@@ -568,7 +568,7 @@ export function InquiryFeesContent({
                     {storageFailure ? (
                         <Alert variant="destructive">
                             <AlertDescription>
-                                费用输入无法保存到本机，请检查浏览器存储后重试；当前输入仍保留，尚未提交。
+                                本地暂存失败，请清理浏览器缓存后重试；当前填写内容仍保留在页面中。
                             </AlertDescription>
                         </Alert>
                     ) : null}
@@ -1141,8 +1141,7 @@ export function InquiryFeesContent({
                 effects={
                     confirmation?.kind === "expense"
                         ? [
-                              "核对来源余额、供应商结算和审批资格后，创建一张费用采购并立即提交审批。",
-                              "审批中、撤回或驳回仍保留费用占用；已办理金额不能直接释放。",
+                              "生成费用采购单并立即提交审批；审批期间或驳回修改期间，该笔费用额度将暂时锁定。",
                           ]
                         : [
                               "新增这笔费用对本销售单的金额归属；其他销售单不会重复复制整笔费用。",

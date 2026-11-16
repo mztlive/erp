@@ -63,7 +63,7 @@ export async function buildPool(
         throw {
             kind: "Validation",
             message:
-                "可核销子账超过 100 条，请先限定销售单或应收子账后再登记。",
+                "待核销的应收款项超过 100 条，请先限定销售单或应收款项后再登记。",
         }
     }
     if (mode === "receipt") {
@@ -115,7 +115,7 @@ export async function buildPool(
                 return {
                     targetId: r.id,
                     targetKind: "receivable_account" as const,
-                    label: `应收子账 #${r.account_seq} · ${salesOrderNo}`,
+                    label: `应收款项 #${r.account_seq} · ${salesOrderNo}`,
                     salesOrderId: r.sales_order_id,
                     salesOrderNo,
                     openAmount: r.open_invoiceable_total,
@@ -374,7 +374,7 @@ export async function createAllocationSession(
         ...proposed,
         submitPolicy: {
             allowUnallocatedRemainder: true,
-            label: "允许保留未分配余额（系统统一判定）",
+            label: "允许保留未分配余额",
         },
         returnContext: {
             returnTo: input.returnTo,

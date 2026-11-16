@@ -108,7 +108,7 @@ export function WorkspacePurchaseApproval({
                             客户与销售单
                         </h3>
                         <p className="text-xs text-muted-foreground">
-                            依据本次提交锁定的销售版本
+                            对照提交时的销售单内容
                         </p>
                     </header>
                     {sources.length ? (

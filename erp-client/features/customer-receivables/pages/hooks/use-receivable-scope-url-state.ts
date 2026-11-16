@@ -260,7 +260,7 @@ export function useReceivableScopeUrlState() {
         if (salesOrderId)
             chips.push({ key: "salesOrderId", label: "已限定销售单" })
         if (receivableAccountId) {
-            chips.push({ key: "receivableAccountId", label: "已限定往来子账" })
+            chips.push({ key: "receivableAccountId", label: "已限定应收款项" })
         }
         return chips
     }, [

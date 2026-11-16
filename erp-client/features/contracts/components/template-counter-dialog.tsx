@@ -28,7 +28,7 @@ function CounterForm({ counter }: { counter: ContractCounter }) {
                     .regex(/^\d{1,4}$/, "请输入 0 至 9999 的整数")
                     .refine(
                         (value) => Number(value) >= counter.last_sequence,
-                        "已用流水不能向后调整",
+                        "不能小于当前已使用的流水号",
                     ),
             }),
         },
@@ -106,8 +106,8 @@ export function TemplateCounterDialog({ onClose }: { onClose: () => void }) {
                 <DialogHeader>
                     <DialogTitle>年度合同流水</DialogTitle>
                     <DialogDescription>
-                        只允许向前校准。2026 年已承接 FSY 452、ZHYF 22、GYL
-                        15、BDKJ 24；跨年重新从 0001 开始。
+                        仅可调大当前最大流水号（不可调小）；跨年将自动从 0001
+                        重新开始编号。
                     </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-3">

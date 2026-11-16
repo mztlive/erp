@@ -28,7 +28,7 @@ export function ContractDetailAttachments({
                               : ("processing" as const),
                     errorMessage:
                         file.securityState === "quarantined"
-                            ? "安全检查未通过，已记录隔离状态。"
+                            ? "文件安全检测未通过，暂不支持下载，请重新上传合规的 PDF 文件。"
                             : undefined,
                     onOpen: undefined,
                 }))}

@@ -25,7 +25,7 @@ export function ruleScope(rule: ProcurementResponsibilityRule): string {
                 ? PRODUCT_KIND_LABELS[rule.productKind]
                 : "商品类型待补充"
         case "DEFAULT_DISPATCHER":
-            return "未命中更具体规则时使用"
+            return "未匹配到其他规则时默认使用"
     }
 }
 

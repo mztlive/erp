@@ -114,7 +114,7 @@ export function WorkspaceReceiptApproval({
                     <span className="mx-2" aria-hidden="true">
                         ·
                     </span>
-                    末节点审批通过并入账后计入已收
+                    审批全部通过并入账后，计入已收金额
                 </p>
             </section>
 

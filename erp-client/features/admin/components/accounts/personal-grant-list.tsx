@@ -255,7 +255,7 @@ export function PersonalGrantList({
                                         )}
                                         {!editable && (
                                             <p className="text-xs leading-5 text-muted-foreground">
-                                                保留的原授权条件。如需调整，请移除此条并添加新范围。
+                                                保留的旧版范围规则。如需调整，请移除此条并添加新范围。
                                             </p>
                                         )}
                                     </div>

@@ -831,7 +831,7 @@ function AccountSummary({ data }: { data: AccountDetail }) {
                     }
                 />
                 <MetricItem
-                    label="最近记录待核实占用"
+                    label="结果待确认的冻结金额"
                     value={<MoneyValue value={pending} display="exact" />}
                     detail="已包含在占用中，不重复扣减可用余额"
                 />
@@ -840,9 +840,9 @@ function AccountSummary({ data }: { data: AccountDetail }) {
                 <Alert variant="destructive">
                     <AlertTitle>账户资金待核对，已暂停新增使用</AlertTitle>
                     <AlertDescription>
-                        请核对下方资金交易、余额采样范围及原订单，并从原对账记录办理“核实对账差异”。
+                        请核对下方资金交易、余额查询范围及原订单，并从原对账记录办理“核实对账差异”。
                         {balancedReconciliations(data.reconciliations).length
-                            ? "请以最新平衡对账和附件说明差异处理结果；服务端核实全部未决资金后才恢复新增使用。"
+                            ? "请以最新双方余额一致的对账记录和附件说明差异处理结果；系统核对无待处理扣款后，将自动恢复账户使用。"
                             : "请先登记双方余额一致且无未核实交易的最新对账，再上传核实附件办理结案。"}
                         原占用继续保护可能发生的扣款，既有订单调查和真实资金记录继续处理。
                     </AlertDescription>

@@ -41,7 +41,7 @@ const navigationGroups = [
     {
         label: "供应协同",
         items: [
-            { path: "offerings", label: "我的供给", icon: PackageIcon },
+            { path: "offerings", label: "供货商品目录", icon: PackageIcon },
             { path: "quotes", label: "已有商品报价", icon: TagsIcon },
             { path: "new-products", label: "新品提报", icon: FilePlus2Icon },
             {
@@ -55,7 +55,7 @@ const navigationGroups = [
         label: "合作与账号",
         items: [
             { path: "cooperation", label: "合作资料", icon: HandshakeIcon },
-            { path: "tasks", label: "我的文件任务", icon: ListChecksIcon },
+            { path: "tasks", label: "导入导出记录", icon: ListChecksIcon },
             { path: "account", label: "账号设置", icon: SettingsIcon },
         ],
     },
@@ -152,8 +152,8 @@ function PortalSidebarAccount({
                             </span>
                             <span className="truncate text-xs text-sidebar-foreground/70">
                                 {profile.role === "read_only"
-                                    ? "只读人员"
-                                    : "供给维护员"}
+                                    ? "只读查看账号"
+                                    : "业务经办人"}
                             </span>
                         </span>
                         <ChevronsUpDownIcon
@@ -261,7 +261,7 @@ export function PortalShell({
                         role="status"
                         className="shrink-0 border-b border-border bg-muted/40 px-page-inline py-2 text-xs text-muted-foreground md:px-page-inline-lg"
                     >
-                        当前账号可查看资料；提交申请和更新可供请联系本供应商的供给维护员。
+                        当前账号可查看资料；提交申请和更新可供请联系本供应商的业务经办人。
                     </p>
                 ) : undefined
             }

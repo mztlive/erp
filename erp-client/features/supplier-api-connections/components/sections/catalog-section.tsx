@@ -264,7 +264,7 @@ export function CatalogSection({
                                                     <Link href={settingsHref} />
                                                 }
                                             >
-                                                前往 API 设置
+                                                前往平台设置
                                             </Button>
                                         ) : null}
                                     </div>

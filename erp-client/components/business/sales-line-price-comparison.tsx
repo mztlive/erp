@@ -56,7 +56,7 @@ export function SalesLinePriceComparison({
                             {isUnchanged ? (
                                 <>{basis ? `${basis} · ` : ""}未调整</>
                             ) : !known ? (
-                                <>{basis ? `${basis} · ` : ""}原底价无法追溯</>
+                                <>{basis ? `${basis} · ` : ""}无历史底价记录</>
                             ) : null}
                         </span>
                     )}
@@ -106,7 +106,7 @@ export function SalesLinePriceComparison({
         <div className="min-w-48 space-y-1 whitespace-normal text-xs">
             <div className="flex flex-wrap justify-between gap-x-3 gap-y-1">
                 <span className="text-muted-foreground">
-                    原采购供给价{basis ? `（${basis}）` : ""}
+                    原采购供货价{basis ? `（${basis}）` : ""}
                 </span>
                 {known ? (
                     <MoneyValue display="exact" value={original} />
@@ -115,7 +115,7 @@ export function SalesLinePriceComparison({
                 )}
             </div>
             <div className="flex flex-wrap justify-between gap-x-3 gap-y-1">
-                <span className="text-muted-foreground">销售填写的供给价</span>
+                <span className="text-muted-foreground">销售填写的供货价</span>
                 <MoneyValue
                     display="exact"
                     value={prices.procurement_supply_price_gross}

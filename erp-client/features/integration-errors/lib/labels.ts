@@ -12,13 +12,13 @@ import type {
 } from "../types"
 
 export const ERROR_CLASS_LABEL: Record<string, string> = {
-    "capability-unsupported": "能力不足",
-    "parameter-or-mapping": "参数/映射错误",
+    "capability-unsupported": "平台功能不支持",
+    "parameter-or-mapping": "资料编码或格式不匹配",
     "business-rejected": "供应商业务拒绝",
     "network-timeout": "临时故障",
     "result-unknown": "结果未知",
-    "authentication-or-signature": "鉴权/签名失败",
-    "rate-limited": "调用次数受限",
+    "authentication-or-signature": "平台授权或签名失败",
+    "rate-limited": "接口请求过于频繁",
     "duplicate-callback": "重复通知",
     "out-of-order-callback": "通知顺序异常",
     "reconciliation-difference": "对账差异",
@@ -51,10 +51,10 @@ export const FUNDS_LABEL: Record<FundsImpact, string> = {
 }
 
 export const EVIDENCE_KIND_LABEL: Record<ControlledEvidenceKind, string> = {
-    EXTERNAL_CASE_RESULT: "外部案例结果",
-    BUSINESS_OBJECT_VERIFICATION: "业务对象核验",
+    EXTERNAL_CASE_RESULT: "外部平台处理回执",
+    BUSINESS_OBJECT_VERIFICATION: "业务单据核对",
     FINANCIAL_RECONCILIATION: "财务对账",
-    COMPENSATION_RESULT: "补偿结果",
+    COMPENSATION_RESULT: "退款或补救结果",
     DISTINCT_REVIEW: "独立复核",
 }
 

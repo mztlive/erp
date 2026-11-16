@@ -85,7 +85,7 @@ export function PortalAvailabilityForm({
         >
             <h2 className="font-semibold">更新可供情况</h2>
             <p className="text-sm text-muted-foreground">
-                立即报送可供事实；恢复有货后，采购暂停、停止关系和其他供货限制继续生效。
+                更新商品当前是否有货及可供数量；若商品处于暂停或停止供货状态，仅更新库存不会自动恢复供货。
             </p>
             <PortalError error={error} />
             {saved && (
@@ -134,7 +134,7 @@ export function PortalAvailabilityForm({
                 <form.AppForm>
                     <form.SubmitButton
                         id="supplier-portal-availability-save"
-                        label={frozen.current ? "重试原报送" : "保存可供情况"}
+                        label={frozen.current ? "重新确认提交" : "保存可供情况"}
                         disabled={disabled}
                     />
                 </form.AppForm>

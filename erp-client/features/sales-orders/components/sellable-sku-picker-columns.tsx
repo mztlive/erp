@@ -40,7 +40,7 @@ export function useSellableSkuPickerColumns() {
                                     {label}
                                 </div>
                                 <div className="truncate text-xs text-muted-foreground">
-                                    SKU 编号：
+                                    商品编号：
                                     <span className="num">
                                         {row.original.stableNo}
                                     </span>

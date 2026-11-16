@@ -131,7 +131,7 @@ function followSingleAddress(
 function lineSubtitle(line: PurchaseOrderLineRow) {
     if (line.lineType === "LOGISTICS_FEE") return "费用"
     if (line.procurementConfirmationLineId) {
-        return line.salesAllocationLabel ?? `确认分行 · ${line.itemName}`
+        return line.salesAllocationLabel ?? `关联销售明细 · ${line.itemName}`
     }
     return "商品/服务"
 }

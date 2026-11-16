@@ -289,7 +289,7 @@ export function SellableSkuSelectDialog({
                                     title={
                                         hasActiveFilters
                                             ? "当前筛选无结果"
-                                            : "还没有可销售的 SKU"
+                                            : "暂无可销售商品"
                                     }
                                     description={
                                         hasActiveFilters

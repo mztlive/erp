@@ -32,8 +32,8 @@ export function ReceivableScopePage() {
         <PageScaffold density="compact" className="space-y-4">
             <ListWorkspaceHeader
                 eyebrow="财务"
-                title="客户往来（按数据范围）"
-                description="按负责销售与登记/核销经办人查询；部分受限仅显示获授权份额。"
+                title="客户往来汇总"
+                description="按负责销售与登记/核销经办人查询；部分金额受限时仅显示本人权限内金额。"
             />
             <ReceivableScopeListPane
                 urlState={urlState}

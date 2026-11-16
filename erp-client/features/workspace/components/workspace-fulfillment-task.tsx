@@ -210,9 +210,9 @@ export function WorkspaceFulfillmentTask({
             )}
             {!descriptor ? (
                 <Alert variant="destructive">
-                    <AlertTitle>任务责任与履约对象不一致</AlertTitle>
+                    <AlertTitle>待办关联的单据信息异常</AlertTitle>
                     <AlertDescription>
-                        请联系管理员核对责任人、对象类型与任务原因后重试。
+                        当前待办与关联业务单据不匹配，请刷新页面后重试，或联系管理员处理。
                     </AlertDescription>
                 </Alert>
             ) : controller.queueQuery.isPending ||
@@ -273,7 +273,7 @@ export function WorkspaceFulfillmentReassignAction({
                 variant="outline"
                 onClick={() => setOpen(true)}
             >
-                转交责任
+                转交他人
             </Button>
             {open ? (
                 <WorkspaceFulfillmentReassignDialog
@@ -332,7 +332,7 @@ function WorkspaceFulfillmentReassignDialog({
                 (option) => option.value === value.targetUserId,
             )
             if (!selectedIsEligible || !normalizedReason) {
-                setError("请选择当前合格人员，并填写转交原因")
+                setError("请选择接收人，并填写转交原因")
                 return
             }
             const fingerprint = JSON.stringify({
@@ -380,10 +380,10 @@ function WorkspaceFulfillmentReassignDialog({
                 className="sm:max-w-lg"
             >
                 <DialogHeader>
-                    <DialogTitle>转交履约责任</DialogTitle>
+                    <DialogTitle>转交履约待办</DialogTitle>
                     <DialogDescription>
                         当前责任人：{item.ownerUserLabel}
-                        。采购单责任转交会同步更新该采购单全部开放交付任务；历史任务不变。
+                        。采购单责任转交会同步更新该采购单全部待处理的交付任务；历史任务不变。
                     </DialogDescription>
                 </DialogHeader>
                 <form
@@ -422,8 +422,8 @@ function WorkspaceFulfillmentReassignDialog({
                                             throwOnError: true,
                                         })
                                     }
-                                    placeholder="选择合格人员"
-                                    emptyLabel="没有同时满足当前责任约束的人员"
+                                    placeholder="选择接收人"
+                                    emptyLabel="暂无符合处理权限的员工"
                                     description="选择能够接手当前任务的人员。"
                                     loading={candidatesQuery.isFetching}
                                     disabled={candidatesQuery.isPending}

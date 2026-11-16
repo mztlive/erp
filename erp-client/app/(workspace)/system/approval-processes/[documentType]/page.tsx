@@ -5,7 +5,7 @@ import { Suspense } from "react"
 import { ApprovalProcessDetailPage } from "@/features/approval-processes/pages/approval-process-detail-page"
 
 export const metadata: Metadata = {
-    title: "审批流程定义",
+    title: "审批流程设置",
 }
 
 function ApprovalProcessDetailFallback() {

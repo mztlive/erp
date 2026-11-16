@@ -132,7 +132,7 @@ export async function runHealthCheck(input: {
     })
     return commandOutcome(result, input.idempotencyKey, {
         title: "连接测试已提交",
-        message: "检查在后台执行；HTTP 完成不代表技术健康成功。",
+        message: "检查正在后台执行，请稍后刷新查看最新连接结果。",
     })
 }
 

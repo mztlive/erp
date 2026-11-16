@@ -210,7 +210,7 @@ export function IntegrationActionZone({
                                 void onTaskAction("LINK_COMPENSATION")
                             }
                         >
-                            关联补偿
+                            关联补救单据
                         </LoadingButton>
                     ) : null}
                     {can("REATTRIBUTE") && item.workItem ? (
@@ -222,7 +222,7 @@ export function IntegrationActionZone({
                             disabled={assignedDisabled}
                             onClick={() => void onTaskAction("REATTRIBUTE")}
                         >
-                            重新归集
+                            重新匹配归属
                         </LoadingButton>
                     ) : null}
                     {can("RESOLVE") &&
@@ -298,7 +298,7 @@ export function IntegrationActionZone({
                                     })
                                 }
                             >
-                                关闭误派
+                                关闭误派任务
                             </Button>
                         </div>
                     </details>

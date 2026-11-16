@@ -36,8 +36,8 @@ export function HistoryRowsTable({
                         <TableHead>归属客户</TableHead>
                         <TableHead data-align="end">订单数</TableHead>
                         <TableHead data-align="end">含税总额</TableHead>
-                        <TableHead data-align="end">缺版本</TableHead>
-                        <TableHead data-align="end">下钻</TableHead>
+                        <TableHead data-align="end">待核价单数</TableHead>
+                        <TableHead data-align="end">查看明细</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -100,7 +100,7 @@ export function HistoryRowsTable({
                                                 })
                                             }
                                         >
-                                            下钻
+                                            查看明细
                                         </Button>
                                     ) : (
                                         "—"

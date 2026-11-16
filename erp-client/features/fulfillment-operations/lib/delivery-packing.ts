@@ -100,7 +100,7 @@ export function packingIssues(
             packing.packages.flatMap((row) => row.items).length > 100 ||
             packing.dispatch.length > 100
         )
-            add("一次发货最多100个地址或包裹商品关联")
+            add("一次发货最多100个地址或包裹商品明细行数")
         const seen = new Set<string>()
         for (const [index, parcel] of packing.packages.entries()) {
             const prefix = `fulfillment-packing-package-${toAutomationIdSegment(parcel.id)}`

@@ -141,7 +141,7 @@ export function confirmedMappingIssue(
         !input.category.raw_name.trim() ||
         input.skus.some((sku) => !sku.unit.raw_name.trim())
     )
-        return "原始品牌、分类或单位缺失，请先单独核对。"
+        return "提报的品牌、分类或单位缺失，请先单独核对。"
     if (!mappingSchema.safeParse(mapping).success)
         return "请先逐项确认品牌、完整分类路径和各规格单位。"
     const brand = dictionaries.brands.find(
@@ -244,7 +244,7 @@ export function applicableMapping(
     )
         return {
             mapping: null,
-            issue: "供应商、商品类型、原始品牌或完整分类路径不同。",
+            issue: "供应商、商品类型、提报品牌或分类不同。",
         }
     if (
         !selectedAllows(target.brand, mapping.brandId, mapping.brandVersion) ||
@@ -375,6 +375,6 @@ export async function mappingPlanIssue(
         plan.supplierId !== application.supplier_id ||
         plan.targetInputIdentity !== (await reviewInputIdentity(input))
     )
-        return "申请或供应商原稿已变化，已保存的映射不可采用，请逐项重新核对。"
+        return "申请或供应商提报资料已变化，已保存的映射不可采用，请逐项重新核对。"
     return confirmedMappingIssue(input, plan.mapping, dictionaries)
 }

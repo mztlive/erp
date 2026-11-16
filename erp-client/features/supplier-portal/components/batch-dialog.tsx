@@ -291,7 +291,7 @@ export function PortalBatchDialog({
         } catch {
             form.setFieldValue(
                 "notice",
-                "当前浏览器无法保存恢复记录。请检查会话存储后重试；提交前须成功保存记录。",
+                "浏览器本地缓存空间不足或受限，请清理缓存或关闭无痕模式后重试。",
             )
         }
     }
@@ -367,7 +367,7 @@ export function PortalBatchDialog({
             const target = await reloaded.mutateAsync(row)
             if (!target)
                 throw new Error(
-                    "未精确匹配当前目标，请核对SKU编号和自己的订货编码",
+                    "未精确匹配当前商品规格，请核对商品编号和您的订货编码",
                 )
             setReviewedTargets((value) => ({
                 ...value,
@@ -1154,7 +1154,7 @@ export function PortalBatchDialog({
                                             {values.recoveryBlocked ? (
                                                 <div className="space-y-3 rounded-lg border p-4">
                                                     <p>
-                                                        先核对原申请或可供结果。确认原结果后，可清理无法读取的浏览器记录并重新整理资料。
+                                                        本地暂存记录读取异常。若您已在「我的申请」中确认上次提交结果，可点击下方按钮清空本地暂存并重新填写。
                                                     </p>
                                                     <Button
                                                         id={`${prefix}-clear-unreadable`}
@@ -1176,12 +1176,12 @@ export function PortalBatchDialog({
                                                             } catch {
                                                                 form.setFieldValue(
                                                                     "notice",
-                                                                    "浏览器记录暂时无法清理，请检查会话存储。",
+                                                                    "本地暂存清理失败，请清理浏览器缓存后重试。",
                                                                 )
                                                             }
                                                         }}
                                                     >
-                                                        已核对原结果，清理记录
+                                                        清空本地暂存并重新填写
                                                     </Button>
                                                 </div>
                                             ) : (
@@ -1300,13 +1300,13 @@ export function PortalBatchDialog({
                                                             />
                                                         </div>
                                                         <p className="text-xs text-muted-foreground">
-                                                            最多100条SKU或供给数据、5
+                                                            最多100条商品或供货数据、5
                                                             MB；编号按文本填写。可供数量空白为未提供，0为明确为零。单元格多格粘贴按模板列顺序，超出范围或包含锁定行时整次拒绝。
                                                         </p>
                                                         {mode ===
                                                             "new_product" && (
                                                             <p className="text-xs text-muted-foreground">
-                                                                一行一个SKU，同一商品使用同一商品组编号并保持公共资料一致。品牌、分类和单位可填写待内部匹配的原始值；保存按整组处理。图片不随表格导入，保存后在原草稿上传，再提交采购确认。
+                                                                每行填写一个商品规格，同一商品使用同一商品组编号并保持公共资料一致。品牌、分类和单位可填写供采购方协助匹配的名称；保存按整组处理。图片不随表格导入，保存后在草稿中补充上传，再提交采购确认。
                                                             </p>
                                                         )}
                                                     </section>

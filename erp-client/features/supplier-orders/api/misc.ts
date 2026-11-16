@@ -19,7 +19,8 @@ export async function revealSupplierOrderAddress(
     void input
     return {
         status: "blocked",
-        message: "地址揭示端点尚未交付；详情仅提供脱敏摘要。",
+        message:
+            "暂不支持在此直接查看完整明文地址，请前往关联采购单或销售单查看。",
     }
 }
 
@@ -37,6 +38,6 @@ export async function addCollaborationNote(
     void input
     return {
         status: "blocked",
-        message: "协同说明写入端点尚未交付。",
+        message: "暂不支持保存协同备注。",
     }
 }

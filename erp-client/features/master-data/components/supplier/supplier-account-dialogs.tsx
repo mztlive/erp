@@ -81,7 +81,7 @@ export function SupplierAccountCreateDialog({
                 intent.current &&
                 JSON.stringify(intent.current.body) !== JSON.stringify(body)
             ) {
-                setError(new Error("请先重试原开通操作并核对结果"))
+                setError(new Error("请先点击「重试提交」并确认结果"))
                 return
             }
             if (!intent.current) {
@@ -144,7 +144,7 @@ export function SupplierAccountCreateDialog({
                     )}
                     {failure === "unknown" && (
                         <p className="text-sm">
-                            开通结果尚未确认，请保留本次填写并重试原开通操作。
+                            开通结果尚未确认，请保留本次填写并点击「重试提交」。
                         </p>
                     )}
                     <div className="grid gap-4 sm:grid-cols-2">
@@ -205,9 +205,7 @@ export function SupplierAccountCreateDialog({
                         <form.AppForm>
                             <form.SubmitButton
                                 id="supplier-portal-account-create-save"
-                                label={
-                                    intent.current ? "重试原开通" : "开通账号"
-                                }
+                                label={intent.current ? "重试提交" : "开通账号"}
                                 disabled={
                                     mutation.isPending ||
                                     failure === "conflict" ||
@@ -328,7 +326,7 @@ export function SupplierAccountEditDialog({
                     )}
                     {failure === "unknown" && (
                         <p className="text-sm">
-                            配置结果尚未确认，请保留填写并重试原配置。
+                            配置结果尚未确认，请保留填写并点击「重试提交」。
                         </p>
                     )}
                     {failure === "conflict" && (
@@ -390,9 +388,7 @@ export function SupplierAccountEditDialog({
                         <form.AppForm>
                             <form.SubmitButton
                                 id="supplier-portal-account-edit-save"
-                                label={
-                                    intent.current ? "重试原配置" : "保存配置"
-                                }
+                                label={intent.current ? "重试提交" : "保存配置"}
                                 disabled={
                                     mutation.isPending || failure === "conflict"
                                 }

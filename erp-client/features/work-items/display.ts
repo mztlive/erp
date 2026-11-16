@@ -84,7 +84,7 @@ export function displayNextActionHint(input: {
     }
     return nextActionHintForWorkItemType(
         input.workItemType === "PROCUREMENT_ORDER_CREATION"
-            ? "待供给分配"
+            ? "待安排采购"
             : input.workItemTypeLabel,
     )
 }

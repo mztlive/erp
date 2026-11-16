@@ -162,7 +162,7 @@ async function executeAllocation(
         if (positiveLines.length === 0) {
             return failedResult(
                 "NEED_ALLOCATION",
-                "登记销项发票至少需要一条正式分配。",
+                "登记销项发票至少需要一条核销分配。",
             )
         }
         if (!commandInput.workItemId || !commandInput.expectedTaskVersion) {

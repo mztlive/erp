@@ -29,7 +29,7 @@ export function BusinessTagDialog({
                         经营标签说明
                     </DialogTitle>
                     <DialogDescription>
-                        标签由系统固定规则生成，页面不提供人工修改入口。
+                        标签由系统规则自动生成，仅供查看。
                     </DialogDescription>
                 </DialogHeader>
                 {tag ? (
@@ -40,9 +40,6 @@ export function BusinessTagDialog({
                                 label={tag.label}
                                 tone={tag.tone}
                             />
-                            <Badge variant="outline">
-                                规则版本 {tag.ruleVersion}
-                            </Badge>
                             <Badge variant="neutral">
                                 {tag.type === "scale"
                                     ? "规模"

@@ -29,7 +29,7 @@ function scopeChangedError() {
         kind: "Http",
         status: 409,
         code: "DATA_SCOPE_CHANGED",
-        message: "DATA_SCOPE_CHANGED：数据范围已变化，请重新查询。",
+        message: "您的数据查看范围已更新，请重新查询。",
     })
 }
 
@@ -89,7 +89,7 @@ export async function fetchCompleteList<T>(
             if (!key)
                 throw createApiError({
                     kind: "Parse",
-                    message: "列表缺少记录标识，请重新查询。",
+                    message: "列表数据加载不完整，请刷新页面后重试。",
                 })
             items.set(key, item)
         }

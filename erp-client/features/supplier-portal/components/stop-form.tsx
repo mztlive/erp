@@ -80,7 +80,7 @@ export function PortalStopForm({ draft }: { draft: PortalApplication }) {
         >
             <h2 className="font-semibold">停止供应申请原因</h2>
             <p className="text-sm text-muted-foreground">
-                保存草稿后，再提交采购确认。采购确认之前当前供给关系保持原状态；已冻结采购单继续按原条件处理。
+                保存草稿后，再提交采购确认。采购确认之前当前供给关系保持原状态；已生效的历史采购单继续按原条件处理。
             </p>
             <PortalError error={error} />
             <PortalCommandConflict
@@ -160,7 +160,7 @@ export function PortalStopForm({ draft }: { draft: PortalApplication }) {
             {!editable && (
                 <p className="text-sm text-muted-foreground">
                     {profile?.role === "read_only"
-                        ? "当前账号仅可查看，维护员可以编辑停止供应申请。"
+                        ? "当前账号仅可查看，业务经办人可以编辑停止供应申请。"
                         : "本申请当前状态不能修改原因。"}
                 </p>
             )}

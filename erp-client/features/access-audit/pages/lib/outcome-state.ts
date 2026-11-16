@@ -19,7 +19,7 @@ export function accessChangeResultState(
                     value: `v${outcome.permissionVersion.split("-").at(-1)}`,
                 },
                 {
-                    label: "影响主体数",
+                    label: "受影响人数",
                     value: String(outcome.affectedSubjectCount),
                 },
                 { label: "审计事件号", value: outcome.auditEventId },
@@ -42,11 +42,11 @@ export function accessChangeResultState(
                     : "rejected",
             title:
                 outcome.code === "REVIEW_POLICY_UNCONFIGURED"
-                    ? "复核策略未确定，动作已阻断"
+                    ? "需配置复核规则后才能执行此操作"
                     : "授权变更被拒绝",
             description: outcome.message,
             facts: outcome.actionBlockers?.map((b) => ({
-                label: b.code,
+                label: "原因",
                 value: b.message,
             })),
         }

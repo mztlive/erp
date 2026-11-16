@@ -560,7 +560,7 @@ export const PreviewGrid = ({
                                                                     className="mr-1 size-3"
                                                                     aria-hidden="true"
                                                                 />
-                                                                重生成此档
+                                                                重新生成此档
                                                             </LoadingButton>
                                                         ) : null}
                                                     </div>

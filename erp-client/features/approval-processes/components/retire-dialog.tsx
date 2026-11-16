@@ -57,7 +57,7 @@ export function RetireDialog({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent closeButtonId={`${id}-close`}>
                 <DialogHeader>
-                    <DialogTitle>退役审批流程</DialogTitle>
+                    <DialogTitle>停用审批流程</DialogTitle>
                     <DialogDescription>
                         {documentTypeLabel(
                             detail.document_type,
@@ -67,12 +67,11 @@ export function RetireDialog({
                     </DialogDescription>
                 </DialogHeader>
                 <p className="text-sm">
-                    退役只影响新单据绑定。已有单据和进行中的审批仍使用原版本。
-                    退役后若没有新的已发布版本，该单据类型将无法创建新单据。
+                    停用后，新发起的单据将不再使用此流程；已创建或审批中的单据不受影响。注意：若停用后该单据没有其他启用中的审批流程，将暂时无法新建单据。
                 </p>
                 {error ? (
                     <Alert variant="destructive">
-                        <AlertTitle>未能退役</AlertTitle>
+                        <AlertTitle>未能停用</AlertTitle>
                         <AlertDescription>{error}</AlertDescription>
                     </Alert>
                 ) : null}
@@ -94,7 +93,7 @@ export function RetireDialog({
                         disabled={retire.isPending}
                         onClick={() => void submit()}
                     >
-                        {retire.isPending ? "正在退役…" : "确认退役"}
+                        {retire.isPending ? "正在停用…" : "确认停用"}
                     </LoadingButton>
                 </DialogFooter>
             </DialogContent>

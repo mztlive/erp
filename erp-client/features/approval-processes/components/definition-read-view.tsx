@@ -20,7 +20,7 @@ export function DefinitionReadView({
         detail.status === "PUBLISHED"
             ? "新建单据使用此版本。调整后需发布新版本，已有单据仍按原版本审批。"
             : detail.status === "RETIRED"
-              ? "此版本已退役，不再用于新建单据。已有单据仍按原版本审批。"
+              ? "此版本已停用，不再用于新建单据。已有单据仍按原版本审批。"
               : "此草稿尚未发布，暂不用于新建单据。"
 
     return (

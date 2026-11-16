@@ -109,8 +109,8 @@ export function CustomerCenterPage() {
         <BusinessEmptyState
             kind="no-scope"
             className={listWorkspaceEmptyStateClassName}
-            title="当前角色无客户范围"
-            description="当前权限与数据范围内没有客户；不代表系统尚无客户。"
+            title="暂无可查看的客户"
+            description="您当前尚未分配客户查看权限，请联系管理员配置负责或协作的客户范围。"
         />
     ) : data && items.length === 0 ? (
         data.totalInScope === 0 && !directoryState.hasActiveFilters ? (
@@ -138,7 +138,7 @@ export function CustomerCenterPage() {
                 kind="filter"
                 className={listWorkspaceEmptyStateClassName}
                 title="当前筛选无结果"
-                description={`范围“${SCOPE_LABELS[scope]}”${status !== "active" ? ` · 状态 ${status}` : ""}${q ? ` · 关键词“${q}”` : ""} 下没有匹配客户。`}
+                description={`范围“${SCOPE_LABELS[scope]}”${status !== "active" ? ` · 状态：${status === "disabled" ? "已停用" : "全部状态"}` : ""}${q ? ` · 关键词“${q}”` : ""} 下没有匹配客户。`}
                 action={
                     directoryState.hasActiveFilters ? (
                         <Button

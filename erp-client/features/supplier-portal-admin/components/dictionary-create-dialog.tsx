@@ -60,7 +60,7 @@ const productKindLabels: Record<string, string> = {
 }
 const formValuesSchema = z.object({
     name: z.string().trim().min(1, "请填写名称"),
-    code: z.string().trim().min(1, "请填写字典代码"),
+    code: z.string().trim().min(1, "请填写编号"),
     parentId: z.string(),
     symbol: z.string(),
     quantityScale: z.string(),
@@ -127,7 +127,7 @@ export function PortalDictionaryCreateDialog(props: Props) {
             <Dialog open onOpenChange={(open) => !open && props.onClose()}>
                 <DialogContent closeButtonId="supplier-portal-review-dictionary-denied-close">
                     <DialogHeader>
-                        <DialogTitle>暂不能补建字典</DialogTitle>
+                        <DialogTitle>暂无新增基础资料权限</DialogTitle>
                         <DialogDescription>
                             当前账号没有对应维护权限，请转交具备权限的同事处理。
                         </DialogDescription>
@@ -212,7 +212,7 @@ function DictionaryCreateForm({
                 return
             }
             if (canRead && !dictionary.isSuccess) {
-                setError("请先读取并核对已有字典，再提交补建")
+                setError("请先刷新确认是否已存在相同资料，再提交新增")
                 return
             }
             const values =
@@ -387,7 +387,7 @@ function DictionaryCreateForm({
                 <DialogHeader>
                     <DialogTitle>补建{dictionaryLabels[kind]}</DialogTitle>
                     <DialogDescription>
-                        供应商原稿：{rawName || "未填写"}
+                        供应商提报：{rawName || "未填写"}
                         。创建后仍需在当前申请核对映射。
                     </DialogDescription>
                 </DialogHeader>
@@ -464,7 +464,7 @@ function DictionaryCreateForm({
                         {(field) => (
                             <field.TextField
                                 id={`${prefix}-code`}
-                                label={`${dictionaryLabels[kind]}代码`}
+                                label={`${dictionaryLabels[kind]}编号`}
                                 required
                                 disabled={locked}
                             />

@@ -262,7 +262,7 @@ export function RequestDetail({
                     </div>
                 }
                 effects={[
-                    "提交后冻结采购、销售与审核材料，并保留本次未付申请金额。",
+                    "提交后锁定本次申请金额及关联的采购、销售单据资料。",
                     "财务批准后由指定出纳登记实际付款。",
                 ]}
                 onConfirm={async () => {
@@ -291,7 +291,7 @@ export function RequestDetail({
             />
             {submitUnknown && (
                 <p role="status" className="text-sm text-muted-foreground">
-                    提交结果暂无法确认，请再次确认本次提交以查询原次结果。
+                    提交结果暂无法确认，请再次确认本次提交以查询上次提交结果。
                 </p>
             )}
             {reasonAction && (
@@ -408,7 +408,7 @@ function ReasonCommandDialog({
                     )}
                     {unknown && (
                         <p className="text-sm">
-                            操作结果暂无法确认，请使用原次操作查询结果。
+                            操作结果暂无法确认，请重新点击确认以查看上次提交结果。
                         </p>
                     )}
                     <DialogFooter>

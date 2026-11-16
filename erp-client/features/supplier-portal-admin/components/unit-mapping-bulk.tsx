@@ -195,7 +195,7 @@ export function PortalUnitMappingBulk({
         <section className="space-y-3 rounded-lg border p-4">
             <h3 className="font-medium">批量确认相同单位</h3>
             <p className="text-sm text-muted-foreground">
-                先逐行确认一个来源规格；原始单位与目标单位名称不同时，必须勾选同义确认并填写核对依据。再明确勾选单位原文、包装和报价口径完全一致的未匹配规格，回填单位引用及已确认的同义依据，保留供应商原稿、包装、价格及数量。
+                先逐行确认一个来源规格；提报单位与标准单位名称不同时，必须勾选一致确认并填写说明。再勾选提报单位、包装和报价口径完全一致的未匹配规格，自动填充标准单位及一致说明，并保留供应商提报的包装、价格及数量。
             </p>
             <form.AppField name="sourceRowId">
                 {(field) => (

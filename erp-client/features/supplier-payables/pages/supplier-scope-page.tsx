@@ -29,7 +29,14 @@ import {
     PreviewNote,
     PreviewSection,
 } from "@/components/business/financial-preview"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { personDirectoryLabel } from "@/features/entity-selectors/api/person-directory"
 import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
+import { usePersonDirectorySelected } from "@/features/entity-selectors/hooks/person-directory"
+import {
+    businessLabelOrPlaceholder,
+    MISSING_SOURCE_DOCUMENT_NO,
+} from "@/features/supplier-payables/lib/display-labels"
 import type { SupplierScopeListView } from "@/features/supplier-payables/api/scoped"
 import { exportSupplierScopeCsv } from "@/features/supplier-payables/lib/scoped-export"
 import {
@@ -44,12 +51,42 @@ import {
 } from "@/features/supplier-payables/components/scoped-columns"
 import { VIEW_LABEL } from "@/features/supplier-payables/types"
 import { getErrorMessage } from "@/lib/api/errors"
+import { hasPermission } from "@/lib/permissions"
 import { useScopeListExport } from "@/lib/use-scope-list-export"
 import { scopeText } from "@/lib/ui-text"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 const SCOPE_VIEWS = ["payable", "payment", "purchase_invoice"] as const
 const toolbarPrefix = "supplier-payables-scope-toolbar"
+
+type ShareWithOptionalName = {
+    owner_user_id: string
+    owner_user_name?: string | null
+    owner_name?: string | null
+}
+
+function isInternalIdentifier(value: string): boolean {
+    const trimmed = value.trim()
+    return (
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+            trimmed,
+        ) || /^[a-z]{2,6}_[a-z0-9_-]{6,}$/i.test(trimmed)
+    )
+}
+
+function resolveGroupedOwnerName(
+    share: ShareWithOptionalName,
+    resolvedNames: ReadonlyMap<string, string>,
+): string {
+    const inline =
+        share.owner_user_name?.trim() || share.owner_name?.trim() || ""
+    if (inline) return inline
+    const fromDirectory = resolvedNames.get(share.owner_user_id)
+    if (fromDirectory) return fromDirectory
+    const rawId = share.owner_user_id.trim()
+    if (!rawId || isInternalIdentifier(rawId)) return "负责人（当前不可见）"
+    return rawId
+}
 
 /** 供应商往来范围页：应付、付款、进项分配的人员筛选都走采购目录。 */
 export function SupplierScopePage() {
@@ -75,6 +112,43 @@ export function SupplierScopePage() {
         [],
     )
     const data: SupplierScopeListView | undefined = listQuery.data
+    const topShares = React.useMemo(
+        () => data?.summary?.grouped.slice(0, 5) ?? [],
+        [data?.summary?.grouped],
+    )
+    const missingNameIds = React.useMemo(
+        () =>
+            topShares
+                .filter((share) => {
+                    const item = share as ShareWithOptionalName
+                    return (
+                        !item.owner_user_name?.trim() &&
+                        !item.owner_name?.trim()
+                    )
+                })
+                .map((share) => share.owner_user_id)
+                .filter(Boolean),
+        [topShares],
+    )
+    const account = useAccountProfileQuery()
+    const canReadProcurement = hasPermission(
+        account.data?.permissions,
+        "procurement_person:list",
+    )
+    const selectedPeople = usePersonDirectorySelected(
+        "procurement",
+        missingNameIds,
+        canReadProcurement && missingNameIds.length > 0,
+    )
+    const resolvedOwnerNames = React.useMemo(() => {
+        const map = new Map<string, string>()
+        if (selectedPeople.isSuccess && selectedPeople.data) {
+            for (const item of selectedPeople.data.items) {
+                map.set(item.id, item.name.trim() || personDirectoryLabel(item))
+            }
+        }
+        return map
+    }, [selectedPeople.data, selectedPeople.isSuccess])
 
     const payableRows =
         urlState.view === "payable" ? [...(data?.payables ?? [])] : []
@@ -107,8 +181,8 @@ export function SupplierScopePage() {
         ) : data && (data.emptyReason === "no_scope" || !data.hasScope) ? (
             <BusinessEmptyState
                 kind="no-scope"
-                title="当前角色未配置供应商往来范围"
-                description="不能显示为 0 元应付。请联系管理员配置范围后再查询。"
+                title="暂无可查看的供应商往来数据"
+                description="您当前尚未配置供应商往来的数据查看范围，请联系管理员开通相应权限后再查询。"
             />
         ) : data && data.total === 0 ? (
             <BusinessEmptyState
@@ -188,8 +262,8 @@ export function SupplierScopePage() {
         <PageScaffold density="compact" className="space-y-4">
             <ListWorkspaceHeader
                 eyebrow="财务"
-                title="供应商往来（按数据范围）"
-                description="按采购负责人与付款/收票经办人查询；部分受限仅显示获授权份额。"
+                title="供应商往来汇总"
+                description="按采购负责人与付款/收票经办人查询；部分金额受限时仅显示本人权限内金额。"
             />
 
             <Tabs
@@ -263,22 +337,23 @@ export function SupplierScopePage() {
                                     暂无匹配份额
                                 </li>
                             ) : (
-                                data.summary.grouped
-                                    .slice(0, 5)
-                                    .map((share) => (
-                                        <li
-                                            key={share.owner_user_id}
-                                            className="flex min-w-0 items-baseline justify-between gap-2 text-xs"
-                                        >
-                                            <span className="min-w-0 break-words">
-                                                {share.owner_user_id}
-                                            </span>
-                                            <MoneyValue
-                                                value={share.visible_share}
-                                                className="shrink-0"
-                                            />
-                                        </li>
-                                    ))
+                                topShares.map((share) => (
+                                    <li
+                                        key={share.owner_user_id}
+                                        className="flex min-w-0 items-baseline justify-between gap-2 text-xs"
+                                    >
+                                        <span className="min-w-0 break-words">
+                                            {resolveGroupedOwnerName(
+                                                share as ShareWithOptionalName,
+                                                resolvedOwnerNames,
+                                            )}
+                                        </span>
+                                        <MoneyValue
+                                            value={share.visible_share}
+                                            className="shrink-0"
+                                        />
+                                    </li>
+                                ))
                             )}
                         </ul>
                     </div>
@@ -420,7 +495,11 @@ export function SupplierScopePage() {
                 size="preview"
                 title={
                     detail?.kind === "payable"
-                        ? `应付子账 ${detail.payable.id}`
+                        ? detail.payable.source_document_no?.trim() &&
+                          detail.payable.source_document_no.trim() !==
+                              detail.payable.source_document_id
+                            ? `应付记录 ${detail.payable.source_document_no.trim()}`
+                            : "应付记录"
                         : detail?.kind === "payment"
                           ? `付款单 ${detail.payment.payment_no}`
                           : "往来详情"
@@ -461,7 +540,7 @@ export function SupplierScopePage() {
                 ) : detail?.kind === "payable" ? (
                     <div className="space-y-6 text-sm">
                         <PreviewAmount
-                            label="获授权已核销"
+                            label="权限内已核销"
                             value={detail.payable.visible_settled_share}
                         >
                             <span>
@@ -490,8 +569,12 @@ export function SupplierScopePage() {
                         <PreviewSection title="来源">
                             <dl className="space-y-3">
                                 <PreviewFact label="来源单据">
-                                    <span className="num break-all">
-                                        {detail.payable.source_document_id}
+                                    <span>
+                                        {businessLabelOrPlaceholder(
+                                            detail.payable.source_document_no,
+                                            detail.payable.source_document_id,
+                                            MISSING_SOURCE_DOCUMENT_NO,
+                                        )}
                                     </span>
                                 </PreviewFact>
                             </dl>
@@ -505,7 +588,7 @@ export function SupplierScopePage() {
                 ) : detail?.kind === "payment" ? (
                     <div className="space-y-6 text-sm">
                         <PreviewAmount
-                            label="获授权已分配"
+                            label="权限内已分配"
                             value={detail.payment.visible_allocated_share}
                         >
                             <span>

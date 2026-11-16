@@ -243,7 +243,7 @@ export function ApprovalProcessDetailPage({
                     }
                 />
                 <p className="text-sm text-muted-foreground">
-                    该单据类型不配置审批流程，也没有新建、编辑、发布或退役入口。
+                    该单据类型不配置审批流程，也没有新建、编辑、发布或停用入口。
                 </p>
             </PageScaffold>
         )
@@ -359,7 +359,7 @@ export function ApprovalProcessDetailPage({
                                     onClick={() => setRetireOpen(true)}
                                 >
                                     <ArchiveIcon aria-hidden />
-                                    退役当前版本
+                                    停用当前版本
                                 </DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
@@ -507,7 +507,7 @@ export function ApprovalProcessDetailPage({
                         <BusinessFailureState
                             kind="business"
                             title="配置缺失"
-                            description="该单据类型必须审批，但还没有可绑定的已发布流程。创建新单据会被阻断。"
+                            description="该类单据要求必须经过审批，但当前尚无启用中的审批流程，业务人员将暂时无法新建此类单据。"
                             action={
                                 canCreate ? (
                                     <Button

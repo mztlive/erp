@@ -1,4 +1,5 @@
 import { fieldErrorMessages } from "./field-errors"
+import { permissionLabel } from "@/lib/permission-catalog"
 import { PERMISSION_GROUPS } from "@/lib/permissions.generated"
 
 /** 错误分类：网络 / HTTP / 鉴权 / 解析 / 业务校验 / 未知。 */
@@ -183,11 +184,11 @@ const fallbackMessage = (status: number): string => {
     if (status === 409) {
         return "当前资料状态不允许继续操作，请刷新后核对。"
     }
-    if (status === 429) return "请求过于频繁，请稍后重试。"
+    if (status === 429) return "操作过于频繁，请稍后重试。"
     if (status >= 500) {
         return "系统暂时无法完成操作，请稍后重试；如仍失败，请联系支持人员。"
     }
-    return "请求未完成，请稍后重试。"
+    return "操作未完成，请稍后重试。"
 }
 
 /** 兼容尚未返回 retryable 的旧版接口。 */
@@ -200,8 +201,8 @@ export const fromFetchError = (cause: unknown, method = "GET"): ApiError =>
         kind: "Network",
         message:
             method === "GET"
-                ? "网络连接失败或请求超时，请检查网络后重新加载。"
-                : "网络连接中断或请求超时，提交结果尚未确认，请先查询处理结果。",
+                ? "网络连接不稳定或响应超时，请检查网络后重新加载。"
+                : "网络连接中断或响应超时，提交结果尚未确认，请先刷新核对最新状态。",
         retryable: method === "GET",
         cause,
     })
@@ -275,8 +276,8 @@ export const fromParse = (
         kind: "Parse",
         message:
             method === "GET"
-                ? "返回资料无法读取，请重新加载；如仍失败，请联系支持人员。"
-                : "返回结果无法读取，提交结果尚未确认，请先查询处理结果。",
+                ? "页面数据加载异常，请刷新重试；如仍无法显示，请联系支持人员。"
+                : "系统响应异常，提交结果尚未确认，请先刷新核对当前状态。",
         retryable: method === "GET",
         requestId,
         responseData,
@@ -312,13 +313,22 @@ const missingPermissionMessage = (error: ApiError): string | undefined => {
         !/^[a-z][a-z0-9_]*:[a-z][a-z0-9_]*$/.test(key)
     )
         return undefined
+    const label = permissionLabel(key)
+    if (label !== key) {
+        return `当前账号缺少「${label}」权限，请联系管理员开通后重试。`
+    }
     const permission = PERMISSION_GROUPS.flatMap(
         (group) => group.permissions,
     ).find(
         (item) =>
             `${item.permission.resource}:${item.permission.action}` === key,
     )
-    return `缺少「${permission?.description ?? "操作权限"}」权限（${key}），请联系管理员授权后重试。`
+    const fallbackName =
+        permission?.description
+            ?.replace(/（幂等）/g, "")
+            .replace(/快照|事实/g, "记录")
+            .trim() || "操作权限"
+    return `当前账号缺少「${fallbackName}」权限，请联系管理员开通后重试。`
 }
 
 const presentationFromApiError = (
@@ -470,11 +480,7 @@ export const getErrorPresentation = (
 /** 提取用户可读错误原因，供仍使用局部 Alert 的页面复用。 */
 export const getErrorMessage = (error: unknown, fallback?: string): string => {
     const failure = getErrorPresentation(error, fallback)
-    return [
-        failure.description,
-        ...fieldErrorMessages(failure.fieldErrors),
-        failure.requestId ? `请求编号：${failure.requestId}` : undefined,
-    ]
+    return [failure.description, ...fieldErrorMessages(failure.fieldErrors)]
         .filter(Boolean)
         .join("\n")
 }

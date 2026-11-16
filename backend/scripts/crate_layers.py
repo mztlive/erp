@@ -1,6 +1,7 @@
 """Explicit crate ownership and dependency contracts for the layered workspace."""
 from __future__ import annotations
 
+import functools
 import json
 from pathlib import Path
 from typing import Any, Mapping
@@ -9,6 +10,7 @@ REGISTRY_PATH = Path(__file__).with_name("crate-layers.json")
 LAYERS = {"domains", "orchestration", "read-models", "adapters", "foundation", "platform", "testing", "apps", "configuration"}
 
 
+@functools.lru_cache(maxsize=1)
 def load_registry() -> dict[str, dict[str, Any]]:
     """Read the reviewed package/layer/path and orchestration dependency registry."""
     payload = json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
@@ -30,9 +32,15 @@ def load_registry() -> dict[str, dict[str, Any]]:
     return packages
 
 
+@functools.lru_cache(maxsize=4096)
+def _resolve_dir(path: Path) -> Path:
+    return path.resolve()
+
+
 def member_directories(backend: Path, metadata: Mapping[str, Any]) -> tuple[dict[str, Path], list[str]]:
     """Locate every active crate from metadata, failing on unknown or missing source paths."""
     registry = load_registry()
+    backend_resolved = _resolve_dir(backend)
     members = set(metadata.get("workspace_members") or [])
     directories: dict[str, Path] = {}
     errors: list[str] = []
@@ -48,8 +56,8 @@ def member_directories(backend: Path, metadata: Mapping[str, Any]) -> tuple[dict
         if not manifest:
             errors.append(f"活动 crate 缺少 manifest_path: {name}")
             continue
-        directory = Path(manifest).resolve().parent
-        allowed = {(backend / path).resolve() for path in contract["paths"]}
+        directory = _resolve_dir(Path(manifest)).parent
+        allowed = {_resolve_dir(backend_resolved / path) for path in contract["paths"]}
         if directory not in allowed:
             errors.append(f"crate 路径与登记层次 {contract['layer']} 不符: {name}: {directory}")
         if not (directory / "src").is_dir():

@@ -54,19 +54,19 @@ export function AllocationPoolCard({
         <section
             id={poolId}
             className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}
-            aria-label="同供应商待核销池"
+            aria-label="待核销应付单据"
         >
             <div className="border-b border-border px-4 py-3">
-                <h2 className="text-sm font-semibold">同供应商待核销池</h2>
+                <h2 className="text-sm font-semibold">待核销应付单据</h2>
                 <p className="mt-0.5 text-xs text-muted-foreground">
                     {`仅 ${supplierName} · ${
-                        track === "payment" ? "开放应付" : "可收票余额"
+                        track === "payment" ? "未结清应付" : "可收票余额"
                     }`}
                 </p>
             </div>
             <div className="space-y-2 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-                    <span>{`共 ${pool.length} 个开放目标`}</span>
+                    <span>{`共 ${pool.length} 笔待核销单据`}</span>
                     <div className="flex gap-1">
                         <Button
                             id="supplier-payables-allocation-pool-select-all"
@@ -88,13 +88,13 @@ export function AllocationPoolCard({
                         >
                             {track === "payment"
                                 ? "按付款建议填写"
-                                : "按开放余额填满"}
+                                : "按剩余未核销金额填满"}
                         </Button>
                     </div>
                 </div>
                 {pool.length === 0 ? (
                     <p className="py-6 text-sm text-muted-foreground">
-                        当前无开放目标
+                        暂无待核销单据
                     </p>
                 ) : (
                     pool.map((item) => {
@@ -145,7 +145,7 @@ export function AllocationPoolCard({
                                         </div>
                                         <div className="mt-1 flex flex-wrap items-center justify-between gap-2 text-sm">
                                             <span className="text-muted-foreground">
-                                                开放余额
+                                                待核销余额
                                             </span>
                                             <MoneyValue
                                                 value={open}

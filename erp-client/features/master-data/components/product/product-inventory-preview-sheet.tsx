@@ -117,7 +117,7 @@ export function ProductInventoryPreviewSheet({
                 <BusinessEmptyState
                     kind="no-data"
                     title="保存商品后可查看库存"
-                    description="库存按已保存的 SKU 身份查询，当前新增但尚未保存的 SKU 暂无正式库存记录。"
+                    description="新增规格需先保存商品后，才能查询库存记录。"
                     className="m-5"
                 />
             )
@@ -158,8 +158,8 @@ export function ProductInventoryPreviewSheet({
             return (
                 <BusinessEmptyState
                     kind="no-scope"
-                    title="当前角色未配置仓库数据范围"
-                    description="不能把无权查看的仓库显示为库存为 0；请联系管理员配置仓库授权。"
+                    title="暂无仓库库存查看权限"
+                    description="您当前尚未开通任何仓库的数据查看权限，请联系管理员配置。"
                     className="m-5"
                 />
             )
@@ -337,8 +337,7 @@ export function ProductInventoryPreviewSheet({
                         />
                     </div>
                     <p className="text-xs text-muted-foreground">
-                        库存按已保存的 SKU
-                        身份查询；当前尚未保存的名称、编号或价格修改不会改变台账范围。
+                        此处展示已保存规格的实时库存。
                     </p>
                 </div>
             }

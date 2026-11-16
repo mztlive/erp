@@ -19,6 +19,33 @@ const HISTORY_SORT_OPTIONS = [
     { value: "label:asc", label: "分组名称升序" },
 ]
 
+function formatAttributionGroupLabel(
+    group: string,
+    directory: ReturnType<typeof useHistoricalDirectory>["data"] | undefined,
+): string {
+    const prefix = group.startsWith("attribution_user:")
+        ? "user"
+        : group.startsWith("attribution_org:")
+          ? "org"
+          : null
+    const rawId = prefix
+        ? group.slice(group.indexOf(":") + 1)
+        : group.replace(/^(user|org):/, "")
+    const options =
+        prefix === "user"
+            ? directory?.attributionUserOptions
+            : prefix === "org"
+              ? directory?.attributionOrgOptions
+              : [
+                    ...(directory?.attributionUserOptions ?? []),
+                    ...(directory?.attributionOrgOptions ?? []),
+                ]
+    const matched = options?.find(
+        (opt) => opt.value === rawId || opt.value === group,
+    )
+    return matched?.label ?? rawId
+}
+
 export function HistoryCaliberFilters({
     filters,
     patchDual,
@@ -84,7 +111,7 @@ export function HistoryCaliberFilters({
                         htmlFor="customers-quality-dual-attribution-id"
                         className="sr-only"
                     >
-                        历史归属销售 ID
+                        销售人员编号
                     </label>
                     <Input
                         id="customers-quality-dual-attribution-id"
@@ -96,7 +123,7 @@ export function HistoryCaliberFilters({
                                 applyIdDraft()
                             }
                         }}
-                        placeholder="历史归属销售 ID（逗号分隔）"
+                        placeholder="输入销售人员编号（多个用逗号分隔）"
                         className="min-w-0 flex-1 font-mono"
                     />
                     <Button
@@ -188,7 +215,11 @@ export function HistoryCaliberFilters({
             {attributionGroup ? (
                 <div className="flex min-w-0 flex-wrap items-center gap-2 rounded-xl border border-border p-2 text-body-compact">
                     <span className="min-w-0 truncate">
-                        历史分组下钻：{attributionGroup}
+                        历史分组明细：
+                        {formatAttributionGroupLabel(
+                            attributionGroup,
+                            directory,
+                        )}
                     </span>
                     <Button
                         id="customers-quality-dual-drill-clear"
@@ -203,14 +234,14 @@ export function HistoryCaliberFilters({
                             })
                         }
                     >
-                        清除下钻
+                        清除明细筛选
                     </Button>
                 </div>
             ) : null}
 
             {directoryQuery.isError && (
                 <BusinessFailureState
-                    title="历史候选加载失败"
+                    title="销售与部门列表加载失败"
                     error={directoryQuery.error}
                     onRetry={() => void directoryQuery.refetch()}
                 />
@@ -218,13 +249,13 @@ export function HistoryCaliberFilters({
             <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
                 <CandidatePicker
                     idPrefix="customers-quality-dual-attribution-user"
-                    title="历史归属销售候选"
+                    title="历史负责销售"
                     options={directory?.attributionUserOptions ?? []}
                     selected={userIds}
                     emptyLabel={
                         directoryQuery.isFetching
-                            ? "正在加载历史候选…"
-                            : "该期间授权范围内无历史销售候选。"
+                            ? "正在加载人员列表…"
+                            : "该期间暂无历史负责销售。"
                     }
                     onToggle={(id) => {
                         const merged = serializeCsvIds(toggleId(userIds, id))
@@ -237,13 +268,13 @@ export function HistoryCaliberFilters({
                 />
                 <CandidatePicker
                     idPrefix="customers-quality-dual-attribution-org"
-                    title="历史归属组织候选"
+                    title="历史所属部门"
                     options={directory?.attributionOrgOptions ?? []}
                     selected={orgIds}
                     emptyLabel={
                         directoryQuery.isFetching
-                            ? "正在加载历史候选…"
-                            : "该期间授权范围内无历史组织候选。"
+                            ? "正在加载部门列表…"
+                            : "该期间暂无历史所属部门。"
                     }
                     onToggle={(id) => {
                         const merged = serializeCsvIds(toggleId(orgIds, id))

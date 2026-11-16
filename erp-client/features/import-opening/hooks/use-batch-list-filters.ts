@@ -99,7 +99,7 @@ export function useBatchListFilters({
         if (appliedObjectType) {
             chips.push({
                 key: "objectType",
-                label: `对象：${OBJECT_CODE_LABEL[appliedObjectType]}`,
+                label: `类型：${OBJECT_CODE_LABEL[appliedObjectType]}`,
             })
         }
         return chips

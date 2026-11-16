@@ -12,7 +12,8 @@ import {
 
 const warningDetails: Record<string, string> = {
     来源销售缺失: "此次提交未保留可核对的来源销售明细，请联系申请人补充核对依据。",
-    供给价未填写: "来源销售未填写预计采购含税单价，无法判断本次采购是否超出预估。",
+    销售预估采购价未填写:
+        "来源销售未填写预计采购含税单价，无法判断本次采购是否超出预估。",
     数值格式需核对:
         "价格或数量格式异常，无法可靠计算差额，请联系申请人核对原始资料。",
     交期资料不完整: "销售承诺交期或采购预计交期缺失，无法判断能否按时交付。",
@@ -60,10 +61,10 @@ export function PurchaseLineSupplement({
                     <ul className="space-y-2 text-sm text-warning-soft-foreground">
                         {warnings.map((warning) => (
                             <li key={warning}>
-                                {warning === "高于供给价" &&
+                                {warning === "高于销售预估采购价" &&
                                 comparison.priceDifference ? (
                                     <>
-                                        每单位高于供给价{" "}
+                                        每单位高于销售预估采购价{" "}
                                         <MoneyValue
                                             value={comparison.priceDifference}
                                             display="exact"

@@ -90,7 +90,7 @@ export function CustomerDetailPage({
             <PageScaffold>
                 <PageHeader
                     title="客户不存在或无权访问"
-                    description="未找到该客户。可能编号有误，或当前角色无权访问该客户。"
+                    description="未找到该客户。可能编号有误，或当前账号无权查看该客户。"
                     actions={
                         <Button
                             id="customers-detail-not-found-back"
@@ -170,7 +170,7 @@ export function CustomerDetailPage({
                 <Alert variant="warning">
                     <AlertTitle>最新客户资料暂时不可用</AlertTitle>
                     <AlertDescription>
-                        当前输入仍然保留。资料可能已变更或访问权限已调整，保存时会重新校验权限及版本。
+                        当前填写内容已保留。客户资料可能已被其他人更新，保存前建议刷新核对最新资料。
                         <Button
                             id="customers-detail-edit-retry"
                             type="button"
@@ -188,7 +188,7 @@ export function CustomerDetailPage({
                 <Alert variant="warning">
                     <AlertTitle>客户已停用</AlertTitle>
                     <AlertDescription>
-                        稳定身份、历史修订与已引用单据保留。上传合同和新建销售单已禁用
+                        该客户已停用，不可新签合同或新建销售单；历史业务单据及往来账款仍可正常查看。
                         {blocker(customer, "UPLOAD_CONTRACT_PDF") ||
                         blocker(customer, "CREATE_SALES_ORDER")
                             ? `（${[
@@ -198,7 +198,6 @@ export function CustomerDetailPage({
                                   .filter(Boolean)
                                   .join("；")}）`
                             : ""}
-                        ；可继续查看历史与票款摘要。
                     </AlertDescription>
                 </Alert>
             ) : null}
@@ -294,7 +293,7 @@ export function CustomerDetailPage({
                 description={
                     state.pendingSection === "back"
                         ? "编辑内容尚未保存，返回列表后将丢失。"
-                        : "编辑内容尚未保存，切换分区后将丢失。可先保存修订再切换。"
+                        : "编辑内容尚未保存，切换标签页后将丢失。可先保存修改再切换。"
                 }
                 confirmLabel={
                     state.pendingSection === "back"

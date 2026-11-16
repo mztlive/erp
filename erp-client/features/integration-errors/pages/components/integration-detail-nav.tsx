@@ -20,7 +20,7 @@ export function IntegrationDetailNav({
 }) {
     return (
         <DetailPageHeader
-            title={itemNumber ?? "接口错误与对账中心"}
+            title={itemNumber ?? "外部同步异常与对账"}
             back={{
                 id: "integration-detail-nav-back",
                 label: "返回队列",

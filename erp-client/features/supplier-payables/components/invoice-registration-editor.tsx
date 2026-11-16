@@ -69,7 +69,9 @@ export function InvoiceRegistrationEditor({
         if (!issue.targetId) return
         const element =
             document.getElementById(issue.targetId) ||
-            document.getElementById(issue.targetId.replace("-select", "-input")) ||
+            document.getElementById(
+                issue.targetId.replace("-select", "-input"),
+            ) ||
             document.getElementById(issue.targetId.replace("-input", "-select"))
         if (element) {
             element.focus()

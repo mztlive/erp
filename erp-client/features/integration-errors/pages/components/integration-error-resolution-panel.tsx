@@ -20,7 +20,7 @@ export function IntegrationErrorResolutionPanel({
             businessImpact={
                 <span>
                     {item.businessObject.title} · {item.fundsImpactLabel}
-                    {item.compensationOpen ? " · 补偿未完成" : ""}
+                    {item.compensationOpen ? " · 后续补救未完成" : ""}
                 </span>
             }
             latestAttempt={{

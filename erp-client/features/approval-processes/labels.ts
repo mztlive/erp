@@ -52,7 +52,7 @@ export const CONFIGURATION_STATUS_LABEL: Record<ConfigurationStatus, string> = {
 export const DEFINITION_STATUS_LABEL: Record<DefinitionStatus, string> = {
     DRAFT: "草稿",
     PUBLISHED: "已发布",
-    RETIRED: "已退役",
+    RETIRED: "已停用",
 }
 
 /**

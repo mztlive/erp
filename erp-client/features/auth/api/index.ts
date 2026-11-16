@@ -55,7 +55,7 @@ export async function login(input: LoginInput): Promise<LoginResult> {
     if (!result?.token) {
         throw {
             kind: "Parse",
-            message: "登录响应缺少 token",
+            message: "登录状态获取异常，请重新登录或联系管理员。",
             responseData: result,
         }
     }

@@ -129,8 +129,8 @@ export async function runDataTransfer(
     })
     if (!delivered) {
         toast.add({
-            title: "已提交后台处理",
-            description: `任务 ${job.job_no}，可离开当前页面，稍后到“我的文件任务”查看结果。`,
+            title: "正在生成文件",
+            description: `任务编号 ${job.job_no}，您可继续其他操作，稍后在“我的文件任务”查看结果。`,
             type: "info",
         })
     }
@@ -139,7 +139,7 @@ export async function runDataTransfer(
     if (!completed.result_file_asset_id)
         throw new Error(
             completed.error_summary ||
-                "后台任务未生成结果，请到任务入口查看详情",
+                "文件未能生成，请前往“我的文件任务”查看具体原因",
         )
     const file = await readTransferResult(job.id, portal)
     return { ...file, jobId: job.id }
@@ -163,7 +163,12 @@ function waitForTransfer(
     })
     return new Promise((resolve, reject) => {
         const timer = setTimeout(
-            () => finish(new Error("任务仍在后台处理，请到任务入口查看结果")),
+            () =>
+                finish(
+                    new Error(
+                        "文件仍在生成中，请稍后到“我的文件任务”中查看结果",
+                    ),
+                ),
             30 * 60 * 1000,
         )
         let unsubscribe = () => {}

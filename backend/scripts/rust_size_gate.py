@@ -29,6 +29,7 @@ MAX_FILE_LINES = 1200
 MAX_FN_LINES = 50
 FN_NAME = re.compile(r"\bfn\s+(?:r#)?([A-Za-z_][A-Za-z0-9_]*)")
 MOD_NAME = re.compile(r"mod\s+([A-Za-z_][A-Za-z0-9_]*)")
+PUB_RE = re.compile(r"pub\b")
 MACRO_IMPL_PREFIXES = ("crates/platform/entity-macros/",)
 CFG_TEST = re.compile(
     r"#\s*!?\s*\[\s*cfg\s*\(\s*(?:test\s*\)|all\s*\((?:[^()]|\([^()]*\))*\btest\b)",
@@ -61,22 +62,29 @@ def skip_balanced(code: str, index: int, opener: str, closer: str) -> int:
     """Return the index after a nested opener/closer pair starting at index."""
     if index >= len(code) or code[index] != opener:
         raise ValueError(f"期望 {opener!r}，实际 {code[index:index + 8]!r}")
-    depth = 0
-    for pos in range(index, len(code)):
-        char = code[pos]
-        depth += char == opener
-        depth -= char == closer
-        if depth == 0:
-            return pos + 1
-    raise ValueError(f"{opener} 未闭合")
+    depth = 1
+    pos = index + 1
+    find = code.find
+    while depth > 0:
+        next_close = find(closer, pos)
+        if next_close < 0:
+            raise ValueError(f"{opener} 未闭合")
+        next_open = find(opener, pos, next_close)
+        if next_open >= 0:
+            depth += 1
+            pos = next_open + 1
+        else:
+            depth -= 1
+            pos = next_close + 1
+    return pos
 
 
 def skip_vis(code: str, index: int) -> int:
     """Skip `pub`, `pub(crate)`, `pub(super)` and `pub(in path)`."""
-    match = re.match(r"pub\b", code[index:])
+    match = PUB_RE.match(code, index)
     if not match:
         return index
-    index = skip_ws(code, index + match.end())
+    index = skip_ws(code, match.end())
     if index < len(code) and code[index] == "(":
         return skip_ws(code, skip_balanced(code, index, "(", ")"))
     return index
@@ -155,10 +163,10 @@ def consume_item(code: str, index: int) -> tuple[int, str | None]:
     """Skip one item after its attributes. Semicolon `mod name;` yields the name."""
     index = skip_vis(code, skip_ws(code, index))
     index = skip_ws(code, index)
-    mod = MOD_NAME.match(code[index:])
+    mod = MOD_NAME.match(code, index)
     if mod:
         name = mod.group(1)
-        pos, is_block = find_block_or_semi(code, index + mod.end())
+        pos, is_block = find_block_or_semi(code, mod.end())
         if is_block:
             return block_end(code, pos), None
         return pos + 1, name
@@ -192,9 +200,10 @@ def find_test_ranges(code: str) -> tuple[list[tuple[int, int]], list[str]]:
     index = 0
     length = len(code)
     while index < length:
-        if code[index] != "#":
-            index += 1
-            continue
+        hash_pos = code.find("#", index)
+        if hash_pos < 0:
+            break
+        index = hash_pos
         start = index
         try:
             attrs, after_attrs = consume_attrs(code, index)
@@ -223,12 +232,20 @@ def mask_ranges(code: str, ranges: list[tuple[int, int]]) -> str:
     """Replace non-newline characters in ranges with spaces; keep line numbers."""
     if not ranges:
         return code
-    chars = list(code)
+    chunks: list[str] = []
+    cursor = 0
+    length = len(code)
     for start, end in ranges:
-        for pos in range(start, min(end, len(chars))):
-            if chars[pos] != "\n":
-                chars[pos] = " "
-    return "".join(chars)
+        start = max(cursor, min(start, length))
+        end = max(start, min(end, length))
+        if start > cursor:
+            chunks.append(code[cursor:start])
+        seg = code[start:end]
+        chunks.append(" " * len(seg) if "\n" not in seg else "\n".join(" " * len(line) for line in seg.split("\n")))
+        cursor = end
+    if cursor < length:
+        chunks.append(code[cursor:])
+    return "".join(chunks)
 
 
 def production_line_count(source: str, ranges: list[tuple[int, int]]) -> int:

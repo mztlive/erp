@@ -43,8 +43,8 @@ export const AUTHORIZATION_POLICY_LABEL: Record<AuthorizationPolicy, string> = {
     shared: "按岗位权限共享",
     source_inherited: "由来源业务决定",
     task: "由流程或任务指派决定",
-    governance: "治理委派",
-    directory: "目录可见",
+    governance: "系统管理授权",
+    directory: "基础资料可见范围",
     role: "由操作权限控制",
 }
 
@@ -205,7 +205,7 @@ export function personScopeDescription(
     const alternatives = expression.alternatives.map((terms) =>
         personTermsDescription(terms, labels),
     )
-    if (expression.history_read) alternatives.push("历史参与读取")
+    if (expression.history_read) alternatives.push("曾参与经办的历史单据")
     const union = alternatives.join("；或 ") || "无数据访问范围"
     if (expression.condition?.length === 0) return "无数据访问范围"
     return expression.condition
@@ -249,7 +249,7 @@ export function personEffectiveDescription(
     )
         return business.policy_description
     if (scope && !scope.expression.additive)
-        return `原授权：${personScopeDescription(scope, labels)}（待转换）`
+        return `旧版范围规则：${personScopeDescription(scope, labels)}（保存后将更新为新版规则）`
     const defaultSelf = action
         ? personHasDefaultSelf(business, action)
         : business.default_self

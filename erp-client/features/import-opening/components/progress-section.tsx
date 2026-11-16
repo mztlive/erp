@@ -17,7 +17,7 @@ export function ProgressSection({ batch }: { batch: ImportBatchView }) {
             <BusinessEmptyState
                 kind="no-data"
                 title="暂无导入任务"
-                description="提交应用后将在此展示任务号、成功/跳过/失败计数与最近进度时间；刷新可恢复进度。"
+                description="开始正式导入后将在此展示任务号、成功/跳过/失败计数与最新进度。"
             />
         )
     }

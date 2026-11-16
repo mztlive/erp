@@ -115,10 +115,11 @@ export function UpgradeBindingDialog({
                 className="sm:max-w-lg"
             >
                 <DialogHeader>
-                    <DialogTitle>更新审批流程版本</DialogTitle>
+                    <DialogTitle>采用最新审批流程</DialogTitle>
                     <DialogDescription>
-                        当前绑定 {currentLabel}，将更新到 {targetLabel}。
-                        不会改动单据内容，只替换尚未提交的审批路线。
+                        公司审批流程已更新（原为 {currentLabel}，最新为{" "}
+                        {targetLabel}
+                        ）。确认后本单将按最新流程提交审批，单据内容不会改变。
                     </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-2 text-sm">

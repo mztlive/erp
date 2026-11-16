@@ -87,7 +87,7 @@ export class InquirySalesCommandLedger extends FormalCommandKeyLedger {
         } catch {
             super.settle(slot, "failed")
             throw new Error(
-                "无法保存本次开单记录，尚未发送请求。请允许本地存储后重试。",
+                "无法暂存本次开单记录，尚未发送请求。请清理浏览器缓存或关闭无痕模式后重试。",
             )
         }
         return command

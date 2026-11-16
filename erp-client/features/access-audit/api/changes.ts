@@ -15,8 +15,7 @@ function submissionBlockerFor(command: AccessChangeCommand) {
         return {
             action: command.action,
             code: "USER_ROLE_TIME_POLICY_MISSING",
-            message:
-                "用户角色时间策略尚未配置；当前只允许立即紧急撤权，其它角色变更已阻断。",
+            message: "暂不支持设置角色生效或到期时间；当前仅支持立即紧急撤权。",
         } as const
     }
 
@@ -24,15 +23,14 @@ function submissionBlockerFor(command: AccessChangeCommand) {
         return {
             action: command.action,
             code: "FIELD_POLICY_GRANULARITY_MISSING",
-            message: "字段粒度策略尚未配置，字段访问策略保持只读。",
+            message: "暂不支持按字段单独配置权限，字段访问规则保持只读。",
         } as const
     }
 
     return {
         action: command.action,
         code: "REVIEW_POLICY_UNCONFIGURED",
-        message:
-            "本次权限变更尚未取得可直接生效的结论，且双人复核规则未配置；当前变更已阻断。",
+        message: "尚未配置权限变更复核规则，当前无法直接提交该变更。",
     } as const
 }
 
@@ -41,10 +39,14 @@ export async function previewAccessChange(
 ): Promise<AccessImpactPreview> {
     const subjectLabel = "subjectId" in command ? command.subjectId : "—"
     const submissionBlocker = submissionBlockerFor(command)
+    const actionLabel =
+        command.action === "EMERGENCY_REVOKE_USER_ROLE"
+            ? "紧急撤权"
+            : command.action
     return {
         subjectLabel,
-        actionLabel: command.action,
-        changeSummary: `预览：${command.action} → ${subjectLabel}`,
+        actionLabel,
+        changeSummary: `预览：${actionLabel} → ${subjectLabel}`,
         affectedSubjectCount: 1,
         affectedWorkSurfaceSummary: submissionBlocker
             ? "影响预览尚未可用"
@@ -52,14 +54,14 @@ export async function previewAccessChange(
         riskLevel: submissionBlocker ? "high" : "medium",
         riskSummary: submissionBlocker
             ? submissionBlocker.message
-            : "紧急撤权将立即影响该授权主体的可访问范围。",
+            : "紧急撤权后，该人员将立即失去对应角色的操作权限。",
         riskFlags: [],
         diffs: [
             {
                 id: "d1",
-                field: "action",
+                field: "操作",
                 before: "—",
-                after: command.action,
+                after: actionLabel,
             },
         ],
         submissionBlocker,
@@ -87,7 +89,7 @@ export async function submitAccessChange(
             return {
                 outcome: "REJECTED",
                 code: "INVALID_COMMAND",
-                message: "紧急撤权需要 USER + roleAssignmentId",
+                message: "请选择需要撤权的人员及对应角色后再操作。",
             }
         }
         await apiPost(`/admin/user-roles/${command.roleAssignmentId}/revoke`, {

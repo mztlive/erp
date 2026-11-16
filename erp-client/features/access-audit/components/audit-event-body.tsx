@@ -87,13 +87,13 @@ function AuditEventBody({ query }: AuditEventBodyProps) {
                             : "无字段变更记录"}
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                        敏感字段不返回完整旧值或新值；安全摘要默认仅作引用。
+                        涉及敏感信息的字段仅提示已变更，不展示明文。
                     </p>
                 </div>
             </section>
             <details className="group rounded-lg border border-border">
                 <summary className="cursor-pointer px-3 py-2 text-xs text-muted-foreground hover:text-foreground">
-                    技术信息：事件号、追踪号与安全摘要
+                    日志编号与追踪信息
                 </summary>
                 <div className="border-t border-border px-3 py-3">
                     <DescriptionList columns="two" aria-label="技术信息">
@@ -124,7 +124,7 @@ function AuditEventBody({ query }: AuditEventBodyProps) {
                 </div>
             </details>
             <p className="text-xs text-muted-foreground">
-                审计记录不可编辑或删除。打开关联对象时将重新鉴权。
+                操作记录不可修改或删除；查看关联单据需具备相应权限。
             </p>
         </div>
     )

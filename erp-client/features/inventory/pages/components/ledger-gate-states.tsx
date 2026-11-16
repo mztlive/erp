@@ -62,12 +62,12 @@ export function InventoryLedgerNoScope() {
             <ListWorkspaceHeader
                 eyebrow="库存"
                 title="库存台账"
-                description="有模块权限但未配置仓库数据范围。"
+                description="当前账号暂未分配可查看的仓库。"
             />
             <BusinessEmptyState
                 kind="no-scope"
-                title="当前角色未配置仓库数据范围"
-                description="不能显示为库存为 0。请联系管理员配置仓库授权后再查询。"
+                title="暂未分配可查看的仓库"
+                description="您的账号尚未关联任何仓库查看权限，请联系管理员分配负责的仓库。"
             />
         </PageScaffold>
     )

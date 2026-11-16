@@ -267,7 +267,7 @@ export function PreviewTable({
                                                   )
                                               }
                                           >
-                                              重生成此档
+                                              重新生成此档
                                           </LoadingButton>
                                       ) : null}
                                   </div>

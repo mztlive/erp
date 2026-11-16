@@ -77,7 +77,7 @@ export function PurchaseOrderDetailOverviewSection({
                 </DetailRecordSection>
             ) : null}
             <div className="grid items-start gap-5 2xl:grid-cols-2">
-                <DetailRecordSection title="来源与版本">
+                <DetailRecordSection title="关联单据与基本信息">
                     <dl className="grid gap-5 sm:grid-cols-2">
                         <OverviewField label="来源销售单">
                             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -101,17 +101,17 @@ export function PurchaseOrderDetailOverviewSection({
                         <OverviewField label="采购类型">
                             {PURCHASE_TYPE_LABEL[order.header.purchaseType]}
                         </OverviewField>
-                        <OverviewField label="当前采购版本">
+                        <OverviewField label="修订版次">
                             {order.identity.revisionNo == null
                                 ? "尚未生效"
                                 : `v${order.identity.revisionNo}`}
                         </OverviewField>
-                        <OverviewField label="内容来源">
+                        <OverviewField label="当前内容">
                             {order.currentContent.source === "DRAFT"
                                 ? "草稿"
                                 : order.currentContent.source === "SUBMISSION"
-                                  ? "已提交内容"
-                                  : "生效版本"}
+                                  ? "已提交审批"
+                                  : "已生效"}
                         </OverviewField>
                     </dl>
                 </DetailRecordSection>

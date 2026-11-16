@@ -42,21 +42,21 @@ function PolicyBanner({
             key: "time",
             label: "角色生效时间",
             consequence:
-                "不能预约生效或到期时间，用户授权只能立即调整或紧急撤权。",
+                "暂不支持设置角色生效或到期时间，调整人员角色后将立即生效（或立即撤权）。",
         })
     }
     if (field.state === "MISSING" && view === "roles") {
         missing.push({
             key: "field",
             label: "字段访问粒度",
-            consequence: "字段级策略保持只读，不能按字段单独授权。",
+            consequence: "暂不支持按字段单独设置查看权限，字段规则仅可查看。",
         })
     }
     if (audit.state === "MISSING" && view === "audit") {
         missing.push({
             key: "audit",
             label: "审计查询与导出",
-            consequence: `只能查询保守窗口（${formatDateTime(audit.fallbackFrom, "full")} ~ ${formatDateTime(audit.fallbackTo, "full")}），导出禁用。`,
+            consequence: `当前仅支持查询近期记录（${formatDateTime(audit.fallbackFrom, "full")} ~ ${formatDateTime(audit.fallbackTo, "full")}），暂不支持导出。`,
         })
     }
 

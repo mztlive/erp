@@ -56,7 +56,7 @@ export function WorkItemProcessPanel({
         <>
             {workItemBlocker ? (
                 <Alert variant="warning">
-                    <AlertTitle>正式任务入口已阻断</AlertTitle>
+                    <AlertTitle>当前待办暂无法处理</AlertTitle>
                     <AlertDescription>
                         {workItemBlocker.message}
                     </AlertDescription>

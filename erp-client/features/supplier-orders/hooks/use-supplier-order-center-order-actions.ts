@@ -82,11 +82,11 @@ export function useSupplierOrderCenterOrderActions(
                 facts: res.data
                     ? [
                           {
-                              label: "取消轨",
+                              label: "取消状态",
                               value: CANCEL_STATUS_LABEL[res.data.cancelStatus],
                           },
                           {
-                              label: "退款轨",
+                              label: "退款状态",
                               value: REFUND_STATUS_LABEL[res.data.refundStatus],
                           },
                           { label: "说明", value: res.data.note },

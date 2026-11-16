@@ -5,7 +5,7 @@ import { ScopePagePulse } from "@/components/layout/page-pulse"
 import { ReceivableScopePage } from "@/features/customer-receivables/pages/receivable-scope-page"
 
 export const metadata: Metadata = {
-    title: "客户往来（按数据范围）",
+    title: "客户往来汇总",
 }
 
 /**

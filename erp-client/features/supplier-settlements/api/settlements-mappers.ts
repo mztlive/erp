@@ -246,7 +246,7 @@ export function toDetail(
                 action: "REVIEW_DECISION",
                 code: "FORMAL_REVIEW_WORK_ITEM_MISSING",
                 message:
-                    "未查询到与当前结算单及 W27 路由完全匹配的正式复核任务；禁止按对象状态直接确认或驳回。",
+                    "当前待办与该结算单不匹配，请从工作台待办列表重新进入处理。",
             },
         )
     }

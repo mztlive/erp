@@ -36,11 +36,6 @@ export function ChangeOfferingStatusDialog({
 }) {
     const mutation = useReviseSupplierOfferingMutation()
     const [submitError, setSubmitError] = React.useState<string | null>(null)
-    const currentNo = offering.current_revision_no ?? "—"
-    const nextNo =
-        offering.current_revision_no != null
-            ? offering.current_revision_no + 1
-            : "—"
     const form = useAppForm({
         defaultValues: {
             changeReason: intent.defaultReason,
@@ -78,9 +73,9 @@ export function ChangeOfferingStatusDialog({
                 <DialogHeader>
                     <DialogTitle>{intent.title}</DialogTitle>
                     <DialogDescription>
-                        将追加一版商业条款。价格、起订量和有效期保持当前内容，条款号从
-                        v{currentNo} 变为 v{nextNo}，关系状态变为
-                        {OFFERING_STATUS_LABELS[intent.nextStatus]}。
+                        变更后供货状态将更新为「
+                        {OFFERING_STATUS_LABELS[intent.nextStatus]}
+                        」，原报价、起订量及有效期保持不变。
                     </DialogDescription>
                 </DialogHeader>
                 {submitError ? (

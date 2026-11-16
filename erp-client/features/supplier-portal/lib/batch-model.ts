@@ -75,7 +75,7 @@ export type PreparedBatch = {
 }
 export const batchModeLabels: Record<PortalBatchMode, string> = {
     quote: "已有商品批量报价",
-    terms: "已有供给批量调价",
+    terms: "已有供货商品批量调价",
     new_product: "新品批量提报",
     availability: "批量更新可供",
 }
@@ -90,7 +90,7 @@ export const batchStatusLabels: Record<BatchStatus, string> = {
 }
 const column = (key: BatchField, label: string): BatchColumn => ({ key, label })
 const identityColumns = [
-    column("skuNo", "公司SKU编号"),
+    column("skuNo", "公司商品编号"),
     column("orderingCode", "供应商订货编码"),
 ]
 const termsColumns = [
@@ -109,13 +109,13 @@ const productColumns = [
     column("groupCode", "商品组编号"),
     column("productName", "商品名称"),
     column("productKind", "商品类型"),
-    column("brandRaw", "原始品牌"),
-    column("categoryRaw", "原始分类完整路径"),
+    column("brandRaw", "品牌名称"),
+    column("categoryRaw", "建议商品分类"),
     column("model", "型号"),
     column("description", "商品说明"),
-    column("skuName", "SKU名称"),
+    column("skuName", "规格名称"),
     column("specs", "规格属性"),
-    column("unitRaw", "原始单位及包装含义"),
+    column("unitRaw", "计量单位与包装规格"),
     column("barcode", "条码"),
     column("orderingCode", "供应商订货编码"),
 ]
@@ -367,7 +367,7 @@ function localErrors(
             "skuName",
             "unitRaw",
         ] as const)
-            if (!value[field].trim()) errors[field] = "此项必须填写原始资料"
+            if (!value[field].trim()) errors[field] = "此项为必填项"
         if (!productKindMap[value.productKind])
             errors.productKind = "请填写实物、虚拟、线下服务或卡券"
         try {
@@ -401,7 +401,7 @@ export function validateBatchRows(
     mode: PortalBatchMode,
 ): BatchEditorRow[] {
     if (!rows.length || rows.length > PORTAL_BATCH_LIMIT)
-        throw new Error("每批须包含1至100条SKU或供给数据")
+        throw new Error("每批须包含1至100条商品或供货数据")
     const editable = rows.filter((row) => !isBatchRowLocked(row))
     const errors = new Map(
         editable.map((row) => [row.rowId, localErrors(row, mode)]),
@@ -539,8 +539,8 @@ export function prepareBatchRows(
                 row.status = "INVALID"
                 row.message =
                     mode === "quote"
-                        ? "未在开放目录中精确匹配此SKU，请核对编号或联系采购开放目录"
-                        : "未精确匹配自己的供给，请同时核对SKU编号和订货编码"
+                        ? "未在开放目录中精确匹配此商品规格，请核对编号或联系采购开放目录"
+                        : "未精确匹配您的供货商品，请同时核对商品编号和订货编码"
                 continue
             }
             if (
@@ -550,7 +550,8 @@ export function prepareBatchRows(
                     ("offering_id" in target && target.offering_id))
             ) {
                 row.status = "INVALID"
-                row.message = "此SKU已有自己的供给，请进入已有供给批量调价"
+                row.message =
+                    "此商品已有您的供货记录，请进入供货商品目录批量调价"
                 continue
             }
             if (

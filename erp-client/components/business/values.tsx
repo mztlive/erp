@@ -39,7 +39,7 @@ const statusLabelFallback: Record<string, string> = {
     SUCCEEDED: "已完成",
     FAILED: "处理失败",
     REJECTED: "未通过",
-    BLOCKED: "已阻断",
+    BLOCKED: "暂不可操作",
     ACCEPTED: "已受理",
     TRANSFERRED: "已转交",
     UNKNOWN: "结果未知",

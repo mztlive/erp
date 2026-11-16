@@ -32,6 +32,6 @@ export function metricReliabilityDetail(
 ) {
     if (fieldDenied) return "当前角色不可查看"
     if (reliability === "partial") return explanation ?? "部分可靠"
-    if (reliability === "unavailable") return explanation ?? "暂无可靠口径"
+    if (reliability === "unavailable") return explanation ?? "待核算"
     return explanation
 }

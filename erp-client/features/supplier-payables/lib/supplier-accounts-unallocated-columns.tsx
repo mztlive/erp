@@ -10,8 +10,8 @@ export function buildUnallocatedColumns(): ColumnDef<UnallocatedRow>[] {
     return [
         {
             id: "track",
-            header: "轨道",
-            meta: { label: "轨道", width: "default" },
+            header: "单据类型",
+            meta: { label: "单据类型", width: "default" },
             cell: ({ row }) => (
                 <Badge
                     variant={

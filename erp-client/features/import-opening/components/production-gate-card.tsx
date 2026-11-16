@@ -24,13 +24,13 @@ export function ProductionGateCard({ batch }: { batch: ImportBatchView }) {
             <CardHeader className="border-b border-grid">
                 <CardTitle>提交前检查</CardTitle>
                 <CardDescription>
-                    验证环境校验与业务确认是生产应用前置条件；系统管理员不能代替确认。
+                    需先完成数据预检与各部门业务核对，才能正式导入系统。
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 pt-4">
                 <GateRow
                     ok={batch.productionGates.validationEnvPassed}
-                    label="验证环境校验与确认已通过并关联"
+                    label="已完成预检测试并核对通过"
                 />
                 <GateRow
                     ok={batch.productionGates.allConfirmationsComplete}
@@ -42,25 +42,25 @@ export function ProductionGateCard({ batch }: { batch: ImportBatchView }) {
                 />
                 <GateRow
                     ok={batch.productionGates.trialVersionMatches}
-                    label="试算版本与确认一致（未因规则变化失效）"
+                    label="核对通过后数据与导入规则未发生变动"
                 />
                 <GateRow
                     ok={batch.productionGates.ruleVersionStable}
-                    label="规则版本稳定"
+                    label="导入规则已锁定"
                 />
                 <GateRow
                     ok={batch.productionGates.workItemTypeRegistered}
-                    label="导入确认任务与专用提交命令已接线"
+                    label="各部门确认流程已就绪"
                 />
                 {applyBlocked.length > 0 ? (
                     <FormalActionResult
                         status="blocked"
-                        title="提交生产应用已阻断"
+                        title="暂不满足正式导入条件"
                         description={applyBlocked
                             .map((b) => b.message)
                             .join(" ")}
                         facts={applyBlocked.map((b) => ({
-                            label: b.code,
+                            label: "阻断原因",
                             value: b.message,
                         }))}
                     />
@@ -69,7 +69,7 @@ export function ProductionGateCard({ batch }: { batch: ImportBatchView }) {
                         status="succeeded"
                         title={
                             batch.stage === "CONFIRM"
-                                ? "检查已完成，可提交应用"
+                                ? "检查已完成，可开始正式导入"
                                 : "检查已完成"
                         }
                         description="提交时系统会再次核验权限与数据，确认无误后开始导入。"

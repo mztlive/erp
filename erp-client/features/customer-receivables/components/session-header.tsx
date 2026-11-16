@@ -123,7 +123,7 @@ export function SessionHeader({
                 <Alert variant="info">
                     <AlertTitle>来自销售单票款区</AlertTitle>
                     <AlertDescription>
-                        完成或取消后可回到销售单原入口；筛选与主体在本次核销内保留。
+                        正在处理该销售单的往来账款，办理完成后可直接返回该销售单；筛选与结算主体在本次核销内保留。
                         <Button
                             id="customer-receivables-session-return-source"
                             type="button"
@@ -134,7 +134,7 @@ export function SessionHeader({
                                 <Link href={session.returnContext.returnTo} />
                             }
                         >
-                            直接返回来源
+                            返回销售单
                         </Button>
                     </AlertDescription>
                 </Alert>

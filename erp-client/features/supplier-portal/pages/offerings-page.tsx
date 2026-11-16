@@ -123,7 +123,7 @@ export function PortalOfferingsPage() {
     return (
         <PortalSurface
             variant="list"
-            title="我的供给"
+            title="供货商品目录"
             description="分别查看当前生效条款、可供情况与待采购确认的变更。"
             actions={
                 <>
@@ -145,7 +145,7 @@ export function PortalOfferingsPage() {
             }
         >
             <ListWorkSurface
-                ariaLabel="我的供给"
+                ariaLabel="供货商品目录"
                 selectionBar={
                     <span className="text-sm">
                         共 {query.data?.total ?? 0} 条供给
@@ -189,7 +189,7 @@ export function PortalOfferingsPage() {
                         }
                         emptyState={
                             <p className="p-6 text-sm text-muted-foreground">
-                                当前没有可查看的供给，可从“已有商品报价”或“新品提报”开始。
+                                当前暂无供货商品，可从「已有商品报价」或「新品提报」发起。
                             </p>
                         }
                     />

@@ -243,13 +243,13 @@ export const commonActions = (
                     action: "CREATE_REVISION",
                     code: "SELLABLE_READ_ONLY",
                     message:
-                        "公司商品池由销售资格实时计算，请在公司商品中维护销售资料。",
+                        "可售商品列表根据商品上架状态与供应商供货情况自动汇总；如需修改价格或上下架，请前往「商品列表」维护。",
                 },
                 {
                     action: "DISABLE",
                     code: "SELLABLE_READ_ONLY",
                     message:
-                        "公司商品池没有独立启停状态，请维护公司 SKU 或供应商供给。",
+                        "可售商品状态随商品上下架及供应商供货状态自动更新。",
                 },
             ],
         }
@@ -307,7 +307,7 @@ export const commonActions = (
             {
                 action: "VIEW",
                 code: "UNIT_NO_SIDE_PREVIEW",
-                message: "计量单位在列表 Dialog 维护，不提供侧边预览。",
+                message: "计量单位支持在列表中直接弹窗编辑，无需打开侧边预览。",
             },
         ]
         if (lifecycle === "ENABLED") {

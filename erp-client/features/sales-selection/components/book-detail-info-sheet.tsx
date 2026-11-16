@@ -58,7 +58,7 @@ export function BookDetailInfoSheet({
     const archiveFields = [
         ["商品来源", POOL_SOURCE_LABEL[detail.source_kind]],
         ["资格核对日", formatBookInstant(detail.eligibility_as_of)],
-        ["商品快照时间", formatBookInstant(detail.prepared_at)],
+        ["清单生成时间", formatBookInstant(detail.prepared_at)],
         ["更新时间", formatBookInstant(detail.updated_at)],
     ]
 
@@ -259,7 +259,7 @@ export function BookDetailInfoSheet({
                                             }
                                         >
                                             <RefreshCwIcon aria-hidden="true" />
-                                            重生成此档
+                                            重新生成此档
                                         </LoadingButton>
                                     ) : null}
                                 </div>

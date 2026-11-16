@@ -35,10 +35,9 @@ export function IntegrationDirectReconciliation({
 }) {
     return (
         <div className="space-y-3 rounded-xl border border-dashed p-3">
-            <p className="text-sm font-medium">直接对账（无关联任务）</p>
+            <p className="text-sm font-medium">登记对账结论</p>
             <p className="text-xs text-muted-foreground">
-                处理完成只能「确认无误 /
-                确认有效差异」，引用原因注册表与受控证据；不得虚构任务关闭。
+                请选择差异原因并核对关联凭证后，确认该笔对账结果。
             </p>
             {item.reconciliationReasonRegistry ? (
                 <>
@@ -54,8 +53,8 @@ export function IntegrationDirectReconciliation({
                         )}
                         className="w-full max-w-md"
                         size="sm"
-                        aria-label="注册原因"
-                        placeholder="选择注册原因"
+                        aria-label="差异原因"
+                        placeholder="请选择差异原因"
                         allowClear={false}
                     />
                     <div className="flex flex-wrap gap-2">
@@ -100,9 +99,9 @@ export function IntegrationDirectReconciliation({
                 </>
             ) : (
                 <Alert variant="warning">
-                    <AlertTitle>原因注册表未配置</AlertTitle>
+                    <AlertTitle>暂未配置差异原因选项</AlertTitle>
                     <AlertDescription>
-                        确认无误/有效差异均禁用；仅展示服务端当前开放的非终结动作。
+                        请联系管理员配置对账差异原因选项后再确认结果；当前仅可查询或补充凭证。
                     </AlertDescription>
                 </Alert>
             )}
@@ -147,7 +146,7 @@ export function IntegrationDirectReconciliation({
                         disabled={formalPending}
                         onClick={() => void onDirectAction("REATTRIBUTE")}
                     >
-                        重新归集
+                        重新匹配归属
                     </LoadingButton>
                 ) : null}
                 {can("LINK_COMPENSATION") ? (
@@ -162,7 +161,7 @@ export function IntegrationDirectReconciliation({
                         }
                         onClick={() => void onDirectAction("LINK_COMPENSATION")}
                     >
-                        关联补偿
+                        关联补救单据
                     </LoadingButton>
                 ) : null}
                 {can("ADD_EVIDENCE") ? (
@@ -177,7 +176,7 @@ export function IntegrationDirectReconciliation({
                         }
                         onClick={() => void onDirectAction("ADD_EVIDENCE")}
                     >
-                        补充证据（暂不完成对账）
+                        补充凭证（暂不完成对账）
                     </LoadingButton>
                 ) : null}
             </div>

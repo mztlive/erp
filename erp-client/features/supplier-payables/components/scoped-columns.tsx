@@ -60,9 +60,9 @@ export function createSupplierScopedPayableColumns(): ColumnDef<ScopedPayableAcc
         },
         {
             id: "visible",
-            header: "获授权已核销",
+            header: "权限内已核销",
             meta: {
-                label: "获授权份额",
+                label: "本人权限内金额",
                 width: "amount",
                 align: "end",
                 numeric: true,
@@ -126,9 +126,9 @@ export function createSupplierScopedPaymentColumns(): ColumnDef<ScopedSupplierPa
         },
         {
             id: "visible",
-            header: "获授权已分配",
+            header: "权限内已分配",
             meta: {
-                label: "获授权份额",
+                label: "本人权限内金额",
                 width: "amount",
                 align: "end",
                 numeric: true,
@@ -182,7 +182,7 @@ export function createSupplierScopedAllocationColumns(): ColumnDef<ScopedPurchas
     return [
         {
             id: "doc",
-            header: "进项发票 / 应付子账",
+            header: "进项发票 / 应付记录",
             meta: { label: "分配", width: "reference" },
             cell: ({ row }) => (
                 <div className="min-w-0">
@@ -207,9 +207,9 @@ export function createSupplierScopedAllocationColumns(): ColumnDef<ScopedPurchas
         },
         {
             id: "visible",
-            header: "获授权分配",
+            header: "权限内分配",
             meta: {
-                label: "获授权份额",
+                label: "本人权限内金额",
                 width: "amount",
                 align: "end",
                 numeric: true,

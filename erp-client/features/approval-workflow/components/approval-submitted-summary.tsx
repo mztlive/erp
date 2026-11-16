@@ -167,8 +167,7 @@ export function ApprovalSubmittedSummary({
                     </ul>
                 ) : (
                     <p className="rounded-lg border border-dashed px-4 py-3 text-sm text-muted-foreground">
-                        {lineDiff ??
-                            "此次提交未保留明细摘要，请核对其他提交字段及附件。"}
+                        {lineDiff ?? "暂无明细概览，请核对下方单据信息及附件。"}
                     </p>
                 )}
                 {source.more_count > 0 && (
@@ -283,7 +282,7 @@ function ComparisonTable({ comparisons }: { comparisons: Comparison[] }) {
                 note={
                     changed.length
                         ? `${changed.length} 项变化${unchanged.length ? ` · ${unchanged.length} 项未变化` : ""}`
-                        : "表头字段均未变化"
+                        : "单据基本信息无变化"
                 }
             />
             <div className="overflow-hidden rounded-lg border text-sm">

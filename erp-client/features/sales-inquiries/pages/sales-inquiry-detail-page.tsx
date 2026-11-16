@@ -472,7 +472,7 @@ function InquiryDetailContent({
                     <div className="flex flex-wrap items-center justify-end gap-3">
                         {actionRound !== inquiry.feedback_round && (
                             <p className="mr-auto text-sm text-muted-foreground">
-                                正在查看历史轮次，请切回最新一轮后接受或重询。
+                                正在查看历史轮次，请切回最新一轮后接受或重新询价。
                             </p>
                         )}
                         {canRevise && (
@@ -646,7 +646,7 @@ function InquiryDetailContent({
                             inquiry.feedbacks.length > 0 && (
                                 <Alert variant="info">
                                     <AlertDescription>
-                                        已处理：当前只读展示本次任务发布的反馈及对应需求，后续重询内容以新任务为准。
+                                        当前展示您在本轮提交的报价反馈；若销售发起新一轮询价，请前往新的待办任务处理。
                                     </AlertDescription>
                                 </Alert>
                             )}

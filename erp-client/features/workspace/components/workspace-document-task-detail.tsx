@@ -534,7 +534,7 @@ export function WorkspaceDocumentTaskDetail({
                   documentFacts.isPending ? (
                     <DetailBlock title="金额">
                         <p className="text-sm text-muted-foreground">
-                            正在读取单据事实…
+                            正在加载单据详情…
                         </p>
                     </DetailBlock>
                 ) : null}

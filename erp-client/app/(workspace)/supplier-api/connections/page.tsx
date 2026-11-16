@@ -5,7 +5,7 @@ import { Suspense } from "react"
 import { SupplierApiConnectionsPage } from "@/features/supplier-api-connections/pages/supplier-api-connections-page"
 
 export const metadata: Metadata = {
-    title: "API 连接",
+    title: "供应商平台连接",
 }
 
 function ConnectionsFallback() {

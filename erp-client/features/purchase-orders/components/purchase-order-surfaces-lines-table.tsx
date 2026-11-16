@@ -59,7 +59,7 @@ function buildPurchaseOrderLinesColumns(
                         {line.procurementConfirmationLineId ? (
                             <div className="text-xs text-muted-foreground">
                                 {line.salesAllocationLabel ??
-                                    `确认分行 · ${line.itemName}`}
+                                    `关联销售明细 · ${line.itemName}`}
                             </div>
                         ) : null}
                         {line.inquiryQuoteSource ? (

@@ -51,7 +51,7 @@ export function SupplierApiConnectionSettingsPage() {
                             id="supplier-api-connection-settings-back-to-list"
                             render={<Link href="/supplier-api/connections" />}
                         >
-                            返回 API 连接
+                            返回平台连接
                         </Button>
                     }
                 />
@@ -64,7 +64,7 @@ export function SupplierApiConnectionSettingsPage() {
             <DetailPageHeader
                 back={{
                     id: `supplier-api-connection-${segment}-back`,
-                    label: "API 连接",
+                    label: "平台连接",
                     href: "/supplier-api/connections",
                 }}
                 title={conn.supplier.name}

@@ -143,7 +143,7 @@ export const SupplierOfferingsPage = () => {
           ? "SKU 供给"
           : "供应商供给"
     const description = state.taskMode
-        ? "核对安全暂停来源与影响并登记处置证据；完成任务不恢复供给或商品销售。"
+        ? "请核实供应商停供原因及受影响的采购单，并填写核实记录。"
         : state.skuLocked
           ? "维护当前公司 SKU 的供应商、订货编码、商业条款与可供情况。"
           : "维护商品的供应商、供货价格、可供数量与配送范围。"
@@ -231,7 +231,7 @@ export const SupplierOfferingsPage = () => {
                             hint={
                                 state.appliedFilterLabels.length > 0
                                     ? `已生效筛选：${state.appliedFilterLabels.join("、")}`
-                                    : "商业条款按版本追加 · 状态与数量独立更新"
+                                    : "可按供应商、商品或供货状态筛选与维护"
                             }
                             items={[
                                 {

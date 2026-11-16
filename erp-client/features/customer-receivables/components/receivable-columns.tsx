@@ -23,7 +23,7 @@ export function createReceivableColumns(): ColumnDef<ReceivableAccountRow>[] {
         },
         {
             id: "order",
-            header: "销售单 / 子账",
+            header: "销售单 / 应收款项",
             meta: { label: "销售单", width: "default" },
             cell: ({ row }) => (
                 <div className="flex flex-col items-start gap-1">
@@ -31,7 +31,7 @@ export function createReceivableColumns(): ColumnDef<ReceivableAccountRow>[] {
                         {row.original.salesOrderNo}
                     </span>
                     <span className="text-xs text-muted-foreground">
-                        子账 #{row.original.accountSeq} ·{" "}
+                        应收款项 #{row.original.accountSeq} ·{" "}
                         {row.original.businessTypeLabel}
                     </span>
                 </div>
@@ -39,9 +39,9 @@ export function createReceivableColumns(): ColumnDef<ReceivableAccountRow>[] {
         },
         {
             id: "open",
-            header: "开放应收（含税）",
+            header: "待收金额（含税）",
             meta: {
-                label: "开放应收",
+                label: "待收金额",
                 width: "amount",
                 align: "end",
                 numeric: true,

@@ -10,25 +10,27 @@ export function CoverageAlert({ data }: { data: ProfitLossView }) {
     return (
         <Alert>
             <AlertTitle>
-                成本覆盖 · {SCOPE_LABEL} · 可靠性{" "}
+                成本归集完整度 · {SCOPE_LABEL} · 可靠性{" "}
                 {data.coverage.reliability === "reliable"
                     ? "可靠"
                     : data.coverage.reliability === "partial"
                       ? "部分可靠"
-                      : "不可用"}
+                      : "待核算"}
             </AlertTitle>
             <AlertDescription className="space-y-3">
                 <Progress
                     value={coveragePercentNumber(data.coverage.coverageRate)}
                 >
-                    <span className="text-xs">成本覆盖率</span>
+                    <span className="text-xs">成本归集完整率</span>
                     <span className="num ml-auto text-sm">
                         {data.coverage.coverageRate}
                     </span>
                 </Progress>
                 <div className="grid gap-2 text-sm sm:grid-cols-3">
                     <div>
-                        <span className="text-muted-foreground">覆盖收入 </span>
+                        <span className="text-muted-foreground">
+                            已归集成本收入{" "}
+                        </span>
                         <span className="num font-medium">
                             <MoneyValue
                                 value={data.coverage.coveredNetRevenue}
@@ -37,7 +39,7 @@ export function CoverageAlert({ data }: { data: ProfitLossView }) {
                     </div>
                     <div>
                         <span className="text-muted-foreground">
-                            未覆盖收入{" "}
+                            待归集成本收入{" "}
                         </span>
                         <span className="num font-medium">
                             <MoneyValue
@@ -55,8 +57,8 @@ export function CoverageAlert({ data }: { data: ProfitLossView }) {
                                 data.coverage.coverageState === "complete"
                                     ? "完整"
                                     : data.coverage.coverageState === "partial"
-                                      ? "部分覆盖"
-                                      : "完全未覆盖"
+                                      ? "部分成本待归集"
+                                      : "成本未归集"
                             }
                             tone={
                                 data.coverage.coverageState === "complete"
@@ -69,7 +71,7 @@ export function CoverageAlert({ data }: { data: ProfitLossView }) {
                     </div>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                    缺失成本显示为未覆盖并注明原因，不会按零成本计利润。
+                    核心成本尚未入账的订单暂不计算盈亏，避免虚增利润。
                 </p>
             </AlertDescription>
         </Alert>

@@ -69,7 +69,7 @@ export function CostDetailSheet({
             footer={
                 <div className="flex w-full flex-wrap items-center justify-end gap-2">
                     <p className="mr-auto w-full text-xs leading-5 text-muted-foreground">
-                        不可删除成本或直接改金额；更正请走原业务对象变更/冲减。
+                        如需调整成本金额，请打开对应业务单据办理变更或冲减。
                     </p>
                     <Button
                         id="actual-profit-loss-cost-detail-dismiss"
@@ -167,7 +167,7 @@ export function CostDetailSheet({
                     </>
                 ) : (
                     <p className="text-sm text-muted-foreground">
-                        当前行无可查看的成本记录（无权限或完全未覆盖）。
+                        当前行无可查看的成本记录（无权限或成本未归集）。
                     </p>
                 )}
             </div>

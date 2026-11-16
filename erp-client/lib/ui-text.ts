@@ -75,19 +75,19 @@ export const resultText = {
     unknownDoNotResubmit: "处理结果待确认，请勿重复提交",
     recorded: "处理结果已记录",
     querySucceeded: "已查到处理结果",
-    querySucceededOriginal: "已查到原任务处理结果",
+    querySucceededOriginal: "已查到上次提交的处理结果",
     queryNotFound: "未找到该次操作记录",
-    queryRetryWithTaskNo: "未查到处理结果，请使用原任务号重试",
-    retryWithOriginalTaskNo: "请使用原任务号重试",
-    useOriginalTaskNoRetry: "使用原任务号重试",
-    originalTaskNo: "原任务号",
-    originalTaskId: "原任务标识",
-    taskNoTail: "任务号尾号",
+    queryRetryWithTaskNo: "暂未查到处理结果，可点击安全重试（不会重复提交）",
+    retryWithOriginalTaskNo: "请点击安全重试，系统会自动避免重复提交",
+    useOriginalTaskNoRetry: "安全重试（不重复提交）",
+    originalTaskNo: "本次操作编号",
+    originalTaskId: "本次操作编号",
+    taskNoTail: "操作尾号",
     skipAlreadyProcessed: "已处理跳过",
-    preventDuplicate: "防重复与不可覆盖",
+    preventDuplicate: "防重复提交保护",
     operationSucceeded: "操作已完成",
     operationRejected: "操作未通过",
-    operationBlocked: "操作被阻断",
+    operationBlocked: "暂无法继续操作",
     operationProcessing: "操作正在处理",
 } as const
 
@@ -101,15 +101,15 @@ export const approvalResultText = {
 // ─── 数据版本 / 新鲜度（禁止「指纹 / 水位 / 对象版本」） ─────────────────────
 
 export const versionText = {
-    dataVersion: "数据版本",
-    version: "版本",
-    versionStatus: "版本状态",
-    versionChanged: "数据版本已变化",
-    versionChangedRefresh: "数据已变更，请刷新后重试",
-    versionMismatchBlocked: "数据版本不匹配，已阻断。请刷新后重试",
-    checksumShort: "校验码（短）",
-    packageChecksum: "数据包校验码",
-    rejectAtVersion: "驳回时数据版本",
+    dataVersion: "单据版次",
+    version: "版次",
+    versionStatus: "版次状态",
+    versionChanged: "单据内容已被更新",
+    versionChangedRefresh: "单据已变更，请刷新后重试",
+    versionMismatchBlocked: "当前内容已被他人或新操作更新，请刷新页面后重试",
+    checksumShort: "文件核对码",
+    packageChecksum: "文件完整性核对码",
+    rejectAtVersion: "驳回时版次",
 } as const
 
 export const freshnessText = {
@@ -118,9 +118,9 @@ export const freshnessText = {
     syncProgress: "同步进度",
     latestSyncAt: "最新同步时间",
     catalogSyncAt: "目录同步时间",
-    queueUpdatedAt: "队列更新时间",
+    queueUpdatedAt: "列表刷新时间",
     mayBeStale: "数据可能不是最新，请刷新",
-    lastSuccessKept: "当前显示的是上次成功数据，业务记录未被修改。",
+    lastSuccessKept: "刷新未成功，当前暂显示已加载的内容。",
 } as const
 
 // ─── 工作面短名（用户提示禁止写 Wxx） ────────────────────────────────────────
@@ -139,7 +139,7 @@ const WORKSPACE_SHORT_LABEL: Partial<Record<WorkspaceId, string>> = {
     W07: "采购二次确认",
     W08: "采购单",
     /** 跨页提示用中性短名；侧栏按岗位分「收货与发货 / 交付与代发」 */
-    W09: "履约处理",
+    W09: "收发货办理",
     W10: "库存台账",
     W11: "客户往来",
     W12: "供应商往来",
@@ -148,11 +148,11 @@ const WORKSPACE_SHORT_LABEL: Partial<Record<WorkspaceId, string>> = {
     W16: "实际经营盈亏",
     W18: "导入与期初",
     W19: "权限与审计",
-    W20: "API 连接与商品库",
-    W21: "商品供给",
+    W20: "供应商平台连接",
+    W21: "供应商供货目录",
     W26: "供应商订单",
-    W27: "API 结算",
-    W29: "接口错误与对账中心",
+    W27: "供应商平台结算",
+    W29: "同步异常与对账",
 }
 
 const workspaceNameById = new Map(
@@ -171,7 +171,8 @@ export function openWorkspaceLabel(id: WorkspaceId): string {
 const NEXT_ACTION_HINT_BY_TYPE_LABEL: Record<string, string> = {
     采购二次确认: "进入采购确认页后，逐行确认可供数量；确认通过后销售单才会生效。",
     待采购建单: "打开采购单页，按销售明细剩余数量选择本次采购数量并创建草稿。",
-    待供给分配: "进入供给分配页后确认库存优先的自动推荐；库存不足部分再创建采购单。",
+    待供给分配: "进入货源分配页后确认库存优先的自动推荐；库存不足部分再创建采购单。",
+    待安排采购: "进入货源分配页后确认库存优先的自动推荐；库存不足部分再创建采购单。",
     低毛利销售审批:
         "进入销售单后，确认是否按原条件承接；通过后仍需采购再次确认供货。",
     采购单财务审核:
@@ -194,11 +195,11 @@ export function nextActionHintForWorkItemType(
 // ─── 数据范围（M07/M08/M09 资金往来范围行共用） ─────────────────────────────
 
 export const scopeText = {
-    visibleShare: "获授权份额",
-    limitedOnlyVisibleShare: "部分金额权限受限，仅显示获授权份额",
-    wholeRestricted: "整单金额权限受限",
+    visibleShare: "本人权限内金额",
+    limitedOnlyVisibleShare: "部分金额不在查看范围内，仅统计本人权限内金额",
+    wholeRestricted: "无整单金额查看权限",
     unassignedShare: "未分配业务归属",
-    scopeChangedRetry: "数据范围已变化，请从第一页重新查询",
+    scopeChangedRetry: "您的数据查看范围已更新，请从第一页重新查询",
     candidateUnavailable: "已选人员（当前不可见）",
 } as const
 
@@ -218,13 +219,13 @@ export const documentText = {
 // ─── 销售变更对采购的影响（第一期 §6.3） ─────────────────────────────────────
 
 export const purchaseSourceUpdateText = {
-    title: "采购依据待更新",
+    title: "关联销售单已变更，待核对采购单",
     maintain: "登记维持原采购",
     paymentPaused: "暂停付款",
     noPurchasePermission: "当前账号没有采购单查看权限，看不到具体采购单。",
     completed: "采购处理完成",
     awaitingSubmission: "已修改，待提交审批",
-    awaitingSubmissionTitle: "已按新销售版本修改，待提交审批",
+    awaitingSubmissionTitle: "已按最新销售单修改，待提交审批",
     awaitingSubmissionDescription:
-        "本采购已按来源销售的新版本修改。提交审批后，采购依据更新才算处理完成。",
+        "本采购单已按变更后的销售单调整，提交审批后即完成更新。",
 } as const

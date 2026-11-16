@@ -77,7 +77,7 @@ export function buildAllocationIssues(
             issues.push({
                 id: `over-${id}`,
                 label: item.sourceDocumentNo,
-                message: `拟分配超过开放余额 ${open}`,
+                message: `拟分配超过待核销余额 ${open}`,
             })
         }
         if (cents(amounts[id] ?? "0") <= BigInt(0)) {

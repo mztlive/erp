@@ -18,16 +18,16 @@ export function OrganizationEmptyByReason({
             return (
                 <BusinessEmptyState
                     kind="no-scope"
-                    title="无模块权限"
-                    description="当前账号没有组织或范围配置的查看权限。这与无数据范围或范围内无记录不同。"
+                    title="暂无访问权限"
+                    description="当前账号无权查看「组织与范围配置」，请联系系统管理员开通。"
                 />
             )
         case "NO_DATA_SCOPE":
             return (
                 <BusinessEmptyState
                     kind="no-scope"
-                    title="无数据范围"
-                    description="你可以进入本页，但当前组织配置范围内没有任何可管理对象。请查看管理范围或申请授权——不是筛选过严。"
+                    title="暂无可管理的部门范围"
+                    description="当前账号尚未分配可管理的部门范围，请联系系统管理员配置。"
                 />
             )
         case "FILTER_NO_RESULT":
@@ -55,8 +55,8 @@ export function OrganizationEmptyByReason({
             return (
                 <BusinessEmptyState
                     kind="no-data"
-                    title="范围内无记录"
-                    description="管理范围有效，但当前还没有可展示的组织或范围配置。"
+                    title="暂无可展示的记录"
+                    description="当前还没有可展示的部门或范围配置。"
                 />
             )
     }

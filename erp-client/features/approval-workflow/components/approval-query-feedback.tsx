@@ -47,7 +47,7 @@ export function ApprovalQueryFeedback({
             {recoveryQuery?.isError ? (
                 <BusinessFailureState
                     id={`${prefix}-recovery-failure`}
-                    title="审批恢复操作读取失败，暂无法确认可用操作"
+                    title="异常处理选项加载失败，请重试"
                     error={recoveryQuery.error}
                     onRetry={() => void recoveryQuery.refetch()}
                 />

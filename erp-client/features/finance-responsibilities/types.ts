@@ -47,6 +47,6 @@ export const FINANCE_OPERATION_LABEL: Readonly<
 export const FINANCE_SCOPE_LABEL: Readonly<
     Record<FinanceResponsibilityScope, string>
 > = {
-    COUNTERPARTY: "指定往来方",
-    DEFAULT: "默认负责人池",
+    COUNTERPARTY: "指定客户/供应商",
+    DEFAULT: "默认经办人组",
 }

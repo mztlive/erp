@@ -95,7 +95,7 @@ export function PurchaseOrderDetailLines({
                                         {line.procurementConfirmationLineId ? (
                                             <span>
                                                 {line.salesAllocationLabel ??
-                                                    `确认分行 · ${line.itemName}`}
+                                                    `关联销售明细 · ${line.itemName}`}
                                             </span>
                                         ) : null}
                                     </div>

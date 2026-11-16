@@ -191,7 +191,7 @@ export function SalesWorkbenchPeriod({
                     <p>
                         期间筛选只影响新增销售单；审批中销售单、待销售处理询价与应收未收均为截至当前的数据。
                     </p>
-                    <p>待办只包含本人具备处理资格的开放任务，不随期间变化。</p>
+                    <p>待办只包含本人具备处理资格的待办任务，不随期间变化。</p>
                 </WorkbenchDataInfo>
             </div>
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">

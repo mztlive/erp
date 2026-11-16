@@ -41,7 +41,7 @@ export function SalesOrderPaperPreviewDialog({
                 </DialogTitle>
                 <DialogDescription className="sr-only">
                     系统业务数据的打印件；金额与状态以系统记录为准。按 Esc
-                    或点击遮罩关闭。版本、附件和关联单据仍在对应工作面查看。
+                    或点击遮罩关闭。版本、附件和关联单据仍在对应标签页查看。
                 </DialogDescription>
                 <div className="relative min-h-0 flex-1">
                     <DialogClose

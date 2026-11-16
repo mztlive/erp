@@ -40,7 +40,7 @@ const resolveSchema = z.object({
     reasonCode: z.string().trim().min(1, "请选择原因码"),
 })
 const evidenceSchema = z.object({
-    referenceId: z.string().trim().min(1, "请填写正式证据引用"),
+    referenceId: z.string().trim().min(1, "请填写凭证编号或链接"),
     comment: z.string(),
 })
 const submitReviewSchema = z.object({
@@ -225,8 +225,8 @@ function useSettlementCenterActions({
         if (!referenceId) {
             setResult({
                 status: "blocked",
-                title: "缺少正式证据引用",
-                description: "请填写工单、附件或供应商确认记录的正式引用。",
+                title: "请填写凭证编号或链接",
+                description: "请填写工单、附件或供应商确认记录的编号或链接。",
             })
             return
         }
@@ -307,7 +307,8 @@ function useSettlementCenterActions({
             setResult({
                 status: "blocked",
                 title: "无复核任务",
-                description: "未查询到正式复核任务，禁止按结算单状态直接确认。",
+                description:
+                    "当前待办与该结算单不匹配，请从工作台待办列表重新进入处理。",
             })
             return
         }

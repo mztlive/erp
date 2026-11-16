@@ -39,13 +39,7 @@ export function CustomerQualityPageHeader({
         <ListWorkspaceHeader
             eyebrow="分析"
             title="客户经营质量"
-            description={`期间 ${period.from} ~ ${period.to}${
-                period.selectionSource === "SERVER_DEFAULT"
-                    ? " · 系统默认"
-                    : period.selectionSource === "CONFIGURED_PRESET"
-                      ? " · 配置快捷项"
-                      : " · 显式选择"
-            } · ${scopeLabel}`}
+            description={`期间 ${period.from} ~ ${period.to} · ${scopeLabel}`}
         >
             <div className="flex flex-wrap items-center justify-end gap-3">
                 <DataFreshness

@@ -108,8 +108,8 @@ export function useCustomerReceivablesAppliedChips({
                 key: "receivableAccountId",
                 label:
                     receivable?.accountSeq != null
-                        ? `往来子账：${receivable.accountSeq}`
-                        : "已限定往来子账",
+                        ? `应收款项：${receivable.accountSeq}`
+                        : "已限定应收款项",
             })
         }
         return chips

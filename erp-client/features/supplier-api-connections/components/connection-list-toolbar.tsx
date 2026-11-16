@@ -116,7 +116,7 @@ export function ConnectionListToolbar({
             moreSize="compact"
             className="[&_[data-slot=list-toolbar-filters]]:min-w-0 [&_[data-slot=list-toolbar-filters]]:shrink [&_[data-slot=list-toolbar-filters]]:self-center"
             idPrefix="supplier-api-connections-toolbar-filter"
-            formAriaLabel="API 供应商连接查询"
+            formAriaLabel="供应商平台连接查询"
             onSubmit={onApplyFilters}
             search={
                 <ListSearchField

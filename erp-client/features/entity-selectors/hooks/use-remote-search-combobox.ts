@@ -79,7 +79,7 @@ export function useRemoteSearchCombobox<TItem>(
                   )
                 : options.list.emptyReason === "no_scope"
                   ? (options.noScopeLabel ??
-                    "当前角色无此目录的数据范围，请申请权限")
+                    "暂无该资料的查看权限，请联系管理员开通")
                   : options.emptyLabel,
     }
 }

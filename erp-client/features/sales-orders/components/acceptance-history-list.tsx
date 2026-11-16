@@ -64,7 +64,7 @@ export function AcceptanceHistoryList({
             title="验收记录"
             description={
                 showGuidance
-                    ? "已经确认的不能改；记错了用冲正新增一条反向记录。"
+                    ? "已确认的验收记录不可修改；如有误录，可通过冲正新增一条反向记录。"
                     : undefined
             }
         >

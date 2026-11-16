@@ -57,7 +57,9 @@ export function PortalAccountPage() {
                 <p>账号：{profile?.account}</p>
                 <p>
                     门户岗位：
-                    {profile?.role === "maintainer" ? "供给维护员" : "只读人员"}
+                    {profile?.role === "maintainer"
+                        ? "业务经办人"
+                        : "只读查看账号"}
                 </p>
             </div>
             <form

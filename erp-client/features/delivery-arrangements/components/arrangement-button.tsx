@@ -615,7 +615,7 @@ function ArrangementEditor({
             {mutation.isError ? (
                 <p role="alert" className="text-sm text-destructive">
                     {mutation.error.message}
-                    。输入已保留；版本冲突时请关闭后重新打开核对。
+                    。已保留您刚才填写的内容；若单据已被他人更新，请关闭窗口后重新打开核对。
                 </p>
             ) : null}
             {saved ? <p role="status">收货安排已保存。</p> : null}

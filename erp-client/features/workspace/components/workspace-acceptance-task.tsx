@@ -86,9 +86,9 @@ export function WorkspaceAcceptanceTask({
         >
             {!descriptor ? (
                 <Alert variant="destructive">
-                    <AlertTitle>任务责任与验收对象不一致</AlertTitle>
+                    <AlertTitle>待办关联的单据信息异常</AlertTitle>
                     <AlertDescription>
-                        请联系管理员核对责任人、销售单与任务原因后重试。
+                        当前待办与关联业务单据不匹配，请刷新页面后重试，或联系管理员处理。
                     </AlertDescription>
                 </Alert>
             ) : !executionAuthorized ? (

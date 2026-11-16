@@ -111,12 +111,12 @@ export function FulfillmentPageStates({
                         ? "本单当前没有待处理的履约单据"
                         : operationTypes?.length === 1
                           ? OPERATION_CLEARED_LABEL[operationTypes[0]]
-                          : "这批活都干完了"
+                          : "当前待办已全部处理完成"
                 }
                 description={
                     embedded
                         ? "可刷新查看本单最新履约进度；已完成记录仍会保留在销售单摘要中。"
-                        : "可以换个类型看看，或者清掉筛选、回工作台。"
+                        : "可以切换其他类型、清除筛选条件或返回工作台。"
                 }
                 action={
                     embedded ? (

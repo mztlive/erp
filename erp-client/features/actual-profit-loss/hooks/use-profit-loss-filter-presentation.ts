@@ -72,7 +72,7 @@ export function useProfitLossFilterPresentation({
                 : "未知归属"
             chips.push({
                 key: "attributionGroup",
-                label: `历史分组下钻：${label}`,
+                label: `签单分组下钻：${label}`,
             })
         }
         for (const [key, ids, options, label] of [
@@ -80,13 +80,13 @@ export function useProfitLossFilterPresentation({
                 "attributionUserIds",
                 attributionUserIds,
                 historyDirectory?.attributionUserOptions,
-                "历史归属销售",
+                "签单归属销售",
             ],
             [
                 "attributionOrgUnitIds",
                 attributionOrgUnitIds,
                 historyDirectory?.attributionOrgOptions,
-                "历史归属组织",
+                "签单所属部门",
             ],
         ] as const) {
             if (ids.length)
@@ -100,7 +100,7 @@ export function useProfitLossFilterPresentation({
         if (coverage !== "covered") {
             chips.push({
                 key: "coverage",
-                label: `覆盖：${COVERAGE_FILTER_LABEL[coverage]}`,
+                label: `成本归集：${COVERAGE_FILTER_LABEL[coverage]}`,
             })
         }
         if (customerId) {

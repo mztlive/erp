@@ -82,7 +82,7 @@ backend/
 4. **Handler**：`apps/erp-server/src/http/handler/<domain>/`，返回 `ApiResponse`；请求/响应复用领域或组合层 DTO，禁重复定义同语义结构。仅路径拆分、上下文注入、协议重命名允许薄包装，须实现 `From` 并注释原因。
 5. **路由**：新增 `routes/<domain>.rs`，在 `routes/admin.rs` 合并，经 `with_permission` 走 JWT + RBAC；组织机构路由挂在 `routes/access_control.rs`。
 6. **索引**：新查询评估索引；在本域 `indexes` 登记，组合根（`apps/erp-server/src/indexes.rs`、`apps/cli/src/indexes.rs`）只调用领域公开入口，保持现有逐集合顺序，禁复制索引定义。
-7. **测试与门禁**：按 §测试 补单元测试，跑 §质量门禁。
+7. **测试与门禁**：按 §测试 补本 crate 单元测试，按 §质量门禁 收尾并按条件矩阵执行对应检查。
 
 ## HTTP 与权限
 
@@ -97,7 +97,7 @@ backend/
 - 导入：禁在代码中写完整路径（如 `erp_workflow::service::...`），顶部 `use` 后用短名，冲突用 `as`；`<Type as Trait>::item` 消歧除外。
 - 注释：所有公共方法写多行文档注释，含 `# 参数`、`# 返回`、`# 错误` 段。
 - Service：模块只有一个服务时实现写 `mod.rs`，多个时拆文件；查询方法用名词（`role_list`），操作用动词（`create/update/delete`）。
-- 方法长度：生产方法硬上限 50 有效行（空行和纯注释不计），用 `./scripts/check-rust-size.sh` 检查；handler、领域 `service/repository/entity`、Process、ReadModel 仍优先 30 有效行，超限拆私有 helper。测试、`build.rs`、宏实现除外。
+- 方法长度：本次新增或修改的生产方法硬上限 50 有效行（空行和纯注释不计）；handler、领域 `service/repository/entity`、Process、ReadModel 仍优先 30 有效行，超限拆私有 helper。测试、`build.rs`、宏实现除外；禁止为通过全量 `./scripts/check-rust-size.sh` 去顺带拆分未触及的历史方法。
 - 文件体积：单个生产源文件不超过 1200 物理行（扣除 `#[cfg(test)]` / `#[test]` / `tests/`）。
 
 ## 逻辑归属
@@ -162,39 +162,44 @@ backend/
 
 ## 质量门禁
 
-均在 `backend/` 执行。
+均在 `backend/` 执行。**禁止在日常改动和常规提交前跑 `--workspace` 全量测试、全量 clippy 或未命中的边界脚本**；全量工作区门禁由 CI（`Jenkinsfile`）兜底，仅在跨层大重构或用户显式要求时本地执行。
 
-### 开发阶段
+### 1. 开发内环（编码迭代中）
 
-每轮改动只跑受影响 crate：
+每轮改动只跑当前受影响 crate，保持统一编译参数以复用增量缓存：
 
 ```bash
-cargo fmt --all
 env -u ERP_TEST_MONGO_URI cargo test -p <crate> --lib [<测试过滤>]
 ```
 
-- `cargo test --lib` 已编译该 crate 全部生产代码，同一轮禁再叠加 `cargo check -p <crate>`；check、test、clippy 各自产出独立编译产物，叠加会把同一改动重复编译。只确认编译、不跑测试时才用 `cargo check -p <crate>`。
-- 改公开类型或方法签名：追加 `cargo check --workspace`。
-- 一项功能完成时：`cargo clippy -p <crate> --all-targets`。
-- 改 `Cargo.toml` 依赖、跨 crate 引用、Service/Process/Repository 数据访问：`./scripts/check-domain-boundaries.sh --cutover`。
-- 改 `bpm` 或 `erp-workflow`：`./scripts/check-bpm-boundaries.sh`。
-- 改显式权限目录或路由绑定：`./scripts/check-permissions-drift.sh`，并提交 `erp-client/lib/permissions.generated.ts`。
-- 仅改文档：不编译、不测试，只跑 `git diff --check`。
+- `cargo test -p <crate> --lib` 已编译该 crate 全部生产代码，同一轮禁再叠加 `cargo check` 或 `cargo clippy`；check、test、clippy 各自产出独立编译产物，叠加会把同一改动重复编译。
+- 只确认类型编译、暂不跑单测时，才用 `cargo check -p <crate> --lib`。
+- 迭代过程中不跑 `cargo fmt`、不跑 `erp-server`、不跑 `scripts/check-*.sh`。
 
-### 提交阶段
+### 2. 任务收尾 / 本地提交门禁（默认只查受影响 crate）
 
-提交前全量跑一次，全部通过才提交（与 Jenkinsfile 一致）：
+完成功能或修复后，仅针对**本次改动的 `<crate>`** 执行：
 
 ```bash
 cargo fmt --all -- --check
-cargo check --workspace --locked
-cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
-env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked
-./scripts/check-bpm-boundaries.sh
-./scripts/check-domain-boundaries.sh --cutover
-./scripts/check-permissions-drift.sh
+cargo clippy -p <crate> --lib --bins --locked -- -D warnings
+env -u ERP_TEST_MONGO_URI cargo test -p <crate> --lib --locked
 git diff --check
 ```
+
+- **不加 `--all-features` / `--all-targets`**：避免与开发内环产生不同 feature 指纹而触发依赖重编。
+- **不单独跑 `cargo check`**：`clippy` 已完整包含类型与编译检查。
+- **不默认连带编译 `erp-server`**：除非本次直接修改了 `apps/erp-server`，或修改了上游 crate 暴露给 `erp-server` 的公开签名。
+
+### 3. 条件触发门禁（仅当改动命中下表时追加）
+
+| 本次改动触及的范围                                                               | 追加执行的检查命令                                                                                   |
+| -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| 修改了 crate 的公开类型/trait/函数签名                                           | 对直接下游调用方跑 `cargo check -p <downstream> --lib`（仅当影响面广时跑 `cargo check --workspace --lib`） |
+| 修改 `Cargo.toml`、`scripts/crate-layers.json`、跨 crate 依赖或新增跨层数据访问  | `./scripts/check-domain-boundaries.sh --cutover`                                                     |
+| 修改 `crates/platform/bpm/` 或 `crates/domains/erp-workflow/`                    | `./scripts/check-bpm-boundaries.sh`                                                                  |
+| 修改 `apps/erp-server/permission_catalog/`、`src/http/routes/` 或 `audit_actions.rs` | `./scripts/check-permissions-drift.sh`，并同步提交 `erp-client/lib/*.generated.ts`                   |
+| 仅修改文档 / 注释 / 配置示例                                                     | 不编译、不测试，仅跑 `git diff --check`                                                              |
 
 ## 运行
 

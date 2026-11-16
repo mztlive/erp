@@ -138,12 +138,12 @@ export function WorkspaceOverviewMetrics({
                                     </span>
                                 ) : data?.noScope ? (
                                     <span className="text-sm">
-                                        当前无数据范围
+                                        暂无数据查看权限
                                     </span>
                                 ) : value == null ? (
                                     <span className="text-sm text-muted-foreground">
                                         {data?.limited
-                                            ? "当前口径受限"
+                                            ? "仅统计权限内部分数据"
                                             : "暂不可用"}
                                     </span>
                                 ) : metric.field === "count" ? (
@@ -168,7 +168,7 @@ export function WorkspaceOverviewMetrics({
                                 {data?.asOf
                                     ? ` · 更新于 ${new Date(data.asOf).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}`
                                     : ""}
-                                {data?.limited ? " · 部分覆盖或权限受限" : ""}
+                                {data?.limited ? " · 仅统计权限内部分数据" : ""}
                                 {query.isFetching && !query.isPending
                                     ? " · 更新中"
                                     : ""}

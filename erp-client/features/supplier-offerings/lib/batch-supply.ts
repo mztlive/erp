@@ -157,9 +157,9 @@ export function rowErrors(
         }
     const errors = [...issues.values()]
     if (mode === "availability" && row.expectedVersion == null)
-        errors.push("缺少可供版本，请刷新列表")
+        errors.push("数据已过期，请刷新列表后重试。")
     if (mode === "revise" && row.expectedRevision == null)
-        errors.push("缺少条款版本，请刷新列表")
+        errors.push("数据已过期，请刷新列表后重试。")
     if (
         mode === "availability" &&
         row.quantityMode === "provided" &&

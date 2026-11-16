@@ -93,8 +93,8 @@ export function ReceivableScopeListPane({
         ) : data && (data.emptyReason === "no_scope" || !data.hasScope) ? (
             <BusinessEmptyState
                 kind="no-scope"
-                title="当前角色未配置客户往来范围"
-                description="不得用 0 元假装无往来。请申请数据范围后再查询。"
+                title="暂无可查看的客户往来数据"
+                description="您当前尚未配置客户往来的数据查看范围，请联系管理员开通相应权限后再查询。"
                 className={listWorkspaceEmptyStateClassName}
             />
         ) : data && data.total === 0 ? (

@@ -48,7 +48,7 @@ export function SalesChangeProcurementProgressCard({
             </div>
             {procurement.predicted ? (
                 <p className="text-xs text-muted-foreground">
-                    按本次提交内容预判，生效时按当时事实重新判定；生效后审批中的受影响采购会自动退回草稿，并派给采购负责人处理。
+                    按本次提交内容预判，变更生效时将按届时实际情况重新判定；生效后审批中的受影响采购单会自动退回草稿，并派给采购负责人处理。
                 </p>
             ) : null}
             {procurement.items.length ? (

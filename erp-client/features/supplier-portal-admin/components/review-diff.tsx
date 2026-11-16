@@ -58,14 +58,14 @@ const cooperationFields: FieldSpec[] = [
 const productFields: FieldSpec[] = [
     field("name", "商品名称"),
     field("product_kind", "商品类型", "product_kind"),
-    field("brand", "品牌原始资料"),
-    field("category", "分类原始完整路径"),
+    field("brand", "品牌名称"),
+    field("category", "建议商品分类"),
     field("model", "型号"),
     field("description", "商品说明"),
 ]
 const skuFields: FieldSpec[] = [
-    field("name", "SKU名称"),
-    field("unit", "单位及包装原始资料"),
+    field("name", "规格名称"),
+    field("unit", "计量单位与包装规格"),
     field("ordering_code", "供应商订货编码"),
     field("barcode", "条码"),
     field("available_quantity", "可供数量", "quantity"),
@@ -428,7 +428,7 @@ export function PortalReviewDiff({
                                     {text(sku.name) || "未填写名称"}
                                 </h3>
                                 {comparison(
-                                    "规格原稿",
+                                    "提报规格明细",
                                     previous,
                                     sku,
                                     skuFields,
@@ -453,25 +453,25 @@ export function PortalReviewDiff({
             <div className="space-y-2 rounded-lg border bg-muted/30 p-4 text-sm">
                 {(application.kind === "quote" || newProduct) && (
                     <p>
-                        复用已上架的公司SKU并增加有效供给后，可能立即参与或恢复销售及采购选源；须确认目标规格、基础单位及供货资格。
+                        复用已上架的公司商品规格并增加有效供货后，可能立即参与或恢复销售及采购供应选择；须确认目标规格、基础单位及供货资格。
                     </p>
                 )}
                 {newProduct && (
                     <p>
-                        本次新建SKU保持未上架，由内部定价并上架；复用已有商品或SKU时，原商品资料、原规格及原上架状态保持不变。
+                        本次新增规格保持未上架，后续由采购方完成合作上架；复用已有商品或规格时，原商品资料及上架状态保持不变。
                     </p>
                 )}
                 {application.kind === "stop" && (
                     <p>
-                        采购确认后停止当前供给关系。该申请不会自动取消已冻结的采购或解除已经存在的履约义务；请另行处理在途业务。
+                        采购确认后停止当前供货关系。该申请不会自动取消已生效的历史采购单或解除已有的履约义务；在途业务需另行处理。
                     </p>
                 )}
                 <p>
-                    更新可供或恢复有货不会解除采购暂停、停止关系或其他供货限制。已冻结采购单继续采用原价格、条款及付款条件。
+                    更新可供或恢复有货不会解除采购暂停、停止合作或其他供货限制。已生效的历史采购单继续采用原价格、条款及付款条件。
                 </p>
                 {application.kind === "cooperation" && (
                     <p>
-                        新付款条件通过确认后用于后续业务；现有采购单的冻结付款条件及已登记付款保持原处理口径。
+                        新付款条件通过确认后用于后续业务；已生效的历史采购单付款条件及已登记付款保持原处理口径。
                     </p>
                 )}
             </div>

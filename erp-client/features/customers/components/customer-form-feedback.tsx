@@ -31,7 +31,7 @@ export function CustomerFormResultPanel({
                             ? "请核对已有企业资料"
                             : mode === "create"
                               ? "无法创建客户"
-                              : "无法保存修订"
+                              : "无法保存修改"
                     }
                     description={result.message}
                 />
@@ -43,10 +43,8 @@ export function CustomerFormResultPanel({
     return (
         <FormalActionResult
             status="unknown"
-            title={mode === "create" ? "创建结果不确定" : "保存结果不确定"}
+            title="暂未确认提交结果"
             description={result.message}
-            reference={result.idempotencyKey}
-            referenceLabel="原任务号"
             actions={
                 <LoadingButton
                     id={`customers-form-${mode}-query-result`}
@@ -57,7 +55,7 @@ export function CustomerFormResultPanel({
                     loading={isQueryingIdempotency}
                     onClick={() => onQueryFinalResult(result.idempotencyKey)}
                 >
-                    查询最终结果
+                    刷新确认结果
                 </LoadingButton>
             }
         />

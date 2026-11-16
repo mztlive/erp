@@ -188,7 +188,7 @@ export function SalesInquiryProducts({
             ) : (
                 <Alert variant="warning">
                     <AlertDescription>
-                        本轮需求快照暂不可用，无法核对商品和配送要求。请刷新后重试，不能用当前需求替代历史版本。
+                        该轮报价对应的历史需求明细加载失败，请刷新页面重试。
                     </AlertDescription>
                 </Alert>
             )}

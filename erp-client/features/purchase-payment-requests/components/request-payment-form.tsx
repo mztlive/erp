@@ -340,7 +340,7 @@ function BankRequestPaymentForm({
             {unknown && (
                 <div role="status" className="space-y-3 rounded-md border p-4">
                     <p className="text-sm">
-                        付款结果暂无法确认。本次金额和回单已保留，请查询原次付款结果后继续。
+                        付款结果暂无法确认。本次金额和回单已保留，请查询上次付款结果后继续。
                     </p>
                     <Button
                         id="ppr-pay-recover"

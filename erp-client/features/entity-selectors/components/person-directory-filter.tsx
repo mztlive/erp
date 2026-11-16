@@ -42,17 +42,17 @@ function selectedIds(value: string): string[] {
 }
 
 function listFailureCopy(error: unknown): string {
-    if (isDataScopeChanged(error)) return "人员范围已变化，请重新查询"
+    if (isDataScopeChanged(error)) return "人员列表已更新，请重新选择"
     if (isApiError(error) && (error.status === 403 || error.kind === "Auth")) {
-        return "没有人员目录权限"
+        return "暂无查看人员列表的权限"
     }
     return "人员候选加载失败，请重试"
 }
 
 function selectedFailureCopy(error: unknown): string {
-    if (isDataScopeChanged(error)) return "已选人员范围已变化，请重新核对"
+    if (isDataScopeChanged(error)) return "已选人员列表已更新，请重新选择"
     if (isApiError(error) && (error.status === 403 || error.kind === "Auth")) {
-        return "没有人员目录权限，已选条件仍保留"
+        return "暂无查看人员列表的权限，已选条件仍保留"
     }
     return "已选人员暂时无法核对，请重试"
 }
@@ -134,7 +134,7 @@ export function PersonDirectoryFilter({
     const emptyLabel = list.isError
         ? listFailureCopy(list.error)
         : first?.empty_reason === "no_scope"
-          ? "当前没有可查询的人员范围"
+          ? "暂无可查看的人员"
           : list.isFetching
             ? "正在加载人员"
             : "没有符合条件的人员"

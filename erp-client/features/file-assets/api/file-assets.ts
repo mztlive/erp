@@ -42,7 +42,9 @@ export function uploadEvidenceFileAsset(
         return Promise.reject(new Error("凭证仅支持 PDF、JPG、PNG 或 WebP"))
     }
     if (file.size === 0 || file.size > 5 * 1024 * 1024) {
-        return Promise.reject(new Error("请选择不超过 5 MB 的非空凭证文件"))
+        return Promise.reject(
+            new Error("文件不能为空，且大小不能超过 5 MB，请重新选择。"),
+        )
     }
     const uploaded = evidenceUploads.get(file)
     if (uploaded) return uploaded

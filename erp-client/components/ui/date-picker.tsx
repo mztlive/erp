@@ -56,6 +56,11 @@ function formatDateValue(date: Date) {
     return `${year}-${month}-${day}`
 }
 
+/** 把技术时区标识转换为业务可读名称。 */
+function formatTimeZoneLabel(timeZone: string) {
+    return timeZone === "Asia/Shanghai" ? "北京时间" : timeZone
+}
+
 /** Normalize time to `HH:mm:ss` (seconds default to 00). */
 function normalizeTimeValue(time?: string) {
     if (!time) return "00:00:00"
@@ -383,7 +388,7 @@ function DateTimePicker({
     const selected = parseDateValue(value?.date)
     const label = value
         ? `${value.date} ${normalizeTimeValue(value.time)}${
-              showTimeZone ? ` · ${value.timeZone}` : ""
+              showTimeZone ? ` · ${formatTimeZoneLabel(value.timeZone)}` : ""
           }`
         : placeholder
 
@@ -477,7 +482,7 @@ function DateTimePicker({
                     />
                     {showTimeZone ? (
                         <span className="whitespace-nowrap text-xs text-muted-foreground">
-                            {timeZone}
+                            {formatTimeZoneLabel(timeZone)}
                         </span>
                     ) : null}
                     <Button
@@ -770,7 +775,7 @@ function DateTimeRangePicker({
                     </div>
                     {showTimeZone ? (
                         <p className="text-xs text-muted-foreground sm:col-span-2">
-                            {timeZone}
+                            {formatTimeZoneLabel(timeZone)}
                         </p>
                     ) : null}
                     <Button

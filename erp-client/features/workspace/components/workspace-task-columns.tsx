@@ -200,10 +200,10 @@ export function workspaceTaskColumns({
     const partyLabel = compact
         ? purchase
             ? "供应商与摘要"
-            : "往来方与摘要"
+            : "客户/供应商与摘要"
         : purchase
           ? "供应商"
-          : "往来方 / 对象"
+          : "客户/供应商 / 关联单据"
     const columns: ColumnDef<QueueTaskRow, unknown>[] = [
         {
             id: "number",

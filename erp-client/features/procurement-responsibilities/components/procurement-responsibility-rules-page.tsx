@@ -196,8 +196,8 @@ function RuleDialog({
                         {target ? "编辑采购责任规则" : "新增采购责任规则"}
                     </DialogTitle>
                     <DialogDescription>
-                        每条规则配置一个负责人池。询价规则整单优先，其余按
-                        SKU、分类、商品类型、默认池依次匹配。
+                        每条规则配置一组负责采购员。询价规则整单优先，其余按
+                        SKU、分类、商品类型、默认分派组依次匹配。
                     </DialogDescription>
                 </DialogHeader>
                 <form
@@ -347,7 +347,7 @@ function RuleDialog({
                                             启用规则
                                         </FieldLabel>
                                         <FieldDescription>
-                                            停用后不再参与销售行负责人解析。
+                                            停用后，新销售订单不再按此规则分派采购员。
                                         </FieldDescription>
                                     </div>
                                     <Switch
@@ -510,7 +510,7 @@ export function ProcurementResponsibilityRulesPage() {
                 className="pb-4 md:pb-4"
                 eyebrow="基础资料"
                 title="采购责任规则"
-                description="每条规则维护一个负责人池，各池独立轮询。询价规则启用后，询价整单优先进入该池。"
+                description="按商品或询价配置负责的采购员团队，系统将按顺序轮流分派采购任务。"
             >
                 {canManage ? (
                     <Button
@@ -536,7 +536,7 @@ export function ProcurementResponsibilityRulesPage() {
             {canManage && dependenciesFailed ? (
                 <BusinessFailureState
                     kind="system"
-                    title="规则编辑依赖加载失败"
+                    title="采购员或商品分类数据加载失败"
                     description={getErrorMessage(
                         dependencyError,
                         "暂时无法读取采购负责人或商品分类，当前不能新增或编辑规则。",
@@ -551,7 +551,7 @@ export function ProcurementResponsibilityRulesPage() {
                                 void categoriesQuery.refetch()
                             }}
                         >
-                            重试依赖数据
+                            重新加载
                         </Button>
                     }
                 />
@@ -615,7 +615,7 @@ export function ProcurementResponsibilityRulesPage() {
                                             listWorkspaceEmptyStateClassName
                                         }
                                         title="还没有采购责任规则"
-                                        description="请先配置默认负责人池；需要询价专人处理时，新增询价规则并选择负责人。"
+                                        description="请先配置默认分派组；需要询价专人处理时，新增询价规则并选择负责人。"
                                         action={
                                             canManage &&
                                             !dependenciesPending &&

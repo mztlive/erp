@@ -333,7 +333,7 @@ export function useSupplierAccountsFilters() {
         if (track) {
             chips.push({
                 key: "track",
-                label: `轨道：${TRACK_LABEL[track]}`,
+                label: `单据类型：${TRACK_LABEL[track]}`,
             })
         }
         if (purchaseOrderId) {

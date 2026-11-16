@@ -167,7 +167,7 @@ export function PortalReviewMappingBatch({
                 )
             } catch (error) {
                 setFeedback(
-                    `已保存 ${results.length} 张申请。${error instanceof Error ? error.message : "保存未完成，请重新核对或检查浏览器存储。"}`,
+                    `已保存 ${results.length} 张申请。${error instanceof Error ? error.message : "保存未完成，请重新核对或清理浏览器缓存后重试。"}`,
                 )
             } finally {
                 setSavedTargets(results)
@@ -199,7 +199,7 @@ export function PortalReviewMappingBatch({
                 !categoryResult.data ||
                 !unitResult.data
             )
-                throw new Error("本申请或字典资料读取未完成，请重新读取。")
+                throw new Error("本申请或基础资料读取未完成，请重新读取。")
             const issue = await mappingPlanIssue(
                 saved.plan,
                 actorId,
@@ -250,7 +250,7 @@ export function PortalReviewMappingBatch({
                     </p>
                     <p className="text-sm text-muted-foreground">
                         {saved.issue ??
-                            "采用前将重新读取本申请，核对原稿、申请状态及全部字典版本。"}
+                            "采用前将重新读取本申请，核对提报资料、申请状态及基础资料最新信息。"}
                     </p>
                     <div className="flex flex-wrap gap-2">
                         {canReadDetails && (
@@ -284,7 +284,7 @@ export function PortalReviewMappingBatch({
                                     )
                                 } catch {
                                     setFeedback(
-                                        "清除未完成，请检查浏览器存储后重试。",
+                                        "清除未完成，请清理浏览器缓存后重试。",
                                     )
                                 }
                             }}
@@ -296,11 +296,11 @@ export function PortalReviewMappingBatch({
             )}
             <div className="space-y-1 text-sm">
                 <p>
-                    品牌原文：{rawProduct.brand.raw_name} →{" "}
+                    提报品牌：{rawProduct.brand.raw_name} →{" "}
                     {brand?.name ?? "待确认"}
                 </p>
                 <p>
-                    分类原始完整路径：{rawProduct.category.raw_name} →{" "}
+                    提报分类：{rawProduct.category.raw_name} →{" "}
                     {category?.path ?? category?.name ?? "待确认"}
                 </p>
                 {rawProduct.skus.map((sku) => {

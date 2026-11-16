@@ -310,7 +310,7 @@ export const WORKSPACE_ROUTES: readonly WorkspaceRouteEntry[] = [
     },
     {
         id: "W02",
-        name: "待办队列（已并入 W01）",
+        name: "待办事项",
         mode: "M3",
         mainRoute: "/workspace",
         navHref: "/workspace",
@@ -331,7 +331,7 @@ export const WORKSPACE_ROUTES: readonly WorkspaceRouteEntry[] = [
     },
     {
         id: "W05",
-        name: "销售单（统一）",
+        name: "销售单",
         mode: "M2+M4+M5",
         mainRoute: "/sales/orders",
         navHref: "/sales/orders",
@@ -425,14 +425,14 @@ export const WORKSPACE_ROUTES: readonly WorkspaceRouteEntry[] = [
     },
     {
         id: "W20",
-        name: "API 连接与商品库",
+        name: "供应商平台连接与商品库",
         mode: "M2+M4",
         mainRoute: "/supplier-api/connections",
         navHref: "/supplier-api/connections",
     },
     {
         id: "W21",
-        name: "供应商供给",
+        name: "供应商供货目录",
         mode: "M2+M4",
         mainRoute: "/procurement/supplier-offerings",
         navHref: "/procurement/supplier-offerings",
@@ -453,14 +453,14 @@ export const WORKSPACE_ROUTES: readonly WorkspaceRouteEntry[] = [
     },
     {
         id: "W27",
-        name: "API 结算",
+        name: "供应商平台结算",
         mode: "M2+M4",
         mainRoute: "/supplier-api/settlements",
         navHref: "/supplier-api/settlements",
     },
     {
         id: "W29",
-        name: "接口错误与对账中心",
+        name: "外部同步异常与对账",
         mode: "M7",
         mainRoute: "/governance/integration-errors",
         navHref: "/governance/integration-errors",
@@ -583,7 +583,7 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
                 },
                 {
                     routeId: "W21",
-                    label: "供应商供给",
+                    label: "供应商供货目录",
                     icon: PackageSearchIcon,
                 },
             ],
@@ -668,7 +668,7 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
                 },
                 {
                     routeId: "W14",
-                    label: "公司主体",
+                    label: "我方公司",
                     icon: HandshakeIcon,
                     href: "/master-data/companies",
                 },
@@ -710,12 +710,12 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
             ],
         },
         {
-            label: "供应商 API",
+            label: "供应商平台对接",
             items: [
                 {
                     routeId: "W20",
                     href: "/supplier-api/connections",
-                    label: "API 连接",
+                    label: "平台连接设置",
                     icon: PlugIcon,
                 },
                 {
@@ -729,7 +729,7 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
             ],
         },
         {
-            label: "治理",
+            label: "数据导入与同步",
             items: [
                 {
                     routeId: "W18",
@@ -738,14 +738,14 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
                 {
                     routeId: "W18",
                     href: "/governance/background-jobs",
-                    label: "后台任务",
+                    label: "批量任务记录",
                     badge: "background-job-active-count",
                     icon: ListChecksIcon,
                     requiredPermissions: ["background_job:list"],
                 },
                 {
                     routeId: "W29",
-                    label: "接口错误与对账",
+                    label: "同步异常与对账",
                     icon: ShieldCheckIcon,
                 },
             ],
@@ -782,7 +782,7 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
                 {
                     routeId: "W19",
                     href: "/system/demo-master-data",
-                    label: "演示主数据",
+                    label: "示例业务数据",
                     icon: DatabaseIcon,
                     requiredPermissions: ["demo_master_data:read"],
                 },

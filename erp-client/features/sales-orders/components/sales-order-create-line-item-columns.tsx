@@ -166,8 +166,8 @@ export function buildSalesOrderCreateLineItemColumns(
                                         unitLocked
                                             ? nature === "card_voucher"
                                                 ? "卡券单位固定为张"
-                                                : "单位随 SKU 基础单位带出，不可改"
-                                            : "选择 SKU 后带出基础单位"
+                                                : "单位随商品基础单位带出，不可改"
+                                            : "选择商品后带出基础单位"
                                     }
                                 >
                                     {field.state.value || "—"}

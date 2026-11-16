@@ -26,18 +26,18 @@ export function SessionPool({
     return (
         <section className="erp-raised-surface space-y-3 rounded-2xl border bg-card p-4">
             <h3 className="text-sm font-semibold">
-                同主体待核销池
+                待核销应收账款
                 <span className="ml-2 text-xs font-normal text-muted-foreground">
                     仅 {session.counterpartyPartyName}
                 </span>
             </h3>
             <p className="text-xs text-muted-foreground">
-                仅同主体的开放应收可分配；跨主体即使同名客户也不返回。
+                仅展示当前结算公司下尚未结清的应收账款。
             </p>
             <ul className="max-h-72 space-y-2 overflow-auto">
                 {session.pool.length === 0 ? (
                     <li className="text-sm text-muted-foreground">
-                        当前主体无开放目标
+                        该结算公司下暂无待核销的应收账款
                     </li>
                 ) : (
                     session.pool.map((t) => {
@@ -54,7 +54,7 @@ export function SessionPool({
                                         {t.label}
                                     </div>
                                     <div className="text-xs text-muted-foreground">
-                                        开放{" "}
+                                        待核销余额{" "}
                                         <MoneyValue
                                             value={t.openAmount}
                                             taxBasis="gross"

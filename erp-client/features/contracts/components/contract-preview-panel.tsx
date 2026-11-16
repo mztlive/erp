@@ -195,7 +195,7 @@ export function ContractPreviewPanel({
                                                     ? "已通过"
                                                     : file.securityState ===
                                                         "quarantined"
-                                                      ? "已隔离"
+                                                      ? "未通过安全检测"
                                                       : "检查中"}
                                             </Badge>
                                         </li>
@@ -204,7 +204,7 @@ export function ContractPreviewPanel({
                             )
                         ) : (
                             <p className="text-sm text-muted-foreground">
-                                附件分区暂不可用
+                                附件列表暂时无法加载
                             </p>
                         )}
                     </div>

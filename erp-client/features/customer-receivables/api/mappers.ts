@@ -320,7 +320,7 @@ function projectInvoiceAllocation(a: BackendInvoiceAllocation): AllocationLine {
         allocationId: a.id,
         action: mapAllocationAction(a.allocation_action),
         amountGross: a.allocated_gross_amount,
-        targetLabel: "应收子账",
+        targetLabel: "应收款项",
         targetId: a.receivable_account_id,
         occurredAt: "",
         reverseOfAllocationId: a.reverses_allocation_id ?? undefined,

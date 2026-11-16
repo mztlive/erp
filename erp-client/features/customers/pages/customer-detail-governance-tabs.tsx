@@ -55,7 +55,7 @@ export function CustomerDetailQualityTab({
                         ? "error"
                         : "success"
                 }
-                error="经营数据分区暂时不可用。已确认的客户主体与其它分区不受影响。"
+                error="经营分析数据暂时无法加载，请稍后重试"
                 errorKind="projection"
                 retryAction={
                     <Button
@@ -64,7 +64,7 @@ export function CustomerDetailQualityTab({
                         size="sm"
                         onClick={() => void refetch()}
                     >
-                        重试经营分区
+                        重新加载
                     </Button>
                 }
             >
@@ -143,8 +143,8 @@ export function CustomerDetailAuditTab({
     return (
         <DocumentSection
             className={detailSectionClassName}
-            title="归属与审计"
-            description="多名销售共用客户资料，各自业务分别授权"
+            title="销售归属与修改记录"
+            description="多名销售可共同服务同一客户，各自负责的业务单据独立管理"
             action={
                 can(customer, "MANAGE_ASSIGNMENTS") ? (
                     <Button
@@ -162,7 +162,7 @@ export function CustomerDetailAuditTab({
             {customer.partitions.audit === "error" ? (
                 <BusinessFailureState
                     kind="system"
-                    description="归属审计分区失败。"
+                    description="销售归属与修改记录加载失败"
                     action={
                         <Button
                             id="customers-detail-audit-retry"
@@ -170,7 +170,7 @@ export function CustomerDetailAuditTab({
                             size="sm"
                             onClick={() => void refetch()}
                         >
-                            重试
+                            重新加载
                         </Button>
                     }
                 />
@@ -202,10 +202,10 @@ export function CustomerDetailAuditTab({
                             ))
                         )}
                     </DetailRecordColumn>
-                    <DetailRecordColumn label="修订时间线">
+                    <DetailRecordColumn label="修改记录">
                         {customer.revisionTimeline.length === 0 ? (
                             <p className="py-2 text-sm text-muted-foreground">
-                                暂无修订记录
+                                暂无修改记录
                             </p>
                         ) : (
                             customer.revisionTimeline.map((revision) => (

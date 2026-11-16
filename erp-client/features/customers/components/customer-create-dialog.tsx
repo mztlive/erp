@@ -37,12 +37,10 @@ export function CustomerCreateDialog({
                     key={open ? "open" : "closed"}
                     mode="create"
                     onCancel={() => onOpenChange(false)}
-                    onSucceeded={(customerId, revisionNo) => {
+                    onSucceeded={(customerId) => {
                         toast.add({
                             title: "客户已创建",
-                            description: revisionNo
-                                ? `客户资料版本 v${revisionNo} 已生效，可在客户列表继续查看。`
-                                : "客户资料已生效，可在客户列表继续查看。",
+                            description: "客户资料已保存，可在客户列表中查看。",
                             type: "success",
                             timeout: 4000,
                         })

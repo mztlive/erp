@@ -690,7 +690,7 @@ function FeedbackEditorContent({
                                         onDirtyChange(true)
                                     } catch {
                                         setError(
-                                            "浏览器无法保留输入，请先恢复浏览器存储后重试。",
+                                            "无法暂存当前填写内容，请清理浏览器缓存或关闭无痕模式后重试。",
                                         )
                                     }
                                 }}

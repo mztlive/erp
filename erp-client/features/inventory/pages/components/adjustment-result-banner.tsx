@@ -44,7 +44,7 @@ export function AdjustmentResultBanner({
                                 void onResolve()
                             }}
                         >
-                            {isResolving ? "查询中…" : "查询最终结果"}
+                            {isResolving ? "刷新中…" : "刷新提交结果"}
                         </LoadingButton>
                     </div>
                 ) : undefined

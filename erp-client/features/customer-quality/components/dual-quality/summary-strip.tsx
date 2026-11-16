@@ -11,7 +11,6 @@ export function SummaryStrip({
     orderCount,
     grossTotal,
     unpricedCount,
-    scopeVersion,
 }: {
     scopeSummary: string
     ownershipBasis: string
@@ -21,7 +20,6 @@ export function SummaryStrip({
     orderCount: number
     grossTotal: string
     unpricedCount: number
-    scopeVersion: string
 }) {
     return (
         <dl className="grid min-w-0 grid-cols-2 gap-2 rounded-xl border border-border p-3 text-body-compact sm:grid-cols-4">
@@ -35,7 +33,7 @@ export function SummaryStrip({
             </div>
             <div className="min-w-0">
                 <dt className="text-xs text-muted-foreground">
-                    对象数 / 订单数
+                    分组数 / 订单数
                 </dt>
                 <dd className="num font-medium">
                     {objectCount} / {orderCount}
@@ -43,7 +41,7 @@ export function SummaryStrip({
             </div>
             <div className="min-w-0">
                 <dt className="text-xs text-muted-foreground">
-                    含税总额 / 缺版本
+                    含税总额 / 待核价
                 </dt>
                 <dd className="num font-medium">
                     <MoneyValue
@@ -59,8 +57,7 @@ export function SummaryStrip({
                 <dd className="break-all">{filterSummary}</dd>
             </div>
             <div className="col-span-2 min-w-0 text-xs text-muted-foreground sm:col-span-4">
-                授权时点 {asOf || "—"} · 范围版本{" "}
-                <span className="num break-all">{scopeVersion || "—"}</span>
+                统计截至 {asOf || "—"}
             </div>
         </dl>
     )

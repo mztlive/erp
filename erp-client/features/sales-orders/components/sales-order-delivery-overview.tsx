@@ -60,7 +60,7 @@ export function SalesOrderDeliveryOverview({
                 </span>
             </div>
             <p className="text-xs leading-5 text-muted-foreground">
-                已交付数量只统计已登记的发货或服务执行。供应商预占、订单确认及父单完成不计入交付，物流妥投后仍按原流程办理客户验收。
+                已交付数量按实际已发货或已完成服务的记录统计；货到后请及时办理客户验收。
             </p>
             <DeliveryProgressNotice
                 order={order}

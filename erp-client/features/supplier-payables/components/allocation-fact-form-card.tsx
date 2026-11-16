@@ -395,10 +395,9 @@ export function AllocationFactFormCard({
 
                 {mixedSources ? (
                     <p className="text-xs text-muted-foreground">
-                        已选择混合来源（采购单 + 结算单）。
                         {policyBlocksAuto
-                            ? "策略不可用，已强制显式选择。"
-                            : "混合来源已按系统优先级分配；提交时系统将重新校验。"}
+                            ? "当前同时选择了采购单与结算单，请手动勾选单据并填写每笔核销金额。"
+                            : "当前同时选择了采购单与结算单，提交时系统将重新校验。"}
                     </p>
                 ) : null}
 

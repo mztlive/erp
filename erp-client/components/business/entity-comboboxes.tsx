@@ -318,13 +318,17 @@ export type SettlementPartyComboboxItem = Readonly<{
 
 export type SettlementPartyComboboxProps = EntityComboboxBaseProps & {
     parties: readonly SettlementPartyComboboxItem[]
+    label?: string
+    "aria-label"?: string
 }
 
-/** 结算主体选择：搜索名称与编号。 */
+/** 结算单位选择：搜索名称与编号。 */
 export function SettlementPartyCombobox({
     parties,
-    placeholder = "搜索结算主体",
-    emptyLabel = "没有符合条件的结算主体",
+    placeholder = "搜索结算单位",
+    emptyLabel = "没有符合条件的结算单位",
+    "aria-label": ariaLabel,
+    label = "结算单位",
     ...props
 }: SettlementPartyComboboxProps) {
     const items = React.useMemo(
@@ -348,7 +352,7 @@ export function SettlementPartyCombobox({
         <BusinessObjectCombobox
             {...props}
             items={items}
-            label="结算主体"
+            label={ariaLabel ?? label}
             placeholder={placeholder}
             emptyLabel={emptyLabel}
         />

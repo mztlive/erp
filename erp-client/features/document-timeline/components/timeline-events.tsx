@@ -54,7 +54,7 @@ export function TimelineEvents({
     if (events.length === 0)
         return (
             <p className="py-5 text-sm text-muted-foreground">
-                当前条件下暂无可查看的动作记录。
+                暂无相关业务动态。
             </p>
         )
     if (groupByDate) {
@@ -173,7 +173,9 @@ function TimelineEventList({
                                 <span>第 {approval.round_no} 轮</span>
                             )}
                             {event.after_submission && (
-                                <Badge variant="warning">提交后发生</Badge>
+                                <Badge variant="warning">
+                                    本次提交后新动态
+                                </Badge>
                             )}
                         </div>
                         {!isCurrentDocument && (

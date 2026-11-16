@@ -24,7 +24,7 @@ export function InquiryProgress({
                 className="text-sm text-muted-foreground"
                 aria-label="转单进度与商品报价状态"
             >
-                已全部转单 {progress.completed_lines} 项（含销售草稿占用）
+                已全部转单 {progress.completed_lines} 项（含未提交的销售单草稿）
                 <span className="mx-2" aria-hidden="true">
                     ·
                 </span>
@@ -46,7 +46,7 @@ export function InquiryProgress({
             />
             <span className="text-muted-foreground">
                 {progress.total_lines} 项商品，{progress.completed_lines}{" "}
-                项已全部转单（含销售草稿占用）
+                项已全部转单（含未提交的销售单草稿）
             </span>
             <StatusBadge
                 label={VALIDITY_LABEL[progress.quote_validity]}

@@ -368,12 +368,6 @@ export function CustomerReceivablesTable({
                     description={
                         <span aria-live="polite">
                             {data?.filterSummary ?? "加载中…"}
-                            {data ? (
-                                <span className="text-muted-foreground">
-                                    {" "}
-                                    · 提交方式：{data.submitPolicy.label}
-                                </span>
-                            ) : null}
                         </span>
                     }
                     toolbar={toolbar}

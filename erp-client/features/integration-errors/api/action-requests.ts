@@ -43,9 +43,9 @@ export async function applyIntegrationTaskAction(
         NO_RESULT_CONFIRMED: "已确认原操作无结果",
         RESULT_UNKNOWN: "结果仍需核实",
         REPLAY_ACCEPTED: "重新提交已受理",
-        REATTRIBUTED: "重新归集已记录",
-        EVIDENCE_LINKED: "补偿证据已关联",
-        EVIDENCE_ADDED: "证据已补充",
+        REATTRIBUTED: "重新匹配归属已记录",
+        EVIDENCE_LINKED: "补救单据凭证已关联",
+        EVIDENCE_ADDED: "凭证已补充",
     }
     return {
         status:
@@ -132,7 +132,7 @@ export async function applyDirectReconciliation(
         status: result.outcome === "RESULT_UNKNOWN" ? "unknown" : "succeeded",
         title: result.is_terminal ? "对账结论已登记" : "对账证据已追加",
         description: result.is_terminal
-            ? "直接对账结论已登记；未完成或关闭任何处理任务。"
+            ? "对账结论已保存。"
             : "差异处理记录已追加，当前差异仍待处理。",
         outcome: result.outcome,
         stayOnItem: !result.is_terminal,

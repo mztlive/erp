@@ -38,7 +38,7 @@ import { toAutomationIdSegment } from "@/lib/automation-id"
 import { formatDateTime } from "@/lib/datetime"
 
 const RETURN_REASON_OPTIONS = [
-    { value: "DATA_MISMATCH", label: "试算数据与业务事实不一致" },
+    { value: "DATA_MISMATCH", label: "预检数据与实际业务不一致" },
     { value: "RULE_MISMATCH", label: "导入口径或规则不一致" },
     { value: "MISSING_EVIDENCE", label: "缺少必要核对依据" },
     { value: "OTHER", label: "其它需修复问题" },
@@ -82,7 +82,7 @@ function ReturnForFixDialog({
                         退回{CONFIRMATION_SCOPE_LABEL[confirmation.scope]}修复
                     </DialogTitle>
                     <DialogDescription>
-                        退回修复后，需重新试算并确认。
+                        退回修复后，需重新预检并核对确认。
                     </DialogDescription>
                 </DialogHeader>
                 <form
@@ -172,7 +172,7 @@ export function ConfirmSection({
                 <FormalActionResult
                     status="blocked"
                     title="责任确认任务不完整"
-                    description="当前试算缺少已登记的责任确认任务，不能提交确认或退回。请联系管理员重新生成确认任务。"
+                    description="当前批次缺少部门核对任务，暂无法确认或退回，请联系管理员重新生成。"
                 />
             ) : null}
 
@@ -230,7 +230,7 @@ export function ConfirmSection({
                                     />
                                 </div>
                                 <CardDescription>
-                                    试算版本{" "}
+                                    预检版本{" "}
                                     <span className="num font-mono">
                                         {confirmation.trialVersion}
                                     </span>
@@ -297,7 +297,7 @@ export function ConfirmSection({
                                         {workItemTypeMissing
                                             ? "当前确认任务不完整，入口已阻断"
                                             : confirmation.result !== "PENDING"
-                                              ? "本范围已有正式结论或已失效"
+                                              ? "本范围已有核对结论或已失效"
                                               : (task?.actionBlockers[0] ??
                                                 "当前范围不由本人处理")}
                                     </p>
@@ -329,11 +329,11 @@ export function ConfirmSection({
                     title={`确认${CONFIRMATION_SCOPE_LABEL[confirming.scope]}`}
                     actionLabel="确认本范围"
                     confirmLabel="确认本范围"
-                    description="确认本范围的试算结果。"
+                    description="确认本范围的数据预检结果。"
                     fromStatus={{ label: "待确认", tone: "warning" }}
                     toStatus={{ label: "已确认", tone: "success" }}
                     effects={["记录责任范围确认结论", "完成当前处理任务"]}
-                    irreversibleEffects={["试算结果变化后需要重新确认"]}
+                    irreversibleEffects={["预检结果变化后需要重新确认"]}
                     pending={isCompleting}
                     onConfirm={() => complete(confirming, "CONFIRM_SCOPE")}
                 />

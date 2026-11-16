@@ -14,11 +14,11 @@ export function IntegrationPageHeader({
 }) {
     return (
         <ListWorkspaceHeader
-            eyebrow="治理"
+            eyebrow="外部协同"
             title={
                 focusMode
-                    ? (itemNumber ?? "接口错误与对账中心")
-                    : "接口错误与对账中心"
+                    ? (itemNumber ?? "外部同步异常与对账")
+                    : "外部同步异常与对账"
             }
         >
             <DataFreshness

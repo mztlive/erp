@@ -95,7 +95,7 @@ export function SensitiveEditableField({
         try {
             const activeToken = (await getRevealToken?.()) ?? revealToken
             if (!activeToken) {
-                throw new Error("敏感字段查看凭证已失效，请刷新后重试")
+                throw new Error("查看授权已过期，请刷新页面后重试")
             }
             const plaintext =
                 value || (await revealMasterDataSensitive(activeToken))
@@ -124,7 +124,7 @@ export function SensitiveEditableField({
                             disabled={!canReveal}
                             onClick={() => void reveal()}
                         >
-                            短时查看
+                            查看完整信息
                         </Button>
                     )}
                 </div>

@@ -73,7 +73,7 @@ function AccessChangeDialog({
                         <BatchImpactPreview
                             title={impact.actionLabel}
                             description={impact.changeSummary}
-                            filterSummary={`主体：${impact.subjectLabel}`}
+                            filterSummary={`变更对象：${impact.subjectLabel}`}
                             selectionScope={impact.affectedWorkSurfaceSummary}
                             estimated={impact.affectedSubjectCount}
                             processable={
@@ -119,9 +119,7 @@ function AccessChangeDialog({
 
                         {impact.submissionBlocker ? (
                             <Alert variant="destructive">
-                                <AlertTitle>
-                                    {impact.submissionBlocker.code}
-                                </AlertTitle>
+                                <AlertTitle>操作暂不可用</AlertTitle>
                                 <AlertDescription>
                                     {impact.submissionBlocker.message}
                                 </AlertDescription>
@@ -256,7 +254,7 @@ function AccessChangeDialog({
                                         onOpenChange(false)
                                     }}
                                 >
-                                    关闭并记录阻断
+                                    关闭
                                 </Button>
                             </DialogFooter>
                         )}

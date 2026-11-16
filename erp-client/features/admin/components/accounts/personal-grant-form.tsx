@@ -164,7 +164,7 @@ export function PersonalGrantForm({
             if (legacy.length && !value.replace_legacy)
                 context.addIssue({
                     code: "custom",
-                    message: "请核对原授权，并确认转换为基础范围与追加授权",
+                    message: "请核对旧版范围规则，并确认保存后更新为新版规则",
                 })
             if (
                 value.grants.some(
@@ -410,7 +410,7 @@ export function PersonalGrantForm({
                                     {legacy.length > 0 && (
                                         <section className="space-y-3 rounded-md border border-warning-border bg-warning-soft p-3">
                                             <h3 className="font-medium">
-                                                原授权仍按原条件生效
+                                                旧版范围规则（保存后将更新为新版规则）
                                             </h3>
                                             {legacy.map((scope) => (
                                                 <p
@@ -426,10 +426,9 @@ export function PersonalGrantForm({
                                                 </p>
                                             ))}
                                             <p className="text-xs text-muted-foreground">
-                                                可直接转换的范围已列为追加授权。
+                                                可兼容的范围已自动迁移到下方列表中，保存后将统一按新版规则生效。
                                                 {business.default_self &&
-                                                    "默认本人已归入基础范围。"}
-                                                保存将把以上操作统一转换为新方式。
+                                                    "默认本人范围已保留。"}
                                             </p>
                                             {complexLegacy.length > 0 && (
                                                 <p className="text-xs text-warning-soft-foreground">
@@ -440,7 +439,7 @@ export function PersonalGrantForm({
                                                             ),
                                                         )
                                                         .join("、")}
-                                                    包含历史参与读取或附加限制，不能直接转换。转换后这些原条件将被移除，请在下面重新添加所需范围，并核对最终结果。
+                                                    包含曾参与经办的历史单据或附加限制，无法自动迁移。保存更新后这些旧规则将被移除，请在下方重新添加所需范围并核对结果。
                                                 </p>
                                             )}
                                             <form.Field name="replace_legacy">
@@ -464,7 +463,7 @@ export function PersonalGrantForm({
                                                                 )
                                                             }
                                                         />
-                                                        我已核对原授权与最终范围，确认转换并替换原授权条件。
+                                                        我已核对旧版规则与上方更新后的范围，确认保存并替换旧规则。
                                                     </label>
                                                 )}
                                             </form.Field>

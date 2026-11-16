@@ -99,7 +99,7 @@ export function DepositResolutionDialog({
                     .refine(
                         (value) =>
                             candidates.some((record) => record.id === value),
-                        "请选择已核实平衡的对账记录",
+                        "请选择双方余额一致的对账记录",
                     ),
                 reason: z
                     .string()
@@ -180,8 +180,8 @@ export function DepositResolutionDialog({
                     </DialogTitle>
                     <DialogDescription>
                         {resolving
-                            ? "以覆盖原核对范围的平衡对账和核实附件办理。全部未决资金均已处理后，账户才可恢复新增使用。"
-                            : "须先查清原订单、真实扣款、冻结及后续费用。服务端核定可释放金额，并同时解除对应付款申请额度和资金占用。"}
+                            ? "请提交覆盖原核对范围且双方余额一致的对账记录与核实附件；系统核对无待处理扣款后，将自动恢复账户使用。"
+                            : "须先查清原订单、真实扣款、冻结及后续费用。核实后将释放剩余冻结金额，并同步调整对应付款申请额度。"}
                     </DialogDescription>
                 </DialogHeader>
                 <p className="text-sm">
@@ -236,7 +236,7 @@ export function DepositResolutionDialog({
                 {!candidates.length && (
                     <Alert>
                         <AlertDescription>
-                            暂无符合范围的平衡对账。请先关闭窗口，登记覆盖原业务期间且无未核实交易的最新对账，再刷新账户办理。
+                            暂无符合范围的双方余额一致的对账记录。请先关闭窗口，登记覆盖原业务期间且无待核实交易的最新对账，再刷新账户办理。
                         </AlertDescription>
                     </Alert>
                 )}
@@ -258,7 +258,7 @@ export function DepositResolutionDialog({
                         {(field) => (
                             <field.SelectField
                                 id={`${prefix}-reconciliation`}
-                                label="已核实平衡的对账记录"
+                                label="双方余额一致的对账记录"
                                 required
                                 disabled={busy || unknown || !candidates.length}
                                 options={candidates.map((record) => ({
@@ -289,7 +289,7 @@ export function DepositResolutionDialog({
                                 label={
                                     resolving
                                         ? "差异查清依据"
-                                        : "资金风险消解依据"
+                                        : "无扣款风险核实凭证"
                                 }
                                 description={
                                     resolving

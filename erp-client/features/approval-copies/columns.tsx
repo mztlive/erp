@@ -20,7 +20,7 @@ const STATUS: Record<string, string> = {
     CANCELLED: "已撤回",
     BLOCKED: "审批受阻",
     ACTIVE: "待审批",
-    SUPERSEDED: "已替换",
+    SUPERSEDED: "往轮记录",
 }
 
 /** 抄送使用标准事项表格；阅读标记与审批进度分别展示。 */

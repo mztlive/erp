@@ -67,22 +67,23 @@ export function InboxPopover() {
                     <Button
                         id="workspace-inbox-trigger"
                         variant="ghost"
-                        size="icon"
-                        className="relative"
+                        size="icon-sm"
+                        className="relative text-muted-foreground hover:text-foreground"
                         aria-label={
                             unread ? `收件箱，${unread} 条未读消息` : "收件箱"
                         }
+                        title={unread ? `收件箱（${unread} 条未读）` : "收件箱"}
                     />
                 }
             >
-                <InboxIcon className="size-5" />
+                <InboxIcon className="size-4" aria-hidden="true" />
                 {unread ? (
-                    <span className="absolute -right-1 -top-1 rounded-full bg-destructive px-1 text-xs leading-4 text-destructive-foreground">
+                    <span className="num pointer-events-none absolute top-0.5 right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-2xs font-semibold leading-none text-destructive-foreground ring-2 ring-card">
                         {unread > 99 ? "99+" : unread}
                     </span>
                 ) : null}
                 {feed.isError ? (
-                    <span className="absolute right-0 top-0 size-2 rounded-full bg-destructive" />
+                    <span className="pointer-events-none absolute top-1.5 right-1.5 size-2 rounded-full bg-destructive ring-2 ring-card" />
                 ) : null}
             </PopoverTrigger>
             <PopoverContent

@@ -52,7 +52,7 @@ export function computeMetrics(rows: readonly MasterDataListItem[]) {
             key: "pending",
             label: "待生效更新",
             value: rows.filter((r) => r.revisionTiming === "FUTURE").length,
-            detail: "版本状态 · 不是启用状态",
+            detail: "修订状态",
         },
     ] as const
 }

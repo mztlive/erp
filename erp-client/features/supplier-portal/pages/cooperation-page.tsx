@@ -54,7 +54,7 @@ export function PortalCooperationPage() {
     return (
         <PortalSurface
             title="合作资料"
-            description="付款条件由采购确认后生效，已冻结的采购单保持原条件。"
+            description="付款条件由采购确认后生效，已生效的历史采购单保持原条件。"
         >
             <PortalError
                 error={query.error}

@@ -158,13 +158,14 @@ const emptyStatePresets: Record<BusinessEmptyStateKind, EmptyStatePreset> = {
         icon: SearchXIcon,
     },
     "no-scope": {
-        title: "当前角色无数据范围",
-        description: "你可以进入此页面，但当前权限范围内没有可查看的数据。",
+        title: "暂无可查看的数据",
+        description:
+            "您当前尚未被分配该模块的查看范围，如需查看请联系管理员开通。",
         icon: ShieldXIcon,
     },
     "not-synced": {
         title: "尚未完成同步",
-        description: "来源系统尚未完成首次同步，可前往后台任务查看进度。",
+        description: "暂未完成首次数据同步，可前往批量任务记录查看进度。",
         icon: CloudOffIcon,
     },
     "no-tasks": {
@@ -174,7 +175,7 @@ const emptyStatePresets: Record<BusinessEmptyStateKind, EmptyStatePreset> = {
     },
     "no-exceptions": {
         title: "当前没有未解决异常",
-        description: "当前筛选范围内的业务链路运行正常。",
+        description: "当前一切正常，暂无待处理的异常事项。",
         icon: CircleCheckIcon,
     },
 }
@@ -247,7 +248,7 @@ type FailureStatePreset = {
 
 const failureStatePresets: Record<BusinessFailureKind, FailureStatePreset> = {
     validation: {
-        title: "存在待修正字段",
+        title: "填写内容有误",
         description: "请按提示修正输入后再次提交。",
         icon: FileWarningIcon,
         variant: "warning",
@@ -255,16 +256,16 @@ const failureStatePresets: Record<BusinessFailureKind, FailureStatePreset> = {
         label: "校验未通过",
     },
     business: {
-        title: "业务规则阻断",
-        description: "当前业务状态或前置条件不允许继续处理。",
+        title: "暂无法执行此操作",
+        description: "当前单据状态或业务条件不满足要求，请核对后再试。",
         icon: TriangleAlertIcon,
         variant: "warning",
         tone: "warning",
-        label: "业务阻断",
+        label: "暂不可操作",
     },
     permission: {
         title: "权限不足",
-        description: "当前账号缺少所需的页面、动作或数据范围权限。",
+        description: "当前账号暂无此项操作或数据的查看权限，请联系管理员开通。",
         icon: ShieldAlertIcon,
         variant: "destructive",
         tone: "destructive",
@@ -295,12 +296,12 @@ const failureStatePresets: Record<BusinessFailureKind, FailureStatePreset> = {
         label: "同步失败",
     },
     integration: {
-        title: "外部接口失败",
+        title: "外部平台通信失败",
         description: `业务记录已保留，请进入${workspaceLabel("W29")}查看后续处理。`,
         icon: CloudOffIcon,
         variant: "destructive",
         tone: "destructive",
-        label: "接口失败",
+        label: "平台通信异常",
     },
     projection: {
         title: "数据更新失败",
@@ -502,7 +503,7 @@ function AsyncSectionState({
     status,
     children,
     loadingLabel = "正在加载",
-    refreshingLabel = "正在更新，当前仍显示上次成功内容",
+    refreshingLabel = "正在刷新最新数据…",
     loadingFallback,
     error,
     errorKind = "system",

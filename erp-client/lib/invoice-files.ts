@@ -35,7 +35,7 @@ export function invoiceFilesError(
             !INVOICE_FILE_MIME_BY_EXTENSION[extension] ||
             file.type !== INVOICE_FILE_MIME_BY_EXTENSION[extension]
         ) {
-            return `${file.name}：仅支持 PDF、JPG、PNG 或 WebP，文件类型须与扩展名一致`
+            return `${file.name}：仅支持 PDF、JPG、PNG 或 WebP 格式（请勿直接修改文件后缀名）`
         }
     }
     return undefined

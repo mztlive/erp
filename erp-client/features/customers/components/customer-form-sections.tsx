@@ -76,7 +76,7 @@ export function ContactRowsSection({
         <FormSection
             grouped={grouped}
             title="联系人"
-            description="可多条；手机在详情页按权限打码展示"
+            description="可添加多位联系人；手机号仅对有权限的人员展示完整号码"
             action={
                 <form.AppField name="contacts">
                     {(field) => (
@@ -237,7 +237,7 @@ export function AddressRowsSection({
         <FormSection
             grouped={grouped}
             title="地址"
-            description="履约地址在详情页按权限打码展示"
+            description="收货地址仅对有权限的人员展示完整信息"
             action={
                 <form.AppField name="addresses">
                     {(field) => (

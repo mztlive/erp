@@ -35,23 +35,23 @@ export function OverviewSection({
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
             <Card size="sm" className={surfacePanelClassName}>
                 <CardHeader className="border-b border-grid">
-                    <CardTitle>试算摘要</CardTitle>
+                    <CardTitle>预检摘要</CardTitle>
                     <CardDescription>
-                        试算统计由系统统一计算，与问题明细可能因筛选存在差异。
+                        此处展示本次数据预检的整体统计结果，具体异常可在明细中筛选查看。
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="pt-4">
                     <MetricStrip
                         variant="plain"
                         columns={4}
-                        aria-label="试算指标"
+                        aria-label="预检指标"
                     >
                         <MetricItem
                             label="总行数"
                             value={batch.metrics.total}
                         />
                         <MetricItem
-                            label="可应用"
+                            label="待导入"
                             value={batch.metrics.valid}
                         />
                         <MetricItem
@@ -87,7 +87,7 @@ export function OverviewSection({
                 <CardHeader className="border-b border-grid">
                     <CardTitle>期初口径</CardTitle>
                     <CardDescription>
-                        提示按本批对象固定生成，不可修改。
+                        以下为本批次导入数据的口径说明，仅供核对参考。
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3 pt-4">
@@ -129,11 +129,7 @@ export function OverviewSection({
                             "dateStyle",
                             "passthrough",
                         )}
-                        ）。禁止按旧试算版本{" "}
-                        <span className="num font-mono">
-                            {batch.invalidation.previousTrialVersion}
-                        </span>{" "}
-                        提交应用。
+                        ）。数据或规则已更新，需按最新预检结果重新核对后才能正式导入。
                     </AlertDescription>
                 </Alert>
             ) : null}

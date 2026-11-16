@@ -55,7 +55,7 @@ export const HANDLER_REGISTRY: Readonly<Record<string, HandlerRegistration>> = {
         baseHref: "/sales/orders",
     },
     procurement_order_creation: {
-        workItemTypeLabel: "待供给分配",
+        workItemTypeLabel: "待安排采购",
         family: "procurement",
         destinationWorkspaceId: "W08",
         baseHref: "/procurement/orders",
@@ -127,7 +127,7 @@ export const HANDLER_REGISTRY: Readonly<Record<string, HandlerRegistration>> = {
         baseHref: "/procurement/supplier-portal/applications",
     },
     integration_unknown: {
-        workItemTypeLabel: "集成结果待确认",
+        workItemTypeLabel: "外部同步结果待确认",
         family: "exception",
         destinationWorkspaceId: "W29",
         baseHref: "/governance/integration-errors",

@@ -170,7 +170,7 @@ export function overviewMetrics(
         {
             key: "purchase-inquiries",
             label: "待处理采购询价",
-            detail: "当前开放询价任务",
+            detail: "当前待处理的询价任务",
             permission: "procurement_inquiry:list",
             source: { kind: "inquiry", procurement: true, taskStatus: "open" },
             field: "count",

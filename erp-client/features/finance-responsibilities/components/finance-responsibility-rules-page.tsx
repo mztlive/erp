@@ -185,7 +185,7 @@ function RuleDialog({
                         {target ? "编辑财务责任规则" : "新增财务责任规则"}
                     </DialogTitle>
                     <DialogDescription>
-                        指定往来方规则优先于同业务的默认负责人池。保存只影响新任务；已有任务请在工作台转交。
+                        指定客户/供应商规则优先于同业务的默认经办人组。保存只影响新任务；已有任务请在工作台转交。
                     </DialogDescription>
                 </DialogHeader>
                 <form
@@ -218,12 +218,12 @@ function RuleDialog({
                             {(field) => (
                                 <field.SelectField
                                     id="finance-responsibilities-rule-scope"
-                                    label="匹配层级"
+                                    label="适用范围"
                                     options={SCOPE_VALUES.map((value) => ({
                                         value,
                                         label: FINANCE_SCOPE_LABEL[value],
                                     }))}
-                                    description="每项业务最多启用一条默认规则；指定往来方可覆盖默认负责人池。"
+                                    description="每项业务最多启用一条默认规则；指定客户/供应商可覆盖默认经办人组。"
                                     allowClear={false}
                                     required
                                     onValueChange={() =>
@@ -335,7 +335,7 @@ function RuleDialog({
                                             启用规则
                                         </FieldLabel>
                                         <FieldDescription>
-                                            停用后不再参与新任务负责人解析。
+                                            停用后，新财务待办将不再按此规则分配。
                                         </FieldDescription>
                                     </div>
                                     <Switch
@@ -474,7 +474,7 @@ export function FinanceResponsibilityRulesPage() {
                 className="pb-4 md:pb-4"
                 eyebrow="财务"
                 title="财务责任配置"
-                description="为供应商付款和客户销项开票配置负责人池，各池独立轮询；指定往来方优先，默认规则兜底。"
+                description="设置供应商付款与客户开票任务的默认经办人，支持按特定客户/供应商指定专人负责，或由多人轮流接单。"
             >
                 {canManage ? (
                     <Button
@@ -568,7 +568,7 @@ export function FinanceResponsibilityRulesPage() {
                                             listWorkspaceEmptyStateClassName
                                         }
                                         title="还没有财务责任规则"
-                                        description="请先分别配置供应商付款和销项开票的默认负责人池。"
+                                        description="请先分别配置供应商付款和销项开票的默认经办人组。"
                                         action={
                                             canManage && !ownerUnavailable ? (
                                                 <Button

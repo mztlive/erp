@@ -109,10 +109,11 @@ export function SupplierAllocationWorkspace({
             !(embedded && track === "payment" && pool.length <= 1) ? (
                 <Alert>
                     <ShieldAlertIcon />
-                    <AlertTitle>应付优先级策略不可用</AlertTitle>
+                    <AlertTitle>请手动填写核销金额</AlertTitle>
                     <AlertDescription>
-                        {policy.blockerMessage}
-                        混合自动分配已禁用；请显式勾选目标并填写金额。
+                        {mixedSources
+                            ? "当前同时选择了采购单与结算单，请手动勾选单据并填写每笔核销金额。"
+                            : "请手动勾选单据并填写每笔核销金额。"}
                     </AlertDescription>
                 </Alert>
             ) : null}

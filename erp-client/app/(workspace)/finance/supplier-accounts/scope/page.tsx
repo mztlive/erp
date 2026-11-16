@@ -5,7 +5,7 @@ import { ScopePagePulse } from "@/components/layout/page-pulse"
 import { SupplierScopePage } from "@/features/supplier-payables/pages/supplier-scope-page"
 
 export const metadata: Metadata = {
-    title: "供应商往来（按数据范围）",
+    title: "供应商往来汇总",
 }
 
 /**

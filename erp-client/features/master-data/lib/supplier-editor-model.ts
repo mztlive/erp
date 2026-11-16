@@ -81,7 +81,7 @@ export function validateSupplierEditorFields(
         context.hasStoredContactPhone === true &&
         values.contactName.trim() === context.originalContactName?.trim()
     if (hasContactName !== hasContactPhone && !preservesStoredContact) {
-        return "联系人姓名和联系电话必须同时填写；修改联系人姓名前请先短时查看联系电话"
+        return "联系人姓名和联系电话必须同时填写；修改联系人姓名时需一并核对联系电话，请先点击“查看完整信息”后再修改"
     }
     if (
         values.bankRoutingNumber.trim() &&
@@ -98,7 +98,7 @@ export function validateSupplierEditorFields(
         context.hasStoredBankAccount === true &&
         values.bankName.trim() === context.originalBankName?.trim()
     if (hasBankName !== hasBankAccount && !preservesStoredBankAccount) {
-        return "开户银行和银行账号必须同时填写；修改开户银行前请先短时查看银行账号"
+        return "开户银行和银行账号必须同时填写；修改开户银行时需一并核对银行账号，请先点击“查看完整信息”后再修改"
     }
     if (!values.signingEntity.trim()) return "请选择公司签约主体"
     if (!values.paymentEntity.trim()) return "请选择公司付款主体"

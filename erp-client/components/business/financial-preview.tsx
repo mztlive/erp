@@ -64,7 +64,7 @@ export function PreviewNote({ children }: { children: ReactNode }) {
 export function PostedRecordNote() {
     return (
         <PreviewNote>
-            已过账记录不可编辑或删除；纠错须追加反向记录。
+            已入账记录不可直接修改或删除；如需更正，请办理冲销或退款。
         </PreviewNote>
     )
 }

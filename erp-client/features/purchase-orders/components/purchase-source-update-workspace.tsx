@@ -65,7 +65,7 @@ export function PurchaseSourceUpdateWorkspace({
             <div
                 className="space-y-4 p-5"
                 aria-busy="true"
-                aria-label="正在加载采购依据"
+                aria-label="正在加载销售变更对比信息"
             >
                 <div className="h-24 animate-pulse rounded-lg bg-muted" />
                 <div className="h-40 animate-pulse rounded-lg bg-muted" />
@@ -74,7 +74,7 @@ export function PurchaseSourceUpdateWorkspace({
     if (query.isError && !order)
         return (
             <BusinessFailureState
-                title="采购依据加载失败"
+                title="销售变更对比信息加载失败"
                 error={query.error}
                 action={
                     <Button
@@ -156,14 +156,14 @@ export function PurchaseSourceUpdateWorkspace({
             {needsUpdate ? <PurchaseSourceUpdateContext order={order} /> : null}
             {!update ? (
                 <Alert variant="warning">
-                    <AlertTitle>暂时无法确认采购依据</AlertTitle>
+                    <AlertTitle>暂无法核对销售变更影响</AlertTitle>
                     <AlertDescription>
-                        未读取到采购依据更新情况，请刷新后再处理。
+                        未读取到销售变更影响情况，请刷新后再处理。
                     </AlertDescription>
                 </Alert>
             ) : !needsUpdate ? (
                 <Alert>
-                    <AlertTitle>本采购已无需更新依据</AlertTitle>
+                    <AlertTitle>本采购单无需调整</AlertTitle>
                     <AlertDescription>
                         {update.lastResolutionLabel ||
                             "当前采购已不受来源销售变更影响。"}{" "}
@@ -177,7 +177,7 @@ export function PurchaseSourceUpdateWorkspace({
                 <Alert>
                     <AlertTitle>采购改单审批中</AlertTitle>
                     <AlertDescription>
-                        改单生效后系统会重新核对采购依据，符合新销售要求后自动结束待办。当前无需重复发起改单。
+                        改单生效后系统会重新核对销售变更影响，符合新销售要求后自动结束待办。当前无需重复发起改单。
                     </AlertDescription>
                 </Alert>
             ) : null}

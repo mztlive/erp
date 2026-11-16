@@ -34,10 +34,9 @@ export function TrialSection({
     return (
         <div className="space-y-4">
             <Alert>
-                <AlertTitle>问题表范围</AlertTitle>
+                <AlertTitle>仅显示异常与待核对数据</AlertTitle>
                 <AlertDescription>
-                    仅展示失败、冲突、跳过与待映射行；不混入成功长表。筛选写入
-                    URL，刷新可恢复。
+                    此处仅列出校验失败、冲突、跳过及待匹配的数据行，正常通过的数据不在此处展示。
                 </AlertDescription>
             </Alert>
 
@@ -74,7 +73,7 @@ export function TrialSection({
                     />
                 </div>
                 <div className="space-y-1">
-                    <Label className="text-xs">对象</Label>
+                    <Label className="text-xs">数据类型</Label>
                     <OptionCombobox
                         id="operations-import-batch-detail-trial-filter-object-type"
                         value={urlState.issueObjectType ?? "all"}
@@ -89,7 +88,7 @@ export function TrialSection({
                             })
                         }}
                         options={[
-                            { value: "all", label: "全部对象" },
+                            { value: "all", label: "全部类型" },
                             ...batch.sourceObjectSet.map((code) => ({
                                 value: code,
                                 label: OBJECT_CODE_LABEL[code],

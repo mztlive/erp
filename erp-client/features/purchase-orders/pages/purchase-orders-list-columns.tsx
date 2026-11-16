@@ -107,7 +107,7 @@ export function buildPurchaseOrdersListColumns({
         {
             id: "tracks",
             header: "进度",
-            meta: { label: "多轨进度", width: "tracks" },
+            meta: { label: "付款与履约进度", width: "tracks" },
             cell: ({ row }) => (
                 <StatusTrackSummary
                     variant="inline"

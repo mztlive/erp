@@ -498,7 +498,7 @@ export function DefinitionFlowCanvas({
                             onConnectEnd={(_event, connection) => {
                                 if (connection.toNode && !connection.isValid) {
                                     setNotice(
-                                        "请从审批步骤出口或汇合点连接下一步骤入口；或签人员分支由人员配置自动生成。",
+                                        "请将当前审批步骤连接到下一个步骤；多人或签无需手动连线，在右侧面板添加审批人即可。",
                                     )
                                 }
                             }}

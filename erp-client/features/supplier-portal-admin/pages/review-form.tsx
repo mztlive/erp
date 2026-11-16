@@ -368,7 +368,7 @@ export function PortalReviewForm({
                     <h2 className="font-semibold">采购确认</h2>
                     <p className="text-sm text-muted-foreground">
                         当前处理人：{task.owner_user?.display_name ?? "待核对"}
-                        。申请原稿保持不变，单位、规格含义或报价变化请退回供应商确认。
+                        。供应商提报资料保持不变，单位、规格含义或报价变化请退回供应商确认。
                     </p>
                 </div>
                 {task.allowed_actions?.includes("REASSIGN") && (
@@ -509,7 +509,9 @@ export function PortalReviewForm({
             >
                 {rawProduct && (
                     <section className="space-y-4">
-                        <h3 className="font-semibold">字典及重复匹配</h3>
+                        <h3 className="font-semibold">
+                            品牌、分类匹配与商品查重
+                        </h3>
                         <div className="grid gap-4 md:grid-cols-2">
                             <form.AppField name="brandId">
                                 {(field) => (
@@ -523,7 +525,7 @@ export function PortalReviewForm({
                                             )
                                         }
                                         id="supplier-portal-review-brand"
-                                        label={`品牌原稿：${rawProduct.brand.raw_name}`}
+                                        label={`提报品牌：${rawProduct.brand.raw_name}`}
                                         required
                                         options={dictionaryOptions(brands.data)}
                                         onRefresh={() =>
@@ -562,7 +564,7 @@ export function PortalReviewForm({
                                             )
                                         }}
                                         id="supplier-portal-review-category"
-                                        label={`分类原稿：${rawProduct.category.raw_name}`}
+                                        label={`提报分类：${rawProduct.category.raw_name}`}
                                         required
                                         options={dictionaryOptions(
                                             categories.data?.filter(
@@ -608,7 +610,7 @@ export function PortalReviewForm({
                             )}
                         </form.Subscribe>
                         <p className="text-sm text-muted-foreground">
-                            未匹配字典需由具备相应维护权限的内部人员补建；完成后重新核对候选。可转交当前申请，供应商原稿保留。
+                            未匹配的品牌、分类或单位需由有权限的同事新增；完成后重新核对候选。可转交当前申请，供应商提报资料保留。
                         </p>
                         <div className="flex flex-wrap gap-3">
                             <Button
@@ -628,7 +630,7 @@ export function PortalReviewForm({
                                     if (failed?.error) setError(failed.error)
                                 }}
                             >
-                                重新读取字典并核对映射
+                                刷新品牌、分类与单位选项
                             </Button>
                             {access.can("product_brand:create") &&
                                 !rawProduct.brand.selected_id && (
@@ -857,9 +859,9 @@ export function PortalReviewForm({
                                                         {sku.ordering_code}
                                                     </p>
                                                     <p className="text-xs text-muted-foreground">
-                                                        原始单位：
+                                                        提报单位：
                                                         {sku.unit.raw_name} ·
-                                                        原始规格：
+                                                        提报规格：
                                                         {sku.spec_entries
                                                             .map(
                                                                 (entry) =>
@@ -968,7 +970,7 @@ export function PortalReviewForm({
                                                                     )
                                                                 }
                                                             />
-                                                            已核对原始单位与所选单位含义相同，仅名称不同，不涉及包装或报价换算
+                                                            已核对提报单位与所选标准单位含义一致，仅名称不同，不涉及包装或报价换算
                                                         </label>
                                                     )}
                                                 </form.AppField>
@@ -978,7 +980,7 @@ export function PortalReviewForm({
                                                     {(field) => (
                                                         <field.TextField
                                                             id={`${prefix}-unit-synonym-reason`}
-                                                            label="单位同义核对依据（勾选同义确认时必填）"
+                                                            label="单位一致/换算说明（勾选一致确认时必填）"
                                                             required={
                                                                 mappings[index]
                                                                     ?.unitSynonymConfirmed
@@ -1042,7 +1044,7 @@ export function PortalReviewForm({
                                 {(field) => (
                                     <section className="space-y-3 rounded-lg border p-4">
                                         <h3 className="font-medium">
-                                            相同订货编码下的既有供给核对
+                                            相同订货编码下的已有供货商品核对
                                         </h3>
                                         {existingCandidates.map((candidate) => (
                                             <label
@@ -1088,7 +1090,7 @@ export function PortalReviewForm({
                             </form.AppField>
                         )}
                         <p className="text-sm text-muted-foreground">
-                            仅本次新建SKU保持未上架。复用在售SKU并增加有效供给后，可能立即参与或恢复销售与采购选源。
+                            仅本次新增规格保持未上架；复用在售商品规格并增加有效供货后，可能立即参与销售及采购供应选择。
                         </p>
                     </section>
                 )}
@@ -1152,7 +1154,7 @@ export function PortalReviewForm({
                         {(field) => (
                             <div className="space-y-2">
                                 <p className="text-xs text-muted-foreground">
-                                    通过前请选择合格的内部维护人；所选人员的当前资格由服务端重新核对。
+                                    通过前请指定内部跟进负责人。
                                 </p>
                                 {access.can("procurement_person:list") ? (
                                     <PersonDirectoryFilter
@@ -1169,7 +1171,7 @@ export function PortalReviewForm({
                                 ) : (
                                     <>
                                         <p className="text-sm">
-                                            当前账号无采购人员目录资格，可明确选择由本人维护或转交处理。
+                                            当前暂无可选采购人员列表，可选择由本人跟进或转交他人处理。
                                         </p>
                                         <Button
                                             id="supplier-portal-review-maintainer-self"

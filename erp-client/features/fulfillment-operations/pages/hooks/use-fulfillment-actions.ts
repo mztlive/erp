@@ -121,7 +121,9 @@ export function useFulfillmentActions({
             return false
         }
         if (!supportsSave) {
-            setActionError("这类履约单据没有草稿保存命令，请直接确认")
+            setActionError(
+                "电子交付与线下服务无需保存草稿，填写完成后请直接点击确认。",
+            )
             return false
         }
         try {
@@ -255,10 +257,10 @@ export function useFulfillmentActions({
                 status: "succeeded",
                 title: OPERATION_DONE_LABEL[response.outcome.operationType],
                 description: autoNext
-                    ? "已记下来了，马上打开下一条。"
+                    ? "已确认完成，正在打开下一条待办。"
                     : activeOperation.operationType === "RECEIPT"
-                      ? "已记下来了。合格的货已入库并按销售单留好，可以继续本单仓发。"
-                      : "已记下来了。可以先核对一下库存变化再继续。",
+                      ? "已确认入库。合格商品已计入库存并按销售单预留，可继续处理仓库发货。"
+                      : "已确认完成，可核对库存变化后继续处理其他任务。",
                 reference: response.outcome.factNo,
                 outcome,
                 stayOnItem: !autoNext,
@@ -342,7 +344,7 @@ export function useFulfillmentActions({
         if (response.status === "unknown") {
             setLastResult({
                 status: "unknown",
-                title: "还是没查到结果",
+                title: "暂未查到处理结果",
                 description: response.message,
                 pendingIdempotencyKey: response.idempotencyKey,
                 stayOnItem: true,
@@ -357,7 +359,7 @@ export function useFulfillmentActions({
             ledger.current.settle("post", "succeeded")
             setLastResult({
                 status: "succeeded",
-                title: "查到了：这一条已经做完",
+                title: "已确认该任务处理完成",
                 description: "该单据当前已完成，请核对本次处理信息。",
                 reference: response.outcome.factNo,
                 outcome: response.outcome,

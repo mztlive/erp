@@ -50,7 +50,7 @@ import { formatDateTime } from "@/lib/datetime"
 const SECTION_TABS: { id: BatchSection; label: string }[] = [
     { id: "overview", label: "概览" },
     { id: "files", label: "文件与规则" },
-    { id: "trial", label: "试算与问题" },
+    { id: "trial", label: "预检与问题" },
     { id: "confirm", label: "责任确认" },
     { id: "progress", label: "执行进度" },
     { id: "result", label: "结果" },
@@ -146,7 +146,7 @@ export function BatchDetailView({
                 <BusinessEmptyState
                     kind="no-data"
                     title="批次不存在"
-                    description="请返回列表或检查批次身份。"
+                    description="未找到该导入批次，请返回列表重新选择。"
                     className="rounded-lg border-0 bg-transparent shadow-none ring-0"
                     action={
                         <Button
@@ -270,14 +270,14 @@ export function BatchDetailView({
                 ]}
             />
 
-            {/* 批次身份摘要：对象集、试算版本、来源系统等（环境/基准日/规则版本见页头） */}
+            {/* 批次身份摘要：导入数据类型、预检版本、来源系统等（环境/基准日/规则版本见页头） */}
             <Card size="sm" className={surfacePanelClassName}>
                 <CardContent className="grid gap-3 pt-4 sm:grid-cols-2 lg:grid-cols-4">
                     <Fact
-                        label="对象集合"
+                        label="导入数据类型"
                         value={formatObjectSet(batch.sourceObjectSet)}
                     />
-                    <Fact label="试算版本" value={batch.trialVersion} mono />
+                    <Fact label="预检版本" value={batch.trialVersion} mono />
                     <Fact label="来源系统" value={batch.sourceSystem.name} />
                     <Fact label="发起人" value={batch.initiatorLabel} />
                     <Fact
@@ -301,7 +301,7 @@ export function BatchDetailView({
                 </Alert>
             ) : (
                 <Alert variant="success">
-                    <AlertTitle>已形成业务对象（部分或全部）</AlertTitle>
+                    <AlertTitle>期初数据已写入系统（部分或全部）</AlertTitle>
                     <AlertDescription>
                         {batch.notFormalDataMessage}
                     </AlertDescription>
@@ -311,7 +311,7 @@ export function BatchDetailView({
             <ImportStageIndicator
                 stages={stageStates}
                 stageLabels={importStageLabels}
-                aria-label="导入六段流水线"
+                aria-label="导入流程进度"
             />
 
             {!embedded ? (

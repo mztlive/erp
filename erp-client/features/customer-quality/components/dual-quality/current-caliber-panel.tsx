@@ -30,10 +30,14 @@ export function CurrentCaliberPanel({
     return (
         <div className="flex min-w-0 flex-col gap-3">
             <p className="text-xs text-muted-foreground">
-                当前负责口径：按销售单当前负责销售和业务组织汇总，同一客户的不同业务分别归属；历史贡献使用生效时的归属。
+                按销售单当前负责销售和业务部门汇总，同一客户的不同业务分别归属；如需按签单时归属统计，请切换至历史贡献口径。
             </p>
 
-            <CurrentCaliberFilters filters={filters} patchDual={patchDual} />
+            <CurrentCaliberFilters
+                filters={filters}
+                patchDual={patchDual}
+                items={viewQuery.data?.rows.items}
+            />
 
             <CaliberQueryBody
                 viewQuery={viewQuery}
@@ -45,10 +49,10 @@ export function CurrentCaliberPanel({
                 patchDual={patchDual}
                 pendingLabel="正在加载当前负责口径…"
                 failureTitle="当前负责口径加载失败"
-                noScopeTitle="当前角色无客户数据范围"
-                noScopeDescription="当前角色无客户数据范围，请申请权限。历史贡献口径不受此影响，可切换查看。"
+                noScopeTitle="暂无可查看的客户数据"
+                noScopeDescription="您当前尚未配置当前负责客户的数据查看范围，请联系管理员开通权限；或切换查看历史贡献口径。"
                 filteredTitle="当前筛选无客户结果"
-                noDataTitle="期间内无授权经营记录"
+                noDataTitle="当前期间暂无客户经营数据"
                 exportIdleLabel="导出当前口径 CSV"
                 onClearFilters={() =>
                     patchDual({

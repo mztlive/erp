@@ -77,7 +77,7 @@ export function CustomerCenterDirectoryTable({
             <BusinessEmptyState
                 kind="filter"
                 title="当前筛选无结果"
-                description={`范围“${SCOPE_LABELS[scope]}”${status !== "active" ? ` · 状态 ${status}` : ""}${q ? ` · 关键词“${q}”` : ""} 下没有匹配客户。`}
+                description={`范围“${SCOPE_LABELS[scope]}”${status !== "active" ? ` · 状态：${status === "disabled" ? "已停用" : "全部状态"}` : ""}${q ? ` · 关键词“${q}”` : ""} 下没有匹配客户。`}
                 className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
                 action={
                     hasActiveFilters ? (

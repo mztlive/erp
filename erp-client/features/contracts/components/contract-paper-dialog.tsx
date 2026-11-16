@@ -41,7 +41,7 @@ export function ContractPaperDialog({
                 <DialogHeader className="shrink-0 border-b border-border px-6 py-4 text-left">
                     <DialogTitle>合同纸质预览</DialogTitle>
                     <DialogDescription>
-                        系统已确认修订的打印件；条款、状态与签章位以系统记录为准。
+                        合同关键条款打印摘要，正式内容以签署的合同原件为准。
                     </DialogDescription>
                 </DialogHeader>
 

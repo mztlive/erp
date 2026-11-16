@@ -46,11 +46,11 @@ export function AccessAuditPage() {
                 <FormalActionResult
                     status="blocked"
                     title="权限复核入口未开放"
-                    description="权限复核任务与专用复核命令尚未注册，不能在权限配置页面代为确认。"
+                    description="权限变更复核功能暂未开放，当前无法在此页面直接确认。"
                     facts={[
                         {
-                            label: "阻断原因",
-                            value: "REVIEW_POLICY_UNCONFIGURED",
+                            label: "说明",
+                            value: "需配置复核规则后才能执行此操作",
                         },
                     ]}
                     actions={

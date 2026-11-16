@@ -31,7 +31,7 @@ export function CustomerReceivablesMetrics({
     const items = [
         {
             id: "open",
-            label: "开放应收",
+            label: "待收金额",
             value: metrics.openReceivableTotal,
         },
         {

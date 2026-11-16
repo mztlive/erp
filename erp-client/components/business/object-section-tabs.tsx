@@ -56,7 +56,7 @@ function ObjectSectionTabs({
     beforeContent,
     className,
     listClassName,
-    listLabel = "对象分区",
+    listLabel = "详情分区",
     id,
     idPrefix,
     ...props

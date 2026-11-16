@@ -52,7 +52,7 @@ export function PurchaseOrderApiExecutions({
     return (
         <>
             {quantities.length > 0 ? (
-                <PurchaseOrderDetailSection title="已应用履约数量">
+                <PurchaseOrderDetailSection title="实际入库与发货进度">
                     <div className="min-w-0 overflow-x-auto">
                         <Table>
                             <TableHeader>
@@ -120,13 +120,12 @@ export function PurchaseOrderApiExecutions({
                         </Table>
                     </div>
                     <p className="text-xs leading-5 text-muted-foreground">
-                        仅统计 ERP
-                        已登记的收货或发货；供应商预占、确认及物流不替代实际交付。入仓采购仍须办理实际收货与后续出库。
+                        仅统计已确认的入库或发货数量（供应商接单及物流状态不计入实际交付）。
                     </p>
                 </PurchaseOrderDetailSection>
             ) : null}
             {executions.length > 0 ? (
-                <PurchaseOrderDetailSection title="供应商接口履约">
+                <PurchaseOrderDetailSection title="供应商平台订单进度">
                     <ul className="divide-y">
                         {executions.map((execution) => (
                             <li
@@ -204,7 +203,7 @@ export function PurchaseOrderApiExecutions({
                         ))}
                     </ul>
                     <p className="text-xs leading-5 text-muted-foreground">
-                        费用超批、付款批准、授权、余额占用与原请求待核实按各自原因处理；资金占用不计入已付。改单前须核查全部相关子单及未决返款。
+                        如遇下单受阻，请根据具体提示核对付款审批或预存款余额。
                     </p>
                 </PurchaseOrderDetailSection>
             ) : null}

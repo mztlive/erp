@@ -194,7 +194,7 @@ export function VoucherCategoryFormDialog({
         : masterDataCopy.createTitle("卡券类目")
     const description = isEdit
         ? "修改名称与描述。编号不可改；分类 / 品牌 / 单位沿用创建时默认。"
-        : "只需填写编号、名称与描述。分类挂到共用「卡券」根分类，品牌固定「福尚云」，单位固定「张」。"
+        : "填写卡券类目的唯一编号、名称及适用范围说明。"
     const blockedTitle = isEdit
         ? masterDataCopy.reviseBlockedTitle
         : masterDataCopy.createBlockedTitle
@@ -267,7 +267,7 @@ export function VoucherCategoryFormDialog({
                                     <field.TextField
                                         id={`${baseId}-voucher-no`}
                                         label="卡券类目编号"
-                                        placeholder="全局唯一，同时作为商品与 SKU 编号"
+                                        placeholder="请输入唯一的卡券类目编号"
                                         disabled={isEdit}
                                         required
                                     />

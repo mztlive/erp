@@ -31,10 +31,9 @@ export function FilesSection({ batch }: { batch: ImportBatchView }) {
         <div className="grid gap-4 lg:grid-cols-2">
             <Card size="sm" className={surfacePanelClassName}>
                 <CardHeader className="border-b border-grid">
-                    <CardTitle>合规输入包</CardTitle>
+                    <CardTitle>导入源文件</CardTitle>
                     <CardDescription>
-                        仅展示白名单包元数据；不展示原始存储键、签名 URL
-                        或文件正文。
+                        展示本次上传的期初数据文件基本信息与检查状态。
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3 pt-4 text-sm">
@@ -84,29 +83,28 @@ export function FilesSection({ batch }: { batch: ImportBatchView }) {
                         </>
                     ) : (
                         <p className="text-muted-foreground">
-                            尚未接收合规包。
+                            暂未上传导入文件。
                         </p>
                     )}
                     <Separator />
                     <p className="text-xs text-muted-foreground">
-                        禁止内容：原始
-                        SQL、数据库连接头、商城禁止字段导出。此类文件不得长期留存，也不能在本页展示。
+                        请按标准模板整理数据，避免包含系统无关字段。
                     </p>
                 </CardContent>
             </Card>
 
             <Card size="sm" className={surfacePanelClassName}>
                 <CardHeader className="border-b border-grid">
-                    <CardTitle>结果与诊断资产保留</CardTitle>
+                    <CardTitle>导入结果与异常报告</CardTitle>
                     <CardDescription>
-                        成功审计长期 · 失败诊断 30 天 · 导出 7
-                        天；下载前重鉴权。
+                        导入成功记录长期保存；失败明细保留 30 天，导出文件保留 7
+                        天。
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3 pt-4">
                     {batch.resultAssets.length === 0 ? (
                         <p className="text-sm text-muted-foreground">
-                            尚无结果资产。
+                            暂无结果文件。
                         </p>
                     ) : (
                         batch.resultAssets.map((a) => (
@@ -135,7 +133,7 @@ export function FilesSection({ batch }: { batch: ImportBatchView }) {
                                 </Button>
                                 {previewAsset === a.fileName ? (
                                     <p className="mt-2 text-xs text-muted-foreground">
-                                        示例：文件正文不在此处展示，仅保留元数据与保留策略。
+                                        当前仅展示文件基本信息与保存期限，不直接预览文件正文。
                                     </p>
                                 ) : null}
                             </div>

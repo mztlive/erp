@@ -260,7 +260,7 @@ export function CustomerReceivablesWorkspace({
                 invoiceExecutionTask?.businessObjectId
         ) {
             setActionError(
-                "当前开票任务不属于所选应收子账，请从工作台重新进入。",
+                "当前开票任务不属于所选应收款项，请从工作台重新进入。",
             )
             return
         }

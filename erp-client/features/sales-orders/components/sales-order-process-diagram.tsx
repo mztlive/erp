@@ -489,7 +489,7 @@ export function SalesOrderProcessDiagram({
                           ? "销售单已作废。"
                           : order.currentRevisionNo == null
                             ? "请先完成销售单审批。"
-                            : "暂无明确的当前办理事项，可进入各分区核对进度。"}
+                            : "暂无明确的当前办理事项，可进入各标签页核对进度。"}
                 </p>
             </div>
             <SalesOrderProcessWorkSheet

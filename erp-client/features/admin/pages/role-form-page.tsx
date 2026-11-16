@@ -344,7 +344,7 @@ function RoleForm({
                 <fieldset className="space-y-2 border-b pb-4 mb-4">
                     <legend className="text-sm font-medium">岗位工作台</legend>
                     <p className="text-xs text-muted-foreground">
-                        显式关联岗位；不会授予业务权限。满足核心模块权限后提供入口。
+                        设置该角色登录后默认使用的岗位工作台（仍需勾选下方对应业务权限后才可进入）。
                     </p>
                     <form.Field name="workbenches">
                         {(field) => (
@@ -434,9 +434,9 @@ function RoleForm({
                 {hasWildcard && (
                     <Alert variant="info" className="mb-3 shrink-0">
                         <ShieldAlertIcon aria-hidden="true" />
-                        <AlertTitle>全权角色</AlertTitle>
+                        <AlertTitle>超级管理员角色（拥有全部权限）</AlertTitle>
                         <AlertDescription>
-                            该角色拥有全部权限，不按条目配置。如需降权，请新建受限角色并改绑账号。
+                            该角色默认拥有系统全部操作权限，无需逐项勾选。如需限制权限，请另行新建普通角色并分配给对应账号。
                         </AlertDescription>
                     </Alert>
                 )}
@@ -569,7 +569,7 @@ function RoleForm({
                                                         setReview("preserved")
                                                     }
                                                 >
-                                                    特殊授权{" "}
+                                                    整模块授权{" "}
                                                     {currentPreserved.length} 项
                                                 </Button>
                                             )}

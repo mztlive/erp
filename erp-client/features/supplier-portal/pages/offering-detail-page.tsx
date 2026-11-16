@@ -102,7 +102,7 @@ export function PortalOfferingDetailPage({
                     href="/supplier-portal/offerings"
                     className="text-sm text-primary"
                 >
-                    返回我的供给
+                    返回供货商品目录
                 </Link>
             }
         >

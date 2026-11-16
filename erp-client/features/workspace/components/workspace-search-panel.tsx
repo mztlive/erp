@@ -251,12 +251,12 @@ export function WorkspaceSearchPanel({
                                     id="workspace-queue-toolbar-search-input"
                                     aria-label={
                                         state.view === "started"
-                                            ? "搜索单号、来源单号、往来方或商品"
+                                            ? "搜索单号、来源单号、客户/供应商或商品"
                                             : "搜索任务编号或关联编号"
                                     }
                                     placeholder={
                                         state.view === "started"
-                                            ? "单号、来源单号、往来方、商品"
+                                            ? "搜索单号、来源单号、客户/供应商、商品"
                                             : "任务编号、关联编号"
                                     }
                                     value={field.state.value}

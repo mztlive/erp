@@ -40,7 +40,7 @@ export function OfferingHistory({
             <BusinessEmptyState
                 kind="no-data"
                 title="暂无条款历史"
-                description="登记供给并保存商业条款后，这里展示真实的条款版本。"
+                description="保存供货报价与条款后，可在此查看历次调价与修订记录。"
             />
         )
     return (

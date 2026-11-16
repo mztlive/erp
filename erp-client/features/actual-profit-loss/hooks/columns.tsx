@@ -108,7 +108,7 @@ export function buildProfitLossColumns(options: {
                 if (r.coverageState === "UNCOVERED") {
                     return (
                         <span className="text-sm text-muted-foreground">
-                            未覆盖
+                            成本未归集
                         </span>
                     )
                 }
@@ -148,7 +148,7 @@ export function buildProfitLossColumns(options: {
                 if (r.coverageState === "UNCOVERED") {
                     return (
                         <span className="text-sm text-muted-foreground">
-                            未覆盖
+                            成本未归集
                         </span>
                     )
                 }
@@ -213,8 +213,8 @@ export function buildProfitLossColumns(options: {
                             title={r.marginUnavailableReason}
                         >
                             {r.coverageState === "UNCOVERED"
-                                ? "不可用（未覆盖）"
-                                : (r.marginUnavailableReason ?? "不可用")}
+                                ? "待归集成本"
+                                : (r.marginUnavailableReason ?? "待归集成本")}
                         </span>
                     )
                 }
@@ -258,8 +258,8 @@ export function buildProfitLossColumns(options: {
         {
             id: "coverageState",
             accessorFn: (r) => r.coverageState,
-            header: "覆盖状态",
-            meta: { label: "覆盖状态" },
+            header: "成本归集状态",
+            meta: { label: "成本归集状态" },
             cell: ({ row }) => {
                 const r = row.original
                 const ui = COVERAGE_STATE_UI[r.coverageState]

@@ -50,7 +50,7 @@ export function SourceFieldEdit({
                     value.value.type === "IMAGES" &&
                     value.value.value.some((image) => !image.file_asset_id)
                 )
-                    return "部分图片尚未登记，请移除后重新选择已登记图片"
+                    return "部分图片尚未保存，请移除后重新选择已上传保存的图片"
                 if (
                     difference.field === "MAIN_IMAGE" &&
                     value.value.type === "IMAGES" &&
@@ -116,7 +116,7 @@ export function SourceFieldEdit({
                             ) : (
                                 <>
                                     <p className="text-xs text-muted-foreground">
-                                        组合已登记的公司与供应商图片并调整顺序。新增图片请先在商品素材中保存，再重新查看差异。
+                                        可调整已保存的商品图片与供应商图片顺序；如需新增图片请先在商品素材中上传保存。
                                     </p>
                                     <div className="space-y-2">
                                         {value.value.map((image, index) => {
@@ -148,7 +148,7 @@ export function SourceFieldEdit({
                                                     <span className="flex-1 text-sm">
                                                         第 {index + 1} 张
                                                         {!image.file_asset_id
-                                                            ? " · 尚未登记"
+                                                            ? " · 未保存"
                                                             : ""}
                                                     </span>
                                                     <Button

@@ -33,7 +33,7 @@ export function RequestDepositExecution({
     return (
         <section className="space-y-4 rounded-lg bg-muted/40 p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
-                <h3 className="font-medium">供应商预存款执行</h3>
+                <h3 className="font-medium">使用预存款支付</h3>
                 {canExecute && (
                     <Button
                         id="ppr-deposit-execute"
@@ -45,21 +45,18 @@ export function RequestDepositExecution({
                         }
                         onClick={() => setConfirmOpen(true)}
                     >
-                        {unknown ? "查询原余额执行结果" : "执行本申请余额占用"}
+                        {unknown ? "刷新处理结果" : "确认使用预存款"}
                     </Button>
                 )}
             </div>
             <p className="text-sm text-muted-foreground">
-                使用本申请批准的同主体、同供应商预存款账户。系统按原采购执行组及批准预算办理专属占用；占用不计入已付，真实扣款核实后才更新核销和任务进度。
-            </p>
-            <p className="text-sm text-muted-foreground">
-                本次人工执行仅覆盖本申请及其原执行组，不授予账户后续自动执行权限。
+                将从该供应商预存款账户中冻结本次批准的付款额度，供采购单下单扣款使用；待供应商实际扣款核实后自动完成核销。
             </p>
             {mutation.isSuccess && (
                 <Alert>
                     <AlertDescription>
-                        已办理 {mutation.data.length}{" "}
-                        组资金占用，等待供应商执行及真实扣款核实。付款任务将在实际核销后更新。
+                        已冻结 {mutation.data.length}{" "}
+                        组预存款额度，待供应商实际扣款核实后自动完成核销。
                     </AlertDescription>
                 </Alert>
             )}
@@ -67,7 +64,7 @@ export function RequestDepositExecution({
                 <Alert variant="destructive">
                     <AlertDescription>
                         {unknown
-                            ? "本次执行结果尚未查明，请查询原结果。原金额、付款申请和任务资料保持锁定，不新建执行。"
+                            ? "本次操作结果确认中，请点击「刷新处理结果」核对，不会重复冻结。"
                             : getErrorMessage(
                                   mutation.error,
                                   "余额执行未完成，请核对账户及原采购执行条件。",
@@ -80,9 +77,9 @@ export function RequestDepositExecution({
                 open={confirmOpen}
                 onOpenChange={setConfirmOpen}
                 pending={mutation.isPending}
-                title="执行供应商预存款"
-                actionLabel="办理余额占用"
-                confirmLabel={unknown ? "查询原执行结果" : "确认按批准范围执行"}
+                title="确认使用预存款"
+                actionLabel="使用预存款支付"
+                confirmLabel={unknown ? "刷新处理结果" : "确认使用预存款"}
                 fromStatus={{ label: "待付款", tone: "neutral" }}
                 toStatus={{ label: "余额已占用，待扣款核实", tone: "info" }}
                 showStatusChange={false}
@@ -98,9 +95,9 @@ export function RequestDepositExecution({
                     </span>,
                 ]}
                 effects={[
-                    "服务器逐组重验采购修订、地址及批准预算，同一批准额度只占用一次。",
-                    "已存在的原占用沿原记录恢复，不生成新的银行付款。",
-                    "资金占用不替代真实扣款核销；已发送或未知订单不会因超时释放。",
+                    "核对采购单与批准额度，冻结预存款账户对应金额（不会重复冻结）",
+                    "使用预存款额度支付，不产生新的银行转账记录",
+                    "待供应商实际扣款核实后，自动更新付款与核销进度",
                 ]}
                 confirmDisabled={
                     !canExecute || !executable || mutation.isSuccess

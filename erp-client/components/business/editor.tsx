@@ -505,7 +505,7 @@ interface AllocationWorkspaceProps<TAllocation> extends Omit<
 /** 分配数量摘要与分配行字段的受控工作区，不在组件内计算任何业务数值。 */
 function AllocationWorkspace<TAllocation>({
     title = "分配明细",
-    description = "逐行填写分配对象与数量，并核对调用方提供的差额。",
+    description = "请逐行填写分配明细与数量，并核对未分配差额。",
     summary,
     allocations,
     columns,
@@ -570,7 +570,7 @@ function AllocationWorkspace<TAllocation>({
                         mode="edit"
                         disabled={disabled}
                         caption="分配明细"
-                        emptyContent="暂无分配行，可新增一行后填写分配对象与数量。"
+                        emptyContent="暂无分配明细，可新增一行后填写。"
                         addLabel={addLabel}
                         addDisabledReason={addDisabledReason}
                         onAddItem={onAddAllocation}

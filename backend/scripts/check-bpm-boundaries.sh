@@ -3,6 +3,7 @@
 set -euo pipefail
 
 BACKEND_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export PYTHONDONTWRITEBYTECODE=1
 FAILED=0
 if [[ "${1:-}" == "--self-test-only" && "$#" -eq 1 ]]; then
     exec python3 "${BACKEND_DIR}/scripts/bpm_workspace.py" --backend "${BACKEND_DIR}" --self-test-only
@@ -19,16 +20,10 @@ fail() {
 }
 
 search_rs() {
-    # Keep the same ERE and exact metadata-derived files; batch subprocesses
-    # within the platform argv limit instead of spawning grep for every file.
-    printf '%s\0' "${ACTIVE_RUST_SOURCES[@]}" | xargs -0 sh -c '
-        pattern=$1
-        shift
-        grep -Hn -E "$pattern" "$@"
-        result=$?
-        # A normal no-match is allowed; missing/unreadable source is fatal.
-        test "$result" -le 1
-    ' sh "$1"
+    if [[ -z "${CANDIDATE_RS_LINES:-}" ]]; then
+        return 0
+    fi
+    printf '%s\n' "${CANDIDATE_RS_LINES}" | grep -E "$1" || true
 }
 
 require_file() {
@@ -85,6 +80,15 @@ if [[ "${#ACTIVE_RUST_SOURCES[@]}" -eq 0 ]]; then
     fail "活动 workspace 没有 Rust 源码"
     exit 1
 fi
+CANDIDATE_RS_LINES="$(
+    printf '%s\0' "${ACTIVE_RUST_SOURCES[@]}" | xargs -0 sh -c '
+        pattern=$1
+        shift
+        grep -Hn -E "$pattern" "$@"
+        result=$?
+        test "$result" -le 1
+    ' sh 'id_type!\(|struct Approval[A-Za-z0-9_]*[[:space:](]|macro_rules![[:space:]]+id_type'
+)"
 
 echo "检查 bpm 源码边界…"
 # 禁止 ERP/I-O/时钟，以及调用方之外的 ID 生成入口。负向夹具见下方 self-check：

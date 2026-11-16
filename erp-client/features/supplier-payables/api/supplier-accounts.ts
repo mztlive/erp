@@ -232,7 +232,7 @@ export async function fetchSupplierAccounts(
         payablePriorityPolicy: {
             state: "MISSING",
             mixedAutoAllocationAllowed: false,
-            blockerMessage: "应付优先级策略尚未配置，请显式逐项选择分配目标。",
+            blockerMessage: "请手动填写核销金额",
         },
         allowFullBankReveal: false,
     }
@@ -418,7 +418,7 @@ export async function fetchAllocationSession(input: {
         payablePriorityPolicy: {
             state: "MISSING",
             mixedAutoAllocationAllowed: false,
-            blockerMessage: "应付优先级策略尚未配置，请显式逐项选择分配目标。",
+            blockerMessage: "请手动填写核销金额",
         },
         preselectedPayableAccountIds: input.preselectPayableAccountId
             ? [input.preselectPayableAccountId]
@@ -450,7 +450,7 @@ async function allocationPoolTarget(account: BackendPayableAccount) {
         const detail = await fetchPayableDetail(account.id)
         const resolved = detail?.payable.primaryEntryId
         if (!detail || !resolved || resolved === account.id) {
-            throw new Error("应付子账缺少可核销分录，无法登记付款")
+            throw new Error("该笔应付单据暂无可核销的明细记录，无法登记付款")
         }
         entryId = resolved
         dueDate = detail.payable.dueDate || dueDate

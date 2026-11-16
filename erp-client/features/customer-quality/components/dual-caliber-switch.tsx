@@ -12,12 +12,12 @@ const CALIBER_TABS: ReadonlyArray<{
     {
         value: "current",
         title: "当前负责客户的经营情况",
-        basis: "现任主责归属",
+        basis: "按当前负责人统计",
     },
     {
         value: "history",
         title: "历史负责订单的贡献",
-        basis: "首次生效冻结归属",
+        basis: "按签单时负责人统计",
     },
 ]
 

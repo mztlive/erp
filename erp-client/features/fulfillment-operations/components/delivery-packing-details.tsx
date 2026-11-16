@@ -77,7 +77,7 @@ export function DeliveryPackingDetails({
                     )}
                     {data && !addresses.length && (
                         <p className="text-muted-foreground">
-                            这笔记录没有可核对的地址包裹分配，保留原物流记录，不推断收货归属。
+                            该发货记录未按收货地址拆分包裹，仅展示整单物流单号。
                         </p>
                     )}
                     {addresses.map((address) => (

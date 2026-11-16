@@ -335,7 +335,7 @@ export async function resolveAdjustmentUnknown(input: {
                 status: "unknown",
                 message: getErrorMessage(
                     error,
-                    "操作结果仍无法确认，请稍后使用原任务号再查询。",
+                    "提交结果确认中，请稍后点击「刷新提交结果」查看。",
                 ),
                 idempotencyKey: input.idempotencyKey,
             }
@@ -343,7 +343,7 @@ export async function resolveAdjustmentUnknown(input: {
     }
     return {
         status: "unknown",
-        message: "暂未确认本次提交结果，请稍后查询或使用本次操作重试。",
+        message: "提交结果确认中，请稍后点击「刷新提交结果」查看。",
         idempotencyKey: input.idempotencyKey,
     }
 }

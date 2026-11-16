@@ -269,23 +269,23 @@ export function validateCreateDataScope(
     input: CreateDataScopeInput,
 ): string | null {
     if (!isRegisteredIdentifier(input.resource)) {
-        return "资源必须使用已注册标识，禁止通配符和显示名"
+        return "所选业务、操作或人员信息无效，请刷新页面后重新选择"
     }
     if (
         input.actions.length === 0 ||
         input.actions.some((action) => !isRegisteredIdentifier(action))
     ) {
-        return "动作必须使用已注册标识，禁止通配符和显示名"
+        return "所选业务、操作或人员信息无效，请刷新页面后重新选择"
     }
     if (
         input.actions.some(
             (action) => !isWiredResourceAction(input.resource, action),
         )
     ) {
-        return "资源或动作尚未接入 DataScope v2"
+        return "该业务操作暂不支持配置数据范围"
     }
     if (!isStableIdentity(input.subjectId)) {
-        return "主体必须使用稳定 ID，不能用显示名"
+        return "所选业务、操作或人员信息无效，请刷新页面后重新选择"
     }
     const objectDimension = input.resource === "warehouse" ? "warehouse" : null
     if (
@@ -293,7 +293,7 @@ export function validateCreateDataScope(
         (input.targetDimension !== objectDimension ||
             !["company", "organization"].includes(input.scopeType))
     ) {
-        return "该目录仅支持公司范围或指定对象集合，请选择对应目标维度"
+        return "该资料仅支持设置为“全公司”或“指定范围”"
     }
     if (
         [
@@ -305,7 +305,7 @@ export function validateCreateDataScope(
         (input.targetDimension !== "internal_org" ||
             input.scopeType === "collaborative")
     ) {
-        return "人员目录只支持内部组织维度的公司、组织、团队或本人范围"
+        return "人员可见范围仅支持按全公司、部门、团队或本人设置"
     }
     const needsTargets =
         input.scopeType === "organization" || input.scopeType === "team"
@@ -315,30 +315,31 @@ export function validateCreateDataScope(
             input.includeDescendants != null ||
             input.scopeTargets.length > 0
         ) {
-            return "公司、本人及协作范围不得携带组织目标"
+            return "请选择具体要授权的部门或范围"
         }
         return null
     }
-    if (!input.targetMode) return "组织范围必须指定目标模式"
+    if (!input.targetMode) return "请选择具体要授权的部门或范围"
     if (
         input.targetMode !== "explicit" &&
         input.targetDimension !== "internal_org"
     ) {
-        return "动态范围仅支持内部组织"
+        return "请选择具体要授权的部门或范围"
     }
     if (input.targetMode === "explicit") {
-        if (input.scopeTargets.length === 0) return "显式模式必须指定目标"
+        if (input.scopeTargets.length === 0)
+            return "请选择具体要授权的部门或范围"
         if (input.scopeTargets.some((id) => !isStableIdentity(id))) {
-            return "目标必须使用稳定 ID，禁止通配符和显示名"
+            return "所选业务、操作或人员信息无效，请刷新页面后重新选择"
         }
     } else if (input.scopeTargets.length > 0) {
-        return "动态模式不得混入静态目标"
+        return "请选择具体要授权的部门或范围"
     }
     const needsDescendants =
         input.targetDimension === "internal_org" &&
         input.targetMode !== "managed_orgs"
     if (needsDescendants === (input.includeDescendants == null)) {
-        return "内部组织显式或本人组织模式必须明确是否包含下级"
+        return "请确认部门范围是否包含下级部门"
     }
     return null
 }

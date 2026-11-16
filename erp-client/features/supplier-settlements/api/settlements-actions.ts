@@ -72,11 +72,11 @@ export async function createSettlementDraft(
             return {
                 status: "blocked",
                 code: "SOURCE_EVIDENCE_MISSING",
-                title: "来源证据尚未完备",
+                title: "对账基础数据尚不完整",
                 // 后端 errorMessage 优先；仅在后端无文案时使用本地兜底
                 message: getErrorMessage(
                     err,
-                    "当前供应商与期间尚无完整来源证据批次，请先通过来源证据录入命令补齐履约、退款、费用与账单行证据。",
+                    "该供应商在所选期间内尚无完整的订单履约或供应商账单数据，请先同步供应商账单并确认相关订单履约状态。",
                 ),
             }
         }

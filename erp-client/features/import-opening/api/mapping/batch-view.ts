@@ -139,8 +139,7 @@ export function buildBatchView(
         confirmationBlockers.push({
             action: "CONFIRM_SCOPE",
             code: "IMPORT_CONFIRMATION_TASK_MISSING",
-            message:
-                "当前试算的责任确认任务不完整，请联系管理员重新生成确认任务。",
+            message: "当前批次的部门核对任务不完整，请联系管理员重新生成。",
         })
     }
     if (taskContextInvalid) {
@@ -199,7 +198,7 @@ export function buildBatchView(
         formalDataFormed: formal,
         notFormalDataMessage: formal
             ? ""
-            : "尚未形成业务数据；上传/校验/确认完成前禁止当正式数据使用。",
+            : "当前数据尚在核对阶段，正式导入完成前不会计入业务台账。",
         resultAssets: [],
         metrics: {
             total: batch.total_rows,

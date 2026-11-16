@@ -38,7 +38,7 @@ export function inquiryCandidateBlocker(
     if (row.status === "closed") return "已关闭，不能继续开单"
     if (!row.acceptances.length) return "尚未接受采购反馈"
     if (row.sales_progress.transfer_status === "complete")
-        return "可转数量已用完（含销售草稿占用）"
+        return "可开单数量已用完（含未提交的销售单草稿）"
     if (!row.sales_progress.can_create_sales)
         return "暂无可转结果，请在询价详情核对重询、报价及剩余数量"
     return null

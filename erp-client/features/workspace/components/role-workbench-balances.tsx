@@ -49,9 +49,7 @@ export function RoleWorkbenchBalances({
                     <p>
                         回款待分配与付款待分配分别按各自授权范围展示，不相加、不相减。资金分配不增加收付款发生额。
                     </p>
-                    <p>
-                        横条以较大的余额为基准，仅用于比较未分配规模，不代表净额或分配进度。
-                    </p>
+                    <p>展示当前尚未核销的客户回款与供应商付款余额。</p>
                     {role.metrics.map((item, index) => {
                         const query = role.stages[index]!
                         const value = query.isError
@@ -129,12 +127,12 @@ export function RoleWorkbenchBalances({
                                         </span>
                                     ) : query.data?.noScope ? (
                                         <span className="text-sm text-muted-foreground">
-                                            当前无数据范围
+                                            暂无数据查看权限
                                         </span>
                                     ) : value == null ? (
                                         <span className="text-sm text-muted-foreground">
                                             {query.data?.limited
-                                                ? "当前口径受限"
+                                                ? "仅统计权限内部分数据"
                                                 : "暂不可用"}
                                         </span>
                                     ) : (
@@ -161,7 +159,7 @@ export function RoleWorkbenchBalances({
                                 )}
                                 {query.data?.limited && (
                                     <span className="mt-2 block text-xs text-muted-foreground">
-                                        部分覆盖或权限受限
+                                        仅统计权限内部分数据
                                     </span>
                                 )}
                             </button>
