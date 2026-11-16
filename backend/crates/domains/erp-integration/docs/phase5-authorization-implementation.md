@@ -1,5 +1,7 @@
 # FSY-11：第五阶段授权修复（R1 开发）
 
+本文件保留 R1 历史结论。S-01 输入到达后的补证与恢复结果见 `phase5-authorization-implementation-r2.md`；后续独立审查以事项最新交付 SHA 为准。
+
 本轮已实现 INT-AUTH-01、INT-AUTH-03，并补充 INT-AUTH-02 中本域可完成的交付、拒绝和仓储守卫回归。**INT-AUTH-02 尚未全部完成**：完整正向 query/require 场景需要 FSY-9 的共享 S-01 测试设施；当前不提交“全部修复完成”或独立 Review 通过的结论。
 
 ## 准确版本与协作边界

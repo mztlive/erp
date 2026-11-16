@@ -14,7 +14,7 @@ use crate::dto::{self, *};
 use crate::entity::integration_ops::*;
 use crate::repository::IntegrationOpsExt;
 use crate::repository::integration_ops::ReconciliationDifferenceRow;
-use crate::repository::prelude::*;
+use crate::repository::integration_ops::reader::IntegrationReader;
 use crate::{Error, Result};
 
 mod delivery;
@@ -48,7 +48,7 @@ impl IntegrationOpsService {
             .client()
             .clone()
             .with_transaction(move |executor| {
-                Box::pin(async move { this.difference_page(query, &actor, executor).await })
+                Box::pin(async move { this.difference_page(query, &actor, executor, &this.db).await })
             })
             .await
     }
@@ -59,6 +59,7 @@ impl IntegrationOpsService {
         query: dto::DifferenceListQuery,
         actor: &AuditActor,
         executor: &mut dyn Executor,
+        reader: &dyn IntegrationReader,
     ) -> Result<DifferenceListView> {
         let access = self.access();
         let scope = resolve_list_scope(
@@ -72,14 +73,19 @@ impl IntegrationOpsService {
         )
         .await?;
         let operator_difference_ids =
-            self.operator_difference_ids(&query.operator_user_ids, executor).await?;
+            self.operator_difference_ids(&query.operator_user_ids, executor, reader).await?;
         let filter = difference_filter(query, scope.owner_org_unit_ids, operator_difference_ids);
-        let page = self
-            .db
-            .reconciliation_differences()
-            .search_differences(&filter, &scope.read_scope, executor)
-            .await?;
-        delivery::deliver_difference_page(self, page, &scope.read_scope, &filter, scope.meta, executor).await
+        let page = reader.difference_page(&filter, &scope.read_scope, executor).await?;
+        delivery::deliver_difference_page(
+            self,
+            page,
+            &scope.read_scope,
+            &filter,
+            scope.meta,
+            executor,
+            reader,
+        )
+        .await
     }
 
     /// 把历史处理人筛选解析为差异 ID 集合。
@@ -97,16 +103,12 @@ impl IntegrationOpsService {
         &self,
         operator_user_ids: &[String],
         executor: &mut dyn Executor,
+        reader: &dyn IntegrationReader,
     ) -> Result<Option<Vec<String>>> {
         if operator_user_ids.is_empty() {
             return Ok(None);
         }
-        Ok(Some(
-            self.db
-                .reconciliation_difference_resolutions()
-                .find_difference_ids_handled_by(operator_user_ids, executor)
-                .await?,
-        ))
+        Ok(Some(reader.handled_difference_ids(operator_user_ids, executor).await?))
     }
 }
 /// 构造差异并把实体不变量失败映射为 `ValidationError`。
@@ -234,12 +236,156 @@ pub async fn persist_difference(
 
 #[cfg(test)]
 mod authorization_tests {
+    use std::sync::Arc;
+
     use erp_core::AccountKind;
+    use erp_identity::entity::access_control::{ResolvedScope, ScopeClause};
     use erp_identity::testing::{unavailable_authorization, unbound_authorization};
+    use persistence_core::Error as PersistenceError;
     use persistence_core::testing::SnapshotExecutor;
 
     use super::*;
+    use crate::repository::integration_ops::reader::testing::{
+        Behavior, MemoryReader, actor, own_scope, plan_denies, plan_owned_by, service,
+    };
     use crate::service::IntegrationAccess;
+
+    #[tokio::test]
+    async fn difference_page_runs_real_query_projection_and_final_validate_with_list_permission() {
+        let reader = Arc::new(MemoryReader::default());
+        let permission = integration_ops::DIFFERENCE_LIST;
+        let service = service(vec![permission.clone()], &[permission], own_scope(), reader.clone()).await;
+        let params: DifferenceListParams =
+            serde_json::from_value(serde_json::json!({"operator_user_ids":"operator"})).unwrap();
+        let mut executor = SnapshotExecutor::default();
+        let view = service
+            .difference_page(params.normalized().unwrap(), &actor(), &mut executor, reader.as_ref())
+            .await
+            .unwrap();
+        assert_eq!((view.data.total, view.data.page, view.data.items.len()), (5, 1, 1));
+        assert_eq!(view.data.items[0].id, "difference");
+        assert_eq!((view.data.items[0].status, view.data.items[0].version), (None, 0));
+        let accesses = reader.accesses.lock().unwrap();
+        let access = &accesses[0];
+        assert_eq!(access.model().resource, "reconciliation_difference");
+        assert!(plan_owned_by(access, "reader"));
+        assert_eq!(view.scope_version, access.version());
+        assert!(access.ensure_current(&mut executor).is_err());
+        assert_eq!(*reader.events.lock().unwrap(), ["handled", "difference_page", "latest"]);
+        assert_eq!(
+            reader.difference_filters.lock().unwrap()[0].operator_difference_ids,
+            Some(vec!["difference".into()])
+        );
+    }
+
+    #[tokio::test]
+    async fn difference_list_rejects_detail_only_missing_permission_and_other_identity_before_reads() {
+        for (grants, user) in [
+            (vec![], actor()),
+            (vec![integration_ops::DIFFERENCE_DETAIL], actor()),
+            (
+                vec![integration_ops::DIFFERENCE_LIST],
+                AuditActor::new("other".into(), "other".into(), AccountKind::Admin),
+            ),
+        ] {
+            let reader = Arc::new(MemoryReader::default());
+            let service =
+                service(grants, &[integration_ops::DIFFERENCE_LIST], own_scope(), reader.clone()).await;
+            let params: DifferenceListParams =
+                serde_json::from_value(serde_json::json!({"operator_user_ids":"operator"})).unwrap();
+            assert!(matches!(
+                service
+                    .difference_page(
+                        params.normalized().unwrap(),
+                        &user,
+                        &mut SnapshotExecutor::default(),
+                        reader.as_ref()
+                    )
+                    .await,
+                Err(Error::Forbidden(_))
+            ));
+            assert!(reader.events.lock().unwrap().is_empty());
+        }
+    }
+
+    #[tokio::test]
+    async fn difference_list_empty_scope_keeps_deny_filter_and_final_validation() {
+        let reader = Arc::new(MemoryReader::with_behavior(Behavior::Empty));
+        let permission = integration_ops::DIFFERENCE_LIST;
+        let scope = ResolvedScope {
+            role_clauses: vec![],
+            user_limit: Some(ScopeClause { company: true, ..Default::default() }),
+        };
+        let service = service(vec![permission.clone()], &[permission], scope, reader.clone()).await;
+        let mut executor = SnapshotExecutor::default();
+        let view = service
+            .difference_page(
+                DifferenceListParams::default().normalized().unwrap(),
+                &actor(),
+                &mut executor,
+                reader.as_ref(),
+            )
+            .await
+            .unwrap();
+        assert!(view.data.items.is_empty());
+        assert_eq!(view.data.total, 0);
+        let accesses = reader.accesses.lock().unwrap();
+        assert!(!accesses[0].has_role_scope());
+        assert!(plan_denies(&accesses[0]));
+        assert!(accesses[0].ensure_current(&mut executor).is_err());
+        assert_eq!(*reader.events.lock().unwrap(), ["difference_page", "latest"]);
+    }
+
+    #[tokio::test]
+    async fn difference_list_discards_pages_on_page_or_latest_failure_and_changed_stage() {
+        for behavior in [Behavior::PageFailure, Behavior::LatestFailure, Behavior::LatestStage] {
+            let reader = Arc::new(MemoryReader::with_behavior(behavior));
+            let permission = integration_ops::DIFFERENCE_LIST;
+            let service = service(vec![permission.clone()], &[permission], own_scope(), reader.clone()).await;
+            let error = service
+                .difference_page(
+                    DifferenceListParams::default().normalized().unwrap(),
+                    &actor(),
+                    &mut SnapshotExecutor::default(),
+                    reader.as_ref(),
+                )
+                .await
+                .unwrap_err();
+            if behavior == Behavior::LatestStage {
+                assert!(
+                    matches!(error, Error::ValidationError(message) if message == "授权结果不能跨事务或读取阶段使用")
+                );
+            } else {
+                let reason = if behavior == Behavior::PageFailure {
+                    "测试分页读取失败"
+                } else {
+                    "测试决定读取失败"
+                };
+                assert_eq!(
+                    error.to_string(),
+                    Error::from(PersistenceError::EntityMetadataOutOfRange(reason)).to_string()
+                );
+            }
+            let expected = if behavior == Behavior::PageFailure {
+                vec!["difference_page"]
+            } else {
+                vec!["difference_page", "latest"]
+            };
+            assert_eq!(*reader.events.lock().unwrap(), expected);
+        }
+    }
+
+    #[tokio::test]
+    async fn difference_list_rejects_changed_scope_version_before_history_or_page_reads() {
+        let reader = Arc::new(MemoryReader::default());
+        let permission = integration_ops::DIFFERENCE_LIST;
+        let service = service(vec![permission.clone()], &[permission], own_scope(), reader.clone()).await;
+        let params = DifferenceListParams { scope_version: Some("stale".into()), ..Default::default() };
+        assert!(
+            matches!(service.difference_page(params.normalized().unwrap(), &actor(), &mut SnapshotExecutor::default(), reader.as_ref()).await, Err(Error::ConflictError(message)) if message.starts_with("DATA_SCOPE_CHANGED"))
+        );
+        assert!(reader.events.lock().unwrap().is_empty());
+    }
 
     #[tokio::test]
     async fn difference_page_rejects_missing_mapping_and_identity_failure_before_business_reads() {
@@ -254,7 +400,7 @@ mod authorization_tests {
             let service = IntegrationOpsService::new(db.clone(), access);
             let params = DifferenceListParams::default();
             let error = service
-                .difference_page(params.normalized().unwrap(), &actor, &mut SnapshotExecutor::default())
+                .difference_page(params.normalized().unwrap(), &actor, &mut SnapshotExecutor::default(), &db)
                 .await
                 .expect_err("授权失败必须先于历史操作人、根分页及决定补齐读取");
             if missing_mapping {

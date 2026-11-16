@@ -11,7 +11,7 @@ use erp_permissions::integration_ops;
 use mongodb::Database;
 use persistence_core::Executor;
 
-use crate::repository::IntegrationOpsExt;
+use crate::repository::integration_ops::reader::IntegrationReader;
 use crate::{Error, Result};
 
 /// 固定登记的集成授权设施；查询凭证绑定本实例。
@@ -19,6 +19,161 @@ use crate::{Error, Result};
 pub struct IntegrationAccess {
     db: Database,
     pub(super) service: Arc<AuthorizationService>,
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use erp_core::AccountKind;
+    use erp_identity::entity::access_control::{ResolvedScope, ScopeClause};
+    use erp_identity::testing::authorization;
+    use persistence_core::Error as PersistenceError;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+    use crate::repository::integration_ops::reader::testing::{
+        Behavior, MemoryReader, actor, own_scope, service as integration_service,
+    };
+
+    #[tokio::test]
+    async fn direct_decision_uses_real_difference_identity_version_and_assignment() {
+        let reader = Arc::new(MemoryReader::default());
+        let service =
+            integration_service(vec![integration_ops::DIFFERENCE_DECISION], &[], own_scope(), reader.clone())
+                .await;
+        service
+            .access()
+            .require_decide_using(reader.as_ref(), &actor(), "difference", &mut SnapshotExecutor::default())
+            .await
+            .unwrap();
+        assert_eq!(*reader.events.lock().unwrap(), ["difference_facts", "difference_facts"]);
+    }
+
+    #[tokio::test]
+    async fn direct_decision_rejects_another_handler_even_with_company_scope() {
+        let reader = Arc::new(MemoryReader::default());
+        reader.difference.lock().unwrap().as_mut().unwrap().owner_user_id = "other".into();
+        let scope = ResolvedScope {
+            role_clauses: vec![ScopeClause { company: true, ..Default::default() }],
+            user_limit: None,
+        };
+        let service =
+            integration_service(vec![integration_ops::DIFFERENCE_DECISION], &[], scope, reader.clone()).await;
+        assert!(matches!(
+            service
+                .access()
+                .require_decide_using(
+                    reader.as_ref(),
+                    &actor(),
+                    "difference",
+                    &mut SnapshotExecutor::default()
+                )
+                .await,
+            Err(Error::Forbidden(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn direct_decision_cannot_use_list_detail_or_another_actor_instead_of_decision_qualification() {
+        for (grants, user) in [
+            (vec![integration_ops::DIFFERENCE_LIST, integration_ops::DIFFERENCE_DETAIL], actor()),
+            (
+                vec![integration_ops::DIFFERENCE_DECISION],
+                AuditActor::new("other".into(), "other".into(), AccountKind::Admin),
+            ),
+        ] {
+            let reader = Arc::new(MemoryReader::default());
+            let service = integration_service(grants, &[], own_scope(), reader.clone()).await;
+            assert!(matches!(
+                service
+                    .access()
+                    .require_decide_using(
+                        reader.as_ref(),
+                        &user,
+                        "difference",
+                        &mut SnapshotExecutor::default()
+                    )
+                    .await,
+                Err(Error::Forbidden(_))
+            ));
+            assert_eq!(*reader.events.lock().unwrap(), ["difference_facts"], "功能拒绝先于任务 Facts 读取");
+        }
+    }
+
+    #[tokio::test]
+    async fn direct_decision_rejects_missing_root_facts_binding_and_incomplete_facts() {
+        let reader = Arc::new(MemoryReader::default());
+        let service =
+            integration_service(vec![integration_ops::DIFFERENCE_DECISION], &[], own_scope(), reader.clone())
+                .await;
+        assert!(
+            matches!(service.access().require_decide_using(reader.as_ref(), &actor(), "missing", &mut SnapshotExecutor::default()).await, Err(Error::NotFound(message)) if message == "差异记录不存在")
+        );
+        let mut access = service.access();
+        access.service = authorization(
+            actor(),
+            vec![integration_ops::DIFFERENCE_DECISION],
+            own_scope(),
+            BTreeMap::new(),
+            BTreeMap::new(),
+        )
+        .unwrap();
+        assert!(
+            matches!(access.require_decide_using(reader.as_ref(), &actor(), "difference", &mut SnapshotExecutor::default()).await, Err(Error::ValidationError(message)) if message == "缺少任务 Facts 绑定")
+        );
+        let reader = Arc::new(MemoryReader::with_behavior(Behavior::MissingFacts));
+        let service =
+            integration_service(vec![integration_ops::DIFFERENCE_DECISION], &[], own_scope(), reader.clone())
+                .await;
+        assert!(matches!(
+            service
+                .access()
+                .require_decide_using(
+                    reader.as_ref(),
+                    &actor(),
+                    "difference",
+                    &mut SnapshotExecutor::default()
+                )
+                .await,
+            Err(Error::NotFound(_))
+        ));
+        assert_eq!(*reader.events.lock().unwrap(), ["difference_facts", "difference_facts"]);
+    }
+
+    #[tokio::test]
+    async fn direct_decision_preserves_exact_version_conflict_and_facts_storage_error() {
+        for behavior in [Behavior::ChangedVersion, Behavior::FactsFailure] {
+            let reader = Arc::new(MemoryReader::with_behavior(behavior));
+            let service = integration_service(
+                vec![integration_ops::DIFFERENCE_DECISION],
+                &[],
+                own_scope(),
+                reader.clone(),
+            )
+            .await;
+            let error = service
+                .access()
+                .require_decide_using(
+                    reader.as_ref(),
+                    &actor(),
+                    "difference",
+                    &mut SnapshotExecutor::default(),
+                )
+                .await
+                .unwrap_err();
+            if behavior == Behavior::ChangedVersion {
+                assert!(matches!(error, Error::ConflictError(message) if message == "任务版本已改变"));
+            } else {
+                assert_eq!(
+                    error.to_string(),
+                    Error::from(PersistenceError::EntityMetadataOutOfRange("测试 Facts 读取失败"))
+                        .to_string()
+                );
+            }
+            assert_eq!(*reader.events.lock().unwrap(), ["difference_facts", "difference_facts"]);
+        }
+    }
 }
 impl IntegrationAccess {
     /// 绑定共享身份设施和本域固定目录。
@@ -72,12 +227,18 @@ impl IntegrationAccess {
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let row = self
-            .db
-            .reconciliation_differences()
-            .find_by_id(id, executor)
-            .await?
-            .ok_or_else(|| Error::NotFound("差异记录不存在".into()))?;
+        self.require_decide_using(&self.db, actor, id, executor).await
+    }
+
+    async fn require_decide_using(
+        &self,
+        reader: &dyn IntegrationReader,
+        actor: &AuditActor,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        let row =
+            reader.difference(id, executor).await?.ok_or_else(|| Error::NotFound("差异记录不存在".into()))?;
         Ok(self
             .service
             .require(

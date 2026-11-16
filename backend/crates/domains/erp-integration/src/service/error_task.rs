@@ -11,7 +11,7 @@ use super::scope::{ScopedIntegrationList, ensure_page, resolve_list_scope};
 use crate::dto::{self, *};
 use crate::entity::integration_ops::*;
 use crate::repository::IntegrationOpsExt;
-use crate::repository::prelude::*;
+use crate::repository::integration_ops::reader::IntegrationReader;
 use crate::{Error, Result};
 /// 错误任务列表筛选条件类型。
 type ErrorTaskFilter = <Database as IntegrationOpsExt>::IntegrationErrorTaskFilter;
@@ -41,7 +41,7 @@ impl IntegrationOpsService {
             .client()
             .clone()
             .with_transaction(move |executor| {
-                Box::pin(async move { this.error_task_page(query, &actor, executor).await })
+                Box::pin(async move { this.error_task_page(query, &actor, executor, &this.db).await })
             })
             .await
     }
@@ -52,6 +52,7 @@ impl IntegrationOpsService {
         query: dto::ErrorTaskListQuery,
         actor: &AuditActor,
         executor: &mut dyn Executor,
+        reader: &dyn IntegrationReader,
     ) -> Result<ErrorTaskListView> {
         let access = self.access();
         let scope = resolve_list_scope(
@@ -65,11 +66,7 @@ impl IntegrationOpsService {
         )
         .await?;
         let filter = error_task_filter(query, scope.owner_org_unit_ids);
-        let page = self
-            .db
-            .integration_error_tasks()
-            .search_error_tasks(&filter, &scope.read_scope, executor)
-            .await?;
+        let page = reader.error_page(&filter, &scope.read_scope, executor).await?;
         access.validate(&scope.read_scope, executor).await?;
         Ok(error_task_list_view(page, &filter, scope.meta))
     }
@@ -97,12 +94,140 @@ impl IntegrationOpsService {
 
 #[cfg(test)]
 mod authorization_tests {
+    use std::sync::Arc;
+
     use erp_core::AccountKind;
+    use erp_identity::entity::access_control::{ResolvedScope, ScopeClause};
     use erp_identity::testing::{unavailable_authorization, unbound_authorization};
+    use persistence_core::Error as PersistenceError;
     use persistence_core::testing::SnapshotExecutor;
 
     use super::*;
+    use crate::repository::integration_ops::reader::testing::{
+        Behavior, MemoryReader, actor, own_scope, plan_denies, plan_owned_by, service,
+    };
     use crate::service::IntegrationAccess;
+
+    #[tokio::test]
+    async fn error_page_runs_real_query_and_validate_with_the_list_permission() {
+        let reader = Arc::new(MemoryReader::default());
+        let permission = integration_ops::ERROR_TASK_LIST;
+        let service = service(vec![permission.clone()], &[permission], own_scope(), reader.clone()).await;
+        let mut executor = SnapshotExecutor::default();
+        let params =
+            ErrorTaskListParams { business_object_id: Some("business".into()), ..Default::default() };
+        let view = service
+            .error_task_page(params.normalized().unwrap(), &actor(), &mut executor, reader.as_ref())
+            .await
+            .unwrap();
+        assert_eq!((view.data.total, view.data.page, view.data.items.len()), (5, 1, 1));
+        assert_eq!(
+            (&*view.data.items[0].id, view.data.items[0].attempt_count, view.data.items[0].version),
+            ("error", 2, 5)
+        );
+        let accesses = reader.accesses.lock().unwrap();
+        let access = &accesses[0];
+        assert_eq!(access.model().resource, "integration_error_task");
+        assert!(plan_owned_by(access, "reader"));
+        assert_eq!(view.scope_version, access.version());
+        assert!(access.ensure_current(&mut executor).is_err(), "真实 validate 必须结束原凭证阶段");
+        assert_eq!(*reader.events.lock().unwrap(), ["error_page"]);
+        assert_eq!(reader.error_filters.lock().unwrap()[0].business_object_id.as_deref(), Some("business"));
+    }
+
+    #[tokio::test]
+    async fn error_list_rejects_detail_only_missing_permission_and_other_identity_without_page_reads() {
+        for (grants, user) in [
+            (vec![], actor()),
+            (vec![integration_ops::ERROR_TASK_DETAIL], actor()),
+            (
+                vec![integration_ops::ERROR_TASK_LIST],
+                AuditActor::new("other".into(), "other".into(), AccountKind::Admin),
+            ),
+        ] {
+            let reader = Arc::new(MemoryReader::default());
+            let service =
+                service(grants, &[integration_ops::ERROR_TASK_LIST], own_scope(), reader.clone()).await;
+            assert!(matches!(
+                service
+                    .error_task_page(
+                        ErrorTaskListParams::default().normalized().unwrap(),
+                        &user,
+                        &mut SnapshotExecutor::default(),
+                        reader.as_ref()
+                    )
+                    .await,
+                Err(Error::Forbidden(_))
+            ));
+            assert!(reader.events.lock().unwrap().is_empty());
+        }
+    }
+
+    #[tokio::test]
+    async fn error_list_empty_role_scope_retains_a_deny_plan_despite_company_personal_limit() {
+        let reader = Arc::new(MemoryReader::with_behavior(Behavior::Empty));
+        let permission = integration_ops::ERROR_TASK_LIST;
+        let scope = ResolvedScope {
+            role_clauses: vec![],
+            user_limit: Some(ScopeClause { company: true, ..Default::default() }),
+        };
+        let service = service(vec![permission.clone()], &[permission], scope, reader.clone()).await;
+        let mut executor = SnapshotExecutor::default();
+        let view = service
+            .error_task_page(
+                ErrorTaskListParams::default().normalized().unwrap(),
+                &actor(),
+                &mut executor,
+                reader.as_ref(),
+            )
+            .await
+            .unwrap();
+        assert!(view.data.items.is_empty());
+        assert_eq!(view.data.total, 0);
+        let accesses = reader.accesses.lock().unwrap();
+        assert!(!accesses[0].has_role_scope());
+        assert!(plan_denies(&accesses[0]));
+        assert!(accesses[0].ensure_current(&mut executor).is_err());
+    }
+
+    #[tokio::test]
+    async fn error_list_discards_pages_on_storage_failure_or_read_stage_change() {
+        for behavior in [Behavior::PageFailure, Behavior::PageStage] {
+            let reader = Arc::new(MemoryReader::with_behavior(behavior));
+            let permission = integration_ops::ERROR_TASK_LIST;
+            let service = service(vec![permission.clone()], &[permission], own_scope(), reader.clone()).await;
+            let error = service
+                .error_task_page(
+                    ErrorTaskListParams::default().normalized().unwrap(),
+                    &actor(),
+                    &mut SnapshotExecutor::default(),
+                    reader.as_ref(),
+                )
+                .await
+                .unwrap_err();
+            if behavior == Behavior::PageFailure {
+                let expected = Error::from(PersistenceError::EntityMetadataOutOfRange("测试分页读取失败"));
+                assert_eq!(error.to_string(), expected.to_string());
+            } else {
+                assert!(
+                    matches!(error, Error::ValidationError(message) if message == "授权结果不能跨事务或读取阶段使用")
+                );
+            }
+            assert_eq!(*reader.events.lock().unwrap(), ["error_page"]);
+        }
+    }
+
+    #[tokio::test]
+    async fn error_list_rejects_changed_scope_version_before_reading_a_page() {
+        let reader = Arc::new(MemoryReader::default());
+        let permission = integration_ops::ERROR_TASK_LIST;
+        let service = service(vec![permission.clone()], &[permission], own_scope(), reader.clone()).await;
+        let params = ErrorTaskListParams { scope_version: Some("stale".into()), ..Default::default() };
+        assert!(
+            matches!(service.error_task_page(params.normalized().unwrap(), &actor(), &mut SnapshotExecutor::default(), reader.as_ref()).await, Err(Error::ConflictError(message)) if message.starts_with("DATA_SCOPE_CHANGED"))
+        );
+        assert!(reader.events.lock().unwrap().is_empty());
+    }
 
     #[tokio::test]
     async fn error_task_page_rejects_missing_mapping_and_identity_failure_before_business_reads() {
@@ -117,7 +242,7 @@ mod authorization_tests {
             let service = IntegrationOpsService::new(db.clone(), access);
             let params = ErrorTaskListParams::default();
             let error = service
-                .error_task_page(params.normalized().unwrap(), &actor, &mut SnapshotExecutor::default())
+                .error_task_page(params.normalized().unwrap(), &actor, &mut SnapshotExecutor::default(), &db)
                 .await
                 .expect_err("授权失败必须先于业务仓储读取");
             if missing_mapping {

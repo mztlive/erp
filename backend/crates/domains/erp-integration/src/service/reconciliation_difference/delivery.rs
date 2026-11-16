@@ -9,14 +9,14 @@ use super::{DifferenceFilter, difference_list_view, project_difference_rows};
 use crate::Result;
 use crate::dto::DifferenceListView;
 use crate::entity::integration_ops::ReconciliationDifferenceResolution;
-use crate::repository::IntegrationOpsExt;
 use crate::repository::integration_ops::ReconciliationDifferenceRow;
-use crate::repository::prelude::ReconciliationDifferenceResolutionBatchExt;
+use crate::repository::integration_ops::reader::IntegrationReader;
 use crate::service::{IntegrationOpsService, ScopedIntegrationList};
 
 struct AuthorizedPage<'a> {
     service: &'a IntegrationOpsService,
     access: &'a CompiledAccess,
+    reader: &'a dyn IntegrationReader,
 }
 
 // 仅隔离交付中的两个异步步骤，授权资格和范围仍由真实 AuthorizationService 决定。
@@ -38,12 +38,7 @@ impl Delivery for AuthorizedPage<'_> {
         ids: &[String],
         executor: &mut dyn Executor,
     ) -> Result<HashMap<String, ReconciliationDifferenceResolution>> {
-        Ok(self
-            .service
-            .db
-            .reconciliation_difference_resolutions()
-            .find_latest_by_differences(ids, executor)
-            .await?)
+        Ok(self.reader.latest_decisions(ids, executor).await?)
     }
 
     async fn validate(&self, executor: &mut dyn Executor) -> Result<()> {
@@ -65,8 +60,9 @@ pub(super) async fn deliver_difference_page(
     filter: &DifferenceFilter,
     meta: ScopedIntegrationList,
     executor: &mut dyn Executor,
+    reader: &dyn IntegrationReader,
 ) -> Result<DifferenceListView> {
-    deliver(&AuthorizedPage { service, access }, page, filter, meta, executor).await
+    deliver(&AuthorizedPage { service, access, reader }, page, filter, meta, executor).await
 }
 
 async fn deliver(

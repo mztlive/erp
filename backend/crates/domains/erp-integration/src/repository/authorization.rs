@@ -18,6 +18,7 @@ use mongodb::bson::{Bson, doc};
 use persistence_core::Executor;
 
 use crate::repository::IntegrationOpsExt;
+use crate::repository::integration_ops::reader::IntegrationReader;
 
 /// 构造本域固定授权目录与查询映射。
 /// # 参数
@@ -27,7 +28,7 @@ use crate::repository::IntegrationOpsExt;
 /// # 错误
 /// 固定登记非法时启动失败；构造不执行 I/O。
 pub fn facts(db: Database) -> Arc<dyn AccessFactsPort> {
-    Arc::new(IntegrationFacts { db })
+    Arc::new(IntegrationFacts { reader: Arc::new(db) })
 }
 /// 返回固定集成资源查询映射。
 /// # 参数
@@ -46,7 +47,7 @@ pub fn mapping(resource: &str) -> IdentityResult<Arc<dyn AccessMapping>> {
 }
 
 struct IntegrationFacts {
-    db: Database,
+    reader: Arc<dyn IntegrationReader>,
 }
 #[async_trait]
 impl AccessFactsPort for IntegrationFacts {
@@ -59,30 +60,26 @@ impl AccessFactsPort for IntegrationFacts {
         let mut objects = Vec::new();
         for id in ids.ids() {
             let object = match context.resource.as_str() {
-                "integration_error_task" => {
-                    self.db.integration_error_tasks().find_by_id(id, executor).await?.map(|row| {
-                        object(
-                            &context.resource,
-                            row.base.id,
-                            row.base.version,
-                            row.owner_user_id,
-                            row.owner_org_unit_id,
-                        )
-                    })
-                },
-                "reconciliation_difference" => {
-                    self.db.reconciliation_differences().find_by_id(id, executor).await?.map(|row| {
-                        let mut object = object(
-                            &context.resource,
-                            row.base.id,
-                            row.base.version,
-                            Some(row.owner_user_id.clone()),
-                            row.owner_org_unit_id,
-                        );
-                        object.assignee_id = FactValue::Known(Some(row.owner_user_id));
-                        object
-                    })
-                },
+                "integration_error_task" => self.reader.error_task(id, executor).await?.map(|row| {
+                    object(
+                        &context.resource,
+                        row.base.id,
+                        row.base.version,
+                        row.owner_user_id,
+                        row.owner_org_unit_id,
+                    )
+                }),
+                "reconciliation_difference" => self.reader.difference(id, executor).await?.map(|row| {
+                    let mut object = object(
+                        &context.resource,
+                        row.base.id,
+                        row.base.version,
+                        Some(row.owner_user_id.clone()),
+                        row.owner_org_unit_id,
+                    );
+                    object.assignee_id = FactValue::Known(Some(row.owner_user_id));
+                    object
+                }),
                 _ => return Err(IdentityError::ValidationError("集成事实资源未登记".into())),
             };
             if let Some(object) = object {
@@ -91,6 +88,18 @@ impl AccessFactsPort for IntegrationFacts {
         }
         Ok(objects)
     }
+}
+
+#[cfg(test)]
+/// 为单测连接真实 Facts 转换和可控的持久化读取边界。
+/// # 参数
+/// reader 为本域读取替身。
+/// # 返回
+/// 与生产工厂相同的 Facts 实现。
+/// # 错误
+/// 构造不执行 I/O，读取错误仍由真实 Facts 入口传播。
+pub(crate) fn facts_using(reader: Arc<dyn IntegrationReader>) -> Arc<dyn AccessFactsPort> {
+    Arc::new(IntegrationFacts { reader })
 }
 
 fn object(resource: &str, id: String, version: u64, owner: Option<String>, org: String) -> ObjectFacts {
@@ -172,8 +181,93 @@ mod tests {
     use application_core::AuditActor;
     use erp_core::AccountKind;
     use erp_core::common::time::Instant;
+    use erp_identity::AccessTarget;
+    use erp_identity::entity::access_control::{ResolvedScope, ScopeClause};
+    use erp_identity::testing::authorization;
+    use persistence_core::testing::SnapshotExecutor;
 
     use super::*;
+    use crate::repository::integration_ops::reader::testing::{
+        MemoryReader, actor, own_scope, plan_contains,
+    };
+
+    #[tokio::test]
+    async fn actual_owner_facts_and_query_mapping_agree_for_both_resources() {
+        for permission in [integration_ops::ERROR_TASK_DETAIL, integration_ops::DIFFERENCE_DETAIL] {
+            let reader = Arc::new(MemoryReader::default());
+            let facts = facts_using(reader.clone());
+            let service = authorization(
+                actor(),
+                vec![permission.clone()],
+                own_scope(),
+                [(permission.resource().into(), facts)].into(),
+                [(permission.clone(), mapping(permission.resource()).unwrap())].into(),
+            )
+            .unwrap();
+            let id = if permission == integration_ops::ERROR_TASK_DETAIL { "error" } else { "difference" };
+            let mut executor = SnapshotExecutor::default();
+            let query = service.query(&actor(), &permission, &mut executor).await.unwrap();
+            assert!(plan_contains(query.stages(), doc! {"owner_user_id":"reader"}));
+            service.validate(&query, &mut executor).await.unwrap();
+            service
+                .require(&actor(), &permission, AccessTarget::record(id).unwrap(), &mut executor)
+                .await
+                .unwrap();
+            reader.error.lock().unwrap().as_mut().unwrap().owner_user_id = Some("other".into());
+            reader.difference.lock().unwrap().as_mut().unwrap().owner_user_id = "other".into();
+            assert!(matches!(
+                service
+                    .require(&actor(), &permission, AccessTarget::record(id).unwrap(), &mut executor)
+                    .await,
+                Err(IdentityError::Forbidden(_))
+            ));
+            assert!(matches!(
+                service
+                    .require(&actor(), &permission, AccessTarget::record("missing").unwrap(), &mut executor)
+                    .await,
+                Err(IdentityError::NotFound(_))
+            ));
+        }
+    }
+
+    #[tokio::test]
+    async fn actual_organization_facts_and_query_mapping_agree_for_both_resources() {
+        for permission in [integration_ops::ERROR_TASK_DETAIL, integration_ops::DIFFERENCE_DETAIL] {
+            let reader = Arc::new(MemoryReader::default());
+            reader.error.lock().unwrap().as_mut().unwrap().owner_user_id = Some("other".into());
+            reader.difference.lock().unwrap().as_mut().unwrap().owner_user_id = "other".into();
+            let facts = facts_using(reader.clone());
+            let scope = ResolvedScope {
+                role_clauses: vec![ScopeClause { org_unit_ids: ["org".into()].into(), ..Default::default() }],
+                user_limit: None,
+            };
+            let service = authorization(
+                actor(),
+                vec![permission.clone()],
+                scope,
+                [(permission.resource().into(), facts)].into(),
+                [(permission.clone(), mapping(permission.resource()).unwrap())].into(),
+            )
+            .unwrap();
+            let id = if permission == integration_ops::ERROR_TASK_DETAIL { "error" } else { "difference" };
+            let mut executor = SnapshotExecutor::default();
+            let query = service.query(&actor(), &permission, &mut executor).await.unwrap();
+            assert!(plan_contains(query.stages(), doc! {"owner_org_unit_id":{"$in":["org"]}}));
+            service.validate(&query, &mut executor).await.unwrap();
+            service
+                .require(&actor(), &permission, AccessTarget::record(id).unwrap(), &mut executor)
+                .await
+                .unwrap();
+            reader.error.lock().unwrap().as_mut().unwrap().owner_org_unit_id = "outside".into();
+            reader.difference.lock().unwrap().as_mut().unwrap().owner_org_unit_id = "outside".into();
+            assert!(matches!(
+                service
+                    .require(&actor(), &permission, AccessTarget::record(id).unwrap(), &mut executor)
+                    .await,
+                Err(IdentityError::Forbidden(_))
+            ));
+        }
+    }
     fn context() -> AccessContext {
         AccessContext {
             actor: AuditActor::new("handler".into(), "handler".into(), AccountKind::Admin),
