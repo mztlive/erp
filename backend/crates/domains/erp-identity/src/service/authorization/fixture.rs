@@ -18,6 +18,7 @@ use crate::{AccessFactsPort, AccessMapping, CompiledAccess, Permission, Qualifie
 
 /// 为单个领域的内联单测注入功能资格、范围和实际 Mapping；不改变生产 Builder 合同。
 pub struct AuthorizationFixture {
+    actor: Option<AuditActor>,
     grants: Vec<(String, Vec<Permission>)>,
     scope: ResolvedScope,
     facts: BTreeMap<String, Arc<dyn AccessFactsPort>>,
@@ -34,6 +35,7 @@ impl AuthorizationFixture {
     /// 不执行 I/O。
     pub fn new(grants: &[(&str, &[Permission])]) -> Self {
         Self {
+            actor: None,
             grants: grants.iter().map(|(role, permissions)| ((*role).into(), permissions.to_vec())).collect(),
             scope: ResolvedScope {
                 role_clauses: vec![ScopeClause { self_owned: true, ..Default::default() }],
@@ -42,6 +44,18 @@ impl AuthorizationFixture {
             facts: BTreeMap::new(),
             mappings: BTreeMap::new(),
         }
+    }
+
+    /// 限定身份设施唯一能解析的测试账号。
+    /// # 参数
+    /// actor 为有效测试账号；require / query 调用中的 ID 和账号种类必须与其一致。
+    /// # 返回
+    /// 更新后的测试设施；其他账号在身份取证时返回 None，由真实授权入口拒绝。
+    /// # 错误
+    /// 不执行 I/O；不提供此选项时保留原有夹具的账号行为。
+    pub fn actor(mut self, actor: AuditActor) -> Self {
+        self.actor = Some(actor);
+        self
     }
 
     /// 指定身份设施返回的范围，规则和候选授权仍由真实服务执行。
@@ -89,7 +103,11 @@ impl AuthorizationFixture {
     /// 不执行 I/O；本工厂只在 test-support feature 下存在。
     pub fn build(self) -> Arc<AuthorizationService> {
         Arc::new(AuthorizationService {
-            facilities: Arc::new(FixtureFacilities { grants: self.grants, scope: self.scope }),
+            facilities: Arc::new(FixtureFacilities {
+                actor: self.actor,
+                grants: self.grants,
+                scope: self.scope,
+            }),
             facts: self.facts,
             mappings: self.mappings,
             token: Arc::new(()),
@@ -98,6 +116,7 @@ impl AuthorizationFixture {
 }
 
 struct FixtureFacilities {
+    actor: Option<AuditActor>,
     grants: Vec<(String, Vec<Permission>)>,
     scope: ResolvedScope,
 }
@@ -106,10 +125,17 @@ struct FixtureFacilities {
 impl Facilities for FixtureFacilities {
     async fn permissions(
         &self,
-        _: &AuditActor,
+        actor: &AuditActor,
         requested: &[Permission],
         _: &mut dyn Executor,
     ) -> Result<Option<QualifiedPermissions>> {
+        if self
+            .actor
+            .as_ref()
+            .is_some_and(|expected| expected.id() != actor.id() || expected.kind() != actor.kind())
+        {
+            return Ok(None);
+        }
         let grants = self
             .grants
             .iter()
@@ -175,12 +201,31 @@ pub fn expire_access(access: &mut CompiledAccess) {
 #[cfg(test)]
 mod tests {
     use erp_core::AccountKind;
-    use erp_permissions::sales_inquiry;
+    use erp_permissions::{legacy_import, sales_inquiry};
     use persistence_core::testing::SnapshotExecutor;
 
     use super::*;
-    use crate::Error;
     use crate::repository::authorization::testing::mapping;
+    use crate::{AccessTarget, Error};
+
+    #[tokio::test]
+    async fn actor_constraint_rejects_other_accounts_before_qualification() {
+        let actor = AuditActor::new("user".into(), "login".into(), AccountKind::Admin);
+        let permissions = [legacy_import::BATCH_LIST];
+        let service = AuthorizationFixture::new(&[("reader", &permissions)]).actor(actor.clone()).build();
+        let mut executor = SnapshotExecutor::default();
+        service.require(&actor, &permissions[0], AccessTarget::Operation, &mut executor).await.unwrap();
+        for other in [
+            AuditActor::new("another-user".into(), "another-login".into(), AccountKind::Admin),
+            AuditActor::new("user".into(), "login".into(), AccountKind::Supplier),
+        ] {
+            assert!(service.permissions(&other, &permissions, &mut executor).await.unwrap().is_none());
+            assert!(matches!(
+                service.require(&other, &permissions[0], AccessTarget::Operation, &mut executor).await,
+                Err(Error::Forbidden(_))
+            ));
+        }
+    }
 
     #[tokio::test]
     async fn isolated_fixture_executes_real_query_and_preserves_missing_binding_denial_and_expiry() {
