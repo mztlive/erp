@@ -1,5 +1,9 @@
-//! 仅测试支持 feature 提供的拒绝式设施；不得用于应用装配。
+//! 仅测试支持 feature 提供的拒绝式设施与仓储凭证夹具；不得用于应用装配。
+mod query;
+
 use std::sync::Arc;
+
+pub use query::compiled_access;
 
 use crate::AuthorizationService;
 
