@@ -5,6 +5,8 @@ mod approvals;
 mod builder;
 mod definitions;
 mod facilities;
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) mod fixture;
 mod materials;
 mod operations;
 mod organization;

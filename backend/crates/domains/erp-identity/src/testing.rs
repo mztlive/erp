@@ -2,6 +2,7 @@
 use std::sync::Arc;
 
 use crate::AuthorizationService;
+pub use crate::service::authorization::fixture::{AuthorizationFixture, expire_access};
 
 /// 构造始终拒绝取证的测试授权服务。
 /// # 参数
