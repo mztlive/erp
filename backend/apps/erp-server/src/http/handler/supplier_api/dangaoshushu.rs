@@ -3,7 +3,6 @@ use axum::Extension;
 use axum::extract::{Path, State};
 use erp_connector_dangaoshushu::{DangaoshushuReadQuery, SupplierReferenceTickets};
 use erp_core::common::time::Instant;
-use persistence_core::NoTransaction;
 use serde_json::Value;
 
 use crate::http::errors::{Error, Result};
@@ -24,13 +23,11 @@ pub async fn read(
     Path(id): Path<String>,
     Query(query): Query<DangaoshushuReadQuery>,
 ) -> Result<Value> {
-    state.application().supplier_api_read_service().connection_detail_for_actor(&id, &actor).await?;
+    let connection = state.application().supplier_api_read_service().protocol_connection(&id, &actor).await?;
     let runtime = state
         .application()
         .dangaoshushu_runtime()
         .ok_or_else(|| Error::Unprocessable("蛋糕叔叔连接尚未配置".into()))?;
-    let connection =
-        state.application().supplier_api_service().load_connection(&id, &mut NoTransaction).await?;
     let value =
         runtime.read(&connection, &query).await.map_err(|failure| Error::Unprocessable(failure.summary))?;
     Ok(ApiResponse::ok_with_data(value))
@@ -48,13 +45,12 @@ pub async fn reference_tickets(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<SupplierReferenceTickets> {
-    state.application().supplier_api_read_service().connection_detail_for_actor(&id, &actor).await?;
+    let connection =
+        state.application().supplier_api_read_service().reference_ticket_connection(&id, &actor).await?;
     let runtime = state
         .application()
         .dangaoshushu_runtime()
         .ok_or_else(|| Error::Unprocessable("蛋糕叔叔连接尚未配置".into()))?;
-    let connection =
-        state.application().supplier_api_service().load_connection(&id, &mut NoTransaction).await?;
     let tickets = runtime
         .reference_tickets(&connection, Instant::now())
         .map_err(|failure| Error::Unprocessable(failure.summary))?;

@@ -366,7 +366,13 @@ fn validate_scope(spec: &ScopeSpec) -> Result<()> {
     if spec.allows_history
         && !matches!(
             spec.permission.action(),
-            "list" | "detail" | "financial_expense_source" | "profit_loss_read" | "extra_cost_read"
+            "list"
+                | "detail"
+                | "financial_expense_source"
+                | "profit_loss_read"
+                | "extra_cost_read"
+                | "customer_quality_history"
+                | "delivery_options_read"
         )
     {
         return Err(Error::ValidationError(format!("{} 的历史读取只适用于读取", spec.permission)));

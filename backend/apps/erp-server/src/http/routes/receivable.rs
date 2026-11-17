@@ -2,204 +2,190 @@
 //!
 //! 经 `admin.rs` 的 `/admin` nest 后，最终路径为 `/admin/receivable-accounts`、
 //! `/admin/customer-receipts`、`/admin/invoices`；
-//! 每条路由统一走 JWT + RBAC（`with_permission`），权限由显式目录统一定义。
+//! 每条路由统一走 JWT 认证；业务授权由用例执行，目录由 `permission_route` 提供，权限由显式目录统一定义。
 
 use axum::Router;
 use axum::routing::{get, post, put};
-use erp_identity::AuthorizationService;
 use erp_permissions as permissions;
 
 use crate::http::handler::receivable;
-use crate::http::middleware::with_permission;
+use crate::http::routes::permission_route;
 use crate::http::state::HttpState;
 use crate::http::upload;
 
 /// 返回本域管理端路由集合。
 ///
 /// # 参数
-/// * `rbac` - 共享 Casbin RBAC 服务
+/// 无。
 ///
 /// # 返回
-/// 返回挂载了权限校验层的路由集合。
-pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
-    receipt_file_routes(rbac)
-        .merge(additional_document_routes(rbac))
-        .merge(invoice_request_edit_routes(rbac))
-        .merge(account_routes(rbac))
-        .merge(receipt_query_routes(rbac))
-        .merge(receipt_command_routes(rbac))
-        .merge(invoice_query_routes(rbac))
-        .merge(invoice_command_routes(rbac))
+/// 返回声明公共权限目录信息的路由集合。
+///
+/// # 错误
+/// 不执行 I/O，不返回错误。
+pub fn routes() -> Router<HttpState> {
+    receipt_file_routes()
+        .merge(additional_document_routes())
+        .merge(invoice_request_edit_routes())
+        .merge(account_routes())
+        .merge(receipt_query_routes())
+        .merge(receipt_command_routes())
+        .merge(invoice_query_routes())
+        .merge(invoice_command_routes())
 }
 
-/// 应收子账与财务来源资料保留逐路由功能权限校验。
-fn account_routes(rbac: &AuthorizationService) -> Router<HttpState> {
+/// 应收子账与财务来源资料保留逐路由公共权限目录信息。
+fn account_routes() -> Router<HttpState> {
     Router::new()
         .route(
             "/receivable-accounts/sources/{kind}/{id}",
-            with_permission(
+            permission_route(
                 get(receivable::allocation_source::detail),
-                rbac,
                 &permissions::receivable::ACCOUNT_DETAIL,
             ),
         )
         .route(
             "/receivable-accounts",
-            with_permission(
+            permission_route(
                 get(receivable::receivable_account_list),
-                rbac,
                 &permissions::receivable::ACCOUNT_LIST,
             ),
         )
         .route(
             "/receivable-accounts",
-            with_permission(
+            permission_route(
                 post(receivable::receivable_account_create),
-                rbac,
                 &permissions::receivable::ACCOUNT_CREATE,
             ),
         )
         .route(
             "/receivable-accounts/{id}",
-            with_permission(
+            permission_route(
                 get(receivable::receivable_account_detail),
-                rbac,
                 &permissions::receivable::ACCOUNT_DETAIL,
             ),
         )
 }
 
-/// 回款列表、详情与草稿保留逐路由功能权限校验。
-fn receipt_query_routes(rbac: &AuthorizationService) -> Router<HttpState> {
+/// 回款列表、详情与草稿保留逐路由公共权限目录信息。
+fn receipt_query_routes() -> Router<HttpState> {
     Router::new()
         .route(
             "/customer-receipts",
-            with_permission(
+            permission_route(
                 get(receivable::customer_receipt_list),
-                rbac,
                 &permissions::receivable::CUSTOMER_RECEIPT_LIST,
             ),
         )
         .route(
             "/customer-receipts",
-            with_permission(
+            permission_route(
                 post(receivable::customer_receipt_create),
-                rbac,
                 &permissions::receivable::CUSTOMER_RECEIPT_CREATE,
             ),
         )
         .route(
             "/customer-receipts/{id}",
-            with_permission(
+            permission_route(
                 get(receivable::customer_receipt_detail),
-                rbac,
                 &permissions::receivable::CUSTOMER_RECEIPT_DETAIL,
             ),
         )
         .route(
             "/customer-receipts/drafts",
-            with_permission(
+            permission_route(
                 post(receivable::draft_update::customer_receipt_save_draft),
-                rbac,
                 &permissions::receivable::CUSTOMER_RECEIPT_SUBMIT,
             ),
         )
 }
 
-/// 回款正式办理命令保留逐路由功能权限校验。
-fn receipt_command_routes(rbac: &AuthorizationService) -> Router<HttpState> {
+/// 回款正式办理命令保留逐路由公共权限目录信息。
+fn receipt_command_routes() -> Router<HttpState> {
     Router::new()
         .route(
             "/customer-receipts/commit",
-            with_permission(
+            permission_route(
                 post(receivable::customer_receipt_commit),
-                rbac,
                 &permissions::receivable::CUSTOMER_RECEIPT_SUBMIT,
             ),
         )
         .route(
             "/customer-receipts/{id}/submit",
-            with_permission(
+            permission_route(
                 post(receivable::customer_receipt_submit),
-                rbac,
                 &permissions::receivable::CUSTOMER_RECEIPT_SUBMIT,
             ),
         )
         .route(
             "/customer-receipts/{id}/cancel-approval",
-            with_permission(
+            permission_route(
                 post(receivable::customer_receipt_cancel_approval),
-                rbac,
                 &permissions::receivable::CUSTOMER_RECEIPT_CANCEL_APPROVAL,
             ),
         )
         .route(
             "/customer-receipts/{id}/post",
-            with_permission(
+            permission_route(
                 post(receivable::customer_receipt_post),
-                rbac,
                 &permissions::receivable::CUSTOMER_RECEIPT_POST,
             ),
         )
 }
 
-/// 发票与开票申请查询保留逐路由功能权限校验。
-fn invoice_query_routes(rbac: &AuthorizationService) -> Router<HttpState> {
+/// 发票与开票申请查询保留逐路由公共权限目录信息。
+fn invoice_query_routes() -> Router<HttpState> {
     Router::new()
         .route(
             "/invoices",
-            with_permission(get(receivable::invoice_list), rbac, &permissions::receivable::INVOICE_LIST),
+            permission_route(get(receivable::invoice_list), &permissions::receivable::INVOICE_LIST),
         )
         .route(
             "/invoices",
-            with_permission(post(receivable::invoice_create), rbac, &permissions::receivable::INVOICE_CREATE),
+            permission_route(post(receivable::invoice_create), &permissions::receivable::INVOICE_CREATE),
         )
         .route(
             "/invoices/{id}",
-            with_permission(get(receivable::invoice_detail), rbac, &permissions::receivable::INVOICE_DETAIL),
+            permission_route(get(receivable::invoice_detail), &permissions::receivable::INVOICE_DETAIL),
         )
         .route(
             "/sales-invoice-requests",
-            with_permission(
+            permission_route(
                 get(receivable::invoice_request::invoice_request_list),
-                rbac,
                 &permissions::receivable::INVOICE_REQUEST_INVOICE_REQUEST_LIST,
             ),
         )
         .route(
             "/sales-invoice-requests/submit",
-            with_permission(
+            permission_route(
                 post(receivable::invoice_request::invoice_request_submit),
-                rbac,
                 &permissions::receivable::INVOICE_REQUEST_INVOICE_REQUEST_SUBMIT,
             ),
         )
         .route(
             "/sales-invoice-requests/amounts/{id}",
-            with_permission(
+            permission_route(
                 get(receivable::invoice_request::invoice_request_amounts),
-                rbac,
                 &permissions::receivable::INVOICE_REQUEST_INVOICE_REQUEST_LIST,
             ),
         )
 }
 
-/// 发票登记与红票命令保留逐路由功能权限校验。
-fn invoice_command_routes(rbac: &AuthorizationService) -> Router<HttpState> {
+/// 发票登记与红票命令保留逐路由公共权限目录信息。
+fn invoice_command_routes() -> Router<HttpState> {
     Router::new()
         .route(
             "/invoices/commit",
-            with_permission(post(receivable::invoice_commit), rbac, &permissions::receivable::INVOICE_POST),
+            permission_route(post(receivable::invoice_commit), &permissions::receivable::INVOICE_POST),
         )
         .route(
             "/invoices/{id}/post",
-            with_permission(post(receivable::invoice_post), rbac, &permissions::receivable::INVOICE_POST),
+            permission_route(post(receivable::invoice_post), &permissions::receivable::INVOICE_POST),
         )
         .route(
             "/invoices/{id}/red-issue",
-            with_permission(
+            permission_route(
                 post(receivable::invoice_red_issue),
-                rbac,
                 &permissions::receivable::INVOICE_RED_ISSUE,
             ),
         )
@@ -208,102 +194,93 @@ fn invoice_command_routes(rbac: &AuthorizationService) -> Router<HttpState> {
 /// 发票文件上传路由。
 ///
 /// # 参数
-/// * `rbac` - 当前共享权限服务
+/// 无。
 /// # 返回
-/// 返回逐操作保留权限校验和上传限制的路由集合。
+/// 返回逐操作声明权限目录信息并保留上传限制的路由集合。
 /// # 错误
 /// 无；业务错误由各处理器返回。
-fn additional_document_routes(rbac: &AuthorizationService) -> Router<HttpState> {
+fn additional_document_routes() -> Router<HttpState> {
     Router::new()
         .route(
             "/invoices/with-files",
-            with_permission(
+            permission_route(
                 upload::multipart_route(
                     post(receivable::invoice_files::invoice_create_with_files),
                     32 * upload::MAX_UPLOAD_FILE_BYTES + 1024 * 1024,
                 ),
-                rbac,
                 &permissions::receivable::INVOICE_CREATE,
             ),
         )
         .route(
             "/invoices/commit-with-files",
-            with_permission(
+            permission_route(
                 upload::multipart_route(
                     post(receivable::invoice_files::invoice_commit_with_files),
                     32 * upload::MAX_UPLOAD_FILE_BYTES + 1024 * 1024,
                 ),
-                rbac,
                 &permissions::receivable::INVOICE_POST,
             ),
         )
         .route(
             "/invoices/complete-with-files",
-            with_permission(
+            permission_route(
                 upload::multipart_route(
                     post(receivable::invoice_files::invoice_complete_with_files),
                     32 * upload::MAX_UPLOAD_FILE_BYTES + 1024 * 1024,
                 ),
-                rbac,
                 &permissions::receivable::INVOICE_POST,
             ),
         )
         .route(
             "/customer-receipts/{id}",
-            with_permission(
+            permission_route(
                 put(receivable::draft_update::customer_receipt_update),
-                rbac,
                 &permissions::receivable::CUSTOMER_RECEIPT_SUBMIT,
             ),
         )
         .route(
             "/customer-receipts/{id}/draft",
-            with_permission(
+            permission_route(
                 get(receivable::draft_read::customer_receipt_draft),
-                rbac,
                 &permissions::receivable::CUSTOMER_RECEIPT_SUBMIT,
             ),
         )
 }
 
 /// 回款草稿凭证沿用提交权限和统一上传限制。
-fn receipt_file_routes(rbac: &AuthorizationService) -> Router<HttpState> {
+fn receipt_file_routes() -> Router<HttpState> {
     Router::new().route(
         "/customer-receipts/drafts/with-files",
-        with_permission(
+        permission_route(
             upload::multipart_route(
                 post(receivable::receipt_files::customer_receipt_save_with_files),
                 upload::MAX_MULTIPART_REQUEST_BYTES,
             ),
-            rbac,
             &permissions::receivable::CUSTOMER_RECEIPT_SUBMIT,
         ),
     )
 }
 
-fn invoice_request_edit_routes(rbac: &AuthorizationService) -> Router<HttpState> {
+fn invoice_request_edit_routes() -> Router<HttpState> {
     Router::new()
         .route(
             "/sales-invoice-requests/{id}",
-            with_permission(
+            permission_route(
                 get(receivable::invoice_request::invoice_request_detail),
-                rbac,
                 &permissions::receivable::INVOICE_REQUEST_INVOICE_REQUEST_DETAIL,
             ),
         )
         .route(
             "/sales-invoice-requests/{id}/cancel",
-            with_permission(
+            permission_route(
                 post(receivable::invoice_request::invoice_request_cancel),
-                rbac,
                 &permissions::receivable::INVOICE_REQUEST_INVOICE_REQUEST_CANCEL,
             ),
         )
         .route(
             "/sales-invoice-requests/{id}",
-            with_permission(
+            permission_route(
                 put(receivable::invoice_request::invoice_request_update),
-                rbac,
                 &permissions::receivable::INVOICE_REQUEST_INVOICE_REQUEST_SUBMIT,
             ),
         )

@@ -2,18 +2,18 @@
 pub mod fulfillment_payment;
 pub mod invoice;
 pub mod receipt;
+use std::sync::Arc;
+
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
 use axum::response::Response;
 use erp_read_models::finance::document_files::{BusinessFinanceFiles, FinancialFileView, matching_file};
-use erp_workflow::WorkItemType;
 
 use crate::http::errors::{Error, Result};
 use crate::http::handler::file_asset::{asset_download_response, read_asset, revalidate_asset};
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
-use crate::wiring::workflow::work_item_service;
 
 /// 按本单详情资格读取发票文件，不要求完整财务详情权限。
 /// # 参数
@@ -28,7 +28,7 @@ pub async fn sales_invoice_files(
     Path(id): Path<String>,
 ) -> Result<Vec<FinancialFileView>> {
     Ok(ApiResponse::ok_with_data(
-        BusinessFinanceFiles::new(state.application().db(), state.application().rbac())
+        BusinessFinanceFiles::new(state.application().db(), state.application().authorization())
             .sales(&actor, &id)
             .await?,
     ))
@@ -46,7 +46,7 @@ pub async fn sales_invoice_download(
     Extension(actor): Extension<AuditActor>,
     Path((id, invoice_id, asset_id)): Path<(String, String, String)>,
 ) -> std::result::Result<Response, Error> {
-    let service = BusinessFinanceFiles::new(state.application().db(), state.application().rbac());
+    let service = BusinessFinanceFiles::new(state.application().db(), state.application().authorization());
     let files = service.sales(&actor, &id).await?;
     let file = matching_file(&files, &invoice_id, Some(&asset_id))?;
     let (view, content) = read_asset(&state, &actor, &file.file_asset_id).await?;
@@ -96,14 +96,8 @@ async fn task_files(
     actor: &AuditActor,
     id: &str,
 ) -> std::result::Result<Vec<FinancialFileView>, Error> {
-    let authorized = work_item_service(state.application().db(), state.application().rbac())
-        .authorize_work_item(id, actor)
-        .await?;
-    if authorized.item.work_item_type != WorkItemType::FulfillmentOperation {
-        return Err(Error::NotFound("采购履约任务不存在或无权查看".into()));
-    }
-    BusinessFinanceFiles::new(state.application().db(), state.application().rbac())
-        .fulfillment(&authorized.item.business_object_type, &authorized.item.business_object_id)
+    BusinessFinanceFiles::new(state.application().db(), state.application().authorization())
+        .fulfillment(actor, id, Arc::new(state.application().work_item_authorization()))
         .await
         .map_err(Error::from)
 }

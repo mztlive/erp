@@ -63,7 +63,7 @@ impl SalesOrderReadService {
         let pending = pending_purchases(&state, &records);
         let awaiting = pending.iter().filter(|purchase| purchase.awaiting_submission).count();
         let updates = if !pending.is_empty()
-            && can_list_purchases(&self.db, self.require_rbac()?, actor, executor).await?
+            && can_list_purchases(&self.db, &self.authorization, actor, executor).await?
         {
             self.source_update_views(&pending, executor).await?
         } else {

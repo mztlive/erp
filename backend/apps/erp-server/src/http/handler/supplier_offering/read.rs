@@ -34,7 +34,7 @@ pub async fn detail(
 ) -> Result<SupplierOfferingView> {
     let mut view = SupplierOfferingReadService::new(
         state.application().db(),
-        OfferingAccess::new(state.application().db(), state.application().rbac()),
+        OfferingAccess::new(state.application().db(), state.application().authorization()),
         MongoOfferingProcurementOwners::shared(state.application().db()),
     )
     .detail(&id, &actor)
@@ -66,7 +66,7 @@ pub async fn history(
     Query(params): Query<OfferingHistoryParams>,
 ) -> Result<OfferingHistoryPage> {
     let mut page = SupplierOfferingService::new(state.application().db())
-        .with_data_scope(OfferingAccess::new(state.application().db(), state.application().rbac()))
+        .with_data_scope(OfferingAccess::new(state.application().db(), state.application().authorization()))
         .history(&id, params, &actor)
         .await?;
     if !can_view_costs(&state, &actor).await? {

@@ -25,9 +25,13 @@ pub async fn task_timeline(
     Path(id): Path<String>,
     Query(query): Query<TimelineQuery>,
 ) -> Result<TaskTimeline> {
-    let workbench = WorkItemReadService::new(state.application().db(), state.application().rbac());
-    let view = sales_timeline_service(state.application().db(), state.application().rbac())
-        .task(workbench, &actor, &id, query)
-        .await?;
+    let workbench = WorkItemReadService::new(state.application().db(), state.application().authorization());
+    let view = sales_timeline_service(
+        state.application().db(),
+        state.application().rbac(),
+        state.application().authorization(),
+    )
+    .task(workbench, &actor, &id, query)
+    .await?;
     Ok(ApiResponse::ok_with_data(view))
 }

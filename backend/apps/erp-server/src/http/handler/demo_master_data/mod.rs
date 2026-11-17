@@ -18,8 +18,11 @@ use crate::http::state::HttpState;
 ///
 /// # 返回
 /// 返回计划数量和当前数量。
-pub async fn demo_master_data_status(State(state): State<HttpState>) -> Result<DemoStatus> {
-    let status = state.application().demo_master_data_process().status().await?;
+pub async fn demo_master_data_status(
+    State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
+) -> Result<DemoStatus> {
+    let status = state.application().demo_master_data_process().status(&actor).await?;
     Ok(ApiResponse::ok_with_data(status))
 }
 

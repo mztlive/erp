@@ -5,6 +5,7 @@ use axum::http::HeaderValue;
 use axum::http::header::{CACHE_CONTROL, CONTENT_DISPOSITION, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS};
 use axum::response::Response;
 use erp_support::{FileAssetView, SecurityScanStatus, content_fingerprint};
+use persistence_core::ReadExecutor;
 
 use crate::http::errors::Error;
 use crate::http::state::HttpState;
@@ -15,7 +16,11 @@ pub(crate) async fn read_asset(
     actor: &AuditActor,
     id: &str,
 ) -> std::result::Result<(FileAssetView, Vec<u8>), Error> {
-    let view = state.application().file_asset_service().file_asset_preview(id, actor).await?;
+    let view = state
+        .application()
+        .file_asset_service()
+        .preview_asset(id, actor, &mut ReadExecutor::default())
+        .await?;
     ensure_readable(&view)?;
     let bytes = state
         .application()
@@ -62,7 +67,11 @@ pub(crate) async fn revalidate_asset(
     state: &HttpState,
     original: &FileAssetView,
 ) -> std::result::Result<(), Error> {
-    let latest = state.application().file_asset_service().file_asset_detail(&original.id).await?;
+    let latest = state
+        .application()
+        .file_asset_service()
+        .asset_view(&original.id, &mut ReadExecutor::default())
+        .await?;
     ensure_readable(&latest)?;
     if latest.version != original.version || latest.content_hmac != original.content_hmac {
         return Err(Error::Conflict("文件已变化，请刷新后重新下载".into()));

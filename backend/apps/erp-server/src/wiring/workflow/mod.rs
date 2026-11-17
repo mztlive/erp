@@ -1,7 +1,7 @@
 //! 工作流消费方端口的生产装配。
 use std::sync::Arc;
 
-use erp_identity::SharedRbacService;
+use erp_identity::{AuthorizationService, SharedRbacService};
 use erp_workflow::{Error as WorkflowError, WorkItemService};
 use mongodb::Database;
 
@@ -51,17 +51,22 @@ fn map_service(error: Error) -> WorkflowError {
 /// # 参数
 /// * `db` - 工作项与身份集合所在数据库。
 /// * `rbac` - 现有 RBAC 快照服务。
+/// * `authorization` - 启动时完整绑定的共享授权服务。
 ///
 /// # 返回
 /// 返回已注入三个组合端口的工作项服务。
 ///
 /// # 错误
 /// 不返回错误。
-pub fn work_item_service(db: Database, rbac: SharedRbacService) -> WorkItemService<WorkflowAuth> {
-    let auth = WorkflowAuth::new(db.clone(), rbac.clone());
+pub fn work_item_service(
+    db: Database,
+    rbac: SharedRbacService,
+    authorization: Arc<AuthorizationService>,
+) -> WorkItemService<WorkflowAuth> {
+    let auth = WorkflowAuth::new(db.clone(), rbac.clone(), authorization.clone());
     let facts = Arc::new(WorkflowObjectFacts::new(db.clone()));
     let audit = Arc::new(WorkflowAudit::new(db.clone()));
-    WorkItemService::with_ports(db, rbac, auth, facts, audit)
+    WorkItemService::with_ports(db, rbac, authorization, auth, facts, audit)
 }
 
 /// 为组合根构造工作流授权 adapter。
@@ -69,14 +74,19 @@ pub fn work_item_service(db: Database, rbac: SharedRbacService) -> WorkItemServi
 /// # 参数
 /// * `db` - 身份与业务集合所在数据库。
 /// * `rbac` - 现有 RBAC 快照服务。
+/// * `authorization` - 启动时完整绑定的共享授权服务。
 ///
 /// # 返回
 /// 返回未执行 I/O 的 `WorkflowAuth`。
 ///
 /// # 错误
 /// 不返回错误。
-pub fn workflow_auth(db: Database, rbac: SharedRbacService) -> WorkflowAuth {
-    WorkflowAuth::new(db, rbac)
+pub fn workflow_auth(
+    db: Database,
+    rbac: SharedRbacService,
+    authorization: Arc<AuthorizationService>,
+) -> WorkflowAuth {
+    WorkflowAuth::new(db, rbac, authorization)
 }
 
 /// 构造工作流审计 adapter。
@@ -114,6 +124,7 @@ pub fn workflow_object_facts(db: Database) -> Arc<WorkflowObjectFacts> {
 /// # 参数
 /// * `db` - 单据与审批集合所在数据库。
 /// * `rbac` - 现有 RBAC 快照服务。
+/// * `authorization` - 当前进程共享的完整授权服务。
 /// * `command` - 绑定已发布定义的命令。
 /// * `actor` - 当前操作人。
 /// * `executor` - 调用方执行器。
@@ -126,13 +137,20 @@ pub fn workflow_object_facts(db: Database) -> Arc<WorkflowObjectFacts> {
 pub async fn bind_published_definition_on_document_create(
     db: &mongodb::Database,
     rbac: &SharedRbacService,
+    authorization: &AuthorizationService,
     command: &erp_workflow::service::approval::binding::BindPublishedDefinitionCommand,
     actor: &application_core::AuditActor,
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<Option<erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding>> {
     let audit = WorkflowAudit::new(db.clone());
     erp_workflow::service::approval::binding::bind_published_definition_on_document_create(
-        rbac, db, &audit, command, actor, executor,
+        authorization,
+        rbac,
+        db,
+        &audit,
+        command,
+        actor,
+        executor,
     )
     .await
     .map_err(map_service_err)

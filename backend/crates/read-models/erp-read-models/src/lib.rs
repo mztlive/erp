@@ -6,6 +6,7 @@ mod support;
 
 pub use errors::{Error, Result};
 
+pub mod contract_attachment;
 pub mod customer_center;
 pub mod customer_quality;
 pub mod fulfillment_queue;

@@ -10,7 +10,6 @@ use erp_resource_grants::{
     BackfillReport, BackfillRequest, ManualGrantRequest, RecomputeRequest, ResourceGrantProcess,
     RevokeRequest, SourcesQuery,
 };
-use persistence_core::NoTransaction;
 
 use crate::http::errors::Result;
 use crate::http::extractor::{Json, Query};
@@ -18,7 +17,7 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
 fn process(state: &HttpState) -> ResourceGrantProcess {
-    ResourceGrantProcess::new(state.application().db(), state.application().rbac())
+    ResourceGrantProcess::new(state.application().db(), state.application().authorization())
 }
 
 /// 按稳定操作号授予指定记录读取权。
@@ -70,10 +69,7 @@ pub async fn sources(
 ) -> Result<GrantSourcePage> {
     query.validate()?;
     Ok(ApiResponse::ok_with_data(
-        process(&state)
-            .management()
-            .sources(&actor, &query.recipient, query.after.as_deref(), &mut NoTransaction)
-            .await?,
+        process(&state).management().sources(&actor, &query.recipient, query.after.as_deref()).await?,
     ))
 }
 

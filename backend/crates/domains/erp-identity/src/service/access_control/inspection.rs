@@ -173,8 +173,6 @@ mod tests {
             object_id: None,
         };
         let access = AuthorizedDataScope::test_fixture(DataScopeFacts {
-            resource: "sales_order".into(),
-            action: "detail".into(),
             scope: ResolvedScope {
                 role_clauses: vec![ScopeClause { company: true, ..Default::default() }],
                 user_limit: None,

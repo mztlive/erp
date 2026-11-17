@@ -86,8 +86,6 @@ impl Facilities for FixedIdentity {
     ) -> Result<AuthorizedDataScope> {
         Ok(AuthorizedDataScope {
             facts: DataScopeFacts {
-                resource: context.resource.clone(),
-                action: context.permission.action().into(),
                 scope: self.scope.clone(),
                 organizations: OrganizationState::default(),
                 policy_version: 1,

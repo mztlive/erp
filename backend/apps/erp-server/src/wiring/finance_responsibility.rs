@@ -5,7 +5,7 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_finance_posting::FinanceTaskPort;
-use erp_identity::SharedRbacService;
+use erp_identity::{AuthorizationService, SharedRbacService};
 use erp_workflow::entity::work_item::{FinanceResponsibilityOperation, WorkItem, WorkItemType};
 use erp_workflow::ports::FinanceResponsibilityPort;
 use erp_workflow::service::work_item::ResolvedFinanceResponsibility;
@@ -20,11 +20,12 @@ use super::workflow::{WorkflowAuth, work_item_service};
 struct FinanceWorkItems {
     db: Database,
     caller_rbac: SharedRbacService,
+    authorization: Arc<AuthorizationService>,
 }
 
 impl FinanceWorkItems {
     fn caller_service(&self) -> WorkItemService<WorkflowAuth> {
-        work_item_service(self.db.clone(), self.caller_rbac.clone())
+        work_item_service(self.db.clone(), self.caller_rbac.clone(), self.authorization.clone())
     }
 
     fn fresh_identity(&self) -> SharedRbacService {
@@ -32,7 +33,7 @@ impl FinanceWorkItems {
     }
 
     fn fresh_service(&self) -> WorkItemService<WorkflowAuth> {
-        work_item_service(self.db.clone(), self.fresh_identity())
+        work_item_service(self.db.clone(), self.fresh_identity(), self.authorization.clone())
     }
 }
 
@@ -81,18 +82,22 @@ impl FinanceTaskPort for FinanceWorkItems {
 
 /// 装配原指定任务资格和独立负责人解析能力。
 /// # 参数
-/// `db` 为原工作项数据库；`caller_rbac` 为该调用点原有的共享或局部权限实例。
+/// db 为工作项数据库，caller_rbac 为身份设施，authorization 为进程共享统一授权服务。
 /// # 返回
 /// 返回任务资格沿用调用方、负责人解析每次独立创建身份的能力。
 /// # 错误
 /// 构造不执行 I/O，不返回错误；资格和责任分配错误由原调用位置返回。
-pub fn finance_tasks(db: Database, caller_rbac: SharedRbacService) -> Arc<dyn FinanceTaskPort> {
-    Arc::new(FinanceWorkItems { db, caller_rbac })
+pub fn finance_tasks(
+    db: Database,
+    caller_rbac: SharedRbacService,
+    authorization: Arc<AuthorizationService>,
+) -> Arc<dyn FinanceTaskPort> {
+    Arc::new(FinanceWorkItems { db, caller_rbac, authorization })
 }
 
 /// 装配每次独立创建身份的财务责任池分配能力。
 /// # 参数
-/// `db` 为原工作项数据库；`caller_rbac` 为应用已有身份，仅保留能力上下文。
+/// db 为工作项数据库，caller_rbac 为身份设施，authorization 为进程共享统一授权服务。
 /// # 返回
 /// 返回两个责任解析方法均在调用时创建新身份的窄合同。
 /// # 错误
@@ -100,8 +105,9 @@ pub fn finance_tasks(db: Database, caller_rbac: SharedRbacService) -> Arc<dyn Fi
 pub fn finance_responsibility(
     db: Database,
     caller_rbac: SharedRbacService,
+    authorization: Arc<AuthorizationService>,
 ) -> Arc<dyn FinanceResponsibilityPort> {
-    Arc::new(FinanceWorkItems { db, caller_rbac })
+    Arc::new(FinanceWorkItems { db, caller_rbac, authorization })
 }
 
 #[cfg(test)]
@@ -113,7 +119,8 @@ mod tests {
         let client = mongodb::Client::with_uri_str("mongodb://localhost:27017").await.unwrap();
         let db = client.database("finance-responsibility-factory-unit-test");
         let caller = shared_rbac_service(db.clone());
-        let provider = FinanceWorkItems { db, caller_rbac: caller.clone() };
+        let authorization = crate::wiring::authorization::build(db.clone(), caller.clone()).unwrap();
+        let provider = FinanceWorkItems { db, caller_rbac: caller.clone(), authorization };
         let first = provider.fresh_identity();
         let second = provider.fresh_identity();
 

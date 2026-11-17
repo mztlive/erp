@@ -200,7 +200,6 @@ async fn preview_and_apply_preserve_the_same_authorized_target_and_review_hash()
             .require_policy_bundle(&actor(), &permission, Some(&document), &mut SnapshotExecutor::default())
             .await
             .unwrap();
-        assert_eq!((access.scope.resource.as_str(), access.scope.action.as_str()), ("org_unit", "manage"));
         let plan = PolicyPlan::build(
             document.clone(),
             &PolicyFacts::default(),

@@ -11,6 +11,7 @@ use mongodb::Database;
 use crate::ports::{CatalogAuditPort, FileAssetFactsPort};
 
 mod access;
+mod attachment_upload;
 mod attribute;
 mod brand;
 mod brand_import;

@@ -2,79 +2,89 @@
 //!
 //! 经 `admin.rs` 的 `/admin` nest 后，最终路径为 `/admin/file-assets`、
 //! `/admin/documents/{id}/attachments`、`/admin/document-attachments`；
-//! 每条路由统一走 JWT + RBAC（`with_permission`），权限由显式目录统一定义。
+//! 每条路由统一走 JWT 认证；业务授权由用例执行，目录由 `permission_route` 提供，权限由显式目录统一定义。
 //!
 use axum::Router;
 use axum::routing::{get, post, put};
-use erp_identity::AuthorizationService;
 use erp_permissions as permissions;
 
 use crate::http::handler::file_asset;
-use crate::http::middleware::with_permission;
+use crate::http::routes::permission_route;
 use crate::http::state::HttpState;
 use crate::http::upload;
 
 /// 返回本域管理端路由集合。
 ///
 /// # 参数
-/// * `rbac` - 共享 Casbin RBAC 服务
+/// 无。
 ///
 /// # 返回
-/// 返回挂载了权限校验层的路由集合。
-pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
+/// 返回声明公共权限目录信息的路由集合。
+///
+/// # 错误
+/// 不执行 I/O，不返回错误。
+pub fn routes() -> Router<HttpState> {
+    Router::new().merge(asset_routes()).merge(lifecycle_routes()).merge(attachment_routes())
+}
+
+/// 文件登记、上传与读取路由。
+fn asset_routes() -> Router<HttpState> {
     Router::new()
         .route(
             "/file-assets",
-            with_permission(get(file_asset::file_asset_list), rbac, &permissions::file_asset::LIST),
+            permission_route(get(file_asset::file_asset_list), &permissions::file_asset::LIST),
         )
         .route(
             "/file-assets/upload",
-            with_permission(
+            permission_route(
                 upload::multipart_route(
                     post(file_asset::file_asset_upload),
                     upload::MAX_MULTIPART_REQUEST_BYTES,
                 ),
-                rbac,
                 &permissions::file_asset::UPLOAD,
             ),
         )
         .route(
             "/file-assets/register",
-            with_permission(post(file_asset::file_asset_register), rbac, &permissions::file_asset::UPLOAD),
+            permission_route(post(file_asset::file_asset_register), &permissions::file_asset::UPLOAD),
         )
         .route(
             "/file-assets/{id}",
-            with_permission(get(file_asset::file_asset_detail), rbac, &permissions::file_asset::DETAIL),
+            permission_route(get(file_asset::file_asset_detail), &permissions::file_asset::DETAIL),
         )
         .route(
             "/file-assets/{id}/preview",
-            with_permission(get(file_asset::file_asset_preview), rbac, &permissions::file_asset::PREVIEW),
+            permission_route(get(file_asset::file_asset_preview), &permissions::file_asset::PREVIEW),
         )
+}
+
+/// 文件扫描与销毁路由。
+fn lifecycle_routes() -> Router<HttpState> {
+    Router::new()
         .route(
             "/file-assets/{id}/scan-result",
-            with_permission(
-                put(file_asset::file_asset_scan_result),
-                rbac,
-                &permissions::file_asset::SCAN_RESULT,
-            ),
+            permission_route(put(file_asset::file_asset_scan_result), &permissions::file_asset::SCAN_RESULT),
         )
         .route(
             "/file-assets/{id}/destroy",
-            with_permission(post(file_asset::file_asset_destroy), rbac, &permissions::file_asset::DESTROY),
+            permission_route(post(file_asset::file_asset_destroy), &permissions::file_asset::DESTROY),
         )
+}
+
+/// 单据附件关联路由。
+fn attachment_routes() -> Router<HttpState> {
+    Router::new()
         .route(
             "/document-attachments",
-            with_permission(
+            permission_route(
                 post(file_asset::document_attachment_create),
-                rbac,
                 &permissions::file_asset::DOCUMENT_ATTACHMENT_CREATE,
             ),
         )
         .route(
             "/documents/{id}/attachments",
-            with_permission(
+            permission_route(
                 get(file_asset::document_attachment_list),
-                rbac,
                 &permissions::file_asset::DOCUMENT_ATTACHMENT_LIST,
             ),
         )

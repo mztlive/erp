@@ -208,7 +208,7 @@ async fn load_change_snapshot(
         Err(error) => return Err(error),
     };
     let mut view = runtime_detail_view(db, rbac, actor, change, binding, executor).await?;
-    view.procurement = SalesChangeReadService::with_rbac(db.clone(), rbac.clone())
+    view.procurement = SalesChangeReadService::new(db.clone(), rbac.clone())
         .change_procurement(&view, actor, executor)
         .await?;
     // 按钮检查可能开始新的授权阶段；根查询在这些检查结束后签发并交付。

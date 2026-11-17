@@ -22,43 +22,25 @@ use crate::{Error, Result};
 /// 销售单列表与详情的跨域只读组合服务。
 pub struct SalesOrderReadService {
     db: Database,
-    rbac: Option<Arc<AuthorizationService>>,
+    authorization: Arc<AuthorizationService>,
 }
 impl SalesOrderReadService {
-    /// 使用数据库句柄构造只读查询服务。
+    /// 使用数据库句柄及共享授权服务构造只读查询服务。
     ///
     /// # 参数
-    /// * `db` - 数据库。
+    /// * `db` - 业务数据库。
+    /// * `authorization` - 应用启动时完整装配的共享授权服务。
     ///
     /// # 返回
-    /// 返回未注入 RBAC 的服务。采购动作投影需要重验权限时，后续读取返回缺少授权源错误。
-    /// 构造本身不执行查询。
+    /// 返回可执行完整授权读取的服务；构造不执行查询。
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn new(db: Database) -> Self {
-        Self { db, rbac: None }
-    }
-    /// 使用数据库句柄和当前 RBAC 服务构造只读查询服务。
-    ///
-    /// # 参数
-    /// * `db` - 数据库。
-    /// * `rbac` - 当前 RBAC 服务。
-    ///
-    /// # 返回
-    /// 返回可投影采购动作访问资格的服务。构造不执行查询。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn with_rbac(db: Database, rbac: Arc<AuthorizationService>) -> Self {
-        Self { db, rbac: Some(rbac) }
+    pub fn new(db: Database, authorization: Arc<AuthorizationService>) -> Self {
+        Self { db, authorization }
     }
     fn sales(&self) -> erp_sales::service::sales_order::SalesOrderService {
         erp_sales::service::sales_order::SalesOrderService::new(self.db.clone())
-    }
-    /// 获取采购访问投影使用的授权源；未注入时保持原错误语义并拒绝放行。
-    fn require_rbac(&self) -> Result<&Arc<AuthorizationService>> {
-        self.rbac.as_ref().ok_or_else(|| Error::Internal("销售单审批绑定需要授权源".into()))
     }
 }
 /// 按销售业务性质显式选择审批对象类型，保留实物服务与卡券的独立主体。

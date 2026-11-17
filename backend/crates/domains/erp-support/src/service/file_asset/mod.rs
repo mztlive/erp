@@ -1,6 +1,7 @@
 //! 文件资产管理入口统一检查功能资格；已授权业务投影复用原执行器。
 mod command;
 mod governance;
+mod upload;
 
 use std::sync::Arc;
 

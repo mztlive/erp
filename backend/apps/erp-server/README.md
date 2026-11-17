@@ -45,6 +45,7 @@ src/
 ├── wiring/
 │   ├── application.rs        # Application：共享资源及业务能力工厂
 │   ├── application/          # 外部连接器、识别、导入等能力装配
+│   ├── authorization/        # 完整 Facts/Mapping 与共享授权服务装配
 │   ├── approval_dispatch/    # 审批动作与对象读取接线
 │   ├── data_transfer/        # 导入导出 Process 和业务读取接线
 │   └── ...                   # 消费方 Port 到提供方领域的 adapter
@@ -58,7 +59,7 @@ src/
 2. `wiring/` 持有共享资源并装配 Service、Process、ReadModel 和 Port；不得依赖 HTTP 类型、启动常驻循环或管理进程退出。
 3. `HttpState` 持有 HTTP 专属缓存与请求任务边界，通过 `application()` 访问业务装配。Worker 直接使用 `Application`。
 4. Handler 只提取协议输入、传递已认证身份、调用用例并包装响应。单域用例归拥有领域，跨域写入归所属编排库，跨域读取归 `erp-read-models`。
-5. 保持原有共享授权对象与每次独立授权对象的构造范围；禁止为简化装配扩大授权状态共享。
+5. HTTP 和 worker 各自在启动时调用 `wiring::authorization::build(db, rbac)`，将完整校验后的 `Arc<AuthorizationService>` 保存在 `Application`。`authorization()` 只克隆该 `Arc`；业务工厂注入同一实例。共享服务不得保存请求身份、事务、候选对象或授权结果。
 
 ## 执行与退出合同
 
@@ -77,19 +78,26 @@ Worker `/health` 表示进程存活，`/ready` 在排空时关闭；不得将其
 
 ## HTTP 与权限合同
 
-- 路由通过 `with_permission` 直接引用 `erp-permissions` 公共目录中登记的权限主常量；编码、分组和默认说明只维护一份。
+- 管理端由 JWT 确认身份，Handler 将当前身份传给受保护的 Service、Process 或 ReadModel。业务用例通过 `require` 或 `query` 在读取业务数据或写入前完成授权；仅功能权限操作使用 `AccessTarget::Operation`。
+- 路由通过 `permission_route(route, &permission)` 引用 `erp-permissions` 公共目录中登记的权限主常量。该包装仅提供构建元数据，运行时原样返回路由；编码、分组和默认说明只维护一份。
+- 业务附件在写入对象存储前调用固定业务准备入口检查完整功能资格；文件存储后的写事务按真实对象、来源或任务重新授权。该准备不签发对象凭证，也不额外要求独立文件上传菜单。
+- 静态选项、字典候选、期间口径及审计日志沿用各自业务入口资格。审计展示通过 `AuditLogReadService::new(db, authorization)`，在同一快照中完成资格检查、分页与计数；登录审计写入继续使用 `AuditLogService`。
+- 公开入口和供应商门户沿用既有认证链路，不以管理端权限元数据替代公开令牌或门户身份检查。
 - `route_descriptions.rs` 仅登记不同于默认值的接口说明，按 HTTP 方法及不含 `/admin` 的管理端路径匹配。`build_route_overrides.rs` 保存少量分组及展示权限差异，只参与生成，不改变鉴权权限。不存在或重复登记的接口差异使生成失败。
 - 请求与响应优先复用拥有领域或编排库 DTO；协议包装必须提供显式转换并说明原因。
 - `build.rs` 使用公共权限定义与 `src/http/routes/` 生成路由权限合同、后端白名单及前端权限目录。生成物不得手改。
 - 在 `backend/` 执行 `python3 scripts/generate-permissions.py` 可独立运行同一生成器；`--test` 执行目录与路由合同单元测试。`check-permissions-drift.sh` 使用独立生成结果比较文件，无需编译业务 crate。
-- 响应字段、HTTP 状态、错误文本、上传限制、限流窗口、路由路径及鉴权顺序保持既有合同。配置变更与错误分类遵循 [后端规则](../../AGENTS.md)。
+- 人员范围和权限检查接口使用 identity 的当前 DTO，不返回 `authorization_policy` 总分类。前端按 `configurable_actions` 控制编辑，按检查步骤展示已检查项和待检查项。
+- 响应字段、HTTP 状态、错误文本、上传限制、限流窗口及路由路径遵循各接口合同。配置变更与错误分类遵循 [后端规则](../../AGENTS.md)。
 
 ## 验证与历史材料
+
+开发和常规提交只检查受影响 crate；命令和触发条件以 [后端规则](../../AGENTS.md) 为准。跨层授权切换执行以下整体检查：
 
 ```bash
 env -u ERP_TEST_MONGO_URI cargo test -p erp-server -p config --lib --locked
 cargo check --workspace --locked
-cargo clippy -p erp-server -p config --all-targets --locked -- -D warnings
+cargo clippy -p erp-server -p config --lib --bins --locked -- -D warnings
 ./scripts/check-domain-boundaries.sh --cutover
 ./scripts/check-bpm-boundaries.sh
 ./scripts/check-permissions-drift.sh

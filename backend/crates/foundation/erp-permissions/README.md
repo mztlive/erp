@@ -25,10 +25,10 @@ assert_eq!(*permission, configured);
 2. 在所属模块定义 `const Permission`。相同权限编码通过常量引用复用，不重复调用构造函数定义相同编码。
 3. 独立权限加入该模块的 `ENTRIES`，填写公共分组及可复用说明。纯复用符号不重复登记独立权限。
 4. 新模块在 `src/lib.rs` 导出并登记 `MODULES`。公共目录不包含 HTTP 方法、路径或处理器。
-5. HTTP 路由直接借用公共 `ENTRIES` 登记的权限主常量。同一权限的接口复用该主常量，名称、分组及默认说明从公共目录读取；只有说明不同才在 server 的 `route_descriptions.rs` 登记差异。新增路由模块同步登记 server 的扫描清单。
+5. HTTP 路由通过 `permission_route(route, &permission)` 引用公共 `ENTRIES` 登记的权限主常量。同一权限的接口复用该主常量，名称、分组及默认说明从公共目录读取；只有说明不同才在 server 的 `route_descriptions.rs` 登记差异。新增路由模块同步登记 server 的扫描清单。
 6. 修改后运行下列检查并 review 生成结果。
 
-目录项保存 `&'static Permission`，不得另存一份权限编码字符串。HTTP 专属信息由 server 的差异记录补充，公共 crate 不提供接口包装或展示权限与鉴权权限的绑定类型。非路由资格登记在 `policy_permission`，由生成器补入展示目录。
+目录项保存 `&'static Permission`，不得另存一份权限编码字符串。HTTP 专属信息由 server 的差异记录补充，公共 crate 不提供接口包装或展示权限与鉴权权限的绑定类型。`permission_route` 只供生成器读取路由元数据；运行时由受保护业务用例调用 identity 的 `require` 或 `query` 完成授权。非路由资格登记在 `policy_permission`，由生成器补入展示目录。
 
 ## 生成与检查
 

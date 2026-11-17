@@ -23,9 +23,13 @@ pub async fn list(
     Path(user): Path<String>,
 ) -> Result<PersonScopeView> {
     Ok(ApiResponse::ok_with_data(
-        scope_configuration(state.application().db(), state.application().rbac())
-            .person_scopes(&user, &actor)
-            .await?,
+        scope_configuration(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        )
+        .person_scopes(&user, &actor)
+        .await?,
     ))
 }
 
@@ -42,8 +46,12 @@ pub async fn save(
     Path(user): Path<String>,
     Json(req): Json<SavePersonScopeRequest>,
 ) -> Result<()> {
-    scope_configuration(state.application().db(), state.application().rbac())
-        .save_person_scope(&user, req.normalized()?, &actor)
-        .await?;
+    scope_configuration(
+        state.application().db(),
+        state.application().rbac(),
+        state.application().authorization(),
+    )
+    .save_person_scope(&user, req.normalized()?, &actor)
+    .await?;
     Ok(ApiResponse::ok_with_data(()))
 }

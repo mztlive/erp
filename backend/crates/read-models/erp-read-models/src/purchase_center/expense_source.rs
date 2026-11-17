@@ -124,7 +124,7 @@ impl ExpenseSourceReadService {
         if params.scope_version.as_ref().is_some_and(|expected| expected != &version) {
             return Err(data_scope_changed("数据范围已变化，请从第一页刷新"));
         }
-        let sales = SalesOrderReadService::new(self.db.clone());
+        let sales = SalesOrderReadService::new(self.db.clone(), self.rbac.clone());
         let filter = SalesOrderFilter {
             search: sales.keyword_search(params.q.as_deref(), executor).await?,
             business_type: Some(BusinessType::GoodsService),
@@ -224,7 +224,7 @@ impl ExpenseSourceReadService {
         let (access, scope) = self.scope(actor, executor).await?;
         let order = self.authorized_order(id, &scope, executor).await?;
         let lines = self.detail_lines(&order, executor).await?;
-        let names = SalesOrderReadService::new(self.db.clone())
+        let names = SalesOrderReadService::new(self.db.clone(), self.rbac.clone())
             .customer_names_batch(&[order.customer_id.to_string()], executor)
             .await?;
         access.validate(executor).await?;

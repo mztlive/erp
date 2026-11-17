@@ -142,7 +142,7 @@ impl PurchaseOrderProcess {
             None,
             &req.idempotency_key,
         )?;
-        let authorization = self.require_rbac()?.clone();
+        let authorization = self.authorization.clone();
         let sales_order_id = parse_basis_sales_order_id(&req.basis_id)?;
         let transaction_result = self
             .basis_transaction(
@@ -815,7 +815,7 @@ impl PurchaseOrderProcess {
         actor: &AuditActor,
     ) -> Result<Option<CreatePurchaseOrderResult>> {
         let db = self.db.clone();
-        let authorization = self.require_rbac()?.clone();
+        let authorization = self.authorization.clone();
         let identity = identity.clone();
         let fingerprint = fingerprint.to_string();
         let actor = actor.clone();

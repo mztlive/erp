@@ -34,10 +34,12 @@ pub async fn customer_refund_update(
     Path(id): Path<String>,
     Json(req): Json<UpdateFinancialReturnRequest>,
 ) -> Result<CustomerRefundView> {
-    let view =
-        ReturnsProcess::new(state.application().db(), local_reverse_flow_ports(state.application().db()))
-            .update_customer_refund(&id, req, &actor)
-            .await?;
+    let view = ReturnsProcess::new(
+        state.application().db(),
+        local_reverse_flow_ports(state.application().db(), state.application().authorization()),
+    )
+    .update_customer_refund(&id, req, &actor)
+    .await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -60,10 +62,12 @@ pub async fn supplier_refund_update(
     Path(id): Path<String>,
     Json(req): Json<UpdateFinancialReturnRequest>,
 ) -> Result<SupplierRefundView> {
-    let view =
-        ReturnsProcess::new(state.application().db(), local_reverse_flow_ports(state.application().db()))
-            .update_supplier_refund(&id, req, &actor)
-            .await?;
+    let view = ReturnsProcess::new(
+        state.application().db(),
+        local_reverse_flow_ports(state.application().db(), state.application().authorization()),
+    )
+    .update_supplier_refund(&id, req, &actor)
+    .await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -86,10 +90,12 @@ pub async fn receipt_reversal_update(
     Path(id): Path<String>,
     Json(req): Json<UpdateFinancialReturnRequest>,
 ) -> Result<ReceiptReversalView> {
-    let view =
-        ReturnsProcess::new(state.application().db(), local_reverse_flow_ports(state.application().db()))
-            .update_receipt_reversal(&id, req, &actor)
-            .await?;
+    let view = ReturnsProcess::new(
+        state.application().db(),
+        local_reverse_flow_ports(state.application().db(), state.application().authorization()),
+    )
+    .update_receipt_reversal(&id, req, &actor)
+    .await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -112,9 +118,11 @@ pub async fn payment_reversal_update(
     Path(id): Path<String>,
     Json(req): Json<UpdateFinancialReturnRequest>,
 ) -> Result<PaymentReversalView> {
-    let view =
-        ReturnsProcess::new(state.application().db(), local_reverse_flow_ports(state.application().db()))
-            .update_payment_reversal(&id, req, &actor)
-            .await?;
+    let view = ReturnsProcess::new(
+        state.application().db(),
+        local_reverse_flow_ports(state.application().db(), state.application().authorization()),
+    )
+    .update_payment_reversal(&id, req, &actor)
+    .await?;
     Ok(ApiResponse::ok_with_data(view))
 }

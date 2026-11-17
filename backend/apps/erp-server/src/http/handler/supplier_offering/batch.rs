@@ -31,7 +31,7 @@ pub async fn revise(
     Json(request): Json<BatchRequest<Targeted<ReviseSupplierOfferingRequest>>>,
 ) -> Result<BatchResult> {
     Ok(ApiResponse::ok_with_data(
-        scoped_offering_process(state.application().db(), state.application().rbac())
+        scoped_offering_process(state.application().db(), state.application().authorization())
             .batch(request, &actor)
             .await?,
     ))
@@ -55,7 +55,7 @@ pub async fn availability(
     Json(request): Json<BatchRequest<Targeted<UpdateSupplierOfferingAvailabilityRequest>>>,
 ) -> Result<BatchResult> {
     Ok(ApiResponse::ok_with_data(
-        scoped_offering_process(state.application().db(), state.application().rbac())
+        scoped_offering_process(state.application().db(), state.application().authorization())
             .batch(request, &actor)
             .await?,
     ))

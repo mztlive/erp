@@ -142,6 +142,18 @@ pub const APPROVAL_COPY_READ: Permission = Permission::new("approval_copy", "rea
 /// 在采购维护范围内以同角色退货资格取得退货来源。
 pub const PURCHASE_RETURN_SOURCE: Permission = Permission::new("purchase_order", "return_source");
 
+/// 兼容既有销售时间线展示资格的隐藏权限，不加入角色配置目录。
+pub const SALES_CHANGE_DETAIL: Permission = Permission::new("sales_change_order", "detail");
+
+/// 查询实际经营盈亏的期间口径，仅要求成本列表功能资格。
+pub const PROFIT_LOSS_PERIOD_BASIS: Permission =
+    Permission::new("cost_entry", "profit_loss_period_basis_read");
+/// 读取采购编辑交付资料，独立要求修改资格并沿用详情对象范围。
+pub const PURCHASE_DELIVERY_OPTIONS_READ: Permission =
+    Permission::new("purchase_order", "delivery_options_read");
+/// 按销售列表范围读取客户质量历史，同时独立要求客户列表功能资格。
+pub const CUSTOMER_QUALITY_HISTORY: Permission = Permission::new("sales_order", "customer_quality_history");
+
 /// 按销售与客户各自当前范围读取客户质量订单交集。
 pub const CUSTOMER_QUALITY_CURRENT: Permission = Permission::new("sales_order", "customer_quality_current");
 /// 只读询价需求商品模板，沿用创建与商品选择的同角色资格。
@@ -239,6 +251,14 @@ pub const PURCHASE_CHANGE_VOIDED_RESULT_READ: Permission =
 /// 读取供应连接商品目录，保持连接详情资格与供应商对象读取范围的独立检查。
 pub const CONNECTION_CATALOG_READ: Permission = Permission::new("supplier_api_connection", "catalog_read");
 
+/// 读取协议目录前校验原入口资格与真实连接来源。
+pub const CONNECTION_PROTOCOL_READ: Permission =
+    Permission::new("supplier_api_connection", "protocol_read_target");
+
+/// 签发技术绑定票据前校验原入口资格与真实连接来源。
+pub const CONNECTION_REFERENCE_TICKETS: Permission =
+    Permission::new("supplier_api_connection", "reference_tickets_target");
+
 /// 按审批定义读取资格及真实单据类型查询定义期候选人员。
 pub const APPROVAL_DEFINITION_ASSIGNEES: Permission =
     Permission::new("approval_process", "definition_assignees");
@@ -302,3 +322,87 @@ pub const DATA_TRANSFER_OFFERING_REVISE: Permission = Permission::new("data_tran
 /// 核验供给批量可供维护的功能资格；实际对象与数据范围由所属业务入口授权。
 pub const DATA_TRANSFER_OFFERING_AVAILABILITY: Permission =
     Permission::new("data_transfer", "offering_availability");
+
+/// 以原库存动作的完整资格和范围核验真实仓库，不授予库存对象访问。
+pub const INVENTORY_BALANCE_WAREHOUSES: Permission =
+    Permission::new("inventory_warehouse", "stock_balance_list");
+/// 以原库存动作的完整资格和范围核验真实仓库，不授予库存对象访问。
+pub const INVENTORY_BALANCE_DETAIL_WAREHOUSES: Permission =
+    Permission::new("inventory_warehouse", "stock_balance_detail");
+/// 以原库存动作的完整资格和范围核验真实仓库，不授予库存对象访问。
+pub const INVENTORY_MOVEMENT_WAREHOUSES: Permission =
+    Permission::new("inventory_warehouse", "stock_movement_list");
+/// 以原库存动作的完整资格和范围核验真实仓库，不授予库存对象访问。
+pub const INVENTORY_RESERVATION_WAREHOUSES: Permission =
+    Permission::new("inventory_warehouse", "stock_reservation_list");
+/// 以原库存动作的完整资格和范围核验真实仓库，不授予库存对象访问。
+pub const INVENTORY_ADJUSTMENT_WAREHOUSES: Permission =
+    Permission::new("inventory_warehouse", "stock_adjustment_list");
+/// 以原库存动作的完整资格和范围核验真实仓库，不授予库存对象访问。
+pub const INVENTORY_ADJUSTMENT_DETAIL_WAREHOUSES: Permission =
+    Permission::new("inventory_warehouse", "stock_adjustment_detail");
+/// 以原库存动作的完整资格和范围核验真实仓库，不授予库存对象访问。
+pub const INVENTORY_CREATE_WAREHOUSES: Permission =
+    Permission::new("inventory_warehouse", "stock_adjustment_create");
+/// 以原库存动作的完整资格和范围核验真实仓库，不授予库存对象访问。
+pub const INVENTORY_UPDATE_WAREHOUSES: Permission =
+    Permission::new("inventory_warehouse", "stock_adjustment_update");
+
+/// 回款附件存储前保留原提交入口功能资格，不证明对象或来源资格。
+pub const FINANCE_UPLOAD_CUSTOMER_RECEIPT: Permission =
+    Permission::new("customer_receipt", "prepare_attachment_upload");
+
+/// 发票草稿附件存储前检查创建功能资格。
+pub const FINANCE_UPLOAD_INVOICE_DRAFT: Permission =
+    Permission::new("invoice", "prepare_draft_attachment_upload");
+
+/// 开票附件存储前检查过账功能资格，不替代精确任务授权。
+pub const FINANCE_UPLOAD_INVOICE_POST: Permission =
+    Permission::new("invoice", "prepare_post_attachment_upload");
+
+/// 进项发票附件存储前检查原登记入口功能资格。
+pub const FINANCE_UPLOAD_PURCHASE_INVOICE: Permission =
+    Permission::new("purchase_invoice_allocation", "prepare_attachment_upload");
+
+/// 附加费用凭证存储前检查完整同角色功能资格。
+pub const FINANCE_UPLOAD_EXTRA_COST: Permission = Permission::new("cost_entry", "prepare_attachment_upload");
+
+/// 付款回单存储前检查付款入口功能资格，不替代当前任务或来源授权。
+pub const FINANCE_UPLOAD_PURCHASE_PAYMENT: Permission =
+    Permission::new("purchase_payment_request", "prepare_attachment_upload");
+
+/// 商品新增附件存储前检查创建入口功能资格。
+pub const CATALOG_CREATE_ATTACHMENT_UPLOAD: Permission =
+    Permission::new("product", "prepare_create_attachment_upload");
+
+/// 商品修改附件存储前检查更新入口功能资格。
+pub const CATALOG_UPDATE_ATTACHMENT_UPLOAD: Permission =
+    Permission::new("product", "prepare_update_attachment_upload");
+
+/// 供应商新增附件存储前检查创建入口功能资格。
+pub const SUPPLIER_CREATE_ATTACHMENT_UPLOAD: Permission =
+    Permission::new("supplier", "prepare_create_attachment_upload");
+
+/// 供应商修改附件存储前检查更新入口功能资格。
+pub const SUPPLIER_UPDATE_ATTACHMENT_UPLOAD: Permission =
+    Permission::new("supplier", "prepare_update_attachment_upload");
+
+/// 采购费用附件存储前检查原确认入口功能资格。
+pub const PURCHASE_EXPENSE_ATTACHMENT_UPLOAD: Permission =
+    Permission::new("purchase_expense_occurrence", "prepare_attachment_upload");
+
+/// 电子交付附件存储前检查完整同角色功能资格。
+pub const ELECTRONIC_DELIVERY_ATTACHMENT_UPLOAD: Permission =
+    Permission::new("electronic_delivery", "prepare_attachment_upload");
+
+/// 服务履约附件存储前检查完整同角色功能资格。
+pub const SERVICE_FULFILLMENT_ATTACHMENT_UPLOAD: Permission =
+    Permission::new("service_fulfillment", "prepare_attachment_upload");
+
+/// 品牌新增附件存储前检查创建入口功能资格。
+pub const CATALOG_BRAND_CREATE_ATTACHMENT_UPLOAD: Permission =
+    Permission::new("product_brand", "prepare_create_attachment_upload");
+
+/// 品牌修改附件存储前检查更新入口功能资格。
+pub const CATALOG_BRAND_UPDATE_ATTACHMENT_UPLOAD: Permission =
+    Permission::new("product_brand", "prepare_update_attachment_upload");

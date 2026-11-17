@@ -16,17 +16,22 @@ use crate::http::state::HttpState;
 /// 查询失败时返回统一错误。
 pub async fn company_list(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<CompanyListParams>,
 ) -> Result<PageView<CompanyView>> {
-    Ok(ApiResponse::ok_with_data(state.application().party_service().company_list(&params).await?))
+    Ok(ApiResponse::ok_with_data(state.application().party_service().company_list(&actor, &params).await?))
 }
 
 /// 回显指定公司。
 ///
 /// # Errors
 /// 公司不存在或查询失败时返回统一错误。
-pub async fn company_detail(State(state): State<HttpState>, Path(id): Path<String>) -> Result<CompanyView> {
-    Ok(ApiResponse::ok_with_data(state.application().party_service().company_detail(&id).await?))
+pub async fn company_detail(
+    State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+) -> Result<CompanyView> {
+    Ok(ApiResponse::ok_with_data(state.application().party_service().company_detail(&actor, &id).await?))
 }
 
 /// 创建公司身份及名称修订。

@@ -31,9 +31,12 @@ use crate::wiring::local_reverse_flow_ports;
 /// 业务处理或数据读取失败时返回对应错误。
 pub async fn receipt_reversal_detail(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<ReceiptReversalView> {
-    let view = ReturnsReadService::new(state.application().db()).receipt_reversal_detail(&id).await?;
+    let view = ReturnsReadService::new(state.application().db(), state.application().authorization())
+        .receipt_reversal_detail(&id, &actor)
+        .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -55,10 +58,12 @@ pub async fn receipt_reversal_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateReceiptReversalRequest>,
 ) -> Result<ReceiptReversalView> {
-    let view =
-        ReturnsProcess::new(state.application().db(), local_reverse_flow_ports(state.application().db()))
-            .create_receipt_reversal(req, &actor)
-            .await?;
+    let view = ReturnsProcess::new(
+        state.application().db(),
+        local_reverse_flow_ports(state.application().db(), state.application().authorization()),
+    )
+    .create_receipt_reversal(req, &actor)
+    .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -80,10 +85,12 @@ pub async fn receipt_reversal_commit(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CommitReceiptReversalRequest>,
 ) -> Result<ReceiptReversalView> {
-    let view =
-        ReturnsProcess::new(state.application().db(), local_reverse_flow_ports(state.application().db()))
-            .commit_receipt_reversal(req, &actor)
-            .await?;
+    let view = ReturnsProcess::new(
+        state.application().db(),
+        local_reverse_flow_ports(state.application().db(), state.application().authorization()),
+    )
+    .commit_receipt_reversal(req, &actor)
+    .await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -106,10 +113,12 @@ pub async fn receipt_reversal_submit(
     Path(id): Path<String>,
     Json(req): Json<SubmitReceiptReversalRequest>,
 ) -> Result<ReceiptReversalView> {
-    let view =
-        ReturnsProcess::new(state.application().db(), local_reverse_flow_ports(state.application().db()))
-            .submit_receipt_reversal(&id, req, &actor)
-            .await?;
+    let view = ReturnsProcess::new(
+        state.application().db(),
+        local_reverse_flow_ports(state.application().db(), state.application().authorization()),
+    )
+    .submit_receipt_reversal(&id, req, &actor)
+    .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -133,10 +142,12 @@ pub async fn receipt_reversal_cancel_approval(
     Path(id): Path<String>,
     Json(req): Json<CancelReceiptReversalApprovalRequest>,
 ) -> Result<ReceiptReversalView> {
-    let view =
-        ReturnsProcess::new(state.application().db(), local_reverse_flow_ports(state.application().db()))
-            .cancel_receipt_reversal_approval(&id, req, &actor)
-            .await?;
+    let view = ReturnsProcess::new(
+        state.application().db(),
+        local_reverse_flow_ports(state.application().db(), state.application().authorization()),
+    )
+    .cancel_receipt_reversal_approval(&id, req, &actor)
+    .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }

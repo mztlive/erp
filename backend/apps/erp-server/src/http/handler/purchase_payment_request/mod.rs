@@ -26,13 +26,17 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
 fn reads(state: &HttpState) -> PurchasePaymentRequestReadService {
-    PurchasePaymentRequestReadService::new(state.application().db(), state.application().rbac())
+    PurchasePaymentRequestReadService::new(state.application().db(), state.application().authorization())
 }
 
 fn process(state: &HttpState) -> PurchasePaymentRequestProcess {
     PurchasePaymentRequestProcess::new(
         state.application().db(),
-        finance_posting_ports(state.application().db(), state.application().rbac()),
+        finance_posting_ports(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        ),
     )
 }
 

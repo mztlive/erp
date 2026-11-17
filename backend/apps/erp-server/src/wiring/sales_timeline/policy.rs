@@ -1,5 +1,7 @@
-use erp_identity::Permission;
-use erp_read_models::Result;
+use erp_permissions::{
+    Permission, fulfillment, internal, inventory, payable, purchase_order, purchase_payment_request,
+    receivable, returns, sales_order,
+};
 use erp_workflow::DocumentType;
 
 /// 组合已有详情入口的读取策略；退货单不属于审批来源适配器。
@@ -28,14 +30,31 @@ impl ReadPolicy {
         }
     }
 
-    pub(super) fn permission(&self, kind: DocumentType) -> Result<Permission> {
-        let resource = if kind == DocumentType::VoucherSalesOrder { "sales_order" } else { kind.as_str() };
-        // 这两个详情入口沿用 list 权限，权限目录中没有对应的 detail 动作。
-        let action = match kind {
-            DocumentType::ElectronicDelivery | DocumentType::ServiceFulfillment => "list",
-            _ => "detail",
-        };
-        Ok(Permission::parse(format!("{resource}:{action}"))?)
+    pub(super) fn permission(&self, kind: DocumentType) -> Permission {
+        use DocumentType::*;
+        match kind {
+            SalesOrder | VoucherSalesOrder => sales_order::DETAIL,
+            SalesChangeOrder => internal::SALES_CHANGE_DETAIL,
+            PurchaseOrder => purchase_order::DETAIL,
+            PurchaseChangeOrder => purchase_order::PURCHASE_CHANGE_DETAIL,
+            PurchaseReceipt => fulfillment::PURCHASE_RECEIPT_PURCHASE_RECEIPT_DETAIL,
+            Delivery => fulfillment::DELIVERY_DELIVERY_DETAIL,
+            ElectronicDelivery => fulfillment::ELECTRONIC_DELIVERY_ELECTRONIC_DELIVERY_LIST,
+            ServiceFulfillment => fulfillment::SERVICE_FULFILLMENT_SERVICE_FULFILLMENT_LIST,
+            CustomerAcceptance => fulfillment::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_DETAIL,
+            StockAdjustment => inventory::STOCK_ADJUSTMENT_DETAIL,
+            CustomerReceipt => receivable::CUSTOMER_RECEIPT_DETAIL,
+            SalesInvoiceRequest => receivable::INVOICE_REQUEST_INVOICE_REQUEST_DETAIL,
+            PurchasePaymentRequest => purchase_payment_request::DETAIL,
+            SupplierPayment => payable::SUPPLIER_PAYMENT_DETAIL,
+            Invoice => receivable::INVOICE_DETAIL,
+            SalesReturnCase => returns::SALES_RETURN_SALES_RETURN_CASE_DETAIL,
+            PurchaseReturnOrder => returns::PURCHASE_RETURN_PURCHASE_RETURN_ORDER_DETAIL,
+            CustomerRefund => returns::CUSTOMER_REFUND_CUSTOMER_REFUND_DETAIL,
+            SupplierRefund => returns::SUPPLIER_REFUND_SUPPLIER_REFUND_DETAIL,
+            ReceiptReversal => returns::RECEIPT_REVERSAL_RECEIPT_REVERSAL_DETAIL,
+            PaymentReversal => returns::PAYMENT_REVERSAL_PAYMENT_REVERSAL_DETAIL,
+        }
     }
 }
 
@@ -51,7 +70,7 @@ mod tests {
         ] {
             let policy = ReadPolicy::for_document(kind);
             assert_eq!(policy, expected);
-            let permission = policy.permission(kind).unwrap();
+            let permission = policy.permission(kind);
             assert!(Permission::parse(grant).unwrap().covers(&permission));
             assert!(!Permission::parse("sales_order:detail").unwrap().covers(&permission));
         }
@@ -68,7 +87,7 @@ mod tests {
         ] {
             let policy = ReadPolicy::for_document(kind);
             assert_eq!(policy, ReadPolicy::Fulfillment);
-            let permission = policy.permission(kind).unwrap();
+            let permission = policy.permission(kind);
             assert!(Permission::parse(grant).unwrap().covers(&permission));
             assert!(!Permission::parse("sales_order:detail").unwrap().covers(&permission));
         }

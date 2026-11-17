@@ -8,7 +8,7 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use erp_customer::CustomerAccess;
 use erp_identity::AuthorizationService;
-use erp_permissions::sales_order as sales_order_permissions;
+use erp_permissions::internal;
 use erp_sales::repository::sales_order::scope::SalesReadScope;
 use mongodb::Database;
 use persistence_core::Executor;
@@ -40,7 +40,7 @@ impl QualityAccess {
         Self { db, rbac }
     }
 
-    /// 在调用方事务内证明历史口径的销售读取范围。
+    /// 在调用方事务内证明历史口径的销售范围及独立客户列表资格。
     ///
     /// # 参数
     /// * `actor` - 已认证操作人
@@ -57,7 +57,7 @@ impl QualityAccess {
         executor: &mut dyn Executor,
     ) -> Result<(SalesReadContext, SalesReadScope)> {
         SalesAccess::new(self.db.clone(), self.rbac.clone())
-            .resolve(actor, &sales_order_permissions::LIST, executor)
+            .resolve(actor, &internal::CUSTOMER_QUALITY_HISTORY, executor)
             .await
     }
 }

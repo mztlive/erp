@@ -206,13 +206,11 @@ pub async fn review_download(
     Path((request_id, file_id)): Path<(String, String)>,
 ) -> StdResult<Response, Error> {
     let portal = process(&state);
-    let before: FileAssetView =
-        portal.asset_review_access(&request_id, &file_id, &actor, &mut NoTransaction).await?.into();
+    let before: FileAssetView = portal.asset_review_access(&request_id, &file_id, &actor).await?.into();
     require_portal_type(&before.content_type)?;
     let (view, bytes) = read_asset(&state, &actor, &file_id).await?;
     require_same_asset(&before, &view)?;
-    let after: FileAssetView =
-        portal.asset_review_access(&request_id, &file_id, &actor, &mut NoTransaction).await?.into();
+    let after: FileAssetView = portal.asset_review_access(&request_id, &file_id, &actor).await?.into();
     require_same_asset(&view, &after)?;
     revalidate_asset(&state, &view).await?;
     asset_download_response(&view, bytes)

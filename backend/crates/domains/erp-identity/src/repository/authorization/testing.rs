@@ -58,6 +58,9 @@ impl AccessMapping for Mapping {
             AccessFact::AssignedTo => doc! {"assignee":context.actor.id()},
             AccessFact::Participant => doc! {"participant":context.actor.id()},
             AccessFact::Completed(completed) => doc! {"completed":completed},
+            AccessFact::WarehouseIn(ids) => {
+                doc! {"warehouse_id":{"$in":ids.iter().cloned().collect::<Vec<_>>() }}
+            },
             _ => return Err(Error::ValidationError("fixture unsupported predicate".into())),
         }))
     }

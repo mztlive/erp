@@ -16,6 +16,7 @@ use erp_notification::NotificationService;
 use erp_order_to_cash::sales_inquiry::SalesInquiryProcess;
 use erp_party::SensitiveDataCodec;
 use erp_read_models::approval_subject::ApprovalUpgradeReadModel;
+use erp_read_models::contract_attachment::ContractAttachmentReadService;
 use erp_read_models::customer_center::profile::CustomerProfileReadService;
 use erp_read_models::integration_center::IntegrationCenterReadService;
 use erp_read_models::supplier_center::SupplierFulfillmentListReadService;
@@ -43,11 +44,10 @@ use tokio::sync::watch;
 use super::notification::ApprovalNotifications;
 use crate::wiring::approval_dispatch::ApprovalActionRegistry;
 use crate::wiring::catalog_supply_query::MongoCatalogSupplyQuery;
-use crate::wiring::identity::shared_rbac_service;
 use crate::wiring::supplier_api::UnavailableSupplierApiGateway;
 use crate::wiring::supplier_fulfillment_gateway::UnavailableSupplierGateway;
 use crate::wiring::workflow::{WorkflowAuth, work_item_service, workflow_audit, workflow_auth};
-use crate::wiring::{contract_template_service, supplier_access};
+use crate::wiring::{contract_access, contract_template_service};
 
 mod demo_data;
 mod supplier_connectors;
@@ -138,6 +138,7 @@ pub struct Application {
     db: Database,
     config: SafeConfig,
     rbac: SharedRbacService,
+    authorization: Arc<AuthorizationService>,
     storage: Arc<S3Storage>,
     sensitive_data: Arc<SensitiveDataCodec>,
     approval_runtime_service: Arc<ApprovalRuntimeService<WorkflowAuth>>,
@@ -149,15 +150,15 @@ pub struct Application {
 }
 
 impl Application {
-    /// 返回统一权限入口，使用服务端固定登记。
+    /// 返回进程共享的统一授权服务。
     /// # 参数
     /// 无。
     /// # 返回
-    /// 账号与功能资格服务；对象及查询由所属领域登记。
+    /// 进程启动时通过完整绑定校验构造的 `Arc<AuthorizationService>`。
     /// # 错误
     /// 不执行 I/O。
-    pub fn authorization(&self) -> AuthorizationService {
-        super::authorization::authorization_service(self.db(), self.rbac())
+    pub fn authorization(&self) -> Arc<AuthorizationService> {
+        Arc::clone(&self.authorization)
     }
 
     /// 返回启动时装配的蛋糕叔叔连接，缺省配置保持关闭。
@@ -193,11 +194,15 @@ impl Application {
         let sensitive_data =
             Arc::new(SensitiveDataCodec::from_secret(config.snapshot().app.secret.as_bytes()));
         let rbac = crate::wiring::identity::shared_rbac_service(db.clone());
-        let approval_action_port = Arc::new(ApprovalActionRegistry::new(db.clone(), Arc::clone(&rbac)));
+        let authorization = crate::wiring::authorization::build(db.clone(), Arc::clone(&rbac))
+            .expect("完整统一授权实现绑定必须有效");
+        let approval_action_port =
+            Arc::new(ApprovalActionRegistry::new(db.clone(), Arc::clone(&rbac), Arc::clone(&authorization)));
         let approval_runtime_service = Arc::new(ApprovalRuntimeService::with_ports(
             db.clone(),
             rbac.clone(),
-            workflow_auth(db.clone(), Arc::clone(&rbac)),
+            Arc::clone(&authorization),
+            workflow_auth(db.clone(), Arc::clone(&rbac), Arc::clone(&authorization)),
             approval_action_port,
             Arc::new(ApprovalUpgradeReadModel::new(db.clone())),
             workflow_audit(db.clone()),
@@ -215,6 +220,7 @@ impl Application {
             db,
             config,
             rbac,
+            authorization,
             storage: Arc::new(storage),
             sensitive_data,
             approval_runtime_service,
@@ -279,8 +285,8 @@ impl Application {
     pub fn sales_inquiry_process(&self) -> SalesInquiryProcess {
         SalesInquiryProcess::new(
             self.db(),
-            self.rbac(),
-            crate::wiring::sales::sales_services(self.db(), self.rbac()),
+            self.authorization(),
+            crate::wiring::sales::sales_services(self.db(), self.rbac(), self.authorization()),
         )
     }
 
@@ -290,6 +296,7 @@ impl Application {
             self.db(),
             crate::wiring::support_audit::MongoSupportAudit::shared(self.db()),
             crate::wiring::support_documents::MongoBusinessDocument::shared(self.db()),
+            self.authorization(),
         )
     }
 
@@ -305,7 +312,7 @@ impl Application {
             self.db(),
             crate::wiring::support_audit::MongoSupportAudit::shared(self.db()),
             crate::wiring::support_documents::MongoBusinessDocument::shared(self.db()),
-            self.rbac(),
+            self.authorization(),
         )
     }
 
@@ -314,6 +321,7 @@ impl Application {
         SourceRegistryService::new(
             self.db(),
             crate::wiring::support_audit::MongoSupportAudit::shared(self.db()),
+            self.authorization(),
         )
     }
 
@@ -343,12 +351,12 @@ impl Application {
     /// # 错误
     /// 构造不执行 I/O。
     pub fn integration_resolution(&self) -> IntegrationResolutionProcess {
-        let work_items = integration_work_items(self.db());
+        let work_items = integration_work_items(self.db(), self.rbac(), self.authorization());
         IntegrationResolutionProcess::new(
             self.db(),
             Arc::clone(&self.integration_evidence),
-            IntegrationAccess::new(self.db(), self.rbac()),
-            Arc::new(integration_identity(self.db())),
+            IntegrationAccess::new(self.db(), self.authorization()),
+            self.authorization(),
             Arc::new(move || -> Arc<dyn CatalogWorkItems> { Arc::new(work_items()) }),
         )
     }
@@ -364,7 +372,7 @@ impl Application {
         IntegrationCenterReadService::new(
             self.db(),
             Arc::clone(&self.integration_evidence),
-            IntegrationAccess::new(self.db(), self.rbac()),
+            IntegrationAccess::new(self.db(), self.authorization()),
         )
     }
 
@@ -379,8 +387,8 @@ impl Application {
     ) -> erp_supplier_catalog::supply_governance::SupplierApiGovernanceProcess {
         erp_supplier_catalog::supply_governance::SupplierApiGovernanceProcess::new(
             self.db(),
-            self.rbac(),
-            crate::wiring::catalog_services(self.db(), self.rbac()),
+            self.authorization(),
+            crate::wiring::catalog_services(self.db(), self.rbac(), self.authorization()),
         )
         .with_reference_registry(Arc::clone(&self.external_connectors.supplier_reference_registry))
         .with_gateway(Arc::clone(&self.external_connectors.supplier_api))
@@ -390,10 +398,12 @@ impl Application {
     pub fn supplier_api_read_service(
         &self,
     ) -> erp_read_models::supplier_center::supplier_api::SupplierApiReadService {
-        erp_read_models::supplier_center::supplier_api::SupplierApiReadService::new(self.db(), self.rbac())
-            .with_reference_registry(Arc::clone(&self.external_connectors.supplier_reference_registry))
-            .with_gateway(Arc::clone(&self.external_connectors.supplier_api))
-            .with_supplier_access(supplier_access(self.db(), self.rbac()))
+        erp_read_models::supplier_center::supplier_api::SupplierApiReadService::new(
+            self.db(),
+            self.authorization(),
+        )
+        .with_reference_registry(Arc::clone(&self.external_connectors.supplier_reference_registry))
+        .with_gateway(Arc::clone(&self.external_connectors.supplier_api))
     }
 
     /// 注入实际任务授权读取，构造不执行授权或查询。
@@ -403,6 +413,7 @@ impl Application {
         crate::wiring::workflow::work_item_authorization::WorkItemAuthorizationAdapter::new(
             self.db(),
             self.rbac(),
+            self.authorization(),
         )
     }
 
@@ -417,8 +428,9 @@ impl Application {
         erp_read_models::catalog_center::CatalogCenterReadService::new(
             self.db(),
             Arc::clone(&self.catalog_supply_query),
-            crate::wiring::catalog_access(self.db(), self.rbac()),
+            crate::wiring::catalog_access(self.db(), self.authorization()),
             erp_read_models::catalog_center::MongoProductProcurementOwners::shared(self.db()),
+            self.authorization(),
         )
     }
 
@@ -429,7 +441,8 @@ impl Application {
         erp_supplier_catalog::supplier_connection_execution::SupplierConnectionExecutionProcess::new(
             self.db(),
             Arc::clone(&self.external_connectors.supplier_api),
-            crate::wiring::scoped_catalog_service(self.db(), self.rbac()),
+            crate::wiring::scoped_catalog_service(self.db(), self.authorization()),
+            self.authorization(),
         )
     }
 
@@ -449,6 +462,7 @@ impl Application {
                 Arc::clone(runtime),
                 self.sensitive_data(),
                 Arc::new(SupplierDepositFundsAdapter::new(self.db())),
+                self.authorization(),
             )
         })
     }
@@ -485,7 +499,7 @@ impl Application {
             erp_supplier_orders::supplier_order_tracking::SupplierOrderTrackingProcess::new(
                 self.db(),
                 Arc::clone(runtime),
-                crate::wiring::fulfillment_identity_factory(self.db()),
+                self.authorization(),
             )
         })
     }
@@ -527,7 +541,7 @@ impl Application {
 
     /// 返回供应商履约的本域查询与持久化服务。
     pub fn supplier_fulfillment_service(&self) -> SupplierFulfillmentService {
-        crate::wiring::scoped_fulfillment_service(self.db(), self.rbac())
+        crate::wiring::scoped_fulfillment_service(self.db(), self.authorization())
             .with_registry(Arc::clone(&self.external_connectors.supplier_reference_registry))
     }
 
@@ -544,9 +558,9 @@ impl Application {
         erp_fulfillment_execution::supply_execution::SupplierFulfillmentProcess::new(
             self.db(),
             Arc::clone(&self.external_connectors.supplier_fulfillment),
-            crate::wiring::fulfillment_order_access(self.db(), self.rbac()),
+            crate::wiring::fulfillment_order_access(self.db(), self.authorization()),
             crate::wiring::MongoFulfillmentExceptionHandlers::shared(self.db()),
-            crate::wiring::supplier_fulfillment_identity_factory(self.db()),
+            crate::wiring::supplier_fulfillment_identity(self.db(), self.rbac(), self.authorization()),
         )
         .with_registry(Arc::clone(&self.external_connectors.supplier_reference_registry))
     }
@@ -574,37 +588,37 @@ impl Application {
 
     /// Party identity service with audit and supplier-role adapters.
     pub fn party_service(&self) -> erp_party::PartyService {
-        crate::wiring::party_service(self.db())
+        crate::wiring::party_service(self.db(), self.authorization())
     }
 
     /// Party contact service with composition adapters.
     pub fn party_contact_service(&self) -> erp_party::PartyContactService {
-        crate::wiring::party_contact_service(self.db(), self.sensitive_data())
+        crate::wiring::party_contact_service(self.db(), self.sensitive_data(), self.authorization())
     }
 
     /// Party address service with composition adapters.
     pub fn party_address_service(&self) -> erp_party::PartyAddressService {
-        crate::wiring::party_address_service(self.db(), self.sensitive_data())
+        crate::wiring::party_address_service(self.db(), self.sensitive_data(), self.authorization())
     }
 
     /// Party bank-account service with composition adapters.
     pub fn party_bank_account_service(&self) -> erp_party::PartyBankAccountService {
-        crate::wiring::party_bank_account_service(self.db(), self.sensitive_data())
+        crate::wiring::party_bank_account_service(self.db(), self.sensitive_data(), self.authorization())
     }
 
     /// Party tax-profile service with composition adapters.
     pub fn party_tax_profile_service(&self) -> erp_party::PartyTaxProfileService {
-        crate::wiring::party_tax_profile_service(self.db())
+        crate::wiring::party_tax_profile_service(self.db(), self.authorization())
     }
 
     /// Customer account service with composition adapters.
     pub fn customer_service(&self) -> erp_customer::CustomerService {
-        crate::wiring::scoped_customer_service(self.db(), self.rbac())
+        crate::wiring::scoped_customer_service(self.db(), self.authorization())
     }
 
     /// Customer assignment service with composition adapters.
     pub fn customer_assignment_service(&self) -> erp_customer::CustomerAssignmentService {
-        crate::wiring::scoped_customer_assignment_service(self.db(), self.rbac())
+        crate::wiring::scoped_customer_assignment_service(self.db(), self.authorization())
     }
 
     /// Customer profile root process.
@@ -612,7 +626,8 @@ impl Application {
         erp_master_data::CustomerProfileProcess::new(
             self.db(),
             self.sensitive_data(),
-            crate::wiring::customer_access(self.db(), self.rbac()),
+            crate::wiring::customer_access(self.db(), self.authorization()),
+            self.authorization(),
         )
     }
 
@@ -624,7 +639,7 @@ impl Application {
     /// # 错误
     /// 构造不执行 I/O。
     pub fn customer_profile_read_service(&self) -> CustomerProfileReadService {
-        let authorization = Arc::new(self.authorization());
+        let authorization = self.authorization();
         CustomerProfileReadService::new(
             self.db(),
             self.sensitive_data(),
@@ -646,7 +661,11 @@ impl Application {
 
     /// Supplier list/detail service with party facts and reveal tokens.
     pub fn supplier_service(&self) -> erp_supplier::SupplierService {
-        crate::wiring::scoped_supplier_service_with_sensitive(self.db(), self.rbac(), self.sensitive_data())
+        crate::wiring::scoped_supplier_service_with_sensitive(
+            self.db(),
+            self.authorization(),
+            self.sensitive_data(),
+        )
     }
 
     /// Supplier profile root process.
@@ -654,19 +673,19 @@ impl Application {
         erp_master_data::SupplierProfileProcess::new(
             self.db(),
             self.sensitive_data(),
-            self.rbac(),
-            crate::wiring::supplier_access(self.db(), self.rbac()),
+            self.authorization(),
+            crate::wiring::supplier_access(self.db(), self.authorization()),
         )
     }
 
     /// Catalog domain service with audit and file-asset adapters.
     pub fn catalog_service(&self) -> erp_catalog::CatalogService {
-        crate::wiring::scoped_catalog_service(self.db(), self.rbac())
+        crate::wiring::scoped_catalog_service(self.db(), self.authorization())
     }
 
     /// Warehouse domain service with identity, audit and fingerprint adapters.
     pub fn warehouse_service(&self) -> erp_warehouse::WarehouseService {
-        crate::wiring::warehouse_service(self.db(), self.rbac())
+        crate::wiring::warehouse_service(self.db(), self.rbac(), self.authorization())
     }
 
     /// 演示主数据服务。是否允许写入由配置 `demo.master_data` 决定。
@@ -680,6 +699,7 @@ impl Application {
             self.db(),
             self.demo_runtime_ports(),
             self.rbac(),
+            self.authorization(),
             self.config_snapshot().demo.master_data_enabled(),
             self.storage().clone(),
             self.config_snapshot().app.secret.as_bytes(),
@@ -688,7 +708,22 @@ impl Application {
 
     /// 装配现有合同查询与终止服务。
     pub fn contract_service(&self) -> erp_contract::ContractService {
-        crate::wiring::scoped_contract_service(self.db(), self.rbac())
+        crate::wiring::scoped_contract_service(self.db(), self.authorization())
+    }
+
+    /// 在同一快照装配合同授权、修订文件关联与文件资产读取。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 合同附件元数据及预览读取用例。
+    /// # 错误
+    /// 构造不执行I/O。
+    pub fn contract_attachments(&self) -> ContractAttachmentReadService {
+        ContractAttachmentReadService::new(
+            self.db(),
+            contract_access(self.db(), self.authorization()),
+            self.file_asset_service(),
+        )
     }
 
     /// 装配合同模板和领号服务。
@@ -699,32 +734,31 @@ impl Application {
     /// # 错误
     /// 无。
     pub fn contract_template_service(&self) -> ContractTemplateService {
-        contract_template_service(self.db())
+        contract_template_service(self.db(), self.authorization())
     }
 
     /// Import-domain query service with bulk-job identity adapter.
     pub fn legacy_import_service(&self) -> erp_import::LegacyImportService {
-        crate::wiring::legacy_import_service(self.db())
+        crate::wiring::legacy_import_service(self.db(), self.authorization())
     }
 
     /// Inventory query service with authorization and foreign-fact adapters.
     pub fn inventory_service(&self) -> erp_inventory::InventoryService {
-        crate::wiring::inventory_service(self.db(), self.rbac())
+        crate::wiring::inventory_service(self.db(), self.authorization())
     }
 
     /// Inventory-adjustment process that owns approval submit/cancel/post.
     pub fn inventory_adjustment_process(&self) -> erp_fulfillment_execution::InventoryAdjustmentProcess {
-        crate::wiring::inventory_adjustment_process(self.db(), self.rbac())
+        crate::wiring::inventory_adjustment_process(self.db(), self.rbac(), self.authorization())
     }
 }
 
-fn integration_identity(db: Database) -> impl Fn() -> SharedRbacService + Send + Sync {
-    move || shared_rbac_service(db.clone())
-}
-
-fn integration_work_items(db: Database) -> impl Fn() -> WorkItemService<WorkflowAuth> + Send + Sync {
-    let identity = integration_identity(db.clone());
-    move || work_item_service(db.clone(), identity())
+fn integration_work_items(
+    db: Database,
+    rbac: SharedRbacService,
+    authorization: Arc<AuthorizationService>,
+) -> impl Fn() -> WorkItemService<WorkflowAuth> + Send + Sync {
+    move || work_item_service(db.clone(), rbac.clone(), authorization.clone())
 }
 
 #[cfg(test)]
@@ -732,31 +766,32 @@ mod tests {
     use super::{Config, ConnectorMode, ExternalConnectorPorts, ExternalConnectorReadiness};
 
     #[tokio::test]
-    async fn integration_commands_and_replays_have_independent_policy_state() {
+    async fn application_clones_share_complete_authorization_instance() {
         use std::sync::Arc;
 
-        use super::{integration_identity, integration_work_items, shared_rbac_service, work_item_service};
+        use config::SafeConfig;
+        use mongodb::Client;
+        use mongodb::options::ClientOptions;
+        use storage::{S3Storage, S3StorageConfig};
 
-        // Construct providers only; no database command is sent.
-        let client = mongodb::Client::with_uri_str("mongodb://localhost:27017").await.unwrap();
-        let db = client.database("integration-identity-factory-unit-test");
-        let caller = shared_rbac_service(db.clone());
-        let identities = integration_identity(db.clone());
-        let first_identity = identities();
-        let second_identity = identities();
-        assert!(!Arc::ptr_eq(&caller, &first_identity));
-        assert!(!Arc::ptr_eq(&caller, &second_identity));
-        assert!(!Arc::ptr_eq(&first_identity, &second_identity));
+        use super::Application;
 
-        let caller_tasks = work_item_service(db.clone(), caller);
-        let first_direct = work_item_service(db.clone(), first_identity);
-        let tasks = integration_work_items(db);
-        let first_command = tasks();
-        let replay = tasks();
-        assert!(!first_command.auth.shares_policy_state(&caller_tasks.auth));
-        assert!(!replay.auth.shares_policy_state(&caller_tasks.auth));
-        assert!(!first_command.auth.shares_policy_state(&replay.auth));
-        assert!(!first_command.auth.shares_policy_state(&first_direct.auth));
+        let options = ClientOptions::parse("mongodb://127.0.0.1:1").await.unwrap();
+        let db = Client::with_options(options).unwrap().database("application_authorization_unit");
+        let storage = S3Storage::new(S3StorageConfig::new(
+            "test",
+            "cn-south-1",
+            "test-key",
+            "test-secret",
+            "https://cdn.example.com",
+        ))
+        .unwrap();
+        let app = Application::new(db, SafeConfig::new(connector_config("")), storage);
+        let first = app.authorization();
+        let second = app.clone().authorization();
+        assert!(Arc::ptr_eq(&first, &second));
+        let _ = app.integration_resolution();
+        let _ = app.supplier_fulfillment_process();
     }
 
     pub(super) fn connector_config(supplier: &str) -> Config {

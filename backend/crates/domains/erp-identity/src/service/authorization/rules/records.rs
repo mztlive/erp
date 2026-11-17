@@ -3,16 +3,27 @@ use std::collections::BTreeSet;
 use std::sync::LazyLock;
 
 use erp_permissions::{
-    admin, approval_instance, bulk_job, catalog, contract, cost, customer, integration_ops, internal,
-    organization, purchase_order, purchase_payment_request, receivable, returns, sales_inquiry, sales_order,
-    sales_review, sales_selection, supplier, supplier_api, supplier_fulfillment, supplier_offering,
-    supplier_settlement, work_item,
+    admin, approval_instance, bulk_job, catalog, contract, cost, customer, fulfillment, integration_ops,
+    internal, organization, payable, purchase_order, purchase_payment_request, receivable, returns,
+    sales_inquiry, sales_order, sales_review, sales_selection, supplier, supplier_api, supplier_fulfillment,
+    supplier_offering, supplier_settlement, work_item,
 };
 
 use crate::entity::authorization::{AccessFact, AccessRule, FactKind, RelationKey, RelationMatch};
 use crate::{Permission, QualifiedPermissions};
 
 pub(crate) fn requirements(permission: &Permission) -> Option<Vec<Permission>> {
+    if permission == &internal::SALES_INQUIRY_IMPORT_CREATE {
+        return Some(vec![
+            sales_inquiry::COMMANDS_SALES_CREATE,
+            sales_inquiry::IMPORT_SALES_IMPORT_PREVIEW,
+            catalog::PRODUCT_SELLABLE_SKU_LIST,
+        ]);
+    }
+    if permission == &internal::SALES_INQUIRY_REINQUIRE_DRAFT {
+        return Some(vec![sales_inquiry::COMMANDS_SALES_REINQUIRE, catalog::PRODUCT_SELLABLE_SKU_LIST]);
+    }
+
     if [internal::WORK_ITEM_RECIPIENT, internal::WORK_ITEM_EXECUTION_QUALIFICATION].contains(permission) {
         return Some(vec![]);
     }
@@ -39,6 +50,42 @@ pub(crate) fn requirements(permission: &Permission) -> Option<Vec<Permission>> {
 
 static REQUIREMENTS: LazyLock<Vec<(Permission, Vec<Permission>)>> = LazyLock::new(|| {
     vec![
+        (internal::CATALOG_BRAND_CREATE_ATTACHMENT_UPLOAD, vec![catalog::PRODUCT_BRAND_CREATE]),
+        (internal::CATALOG_BRAND_UPDATE_ATTACHMENT_UPLOAD, vec![catalog::PRODUCT_BRAND_UPDATE]),
+        (internal::CATALOG_CREATE_ATTACHMENT_UPLOAD, vec![catalog::PRODUCT_PRODUCT_CREATE]),
+        (internal::CATALOG_UPDATE_ATTACHMENT_UPLOAD, vec![catalog::PRODUCT_PRODUCT_UPDATE]),
+        (internal::SUPPLIER_CREATE_ATTACHMENT_UPLOAD, vec![supplier::PROFILE_CREATE]),
+        (internal::SUPPLIER_UPDATE_ATTACHMENT_UPLOAD, vec![supplier::PROFILE_UPDATE]),
+        (
+            internal::PURCHASE_EXPENSE_ATTACHMENT_UPLOAD,
+            vec![purchase_order::EXPENSE_EXPENSE_OCCURRENCE_CONFIRM],
+        ),
+        (
+            internal::ELECTRONIC_DELIVERY_ATTACHMENT_UPLOAD,
+            vec![
+                fulfillment::ELECTRONIC_DELIVERY_ELECTRONIC_DELIVERY_LIST,
+                fulfillment::ELECTRONIC_DELIVERY_ELECTRONIC_DELIVERY_CONFIRM,
+            ],
+        ),
+        (
+            internal::SERVICE_FULFILLMENT_ATTACHMENT_UPLOAD,
+            vec![
+                fulfillment::SERVICE_FULFILLMENT_SERVICE_FULFILLMENT_LIST,
+                fulfillment::SERVICE_FULFILLMENT_SERVICE_FULFILLMENT_CONFIRM,
+            ],
+        ),
+        (internal::FINANCE_UPLOAD_CUSTOMER_RECEIPT, vec![receivable::CUSTOMER_RECEIPT_SUBMIT]),
+        (internal::FINANCE_UPLOAD_INVOICE_DRAFT, vec![receivable::INVOICE_CREATE]),
+        (internal::FINANCE_UPLOAD_INVOICE_POST, vec![receivable::INVOICE_POST]),
+        (internal::FINANCE_UPLOAD_PURCHASE_INVOICE, vec![payable::PURCHASE_INVOICE_ALLOCATION_POST]),
+        (internal::FINANCE_UPLOAD_EXTRA_COST, vec![cost::ENTRY_CREATE, sales_order::DETAIL]),
+        (
+            internal::FINANCE_UPLOAD_PURCHASE_PAYMENT,
+            vec![purchase_payment_request::CREDIT_LIST, purchase_payment_request::DETAIL],
+        ),
+        (internal::PROFIT_LOSS_PERIOD_BASIS, vec![cost::ENTRY_LIST]),
+        (internal::CUSTOMER_QUALITY_HISTORY, vec![sales_order::LIST]),
+        (internal::PURCHASE_DELIVERY_OPTIONS_READ, vec![purchase_order::DETAIL]),
         (internal::CUSTOMER_PROFILE_COMMAND_READ, vec![customer::PROFILE_COMMAND_DETAIL]),
         (internal::CUSTOMER_CREATED_RESULT_READ, vec![customer::CREATE]),
         (internal::SUPPLIER_PROFILE_COMMAND_READ, vec![supplier::PROFILE_COMMAND_DETAIL]),
@@ -118,10 +165,21 @@ static REQUIREMENTS: LazyLock<Vec<(Permission, Vec<Permission>)>> = LazyLock::ne
         (internal::SALES_ORDER_HANDOVER_RECIPIENT, vec![sales_order::DETAIL]),
         (internal::CUSTOMER_SELECT, vec![customer::DETAIL]),
         (internal::CONNECTION_CATALOG_READ, vec![supplier_api::CONNECTION_DETAIL]),
+        (internal::CONNECTION_PROTOCOL_READ, vec![supplier_api::DANGAOSHUSHU_READ]),
+        (internal::CONNECTION_REFERENCE_TICKETS, vec![supplier_api::DANGAOSHUSHU_REFERENCE_TICKETS]),
     ]
 });
 
 pub(crate) fn independent(permission: &Permission) -> Vec<Permission> {
+    if [internal::CONNECTION_PROTOCOL_READ, internal::CONNECTION_REFERENCE_TICKETS].contains(permission) {
+        return vec![supplier_api::CONNECTION_DETAIL, supplier::DETAIL];
+    }
+    if permission == &internal::PURCHASE_DELIVERY_OPTIONS_READ {
+        return vec![purchase_order::SAVE_DRAFT];
+    }
+    if permission == &internal::CUSTOMER_QUALITY_HISTORY {
+        return vec![customer::LIST];
+    }
     if let Some(required) = independent_command(permission) {
         return vec![required];
     }
@@ -151,6 +209,11 @@ pub(crate) fn independent(permission: &Permission) -> Vec<Permission> {
     {
         return vec![supplier::DETAIL];
     }
+    portal_material_permissions(permission)
+}
+
+/// 门户材料按其固定用途取得独立业务资格，不改变其他对象入口。
+fn portal_material_permissions(permission: &Permission) -> Vec<Permission> {
     if permission.resource() != "supplier_portal_material" {
         return vec![];
     }
@@ -220,7 +283,10 @@ pub(crate) fn condition(permission: &Permission) -> Option<AccessRule> {
     }
     match permission.resource() {
         "supplier_api_connection"
-            if matches!(permission.action(), "detail" | "authorize" | "catalog_read") =>
+            if matches!(
+                permission.action(),
+                "detail" | "authorize" | "catalog_read" | "protocol_read_target" | "reference_tickets_target"
+            ) =>
         {
             Some(AccessRule::Related {
                 relation: RelationKey::parse("supplier").expect("固定供应商关系"),

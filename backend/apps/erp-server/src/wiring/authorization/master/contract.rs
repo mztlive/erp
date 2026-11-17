@@ -17,7 +17,9 @@ use persistence_core::Executor;
 /// 合同拥有域构造的共享事实和映射。
 /// # 错误
 /// 拥有域拒绝模型或来源描述时原样返回，不构造占位实现。
-pub(super) fn bindings(db: Database) -> Result<(Arc<dyn AccessFactsPort>, Arc<dyn AccessMapping>)> {
+pub(in crate::wiring::authorization) fn bindings(
+    db: Database,
+) -> Result<(Arc<dyn AccessFactsPort>, Arc<dyn AccessMapping>)> {
     let participants = Arc::new(ContractParticipants(db.clone()));
     authorization::bindings(db, participants, Database::DOCUMENT_PARTICIPANTS)
 }

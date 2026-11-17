@@ -8,6 +8,7 @@ use erp_sales::dto::sales_order::selection_basis::SelectionOrderBasis;
 use crate::http::errors::Result;
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
+use crate::wiring::sales::sales_services;
 
 /// 读取按份采购方案开单内容，不执行写入。
 /// # 参数
@@ -23,8 +24,12 @@ pub async fn selection_basis(
 ) -> Result<SelectionOrderBasis> {
     let basis = SalesOrderCommandProcess::new(
         state.application().db(),
-        state.application().rbac(),
-        crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),
+        state.application().authorization(),
+        sales_services(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        ),
     )
     .selection_order_basis(&id, &actor)
     .await?;

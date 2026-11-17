@@ -23,7 +23,7 @@ impl IntegrationCenterReadService {
     ///
     /// # 错误
     /// 关联事实查询失败时返回仓储错误。
-    pub async fn error_task_names(
+    pub(super) async fn error_task_names(
         &self,
         items: &mut [ErrorTaskView],
         executor: &mut dyn Executor,
@@ -52,7 +52,7 @@ impl IntegrationCenterReadService {
     ///
     /// # 错误
     /// 关联事实查询失败时返回仓储错误。
-    pub async fn difference_names(
+    pub(super) async fn difference_names(
         &self,
         items: &mut [DifferenceView],
         executor: &mut dyn Executor,

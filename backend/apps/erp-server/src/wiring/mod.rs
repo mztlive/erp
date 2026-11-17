@@ -10,7 +10,6 @@ mod audit_conversion;
 mod catalog;
 mod catalog_data_scope;
 mod contract;
-mod contract_data_scope;
 mod contract_template;
 mod customer;
 mod customer_data_scope;
@@ -23,30 +22,27 @@ mod inventory;
 mod offering_data_scope;
 mod organization;
 mod party;
-mod purchase_data_scope;
 mod scope_support;
 mod selection_data_scope;
 mod settlement_data_scope;
 mod supplier;
 mod supplier_data_scope;
-mod supplier_fulfillment_identity;
 mod warehouse;
 use std::sync::Arc;
 
+pub(crate) use authorization::contract_access_with_db as contract_access;
 pub use catalog::{MongoCatalogAudit, MongoCatalogFileAssets};
-pub use contract::{contract_access, scoped_contract_service};
-pub use contract_data_scope::contract_authorization;
+pub use contract::scoped_contract_service;
 pub use contract_template::contract_template_service;
 pub use customer::{MongoCustomerAudit, MongoCustomerPartyFacts};
 pub use customer_data_scope::customer_access;
 use erp_customer::{CustomerAssignmentService, CustomerService};
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 use erp_party::{
     PartyAddressService, PartyBankAccountService, PartyContactService, PartyService, PartyTaxProfileService,
     SensitiveDataCodec,
 };
-pub use erp_procurement::PurchaseDataScope;
-pub use funds_data_scope::{MongoFundsDataScope, funds_access_with_rbac};
+pub use funds_data_scope::{MongoFundsDataScope, funds_access};
 pub use import::{MongoImportBulkJobs, legacy_import_service};
 pub use integration_data_scope::scoped_integration_ops_service;
 pub use inventory::{authorize_inventory, inventory_adjustment_process, inventory_service};
@@ -71,8 +67,13 @@ pub use warehouse::{MongoWarehouseIdentity, warehouse_service};
 ///
 /// # 错误
 /// 不返回错误。
-pub fn party_service(db: Database) -> PartyService {
-    PartyService::new(db.clone(), MongoPartyAudit::shared(db.clone()), MongoSupplierRole::shared(db))
+pub fn party_service(db: Database, authorization: Arc<AuthorizationService>) -> PartyService {
+    PartyService::new(
+        db.clone(),
+        MongoPartyAudit::shared(db.clone()),
+        MongoSupplierRole::shared(db),
+        authorization,
+    )
 }
 
 /// 装配带审计、供应商角色与敏感数据编解码的主体联系人服务。
@@ -86,12 +87,17 @@ pub fn party_service(db: Database) -> PartyService {
 ///
 /// # 错误
 /// 不返回错误。
-pub fn party_contact_service(db: Database, sensitive_data: Arc<SensitiveDataCodec>) -> PartyContactService {
+pub fn party_contact_service(
+    db: Database,
+    sensitive_data: Arc<SensitiveDataCodec>,
+    authorization: Arc<AuthorizationService>,
+) -> PartyContactService {
     PartyContactService::new(
         db.clone(),
         sensitive_data,
         MongoPartyAudit::shared(db.clone()),
         MongoSupplierRole::shared(db),
+        authorization,
     )
 }
 
@@ -106,12 +112,17 @@ pub fn party_contact_service(db: Database, sensitive_data: Arc<SensitiveDataCode
 ///
 /// # 错误
 /// 不返回错误。
-pub fn party_address_service(db: Database, sensitive_data: Arc<SensitiveDataCodec>) -> PartyAddressService {
+pub fn party_address_service(
+    db: Database,
+    sensitive_data: Arc<SensitiveDataCodec>,
+    authorization: Arc<AuthorizationService>,
+) -> PartyAddressService {
     PartyAddressService::new(
         db.clone(),
         sensitive_data,
         MongoPartyAudit::shared(db.clone()),
         MongoSupplierRole::shared(db),
+        authorization,
     )
 }
 
@@ -129,12 +140,14 @@ pub fn party_address_service(db: Database, sensitive_data: Arc<SensitiveDataCode
 pub fn party_bank_account_service(
     db: Database,
     sensitive_data: Arc<SensitiveDataCodec>,
+    authorization: Arc<AuthorizationService>,
 ) -> PartyBankAccountService {
     PartyBankAccountService::new(
         db.clone(),
         sensitive_data,
         MongoPartyAudit::shared(db.clone()),
         MongoSupplierRole::shared(db),
+        authorization,
     )
 }
 
@@ -148,11 +161,15 @@ pub fn party_bank_account_service(
 ///
 /// # 错误
 /// 不返回错误。
-pub fn party_tax_profile_service(db: Database) -> PartyTaxProfileService {
+pub fn party_tax_profile_service(
+    db: Database,
+    authorization: Arc<AuthorizationService>,
+) -> PartyTaxProfileService {
     PartyTaxProfileService::new(
         db.clone(),
         MongoPartyAudit::shared(db.clone()),
         MongoSupplierRole::shared(db),
+        authorization,
     )
 }
 
@@ -160,7 +177,7 @@ pub fn party_tax_profile_service(db: Database) -> PartyTaxProfileService {
 ///
 /// # 参数
 /// * `db` - 客户与身份集合所在数据库
-/// * `rbac` - 当前 RBAC 快照
+/// * `authorization` - 进程共享的完整授权服务
 ///
 /// # 返回
 /// 返回可解析客户范围的服务。
@@ -170,12 +187,12 @@ pub fn party_tax_profile_service(db: Database) -> PartyTaxProfileService {
 ///
 /// # 关键业务约束
 /// 本域访问器直接调用 identity 统一授权服务，不解释范围条款。
-pub fn scoped_customer_service(db: Database, rbac: SharedRbacService) -> CustomerService {
+pub fn scoped_customer_service(db: Database, authorization: Arc<AuthorizationService>) -> CustomerService {
     CustomerService::new(
         db.clone(),
         MongoCustomerAudit::shared(db.clone()),
         MongoCustomerPartyFacts::shared(db.clone()),
-        customer_access(db, rbac),
+        customer_access(db, authorization),
     )
 }
 
@@ -183,7 +200,7 @@ pub fn scoped_customer_service(db: Database, rbac: SharedRbacService) -> Custome
 ///
 /// # 参数
 /// * `db` - 客户与身份集合所在数据库
-/// * `rbac` - 当前 RBAC 快照
+/// * `authorization` - 进程共享的完整授权服务
 ///
 /// # 返回
 /// 返回可在事务内重验客户范围的归属服务。
@@ -195,12 +212,12 @@ pub fn scoped_customer_service(db: Database, rbac: SharedRbacService) -> Custome
 /// 归属变更必须证明 customer:update，不得只依赖入口事前检查。
 pub fn scoped_customer_assignment_service(
     db: Database,
-    rbac: SharedRbacService,
+    authorization: Arc<AuthorizationService>,
 ) -> CustomerAssignmentService {
     CustomerAssignmentService::new(
         db.clone(),
         MongoCustomerAudit::shared(db.clone()),
-        customer_access(db, rbac),
+        customer_access(db, authorization),
     )
 }
 
@@ -218,9 +235,9 @@ pub mod support_documents;
 pub use catalog_data_scope::{catalog_access, scoped_catalog_service};
 pub use fulfillment_order_data_scope::{
     MongoFulfillmentExceptionHandlers, fulfillment_order_access, scoped_fulfillment_service,
+    supplier_fulfillment_identity,
 };
 pub use offering_data_scope::{offering_access, scoped_offering_process, scoped_offering_service};
-pub use supplier_fulfillment_identity::supplier_fulfillment_identity_factory;
 
 #[cfg(test)]
 mod supplier_composition_tests;
@@ -240,9 +257,6 @@ pub use supplier_catalog::catalog_services;
 
 mod approval_runtime;
 pub use approval_runtime::approval_runtime;
-
-mod fulfillment_identity;
-pub use fulfillment_identity::fulfillment_identity_factory;
 
 pub mod sales;
 

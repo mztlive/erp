@@ -7,10 +7,12 @@ use erp_supply::ports::supplier_reference_registry::SupplierReferenceRegistry;
 use erp_supply::service::supplier_api::SupplierApiService;
 use mongodb::Database;
 mod catalog;
+mod connector_types;
 mod context;
 pub use catalog::{CatalogQuery, CatalogView};
 pub mod dto;
 mod jobs;
+mod protocol;
 mod query;
 mod references;
 /// 供应连接跨域只读入口。

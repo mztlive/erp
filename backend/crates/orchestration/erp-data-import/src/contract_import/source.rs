@@ -9,7 +9,7 @@ use erp_core::ids::FileAssetId;
 use erp_permissions::contract;
 use erp_support::{FileAsset, FileAssetExt, RegisterFileAssetRequest, SecurityScanStatus};
 use id_generator::next_id;
-use persistence_core::Executor;
+use persistence_core::{Executor, Transactional};
 use sha2::{Digest, Sha256};
 use validator::Validate;
 
@@ -34,6 +34,25 @@ pub async fn inspect_pdf(pdf: Vec<u8>) -> Result<(String, u32)> {
 }
 
 impl ContractImportProcess {
+    /// 在保存识别源文件前检查合同导入功能资格。
+    /// # 参数
+    /// actor 为已认证账号。
+    /// # 返回
+    /// 当前快照具备导入功能资格时成功；追加目标仍在登记事务重新授权。
+    /// # 错误
+    /// 身份失效、缺少功能资格或快照失败时拒绝外部上传。
+    pub async fn prepare_attachment_upload(&self, actor: &AuditActor) -> Result<()> {
+        let access = self.services.contract_access.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { access.require_import(&actor, executor).await.map_err(Error::from) })
+            })
+            .await
+    }
+
     /// 登记源文件及任务；重放时返回 false，调用方删除本次未使用对象。
     /// # 参数
     /// * `command` / `asset_request` / `digest` / `actor` - 控制信息、受控文件、摘要页数与认证人。

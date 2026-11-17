@@ -23,11 +23,14 @@ use crate::http::state::HttpState;
 /// 返回按名称排序的模板。
 pub async fn list(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Path(supplier_id): Path<String>,
 ) -> Result<Vec<DeliveryTemplateView>> {
     let templates = erp_supplier_catalog::supplier_delivery_template::supplier_delivery_templates(
         state.application().db(),
+        state.application().authorization(),
         supplier_id,
+        actor,
     )
     .await?;
     Ok(ApiResponse::ok_with_data(templates))
@@ -51,6 +54,7 @@ pub async fn create(
 ) -> Result<DeliveryTemplateView> {
     let view = erp_supplier_catalog::supplier_delivery_template::create_delivery_template(
         state.application().db(),
+        state.application().authorization(),
         supplier_id,
         req,
         actor,
@@ -77,6 +81,7 @@ pub async fn update(
 ) -> Result<DeliveryTemplateView> {
     let view = erp_supplier_catalog::supplier_delivery_template::update_delivery_template(
         state.application().db(),
+        state.application().authorization(),
         id,
         req,
         actor,
@@ -103,6 +108,7 @@ pub async fn delete(
 ) -> Result<()> {
     erp_supplier_catalog::supplier_delivery_template::delete_delivery_template(
         state.application().db(),
+        state.application().authorization(),
         id,
         req,
         actor,
@@ -127,7 +133,7 @@ pub async fn assign(
 ) -> Result<AssignDeliveryTemplateResult> {
     let result = erp_supplier_catalog::supplier_delivery_template::assign_offering_delivery_template(
         state.application().db(),
-        crate::wiring::offering_access(state.application().db(), state.application().rbac()),
+        crate::wiring::offering_access(state.application().db(), state.application().authorization()),
         req,
         actor,
     )

@@ -84,7 +84,7 @@ impl HttpState {
         JdVopAuthorizationProcess::new(
             self.application().db(),
             config.jd_vop.as_ref(),
-            self.application().rbac(),
+            self.application().authorization(),
             self.jd_vop_authorization.clone(),
             config
                 .jd_vop

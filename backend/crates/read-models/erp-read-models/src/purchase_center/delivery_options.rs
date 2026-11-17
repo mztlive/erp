@@ -9,7 +9,7 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use erp_core::ids::SalesOrderRevisionId;
 use erp_identity::AuthorizationService;
-use erp_permissions::purchase_order;
+use erp_permissions::internal;
 use erp_procurement::entity::purchase_order::{
     ChangeQuantityBound, FulfillmentResponsibility, ProcurementCoverageFacts, PurchaseOrder,
     business_date_of, remaining_delivery_capacity,
@@ -71,7 +71,8 @@ async fn delivery_snapshot(
     if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
         return Err(Error::ValidationError("采购交付安排读取必须使用快照事务".into()));
     }
-    let access = Arc::new(authorization.query(actor, &purchase_order::DETAIL, executor).await?);
+    let access =
+        Arc::new(authorization.query(actor, &internal::PURCHASE_DELIVERY_OPTIONS_READ, executor).await?);
     let scope = PurchaseReadScope::from_compiled(access, authorization);
     let order = db
         .purchase_orders()

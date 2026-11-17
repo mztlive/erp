@@ -34,9 +34,10 @@ use crate::http::state::HttpState;
 /// 业务处理或数据读取失败时返回对应错误。
 pub async fn service_fulfillment_list(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<ServiceFulfillmentListParams>,
 ) -> Result<PageView<ServiceFulfillmentView>> {
-    let page = service(&state).service_fulfillment_list(&params).await?;
+    let page = service(&state).service_fulfillment_list(&params, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -54,9 +55,10 @@ pub async fn service_fulfillment_list(
 /// 业务处理或数据读取失败时返回对应错误。
 pub async fn service_fulfillment_detail(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<ServiceFulfillmentView> {
-    let view = service(&state).service_fulfillment_detail(&id).await?;
+    let view = service(&state).service_fulfillment_detail(&id, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -105,6 +107,7 @@ pub async fn service_fulfillment_confirm(
     Path(id): Path<String>,
     mut multipart: Multipart,
 ) -> Result<ServiceFulfillmentView> {
+    process(&state).prepare_service_fulfillment_attachment_upload(&actor).await?;
     let (req, files) =
         extract_command_with_asset_files::<ConfirmServiceFulfillmentRequest>(&mut multipart).await?;
     validate_evidence_upload(req.evidence_attachment_id.as_ref(), &files)?;

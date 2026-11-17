@@ -28,7 +28,7 @@ impl SalesOrderReadService {
         asset_id: &str,
     ) -> Result<u64> {
         let db = self.db.clone();
-        let access = SalesAccess::new(db.clone(), self.require_rbac()?.clone());
+        let access = SalesAccess::new(db.clone(), self.authorization.clone());
         let actor = actor.clone();
         let order_id = order_id.to_string();
         let asset_id = asset_id.to_string();

@@ -5,6 +5,7 @@ use axum::extract::{Multipart, State};
 use erp_file_assets::PendingFileAssets;
 use erp_finance::dto::receivable::SaveCustomerReceiptDraftRequest;
 use erp_finance_posting::finance_posting::receivable::ReceivableProcess;
+use erp_finance_posting::{FinanceAttachmentService, FinanceAttachmentUpload};
 use erp_read_models::finance::dto::CustomerReceiptView;
 use erp_support::SensitivityClass;
 
@@ -29,6 +30,9 @@ pub async fn customer_receipt_save_with_files(
     Extension(actor): Extension<AuditActor>,
     mut multipart: Multipart,
 ) -> Result<CustomerReceiptView> {
+    FinanceAttachmentService::new(state.application().db(), state.application().authorization())
+        .prepare_attachment_upload(&actor, FinanceAttachmentUpload::CustomerReceipt)
+        .await?;
     let (req, files) =
         extract_command_with_asset_files::<SaveCustomerReceiptDraftRequest>(&mut multipart).await?;
     let uploads = store_pending_asset_files(&state, files, |_| SensitivityClass::Sensitive).await?;
@@ -39,10 +43,12 @@ pub async fn customer_receipt_save_with_files(
             return Err(error.into());
         },
     };
-    let outcome =
-        ReceivableProcess::new(state.application().db(), receivable_posting_ports(state.application().db()))
-            .save_customer_receipt_draft_with_assets(req, pending, &actor)
-            .await;
+    let outcome = ReceivableProcess::new(
+        state.application().db(),
+        receivable_posting_ports(state.application().db(), state.application().authorization()),
+    )
+    .save_customer_receipt_draft_with_assets(req, pending, &actor)
+    .await;
     let result = finish_asset_command(&state, &uploads, outcome, |result| result.assets_committed).await?;
     Ok(ApiResponse::ok_with_data(result.view))
 }

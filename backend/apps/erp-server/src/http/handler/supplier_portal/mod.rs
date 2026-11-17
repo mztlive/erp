@@ -9,11 +9,16 @@ pub mod write;
 use erp_supplier_catalog::supplier_portal::SupplierPortalProcess;
 
 use crate::http::state::HttpState;
+use crate::wiring::catalog_services;
 
 fn process(state: &HttpState) -> SupplierPortalProcess {
     SupplierPortalProcess::new(
         state.application().db(),
-        state.application().rbac(),
-        crate::wiring::catalog_services(state.application().db(), state.application().rbac()),
+        state.application().authorization(),
+        catalog_services(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        ),
     )
 }

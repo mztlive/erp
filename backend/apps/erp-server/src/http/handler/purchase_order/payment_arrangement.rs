@@ -39,10 +39,14 @@ pub async fn schedule_payment_follow_up(
     Path(id): Path<String>,
     Json(req): Json<SchedulePaymentFollowUp>,
 ) -> Result<()> {
-    PurchaseOrderProcess::with_rbac(
+    PurchaseOrderProcess::new(
         state.application().db(),
-        state.application().rbac(),
-        purchase_ports(state.application().db(), state.application().rbac()),
+        state.application().authorization(),
+        purchase_ports(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        ),
     )
     .schedule_payment_follow_up(&id, req, &actor)
     .await?;

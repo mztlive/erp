@@ -1,5 +1,4 @@
 import {
-    AUTHORIZATION_POLICY_LABEL,
     personEffectiveDescription,
     personHasDefaultSelf,
     type PersonScopeBusiness,
@@ -36,10 +35,7 @@ export function personalPolicyView(
             action,
         )
         if (description === "无数据访问范围，请添加授权")
-            description =
-                business.authorization_policy === "directory"
-                    ? "未配置可见范围"
-                    : "未配置数据范围"
+            description = "未配置数据范围"
         const group = groups.get(key) ?? { key, actions: [], description }
         group.actions.push(action)
         groups.set(key, group)
@@ -47,12 +43,13 @@ export function personalPolicyView(
     const rows = [...groups.values()]
     return {
         business,
-        category: AUTHORIZATION_POLICY_LABEL[business.authorization_policy],
+        category: business.configurable_actions.length
+            ? "可配置数据范围"
+            : "按业务规则校验",
         summary:
             rows.length > 1
                 ? "各操作范围不同"
-                : (rows[0]?.description ??
-                  AUTHORIZATION_POLICY_LABEL[business.authorization_policy]),
+                : (rows[0]?.description ?? "无需单独配置范围"),
         groups: rows,
     }
 }

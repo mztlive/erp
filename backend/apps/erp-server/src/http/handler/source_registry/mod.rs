@@ -6,6 +6,7 @@
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
+use erp_supplier_catalog::source_registry::create_source_system;
 use erp_support::{
     CreateExternalIdentityMapRequest, CreateSourceSystemRequest, ExternalIdentityMapListParams,
     ExternalIdentityMapView, PageView, SourceSystemListParams, SourceSystemView, UpdateSourceSystemRequest,
@@ -26,9 +27,10 @@ use crate::http::state::HttpState;
 /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
 pub async fn source_system_list(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<SourceSystemListParams>,
 ) -> Result<PageView<SourceSystemView>> {
-    let page = state.application().source_registry_service().source_system_list(&params).await?;
+    let page = state.application().source_registry_service().source_system_list(&params, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -48,7 +50,7 @@ pub async fn source_system_create(
     Json(req): Json<CreateSourceSystemRequest>,
 ) -> Result<SourceSystemView> {
     let view =
-        erp_supplier_catalog::source_registry::create_source_system(state.application().db(), req, actor)
+        create_source_system(state.application().db(), state.application().authorization(), req, actor)
             .await?;
 
     Ok(ApiResponse::ok_with_data(view))
@@ -85,9 +87,11 @@ pub async fn source_system_update(
 /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
 pub async fn external_identity_map_list(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<ExternalIdentityMapListParams>,
 ) -> Result<PageView<ExternalIdentityMapView>> {
-    let page = state.application().source_registry_service().external_identity_map_list(&params).await?;
+    let page =
+        state.application().source_registry_service().external_identity_map_list(&params, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }

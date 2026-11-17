@@ -36,8 +36,6 @@ async fn scoped_inspection_requires_complete_same_role_qualification() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(scope.resource, "sales_inquiry");
-    assert_eq!(scope.action, permission.action());
     assert!(scope.scope.has_role_scope());
 }
 
@@ -60,8 +58,6 @@ async fn permission_source_uses_current_target_roles_and_fixed_origin() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(access.resource, "contract");
-    assert_eq!(access.action, "detail");
     assert_eq!(access.scope.role_clauses, vec![ScopeClause { self_owned: true, ..Default::default() }]);
 }
 

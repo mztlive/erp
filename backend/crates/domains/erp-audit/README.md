@@ -23,7 +23,7 @@
 
 术语与统一分工见[总索引](../../README.md#代码中常见名称的含义)。
 
-- 本领域的数据结构、业务规则、服务和数据库仓储在此维护。常规、构建和测试依赖均不得指向其他业务领域或组合层。
+- 本领域的数据结构、业务规则、服务和数据库仓储在此维护。读取用例依赖 `erp-identity` 的统一授权服务和 `erp-permissions` 的公共常量；identity 不反向依赖本领域。其余业务领域或组合层不得成为本域依赖。
 - 命令身份和结果回执由拥有领域保存；本域仅保留追溯关联，不提供业务授权或命令重放依据。
 - 跨领域业务写入与审计的一致性由所属编排库负责，调用方不得绕过事务写入约定。
 - 需要其他领域的能力时，由组合层或应用将本域接口接到实际提供方；公开入口见 [src/lib.rs](src/lib.rs)。
@@ -34,12 +34,21 @@
 | --- | --- |
 | [src/catalog.rs](src/catalog.rs) | 普通动作与目标类型的显式中文目录，未知配对拒绝 |
 | [src/entity/attempt.rs](src/entity/attempt.rs) | 事务外安全尝试及 Failed/Rejected/Unknown 分类 |
-| [src/service.rs](src/service.rs) | AuditLogService 与现有日志构造入口 |
+| [src/service.rs](src/service.rs) | AuditLogService 内部写入与安全日志构造入口 |
+| [src/read.rs](src/read.rs) | AuditLogReadService：同快照执行读取授权、分页和计数 |
 | [src/execution/mod.rs](src/execution/mod.rs) | 泛型审计命令、同 Executor 执行、事务入口及事务外尝试记录 |
 | [src/entity/business_event.rs](src/entity/business_event.rs) | 显式动作、字段白名单、BusinessEventContext 与安全中文事实 |
 | [src/repository/mod.rs](src/repository/mod.rs) | AuditExt、AuditLogRepository 与授权审计查询 |
 | [src/entity/mod.rs](src/entity/mod.rs) | 本域实体、值对象和确定性规则 |
 | [src/indexes.rs](src/indexes.rs) | 公开索引注册入口 |
+
+## 查询审计日志
+
+应用注入进程共享的完整授权服务，使用 `AuditLogReadService::new(db, authorization)`。列表入口 `audit_log_list(&params, &actor)` 必须接收当前已认证账号；该方法在快照事务中先执行 `audit_log:list` 的 `AccessTarget::Operation` 检查，再使用同一执行器查询分页与总数。
+
+无资格、身份设施失败或参数非法时不得读取审计记录；授权和持久化错误保留原分类。该读取服务不提供绕过授权的公开列表入口。
+
+登录等内部审计写入继续使用 `AuditLogService::new(db).create(data)`。业务写入与审计需要原子提交时使用既有执行合同，不通过展示读取服务写日志。
 
 ## 修改执行要求
 

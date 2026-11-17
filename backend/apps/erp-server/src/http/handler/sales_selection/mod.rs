@@ -32,13 +32,18 @@ use crate::http::errors::{Error, Result};
 use crate::http::extractor::{Json, Query};
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
+use crate::wiring::sales::sales_services;
 
 fn process(state: &HttpState) -> SalesSelectionProcess {
     SalesSelectionProcess::new(
         state.application().db(),
         state.application().storage().clone(),
         state.application().config_snapshot().app.secret.as_bytes(),
-        crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),
+        sales_services(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        ),
     )
 }
 
@@ -50,7 +55,11 @@ fn process(state: &HttpState) -> SalesSelectionProcess {
 /// # 错误
 /// 构造不执行 I/O。
 fn read_service(state: &HttpState) -> SalesSelectionReadService {
-    let services = crate::wiring::sales::sales_services(state.application().db(), state.application().rbac());
+    let services = sales_services(
+        state.application().db(),
+        state.application().rbac(),
+        state.application().authorization(),
+    );
     SalesSelectionReadService::new(
         state.application().db(),
         services.selections.clone(),

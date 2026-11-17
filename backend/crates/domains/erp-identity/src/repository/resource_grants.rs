@@ -7,7 +7,7 @@ use mongodb::Database;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
 use persistence_core::{Executor, Repository, mongo_ops, persisted_document};
-pub(crate) use query::{grant_lookup, target_ids};
+pub(crate) use query::{grant_lookup, source_target, target_ids};
 pub(crate) use revision::{advance, revision};
 pub(crate) use rows::sync_rows;
 use serde::de::DeserializeOwned;

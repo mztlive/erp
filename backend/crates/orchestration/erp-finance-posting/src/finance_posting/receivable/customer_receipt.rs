@@ -23,7 +23,7 @@ use validator::Validate;
 
 use super::ReceivableProcess;
 use super::adapter::{
-    self, customer_receipt_adapter, customer_receipt_subject_ref, execute_customer_receipt_domain_action,
+    customer_receipt_adapter, customer_receipt_subject_ref, execute_customer_receipt_domain_action,
     require_frozen_binding, start_customer_receipt_approval,
 };
 use super::cancel_approval::{
@@ -237,17 +237,17 @@ impl ReceivableProcess {
                     ensure_expected_version(receipt.base.version, req.expected_version)?;
                     let allocations = convert_allocations(&req.allocations)?;
                     start_customer_receipt_approval(&mut receipt, allocations)?;
-                    process
-                        .dispatch_customer_receipt_start(
+                    let input = process
+                        .prepare_receipt_submit_input(
                             &request_id,
                             receipt,
                             &req,
                             &request_actor,
                             adapter,
-                            request_command,
                             executor,
                         )
-                        .await
+                        .await?;
+                    persist_receipt_submit(&process.db, &process.rbac, input, request_command, executor).await
                 })
             })
             .await;
@@ -320,24 +320,6 @@ impl ReceivableProcess {
     /// 恒返回 `ConflictError`。
     pub fn reject_client_post() -> Result<CustomerReceiptView> {
         Err(Error::ConflictError("客户回款过账只能由审批最终通过动作执行，客户端不得直接过账".to_string()))
-    }
-
-    /// 从绑定读取定义并持久化启动事实。
-    ///
-    /// # 错误
-    /// 无绑定、定义缺失或写入失败时返回错误。
-    async fn dispatch_customer_receipt_start(
-        &self,
-        id: &str,
-        receipt: CustomerReceipt,
-        req: &SubmitCustomerReceiptRequest,
-        actor: &AuditActor,
-        adapter: adapter::CustomerReceiptAdapter,
-        command: CommandReceipt,
-        executor: &mut dyn Executor,
-    ) -> Result<CustomerReceiptView> {
-        let input = self.prepare_receipt_submit_input(id, receipt, req, actor, adapter, executor).await?;
-        persist_receipt_submit(&self.db, &self.rbac, input, command, executor).await
     }
 
     /// 加载撤回运行事实并写回草稿。

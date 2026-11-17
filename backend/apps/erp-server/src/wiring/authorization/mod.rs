@@ -21,6 +21,7 @@ use erp_read_models::purchase_center::creation_authorization::CreationTaskMappin
 use erp_support::authorization::{background, files};
 use erp_workflow::service::approval::copies;
 use erp_workflow::service::work_item as work_items;
+pub(crate) use master::contract_access_with_db;
 use mongodb::Database;
 
 pub(super) type FactsBindings = Vec<(String, Arc<dyn AccessFactsPort>)>;

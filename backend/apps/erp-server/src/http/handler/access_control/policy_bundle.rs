@@ -2,12 +2,13 @@
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::State;
+use erp_identity::Result as IdentityResult;
 use erp_identity::dto::authorization_bundle::{
     ApplyPolicyRequest, ExportPolicyRequest, PolicyApplyResult, PolicyExport, PolicyPreview,
 };
 use erp_identity::entity::authorization_bundle::PolicyDocument;
 use erp_identity::service::access_control::policy_bundle::PolicyBundleService;
-use erp_identity::{Permission, Result as IdentityResult};
+use erp_permissions::Permission;
 
 use crate::http::errors::Result;
 use crate::http::extractor::Json;
@@ -22,7 +23,11 @@ fn service(state: &HttpState) -> IdentityResult<PolicyBundleService> {
     let catalog =
         POLICY_PERMISSION_CODES.iter().map(Permission::parse).collect::<std::result::Result<Vec<_>, _>>()?;
     Ok(PolicyBundleService::new(
-        scope_configuration(state.application().db(), state.application().rbac()),
+        scope_configuration(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        ),
         catalog,
     ))
 }

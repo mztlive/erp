@@ -1,7 +1,8 @@
 //! 非卡券实际经营盈亏：正式收入、成本归属和完整性的一致快照查询。
 use std::sync::Arc;
 
-use erp_identity::AuthorizationService;
+use erp_identity::{AccessTarget, AuthorizationService};
+use erp_permissions::internal;
 mod access;
 mod attribution;
 mod calculation;
@@ -47,15 +48,33 @@ impl ActualProfitLossReadModel {
     /// 提供已实现的口径，由用户显式选择，不伪装已配置财务收入确认规则。
     ///
     /// # 参数
-    /// 无。
+    /// `actor` 为当前已认证账号。
     ///
     /// # 返回
     /// 返回已实现的销售单生效日口径。
     ///
     /// # 错误
-    /// 不返回错误。
-    pub fn period_basis() -> PeriodBasisConfig {
-        PeriodBasisConfig { configuration_version: query::FORMULA_VERSION.into(), allowed_period_bases: vec![PeriodBasisOption { code: query::PERIOD_BASIS.into(), label: query::BASIS_LABEL.into(), explanation: "按上海自然日的销售单首次生效日期选单，采用当前正式收入与查询时点累计实际成本；后补费用会更新原订单盈亏。".into() }] }
+    /// 无成本列表资格、账号无效或授权读取失败时拒绝。
+    pub async fn period_basis(&self, actor: &AuditActor) -> Result<PeriodBasisConfig> {
+        let this = self.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    this.rbac
+                        .require(
+                            &actor,
+                            &internal::PROFIT_LOSS_PERIOD_BASIS,
+                            AccessTarget::Operation,
+                            executor,
+                        )
+                        .await?;
+                    Ok(period_basis_config())
+                })
+            })
+            .await
     }
     /// 分页视图包含同一筛选下的全量指标、趋势和覆盖率。
     ///
@@ -168,6 +187,11 @@ impl ActualProfitLossReadModel {
             })
             .await
     }
+}
+
+/// 已发布的期间口径配置；授权入口通过后才向当前账号返回。
+fn period_basis_config() -> PeriodBasisConfig {
+    PeriodBasisConfig { configuration_version: query::FORMULA_VERSION.into(), allowed_period_bases: vec![PeriodBasisOption { code: query::PERIOD_BASIS.into(), label: query::BASIS_LABEL.into(), explanation: "按上海自然日的销售单首次生效日期选单，采用当前正式收入与查询时点累计实际成本；后补费用会更新原订单盈亏。".into() }] }
 }
 
 /// 跨页与生成返回前必须使用相同授权版本；不拼接撤权前后的结果。

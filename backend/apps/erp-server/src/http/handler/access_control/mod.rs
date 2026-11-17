@@ -33,11 +33,16 @@ use crate::wiring::scope_configuration;
 /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
 pub async fn permission_list(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<PermissionListParams>,
 ) -> Result<PageView<PermissionView>> {
-    let page = scope_configuration(state.application().db(), state.application().rbac())
-        .permission_list(&params)
-        .await?;
+    let page = scope_configuration(
+        state.application().db(),
+        state.application().rbac(),
+        state.application().authorization(),
+    )
+    .permission_list(&params, &actor)
+    .await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -56,9 +61,13 @@ pub async fn permission_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreatePermissionRequest>,
 ) -> Result<PermissionView> {
-    let view = scope_configuration(state.application().db(), state.application().rbac())
-        .create_permission(req, &actor)
-        .await?;
+    let view = scope_configuration(
+        state.application().db(),
+        state.application().rbac(),
+        state.application().authorization(),
+    )
+    .create_permission(req, &actor)
+    .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -79,9 +88,13 @@ pub async fn permission_update(
     Path(id): Path<String>,
     Json(req): Json<UpdatePermissionRequest>,
 ) -> Result<PermissionView> {
-    let view = scope_configuration(state.application().db(), state.application().rbac())
-        .update_permission(&id, req, &actor)
-        .await?;
+    let view = scope_configuration(
+        state.application().db(),
+        state.application().rbac(),
+        state.application().authorization(),
+    )
+    .update_permission(&id, req, &actor)
+    .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -100,9 +113,13 @@ pub async fn permission_delete(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<()> {
-    scope_configuration(state.application().db(), state.application().rbac())
-        .delete_permission(&id, &actor)
-        .await?;
+    scope_configuration(
+        state.application().db(),
+        state.application().rbac(),
+        state.application().authorization(),
+    )
+    .delete_permission(&id, &actor)
+    .await?;
 
     Ok(ApiResponse::ok())
 }
@@ -117,11 +134,16 @@ pub async fn permission_delete(
 /// 返回绑定视图列表。
 pub async fn user_role_list(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<UserRoleListParams>,
 ) -> Result<Vec<UserRoleView>> {
-    let items = scope_configuration(state.application().db(), state.application().rbac())
-        .user_role_list(&params)
-        .await?;
+    let items = scope_configuration(
+        state.application().db(),
+        state.application().rbac(),
+        state.application().authorization(),
+    )
+    .user_role_list(&params, &actor)
+    .await?;
 
     Ok(ApiResponse::ok_with_data(items))
 }
@@ -140,9 +162,13 @@ pub async fn user_role_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<AssignUserRoleRequest>,
 ) -> Result<UserRoleView> {
-    let view = scope_configuration(state.application().db(), state.application().rbac())
-        .assign_user_role(req, &actor)
-        .await?;
+    let view = scope_configuration(
+        state.application().db(),
+        state.application().rbac(),
+        state.application().authorization(),
+    )
+    .assign_user_role(req, &actor)
+    .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -163,9 +189,13 @@ pub async fn user_role_revoke(
     Path(id): Path<String>,
     Json(req): Json<RevokeUserRoleRequest>,
 ) -> Result<UserRoleView> {
-    let view = scope_configuration(state.application().db(), state.application().rbac())
-        .revoke_user_role(&id, req, &actor)
-        .await?;
+    let view = scope_configuration(
+        state.application().db(),
+        state.application().rbac(),
+        state.application().authorization(),
+    )
+    .revoke_user_role(&id, req, &actor)
+    .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -180,11 +210,16 @@ pub async fn user_role_revoke(
 /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
 pub async fn audit_event_list(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<AuditEventListParams>,
 ) -> Result<PageView<AuditEventView>> {
-    let page = scope_configuration(state.application().db(), state.application().rbac())
-        .audit_event_list(&params)
-        .await?;
+    let page = scope_configuration(
+        state.application().db(),
+        state.application().rbac(),
+        state.application().authorization(),
+    )
+    .audit_event_list(&params, &actor)
+    .await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }

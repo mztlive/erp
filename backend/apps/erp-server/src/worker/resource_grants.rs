@@ -15,7 +15,7 @@ use crate::wiring::Application;
 /// # 错误
 /// 轮次错误记录后重试，panic 由进程监督器检测。
 pub(super) async fn run(state: Application, mut stop: watch::Receiver<bool>) {
-    let process = ResourceGrantProcess::new(state.db(), state.rbac());
+    let process = ResourceGrantProcess::new(state.db(), state.authorization());
     let mut cursor = None;
     let mut rounds = 0_u64;
     loop {

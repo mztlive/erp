@@ -24,13 +24,7 @@ export function PersonalPolicyDetail({
     const otherActions = business.actions.filter(
         (action) => !business.configurable_actions.includes(action),
     )
-    const scopeTitle = !configurable
-        ? "访问方式"
-        : business.authorization_policy === "directory"
-          ? "可查询、选择的范围"
-          : business.authorization_policy === "governance"
-            ? "可管理的范围"
-            : "当前数据范围"
+    const scopeTitle = configurable ? "当前数据范围" : "访问方式"
     return (
         <section
             id="person-scope-selected-detail"
@@ -89,12 +83,6 @@ export function PersonalPolicyDetail({
                         无需单独配置范围。{business.policy_description}
                     </p>
                 )}
-                {configurable &&
-                    business.authorization_policy === "directory" && (
-                        <p className="text-xs leading-5 text-muted-foreground">
-                            仅决定在下拉选择框中能否看到对应资料，不代表可以查看或处理其业务单据。
-                        </p>
-                    )}
                 {configurable && otherActions.length > 0 && (
                     <p className="text-xs leading-5 text-muted-foreground">
                         此范围适用于 {business.configurable_actions.length}{" "}
@@ -116,7 +104,16 @@ export function PersonalPolicyDetail({
                     <div className="space-y-3 pb-4">
                         <ul className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
                             {business.actions.map((action) => (
-                                <li key={action}>{actionLabel(action)}</li>
+                                <li key={action} className="space-y-1">
+                                    <p>{actionLabel(action)}</p>
+                                    <p className="text-xs text-muted-foreground">
+                                        {business.configurable_actions.includes(
+                                            action,
+                                        )
+                                            ? "可配置范围"
+                                            : "按业务规则校验，不单独配置范围"}
+                                    </p>
+                                </li>
                             ))}
                         </ul>
                         <p className="text-xs leading-5 text-muted-foreground">

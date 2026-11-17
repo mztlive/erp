@@ -20,11 +20,11 @@ pub struct SalesChangeReadService {
     rbac: Arc<AuthorizationService>,
 }
 impl SalesChangeReadService {
-    /// 使用数据库句柄和当前 RBAC 服务构造只读查询服务。
+    /// 使用数据库句柄和共享授权服务构造只读查询服务。
     ///
     /// # 参数
     /// * `db` - MongoDB 数据库
-    /// * `rbac` - 当前 RBAC 快照
+    /// * `rbac` - 应用启动时完整装配的共享授权服务
     ///
     /// # 返回
     /// 返回可解析销售范围的服务；构造不执行查询。
@@ -34,7 +34,7 @@ impl SalesChangeReadService {
     ///
     /// # 关键业务约束
     /// 变更单沿原销售单当前负责人和 `business_org_unit_id` 接入。
-    pub fn with_rbac(db: mongodb::Database, rbac: Arc<AuthorizationService>) -> Self {
+    pub fn new(db: mongodb::Database, rbac: Arc<AuthorizationService>) -> Self {
         Self { db, rbac }
     }
 }

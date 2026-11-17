@@ -109,8 +109,7 @@ pub async fn contract_file(
     Extension(actor): Extension<AuditActor>,
     Path((id, file_id)): Path<(String, String)>,
 ) -> Result<FileAssetView> {
-    state.application().contract_service().require_attachment(&actor, &id, &file_id).await?;
-    let mut view = state.application().file_asset_service().file_asset_detail(&file_id).await?;
+    let mut view = state.application().contract_attachments().metadata(&id, &file_id, &actor).await?;
     prepare_asset_response(&state, &mut view);
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -130,8 +129,7 @@ pub async fn contract_file_preview(
     Extension(actor): Extension<AuditActor>,
     Path((id, file_id)): Path<(String, String)>,
 ) -> std::result::Result<Response, Error> {
-    state.application().contract_service().require_attachment(&actor, &id, &file_id).await?;
-    let view = state.application().file_asset_service().file_asset_preview(&file_id, &actor).await?;
+    let view = state.application().contract_attachments().preview(&id, &file_id, &actor).await?;
     if view.content_type.as_str() != "application/pdf" {
         return Err(Error::Unprocessable("当前文件类型不支持在线预览".to_string()));
     }
@@ -189,34 +187,6 @@ pub async fn contract_terminate(
     let view = state.application().contract_service().terminate_contract(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
-}
-
-/// 按资源动作重验合同对象范围；缺动作拒绝，缺范围不得补公司。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已认证操作人
-/// * `action` - 已注册的合同动作
-/// * `contract_id` - 目标合同
-///
-/// # 返回
-/// 对象在范围内时成功。
-///
-/// # 错误
-/// 读取动作对不可见对象返回 NotFound；写动作返回 Forbidden。
-///
-/// # 关键业务约束
-/// 销售建单所选合同必须独立走合同 v2，不得用客户范围代替。
-pub(crate) async fn ensure_contract_access(
-    state: &HttpState,
-    actor: &AuditActor,
-    action: &str,
-    contract_id: &str,
-) -> std::result::Result<(), Error> {
-    crate::wiring::contract_access(state.application().db(), state.application().rbac())
-        .require(actor, action, contract_id)
-        .await?;
-    Ok(())
 }
 
 #[cfg(test)]

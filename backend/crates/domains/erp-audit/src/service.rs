@@ -1,18 +1,15 @@
-use application_core::{AuditActor, Page};
+use application_core::AuditActor;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::NoTransaction;
-use validator::Validate;
 
 use crate::Error;
 use crate::catalog::registered_action;
-pub use crate::dto::{AuditLogItem, AuditLogListParams};
 use crate::entity::{
     AuditLog, AuditLogData, BusinessEventContent, BusinessEventContext, BusinessEventResult,
 };
 use crate::error::Result;
-use crate::repository::prelude::*;
-use crate::repository::{AuditExt, AuditLogFilter};
+use crate::repository::AuditExt;
 
 /// 由审计领域消费 [`AuditActor`] 构造可持久化审计日志。
 pub trait AuditActorLogs {
@@ -205,7 +202,7 @@ pub fn attempt_context(log: &AuditLog) -> Result<BusinessEventContext> {
 
 /// 审计日志服务
 ///
-/// 提供审计日志的写入与查询能力。
+/// 提供内部审计日志写入；展示读取由 `AuditLogReadService` 授权。
 pub struct AuditLogService {
     db: Database,
 }
@@ -242,24 +239,6 @@ impl AuditLogService {
         let log = AuditLog::new(id, data)?;
         self.db.audit_logs().create(&log, &mut NoTransaction).await?;
         Ok(log)
-    }
-
-    /// 按查询参数返回审计日志分页。
-    ///
-    /// # 参数
-    /// * `params` - 列表查询参数。
-    ///
-    /// # 返回
-    /// 返回校验通过并完成文本归一化后的 `AuditLogItem` 页；`total` 来自仓储计数。
-    ///
-    /// # 错误
-    /// `params` 校验失败时返回 `Error::ValidationError`。仓储查询失败时返回对应错误。
-    pub async fn audit_log_list(&self, params: &AuditLogListParams) -> Result<Page<AuditLogItem>> {
-        params.validate()?;
-        let filter = AuditLogFilter::from(params);
-        let page = self.db.audit_logs().search_logs(&filter, &mut NoTransaction).await?;
-        let items = page.items.into_iter().map(Into::into).collect();
-        Ok(Page::new(items, page.total))
     }
 }
 

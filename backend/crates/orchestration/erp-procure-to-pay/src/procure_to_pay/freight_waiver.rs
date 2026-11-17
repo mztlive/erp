@@ -37,7 +37,6 @@ impl PurchaseOrderProcess {
     ) -> Result<WaivePurchaseFreightResult> {
         req.validate()?;
         let db = self.db.clone();
-        self.require_rbac()?;
         let ports = self.ports.clone();
         let purchase_order_id = purchase_order_id.to_string();
         let actor = actor.clone();

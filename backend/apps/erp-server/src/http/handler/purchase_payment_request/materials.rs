@@ -1,4 +1,5 @@
 //! 本申请完整来源及冻结材料读取，不展开无关业务附件。
+use std::sync::Arc;
 
 use application_core::AuditActor;
 use axum::Extension;
@@ -56,7 +57,9 @@ pub async fn task_context(
     Path(id): Path<String>,
 ) -> Result<PurchasePaymentRequestView> {
     Ok(ApiResponse::ok_with_data(
-        reads(&state).task_context(&actor, &id, &state.application().work_item_authorization()).await?,
+        reads(&state)
+            .task_context(&actor, &id, Arc::new(state.application().work_item_authorization()))
+            .await?,
     ))
 }
 
@@ -137,7 +140,12 @@ async fn material_reference(
     }
     Ok(if let Some(task_id) = query.work_item_id.as_deref() {
         service
-            .require_task_material(actor, task_id, asset_id, &state.application().work_item_authorization())
+            .require_task_material(
+                actor,
+                task_id,
+                asset_id,
+                Arc::new(state.application().work_item_authorization()),
+            )
             .await?
     } else if let Some(version) = query.submission_version {
         service.require_submission_material(actor, id, version, asset_id).await?

@@ -4,8 +4,13 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use erp_identity::ports::OrganizationBusinessPort;
+use erp_identity::service::organization::OrganizationService;
+use erp_identity::{AuthorizationService, SharedRbacService};
+use erp_integration::repository::organization::has_unsettled_business_org as integration_unsettled;
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_procurement::repository::prelude::*;
+use erp_sales::repository::organization::has_unsettled_business_org as sales_unsettled;
+use erp_supply::repository::organization::has_unsettled_business_org as supply_unsettled;
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -20,14 +25,12 @@ impl OrganizationBusinessPort for OrganizationBusinessFacts {
         org: &str,
         executor: &mut dyn Executor,
     ) -> erp_identity::Result<bool> {
-        if erp_sales::repository::organization::has_unsettled_business_org(&self.db, org, executor).await? {
+        if sales_unsettled(&self.db, org, executor).await? {
             return Ok(true);
         }
         if self.db.purchase_orders().has_unsettled_business_org(org, executor).await?
-            || erp_supply::repository::organization::has_unsettled_business_org(&self.db, org, executor)
-                .await?
-            || erp_integration::repository::organization::has_unsettled_business_org(&self.db, org, executor)
-                .await?
+            || supply_unsettled(&self.db, org, executor).await?
+            || integration_unsettled(&self.db, org, executor).await?
         {
             return Ok(true);
         }
@@ -40,6 +43,7 @@ impl OrganizationBusinessPort for OrganizationBusinessFacts {
 /// # 参数
 /// * `db` - 各域未结业务集合所在数据库。
 /// * `rbac` - 组织服务使用的 RBAC 服务。
+/// * `authorization` - 完整绑定的共享授权服务。
 ///
 /// # 返回
 /// 返回必须通过真实业务事实核验才可停用组织的服务。
@@ -48,11 +52,8 @@ impl OrganizationBusinessPort for OrganizationBusinessFacts {
 /// 不返回错误。
 pub fn organization_service(
     db: Database,
-    rbac: erp_identity::SharedRbacService,
-) -> erp_identity::service::organization::OrganizationService {
-    erp_identity::service::organization::OrganizationService::new(
-        db.clone(),
-        rbac,
-        Arc::new(OrganizationBusinessFacts { db }),
-    )
+    rbac: SharedRbacService,
+    authorization: Arc<AuthorizationService>,
+) -> OrganizationService {
+    OrganizationService::new(db.clone(), rbac, Arc::new(OrganizationBusinessFacts { db }), authorization)
 }

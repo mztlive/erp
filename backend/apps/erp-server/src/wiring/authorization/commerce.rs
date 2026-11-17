@@ -54,6 +54,7 @@ pub(super) fn bindings(
     let mut mappings = vec![
         (purchase_order::LIST, purchase.clone()),
         (purchase_order::DETAIL, purchase.clone()),
+        (internal::PURCHASE_DELIVERY_OPTIONS_READ, purchase.clone()),
         (internal::PAYMENT_REQUEST_CANDIDATES, purchase.clone()),
         (internal::PURCHASE_PORTAL_IMPACT_READ, purchase.clone()),
     ];

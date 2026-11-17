@@ -15,12 +15,26 @@ use crate::{Error, Result};
 impl SupplierCatalogAdoptionProcess {
     /// 读取准备摘要，允许未完成批次，仍校验当前连接和供应商权限。
     /// # 参数
-    /// 连接、批次身份、认证用户及事务执行器。
+    /// connection、id 为连接和批次身份；actor 为当前认证用户。
     /// # 返回
     /// 不含成员资料的批次头。
     /// # 错误
     /// 不存在、旧未完成孤立批次或越权时拒绝。
     pub async fn preparation_batch(
+        &self,
+        connection: &str,
+        id: &str,
+        actor: &AuditActor,
+    ) -> Result<CatalogAdoptionBatch> {
+        let (connection, id, actor) = (connection.to_owned(), id.to_owned(), actor.clone());
+        self.with_snapshot(move |process, executor| {
+            Box::pin(async move { process.read_preparation_batch(&connection, &id, &actor, executor).await })
+        })
+        .await
+    }
+
+    /// 在调用方原事务内先授权，再读取并核对批次所属连接和供应商。
+    pub(super) async fn read_preparation_batch(
         &self,
         connection: &str,
         id: &str,
@@ -84,7 +98,8 @@ impl SupplierCatalogAdoptionProcess {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let mut batch = process.preparation_batch(&connection, &id, &actor, executor).await?;
+                    let mut batch =
+                        process.read_preparation_batch(&connection, &id, &actor, executor).await?;
                     batch
                         .preparation
                         .as_mut()
@@ -190,5 +205,109 @@ impl SupplierCatalogAdoptionProcess {
             Ok(()) | Err(PersistenceError::OptimisticLockingError) => Ok(()),
             Err(error) => Err(error.into()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use async_trait::async_trait;
+    use erp_catalog::{CatalogAccess, CatalogService, EmptyFileAssetFacts, FailClosedAuditPort};
+    use erp_core::AccountKind;
+    use erp_identity::entity::access_control::ResolvedScope;
+    use erp_identity::ports::{IdentityAuditPort, PreparedResourceAudit};
+    use erp_identity::testing::{fixed_authorization, unavailable_authorization};
+    use erp_identity::{AuthorizationService, RbacService, Result as IdentityResult};
+    use erp_supplier::SupplierAccess;
+    use erp_supply::service::supplier_offering::{OfferingAccess, SupplierOfferingService};
+    use erp_workflow::WorkItemService;
+    use erp_workflow::ports::WorkflowAuthorizationPort;
+    use mongodb::Client;
+    use persistence_core::ReadExecutor;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+    use crate::wiring::CatalogServices;
+
+    struct NoAudit;
+    #[async_trait]
+    impl IdentityAuditPort for NoAudit {
+        fn resource_log(
+            &self,
+            _: AuditActor,
+            _: &str,
+            _: &str,
+            _: String,
+        ) -> IdentityResult<PreparedResourceAudit> {
+            panic!("准备摘要读取不得准备身份审计")
+        }
+        async fn persist(&self, _: &PreparedResourceAudit, _: &mut dyn Executor) -> IdentityResult<()> {
+            panic!("准备摘要读取不得写身份审计")
+        }
+    }
+
+    #[derive(Clone)]
+    struct Workflows;
+    impl WorkflowAuthorizationPort for Workflows {}
+
+    /// 失败发生在授权阶段；本夹具不发起连接、批次或成员查询。
+    async fn process(authorization: Arc<AuthorizationService>) -> SupplierCatalogAdoptionProcess {
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("adoption_preparation_authorization_unit");
+        let catalog_access = CatalogAccess::new(db.clone(), authorization.clone());
+        let offering_access = OfferingAccess::new(db.clone(), authorization.clone());
+        let services = CatalogServices {
+            catalog: CatalogService::new(
+                db.clone(),
+                Arc::new(FailClosedAuditPort),
+                Arc::new(EmptyFileAssetFacts),
+                catalog_access.clone(),
+            ),
+            catalog_access,
+            offerings: SupplierOfferingService::new(db.clone()).with_data_scope(offering_access.clone()),
+            offering_access,
+            suppliers: SupplierAccess::new(db.clone(), authorization.clone()),
+            work_items: Arc::new(WorkItemService::new(
+                db.clone(),
+                Arc::new(RbacService::new(db.clone(), Arc::new(NoAudit))),
+                authorization.clone(),
+                Workflows,
+            )),
+        };
+        SupplierCatalogAdoptionProcess::new(db, authorization, Arc::new(services))
+    }
+
+    #[tokio::test]
+    async fn preparation_read_requires_snapshot_before_identity_or_business_reads() {
+        let process = process(unavailable_authorization()).await;
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        for executor in [&mut NoTransaction as &mut dyn Executor, &mut ReadExecutor::default()] {
+            let result = process.read_preparation_batch("connection", "batch", &actor, executor).await;
+            assert!(matches!(result, Err(Error::ValidationError(_))));
+        }
+        let result = process
+            .read_preparation_batch("connection", "batch", &actor, &mut SnapshotExecutor::default())
+            .await;
+        assert!(matches!(result, Err(Error::Internal(message)) if message == "测试授权设施不可用"));
+    }
+
+    #[tokio::test]
+    async fn preparation_read_rejects_missing_adoption_qualification_before_loading_connection_or_batch() {
+        let authorization = fixed_authorization(
+            &[],
+            ResolvedScope { role_clauses: Vec::new(), user_limit: None },
+            Vec::new(),
+            Vec::new(),
+        )
+        .unwrap();
+        let process = process(authorization).await;
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let result = process
+            .read_preparation_batch("connection", "batch", &actor, &mut SnapshotExecutor::default())
+            .await;
+        assert!(matches!(result, Err(Error::Forbidden(_))));
     }
 }

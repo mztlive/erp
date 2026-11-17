@@ -1,11 +1,12 @@
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_data_import::data_transfer::{TransferKind, TransferReader};
-use erp_identity::Permission;
+use erp_permissions::cost;
+use erp_procurement::PurchaseDataScope;
 use erp_supply::OfferingAccess;
 use persistence_core::{Executor, NoTransaction};
 
-use crate::wiring::{PurchaseDataScope, customer_access, funds_access_with_rbac};
+use crate::wiring::{customer_access, funds_access};
 mod error;
 use erp_read_models::customer_quality::CustomerQualityReadModel;
 use erp_read_models::finance::actual_profit_loss::{ActualProfitLossReadModel, ProfitLossAccess};
@@ -72,8 +73,8 @@ impl Reads {
             PurchaseOrders => output(
                 PurchaseOrderReadService::new(
                     state.db(),
-                    state.rbac(),
-                    PurchaseDataScope::shared(state.db(), state.authorization().into()),
+                    state.authorization(),
+                    PurchaseDataScope::shared(state.db(), state.authorization()),
                 )
                 .purchase_order_list(&input(query)?, actor)
                 .await?,
@@ -99,7 +100,7 @@ impl Reads {
                     .await?,
             ),
             InvoiceRequests => output(
-                funds_access_with_rbac(state.db(), state.rbac())
+                funds_access(state.db(), state.authorization())
                     .request_list_scoped(&input(query)?, actor)
                     .await?,
             ),
@@ -117,10 +118,10 @@ impl Reads {
             TransferKind::ProfitLoss => {
                 let can_drill_cost = state
                     .authorization()
-                    .has_permission(actor, &Permission::parse("cost_entry:detail")?, &mut NoTransaction)
+                    .has_permission(actor, &cost::ENTRY_DETAIL, &mut NoTransaction)
                     .await?;
                 output(
-                    ActualProfitLossReadModel::new(state.db(), state.rbac())
+                    ActualProfitLossReadModel::new(state.db(), state.authorization())
                         .export(input(query)?, ProfitLossAccess { can_drill_cost }, actor)
                         .await?,
                 )
@@ -136,7 +137,11 @@ impl Reads {
     }
 }
 fn quality(state: &Application) -> CustomerQualityReadModel {
-    CustomerQualityReadModel::new(state.db(), state.rbac(), customer_access(state.db(), state.rbac()))
+    CustomerQualityReadModel::new(
+        state.db(),
+        state.authorization(),
+        customer_access(state.db(), state.authorization()),
+    )
 }
 async fn master(state: &Application, query: &Value, actor: &AuditActor) -> Result<Value> {
     match query["resource"].as_str() {
@@ -147,7 +152,7 @@ async fn master(state: &Application, query: &Value, actor: &AuditActor) -> Resul
     }
 }
 async fn funds(state: &Application, kind: TransferKind, query: &Value, actor: &AuditActor) -> Result<Value> {
-    let service = funds_access_with_rbac(state.db(), state.rbac());
+    let service = funds_access(state.db(), state.authorization());
     let view = query["view"].as_str();
     let mut filtered = query.clone();
     if let Some(map) = filtered.as_object_mut() {
@@ -222,7 +227,7 @@ impl Reads {
         let state = &self.0;
         let mut page = SupplierOfferingReadService::new(
             state.db(),
-            OfferingAccess::new(state.db(), state.authorization().into()),
+            OfferingAccess::new(state.db(), state.authorization()),
             MongoOfferingProcurementOwners::shared(state.db()),
         )
         .list_with(&input(query)?, actor, executor)
@@ -236,7 +241,7 @@ impl Reads {
 
 async fn sales(state: &Application, query: &Value, actor: &AuditActor) -> Result<Value> {
     output(
-        SalesOrderReadService::with_rbac(state.db(), state.rbac())
+        SalesOrderReadService::new(state.db(), state.authorization())
             .sales_order_export_page(&input(query)?, actor)
             .await?,
     )

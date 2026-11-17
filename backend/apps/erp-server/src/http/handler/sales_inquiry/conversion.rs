@@ -35,7 +35,7 @@ pub async fn financial_inquiry_candidates(
     Path(id): Path<String>,
 ) -> Result<FinancialInquiryExpenseCandidates> {
     Ok(ApiResponse::ok_with_data(
-        InquiryExpenseReadService::new(state.application().db(), state.application().rbac())
+        InquiryExpenseReadService::new(state.application().db(), state.application().authorization())
             .financial_candidates(&id, &actor)
             .await?,
     ))
@@ -54,7 +54,7 @@ pub async fn expense_inquiry_candidates(
     Path(id): Path<String>,
 ) -> Result<InquiryExpenseCandidates> {
     Ok(ApiResponse::ok_with_data(
-        InquiryExpenseReadService::new(state.application().db(), state.application().rbac())
+        InquiryExpenseReadService::new(state.application().db(), state.application().authorization())
             .candidates(&id, &actor)
             .await?,
     ))
@@ -76,8 +76,12 @@ pub async fn sales_basis(
     Ok(ApiResponse::ok_with_data(
         SalesOrderCommandProcess::new(
             state.application().db(),
-            state.application().rbac(),
-            crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),
+            state.application().authorization(),
+            crate::wiring::sales::sales_services(
+                state.application().db(),
+                state.application().rbac(),
+                state.application().authorization(),
+            ),
         )
         .inquiry_sales_basis(&id, params.round, &actor)
         .await?,

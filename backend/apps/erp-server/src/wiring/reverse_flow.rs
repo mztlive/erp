@@ -23,9 +23,9 @@ pub fn reverse_flow_ports(
     authorization: Arc<AuthorizationService>,
 ) -> ReverseFlowPorts {
     ReverseFlowPorts::new(
-        authorization,
-        approval_runtime(db.clone(), rbac.clone()),
-        finance_responsibility(db, rbac),
+        authorization.clone(),
+        approval_runtime(db.clone(), rbac.clone(), authorization.clone()),
+        finance_responsibility(db, rbac, authorization),
     )
 }
 

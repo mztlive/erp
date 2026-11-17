@@ -3,13 +3,12 @@
 use axum::extract::DefaultBodyLimit;
 use axum::routing::{get, post, put};
 use axum::{Extension, Router, middleware};
-use erp_identity::AuthorizationService;
 use erp_permissions as permissions;
 
 use crate::http::handler::data_transfer as transfers;
 use crate::http::handler::supplier_portal::{self, assets, auth, read, write};
 use crate::http::middleware::supplier_portal::authenticate_portal;
-use crate::http::middleware::with_permission;
+use crate::http::routes::permission_route;
 use crate::http::state::HttpState;
 use crate::http::upload;
 
@@ -83,132 +82,117 @@ fn asset_routes() -> Router<HttpState> {
 /// 装配后台专项接口；统一后台认证由父级 `/admin` 路由执行。
 ///
 /// # 参数
-/// * `rbac` - 后台权限校验服务。
+/// 无。
 /// # 返回
 /// 返回逐接口绑定专项权限的 `/supplier-portal` 子路由。
 /// # 错误
 /// 构建不执行授权读取；请求错误由权限层及处理器返回。
-pub fn admin_routes(rbac: &AuthorizationService) -> Router<HttpState> {
+pub fn admin_routes() -> Router<HttpState> {
     Router::new().nest(
         "/supplier-portal",
-        account_routes(rbac)
-            .merge(catalog_routes(rbac))
-            .merge(application_routes(rbac))
-            .merge(review_routes(rbac)),
+        account_routes().merge(catalog_routes()).merge(application_routes()).merge(review_routes()),
     )
 }
 
 /// 账号管理入口不授予内部角色或组织身份。
-fn account_routes(rbac: &AuthorizationService) -> Router<HttpState> {
+fn account_routes() -> Router<HttpState> {
     Router::new()
         .route(
             "/accounts",
-            with_permission(
+            permission_route(
                 get(supplier_portal::admin::accounts),
-                rbac,
                 &permissions::supplier_portal::ADMIN_ACCOUNTS,
             ),
         )
         .route(
             "/accounts",
-            with_permission(
+            permission_route(
                 post(supplier_portal::admin::create_account),
-                rbac,
                 &permissions::supplier_portal::ADMIN_CREATE_ACCOUNT,
             ),
         )
         .route(
             "/accounts/{id}",
-            with_permission(
+            permission_route(
                 put(supplier_portal::admin::update_account),
-                rbac,
                 &permissions::supplier_portal::ADMIN_UPDATE_ACCOUNT,
             ),
         )
 }
 
 /// 定向目录开放使用独立目录权限。
-fn catalog_routes(rbac: &AuthorizationService) -> Router<HttpState> {
+fn catalog_routes() -> Router<HttpState> {
     Router::new()
         .route(
             "/catalog-grants",
-            with_permission(
+            permission_route(
                 get(supplier_portal::admin::grants),
-                rbac,
                 &permissions::supplier_portal::ADMIN_GRANTS,
             ),
         )
         .route(
             "/catalog-grants",
-            with_permission(
+            permission_route(
                 post(supplier_portal::admin::update_grant),
-                rbac,
                 &permissions::supplier_portal::ADMIN_UPDATE_GRANT,
             ),
         )
 }
 
 /// 申请列表、原稿读取和决定各自绑定对应专项权限。
-fn application_routes(rbac: &AuthorizationService) -> Router<HttpState> {
+fn application_routes() -> Router<HttpState> {
     Router::new()
         .route(
             "/applications",
-            with_permission(
+            permission_route(
                 get(supplier_portal::admin::applications),
-                rbac,
                 &permissions::supplier_portal::ADMIN_APPLICATIONS,
             ),
         )
         .route(
             "/applications/{id}",
-            with_permission(
+            permission_route(
                 get(supplier_portal::admin::application),
-                rbac,
                 &permissions::supplier_portal::ADMIN_IMPACTS,
             ),
         )
         .route(
             "/applications/{id}/review",
-            with_permission(
+            permission_route(
                 post(supplier_portal::admin::review),
-                rbac,
                 &permissions::supplier_portal::ADMIN_REVIEW,
             ),
         )
 }
 
 /// 审核辅助字典与重复候选仍受专项读取权限及领域范围约束。
-fn review_routes(rbac: &AuthorizationService) -> Router<HttpState> {
+fn review_routes() -> Router<HttpState> {
     Router::new()
         .route(
             "/offerings/{id}/impacts",
-            with_permission(
+            permission_route(
                 get(supplier_portal::admin::impacts),
-                rbac,
                 &permissions::supplier_portal::ADMIN_IMPACTS,
             ),
         )
         .route(
             "/applications/{id}/files/{file_id}/download",
-            with_permission(
+            permission_route(
                 get(supplier_portal::assets::review_download),
-                rbac,
                 &permissions::supplier_portal::ADMIN_IMPACTS,
             ),
         )
         .route(
             "/dictionaries/{kind}",
-            with_permission(
+            permission_route(
                 get(supplier_portal::admin::dictionaries),
-                rbac,
                 &permissions::supplier_portal::ADMIN_REVIEW,
             ),
         )
         .route(
             "/applications/{id}/duplicates",
-            with_permission(
+            permission_route(
                 get(supplier_portal::admin::duplicates),
-                rbac,
                 &permissions::supplier_portal::ADMIN_REVIEW,
             ),
         )

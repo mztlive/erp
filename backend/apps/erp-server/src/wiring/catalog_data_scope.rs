@@ -1,6 +1,8 @@
 //! 商品授权与业务能力装配。
+use std::sync::Arc;
+
 use erp_catalog::{CatalogAccess, CatalogService};
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 use mongodb::Database;
 
 use super::catalog::{MongoCatalogAudit, MongoCatalogFileAssets};
@@ -9,7 +11,7 @@ use super::catalog::{MongoCatalogAudit, MongoCatalogFileAssets};
 ///
 /// # 参数
 /// * `db` - 数据库
-/// * `rbac` - 当前 RBAC 快照
+/// * `authorization` - 进程共享统一授权服务
 ///
 /// # 返回
 /// 返回已注入本 adapter 的商品访问器。
@@ -18,27 +20,27 @@ use super::catalog::{MongoCatalogAudit, MongoCatalogFileAssets};
 /// 无。
 ///
 /// # 关键业务约束
-/// HTTP 与命名 Process 复用本域固定授权登记。
-pub fn catalog_access(db: Database, rbac: SharedRbacService) -> CatalogAccess {
-    CatalogAccess::new(db, rbac)
+/// HTTP 与业务流程必须复用进程共享统一授权服务。
+pub fn catalog_access(db: Database, authorization: Arc<AuthorizationService>) -> CatalogAccess {
+    CatalogAccess::new(db, authorization)
 }
 
 /// 装配已接线授权能力 的商品服务。
 ///
 /// # 参数
 /// * `db` - 数据库
-/// * `rbac` - 当前 RBAC 快照
+/// * `authorization` - 进程共享统一授权服务
 ///
 /// # 返回
 /// 返回注入生产范围 adapter 的商品服务。
 ///
 /// # 错误
 /// 无。
-pub fn scoped_catalog_service(db: Database, rbac: SharedRbacService) -> CatalogService {
+pub fn scoped_catalog_service(db: Database, authorization: Arc<AuthorizationService>) -> CatalogService {
     CatalogService::new(
         db.clone(),
         MongoCatalogAudit::shared(db.clone()),
         MongoCatalogFileAssets::shared(db.clone()),
-        CatalogAccess::new(db, rbac),
+        CatalogAccess::new(db, authorization),
     )
 }

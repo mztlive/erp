@@ -27,9 +27,10 @@ use crate::http::state::HttpState;
 /// 业务处理或数据读取失败时返回对应错误。
 pub async fn purchase_receipt_list(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<PurchaseReceiptListParams>,
 ) -> Result<PageView<PurchaseReceiptView>> {
-    let page = service(&state).purchase_receipt_list(&params).await?;
+    let page = service(&state).purchase_receipt_list(&params, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -47,9 +48,10 @@ pub async fn purchase_receipt_list(
 /// 业务处理或数据读取失败时返回对应错误。
 pub async fn purchase_receipt_detail(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<PurchaseReceiptDetailView> {
-    let view = service(&state).purchase_receipt_detail(&id).await?;
+    let view = service(&state).purchase_receipt_detail(&id, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }

@@ -6,23 +6,20 @@
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
-use erp_core::common::time::Instant;
 use erp_customer::{
     CreateCustomerRequest, CustomerAssignmentListParams, CustomerAssignmentRequest, CustomerAssignmentView,
     CustomerDetailView, CustomerListParams, CustomerListView, CustomerProfileDetailView,
     CustomerProfileMutationView, CustomerScope, CustomerSensitiveRevealView, CustomerView, PageView,
-    RevealCustomerSensitiveRequest, SaveCustomerProfileRequest, SensitiveFieldKind, UpdateCustomerRequest,
+    RevealCustomerSensitiveRequest, SaveCustomerProfileRequest, UpdateCustomerRequest,
 };
-use erp_identity::Permission;
 use erp_master_data::delete_customer;
 use erp_read_models::{CustomerCenterReadService, CustomerCenterReceivableView, CustomerCenterRelatedView};
-use persistence_core::NoTransaction;
 
 use crate::http::errors::{Error, Result};
 use crate::http::extractor::{Json, Query};
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
-use crate::wiring::{contract_access, customer_access, funds_access_with_rbac};
+use crate::wiring::{contract_access, customer_access, funds_access};
 
 /// 原子创建完整客户资料。
 pub async fn customer_profile_create(
@@ -30,18 +27,6 @@ pub async fn customer_profile_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<SaveCustomerProfileRequest>,
 ) -> Result<CustomerProfileMutationView> {
-    if req.contacts.is_some() {
-        ensure_permission(&state, &actor, "party_contact:create").await?;
-    }
-    if req.addresses.is_some() {
-        ensure_permission(&state, &actor, "party_address:create").await?;
-    }
-    if req.bank_accounts.is_some() {
-        ensure_permission(&state, &actor, "party_bank_account:create").await?;
-    }
-    crate::wiring::customer_access(state.application().db(), state.application().rbac())
-        .ensure_create(&actor)
-        .await?;
     let view = state.application().customer_profile_process().create(req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -53,19 +38,6 @@ pub async fn customer_profile_update(
     Path(id): Path<String>,
     Json(req): Json<SaveCustomerProfileRequest>,
 ) -> Result<CustomerProfileMutationView> {
-    ensure_customer_access(&state, &actor, "update", &id).await?;
-    if req.contacts.is_some() {
-        ensure_permission(&state, &actor, "party_contact:detail").await?;
-        ensure_permission(&state, &actor, "party_contact:update").await?;
-    }
-    if req.addresses.is_some() {
-        ensure_permission(&state, &actor, "party_address:detail").await?;
-        ensure_permission(&state, &actor, "party_address:update").await?;
-    }
-    if req.bank_accounts.is_some() {
-        ensure_permission(&state, &actor, "party_bank_account:detail").await?;
-        ensure_permission(&state, &actor, "party_bank_account:update").await?;
-    }
     let view = state.application().customer_profile_process().update(&id, req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -86,15 +58,12 @@ pub async fn customer_center_related(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<CustomerCenterRelatedView> {
-    ensure_customer_access(&state, &actor, "detail", &id).await?;
-    ensure_permission(&state, &actor, "contract:list").await?;
-    ensure_permission(&state, &actor, "sales_order:list").await?;
     let view = CustomerCenterReadService::new(
         state.application().db(),
-        state.application().rbac(),
-        contract_access(state.application().db(), state.application().rbac()),
-        customer_access(state.application().db(), state.application().rbac()),
-        funds_access_with_rbac(state.application().db(), state.application().rbac()),
+        state.application().authorization(),
+        contract_access(state.application().db(), state.application().authorization()),
+        customer_access(state.application().db(), state.application().authorization()),
+        funds_access(state.application().db(), state.application().authorization()),
     )
     .related(&id, &actor)
     .await?;
@@ -107,14 +76,12 @@ pub async fn customer_center_receivable(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<CustomerCenterReceivableView> {
-    ensure_customer_access(&state, &actor, "detail", &id).await?;
-    ensure_permission(&state, &actor, "receivable_account:list").await?;
     let view = CustomerCenterReadService::new(
         state.application().db(),
-        state.application().rbac(),
-        contract_access(state.application().db(), state.application().rbac()),
-        customer_access(state.application().db(), state.application().rbac()),
-        funds_access_with_rbac(state.application().db(), state.application().rbac()),
+        state.application().authorization(),
+        contract_access(state.application().db(), state.application().authorization()),
+        customer_access(state.application().db(), state.application().authorization()),
+        funds_access(state.application().db(), state.application().authorization()),
     )
     .receivable(&id, &actor)
     .await?;
@@ -127,12 +94,8 @@ pub async fn customer_profile_command_detail(
     Extension(actor): Extension<AuditActor>,
     Path(idempotency_key): Path<String>,
 ) -> Result<Option<CustomerProfileMutationView>> {
-    let view = state.application().customer_profile_process().command_result(&idempotency_key).await?;
-    if let Some(result) = &view
-        && result.initiated_by != actor.id()
-    {
-        ensure_customer_access(&state, &actor, "detail", &result.customer_id).await?;
-    }
+    let view =
+        state.application().customer_profile_process().command_result(&idempotency_key, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -142,19 +105,6 @@ pub async fn customer_sensitive_reveal(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<RevealCustomerSensitiveRequest>,
 ) -> Result<CustomerSensitiveRevealView> {
-    let now =
-        u64::try_from(Instant::now().unix_secs()).map_err(|_| Error::Internal("系统时间非法".to_string()))?;
-    let scope = state.application().sensitive_data().verify_reveal_token(&req.reveal_token, now)?;
-    let (detail_permission, reveal_permission) = match scope.kind {
-        erp_party::SensitiveFieldKind::ContactMobile => ("party_contact:detail", "party_contact:reveal"),
-        erp_party::SensitiveFieldKind::Address => ("party_address:detail", "party_address:reveal"),
-        erp_party::SensitiveFieldKind::BankAccountNumber => {
-            ("party_bank_account:detail", "party_bank_account:reveal")
-        },
-    };
-    ensure_customer_access(&state, &actor, "detail", &scope.supplier_id).await?;
-    ensure_permission(&state, &actor, detail_permission).await?;
-    ensure_permission(&state, &actor, reveal_permission).await?;
     let view = state.application().customer_profile_process().reveal_sensitive(req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -189,7 +139,6 @@ pub async fn customer_all_authorized_list(
     Extension(actor): Extension<AuditActor>,
     Query(mut params): Query<CustomerListParams>,
 ) -> Result<CustomerListView> {
-    ensure_permission(&state, &actor, "customer:list").await?;
     params.scope = CustomerScope::AllAuthorized;
     let page = state.application().customer_service().customer_list(&params, &actor).await?;
     Ok(ApiResponse::ok_with_data(page))
@@ -264,11 +213,10 @@ pub async fn customer_delete(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<()> {
-    ensure_customer_access(&state, &actor, "delete", &id).await?;
     delete_customer(
         state.application().db(),
         state.application().customer_service(),
-        customer_access(state.application().db(), state.application().rbac()),
+        customer_access(state.application().db(), state.application().authorization()),
         id,
         actor,
     )
@@ -291,9 +239,11 @@ pub async fn customer_assignment_list(
     Path(id): Path<String>,
     Query(params): Query<CustomerAssignmentListParams>,
 ) -> Result<PageView<CustomerAssignmentView>> {
-    ensure_customer_access(&state, &actor, "detail", &id).await?;
-    let page =
-        state.application().customer_assignment_service().customer_assignment_list(&id, &params).await?;
+    let page = state
+        .application()
+        .customer_assignment_service()
+        .customer_assignment_list(&actor, &id, &params)
+        .await?;
     Ok(ApiResponse::ok_with_data(page))
 }
 
@@ -313,69 +263,8 @@ pub async fn customer_assignment_apply(
     Path(id): Path<String>,
     Json(req): Json<CustomerAssignmentRequest>,
 ) -> Result<Vec<CustomerAssignmentView>> {
-    ensure_customer_access(&state, &actor, "update", &id).await?;
     let views = state.application().customer_assignment_service().apply_assignment(&id, req, &actor).await?;
     Ok(ApiResponse::ok_with_data(views))
-}
-
-/// 计算客户对象中心允许动作；RBAC 与客户停用状态在可信服务端合并。
-async fn allowed_actions(
-    state: &HttpState,
-    actor: &AuditActor,
-    customer_active: bool,
-) -> std::result::Result<Vec<String>, Error> {
-    let candidates = [
-        ("EDIT_CUSTOMER", "customer:update", None, false),
-        ("UPLOAD_CONTRACT_PDF", "contract:create", None, true),
-        ("CREATE_SALES_ORDER", "sales_order:create", None, true),
-        ("OPEN_RECEIVABLE", "receivable_account:detail", None, false),
-        ("MANAGE_ASSIGNMENTS", "customer_assignment:create", None, false),
-        ("REVEAL_CONTACT", "party_contact:reveal", Some("party_contact:detail"), false),
-        ("REVEAL_ADDRESS", "party_address:reveal", Some("party_address:detail"), false),
-        ("REVEAL_BANK_ACCOUNT", "party_bank_account:reveal", Some("party_bank_account:detail"), false),
-    ];
-    let mut actions = Vec::new();
-    for (action, permission, prerequisite, requires_active) in candidates {
-        if requires_active && !customer_active {
-            continue;
-        }
-        if let Some(prerequisite) = prerequisite
-            && !has_permission(state, actor, prerequisite).await?
-        {
-            continue;
-        }
-        if has_permission(state, actor, permission).await? {
-            actions.push(action.to_string());
-        }
-    }
-    Ok(actions)
-}
-
-/// 判断当前 RBAC 主体是否覆盖给定权限。
-pub(crate) async fn has_permission(
-    state: &HttpState,
-    actor: &AuditActor,
-    permission: &str,
-) -> std::result::Result<bool, Error> {
-    let permission = Permission::parse(permission)?;
-    state
-        .application()
-        .authorization()
-        .has_permission(actor, &permission, &mut NoTransaction)
-        .await
-        .map_err(Into::into)
-}
-
-/// 强制当前 RBAC 主体覆盖字段级权限。
-async fn ensure_permission(
-    state: &HttpState,
-    actor: &AuditActor,
-    permission: &str,
-) -> std::result::Result<(), Error> {
-    if has_permission(state, actor, permission).await? {
-        return Ok(());
-    }
-    Err(Error::Forbidden("当前角色无权维护或查看该字段".to_string()))
 }
 
 /// 常规列表拒绝全量授权口径，避免只凭 `customer:list` 绕过专用入口。
@@ -395,19 +284,6 @@ fn reject_all_authorized_on_regular_list(scope: CustomerScope) -> std::result::R
     if scope == CustomerScope::AllAuthorized {
         return Err(Error::BadRequest("全部有权客户请使用专用查询入口".to_string()));
     }
-    Ok(())
-}
-
-/// 按资源动作重验客户对象范围；缺动作拒绝，缺范围不得补公司。
-pub(crate) async fn ensure_customer_access(
-    state: &HttpState,
-    actor: &AuditActor,
-    action: &str,
-    customer_id: &str,
-) -> std::result::Result<(), Error> {
-    crate::wiring::customer_access(state.application().db(), state.application().rbac())
-        .require(actor, action, customer_id)
-        .await?;
     Ok(())
 }
 

@@ -28,9 +28,11 @@ pub async fn customer_receipt_draft(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<CustomerReceiptView> {
-    let view =
-        ReceivableProcess::new(state.application().db(), receivable_posting_ports(state.application().db()))
-            .customer_receipt_draft(&id, &actor)
-            .await?;
+    let view = ReceivableProcess::new(
+        state.application().db(),
+        receivable_posting_ports(state.application().db(), state.application().authorization()),
+    )
+    .customer_receipt_draft(&id, &actor)
+    .await?;
     Ok(ApiResponse::ok_with_data(view))
 }

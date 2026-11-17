@@ -1,19 +1,22 @@
 //! 将身份域权限与 policy 事务装配到工作流授权端口。
 
+use std::sync::Arc;
+
 use application_core::AuditActor;
 use erp_approval_runtime::resource_grants::append_assignments;
-use erp_identity::{Permission, SharedRbacService};
+use erp_identity::{AccessTarget, AuthorizationService, SharedRbacService};
+use erp_permissions::contract;
 use erp_supplier_catalog::supplier_portal::authorization::request_readable as portal_request_readable;
 use erp_supplier_catalog::supplier_portal::request_reviewable as portal_request_reviewable;
 use erp_workflow::entity::document_registry::DocumentType;
-use erp_workflow::ports::{ApprovalBindingFacts, OrderTaskSource, TaskReadAction, WorkflowAuthorizationPort};
+use erp_workflow::ports::{ApprovalBindingFacts, OrderTaskSource, WorkflowAuthorizationPort};
 use erp_workflow::service::approval::execution::PlannedWrites;
 use erp_workflow::{Error as WorkflowError, Result as WorkflowResult};
 use mongodb::Database;
 use persistence_core::Executor;
 
 use super::map_service;
-use crate::wiring::contract_access;
+use crate::wiring::catalog_services;
 use crate::wiring::errors::{Error, Result};
 
 /// 工作流跨域业务来源授权 adapter。
@@ -21,6 +24,7 @@ use crate::wiring::errors::{Error, Result};
 pub struct WorkflowAuth {
     db: Database,
     rbac: SharedRbacService,
+    authorization: Arc<AuthorizationService>,
 }
 
 impl WorkflowAuth {
@@ -29,33 +33,36 @@ impl WorkflowAuth {
     /// # 参数
     /// * `db` - 身份与业务集合所在数据库。
     /// * `rbac` - 现有 RBAC 快照服务。
+    /// * `authorization` - 启动时完整绑定的共享授权服务。
     ///
     /// # 返回
     /// 返回未执行 I/O 的授权 adapter。
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
-        Self { db, rbac }
-    }
-
-    #[cfg(test)]
-    pub(crate) fn shares_policy_state(&self, other: &Self) -> bool {
-        SharedRbacService::ptr_eq(&self.rbac, &other.rbac)
+    pub fn new(db: Database, rbac: SharedRbacService, authorization: Arc<AuthorizationService>) -> Self {
+        Self { db, rbac, authorization }
     }
 }
 
 impl WorkflowAuthorizationPort for WorkflowAuth {
-    async fn require_approval_source(
+    async fn approval_source_readiness(
         &self,
         actor: &AuditActor,
         source: &OrderTaskSource,
         instance: &str,
         executor: &mut dyn Executor,
     ) -> WorkflowResult<()> {
-        super::resource_access::require_approval(&self.db, &self.rbac, actor, source, instance, executor)
-            .await
-            .map_err(map_service)
+        super::resource_access::approval_readiness(
+            &self.db,
+            &self.authorization,
+            actor,
+            source,
+            instance,
+            executor,
+        )
+        .await
+        .map_err(map_service)
     }
 
     async fn append_assignment_grants(
@@ -74,8 +81,8 @@ impl WorkflowAuthorizationPort for WorkflowAuth {
     ) -> WorkflowResult<bool> {
         portal_request_reviewable(
             &self.db,
-            &self.rbac,
-            crate::wiring::catalog_services(self.db.clone(), self.rbac.clone()),
+            &self.authorization,
+            catalog_services(self.db.clone(), self.rbac.clone(), self.authorization.clone()),
             actor,
             request_id,
             executor,
@@ -89,7 +96,7 @@ impl WorkflowAuthorizationPort for WorkflowAuth {
         request_id: &str,
         executor: &mut dyn Executor,
     ) -> WorkflowResult<bool> {
-        portal_request_readable(&self.db, &self.rbac, actor, request_id, executor)
+        portal_request_readable(&self.db, &self.authorization, actor, request_id, executor)
             .await
             .map_err(|error| map_service(error.into()))
     }
@@ -100,25 +107,10 @@ impl WorkflowAuthorizationPort for WorkflowAuth {
         document_id: &str,
         executor: &mut dyn Executor,
     ) -> WorkflowResult<bool> {
-        super::approval_source::readable(&self.db, &self.rbac, actor, document_type, document_id, executor)
-            .await
-            .map_err(map_service)
-    }
-
-    async fn require_approval_management(
-        &self,
-        actor: &AuditActor,
-        entry: &Permission,
-        required: &[Permission],
-        document_type: DocumentType,
-        document_id: &str,
-        executor: &mut dyn Executor,
-    ) -> WorkflowResult<()> {
-        super::approval_source::require_management(
+        super::approval_source::readable(
             &self.db,
-            &self.rbac,
+            &self.authorization,
             actor,
-            (entry, required),
             document_type,
             document_id,
             executor,
@@ -143,8 +135,9 @@ impl WorkflowAuthorizationPort for WorkflowAuth {
         contract_id: &str,
         executor: &mut dyn Executor,
     ) -> WorkflowResult<bool> {
-        let result = contract_access(self.db.clone(), self.rbac.clone())
-            .require_with(actor.clone(), "detail", contract_id, executor)
+        let result = self
+            .authorization
+            .require(actor, &contract::DETAIL, AccessTarget::record(contract_id)?, executor)
             .await
             .map(|_| ())
             .map_err(Error::from);
@@ -162,39 +155,6 @@ impl WorkflowAuthorizationPort for WorkflowAuth {
             .map_err(map_service)?
             .ok_or_else(|| WorkflowError::NotFound("审批当前业务对象不存在".into()))
     }
-
-    async fn require_order_task_read(
-        &self,
-        actor: &AuditActor,
-        source: &OrderTaskSource,
-        action: TaskReadAction,
-        executor: &mut dyn Executor,
-    ) -> WorkflowResult<()> {
-        let permission = Permission::parse(action.permission())?;
-        task_read_result(
-            super::resource_access::require_source_operation(
-                &self.db,
-                &self.rbac,
-                actor,
-                source,
-                &permission,
-                &[],
-                executor,
-            )
-            .await,
-        )
-    }
-}
-
-/// 任务来源拒绝统一隐藏存在性，设施和版本错误保留原类别。
-fn task_read_result(result: Result<()>) -> WorkflowResult<()> {
-    match result {
-        Ok(()) => Ok(()),
-        Err(Error::Forbidden(_) | Error::NotFound(_)) => {
-            Err(WorkflowError::Forbidden("没有任务来源的读取资格".into()))
-        },
-        Err(error) => Err(map_service(error)),
-    }
 }
 
 /// 对象不可见只证明材料转授被拒绝；配置和版本错误不得吞成普通拒绝。
@@ -211,25 +171,6 @@ mod tests {
     use erp_workflow::ErrorCode;
 
     use super::*;
-
-    #[test]
-    fn task_source_authorization_hides_denial_and_preserves_operational_errors() {
-        assert!(task_read_result(Ok(())).is_ok());
-        for error in [Error::Forbidden("revoked".into()), Error::NotFound("missing".into())] {
-            assert!(matches!(
-                task_read_result(Err(error)),
-                Err(WorkflowError::Forbidden(message)) if message == "没有任务来源的读取资格"
-            ));
-        }
-        assert!(matches!(
-            task_read_result(Err(Error::ConflictError("DATA_SCOPE_CHANGED".into()))),
-            Err(WorkflowError::ConflictError(message)) if message == "DATA_SCOPE_CHANGED"
-        ));
-        assert!(matches!(
-            task_read_result(Err(Error::Internal("unwired source".into()))),
-            Err(WorkflowError::Internal(message)) if message == "unwired source"
-        ));
-    }
 
     #[test]
     fn contract_material_authorization_preserves_denial_and_operational_errors() {

@@ -41,7 +41,7 @@ impl PurchaseOrderProcess {
         req: SchedulePaymentFollowUp,
         actor: &AuditActor,
     ) -> Result<()> {
-        let rbac = self.require_rbac()?.clone();
+        let rbac = self.authorization.clone();
         let command = CommandReceipt::from_resource_parts(
             "payment-follow-up-",
             actor.id(),

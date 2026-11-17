@@ -12,7 +12,7 @@ use erp_supply::SupplierOfferingExt;
 use erp_supply::dto::supplier_offering::SupplierOfferingTermsWrite;
 use erp_supply::entity::supplier_offering::{SupplierOffering, SupplierOfferingRevision};
 use erp_supply::portal::{PortalOfferingService, PortalSupplyExt};
-use persistence_core::Executor;
+use persistence_core::{Executor, Transactional};
 use serde::Serialize;
 use serde_json::{Value, json};
 
@@ -86,12 +86,13 @@ impl SupplierPortalReadService {
     /// 供给返回当前正式条款和版本，合作返回当前正式付款条件；新品和首次报价为空。
     /// # 错误
     /// 申请或供给不可见、目标归属异常、正式版本缺失或持久化错误时拒绝。
-    pub async fn current_application_facts(
+    pub(super) async fn current_application_facts(
         &self,
         request_id: &str,
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<Value> {
+        review_snapshot(executor)?;
         let authorization = self.internal_authorization()?;
         if !authorization.request_readable(actor, request_id, executor).await? {
             return Err(hidden_target());
@@ -123,7 +124,7 @@ impl SupplierPortalReadService {
     ///
     /// # 参数
     /// `request_id` 为精确申请，`q` 为可选搜索，`actor` 为内部账号；
-    /// `catalog` 必须装配正式商品范围授权，`executor` 为同一读取执行器。
+    /// `catalog` 必须装配正式商品范围授权；入口负责覆盖全部读取的快照事务。
     /// # 返回
     /// 返回可维护商品候选及本供应商、原订货码下可读的供给版本。
     /// # 错误
@@ -134,8 +135,34 @@ impl SupplierPortalReadService {
         q: Option<&str>,
         actor: &AuditActor,
         catalog: &CatalogPortalService,
+    ) -> Result<PortalNewProductReviewContext> {
+        let service = self.clone();
+        let catalog = catalog.clone();
+        let request_id = request_id.to_owned();
+        let q = q.map(str::to_owned);
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    service
+                        .read_new_product_context(&request_id, q.as_deref(), &actor, &catalog, executor)
+                        .await
+                })
+            })
+            .await
+    }
+
+    /// 查重及所有申请、供给和分类补齐均加入公开入口的原快照。
+    async fn read_new_product_context(
+        &self,
+        request_id: &str,
+        q: Option<&str>,
+        actor: &AuditActor,
+        catalog: &CatalogPortalService,
         executor: &mut dyn Executor,
     ) -> Result<PortalNewProductReviewContext> {
+        review_snapshot(executor)?;
         let existing_offerings =
             self.existing_offering_review_candidates(request_id, actor, executor).await?;
         let duplicates = match q.map(str::trim).filter(|query| !query.is_empty()) {
@@ -170,12 +197,13 @@ impl SupplierPortalReadService {
     /// 非内部身份或未装配授权时返回 `Forbidden`。申请不存在或越权时返回 `NotFound`。
     /// 供给当前版本缺失、归属异常或 SKU 资料缺失时返回 `ConflictError`。
     /// 待确认原稿关联损坏或仓储读取失败时返回对应错误。
-    pub async fn existing_offering_review_candidates(
+    pub(super) async fn existing_offering_review_candidates(
         &self,
         request_id: &str,
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<Vec<ExistingOfferingReviewCandidate>> {
+        review_snapshot(executor)?;
         let authorization = self.internal_authorization()?;
         if !authorization.request_readable(actor, request_id, executor).await? {
             return Err(hidden_target());
@@ -313,4 +341,95 @@ fn formal_terms(revision: &SupplierOfferingRevision) -> SupplierOfferingTermsWri
 
 fn hidden_target() -> Error {
     Error::NotFound("申请不存在或无权访问".into())
+}
+
+/// 原稿、当前事实与核对候选必须来自同一可核验快照。
+fn review_snapshot(executor: &mut dyn Executor) -> Result<()> {
+    if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
+        return Err(Error::ValidationError("内部门户读取必须使用快照事务".into()));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use erp_catalog::{CatalogAccess, CatalogService, EmptyFileAssetFacts, FailClosedAuditPort};
+    use erp_identity::testing::unavailable_authorization;
+    use persistence_core::testing::SnapshotExecutor;
+    use persistence_core::{NoTransaction, ReadExecutor};
+
+    use super::*;
+    use crate::supplier_portal::testing::{Outcome, service};
+
+    fn catalog(service: &SupplierPortalReadService) -> CatalogPortalService {
+        let db = service.db.clone();
+        let access = CatalogAccess::new(db.clone(), unavailable_authorization());
+        CatalogPortalService::new(
+            db.clone(),
+            CatalogService::new(db, Arc::new(FailClosedAuditPort), Arc::new(EmptyFileAssetFacts), access),
+        )
+    }
+
+    #[tokio::test]
+    async fn review_context_steps_keep_original_snapshot_and_authorization_denials_before_data_reads() {
+        let (service, authorization, actor) = service(Outcome::Denied).await;
+        let catalog = catalog(&service);
+        let mut executor = SnapshotExecutor::default();
+        let expected = &mut executor as *mut SnapshotExecutor as usize;
+        assert!(matches!(
+            service.current_application_facts("request", &actor, &mut executor).await,
+            Err(Error::NotFound(_))
+        ));
+        assert!(matches!(
+            service.existing_offering_review_candidates("request", &actor, &mut executor).await,
+            Err(Error::NotFound(_))
+        ));
+        assert!(matches!(
+            service.read_new_product_context("request", Some("query"), &actor, &catalog, &mut executor).await,
+            Err(Error::NotFound(_))
+        ));
+        assert_eq!(
+            *authorization.calls.lock().unwrap(),
+            vec![
+                ("request", "request".into(), expected),
+                ("request", "request".into(), expected),
+                ("request", "request".into(), expected),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn review_context_refuses_non_snapshot_before_request_and_duplicate_reads() {
+        let (service, authorization, actor) = service(Outcome::Allowed).await;
+        let catalog = catalog(&service);
+        for executor in [&mut NoTransaction as &mut dyn Executor, &mut ReadExecutor::default()] {
+            assert!(matches!(
+                service.current_application_facts("request", &actor, executor).await,
+                Err(Error::ValidationError(_))
+            ));
+            assert!(matches!(
+                service.existing_offering_review_candidates("request", &actor, executor).await,
+                Err(Error::ValidationError(_))
+            ));
+            assert!(matches!(
+                service.read_new_product_context("request", Some("query"), &actor, &catalog, executor).await,
+                Err(Error::ValidationError(_))
+            ));
+        }
+        assert!(authorization.calls.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn review_context_does_not_turn_changed_authorization_into_missing_application() {
+        let (service, _, actor) = service(Outcome::Failed).await;
+        let catalog = catalog(&service);
+        let result = service
+            .read_new_product_context("request", None, &actor, &catalog, &mut SnapshotExecutor::default())
+            .await;
+        assert!(
+            matches!(result, Err(Error::ConflictError(message)) if message.starts_with("DATA_SCOPE_CHANGED"))
+        );
+    }
 }

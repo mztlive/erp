@@ -10,7 +10,7 @@ use crate::http::errors::{Error, Result};
 use crate::http::handler::file_asset::{asset_download_response, read_asset, revalidate_asset};
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
-use crate::wiring::{funds_access_with_rbac, receivable_posting_ports};
+use crate::wiring::{funds_access, receivable_posting_ports};
 
 /// 编辑入口与查看入口分别核验各自权限，下载前后均重新读取。
 async fn files(
@@ -22,12 +22,12 @@ async fn files(
     if draft {
         Ok(ReceivableProcess::new(
             state.application().db(),
-            receivable_posting_ports(state.application().db()),
+            receivable_posting_ports(state.application().db(), state.application().authorization()),
         )
         .customer_receipt_draft_files(id, actor)
         .await?)
     } else {
-        Ok(funds_access_with_rbac(state.application().db(), state.application().rbac())
+        Ok(funds_access(state.application().db(), state.application().authorization())
             .customer_receipt_files_scoped(id, actor)
             .await?)
     }

@@ -2,8 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use erp_core::common::time::Instant;
-use erp_identity::entity::organization::{OrgMembership, OrgTree};
+use erp_identity::entity::organization::OrgTree;
 use erp_identity::entity::organization_change::OrganizationState;
 use erp_identity::repository::OrganizationRepository;
 use mongodb::Database;
@@ -58,37 +57,6 @@ pub(crate) fn expand_org_ids(
     Ok(expanded)
 }
 
-/// 读取指定组织在给定时点的有效主属成员。
-///
-/// # 参数
-/// * `state` - 组织事实
-/// * `org_ids` - 内部组织集合
-/// * `at` - 授权时点
-///
-/// # 返回
-/// 返回排序去重后的人员 ID。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 过期或未生效成员不得进入当前责任组织筛选。
-pub(crate) fn member_ids(state: &OrganizationState, org_ids: &BTreeSet<String>, at: Instant) -> Vec<String> {
-    let mut ids = state
-        .memberships
-        .iter()
-        .filter(|membership| {
-            !membership.base.is_deleted()
-                && org_ids.contains(&membership.org_unit_id)
-                && membership.validity.contains(at)
-        })
-        .map(|membership| membership.user_id.clone())
-        .collect::<Vec<_>>();
-    ids.sort();
-    ids.dedup();
-    ids
-}
-
 /// 展开启用组织及其可选下级；快照错误由调用方映射。
 ///
 /// # 参数
@@ -119,69 +87,10 @@ pub(crate) async fn expand_org_units<E>(
     expand_org_ids(&state, org_unit_ids, include_descendants).map_err(map_identity)
 }
 
-/// 读取指定组织在给定时点的有效主属成员；快照错误由调用方映射。
-///
-/// # 参数
-/// * `db` - 身份数据库
-/// * `org_unit_ids` - 内部组织集合
-/// * `at` - 授权时点
-/// * `executor` - 调用方执行器
-/// * `map_load` - 组织快照读取错误映射
-///
-/// # 返回
-/// 返回排序去重后的人员 ID。
-///
-/// # 错误
-/// 快照读取失败时返回调用方映射后的领域错误。
-///
-/// # 关键业务约束
-/// 资金必须传入 `Error::RepositoryError`；其余域可传入 `Into::into`。
-pub(crate) async fn org_member_ids<E>(
-    db: &Database,
-    org_unit_ids: &BTreeSet<String>,
-    at: Instant,
-    executor: &mut dyn Executor,
-    map_load: impl FnOnce(persistence_core::Error) -> E,
-) -> Result<Vec<String>, E> {
-    let state = load_organization_state(db, executor).await.map_err(map_load)?;
-    Ok(member_ids(&state, org_unit_ids, at))
-}
-
-/// 查询账号在解析时点的唯一主属组织；快照错误由调用方映射。
-///
-/// # 参数
-/// * `db` - 身份数据库
-/// * `user_id` - 当前账号
-/// * `at` - 授权时点
-/// * `executor` - 调用方执行器
-/// * `map_load` - 组织快照读取错误映射
-/// * `map_identity` - 多主属关系错误映射
-///
-/// # 返回
-/// 存在唯一主属组织时返回其 ID；没有主属组织时返回 `None`。
-///
-/// # 错误
-/// 成员事实读取失败或同一时点多条主属关系时返回调用方映射后的领域错误。
-///
-/// # 关键业务约束
-/// 不得默认放入根组织或公司范围。资金 Port 无此方法。
-pub(crate) async fn own_org<E>(
-    db: &Database,
-    user_id: &str,
-    at: Instant,
-    executor: &mut dyn Executor,
-    map_load: impl FnOnce(persistence_core::Error) -> E,
-    map_identity: impl FnOnce(erp_identity::Error) -> E,
-) -> Result<Option<String>, E> {
-    let memberships =
-        OrganizationRepository::new(db).primary_memberships(user_id, at, executor).await.map_err(map_load)?;
-    Ok(OrgMembership::primary_org(&memberships, user_id, at).map_err(map_identity)?.map(str::to_string))
-}
-
 #[cfg(test)]
 mod tests {
     use entity_core::BaseModel;
-    use erp_identity::entity::organization::{OrgMembership, OrgUnit, OrgUnitKind, OrgValidity};
+    use erp_identity::entity::organization::{OrgUnit, OrgUnitKind};
 
     use super::*;
 
@@ -196,50 +105,6 @@ mod tests {
             changed_by: "admin".to_string(),
             reason: "test".to_string(),
         }
-    }
-
-    fn membership(id: &str, user: &str, org: &str, from: i64, to: Option<i64>) -> OrgMembership {
-        OrgMembership {
-            base: BaseModel { id: id.to_string(), version: 1, created_at: 1, updated_at: 1, deleted_at: 0 },
-            user_id: user.to_string(),
-            org_unit_id: org.to_string(),
-            validity: OrgValidity {
-                valid_from: Instant::from_unix_secs(from),
-                valid_to: to.map(Instant::from_unix_secs),
-            },
-            changed_by: "admin".to_string(),
-            reason: "test".to_string(),
-        }
-    }
-
-    fn deleted_membership(id: &str, user: &str, org: &str) -> OrgMembership {
-        let mut item = membership(id, user, org, 1, None);
-        item.base.deleted_at = 2;
-        item
-    }
-
-    /// 有效主属成员按组织过滤并排序去重；删除与过期成员不得进入。
-    #[test]
-    fn member_ids_filters_deleted_expired_and_sorts() {
-        let state = OrganizationState {
-            version: 1,
-            units: vec![unit("org-a", None, true)],
-            memberships: vec![
-                membership("m1", "user-2", "org-a", 1, None),
-                membership("m2", "user-1", "org-a", 1, None),
-                membership("m3", "user-1", "org-a", 1, None),
-                membership("m4", "user-3", "org-b", 1, None),
-                membership("m5", "user-4", "org-a", 1, Some(5)),
-                deleted_membership("m6", "user-5", "org-a"),
-            ],
-            management: vec![],
-        };
-        let orgs = BTreeSet::from(["org-a".to_string()]);
-        assert_eq!(
-            member_ids(&state, &orgs, Instant::from_unix_secs(10)),
-            vec!["user-1".to_string(), "user-2".to_string()]
-        );
-        assert!(member_ids(&state, &BTreeSet::new(), Instant::from_unix_secs(10)).is_empty());
     }
 
     /// 未知组织拒绝；停用节点不贡献范围。

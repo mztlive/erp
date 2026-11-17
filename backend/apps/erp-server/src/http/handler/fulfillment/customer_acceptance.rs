@@ -16,24 +16,29 @@ use erp_fulfillment_execution::workflow::FulfillmentWorkflowServices;
 use erp_read_models::fulfillment_center::access::AcceptanceReadService;
 use erp_read_models::fulfillment_center::dto::{AcceptanceEligibilityView, CommitCustomerAcceptanceView};
 
-use super::service;
 use crate::http::errors::Result;
 use crate::http::extractor::{Json, Query};
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
+use crate::wiring::approval_runtime;
 use crate::wiring::workflow::work_item_service;
-use crate::wiring::{approval_runtime, fulfillment_identity_factory};
 
 /// 装配客户验收命令入口，沿用对象读取授权与 RBAC 服务。
 fn acceptance_process(state: &HttpState) -> CustomerAcceptanceProcess {
     CustomerAcceptanceProcess::new(
         state.application().db(),
-        service(state),
-        state.application().rbac(),
-        fulfillment_identity_factory(state.application().db()),
+        state.application().authorization(),
         Arc::new(FulfillmentWorkflowServices::new(
-            work_item_service(state.application().db(), state.application().rbac()),
-            approval_runtime(state.application().db(), state.application().rbac()),
+            work_item_service(
+                state.application().db(),
+                state.application().rbac(),
+                state.application().authorization(),
+            ),
+            approval_runtime(
+                state.application().db(),
+                state.application().rbac(),
+                state.application().authorization(),
+            ),
         )),
     )
 }
@@ -54,7 +59,7 @@ pub async fn customer_acceptance_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<CustomerAcceptanceListParams>,
 ) -> Result<PageView<CustomerAcceptanceView>> {
-    let page = AcceptanceReadService::new(state.application().db(), state.application().rbac())
+    let page = AcceptanceReadService::new(state.application().db(), state.application().authorization())
         .list(&params, &actor)
         .await?;
 
@@ -77,7 +82,7 @@ pub async fn customer_acceptance_detail(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<CustomerAcceptanceDetailView> {
-    let view = AcceptanceReadService::new(state.application().db(), state.application().rbac())
+    let view = AcceptanceReadService::new(state.application().db(), state.application().authorization())
         .detail(&id, &actor)
         .await?;
 
@@ -196,7 +201,7 @@ pub async fn customer_acceptance_eligible(
         .sales_order_id
         .clone()
         .ok_or_else(|| ProcessError::ValidationError("sales_order_id 不能为空".to_string()))?;
-    let view = AcceptanceReadService::new(state.application().db(), state.application().rbac())
+    let view = AcceptanceReadService::new(state.application().db(), state.application().authorization())
         .eligibility(sales_order_id.as_ref(), &actor)
         .await?;
 

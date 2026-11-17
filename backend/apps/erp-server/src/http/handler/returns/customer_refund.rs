@@ -31,9 +31,12 @@ use crate::wiring::local_reverse_flow_ports;
 /// 业务处理或数据读取失败时返回对应错误。
 pub async fn customer_refund_list(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<CustomerRefundListParams>,
 ) -> Result<PageView<CustomerRefundView>> {
-    let page = ReturnsReadService::new(state.application().db()).customer_refund_list(&params).await?;
+    let page = ReturnsReadService::new(state.application().db(), state.application().authorization())
+        .customer_refund_list(&actor, &params)
+        .await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -51,9 +54,12 @@ pub async fn customer_refund_list(
 /// 业务处理或数据读取失败时返回对应错误。
 pub async fn customer_refund_detail(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<CustomerRefundView> {
-    let view = ReturnsReadService::new(state.application().db()).customer_refund_detail(&id).await?;
+    let view = ReturnsReadService::new(state.application().db(), state.application().authorization())
+        .customer_refund_detail(&id, &actor)
+        .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -75,10 +81,12 @@ pub async fn customer_refund_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateCustomerRefundRequest>,
 ) -> Result<CustomerRefundView> {
-    let view =
-        ReturnsProcess::new(state.application().db(), local_reverse_flow_ports(state.application().db()))
-            .create_customer_refund(req, &actor)
-            .await?;
+    let view = ReturnsProcess::new(
+        state.application().db(),
+        local_reverse_flow_ports(state.application().db(), state.application().authorization()),
+    )
+    .create_customer_refund(req, &actor)
+    .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -100,10 +108,12 @@ pub async fn customer_refund_commit(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CommitCustomerRefundRequest>,
 ) -> Result<CustomerRefundView> {
-    let view =
-        ReturnsProcess::new(state.application().db(), local_reverse_flow_ports(state.application().db()))
-            .commit_customer_refund(req, &actor)
-            .await?;
+    let view = ReturnsProcess::new(
+        state.application().db(),
+        local_reverse_flow_ports(state.application().db(), state.application().authorization()),
+    )
+    .commit_customer_refund(req, &actor)
+    .await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -126,10 +136,12 @@ pub async fn customer_refund_submit(
     Path(id): Path<String>,
     Json(req): Json<SubmitCustomerRefundRequest>,
 ) -> Result<CustomerRefundView> {
-    let view =
-        ReturnsProcess::new(state.application().db(), local_reverse_flow_ports(state.application().db()))
-            .submit_customer_refund(&id, req, &actor)
-            .await?;
+    let view = ReturnsProcess::new(
+        state.application().db(),
+        local_reverse_flow_ports(state.application().db(), state.application().authorization()),
+    )
+    .submit_customer_refund(&id, req, &actor)
+    .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -153,10 +165,12 @@ pub async fn customer_refund_cancel_approval(
     Path(id): Path<String>,
     Json(req): Json<CancelCustomerRefundApprovalRequest>,
 ) -> Result<CustomerRefundView> {
-    let view =
-        ReturnsProcess::new(state.application().db(), local_reverse_flow_ports(state.application().db()))
-            .cancel_customer_refund_approval(&id, req, &actor)
-            .await?;
+    let view = ReturnsProcess::new(
+        state.application().db(),
+        local_reverse_flow_ports(state.application().db(), state.application().authorization()),
+    )
+    .cancel_customer_refund_approval(&id, req, &actor)
+    .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }

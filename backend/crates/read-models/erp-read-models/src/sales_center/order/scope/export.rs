@@ -53,7 +53,7 @@ impl SalesOrderReadService {
     ) -> Result<Value> {
         crate::support::ensure_deep_page(params.page.unwrap_or(1), params.scope_version.as_deref())?;
         validator::Validate::validate(params)?;
-        let reader = Self::with_rbac(self.db.clone(), self.require_rbac()?.clone());
+        let reader = Self::new(self.db.clone(), self.authorization.clone());
         let (params, actor) = (params.clone(), actor.clone());
         self.db
             .client()
@@ -85,7 +85,7 @@ impl ExportRead for SalesOrderReadService {
         if ids.is_empty() {
             return Ok(HashMap::new());
         }
-        let authorization = self.require_rbac()?;
+        let authorization = &self.authorization;
         let access = match authorization.query(actor, &contract::DETAIL, executor).await {
             Ok(access) => access,
             Err(IdentityError::Forbidden(_) | IdentityError::Unauthenticated(_)) => {

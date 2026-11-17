@@ -30,7 +30,7 @@ impl SupplierCatalogAdoptionProcess {
         let (connection, id, actor) = (connection.to_owned(), id.to_owned(), actor.clone());
         self.with_snapshot(move |process, executor| {
             Box::pin(async move {
-                let batch = process.preparation_batch(&connection, &id, &actor, executor).await?;
+                let batch = process.read_preparation_batch(&connection, &id, &actor, executor).await?;
                 if !batch.selection_complete || batch.work.as_ref().is_some_and(|work| work.blocking()) {
                     return Ok(batch_summary(batch));
                 }

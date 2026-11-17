@@ -7,7 +7,7 @@ use erp_read_models::finance::funds_scope::{AllocationSource, AllocationSourceKi
 use crate::http::errors::Result;
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
-use crate::wiring::funds_access_with_rbac;
+use crate::wiring::funds_access;
 
 /// 按分配目标返回财务来源资料。
 /// # 参数
@@ -21,7 +21,7 @@ pub async fn detail(
     Extension(actor): Extension<AuditActor>,
     Path((kind, id)): Path<(AllocationSourceKind, String)>,
 ) -> Result<AllocationSource> {
-    let data = funds_access_with_rbac(state.application().db(), state.application().rbac())
+    let data = funds_access(state.application().db(), state.application().authorization())
         .allocation_source(&actor, kind, &id)
         .await?;
     Ok(ApiResponse::ok_with_data(data))

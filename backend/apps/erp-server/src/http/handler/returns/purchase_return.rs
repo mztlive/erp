@@ -3,6 +3,7 @@
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
+use erp_procurement::PurchaseDataScope;
 use erp_procurement::entity::purchase_order::ReturnSettlementDecision;
 use erp_read_models::returns_center::dto::{PurchaseReturnOrderListParams, PurchaseReturnOrderView};
 use erp_read_models::returns_center::{PurchaseReturnListView, ReturnsReadService};
@@ -14,7 +15,7 @@ use crate::http::errors::Result;
 use crate::http::extractor::{Json, Query};
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
-use crate::wiring::{PurchaseDataScope, local_reverse_flow_ports, reverse_flow_ports};
+use crate::wiring::{local_reverse_flow_ports, reverse_flow_ports};
 
 /// 查询采购退货单列表。
 ///
@@ -36,10 +37,10 @@ pub async fn purchase_return_order_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<PurchaseReturnOrderListParams>,
 ) -> Result<PurchaseReturnListView> {
-    let page = ReturnsReadService::new(state.application().db())
+    let page = ReturnsReadService::new(state.application().db(), state.application().authorization())
         .with_purchase_scope(PurchaseDataScope::shared(
             state.application().db(),
-            state.application().authorization().into(),
+            state.application().authorization(),
         ))
         .purchase_return_order_list(&params, &actor)
         .await?;
@@ -67,10 +68,10 @@ pub async fn purchase_return_order_detail(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<PurchaseReturnOrderView> {
-    let view = ReturnsReadService::new(state.application().db())
+    let view = ReturnsReadService::new(state.application().db(), state.application().authorization())
         .with_purchase_scope(PurchaseDataScope::shared(
             state.application().db(),
-            state.application().authorization().into(),
+            state.application().authorization(),
         ))
         .purchase_return_order_detail(&id, &actor)
         .await?;
@@ -95,10 +96,12 @@ pub async fn purchase_return_order_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreatePurchaseReturnOrderRequest>,
 ) -> Result<PurchaseReturnOrderView> {
-    let view =
-        ReturnsProcess::new(state.application().db(), local_reverse_flow_ports(state.application().db()))
-            .create_purchase_return_order(req, &actor)
-            .await?;
+    let view = ReturnsProcess::new(
+        state.application().db(),
+        local_reverse_flow_ports(state.application().db(), state.application().authorization()),
+    )
+    .create_purchase_return_order(req, &actor)
+    .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -121,7 +124,11 @@ pub async fn purchase_direct_return_confirm(
 ) -> Result<String> {
     let result = ReturnsProcess::new(
         state.application().db(),
-        reverse_flow_ports(state.application().db(), state.application().rbac()),
+        reverse_flow_ports(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        ),
     )
     .confirm_direct_return(&id, req, &actor)
     .await?;
@@ -145,7 +152,11 @@ pub async fn purchase_return_finance_sync(
 ) -> Result<()> {
     ReturnsProcess::new(
         state.application().db(),
-        reverse_flow_ports(state.application().db(), state.application().rbac()),
+        reverse_flow_ports(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        ),
     )
     .reconcile_return_finance(&id, decision, &actor)
     .await?;

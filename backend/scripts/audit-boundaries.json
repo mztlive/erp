@@ -39,15 +39,15 @@
       "removal_condition": "唯一批量业务审计入口；全部投影验证后保留原有序批量写入及同Executor。"
     },
     {
-      "path": "crates/domains/erp-audit/src/service.rs",
-      "function": "audit_log_list",
+      "path": "crates/domains/erp-audit/src/read.rs",
+      "function": "page",
       "operation": "audit_logs.search_logs",
       "max_occurrences": 1,
       "policy": "Display",
       "contract_items": [
         "E01"
       ],
-      "removal_condition": "保留为授权业务审计展示；禁止向命令恢复或业务资格输出事实。"
+      "removal_condition": "仅经 audit_log:list 功能资格授权的展示读取；授权、分页和计数沿用同一快照执行器，禁止向命令恢复或业务资格输出事实。"
     },
     {
       "path": "crates/domains/erp-audit/src/service.rs",

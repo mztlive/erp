@@ -22,7 +22,7 @@ pub async fn invoice_request_list(
     Query(params): Query<InvoiceRequestQuery>,
 ) -> Result<FundsScopedPage<ScopedInvoiceRequestRow>> {
     Ok(ApiResponse::ok_with_data(
-        crate::wiring::funds_access_with_rbac(state.application().db(), state.application().rbac())
+        crate::wiring::funds_access(state.application().db(), state.application().authorization())
             .request_list_scoped(&params, &actor)
             .await?,
     ))
@@ -37,7 +37,7 @@ pub async fn invoice_request_detail(
     Path(id): Path<String>,
 ) -> Result<FundsScopedResult<ScopedInvoiceRequestRow>> {
     Ok(ApiResponse::ok_with_data(
-        crate::wiring::funds_access_with_rbac(state.application().db(), state.application().rbac())
+        crate::wiring::funds_access(state.application().db(), state.application().authorization())
             .request_detail_scoped(&id, &actor)
             .await?,
     ))
@@ -48,10 +48,13 @@ pub async fn invoice_request_detail(
 /// 返回已授权业务用例的结果；失败保留既有错误类型。
 pub async fn invoice_request_amounts(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<InvoiceRequestAmounts> {
     Ok(ApiResponse::ok_with_data(
-        ReceivableReadService::new(state.application().db()).invoice_request_amounts(&id).await?,
+        ReceivableReadService::new(state.application().db())
+            .invoice_request_amounts(&id, &actor, state.application().authorization())
+            .await?,
     ))
 }
 
@@ -64,9 +67,12 @@ pub async fn invoice_request_submit(
     Json(req): Json<SubmitInvoiceRequest>,
 ) -> Result<InvoiceRequestView> {
     Ok(ApiResponse::ok_with_data(
-        ReceivableProcess::new(state.application().db(), receivable_posting_ports(state.application().db()))
-            .submit_invoice_request(req, &actor)
-            .await?,
+        ReceivableProcess::new(
+            state.application().db(),
+            receivable_posting_ports(state.application().db(), state.application().authorization()),
+        )
+        .submit_invoice_request(req, &actor)
+        .await?,
     ))
 }
 
@@ -87,9 +93,12 @@ pub async fn invoice_request_update(
     Json(req): Json<UpdateInvoiceRequest>,
 ) -> Result<InvoiceRequestView> {
     Ok(ApiResponse::ok_with_data(
-        ReceivableProcess::new(state.application().db(), receivable_posting_ports(state.application().db()))
-            .update_invoice_request(&id, req, &actor)
-            .await?,
+        ReceivableProcess::new(
+            state.application().db(),
+            receivable_posting_ports(state.application().db(), state.application().authorization()),
+        )
+        .update_invoice_request(&id, req, &actor)
+        .await?,
     ))
 }
 
@@ -103,8 +112,11 @@ pub async fn invoice_request_cancel(
     Json(req): Json<CancelInvoiceRequest>,
 ) -> Result<InvoiceRequestView> {
     Ok(ApiResponse::ok_with_data(
-        ReceivableProcess::new(state.application().db(), receivable_posting_ports(state.application().db()))
-            .cancel_invoice_request(&id, req, &actor)
-            .await?,
+        ReceivableProcess::new(
+            state.application().db(),
+            receivable_posting_ports(state.application().db(), state.application().authorization()),
+        )
+        .cancel_invoice_request(&id, req, &actor)
+        .await?,
     ))
 }

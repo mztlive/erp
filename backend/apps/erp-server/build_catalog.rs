@@ -183,7 +183,7 @@ pub(crate) fn route_contract(routes: &[RouteHandler]) -> Result<String, String> 
         rows.push(serde_json::json!({
             "method": route.method, "path": route.path, "handler": route.handler,
             "code": definition.permission, "group": definition.group.name,
-            "guards": route.guards.iter().map(|symbol| definitions.get(symbol).expect("全部权限层已校验").permission).collect::<Vec<_>>(),
+            "guards": route.guards.iter().map(|symbol| definitions.get(symbol).expect("全部权限目录标记已校验").permission).collect::<Vec<_>>(),
             "group_desc": definition.group.description, "description": definition.description,
         }));
     }
@@ -191,6 +191,7 @@ pub(crate) fn route_contract(routes: &[RouteHandler]) -> Result<String, String> 
 }
 
 /// 为库测试生成对真实 Rust 常量的引用，防止显式索引名称与值配错。
+#[cfg(not(test))]
 pub(crate) fn compiled_references() -> Result<String, String> {
     let definitions = registry(MODULES)?;
     let mut names = definitions.keys().collect::<Vec<_>>();
@@ -275,8 +276,8 @@ mod tests {
     fn reuse_keeps_endpoint_descriptions_and_non_http_policy_permissions() {
         let routes = route_parser::parse_routes(
             r#"fn routes() { Router::new()
-            .route("/a", with_permission(post(h::submit), rbac, permissions::purchase_order::SUBMIT))
-            .route("/b", with_permission(post(h::submit), rbac, permissions::purchase_order::SUBMIT)); }"#,
+            .route("/a", permission_route(post(h::submit), permissions::purchase_order::SUBMIT))
+            .route("/b", permission_route(post(h::submit), permissions::purchase_order::SUBMIT)); }"#,
         )
         .unwrap();
         let groups = groups("/admin", &routes).unwrap();

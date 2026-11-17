@@ -258,15 +258,10 @@ mod tests {
     };
     use erp_workflow::WorkItemType;
     use erp_workflow::entity::work_item::{AssignmentSource, WorkItemData, WorkItemPriority, WorkItemStatus};
+    use persistence_core::testing::SnapshotExecutor;
 
     use super::*;
 
-    struct Marker(u64);
-    impl Executor for Marker {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            None
-        }
-    }
     struct Recorder {
         pointer: usize,
         calls: Mutex<Vec<&'static str>>,
@@ -279,12 +274,11 @@ mod tests {
         written_resolution: Mutex<Option<ReconciliationDifferenceResolution>>,
     }
     impl Recorder {
-        fn new(ex: &mut Marker, item: &WorkItem) -> Self {
-            assert_eq!(ex.0, 172);
+        fn new(ex: &mut SnapshotExecutor, item: &WorkItem) -> Self {
             let mut replacement = item.clone();
             replacement.base.id = "replacement".into();
             Self {
-                pointer: ex as *mut Marker as usize,
+                pointer: ex as *mut SnapshotExecutor as usize,
                 calls: Mutex::new(Vec::new()),
                 fail: None,
                 replacement: Some(replacement),
@@ -437,7 +431,7 @@ mod tests {
                 WorkItemType::BusinessException
             };
             let item = item("integration_error_task", kind);
-            let mut ex = Marker(172);
+            let mut ex = SnapshotExecutor::default();
             let mut port = Recorder::new(&mut ex, &item);
             port.task = Some(error_task(class));
             let decision = prepare_w29_close("MISROUTED", Some("误派"), None).unwrap();
@@ -456,7 +450,7 @@ mod tests {
     async fn w29_resolution_preserves_receipt_id_sequence_and_both_decisions() {
         for duplicate in [false, true] {
             let item = item("reconciliation_difference", WorkItemType::BusinessException);
-            let mut ex = Marker(172);
+            let mut ex = SnapshotExecutor::default();
             let mut port = Recorder::new(&mut ex, &item);
             port.latest = Some(latest(7, ResolutionAction::QueryOriginalResult));
             let decision = if duplicate {
@@ -498,7 +492,7 @@ mod tests {
             };
             for fail in 0..expected.len() {
                 let item = item(object_type, WorkItemType::BusinessException);
-                let mut ex = Marker(172);
+                let mut ex = SnapshotExecutor::default();
                 let mut port = Recorder::new(&mut ex, &item);
                 port.fail = Some(fail);
                 let decision = prepare_w29_close("DUPLICATE", None, Some("replacement")).unwrap();
@@ -516,7 +510,7 @@ mod tests {
         let decision = prepare_w29_close("DUPLICATE", None, Some("replacement")).unwrap();
         for case in 0..4 {
             let item = item("integration_error_task", WorkItemType::BusinessException);
-            let mut ex = Marker(172);
+            let mut ex = SnapshotExecutor::default();
             let mut port = Recorder::new(&mut ex, &item);
             match case {
                 0 => port.replacement = None,
@@ -532,7 +526,7 @@ mod tests {
         let decision = prepare_w29_close("MISROUTED", Some("误派"), None).unwrap();
         for case in 0..5 {
             let item = item("reconciliation_difference", WorkItemType::BusinessException);
-            let mut ex = Marker(172);
+            let mut ex = SnapshotExecutor::default();
             let mut port = Recorder::new(&mut ex, &item);
             match case {
                 0 => port.difference = false,
@@ -546,7 +540,7 @@ mod tests {
             assert!(port.written_resolution.lock().unwrap().is_none());
         }
         let item = item("unsupported", WorkItemType::BusinessException);
-        let mut ex = Marker(172);
+        let mut ex = SnapshotExecutor::default();
         let port = Recorder::new(&mut ex, &item);
         assert!(
             matches!(persist(&port, input(&item, &decision), &mut ex).await, Err(WorkflowError::BusinessLogicError(message)) if message == "只有 W29 登记的异常对象允许受控关闭")
@@ -556,7 +550,7 @@ mod tests {
     #[tokio::test]
     async fn w29_invalid_evidence_is_rejected_after_original_reads() {
         let item = item("reconciliation_difference", WorkItemType::BusinessException);
-        let mut ex = Marker(172);
+        let mut ex = SnapshotExecutor::default();
         let port = Recorder::new(&mut ex, &item);
         let decision = prepare_w29_close("MISROUTED", Some("误派"), None).unwrap();
         let mut command = input(&item, &decision);

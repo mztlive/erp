@@ -2,29 +2,36 @@
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::State;
+use erp_permissions::cost;
 use erp_read_models::finance::actual_profit_loss::dto::{
     PeriodBasisConfig, ProfitLossExport, ProfitLossQuery, ProfitLossView,
 };
 use erp_read_models::finance::actual_profit_loss::{ActualProfitLossReadModel, ProfitLossAccess};
+use persistence_core::NoTransaction;
 
 use crate::http::errors::{Error, Result};
 use crate::http::extractor::{Json, Query};
-use crate::http::handler::customer::has_permission;
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
 /// 复核协议入口的读取权限，具体数据范围由组合层在事务内解析。
 async fn access(state: &HttpState, actor: &AuditActor) -> std::result::Result<ProfitLossAccess, Error> {
-    if !has_permission(state, actor, "sales_order:list").await? {
-        return Err(Error::Forbidden("查看经营盈亏还需要销售单查询权限".into()));
-    }
-    // 组合层还须证明销售单 Company 范围及个人上限，才允许整笔费用下钻。
-    let can_drill_cost = has_permission(state, actor, "cost_entry:detail").await?;
+    let can_drill_cost = state
+        .application()
+        .authorization()
+        .has_permission(actor, &cost::ENTRY_DETAIL, &mut NoTransaction)
+        .await?;
     Ok(ProfitLossAccess { can_drill_cost })
 }
 /// 期间口径元数据不包含经营金额，路由仍要求成本查询权限。
-pub async fn period_basis() -> Result<PeriodBasisConfig> {
-    Ok(ApiResponse::ok_with_data(ActualProfitLossReadModel::period_basis()))
+pub async fn period_basis(
+    State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
+) -> Result<PeriodBasisConfig> {
+    let view = ActualProfitLossReadModel::new(state.application().db(), state.application().authorization())
+        .period_basis(&actor)
+        .await?;
+    Ok(ApiResponse::ok_with_data(view))
 }
 /// 返回当前权限下的真实经营分析视图。
 pub async fn view(
@@ -34,7 +41,7 @@ pub async fn view(
 ) -> Result<ProfitLossView> {
     let access = access(&state, &actor).await?;
     Ok(ApiResponse::ok_with_data(
-        ActualProfitLossReadModel::new(state.application().db(), state.application().rbac())
+        ActualProfitLossReadModel::new(state.application().db(), state.application().authorization())
             .view(query, access, &actor)
             .await?,
     ))
@@ -47,7 +54,7 @@ pub async fn export(
 ) -> Result<ProfitLossExport> {
     let access = access(&state, &actor).await?;
     Ok(ApiResponse::ok_with_data(
-        ActualProfitLossReadModel::new(state.application().db(), state.application().rbac())
+        ActualProfitLossReadModel::new(state.application().db(), state.application().authorization())
             .export(query, access, &actor)
             .await?,
     ))
@@ -61,7 +68,7 @@ pub async fn history_directory(
 ) -> Result<erp_read_models::historical_directory::HistoricalDirectoryView> {
     access(&state, &actor).await?;
     Ok(ApiResponse::ok_with_data(
-        ActualProfitLossReadModel::new(state.application().db(), state.application().rbac())
+        ActualProfitLossReadModel::new(state.application().db(), state.application().authorization())
             .history_directory(query, &actor)
             .await?,
     ))

@@ -37,6 +37,7 @@ pub async fn product_import_submit(
     Extension(actor): Extension<AuditActor>,
     mut multipart: Multipart,
 ) -> Result<ProductImportJobView> {
+    state.application().product_import_process().prepare_attachment_upload(&actor).await?;
     let extracted = extract_import_form(&mut multipart).await?;
     let pending =
         store_asset_file(&state, extracted.file, SensitivityClass::General, RetentionClass::LongTerm, None)

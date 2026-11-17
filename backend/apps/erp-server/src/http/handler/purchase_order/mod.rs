@@ -18,6 +18,7 @@ use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
 use erp_procure_to_pay::procure_to_pay::PurchaseOrderProcess;
+use erp_procurement::PurchaseDataScope;
 use erp_procurement::dto::purchase_order::{
     CancelPurchaseChangeApprovalRequest, CancelPurchaseOrderApprovalRequest,
     CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderResult, CreatePurchaseOrdersFromSourcingRequest,
@@ -37,7 +38,7 @@ use crate::http::errors::Result;
 use crate::http::extractor::{Json, Query};
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
-use crate::wiring::{PurchaseDataScope, purchase_ports};
+use crate::wiring::purchase_ports;
 
 /// 构造已注入采购范围 Port 的只读服务。
 ///
@@ -55,8 +56,8 @@ use crate::wiring::{PurchaseDataScope, purchase_ports};
 fn purchase_reads(state: &HttpState) -> PurchaseOrderReadService {
     PurchaseOrderReadService::new(
         state.application().db(),
-        state.application().rbac(),
-        PurchaseDataScope::shared(state.application().db(), state.application().authorization().into()),
+        state.application().authorization(),
+        PurchaseDataScope::shared(state.application().db(), state.application().authorization()),
     )
 }
 
@@ -126,10 +127,14 @@ pub async fn purchase_order_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreatePurchaseOrderFromBasisRequest>,
 ) -> Result<CreatePurchaseOrderResult> {
-    let view = PurchaseOrderProcess::with_rbac(
+    let view = PurchaseOrderProcess::new(
         state.application().db(),
-        state.application().rbac(),
-        purchase_ports(state.application().db(), state.application().rbac()),
+        state.application().authorization(),
+        purchase_ports(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        ),
     )
     .create_from_basis(req, &actor)
     .await?;
@@ -151,10 +156,14 @@ pub async fn purchase_order_create_from_sourcing(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreatePurchaseOrdersFromSourcingRequest>,
 ) -> Result<CreatePurchaseOrdersFromSourcingResult> {
-    let view = PurchaseOrderProcess::with_rbac(
+    let view = PurchaseOrderProcess::new(
         state.application().db(),
-        state.application().rbac(),
-        purchase_ports(state.application().db(), state.application().rbac()),
+        state.application().authorization(),
+        purchase_ports(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        ),
     )
     .create_from_sourcing(req, &actor)
     .await?;
@@ -178,10 +187,14 @@ pub async fn purchase_order_save_draft(
     Path(id): Path<String>,
     Json(req): Json<SavePurchaseOrderDraftRequest>,
 ) -> Result<SavePurchaseOrderDraftResult> {
-    let view = PurchaseOrderProcess::with_rbac(
+    let view = PurchaseOrderProcess::new(
         state.application().db(),
-        state.application().rbac(),
-        purchase_ports(state.application().db(), state.application().rbac()),
+        state.application().authorization(),
+        purchase_ports(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        ),
     )
     .save_draft(&id, req, &actor)
     .await?;
@@ -205,10 +218,14 @@ pub async fn purchase_order_void(
     Path(id): Path<String>,
     Json(req): Json<VoidPurchaseOrderRequest>,
 ) -> Result<VoidPurchaseOrderResult> {
-    let view = PurchaseOrderProcess::with_rbac(
+    let view = PurchaseOrderProcess::new(
         state.application().db(),
-        state.application().rbac(),
-        purchase_ports(state.application().db(), state.application().rbac()),
+        state.application().authorization(),
+        purchase_ports(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        ),
     )
     .void_draft(&id, req, &actor)
     .await?;
@@ -232,10 +249,14 @@ pub async fn purchase_order_submit(
     Path(id): Path<String>,
     Json(req): Json<SubmitPurchaseOrderRequest>,
 ) -> Result<SubmitPurchaseOrderResult> {
-    let view = PurchaseOrderProcess::with_rbac(
+    let view = PurchaseOrderProcess::new(
         state.application().db(),
-        state.application().rbac(),
-        purchase_ports(state.application().db(), state.application().rbac()),
+        state.application().authorization(),
+        purchase_ports(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        ),
     )
     .submit(&id, req, &actor)
     .await?;
@@ -259,10 +280,14 @@ pub async fn purchase_order_maintain_source(
     Path(id): Path<String>,
     Json(req): Json<MaintainPurchaseSourceRequest>,
 ) -> Result<()> {
-    PurchaseOrderProcess::with_rbac(
+    PurchaseOrderProcess::new(
         state.application().db(),
-        state.application().rbac(),
-        purchase_ports(state.application().db(), state.application().rbac()),
+        state.application().authorization(),
+        purchase_ports(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        ),
     )
     .maintain_source(&id, req, &actor)
     .await?;
@@ -285,10 +310,14 @@ pub async fn purchase_order_cancel_approval(
     Path(id): Path<String>,
     Json(req): Json<CancelPurchaseOrderApprovalRequest>,
 ) -> Result<()> {
-    PurchaseOrderProcess::with_rbac(
+    PurchaseOrderProcess::new(
         state.application().db(),
-        state.application().rbac(),
-        purchase_ports(state.application().db(), state.application().rbac()),
+        state.application().authorization(),
+        purchase_ports(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        ),
     )
     .cancel_approval(&id, req, &actor)
     .await?;
@@ -331,10 +360,14 @@ pub async fn purchase_change_create(
     Path(id): Path<String>,
     Json(req): Json<StartPurchaseChangeRequest>,
 ) -> Result<StartPurchaseChangeResult> {
-    let view = PurchaseOrderProcess::with_rbac(
+    let view = PurchaseOrderProcess::new(
         state.application().db(),
-        state.application().rbac(),
-        purchase_ports(state.application().db(), state.application().rbac()),
+        state.application().authorization(),
+        purchase_ports(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        ),
     )
     .start_change(&id, req, &actor)
     .await?;
@@ -358,10 +391,14 @@ pub async fn purchase_change_submit(
     Path(id): Path<String>,
     Json(req): Json<SubmitPurchaseChangeRequest>,
 ) -> Result<PurchaseChangeOrderView> {
-    let view = PurchaseOrderProcess::with_rbac(
+    let view = PurchaseOrderProcess::new(
         state.application().db(),
-        state.application().rbac(),
-        purchase_ports(state.application().db(), state.application().rbac()),
+        state.application().authorization(),
+        purchase_ports(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        ),
     )
     .submit_change_view(&id, req, &actor)
     .await?;
@@ -407,10 +444,14 @@ pub async fn purchase_change_cancel_approval(
     Path(id): Path<String>,
     Json(req): Json<CancelPurchaseChangeApprovalRequest>,
 ) -> Result<()> {
-    PurchaseOrderProcess::with_rbac(
+    PurchaseOrderProcess::new(
         state.application().db(),
-        state.application().rbac(),
-        purchase_ports(state.application().db(), state.application().rbac()),
+        state.application().authorization(),
+        purchase_ports(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        ),
     )
     .cancel_change_approval(&id, req, &actor)
     .await?;

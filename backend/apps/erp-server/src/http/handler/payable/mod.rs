@@ -9,7 +9,7 @@ pub(crate) mod invoice_files;
 use application_core::AuditActor;
 use axum::Extension;
 use axum::body::Body;
-use axum::extract::{Multipart, Path, State};
+use axum::extract::{Path, State};
 use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS};
 use axum::http::{HeaderValue, StatusCode};
 use axum::response::Response;
@@ -20,23 +20,20 @@ use erp_finance::dto::payable::{
     SupplierPaymentView,
 };
 use erp_finance::dto::payment_merge::{PaymentMergeCandidatesParams, PaymentMergeCandidatesView};
-use erp_finance_posting::commit_supplier_payment_with_assets;
 use erp_finance_posting::finance_posting::payable::PayableProcess;
 use erp_read_models::finance::funds_scope::{
     FundsScopedPage, FundsScopedResult, ScopedPayableAccountRow, ScopedPurchaseInvoiceAllocationRow,
     ScopedSupplierPaymentRow,
 };
-use erp_support::{SecurityScanStatus, SensitivityClass};
+use erp_support::SecurityScanStatus;
 use tracing::error;
 
 use crate::http::errors::{Error, Result};
 use crate::http::extractor::{Json, Query};
-use crate::http::handler::file_asset::{
-    PendingAssetFile, extract_command_with_asset_files, finish_asset_command, store_pending_asset_files,
-};
+use crate::http::handler::file_asset::PendingAssetFile;
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
-use crate::wiring::funds_access_with_rbac;
+use crate::wiring::funds_access;
 
 /// 查询应付往来子账列表。
 ///
@@ -55,7 +52,7 @@ pub async fn payable_account_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<PayableAccountListParams>,
 ) -> Result<FundsScopedPage<ScopedPayableAccountRow>> {
-    let page = funds_access_with_rbac(state.application().db(), state.application().rbac())
+    let page = funds_access(state.application().db(), state.application().authorization())
         .payable_account_list_scoped(&params, &actor)
         .await?;
 
@@ -76,7 +73,7 @@ pub async fn payable_account_detail(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<FundsScopedResult<ScopedPayableAccountRow>> {
-    let view = funds_access_with_rbac(state.application().db(), state.application().rbac())
+    let view = funds_access(state.application().db(), state.application().authorization())
         .payable_account_detail_scoped(&id, &actor)
         .await?;
 
@@ -102,7 +99,11 @@ pub async fn payment_recipient_reveal(
     let sensitive_data = state.application().sensitive_data();
     let view = PayableProcess::new(
         state.application().db(),
-        finance_posting_ports(state.application().db(), state.application().rbac()),
+        finance_posting_ports(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        ),
     )
     .reveal_payment_recipient(&id, req, &actor, sensitive_data.as_ref())
     .await?;
@@ -126,7 +127,11 @@ pub async fn payable_account_create(
 ) -> Result<PayableAccountView> {
     let view = PayableProcess::new(
         state.application().db(),
-        finance_posting_ports(state.application().db(), state.application().rbac()),
+        finance_posting_ports(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        ),
     )
     .create_payable_account(req, &actor)
     .await?;
@@ -151,7 +156,7 @@ pub async fn supplier_payment_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<SupplierPaymentListParams>,
 ) -> Result<FundsScopedPage<ScopedSupplierPaymentRow>> {
-    let page = funds_access_with_rbac(state.application().db(), state.application().rbac())
+    let page = funds_access(state.application().db(), state.application().authorization())
         .supplier_payment_list_scoped(&params, &actor)
         .await?;
 
@@ -172,7 +177,7 @@ pub async fn supplier_payment_detail(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<FundsScopedResult<ScopedSupplierPaymentRow>> {
-    let view = funds_access_with_rbac(state.application().db(), state.application().rbac())
+    let view = funds_access(state.application().db(), state.application().authorization())
         .supplier_payment_detail_scoped(&id, &actor)
         .await?;
 
@@ -195,46 +200,29 @@ pub async fn supplier_payment_merge_candidates(
 ) -> Result<PaymentMergeCandidatesView> {
     let view = PayableProcess::new(
         state.application().db(),
-        finance_posting_ports(state.application().db(), state.application().rbac()),
+        finance_posting_ports(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        ),
     )
     .payment_merge_candidates(params, &actor)
     .await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 在付款执行任务内原子登记付款、过账并核销。
-///
+/// 拒绝已停止的采购应付直付入口。
 /// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `multipart` - 付款 JSON 命令、冻结分配、幂等键和银行回单文件
-///
+/// state 和 actor 为现有后台认证上下文。
 /// # 返回
-/// 按附件消费事实完成对象补偿后，返回已过账的付款单视图。
-///
+/// 无成功结果；付款须从已批准的付款申请登记。
 /// # 错误
-/// 文件、权限、版本或付款失败时返回原错误。已提交付款的详情读取失败保持原错误
-/// 分类及上传对象；幂等重放未消费本次上传时，先清理对象再传播读取错误。
-/// 提交结果未知时保留本次对象及最初的未知错误。
+/// 始终返回已停止入口的业务错误，不读取文件或写入存储。
 pub async fn supplier_payment_commit(
-    State(state): State<HttpState>,
-    Extension(actor): Extension<AuditActor>,
-    mut multipart: Multipart,
+    State(_state): State<HttpState>,
+    Extension(_actor): Extension<AuditActor>,
 ) -> Result<SupplierPaymentView> {
-    let (req, files) =
-        extract_command_with_asset_files::<CommitSupplierPaymentRequest>(&mut multipart).await?;
-    validate_bank_receipt_upload(&req, &files)?;
-    let pending = store_pending_asset_files(&state, files, |_| SensitivityClass::Sensitive).await?;
-    let result = commit_supplier_payment_with_assets(
-        state.application().db(),
-        finance_posting_ports(state.application().db(), state.application().rbac()),
-        req,
-        pending.clone(),
-        actor,
-    )
-    .await;
-    let result = finish_asset_command(&state, &pending, result, |result| result.assets_committed).await?;
-    Ok(ApiResponse::ok_with_data(result.view?))
+    Ok(ApiResponse::ok_with_data(PayableProcess::reject_client_payment()?))
 }
 
 /// 在校验付款归属并记录审计后，返回银行回单图片内容。
@@ -248,7 +236,11 @@ pub async fn supplier_payment_bank_receipt(
 ) -> std::result::Result<Response, Error> {
     let payable = PayableProcess::new(
         state.application().db(),
-        finance_posting_ports(state.application().db(), state.application().rbac()),
+        finance_posting_ports(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        ),
     );
     let snapshot = payable.supplier_payment_bank_receipt(&id, &actor).await?;
     let view = &snapshot.asset;
@@ -322,7 +314,11 @@ pub async fn purchase_invoice_allocation_post(
 ) -> Result<PurchaseInvoiceRegisteredView> {
     let view = PayableProcess::new(
         state.application().db(),
-        finance_posting_ports(state.application().db(), state.application().rbac()),
+        finance_posting_ports(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        ),
     )
     .register_purchase_invoice(req, &actor)
     .await?;
@@ -347,7 +343,7 @@ pub async fn purchase_invoice_allocation_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<PurchaseInvoiceAllocationListParams>,
 ) -> Result<FundsScopedPage<ScopedPurchaseInvoiceAllocationRow>> {
-    let page = funds_access_with_rbac(state.application().db(), state.application().rbac())
+    let page = funds_access(state.application().db(), state.application().authorization())
         .purchase_invoice_allocation_list_scoped(&params, &actor)
         .await?;
 

@@ -76,6 +76,7 @@ fn main() {
     )
     .expect("必须写入路由权限合同");
 
+    #[cfg(not(test))]
     fs::write(
         PathBuf::from(env::var_os("OUT_DIR").expect("Cargo provides OUT_DIR"))
             .join("permission_references.rs"),

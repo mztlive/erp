@@ -82,6 +82,7 @@ impl AuthorizationService {
         let facts =
             TargetFacts::load(&self.facts, &proof.context, &proof.rule, target.borrowed()?, executor).await?;
         let mut source_proofs = self.approval_sources(&proof, &facts, executor).await?;
+        source_proofs.extend(self.approval_decision_sources(&proof, &facts, executor).await?);
         let sources = self.work_item_sources(&proof, &facts, executor).await?;
         source_proofs.extend(sources.proofs);
         let grants = self.target_grants(&proof.context, &proof.rule, &facts, executor).await?;

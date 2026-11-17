@@ -25,7 +25,7 @@ pub async fn sales_order_evidence_download(
     Extension(actor): Extension<AuditActor>,
     Path((order_id, asset_id)): Path<(String, String)>,
 ) -> Result<Response, Error> {
-    let service = SalesOrderReadService::with_rbac(state.application().db(), state.application().rbac());
+    let service = SalesOrderReadService::new(state.application().db(), state.application().authorization());
     let version = service.require_sales_evidence(&actor, &order_id, &asset_id).await?;
     let (view, bytes) = read_asset(&state, &actor, &asset_id).await?;
     let current = service.require_sales_evidence(&actor, &order_id, &asset_id).await?;

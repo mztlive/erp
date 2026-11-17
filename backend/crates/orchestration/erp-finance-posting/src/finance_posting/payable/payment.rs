@@ -48,6 +48,17 @@ const PAYMENT_COMMIT: AuditAction = AuditAction {
 };
 
 impl PayableProcess {
+    /// 在文件存储前拒绝已关闭的应付直付入口。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 不返回付款结果。
+    /// # 错误
+    /// 恒返回冲突；付款只能从已批准付款申请办理。
+    pub fn reject_client_payment() -> Result<SupplierPaymentView> {
+        Err(Error::ConflictError("旧采购应付直付入口已停止，请从已批准付款申请登记付款".into()))
+    }
+
     /// 读取付款单归属的银行回单元数据，并记录受控预览审计。
     ///
     /// 完整对象资格、付款引用和文件资产在同一事务 Executor 读取，资格通过后
@@ -144,35 +155,6 @@ impl PayableProcess {
             })
             .await
     }
-    /// 原子登记并过账供应商付款，同时登记银行回单。
-    ///
-    /// 任务责任、当前默认收款账户、付款实体、核销分配、应付余额、回单资产、
-    /// 付款任务和审计全部位于同一事务。采购单审批是付款授权来源，本命令不得
-    /// 创建付款审批实例或审批任务。
-    ///
-    /// # 参数
-    /// * `req` - 本次付款事实、冻结分配与幂等键
-    /// * `pending_assets` - 已上传、须随本次付款登记的银行回单批次
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回详情读取结果及本次附件提交状态。调用方必须先完成附件补偿，
-    /// 再展开详情；提交后读取失败保存在 `view` 内，不得触发已关联回单清理。
-    ///
-    /// # 错误
-    /// * `ValidationError` - 参数组合或分配不合法
-    /// * `ConflictError` - 任务版本、付款单号或收款账户漂移
-    /// * `NotFound` - 任务、应付、供应商或银行回单不存在
-    pub async fn commit_supplier_payment_with_assets(
-        &self,
-        req: CommitSupplierPaymentRequest,
-        pending_assets: Arc<dyn PendingAttachmentBatch>,
-        actor: &AuditActor,
-    ) -> Result<SupplierPaymentWithAssetsResult> {
-        let _ = (req, pending_assets, actor);
-        Err(Error::ConflictError("旧采购应付直付入口已停止，请从已批准付款申请登记付款".into()))
-    }
-
     /// 从已批准采购付款申请原子登记实际付款和回单。
     /// # 参数
     /// * `id` - 路径所指定的付款申请。
@@ -696,5 +678,18 @@ mod tests {
 
         assert!(result.assets_committed);
         assert_eq!(result.view.unwrap(), expected);
+    }
+}
+
+#[cfg(test)]
+mod legacy_upload_tests {
+    use super::{Error, PayableProcess};
+
+    #[test]
+    fn legacy_payment_rejects_before_request_or_file_storage_is_needed() {
+        assert!(matches!(
+            PayableProcess::reject_client_payment(),
+            Err(Error::ConflictError(reason)) if reason == "旧采购应付直付入口已停止，请从已批准付款申请登记付款"
+        ));
     }
 }

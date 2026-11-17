@@ -130,26 +130,6 @@ export function PersonalBusinessPermissions({
                             setEditing(resource)
                         }}
                     />
-                    {query.data.retired_items.length > 0 && (
-                        <details className="border-t pt-3 text-xs text-muted-foreground">
-                            <summary
-                                id="person-scope-retired-details"
-                                className="cursor-pointer leading-6"
-                            >
-                                {query.data.retired_items.length}{" "}
-                                项旧范围已停用，仅保留审计记录
-                            </summary>
-                            <ul className="mt-2 space-y-2">
-                                {query.data.retired_items.map((item) => (
-                                    <li key={`${item.resource}:${item.action}`}>
-                                        {resourceLabel(item.resource)} ·{" "}
-                                        {actionLabel(item.action)}：
-                                        {item.reason}
-                                    </li>
-                                ))}
-                            </ul>
-                        </details>
-                    )}
                     {editing && ready && canCreate && !unavailableDraft && (
                         <PersonalGrantForm
                             key={editing}
@@ -174,6 +154,27 @@ export function PersonalBusinessPermissions({
                     )}
                 </>
             )}
+            {canRead &&
+                query.isSuccess &&
+                query.data.retired_items.length > 0 && (
+                    <details className="border-t pt-3 text-xs text-muted-foreground">
+                        <summary
+                            id="person-scope-retired-details"
+                            className="cursor-pointer leading-6"
+                        >
+                            {query.data.retired_items.length}{" "}
+                            项旧范围已停用，仅保留审计记录
+                        </summary>
+                        <ul className="mt-2 space-y-2">
+                            {query.data.retired_items.map((item) => (
+                                <li key={`${item.resource}:${item.action}`}>
+                                    {resourceLabel(item.resource)} ·{" "}
+                                    {actionLabel(item.action)}：{item.reason}
+                                </li>
+                            ))}
+                        </ul>
+                    </details>
+                )}
         </section>
     )
 }

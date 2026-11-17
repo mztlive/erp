@@ -196,6 +196,7 @@ fn definition_service(state: &HttpState) -> ApprovalDefinitionService {
     ApprovalDefinitionService::with_audit(
         state.application().db(),
         state.application().rbac(),
+        state.application().authorization(),
         workflow_audit(state.application().db()),
     )
 }

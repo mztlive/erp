@@ -59,7 +59,7 @@ impl PurchaseOrderFormalizationProcess {
         id: &str,
         actor: &AuditActor,
     ) -> Result<PurchaseReviewResult> {
-        let service = PurchaseOrderProcess::with_rbac(self.db.clone(), self.rbac.clone(), self.ports.clone());
+        let service = PurchaseOrderProcess::new(self.db.clone(), self.rbac.clone(), self.ports.clone());
         let (persist, result) = service.prepare_formalized_order(id, actor).await?.into_parts();
         let db = self.db.clone();
         let actor = actor.clone();
@@ -90,7 +90,7 @@ impl PurchaseOrderFormalizationProcess {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let service = PurchaseOrderProcess::with_rbac(self.db.clone(), self.rbac.clone(), self.ports.clone());
+        let service = PurchaseOrderProcess::new(self.db.clone(), self.rbac.clone(), self.ports.clone());
         let (persist, _) = service.prepare_formalized_order(id, actor).await?.into_parts();
         persist_formalized_order_write(&self.db, persist, actor, executor).await
     }

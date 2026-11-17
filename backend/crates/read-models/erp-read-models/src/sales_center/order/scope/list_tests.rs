@@ -154,7 +154,7 @@ async fn production_load_checks_authorization_before_keyword_or_business_reads()
         .await
         .unwrap()
         .database("sales_list_authorization");
-    let service = SalesOrderReadService::with_rbac(db, unbound_authorization());
+    let service = SalesOrderReadService::new(db, unbound_authorization());
     let params = serde_json::from_value(serde_json::json!({"q": "客户关键词"})).unwrap();
     let result = service.load(&params, &actor(), &mut SnapshotExecutor::default()).await;
     assert!(matches!(

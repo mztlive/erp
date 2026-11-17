@@ -5,83 +5,87 @@
 
 use axum::Router;
 use axum::routing::{get, post, put};
-use erp_identity::AuthorizationService;
 use erp_permissions as permissions;
 
 use crate::http::handler::approval_instance::approval_process;
-use crate::http::middleware::with_permission;
+use crate::http::routes::permission_route;
 use crate::http::state::HttpState;
 
 /// 返回定义管理路由。
 ///
 /// # 参数
-/// * `rbac` - 共享 RBAC 服务
+/// 无。
 ///
 /// # 返回
 /// 返回目录、版本、详情、草稿、节点、发布、退役与定义期候选人路由。
-pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
+///
+/// # 错误
+/// 不执行 I/O，不返回错误。
+pub fn routes() -> Router<HttpState> {
+    Router::new().merge(catalog_routes()).merge(definition_routes())
+}
+
+/// 审批类型、版本与候选读取路由。
+fn catalog_routes() -> Router<HttpState> {
     Router::new()
         .route(
             "/approval-processes/catalog",
-            with_permission(
+            permission_route(
                 get(approval_process::definition_catalog),
-                rbac,
                 &permissions::approval_process::DEFINITION_DETAIL,
             ),
         )
         .route(
             "/approval-processes/{document_type}/versions",
-            with_permission(
+            permission_route(
                 get(approval_process::definition_versions),
-                rbac,
                 &permissions::approval_process::DEFINITION_DETAIL,
             ),
         )
         .route(
             "/approval-processes/{document_type}/eligible-assignees",
-            with_permission(
+            permission_route(
                 get(approval_process::eligible_assignees),
-                rbac,
                 &permissions::approval_process::DEFINITION_DETAIL,
             ),
         )
+}
+
+/// 审批定义草稿、发布及退役路由。
+fn definition_routes() -> Router<HttpState> {
+    Router::new()
         .route(
             "/approval-process-definitions/drafts",
-            with_permission(
+            permission_route(
                 post(approval_process::create_definition_draft),
-                rbac,
                 &permissions::approval_process::CREATE_DEFINITION_DRAFT,
             ),
         )
         .route(
             "/approval-process-definitions/{id}",
-            with_permission(
+            permission_route(
                 get(approval_process::definition_detail),
-                rbac,
                 &permissions::approval_process::DEFINITION_DETAIL,
             ),
         )
         .route(
             "/approval-process-definitions/{id}/nodes",
-            with_permission(
+            permission_route(
                 put(approval_process::replace_definition_nodes),
-                rbac,
                 &permissions::approval_process::REPLACE_DEFINITION_NODES,
             ),
         )
         .route(
             "/approval-process-definitions/{id}/publish",
-            with_permission(
+            permission_route(
                 post(approval_process::publish_definition),
-                rbac,
                 &permissions::approval_process::PUBLISH_DEFINITION,
             ),
         )
         .route(
             "/approval-process-definitions/{id}/retire",
-            with_permission(
+            permission_route(
                 post(approval_process::retire_definition),
-                rbac,
                 &permissions::approval_process::RETIRE_DEFINITION,
             ),
         )

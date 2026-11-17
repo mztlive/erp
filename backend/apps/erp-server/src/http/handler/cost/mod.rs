@@ -32,8 +32,9 @@ pub async fn cost_entry_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<CostReadParams>,
 ) -> Result<CostReadResult<PageView<ScopedCostEntryView>>> {
-    let page =
-        CostReadModel::new(state.application().db(), state.application().rbac()).list(params, &actor).await?;
+    let page = CostReadModel::new(state.application().db(), state.application().authorization())
+        .list(params, &actor)
+        .await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -51,8 +52,9 @@ pub async fn cost_entry_detail(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<CostReadResult<ScopedCostEntryView>> {
-    let view =
-        CostReadModel::new(state.application().db(), state.application().rbac()).detail(&id, &actor).await?;
+    let view = CostReadModel::new(state.application().db(), state.application().authorization())
+        .detail(&id, &actor)
+        .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -71,9 +73,12 @@ pub async fn cost_entry_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateCostEntryRequest>,
 ) -> Result<CostEntryView> {
-    let view = erp_finance_posting::finance_posting::cost::CostProcess::new(state.application().db())
-        .create_cost_entry(req, &actor)
-        .await?;
+    let view = erp_finance_posting::finance_posting::cost::CostProcess::new(
+        state.application().db(),
+        state.application().authorization(),
+    )
+    .create_cost_entry(req, &actor)
+    .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -91,7 +96,7 @@ pub async fn cost_allocation_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<AllocationReadParams>,
 ) -> Result<CostReadResult<PageView<CostAllocationView>>> {
-    let page = CostReadModel::new(state.application().db(), state.application().rbac())
+    let page = CostReadModel::new(state.application().db(), state.application().authorization())
         .allocations(params, &actor)
         .await?;
 

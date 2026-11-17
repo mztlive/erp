@@ -236,7 +236,7 @@ impl PurchaseOrderProcess {
     ) -> Result<PurchaseChangeOrderView> {
         let reads = PurchaseOrderReadService::new(
             self.db.clone(),
-            self.require_rbac()?.clone(),
+            self.authorization.clone(),
             self.ports.scope.clone(),
         );
         let id = change_id.to_owned();
@@ -340,7 +340,6 @@ impl PurchaseOrderProcess {
             "purchase_change_order",
             change.base.id.clone(),
         )?;
-        self.require_rbac()?;
         persist_created_change_order(
             &self.db,
             ports.as_ref(),
@@ -539,7 +538,7 @@ impl PurchaseOrderProcess {
         .await?;
         let graph = resolve_start_approvers(
             &self.db,
-            self.require_rbac()?,
+            &self.authorization,
             graph,
             actor.id(),
             existing_receipt.as_ref(),

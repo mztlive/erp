@@ -2,215 +2,194 @@
 
 use axum::Router;
 use axum::routing::{get, post, put};
-use erp_identity::AuthorizationService;
 use erp_permissions as permissions;
 
 use crate::http::handler::purchase_payment_request;
-use crate::http::middleware::with_permission;
+use crate::http::routes::permission_route;
 use crate::http::state::HttpState;
 use crate::http::upload;
 
 /// 装配申请、材料及付款路由。
 /// # 参数
-/// * `rbac` - 管理端共享权限服务。
+/// 无。
 /// # 返回
 /// 经 JWT 与逐动作权限保护的路由集合。
 /// # 错误
 /// 不执行 I/O，不返回错误。
-pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
-    query_routes(rbac).merge(candidate_routes(rbac)).merge(command_routes(rbac)).merge(material_routes(rbac))
+pub fn routes() -> Router<HttpState> {
+    query_routes().merge(candidate_routes()).merge(command_routes()).merge(material_routes())
 }
 
-fn query_routes(rbac: &AuthorizationService) -> Router<HttpState> {
+fn query_routes() -> Router<HttpState> {
     Router::new()
         .route(
             "/purchase-payment-requests",
-            with_permission(
+            permission_route(
                 get(purchase_payment_request::list),
-                rbac,
                 &permissions::purchase_payment_request::LIST,
             ),
         )
         .route(
             "/purchase-payment-requests/candidates",
-            with_permission(
+            permission_route(
                 get(purchase_payment_request::candidates),
-                rbac,
                 &permissions::purchase_payment_request::CREATE,
             ),
         )
         .route(
             "/purchase-payment-requests/{id}",
-            with_permission(
+            permission_route(
                 get(purchase_payment_request::detail),
-                rbac,
                 &permissions::purchase_payment_request::DETAIL,
             ),
         )
         .route(
             "/purchase-payment-requests/{id}/submissions/{version}",
-            with_permission(
+            permission_route(
                 get(purchase_payment_request::materials::submission),
-                rbac,
                 &permissions::purchase_payment_request::DETAIL,
             ),
         )
         .route(
             "/work-items/{id}/purchase-payment-request",
-            with_permission(
+            permission_route(
                 get(purchase_payment_request::materials::task_context),
-                rbac,
                 &permissions::work_item::DETAIL,
             ),
         )
 }
 
-fn candidate_routes(rbac: &AuthorizationService) -> Router<HttpState> {
+fn candidate_routes() -> Router<HttpState> {
     Router::new()
         .route(
             "/purchase-payment-requests/candidates/page",
-            with_permission(
+            permission_route(
                 get(purchase_payment_request::candidate_list::page),
-                rbac,
                 &permissions::purchase_payment_request::CREATE,
             ),
         )
         .route(
             "/purchase-payment-requests/candidates/ids",
-            with_permission(
+            permission_route(
                 get(purchase_payment_request::candidate_list::ids),
-                rbac,
                 &permissions::purchase_payment_request::CREATE,
             ),
         )
 }
 
-fn command_routes(rbac: &AuthorizationService) -> Router<HttpState> {
-    draft_routes(rbac).merge(lifecycle_routes(rbac)).merge(payment_routes(rbac))
+fn command_routes() -> Router<HttpState> {
+    draft_routes().merge(lifecycle_routes()).merge(payment_routes())
 }
 
-fn draft_routes(rbac: &AuthorizationService) -> Router<HttpState> {
+fn draft_routes() -> Router<HttpState> {
     Router::new()
         .route(
             "/purchase-payment-requests/batch",
-            with_permission(
+            permission_route(
                 post(purchase_payment_request::create_batch),
-                rbac,
                 &permissions::purchase_payment_request::CREATE,
             ),
         )
         .route(
             "/purchase-payment-requests",
-            with_permission(
+            permission_route(
                 post(purchase_payment_request::create),
-                rbac,
                 &permissions::purchase_payment_request::CREATE,
             ),
         )
         .route(
             "/purchase-payment-requests/{id}",
-            with_permission(
+            permission_route(
                 put(purchase_payment_request::update),
-                rbac,
                 &permissions::purchase_payment_request::UPDATE,
             ),
         )
 }
 
-fn lifecycle_routes(rbac: &AuthorizationService) -> Router<HttpState> {
+fn lifecycle_routes() -> Router<HttpState> {
     Router::new()
         .route(
             "/purchase-payment-requests/{id}/submit",
-            with_permission(
+            permission_route(
                 post(purchase_payment_request::submit),
-                rbac,
                 &permissions::purchase_payment_request::SUBMIT,
             ),
         )
         .route(
             "/purchase-payment-requests/{id}/withdraw",
-            with_permission(
+            permission_route(
                 post(purchase_payment_request::withdraw),
-                rbac,
                 &permissions::purchase_payment_request::WITHDRAW,
             ),
         )
         .route(
             "/purchase-payment-requests/{id}/close",
-            with_permission(
+            permission_route(
                 post(purchase_payment_request::close),
-                rbac,
                 &permissions::purchase_payment_request::CLOSE,
             ),
         )
 }
 
-fn payment_routes(rbac: &AuthorizationService) -> Router<HttpState> {
+fn payment_routes() -> Router<HttpState> {
     Router::new()
-        .merge(deposit_routes(rbac))
+        .merge(deposit_routes())
         .route(
             "/purchase-payment-requests/{id}/supplier-credits",
-            with_permission(
+            permission_route(
                 get(purchase_payment_request::credit::list),
-                rbac,
                 &permissions::purchase_payment_request::CREDIT_LIST,
             ),
         )
         .route(
             "/purchase-payment-requests/{id}/supplier-credits/use",
-            with_permission(
+            permission_route(
                 post(purchase_payment_request::credit::apply),
-                rbac,
                 &permissions::purchase_payment_request::CREDIT_LIST,
             ),
         )
         .route(
             "/purchase-payment-requests/{id}/reveal-account",
-            with_permission(
+            permission_route(
                 post(purchase_payment_request::payments::reveal_account),
-                rbac,
                 &permissions::payable::PAYMENT_RECIPIENT_REVEAL,
             ),
         )
         .route(
             "/purchase-payment-requests/{id}/payments/commit",
-            with_permission(
+            permission_route(
                 upload::multipart_route(
                     post(purchase_payment_request::payments::pay),
                     upload::MAX_MULTIPART_REQUEST_BYTES,
                 ),
-                rbac,
                 &permissions::purchase_payment_request::CREDIT_LIST,
             ),
         )
 }
 
-fn deposit_routes(rbac: &AuthorizationService) -> Router<HttpState> {
+fn deposit_routes() -> Router<HttpState> {
     Router::new().route(
         "/purchase-payment-requests/{id}/deposit-executions",
-        with_permission(
+        permission_route(
             post(purchase_payment_request::deposit::execute),
-            rbac,
             &permissions::purchase_payment_request::CREDIT_LIST,
         ),
     )
 }
 
-fn material_routes(rbac: &AuthorizationService) -> Router<HttpState> {
+fn material_routes() -> Router<HttpState> {
     Router::new()
         .route(
             "/purchase-payment-requests/{id}/materials/{file_asset_id}/download",
-            with_permission(
+            permission_route(
                 get(purchase_payment_request::materials::material_download),
-                rbac,
                 &permissions::purchase_payment_request::DETAIL,
             ),
         )
         .route(
             "/purchase-payment-requests/{id}/materials/{file_asset_id}/preview",
-            with_permission(
+            permission_route(
                 get(purchase_payment_request::materials::material_preview),
-                rbac,
                 &permissions::purchase_payment_request::DETAIL,
             ),
         )

@@ -1778,6 +1778,8 @@ dependencies = [
  "entity-core",
  "entity-macros",
  "erp-core",
+ "erp-identity",
+ "erp-permissions",
  "id-generator",
  "mongodb",
  "persistence-core",

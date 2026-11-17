@@ -18,6 +18,7 @@ use mongodb::Database;
 use mongodb::bson::{Bson, Document, doc};
 use persistence_core::Executor;
 
+use crate::entity::warehouse::Warehouse;
 use crate::repository::WarehouseExt;
 use crate::repository::directory::{authorized_ids_in, authorized_rows_exist};
 
@@ -38,7 +39,7 @@ impl WarehouseMapping {
             collection: <Database as WarehouseExt>::WAREHOUSES.into(),
             id_field: "id".into(),
             output: QueryOutput::Object,
-            facts: [FactKind::Warehouse].into(),
+            facts: [FactKind::Warehouse, FactKind::Collaborators].into(),
         })))
     }
 }
@@ -55,6 +56,18 @@ impl WarehouseFacts {
     pub fn shared(db: Database) -> Arc<dyn AccessFactsPort> {
         Arc::new(Self(db))
     }
+
+    /// 仓库模型没有协作关系，已知空集合与查询端恒假协作条件保持一致。
+    fn object(context: &AccessContext, row: Warehouse) -> ObjectFacts {
+        ObjectFacts {
+            resource: context.resource.clone(),
+            id: row.base.id.clone(),
+            version: row.base.version.to_string(),
+            warehouse_id: FactValue::Known(Some(row.base.id)),
+            collaborators: FactValue::Known(Default::default()),
+            ..Default::default()
+        }
+    }
 }
 #[async_trait]
 impl AccessFactsPort for WarehouseFacts {
@@ -67,13 +80,7 @@ impl AccessFactsPort for WarehouseFacts {
         let mut objects = Vec::new();
         for id in ids.ids() {
             if let Some(row) = self.0.warehouse().warehouse(id, executor).await? {
-                objects.push(ObjectFacts {
-                    resource: context.resource.clone(),
-                    id: row.base.id.clone(),
-                    version: row.base.version.to_string(),
-                    warehouse_id: FactValue::Known(Some(row.base.id)),
-                    ..Default::default()
-                });
+                objects.push(Self::object(context, row));
             }
         }
         Ok(objects)
@@ -99,6 +106,7 @@ impl AccessMapping for WarehouseMapping {
     ) -> erp_identity::Result<QueryFragment> {
         Ok(QueryFragment::Match(match fact {
             AccessFact::WarehouseIn(ids) => doc! {"id":{"$in":ids.iter().cloned().collect::<Vec<_>>() }},
+            AccessFact::Collaborating => doc! {"$expr": false},
             _ => return Err(erp_identity::Error::ValidationError("仓库身份仅支持仓库事实".into())),
         }))
     }
@@ -168,6 +176,19 @@ impl WarehouseAuthorization {
         executor: &mut dyn Executor,
     ) -> erp_identity::Result<()> {
         self.service.require(actor, &self.permission, AccessTarget::record(id)?, executor).await
+    }
+
+    /// 判断完整仓库授权是否命中真实记录，并在返回前复验当前查询。
+    /// # 参数
+    /// actor 为真实账号，executor 为本次存在性读取的原执行器。
+    /// # 返回
+    /// 至少一个真实仓库通过完整功能资格和范围条件时返回 true。
+    /// # 错误
+    /// 身份、映射、数据库或授权依赖失效时返回原错误。
+    pub async fn has_any(&self, actor: &AuditActor, executor: &mut dyn Executor) -> IdentityResult<bool> {
+        let query = self.query(actor, executor).await?;
+        query.validate(executor).await?;
+        Ok(!query.is_empty())
     }
 
     /// 编译当前仓库查询，不预载全部授权身份。
@@ -282,7 +303,7 @@ pub(crate) fn ensure_warehouse_query(
 
 /// 仓库身份读取不得消费其他资源、集合、行身份或受限输出。
 fn warehouse_model(model: &QueryModel) -> IdentityResult<()> {
-    if model.resource != "warehouse"
+    if !matches!(model.resource.as_str(), "warehouse" | "inventory_warehouse")
         || model.collection != <Database as WarehouseExt>::WAREHOUSES
         || model.id_field != "id"
         || model.output != QueryOutput::Object
@@ -298,11 +319,14 @@ mod tests {
     use erp_core::common::time::Instant;
     use erp_identity::entity::access_control::{ResolvedScope, ScopeClause};
     use erp_identity::testing::fixed_authorization;
-    use erp_permissions::warehouse;
+    use erp_permissions::{internal, inventory, warehouse};
     use mongodb::Client;
     use persistence_core::ReadExecutor;
+    use persistence_core::testing::SnapshotExecutor;
 
     use super::*;
+    use crate::WarehouseData;
+    use crate::entity::warehouse::WarehouseId;
 
     fn mapping() -> WarehouseMapping {
         WarehouseMapping(QueryModel {
@@ -343,6 +367,7 @@ mod tests {
     fn warehouse_model_requires_fixed_resource_collection_identity_and_object_output() {
         let model = mapping().0;
         warehouse_model(&model).unwrap();
+        warehouse_model(&QueryModel { resource: "inventory_warehouse".into(), ..model.clone() }).unwrap();
         for invalid in [
             QueryModel { resource: "supplier".into(), ..model.clone() },
             QueryModel { collection: "other_warehouses".into(), ..model.clone() },
@@ -400,6 +425,74 @@ mod tests {
         assert!(mapping.predicate(&AccessFact::Owned, &context, prepared).is_err());
         assert!(mapping.relation(&RelationKey::parse("source").unwrap(), &context, prepared).is_err());
     }
+    fn inventory_entries() -> [(Permission, Permission); 8] {
+        [
+            (internal::INVENTORY_BALANCE_WAREHOUSES, inventory::STOCK_BALANCE_LIST),
+            (internal::INVENTORY_BALANCE_DETAIL_WAREHOUSES, inventory::STOCK_BALANCE_DETAIL),
+            (internal::INVENTORY_MOVEMENT_WAREHOUSES, inventory::STOCK_MOVEMENT_LIST),
+            (internal::INVENTORY_RESERVATION_WAREHOUSES, inventory::STOCK_RESERVATION_LIST),
+            (internal::INVENTORY_ADJUSTMENT_WAREHOUSES, inventory::STOCK_ADJUSTMENT_LIST),
+            (internal::INVENTORY_ADJUSTMENT_DETAIL_WAREHOUSES, inventory::STOCK_ADJUSTMENT_DETAIL),
+            (internal::INVENTORY_CREATE_WAREHOUSES, inventory::STOCK_ADJUSTMENT_CREATE),
+            (internal::INVENTORY_UPDATE_WAREHOUSES, inventory::STOCK_ADJUSTMENT_UPDATE),
+        ]
+    }
+
+    #[tokio::test]
+    async fn inventory_bindings_keep_missing_collaboration_empty_and_preserve_real_warehouse_scope() {
+        for (entry, source) in inventory_entries() {
+            for has_warehouse_scope in [false, true] {
+                let mut context = context();
+                context.permission = entry.clone();
+                context.resource = entry.resource().into();
+                let row = Warehouse::new(WarehouseId::new("warehouse"), WarehouseData::new("WH-1"), "actor")
+                    .unwrap();
+                let facts = WarehouseFacts::object(&context, row);
+                assert_eq!(facts.collaborators, FactValue::Known(Default::default()));
+                let mut clauses = vec![ScopeClause { collaborative: true, ..Default::default() }];
+                if has_warehouse_scope {
+                    clauses.push(ScopeClause {
+                        warehouse_ids: ["warehouse".into()].into(),
+                        ..Default::default()
+                    });
+                }
+                let mapping = WarehouseMapping::shared(entry.resource()).unwrap();
+                let authorization = fixed_authorization(
+                    &[source.clone(), inventory::STOCK_ADJUSTMENT_DETAIL, entry.clone()],
+                    ResolvedScope { role_clauses: clauses, user_limit: None },
+                    vec![facts],
+                    vec![(entry.clone(), mapping)],
+                )
+                .unwrap();
+                let mut executor = SnapshotExecutor::default();
+                let result = authorization
+                    .require(
+                        &context.actor,
+                        &entry,
+                        AccessTarget::record("warehouse").unwrap(),
+                        &mut executor,
+                    )
+                    .await;
+                if has_warehouse_scope {
+                    result.unwrap();
+                } else {
+                    assert!(matches!(result, Err(IdentityError::Forbidden(_))));
+                }
+                let access = authorization.query(&context.actor, &entry, &mut executor).await.unwrap();
+                warehouse_model(access.model()).unwrap();
+                authorization.validate(&access, &mut executor).await.unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn warehouse_collaboration_query_matches_known_empty_object_facts() {
+        let mapping = WarehouseMapping::shared("inventory_warehouse").unwrap();
+        assert!(mapping.model().facts.contains(&FactKind::Collaborators));
+        let fragment = mapping.predicate(&AccessFact::Collaborating, &context(), None).unwrap();
+        assert!(matches!(fragment, QueryFragment::Match(filter) if filter == doc! {"$expr": false}));
+    }
+
     #[test]
     fn model_records_exclude_deleted_warehouse_identities() {
         let mapping = mapping();

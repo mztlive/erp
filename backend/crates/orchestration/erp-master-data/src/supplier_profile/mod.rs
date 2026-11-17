@@ -3,6 +3,7 @@
 //! 本 Process 协调 Party、Supplier、当前事实与独立资质，在一个
 //! MongoDB 事务中提交全部写入，并把幂等结果与业务数据一并落库。
 
+mod attachment_upload;
 mod commands;
 mod create;
 mod handover;

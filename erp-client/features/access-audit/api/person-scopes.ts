@@ -1,6 +1,7 @@
 import {
     fetchPersonScopes,
     personScopeDescription,
+    personHasDefaultSelf,
     type PersonDataScope,
     type PersonScopeList,
 } from "@/features/admin/api/person-data-scopes"
@@ -42,7 +43,10 @@ export function scopeViewRows(
         const active =
             !retired &&
             (business?.configurable_actions.includes(scope.action) ?? false)
-        const row = scopeRow(scope, business?.default_self ?? false)
+        const row = scopeRow(
+            scope,
+            business ? personHasDefaultSelf(business, scope.action) : false,
+        )
         return {
             ...row,
             enabled: active,
@@ -54,8 +58,8 @@ export function scopeViewRows(
         }
     })
     for (const business of view.businesses) {
-        if (!business.default_self) continue
         for (const action of business.configurable_actions) {
+            if (!personHasDefaultSelf(business, action)) continue
             if (
                 view.items.some(
                     (scope) =>

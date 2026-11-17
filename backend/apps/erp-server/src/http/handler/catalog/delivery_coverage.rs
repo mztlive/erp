@@ -1,5 +1,7 @@
 //! 销售录入收货地址时的配送提示 Handler。
 
+use application_core::AuditActor;
+use axum::Extension;
 use axum::extract::State;
 use erp_read_models::catalog_center::delivery_coverage::{
     DeliveryCoverageRequest, DeliveryCoverageView, sellable_delivery_coverage,
@@ -20,8 +22,15 @@ use crate::http::state::HttpState;
 /// 返回逐商品、地区的提示，不含供应商信息。
 pub async fn delivery_coverage(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Json(req): Json<DeliveryCoverageRequest>,
 ) -> Result<DeliveryCoverageView> {
-    let view = sellable_delivery_coverage(&state.application().db(), req).await?;
+    let view = sellable_delivery_coverage(
+        &state.application().db(),
+        req,
+        &state.application().authorization(),
+        &actor,
+    )
+    .await?;
     Ok(ApiResponse::ok_with_data(view))
 }

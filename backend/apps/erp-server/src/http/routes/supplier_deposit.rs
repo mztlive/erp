@@ -1,151 +1,127 @@
-//! 预存款管理路由；逐动作JWT/RBAC与Process对象范围共同执行。
+//! 预存款管理路由；JWT 认证及 Process 统一授权共同执行。
 use axum::Router;
 use axum::routing::{get, post};
-use erp_identity::AuthorizationService;
 use erp_permissions as permissions;
 
 use crate::http::handler::supplier_deposit;
-use crate::http::middleware::with_permission;
+use crate::http::routes::permission_route;
 use crate::http::state::HttpState;
 /// 装配已明确授权的财务账户与资金命令。
 /// # 参数
-/// * `rbac` - 当前应用共享权限服务。
+/// 无。
 /// # 返回
 /// 返回逐动作权限保护的路由。
 /// # 错误
 /// 不执行I/O，不返回错误。
-pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
-    reads(rbac)
-        .merge(recharge(rbac))
-        .merge(authorizations(rbac))
-        .merge(execution(rbac))
-        .merge(resolution(rbac))
+pub fn routes() -> Router<HttpState> {
+    reads().merge(recharge()).merge(authorizations()).merge(execution()).merge(resolution())
 }
 
-fn resolution(rbac: &AuthorizationService) -> Router<HttpState> {
+fn resolution() -> Router<HttpState> {
     Router::new()
         .route(
             "/supplier-deposits/accounts/{id}/reconciliations/{reconciliation}/resolve",
-            with_permission(
+            permission_route(
                 post(supplier_deposit::resolution::resolve),
-                rbac,
                 &permissions::supplier_deposit::RESOLUTION_RESOLVE,
             ),
         )
         .route(
             "/supplier-deposits/accounts/{id}/reservations/{reservation}/release",
-            with_permission(
+            permission_route(
                 post(supplier_deposit::resolution::release),
-                rbac,
                 &permissions::supplier_deposit::RESOLUTION_RELEASE,
             ),
         )
 }
 
-fn reads(rbac: &AuthorizationService) -> Router<HttpState> {
+fn reads() -> Router<HttpState> {
     Router::new()
         .route(
             "/supplier-deposits/accounts",
-            with_permission(get(supplier_deposit::list), rbac, &permissions::supplier_deposit::LIST),
+            permission_route(get(supplier_deposit::list), &permissions::supplier_deposit::LIST),
         )
         .route(
             "/supplier-deposits/accounts",
-            with_permission(post(supplier_deposit::open), rbac, &permissions::supplier_deposit::OPEN),
+            permission_route(post(supplier_deposit::open), &permissions::supplier_deposit::OPEN),
         )
         .route(
             "/supplier-deposits/accounts/{id}",
-            with_permission(get(supplier_deposit::detail), rbac, &permissions::supplier_deposit::DETAIL),
+            permission_route(get(supplier_deposit::detail), &permissions::supplier_deposit::DETAIL),
         )
 }
 
-fn recharge(rbac: &AuthorizationService) -> Router<HttpState> {
+fn recharge() -> Router<HttpState> {
     Router::new()
         .route(
             "/supplier-deposits/accounts/{id}/recharge-requests",
-            with_permission(
+            permission_route(
                 post(supplier_deposit::request_recharge),
-                rbac,
                 &permissions::supplier_deposit::REQUEST_RECHARGE,
             ),
         )
         .route(
             "/supplier-deposits/accounts/{id}/recharge-requests/{request}/approve",
-            with_permission(
+            permission_route(
                 post(supplier_deposit::approve_recharge),
-                rbac,
                 &permissions::supplier_deposit::APPROVE_RECHARGE,
             ),
         )
         .route(
             "/supplier-deposits/accounts/{id}/recharge-requests/{request}/pay",
-            with_permission(
+            permission_route(
                 post(supplier_deposit::pay_recharge),
-                rbac,
                 &permissions::supplier_deposit::PAY_RECHARGE,
             ),
         )
         .route(
             "/supplier-deposits/accounts/{id}/recharges",
-            with_permission(
+            permission_route(
                 post(supplier_deposit::receive_recharge),
-                rbac,
                 &permissions::supplier_deposit::RECEIVE_RECHARGE,
             ),
         )
 }
 
-fn authorizations(rbac: &AuthorizationService) -> Router<HttpState> {
+fn authorizations() -> Router<HttpState> {
     Router::new()
         .route(
             "/supplier-deposits/accounts/{id}/authorizations",
-            with_permission(
-                post(supplier_deposit::authorize),
-                rbac,
-                &permissions::supplier_deposit::AUTHORIZE,
-            ),
+            permission_route(post(supplier_deposit::authorize), &permissions::supplier_deposit::AUTHORIZE),
         )
         .route(
             "/supplier-deposits/accounts/{id}/authorizations/{authorization}/revoke",
-            with_permission(post(supplier_deposit::revoke), rbac, &permissions::supplier_deposit::REVOKE),
+            permission_route(post(supplier_deposit::revoke), &permissions::supplier_deposit::REVOKE),
         )
         .route(
             "/supplier-deposits/accounts/{id}/reconciliations",
-            with_permission(
-                post(supplier_deposit::reconcile),
-                rbac,
-                &permissions::supplier_deposit::RECONCILE,
-            ),
+            permission_route(post(supplier_deposit::reconcile), &permissions::supplier_deposit::RECONCILE),
         )
 }
 
-fn execution(rbac: &AuthorizationService) -> Router<HttpState> {
+fn execution() -> Router<HttpState> {
     Router::new()
         .route(
             "/supplier-deposits/accounts/{id}/reservations",
-            with_permission(post(supplier_deposit::reserve), rbac, &permissions::supplier_deposit::RESERVE),
+            permission_route(post(supplier_deposit::reserve), &permissions::supplier_deposit::RESERVE),
         )
         .route(
             "/supplier-deposits/accounts/{id}/debits",
-            with_permission(
-                post(supplier_deposit::record_debit),
-                rbac,
-                &permissions::supplier_deposit::SETTLE,
-            ),
+            permission_route(post(supplier_deposit::record_debit), &permissions::supplier_deposit::SETTLE),
         )
         .route(
             "/supplier-deposits/accounts/{id}/usages/{usage}/settlements",
-            with_permission(post(supplier_deposit::settle), rbac, &permissions::supplier_deposit::SETTLE),
+            permission_route(post(supplier_deposit::settle), &permissions::supplier_deposit::SETTLE),
         )
         .route(
             "/supplier-deposits/accounts/{id}/returns",
-            with_permission(
+            permission_route(
                 post(supplier_deposit::return_usage),
-                rbac,
                 &permissions::supplier_deposit::RETURN_USAGE,
             ),
         )
         .route(
             "/supplier-deposits/accounts/{id}/connections",
-            with_permission(post(supplier_deposit::bind), rbac, &permissions::supplier_deposit::BIND),
+            permission_route(post(supplier_deposit::bind), &permissions::supplier_deposit::BIND),
         )
 }

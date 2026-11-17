@@ -1,20 +1,15 @@
-use application_core::AuditActor;
-use axum::Extension;
 use axum::body::Body;
-use axum::extract::{FromRequest, Multipart, Path, State};
-use axum::http::Request;
+use axum::http::{Method, Request, StatusCode};
 use config::{Config, SafeConfig};
-use erp_core::AccountKind;
 use mongodb::Client;
 use mongodb::options::{ClientOptions, ServerAddress};
-use serde_json::json;
 use storage::{S3Storage, S3StorageConfig};
+use tower::ServiceExt;
 
-use super::{supplier_profile_create_with_assets, supplier_profile_update_with_assets};
-use crate::http::errors::Error;
+use crate::http::routes;
 use crate::http::state::HttpState;
 
-/// 只构造客户端；命令在输入校验阶段返回，不访问数据库或对象存储。
+/// 只构造本地客户端；请求在 JWT 认证边界拒绝，不执行数据库命令或对象存储写入。
 fn state() -> HttpState {
     let config = Config::from_toml_str(
         r#"
@@ -54,49 +49,21 @@ access_token = "test-token-123456"
     HttpState::new(db, SafeConfig::new(config), storage)
 }
 
-async fn multipart() -> Multipart {
-    let command = json!({
-        "idempotency_key": "supplier-assets-unit-test", "legal_name": "测试供应商",
-        "contact": {"contact_name": "测试联系人", "mobile": "13800000000"},
-        "clear_contact": true,
-        "settlement_mode": "monthly", "reconciliation_cycle": "none",
-        "payment_term_snapshot": "PERIOD_MONTH_3", "invoice_type": "vat_special",
-        "signing_entity_party_id": "party-1", "payment_entity_party_id": "party-1",
-        "capability_codes": [], "qualifications": [],
-        "effective_from": "2026-10-20", "change_reason": "测试"
-    });
-    let body = format!(
-        "--test-boundary\r\nContent-Disposition: form-data; name=\"command\"\r\n\r\n{command}\r\n--test-boundary--\r\n"
-    );
-    let request = Request::builder()
-        .method("POST")
-        .header("content-type", "multipart/form-data; boundary=test-boundary")
-        .body(Body::from(body))
-        .unwrap();
-    Multipart::from_request(request, &()).await.unwrap()
-}
-
+/// 生产路由先验证身份，未认证请求不能进入上传资格预检或文件处理。
 #[tokio::test]
-async fn asset_handlers_inject_authorization_before_business_validation() {
-    let state = state();
-    let actor = AuditActor::new("buyer-1".into(), "buyer".into(), AccountKind::Admin);
-    let created = supplier_profile_create_with_assets(
-        State(state.clone()),
-        Extension(actor.clone()),
-        multipart().await,
-    )
-    .await;
-    let updated = supplier_profile_update_with_assets(
-        State(state),
-        Extension(actor),
-        Path("supplier-1".into()),
-        multipart().await,
-    )
-    .await;
-    for result in [created, updated] {
-        assert!(matches!(
-            result,
-            Err(Error::BadRequest(message)) if message == "联系人不能同时替换和清空"
-        ));
+async fn asset_routes_require_authentication_before_upload_processing() {
+    let app = routes::create(state());
+    for (method, path) in [
+        (Method::POST, "/admin/supplier-profiles/with-assets"),
+        (Method::PUT, "/admin/supplier-profiles/supplier-1/with-assets"),
+    ] {
+        let request = Request::builder()
+            .method(method)
+            .uri(path)
+            .header("content-type", "multipart/form-data; boundary=test-boundary")
+            .body(Body::from("invalid multipart payload"))
+            .unwrap();
+        let response = app.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED, "{path}");
     }
 }

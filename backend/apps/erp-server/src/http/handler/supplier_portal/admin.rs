@@ -13,7 +13,6 @@ use erp_supplier_catalog::supplier_portal::authorization::PortalReadAuthorizatio
 use erp_supplier_catalog::supplier_portal::{PortalGrantInput, PortalReview};
 use erp_supply::portal::QuoteAccessGrant;
 use erp_workflow::WorkItemReadService;
-use persistence_core::NoTransaction;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, to_value};
 
@@ -23,7 +22,7 @@ use crate::http::errors::{Error, Result};
 use crate::http::extractor::{Json, Query};
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
-use crate::wiring::purchase_access;
+use crate::wiring::{catalog_services, purchase_access};
 
 /// 协议层账号开通允许字段；内部角色及组织不属于外部身份。
 #[derive(Deserialize)]
@@ -178,14 +177,7 @@ pub async fn application(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<Value> {
-    let service = reads(&state);
-    let mut data = service.admin_application(&actor, &id).await?;
-    data["current"] = service.current_application_facts(&id, &actor, &mut NoTransaction).await?;
-    if data.get("kind").and_then(Value::as_str) == Some("NEW_PRODUCT") {
-        let candidates = service.existing_offering_review_candidates(&id, &actor, &mut NoTransaction).await?;
-        data["existing_offerings"] =
-            to_value(candidates).map_err(|error| Error::Internal(error.to_string()))?;
-    }
+    let data = reads(&state).admin_application(&actor, &id).await?;
     Ok(ApiResponse::ok_with_data(data))
 }
 
@@ -215,11 +207,12 @@ pub async fn review(
 /// 类型或读取无效时拒绝。
 pub async fn dictionaries(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Path(kind): Path<DictionaryKind>,
     Query(params): Query<DictionaryParams>,
 ) -> Result<Vec<DictionaryCandidate>> {
     let data = CatalogPortalService::new(state.application().db(), state.application().catalog_service())
-        .dictionary_candidates(kind, params.q.as_deref(), params.product_kind, &mut NoTransaction)
+        .admin_dictionary_candidates(kind, params.q.as_deref(), params.product_kind, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(data))
 }
@@ -244,9 +237,7 @@ pub async fn duplicates(
     Query(params): Query<DuplicateParams>,
 ) -> Result<Value> {
     let catalog = CatalogPortalService::new(state.application().db(), state.application().catalog_service());
-    let data = reads(&state)
-        .new_product_review_context(&id, params.q.as_deref(), &actor, &catalog, &mut NoTransaction)
-        .await?;
+    let data = reads(&state).new_product_review_context(&id, params.q.as_deref(), &actor, &catalog).await?;
     ok_value(data)
 }
 
@@ -265,13 +256,17 @@ pub async fn impacts(
 ) -> Result<Value> {
     let service = PortalOfferingImpactReadService::new(
         state.application().db(),
-        purchase_access(state.application().db(), state.application().authorization().into()),
+        purchase_access(state.application().db(), state.application().authorization()),
         Arc::new(PortalReadAuthorization::new(
             state.application().db(),
-            state.application().rbac(),
-            crate::wiring::catalog_services(state.application().db(), state.application().rbac()),
+            state.application().authorization(),
+            catalog_services(
+                state.application().db(),
+                state.application().rbac(),
+                state.application().authorization(),
+            ),
         )),
-        WorkItemReadService::new(state.application().db(), state.application().rbac()),
+        WorkItemReadService::new(state.application().db(), state.application().authorization()),
     );
     ok_value(service.offering_impacts(&actor, &id, &params).await?)
 }
@@ -280,8 +275,12 @@ fn reads(state: &HttpState) -> SupplierPortalReadService {
     SupplierPortalReadService::new(state.application().db()).with_authorization(Arc::new(
         PortalReadAuthorization::new(
             state.application().db(),
-            state.application().rbac(),
-            crate::wiring::catalog_services(state.application().db(), state.application().rbac()),
+            state.application().authorization(),
+            catalog_services(
+                state.application().db(),
+                state.application().rbac(),
+                state.application().authorization(),
+            ),
         ),
     ))
 }

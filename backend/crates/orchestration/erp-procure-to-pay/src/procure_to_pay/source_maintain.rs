@@ -27,7 +27,6 @@ use super::PurchaseOrderProcess;
 use crate::{Error, Result};
 
 /// 维持原采购的授权动作。
-
 impl PurchaseOrderProcess {
     /// 登记维持原采购并关闭依据更新待办。
     ///

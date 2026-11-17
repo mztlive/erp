@@ -6,7 +6,7 @@
 
 本 crate 不依赖其他业务领域。业务模块提供事实读取器和 Mapping；server 的 `wiring/authorization/` 装配事实读取器和 Mapping；identity 固定并执行授权规则。
 
-公共权限值与目录已迁入 `erp-permissions`，identity 的 `Permission` 导出引用同一类型。统一公共 API、Builder、固定规则和执行边界已实现。业务调用与完整 Facts/Mapping 在第五阶段迁移，`Application`、HTTP 和 worker 在第六阶段切换。实施要求见 [授权服务改进](docs/authorization-service-improvement.md)。
+公共权限值与目录由 `erp-permissions` 提供，identity 的 `Permission` 导出引用同一类型。业务用例使用统一公共 API，HTTP 和 worker 通过完整 Facts/Mapping 装配取得共享服务。接口与验收合同见 [授权服务改进](docs/authorization-service-improvement.md)。
 
 ## 共享服务
 
@@ -30,9 +30,13 @@ identity 固定授权规则，事实读取器和 Mapping 在 server 的 `wiring/
 
 `permissions` 批量读取各项功能资格，账号失效时返回 `None`；身份设施、策略版本或非法权限错误直接返回。批量结果不代表同一角色具备全部权限，需要此约束时使用 `QualifiedPermissions::same_role`。功能资格不能替代 `require` 或 `query` 的对象授权。
 
-HTTP 层通过 JWT 认证身份，受保护的公共业务用例在返回业务数据或执行写入前调用 `require` 或 `query`。仅要求功能权限的操作使用 `require` 和 `AccessTarget::Operation`；`has_permission` 和 `permissions` 用于功能资格查询及按钮展示。第六阶段移除 `with_permission` 鉴权中间件及路由包装调用；切换前保留既有路由鉴权。
+HTTP 层通过 JWT 认证身份，受保护的公共业务用例在返回业务数据或执行写入前调用 `require` 或 `query`。仅要求功能权限的操作使用 `require` 和 `AccessTarget::Operation`；`has_permission` 和 `permissions` 用于功能资格查询及按钮展示。路由中的 `permission_route` 只关联公共权限目录元数据，供构建生成器读取，不执行运行时 RBAC。
 
 业务不得直接调用 `RbacService::enforce`、`DataScopeService`、`ResourceAccessService`，也不得手工合并基础范围和记录授权。范围解析和查询编译由 identity 内部执行。
+
+静态选项、字典候选、期间口径和审计日志同样执行各自入口授权。审计展示使用 `AuditLogReadService`；内部审计写入继续使用独立的写入服务。协议读取及技术票据使用固定对象入口，在原快照中取得完整资格、连接和来源，不能用连接详情按钮资格代替。
+
+业务附件写入对象存储前，先通过所属用例的固定 `prepare_attachment_upload` 入口检查完整功能资格；identity 使用固定内部权限和 `AccessTarget::Operation` 执行。该准备结果不证明对象、来源或任务资格，不能复用作写入凭证。文件存储后的业务事务仍须按真实目标重新完整授权；不得为业务附件额外要求独立文件上传菜单。
 
 供应商门户继续使用 `PortalIdentityService`，按供应商绑定和门户岗位检查。
 
@@ -92,9 +96,9 @@ authorization.validate(&access, executor).await?;
 
 ## 权限定义与事实装配
 
-`erp-permissions` 提供权限值、内置常量、资源标识和公共目录。server 补充 HTTP 路由及接口说明。identity 不再公开登记政策、选择授权主体或独立编译查询的接口。业务调用必须按第五阶段迁入本文 API。
+`erp-permissions` 提供权限值、内置常量、资源标识和公共目录。server 补充 HTTP 路由及接口说明。identity 不公开登记政策、选择授权主体或独立编译查询的接口。业务调用使用本文 API。
 
-identity 按权限执行固定函数，检查功能资格、数据范围和必要记录关系。server 的 `wiring/authorization::build` 接收身份设施、按资源组织的 Facts 和按权限组织的 Mapping，返回 `Result<Arc<AuthorizationService>>`。Builder 只绑定实现，不声明政策。
+identity 按权限执行固定函数，检查功能资格、数据范围和必要记录关系。server 的 `wiring::authorization::build(db, rbac)` 创建真实 Facts 和 Mapping，并返回 `Result<Arc<AuthorizationService>>`。Builder 只绑定实现，不声明政策。
 
 使用 `AuthorizationService::builder(db, rbac)` 开始装配，依次调用 `facts(resource, facts)?` 和 `mapping(&permission, mapping)?`，最后调用 `build()?`。全部固定数据规则所需资源必须有 Facts，每个支持查询的权限必须有唯一 Mapping；仅功能权限操作不需要对象或查询绑定。缺失、重复、未知引用、事实能力不足、来源资源或输出粒度错配均返回接入错误。不得用空实现补齐生产绑定。
 
@@ -159,6 +163,17 @@ Facts 返回的根对象和各层来源对象按资源与身份视为无序集�
 5. 来源业务默认检查入口权限及实际来源数据资格。独立来源入口资格由identity 固定规则确定，不由调用方临时追加。
 6. 任务可见、资料可读、任务可办理分别定义；业务状态不由授权服务判断。
 7. 公司共享资源仍检查账号和操作权限，不读取无关的人员范围或记录授权。
+
+## 人员范围与权限检查
+
+人员范围目录保留 `resource`、`actions`、`configurable_actions`、`dimensions`、`default_self_actions`、`default_self` 和 `policy_description`。接口不返回 `authorization_policy` 总分类。
+
+- 前端只允许编辑 `configurable_actions` 中的动作；`dimensions` 为可配置动作支持维度的并集，服务保存时仍逐动作校验支持范围类型、支持维度和必需维度。
+- `default_self_actions` 标识未配置时采用本人基础的可配置动作；汇总 `default_self` 只在全部可配置动作均有本人基础时成立。
+- 公司共享、来源范围复用、纯任务或仅功能资格的操作不接受独立人员范围。历史记录保留为退役项，不得直接重新启用。
+- `policy_description` 按动作解释实际能力，只作说明，不作为授权或编辑条件。
+- 管理员通过 `AccessInspectionService` 发起检查。`steps` 分别返回 `passed`、`blocked` 或 `review`；缺少具体对象、任务或来源上下文的条件保持 `review`，不得据此报告对象授权通过。
+- 具体单据检查沿用销售单 `detail`、`update` 的现有范围；检查结果不作为下一次业务请求的授权凭证。
 
 ## 管理记录读取授权
 

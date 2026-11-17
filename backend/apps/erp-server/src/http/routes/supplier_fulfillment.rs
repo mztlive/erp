@@ -1,172 +1,155 @@
 //! 域 D32 `supplier_fulfillment` 管理端路由。
 //!
 //! 经 `admin.rs` 的 `/admin` nest 后，最终路径为 `/admin/supplier-fulfillment-orders`、
-//! `/admin/supplier-fulfillment-orders/{id}/refund-facts`；每条路由统一走 JWT + RBAC（`with_permission`），
+//! `/admin/supplier-fulfillment-orders/{id}/refund-facts`；每条路由统一走 JWT 认证；业务授权由用例执行，目录由 `permission_route` 提供，
 //! 权限由显式目录统一定义。
 
 use axum::Router;
 use axum::routing::{get, post};
-use erp_identity::AuthorizationService;
 use erp_permissions as permissions;
 
 use crate::http::handler::supplier_fulfillment;
-use crate::http::middleware::with_permission;
+use crate::http::routes::permission_route;
 use crate::http::state::HttpState;
 
 /// 返回本域管理端路由集合。
 ///
 /// # 参数
-/// * `rbac` - 共享 Casbin RBAC 服务
+/// 无。
 ///
 /// # 返回
-/// 返回挂载了权限校验层的路由集合。
-pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
-    execution_routes(rbac)
-        .merge(order_routes(rbac))
-        .merge(order_action_routes(rbac))
-        .merge(order_handover_routes(rbac))
+/// 返回声明公共权限目录信息的路由集合。
+///
+/// # 错误
+/// 不执行 I/O，不返回错误。
+pub fn routes() -> Router<HttpState> {
+    execution_routes().merge(order_routes()).merge(order_action_routes()).merge(order_handover_routes())
 }
 
-fn order_routes(rbac: &AuthorizationService) -> Router<HttpState> {
+fn order_routes() -> Router<HttpState> {
     Router::new()
         .route(
             "/supplier-fulfillment-orders",
-            with_permission(
+            permission_route(
                 get(supplier_fulfillment::supplier_fulfillment_order_list),
-                rbac,
                 &permissions::supplier_fulfillment::ORDER_LIST,
             ),
         )
         .route(
             "/supplier-fulfillment-orders",
-            with_permission(
+            permission_route(
                 post(supplier_fulfillment::supplier_fulfillment_order_submit),
-                rbac,
                 &permissions::supplier_fulfillment::ORDER_SUBMIT,
             ),
         )
         .route(
             "/supplier-fulfillment-orders/investigations",
-            with_permission(
+            permission_route(
                 post(supplier_fulfillment::supplier_fulfillment_order_investigation),
-                rbac,
                 &permissions::supplier_fulfillment::ORDER_INVESTIGATION,
             ),
         )
         .route(
             "/supplier-fulfillment-orders/task-investigations",
-            with_permission(
+            permission_route(
                 post(supplier_fulfillment::supplier_fulfillment_order_task_investigation),
-                rbac,
                 &permissions::supplier_fulfillment::ORDER_INVESTIGATION,
             ),
         )
         .route(
             "/supplier-fulfillment-orders/task-completions",
-            with_permission(
+            permission_route(
                 post(supplier_fulfillment::supplier_fulfillment_order_task_completion),
-                rbac,
                 &permissions::supplier_fulfillment::ORDER_TASK_COMPLETION,
             ),
         )
 }
 
-fn order_action_routes(rbac: &AuthorizationService) -> Router<HttpState> {
+fn order_action_routes() -> Router<HttpState> {
     Router::new()
         .route(
             "/supplier-fulfillment-orders/{id}",
-            with_permission(
+            permission_route(
                 get(supplier_fulfillment::supplier_fulfillment_order_detail),
-                rbac,
                 &permissions::supplier_fulfillment::ORDER_DETAIL,
             ),
         )
         .route(
             "/supplier-fulfillment-orders/{id}/cancel",
-            with_permission(
+            permission_route(
                 post(supplier_fulfillment::supplier_fulfillment_order_cancel),
-                rbac,
                 &permissions::supplier_fulfillment::ORDER_CANCEL,
             ),
         )
         .route(
             "/supplier-fulfillment-orders/{id}/refund",
-            with_permission(
+            permission_route(
                 post(supplier_fulfillment::supplier_fulfillment_order_refund),
-                rbac,
                 &permissions::supplier_fulfillment::ORDER_REFUND,
             ),
         )
         .route(
             "/supplier-fulfillment-orders/{id}/reject",
-            with_permission(
+            permission_route(
                 post(supplier_fulfillment::supplier_fulfillment_order_reject),
-                rbac,
                 &permissions::supplier_fulfillment::ORDER_REJECT,
             ),
         )
 }
 
-fn order_handover_routes(rbac: &AuthorizationService) -> Router<HttpState> {
+fn order_handover_routes() -> Router<HttpState> {
     Router::new()
         .route(
             "/supplier-fulfillment-orders/{id}/handover",
-            with_permission(
+            permission_route(
                 post(supplier_fulfillment::supplier_fulfillment_order_handover),
-                rbac,
                 &permissions::supplier_fulfillment::ORDER_HANDOVER,
             ),
         )
         .route(
             "/supplier-fulfillment-orders/{id}/handover-candidates",
-            with_permission(
+            permission_route(
                 get(supplier_fulfillment::supplier_fulfillment_order_handover_candidates),
-                rbac,
                 &permissions::supplier_fulfillment::ORDER_HANDOVER,
             ),
         )
         .route(
             "/supplier-fulfillment-orders/{id}/refund-facts",
-            with_permission(
+            permission_route(
                 post(supplier_fulfillment::supplier_refund_fact_post),
-                rbac,
                 &permissions::supplier_fulfillment::SUPPLIER_REFUND_FACT_POST,
             ),
         )
 }
 
 /// 将配送补充路由单独组装，保持读写各自既有动作授权。
-fn execution_routes(rbac: &AuthorizationService) -> Router<HttpState> {
-    execution_query_routes(rbac).route(
+fn execution_routes() -> Router<HttpState> {
+    execution_query_routes().route(
         "/supplier-fulfillment-orders/{id}/execution-setup",
-        with_permission(
+        permission_route(
             get(supplier_fulfillment::execution_setup::supplier_order_execution_setup),
-            rbac,
             &permissions::supplier_fulfillment::ORDER_DETAIL,
         )
-        .merge(with_permission(
+        .merge(permission_route(
             post(supplier_fulfillment::execution_setup::save_supplier_order_execution_setup),
-            rbac,
             &permissions::supplier_fulfillment::ORDER_SUBMIT,
         )),
     )
 }
 
-fn execution_query_routes(rbac: &AuthorizationService) -> Router<HttpState> {
+fn execution_query_routes() -> Router<HttpState> {
     Router::new()
         .route(
             "/supplier-fulfillment-orders/{id}/execution-address-candidates",
-            with_permission(
+            permission_route(
                 get(supplier_fulfillment::execution_setup::supplier_order_execution_address_candidates),
-                rbac,
                 &permissions::supplier_fulfillment::ORDER_SUBMIT,
             ),
         )
         .route(
             "/supplier-fulfillment-orders/{id}/execution-query",
-            with_permission(
+            permission_route(
                 post(supplier_fulfillment::execution_setup::query_supplier_order_execution_result),
-                rbac,
                 &permissions::supplier_fulfillment::ORDER_SUBMIT,
             ),
         )

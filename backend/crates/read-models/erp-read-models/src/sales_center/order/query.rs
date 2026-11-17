@@ -126,7 +126,7 @@ impl SalesOrderReadService {
         };
         let task_count = match query_tasks(
             &self.db,
-            self.require_rbac()?,
+            &self.authorization,
             actor,
             CreationTaskFilter { sales_order_id: Some(order.base.id.clone()), work_item_id: None },
             executor,
@@ -168,7 +168,7 @@ impl SalesOrderReadService {
         let Some(actor) = actor else {
             return Ok(Vec::new());
         };
-        let authorization = self.require_rbac()?;
+        let authorization = &self.authorization;
         if !authorization.has_permission(actor, &purchase_order::CREATE, executor).await? {
             return Ok(Vec::new());
         }

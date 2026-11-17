@@ -32,10 +32,12 @@ pub async fn customer_receipt_update(
     Path(id): Path<String>,
     Json(req): Json<UpdateCustomerReceiptRequest>,
 ) -> Result<CustomerReceiptView> {
-    let view =
-        ReceivableProcess::new(state.application().db(), receivable_posting_ports(state.application().db()))
-            .update_customer_receipt(&id, req, &actor)
-            .await?;
+    let view = ReceivableProcess::new(
+        state.application().db(),
+        receivable_posting_ports(state.application().db(), state.application().authorization()),
+    )
+    .update_customer_receipt(&id, req, &actor)
+    .await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -53,9 +55,11 @@ pub async fn customer_receipt_save_draft(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<SaveCustomerReceiptDraftRequest>,
 ) -> Result<CustomerReceiptView> {
-    let view =
-        ReceivableProcess::new(state.application().db(), receivable_posting_ports(state.application().db()))
-            .save_customer_receipt_draft(req, &actor)
-            .await?;
+    let view = ReceivableProcess::new(
+        state.application().db(),
+        receivable_posting_ports(state.application().db(), state.application().authorization()),
+    )
+    .save_customer_receipt_draft(req, &actor)
+    .await?;
     Ok(ApiResponse::ok_with_data(view))
 }

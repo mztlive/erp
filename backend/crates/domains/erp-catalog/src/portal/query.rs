@@ -4,9 +4,10 @@ use std::collections::HashSet;
 
 use application_core::AuditActor;
 use async_trait::async_trait;
-use erp_permissions::catalog as catalog_permissions;
+use erp_identity::AccessTarget;
+use erp_permissions::{catalog as catalog_permissions, supplier_portal};
 use mongodb::bson::{Document, doc};
-use persistence_core::{Executor, Pagination, QueryFilter, insert_literal_regex_filter};
+use persistence_core::{Executor, Pagination, QueryFilter, Transactional, insert_literal_regex_filter};
 use serde::{Deserialize, Serialize};
 
 use super::CatalogPortalService;
@@ -132,6 +133,52 @@ impl Pagination for CandidateFilter {
 }
 
 impl CatalogPortalService {
+    /// 管理端审核人员在快照中读取独立字典候选。
+    /// # 参数
+    /// kind 为字典类型，q 为搜索，product_kind 为分类约束，actor 为当前账号。
+    /// # 返回
+    /// 已通过审核功能资格检查的安全字典候选。
+    /// # 错误
+    /// 身份无效、缺少审核权限、搜索非法或数据库失败时返回对应错误。
+    pub async fn admin_dictionary_candidates(
+        &self,
+        kind: DictionaryKind,
+        q: Option<&str>,
+        product_kind: Option<ProductKind>,
+        actor: &AuditActor,
+    ) -> Result<Vec<DictionaryCandidate>> {
+        let service = Self::new(self.db.clone(), self.catalog.clone());
+        let query = q.map(str::to_owned);
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    service
+                        .review_dictionary_candidates(kind, query.as_deref(), product_kind, &actor, executor)
+                        .await
+                })
+            })
+            .await
+    }
+
+    /// 管理端资格先于字典输入校验和读取，门户原入口保留自身认证合同。
+    async fn review_dictionary_candidates(
+        &self,
+        kind: DictionaryKind,
+        q: Option<&str>,
+        product_kind: Option<ProductKind>,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<DictionaryCandidate>> {
+        self.catalog
+            .access()
+            .authorization
+            .require(actor, &supplier_portal::ADMIN_REVIEW, AccessTarget::Operation, executor)
+            .await?;
+        self.dictionary_candidates(kind, q, product_kind, executor).await
+    }
+
     /// 独立于商品结果列表，查询已启用的字典值。
     /// # 参数
     /// `kind` 为字典类型，`q` 为字面搜索；分类可按商品类型收窄。
@@ -569,6 +616,65 @@ mod tests {
             CatalogAccess::new(db.clone(), authorization),
         );
         CatalogPortalService::new(db, catalog)
+    }
+
+    #[tokio::test]
+    async fn admin_dictionaries_reject_missing_review_permission_before_storage() {
+        let authorization = fixed_authorization(
+            &[],
+            ResolvedScope { role_clauses: vec![], user_limit: None },
+            vec![],
+            vec![],
+        )
+        .unwrap();
+        let service = portal(authorization).await;
+        for kind in [DictionaryKind::Brand, DictionaryKind::Unit, DictionaryKind::Category] {
+            let error = service
+                .review_dictionary_candidates(kind, None, None, &actor(), &mut SnapshotExecutor::default())
+                .await
+                .unwrap_err();
+            assert!(matches!(error, Error::Forbidden(_)));
+        }
+    }
+
+    #[tokio::test]
+    async fn admin_dictionary_qualification_reaches_real_validation_without_storage() {
+        let authorization = fixed_authorization(
+            &[supplier_portal::ADMIN_REVIEW],
+            ResolvedScope { role_clauses: vec![], user_limit: None },
+            vec![],
+            vec![],
+        )
+        .unwrap();
+        let service = portal(authorization).await;
+        let search = "字".repeat(129);
+        let error = service
+            .review_dictionary_candidates(
+                DictionaryKind::Brand,
+                Some(&search),
+                None,
+                &actor(),
+                &mut SnapshotExecutor::default(),
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(error, Error::ValidationError(reason) if reason == "搜索文本过长"));
+    }
+
+    #[tokio::test]
+    async fn admin_dictionary_identity_failure_stops_before_storage() {
+        let service = portal(unavailable_authorization()).await;
+        let error = service
+            .review_dictionary_candidates(
+                DictionaryKind::Brand,
+                None,
+                None,
+                &actor(),
+                &mut SnapshotExecutor::default(),
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(error, Error::Internal(reason) if reason == "测试授权设施不可用"));
     }
 
     #[tokio::test]

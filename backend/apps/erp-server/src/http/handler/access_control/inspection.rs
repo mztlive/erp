@@ -24,8 +24,9 @@ pub async fn inspect(
     Extension(actor): Extension<AuditActor>,
     Json(request): Json<AccessInspectionRequest>,
 ) -> Result<AccessInspectionView> {
-    let view = AccessInspectionReadService::new(state.application().db(), state.application().rbac())
-        .inspect(actor, request)
-        .await?;
+    let view =
+        AccessInspectionReadService::new(state.application().db(), state.application().authorization())
+            .inspect(actor, request)
+            .await?;
     Ok(ApiResponse::ok_with_data(view))
 }

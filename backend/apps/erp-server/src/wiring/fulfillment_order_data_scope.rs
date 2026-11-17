@@ -3,7 +3,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use erp_identity::SharedRbacService;
+use erp_fulfillment_execution::supply_execution::SupplierFulfillmentIdentity;
+use erp_fulfillment_execution::workflow::FulfillmentWorkflowServices;
+use erp_identity::{AuthorizationService, SharedRbacService};
 use erp_supply::FulfillmentOrderAccess;
 use erp_supply::ports::FulfillmentExceptionHandlerPort;
 use erp_supply::service::supplier_fulfillment::{SupplierFulfillmentService, W26_BUSINESS_OBJECT_TYPE};
@@ -11,6 +13,9 @@ use erp_workflow::repository::prelude::*;
 use erp_workflow::{WorkItem, WorkItemExt, WorkItemFilter, WorkItemRow, WorkItemStatus, WorkItemType};
 use mongodb::Database;
 use persistence_core::Executor;
+
+use super::approval_runtime;
+use super::workflow::work_item_service;
 
 /// 当前开放 W26 异常处理人 adapter。
 #[derive(Clone)]
@@ -150,31 +155,59 @@ fn w26_row_order_id(row: WorkItemRow) -> Option<String> {
 ///
 /// # 参数
 /// * `db` - 履约与身份集合所在数据库。
-/// * `rbac` - 现有 RBAC 快照服务。
+/// * `authorization` - 进程共享统一授权服务。
 ///
 /// # 返回
 /// 返回已注入本 adapter 的履约订单访问器。
 ///
 /// # 错误
 /// 不返回错误。
-pub fn fulfillment_order_access(db: Database, rbac: SharedRbacService) -> FulfillmentOrderAccess {
-    FulfillmentOrderAccess::new(db, rbac)
+pub fn fulfillment_order_access(
+    db: Database,
+    authorization: Arc<AuthorizationService>,
+) -> FulfillmentOrderAccess {
+    FulfillmentOrderAccess::new(db, authorization)
 }
 
 /// 构造已接入身份域公共解析器与 W26 处理人 Port 的履约服务。
 ///
 /// # 参数
 /// * `db` - 履约与身份集合所在数据库。
-/// * `rbac` - 现有 RBAC 快照服务。
+/// * `authorization` - 进程共享统一授权服务。
 ///
 /// # 返回
 /// 返回已注入范围与异常处理人 adapter 的履约服务。
 ///
 /// # 错误
 /// 不返回错误。
-pub fn scoped_fulfillment_service(db: Database, rbac: SharedRbacService) -> SupplierFulfillmentService {
+pub fn scoped_fulfillment_service(
+    db: Database,
+    authorization: Arc<AuthorizationService>,
+) -> SupplierFulfillmentService {
     SupplierFulfillmentService::new(db.clone()).with_scope(
-        FulfillmentOrderAccess::new(db.clone(), rbac),
+        FulfillmentOrderAccess::new(db.clone(), authorization),
         MongoFulfillmentExceptionHandlers::shared(db),
     )
+}
+
+/// 绑定供应履约的共享授权、工作项和审批能力。
+/// # 参数
+/// db、rbac 为共享设施，authorization 为进程统一授权服务。
+/// # 返回
+/// 使用同一授权实例的履约业务依赖。
+/// # 错误
+/// 构造不执行 I/O。
+pub fn supplier_fulfillment_identity(
+    db: Database,
+    rbac: SharedRbacService,
+    authorization: Arc<AuthorizationService>,
+) -> SupplierFulfillmentIdentity {
+    SupplierFulfillmentIdentity {
+        rbac: authorization.clone(),
+        workflow: Arc::new(FulfillmentWorkflowServices::new(
+            work_item_service(db.clone(), rbac.clone(), authorization.clone()),
+            approval_runtime(db.clone(), rbac, authorization.clone()),
+        )),
+        data_scope: FulfillmentOrderAccess::new(db, authorization),
+    }
 }

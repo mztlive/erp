@@ -3,6 +3,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use erp_identity::AuthorizationService;
 use erp_import::{BulkJobFactsPort, LegacyImportService};
 use erp_support::BulkJobExt;
 use erp_support::repository::prelude::*;
@@ -66,12 +67,13 @@ impl BulkJobFactsPort for MongoImportBulkJobs {
 ///
 /// # 参数
 /// * `db` - 导入与批量任务所在数据库。
+/// * `authorization` - 进程共享统一授权服务。
 ///
 /// # 返回
 /// 返回已注入批量任务事实 Port 的导入查询服务。
 ///
 /// # 错误
 /// 不返回错误。
-pub fn legacy_import_service(db: Database) -> LegacyImportService {
-    LegacyImportService::new(db.clone(), MongoImportBulkJobs::shared(db))
+pub fn legacy_import_service(db: Database, authorization: Arc<AuthorizationService>) -> LegacyImportService {
+    LegacyImportService::new(db.clone(), MongoImportBulkJobs::shared(db), authorization)
 }

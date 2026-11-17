@@ -43,9 +43,10 @@ use crate::wiring::catalog_access;
 /// 返回公司商品池分页视图，不包含采购成本与供应商身份。
 pub async fn sellable_sku_list(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<SellableSkuListParams>,
 ) -> Result<PageView<SellableSkuView>> {
-    let view = state.application().catalog_center().sellable_sku_list(&params).await?;
+    let view = state.application().catalog_center().sellable_sku_list(&params, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -106,6 +107,7 @@ pub async fn product_create_with_assets(
     Extension(actor): Extension<AuditActor>,
     mut multipart: Multipart,
 ) -> Result<ProductView> {
+    state.application().catalog_service().prepare_create_attachment_upload(&actor).await?;
     let (req, files) = extract_command_with_asset_files::<CreateProductRequest>(&mut multipart).await?;
     let pending = store_pending_asset_files(&state, files, |_| SensitivityClass::General).await?;
     let result =
@@ -157,6 +159,7 @@ pub async fn product_update_with_assets(
     Path(id): Path<String>,
     mut multipart: Multipart,
 ) -> Result<ProductView> {
+    state.application().catalog_service().prepare_update_attachment_upload(&actor).await?;
     let (req, files) = extract_command_with_asset_files::<UpdateProductRequest>(&mut multipart).await?;
     let pending = store_pending_asset_files(&state, files, |_| SensitivityClass::General).await?;
     let result =
@@ -217,9 +220,10 @@ pub async fn product_listing_update(
 /// 返回契约形状的分页视图。
 pub async fn product_revision_list(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<ProductRevisionListParams>,
 ) -> Result<PageView<ProductRevisionView>> {
-    let page = state.application().catalog_service().product_revision_list(&params).await?;
+    let page = state.application().catalog_service().product_revision_list(&actor, &params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -234,9 +238,10 @@ pub async fn product_revision_list(
 /// 返回契约形状的分页视图。
 pub async fn sku_list(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<SkuListParams>,
 ) -> Result<PageView<SkuView>> {
-    let page = state.application().catalog_service().sku_list(&params).await?;
+    let page = state.application().catalog_service().sku_list(&actor, &params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -271,9 +276,10 @@ pub async fn sku_listing_update(
 /// 返回契约形状的分页视图。
 pub async fn sku_revision_list(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<SkuRevisionListParams>,
 ) -> Result<PageView<SkuRevisionView>> {
-    let page = state.application().catalog_service().sku_revision_list(&params).await?;
+    let page = state.application().catalog_service().sku_revision_list(&actor, &params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -288,9 +294,10 @@ pub async fn sku_revision_list(
 /// 返回契约形状的分页视图。
 pub async fn voucher_category_profile_list(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<VoucherCategoryProfileListParams>,
 ) -> Result<PageView<VoucherCategoryProfileView>> {
-    let page = state.application().catalog_service().voucher_category_profile_list(&params).await?;
+    let page = state.application().catalog_service().voucher_category_profile_list(&actor, &params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -380,9 +387,9 @@ pub async fn product_handover(
 ) -> Result<HandoverProductView> {
     let view = handover_product(
         state.application().db(),
-        state.application().rbac(),
+        state.application().authorization(),
         CatalogHandoverPorts::new(
-            catalog_access(state.application().db(), state.application().rbac()),
+            catalog_access(state.application().db(), state.application().authorization()),
             state.application().catalog_service(),
         ),
         &id,
@@ -409,9 +416,9 @@ pub async fn product_handover_candidates(
 ) -> Result<Vec<HandoverCandidateView>> {
     let view = load_product_handover_candidates(
         state.application().db(),
-        state.application().rbac(),
+        state.application().authorization(),
         CatalogHandoverPorts::new(
-            catalog_access(state.application().db(), state.application().rbac()),
+            catalog_access(state.application().db(), state.application().authorization()),
             state.application().catalog_service(),
         ),
         &id,

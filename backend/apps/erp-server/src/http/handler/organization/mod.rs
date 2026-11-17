@@ -31,7 +31,13 @@ pub async fn list(
     Extension(actor): Extension<AuditActor>,
 ) -> Result<OrganizationStateView> {
     Ok(ApiResponse::ok_with_data(
-        organization_service(state.application().db(), state.application().rbac()).state(&actor).await?,
+        organization_service(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        )
+        .state(&actor)
+        .await?,
     ))
 }
 
@@ -56,9 +62,13 @@ pub async fn preview(
     Json(request): Json<OrganizationChangeRequest>,
 ) -> Result<OrganizationChangeReceipt> {
     Ok(ApiResponse::ok_with_data(
-        organization_service(state.application().db(), state.application().rbac())
-            .preview(&actor, request)
-            .await?,
+        organization_service(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        )
+        .preview(&actor, request)
+        .await?,
     ))
 }
 
@@ -83,8 +93,12 @@ pub async fn change(
     Json(request): Json<OrganizationChangeRequest>,
 ) -> Result<OrganizationChangeReceipt> {
     Ok(ApiResponse::ok_with_data(
-        organization_service(state.application().db(), state.application().rbac())
-            .change(&actor, request)
-            .await?,
+        organization_service(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        )
+        .change(&actor, request)
+        .await?,
     ))
 }

@@ -78,6 +78,7 @@ pub(super) fn bindings(
         internal::SALES_ORDER_PROFIT_LOSS_READ,
         internal::SALES_ORDER_EXTRA_COST_READ,
         internal::SALES_CHANGE_DRAFT_READ,
+        internal::CUSTOMER_QUALITY_HISTORY,
     ]
     .into_iter()
     .map(|p| (p, sales.clone()))

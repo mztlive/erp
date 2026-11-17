@@ -1,5 +1,6 @@
 //! 集成本域查询、实体准备与调用方事务内写入。
 use application_core::AuditActor;
+use erp_identity::CompiledAccess;
 use erp_permissions::integration_ops;
 use id_generator::next_id;
 use mongodb::Database;
@@ -32,18 +33,42 @@ impl IntegrationOpsService {
         params: &ErrorTaskListParams,
         actor: &AuditActor,
     ) -> Result<ErrorTaskListView> {
-        params.validate()?;
-        let query = params.normalized()?;
-        ensure_page(query.paging.page, query.scope_version.as_deref())?;
+        let params = params.clone();
         let this = self.clone();
         let actor = actor.clone();
         self.db
             .client()
             .clone()
             .with_transaction(move |executor| {
-                Box::pin(async move { this.error_task_page(query, &actor, executor).await })
+                Box::pin(async move {
+                    let (view, access) = this.error_task_list_read(&params, &actor, executor).await?;
+                    this.access().validate(&access, executor).await?;
+                    Ok(view)
+                })
             })
             .await
+    }
+
+    /// 在调用方读取阶段取得完整授权分页及待交付的原查询凭证。
+    ///
+    /// # 参数
+    /// `params` 为原列表筛选，`actor` 为当前账号，`executor` 为用例原执行器。
+    ///
+    /// # 返回
+    /// 分页视图及查询凭证；调用方必须补齐展示后通过 `IntegrationAccess::validate` 才能交付。
+    ///
+    /// # 错误
+    /// 参数非法、资格不足、范围变化或分页读取失败时拒绝。
+    pub async fn error_task_list_read(
+        &self,
+        params: &ErrorTaskListParams,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<(ErrorTaskListView, CompiledAccess)> {
+        params.validate()?;
+        let query = params.normalized()?;
+        ensure_page(query.paging.page, query.scope_version.as_deref())?;
+        self.error_task_page(query, actor, executor).await
     }
 
     /// 无有效范围时不查库，直接返回空页。
@@ -52,7 +77,7 @@ impl IntegrationOpsService {
         query: dto::ErrorTaskListQuery,
         actor: &AuditActor,
         executor: &mut dyn Executor,
-    ) -> Result<ErrorTaskListView> {
+    ) -> Result<(ErrorTaskListView, CompiledAccess)> {
         let access = self.access();
         let scope = resolve_list_scope(
             &access,
@@ -70,8 +95,7 @@ impl IntegrationOpsService {
             .integration_error_tasks()
             .search_error_tasks(&filter, &scope.read_scope, executor)
             .await?;
-        access.validate(&scope.read_scope, executor).await?;
-        Ok(error_task_list_view(page, &filter, scope.meta))
+        Ok((error_task_list_view(page, &filter, scope.meta), scope.read_scope))
     }
 
     /// 确认关联入站消息存在；不校验处理状态。

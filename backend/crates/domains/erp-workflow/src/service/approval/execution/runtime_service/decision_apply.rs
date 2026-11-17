@@ -3,7 +3,8 @@
 use erp_identity::{AccessTarget, AuthorizationService, SharedRbacService};
 use erp_permissions::approval_instance;
 
-use crate::ports::WorkflowAuthorizationPort;
+use crate::entity::document_registry::DocumentType;
+use crate::ports::{OrderTaskSource, WorkflowAuthorizationPort};
 use crate::service::approval::copies::persist_copies;
 mod decision_persist;
 mod decision_prepare;
@@ -371,7 +372,7 @@ async fn submit_decision_apply(
         return Ok(replay);
     }
     let loaded = load_open_decision_runtime(db, actor, command, executor).await?;
-    authorization
+    let authorization_result = authorization
         .require(
             actor,
             &approval_instance::SUBMIT_DECISION,
@@ -381,7 +382,14 @@ async fn submit_decision_apply(
             },
             executor,
         )
-        .await?;
+        .await
+        .map_err(Error::from);
+    if let Err(error) = authorization_result {
+        if matches!(error, Error::Forbidden(_)) {
+            decision_source_readiness(rbac, actor, &loaded.snapshot, executor).await?;
+        }
+        return Err(error);
+    }
     let services = DecisionServices { authorization, identity_service, db, rbac };
     let prepared = prepare_open_decision(&services, actor, command, &loaded, executor).await?;
     persist_open_decision(
@@ -833,4 +841,20 @@ mod rejection_replay_tests {
         .unwrap();
         assert!(ensure_decision_receipt_scope(&receipt, &other).is_err());
     }
+}
+
+/// 仅将当前精确审批来源的正式分配延迟转换为可重试状态，不替代统一对象授权。
+async fn decision_source_readiness(
+    port: &impl WorkflowAuthorizationPort,
+    actor: &AuditActor,
+    snapshot: &ApprovalSubjectSnapshot,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let source = match snapshot.document_type {
+        DocumentType::SalesOrder => OrderTaskSource::Sales(snapshot.business_object_id.clone()),
+        DocumentType::PurchaseOrder => OrderTaskSource::Purchase(snapshot.business_object_id.clone()),
+        _ => return Ok(()),
+    };
+    port.approval_source_readiness(actor, &source, snapshot.approval_process_instance_id.as_ref(), executor)
+        .await
 }

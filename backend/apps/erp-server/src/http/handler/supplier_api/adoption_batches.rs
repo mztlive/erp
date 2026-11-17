@@ -10,7 +10,6 @@ use erp_supplier_catalog::supplier_catalog_adoption::{
 use erp_supply::catalog_adoption::{
     BatchHistoryEntry, CatalogAdoptionBatch, PreparationAction, SelectionView,
 };
-use persistence_core::NoTransaction;
 use serde::Deserialize;
 
 use crate::http::errors::Result;
@@ -219,7 +218,7 @@ pub async fn preparation(
     let batch = state
         .application()
         .supplier_catalog_adoption_process()?
-        .preparation_batch(&connection, &batch, &actor, &mut NoTransaction)
+        .preparation_batch(&connection, &batch, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(batch))
 }

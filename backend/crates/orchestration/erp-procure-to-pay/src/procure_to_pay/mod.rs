@@ -77,55 +77,32 @@ pub use source_withdraw::SalesChangeWithdrawal;
 #[derive(Clone)]
 pub struct PurchaseOrderProcess {
     db: Database,
-    rbac: Option<Arc<AuthorizationService>>,
+    authorization: Arc<AuthorizationService>,
     ports: Arc<PurchaseOrderPorts>,
 }
 impl PurchaseOrderProcess {
-    /// 创建采购单服务实例。
+    /// 创建必须复用进程共享授权服务的采购命令入口。
     ///
     /// # 参数
-    /// * `db` - 数据库实例
-    /// * `ports` - 应用已装配的采购范围、审批、财务责任及履约授权能力。
+    /// * `db` - 采购数据库实例。
+    /// * `authorization` - 启动时完成真实绑定的进程共享统一授权服务。
+    /// * `ports` - 已装配的采购范围、审批、财务责任及履约授权能力。
     ///
     /// # 返回
-    /// 返回服务实例。
+    /// 返回可执行受保护采购命令的服务实例。
     ///
     /// # 错误
-    /// 不返回错误。
-    pub fn new(db: Database, ports: Arc<PurchaseOrderPorts>) -> Self {
-        Self { db, rbac: None, ports }
-    }
-    /// 创建可绑定发布定义的采购单服务。
-    ///
-    /// # 参数
-    /// * `db` - 数据库实例
-    /// * `rbac` - 共享授权源
-    /// * `ports` - 应用已装配的采购范围、审批、财务责任及履约授权能力。
-    ///
-    /// # 返回
-    /// 返回同时绑定数据库和授权源的服务。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn with_rbac(db: Database, rbac: Arc<AuthorizationService>, ports: Arc<PurchaseOrderPorts>) -> Self {
-        Self { db, rbac: Some(rbac), ports }
+    /// 构造不执行 I/O；业务调用通过原执行器检查授权。
+    pub fn new(
+        db: Database,
+        authorization: Arc<AuthorizationService>,
+        ports: Arc<PurchaseOrderPorts>,
+    ) -> Self {
+        Self { db, authorization, ports }
     }
     /// 为单域采购构造和事务内写入提供本地服务。
     fn domain(&self) -> PurchaseOrderService {
         PurchaseOrderService::new(self.db.clone())
-    }
-    /// 读取采购单写命令所需的共享授权源。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回已注入的共享授权源。
-    ///
-    /// # 错误
-    /// 未注入 RBAC 时返回内部错误，不得跳过绑定。
-    pub(super) fn require_rbac(&self) -> Result<&Arc<AuthorizationService>> {
-        self.rbac.as_ref().ok_or_else(|| Error::Internal("采购单写命令需要授权源".to_string()))
     }
 }
 

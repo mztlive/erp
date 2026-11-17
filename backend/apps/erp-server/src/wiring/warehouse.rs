@@ -7,14 +7,18 @@ use async_trait::async_trait;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_core::AccountKind;
+use erp_identity::entity::authorization::{FactValue, ObjectFacts};
 use erp_identity::repository::prelude::*;
-use erp_identity::{AccessControlExt, AccountCore, Permission, SharedRbacService};
+use erp_identity::{
+    AccessControlExt, AccessTarget, AccountCore, AuthorizationService, Error as IdentityError,
+    SharedRbacService,
+};
+use erp_permissions::internal;
 use erp_support::content_fingerprint;
 use erp_warehouse::{
     AttachmentFingerprintPort, HandlerIdentityFact, IdentityFactPort, PreparedWarehouseAudit,
     WarehouseAuditPort, WarehouseService,
 };
-use erp_workflow::WorkItemType;
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -102,6 +106,7 @@ impl WarehouseAuditPort for MongoWarehouseAudit {
 pub struct MongoWarehouseIdentity {
     db: Database,
     rbac: SharedRbacService,
+    authorization: Arc<AuthorizationService>,
 }
 
 impl MongoWarehouseIdentity {
@@ -109,30 +114,36 @@ impl MongoWarehouseIdentity {
     ///
     /// # 参数
     /// * `db` - 身份账号集合所在数据库。
-    /// * `rbac` - 现有 RBAC 快照服务。
+    /// * `rbac` - 现有账号身份设施。
+    /// * `authorization` - 进程共享的完整授权服务。
     ///
     /// # 返回
     /// 返回未执行 I/O 的 adapter。
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
-        Self { db, rbac }
+    pub fn new(db: Database, rbac: SharedRbacService, authorization: Arc<AuthorizationService>) -> Self {
+        Self { db, rbac, authorization }
     }
 
     /// 包装为仓库域可注入的身份事实 Port。
     ///
     /// # 参数
     /// * `db` - 身份账号集合所在数据库。
-    /// * `rbac` - 现有 RBAC 快照服务。
+    /// * `rbac` - 现有账号身份设施。
+    /// * `authorization` - 进程共享的完整授权服务。
     ///
     /// # 返回
     /// 返回共享的身份事实 Port。
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn shared(db: Database, rbac: SharedRbacService) -> Arc<dyn IdentityFactPort> {
-        Arc::new(Self::new(db, rbac))
+    pub fn shared(
+        db: Database,
+        rbac: SharedRbacService,
+        authorization: Arc<AuthorizationService>,
+    ) -> Arc<dyn IdentityFactPort> {
+        Arc::new(Self::new(db, rbac, authorization))
     }
 
     async fn identity_fact(
@@ -140,15 +151,11 @@ impl MongoWarehouseIdentity {
         account: &AccountCore,
         executor: &mut dyn Executor,
     ) -> erp_warehouse::Result<HandlerIdentityFact> {
-        let inbound = handler_permissions(required_fulfillment_permissions("purchase_receipt"));
-        let outbound = handler_permissions(required_fulfillment_permissions("delivery"));
         let actor =
             AuditActor::new(account.base.id.clone(), account.secret.account().to_string(), account.kind);
-        let requested = inbound.iter().chain(&outbound).cloned().collect::<Vec<_>>();
-        let qualified = self.rbac.qualified_permissions(&actor, &requested, executor).await?;
-        let can_login = qualified.is_some();
-        let inbound_eligible = qualified.as_ref().is_some_and(|value| value.same_role(&inbound));
-        let outbound_eligible = qualified.as_ref().is_some_and(|value| value.same_role(&outbound));
+        let can_login = self.rbac.qualified_permissions(&actor, &[], executor).await?.is_some();
+        let inbound_eligible = self.execution_qualified(&actor, "purchase_receipt", executor).await?;
+        let outbound_eligible = self.execution_qualified(&actor, "delivery", executor).await?;
         Ok(HandlerIdentityFact {
             user_id: account.base.id.clone(),
             display_name: account.name.clone(),
@@ -157,6 +164,29 @@ impl MongoWarehouseIdentity {
             inbound_eligible,
             outbound_eligible,
         })
+    }
+
+    async fn execution_qualified(
+        &self,
+        actor: &AuditActor,
+        source: &str,
+        executor: &mut dyn Executor,
+    ) -> erp_warehouse::Result<bool> {
+        let target = AccessTarget::Candidate(ObjectFacts {
+            resource: "work_item".into(),
+            subject_type: FactValue::Known("FULFILLMENT_OPERATION".into()),
+            subject_source_resource: FactValue::Known(source.into()),
+            ..Default::default()
+        });
+        match self
+            .authorization
+            .require(actor, &internal::WORK_ITEM_EXECUTION_QUALIFICATION, target, executor)
+            .await
+        {
+            Ok(()) => Ok(true),
+            Err(IdentityError::Forbidden(_)) => Ok(false),
+            Err(error) => Err(error.into()),
+        }
     }
 }
 
@@ -211,38 +241,26 @@ impl AttachmentFingerprintPort for SupportFingerprint {
 ///
 /// # 参数
 /// * `db` - 仓库与身份集合所在数据库。
-/// * `rbac` - 现有 RBAC 快照服务。
+/// * `rbac` - 现有账号身份设施。
+/// * `authorization` - 进程共享的完整授权服务。
 ///
 /// # 返回
 /// 返回仓库服务。
 ///
 /// # 错误
 /// 不返回错误。
-pub fn warehouse_service(db: Database, rbac: SharedRbacService) -> WarehouseService {
+pub fn warehouse_service(
+    db: Database,
+    rbac: SharedRbacService,
+    authorization: Arc<AuthorizationService>,
+) -> WarehouseService {
     WarehouseService::new(
         db.clone(),
-        MongoWarehouseIdentity::shared(db.clone(), rbac),
+        MongoWarehouseIdentity::shared(db.clone(), rbac, authorization.clone()),
         MongoWarehouseAudit::shared(db),
         Arc::new(SupportFingerprint),
+        authorization,
     )
-}
-
-/// 取已登记履约对象的完整执行权限。
-///
-/// # Panics
-/// 对象类型未登记履约完整执行权限时 panic，避免静默放行。
-fn required_fulfillment_permissions(business_object_type: &str) -> &'static [&'static str] {
-    WorkItemType::FulfillmentOperation
-        .fulfillment_execution_permissions(business_object_type)
-        .expect("仓库责任对象必须登记履约完整执行权限")
-}
-
-/// 把固定仓储操作权限码解析为权限值。
-///
-/// # Panics
-/// 固定权限码无法解析时 panic。
-fn handler_permissions(codes: &[&str]) -> Vec<Permission> {
-    codes.iter().map(|code| Permission::parse(code).expect("固定仓储操作权限必须合法")).collect()
 }
 
 map_audit_error!(fn map_audit_to_warehouse -> erp_warehouse);

@@ -26,4 +26,5 @@ tracing = { workspace = true }
 validator = { workspace = true }
 
 [dev-dependencies]
+erp-identity = { workspace = true, features = ["test-support"] }
 persistence-core = { workspace = true, features = ["test-support"] }

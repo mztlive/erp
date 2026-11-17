@@ -28,10 +28,14 @@ pub async fn freight_waiver_create(
     Path(id): Path<String>,
     Json(req): Json<WaivePurchaseFreightRequest>,
 ) -> Result<WaivePurchaseFreightResult> {
-    let result = PurchaseOrderProcess::with_rbac(
+    let result = PurchaseOrderProcess::new(
         state.application().db(),
-        state.application().rbac(),
-        purchase_ports(state.application().db(), state.application().rbac()),
+        state.application().authorization(),
+        purchase_ports(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        ),
     )
     .waive_freight(&id, req, &actor)
     .await?;

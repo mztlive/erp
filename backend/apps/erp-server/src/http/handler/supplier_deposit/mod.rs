@@ -24,7 +24,7 @@ fn process(state: &HttpState) -> SupplierDepositManagementProcess {
     SupplierDepositManagementProcess::new(
         state.application().db(),
         state.application().sensitive_data().as_ref().clone(),
-        state.application().rbac(),
+        state.application().authorization(),
         state.application().supplier_payment_tasks(),
     )
 }

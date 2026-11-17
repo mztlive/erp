@@ -1,5 +1,6 @@
 //! 业务授权唯一入口；固定规则及启动绑定不能由调用方替换。
 mod approval_cancel;
+mod approval_decision;
 mod approval_query;
 mod approvals;
 mod builder;

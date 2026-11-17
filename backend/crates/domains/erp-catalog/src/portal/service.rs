@@ -36,6 +36,7 @@ pub trait PortalSupplyTermsPort: Send + Sync {
 }
 
 /// Catalog-owned proposal lifecycle and formal materialization steps.
+#[derive(Clone)]
 pub struct CatalogPortalService {
     pub(super) db: Database,
     pub(super) catalog: CatalogService,

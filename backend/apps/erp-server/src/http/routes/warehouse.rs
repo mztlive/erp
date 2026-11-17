@@ -2,99 +2,103 @@
 //!
 //! 经 `admin.rs` 的 `/admin` nest 后，最终路径为 `/admin/warehouses`、
 //! `/admin/warehouse-revisions`、`/admin/warehouse-sku-policies`；
-//! 每条路由统一走 JWT + RBAC（`with_permission`），权限由显式目录统一定义。
+//! 每条路由统一走 JWT 认证；业务授权由用例执行，目录由 `permission_route` 提供，权限由显式目录统一定义。
 
 use axum::Router;
 use axum::routing::{delete, get, post, put};
-use erp_identity::AuthorizationService;
 use erp_permissions as permissions;
 
 use crate::http::handler::warehouse;
-use crate::http::middleware::with_permission;
+use crate::http::routes::permission_route;
 use crate::http::state::HttpState;
 
 /// 返回本域管理端路由集合。
 ///
 /// # 参数
-/// * `rbac` - 共享 Casbin RBAC 服务
+/// 无。
 ///
 /// # 返回
-/// 返回挂载了权限校验层的路由集合。
-pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
+/// 返回声明公共权限目录信息的路由集合。
+///
+/// # 错误
+/// 不执行 I/O，不返回错误。
+pub fn routes() -> Router<HttpState> {
+    Router::new().merge(warehouse_routes()).merge(fulfillment_routes()).merge(sku_policy_routes())
+}
+
+/// 仓库目录、档案查询与维护路由。
+fn warehouse_routes() -> Router<HttpState> {
     Router::new()
         .route(
             "/warehouse-directory",
-            with_permission(get(warehouse::directory::list), rbac, &permissions::warehouse::LIST),
+            permission_route(get(warehouse::directory::list), &permissions::warehouse::LIST),
         )
         .route(
             "/warehouse-directory/selected",
-            with_permission(get(warehouse::directory::selected), rbac, &permissions::warehouse::LIST),
+            permission_route(get(warehouse::directory::selected), &permissions::warehouse::LIST),
         )
+        .route("/warehouses", permission_route(get(warehouse::warehouse_list), &permissions::warehouse::LIST))
         .route(
             "/warehouses",
-            with_permission(get(warehouse::warehouse_list), rbac, &permissions::warehouse::LIST),
-        )
-        .route(
-            "/warehouses",
-            with_permission(post(warehouse::warehouse_create), rbac, &permissions::warehouse::CREATE),
+            permission_route(post(warehouse::warehouse_create), &permissions::warehouse::CREATE),
         )
         .route(
             "/warehouses/{id}",
-            with_permission(put(warehouse::warehouse_update), rbac, &permissions::warehouse::UPDATE),
+            permission_route(put(warehouse::warehouse_update), &permissions::warehouse::UPDATE),
         )
+}
+
+/// 仓库履约人选与修订读取路由。
+fn fulfillment_routes() -> Router<HttpState> {
+    Router::new()
         .route(
             "/warehouses/{id}/fulfillment-handlers",
-            with_permission(
+            permission_route(
                 put(warehouse::warehouse_fulfillment_handlers_update),
-                rbac,
                 &permissions::warehouse::UPDATE,
             ),
         )
         .route(
             "/warehouse-fulfillment-handler-options",
-            with_permission(
+            permission_route(
                 get(warehouse::warehouse_fulfillment_handler_options),
-                rbac,
                 &permissions::warehouse::UPDATE,
             ),
         )
         .route(
             "/warehouse-revisions",
-            with_permission(
-                get(warehouse::warehouse_revision_list),
-                rbac,
-                &permissions::warehouse::REVISION_LIST,
-            ),
+            permission_route(get(warehouse::warehouse_revision_list), &permissions::warehouse::REVISION_LIST),
         )
+}
+
+/// 仓库规格政策路由。
+fn sku_policy_routes() -> Router<HttpState> {
+    Router::new()
         .route(
             "/warehouse-sku-policies",
-            with_permission(
+            permission_route(
                 get(warehouse::warehouse_sku_policy_list),
-                rbac,
                 &permissions::warehouse::SKU_POLICY_LIST,
             ),
         )
         .route(
             "/warehouse-sku-policies",
-            with_permission(
+            permission_route(
                 post(warehouse::warehouse_sku_policy_create),
-                rbac,
                 &permissions::warehouse::SKU_POLICY_CREATE,
             ),
         )
         .route(
             "/warehouse-sku-policies/{id}",
-            with_permission(
+            permission_route(
                 put(warehouse::warehouse_sku_policy_update),
-                rbac,
                 &permissions::warehouse::SKU_POLICY_UPDATE,
             ),
         )
         .route(
             "/warehouse-sku-policies/{id}",
-            with_permission(
+            permission_route(
                 delete(warehouse::warehouse_sku_policy_delete),
-                rbac,
                 &permissions::warehouse::SKU_POLICY_DELETE,
             ),
         )

@@ -113,7 +113,7 @@ impl PurchaseOrderProcess {
             Some(sales_order_id.as_ref()),
             &req.idempotency_key,
         )?;
-        let authorization = self.require_rbac()?.clone();
+        let authorization = self.authorization.clone();
         let command = SourcingTransactionInput {
             req: &req,
             sales_order_id: &sales_order_id,
@@ -179,7 +179,7 @@ impl PurchaseOrderProcess {
         command: SourcingTransactionInput<'_>,
     ) -> Result<Option<CreatePurchaseOrdersFromSourcingResult>> {
         let db = self.db.clone();
-        let authorization = self.require_rbac()?.clone();
+        let authorization = self.authorization.clone();
         let req = command.req.clone();
         let sales_order_id = command.sales_order_id.clone();
         let identity = command.receipt_identity.clone();

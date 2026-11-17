@@ -44,7 +44,7 @@ impl ProductImportProcess {
         req: ProductImportDirectUploadInitRequest,
         actor: &AuditActor,
     ) -> Result<ProductImportDirectUploadInitView> {
-        self.authorize_submission(actor).await?;
+        self.prepare_attachment_upload(actor).await?;
         req.validate()?;
         validate_xlsx_file_name(&req.file_name)?;
         validate_byte_size(req.byte_size)?;
@@ -86,7 +86,7 @@ impl ProductImportProcess {
         request_id: &str,
         actor: &AuditActor,
     ) -> Result<String> {
-        self.authorize_submission(actor).await?;
+        self.prepare_attachment_upload(actor).await?;
         require_bound_object_key(object_key, request_id)?;
         if !(1..=10_000).contains(&part_number) {
             return Err(Error::ValidationError("分片序号必须在 1-10000 之间".to_string()));
@@ -121,7 +121,7 @@ impl ProductImportProcess {
         req: ProductImportDirectUploadCompleteRequest,
         actor: &AuditActor,
     ) -> Result<ProductImportJobView> {
-        self.authorize_submission(actor).await?;
+        self.prepare_attachment_upload(actor).await?;
         req.validate()?;
         validate_xlsx_file_name(&req.file_name)?;
         validate_byte_size(req.byte_size)?;
@@ -167,7 +167,7 @@ impl ProductImportProcess {
         request_id: &str,
         actor: &AuditActor,
     ) -> Result<()> {
-        self.authorize_submission(actor).await?;
+        self.prepare_attachment_upload(actor).await?;
         require_bound_object_key(object_key, request_id)?;
         match self.storage.abort_multipart_upload(object_key, upload_id).await {
             Ok(()) => Ok(()),

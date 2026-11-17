@@ -87,7 +87,7 @@ impl SalesOrderReadService {
         params: &SalesListParams,
         actor: &AuditActor,
     ) -> Result<SalesListView> {
-        let service = Self::with_rbac(self.db.clone(), self.require_rbac()?.clone());
+        let service = Self::new(self.db.clone(), self.authorization.clone());
         let params = params.clone();
         let actor = actor.clone();
         self.db
@@ -111,7 +111,7 @@ impl SalesListRead for SalesOrderReadService {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<SalesListSnapshot<Self::Context>> {
-        let access = SalesAccess::new(self.db.clone(), self.require_rbac()?.clone());
+        let access = SalesAccess::new(self.db.clone(), self.authorization.clone());
         let (context, scope) = access.resolve(actor, &sales_order_permissions::LIST, executor).await?;
         let org_ids = requested_business_org_units(&access, params, executor).await?;
         let search = self.keyword_search(params.q.as_deref(), executor).await?;

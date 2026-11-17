@@ -30,7 +30,8 @@ use self::approval_outbox::ApprovalOutboxWorker;
 use self::supplier_orders::SupplierOrderWorker;
 use self::xxl::XxlExecutor;
 use crate::runtime::Result;
-use crate::wiring::Application;
+use crate::wiring::sales::sales_services;
+use crate::wiring::{Application, scoped_catalog_service};
 
 /// 进程唯一的常驻执行器集合。
 pub(crate) struct Workers {
@@ -71,7 +72,7 @@ impl Workers {
             let media = SourceMediaWorker::new(
                 state.db(),
                 preparer,
-                crate::wiring::scoped_catalog_service(state.db(), state.rbac()),
+                scoped_catalog_service(state.db(), state.authorization()),
             );
             let receive = receive.clone();
             tasks.push(tokio::spawn(async move {
@@ -141,7 +142,7 @@ fn build_runner(state: &Application) -> Result<BackgroundRunner> {
             state.db(),
             state.storage().clone(),
             state.config_snapshot().app.secret.as_bytes(),
-            crate::wiring::sales::sales_services(state.db(), state.rbac()),
+            sales_services(state.db(), state.rbac(), state.authorization()),
         )))
         .register(DeliveryCoverageRefreshAdapter::new(DeliveryCoverageRefreshProcess::new(state.db())))
         .register(SellableProjectionRefreshAdapter::new(SellableProjectionRefresher::new(state.db()))))

@@ -20,10 +20,16 @@ use crate::http::state::HttpState;
 /// 分页查询采购责任规则。
 pub async fn list_rules(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<ProcurementResponsibilityRuleListParams>,
 ) -> Result<ProcurementResponsibilityRulePageView> {
     params.validate()?;
-    let view = ProcurementResponsibilityReadService::new(state.application().db()).rule_list(params).await?;
+    let view = ProcurementResponsibilityReadService::new(
+        state.application().db(),
+        state.application().authorization(),
+    )
+    .rule_list(params, &actor)
+    .await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -34,9 +40,10 @@ pub async fn create_rule(
     Json(request): Json<CreateProcurementResponsibilityRuleRequest>,
 ) -> Result<ProcurementResponsibilityRuleView> {
     request.validate()?;
-    let view = ProcurementResponsibilityProcess::new(state.application().db(), state.application().rbac())
-        .create_rule(request, &actor)
-        .await?;
+    let view =
+        ProcurementResponsibilityProcess::new(state.application().db(), state.application().authorization())
+            .create_rule(request, &actor)
+            .await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -48,9 +55,10 @@ pub async fn update_rule(
     Json(request): Json<UpdateProcurementResponsibilityRuleRequest>,
 ) -> Result<ProcurementResponsibilityRuleView> {
     request.validate()?;
-    let view = ProcurementResponsibilityProcess::new(state.application().db(), state.application().rbac())
-        .update_rule(&id, request, &actor)
-        .await?;
+    let view =
+        ProcurementResponsibilityProcess::new(state.application().db(), state.application().authorization())
+            .update_rule(&id, request, &actor)
+            .await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -61,8 +69,9 @@ pub async fn resolve(
     Json(request): Json<ProcurementResponsibilityResolveRequest>,
 ) -> Result<ProcurementResponsibilityResolveView> {
     request.validate()?;
-    let view = ProcurementResponsibilityProcess::new(state.application().db(), state.application().rbac())
-        .resolve_preview(request, &actor)
-        .await?;
+    let view =
+        ProcurementResponsibilityProcess::new(state.application().db(), state.application().authorization())
+            .resolve_preview(request, &actor)
+            .await?;
     Ok(ApiResponse::ok_with_data(view))
 }

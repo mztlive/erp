@@ -317,34 +317,6 @@ impl ContractService {
         Ok(())
     }
 
-    /// 独立重验合同读取资格，并确认附件属于该合同。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证操作人
-    /// * `contract_id` - 合同 ID
-    /// * `file_id` - 合同 PDF 文件资产 ID
-    ///
-    /// # 返回
-    /// 附件属于该合同且当前可读时成功。
-    ///
-    /// # 错误
-    /// 合同不可读或附件不属于该合同时返回 NotFound。
-    ///
-    /// # 关键业务约束
-    /// 列表或详情已授权不能作为附件请求的长期凭证。
-    pub async fn require_attachment(
-        &self,
-        actor: &AuditActor,
-        contract_id: &str,
-        file_id: &str,
-    ) -> Result<()> {
-        let detail = self.contract_detail(contract_id, actor).await?;
-        if !detail.revisions.iter().any(|revision| revision.contract_pdf_file_id == file_id) {
-            return Err(Error::NotFound("合同附件不存在或无权查看".into()));
-        }
-        Ok(())
-    }
-
     /// 校验客户存在且未停用。
     ///
     /// # 参数

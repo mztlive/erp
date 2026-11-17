@@ -2,103 +2,118 @@
 //!
 //! 经 `admin.rs` 的 `/admin` nest 后，最终路径为 `/admin/customers`、
 //! `/admin/customers/{id}/assignments` 等；每条路由统一走
-//! JWT + RBAC（`with_permission`），权限由显式目录统一定义。
+//! JWT 认证；业务授权由用例执行，目录由 `permission_route` 提供，权限由显式目录统一定义。
 
 use axum::Router;
 use axum::routing::{delete, get, post, put};
-use erp_identity::AuthorizationService;
 use erp_permissions as permissions;
 
 use crate::http::handler::customer;
-use crate::http::middleware::with_permission;
+use crate::http::routes::permission_route;
 use crate::http::state::HttpState;
 
 /// 返回本域管理端路由集合。
 ///
 /// # 参数
-/// * `rbac` - 共享 Casbin RBAC 服务
+/// 无。
 ///
 /// # 返回
-/// 返回挂载了权限校验层的路由集合。
-pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
+/// 返回声明公共权限目录信息的路由集合。
+///
+/// # 错误
+/// 不执行 I/O，不返回错误。
+pub fn routes() -> Router<HttpState> {
+    Router::new()
+        .merge(profile_query_routes())
+        .merge(profile_command_routes())
+        .merge(customer_routes())
+        .merge(assignment_routes())
+}
+
+/// 客户资料与业务汇总读取路由。
+fn profile_query_routes() -> Router<HttpState> {
     Router::new()
         .route(
             "/customer-profiles",
-            with_permission(post(customer::customer_profile_create), rbac, &permissions::customer::CREATE),
+            permission_route(post(customer::customer_profile_create), &permissions::customer::CREATE),
         )
         .route(
             "/customer-profiles/{id}",
-            with_permission(get(customer::customer_profile_detail), rbac, &permissions::customer::DETAIL),
+            permission_route(get(customer::customer_profile_detail), &permissions::customer::DETAIL),
         )
         .route(
             "/customer-profiles/{id}/related-summary",
-            with_permission(get(customer::customer_center_related), rbac, &permissions::customer::DETAIL),
+            permission_route(get(customer::customer_center_related), &permissions::customer::DETAIL),
         )
         .route(
             "/customer-profiles/{id}/receivable-summary",
-            with_permission(get(customer::customer_center_receivable), rbac, &permissions::customer::DETAIL),
+            permission_route(get(customer::customer_center_receivable), &permissions::customer::DETAIL),
         )
+}
+
+/// 客户资料命令与敏感字段路由。
+fn profile_command_routes() -> Router<HttpState> {
+    Router::new()
         .route(
             "/customer-profiles/{id}",
-            with_permission(put(customer::customer_profile_update), rbac, &permissions::customer::UPDATE),
+            permission_route(put(customer::customer_profile_update), &permissions::customer::UPDATE),
         )
         .route(
             "/customer-profile-commands/{idempotency_key}",
-            with_permission(
-                get(customer::customer_profile_command_detail),
-                rbac,
-                &permissions::customer::DETAIL,
-            ),
+            permission_route(get(customer::customer_profile_command_detail), &permissions::customer::DETAIL),
         )
         .route(
             "/customer-sensitive-fields/reveal",
-            with_permission(
+            permission_route(
                 post(customer::customer_sensitive_reveal),
-                rbac,
                 &permissions::customer::SENSITIVE_REVEAL,
             ),
         )
-        .route(
-            "/customers",
-            with_permission(get(customer::customer_list), rbac, &permissions::customer::LIST),
-        )
+}
+
+/// 客户档案查询与维护路由。
+fn customer_routes() -> Router<HttpState> {
+    Router::new()
+        .route("/customers", permission_route(get(customer::customer_list), &permissions::customer::LIST))
         .route(
             "/customers/all-authorized",
-            with_permission(
+            permission_route(
                 get(customer::customer_all_authorized_list),
-                rbac,
                 &permissions::customer::ALL_AUTHORIZED_LIST,
             ),
         )
         .route(
             "/customers",
-            with_permission(post(customer::customer_create), rbac, &permissions::customer::CREATE),
+            permission_route(post(customer::customer_create), &permissions::customer::CREATE),
         )
         .route(
             "/customers/{id}",
-            with_permission(get(customer::customer_detail), rbac, &permissions::customer::DETAIL),
+            permission_route(get(customer::customer_detail), &permissions::customer::DETAIL),
         )
         .route(
             "/customers/{id}",
-            with_permission(put(customer::customer_update), rbac, &permissions::customer::UPDATE),
+            permission_route(put(customer::customer_update), &permissions::customer::UPDATE),
         )
         .route(
             "/customers/{id}",
-            with_permission(delete(customer::customer_delete), rbac, &permissions::customer::DELETE),
+            permission_route(delete(customer::customer_delete), &permissions::customer::DELETE),
         )
+}
+
+/// 客户负责人分配路由。
+fn assignment_routes() -> Router<HttpState> {
+    Router::new()
         .route(
             "/customers/{id}/assignments",
-            with_permission(
+            permission_route(
                 get(customer::customer_assignment_list),
-                rbac,
                 &permissions::customer::ASSIGNMENT_LIST,
             ),
         )
         .route(
             "/customers/{id}/assignments",
-            with_permission(
+            permission_route(
                 post(customer::customer_assignment_apply),
-                rbac,
                 &permissions::customer::ASSIGNMENT_APPLY,
             ),
         )

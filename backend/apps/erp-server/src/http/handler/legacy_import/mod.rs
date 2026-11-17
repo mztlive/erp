@@ -151,10 +151,11 @@ pub async fn legacy_import_execution_command(
 /// 返回契约形状的分页视图。
 pub async fn legacy_import_row_list(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
     Query(params): Query<LegacyImportRowListParams>,
 ) -> Result<PageView<LegacyImportRowView>> {
-    let page = state.application().legacy_import_service().row_list(&id, &params).await?;
+    let page = state.application().legacy_import_service().row_list(&id, &params, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }

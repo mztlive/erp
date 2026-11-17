@@ -190,8 +190,6 @@ mod tests {
         use crate::access_control::ResolvedScope;
         use crate::entity::organization_change::OrganizationState;
         AuthorizedDataScope::test_fixture(DataScopeFacts {
-            resource: "sales_order".into(),
-            action: "detail".into(),
             scope: ResolvedScope { role_clauses: vec![], user_limit: None },
             organizations: OrganizationState::default(),
             policy_version: 1,

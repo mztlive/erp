@@ -29,34 +29,14 @@ export type PersonDataScope = {
     action: string
     expression: PersonScopeExpression
 }
-export type AuthorizationPolicy =
-    | "business"
-    | "shared"
-    | "source_inherited"
-    | "task"
-    | "governance"
-    | "directory"
-    | "role"
-
-export const AUTHORIZATION_POLICY_LABEL: Record<AuthorizationPolicy, string> = {
-    business: "业务数据范围",
-    shared: "按岗位权限共享",
-    source_inherited: "由来源业务决定",
-    task: "由流程或任务指派决定",
-    governance: "系统管理授权",
-    directory: "基础资料可见范围",
-    role: "由操作权限控制",
-}
-
 export type PersonScopeBusiness = {
-    authorization_policy: AuthorizationPolicy
     configurable_actions: string[]
     policy_description: string
     resource: string
     actions: string[]
     dimensions: ScopeDimension[]
     default_self: boolean
-    default_self_actions?: string[]
+    default_self_actions: string[]
 }
 export type PersonScopeList = {
     items: PersonDataScope[]
@@ -96,12 +76,18 @@ export async function fetchPersonScopes(
     const view = await apiGet<PersonScopeList>(path(userId))
     if (
         !Array.isArray(view.retired_items) ||
+        !Array.isArray(view.businesses) ||
         view.businesses.some(
             (business) =>
+                !Array.isArray(business.actions) ||
                 !Array.isArray(business.configurable_actions) ||
-                !Object.hasOwn(
-                    AUTHORIZATION_POLICY_LABEL,
-                    business.authorization_policy,
+                !Array.isArray(business.default_self_actions) ||
+                !Array.isArray(business.dimensions) ||
+                business.configurable_actions.some(
+                    (action) => !business.actions.includes(action),
+                ) ||
+                business.default_self_actions.some(
+                    (action) => !business.configurable_actions.includes(action),
                 ) ||
                 typeof business.policy_description !== "string",
         )
@@ -192,12 +178,12 @@ export function personScopeDescription(
             scope,
             {
                 resource: scope.resource,
-                authorization_policy: "business",
                 configurable_actions: [scope.action],
                 policy_description: "",
                 actions: [scope.action],
                 dimensions: [],
                 default_self: defaultSelf,
+                default_self_actions: defaultSelf ? [scope.action] : [],
             },
             labels,
         )
@@ -213,14 +199,12 @@ export function personScopeDescription(
         : union
 }
 
-/** 默认本人范围按动作判断，旧服务端仍兼容资源级标记。 */
+/** 本人基础范围使用服务端逐动作配置，资源汇总不参与单项判断。 */
 export function personHasDefaultSelf(
     business: PersonScopeBusiness,
     action: string,
 ): boolean {
-    return (
-        business.default_self_actions?.includes(action) ?? business.default_self
-    )
+    return business.default_self_actions.includes(action)
 }
 
 /** 同一资源可同时包含默认本人读取和必须显式配置的管理动作。 */

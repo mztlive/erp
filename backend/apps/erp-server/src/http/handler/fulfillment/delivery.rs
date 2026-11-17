@@ -27,9 +27,10 @@ use crate::http::state::HttpState;
 /// 业务处理或数据读取失败时返回对应错误。
 pub async fn delivery_list(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<DeliveryListParams>,
 ) -> Result<PageView<DeliveryView>> {
-    let page = service(&state).delivery_list(&params).await?;
+    let page = service(&state).delivery_list(&params, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -47,9 +48,10 @@ pub async fn delivery_list(
 /// 业务处理或数据读取失败时返回对应错误。
 pub async fn delivery_detail(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<DeliveryDetailView> {
-    let view = process(&state).delivery_packing_detail(&id).await?;
+    let view = process(&state).delivery_packing_detail(&id, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }

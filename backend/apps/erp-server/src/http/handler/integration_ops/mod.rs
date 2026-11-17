@@ -33,12 +33,15 @@ use crate::http::state::HttpState;
 /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
 pub async fn inbox_message_list(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<InboxMessageListParams>,
 ) -> Result<PageView<InboxMessageListView>> {
-    let page =
-        crate::wiring::scoped_integration_ops_service(state.application().db(), state.application().rbac())
-            .inbox_message_list(&params)
-            .await?;
+    let page = crate::wiring::scoped_integration_ops_service(
+        state.application().db(),
+        state.application().authorization(),
+    )
+    .inbox_message_list(&params, &actor)
+    .await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -53,12 +56,15 @@ pub async fn inbox_message_list(
 /// 返回消息详情视图。
 pub async fn inbox_message_detail(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<InboxMessageView> {
-    let view =
-        crate::wiring::scoped_integration_ops_service(state.application().db(), state.application().rbac())
-            .inbox_message_detail(&id)
-            .await?;
+    let view = crate::wiring::scoped_integration_ops_service(
+        state.application().db(),
+        state.application().authorization(),
+    )
+    .inbox_message_detail(&id, &actor)
+    .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -116,11 +122,7 @@ pub async fn error_task_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<ErrorTaskListParams>,
 ) -> Result<ErrorTaskListView> {
-    let mut page =
-        crate::wiring::scoped_integration_ops_service(state.application().db(), state.application().rbac())
-            .error_task_list(&params, &actor)
-            .await?;
-    state.application().integration_center().error_task_names(&mut page.data.items).await?;
+    let page = state.application().integration_center().error_task_list(&params, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -196,11 +198,7 @@ pub async fn difference_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<DifferenceListParams>,
 ) -> Result<DifferenceListView> {
-    let mut page =
-        crate::wiring::scoped_integration_ops_service(state.application().db(), state.application().rbac())
-            .difference_list(&params, &actor)
-            .await?;
-    state.application().integration_center().difference_names(&mut page.data.items).await?;
+    let page = state.application().integration_center().difference_list(&params, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }

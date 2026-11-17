@@ -5,8 +5,9 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use erp_finance::ports::funds_scope::FundsDataScopePort;
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 use erp_read_models::Result as ReadResult;
+use erp_read_models::finance::funds_scope::FundsAccess;
 use erp_read_models::ports::invoice_grants::InvoiceGrantReadiness;
 use erp_resource_grants::ResourceGrantProcess;
 use mongodb::Database;
@@ -73,29 +74,26 @@ impl FundsDataScopePort for MongoFundsDataScope {
     }
 }
 
-/// 构造绑定同一 RBAC 的资金访问器；HTTP 与命名 Process 必须经此入口。
+/// 构造复用统一授权服务和真实开票授权状态的资金访问器。
 ///
 /// # 参数
 /// * `db` - 资金与身份集合所在数据库。
-/// * `rbac` - 交给资金访问器的 RBAC 快照；范围 Port 本身不保存它。
+/// * `authorization` - 进程共享统一授权服务。
 ///
 /// # 返回
 /// 返回已注入本 adapter 的资金访问器。
 ///
 /// # 错误
 /// 不返回错误。
-pub fn funds_access_with_rbac(
-    db: Database,
-    rbac: SharedRbacService,
-) -> erp_read_models::finance::funds_scope::FundsAccess {
+pub fn funds_access(db: Database, authorization: Arc<AuthorizationService>) -> FundsAccess {
     let scope = MongoFundsDataScope::shared(db.clone());
-    erp_read_models::finance::funds_scope::FundsAccess::new(db.clone(), rbac.clone(), scope)
-        .with_grant_readiness(Arc::new(InvoiceReadiness { db, rbac }))
+    FundsAccess::new(db.clone(), authorization.clone(), scope)
+        .with_grant_readiness(Arc::new(InvoiceReadiness { db, authorization }))
 }
 
 struct InvoiceReadiness {
     db: Database,
-    rbac: SharedRbacService,
+    authorization: Arc<AuthorizationService>,
 }
 #[async_trait]
 impl InvoiceGrantReadiness for InvoiceReadiness {
@@ -105,7 +103,7 @@ impl InvoiceGrantReadiness for InvoiceReadiness {
         recipient: &str,
         executor: &mut dyn Executor,
     ) -> ReadResult<bool> {
-        Ok(ResourceGrantProcess::new(self.db.clone(), self.rbac.clone())
+        Ok(ResourceGrantProcess::new(self.db.clone(), self.authorization.clone())
             .invoice_pending(request_id, recipient, executor)
             .await?)
     }

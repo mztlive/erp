@@ -11,18 +11,23 @@ pub(crate) fn process(state: &Application) -> DataTransferProcess {
     let reader = Arc::new(reads::Reads(state.clone()));
     let services = BusinessTransferServices {
         inquiry: state.inquiry_import_process(),
-        offerings: Arc::new(scoped_offering_process(state.db(), state.rbac())),
+        offerings: Arc::new(scoped_offering_process(state.db(), state.authorization())),
         portal: Arc::new(SupplierPortalProcess::new(
             state.db(),
-            state.rbac(),
-            catalog_services(state.db(), state.rbac()),
+            state.authorization(),
+            catalog_services(state.db(), state.rbac(), state.authorization()),
         )),
     };
-    let handler =
-        Arc::new(BusinessTransfers::new(state.db(), state.rbac(), reader, state.storage().clone(), services));
+    let handler = Arc::new(BusinessTransfers::new(
+        state.db(),
+        state.authorization(),
+        reader,
+        state.storage().clone(),
+        services,
+    ));
     DataTransferProcess::new(
         state.db(),
-        state.rbac(),
+        state.authorization(),
         state.storage().clone(),
         state.sensitive_data(),
         handler,

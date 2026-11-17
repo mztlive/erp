@@ -131,8 +131,6 @@ mod tests {
     fn file_delivery_rejects_expiry_new_read_phases_and_restarted_transactions() {
         let mut executor = SnapshotExecutor::default();
         let scope = AuthorizedDataScope::test_fixture(DataScopeFacts {
-            resource: "org_unit".into(),
-            action: "manage".into(),
             scope: ResolvedScope { role_clauses: vec![], user_limit: None },
             organizations: OrganizationState::default(),
             policy_version: 1,

@@ -1,6 +1,6 @@
 //! 库存授权、审计与外部事实 adapter。
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
 use application_core::AuditActor;
@@ -13,19 +13,16 @@ use erp_core::ids::SkuId;
 use erp_fulfillment::repository::FulfillmentExt;
 use erp_fulfillment_execution::inventory_adjustment::InventoryAdjustmentProcess;
 use erp_fulfillment_execution::workflow::FulfillmentWorkflowServices;
-use erp_identity::entity::authorization::{FactKind, ReadAccess, RelationKey, RelationMatch};
-use erp_identity::{
-    AccessMode, AccessPolicy, AccessRegistration, AccessSubject, AuthorizationRegistry, AuthorizationService,
-    DataAccess, Error as IdentityError, Permission, SharedRbacService,
-};
-use erp_inventory::repository::inventory::authorization::InventoryMapping;
+use erp_identity::{AccessTarget, AuthorizationService, Error as IdentityError, SharedRbacService};
 use erp_inventory::{
-    AuthorizationPort, CatalogFactsPort, FulfillmentFactsPort, InventoryAction, InventoryAuditPort,
-    InventoryAuthorization, InventoryQuery, InventoryService, PreparedInventoryAudit, ReceiptNoFact, SkuFact,
-    SkuRevisionFact, WarehouseFact, WarehouseFactsPort, WarehouseRevisionFact,
+    AuthorizationPort, CatalogFactsPort, Error as InventoryError, FulfillmentFactsPort, InventoryAction,
+    InventoryAuditPort, InventoryAuthorization, InventoryQuery, InventoryService, PreparedInventoryAudit,
+    ReceiptNoFact, Result as InventoryResult, SkuFact, SkuRevisionFact, WarehouseFact, WarehouseFactsPort,
+    WarehouseRevisionFact,
 };
+use erp_permissions::{internal, inventory};
 use erp_warehouse::WarehouseExt;
-use erp_warehouse::authorization::{WarehouseAuthorization, WarehouseMapping};
+use erp_warehouse::authorization::WarehouseAuthorization;
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -38,200 +35,166 @@ mod people;
 
 pub use people::MongoInventoryPeopleFacts;
 
-const DETAIL_PERMISSION: &str = "stock_adjustment:detail";
-/// 从身份事实计算库存仓库范围的 Mongo adapter。
+/// 使用共享统一授权服务检查库存对象及真实仓库。
 #[derive(Clone)]
 pub struct MongoInventoryAuthorization {
     db: Database,
-    rbac: SharedRbacService,
+    authorization: Arc<AuthorizationService>,
 }
 
 impl MongoInventoryAuthorization {
-    /// 绑定身份数据库与共享 RBAC，构造时不解析范围。
-    ///
+    /// 绑定业务库与完整统一授权服务。
     /// # 参数
-    /// * `db` - 身份与库存集合所在数据库。
-    /// * `rbac` - 现有 RBAC 快照服务。
-    ///
+    /// db 为库存与仓库数据库，authorization 为进程共享的完整授权服务。
     /// # 返回
-    /// 返回未执行 I/O 的 adapter。
-    ///
+    /// 不执行 I/O 的库存授权 adapter。
     /// # 错误
-    /// 不返回错误。
-    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
-        Self { db, rbac }
+    /// 构造不返回错误。
+    pub fn new(db: Database, authorization: Arc<AuthorizationService>) -> Self {
+        Self { db, authorization }
     }
 
-    /// 包装为库存域可注入的授权 Port。
-    ///
+    /// 包装为库存域可注入的共享授权 Port。
     /// # 参数
-    /// * `db` - 身份与库存集合所在数据库。
-    /// * `rbac` - 现有 RBAC 快照服务。
-    ///
+    /// db 为库存与仓库数据库，authorization 为进程共享的完整授权服务。
     /// # 返回
-    /// 返回共享的库存授权 Port。
-    ///
+    /// 保留同一授权实例的共享 Port。
     /// # 错误
-    /// 不返回错误。
-    pub fn shared(db: Database, rbac: SharedRbacService) -> Arc<dyn AuthorizationPort> {
-        Arc::new(Self::new(db, rbac))
+    /// 构造不返回错误。
+    pub fn shared(db: Database, authorization: Arc<AuthorizationService>) -> Arc<dyn AuthorizationPort> {
+        Arc::new(Self::new(db, authorization))
     }
 }
 
 #[async_trait]
 impl AuthorizationPort for MongoInventoryAuthorization {
+    async fn require_adjustment(
+        &self,
+        actor: &AuditActor,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> InventoryResult<()> {
+        self.authorization
+            .require(actor, &inventory::STOCK_ADJUSTMENT_DETAIL, AccessTarget::record(id)?, executor)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn require_adjustment_update(
+        &self,
+        actor: &AuditActor,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> InventoryResult<()> {
+        self.authorization
+            .require(actor, &inventory::STOCK_ADJUSTMENT_UPDATE, AccessTarget::record(id)?, executor)
+            .await
+            .map_err(Into::into)
+    }
+
     async fn authorize(
         &self,
         actor: &AuditActor,
-        actions: &[InventoryAction],
+        action: InventoryAction,
         executor: &mut dyn Executor,
-    ) -> erp_inventory::Result<InventoryAuthorization> {
-        authorize_inventory(&self.db, &self.rbac, actor, actions, executor).await
+    ) -> InventoryResult<InventoryAuthorization> {
+        authorize_inventory(&self.db, &self.authorization, actor, action, executor).await
     }
+
     async fn require_warehouse(
         &self,
         actor: &AuditActor,
         action: InventoryAction,
         warehouse: &str,
         executor: &mut dyn Executor,
-    ) -> erp_inventory::Result<()> {
-        warehouse_authorization(&self.db, &self.rbac, action)?
+    ) -> InventoryResult<()> {
+        warehouse_authorization(&self.db, &self.authorization, action)
             .require(actor, warehouse, executor)
             .await
-            .map_err(|error| map_svc(error.into()))
+            .map_err(Into::into)
     }
+
     async fn allowed_warehouses(
         &self,
         actor: &AuditActor,
         action: InventoryAction,
         ids: &[String],
         executor: &mut dyn Executor,
-    ) -> erp_inventory::Result<BTreeSet<String>> {
-        match warehouse_authorization(&self.db, &self.rbac, action)?.ids_in(actor, ids, executor).await {
+    ) -> InventoryResult<BTreeSet<String>> {
+        match warehouse_authorization(&self.db, &self.authorization, action)
+            .ids_in(actor, ids, executor)
+            .await
+        {
             Ok(ids) => Ok(ids.into_iter().collect()),
             Err(IdentityError::Forbidden(_)) => Ok(BTreeSet::new()),
-            Err(error) => Err(map_svc(error.into())),
+            Err(error) => Err(error.into()),
         }
     }
 }
 
-/// 在调用方执行器上仅计算当前用例需要的动作范围。
+/// 在调用方执行器上只生成当前读取动作的完整库存凭证。
 /// # 参数
-/// db、rbac 为共享身份设施；actor 为操作人；actions 为所需动作；executor 为原执行器。
+/// db、authorization 为共享基础设施，actor、action 为真实身份和当前动作，executor 为原执行器。
 /// # 返回
-/// 仅包含本次所需动作的授权快照；未请求动作保持空范围。
+/// 当前动作的查询凭证；有效账号缺少功能资格时不签发查询。
 /// # 错误
-/// 空动作集合、身份取证或范围解析失败时返回错误。
+/// 非读取动作、身份设施、范围或查询依赖错误时拒绝。
 pub async fn authorize_inventory(
     db: &Database,
-    rbac: &SharedRbacService,
+    authorization: &Arc<AuthorizationService>,
     actor: &AuditActor,
-    actions: &[InventoryAction],
+    action: InventoryAction,
     executor: &mut dyn Executor,
-) -> erp_inventory::Result<InventoryAuthorization> {
-    let actions = actions.iter().copied().collect::<BTreeSet<_>>();
-    if actions.is_empty() {
-        return Err(erp_inventory::Error::ValidationError("库存授权动作不能为空".into()));
+) -> InventoryResult<InventoryAuthorization> {
+    if matches!(action, InventoryAction::Create | InventoryAction::Update) {
+        return Err(InventoryError::ValidationError("库存授权查询只接受读取动作".into()));
     }
-    let permissions = actions
-        .iter()
-        .map(|action| Permission::parse(action.permission()))
-        .collect::<erp_core::Result<Vec<_>>>()?;
-    if super::authorization::authorization_service(db.clone(), rbac.clone())
-        .permissions(actor, &permissions, executor)
-        .await
-        .map_err(|error| map_svc(error.into()))?
-        .is_none()
-    {
+    if authorization.permissions(actor, &[action.permission()], executor).await?.is_none() {
         return Ok(InventoryAuthorization::inactive());
     }
-    let mut queries = BTreeMap::new();
-    for action in actions {
-        if matches!(
-            action,
-            InventoryAction::BalanceList
-                | InventoryAction::MovementList
-                | InventoryAction::ReservationList
-                | InventoryAction::AdjustmentList
-        ) && let Some(query) = inventory_query(db, rbac, actor, action, executor).await?
-        {
-            queries.insert(action, query);
-        }
-    }
-    Ok(InventoryAuthorization::new(true, queries))
+    let query = inventory_query(db, authorization, actor, action, executor).await?;
+    Ok(InventoryAuthorization::new(true, query.map(|query| (action, query))))
 }
 
-/// 固定仓库入口与其同角色附加功能资格。
+/// 固定仓库入口只连接实现；资格和范围复用均由 identity 负责。
 fn warehouse_authorization(
     db: &Database,
-    rbac: &SharedRbacService,
+    authorization: &Arc<AuthorizationService>,
     action: InventoryAction,
-) -> erp_inventory::Result<WarehouseAuthorization> {
-    WarehouseAuthorization::new(
-        db.clone(),
-        rbac.clone(),
-        Permission::parse(action.permission())?,
-        required_permissions(action),
-    )
-    .map_err(|error| map_svc(error.into()))
-}
-fn required_permissions(action: InventoryAction) -> Vec<Permission> {
-    action
-        .requires_adjustment_detail()
-        .then(|| Permission::parse(DETAIL_PERMISSION).expect("固定库存权限"))
-        .into_iter()
-        .collect()
+) -> WarehouseAuthorization {
+    let permission = match action {
+        InventoryAction::BalanceList => internal::INVENTORY_BALANCE_WAREHOUSES,
+        InventoryAction::BalanceDetail => internal::INVENTORY_BALANCE_DETAIL_WAREHOUSES,
+        InventoryAction::MovementList => internal::INVENTORY_MOVEMENT_WAREHOUSES,
+        InventoryAction::ReservationList => internal::INVENTORY_RESERVATION_WAREHOUSES,
+        InventoryAction::AdjustmentList => internal::INVENTORY_ADJUSTMENT_WAREHOUSES,
+        InventoryAction::AdjustmentDetail => internal::INVENTORY_ADJUSTMENT_DETAIL_WAREHOUSES,
+        InventoryAction::Create => internal::INVENTORY_CREATE_WAREHOUSES,
+        InventoryAction::Update => internal::INVENTORY_UPDATE_WAREHOUSES,
+    };
+    WarehouseAuthorization::new(db.clone(), Arc::clone(authorization), permission)
 }
 
-/// 库存行通过完整真实仓库来源执行统一授权，不预装授权 ID。
+/// 先交付真实仓库存在性结果，再开始唯一库存查询阶段。
 async fn inventory_query(
     db: &Database,
-    rbac: &SharedRbacService,
+    authorization: &Arc<AuthorizationService>,
     actor: &AuditActor,
     action: InventoryAction,
     executor: &mut dyn Executor,
-) -> erp_inventory::Result<Option<InventoryQuery>> {
-    let permission = Permission::parse(action.permission())?;
-    let mapping = InventoryMapping::shared(
-        action,
-        WarehouseMapping::shared(permission.resource()).map_err(|error| map_svc(error.into()))?,
-    )
-    .map_err(|error| map_svc(error.into()))?;
-    let registration = AccessRegistration {
-        permission: permission.clone(),
-        required_permissions: required_permissions(action),
-        access: AccessMode::Query {
-            data: DataAccess {
-                subject: AccessSubject::Direct,
-                required_facts: BTreeSet::new(),
-                policy: AccessPolicy::Related {
-                    relation: RelationKey::parse("warehouse").map_err(|error| map_svc(error.into()))?,
-                    resource: permission.resource().into(),
-                    mode: RelationMatch::AllNonEmpty,
-                    required_facts: [FactKind::Warehouse].into(),
-                    policy: Box::new(AccessPolicy::Scope {
-                        permission: permission.clone(),
-                        read: ReadAccess::default(),
-                    }),
-                },
-            },
-            mapping: mapping.clone(),
-        },
-    };
-    let registry = AuthorizationRegistry::new(vec![registration]).map_err(|error| map_svc(error.into()))?;
-    let service = AuthorizationService::new(db.clone(), rbac.clone(), registry);
-    let query = match service.query(actor, &permission, AccessSubject::Direct, executor).await {
-        Ok(query) => query,
+) -> InventoryResult<Option<InventoryQuery>> {
+    let has_warehouse =
+        match warehouse_authorization(db, authorization, action).has_any(actor, executor).await {
+            Ok(has_warehouse) => has_warehouse,
+            Err(IdentityError::Forbidden(_)) => return Ok(None),
+            Err(error) => return Err(error.into()),
+        };
+    let compiled = match authorization.query(actor, &action.permission(), executor).await {
+        Ok(compiled) => compiled,
         Err(IdentityError::Forbidden(_)) => return Ok(None),
-        Err(error) => return Err(map_svc(error.into())),
+        Err(error) => return Err(error.into()),
     };
-    let compiled = query.compile(mapping.as_ref(), executor).await.map_err(|error| map_svc(error.into()))?;
-    service.validate(&compiled, executor).await.map_err(|error| map_svc(error.into()))?;
-    let warehouses = warehouse_authorization(db, rbac, action)?
-        .query(actor, executor)
-        .await
-        .map_err(|error| map_svc(error.into()))?;
-    Ok(Some(InventoryQuery::new(service, compiled, warehouses.is_empty())))
+    Ok(Some(InventoryQuery::new(Arc::clone(authorization), compiled, !has_warehouse)))
 }
 
 /// 把库存审计事实写入 `erp-audit` 的 Mongo adapter。
@@ -565,10 +528,10 @@ impl FulfillmentFactsPort for MongoInventoryFulfillmentFacts {
 ///
 /// # 错误
 /// 不返回错误。
-pub fn inventory_service(db: Database, rbac: SharedRbacService) -> InventoryService {
+pub fn inventory_service(db: Database, authorization: Arc<AuthorizationService>) -> InventoryService {
     InventoryService::new(
         db.clone(),
-        MongoInventoryAuthorization::shared(db.clone(), rbac),
+        MongoInventoryAuthorization::shared(db.clone(), authorization),
         MongoInventoryWarehouseFacts::shared(db.clone()),
         MongoInventoryCatalogFacts::shared(db.clone()),
         MongoInventoryFulfillmentFacts::shared(db.clone()),
@@ -588,13 +551,17 @@ pub fn inventory_service(db: Database, rbac: SharedRbacService) -> InventoryServ
 ///
 /// # 错误
 /// 不返回错误。
-pub fn inventory_adjustment_process(db: Database, rbac: SharedRbacService) -> InventoryAdjustmentProcess {
+pub fn inventory_adjustment_process(
+    db: Database,
+    rbac: SharedRbacService,
+    authorization: Arc<AuthorizationService>,
+) -> InventoryAdjustmentProcess {
     let workflow = Arc::new(FulfillmentWorkflowServices::new(
-        work_item_service(db.clone(), rbac.clone()),
-        approval_runtime(db.clone(), rbac.clone()),
+        work_item_service(db.clone(), rbac.clone(), authorization.clone()),
+        approval_runtime(db.clone(), rbac.clone(), authorization.clone()),
     ));
-    let inventory = Arc::new(inventory_service(db.clone(), rbac.clone()));
-    InventoryAdjustmentProcess::new(db, rbac, workflow, inventory)
+    let inventory = Arc::new(inventory_service(db.clone(), authorization.clone()));
+    InventoryAdjustmentProcess::new(db, authorization, workflow, inventory)
 }
 
 fn map_audit_to_inventory(error: erp_audit::Error) -> erp_inventory::Error {

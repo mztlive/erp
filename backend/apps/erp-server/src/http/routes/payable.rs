@@ -2,137 +2,122 @@
 //!
 //! 经 `admin.rs` 的 `/admin` nest 后，最终路径为 `/admin/payable-accounts`、
 //! `/admin/supplier-payments`、`/admin/purchase-invoice-allocations`；
-//! 每条路由统一走 JWT + RBAC（`with_permission`）。
+//! 每条路由统一走 JWT 认证；业务授权由用例执行，目录由 `permission_route` 提供。
 
 use axum::Router;
 use axum::routing::{get, post};
-use erp_identity::AuthorizationService;
 use erp_permissions as permissions;
 
 use crate::http::handler::payable;
-use crate::http::middleware::with_permission;
+use crate::http::routes::permission_route;
 use crate::http::state::HttpState;
 use crate::http::upload;
 
 /// 返回本域管理端路由集合。
 ///
 /// # 参数
-/// * `rbac` - 共享 Casbin RBAC 服务
+/// 无。
 ///
 /// # 返回
-/// 返回挂载了权限校验层的路由集合。
-pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
-    account_routes(rbac).merge(payment_routes(rbac)).merge(invoice_routes(rbac))
+/// 返回声明公共权限目录信息的路由集合。
+///
+/// # 错误
+/// 不执行 I/O，不返回错误。
+pub fn routes() -> Router<HttpState> {
+    account_routes().merge(payment_routes()).merge(invoice_routes())
 }
 
 /// 应付子账读取、建立与收款账户查看。
-fn account_routes(rbac: &AuthorizationService) -> Router<HttpState> {
+fn account_routes() -> Router<HttpState> {
     Router::new()
         .route(
             "/payable-accounts",
-            with_permission(get(payable::payable_account_list), rbac, &permissions::payable::ACCOUNT_LIST),
+            permission_route(get(payable::payable_account_list), &permissions::payable::ACCOUNT_LIST),
         )
         .route(
             "/payable-accounts",
-            with_permission(
-                post(payable::payable_account_create),
-                rbac,
-                &permissions::payable::ACCOUNT_CREATE,
-            ),
+            permission_route(post(payable::payable_account_create), &permissions::payable::ACCOUNT_CREATE),
         )
         .route(
             "/payable-accounts/{id}",
-            with_permission(
-                get(payable::payable_account_detail),
-                rbac,
-                &permissions::payable::ACCOUNT_DETAIL,
-            ),
+            permission_route(get(payable::payable_account_detail), &permissions::payable::ACCOUNT_DETAIL),
         )
         .route(
             "/payable-accounts/{id}/payment-recipient/reveal",
-            with_permission(
+            permission_route(
                 post(payable::payment_recipient_reveal),
-                rbac,
                 &permissions::payable::PAYMENT_RECIPIENT_REVEAL,
             ),
         )
 }
 
 /// 供应商付款读取、回单与提交。
-fn payment_routes(rbac: &AuthorizationService) -> Router<HttpState> {
+fn payment_routes() -> Router<HttpState> {
     Router::new()
         .route(
             "/supplier-payments",
-            with_permission(
+            permission_route(
                 get(payable::supplier_payment_list),
-                rbac,
                 &permissions::payable::SUPPLIER_PAYMENT_LIST,
             ),
         )
         .route(
             "/supplier-payments/merge-candidates",
-            with_permission(
+            permission_route(
                 get(payable::supplier_payment_merge_candidates),
-                rbac,
                 &permissions::payable::ACCOUNT_DETAIL,
             ),
         )
         .route(
             "/supplier-payments/{id}",
-            with_permission(
+            permission_route(
                 get(payable::supplier_payment_detail),
-                rbac,
                 &permissions::payable::SUPPLIER_PAYMENT_DETAIL,
             ),
         )
         .route(
             "/supplier-payments/{id}/bank-receipt",
-            with_permission(
+            permission_route(
                 get(payable::supplier_payment_bank_receipt),
-                rbac,
                 &permissions::payable::SUPPLIER_PAYMENT_DETAIL,
             ),
         )
         .route(
             "/supplier-payments/commit",
-            with_permission(
+            permission_route(
                 upload::multipart_route(
                     post(payable::supplier_payment_commit),
                     upload::MAX_MULTIPART_REQUEST_BYTES,
                 ),
-                rbac,
                 &permissions::payable::SUPPLIER_PAYMENT_COMMIT,
             ),
         )
 }
 
 /// 进项发票分配列表与含文件登记。
-fn invoice_routes(rbac: &AuthorizationService) -> Router<HttpState> {
+fn invoice_routes() -> Router<HttpState> {
     Router::new()
         .route(
             "/purchase-invoice-allocations",
-            with_permission(
+            permission_route(
                 get(payable::purchase_invoice_allocation_list),
-                rbac,
                 &permissions::payable::PURCHASE_INVOICE_ALLOCATION_LIST,
             ),
         )
         .route(
             "/purchase-invoice-allocations",
-            with_permission(
+            permission_route(
                 post(payable::purchase_invoice_allocation_post),
-                rbac,
                 &permissions::payable::PURCHASE_INVOICE_ALLOCATION_POST,
             ),
         )
         .route(
             "/purchase-invoice-allocations/with-files",
-            with_permission(
+            permission_route(
                 upload::multipart_route(
                     post(payable::invoice_files::purchase_invoice_allocation_post_with_files),
                     upload::MAX_MULTIPART_REQUEST_BYTES,
                 ),
-                rbac,
                 &permissions::payable::PURCHASE_INVOICE_ALLOCATION_POST,
             ),
         )

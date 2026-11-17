@@ -29,7 +29,6 @@ use crate::http::handler::file_asset::{
 };
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
-use crate::wiring::identity::shared_rbac_service;
 use crate::wiring::supplier_access;
 
 /// 原子创建完整供应商资料。
@@ -59,6 +58,7 @@ pub async fn supplier_profile_create_with_assets(
     Extension(actor): Extension<AuditActor>,
     mut multipart: Multipart,
 ) -> Result<SupplierProfileMutationView> {
+    state.application().supplier_profile_process().prepare_create_attachment_upload(&actor).await?;
     let (req, files) = extract_command_with_asset_files::<SaveSupplierProfileRequest>(&mut multipart).await?;
     let pending = store_pending_asset_files(&state, files, supplier_asset_sensitivity).await?;
     let result = create_supplier_profile_with_assets(
@@ -102,6 +102,7 @@ pub async fn supplier_profile_update_with_assets(
     Path(id): Path<String>,
     mut multipart: Multipart,
 ) -> Result<SupplierProfileMutationView> {
+    state.application().supplier_profile_process().prepare_update_attachment_upload(&actor).await?;
     let (req, files) = extract_command_with_asset_files::<SaveSupplierProfileRequest>(&mut multipart).await?;
     let pending = store_pending_asset_files(&state, files, supplier_asset_sensitivity).await?;
     let result = update_supplier_profile_with_assets(
@@ -128,9 +129,11 @@ fn supplier_asset_sensitivity(reference: &str) -> SensitivityClass {
 /// 按幂等键查询已成功的供应商资料命令结果。
 pub async fn supplier_profile_command_detail(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Path(idempotency_key): Path<String>,
 ) -> Result<Option<SupplierProfileMutationView>> {
-    let view = state.application().supplier_profile_process().command_result(&idempotency_key).await?;
+    let view =
+        state.application().supplier_profile_process().command_result(&idempotency_key, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -195,8 +198,7 @@ pub async fn supplier_delete(
 ) -> Result<()> {
     delete_supplier(
         state.application().db(),
-        state.application().supplier_service(),
-        supplier_access(state.application().db(), shared_rbac_service(state.application().db())),
+        supplier_access(state.application().db(), state.application().authorization()),
         id,
         actor,
     )

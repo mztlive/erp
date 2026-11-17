@@ -22,8 +22,8 @@ pub fn purchase_ports(
 ) -> Arc<PurchaseOrderPorts> {
     Arc::new(PurchaseOrderPorts::new(
         PurchaseDataScope::shared(db.clone(), authorization.clone()),
-        approval_runtime(db.clone(), rbac.clone()),
-        finance_responsibility(db, rbac),
+        approval_runtime(db.clone(), rbac.clone(), authorization.clone()),
+        finance_responsibility(db, rbac, authorization.clone()),
         authorization,
     ))
 }

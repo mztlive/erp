@@ -7,6 +7,7 @@ use erp_permissions::{
 };
 
 use crate::QualifiedPermissions;
+mod inventory_warehouses;
 pub(crate) mod quality;
 pub(super) mod queries;
 pub(super) mod records;
@@ -42,6 +43,9 @@ pub(crate) enum TargetForm {
 
 /// 完整功能资格由入口固定，业务输入不能追加或删减。
 pub(crate) fn same_role_permissions(permission: &Permission) -> Vec<Permission> {
+    if let Some(source) = inventory_warehouses::source(permission) {
+        return same_role_permissions(&source);
+    }
     if transfers::supports(permission) {
         return vec![];
     }
@@ -53,16 +57,6 @@ pub(crate) fn same_role_permissions(permission: &Permission) -> Vec<Permission> 
     }
     if let Some(required) = records::requirements(permission) {
         return required;
-    }
-    if permission == &internal::SALES_INQUIRY_IMPORT_CREATE {
-        return vec![
-            sales_inquiry::COMMANDS_SALES_CREATE,
-            sales_inquiry::IMPORT_SALES_IMPORT_PREVIEW,
-            catalog::PRODUCT_SELLABLE_SKU_LIST,
-        ];
-    }
-    if permission == &internal::SALES_INQUIRY_REINQUIRE_DRAFT {
-        return vec![sales_inquiry::COMMANDS_SALES_REINQUIRE, catalog::PRODUCT_SELLABLE_SKU_LIST];
     }
     let mut required = vec![permission.clone()];
     if [
@@ -229,6 +223,9 @@ pub(super) fn ensure_target(permission: &Permission, kind: ActionKind, target: T
 
 /// 已有记录的读取动作；其余对象操作必须先进入快照事务。
 pub(super) fn is_read(permission: &Permission) -> bool {
+    if let Some(source) = inventory_warehouses::source(permission) {
+        return is_read(&source);
+    }
     if transfers::supports(permission) {
         return true;
     }
@@ -256,6 +253,9 @@ pub(super) fn is_read(permission: &Permission) -> bool {
             | "mine_list"
             | "quality_current"
             | "customer_quality_current"
+            | "customer_quality_history"
+            | "profit_loss_period_basis_read"
+            | "delivery_options_read"
             | "template_products_read"
             | "list"
             | "detail"
@@ -335,6 +335,8 @@ fn record_grant(permission: &Permission) -> bool {
             | "profit_loss_read"
             | "purchase_expense_source"
             | "extra_cost_read"
+            | "customer_quality_history"
+            | "delivery_options_read"
     ) && matches!(permission.resource(), "sales_order" | "purchase_order")
 }
 

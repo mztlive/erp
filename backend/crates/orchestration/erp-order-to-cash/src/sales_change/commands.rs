@@ -90,7 +90,7 @@ impl SalesChangeProcess {
             })
             .await?;
 
-        SalesChangeReadService::with_rbac(self.db.clone(), self.authorization.clone())
+        SalesChangeReadService::new(self.db.clone(), self.authorization.clone())
             .command_detail(&change_id, actor, &sales_review::SALES_CHANGE_ORDER_CREATE)
             .await
             .map_err(crate::Error::from)
@@ -173,7 +173,7 @@ impl SalesChangeProcess {
             }
             self.recover_sales_change_start(&command, actor, error).await?;
         }
-        SalesChangeReadService::with_rbac(self.db.clone(), self.authorization.clone())
+        SalesChangeReadService::new(self.db.clone(), self.authorization.clone())
             .command_detail(id, actor, &sales_review::SALES_CHANGE_DRAFT)
             .await
             .map_err(Error::from)
@@ -230,7 +230,7 @@ impl SalesChangeProcess {
             })
             .await?;
 
-        SalesChangeReadService::with_rbac(self.db.clone(), self.authorization.clone())
+        SalesChangeReadService::new(self.db.clone(), self.authorization.clone())
             .command_detail(id, actor, &sales_review::SALES_CHANGE_ORDER_VOID)
             .await
             .map_err(crate::Error::from)
@@ -264,7 +264,7 @@ impl SalesChangeProcess {
                 Box::pin(async move { this.cancel_change_stage(&id_copy, req, &actor_copy, executor).await })
             })
             .await?;
-        SalesChangeReadService::with_rbac(self.db.clone(), self.authorization.clone())
+        SalesChangeReadService::new(self.db.clone(), self.authorization.clone())
             .command_detail(id, actor, &sales_review::SALES_CHANGE_DRAFT)
             .await
             .map_err(Error::from)

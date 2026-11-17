@@ -31,9 +31,12 @@ use crate::wiring::local_reverse_flow_ports;
 /// 业务处理或数据读取失败时返回对应错误。
 pub async fn payment_reversal_detail(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<PaymentReversalView> {
-    let view = ReturnsReadService::new(state.application().db()).payment_reversal_detail(&id).await?;
+    let view = ReturnsReadService::new(state.application().db(), state.application().authorization())
+        .payment_reversal_detail(&id, &actor)
+        .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -55,10 +58,12 @@ pub async fn payment_reversal_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreatePaymentReversalRequest>,
 ) -> Result<PaymentReversalView> {
-    let view =
-        ReturnsProcess::new(state.application().db(), local_reverse_flow_ports(state.application().db()))
-            .create_payment_reversal(req, &actor)
-            .await?;
+    let view = ReturnsProcess::new(
+        state.application().db(),
+        local_reverse_flow_ports(state.application().db(), state.application().authorization()),
+    )
+    .create_payment_reversal(req, &actor)
+    .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -80,10 +85,12 @@ pub async fn payment_reversal_commit(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CommitPaymentReversalRequest>,
 ) -> Result<PaymentReversalView> {
-    let view =
-        ReturnsProcess::new(state.application().db(), local_reverse_flow_ports(state.application().db()))
-            .commit_payment_reversal(req, &actor)
-            .await?;
+    let view = ReturnsProcess::new(
+        state.application().db(),
+        local_reverse_flow_ports(state.application().db(), state.application().authorization()),
+    )
+    .commit_payment_reversal(req, &actor)
+    .await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -106,10 +113,12 @@ pub async fn payment_reversal_submit(
     Path(id): Path<String>,
     Json(req): Json<SubmitPaymentReversalRequest>,
 ) -> Result<PaymentReversalView> {
-    let view =
-        ReturnsProcess::new(state.application().db(), local_reverse_flow_ports(state.application().db()))
-            .submit_payment_reversal(&id, req, &actor)
-            .await?;
+    let view = ReturnsProcess::new(
+        state.application().db(),
+        local_reverse_flow_ports(state.application().db(), state.application().authorization()),
+    )
+    .submit_payment_reversal(&id, req, &actor)
+    .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -133,10 +142,12 @@ pub async fn payment_reversal_cancel_approval(
     Path(id): Path<String>,
     Json(req): Json<CancelPaymentReversalApprovalRequest>,
 ) -> Result<PaymentReversalView> {
-    let view =
-        ReturnsProcess::new(state.application().db(), local_reverse_flow_ports(state.application().db()))
-            .cancel_payment_reversal_approval(&id, req, &actor)
-            .await?;
+    let view = ReturnsProcess::new(
+        state.application().db(),
+        local_reverse_flow_ports(state.application().db(), state.application().authorization()),
+    )
+    .cancel_payment_reversal_approval(&id, req, &actor)
+    .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }

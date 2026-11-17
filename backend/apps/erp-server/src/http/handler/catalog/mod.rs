@@ -47,9 +47,10 @@ use crate::http::state::HttpState;
 /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
 pub async fn product_category_list(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<ProductCategoryListParams>,
 ) -> Result<PageView<ProductCategoryView>> {
-    let page = state.application().catalog_service().product_category_list(&params).await?;
+    let page = state.application().catalog_service().product_category_list(&actor, &params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -68,9 +69,14 @@ pub async fn product_category_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateProductCategoryRequest>,
 ) -> Result<ProductCategoryView> {
-    let view =
-        create_product_category(state.application().db(), state.application().catalog_service(), req, actor)
-            .await?;
+    let view = create_product_category(
+        state.application().db(),
+        state.application().authorization(),
+        state.application().catalog_service(),
+        req,
+        actor,
+    )
+    .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -146,9 +152,10 @@ pub async fn product_category_delete(
 /// 返回契约形状的分页视图。
 pub async fn product_brand_list(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<ProductBrandListParams>,
 ) -> Result<PageView<ProductBrandView>> {
-    let page = state.application().catalog_service().product_brand_list(&params).await?;
+    let page = state.application().catalog_service().product_brand_list(&actor, &params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -189,6 +196,7 @@ pub async fn product_brand_create_with_assets(
     Extension(actor): Extension<AuditActor>,
     mut multipart: Multipart,
 ) -> Result<ProductBrandView> {
+    state.application().catalog_service().prepare_brand_create_attachment_upload(&actor).await?;
     let (req, files) = extract_command_with_asset_files::<CreateProductBrandRequest>(&mut multipart).await?;
     let pending = store_pending_asset_files(&state, files, |_| SensitivityClass::General).await?;
     let result =
@@ -237,6 +245,7 @@ pub async fn product_brand_update_with_assets(
     Path(id): Path<String>,
     mut multipart: Multipart,
 ) -> Result<ProductBrandView> {
+    state.application().catalog_service().prepare_brand_update_attachment_upload(&actor).await?;
     let (req, files) = extract_command_with_asset_files::<UpdateProductBrandRequest>(&mut multipart).await?;
     let pending = store_pending_asset_files(&state, files, |_| SensitivityClass::General).await?;
     let result =
@@ -275,9 +284,10 @@ pub async fn product_brand_delete(
 /// 返回契约形状的分页视图。
 pub async fn unit_of_measure_list(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<UnitOfMeasureListParams>,
 ) -> Result<PageView<UnitOfMeasureView>> {
-    let page = state.application().catalog_service().unit_of_measure_list(&params).await?;
+    let page = state.application().catalog_service().unit_of_measure_list(&actor, &params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -296,7 +306,9 @@ pub async fn unit_of_measure_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateUnitOfMeasureRequest>,
 ) -> Result<UnitOfMeasureView> {
-    let view = create_unit_of_measure(state.application().db(), req, actor).await?;
+    let view =
+        create_unit_of_measure(state.application().db(), state.application().authorization(), req, actor)
+            .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -351,9 +363,10 @@ pub async fn unit_of_measure_delete(
 /// 返回契约形状的分页视图。
 pub async fn sku_attribute_list(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<SkuAttributeListParams>,
 ) -> Result<PageView<SkuAttributeView>> {
-    let page = state.application().catalog_service().sku_attribute_list(&params).await?;
+    let page = state.application().catalog_service().sku_attribute_list(&actor, &params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -372,7 +385,9 @@ pub async fn sku_attribute_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateSkuAttributeRequest>,
 ) -> Result<SkuAttributeView> {
-    let view = create_sku_attribute(state.application().db(), req, actor).await?;
+    let view =
+        create_sku_attribute(state.application().db(), state.application().authorization(), req, actor)
+            .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -427,9 +442,10 @@ pub async fn sku_attribute_delete(
 /// 返回契约形状的分页视图。
 pub async fn sku_attribute_value_list(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<SkuAttributeValueListParams>,
 ) -> Result<PageView<SkuAttributeValueView>> {
-    let page = state.application().catalog_service().sku_attribute_value_list(&params).await?;
+    let page = state.application().catalog_service().sku_attribute_value_list(&actor, &params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -450,6 +466,7 @@ pub async fn sku_attribute_value_create(
 ) -> Result<SkuAttributeValueView> {
     let view = create_sku_attribute_value(
         state.application().db(),
+        state.application().authorization(),
         state.application().catalog_service(),
         req,
         actor,

@@ -84,7 +84,7 @@ impl PurchaseOrderProcess {
             Some(sales_order_id),
             &req.idempotency_key,
         )?;
-        let authorization = self.require_rbac()?.clone();
+        let authorization = self.authorization.clone();
         let command = ExpenseCommand {
             sales_order_id: sales_order_id.to_string(),
             req,

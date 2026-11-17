@@ -104,8 +104,8 @@ impl Application {
             SupplierCatalogCallbackProcess::new(
                 self.db(),
                 Arc::clone(runtime),
-                self.rbac(),
-                crate::wiring::scoped_catalog_service(self.db(), self.rbac()),
+                self.authorization(),
+                crate::wiring::scoped_catalog_service(self.db(), self.authorization()),
             )
         })
     }

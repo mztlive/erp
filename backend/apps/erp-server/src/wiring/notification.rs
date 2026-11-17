@@ -86,7 +86,7 @@ pub async fn todo_count(app: &Application, actor: &AuditActor) -> ApplicationRes
         "scope": "mine", "page": 1, "page_size": 1, "timezone": "Asia/Shanghai"
     }))
     .map_err(|error| ApplicationError::Internal(error.to_string()))?;
-    let page = WorkItemReadService::new(app.db(), app.rbac())
+    let page = WorkItemReadService::new(app.db(), app.authorization())
         .work_item_search(
             WorkItemSearchParams { base: params, filters: Some("{\"include_options\":false}".into()) },
             actor.clone(),

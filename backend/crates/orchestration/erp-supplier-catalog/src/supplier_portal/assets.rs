@@ -13,7 +13,7 @@ use erp_supply::portal::{PortalOfferingService, PortalSupplyExt};
 use erp_support::FileAssetExt;
 use erp_support::entity::file_asset::{FileAsset, FileAssetData, RetentionClass};
 use id_generator::next_id;
-use persistence_core::{Executor, ReadExecutor};
+use persistence_core::{Executor, ReadExecutor, Transactional};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -121,12 +121,33 @@ impl PortalAssetKind {
 impl SupplierPortalProcess {
     /// 在供应商申请审核对象范围内读取原稿素材，不依赖普通文件列表权限。
     /// # 参数
-    /// 精确申请、素材、真实内部身份与读取执行器。
+    /// 精确申请、素材及真实内部身份；入口负责开启覆盖全部读取的快照事务。
     /// # 返回
     /// 返回当前或历史提交明确关联且仍可用的文件。
     /// # 错误
     /// 身份、申请读取范围、素材来源或治理状态失效时拒绝。
     pub async fn asset_review_access(
+        &self,
+        request_id: &str,
+        file_id: &str,
+        actor: &AuditActor,
+    ) -> Result<FileAsset> {
+        let process = self.clone();
+        let request_id = request_id.to_owned();
+        let file_id = file_id.to_owned();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(
+                    async move { process.read_review_asset(&request_id, &file_id, &actor, executor).await },
+                )
+            })
+            .await
+    }
+
+    /// 文件元数据与原稿引用在原读取快照中取证，事务内不读取对象存储。
+    async fn read_review_asset(
         &self,
         request_id: &str,
         file_id: &str,
@@ -468,6 +489,23 @@ mod tests {
     use erp_support::entity::file_asset::{ContentHmac, SensitivityClass};
 
     use super::*;
+    #[tokio::test]
+    async fn review_asset_requires_snapshot_and_full_qualification_before_request_or_file_reads() {
+        use erp_core::AccountKind;
+        use persistence_core::NoTransaction;
+        use persistence_core::testing::SnapshotExecutor;
+
+        use crate::supplier_portal::testing::unavailable_process;
+
+        let process = unavailable_process().await;
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let result = process.read_review_asset("request", "file", &actor, &mut NoTransaction).await;
+        assert!(matches!(result, Err(Error::ValidationError(_))));
+        let result =
+            process.read_review_asset("request", "file", &actor, &mut SnapshotExecutor::default()).await;
+        assert!(matches!(result, Err(Error::Internal(_))));
+    }
+
     fn data(key: &str) -> FileAssetData {
         FileAssetData {
             storage_object_key: key.into(),

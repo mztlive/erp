@@ -10,7 +10,6 @@ use erp_audit::execution::persist_log;
 use erp_core::ids::PartyId;
 use erp_customer::{CustomerAuditPort, PartyFactPort, PartyIdentityFact, PreparedCustomerAudit};
 use erp_party::PartyExt;
-use erp_party::repository::prelude::*;
 use mongodb::Database;
 use persistence_core::Executor;
 

@@ -8,7 +8,7 @@ use bpm::model::types::{ApprovalNodeExecutionStatus, ApprovalProcessInstanceStat
 use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance};
 use erp_identity::entity::authorization::{
     AccessContext, AccessFact, FactKind, FactValue, MappingFacts, ObjectFacts, QueryModel, QueryModelKey,
-    QueryOutput, RelationKey,
+    QueryOutput, RelatedObjects, RelationKey,
 };
 use erp_identity::ports::{QueryFragment, RelationMapping};
 use erp_identity::{AccessFactsPort, AccessMapping, Error, ResourceTargets, Result};
@@ -261,6 +261,19 @@ fn decision_task_object(
     {
         return Err(Error::Forbidden("当前审批任务责任或冻结身份不一致".into()));
     }
+    object.relations.insert(
+        RelationKey::parse("decision_instance")?,
+        RelatedObjects {
+            expected_ids: [subject.instance.base.id.clone()].into(),
+            objects: vec![ObjectFacts {
+                resource: "approval_instance".into(),
+                id: subject.instance.base.id.clone(),
+                version: subject.instance.base.version.to_string(),
+                subject_type: object.subject_type.clone(),
+                ..Default::default()
+            }],
+        },
+    );
     object.id = task.base.id.clone();
     object.version = task.base.version.to_string();
     object.assignee_id = FactValue::Known(task.owner_user_id.clone());

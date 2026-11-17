@@ -273,8 +273,6 @@ mod tests {
 
     fn access_with(scope: ResolvedScope, organizations: OrganizationState) -> AuthorizedDataScope {
         AuthorizedDataScope::test_fixture(DataScopeFacts {
-            resource: "org_unit".into(),
-            action: "manage".into(),
             scope,
             organizations,
             policy_version: 1,

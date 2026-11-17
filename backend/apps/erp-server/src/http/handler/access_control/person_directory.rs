@@ -157,7 +157,7 @@ async fn selected_people(
 }
 
 fn service(state: &HttpState) -> PersonDirectoryService {
-    PersonDirectoryService::new(state.application().db(), state.application().rbac())
+    PersonDirectoryService::new(state.application().db(), state.application().authorization())
 }
 
 /// 在目标账号管理范围内读取查询资格及乐观锁版本。

@@ -6,6 +6,7 @@
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
+use erp_core::ids::BusinessDocumentId;
 use erp_workflow::service::document_registry::{
     AppendWorkflowActionRequest, BusinessDocumentListParams, BusinessDocumentView,
     CreateDocumentParticipantRequest, CreateDocumentRelationRequest, DocumentParticipantView,
@@ -22,6 +23,7 @@ use crate::wiring::workflow::{workflow_audit, workflow_object_facts};
 fn document_registry_service(state: &HttpState) -> DocumentRegistryService {
     DocumentRegistryService::with_ports(
         state.application().db(),
+        state.application().authorization(),
         workflow_audit(state.application().db()),
         workflow_object_facts(state.application().db()),
     )
@@ -37,9 +39,10 @@ fn document_registry_service(state: &HttpState) -> DocumentRegistryService {
 /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
 pub async fn business_document_list(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<BusinessDocumentListParams>,
 ) -> Result<PageView<BusinessDocumentView>> {
-    let page = document_registry_service(&state).business_document_list(&params).await?;
+    let page = document_registry_service(&state).business_document_list(&params, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -73,9 +76,10 @@ pub async fn business_document_register(
 /// 返回注册行视图。
 pub async fn business_document_detail(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<BusinessDocumentView> {
-    let view = document_registry_service(&state).business_document_detail(&id).await?;
+    let view = document_registry_service(&state).business_document_detail(&id, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -90,9 +94,10 @@ pub async fn business_document_detail(
 /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
 pub async fn workflow_action_list(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<WorkflowActionListParams>,
 ) -> Result<PageView<WorkflowActionView>> {
-    let page = document_registry_service(&state).workflow_action_list(&params).await?;
+    let page = document_registry_service(&state).workflow_action_list(&params, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -127,10 +132,11 @@ pub async fn workflow_action_create(
 /// 返回关系视图列表。
 pub async fn document_relation_list(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<Vec<DocumentRelationView>> {
     let relations = document_registry_service(&state)
-        .document_relation_list(&erp_core::ids::BusinessDocumentId::new(id))
+        .document_relation_list(&BusinessDocumentId::new(id), &actor)
         .await?;
 
     Ok(ApiResponse::ok_with_data(relations))
@@ -165,9 +171,10 @@ pub async fn document_relation_create(
 /// 返回参与记录视图列表。
 pub async fn document_participant_list(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Query(query): Query<DocumentParticipantListQuery>,
 ) -> Result<Vec<DocumentParticipantView>> {
-    let items = document_registry_service(&state).document_participant_list(&query.user_id).await?;
+    let items = document_registry_service(&state).document_participant_list(&query.user_id, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(items))
 }

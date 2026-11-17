@@ -1,7 +1,7 @@
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
-use erp_identity::Permission;
+use erp_permissions::internal;
 use erp_supplier_orders::supplier_api_orders::{
     ExecutionAddressCandidates, ExecutionAddressQuery, ExecutionQueryRequest, ExecutionSetupRequest,
     ExecutionSetupView,
@@ -25,15 +25,10 @@ pub async fn supplier_order_execution_setup(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<ExecutionSetupView> {
-    state
-        .application()
-        .supplier_fulfillment_process()
-        .require_scoped_order(&id, &actor, "detail", &mut NoTransaction)
-        .await?;
     let process = state.application().supplier_api_order_process().ok_or_else(|| {
         crate::wiring::errors::Error::NotFound("此订单没有已配置的 API 自动执行入口".into())
     })?;
-    let view = mask_execution_costs(&state, &actor, process.execution_setup(&id).await?).await?;
+    let view = mask_execution_costs(&state, &actor, process.execution_setup(&id, &actor).await?).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -50,23 +45,11 @@ pub async fn save_supplier_order_execution_setup(
     Path(id): Path<String>,
     Json(request): Json<ExecutionSetupRequest>,
 ) -> Result<ExecutionSetupView> {
-    state
-        .application()
-        .supplier_fulfillment_process()
-        .require_scoped_order(&id, &actor, "submit", &mut NoTransaction)
-        .await?;
     let process = state
         .application()
         .supplier_api_order_process()
         .ok_or_else(|| crate::wiring::errors::Error::BusinessLogicError("供应商协议尚未配置".into()))?;
-    let view = process
-        .save_execution_setup(
-            &id,
-            request,
-            &actor,
-            &state.application().supplier_fulfillment_service().access(),
-        )
-        .await?;
+    let view = process.save_execution_setup(&id, request, &actor).await?;
     Ok(ApiResponse::ok_with_data(mask_execution_costs(&state, &actor, view).await?))
 }
 
@@ -83,16 +66,11 @@ pub async fn supplier_order_execution_address_candidates(
     Path(id): Path<String>,
     Query(query): Query<ExecutionAddressQuery>,
 ) -> Result<ExecutionAddressCandidates> {
-    state
-        .application()
-        .supplier_fulfillment_process()
-        .require_scoped_order(&id, &actor, "submit", &mut NoTransaction)
-        .await?;
     let process = state
         .application()
         .supplier_api_order_process()
         .ok_or_else(|| crate::wiring::errors::Error::NotFound("供应商协议尚未配置".into()))?;
-    Ok(ApiResponse::ok_with_data(process.execution_address_candidates(&id, query).await?))
+    Ok(ApiResponse::ok_with_data(process.execution_address_candidates(&id, query, &actor).await?))
 }
 
 /// 请求查询原订单及确认结果，不重新发送下单或确认。
@@ -108,23 +86,11 @@ pub async fn query_supplier_order_execution_result(
     Path(id): Path<String>,
     Json(request): Json<ExecutionQueryRequest>,
 ) -> Result<ExecutionSetupView> {
-    state
-        .application()
-        .supplier_fulfillment_process()
-        .require_scoped_order(&id, &actor, "submit", &mut NoTransaction)
-        .await?;
     let process = state
         .application()
         .supplier_api_order_process()
         .ok_or_else(|| crate::wiring::errors::Error::NotFound("供应商协议尚未配置".into()))?;
-    let view = process
-        .query_execution_result(
-            &id,
-            request,
-            &actor,
-            &state.application().supplier_fulfillment_service().access(),
-        )
-        .await?;
+    let view = process.query_execution_result(&id, request, &actor).await?;
     Ok(ApiResponse::ok_with_data(mask_execution_costs(&state, &actor, view).await?))
 }
 
@@ -133,8 +99,12 @@ async fn mask_execution_costs(
     actor: &AuditActor,
     mut view: ExecutionSetupView,
 ) -> std::result::Result<ExecutionSetupView, Error> {
-    let permission = Permission::parse("supplier_offering_cost:detail")?;
-    if !state.application().authorization().has_permission(actor, &permission, &mut NoTransaction).await? {
+    if !state
+        .application()
+        .authorization()
+        .has_permission(actor, &internal::SUPPLIER_OFFERING_COST_DETAIL, &mut NoTransaction)
+        .await?
+    {
         view.without_costs();
     }
     Ok(view)

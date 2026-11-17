@@ -9,6 +9,7 @@ use erp_finance::dto::payable::{
     SupplierPaymentView,
 };
 use erp_finance_posting::finance_posting::payable::PayableProcess;
+use erp_finance_posting::{FinanceAttachmentService, FinanceAttachmentUpload};
 use erp_support::SensitivityClass;
 
 use super::process;
@@ -35,6 +36,9 @@ pub async fn pay(
     Path(id): Path<String>,
     mut multipart: Multipart,
 ) -> Result<SupplierPaymentView> {
+    FinanceAttachmentService::new(state.application().db(), state.application().authorization())
+        .prepare_attachment_upload(&actor, FinanceAttachmentUpload::PurchasePayment)
+        .await?;
     let (req, files) =
         extract_command_with_asset_files::<CommitSupplierPaymentRequest>(&mut multipart).await?;
     if req.payment_request_id != id {
@@ -50,7 +54,11 @@ pub async fn pay(
         let batch = PendingFileAssets::prepare(pending.clone(), &actor)?.shared();
         PayableProcess::new(
             state.application().db(),
-            finance_posting_ports(state.application().db(), state.application().rbac()),
+            finance_posting_ports(
+                state.application().db(),
+                state.application().rbac(),
+                state.application().authorization(),
+            ),
         )
         .commit_purchase_payment_request_with_assets(&id, req, batch, &actor)
         .await

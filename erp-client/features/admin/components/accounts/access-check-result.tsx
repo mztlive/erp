@@ -72,12 +72,11 @@ function summarize(
         }
     }
 
-    const contextual = result.steps.find((step) => step.layer === "业务授权")
-    if (permissionPassed && contextual) {
+    if (permissionPassed && reviews.length > 0) {
         return {
             title: "有操作权限，具体业务能否处理尚未确认",
-            description: contextual.message,
-            next: "请进入对应业务或待办，核对来源单据和当前处理人。本页未检查具体任务的处理资格。",
+            description: reviews[0].message,
+            next: "请按待检查项目核对具体单据和任务；只有实际业务中的完整检查通过后，才能执行对应操作。",
             variant: "info",
         }
     }
@@ -108,7 +107,9 @@ function summarize(
 function stepStatus(step: AccessCheckView["steps"][number]) {
     if (step.status === "blocked") return "未通过"
     if (step.status === "review") {
-        return ["业务条件", "对象上下文", "保存内容"].includes(step.layer)
+        return ["业务条件", "对象上下文", "对象资格", "保存内容"].includes(
+            step.layer,
+        )
             ? "本次未检查"
             : "待核对"
     }
@@ -125,6 +126,7 @@ export function AccessCheckResult({
     result: AccessCheckView
 }) {
     const summary = summarize(input, result)
+    const reviews = result.steps.filter((step) => step.status === "review")
     return (
         <section
             className="space-y-4 rounded-xl border p-4"
@@ -135,6 +137,9 @@ export function AccessCheckResult({
                 <Badge variant="outline">
                     {input.object_id ? "已选择具体单据" : "仅检查权限配置"}
                 </Badge>
+                {reviews.length > 0 && (
+                    <Badge variant="outline">{reviews.length} 项待检查</Badge>
+                )}
                 <span className="text-sm text-muted-foreground">
                     {resourceLabel(input.resource)} ·{" "}
                     {actionLabel(input.action)}
@@ -150,6 +155,18 @@ export function AccessCheckResult({
                 </span>
                 {summary.next}
             </p>
+            {reviews.length > 0 && (
+                <div className="space-y-2 text-sm">
+                    <h4 className="font-medium">待检查项目</h4>
+                    <ul className="space-y-2 text-muted-foreground">
+                        {reviews.map((step, index) => (
+                            <li key={`${step.layer}-${index}`}>
+                                {step.layer}：{step.message}
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
             <details className="border-t pt-3">
                 <summary
                     id="account-check-result-details"

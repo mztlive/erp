@@ -17,10 +17,15 @@ use crate::wiring::workflow::work_item_service;
 /// 查询财务责任规则。
 pub async fn finance_responsibility_rule_list(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
 ) -> Result<Vec<FinanceResponsibilityRuleView>> {
-    let views = work_item_service(state.application().db(), state.application().rbac())
-        .finance_responsibility_rule_list()
-        .await?;
+    let views = work_item_service(
+        state.application().db(),
+        state.application().rbac(),
+        state.application().authorization(),
+    )
+    .finance_responsibility_rule_list(&actor)
+    .await?;
     Ok(ApiResponse::ok_with_data(views))
 }
 
@@ -42,9 +47,13 @@ pub async fn finance_responsibility_rule_create(
     Json(request): Json<CreateFinanceResponsibilityRuleRequest>,
 ) -> Result<FinanceResponsibilityRuleView> {
     request.validate()?;
-    let view = work_item_service(state.application().db(), state.application().rbac())
-        .create_finance_responsibility_rule(request, actor)
-        .await?;
+    let view = work_item_service(
+        state.application().db(),
+        state.application().rbac(),
+        state.application().authorization(),
+    )
+    .create_finance_responsibility_rule(request, actor)
+    .await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -68,19 +77,28 @@ pub async fn finance_responsibility_rule_update(
     Json(request): Json<UpdateFinanceResponsibilityRuleRequest>,
 ) -> Result<FinanceResponsibilityRuleView> {
     request.validate()?;
-    let view = work_item_service(state.application().db(), state.application().rbac())
-        .update_finance_responsibility_rule(id, request, actor)
-        .await?;
+    let view = work_item_service(
+        state.application().db(),
+        state.application().rbac(),
+        state.application().authorization(),
+    )
+    .update_finance_responsibility_rule(id, request, actor)
+    .await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
 /// 查询付款与销项开票的负责人候选。
 pub async fn finance_responsibility_owner_options(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
 ) -> Result<Vec<FinanceResponsibilityOwnerOptionView>> {
-    let views = work_item_service(state.application().db(), state.application().rbac())
-        .finance_responsibility_owner_options()
-        .await?;
+    let views = work_item_service(
+        state.application().db(),
+        state.application().rbac(),
+        state.application().authorization(),
+    )
+    .finance_responsibility_owner_options(&actor)
+    .await?;
     Ok(ApiResponse::ok_with_data(views))
 }
 

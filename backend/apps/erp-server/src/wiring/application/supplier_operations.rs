@@ -88,7 +88,11 @@ impl Application {
     /// # 错误
     /// 构造时不执行 I/O，不返回错误。
     pub(super) fn supplier_message_catalog(&self) -> Arc<dyn SupplierMessageCatalog> {
-        Arc::new(CatalogMessages(CatalogMessageWriter::new(self.db(), self.catalog_service())))
+        Arc::new(CatalogMessages(CatalogMessageWriter::new(
+            self.db(),
+            self.catalog_service(),
+            self.authorization(),
+        )))
     }
 }
 

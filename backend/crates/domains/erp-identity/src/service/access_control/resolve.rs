@@ -27,8 +27,6 @@ pub(crate) struct AuthorizedDataScope {
 /// 授权解析器产生的事实数据；构造事实本身不授予授权资格。
 /// 消费者可按查询需要补充组织关系，不将其视为不可变的原始授权快照。
 pub(crate) struct DataScopeFacts {
-    pub resource: String,
-    pub action: String,
     pub scope: ResolvedScope,
     pub organizations: OrganizationState,
     pub policy_version: u64,
@@ -110,8 +108,6 @@ impl DataScopeService {
         );
         Ok(AuthorizedDataScope {
             facts: DataScopeFacts {
-                resource: target.0.into(),
-                action: target.1.into(),
                 scope,
                 organizations: state,
                 policy_version: qualified.policy_revision(),

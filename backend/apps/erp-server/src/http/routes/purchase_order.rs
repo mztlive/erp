@@ -2,337 +2,300 @@
 //!
 //! 经 `admin.rs` 的 `/admin` nest 后，最终路径为 `/admin/purchase-orders`、
 //! `/admin/purchase-change-orders`；每条路由统一走
-//! JWT + RBAC（`with_permission`），权限由显式目录统一定义。
+//! JWT 认证；业务授权由用例执行，目录由 `permission_route` 提供，权限由显式目录统一定义。
 
 use axum::Router;
 use axum::routing::{get, post};
-use erp_identity::AuthorizationService;
 use erp_permissions as permissions;
 
 use crate::http::handler::purchase_order;
-use crate::http::middleware::with_permission;
+use crate::http::routes::permission_route;
 use crate::http::state::HttpState;
 
 /// 返回本域管理端路由集合。
 ///
 /// # 参数
-/// * `rbac` - 共享 Casbin RBAC 服务
+/// 无。
 ///
 /// # 返回
-/// 返回挂载了权限校验层的路由集合。
-pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
-    purchase_document_routes(rbac)
-        .merge(purchase_detail_routes(rbac))
-        .merge(payment_arrangement_routes(rbac))
-        .merge(purchase_workflow_routes(rbac))
-        .merge(purchase_change_routes(rbac))
-        .merge(purchase_change_draft_routes(rbac))
-        .merge(purchase_sales_material_routes(rbac))
-        .merge(purchase_correspondence_routes(rbac))
+/// 返回声明公共权限目录信息的路由集合。
+///
+/// # 错误
+/// 不执行 I/O，不返回错误。
+pub fn routes() -> Router<HttpState> {
+    purchase_document_routes()
+        .merge(purchase_detail_routes())
+        .merge(payment_arrangement_routes())
+        .merge(purchase_workflow_routes())
+        .merge(purchase_change_routes())
+        .merge(purchase_change_draft_routes())
+        .merge(purchase_sales_material_routes())
+        .merge(purchase_correspondence_routes())
 }
 
 /// 采购关联销售材料下载始终使用采购对象详情资格及其准确销售版本。
-fn purchase_sales_material_routes(rbac: &AuthorizationService) -> Router<HttpState> {
+fn purchase_sales_material_routes() -> Router<HttpState> {
     Router::new().route(
         "/purchase-orders/{id}/sales-materials/{asset_id}/download",
-        with_permission(
+        permission_route(
             get(purchase_order::sales_material::purchase_sales_material_download),
-            rbac,
             &permissions::purchase_order::DETAIL,
         ),
     )
 }
 
 /// 采购单列表、创建与详情入口。
-fn purchase_document_routes(rbac: &AuthorizationService) -> Router<HttpState> {
+fn purchase_document_routes() -> Router<HttpState> {
     Router::new()
         .route(
             "/purchase-orders",
-            with_permission(
-                get(purchase_order::purchase_order_list),
-                rbac,
-                &permissions::purchase_order::LIST,
-            ),
+            permission_route(get(purchase_order::purchase_order_list), &permissions::purchase_order::LIST),
         )
         .route(
             "/purchase-orders",
-            with_permission(
+            permission_route(
                 post(purchase_order::purchase_order_create),
-                rbac,
                 &permissions::purchase_order::CREATE,
             ),
         )
         .route(
             "/purchase-orders/from-sourcing",
-            with_permission(
+            permission_route(
                 post(purchase_order::purchase_order_create_from_sourcing),
-                rbac,
                 &permissions::purchase_order::CREATE,
             ),
         )
         .route(
             "/purchase-orders/{id}",
-            with_permission(
+            permission_route(
                 get(purchase_order::purchase_order_detail),
-                rbac,
                 &permissions::purchase_order::DETAIL,
             ),
         )
 }
 
 /// 采购单详情下的付款记录、交付安排范围和原单草稿保存入口。
-fn purchase_detail_routes(rbac: &AuthorizationService) -> Router<HttpState> {
+fn purchase_detail_routes() -> Router<HttpState> {
     Router::new()
         .route(
             "/purchase-orders/{id}/payments",
-            with_permission(
+            permission_route(
                 get(purchase_order::payments::purchase_payments),
-                rbac,
                 &permissions::purchase_order::DETAIL,
             ),
         )
         .route(
             "/purchase-orders/{id}/payments/{payment_id}/receipt",
-            with_permission(
+            permission_route(
                 get(purchase_order::payments::purchase_payment_receipt),
-                rbac,
                 &permissions::purchase_order::DETAIL,
             ),
         )
         .route(
             "/purchase-orders/{id}/delivery-options",
-            with_permission(
+            permission_route(
                 get(purchase_order::delivery_options::purchase_delivery_options),
-                rbac,
                 &permissions::purchase_order::SAVE_DRAFT,
             ),
         )
         .route(
             "/purchase-orders/{id}/draft",
-            with_permission(
+            permission_route(
                 post(purchase_order::purchase_order_save_draft),
-                rbac,
                 &permissions::purchase_order::SAVE_DRAFT,
             ),
         )
 }
 
 /// 采购单审批、作废、建单依据及发起变更入口。
-fn purchase_workflow_routes(rbac: &AuthorizationService) -> Router<HttpState> {
+fn purchase_workflow_routes() -> Router<HttpState> {
     Router::new()
         .route(
             "/purchase-orders/{id}/void",
-            with_permission(
-                post(purchase_order::purchase_order_void),
-                rbac,
-                &permissions::purchase_order::VOID,
-            ),
+            permission_route(post(purchase_order::purchase_order_void), &permissions::purchase_order::VOID),
         )
         .route(
             "/purchase-orders/{id}/submit",
-            with_permission(
+            permission_route(
                 post(purchase_order::purchase_order_submit),
-                rbac,
                 &permissions::purchase_order::SUBMIT,
             ),
         )
         .route(
             "/purchase-orders/{id}/source-update/maintain",
-            with_permission(
+            permission_route(
                 post(purchase_order::purchase_order_maintain_source),
-                rbac,
                 &permissions::purchase_order::MAINTAIN_SOURCE,
             ),
         )
         .route(
             "/purchase-orders/{id}/cancel-approval",
-            with_permission(
+            permission_route(
                 post(purchase_order::purchase_order_cancel_approval),
-                rbac,
                 &permissions::purchase_order::CANCEL_APPROVAL,
             ),
         )
         .route(
             "/purchase-creation-bases",
-            with_permission(
+            permission_route(
                 get(purchase_order::purchase_creation_basis_list),
-                rbac,
                 &permissions::purchase_order::CREATE,
             ),
         )
         .route(
             "/purchase-orders/{id}/changes",
-            with_permission(
+            permission_route(
                 post(purchase_order::purchase_change_create),
-                rbac,
                 &permissions::purchase_order::PURCHASE_CHANGE_CREATE,
             ),
         )
 }
 
 /// 采购变更详情和既有审批命令入口。
-fn purchase_change_routes(rbac: &AuthorizationService) -> Router<HttpState> {
+fn purchase_change_routes() -> Router<HttpState> {
     Router::new()
         .route(
             "/purchase-change-orders",
-            with_permission(
+            permission_route(
                 get(purchase_order::purchase_change_list),
-                rbac,
                 &permissions::purchase_order::PURCHASE_CHANGE_LIST,
             ),
         )
         .route(
             "/purchase-change-orders/{id}",
-            with_permission(
+            permission_route(
                 get(purchase_order::purchase_change_detail),
-                rbac,
                 &permissions::purchase_order::PURCHASE_CHANGE_DETAIL,
             ),
         )
         .route(
             "/purchase-change-orders/{id}/submit",
-            with_permission(
+            permission_route(
                 post(purchase_order::purchase_change_submit),
-                rbac,
                 &permissions::purchase_order::PURCHASE_CHANGE_SUBMIT,
             ),
         )
         .route(
             "/purchase-change-orders/{id}/cancel-approval",
-            with_permission(
+            permission_route(
                 post(purchase_order::purchase_change_cancel_approval),
-                rbac,
                 &permissions::purchase_order::PURCHASE_CHANGE_CANCEL_APPROVAL,
             ),
         )
         .route(
             "/purchase-change-orders/{id}/effect",
-            with_permission(
+            permission_route(
                 post(purchase_order::purchase_change_effect),
-                rbac,
                 &permissions::purchase_order::PURCHASE_CHANGE_EFFECT,
             ),
         )
 }
 
 /// 采购改单草稿读取（复用提交权限）与作废入口。
-fn purchase_change_draft_routes(rbac: &AuthorizationService) -> Router<HttpState> {
+fn purchase_change_draft_routes() -> Router<HttpState> {
     Router::new()
         .route(
             "/purchase-change-orders/{id}/draft",
-            with_permission(
+            permission_route(
                 post(purchase_order::change_draft::purchase_change_save_draft),
-                rbac,
                 &permissions::purchase_order::PURCHASE_CHANGE_SUBMIT,
             ),
         )
         .route(
             "/purchase-change-orders/{id}/draft",
-            with_permission(
+            permission_route(
                 get(purchase_order::change_draft::purchase_change_draft),
-                rbac,
                 &permissions::purchase_order::PURCHASE_CHANGE_SUBMIT,
             ),
         )
         .route(
             "/purchase-change-orders/{id}/void",
-            with_permission(
+            permission_route(
                 post(purchase_order::change_void::purchase_change_void),
-                rbac,
                 &permissions::purchase_order::CHANGE_VOID_PURCHASE_CHANGE_VOID,
             ),
         )
 }
 
-fn purchase_correspondence_routes(rbac: &AuthorizationService) -> Router<HttpState> {
+fn purchase_correspondence_routes() -> Router<HttpState> {
     Router::new()
-        .merge(expense_source_routes(rbac))
+        .merge(expense_source_routes())
         .route(
             "/purchase-orders/{id}/emails",
-            with_permission(
+            permission_route(
                 get(purchase_order::correspondence::purchase_email_history),
-                rbac,
                 &permissions::purchase_order::DETAIL,
             ),
         )
         .route(
             "/purchase-orders/{id}/paper",
-            with_permission(
+            permission_route(
                 get(purchase_order::correspondence::purchase_paper),
-                rbac,
                 &permissions::purchase_order::DETAIL,
             ),
         )
         .route(
             "/sales-orders/{id}/expense-purchases",
-            with_permission(
+            permission_route(
                 post(purchase_order::expense::expense_purchase_create),
-                rbac,
                 &permissions::purchase_order::CREATE,
             ),
         )
         .route(
             "/purchase-orders/{id}/expenses/{expense_line_id}/occurrence",
-            with_permission(
+            permission_route(
                 post(purchase_order::expense::expense_occurrence_confirm),
-                rbac,
                 &permissions::purchase_order::EXPENSE_EXPENSE_OCCURRENCE_CONFIRM,
             ),
         )
         .route(
             "/purchase-orders/{id}/freight-waivers",
-            with_permission(
+            permission_route(
                 post(purchase_order::freight::freight_waiver_create),
-                rbac,
                 &permissions::purchase_order::SAVE_DRAFT,
             ),
         )
         .route(
             "/purchase-orders/{id}/email",
-            with_permission(
+            permission_route(
                 post(purchase_order::correspondence::send_purchase_email),
-                rbac,
                 &permissions::purchase_order::CORRESPONDENCE_SEND_PURCHASE_EMAIL,
             ),
         )
 }
 
-fn expense_source_routes(rbac: &AuthorizationService) -> Router<HttpState> {
+fn expense_source_routes() -> Router<HttpState> {
     Router::new()
         .route(
             "/purchase-orders/expense-sources",
-            with_permission(
+            permission_route(
                 get(purchase_order::expense::expense_sources),
-                rbac,
                 &permissions::purchase_order::CREATE,
             ),
         )
         .route(
             "/purchase-orders/expense-sources/{id}",
-            with_permission(
+            permission_route(
                 get(purchase_order::expense::expense_source_detail),
-                rbac,
                 &permissions::purchase_order::CREATE,
             ),
         )
 }
 
 /// 采购付款安排查询与当前负责人跟进日期登记。
-fn payment_arrangement_routes(rbac: &AuthorizationService) -> Router<HttpState> {
+fn payment_arrangement_routes() -> Router<HttpState> {
     Router::new()
         .route(
             "/purchase-orders/{id}/payment-arrangement",
-            with_permission(
+            permission_route(
                 get(purchase_order::payment_arrangement::payment_arrangement),
-                rbac,
                 &permissions::purchase_order::DETAIL,
             ),
         )
         .route(
             "/purchase-orders/{id}/payment-follow-up",
-            with_permission(
+            permission_route(
                 post(purchase_order::payment_arrangement::schedule_payment_follow_up),
-                rbac,
                 &permissions::purchase_payment_request::SUBMIT,
             ),
         )

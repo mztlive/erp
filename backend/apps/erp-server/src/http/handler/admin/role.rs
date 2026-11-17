@@ -24,14 +24,18 @@ pub async fn create_role(
     Json(req): Json<CreateRoleParams>,
 ) -> Result<String> {
     req.validate()?;
-    let role = state.application().rbac().create_role(req, actor).await?;
+    let role =
+        state.application().rbac().create_role(req, actor, state.application().authorization()).await?;
 
     Ok(ApiResponse::ok_with_data(role.base.id.to_string()))
 }
 
 /// 查询全部角色及其 Casbin 权限策略。
-pub async fn list_roles(State(state): State<HttpState>) -> Result<Vec<RoleItem>> {
-    let items = state.application().rbac().role_list().await?;
+pub async fn list_roles(
+    State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
+) -> Result<Vec<RoleItem>> {
+    let items = state.application().rbac().role_list(&actor, state.application().authorization()).await?;
     Ok(ApiResponse::ok_with_data(items))
 }
 
@@ -40,7 +44,8 @@ pub async fn list_assignable_roles(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
 ) -> Result<Vec<RoleItem>> {
-    let items = state.application().rbac().assignable_role_list(&actor).await?;
+    let items =
+        state.application().rbac().assignable_role_list(&actor, state.application().authorization()).await?;
     Ok(ApiResponse::ok_with_data(items))
 }
 
@@ -52,7 +57,7 @@ pub async fn update_role(
     Json(req): Json<UpdateRoleParams>,
 ) -> Result<()> {
     req.validate()?;
-    state.application().rbac().update_role(&id, req, actor).await?;
+    state.application().rbac().update_role(&id, req, actor, state.application().authorization()).await?;
 
     Ok(ApiResponse::<()>::ok())
 }
@@ -63,7 +68,7 @@ pub async fn delete_role(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<()> {
-    state.application().rbac().delete_role(&id, actor).await?;
+    state.application().rbac().delete_role(&id, actor, state.application().authorization()).await?;
 
     Ok(ApiResponse::<()>::ok())
 }

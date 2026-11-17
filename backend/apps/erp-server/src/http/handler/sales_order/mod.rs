@@ -21,10 +21,9 @@ use erp_sales::dto::sales_order::{
 
 use crate::http::errors::Result;
 use crate::http::extractor::{Json, Query};
-use crate::http::handler::contract::ensure_contract_access;
-use crate::http::handler::customer::ensure_customer_access;
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
+use crate::wiring::sales::sales_services;
 
 /// 查询销售单列表。
 ///
@@ -43,7 +42,7 @@ pub async fn sales_order_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<SalesListParams>,
 ) -> Result<SalesListView> {
-    let page = SalesOrderReadService::with_rbac(state.application().db(), state.application().rbac())
+    let page = SalesOrderReadService::new(state.application().db(), state.application().authorization())
         .sales_order_list(&params, &actor)
         .await?;
 
@@ -61,10 +60,10 @@ pub async fn sales_order_list(
 /// 返回销售单详情视图。
 ///
 /// # 错误
-/// 所选合同或客户不在 v2 范围内时拒绝。
+/// 所选合同或客户不在本次业务授权范围内时拒绝。
 ///
 /// # 关键业务约束
-/// 关联合同与客户必须各自按 detail 动作重验，不得用客户范围代替合同。
+/// 业务流程在原事务内分别校验合同详情与客户当前选择资格。
 pub async fn sales_order_create(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -72,14 +71,13 @@ pub async fn sales_order_create(
 ) -> Result<SalesOrderDetailView> {
     let service = SalesOrderCommandProcess::new(
         state.application().db(),
-        state.application().rbac(),
-        crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),
+        state.application().authorization(),
+        sales_services(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        ),
     );
-    if let Some(contract_id) = req.contract_id.as_ref() {
-        ensure_contract_access(&state, &actor, "detail", contract_id.as_ref()).await?;
-    }
-    let customer_id = service.sales_command_customer_id(&actor, &req.contract_id, &req.customer_id).await?;
-    ensure_customer_access(&state, &actor, "detail", customer_id.as_ref()).await?;
     let view = service.create_sales_order(req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
@@ -98,7 +96,7 @@ pub async fn sales_order_detail(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<SalesOrderDetailView> {
-    let view = SalesOrderReadService::with_rbac(state.application().db(), state.application().rbac())
+    let view = SalesOrderReadService::new(state.application().db(), state.application().authorization())
         .sales_order_detail(&id, Some(&actor))
         .await?;
 
@@ -117,26 +115,25 @@ pub async fn sales_order_detail(
 /// 返回保存后的工作副本视图。
 ///
 /// # 错误
-/// 所选合同或客户不在 v2 范围内时拒绝。
+/// 所选合同或客户不在本次业务授权范围内时拒绝。
 ///
 /// # 关键业务约束
-/// 关联合同与客户必须各自按 detail 动作重验。
+/// 业务流程在原事务内按原关系或本次归属变更校验合同与客户资格。
 pub async fn sales_order_save_working_copy(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
     Json(req): Json<SaveWorkingCopyRequest>,
 ) -> Result<WorkingCopyView> {
-    if let Some(contract_id) = req.contract_id.as_ref() {
-        ensure_contract_access(&state, &actor, "detail", contract_id.as_ref()).await?;
-    }
     let service = SalesOrderCommandProcess::new(
         state.application().db(),
-        state.application().rbac(),
-        crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),
+        state.application().authorization(),
+        sales_services(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        ),
     );
-    let customer_id = service.sales_command_customer_id(&actor, &req.contract_id, &req.customer_id).await?;
-    ensure_customer_access(&state, &actor, "detail", customer_id.as_ref()).await?;
     let view = service.save_working_copy(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
@@ -154,26 +151,25 @@ pub async fn sales_order_save_working_copy(
 /// 返回提交快照视图。
 ///
 /// # 错误
-/// 所选合同或客户不在 v2 范围内时拒绝。
+/// 所选合同或客户不在本次业务授权范围内时拒绝。
 ///
 /// # 关键业务约束
-/// 关联合同与客户必须各自按 detail 动作重验。
+/// 业务流程在原事务内按原关系或本次归属变更校验合同与客户资格。
 pub async fn sales_order_submit(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
     Json(req): Json<SubmitSalesOrderRequest>,
 ) -> Result<SubmissionView> {
-    if let Some(contract_id) = req.contract_id.as_ref() {
-        ensure_contract_access(&state, &actor, "detail", contract_id.as_ref()).await?;
-    }
     let service = SalesOrderCommandProcess::new(
         state.application().db(),
-        state.application().rbac(),
-        crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),
+        state.application().authorization(),
+        sales_services(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        ),
     );
-    let customer_id = service.sales_command_customer_id(&actor, &req.contract_id, &req.customer_id).await?;
-    ensure_customer_access(&state, &actor, "detail", customer_id.as_ref()).await?;
     let view = service.submit_sales_order(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
@@ -197,8 +193,12 @@ pub async fn sales_order_cancel_approval(
 ) -> Result<SalesOrderDetailView> {
     let view = SalesOrderCommandProcess::new(
         state.application().db(),
-        state.application().rbac(),
-        crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),
+        state.application().authorization(),
+        sales_services(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        ),
     )
     .cancel_approval_submission(&id, req, &actor)
     .await?;
@@ -224,8 +224,12 @@ pub async fn sales_order_void(
 ) -> Result<SalesOrderDetailView> {
     let view = SalesOrderCommandProcess::new(
         state.application().db(),
-        state.application().rbac(),
-        crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),
+        state.application().authorization(),
+        sales_services(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        ),
     )
     .void_sales_order(&id, req, &actor)
     .await?;
@@ -254,8 +258,12 @@ pub async fn sales_order_handover(
 ) -> Result<HandoverSalesOrderView> {
     let view = SalesOrderCommandProcess::new(
         state.application().db(),
-        state.application().rbac(),
-        crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),
+        state.application().authorization(),
+        sales_services(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        ),
     )
     .handover_sales_order(&id, req, &actor)
     .await?;
@@ -279,8 +287,12 @@ pub async fn sales_order_handover_candidates(
 ) -> Result<Vec<HandoverCandidateView>> {
     let candidates = SalesOrderCommandProcess::new(
         state.application().db(),
-        state.application().rbac(),
-        crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),
+        state.application().authorization(),
+        sales_services(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        ),
     )
     .handover_candidates(&id, &actor)
     .await?;
@@ -363,8 +375,12 @@ pub async fn sales_order_bind_contract(
 ) -> Result<SalesOrderDetailView> {
     let view = SalesOrderCommandProcess::new(
         state.application().db(),
-        state.application().rbac(),
-        crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),
+        state.application().authorization(),
+        sales_services(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        ),
     )
     .bind_sales_order_contract(&id, req, &actor)
     .await?;

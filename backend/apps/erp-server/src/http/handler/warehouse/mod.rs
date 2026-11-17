@@ -33,7 +33,7 @@ pub async fn warehouse_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<WarehouseListParams>,
 ) -> Result<ScopedPage<WarehouseView>> {
-    let page = warehouse_directory(state.application().db(), state.application().rbac())
+    let page = warehouse_directory(state.application().db(), state.application().authorization())
         .warehouses(actor, params)
         .await?;
 
@@ -113,8 +113,10 @@ pub async fn warehouse_fulfillment_handlers_update(
 /// 返回可登录账号及其入库、仓发资格。
 pub async fn warehouse_fulfillment_handler_options(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
 ) -> Result<Vec<WarehouseFulfillmentHandlerOptionView>> {
-    let options = state.application().warehouse_service().warehouse_fulfillment_handler_options().await?;
+    let options =
+        state.application().warehouse_service().warehouse_fulfillment_handler_options(&actor).await?;
     Ok(ApiResponse::ok_with_data(options))
 }
 
@@ -128,9 +130,10 @@ pub async fn warehouse_fulfillment_handler_options(
 /// 返回契约形状的分页视图。
 pub async fn warehouse_revision_list(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<WarehouseRevisionListParams>,
 ) -> Result<PageView<WarehouseRevisionView>> {
-    let page = state.application().warehouse_service().warehouse_revision_list(&params).await?;
+    let page = state.application().warehouse_service().warehouse_revision_list(&actor, &params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -145,9 +148,10 @@ pub async fn warehouse_revision_list(
 /// 返回契约形状的分页视图。
 pub async fn warehouse_sku_policy_list(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<WarehouseSkuPolicyListParams>,
 ) -> Result<PageView<WarehouseSkuPolicyView>> {
-    let page = state.application().warehouse_service().warehouse_sku_policy_list(&params).await?;
+    let page = state.application().warehouse_service().warehouse_sku_policy_list(&actor, &params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -166,7 +170,13 @@ pub async fn warehouse_sku_policy_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateWarehouseSkuPolicyRequest>,
 ) -> Result<WarehouseSkuPolicyView> {
-    let view = erp_master_data::create_warehouse_sku_policy(state.application().db(), req, actor).await?;
+    let view = erp_master_data::create_warehouse_sku_policy(
+        state.application().db(),
+        state.application().authorization(),
+        req,
+        actor,
+    )
+    .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }

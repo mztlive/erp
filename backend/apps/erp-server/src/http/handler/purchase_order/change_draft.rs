@@ -26,10 +26,14 @@ pub async fn purchase_change_draft(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<PurchaseChangeDraftView> {
-    let view = PurchaseOrderProcess::with_rbac(
+    let view = PurchaseOrderProcess::new(
         state.application().db(),
-        state.application().rbac(),
-        purchase_ports(state.application().db(), state.application().rbac()),
+        state.application().authorization(),
+        purchase_ports(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        ),
     )
     .change_draft(&id, &actor)
     .await?;
@@ -53,10 +57,14 @@ pub async fn purchase_change_save_draft(
     Path(id): Path<String>,
     Json(req): Json<SavePurchaseChangeDraftRequest>,
 ) -> Result<PurchaseChangeDraftView> {
-    let view = PurchaseOrderProcess::with_rbac(
+    let view = PurchaseOrderProcess::new(
         state.application().db(),
-        state.application().rbac(),
-        purchase_ports(state.application().db(), state.application().rbac()),
+        state.application().authorization(),
+        purchase_ports(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        ),
     )
     .save_change_draft(&id, req, &actor)
     .await?;

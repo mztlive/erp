@@ -5,13 +5,13 @@ use axum::extract::{Path, State};
 use erp_procure_to_pay::purchase_correspondence::{
     self, PurchaseEmailHistory, PurchaseEmailResult, PurchasePaper,
 };
+use erp_procurement::PurchaseDataScope;
 use erp_procurement::entity::purchase_email::SendPurchaseEmail;
 
 use crate::http::errors::Result;
 use crate::http::extractor::Json;
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
-use crate::wiring::PurchaseDataScope;
 
 /// 下载当前保存内容的独立采购单文件。
 /// # 参数
@@ -28,8 +28,8 @@ pub async fn purchase_paper(
     Ok(ApiResponse::ok_with_data(
         purchase_correspondence::download(
             state.application().db(),
-            state.application().rbac(),
-            PurchaseDataScope::shared(state.application().db(), state.application().authorization().into()),
+            state.application().authorization(),
+            PurchaseDataScope::shared(state.application().db(), state.application().authorization()),
             &id,
             &actor,
         )
@@ -53,8 +53,8 @@ pub async fn send_purchase_email(
     Ok(ApiResponse::ok_with_data(
         purchase_correspondence::send(
             state.application().db(),
-            state.application().rbac(),
-            PurchaseDataScope::shared(state.application().db(), state.application().authorization().into()),
+            state.application().authorization(),
+            PurchaseDataScope::shared(state.application().db(), state.application().authorization()),
             config.purchase_mail.as_ref(),
             &id,
             req,
@@ -79,8 +79,7 @@ pub async fn purchase_email_history(
     Ok(ApiResponse::ok_with_data(
         purchase_correspondence::history(
             state.application().db(),
-            state.application().rbac(),
-            PurchaseDataScope::shared(state.application().db(), state.application().authorization().into()),
+            state.application().authorization(),
             &id,
             &actor,
         )

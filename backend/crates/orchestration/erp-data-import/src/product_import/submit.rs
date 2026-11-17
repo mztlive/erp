@@ -47,7 +47,7 @@ impl ProductImportProcess {
         request_id: String,
         actor: &AuditActor,
     ) -> Result<ProductImportJobView> {
-        self.authorize_submission(actor).await?;
+        self.prepare_attachment_upload(actor).await?;
         let shared_bytes = Arc::new(bytes);
         let for_parse = shared_bytes.clone();
         let parsed = tokio::task::spawn_blocking(move || parse_product_quote_xlsx(&for_parse))
@@ -213,7 +213,7 @@ impl ProductImportProcess {
     /// 当前账号具有商品创建功能资格时返回成功。
     /// # 错误
     /// 身份、资格取证或快照事务失败时拒绝后续处理。
-    pub(super) async fn authorize_submission(&self, actor: &AuditActor) -> Result<()> {
+    pub async fn prepare_attachment_upload(&self, actor: &AuditActor) -> Result<()> {
         let authorization = self.job_access.service.clone();
         let actor = actor.clone();
         self.db

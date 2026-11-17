@@ -1,4 +1,4 @@
-//! 合同客户、身份、参与与审计 adapter。
+//! 合同客户事实、统一授权与审计能力装配。
 
 use std::sync::Arc;
 
@@ -7,20 +7,17 @@ use async_trait::async_trait;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_contract::{
-    ContractAuditPort, ContractParticipantPort, ContractService, CustomerAccountFact, CustomerFactsPort,
-    PreparedContractAudit,
+    ContractAuditPort, ContractService, CustomerAccountFact, CustomerFactsPort, PreparedContractAudit,
 };
 use erp_core::ids::CustomerAccountId;
 use erp_customer::CustomerExt;
 use erp_customer::repository::prelude::*;
-use erp_identity::SharedRbacService;
-use erp_workflow::DocumentRegistryExt;
-use erp_workflow::repository::prelude::*;
+use erp_identity::AuthorizationService;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 
 use super::audit_conversion::{PreparedAudit, map_audit_error};
-use super::contract_data_scope::contract_authorization;
+use super::authorization::contract_access_with_db;
 use super::contract_template::MongoSigningCompanies;
 
 /// 把合同审计事实写入 `erp-audit` 的 Mongo adapter。
@@ -151,69 +148,11 @@ impl CustomerFactsPort for MongoContractCustomers {
     }
 }
 
-/// 为合同读取法律文书参与事实的 Mongo adapter。
-#[derive(Clone)]
-pub(crate) struct MongoContractParticipants {
-    db: Database,
-}
-
-impl MongoContractParticipants {
-    /// 绑定工作流参与集合所在数据库，构造时不读取。
-    ///
-    /// # 参数
-    /// * `db` - 工作流参与集合所在数据库
-    ///
-    /// # 返回
-    /// 返回未执行 I/O 的 adapter。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 不得把签约经办解释为参与事实。
-    pub fn new(db: Database) -> Self {
-        Self { db }
-    }
-
-    /// 包装为合同域可注入的参与 Port。
-    ///
-    /// # 参数
-    /// * `db` - 工作流参与集合所在数据库
-    ///
-    /// # 返回
-    /// 返回合同参与 Port。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 历史参与只用于读取动作。
-    pub fn shared(db: Database) -> Arc<dyn ContractParticipantPort> {
-        Arc::new(Self::new(db))
-    }
-}
-
-#[async_trait]
-impl ContractParticipantPort for MongoContractParticipants {
-    async fn document_ids_in(
-        &self,
-        user_id: &str,
-        ids: &[String],
-        executor: &mut dyn Executor,
-    ) -> erp_contract::Result<Vec<String>> {
-        self.db
-            .document_participants()
-            .document_ids_in(user_id, ids, executor)
-            .await
-            .map_err(map_customer_to_contract)
-    }
-}
-
 /// 构造已接入身份域公共解析器的合同服务。
 ///
 /// # 参数
 /// * `db` - 合同与身份集合所在数据库
-/// * `rbac` - 当前 RBAC 快照
+/// * `authorization` - 进程共享统一授权服务
 ///
 /// # 返回
 /// 返回可解析合同范围的服务。
@@ -223,32 +162,14 @@ impl ContractParticipantPort for MongoContractParticipants {
 ///
 /// # 关键业务约束
 /// adapter 必须调用 identity 统一授权服务，不解释范围条款。
-pub fn scoped_contract_service(db: Database, rbac: SharedRbacService) -> ContractService {
+pub fn scoped_contract_service(db: Database, authorization: Arc<AuthorizationService>) -> ContractService {
     ContractService::new(
         db.clone(),
         MongoContractAudit::shared(db.clone()),
         MongoContractCustomers::shared(db.clone()),
         Arc::new(MongoSigningCompanies(db.clone())),
-        contract_authorization(db, rbac),
+        contract_access_with_db(db, authorization),
     )
-}
-
-/// 构造绑定身份数据库的合同访问器。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `rbac` - 当前 RBAC 快照
-///
-/// # 返回
-/// 返回已注入本 adapter 的合同访问器。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// HTTP 与命名 Process 复用固定模型和完整事实适配。
-pub fn contract_access(db: Database, rbac: SharedRbacService) -> erp_contract::ContractAccess {
-    contract_authorization(db, rbac)
 }
 
 fn customer_account_fact(account: erp_customer::CustomerAccount) -> CustomerAccountFact {

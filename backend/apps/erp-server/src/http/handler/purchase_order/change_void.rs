@@ -32,10 +32,14 @@ pub async fn purchase_change_void(
     Path(id): Path<String>,
     Json(req): Json<VoidPurchaseChangeRequest>,
 ) -> Result<PurchaseChangeOrderView> {
-    let view = PurchaseOrderProcess::with_rbac(
+    let view = PurchaseOrderProcess::new(
         state.application().db(),
-        state.application().rbac(),
-        purchase_ports(state.application().db(), state.application().rbac()),
+        state.application().authorization(),
+        purchase_ports(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        ),
     )
     .void_change(&id, req, &actor)
     .await?;

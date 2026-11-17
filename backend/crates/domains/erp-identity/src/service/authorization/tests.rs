@@ -1,17 +1,20 @@
 //! 用替身设施执行真实 Builder 和公共 API；不连接数据库。
 mod access_inspection;
 mod approval_cancel;
+mod approval_decision;
 mod approval_management;
 mod bank_reveal;
 mod contract_import;
 mod entry_migration;
 mod fixtures;
 mod integration_difference;
+mod inventory_warehouses;
 mod management_contract;
 mod migration_fixes;
 mod phase5;
 mod phase5_regressions;
 mod phase5_review_fixes;
+mod phase6_read_entries;
 mod policy_bundles;
 mod purchase_entries;
 mod read_delivery_expiry;
@@ -201,6 +204,7 @@ async fn candidates_and_ownership_change_check_server_destination_and_original()
 async fn exact_tasks_require_version_assignment_and_same_role_extra_permission() {
     let task = ObjectFacts {
         assignee_id: FactValue::Known(Some("user".into())),
+        subject_type: FactValue::Known("stock_adjustment".into()),
         ..object("approval_instance", "task", "user")
     };
     let port = Arc::new(Facts::new(vec![task]));

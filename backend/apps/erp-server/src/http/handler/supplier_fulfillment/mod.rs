@@ -4,6 +4,8 @@
 //! 直接复用 供应链领域及组合层的 DTO，禁止重复定义同构类型、
 //! 禁止直连数据库。Connector 由启动组合根注入，Handler 不选择实现。
 
+use std::sync::Arc;
+
 pub mod execution_setup;
 
 use application_core::AuditActor;
@@ -21,7 +23,6 @@ use erp_supply::dto::supplier_fulfillment::{
     SupplierOrderObjectInvestigationCommand, SupplierOrderStatusHistoryView,
     SupplierOrderTaskCompletionCommand, SupplierOrderTaskInvestigationCommand, SupplierRefundFactView,
 };
-use persistence_core::NoTransaction;
 
 use crate::http::errors::Result;
 use crate::http::extractor::{Json, Query};
@@ -66,18 +67,17 @@ pub async fn supplier_fulfillment_order_detail(
     Path(id): Path<String>,
     Query(params): Query<SupplierFulfillmentOrderDetailParams>,
 ) -> Result<SupplierFulfillmentOrderDetailView> {
-    if params.work_item_id.as_deref().is_none_or(|id| id.trim().is_empty()) {
-        state
-            .application()
-            .supplier_fulfillment_process()
-            .require_scoped_order(&id, &actor, "detail", &mut NoTransaction)
-            .await?;
-    }
     let view = erp_read_models::supplier_center::SupplierFulfillmentDetailReadService::new(
         state.application().db(),
         state.application().supplier_fulfillment_service(),
+        state.application().authorization(),
     )
-    .supplier_fulfillment_order_detail(&id, &params, &actor, &state.application().work_item_authorization())
+    .supplier_fulfillment_order_detail(
+        &id,
+        &params,
+        &actor,
+        Arc::new(state.application().work_item_authorization()),
+    )
     .await?;
 
     Ok(ApiResponse::ok_with_data(view))
@@ -153,11 +153,6 @@ pub async fn supplier_fulfillment_order_cancel(
     Path(id): Path<String>,
     Json(req): Json<SubmitAfterSalesActionRequest>,
 ) -> Result<SubmitActionResultView> {
-    state
-        .application()
-        .supplier_fulfillment_process()
-        .require_scoped_order(&id, &actor, "cancel", &mut NoTransaction)
-        .await?;
     if let Some(process) = state.application().supplier_api_order_process()
         && let Some(view) = process
             .submit_cancel_if_api(

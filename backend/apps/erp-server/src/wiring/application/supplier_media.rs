@@ -35,8 +35,8 @@ impl Application {
     pub fn supplier_catalog_adoption_process(&self) -> Result<SupplierCatalogAdoptionProcess> {
         let process = SupplierCatalogAdoptionProcess::new(
             self.db(),
-            self.rbac(),
-            crate::wiring::catalog_services(self.db(), self.rbac()),
+            self.authorization(),
+            crate::wiring::catalog_services(self.db(), self.rbac(), self.authorization()),
         )
         .with_registry(Arc::clone(&self.external_connectors.supplier_reference_registry));
         Ok(match self.supplier_source_media_preparer()? {

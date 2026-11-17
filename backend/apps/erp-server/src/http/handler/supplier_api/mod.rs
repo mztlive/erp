@@ -101,8 +101,9 @@ pub async fn supplier_api_connection_command(
 /// 查询健康检查或目录同步任务进度与终态。
 pub async fn supplier_api_connection_job_detail(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Path((id, job_id)): Path<(String, String)>,
 ) -> Result<SupplierConnectionJobView> {
-    let result = state.application().supplier_api_read_service().connection_job(&id, &job_id).await?;
+    let result = state.application().supplier_api_read_service().connection_job(&id, &job_id, &actor).await?;
     Ok(ApiResponse::ok_with_data(result))
 }

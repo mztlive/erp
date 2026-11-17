@@ -1,8 +1,10 @@
 //! 将原工作流任务授权入口装配为详情消费的唯一窄读取端口。
 
+use std::sync::Arc;
+
 use application_core::AuditActor;
 use async_trait::async_trait;
-use erp_identity::{CompiledAccess, SharedRbacService};
+use erp_identity::{AuthorizationService, CompiledAccess, SharedRbacService};
 use erp_read_models::ports::work_item_authorization::{AuthorizedTaskFact, WorkItemAuthorizationReadPort};
 use erp_workflow::service::work_item::WorkItemService;
 use mongodb::Database;
@@ -21,14 +23,15 @@ impl WorkItemAuthorizationAdapter {
     /// # 参数
     /// * `db` - 工作项集合所在数据库。
     /// * `rbac` - 现有 RBAC 快照服务。
+    /// * `authorization` - 启动时完整绑定的共享授权服务。
     ///
     /// # 返回
     /// 返回只向外暴露授权事实的 adapter。
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
-        Self { service: work_item_service(db, rbac) }
+    pub fn new(db: Database, rbac: SharedRbacService, authorization: Arc<AuthorizationService>) -> Self {
+        Self { service: work_item_service(db, rbac, authorization) }
     }
 }
 

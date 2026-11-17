@@ -10,6 +10,7 @@ use erp_core::ids::{CostEntryId, FileAssetId, PurchaseOrderId, PurchaseOrderRevi
 use erp_file_assets::PendingFileAssets;
 use erp_finance::entity::cost::PurchaseExpenseCostFact;
 use erp_finance::service::cost::{PreparedCostEntry, persist_cost_entry};
+use erp_identity::AccessTarget;
 use erp_permissions::internal;
 use erp_procurement::dto::purchase_order::{
     CONFIRM_EXPENSE_ACTION, ConfirmExpenseOccurrenceRequest, ConfirmExpenseOccurrenceResult,
@@ -44,6 +45,35 @@ struct ConfirmCommand {
 }
 
 impl PurchaseOrderProcess {
+    /// 在上传费用凭证前检查确认费用发生的功能资格。
+    /// # 参数
+    /// actor 为已认证账号。
+    /// # 返回
+    /// 当前快照具有功能资格时成功；不证明采购单范围或费用行可办理。
+    /// # 错误
+    /// 身份失效、缺少功能资格或快照失败时拒绝外部上传。
+    pub async fn prepare_attachment_upload(&self, actor: &AuditActor) -> Result<()> {
+        let authorization = self.authorization.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    authorization
+                        .require(
+                            &actor,
+                            &internal::PURCHASE_EXPENSE_ATTACHMENT_UPLOAD,
+                            AccessTarget::Operation,
+                            executor,
+                        )
+                        .await
+                        .map_err(Error::from)
+                })
+            })
+            .await
+    }
+
     /// 采购确认一条费用行已发生，形成实际发生成本。
     ///
     /// # 参数
@@ -79,7 +109,6 @@ impl PurchaseOrderProcess {
             actor: actor.clone(),
         };
         let db = self.db.clone();
-        self.require_rbac()?;
         self.db
             .client()
             .clone()

@@ -1,10 +1,7 @@
 // 有效权限解释读路径：按 ROLE / USER 主体组装来源视图，不合并前端数据。
 
 import { apiGet } from "@/lib/api"
-import {
-    AUTHORIZATION_POLICY_LABEL,
-    fetchPersonScopes,
-} from "@/features/admin/api/person-data-scopes"
+import { fetchPersonScopes } from "@/features/admin/api/person-data-scopes"
 import { scopeViewRows } from "./person-scopes"
 import type { EffectiveAccessView } from "@/features/access-audit/types"
 import type {
@@ -128,10 +125,7 @@ export async function fetchEffectiveAccess(
                           {
                               id: `policy:${business.resource}`,
                               layer: "DATA_SCOPE" as const,
-                              layerLabel:
-                                  AUTHORIZATION_POLICY_LABEL[
-                                      business.authorization_policy
-                                  ],
+                              layerLabel: "业务访问规则",
                               targetLabel: business.policy_description,
                               capability: business.resource,
                               sourceType: "AUTHORIZATION_POLICY",

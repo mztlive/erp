@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use erp_identity::access_control::ScopeDimension;
 use erp_identity::ports::ScopeTargetPort;
 use erp_identity::service::access_control::AccessControlService;
-use erp_identity::{Error, Result, SharedRbacService};
+use erp_identity::{AuthorizationService, Error, Result, SharedRbacService};
 use erp_party::PartyExt;
 use erp_warehouse::WarehouseExt;
 use mongodb::Database;
@@ -55,10 +55,15 @@ impl ScopeTargetPort for ScopeTargets {
 /// # 参数
 /// * `db` - 业务数据库
 /// * `rbac` - 现有 RBAC 服务
+/// * `authorization` - 完整绑定的共享授权服务
 /// # 返回
 /// 返回无嵌套事务的配置服务。
 /// # 错误
 /// 无；目标错误由创建命令在原事务中返回。
-pub fn scope_configuration(db: Database, rbac: SharedRbacService) -> AccessControlService {
-    AccessControlService::new(db.clone(), rbac, Arc::new(ScopeTargets(db)))
+pub fn scope_configuration(
+    db: Database,
+    rbac: SharedRbacService,
+    authorization: Arc<AuthorizationService>,
+) -> AccessControlService {
+    AccessControlService::new(db.clone(), rbac, Arc::new(ScopeTargets(db)), authorization)
 }

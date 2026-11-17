@@ -3,7 +3,9 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use erp_permissions::{
-    customer, demo_master_data, internal, sales_inquiry, supplier, supplier_api, supplier_offering,
+    catalog, cost, customer, demo_master_data, fulfillment, internal, payable, purchase_order,
+    purchase_payment_request, receivable, sales_inquiry, sales_order, supplier, supplier_api,
+    supplier_offering,
 };
 use persistence_core::ReadExecutor;
 use persistence_core::testing::SnapshotExecutor;
@@ -158,5 +160,123 @@ async fn inquiry_write_qualification_previews_require_the_callers_snapshot() {
         ));
         assert_eq!(facts.calls.load(Ordering::SeqCst), calls);
         service.require(&actor(), &permission, target, &mut SnapshotExecutor::default()).await.unwrap();
+    }
+}
+
+#[tokio::test]
+async fn protocol_operations_keep_their_own_qualification_and_complete_connection_sources() {
+    for (entry, qualification) in [
+        (internal::CONNECTION_PROTOCOL_READ, supplier_api::DANGAOSHUSHU_READ),
+        (internal::CONNECTION_REFERENCE_TICKETS, supplier_api::DANGAOSHUSHU_REFERENCE_TICKETS),
+    ] {
+        let identity = Arc::new(Identity::default());
+        let source = object("supplier", "supplier", "user");
+        let connection = ObjectFacts {
+            relations: [(
+                RelationKey::parse("supplier").unwrap(),
+                RelatedObjects { expected_ids: ["supplier".into()].into(), objects: vec![source] },
+            )]
+            .into(),
+            ..object("supplier_api_connection", "connection", "user")
+        };
+        let facts = Arc::new(Facts::new(vec![connection.clone()]));
+        let mut builder = complete();
+        builder.facilities = identity.clone();
+        builder.facts.insert("supplier_api_connection".into(), facts.clone());
+        let service = builder.build().unwrap();
+        let mut executor = SnapshotExecutor::default();
+        identity.state.lock().unwrap().grants = vec![
+            ("connection".into(), vec![supplier_api::CONNECTION_DETAIL]),
+            ("supplier".into(), vec![supplier::DETAIL]),
+        ];
+        assert!(matches!(
+            service
+                .require(&actor(), &entry, AccessTarget::record("connection").unwrap(), &mut executor)
+                .await,
+            Err(Error::Forbidden(_))
+        ));
+        assert_eq!(facts.calls.load(Ordering::SeqCst), 0);
+        identity.state.lock().unwrap().grants.push(("protocol".into(), vec![qualification]));
+        service
+            .require(&actor(), &entry, AccessTarget::record("connection").unwrap(), &mut executor)
+            .await
+            .unwrap();
+        let mut incomplete = connection;
+        incomplete.relations.get_mut(&RelationKey::parse("supplier").unwrap()).unwrap().objects.clear();
+        *facts.objects.lock().unwrap() = vec![incomplete];
+        assert!(
+            service
+                .require(&actor(), &entry, AccessTarget::record("connection").unwrap(), &mut executor)
+                .await
+                .is_err()
+        );
+    }
+}
+
+#[tokio::test]
+async fn attachment_preparations_keep_fixed_function_qualification_and_reject_object_claims() {
+    let cases = [
+        (internal::CATALOG_CREATE_ATTACHMENT_UPLOAD, vec![catalog::PRODUCT_PRODUCT_CREATE]),
+        (internal::CATALOG_UPDATE_ATTACHMENT_UPLOAD, vec![catalog::PRODUCT_PRODUCT_UPDATE]),
+        (internal::CATALOG_BRAND_CREATE_ATTACHMENT_UPLOAD, vec![catalog::PRODUCT_BRAND_CREATE]),
+        (internal::CATALOG_BRAND_UPDATE_ATTACHMENT_UPLOAD, vec![catalog::PRODUCT_BRAND_UPDATE]),
+        (internal::SUPPLIER_CREATE_ATTACHMENT_UPLOAD, vec![supplier::PROFILE_CREATE]),
+        (internal::SUPPLIER_UPDATE_ATTACHMENT_UPLOAD, vec![supplier::PROFILE_UPDATE]),
+        (
+            internal::PURCHASE_EXPENSE_ATTACHMENT_UPLOAD,
+            vec![purchase_order::EXPENSE_EXPENSE_OCCURRENCE_CONFIRM],
+        ),
+        (
+            internal::ELECTRONIC_DELIVERY_ATTACHMENT_UPLOAD,
+            vec![
+                fulfillment::ELECTRONIC_DELIVERY_ELECTRONIC_DELIVERY_LIST,
+                fulfillment::ELECTRONIC_DELIVERY_ELECTRONIC_DELIVERY_CONFIRM,
+            ],
+        ),
+        (
+            internal::SERVICE_FULFILLMENT_ATTACHMENT_UPLOAD,
+            vec![
+                fulfillment::SERVICE_FULFILLMENT_SERVICE_FULFILLMENT_LIST,
+                fulfillment::SERVICE_FULFILLMENT_SERVICE_FULFILLMENT_CONFIRM,
+            ],
+        ),
+        (internal::FINANCE_UPLOAD_CUSTOMER_RECEIPT, vec![receivable::CUSTOMER_RECEIPT_SUBMIT]),
+        (internal::FINANCE_UPLOAD_INVOICE_DRAFT, vec![receivable::INVOICE_CREATE]),
+        (internal::FINANCE_UPLOAD_INVOICE_POST, vec![receivable::INVOICE_POST]),
+        (internal::FINANCE_UPLOAD_PURCHASE_INVOICE, vec![payable::PURCHASE_INVOICE_ALLOCATION_POST]),
+        (internal::FINANCE_UPLOAD_EXTRA_COST, vec![cost::ENTRY_CREATE, sales_order::DETAIL]),
+        (
+            internal::FINANCE_UPLOAD_PURCHASE_PAYMENT,
+            vec![purchase_payment_request::CREDIT_LIST, purchase_payment_request::DETAIL],
+        ),
+    ];
+    for (entry, required) in cases {
+        let identity = Arc::new(Identity::default());
+        let mut builder = complete();
+        builder.facilities = identity.clone();
+        let service = builder.build().unwrap();
+        let mut executor = SnapshotExecutor::default();
+        identity.state.lock().unwrap().grants.clear();
+        assert!(matches!(
+            service.require(&actor(), &entry, AccessTarget::Operation, &mut executor).await,
+            Err(Error::Forbidden(_))
+        ));
+        identity.state.lock().unwrap().grants = vec![("business".into(), required.clone())];
+        service.require(&actor(), &entry, AccessTarget::Operation, &mut executor).await.unwrap();
+        assert!(matches!(
+            service.require(&actor(), &entry, AccessTarget::record("object").unwrap(), &mut executor).await,
+            Err(Error::ValidationError(_))
+        ));
+        if required.len() > 1 {
+            identity.state.lock().unwrap().grants = required
+                .into_iter()
+                .enumerate()
+                .map(|(index, permission)| (format!("role-{index}"), vec![permission]))
+                .collect();
+            assert!(matches!(
+                service.require(&actor(), &entry, AccessTarget::Operation, &mut executor).await,
+                Err(Error::Forbidden(_))
+            ));
+        }
     }
 }

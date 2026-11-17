@@ -1,3 +1,4 @@
+#![cfg(test)]
 //! 单元测试中的 BSON 管道解释器。未知操作立即失败，不访问数据库。
 //! 仅用于对比固定样本的成员判断，不能证明 MongoDB 执行、索引或事务行为。
 use std::collections::BTreeMap;
@@ -132,11 +133,18 @@ fn matches(filter: &Document, row: &Document, variables: &Document) -> bool {
                     return path(row, field).is_some() == exists;
                 }
                 let members = operator.get_array("$in").expect("unsupported fixture field operation");
-                return path(row, field).is_some_and(|actual| members.contains(&actual));
+                return path(row, field)
+                    .is_some_and(|actual| members.iter().any(|expected| query_equality(&actual, expected)));
             }
-            path(row, field).as_ref() == Some(expected)
+            path(row, field).is_some_and(|actual| query_equality(&actual, expected))
         },
     })
+}
+
+/// 查询字段等值匹配接受数组中的标量；聚合 `$expr` 的 `$eq` 仍比较完整值。
+fn query_equality(actual: &Bson, expected: &Bson) -> bool {
+    actual == expected
+        || matches!(actual, Bson::Array(items) if !matches!(expected, Bson::Array(_)) && items.contains(expected))
 }
 
 fn value(expression: &Bson, row: &Document, variables: &Document) -> Bson {
@@ -221,6 +229,27 @@ mod tests {
     use mongodb::bson::doc;
 
     use super::*;
+
+    #[test]
+    fn scalar_queries_match_array_members_while_array_queries_and_expressions_keep_full_equality() {
+        let rows = vec![
+            doc! { "id": "scalar", "history": "user" },
+            doc! { "id": "array", "history": ["other", "user"] },
+            doc! { "id": "reverse", "history": ["user", "other"] },
+            doc! { "id": "outside", "history": ["other"] },
+            doc! { "id": "empty", "history": [] },
+            doc! { "id": "missing" },
+        ];
+        for (filter, expected) in [
+            (doc! { "history": "user" }, vec!["scalar", "array", "reverse"]),
+            (doc! { "history": { "$in": ["user"] } }, vec!["scalar", "array", "reverse"]),
+            (doc! { "history": ["other", "user"] }, vec!["array"]),
+            (doc! { "$expr": { "$eq": ["$history", "user"] } }, vec!["scalar"]),
+        ] {
+            let result = execute(rows.clone(), &[doc! { "$match": filter }], &BTreeMap::new(), &doc! {});
+            assert_eq!(result.iter().map(|row| row.get_str("id").unwrap()).collect::<Vec<_>>(), expected);
+        }
+    }
 
     #[test]
     #[should_panic(expected = "invalid MongoDB user variable")]

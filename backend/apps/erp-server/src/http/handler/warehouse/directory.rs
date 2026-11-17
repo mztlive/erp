@@ -22,8 +22,9 @@ pub async fn list(
     Extension(actor): Extension<AuditActor>,
     Query(query): Query<DirectoryQuery>,
 ) -> Result<DirectoryPage> {
-    let page =
-        warehouse_directory(state.application().db(), state.application().rbac()).list(actor, query).await?;
+    let page = warehouse_directory(state.application().db(), state.application().authorization())
+        .list(actor, query)
+        .await?;
     Ok(ApiResponse::ok_with_data(page))
 }
 
@@ -39,7 +40,7 @@ pub async fn selected(
     Extension(actor): Extension<AuditActor>,
     Query(query): Query<DirectorySelectedQuery>,
 ) -> Result<DirectoryPage> {
-    let page = warehouse_directory(state.application().db(), state.application().rbac())
+    let page = warehouse_directory(state.application().db(), state.application().authorization())
         .list(actor, query.into())
         .await?;
     Ok(ApiResponse::ok_with_data(page))

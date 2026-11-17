@@ -34,9 +34,10 @@ use crate::http::state::HttpState;
 /// 业务处理或数据读取失败时返回对应错误。
 pub async fn electronic_delivery_list(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<ElectronicDeliveryListParams>,
 ) -> Result<PageView<ElectronicDeliveryView>> {
-    let page = service(&state).electronic_delivery_list(&params).await?;
+    let page = service(&state).electronic_delivery_list(&params, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -54,9 +55,10 @@ pub async fn electronic_delivery_list(
 /// 业务处理或数据读取失败时返回对应错误。
 pub async fn electronic_delivery_detail(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<ElectronicDeliveryView> {
-    let view = service(&state).electronic_delivery_detail(&id).await?;
+    let view = service(&state).electronic_delivery_detail(&id, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -101,6 +103,7 @@ pub async fn electronic_delivery_confirm(
     Path(id): Path<String>,
     mut multipart: Multipart,
 ) -> Result<ElectronicDeliveryView> {
+    process(&state).prepare_electronic_delivery_attachment_upload(&actor).await?;
     let (req, files) =
         extract_command_with_asset_files::<ConfirmElectronicDeliveryRequest>(&mut multipart).await?;
     validate_evidence_upload(req.evidence_attachment_id.as_ref(), &files)?;

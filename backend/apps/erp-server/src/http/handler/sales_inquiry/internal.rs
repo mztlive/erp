@@ -1,5 +1,4 @@
 //! 采购内部报价、费用依据和附件使用独立权限及当前任务访问。
-use std::sync::Arc;
 
 use application_core::AuditActor;
 use axum::Extension;
@@ -85,7 +84,7 @@ pub async fn fee_bases(
     Query(params): Query<InquiryFeeBasisParams>,
 ) -> Result<Vec<InquiryFeeBasis>> {
     Ok(ApiResponse::ok_with_data(
-        InquiryReadService::new(state.application().db(), Arc::new(state.application().authorization()))
+        InquiryReadService::new(state.application().db(), state.application().authorization())
             .fee_bases(&actor, &id, &params)
             .await?,
     ))
@@ -104,8 +103,7 @@ pub async fn fee_basis_attachment(
     Path((id, basis_id, asset_id)): Path<(String, String, String)>,
     Query(params): Query<InquiryFeeBasisParams>,
 ) -> std::result::Result<Response, Error> {
-    let service =
-        InquiryReadService::new(state.application().db(), Arc::new(state.application().authorization()));
+    let service = InquiryReadService::new(state.application().db(), state.application().authorization());
     service.require_fee_basis_attachment(&actor, &id, &params, &basis_id, &asset_id).await?;
     let (view, bytes) = read_asset(&state, &actor, &asset_id).await?;
     service.require_fee_basis_attachment(&actor, &id, &params, &basis_id, &asset_id).await?;

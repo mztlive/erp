@@ -18,13 +18,16 @@ impl Application {
         erp_data_import::BrandImportProcess::new(
             self.db(),
             self.catalog_service(),
-            self.rbac(),
+            self.authorization(),
             self.storage().clone(),
             self.sensitive_data(),
         )
     }
 
     /// 产品报价表异步导入流程。
+    ///
+    /// # 参数
+    /// 无；使用当前应用共享授权和基础设施。
     ///
     /// # 返回
     /// 返回绑定当前数据库、对象存储与内容指纹密钥的导入流程。
@@ -34,15 +37,15 @@ impl Application {
     pub fn product_import_process(&self) -> erp_data_import::ProductImportProcess {
         let services = ProductImportServices {
             catalog: self.catalog_service(),
-            scoped_catalog: scoped_catalog_service(self.db(), self.rbac()),
-            catalog_access: catalog_access(self.db(), self.rbac()),
-            offerings: Arc::new(scoped_offering_service(self.db(), self.rbac())),
-            offering_access: offering_access(self.db(), self.rbac()),
+            scoped_catalog: scoped_catalog_service(self.db(), self.authorization()),
+            catalog_access: catalog_access(self.db(), self.authorization()),
+            offerings: Arc::new(scoped_offering_service(self.db(), self.authorization())),
+            offering_access: offering_access(self.db(), self.authorization()),
         };
         erp_data_import::ProductImportProcess::new(
             self.db(),
             services,
-            self.rbac(),
+            self.authorization(),
             self.storage().clone(),
             self.config_snapshot().app.secret.as_bytes(),
         )
@@ -62,7 +65,7 @@ impl Application {
         erp_data_import::SupplierImportProcess::new(
             self.db(),
             Arc::new(self.supplier_profile_process()),
-            self.rbac(),
+            self.authorization(),
             self.storage().clone(),
             self.sensitive_data(),
         )
@@ -93,8 +96,8 @@ impl Application {
         }
         let services = ContractImportServices {
             contracts: Arc::new(self.contract_service()),
-            contract_access: contract_access(self.db(), self.rbac()),
-            customer_access: customer_access(self.db(), self.rbac()),
+            contract_access: contract_access(self.db(), self.authorization()),
+            customer_access: customer_access(self.db(), self.authorization()),
         };
         ContractImportProcess::new(self.db(), services, providers)
     }
@@ -109,7 +112,8 @@ impl Application {
     pub fn import_apply_process(&self) -> erp_data_import::ImportApplyProcess {
         erp_data_import::ImportApplyProcess::new(
             self.db(),
-            Arc::new(work_item_service(self.db(), self.rbac())),
+            Arc::new(work_item_service(self.db(), self.rbac(), self.authorization())),
+            self.authorization(),
         )
     }
 
@@ -123,7 +127,7 @@ impl Application {
     pub fn inquiry_import_process(&self) -> SalesInquiryImportProcess {
         SalesInquiryImportProcess::new(
             self.db(),
-            self.rbac(),
+            self.authorization(),
             Arc::new(MongoCatalogSupplyQuery::new(self.db())),
             Arc::new(self.sales_inquiry_process()),
         )

@@ -29,9 +29,10 @@ use crate::http::state::HttpState;
 /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
 pub async fn bulk_selection_snapshot_list(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<BulkSelectionSnapshotListParams>,
 ) -> Result<PageView<BulkSelectionSnapshotView>> {
-    let page = state.application().bulk_job_service().bulk_selection_snapshot_list(&params).await?;
+    let page = state.application().bulk_job_service().bulk_selection_snapshot_list(&params, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -110,13 +111,14 @@ pub async fn bulk_selection_snapshot_expire(
 /// 返回当前页逐项结果行与总数。
 pub async fn bulk_selection_item_list(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
     Query(query): Query<BulkSelectionItemListQuery>,
 ) -> Result<PageView<BulkSelectionItemView>> {
     let page = state
         .application()
         .bulk_job_service()
-        .bulk_selection_item_list(&id, query.result_status, query.page, query.page_size)
+        .bulk_selection_item_list(&id, query.result_status, query.page, query.page_size, &actor)
         .await?;
 
     Ok(ApiResponse::ok_with_data(page))

@@ -6,8 +6,6 @@
 
 pub mod reviewer_options;
 
-use std::sync::Arc;
-
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
@@ -29,7 +27,6 @@ use erp_supply::dto::supplier_settlement::{
     SupplierSettlementItemListParams, SupplierSettlementSourceEvidenceQuery,
     SupplierSettlementSourceEvidenceView, SupplierSettlementStatementListParams, VoidSettlementRequest,
 };
-use erp_supply::service::supplier_settlement::SupplierSettlementService;
 use erp_supply_settlement::supply_settlement::SupplierSettlementProcess;
 
 use crate::http::errors::Result;
@@ -39,7 +36,11 @@ use crate::http::state::HttpState;
 use crate::wiring::workflow::WorkflowAuth;
 
 fn settlement_process(state: &HttpState) -> SupplierSettlementProcess<WorkflowAuth> {
-    crate::wiring::scoped_settlement_process(state.application().db(), state.application().rbac())
+    crate::wiring::scoped_settlement_process(
+        state.application().db(),
+        state.application().rbac(),
+        state.application().authorization(),
+    )
 }
 
 /// 查询供应商结算单列表。
@@ -55,15 +56,14 @@ pub async fn supplier_settlement_statement_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<SupplierSettlementStatementListParams>,
 ) -> Result<SettlementStatementDisplayList> {
-    let page = SupplierSettlementReadService::new(
-        state.application().db(),
-        Arc::new(state.application().authorization()),
-    )
-    .statement_list(&params, &actor)
-    .await?;
-    let page = SupplierSettlementReadService::new(state.application().db(), state.application().rbac())
-        .statement_list_view(page)
-        .await?;
+    let page =
+        SupplierSettlementReadService::new(state.application().db(), state.application().authorization())
+            .statement_list(&params, &actor)
+            .await?;
+    let page =
+        SupplierSettlementReadService::new(state.application().db(), state.application().authorization())
+            .statement_list_view(page)
+            .await?;
     Ok(ApiResponse::ok_with_data(page))
 }
 
@@ -80,10 +80,10 @@ pub async fn supplier_settlement_statement_detail(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<SettlementStatementDisplayDetail> {
-    settlement_process(&state).require_detail(&actor, &id).await?;
-    let view = SupplierSettlementReadService::new(state.application().db(), state.application().rbac())
-        .supplier_settlement_statement_detail(&id, &actor)
-        .await?;
+    let view =
+        SupplierSettlementReadService::new(state.application().db(), state.application().authorization())
+            .supplier_settlement_statement_detail(&id, &actor)
+            .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -104,9 +104,10 @@ pub async fn supplier_settlement_statement_create(
 ) -> Result<SettlementDraftCommandResult<SettlementStatementDisplayView>> {
     let view = settlement_process(&state).create_statement(req, &actor).await?;
 
-    let view = SupplierSettlementReadService::new(state.application().db(), state.application().rbac())
-        .statement_result(view)
-        .await?;
+    let view =
+        SupplierSettlementReadService::new(state.application().db(), state.application().authorization())
+            .statement_result(view)
+            .await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -118,19 +119,25 @@ pub async fn supplier_settlement_statement_refresh(
     Json(req): Json<RefreshSettlementStatementRequest>,
 ) -> Result<SettlementDraftCommandResult<SettlementStatementDisplayView>> {
     let view = settlement_process(&state).refresh_statement(&id, req, &actor).await?;
-    let view = SupplierSettlementReadService::new(state.application().db(), state.application().rbac())
-        .statement_result(view)
-        .await?;
+    let view =
+        SupplierSettlementReadService::new(state.application().db(), state.application().authorization())
+            .statement_result(view)
+            .await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
 /// 查询创建草稿所需的最新完整来源证据批次，不返回金额明细。
 pub async fn supplier_settlement_source_evidence_latest(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Query(query): Query<SupplierSettlementSourceEvidenceQuery>,
 ) -> Result<SupplierSettlementSourceEvidenceView> {
-    let view =
-        SupplierSettlementService::new(state.application().db()).latest_source_evidence(&query).await?;
+    let view = crate::wiring::scoped_settlement_service(
+        state.application().db(),
+        state.application().authorization(),
+    )
+    .latest_source_evidence(&query, &actor)
+    .await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -162,9 +169,10 @@ pub async fn supplier_settlement_statement_submit_review(
 ) -> Result<SubmitSettlementReviewResult<SettlementStatementDisplayView>> {
     let view = settlement_process(&state).submit_review(&id, req, &actor).await?;
 
-    let view = SupplierSettlementReadService::new(state.application().db(), state.application().rbac())
-        .statement_result(view)
-        .await?;
+    let view =
+        SupplierSettlementReadService::new(state.application().db(), state.application().authorization())
+            .statement_result(view)
+            .await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -186,9 +194,10 @@ pub async fn supplier_settlement_statement_review_decide(
 ) -> Result<SettlementReviewDecisionResult<SettlementStatementDisplayView>> {
     let view = settlement_process(&state).decide_review(&id, req, &actor).await?;
 
-    let view = SupplierSettlementReadService::new(state.application().db(), state.application().rbac())
-        .statement_result(view)
-        .await?;
+    let view =
+        SupplierSettlementReadService::new(state.application().db(), state.application().authorization())
+            .statement_result(view)
+            .await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -210,9 +219,10 @@ pub async fn supplier_settlement_statement_void(
 ) -> Result<SettlementStatementDisplayView> {
     let view = settlement_process(&state).void_statement(&id, req, &actor).await?;
 
-    let view = SupplierSettlementReadService::new(state.application().db(), state.application().rbac())
-        .statement_result(view)
-        .await?;
+    let view =
+        SupplierSettlementReadService::new(state.application().db(), state.application().authorization())
+            .statement_result(view)
+            .await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -226,15 +236,20 @@ pub async fn supplier_settlement_statement_void(
 /// 返回契约形状的分页视图。
 pub async fn supplier_settlement_item_list(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<SupplierSettlementItemListParams>,
 ) -> Result<SettlementPageView<SettlementItemDisplayView>> {
-    let page = SupplierSettlementService::new(state.application().db())
-        .supplier_settlement_item_list(&params)
-        .await?;
+    let page = crate::wiring::scoped_settlement_service(
+        state.application().db(),
+        state.application().authorization(),
+    )
+    .supplier_settlement_item_list(&params, &actor)
+    .await?;
 
-    let page = SupplierSettlementReadService::new(state.application().db(), state.application().rbac())
-        .item_page_view(page)
-        .await?;
+    let page =
+        SupplierSettlementReadService::new(state.application().db(), state.application().authorization())
+            .item_page_view(page)
+            .await?;
     Ok(ApiResponse::ok_with_data(page))
 }
 
@@ -248,15 +263,20 @@ pub async fn supplier_settlement_item_list(
 /// 返回契约形状的分页视图。
 pub async fn supplier_settlement_difference_list(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<SupplierSettlementDifferenceListParams>,
 ) -> Result<SettlementPageView<SupplierSettlementDifferenceView<SettlementEvidenceDisplayView>>> {
-    let page = SupplierSettlementService::new(state.application().db())
-        .supplier_settlement_difference_list(&params)
-        .await?;
+    let page = crate::wiring::scoped_settlement_service(
+        state.application().db(),
+        state.application().authorization(),
+    )
+    .supplier_settlement_difference_list(&params, &actor)
+    .await?;
 
-    let page = SupplierSettlementReadService::new(state.application().db(), state.application().rbac())
-        .difference_page_view(page)
-        .await?;
+    let page =
+        SupplierSettlementReadService::new(state.application().db(), state.application().authorization())
+            .difference_page_view(page)
+            .await?;
     Ok(ApiResponse::ok_with_data(page))
 }
 
@@ -279,9 +299,10 @@ pub async fn supplier_settlement_difference_decide(
 {
     let view = settlement_process(&state).decide_difference(&id, req, &actor).await?;
 
-    let view = SupplierSettlementReadService::new(state.application().db(), state.application().rbac())
-        .difference_result_view(view)
-        .await?;
+    let view =
+        SupplierSettlementReadService::new(state.application().db(), state.application().authorization())
+            .difference_result_view(view)
+            .await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -293,9 +314,10 @@ pub async fn supplier_settlement_difference_evidence_append(
     Json(req): Json<SettlementDifferenceEvidenceRequest>,
 ) -> Result<SettlementDifferenceEvidenceResult<SettlementEvidenceDisplayView>> {
     let view = settlement_process(&state).append_difference_evidence(&id, req, &actor).await?;
-    let view = SupplierSettlementReadService::new(state.application().db(), state.application().rbac())
-        .evidence_result_view(view)
-        .await?;
+    let view =
+        SupplierSettlementReadService::new(state.application().db(), state.application().authorization())
+            .evidence_result_view(view)
+            .await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 

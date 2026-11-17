@@ -1,41 +1,44 @@
 //! 供应商身份设施与业务事实装配。
 use std::sync::Arc;
 
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
+use erp_party::SensitiveDataCodec;
 use erp_supplier::{SupplierAccess, SupplierService};
 use mongodb::Database;
+
+use super::{MongoSupplierPartyFacts, MongoSupplierSensitiveTokens};
 
 /// 构造绑定身份数据库的供应商访问器。
 ///
 /// # 参数
 /// * `db` - 供应商与身份集合所在数据库
-/// * `rbac` - 现有 RBAC 快照服务
+/// * `authorization` - 进程共享统一授权服务
 ///
 /// # 返回
 /// 返回未缓存授权的供应商访问器。
 ///
 /// # 错误
 /// 无。
-pub fn supplier_access(db: Database, rbac: SharedRbacService) -> SupplierAccess {
-    SupplierAccess::new(db, rbac)
+pub fn supplier_access(db: Database, authorization: Arc<AuthorizationService>) -> SupplierAccess {
+    SupplierAccess::new(db, authorization)
 }
 
 /// 构造已接入身份域公共解析器的供应商服务。
 ///
 /// # 参数
 /// * `db` - 供应商与身份集合所在数据库
-/// * `rbac` - 现有 RBAC 快照服务
+/// * `authorization` - 进程共享统一授权服务
 ///
 /// # 返回
 /// 返回可解析供应商范围的服务。
 ///
 /// # 错误
 /// 无。
-pub fn scoped_supplier_service(db: Database, rbac: SharedRbacService) -> SupplierService {
+pub fn scoped_supplier_service(db: Database, authorization: Arc<AuthorizationService>) -> SupplierService {
     SupplierService::new(
         db.clone(),
-        super::MongoSupplierPartyFacts::shared(db.clone()),
-        SupplierAccess::new(db, rbac),
+        MongoSupplierPartyFacts::shared(db.clone()),
+        SupplierAccess::new(db, authorization),
     )
 }
 
@@ -43,7 +46,7 @@ pub fn scoped_supplier_service(db: Database, rbac: SharedRbacService) -> Supplie
 ///
 /// # 参数
 /// * `db` - 供应商与身份集合所在数据库
-/// * `rbac` - 现有 RBAC 快照服务
+/// * `authorization` - 进程共享统一授权服务
 /// * `sensitive_data` - 敏感字段编解码
 ///
 /// # 返回
@@ -53,13 +56,13 @@ pub fn scoped_supplier_service(db: Database, rbac: SharedRbacService) -> Supplie
 /// 无。
 pub fn scoped_supplier_service_with_sensitive(
     db: Database,
-    rbac: SharedRbacService,
-    sensitive_data: Arc<erp_party::SensitiveDataCodec>,
+    authorization: Arc<AuthorizationService>,
+    sensitive_data: Arc<SensitiveDataCodec>,
 ) -> SupplierService {
     SupplierService::with_sensitive_data(
         db.clone(),
-        super::MongoSupplierPartyFacts::shared(db.clone()),
-        super::MongoSupplierSensitiveTokens::shared(sensitive_data),
-        SupplierAccess::new(db, rbac),
+        MongoSupplierPartyFacts::shared(db.clone()),
+        MongoSupplierSensitiveTokens::shared(sensitive_data),
+        SupplierAccess::new(db, authorization),
     )
 }

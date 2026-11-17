@@ -4,93 +4,87 @@
 
 use axum::Router;
 use axum::routing::{get, post, put};
-use erp_identity::AuthorizationService;
 use erp_permissions as permissions;
 
 use crate::http::handler::work_item;
-use crate::http::middleware::with_permission;
+use crate::http::routes::permission_route;
 use crate::http::state::HttpState;
 
 /// 返回只暴露稳定责任接口的管理端路由。
 ///
 /// # 返回
 /// 返回列表、统计、详情、转交和关闭路由；仅支持指定责任人的任务合同。
-pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
+///
+/// # 参数
+/// 无。
+///
+/// # 错误
+/// 不执行 I/O，不返回错误。
+pub fn routes() -> Router<HttpState> {
     Router::new()
         .route(
             "/work-items/{id}/timeline",
-            with_permission(get(work_item::timeline::task_timeline), rbac, &permissions::work_item::DETAIL),
+            permission_route(get(work_item::timeline::task_timeline), &permissions::work_item::DETAIL),
         )
-        .route(
-            "/work-items",
-            with_permission(get(work_item::work_item_list), rbac, &permissions::work_item::LIST),
-        )
+        .route("/work-items", permission_route(get(work_item::work_item_list), &permissions::work_item::LIST))
         .route(
             "/work-items/fulfillment-queue",
-            with_permission(get(work_item::fulfillment_queue_list), rbac, &permissions::work_item::LIST),
+            permission_route(get(work_item::fulfillment_queue_list), &permissions::work_item::LIST),
         )
         .route(
             "/work-items/stats",
-            with_permission(get(work_item::work_item_stats), rbac, &permissions::work_item::LIST),
+            permission_route(get(work_item::work_item_stats), &permissions::work_item::LIST),
         )
         .route(
             "/work-items/{id}",
-            with_permission(get(work_item::work_item_detail), rbac, &permissions::work_item::DETAIL),
+            permission_route(get(work_item::work_item_detail), &permissions::work_item::DETAIL),
         )
         .route(
             "/work-items/{id}/reassign",
-            with_permission(post(work_item::work_item_reassign), rbac, &permissions::work_item::MANAGE),
+            permission_route(post(work_item::work_item_reassign), &permissions::work_item::MANAGE),
         )
         .route(
             "/work-items/{id}/reassign-candidates",
-            with_permission(
-                get(work_item::work_item_reassign_candidates),
-                rbac,
-                &permissions::work_item::MANAGE,
-            ),
+            permission_route(get(work_item::work_item_reassign_candidates), &permissions::work_item::MANAGE),
         )
         .route(
             "/work-items/{id}/close",
-            with_permission(post(work_item::work_item_close), rbac, &permissions::work_item::MANAGE),
+            permission_route(post(work_item::work_item_close), &permissions::work_item::MANAGE),
         )
         .route(
             "/work-items/{id}/abandon-rework",
-            with_permission(post(work_item::abandon_rework), rbac, &permissions::work_item::MANAGE),
+            permission_route(post(work_item::abandon_rework), &permissions::work_item::MANAGE),
         )
-        .merge(finance_responsibility_routes(rbac))
+        .merge(finance_responsibility_routes())
 }
 
-fn finance_responsibility_routes(rbac: &AuthorizationService) -> Router<HttpState> {
+fn finance_responsibility_routes() -> Router<HttpState> {
     Router::new()
         .route(
             "/finance-responsibility-rules",
-            with_permission(
+            permission_route(
                 get(work_item::finance_responsibility::finance_responsibility_rule_list),
-                rbac,
                 &permissions::work_item::FINANCE_RESPONSIBILITY_FINANCE_RESPONSIBILITY_RULE_LIST,
             ),
         )
         .route(
             "/finance-responsibility-rules",
-            with_permission(
+            permission_route(
                 post(work_item::finance_responsibility::finance_responsibility_rule_create),
-                rbac,
                 &permissions::work_item::FINANCE_RESPONSIBILITY_FINANCE_RESPONSIBILITY_RULE_CREATE,
             ),
         )
         .route(
             "/finance-responsibility-rules/{id}",
-            with_permission(
+            permission_route(
                 put(work_item::finance_responsibility::finance_responsibility_rule_update),
-                rbac,
                 &permissions::work_item::FINANCE_RESPONSIBILITY_FINANCE_RESPONSIBILITY_RULE_CREATE,
             ),
         )
         .route(
             "/finance-responsibility-owner-options",
-            with_permission(
+            permission_route(
                 get(work_item::finance_responsibility::finance_responsibility_owner_options),
-                rbac,
                 &permissions::work_item::FINANCE_RESPONSIBILITY_FINANCE_RESPONSIBILITY_RULE_LIST,
             ),
         )

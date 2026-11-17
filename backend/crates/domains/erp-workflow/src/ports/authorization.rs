@@ -37,21 +37,21 @@ impl TaskReadAction {
 
 /// 工作流消费的跨域业务来源取证；身份服务由用例直接注入。
 pub trait WorkflowAuthorizationPort: Clone + Send + Sync + 'static {
-    /// 当前审批办理在原事务检查完整单据读取资格。
+    /// 当前审批授权被拒绝后检查正式分配授权是否仍待应用。
     /// # 参数
     /// actor 为已验证当前办理人；source 为实际订单；instance 为审批实例；executor 为原事务。
     /// # 返回
-    /// 当前入口和来源授权成立时成功。
+    /// 无待应用事件时成功；不授予任何功能或对象资格。
     /// # 错误
-    /// 未装配、授权未就绪或来源不可读时拒绝。
-    fn require_approval_source(
+    /// 未装配、授权事件未就绪或基础设施失败时返回错误。
+    fn approval_source_readiness(
         &self,
         _actor: &AuditActor,
         _source: &OrderTaskSource,
         _instance: &str,
         _executor: &mut dyn Executor,
     ) -> impl Future<Output = Result<()>> + Send {
-        async { Err(Error::Internal("审批单据读取授权未装配".into())) }
+        async { Err(Error::Internal("审批读取授权就绪检查未装配".into())) }
     }
 
     /// 在正式审批分配事务追加读取授权事件。

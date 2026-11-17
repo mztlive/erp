@@ -35,7 +35,7 @@ pub async fn expense_sources(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<ExpenseSourceParams>,
 ) -> Result<ExpenseSourceList> {
-    let view = ExpenseSourceReadService::new(state.application().db(), state.application().rbac())
+    let view = ExpenseSourceReadService::new(state.application().db(), state.application().authorization())
         .list(&params, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(view))
@@ -53,7 +53,7 @@ pub async fn expense_source_detail(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<ExpenseSourceDetail> {
-    let view = ExpenseSourceReadService::new(state.application().db(), state.application().rbac())
+    let view = ExpenseSourceReadService::new(state.application().db(), state.application().authorization())
         .detail(&id, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(view))
@@ -78,10 +78,14 @@ pub async fn expense_purchase_create(
     Path(id): Path<String>,
     Json(req): Json<CreateExpensePurchaseRequest>,
 ) -> Result<CreatePurchaseOrderResult> {
-    let view = PurchaseOrderProcess::with_rbac(
+    let view = PurchaseOrderProcess::new(
         state.application().db(),
-        state.application().rbac(),
-        purchase_ports(state.application().db(), state.application().rbac()),
+        state.application().authorization(),
+        purchase_ports(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        ),
     )
     .create_expense_purchase(&id, req, &actor)
     .await?;
@@ -110,17 +114,22 @@ pub async fn expense_occurrence_confirm(
     Path((id, expense_line_id)): Path<(String, String)>,
     mut multipart: Multipart,
 ) -> Result<ConfirmExpenseOccurrenceResult> {
+    let process = PurchaseOrderProcess::new(
+        state.application().db(),
+        state.application().authorization(),
+        purchase_ports(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        ),
+    );
+    process.prepare_attachment_upload(&actor).await?;
     let (req, files) =
         extract_command_with_asset_files::<ConfirmExpenseOccurrenceRequest>(&mut multipart).await?;
     validate_expense_evidence(req.evidence_attachment_id.as_ref(), &files)?;
     let pending = store_pending_asset_files(&state, files, |_| SensitivityClass::Sensitive).await?;
-    let result = PurchaseOrderProcess::with_rbac(
-        state.application().db(),
-        state.application().rbac(),
-        purchase_ports(state.application().db(), state.application().rbac()),
-    )
-    .confirm_expense_occurrence(&id, &expense_line_id, req, pending.clone(), &actor)
-    .await;
+    let result =
+        process.confirm_expense_occurrence(&id, &expense_line_id, req, pending.clone(), &actor).await;
     match result {
         Ok(view) => Ok(ApiResponse::ok_with_data(view)),
         Err(error) => {

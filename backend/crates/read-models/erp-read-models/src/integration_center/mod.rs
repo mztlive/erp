@@ -3,6 +3,7 @@ pub(crate) mod display;
 mod error_detail;
 pub(crate) mod error_labels;
 mod error_task;
+mod list;
 pub use error_detail::IntegrationErrorDetailView;
 mod reconciliation_difference;
 mod repository;

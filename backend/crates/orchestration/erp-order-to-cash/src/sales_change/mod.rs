@@ -100,7 +100,7 @@ impl SalesChangeProcess {
                 })
             })
             .await?;
-        SalesChangeReadService::with_rbac(self.db.clone(), self.authorization.clone())
+        SalesChangeReadService::new(self.db.clone(), self.authorization.clone())
             .command_detail(id, actor, &internal::SALES_CHANGE_APPLIED_RESULT_READ)
             .await
             .map_err(crate::Error::from)

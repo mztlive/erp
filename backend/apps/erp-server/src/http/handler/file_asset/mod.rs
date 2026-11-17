@@ -19,6 +19,10 @@ use axum::response::Response;
 pub(crate) use compensation::{
     delete_pending_asset_objects, finish_asset_command, should_compensate_pending_assets,
 };
+use erp_approval_runtime::approval_materials::authorize_attachment;
+use erp_core::ids::BusinessDocumentId;
+use erp_permissions::sales_order;
+use erp_read_models::sales_center::access::SalesAccess;
 use erp_support::{
     AttachToDocumentRequest, DestroyFileAssetRequest, DocumentAttachmentView, FileAssetListItemView,
     FileAssetListParams, FileAssetView, MarkScanResultRequest, PageView, PendingFileAssetRequest,
@@ -38,15 +42,20 @@ use crate::http::upload;
 ///
 /// # 参数
 /// * `state` - 应用状态
+/// * `actor` - 已认证操作人
 /// * `query` - 分页与筛选参数（`file_name`/`security_scan_status` 等）
 ///
 /// # 返回
 /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
+///
+/// # 错误
+/// 无文件列表资格、参数非法或读取失败时拒绝。
 pub async fn file_asset_list(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<FileAssetListParams>,
 ) -> Result<PageView<FileAssetListItemView>> {
-    let page = state.application().file_asset_service().file_asset_list(&params).await?;
+    let page = state.application().file_asset_service().file_asset_list(&params, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -55,15 +64,20 @@ pub async fn file_asset_list(
 ///
 /// # 参数
 /// * `state` - 应用状态
+/// * `actor` - 已认证操作人
 /// * `id` - 文件资产 ID
 ///
 /// # 返回
 /// 返回完整资产视图。
+///
+/// # 错误
+/// 无文件详情资格、资产缺失或读取失败时拒绝。
 pub async fn file_asset_detail(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<FileAssetView> {
-    let mut view = state.application().file_asset_service().file_asset_detail(&id).await?;
+    let mut view = state.application().file_asset_service().file_asset_detail(&id, &actor).await?;
     prepare_asset_response(&state, &mut view);
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -121,22 +135,22 @@ pub async fn file_asset_upload(
     Extension(actor): Extension<AuditActor>,
     mut multipart: Multipart,
 ) -> Result<FileAssetView> {
+    let service = state.application().file_asset_service();
+    service.prepare_upload(&actor).await?;
     let file = extract_asset_file(&mut multipart).await?;
     let fields = FileAssetFormFields::from_multipart(&mut multipart).await?;
+    if let Some(document_id) = &fields.document_id {
+        SalesAccess::new(state.application().db(), state.application().authorization())
+            .require_attachment(&actor, &sales_order::HANDOVER, document_id.as_ref())
+            .await?;
+    }
     let request =
         store_asset_file(&state, file, fields.sensitivity_class, fields.retention_class, fields.expires_at)
             .await?;
     let cleanup =
         [PendingFileAssetRequest { reference: "file-upload".to_string(), registration: request.clone() }];
-    let service = state.application().file_asset_service();
     let result = match fields.document_id {
         Some(document_id) => {
-            erp_read_models::sales_center::access::SalesAccess::new(
-                state.application().db(),
-                state.application().rbac(),
-            )
-            .require_attachment(&actor, "update", document_id.as_ref())
-            .await?;
             service
                 .register_content_checked_file_asset_with_attachment(
                     request,
@@ -237,14 +251,11 @@ pub async fn document_attachment_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<AttachToDocumentRequest>,
 ) -> Result<DocumentAttachmentView> {
-    erp_read_models::sales_center::access::SalesAccess::new(
-        state.application().db(),
-        state.application().rbac(),
-    )
-    .require_attachment(&actor, "update", req.document_id.as_ref())
-    .await?;
-    erp_approval_runtime::approval_materials::authorize_attachment(
-        &state.application().rbac(),
+    SalesAccess::new(state.application().db(), state.application().authorization())
+        .require_attachment(&actor, &sales_order::HANDOVER, req.document_id.as_ref())
+        .await?;
+    authorize_attachment(
+        &state.application().authorization(),
         &state.application().db(),
         &actor,
         req.file_asset_id.as_ref(),
@@ -275,16 +286,13 @@ pub async fn document_attachment_list(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<Vec<DocumentAttachmentView>> {
-    erp_read_models::sales_center::access::SalesAccess::new(
-        state.application().db(),
-        state.application().rbac(),
-    )
-    .require_attachment(&actor, "detail", &id)
-    .await?;
+    SalesAccess::new(state.application().db(), state.application().authorization())
+        .require_attachment(&actor, &sales_order::DETAIL, &id)
+        .await?;
     let items = state
         .application()
         .file_asset_service()
-        .document_attachment_list(&erp_core::ids::BusinessDocumentId::new(id))
+        .document_attachment_list(&BusinessDocumentId::new(id), &actor)
         .await?;
 
     Ok(ApiResponse::ok_with_data(items))

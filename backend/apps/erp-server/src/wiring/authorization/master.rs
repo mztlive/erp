@@ -7,7 +7,7 @@ use erp_contract::authorization::ContractAccess;
 use erp_contract::repository::authorization::creation_facts;
 use erp_customer::authorization::{CustomerFacts, CustomerMapping};
 use erp_identity::{AccessFactsPort, AccessMapping, AuthorizationService, Result};
-use erp_permissions::{catalog, contract as contract_permissions, customer, warehouse};
+use erp_permissions::{catalog, contract as contract_permissions, customer, internal, warehouse};
 use erp_warehouse::authorization::{WarehouseFacts, WarehouseMapping};
 use mongodb::Database;
 
@@ -22,6 +22,21 @@ pub(super) struct MasterBindings {
     pub warehouse_mapping: Arc<dyn AccessMapping>,
 }
 
+/// 构造合同访问器，绑定共享统一授权服务及客户事实端口。
+/// # 参数
+/// db 为业务库，authorization 为进程共享的完整授权服务。
+/// # 返回
+/// 使用真实客户事实的合同访问器。
+/// # 错误
+/// 构造不执行 I/O。
+pub(crate) fn contract_access_with_db(
+    db: Database,
+    authorization: Arc<AuthorizationService>,
+) -> ContractAccess {
+    let customer_facts = CustomerFacts::shared(db.clone());
+    contract_access(db, authorization, customer_facts)
+}
+
 /// 构造拥有领域的真实实现并连接对应查询入口。
 /// # 参数
 /// db 为拥有领域共用的数据库。
@@ -34,15 +49,17 @@ pub(super) fn bindings(db: Database) -> Result<MasterBindings> {
     let customer_mapping = CustomerMapping::shared(db.clone());
     let warehouse_facts = WarehouseFacts::shared(db.clone());
     let warehouse_mapping = WarehouseMapping::shared("warehouse")?;
+    let inventory_warehouse_mapping = WarehouseMapping::shared("inventory_warehouse")?;
     let (product_facts, product_mapping) = product_bindings(db.clone())?;
     let (contract_facts, contract_mapping) = contract::bindings(db)?;
     let facts = vec![
         ("customer".into(), customer_facts.clone()),
         ("warehouse".into(), warehouse_facts.clone()),
+        ("inventory_warehouse".into(), warehouse_facts.clone()),
         ("product".into(), product_facts),
         ("contract".into(), contract_facts),
     ];
-    let mappings = vec![
+    let mut mappings = vec![
         (customer::LIST, customer_mapping.clone()),
         (customer::DETAIL, customer_mapping.clone()),
         (catalog::PRODUCT_PRODUCT_LIST, product_mapping.clone()),
@@ -51,6 +68,20 @@ pub(super) fn bindings(db: Database) -> Result<MasterBindings> {
         (contract_permissions::DETAIL, contract_mapping),
         (warehouse::LIST, warehouse_mapping.clone()),
     ];
+    mappings.extend(
+        [
+            internal::INVENTORY_BALANCE_WAREHOUSES,
+            internal::INVENTORY_BALANCE_DETAIL_WAREHOUSES,
+            internal::INVENTORY_MOVEMENT_WAREHOUSES,
+            internal::INVENTORY_RESERVATION_WAREHOUSES,
+            internal::INVENTORY_ADJUSTMENT_WAREHOUSES,
+            internal::INVENTORY_ADJUSTMENT_DETAIL_WAREHOUSES,
+            internal::INVENTORY_CREATE_WAREHOUSES,
+            internal::INVENTORY_UPDATE_WAREHOUSES,
+        ]
+        .into_iter()
+        .map(|permission| (permission, inventory_warehouse_mapping.clone())),
+    );
     Ok(MasterBindings {
         facts,
         mappings,

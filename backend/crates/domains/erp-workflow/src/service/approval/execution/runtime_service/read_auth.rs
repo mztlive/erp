@@ -19,7 +19,7 @@ use crate::entity::approval_qualification::ApprovalQualification;
 use crate::entity::document_registry::DocumentType;
 use crate::entity::work_item::{AssignmentSource, WorkItem, WorkItemStatus, WorkItemType};
 use crate::error::{Error, ErrorCode, Result};
-use crate::ports::{OrderTaskSource, WorkflowAuthorizationPort};
+use crate::ports::WorkflowAuthorizationPort;
 use crate::repository::bpm::ApprovalInstanceSummary;
 use crate::service::approval::business_adapter::{adapter_spec_of, ensure_separation_of_duties};
 use crate::service::approval::policy::{DocumentApprovalPolicy, SeparationOfDutiesPolicy, policy_of};
@@ -83,7 +83,7 @@ pub(super) async fn revalidate_decision_approver(
     authorization: &AuthorizationService,
     db: &Database,
     identity_service: &SharedRbacService,
-    rbac: &impl WorkflowAuthorizationPort,
+    _rbac: &impl WorkflowAuthorizationPort,
     input: RevalidateDecisionApproverInput<'_>,
     executor: &mut dyn Executor,
 ) -> Result<Eligibility> {
@@ -121,11 +121,6 @@ pub(super) async fn revalidate_decision_approver(
         },
         ApprovalQualification::Eligible(_) => None,
     };
-    if failure.is_none()
-        && let Some(actor) = authenticated_actor
-    {
-        require_decision_source(rbac, actor, snapshot, executor).await?;
-    }
     converge_eligibility(assignee_id, assignee_name, failure)
 }
 
@@ -415,28 +410,4 @@ pub(crate) fn open_tasks_match(execution: &ApprovalNodeExecution, tasks: &[WorkI
                     .as_deref()
                     .is_some_and(|owner| execution.has_participant(owner) && owners.insert(owner))
         })
-}
-
-/// 实际审批提交重验来源；候选人分配阶段不要求尚未生成的授权。
-async fn require_decision_source(
-    rbac: &impl WorkflowAuthorizationPort,
-    actor: &AuditActor,
-    snapshot: &ApprovalSubjectSnapshot,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    let source = match snapshot.document_type {
-        DocumentType::SalesOrder => Some(OrderTaskSource::Sales(snapshot.business_object_id.clone())),
-        DocumentType::PurchaseOrder => Some(OrderTaskSource::Purchase(snapshot.business_object_id.clone())),
-        _ => None,
-    };
-    if let Some(source) = source {
-        rbac.require_approval_source(
-            actor,
-            &source,
-            snapshot.approval_process_instance_id.as_ref(),
-            executor,
-        )
-        .await?;
-    }
-    Ok(())
 }

@@ -40,6 +40,7 @@ pub async fn upload(
     Extension(actor): Extension<AuditActor>,
     mut multipart: Multipart,
 ) -> Result<ImportView> {
+    state.application().contract_import_process().prepare_attachment_upload(&actor).await?;
     let file = read_file(&mut multipart).await?;
     if file.content_type != "application/pdf" {
         return Err(Error::BadRequest("合同仅支持 PDF".into()));

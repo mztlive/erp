@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use erp_identity::SharedRbacService;
+use erp_identity::{AuthorizationService, SharedRbacService};
 use erp_supplier_catalog::wiring::CatalogServices;
 use mongodb::Database;
 
@@ -13,18 +13,22 @@ use super::{
 
 /// 为供应目录装配同一数据库和身份政策下的消费合同。
 /// # 参数
-/// 数据库及应用已有的共享权限实例。
+/// db、rbac 为数据库与身份设施，authorization 为进程共享统一授权服务。
 /// # 返回
 /// 已注入范围、审计、文件和正式任务端口的目录依赖。
 /// # 错误
 /// 不返回错误；构造不读取或写入事实。
-pub fn catalog_services(db: Database, rbac: SharedRbacService) -> Arc<CatalogServices> {
+pub fn catalog_services(
+    db: Database,
+    rbac: SharedRbacService,
+    authorization: Arc<AuthorizationService>,
+) -> Arc<CatalogServices> {
     Arc::new(CatalogServices {
-        catalog: scoped_catalog_service(db.clone(), rbac.clone()),
-        catalog_access: catalog_access(db.clone(), rbac.clone()),
-        offerings: scoped_offering_service(db.clone(), rbac.clone()),
-        offering_access: offering_access(db.clone(), rbac.clone()),
-        suppliers: supplier_access(db.clone(), rbac.clone()),
-        work_items: Arc::new(work_item_service(db, rbac)),
+        catalog: scoped_catalog_service(db.clone(), authorization.clone()),
+        catalog_access: catalog_access(db.clone(), authorization.clone()),
+        offerings: scoped_offering_service(db.clone(), authorization.clone()),
+        offering_access: offering_access(db.clone(), authorization.clone()),
+        suppliers: supplier_access(db.clone(), authorization.clone()),
+        work_items: Arc::new(work_item_service(db, rbac, authorization)),
     })
 }

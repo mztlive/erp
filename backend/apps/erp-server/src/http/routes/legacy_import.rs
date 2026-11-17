@@ -5,95 +5,98 @@
 //! `/admin/legacy-import-batches/{id}/apply`、`/admin/legacy-import-confirmations`、
 //! `/admin/legacy-import-batches/{id}/commands`、`/admin/legacy-import-confirmations/complete`；
 //! 每条路由统一走
-//! JWT + RBAC（`with_permission`），权限由显式目录统一定义。
+//! JWT 认证；业务授权由用例执行，目录由 `permission_route` 提供，权限由显式目录统一定义。
 
 use axum::Router;
 use axum::routing::{get, post};
-use erp_identity::AuthorizationService;
 use erp_permissions as permissions;
 
 use crate::http::handler::legacy_import;
-use crate::http::middleware::with_permission;
+use crate::http::routes::permission_route;
 use crate::http::state::HttpState;
 
 /// 返回本域管理端路由集合。
 ///
 /// # 参数
-/// * `rbac` - 共享 Casbin RBAC 服务
+/// 无。
 ///
 /// # 返回
-/// 返回挂载了权限校验层的路由集合。
-pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
+/// 返回声明公共权限目录信息的路由集合。
+///
+/// # 错误
+/// 不执行 I/O，不返回错误。
+pub fn routes() -> Router<HttpState> {
+    Router::new().merge(batch_routes()).merge(confirmation_routes())
+}
+
+/// 历史数据导入批次路由。
+fn batch_routes() -> Router<HttpState> {
     Router::new()
         .route(
             "/legacy-import-batches",
-            with_permission(
+            permission_route(
                 get(legacy_import::legacy_import_batch_list),
-                rbac,
                 &permissions::legacy_import::BATCH_LIST,
             ),
         )
         .route(
             "/legacy-import-batches",
-            with_permission(
+            permission_route(
                 post(legacy_import::legacy_import_batch_create),
-                rbac,
                 &permissions::legacy_import::BATCH_CREATE,
             ),
         )
         .route(
             "/legacy-import-batches/{id}",
-            with_permission(
+            permission_route(
                 get(legacy_import::legacy_import_batch_detail),
-                rbac,
                 &permissions::legacy_import::BATCH_DETAIL,
             ),
         )
         .route(
             "/legacy-import-batches/{id}/rows",
-            with_permission(
+            permission_route(
                 get(legacy_import::legacy_import_row_list),
-                rbac,
                 &permissions::legacy_import::ROW_LIST,
             ),
         )
         .route(
             "/legacy-import-batches/{id}/apply",
-            with_permission(
+            permission_route(
                 post(legacy_import::legacy_import_batch_apply),
-                rbac,
                 &permissions::legacy_import::BATCH_APPLY,
             ),
         )
         .route(
             "/legacy-import-batches/{id}/commands",
-            with_permission(
+            permission_route(
                 post(legacy_import::legacy_import_execution_command),
-                rbac,
                 &permissions::legacy_import::EXECUTION_COMMAND,
             ),
         )
+}
+
+/// 历史数据导入确认路由。
+fn confirmation_routes() -> Router<HttpState> {
+    Router::new()
         .route(
             "/legacy-import-confirmations",
-            with_permission(
+            permission_route(
                 get(legacy_import::legacy_import_confirmation_list),
-                rbac,
                 &permissions::legacy_import::CONFIRMATION_LIST,
             ),
         )
         .route(
             "/legacy-import-confirmations",
-            with_permission(
+            permission_route(
                 post(legacy_import::legacy_import_confirmation_create),
-                rbac,
                 &permissions::legacy_import::CONFIRMATION_CREATE,
             ),
         )
         .route(
             "/legacy-import-confirmations/complete",
-            with_permission(
+            permission_route(
                 post(legacy_import::legacy_import_confirmation_complete),
-                rbac,
                 &permissions::legacy_import::CONFIRMATION_COMPLETE,
             ),
         )

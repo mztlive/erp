@@ -12,13 +12,20 @@ pub async fn create_admin(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateAdminParams>,
 ) -> Result<()> {
-    AdminService::new(state.application().db(), state.application().rbac()).create_admin(req, actor).await?;
+    AdminService::new(state.application().db(), state.application().rbac())
+        .create_admin(req, actor, state.application().authorization())
+        .await?;
 
     Ok(ApiResponse::<()>::ok())
 }
 
-pub async fn list_admins(State(state): State<HttpState>) -> Result<Vec<AdminItem>> {
-    let items = AdminService::new(state.application().db(), state.application().rbac()).admin_list().await?;
+pub async fn list_admins(
+    State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
+) -> Result<Vec<AdminItem>> {
+    let items = AdminService::new(state.application().db(), state.application().rbac())
+        .admin_list(&actor, state.application().authorization())
+        .await?;
     Ok(ApiResponse::ok_with_data(items))
 }
 
@@ -29,7 +36,9 @@ pub async fn update_admin(
     Json(mut req): Json<UpdateAdminParams>,
 ) -> Result<()> {
     req.id = id;
-    AdminService::new(state.application().db(), state.application().rbac()).update_admin(req, actor).await?;
+    AdminService::new(state.application().db(), state.application().rbac())
+        .update_admin(req, actor, state.application().authorization())
+        .await?;
 
     Ok(ApiResponse::<()>::ok())
 }
@@ -39,7 +48,9 @@ pub async fn delete_admin(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<()> {
-    AdminService::new(state.application().db(), state.application().rbac()).delete_admin(id, actor).await?;
+    AdminService::new(state.application().db(), state.application().rbac())
+        .delete_admin(id, actor, state.application().authorization())
+        .await?;
 
     Ok(ApiResponse::<()>::ok())
 }
@@ -52,7 +63,7 @@ pub async fn update_admin_role(
 ) -> Result<()> {
     req.id = id;
     AdminService::new(state.application().db(), state.application().rbac())
-        .update_admin_role(req, actor)
+        .update_admin_role(req, actor, state.application().authorization())
         .await?;
 
     Ok(ApiResponse::<()>::ok())

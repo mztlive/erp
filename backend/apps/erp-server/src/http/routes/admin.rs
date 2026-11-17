@@ -1,68 +1,71 @@
 use axum::routing::{delete, get, post, put};
 use axum::{Router, middleware};
-use erp_identity::AuthorizationService;
 use erp_permissions as permissions;
 
 use crate::http::handler::admin;
-use crate::http::middleware::{authenticate, with_permission};
+use crate::http::middleware::authenticate;
 use crate::http::routes::{
     access_control, approval_instance, bulk_job, catalog, contract, cost, customer, customer_quality,
     demo_master_data, document_registry, file_asset, financial_files, fulfillment, integration_ops,
-    inventory, legacy_import, party, payable, purchase_order, purchase_payment_request, receivable, returns,
-    sales_inquiry, sales_order, sales_review, sales_selection, source_registry, supplier, supplier_api,
-    supplier_deposit, supplier_fulfillment, supplier_offering, supplier_portal, supplier_settlement,
-    warehouse, work_item,
+    inventory, legacy_import, party, payable, permission_route, purchase_order, purchase_payment_request,
+    receivable, returns, sales_inquiry, sales_order, sales_review, sales_selection, source_registry,
+    supplier, supplier_api, supplier_deposit, supplier_fulfillment, supplier_offering, supplier_portal,
+    supplier_settlement, warehouse, work_item,
 };
 use crate::http::state::HttpState;
 
 /// 管理后台路由入口。
 ///
 /// # 返回值
-/// 返回统一认证的管理后台路由；业务操作按各路由校验 Casbin RBAC。
+/// 返回统一 JWT 认证的管理后台路由；业务用例完成授权。
+///
+/// # 参数
+/// `state` 为 HTTP 状态。
+///
+/// # 错误
+/// 不执行 I/O，不返回错误。
 pub fn routes(state: HttpState) -> Router<HttpState> {
-    let rbac_service = state.application().authorization();
-
     Router::new()
-        .merge(account_routes(&rbac_service))
-        .merge(role_routes(&rbac_service))
-        .merge(audit_log_routes(&rbac_service))
-        .merge(procurement_responsibility_routes(&rbac_service))
-        .merge(access_control::routes(&rbac_service))
-        .merge(approval_instance::routes(&rbac_service))
-        .merge(bulk_job::routes(&rbac_service))
-        .merge(catalog::routes(&rbac_service))
-        .merge(contract::routes(&rbac_service))
-        .merge(cost::routes(&rbac_service))
-        .merge(customer::routes(&rbac_service))
-        .merge(customer_quality::routes(&rbac_service))
-        .merge(document_registry::routes(&rbac_service))
-        .merge(file_asset::routes(&rbac_service))
-        .merge(financial_files::routes(&rbac_service))
-        .merge(fulfillment::routes(&rbac_service))
-        .merge(integration_ops::routes(&rbac_service))
-        .merge(inventory::routes(&rbac_service))
-        .merge(legacy_import::routes(&rbac_service))
-        .merge(party::routes(&rbac_service))
-        .merge(payable::routes(&rbac_service))
-        .merge(purchase_order::routes(&rbac_service))
-        .merge(purchase_payment_request::routes(&rbac_service))
-        .merge(receivable::routes(&rbac_service))
-        .merge(returns::routes(&rbac_service))
-        .merge(sales_order::routes(&rbac_service))
-        .merge(sales_inquiry::routes(&rbac_service))
-        .merge(sales_review::routes(&rbac_service))
-        .merge(sales_selection::routes(&rbac_service))
-        .merge(source_registry::routes(&rbac_service))
-        .merge(supplier::routes(&rbac_service))
-        .merge(supplier_deposit::routes(&rbac_service))
-        .merge(supplier_api::routes(&rbac_service))
-        .merge(supplier_offering::routes(&rbac_service))
-        .merge(supplier_portal::admin_routes(&rbac_service))
-        .merge(supplier_fulfillment::routes(&rbac_service))
-        .merge(supplier_settlement::routes(&rbac_service))
-        .merge(warehouse::routes(&rbac_service))
-        .merge(work_item::routes(&rbac_service))
-        .merge(demo_master_data::routes(&rbac_service))
+        .merge(account_routes())
+        .merge(role_routes())
+        .merge(audit_log_routes())
+        .merge(procurement_responsibility_routes())
+        .merge(access_control::routes())
+        .merge(approval_instance::routes())
+        .merge(bulk_job::routes())
+        .merge(catalog::routes())
+        .merge(contract::routes())
+        .merge(cost::routes())
+        .merge(customer::routes())
+        .merge(customer_quality::routes())
+        .merge(document_registry::routes())
+        .merge(file_asset::routes())
+        .merge(financial_files::routes())
+        .merge(fulfillment::routes())
+        .merge(integration_ops::routes())
+        .merge(inventory::routes())
+        .merge(legacy_import::routes())
+        .merge(party::routes())
+        .merge(payable::routes())
+        .merge(purchase_order::routes())
+        .merge(purchase_payment_request::routes())
+        .merge(receivable::routes())
+        .merge(returns::routes())
+        .merge(sales_order::routes())
+        .merge(sales_inquiry::routes())
+        .merge(sales_review::routes())
+        .merge(sales_selection::routes())
+        .merge(source_registry::routes())
+        .merge(supplier::routes())
+        .merge(supplier_deposit::routes())
+        .merge(supplier_api::routes())
+        .merge(supplier_offering::routes())
+        .merge(supplier_portal::admin_routes())
+        .merge(supplier_fulfillment::routes())
+        .merge(supplier_settlement::routes())
+        .merge(warehouse::routes())
+        .merge(work_item::routes())
+        .merge(demo_master_data::routes())
         .route_layer(middleware::from_fn_with_state(state.clone(), authenticate))
         .with_state(state)
 }
@@ -70,49 +73,32 @@ pub fn routes(state: HttpState) -> Router<HttpState> {
 /// 管理后台账号相关路由。
 ///
 /// # 参数
-/// * `rbac_service` - 授权引擎
+/// 无。
 ///
 /// # 返回值
 /// 返回账号相关路由集合
-fn account_routes(rbac_service: &AuthorizationService) -> Router<HttpState> {
+fn account_routes() -> Router<HttpState> {
     Router::new()
         .route(
             "/admins",
-            with_permission(
-                get(admin::account::list_admins),
-                rbac_service,
-                &permissions::admin::ACCOUNT_LIST_ADMINS,
-            ),
+            permission_route(get(admin::account::list_admins), &permissions::admin::ACCOUNT_LIST_ADMINS),
         )
         .route(
             "/admins",
-            with_permission(
-                post(admin::account::create_admin),
-                rbac_service,
-                &permissions::admin::ACCOUNT_CREATE_ADMIN,
-            ),
+            permission_route(post(admin::account::create_admin), &permissions::admin::ACCOUNT_CREATE_ADMIN),
         )
         .route(
             "/admins/{id}",
-            with_permission(
-                put(admin::account::update_admin),
-                rbac_service,
-                &permissions::admin::ACCOUNT_UPDATE_ADMIN,
-            ),
+            permission_route(put(admin::account::update_admin), &permissions::admin::ACCOUNT_UPDATE_ADMIN),
         )
         .route(
             "/admins/{id}",
-            with_permission(
-                delete(admin::account::delete_admin),
-                rbac_service,
-                &permissions::admin::ACCOUNT_DELETE_ADMIN,
-            ),
+            permission_route(delete(admin::account::delete_admin), &permissions::admin::ACCOUNT_DELETE_ADMIN),
         )
         .route(
             "/admins/{id}/role",
-            with_permission(
+            permission_route(
                 put(admin::account::update_admin_role),
-                rbac_service,
                 &permissions::admin::ACCOUNT_UPDATE_ADMIN_ROLE,
             ),
         )
@@ -121,89 +107,70 @@ fn account_routes(rbac_service: &AuthorizationService) -> Router<HttpState> {
 /// 管理后台角色相关路由。
 ///
 /// # 参数
-/// * `rbac_service` - 授权引擎
+/// 无。
 ///
 /// # 返回值
 /// 返回角色相关路由集合
-fn role_routes(rbac_service: &AuthorizationService) -> Router<HttpState> {
-    role_template_routes(rbac_service).merge(role_crud_routes(rbac_service))
+fn role_routes() -> Router<HttpState> {
+    role_template_routes().merge(role_crud_routes())
 }
 
 /// 内建岗位模板预览和生成，复用角色查看与创建权限。
-fn role_template_routes(rbac_service: &AuthorizationService) -> Router<HttpState> {
+fn role_template_routes() -> Router<HttpState> {
     Router::new()
         .route(
             "/role-templates",
-            with_permission(
+            permission_route(
                 get(admin::role_template::list_role_templates),
-                rbac_service,
                 &permissions::admin::ROLE_LIST_ROLES,
             ),
         )
         .route(
             "/role-templates/generate",
-            with_permission(
+            permission_route(
                 post(admin::role_template::generate_builtin_roles),
-                rbac_service,
                 &permissions::admin::ROLE_CREATE_ROLE,
             ),
         )
 }
 
 /// 普通角色的列表、创建、修改和删除入口。
-fn role_crud_routes(rbac_service: &AuthorizationService) -> Router<HttpState> {
+fn role_crud_routes() -> Router<HttpState> {
     Router::new()
-        .route(
-            "/roles",
-            with_permission(get(admin::role::list_roles), rbac_service, &permissions::admin::ROLE_LIST_ROLES),
-        )
+        .route("/roles", permission_route(get(admin::role::list_roles), &permissions::admin::ROLE_LIST_ROLES))
         .route(
             "/roles/assignable",
-            with_permission(
+            permission_route(
                 get(admin::role::list_assignable_roles),
-                rbac_service,
                 &permissions::admin::ROLE_LIST_ASSIGNABLE_ROLES,
             ),
         )
         .route(
             "/roles",
-            with_permission(
-                post(admin::role::create_role),
-                rbac_service,
-                &permissions::admin::ROLE_CREATE_ROLE,
-            ),
+            permission_route(post(admin::role::create_role), &permissions::admin::ROLE_CREATE_ROLE),
         )
         .route(
             "/roles/{id}",
-            with_permission(
-                put(admin::role::update_role),
-                rbac_service,
-                &permissions::admin::ROLE_UPDATE_ROLE,
-            ),
+            permission_route(put(admin::role::update_role), &permissions::admin::ROLE_UPDATE_ROLE),
         )
         .route(
             "/roles/{id}",
-            with_permission(
-                delete(admin::role::delete_role),
-                rbac_service,
-                &permissions::admin::ROLE_DELETE_ROLE,
-            ),
+            permission_route(delete(admin::role::delete_role), &permissions::admin::ROLE_DELETE_ROLE),
         )
 }
 
 /// 管理后台审计日志相关路由。
 ///
 /// # 参数
-/// * `rbac_service` - 授权引擎
+/// 无。
 ///
 /// # 返回值
 /// 返回审计日志相关路由集合
-fn audit_log_routes(rbac_service: &AuthorizationService) -> Router<HttpState> {
+fn audit_log_routes() -> Router<HttpState> {
     Router::new().route(
         "/audit-logs",
-        with_permission(
+        permission_route(
             get(admin::audit_log::list_audit_logs),
-            rbac_service,
             &permissions::admin::AUDIT_LOG_LIST_AUDIT_LOGS,
         ),
     )
@@ -212,41 +179,37 @@ fn audit_log_routes(rbac_service: &AuthorizationService) -> Router<HttpState> {
 /// 采购责任规则维护与解析预览路由。
 ///
 /// # 参数
-/// * `rbac_service` - 授权引擎
+/// 无。
 ///
 /// # 返回
 /// 返回规则查询、创建、更新和逐行解析路由集合。
-fn procurement_responsibility_routes(rbac_service: &AuthorizationService) -> Router<HttpState> {
+fn procurement_responsibility_routes() -> Router<HttpState> {
     Router::new()
         .route(
             "/procurement-responsibility-rules",
-            with_permission(
+            permission_route(
                 get(admin::procurement_responsibility::list_rules),
-                rbac_service,
                 &permissions::admin::PROCUREMENT_RESPONSIBILITY_RESOLVE,
             ),
         )
         .route(
             "/procurement-responsibility-rules",
-            with_permission(
+            permission_route(
                 post(admin::procurement_responsibility::create_rule),
-                rbac_service,
                 &permissions::admin::PROCUREMENT_RESPONSIBILITY_CREATE_RULE,
             ),
         )
         .route(
             "/procurement-responsibility-rules/{id}",
-            with_permission(
+            permission_route(
                 put(admin::procurement_responsibility::update_rule),
-                rbac_service,
                 &permissions::admin::PROCUREMENT_RESPONSIBILITY_CREATE_RULE,
             ),
         )
         .route(
             "/procurement-responsibility/resolve",
-            with_permission(
+            permission_route(
                 post(admin::procurement_responsibility::resolve),
-                rbac_service,
                 &permissions::admin::PROCUREMENT_RESPONSIBILITY_RESOLVE,
             ),
         )

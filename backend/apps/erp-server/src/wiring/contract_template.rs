@@ -5,6 +5,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use erp_contract::ports::{SigningCompanyFact, SigningCompanyPort};
 use erp_contract::{ContractTemplateService, Result};
+use erp_identity::AuthorizationService;
 use erp_party::{PartyExt, PartyStatus};
 use mongodb::Database;
 use persistence_core::Executor;
@@ -29,14 +30,19 @@ impl SigningCompanyPort for MongoSigningCompanies {
 /// 装配主体事实和现有合同审计 Port。
 /// # 参数
 /// * `db` - 业务数据库。
+/// * `authorization` - 进程共享统一授权服务。
 /// # 返回
 /// 完整接线的模板服务。
 /// # 错误
 /// 无。
-pub fn contract_template_service(db: Database) -> ContractTemplateService {
+pub fn contract_template_service(
+    db: Database,
+    authorization: Arc<AuthorizationService>,
+) -> ContractTemplateService {
     ContractTemplateService::new(
         db.clone(),
         MongoContractAudit::shared(db.clone()),
         Arc::new(MongoSigningCompanies(db)),
+        authorization,
     )
 }

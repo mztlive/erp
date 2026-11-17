@@ -17,7 +17,7 @@ use crate::entity::access_control::{ResolvedScope, ScopeClause};
 use crate::entity::authorization::{AccessContext, FactValue, ObjectFacts, ResourceTargets};
 use crate::entity::organization::{OrgMembership, OrgValidity};
 use crate::entity::organization_change::OrganizationState;
-use crate::entity::resource_access::ResourceKind;
+use crate::entity::resource_access::{GrantTarget, ResourceKind, SourceKey};
 use crate::ports::AccessFactsPort;
 pub(super) use crate::repository::authorization::testing::{inquiry_members, mapping};
 use crate::service::access_control::resolve::{AuthorizedDataScope, DataScopeFacts};
@@ -35,6 +35,7 @@ pub(super) struct Identity {
     pub permissions_calls: AtomicU64,
     pub grant_revision: AtomicU64,
     pub record_grants: Mutex<BTreeSet<(ResourceKind, String)>>,
+    pub source_grants: Mutex<BTreeSet<(String, ResourceKind, String)>>,
     pub scopes: Mutex<BTreeMap<(Permission, Permission), ResolvedScope>>,
     pub role_scopes: Mutex<BTreeMap<(String, Permission), ScopeClause>>,
     pub scope_deadlines: Mutex<BTreeMap<Permission, Instant>>,
@@ -58,6 +59,7 @@ impl Default for Identity {
             permissions_calls: AtomicU64::new(0),
             grant_revision: AtomicU64::new(1),
             record_grants: Mutex::new(BTreeSet::new()),
+            source_grants: Mutex::new(BTreeSet::new()),
             scopes: Mutex::new(BTreeMap::new()),
             role_scopes: Mutex::new(BTreeMap::new()),
             scope_deadlines: Mutex::new(BTreeMap::new()),
@@ -130,8 +132,6 @@ impl Facilities for Identity {
             });
         }
         Ok(AuthorizedDataScope::test_fixture(DataScopeFacts {
-            resource: context.permission.resource().into(),
-            action: context.permission.action().into(),
             scope: scoped_roles.unwrap_or_else(|| {
                 self.scopes
                     .lock()
@@ -173,6 +173,14 @@ impl Facilities for Identity {
             .filter(|(kind, id)| *kind == resource && ids.ids().contains(id))
             .map(|(_, id)| id.clone())
             .collect())
+    }
+    async fn source_grant(
+        &self,
+        source: &SourceKey,
+        target: &GrantTarget,
+        _: &mut dyn Executor,
+    ) -> Result<bool> {
+        Ok(self.source_grants.lock().unwrap().contains(&(source.id()?, target.resource, target.id.clone())))
     }
 }
 

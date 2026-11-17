@@ -1,6 +1,7 @@
 //! 审计领域应用错误，保留原有的审计错误映射。
 
 use application_core::{ValidationIssues, impl_application_error_conversions, impl_domain_error_class};
+use erp_identity::Error as IdentityError;
 use persistence_core::impl_repository_error;
 
 /// 审计领域结果别名。
@@ -56,6 +57,33 @@ impl_domain_error_class!(Error);
 
 impl_repository_error!(Error, duplicate = Error::ReceiptDuplicate);
 
+impl From<IdentityError> for Error {
+    /// 保留统一授权错误的分类与原持久化来源。
+    /// # 参数
+    /// error 为统一授权服务返回的错误。
+    /// # 返回
+    /// 对应分类的审计领域错误。
+    /// # 错误
+    /// 不返回额外错误。
+    fn from(error: IdentityError) -> Self {
+        match error {
+            IdentityError::Internal(v) | IdentityError::Rbac(v) => Self::Internal(v),
+            IdentityError::NotFound(v) => Self::NotFound(v),
+            IdentityError::ValidationError(v) => Self::ValidationError(v),
+            IdentityError::InvalidInput(v) => Self::InvalidInput(v),
+            IdentityError::BusinessLogicError(v) => Self::BusinessLogicError(v),
+            IdentityError::ConflictError(v) => Self::ConflictError(v),
+            IdentityError::Forbidden(v) => Self::Forbidden(v),
+            IdentityError::Unauthenticated(v) => Self::Unauthenticated(v),
+            IdentityError::Logic(v) => Self::Logic(v),
+            IdentityError::ReceiptDuplicate(v) => Self::ReceiptDuplicate(v),
+            IdentityError::TransientTransaction(v) => Self::TransientTransaction(v),
+            IdentityError::OutcomeUnknown(v) => Self::OutcomeUnknown(v),
+            IdentityError::RepositoryError(v) => Self::from(v),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::error::Error as StdError;
@@ -63,7 +91,31 @@ mod tests {
     use application_core::ErrorClass;
     use mongodb::error::Error as MongoError;
 
-    use super::Error;
+    use super::{Error, IdentityError};
+
+    #[test]
+    fn authorization_errors_preserve_access_and_storage_classification() {
+        assert!(matches!(
+            Error::from(IdentityError::Forbidden("denied".into())),
+            Error::Forbidden(reason) if reason == "denied"
+        ));
+        assert!(matches!(
+            Error::from(IdentityError::Unauthenticated("disabled".into())),
+            Error::Unauthenticated(reason) if reason == "disabled"
+        ));
+        assert!(matches!(
+            Error::from(IdentityError::Rbac("unavailable".into())),
+            Error::Internal(reason) if reason == "unavailable"
+        ));
+        let source = persistence_core::Error::DuplicateKey(MongoError::custom("identity-source"));
+        let error = Error::from(IdentityError::ReceiptDuplicate(source));
+        assert_eq!(error.class(), ErrorClass::Conflict);
+        let source = error.source().unwrap().downcast_ref::<persistence_core::Error>().unwrap();
+        let persistence_core::Error::DuplicateKey(mongo) = source else {
+            panic!("授权持久化来源必须保留");
+        };
+        assert_eq!(mongo.get_custom::<&str>().copied(), Some("identity-source"));
+    }
 
     #[test]
     fn audit_duplicate_conversion_keeps_the_receipt_source() {

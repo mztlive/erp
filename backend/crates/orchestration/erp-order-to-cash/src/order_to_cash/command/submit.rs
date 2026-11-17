@@ -320,10 +320,9 @@ impl SalesOrderCommandProcess {
             .sales()
             .prepare_submission_copy(
                 &order,
-                active_working_copy,
+                active_working_copy.map(|copy| (copy, req.version)),
                 stable,
                 &draft,
-                req.version,
                 actor,
                 executor,
             )

@@ -22,6 +22,7 @@ mod start_approval;
 
 pub use adapter::sales_order_object_readable;
 use erp_identity::AuthorizationService;
+use erp_read_models::sales_center::order::SalesOrderReadService;
 use erp_sales::entity::sales_order::BusinessType;
 use erp_sales::service::sales_order::SalesOrderService;
 use erp_workflow::entity::document_registry::DocumentType;
@@ -57,11 +58,8 @@ impl SalesOrderCommandProcess {
     fn sales(&self) -> SalesOrderService {
         SalesOrderService::new(self.db.clone())
     }
-    fn read_model(&self) -> erp_read_models::sales_center::order::SalesOrderReadService {
-        erp_read_models::sales_center::order::SalesOrderReadService::with_rbac(
-            self.db.clone(),
-            self.authorization.clone(),
-        )
+    fn read_model(&self) -> SalesOrderReadService {
+        SalesOrderReadService::new(self.db.clone(), self.authorization.clone())
     }
     fn catalog(&self) -> adapters::catalog::CatalogQualificationAdapter {
         adapters::catalog::CatalogQualificationAdapter::new(self.services.catalog.clone())

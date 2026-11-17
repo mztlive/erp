@@ -9,7 +9,7 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use erp_finance_posting::finance_posting;
 use erp_fulfillment_execution::inventory_adjustment;
-use erp_identity::SharedRbacService;
+use erp_identity::{AuthorizationService, SharedRbacService};
 use erp_order_to_cash::{order_to_cash, sales_change};
 use erp_procure_to_pay::procure_to_pay;
 use erp_reverse_flow::reverse_flow;
@@ -32,6 +32,7 @@ use crate::wiring::{
 pub struct ApprovalActionRegistry {
     db: Database,
     rbac: SharedRbacService,
+    authorization: Arc<AuthorizationService>,
 }
 
 impl ApprovalActionRegistry {
@@ -40,14 +41,15 @@ impl ApprovalActionRegistry {
     /// # 参数
     /// * `db` - 各领域动作使用的数据库。
     /// * `rbac` - 领域动作重验使用的 RBAC 快照。
+    /// * `authorization` - 启动时完整绑定的共享授权服务。
     ///
     /// # 返回
     /// 返回可注入审批运行时的注册表。
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
-        Self { db, rbac }
+    pub fn new(db: Database, rbac: SharedRbacService, authorization: Arc<AuthorizationService>) -> Self {
+        Self { db, rbac, authorization }
     }
 }
 
@@ -155,8 +157,8 @@ async fn dispatch_sales(
             require_transaction(executor)?;
             order_to_cash::SalesOrderFormalizationProcess::new(
                 registry.db.clone(),
-                registry.rbac.clone(),
-                sales_services(registry.db.clone(), registry.rbac.clone()),
+                registry.authorization.clone(),
+                sales_services(registry.db.clone(), registry.rbac.clone(), registry.authorization.clone()),
             )
             .formalize_approved_submission_apply(context.business_object_id(), actor, executor)
             .await
@@ -166,8 +168,8 @@ async fn dispatch_sales(
             require_transaction(executor)?;
             sales_change::SalesChangeProcess::new(
                 registry.db.clone(),
-                registry.rbac.clone(),
-                sales_services(registry.db.clone(), registry.rbac.clone()),
+                registry.authorization.clone(),
+                sales_services(registry.db.clone(), registry.rbac.clone(), registry.authorization.clone()),
             )
             .apply_effective_change_apply(context.business_object_id(), actor, executor)
             .await
@@ -202,16 +204,21 @@ async fn dispatch_procurement(
     match action {
         ApprovalDomainAction::PurchaseOrderFormalizeApprovedOrder => {
             require_transaction(executor)?;
-            purchase_formalization_process(registry.db.clone(), registry.rbac.clone())
-                .formalize_approved_order_apply(context.business_object_id(), actor, executor)
-                .await
-                .map_err(Into::into)
+            purchase_formalization_process(
+                registry.db.clone(),
+                registry.rbac.clone(),
+                registry.authorization.clone(),
+            )
+            .formalize_approved_order_apply(context.business_object_id(), actor, executor)
+            .await
+            .map_err(Into::into)
         },
         ApprovalDomainAction::PurchaseChangeOrderApplyEffectiveChange => {
             require_transaction(executor)?;
             procure_to_pay::PurchaseOrderProcess::new(
                 registry.db.clone(),
-                purchase_ports(registry.db.clone(), registry.rbac.clone()),
+                registry.authorization.clone(),
+                purchase_ports(registry.db.clone(), registry.rbac.clone(), registry.authorization.clone()),
             )
             .apply_effective_change_apply(context.business_object_id(), actor, executor)
             .await
@@ -249,13 +256,15 @@ async fn dispatch_inventory(
     executor: &mut dyn Executor,
 ) -> ServiceResult<()> {
     match action {
-        ApprovalDomainAction::StockAdjustmentPost => {
-            inventory_adjustment_process(registry.db.clone(), registry.rbac.clone())
-                .post_stock_adjustment(context, actor, executor)
-                .await
-                .map(|_| ())
-                .map_err(Into::into)
-        },
+        ApprovalDomainAction::StockAdjustmentPost => inventory_adjustment_process(
+            registry.db.clone(),
+            registry.rbac.clone(),
+            registry.authorization.clone(),
+        )
+        .post_stock_adjustment(context, actor, executor)
+        .await
+        .map(|_| ())
+        .map_err(Into::into),
         ApprovalDomainAction::StockAdjustmentCancelApproval => {
             inventory_adjustment::cancel_approval::cancel_stock_adjustment_approval_apply(
                 &registry.db,
@@ -280,16 +289,7 @@ async fn dispatch_finance(
 ) -> ServiceResult<()> {
     match action {
         ApprovalDomainAction::SalesInvoiceRequestApprove => {
-            finance_posting::receivable::invoice_request::approve(
-                &registry.db,
-                &finance_posting_ports(registry.db.clone(), registry.rbac.clone()),
-                context.business_object_id(),
-                context.approval_process_instance_id(),
-                actor,
-                executor,
-            )
-            .await
-            .map_err(Into::into)
+            approve_invoice_request(registry, context, actor, executor).await
         },
         ApprovalDomainAction::SalesInvoiceRequestCancelApproval => {
             finance_posting::receivable::invoice_request::cancel(
@@ -327,6 +327,25 @@ async fn dispatch_finance(
     }
 }
 
+/// 使用同一事务的财务能力批准开票申请。
+async fn approve_invoice_request(
+    registry: &ApprovalActionRegistry,
+    context: &ApprovalActionContext,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> ServiceResult<()> {
+    finance_posting::receivable::invoice_request::approve(
+        &registry.db,
+        &finance_posting_ports(registry.db.clone(), registry.rbac.clone(), registry.authorization.clone()),
+        context.business_object_id(),
+        context.approval_process_instance_id(),
+        actor,
+        executor,
+    )
+    .await
+    .map_err(Into::into)
+}
+
 async fn dispatch_reverse(
     registry: &ApprovalActionRegistry,
     action: ApprovalDomainAction,
@@ -339,7 +358,11 @@ async fn dispatch_reverse(
             require_transaction(executor)?;
             reverse_flow::finalize_approved_return(
                 &registry.db,
-                &reverse_flow_ports(registry.db.clone(), registry.rbac.clone()),
+                &reverse_flow_ports(
+                    registry.db.clone(),
+                    registry.rbac.clone(),
+                    registry.authorization.clone(),
+                ),
                 action.document_type(),
                 context.business_object_id(),
                 actor,
@@ -356,14 +379,7 @@ async fn dispatch_reverse(
                 .map_err(Into::into)
         },
         ApprovalDomainAction::PaymentReversalPost => {
-            require_transaction(executor)?;
-            reverse_flow::PaymentReversalProcess::new(
-                registry.db.clone(),
-                Arc::new(PaymentRequestRestoration::new(registry.db.clone(), registry.rbac.clone())),
-            )
-            .post_payment_reversal_apply(context.business_object_id(), actor, executor)
-            .await
-            .map_err(Into::into)
+            post_payment_reversal(registry, context, actor, executor).await
         },
         ApprovalDomainAction::CustomerRefundCancelApproval
         | ApprovalDomainAction::SupplierRefundCancelApproval
@@ -382,6 +398,27 @@ async fn dispatch_reverse(
     }
 }
 
+/// 付款冲正在原审批事务内恢复原申请并完成过账。
+async fn post_payment_reversal(
+    registry: &ApprovalActionRegistry,
+    context: &ApprovalActionContext,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> ServiceResult<()> {
+    require_transaction(executor)?;
+    reverse_flow::PaymentReversalProcess::new(
+        registry.db.clone(),
+        Arc::new(PaymentRequestRestoration::new(
+            registry.db.clone(),
+            registry.rbac.clone(),
+            registry.authorization.clone(),
+        )),
+    )
+    .post_payment_reversal_apply(context.business_object_id(), actor, executor)
+    .await
+    .map_err(Into::into)
+}
+
 async fn dispatch_payment_request(
     registry: &ApprovalActionRegistry,
     action: ApprovalDomainAction,
@@ -397,7 +434,11 @@ async fn dispatch_payment_request(
     match action {
         ApprovalDomainAction::PurchasePaymentRequestApprove => payment_request::approve(
             &registry.db,
-            &finance_posting_ports(registry.db.clone(), registry.rbac.clone()),
+            &finance_posting_ports(
+                registry.db.clone(),
+                registry.rbac.clone(),
+                registry.authorization.clone(),
+            ),
             id,
             actor,
             executor,

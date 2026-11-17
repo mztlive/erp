@@ -34,9 +34,10 @@ use crate::wiring::MongoSupplierRole;
 /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
 pub async fn party_list(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<PartyListParams>,
 ) -> Result<PageView<PartyView>> {
-    let page = state.application().party_service().party_list(&params).await?;
+    let page = state.application().party_service().party_list(&actor, &params).await?;
     Ok(ApiResponse::ok_with_data(page))
 }
 
@@ -66,8 +67,12 @@ pub async fn party_create(
 ///
 /// # 返回
 /// 返回主体详情视图。
-pub async fn party_detail(State(state): State<HttpState>, Path(id): Path<String>) -> Result<PartyDetailView> {
-    let view = state.application().party_service().party_detail(&id).await?;
+pub async fn party_detail(
+    State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+) -> Result<PartyDetailView> {
+    let view = state.application().party_service().party_detail(&actor, &id).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -127,10 +132,11 @@ pub async fn party_delete(
 /// 返回契约形状的分页视图。
 pub async fn party_revision_list(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
     Query(params): Query<PartyRevisionListParams>,
 ) -> Result<PageView<PartyRevisionView>> {
-    let page = state.application().party_service().party_revision_list(&id, &params).await?;
+    let page = state.application().party_service().party_revision_list(&actor, &id, &params).await?;
     Ok(ApiResponse::ok_with_data(page))
 }
 
@@ -145,10 +151,11 @@ pub async fn party_revision_list(
 /// 返回契约形状的分页视图。
 pub async fn party_contact_list(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
     Query(params): Query<PartyContactListParams>,
 ) -> Result<PageView<PartyContactView>> {
-    let page = state.application().party_contact_service().party_contact_list(&id, &params).await?;
+    let page = state.application().party_contact_service().party_contact_list(&actor, &id, &params).await?;
     Ok(ApiResponse::ok_with_data(page))
 }
 
@@ -203,10 +210,11 @@ pub async fn party_contact_update(
 /// 返回契约形状的分页视图。
 pub async fn party_address_list(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
     Query(params): Query<PartyAddressListParams>,
 ) -> Result<PageView<PartyAddressView>> {
-    let page = state.application().party_address_service().party_address_list(&id, &params).await?;
+    let page = state.application().party_address_service().party_address_list(&actor, &id, &params).await?;
     Ok(ApiResponse::ok_with_data(page))
 }
 
@@ -261,10 +269,12 @@ pub async fn party_address_update(
 /// 返回契约形状的分页视图。
 pub async fn party_tax_profile_list(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
     Query(params): Query<PartyTaxProfileListParams>,
 ) -> Result<PageView<PartyTaxProfileView>> {
-    let page = state.application().party_tax_profile_service().party_tax_profile_list(&id, &params).await?;
+    let page =
+        state.application().party_tax_profile_service().party_tax_profile_list(&actor, &id, &params).await?;
     Ok(ApiResponse::ok_with_data(page))
 }
 
@@ -321,10 +331,15 @@ pub async fn party_tax_profile_update(
 /// 返回契约形状的分页视图。
 pub async fn party_bank_account_list(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
     Query(params): Query<PartyBankAccountListParams>,
 ) -> Result<PageView<PartyBankAccountView>> {
-    let page = state.application().party_bank_account_service().party_bank_account_list(&id, &params).await?;
+    let page = state
+        .application()
+        .party_bank_account_service()
+        .party_bank_account_list(&actor, &id, &params)
+        .await?;
     Ok(ApiResponse::ok_with_data(page))
 }
 

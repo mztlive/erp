@@ -9,9 +9,9 @@ pub mod read;
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
-use erp_identity::Permission;
 use erp_master_data::offering_handover::OfferingHandoverPorts;
 use erp_master_data::{handover_offering, offering_handover_candidates as load_offering_handover_candidates};
+use erp_permissions::internal;
 use erp_read_models::supplier_center::offering::dto::SupplierOfferingListParams;
 use erp_read_models::supplier_center::{
     MongoOfferingProcurementOwners, SupplierOfferingListView, SupplierOfferingReadService,
@@ -49,7 +49,7 @@ pub async fn list(
 ) -> Result<SupplierOfferingListView> {
     let mut page = SupplierOfferingReadService::new(
         state.application().db(),
-        OfferingAccess::new(state.application().db(), state.application().rbac()),
+        OfferingAccess::new(state.application().db(), state.application().authorization()),
         MongoOfferingProcurementOwners::shared(state.application().db()),
     )
     .list(&params, &actor)
@@ -76,9 +76,10 @@ pub async fn create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateSupplierOfferingRequest>,
 ) -> Result<CreateSupplierOfferingResult> {
-    let result = crate::wiring::scoped_offering_process(state.application().db(), state.application().rbac())
-        .create(req, &actor)
-        .await?;
+    let result =
+        crate::wiring::scoped_offering_process(state.application().db(), state.application().authorization())
+            .create(req, &actor)
+            .await?;
     Ok(ApiResponse::ok_with_data(result))
 }
 
@@ -98,9 +99,10 @@ pub async fn revise(
     Path(id): Path<String>,
     Json(req): Json<ReviseSupplierOfferingRequest>,
 ) -> Result<ReviseSupplierOfferingResult> {
-    let result = crate::wiring::scoped_offering_process(state.application().db(), state.application().rbac())
-        .revise(&id, req, &actor)
-        .await?;
+    let result =
+        crate::wiring::scoped_offering_process(state.application().db(), state.application().authorization())
+            .revise(&id, req, &actor)
+            .await?;
     Ok(ApiResponse::ok_with_data(result))
 }
 
@@ -120,9 +122,10 @@ pub async fn update_availability(
     Path(id): Path<String>,
     Json(req): Json<UpdateSupplierOfferingAvailabilityRequest>,
 ) -> Result<UpdateSupplierOfferingAvailabilityResult> {
-    let result = crate::wiring::scoped_offering_process(state.application().db(), state.application().rbac())
-        .update_availability(&id, req, &actor)
-        .await?;
+    let result =
+        crate::wiring::scoped_offering_process(state.application().db(), state.application().authorization())
+            .update_availability(&id, req, &actor)
+            .await?;
     Ok(ApiResponse::ok_with_data(result))
 }
 
@@ -135,9 +138,10 @@ pub async fn complete_supply_exception_task(
     Path(id): Path<String>,
     Json(req): Json<CompleteSupplierSupplyExceptionTaskRequest>,
 ) -> Result<CompleteSupplierSupplyExceptionTaskResult> {
-    let result = crate::wiring::scoped_offering_process(state.application().db(), state.application().rbac())
-        .complete_supply_exception_task(&id, req, &actor)
-        .await?;
+    let result =
+        crate::wiring::scoped_offering_process(state.application().db(), state.application().authorization())
+            .complete_supply_exception_task(&id, req, &actor)
+            .await?;
     Ok(ApiResponse::ok_with_data(result))
 }
 
@@ -159,10 +163,10 @@ pub async fn offering_handover(
 ) -> Result<HandoverSupplierOfferingView> {
     let view = handover_offering(
         state.application().db(),
-        state.application().rbac(),
+        state.application().authorization(),
         OfferingHandoverPorts::new(
-            offering_access(state.application().db(), state.application().rbac()),
-            scoped_offering_service(state.application().db(), state.application().rbac()),
+            offering_access(state.application().db(), state.application().authorization()),
+            scoped_offering_service(state.application().db(), state.application().authorization()),
         ),
         &id,
         req,
@@ -188,10 +192,10 @@ pub async fn offering_handover_candidates(
 ) -> Result<Vec<HandoverCandidateView>> {
     let view = load_offering_handover_candidates(
         state.application().db(),
-        state.application().rbac(),
+        state.application().authorization(),
         OfferingHandoverPorts::new(
-            offering_access(state.application().db(), state.application().rbac()),
-            scoped_offering_service(state.application().db(), state.application().rbac()),
+            offering_access(state.application().db(), state.application().authorization()),
+            scoped_offering_service(state.application().db(), state.application().authorization()),
         ),
         &id,
         &actor,
@@ -201,11 +205,10 @@ pub async fn offering_handover_candidates(
 }
 
 async fn can_view_costs(state: &HttpState, actor: &AuditActor) -> std::result::Result<bool, Error> {
-    let permission = Permission::parse("supplier_offering_cost:detail")?;
     state
         .application()
         .authorization()
-        .has_permission(actor, &permission, &mut NoTransaction)
+        .has_permission(actor, &internal::SUPPLIER_OFFERING_COST_DETAIL, &mut NoTransaction)
         .await
         .map_err(Into::into)
 }

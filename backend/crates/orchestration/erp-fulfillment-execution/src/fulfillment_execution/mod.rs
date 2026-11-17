@@ -1,5 +1,6 @@
 //! 履约创建、确认、过账及任务的跨域事务组合。
 
+mod attachment_upload;
 pub mod customer_acceptance;
 mod delivery;
 mod delivery_posting;

@@ -39,6 +39,7 @@
 4. 调整列表或统计时保持同一授权范围，验证过滤、排序、分页、总数和明细口径一致。
 5. 库存调整详情的授权、单据、明细、流水、审批绑定、精确实例与人员身份读取必须沿用同一 Executor；独立详情入口在核心快照成功后补齐可降级的姓名和 SKU 展示名称。原命令结果必须按收据实例及主题版本读取，禁止回落到最新实例。
 6. 商品与供给聚合由 `catalog_supply` 提供。Process 只负责消费方 Port 装配及当日投影追平；必须先读取配送和勾选交集，空交集直接返回，不执行投影写入。ReadModel 不追平或修改投影。
+7. 合同附件必须经 `ContractAttachmentReadService::metadata/preview` 读取。合同完整授权、修订文件关联、资产元数据和预览审计必须沿用同一快照，交付前校验原凭证。对象存储读取在事务外执行；合同附件读取不追加文件管理菜单资格。
 
 客户资料、询价、选品册与方案、供应商履约列表和结算列表必须由本库读取。读取入口必须复用原权限常量、授权结果与事务快照。销售退货单域列表、详情及命令结果装配必须调用 `erp-returns`，本库不保留该查询入口。
 
@@ -47,6 +48,7 @@
 | 入口 | 用途 |
 | --- | --- |
 | [src/lib.rs](src/lib.rs) | 中心页与工作台公开模块 |
+| [src/contract_attachment/mod.rs](src/contract_attachment/mod.rs) | 合同附件元数据、修订文件关联和预览审计的完整授权读取 |
 | [src/catalog_supply/mod.rs](src/catalog_supply/mod.rs) | 商品、供给与实时可售资格的跨域聚合仓储 |
 | [src/inventory_center/mod.rs](src/inventory_center/mod.rs) | 库存调整详情、actor-aware 审批动作与精确实例投影 |
 | [src/workbench/mod.rs](src/workbench/mod.rs) | 跨业务审批材料、展示与履约队列 |

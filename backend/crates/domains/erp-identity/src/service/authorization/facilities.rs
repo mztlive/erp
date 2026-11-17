@@ -7,7 +7,7 @@ use mongodb::Database;
 use persistence_core::Executor;
 
 use crate::entity::authorization::{AccessContext, ResourceTargets};
-use crate::entity::resource_access::ResourceKind;
+use crate::entity::resource_access::{GrantTarget, ResourceKind, SourceKey};
 use crate::repository::resource_grants;
 use crate::service::access_control::resolve::{AuthorizedDataScope, DataScopeService};
 use crate::{Permission, QualifiedPermissions, Result, SharedRbacService};
@@ -44,6 +44,15 @@ pub(super) trait Facilities: Send + Sync {
         ids: &ResourceTargets,
         executor: &mut dyn Executor,
     ) -> Result<BTreeSet<String>>;
+    /// 只接受当前审批实例为当前接收人形成的精确来源读取授权。
+    async fn source_grant(
+        &self,
+        _source: &SourceKey,
+        _target: &GrantTarget,
+        _executor: &mut dyn Executor,
+    ) -> Result<bool> {
+        Ok(false)
+    }
 }
 
 pub(super) struct IdentityFacilities {
@@ -90,5 +99,13 @@ impl Facilities for IdentityFacilities {
         executor: &mut dyn Executor,
     ) -> Result<BTreeSet<String>> {
         resource_grants::target_ids(&self.db, context.actor.id(), resource, ids, executor).await
+    }
+    async fn source_grant(
+        &self,
+        source: &SourceKey,
+        target: &GrantTarget,
+        executor: &mut dyn Executor,
+    ) -> Result<bool> {
+        resource_grants::source_target(&self.db, source, target, executor).await
     }
 }

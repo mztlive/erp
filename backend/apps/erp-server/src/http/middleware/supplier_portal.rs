@@ -56,8 +56,12 @@ async fn verified_actor(state: &HttpState, token: &str) -> StdResult<PortalActor
         .await?;
     match SupplierPortalProcess::new(
         state.application().db(),
-        state.application().rbac(),
-        crate::wiring::catalog_services(state.application().db(), state.application().rbac()),
+        state.application().authorization(),
+        crate::wiring::catalog_services(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        ),
     )
     .session_validate(&actor, &mut NoTransaction)
     .await

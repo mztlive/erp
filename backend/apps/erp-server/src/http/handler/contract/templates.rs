@@ -32,9 +32,12 @@ use crate::http::state::HttpState;
 /// 查询失败。
 pub async fn list(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<TemplateListParams>,
 ) -> Result<PageView<TemplateView>> {
-    Ok(ApiResponse::ok_with_data(state.application().contract_template_service().templates(&params).await?))
+    Ok(ApiResponse::ok_with_data(
+        state.application().contract_template_service().templates(&actor, &params).await?,
+    ))
 }
 
 /// 上传不可变 Word 模板，处理及对象写入位于数据库事务外。
@@ -56,7 +59,7 @@ pub async fn create(
     ContractTemplateService::render(file.bytes.clone(), format!("{}-S-SAMPLE", request.group.prefix()))
         .await?;
     let service = state.application().contract_template_service();
-    let planned = service.prepare(request, &file.name).await?;
+    let planned = service.prepare(request, &file.name, &actor).await?;
     let object_key = planned.object_key();
     state
         .application()
@@ -103,8 +106,11 @@ pub async fn status(
 /// 四组流水。
 /// # 错误
 /// 查询失败。
-pub async fn counters(State(state): State<HttpState>) -> Result<Vec<CounterView>> {
-    Ok(ApiResponse::ok_with_data(state.application().contract_template_service().counters().await?))
+pub async fn counters(
+    State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
+) -> Result<Vec<CounterView>> {
+    Ok(ApiResponse::ok_with_data(state.application().contract_template_service().counters(&actor).await?))
 }
 
 /// 只向前校准流水。

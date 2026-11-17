@@ -3,8 +3,9 @@ use std::time::Duration;
 use axum::extract::{DefaultBodyLimit, State};
 use axum::http::StatusCode;
 use axum::http::header::HeaderName;
-use axum::routing::{get, post};
+use axum::routing::{MethodRouter, get, post};
 use axum::{Router, middleware};
+use erp_permissions::Permission;
 use tower::ServiceBuilder;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::timeout::TimeoutLayer;
@@ -60,6 +61,21 @@ mod supplier_settlement;
 mod warehouse;
 mod work_item;
 
+/// 声明路由的公共权限目录信息，供构建生成器读取。
+///
+/// # 参数
+/// * `route` - 由业务用例执行授权的 HTTP 路由。
+/// * `_permission` - 公共权限目录中的主常量。
+///
+/// # 返回
+/// 原路由；此声明不执行授权，也不增加中间件。
+///
+/// # 错误
+/// 不执行 I/O，不返回错误。
+fn permission_route(route: MethodRouter<HttpState>, _permission: &Permission) -> MethodRouter<HttpState> {
+    route
+}
+
 /// 覆盖 MongoDB 最长 120 秒提交确认窗口，避免服务端先返回 408 而事务随后提交。
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(180);
 
@@ -70,6 +86,9 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(180);
 ///
 /// # 返回
 /// 返回 `Router` 实例。
+///
+/// # 错误
+/// 不执行 I/O，不返回错误。
 pub fn create(app_state: HttpState) -> Router {
     let upload = post(upload_handler::upload_file)
         .route_layer(middleware::from_fn_with_state(upload::limiter(), enforce_admission));

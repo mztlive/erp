@@ -100,14 +100,35 @@ impl ResourceGrantService {
             })
             .await
     }
-    /// 管理员查看指定接收账号的来源及终止原因。
+    /// 管理员在同一快照查看指定接收账号的来源及终止原因。
     /// # 参数
-    /// actor 为管理员；recipient 为接收账号；after 为上一页游标；executor 为原快照事务执行器。
+    /// actor 为管理员；recipient 为接收账号；after 为上一页游标。
     /// # 返回
     /// 最多 100 个来源及下一页游标，包含终止记录。
     /// # 错误
-    /// 管理资格不足或数据库失败时拒绝。
+    /// 管理资格不足、读取阶段变化或数据库失败时拒绝。
     pub async fn sources(
+        &self,
+        actor: &AuditActor,
+        recipient: &str,
+        after: Option<&str>,
+    ) -> Result<GrantSourcePage> {
+        let service = self.clone();
+        let actor = actor.clone();
+        let recipient = recipient.to_owned();
+        let after = after.map(str::to_owned);
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(
+                    async move { service.source_page(&actor, &recipient, after.as_deref(), executor).await },
+                )
+            })
+            .await
+    }
+
+    /// 来源及终止原因只在完成管理授权的原快照读取，不返回跨阶段结果。
+    async fn source_page(
         &self,
         actor: &AuditActor,
         recipient: &str,
@@ -115,8 +136,15 @@ impl ResourceGrantService {
         executor: &mut dyn Executor,
     ) -> Result<GrantSourcePage> {
         self.authorize_manager(actor, executor).await?;
-        resource_grants::for_recipient(&self.db, recipient, after, executor).await
+        let boundary =
+            executor.boundary().ok_or_else(|| Error::ValidationError("授权来源读取缺少执行边界".into()))?;
+        let page = resource_grants::for_recipient(&self.db, recipient, after, executor).await?;
+        if !boundary.is_current(executor) {
+            return Err(Error::ValidationError("授权来源读取跨越执行阶段".into()));
+        }
+        Ok(page)
     }
+
     /// 校验读取授权的维护资格。
     /// # 参数
     /// actor 为当前管理员，executor 为维护事务。
@@ -204,11 +232,62 @@ pub async fn append_event(
 
 #[cfg(test)]
 mod tests {
-    use persistence_core::NoTransaction;
+    use std::sync::Arc;
+
+    use async_trait::async_trait;
+    use erp_core::AccountKind;
+    use mongodb::Client;
+    use persistence_core::testing::SnapshotExecutor;
+    use persistence_core::{NoTransaction, ReadExecutor};
 
     use super::*;
+    use crate::entity::access_control::ResolvedScope;
+    use crate::entity::resource_access::GrantTarget;
+    use crate::ports::ResourceGrantFacts;
+    use crate::service::authorization::fixed;
+
+    struct UnusedGrantFacts;
+
+    #[async_trait]
+    impl ResourceGrantFacts for UnusedGrantFacts {
+        async fn validate_targets(&self, _: &[GrantTarget], _: &mut dyn Executor) -> Result<()> {
+            panic!("来源读取不得调用写入目标校验")
+        }
+
+        async fn validate_source(&self, _: &SourceUpdate, _: &mut dyn Executor) -> Result<()> {
+            panic!("来源读取不得调用来源发布校验")
+        }
+    }
+
     #[test]
     fn publishing_requires_an_existing_transaction() {
         assert!(matches!(require_transaction(&mut NoTransaction), Err(Error::Internal(_))));
+    }
+
+    #[tokio::test]
+    async fn source_page_rejects_missing_snapshot_or_management_qualification_before_reading_sources() {
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("resource_sources_unit");
+        let authorization = fixed::authorization(
+            &[],
+            ResolvedScope { role_clauses: Vec::new(), user_limit: None },
+            Vec::new(),
+            Vec::new(),
+        )
+        .unwrap();
+        let service = ResourceGrantService::new(db, authorization, Arc::new(UnusedGrantFacts));
+        let actor = AuditActor::new("operator".into(), "operator".into(), AccountKind::Admin);
+        for executor in [&mut NoTransaction as &mut dyn Executor, &mut ReadExecutor::default()] {
+            assert!(matches!(
+                service.source_page(&actor, "recipient", Some("cursor"), executor).await,
+                Err(Error::ValidationError(_))
+            ));
+        }
+        assert!(matches!(
+            service.source_page(&actor, "recipient", Some("cursor"), &mut SnapshotExecutor::default()).await,
+            Err(Error::Forbidden(_))
+        ));
     }
 }

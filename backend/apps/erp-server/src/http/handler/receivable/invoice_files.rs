@@ -7,6 +7,7 @@ use erp_finance::dto::receivable::{
     CommitInvoiceRequest, CompleteInvoiceRequest, CreateInvoiceRequest, InvoiceView,
 };
 use erp_finance_posting::finance_posting::receivable::ReceivableProcess;
+use erp_finance_posting::{FinanceAttachmentService, FinanceAttachmentUpload};
 use erp_support::SensitivityClass;
 
 use crate::http::errors::Result;
@@ -35,6 +36,9 @@ pub async fn invoice_create_with_files(
     Extension(actor): Extension<AuditActor>,
     mut multipart: Multipart,
 ) -> Result<InvoiceView> {
+    FinanceAttachmentService::new(state.application().db(), state.application().authorization())
+        .prepare_attachment_upload(&actor, FinanceAttachmentUpload::InvoiceDraft)
+        .await?;
     let (req, files) = extract_command_with_asset_files::<CreateInvoiceRequest>(&mut multipart).await?;
     let uploads = store_pending_asset_files(&state, files, |_| SensitivityClass::Sensitive).await?;
     let pending = match PendingFileAssets::prepare(uploads.clone(), &actor) {
@@ -44,10 +48,12 @@ pub async fn invoice_create_with_files(
             return Err(error.into());
         },
     };
-    let outcome =
-        ReceivableProcess::new(state.application().db(), receivable_posting_ports(state.application().db()))
-            .create_invoice_with_assets(req, pending, &actor)
-            .await;
+    let outcome = ReceivableProcess::new(
+        state.application().db(),
+        receivable_posting_ports(state.application().db(), state.application().authorization()),
+    )
+    .create_invoice_with_assets(req, pending, &actor)
+    .await;
     let view = finish_asset_command(&state, &uploads, outcome, |_| true).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -69,6 +75,9 @@ pub async fn invoice_commit_with_files(
     Extension(actor): Extension<AuditActor>,
     mut multipart: Multipart,
 ) -> Result<InvoiceView> {
+    FinanceAttachmentService::new(state.application().db(), state.application().authorization())
+        .prepare_attachment_upload(&actor, FinanceAttachmentUpload::InvoicePosting)
+        .await?;
     let (req, files) = extract_command_with_asset_files::<CommitInvoiceRequest>(&mut multipart).await?;
     let uploads = store_pending_asset_files(&state, files, |_| SensitivityClass::Sensitive).await?;
     let pending = match PendingFileAssets::prepare(uploads.clone(), &actor) {
@@ -78,10 +87,12 @@ pub async fn invoice_commit_with_files(
             return Err(error.into());
         },
     };
-    let outcome =
-        ReceivableProcess::new(state.application().db(), receivable_posting_ports(state.application().db()))
-            .commit_invoice_with_assets(req, pending, &actor)
-            .await;
+    let outcome = ReceivableProcess::new(
+        state.application().db(),
+        receivable_posting_ports(state.application().db(), state.application().authorization()),
+    )
+    .commit_invoice_with_assets(req, pending, &actor)
+    .await;
     let result = finish_asset_command(&state, &uploads, outcome, |result| result.assets_committed).await?;
     Ok(ApiResponse::ok_with_data(result.view))
 }
@@ -103,6 +114,9 @@ pub async fn invoice_complete_with_files(
     Extension(actor): Extension<AuditActor>,
     mut multipart: Multipart,
 ) -> Result<InvoiceView> {
+    FinanceAttachmentService::new(state.application().db(), state.application().authorization())
+        .prepare_attachment_upload(&actor, FinanceAttachmentUpload::InvoicePosting)
+        .await?;
     let (req, files) = extract_command_with_asset_files::<CompleteInvoiceRequest>(&mut multipart).await?;
     let uploads = store_pending_asset_files(&state, files, |_| SensitivityClass::Sensitive).await?;
     let pending = match PendingFileAssets::prepare(uploads.clone(), &actor) {
@@ -112,10 +126,12 @@ pub async fn invoice_complete_with_files(
             return Err(error.into());
         },
     };
-    let outcome =
-        ReceivableProcess::new(state.application().db(), receivable_posting_ports(state.application().db()))
-            .complete_invoice_with_assets(req, pending, &actor)
-            .await;
+    let outcome = ReceivableProcess::new(
+        state.application().db(),
+        receivable_posting_ports(state.application().db(), state.application().authorization()),
+    )
+    .complete_invoice_with_assets(req, pending, &actor)
+    .await;
     let result = finish_asset_command(&state, &uploads, outcome, |result| result.assets_committed).await?;
     Ok(ApiResponse::ok_with_data(result.view))
 }

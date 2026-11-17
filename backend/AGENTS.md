@@ -71,7 +71,7 @@ backend/
 - 不得恢复旧 `erp-processes`、旧路径别名或兼容 façade；编排间只允许显式登记的单向依赖。具体协议适配不得反向依赖编排或应用。
 
 - `http/` 与 `worker/` 不得相互依赖；`wiring/` 不得依赖 HTTP 类型或启动后台循环。HTTP 专属状态归 `HttpState`，共享资源和业务工厂归 `Application`。
-- 授权装配统一使用 `wiring::authorization::build`，只连接身份设施、资源 Facts 与权限 Mapping，不声明政策。identity 的 `AuthorizationService::builder` 校验完整绑定；禁止用空实现或放宽校验构造生产服务。完整业务绑定已在第五阶段补齐；`Application` 和服务工厂在第六阶段切换。
+- 授权装配统一使用 `wiring::authorization::build`，只连接身份设施、资源 Facts 与权限 Mapping，不声明政策。identity 的 `AuthorizationService::builder` 校验完整绑定；禁止用空实现或放宽校验构造生产服务。`Application` 在启动时构造并持有共享实例，HTTP 和 worker 的服务工厂注入同一实例。
 - 业务迁入 `AuthorizationService::{require, query, validate}`，内置权限直接引用 `erp-permissions` 常量；不得恢复政策登记、调用方授权主体选择或独立查询编译入口。Mapping 的固定来源通过 `relations()` 描述；动态数据只经按需准备能力读取。
 
 ## 新功能落点
@@ -80,14 +80,14 @@ backend/
 2. **仓储**：拥有领域 `repository/` 新增仓储，经本域 `*Ext` trait 暴露（如 `AccessControlExt::accounts()/roles()`）。
 3. **服务**：本域 DTO 与单域用例放拥有领域；跨域写入放 Process，混合读取放 ReadModel。
 4. **Handler**：`apps/erp-server/src/http/handler/<domain>/`，返回 `ApiResponse`；请求/响应复用领域或组合层 DTO，禁重复定义同语义结构。仅路径拆分、上下文注入、协议重命名允许薄包装，须实现 `From` 并注释原因。
-5. **路由**：新增 `routes/<domain>.rs`，在 `routes/admin.rs` 合并，经 `with_permission` 走 JWT + RBAC；组织机构路由挂在 `routes/access_control.rs`。
+5. **路由**：新增 `routes/<domain>.rs`，在 `routes/admin.rs` 合并，由 `admin` 路由统一执行 JWT 认证，业务用例执行统一授权；组织机构路由挂在 `routes/access_control.rs`。
 6. **索引**：新查询评估索引；在本域 `indexes` 登记，组合根（`apps/erp-server/src/indexes.rs`、`apps/cli/src/indexes.rs`）只调用领域公开入口，保持现有逐集合顺序，禁复制索引定义。
 7. **测试与门禁**：按 §测试 补本 crate 单元测试，按 §质量门禁 收尾并按条件矩阵执行对应检查。
 
 ## HTTP 与权限
 
 - 公共 `Permission` 值类型、资源标识、权限常量及展示分组归 `crates/foundation/erp-permissions/`；账号授权仍由 identity 执行。动态输入通过公共解析器校验，运行时和构建生成器使用同一份类型。
-- 管理端接口通过 `with_permission` 直接引用 `erp-permissions` 公共目录中登记的权限主常量，不再建立 server 权限包装目录。接口专属说明仅在 `apps/erp-server/route_descriptions.rs` 登记与默认说明不同的项；分组及展示权限差异归 `build_route_overrides.rs`，不得参与运行时鉴权。处理函数不声明权限属性。公开选品、结算主体登录目录等既有例外保持原认证链路。
+- 管理端接口通过只提供目录信息的 `permission_route(route, &permission)` 直接引用 `erp-permissions` 公共目录中登记的权限主常量，不再建立 server 权限包装目录。接口专属说明仅在 `apps/erp-server/route_descriptions.rs` 登记与默认说明不同的项；分组及展示权限差异归 `build_route_overrides.rs`，不得参与运行时鉴权。HTTP 不重复执行 RBAC 授权；受保护的 Service、Process、ReadModel 在读取或写入前执行统一授权。处理函数不声明权限属性。公开选品、结算主体登录目录等既有例外保持原认证链路。
 - 新权限在 `erp-permissions` 所属模块定义并加入公共 `ENTRIES`；新模块登记公共 `MODULES`。server 不维护第二份 `ENTRIES` 或 `MODULES`。新增受保护路由模块登记 `build_permissions.rs` 的扫描清单。相同权限编码只定义一次，复用时保留接口各自的展示说明。
 - 前端权限由 `apps/erp-server/build.rs` 生成，禁手改生成物。独立生成使用 `python3 scripts/generate-permissions.py`，生成器单元测试使用 `python3 scripts/generate-permissions.py --test`；改动后跑 `./scripts/check-permissions-drift.sh`，无需编译业务 crate。
 - 配置只经 `config::SafeConfig` 读取；上传只经共享 `Application` 的 `storage::S3Storage` 写入。

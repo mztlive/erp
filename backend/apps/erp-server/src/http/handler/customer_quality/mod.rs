@@ -11,30 +11,18 @@ use erp_read_models::customer_quality::{
     HistoryQualityView, QualityExport,
 };
 
-use crate::http::errors::{Error, Result};
+use crate::http::errors::Result;
 use crate::http::extractor::{Json, Query};
-use crate::http::handler::customer::has_permission;
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 use crate::wiring::customer_access;
-
-/// 双口径共用的读取门槛：客户查询与销售单查询动作缺一不可。
-async fn ensure_list_access(state: &HttpState, actor: &AuditActor) -> std::result::Result<(), Error> {
-    if !has_permission(state, actor, "customer:list").await? {
-        return Err(Error::Forbidden("查看客户经营质量需要客户查询权限".into()));
-    }
-    if !has_permission(state, actor, "sales_order:list").await? {
-        return Err(Error::Forbidden("查看客户经营质量需要销售单查询权限".into()));
-    }
-    Ok(())
-}
 
 /// 当前负责口径使用同一客户授权服务完成查询和复验。
 fn read_model(state: &HttpState) -> CustomerQualityReadModel {
     CustomerQualityReadModel::new(
         state.application().db(),
-        state.application().rbac(),
-        customer_access(state.application().db(), state.application().rbac()),
+        state.application().authorization(),
+        customer_access(state.application().db(), state.application().authorization()),
     )
 }
 
@@ -44,7 +32,6 @@ pub async fn quality_current(
     Extension(actor): Extension<AuditActor>,
     Query(query): Query<CurrentQualityQuery>,
 ) -> Result<CurrentQualityView> {
-    ensure_list_access(&state, &actor).await?;
     Ok(ApiResponse::ok_with_data(read_model(&state).view_current(query, &actor).await?))
 }
 
@@ -54,7 +41,6 @@ pub async fn quality_history(
     Extension(actor): Extension<AuditActor>,
     Query(query): Query<HistoryQualityQuery>,
 ) -> Result<HistoryQualityView> {
-    ensure_list_access(&state, &actor).await?;
     Ok(ApiResponse::ok_with_data(read_model(&state).view_history(query, &actor).await?))
 }
 
@@ -64,7 +50,6 @@ pub async fn quality_current_export(
     Extension(actor): Extension<AuditActor>,
     Json(query): Json<CurrentQualityQuery>,
 ) -> Result<QualityExport> {
-    ensure_list_access(&state, &actor).await?;
     Ok(ApiResponse::ok_with_data(read_model(&state).export_current(query, &actor).await?))
 }
 
@@ -74,7 +59,6 @@ pub async fn quality_history_export(
     Extension(actor): Extension<AuditActor>,
     Json(query): Json<HistoryQualityQuery>,
 ) -> Result<QualityExport> {
-    ensure_list_access(&state, &actor).await?;
     Ok(ApiResponse::ok_with_data(read_model(&state).export_history(query, &actor).await?))
 }
 
@@ -84,7 +68,6 @@ pub async fn quality_history_directory(
     Extension(actor): Extension<AuditActor>,
     Query(query): Query<erp_read_models::historical_directory::HistoricalDirectoryQuery>,
 ) -> Result<erp_read_models::historical_directory::HistoricalDirectoryView> {
-    ensure_list_access(&state, &actor).await?;
     Ok(ApiResponse::ok_with_data(read_model(&state).history_directory(query, &actor).await?))
 }
 

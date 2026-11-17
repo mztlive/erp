@@ -10,6 +10,7 @@ use crate::http::errors::Result;
 use crate::http::extractor::Query;
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
+use crate::wiring::sales::sales_services;
 
 /// 返回原单与所选合同的商业条款差异。
 ///
@@ -28,8 +29,12 @@ pub async fn sales_order_contract_check(
 ) -> Result<ContractBindingCheck> {
     let check = SalesOrderCommandProcess::new(
         state.application().db(),
-        state.application().rbac(),
-        crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),
+        state.application().authorization(),
+        sales_services(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        ),
     )
     .check_sales_order_contract(&id, req, &actor)
     .await?;

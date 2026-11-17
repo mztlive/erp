@@ -24,8 +24,12 @@ pub async fn approval_timeline(
     Query(query): Query<TimelineQuery>,
 ) -> Result<TaskTimeline> {
     let runtime = state.application().approval_runtime_service();
-    let view = sales_timeline_service(state.application().db(), state.application().rbac())
-        .approval(runtime.as_ref(), &actor, &id, query)
-        .await?;
+    let view = sales_timeline_service(
+        state.application().db(),
+        state.application().rbac(),
+        state.application().authorization(),
+    )
+    .approval(runtime.as_ref(), &actor, &id, query)
+    .await?;
     Ok(ApiResponse::ok_with_data(view))
 }

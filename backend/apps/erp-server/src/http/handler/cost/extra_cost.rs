@@ -7,6 +7,7 @@ use erp_finance::dto::extra_cost::{
     ExtraCostCommandResult, ReduceExtraCostRequest, RegisterExtraCostRequest, SalesExtraCostListView,
 };
 use erp_finance_posting::finance_posting::extra_cost::SalesExtraCostProcess;
+use erp_finance_posting::{FinanceAttachmentService, FinanceAttachmentUpload};
 use erp_read_models::finance::extra_cost::SalesExtraCostReadModel;
 use erp_support::SensitivityClass;
 
@@ -35,7 +36,7 @@ pub async fn sales_extra_cost_list(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<SalesExtraCostListView> {
-    let view = SalesExtraCostReadModel::new(state.application().db(), state.application().rbac())
+    let view = SalesExtraCostReadModel::new(state.application().db(), state.application().authorization())
         .list(&id, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(view))
@@ -63,10 +64,13 @@ pub async fn sales_extra_cost_register(
     Path(id): Path<String>,
     mut multipart: Multipart,
 ) -> Result<ExtraCostCommandResult> {
+    FinanceAttachmentService::new(state.application().db(), state.application().authorization())
+        .prepare_attachment_upload(&actor, FinanceAttachmentUpload::SalesExtraCost)
+        .await?;
     let (req, files) = extract_command_with_asset_files::<RegisterExtraCostRequest>(&mut multipart).await?;
     validate_cost_evidence(req.evidence_attachment_id.as_ref(), &files)?;
     let pending = store_pending_asset_files(&state, files, |_| SensitivityClass::Sensitive).await?;
-    let process = SalesExtraCostProcess::new(state.application().db(), state.application().rbac());
+    let process = SalesExtraCostProcess::new(state.application().db(), state.application().authorization());
     let result = process.register(&id, req, pending.clone(), &actor).await;
     finish(&state, &pending, result).await
 }
@@ -90,10 +94,13 @@ pub async fn sales_extra_cost_reduce(
     Path((id, cost_entry_id)): Path<(String, String)>,
     mut multipart: Multipart,
 ) -> Result<ExtraCostCommandResult> {
+    FinanceAttachmentService::new(state.application().db(), state.application().authorization())
+        .prepare_attachment_upload(&actor, FinanceAttachmentUpload::SalesExtraCost)
+        .await?;
     let (req, files) = extract_command_with_asset_files::<ReduceExtraCostRequest>(&mut multipart).await?;
     validate_cost_evidence(req.evidence_attachment_id.as_ref(), &files)?;
     let pending = store_pending_asset_files(&state, files, |_| SensitivityClass::Sensitive).await?;
-    let process = SalesExtraCostProcess::new(state.application().db(), state.application().rbac());
+    let process = SalesExtraCostProcess::new(state.application().db(), state.application().authorization());
     let result = process.reduce(&id, &cost_entry_id, req, pending.clone(), &actor).await;
     finish(&state, &pending, result).await
 }

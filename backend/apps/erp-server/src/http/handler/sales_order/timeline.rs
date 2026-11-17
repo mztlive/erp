@@ -23,8 +23,12 @@ pub async fn sales_timeline(
     Path(id): Path<String>,
     Query(query): Query<TimelineQuery>,
 ) -> Result<TimelinePage> {
-    let view = sales_timeline_service(state.application().db(), state.application().rbac())
-        .sales(&actor, &id, query)
-        .await?;
+    let view = sales_timeline_service(
+        state.application().db(),
+        state.application().rbac(),
+        state.application().authorization(),
+    )
+    .sales(&actor, &id, query)
+    .await?;
     Ok(ApiResponse::ok_with_data(view))
 }

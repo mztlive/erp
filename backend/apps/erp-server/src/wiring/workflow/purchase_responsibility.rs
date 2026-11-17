@@ -160,15 +160,10 @@ mod tests {
     };
     use erp_workflow::WorkItemType;
     use erp_workflow::entity::work_item::{AssignmentSource, WorkItemData, WorkItemPriority};
+    use persistence_core::testing::SnapshotExecutor;
 
     use super::*;
 
-    struct Marker(u64);
-    impl Executor for Marker {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            None
-        }
-    }
     struct Recorder {
         pointer: usize,
         calls: Mutex<Vec<&'static str>>,
@@ -178,10 +173,9 @@ mod tests {
         written: Mutex<Option<PurchaseOrder>>,
     }
     impl Recorder {
-        fn new(executor: &mut Marker) -> Self {
-            assert_eq!(executor.0, 171);
+        fn new(executor: &mut SnapshotExecutor) -> Self {
             Self {
-                pointer: executor as *mut Marker as usize,
+                pointer: executor as *mut SnapshotExecutor as usize,
                 calls: Mutex::new(Vec::new()),
                 fail: None,
                 order: Some(order()),
@@ -278,7 +272,7 @@ mod tests {
     }
     #[tokio::test]
     async fn purchase_responsibility_uses_original_executor_and_real_entity_mutation() {
-        let mut ex = Marker(171);
+        let mut ex = SnapshotExecutor::default();
         let port = Recorder::new(&mut ex);
         let (owner, tasks) = scope(&port, &item("selected"), "po-1", &mut ex).await.unwrap();
         assert_eq!(owner, "buyer-1");
@@ -294,7 +288,7 @@ mod tests {
     #[tokio::test]
     async fn purchase_responsibility_stops_at_every_provider_failure() {
         for fail in 0..2 {
-            let mut ex = Marker(171);
+            let mut ex = SnapshotExecutor::default();
             let mut port = Recorder::new(&mut ex);
             port.fail = Some(fail);
             assert!(
@@ -313,7 +307,7 @@ mod tests {
     #[tokio::test]
     async fn purchase_responsibility_preserves_guard_order_and_missing_scope() {
         for status in [PurchaseOrderStatus::Completed, PurchaseOrderStatus::Voided] {
-            let mut ex = Marker(171);
+            let mut ex = SnapshotExecutor::default();
             let mut port = Recorder::new(&mut ex);
             port.order.as_mut().unwrap().stable.status = status;
             port.order.as_mut().unwrap().owner_user_id = None;
@@ -323,7 +317,7 @@ mod tests {
             assert_eq!(*port.calls.lock().unwrap(), ["order"]);
         }
         for case in 0..5 {
-            let mut ex = Marker(171);
+            let mut ex = SnapshotExecutor::default();
             let mut port = Recorder::new(&mut ex);
             match case {
                 0 => port.order = None,
@@ -335,7 +329,7 @@ mod tests {
             assert!(scope(&port, &item("selected"), "po-1", &mut ex).await.is_err());
             assert_eq!(port.calls.lock().unwrap().len(), if case < 3 { 1 } else { 2 });
         }
-        let mut ex = Marker(171);
+        let mut ex = SnapshotExecutor::default();
         let port = Recorder::new(&mut ex);
         assert!(reassign(&port, "po-1", " ", "actor", &mut ex).await.is_err());
         assert_eq!(*port.calls.lock().unwrap(), ["order"]);

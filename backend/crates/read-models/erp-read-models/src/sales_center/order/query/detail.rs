@@ -54,13 +54,13 @@ impl SalesOrderReadService {
     ) -> Result<SalesOrderDetailView> {
         let actor = actor.ok_or_else(|| Error::Unauthenticated("销售详情必须提供当前账号".into()))?.clone();
         let id = id.to_string();
-        let this = Self::with_rbac(self.db.clone(), self.require_rbac()?.clone());
+        let this = Self::new(self.db.clone(), self.authorization.clone());
         self.db
             .client()
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    this.require_rbac()?
+                    this.authorization
                         .require(&actor, &sales_order::DETAIL, AccessTarget::record(&id)?, executor)
                         .await?;
                     let order = this
@@ -70,7 +70,7 @@ impl SalesOrderReadService {
                         .await?
                         .ok_or_else(|| Error::NotFound("销售单不存在或无权查看".into()))?;
                     let view = this.detail_view(order, &actor, executor).await?;
-                    let (context, scope) = SalesAccess::new(this.db.clone(), this.require_rbac()?.clone())
+                    let (context, scope) = SalesAccess::new(this.db.clone(), this.authorization.clone())
                         .resolve(&actor, &sales_order_permissions::DETAIL, executor)
                         .await?;
                     this.db
@@ -105,7 +105,7 @@ impl SalesOrderReadService {
         {
             return Err(Error::ValidationError("销售结果读取必须使用对应权限和快照事务".into()));
         }
-        self.require_rbac()?.require(actor, permission, AccessTarget::record(id)?, executor).await?;
+        self.authorization.require(actor, permission, AccessTarget::record(id)?, executor).await?;
         let order = self
             .db
             .sales_orders()
@@ -113,7 +113,7 @@ impl SalesOrderReadService {
             .await?
             .ok_or_else(|| Error::NotFound("销售单不存在或无权查看".into()))?;
         let view = self.detail_view(order, actor, executor).await?;
-        self.require_rbac()?.require(actor, permission, AccessTarget::record(id)?, executor).await?;
+        self.authorization.require(actor, permission, AccessTarget::record(id)?, executor).await?;
         Ok(view)
     }
 
@@ -322,10 +322,7 @@ mod tests {
         let client = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
             .await
             .expect("合法测试地址");
-        SalesOrderReadService::with_rbac(
-            client.database("sales_detail_authorization"),
-            unavailable_authorization(),
-        )
+        SalesOrderReadService::new(client.database("sales_detail_authorization"), unavailable_authorization())
     }
 
     #[tokio::test]

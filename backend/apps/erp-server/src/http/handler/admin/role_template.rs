@@ -19,7 +19,9 @@ pub async fn list_role_templates(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
 ) -> Result<BuiltinRoleCatalog> {
-    Ok(ApiResponse::ok_with_data(state.application().rbac().builtin_role_catalog(&actor).await?))
+    Ok(ApiResponse::ok_with_data(
+        state.application().rbac().builtin_role_catalog(&actor, state.application().authorization()).await?,
+    ))
 }
 
 /// 按所选岗位原子生成普通角色。
@@ -34,7 +36,13 @@ pub async fn generate_builtin_roles(
     Extension(actor): Extension<AuditActor>,
     Json(request): Json<GenerateBuiltinRolesRequest>,
 ) -> Result<Vec<GeneratedBuiltinRole>> {
-    Ok(ApiResponse::ok_with_data(state.application().rbac().generate_builtin_roles(request, actor).await?))
+    Ok(ApiResponse::ok_with_data(
+        state
+            .application()
+            .rbac()
+            .generate_builtin_roles(request, actor, state.application().authorization())
+            .await?,
+    ))
 }
 
 #[cfg(test)]

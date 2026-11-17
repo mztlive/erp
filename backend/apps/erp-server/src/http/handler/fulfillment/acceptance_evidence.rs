@@ -24,7 +24,7 @@ pub async fn customer_acceptance_evidence(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> std::result::Result<Response, Error> {
-    let service = AcceptanceReadService::new(state.application().db(), state.application().rbac());
+    let service = AcceptanceReadService::new(state.application().db(), state.application().authorization());
     let detail = service.detail(&id, &actor).await?;
     let file_id = detail
         .acceptance

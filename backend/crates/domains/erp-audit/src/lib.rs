@@ -6,6 +6,7 @@ pub mod entity;
 mod error;
 pub mod execution;
 pub mod indexes;
+mod read;
 pub mod repository;
 mod service;
 
@@ -18,5 +19,6 @@ pub use entity::{
     BusinessEventResult,
 };
 pub use error::{Error, Result};
+pub use read::AuditLogReadService;
 pub use repository::{AuditAttemptExt, AuditExt, AuditLogFilter, AuditLogRepository, AuditLogRepositoryExt};
 pub use service::{AuditActorLogs, AuditLogService, attempt_context, prepare_business_log};

@@ -3,7 +3,7 @@
 use application_core::{AuditActor, PageView};
 use erp_identity::PortalActor;
 use persistence_core::{Executor, NoTransaction, Transactional};
-use serde_json::Value;
+use serde_json::{Value, to_value};
 
 use super::repository::applications::PortalApplicationRepository;
 use super::repository::query::PortalQuery;
@@ -113,7 +113,7 @@ impl SupplierPortalReadService {
     /// # 参数
     /// `actor` 为真实内部账号；`id` 是精确申请身份。
     /// # 返回
-    /// 有权审核的完整领域事实及统一协议字段。
+    /// 同一快照中的完整原稿、当前正式事实、既有供给候选及统一协议字段。
     /// # 错误
     /// 未知或越权统一返回 `NotFound`。非内部身份或未注入授权时返回 `Forbidden`。
     /// 查询或序列化失败时返回对应错误。
@@ -142,7 +142,15 @@ impl SupplierPortalReadService {
         if !self.internal_authorization()?.request_readable(actor, id, executor).await? {
             return Err(hidden_target());
         }
-        PortalApplicationRepository::new(&self.db).any_application(id, executor).await?.internal()
+        let mut data =
+            PortalApplicationRepository::new(&self.db).any_application(id, executor).await?.internal()?;
+        data["current"] = self.current_application_facts(id, actor, executor).await?;
+        if data.get("kind").and_then(Value::as_str) == Some("NEW_PRODUCT") {
+            let candidates = self.existing_offering_review_candidates(id, actor, executor).await?;
+            data["existing_offerings"] =
+                to_value(candidates).map_err(|error| Error::Internal(error.to_string()))?;
+        }
+        Ok(data)
     }
 
     /// 取得组合层装配的正式对象授权端口。

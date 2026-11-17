@@ -5,6 +5,7 @@ use axum::extract::{Multipart, State};
 use erp_file_assets::PendingFileAssets;
 use erp_finance::dto::payable::{PurchaseInvoiceRegisteredView, RegisterPurchaseInvoiceRequest};
 use erp_finance_posting::finance_posting::payable::PayableProcess;
+use erp_finance_posting::{FinanceAttachmentService, FinanceAttachmentUpload};
 use erp_support::SensitivityClass;
 
 use crate::http::errors::Result;
@@ -28,6 +29,9 @@ pub async fn purchase_invoice_allocation_post_with_files(
     Extension(actor): Extension<AuditActor>,
     mut multipart: Multipart,
 ) -> Result<PurchaseInvoiceRegisteredView> {
+    FinanceAttachmentService::new(state.application().db(), state.application().authorization())
+        .prepare_attachment_upload(&actor, FinanceAttachmentUpload::PurchaseInvoice)
+        .await?;
     let (req, files) =
         extract_command_with_asset_files::<RegisterPurchaseInvoiceRequest>(&mut multipart).await?;
     let uploads = store_pending_asset_files(&state, files, |_| SensitivityClass::Sensitive).await?;
@@ -40,7 +44,11 @@ pub async fn purchase_invoice_allocation_post_with_files(
     };
     let outcome = PayableProcess::new(
         state.application().db(),
-        finance_posting_ports(state.application().db(), state.application().rbac()),
+        finance_posting_ports(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        ),
     )
     .register_purchase_invoice_with_assets(req, pending, &actor)
     .await;

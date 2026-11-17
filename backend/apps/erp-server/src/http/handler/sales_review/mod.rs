@@ -19,6 +19,7 @@ use crate::http::errors::Result;
 use crate::http::extractor::{Json, Query};
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
+use crate::wiring::sales::sales_services;
 
 /// 读取原变更可修改内容。
 ///
@@ -40,8 +41,12 @@ pub async fn sales_change_draft(
     Ok(ApiResponse::ok_with_data(
         SalesChangeProcess::new(
             state.application().db(),
-            state.application().rbac(),
-            crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),
+            state.application().authorization(),
+            sales_services(
+                state.application().db(),
+                state.application().rbac(),
+                state.application().authorization(),
+            ),
         )
         .draft(&id, &actor)
         .await?,
@@ -70,8 +75,12 @@ pub async fn sales_change_save_draft(
     Ok(ApiResponse::ok_with_data(
         SalesChangeProcess::new(
             state.application().db(),
-            state.application().rbac(),
-            crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),
+            state.application().authorization(),
+            sales_services(
+                state.application().db(),
+                state.application().rbac(),
+                state.application().authorization(),
+            ),
         )
         .save_draft(&id, request, &actor)
         .await?,
@@ -98,7 +107,7 @@ pub async fn sales_change_order_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<SalesChangeOrderListParams>,
 ) -> Result<SalesChangeListView> {
-    let page = SalesChangeReadService::with_rbac(state.application().db(), state.application().rbac())
+    let page = SalesChangeReadService::new(state.application().db(), state.application().authorization())
         .sales_change_order_list(&params, &actor)
         .await?;
 
@@ -125,7 +134,7 @@ pub async fn sales_change_order_detail(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<SalesChangeOrderDetailView> {
-    let view = SalesChangeReadService::with_rbac(state.application().db(), state.application().rbac())
+    let view = SalesChangeReadService::new(state.application().db(), state.application().authorization())
         .sales_change_order_detail(&id, &actor)
         .await?;
 
@@ -146,13 +155,16 @@ pub async fn sales_change_order_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateSalesChangeOrderRequest>,
 ) -> Result<SalesChangeOrderDetailView> {
-    let rbac = state.application().rbac();
     let view = SalesChangeProcess::new(
         state.application().db(),
-        state.application().rbac(),
-        crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),
+        state.application().authorization(),
+        sales_services(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        ),
     )
-    .create_sales_change_order(req, &actor, &rbac)
+    .create_sales_change_order(req, &actor)
     .await?;
 
     Ok(ApiResponse::ok_with_data(view))
@@ -176,8 +188,12 @@ pub async fn sales_change_order_submit_impact(
 ) -> Result<SalesChangeOrderDetailView> {
     let view = SalesChangeProcess::new(
         state.application().db(),
-        state.application().rbac(),
-        crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),
+        state.application().authorization(),
+        sales_services(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        ),
     )
     .submit_sales_change(&id, req, &actor)
     .await?;
@@ -203,8 +219,12 @@ pub async fn sales_change_order_void(
 ) -> Result<SalesChangeOrderDetailView> {
     let view = SalesChangeProcess::new(
         state.application().db(),
-        state.application().rbac(),
-        crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),
+        state.application().authorization(),
+        sales_services(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        ),
     )
     .void_sales_change(&id, req, &actor)
     .await?;
@@ -230,8 +250,12 @@ pub async fn sales_change_order_cancel_approval(
 ) -> Result<SalesChangeOrderDetailView> {
     let view = SalesChangeProcess::new(
         state.application().db(),
-        state.application().rbac(),
-        crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),
+        state.application().authorization(),
+        sales_services(
+            state.application().db(),
+            state.application().rbac(),
+            state.application().authorization(),
+        ),
     )
     .cancel_approval(&id, req, &actor)
     .await?;

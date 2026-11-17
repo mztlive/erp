@@ -248,10 +248,12 @@ async fn work_item_action_response(
         },
         WorkItemMutationOutcome::Conflict(conflict) => {
             let current = match conflict.work_item_id() {
-                Some(id) => WorkItemReadService::new(state.application().db(), state.application().rbac())
-                    .work_item_action_view(id.to_string(), actor)
-                    .await
-                    .ok(),
+                Some(id) => {
+                    WorkItemReadService::new(state.application().db(), state.application().authorization())
+                        .work_item_action_view(id.to_string(), actor)
+                        .await
+                        .ok()
+                },
                 None => None,
             };
             Err(WorkItemActionError::Conflict(Box::new(HttpWorkItemConflict {
@@ -294,7 +296,7 @@ pub async fn work_item_list(
     Query(params): Query<WorkItemListParams>,
     Query(search): Query<WorkItemSearchQuery>,
 ) -> Result<WorkItemHttpPageView> {
-    let page = WorkItemReadService::new(state.application().db(), state.application().rbac())
+    let page = WorkItemReadService::new(state.application().db(), state.application().authorization())
         .work_item_search(WorkItemSearchParams { base: params, filters: search.filters }, actor)
         .await?;
     Ok(ApiResponse::ok_with_data(wrap_page(page)))
@@ -321,7 +323,7 @@ pub async fn fulfillment_queue_list(
         .fulfillment_queue_list(
             params,
             actor,
-            WorkItemReadService::new(state.application().db(), state.application().rbac()),
+            WorkItemReadService::new(state.application().db(), state.application().authorization()),
         )
         .await?;
     Ok(ApiResponse::ok_with_data(page))
@@ -344,7 +346,7 @@ pub async fn work_item_stats(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<WorkItemStatsParams>,
 ) -> Result<WorkItemStatsView> {
-    let stats = WorkItemReadService::new(state.application().db(), state.application().rbac())
+    let stats = WorkItemReadService::new(state.application().db(), state.application().authorization())
         .work_item_stats(params, actor)
         .await?;
     Ok(ApiResponse::ok_with_data(stats))
@@ -367,7 +369,7 @@ pub async fn work_item_detail(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<WorkItemHttpView> {
-    let view = WorkItemReadService::new(state.application().db(), state.application().rbac())
+    let view = WorkItemReadService::new(state.application().db(), state.application().authorization())
         .work_item_detail(id, actor)
         .await?;
     Ok(ApiResponse::ok_with_data(view.into()))
@@ -390,9 +392,13 @@ pub async fn work_item_reassign_candidates(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<Vec<WorkItemReassignCandidateView>> {
-    let candidates = work_item_service(state.application().db(), state.application().rbac())
-        .reassign_candidates(id, actor)
-        .await?;
+    let candidates = work_item_service(
+        state.application().db(),
+        state.application().rbac(),
+        state.application().authorization(),
+    )
+    .reassign_candidates(id, actor)
+    .await?;
     Ok(ApiResponse::ok_with_data(candidates))
 }
 
@@ -417,9 +423,13 @@ pub async fn work_item_reassign(
     Path(id): Path<String>,
     Json(req): Json<ReassignWorkItemRequest>,
 ) -> WorkItemActionResult {
-    let outcome = work_item_service(state.application().db(), state.application().rbac())
-        .reassign(id, req, actor.clone())
-        .await?;
+    let outcome = work_item_service(
+        state.application().db(),
+        state.application().rbac(),
+        state.application().authorization(),
+    )
+    .reassign(id, req, actor.clone())
+    .await?;
     work_item_action_response(state, actor, outcome).await
 }
 
@@ -444,9 +454,13 @@ pub async fn work_item_close(
     Path(id): Path<String>,
     Json(req): Json<CloseWorkItemRequest>,
 ) -> WorkItemActionResult {
-    let outcome = work_item_service(state.application().db(), state.application().rbac())
-        .close(id, req, actor.clone())
-        .await?;
+    let outcome = work_item_service(
+        state.application().db(),
+        state.application().rbac(),
+        state.application().authorization(),
+    )
+    .close(id, req, actor.clone())
+    .await?;
     work_item_action_response(state, actor, outcome).await
 }
 
@@ -469,9 +483,13 @@ pub async fn abandon_rework(
     Path(id): Path<String>,
     Json(req): Json<AbandonApprovalReworkRequest>,
 ) -> WorkItemActionResult {
-    let outcome = work_item_service(state.application().db(), state.application().rbac())
-        .abandon_rework(id, req, actor.clone())
-        .await?;
+    let outcome = work_item_service(
+        state.application().db(),
+        state.application().rbac(),
+        state.application().authorization(),
+    )
+    .abandon_rework(id, req, actor.clone())
+    .await?;
     work_item_action_response(state, actor, outcome).await
 }
 

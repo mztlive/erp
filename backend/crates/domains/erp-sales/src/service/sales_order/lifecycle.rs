@@ -422,10 +422,9 @@ impl SalesOrderService {
     ///
     /// # 参数
     /// * `order` - 本次提交的销售单
-    /// * `active_working_copy` - 当前活跃工作副本；缺省时重开首次提交副本
+    /// * `active_working_copy` - 当前活跃工作副本及客户端期望版本；缺省时重开首次提交副本
     /// * `stable` - 已证明归属的稳定行及新增行
     /// * `draft` - 本次提交的完整草稿内容
-    /// * `version` - 客户端期望的已有工作副本版本
     /// * `actor` - 当前认证提交人
     /// * `executor` - 原提交事务执行器。
     ///
@@ -437,26 +436,17 @@ impl SalesOrderService {
     pub async fn prepare_submission_copy(
         &self,
         order: &SalesOrder,
-        active_working_copy: Option<SalesOrderWorkingCopy>,
+        active_working_copy: Option<(SalesOrderWorkingCopy, u64)>,
         stable: DraftStableLines,
         draft: &SalesOrderDraftRequest,
-        version: u64,
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<(SalesOrderWorkingCopy, Vec<SalesOrderWorkingCopyLine>, SalesOrderWorkingCopyPersistPlan)>
     {
         match active_working_copy {
             Some(working_copy) => {
-                self.prepare_existing_submission_copy(
-                    order,
-                    working_copy,
-                    stable,
-                    draft,
-                    version,
-                    actor,
-                    executor,
-                )
-                .await
+                self.prepare_existing_submission_copy(order, working_copy, stable, draft, actor, executor)
+                    .await
             },
             None => {
                 let (working_copy, copy_lines) =
@@ -474,14 +464,14 @@ impl SalesOrderService {
     async fn prepare_existing_submission_copy(
         &self,
         order: &SalesOrder,
-        mut working_copy: SalesOrderWorkingCopy,
+        working_copy: (SalesOrderWorkingCopy, u64),
         stable: DraftStableLines,
         draft: &SalesOrderDraftRequest,
-        version: u64,
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<(SalesOrderWorkingCopy, Vec<SalesOrderWorkingCopyLine>, SalesOrderWorkingCopyPersistPlan)>
     {
+        let (mut working_copy, version) = working_copy;
         if !working_copy.matches_version(version) {
             return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
         }

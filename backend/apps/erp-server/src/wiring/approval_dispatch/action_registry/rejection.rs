@@ -72,12 +72,14 @@ async fn reject_finance_and_inventory(
 ) -> ServiceResult<()> {
     let id = context.business_object_id();
     match action {
-        ApprovalDomainAction::StockAdjustmentReject => {
-            inventory_adjustment_process(registry.db.clone(), registry.rbac.clone())
-                .reject(id, version, actor, executor)
-                .await
-                .map_err(Into::into)
-        },
+        ApprovalDomainAction::StockAdjustmentReject => inventory_adjustment_process(
+            registry.db.clone(),
+            registry.rbac.clone(),
+            registry.authorization.clone(),
+        )
+        .reject(id, version, actor, executor)
+        .await
+        .map_err(Into::into),
         ApprovalDomainAction::SalesInvoiceRequestReject => {
             finance_posting::receivable::invoice_request::reject(&registry.db, id, version, actor, executor)
                 .await

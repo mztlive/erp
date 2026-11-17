@@ -1,7 +1,5 @@
 //! 销售退货与拒收处理 HTTP 协议适配。
 
-use std::sync::Arc;
-
 use application_core::{AuditActor, PageView};
 use axum::Extension;
 use axum::extract::{Path, State};
@@ -31,10 +29,9 @@ pub async fn sales_return_case_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<SalesReturnCaseListParams>,
 ) -> Result<PageView<SalesReturnCaseView>> {
-    let page =
-        SalesReturnQueryService::new(state.application().db(), Arc::new(state.application().authorization()))
-            .sales_return_case_list(&actor, &params)
-            .await?;
+    let page = SalesReturnQueryService::new(state.application().db(), state.application().authorization())
+        .sales_return_case_list(&actor, &params)
+        .await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -55,10 +52,9 @@ pub async fn sales_return_case_detail(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<SalesReturnCaseView> {
-    let view =
-        SalesReturnQueryService::new(state.application().db(), Arc::new(state.application().authorization()))
-            .sales_return_case_detail(&id, &actor)
-            .await?;
+    let view = SalesReturnQueryService::new(state.application().db(), state.application().authorization())
+        .sales_return_case_detail(&id, &actor)
+        .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -80,10 +76,12 @@ pub async fn sales_return_case_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateSalesReturnCaseRequest>,
 ) -> Result<SalesReturnCaseView> {
-    let view =
-        ReturnsProcess::new(state.application().db(), local_reverse_flow_ports(state.application().db()))
-            .create_sales_return_case(req, &actor)
-            .await?;
+    let view = ReturnsProcess::new(
+        state.application().db(),
+        local_reverse_flow_ports(state.application().db(), state.application().authorization()),
+    )
+    .create_sales_return_case(req, &actor)
+    .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }

@@ -1,11 +1,13 @@
 //! 应用装配付款冲正的原申请恢复能力；沿用调用方事务。
+use std::sync::Arc;
+
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_finance::entity::payable::{PaymentRequestAllocation, SupplierPayment};
 use erp_finance::ports::payment_restoration::PaymentRequestRestorationPort;
 use erp_finance_posting::finance_posting::payable::payment_request::restore_reversed_payment;
 use erp_finance_posting::{Error as PostingError, FinancePostingPorts};
-use erp_identity::SharedRbacService;
+use erp_identity::{AuthorizationService, SharedRbacService};
 use erp_reverse_flow::Error as ReverseError;
 use mongodb::Database;
 use persistence_core::Executor;
@@ -21,15 +23,19 @@ impl PaymentRequestRestoration {
     /// 绑定当前应用数据库，不执行读写。
     ///
     /// # 参数
-    /// `db` 为冲正命令使用的数据库，`rbac` 为同一应用的共享权限来源。
+    /// `db` 为冲正命令数据库，`rbac` 为共享身份来源，`authorization` 为完整绑定的共享授权服务。
     ///
     /// # 返回
     /// 可注入逆向编排的原申请恢复能力。
     ///
     /// # 错误
     /// 不返回错误。
-    pub(crate) fn new(db: Database, rbac: SharedRbacService) -> Self {
-        Self { ports: finance_posting_ports(db.clone(), rbac), db }
+    pub(crate) fn new(
+        db: Database,
+        rbac: SharedRbacService,
+        authorization: Arc<AuthorizationService>,
+    ) -> Self {
+        Self { ports: finance_posting_ports(db.clone(), rbac, authorization), db }
     }
 }
 #[async_trait]
