@@ -41,8 +41,6 @@ pub enum CapabilityCode {
 impl CapabilityCode {
     /// 返回能力的中文展示名。
     ///
-    /// 映射表见 [`CAPABILITY_CODE_DISPLAY`]（erp-supplier-002）。
-    ///
     /// # 参数
     /// 无。
     ///
@@ -52,12 +50,16 @@ impl CapabilityCode {
     /// # 错误
     /// 不返回错误。
     pub fn label(&self) -> &'static str {
-        super::display::label_of(*self, &CAPABILITY_CODE_DISPLAY)
+        match self {
+            Self::Physical => "实物商品",
+            Self::Virtual => "虚拟商品",
+            Self::OfflineService => "线下服务",
+            Self::Api => "API",
+            Self::Printing => "印刷",
+        }
     }
 
     /// 返回能力的稳定代码。
-    ///
-    /// 映射表见 [`CAPABILITY_CODE_DISPLAY`]（erp-supplier-002）。
     ///
     /// # 参数
     /// 无。
@@ -68,13 +70,18 @@ impl CapabilityCode {
     /// # 错误
     /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
-        super::display::code_of(*self, &CAPABILITY_CODE_DISPLAY)
+        match self {
+            Self::Physical => "physical",
+            Self::Virtual => "virtual",
+            Self::OfflineService => "offline_service",
+            Self::Api => "api",
+            Self::Printing => "printing",
+        }
     }
 
     /// 由稳定代码反查能力代码。
     ///
-    /// 映射表见 [`CAPABILITY_CODE_DISPLAY`]（erp-supplier-002）；列表查询的
-    /// 逗号分隔代码经此归一化，不再于 DTO 侧重复分支。
+    /// 列表查询的逗号分隔代码经此归一化。
     ///
     /// # 参数
     /// * `code` - 稳定代码（如 `physical`）
@@ -85,24 +92,16 @@ impl CapabilityCode {
     /// # 错误
     /// 不返回错误。
     pub fn from_code(code: &str) -> Option<Self> {
-        super::display::from_code(code, &CAPABILITY_CODE_DISPLAY)
+        match code {
+            "physical" => Some(Self::Physical),
+            "virtual" => Some(Self::Virtual),
+            "offline_service" => Some(Self::OfflineService),
+            "api" => Some(Self::Api),
+            "printing" => Some(Self::Printing),
+            _ => None,
+        }
     }
 }
-
-/// 能力代码展示映射表（erp-supplier-002）：变体→中文名/稳定代码。
-const CAPABILITY_CODE_DISPLAY: [super::display::DisplayEntry<CapabilityCode>; 5] = [
-    super::display::DisplayEntry {
-        variant: CapabilityCode::Physical, label: "实物商品", code: "physical"
-    },
-    super::display::DisplayEntry { variant: CapabilityCode::Virtual, label: "虚拟商品", code: "virtual" },
-    super::display::DisplayEntry {
-        variant: CapabilityCode::OfflineService,
-        label: "线下服务",
-        code: "offline_service",
-    },
-    super::display::DisplayEntry { variant: CapabilityCode::Api, label: "API", code: "api" },
-    super::display::DisplayEntry { variant: CapabilityCode::Printing, label: "印刷", code: "printing" },
-];
 
 /// 能力启停状态（§6.2：启用/停用；对称状态机）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -118,8 +117,6 @@ pub enum CapabilityStatus {
 impl CapabilityStatus {
     /// 返回状态的中文展示名。
     ///
-    /// 映射表见 [`CAPABILITY_STATUS_DISPLAY`]（erp-supplier-002）。
-    ///
     /// # 参数
     /// 无。
     ///
@@ -129,12 +126,13 @@ impl CapabilityStatus {
     /// # 错误
     /// 不返回错误。
     pub fn label(&self) -> &'static str {
-        super::display::label_of(*self, &CAPABILITY_STATUS_DISPLAY)
+        match self {
+            Self::Active => "启用",
+            Self::Disabled => "停用",
+        }
     }
 
     /// 返回状态的稳定代码。
-    ///
-    /// 映射表见 [`CAPABILITY_STATUS_DISPLAY`]（erp-supplier-002）。
     ///
     /// # 参数
     /// 无。
@@ -145,7 +143,10 @@ impl CapabilityStatus {
     /// # 错误
     /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
-        super::display::code_of(*self, &CAPABILITY_STATUS_DISPLAY)
+        match self {
+            Self::Active => "active",
+            Self::Disabled => "disabled",
+        }
     }
 
     /// 判断是否处于启用状态。
@@ -162,12 +163,6 @@ impl CapabilityStatus {
         matches!(self, Self::Active)
     }
 }
-
-/// 能力状态展示映射表（erp-supplier-002）：变体→中文名/稳定代码。
-const CAPABILITY_STATUS_DISPLAY: [super::display::DisplayEntry<CapabilityStatus>; 2] = [
-    super::display::DisplayEntry { variant: CapabilityStatus::Active, label: "启用", code: "active" },
-    super::display::DisplayEntry { variant: CapabilityStatus::Disabled, label: "停用", code: "disabled" },
-];
 
 impl DocumentState for CapabilityStatus {
     /// 返回合法后继：启用 ⇄ 停用。

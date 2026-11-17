@@ -105,138 +105,17 @@ pub(crate) fn normalize_expense(
 /// 行实体只需实现本接口即可复用 [`normalize_and_validate_line`] 的完整校验；
 /// 有销售分配字段的行类型覆写 [`ensure_allocation`](Self::ensure_allocation)。
 pub(crate) trait PurchaseLineDataRef {
-    /// 返回行类型。
+    /// 返回待规范化与校验的共享字段快照。
     ///
     /// # 参数
     /// 无。
     ///
     /// # 返回
-    /// 返回该行的 [`PurchaseLineType`]。
+    /// 返回保持原始文本与字段归属的共享字段。
     ///
     /// # 错误
     /// 不返回错误。
-    fn line_type(&self) -> PurchaseLineType;
-    /// 返回采购二次确认分行引用。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回字段中的采购二次确认分行引用。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    fn procurement_confirmation_line_id(&self) -> &Option<ProcurementConfirmationLineId>;
-    /// 返回 SKU 引用。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回字段中的 SKU 引用。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    fn sku_id(&self) -> &Option<SkuId>;
-    /// 返回商品名称快照。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回字段中的商品名称快照。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    fn product_name_snapshot(&self) -> &Option<String>;
-    /// 返回规格快照。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回字段中的规格快照。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    fn specification_snapshot(&self) -> &Option<String>;
-    /// 返回基础单位数量。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回字段中的基础单位数量。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    fn quantity(&self) -> Option<Quantity>;
-    /// 返回单位代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回字段中的单位代码。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    fn base_unit_code(&self) -> &Option<String>;
-    /// 返回含税采购单价。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回字段中的含税采购单价。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    fn unit_cost_gross(&self) -> Option<UnitPrice>;
-    /// 返回含税行金额。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回字段中的含税行金额。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    fn gross_amount(&self) -> Amount;
-    /// 返回不含税行金额。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回字段中的不含税行金额。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    fn net_amount(&self) -> Amount;
-    /// 返回税额。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回字段中的税额。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    fn tax_amount(&self) -> Amount;
-    /// 返回进项税率。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回字段中的进项税率。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    fn input_tax_rate(&self) -> Option<Rate>;
+    fn fields(&self) -> PurchaseLineFields;
 
     /// 校验销售分配归属；无销售分配字段的行类型保持默认空实现。
     ///
@@ -287,25 +166,12 @@ pub(crate) trait PurchaseLineDataRef {
 pub(crate) fn normalize_and_validate_line<D: PurchaseLineDataRef>(
     data: &D,
 ) -> Result<(Option<String>, Option<String>, Option<String>)> {
-    let product_name =
-        normalize_optional_text(data.product_name_snapshot().clone(), "商品名称快照", PRODUCT_NAME_MAX_LEN)?;
-    let specification =
-        normalize_optional_text(data.specification_snapshot().clone(), "规格快照", SPECIFICATION_MAX_LEN)?;
-    let base_unit_code = normalize_optional_text(data.base_unit_code().clone(), "单位", BASE_UNIT_MAX_LEN)?;
-    let fields = PurchaseLineFields {
-        line_type: data.line_type(),
-        procurement_confirmation_line_id: data.procurement_confirmation_line_id().clone(),
-        sku_id: data.sku_id().clone(),
-        product_name_snapshot: product_name,
-        specification_snapshot: specification,
-        quantity: data.quantity(),
-        base_unit_code,
-        unit_cost_gross: data.unit_cost_gross(),
-        gross_amount: data.gross_amount(),
-        net_amount: data.net_amount(),
-        tax_amount: data.tax_amount(),
-        input_tax_rate: data.input_tax_rate(),
-    };
+    let mut fields = data.fields();
+    fields.product_name_snapshot =
+        normalize_optional_text(fields.product_name_snapshot, "商品名称快照", PRODUCT_NAME_MAX_LEN)?;
+    fields.specification_snapshot =
+        normalize_optional_text(fields.specification_snapshot, "规格快照", SPECIFICATION_MAX_LEN)?;
+    fields.base_unit_code = normalize_optional_text(fields.base_unit_code, "单位", BASE_UNIT_MAX_LEN)?;
     validate_purchase_line(&fields, data.allows_zero_quantity())?;
     data.ensure_allocation()?;
     Ok((fields.product_name_snapshot, fields.specification_snapshot, fields.base_unit_code))
@@ -389,6 +255,23 @@ fn validate_logistics_fee_line(fields: &PurchaseLineFields) -> Result<()> {
     Ok(())
 }
 
+/// 校验采购行号从 1 开始。
+///
+/// # 参数
+/// * `line_no` - 行号
+///
+/// # 返回
+/// 行号非零时返回 `Ok(())`。
+///
+/// # 错误
+/// 行号为零时返回领域错误。
+pub(super) fn ensure_line_no(line_no: u32) -> Result<()> {
+    if line_no == 0 {
+        return Err(Error::from("行号必须从 1 开始"));
+    }
+    Ok(())
+}
+
 /// 断言必填快照字段非空。
 ///
 /// # 参数
@@ -397,11 +280,8 @@ fn validate_logistics_fee_line(fields: &PurchaseLineFields) -> Result<()> {
 ///
 /// # 错误
 /// 快照缺失或为空时返回错误。
-///
-/// # Panics
-/// `value` 为 `Some` 时才 `unwrap`；`None` 已在同一条件中返回错误，正常输入不会 panic。
 fn ensure_snapshot_present(value: Option<&str>, label: &str) -> Result<()> {
-    if value.is_none() || value.unwrap().is_empty() {
+    if value.is_none_or(str::is_empty) {
         return Err(Error::from(format!("商品/服务行必须保存{label}快照")));
     }
     Ok(())
@@ -426,4 +306,24 @@ fn ensure_amount_triple(
         return Err(Error::from(format!("行金额三元组与含税单价×数量×税率复算不一致（{context}）")));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_core::Error;
+
+    use super::ensure_snapshot_present;
+
+    #[test]
+    fn snapshot_presence_preserves_empty_and_untrimmed_boundaries() {
+        for value in [None, Some("")] {
+            let error = ensure_snapshot_present(value, "商品名称").unwrap_err();
+            assert!(
+                matches!(error, Error::LogicError(message) if message == "商品/服务行必须保存商品名称快照")
+            );
+        }
+        for value in ["礼包", " ", "\t"] {
+            assert!(ensure_snapshot_present(Some(value), "商品名称").is_ok());
+        }
+    }
 }

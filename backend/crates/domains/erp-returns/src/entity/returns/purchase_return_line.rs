@@ -66,10 +66,7 @@ impl PurchaseReturnLine {
     /// # 错误
     /// 当退货数量非正时返回错误。
     pub fn new(id: PurchaseReturnLineId, data: PurchaseReturnLineData) -> Result<Self> {
-        if data.return_quantity.to_decimal().is_sign_negative() || data.return_quantity.to_decimal().is_zero()
-        {
-            return Err(Error::from("退货数量必须为正数"));
-        }
+        validate_return_quantity(data.return_quantity)?;
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),
@@ -94,9 +91,7 @@ impl PurchaseReturnLine {
     /// 当退货数量非正时返回错误。
     pub fn update(&mut self, update: PurchaseReturnLineUpdate) -> Result<()> {
         if let Some(return_quantity) = update.return_quantity {
-            if return_quantity.to_decimal().is_sign_negative() || return_quantity.to_decimal().is_zero() {
-                return Err(Error::from("退货数量必须为正数"));
-            }
+            validate_return_quantity(return_quantity)?;
             self.return_quantity = return_quantity;
         }
         if let Some(warehouse_id) = update.warehouse_id {
@@ -104,6 +99,13 @@ impl PurchaseReturnLine {
         }
         Ok(())
     }
+}
+
+fn validate_return_quantity(quantity: Quantity) -> Result<()> {
+    if quantity.to_decimal().is_sign_negative() || quantity.to_decimal().is_zero() {
+        return Err(Error::from("退货数量必须为正数"));
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -129,14 +131,55 @@ mod tests {
     }
 
     #[test]
-    fn new_rejects_non_positive_quantity() {
-        let non_positive =
-            PurchaseReturnLineData { return_quantity: Quantity::from_str("0.000000").unwrap(), ..data() };
-        assert!(PurchaseReturnLine::new(PurchaseReturnLineId::new("prl-2"), non_positive).is_err());
+    fn new_and_update_reject_non_positive_quantity_without_changes() {
+        let mut line = PurchaseReturnLine::new(PurchaseReturnLineId::new("prl-1"), data()).unwrap();
+        line.base = BaseModel::fake();
+        let before = line.clone();
+        for value in ["0.000000", "-0.000000", "-0.000001", "-1.000000"] {
+            let quantity = Quantity::from_str(value).unwrap();
+            let invalid = PurchaseReturnLineData { return_quantity: quantity, ..data() };
+            assert!(matches!(
+                PurchaseReturnLine::new(PurchaseReturnLineId::new("prl-2"), invalid),
+                Err(Error::LogicError(message)) if message == "退货数量必须为正数"
+            ));
+            assert!(matches!(
+                line.update(PurchaseReturnLineUpdate {
+                    return_quantity: Some(quantity),
+                    warehouse_id: Some(WarehouseId::new("wh-2")),
+                }),
+                Err(Error::LogicError(message)) if message == "退货数量必须为正数"
+            ));
+            assert_eq!(line, before);
+        }
+    }
 
-        let negative =
-            PurchaseReturnLineData { return_quantity: Quantity::from_str("-1.000000").unwrap(), ..data() };
-        assert!(PurchaseReturnLine::new(PurchaseReturnLineId::new("prl-3"), negative).is_err());
+    #[test]
+    fn smallest_positive_quantity_and_empty_updates_preserve_fields() {
+        let minimum = Quantity::from_str("0.000001").unwrap();
+        let input = PurchaseReturnLineData { return_quantity: minimum, warehouse_id: None, ..data() };
+        let mut line = PurchaseReturnLine::new(PurchaseReturnLineId::new("prl-1"), input).unwrap();
+        line.base = BaseModel::fake();
+        assert_eq!(line.return_quantity, minimum);
+        assert_eq!(line.warehouse_id, None);
+        let before = line.clone();
+        line.update(PurchaseReturnLineUpdate::default()).unwrap();
+        assert_eq!(line, before);
+
+        line.update(PurchaseReturnLineUpdate {
+            return_quantity: Some(Quantity::from_str("5.000000").unwrap()),
+            warehouse_id: Some(WarehouseId::new("wh-2")),
+        })
+        .unwrap();
+        assert_eq!(line.return_quantity, Quantity::from_str("5.000000").unwrap());
+        line.update(PurchaseReturnLineUpdate { return_quantity: Some(minimum), ..Default::default() })
+            .unwrap();
+        assert_eq!(line.return_quantity, minimum);
+        assert_eq!(line.warehouse_id, Some(WarehouseId::new("wh-2")));
+        assert_eq!(line.purchase_return_order_id, before.purchase_return_order_id);
+        assert_eq!(line.purchase_order_revision_line_id, before.purchase_order_revision_line_id);
+        let before = line.clone();
+        line.update(PurchaseReturnLineUpdate::default()).unwrap();
+        assert_eq!(line, before);
     }
 
     #[test]

@@ -333,12 +333,7 @@ pub fn project_error_actions(input: ErrorActionProjection) -> (Vec<DecidedAction
     if input.can_replay {
         actions.push(DecidedAction::ReplayOriginal);
     }
-    if input.present.contains(&RequiredEvidenceKind::BusinessObjectVerification) {
-        actions.push(DecidedAction::Reattribute);
-    }
-    if input.present.contains(&RequiredEvidenceKind::CompensationResult) {
-        actions.push(DecidedAction::LinkCompensation);
-    }
+    append_evidence_actions(&mut actions, &input.present);
     if input.policy.satisfied_by(&input.present) {
         actions.push(DecidedAction::Resolve);
         return (actions, Vec::new());
@@ -383,12 +378,7 @@ pub fn project_difference_actions(
         return (Vec::new(), Vec::new());
     }
     let mut actions = vec![DecidedAction::QueryOriginalResult, DecidedAction::AddEvidence];
-    if input.present.contains(&RequiredEvidenceKind::BusinessObjectVerification) {
-        actions.push(DecidedAction::Reattribute);
-    }
-    if input.present.contains(&RequiredEvidenceKind::CompensationResult) {
-        actions.push(DecidedAction::LinkCompensation);
-    }
+    append_evidence_actions(&mut actions, &input.present);
     if input.has_work_item {
         if input.policy.satisfied_by(&input.present) {
             actions.push(DecidedAction::Resolve);
@@ -406,6 +396,15 @@ pub fn project_difference_actions(
     actions.push(DecidedAction::ConfirmNoError);
     actions.push(DecidedAction::ConfirmValidDifference);
     (actions, Vec::new())
+}
+
+fn append_evidence_actions(actions: &mut Vec<DecidedAction>, present: &[RequiredEvidenceKind]) {
+    if present.contains(&RequiredEvidenceKind::BusinessObjectVerification) {
+        actions.push(DecidedAction::Reattribute);
+    }
+    if present.contains(&RequiredEvidenceKind::CompensationResult) {
+        actions.push(DecidedAction::LinkCompensation);
+    }
 }
 
 /// 动作后下一动作推导的业务项类型。
@@ -458,9 +457,9 @@ mod tests {
     use erp_core::ids::{InboxMessageId, IntegrationErrorTaskId, ReconciliationDifferenceId};
 
     use super::{
-        DifferenceActionProjection, DirectConclusion, ErrorActionProjection, FundsImpact, ProjectionOutcome,
-        ProjectionSubject, RequiredEvidenceKind, difference_terminal_policy, error_terminal_policy,
-        next_actions_after_outcome, project_difference_actions, project_error_actions,
+        ActionBlocker, DecidedAction, DifferenceActionProjection, DirectConclusion, ErrorActionProjection,
+        FundsImpact, ProjectionOutcome, ProjectionSubject, RequiredEvidenceKind, difference_terminal_policy,
+        error_terminal_policy, next_actions_after_outcome, project_difference_actions, project_error_actions,
         reconciliation_reason_registry,
     };
     use crate::entity::integration_ops::{
@@ -598,6 +597,152 @@ mod tests {
         assert!(!actions.iter().any(|action| action.as_str() == "RESOLVE"));
         assert_eq!(blockers.len(), 1);
         assert_eq!(blockers[0].code, "VERIFIED_EVIDENCE_REQUIRED");
+    }
+
+    #[test]
+    fn evidence_actions_preserve_order_and_deduplicate_for_both_subjects() {
+        for (present, evidence_actions) in [
+            (vec![], vec![]),
+            (vec![RequiredEvidenceKind::BusinessObjectVerification], vec![DecidedAction::Reattribute]),
+            (vec![RequiredEvidenceKind::CompensationResult], vec![DecidedAction::LinkCompensation]),
+            (
+                vec![
+                    RequiredEvidenceKind::CompensationResult,
+                    RequiredEvidenceKind::DistinctReview,
+                    RequiredEvidenceKind::BusinessObjectVerification,
+                    RequiredEvidenceKind::CompensationResult,
+                    RequiredEvidenceKind::BusinessObjectVerification,
+                ],
+                vec![DecidedAction::Reattribute, DecidedAction::LinkCompensation],
+            ),
+        ] {
+            let mut expected = vec![
+                DecidedAction::QueryOriginalResult,
+                DecidedAction::AddEvidence,
+                DecidedAction::ReplayOriginal,
+            ];
+            expected.extend(evidence_actions.iter().copied());
+            let (actions, blockers) = project_error_actions(ErrorActionProjection {
+                terminal: false,
+                has_work_item: true,
+                can_replay: true,
+                present: present.clone(),
+                policy: error_terminal_policy(&error_task(true)),
+            });
+            assert_eq!(actions, expected);
+            assert_eq!(
+                blockers,
+                vec![ActionBlocker {
+                    action: DecidedAction::Resolve,
+                    code: "VERIFIED_RESULT_REQUIRED",
+                    message: "取得可验证结果后才能完成任务。",
+                }],
+            );
+
+            for has_work_item in [false, true] {
+                let mut expected = vec![DecidedAction::QueryOriginalResult, DecidedAction::AddEvidence];
+                expected.extend(evidence_actions.iter().copied());
+                let expected_blockers = if has_work_item {
+                    vec![ActionBlocker {
+                        action: DecidedAction::Resolve,
+                        code: "VERIFIED_EVIDENCE_REQUIRED",
+                        message: "终态证据尚未满足当前固定策略。",
+                    }]
+                } else {
+                    expected.extend([DecidedAction::ConfirmNoError, DecidedAction::ConfirmValidDifference]);
+                    vec![]
+                };
+                let (actions, blockers) = project_difference_actions(DifferenceActionProjection {
+                    terminal: false,
+                    has_work_item,
+                    present: present.clone(),
+                    policy: difference_terminal_policy(&difference("amount_mismatch")),
+                });
+                assert_eq!(actions, expected);
+                assert_eq!(blockers, expected_blockers);
+            }
+        }
+    }
+
+    #[test]
+    fn satisfied_evidence_keeps_resolution_after_evidence_actions() {
+        let present = vec![
+            RequiredEvidenceKind::FinancialReconciliation,
+            RequiredEvidenceKind::CompensationResult,
+            RequiredEvidenceKind::ExternalCaseResult,
+            RequiredEvidenceKind::BusinessObjectVerification,
+        ];
+        let error = project_error_actions(ErrorActionProjection {
+            terminal: false,
+            has_work_item: true,
+            can_replay: false,
+            present: present.clone(),
+            policy: error_terminal_policy(&error_task(true)),
+        });
+        let difference = project_difference_actions(DifferenceActionProjection {
+            terminal: false,
+            has_work_item: true,
+            present,
+            policy: difference_terminal_policy(&difference("amount_mismatch")),
+        });
+        for (actions, blockers) in [error, difference] {
+            assert_eq!(
+                actions,
+                vec![
+                    DecidedAction::QueryOriginalResult,
+                    DecidedAction::AddEvidence,
+                    DecidedAction::Reattribute,
+                    DecidedAction::LinkCompensation,
+                    DecidedAction::Resolve,
+                ],
+            );
+            assert!(blockers.is_empty());
+        }
+    }
+
+    #[test]
+    fn terminal_and_missing_work_item_projections_ignore_available_evidence() {
+        let present = vec![
+            RequiredEvidenceKind::BusinessObjectVerification,
+            RequiredEvidenceKind::CompensationResult,
+            RequiredEvidenceKind::FinancialReconciliation,
+            RequiredEvidenceKind::ExternalCaseResult,
+        ];
+        for has_work_item in [false, true] {
+            let error = project_error_actions(ErrorActionProjection {
+                terminal: true,
+                has_work_item,
+                can_replay: true,
+                present: present.clone(),
+                policy: error_terminal_policy(&error_task(true)),
+            });
+            assert_eq!(error, (vec![], vec![]));
+            let difference = project_difference_actions(DifferenceActionProjection {
+                terminal: true,
+                has_work_item,
+                present: present.clone(),
+                policy: difference_terminal_policy(&difference("amount_mismatch")),
+            });
+            assert_eq!(difference, (vec![], vec![]));
+        }
+        let missing = project_error_actions(ErrorActionProjection {
+            terminal: false,
+            has_work_item: false,
+            can_replay: true,
+            present,
+            policy: error_terminal_policy(&error_task(true)),
+        });
+        assert_eq!(
+            missing,
+            (
+                vec![],
+                vec![ActionBlocker {
+                    action: DecidedAction::Process,
+                    code: "FORMAL_WORK_ITEM_MISSING",
+                    message: "尚未建立 W29 处理责任，当前错误只能查看。",
+                }],
+            ),
+        );
     }
 
     #[test]

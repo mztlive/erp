@@ -380,9 +380,7 @@ impl BackgroundJob {
     /// # 错误
     /// 当任务状态不允许完成，或仍有目标未处理时返回错误。
     pub fn mark_succeeded(&mut self, at: Instant) -> Result<()> {
-        if self.finished_at.is_some()
-            || !matches!(self.status, JobStatus::Running | JobStatus::PartiallySucceeded)
-        {
+        if !self.can_record_progress() {
             return Err(Error::from(format!("状态 {:?} 不允许完成", self.status)));
         }
         if self.processed_count != self.total_count {
@@ -406,9 +404,7 @@ impl BackgroundJob {
     /// # 错误
     /// 当任务状态不允许失败时返回错误。
     pub fn mark_failed(&mut self, error_summary: Option<String>, at: Instant) -> Result<()> {
-        if self.finished_at.is_some()
-            || !matches!(self.status, JobStatus::Running | JobStatus::PartiallySucceeded)
-        {
+        if !self.can_record_progress() {
             return Err(Error::from(format!("状态 {:?} 不允许失败", self.status)));
         }
         self.status = JobStatus::Failed;
@@ -629,6 +625,54 @@ mod tests {
         let mut cancelled = BackgroundJob::new(BackgroundJobId::new("job-2"), data()).unwrap();
         cancelled.cancel(Instant::from_unix_secs(1_700_000_100)).unwrap();
         assert_eq!(cancelled.status, JobStatus::Cancelled);
+    }
+
+    #[test]
+    fn completion_requires_an_unfinished_running_state_for_every_status() {
+        let at = Instant::from_unix_secs(200);
+        for status in [
+            JobStatus::Pending,
+            JobStatus::Running,
+            JobStatus::PartiallySucceeded,
+            JobStatus::Succeeded,
+            JobStatus::Failed,
+            JobStatus::Cancelled,
+        ] {
+            for finished_at in [None, Some(Instant::from_unix_secs(100))] {
+                let mut original = BackgroundJob::new(BackgroundJobId::new("job"), data()).unwrap();
+                original.status = status;
+                original.finished_at = finished_at;
+                original.processed_count = original.total_count;
+                let allowed = finished_at.is_none()
+                    && matches!(status, JobStatus::Running | JobStatus::PartiallySucceeded);
+
+                let mut succeeded = original.clone();
+                let mut failed = original.clone();
+                let success_result = succeeded.mark_succeeded(at);
+                let failure_result = failed.mark_failed(None, at);
+                if allowed {
+                    success_result.unwrap();
+                    failure_result.unwrap();
+                    assert_eq!(succeeded.status, JobStatus::Succeeded);
+                    assert_eq!(failed.status, JobStatus::Failed);
+                    assert_eq!(succeeded.finished_at, Some(at));
+                    assert_eq!(failed.finished_at, Some(at));
+                    assert_eq!(succeeded.last_progress_at, Some(at));
+                    assert_eq!(failed.last_progress_at, Some(at));
+                } else {
+                    assert_eq!(
+                        success_result.unwrap_err().to_string(),
+                        format!("状态 {status:?} 不允许完成")
+                    );
+                    assert_eq!(
+                        failure_result.unwrap_err().to_string(),
+                        format!("状态 {status:?} 不允许失败")
+                    );
+                    assert_eq!(succeeded, original);
+                    assert_eq!(failed, original);
+                }
+            }
+        }
     }
 
     /// 失败项重试仅回退失败计数，保留已成功/跳过结果。

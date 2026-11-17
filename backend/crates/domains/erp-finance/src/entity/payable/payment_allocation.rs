@@ -11,6 +11,7 @@ use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 use super::PaymentAllocationSource;
+use crate::entity::receivable::receipt_allocation::validate_action_reference;
 
 /// 分配动作（数据模型 §6.9：`APPLY` 或 `REVERSE`）。
 ///
@@ -166,15 +167,7 @@ impl PaymentAllocation {
         if data.allocation_seq == 0 {
             return Err(Error::from("分配序号必须从 1 开始"));
         }
-        match data.allocation_action {
-            AllocationAction::Apply if data.reverses_allocation_id.is_some() => {
-                return Err(Error::from("APPLY 分配不得引用原分配"));
-            },
-            AllocationAction::Reverse if data.reverses_allocation_id.is_none() => {
-                return Err(Error::from("REVERSE 分配必须引用原 APPLY 分配"));
-            },
-            _ => {},
-        }
+        validate_action_reference(data.allocation_action.into(), data.reverses_allocation_id.is_some())?;
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),
@@ -476,25 +469,32 @@ mod tests {
 
     #[test]
     fn new_enforces_action_reference_consistency() {
-        let apply_with_reverse = PaymentAllocationData {
-            reverses_allocation_id: Some(PaymentAllocationId::new("pa-1")),
-            ..data()
-        };
-        assert!(PaymentAllocation::new(PaymentAllocationId::new("pa-4"), apply_with_reverse).is_err());
-
-        let reverse_without_ref = PaymentAllocationData {
-            allocation_action: AllocationAction::Reverse,
-            reverses_allocation_id: None,
-            ..data()
-        };
-        assert!(PaymentAllocation::new(PaymentAllocationId::new("pa-5"), reverse_without_ref).is_err());
-
-        let reverse_valid = PaymentAllocationData {
-            allocation_action: AllocationAction::Reverse,
-            reverses_allocation_id: Some(PaymentAllocationId::new("pa-1")),
-            ..data()
-        };
-        assert!(PaymentAllocation::new(PaymentAllocationId::new("pa-6"), reverse_valid).is_ok());
+        for (action, reference, error) in [
+            (AllocationAction::Apply, false, None),
+            (AllocationAction::Apply, true, Some("APPLY 分配不得引用原分配")),
+            (AllocationAction::Reverse, false, Some("REVERSE 分配必须引用原 APPLY 分配")),
+            (AllocationAction::Reverse, true, None),
+        ] {
+            let result = PaymentAllocation::new(
+                PaymentAllocationId::new("allocation"),
+                PaymentAllocationData {
+                    allocation_action: action,
+                    reverses_allocation_id: reference.then(|| PaymentAllocationId::new("original")),
+                    ..data()
+                },
+            );
+            match error {
+                Some(message) => assert!(
+                    matches!(result, Err(Error::LogicError(actual)) if actual == message),
+                    "{action:?} / {reference}"
+                ),
+                None => {
+                    let allocation = result.unwrap();
+                    assert_eq!(allocation.allocation_action, action);
+                    assert_eq!(allocation.reverses_allocation_id.is_some(), reference);
+                },
+            }
+        }
     }
 
     #[test]

@@ -25,8 +25,6 @@ pub enum SettlementMode {
 impl SettlementMode {
     /// 返回面向业务用户的中文标签。
     ///
-    /// 映射表见 [`SETTLEMENT_MODE_DISPLAY`]（erp-supplier-002）。
-    ///
     /// # 参数
     /// 无。
     ///
@@ -36,12 +34,19 @@ impl SettlementMode {
     /// # 错误
     /// 不返回错误。
     pub fn label(&self) -> &'static str {
-        super::display::label_of(*self, &SETTLEMENT_MODE_DISPLAY)
+        match self {
+            Self::Prepayment => "预付款",
+            Self::PayAfterUse => "货到后付（历史）",
+            Self::Weekly => "周结",
+            Self::Monthly => "月结",
+            Self::Quarterly => "季结",
+            Self::HalfYearly => "半年结",
+            Self::Yearly => "年结",
+            Self::CashSettlement => "现结",
+        }
     }
 
     /// 返回用于持久化和接口传输的稳定代码。
-    ///
-    /// 映射表见 [`SETTLEMENT_MODE_DISPLAY`]（erp-supplier-002）。
     ///
     /// # 参数
     /// 无。
@@ -52,35 +57,18 @@ impl SettlementMode {
     /// # 错误
     /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
-        super::display::code_of(*self, &SETTLEMENT_MODE_DISPLAY)
+        match self {
+            Self::Prepayment => "prepayment",
+            Self::PayAfterUse => "pay_after_use",
+            Self::Weekly => "weekly",
+            Self::Monthly => "monthly",
+            Self::Quarterly => "quarterly",
+            Self::HalfYearly => "half_yearly",
+            Self::Yearly => "yearly",
+            Self::CashSettlement => "cash_settlement",
+        }
     }
 }
-
-/// 结算方式展示映射表（erp-supplier-002）：变体→中文名/稳定代码。
-const SETTLEMENT_MODE_DISPLAY: [super::display::DisplayEntry<SettlementMode>; 8] = [
-    super::display::DisplayEntry {
-        variant: SettlementMode::Prepayment, label: "预付款", code: "prepayment"
-    },
-    super::display::DisplayEntry {
-        variant: SettlementMode::PayAfterUse,
-        label: "货到后付（历史）",
-        code: "pay_after_use",
-    },
-    super::display::DisplayEntry { variant: SettlementMode::Weekly, label: "周结", code: "weekly" },
-    super::display::DisplayEntry { variant: SettlementMode::Monthly, label: "月结", code: "monthly" },
-    super::display::DisplayEntry { variant: SettlementMode::Quarterly, label: "季结", code: "quarterly" },
-    super::display::DisplayEntry {
-        variant: SettlementMode::HalfYearly,
-        label: "半年结",
-        code: "half_yearly",
-    },
-    super::display::DisplayEntry { variant: SettlementMode::Yearly, label: "年结", code: "yearly" },
-    super::display::DisplayEntry {
-        variant: SettlementMode::CashSettlement,
-        label: "现结",
-        code: "cash_settlement",
-    },
-];
 
 /// 可形成采购计划付款日的供应商付款条件。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -141,23 +129,16 @@ impl SupplierPaymentTerm {
     ///
     /// # 错误
     /// 不返回错误。
-    ///
-    /// # Panics
-    /// `Periodic` 已在前面返回；若仍进入后续分支则 panic。
     pub fn code(self) -> String {
-        if let Self::Periodic { period, days } = self {
-            return format!("PERIOD_{}_{}", period_code(period), days);
-        }
         match self {
-            Self::Prepay100 => "PREPAY_100",
-            Self::Prepay50 => "PREPAY_50",
-            Self::Prepay30 => "PREPAY_30",
-            Self::CashOnApproval => "CASH_ON_APPROVAL",
-            Self::PostpayNet15 => "POSTPAY_NET15",
-            Self::PostpayNet30 => "POSTPAY_NET30",
-            Self::Periodic { .. } => unreachable!(),
+            Self::Prepay100 => "PREPAY_100".into(),
+            Self::Prepay50 => "PREPAY_50".into(),
+            Self::Prepay30 => "PREPAY_30".into(),
+            Self::CashOnApproval => "CASH_ON_APPROVAL".into(),
+            Self::PostpayNet15 => "POSTPAY_NET15".into(),
+            Self::PostpayNet30 => "POSTPAY_NET30".into(),
+            Self::Periodic { period, days } => format!("PERIOD_{}_{}", period_code(period), days),
         }
-        .to_string()
     }
 
     /// 返回面向采购与财务用户的付款条件名称。
@@ -170,23 +151,18 @@ impl SupplierPaymentTerm {
     ///
     /// # 错误
     /// 不返回错误。
-    ///
-    /// # Panics
-    /// `Periodic` 已在前面返回；若仍进入后续分支则 panic。
     pub fn label(self) -> String {
-        if let Self::Periodic { days, .. } = self {
-            return format!("{}，期末后 {} 天付款", self.settlement_mode().label(), days);
-        }
         match self {
-            Self::Prepay100 => "先款 100%",
-            Self::Prepay50 => "先款 50%",
-            Self::Prepay30 => "先款 30%",
-            Self::CashOnApproval => "现结（审批通过日）",
-            Self::PostpayNet15 => "货到 15 天",
-            Self::PostpayNet30 => "货到 30 天",
-            Self::Periodic { .. } => unreachable!(),
+            Self::Prepay100 => "先款 100%".into(),
+            Self::Prepay50 => "先款 50%".into(),
+            Self::Prepay30 => "先款 30%".into(),
+            Self::CashOnApproval => "现结（审批通过日）".into(),
+            Self::PostpayNet15 => "货到 15 天".into(),
+            Self::PostpayNet30 => "货到 30 天".into(),
+            Self::Periodic { days, .. } => {
+                format!("{}，期末后 {} 天付款", self.settlement_mode().label(), days)
+            },
         }
-        .to_string()
     }
 
     /// 返回付款条件归属的结算方式。
@@ -322,7 +298,38 @@ fn period_code(period: CalendarPeriod) -> &'static str {
 
 #[cfg(test)]
 mod tests {
+    use erp_core::common::calendar::CalendarPeriod;
+
     use super::{SettlementMode, SupplierPaymentTerm};
+
+    #[test]
+    fn payment_term_codes_and_labels_cover_fixed_and_periodic_variants() {
+        for (term, code, label) in [
+            (SupplierPaymentTerm::Prepay100, "PREPAY_100", "先款 100%"),
+            (SupplierPaymentTerm::Prepay50, "PREPAY_50", "先款 50%"),
+            (SupplierPaymentTerm::Prepay30, "PREPAY_30", "先款 30%"),
+            (SupplierPaymentTerm::CashOnApproval, "CASH_ON_APPROVAL", "现结（审批通过日）"),
+            (SupplierPaymentTerm::PostpayNet15, "POSTPAY_NET15", "货到 15 天"),
+            (SupplierPaymentTerm::PostpayNet30, "POSTPAY_NET30", "货到 30 天"),
+        ] {
+            assert_eq!(term.code(), code);
+            assert_eq!(term.label(), label);
+            assert_eq!(SupplierPaymentTerm::parse(code).unwrap(), term);
+        }
+        for (period, code, label) in [
+            (CalendarPeriod::Week, "WEEK", "周结"),
+            (CalendarPeriod::Month, "MONTH", "月结"),
+            (CalendarPeriod::Quarter, "QUARTER", "季结"),
+            (CalendarPeriod::HalfYear, "HALF_YEAR", "半年结"),
+            (CalendarPeriod::Year, "YEAR", "年结"),
+        ] {
+            for days in [0, 15, 366, u16::MAX] {
+                let term = SupplierPaymentTerm::Periodic { period, days };
+                assert_eq!(term.code(), format!("PERIOD_{code}_{days}"));
+                assert_eq!(term.label(), format!("{label}，期末后 {days} 天付款"));
+            }
+        }
+    }
 
     #[test]
     fn payment_terms_normalize_legacy_aliases() {

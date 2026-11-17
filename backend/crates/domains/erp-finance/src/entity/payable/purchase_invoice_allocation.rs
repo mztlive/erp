@@ -8,6 +8,8 @@ use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 use super::payment_allocation::AllocationAction;
+use crate::entity::receivable::allocation_amount::validate_invoice_amounts;
+use crate::entity::receivable::receipt_allocation::validate_action_reference;
 
 /// 进项发票分配创建数据。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -75,19 +77,15 @@ impl PurchaseInvoiceAllocation {
     /// # 错误
     /// 当金额恒等不成立/非正、序号为 0 或动作与引用不一致时返回错误。
     pub fn new(id: PurchaseInvoiceAllocationId, data: PurchaseInvoiceAllocationData) -> Result<Self> {
-        validate_amounts(data.allocated_gross_amount, data.allocated_net_amount, data.allocated_tax_amount)?;
+        validate_invoice_amounts(
+            data.allocated_gross_amount,
+            data.allocated_net_amount,
+            data.allocated_tax_amount,
+        )?;
         if data.allocation_seq == 0 {
             return Err(Error::from("分配序号必须从 1 开始"));
         }
-        match data.allocation_action {
-            AllocationAction::Apply if data.reverses_allocation_id.is_some() => {
-                return Err(Error::from("APPLY 分配不得引用原分配"));
-            },
-            AllocationAction::Reverse if data.reverses_allocation_id.is_none() => {
-                return Err(Error::from("REVERSE 分配必须引用原 APPLY 分配"));
-            },
-            _ => {},
-        }
+        validate_action_reference(data.allocation_action.into(), data.reverses_allocation_id.is_some())?;
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),
@@ -123,32 +121,6 @@ impl PurchaseInvoiceAllocation {
         let _ = (update, updated_by);
         Err(Error::from("正式事实过账后不可更新或删除"))
     }
-}
-
-/// 校验分配金额三元组恒等且为正。
-///
-/// # 参数
-/// * `gross` - 分配含税金额
-/// * `net` - 分配不含税金额
-/// * `tax` - 分配税额
-///
-/// # 返回
-/// 恒等成立返回 `Ok(())`。
-///
-/// # 错误
-/// 金额非正或恒等不成立时返回错误。
-fn validate_amounts(gross: Amount, net: Amount, tax: Amount) -> Result<()> {
-    if gross.to_decimal().is_sign_negative()
-        || gross.to_decimal().is_zero()
-        || net.to_decimal().is_sign_negative()
-        || tax.to_decimal().is_sign_negative()
-    {
-        return Err(Error::from("分配金额必须为正数"));
-    }
-    if gross != net.checked_add(tax) {
-        return Err(Error::from("分配含税金额必须等于不含税金额加税额"));
-    }
-    Ok(())
 }
 
 #[cfg(test)]
@@ -192,36 +164,53 @@ mod tests {
 
     #[test]
     fn new_rejects_amount_mismatch_and_zero_seq() {
-        let mismatch = PurchaseInvoiceAllocationData {
-            allocated_tax_amount: erp_core::money::Amount::from_str("14.00").unwrap(),
+        let zero_seq = PurchaseInvoiceAllocationData {
+            allocation_seq: 0,
+            reverses_allocation_id: Some(PurchaseInvoiceAllocationId::new("original")),
             ..data()
         };
-        assert!(PurchaseInvoiceAllocation::new(PurchaseInvoiceAllocationId::new("pi-2"), mismatch).is_err());
-
-        let zero_seq = PurchaseInvoiceAllocationData { allocation_seq: 0, ..data() };
-        assert!(PurchaseInvoiceAllocation::new(PurchaseInvoiceAllocationId::new("pi-3"), zero_seq).is_err());
+        let mismatch = PurchaseInvoiceAllocationData {
+            allocated_tax_amount: erp_core::money::Amount::from_str("14.00").unwrap(),
+            ..zero_seq.clone()
+        };
+        let error =
+            PurchaseInvoiceAllocation::new(PurchaseInvoiceAllocationId::new("pi-2"), mismatch).unwrap_err();
+        assert!(
+            matches!(error, Error::LogicError(message) if message == "分配含税金额必须等于不含税金额加税额")
+        );
+        let error =
+            PurchaseInvoiceAllocation::new(PurchaseInvoiceAllocationId::new("pi-3"), zero_seq).unwrap_err();
+        assert!(matches!(error, Error::LogicError(message) if message == "分配序号必须从 1 开始"));
     }
 
     #[test]
     fn new_enforces_action_reference_consistency() {
-        let reverse_without_ref = PurchaseInvoiceAllocationData {
-            allocation_action: AllocationAction::Reverse,
-            reverses_allocation_id: None,
-            ..data()
-        };
-        assert!(
-            PurchaseInvoiceAllocation::new(PurchaseInvoiceAllocationId::new("pi-4"), reverse_without_ref)
-                .is_err()
-        );
-
-        let reverse_valid = PurchaseInvoiceAllocationData {
-            allocation_action: AllocationAction::Reverse,
-            reverses_allocation_id: Some(PurchaseInvoiceAllocationId::new("pi-1")),
-            ..data()
-        };
-        assert!(
-            PurchaseInvoiceAllocation::new(PurchaseInvoiceAllocationId::new("pi-5"), reverse_valid).is_ok()
-        );
+        for (action, reference, error) in [
+            (AllocationAction::Apply, false, None),
+            (AllocationAction::Apply, true, Some("APPLY 分配不得引用原分配")),
+            (AllocationAction::Reverse, false, Some("REVERSE 分配必须引用原 APPLY 分配")),
+            (AllocationAction::Reverse, true, None),
+        ] {
+            let result = PurchaseInvoiceAllocation::new(
+                PurchaseInvoiceAllocationId::new("allocation"),
+                PurchaseInvoiceAllocationData {
+                    allocation_action: action,
+                    reverses_allocation_id: reference.then(|| PurchaseInvoiceAllocationId::new("original")),
+                    ..data()
+                },
+            );
+            match error {
+                Some(message) => assert!(
+                    matches!(result, Err(Error::LogicError(actual)) if actual == message),
+                    "{action:?} / {reference}"
+                ),
+                None => {
+                    let allocation = result.unwrap();
+                    assert_eq!(allocation.allocation_action, action);
+                    assert_eq!(allocation.reverses_allocation_id.is_some(), reference);
+                },
+            }
+        }
     }
 
     #[test]

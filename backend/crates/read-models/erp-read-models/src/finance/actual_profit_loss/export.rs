@@ -1,5 +1,6 @@
 //! 同步导出全部匹配分组；防止电子表格公式注入并附带本次查询口径。
-use super::dto::{ProfitLossExport, ProfitLossView};
+use super::dto::{ProfitLossExport, ProfitLossRow, ProfitLossView};
+use crate::support::csv_record as record;
 
 /// 直接序列化服务端全量结果，不使用客户端金额或当前页数据。
 ///
@@ -51,7 +52,7 @@ fn header() -> String {
     ])
 }
 /// 每个分组行使用服务端已校验金额，缺利润保留空值。
-fn row(row: &super::dto::ProfitLossRow) -> String {
+fn row(row: &ProfitLossRow) -> String {
     let t = &row.totals;
     let blockers = row.coverage_blockers.iter().map(|b| b.message.as_str()).collect::<Vec<_>>().join("；");
     let coverage = match row.coverage_state.as_str() {
@@ -74,26 +75,44 @@ fn row(row: &super::dto::ProfitLossRow) -> String {
         &blockers,
     ])
 }
-/// CSV 单元格转义；文本控制字符或公式起始符添加单引号，合法负数保留数值。
-fn record(values: &[&str]) -> String {
-    values.iter().map(|v| cell(v)).collect::<Vec<_>>().join(",")
-}
-/// 引号、换行和危险前缀不能改变表格结构或执行公式。
-fn cell(value: &str) -> String {
-    let trimmed = value.trim_start();
-    let numeric = value.parse::<rust_decimal::Decimal>().is_ok();
-    let dangerous =
-        !numeric && (trimmed.starts_with(['=', '+', '-', '@']) || value.starts_with(['\t', '\r', '\n']));
-    let prefix = if dangerous { "'" } else { "" };
-    format!("\"{prefix}{}\"", value.replace('"', "\"\""))
-}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::finance::actual_profit_loss::dto::{CoverageBlocker, Totals};
+
+    #[test]
+    fn row_preserves_column_order_negative_amounts_and_missing_profit() {
+        let mut value =
+            ProfitLossRow::new("row".into(), "sales_order".into(), "@订单".into(), "PARTIAL".into());
+        value.customer_label = Some("客户\"甲".into());
+        value.attribution_user_name = Some("冻结销售".into());
+        value.totals = Totals {
+            net_sales_revenue: "100.00".into(),
+            actual_procurement_cost_net: "120.00".into(),
+            actual_fulfillment_cost_net: "0.00".into(),
+            reductions_net: "0.00".into(),
+            ..Totals::default()
+        };
+        value.coverage_blockers =
+            vec![CoverageBlocker { code: "missing".into(), message: "缺少成本".into() }];
+        assert_eq!(
+            row(&value),
+            "\"'@订单\",\"客户\"\"甲\",\"冻结销售\",\"\",\"100.00\",\"120.00\",\"0.00\",\"0.00\",\"\",\"\",\"部分\",\"缺少成本\""
+        );
+        value.totals.actual_profit_loss_net = Some("-20.00".into());
+        value.totals.margin_rate = Some("-20.00%".into());
+        value.coverage_state = "COVERED".into();
+        value.coverage_blockers.clear();
+        assert_eq!(
+            row(&value),
+            "\"'@订单\",\"客户\"\"甲\",\"冻结销售\",\"\",\"100.00\",\"120.00\",\"0.00\",\"0.00\",\"-20.00\",\"'-20.00%\",\"完整\",\"\""
+        );
+    }
+
     #[test]
     fn csv_blocks_formula_and_preserves_negative_amount() {
-        assert_eq!(cell(" =HYPERLINK(\"x\")"), "\"' =HYPERLINK(\"\"x\"\")\"");
-        assert_eq!(cell("-12.50"), "\"-12.50\"");
-        assert_eq!(cell("a,b\nc"), "\"a,b\nc\"");
+        assert_eq!(record(&[" =HYPERLINK(\"x\")"]), "\"' =HYPERLINK(\"\"x\"\")\"");
+        assert_eq!(record(&["-12.50"]), "\"-12.50\"");
+        assert_eq!(record(&["a,b\nc"]), "\"a,b\nc\"");
     }
 }

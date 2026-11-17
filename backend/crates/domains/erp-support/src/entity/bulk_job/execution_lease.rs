@@ -60,8 +60,7 @@ impl BackgroundJob {
     /// # 错误
     /// 任务已结束或执行权已过期时拒绝续期。
     pub fn heartbeat_execution(&mut self, now: Instant) -> Result<()> {
-        if self.finished_at.is_some()
-            || !matches!(self.status, JobStatus::Running | JobStatus::PartiallySucceeded)
+        if !self.can_record_progress()
             || self.last_progress_at.is_none_or(|at| now.unix_secs() - at.unix_secs() >= 120)
         {
             return Err(Error::from("任务执行权已失效，请查询原任务"));
@@ -113,6 +112,43 @@ mod tests {
         assert!(job.cancel(Instant::from_unix_secs(1010)).is_err());
         assert_eq!(job.status, JobStatus::Running);
     }
+    #[test]
+    fn heartbeat_preserves_state_and_lease_boundaries() {
+        let now = Instant::from_unix_secs(1200);
+        for status in [
+            JobStatus::Pending,
+            JobStatus::Running,
+            JobStatus::PartiallySucceeded,
+            JobStatus::Succeeded,
+            JobStatus::Failed,
+            JobStatus::Cancelled,
+        ] {
+            for finished_at in [None, Some(Instant::from_unix_secs(1000))] {
+                for last_progress_at in
+                    [None, Some(Instant::from_unix_secs(1080)), Some(Instant::from_unix_secs(1081))]
+                {
+                    let mut original = job();
+                    original.status = status;
+                    original.finished_at = finished_at;
+                    original.last_progress_at = last_progress_at;
+                    let mut updated = original.clone();
+                    let result = updated.heartbeat_execution(now);
+                    let allowed = finished_at.is_none()
+                        && matches!(status, JobStatus::Running | JobStatus::PartiallySucceeded)
+                        && last_progress_at == Some(Instant::from_unix_secs(1081));
+                    if allowed {
+                        result.unwrap();
+                        original.last_progress_at = Some(now);
+                        assert_eq!(updated, original);
+                    } else {
+                        assert_eq!(result.unwrap_err().to_string(), "任务执行权已失效，请查询原任务");
+                        assert_eq!(updated, original);
+                    }
+                }
+            }
+        }
+    }
+
     #[test]
     fn cancellation_and_expiration_fence_heartbeat() {
         let mut job = job();

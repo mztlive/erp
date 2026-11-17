@@ -12,7 +12,7 @@ use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::entity::purchase_order::line_common::{
-    PurchaseLineDataRef, normalize_and_validate_line, normalize_expense,
+    PurchaseLineDataRef, PurchaseLineFields, ensure_line_no, normalize_and_validate_line, normalize_expense,
 };
 use crate::entity::purchase_order::offering_source::ensure_offering_source;
 use crate::entity::purchase_order::types::PurchaseLineType;
@@ -134,52 +134,21 @@ pub struct PurchaseChangeSubmissionLine {
 }
 
 impl PurchaseLineDataRef for PurchaseChangeSubmissionLineData {
-    fn line_type(&self) -> PurchaseLineType {
-        self.line_type
-    }
-
-    fn procurement_confirmation_line_id(&self) -> &Option<ProcurementConfirmationLineId> {
-        &self.procurement_confirmation_line_id
-    }
-
-    fn sku_id(&self) -> &Option<SkuId> {
-        &self.sku_id
-    }
-
-    fn product_name_snapshot(&self) -> &Option<String> {
-        &self.product_name_snapshot
-    }
-
-    fn specification_snapshot(&self) -> &Option<String> {
-        &self.specification_snapshot
-    }
-
-    fn quantity(&self) -> Option<Quantity> {
-        self.quantity
-    }
-
-    fn base_unit_code(&self) -> &Option<String> {
-        &self.base_unit_code
-    }
-
-    fn unit_cost_gross(&self) -> Option<UnitPrice> {
-        self.unit_cost_gross
-    }
-
-    fn gross_amount(&self) -> Amount {
-        self.gross_amount
-    }
-
-    fn net_amount(&self) -> Amount {
-        self.net_amount
-    }
-
-    fn tax_amount(&self) -> Amount {
-        self.tax_amount
-    }
-
-    fn input_tax_rate(&self) -> Option<Rate> {
-        self.input_tax_rate
+    fn fields(&self) -> PurchaseLineFields {
+        PurchaseLineFields {
+            line_type: self.line_type,
+            procurement_confirmation_line_id: self.procurement_confirmation_line_id.clone(),
+            sku_id: self.sku_id.clone(),
+            product_name_snapshot: self.product_name_snapshot.clone(),
+            specification_snapshot: self.specification_snapshot.clone(),
+            quantity: self.quantity,
+            base_unit_code: self.base_unit_code.clone(),
+            unit_cost_gross: self.unit_cost_gross,
+            gross_amount: self.gross_amount,
+            net_amount: self.net_amount,
+            tax_amount: self.tax_amount,
+            input_tax_rate: self.input_tax_rate,
+        }
     }
 
     /// 按行类型校验销售分配字段。
@@ -289,24 +258,11 @@ impl PurchaseChangeSubmissionLine {
     }
 }
 
-/// 校验行号从 1 开始。
-///
-/// # 参数
-/// * `line_no` - 行号
-///
-/// # 错误
-/// 行号为零时返回错误。
-fn ensure_line_no(line_no: u32) -> Result<()> {
-    if line_no == 0 {
-        return Err(Error::from("行号必须从 1 开始"));
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 pub(super) mod tests {
     use std::str::FromStr;
 
+    use erp_core::Error;
     use erp_core::common::time::BusinessDate;
     use erp_core::ids::{
         ProcurementConfirmationLineId, PurchaseChangeSubmissionId, PurchaseChangeSubmissionLineId,
@@ -353,21 +309,33 @@ pub(super) mod tests {
 
     #[test]
     fn change_submission_line_happy_and_failure() {
-        let line = PurchaseChangeSubmissionLine::new(
-            PurchaseChangeSubmissionLineId::new("pcsl-1"),
-            change_line_data(),
-        )
-        .unwrap();
+        let data = PurchaseChangeSubmissionLineData {
+            line_no: u32::MAX,
+            product_name_snapshot: Some(" 礼包 ".into()),
+            specification_snapshot: Some(" \t ".into()),
+            base_unit_code: Some(" 件 ".into()),
+            ..change_line_data()
+        };
+        let line =
+            PurchaseChangeSubmissionLine::new(PurchaseChangeSubmissionLineId::new("pcsl-1"), data).unwrap();
         assert_eq!(line.line_type, PurchaseLineType::ItemService);
+        assert_eq!(line.line_no, u32::MAX);
+        assert_eq!(line.product_name_snapshot.as_deref(), Some("礼包"));
+        assert_eq!(line.specification_snapshot, None);
+        assert_eq!(line.base_unit_code.as_deref(), Some("件"));
+        assert_eq!(line.gross_amount, Amount::from_str("29.97").unwrap());
+        assert_eq!(line.net_amount, Amount::from_str("26.07").unwrap());
+        assert_eq!(line.tax_amount, Amount::from_str("3.90").unwrap());
 
         let bad_amounts = PurchaseChangeSubmissionLineData {
             gross_amount: Amount::from_str("29.98").unwrap(),
             ..change_line_data()
         };
-        assert!(
-            PurchaseChangeSubmissionLine::new(PurchaseChangeSubmissionLineId::new("pcsl-2"), bad_amounts,)
-                .is_err()
-        );
+        let error =
+            PurchaseChangeSubmissionLine::new(PurchaseChangeSubmissionLineId::new("pcsl-2"), bad_amounts)
+                .unwrap_err();
+        assert!(matches!(error, Error::LogicError(message)
+            if message == "行金额三元组与含税单价×数量×税率复算不一致（sku-1）"));
 
         let fee_with_quantity = PurchaseChangeSubmissionLineData {
             line_type: PurchaseLineType::LogisticsFee,
@@ -383,7 +351,35 @@ pub(super) mod tests {
         );
     }
 
-    /// 改单移除的商品行以零数量和零金额保留原行身份；负数量仍被拒绝。
+    #[test]
+    fn change_line_preserves_validation_errors_and_order() {
+        let assert_error = |data, expected: &str| {
+            let error = PurchaseChangeSubmissionLine::new("invalid".to_string().into(), data).unwrap_err();
+            assert!(matches!(error, Error::LogicError(message) if message == expected));
+        };
+        let mut data = PurchaseChangeSubmissionLineData {
+            line_no: 0,
+            product_name_snapshot: Some("名".repeat(257)),
+            sales_order_revision_line_id: None,
+            ..change_line_data()
+        };
+        assert_error(data.clone(), "行号必须从 1 开始");
+        data.line_no = 1;
+        assert_error(data.clone(), "商品名称快照长度不符合要求");
+        data.product_name_snapshot = Some(" \t ".into());
+        assert_error(data.clone(), "商品/服务行必须保存商品名称快照");
+        data.product_name_snapshot = Some("礼包".into());
+        assert_error(data, "商品/服务行必须引用销售稳定行与当前版本行");
+
+        let negative = Quantity::from_str("-1").unwrap();
+        let data = PurchaseChangeSubmissionLineData { quantity: Some(negative), ..change_line_data() };
+        assert_error(data, "商品/服务行数量必须为正");
+        let data =
+            PurchaseChangeSubmissionLineData { allocated_quantity: Some(negative), ..change_line_data() };
+        assert_error(data, "商品/服务行分配数量不能为负");
+    }
+
+    /// 改单移除的商品行以零数量和零金额保留原行身份。
     #[test]
     fn change_line_keeps_removed_item_with_zero_quantity() {
         let zero = Quantity::from_str("0").unwrap();

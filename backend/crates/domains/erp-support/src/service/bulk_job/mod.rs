@@ -732,15 +732,17 @@ impl BulkJobService {
         items: &[BulkSelectionItem],
         executor: &mut dyn Executor,
     ) -> Result<()> {
+        let mut seen = HashSet::new();
         let document_ids = items
             .iter()
             .filter(|item| is_business_document_type(&item.object_type))
-            .map(|item| item.object_id.clone())
+            .map(|item| &item.object_id)
+            .filter(|id| seen.insert(id.as_str()))
+            .cloned()
             .collect::<Vec<_>>();
-        let unique_ids = dedup_preserving_order(&document_ids);
         let registered_ids =
-            documents.find_registered_ids(&unique_ids, executor).await?.into_iter().collect::<HashSet<_>>();
-        if first_unregistered_document_id(&document_ids, &registered_ids).is_some() {
+            documents.find_registered_ids(&document_ids, executor).await?.into_iter().collect::<HashSet<_>>();
+        if document_ids.iter().any(|id| !registered_ids.contains(id)) {
             return Err(Error::NotFound("业务单据未注册".to_string()));
         }
         Ok(())
@@ -829,41 +831,18 @@ fn build_job_parts(
     Ok(aggregate.into_parts())
 }
 
-/// 借用去重键，只复制首次出现的 ID。
-///
-/// # 参数
-/// * `ids` - 待去重的 ID 序列
-///
-/// # 返回
-/// 返回保序去重后的 ID 集合；去重语义与 `NotFound` 行为不变。
-fn dedup_preserving_order(ids: &[String]) -> Vec<String> {
-    let mut seen = HashSet::new();
-    ids.iter().filter(|id| seen.insert(id.as_str())).cloned().collect()
-}
-
-/// 按请求顺序定位首个尚未注册的业务单据 ID。
-///
-/// # 参数
-/// * `document_ids` - 从请求提取的业务单据 ID，保留原始顺序与重复项
-/// * `registered_ids` - 仓储批量查询返回的已注册 ID 集合
-///
-/// # 返回
-/// 全部已注册时返回 `None`；否则返回首个缺失 ID。
-///
-/// # 错误
-/// 无。
-fn first_unregistered_document_id<'a>(
-    document_ids: &'a [String],
-    registered_ids: &HashSet<String>,
-) -> Option<&'a str> {
-    document_ids.iter().find(|id| !registered_ids.contains(id.as_str())).map(String::as_str)
-}
-
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
+    use std::sync::Mutex;
 
-    use super::first_unregistered_document_id;
+    use async_trait::async_trait;
+    use erp_core::ids::{BulkSelectionItemId, BulkSelectionSnapshotId};
+    use persistence_core::{Executor, NoTransaction};
+
+    use super::BulkJobService;
+    use crate::entity::bulk_job::{BulkSelectionItem, BulkSelectionItemData};
+    use crate::error::{Error, Result};
+    use crate::ports::BusinessDocumentPort;
 
     #[tokio::test]
     async fn detail_and_cancel_authorize_before_reading_job_existence() {
@@ -990,23 +969,92 @@ mod tests {
         }
     }
 
-    #[test]
-    fn registration_membership_preserves_first_missing_request_order() {
-        let ids = vec![
-            "registered".to_string(),
-            "missing-first".to_string(),
-            "registered".to_string(),
-            "missing-later".to_string(),
-        ];
-        let registered = HashSet::from(["registered".to_string()]);
-        assert_eq!(first_unregistered_document_id(&ids, &registered), Some("missing-first"));
+    #[derive(Default)]
+    struct RegisteredDocuments {
+        queries: Mutex<Vec<Vec<String>>>,
+        registered: Vec<String>,
+        fail: bool,
+    }
 
-        let all_registered = HashSet::from([
-            "registered".to_string(),
-            "missing-first".to_string(),
-            "missing-later".to_string(),
-        ]);
-        assert_eq!(first_unregistered_document_id(&ids, &all_registered), None);
-        assert_eq!(first_unregistered_document_id(&[], &HashSet::new()), None);
+    #[async_trait]
+    impl BusinessDocumentPort for RegisteredDocuments {
+        async fn ensure_registered(&self, _id: &str, _executor: &mut dyn Executor) -> Result<()> {
+            panic!("冻结目标应通过批量端口核验");
+        }
+
+        async fn find_registered_ids(
+            &self,
+            ids: &[String],
+            _executor: &mut dyn Executor,
+        ) -> Result<Vec<String>> {
+            self.queries.lock().unwrap().push(ids.to_vec());
+            if self.fail {
+                return Err(Error::Internal("单据查询失败".into()));
+            }
+            Ok(self.registered.clone())
+        }
+    }
+
+    fn selection_item(object_type: &str, object_id: &str) -> BulkSelectionItem {
+        BulkSelectionItem::new(
+            BulkSelectionItemId::new(format!("{object_type}:{object_id}")),
+            BulkSelectionItemData {
+                selection_snapshot_id: BulkSelectionSnapshotId::new("snapshot"),
+                object_type: object_type.into(),
+                object_id: object_id.into(),
+                expected_version: None,
+                expected_hash: None,
+            },
+        )
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn registration_checks_only_document_ids_in_first_occurrence_order() {
+        let documents = RegisteredDocuments {
+            registered: vec!["second".into(), "first".into(), "unrequested".into()],
+            ..Default::default()
+        };
+        let items = vec![
+            selection_item("sales_order", "first"),
+            selection_item("catalog_product", "unregistered-product"),
+            selection_item("purchase_order", "second"),
+            selection_item("sales_order", "first"),
+            selection_item("purchase_order", "first"),
+        ];
+        BulkJobService::ensure_items_registered(&documents, &items, &mut NoTransaction).await.unwrap();
+        assert_eq!(*documents.queries.lock().unwrap(), vec![vec!["first", "second"]]);
+    }
+
+    #[tokio::test]
+    async fn registration_rejects_missing_documents_and_propagates_port_errors() {
+        let items = vec![selection_item("sales_order", "missing")];
+        let documents = RegisteredDocuments::default();
+        let error = BulkJobService::ensure_items_registered(&documents, &items, &mut NoTransaction)
+            .await
+            .unwrap_err();
+        assert!(matches!(error, Error::NotFound(message) if message == "业务单据未注册"));
+
+        let documents = RegisteredDocuments { fail: true, ..Default::default() };
+        let error = BulkJobService::ensure_items_registered(&documents, &items, &mut NoTransaction)
+            .await
+            .unwrap_err();
+        assert!(matches!(error, Error::Internal(message) if message == "单据查询失败"));
+    }
+
+    #[tokio::test]
+    async fn empty_document_sets_still_call_the_port_and_preserve_its_errors() {
+        for items in [vec![], vec![selection_item("catalog_product", "product")]] {
+            let documents = RegisteredDocuments::default();
+            BulkJobService::ensure_items_registered(&documents, &items, &mut NoTransaction).await.unwrap();
+            assert_eq!(*documents.queries.lock().unwrap(), vec![Vec::<String>::new()]);
+
+            let documents = RegisteredDocuments { fail: true, ..Default::default() };
+            let error = BulkJobService::ensure_items_registered(&documents, &items, &mut NoTransaction)
+                .await
+                .unwrap_err();
+            assert!(matches!(error, Error::Internal(message) if message == "单据查询失败"));
+            assert_eq!(*documents.queries.lock().unwrap(), vec![Vec::<String>::new()]);
+        }
     }
 }

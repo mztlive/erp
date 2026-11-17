@@ -25,6 +25,32 @@ pub(crate) fn net_receipt_allocated(allocations: &[ReceiptAllocation]) -> Result
     })
 }
 
+/// 校验发票分配金额为正且满足含税金额恒等式。
+///
+/// # 参数
+/// * `gross` - 分配含税金额。
+/// * `net` - 分配不含税金额。
+/// * `tax` - 分配税额。
+///
+/// # 返回
+/// 金额合法时返回 `Ok(())`。
+///
+/// # 错误
+/// 金额非正或恒等式不成立时返回原分配校验错误。
+pub(crate) fn validate_invoice_amounts(gross: Amount, net: Amount, tax: Amount) -> Result<()> {
+    if gross.to_decimal().is_sign_negative()
+        || gross.to_decimal().is_zero()
+        || net.to_decimal().is_sign_negative()
+        || tax.to_decimal().is_sign_negative()
+    {
+        return Err(Error::from("分配金额必须为正数"));
+    }
+    if gross != net.checked_add(tax) {
+        return Err(Error::from("分配含税金额必须等于不含税金额加税额"));
+    }
+    Ok(())
+}
+
 /// 返回固定零金额。
 ///
 /// # 参数
@@ -101,6 +127,29 @@ mod tests {
         assert_eq!(zero, Amount::zero());
         assert_eq!(zero.to_string(), "0.00");
         assert_eq!(zero.to_decimal().scale(), 2);
+    }
+
+    #[test]
+    fn invoice_amounts_keep_zero_components_and_error_precedence() {
+        for (gross, net, tax, error) in [
+            ("10", "10", "0", None),
+            ("10", "0", "10", None),
+            ("0", "0", "0", Some("分配金额必须为正数")),
+            ("-10", "-10", "0", Some("分配金额必须为正数")),
+            ("10", "-1", "11", Some("分配金额必须为正数")),
+            ("10", "11", "-1", Some("分配金额必须为正数")),
+            ("10", "8", "1", Some("分配含税金额必须等于不含税金额加税额")),
+        ] {
+            let result =
+                validate_invoice_amounts(gross.parse().unwrap(), net.parse().unwrap(), tax.parse().unwrap());
+            match error {
+                Some(message) => assert!(
+                    matches!(result, Err(Error::LogicError(actual)) if actual == message),
+                    "{gross} / {net} / {tax}"
+                ),
+                None => result.unwrap(),
+            }
+        }
     }
 
     /// 调用方指定的溢出文案被原样保留。

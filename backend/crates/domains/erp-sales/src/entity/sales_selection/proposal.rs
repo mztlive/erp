@@ -1,5 +1,7 @@
 //! 销售方案：客户提交后不可改明细。
 
+use std::slice;
+
 use entity_core::BaseModel;
 use entity_macros::Entity;
 use erp_core::common::time::Instant;
@@ -11,6 +13,7 @@ use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 use super::display_item::{DisplayKind, SalesSelectionDisplayItem};
+use super::pricing::try_mul_u32;
 use super::recipient::SelectionRecipient;
 use super::session::SessionChoice;
 use super::types::{ProposalSource, SelectionForm, SubmitMode};
@@ -297,7 +300,7 @@ where
     }
     let unit_price = item.price();
     let line_amount = match quantity {
-        Some(copies) => Some(super::pricing::try_mul_u32(unit_price, copies)?),
+        Some(copies) => Some(try_mul_u32(unit_price, copies)?),
         None => None,
     };
     let display_line = SalesSelectionProposalDisplayLine {
@@ -340,13 +343,13 @@ where
     F: FnMut() -> String,
 {
     let members = match &item.kind {
-        DisplayKind::SingleSku { sku } => vec![sku],
-        DisplayKind::Package { members, .. } => members.iter().collect(),
+        DisplayKind::SingleSku { sku } => slice::from_ref(sku),
+        DisplayKind::Package { members, .. } => members.as_slice(),
     };
     let mut lines = Vec::with_capacity(members.len());
     for sku in members {
         let line_amount = match quantity {
-            Some(copies) => Some(super::pricing::try_mul_u32(sku.sales_visible_price_gross, copies)?),
+            Some(copies) => Some(try_mul_u32(sku.sales_visible_price_gross, copies)?),
             None => None,
         };
         lines.push(SalesSelectionProposalSkuLine {
@@ -370,19 +373,25 @@ where
 mod tests {
     use std::str::FromStr;
 
+    use erp_core::Error;
     use erp_core::common::time::Instant;
     use erp_core::ids::{
         CustomerAccountId, ProductId, SalesSelectionBookletId, SalesSelectionDisplayItemId,
         SalesSelectionProposalId, SkuId, SkuRevisionId,
     };
     use erp_core::money::Amount;
+    use rust_decimal::Decimal;
 
-    use super::{SalesSelectionProposal, SalesSelectionProposalData, build_proposal_lines};
-    use crate::entity::sales_selection::display_item::SalesSelectionDisplayItem;
+    use super::{
+        SalesSelectionProposal, SalesSelectionProposalData, build_proposal_lines, sku_lines_for_item,
+    };
+    use crate::entity::sales_selection::display_item::{DisplayKind, SalesSelectionDisplayItem};
     use crate::entity::sales_selection::session::SessionChoice;
     use crate::entity::sales_selection::sku_snapshot::SkuSnapshot;
     use crate::entity::sales_selection::types::SubmitMode;
-    use crate::entity::sales_selection::{PackageCoverRef, SelectionForm, SelectionRecipient};
+    use crate::entity::sales_selection::{
+        PackageCoverRef, SelectionForm, SelectionRecipient, SpecificationAttributeSnapshot,
+    };
 
     fn sku() -> SkuSnapshot {
         SkuSnapshot {
@@ -425,6 +434,9 @@ mod tests {
         assert_eq!(display[0].line_amount, total);
         assert_eq!(sku_lines[0].quantity, Some(3));
         assert_eq!(sku_lines[0].line_amount, total);
+        assert_eq!(seq, 2);
+        assert_eq!(display[0].base.id, "id-1");
+        assert_eq!(sku_lines[0].base.id, "id-2");
     }
     fn proposal_data() -> SalesSelectionProposalData {
         SalesSelectionProposalData {
@@ -513,19 +525,20 @@ mod tests {
         assert!(restored.participant_id.is_empty());
         assert!(restored.recipient.is_none());
     }
-    #[test]
-    fn package_voucher_totals_expand_every_member_and_preserve_personal_budget() {
-        let first = sku();
+    fn package() -> SalesSelectionDisplayItem {
         let mut second = sku();
         second.sku_id = SkuId::new("sku-2");
         second.sku_revision_id = SkuRevisionId::new("rev-2");
         second.sales_visible_price_gross = "15.00".parse().unwrap();
-        let package = SalesSelectionDisplayItem::package(
+        second.unit = "盒".into();
+        second.specification_attributes =
+            vec![SpecificationAttributeSnapshot { name: "包装".into(), value: "礼盒".into() }];
+        SalesSelectionDisplayItem::package(
             SalesSelectionDisplayItemId::new("package-1"),
             SalesSelectionBookletId::new("b1"),
             "batch".into(),
             "tier-1".into(),
-            vec![first, second],
+            vec![sku(), second],
             PackageCoverRef {
                 file_asset_id: "cover-1".into(),
                 content_checksum: "checksum".into(),
@@ -533,7 +546,12 @@ mod tests {
                 generator_version: "test".into(),
             },
         )
-        .unwrap();
+        .unwrap()
+    }
+
+    #[test]
+    fn package_voucher_totals_expand_every_member_and_preserve_personal_budget() {
+        let package = package();
         let choices = vec![SessionChoice {
             display_item_id: SalesSelectionDisplayItemId::new("package-1"),
             quantity: Some(3),
@@ -558,5 +576,93 @@ mod tests {
         assert_eq!(sku_lines[0].line_amount, Some("30.00".parse().unwrap()));
         assert_eq!(sku_lines[1].quantity, Some(3));
         assert_eq!(sku_lines[1].line_amount, Some("45.00".parse().unwrap()));
+        assert_eq!(sequence, 3);
+        assert_eq!(display_lines[0].base.id, "line-1");
+        assert_eq!(sku_lines[0].base.id, "line-2");
+        assert_eq!(sku_lines[0].sku_id, "sku-1");
+        assert_eq!(sku_lines[1].base.id, "line-3");
+        assert_eq!(sku_lines[1].sku_id, "sku-2");
+    }
+
+    #[test]
+    fn sku_expansion_preserves_member_order_snapshots_and_optional_quantities() {
+        let single = SalesSelectionDisplayItem::single_sku(
+            SalesSelectionDisplayItemId::new("single"),
+            SalesSelectionBookletId::new("b1"),
+            "batch".into(),
+            sku(),
+        )
+        .unwrap();
+        let mut package = package();
+        let DisplayKind::Package { members, .. } = &mut package.kind else { panic!("expected package") };
+        members.reverse();
+        for item in [single, package] {
+            let expected = match &item.kind {
+                DisplayKind::SingleSku { sku } => vec![sku.clone()],
+                DisplayKind::Package { members, .. } => members.clone(),
+            };
+            for quantity in [None, Some(0)] {
+                let proposal_id = SalesSelectionProposalId::new("proposal");
+                let mut calls = 0;
+                let lines = sku_lines_for_item(&proposal_id, &item, quantity, &mut || {
+                    calls += 1;
+                    format!("line-{calls}")
+                })
+                .unwrap();
+                assert_eq!(calls, expected.len());
+                assert_eq!(lines.len(), expected.len());
+                for (index, (line, snapshot)) in lines.iter().zip(&expected).enumerate() {
+                    assert_eq!(line.base.id, format!("line-{}", index + 1));
+                    assert_eq!(line.proposal_id, proposal_id);
+                    assert_eq!(line.display_item_id.as_ref(), item.base.id.as_str());
+                    assert_eq!(line.sku_id, snapshot.sku_id.as_ref());
+                    assert_eq!(line.sku_revision_id, snapshot.sku_revision_id.as_ref());
+                    assert_eq!(line.name, snapshot.name);
+                    assert_eq!(line.specification, snapshot.specification_attributes);
+                    assert_eq!(line.unit, snapshot.unit);
+                    assert_eq!(line.unit_price, snapshot.sales_visible_price_gross);
+                    assert_eq!(line.quantity, quantity);
+                    assert_eq!(line.line_amount, quantity.map(|_| Amount::zero()));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn empty_package_expands_no_sku_lines_and_generates_no_ids() {
+        let mut item = package();
+        let DisplayKind::Package { members, .. } = &mut item.kind else { panic!("expected package") };
+        members.clear();
+        for quantity in [None, Some(3)] {
+            let mut calls = 0;
+            let lines =
+                sku_lines_for_item(&SalesSelectionProposalId::new("proposal"), &item, quantity, &mut || {
+                    calls += 1;
+                    "unused".into()
+                })
+                .unwrap();
+            assert!(lines.is_empty());
+            assert_eq!(calls, 0);
+        }
+    }
+
+    #[test]
+    fn sku_expansion_stops_at_overflow_before_generating_failed_or_later_ids() {
+        let mut item = package();
+        let DisplayKind::Package { members, .. } = &mut item.kind else { panic!("expected package") };
+        members[1].sales_visible_price_gross = Amount::try_from(Decimal::MAX).unwrap();
+        members.push(sku());
+        let original = item.clone();
+        let mut calls = 0;
+        let error =
+            sku_lines_for_item(&SalesSelectionProposalId::new("proposal"), &item, Some(2), &mut || {
+                calls += 1;
+                format!("line-{calls}")
+            })
+            .unwrap_err();
+        assert_eq!(error.to_string(), "行金额超出可表示范围");
+        assert!(matches!(error, Error::LogicError(_)));
+        assert_eq!(calls, 1);
+        assert_eq!(item, original);
     }
 }

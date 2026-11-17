@@ -52,35 +52,8 @@ pub enum QualificationType {
     LegalPersonId,
 }
 
-/// 资质类型展示映射表（erp-supplier-002）：变体→中文名/稳定代码。
-const QUALIFICATION_TYPE_DISPLAY: [super::display::DisplayEntry<QualificationType>; 5] = [
-    super::display::DisplayEntry {
-        variant: QualificationType::Certificate,
-        label: "资质证照",
-        code: "certificate",
-    },
-    super::display::DisplayEntry { variant: QualificationType::Contract, label: "合同", code: "contract" },
-    super::display::DisplayEntry {
-        variant: QualificationType::Authorization,
-        label: "授权书",
-        code: "authorization",
-    },
-    super::display::DisplayEntry {
-        variant: QualificationType::FoodLicense,
-        label: "食品经营许可证",
-        code: "food_license",
-    },
-    super::display::DisplayEntry {
-        variant: QualificationType::LegalPersonId,
-        label: "法人身份证",
-        code: "legal_person_id",
-    },
-];
-
 impl QualificationType {
     /// 返回类型的中文展示名。
-    ///
-    /// 映射表见 [`QUALIFICATION_TYPE_DISPLAY`]（erp-supplier-002）。
     ///
     /// # 参数
     /// 无。
@@ -91,12 +64,16 @@ impl QualificationType {
     /// # 错误
     /// 不返回错误。
     pub fn label(&self) -> &'static str {
-        super::display::label_of(*self, &QUALIFICATION_TYPE_DISPLAY)
+        match self {
+            Self::Certificate => "资质证照",
+            Self::Contract => "合同",
+            Self::Authorization => "授权书",
+            Self::FoodLicense => "食品经营许可证",
+            Self::LegalPersonId => "法人身份证",
+        }
     }
 
     /// 返回类型的稳定代码。
-    ///
-    /// 映射表见 [`QUALIFICATION_TYPE_DISPLAY`]（erp-supplier-002）。
     ///
     /// # 参数
     /// 无。
@@ -107,13 +84,18 @@ impl QualificationType {
     /// # 错误
     /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
-        super::display::code_of(*self, &QUALIFICATION_TYPE_DISPLAY)
+        match self {
+            Self::Certificate => "certificate",
+            Self::Contract => "contract",
+            Self::Authorization => "authorization",
+            Self::FoodLicense => "food_license",
+            Self::LegalPersonId => "legal_person_id",
+        }
     }
 
     /// 由稳定代码反查资质类型。
     ///
-    /// 映射表见 [`QUALIFICATION_TYPE_DISPLAY`]（erp-supplier-002）；列表查询的
-    /// 逗号分隔代码经此归一化，不再于 DTO 侧重复分支。
+    /// 列表查询的逗号分隔代码经此归一化。
     ///
     /// # 参数
     /// * `code` - 稳定代码（如 `contract`）
@@ -124,7 +106,14 @@ impl QualificationType {
     /// # 错误
     /// 不返回错误。
     pub fn from_code(code: &str) -> Option<Self> {
-        super::display::from_code(code, &QUALIFICATION_TYPE_DISPLAY)
+        match code {
+            "certificate" => Some(Self::Certificate),
+            "contract" => Some(Self::Contract),
+            "authorization" => Some(Self::Authorization),
+            "food_license" => Some(Self::FoodLicense),
+            "legal_person_id" => Some(Self::LegalPersonId),
+            _ => None,
+        }
     }
 
     /// 校验日期窗口；只有合同允许缺少起始日期。
@@ -216,19 +205,8 @@ pub enum QualificationStatus {
     Disabled,
 }
 
-/// 资质状态展示映射表（erp-supplier-002）：变体→中文名/稳定代码。
-const QUALIFICATION_STATUS_DISPLAY: [super::display::DisplayEntry<QualificationStatus>; 3] = [
-    super::display::DisplayEntry { variant: QualificationStatus::Active, label: "有效", code: "active" },
-    super::display::DisplayEntry { variant: QualificationStatus::Expired, label: "失效", code: "expired" },
-    super::display::DisplayEntry {
-        variant: QualificationStatus::Disabled, label: "停用", code: "disabled"
-    },
-];
-
 impl QualificationStatus {
     /// 返回状态的中文展示名。
-    ///
-    /// 映射表见 [`QUALIFICATION_STATUS_DISPLAY`]（erp-supplier-002）。
     ///
     /// # 参数
     /// 无。
@@ -239,12 +217,14 @@ impl QualificationStatus {
     /// # 错误
     /// 不返回错误。
     pub fn label(&self) -> &'static str {
-        super::display::label_of(*self, &QUALIFICATION_STATUS_DISPLAY)
+        match self {
+            Self::Active => "有效",
+            Self::Expired => "失效",
+            Self::Disabled => "停用",
+        }
     }
 
     /// 返回状态的稳定代码。
-    ///
-    /// 映射表见 [`QUALIFICATION_STATUS_DISPLAY`]（erp-supplier-002）。
     ///
     /// # 参数
     /// 无。
@@ -255,7 +235,11 @@ impl QualificationStatus {
     /// # 错误
     /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
-        super::display::code_of(*self, &QUALIFICATION_STATUS_DISPLAY)
+        match self {
+            Self::Active => "active",
+            Self::Expired => "expired",
+            Self::Disabled => "disabled",
+        }
     }
 
     /// 判断资质状态是否为有效。

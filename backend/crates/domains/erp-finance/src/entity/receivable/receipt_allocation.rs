@@ -166,7 +166,7 @@ impl ReceiptAllocation {
         if data.allocation_seq == 0 {
             return Err(Error::from("分配序号必须从 1 开始"));
         }
-        validate_action_reference(data.allocation_action, &data.reverses_allocation_id)?;
+        validate_action_reference(data.allocation_action, data.reverses_allocation_id.is_some())?;
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),
@@ -199,35 +199,21 @@ impl ReceiptAllocation {
     }
 }
 
-/// 分配引用 ID 的可泛化标记。
-///
-/// 本域内 `receipt_allocation` 与 `sales_invoice_allocation` 的反向引用 ID 类型
-/// 不同，共享校验逻辑用空 trait 泛化。
-pub(crate) trait AllocationIdRef {}
-
-impl AllocationIdRef for ReceiptAllocationId {}
-impl AllocationIdRef for erp_core::ids::SalesInvoiceAllocationId {}
-
 /// 校验分配动作与反向引用的一致性。
 ///
 /// # 参数
 /// * `action` - 分配动作
-/// * `reverses_allocation_id` - 原 `APPLY` 分配引用
+/// * `has_reverse_reference` - 是否携带原 `APPLY` 分配引用
 ///
 /// # 返回
 /// 一致返回 `Ok(())`。
 ///
 /// # 错误
 /// `REVERSE` 未携带引用或 `APPLY` 携带引用时返回错误。
-pub(crate) fn validate_action_reference<T: AllocationIdRef>(
-    action: AllocationAction,
-    reverses_allocation_id: &Option<T>,
-) -> Result<()> {
+pub(crate) fn validate_action_reference(action: AllocationAction, has_reverse_reference: bool) -> Result<()> {
     match action {
-        AllocationAction::Apply if reverses_allocation_id.is_some() => {
-            Err(Error::from("APPLY 分配不得引用原分配"))
-        },
-        AllocationAction::Reverse if reverses_allocation_id.is_none() => {
+        AllocationAction::Apply if has_reverse_reference => Err(Error::from("APPLY 分配不得引用原分配")),
+        AllocationAction::Reverse if !has_reverse_reference => {
             Err(Error::from("REVERSE 分配必须引用原 APPLY 分配"))
         },
         _ => Ok(()),
@@ -412,25 +398,32 @@ mod tests {
 
     #[test]
     fn new_enforces_action_reference_consistency() {
-        let apply_with_reverse = ReceiptAllocationData {
-            reverses_allocation_id: Some(ReceiptAllocationId::new("rc-1")),
-            ..data()
-        };
-        assert!(ReceiptAllocation::new(ReceiptAllocationId::new("rc-4"), apply_with_reverse).is_err());
-
-        let reverse_without_ref = ReceiptAllocationData {
-            allocation_action: AllocationAction::Reverse,
-            reverses_allocation_id: None,
-            ..data()
-        };
-        assert!(ReceiptAllocation::new(ReceiptAllocationId::new("rc-5"), reverse_without_ref).is_err());
-
-        let reverse_valid = ReceiptAllocationData {
-            allocation_action: AllocationAction::Reverse,
-            reverses_allocation_id: Some(ReceiptAllocationId::new("rc-1")),
-            ..data()
-        };
-        assert!(ReceiptAllocation::new(ReceiptAllocationId::new("rc-6"), reverse_valid).is_ok());
+        for (action, reference, error) in [
+            (AllocationAction::Apply, false, None),
+            (AllocationAction::Apply, true, Some("APPLY 分配不得引用原分配")),
+            (AllocationAction::Reverse, false, Some("REVERSE 分配必须引用原 APPLY 分配")),
+            (AllocationAction::Reverse, true, None),
+        ] {
+            let result = ReceiptAllocation::new(
+                ReceiptAllocationId::new("allocation"),
+                ReceiptAllocationData {
+                    allocation_action: action,
+                    reverses_allocation_id: reference.then(|| ReceiptAllocationId::new("original")),
+                    ..data()
+                },
+            );
+            match error {
+                Some(message) => assert!(
+                    matches!(result, Err(Error::LogicError(actual)) if actual == message),
+                    "{action:?} / {reference}"
+                ),
+                None => {
+                    let allocation = result.unwrap();
+                    assert_eq!(allocation.allocation_action, action);
+                    assert_eq!(allocation.reverses_allocation_id.is_some(), reference);
+                },
+            }
+        }
     }
 
     #[test]

@@ -1,6 +1,7 @@
 //! 册内客户售价调整；仅修改准备批次快照与陈列。
 
 use std::collections::BTreeMap;
+use std::slice;
 
 use erp_core::money::{Amount, round_to_cent};
 use erp_core::{Error, Result};
@@ -85,20 +86,17 @@ impl SelectionPriceChange {
 
 impl SalesSelectionDisplayItem {
     fn apply_prices(&mut self, prices: &BTreeMap<String, Amount>) -> Result<()> {
-        match &mut self.kind {
-            DisplayKind::SingleSku { sku } => {
-                if let Some(price) = prices.get(sku.sku_id_str()) {
-                    sku.sales_visible_price_gross = *price;
-                }
-            },
-            DisplayKind::Package { members, price, .. } => {
-                for sku in members.iter_mut() {
-                    if let Some(price) = prices.get(sku.sku_id_str()) {
-                        sku.sales_visible_price_gross = *price;
-                    }
-                }
-                *price = package_price(members)?;
-            },
+        let (members, package_total) = match &mut self.kind {
+            DisplayKind::SingleSku { sku } => (slice::from_mut(sku), None),
+            DisplayKind::Package { members, price, .. } => (members.as_mut_slice(), Some(price)),
+        };
+        for sku in members.iter_mut() {
+            if let Some(price) = prices.get(sku.sku_id_str()) {
+                sku.sales_visible_price_gross = *price;
+            }
+        }
+        if let Some(price) = package_total {
+            *price = package_price(members)?;
         }
         Ok(())
     }
@@ -214,6 +212,57 @@ mod tests {
     }
 
     #[test]
+    fn single_change_keeps_unmatched_display_unchanged() {
+        let (mut pool, mut items) = fixture();
+        let original_single = items[0].clone();
+        let original_member = pool[0].clone();
+        SelectionPriceChange::Single { sku_id: "b".into(), price: amount("25") }
+            .apply(BookletStatus::PendingPublish, &mut pool, &mut items)
+            .unwrap();
+        assert_eq!(items[0], original_single);
+        assert_eq!(pool[0], original_member);
+        assert_eq!(pool[1].sku.sales_visible_price_gross, amount("25"));
+        assert_eq!(items[1].price(), amount("35.05"));
+        let DisplayKind::Package { members, .. } = &items[1].kind else { panic!("expected package") };
+        assert_eq!(members[0], pool[0].sku);
+        assert_eq!(members[1], pool[1].sku);
+    }
+
+    #[test]
+    fn empty_price_map_still_recalculates_package_total() {
+        let (_, mut items) = fixture();
+        let original_single = items[0].clone();
+        let DisplayKind::Package { members, price, .. } = &mut items[1].kind else {
+            panic!("expected package")
+        };
+        let original_members = members.clone();
+        *price = amount("1");
+        for item in &mut items {
+            item.apply_prices(&BTreeMap::new()).unwrap();
+        }
+        assert_eq!(items[0], original_single);
+        let DisplayKind::Package { members, price, .. } = &items[1].kind else { panic!("expected package") };
+        assert_eq!(members, &original_members);
+        assert_eq!(*price, amount("30.20"));
+    }
+
+    #[test]
+    fn empty_package_rejects_change_without_committing_prior_item_updates() {
+        let (mut pool, mut items) = fixture();
+        let DisplayKind::Package { members, .. } = &mut items[1].kind else { panic!("expected package") };
+        members.clear();
+        let original_pool = pool.clone();
+        let original_items = items.clone();
+        let error = SelectionPriceChange::Single { sku_id: "a".into(), price: amount("15") }
+            .apply(BookletStatus::PendingPublish, &mut pool, &mut items)
+            .unwrap_err();
+        assert_eq!(error.to_string(), "套餐必须包含成员 SKU");
+        assert!(matches!(error, Error::LogicError(_)));
+        assert_eq!(pool, original_pool);
+        assert_eq!(items, original_items);
+    }
+
+    #[test]
     fn markup_rounds_each_sku_to_cent_before_summing_packages() {
         let (mut pool, mut items) = fixture();
         let change = SelectionPriceChange::Markup { percent: amount("10") };
@@ -297,11 +346,11 @@ mod tests {
         let huge = Amount::try_from(Decimal::MAX).unwrap();
         let original_pool = pool.clone();
         let original_items = items.clone();
-        assert!(
-            SelectionPriceChange::Single { sku_id: "a".into(), price: huge }
-                .apply(BookletStatus::PendingPublish, &mut pool, &mut items)
-                .is_err()
-        );
+        let error = SelectionPriceChange::Single { sku_id: "a".into(), price: huge }
+            .apply(BookletStatus::PendingPublish, &mut pool, &mut items)
+            .unwrap_err();
+        assert_eq!(error.to_string(), "金额合计超出可表示范围");
+        assert!(matches!(error, Error::LogicError(_)));
         assert_eq!(pool, original_pool);
         assert_eq!(items, original_items);
         pool[0].sku.sales_visible_price_gross = huge;

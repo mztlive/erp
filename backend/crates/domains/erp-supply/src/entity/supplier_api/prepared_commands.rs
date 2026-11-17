@@ -261,33 +261,18 @@ impl PreparedSupplierConnectionCommand {
             return Err(SupplierCommandShapeRejection::InvalidExpectedVersion);
         }
         match action {
-            SupplierConnectionAction::UpdateBusinessProfile => {
-                let prepared = Self::UpdateBusinessProfile {
-                    expected_version,
-                    payload_reference: require_reference(payload_reference)?,
-                };
-                forbid(action, CommandOptionalField::ReasonCode, reason_code)?;
-                forbid(action, CommandOptionalField::CheckType, check_type)?;
-                Ok(prepared)
-            },
-            SupplierConnectionAction::BindEndpointReference => {
-                let prepared = Self::BindEndpointReference {
-                    expected_version,
-                    payload_reference: require_reference(payload_reference)?,
-                };
-                forbid(action, CommandOptionalField::ReasonCode, reason_code)?;
-                forbid(action, CommandOptionalField::CheckType, check_type)?;
-                Ok(prepared)
-            },
-            SupplierConnectionAction::BindCredentialReference => {
-                let prepared = Self::BindCredentialReference {
-                    expected_version,
-                    payload_reference: require_reference(payload_reference)?,
-                };
-                forbid(action, CommandOptionalField::ReasonCode, reason_code)?;
-                forbid(action, CommandOptionalField::CheckType, check_type)?;
-                Ok(prepared)
-            },
+            SupplierConnectionAction::UpdateBusinessProfile => Ok(Self::UpdateBusinessProfile {
+                expected_version,
+                payload_reference: prepare_reference(action, payload_reference, reason_code, check_type)?,
+            }),
+            SupplierConnectionAction::BindEndpointReference => Ok(Self::BindEndpointReference {
+                expected_version,
+                payload_reference: prepare_reference(action, payload_reference, reason_code, check_type)?,
+            }),
+            SupplierConnectionAction::BindCredentialReference => Ok(Self::BindCredentialReference {
+                expected_version,
+                payload_reference: prepare_reference(action, payload_reference, reason_code, check_type)?,
+            }),
             SupplierConnectionAction::RunHealthCheck => {
                 forbid(action, CommandOptionalField::PayloadReference, payload_reference)?;
                 forbid(action, CommandOptionalField::ReasonCode, reason_code)?;
@@ -304,7 +289,10 @@ impl PreparedSupplierConnectionCommand {
             SupplierConnectionAction::Disable => {
                 forbid(action, CommandOptionalField::PayloadReference, payload_reference)?;
                 forbid(action, CommandOptionalField::CheckType, check_type)?;
-                Ok(Self::Disable { expected_version, reason_code: require_reason(reason_code)? })
+                Ok(Self::Disable {
+                    expected_version,
+                    reason_code: require_text(reason_code, CommandOptionalField::ReasonCode)?,
+                })
             },
             SupplierConnectionAction::StartCatalogSync => {
                 forbid(action, CommandOptionalField::PayloadReference, payload_reference)?;
@@ -360,40 +348,29 @@ impl PreparedSupplierConnectionCommand {
     }
 }
 
-/// 要求不透明引用存在且去除首尾空白后非空。
-///
-/// # 参数
-/// * `value` - 可选不透明引用
-///
-/// # 返回
-/// 返回规范化后的引用正文。
-///
-/// # 错误
-/// 当引用缺失或空白时返回缺失拒绝。
-fn require_reference(value: Option<&str>) -> Result<String, SupplierCommandShapeRejection> {
-    value
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string)
-        .ok_or(SupplierCommandShapeRejection::MissingField(CommandOptionalField::PayloadReference))
+/// 引用类命令按引用、原因、检查类型的既定顺序校验。
+fn prepare_reference(
+    action: SupplierConnectionAction,
+    payload_reference: Option<&str>,
+    reason_code: Option<&str>,
+    check_type: Option<SupplierHealthCheckType>,
+) -> Result<String, SupplierCommandShapeRejection> {
+    let reference = require_text(payload_reference, CommandOptionalField::PayloadReference)?;
+    forbid(action, CommandOptionalField::ReasonCode, reason_code)?;
+    forbid(action, CommandOptionalField::CheckType, check_type)?;
+    Ok(reference)
 }
 
-/// 要求停用原因代码存在且去除首尾空白后非空。
-///
-/// # 参数
-/// * `value` - 可选原因代码
-///
-/// # 返回
-/// 返回规范化后的原因代码。
-///
-/// # 错误
-/// 当原因代码缺失或空白时返回缺失拒绝。
-fn require_reason(value: Option<&str>) -> Result<String, SupplierCommandShapeRejection> {
+/// 必填文本统一去除首尾空白，缺失错误保留各自字段身份。
+fn require_text(
+    value: Option<&str>,
+    field: CommandOptionalField,
+) -> Result<String, SupplierCommandShapeRejection> {
     value
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(str::to_string)
-        .ok_or(SupplierCommandShapeRejection::MissingField(CommandOptionalField::ReasonCode))
+        .ok_or(SupplierCommandShapeRejection::MissingField(field))
 }
 
 /// 拒绝指定动作不接受的可选字段（`Some` 即拒绝，`None` 通过）。
@@ -422,7 +399,8 @@ fn forbid<T>(
 #[cfg(test)]
 mod tests {
     use super::{
-        PreparedSupplierConnectionCommand, PreparedSupplierConnectionCreate, SupplierCommandShapeRejection,
+        CommandOptionalField, PreparedSupplierConnectionCommand, PreparedSupplierConnectionCreate,
+        SupplierCommandShapeRejection,
     };
     use crate::entity::supplier_api::{
         SupplierApiConnectionStatus, SupplierConnectionAction, SupplierHealthCheckType,
@@ -512,6 +490,124 @@ mod tests {
                 "引用类动作多余检查类型必须拒绝"
             );
         }
+    }
+
+    #[test]
+    fn reference_commands_preserve_normalization_and_first_rejection() {
+        for action in [
+            SupplierConnectionAction::UpdateBusinessProfile,
+            SupplierConnectionAction::BindEndpointReference,
+            SupplierConnectionAction::BindCredentialReference,
+        ] {
+            let check = Some(SupplierHealthCheckType::Connectivity);
+            for (version, reference, reason, check_type, expected) in [
+                (0, None, Some(""), check, SupplierCommandShapeRejection::InvalidExpectedVersion),
+                (
+                    1,
+                    None,
+                    Some(""),
+                    check,
+                    SupplierCommandShapeRejection::MissingField(CommandOptionalField::PayloadReference),
+                ),
+                (
+                    1,
+                    Some(" \t "),
+                    None,
+                    None,
+                    SupplierCommandShapeRejection::MissingField(CommandOptionalField::PayloadReference),
+                ),
+                (
+                    1,
+                    Some("ref"),
+                    Some(""),
+                    check,
+                    SupplierCommandShapeRejection::ForbiddenField {
+                        action,
+                        field: CommandOptionalField::ReasonCode,
+                    },
+                ),
+                (
+                    1,
+                    Some("ref"),
+                    None,
+                    check,
+                    SupplierCommandShapeRejection::ForbiddenField {
+                        action,
+                        field: CommandOptionalField::CheckType,
+                    },
+                ),
+            ] {
+                assert_eq!(
+                    PreparedSupplierConnectionCommand::try_from_parts(
+                        action, version, reference, reason, check_type
+                    ),
+                    Err(expected),
+                );
+            }
+            let prepared = PreparedSupplierConnectionCommand::try_from_parts(
+                action,
+                u64::MAX,
+                Some(" \t引用\n "),
+                None,
+                None,
+            )
+            .unwrap();
+            assert_eq!(prepared.action(), action);
+            assert_eq!(prepared.expected_version(), u64::MAX);
+            match prepared {
+                PreparedSupplierConnectionCommand::UpdateBusinessProfile { payload_reference, .. }
+                | PreparedSupplierConnectionCommand::BindEndpointReference { payload_reference, .. }
+                | PreparedSupplierConnectionCommand::BindCredentialReference { payload_reference, .. } => {
+                    assert_eq!(payload_reference, "引用");
+                },
+                _ => panic!("expected reference command"),
+            }
+        }
+    }
+
+    #[test]
+    fn disable_preserves_required_reason_and_forbidden_field_precedence() {
+        let action = SupplierConnectionAction::Disable;
+        for (reference, check, reason, expected) in [
+            (
+                Some(""),
+                None,
+                None,
+                SupplierCommandShapeRejection::ForbiddenField {
+                    action,
+                    field: CommandOptionalField::PayloadReference,
+                },
+            ),
+            (
+                None,
+                Some(SupplierHealthCheckType::Connectivity),
+                None,
+                SupplierCommandShapeRejection::ForbiddenField {
+                    action,
+                    field: CommandOptionalField::CheckType,
+                },
+            ),
+            (None, None, None, SupplierCommandShapeRejection::MissingField(CommandOptionalField::ReasonCode)),
+            (
+                None,
+                None,
+                Some(" \t "),
+                SupplierCommandShapeRejection::MissingField(CommandOptionalField::ReasonCode),
+            ),
+        ] {
+            assert_eq!(
+                PreparedSupplierConnectionCommand::try_from_parts(action, 1, reference, reason, check),
+                Err(expected)
+            );
+        }
+        assert_eq!(
+            PreparedSupplierConnectionCommand::try_from_parts(action, 1, None, Some(" 操作停用 "), None)
+                .unwrap(),
+            PreparedSupplierConnectionCommand::Disable {
+                expected_version: 1,
+                reason_code: "操作停用".into()
+            },
+        );
     }
 
     #[test]

@@ -1,5 +1,6 @@
 //! 双口径同步导出；防止电子表格公式注入并附带本次查询口径。
 use super::dto::{CurrentQualityView, HistoryQualityView, QualityExport};
+use crate::support::csv_record as record;
 
 /// 直接序列化服务端全量结果，不使用客户端金额或当前页数据。
 ///
@@ -48,7 +49,7 @@ pub(super) fn current(view: CurrentQualityView) -> QualityExport {
         csv_content: lines.join("\r\n"),
         file_name: format!("客户经营质量-当前负责-{}-{}.csv", view.period.from, view.period.to),
         row_count: view.rows.total,
-        generated_at: view.as_of.clone(),
+        generated_at: view.as_of,
     }
 }
 
@@ -93,33 +94,127 @@ pub(super) fn history(view: HistoryQualityView) -> QualityExport {
         csv_content: lines.join("\r\n"),
         file_name: format!("客户经营质量-历史贡献-{}-{}.csv", view.period.from, view.period.to),
         row_count: view.rows.total,
-        generated_at: view.as_of.clone(),
+        generated_at: view.as_of,
     }
-}
-
-/// CSV 单元格转义；文本控制字符或公式起始符添加单引号，合法负数保留数值。
-fn record(values: &[&str]) -> String {
-    values.iter().map(|v| cell(v)).collect::<Vec<_>>().join(",")
-}
-
-/// 引号、换行和危险前缀不能改变表格结构或执行公式。
-fn cell(value: &str) -> String {
-    let trimmed = value.trim_start();
-    let numeric = value.parse::<rust_decimal::Decimal>().is_ok();
-    let dangerous =
-        !numeric && (trimmed.starts_with(['=', '+', '-', '@']) || value.starts_with(['\t', '\r', '\n']));
-    let prefix = if dangerous { "'" } else { "" };
-    format!("\"{prefix}{}\"", value.replace('"', "\"\""))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::customer_quality::dto::{
+        CurrentQualityRow, HistoryQualityRow, QualityPeriod, QualityRows, QualityScope, QualityTotals,
+    };
+
+    fn period() -> QualityPeriod {
+        QualityPeriod {
+            from: "2026-09-01".into(),
+            to: "2026-09-30".into(),
+            basis: "effective_date".into(),
+            basis_label: "生效日期".into(),
+            timezone: "Asia/Shanghai".into(),
+        }
+    }
+
+    #[test]
+    fn current_export_preserves_rows_columns_fallbacks_and_metadata() {
+        let rows = QualityRows {
+            dimension: "customer".into(),
+            items: vec![
+                CurrentQualityRow::new("c-1".into(), "customer".into(), "-12.50".into())
+                    .with_customer(Some("c-1".into()), Some("C-1".into()), Some("=客户".into()))
+                    .with_ownership(Some("u-1".into()), None, Some("org-1".into()), None)
+                    .with_counts(2, 1),
+                CurrentQualityRow::new("group-1".into(), "owner_user".into(), "0.00".into()).with_group(
+                    None,
+                    Some("分组\"名".into()),
+                    None,
+                ),
+            ],
+            total: 2,
+        };
+        let output = current(CurrentQualityView {
+            empty_reason: None,
+            scope_summary: String::new(),
+            as_of: "2026-10-01".into(),
+            scope_version: "v3".into(),
+            scope: QualityScope::new("all".into(), "授权范围".into(), "v3".into()),
+            period: period(),
+            ownership_basis: "current_owner".into(),
+            totals: QualityTotals::default(),
+            rows,
+            filter_summary: "筛选说明".into(),
+            can_export: true,
+        });
+        let lines: Vec<_> = output.csv_content.split("\r\n").collect();
+        assert_eq!(lines.len(), 9);
+        assert_eq!(
+            lines[6],
+            "\"客户\",\"客户编号\",\"现任负责人\",\"现任组织\",\"订单数\",\"含税总额\",\"缺版本数\",\"首次生效\",\"最近生效\""
+        );
+        assert_eq!(lines[7], "\"'=客户\",\"C-1\",\"u-1\",\"org-1\",\"2\",\"-12.50\",\"1\",\"\",\"\"");
+        assert_eq!(lines[8], "\"分组\"\"名\",\"\",\"\",\"\",\"0\",\"0.00\",\"0\",\"\",\"\"");
+        assert_eq!(output.file_name, "客户经营质量-当前负责-2026-09-01-2026-09-30.csv");
+        assert_eq!(output.generated_at, "2026-10-01");
+        assert_eq!(output.row_count, 2);
+    }
+
+    #[test]
+    fn history_export_keeps_frozen_attribution_and_empty_headers() {
+        for empty in [false, true] {
+            let output = history(HistoryQualityView {
+                empty_reason: None,
+                scope_summary: String::new(),
+                as_of: "2026-10-01".into(),
+                scope_version: "v4".into(),
+                scope: QualityScope::new("all".into(), "授权范围".into(), "v4".into()),
+                period: period(),
+                ownership_basis: "frozen_attribution".into(),
+                totals: QualityTotals::default(),
+                rows: QualityRows {
+                    dimension: "attribution_user".into(),
+                    items: if empty {
+                        vec![]
+                    } else {
+                        vec![
+                            HistoryQualityRow::new(
+                                "history".into(),
+                                "attribution_user".into(),
+                                "10.00".into(),
+                            )
+                            .with_group(None, Some("历史分组".into()))
+                            .with_attribution(
+                                Some("frozen-user".into()),
+                                None,
+                                Some("frozen-org".into()),
+                                None,
+                                None,
+                            ),
+                        ]
+                    },
+                    total: usize::from(!empty),
+                },
+                filter_summary: "历史筛选".into(),
+                can_export: true,
+            });
+            let lines: Vec<_> = output.csv_content.split("\r\n").collect();
+            assert_eq!(lines.len(), if empty { 7 } else { 8 });
+            assert_eq!(
+                lines[6],
+                "\"历史分组\",\"首次生效归属销售\",\"首次生效归属组织\",\"订单数\",\"含税总额\",\"缺版本数\""
+            );
+            if !empty {
+                assert_eq!(lines[7], "\"历史分组\",\"frozen-user\",\"frozen-org\",\"0\",\"10.00\",\"0\"");
+            }
+            assert_eq!(output.file_name, "客户经营质量-历史贡献-2026-09-01-2026-09-30.csv");
+            assert_eq!(output.generated_at, "2026-10-01");
+            assert_eq!(output.row_count, usize::from(!empty));
+        }
+    }
 
     #[test]
     fn csv_blocks_formula_and_preserves_negative_amount() {
-        assert_eq!(cell(" =HYPERLINK(\"x\")"), "\"' =HYPERLINK(\"\"x\"\")\"");
-        assert_eq!(cell("-12.50"), "\"-12.50\"");
-        assert_eq!(cell("a,b\nc"), "\"a,b\nc\"");
+        assert_eq!(record(&[" =HYPERLINK(\"x\")"]), "\"' =HYPERLINK(\"\"x\"\")\"");
+        assert_eq!(record(&["-12.50"]), "\"-12.50\"");
+        assert_eq!(record(&["a,b\nc"]), "\"a,b\nc\"");
     }
 }

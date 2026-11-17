@@ -44,8 +44,6 @@ pub enum ReconciliationCycle {
 impl ReconciliationCycle {
     /// 返回周期的中文展示名。
     ///
-    /// 映射表见 [`RECONCILIATION_CYCLE_DISPLAY`]（erp-supplier-002）。
-    ///
     /// # 参数
     /// 无。
     ///
@@ -55,12 +53,18 @@ impl ReconciliationCycle {
     /// # 错误
     /// 不返回错误。
     pub fn label(&self) -> &'static str {
-        super::display::label_of(*self, &RECONCILIATION_CYCLE_DISPLAY)
+        match self {
+            Self::Daily => "日",
+            Self::Weekly => "周",
+            Self::Monthly => "月",
+            Self::Quarterly => "季",
+            Self::Yearly => "年",
+            Self::HalfYearly => "半年",
+            Self::None => "无需周期对账",
+        }
     }
 
     /// 返回周期的稳定代码。
-    ///
-    /// 映射表见 [`RECONCILIATION_CYCLE_DISPLAY`]（erp-supplier-002）。
     ///
     /// # 参数
     /// 无。
@@ -71,26 +75,17 @@ impl ReconciliationCycle {
     /// # 错误
     /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
-        super::display::code_of(*self, &RECONCILIATION_CYCLE_DISPLAY)
+        match self {
+            Self::Daily => "daily",
+            Self::Weekly => "weekly",
+            Self::Monthly => "monthly",
+            Self::Quarterly => "quarterly",
+            Self::Yearly => "yearly",
+            Self::HalfYearly => "half_yearly",
+            Self::None => "none",
+        }
     }
 }
-
-/// 对账周期展示映射表（erp-supplier-002）：变体→中文名/稳定代码。
-const RECONCILIATION_CYCLE_DISPLAY: [super::display::DisplayEntry<ReconciliationCycle>; 7] = [
-    super::display::DisplayEntry { variant: ReconciliationCycle::Daily, label: "日", code: "daily" },
-    super::display::DisplayEntry { variant: ReconciliationCycle::Weekly, label: "周", code: "weekly" },
-    super::display::DisplayEntry { variant: ReconciliationCycle::Monthly, label: "月", code: "monthly" },
-    super::display::DisplayEntry { variant: ReconciliationCycle::Quarterly, label: "季", code: "quarterly" },
-    super::display::DisplayEntry { variant: ReconciliationCycle::Yearly, label: "年", code: "yearly" },
-    super::display::DisplayEntry {
-        variant: ReconciliationCycle::HalfYearly,
-        label: "半年",
-        code: "half_yearly",
-    },
-    super::display::DisplayEntry {
-        variant: ReconciliationCycle::None, label: "无需周期对账", code: "none"
-    },
-];
 
 /// 发票类型（§6.2：增值税专用发票、增值税普通发票、电子发票等受控代码）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -107,8 +102,6 @@ pub enum InvoiceType {
 impl InvoiceType {
     /// 返回类型的中文展示名。
     ///
-    /// 映射表见 [`INVOICE_TYPE_DISPLAY`]（erp-supplier-002）。
-    ///
     /// # 参数
     /// 无。
     ///
@@ -118,12 +111,14 @@ impl InvoiceType {
     /// # 错误
     /// 不返回错误。
     pub fn label(&self) -> &'static str {
-        super::display::label_of(*self, &INVOICE_TYPE_DISPLAY)
+        match self {
+            Self::VatSpecial => "增值税专用发票",
+            Self::VatNormal => "增值税普通发票",
+            Self::Electronic => "电子发票",
+        }
     }
 
     /// 返回类型的稳定代码。
-    ///
-    /// 映射表见 [`INVOICE_TYPE_DISPLAY`]（erp-supplier-002）。
     ///
     /// # 参数
     /// 无。
@@ -134,26 +129,13 @@ impl InvoiceType {
     /// # 错误
     /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
-        super::display::code_of(*self, &INVOICE_TYPE_DISPLAY)
+        match self {
+            Self::VatSpecial => "vat_special",
+            Self::VatNormal => "vat_normal",
+            Self::Electronic => "electronic",
+        }
     }
 }
-
-/// 发票类型展示映射表（erp-supplier-002）：变体→中文名/稳定代码。
-const INVOICE_TYPE_DISPLAY: [super::display::DisplayEntry<InvoiceType>; 3] = [
-    super::display::DisplayEntry {
-        variant: InvoiceType::VatSpecial,
-        label: "增值税专用发票",
-        code: "vat_special",
-    },
-    super::display::DisplayEntry {
-        variant: InvoiceType::VatNormal,
-        label: "增值税普通发票",
-        code: "vat_normal",
-    },
-    super::display::DisplayEntry {
-        variant: InvoiceType::Electronic, label: "电子发票", code: "electronic"
-    },
-];
 
 /// 商务结算版本创建数据（不含系统字段）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

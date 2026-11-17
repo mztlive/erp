@@ -1,13 +1,14 @@
-//! Crate 内复用的纯查询装配 helpers：深分页守卫、去重与范围错误。
+//! Crate 内复用的纯查询与导出装配：深分页守卫、去重、范围错误与 CSV 编码。
 //!
-//! 只收敛本 crate 内已重复多次的纯逻辑（分页守卫文案、保序/排序去重、
-//! 范围变化错误），不改变任何过滤、排序、总数与回退语义；事实权限
-//! 仍由拥有领域执行，本模块不接触数据库。
+//! 只收敛本 crate 内复用的纯逻辑（分页守卫文案、保序/排序去重、
+//! 范围变化错误、CSV 编码），不改变任何过滤、排序、总数与回退语义；
+//! 事实权限仍由拥有领域执行，本模块不接触数据库。
 
 use std::collections::HashSet;
 use std::hash::Hash;
 
 use application_core::{EmptyScopeVersion, ScopeVersion};
+use rust_decimal::Decimal;
 
 use crate::{Error, Result};
 
@@ -109,6 +110,29 @@ pub(crate) fn dedup_trimmed_nonempty<'a>(values: impl IntoIterator<Item = &'a st
     unique
 }
 
+/// 编码报表 CSV 行，危险文本加单引号，合法十进制数值保留原文。
+///
+/// # 参数
+/// * `values` - 按报表列顺序排列的原始单元格。
+///
+/// # 返回
+/// 返回各单元格加双引号、内部引号转义后以逗号连接的行。
+///
+/// # 错误
+/// 不返回错误。
+pub(crate) fn csv_record(values: &[&str]) -> String {
+    values.iter().map(|value| csv_cell(value)).collect::<Vec<_>>().join(",")
+}
+
+fn csv_cell(value: &str) -> String {
+    let trimmed = value.trim_start();
+    let numeric = value.parse::<Decimal>().is_ok();
+    let dangerous =
+        !numeric && (trimmed.starts_with(['=', '+', '-', '@']) || value.starts_with(['\t', '\r', '\n']));
+    let prefix = if dangerous { "'" } else { "" };
+    format!("\"{prefix}{}\"", value.replace('"', "\"\""))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -147,6 +171,33 @@ mod tests {
             dedup_sorted(["b".to_string(), "a".to_string(), "b".to_string()]),
             vec!["a".to_string(), "b".to_string()]
         );
+    }
+
+    #[test]
+    fn csv_record_preserves_numbers_and_escapes_structure() {
+        assert_eq!(
+            csv_record(&["客户", "-12.50", "0", "12.50", "a,b\nc", "say \"hi\""]),
+            "\"客户\",\"-12.50\",\"0\",\"12.50\",\"a,b\nc\",\"say \"\"hi\"\"\""
+        );
+        assert_eq!(csv_record(&[]), "");
+        assert_eq!(csv_record(&["", "   "]), "\"\",\"   \"");
+    }
+
+    #[test]
+    fn csv_record_neutralizes_formulas_and_non_numeric_prefixes() {
+        for (value, expected) in [
+            (" =HYPERLINK(\"x\")", "\"' =HYPERLINK(\"\"x\"\")\""),
+            ("\u{2003}=1+1", "\"'\u{2003}=1+1\""),
+            ("+SUM(A1:A2)", "\"'+SUM(A1:A2)\""),
+            ("-not-a-number", "\"'-not-a-number\""),
+            ("@SUM(A1)", "\"'@SUM(A1)\""),
+            ("\ttext", "\"'\ttext\""),
+            ("\rtext", "\"'\rtext\""),
+            ("\ntext", "\"'\ntext\""),
+        ] {
+            assert_eq!(csv_record(&[value]), expected);
+        }
+        assert_eq!(csv_record(&["-12.50%", "-", "+"]), "\"'-12.50%\",\"'-\",\"'+\"");
     }
 
     #[test]

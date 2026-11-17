@@ -133,7 +133,7 @@ impl SalesReturnLine {
             data.received_quantity,
             data.quality_result,
             data.restockable_quantity,
-            Some(data.requested_quantity),
+            data.requested_quantity,
         )?;
 
         Ok(Self {
@@ -163,16 +163,10 @@ impl SalesReturnLine {
         let received = update.received_quantity.or(self.received_quantity);
         let quality = update.quality_result.or(self.quality_result);
         let restockable = update.restockable_quantity.or(self.restockable_quantity);
-        validate_receiving(received, quality, restockable, Some(self.requested_quantity))?;
-        if let Some(received) = update.received_quantity {
-            self.received_quantity = Some(received);
-        }
-        if let Some(quality) = update.quality_result {
-            self.quality_result = Some(quality);
-        }
-        if let Some(restockable) = update.restockable_quantity {
-            self.restockable_quantity = Some(restockable);
-        }
+        validate_receiving(received, quality, restockable, self.requested_quantity)?;
+        self.received_quantity = received;
+        self.quality_result = quality;
+        self.restockable_quantity = restockable;
         Ok(())
     }
 
@@ -211,15 +205,13 @@ fn validate_receiving(
     received: Option<Quantity>,
     quality: Option<QualityResult>,
     restockable: Option<Quantity>,
-    requested: Option<Quantity>,
+    requested: Quantity,
 ) -> Result<()> {
     if let Some(received) = received {
         if received.to_decimal().is_sign_negative() {
             return Err(Error::from("实际退回数量不得为负"));
         }
-        if let Some(requested) = requested
-            && received > requested
-        {
+        if received > requested {
             return Err(Error::from("实际退回数量不得超过申请数量"));
         }
     }
@@ -294,6 +286,105 @@ mod tests {
             ..data()
         };
         assert!(SalesReturnLine::new(SalesReturnLineId::new("srl-6"), rejected_restock).is_err());
+    }
+
+    #[test]
+    fn new_preserves_received_quantity_boundaries_and_errors() {
+        for received in ["0.000000", "10.000000"] {
+            let input = SalesReturnLineData { received_quantity: Some(qty(received)), ..data() };
+            let line = SalesReturnLine::new(SalesReturnLineId::new("srl-1"), input).unwrap();
+            assert_eq!(line.received_quantity, Some(qty(received)));
+            assert_eq!(line.requested_quantity, qty("10.000000"));
+            assert_eq!(line.quality_result, None);
+            assert_eq!(line.restockable_quantity, None);
+        }
+        for (received, expected) in
+            [("-0.000001", "实际退回数量不得为负"), ("10.000001", "实际退回数量不得超过申请数量")]
+        {
+            let input = SalesReturnLineData { received_quantity: Some(qty(received)), ..data() };
+            assert!(matches!(
+                SalesReturnLine::new(SalesReturnLineId::new("srl-2"), input),
+                Err(Error::LogicError(message)) if message == expected
+            ));
+        }
+    }
+
+    #[test]
+    fn partial_and_empty_updates_preserve_omitted_acceptance_fields() {
+        let mut line = SalesReturnLine::new(SalesReturnLineId::new("srl-1"), data()).unwrap();
+        line.base = BaseModel::fake();
+        let before = line.clone();
+        line.update(SalesReturnLineUpdate::default()).unwrap();
+        assert_eq!(line, before);
+
+        line.update(SalesReturnLineUpdate {
+            quality_result: Some(QualityResult::Unqualified),
+            ..Default::default()
+        })
+        .unwrap();
+        assert_eq!(line.received_quantity, None);
+        assert_eq!(line.quality_result, Some(QualityResult::Unqualified));
+        assert_eq!(line.restockable_quantity, None);
+        line.update(SalesReturnLineUpdate {
+            received_quantity: Some(qty("10.000000")),
+            ..Default::default()
+        })
+        .unwrap();
+        assert_eq!(line.received_quantity, Some(qty("10.000000")));
+        assert_eq!(line.quality_result, Some(QualityResult::Unqualified));
+        assert_eq!(line.restockable_quantity, None);
+        line.update(SalesReturnLineUpdate {
+            quality_result: Some(QualityResult::Qualified),
+            restockable_quantity: Some(qty("8.000000")),
+            ..Default::default()
+        })
+        .unwrap();
+        assert_eq!(line.received_quantity, Some(qty("10.000000")));
+        assert_eq!(line.quality_result, Some(QualityResult::Qualified));
+        assert_eq!(line.restockable_quantity, Some(qty("8.000000")));
+        line.update(SalesReturnLineUpdate {
+            restockable_quantity: Some(qty("10.000000")),
+            ..Default::default()
+        })
+        .unwrap();
+        assert_eq!(line.received_quantity, Some(qty("10.000000")));
+        assert_eq!(line.quality_result, Some(QualityResult::Qualified));
+        assert_eq!(line.restockable_quantity, Some(qty("10.000000")));
+        assert_eq!(line.requested_quantity, before.requested_quantity);
+        assert_eq!(line.sales_order_line_id, before.sales_order_line_id);
+        assert_eq!(line.sales_return_case_id, before.sales_return_case_id);
+        let before = line.clone();
+        line.update(SalesReturnLineUpdate::default()).unwrap();
+        assert_eq!(line, before);
+    }
+
+    #[test]
+    fn invalid_acceptance_updates_keep_first_error_and_leave_line_unchanged() {
+        let input = SalesReturnLineData {
+            received_quantity: Some(qty("8.000000")),
+            quality_result: Some(QualityResult::Qualified),
+            restockable_quantity: Some(qty("5.000000")),
+            ..data()
+        };
+        let mut line = SalesReturnLine::new(SalesReturnLineId::new("srl-1"), input).unwrap();
+        line.base = BaseModel::fake();
+        let before = line.clone();
+        for (received, restockable, expected) in [
+            (Some(qty("-0.000001")), Some(qty("9.000000")), "实际退回数量不得为负"),
+            (Some(qty("10.000001")), Some(qty("11.000000")), "实际退回数量不得超过申请数量"),
+            (None, Some(qty("8.000001")), "可重新入库数量不得超过实际退回数量"),
+            (None, None, "仅验收合格的商品可以重新入库"),
+        ] {
+            assert!(matches!(
+                line.update(SalesReturnLineUpdate {
+                    received_quantity: received,
+                    quality_result: Some(QualityResult::Unqualified),
+                    restockable_quantity: restockable,
+                }),
+                Err(Error::LogicError(message)) if message == expected
+            ));
+            assert_eq!(line, before);
+        }
     }
 
     #[test]

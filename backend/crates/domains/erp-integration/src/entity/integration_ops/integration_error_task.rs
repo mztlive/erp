@@ -666,20 +666,13 @@ impl IntegrationErrorTask {
             Some(other) => other,
             None => return Err(Error::from("解决任务必须提供解决方式")),
         };
-        let resolution = match resolution {
-            Some(resolution) => resolution,
-            None => return Err(Error::from("解决任务必须提供终态证据")),
-        };
-        let resolution = normalize_required_text(
+        self.apply_terminal_resolution(
+            resolution_type,
             resolution,
+            at,
             "解决任务必须提供终态证据",
-            RESOLUTION_MAX_LEN,
             "解决证据过长",
-        )?;
-        self.resolution_type = Some(resolution_type);
-        self.resolution = Some(resolution);
-        self.resolved_at = Some(at);
-        Ok(())
+        )
     }
 
     /// 应用「已关闭」终态要求。
@@ -700,17 +693,27 @@ impl IntegrationErrorTask {
         if !matches!(resolution_type, Some(ResolutionType::Close)) {
             return Err(Error::from("关闭任务必须使用“关闭”解决方式"));
         }
-        let resolution = match resolution {
-            Some(resolution) => resolution,
-            None => return Err(Error::from("关闭任务必须提供替代任务或终态证据")),
-        };
-        let resolution = normalize_required_text(
+        self.apply_terminal_resolution(
+            ResolutionType::Close,
             resolution,
+            at,
             "关闭任务必须提供替代任务或终态证据",
-            RESOLUTION_MAX_LEN,
             "关闭证据过长",
-        )?;
-        self.resolution_type = Some(ResolutionType::Close);
+        )
+    }
+
+    fn apply_terminal_resolution(
+        &mut self,
+        resolution_type: ResolutionType,
+        resolution: Option<String>,
+        at: Instant,
+        missing_message: &str,
+        length_message: &str,
+    ) -> Result<()> {
+        let resolution = resolution.ok_or_else(|| Error::from(missing_message))?;
+        let resolution =
+            normalize_required_text(resolution, missing_message, RESOLUTION_MAX_LEN, length_message)?;
+        self.resolution_type = Some(resolution_type);
         self.resolution = Some(resolution);
         self.resolved_at = Some(at);
         Ok(())
@@ -1013,6 +1016,85 @@ pub(crate) mod tests {
             )
             .unwrap();
         assert_eq!(result_unknown.status, ErrorTaskStatus::Closed);
+    }
+
+    #[test]
+    fn terminal_resolution_normalizes_evidence_and_preserves_length_boundary() {
+        for (status, resolution_type) in [
+            (ErrorTaskStatus::Resolved, ResolutionType::QueryConfirm),
+            (ErrorTaskStatus::Closed, ResolutionType::Close),
+        ] {
+            for (evidence, expected) in [
+                (" \t 已核实证据 \n".to_string(), "已核实证据".to_string()),
+                (format!(" {} ", "e".repeat(1024)), "e".repeat(1024)),
+            ] {
+                let mut created = task();
+                created
+                    .transition(status, Some(resolution_type), Some(evidence), Instant::from_unix_secs(NOW))
+                    .unwrap();
+                assert_eq!(created.status, status);
+                assert_eq!(created.resolution_type, Some(resolution_type));
+                assert_eq!(created.resolution, Some(expected));
+                assert_eq!(created.resolved_at, Some(Instant::from_unix_secs(NOW)));
+            }
+        }
+    }
+
+    #[test]
+    fn terminal_evidence_failures_preserve_messages_and_all_fields() {
+        for (status, resolution_type, missing_message, length_message) in [
+            (
+                ErrorTaskStatus::Resolved,
+                ResolutionType::QueryConfirm,
+                "解决任务必须提供终态证据",
+                "解决证据过长",
+            ),
+            (
+                ErrorTaskStatus::Closed,
+                ResolutionType::Close,
+                "关闭任务必须提供替代任务或终态证据",
+                "关闭证据过长",
+            ),
+        ] {
+            for (evidence, expected) in [
+                (None, missing_message),
+                (Some("".to_string()), missing_message),
+                (Some(" \t\n ".to_string()), missing_message),
+                (Some("e".repeat(1025)), length_message),
+            ] {
+                let mut created = task();
+                let before = created.clone();
+                let error = created
+                    .transition(status, Some(resolution_type), evidence, Instant::from_unix_secs(NOW))
+                    .unwrap_err();
+                assert_eq!(error.to_string(), expected);
+                assert_eq!(created, before);
+            }
+        }
+    }
+
+    #[test]
+    fn terminal_resolution_type_errors_precede_invalid_evidence() {
+        for (status, resolution_type, message) in [
+            (ErrorTaskStatus::Resolved, None, "解决任务必须提供解决方式"),
+            (
+                ErrorTaskStatus::Resolved,
+                Some(ResolutionType::Close),
+                "解决任务不得使用“关闭”解决方式，请走关闭迁移",
+            ),
+            (ErrorTaskStatus::Closed, None, "关闭任务必须使用“关闭”解决方式"),
+            (ErrorTaskStatus::Closed, Some(ResolutionType::QueryConfirm), "关闭任务必须使用“关闭”解决方式"),
+        ] {
+            for evidence in [None, Some(" ".to_string()), Some("e".repeat(1025))] {
+                let mut created = task();
+                let before = created.clone();
+                let error = created
+                    .transition(status, resolution_type, evidence, Instant::from_unix_secs(NOW))
+                    .unwrap_err();
+                assert_eq!(error.to_string(), message);
+                assert_eq!(created, before);
+            }
+        }
     }
 
     #[test]

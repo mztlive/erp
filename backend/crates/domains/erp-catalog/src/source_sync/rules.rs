@@ -158,33 +158,22 @@ impl ProductSource {
                 .find(|(f, s, _)| *f == field && *s == sku_id)
                 .map(|(_, _, v)| v.clone())
                 .unwrap_or_else(|| value.empty());
+            let verification_required = value.verification_required();
+            let equivalent = company.equivalent(&value);
             fields.push(SourceFieldState {
                 field,
                 sku_id,
                 baseline: value.clone(),
-                baseline_confirmed: !value.verification_required(),
+                baseline_confirmed: !verification_required,
                 latest: value.clone(),
-                manually_maintained: !company.equivalent(&value)
-                    && !(value.verification_required()
+                manually_maintained: !equivalent
+                    && !(verification_required
                         && matches!(&company, SourceValue::Images(images) if images.is_empty())),
-                pending: value.verification_required() && !company.equivalent(&value),
+                pending: verification_required && !equivalent,
                 company,
             });
         }
-        for (field, sku_id, value) in current {
-            if !fields.iter().any(|s| s.field == *field && s.sku_id == *sku_id) {
-                fields.push(SourceFieldState {
-                    field: *field,
-                    sku_id: sku_id.clone(),
-                    baseline: value.clone(),
-                    baseline_confirmed: false,
-                    latest: value.clone(),
-                    company: value.clone(),
-                    manually_maintained: false,
-                    pending: false,
-                });
-            }
-        }
+        Self::register_missing_fields(&mut fields, current, false);
         let mut source = Self {
             base: BaseModel::new(product.into()),
             product_id: product.into(),
@@ -211,21 +200,29 @@ impl ProductSource {
     /// # 错误
     /// 无。
     pub fn record_manual_edit(&mut self, current: &[(SourceField, Option<String>, SourceValue)]) {
+        Self::register_missing_fields(&mut self.fields, current, true);
+        self.record_company_edit(current);
+    }
+
+    fn register_missing_fields(
+        fields: &mut Vec<SourceFieldState>,
+        current: &[(SourceField, Option<String>, SourceValue)],
+        manually_maintained: bool,
+    ) {
         for (field, sku_id, value) in current {
-            if !self.fields.iter().any(|s| s.field == *field && s.sku_id == *sku_id) {
-                self.fields.push(SourceFieldState {
+            if !fields.iter().any(|s| s.field == *field && s.sku_id == *sku_id) {
+                fields.push(SourceFieldState {
                     field: *field,
                     sku_id: sku_id.clone(),
                     baseline: value.clone(),
                     baseline_confirmed: false,
                     latest: value.clone(),
                     company: value.clone(),
-                    manually_maintained: true,
+                    manually_maintained,
                     pending: false,
                 });
             }
         }
-        self.record_company_edit(current);
     }
 
     /// 将真实人工编辑同步到字段责任，未变字段不受影响。
@@ -298,13 +295,14 @@ impl ProductSource {
             .find(|(f, s, _)| *f == field && *s == sku_id)
             .map(|(_, _, v)| v.clone())
             .unwrap_or_else(|| value.empty());
-        let manual = !company.equivalent(&value)
+        let equivalent = company.equivalent(&value);
+        let manual = !equivalent
             && match &company {
                 SourceValue::Text(v) => v.as_ref().is_some_and(|v| !v.is_empty()),
                 SourceValue::Images(v) => !v.is_empty(),
             };
-        let pending = !company.equivalent(&value) && (manual || value.application_blocker(field).is_some());
-        let changed = !pending && !company.equivalent(&value);
+        let pending = !equivalent && (manual || value.application_blocker(field).is_some());
+        let changed = !pending && !equivalent;
         self.fields.push(SourceFieldState {
             field,
             sku_id,
@@ -512,5 +510,224 @@ impl SourceFieldState {
         self.baseline_confirmed = true;
         self.pending = false;
         Some(value)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::slice;
+
+    use super::*;
+
+    fn text(value: &str) -> SourceValue {
+        SourceValue::Text(Some(value.into()))
+    }
+
+    fn image(asset: Option<&str>, fingerprint: Option<&str>, url: &str) -> SourceValue {
+        SourceValue::Images(vec![SourceImage {
+            url: Some(url.into()),
+            file_asset_id: asset.map(Into::into),
+            content_fingerprint: fingerprint.map(Into::into),
+        }])
+    }
+
+    #[test]
+    fn empty_initial_content_and_manual_edit_leave_no_fields() {
+        let mut source = ProductSource::new("p", "s", "c", "i", &[], SourceObservation::default()).unwrap();
+
+        source.record_manual_edit(&[]);
+
+        assert!(source.fields.is_empty());
+        assert!(source.pending_fields.is_empty());
+        assert_eq!(source.pending_count, 0);
+        assert_eq!(source.observed_at, 0);
+    }
+
+    #[test]
+    fn initial_missing_fields_keep_order_first_value_and_distinct_sku_keys() {
+        let name = (SourceField::Name, None, text("原名"));
+        let first_sku = (SourceField::SkuName, Some("sku-a".into()), text("规格 A"));
+        let second_sku = (SourceField::SkuName, Some("sku-b".into()), text("规格 B"));
+        let duplicate = (SourceField::SkuName, Some("sku-a".into()), text("不应覆盖首行"));
+        let current = vec![first_sku.clone(), name.clone(), duplicate, second_sku.clone()];
+        let observation = SourceObservation { values: vec![name.clone()], observed_at: 20 };
+
+        let source = ProductSource::new("p", "s", "c", "i", &current, observation).unwrap();
+
+        let snapshots: Vec<_> = source
+            .fields
+            .iter()
+            .map(|state| (state.field, state.sku_id.clone(), state.company.clone()))
+            .collect();
+        assert_eq!(snapshots, vec![name, first_sku, second_sku]);
+        for (index, state) in source.fields.iter().enumerate() {
+            assert_eq!(state.baseline, state.company);
+            assert_eq!(state.latest, state.company);
+            assert_eq!(state.baseline_confirmed, index == 0);
+            assert!(!state.manually_maintained);
+            assert!(!state.pending);
+        }
+        assert!(source.pending_fields.is_empty());
+        assert_eq!(source.pending_count, 0);
+        assert_eq!(source.observed_at, 20);
+    }
+
+    #[test]
+    fn manual_missing_fields_keep_existing_states_and_register_cleared_values() {
+        let name = (SourceField::Name, None, text("原名"));
+        let observation = SourceObservation { values: vec![name.clone()], observed_at: 20 };
+        let mut source = ProductSource::new("p", "s", "c", "i", slice::from_ref(&name), observation).unwrap();
+        let existing = source.fields[0].clone();
+        let cleared = (SourceField::Description, None, SourceValue::Text(None));
+        let sku = (SourceField::SkuName, Some("sku-a".into()), text("规格 A"));
+        let duplicate = (SourceField::Description, None, text("不应覆盖清空值"));
+        let current = vec![cleared.clone(), name.clone(), duplicate, sku.clone()];
+
+        source.record_manual_edit(&current);
+
+        let snapshots: Vec<_> = source
+            .fields
+            .iter()
+            .map(|state| (state.field, state.sku_id.clone(), state.company.clone()))
+            .collect();
+        assert_eq!(snapshots, vec![name, cleared, sku]);
+        assert_eq!(source.fields[0], existing);
+        for state in &source.fields[1..] {
+            assert_eq!(state.baseline, state.company);
+            assert_eq!(state.latest, state.company);
+            assert!(state.baseline_confirmed);
+            assert!(state.manually_maintained);
+            assert!(!state.pending);
+        }
+        let fields = source.fields.clone();
+        source.record_manual_edit(&current);
+        source.record_manual_edit(&[]);
+        assert_eq!(source.fields, fields);
+        assert!(source.pending_fields.is_empty());
+        assert_eq!(source.pending_count, 0);
+    }
+
+    #[test]
+    fn initial_image_flags_follow_asset_or_fingerprint_identity_not_raw_equality() {
+        let cases = [
+            (
+                image(Some("asset"), Some("old"), "company"),
+                image(Some("asset"), Some("new"), "supplier"),
+                (true, false, false),
+            ),
+            (
+                image(Some("company"), Some("hash"), "company"),
+                image(Some("supplier"), Some("hash"), "supplier"),
+                (true, false, false),
+            ),
+            (
+                image(Some("company"), Some("old"), "company"),
+                image(Some("supplier"), Some("new"), "supplier"),
+                (true, true, false),
+            ),
+            (
+                image(Some("asset"), None, "company"),
+                image(Some("asset"), None, "supplier"),
+                (false, false, false),
+            ),
+            (image(None, None, "same"), image(None, None, "same"), (false, true, true)),
+            (SourceValue::Images(vec![]), image(None, None, "supplier"), (false, false, true)),
+            (SourceValue::Images(vec![]), SourceValue::Images(vec![]), (true, false, false)),
+        ];
+        for (company, supplier, expected_flags) in cases {
+            let current = [(SourceField::DetailMedia, None, company.clone())];
+            let observation = SourceObservation {
+                values: vec![(SourceField::DetailMedia, None, supplier.clone())],
+                observed_at: 20,
+            };
+
+            let source = ProductSource::new("p", "s", "c", "i", &current, observation).unwrap();
+            let state = &source.fields[0];
+
+            assert_eq!(state.company, company);
+            assert_eq!(state.latest, supplier);
+            assert_eq!(state.baseline, supplier);
+            assert_eq!((state.baseline_confirmed, state.manually_maintained, state.pending), expected_flags);
+            assert_eq!(source.pending_count, u32::from(expected_flags.2));
+            let pending = if expected_flags.2 { vec![SourceField::DetailMedia] } else { vec![] };
+            assert_eq!(source.pending_fields, pending);
+        }
+    }
+
+    #[test]
+    fn first_image_observation_keeps_equivalence_pending_and_change_results() {
+        let cases = [
+            (
+                image(Some("company"), Some("hash"), "company"),
+                image(Some("supplier"), Some("hash"), "supplier"),
+                (true, false, false),
+                false,
+            ),
+            (
+                SourceValue::Images(vec![]),
+                image(Some("supplier"), Some("hash"), "supplier"),
+                (true, false, false),
+                true,
+            ),
+            (
+                image(Some("asset"), None, "company"),
+                image(Some("asset"), None, "supplier"),
+                (true, false, false),
+                false,
+            ),
+            (SourceValue::Images(vec![]), image(None, None, "supplier"), (false, false, true), false),
+            (image(None, None, "same"), image(None, None, "same"), (false, true, true), false),
+            (SourceValue::Images(vec![]), SourceValue::Images(vec![]), (true, false, false), false),
+        ];
+        for (company, supplier, expected_flags, changed) in cases {
+            let mut source =
+                ProductSource::new("p", "s", "c", "i", &[], SourceObservation::default()).unwrap();
+            let current = [(SourceField::DetailMedia, None, company.clone())];
+            let observation = SourceObservation {
+                values: vec![(SourceField::DetailMedia, None, supplier.clone())],
+                observed_at: 20,
+            };
+
+            let changes = source.observe(&current, observation).unwrap();
+            let expected =
+                if changed { vec![(SourceField::DetailMedia, None, supplier.clone())] } else { vec![] };
+            assert_eq!(changes, expected);
+            let state = &source.fields[0];
+            assert_eq!(state.latest, supplier);
+            assert_eq!(state.baseline, supplier);
+            assert_eq!(state.company, if expected_flags.2 { company } else { supplier });
+            assert_eq!((state.baseline_confirmed, state.manually_maintained, state.pending), expected_flags);
+            assert_eq!(source.pending_count, u32::from(expected_flags.2));
+            assert_eq!(source.observed_at, 20);
+        }
+    }
+
+    #[test]
+    fn invalid_initial_and_new_source_values_keep_validation_errors() {
+        let unknown = SourceImage { url: None, file_asset_id: None, content_fingerprint: None };
+        let cases = [
+            (SourceField::Name, text("   ")),
+            (SourceField::DetailMedia, SourceValue::Text(None)),
+            (SourceField::MainImage, SourceValue::Images(vec![unknown.clone(); 2])),
+            (SourceField::DetailMedia, SourceValue::Images(vec![unknown; 101])),
+        ];
+        for (field, value) in cases {
+            let observation = SourceObservation { values: vec![(field, None, value)], observed_at: 20 };
+            assert!(matches!(
+                ProductSource::new("p", "s", "c", "i", &[], observation.clone()),
+                Err(Error::ValidationError(message)) if message == "商品资料字段类型或内容无效"
+            ));
+            let mut source =
+                ProductSource::new("p", "s", "c", "i", &[], SourceObservation::default()).unwrap();
+
+            assert!(matches!(
+                source.observe(&[], observation),
+                Err(Error::ValidationError(message)) if message == "商品资料字段类型或内容无效"
+            ));
+            assert!(source.fields.is_empty());
+            assert!(source.pending_fields.is_empty());
+            assert_eq!(source.pending_count, 0);
+            assert_eq!(source.observed_at, 0);
+        }
     }
 }
