@@ -318,7 +318,6 @@ impl SupplierRuntime for JdVopRuntime {
 
 impl SupplierReferenceRegistry for JdVopRuntime {
     fn description(&self, target: &SupplierReferenceTarget) -> Result<ConnectorDescription, ClassifiedError> {
-        self.validate_target(target).map_err(classified)?;
         let connector = self.connector_for_target(target).map_err(classified)?;
         Ok(ConnectorDescription::from_connector(&connector))
     }

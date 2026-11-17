@@ -6,7 +6,7 @@ use rig_agent::agent::{AgentHook, HookContext, OutcomeAction, OutcomeEvent};
 use rig_agent::completion::{PromptError, StructuredOutputError};
 use rig_core::ProviderError;
 use rig_core::completion::CompletionResponse;
-use rig_core::http_client::HeaderMap;
+use rig_core::http_client::{HeaderMap, StatusCode};
 use serde_json::Value as JsonValue;
 
 use super::Result;
@@ -29,6 +29,34 @@ struct ResponseMetadata {
     finish_reason: Option<String>,
     validation_error: Option<String>,
     rejection: Rejection,
+}
+
+impl ResponseMetadata {
+    fn record_provider_error(
+        &mut self,
+        sdk_error: String,
+        status: Option<StatusCode>,
+        headers: Option<&HeaderMap>,
+        body: Option<&str>,
+    ) {
+        self.sdk_error = Some(sdk_error);
+        if let Some(status) = status {
+            self.status = Some(status.as_u16());
+        }
+        if let Some(headers) = headers {
+            if self.headers.is_empty() {
+                self.headers = response_headers(headers);
+            }
+            if self.request_id.is_none() {
+                self.request_id = request_id(headers);
+            }
+        }
+        if self.rejection.body_state.is_none()
+            && let Some(body) = body
+        {
+            self.rejection = Rejection::parse(body.to_owned());
+        }
+    }
 }
 
 impl AgentHook for Diagnostics {
@@ -93,23 +121,12 @@ impl Diagnostics {
             return;
         }
         let mut metadata = self.metadata();
-        metadata.sdk_error = Some(format!("{error:?}"));
-        if let Some(status) = error.provider_response_status() {
-            metadata.status = Some(status.as_u16());
-        }
-        if let Some(headers) = error.provider_response_headers() {
-            if metadata.headers.is_empty() {
-                metadata.headers = response_headers(headers);
-            }
-            if metadata.request_id.is_none() {
-                metadata.request_id = request_id(headers);
-            }
-        }
-        if metadata.rejection.body_state.is_none()
-            && let Some(body) = error.provider_response_body()
-        {
-            metadata.rejection = Rejection::parse(body.to_owned());
-        }
+        metadata.record_provider_error(
+            format!("{error:?}"),
+            error.provider_response_status(),
+            error.provider_response_headers(),
+            error.provider_response_body(),
+        );
         // hook 已记录完成状态等具体拒绝原因时，不用取消错误覆盖。
         if metadata.validation_error.is_none() {
             metadata.validation_error = Some(error.to_string());
@@ -220,24 +237,12 @@ impl Diagnostics {
     /// # 错误
     /// 不返回错误。
     pub(super) fn error(&self, error: &ProviderError) {
-        let mut metadata = self.metadata();
-        metadata.sdk_error = Some(format!("{error:?}"));
-        if let Some(status) = error.provider_response_status() {
-            metadata.status = Some(status.as_u16());
-            if metadata.request_id.is_none() {
-                metadata.request_id = error.provider_response_headers().and_then(request_id);
-            }
-        }
-        if metadata.headers.is_empty()
-            && let Some(headers) = error.provider_response_headers()
-        {
-            metadata.headers = response_headers(headers);
-        }
-        if metadata.rejection.body_state.is_none()
-            && let Some(body) = error.provider_response_body()
-        {
-            metadata.rejection = Rejection::parse(body.to_owned());
-        }
+        self.metadata().record_provider_error(
+            format!("{error:?}"),
+            error.provider_response_status(),
+            error.provider_response_headers(),
+            error.provider_response_body(),
+        );
     }
 
     /// 按成功或失败写一条合同提取结束日志，不改变调用结果。

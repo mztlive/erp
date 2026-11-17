@@ -40,7 +40,8 @@ pub(super) fn details(product: &Value, spec: &Value, root: Option<&Value>) -> Co
             && !root["product"]["can_buy"].is_null()
             && !spec["deleted"].is_null()
             && !spec["can_buy"].is_null();
-        let quantity = catalog_stock(spec)?;
+        let quantity =
+            stock(&spec["stock"]).map_err(|e| context(e, "规格库存 stock 格式无效或为不支持的负数"))?;
         details.availability = if complete_state {
             match availability_state(root, spec, &quantity)? {
                 AvailabilityState::Available => CatalogAvailability::Available,
@@ -55,10 +56,6 @@ pub(super) fn details(product: &Value, spec: &Value, root: Option<&Value>) -> Co
         }
     }
     Ok(details)
-}
-
-fn catalog_stock(spec: &Value) -> ConnectorResult<AvailableQuantity> {
-    stock(&spec["stock"]).map_err(|e| context(e, "规格库存 stock 格式无效或为不支持的负数"))
 }
 
 fn optional_id(value: &Value, key: &str) -> ConnectorResult<Option<String>> {
@@ -81,12 +78,7 @@ fn optional_text(value: &Value, key: &str) -> ConnectorResult<Option<String>> {
 fn image_list(value: &Value, key: &str) -> Option<Vec<CatalogImage>> {
     let images = value.get(key).filter(|value| !value.is_null())?;
     let Some(images) = images.as_array() else {
-        return Some(vec![CatalogImage {
-            url: String::new(),
-            content_fingerprint: None,
-            file_asset_id: None,
-            ..CatalogImage::default()
-        }]);
+        return Some(vec![CatalogImage::default()]);
     };
     Some(
         images
@@ -101,12 +93,7 @@ fn image_list(value: &Value, key: &str) -> Option<Vec<CatalogImage>> {
                         && parsed.password().is_none()
                         && url.len() <= 2048
                 });
-                CatalogImage {
-                    url: if valid { url } else { String::new() },
-                    content_fingerprint: None,
-                    file_asset_id: None,
-                    ..CatalogImage::default()
-                }
+                CatalogImage { url: if valid { url } else { String::new() }, ..CatalogImage::default() }
             })
             .collect(),
     )

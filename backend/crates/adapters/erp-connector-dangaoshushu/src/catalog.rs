@@ -2,8 +2,8 @@ use std::collections::BTreeSet;
 use std::num::NonZeroU32;
 
 use async_trait::async_trait;
-use chrono::{DateTime, FixedOffset};
-use erp_core::common::time::{BUSINESS_TZ_OFFSET_SECS, Instant};
+use chrono::DateTime;
+use erp_core::common::time::Instant;
 use erp_core::money::Quantity;
 use erp_supply::entity::failure::SupplierFailureClass;
 use erp_supply::ports::connector::common::{
@@ -18,7 +18,7 @@ use erp_supply::ports::connector::transform::OfferTransform;
 use rust_decimal::Decimal;
 use serde_json::Value;
 
-use super::parsing::{context, fixed, flag, id, mapping, snapshot, source_time, valid_id};
+use super::parsing::{business_tz, context, fixed, flag, id, mapping, snapshot, source_time, valid_id};
 use super::transport::Request;
 use super::{DangaoshushuConnector, DangaoshushuOffer, error};
 
@@ -64,9 +64,7 @@ impl DangaoshushuConnector {
     }
 
     pub(super) async fn product(&self, sku: &SupplierSku, city_id: Option<&str>) -> ConnectorResult<Value> {
-        valid_id(&sku.spec_id)?;
-        let product_id = sku.product_id.as_deref().ok_or_else(mapping)?;
-        valid_id(product_id)?;
+        let product_id = sku_product_id(sku)?;
         let mut parameters = vec![("product_id".into(), product_id.into())];
         if let Some(city) = city_id {
             parameters.push(("city_id".into(), city.into()));
@@ -121,7 +119,7 @@ pub(super) fn scan_parameters(scan: &Scan) -> ConnectorResult<(u32, Parameters)>
         if since > through {
             return Err(mapping());
         }
-        let zone = FixedOffset::east_opt(BUSINESS_TZ_OFFSET_SECS).expect("业务时区合法");
+        let zone = business_tz();
         let day = |instant: Instant| {
             DateTime::from_timestamp(instant.unix_secs(), 0)
                 .map(|date| date.with_timezone(&zone).date_naive())
@@ -312,6 +310,13 @@ impl AvailabilitySource for DangaoshushuConnector {
     }
 }
 
+fn sku_product_id(sku: &SupplierSku) -> ConnectorResult<&str> {
+    valid_id(&sku.spec_id)?;
+    let product_id = sku.product_id.as_deref().ok_or_else(mapping)?;
+    valid_id(product_id)?;
+    Ok(product_id)
+}
+
 pub(super) fn stock(value: &Value) -> ConnectorResult<AvailableQuantity> {
     if value.is_null() {
         return Ok(AvailableQuantity::Unreported);
@@ -329,9 +334,7 @@ pub(super) fn stock(value: &Value) -> ConnectorResult<AvailableQuantity> {
 #[async_trait]
 impl ServiceAreas for DangaoshushuConnector {
     async fn regions(&self, sku: &SupplierSku) -> ConnectorResult<Snapshot<RegionCoverage>> {
-        valid_id(&sku.spec_id)?;
-        let product = sku.product_id.as_deref().ok_or_else(mapping)?;
-        valid_id(product)?;
+        let product = sku_product_id(sku)?;
         let value = self
             .transport
             .send(Request::Read {

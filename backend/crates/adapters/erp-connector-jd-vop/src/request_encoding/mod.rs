@@ -8,7 +8,7 @@ use serde_json::value::{RawValue, to_raw_value};
 use serde_json::{Value, json};
 
 use super::mapping;
-use super::order_payload::identifier;
+use super::order_payload::{identifier, identifier_or_zero};
 use super::transport::{JdVopReadRequest, JdVopWriteRequest};
 
 mod catalog;
@@ -135,13 +135,6 @@ fn fields_with_source(
     Ok(object)
 }
 
-fn number(value: &str, zero: bool) -> ConnectorResult<u64> {
-    if zero && value == "0" {
-        return Ok(0);
-    }
-    identifier(value)
-}
-
 fn merchant(value: &str) -> ConnectorResult<()> {
     if value.trim().is_empty() || value.chars().count() > 100 || value.chars().any(char::is_control) {
         return Err(mapping("京东原第三方订单号无效"));
@@ -158,6 +151,6 @@ fn ids(values: &[String], maximum: usize) -> ConnectorResult<Vec<u64>> {
 
 fn area(values: &[String; 4]) -> ConnectorResult<Value> {
     Ok(
-        json!({"provinceId":identifier(&values[0])?,"cityId":identifier(&values[1])?,"countyId":identifier(&values[2])?,"townId":number(&values[3],true)?}),
+        json!({"provinceId":identifier(&values[0])?,"cityId":identifier(&values[1])?,"countyId":identifier(&values[2])?,"townId":identifier_or_zero(&values[3])?}),
     )
 }

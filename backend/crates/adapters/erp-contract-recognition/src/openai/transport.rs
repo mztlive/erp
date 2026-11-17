@@ -165,7 +165,7 @@ async fn receive<U: From<Bytes> + Send + 'static>(
 }
 
 async fn read_body(mut response: HttpResponse) -> Result<Bytes, Failure> {
-    if response.content_length().is_some_and(|length| length > 1_048_576) {
+    if response.content_length().is_some_and(|length| length > MAX_RESPONSE as u64) {
         return Err(Failure::ResponseSize);
     }
     let mut bytes = Vec::new();

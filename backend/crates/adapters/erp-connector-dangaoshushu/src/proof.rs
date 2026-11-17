@@ -66,11 +66,15 @@ pub(super) fn binding_hash(
     Ok(hash(&settings.private_key, &bytes))
 }
 
-pub(super) fn hash(secret: &str, body: &[u8]) -> String {
+fn mac(secret: &str, body: &[u8]) -> HmacSha256 {
     let mut mac = HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC 接受任意长度密钥");
     mac.update(b"erp-dangaoshushu-proof-v1\0");
     mac.update(body);
-    hex::encode(mac.finalize().into_bytes())
+    mac
+}
+
+pub(super) fn hash(secret: &str, body: &[u8]) -> String {
+    hex::encode(mac(secret, body).finalize().into_bytes())
 }
 pub(super) fn encode<T: Serialize>(secret: &str, value: &T) -> ConnectorResult<String> {
     let body = to_vec(value).map_err(|_| mapping())?;
@@ -83,10 +87,7 @@ pub(super) fn decode<T: DeserializeOwned>(secret: &str, value: &str) -> Connecto
     let (body, signature) = value.split_once('.').ok_or_else(mapping)?;
     let body = hex::decode(body).map_err(|_| mapping())?;
     let signature = hex::decode(signature).map_err(|_| mapping())?;
-    let mut mac = HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC 接受任意长度密钥");
-    mac.update(b"erp-dangaoshushu-proof-v1\0");
-    mac.update(&body);
-    mac.verify_slice(&signature).map_err(|_| mapping())?;
+    mac(secret, &body).verify_slice(&signature).map_err(|_| mapping())?;
     from_slice(&body).map_err(|_| mapping())
 }
 pub(super) fn recipient_hash(secret: &str, recipient: &Recipient) -> ConnectorResult<String> {

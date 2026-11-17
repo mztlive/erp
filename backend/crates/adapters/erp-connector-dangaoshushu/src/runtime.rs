@@ -221,6 +221,7 @@ impl DangaoshushuRuntime {
         now: Instant,
     ) -> ConnectorResult<SupplierReferenceTickets> {
         let expires_at = now.unix_secs().checked_add(300).ok_or_else(mapping)?;
+        let fingerprint = proof::binding_hash(&self.settings, target)?;
         let ticket = |kind: &str| {
             proof::encode(
                 &self.settings.private_key,
@@ -229,7 +230,7 @@ impl DangaoshushuRuntime {
                     supplier_id: target.supplier_id.to_string(),
                     connector_type: SupplierConnectorType::Dangaoshushu,
                     kind: kind.into(),
-                    fingerprint: proof::binding_hash(&self.settings, target)?,
+                    fingerprint: fingerprint.clone(),
                     expires_at,
                 },
             )

@@ -12,6 +12,7 @@ use serde_json::Value;
 use tokio::sync::Mutex;
 use tokio::time::{sleep, timeout};
 
+use super::parsing::delivery_expired;
 use super::{error, signing, wire};
 
 const MAX_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
@@ -172,20 +173,12 @@ impl Transport for HttpTransport {
 fn sending_window(deadline: Option<Instant>, now: Instant) -> ConnectorResult<Option<Duration>> {
     let Some(deadline) = deadline else { return Ok(None) };
     if deadline <= now {
-        return Err(error(
-            SupplierFailureClass::BusinessRejected,
-            "DGSS_DELIVERY_EXPIRED",
-            "配送选项已过期，须重新查询后提交",
-        ));
+        return Err(delivery_expired());
     }
     let seconds = deadline.unix_secs().checked_sub(now.unix_secs()).ok_or_else(|| invalid_response(false))?;
     let seconds = u64::try_from(seconds).map_err(|_| invalid_response(false))?;
     if seconds == 0 {
-        return Err(error(
-            SupplierFailureClass::BusinessRejected,
-            "DGSS_DELIVERY_EXPIRED",
-            "配送选项已过期，须重新查询后提交",
-        ));
+        return Err(delivery_expired());
     }
     Ok(Some(Duration::from_secs(seconds)))
 }

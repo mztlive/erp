@@ -23,7 +23,7 @@ pub(super) fn read(
                 return Err(mapping("京东商品池分页大小超过100"));
             }
             flat(
-                json!({"bizPoolId":pool_id,"offset":number(offset,true)?,"pageSize":page_size.get()}),
+                json!({"bizPoolId":pool_id,"offset":identifier_or_zero(offset)?,"pageSize":page_size.get()}),
                 context,
             )
         },
@@ -64,7 +64,7 @@ fn address(request: &JdVopReadRequest, context: &JdVopRequestContext) -> Connect
             }
             let mut fields = json!({"areaLevel":level});
             if let Some(parent) = parent_code {
-                fields["jdAreaId"] = json!(number(parent, true)?);
+                fields["jdAreaId"] = json!(identifier_or_zero(parent)?);
             }
             flat(fields, context)
         },

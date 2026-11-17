@@ -13,30 +13,23 @@ use erp_supply::ports::connector::order::{
 use rust_decimal::Decimal;
 use serde_json::{Map, Value, json, to_string};
 
-use super::parsing::{field, flag, id, mapping, non_negative_amount, snapshot, source_time, valid_id};
+use super::parsing::{
+    delivery_expired, field, flag, id, join_field, join_quantities, mapping, non_negative_amount, snapshot,
+    source_time, valid_id,
+};
 use super::proof::{self, AddressProof, ChoiceProof};
 use super::transport::Request;
 use super::{DangaoshushuConnector, error};
 
 impl DangaoshushuConnector {
-    fn order_payload(&self, request: &CreateOrder) -> ConnectorResult<Value> {
-        self.order_payload_at(request, Instant::now())
-    }
-
-    fn order_payload_at(&self, request: &CreateOrder, now: Instant) -> ConnectorResult<Value> {
+    fn order_payload_at(&self, request: &CreateOrder, now: Instant) -> ConnectorResult<(Value, i64)> {
         Self::valid_lines(&request.lines)?;
         valid_id(&request.action.id)?;
         valid_id(&request.action.payload_hash)?;
         valid_id(&request.merchant_order_no)?;
         let address = self.address_proof(&request.delivery_context)?;
         let choice: ChoiceProof = proof::decode(&self.settings.private_key, &request.delivery.reference)?;
-        if choice.expires_at <= now.unix_secs() {
-            return Err(error(
-                SupplierFailureClass::BusinessRejected,
-                "DGSS_DELIVERY_EXPIRED",
-                "配送选项已过期，须重新查询后提交",
-            ));
-        }
+        check_choice_expiry(choice.expires_at, now)?;
         if choice.connection_id != self.connection_id.as_ref()
             || choice.configuration_hash != self.binding
             || choice.context_hash
@@ -50,7 +43,8 @@ impl DangaoshushuConnector {
             return Err(mapping());
         }
         approved_amount(request)?;
-        self.payload_for_choice(request, address, choice)
+        let expires_at = choice.expires_at;
+        Ok((self.payload_for_choice(request, address, choice)?, expires_at))
     }
 
     fn payload_for_choice(
@@ -60,26 +54,17 @@ impl DangaoshushuConnector {
         choice: ChoiceProof,
     ) -> ConnectorResult<Value> {
         let group = selected_group(&request.delivery.method, &choice)?;
-        let quantitys = request
-            .lines
-            .iter()
-            .map(|line| line.quantity.to_decimal().normalize().to_string())
-            .collect::<Vec<_>>()
-            .join(",");
-        let tastes = request
-            .lines
-            .iter()
-            .map(|line| line.attributes.first().map(|attribute| attribute.value.as_str()).unwrap_or(""))
-            .collect::<Vec<_>>()
-            .join(",");
+        let tastes = join_field(&request.lines, |line| {
+            line.attributes.first().map(|attribute| attribute.value.as_str()).unwrap_or("")
+        });
         let mut groups = Map::new();
         groups.insert(choice.rule_id.clone(), group);
         Ok(json!({
             "out_order_no":request.merchant_order_no,
             "addr":{"id":address.addr_id,"name":request.recipient.name,"phone":request.recipient.phone,"detail":request.recipient.address},
             "rule_ids":vec![choice.rule_id;request.lines.len()].join(","),
-            "spec_ids":request.lines.iter().map(|line|line.sku.spec_id.as_str()).collect::<Vec<_>>().join(","),
-            "quantitys":quantitys,"tastes_name":tastes,"group":groups,
+            "spec_ids":join_field(&request.lines, |line| line.sku.spec_id.as_str()),
+            "quantitys":join_quantities(&request.lines),"tastes_name":tastes,"group":groups,
             "pay_type":self.settings.channel_no,"buyer_phone":request.recipient.phone,
             "user_id":address.user_id,"city_id":address.city_id
         }))
@@ -120,6 +105,13 @@ fn approved_amount(request: &CreateOrder) -> ConnectorResult<()> {
     Ok(())
 }
 
+fn check_choice_expiry(expires_at: i64, now: Instant) -> ConnectorResult<()> {
+    if expires_at <= now.unix_secs() {
+        return Err(delivery_expired());
+    }
+    Ok(())
+}
+
 fn price_rejected() -> ConnectorError {
     error(
         SupplierFailureClass::BusinessRejected,
@@ -155,18 +147,17 @@ impl Orders for DangaoshushuConnector {
     }
 
     async fn create(&self, request: &CreateOrder) -> ConnectorResult<CreatedOrder> {
-        self.order_payload(request)?;
+        let (payload, expires_at) = self.order_payload_at(request, Instant::now())?;
         self.verify_prices(request).await?;
-        // 读价可能耗时；发送前再次核对地址、明细、成本与配送有效期。
-        let payload = self.order_payload(request)?;
-        let choice: ChoiceProof = proof::decode(&self.settings.private_key, &request.delivery.reference)?;
+        // 读价可能耗时；发送前再次核对配送有效期。
+        check_choice_expiry(expires_at, Instant::now())?;
         let value = self
             .transport
             .send(Request::Multipart {
                 path: "/dsapi/order/submit_order",
                 parameters: vec![("order_data".into(), to_string(&payload).map_err(|_| mapping())?)],
                 write: true,
-                not_after: Some(Instant::from_unix_secs(choice.expires_at)),
+                not_after: Some(Instant::from_unix_secs(expires_at)),
             })
             .await?;
         // 即使实际金额超批准，保留已创建外部订单；由 Process 阻断支付和登记异常。

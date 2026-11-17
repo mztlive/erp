@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use erp_supply::entity::failure::SupplierFailureClass;
 use erp_supply::ports::connector::common::{ConnectorError, ConnectorResult};
 use serde::de::DeserializeOwned;
-use tokio::sync::{Mutex, Semaphore};
+use tokio::sync::{Mutex, Semaphore, SemaphorePermit};
 use tokio::time::{Instant, sleep_until, timeout};
 
 use super::error;
@@ -201,14 +201,7 @@ impl WriteClient {
     }
 
     async fn once(&self, request: &JdVopWriteRequest) -> ConnectorResult<Vec<u8>> {
-        let _permit = self.reader.semaphore.acquire().await.map_err(|_| write_unknown())?;
-        let scheduled = {
-            let mut next = self.reader.next_request.lock().await;
-            let scheduled = (*next).max(Instant::now());
-            *next = scheduled + self.reader.interval;
-            scheduled
-        };
-        sleep_until(scheduled).await;
+        let _permit = self.reader.acquire_slot().await.ok_or_else(write_unknown)?;
         self.transport.write(request).await.map_err(unknown_after_write)
     }
 }
@@ -277,9 +270,14 @@ impl ReadClient {
     }
 
     async fn once(&self, request: &JdVopReadRequest) -> ConnectorResult<Vec<u8>> {
-        let _permit = self.semaphore.acquire().await.map_err(|_| {
+        let _permit = self.acquire_slot().await.ok_or_else(|| {
             error(SupplierFailureClass::TransientFailure, "JD_VOP_READ_CLOSED", "京东读取服务暂不可用")
         })?;
+        self.transport.read(request).await
+    }
+
+    async fn acquire_slot(&self) -> Option<SemaphorePermit<'_>> {
+        let permit = self.semaphore.acquire().await.ok()?;
         let scheduled = {
             let mut next = self.next_request.lock().await;
             let scheduled = (*next).max(Instant::now());
@@ -287,6 +285,6 @@ impl ReadClient {
             scheduled
         };
         sleep_until(scheduled).await;
-        self.transport.read(request).await
+        Some(permit)
     }
 }

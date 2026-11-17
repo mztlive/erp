@@ -14,7 +14,9 @@ use rust_decimal::Decimal;
 use serde_json::{Value, from_str, to_string};
 
 use super::catalog::spec_value;
-use super::parsing::{field, flag, id, mapping, non_negative_amount, snapshot, text, valid_id};
+use super::parsing::{
+    field, flag, id, join_field, join_quantities, mapping, non_negative_amount, snapshot, text, valid_id,
+};
 use super::proof::{self, AddressProof, ChoiceProof};
 use super::transport::Request;
 use super::{DangaoshushuConnector, error};
@@ -315,15 +317,8 @@ fn distribution_parameters(address: &AddressProof, lines: &[OrderLine]) -> Vec<(
     vec![
         ("city_id".into(), address.city_id.clone()),
         ("addr_id".into(), address.addr_id.clone()),
-        ("spec_id".into(), lines.iter().map(|line| line.sku.spec_id.as_str()).collect::<Vec<_>>().join(",")),
-        (
-            "quantitys".into(),
-            lines
-                .iter()
-                .map(|line| line.quantity.to_decimal().normalize().to_string())
-                .collect::<Vec<_>>()
-                .join(","),
-        ),
+        ("spec_id".into(), join_field(lines, |line| line.sku.spec_id.as_str())),
+        ("quantitys".into(), join_quantities(lines)),
     ]
 }
 

@@ -7,19 +7,23 @@ use application_core::AuditActor;
 use entity_core::BaseModel;
 use erp_core::AccountKind;
 use erp_core::money::{Amount, Quantity};
-use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::validation::normalize_required_text;
 use id_generator::next_id;
 use serde::{Deserialize, Deserializer, Serialize};
 
+use super::audit_log::{
+    ACTOR_ACCOUNT_MAX_LEN, ACTOR_ID_MAX_LEN, RESOURCE_ID_MAX_LEN, RESOURCE_TYPE_MAX_LEN, SNAPSHOT_MAX_LEN,
+    normalized_snapshot_with_message,
+};
 use super::{AuditAttempt, AuditAttemptKind, AuditAttemptResult, AuditLog, AuditLogData};
 use crate::error::{Error, Result};
 
 /// 业务事件持久化 schema 版本。
 const EVENT_SCHEMA_VERSION: u16 = 1;
 /// 动作、字段及枚举代码上限。
-const CODE_MAX_LEN: usize = 128;
+const CODE_MAX_LEN: usize = SNAPSHOT_MAX_LEN;
 /// 名称、中文标签及业务编号上限。
-const DISPLAY_MAX_LEN: usize = 128;
+const DISPLAY_MAX_LEN: usize = SNAPSHOT_MAX_LEN;
 /// 一次业务事件允许记录的投影字段数。
 const PROJECTION_MAX_LEN: usize = 64;
 
@@ -205,7 +209,7 @@ impl AuditAction {
     pub fn validate(&self) -> Result<()> {
         validate_code(self.code)?;
         validate_code(self.resource_type)?;
-        if self.resource_type.len() > 64 {
+        if self.resource_type.len() > RESOURCE_TYPE_MAX_LEN {
             return Err(validation_error("审计资源类型长度不符合要求"));
         }
         validate_label(self.label)?;
@@ -252,8 +256,13 @@ impl BusinessEventContext {
         let actor_name_snapshot = actor.actor_name_snapshot().map(str::to_string);
         let request_id = actor.request_id().map(str::to_string);
         let (id, account, kind) = actor.into_parts();
-        let id = normalize_required_text(id, "操作人ID不能为空", 128, "操作人ID长度不符合要求")?;
-        let account = normalize_required_text(account, "操作人账号不能为空", 64, "操作人账号长度不符合要求")?;
+        let id = normalize_required_text(id, "操作人ID不能为空", ACTOR_ID_MAX_LEN, "操作人ID长度不符合要求")?;
+        let account = normalize_required_text(
+            account,
+            "操作人账号不能为空",
+            ACTOR_ACCOUNT_MAX_LEN,
+            "操作人账号长度不符合要求",
+        )?;
         validate_plain_text(&id)?;
         validate_plain_text(&account)?;
         Ok(Self {
@@ -418,8 +427,12 @@ impl BusinessEventContext {
 
     /// 持久化前先收紧目标和编号，避免自由文本进入结构化事件。
     fn event(&self, content: BusinessEventContent) -> Result<BusinessAuditEvent> {
-        let resource_id =
-            normalize_required_text(content.target_id, "资源ID不能为空", 64, "资源ID长度不符合要求")?;
+        let resource_id = normalize_required_text(
+            content.target_id,
+            "资源ID不能为空",
+            RESOURCE_ID_MAX_LEN,
+            "资源ID长度不符合要求",
+        )?;
         validate_plain_text(&resource_id)?;
         let resource_number_snapshot = normalized_snapshot(content.target_number, "业务编号")?;
         let (field_changes, facts) = self.projection(content.field_changes, content.facts)?;
@@ -589,11 +602,7 @@ fn validate_label(label: &str) -> Result<()> {
 
 /// 快照只保留有限安全文本，空白表示当时未知。
 fn normalized_snapshot(value: Option<String>, field: &str) -> Result<Option<String>> {
-    let value = normalize_optional_text(value, field, DISPLAY_MAX_LEN)?;
-    if let Some(value) = &value {
-        validate_plain_text(value)?;
-    }
-    Ok(value)
+    normalized_snapshot_with_message(value, field, "审计字段不能包含控制字符")
 }
 
 fn validate_plain_text(value: &str) -> Result<()> {

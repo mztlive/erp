@@ -61,7 +61,7 @@ impl Orders for JdVopConnector {
     }
 
     async fn order(&self, key: &OrderKey) -> ConnectorResult<Lookup<Snapshot<OrderSnapshot>>> {
-        self.query_order(key, &[]).await
+        self.query_order_facts(key, &[], true).await
     }
 
     async fn order_with_lines(
@@ -69,7 +69,7 @@ impl Orders for JdVopConnector {
         key: &OrderKey,
         frozen: &[OrderLine],
     ) -> ConnectorResult<Lookup<Snapshot<OrderSnapshot>>> {
-        self.query_order(key, frozen).await
+        self.query_order_facts(key, frozen, true).await
     }
 
     async fn cancellation_order(
@@ -77,7 +77,7 @@ impl Orders for JdVopConnector {
         key: &OrderKey,
         frozen: &[OrderLine],
     ) -> ConnectorResult<Lookup<Snapshot<OrderSnapshot>>> {
-        self.query_cancellation_order(key, frozen).await
+        self.query_order_facts(key, frozen, false).await
     }
 }
 
@@ -105,11 +105,10 @@ impl OrderConfirmation for JdVopConnector {
         {
             return Err(mapping("京东原子单已取消，不能继续确认"));
         }
-        if confirmation(&order)? == Some(ConfirmationState::Confirmed) {
-            return Ok(observed(ConfirmationState::Confirmed));
-        }
-        if confirmation(&order)? != Some(ConfirmationState::Pending) {
-            return Err(mapping("京东原子单确认状态未知，请继续查询原结果"));
+        match confirmation(&order)? {
+            Some(ConfirmationState::Confirmed) => return Ok(observed(ConfirmationState::Confirmed)),
+            Some(ConfirmationState::Pending) => {},
+            _ => return Err(mapping("京东原子单确认状态未知，请继续查询原结果")),
         }
         let writer = self.writer.as_ref().ok_or_else(protocol_required)?;
         let result: WireText = writer

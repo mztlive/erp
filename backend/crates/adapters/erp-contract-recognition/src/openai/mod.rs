@@ -124,8 +124,7 @@ impl OpenAiContractExtractor {
 impl ContractExtractor for OpenAiContractExtractor {
     async fn extract(&self, document: &OcrDocument) -> Result<ContractExtraction> {
         let diagnostics = Diagnostics::default();
-        let http = BoundedHttp::new(self.timeout, diagnostics.clone())
-            .map_err(|_| ImportFailure::new("AI_UNAVAILABLE", "字段提取服务暂不可用，请稍后重试"))?;
+        let http = BoundedHttp::new(self.timeout, diagnostics.clone()).map_err(|_| unavailable())?;
         self.extract_with(document, http, diagnostics).await
     }
 }
@@ -138,21 +137,18 @@ fn extraction_failure(
         return (Err(provider_error(error)), timeout_source(error));
     }
     if let Some(status) = error.provider_response_status().filter(|status| !status.is_success()) {
-        let status = status.as_u16();
-        return (Err(status_error(status)), matches!(status, 408 | 504).then_some("upstream_http"));
+        let (error, source) = status_failure(status.as_u16());
+        return (Err(error), source);
     }
     // Rig runtime 的 ErrorReport 不保留自定义 Rust 错误类型，传输边界保留原始分类。
     if let Some(failure) = diagnostics.failure() {
-        let source = match failure {
-            Failure::Timeout(source) => Some(source.as_str()),
-            _ => None,
-        };
-        return (Err(provider_error(&ProviderError::from(HttpError::instance(failure)))), source);
+        let (error, source) = transport_failure(failure);
+        return (Err(error), source);
     }
     if let StructuredOutputError::PromptError(PromptError::Report(report)) = error
         && report.kind == ErrorKind::Http
     {
-        return (Err(ImportFailure::new("AI_UNAVAILABLE", "字段提取服务暂不可用，请稍后重试")), None);
+        return (Err(unavailable()), None);
     }
     (Err(invalid_output()), None)
 }
@@ -161,24 +157,23 @@ fn invalid_output() -> ImportFailure {
     ImportFailure::new("AI_INVALID_OUTPUT", "字段提取结果不完整或格式无效，请重试或联系管理员")
 }
 
+fn unavailable() -> ImportFailure {
+    ImportFailure::new("AI_UNAVAILABLE", "字段提取服务暂不可用，请稍后重试")
+}
+
 fn provider_error(error: &ProviderError) -> ImportFailure {
     if let Some(status) = error.provider_response_status() {
         // Responses 解码失败也可能保留 HTTP 200；这不是供应商拒绝请求。
         return if status.is_success() { invalid_output() } else { status_error(status.as_u16()) };
     }
-    if let ProviderError::Http(error) = error {
-        if let HttpError::Instance(inner) = error.as_ref() {
-            match inner.downcast_ref::<Failure>() {
-                Some(Failure::Timeout(_)) => {
-                    return ImportFailure::new("AI_TIMEOUT", "合同字段提取超时，请稍后重试");
-                },
-                Some(Failure::ResponseSize) => return invalid_output(),
-                _ => {},
-            }
-        }
-        return ImportFailure::new("AI_UNAVAILABLE", "字段提取服务暂不可用，请稍后重试");
+    if matches!(error, ProviderError::Http(_)) {
+        return http_failure(error).map_or_else(unavailable, |failure| transport_failure(failure).0);
     }
     invalid_output()
+}
+
+fn status_failure(status: u16) -> (ImportFailure, Option<&'static str>) {
+    (status_error(status), matches!(status, 408 | 504).then_some("upstream_http"))
 }
 
 fn status_error(status: u16) -> ImportFailure {
@@ -186,7 +181,7 @@ fn status_error(status: u16) -> ImportFailure {
         401 | 403 => ImportFailure::new("AI_UNAUTHORIZED", "字段提取服务凭据无效或未授权，请联系管理员"),
         429 => ImportFailure::new("AI_THROTTLED", "字段提取服务限流，请稍后重试"),
         408 | 504 => ImportFailure::new("AI_TIMEOUT", "合同字段提取超时，请稍后重试"),
-        500..=599 => ImportFailure::new("AI_UNAVAILABLE", "字段提取服务暂不可用，请稍后重试"),
+        500..=599 => unavailable(),
         _ => ImportFailure::new("AI_REJECTED", "字段提取请求被拒绝，请检查模型、上下文容量及结构化输出支持"),
     }
 }
@@ -194,7 +189,8 @@ fn status_error(status: u16) -> ImportFailure {
 fn deadline_failure(diagnostics: &Diagnostics) -> (Result<ContractExtraction>, Option<&'static str>) {
     // 已知 HTTP 拒绝优先；诊断正文未读完不能把 400/401 等改报成 AI_TIMEOUT。
     if let Some(status) = diagnostics.status().filter(|status| !(200..300).contains(status)) {
-        return (Err(status_error(status)), matches!(status, 408 | 504).then_some("upstream_http"));
+        let (error, source) = status_failure(status);
+        return (Err(error), source);
     }
     (Err(ImportFailure::new("AI_TIMEOUT", "合同字段提取超时，请稍后重试")), Some("application_deadline"))
 }
@@ -203,11 +199,21 @@ fn timeout_source(error: &ProviderError) -> Option<&'static str> {
     if error.provider_response_status().is_some_and(|status| matches!(status.as_u16(), 408 | 504)) {
         return Some("upstream_http");
     }
-    if let ProviderError::Http(error) = error
-        && let HttpError::Instance(inner) = error.as_ref()
-        && let Some(Failure::Timeout(source)) = inner.downcast_ref::<Failure>()
-    {
-        return Some(source.as_str());
+    http_failure(error).and_then(|failure| transport_failure(failure).1)
+}
+
+fn transport_failure(failure: Failure) -> (ImportFailure, Option<&'static str>) {
+    match failure {
+        Failure::Timeout(source) => {
+            (ImportFailure::new("AI_TIMEOUT", "合同字段提取超时，请稍后重试"), Some(source.as_str()))
+        },
+        Failure::ResponseSize => (invalid_output(), None),
+        Failure::Unavailable | Failure::Unsupported => (unavailable(), None),
     }
-    None
+}
+
+fn http_failure(error: &ProviderError) -> Option<Failure> {
+    let ProviderError::Http(error) = error else { return None };
+    let HttpError::Instance(inner) = error.as_ref() else { return None };
+    inner.downcast_ref::<Failure>().copied()
 }

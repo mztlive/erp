@@ -275,7 +275,7 @@ pub(super) fn submit(request: &CreateOrder, profile: &JdVopExecutionProfile) -> 
             consignee_province_id: identifier(&address.province.code)?,
             consignee_city_id: identifier(&address.city.code)?,
             consignee_county_id: identifier(&address.county.code)?,
-            consignee_town_id: town_identifier(&address.town.code)?,
+            consignee_town_id: identifier_or_zero(&address.town.code)?,
         },
     })
 }
@@ -321,7 +321,7 @@ pub(super) fn identifier(value: &str) -> ConnectorResult<u64> {
     Ok(id)
 }
 
-fn town_identifier(value: &str) -> ConnectorResult<u64> {
+pub(super) fn identifier_or_zero(value: &str) -> ConnectorResult<u64> {
     if value == "0" { Ok(0) } else { identifier(value) }
 }
 

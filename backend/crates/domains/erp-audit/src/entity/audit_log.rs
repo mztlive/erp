@@ -11,17 +11,19 @@ use super::business_event::BusinessAuditEvent;
 use crate::error::{Error as AuditError, Result as AuditResult};
 
 /// 操作人ID最大长度。
-const ACTOR_ID_MAX_LEN: usize = 128;
+pub(crate) const ACTOR_ID_MAX_LEN: usize = 128;
 /// 操作人账号最大长度。
-const ACTOR_ACCOUNT_MAX_LEN: usize = 64;
+pub(crate) const ACTOR_ACCOUNT_MAX_LEN: usize = 64;
 /// 审计动作最大长度。
 const ACTION_MAX_LEN: usize = 128;
 /// 资源类型最大长度。
-const RESOURCE_TYPE_MAX_LEN: usize = 64;
+pub(crate) const RESOURCE_TYPE_MAX_LEN: usize = 64;
 /// 资源ID最大长度。
-const RESOURCE_ID_MAX_LEN: usize = 64;
+pub(crate) const RESOURCE_ID_MAX_LEN: usize = 64;
 /// 消息最大长度。
 const MESSAGE_MAX_LEN: usize = 8192;
+/// 快照最大长度。
+pub(crate) const SNAPSHOT_MAX_LEN: usize = 128;
 
 /// 审计日志创建数据。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -82,10 +84,10 @@ impl AuditLog {
     ///
     /// # 错误
     /// 编号超长时返回 `Error::Logic`。缺少结构化事件或编号含控制字符时返回 `Error::ValidationError`。
-    pub fn with_request_id(mut self, request_id: Option<String>) -> AuditResult<Self> {
-        let value = normalized_snapshot(request_id, "请求编号")?;
-        structured_event_mut(&mut self)?.request_id = value;
-        Ok(self)
+    pub fn with_request_id(self, request_id: Option<String>) -> AuditResult<Self> {
+        self.update_snapshot(request_id, "请求编号", |event, value| {
+            event.request_id = value;
+        })
     }
 
     /// 保存认证时已取得的安全操作人名称，不读取当前账户补齐快照。
@@ -98,12 +100,10 @@ impl AuditLog {
     ///
     /// # 错误
     /// 名称超长时返回 `Error::Logic`。缺少结构化事件或名称含控制字符时返回 `Error::ValidationError`。
-    pub fn with_actor_name_snapshot(mut self, name: Option<String>) -> AuditResult<Self> {
-        let value = normalized_snapshot(name, "操作人名称")?;
-        let event = structured_event_mut(&mut self)?;
-        event.actor_name_snapshot = value;
-        self.message = Some(event.message());
-        Ok(self)
+    pub fn with_actor_name_snapshot(self, name: Option<String>) -> AuditResult<Self> {
+        self.update_snapshot_and_message(name, "操作人名称", |event, value| {
+            event.actor_name_snapshot = value;
+        })
     }
 
     /// 关联独立命令身份，不将幂等键或指纹写入展示事件。
@@ -116,10 +116,10 @@ impl AuditLog {
     ///
     /// # 错误
     /// 编号超长时返回 `Error::Logic`。缺少结构化事件或编号含控制字符时返回 `Error::ValidationError`。
-    pub fn with_command_id(mut self, command_id: Option<String>) -> AuditResult<Self> {
-        let value = normalized_snapshot(command_id, "命令编号")?;
-        structured_event_mut(&mut self)?.command_id = value;
-        Ok(self)
+    pub fn with_command_id(self, command_id: Option<String>) -> AuditResult<Self> {
+        self.update_snapshot(command_id, "命令编号", |event, value| {
+            event.command_id = value;
+        })
     }
 
     /// 保存发生时已明确的安全业务编号，不查询当前对象补齐快照。
@@ -132,11 +132,33 @@ impl AuditLog {
     ///
     /// # 错误
     /// 编号超长时返回 `Error::Logic`。缺少结构化事件或编号含控制字符时返回 `Error::ValidationError`。
-    pub fn with_resource_number(mut self, number: Option<String>) -> AuditResult<Self> {
-        let value = normalized_snapshot(number, "业务编号")?;
-        let event = structured_event_mut(&mut self)?;
-        event.resource_number_snapshot = value;
-        self.message = Some(event.message());
+    pub fn with_resource_number(self, number: Option<String>) -> AuditResult<Self> {
+        self.update_snapshot_and_message(number, "业务编号", |event, value| {
+            event.resource_number_snapshot = value;
+        })
+    }
+
+    fn update_snapshot(
+        mut self,
+        value: Option<String>,
+        field: &str,
+        assign: impl FnOnce(&mut BusinessAuditEvent, Option<String>),
+    ) -> AuditResult<Self> {
+        let value = normalized_snapshot(value, field)?;
+        assign(structured_event_mut(&mut self)?, value);
+        Ok(self)
+    }
+
+    fn update_snapshot_and_message(
+        mut self,
+        value: Option<String>,
+        field: &str,
+        assign: impl FnOnce(&mut BusinessAuditEvent, Option<String>),
+    ) -> AuditResult<Self> {
+        self = self.update_snapshot(value, field, assign)?;
+        if let Some(event) = &self.structured_event {
+            self.message = Some(event.message());
+        }
         Ok(self)
     }
 
@@ -232,12 +254,20 @@ impl AuditLog {
     }
 }
 
-fn normalized_snapshot(value: Option<String>, field: &str) -> AuditResult<Option<String>> {
-    let value = normalize_optional_text(value, field, 128)?;
+pub(crate) fn normalized_snapshot_with_message(
+    value: Option<String>,
+    field: &str,
+    control_error: &str,
+) -> AuditResult<Option<String>> {
+    let value = normalize_optional_text(value, field, SNAPSHOT_MAX_LEN)?;
     if value.as_ref().is_some_and(|value| value.chars().any(char::is_control)) {
-        return Err(AuditError::ValidationError(format!("{field}包含非法字符")));
+        return Err(AuditError::ValidationError(control_error.to_string()));
     }
     Ok(value)
+}
+
+fn normalized_snapshot(value: Option<String>, field: &str) -> AuditResult<Option<String>> {
+    normalized_snapshot_with_message(value, field, &format!("{field}包含非法字符"))
 }
 
 fn structured_event_mut(log: &mut AuditLog) -> AuditResult<&mut BusinessAuditEvent> {

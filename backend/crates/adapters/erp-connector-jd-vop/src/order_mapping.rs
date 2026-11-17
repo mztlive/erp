@@ -26,23 +26,7 @@ struct OrderEvidence<'a> {
 }
 
 impl JdVopConnector {
-    pub(super) async fn query_order(
-        &self,
-        key: &OrderKey,
-        frozen: &[OrderLine],
-    ) -> ConnectorResult<Lookup<Snapshot<OrderSnapshot>>> {
-        self.query_order_facts(key, frozen, true).await
-    }
-
-    pub(super) async fn query_cancellation_order(
-        &self,
-        key: &OrderKey,
-        frozen: &[OrderLine],
-    ) -> ConnectorResult<Lookup<Snapshot<OrderSnapshot>>> {
-        self.query_order_facts(key, frozen, false).await
-    }
-
-    async fn query_order_facts(
+    pub(super) async fn query_order_facts(
         &self,
         key: &OrderKey,
         frozen: &[OrderLine],
@@ -61,23 +45,24 @@ impl JdVopConnector {
         }
         let root = roots[0];
         let mut snapshot = order_snapshot(root, &orders, frozen, verify_frozen_price)?;
-        let leaves = orders.values().filter(|order| order.parent_type.0 == "0").collect::<Vec<_>>();
         let mut shipments = snapshot.shipments.take().unwrap_or_default();
         let mut logistics = Vec::new();
-        for leaf in leaves.into_iter().filter(|_| verify_frozen_price) {
-            let observed = self.logistics(leaf).await?;
-            let line_ids = snapshot
-                .topology
-                .as_ref()
-                .and_then(|tree| {
-                    tree.leaves().into_iter().find(|node| node.external_order_no == leaf.jd_order_id.0)
-                })
-                .map(|node| node.lines.iter().map(|line| line.line_id.clone()).collect::<Vec<_>>());
-            shipments.extend(observed.shipments.into_iter().map(|mut shipment| {
-                shipment.line_ids = line_ids.clone().unwrap_or_default();
-                shipment
-            }));
-            logistics.push(observed.evidence);
+        if verify_frozen_price {
+            for leaf in orders.values().filter(|order| order.parent_type.0 == "0") {
+                let observed = self.logistics(leaf).await?;
+                let line_ids = snapshot
+                    .topology
+                    .as_ref()
+                    .and_then(|tree| {
+                        tree.leaves().into_iter().find(|node| node.external_order_no == leaf.jd_order_id.0)
+                    })
+                    .map(|node| node.lines.iter().map(|line| line.line_id.clone()).collect::<Vec<_>>());
+                shipments.extend(observed.shipments.into_iter().map(|mut shipment| {
+                    shipment.line_ids = line_ids.clone().unwrap_or_default();
+                    shipment
+                }));
+                logistics.push(observed.evidence);
+            }
         }
         snapshot.shipments = Some(shipments);
         let codec = self.evidence_codec.as_ref().ok_or_else(protocol_required)?;

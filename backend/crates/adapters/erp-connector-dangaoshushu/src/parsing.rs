@@ -7,9 +7,14 @@ use erp_supply::entity::failure::SupplierFailureClass;
 use erp_supply::ports::connector::common::{
     ConnectorError, ConnectorResult, Snapshot, SourceRevision, SourceStamp,
 };
+use erp_supply::ports::connector::order::OrderLine;
 use serde_json::Value;
 
 use super::error;
+
+pub(super) fn delivery_expired() -> ConnectorError {
+    error(SupplierFailureClass::BusinessRejected, "DGSS_DELIVERY_EXPIRED", "配送选项已过期，须重新查询后提交")
+}
 
 pub(super) fn mapping() -> ConnectorError {
     error(SupplierFailureClass::MappingError, "DGSS_MAPPING", "供应商字段缺失或语义无法核实")
@@ -77,14 +82,25 @@ pub(super) fn non_negative_amount(value: &Value) -> ConnectorResult<Amount> {
     Ok(amount)
 }
 
+pub(super) fn join_field<'a>(lines: &'a [OrderLine], f: impl Fn(&'a OrderLine) -> &'a str) -> String {
+    lines.iter().map(f).collect::<Vec<_>>().join(",")
+}
+
+pub(super) fn join_quantities(lines: &[OrderLine]) -> String {
+    lines.iter().map(|line| line.quantity.to_decimal().normalize().to_string()).collect::<Vec<_>>().join(",")
+}
+
+pub(super) fn business_tz() -> FixedOffset {
+    FixedOffset::east_opt(BUSINESS_TZ_OFFSET_SECS).expect("业务时区固定为 +08:00")
+}
+
 pub(super) fn source_time(value: &Value) -> ConnectorResult<Option<Instant>> {
     if value.is_null() || value.as_str() == Some("") {
         return Ok(None);
     }
     let text = text(value)?;
     let date = NaiveDateTime::parse_from_str(&text, "%Y-%m-%d %H:%M:%S").map_err(|_| mapping())?;
-    let zone = FixedOffset::east_opt(BUSINESS_TZ_OFFSET_SECS).expect("业务时区固定为 +08:00");
-    let date = zone.from_local_datetime(&date).single().ok_or_else(mapping)?;
+    let date = business_tz().from_local_datetime(&date).single().ok_or_else(mapping)?;
     Ok(Some(Instant::from_unix_secs(date.timestamp())))
 }
 pub(super) fn snapshot<T>(value: T, changed_at: Option<Instant>) -> Snapshot<T> {
