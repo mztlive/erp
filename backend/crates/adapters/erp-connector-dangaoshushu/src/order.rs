@@ -1,6 +1,5 @@
 use async_trait::async_trait;
 use erp_core::common::time::Instant;
-use erp_core::money::Amount;
 use erp_supply::entity::failure::SupplierFailureClass;
 use erp_supply::entity::supplier_fulfillment::{CancelStatus, FulfillmentStatus};
 use erp_supply::ports::connector::common::{
@@ -14,7 +13,7 @@ use erp_supply::ports::connector::order::{
 use rust_decimal::Decimal;
 use serde_json::{Map, Value, json, to_string};
 
-use super::parsing::{field, fixed, flag, id, mapping, snapshot, source_time, valid_id};
+use super::parsing::{field, flag, id, mapping, non_negative_amount, snapshot, source_time, valid_id};
 use super::proof::{self, AddressProof, ChoiceProof};
 use super::transport::Request;
 use super::{DangaoshushuConnector, error};
@@ -214,10 +213,7 @@ fn created_order(value: &Value, merchant_order_no: &str) -> ConnectorResult<Crea
         merchant_order_no: merchant_order_no.into(),
         external_order_no: id(&order["order_no"])?,
     };
-    let payable: Amount = fixed(&order["final_amount"])?;
-    if payable.to_decimal().is_sign_negative() {
-        return Err(mapping());
-    }
+    let payable = non_negative_amount(&order["final_amount"])?;
     let payment = if flag(&order["pay_status"])? { PaymentState::Confirmed } else { PaymentState::Pending };
     Ok(CreatedOrder {
         order: snapshot(
@@ -273,10 +269,7 @@ fn order_snapshot(value: &Value, channel: &str) -> ConnectorResult<OrderSnapshot
     let amounts = if value["final_amount"].is_null() {
         None
     } else {
-        let payable: Amount = fixed(&value["final_amount"])?;
-        if payable.to_decimal().is_sign_negative() {
-            return Err(mapping());
-        }
+        let payable = non_negative_amount(&value["final_amount"])?;
         Some(OrderAmounts { payable, goods_cost: None, shipping_cost: None, service_cost: None })
     };
     Ok(OrderSnapshot {
@@ -342,6 +335,7 @@ impl PaymentConfirmation for DangaoshushuConnector {
 
 #[cfg(test)]
 mod tests {
+    use erp_core::money::Amount;
     use erp_supply::ports::connector::common::{ActionKey, SupplierSku};
     use erp_supply::ports::connector::offer::DeliveryContext;
     use erp_supply::ports::connector::order::{
@@ -543,6 +537,50 @@ mod tests {
         assert_eq!(error.class, SupplierFailureClass::BusinessRejected);
         assert_eq!(error.code, "DGSS_DELIVERY_EXPIRED");
     }
+    #[test]
+    fn order_amount_mapping_preserves_optional_values_and_exact_scale() {
+        let mut value = json!({"channel_no":"test-channel", "out_order_no":"merchant-1",
+            "order_no":"external-1", "status":"1", "pay_status":"0"});
+        assert_eq!(order_snapshot(&value, "test-channel").unwrap().amounts, None);
+        for amount in ["0", "12.30"] {
+            value["final_amount"] = json!(amount);
+            let observed = order_snapshot(&value, "test-channel").unwrap();
+            assert_eq!(observed.amounts.unwrap().payable.to_string(), amount);
+            let created = created_order(&json!({"order":value}), "merchant-1").unwrap();
+            assert_eq!(created.order.value.amounts.unwrap().payable.to_string(), amount);
+        }
+        for amount in [json!("-0.01"), json!("1.001"), json!("invalid"), json!("")] {
+            value["final_amount"] = amount;
+            assert_eq!(order_snapshot(&value, "test-channel").err().unwrap(), mapping());
+            assert_eq!(created_order(&json!({"order":value}), "merchant-1").err().unwrap(), mapping());
+        }
+        value["final_amount"] = Value::Null;
+        assert_eq!(order_snapshot(&value, "test-channel").unwrap().amounts, None);
+        assert_eq!(created_order(&json!({"order":value}), "merchant-1").err().unwrap(), mapping());
+    }
+
+    #[tokio::test]
+    async fn invalid_created_amount_remains_unknown_after_one_write() {
+        for amount in [Value::Null, json!("-0.01"), json!("1.001"), json!("invalid")] {
+            let (connector, calls) = recording_connector(vec![
+                Ok(product("10.00")),
+                Ok(json!({"order":{"order_no":"external-1", "final_amount":amount, "pay_status":"0"}})),
+            ]);
+            assert_eq!(
+                connector.create(&request()).await.err().unwrap(),
+                error(
+                    SupplierFailureClass::ResultUnknown,
+                    "DGSS_CREATE_RESULT_UNKNOWN",
+                    "供应商可能已创建订单，须按原我方单号调查"
+                )
+            );
+            let requests = calls.requests.lock().unwrap();
+            let [Request::Read { .. }, Request::Multipart { write: true, .. }] = requests.as_slice() else {
+                panic!("只应读价一次并创建一次，不重放写入");
+            };
+        }
+    }
+
     #[test]
     fn canceled_order_does_not_fabricate_refund_or_rejection() {
         let value = json!({"channel_no":"channel","out_order_no":"merchant-1","order_no":"external-1","status":"3","pay_status":"1","refund_amount":"99.00"});

@@ -52,9 +52,9 @@ impl Rejection {
     /// # 错误
     /// 不返回错误。
     pub(super) fn parse(body: String) -> Self {
+        let value = serde_json::from_str::<Value>(&body);
         let mut result = Self { body_state: Some("received"), body: Some(body), ..Self::default() };
-        if let Some(value) = result.body.as_deref().and_then(|body| serde_json::from_str::<Value>(body).ok())
-        {
+        if let Ok(value) = value {
             let error = value.get("error").unwrap_or(&value);
             result.kind = field(error, "type");
             result.code = field(error, "code");
@@ -88,6 +88,20 @@ mod tests {
         assert_eq!(result.code.as_deref(), Some("400"));
         assert_eq!(result.param.as_deref(), Some("messages[0].content"));
         assert_eq!(result.message.as_deref(), Some(message.as_str()));
+    }
+
+    #[test]
+    fn present_error_key_never_falls_back_to_outer_message() {
+        for error in [Value::Null, json!({}), json!([]), json!("denied"), json!(false), json!(400)] {
+            let body = json!({"error": error, "message": "outer message", "code": "outer-code"}).to_string();
+            let result = Rejection::parse(body.clone());
+            assert_eq!(result.body_state, Some("received"));
+            assert_eq!(result.body.as_deref(), Some(body.as_str()));
+            assert_eq!(result.kind, None);
+            assert_eq!(result.code, None);
+            assert_eq!(result.param, None);
+            assert_eq!(result.message, None);
+        }
     }
 
     #[test]

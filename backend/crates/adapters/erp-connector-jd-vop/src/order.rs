@@ -2,9 +2,7 @@
 use async_trait::async_trait;
 use erp_supply::entity::failure::SupplierFailureClass;
 use erp_supply::entity::supplier_fulfillment::CancelStatus;
-use erp_supply::ports::connector::common::{
-    ConnectorError, ConnectorResult, Lookup, ReplayProtection, Snapshot,
-};
+use erp_supply::ports::connector::common::{ConnectorResult, Lookup, ReplayProtection, Snapshot};
 use erp_supply::ports::connector::order::{
     ActionAccepted, CancelOrder, Cancellations, ConfirmOrder, ConfirmationState, CreateOrder, CreatedOrder,
     CreationNext, EncryptedOrderEvidence, OrderConfirmation, OrderKey, OrderLine, OrderReference,
@@ -15,7 +13,7 @@ use erp_supply::ports::connector::preflight::OrderPreflight;
 use super::delivery::observed;
 use super::order_mapping::{confirmation, summary};
 use super::order_payload::{identifier, submit, valid_order_no};
-use super::transport::{JdVopReadRequest, JdVopWriteRequest};
+use super::transport::{JdVopReadRequest, JdVopWriteRequest, write_unknown};
 use super::wire::WireText;
 use super::wire_order::{CancelProgress, CancellationEligibility, JdOrder};
 use super::{JdVopConnector, error, mapping, protocol_required};
@@ -50,14 +48,14 @@ impl Orders for JdVopConnector {
             .send(JdVopWriteRequest::Submit { order: Box::new(payload), source_type: profile.source_type })
             .await?;
         if order.third_order_id != request.merchant_order_no {
-            return Err(result_unknown());
+            return Err(write_unknown());
         }
-        let mut snapshot = summary(&order).map_err(|_| result_unknown())?;
-        let codec = self.evidence_codec.as_ref().ok_or_else(result_unknown)?;
-        let payload = serde_json::to_string(&order).map_err(|_| result_unknown())?;
+        let mut snapshot = summary(&order).map_err(|_| write_unknown())?;
+        let codec = self.evidence_codec.as_ref().ok_or_else(write_unknown)?;
+        let payload = serde_json::to_string(&order).map_err(|_| write_unknown())?;
         snapshot.source_evidence = Some(EncryptedOrderEvidence {
-            encrypted_payload: codec.encrypt(&payload).map_err(|_| result_unknown())?,
-            content_fingerprint: self.hash(&order).map_err(|_| result_unknown())?,
+            encrypted_payload: codec.encrypt(&payload).map_err(|_| write_unknown())?,
+            content_fingerprint: self.hash(&order).map_err(|_| write_unknown())?,
         });
         Ok(CreatedOrder { order: observed(snapshot), next: CreationNext::ConfirmOrder })
     }
@@ -122,7 +120,7 @@ impl OrderConfirmation for JdVopConnector {
             })
             .await?;
         if result.0 != "true" {
-            return Err(result_unknown());
+            return Err(write_unknown());
         }
         Ok(observed(ConfirmationState::Confirmed))
     }
@@ -174,7 +172,7 @@ impl Cancellations for JdVopConnector {
             })
             .await?;
         if result.0 != "true" {
-            return Err(result_unknown());
+            return Err(write_unknown());
         }
         Ok(ActionAccepted { action_id: request.action.id.clone(), external_request_id: None })
     }
@@ -256,14 +254,6 @@ impl JdVopConnector {
             _ => Err(mapping("京东原订单可取消状态尚未核实")),
         }
     }
-}
-
-fn result_unknown() -> ConnectorError {
-    error(
-        SupplierFailureClass::ResultUnknown,
-        "JD_VOP_WRITE_RESULT_UNKNOWN",
-        "京东原请求结果待核实，请查询原结果",
-    )
 }
 
 #[cfg(test)]
@@ -743,6 +733,27 @@ mod tests {
             let JdVopWriteRequest::Submit { order, .. } = &writes[0] else { panic!("one original create") };
             assert_eq!(order.third_order_id, request.merchant_order_no);
         }
+    }
+
+    #[tokio::test]
+    async fn false_confirmation_result_keeps_exact_unknown_error_without_retry() {
+        let (connector, transport, _, _) = prepared().await;
+        let request = ConfirmOrder {
+            action: ActionKey { id: "confirm-original".into(), payload_hash: "original-hash".into() },
+            order: OrderReference {
+                merchant_order_no: "stable-third-1".into(),
+                external_order_no: "201".into(),
+            },
+            topology_version: 1,
+        };
+        let response = envelope("jingdong.vop.order.confirmOrder", "openRpcResult", json!(false));
+        transport.write_responses.lock().unwrap().push_back(Ok(response));
+        let failure = connector.confirm_order(&request).await.unwrap_err();
+        assert_eq!(failure.class, SupplierFailureClass::ResultUnknown);
+        assert_eq!(failure.code, "JD_VOP_WRITE_RESULT_UNKNOWN");
+        assert_eq!(failure.summary, "京东原请求结果待核实，请查询原结果");
+        assert_eq!(failure.retry_after, None);
+        assert_eq!(transport.writes.lock().unwrap().len(), 1);
     }
 
     #[tokio::test]

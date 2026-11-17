@@ -179,11 +179,14 @@ impl JdVopRuntime {
     /// 已删除、协议不匹配、技术引用缺失或陈旧时拒绝。
     pub fn tracking_connector(&self, connection: &SupplierApiConnection) -> ConnectorResult<JdVopConnector> {
         self.validate_binding(connection)?;
-        let target = SupplierReferenceTarget::from(connection);
+        self.connector_for_target(&SupplierReferenceTarget::from(connection))
+    }
+
+    fn connector_for_target(&self, target: &SupplierReferenceTarget) -> ConnectorResult<JdVopConnector> {
         Ok(JdVopConnector {
             connection_id: target.connection_id.clone(),
             account_scope: self.settings.account_scope.clone(),
-            binding: self.binding(&target)?,
+            binding: self.binding(target)?,
             cursor_secret: self.settings.app_secret.clone(),
             reader: self.reader.clone(),
             mapper: JdVopOfferMapper { image_base_url: self.settings.image_base_url.clone() },
@@ -316,18 +319,7 @@ impl SupplierRuntime for JdVopRuntime {
 impl SupplierReferenceRegistry for JdVopRuntime {
     fn description(&self, target: &SupplierReferenceTarget) -> Result<ConnectorDescription, ClassifiedError> {
         self.validate_target(target).map_err(classified)?;
-        let connector = JdVopConnector {
-            connection_id: target.connection_id.clone(),
-            account_scope: self.settings.account_scope.clone(),
-            binding: self.binding(target).map_err(classified)?,
-            cursor_secret: self.settings.app_secret.clone(),
-            reader: self.reader.clone(),
-            mapper: JdVopOfferMapper { image_base_url: self.settings.image_base_url.clone() },
-            writer: self.writer.clone(),
-            profile: self.profile.clone(),
-            evidence_codec: self.evidence_codec.clone(),
-            message_runtime: self.message_runtime.clone(),
-        };
+        let connector = self.connector_for_target(target).map_err(classified)?;
         Ok(ConnectorDescription::from_connector(&connector))
     }
 
@@ -368,6 +360,7 @@ fn binding_error() -> ConnectorError {
 
 #[cfg(test)]
 mod tests {
+    use async_trait::async_trait;
     use erp_core::ids::{SupplierAccountId, SupplierApiConnectionId};
     use erp_supply::entity::supplier_api::SupplierApiConnectionData;
     use erp_supply::ports::supplier_api_gateway::SupplierApiGateway;
@@ -430,6 +423,34 @@ mod tests {
             "JD_VOP_PROTOCOL_REQUIRED"
         );
         assert_eq!(runtime.connector(&connection).err().unwrap().code, "JD_VOP_CREATION_DISABLED");
+    }
+
+    #[test]
+    fn shared_connector_construction_preserves_read_capabilities_and_binding_failures() {
+        struct Offline;
+        #[async_trait]
+        impl JdVopReadTransport for Offline {
+            async fn read(&self, _: &JdVopReadRequest) -> ConnectorResult<Vec<u8>> {
+                panic!("构造连接和能力描述不得发送请求")
+            }
+        }
+
+        let runtime = JdVopRuntime::with_verified_transport(toml_config(), Arc::new(Offline)).unwrap();
+        let mut connection = connection(&runtime);
+        let target = SupplierReferenceTarget::from(&connection);
+        let connector = runtime.tracking_connector(&connection).unwrap();
+        let description = runtime.description(&target).unwrap();
+        assert_eq!(description, ConnectorDescription::from_connector(&connector));
+        assert!(description.address_candidates);
+        assert!(connector.offers().is_some());
+        assert!(connector.orders().is_none());
+        assert_eq!(connector.connection_id().as_ref(), connection.base.id.as_str());
+        assert_eq!(connector.binding, runtime.binding(&target).unwrap());
+        connection.credential_reference = Some("stale".into());
+        assert_eq!(runtime.tracking_connector(&connection).err().unwrap(), binding_error());
+        let mut invalid = target;
+        invalid.connector_type = None;
+        assert_eq!(runtime.description(&invalid).unwrap_err(), classified(binding_error()));
     }
 
     #[test]

@@ -136,6 +136,27 @@ mod tests {
     use std::sync::Mutex;
 
     use super::*;
+
+    #[tokio::test]
+    async fn pdf_size_limit_precedes_pdf_and_provider_validation() {
+        let ocr = AliyunContractOcr::new(
+            Credentials {
+                access_key_id: String::new(),
+                access_key_secret: String::new(),
+                security_token: None,
+            },
+            PathBuf::from("unused-pdftoppm"),
+        );
+        for (size, code, message) in [
+            (0, "INVALID_PDF", "PDF 无法解析，请上传完整文件"),
+            (20 * 1024 * 1024, "INVALID_PDF", "PDF 无法解析，请上传完整文件"),
+            (20 * 1024 * 1024 + 1, "OCR_PDF_SIZE", "合同 PDF 超过识别大小限制"),
+        ] {
+            let failure = ocr.recognize(&vec![0; size], 0).await.unwrap_err();
+            assert_eq!(failure, ImportFailure::new(code, message));
+        }
+    }
+
     struct FakePages {
         calls: Mutex<Vec<u32>>,
         fail_at: Option<u32>,

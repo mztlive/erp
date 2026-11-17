@@ -2,7 +2,6 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use async_trait::async_trait;
 use erp_core::common::time::Instant;
-use erp_core::money::Amount;
 use erp_supply::entity::failure::SupplierFailureClass;
 use erp_supply::ports::connector::common::{ActionKey, ConnectorResult, Lookup, Snapshot};
 use erp_supply::ports::connector::offer::{
@@ -15,7 +14,7 @@ use rust_decimal::Decimal;
 use serde_json::{Value, from_str, to_string};
 
 use super::catalog::spec_value;
-use super::parsing::{field, fixed, flag, id, mapping, snapshot, text, valid_id};
+use super::parsing::{field, flag, id, mapping, non_negative_amount, snapshot, text, valid_id};
 use super::proof::{self, AddressProof, ChoiceProof};
 use super::transport::Request;
 use super::{DangaoshushuConnector, error};
@@ -220,10 +219,7 @@ impl DangaoshushuConnector {
     fn delivery_choices(&self, value: &Value) -> ConnectorResult<Vec<DeliveryChoice>> {
         let mut choices = Vec::new();
         if flag(&value["can_same"])? {
-            let shipping_fee: Amount = fixed(&value["validate_same_row"]["delivery_amount"])?;
-            if shipping_fee.to_decimal().is_sign_negative() {
-                return Err(mapping());
-            }
+            let shipping_fee = non_negative_amount(&value["validate_same_row"]["delivery_amount"])?;
             push_choice(
                 &mut choices,
                 DeliveryChoice { method: DeliveryMethod::Courier, shipping_fee, reference: String::new() },
@@ -232,10 +228,7 @@ impl DangaoshushuConnector {
         if flag(&value["can_ship"])? {
             for day in value["validate_delivery_dates"].as_array().ok_or_else(mapping)? {
                 let date = field(day, "date")?.parse().map_err(|_| mapping())?;
-                let shipping_fee: Amount = fixed(&day["delivery_amount"])?;
-                if shipping_fee.to_decimal().is_sign_negative() {
-                    return Err(mapping());
-                }
+                let shipping_fee = non_negative_amount(&day["delivery_amount"])?;
                 for slot in day["validate_delivery_times"].as_array().ok_or_else(mapping)? {
                     push_choice(
                         &mut choices,
@@ -505,6 +498,34 @@ mod tests {
             "date":"2026-10-10","delivery_amount":"0","validate_delivery_times":[""]}]});
         assert!(connector.delivery_choices(&value).is_err());
     }
+    #[test]
+    fn delivery_modes_preserve_exact_fees_and_share_invalid_amount_errors() {
+        let connector = connector(vec![]);
+        for amount in ["0", "12.30"] {
+            let choices = connector
+                .delivery_choices(&json!({
+                    "can_same":"1", "can_ship":"1",
+                    "validate_same_row":{"delivery_amount":amount},
+                    "validate_delivery_dates":[{"date":"2026-10-10", "delivery_amount":amount,
+                        "validate_delivery_times":["10:00-12:00"]}]
+                }))
+                .unwrap();
+            assert_eq!(choices.len(), 2);
+            assert!(choices[0].method == DeliveryMethod::Courier);
+            assert!(matches!(choices[1].method, DeliveryMethod::LocalDelivery { .. }));
+            assert!(choices.iter().all(|choice| choice.shipping_fee.to_string() == amount));
+        }
+        for amount in [Value::Null, json!("-0.01"), json!("1.001"), json!("invalid"), json!("")] {
+            let courier = json!({"can_same":"1", "can_ship":"0",
+                "validate_same_row":{"delivery_amount":amount}});
+            let local = json!({"can_same":"0", "can_ship":"1",
+                "validate_delivery_dates":[{"date":"2026-10-10", "delivery_amount":amount,
+                    "validate_delivery_times":["10:00-12:00"]}]});
+            assert_eq!(connector.delivery_choices(&courier).err().unwrap(), mapping());
+            assert_eq!(connector.delivery_choices(&local).err().unwrap(), mapping());
+        }
+    }
+
     #[test]
     fn local_and_merged_delivery_choices_share_bounded_cartesian_limit() {
         let connector = connector(vec![]);

@@ -248,6 +248,7 @@ impl BusinessEventContext {
     /// 身份含控制字符，或动作代码、标签、版本、字段白名单无效时返回 `Error::ValidationError`。
     pub fn new(actor: AuditActor, action: AuditAction) -> Result<Self> {
         action.validate()?;
+        // AuditActor 的私有快照字段已在 setter 中规范化并校验。
         let actor_name_snapshot = actor.actor_name_snapshot().map(str::to_string);
         let request_id = actor.request_id().map(str::to_string);
         let (id, account, kind) = actor.into_parts();
@@ -255,8 +256,6 @@ impl BusinessEventContext {
         let account = normalize_required_text(account, "操作人账号不能为空", 64, "操作人账号长度不符合要求")?;
         validate_plain_text(&id)?;
         validate_plain_text(&account)?;
-        let actor_name_snapshot = normalized_snapshot(actor_name_snapshot, "操作人名称")?;
-        let request_id = normalized_snapshot(request_id, "请求编号")?;
         Ok(Self {
             event_id: next_id(),
             event_sequence: NonZeroU32::MIN,
@@ -612,6 +611,7 @@ fn validation_error(message: &str) -> Error {
 mod tests {
     use std::str::FromStr;
 
+    use erp_core::Error as CoreError;
     use serde_json::json;
 
     use super::*;
@@ -676,6 +676,62 @@ mod tests {
             context.attempt(AuditAttemptResult::Unknown).actor_name_snapshot.as_deref(),
             Some("林晓燕")
         );
+    }
+
+    #[test]
+    fn context_preserves_validated_actor_snapshot_boundaries() {
+        let limit = "名".repeat(128);
+        for (input, expected) in [
+            (None, None),
+            (Some(" \t\n ".into()), None),
+            (Some(format!("  {limit}  ")), Some(limit.as_str())),
+        ] {
+            let actor =
+                actor().with_actor_name_snapshot(input.clone()).unwrap().with_request_id(input).unwrap();
+            let context = BusinessEventContext::new(actor, ACTION).unwrap();
+            let event = context.log(content()).unwrap().structured_event.unwrap();
+            let attempt = context.attempt(AuditAttemptResult::Failed);
+            assert_eq!(event.actor_name_snapshot.as_deref(), expected);
+            assert_eq!(event.request_id.as_deref(), expected);
+            assert_eq!(attempt.actor_name_snapshot.as_deref(), expected);
+            assert_eq!(attempt.request_id.as_deref(), expected);
+        }
+        let too_long = "名".repeat(129);
+        assert!(matches!(
+            actor().with_actor_name_snapshot(Some(too_long.clone())),
+            Err(CoreError::LogicError(message)) if message == "操作人名称长度不符合要求"
+        ));
+        assert!(matches!(
+            actor().with_request_id(Some(too_long)),
+            Err(CoreError::LogicError(message)) if message == "请求编号长度不符合要求"
+        ));
+        for invalid in ["名\n称", "名\0称"] {
+            assert!(matches!(
+                actor().with_actor_name_snapshot(Some(invalid.into())),
+                Err(CoreError::LogicError(message)) if message == "操作人名称包含控制字符"
+            ));
+            assert!(matches!(
+                actor().with_request_id(Some(invalid.into())),
+                Err(CoreError::LogicError(message)) if message == "请求编号包含控制字符"
+            ));
+        }
+    }
+
+    #[test]
+    fn context_keeps_action_then_actor_validation_before_event_creation() {
+        let actor = AuditActor::new(" ".into(), "x".repeat(65), AccountKind::Admin)
+            .with_actor_name_snapshot(Some("名".repeat(128)))
+            .unwrap()
+            .with_request_id(Some("r".repeat(128)))
+            .unwrap();
+        assert!(matches!(
+            BusinessEventContext::new(actor.clone(), AuditAction { version: 0, ..ACTION }),
+            Err(Error::ValidationError(message)) if message == "动作版本或审计字段数量不符合要求"
+        ));
+        assert!(matches!(
+            BusinessEventContext::new(actor, ACTION),
+            Err(Error::Logic(CoreError::LogicError(message))) if message == "操作人ID不能为空"
+        ));
     }
 
     #[test]

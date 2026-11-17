@@ -135,6 +135,21 @@ pub(super) fn scan_parameters(scan: &Scan) -> ConnectorResult<(u32, Parameters)>
     Ok((page, parameters))
 }
 
+/// 按原始商品数计算下一页，不受规格映射或跳过数量影响。
+/// # 参数
+/// `page` 为当前页码，`products` 为原始商品数，`limit` 为请求页大小。
+/// # 返回
+/// 满页继续读取，否则结束扫描。
+/// # 错误
+/// 页大小转换或下一页页码溢出时返回映射错误。
+pub(super) fn next_page(page: u32, products: usize, limit: NonZeroU32) -> ConnectorResult<Option<String>> {
+    if products >= usize::try_from(limit.get()).map_err(|_| mapping())? {
+        Ok(Some(page.checked_add(1).ok_or_else(mapping)?.to_string()))
+    } else {
+        Ok(None)
+    }
+}
+
 /// 定位商品响应中的请求规格，异常身份不得当作正常缺项。
 ///
 /// # 参数
@@ -262,11 +277,7 @@ impl OfferSource for DangaoshushuConnector {
                 items.push(snapshot(OfferChange::Upsert(Box::new(offer)), None));
             }
         }
-        let next = if products.len() >= usize::try_from(scan.limit.get()).map_err(|_| mapping())? {
-            Some(page.checked_add(1).ok_or_else(mapping)?.to_string())
-        } else {
-            None
-        };
+        let next = next_page(page, products.len(), scan.limit)?;
         self.name_catalog_categories(&mut items).await?;
         Ok(Page { items, next })
     }
@@ -350,7 +361,7 @@ mod tests {
 
     use serde_json::json;
 
-    use super::super::test_support::{FakeTransport, connector, settings};
+    use super::super::test_support::{FakeTransport, connector, recording_connector, settings};
     use super::*;
 
     fn sku() -> SupplierSku {
@@ -426,6 +437,43 @@ mod tests {
                 format!("第 3 页第 1 个商品第 1 个规格：供应商名称字段 {field_name} 缺失、为空或类型无效")
             );
         }
+    }
+
+    #[test]
+    fn catalog_next_page_uses_raw_count_and_checks_overflow_only_for_full_pages() {
+        let limit = NonZeroU32::new(2).unwrap();
+        for count in [0, 1] {
+            assert_eq!(next_page(u32::MAX, count, limit).unwrap(), None);
+        }
+        for count in [2, 3] {
+            assert_eq!(next_page(7, count, limit).unwrap().as_deref(), Some("8"));
+            assert_eq!(next_page(u32::MAX, count, limit).unwrap_err(), mapping());
+        }
+    }
+
+    #[tokio::test]
+    async fn catalog_next_page_preserves_scan_error_precedence_and_read_counts() {
+        let scan = Scan {
+            window: ScanWindow::Full,
+            cursor: Some(u32::MAX.to_string()),
+            limit: NonZeroU32::new(1).unwrap(),
+        };
+        let listed = json!({"product_list":[{"id":"p1", "title":" ",
+            "specs":[{"spec_id":"s1", "name":"规格"}]}]});
+        let (connector, calls) = recording_connector(vec![Ok(listed.clone()), Ok(listed)]);
+        let failure = connector.scan(&scan).await.unwrap_err();
+        assert_eq!(failure.class, SupplierFailureClass::MappingError);
+        assert_eq!(
+            failure.summary,
+            format!("第 {} 页第 1 个商品第 1 个规格：供应商名称字段 title 缺失、为空或类型无效", u32::MAX)
+        );
+        assert_eq!(connector.scan_with_details(&scan).await.unwrap_err(), mapping());
+        assert_eq!(calls.requests.lock().unwrap().len(), 2);
+        let (connector, calls) =
+            recording_connector(vec![Ok(json!({"product_list":[]})), Ok(json!({"product_list":[]}))]);
+        assert_eq!(connector.scan(&scan).await.unwrap().next, None);
+        assert_eq!(connector.scan_with_details(&scan).await.unwrap().page.next, None);
+        assert_eq!(calls.requests.lock().unwrap().len(), 2);
     }
 
     #[test]
@@ -659,8 +707,6 @@ mod tests {
     #[tokio::test]
     async fn detail_offer_preserves_attributes_precise_price_and_parent_availability() {
         use erp_supply::ports::connector::offer::CatalogAvailability;
-
-        use super::super::test_support::recording_connector;
 
         for (can_buy, expected) in
             [("1", CatalogAvailability::Available), ("0", CatalogAvailability::Unavailable)]

@@ -21,16 +21,16 @@ impl PdfFile {
     /// 把 PDF 写入进程私有临时目录，不启动转图。
     ///
     /// # 参数
-    /// * `pdf` - 原文件字节；空文件或超过 20 MB 会被拒绝。
+    /// * `pdf` - 调用方已校验不超过 20 MB 的原文件字节；空文件会被拒绝。
     /// * `program` - `pdftoppm` 可执行文件路径。
     ///
     /// # 返回
     /// 持有临时目录和 PDF 路径的渲染上下文。
     ///
     /// # 错误
-    /// 文件为空、超过 20 MB、临时目录或写盘失败时返回 `OCR_RENDER_FAILED`。
+    /// 文件为空、临时目录或写盘失败时返回 `OCR_RENDER_FAILED`。
     pub(super) async fn create(pdf: &[u8], program: &Path) -> Result<Self> {
-        if pdf.is_empty() || pdf.len() > 20 * 1024 * 1024 {
+        if pdf.is_empty() {
             return Err(render_error());
         }
         let directory = tempfile::tempdir().map_err(|_| render_error())?;
@@ -110,6 +110,23 @@ fn render_error() -> ImportFailure {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn private_pdf_file_keeps_bytes_until_drop_and_rejects_empty() {
+        let program = Path::new("unused-pdftoppm");
+        let error = PdfFile::create(&[], program).await.err().unwrap();
+        assert_eq!(error, render_error());
+        for bytes in [b"pdf".to_vec(), vec![0; 20 * 1024 * 1024]] {
+            let pdf = PdfFile::create(&bytes, program).await.unwrap();
+            let path = pdf.path.clone();
+            assert_eq!(tokio::fs::read(&path).await.unwrap(), bytes);
+            assert_eq!(pdf.program, program);
+            drop(pdf);
+            assert!(!path.exists());
+            assert!(!path.parent().unwrap().exists());
+        }
+    }
+
     #[tokio::test]
     async fn image_reader_rejects_empty_and_limits_stream_bytes() {
         assert!(bounded_image(b"".as_slice()).await.is_err());

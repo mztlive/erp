@@ -213,7 +213,7 @@ impl WriteClient {
     }
 }
 
-fn write_unknown() -> ConnectorError {
+pub(super) fn write_unknown() -> ConnectorError {
     error(
         SupplierFailureClass::ResultUnknown,
         "JD_VOP_WRITE_RESULT_UNKNOWN",

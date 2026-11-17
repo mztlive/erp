@@ -7,8 +7,7 @@ use async_trait::async_trait;
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::FixedOffset;
-use erp_core::common::time::Instant;
-use erp_supply::ports::connector::common::{ConnectorResult, Page, Snapshot, SourceRevision, SourceStamp};
+use erp_supply::ports::connector::common::{ConnectorResult, Page, Snapshot};
 use erp_supply::ports::connector::funds::{
     SupplierFundsBalance, SupplierFundsCurrency, SupplierFundsDirection, SupplierFundsEvidence,
     SupplierFundsObservation, SupplierFundsQuery, SupplierFundsSource,
@@ -18,6 +17,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
 use sha2::Sha256;
 
+use super::delivery::observed;
 use super::transport::JdVopReadRequest;
 use super::wire_funds::{BalanceChanges, balance_amount, observation};
 use super::{JdVopConnector, mapping, protocol_required};
@@ -248,22 +248,12 @@ impl SupplierFundsSource for JdVopConnector {
     }
 }
 
-fn observed<T>(value: T) -> Snapshot<T> {
-    Snapshot {
-        stamp: SourceStamp {
-            revision: SourceRevision::Unversioned,
-            changed_at: None,
-            observed_at: Instant::now(),
-        },
-        value,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::collections::{BTreeSet, VecDeque};
     use std::sync::{Arc, Mutex};
 
+    use erp_core::common::time::Instant;
     use erp_core::ids::SupplierApiConnectionId;
     use erp_party::SensitiveDataCodec;
     use erp_supply::ports::connector::funds::SupplierFundsObservationResult;
@@ -382,6 +372,7 @@ mod tests {
         assert_eq!(balance.value.account_reference, "account-ref");
         assert_eq!(balance.value.amount, "100.00".parse().unwrap());
         assert!(codec.decrypt(&balance.value.evidence.body_encrypted).unwrap().contains("remainLimit"));
+        assert_eq!(serde_json::to_value(&balance.stamp.revision).unwrap(), "Unversioned");
         assert!(balance.stamp.changed_at.is_none());
         let mut query = query();
         let first = connector.transactions(&query).await.unwrap();

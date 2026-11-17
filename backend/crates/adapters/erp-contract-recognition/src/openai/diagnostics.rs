@@ -1,5 +1,5 @@
 //! 关联 HTTP 响应、原始错误正文与合同识别任务日志。
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Instant;
 
 use rig_agent::agent::{AgentHook, HookContext, OutcomeAction, OutcomeEvent};
@@ -45,6 +45,10 @@ impl AgentHook for Diagnostics {
 }
 
 impl Diagnostics {
+    fn metadata(&self) -> MutexGuard<'_, ResponseMetadata> {
+        self.0.lock().unwrap_or_else(|error| error.into_inner())
+    }
+
     /// 记录传输失败。锁中毒时仍写回内部记录。
     ///
     /// # 参数
@@ -56,7 +60,7 @@ impl Diagnostics {
     /// # 错误
     /// 不返回错误。
     pub(super) fn transport_failure(&self, failure: Failure) {
-        self.0.lock().unwrap_or_else(|error| error.into_inner()).transport_failure = Some(failure);
+        self.metadata().transport_failure = Some(failure);
     }
 
     /// 读取已记录的传输失败。锁中毒时仍返回内部记录。
@@ -70,7 +74,7 @@ impl Diagnostics {
     /// # 错误
     /// 不返回错误。
     pub(super) fn failure(&self) -> Option<Failure> {
-        self.0.lock().unwrap_or_else(|error| error.into_inner()).transport_failure
+        self.metadata().transport_failure
     }
 
     /// 记录提取失败。完成错误转入 `error`；已有校验原因时不覆盖。
@@ -88,7 +92,7 @@ impl Diagnostics {
             self.error(error);
             return;
         }
-        let mut metadata = self.0.lock().unwrap_or_else(|error| error.into_inner());
+        let mut metadata = self.metadata();
         metadata.sdk_error = Some(format!("{error:?}"));
         if let Some(status) = error.provider_response_status() {
             metadata.status = Some(status.as_u16());
@@ -123,8 +127,7 @@ impl Diagnostics {
     /// # 错误
     /// 不返回错误。
     pub(super) fn body(&self, body: &[u8]) {
-        self.0.lock().unwrap_or_else(|error| error.into_inner()).response_body =
-            Some(String::from_utf8_lossy(body).into_owned());
+        self.metadata().response_body = Some(String::from_utf8_lossy(body).into_owned());
     }
 
     /// 保存解码后的原始响应和结束原因。
@@ -138,7 +141,7 @@ impl Diagnostics {
     /// # 错误
     /// 不返回错误。
     pub(super) fn output(&self, response: &CompletionResponse) {
-        let mut metadata = self.0.lock().unwrap_or_else(|error| error.into_inner());
+        let mut metadata = self.metadata();
         metadata.decoded_response = Some(response.raw.clone());
         metadata.finish_reason = response.finish_reason().map(|reason| format!("{reason:?}"));
     }
@@ -154,7 +157,7 @@ impl Diagnostics {
     /// # 错误
     /// 不返回错误。
     pub(super) fn output_error(&self, error: &DecodeError) {
-        self.0.lock().unwrap_or_else(|error| error.into_inner()).validation_error = Some(error.to_string());
+        self.metadata().validation_error = Some(error.to_string());
     }
 
     /// 记录 HTTP 状态、请求标识和响应头。非成功状态把拒绝正文标为待读取。
@@ -169,7 +172,7 @@ impl Diagnostics {
     /// # 错误
     /// 不返回错误。
     pub(super) fn response(&self, status: u16, headers: &HeaderMap) {
-        let mut metadata = self.0.lock().unwrap_or_else(|error| error.into_inner());
+        let mut metadata = self.metadata();
         metadata.status = Some(status);
         metadata.request_id = request_id(headers);
         metadata.headers = response_headers(headers);
@@ -189,7 +192,7 @@ impl Diagnostics {
     /// # 错误
     /// 不返回错误。
     pub(super) fn status(&self) -> Option<u16> {
-        self.0.lock().unwrap_or_else(|error| error.into_inner()).status
+        self.metadata().status
     }
 
     /// 用已解析的供应商拒绝替换当前拒绝记录。
@@ -203,7 +206,7 @@ impl Diagnostics {
     /// # 错误
     /// 不返回错误。
     pub(super) fn rejection(&self, rejection: Rejection) {
-        self.0.lock().unwrap_or_else(|error| error.into_inner()).rejection = rejection;
+        self.metadata().rejection = rejection;
     }
 
     /// 记录供应商错误的调试文本、状态、响应头和正文。已有拒绝正文时不覆盖。
@@ -217,7 +220,7 @@ impl Diagnostics {
     /// # 错误
     /// 不返回错误。
     pub(super) fn error(&self, error: &ProviderError) {
-        let mut metadata = self.0.lock().unwrap_or_else(|error| error.into_inner());
+        let mut metadata = self.metadata();
         metadata.sdk_error = Some(format!("{error:?}"));
         if let Some(status) = error.provider_response_status() {
             metadata.status = Some(status.as_u16());
@@ -250,7 +253,7 @@ impl Diagnostics {
     /// # 错误
     /// 不返回错误。
     pub(super) fn finish<T>(&self, start: Instant, result: &Result<T>, timeout_source: Option<&str>) {
-        let metadata = self.0.lock().unwrap_or_else(|error| error.into_inner());
+        let metadata = self.metadata();
         let elapsed_ms = u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX);
         let response = metadata.decoded_response.as_ref().unwrap_or(&JsonValue::Null);
         match result {
@@ -302,9 +305,71 @@ fn response_headers(headers: &HeaderMap) -> Vec<(String, String)> {
 
 #[cfg(test)]
 mod tests {
-    use rig_core::http_client::HeaderValue;
+    use std::thread;
 
+    use rig_core::http_client::{Error as HttpError, HeaderValue};
+
+    use super::super::invalid_output;
+    use super::super::tests::{capture, event};
+    use super::super::transport::TimeoutSource;
     use super::*;
+
+    #[tokio::test]
+    async fn metadata_recovery_preserves_reads_writes_and_finish_logs() {
+        for poisoned in [false, true] {
+            let diagnostics = Diagnostics::default();
+            assert_eq!(diagnostics.status(), None);
+            assert!(diagnostics.failure().is_none());
+            let mut headers = HeaderMap::new();
+            headers.insert("x-request-id", HeaderValue::from_static("req-recovery"));
+            diagnostics.response(429, &headers);
+            if poisoned {
+                let shared = diagnostics.clone();
+                assert!(
+                    thread::spawn(move || {
+                        let _guard = shared.0.lock().unwrap();
+                        panic!("poison diagnostic metadata");
+                    })
+                    .join()
+                    .is_err()
+                );
+            }
+            assert_eq!(diagnostics.status(), Some(429));
+            diagnostics.transport_failure(Failure::Timeout(TimeoutSource::ResponseBody));
+            assert!(matches!(diagnostics.failure(), Some(Failure::Timeout(TimeoutSource::ResponseBody))));
+            diagnostics.body(b"original response\xff");
+            let body = r#"{"error":{"code":"vendor-limit","message":"try later"}}"#;
+            diagnostics.rejection(Rejection::parse(body.into()));
+            diagnostics.output_error(&DecodeError::Shape("original output failure"));
+            let error = ProviderError::from(HttpError::instance(Failure::ResponseSize));
+            diagnostics.error(&error);
+            diagnostics
+                .extraction_error(&StructuredOutputError::PromptError(PromptError::Report(error.report())));
+            let (_, logs) = capture(async {
+                let result: Result<()> = Err(invalid_output());
+                diagnostics.finish(Instant::now(), &result, None);
+            })
+            .await;
+            let fields = &event(&logs, "contract_ai_finished")["fields"];
+            assert_eq!(fields["error_code"], "AI_INVALID_OUTPUT");
+            assert_eq!(fields["http_status"], 429);
+            assert_eq!(fields["provider_request_id"], "req-recovery");
+            assert_eq!(fields["provider_error_body_state"], "received");
+            assert_eq!(fields["provider_error_body"], body);
+            assert_eq!(fields["provider_error_code"], "vendor-limit");
+            assert_eq!(fields["provider_error_message"], "try later");
+            assert_eq!(fields["provider_response_body"], "original response\u{fffd}");
+            assert_eq!(fields["output_validation_error"], "response_shape: original output failure");
+            let (_, logs) = capture(async {
+                diagnostics.finish(Instant::now(), &Ok(()), None);
+            })
+            .await;
+            let finished = event(&logs, "contract_ai_finished");
+            assert_eq!(finished["level"], "INFO");
+            assert_eq!(finished["fields"]["outcome"], "succeeded");
+            assert_eq!(finished["fields"]["http_status"], 429);
+        }
+    }
 
     #[test]
     fn retains_request_ids_and_all_response_headers_without_content_limits() {

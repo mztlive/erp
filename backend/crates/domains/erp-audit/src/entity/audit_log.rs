@@ -68,10 +68,7 @@ impl AuditLog {
     pub fn with_event_sequence(mut self, sequence: u32) -> AuditResult<Self> {
         let sequence = NonZeroU32::new(sequence)
             .ok_or_else(|| AuditError::ValidationError("审计事件序号必须为正整数".into()))?;
-        self.structured_event
-            .as_mut()
-            .ok_or_else(|| AuditError::ValidationError("审计缺少结构化事件".into()))?
-            .event_sequence = sequence;
+        structured_event_mut(&mut self)?.event_sequence = sequence;
         Ok(self)
     }
 
@@ -86,14 +83,8 @@ impl AuditLog {
     /// # 错误
     /// 编号超长时返回 `Error::Logic`。缺少结构化事件或编号含控制字符时返回 `Error::ValidationError`。
     pub fn with_request_id(mut self, request_id: Option<String>) -> AuditResult<Self> {
-        let value = normalize_optional_text(request_id, "请求编号", 128)?;
-        if value.as_ref().is_some_and(|value| value.chars().any(char::is_control)) {
-            return Err(AuditError::ValidationError("请求编号包含非法字符".into()));
-        }
-        self.structured_event
-            .as_mut()
-            .ok_or_else(|| AuditError::ValidationError("审计缺少结构化事件".into()))?
-            .request_id = value;
+        let value = normalized_snapshot(request_id, "请求编号")?;
+        structured_event_mut(&mut self)?.request_id = value;
         Ok(self)
     }
 
@@ -108,14 +99,8 @@ impl AuditLog {
     /// # 错误
     /// 名称超长时返回 `Error::Logic`。缺少结构化事件或名称含控制字符时返回 `Error::ValidationError`。
     pub fn with_actor_name_snapshot(mut self, name: Option<String>) -> AuditResult<Self> {
-        let value = normalize_optional_text(name, "操作人名称", 128)?;
-        if value.as_ref().is_some_and(|value| value.chars().any(char::is_control)) {
-            return Err(AuditError::ValidationError("操作人名称包含非法字符".into()));
-        }
-        let event = self
-            .structured_event
-            .as_mut()
-            .ok_or_else(|| AuditError::ValidationError("审计缺少结构化事件".into()))?;
+        let value = normalized_snapshot(name, "操作人名称")?;
+        let event = structured_event_mut(&mut self)?;
         event.actor_name_snapshot = value;
         self.message = Some(event.message());
         Ok(self)
@@ -132,14 +117,8 @@ impl AuditLog {
     /// # 错误
     /// 编号超长时返回 `Error::Logic`。缺少结构化事件或编号含控制字符时返回 `Error::ValidationError`。
     pub fn with_command_id(mut self, command_id: Option<String>) -> AuditResult<Self> {
-        let value = normalize_optional_text(command_id, "命令编号", 128)?;
-        if value.as_ref().is_some_and(|value| value.chars().any(char::is_control)) {
-            return Err(AuditError::ValidationError("命令编号包含非法字符".into()));
-        }
-        self.structured_event
-            .as_mut()
-            .ok_or_else(|| AuditError::ValidationError("审计缺少结构化事件".into()))?
-            .command_id = value;
+        let value = normalized_snapshot(command_id, "命令编号")?;
+        structured_event_mut(&mut self)?.command_id = value;
         Ok(self)
     }
 
@@ -154,14 +133,8 @@ impl AuditLog {
     /// # 错误
     /// 编号超长时返回 `Error::Logic`。缺少结构化事件或编号含控制字符时返回 `Error::ValidationError`。
     pub fn with_resource_number(mut self, number: Option<String>) -> AuditResult<Self> {
-        let value = normalize_optional_text(number, "业务编号", 128)?;
-        if value.as_ref().is_some_and(|value| value.chars().any(char::is_control)) {
-            return Err(AuditError::ValidationError("业务编号包含非法字符".into()));
-        }
-        let event = self
-            .structured_event
-            .as_mut()
-            .ok_or_else(|| AuditError::ValidationError("审计缺少结构化事件".into()))?;
+        let value = normalized_snapshot(number, "业务编号")?;
+        let event = structured_event_mut(&mut self)?;
         event.resource_number_snapshot = value;
         self.message = Some(event.message());
         Ok(self)
@@ -259,13 +232,35 @@ impl AuditLog {
     }
 }
 
+fn normalized_snapshot(value: Option<String>, field: &str) -> AuditResult<Option<String>> {
+    let value = normalize_optional_text(value, field, 128)?;
+    if value.as_ref().is_some_and(|value| value.chars().any(char::is_control)) {
+        return Err(AuditError::ValidationError(format!("{field}包含非法字符")));
+    }
+    Ok(value)
+}
+
+fn structured_event_mut(log: &mut AuditLog) -> AuditResult<&mut BusinessAuditEvent> {
+    log.structured_event.as_mut().ok_or_else(|| AuditError::ValidationError("审计缺少结构化事件".into()))
+}
+
 #[cfg(test)]
 mod tests {
     use application_core::AuditActor;
-    use erp_core::AccountKind;
+    use erp_core::{AccountKind, Error as CoreError};
+    use serde_json::Value;
 
-    use super::{AuditLog, AuditLogData};
+    use super::{AuditError, AuditLog, AuditLogData, AuditResult};
     use crate::AuditActorLogs;
+
+    type SnapshotSetter = fn(AuditLog, Option<String>) -> AuditResult<AuditLog>;
+
+    const SNAPSHOT_SETTERS: &[(SnapshotSetter, &str, &str)] = &[
+        (AuditLog::with_request_id, "request_id", "请求编号"),
+        (AuditLog::with_actor_name_snapshot, "actor_name_snapshot", "操作人名称"),
+        (AuditLog::with_command_id, "command_id", "命令编号"),
+        (AuditLog::with_resource_number, "resource_number_snapshot", "业务编号"),
+    ];
 
     fn audit_actor() -> AuditActor {
         AuditActor::new("admin-1".to_string(), "root".to_string(), AccountKind::Admin)
@@ -384,5 +379,93 @@ mod tests {
                 .with_actor_name_snapshot(Some("周晓彤".to_string()))
                 .is_err()
         );
+    }
+
+    #[test]
+    fn snapshot_setters_normalize_unicode_limits_and_clear_unknown_values() {
+        let log = audit_actor()
+            .resource_log("customer.create", "customer", "customer-1".into())
+            .unwrap()
+            .with_request_id(Some("request-original".into()))
+            .unwrap()
+            .with_command_id(Some("command-original".into()))
+            .unwrap()
+            .with_actor_name_snapshot(Some("发生时名称".into()))
+            .unwrap()
+            .with_resource_number(Some("KH-original".into()))
+            .unwrap();
+        let limit = "名".repeat(128);
+        for &(setter, key, _) in SNAPSHOT_SETTERS {
+            for (input, expected) in [
+                (None, None),
+                (Some(String::new()), None),
+                (Some(" \t\n ".into()), None),
+                (Some("  名称  ".into()), Some("名称".to_string())),
+                (Some(format!(" \t{limit}\n ")), Some(limit.clone())),
+            ] {
+                let updated = setter(log.clone(), input).unwrap();
+                let mut event = serde_json::to_value(log.structured_event.as_ref().unwrap()).unwrap();
+                if let Some(value) = expected {
+                    event[key] = Value::String(value);
+                } else {
+                    event.as_object_mut().unwrap().remove(key);
+                }
+                let mut expected = log.clone();
+                expected.structured_event = Some(serde_json::from_value(event).unwrap());
+                if matches!(key, "actor_name_snapshot" | "resource_number_snapshot") {
+                    expected.message = Some(expected.structured_event.as_ref().unwrap().message());
+                }
+                assert_eq!(updated, expected);
+            }
+        }
+    }
+
+    #[test]
+    fn snapshot_setters_keep_input_errors_before_missing_event() {
+        let structured =
+            audit_actor().resource_log("customer.create", "customer", "customer-1".into()).unwrap();
+        let raw = AuditLog::new("audit-1".into(), audit_data()).unwrap();
+        for &(setter, _, field) in SNAPSHOT_SETTERS {
+            for log in [&structured, &raw] {
+                for value in ["名".repeat(129), format!("{}\n末", "名".repeat(128))] {
+                    assert!(matches!(
+                        setter(log.clone(), Some(value)),
+                        Err(AuditError::Logic(CoreError::LogicError(message)))
+                            if message == format!("{field}长度不符合要求")
+                    ));
+                }
+                for value in ["名\n称", "名\0称", "名\u{7f}称"] {
+                    assert!(matches!(
+                        setter(log.clone(), Some(value.into())),
+                        Err(AuditError::ValidationError(message))
+                            if message == format!("{field}包含非法字符")
+                    ));
+                }
+            }
+            for value in [None, Some(String::new()), Some(" \t\n ".into()), Some("valid".into())] {
+                assert!(matches!(
+                    setter(raw.clone(), value),
+                    Err(AuditError::ValidationError(message)) if message == "审计缺少结构化事件"
+                ));
+            }
+        }
+    }
+
+    #[test]
+    fn event_sequence_keeps_positive_limit_and_missing_event_error_order() {
+        let log = audit_actor().resource_log("customer.create", "customer", "customer-1".into()).unwrap();
+        let updated = log.clone().with_event_sequence(u32::MAX).unwrap();
+        assert_eq!(updated.base, log.base);
+        assert_eq!(updated.message, log.message);
+        assert_eq!(updated.structured_event.unwrap().event_sequence.get(), u32::MAX);
+        let raw = AuditLog::new("audit-1".into(), audit_data()).unwrap();
+        assert!(matches!(
+            raw.clone().with_event_sequence(0),
+            Err(AuditError::ValidationError(message)) if message == "审计事件序号必须为正整数"
+        ));
+        assert!(matches!(
+            raw.with_event_sequence(u32::MAX),
+            Err(AuditError::ValidationError(message)) if message == "审计缺少结构化事件"
+        ));
     }
 }

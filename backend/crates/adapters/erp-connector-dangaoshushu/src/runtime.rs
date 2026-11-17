@@ -220,7 +220,6 @@ impl DangaoshushuRuntime {
         target: &SupplierReferenceTarget,
         now: Instant,
     ) -> ConnectorResult<SupplierReferenceTickets> {
-        self.validate_target(target)?;
         let expires_at = now.unix_secs().checked_add(300).ok_or_else(mapping)?;
         let ticket = |kind: &str| {
             proof::encode(
@@ -598,6 +597,60 @@ mod tests {
         wrong.supplier_id = SupplierAccountId::new("other");
         assert!(runtime.validate_binding(&wrong, false).is_ok());
         assert!(runtime.validate_binding(&connection, true).is_err());
+    }
+
+    #[test]
+    fn ticket_entries_preserve_target_validation_and_option_filtering() {
+        let (_, transport) = recording_connector(vec![]);
+        let runtime = DangaoshushuRuntime::with_transport(settings(), transport.clone()).unwrap();
+        let now = Instant::from_unix_secs(1700000000);
+        let valid = connection();
+        let tickets = runtime.reference_tickets(&valid, now).unwrap();
+        assert_eq!(tickets.expires_at, 1700000300);
+        let target = SupplierReferenceTarget::from(&valid);
+        for kind in [SupplierReferenceKind::Endpoint, SupplierReferenceKind::Credential] {
+            let options = runtime.reference_options(kind, &target, now).unwrap();
+            assert_eq!(options.len(), 1);
+            let resolved = runtime.resolve_ticket(kind, &options[0].reference_id, &target, now).unwrap();
+            assert_eq!(
+                resolved.internal_reference,
+                runtime.internal_reference(reference_kind(kind).unwrap(), &target).unwrap()
+            );
+        }
+        for boundary in ["missing_type", "other_type", "connection", "supplier", "deleted"] {
+            let mut invalid = valid.clone();
+            match boundary {
+                "missing_type" => invalid.connector_type = None,
+                "other_type" => invalid.connector_type = Some(SupplierConnectorType::JdVop),
+                "connection" => invalid.base.id.clear(),
+                "supplier" => invalid.supplier_id = SupplierAccountId::new(""),
+                "deleted" => invalid.base.deleted_at = 1,
+                _ => unreachable!(),
+            }
+            let expected = if matches!(boundary, "missing_type" | "other_type") {
+                error(
+                    SupplierFailureClass::CapabilityGap,
+                    "DGSS_CONNECTOR_TYPE_MISMATCH",
+                    "连接未选择蛋糕叔叔 API",
+                )
+            } else {
+                binding_error()
+            };
+            assert_eq!(runtime.reference_tickets(&invalid, now).err().unwrap(), expected);
+            if boundary != "deleted" {
+                assert!(
+                    runtime
+                        .reference_options(
+                            SupplierReferenceKind::Endpoint,
+                            &SupplierReferenceTarget::from(&invalid),
+                            now
+                        )
+                        .unwrap()
+                        .is_empty()
+                );
+            }
+        }
+        assert!(transport.requests.lock().unwrap().is_empty());
     }
 
     #[tokio::test]

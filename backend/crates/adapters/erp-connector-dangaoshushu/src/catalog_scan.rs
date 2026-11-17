@@ -7,7 +7,7 @@ use erp_supply::ports::connector::offer::{Offer, OfferChange, ScopedOfferPage};
 use erp_supply::ports::connector::transform::OfferTransform;
 use serde_json::Value;
 
-use super::catalog::{scan_parameters, spec_value};
+use super::catalog::{next_page, scan_parameters, spec_value};
 use super::parsing::{context, mapping, snapshot, source_time};
 use super::transport::Request;
 use super::{DangaoshushuConnector, DangaoshushuOffer};
@@ -27,11 +27,7 @@ impl DangaoshushuConnector {
             .send(Request::Read { path: "/dsapi/product/get_product_hot_lists", parameters })
             .await?;
         let products = value["product_list"].as_array().ok_or_else(mapping)?;
-        let next = if products.len() >= usize::try_from(scan.limit.get()).map_err(|_| mapping())? {
-            Some(number.checked_add(1).ok_or_else(mapping)?.to_string())
-        } else {
-            None
-        };
+        let next = next_page(number, products.len(), scan.limit)?;
         let mut page =
             ScopedOfferPage { page: Page { items: vec![], next }, skipped: vec![], membership: None };
         let mut details = BTreeMap::new();

@@ -49,16 +49,6 @@ pub(super) fn parse_refresh(body: &[u8]) -> ConnectorResult<JdVopRefreshResult> 
     }
     let result = token_data(body)?;
     let expires_in: u64 = result.expires_in.0.parse().map_err(|_| token_error())?;
-    if expires_in == 0
-        || [&result.access_token, &result.refresh_token].iter().any(|value| {
-            value.trim().is_empty()
-                || value.trim() != value.as_str()
-                || value.len() > 8192
-                || value.chars().any(char::is_control)
-        })
-    {
-        return Err(token_error());
-    }
     JdVopRefreshResult::new(result.access_token, result.refresh_token, expires_in)
 }
 /// 编码刷新参数；只由协议 HTTP 发送，编排不接触请求格式。
@@ -104,6 +94,51 @@ mod tests {
             assert_eq!(token.value_for("account",Instant::from_unix_secs(2)).unwrap(),"next");
         }
     }
+    #[test]
+    fn refresh_validation_preserves_token_limits_and_duration_boundaries_in_both_envelopes() {
+        for wrapped in [false, true] {
+            for (access, refresh, seconds, accepted) in [
+                ("a".repeat(8192), "r".repeat(8192), 1_u64, true),
+                ("a".into(), "r".into(), u64::MAX, true),
+                ("a".into(), "r".into(), 0, false),
+                (String::new(), "r".into(), 1, false),
+                ("a".into(), String::new(), 1, false),
+                (" a".into(), "r".into(), 1, false),
+                ("a".into(), "r ".into(), 1, false),
+                ("a\n".into(), "r".into(), 1, false),
+                ("a".into(), "r\u{007f}".into(), 1, false),
+                ("a".repeat(8193), "r".into(), 1, false),
+                ("a".into(), "r".repeat(8193), 1, false),
+            ] {
+                let tokens = serde_json::json!({
+                    "access_token": access, "refresh_token": refresh, "expires_in": seconds
+                });
+                let body = if wrapped {
+                    serde_json::json!({"success": true, "resultCode": "0000", "result": tokens})
+                } else {
+                    serde_json::json!({"code": 0, "access_token": access,
+                        "refresh_token": refresh, "expires_in": seconds})
+                };
+                let result = parse_refresh(&serde_json::to_vec(&body).unwrap());
+                if accepted {
+                    let result = result.unwrap();
+                    assert_eq!(result.refresh_token(), refresh);
+                    let parts = result.into_credential_parts(Instant::from_unix_secs(0));
+                    if seconds == u64::MAX {
+                        assert_eq!(parts.unwrap_err(), token_error());
+                    } else {
+                        let (actual_access, actual_refresh, expires) = parts.unwrap();
+                        assert_eq!(actual_access, access);
+                        assert_eq!(actual_refresh, refresh);
+                        assert_eq!(expires, Instant::from_unix_secs(1));
+                    }
+                } else {
+                    assert_eq!(result.err().unwrap(), token_error());
+                }
+            }
+        }
+    }
+
     #[test]
     fn malformed_expired_and_failed_authorization_never_exposes_response_body() {
         for body in [

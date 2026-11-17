@@ -62,13 +62,7 @@ pub(super) fn decode<T: DeserializeOwned>(body: &[u8], method: &str, rpc: &str) 
     if let Some(failure) = root.remove("error_response") {
         return Err(gateway_error(failure.get())?);
     }
-    if let Some(code) = root.get("code") {
-        let code: WireText =
-            serde_json::from_str(code.get()).map_err(|_| mapping("京东网关错误码格式无效"))?;
-        if code.0 != "0" {
-            return Err(classify_code(&code.0));
-        }
-    }
+    validate_gateway_code(&root)?;
     let key = method.replace('.', "_");
     let wrapped = root
         .remove(&format!("{key}_responce"))
@@ -76,17 +70,22 @@ pub(super) fn decode<T: DeserializeOwned>(body: &[u8], method: &str, rpc: &str) 
         .ok_or_else(|| mapping("京东方法响应键缺失"))?;
     let mut method_result: BTreeMap<String, Box<RawValue>> =
         serde_json::from_str(wrapped.get()).map_err(|_| mapping("京东方法响应格式无效"))?;
-    if let Some(code) = method_result.get("code") {
+    validate_gateway_code(&method_result)?;
+    let result = method_result.remove(rpc).ok_or_else(|| mapping("京东方法 RPC 响应键缺失"))?;
+    let envelope: RpcResult =
+        serde_json::from_str(result.get()).map_err(|_| mapping("京东业务响应格式无效"))?;
+    decode_result(envelope, method)
+}
+
+fn validate_gateway_code(fields: &BTreeMap<String, Box<RawValue>>) -> ConnectorResult<()> {
+    if let Some(code) = fields.get("code") {
         let code: WireText =
             serde_json::from_str(code.get()).map_err(|_| mapping("京东网关错误码格式无效"))?;
         if code.0 != "0" {
             return Err(classify_code(&code.0));
         }
     }
-    let result = method_result.remove(rpc).ok_or_else(|| mapping("京东方法 RPC 响应键缺失"))?;
-    let envelope: RpcResult =
-        serde_json::from_str(result.get()).map_err(|_| mapping("京东业务响应格式无效"))?;
-    decode_result(envelope, method)
+    Ok(())
 }
 
 /// 先验证业务成功；仅消息查询允许已实测的空队列省略结果字段。
@@ -304,6 +303,52 @@ mod tests {
         assert!(
             decode::<Vec<Box<RawValue>>>(body, "jingdong.vop.goods.getSkuPoolInfo", "openRpcResult").is_err()
         );
+    }
+
+    #[test]
+    fn gateway_codes_at_both_levels_preserve_success_failures_and_precedence() {
+        use serde_json::{Value, json, to_vec};
+
+        let method = "jingdong.vop.goods.getSkuPoolInfo";
+        let key = "jingdong_vop_goods_getSkuPoolInfo_responce";
+        let body = json!({key:{"openRpcResult":{"success":true,"resultCode":"0000",
+            "result":{"skuPoolList":[]}}}});
+        for code in [None, Some(json!(0)), Some(json!("0"))] {
+            let mut success = body.clone();
+            if let Some(code) = code {
+                success["code"] = code.clone();
+                success[key]["code"] = code;
+            }
+            let pools: Pools = decode(&to_vec(&success).unwrap(), method, "openRpcResult").unwrap();
+            assert!(pools.sku_pool_list.is_empty());
+        }
+        for (code, expected) in [
+            (json!(2002), classify_code("2002")),
+            (json!("2010"), classify_code("2010")),
+            (json!("FUTURE_99"), classify_code("FUTURE_99")),
+            (Value::Null, classify_code("null")),
+            (json!(" "), mapping("京东网关错误码格式无效")),
+        ] {
+            let outer = json!({"code":code});
+            assert_eq!(
+                decode::<Pools>(&to_vec(&outer).unwrap(), method, "openRpcResult").unwrap_err(),
+                expected
+            );
+            let inner = json!({"code":0,key:{"code":code}});
+            assert_eq!(
+                decode::<Pools>(&to_vec(&inner).unwrap(), method, "openRpcResult").unwrap_err(),
+                expected
+            );
+        }
+        for (body, expected) in [
+            (json!({"error_response":{"code":"2002"},"code":"2010"}), classify_code("2002")),
+            (json!({"code":"2010",key:{"code":"2002"}}), classify_code("2010")),
+        ] {
+            assert_eq!(
+                decode::<Pools>(&to_vec(&body).unwrap(), method, "openRpcResult").unwrap_err(),
+                expected
+            );
+        }
     }
 
     #[test]

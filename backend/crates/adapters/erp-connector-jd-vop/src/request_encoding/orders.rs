@@ -143,15 +143,8 @@ pub(super) fn write(
             merchant(&order.third_order_id)?;
             envelope("submitOrderOpenReq", order.as_ref(), Some(context))
         },
-        W::Confirm { merchant_order_no, external_order_no, source_type } => {
-            context.source(*source_type)?;
-            merchant(merchant_order_no)?;
-            flat(
-                json!({"thirdOrderId":merchant_order_no,"jdOrderId":identifier(external_order_no)?}),
-                context,
-            )
-        },
-        W::ConfirmReceipt { merchant_order_no, external_order_no, source_type } => {
+        W::Confirm { merchant_order_no, external_order_no, source_type }
+        | W::ConfirmReceipt { merchant_order_no, external_order_no, source_type } => {
             context.source(*source_type)?;
             merchant(merchant_order_no)?;
             flat(
@@ -180,4 +173,44 @@ pub(super) fn write(
 /// 校验订单批次后按网关要求编码为逗号分隔的编号，不经过浮点数。
 fn csv_ids(values: &[String], maximum: usize) -> ConnectorResult<String> {
     Ok(ids(values, maximum)?.iter().map(u64::to_string).collect::<Vec<_>>().join(","))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn confirmation_payloads_keep_exact_bytes_and_validation_order() {
+        let context = JdVopRequestContext::new(3).unwrap();
+        for (merchant, external, source, expected) in [
+            ("original", "9007199254740993", 3, None),
+            ("", "0", 4, Some("京东请求渠道与受控账号不一致")),
+            ("", "0", 3, Some("京东原第三方订单号无效")),
+            ("original", "0", 3, Some("京东编号超出接口范围")),
+            ("original", "9223372036854775808", 3, Some("京东编号超出接口范围")),
+        ] {
+            for request in [
+                JdVopWriteRequest::Confirm {
+                    merchant_order_no: merchant.into(),
+                    external_order_no: external.into(),
+                    source_type: source,
+                },
+                JdVopWriteRequest::ConfirmReceipt {
+                    merchant_order_no: merchant.into(),
+                    external_order_no: external.into(),
+                    source_type: source,
+                },
+            ] {
+                let result = write_payload(&request, &context);
+                if let Some(summary) = expected {
+                    assert_eq!(result.unwrap_err(), mapping(summary));
+                } else {
+                    assert_eq!(
+                        result.unwrap().get(),
+                        r#"{"jdOrderId":9007199254740993,"sourceType":3,"thirdOrderId":"original"}"#
+                    );
+                }
+            }
+        }
+    }
 }

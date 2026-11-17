@@ -2,13 +2,13 @@
 use std::collections::BTreeSet;
 
 use async_trait::async_trait;
-use erp_core::common::time::Instant;
 use erp_supply::ports::connector::address::{
     AddressCandidateQuery, ConfirmedSupplierAddress, SupplierAddressCandidate, SupplierAddressDepth,
     SupplierAddressSource,
 };
-use erp_supply::ports::connector::common::{ConnectorResult, Snapshot, SourceRevision, SourceStamp};
+use erp_supply::ports::connector::common::{ConnectorResult, Snapshot};
 
+use super::delivery::observed;
 use super::transport::JdVopReadRequest;
 use super::wire::{Areas, WireText};
 use super::{JdVopConnector, mapping, protocol_required};
@@ -28,7 +28,7 @@ impl SupplierAddressSource for JdVopConnector {
             })
             .await?;
         if query.depth == SupplierAddressDepth::Town && areas.area_info_list.is_empty() {
-            return Ok(snapshot(vec![SupplierAddressCandidate {
+            return Ok(observed(vec![SupplierAddressCandidate {
                 depth: SupplierAddressDepth::Town,
                 code: "0".into(),
                 name: "无需第四级地址".into(),
@@ -51,7 +51,7 @@ impl SupplierAddressSource for JdVopConnector {
                 parent_code: query.parent_code.clone(),
             });
         }
-        Ok(snapshot(candidates))
+        Ok(observed(candidates))
     }
 
     async fn validate(&self, address: &ConfirmedSupplierAddress) -> ConnectorResult<Snapshot<bool>> {
@@ -75,7 +75,7 @@ impl SupplierAddressSource for JdVopConnector {
                 .iter()
                 .any(|candidate| candidate.code == level.code && candidate.name == level.name)
             {
-                return Ok(snapshot(false));
+                return Ok(observed(false));
             }
             parent_code = Some(level.code.clone());
         }
@@ -89,8 +89,8 @@ impl SupplierAddressSource for JdVopConnector {
             })
             .await?;
         match valid.0.as_str() {
-            "true" => Ok(snapshot(true)),
-            "false" => Ok(snapshot(false)),
+            "true" => Ok(observed(true)),
+            "false" => Ok(observed(false)),
             _ => Err(mapping("京东地址有效性结果未识别")),
         }
     }
@@ -113,17 +113,6 @@ fn depth_code(depth: SupplierAddressDepth) -> u8 {
         SupplierAddressDepth::City => 2,
         SupplierAddressDepth::County => 3,
         SupplierAddressDepth::Town => 4,
-    }
-}
-
-fn snapshot<T>(value: T) -> Snapshot<T> {
-    Snapshot {
-        stamp: SourceStamp {
-            revision: SourceRevision::Unversioned,
-            changed_at: None,
-            observed_at: Instant::now(),
-        },
-        value,
     }
 }
 
@@ -220,14 +209,16 @@ mod tests {
             JdVopReadRequest::Areas { level: 2, parent_code: Some("1".into()) },
             json!({"areaInfoList":[{"areaId":9007199254740993u64,"areaName":" 北京 "}]}),
         )]);
-        let values = connector
+        let result = connector
             .candidates(&AddressCandidateQuery {
                 depth: SupplierAddressDepth::City,
                 parent_code: Some("1".into()),
             })
             .await
-            .unwrap()
-            .value;
+            .unwrap();
+        assert_eq!(serde_json::to_value(&result.stamp.revision).unwrap(), "Unversioned");
+        assert_eq!(result.stamp.changed_at, None);
+        let values = result.value;
         assert_eq!(values[0].code, "9007199254740993");
         assert_eq!(values[0].name, "北京");
         assert_eq!(values[0].parent_code.as_deref(), Some("1"));

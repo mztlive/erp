@@ -135,11 +135,7 @@ fn order_snapshot(
 ) -> ConnectorResult<OrderSnapshot> {
     let mut snapshot = summary(root)?;
     if !frozen.is_empty() {
-        let tree = if verify_frozen_price {
-            build_tree(root, orders, frozen)?
-        } else {
-            build_tree_facts(root, orders, frozen, false)?
-        };
+        let tree = build_tree_facts(root, orders, frozen, verify_frozen_price)?;
         snapshot.confirmation = aggregate_confirmation(&tree);
         snapshot.fulfillment = aggregate_fulfillment(&tree);
         let targets = tree.action_targets();
@@ -217,14 +213,6 @@ fn validate_identity(key: &OrderKey, orders: &BTreeMap<String, JdOrder>) -> Conn
         return Err(mapping("京东查询结果与原订单身份不符"));
     }
     Ok(())
-}
-
-fn build_tree(
-    root: &JdOrder,
-    orders: &BTreeMap<String, JdOrder>,
-    frozen: &[OrderLine],
-) -> ConnectorResult<OrderTree> {
-    build_tree_facts(root, orders, frozen, true)
 }
 
 fn build_tree_facts(
@@ -592,23 +580,23 @@ mod tests {
             orders.insert(order.jd_order_id.0.clone(), order);
         }
         let frozen = [frozen("123", "10", "2")];
-        let tree = build_tree(&root, &orders, &frozen).unwrap();
+        let tree = build_tree_facts(&root, &orders, &frozen, true).unwrap();
         assert_eq!(aggregate_fulfillment(&tree), Some(FulfillmentStatus::Fulfilling));
         orders.get_mut("102").unwrap().order_state.as_mut().unwrap().jd_order_state =
             Some(WireText("16".into()));
         assert_eq!(
-            aggregate_fulfillment(&build_tree(&root, &orders, &frozen).unwrap()),
+            aggregate_fulfillment(&build_tree_facts(&root, &orders, &frozen, true).unwrap()),
             Some(FulfillmentStatus::Shipped)
         );
         orders.get_mut("102").unwrap().order_state.as_mut().unwrap().jd_order_state =
             Some(WireText("19".into()));
         assert_eq!(
-            aggregate_fulfillment(&build_tree(&root, &orders, &frozen).unwrap()),
+            aggregate_fulfillment(&build_tree_facts(&root, &orders, &frozen, true).unwrap()),
             Some(FulfillmentStatus::Completed)
         );
         orders.get_mut("102").unwrap().order_state.as_mut().unwrap().jd_order_state =
             Some(WireText("999".into()));
-        assert_eq!(aggregate_fulfillment(&build_tree(&root, &orders, &frozen).unwrap()), None);
+        assert_eq!(aggregate_fulfillment(&build_tree_facts(&root, &orders, &frozen, true).unwrap()), None);
     }
 
     #[test]
@@ -622,7 +610,12 @@ mod tests {
             Some(serde_json::from_value(json!({"orderTotalPrice":"30", "orderTotalFreight":"0"})).unwrap());
         let frozen = [frozen("123", "10", "1"), frozen("456", "20", "1")];
         let tree = |order: &JdOrder| {
-            build_tree(order, &BTreeMap::from([(order.jd_order_id.0.clone(), order.clone())]), &frozen)
+            build_tree_facts(
+                order,
+                &BTreeMap::from([(order.jd_order_id.0.clone(), order.clone())]),
+                &frozen,
+                true,
+            )
         };
         tree(&order).unwrap();
         order.sku_info_list[0].sku_price = Some(WireText("11".into()));

@@ -62,7 +62,7 @@ pub fn encode<B: Serialize + ?Sized>(
     parameters.remove("sign");
     validate(&parameters, app_secret)?;
     let business = to_string(business).map_err(|_| mapping("京东业务参数无法编码，请核对请求资料"))?;
-    finish(parameters, business, app_secret)
+    Ok(finish(parameters, business, app_secret))
 }
 
 /// 对已完成类型化序列化的业务 JSON 签名，保持数字和 JSON 原文不变。
@@ -79,19 +79,15 @@ pub(super) fn encode_raw(
 ) -> ConnectorResult<SignedParameters> {
     parameters.remove("sign");
     validate(&parameters, app_secret)?;
-    finish(parameters, business.get().to_owned(), app_secret)
+    Ok(finish(parameters, business.get().to_owned(), app_secret))
 }
 
-fn finish(
-    mut parameters: BTreeMap<String, String>,
-    business: String,
-    app_secret: &str,
-) -> ConnectorResult<SignedParameters> {
+fn finish(mut parameters: BTreeMap<String, String>, business: String, app_secret: &str) -> SignedParameters {
     parameters.insert(BUSINESS_PARAMETER.into(), business);
     let signature = sign(&parameters, app_secret);
     parameters.insert("sign".into(), signature);
     let encoded = Serializer::new(String::new()).extend_pairs(&parameters).finish();
-    Ok(SignedParameters { encoded })
+    SignedParameters { encoded }
 }
 
 fn validate(parameters: &BTreeMap<String, String>, app_secret: &str) -> ConnectorResult<()> {

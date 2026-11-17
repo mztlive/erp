@@ -2,6 +2,7 @@ use std::str::FromStr;
 
 use chrono::{FixedOffset, NaiveDateTime, TimeZone};
 use erp_core::common::time::{BUSINESS_TZ_OFFSET_SECS, Instant};
+use erp_core::money::Amount;
 use erp_supply::entity::failure::SupplierFailureClass;
 use erp_supply::ports::connector::common::{
     ConnectorError, ConnectorResult, Snapshot, SourceRevision, SourceStamp,
@@ -61,6 +62,21 @@ pub(super) fn fixed<T: FromStr>(value: &Value) -> ConnectorResult<T> {
     text(value)?.parse().map_err(|_| mapping())
 }
 
+/// 解析非负金额，保留来源精度及通用映射错误。
+/// # 参数
+/// `value` 为供应商返回的金额字段。
+/// # 返回
+/// 精确金额，允许零值。
+/// # 错误
+/// 缺失、格式或精度非法、负数时返回映射错误。
+pub(super) fn non_negative_amount(value: &Value) -> ConnectorResult<Amount> {
+    let amount: Amount = fixed(value)?;
+    if amount.to_decimal().is_sign_negative() {
+        return Err(mapping());
+    }
+    Ok(amount)
+}
+
 pub(super) fn source_time(value: &Value) -> ConnectorResult<Option<Instant>> {
     if value.is_null() || value.as_str() == Some("") {
         return Ok(None);
@@ -80,9 +96,31 @@ pub(super) fn snapshot<T>(value: T, changed_at: Option<Instant>) -> Snapshot<T> 
 
 #[cfg(test)]
 mod tests {
-    use erp_core::money::Amount;
+    use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn non_negative_amount_preserves_scale_and_rejects_invalid_values() {
+        for text in ["0", "0.00", "12.30", "79228162514264337593543950335"] {
+            assert_eq!(non_negative_amount(&json!(text)).unwrap().to_string(), text);
+        }
+        assert_eq!(non_negative_amount(&json!(123)).unwrap().to_string(), "123");
+        for value in [
+            Value::Null,
+            json!(true),
+            json!([]),
+            json!("-0.01"),
+            json!("1.001"),
+            json!("invalid"),
+            json!(""),
+            json!(" 1 "),
+            json!("79228162514264337593543950336"),
+        ] {
+            assert_eq!(non_negative_amount(&value).unwrap_err(), mapping());
+        }
+    }
+
     #[test]
     fn preserves_composite_ids_precision_and_missing_source_time() {
         assert_eq!(id(&serde_json::json!("721-101902")).unwrap(), "721-101902");
