@@ -1,48 +1,46 @@
 # test-support：库测试辅助与历史数据库夹具
 
-提供后端测试共用的请求调用、测试 JWT、账号种子和索引断言辅助，并保留历史数据库测试夹具。
+## 职责
 
-测试需要构造请求和身份上下文。共享辅助代码可减少各 crate 重复准备，但生产代码不得依赖这些测试能力。
+`test-support` 提供可跨 crate 复用的测试辅助，不承载生产逻辑。新测试放在拥有被测行为的 crate 中，以不依赖真实外部服务的库单元测试为限。
 
-## 使用场景
+### 负责的数据与能力
 
-- 在允许的库单元测试中复用测试 JWT、请求辅助或断言。
-- 定位既有测试夹具的实现及与应用协议同步的代码。
+- **无外部 I/O 的单测助手**：`matches_filter` 用固定 JSON 样本在内存中求值 BSON 过滤条件，只支持字段等值、`$and`、`$or`、布尔 `$expr` 和单键 `$exists`、`$in`；求值遇到不支持的操作时中止测试。它不是 MongoDB 模拟器，不能验证授权政策、查询计划或事务行为。`mint_jwt` 在本地签发与种子管理员身份对应的测试 JWT，不查库、不创建账号，也不授予权限。
+- **进程内 HTTP 辅助**：`TestApi` 通过 `tower::ServiceExt::oneshot` 调用已装配的 `axum::Router<()>`，不绑定端口、不启动服务。`get`、`post` 和通用 `request` 都可附带 Bearer 令牌并返回状态码与 JSON，`post` 和 `request` 还支持 JSON 请求体；非 JSON 正文返回 `Value::Null`，响应体读取上限为 8 MiB。路由及中间件仍会执行，能否用于库单测取决于它们是否依赖真实外部服务。
+- **历史 MongoDB 夹具**：`TestDb` 直连 MongoDB，以随机库名隔离用例并创建 `_fixture` 标记集合；`cleanup` 等待删库并返回结果，析构只尝试后台清理。`seed_admin_account` 写入 `accounts`、`roles`、`casbin_rules`，返回账号 ID；角色只包含 `role`、`admin`、`audit_log` 的 `list` 权限，种子口令不是可用于登录的哈希。`assert_indexes` 向数据库查询索引名称，不检查索引键、唯一性或查询是否使用索引。
 
-## 协作示例
+## 目录结构
 
-TestApi 接收调用方组装好的 Axum Router，在测试中直接调用路由；它不启动独立 HTTP 服务。TestDb 和 require_mongo! 是历史真实数据库夹具，使用范围必须遵守下文测试约束。
-
-## 负责的数据与能力
-
-- 基于 axum::Router 的 TestApi、JWT 签发、账号种子和索引断言辅助。
-- TestDb、MongoDB 环境识别与 require_mongo! 历史夹具。
-
-## 使用与边界要求
-
-1. 仅允许作为消费方 dev-dependency，不得引入生产依赖链。
-2. TestApi 使用调用方提供的 Router，不负责启动 HTTP 服务；本 crate 不得依赖 web-api。
-3. JWT 辅助须与 web-api 的实际令牌结构和签名合同同步；仅用于测试。
-4. TestDb 与 require_mongo! 的存在不构成运行真实数据库测试的授权；按 backend/AGENTS.md，禁止新增、修改或执行集成测试，也不执行 include-ignored。
-5. 不得启用 Cargo.toml 中已关闭的自动集成测试发现；新增测试优先放入拥有 crate 的库单元测试。
-
-## 代码入口
+### 代码入口
 
 | 入口 | 用途 |
 | --- | --- |
-| [src/api.rs](src/api.rs) | TestApi |
-| [src/jwt.rs](src/jwt.rs) | mint_jwt |
-| [src/seed.rs](src/seed.rs) | seed_admin_account |
-| [src/indexes.rs](src/indexes.rs) | assert_indexes |
-| [src/db.rs](src/db.rs) | TestDb 历史夹具 |
-| [src/lib.rs](src/lib.rs) | 导出及 require_mongo! 门控 |
+| [Cargo.toml](Cargo.toml) | crate 依赖和 `autotests = false`。 |
+| [src/lib.rs](src/lib.rs)、[src/error.rs](src/error.rs) | 公开导出、MongoDB 环境门控及共享 `Error`／`Result`。 |
+| [src/filter.rs](src/filter.rs)、[src/jwt.rs](src/jwt.rs) | 内存过滤条件求值、测试 JWT 签发及对应库单测。 |
+| [src/api.rs](src/api.rs) | 接受调用方路由的进程内 HTTP 客户端。 |
+| [src/db.rs](src/db.rs)、[src/seed.rs](src/seed.rs)、[src/indexes.rs](src/indexes.rs) | 历史测试数据库管理、账号种子和索引名称断言。 |
+| [tests/smoke.rs](tests/smoke.rs) | 历史集成测试源码，包含进程内路由示例和真实 MongoDB 夹具用例；未登记为测试目标，不运行。 |
+
+## 架构设计
+
+### 使用场景
+
+优先在消费方的库单测中用 `matches_filter` 检查过滤条件或用 `mint_jwt` 构造测试令牌。需要验证路由行为时，只向 `TestApi` 传入不依赖真实外部服务的路由；已有数据库夹具和验收例程仅供查阅，不作为新测试范本。
+
+### 协作示例
+
+- [可售 SKU 仓储库单测](../../read-models/erp-read-models/src/catalog_supply/repository/sellable.rs) 先断言完整 BSON，再用 `matches_filter` 验证其支持的 `$or` 条件，确认 SKU 与修订 ID 必须成对匹配。
+- [历史 smoke 文件](tests/smoke.rs) 用本地 `/ping` 和 `/echo` 路由展示 `TestApi`；[历史 S2 HTTP 验收例程](../../../apps/erp-server/examples/s2_http_acceptance.rs) 则使用 `seed_admin_account` 写入真实 MongoDB，并自行启动环回监听，不是 `TestApi` 的用法。
+- [结算仓储的历史库测试](../../orchestration/erp-supply-settlement/src/supply_settlement/repository/persistence_tests.rs) 以 `#[ignore]` 和 `require_mongo!` 双重门控调用 `TestDb`。`mongo_env_present` 和宏只检查 `ERP_TEST_MONGO_URI` 是否存在且非空白，不探测连通性或验证副本集；缺少配置时宏打印提示并从当前测试函数返回。
+
+### 使用与边界要求
+
+1. 消费方只能在 `[dev-dependencies]` 声明 `test-support = { workspace = true }`，例如 [erp-read-models 的清单](../../read-models/erp-read-models/Cargo.toml)。本 crate 不进入生产依赖链，也不得反向依赖 `erp-server`（包含 `web-api`）或历史 `database`、`services` crate，以免形成依赖环。
+2. 路由及其状态由调用方装配；历史夹具直接使用 `mongodb` 驱动，种子角色使用 `erp-identity` 类型。`mint_jwt` 与种子共用登录名派生规则和账号版本，签名与声明须和[服务端 JWT 实现](../../../apps/erp-server/src/http/auth/jwt.rs)保持同步。它签发后台管理员令牌，采用 HMAC-SHA256；密钥至少 32 字节，用于路由测试时须与测试应用的 `app.secret` 一致。
+3. 按[后端开发规则](../../../AGENTS.md#验证)，不得新增、修改或运行集成测试，不得执行历史验收例程、`--include-ignored`，或依赖真实 MongoDB、S3 等外部服务的测试。真实 MongoDB 单节点副本集及 `ERP_TEST_MONGO_URI` 只是历史夹具的前置条件，不是运行许可。保留 `autotests = false`，不得显式登记或恢复 `tests/smoke.rs` 等历史测试目标。
 
 ## 验证要求
 
-以下命令在 `backend/` 目录执行：
-
-```bash
-env -u ERP_TEST_MONGO_URI cargo test -p test-support --lib --locked
-```
-
-代码变更还须执行[统一质量门禁](../../README.md#质量门禁)。测试范围限定为库单元测试，不执行集成测试或真实外部服务测试。
+仅修改本文档时，在 `backend/` 下只运行 `git diff --check -- crates/testing/test-support/README.md`。代码变更遵循[统一质量门禁](../../README.md#质量门禁)，本 crate 的定向库单测命令为 `env -u ERP_TEST_MONGO_URI cargo test -p test-support --lib --locked`，不包含历史集成测试或外部服务验收。

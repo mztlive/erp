@@ -1,82 +1,78 @@
-# 通知系统执行合同
+# erp-notification：通知系统执行合同
 
-## 职责与入口
+## 职责
 
-- `erp-notification` 唯一拥有 `notifications` 集合、个人收件箱、通知去重和已读状态，并提供无正文的 `RefreshHub` 刷新分发。
-- 生产者必须调用 `NotificationService::notify(NotificationData, Channel)`。禁止绕过服务直接写集合。
-- `Channel::Inbox` 完成持久化即返回成功；`Channel::External(name)` 调用组合根注册的 `NotificationChannel`。
-- 首期不注册站外渠道。未注册渠道必须返回 `ChannelUnavailable`，不得记录为投递成功。
-- 渠道适配必须设置网络超时，以 `(recipient_id, dedup_key)` 实现提供方幂等，区分 `Retryable`、`Rejected` 和 `ChannelUnavailable`。接入新渠道时必须配置独立投递状态，禁止某一渠道的失败回滚或遮蔽其他渠道的成功。
+`erp-notification` 是统一通知投递入口，拥有 MongoDB 的 `notifications` 集合，负责个人收件箱、站内信去重和已读状态。站外投递只通过注入的渠道端口执行。`RefreshHub` 提供进程内、无正文的刷新分发，不保存消息，也不承担可靠投递。
+
+通知产生的业务条件、收件人选择和 outbox 归生产者；应用负责装配投递渠道、运行 worker、维护数据库订阅及暴露登录后的 HTTP/SSE 接口。通知和刷新都不授予业务对象的访问权限。
+
+## 目录结构
+
+| 文件 | 职责 |
+| --- | --- |
+| [Cargo.toml](Cargo.toml)、[src/lib.rs](src/lib.rs) | 依赖声明和公开入口；本 crate 不依赖生产者领域或应用层 |
+| [src/entity.rs](src/entity.rs) | `Channel`、`NotificationData`、`Notification`；内容规范化、站内跳转约束和同键重放判定 |
+| [src/dto.rs](src/dto.rs)、[src/error.rs](src/error.rs) | 收件箱游标、分页与展示投影，以及通知错误分类 |
+| [src/service.rs](src/service.rs)、[src/ports.rs](src/ports.rs) | `NotificationService` 负责投递分流和收件箱用例；`NotificationChannel` 定义站外渠道合同 |
+| [src/repository.rs](src/repository.rs)、[src/indexes.rs](src/indexes.rs) | 集合读写、去重查回、已读条件更新和公开索引登记入口 |
+| [src/refresh.rs](src/refresh.rs) | 刷新主题、收件账号过滤、订阅可用状态与有界广播 |
+
+## 架构设计
+
+### 站内信、去重与事务
+
+- 生产者调用 `NotificationService::notify`，不得直接写 `notifications`。服务先规范化去重键、收件账号、标题和正文，校验必填项、长度及可选站内跳转，再按渠道分流。一次调用只投递给一位收件人、一个渠道。
+- `Channel::Inbox` 依靠 `(recipient_id, dedup_key)` 唯一索引去重。仓储先尝试插入；遇到唯一键冲突，按收件账号和去重键查回原记录。规范化内容相同则成功且不改动原记录，内容不同或查不到对应记录则返回 `Conflict`。已读消息不会因重放恢复为未读。
+- 已读操作按消息 ID、收件账号和未读条件更新，只写入首次已读时间。列表和未读总数是两次独立读取，不承诺同一事务快照。
+- 本域服务以 `NoTransaction` 调用站内仓储，不接入生产者事务。需要与业务写入一致时，在同一业务事务内保存生产者 outbox，提交后由 worker 调用 `notify`；业务写入、通知落库和 outbox 投递结果回写不是同一次提交。若通知已落库但结果未回写，重试复用原键和原内容，不回滚已成功的投递。
+
+### 站外投递能力
+
+`Channel::External(name)` 按名称查找注入的 `NotificationChannel` 并传入同一份规范化内容；它不写收件箱，也不复用站内唯一索引。[当前应用装配](../../../apps/erp-server/src/wiring/application.rs)传入空渠道表，合法消息请求未注册渠道时返回 `ChannelUnavailable`，不会被记为成功。
+
+接入站外渠道时，适配器须设置网络超时，按 `(recipient_id, dedup_key)` 实现提供方幂等，以提供方确认接收为成功，区分 `Retryable`、`Rejected` 和 `ChannelUnavailable`。本 crate 没有站外投递状态或重试队列；生产者须按渠道独立记录结果和安排重试，不得用某一渠道的失败回滚或遮蔽其他渠道的成功。
 
 ## 用户消息生产者接入
 
-1. 在业务事务内保存所属领域的通知 outbox；保存不可变收件人、内容和稳定业务事件键。
-2. 在事务提交后由 worker 调用统一通知服务。禁止在业务事务内调用 `notify` 或外部提供方。
-3. 一条通知以一个收件人和一个渠道为投递单位。多收件人发生部分成功时，重试必须复用原键和原内容。
-4. 站内信唯一索引为 `(recipient_id, dedup_key)`。同内容重放成功，异内容重放返回 `Conflict`；已读状态不得因重放恢复为未读。
-5. 首期生产者为审批 outbox。组合层 `ApprovalNotifications` 将全部审批事件转入个人收件箱。沿用现有租约、退避和死信，不修改审批事务或 BPM。
-6. 旧审批 outbox 没有独立导航对象 ID，消息统一进入 `/workspace/tasks`。禁止从去重键推测实例 ID；后续精确跳转必须先增加明确的来源引用合同。
+1. 在业务事务中用同一执行器保存所属领域的 outbox，固定收件人、消息内容（或生成内容所需的模板参数）和稳定业务事件键。提交前不调用 `notify` 或外部提供方。
+2. 当前接入的是审批通知。[工作流领域](../erp-workflow/src/service/approval/execution/runtime_service/notifications.rs)持久化审批 outbox；[应用 worker](../../../apps/erp-server/src/worker/approval_outbox.rs)轮询，[工作流投递端口](../erp-workflow/src/service/approval/execution/notification_worker.rs)领取租约并负责结果回写、退避和死信。只运行 web-api 不会消费审批 outbox。
+3. [组合层 `ApprovalNotifications`](../../../apps/erp-server/src/wiring/notification.rs)把审批 outbox 的事件逐个收件人投递到 `Channel::Inbox`，使用 `approval:` 前缀加原事件键。全部收件人成功后才回写 `Delivered`；部分成功不会撤销，若整条 outbox 重试，已成功的收件人按原键、原内容重放。非法内容、内容冲突和拒绝投递归为永久失败，其余错误交给既有重试机制。
+4. 当前审批 outbox 不提供可导航的对象 ID，消息统一进入 `/workspace/tasks`。不得从去重键推测实例 ID；精确跳转需先定义明确的来源引用合同。
 
 ## 个人接口
 
-接口挂载在既有 `/account` 登录认证链路。收件人必须取会话账号，禁止接收用户指定的 recipient 参数。该接口与已有本人抄送接口一样，不要求管理员分配消息读取权限；消息跳转目标仍执行原业务授权。
+[账号路由](../../../apps/erp-server/src/http/routes/account.rs)复用 `/account` 的登录认证。[通知处理器](../../../apps/erp-server/src/http/handler/notification.rs)只使用认证会话账号作为收件人，不接受调用者指定收件人，不要求另行授予消息读取权限。收件箱是发送时归属该账号的历史消息；跳转仍须通过目标业务的授权。
 
 | 接口 | 行为 |
 | --- | --- |
-| `GET /account/notifications` | 返回 `items`、`unread_count`、`has_more`；每页 20 条，按 `created_at DESC, id DESC` 排序 |
-| `GET /account/notifications?before_created_at=…&before_id=…` | 按上一页最后一条继续读取；两个参数必须同时存在，同秒消息按 ID 继续 |
-| `POST /account/notifications/{id}/read` | 幂等标记本人消息；非本人及不存在均返回 404；重复操作保留首次已读时间 |
-| `GET /account/notifications/events` | Bearer Header 认证的 SSE；禁止把 token 放在 URL |
+| `GET /account/notifications` | 返回 `items`、`unread_count`、`has_more`；每页最多 20 条，按 `created_at DESC, id DESC` 排序；未读数是本人全量未读，不限于当前页 |
+| `GET /account/notifications?before_created_at=…&before_id=…` | 使用上一页最后一条的时间和 ID 继续读取；两参数须同时提供，非法游标返回 400 |
+| `POST /account/notifications/{id}/read` | 幂等标记本人消息；非本人或不存在均返回 404，重复操作保留首次已读时间 |
+| `GET /account/notifications/events` | 使用 `Authorization: Bearer …` 建立 SSE，凭证不进入 URL |
 
-列表响应只提供展示字段，不公开去重键和内部系统字段。收件人变更不得转移历史收件箱。历史通知为发送当时的个人消息；跳转不授予单据查看权限。
+列表中的每条消息只返回 `id`、`title`、`body`、`href`、`created_at`、`read_at`，不公开去重键和其他内部字段。
 
 ## 刷新事件来源
 
-1. 用户可读站内信继续执行上述 outbox 合同。界面刷新信号不得写入收件箱，不改变未读消息的业务口径。
-2. 刷新信号使用 MongoDB 已提交变更流。每个 API 进程仅建立一条数据库订阅，接收同库 API、worker、批量操作及其他实例已提交的变化。回滚事务不得产生刷新事实。
-3. 来源必须通过拥有领域的仓储登记。组合层只装配来源与主题；持久化层只投影主题、不可变收件账号及驱动恢复字段，不返回业务文档或对象标识。
-4. 个人通知、抄送按不可变收件账号分发；共享资源只发无正文刷新信号，前端重新执行原授权查询。删除或并发删除导致收件信息缺失时，只允许发送无正文重新同步信号，不得猜测收件账号。
-5. 共享刷新不以操作人或单据创建人为唯一收件人。数据范围可能覆盖多人；转派必须让原负责人和新负责人的查询均可更新。
-6. 不依赖进程内广播完成跨实例交付。进程内广播只承担数据库订阅到本机 SSE 的分发，缓冲区上限为 256；落后接收器必须完整同步。
-
-| 主题 | 来源与消费规则 |
-| --- | --- |
-| `inbox` | 通知新增、已读；同步本人未读数及收件箱 |
-| `tasks` | 工作项创建、关闭、完成、转派等持久化变化；同步本人待办数、工作台与采购询价 |
-| `approvals` | 审批实例进展及已查看确认；刷新发起人未读数、审批队列及相关单据分区 |
-| `copies` | 抄送生成及已读；刷新本人抄送列表和未读数 |
-| `inquiries` | 询价状态与反馈变化；刷新销售、采购询价及工作台 |
-| `selection` | 选品册持久化变化；刷新待处理数和已打开的列表、详情 |
-| `jobs` | 后台任务创建、进度、重试及终态；刷新任务计数、列表及详情 |
-| `sales`、`purchase` | 单据、变更及采购分配变化；刷新单据分区与相关付款候选 |
-| `finance`、`fulfillment` | 财务与交付事实变化；刷新付款候选、相关单据分区和工作台 |
-| `authorization` | 账号、角色、授权及组织版本变化；先重取账号资料，再同步各授权查询 |
+- `notify` 不直接推送 SSE。审批 worker 投递站内信后，API 通过 `notifications` 的已提交变更收到刷新信号；没有站内信的业务变化也可以独立触发刷新，刷新本身不会写入收件箱。
+- 每个 API 进程由[应用订阅任务](../../../apps/erp-server/src/http/notification_feed.rs)建立一条数据库级 MongoDB 变更流，接收同库 API、worker 和其他实例的已提交变化。回滚不产生刷新；进程内广播仅负责本机 SSE 分发，缓冲区为 256。
+- 拥有领域声明来源，[应用组合层](../../../apps/erp-server/src/wiring/notification_sources.rs)把来源映射为主题：`inbox` 对应站内信（包括新增和已读）；`copies` 对应审批抄送；`tasks`、`approvals`、`inquiries`、`selection`、`jobs` 对应工作项、审批实例、询价、选品册和后台任务；`sales`、`purchase`、`finance`、`fulfillment`、`authorization` 对应相关单据、财务、履约及授权来源。
+- [持久化变更流](../../foundation/persistence-core/src/change_feed.rs)只投影主题、收件账号和驱动所需的变更字段，不传业务正文或对象 ID。`inbox`、`copies` 按不可变收件账号分发；个人来源在删除等情况下取不到账号时，当前实现退化为该主题的无正文共享刷新，不猜测收件人。共享刷新不绑定操作人、创建人或当前负责人，客户端须重新执行原授权查询。
+- 订阅中断会广播不可用并关闭 SSE；应用尝试重建，恢复后要求全量同步。数据库级失效信号和广播接收落后也触发全量同步。不持久化消费位置，不通过刷新流重放业务命令。
 
 ## 推送协议与前端
 
-- SSE `snapshot` 载荷为 `{ "unread_count": 0, "todo_count": 0, "topics": ["inbox", "tasks"] }`。`todo_count: null` 表示没有任务列表权限，禁止解释为零。
-- SSE `refresh` 载荷为 `{ "topics": ["inquiries"] }`，不携带计数和业务正文。仅需业务查询刷新的事件不得触发无关的待办计数查询。
-- 每次连接必须先订阅，再发送含全部主题的最新快照。连接最长约 60 秒；前端正常结束后 1 秒重连，失败后 10 秒重连。重连必须重新同步，禁止按消息条数累加计数。
-- 每次业务发送及空闲 15 秒心跳必须复验 JWT 和账号会话。心跳不得重新查询业务计数。失效发送 `auth` 后关闭；订阅或查询故障发送 `error` 后关闭，不得以零或成功空流降级。
-- 数据库订阅中断必须标记不可用。驱动恢复失败后重建订阅，建立成功后发送完整同步信号。刷新通道不持久化消费位置；进程重启或 oplog 历史不可用时依靠最新授权快照恢复，不重放业务命令。
-- 同一页面保留一条 SSE 连接。服务端以 200 毫秒窗口合并刷新主题，窗口不得被连续变化无限延长。前端合并在途刷新，新事件在当前查询结束后继续刷新，不反复取消请求。
-- “待我处理”继续复用 `WorkbenchReadService::work_item_search` 的 `mine` 授权范围。其他菜单保留原查询、权限和计数口径；禁止以通知未读数替代业务待办数。
-- 销售询价只统计 `awaiting_sales`，不包含 `awaiting_sales_supplement`；采购询价只统计本人开放任务；选品册统计草稿、准备中及待发布；后台任务沿用 `active_only` 的未结束条件。
-- 七个业务菜单不再独立定时轮询计数。当前业务操作成功后的本地缓存失效仍保留。工作台今日、超期计数保留时间刷新，详情进度查询保留自身刷新合同。
-- 数量未变化仍须按主题刷新列表。待办减少一项同时新增一项、选品册准备完成但仍待发布，均不得因总数相同跳过更新。
-- 反向代理必须关闭响应缓冲，保留 `text/event-stream` 和 `X-Accel-Buffering: no`，空闲超时大于 75 秒。
+- [SSE 处理器](../../../apps/erp-server/src/http/handler/notification/feed.rs)先订阅再发送含全部主题的 `snapshot`。后续以 200 毫秒窗口合并变化；批次包含 `inbox`、`tasks` 或 `authorization` 时发送 `snapshot`（`unread_count`、`todo_count`、`topics`），否则发送只含 `topics` 的 `refresh`，不查询计数。待办数沿用 `WorkItemReadService::work_item_search` 的 `mine` 范围，无列表权限时为 `null`，不是零。
+- 连接约 60 秒后正常结束；发送业务帧及约 15 秒的空闲心跳前复验会话，心跳不查业务计数。凭证失效发送 `auth` 后关闭；会话设施、订阅或查询故障发送 `error` 后关闭，不以零或空流掩盖错误。
+- [前端订阅](../../../../erp-client/features/notifications/hooks/queries.ts)由顶栏发起，同页其他组件读取共享缓存；正常结束后约 1 秒重连，失败后约 10 秒重试。重连取最新快照，不按事件条数累加。[刷新队列](../../../../erp-client/features/notifications/lib/refresh.ts)按主题合并、串行刷新对应查询，授权主题先刷新账号资料；即使数量不变，也按主题重新查询列表。
 
 ## 数据发布与回滚
 
-1. 数据库必须支持变更流；API 数据库账号必须具有目标数据库的 `find`、`changeStream` 权限。部署前检查该权限，订阅失败必须在日志和 SSE 错误中可见。
-2. 先部署后端，执行正常启动索引登记或 `scripts/migrations/20261104-notifications.mongosh.js`。本轮刷新事件不新增集合、索引或业务字段。
-3. 索引成功后启动新版 `erp-worker`，再部署前端。只运行 web-api 不会消费审批 outbox。
-4. 新版 worker 会消费过去保留的 Pending 通知，因此首次上线可能收到历史审批消息；不得擅自清除历史 outbox。
-5. 回滚时停止新版 worker、恢复旧后端和前端；保留 `notifications` 集合和索引。已投递的审批 outbox 保留 Delivered，不得重置或删除其事实。
-6. 通知系统保留已有集合，不修改审批 outbox 数据结构，不删除历史数据。索引冲突必须停止上线并核对数据，禁止自动删除冲突记录。
+1. 目标数据库须支持变更流，API 数据库账号须具备目标数据库的 `find`、`changeStream` 权限；部署前核对权限。订阅失败可见于服务日志和 SSE 错误。反向代理须关闭响应缓冲，保留 `text/event-stream` 和 `X-Accel-Buffering: no`，空闲超时大于 75 秒。
+2. 先部署后端，由[启动索引登记](../../../apps/erp-server/src/indexes.rs)调用本域索引入口，或执行[通知索引迁移](../../../scripts/migrations/20261104-notifications.mongosh.js)。索引冲突须停止上线并核对数据，不得自动删除冲突记录。刷新流本身不增加集合、索引或业务字段。
+3. 索引就绪后启动新版 `erp-worker`，再部署前端。worker 会消费仍可投递的历史 `Pending` 审批通知，首次上线可能出现历史消息，不得擅自清理 outbox。
+4. 回滚时停止新版 worker，再恢复旧后端和前端。保留 `notifications` 集合、索引及历史数据，不改审批 outbox 结构，不重置或删除已 `Delivered` 的记录。
 
 ## 验证要求
 
-- 运行持久化变更流、通知分发与 HTTP 通知适配的内联单元测试，覆盖个人隔离、批量合并、落后重同步、故障关闭及数量不变仍刷新；运行 workspace 编译、受影响 crate clippy、领域边界、BPM 边界和权限漂移检查。
-- 前端运行 lint、格式检查、TypeScript 和构建。
-- 真实 MongoDB、多实例推送、反向代理缓冲、已读并发和浏览器视觉验收必须单独记录；静态检查与单元测试不得替代这些证据。
+仅改文档时，按[后端开发规则](../../../AGENTS.md#验证)只检查目标文件的 `git diff --check`。涉及实际推送的变更时，静态检查和单元测试不能代替真实 MongoDB、多实例和反向代理的部署验证。
