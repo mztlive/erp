@@ -3,7 +3,7 @@
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
-use erp_core::ids::{PartyBankAccountId, PayableAccountId};
+use erp_core::ids::PayableAccountId;
 use erp_finance::repository::PayableExt;
 use erp_finance::service::payable::prepare_payable_account;
 use erp_identity::{AccessTarget, AuthorizationService};
@@ -11,78 +11,38 @@ use erp_party::SensitiveDataCodec;
 use erp_permissions::payable;
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_read_models::finance::payable::PayableReadService;
-use erp_workflow::service::work_item::expected_task_version;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::dto::{
     CreatePayableAccountRequest, PayableAccountView, PaymentRecipientRevealView,
     RevealPaymentRecipientRequest,
 };
-use super::mapping::resolve_current_payment_recipient;
 use super::{PayableProcess, payment_task};
 use crate::{Error, Result};
 
 impl PayableProcess {
-    /// 在付款任务责任校验后揭示当前默认收款账号。
-    ///
-    /// 查看不修改任务版本；页面可在核对账号后继续使用同一任务版本提交付款。
-    /// 每次成功揭示均写入敏感信息审计。
+    /// 拒绝旧应付直付入口的收款账号揭示，不读取或解密账户。
     ///
     /// # 参数
-    /// * `id` - 当前付款任务绑定的应付往来子账 ID
-    /// * `req` - 任务身份、任务版本与页面所见收款账户
-    /// * `actor` - 当前操作人
-    /// * `sensitive_data` - 应用启动期共享的敏感数据编解码器
+    /// * `_id` - 旧应付往来子账 ID。
+    /// * `req` - 旧任务与页面所见收款账户，仍需校验请求和任务版本。
+    /// * `_actor` - 当前操作人。
+    /// * `_sensitive_data` - 敏感数据编解码器，本入口不使用。
     ///
     /// # 返回
-    /// 返回完整收款账号和对应账户事实行主键。
+    /// 不返回收款账号。
     ///
     /// # 错误
-    /// 任务责任、版本、账户身份或敏感密文不合法时失败关闭。
+    /// 保留请求和任务版本的校验错误；校验通过后固定返回冲突。
     pub async fn reveal_payment_recipient(
         &self,
-        id: &str,
+        _id: &str,
         req: RevealPaymentRecipientRequest,
-        actor: &AuditActor,
-        sensitive_data: &SensitiveDataCodec,
+        _actor: &AuditActor,
+        _sensitive_data: &SensitiveDataCodec,
     ) -> Result<PaymentRecipientRevealView> {
-        req.validate()?;
-        let expected_task_version = expected_task_version(&req.expected_task_version)?;
-        let account_id = PayableAccountId::new(id);
-        let (_, account) = payment_task::authorize_payment_execution(
-            &self.db,
-            &self.authorization_rbac,
-            &req.work_item_id,
-            expected_task_version,
-            Some(&account_id),
-            actor,
-            &mut NoTransaction,
-        )
-        .await?;
-        let recipient =
-            resolve_current_payment_recipient(&self.db, &account.supplier_id, &mut NoTransaction).await?;
-        if !recipient.matches_expected(
-            &PartyBankAccountId::new(req.expected_bank_account_id.trim()),
-            req.expected_bank_account_version,
-        ) {
-            return Err(Error::ConflictError("供应商收款账户已变化，请刷新付款任务并重新核对".to_string()));
-        }
-        let account_number = sensitive_data.decrypt(&recipient.account_number_ciphertext)?;
-        let audit = actor.clone().resource_log(
-            "party_bank_account.reveal_for_payment",
-            "party_bank_account",
-            recipient.base.id.clone(),
-        )?;
-        persist_log(&self.db, &audit, &mut NoTransaction).await?;
-        Ok(PaymentRecipientRevealView {
-            bank_account_id: recipient.base.id,
-            account_number,
-            account_name: recipient.account_name,
-            bank_name: recipient.bank_name,
-            bank_branch_name: recipient.bank_branch_name,
-            bank_routing_number: recipient.bank_routing_number,
-        })
+        payment_task::reject_legacy_payment_reveal(&req)
     }
     /// 建立应付往来子账与原始应付分录（跨集合事务写入）。
     ///

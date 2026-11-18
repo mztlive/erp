@@ -205,6 +205,36 @@ pub struct HeaderSnapshotData {
     pub tax_point: String,
 }
 
+impl HeaderSnapshotData {
+    /// 从已保存的结构化快照复制表头入参，不重新规范化历史值。
+    ///
+    /// # 参数
+    /// * `customer`、`contract`、`settlement_party`、`payment_term`、`invoice_requirement` - 各项表头快照。
+    ///
+    /// # 返回
+    /// 原样保留字段值与可选快照缺失状态的表头入参。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    pub(crate) fn from_snapshots(
+        customer: &CustomerSnapshot,
+        contract: Option<&ContractSnapshot>,
+        settlement_party: Option<&SettlementPartySnapshot>,
+        payment_term: &PaymentTermSnapshot,
+        invoice_requirement: &InvoiceRequirementSnapshot,
+    ) -> Self {
+        Self {
+            customer_name: customer.customer_name.clone(),
+            contract_no: contract.map(|snapshot| snapshot.contract_no.clone()),
+            settlement_party_name: settlement_party.map(|snapshot| snapshot.settlement_party_name.clone()),
+            payment_term_code: payment_term.payment_term_code.clone(),
+            payment_term_name: payment_term.payment_term_name.clone(),
+            invoice_type: invoice_requirement.invoice_type.clone(),
+            tax_point: invoice_requirement.tax_point.clone(),
+        }
+    }
+}
+
 impl Default for HeaderSnapshotData {
     /// 空表头快照（供测试与占位使用；实体 `new` 仍会校验非空字段）。
     fn default() -> Self {
@@ -249,12 +279,10 @@ impl HeaderSnapshots {
     pub fn build(data: &HeaderSnapshotData) -> Result<Self> {
         let contract_snapshot =
             normalize_optional_text(data.contract_no.clone(), "合同编号", CONTRACT_NO_MAX_LEN)?
-                .map(ContractSnapshot::new)
-                .transpose()?;
+                .map(|contract_no| ContractSnapshot { contract_no });
         let settlement_party_snapshot =
             normalize_optional_text(data.settlement_party_name.clone(), "结算主体", PARTY_NAME_MAX_LEN)?
-                .map(SettlementPartySnapshot::new)
-                .transpose()?;
+                .map(|settlement_party_name| SettlementPartySnapshot { settlement_party_name });
 
         Ok(Self {
             customer_snapshot: CustomerSnapshot::new(data.customer_name.clone())?,
@@ -318,6 +346,31 @@ mod tests {
         assert_eq!(snapshots.settlement_party_snapshot.unwrap().settlement_party_name, "集团结算中心");
         assert_eq!(snapshots.payment_term_snapshot.payment_term_name, "月结 30 天");
         assert_eq!(snapshots.invoice_requirement_snapshot.invoice_type, "增值税专用发票");
+    }
+
+    #[test]
+    fn optional_snapshots_preserve_length_and_error_boundaries() {
+        let mut data = HeaderSnapshotData {
+            customer_name: "客户".into(),
+            contract_no: Some(format!(" {} ", "甲".repeat(CONTRACT_NO_MAX_LEN))),
+            settlement_party_name: Some(" \t ".into()),
+            payment_term_code: "NET30".into(),
+            payment_term_name: "月结 30 天".into(),
+            invoice_type: "专票".into(),
+            tax_point: "6".into(),
+        };
+        let snapshots = HeaderSnapshots::build(&data).unwrap();
+        assert_eq!(snapshots.contract_snapshot.unwrap().contract_no, "甲".repeat(CONTRACT_NO_MAX_LEN));
+        assert_eq!(snapshots.settlement_party_snapshot, None);
+
+        data.customer_name.clear();
+        data.contract_no = Some("甲".repeat(CONTRACT_NO_MAX_LEN + 1));
+        data.settlement_party_name = Some("乙".repeat(PARTY_NAME_MAX_LEN + 1));
+        assert_eq!(HeaderSnapshots::build(&data).unwrap_err().to_string(), "合同编号长度不符合要求");
+        data.contract_no = None;
+        assert_eq!(HeaderSnapshots::build(&data).unwrap_err().to_string(), "结算主体长度不符合要求");
+        data.settlement_party_name = None;
+        assert_eq!(HeaderSnapshots::build(&data).unwrap_err().to_string(), "客户名称不能为空");
     }
 
     #[test]

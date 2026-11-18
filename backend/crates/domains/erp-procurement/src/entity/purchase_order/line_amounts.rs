@@ -27,7 +27,7 @@ use crate::entity::purchase_order::{
 /// 一行采购明细的类型化输入（`SavePurchaseOrderLine` 的转换目标）。
 ///
 /// 字符串字段已完成类型化；快照文本保持客户端原始形态，规范化与字段归属校验仍由
-/// 行实体构造（`normalize_and_validate_line`）统一完成。金额只经
+/// 行实体构造统一完成。金额只经
 /// [`compute_amounts`](Self::compute_amounts) 计算，调用方不得自行推算。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PurchaseLineInput {

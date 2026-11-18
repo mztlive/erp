@@ -95,13 +95,15 @@ impl ProductProcurementOwners for MongoProductProcurementOwners {
         executor: &mut dyn Executor,
     ) -> Result<Vec<String>> {
         let wanted: HashSet<&str> = owner_user_ids.iter().map(String::as_str).collect();
+        let listed_ids;
         let product_ids = match authorized_ids {
-            Some(ids) => ids.to_vec(),
-            None => self.db.products().list_ids(executor).await?,
+            Some(ids) => ids,
+            None => {
+                listed_ids = self.db.products().list_ids(executor).await?;
+                listed_ids.as_slice()
+            },
         };
-        if product_ids.len() > AUTHORIZED_ID_LIMIT {
-            return Err(Error::ValidationError("采购负责人筛选超过上限，请收窄组织或维护人条件".into()));
-        }
+        ensure_authorized_count(product_ids.len())?;
         if product_ids.is_empty() {
             return Ok(Vec::new());
         }
@@ -110,10 +112,21 @@ impl ProductProcurementOwners for MongoProductProcurementOwners {
             .procurement_responsibility_rules()
             .list_active_procurement_responsibility_rules(executor)
             .await?;
-        let products = load_products(&self.db, &product_ids, executor).await?;
-        let skus = load_skus(&self.db, &product_ids, executor).await?;
+        let products = load_products(&self.db, product_ids, executor).await?;
+        let skus = self.db.catalog().procurement_product_skus(product_ids, executor).await?;
         let revisions = load_revisions(&self.db, &products, executor).await?;
-        match_authorized_products(&self.db, &products, &skus, &revisions, &rules, &wanted, executor).await
+        let rule_set = ProcurementResponsibilityRuleSet::new(&rules);
+        let mut categories = prefetch_category_chains(&self.db, &revisions, executor).await;
+        let mut matched = HashSet::new();
+        for sku in &skus {
+            if let Some(id) =
+                match_sku_owner(&mut categories, &products, &revisions, &rule_set, sku, &wanted, executor)
+                    .await
+            {
+                matched.insert(id.to_owned());
+            }
+        }
+        Ok(matched.into_iter().collect())
     }
 }
 
@@ -145,89 +158,45 @@ impl ProductProcurementOwners for MapProductProcurementOwners {
     }
 }
 
-/// 在授权商品集合内按现行规则解析采购负责人，缺规则的商品不命中。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `products` - 已加载商品
-/// * `skus` - 商品下 SKU
-/// * `revisions` - 当前商品修订
-/// * `rules` - 现行采购责任规则
-/// * `wanted` - 请求的采购负责人
-/// * `executor` - 与授权相同的执行器
-///
-/// # 返回
-/// 返回命中的商品 ID。
-///
-/// # 错误
-/// 分类链读取失败时跳过该 SKU，不扩大授权。
-async fn match_authorized_products(
-    db: &Database,
-    products: &HashMap<String, ProcurementProductFact>,
-    skus: &[ProcurementSkuFact],
-    revisions: &HashMap<String, ProcurementRevisionFact>,
-    rules: &[erp_procurement::entity::procurement_responsibility::ProcurementResponsibilityRule],
-    wanted: &HashSet<&str>,
-    executor: &mut dyn Executor,
-) -> Result<Vec<String>> {
-    let rule_set = ProcurementResponsibilityRuleSet::new(rules);
-    let mut categories = CategoryChainCache::new(db);
-    // Warm-up 仅缓存成功读取；失败时继续沿原逐 SKU 读取与跳过策略。
-    let _ = categories.prefetch(revisions.values().map(|row| row.category_id.as_str()), executor).await;
-    let mut matched = HashSet::new();
-    for sku in skus {
-        if let Some(id) =
-            match_sku_owner(&mut categories, products, revisions, &rule_set, sku, wanted, executor).await?
-        {
-            matched.insert(id);
-        }
+/// 两种列表均在候选超限时整体拒绝，不截断后继续解析。
+pub(crate) fn ensure_authorized_count(count: usize) -> Result<()> {
+    if count > AUTHORIZED_ID_LIMIT {
+        return Err(Error::ValidationError("采购负责人筛选超过上限，请收窄组织或维护人条件".into()));
     }
-    Ok(matched.into_iter().collect())
+    Ok(())
 }
 
-/// 解析单个 SKU 的采购负责人；规则缺失时跳过。
-///
-/// # 参数
-/// * `categories` - 当前请求内的成功分类读取缓存
-/// * `products` - 已加载商品
-/// * `revisions` - 当前商品修订
-/// * `rule_set` - 现行规则集合
-/// * `sku` - 待解析 SKU
-/// * `wanted` - 请求的采购负责人
-/// * `executor` - 与授权相同的执行器
-///
-/// # 返回
-/// 命中时返回商品 ID。
-///
-/// # 错误
-/// 无；规则缺失、分类链非法或读取失败时不命中，缺失的分类末节点继续保留。
-async fn match_sku_owner(
+pub(crate) async fn prefetch_category_chains<'a>(
+    db: &'a Database,
+    revisions: &HashMap<String, ProcurementRevisionFact>,
+    executor: &mut dyn Executor,
+) -> CategoryChainCache<'a> {
+    let mut categories = CategoryChainCache::new(db);
+    // 预读失败不终止匹配；未缓存的分类仍按 SKU 读取。
+    let _ = categories.prefetch(revisions.values().map(|row| row.category_id.as_str()), executor).await;
+    categories
+}
+
+/// 仅返回命中 SKU 所属商品的 ID；缺失关联或解析失败均不命中。
+pub(crate) async fn match_sku_owner<'a>(
     categories: &mut CategoryChainCache<'_>,
-    products: &HashMap<String, ProcurementProductFact>,
+    products: &'a HashMap<String, ProcurementProductFact>,
     revisions: &HashMap<String, ProcurementRevisionFact>,
     rule_set: &ProcurementResponsibilityRuleSet<'_>,
     sku: &ProcurementSkuFact,
     wanted: &HashSet<&str>,
     executor: &mut dyn Executor,
-) -> Result<Option<String>> {
-    let Some(product) = products.get(&sku.product_id) else {
-        return Ok(None);
-    };
-    let Some(revision_id) = product.current_revision_id.as_deref() else {
-        return Ok(None);
-    };
-    let Some(revision) = revisions.get(revision_id) else {
-        return Ok(None);
-    };
-    let Ok(chain) = categories.ids(&revision.category_id, executor).await else {
-        return Ok(None);
-    };
-    Ok(matches_procurement_owner(product.product_kind, &sku.id, chain, rule_set, wanted)
-        .then(|| product.id.clone()))
+) -> Option<&'a str> {
+    let product = products.get(sku.product_id.as_str())?;
+    let revision = revisions.get(product.current_revision_id.as_deref()?)?;
+    // 单个分类链读取失败只跳过当前 SKU。
+    let chain = categories.ids(&revision.category_id, executor).await.ok()?;
+    matches_procurement_owner(product.product_kind, &sku.id, chain, rule_set, wanted)
+        .then_some(product.id.as_str())
 }
 
 /// 批量读取商品类型和当前修订指针，不装载商品完整实体。
-async fn load_products(
+pub(crate) async fn load_products(
     db: &Database,
     ids: &[String],
     executor: &mut dyn Executor,
@@ -236,17 +205,8 @@ async fn load_products(
     Ok(products.into_iter().map(|product| (product.id.clone(), product)).collect())
 }
 
-/// 批量读取候选商品下所有 SKU 身份，保持多 SKU 任一匹配的口径。
-async fn load_skus(
-    db: &Database,
-    product_ids: &[String],
-    executor: &mut dyn Executor,
-) -> Result<Vec<ProcurementSkuFact>> {
-    db.catalog().procurement_product_skus(product_ids, executor).await.map_err(Into::into)
-}
-
 /// 只读取稳定商品当前指针所引用修订的分类，不读取历史修订和全文。
-async fn load_revisions(
+pub(crate) async fn load_revisions(
     db: &Database,
     products: &HashMap<String, ProcurementProductFact>,
     executor: &mut dyn Executor,
@@ -270,7 +230,7 @@ async fn load_revisions(
 ///
 /// # 错误
 /// 无；不改变列表对非法关联的跳过策略。
-pub(crate) fn matches_procurement_owner(
+fn matches_procurement_owner(
     kind: ProductKind,
     sku_id: &str,
     chain: Vec<ProductCategoryId>,
@@ -304,6 +264,20 @@ mod tests {
     };
 
     use super::*;
+
+    #[test]
+    fn authorized_count_preserves_limit_and_validation_message() {
+        for count in [0, 10_000] {
+            assert!(ensure_authorized_count(count).is_ok());
+        }
+        for count in [10_001, usize::MAX] {
+            assert!(matches!(
+                ensure_authorized_count(count),
+                Err(Error::ValidationError(message))
+                    if message == "采购负责人筛选超过上限，请收窄组织或维护人条件"
+            ));
+        }
+    }
 
     /// 创建用于实际负责人匹配的现行规则。
     fn rule(

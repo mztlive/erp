@@ -9,7 +9,7 @@
 //! 展示读取复用 `erp-read-models`，文件上传与其他外部 I/O 在数据库事务外执行。
 
 use erp_finance::dto::payable::{self as dto, SupplierPaymentView};
-use erp_read_models::finance::payable::{PayableReadService, mapping};
+use erp_read_models::finance::payable::PayableReadService;
 use erp_support::FileAssetView;
 use mongodb::Database;
 
@@ -93,7 +93,7 @@ impl PayableProcess {
 }
 #[cfg(test)]
 mod supplier_payment_execution_tests {
-    use super::mapping::masked_bank_account_number;
+    use erp_read_models::finance::payable::mapping::masked_bank_account_number;
 
     /// 收款账号掩码不得泄露除末四位外的内容。
     #[test]

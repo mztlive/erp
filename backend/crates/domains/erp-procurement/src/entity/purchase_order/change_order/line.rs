@@ -11,9 +11,7 @@ use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
-use crate::entity::purchase_order::line_common::{
-    PurchaseLineDataRef, PurchaseLineFields, ensure_line_no, normalize_and_validate_line, normalize_expense,
-};
+use crate::entity::purchase_order::line_common::{PurchaseLineFields, normalize_expense};
 use crate::entity::purchase_order::offering_source::ensure_offering_source;
 use crate::entity::purchase_order::types::PurchaseLineType;
 use crate::entity::purchase_order::{
@@ -133,22 +131,32 @@ pub struct PurchaseChangeSubmissionLine {
     pub expense: Option<PurchaseExpenseDetail>,
 }
 
-impl PurchaseLineDataRef for PurchaseChangeSubmissionLineData {
-    fn fields(&self) -> PurchaseLineFields {
-        PurchaseLineFields {
+impl PurchaseChangeSubmissionLineData {
+    fn take_validated_fields(&mut self) -> Result<PurchaseLineFields> {
+        let mut fields = PurchaseLineFields {
             line_type: self.line_type,
-            procurement_confirmation_line_id: self.procurement_confirmation_line_id.clone(),
-            sku_id: self.sku_id.clone(),
-            product_name_snapshot: self.product_name_snapshot.clone(),
-            specification_snapshot: self.specification_snapshot.clone(),
+            procurement_confirmation_line_id: self.procurement_confirmation_line_id.take(),
+            sku_id: self.sku_id.take(),
+            product_name_snapshot: self.product_name_snapshot.take(),
+            specification_snapshot: self.specification_snapshot.take(),
             quantity: self.quantity,
-            base_unit_code: self.base_unit_code.clone(),
+            base_unit_code: self.base_unit_code.take(),
             unit_cost_gross: self.unit_cost_gross,
             gross_amount: self.gross_amount,
             net_amount: self.net_amount,
             tax_amount: self.tax_amount,
             input_tax_rate: self.input_tax_rate,
-        }
+        };
+        fields.normalize_and_validate(self.line_no, true)?;
+        self.ensure_allocation()?;
+        ensure_offering_source(
+            self.line_type,
+            self.supplier_offering_source.as_ref(),
+            self.unit_cost_gross,
+            self.input_tax_rate,
+        )?;
+        PurchaseDeliveryAllocation::validate(&mut self.delivery_allocations, self.line_type, self.quantity)?;
+        Ok(fields)
     }
 
     /// 按行类型校验销售分配字段。
@@ -184,27 +192,13 @@ impl PurchaseLineDataRef for PurchaseChangeSubmissionLineData {
         }
         Ok(())
     }
-
-    /// 变更提交行与版本行允许零数量，表示该行已移除但保留原行身份。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 恒返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    fn allows_zero_quantity(&self) -> bool {
-        true
-    }
 }
 
 impl PurchaseChangeSubmissionLine {
     /// 创建采购变更提交行。
     ///
     /// 完成快照文本的规范化，并按行类型强制字段归属与金额三元组守恒（§6.6）；
-    /// 商品行必须携带销售提交行引用与分配数量。
+    /// 商品行必须引用销售稳定行与当前版本行，移除行的分配数量可以为零。
     ///
     /// # 参数
     /// * `id` - 实体主键（`erp_core::ids::PurchaseChangeSubmissionLineId`）
@@ -220,34 +214,26 @@ impl PurchaseChangeSubmissionLine {
         id: PurchaseChangeSubmissionLineId,
         mut data: PurchaseChangeSubmissionLineData,
     ) -> Result<Self> {
-        ensure_line_no(data.line_no)?;
-        let (product_name, specification, base_unit_code) = normalize_and_validate_line(&data)?;
-        ensure_offering_source(
-            data.line_type,
-            data.supplier_offering_source.as_ref(),
-            data.unit_cost_gross,
-            data.input_tax_rate,
-        )?;
-        PurchaseDeliveryAllocation::validate(&mut data.delivery_allocations, data.line_type, data.quantity)?;
+        let fields = data.take_validated_fields()?;
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             purchase_change_submission_id: data.purchase_change_submission_id,
             line_no: data.line_no,
-            line_type: data.line_type,
-            procurement_confirmation_line_id: data.procurement_confirmation_line_id,
-            sku_id: data.sku_id,
+            line_type: fields.line_type,
+            procurement_confirmation_line_id: fields.procurement_confirmation_line_id,
+            sku_id: fields.sku_id,
             sku_revision_id: data.sku_revision_id,
             supplier_offering_source: data.supplier_offering_source,
             delivery_allocations: data.delivery_allocations,
-            product_name_snapshot: product_name,
-            specification_snapshot: specification,
-            quantity: data.quantity,
-            base_unit_code,
-            unit_cost_gross: data.unit_cost_gross,
-            gross_amount: data.gross_amount,
-            net_amount: data.net_amount,
-            tax_amount: data.tax_amount,
-            input_tax_rate: data.input_tax_rate,
+            product_name_snapshot: fields.product_name_snapshot,
+            specification_snapshot: fields.specification_snapshot,
+            quantity: fields.quantity,
+            base_unit_code: fields.base_unit_code,
+            unit_cost_gross: fields.unit_cost_gross,
+            gross_amount: fields.gross_amount,
+            net_amount: fields.net_amount,
+            tax_amount: fields.tax_amount,
+            input_tax_rate: fields.input_tax_rate,
             expected_delivery_date: data.expected_delivery_date,
             sales_order_line_id: data.sales_order_line_id,
             sales_order_revision_line_id: data.sales_order_revision_line_id,

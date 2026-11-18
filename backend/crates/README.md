@@ -146,21 +146,21 @@
 3. 由本域 Repository 封装数据操作。Repository 接收调用方的 Executor；多集合原子写入由用例或 Process 控制事务。外部 HTTP、S3 和供应商调用置于数据库事务之外。
 4. 查询变更同步评估索引；应用组合根复用各领域公开索引入口，保持既有逐集合注册顺序。列表、统计和导出保持相同的数据授权及筛选口径。
 5. HTTP 请求和响应优先复用领域或组合层 DTO。扩展公共类型或方法时检查 Process、ReadModel、应用调用方及宏消费方。
-6. 业务代码改动补充库单元测试，覆盖成功、失败、边界及相关幂等、版本冲突和金额数量规则；执行目标 README 的定向检查及下列统一质量门禁。
+6. 业务代码改动补充库单元测试，覆盖成功、失败、边界及相关幂等、版本冲突和金额数量规则。按 [后端开发规则](../AGENTS.md#验证) 执行定向检查。
 7. 仅修改 README 时，核对 crate 覆盖、相对链接、公开入口、命令包名和 git diff --check；无需因文档编辑执行编译或业务回归。
 
 ## 质量门禁
 
-以下命令均在 `backend/` 目录执行：
+日常本地验证按 [后端开发规则](../AGENTS.md#验证) 执行。CI 在 `backend/` 执行以下全量检查：
 
 ```bash
 cargo fmt --all -- --check
+./scripts/check-permissions-drift.sh
 cargo check --workspace --locked
 cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked
 ./scripts/check-bpm-boundaries.sh
 ./scripts/check-domain-boundaries.sh --cutover
-./scripts/check-permissions-drift.sh
 git diff --check
 ```
 

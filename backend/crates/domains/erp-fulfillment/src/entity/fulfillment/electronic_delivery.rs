@@ -13,7 +13,7 @@ use std::fmt;
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use erp_core::common::fact::FactBase;
+use erp_core::common::fact::{FactBase, FactSource};
 use erp_core::common::source::SourceType;
 use erp_core::common::state::{DocumentState, ensure_transition};
 use erp_core::common::time::Instant;
@@ -23,9 +23,10 @@ use erp_core::ids::{
 use erp_core::money::Quantity;
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
-use super::fingerprint::{FINGERPRINT_HEX_LEN, hmac_sha256_hex, validate_fingerprint};
+use super::fingerprint::{hmac_sha256_hex, normalize_precomputed_fingerprint};
 
 /// 履约记录号最大长度。
 const FULFILLMENT_NO_MAX_LEN: usize = 64;
@@ -240,6 +241,28 @@ pub struct ElectronicDeliveryData {
     pub reason_text: Option<String>,
 }
 
+impl ElectronicDeliveryData {
+    fn normalized(mut self) -> Result<Self> {
+        self.fulfillment_no = normalize_required_text(
+            self.fulfillment_no,
+            "履约记录号不能为空",
+            FULFILLMENT_NO_MAX_LEN,
+            "履约记录号过长",
+        )?;
+        (self.recipient_snapshot, self.recipient_snapshot_fingerprint) =
+            normalize_recipient_snapshot(self.recipient_snapshot, self.recipient_snapshot_fingerprint)?;
+        self.recorded_by =
+            normalize_required_text(self.recorded_by, "记录人不能为空", ACTOR_MAX_LEN, "记录人过长")?;
+        if self.recorded_at < self.occurred_at {
+            return Err(Error::from("记录时间不得早于实际交付时间"));
+        }
+        if self.quantity.to_decimal() <= Decimal::ZERO {
+            return Err(Error::from("交付数量必须为正数"));
+        }
+        Ok(self)
+    }
+}
+
 /// 电子交付记录更新数据（仅草稿可更新）。
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ElectronicDeliveryUpdate {
@@ -373,55 +396,23 @@ impl ElectronicDelivery {
     /// 必填字段为空/超长、快照指纹格式非法、交付数量非正或记录时间早于
     /// 发生时间时返回错误。
     pub fn new(id: ElectronicDeliveryId, data: ElectronicDeliveryData) -> Result<Self> {
-        let fulfillment_no = normalize_required_text(
-            data.fulfillment_no,
-            "履约记录号不能为空",
-            FULFILLMENT_NO_MAX_LEN,
-            "履约记录号过长",
-        )?;
-        let recipient_snapshot = normalize_required_text(
-            data.recipient_snapshot,
-            "交付对象加密快照不能为空",
-            RECIPIENT_SNAPSHOT_MAX_LEN,
-            "交付对象加密快照过长",
-        )?;
-        let recipient_snapshot_fingerprint = normalize_required_text(
-            data.recipient_snapshot_fingerprint,
-            "交付对象查询指纹不能为空",
-            FINGERPRINT_HEX_LEN,
-            "交付对象查询指纹过长",
-        )?;
-        validate_fingerprint(&recipient_snapshot_fingerprint)?;
-        let recorded_by =
-            normalize_required_text(data.recorded_by, "记录人不能为空", ACTOR_MAX_LEN, "记录人过长")?;
+        let data = data.normalized()?;
         let source_reference = normalize_optional_source_reference(data.source_reference);
-        if data.recorded_at < data.occurred_at {
-            return Err(Error::from("记录时间不得早于实际交付时间"));
-        }
-        if data.quantity.to_decimal() <= rust_decimal::Decimal::ZERO {
-            return Err(Error::from("交付数量必须为正数"));
-        }
-
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             fact: FactBase::new(
                 data.fact_no,
                 data.occurred_at,
                 data.recorded_at,
-                recorded_by,
-                erp_core::common::fact::FactSource {
-                    source_type: data.source_type,
-                    source_reference,
-                    reason_code: data.reason_code,
-                    reason_text: data.reason_text,
-                },
+                data.recorded_by,
+                FactSource::new(data.source_type, source_reference, data.reason_code, data.reason_text),
             ),
-            fulfillment_no,
+            fulfillment_no: data.fulfillment_no,
             sales_order_line_id: data.sales_order_line_id,
             purchase_order_id: data.purchase_order_id,
             purchase_line_sales_allocation_id: data.purchase_line_sales_allocation_id,
-            recipient_snapshot,
-            recipient_snapshot_fingerprint,
+            recipient_snapshot: data.recipient_snapshot,
+            recipient_snapshot_fingerprint: data.recipient_snapshot_fingerprint,
             quantity: data.quantity,
             result: data.result,
             evidence_attachment_id: data.evidence_attachment_id,
@@ -508,6 +499,7 @@ impl ElectronicDelivery {
     }
 
     /// 在正式确认前原子写入交付事实；数量必须等于冻结分配。
+    /// 履约记录号仍须合法，但不覆盖草稿记录号。
     ///
     /// # 参数
     /// * `data` - 当前身份与已加密、已校验凭证的交付事实
@@ -525,14 +517,14 @@ impl ElectronicDelivery {
         if data.evidence_attachment_id.is_none() {
             return Err(Error::from("确认电子交付必须提供交付凭证"));
         }
-        let validated = Self::new(ElectronicDeliveryId::new(self.base.id.clone()), data)?;
-        self.recipient_snapshot = validated.recipient_snapshot;
-        self.recipient_snapshot_fingerprint = validated.recipient_snapshot_fingerprint;
-        self.result = validated.result;
-        self.evidence_attachment_id = validated.evidence_attachment_id;
-        self.fact.occurred_at = validated.fact.occurred_at;
-        self.fact.recorded_at = validated.fact.recorded_at;
-        self.fact.recorded_by = validated.fact.recorded_by;
+        let data = data.normalized()?;
+        self.recipient_snapshot = data.recipient_snapshot;
+        self.recipient_snapshot_fingerprint = data.recipient_snapshot_fingerprint;
+        self.result = data.result;
+        self.evidence_attachment_id = data.evidence_attachment_id;
+        self.fact.occurred_at = data.occurred_at;
+        self.fact.recorded_at = data.recorded_at;
+        self.fact.recorded_by = data.recorded_by;
         Ok(())
     }
 
@@ -598,6 +590,21 @@ impl ElectronicDelivery {
         }
         Ok(())
     }
+}
+
+pub(super) fn normalize_recipient_snapshot(
+    snapshot: String,
+    fingerprint: String,
+) -> Result<(String, String)> {
+    let snapshot = normalize_required_text(
+        snapshot,
+        "交付对象加密快照不能为空",
+        RECIPIENT_SNAPSHOT_MAX_LEN,
+        "交付对象加密快照过长",
+    )?;
+    let fingerprint =
+        normalize_precomputed_fingerprint("交付对象查询指纹不能为空", "交付对象查询指纹过长", fingerprint)?;
+    Ok((snapshot, fingerprint))
 }
 
 /// 规范化可选来源引用。
@@ -677,27 +684,83 @@ pub(crate) mod tests {
     #[test]
     fn confirmation_writes_facts_and_rejects_mutation_after_confirmation() {
         let mut record = ElectronicDelivery::new(ElectronicDeliveryId::new("ed-confirm"), data()).unwrap();
-        let original = serde_json::to_value(&record).unwrap();
-        let mut invalid = data();
-        invalid.quantity = Quantity::from_str("3").unwrap();
-        assert!(record.apply_confirmation(invalid).is_err());
-        assert_eq!(serde_json::to_value(&record).unwrap(), original);
-        let mut invalid = data();
-        invalid.evidence_attachment_id = None;
-        assert!(record.apply_confirmation(invalid).is_err());
-        assert_eq!(serde_json::to_value(&record).unwrap(), original);
-        let mut submitted = data();
-        submitted.recipient_snapshot = "encrypted-confirmed-recipient".into();
-        submitted.occurred_at = Instant::from_unix_secs(1_700_000_020);
+        record.base = BaseModel::fake();
+        record.base.version = u64::MAX;
+        record.quantity = Quantity::try_from(Decimal::MAX).unwrap();
+        let mut expected = record.clone();
+        let mut submitted = ElectronicDeliveryData {
+            fulfillment_no: " ".into(),
+            quantity: Quantity::from_str("3").unwrap(),
+            evidence_attachment_id: None,
+            ..data()
+        };
+        assert_eq!(
+            record.apply_confirmation(submitted.clone()).unwrap_err().to_string(),
+            "交付数量必须与采购销售分配数量一致"
+        );
+        submitted.quantity = record.quantity;
+        assert_eq!(
+            record.apply_confirmation(submitted.clone()).unwrap_err().to_string(),
+            "确认电子交付必须提供交付凭证"
+        );
         submitted.evidence_attachment_id = Some(FileAssetId::new("confirmed-evidence"));
+        assert_eq!(
+            record.apply_confirmation(submitted.clone()).unwrap_err().to_string(),
+            "履约记录号不能为空"
+        );
+        assert_eq!(record, expected);
+
+        submitted.fulfillment_no = "ED-OTHER".into();
+        submitted.sales_order_line_id = SalesOrderLineId::new("other-line");
+        submitted.fact_no = "F-OTHER".into();
+        submitted.source_type = SourceType::ManualImport;
+        submitted.source_reference = Some("界".repeat(257));
+        submitted.reason_text = Some("后补说明".into());
+        submitted.recipient_snapshot = " encrypted-confirmed-recipient ".into();
+        submitted.recipient_snapshot_fingerprint = format!(" {} ", "A".repeat(64));
+        submitted.result = FulfillmentResult::PartialSuccess;
+        submitted.occurred_at = Instant::from_unix_secs(1_700_000_020);
+        submitted.recorded_at = submitted.occurred_at;
+        submitted.recorded_by = " confirmer ".into();
         record.apply_confirmation(submitted).unwrap();
-        assert_eq!(record.recipient_snapshot, "encrypted-confirmed-recipient");
-        assert_eq!(record.fact.occurred_at.unix_secs(), 1_700_000_020);
-        assert_eq!(record.evidence_attachment_id.as_ref().unwrap().as_ref(), "confirmed-evidence");
+
+        expected.recipient_snapshot = "encrypted-confirmed-recipient".into();
+        expected.recipient_snapshot_fingerprint = "A".repeat(64);
+        expected.result = FulfillmentResult::PartialSuccess;
+        expected.evidence_attachment_id = Some(FileAssetId::new("confirmed-evidence"));
+        expected.fact.occurred_at = Instant::from_unix_secs(1_700_000_020);
+        expected.fact.recorded_at = expected.fact.occurred_at;
+        expected.fact.recorded_by = "confirmer".into();
+        assert_eq!(record, expected);
+
         record.confirm().unwrap();
-        let confirmed = serde_json::to_value(&record).unwrap();
-        assert!(record.apply_confirmation(data()).is_err());
-        assert_eq!(serde_json::to_value(&record).unwrap(), confirmed);
+        expected.status = ElectronicDeliveryState::Confirmed;
+        assert_eq!(
+            record.apply_confirmation(data()).unwrap_err().to_string(),
+            "已确认或已冲正的电子交付记录不可覆盖"
+        );
+        assert_eq!(record, expected);
+    }
+
+    #[test]
+    fn confirmation_keeps_time_and_positive_quantity_checks_when_frozen_quantity_is_zero() {
+        let mut record = ElectronicDelivery::new(ElectronicDeliveryId::new("ed-confirm"), data()).unwrap();
+        record.quantity = Quantity::from_str("0").unwrap();
+        let original = record.clone();
+        let mut submitted = ElectronicDeliveryData {
+            quantity: record.quantity,
+            recipient_snapshot: "new-ciphertext".into(),
+            recorded_at: Instant::from_unix_secs(1_699_999_999),
+            ..data()
+        };
+        assert_eq!(
+            record.apply_confirmation(submitted.clone()).unwrap_err().to_string(),
+            "记录时间不得早于实际交付时间"
+        );
+        assert_eq!(record, original);
+        submitted.recorded_at = submitted.occurred_at;
+        assert_eq!(record.apply_confirmation(submitted).unwrap_err().to_string(), "交付数量必须为正数");
+        assert_eq!(record, original);
     }
 
     /// 失败路径：必填空、超长、指纹格式非法、数量越界、时间倒挂。

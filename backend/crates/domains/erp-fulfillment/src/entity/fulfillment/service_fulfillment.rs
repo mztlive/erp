@@ -13,7 +13,7 @@ use std::fmt;
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use erp_core::common::fact::FactBase;
+use erp_core::common::fact::{FactBase, FactSource};
 use erp_core::common::source::SourceType;
 use erp_core::common::state::{DocumentState, ensure_transition};
 use erp_core::common::time::Instant;
@@ -23,15 +23,14 @@ use erp_core::ids::{
 use erp_core::money::Quantity;
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
-use super::electronic_delivery::{ElectronicDelivery, FulfillmentResult};
-use super::fingerprint::{FINGERPRINT_HEX_LEN, hmac_sha256_hex, validate_fingerprint};
+use super::electronic_delivery::{ElectronicDelivery, FulfillmentResult, normalize_recipient_snapshot};
+use super::fingerprint::{hmac_sha256_hex, normalize_precomputed_fingerprint};
 
 /// 履约记录号最大长度。
 const FULFILLMENT_NO_MAX_LEN: usize = 64;
-/// 交付对象加密快照最大长度。
-const RECIPIENT_SNAPSHOT_MAX_LEN: usize = 4096;
 /// 服务地点加密值最大长度。
 const SERVICE_LOCATION_ENCRYPTED_MAX_LEN: usize = 4096;
 /// 完成说明最大长度。
@@ -113,7 +112,7 @@ impl ServiceFulfillmentState {
     /// # 错误
     /// 不返回错误。
     pub fn is_confirmable(self) -> bool {
-        self.is_editable()
+        self.allowed_next().contains(&Self::Confirmed)
     }
 
     /// 判断当前状态能否作为客户验收履约事实。
@@ -271,7 +270,9 @@ impl ServiceFulfillmentConfirmation {
     /// # 约束
     /// 无。
     pub fn new(params: ServiceFulfillmentConfirmationParams) -> Result<Self> {
-        let result = ensure_binary_service_result(params.result)?;
+        if params.result == FulfillmentResult::PartialSuccess {
+            return Err(Error::from("线下服务履约结果只能是成功或失败"));
+        }
         let completion_note = normalize_required_text(
             params.completion_note,
             "完成说明不能为空",
@@ -280,23 +281,14 @@ impl ServiceFulfillmentConfirmation {
         )?;
         let evidence_attachment_id = params.evidence_attachment_id;
         require_evidence_attachment_id(&evidence_attachment_id)?;
-        let service_location_encrypted = normalize_required_text(
+        let (service_location_encrypted, service_location_fingerprint) = normalize_service_location(
             params.service_location_encrypted,
-            "服务地点加密值不能为空",
-            SERVICE_LOCATION_ENCRYPTED_MAX_LEN,
-            "服务地点加密值过长",
-        )?;
-        let service_location_fingerprint = normalize_required_text(
             params.service_location_fingerprint,
-            "服务地点查询指纹不能为空",
-            FINGERPRINT_HEX_LEN,
-            "服务地点查询指纹过长",
         )?;
-        validate_fingerprint(&service_location_fingerprint)?;
         ensure_positive_quantity(&params.quantity)?;
         ensure_service_window(params.service_started_at, params.service_ended_at)?;
         Ok(Self {
-            result,
+            result: params.result,
             completion_note,
             evidence_attachment_id,
             service_location_encrypted,
@@ -474,32 +466,10 @@ impl ServiceFulfillment {
             FULFILLMENT_NO_MAX_LEN,
             "履约记录号过长",
         )?;
-        let recipient_snapshot = normalize_required_text(
-            data.recipient_snapshot,
-            "交付对象加密快照不能为空",
-            RECIPIENT_SNAPSHOT_MAX_LEN,
-            "交付对象加密快照过长",
-        )?;
-        let recipient_snapshot_fingerprint = normalize_required_text(
-            data.recipient_snapshot_fingerprint,
-            "交付对象查询指纹不能为空",
-            FINGERPRINT_HEX_LEN,
-            "交付对象查询指纹过长",
-        )?;
-        validate_fingerprint(&recipient_snapshot_fingerprint)?;
-        let service_location_encrypted = normalize_required_text(
-            data.service_location_encrypted,
-            "服务地点加密值不能为空",
-            SERVICE_LOCATION_ENCRYPTED_MAX_LEN,
-            "服务地点加密值过长",
-        )?;
-        let service_location_fingerprint = normalize_required_text(
-            data.service_location_fingerprint,
-            "服务地点查询指纹不能为空",
-            FINGERPRINT_HEX_LEN,
-            "服务地点查询指纹过长",
-        )?;
-        validate_fingerprint(&service_location_fingerprint)?;
+        let (recipient_snapshot, recipient_snapshot_fingerprint) =
+            normalize_recipient_snapshot(data.recipient_snapshot, data.recipient_snapshot_fingerprint)?;
+        let (service_location_encrypted, service_location_fingerprint) =
+            normalize_service_location(data.service_location_encrypted, data.service_location_fingerprint)?;
         let recorded_by =
             normalize_required_text(data.recorded_by, "记录人不能为空", ACTOR_MAX_LEN, "记录人过长")?;
         let completion_note =
@@ -519,12 +489,7 @@ impl ServiceFulfillment {
                 data.occurred_at,
                 data.recorded_at,
                 recorded_by,
-                erp_core::common::fact::FactSource {
-                    source_type: data.source_type,
-                    source_reference: data.source_reference,
-                    reason_code: data.reason_code,
-                    reason_text: data.reason_text,
-                },
+                FactSource::new(data.source_type, data.source_reference, data.reason_code, data.reason_text),
             ),
             fulfillment_no,
             sales_order_line_id: data.sales_order_line_id,
@@ -720,7 +685,6 @@ impl ServiceFulfillment {
         }
         self.ensure_confirmable()?;
         self.ensure_evidence_present()?;
-        ensure_transition(self.status, ServiceFulfillmentState::Confirmed)?;
         self.status = ServiceFulfillmentState::Confirmed;
         Ok(())
     }
@@ -784,7 +748,7 @@ impl ServiceFulfillment {
 /// # 错误
 /// 数量小于或等于零时返回错误。
 fn ensure_positive_quantity(quantity: &Quantity) -> Result<()> {
-    if quantity.to_decimal() <= rust_decimal::Decimal::ZERO {
+    if quantity.to_decimal() <= Decimal::ZERO {
         return Err(Error::from("服务数量必须为正数"));
     }
     Ok(())
@@ -808,21 +772,16 @@ fn ensure_service_window(started_at: Instant, ended_at: Instant) -> Result<()> {
     Ok(())
 }
 
-/// 校验线下服务履约结果只能是成功或失败。
-///
-/// # 参数
-/// * `result` - 待确认的履约结果
-///
-/// # 返回
-/// 成功或失败时原样返回。
-///
-/// # 错误
-/// 结果为部分成功时返回错误。
-fn ensure_binary_service_result(result: FulfillmentResult) -> Result<FulfillmentResult> {
-    if matches!(result, FulfillmentResult::PartialSuccess) {
-        return Err(Error::from("线下服务履约结果只能是成功或失败"));
-    }
-    Ok(result)
+fn normalize_service_location(location: String, fingerprint: String) -> Result<(String, String)> {
+    let location = normalize_required_text(
+        location,
+        "服务地点加密值不能为空",
+        SERVICE_LOCATION_ENCRYPTED_MAX_LEN,
+        "服务地点加密值过长",
+    )?;
+    let fingerprint =
+        normalize_precomputed_fingerprint("服务地点查询指纹不能为空", "服务地点查询指纹过长", fingerprint)?;
+    Ok((location, fingerprint))
 }
 
 /// 校验图片凭证主键非空。
@@ -972,7 +931,8 @@ pub(crate) mod tests {
         )
         .unwrap();
         assert!(missing_evidence.ensure_evidence_present().is_err());
-        assert!(missing_evidence.confirm().is_err());
+        assert_eq!(missing_evidence.confirm().unwrap_err().to_string(), "线下服务履约必须上传图片凭证");
+        assert_eq!(missing_evidence.status, ServiceFulfillmentState::Draft);
 
         let confirmation = ServiceFulfillmentConfirmation::new(ServiceFulfillmentConfirmationParams {
             result: FulfillmentResult::Success,
@@ -992,8 +952,28 @@ pub(crate) mod tests {
         assert_eq!(missing_evidence.evidence_attachment_id, Some(FileAssetId::new("file-confirm")));
         missing_evidence.confirm().unwrap();
         assert_eq!(missing_evidence.status, ServiceFulfillmentState::Confirmed);
-        assert!(missing_evidence.confirm().is_ok());
         assert!(missing_evidence.ensure_draft_version(missing_evidence.base.version).is_err());
+        missing_evidence.evidence_attachment_id = None;
+        missing_evidence.confirm().unwrap();
+        missing_evidence.reverse().unwrap();
+        assert_eq!(missing_evidence.confirm().unwrap_err().to_string(), "只有草稿状态的服务履约记录可以确认");
+        assert_eq!(missing_evidence.status, ServiceFulfillmentState::Reversed);
+    }
+
+    #[test]
+    fn update_keeps_result_change_when_completion_note_is_too_long() {
+        let mut fulfillment =
+            ServiceFulfillment::new(ServiceFulfillmentId::new("sf-update"), data()).unwrap();
+        let mut expected = fulfillment.clone();
+        expected.result = FulfillmentResult::Failure;
+        let error = fulfillment
+            .update(ServiceFulfillmentUpdate {
+                result: Some(FulfillmentResult::Failure),
+                completion_note: Some("说".repeat(513)),
+            })
+            .unwrap_err();
+        assert_eq!(error.to_string(), "完成说明长度不符合要求");
+        assert_eq!(fulfillment, expected);
     }
 
     /// 确认不得放大或缩小采购销售分配冻结的服务数量。
@@ -1022,50 +1002,46 @@ pub(crate) mod tests {
         }
     }
 
-    /// 确认现场事实拒绝空凭证、倒挂时间窗和非正数量。
     #[test]
-    fn confirmation_facts_reject_invalid_inputs() {
-        let fingerprint =
-            ServiceFulfillment::service_location_fingerprint(PLAINTEXT_LOCATION, FINGERPRINT_KEY);
-        assert!(
-            ServiceFulfillmentConfirmation::new(ServiceFulfillmentConfirmationParams {
-                result: FulfillmentResult::Success,
-                completion_note: "上门安装调试完成".to_string(),
-                evidence_attachment_id: FileAssetId::new("   "),
-                service_location_encrypted: "ciphertext-location".to_string(),
-                service_location_fingerprint: fingerprint.clone(),
-                service_started_at: Instant::from_unix_secs(1_700_000_000),
-                service_ended_at: Instant::from_unix_secs(1_700_003_600),
-                quantity: Quantity::from_str("1").unwrap(),
-            })
-            .is_err()
-        );
-        assert!(
-            ServiceFulfillmentConfirmation::new(ServiceFulfillmentConfirmationParams {
-                result: FulfillmentResult::Success,
-                completion_note: "上门安装调试完成".to_string(),
-                evidence_attachment_id: FileAssetId::new("file-1"),
-                service_location_encrypted: "ciphertext-location".to_string(),
-                service_location_fingerprint: fingerprint.clone(),
-                service_started_at: Instant::from_unix_secs(1_700_003_600),
-                service_ended_at: Instant::from_unix_secs(1_700_000_000),
-                quantity: Quantity::from_str("1").unwrap(),
-            })
-            .is_err()
-        );
-        assert!(
-            ServiceFulfillmentConfirmation::new(ServiceFulfillmentConfirmationParams {
-                result: FulfillmentResult::PartialSuccess,
-                completion_note: "上门安装调试完成".to_string(),
-                evidence_attachment_id: FileAssetId::new("file-1"),
-                service_location_encrypted: "ciphertext-location".to_string(),
-                service_location_fingerprint: fingerprint,
-                service_started_at: Instant::from_unix_secs(1_700_000_000),
-                service_ended_at: Instant::from_unix_secs(1_700_003_600),
-                quantity: Quantity::from_str("1").unwrap(),
-            })
-            .is_err()
-        );
+    fn confirmation_validates_fields_in_order_and_keeps_boundary_values() {
+        let ended_at = Instant::from_unix_secs(1_700_000_000);
+        let mut params = ServiceFulfillmentConfirmationParams {
+            result: FulfillmentResult::PartialSuccess,
+            completion_note: " ".into(),
+            evidence_attachment_id: FileAssetId::new("   "),
+            service_location_encrypted: " ".into(),
+            service_location_fingerprint: "A".repeat(65),
+            service_started_at: Instant::from_unix_secs(1_700_003_600),
+            service_ended_at: ended_at,
+            quantity: Quantity::from_str("0").unwrap(),
+        };
+        let error = |params: &ServiceFulfillmentConfirmationParams| {
+            ServiceFulfillmentConfirmation::new(params.clone()).unwrap_err().to_string()
+        };
+        assert_eq!(error(&params), "线下服务履约结果只能是成功或失败");
+        params.result = FulfillmentResult::Failure;
+        assert_eq!(error(&params), "完成说明不能为空");
+        let note = "说".repeat(512);
+        params.completion_note = format!(" {note} ");
+        assert_eq!(error(&params), "线下服务履约必须上传图片凭证");
+        params.evidence_attachment_id = FileAssetId::new("file-1");
+        assert_eq!(error(&params), "服务地点加密值不能为空");
+        let location = "址".repeat(4096);
+        params.service_location_encrypted = format!(" {location} ");
+        assert_eq!(error(&params), "服务地点查询指纹过长");
+        let fingerprint = "A".repeat(64);
+        params.service_location_fingerprint = format!(" {fingerprint} ");
+        assert_eq!(error(&params), "服务数量必须为正数");
+        params.quantity = Quantity::try_from(Decimal::MAX).unwrap();
+        assert_eq!(error(&params), "服务结束时间不得早于开始时间");
+        params.service_started_at = ended_at;
+        let confirmation = ServiceFulfillmentConfirmation::new(params).unwrap();
+        assert_eq!(confirmation.result, FulfillmentResult::Failure);
+        assert_eq!(confirmation.completion_note, note);
+        assert_eq!(confirmation.service_location_encrypted, location);
+        assert_eq!(confirmation.service_location_fingerprint, fingerprint);
+        assert_eq!(confirmation.quantity.to_decimal(), Decimal::MAX);
+        assert_eq!(confirmation.service_started_at, confirmation.service_ended_at);
     }
 
     /// 确认与验收资格由实体状态及销售明细关联共同决定。

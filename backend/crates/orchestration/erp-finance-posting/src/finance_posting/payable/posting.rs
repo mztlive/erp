@@ -10,14 +10,13 @@ use erp_finance::service::payable::{
 use mongodb::Database;
 use persistence_core::Executor;
 
-use super::payment_task;
 use crate::{Error, Result};
-/// 在调用方事务内写入付款核销、应付余额、任务进度与审计。
+/// 在调用方事务内写入付款核销、应付余额与审计。
 ///
 /// 数据面职责归位（FIN-E02/FIN-R05）：分录/子账事实一次批量装载并去重，
 /// 核销净额、逐分录开放余额、连续序号与分配实体构造由
 /// [`erp_finance::entity::payable::PaymentAllocationLedger`] 完成；子账进度按账户聚合后批量条件更新，
-/// 分配行批量插入。供应商一致性、事务、任务同步与审计仍在本方法编排。
+/// 分配行批量插入。
 ///
 /// # 参数
 /// * `db` - 数据库。
@@ -29,7 +28,7 @@ use crate::{Error, Result};
 /// * `session` - 调用方事务执行器，各步骤共用。
 ///
 /// # 返回
-/// 余额、任务、付款与审计全部写入成功时无返回值。
+/// 余额、付款与审计全部写入成功时无返回值。
 ///
 /// # 错误
 /// 付款状态、供应商、应付开放余额、分配金额或仓储写入不合法时返回错误。
@@ -51,18 +50,15 @@ pub(super) async fn post_supplier_payment(
 trait PaymentPostingSteps: Send {
     /// 按同一执行器写入财务余额。
     async fn settle_accounts(&mut self, executor: &mut dyn Executor) -> Result<()>;
-    /// 在余额更新后重验并同步付款任务。
-    async fn synchronize_tasks(&mut self, executor: &mut dyn Executor) -> Result<()>;
     /// 写入付款状态和核销分配。
     async fn persist_payment(&mut self, executor: &mut dyn Executor) -> Result<()>;
     /// 在付款事实写入后记录过账审计。
     async fn write_audit(&mut self, executor: &mut dyn Executor) -> Result<()>;
 }
 
-/// 保持原余额更新、任务同步、付款/分配、审计顺序；所有步骤收到相同 Executor。
+/// 保持余额更新、付款及分配写入、审计顺序；所有步骤使用同一 Executor。
 async fn execute_posting(steps: &mut impl PaymentPostingSteps, executor: &mut dyn Executor) -> Result<()> {
     steps.settle_accounts(executor).await?;
-    steps.synchronize_tasks(executor).await?;
     steps.persist_payment(executor).await?;
     steps.write_audit(executor).await
 }
@@ -75,13 +71,6 @@ struct MongoPaymentPosting<'a> {
     audit: &'a BusinessEventContext,
     actor: &'a AuditActor,
     settlement: Option<PaymentSettlement>,
-}
-
-impl MongoPaymentPosting<'_> {
-    /// 返回前一步已经形成的余额核销结果。
-    fn settlement(&self) -> Result<&PaymentSettlement> {
-        self.settlement.as_ref().ok_or_else(|| Error::Internal("付款过账缺少应付核销结果".to_string()))
-    }
 }
 
 #[async_trait]
@@ -111,24 +100,7 @@ impl PaymentPostingSteps for MongoPaymentPosting<'_> {
         Ok(())
     }
 
-    /// 按余额更新后实际应用的账户顺序同步付款任务。
-    ///
-    /// # 参数
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 已应用账户的付款任务均已同步。
-    ///
-    /// # 错误
-    /// 尚无核销结果时返回 `Internal`。任一账户的任务同步失败时返回对应错误，并停止后续账户。
-    async fn synchronize_tasks(&mut self, executor: &mut dyn Executor) -> Result<()> {
-        for account_id in &self.settlement()?.applied_account_ids {
-            payment_task::sync_purchase_payment_task(self.db, account_id, executor).await?;
-        }
-        Ok(())
-    }
-
-    /// 在任务同步成功后登记付款状态与核销行。
+    /// 在余额更新成功后登记付款状态与核销行。
     ///
     /// # 参数
     /// * `executor` - 调用方执行器。
@@ -200,9 +172,6 @@ mod tests {
         async fn settle_accounts(&mut self, e: &mut dyn Executor) -> Result<()> {
             self.record("settle", e)
         }
-        async fn synchronize_tasks(&mut self, e: &mut dyn Executor) -> Result<()> {
-            self.record("tasks", e)
-        }
         async fn persist_payment(&mut self, e: &mut dyn Executor) -> Result<()> {
             self.record("payment", e)
         }
@@ -212,25 +181,20 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn posting_keeps_original_order_and_the_same_executor() {
+    async fn posting_keeps_write_order_and_the_same_executor() {
         let mut executor = ReadExecutor::default();
         let expected_executor = &mut executor as *mut ReadExecutor as usize;
         let mut steps = RecordedPosting { calls: Vec::new(), fail_at: None };
         execute_posting(&mut steps, &mut executor).await.unwrap();
         assert_eq!(
             steps.calls,
-            vec![
-                ("settle", expected_executor),
-                ("tasks", expected_executor),
-                ("payment", expected_executor),
-                ("audit", expected_executor)
-            ]
+            vec![("settle", expected_executor), ("payment", expected_executor), ("audit", expected_executor)]
         );
     }
 
     #[tokio::test]
     async fn posting_stops_at_each_failure_and_preserves_the_original_error() {
-        let sequence = ["settle", "tasks", "payment", "audit"];
+        let sequence = ["settle", "payment", "audit"];
         for (index, fail_at) in sequence.iter().enumerate() {
             let mut steps = RecordedPosting { calls: Vec::new(), fail_at: Some(fail_at) };
             let error = execute_posting(&mut steps, &mut ReadExecutor::default()).await.unwrap_err();

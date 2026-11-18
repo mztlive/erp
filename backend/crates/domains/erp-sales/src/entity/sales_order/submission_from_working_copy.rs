@@ -27,18 +27,13 @@ impl SalesOrderWorkingCopy {
     /// # 关键业务约束
     /// 只复制已规范化快照，不再次 trim。
     pub fn header_snapshot_data(&self) -> HeaderSnapshotData {
-        HeaderSnapshotData {
-            customer_name: self.customer_snapshot.customer_name.clone(),
-            contract_no: self.contract_snapshot.as_ref().map(|snapshot| snapshot.contract_no.clone()),
-            settlement_party_name: self
-                .settlement_party_snapshot
-                .as_ref()
-                .map(|snapshot| snapshot.settlement_party_name.clone()),
-            payment_term_code: self.payment_term_snapshot.payment_term_code.clone(),
-            payment_term_name: self.payment_term_snapshot.payment_term_name.clone(),
-            invoice_type: self.invoice_requirement_snapshot.invoice_type.clone(),
-            tax_point: self.invoice_requirement_snapshot.tax_point.clone(),
-        }
+        HeaderSnapshotData::from_snapshots(
+            &self.customer_snapshot,
+            self.contract_snapshot.as_ref(),
+            self.settlement_party_snapshot.as_ref(),
+            &self.payment_term_snapshot,
+            &self.invoice_requirement_snapshot,
+        )
     }
 }
 

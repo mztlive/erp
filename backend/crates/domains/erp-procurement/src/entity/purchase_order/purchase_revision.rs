@@ -17,9 +17,7 @@ use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::entity::purchase_order::change_order::{PurchaseChangeSubmission, PurchaseChangeSubmissionLine};
-use crate::entity::purchase_order::line_common::{
-    PurchaseLineDataRef, PurchaseLineFields, ensure_line_no, normalize_and_validate_line, normalize_expense,
-};
+use crate::entity::purchase_order::line_common::{PurchaseLineFields, normalize_expense};
 use crate::entity::purchase_order::offering_source::ensure_offering_source;
 use crate::entity::purchase_order::purchase_submission::{
     PurchaseOrderSubmission, PurchaseOrderSubmissionLine,
@@ -98,7 +96,9 @@ impl PurchaseOrderRevision {
     /// # 错误
     /// 版本号为零或表头金额三元组不守恒时返回错误。
     pub fn new(id: PurchaseOrderRevisionId, data: PurchaseOrderRevisionData) -> Result<Self> {
-        ensure_revision_no(data.revision_no)?;
+        if data.revision_no == 0 {
+            return Err(Error::from("版本号必须从 1 开始"));
+        }
         ensure_header_triple(data.gross_amount, data.net_amount, data.tax_amount, &data.purchase_order_id)?;
         Ok(Self {
             base: BaseModel::new(id.to_string()),
@@ -319,22 +319,32 @@ pub struct PurchaseOrderRevisionLine {
     pub expense: Option<PurchaseExpenseDetail>,
 }
 
-impl PurchaseLineDataRef for PurchaseOrderRevisionLineData {
-    fn fields(&self) -> PurchaseLineFields {
-        PurchaseLineFields {
+impl PurchaseOrderRevisionLineData {
+    fn take_validated_fields(&mut self) -> Result<PurchaseLineFields> {
+        let mut fields = PurchaseLineFields {
             line_type: self.line_type,
-            procurement_confirmation_line_id: self.procurement_confirmation_line_id.clone(),
-            sku_id: self.sku_id.clone(),
-            product_name_snapshot: self.product_name_snapshot.clone(),
-            specification_snapshot: self.specification_snapshot.clone(),
+            procurement_confirmation_line_id: self.procurement_confirmation_line_id.take(),
+            sku_id: self.sku_id.take(),
+            product_name_snapshot: self.product_name_snapshot.take(),
+            specification_snapshot: self.specification_snapshot.take(),
             quantity: self.quantity,
-            base_unit_code: self.base_unit_code.clone(),
+            base_unit_code: self.base_unit_code.take(),
             unit_cost_gross: self.unit_cost_gross,
             gross_amount: self.gross_amount,
             net_amount: self.net_amount,
             tax_amount: self.tax_amount,
             input_tax_rate: self.input_tax_rate,
-        }
+        };
+        fields.normalize_and_validate(self.line_no, true)?;
+        self.ensure_allocation()?;
+        ensure_offering_source(
+            self.line_type,
+            self.supplier_offering_source.as_ref(),
+            self.unit_cost_gross,
+            self.input_tax_rate,
+        )?;
+        PurchaseDeliveryAllocation::validate(&mut self.delivery_allocations, self.line_type, self.quantity)?;
+        Ok(fields)
     }
 
     /// 按行类型校验版本行的销售分配字段。
@@ -369,20 +379,6 @@ impl PurchaseLineDataRef for PurchaseOrderRevisionLineData {
         }
         Ok(())
     }
-
-    /// 变更提交行与版本行允许零数量，表示该行已移除但保留原行身份。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 恒返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    fn allows_zero_quantity(&self) -> bool {
-        true
-    }
 }
 
 impl PurchaseOrderRevisionLine {
@@ -401,34 +397,26 @@ impl PurchaseOrderRevisionLine {
     /// 行号为零、字段归属与行类型不符、快照超长、数量/单价/税率越界或
     /// 金额三元组不守恒时返回错误。
     pub fn new(id: PurchaseOrderRevisionLineId, mut data: PurchaseOrderRevisionLineData) -> Result<Self> {
-        ensure_line_no(data.line_no)?;
-        let (product_name, specification, base_unit_code) = normalize_and_validate_line(&data)?;
-        ensure_offering_source(
-            data.line_type,
-            data.supplier_offering_source.as_ref(),
-            data.unit_cost_gross,
-            data.input_tax_rate,
-        )?;
-        PurchaseDeliveryAllocation::validate(&mut data.delivery_allocations, data.line_type, data.quantity)?;
+        let fields = data.take_validated_fields()?;
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             purchase_order_revision_id: data.purchase_order_revision_id,
             line_no: data.line_no,
-            line_type: data.line_type,
-            procurement_confirmation_line_id: data.procurement_confirmation_line_id,
-            sku_id: data.sku_id,
+            line_type: fields.line_type,
+            procurement_confirmation_line_id: fields.procurement_confirmation_line_id,
+            sku_id: fields.sku_id,
             sku_revision_id: data.sku_revision_id,
             supplier_offering_source: data.supplier_offering_source,
             delivery_allocations: data.delivery_allocations,
-            product_name_snapshot: product_name,
-            specification_snapshot: specification,
-            quantity: data.quantity,
-            base_unit_code,
-            unit_cost_gross: data.unit_cost_gross,
-            gross_amount: data.gross_amount,
-            net_amount: data.net_amount,
-            tax_amount: data.tax_amount,
-            input_tax_rate: data.input_tax_rate,
+            product_name_snapshot: fields.product_name_snapshot,
+            specification_snapshot: fields.specification_snapshot,
+            quantity: fields.quantity,
+            base_unit_code: fields.base_unit_code,
+            unit_cost_gross: fields.unit_cost_gross,
+            gross_amount: fields.gross_amount,
+            net_amount: fields.net_amount,
+            tax_amount: fields.tax_amount,
+            input_tax_rate: fields.input_tax_rate,
             expected_delivery_date: data.expected_delivery_date,
             sales_order_line_id: data.sales_order_line_id,
             sales_order_revision_line_id: data.sales_order_revision_line_id,
@@ -454,7 +442,33 @@ impl PurchaseOrderRevisionLine {
         revision_id: PurchaseOrderRevisionId,
         submission_line: &PurchaseOrderSubmissionLine,
     ) -> Result<Self> {
-        Self::new(id, revision_line_data_from_submission(revision_id, submission_line))
+        Self::new(
+            id,
+            PurchaseOrderRevisionLineData {
+                purchase_order_revision_id: revision_id,
+                line_no: submission_line.line_no,
+                line_type: submission_line.line_type,
+                procurement_confirmation_line_id: submission_line.procurement_confirmation_line_id.clone(),
+                sku_id: submission_line.sku_id.clone(),
+                sku_revision_id: submission_line.sku_revision_id.clone(),
+                supplier_offering_source: submission_line.supplier_offering_source.clone(),
+                delivery_allocations: submission_line.delivery_allocations.clone(),
+                product_name_snapshot: submission_line.product_name_snapshot.clone(),
+                specification_snapshot: submission_line.specification_snapshot.clone(),
+                quantity: submission_line.quantity,
+                base_unit_code: submission_line.base_unit_code.clone(),
+                unit_cost_gross: submission_line.unit_cost_gross,
+                gross_amount: submission_line.gross_amount,
+                net_amount: submission_line.net_amount,
+                tax_amount: submission_line.tax_amount,
+                input_tax_rate: submission_line.input_tax_rate,
+                expected_delivery_date: submission_line.expected_delivery_date,
+                sales_order_line_id: submission_line.sales_order_line_id.clone(),
+                sales_order_revision_line_id: submission_line.sales_order_revision_line_id.clone(),
+                allocated_quantity: submission_line.allocated_quantity,
+                expense: submission_line.expense.clone(),
+            },
+        )
     }
 
     /// 从采购变更提交行派生生效版本行。
@@ -502,58 +516,6 @@ impl PurchaseOrderRevisionLine {
             },
         )
     }
-}
-
-/// 把采购提交行映射为版本行创建数据。
-///
-/// # 参数
-/// * `revision_id` - 新生效版本稳定身份
-/// * `line` - 已冻结采购提交行
-///
-/// # 返回
-/// 返回保留全部业务字段的版本行创建数据。
-fn revision_line_data_from_submission(
-    revision_id: PurchaseOrderRevisionId,
-    line: &PurchaseOrderSubmissionLine,
-) -> PurchaseOrderRevisionLineData {
-    PurchaseOrderRevisionLineData {
-        purchase_order_revision_id: revision_id,
-        line_no: line.line_no,
-        line_type: line.line_type,
-        procurement_confirmation_line_id: line.procurement_confirmation_line_id.clone(),
-        sku_id: line.sku_id.clone(),
-        sku_revision_id: line.sku_revision_id.clone(),
-        supplier_offering_source: line.supplier_offering_source.clone(),
-        delivery_allocations: line.delivery_allocations.clone(),
-        product_name_snapshot: line.product_name_snapshot.clone(),
-        specification_snapshot: line.specification_snapshot.clone(),
-        quantity: line.quantity,
-        base_unit_code: line.base_unit_code.clone(),
-        unit_cost_gross: line.unit_cost_gross,
-        gross_amount: line.gross_amount,
-        net_amount: line.net_amount,
-        tax_amount: line.tax_amount,
-        input_tax_rate: line.input_tax_rate,
-        expected_delivery_date: line.expected_delivery_date,
-        sales_order_line_id: line.sales_order_line_id.clone(),
-        sales_order_revision_line_id: line.sales_order_revision_line_id.clone(),
-        allocated_quantity: line.allocated_quantity,
-        expense: line.expense.clone(),
-    }
-}
-
-/// 校验版本号从 1 开始。
-///
-/// # 参数
-/// * `revision_no` - 版本号
-///
-/// # 错误
-/// 版本号为零时返回错误。
-fn ensure_revision_no(revision_no: u32) -> Result<()> {
-    if revision_no == 0 {
-        return Err(Error::from("版本号必须从 1 开始"));
-    }
-    Ok(())
 }
 
 /// 校验表头金额三元组守恒。
@@ -743,12 +705,27 @@ mod tests {
         assert_eq!(revision.revision.revision_no, 1);
         assert_eq!(revision.supplier_snapshot.supplier_name, "北京华联供应商");
 
-        let zero = PurchaseOrderRevisionData { revision_no: 0, ..revision_data() };
-        assert!(PurchaseOrderRevision::new(PurchaseOrderRevisionId::new("por-2"), zero).is_err());
+        let zero = PurchaseOrderRevisionData {
+            revision_no: 0,
+            gross_amount: Amount::from_str("30.00").unwrap(),
+            ..revision_data()
+        };
+        let error = PurchaseOrderRevision::new(PurchaseOrderRevisionId::new("por-2"), zero).unwrap_err();
+        assert!(matches!(error, Error::LogicError(message) if message == "版本号必须从 1 开始"));
 
         let inconsistent =
             PurchaseOrderRevisionData { gross_amount: Amount::from_str("30.00").unwrap(), ..revision_data() };
         assert!(PurchaseOrderRevision::new(PurchaseOrderRevisionId::new("por-3"), inconsistent).is_err());
+    }
+
+    #[test]
+    fn revision_numbers_allow_u32_max_but_next_cannot_overflow() {
+        assert_eq!(PurchaseOrderRevision::next_revision_no(&[]).unwrap(), 1);
+        let data = PurchaseOrderRevisionData { revision_no: u32::MAX, ..revision_data() };
+        let revision = PurchaseOrderRevision::new(PurchaseOrderRevisionId::new("last"), data).unwrap();
+        assert_eq!(revision.revision.revision_no, u32::MAX);
+        let error = PurchaseOrderRevision::next_revision_no(&[revision]).unwrap_err();
+        assert!(matches!(error, Error::LogicError(message) if message == "采购版本号溢出"));
     }
 
     #[test]

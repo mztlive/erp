@@ -13,11 +13,10 @@ use persistence_core::{ExecutionBoundary, Executor, Transactional};
 use crate::{Error, Result};
 
 pub mod delivery_coverage;
-mod procurement;
+pub(crate) mod procurement;
 mod scope;
 mod supplier_codes;
 
-pub(crate) use procurement::{CategoryChainCache, matches_procurement_owner};
 pub use procurement::{MapProductProcurementOwners, MongoProductProcurementOwners, ProductProcurementOwners};
 
 /// 商品列表与可售商品列表的组合入口。

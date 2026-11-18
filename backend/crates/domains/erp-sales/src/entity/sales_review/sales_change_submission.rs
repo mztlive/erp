@@ -22,7 +22,7 @@ use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
-use super::snapshot::HeaderSnapshots;
+use super::snapshot::{HeaderSnapshotData, HeaderSnapshots};
 use super::types::{
     BusinessType, GoodsLineFields, LineSummary, LineType, VoucherLineDraft, WelfareScenario,
     build_line_groups, validate_line_list,
@@ -217,21 +217,7 @@ impl SalesChangeSubmissionData {
             customer_id: working_copy.customer_id.clone(),
             contract_revision_id: working_copy.contract_revision_id.clone(),
             settlement_party_id: working_copy.settlement_party_id.clone(),
-            snapshot: super::snapshot::HeaderSnapshotData {
-                customer_name: working_copy.customer_snapshot.customer_name.clone(),
-                contract_no: working_copy
-                    .contract_snapshot
-                    .as_ref()
-                    .map(|snapshot| snapshot.contract_no.clone()),
-                settlement_party_name: working_copy
-                    .settlement_party_snapshot
-                    .as_ref()
-                    .map(|snapshot| snapshot.settlement_party_name.clone()),
-                payment_term_code: working_copy.payment_term_snapshot.payment_term_code.clone(),
-                payment_term_name: working_copy.payment_term_snapshot.payment_term_name.clone(),
-                invoice_type: working_copy.invoice_requirement_snapshot.invoice_type.clone(),
-                tax_point: working_copy.invoice_requirement_snapshot.tax_point.clone(),
-            },
+            snapshot: working_copy.header_snapshot_data(),
             project_name: working_copy.project_name.clone(),
             business_remark: working_copy.business_remark.clone(),
             voucher_category_sku_id: working_copy.voucher_category_sku_id.clone(),
@@ -531,19 +517,14 @@ impl SalesChangeSubmission {
     ///
     /// # 关键业务约束
     /// 只复制已规范化快照字段，不在转换时改写空合同或结算主体。
-    pub fn sales_order_header_snapshot(&self) -> crate::entity::sales_order::HeaderSnapshotData {
-        crate::entity::sales_order::HeaderSnapshotData {
-            customer_name: self.customer_snapshot.customer_name.clone(),
-            contract_no: self.contract_snapshot.as_ref().map(|snapshot| snapshot.contract_no.clone()),
-            settlement_party_name: self
-                .settlement_party_snapshot
-                .as_ref()
-                .map(|snapshot| snapshot.settlement_party_name.clone()),
-            payment_term_code: self.payment_term_snapshot.payment_term_code.clone(),
-            payment_term_name: self.payment_term_snapshot.payment_term_name.clone(),
-            invoice_type: self.invoice_requirement_snapshot.invoice_type.clone(),
-            tax_point: self.invoice_requirement_snapshot.tax_point.clone(),
-        }
+    pub fn sales_order_header_snapshot(&self) -> HeaderSnapshotData {
+        HeaderSnapshotData::from_snapshots(
+            &self.customer_snapshot,
+            self.contract_snapshot.as_ref(),
+            self.settlement_party_snapshot.as_ref(),
+            &self.payment_term_snapshot,
+            &self.invoice_requirement_snapshot,
+        )
     }
 
     /// 执行一次固定状态机迁移。
@@ -888,6 +869,9 @@ mod tests {
         assert_eq!(submission.base_revision_id, SalesOrderRevisionId::new("rev-1"));
         assert_eq!(submission.stable.status(), SubmissionStatus::InReview);
         assert_eq!(submission.customer_snapshot.customer_name, "东方企业");
+        let snapshot = submission.sales_order_header_snapshot();
+        assert_eq!(snapshot.contract_no.as_deref(), Some("HT-2026-0088"));
+        assert_eq!(snapshot.settlement_party_name.as_deref(), Some("集团结算中心"));
     }
 
     #[test]
@@ -986,11 +970,9 @@ mod tests {
                 customer_name: "东方企业".to_string(),
             },
             contract_snapshot: Some(crate::entity::sales_order::ContractSnapshot {
-                contract_no: "HT-1".to_string(),
+                contract_no: " HT-1 ".to_string(),
             }),
-            settlement_party_snapshot: Some(crate::entity::sales_order::SettlementPartySnapshot {
-                settlement_party_name: "结算中心".to_string(),
-            }),
+            settlement_party_snapshot: None,
             payment_term_snapshot: crate::entity::sales_order::PaymentTermSnapshot {
                 payment_term_code: "NET30".to_string(),
                 payment_term_name: "月结30天".to_string(),
@@ -1020,6 +1002,8 @@ mod tests {
         assert_eq!(data.submission_no, 3);
         assert_eq!(data.working_copy_version, 2);
         assert_eq!(data.gross_amount, amt("29.97"));
+        assert_eq!(data.snapshot.contract_no.as_deref(), Some(" HT-1 "));
+        assert_eq!(data.snapshot.settlement_party_name, None);
 
         let mut unrelated_copy = working_copy;
         unrelated_copy.base.id = "wc-2".to_string();

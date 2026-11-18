@@ -20,7 +20,7 @@ use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 use super::amount_validation::{sum_line_amounts, validate_submission_amounts};
-use super::snapshot::HeaderSnapshots;
+use super::snapshot::{HeaderSnapshotData, HeaderSnapshots};
 use super::types::{
     BusinessType, GoodsLineFields, LineSummary, LineType, VoucherLineDraft, WelfareScenario,
     build_line_groups, validate_line_list,
@@ -252,33 +252,19 @@ impl PartialEq for SalesOrderSubmission {
 
 impl Eq for SalesOrderSubmission {}
 
-/// 卡券执行投影校验输入。
-///
-/// # 用途
-/// 将卡券投影字段与提交时间打包，供提交构造时一次性校验。
-///
-/// # 参数
-/// 无
-///
-/// # 返回
-/// 无
-///
-/// # 错误
-/// 无
-///
-/// # 关键业务约束
-/// 卡券必须全字段同时存在；非卡券不得携带任一投影字段。
-struct CardProjectionInputs<'a> {
-    /// 业务性质。
+fn validate_submission_lines(
     business_type: BusinessType,
-    /// 卡券类目 SKU。
-    voucher_category_sku_id: Option<&'a SkuId>,
-    /// 卡券履约期限。
-    voucher_expiry_at: Option<Instant>,
-    /// 应收到期日。
-    receivable_due_date: Option<BusinessDate>,
-    /// 提交时间。
-    submitted_at: Instant,
+    lines: Vec<SalesOrderSubmissionLineData>,
+) -> Result<()> {
+    let summaries = lines
+        .into_iter()
+        .map(|line| LineSummary {
+            line_no: line.line_no,
+            line_id: line.sales_order_line_id,
+            line_type: line.line_type,
+        })
+        .collect::<Vec<_>>();
+    validate_line_list(business_type, &summaries)
 }
 
 impl SalesOrderSubmission {
@@ -310,24 +296,15 @@ impl SalesOrderSubmission {
         let project_name = normalize_optional_text(data.project_name, "项目名称", PROJECT_NAME_MAX_LEN)?;
         let business_remark =
             normalize_optional_text(data.business_remark, "业务备注", BUSINESS_REMARK_MAX_LEN)?;
-        Self::validate_card_projection_inputs(CardProjectionInputs {
-            business_type: data.business_type,
-            voucher_category_sku_id: data.voucher_category_sku_id.as_ref(),
-            voucher_expiry_at: data.voucher_expiry_at,
-            receivable_due_date: data.receivable_due_date,
-            submitted_at: data.submitted_at,
-        })?;
+        Self::validate_card_projection(
+            data.business_type,
+            data.voucher_category_sku_id.as_ref(),
+            data.voucher_expiry_at,
+            data.receivable_due_date,
+            data.submitted_at,
+        )?;
         validate_submission_amounts(data.gross_amount, data.net_amount, data.tax_amount)?;
-        let lines = data
-            .lines
-            .into_iter()
-            .map(|line| LineSummary {
-                line_no: line.line_no,
-                line_id: line.sales_order_line_id,
-                line_type: line.line_type,
-            })
-            .collect::<Vec<_>>();
-        validate_line_list(data.business_type, &lines)?;
+        validate_submission_lines(data.business_type, data.lines)?;
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),
@@ -446,49 +423,24 @@ impl SalesOrderSubmission {
         self.transition(SubmissionStatus::Superseded, updated_by)
     }
 
-    /// 校验卡券提交冻结了完整且不过期的卡券输入。
-    ///
-    /// 卡券提交必须同时冻结类目、履约期限和应收到期日。非卡券提交不得携带这些卡券字段。
-    /// 应收到期日不得早于服务端记录的提交自然日。
-    ///
-    /// # 用途
-    /// 按业务性质校验卡券投影字段组是否完整、互斥且到期日合法。
-    ///
-    /// # 参数
-    /// * `inputs` - 业务性质、卡券投影字段与提交时间
-    ///
-    /// # 返回
-    /// 校验通过时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 字段组不完整、业务性质不匹配或应收到期日早于提交日时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 卡券必须冻结类目、期限与到期日。
-    fn validate_card_projection_inputs(inputs: CardProjectionInputs<'_>) -> Result<()> {
-        let CardProjectionInputs {
-            business_type,
-            voucher_category_sku_id,
-            voucher_expiry_at,
-            receivable_due_date,
-            submitted_at,
-        } = inputs;
-        let all_present =
-            voucher_category_sku_id.is_some() && voucher_expiry_at.is_some() && receivable_due_date.is_some();
-        let any_present =
-            voucher_category_sku_id.is_some() || voucher_expiry_at.is_some() || receivable_due_date.is_some();
-        match business_type {
-            BusinessType::Voucher if !all_present => {
-                return Err(Error::from("卡券提交必须冻结卡券类目、履约期限和应收到期日"));
-            },
-            BusinessType::GoodsService if any_present => {
-                return Err(Error::from("非卡券提交不得携带卡券字段"));
-            },
-            BusinessType::Voucher | BusinessType::GoodsService => {},
-        }
-        let Some(receivable_due_date) = receivable_due_date else {
-            return Ok(());
-        };
+    fn validate_card_projection(
+        business_type: BusinessType,
+        voucher_category_sku_id: Option<&SkuId>,
+        voucher_expiry_at: Option<Instant>,
+        receivable_due_date: Option<BusinessDate>,
+        submitted_at: Instant,
+    ) -> Result<()> {
+        let receivable_due_date =
+            match (business_type, voucher_category_sku_id, voucher_expiry_at, receivable_due_date) {
+                (BusinessType::Voucher, Some(_), Some(_), Some(due_date)) => due_date,
+                (BusinessType::Voucher, _, _, _) => {
+                    return Err(Error::from("卡券提交必须冻结卡券类目、履约期限和应收到期日"));
+                },
+                (BusinessType::GoodsService, None, None, None) => return Ok(()),
+                (BusinessType::GoodsService, _, _, _) => {
+                    return Err(Error::from("非卡券提交不得携带卡券字段"));
+                },
+            };
         let submitted_date: BusinessDate = submitted_at.as_utc().date_naive().to_string().parse()?;
         if receivable_due_date < submitted_date {
             return Err(Error::from("应收到期日不得早于销售单提交日"));
@@ -527,19 +479,14 @@ impl SalesOrderSubmission {
     ///
     /// # 关键业务约束
     /// 只复制已规范化快照，不再次 trim 或改写空合同/结算主体。
-    pub fn header_snapshot_data(&self) -> super::snapshot::HeaderSnapshotData {
-        super::snapshot::HeaderSnapshotData {
-            customer_name: self.customer_snapshot.customer_name.clone(),
-            contract_no: self.contract_snapshot.as_ref().map(|snapshot| snapshot.contract_no.clone()),
-            settlement_party_name: self
-                .settlement_party_snapshot
-                .as_ref()
-                .map(|snapshot| snapshot.settlement_party_name.clone()),
-            payment_term_code: self.payment_term_snapshot.payment_term_code.clone(),
-            payment_term_name: self.payment_term_snapshot.payment_term_name.clone(),
-            invoice_type: self.invoice_requirement_snapshot.invoice_type.clone(),
-            tax_point: self.invoice_requirement_snapshot.tax_point.clone(),
-        }
+    pub fn header_snapshot_data(&self) -> HeaderSnapshotData {
+        HeaderSnapshotData::from_snapshots(
+            &self.customer_snapshot,
+            self.contract_snapshot.as_ref(),
+            self.settlement_party_snapshot.as_ref(),
+            &self.payment_term_snapshot,
+            &self.invoice_requirement_snapshot,
+        )
     }
 }
 
@@ -894,8 +841,10 @@ mod tests {
         };
         assert!(SalesOrderSubmission::new(SalesOrderSubmissionId::new("s-1"), half_voucher).is_err());
 
-        let broken_amount = SalesOrderSubmissionData { net_amount: amt("26.08"), ..header_data() };
-        assert!(SalesOrderSubmission::new(SalesOrderSubmissionId::new("s-1"), broken_amount).is_err());
+        let broken_amount =
+            SalesOrderSubmissionData { net_amount: amt("26.08"), lines: vec![line_data(0)], ..header_data() };
+        let error = SalesOrderSubmission::new(SalesOrderSubmissionId::new("s-1"), broken_amount).unwrap_err();
+        assert_eq!(error.to_string(), "表头金额必须满足 gross = net + tax");
 
         let duplicated_lines =
             SalesOrderSubmissionData { lines: vec![line_data(1), line_data(1)], ..header_data() };
@@ -928,12 +877,49 @@ mod tests {
     }
 
     #[test]
-    fn voucher_submission_rejects_past_due_date() {
-        let past_due = SalesOrderSubmissionData {
-            receivable_due_date: Some(BusinessDate::from_ymd(2026, 1, 1).unwrap()),
-            ..voucher_header_data()
-        };
-        assert!(SalesOrderSubmission::new(SalesOrderSubmissionId::new("s-card-2"), past_due).is_err());
+    fn card_projection_requires_all_fields_for_vouchers_and_none_for_goods() {
+        for business_type in [BusinessType::Voucher, BusinessType::GoodsService] {
+            for mask in 0..8 {
+                let mut data = if business_type == BusinessType::Voucher {
+                    voucher_header_data()
+                } else {
+                    header_data()
+                };
+                data.voucher_category_sku_id = (mask & 1 != 0).then(|| SkuId::new("vcat-1"));
+                data.voucher_expiry_at = (mask & 2 != 0).then_some(Instant::from_unix_secs(1_850_000_000));
+                data.receivable_due_date =
+                    (mask & 4 != 0).then(|| BusinessDate::from_ymd(2026, 10, 31).unwrap());
+                let result = SalesOrderSubmission::new(SalesOrderSubmissionId::new("s-card"), data);
+                match (business_type, mask) {
+                    (BusinessType::Voucher, 7) | (BusinessType::GoodsService, 0) => {
+                        assert_eq!(result.unwrap().business_type, business_type);
+                    },
+                    (BusinessType::Voucher, _) => assert_eq!(
+                        result.unwrap_err().to_string(),
+                        "卡券提交必须冻结卡券类目、履约期限和应收到期日"
+                    ),
+                    (BusinessType::GoodsService, _) => {
+                        assert_eq!(result.unwrap_err().to_string(), "非卡券提交不得携带卡券字段");
+                    },
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn voucher_due_date_uses_utc_day_and_precedes_amount_validation() {
+        let mut data = voucher_header_data();
+        let due_date = BusinessDate::from_ymd(1970, 1, 1).unwrap();
+        data.receivable_due_date = Some(due_date);
+        data.submitted_at = Instant::from_unix_secs(86_399);
+        let submission =
+            SalesOrderSubmission::new(SalesOrderSubmissionId::new("s-card"), data.clone()).unwrap();
+        assert_eq!(submission.receivable_due_date, Some(due_date));
+
+        data.submitted_at = Instant::from_unix_secs(86_400);
+        data.tax_amount = amt("0");
+        let error = SalesOrderSubmission::new(SalesOrderSubmissionId::new("s-card"), data).unwrap_err();
+        assert_eq!(error.to_string(), "应收到期日不得早于销售单提交日");
     }
 
     #[test]

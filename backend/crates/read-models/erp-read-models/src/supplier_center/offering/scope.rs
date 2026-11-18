@@ -14,8 +14,9 @@ use erp_supply::repository::supplier_offering::procurement::ProcurementOfferingR
 use erp_supply::{OfferingAccess, SupplierOfferingExt};
 use persistence_core::{Executor, Transactional};
 
-use super::procurement::{OfferingProcurementOwners, ensure_authorized_count};
+use super::procurement::OfferingProcurementOwners;
 use super::{SupplierOfferingListParams, SupplierOfferingListView, SupplierOfferingReadService};
+use crate::catalog_center::procurement::ensure_authorized_count;
 use crate::{Error, Result};
 
 impl SupplierOfferingReadService {

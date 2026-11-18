@@ -88,12 +88,12 @@ pipeline {
                     set -eu
                     cd backend
                     cargo fmt --all -- --check
+                    ./scripts/check-permissions-drift.sh
                     cargo check --workspace --locked
                     cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
                     env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked
                     ./scripts/check-bpm-boundaries.sh
                     ./scripts/check-domain-boundaries.sh --cutover
-                    ./scripts/check-permissions-drift.sh
                 '''
             }
         }

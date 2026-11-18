@@ -14,7 +14,7 @@ use erp_permissions::catalog as catalog_permissions;
 use persistence_core::Transactional;
 
 use super::CatalogCenterReadService;
-use super::procurement::ProductProcurementOwners;
+use super::procurement::{ProductProcurementOwners, ensure_authorized_count};
 use crate::{Error, Result};
 
 impl CatalogCenterReadService {
@@ -222,9 +222,7 @@ pub(super) async fn apply_procurement_filter(
         return Ok(());
     };
     let candidates = query.product_candidate_ids(filter, executor).await?;
-    if candidates.len() > 10_000 {
-        return Err(Error::ValidationError("采购负责人筛选超过上限，请收窄组织或维护人条件".into()));
-    }
+    ensure_authorized_count(candidates.len())?;
     let matched = procurement.matching_product_ids(Some(&candidates), owners.as_slice(), executor).await?;
     filter.ids = Some(matched);
     Ok(())

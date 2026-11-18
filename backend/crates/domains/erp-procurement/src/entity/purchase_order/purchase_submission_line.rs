@@ -11,9 +11,7 @@ use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
-use crate::entity::purchase_order::line_common::{
-    PurchaseLineDataRef, PurchaseLineFields, ensure_line_no, normalize_and_validate_line, normalize_expense,
-};
+use crate::entity::purchase_order::line_common::{PurchaseLineFields, normalize_expense};
 use crate::entity::purchase_order::offering_source::ensure_offering_source;
 use crate::entity::purchase_order::types::PurchaseLineType;
 use crate::entity::purchase_order::{
@@ -74,22 +72,32 @@ pub struct PurchaseOrderSubmissionLineData {
     pub expense: Option<PurchaseExpenseDetail>,
 }
 
-impl PurchaseLineDataRef for PurchaseOrderSubmissionLineData {
-    fn fields(&self) -> PurchaseLineFields {
-        PurchaseLineFields {
+impl PurchaseOrderSubmissionLineData {
+    fn take_validated_fields(&mut self) -> Result<PurchaseLineFields> {
+        let mut fields = PurchaseLineFields {
             line_type: self.line_type,
-            procurement_confirmation_line_id: self.procurement_confirmation_line_id.clone(),
-            sku_id: self.sku_id.clone(),
-            product_name_snapshot: self.product_name_snapshot.clone(),
-            specification_snapshot: self.specification_snapshot.clone(),
+            procurement_confirmation_line_id: self.procurement_confirmation_line_id.take(),
+            sku_id: self.sku_id.take(),
+            product_name_snapshot: self.product_name_snapshot.take(),
+            specification_snapshot: self.specification_snapshot.take(),
             quantity: self.quantity,
-            base_unit_code: self.base_unit_code.clone(),
+            base_unit_code: self.base_unit_code.take(),
             unit_cost_gross: self.unit_cost_gross,
             gross_amount: self.gross_amount,
             net_amount: self.net_amount,
             tax_amount: self.tax_amount,
             input_tax_rate: self.input_tax_rate,
-        }
+        };
+        fields.normalize_and_validate(self.line_no, false)?;
+        self.ensure_allocation()?;
+        ensure_offering_source(
+            self.line_type,
+            self.supplier_offering_source.as_ref(),
+            self.unit_cost_gross,
+            self.input_tax_rate,
+        )?;
+        PurchaseDeliveryAllocation::validate(&mut self.delivery_allocations, self.line_type, self.quantity)?;
+        Ok(fields)
     }
 
     /// 按行类型校验销售分配字段。
@@ -187,7 +195,7 @@ impl PurchaseOrderSubmissionLine {
     /// 创建采购提交行。
     ///
     /// 完成快照文本的规范化，并按行类型强制字段归属与金额三元组守恒（§6.6）；
-    /// 商品行必须携带销售提交行引用与分配数量。
+    /// 商品行必须引用销售稳定行与当前版本行，且分配数量必须为正。
     ///
     /// # 参数
     /// * `id` - 实体主键（`erp_core::ids::PurchaseOrderSubmissionLineId`）
@@ -200,34 +208,26 @@ impl PurchaseOrderSubmissionLine {
     /// 行号为零、字段归属与行类型不符、快照超长、数量/单价/税率越界或
     /// 金额三元组不守恒时返回错误。
     pub fn new(id: PurchaseOrderSubmissionLineId, mut data: PurchaseOrderSubmissionLineData) -> Result<Self> {
-        ensure_line_no(data.line_no)?;
-        let (product_name, specification, base_unit_code) = normalize_and_validate_line(&data)?;
-        ensure_offering_source(
-            data.line_type,
-            data.supplier_offering_source.as_ref(),
-            data.unit_cost_gross,
-            data.input_tax_rate,
-        )?;
-        PurchaseDeliveryAllocation::validate(&mut data.delivery_allocations, data.line_type, data.quantity)?;
+        let fields = data.take_validated_fields()?;
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             purchase_order_submission_id: data.purchase_order_submission_id,
             line_no: data.line_no,
-            line_type: data.line_type,
-            procurement_confirmation_line_id: data.procurement_confirmation_line_id,
-            sku_id: data.sku_id,
+            line_type: fields.line_type,
+            procurement_confirmation_line_id: fields.procurement_confirmation_line_id,
+            sku_id: fields.sku_id,
             sku_revision_id: data.sku_revision_id,
             supplier_offering_source: data.supplier_offering_source,
             delivery_allocations: data.delivery_allocations,
-            product_name_snapshot: product_name,
-            specification_snapshot: specification,
-            quantity: data.quantity,
-            base_unit_code,
-            unit_cost_gross: data.unit_cost_gross,
-            gross_amount: data.gross_amount,
-            net_amount: data.net_amount,
-            tax_amount: data.tax_amount,
-            input_tax_rate: data.input_tax_rate,
+            product_name_snapshot: fields.product_name_snapshot,
+            specification_snapshot: fields.specification_snapshot,
+            quantity: fields.quantity,
+            base_unit_code: fields.base_unit_code,
+            unit_cost_gross: fields.unit_cost_gross,
+            gross_amount: fields.gross_amount,
+            net_amount: fields.net_amount,
+            tax_amount: fields.tax_amount,
+            input_tax_rate: fields.input_tax_rate,
             expected_delivery_date: data.expected_delivery_date,
             sales_order_line_id: data.sales_order_line_id,
             sales_order_revision_line_id: data.sales_order_revision_line_id,
@@ -341,8 +341,10 @@ mod tests {
     use erp_core::money::{Amount, Quantity, Rate, UnitPrice, line_amounts};
 
     use super::{PurchaseOrderSubmissionLine, PurchaseOrderSubmissionLineData};
-    use crate::entity::purchase_order::PurchaseDeliveryAllocation;
     use crate::entity::purchase_order::types::PurchaseLineType;
+    use crate::entity::purchase_order::{
+        PurchaseDeliveryAllocation, PurchaseExpenseCategory, PurchaseExpenseDetail,
+    };
 
     fn goods_line_data() -> PurchaseOrderSubmissionLineData {
         let (gross, net, tax) = line_amounts(
@@ -574,6 +576,46 @@ mod tests {
     }
 
     #[test]
+    fn submission_checks_allocation_source_delivery_and_expense_in_order() {
+        let assert_error = |data, expected: &str| {
+            let error = PurchaseOrderSubmissionLine::new("invalid".to_string().into(), data).unwrap_err();
+            assert!(matches!(error, Error::LogicError(message) if message == expected));
+        };
+        let mut data = goods_line_data();
+        data.sales_order_revision_line_id = None;
+        let mut source = offering_source();
+        source.revision_version = 0;
+        data.supplier_offering_source = Some(source);
+        data.delivery_allocations = vec![PurchaseDeliveryAllocation {
+            recipient: String::new(),
+            phone: "13800000000".into(),
+            region_code: erp_core::region::RegionCode::parse("310115").unwrap(),
+            region_name: "旧地区".into(),
+            address: "客户地址".into(),
+            quantity: data.quantity.unwrap(),
+        }];
+        data.expense = Some(
+            PurchaseExpenseDetail::new(
+                "expense-1".into(),
+                PurchaseExpenseCategory::Logistics,
+                "运费".into(),
+                None,
+            )
+            .unwrap(),
+        );
+        assert_error(data.clone(), "商品/服务行必须引用销售稳定行与当前版本行");
+        data.sales_order_revision_line_id = Some(SalesOrderRevisionLineId::new("sorl-1"));
+        assert_error(data.clone(), "采购正式选源身份或版本缺失");
+        data.supplier_offering_source = Some(offering_source());
+        assert_error(data.clone(), "交付安排须填写有效收货人、电话、地址和正数数量");
+        data.delivery_allocations[0].recipient = "张三".into();
+        assert_error(data.clone(), "商品/服务行不得携带费用内容");
+        data.expense = None;
+        let line = PurchaseOrderSubmissionLine::new("valid".to_string().into(), data).unwrap();
+        assert_eq!(line.delivery_allocations[0].region_name, "上海市浦东新区");
+    }
+
+    #[test]
     fn submission_line_requires_positive_quantity_and_allocation() {
         for value in ["0", "-1"] {
             let quantity = Quantity::from_str(value).unwrap();
@@ -635,10 +677,17 @@ mod tests {
             allocated_quantity: None,
             ..goods_line_data()
         };
-        let line =
-            PurchaseOrderSubmissionLine::new(PurchaseOrderSubmissionLineId::new("sl-2"), data).unwrap();
+        let line = PurchaseOrderSubmissionLine::new(PurchaseOrderSubmissionLineId::new("sl-2"), data.clone())
+            .unwrap();
         assert_eq!(line.quantity, None);
         assert_eq!(line.gross_amount, gross);
+
+        let data = PurchaseOrderSubmissionLineData {
+            sales_order_submission_line_id: Some(SalesOrderSubmissionLineId::new("legacy")),
+            ..data
+        };
+        let error = PurchaseOrderSubmissionLine::new("invalid".to_string().into(), data).unwrap_err();
+        assert!(matches!(error, Error::LogicError(message) if message == "物流费用行不得携带销售分配"));
     }
 
     #[test]

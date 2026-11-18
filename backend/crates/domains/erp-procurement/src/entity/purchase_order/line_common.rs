@@ -16,15 +16,14 @@ use crate::entity::purchase_order::PurchaseExpenseDetail;
 use crate::entity::purchase_order::types::PurchaseLineType;
 
 /// 商品名称快照最大长度。
-pub(crate) const PRODUCT_NAME_MAX_LEN: usize = 256;
+const PRODUCT_NAME_MAX_LEN: usize = 256;
 /// 规格快照最大长度。
-pub(crate) const SPECIFICATION_MAX_LEN: usize = 512;
+const SPECIFICATION_MAX_LEN: usize = 512;
 /// 单位代码最大长度。
-pub(crate) const BASE_UNIT_MAX_LEN: usize = 64;
+const BASE_UNIT_MAX_LEN: usize = 64;
 
 /// 一行采购明细的共享字段组（提交行/版本行/变更提交行共用，§6.6 行字典）。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct PurchaseLineFields {
+pub(super) struct PurchaseLineFields {
     /// 行类型。
     pub line_type: PurchaseLineType,
     /// 商品/服务行对应的采购二次确认分行；物流费用行为空。
@@ -51,30 +50,31 @@ pub(crate) struct PurchaseLineFields {
     pub input_tax_rate: Option<Rate>,
 }
 
-/// 校验一行采购明细（提交行/版本行/变更提交行共用）。
-///
-/// 按行类型强制字段归属（§6.6）：
-/// - 商品/服务成本行：`sku_id`、商品名称、单位、数量（>0；变更与版本行允许 0 表示已移除）、
-///   含税单价、进项税率必填；
-///   规格沿用来源销售行，允许为空，不补造占位规格；
-/// - 物流费用行：`sku_id`、商品名称、单位、数量、含税单价全部为空，
-///   与商品成本分开计税（进项税率必填），金额直接入账；
-/// - 两种行都必须满足金额三元组守恒：商品行按 `line_amounts(单价, 数量, 税率)`
-///   复算，物流费用行按 `gross − round(gross × 税率) = net` 复算（§4.2 铁律 4）。
-///
-/// # 参数
-/// * `fields` - 一行采购明细的共享字段组
-/// * `allow_zero_quantity` - 商品/服务行是否允许零数量（仅变更提交行与版本行）
-///
-/// # 返回
-/// 校验通过返回 `Ok(())`。
-///
-/// # 错误
-/// 字段归属与行类型不符、数量/单价/税率越界或金额三元组不守恒时返回错误。
-pub(crate) fn validate_purchase_line(fields: &PurchaseLineFields, allow_zero_quantity: bool) -> Result<()> {
-    match fields.line_type {
-        PurchaseLineType::ItemService => validate_item_service_line(fields, allow_zero_quantity),
-        PurchaseLineType::LogisticsFee => validate_logistics_fee_line(fields),
+impl PurchaseLineFields {
+    /// 先规范化快照，再按行类型校验字段归属与金额守恒。
+    ///
+    /// # 参数
+    /// * `line_no` - 从 1 开始的行号
+    /// * `allow_zero_quantity` - 仅变更提交行和版本行允许零数量表示已移除
+    ///
+    /// # 返回
+    /// 校验成功时保留规范化后的快照。
+    ///
+    /// # 错误
+    /// 行号为零、快照超长、字段归属错误或金额不守恒时返回领域错误。
+    pub(super) fn normalize_and_validate(&mut self, line_no: u32, allow_zero_quantity: bool) -> Result<()> {
+        if line_no == 0 {
+            return Err(Error::from("行号必须从 1 开始"));
+        }
+        self.product_name_snapshot =
+            normalize_optional_text(self.product_name_snapshot.take(), "商品名称快照", PRODUCT_NAME_MAX_LEN)?;
+        self.specification_snapshot =
+            normalize_optional_text(self.specification_snapshot.take(), "规格快照", SPECIFICATION_MAX_LEN)?;
+        self.base_unit_code = normalize_optional_text(self.base_unit_code.take(), "单位", BASE_UNIT_MAX_LEN)?;
+        match self.line_type {
+            PurchaseLineType::ItemService => validate_item_service_line(self, allow_zero_quantity),
+            PurchaseLineType::LogisticsFee => validate_logistics_fee_line(self),
+        }
     }
 }
 
@@ -89,7 +89,7 @@ pub(crate) fn validate_purchase_line(fields: &PurchaseLineFields, allow_zero_qua
 ///
 /// # 错误
 /// 商品行携带费用内容或费用内容非法时返回错误。
-pub(crate) fn normalize_expense(
+pub(super) fn normalize_expense(
     line_type: PurchaseLineType,
     expense: Option<PurchaseExpenseDetail>,
 ) -> Result<Option<PurchaseExpenseDetail>> {
@@ -98,83 +98,6 @@ pub(crate) fn normalize_expense(
         (_, Some(detail)) => Ok(Some(detail.normalized()?)),
         (_, None) => Ok(None),
     }
-}
-
-/// 采购行创建数据的共享访问接口（提交行/版本行/变更提交行共用，§6.6 行字典）。
-///
-/// 行实体只需实现本接口即可复用 [`normalize_and_validate_line`] 的完整校验；
-/// 有销售分配字段的行类型覆写 [`ensure_allocation`](Self::ensure_allocation)。
-pub(crate) trait PurchaseLineDataRef {
-    /// 返回待规范化与校验的共享字段快照。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回保持原始文本与字段归属的共享字段。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    fn fields(&self) -> PurchaseLineFields;
-
-    /// 校验销售分配归属；无销售分配字段的行类型保持默认空实现。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 校验通过返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 分配字段与行类型不符时返回错误。
-    fn ensure_allocation(&self) -> Result<()> {
-        Ok(())
-    }
-
-    /// 商品/服务行是否允许数量为零。
-    ///
-    /// 只有采购变更提交行与生效版本行允许零数量，表示该行已移除但保留原行身份；
-    /// 采购草稿与审批提交行删除不再需要的行，不得以零数量保留。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 允许零数量时返回 `true`，默认返回 `false`。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    fn allows_zero_quantity(&self) -> bool {
-        false
-    }
-}
-
-/// 规范化并校验一行采购明细。
-///
-/// 完成快照文本规范化（商品名称/规格/单位），按行类型校验字段归属与金额三元组
-/// 守恒（§6.6），并执行行类型的销售分配归属校验。
-///
-/// # 参数
-/// * `data` - 采购行创建数据（实现 [`PurchaseLineDataRef`]）
-///
-/// # 返回
-/// 返回 `(商品名称快照, 规格快照, 单位代码)` 三元组。
-///
-/// # 错误
-/// 快照超长、字段归属与行类型不符、数量/单价/税率越界或金额三元组不守恒时
-/// 返回错误。
-pub(crate) fn normalize_and_validate_line<D: PurchaseLineDataRef>(
-    data: &D,
-) -> Result<(Option<String>, Option<String>, Option<String>)> {
-    let mut fields = data.fields();
-    fields.product_name_snapshot =
-        normalize_optional_text(fields.product_name_snapshot, "商品名称快照", PRODUCT_NAME_MAX_LEN)?;
-    fields.specification_snapshot =
-        normalize_optional_text(fields.specification_snapshot, "规格快照", SPECIFICATION_MAX_LEN)?;
-    fields.base_unit_code = normalize_optional_text(fields.base_unit_code, "单位", BASE_UNIT_MAX_LEN)?;
-    validate_purchase_line(&fields, data.allows_zero_quantity())?;
-    data.ensure_allocation()?;
-    Ok((fields.product_name_snapshot, fields.specification_snapshot, fields.base_unit_code))
 }
 
 /// 校验商品/服务成本行。
@@ -190,8 +113,12 @@ fn validate_item_service_line(fields: &PurchaseLineFields, allow_zero_quantity: 
         return Err(Error::from("商品/服务行必须引用采购二次确认分行"));
     }
     let sku_id = fields.sku_id.as_ref().ok_or("商品/服务行必须引用 SKU")?;
-    ensure_snapshot_present(fields.product_name_snapshot.as_deref(), "商品名称")?;
-    ensure_snapshot_present(fields.base_unit_code.as_deref(), "单位")?;
+    if fields.product_name_snapshot.is_none() {
+        return Err(Error::from("商品/服务行必须保存商品名称快照"));
+    }
+    if fields.base_unit_code.is_none() {
+        return Err(Error::from("商品/服务行必须保存单位快照"));
+    }
     let quantity = fields.quantity.ok_or("商品/服务行数量不能为空")?;
     if quantity.to_decimal() < rust_decimal::Decimal::ZERO
         || (!allow_zero_quantity && quantity.to_decimal().is_zero())
@@ -207,7 +134,12 @@ fn validate_item_service_line(fields: &PurchaseLineFields, allow_zero_quantity: 
         return Err(Error::from("进项税率不能为负"));
     }
     let expected = line_amounts(unit_cost, quantity, tax_rate);
-    ensure_amount_triple(fields, expected, sku_id.as_ref())?;
+    if (fields.gross_amount, fields.net_amount, fields.tax_amount) != expected {
+        return Err(Error::from(format!(
+            "行金额三元组与含税单价×数量×税率复算不一致（{}）",
+            sku_id.as_ref()
+        )));
+    }
     Ok(())
 }
 
@@ -253,77 +185,4 @@ fn validate_logistics_fee_line(fields: &PurchaseLineFields) -> Result<()> {
         return Err(Error::from("物流费用行金额三元组不守恒"));
     }
     Ok(())
-}
-
-/// 校验采购行号从 1 开始。
-///
-/// # 参数
-/// * `line_no` - 行号
-///
-/// # 返回
-/// 行号非零时返回 `Ok(())`。
-///
-/// # 错误
-/// 行号为零时返回领域错误。
-pub(super) fn ensure_line_no(line_no: u32) -> Result<()> {
-    if line_no == 0 {
-        return Err(Error::from("行号必须从 1 开始"));
-    }
-    Ok(())
-}
-
-/// 断言必填快照字段非空。
-///
-/// # 参数
-/// * `value` - 快照文本
-/// * `label` - 字段说明
-///
-/// # 错误
-/// 快照缺失或为空时返回错误。
-fn ensure_snapshot_present(value: Option<&str>, label: &str) -> Result<()> {
-    if value.is_none_or(str::is_empty) {
-        return Err(Error::from(format!("商品/服务行必须保存{label}快照")));
-    }
-    Ok(())
-}
-
-/// 断言金额三元组与复算结果一致。
-///
-/// # 参数
-/// * `fields` - 一行采购明细的共享字段组
-/// * `expected` - 按 §4.2 铁律 1 复算的 `(gross, net, tax)`
-/// * `context` - 错误提示中的行上下文（如 SKU）
-///
-/// # 错误
-/// 任一分量不一致时返回错误。
-fn ensure_amount_triple(
-    fields: &PurchaseLineFields,
-    expected: (Amount, Amount, Amount),
-    context: &str,
-) -> Result<()> {
-    if fields.gross_amount != expected.0 || fields.net_amount != expected.1 || fields.tax_amount != expected.2
-    {
-        return Err(Error::from(format!("行金额三元组与含税单价×数量×税率复算不一致（{context}）")));
-    }
-    Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use erp_core::Error;
-
-    use super::ensure_snapshot_present;
-
-    #[test]
-    fn snapshot_presence_preserves_empty_and_untrimmed_boundaries() {
-        for value in [None, Some("")] {
-            let error = ensure_snapshot_present(value, "商品名称").unwrap_err();
-            assert!(
-                matches!(error, Error::LogicError(message) if message == "商品/服务行必须保存商品名称快照")
-            );
-        }
-        for value in ["礼包", " ", "\t"] {
-            assert!(ensure_snapshot_present(Some(value), "商品名称").is_ok());
-        }
-    }
 }
