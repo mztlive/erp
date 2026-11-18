@@ -12,6 +12,7 @@ import { AcceptanceWorkspace } from "@/features/sales-orders/components/acceptan
 import { workspaceReadActionLabel } from "@/features/workspace/api/work-item-meta"
 import { workspaceHomeKeys } from "@/features/workspace/hooks/queries"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
 
 import { sourceSalesOrderHref } from "../lib/source-sales-order"
 import { stripDocumentNumberPrefix } from "../lib/stable-number"
@@ -52,7 +53,7 @@ export function WorkspaceAcceptanceTask({
             header={
                 <WorkspaceTaskIdentityHeader item={item}>
                     {salesOrderId ? (
-                        <>
+                        <PermissionGuard permission="sales_order:detail">
                             <IconActionButton
                                 id={`workspace-acceptance-preview-so-${toAutomationIdSegment(item.workItemId)}`}
                                 label={readSalesLabel}
@@ -78,7 +79,7 @@ export function WorkspaceAcceptanceTask({
                             >
                                 <ArrowUpRightIcon aria-hidden="true" />
                             </IconActionButton>
-                        </>
+                        </PermissionGuard>
                     ) : null}
                 </WorkspaceTaskIdentityHeader>
             }

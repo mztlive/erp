@@ -24,6 +24,7 @@ import {
 import { useWorkspaceDetailDocumentTitle } from "../hooks/use-workspace-detail-title"
 import {
     parseWorkspaceSearchParams,
+    restrictWorkspaceFilters,
     toTodayWorkspaceQuery,
 } from "../lib/url-state"
 
@@ -76,11 +77,12 @@ function WorkspaceDetailContent({
     const detail = approval ? approvalQuery : taskQuery
     useWorkspaceDetailDocumentTitle(detail.data?.item)
     const reworkTask = detail.data?.reworkTask
-    const queueState = parseWorkspaceSearchParams(
-        workspaceQueueParams(
-            returnTo.split("?")[0],
-            new URLSearchParams(returnTo.split("?")[1]),
+    const [queuePath, queueSearch] = returnTo.split("?")
+    const queueState = restrictWorkspaceFilters(
+        parseWorkspaceSearchParams(
+            workspaceQueueParams(queuePath, new URLSearchParams(queueSearch)),
         ),
+        profile.data?.permissions,
     )
     const queue = useWorkspaceDashboardQuery(
         toTodayWorkspaceQuery(queueState, "Asia/Shanghai"),

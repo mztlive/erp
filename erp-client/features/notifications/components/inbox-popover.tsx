@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { InboxIcon } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useAccountProfileQuery } from "@/features/auth/queries"
@@ -20,14 +20,102 @@ import {
 } from "../hooks/queries"
 import type { NotificationMessage } from "../api"
 
+/** Collects accessible same-origin iframe documents, including nested frames. */
+function collectIframeDocuments(root: Document, result: Set<Document>): void {
+    for (const frame of root.querySelectorAll("iframe")) {
+        try {
+            const doc = frame.contentDocument
+            if (doc && !result.has(doc)) {
+                result.add(doc)
+                collectIframeDocuments(doc, result)
+            }
+        } catch {
+            // Cross-origin frames are handled via window blur + activeElement fallback.
+        }
+    }
+}
+
 export function InboxPopover() {
     const [open, setOpen] = useState(false)
+    const skipReturnFocusRef = useRef(false)
     const profile = useAccountProfileQuery().data
     const feed = useNotificationFeed(profile, true)
     const inbox = useInbox(profile?.userid, open)
     const read = useReadNotification(profile?.userid)
     const router = useRouter()
     const unread = feed.isError ? undefined : feed.data?.unread_count
+
+    useEffect(() => {
+        if (!open) return
+
+        // Base UI dismiss only observes the host document; workspace pages live in iframes.
+        const docs = new Set<Document>()
+        const cleanups: Array<() => void> = []
+        let blurTimer: number | undefined
+
+        const closeFromOutsideFrame = () => {
+            skipReturnFocusRef.current = true
+            setOpen(false)
+        }
+
+        const bindIframeDocuments = () => {
+            const nextDocs = new Set<Document>()
+            collectIframeDocuments(document, nextDocs)
+            for (const doc of nextDocs) {
+                if (docs.has(doc)) continue
+                docs.add(doc)
+                doc.addEventListener("pointerdown", closeFromOutsideFrame, true)
+                doc.addEventListener("click", closeFromOutsideFrame, true)
+                cleanups.push(() => {
+                    doc.removeEventListener(
+                        "pointerdown",
+                        closeFromOutsideFrame,
+                        true,
+                    )
+                    doc.removeEventListener(
+                        "click",
+                        closeFromOutsideFrame,
+                        true,
+                    )
+                })
+            }
+        }
+
+        const onFrameLoad = (event: Event) => {
+            if (event.target instanceof HTMLIFrameElement) {
+                bindIframeDocuments()
+            }
+        }
+
+        const onWindowBlur = () => {
+            window.clearTimeout(blurTimer)
+            blurTimer = window.setTimeout(() => {
+                if (document.activeElement instanceof HTMLIFrameElement) {
+                    closeFromOutsideFrame()
+                }
+            }, 0)
+        }
+
+        bindIframeDocuments()
+        document.addEventListener("load", onFrameLoad, true)
+        window.addEventListener("blur", onWindowBlur)
+
+        return () => {
+            window.clearTimeout(blurTimer)
+            document.removeEventListener("load", onFrameLoad, true)
+            window.removeEventListener("blur", onWindowBlur)
+            for (const cleanup of cleanups) {
+                cleanup()
+            }
+        }
+    }, [open])
+
+    function handleOpenChange(nextOpen: boolean) {
+        if (nextOpen) {
+            skipReturnFocusRef.current = false
+        }
+        setOpen(nextOpen)
+    }
 
     async function openMessage(message: NotificationMessage) {
         if (message.read_at == null) {
@@ -48,20 +136,7 @@ export function InboxPopover() {
     }
 
     return (
-        <Popover
-            open={open}
-            onOpenChange={(nextOpen, details) => {
-                if (
-                    !nextOpen &&
-                    (details.reason === "focus-out" ||
-                        details.reason === "outside-press")
-                ) {
-                    details.cancel()
-                    return
-                }
-                setOpen(nextOpen)
-            }}
-        >
+        <Popover open={open} onOpenChange={handleOpenChange}>
             <PopoverTrigger
                 render={
                     <Button
@@ -88,6 +163,7 @@ export function InboxPopover() {
             </PopoverTrigger>
             <PopoverContent
                 align="end"
+                finalFocus={() => !skipReturnFocusRef.current}
                 className="w-96 max-w-[calc(100vw-2rem)] gap-3"
             >
                 <div className="flex items-center justify-between gap-3">

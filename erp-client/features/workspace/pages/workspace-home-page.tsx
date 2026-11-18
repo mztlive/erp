@@ -4,6 +4,7 @@ import { usePathname } from "@/lib/navigation"
 import { WORKSPACE_QUEUE_ROUTES } from "@/lib/workspace-queue-routes"
 import { DownloadIcon, RefreshCwIcon } from "lucide-react"
 import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 import { BusinessFailureState, PageScaffold } from "@/components/business"
 import {
     ListWorkspaceHeader,
@@ -44,6 +45,13 @@ export function WorkspaceHomeView({
     home: ReturnType<typeof useWorkspaceHome>
 }) {
     const paymentExport = usePaymentExport()
+    const permissions = home.accountProfileQuery.data?.permissions
+    const canExportPayments = [
+        "work_item:list",
+        "purchase_payment_request:detail",
+        "purchase_payment_request:pay",
+        "party_bank_account:reveal",
+    ].every((permission) => hasPermission(permissions, permission))
     const paymentQueue =
         home.urlState.view === "inbox" &&
         home.urlState.filters?.item_types?.length === 1 &&
@@ -96,7 +104,7 @@ export function WorkspaceHomeView({
                     </div>
                 }
             >
-                {paymentQueue && (
+                {paymentQueue && canExportPayments && (
                     <Button
                         id="workspace-payment-export"
                         variant="outline"

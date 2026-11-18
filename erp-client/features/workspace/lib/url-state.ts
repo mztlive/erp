@@ -10,6 +10,7 @@ import type {
     WorkspaceViewFilter,
 } from "@/features/workspace/types"
 import { createUrlStateCodec } from "@/lib/url-state"
+import { hasPermission } from "@/lib/permissions"
 import { OVERVIEW_VIEWS, type OverviewView } from "./overview"
 import type { PeriodPreset } from "@/features/actual-profit-loss/types"
 
@@ -119,6 +120,46 @@ export const parseWorkspaceSearchParams: typeof codec.parse = (params) => {
     }
 }
 export const buildWorkspaceSearchParams = codec.build
+
+// 「我发起的审批」的候选来自审批队列自身，任务队列使用独立目录。
+const TASK_FILTER_PERMISSIONS: Partial<Record<keyof WorkspaceFilters, string>> =
+    {
+        handlers: "business_person:list",
+        sales_orders: "sales_order:list",
+        purchase_orders: "purchase_order:list",
+    }
+
+export function canUseWorkspaceFilter(
+    view: WorkspaceViewFilter,
+    key: keyof WorkspaceFilters,
+    permissions?: readonly string[],
+): boolean {
+    const permission = TASK_FILTER_PERMISSIONS[key]
+    return (
+        view === "started" ||
+        !permission ||
+        hasPermission(permissions, permission)
+    )
+}
+
+/** 已隐藏的筛选不能继续影响队列、分页或连续办理。 */
+export function restrictWorkspaceFilters(
+    state: WorkspaceUrlState,
+    permissions?: readonly string[],
+): WorkspaceUrlState {
+    const unavailable = (
+        Object.keys(TASK_FILTER_PERMISSIONS) as (keyof WorkspaceFilters)[]
+    ).filter(
+        (key) =>
+            state.filters?.[key] &&
+            !canUseWorkspaceFilter(state.view, key, permissions),
+    )
+    if (!unavailable.length) return state
+
+    const filters = { ...state.filters }
+    for (const key of unavailable) delete filters[key]
+    return { ...state, filters, page: 1, scopeVersion: undefined }
+}
 
 /**
  * 处理人／来源订单筛选：逗号分隔的稳定 ID，只收窄授权结果。

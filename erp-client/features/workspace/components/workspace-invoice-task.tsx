@@ -3,6 +3,8 @@
 import Link from "next/link"
 import { isResourceAuthorizationPending } from "@/lib/resource-authorization"
 import { Button } from "@/components/ui/button"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 import { sourceSalesOrderHref } from "../lib/source-sales-order"
 import { useInvoiceRequests } from "@/features/invoice-requests/hooks/queries"
 import { subtractFixed } from "@/lib/fixed-decimal"
@@ -72,6 +74,11 @@ export function WorkspaceInvoiceTask({
     item,
     onTaskCompleted,
 }: WorkspaceInvoiceTaskProps) {
+    const profile = useAccountProfileQuery().data
+    const canReadSalesOrder = hasPermission(
+        profile?.permissions,
+        "sales_order:detail",
+    )
     const requestQuery = useInvoiceRequests({
         work_item_id: item.workItemId,
         page_size: 2,
@@ -108,7 +115,7 @@ export function WorkspaceInvoiceTask({
                                 {receivable?.counterpartyPartyName ||
                                     item.counterpartyName}
                             </span>
-                            {receivable?.salesOrderId ? (
+                            {receivable?.salesOrderId && canReadSalesOrder ? (
                                 <Link
                                     id="workspace-invoice-source-sales"
                                     href={sourceSalesOrderHref(
@@ -118,6 +125,8 @@ export function WorkspaceInvoiceTask({
                                 >
                                     销售单 {receivable.salesOrderNo}
                                 </Link>
+                            ) : receivable?.salesOrderNo ? (
+                                <span>销售单 {receivable.salesOrderNo}</span>
                             ) : null}
                         </div>
                     }

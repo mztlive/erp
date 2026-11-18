@@ -28,6 +28,7 @@ import {
     buildWorkspaceSearchParams,
     metricKeyFromUrlState,
     parseWorkspaceSearchParams,
+    restrictWorkspaceFilters,
     toTodayWorkspaceQuery,
     urlStateFromMetricKey,
     type WorkspaceUrlState,
@@ -48,7 +49,9 @@ export function useWorkspaceHome() {
     const searchParams = useSearchParams()
     const queryClient = useQueryClient()
 
-    const urlState = React.useMemo(
+    const accountProfileQuery = useAccountProfileQuery()
+    const permissions = accountProfileQuery.data?.permissions
+    const parsedState = React.useMemo(
         () =>
             parseWorkspaceSearchParams(
                 workspaceQueueParams(
@@ -59,12 +62,14 @@ export function useWorkspaceHome() {
         [pathname, searchParams],
     )
 
+    const urlState = React.useMemo(
+        () => restrictWorkspaceFilters(parsedState, permissions),
+        [parsedState, permissions],
+    )
     const queryInput = React.useMemo(
         () => toTodayWorkspaceQuery(urlState, VIEWER_TIMEZONE),
         [urlState],
     )
-
-    const accountProfileQuery = useAccountProfileQuery()
     const dashboardQuery = useWorkspaceDashboardQuery(
         queryInput,
         accountProfileQuery.data,
@@ -106,6 +111,10 @@ export function useWorkspaceHome() {
         },
         [router],
     )
+
+    React.useEffect(() => {
+        if (permissions && parsedState !== urlState) replaceUrl(urlState)
+    }, [parsedState, permissions, replaceUrl, urlState])
 
     const viewStates = React.useRef<Partial<Record<string, WorkspaceUrlState>>>(
         {},

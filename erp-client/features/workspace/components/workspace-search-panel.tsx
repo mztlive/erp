@@ -24,7 +24,7 @@ import {
     type WorkspaceSearchOption,
 } from "@/lib/workspace-search"
 import { useWorkspaceFilterOptions } from "../hooks/use-workspace-filter-options"
-import type { WorkspaceUrlState } from "../lib/url-state"
+import { canUseWorkspaceFilter, type WorkspaceUrlState } from "../lib/url-state"
 import type { WorkspaceViewFilter } from "../types"
 
 const MORE_KEYS: WorkspaceChoiceKey[] = [
@@ -56,10 +56,7 @@ function RemoteSearchChoice({
 }) {
     const remote = useWorkspaceFilterOptions(view, undefined, name)
     const id = `workspace-filter-${name}`
-    const failureText =
-        externalLabel && remote.accessDenied
-            ? (remote.accessDenied.detail ?? "无权查看筛选选项，请联系管理员。")
-            : remote.failure?.description
+    const failureText = remote.failure?.description
     const labels = useRef(new Map<string, WorkspaceSearchOption>())
     const initial = options[name] ?? []
     for (const option of [...initial, ...(remote.data?.[name] ?? [])])
@@ -121,7 +118,7 @@ function RemoteSearchChoice({
 }
 
 /** 人员目录负责选择与回显，任务查询只传 ID 数组。 */
-export function WorkspaceSearchChoice(
+function WorkspaceSearchChoice(
     props: React.ComponentProps<typeof RemoteSearchChoice>,
 ) {
     if (props.name === "handlers" && props.view !== "started") {
@@ -381,23 +378,18 @@ export function WorkspaceSearchPanel({
                     }
                     morePanel={
                         <div className="grid min-w-0 items-start gap-x-4 gap-y-3 sm:grid-cols-2">
-                            {MORE_KEYS.filter((key) => {
-                                if (
-                                    key === "handlers" &&
-                                    state.view !== "started"
-                                )
-                                    return hasPermission(
-                                        profile?.permissions,
-                                        "business_person:list",
-                                    )
-                                return (
-                                    !["warehouses", "business_types"].includes(
+                            {MORE_KEYS.filter(
+                                (key) =>
+                                    canUseWorkspaceFilter(
+                                        state.view,
                                         key,
-                                    ) ||
-                                    options[key]?.length ||
-                                    applied.filters[key]?.length
-                                )
-                            }).map((key) => (
+                                        profile?.permissions,
+                                    ) &&
+                                    ((key !== "warehouses" &&
+                                        key !== "business_types") ||
+                                        options[key]?.length ||
+                                        applied.filters[key]?.length),
+                            ).map((key) => (
                                 <ListWorkspaceFilterField
                                     key={key}
                                     label={WORKSPACE_FILTER_LABELS[key]}
