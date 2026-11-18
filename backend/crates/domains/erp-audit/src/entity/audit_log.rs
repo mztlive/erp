@@ -216,18 +216,7 @@ impl AuditLog {
     /// 操作人 ID、操作人账号、动作或资源类型去空白后为空或超长，或资源 ID、消息超长时返回 `erp_core::Error::LogicError`。
     /// 字符数上限分别为操作人 ID 128、账号 64、动作 128、资源类型 64、资源 ID 64、消息 8192。
     pub fn new(id: String, data: AuditLogData) -> Result<Self> {
-        let actor_id = normalize_required_text(
-            data.actor_id,
-            "操作人ID不能为空",
-            ACTOR_ID_MAX_LEN,
-            "操作人ID长度不符合要求",
-        )?;
-        let actor_account = normalize_required_text(
-            data.actor_account,
-            "操作人账号不能为空",
-            ACTOR_ACCOUNT_MAX_LEN,
-            "操作人账号长度不符合要求",
-        )?;
+        let (actor_id, actor_account) = normalized_actor_identity(data.actor_id, data.actor_account)?;
         let action =
             normalize_required_text(data.action, "动作不能为空", ACTION_MAX_LEN, "动作长度不符合要求")?;
         let resource_type = normalize_required_text(
@@ -252,6 +241,17 @@ impl AuditLog {
             structured_event: None,
         })
     }
+}
+
+pub(super) fn normalized_actor_identity(id: String, account: String) -> Result<(String, String)> {
+    let id = normalize_required_text(id, "操作人ID不能为空", ACTOR_ID_MAX_LEN, "操作人ID长度不符合要求")?;
+    let account = normalize_required_text(
+        account,
+        "操作人账号不能为空",
+        ACTOR_ACCOUNT_MAX_LEN,
+        "操作人账号长度不符合要求",
+    )?;
+    Ok((id, account))
 }
 
 pub(crate) fn normalized_snapshot_with_message(
@@ -281,7 +281,7 @@ mod tests {
     use serde_json::Value;
 
     use super::{AuditError, AuditLog, AuditLogData, AuditResult};
-    use crate::AuditActorLogs;
+    use crate::{AuditActorLogs, AuditAttemptResult, BusinessEventContext, registered_action};
 
     type SnapshotSetter = fn(AuditLog, Option<String>) -> AuditResult<AuditLog>;
 
@@ -322,6 +322,74 @@ mod tests {
         data.actor_account = "x".repeat(65);
 
         assert!(AuditLog::new("audit-1".to_string(), data).is_err());
+    }
+
+    #[test]
+    fn actor_identity_normalization_keeps_unicode_limits_in_logs_and_contexts() {
+        for (id, account) in [("人".to_string(), "号".to_string()), ("人".repeat(128), "号".repeat(64))] {
+            for kind in [AccountKind::Admin, AccountKind::Supplier] {
+                let mut data = audit_data();
+                data.actor_id = format!("\u{3000}\t{id}\n ");
+                data.actor_account = format!(" \n{account}\t\u{3000}");
+                data.actor_type = kind;
+                let actor = AuditActor::new(data.actor_id.clone(), data.actor_account.clone(), kind);
+                let log = AuditLog::new("audit-1".into(), data).unwrap();
+                let context =
+                    BusinessEventContext::new(actor, registered_action("auth.login", "auth").unwrap())
+                        .unwrap();
+                let attempt = context.attempt(AuditAttemptResult::Rejected);
+                assert_eq!(log.actor_id, id);
+                assert_eq!(log.actor_account, account);
+                assert_eq!(log.actor_type, kind);
+                assert_eq!(attempt.actor_id, id);
+                assert_eq!(attempt.actor_account, account);
+                assert_eq!(attempt.actor_type, kind);
+                assert!(log.structured_event.is_none());
+            }
+        }
+    }
+
+    #[test]
+    fn actor_identity_errors_keep_id_then_account_priority_in_both_constructors() {
+        for (id, account, expected) in [
+            (String::new(), "账".repeat(65), "操作人ID不能为空"),
+            ("\u{3000}\t\n ".into(), String::new(), "操作人ID不能为空"),
+            ("人".repeat(129), String::new(), "操作人ID长度不符合要求"),
+            ("valid".into(), "\u{3000}\t\n ".into(), "操作人账号不能为空"),
+            ("valid".into(), "账".repeat(65), "操作人账号长度不符合要求"),
+            ("人\0员".into(), "账".repeat(65), "操作人账号长度不符合要求"),
+        ] {
+            let actor = AuditActor::new(id.clone(), account.clone(), AccountKind::Admin);
+            let mut data = audit_data();
+            data.actor_id = id;
+            data.actor_account = account;
+            data.action = " ".into();
+            assert!(matches!(
+                AuditLog::new("audit-1".into(), data),
+                Err(CoreError::LogicError(message)) if message == expected
+            ));
+            assert!(matches!(
+                BusinessEventContext::new(actor, registered_action("auth.login", "auth").unwrap()),
+                Err(AuditError::Logic(CoreError::LogicError(message))) if message == expected
+            ));
+        }
+    }
+
+    #[test]
+    fn actor_control_character_validation_remains_specific_to_business_contexts() {
+        for (id, account) in [("人\0员", "account"), ("actor", "账\n号")] {
+            let mut data = audit_data();
+            data.actor_id = id.into();
+            data.actor_account = account.into();
+            let log = AuditLog::new("audit-1".into(), data).unwrap();
+            assert_eq!(log.actor_id, id);
+            assert_eq!(log.actor_account, account);
+            let actor = AuditActor::new(id.into(), account.into(), AccountKind::Admin);
+            assert!(matches!(
+                BusinessEventContext::new(actor, registered_action("auth.login", "auth").unwrap()),
+                Err(AuditError::ValidationError(message)) if message == "审计字段不能包含控制字符"
+            ));
+        }
     }
 
     #[test]

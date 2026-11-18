@@ -161,6 +161,10 @@ fn unavailable() -> ImportFailure {
     ImportFailure::new("AI_UNAVAILABLE", "字段提取服务暂不可用，请稍后重试")
 }
 
+fn timeout_error() -> ImportFailure {
+    ImportFailure::new("AI_TIMEOUT", "合同字段提取超时，请稍后重试")
+}
+
 fn provider_error(error: &ProviderError) -> ImportFailure {
     if let Some(status) = error.provider_response_status() {
         // Responses 解码失败也可能保留 HTTP 200；这不是供应商拒绝请求。
@@ -180,7 +184,7 @@ fn status_error(status: u16) -> ImportFailure {
     match status {
         401 | 403 => ImportFailure::new("AI_UNAUTHORIZED", "字段提取服务凭据无效或未授权，请联系管理员"),
         429 => ImportFailure::new("AI_THROTTLED", "字段提取服务限流，请稍后重试"),
-        408 | 504 => ImportFailure::new("AI_TIMEOUT", "合同字段提取超时，请稍后重试"),
+        408 | 504 => timeout_error(),
         500..=599 => unavailable(),
         _ => ImportFailure::new("AI_REJECTED", "字段提取请求被拒绝，请检查模型、上下文容量及结构化输出支持"),
     }
@@ -192,7 +196,7 @@ fn deadline_failure(diagnostics: &Diagnostics) -> (Result<ContractExtraction>, O
         let (error, source) = status_failure(status);
         return (Err(error), source);
     }
-    (Err(ImportFailure::new("AI_TIMEOUT", "合同字段提取超时，请稍后重试")), Some("application_deadline"))
+    (Err(timeout_error()), Some("application_deadline"))
 }
 
 fn timeout_source(error: &ProviderError) -> Option<&'static str> {
@@ -204,9 +208,7 @@ fn timeout_source(error: &ProviderError) -> Option<&'static str> {
 
 fn transport_failure(failure: Failure) -> (ImportFailure, Option<&'static str>) {
     match failure {
-        Failure::Timeout(source) => {
-            (ImportFailure::new("AI_TIMEOUT", "合同字段提取超时，请稍后重试"), Some(source.as_str()))
-        },
+        Failure::Timeout(source) => (timeout_error(), Some(source.as_str())),
         Failure::ResponseSize => (invalid_output(), None),
         Failure::Unavailable | Failure::Unsupported => (unavailable(), None),
     }

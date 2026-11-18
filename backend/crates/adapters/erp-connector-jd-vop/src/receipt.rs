@@ -12,8 +12,8 @@ use erp_supply::ports::connector::receipt::{
 use rust_decimal::Decimal;
 
 use super::delivery::observed;
-use super::order_payload::{identifier, valid_order_no};
-use super::transport::{JdVopReadRequest, JdVopWriteRequest};
+use super::order_payload::identifier;
+use super::transport::JdVopWriteRequest;
 use super::wire::WireText;
 use super::wire_order::JdOrder;
 use super::{JdVopConnector, error, mapping, protocol_required};
@@ -68,15 +68,7 @@ impl OrderReceiptConfirmation for JdVopConnector {
 
 impl JdVopConnector {
     async fn receipt_node(&self, reference: &OrderReference) -> ConnectorResult<Lookup<JdOrder>> {
-        valid_order_no(&reference.merchant_order_no)?;
-        identifier(&reference.external_order_no)?;
-        let reader = self.reader.as_ref().ok_or_else(protocol_required)?;
-        let orders: Vec<JdOrder> = reader
-            .read(JdVopReadRequest::Order {
-                merchant_order_no: None,
-                external_order_no: Some(reference.external_order_no.clone()),
-            })
-            .await?;
+        let orders = self.read_referenced_orders(reference).await?;
         let mut matches =
             orders.into_iter().filter(|order| order.jd_order_id.0 == reference.external_order_no);
         let Some(order) = matches.next() else {
@@ -185,7 +177,9 @@ mod tests {
 
     use super::super::JdVopOfferMapper;
     use super::super::order_payload::{JdVopExecutionProfile, JdVopInvoiceProfile};
-    use super::super::transport::{JdVopReadTransport, JdVopWriteTransport, ReadClient, WriteClient};
+    use super::super::transport::{
+        JdVopReadRequest, JdVopReadTransport, JdVopWriteTransport, ReadClient, WriteClient,
+    };
     use super::*;
 
     struct Transport {

@@ -6,7 +6,7 @@ use erp_core::common::time::Instant;
 use erp_supply::catalog_membership::{CatalogMembershipPage, CatalogPoolScope};
 use erp_supply::entity::failure::SupplierFailureClass;
 use erp_supply::ports::connector::common::{
-    ConnectorResult, Lookup, Page, Scan, ScanWindow, Snapshot, SourceRevision, SourceStamp, SupplierSku,
+    ConnectorResult, Lookup, Page, Scan, ScanWindow, Snapshot, SupplierSku,
 };
 use erp_supply::ports::connector::offer::{
     IncrementalSupport, Offer, OfferChange, OfferSource, ScopedOfferPage,
@@ -16,6 +16,7 @@ use hmac::{Hmac, KeyInit, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 
+use super::delivery::observed;
 use super::transport::JdVopReadRequest;
 use super::wire::{Category, PoolPage, Pools, SellPrice, SkuDetail, SkuImages};
 use super::{JdVopConnector, JdVopOffer, error, mapping, protocol_required};
@@ -96,7 +97,7 @@ impl OfferSource for JdVopConnector {
                 "京东商品分组已变化，请先核验来源身份",
             ));
         }
-        Ok(Lookup::Found(Snapshot { stamp: stamp(), value: offer }))
+        Ok(Lookup::Found(observed(offer)))
     }
 }
 
@@ -110,7 +111,7 @@ impl JdVopConnector {
         for id in ids {
             match self.read_offer(&id).await {
                 Ok(offer) => {
-                    items.push(Snapshot { stamp: stamp(), value: OfferChange::Upsert(Box::new(offer)) });
+                    items.push(observed(OfferChange::Upsert(Box::new(offer))));
                 },
                 Err(error) if error.class == SupplierFailureClass::MappingError => {
                     skipped.push(format!("京东 SKU {id}：{}：{}", error.code, error.summary));
@@ -254,10 +255,6 @@ fn cursor_mac(secret: &str) -> HmacSha256 {
     let mut mac = HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC接受任意长度密钥");
     mac.update(b"erp-jd-vop-catalog-cursor-v1\0");
     mac
-}
-
-fn stamp() -> SourceStamp {
-    SourceStamp { revision: SourceRevision::Unversioned, changed_at: None, observed_at: Instant::now() }
 }
 
 fn validate_scan(scan: &Scan) -> ConnectorResult<()> {
@@ -513,6 +510,9 @@ mod tests {
         ]);
         let result = connector.scan(&scan(None)).await.unwrap();
         assert_eq!(result.items.len(), 1);
+        let stamp = &result.items[0].stamp;
+        assert_eq!(serde_json::to_value(&stamp.revision).unwrap(), "Unversioned");
+        assert!(stamp.changed_at.is_none());
         let OfferChange::Upsert(offer) = &result.items[0].value else { panic!("no fabricated withdrawals") };
         assert_eq!(offer.sku.product_id.as_deref(), Some("sku:123"));
         assert_eq!(offer.quote.as_ref().unwrap().dropship.as_ref().unwrap().unit_price.to_string(), "0");
@@ -526,6 +526,36 @@ mod tests {
             response(JdVopReadRequest::Price { sku_id: id.into(), quantity: "1".into() }, json!([])),
             response(JdVopReadRequest::Images { sku_id: id.into() }, json!([])),
         ]
+    }
+
+    #[tokio::test]
+    async fn single_offer_keeps_unversioned_stamp_and_rejects_changed_group_after_same_reads() {
+        let detail = json!({"skuId":"123","skuName":"ordinary"});
+        let mut responses = item_responses("123", detail.clone());
+        responses.extend(item_responses("123", detail));
+        let (connector, transport) = connector(responses);
+        let Lookup::Found(snapshot) =
+            connector.offer(&SupplierSku { product_id: None, spec_id: "123".into() }).await.unwrap()
+        else {
+            panic!("observed offer visible")
+        };
+        assert_eq!(snapshot.value.sku.product_id.as_deref(), Some("sku:123"));
+        assert_eq!(serde_json::to_value(snapshot.stamp.revision).unwrap(), "Unversioned");
+        assert!(snapshot.stamp.changed_at.is_none());
+        let failure = connector
+            .offer(&SupplierSku { product_id: Some("spu:other".into()), spec_id: "123".into() })
+            .await
+            .err()
+            .unwrap();
+        assert_eq!(
+            failure,
+            error(
+                SupplierFailureClass::MappingError,
+                "JD_VOP_SOURCE_GROUP_CHANGED",
+                "京东商品分组已变化，请先核验来源身份"
+            )
+        );
+        assert_eq!(transport.requests.lock().unwrap().len(), 6);
     }
 
     #[tokio::test]

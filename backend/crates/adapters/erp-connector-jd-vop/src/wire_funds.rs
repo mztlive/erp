@@ -92,7 +92,7 @@ pub(super) fn observation(
     profile: &JdVopFundsProfile,
     evidence: SupplierFundsEvidence,
     query: &SupplierFundsQuery,
-) -> ConnectorResult<SupplierFundsObservation> {
+) -> SupplierFundsObservation {
     let fields = serde_json::from_str::<BTreeMap<String, Box<RawValue>>>(raw.get());
     let fields = fields.unwrap_or_default();
     let candidate = candidate(&fields, profile);
@@ -109,7 +109,7 @@ pub(super) fn observation(
             reason_code: reason.into(),
         }),
     };
-    Ok(SupplierFundsObservation { evidence, result })
+    SupplierFundsObservation { evidence, result }
 }
 
 fn candidate(fields: &BTreeMap<String, Box<RawValue>>, profile: &JdVopFundsProfile) -> Candidate {
@@ -258,7 +258,7 @@ pub(super) mod tests {
 
     #[test]
     fn verified_business_code_sign_account_and_timezone_produce_exact_positive_debit() {
-        let observed = observation(&row(serde_json::json!({})), &profile(), evidence(), &query()).unwrap();
+        let observed = observation(&row(serde_json::json!({})), &profile(), evidence(), &query());
         let SupplierFundsObservationResult::Transaction(transaction) = observed.result else {
             panic!("verified transaction expected");
         };
@@ -282,13 +282,63 @@ pub(super) mod tests {
             serde_json::json!({"createdDate":"unknown"}),
             serde_json::json!({"amount":"-21.931"}),
         ] {
-            let observed = observation(&row(change), &profile(), evidence(), &query()).unwrap();
+            let observed = observation(&row(change), &profile(), evidence(), &query());
             let SupplierFundsObservationResult::Unresolved(unresolved) = observed.result else {
                 panic!("unresolved expected");
             };
             assert!(!unresolved.reason_code.is_empty());
             assert_eq!(unresolved.evidence_reference, "evidence");
             assert_eq!(observed.evidence.body_encrypted, "cipher");
+        }
+    }
+
+    #[test]
+    fn non_object_rows_preserve_unresolved_evidence_and_account_failure_priority() {
+        for body in ["null", "true", "[]", "0", r#""not a transaction""#, "{}"] {
+            let raw: Box<RawValue> = serde_json::from_str(body).unwrap();
+            let evidence = evidence();
+            let observed = observation(&raw, &profile(), evidence.clone(), &query());
+            assert_eq!(observed.evidence, evidence);
+            assert_eq!(
+                observed.result,
+                SupplierFundsObservationResult::Unresolved(SupplierFundsUnresolved {
+                    observation_id: "evidence".into(),
+                    evidence_reference: "evidence".into(),
+                    external_transaction_id: None,
+                    external_order_id: None,
+                    amount: None,
+                    occurred_at: None,
+                    business_code: None,
+                    reason_code: "JD_VOP_FUNDS_ACCOUNT_UNVERIFIED".into(),
+                })
+            );
+        }
+    }
+
+    #[test]
+    fn transaction_times_include_both_window_edges_and_retain_outside_observations() {
+        for (date, timestamp, accepted) in [
+            ("1970-01-01 07:59:59", -1, false),
+            ("1970-01-01 08:00:00", 0, true),
+            ("1970-01-01 09:00:00", 3600, true),
+            ("1970-01-01 09:00:01", 3601, false),
+        ] {
+            let observed =
+                observation(&row(serde_json::json!({"createdDate":date})), &profile(), evidence(), &query());
+            match observed.result {
+                SupplierFundsObservationResult::Transaction(transaction) => {
+                    assert!(accepted);
+                    assert_eq!(transaction.occurred_at, Instant::from_unix_secs(timestamp));
+                    assert_eq!(transaction.amount, "21.93".parse().unwrap());
+                },
+                SupplierFundsObservationResult::Unresolved(unresolved) => {
+                    assert!(!accepted);
+                    assert_eq!(unresolved.reason_code, "JD_VOP_FUNDS_TIME_OUTSIDE_WINDOW");
+                    assert_eq!(unresolved.occurred_at, Some(Instant::from_unix_secs(timestamp)));
+                    assert_eq!(unresolved.amount, Some("-21.93".parse().unwrap()));
+                    assert_eq!(unresolved.evidence_reference, "evidence");
+                },
+            }
         }
     }
 

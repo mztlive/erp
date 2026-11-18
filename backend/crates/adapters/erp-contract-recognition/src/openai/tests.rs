@@ -562,7 +562,7 @@ async fn cancels_pending_request_at_deadline_without_retry() {
     let mut extractor = extractor();
     extractor.timeout = Duration::from_millis(20);
     let (result, logs) = capture(extractor.extract_with(&document, http, Diagnostics::default())).await;
-    assert_eq!(result.unwrap_err().code, "AI_TIMEOUT");
+    assert_eq!(result.unwrap_err(), ImportFailure::new("AI_TIMEOUT", "合同字段提取超时，请稍后重试"));
     let finished = event(&logs, "contract_ai_finished");
     assert_eq!(finished["level"], "WARN");
     assert_eq!(finished["fields"]["timeout_source"], "application_deadline");
@@ -692,7 +692,7 @@ async fn upstream_timeout_logs_original_provider_body_headers_and_request_id() {
             headers,
         );
         let (result, logs) = capture(extractor().extract_with(&document, http, diagnostics)).await;
-        assert_eq!(result.unwrap_err().code, "AI_TIMEOUT");
+        assert_eq!(result.unwrap_err(), ImportFailure::new("AI_TIMEOUT", "合同字段提取超时，请稍后重试"));
         let finished = event(&logs, "contract_ai_finished");
         assert_eq!(finished["level"], "WARN");
         assert_eq!(finished["fields"]["timeout_source"], "upstream_http");
@@ -705,18 +705,24 @@ async fn upstream_timeout_logs_original_provider_body_headers_and_request_id() {
 
 #[test]
 fn diagnostic_read_deadline_preserves_known_http_rejections() {
-    for (status, code, source) in [
-        (400, "AI_REJECTED", None),
-        (401, "AI_UNAUTHORIZED", None),
-        (429, "AI_THROTTLED", None),
-        (500, "AI_UNAVAILABLE", None),
-        (504, "AI_TIMEOUT", Some("upstream_http")),
-        (200, "AI_TIMEOUT", Some("application_deadline")),
+    let (result, source) = deadline_failure(&Diagnostics::default());
+    assert_eq!(result.unwrap_err(), ImportFailure::new("AI_TIMEOUT", "合同字段提取超时，请稍后重试"));
+    assert_eq!(source, Some("application_deadline"));
+    for (status, code, message, source) in [
+        (400, "AI_REJECTED", "字段提取请求被拒绝，请检查模型、上下文容量及结构化输出支持", None),
+        (401, "AI_UNAUTHORIZED", "字段提取服务凭据无效或未授权，请联系管理员", None),
+        (429, "AI_THROTTLED", "字段提取服务限流，请稍后重试", None),
+        (500, "AI_UNAVAILABLE", "字段提取服务暂不可用，请稍后重试", None),
+        (408, "AI_TIMEOUT", "合同字段提取超时，请稍后重试", Some("upstream_http")),
+        (504, "AI_TIMEOUT", "合同字段提取超时，请稍后重试", Some("upstream_http")),
+        (200, "AI_TIMEOUT", "合同字段提取超时，请稍后重试", Some("application_deadline")),
+        (299, "AI_TIMEOUT", "合同字段提取超时，请稍后重试", Some("application_deadline")),
+        (300, "AI_REJECTED", "字段提取请求被拒绝，请检查模型、上下文容量及结构化输出支持", None),
     ] {
         let diagnostics = Diagnostics::default();
         diagnostics.response(status, &HeaderMap::new());
         let (result, timeout_source) = deadline_failure(&diagnostics);
-        assert_eq!(result.unwrap_err().code, code);
+        assert_eq!(result.unwrap_err(), ImportFailure::new(code, message));
         assert_eq!(timeout_source, source);
     }
 }
@@ -731,17 +737,20 @@ fn transport_timeouts_keep_distinct_sources_and_the_existing_business_code() {
         (TimeoutSource::ResponseBody, "response_body"),
     ] {
         let error = ProviderError::from(HttpError::instance(Failure::Timeout(source)));
-        assert_eq!(provider_error(&error).code, "AI_TIMEOUT");
+        assert_eq!(provider_error(&error), ImportFailure::new("AI_TIMEOUT", "合同字段提取超时，请稍后重试"));
         assert_eq!(timeout_source(&error), Some(expected));
         let diagnostics = Diagnostics::default();
         diagnostics.transport_failure(Failure::Timeout(source));
         let report = StructuredOutputError::PromptError(PromptError::Report(error.report()));
         let (result, timeout_source) = extraction_failure(&report, &diagnostics);
-        assert_eq!(result.unwrap_err().code, "AI_TIMEOUT");
+        assert_eq!(result.unwrap_err(), ImportFailure::new("AI_TIMEOUT", "合同字段提取超时，请稍后重试"));
         assert_eq!(timeout_source, Some(expected));
     }
     let error = ProviderError::from(HttpError::instance(Failure::Unavailable));
-    assert_eq!(provider_error(&error).code, "AI_UNAVAILABLE");
+    assert_eq!(
+        provider_error(&error),
+        ImportFailure::new("AI_UNAVAILABLE", "字段提取服务暂不可用，请稍后重试")
+    );
     assert_eq!(timeout_source(&error), None);
 }
 

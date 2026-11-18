@@ -14,7 +14,6 @@ use super::delivery::observed;
 use super::order_mapping::{confirmation, summary};
 use super::order_payload::{identifier, submit, valid_order_no};
 use super::transport::{JdVopReadRequest, JdVopWriteRequest, write_unknown};
-use super::wire::WireText;
 use super::wire_order::{CancelProgress, CancellationEligibility, JdOrder};
 use super::{JdVopConnector, error, mapping, protocol_required};
 
@@ -111,16 +110,13 @@ impl OrderConfirmation for JdVopConnector {
             _ => return Err(mapping("京东原子单确认状态未知，请继续查询原结果")),
         }
         let writer = self.writer.as_ref().ok_or_else(protocol_required)?;
-        let result: WireText = writer
-            .send(JdVopWriteRequest::Confirm {
+        writer
+            .send_true(JdVopWriteRequest::Confirm {
                 merchant_order_no: request.order.merchant_order_no.clone(),
                 external_order_no: request.order.external_order_no.clone(),
                 source_type: profile.source_type,
             })
             .await?;
-        if result.0 != "true" {
-            return Err(write_unknown());
-        }
         Ok(observed(ConfirmationState::Confirmed))
     }
 }
@@ -162,17 +158,14 @@ impl Cancellations for JdVopConnector {
         self.validate(request).await?;
         let profile = self.profile.as_ref().ok_or_else(protocol_required)?;
         let writer = self.writer.as_ref().ok_or_else(protocol_required)?;
-        let result: WireText = writer
-            .send(JdVopWriteRequest::Cancel {
+        writer
+            .send_true(JdVopWriteRequest::Cancel {
                 merchant_order_no: request.order.merchant_order_no.clone(),
                 external_order_no: request.order.external_order_no.clone(),
                 reason: request.reason_code.clone(),
                 source_type: profile.source_type,
             })
             .await?;
-        if result.0 != "true" {
-            return Err(write_unknown());
-        }
         Ok(ActionAccepted { action_id: request.action.id.clone(), external_request_id: None })
     }
 
@@ -196,16 +189,30 @@ impl Cancellations for JdVopConnector {
 }
 
 impl JdVopConnector {
-    async fn current_target(&self, reference: &OrderReference) -> ConnectorResult<JdOrder> {
+    /// 校验原引用后按外部单号读取，目标资格仍由各动作核验。
+    /// # 参数
+    /// `reference` 为原第三方单号及供应商订单号。
+    /// # 返回
+    /// 同次查询的来源订单列表。
+    /// # 错误
+    /// 保持第三方单号、供应商编号、读取能力和远端读取的失败优先级。
+    pub(super) async fn read_referenced_orders(
+        &self,
+        reference: &OrderReference,
+    ) -> ConnectorResult<Vec<JdOrder>> {
         valid_order_no(&reference.merchant_order_no)?;
         identifier(&reference.external_order_no)?;
         let reader = self.reader.as_ref().ok_or_else(protocol_required)?;
-        let orders: Vec<JdOrder> = reader
+        reader
             .read(JdVopReadRequest::Order {
                 merchant_order_no: None,
                 external_order_no: Some(reference.external_order_no.clone()),
             })
-            .await?;
+            .await
+    }
+
+    async fn current_target(&self, reference: &OrderReference) -> ConnectorResult<JdOrder> {
+        let orders = self.read_referenced_orders(reference).await?;
         let mut matches =
             orders.into_iter().filter(|order| order.jd_order_id.0 == reference.external_order_no);
         let order = matches.next().ok_or_else(|| mapping("京东原子单暂不可见，请继续查询原结果"))?;
@@ -274,6 +281,7 @@ mod tests {
     use erp_supply::ports::connector::offer::{DeliveryContext, DeliveryQuery, DeliverySource};
     use erp_supply::ports::connector::order::{DeliveryChoice, DeliveryMethod, Recipient};
     use erp_supply::ports::connector::order_tree::OrderNodeRole;
+    use erp_supply::ports::connector::receipt::{OrderReceiptConfirmation, ReceiptConfirmationState};
     use erp_supply::ports::supplier_reference_registry::{
         SupplierReferenceRegistry, SupplierReferenceTarget,
     };
@@ -735,24 +743,67 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn false_confirmation_result_keeps_exact_unknown_error_without_retry() {
-        let (connector, transport, _, _) = prepared().await;
-        let request = ConfirmOrder {
-            action: ActionKey { id: "confirm-original".into(), payload_hash: "original-hash".into() },
-            order: OrderReference {
-                merchant_order_no: "stable-third-1".into(),
-                external_order_no: "201".into(),
-            },
-            topology_version: 1,
-        };
-        let response = envelope("jingdong.vop.order.confirmOrder", "openRpcResult", json!(false));
-        transport.write_responses.lock().unwrap().push_back(Ok(response));
-        let failure = connector.confirm_order(&request).await.unwrap_err();
-        assert_eq!(failure.class, SupplierFailureClass::ResultUnknown);
-        assert_eq!(failure.code, "JD_VOP_WRITE_RESULT_UNKNOWN");
-        assert_eq!(failure.summary, "京东原请求结果待核实，请查询原结果");
-        assert_eq!(failure.retry_after, None);
-        assert_eq!(transport.writes.lock().unwrap().len(), 1);
+    async fn non_true_confirmation_results_keep_exact_unknown_error_without_retry() {
+        for result in [json!(false), json!("false"), json!("TRUE"), json!(0), Value::Null] {
+            let (connector, transport, _, _) = prepared().await;
+            let request = ConfirmOrder {
+                action: ActionKey { id: "confirm-original".into(), payload_hash: "original-hash".into() },
+                order: OrderReference {
+                    merchant_order_no: "stable-third-1".into(),
+                    external_order_no: "201".into(),
+                },
+                topology_version: 1,
+            };
+            let response = envelope("jingdong.vop.order.confirmOrder", "openRpcResult", result.clone());
+            transport.write_responses.lock().unwrap().push_back(Ok(response));
+            let failure = connector.confirm_order(&request).await.unwrap_err();
+            let mut expected = write_unknown();
+            if result.is_null() {
+                expected.code = "JD_VOP_MAPPING_INVALID".into();
+            }
+            assert_eq!(failure, expected);
+            let writes = transport.writes.lock().unwrap();
+            assert_eq!(writes.len(), 1);
+            assert!(matches!(&writes[0], JdVopWriteRequest::Confirm {
+                merchant_order_no, external_order_no, source_type: 3
+            } if merchant_order_no == "stable-third-1" && external_order_no == "201"));
+        }
+    }
+
+    #[tokio::test]
+    async fn cancellation_true_and_non_true_results_preserve_acceptance_and_original_unknown() {
+        for result in [json!(true), json!("true"), json!(false), json!("false"), json!(0), Value::Null] {
+            let (connector, transport, _, _) = prepared().await;
+            let request = CancelOrder {
+                action: ActionKey { id: "cancel-original".into(), payload_hash: "original-hash".into() },
+                order: OrderReference {
+                    merchant_order_no: "stable-third-1".into(),
+                    external_order_no: "201".into(),
+                },
+                lines: None,
+                reason_code: "006".into(),
+            };
+            let response = envelope("jingdong.vop.order.cancelOrder", "openRpcResult", result.clone());
+            transport.write_responses.lock().unwrap().push_back(Ok(response));
+            let outcome = connector.cancel(&request).await;
+            if result == json!(true) || result == json!("true") {
+                assert_eq!(
+                    outcome.unwrap(),
+                    ActionAccepted { action_id: request.action.id, external_request_id: None }
+                );
+            } else {
+                let mut expected = write_unknown();
+                if result.is_null() {
+                    expected.code = "JD_VOP_MAPPING_INVALID".into();
+                }
+                assert_eq!(outcome.unwrap_err(), expected);
+            }
+            let writes = transport.writes.lock().unwrap();
+            assert_eq!(writes.len(), 1);
+            assert!(matches!(&writes[0], JdVopWriteRequest::Cancel {
+                merchant_order_no, external_order_no, reason, source_type: 3
+            } if merchant_order_no == "stable-third-1" && external_order_no == "201" && reason == "006"));
+        }
     }
 
     #[tokio::test]
@@ -855,6 +906,100 @@ mod tests {
         assert!(
             matches!(&writes[0], JdVopWriteRequest::Cancel { external_order_no, .. } if external_order_no == "100")
         );
+    }
+
+    #[tokio::test]
+    async fn referenced_order_validation_keeps_error_priority_without_external_reads() {
+        let (mut connector, transport, _, _) = prepared().await;
+        transport.reads.lock().unwrap().clear();
+        let reader = connector.reader.clone();
+        for reader in [reader, None] {
+            connector.reader = reader;
+            for (merchant, external, summary) in [
+                ("", "0", "京东原第三方订单号格式无效"),
+                ("stable-third-1", "", "京东编号格式无效"),
+                ("stable-third-1", "0", "京东编号超出接口范围"),
+                ("stable-third-1", "9223372036854775808", "京东编号超出接口范围"),
+                ("stable-third-1", "18446744073709551616", "京东编号超出范围"),
+            ] {
+                let reference =
+                    OrderReference { merchant_order_no: merchant.into(), external_order_no: external.into() };
+                assert_eq!(connector.current_target(&reference).await.err().unwrap(), mapping(summary));
+                assert_eq!(
+                    OrderReceiptConfirmation::receipt_confirmation(&connector, &reference)
+                        .await
+                        .err()
+                        .unwrap(),
+                    mapping(summary)
+                );
+            }
+        }
+        for external in ["1", "9223372036854775807"] {
+            let reference =
+                OrderReference { merchant_order_no: "x".repeat(100), external_order_no: external.into() };
+            assert_eq!(connector.current_target(&reference).await.err().unwrap(), protocol_required());
+            assert_eq!(
+                OrderReceiptConfirmation::receipt_confirmation(&connector, &reference).await.err().unwrap(),
+                protocol_required()
+            );
+        }
+        assert!(transport.reads.lock().unwrap().is_empty());
+        assert!(transport.writes.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn referenced_order_queries_preserve_visibility_duplicates_and_reservation_rules() {
+        let (connector, transport, _, _) = prepared().await;
+        transport.reads.lock().unwrap().clear();
+        let mut child = order("201", Some("100"), "1", "1", false);
+        child["orderType"] = json!("1");
+        for (source, external, current_error, receipt_error) in [
+            (json!([child]), "201", None, None),
+            (json!([]), "201", Some("京东原子单暂不可见，请继续查询原结果"), None),
+            (
+                json!([child, child]),
+                "201",
+                Some("京东原子单查询返回重复身份，请先核实原结果"),
+                Some("京东收货确认目标不是原订单当前有效子单，请核对拆单结果"),
+            ),
+            (
+                json!([reservation()]),
+                "100",
+                None,
+                Some("京东收货确认目标不是原订单当前有效子单，请核对拆单结果"),
+            ),
+        ] {
+            let reference = OrderReference {
+                merchant_order_no: "stable-third-1".into(),
+                external_order_no: external.into(),
+            };
+            let before = transport.reads.lock().unwrap().len();
+            transport.custom.lock().unwrap().push_back(source.clone());
+            let target = connector.current_target(&reference).await;
+            if let Some(summary) = current_error {
+                assert_eq!(target.err().unwrap(), mapping(summary));
+            } else {
+                assert_eq!(target.unwrap().jd_order_id.0, external);
+            }
+            transport.custom.lock().unwrap().push_back(source.clone());
+            let received = OrderReceiptConfirmation::receipt_confirmation(&connector, &reference).await;
+            if let Some(summary) = receipt_error {
+                assert_eq!(received.err().unwrap(), mapping(summary));
+            } else if source.as_array().unwrap().is_empty() {
+                assert!(matches!(received.unwrap(), Lookup::NotVisible));
+            } else {
+                let Lookup::Found(state) = received.unwrap() else { panic!("original leaf visible") };
+                assert_eq!(state.value, ReceiptConfirmationState::NotRequired);
+            }
+            let reads = transport.reads.lock().unwrap();
+            assert_eq!(reads.len(), before + 2);
+            assert!(reads[before..].iter().all(|read| *read
+                == JdVopReadRequest::Order {
+                    merchant_order_no: None,
+                    external_order_no: Some(external.into()),
+                }));
+        }
+        assert!(transport.writes.lock().unwrap().is_empty());
     }
 
     #[tokio::test]

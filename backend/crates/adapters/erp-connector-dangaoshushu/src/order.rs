@@ -198,25 +198,29 @@ impl Orders for DangaoshushuConnector {
     }
 }
 
+fn order_amounts(value: &Value) -> ConnectorResult<OrderAmounts> {
+    Ok(OrderAmounts {
+        payable: non_negative_amount(&value["final_amount"])?,
+        goods_cost: None,
+        shipping_cost: None,
+        service_cost: None,
+    })
+}
+
 fn created_order(value: &Value, merchant_order_no: &str) -> ConnectorResult<CreatedOrder> {
     let order = &value["order"];
     let reference = OrderReference {
         merchant_order_no: merchant_order_no.into(),
         external_order_no: id(&order["order_no"])?,
     };
-    let payable = non_negative_amount(&order["final_amount"])?;
+    let amounts = order_amounts(order)?;
     let payment = if flag(&order["pay_status"])? { PaymentState::Confirmed } else { PaymentState::Pending };
     Ok(CreatedOrder {
         order: snapshot(
             OrderSnapshot {
                 source_evidence: None,
                 reference,
-                amounts: Some(OrderAmounts {
-                    payable,
-                    goods_cost: None,
-                    shipping_cost: None,
-                    service_cost: None,
-                }),
+                amounts: Some(amounts),
                 fulfillment: None,
                 cancellation: None,
                 refund: None,
@@ -257,12 +261,7 @@ fn order_snapshot(value: &Value, channel: &str) -> ConnectorResult<OrderSnapshot
     } else {
         Some(if flag(&value["pay_status"])? { PaymentState::Confirmed } else { PaymentState::Pending })
     };
-    let amounts = if value["final_amount"].is_null() {
-        None
-    } else {
-        let payable = non_negative_amount(&value["final_amount"])?;
-        Some(OrderAmounts { payable, goods_cost: None, shipping_cost: None, service_cost: None })
-    };
+    let amounts = if value["final_amount"].is_null() { None } else { Some(order_amounts(value)?) };
     Ok(OrderSnapshot {
         source_evidence: None,
         reference,
@@ -531,16 +530,36 @@ mod tests {
     #[test]
     fn order_amount_mapping_preserves_optional_values_and_exact_scale() {
         let mut value = json!({"channel_no":"test-channel", "out_order_no":"merchant-1",
-            "order_no":"external-1", "status":"1", "pay_status":"0"});
+            "order_no":"external-1", "status":"1", "pay_status":"0",
+            "goods_cost":"7.00", "shipping_cost":"2.00", "service_cost":"1.00"});
         assert_eq!(order_snapshot(&value, "test-channel").unwrap().amounts, None);
-        for amount in ["0", "12.30"] {
+        assert_eq!(created_order(&json!({"order":value}), "merchant-1").err().unwrap(), mapping());
+        for amount in ["0", "0.00", "12.30", "79228162514264337593543950335"] {
             value["final_amount"] = json!(amount);
+            let expected = Some(OrderAmounts {
+                payable: amount.parse().unwrap(),
+                goods_cost: None,
+                shipping_cost: None,
+                service_cost: None,
+            });
             let observed = order_snapshot(&value, "test-channel").unwrap();
-            assert_eq!(observed.amounts.unwrap().payable.to_string(), amount);
+            assert_eq!(observed.amounts.as_ref().unwrap().payable.to_string(), amount);
+            assert_eq!(observed.amounts, expected);
             let created = created_order(&json!({"order":value}), "merchant-1").unwrap();
-            assert_eq!(created.order.value.amounts.unwrap().payable.to_string(), amount);
+            assert_eq!(created.order.value.amounts.as_ref().unwrap().payable.to_string(), amount);
+            assert_eq!(created.order.value.amounts, expected);
         }
-        for amount in [json!("-0.01"), json!("1.001"), json!("invalid"), json!("")] {
+        for amount in [
+            json!("-0.01"),
+            json!("1.001"),
+            json!("invalid"),
+            json!(""),
+            json!(" 1 "),
+            json!("79228162514264337593543950336"),
+            json!(true),
+            json!([]),
+            json!({}),
+        ] {
             value["final_amount"] = amount;
             assert_eq!(order_snapshot(&value, "test-channel").err().unwrap(), mapping());
             assert_eq!(created_order(&json!({"order":value}), "merchant-1").err().unwrap(), mapping());

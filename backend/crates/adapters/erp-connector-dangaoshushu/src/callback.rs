@@ -37,12 +37,8 @@ impl Callbacks for DangaoshushuConnector {
                 "供应商推送渠道、签名或时间窗口无效",
             ));
         }
-        let kind = request
-            .path_and_query
-            .split('?')
-            .next()
-            .and_then(|path| path.rsplit('/').next())
-            .ok_or_else(mapping)?;
+        let path = request.path_and_query.split_once('?').map_or(request.path_and_query, |(path, _)| path);
+        let kind = path.rsplit_once('/').map_or(path, |(_, kind)| kind);
         let notices = notices(kind, &value)?;
         Ok(VerifiedCallback {
             integrity: CallbackIntegrity::EnvelopeOnly,
@@ -154,6 +150,46 @@ mod tests {
             assert!(verified.notices.iter().all(|notice| notice.observation.is_none()
                 && notice.occurred_at.is_none()
                 && notice.source_event_id.is_none()));
+        }
+    }
+
+    #[test]
+    fn callback_topic_uses_only_final_path_segment_before_first_query() {
+        let connector = connector(vec![]);
+        let bytes = serde_json::to_vec(&serde_json::json!({
+            "channel_no":"test-channel", "timestamp":1700000000,
+            "sign":"b918d6992b799b477691f8beebc45c8f", "out_order_no":"order-1"
+        }))
+        .unwrap();
+        let mut request = CallbackRequest {
+            method: "POST",
+            path_and_query: "/callbacks/connection-1/order",
+            headers: &[],
+            body: &bytes,
+            received_at: Instant::from_unix_secs(1700000000),
+        };
+        let expected = connector.verify(&request).unwrap();
+        for path in [
+            "order",
+            "/order",
+            "/callbacks//connection-1/order",
+            "/callbacks/connection-1/order?original=/price?extra=/unknown",
+            "order?",
+        ] {
+            request.path_and_query = path;
+            let actual = connector.verify(&request).unwrap();
+            assert!(actual == expected, "{path}");
+        }
+        for path in [
+            "",
+            "/",
+            "?order",
+            "/callbacks/connection-1/order/",
+            "/callbacks/connection-1/unknown?route=order",
+            "/callbacks/connection-1/order？ignored",
+        ] {
+            request.path_and_query = path;
+            assert_eq!(connector.verify(&request).err().unwrap(), mapping(), "{path}");
         }
     }
 

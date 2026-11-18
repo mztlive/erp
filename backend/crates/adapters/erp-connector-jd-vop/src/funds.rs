@@ -235,7 +235,7 @@ impl SupplierFundsSource for JdVopConnector {
         let mut items = Vec::with_capacity(response.items.len());
         for raw in response.items {
             let evidence = self.funds_evidence(&raw)?;
-            items.push(observed(observation(&raw, profile, evidence, query)?));
+            items.push(observed(observation(&raw, profile, evidence, query)));
         }
         let next = if more {
             Some(

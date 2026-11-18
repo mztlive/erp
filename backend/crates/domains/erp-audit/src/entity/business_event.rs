@@ -12,7 +12,7 @@ use id_generator::next_id;
 use serde::{Deserialize, Deserializer, Serialize};
 
 use super::audit_log::{
-    ACTOR_ACCOUNT_MAX_LEN, ACTOR_ID_MAX_LEN, RESOURCE_ID_MAX_LEN, RESOURCE_TYPE_MAX_LEN, SNAPSHOT_MAX_LEN,
+    RESOURCE_ID_MAX_LEN, RESOURCE_TYPE_MAX_LEN, SNAPSHOT_MAX_LEN, normalized_actor_identity,
     normalized_snapshot_with_message,
 };
 use super::{AuditAttempt, AuditAttemptKind, AuditAttemptResult, AuditLog, AuditLogData};
@@ -256,13 +256,7 @@ impl BusinessEventContext {
         let actor_name_snapshot = actor.actor_name_snapshot().map(str::to_string);
         let request_id = actor.request_id().map(str::to_string);
         let (id, account, kind) = actor.into_parts();
-        let id = normalize_required_text(id, "操作人ID不能为空", ACTOR_ID_MAX_LEN, "操作人ID长度不符合要求")?;
-        let account = normalize_required_text(
-            account,
-            "操作人账号不能为空",
-            ACTOR_ACCOUNT_MAX_LEN,
-            "操作人账号长度不符合要求",
-        )?;
+        let (id, account) = normalized_actor_identity(id, account)?;
         validate_plain_text(&id)?;
         validate_plain_text(&account)?;
         Ok(Self {

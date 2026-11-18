@@ -12,7 +12,7 @@ use tokio::time::{Instant, sleep_until, timeout};
 
 use super::error;
 use super::order_payload::SubmitOrder;
-use super::wire::decode;
+use super::wire::{WireText, decode};
 
 /// 仅列入已核验官方文档的读取方法，不能携带创建、确认或删除命令。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -193,6 +193,21 @@ pub(super) struct WriteClient {
 }
 
 impl WriteClient {
+    /// 只接受明确的 true 应答，不把业务失败当作未发送证明。
+    /// # 参数
+    /// `request` 为当前已持久化的原写动作。
+    /// # 返回
+    /// 单次发送且应答为 true 时成功。
+    /// # 错误
+    /// 传输、解码或非 true 应答保持原写结果未知分类。
+    pub(super) async fn send_true(&self, request: JdVopWriteRequest) -> ConnectorResult<()> {
+        let result: WireText = self.send(request).await?;
+        if result.0 != "true" {
+            return Err(write_unknown());
+        }
+        Ok(())
+    }
+
     pub(super) async fn send<T: DeserializeOwned>(&self, request: JdVopWriteRequest) -> ConnectorResult<T> {
         let body = timeout(self.reader.timeout, self.once(&request)).await.map_err(|_| write_unknown())??;
         let rpc = request.response_key();
