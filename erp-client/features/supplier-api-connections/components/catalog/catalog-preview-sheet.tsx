@@ -38,6 +38,8 @@ export function CatalogPreviewSheet({
     item,
     onClose,
     canReadCost,
+    canSelect,
+    canOpenProduct,
     canConfigure,
     selectionBlocker,
     choice,
@@ -45,6 +47,8 @@ export function CatalogPreviewSheet({
     item: CatalogItem
     onClose: () => void
     canReadCost: boolean
+    canSelect: boolean
+    canOpenProduct: boolean
     canConfigure: boolean
     selectionBlocker?: string
     choice: ReturnType<typeof useCatalogBatchSelection>
@@ -111,22 +115,22 @@ export function CatalogPreviewSheet({
             }
             summary={
                 <div className="flex flex-wrap items-end justify-between gap-2">
-                    <div>
-                        <p className="text-xs text-muted-foreground">
-                            接口采购报价
-                        </p>
-                        <MoneyValue
-                            value={item.purchase_price}
-                            unavailableReason={
-                                !canReadCost
-                                    ? "无采购报价查看权限"
-                                    : item.purchase_price == null
-                                      ? "暂无接口报价"
-                                      : undefined
-                            }
-                            size="section"
-                        />
-                    </div>
+                    {canReadCost && (
+                        <div>
+                            <p className="text-xs text-muted-foreground">
+                                接口采购报价
+                            </p>
+                            <MoneyValue
+                                value={item.purchase_price}
+                                unavailableReason={
+                                    item.purchase_price == null
+                                        ? "暂无接口报价"
+                                        : undefined
+                                }
+                                size="section"
+                            />
+                        </div>
+                    )}
                     <Badge
                         variant={
                             item.availability === "AVAILABLE"
@@ -142,7 +146,7 @@ export function CatalogPreviewSheet({
             }
             footer={
                 <>
-                    {blocker ? (
+                    {canSelect && blocker ? (
                         <PermissionGuard
                             permission={[
                                 "supplier_api_connection:catalog_sync",
@@ -165,7 +169,7 @@ export function CatalogPreviewSheet({
                     >
                         关闭
                     </Button>
-                    {item.company_product_id ? (
+                    {canOpenProduct && item.company_product_id ? (
                         <Button
                             id="supplier-catalog-preview-open-company"
                             variant="outline"
@@ -182,36 +186,38 @@ export function CatalogPreviewSheet({
                             />
                         </Button>
                     ) : null}
-                    <PermissionGuard
-                        permission={[
-                            "supplier_api_connection:catalog_sync",
-                            "supplier_offering:create",
-                            "supplier_offering_cost:detail",
-                        ]}
-                    >
-                        <LoadingButton
-                            id="supplier-catalog-preview-select"
-                            variant={selected ? "outline" : "default"}
-                            disabled={Boolean(blocker) || choice.busy}
-                            loading={choice.saving}
-                            aria-describedby={
-                                blocker
-                                    ? "supplier-catalog-preview-selection-blocker"
-                                    : undefined
-                            }
-                            onClick={() =>
-                                choice.change(
-                                    {
-                                        ...choice.rowSelection,
-                                        [item.id]: !selected,
-                                    },
-                                    [item],
-                                )
-                            }
+                    {canSelect && (
+                        <PermissionGuard
+                            permission={[
+                                "supplier_api_connection:catalog_sync",
+                                "supplier_offering:create",
+                                "supplier_offering_cost:detail",
+                            ]}
                         >
-                            {selected ? "取消选择" : "加入本次选择"}
-                        </LoadingButton>
-                    </PermissionGuard>
+                            <LoadingButton
+                                id="supplier-catalog-preview-select"
+                                variant={selected ? "outline" : "default"}
+                                disabled={Boolean(blocker) || choice.busy}
+                                loading={choice.saving}
+                                aria-describedby={
+                                    blocker
+                                        ? "supplier-catalog-preview-selection-blocker"
+                                        : undefined
+                                }
+                                onClick={() =>
+                                    choice.change(
+                                        {
+                                            ...choice.rowSelection,
+                                            [item.id]: !selected,
+                                        },
+                                        [item],
+                                    )
+                                }
+                            >
+                                {selected ? "取消选择" : "加入本次选择"}
+                            </LoadingButton>
+                        </PermissionGuard>
+                    )}
                 </>
             }
         >

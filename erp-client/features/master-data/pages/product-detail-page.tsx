@@ -3,6 +3,7 @@
 import { useChangeConfirmation } from "../hooks/use-change-confirmation"
 
 import * as React from "react"
+import { hasPermission } from "@/lib/permissions"
 import { useSearchParams } from "next/navigation"
 import {
     DiscardConfirmDialog,
@@ -61,6 +62,9 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
         categoryOptions,
         brandOptions,
         unitOptionsQuery,
+        canSelectUnit,
+        canSelectCategory,
+        canSelectBrand,
         data,
         form,
         formError,
@@ -89,6 +93,7 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
         listHref,
         pending,
         canCreate,
+        hasUpdatePermission,
         canRevise,
         canDisable,
         reviseBlocker,
@@ -99,6 +104,12 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
         requestSave,
         initialFormValues,
     } = editor
+
+    const permissions = accountQuery.isSuccess
+        ? accountQuery.data.permissions
+        : undefined
+    const canReadSupply = hasPermission(permissions, "supplier_offering:list")
+    const canReadInventory = hasPermission(permissions, "stock_balance:list")
 
     React.useEffect(() => {
         if (activeSection !== "sku") return
@@ -157,9 +168,12 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                     } = bindings
                     const saving = pending || isSubmitting || sourceProcessing
                     // Retain old deep links to the effective section, now shown as the save dialog.
-                    const showSave = saveOpen || activeSection === "effective"
+                    const showSave =
+                        canRevise && (saveOpen || activeSection === "effective")
                     const section =
-                        activeSection === "effective" || activeSection === "sku"
+                        activeSection === "effective" ||
+                        activeSection === "sku" ||
+                        (activeSection === "supply" && !canReadSupply)
                             ? "basic"
                             : activeSection
                     const changes = productChangeSummary(
@@ -220,6 +234,7 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                     key={stableId}
                                     productId={stableId}
                                     enabled={!isCreate && Boolean(data)}
+                                    canResolve={hasUpdatePermission}
                                     canRevise={canRevise}
                                     dirty={isDirty}
                                     busy={saving}
@@ -235,6 +250,7 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                     <ProductSectionTabs
                                         value={section}
                                         isCreate={isCreate}
+                                        canReadSupply={canReadSupply}
                                         onValueChange={setActiveSection}
                                     />
                                     <div
@@ -252,6 +268,15 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                                     }
                                                 >
                                                     <ProductBasicSection
+                                                        canSelectUnit={
+                                                            canSelectUnit
+                                                        }
+                                                        canSelectCategory={
+                                                            canSelectCategory
+                                                        }
+                                                        canSelectBrand={
+                                                            canSelectBrand
+                                                        }
                                                         onRefreshUnits={() =>
                                                             unitOptionsQuery.refetch(
                                                                 {
@@ -306,6 +331,11 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                                     }
                                                 >
                                                     <ProductSkuSection
+                                                        canEditLifecycle={
+                                                            isCreate
+                                                                ? canCreate
+                                                                : hasUpdatePermission
+                                                        }
                                                         idPrefix="master-data-product-detail-sku"
                                                         isCreate={isCreate}
                                                         canRevise={
@@ -382,7 +412,9 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                                             inventoryActionHint
                                                         }
                                                         onOpenInventory={
-                                                            openInventoryPreview
+                                                            canReadInventory
+                                                                ? openInventoryPreview
+                                                                : undefined
                                                         }
                                                         rememberSkuFile={
                                                             rememberSkuFile
@@ -391,7 +423,9 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                                 </div>
                                             </div>
                                         ) : null}
-                                        {section === "supply" && !isCreate ? (
+                                        {section === "supply" &&
+                                        !isCreate &&
+                                        canReadSupply ? (
                                             <ProductSupplySection
                                                 fields={fields}
                                                 name={name}
@@ -423,7 +457,7 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                 </div>
                             </form>
                             {changeConfirmation.dialog}
-                            {priceUndo ? (
+                            {canRevise && priceUndo ? (
                                 <div
                                     role="status"
                                     className="fixed bottom-20 right-6 z-40 flex items-center gap-3 rounded-lg border bg-background p-3 shadow-md"
@@ -462,7 +496,7 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                 setChangeReason={setChangeReason}
                             />
                             <DiscardConfirmDialog
-                                open={resetOpen}
+                                open={canRevise && resetOpen}
                                 onOpenChange={setResetOpen}
                                 title="取消本次修改？"
                                 description="商品资料将恢复到本次编辑前的内容。"

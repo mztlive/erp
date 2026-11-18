@@ -85,6 +85,7 @@ export function PaymentCandidatesList({
                 <CandidateListFilters
                     key={JSON.stringify(list.applied)}
                     applied={list.applied}
+                    canFilterSupplier={list.canFilterSupplier}
                     onApply={(filters) => {
                         selection.cancelPending()
                         list.update({ ...filters, page: 1 })

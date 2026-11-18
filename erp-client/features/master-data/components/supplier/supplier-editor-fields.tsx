@@ -68,13 +68,19 @@ export function SensitiveEditableField({
     const [revealError, setRevealError] = React.useState<string | null>(null)
 
     React.useEffect(() => {
+        if (!canReveal) {
+            setRevealed(false)
+            setRevealedValue(null)
+            setRevealError(null)
+            return
+        }
         if (!revealed) return
         const timer = window.setTimeout(() => {
             setRevealed(false)
             setRevealedValue(null)
         }, 15000)
         return () => window.clearTimeout(timer)
-    }, [revealed])
+    }, [canReveal, revealed])
 
     if (!revealToken) {
         return (
@@ -107,7 +113,7 @@ export function SensitiveEditableField({
         }
     }
 
-    if (!revealed) {
+    if (!revealed || !canReveal) {
         return (
             <div className="space-y-1.5">
                 <Label htmlFor={id}>{label}</Label>
@@ -121,22 +127,21 @@ export function SensitiveEditableField({
                             type="button"
                             size="sm"
                             variant="outline"
-                            disabled={!canReveal}
                             onClick={() => void reveal()}
                         >
                             查看完整信息
                         </Button>
                     )}
                 </div>
-                {revealError ? (
+                {canReveal && revealError ? (
                     <p className="text-xs text-destructive" role="alert">
                         {revealError}
                     </p>
-                ) : (
+                ) : canReveal ? (
                     <p className="text-xs text-muted-foreground">
                         敏感信息已打码；查看后 15 秒自动隐藏。
                     </p>
-                )}
+                ) : null}
             </div>
         )
     }

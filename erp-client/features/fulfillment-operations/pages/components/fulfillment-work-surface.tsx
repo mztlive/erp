@@ -41,7 +41,10 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { useFulfillmentFieldLocation } from "../hooks/use-fulfillment-field-location"
-import { FulfillmentDraftForm } from "@/features/fulfillment-operations/components/forms/fulfillment-draft-form"
+import {
+    FulfillmentDraftForm,
+    FulfillmentDraftReadOnly,
+} from "@/features/fulfillment-operations/components/forms/fulfillment-draft-form"
 import {
     OPERATION_ACTION_LABEL,
     OPERATION_TYPE_LABEL,
@@ -194,9 +197,10 @@ export function FulfillmentWorkSurface({
                     currentUrl={currentUrl}
                     snapshotUpdatedAt={snapshotUpdatedAt}
                     validationIssues={validationIssues}
-                    showValidation={dirty}
+                    showValidation={canExecute && dirty}
                     saveMessage={saveMessage}
-                    disabled={formalPending || !canExecute || resultUnknown}
+                    canExecute={canExecute}
+                    disabled={formalPending || resultUnknown}
                     readOnlyNote={!canExecute ? readOnlyNote : undefined}
                     headingRef={headingRef}
                     onDraftChange={onDraftChange}
@@ -416,15 +420,24 @@ export function FulfillmentWorkSurface({
                         </WorkspaceTaskPageSlot>
                     ) : null}
 
-                    <FulfillmentDraftForm
-                        deliveryRef={deliveryRef}
-                        operation={operation}
-                        draft={draft}
-                        onChange={onDraftChange}
-                        disabled={formalPending || !canExecute || resultUnknown}
-                    />
+                    {canExecute ? (
+                        <FulfillmentDraftForm
+                            deliveryRef={deliveryRef}
+                            operation={operation}
+                            draft={draft}
+                            onChange={onDraftChange}
+                            disabled={formalPending || resultUnknown}
+                        />
+                    ) : (
+                        <FulfillmentDraftReadOnly
+                            operation={operation}
+                            draft={operation.draft}
+                        />
+                    )}
 
-                    {fieldIssues.length > 0 && (!addressPacking || dirty) ? (
+                    {canExecute &&
+                    fieldIssues.length > 0 &&
+                    (!addressPacking || dirty) ? (
                         addressPacking ? (
                             <details className="text-xs text-muted-foreground">
                                 <summary

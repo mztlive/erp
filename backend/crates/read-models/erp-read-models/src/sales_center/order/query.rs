@@ -19,7 +19,7 @@ use erp_party::PartyExt;
 use erp_permissions::purchase_order;
 use erp_sales::dto::sales_order::{PageView, SubmissionView};
 use erp_sales::entity::sales_order::{BusinessType, ReviewStatus, SalesOrder};
-use erp_sales::repository::sales_order::{SalesOrderRow, SalesOrderSearch};
+use erp_sales::repository::sales_order::{PendingSalesOrderAmounts, SalesOrderRow, SalesOrderSearch};
 use erp_sales::repository::{SalesOrderExt, SalesOrderRevisionRepositoryExt};
 use erp_workflow::WorkItemExt;
 use erp_workflow::repository::prelude::*;
@@ -86,8 +86,27 @@ impl SalesOrderReadService {
         executor: &mut dyn Executor,
     ) -> Result<PageView<SalesOrderView>> {
         let revision_amounts = self.revision_amounts(&page.items, executor).await?;
-        let mut items =
-            page.items.into_iter().map(|row| map_sales_row(row, &revision_amounts)).collect::<Vec<_>>();
+        let pending_ids = page
+            .items
+            .iter()
+            .filter(|row| row.current_revision_id.is_none())
+            .map(|row| row.id.clone())
+            .collect::<Vec<_>>();
+
+        let pending_amounts = self
+            .db
+            .sales_order()
+            .pending_amounts(&pending_ids, executor)
+            .await?
+            .into_iter()
+            .map(|amounts| (amounts.id.clone(), amounts))
+            .collect::<HashMap<_, _>>();
+
+        let mut items = page
+            .items
+            .into_iter()
+            .map(|row| map_sales_row(row, &revision_amounts, &pending_amounts))
+            .collect::<Vec<_>>();
 
         self.fill_stage_owners(&mut items, executor).await?;
         self.fill_owner_names(&mut items, executor).await?;
@@ -307,7 +326,7 @@ impl SalesOrderReadService {
         &self,
         rows: &[SalesOrderRow],
         executor: &mut dyn Executor,
-    ) -> Result<HashMap<String, SalesRevisionAmounts>> {
+    ) -> Result<HashMap<String, SalesOrderAmounts>> {
         let revision_ids = rows
             .iter()
             .filter_map(|row| row.current_revision_id.clone())
@@ -321,7 +340,7 @@ impl SalesOrderReadService {
             .map(|revision| {
                 (
                     revision.base.id.clone(),
-                    SalesRevisionAmounts {
+                    SalesOrderAmounts {
                         gross: revision.gross_amount,
                         net: revision.net_amount,
                         tax: revision.tax_amount,
@@ -353,9 +372,9 @@ impl SalesOrderReadService {
     }
 }
 
-/// 当前正式版本的列表金额快照。
+/// 从同一个销售单内容版本取得的金额。
 #[derive(Debug, Clone, Copy)]
-struct SalesRevisionAmounts {
+struct SalesOrderAmounts {
     /// 含税成交金额。
     gross: Amount,
     /// 不含税成交金额。
@@ -364,10 +383,11 @@ struct SalesRevisionAmounts {
     tax: Amount,
 }
 
-/// 映射销售列表行与正式版本金额，名称和阶段责任由批量查询补齐。
+/// 映射销售列表行，首次生效后仅使用当前正式版本金额。
 fn map_sales_row(
     row: SalesOrderRow,
-    revision_amounts: &HashMap<String, SalesRevisionAmounts>,
+    revision_amounts: &HashMap<String, SalesOrderAmounts>,
+    pending_amounts: &HashMap<String, PendingSalesOrderAmounts>,
 ) -> SalesOrderView {
     let (code, label, tone) = stage_code_label_tone(
         row.commercial_status,
@@ -375,8 +395,14 @@ fn map_sales_row(
         row.close_status,
         row.fulfillment_progress,
     );
-    let amounts =
-        row.current_revision_id.as_deref().and_then(|revision_id| revision_amounts.get(revision_id)).copied();
+    let amounts = match row.current_revision_id.as_deref() {
+        Some(revision_id) => revision_amounts.get(revision_id).copied(),
+        None => pending_amounts.get(&row.id).map(|value| SalesOrderAmounts {
+            gross: value.gross_amount,
+            net: value.net_amount,
+            tax: value.tax_amount,
+        }),
+    };
     SalesOrderView {
         id: row.id,
         order_no: row.order_no,
@@ -464,9 +490,13 @@ impl SalesOrderReadService {
 
 #[cfg(test)]
 mod tests {
-    use erp_sales::entity::sales_order::ReviewStatus;
+    use std::collections::HashMap;
 
-    use super::blocked_purchase_creation_access;
+    use erp_core::money::Amount;
+    use erp_sales::entity::sales_order::ReviewStatus;
+    use erp_sales::repository::sales_order::{PendingSalesOrderAmounts, SalesOrderRow};
+
+    use super::{SalesOrderAmounts, blocked_purchase_creation_access, map_sales_row};
 
     #[test]
     fn unified_and_legacy_pending_reviews_require_open_tasks() {
@@ -508,5 +538,59 @@ mod tests {
         assert!(!view.allowed);
         assert_eq!(view.task_count, 0);
         assert_eq!(view.blocker.as_deref(), Some("当前账号缺少 purchase_order:create 权限"));
+    }
+
+    #[test]
+    fn list_row_reads_pending_amounts_until_the_first_revision_is_effective() {
+        let mut row: SalesOrderRow = serde_json::from_value(serde_json::json!({
+            "id": "order",
+            "order_no": "SO-1",
+            "business_type": "GOODS_SERVICE",
+            "origin_system": "ERP",
+            "customer_id": "customer",
+            "commercial_status": "PENDING_REVIEW",
+            "review_status": "IN_APPROVAL",
+            "fulfillment_progress": "NOT_STARTED",
+            "collection_progress": "NOT_COLLECTED",
+            "invoice_progress": "NOT_INVOICED",
+            "close_status": "NOT_SATISFIED",
+            "version": 2,
+            "created_at": 1,
+            "updated_at": 1,
+            "created_by": "sales",
+            "sales_owner_user_id": "sales"
+        }))
+        .unwrap();
+        let pending = PendingSalesOrderAmounts {
+            id: row.id.clone(),
+            gross_amount: "600".parse().unwrap(),
+            net_amount: "522".parse().unwrap(),
+            tax_amount: "78".parse().unwrap(),
+        };
+        let pending_amounts = HashMap::from([(pending.id.clone(), pending)]);
+        let revision = SalesOrderAmounts {
+            gross: "700".parse().unwrap(),
+            net: "650".parse().unwrap(),
+            tax: "50".parse().unwrap(),
+        };
+        let revision_amounts = HashMap::from([("current".into(), revision)]);
+
+        let pending_view = map_sales_row(row.clone(), &revision_amounts, &pending_amounts);
+        assert_eq!(pending_view.gross_amount, "600".parse::<Amount>().unwrap());
+        assert_eq!(pending_view.net_amount, "522".parse::<Amount>().unwrap());
+        assert_eq!(pending_view.tax_amount, "78".parse::<Amount>().unwrap());
+
+        let empty_view = map_sales_row(row.clone(), &revision_amounts, &HashMap::new());
+        assert_eq!(empty_view.gross_amount, Amount::zero());
+
+        row.current_revision_id = Some("current".into());
+        let effective_view = map_sales_row(row.clone(), &revision_amounts, &pending_amounts);
+        assert_eq!(effective_view.gross_amount, revision.gross);
+        assert_eq!(effective_view.net_amount, revision.net);
+        assert_eq!(effective_view.tax_amount, revision.tax);
+
+        row.current_revision_id = Some("missing".into());
+        let incomplete_view = map_sales_row(row, &revision_amounts, &pending_amounts);
+        assert_eq!(incomplete_view.gross_amount, Amount::zero());
     }
 }

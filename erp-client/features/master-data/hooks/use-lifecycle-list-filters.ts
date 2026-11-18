@@ -28,7 +28,13 @@ export type DictionaryAppliedChip = Readonly<{
  */
 export function useLifecycleListFilters(
     searchInputRef: React.RefObject<HTMLInputElement | null>,
-    { enableRevisionFilter = true }: { enableRevisionFilter?: boolean } = {},
+    {
+        enableRevisionFilter = true,
+        filterPermissionsReady = true,
+    }: {
+        enableRevisionFilter?: boolean
+        filterPermissionsReady?: boolean
+    } = {},
 ) {
     const {
         searchParams,
@@ -38,7 +44,10 @@ export function useLifecycleListFilters(
         setPagination,
         resetPagination,
         changePagination,
-    } = useListUrl()
+    } = useListUrl(
+        { revisionTiming: !enableRevisionFilter },
+        filterPermissionsReady,
+    )
     const { searchDraft, setSearchDraft } = useSearchDraft(q, {
         skipWhileFocused: true,
         inputRef: searchInputRef,
@@ -150,7 +159,7 @@ export function useLifecycleListFilters(
 
     React.useEffect(() => {
         setRevisionTimingDraft(revisionTiming)
-    }, [lifecycleStatus, revisionTiming])
+    }, [enableRevisionFilter, lifecycleStatus, revisionTiming])
 
     return {
         q,

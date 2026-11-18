@@ -99,6 +99,7 @@ export function InvoiceRequestPanel({
             summary={salesSummary}
             availability={availability}
             canRead={permissions.canRead}
+            canSubmit={permissions.canSubmit}
             onCreate={
                 canCreate
                     ? () => {
@@ -114,9 +115,11 @@ export function InvoiceRequestPanel({
             <>
                 {overview}
                 {invoiceRecords}
-                <p className="text-sm text-muted-foreground">
-                    当前账号没有查看开票申请的权限。
-                </p>
+                {!salesOrderId && (
+                    <p className="text-sm text-muted-foreground">
+                        当前账号没有查看开票申请的权限。
+                    </p>
+                )}
             </>
         )
     const requestForm =

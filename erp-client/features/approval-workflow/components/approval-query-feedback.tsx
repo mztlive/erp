@@ -1,6 +1,7 @@
 "use client"
 
 import { BusinessFailureState } from "@/components/business"
+import { isPermissionDeniedError } from "@/lib/api/errors"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 
 type FailedQuery = {
@@ -44,7 +45,8 @@ export function ApprovalQueryFeedback({
                     }}
                 />
             ) : null}
-            {recoveryQuery?.isError ? (
+            {recoveryQuery?.isError &&
+            !isPermissionDeniedError(recoveryQuery.error) ? (
                 <BusinessFailureState
                     id={`${prefix}-recovery-failure`}
                     title="异常处理选项加载失败，请重试"

@@ -69,13 +69,16 @@ export function ProductsListPage() {
         React.useState<FixedSku>()
     const [supplyDialogProduct, setSupplyDialogProduct] =
         React.useState<MasterDataListItem | null>(null)
-    const supplyOptionsQuery = useProductListSkusQuery(
-        supplyDialogProduct ? [supplyDialogProduct.stableId] : [],
-    )
     const [importOpen, setImportOpen] = React.useState(false)
     const { searchInputRef, resultsHeadingRef, lastFocusedRowId } =
         useListPageChrome()
     const state = useProductListState(searchInputRef)
+    const supplyOptionsQuery = useProductListSkusQuery(
+        state.canAddSupply && supplyDialogProduct
+            ? [supplyDialogProduct.stableId]
+            : [],
+        state.canReadUnits,
+    )
     const exportPending = state.exportPending
     const { filters } = state
     const openSupply = (
@@ -89,6 +92,8 @@ export function ProductsListPage() {
     }
     const columns = useProductListColumns({
         canUpdateProductListing: state.canUpdateProductListing,
+        canReadSkus: state.canReadSkus,
+        canReadOfferings: state.canReadOfferings,
         currentSupplySkuIds: state.currentSupplySkuIds,
         lastFocusedRowId,
         productSkusByProduct: state.productSkusByProduct,
@@ -102,20 +107,26 @@ export function ProductsListPage() {
         supplierOfferingsError: state.supplierOfferingsQuery.isError,
         onUpdateProductListing: state.updateProductListing,
         onSupplyProduct: state.setSupplyProduct,
-        onSourceDiff: (product) => {
-            lastFocusedRowId.current = product.stableId
-            router.push(
-                `/master-data/products/${encodeURIComponent(product.stableId)}?sourceDiff=true`,
-            )
-        },
-        onAddSupply: (product) => {
-            state.setSupplyProduct(null)
-            openSupply(
-                product,
-                state.productSkusByProduct.get(product.stableId) ?? [],
-            )
-        },
-        onDisableTarget: state.setDisableTarget,
+        onSourceDiff: state.canReadProductDetail
+            ? (product) => {
+                  lastFocusedRowId.current = product.stableId
+                  router.push(
+                      `/master-data/products/${encodeURIComponent(product.stableId)}?sourceDiff=true`,
+                  )
+              }
+            : undefined,
+        onAddSupply: state.canAddSupply
+            ? (product) => {
+                  state.setSupplyProduct(null)
+                  openSupply(
+                      product,
+                      state.productSkusByProduct.get(product.stableId) ?? [],
+                  )
+              }
+            : undefined,
+        onDisableTarget: state.canUpdateProductListing
+            ? state.setDisableTarget
+            : undefined,
     })
     const hasActiveFilters =
         filters.q.trim() !== "" || filters.hasStructuredProductFilters
@@ -146,6 +157,7 @@ export function ProductsListPage() {
 
     return (
         <ListPageFrame
+            resource="products"
             title="商品列表"
             description="查看商品资料、上架状态与供应覆盖。"
             alerts={
@@ -196,7 +208,11 @@ export function ProductsListPage() {
                         metricKey={filters.metricKey}
                         ariaLabel="商品列表指标筛选"
                         allLabel="全部商品"
-                        hint="选择商品查看详情"
+                        hint={
+                            state.canReadProductDetail
+                                ? "选择商品查看详情"
+                                : undefined
+                        }
                         onChangeLifecycle={filters.changeLifecycle}
                     />
                 }
@@ -298,7 +314,9 @@ export function ProductsListPage() {
                                             ? "您当前尚未分配商品的数据查看权限，请联系管理员开通后再试。"
                                             : hasActiveFilters
                                               ? masterDataCopy.filterEmptyDescription
-                                              : "点击「新建」创建第一份资料；历史记录会随资料保留。"
+                                              : state.canCreate
+                                                ? "点击「新建」创建第一份资料；历史记录会随资料保留。"
+                                                : undefined
                                     }
                                     action={
                                         hasActiveFilters ? (
@@ -318,13 +336,21 @@ export function ProductsListPage() {
                                 />
                             ) : undefined
                         }
-                        onRowPreview={(row) => openDetail(row.stableId)}
-                        onRowOpen={(row) => openDetail(row.stableId)}
+                        onRowPreview={
+                            state.canReadProductDetail
+                                ? (row) => openDetail(row.stableId)
+                                : undefined
+                        }
+                        onRowOpen={
+                            state.canReadProductDetail
+                                ? (row) => openDetail(row.stableId)
+                                : undefined
+                        }
                     />
                 }
             />
 
-            {!state.supplyDialogSkus && (
+            {state.canReadOfferings && !state.supplyDialogSkus && (
                 <ProductSupplyDialog
                     product={state.supplyProduct}
                     skus={
@@ -355,7 +381,7 @@ export function ProductsListPage() {
                     }}
                 />
             )}
-            {state.supplyDialogSkus ? (
+            {state.canAddSupply && state.supplyDialogSkus ? (
                 <RegisterSupplyForSkuDialog
                     open
                     fixedSku={supplyDialogFixedSku}
@@ -378,14 +404,18 @@ export function ProductsListPage() {
                 />
             ) : null}
             <ProductDisableDialog
-                open={state.disableTarget != null}
+                open={
+                    state.canUpdateProductListing && state.disableTarget != null
+                }
                 onOpenChange={(open) => {
                     if (!open) state.setDisableTarget(null)
                 }}
                 target={state.disableTarget}
             />
-            {state.listingConfirmationDialog}
-            {importOpen ? (
+            {state.canUpdateProductListing
+                ? state.listingConfirmationDialog
+                : null}
+            {state.canCreate && importOpen ? (
                 <ProductImportDialog
                     onClose={() => setImportOpen(false)}
                     onSubmitted={onImportSubmitted}

@@ -4,6 +4,7 @@ import Link from "next/link"
 import { ExternalLinkIcon } from "lucide-react"
 
 import { DetailPageHeader, GuardedBusinessAction } from "@/components/business"
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
 import { Button } from "@/components/ui/button"
 import type { SupplierOrderDetailView } from "@/features/supplier-orders/types"
 
@@ -66,63 +67,70 @@ export function SupplierOrderCenterHeader({
                 ]}
                 primaryAction={
                     isResultUnknown ? (
-                        <GuardedBusinessAction
-                            id="supplier-order-center-header-query-result"
-                            loading={queryPending}
-                            type="button"
-                            size="sm"
-                            disabled={!canQuery || queryPending}
-                            reason={
-                                !canQuery
-                                    ? (actionBlockers.find(
-                                          (b) => b.action === "QUERY_RESULT",
-                                      )?.message ?? "当前不可查询")
-                                    : undefined
-                            }
-                            onClick={onQueryResult}
-                        >
-                            {queryPending ? "查询中…" : "查询原结果"}
-                        </GuardedBusinessAction>
+                        <PermissionGuard permission="supplier_fulfillment_order:investigate">
+                            <GuardedBusinessAction
+                                id="supplier-order-center-header-query-result"
+                                loading={queryPending}
+                                type="button"
+                                size="sm"
+                                disabled={!canQuery || queryPending}
+                                reason={
+                                    !canQuery
+                                        ? (actionBlockers.find(
+                                              (b) =>
+                                                  b.action === "QUERY_RESULT",
+                                          )?.message ?? "当前不可查询")
+                                        : undefined
+                                }
+                                onClick={onQueryResult}
+                            >
+                                {queryPending ? "查询中…" : "查询原结果"}
+                            </GuardedBusinessAction>
+                        </PermissionGuard>
                     ) : undefined
                 }
                 secondaryActions={
                     <>
                         {isResultUnknown ? (
-                            <GuardedBusinessAction
-                                id="supplier-order-center-header-replay"
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                disabled={!canReplay || replayPending}
-                                reason={
-                                    canReplay
-                                        ? "已确认无结果，可安全重发"
-                                        : (actionBlockers.find(
-                                              (b) => b.action === "REPLAY",
-                                          )?.message ??
-                                          "需先查询确认无结果后，方可重发")
-                                }
-                                onClick={onReplayClick}
-                            >
-                                安全重发
-                            </GuardedBusinessAction>
+                            <PermissionGuard permission="supplier_fulfillment_order:investigate">
+                                <GuardedBusinessAction
+                                    id="supplier-order-center-header-replay"
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={!canReplay || replayPending}
+                                    reason={
+                                        canReplay
+                                            ? "已确认无结果，可安全重发"
+                                            : (actionBlockers.find(
+                                                  (b) => b.action === "REPLAY",
+                                              )?.message ??
+                                              "需先查询确认无结果后，方可重发")
+                                    }
+                                    onClick={onReplayClick}
+                                >
+                                    安全重发
+                                </GuardedBusinessAction>
+                            </PermissionGuard>
                         ) : null}
                         {allowedActions.includes("ESCALATE_W29") ? (
-                            <Button
-                                id="supplier-order-center-header-escalate"
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                render={
-                                    <Link href="/governance/integration-errors" />
-                                }
-                            >
-                                转接口错误中心
-                                <ExternalLinkIcon
-                                    data-icon="inline-end"
-                                    aria-hidden="true"
-                                />
-                            </Button>
+                            <PermissionGuard permission="integration_error_task:list">
+                                <Button
+                                    id="supplier-order-center-header-escalate"
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    render={
+                                        <Link href="/governance/integration-errors" />
+                                    }
+                                >
+                                    转接口错误中心
+                                    <ExternalLinkIcon
+                                        data-icon="inline-end"
+                                        aria-hidden="true"
+                                    />
+                                </Button>
+                            </PermissionGuard>
                         ) : null}
                     </>
                 }

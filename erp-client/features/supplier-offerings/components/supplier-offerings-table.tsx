@@ -36,13 +36,14 @@ export type SupplierOfferingsTableProps = {
     onRowPreview: (offering: SupplierOfferingView) => void
     highlightedRowId?: string
     returnTo: string
+    canViewCosts: boolean
     canRevise: boolean
     canAvailability: boolean
     taskMode: boolean
     taskBusinessObjectId?: string
     onRetry: () => void
     onClearFilters: () => void
-    onCreateOffering: () => void
+    onCreateOffering?: () => void
     onUpdateAvailability: (offering: SupplierOfferingView) => void
     onReviseOffering: (offering: SupplierOfferingView) => void
     onChangeStatus: (
@@ -66,6 +67,7 @@ export function SupplierOfferingsTable({
     onRowPreview,
     highlightedRowId,
     returnTo,
+    canViewCosts,
     canRevise,
     canAvailability,
     taskMode,
@@ -288,7 +290,9 @@ export function SupplierOfferingsTable({
                           ? "没有符合当前筛选的供给关系。"
                           : taskMode
                             ? "当前列表没有加载任务来源的供给行；来源身份以上方任务记录为准。"
-                            : "先添加公司商品，再为具体 SKU 添加第一条供给。"
+                            : onCreateOffering
+                              ? "先添加公司商品，再为具体 SKU 添加第一条供给。"
+                              : undefined
                 }
                 action={
                     hasFilters ? (
@@ -302,7 +306,7 @@ export function SupplierOfferingsTable({
                         >
                             清除筛选
                         </Button>
-                    ) : !taskMode ? (
+                    ) : !taskMode && onCreateOffering ? (
                         <Button
                             id="supplier-offerings-table-create"
                             type="button"
@@ -321,7 +325,11 @@ export function SupplierOfferingsTable({
         <DataTable
             idPrefix="supplier-offerings-table"
             data={[...items]}
-            columns={columns}
+            columns={
+                canViewCosts
+                    ? columns
+                    : columns.filter((column) => column.id !== "prices")
+            }
             getRowId={(item) => item.id}
             rowLabel={(item) =>
                 `${item.sku_name || item.sku_no || "供给"} · ${item.supplier_name || item.supplier_sku_code}`

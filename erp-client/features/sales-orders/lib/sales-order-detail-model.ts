@@ -315,6 +315,7 @@ export function buildSelfHref(
 export function navItemsFor(
     order: SalesOrderDetailView,
     options: {
+        canReadAcceptance?: boolean
         canViewExtraCost?: boolean
         canSupplementContract?: boolean
     } = {},
@@ -364,7 +365,9 @@ export function navItemsFor(
             id: "acceptance",
             label: "验收",
             hint: "客户验收与历史",
-            show: order.nature === "physical_service",
+            show:
+                order.nature === "physical_service" &&
+                Boolean(options.canReadAcceptance),
         },
         {
             id: "receivable",

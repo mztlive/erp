@@ -31,18 +31,21 @@ export function useDictionaryListState({
     createPermission,
     enablePreview = false,
     enableRevisionFilter = true,
+    filterPermissionsReady = true,
     searchInputRef,
 }: {
     resource: DictionaryResource
     createPermission?: string
     enablePreview?: boolean
     enableRevisionFilter?: boolean
+    filterPermissionsReady?: boolean
     searchInputRef: React.RefObject<HTMLInputElement | null>
 }) {
     const { canCreate, createBlockedReason } =
         useCreatePermission(createPermission)
     const filters = useLifecycleListFilters(searchInputRef, {
         enableRevisionFilter,
+        filterPermissionsReady,
     })
     const listQuery = useMasterDataListQuery({
         resource,

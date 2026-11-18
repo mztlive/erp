@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { getErrorMessage } from "@/lib/api/errors"
 import { restoreListRowFocus } from "@/lib/list-row-focus"
+import { hasPermission } from "@/lib/permissions"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import type { BackgroundJobView, CancelAllBackgroundJobsResult } from "../api"
 import { isBackgroundJobAdmin, isJobActive } from "../labels"
@@ -40,6 +41,12 @@ import {
 export function BackgroundJobsWorkspace() {
     const profileQuery = useAccountProfileQuery()
     const isAdmin = isBackgroundJobAdmin(profileQuery.data?.role_ids)
+    const permissions = profileQuery.data?.permissions
+    const canReadDetail = hasPermission(permissions, "background_job:detail")
+    const canReadItems = hasPermission(permissions, "background_job_item:list")
+    const canCancel = hasPermission(permissions, "background_job:cancel")
+    const canStopAll =
+        isAdmin && hasPermission(permissions, "background_job:cancel_all")
     const currentUserId = profileQuery.data?.userid
     const filters = useBackgroundJobsFilters(isAdmin, currentUserId)
     const { page, setPage, hasActiveFilters, clearAll: clearFilters } = filters
@@ -55,9 +62,10 @@ export function BackgroundJobsWorkspace() {
     const searchInputRef = React.useRef<HTMLInputElement>(null)
 
     const jobsQuery = useBackgroundJobsQuery(filters.listParams)
-    const detailQuery = useBackgroundJobDetailQuery(previewId)
+    const authorizedPreviewId = canReadDetail ? previewId : null
+    const detailQuery = useBackgroundJobDetailQuery(authorizedPreviewId)
     const itemsQuery = useBackgroundJobItemsQuery(
-        previewId,
+        canReadItems ? authorizedPreviewId : null,
         itemsPage,
         Boolean(
             detailQuery.data &&
@@ -85,7 +93,7 @@ export function BackgroundJobsWorkspace() {
     }, [])
 
     const confirmCancel = React.useCallback(async () => {
-        if (!cancelId || !detailQuery.data) return
+        if (!canCancel || !cancelId || !detailQuery.data) return
         setCancelError(null)
         try {
             await cancelMutation.mutateAsync({
@@ -96,7 +104,7 @@ export function BackgroundJobsWorkspace() {
         } catch (error) {
             setCancelError(getErrorMessage(error, "取消失败，请重试。"))
         }
-    }, [cancelId, detailQuery.data, cancelMutation])
+    }, [canCancel, cancelId, detailQuery.data, cancelMutation])
 
     const openStopAll = React.useCallback(() => {
         setStopAllError(null)
@@ -105,6 +113,7 @@ export function BackgroundJobsWorkspace() {
     }, [])
 
     const confirmStopAll = React.useCallback(async () => {
+        if (!canStopAll) return
         setStopAllError(null)
         try {
             const result = await cancelAllMutation.mutateAsync(undefined)
@@ -114,11 +123,11 @@ export function BackgroundJobsWorkspace() {
                 getErrorMessage(error, "停止全部任务失败，请重试。"),
             )
         }
-    }, [cancelAllMutation])
+    }, [canStopAll, cancelAllMutation])
 
     const columns = React.useMemo(
-        () => backgroundJobColumns(openPreview),
-        [openPreview],
+        () => backgroundJobColumns(canReadDetail ? openPreview : undefined),
+        [canReadDetail, openPreview],
     )
 
     return (
@@ -128,7 +137,7 @@ export function BackgroundJobsWorkspace() {
                 title="后台任务"
                 description="集中查看商品导入、业务导出等后台任务的进度与结果，取消尚未完成的任务。"
             >
-                {isAdmin ? (
+                {canStopAll ? (
                     <Button
                         id={`${ID_PREFIX}-stop-all`}
                         type="button"
@@ -166,8 +175,8 @@ export function BackgroundJobsWorkspace() {
                         loading={jobsQuery.isPending}
                         showRefreshingBanner={false}
                         layout="flush"
-                        onRowPreview={openPreview}
-                        highlightedRowId={previewId ?? undefined}
+                        onRowPreview={canReadDetail ? openPreview : undefined}
+                        highlightedRowId={authorizedPreviewId ?? undefined}
                         errorState={
                             jobsQuery.isError ? (
                                 <BusinessFailureState
@@ -226,7 +235,9 @@ export function BackgroundJobsWorkspace() {
                 }
             />
             <BackgroundJobPreviewSheet
-                previewId={previewId}
+                previewId={authorizedPreviewId}
+                canCancel={canCancel}
+                canReadItems={canReadItems}
                 currentUserId={currentUserId}
                 identityError={profileQuery.error}
                 onRetryIdentity={() => void profileQuery.refetch()}
@@ -239,7 +250,7 @@ export function BackgroundJobsWorkspace() {
                 onCancel={setCancelId}
             />
             <BackgroundJobCancelDialog
-                open={cancelId != null}
+                open={canCancel && canReadDetail && cancelId != null}
                 onOpenChange={(open) => {
                     if (!open) {
                         setCancelId(null)
@@ -251,7 +262,7 @@ export function BackgroundJobsWorkspace() {
                 onConfirm={confirmCancel}
             />
             <BackgroundJobsStopAllDialog
-                open={stopAllOpen}
+                open={canStopAll && stopAllOpen}
                 onOpenChange={(open) => {
                     if (!open) {
                         setStopAllOpen(false)

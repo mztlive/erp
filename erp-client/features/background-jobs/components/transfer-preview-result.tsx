@@ -15,6 +15,8 @@ import type {
 } from "@/features/sales-inquiries/components/inquiry-import-dialog"
 import type { SupplierQuoteImportPreview } from "@/features/sales-inquiries/components/supplier-quote-preview-panel"
 import { useTransferPreviewQuery } from "@/features/sales-inquiries/hooks/use-transfer-preview"
+import { isPermissionDeniedError } from "@/lib/api/errors"
+import { hasPermission } from "@/lib/permissions"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { DataTransferContext, TransferJob } from "@/lib/data-transfer"
 import { useRouter } from "@/lib/navigation"
@@ -54,6 +56,13 @@ export function TransferPreviewResult({
     const result = useTransferPreviewQuery<TransferPreviewData>(job.id, canRead)
     const idPrefix = `transfer-preview-${toAutomationIdSegment(job.id)}`
     const inquiryId = confirmedInquiryId ?? context.context.inquiry_id
+    const previewDenied = isPermissionDeniedError(result.error)
+    const canOpenBusiness =
+        !portal &&
+        hasPermission(
+            profile.data?.permissions,
+            `${quote && inquiryId ? "procurement_inquiry" : "sales_inquiry"}:${inquiryId ? "detail" : "list"}`,
+        )
     const usablePreview = canRead && !result.isError ? result.data : undefined
     const inquiryPreview =
         usablePreview && !quote ? (usablePreview as InquiryImportPreview) : null
@@ -119,22 +128,24 @@ export function TransferPreviewResult({
                 <BusinessFailureState
                     error={result.error}
                     action={
-                        <Button
-                            id={`${idPrefix}-retry`}
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                                onChanged?.()
-                                void result.refetch()
-                            }}
-                        >
-                            重新读取预览
-                        </Button>
+                        !previewDenied ? (
+                            <Button
+                                id={`${idPrefix}-retry`}
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                    onChanged?.()
+                                    void result.refetch()
+                                }}
+                            >
+                                重新读取预览
+                            </Button>
+                        ) : undefined
                     }
                 />
             )}
             <div className="flex flex-wrap gap-2">
-                {canRead && (
+                {canRead && !previewDenied && (
                     <Button
                         id={`${idPrefix}-resume`}
                         disabled={
@@ -153,19 +164,22 @@ export function TransferPreviewResult({
                                 : "继续核对导入"}
                     </Button>
                 )}
-                <Button
-                    id={`${idPrefix}-open-business`}
-                    variant="outline"
-                    onClick={() => router.push(businessPath)}
-                >
-                    {context.resume_state === "confirmed" || confirmedInquiryId
-                        ? quote
-                            ? "查看已登记报价"
-                            : "查看询价草稿"
-                        : inquiryId
-                          ? "打开关联询价"
-                          : "打开询价列表"}
-                </Button>
+                {canOpenBusiness && (
+                    <Button
+                        id={`${idPrefix}-open-business`}
+                        variant="outline"
+                        onClick={() => router.push(businessPath)}
+                    >
+                        {context.resume_state === "confirmed" ||
+                        confirmedInquiryId
+                            ? quote
+                                ? "查看已登记报价"
+                                : "查看询价草稿"
+                            : inquiryId
+                              ? "打开关联询价"
+                              : "打开询价列表"}
+                    </Button>
+                )}
             </div>
             {open && usablePreview && profile.data?.userid && (
                 <TransferPreviewResumeDialog

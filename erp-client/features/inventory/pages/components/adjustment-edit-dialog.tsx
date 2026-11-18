@@ -55,10 +55,12 @@ const editSchema = adjustSchema.omit({ quantity: true }).extend({
 /** 编辑撤回后的原调整单，所有原行与单据身份均保留。 */
 export function AdjustmentEditDialog({
     id,
+    canSubmit,
     onClose,
     onSubmitted,
 }: {
     id: string
+    canSubmit: boolean
     onClose: () => void
     onSubmitted: () => void
 }) {
@@ -105,6 +107,7 @@ export function AdjustmentEditDialog({
                         ) : null}
                         <AdjustmentEditForm
                             draft={query.data}
+                            canSubmit={canSubmit}
                             prefix={prefix}
                             onBusyChange={setBusy}
                             onClose={onClose}
@@ -138,6 +141,7 @@ export function AdjustmentEditDialog({
 
 function AdjustmentEditForm({
     draft,
+    canSubmit,
     prefix,
     onBusyChange,
     onClose,
@@ -145,6 +149,7 @@ function AdjustmentEditForm({
     onRefresh,
 }: {
     draft: EditableAdjustment
+    canSubmit: boolean
     prefix: string
     onBusyChange: (busy: boolean) => void
     onClose: () => void
@@ -243,7 +248,7 @@ function AdjustmentEditForm({
                 }
                 return
             }
-            if (!rework.valid) return
+            if (!canSubmit || !rework.valid) return
             const first = draft.lines[0]
             const command = ledger.current.acquire(
                 "submit",
@@ -411,7 +416,7 @@ function AdjustmentEditForm({
                         />
                     )}
                 />
-                {rework.field}
+                {canSubmit && rework.field}
                 <AdjustmentApprovalArea
                     phase="confirm"
                     approval={draft.approval}
@@ -477,14 +482,16 @@ function AdjustmentEditForm({
                 >
                     保存修改
                 </LoadingButton>
-                <form.AppForm>
-                    <form.SubmitButton
-                        id={`${prefix}-submit`}
-                        label="保存并提交审批"
-                        disabled={locked || !rework.valid}
-                        loading={submit.isPending}
-                    />
-                </form.AppForm>
+                {canSubmit && (
+                    <form.AppForm>
+                        <form.SubmitButton
+                            id={`${prefix}-submit`}
+                            label="保存并提交审批"
+                            disabled={locked || !rework.valid}
+                            loading={submit.isPending}
+                        />
+                    </form.AppForm>
+                )}
             </DialogFooter>
         </form>
     )

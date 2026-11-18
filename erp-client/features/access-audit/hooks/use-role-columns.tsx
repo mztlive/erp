@@ -17,6 +17,8 @@ function useRoleColumns({
     router,
     rowFocusRef,
     setDeletingRole,
+    canEditRole,
+    canDeleteRole,
 }: AccessColumnsInput) {
     return React.useMemo<ColumnDef<RoleRow>[]>(
         () => [
@@ -72,6 +74,7 @@ function useRoleColumns({
                 size: 130,
                 cell: ({ row }) => {
                     const role = row.original
+                    if (role.boundAccountCount === null) return "—"
                     return role.boundAccountCount === 0 ? (
                         <span className="text-sm text-muted-foreground">
                             未绑定
@@ -95,57 +98,65 @@ function useRoleColumns({
                     )
                 },
             },
-            {
-                id: "actions",
-                meta: { align: "end" },
-                size: 168,
-                minSize: 168,
-                header: () => <span className="block text-right">操作</span>,
-                cell: ({ row }) => {
-                    const role = row.original
-                    const segment = toAutomationIdSegment(role.id)
-                    return (
-                        <TableRowActions
-                            moreId={`operations-access-roles-row-${segment}-more`}
-                            moreLabel={`${role.name} 更多操作`}
-                            actions={[
-                                {
-                                    id: `operations-access-roles-row-${segment}-edit`,
-                                    label: "编辑",
-                                    icon: PencilIcon,
-                                    buttonRef: (element) => {
-                                        rowFocusRef.current.set(
-                                            role.id,
-                                            element,
-                                        )
-                                    },
-                                    onClick: () =>
-                                        router.push(
-                                            `/system/roles/${role.id}/edit`,
-                                        ),
-                                },
-                                {
-                                    id: `operations-access-roles-row-${segment}-delete`,
-                                    label: "删除角色",
-                                    icon: Trash2Icon,
-                                    destructive: true,
-                                    disabled: role.system === true,
-                                    disabledReason: role.system
-                                        ? "系统内置角色不可删除"
-                                        : undefined,
-                                    onClick: () =>
-                                        setDeletingRole({
-                                            id: role.id,
-                                            name: role.name,
-                                        }),
-                                },
-                            ]}
-                        />
-                    )
-                },
-            },
+            ...((canEditRole || canDeleteRole
+                ? [
+                      {
+                          id: "actions",
+                          meta: { align: "end" },
+                          size: 168,
+                          minSize: 168,
+                          header: () => (
+                              <span className="block text-right">操作</span>
+                          ),
+                          cell: ({ row }) => {
+                              const role = row.original
+                              const segment = toAutomationIdSegment(role.id)
+                              return (
+                                  <TableRowActions
+                                      moreId={`operations-access-roles-row-${segment}-more`}
+                                      moreLabel={`${role.name} 更多操作`}
+                                      actions={[
+                                          {
+                                              id: `operations-access-roles-row-${segment}-edit`,
+                                              label: "编辑",
+                                              hidden: !canEditRole,
+                                              icon: PencilIcon,
+                                              buttonRef: (element) => {
+                                                  rowFocusRef.current.set(
+                                                      role.id,
+                                                      element,
+                                                  )
+                                              },
+                                              onClick: () =>
+                                                  router.push(
+                                                      `/system/roles/${role.id}/edit`,
+                                                  ),
+                                          },
+                                          {
+                                              id: `operations-access-roles-row-${segment}-delete`,
+                                              label: "删除角色",
+                                              hidden: !canDeleteRole,
+                                              icon: Trash2Icon,
+                                              destructive: true,
+                                              disabled: role.system === true,
+                                              disabledReason: role.system
+                                                  ? "系统内置角色不可删除"
+                                                  : undefined,
+                                              onClick: () =>
+                                                  setDeletingRole({
+                                                      id: role.id,
+                                                      name: role.name,
+                                                  }),
+                                          },
+                                      ]}
+                                  />
+                              )
+                          },
+                      },
+                  ]
+                : []) satisfies ColumnDef<RoleRow>[]),
         ],
-        [router, rowFocusRef, setDeletingRole],
+        [router, rowFocusRef, setDeletingRole, canEditRole, canDeleteRole],
     )
 }
 

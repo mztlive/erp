@@ -1,5 +1,7 @@
 "use client"
 
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
+
 import Link from "next/link"
 import { ChevronDownIcon } from "lucide-react"
 
@@ -84,27 +86,31 @@ export function PreviewStockSection({
 }) {
     return (
         <>
-            <Separator />
-            <section className="space-y-2">
-                <h3 className="text-xs font-medium text-muted-foreground">
-                    {masterDataCopy.previewStock}
-                </h3>
-                <p className="text-xs text-muted-foreground">{policyNote}</p>
-                <p>
-                    在库 <span className="num">{onHandQty}</span>
-                    {" · "}
-                    预占 <span className="num">{reservedQty}</span>
-                </p>
-                <Button
-                    id="master-data-list-master-data-preview-sections-button-1"
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    render={<Link href={w10Href} />}
-                >
-                    打开库存台账
-                </Button>
-            </section>
+            <PermissionGuard permission="stock_balance:list">
+                <Separator />
+                <section className="space-y-2">
+                    <h3 className="text-xs font-medium text-muted-foreground">
+                        {masterDataCopy.previewStock}
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                        {policyNote}
+                    </p>
+                    <p>
+                        在库 <span className="num">{onHandQty}</span>
+                        {" · "}
+                        预占 <span className="num">{reservedQty}</span>
+                    </p>
+                    <Button
+                        id="master-data-list-master-data-preview-sections-button-1"
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        render={<Link href={w10Href} />}
+                    >
+                        打开库存台账
+                    </Button>
+                </section>
+            </PermissionGuard>
         </>
     )
 }

@@ -27,6 +27,7 @@ import { CrossEntryBanner } from "@/features/supplier-settlements/components/cro
 import { SettlementMetricsStrip } from "@/features/supplier-settlements/components/settlement-list-metrics"
 import { SettlementListPreviewSheet } from "@/features/supplier-settlements/components/settlement-list-preview"
 import { SettlementListToolbar } from "@/features/supplier-settlements/components/settlement-list-toolbar"
+import { hasPermission } from "@/lib/permissions"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { useSettlementListQuery } from "@/features/supplier-settlements/hooks/queries"
 import { useSettlementListColumns } from "@/features/supplier-settlements/hooks/use-settlement-list-columns"
@@ -85,7 +86,13 @@ function SettlementList({
     })
 
     const data = listQuery.data
-    const filters = useSettlementListState(urlState, patchUrl, searchInputRef)
+    const filters = useSettlementListState(
+        urlState,
+        patchUrl,
+        searchInputRef,
+        hasPermission(profileQuery.data?.permissions, "business_person:list"),
+        hasPermission(profileQuery.data?.permissions, "org_unit:list"),
+    )
     const { pagination } = filters
 
     // 与加载/错误早返回无关，热键始终挂载（原行为：早返回前已注册）。
@@ -102,8 +109,13 @@ function SettlementList({
         }
     }, [data?.scopeVersion, patchUrl, urlState.scopeVersion])
 
-    const canCreate =
-        data?.hasModulePermission && data.emptyReason !== "NO_SCOPE"
+    const canCreate = hasPermission(
+        profileQuery.data?.permissions,
+        "supplier_settlement_statement:create",
+    )
+    const canCreateInScope = Boolean(
+        data?.hasModulePermission && data.emptyReason !== "NO_SCOPE",
+    )
     const listLoadFailed = listQuery.isError || !listQuery.data
 
     if (listQuery.isPending) {
@@ -168,11 +180,11 @@ function SettlementList({
                             id="supplier-settlements-list-create"
                             type="button"
                             size="sm"
-                            disabled={!canCreate}
+                            disabled={!canCreateInScope}
                             reason={
-                                canCreate
+                                canCreateInScope
                                     ? undefined
-                                    : "当前账号无模块权限或数据范围"
+                                    : "当前没有可创建结算单的数据范围"
                             }
                             onClick={() => setCreateOpen(true)}
                         >
@@ -381,7 +393,7 @@ function SettlementList({
                                         title="当前范围没有结算单"
                                         description="可选择供应商与期间后重查，或新建结算草稿。"
                                         action={
-                                            canCreate ? (
+                                            canCreate && canCreateInScope ? (
                                                 <Button
                                                     id="supplier-settlements-list-empty-create"
                                                     type="button"
@@ -416,7 +428,7 @@ function SettlementList({
             />
 
             <CreateDraftDialog
-                open={createOpen}
+                open={createOpen && canCreate && canCreateInScope}
                 onOpenChange={setCreateOpen}
                 onCreated={(outcome) => {
                     setResult(outcomeToResult(outcome))

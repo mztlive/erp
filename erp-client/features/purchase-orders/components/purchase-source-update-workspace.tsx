@@ -106,6 +106,7 @@ export function PurchaseSourceUpdateWorkspace({
           )
         : null
     const continueChange = Boolean(
+        permissions.canContinueChange &&
         activeChange &&
         phase === "draft" &&
         activeChange.approval?.allowedActions.includes("SUBMIT"),

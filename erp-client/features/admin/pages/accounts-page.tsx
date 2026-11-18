@@ -44,6 +44,7 @@ import type { AdminAccount } from "@/features/admin/types"
 import { adminAccountStatusBadge } from "@/features/admin/lib/account-status"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { useAccountProfileQuery } from "@/features/auth/queries"
+import { isPermissionDeniedError } from "@/lib/api/errors"
 import { hasPermission } from "@/lib/permissions"
 import { PeopleNavigation } from "@/features/organization/components/people-navigation"
 import { useOrganizationStateQuery } from "@/features/organization/hooks/queries"
@@ -55,14 +56,16 @@ export function AccountsPage() {
     const router = useRouter()
     const searchParams = useSearchParams()
     const profileQuery = useAccountProfileQuery()
+    const permissions = profileQuery.data?.permissions
+    const canReadRoles = hasPermission(permissions, "role:list")
+    const canCreateAdmin =
+        hasPermission(permissions, "admin:create") &&
+        hasPermission(permissions, "role:assignable_list")
     const canReadOrganization = hasPermission(
         profileQuery.data?.permissions,
         "org_unit:list",
     )
-    const canUpdateAdmin = hasPermission(
-        profileQuery.data?.permissions,
-        "admin:update",
-    )
+    const canUpdateAdmin = hasPermission(permissions, "admin:update")
     const canDeleteAdmin = hasPermission(
         profileQuery.data?.permissions,
         "admin:delete",
@@ -70,8 +73,10 @@ export function AccountsPage() {
     const currentUserId = profileQuery.data?.userid
     const organizationQuery = useOrganizationStateQuery(canReadOrganization)
     const adminsQuery = useAdminsQuery()
-    const rolesQuery = useRolesQuery()
-    const assignableRolesQuery = useAssignableRolesQuery()
+    const rolesQuery = useRolesQuery(canReadRoles)
+    const assignableRolesQuery = useAssignableRolesQuery(canCreateAdmin)
+    const showCreateAdmin =
+        canCreateAdmin && !isPermissionDeniedError(assignableRolesQuery.error)
 
     /** 权限配置页按角色跳转过来时（?q=角色名），首屏直接带上该筛选。 */
     const keywordFromUrl = searchParams.get("q") ?? ""
@@ -149,7 +154,7 @@ export function AccountsPage() {
                       ? "角色尚未读取，暂不能删除"
                       : undefined
                 const actions: TableRowAction[] = []
-                if (canUpdateAdmin) {
+                if (canUpdateAdmin && canReadRoles) {
                     actions.push({
                         id: `governance-admin-accounts-row-${segment}-toggle-status`,
                         label: account.status === "active" ? "停用" : "启用",
@@ -162,7 +167,7 @@ export function AccountsPage() {
                         onClick: () => setTogglingAccount(account),
                     })
                 }
-                if (canDeleteAdmin) {
+                if (canDeleteAdmin && canReadRoles) {
                     actions.push({
                         id: `governance-admin-accounts-row-${segment}-delete`,
                         label: "删除",
@@ -261,11 +266,14 @@ export function AccountsPage() {
                     </span>
                 ),
             },
-            ...(canUpdateAdmin || canDeleteAdmin ? [actionsColumn] : []),
+            ...(canReadRoles && (canUpdateAdmin || canDeleteAdmin)
+                ? [actionsColumn]
+                : []),
         ]
     }, [
         roleNameById,
         canReadOrganization,
+        canReadRoles,
         organizationQuery.data,
         organizationQuery.isError,
         systemRoleIds,
@@ -305,33 +313,27 @@ export function AccountsPage() {
                 description="点击人员行，统一管理资料、角色、账号启停与数据范围。"
             >
                 <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                        id="governance-admin-accounts-permission-config"
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => router.push("/system/access-audit")}
-                    >
-                        <ShieldCheckIcon
-                            className="size-3.5"
-                            aria-hidden="true"
-                        />
-                        角色与权限
-                    </Button>
-                    {hasPermission(
-                        profileQuery.data?.permissions,
-                        "admin:create",
-                    ) && (
+                    {canReadRoles && (
+                        <Button
+                            id="governance-admin-accounts-permission-config"
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => router.push("/system/access-audit")}
+                        >
+                            <ShieldCheckIcon
+                                className="size-3.5"
+                                aria-hidden="true"
+                            />
+                            角色与权限
+                        </Button>
+                    )}
+                    {showCreateAdmin && (
                         <Button
                             id="governance-admin-accounts-create"
                             type="button"
                             size="sm"
-                            disabled={
-                                !hasPermission(
-                                    profileQuery.data?.permissions,
-                                    "admin:create",
-                                ) || !assignableRolesQuery.isSuccess
-                            }
+                            disabled={!assignableRolesQuery.isSuccess}
                             onClick={() => setCreating(true)}
                         >
                             <PlusIcon className="size-3.5" aria-hidden="true" />
@@ -357,18 +359,14 @@ export function AccountsPage() {
                     }}
                 />
             ) : null}
-            {assignableRolesQuery.isError &&
-                hasPermission(
-                    profileQuery.data?.permissions,
-                    "admin:create",
-                ) && (
-                    <BusinessFailureState
-                        id="accounts-role-options-retry"
-                        title="新建账号所需角色加载失败"
-                        error={assignableRolesQuery.error}
-                        onRetry={() => void assignableRolesQuery.refetch()}
-                    />
-                )}
+            {assignableRolesQuery.isError && showCreateAdmin && (
+                <BusinessFailureState
+                    id="accounts-role-options-retry"
+                    title="新建账号所需角色加载失败"
+                    error={assignableRolesQuery.error}
+                    onRetry={() => void assignableRolesQuery.refetch()}
+                />
+            )}
             <ListWorkSurface
                 ariaLabel="账号列表"
                 toolbar={
@@ -456,7 +454,9 @@ export function AccountsPage() {
                                     description={
                                         hasSearch
                                             ? "没有账号符合当前搜索条件。"
-                                            : "点击「新建账号」创建第一条账号记录。"
+                                            : canCreateAdmin
+                                              ? "点击「新建账号」创建第一条账号记录。"
+                                              : undefined
                                     }
                                 />
                             ) : undefined
@@ -465,7 +465,7 @@ export function AccountsPage() {
                 }
             />
 
-            {creating ? (
+            {creating && showCreateAdmin ? (
                 <AccountFormDialog
                     onCreated={(accountName) => {
                         setNotice("账号已创建，正在打开人员资料继续配置。")

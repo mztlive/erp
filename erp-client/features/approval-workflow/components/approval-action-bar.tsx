@@ -232,7 +232,10 @@ export function ApprovalActionBar({
             {workItemId && expectedTaskVersion ? (
                 <DecisionDialog
                     id={`${id}-decision-dialog`}
-                    open={dialog === "reject" || dialog === "approve"}
+                    open={
+                        (showReject && dialog === "reject") ||
+                        (showApprove && dialog === "approve")
+                    }
                     onOpenChange={(open) => setDialog(open ? dialog : null)}
                     workItemId={workItemId}
                     expectedTaskVersion={expectedTaskVersion}
@@ -254,7 +257,7 @@ export function ApprovalActionBar({
             {instance ? (
                 <ResumeApproverDialog
                     id={`${id}-resume-dialog`}
-                    open={dialog === "resume"}
+                    open={showResume && dialog === "resume"}
                     onOpenChange={(open) => setDialog(open ? "resume" : null)}
                     instanceId={instance.id}
                     expectedInstanceVersion={instance.instanceVersion ?? ""}
@@ -266,7 +269,10 @@ export function ApprovalActionBar({
             {instance ? (
                 <CancelApprovalDialog
                     id={`${id}-cancel-dialog`}
-                    open={dialog === "withdraw" || dialog === "cancel-blocked"}
+                    open={
+                        (showWithdraw && dialog === "withdraw") ||
+                        (showCancelBlocked && dialog === "cancel-blocked")
+                    }
                     onOpenChange={(open) => setDialog(open ? dialog : null)}
                     mode={
                         dialog === "cancel-blocked"
@@ -300,7 +306,7 @@ export function ApprovalActionBar({
             {definition && documentType && documentId ? (
                 <UpgradeBindingDialog
                     id={`${id}-upgrade-dialog`}
-                    open={dialog === "upgrade"}
+                    open={showUpgrade && dialog === "upgrade"}
                     onOpenChange={(open) => setDialog(open ? "upgrade" : null)}
                     documentType={documentType}
                     documentId={documentId}

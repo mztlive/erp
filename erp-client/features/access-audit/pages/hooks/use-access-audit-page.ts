@@ -28,6 +28,8 @@ import {
 } from "@/features/access-audit/lib/audit-labels"
 import { resultFilterLabel } from "@/features/access-audit/lib/filter-options"
 import { buildAccessListQuery } from "@/features/access-audit/pages/lib/build-list-query"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 import { useAssignableRolesQuery } from "@/features/admin/queries"
 import type { AccessView } from "@/features/access-audit/types"
 import { useSearchHotkey } from "@/lib/use-search-hotkey"
@@ -178,7 +180,13 @@ function useAccessAuditPage(surface: "access" | "audit" = "access") {
         [view, applied, subjectTypeParam, subjectIdParam],
     )
 
-    const pageQuery = useAccessListQuery(listQuery)
+    const profile = useAccountProfileQuery()
+    const permissions = profile.data?.permissions
+    const pageQuery = useAccessListQuery(
+        listQuery,
+        surface === "access" && hasPermission(permissions, "admin:list"),
+        profile.isSuccess && !legacyAuditView,
+    )
     const hasRolePreview =
         view === "roles" &&
         explainSubject?.type === "ROLE" &&
@@ -188,8 +196,11 @@ function useAccessAuditPage(surface: "access" | "audit" = "access") {
         hasRolePreview ? null : (explainSubject?.id ?? null),
     )
     const eventQuery = useAuditEventQuery(eventOpenId)
-    // 账号表单角色选项：仅当前操作者可分配的角色（API 层失败时回落全部角色）
-    const assignableRolesQuery = useAssignableRolesQuery(surface === "access")
+    const assignableRolesQuery = useAssignableRolesQuery(
+        Boolean(roleAssignment) &&
+            hasPermission(permissions, "admin:update_role") &&
+            hasPermission(permissions, "role:assignable_list"),
+    )
 
     const data = pageQuery.data
     const policies = data?.governancePolicies
@@ -213,6 +224,8 @@ function useAccessAuditPage(surface: "access" | "audit" = "access") {
     const { auditColumns, roleColumns, userColumns } = useAccessColumns({
         data,
         policies,
+        canEditRole: hasPermission(permissions, "role:update"),
+        canDeleteRole: hasPermission(permissions, "role:delete"),
         router,
         rowFocusRef,
         openExplain,

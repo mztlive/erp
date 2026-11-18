@@ -14,6 +14,7 @@
 //! 两者都必须收到事务执行器（P2 §2.1）。
 
 mod order;
+mod pending_amounts;
 pub mod profit_loss;
 pub mod quality;
 mod revision;
@@ -26,6 +27,7 @@ pub use order::{
     SalesOrderFilter, SalesOrderLineRepositoryExt, SalesOrderListView, SalesOrderRepositoryExt,
     SalesOrderRow, SalesOrderSearch,
 };
+pub use pending_amounts::PendingSalesOrderAmounts;
 pub use profit_loss::SalesOrderRepositoryProfitLossExt;
 pub use quality::SalesOrderRepositoryQualityExt;
 pub use revision::{

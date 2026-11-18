@@ -116,7 +116,10 @@ export function AuditPage() {
     return source === "business" ? (
         <BusinessAuditPage views={views} />
     ) : (
-        <IdentityAuditPage views={views} />
+        <IdentityAuditPage
+            views={views}
+            canReadRoles={hasPermission(account.data?.permissions, "role:list")}
+        />
     )
 }
 
@@ -126,7 +129,13 @@ export function AuditPage() {
  * 与权限配置分开：查询词、筛选维度、时间语义与导出策略都不同，
  * 进入时默认落最近 7 天，不再以空列表迎客。
  */
-function IdentityAuditPage({ views }: { views: ReactNode }) {
+function IdentityAuditPage({
+    views,
+    canReadRoles,
+}: {
+    views: ReactNode
+    canReadRoles: boolean
+}) {
     const page = useAccessAuditPage("audit")
 
     if (page.pageQuery.isPending) {
@@ -158,19 +167,23 @@ function IdentityAuditPage({ views }: { views: ReactNode }) {
                 }
             >
                 <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                        id="operations-audit-go-access-config"
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => page.routerPush("/system/access-audit")}
-                    >
-                        <ShieldCheckIcon
-                            className="size-3.5"
-                            aria-hidden="true"
-                        />
-                        权限配置
-                    </Button>
+                    {canReadRoles && (
+                        <Button
+                            id="operations-audit-go-access-config"
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() =>
+                                page.routerPush("/system/access-audit")
+                            }
+                        >
+                            <ShieldCheckIcon
+                                className="size-3.5"
+                                aria-hidden="true"
+                            />
+                            权限配置
+                        </Button>
+                    )}
                     <Button
                         id="operations-audit-export"
                         type="button"

@@ -54,7 +54,14 @@ function sameCodeList(
 export function useSupplierOrdersFilters(
     searchInputRef: React.RefObject<HTMLInputElement | null>,
 ) {
-    const { url, returnTo, updateUrl } = useSupplierOrdersUrlState()
+    const {
+        url,
+        returnTo,
+        updateUrl,
+        canFilterSupplier,
+        canFilterPeople,
+        canFilterOrg,
+    } = useSupplierOrdersUrlState()
 
     const hasActiveFilters = Boolean(
         url.q ||
@@ -113,10 +120,23 @@ export function useSupplierOrdersFilters(
     /** 深链条件显示为标签，不自动打开浮层。 */
     const [panelOpen, setPanelOpen] = React.useState(false)
 
+    React.useEffect(() => {
+        if (!canFilterSupplier) setSupplierIdDraft(null)
+        if (!canFilterPeople) {
+            setOwnerUserIdsDraft("")
+            setHandlerUserIdsDraft("")
+        }
+        if (!canFilterOrg) {
+            setOrgUnitIdsDraft("")
+            setIncludeDescendantsDraft(false)
+        }
+    }, [canFilterSupplier, canFilterPeople, canFilterOrg])
+
     // 供应商名称解析（chip 文案用业务名称，不展示内部 ID）；无 supplierId 时不请求。
     const supplierSelectorQuery = useSupplierSelectorQuery(
         { query: "", purpose: "filter" },
         url.supplierId,
+        canFilterSupplier,
     )
     const selectedSupplierName =
         supplierSelectorQuery.selected.data?.supplierName
@@ -231,15 +251,17 @@ export function useSupplierOrdersFilters(
 
     const hasPendingChanges =
         searchDraft.trim() !== (url.q ?? "").trim() ||
-        supplierIdDraft !== (url.supplierId ?? null) ||
+        (canFilterSupplier && supplierIdDraft !== (url.supplierId ?? null)) ||
         !sameCodeList(fulfillmentStatusesDraft, url.fulfillmentStatuses) ||
         !sameCodeList(cancelStatusesDraft, url.cancelStatuses) ||
         !sameCodeList(refundStatusesDraft, url.refundStatuses) ||
         aftersalePendingDraft !== Boolean(url.aftersalePending) ||
-        ownerUserIdsDraft.trim() !== (url.ownerUserIds ?? "") ||
-        handlerUserIdsDraft.trim() !== (url.handlerUserIds ?? "") ||
-        orgUnitIdsDraft.trim() !== (url.orgUnitIds ?? "") ||
-        includeDescendantsDraft !== Boolean(url.includeDescendants)
+        (canFilterPeople &&
+            (ownerUserIdsDraft.trim() !== (url.ownerUserIds ?? "") ||
+                handlerUserIdsDraft.trim() !== (url.handlerUserIds ?? ""))) ||
+        (canFilterOrg &&
+            (orgUnitIdsDraft.trim() !== (url.orgUnitIds ?? "") ||
+                includeDescendantsDraft !== Boolean(url.includeDescendants)))
 
     /** 清除全部：同时重置草稿、错误、面板与 URL 筛选参数；保留视图/排序/分页大小/导航上下文。 */
     const clearAllFilters = React.useCallback(() => {
@@ -364,6 +386,9 @@ export function useSupplierOrdersFilters(
     ])
 
     return {
+        canFilterSupplier,
+        canFilterPeople,
+        canFilterOrg,
         url,
         returnTo,
         updateUrl,

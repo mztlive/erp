@@ -191,11 +191,12 @@ export function useActualProfitLossPage() {
     const columns = React.useMemo(
         () =>
             buildProfitLossColumns({
+                fieldPermissions: data?.fieldPermissions,
                 openCostDetail,
                 openHistoricalGroup,
                 rowFocusRef,
             }),
-        [openCostDetail, openHistoricalGroup],
+        [data?.fieldPermissions, openCostDetail, openHistoricalGroup],
     )
 
     const freshnessUi = data

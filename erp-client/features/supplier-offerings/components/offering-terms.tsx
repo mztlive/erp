@@ -42,41 +42,30 @@ export function OfferingTerms({
     return (
         <div className="space-y-6 text-sm">
             <section className="border-b border-border pb-6">
-                <div className="grid grid-cols-2 gap-4">
-                    <div>
-                        <h3 className="text-xs font-medium text-muted-foreground">
-                            一件代发价（含税）
-                        </h3>
-                        <MoneyValue
-                            value={
-                                canViewCosts
-                                    ? terms.dropship_supply_price_gross
-                                    : null
-                            }
-                            size="section"
-                            className="mt-2"
-                        />
+                {canViewCosts && (
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <h3 className="text-xs font-medium text-muted-foreground">
+                                一件代发价（含税）
+                            </h3>
+                            <MoneyValue
+                                value={terms.dropship_supply_price_gross}
+                                size="section"
+                                className="mt-2"
+                            />
+                        </div>
+                        <div>
+                            <h3 className="text-xs font-medium text-muted-foreground">
+                                集采价（含税）
+                            </h3>
+                            <MoneyValue
+                                value={terms.bulk_supply_price_gross}
+                                size="section"
+                                className="mt-2"
+                            />
+                        </div>
                     </div>
-                    <div>
-                        <h3 className="text-xs font-medium text-muted-foreground">
-                            集采价（含税）
-                        </h3>
-                        <MoneyValue
-                            value={
-                                canViewCosts
-                                    ? terms.bulk_supply_price_gross
-                                    : null
-                            }
-                            size="section"
-                            className="mt-2"
-                        />
-                    </div>
-                </div>
-                {!canViewCosts ? (
-                    <p className="mt-3 text-xs text-muted-foreground">
-                        采购成本、税费：无权限
-                    </p>
-                ) : null}
+                )}
                 <dl className="mt-4 space-y-3">
                     <OfferingField label="集采起订量">
                         {terms.bulk_minimum_order_quantity != null ? (

@@ -18,6 +18,7 @@ const EFFECTIVE_SHEET_PREFIX = "access-preview-effective-access"
 type AccessPreviewSheetsProps = {
     explainSubject: { type: "ROLE" | "USER"; id: string } | null
     previewRole?: RoleRow | null
+    canEditRole?: boolean
     eventOpenId: string | null
     effectiveQuery: ReturnType<typeof useEffectiveAccessQuery>
     eventQuery: ReturnType<typeof useAuditEventQuery>
@@ -29,6 +30,7 @@ type AccessPreviewSheetsProps = {
 function AccessPreviewSheets({
     explainSubject,
     previewRole,
+    canEditRole = false,
     eventOpenId,
     effectiveQuery,
     eventQuery,
@@ -42,7 +44,7 @@ function AccessPreviewSheets({
         (explainSubject?.type === "USER" ? "账号" : "角色")
     const boundAccountCount = previewRole?.boundAccountCount
     const openRoleHref =
-        explainSubject?.type === "ROLE"
+        canEditRole && explainSubject?.type === "ROLE"
             ? `/system/roles/${explainSubject.id}/edit`
             : null
 
@@ -68,19 +70,21 @@ function AccessPreviewSheets({
                                 label={previewRole.statusLabel}
                                 tone={previewRole.statusTone}
                             />
-                            <span className="text-xs text-muted-foreground">
-                                {boundAccountCount === 0 ? (
-                                    "尚未绑定账号"
-                                ) : (
-                                    <>
-                                        已绑定{" "}
-                                        <span className="num">
-                                            {boundAccountCount}
-                                        </span>{" "}
-                                        个账号
-                                    </>
-                                )}
-                            </span>
+                            {boundAccountCount != null && (
+                                <span className="text-xs text-muted-foreground">
+                                    {boundAccountCount === 0 ? (
+                                        "尚未绑定账号"
+                                    ) : (
+                                        <>
+                                            已绑定{" "}
+                                            <span className="num">
+                                                {boundAccountCount}
+                                            </span>{" "}
+                                            个账号
+                                        </>
+                                    )}
+                                </span>
+                            )}
                         </div>
                     ) : null
                 }

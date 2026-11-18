@@ -83,7 +83,6 @@ export function CatalogSection({
           ? "供应商接口处于故障状态，请检查连接配置。"
           : undefined
     const canAdopt =
-        !adoptionBlocker &&
         hasPermission(
             account.data?.permissions,
             "supplier_api_connection:catalog_sync",

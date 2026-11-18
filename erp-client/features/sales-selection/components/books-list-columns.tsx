@@ -19,9 +19,15 @@ import {
 import { toAutomationIdSegment } from "@/lib/automation-id"
 
 /** 选品册列表列：客户身份列可打开详情，已提交行链方案。 */
-export function buildBooksListColumns(
-    onCopy?: (book: SelectionBook) => void,
-): ColumnDef<SelectionBook>[] {
+export function buildBooksListColumns({
+    canOpen,
+    canOpenProposal,
+    onCopy,
+}: {
+    canOpen: boolean
+    canOpenProposal: boolean
+    onCopy?: (book: SelectionBook) => void
+}): ColumnDef<SelectionBook>[] {
     return [
         {
             id: "customer",
@@ -34,18 +40,25 @@ export function buildBooksListColumns(
                 const rowKey = toAutomationIdSegment(bookId)
                 return (
                     <div className="flex min-w-0 flex-col gap-1">
-                        <Button
-                            id={`sales-selection-row-${rowKey}-open`}
-                            variant="link"
-                            size="xs"
-                            className="h-auto min-h-0 justify-start px-0 text-sm leading-5 font-semibold text-foreground"
-                            aria-label={`查看 ${row.original.customer_name} 的选品册`}
-                            render={
-                                <Link href={`/sales/selection/${bookId}`} />
-                            }
-                        >
-                            {row.original.customer_name}
-                        </Button>
+                        {canOpen ? (
+                            <Button
+                                id={`sales-selection-row-${rowKey}-open`}
+                                variant="link"
+                                size="xs"
+                                className="h-auto min-h-0 justify-start px-0 text-sm leading-5 font-semibold text-foreground"
+                                aria-label={`查看 ${row.original.customer_name} 的选品册`}
+                                render={
+                                    <Link href={`/sales/selection/${bookId}`} />
+                                }
+                            >
+                                {row.original.customer_name}
+                            </Button>
+                        ) : (
+                            <span className="text-sm font-semibold">
+                                {row.original.customer_name}
+                            </span>
+                        )}
+
                         <span className="num truncate text-xs text-muted-foreground">
                             {bookId}
                         </span>
@@ -130,6 +143,12 @@ export function buildBooksListColumns(
                         <span className="text-sm text-muted-foreground">—</span>
                     )
                 }
+                if (!canOpenProposal)
+                    return (
+                        <span className="num text-sm">
+                            {row.original.proposal_no}
+                        </span>
+                    )
                 return (
                     <Button
                         id={`sales-selection-row-${rowKey}-proposal`}

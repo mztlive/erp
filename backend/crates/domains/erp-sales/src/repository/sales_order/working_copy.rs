@@ -180,20 +180,9 @@ impl SalesOrderWorkingCopyRepositoryExt for Repository<'_, SalesOrderWorkingCopy
         working_purpose: WorkingPurpose,
         executor: &mut dyn Executor,
     ) -> Result<Option<SalesOrderWorkingCopy>> {
-        self.find_one(
-            doc! {
-                "sales_order_id": sales_order_id.to_string(),
-                "working_purpose": working_purpose.as_str(),
-                "status": {
-                    "$in": [
-                        WorkingCopyStatus::Editing.as_str(),
-                        WorkingCopyStatus::Conflict.as_str(),
-                    ]
-                },
-            },
-            executor,
-        )
-        .await
+        let mut filter = active_copy_filter(working_purpose);
+        filter.insert("sales_order_id", sales_order_id.to_string());
+        self.find_one(filter, executor).await
     }
 
     async fn find_by_sales_change_order(
@@ -232,6 +221,13 @@ impl SalesOrderWorkingCopyRepositoryExt for Repository<'_, SalesOrderWorkingCopy
             return Ok(active);
         }
         self.find_by_sales_change_order(sales_change_order_id, executor).await
+    }
+}
+
+pub(super) fn active_copy_filter(purpose: WorkingPurpose) -> Document {
+    doc! {
+        "working_purpose": purpose.as_str(),
+        "status": { "$in": [WorkingCopyStatus::Editing.as_str(), WorkingCopyStatus::Conflict.as_str()] },
     }
 }
 

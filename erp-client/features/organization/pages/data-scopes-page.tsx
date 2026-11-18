@@ -1,5 +1,6 @@
 "use client"
 import Link from "next/link"
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
 import { PageScaffold, PageHeader } from "@/components/business"
 /** 数据范围统一在人员上下文中设置。 */
 export function DataScopesPage() {
@@ -11,13 +12,15 @@ export function DataScopesPage() {
                 <p className="text-xs text-muted-foreground">
                     角色只提供操作权限。可以让同一人查看部门数据，同时只能修改本人数据。
                 </p>
-                <Link
-                    id="person-scope-accounts-entry"
-                    href="/system/accounts"
-                    className="text-primary"
-                >
-                    进入人员账号
-                </Link>
+                <PermissionGuard permission="admin:list">
+                    <Link
+                        id="person-scope-accounts-entry"
+                        href="/system/accounts"
+                        className="text-primary"
+                    >
+                        进入人员账号
+                    </Link>
+                </PermissionGuard>
             </div>
         </PageScaffold>
     )

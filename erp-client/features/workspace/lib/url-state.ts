@@ -17,6 +17,7 @@ import type { PeriodPreset } from "@/features/actual-profit-loss/types"
 const DUE_VALUES = ["today", "overdue"] as const
 const VIEW_VALUES = ["inbox", "started", "managed", "history"] as const
 const SORT_VALUES = ["priority_due", "due_asc", "created_desc"] as const
+export const DEFAULT_WORKSPACE_SORT = "created_desc" satisfies WorkspaceSort
 
 export type WorkspaceUrlState = {
     overviewView?: OverviewView
@@ -88,7 +89,7 @@ const codec = createUrlStateCodec<WorkspaceUrlState>([
         key: "sort",
         type: "enum",
         values: SORT_VALUES,
-        defaultValue: "priority_due",
+        defaultValue: DEFAULT_WORKSPACE_SORT,
     },
     { key: "queue", type: "boolean", defaultValue: false },
     { key: "page", type: "number", defaultValue: 1, min: 1 },

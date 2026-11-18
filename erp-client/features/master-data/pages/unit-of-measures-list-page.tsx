@@ -1,5 +1,7 @@
 "use client"
 
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
+
 import { DictionaryCompactWorkspace } from "@/features/master-data/components/list/dictionary-compact-workspace"
 import { MasterDataEmptyCreateButton } from "@/features/master-data/components/list/list-empty-actions"
 import { ListPageFrame } from "@/features/master-data/components/list/list-page-frame"
@@ -32,6 +34,7 @@ export function UnitOfMeasuresListPage() {
 
     return (
         <ListPageFrame
+            resource="unit-of-measures"
             title="计量单位"
             description="查看计量单位，供商品选择基础单位。"
             exportMeta={state.exportMeta}
@@ -66,7 +69,11 @@ export function UnitOfMeasuresListPage() {
                 )}
                 codeLabel={masterDataCopy.fUnitCode}
                 emptyTitle="还没有计量单位资料"
-                emptyDescription="点击「新建」创建第一份资料；历史记录会随资料保留。"
+                emptyDescription={
+                    state.canCreate
+                        ? "点击「新建」创建第一份资料；历史记录会随资料保留。"
+                        : undefined
+                }
                 emptyAction={
                     state.canCreate ? (
                         <MasterDataEmptyCreateButton
@@ -97,26 +104,32 @@ export function UnitOfMeasuresListPage() {
                 onRevise={state.setReviseTarget}
                 onDisable={state.setDisableTarget}
             />
-            <UnitOfMeasureCreateDialog
-                idPrefix="master-data-unit-of-measures-list-create-dialog"
-                open={state.createOpen}
-                onOpenChange={state.setCreateOpen}
-            />
-            <UnitOfMeasureReviseDialog
-                idPrefix="master-data-unit-of-measures-list-revise-dialog"
-                open={state.reviseTarget != null}
-                onOpenChange={(open) => {
-                    if (!open) state.setReviseTarget(null)
-                }}
-                target={state.reviseTarget}
-            />
-            <UnitOfMeasureDisableDialog
-                open={state.disableTarget != null}
-                onOpenChange={(open) => {
-                    if (!open) state.setDisableTarget(null)
-                }}
-                target={state.disableTarget}
-            />
+            <PermissionGuard permission="unit_of_measure:create">
+                <UnitOfMeasureCreateDialog
+                    idPrefix="master-data-unit-of-measures-list-create-dialog"
+                    open={state.createOpen}
+                    onOpenChange={state.setCreateOpen}
+                />
+            </PermissionGuard>
+            <PermissionGuard permission="unit_of_measure:update">
+                <UnitOfMeasureReviseDialog
+                    idPrefix="master-data-unit-of-measures-list-revise-dialog"
+                    open={state.reviseTarget != null}
+                    onOpenChange={(open) => {
+                        if (!open) state.setReviseTarget(null)
+                    }}
+                    target={state.reviseTarget}
+                />
+            </PermissionGuard>
+            <PermissionGuard permission="unit_of_measure:update">
+                <UnitOfMeasureDisableDialog
+                    open={state.disableTarget != null}
+                    onOpenChange={(open) => {
+                        if (!open) state.setDisableTarget(null)
+                    }}
+                    target={state.disableTarget}
+                />
+            </PermissionGuard>
         </ListPageFrame>
     )
 }

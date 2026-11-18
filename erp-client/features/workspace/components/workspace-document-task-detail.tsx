@@ -41,15 +41,21 @@ import {
     DescriptionTerm,
 } from "@/components/ui/description-list"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { displayName } from "@/lib/display-name"
+import { hasPermission } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
 import { StatusBadge } from "@/components/ui/status-badge"
+import { WorkspaceDocumentBadge } from "./workspace-document-badge"
 import { WorkspaceTaskHeaderActions } from "./workspace-task-context"
 import { stripDocumentNumberPrefix } from "../lib/stable-number"
 import {
+    workspaceDocumentName,
     workspaceOpenActionLabel,
     workspaceReadActionLabel,
 } from "../api/work-item-meta"
+import { workspaceApprovalListFacts } from "../api/task-materials"
 import { useWorkspaceDocumentFacts } from "../hooks/use-workspace-document-facts"
+import { useWorkspaceDetailDocumentTitle } from "../hooks/use-workspace-detail-title"
 import { useWorkspaceSourceSalesOrder } from "../hooks/use-workspace-source-sales-order"
 import { buildDocumentHref } from "../lib/destination"
 import { type DetailSection, splitDetailSections } from "../lib/detail-facts"
@@ -93,6 +99,10 @@ export function WorkspaceDocumentTaskDetail({
     ) => void
 }) {
     const fullPage = useWorkspaceTaskPage()
+    const rework = item.workItemType === "APPROVAL_REWORK"
+    const canReadSubmission =
+        canReadSensitive &&
+        (!rework || hasPermission(grantedPermissions, "approval_instance:read"))
     const approvalTask = isApprovalWorkbenchTask(
         item.allowedActions,
         item.approvalProcessInstanceId,
@@ -103,7 +113,7 @@ export function WorkspaceDocumentTaskDetail({
         approvalTask ||
         trackingTask ||
         item.workItemType === "DOCUMENT_APPROVAL" ||
-        item.workItemType === "APPROVAL_REWORK"
+        rework
     const instanceId =
         item.approvalProcessInstanceId ?? item.approval?.instanceId
     const recoveryQuery = useRecoveryOptionsQuery(
@@ -114,18 +124,19 @@ export function WorkspaceDocumentTaskDetail({
     const currentPaperKind = workspacePaperKind(item.businessObjectType)
     const canReadPaper = Boolean(
         approvalDocument
-            ? instanceId
+            ? instanceId && (!rework || canReadSubmission)
             : currentPaperKind && item.businessObjectId.trim(),
     )
     const salesApproval =
         approvalDocument &&
         ["sales_order", "voucher_sales_order"].includes(item.businessObjectType)
-    const purchaseApproval = isPurchaseApprovalTask(item)
+    const purchaseApproval =
+        isPurchaseApprovalTask(item) && (!rework || canReadSubmission)
     const receiptApproval =
         approvalDocument &&
         item.businessObjectType === "customer_receipt" &&
         Boolean(instanceId) &&
-        canReadSensitive
+        canReadSubmission
     const readActionLabel = approvalDocument
         ? salesApproval
             ? "预览完整销售单"
@@ -146,19 +157,67 @@ export function WorkspaceDocumentTaskDetail({
     }, [item.workItemId])
     const documentFacts = useWorkspaceDocumentFacts(item)
     const sourceSales = useWorkspaceSourceSalesOrder(item)
-    const facts = documentFacts.facts
+    const materials = useApprovalMaterials(
+        instanceId ?? "",
+        (salesApproval || rework) && canReadSubmission,
+        item,
+    )
+    const submission = canReadSubmission ? materials.data : undefined
+    const salesSubmission = submission?.sales_order
+    const reworkFacts =
+        rework && submission
+            ? workspaceApprovalListFacts({
+                  ...submission,
+                  ...submission.display,
+                  source_sales: submission.display.source_sales ?? [],
+              })
+            : undefined
+    const facts = rework ? reworkFacts : documentFacts.facts
+    const sections =
+        facts?.sections ?? (rework ? [] : (item.summarySections ?? []))
     const summarySections = approvalDocument
-        ? (facts?.sections ?? item.summarySections ?? []).map((section) => ({
+        ? sections.map((section) => ({
               ...section,
+              value:
+                  rework && section.objectId?.trim() === section.value.trim()
+                      ? "未记录名称"
+                      : section.value,
               objectId: undefined,
           }))
-        : withSourceSalesOrder(
-              facts?.sections ?? item.summarySections ?? [],
-              sourceSales.source,
+        : withSourceSalesOrder(sections, sourceSales.source)
+    const briefLines = facts?.lines ?? (rework ? undefined : item.briefLines)
+    const briefMoreCount =
+        facts?.moreCount ?? (rework ? undefined : item.briefMoreCount)
+    const counterpartyName = rework
+        ? displayName(
+              salesSubmission?.customer_name ?? reworkFacts?.counterparty,
+              item.businessObjectId,
           )
-    const briefLines = facts?.lines ?? item.briefLines
-    const briefMoreCount = facts?.moreCount ?? item.briefMoreCount
-    const counterpartyName = facts?.counterparty ?? item.counterpartyName
+        : (facts?.counterparty ?? item.counterpartyName)
+    const documentNumber = rework
+        ? displayName(
+              reworkFacts?.documentNumber,
+              item.businessObjectId,
+              item.workItemId,
+              instanceId,
+          )
+        : stripDocumentNumberPrefix(item.stableNumber)
+    const headerTitle = rework
+        ? counterpartyName ||
+          workspaceDocumentName(item.businessObjectType) ||
+          "原单资料"
+        : purchaseApproval
+          ? "采购单审批"
+          : counterpartyName || item.objectTitle
+    const headerItem = rework
+        ? {
+              ...item,
+              counterpartyName,
+              objectTitle: headerTitle,
+              stableNumber: documentNumber ?? "",
+          }
+        : item
+    useWorkspaceDetailDocumentTitle(fullPage && rework ? headerItem : undefined)
     const impactSummary =
         facts?.impact &&
         (item.impactSummary === "不审批则卡券销售不能生效" ||
@@ -167,12 +226,6 @@ export function WorkspaceDocumentTaskDetail({
             : item.impactSummary
     const detailFacts = splitDetailSections(summarySections, counterpartyName)
     const [primaryAmount, ...otherAmounts] = detailFacts.amounts
-    const salesMaterials = useApprovalMaterials(
-        instanceId ?? "",
-        Boolean(salesApproval && instanceId && canReadSensitive),
-        item,
-    )
-    const salesSubmission = salesMaterials.data?.sales_order
     const documentFields = [
         ...(detailFacts.submitter
             ? [{ label: "申请人", value: detailFacts.submitter }]
@@ -209,6 +262,16 @@ export function WorkspaceDocumentTaskDetail({
               processVersion: item.approval.processVersion,
           }
         : undefined
+    const specializedApproval =
+        salesApproval ||
+        purchaseApproval ||
+        receiptApproval ||
+        item.businessObjectType === "sales_invoice_request"
+    const showCurrentAssignee = rework
+        ? item.status === "OPEN"
+        : salesApproval &&
+          (reworkTask ||
+              ["RUNNING", "BLOCKED"].includes(instance?.status ?? ""))
     const deliveryBrief =
         item.workItemType === "FULFILLMENT_OPERATION" &&
         item.businessObjectType === "delivery" &&
@@ -290,13 +353,21 @@ export function WorkspaceDocumentTaskDetail({
             header={
                 <>
                     <div className="min-w-0 space-y-2">
-                        {!purchaseApproval && (
+                        {(!purchaseApproval || rework) && (
                             <div className="flex flex-wrap items-center gap-2">
-                                <span className="rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
-                                    {item.workItemTypeLabel}
-                                </span>
+                                {rework ? (
+                                    <WorkspaceDocumentBadge item={item} />
+                                ) : (
+                                    <span className="rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
+                                        {item.workItemTypeLabel}
+                                    </span>
+                                )}
                                 <StatusBadge
-                                    label={item.statusLabel}
+                                    label={
+                                        rework && item.status === "OPEN"
+                                            ? item.workItemTypeLabel
+                                            : item.statusLabel
+                                    }
                                     tone={item.statusTone}
                                 />
                                 {salesApproval &&
@@ -313,21 +384,24 @@ export function WorkspaceDocumentTaskDetail({
                             </div>
                         )}
                         <h2 className="break-words text-xl font-medium tracking-tight">
-                            {canReadSensitive
-                                ? purchaseApproval
-                                    ? "采购单审批"
-                                    : counterpartyName || item.objectTitle
-                                : "业务详情"}
+                            {canReadSensitive ? headerTitle : "业务详情"}
                         </h2>
-                        <p className="break-all text-sm text-muted-foreground">
-                            {stripDocumentNumberPrefix(item.stableNumber)}
-                        </p>
-                        {salesApproval &&
-                        fullPage &&
-                        (reworkTask ||
-                            ["RUNNING", "BLOCKED"].includes(
-                                instance?.status ?? "",
-                            )) ? (
+                        {rework && submission ? (
+                            <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-muted-foreground">
+                                <p className="min-w-0 break-all">
+                                    单号：
+                                    <span className="num text-foreground select-all">
+                                        {documentNumber || "未提供"}
+                                    </span>
+                                </p>
+                                <p>提交版本 {submission.subject_version}</p>
+                            </div>
+                        ) : !rework ? (
+                            <p className="break-all text-sm text-muted-foreground">
+                                {documentNumber}
+                            </p>
+                        ) : null}
+                        {fullPage && showCurrentAssignee ? (
                             <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground">
                                 <p>
                                     {reworkTask
@@ -346,7 +420,7 @@ export function WorkspaceDocumentTaskDetail({
                             </div>
                         ) : null}
                     </div>
-                    <WorkspaceTaskHeaderActions item={item}>
+                    <WorkspaceTaskHeaderActions item={headerItem}>
                         {item.workItemType === "FULFILLMENT_OPERATION" ? (
                             <WorkspaceFulfillmentReassignAction
                                 item={item}
@@ -373,7 +447,7 @@ export function WorkspaceDocumentTaskDetail({
                                             ? {
                                                   kind: "approval_snapshot",
                                                   objectId: instanceId,
-                                                  title: item.stableNumber,
+                                                  title: documentNumber,
                                               }
                                             : currentPaperKind
                                               ? {
@@ -418,7 +492,9 @@ export function WorkspaceDocumentTaskDetail({
             footer={actions}
             aria-label="当前任务"
         >
-            {item.approval?.status === "REJECTED" && (
+            {(rework
+                ? canReadSubmission && Boolean(instanceId)
+                : item.approval?.status === "REJECTED") && (
                 <WorkspaceRejectionNotice
                     item={item}
                     actionable={Boolean(
@@ -427,6 +503,35 @@ export function WorkspaceDocumentTaskDetail({
                 />
             )}
             <div className="@container/delivery-brief flex w-full min-w-0 flex-col">
+                {rework && (!instanceId || !canReadSubmission) ? (
+                    <DetailBlock>
+                        <p
+                            className="text-sm text-muted-foreground"
+                            role="status"
+                        >
+                            {canReadSubmission
+                                ? "未找到本次驳回关联的提交资料，请刷新任务后重试。"
+                                : "当前账号无权查看本次提交资料。"}
+                        </p>
+                    </DetailBlock>
+                ) : rework && !specializedApproval && materials.isPending ? (
+                    <DetailBlock>
+                        <p
+                            className="text-sm text-muted-foreground"
+                            role="status"
+                        >
+                            正在读取本次提交资料…
+                        </p>
+                    </DetailBlock>
+                ) : rework && !specializedApproval && materials.isError ? (
+                    <BusinessFailureState
+                        id={`workspace-rework-materials-${toAutomationIdSegment(item.workItemId)}`}
+                        title="原单资料读取失败"
+                        error={materials.error}
+                        onRetry={() => void materials.refetch()}
+                        className={workspaceTaskSurfacePadClassName}
+                    />
+                ) : null}
                 {item.documentSummaryResolved &&
                 !item.summarySections?.length &&
                 !item.briefLines?.length ? (
@@ -592,7 +697,7 @@ export function WorkspaceDocumentTaskDetail({
 
                 {approvalDocument &&
                 instanceId &&
-                canReadSensitive &&
+                canReadSubmission &&
                 item.businessObjectType === "sales_invoice_request" ? (
                     <WorkspaceInvoiceApproval
                         item={item}
@@ -602,7 +707,7 @@ export function WorkspaceDocumentTaskDetail({
                     />
                 ) : null}
 
-                {salesApproval && instanceId && canReadSensitive ? (
+                {salesApproval && instanceId && canReadSubmission ? (
                     <WorkspaceSalesApproval
                         item={item}
                         key={instanceId}
@@ -611,7 +716,7 @@ export function WorkspaceDocumentTaskDetail({
                     />
                 ) : null}
 
-                {!(salesApproval && instanceId && canReadSensitive) &&
+                {!(salesApproval && instanceId && canReadSubmission) &&
                 !deliveryBrief &&
                 !receiptApproval &&
                 !purchaseApproval &&

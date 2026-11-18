@@ -66,6 +66,7 @@ import { useSourcingParticipation } from "../hooks/use-sourcing-participation"
 import { canSplitSourcingProduct } from "../lib/sourcing-quantity"
 import { compareDecimal } from "@/lib/fixed-decimal"
 import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 import { getErrorMessage } from "@/lib/api/errors"
 import {
     readInquiryLocalValue,
@@ -87,13 +88,7 @@ export type SalesOrderPaperPreviewRenderProps = Readonly<{
     onOpenChange: (open: boolean) => void
 }>
 
-export function PurchaseOrderCreatePage({
-    initialSalesOrderId = "",
-    initialWorkItemId = "",
-    embedded = false,
-    onTaskCompleted,
-    renderSalesOrderPreview,
-}: {
+type PurchaseOrderCreatePageProps = {
     initialSalesOrderId?: string
     initialWorkItemId?: string
     embedded?: boolean
@@ -102,7 +97,55 @@ export function PurchaseOrderCreatePage({
     renderSalesOrderPreview?: (
         props: SalesOrderPaperPreviewRenderProps,
     ) => ReactNode
-}) {
+}
+
+export function PurchaseOrderCreatePage(props: PurchaseOrderCreatePageProps) {
+    const profile = useAccountProfileQuery()
+    const canCreate = hasPermission(
+        profile.data?.permissions,
+        "purchase_order:create",
+    )
+    if (profile.isPending) return <Skeleton className="h-40 w-full" />
+    if (profile.isError || !canCreate) {
+        return (
+            <PageScaffold density="compact">
+                <BusinessFailureState
+                    kind={profile.isError ? "system" : "permission"}
+                    title={profile.isError ? "权限信息加载失败" : "权限不足"}
+                    description={
+                        profile.isError
+                            ? getErrorMessage(
+                                  profile.error,
+                                  "暂时无法核对采购单权限。",
+                              )
+                            : "当前账号不能新建采购单。"
+                    }
+                    action={
+                        profile.isError ? (
+                            <Button
+                                id="purchase-order-create-retry-permissions"
+                                type="button"
+                                variant="outline"
+                                onClick={() => void profile.refetch()}
+                            >
+                                重试
+                            </Button>
+                        ) : undefined
+                    }
+                />
+            </PageScaffold>
+        )
+    }
+    return <PurchaseOrderCreateSurface {...props} />
+}
+
+function PurchaseOrderCreateSurface({
+    initialSalesOrderId = "",
+    initialWorkItemId = "",
+    embedded = false,
+    onTaskCompleted,
+    renderSalesOrderPreview,
+}: PurchaseOrderCreatePageProps) {
     const router = useRouter()
     const pathname = usePathname()
     const searchParams = useSearchParams()

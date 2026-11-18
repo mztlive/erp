@@ -14,6 +14,7 @@ pub(crate) const DESCRIPTIONS: &[(&str, &str, &str)] = &[
     ("GET", "/finance-responsibility-owner-options", "查询财务负责人候选"),
     ("GET", "/approval-instances/{id}/invoice-review", "读取开票审批当前核对依据"),
     ("GET", "/approval-instances/{id}/materials", "读取本次提交的审批资料"),
+    ("POST", "/approval-instances/materials/batch", "批量读取原提交审批资料摘要"),
     ("GET", "/approval-instances/{id}/materials/{file_asset_id}/preview", "预览本次提交的审批附件"),
     ("GET", "/approval-instances/{id}/materials/{file_asset_id}/download", "下载本次提交的审批附件"),
     ("GET", "/approval-instances/{id}/timeline", "查询审批实例详情"),

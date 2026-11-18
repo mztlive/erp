@@ -57,12 +57,17 @@ export const SupplierOfferingsPage = () => {
         restoreListRowFocus(lastFocusedRowId.current)
     }
     const account = useAccountProfileQuery()
+    const canCreate =
+        hasPermission(account.data?.permissions, "supplier_offering:create") &&
+        state.canFilterSupplier &&
+        (Boolean(state.urlState.skuId) || state.canFilterSku)
+    const canViewCosts = hasPermission(
+        account.data?.permissions,
+        "supplier_offering_cost:detail",
+    )
     const canBatchRevise =
         hasPermission(account.data?.permissions, "supplier_offering:update") &&
-        hasPermission(
-            account.data?.permissions,
-            "supplier_offering_cost:detail",
-        )
+        canViewCosts
     const canBatchAvailability = hasPermission(
         account.data?.permissions,
         "supplier_offering_availability:update",
@@ -156,10 +161,21 @@ export const SupplierOfferingsPage = () => {
     const listScopeVersion = state.urlState.scopeVersion
     React.useEffect(() => {
         const next = query.data?.scope_version
-        if (next && listPage === 1 && listScopeVersion !== next) {
+        if (
+            !state.hasUnauthorizedFilters &&
+            next &&
+            listPage === 1 &&
+            listScopeVersion !== next
+        ) {
             patchUrl({ scopeVersion: next })
         }
-    }, [query.data?.scope_version, patchUrl, listPage, listScopeVersion])
+    }, [
+        query.data?.scope_version,
+        patchUrl,
+        listPage,
+        listScopeVersion,
+        state.hasUnauthorizedFilters,
+    ])
 
     return (
         <PageScaffold density="compact" className={styles.page}>
@@ -195,7 +211,7 @@ export const SupplierOfferingsPage = () => {
                             返回商品
                         </Button>
                     ) : null}
-                    {!state.taskMode ? (
+                    {!state.taskMode && canCreate ? (
                         <Button
                             id="supplier-offerings-page-create"
                             type="button"
@@ -286,6 +302,11 @@ export const SupplierOfferingsPage = () => {
                             onAvailabilityStatusDraftChange={
                                 state.setAvailabilityStatusDraft
                             }
+                            canFilterOwner={state.canFilterOwner}
+                            canFilterProcurementOwner={
+                                state.canFilterProcurementOwner
+                            }
+                            canFilterSku={state.canFilterSku}
                             skuLocked={state.skuLocked}
                             skuIdDraft={state.skuIdDraft}
                             onSkuIdDraftChange={state.setSkuIdDraft}
@@ -392,6 +413,7 @@ export const SupplierOfferingsPage = () => {
                                         setPreviewId(offering.id)
                                     }}
                                     highlightedRowId={previewId ?? undefined}
+                                    canViewCosts={canViewCosts}
                                     canRevise={canBatchRevise}
                                     canAvailability={canBatchAvailability}
                                     returnTo={returnTo}
@@ -409,7 +431,11 @@ export const SupplierOfferingsPage = () => {
                                     }
                                     onRetry={() => void query.refetch()}
                                     onClearFilters={state.clearFilters}
-                                    onCreateOffering={() => setCreateOpen(true)}
+                                    onCreateOffering={
+                                        canCreate
+                                            ? () => setCreateOpen(true)
+                                            : undefined
+                                    }
                                     onUpdateAvailability={
                                         setAvailabilityOffering
                                     }
@@ -458,7 +484,7 @@ export const SupplierOfferingsPage = () => {
                     onClose={() => setBatch(null)}
                 />
             )}
-            {!state.taskMode ? (
+            {!state.taskMode && canCreate ? (
                 <RegisterSupplyForSkuDialog
                     key={
                         createOpen
@@ -481,7 +507,7 @@ export const SupplierOfferingsPage = () => {
                     }
                 />
             ) : null}
-            {!state.taskMode && reviseOffering ? (
+            {!state.taskMode && canBatchRevise && reviseOffering ? (
                 <ReviseOfferingDialog
                     key={reviseOffering.id}
                     offering={reviseOffering}
@@ -490,7 +516,7 @@ export const SupplierOfferingsPage = () => {
                     }}
                 />
             ) : null}
-            {!state.taskMode && availabilityOffering ? (
+            {!state.taskMode && canBatchAvailability && availabilityOffering ? (
                 <UpdateAvailabilityDialog
                     key={availabilityOffering.id}
                     offering={availabilityOffering}
@@ -499,7 +525,7 @@ export const SupplierOfferingsPage = () => {
                     }}
                 />
             ) : null}
-            {!state.taskMode && statusChange ? (
+            {!state.taskMode && canBatchRevise && statusChange ? (
                 <ChangeOfferingStatusDialog
                     key={`${statusChange.offering.id}-${statusChange.intent.actionId}`}
                     offering={statusChange.offering}

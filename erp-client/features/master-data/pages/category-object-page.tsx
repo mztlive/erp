@@ -1,5 +1,7 @@
 "use client"
 
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
+
 import * as React from "react"
 import { useRouter, useSearchParams } from "@/lib/navigation"
 
@@ -54,16 +56,20 @@ export function CategoryObjectPage({
             onDisable={() => setDisableOpen(true)}
             dialogs={
                 <>
-                    <CategoryReviseDialog
-                        open={reviseOpen}
-                        onOpenChange={setReviseOpen}
-                        target={query.data}
-                    />
-                    <CategoryDisableDialog
-                        open={disableOpen}
-                        onOpenChange={setDisableOpen}
-                        target={query.data}
-                    />
+                    <PermissionGuard permission="product_category:update">
+                        <CategoryReviseDialog
+                            open={reviseOpen}
+                            onOpenChange={setReviseOpen}
+                            target={query.data}
+                        />
+                    </PermissionGuard>
+                    <PermissionGuard permission="product_category:update">
+                        <CategoryDisableDialog
+                            open={disableOpen}
+                            onOpenChange={setDisableOpen}
+                            target={query.data}
+                        />
+                    </PermissionGuard>
                 </>
             }
         />

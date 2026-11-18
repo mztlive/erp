@@ -5,95 +5,125 @@ import { compareDecimal } from "@/lib/fixed-decimal"
 import { PROFIT_LOSS_SCOPE_LABEL as SCOPE_LABEL } from "@/features/actual-profit-loss/lib/presentation"
 
 export function ProfitLossMetrics({ data }: { data: ProfitLossView }) {
+    const { canViewRevenue, canViewCost, canViewProfit } = data.fieldPermissions
+    const columns =
+        canViewCost && canViewProfit
+            ? canViewRevenue
+                ? 5
+                : 4
+            : canViewCost || canViewProfit
+              ? canViewRevenue
+                  ? 3
+                  : 2
+              : canViewRevenue
+                ? 1
+                : null
     return (
         <>
-            <MetricStrip
-                columns={5}
-                aria-label="实际经营盈亏核心指标（非卡券·不含税）"
-            >
-                <MetricItem
-                    label="不含税销售收入"
-                    value={
-                        <MoneyValue
-                            display="compact"
-                            value={data.totals.netSalesRevenue}
+            {columns !== null && (
+                <MetricStrip
+                    columns={columns}
+                    aria-label="实际经营盈亏核心指标（非卡券·不含税）"
+                >
+                    {canViewRevenue && (
+                        <MetricItem
+                            label="不含税销售收入"
+                            value={
+                                <MoneyValue
+                                    display="compact"
+                                    value={data.totals.netSalesRevenue}
+                                />
+                            }
                         />
-                    }
-                />
-                <MetricItem
-                    label="实际采购成本"
-                    value={
-                        data.totals.actualProcurementCostNet != null ? (
-                            <MoneyValue
-                                display="compact"
-                                value={data.totals.actualProcurementCostNet}
-                            />
-                        ) : (
-                            "无权限"
-                        )
-                    }
-                    detail="实际发生 · 冲减另行加回"
-                />
-                <MetricItem
-                    label="实际履约费用"
-                    value={
-                        data.totals.actualFulfillmentCostNet != null ? (
-                            <MoneyValue
-                                display="compact"
-                                value={data.totals.actualFulfillmentCostNet}
-                            />
-                        ) : (
-                            "无权限"
-                        )
-                    }
-                    detail="印刷/仓储/配送等 · 不含税"
-                />
-                <MetricItem
-                    label="实际经营盈亏"
-                    value={
-                        data.totals.actualProfitLossNet != null ? (
-                            <MoneyValue
-                                display="compact"
-                                value={data.totals.actualProfitLossNet}
-                            />
-                        ) : (
-                            (data.totals.marginUnavailableReason ?? "不可用")
-                        )
-                    }
-                    detail={
-                        data.coverage.reliability === "partial"
-                            ? "部分成本待归集"
-                            : SCOPE_LABEL
-                    }
-                    status={
-                        data.totals.actualProfitLossNet != null &&
-                        compareDecimal(
-                            data.totals.actualProfitLossNet,
-                            "0",
-                            2,
-                        ) < 0
-                            ? {
-                                  label: "亏损",
-                                  tone: "destructive",
-                              }
-                            : data.coverage.reliability === "partial"
-                              ? {
-                                    label: "部分可靠",
-                                    tone: "warning",
-                                }
-                              : undefined
-                    }
-                />
-                <MetricItem
-                    label="实际利润率"
-                    value={
-                        data.totals.marginRate ??
-                        data.totals.marginUnavailableReason ??
-                        "不适用"
-                    }
-                    detail="盈亏 / 适用不含税收入"
-                />
-            </MetricStrip>
+                    )}
+                    {canViewCost && (
+                        <MetricItem
+                            label="实际采购成本"
+                            value={
+                                data.totals.actualProcurementCostNet != null ? (
+                                    <MoneyValue
+                                        display="compact"
+                                        value={
+                                            data.totals.actualProcurementCostNet
+                                        }
+                                    />
+                                ) : (
+                                    "—"
+                                )
+                            }
+                            detail="实际发生 · 冲减另行加回"
+                        />
+                    )}
+                    {canViewCost && (
+                        <MetricItem
+                            label="实际履约费用"
+                            value={
+                                data.totals.actualFulfillmentCostNet != null ? (
+                                    <MoneyValue
+                                        display="compact"
+                                        value={
+                                            data.totals.actualFulfillmentCostNet
+                                        }
+                                    />
+                                ) : (
+                                    "—"
+                                )
+                            }
+                            detail="印刷/仓储/配送等 · 不含税"
+                        />
+                    )}
+                    {canViewProfit && (
+                        <MetricItem
+                            label="实际经营盈亏"
+                            value={
+                                data.totals.actualProfitLossNet != null ? (
+                                    <MoneyValue
+                                        display="compact"
+                                        value={data.totals.actualProfitLossNet}
+                                    />
+                                ) : (
+                                    (data.totals.marginUnavailableReason ??
+                                    "不可用")
+                                )
+                            }
+                            detail={
+                                data.coverage.reliability === "partial"
+                                    ? "部分成本待归集"
+                                    : SCOPE_LABEL
+                            }
+                            status={
+                                data.totals.actualProfitLossNet != null &&
+                                compareDecimal(
+                                    data.totals.actualProfitLossNet,
+                                    "0",
+                                    2,
+                                ) < 0
+                                    ? {
+                                          label: "亏损",
+                                          tone: "destructive",
+                                      }
+                                    : data.coverage.reliability === "partial"
+                                      ? {
+                                            label: "部分可靠",
+                                            tone: "warning",
+                                        }
+                                      : undefined
+                            }
+                        />
+                    )}
+                    {canViewProfit && (
+                        <MetricItem
+                            label="实际利润率"
+                            value={
+                                data.totals.marginRate ??
+                                data.totals.marginUnavailableReason ??
+                                "不适用"
+                            }
+                            detail="盈亏 / 适用不含税收入"
+                        />
+                    )}
+                </MetricStrip>
+            )}
 
             <Alert>
                 <AlertTitle>口径说明</AlertTitle>

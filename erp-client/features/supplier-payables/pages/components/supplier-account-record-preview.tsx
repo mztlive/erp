@@ -1,5 +1,7 @@
 "use client"
 
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 import * as React from "react"
 import Link from "next/link"
 import {
@@ -71,6 +73,11 @@ export function SupplierAccountRecordPreview({
         kind === "payment" ||
         Boolean(payment) ||
         unallocated?.track === "payment"
+    const profile = useAccountProfileQuery()
+    const canPostAllocation = hasPermission(
+        profile.data?.permissions,
+        "purchase_invoice_allocation:post",
+    )
     const canAllocate = Boolean(
         invoice?.allowedActions.includes("CONTINUE_ALLOCATE"),
     )
@@ -195,7 +202,7 @@ export function SupplierAccountRecordPreview({
                                 红票
                             </Button>
                         ) : null}
-                        {canAllocate || unallocated ? (
+                        {canPostAllocation && (canAllocate || unallocated) ? (
                             <Button
                                 id="supplier-payables-preview-record-allocate"
                                 disabled={!canAllocate || isPayment}

@@ -78,6 +78,12 @@ export const isApiError = (error: unknown): error is ApiError =>
     "message" in error &&
     typeof error.message === "string"
 
+/** 仅判断 API 明确拒绝权限的响应。 */
+export const isPermissionDeniedError = (error: unknown): boolean =>
+    isApiError(error) &&
+    error.status === 403 &&
+    error.code === "PERMISSION_DENIED"
+
 /** 详情不存在。鉴权、网络和其它业务错误不能当成不存在。 */
 export const isNotFoundError = (error: unknown): boolean =>
     isApiError(error) && error.status === 404

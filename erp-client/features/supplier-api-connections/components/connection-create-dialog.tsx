@@ -41,7 +41,7 @@ export function ConnectionCreateDialog({
 }: {
     open: boolean
     onOpenChange: (open: boolean) => void
-    onOpen: (connectionId: string) => void
+    onOpen?: (connectionId: string) => void
     onResult: (
         result: (ResultState & { actions?: React.ReactNode }) | null,
     ) => void
@@ -73,7 +73,7 @@ export function ConnectionCreateDialog({
                     mapped
                         ? {
                               ...mapped,
-                              actions: (
+                              actions: onOpen ? (
                                   <Button
                                       id="supplier-api-connections-create-success-open"
                                       type="button"
@@ -84,7 +84,7 @@ export function ConnectionCreateDialog({
                                   >
                                       打开平台设置
                                   </Button>
-                              ),
+                              ) : undefined,
                           }
                         : mapped,
                 )

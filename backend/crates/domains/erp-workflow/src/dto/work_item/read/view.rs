@@ -34,7 +34,7 @@ pub struct WorkItemView {
     pub route_context: Option<WorkItemRouteContext>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub approval_node_execution_id: Option<String>,
-    /// 驳回任务详情绑定的原审批实例；不从当前业务审批推断。
+    /// 驳回任务绑定的原审批实例；不从当前业务审批推断。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub approval_process_instance_id: Option<String>,
     /// 由审批节点执行和有界实例投影补齐的判断上下文。
@@ -197,7 +197,7 @@ pub(crate) struct WorkItemFields {
     pub(crate) search: crate::service::work_item::read::search::SearchDocument,
     pub search_matches: Vec<String>,
     inner: crate::dto::work_item::WorkItemFields,
-    /// 仅完整任务详情提供固定驳回实例关联，列表行不得猜测。
+    /// 由持久化责任键提取的原审批实例。
     rework_instance_id: Option<String>,
 }
 
@@ -231,12 +231,7 @@ impl DerefMut for WorkItemFields {
 impl From<WorkItem> for WorkItemFields {
     /// 从完整任务保留驳回实例关联；其他任务不产生实例读取入口。
     fn from(item: WorkItem) -> Self {
-        let rework_instance_id = item
-            .responsibility_key()
-            .filter(|_| item.work_item_type == WorkItemType::ApprovalRework)
-            .and_then(|key| key.strip_prefix("approval_rework:"))
-            .filter(|id| !id.trim().is_empty())
-            .map(str::to_owned);
+        let rework_instance_id = rework_instance_id(item.work_item_type, item.responsibility_key());
         Self {
             inner: item.into(),
             rework_instance_id,
@@ -247,15 +242,25 @@ impl From<WorkItem> for WorkItemFields {
 }
 
 impl From<crate::WorkItemRow> for WorkItemFields {
-    /// 列表行不携带责任键，实例关联由独立任务详情提供。
+    /// 列表与详情从同一持久化责任键提取原审批实例。
     fn from(item: crate::WorkItemRow) -> Self {
+        let rework_instance_id = rework_instance_id(item.work_item_type, item.responsibility_key.as_deref());
         Self {
             inner: item.into(),
-            rework_instance_id: None,
+            rework_instance_id,
             search: Default::default(),
             search_matches: Vec::new(),
         }
     }
+}
+
+/// 只从驳回任务自身的固定关联读取原审批实例。
+fn rework_instance_id(work_item_type: WorkItemType, responsibility_key: Option<&str>) -> Option<String> {
+    responsibility_key
+        .filter(|_| work_item_type == WorkItemType::ApprovalRework)
+        .and_then(|key| key.strip_prefix("approval_rework:"))
+        .filter(|id| !id.trim().is_empty())
+        .map(str::to_owned)
 }
 
 /// 从工作台唯一任务路由规则投影处理器和目标工作面。

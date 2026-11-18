@@ -12,6 +12,7 @@ import { baseCenter } from "./base"
 
 export async function centerVoucher(
     stableId: string,
+    canReadSkus = true,
 ): Promise<MasterDataCenterView | null> {
     const profiles = await fetchAllPages<VoucherCategoryProfileDto>(
         "/admin/voucher-category-profiles",
@@ -24,7 +25,10 @@ export async function centerVoucher(
     const profile = matched.reduce((best, cur) =>
         cur.revision_no > best.revision_no ? cur : best,
     )
-    const skus = await fetchAllPages<SkuDto>("/admin/skus", {})
+    const skus =
+        canReadSkus && !profile.sku_no
+            ? await fetchAllPages<SkuDto>("/admin/skus", {})
+            : []
     const sku = skus.find((s) => s.id === profile.sku_id)
     const row = mapVoucherRow(profile, sku)
     return baseCenter("voucher-categories", row, {

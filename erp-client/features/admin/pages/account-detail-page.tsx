@@ -32,6 +32,7 @@ import {
     DropdownMenuItem,
 } from "@/components/ui/dropdown-menu"
 import { useAccountProfileQuery } from "@/features/auth/queries"
+import { isPermissionDeniedError } from "@/lib/api/errors"
 import { hasPermission } from "@/lib/permissions"
 import {
     useAdminsQuery,
@@ -51,9 +52,12 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
     const { draft: businessDraft, setDraft: setBusinessDraft } =
         usePersonalGrantDraft(accountId)
     const accounts = useAdminsQuery()
-    const roles = useRolesQuery()
-    const options = useAssignableRolesQuery()
     const profile = useAccountProfileQuery()
+    const can = (permission: string) =>
+        hasPermission(profile.data?.permissions, permission)
+    const canEditRoles = can("admin:update") && can("role:assignable_list")
+    const roles = useRolesQuery(can("role:list"))
+    const options = useAssignableRolesQuery(canEditRoles)
     const [profileDraft, setProfileSnapshot] =
         React.useState<AccountProfileSnapshot | null>(null)
     const profileSnapshot =
@@ -63,8 +67,6 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
         (profileSnapshot?.account.id === accountId
             ? profileSnapshot.account
             : null)
-    const can = (permission: string) =>
-        hasPermission(profile.data?.permissions, permission)
     const org = useOrganizationStateQuery(can("org_unit:list"))
     const router = useRouter()
     const [editing, setEditing] = React.useState<"password" | null>(null)
@@ -121,6 +123,8 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
         : !roles.isSuccess
           ? "角色尚未读取，暂不能删除"
           : undefined
+    const canToggleStatus = can("admin:update") && can("role:list")
+    const canDelete = can("admin:delete") && can("role:list")
     const isActive = account.status === "active"
     const statusDisabledReason = hasSystemRole
         ? "系统角色账号不可停用或启用"
@@ -153,7 +157,7 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                     </>
                 }
                 secondaryActions={
-                    (can("admin:delete") || can("admin:update")) && (
+                    (canDelete || canToggleStatus) && (
                         <DropdownMenu>
                             <DropdownMenuTrigger
                                 id="account-detail-more"
@@ -166,7 +170,7 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                                 更多
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-56">
-                                {can("admin:update") && (
+                                {canToggleStatus && (
                                     <DropdownMenuItem
                                         id="account-detail-toggle-status"
                                         disabled={Boolean(statusDisabledReason)}
@@ -185,16 +189,15 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                                         {isActive ? "停用账号" : "启用账号"}
                                     </DropdownMenuItem>
                                 )}
-                                {can("admin:update") &&
-                                    statusDisabledReason && (
-                                        <p
-                                            id="account-detail-status-reason"
-                                            className="px-2 py-1.5 text-xs text-muted-foreground"
-                                        >
-                                            {statusDisabledReason}
-                                        </p>
-                                    )}
-                                {can("admin:delete") && (
+                                {canToggleStatus && statusDisabledReason && (
+                                    <p
+                                        id="account-detail-status-reason"
+                                        className="px-2 py-1.5 text-xs text-muted-foreground"
+                                    >
+                                        {statusDisabledReason}
+                                    </p>
+                                )}
+                                {canDelete && (
                                     <DropdownMenuItem
                                         id="account-detail-delete"
                                         variant="destructive"
@@ -210,15 +213,14 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                                         删除账号
                                     </DropdownMenuItem>
                                 )}
-                                {can("admin:delete") &&
-                                    deleteDisabledReason && (
-                                        <p
-                                            id="account-detail-delete-reason"
-                                            className="px-2 py-1.5 text-xs text-muted-foreground"
-                                        >
-                                            {deleteDisabledReason}
-                                        </p>
-                                    )}
+                                {canDelete && deleteDisabledReason && (
+                                    <p
+                                        id="account-detail-delete-reason"
+                                        className="px-2 py-1.5 text-xs text-muted-foreground"
+                                    >
+                                        {deleteDisabledReason}
+                                    </p>
+                                )}
                             </DropdownMenuContent>
                         </DropdownMenu>
                     )
@@ -276,10 +278,7 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                             account={account}
                             roles={roles}
                             departmentLabel={departmentLabel}
-                            canEdit={
-                                can("admin:update") ||
-                                (can("org_unit:manage") && Boolean(person))
-                            }
+                            canEdit={can("admin:update")}
                             editDisabledReason={
                                 can("org_unit:list") &&
                                 can("org_unit:manage") &&
@@ -289,6 +288,7 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                             }
                             canChangePassword={can("admin:update")}
                             canReadRoles={can("role:list")}
+                            canEditRoles={can("role:update")}
                             onEdit={() =>
                                 setProfileSnapshot({
                                     account,
@@ -361,6 +361,9 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                     snapshot={profileSnapshot}
                     currentVersion={org.data?.organizationVersion}
                     canName={can("admin:update")}
+                    canEditRoles={
+                        canEditRoles && !isPermissionDeniedError(options.error)
+                    }
                     assignableRoles={options.data ?? []}
                     roleLabels={roles.data ?? []}
                     rolesReady={options.isSuccess}
@@ -369,6 +372,7 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                     }
                     onRetryRoleOptions={() => void options.refetch()}
                     canOrganization={
+                        can("admin:update") &&
                         can("org_unit:manage") &&
                         Boolean(
                             profileSnapshot.view?.people.some(
@@ -382,7 +386,7 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                     }}
                 />
             )}
-            {editing && (
+            {editing && can("admin:update") && (
                 <AccountFormDialog
                     mode="edit"
                     account={account}
@@ -394,7 +398,7 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                     onSaved={() => setNotice("密码已修改。")}
                 />
             )}
-            {togglingStatus && (
+            {togglingStatus && canToggleStatus && (
                 <ToggleAdminStatusDialog
                     account={account}
                     onOpenChange={(open) => {
@@ -409,7 +413,7 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                     }
                 />
             )}
-            {deleting && (
+            {deleting && canDelete && (
                 <DeleteAdminDialog
                     account={account}
                     onOpenChange={(open) => {

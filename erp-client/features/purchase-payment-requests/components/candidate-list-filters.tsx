@@ -9,8 +9,10 @@ import {
 
 export function CandidateListFilters({
     applied,
+    canFilterSupplier,
     onApply,
 }: {
+    canFilterSupplier: boolean
     applied: CandidateFilters
     onApply: (filters: CandidateFilters) => void
 }) {
@@ -18,7 +20,9 @@ export function CandidateListFilters({
         <PaymentTextFilterBar
             idPrefix="purchase-payment-candidates-filters"
             formAriaLabel="可申请采购单查询条件"
-            fields={candidateFilterFields}
+            fields={candidateFilterFields.filter(
+                ([key]) => key !== "supplier_id" || canFilterSupplier,
+            )}
             applied={applied}
             empty={emptyCandidateFilters}
             onApply={onApply}

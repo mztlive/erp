@@ -52,7 +52,7 @@ export function DictionaryCompactList({
     hasActiveFilters: boolean
     onClearFilters: () => void
     emptyTitle: string
-    emptyDescription: string
+    emptyDescription?: string
     emptyAction?: React.ReactNode
     codeLabel: string
     selectedId: string | null

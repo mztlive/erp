@@ -1,4 +1,6 @@
 "use client"
+
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
 import { useState } from "react"
 import { backgroundJobKeys } from "@/lib/background-jobs"
 import type { BackgroundJobView } from "@/lib/background-jobs"
@@ -119,14 +121,17 @@ export const SupplierImportDialog = ({
                     <div className="rounded-lg bg-muted/50 p-4 text-sm leading-6">
                         签约和付款主体互相补齐，并按公司全称、简称或别名匹配。周期结算默认期末后
                         15 天计划付款；不明确的合同有效期留空。
-                        <Link
-                            id="supplier-import-companies"
-                            className="ml-2 underline"
-                            href="/master-data/companies"
-                            target="_blank"
-                        >
-                            维护公司主体
-                        </Link>
+                        <PermissionGuard permission="company:list">
+                            {" "}
+                            <Link
+                                id="supplier-import-companies"
+                                className="ml-2 underline"
+                                href="/master-data/companies"
+                                target="_blank"
+                            >
+                                维护公司主体
+                            </Link>
+                        </PermissionGuard>
                     </div>
                     <FileUpload
                         idPrefix="supplier-import-file"

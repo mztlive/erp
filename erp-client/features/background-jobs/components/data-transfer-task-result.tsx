@@ -2,6 +2,7 @@
 
 import { BusinessFailureState } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { isPermissionDeniedError } from "@/lib/api/errors"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { BackgroundJobView } from "../api"
 import { useDataTransferContextQuery } from "../queries"
@@ -27,7 +28,7 @@ export function DataTransferTaskResult({
                 <BusinessFailureState
                     error={context.error}
                     action={
-                        !expired ? (
+                        !expired && !isPermissionDeniedError(context.error) ? (
                             <Button
                                 id={`transfer-context-retry-${toAutomationIdSegment(job.id)}`}
                                 variant="outline"

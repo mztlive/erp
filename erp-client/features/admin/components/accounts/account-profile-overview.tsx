@@ -24,6 +24,7 @@ export function AccountProfileOverview({
     editDisabledReason,
     canChangePassword,
     canReadRoles,
+    canEditRoles,
     onEdit,
     onPasswordChange,
 }: {
@@ -34,6 +35,7 @@ export function AccountProfileOverview({
     editDisabledReason?: string
     canChangePassword: boolean
     canReadRoles: boolean
+    canEditRoles: boolean
     onEdit: () => void
     onPasswordChange: () => void
 }) {
@@ -141,19 +143,20 @@ export function AccountProfileOverview({
                             >
                                 角色
                             </h3>
-                            {roles.isSuccess && roleCount > 0 ? (
+                            {roleCount > 0 ? (
                                 <span className="num text-xs text-muted-foreground">
                                     {roleCount} 个
                                 </span>
                             ) : null}
                         </div>
-                        {roles.isError ? (
+                        {!canReadRoles && roleCount > 0 ? null : canReadRoles &&
+                          roles.isError ? (
                             <BusinessFailureState
                                 id="account-detail-roles-retry"
                                 error={roles.error}
                                 onRetry={() => void roles.refetch()}
                             />
-                        ) : roles.isPending ? (
+                        ) : canReadRoles && roles.isPending ? (
                             <p
                                 role="status"
                                 className="text-xs text-muted-foreground"
@@ -164,7 +167,8 @@ export function AccountProfileOverview({
                             <div className="rounded-lg border border-dashed border-border px-3 py-3">
                                 <p className="font-medium">尚未分配角色</p>
                                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                                    没有角色的账号无法执行任何业务操作，可点击“编辑资料”分配。
+                                    没有角色的账号无法执行任何业务操作。
+                                    {canEdit && "可点击“编辑资料”分配。"}
                                 </p>
                             </div>
                         ) : (
@@ -185,7 +189,7 @@ export function AccountProfileOverview({
                                             </li>
                                         )
                                     }
-                                    if (!canReadRoles) {
+                                    if (!canEditRoles) {
                                         return (
                                             <li
                                                 key={roleId}

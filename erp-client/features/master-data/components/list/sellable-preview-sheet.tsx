@@ -1,5 +1,7 @@
 "use client"
 
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
+
 import Link from "next/link"
 import { ArrowUpRightIcon } from "lucide-react"
 
@@ -65,21 +67,23 @@ export function SellablePreviewSheet({
                         >
                             关闭
                         </Button>
-                        <Button
-                            id={`${prefix}-open-product`}
-                            type="button"
-                            render={
-                                <Link
-                                    href={`/master-data/products/${previewRow.sellableItem.productId}?section=overview`}
+                        <PermissionGuard permission="product:detail">
+                            <Button
+                                id={`${prefix}-open-product`}
+                                type="button"
+                                render={
+                                    <Link
+                                        href={`/master-data/products/${previewRow.sellableItem.productId}?section=overview`}
+                                    />
+                                }
+                            >
+                                打开商品资料
+                                <ArrowUpRightIcon
+                                    data-icon="inline-end"
+                                    aria-hidden
                                 />
-                            }
-                        >
-                            打开商品资料
-                            <ArrowUpRightIcon
-                                data-icon="inline-end"
-                                aria-hidden
-                            />
-                        </Button>
+                            </Button>
+                        </PermissionGuard>
                     </>
                 ) : null
             }

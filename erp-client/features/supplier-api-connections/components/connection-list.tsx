@@ -1,5 +1,7 @@
 "use client"
 
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 import { PermissionGuard } from "@/features/auth/components/permission-guard"
 
 import * as React from "react"
@@ -41,6 +43,15 @@ export function ConnectionList({
     onOpen: (connectionId: string) => void
     onOpenCatalog: (connectionId: string) => void
 }) {
+    const profile = useAccountProfileQuery()
+    const canCreate = hasPermission(
+        profile.data?.permissions,
+        "supplier_api_connection:create",
+    )
+    const canOpen = hasPermission(
+        profile.data?.permissions,
+        "supplier_api_connection:detail",
+    )
     const filters = useConnectionListFilters(urlState, patchUrl)
     const [createOpen, setCreateOpen] = React.useState(false)
     const [result, setResult] = React.useState<
@@ -80,7 +91,10 @@ export function ConnectionList({
         }))
     }, [urlState.page, urlState.pageSize])
 
-    const columns = useConnectionListColumns(onOpen, onOpenCatalog)
+    const columns = useConnectionListColumns(
+        canOpen ? onOpen : undefined,
+        canOpen ? onOpenCatalog : undefined,
+    )
 
     // chip 展示供应商业务名称，不展示内部 ID（§4.5）
     const supplierNameLabel = React.useMemo(
@@ -240,9 +254,11 @@ export function ConnectionList({
                                 pageSize: next.pageSize,
                             })
                         }}
-                        onRowOpen={onOpen}
+                        onRowOpen={canOpen ? onOpen : undefined}
                         onClearFilters={filters.clearFilters}
-                        onCreate={() => setCreateOpen(true)}
+                        onCreate={
+                            canCreate ? () => setCreateOpen(true) : undefined
+                        }
                         loading={listQuery.isFetching}
                         isError={listQuery.isError}
                         error={listQuery.error}
@@ -252,12 +268,14 @@ export function ConnectionList({
                 }
             />
 
-            <ConnectionCreateDialog
-                open={createOpen}
-                onOpenChange={setCreateOpen}
-                onOpen={onOpen}
-                onResult={setResult}
-            />
+            {canCreate && (
+                <ConnectionCreateDialog
+                    open={createOpen}
+                    onOpenChange={setCreateOpen}
+                    onOpen={canOpen ? onOpen : undefined}
+                    onResult={setResult}
+                />
+            )}
         </PageScaffold>
     )
 }

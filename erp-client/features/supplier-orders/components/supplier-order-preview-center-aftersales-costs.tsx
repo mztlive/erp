@@ -9,6 +9,7 @@ import {
     MoneyValue,
     surfaceInsetClassName,
 } from "@/components/business"
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
 import { Button } from "@/components/ui/button"
 import {
     Card,
@@ -82,56 +83,62 @@ export function AftersalesSection({
                                     />
                                 </div>
                                 <div className="flex flex-wrap gap-2">
-                                    <GuardedBusinessAction
-                                        id={`supplier-order-center-aftersales-${toAutomationIdSegment(as.requestId)}-cancel`}
-                                        type="button"
-                                        size="sm"
-                                        variant="outline"
-                                        disabled={
-                                            !as.allowedActions.includes(
-                                                "CANCEL",
-                                            ) || pending
-                                        }
-                                        reason={
-                                            as.actionBlockers.find(
-                                                (b) => b.action === "CANCEL",
-                                            )?.message
-                                        }
-                                        onClick={() =>
-                                            onRequest({
-                                                requestId: as.requestId,
-                                                requestNo: as.requestNo,
-                                                action: "CANCEL",
-                                            })
-                                        }
-                                    >
-                                        提交取消
-                                    </GuardedBusinessAction>
-                                    <GuardedBusinessAction
-                                        id={`supplier-order-center-aftersales-${toAutomationIdSegment(as.requestId)}-refund`}
-                                        type="button"
-                                        size="sm"
-                                        variant="outline"
-                                        disabled={
-                                            !as.allowedActions.includes(
-                                                "REFUND",
-                                            ) || pending
-                                        }
-                                        reason={
-                                            as.actionBlockers.find(
-                                                (b) => b.action === "REFUND",
-                                            )?.message
-                                        }
-                                        onClick={() =>
-                                            onRequest({
-                                                requestId: as.requestId,
-                                                requestNo: as.requestNo,
-                                                action: "REFUND",
-                                            })
-                                        }
-                                    >
-                                        提交退款
-                                    </GuardedBusinessAction>
+                                    <PermissionGuard permission="supplier_fulfillment_order:cancel">
+                                        <GuardedBusinessAction
+                                            id={`supplier-order-center-aftersales-${toAutomationIdSegment(as.requestId)}-cancel`}
+                                            type="button"
+                                            size="sm"
+                                            variant="outline"
+                                            disabled={
+                                                !as.allowedActions.includes(
+                                                    "CANCEL",
+                                                ) || pending
+                                            }
+                                            reason={
+                                                as.actionBlockers.find(
+                                                    (b) =>
+                                                        b.action === "CANCEL",
+                                                )?.message
+                                            }
+                                            onClick={() =>
+                                                onRequest({
+                                                    requestId: as.requestId,
+                                                    requestNo: as.requestNo,
+                                                    action: "CANCEL",
+                                                })
+                                            }
+                                        >
+                                            提交取消
+                                        </GuardedBusinessAction>
+                                    </PermissionGuard>
+                                    <PermissionGuard permission="supplier_fulfillment_order:refund">
+                                        <GuardedBusinessAction
+                                            id={`supplier-order-center-aftersales-${toAutomationIdSegment(as.requestId)}-refund`}
+                                            type="button"
+                                            size="sm"
+                                            variant="outline"
+                                            disabled={
+                                                !as.allowedActions.includes(
+                                                    "REFUND",
+                                                ) || pending
+                                            }
+                                            reason={
+                                                as.actionBlockers.find(
+                                                    (b) =>
+                                                        b.action === "REFUND",
+                                                )?.message
+                                            }
+                                            onClick={() =>
+                                                onRequest({
+                                                    requestId: as.requestId,
+                                                    requestNo: as.requestNo,
+                                                    action: "REFUND",
+                                                })
+                                            }
+                                        >
+                                            提交退款
+                                        </GuardedBusinessAction>
+                                    </PermissionGuard>
                                 </div>
                                 <p className="text-tiny text-muted-foreground">
                                     关联售后申请单：{as.requestNo}

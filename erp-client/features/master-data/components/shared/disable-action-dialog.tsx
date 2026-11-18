@@ -1,5 +1,8 @@
 "use client"
 
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
+
 import * as React from "react"
 import Link from "next/link"
 import { useQueryClient } from "@tanstack/react-query"
@@ -58,6 +61,10 @@ export function DisableActionDialog({
     submitDisabled?: boolean
     submitLabel?: string
 }) {
+    const account = useAccountProfileQuery()
+    const canReadStock =
+        account.isSuccess &&
+        hasPermission(account.data.permissions, "stock_balance:list")
     const queryClient = useQueryClient()
     const [idempotencyKey, setIdempotencyKey] = React.useState(() =>
         newIdempotencyKey("disable"),
@@ -132,12 +139,13 @@ export function DisableActionDialog({
                                 ...(result.detail
                                     ? [{ label: "说明", value: result.detail }]
                                     : []),
-                                ...(result.drillHref
+                                ...(canReadStock && result.drillHref
                                     ? [
                                           {
                                               label: "库存台账",
                                               value: (
                                                   <Link
+                                                      id="master-data-disable-open-inventory"
                                                       className="text-primary underline-offset-4 hover:underline"
                                                       href={result.drillHref}
                                                   >

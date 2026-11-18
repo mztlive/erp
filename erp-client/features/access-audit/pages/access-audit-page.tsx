@@ -34,6 +34,25 @@ import type { RoleRow } from "@/features/access-audit/types"
 export function AccessAuditPage() {
     const profile = useAccountProfileQuery()
     const page = useAccessAuditPage("access")
+    const permissions = profile.data?.permissions
+    const canCreate =
+        hasPermission(permissions, "role:create") &&
+        hasPermission(permissions, "role:list")
+    const canEdit = hasPermission(permissions, "role:update")
+    const canDelete = hasPermission(permissions, "role:delete")
+
+    if (profile.isError) {
+        return (
+            <PageScaffold density="compact" className={styles.page}>
+                <ListWorkspaceHeader eyebrow="系统" title="角色与权限" />
+                <BusinessFailureState
+                    error={profile.error}
+                    id="operations-access-profile-retry"
+                    onRetry={() => void profile.refetch()}
+                />
+            </PageScaffold>
+        )
+    }
 
     if (page.rejectedWorkItemId) {
         return (
@@ -98,10 +117,7 @@ export function AccessAuditPage() {
                 description="管理角色的操作权限，查看关联人员。"
             >
                 <div className="flex flex-wrap items-center gap-2">
-                    {hasPermission(profile.data?.permissions, "role:create") &&
-                    hasPermission(profile.data?.permissions, "role:list") ? (
-                        <BuiltinRoleDialog />
-                    ) : null}
+                    {canCreate ? <BuiltinRoleDialog /> : null}
                     <Button
                         id="operations-access-export"
                         type="button"
@@ -118,15 +134,17 @@ export function AccessAuditPage() {
                         <DownloadIcon className="size-3.5" aria-hidden="true" />
                         导出配置
                     </Button>
-                    <Button
-                        id="operations-access-config-create-role"
-                        type="button"
-                        size="sm"
-                        onClick={() => page.routerPush("/system/roles/new")}
-                    >
-                        <PlusIcon className="size-3.5" aria-hidden="true" />
-                        新建角色
-                    </Button>
+                    {canCreate && (
+                        <Button
+                            id="operations-access-config-create-role"
+                            type="button"
+                            size="sm"
+                            onClick={() => page.routerPush("/system/roles/new")}
+                        >
+                            <PlusIcon className="size-3.5" aria-hidden="true" />
+                            新建角色
+                        </Button>
+                    )}
                 </div>
             </ListWorkspaceHeader>
 
@@ -228,6 +246,7 @@ export function AccessAuditPage() {
 
             <AccessPreviewSheets
                 explainSubject={page.explainSubject}
+                canEditRole={canEdit}
                 previewRole={
                     page.explainSubject?.type === "ROLE"
                         ? (rows.find(
@@ -260,7 +279,7 @@ export function AccessAuditPage() {
                 onApplyOutcome={page.applyOutcome}
             />
 
-            {page.deletingRole ? (
+            {canDelete && page.deletingRole ? (
                 <DeleteRoleDialog
                     key={page.deletingRole.id}
                     role={page.deletingRole}

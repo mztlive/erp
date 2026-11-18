@@ -1,5 +1,7 @@
 "use client"
 
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
+
 import { BusinessStatusBadge, QuickPreviewSheet } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -84,19 +86,22 @@ export function VoucherCategoryPreviewSheet({
                             surface="sheet"
                             onClick={() => onStatusChange(row)}
                         />
-                        <Button
-                            id={`${prefix}-revise`}
-                            disabled={!canRevise}
-                            title={
-                                row.actionBlockers.find(
-                                    (blocker) =>
-                                        blocker.action === "CREATE_REVISION",
-                                )?.message
-                            }
-                            onClick={() => onRevise(row)}
-                        >
-                            {masterDataCopy.actionUpdate}
-                        </Button>
+                        <PermissionGuard permission="voucher_category_profile:update">
+                            <Button
+                                id={`${prefix}-revise`}
+                                disabled={!canRevise}
+                                title={
+                                    row.actionBlockers.find(
+                                        (blocker) =>
+                                            blocker.action ===
+                                            "CREATE_REVISION",
+                                    )?.message
+                                }
+                                onClick={() => onRevise(row)}
+                            >
+                                {masterDataCopy.actionUpdate}
+                            </Button>
+                        </PermissionGuard>
                     </>
                 ) : null
             }

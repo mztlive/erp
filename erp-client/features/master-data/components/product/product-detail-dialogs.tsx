@@ -1,5 +1,7 @@
 "use client"
 
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
+
 import { useRouter } from "@/lib/navigation"
 
 import { DiscardConfirmDialog } from "@/components/business"
@@ -57,28 +59,34 @@ function ProductDetailDialogs({
     return (
         <>
             {!isCreate && data ? (
-                <ProductDisableDialog
-                    open={disableOpen}
-                    onOpenChange={setDisableOpen}
-                    target={data}
-                />
+                <PermissionGuard permission="product:update">
+                    <ProductDisableDialog
+                        open={disableOpen}
+                        onOpenChange={setDisableOpen}
+                        target={data}
+                    />
+                </PermissionGuard>
             ) : null}
-            <RegisterSupplyForSkuDialog
-                key={supplierDialogSku?.skuId ?? "register-supply"}
-                open={Boolean(supplierDialogSku)}
-                onOpenChange={(open) => {
-                    if (!open) setSupplierDialogSku(undefined)
-                }}
-                fixedSku={supplierDialogSku}
-            />
-            <ProductInventoryPreviewSheet
-                open={inventoryOpen}
-                onOpenChange={onInventoryOpenChange}
-                productName={productName}
-                productKind={productKind}
-                skus={inventoryPreviewSkus}
-                initialSkuId={inventoryInitialSkuId}
-            />
+            <PermissionGuard permission="supplier_offering:create">
+                <RegisterSupplyForSkuDialog
+                    key={supplierDialogSku?.skuId ?? "register-supply"}
+                    open={Boolean(supplierDialogSku)}
+                    onOpenChange={(open) => {
+                        if (!open) setSupplierDialogSku(undefined)
+                    }}
+                    fixedSku={supplierDialogSku}
+                />
+            </PermissionGuard>
+            <PermissionGuard permission="stock_balance:list">
+                <ProductInventoryPreviewSheet
+                    open={inventoryOpen}
+                    onOpenChange={onInventoryOpenChange}
+                    productName={productName}
+                    productKind={productKind}
+                    skus={inventoryPreviewSkus}
+                    initialSkuId={inventoryInitialSkuId}
+                />
+            </PermissionGuard>
             <DiscardConfirmDialog
                 open={discardOpen}
                 onOpenChange={setDiscardOpen}

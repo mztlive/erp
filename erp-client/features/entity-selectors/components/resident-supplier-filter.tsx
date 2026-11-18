@@ -2,6 +2,8 @@
 
 import { OptionCombobox } from "@/components/business/option-combobox"
 import { SelectorQueryFeedback } from "@/components/business/selector-query-feedback"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 import { useSupplierSelectorQuery } from "@/features/entity-selectors/hooks/queries"
 import { useRemoteSearchCombobox } from "@/features/entity-selectors/hooks/use-remote-search-combobox"
 import { useSearchInput } from "@/features/entity-selectors/hooks/use-search-input"
@@ -9,8 +11,7 @@ import { useSearchInput } from "@/features/entity-selectors/hooks/use-search-inp
 /**
  * 列表筛选栏常驻的供应商筛选。
  *
- * 与 `SupplierSearchCombobox` 共用候选查询，仅把外观固定为筛选栏的
- * `OptionCombobox`；失败与无权限提示保持在各列表工具栏同一位置。
+ * 与 `SupplierSearchCombobox` 共用候选查询，外观固定为筛选栏的 `OptionCombobox`。
  */
 export function ResidentSupplierFilter({
     id,
@@ -21,18 +22,24 @@ export function ResidentSupplierFilter({
     value: string | null
     onValueChange: (value: string | null) => void
 }) {
+    const profile = useAccountProfileQuery()
+    const canList = hasPermission(profile.data?.permissions, "supplier:list")
     const search = useSearchInput()
     const query = useSupplierSelectorQuery(
         { query: search.input, purpose: "filter" },
         value ?? undefined,
+        canList,
     )
-    const { rows, loading, emptyLabel, onRefresh } = useRemoteSearchCombobox({
-        selectedId: value ?? undefined,
-        list: query.list,
-        selected: query.selected,
-        idOf: (item) => item.supplierId,
-        fallbackError: "供应商加载失败，请重试",
-    })
+    const { rows, loading, emptyLabel, onRefresh, denied } =
+        useRemoteSearchCombobox({
+            selectedId: value ?? undefined,
+            list: query.list,
+            selected: query.selected,
+            idOf: (item) => item.supplierId,
+            fallbackError: "供应商加载失败，请重试",
+        })
+    if (!canList || denied) return null
+
     const directoryFailed = query.list.isError || query.selected.isError
     return (
         <div className="min-w-0">

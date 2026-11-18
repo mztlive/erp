@@ -1,6 +1,8 @@
 "use client"
 
 import * as React from "react"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 import { useSearchParams } from "next/navigation"
 
 import type { CurrentQualityQuery } from "../dual-types"
@@ -24,19 +26,58 @@ export function useCurrentQualityFilters({
     patchDual: PatchDual
 }) {
     const searchParams = useSearchParams()
-    const ownerIds = parseCsvIds(searchParams.get("ownerUserIds"))
-    const orgIds = parseCsvIds(searchParams.get("orgUnitIds"))
+    const account = useAccountProfileQuery()
+    const canFilterOwners = hasPermission(
+        account.data?.permissions,
+        "sales_person:list",
+    )
+    const canFilterOrgs = hasPermission(
+        account.data?.permissions,
+        "org_unit:list",
+    )
+    const ownerIds = parseCsvIds(
+        canFilterOwners ? searchParams.get("ownerUserIds") : null,
+    )
+    const orgIds = parseCsvIds(
+        canFilterOrgs ? searchParams.get("orgUnitIds") : null,
+    )
     const includeDescendants = parseDualBoolean(
-        searchParams.get("includeDescendants"),
+        canFilterOrgs ? searchParams.get("includeDescendants") : null,
     )
     const ownerGroup = searchParams.get("ownerGroup") ?? undefined
+    const hasUnavailableOwners =
+        !canFilterOwners && searchParams.has("ownerUserIds")
+    const hasUnavailableOrgs =
+        !canFilterOrgs &&
+        (searchParams.has("orgUnitIds") ||
+            searchParams.has("includeDescendants"))
+    const resetting = hasUnavailableOwners || hasUnavailableOrgs
+    React.useEffect(() => {
+        if (!account.data || !resetting) return
+        patchDual({
+            ...(hasUnavailableOwners ? { ownerUserIds: null } : {}),
+            ...(hasUnavailableOrgs
+                ? { orgUnitIds: null, includeDescendants: null }
+                : {}),
+            dualPage: null,
+            scopeVersion: null,
+        })
+    }, [
+        account.data,
+        hasUnavailableOrgs,
+        hasUnavailableOwners,
+        patchDual,
+        resetting,
+    ])
     const customerId = searchParams.get("dualCustomerId") ?? undefined
     const qParam = searchParams.get("dualQ") ?? ""
     const dimension = parseCurrentDimension(searchParams.get("dualDimension"))
     const sort = parseCurrentSort(searchParams.get("dualSort"))
-    const page = parseDualPage(searchParams.get("dualPage"))
+    const page = resetting ? 1 : parseDualPage(searchParams.get("dualPage"))
     const pageSize = parseDualPageSize(searchParams.get("dualPageSize"))
-    const scopeVersion = searchParams.get("scopeVersion") ?? undefined
+    const scopeVersion = resetting
+        ? undefined
+        : (searchParams.get("scopeVersion") ?? undefined)
 
     const [qDraft, setQDraft] = React.useState(qParam)
     const suppressDescendantsPatch = React.useRef(false)
@@ -126,6 +167,8 @@ export function useCurrentQualityFilters({
     }
 
     return {
+        canFilterOwners,
+        canFilterOrgs,
         searchParams,
         query,
         ownerIds,

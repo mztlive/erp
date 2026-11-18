@@ -91,49 +91,53 @@ export const CompaniesPage = () => {
             cell: ({ row }) =>
                 row.original.status === "active" ? "启用" : "停用",
         },
-        {
-            id: "actions",
-            meta: { align: "end" },
-            size: 168,
-            minSize: 168,
-            header: "操作",
-            cell: ({ row }) => {
-                const segment = toAutomationIdSegment(row.original.id)
-                return (
-                    <TableRowActions
-                        moreId={`company-more-${segment}`}
-                        moreLabel={`${row.original.legal_name} 更多操作`}
-                        actions={[
-                            {
-                                hidden: !canUpdate,
-                                id: `company-edit-${segment}`,
-                                label: "编辑",
-                                icon: PencilIcon,
-                                disabled: !canUpdate,
-                                onClick: () => setEditing(row.original),
-                            },
-                            {
-                                hidden: !canUpdate,
-                                id: `company-status-${segment}`,
-                                icon:
-                                    row.original.status === "active"
-                                        ? BanIcon
-                                        : CircleCheckIcon,
-                                label:
-                                    row.original.status === "active"
-                                        ? "停用"
-                                        : "启用",
-                                disabled: !canUpdate || mutation.isPending,
-                                loading:
-                                    mutation.isPending &&
-                                    mutation.variables?.id === row.original.id,
-                                onClick: () => void changeStatus(row.original),
-                            },
-                        ]}
-                    />
-                )
-            },
-        },
+        ...((canUpdate
+            ? [
+                  {
+                      id: "actions",
+                      meta: { align: "end" },
+                      size: 168,
+                      minSize: 168,
+                      header: "操作",
+                      cell: ({ row }) => {
+                          const segment = toAutomationIdSegment(row.original.id)
+                          return (
+                              <TableRowActions
+                                  moreId={`company-more-${segment}`}
+                                  moreLabel={`${row.original.legal_name} 更多操作`}
+                                  actions={[
+                                      {
+                                          id: `company-edit-${segment}`,
+                                          label: "编辑",
+                                          icon: PencilIcon,
+                                          onClick: () =>
+                                              setEditing(row.original),
+                                      },
+                                      {
+                                          id: `company-status-${segment}`,
+                                          icon:
+                                              row.original.status === "active"
+                                                  ? BanIcon
+                                                  : CircleCheckIcon,
+                                          label:
+                                              row.original.status === "active"
+                                                  ? "停用"
+                                                  : "启用",
+                                          disabled: mutation.isPending,
+                                          loading:
+                                              mutation.isPending &&
+                                              mutation.variables?.id ===
+                                                  row.original.id,
+                                          onClick: () =>
+                                              void changeStatus(row.original),
+                                      },
+                                  ]}
+                              />
+                          )
+                      },
+                  },
+              ]
+            : []) satisfies ColumnDef<Company>[]),
     ]
     return (
         <PageScaffold density="compact">
@@ -149,7 +153,6 @@ export const CompaniesPage = () => {
                                 actionKey: "create",
                                 label: "新建公司主体",
                                 icon: PlusIcon,
-                                disabled: !canCreate,
                                 onClick: () => setEditing("new"),
                             },
                         ]}
@@ -217,7 +220,7 @@ export const CompaniesPage = () => {
                     />
                 }
             />
-            {editing && (
+            {editing && (editing === "new" ? canCreate : canUpdate) && (
                 <CompanyForm
                     company={editing === "new" ? undefined : editing}
                     onClose={() => setEditing(null)}

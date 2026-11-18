@@ -33,20 +33,11 @@ impl BpmWorkflowRepository<'_> {
         }
         access.ensure_current(executor)?;
 
-        let mut pipeline = access.stages().to_vec();
-        pipeline.push(doc! {"$match": {
+        let filter = doc! {
             "started_by": actor_id, "initiator_unread": true, "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-        }});
-        pipeline.push(doc! {"$count": "count"});
-        let rows = aggregate::rows(&self.db.collection::<Document>(INSTANCES), pipeline, executor).await?;
-
-        let count = rows
-            .first()
-            .map(|row| row.get_i64("count"))
-            .transpose()
-            .map_err(|_| crate::Error::Internal("审批进展计数类型非法".into()))?
-            .unwrap_or_default();
-        u64::try_from(count).map_err(|_| crate::Error::Internal("审批进展计数越界".into()))
+        };
+        let collection = self.db.collection::<Document>(INSTANCES);
+        Ok(aggregate::count(&collection, filter, access.stages().to_vec(), executor).await?)
     }
 
     /// 原子清除已展示版本以内的进展，保留并发产生的更新。

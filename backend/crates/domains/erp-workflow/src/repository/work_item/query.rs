@@ -409,6 +409,7 @@ pub(super) fn work_item_projection() -> Document {
         "id": 1,
         "work_item_type": 1,
         "approval_node_execution_id": 1,
+        "responsibility_key": 1,
         "business_object_type": 1,
         "business_object_id": 1,
         "subject_version": 1,
@@ -464,15 +465,17 @@ mod tests {
     }
 
     #[test]
-    fn work_item_projection_includes_approval_node_execution_id() {
+    fn work_item_projection_includes_approval_references() {
         let projection = work_item_projection();
         assert_eq!(projection.get_i32("approval_node_execution_id").unwrap(), 1);
+        assert_eq!(projection.get_i32("responsibility_key").unwrap(), 1);
 
         let row = WorkItemRow {
             links: Vec::new(),
             id: "wi-1".to_string(),
             work_item_type: WorkItemType::CardFundsDeltaReview,
             approval_node_execution_id: Some("exec-1".to_string()),
+            responsibility_key: None,
             business_object_type: "receivable_account".to_string(),
             business_object_id: "account-1".to_string(),
             subject_version: "v1".to_string(),

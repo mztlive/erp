@@ -207,14 +207,15 @@ export function BatchWorkspace({
     }
     const center = useConnectionCenterQuery(identity.connectionId)
     const profile = useAccountProfileQuery()
+    const canReadCost = hasPermission(
+        profile.data?.permissions,
+        "supplier_offering_cost:detail",
+    )
     const canWrite =
+        canReadCost &&
         hasPermission(
             profile.data?.permissions,
             "supplier_api_connection:catalog_sync",
-        ) &&
-        hasPermission(
-            profile.data?.permissions,
-            "supplier_offering_cost:detail",
         )
     const categories = useMasterDataListQuery({
         resource: "categories",
@@ -645,7 +646,7 @@ export function BatchWorkspace({
                     {submissionNotice}
                 </p>
             ) : null}
-            {uncertainSubmission ? (
+            {canWrite && uncertainSubmission ? (
                 <div
                     role="alert"
                     className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning/30 bg-warning/10 p-4 text-sm"
@@ -664,7 +665,7 @@ export function BatchWorkspace({
                     </Button>
                 </div>
             ) : null}
-            {step === "PRICING" || step === "DETAILS" ? (
+            {canWrite && (step === "PRICING" || step === "DETAILS") ? (
                 <form.AppForm>
                     <form
                         id="supplier-catalog-batch-draft-form"
@@ -753,7 +754,7 @@ export function BatchWorkspace({
                             个，可离开页面后继续查看。
                         </p>
                     ) : null}
-                    {step !== "RESULT" && warningRows.length ? (
+                    {canWrite && step !== "RESULT" && warningRows.length ? (
                         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning/30 bg-warning/10 p-3">
                             <p className="text-sm">
                                 {warningRows.length}{" "}
@@ -798,11 +799,13 @@ export function BatchWorkspace({
                         onSelectionChange={setSelectedIds}
                         onEdit={(row) => setEditingId(row.source.id)}
                         onReconcile={() => void verifyOriginal()}
-                        busy={busy || !canWrite}
+                        busy={busy}
+                        canWrite={canWrite}
+                        canReadCost={canReadCost}
                     />
                 </>
             )}
-            {step !== "RESULT" ? (
+            {canWrite && step !== "RESULT" ? (
                 <div className="sticky bottom-0 z-10 -mx-1 flex flex-wrap items-center justify-between gap-3 border-t bg-background px-1 py-3">
                     <div className="flex flex-wrap items-center gap-3">
                         <DraftSaveIndicator
@@ -975,7 +978,7 @@ export function BatchWorkspace({
                     </div>
                 </div>
             ) : null}
-            {editing ? (
+            {canWrite && editing ? (
                 <BatchItemDialog
                     key={`${editing.source.id}-${view.batch.version}`}
                     open

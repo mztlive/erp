@@ -1,9 +1,12 @@
 import * as React from "react"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 
 import { useSearchDraft } from "@/lib/use-search-draft"
 
 import {
     EMPTY_SALES_ORDERS_LIST_FILTER_DRAFT,
+    type SalesOrdersListFilterDraft,
     filterDraftFromUrl,
     hasStructuredSalesOrdersFilters,
     resolveSalesOrdersListFilterPatch,
@@ -38,9 +41,43 @@ export function useSalesOrdersListFilters(
 ) {
     const { searchDraft, setSearchDraft } = useSearchDraft(url.search ?? "")
     const [filterPanelOpen, setFilterPanelOpen] = React.useState(false)
-    const [filterDraft, setFilterDraft] = React.useState(() =>
+    const [draft, setFilterDraft] = React.useState(() =>
         filterDraftFromUrl(url),
     )
+
+    const account = useAccountProfileQuery()
+    const permissions = account.data?.permissions
+    const stripUnavailable = React.useCallback(
+        (value: SalesOrdersListFilterDraft) => ({
+            ...value,
+            customerId: hasPermission(permissions, "customer:list")
+                ? value.customerId
+                : "",
+            contractId: hasPermission(permissions, "contract:list")
+                ? value.contractId
+                : "",
+            createdBy: hasPermission(permissions, "business_person:list")
+                ? value.createdBy
+                : "",
+            ownerUserIds: hasPermission(permissions, "sales_person:list")
+                ? value.ownerUserIds
+                : "",
+            orgUnitIds: hasPermission(permissions, "org_unit:list")
+                ? value.orgUnitIds
+                : "",
+            includeDescendants:
+                hasPermission(permissions, "org_unit:list") &&
+                value.includeDescendants,
+        }),
+        [permissions],
+    )
+    const filterDraft = React.useMemo(
+        () => stripUnavailable(draft),
+        [draft, stripUnavailable],
+    )
+    React.useEffect(() => {
+        setFilterDraft(stripUnavailable)
+    }, [stripUnavailable])
 
     const hasStructuredFilters = hasStructuredSalesOrdersFilters(url)
 

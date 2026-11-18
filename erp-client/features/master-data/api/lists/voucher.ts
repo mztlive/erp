@@ -13,6 +13,7 @@ import { fetchAllPages } from "./fetch-all"
 
 export async function listVoucherCategories(
     query: MasterDataListQuery,
+    canReadSkus = true,
 ): Promise<MasterDataListItem[]> {
     // 先按 SKU 取最新版本，再按当前状态筛选；历史启用版本不能使已停用类目复活。
     const profiles = await fetchAllPages<VoucherCategoryProfileDto>(
@@ -28,7 +29,10 @@ export async function listVoucherCategories(
             latestBySku.set(profile.sku_id, profile)
         }
     }
-    const skus = await fetchAllPages<SkuDto>("/admin/skus", {})
+    const skus =
+        canReadSkus && profiles.some((profile) => !profile.sku_no)
+            ? await fetchAllPages<SkuDto>("/admin/skus", {})
+            : []
     const skuById = new Map(skus.map((s) => [s.id, s]))
     let rows = Array.from(latestBySku.values()).map((p) =>
         mapVoucherRow(p, skuById.get(p.sku_id)),

@@ -5,8 +5,10 @@
 mod cancel_blocked;
 mod decision_apply;
 mod materials;
+mod materials_batch;
 mod notifications;
 pub use materials::{ApprovalMaterialView, ApprovalMaterialsView};
+pub use materials_batch::{ApprovalMaterialsBatchQuery, ApprovalMaterialsBatchResult};
 mod progress;
 mod query;
 mod query_contract;

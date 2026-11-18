@@ -62,6 +62,7 @@ function wrapListResult(
 
 export async function fetchMasterDataList(
     query: MasterDataListQuery,
+    extraAccess?: boolean,
 ): Promise<MasterDataListResult> {
     let rows: MasterDataListItem[]
     let extra: Pick<MasterDataListResult, "emptyReason"> = {}
@@ -87,10 +88,10 @@ export async function fetchMasterDataList(
             rows = await listSellableItems(query)
             break
         case "voucher-categories":
-            rows = await listVoucherCategories(query)
+            rows = await listVoucherCategories(query, extraAccess)
             break
         case "warehouses":
-            rows = await listWarehouses(query)
+            rows = await listWarehouses(query, extraAccess)
             break
         case "suppliers": {
             const listed = await listSuppliers(query)
@@ -132,24 +133,31 @@ export async function fetchMasterDataList(
 export async function fetchMasterDataCenter(
     resource: MasterDataResource,
     stableId: string,
+    extraAccess?: {
+        assets?: boolean
+        units?: boolean
+        categories?: boolean
+        brands?: boolean
+        skus?: boolean
+    },
 ): Promise<MasterDataCenterView | null> {
     switch (resource) {
         case "categories":
             return centerCategory(stableId)
         case "brands":
-            return centerBrand(stableId)
+            return centerBrand(stableId, extraAccess?.assets)
         case "unit-of-measures":
             return centerUnitOfMeasure(stableId)
         case "products":
-            return centerProduct(stableId)
+            return centerProduct(stableId, extraAccess)
         case "sellable-items":
             return centerSellable(stableId)
         case "voucher-categories":
-            return centerVoucher(stableId)
+            return centerVoucher(stableId, extraAccess?.skus)
         case "warehouses":
             return centerWarehouse(stableId)
         case "suppliers":
-            return centerSupplier(stableId)
+            return centerSupplier(stableId, extraAccess?.assets)
         default:
             return null
     }

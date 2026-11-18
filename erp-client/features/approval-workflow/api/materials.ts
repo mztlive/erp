@@ -1,5 +1,5 @@
 import type { SalesLinePrices } from "@/lib/sales-line-prices"
-import { apiGet, apiGetBlob } from "@/lib/api"
+import { apiGet, apiGetBlob, apiPost } from "@/lib/api"
 import { downloadBlob } from "@/lib/download-blob"
 
 /** 仅提交时冻结的展示与文件白名单；关联对象标识不构成读取入口。 */
@@ -173,6 +173,57 @@ export type MaterialReference = Readonly<{
     businessObjectId: string
     subjectVersion: string
 }>
+
+export type ApprovalListMaterialReference = MaterialReference & {
+    instanceId: string
+}
+
+export type ApprovalListMaterial = {
+    document_no: string
+    document_type: string
+    document_id: string
+    subject_version: number
+    counterparty_label: string | null
+    impact_summary: string | null
+    source: ApprovalMaterials["display"]["source"]
+    source_sales: Array<{ document_id: string; document_no: string }>
+}
+
+type ApprovalListMaterialResult =
+    | { status: "available"; materials: ApprovalListMaterial }
+    | { status: "unavailable" | "reference_mismatch" | "failed" }
+
+/** 批量读取本页审批引用的冻结摘要，返回顺序与引用一致。 */
+export async function fetchApprovalListMaterials(
+    references: readonly ApprovalListMaterialReference[],
+    signal?: AbortSignal,
+): Promise<ApprovalListMaterialResult[]> {
+    const results = await apiPost<ApprovalListMaterialResult[]>(
+        "/admin/approval-instances/materials/batch",
+        {
+            references: references.map((reference) => ({
+                instance_id: reference.instanceId,
+                document_type: reference.businessObjectType,
+                document_id: reference.businessObjectId,
+                subject_version: reference.subjectVersion,
+            })),
+        },
+        { signal, cache: "no-store" },
+    )
+    if (results.length !== references.length)
+        throw new Error("审批资料返回不完整，请重试")
+
+    return results.map((result, index) => {
+        if (result.status !== "available") return result
+        const reference = references[index]
+        const materials = result.materials
+        return materials.document_type === reference.businessObjectType &&
+            materials.document_id === reference.businessObjectId &&
+            String(materials.subject_version) === reference.subjectVersion
+            ? result
+            : { status: "reference_mismatch" }
+    })
+}
 
 /** 独立授权的冻结材料必须匹配任务绑定的单据及提交版本。 */
 export async function fetchApprovalMaterials(

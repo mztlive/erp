@@ -1,5 +1,7 @@
 "use client"
 
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
+
 import { useRef } from "react"
 import { BanIcon, PencilIcon } from "lucide-react"
 import { BusinessStatusBadge } from "@/components/business"
@@ -98,23 +100,25 @@ export function BrandPreviewDialog({
                             </p>
                         ) : null}
                         <DialogFooter className="flex-row flex-wrap items-center justify-between gap-3 border-t bg-surface-sunken/40 px-6 py-4 sm:justify-between">
-                            <DisabledActionHint message={disableReason}>
-                                <Button
-                                    id={`${prefix}-disable`}
-                                    variant="ghost"
-                                    size="sm"
-                                    className="text-muted-foreground"
-                                    disabled={!canDisable}
-                                    title={disableReason}
-                                    onClick={() => onDisable(row)}
-                                >
-                                    <BanIcon
-                                        data-icon="inline-start"
-                                        aria-hidden
-                                    />
-                                    停用品牌
-                                </Button>
-                            </DisabledActionHint>
+                            <PermissionGuard permission="product_brand:update">
+                                <DisabledActionHint message={disableReason}>
+                                    <Button
+                                        id={`${prefix}-disable`}
+                                        variant="ghost"
+                                        size="sm"
+                                        className="text-muted-foreground"
+                                        disabled={!canDisable}
+                                        title={disableReason}
+                                        onClick={() => onDisable(row)}
+                                    >
+                                        <BanIcon
+                                            data-icon="inline-start"
+                                            aria-hidden
+                                        />
+                                        停用品牌
+                                    </Button>
+                                </DisabledActionHint>
+                            </PermissionGuard>
                             <div className="ml-auto flex items-center gap-2">
                                 <Button
                                     id={`${prefix}-cancel`}
@@ -124,21 +128,23 @@ export function BrandPreviewDialog({
                                 >
                                     关闭
                                 </Button>
-                                <DisabledActionHint message={reviseReason}>
-                                    <Button
-                                        id={`${prefix}-revise`}
-                                        size="sm"
-                                        disabled={!canRevise}
-                                        title={reviseReason}
-                                        onClick={() => onRevise(row)}
-                                    >
-                                        <PencilIcon
-                                            data-icon="inline-start"
-                                            aria-hidden
-                                        />
-                                        编辑品牌
-                                    </Button>
-                                </DisabledActionHint>
+                                <PermissionGuard permission="product_brand:update">
+                                    <DisabledActionHint message={reviseReason}>
+                                        <Button
+                                            id={`${prefix}-revise`}
+                                            size="sm"
+                                            disabled={!canRevise}
+                                            title={reviseReason}
+                                            onClick={() => onRevise(row)}
+                                        >
+                                            <PencilIcon
+                                                data-icon="inline-start"
+                                                aria-hidden
+                                            />
+                                            编辑品牌
+                                        </Button>
+                                    </DisabledActionHint>
+                                </PermissionGuard>
                             </div>
                         </DialogFooter>
                     </>

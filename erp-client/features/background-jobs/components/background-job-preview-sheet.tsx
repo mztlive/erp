@@ -30,6 +30,8 @@ import { canCancelJob } from "../labels"
 
 type BackgroundJobPreviewSheetProps = {
     previewId: string | null
+    canCancel: boolean
+    canReadItems: boolean
     currentUserId: string | undefined
     identityError: unknown
     onRetryIdentity: () => void
@@ -45,6 +47,8 @@ type BackgroundJobPreviewSheetProps = {
 /** 任务预览保持受控，查询订阅与焦点恢复由工作台负责。 */
 export function BackgroundJobPreviewSheet({
     previewId,
+    canCancel,
+    canReadItems,
     currentUserId,
     identityError,
     onRetryIdentity,
@@ -56,7 +60,8 @@ export function BackgroundJobPreviewSheet({
     onClose,
     onCancel,
 }: BackgroundJobPreviewSheetProps) {
-    const previewJob = detailQuery.isError ? null : (detailQuery.data ?? null)
+    const previewJob =
+        !previewId || detailQuery.isError ? null : (detailQuery.data ?? null)
     const identity = previewJob ? backgroundJobIdentity(previewJob) : null
     return (
         <QuickPreviewSheet
@@ -109,7 +114,7 @@ export function BackgroundJobPreviewSheet({
                         >
                             关闭
                         </Button>
-                        {previewJob && canCancelJob(previewJob) ? (
+                        {canCancel && previewJob && canCancelJob(previewJob) ? (
                             <Button
                                 id={`${ID_PREFIX}-preview-cancel`}
                                 type="button"
@@ -176,7 +181,8 @@ export function BackgroundJobPreviewSheet({
                             {previewJob.error_summary}
                         </p>
                     )}
-                    {previewJob.domain_job_type === "DATA_TRANSFER" &&
+                    {canCancel &&
+                        previewJob.domain_job_type === "DATA_TRANSFER" &&
                         previewJob.job_type === "import" &&
                         isJobActive(
                             previewJob.status,
@@ -223,15 +229,16 @@ export function BackgroundJobPreviewSheet({
                             </DescriptionItem>
                         </DescriptionList>
                     </section>
-                    {previewJob.domain_job_type !== "DATA_TRANSFER" && (
-                        <BackgroundJobItemResults
-                            previewJob={previewJob}
-                            currentUserId={currentUserId}
-                            itemsPage={itemsPage}
-                            onPageChange={onItemsPageChange}
-                            itemsQuery={itemsQuery}
-                        />
-                    )}
+                    {canReadItems &&
+                        previewJob.domain_job_type !== "DATA_TRANSFER" && (
+                            <BackgroundJobItemResults
+                                previewJob={previewJob}
+                                currentUserId={currentUserId}
+                                itemsPage={itemsPage}
+                                onPageChange={onItemsPageChange}
+                                itemsQuery={itemsQuery}
+                            />
+                        )}
                 </div>
             ) : detailQuery.isError ? (
                 <BusinessFailureState

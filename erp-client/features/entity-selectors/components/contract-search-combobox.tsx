@@ -54,6 +54,7 @@ export function ContractSearchCombobox({
     )
     const {
         rows,
+        denied,
         onRefresh,
         loading,
         emptyLabel: resolvedEmptyLabel,
@@ -67,6 +68,8 @@ export function ContractSearchCombobox({
         fallbackError: "合同加载失败，请重试",
         extraLoading: !scopeReady,
     })
+    if (denied) return null
+
     return (
         <div className="min-w-0">
             <ContractCombobox

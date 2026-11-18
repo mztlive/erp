@@ -31,11 +31,13 @@ import { canAdoptSource, SourceValueComparison } from "./product-source-values"
 
 function SourceDifference({
     difference,
+    canResolve,
     disabled,
     pending,
     onResolve,
 }: {
     difference: ProductSourceDifference
+    canResolve: boolean
     disabled: boolean
     pending: boolean
     onResolve: (decisions: readonly ProductSourceDecision[]) => Promise<boolean>
@@ -63,73 +65,75 @@ function SourceDifference({
                 supplier={difference.supplier}
                 idPrefix={prefix}
             />
-            {adoptBlocked ? (
+            {canResolve && adoptBlocked ? (
                 <p className="text-sm text-warning-soft-foreground">
                     {difference.application_blocker ??
                         "供应商图片或资料尚待核验，暂不能采用。可以保留公司版本，完成核验后再处理更新。"}
                 </p>
             ) : null}
-            {editing ? (
-                <SourceFieldEdit
-                    key={prefix}
-                    prefix={prefix}
-                    difference={difference}
-                    disabled={disabled || pending}
-                    onCancel={() => setEditing(false)}
-                    onConfirm={async (decision) => {
-                        if (await onResolve([decision])) setEditing(false)
-                    }}
-                />
-            ) : (
-                <div className="flex flex-wrap justify-end gap-2">
-                    <Button
-                        id={`${prefix}-edit`}
-                        type="button"
-                        variant="ghost"
+            {canResolve ? (
+                editing ? (
+                    <SourceFieldEdit
+                        key={prefix}
+                        prefix={prefix}
+                        difference={difference}
                         disabled={disabled || pending}
-                        onClick={() => setEditing(true)}
-                    >
-                        编辑后确认
-                    </Button>
-                    <Button
-                        id={`${prefix}-keep`}
-                        type="button"
-                        variant="outline"
-                        disabled={disabled || pending}
-                        onClick={() =>
-                            void onResolve([
-                                {
-                                    field: difference.field,
-                                    ...(difference.sku_id
-                                        ? { sku_id: difference.sku_id }
-                                        : {}),
-                                    action: "KEEP",
-                                },
-                            ])
-                        }
-                    >
-                        保留公司版本
-                    </Button>
-                    <Button
-                        id={`${prefix}-adopt`}
-                        type="button"
-                        disabled={disabled || pending || adoptBlocked}
-                        onClick={() =>
-                            void onResolve([
-                                {
-                                    field: difference.field,
-                                    ...(difference.sku_id
-                                        ? { sku_id: difference.sku_id }
-                                        : {}),
-                                    action: "ADOPT",
-                                },
-                            ])
-                        }
-                    >
-                        采用供应商版本
-                    </Button>
-                </div>
-            )}
+                        onCancel={() => setEditing(false)}
+                        onConfirm={async (decision) => {
+                            if (await onResolve([decision])) setEditing(false)
+                        }}
+                    />
+                ) : (
+                    <div className="flex flex-wrap justify-end gap-2">
+                        <Button
+                            id={`${prefix}-edit`}
+                            type="button"
+                            variant="ghost"
+                            disabled={disabled || pending}
+                            onClick={() => setEditing(true)}
+                        >
+                            编辑后确认
+                        </Button>
+                        <Button
+                            id={`${prefix}-keep`}
+                            type="button"
+                            variant="outline"
+                            disabled={disabled || pending}
+                            onClick={() =>
+                                void onResolve([
+                                    {
+                                        field: difference.field,
+                                        ...(difference.sku_id
+                                            ? { sku_id: difference.sku_id }
+                                            : {}),
+                                        action: "KEEP",
+                                    },
+                                ])
+                            }
+                        >
+                            保留公司版本
+                        </Button>
+                        <Button
+                            id={`${prefix}-adopt`}
+                            type="button"
+                            disabled={disabled || pending || adoptBlocked}
+                            onClick={() =>
+                                void onResolve([
+                                    {
+                                        field: difference.field,
+                                        ...(difference.sku_id
+                                            ? { sku_id: difference.sku_id }
+                                            : {}),
+                                        action: "ADOPT",
+                                    },
+                                ])
+                            }
+                        >
+                            采用供应商版本
+                        </Button>
+                    </div>
+                )
+            ) : null}
         </section>
     )
 }
@@ -138,6 +142,7 @@ export function ProductSourceDiff({
     productId,
     enabled,
     canRevise,
+    canResolve,
     dirty,
     busy,
     openRequested = false,
@@ -146,6 +151,7 @@ export function ProductSourceDiff({
     productId: string
     enabled: boolean
     canRevise: boolean
+    canResolve: boolean
     dirty: boolean
     busy: boolean
     openRequested?: boolean
@@ -161,7 +167,12 @@ export function ProductSourceDiff({
     )
     const view = query.data
     const disabled =
-        !canRevise || dirty || busy || needsRefresh || query.isFetching
+        !canResolve ||
+        !canRevise ||
+        dirty ||
+        busy ||
+        needsRefresh ||
+        query.isFetching
     const refresh = async () => {
         const result = await query.refetch()
         if (result.isSuccess) {
@@ -295,7 +306,7 @@ export function ProductSourceDiff({
                                 onRetry={() => void refresh()}
                             />
                         ) : null}
-                        {dirty ? (
+                        {canResolve && dirty ? (
                             <Alert variant="warning">
                                 <AlertTitle>请先保存或取消本页修改</AlertTitle>
                                 <AlertDescription>
@@ -303,7 +314,7 @@ export function ProductSourceDiff({
                                 </AlertDescription>
                             </Alert>
                         ) : null}
-                        {!canRevise ? (
+                        {!canResolve ? (
                             <Alert>
                                 <AlertDescription>
                                     当前账号仅可查看，确认更新需要商品维护权限。
@@ -333,6 +344,7 @@ export function ProductSourceDiff({
                             <SourceDifference
                                 key={`${view.product_version}-${view.source_version}-${difference.field}-${difference.sku_id ?? "product"}`}
                                 difference={difference}
+                                canResolve={canResolve}
                                 disabled={disabled}
                                 pending={mutation.isPending}
                                 onResolve={resolve}
@@ -359,7 +371,7 @@ export function ProductSourceDiff({
                         >
                             关闭
                         </Button>
-                        {view?.pending_count ? (
+                        {canResolve && view?.pending_count ? (
                             <>
                                 <Button
                                     id="product-source-diff-keep-all"

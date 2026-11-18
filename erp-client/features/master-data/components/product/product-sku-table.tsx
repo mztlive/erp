@@ -37,12 +37,13 @@ type SkuRowProps = {
     sku: ProductSkuFields
     index: number
     canRevise: boolean
+    canEditLifecycle: boolean
     name: string
     fields: ProductFields
     activeSpecs: readonly ProductSpecDimension[]
     updateSku: (index: number, patch: Partial<ProductSkuFields>) => void
     rememberSkuFile: (previewUrl: string, file: File) => void
-    onOpenInventory: (
+    onOpenInventory?: (
         skuId: string | undefined,
         trigger: HTMLButtonElement,
     ) => void
@@ -52,6 +53,7 @@ function SkuRow({
     sku,
     index,
     canRevise,
+    canEditLifecycle,
     name,
     fields,
     activeSpecs,
@@ -243,46 +245,54 @@ function SkuRow({
                                 : "已下架"}
                         </Badge>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <Switch
-                            id={`master-data-product-sku-${skuSegment}-enable`}
-                            size="sm"
-                            disabled={!canRevise}
-                            checked={sku.lifecycleStatus === "ENABLED"}
-                            onCheckedChange={(checked) => {
-                                if (!checked) {
-                                    disableConfirmation.confirm({
-                                        title: "停用 SKU",
-                                        description:
-                                            "保存商品后，新的业务单据将选不到此 SKU，历史单据不受影响。",
-                                        details: [
-                                            skuName,
-                                            `${sku.skuNo || "新 SKU"} · ${specText}`,
-                                        ],
-                                        confirmLabel: "停用 SKU",
-                                        destructive: true,
-                                        onConfirm: () =>
-                                            updateSku(index, {
-                                                lifecycleStatus: "DISABLED",
-                                            }),
-                                    })
-                                } else
-                                    updateSku(index, {
-                                        lifecycleStatus: "ENABLED",
-                                    })
-                            }}
-                            aria-label={`${skuName} SKU 启用`}
-                        />
-                        <Label
-                            htmlFor={`master-data-product-sku-${skuSegment}-enable`}
-                            className="whitespace-nowrap text-xs font-normal text-muted-foreground"
-                        >
+                    {canEditLifecycle ? (
+                        <div className="flex items-center gap-2">
+                            <Switch
+                                id={`master-data-product-sku-${skuSegment}-enable`}
+                                size="sm"
+                                disabled={!canRevise}
+                                checked={sku.lifecycleStatus === "ENABLED"}
+                                onCheckedChange={(checked) => {
+                                    if (!checked) {
+                                        disableConfirmation.confirm({
+                                            title: "停用 SKU",
+                                            description:
+                                                "保存商品后，新的业务单据将选不到此 SKU，历史单据不受影响。",
+                                            details: [
+                                                skuName,
+                                                `${sku.skuNo || "新 SKU"} · ${specText}`,
+                                            ],
+                                            confirmLabel: "停用 SKU",
+                                            destructive: true,
+                                            onConfirm: () =>
+                                                updateSku(index, {
+                                                    lifecycleStatus: "DISABLED",
+                                                }),
+                                        })
+                                    } else
+                                        updateSku(index, {
+                                            lifecycleStatus: "ENABLED",
+                                        })
+                                }}
+                                aria-label={`${skuName} SKU 启用`}
+                            />
+                            <Label
+                                htmlFor={`master-data-product-sku-${skuSegment}-enable`}
+                                className="whitespace-nowrap text-xs font-normal text-muted-foreground"
+                            >
+                                {sku.lifecycleStatus === "ENABLED"
+                                    ? "SKU 已启用"
+                                    : "SKU 已停用"}
+                            </Label>
+                        </div>
+                    ) : (
+                        <span className="text-xs text-muted-foreground">
                             {sku.lifecycleStatus === "ENABLED"
                                 ? "SKU 已启用"
                                 : "SKU 已停用"}
-                        </Label>
-                    </div>
-                    {fields.productKind === "PHYSICAL" ? (
+                        </span>
+                    )}
+                    {fields.productKind === "PHYSICAL" && onOpenInventory ? (
                         sku.skuId ? (
                             <Button
                                 id={`master-data-product-sku-${skuSegment}-inventory`}
@@ -316,10 +326,11 @@ type ProductSkuTableProps = {
     fields: ProductFields
     activeSpecs: readonly ProductSpecDimension[]
     canRevise: boolean
+    canEditLifecycle: boolean
     name: string
     updateSku: (index: number, patch: Partial<ProductSkuFields>) => void
     rememberSkuFile: (previewUrl: string, file: File) => void
-    onOpenInventory: (
+    onOpenInventory?: (
         skuId: string | undefined,
         trigger: HTMLButtonElement,
     ) => void
@@ -329,6 +340,7 @@ function ProductSkuTable({
     fields,
     activeSpecs,
     canRevise,
+    canEditLifecycle,
     name,
     updateSku,
     rememberSkuFile,
@@ -406,6 +418,7 @@ function ProductSkuTable({
                             sku={sku}
                             index={index}
                             canRevise={canRevise}
+                            canEditLifecycle={canEditLifecycle}
                             name={name}
                             fields={fields}
                             activeSpecs={activeSpecs}

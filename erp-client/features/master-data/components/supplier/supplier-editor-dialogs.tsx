@@ -1,5 +1,7 @@
 "use client"
 
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
+
 import { useRouter } from "@/lib/navigation"
 
 import { DiscardConfirmDialog } from "@/components/business"
@@ -47,29 +49,35 @@ export function SupplierEditorDialogs({
     return (
         <>
             {!isCreate && data ? (
-                <SupplierDisableDialog
-                    open={disableOpen}
-                    onOpenChange={setDisableOpen}
-                    target={data}
-                />
+                <PermissionGuard permission="supplier:delete">
+                    <SupplierDisableDialog
+                        open={disableOpen}
+                        onOpenChange={setDisableOpen}
+                        target={data}
+                    />
+                </PermissionGuard>
             ) : null}
 
-            <SupplierSaveReasonDialog
-                open={saveReasonOpen}
-                onOpenChange={(open) => {
-                    setSaveReasonOpen(open)
-                    if (!open) setReasonError(null)
-                }}
-                isCreate={isCreate}
-                reason={reasonDraft}
-                onReasonChange={(reason) => {
-                    setReasonDraft(reason)
-                    if (reasonError) setReasonError(null)
-                }}
-                reasonError={reasonError}
-                pending={pending}
-                onConfirm={onConfirm}
-            />
+            <PermissionGuard
+                permission={isCreate ? "supplier:create" : "supplier:update"}
+            >
+                <SupplierSaveReasonDialog
+                    open={saveReasonOpen}
+                    onOpenChange={(open) => {
+                        setSaveReasonOpen(open)
+                        if (!open) setReasonError(null)
+                    }}
+                    isCreate={isCreate}
+                    reason={reasonDraft}
+                    onReasonChange={(reason) => {
+                        setReasonDraft(reason)
+                        if (reasonError) setReasonError(null)
+                    }}
+                    reasonError={reasonError}
+                    pending={pending}
+                    onConfirm={onConfirm}
+                />
+            </PermissionGuard>
 
             <DiscardConfirmDialog
                 open={discardOpen}

@@ -29,18 +29,20 @@ const adminKeys = {
 }
 
 /** 全部管理员账号（角色页用于统计绑定账号、账号页用于列表）。 */
-export function useAdminsQuery() {
+export function useAdminsQuery(enabled = true) {
     return useQuery({
         queryKey: adminKeys.admins(),
         queryFn: fetchAdmins,
+        enabled,
     })
 }
 
 /** 全部角色列表（账号页用于展示角色名、角色页用于列表）。 */
-export function useRolesQuery() {
+export function useRolesQuery(enabled = true) {
     return useQuery({
         queryKey: adminKeys.roles(),
         queryFn: fetchRoles,
+        enabled,
     })
 }
 

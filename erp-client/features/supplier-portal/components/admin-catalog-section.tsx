@@ -111,6 +111,8 @@ export function SupplierCatalogSection({ supplierId }: { supplierId: string }) {
             })
         },
     })
+    const canUpdate = access.can("supplier_portal_catalog:update")
+    const canAdd = canUpdate && access.can("sku:list")
     const columns = useMemo<ColumnDef<PortalGrant>[]>(
         () => [
             {
@@ -125,40 +127,45 @@ export function SupplierCatalogSection({ supplierId }: { supplierId: string }) {
                 header: "报价资格",
                 cell: ({ row }) => (row.original.active ? "已开放" : "已撤销"),
             },
-            {
-                id: "actions",
-                header: "操作",
-                enableHiding: false,
-                cell: ({ row }) => (
-                    <Button
-                        id={`supplier-portal-grant-change-${toAutomationIdSegment(row.original.id)}`}
-                        variant="outline"
-                        size="sm"
-                        disabled={
-                            !access.can("supplier_portal_catalog:update") ||
-                            mutation.isPending ||
-                            !!intent.current
-                        }
-                        onClick={() =>
-                            void change({
-                                supplier_id: row.original.supplier_id,
-                                sku_id: row.original.sku_id,
-                                active: !row.original.active,
-                                expected_version: row.original.version,
-                            })
-                        }
-                    >
-                        {row.original.active ? "撤销开放" : "重新开放"}
-                    </Button>
-                ),
-            },
+            ...(canUpdate
+                ? [
+                      {
+                          id: "actions",
+                          header: "操作",
+                          enableHiding: false,
+                          cell: ({ row }) => (
+                              <Button
+                                  id={`supplier-portal-grant-change-${toAutomationIdSegment(row.original.id)}`}
+                                  variant="outline"
+                                  size="sm"
+                                  disabled={
+                                      mutation.isPending || !!intent.current
+                                  }
+                                  onClick={() =>
+                                      void change({
+                                          supplier_id: row.original.supplier_id,
+                                          sku_id: row.original.sku_id,
+                                          active: !row.original.active,
+                                          expected_version:
+                                              row.original.version,
+                                      })
+                                  }
+                              >
+                                  {row.original.active
+                                      ? "撤销开放"
+                                      : "重新开放"}
+                              </Button>
+                          ),
+                      } satisfies ColumnDef<PortalGrant>,
+                  ]
+                : []),
         ],
-        [access, mutation.isPending, change],
+        [canUpdate, mutation.isPending, change],
     )
     const feedback = (
         <>
             <PortalError error={error} />
-            {intent.current && failure === "unknown" && (
+            {canUpdate && intent.current && failure === "unknown" && (
                 <Button
                     id="supplier-portal-grant-retry-original"
                     type="button"
@@ -176,7 +183,7 @@ export function SupplierCatalogSection({ supplierId }: { supplierId: string }) {
                     配置结果尚未确认，请保留原内容并重试原目录配置。
                 </p>
             )}
-            {failure === "conflict" && (
+            {canUpdate && failure === "conflict" && (
                 <PortalAdminCommandConflict
                     idPrefix="supplier-portal-grant-conflict"
                     onReload={async () => {
@@ -215,7 +222,7 @@ export function SupplierCatalogSection({ supplierId }: { supplierId: string }) {
                     }}
                 />
             )}
-            {reviewedBody && (
+            {canUpdate && reviewedBody && (
                 <div className="space-y-2 rounded-lg border p-4">
                     <p className="text-sm">
                         已核对最新目录，原填写的目标仍为
@@ -252,21 +259,20 @@ export function SupplierCatalogSection({ supplierId }: { supplierId: string }) {
                         选择允许当前供应商报价的公司规格，开放报价不改变商品上架状态。
                     </p>
                 </div>
-                {access.can("supplier_portal_catalog:update") &&
-                    access.can("sku:list") && (
-                        <Button
-                            id="supplier-portal-grant-create"
-                            type="button"
-                            disabled={locked}
-                            onClick={() => {
-                                form.reset()
-                                setCreating(true)
-                            }}
-                        >
-                            <PlusIcon data-icon="inline-start" aria-hidden />
-                            开放 SKU
-                        </Button>
-                    )}
+                {canAdd && (
+                    <Button
+                        id="supplier-portal-grant-create"
+                        type="button"
+                        disabled={locked}
+                        onClick={() => {
+                            form.reset()
+                            setCreating(true)
+                        }}
+                    >
+                        <PlusIcon data-icon="inline-start" aria-hidden />
+                        开放 SKU
+                    </Button>
+                )}
             </div>
             {!creating && feedback}
             {query.isSuccess && query.data.total === 0 ? (
@@ -313,104 +319,94 @@ export function SupplierCatalogSection({ supplierId }: { supplierId: string }) {
                     }
                 />
             )}
-            {access.can("supplier_portal_catalog:update") &&
-                !access.can("sku:list") && (
-                    <p className="text-sm text-muted-foreground">
-                        需公司SKU列表查看权限才能选择并开放新规格；现有配置按已有资格维护。
-                    </p>
-                )}
-            {access.can("supplier_portal_catalog:update") &&
-                access.can("sku:list") && (
-                    <Dialog
-                        open={creating}
-                        onOpenChange={(open) => {
-                            if (!open && !locked) setCreating(false)
-                        }}
+            {canAdd && (
+                <Dialog
+                    open={creating}
+                    onOpenChange={(open) => {
+                        if (!open && !locked) setCreating(false)
+                    }}
+                >
+                    <DialogContent
+                        closeButtonId="supplier-portal-grant-create-close"
+                        showCloseButton={!locked}
+                        className="max-h-[85svh] overflow-y-auto sm:max-w-lg"
                     >
-                        <DialogContent
-                            closeButtonId="supplier-portal-grant-create-close"
-                            showCloseButton={!locked}
-                            className="max-h-[85svh] overflow-y-auto sm:max-w-lg"
+                        <DialogHeader>
+                            <DialogTitle>开放 SKU 报价</DialogTitle>
+                            <DialogDescription>
+                                选择当前供应商可报价的精确公司
+                                SKU，包含未上架规格。
+                            </DialogDescription>
+                        </DialogHeader>
+                        {feedback}
+                        <form
+                            className="space-y-5"
+                            onSubmit={(event) => {
+                                event.preventDefault()
+                                void form.handleSubmit()
+                            }}
                         >
-                            <DialogHeader>
-                                <DialogTitle>开放 SKU 报价</DialogTitle>
-                                <DialogDescription>
-                                    选择当前供应商可报价的精确公司
-                                    SKU，包含未上架规格。
-                                </DialogDescription>
-                            </DialogHeader>
-                            {feedback}
-                            <form
-                                className="space-y-5"
-                                onSubmit={(event) => {
-                                    event.preventDefault()
-                                    void form.handleSubmit()
-                                }}
-                            >
-                                <form.AppField name="skuId">
-                                    {(field) => (
-                                        <div className="space-y-2">
-                                            <label
-                                                className="text-sm"
-                                                htmlFor="supplier-portal-grant-sku"
-                                            >
-                                                精确公司SKU
-                                            </label>
-                                            <CompanySkuSearchCombobox
-                                                id="supplier-portal-grant-sku"
-                                                label="精确公司SKU"
-                                                value={
-                                                    field.state.value ||
-                                                    undefined
-                                                }
-                                                onValueChange={(value) =>
-                                                    field.handleChange(
-                                                        value ?? "",
-                                                    )
-                                                }
-                                                disabled={
-                                                    mutation.isPending ||
-                                                    !!intent.current
-                                                }
-                                                allowClear={false}
-                                            />
-                                            <FieldError
-                                                errors={toFieldErrors(
-                                                    field.state.meta.errors,
-                                                )}
-                                            />
-                                        </div>
-                                    )}
-                                </form.AppField>
-                                <DialogFooter>
-                                    <Button
-                                        id="supplier-portal-grant-create-cancel"
-                                        type="button"
-                                        variant="outline"
-                                        disabled={locked}
-                                        onClick={() => setCreating(false)}
-                                    >
-                                        取消
-                                    </Button>
-                                    <form.AppForm>
-                                        <form.SubmitButton
-                                            id="supplier-portal-grant-save"
-                                            label={
-                                                intent.current
-                                                    ? "重试原配置"
-                                                    : "开放此SKU报价"
+                            <form.AppField name="skuId">
+                                {(field) => (
+                                    <div className="space-y-2">
+                                        <label
+                                            className="text-sm"
+                                            htmlFor="supplier-portal-grant-sku"
+                                        >
+                                            精确公司SKU
+                                        </label>
+                                        <CompanySkuSearchCombobox
+                                            id="supplier-portal-grant-sku"
+                                            label="精确公司SKU"
+                                            value={
+                                                field.state.value || undefined
+                                            }
+                                            onValueChange={(value) =>
+                                                field.handleChange(value ?? "")
                                             }
                                             disabled={
                                                 mutation.isPending ||
-                                                failure === "conflict"
+                                                !!intent.current
                                             }
+                                            allowClear={false}
                                         />
-                                    </form.AppForm>
-                                </DialogFooter>
-                            </form>
-                        </DialogContent>
-                    </Dialog>
-                )}
+                                        <FieldError
+                                            errors={toFieldErrors(
+                                                field.state.meta.errors,
+                                            )}
+                                        />
+                                    </div>
+                                )}
+                            </form.AppField>
+                            <DialogFooter>
+                                <Button
+                                    id="supplier-portal-grant-create-cancel"
+                                    type="button"
+                                    variant="outline"
+                                    disabled={locked}
+                                    onClick={() => setCreating(false)}
+                                >
+                                    取消
+                                </Button>
+                                <form.AppForm>
+                                    <form.SubmitButton
+                                        id="supplier-portal-grant-save"
+                                        label={
+                                            intent.current
+                                                ? "重试原配置"
+                                                : "开放此SKU报价"
+                                        }
+                                        disabled={
+                                            mutation.isPending ||
+                                            failure === "conflict"
+                                        }
+                                    />
+                                </form.AppForm>
+                            </DialogFooter>
+                        </form>
+                    </DialogContent>
+                </Dialog>
+            )}
         </section>
     )
 }

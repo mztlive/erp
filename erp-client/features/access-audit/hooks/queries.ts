@@ -24,10 +24,15 @@ const accessAuditKeys = {
         [...accessAuditKeys.all, "event", eventId] as const,
 }
 
-export function useAccessListQuery(query: AccessListQuery) {
+export function useAccessListQuery(
+    query: AccessListQuery,
+    includeAccounts: boolean,
+    enabled = true,
+) {
     return useQuery({
-        queryKey: accessAuditKeys.list(query),
-        queryFn: () => fetchAccessList(query),
+        queryKey: [...accessAuditKeys.list(query), includeAccounts],
+        queryFn: () => fetchAccessList(query, includeAccounts),
+        enabled,
     })
 }
 

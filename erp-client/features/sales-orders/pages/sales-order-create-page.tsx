@@ -1,6 +1,8 @@
 "use client"
 
 import Link from "next/link"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 import { InquirySalesOrderCreate } from "../components/inquiry-sales-order-create"
 import { useSelectionOrderBasis } from "@/features/sales-orders/hooks/use-selection-order-basis"
 
@@ -39,10 +41,41 @@ export function SalesOrderCreatePage({
     /** 从草稿详情页"继续编辑"进入时携带；为空则是全新建单。 */
     initialSalesOrderId?: string
 }) {
-    const basisQuery = useSelectionOrderBasis(
-        initialSalesOrderId ? "" : initialSelectionProposalId,
+    const account = useAccountProfileQuery()
+    const canEdit = hasPermission(
+        account.data?.permissions,
+        initialSalesOrderId ? "sales_order:update" : "sales_order:create",
     )
-    const resumeQuery = useSalesOrderDraftResumeQuery(initialSalesOrderId)
+    const basisQuery = useSelectionOrderBasis(
+        canEdit && !initialSalesOrderId ? initialSelectionProposalId : "",
+    )
+    const resumeQuery = useSalesOrderDraftResumeQuery(
+        canEdit ? initialSalesOrderId : "",
+    )
+
+    if (account.isPending || account.isError || !canEdit) {
+        const title = initialSalesOrderId ? "继续编辑草稿" : "新建销售单"
+        return (
+            <PageScaffold>
+                <PageHeader title={title} />
+                {account.isPending ? (
+                    <p role="status" className="text-sm text-muted-foreground">
+                        正在核对权限…
+                    </p>
+                ) : account.isError ? (
+                    <BusinessFailureState
+                        error={account.error}
+                        onRetry={() => void account.refetch()}
+                    />
+                ) : (
+                    <BusinessFailureState
+                        kind="permission"
+                        description="当前账号不能执行此操作。"
+                    />
+                )}
+            </PageScaffold>
+        )
+    }
 
     if (initialSalesOrderId) {
         if (resumeQuery.isPending) {

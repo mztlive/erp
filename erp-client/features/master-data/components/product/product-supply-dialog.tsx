@@ -1,5 +1,7 @@
 "use client"
 
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
+
 import * as React from "react"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { PlusIcon } from "lucide-react"
@@ -163,19 +165,21 @@ export function ProductSupplyDialog({
                                                 )}
                                             </p>
                                         </div>
-                                        <Button
-                                            id={`master-data-product-supply-${toAutomationIdSegment(sku.skuId)}-add`}
-                                            type="button"
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={() => onAddSupply(sku)}
-                                        >
-                                            <PlusIcon
-                                                data-icon="inline-start"
-                                                aria-hidden
-                                            />
-                                            添加供给
-                                        </Button>
+                                        <PermissionGuard permission="supplier_offering:create">
+                                            <Button
+                                                id={`master-data-product-supply-${toAutomationIdSegment(sku.skuId)}-add`}
+                                                type="button"
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => onAddSupply(sku)}
+                                            >
+                                                <PlusIcon
+                                                    data-icon="inline-start"
+                                                    aria-hidden
+                                                />
+                                                添加供给
+                                            </Button>
+                                        </PermissionGuard>
                                     </div>
 
                                     {offeringLoading ? (
@@ -201,12 +205,16 @@ export function ProductSupplyDialog({
                                                     <TableHead>
                                                         供应商 SKU
                                                     </TableHead>
-                                                    <TableHead>
-                                                        一件代发价
-                                                    </TableHead>
-                                                    <TableHead>
-                                                        集采价
-                                                    </TableHead>
+                                                    <PermissionGuard permission="supplier_offering_cost:detail">
+                                                        <TableHead>
+                                                            一件代发价
+                                                        </TableHead>
+                                                    </PermissionGuard>
+                                                    <PermissionGuard permission="supplier_offering_cost:detail">
+                                                        <TableHead>
+                                                            集采价
+                                                        </TableHead>
+                                                    </PermissionGuard>
                                                     <TableHead>
                                                         当前可供
                                                     </TableHead>
@@ -238,16 +246,20 @@ export function ProductSupplyDialog({
                                                                     offering.supplier_sku_code
                                                                 }
                                                             </TableCell>
-                                                            <TableCell>
-                                                                {money(
-                                                                    offering.dropship_supply_price_gross,
-                                                                )}
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                {money(
-                                                                    offering.bulk_supply_price_gross,
-                                                                )}
-                                                            </TableCell>
+                                                            <PermissionGuard permission="supplier_offering_cost:detail">
+                                                                <TableCell>
+                                                                    {money(
+                                                                        offering.dropship_supply_price_gross,
+                                                                    )}
+                                                                </TableCell>
+                                                            </PermissionGuard>
+                                                            <PermissionGuard permission="supplier_offering_cost:detail">
+                                                                <TableCell>
+                                                                    {money(
+                                                                        offering.bulk_supply_price_gross,
+                                                                    )}
+                                                                </TableCell>
+                                                            </PermissionGuard>
                                                             <TableCell>
                                                                 <Badge
                                                                     variant={

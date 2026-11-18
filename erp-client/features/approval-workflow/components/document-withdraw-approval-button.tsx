@@ -90,34 +90,30 @@ export function DocumentWithdrawApprovalButton<TCommand>({
     const pendingCommand = React.useRef<TCommand | null>(null)
     const busy = pending || checking
 
-    if (!visible) return null
+    if (!visible || !permitted) return null
 
     return (
         <>
-            {permitted ? (
-                <Button
-                    id={ids.trigger}
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={!gate.enabled}
-                    title={gate.reason}
-                    onClick={() => {
-                        pendingCommand.current = null
-                        setUncertain(false)
-                        setReason(
-                            reviseRejected
-                                ? "按驳回意见修改原单后重新提交"
-                                : "",
-                        )
-                        setConfirmError(null)
-                        setIdempotencyKey(createIdempotencyKey())
-                        setOpen(true)
-                    }}
-                >
-                    {reviseRejected ? "修改原单" : "撤回审批"}
-                </Button>
-            ) : null}
+            <Button
+                id={ids.trigger}
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={!gate.enabled}
+                title={gate.reason}
+                onClick={() => {
+                    pendingCommand.current = null
+                    setUncertain(false)
+                    setReason(
+                        reviseRejected ? "按驳回意见修改原单后重新提交" : "",
+                    )
+                    setConfirmError(null)
+                    setIdempotencyKey(createIdempotencyKey())
+                    setOpen(true)
+                }}
+            >
+                {reviseRejected ? "修改原单" : "撤回审批"}
+            </Button>
             <AlertDialog
                 open={open}
                 onOpenChange={(next) => {

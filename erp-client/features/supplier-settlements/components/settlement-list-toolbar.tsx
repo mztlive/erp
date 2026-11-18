@@ -238,17 +238,19 @@ export function SettlementListToolbar({
                             </div>
                         </fieldset>
                     </PermissionGuard>
-                    <fieldset className="min-w-0 border-t pt-4">
-                        <legend className="sr-only">业务组织</legend>
-                        <OrganizationUnitFilter
-                            id={`${prefix}-filter-org`}
-                            label="业务组织"
-                            value={orgUnitIdsDraft}
-                            onChange={setOrgUnitIdsDraft}
-                            includeDescendants={includeDescendantsDraft}
-                            onDescendantsChange={setIncludeDescendantsDraft}
-                        />
-                    </fieldset>
+                    <PermissionGuard permission="org_unit:list">
+                        <fieldset className="min-w-0 border-t pt-4">
+                            <legend className="sr-only">业务组织</legend>
+                            <OrganizationUnitFilter
+                                id={`${prefix}-filter-org`}
+                                label="业务组织"
+                                value={orgUnitIdsDraft}
+                                onChange={setOrgUnitIdsDraft}
+                                includeDescendants={includeDescendantsDraft}
+                                onDescendantsChange={setIncludeDescendantsDraft}
+                            />
+                        </fieldset>
+                    </PermissionGuard>
                     <fieldset className="min-w-0 border-t pt-4">
                         <legend className="mb-3 text-sm font-medium">
                             结算期间

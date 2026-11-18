@@ -12,12 +12,17 @@ import {
     ListWorkspaceHeader,
     listWorkspaceStyles as styles,
 } from "@/components/business/list-workspace"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { masterDataListPermission } from "@/features/master-data/lib/data"
+import type { MasterDataResource } from "@/features/master-data/types"
+import { hasPermission } from "@/lib/permissions"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import type { ListExportMeta } from "@/features/master-data/hooks/use-master-data-list-export"
 
 export function ListPageFrame({
     eyebrow = "基础资料",
     title,
+    resource,
     description,
     alerts,
     exportMeta,
@@ -29,6 +34,7 @@ export function ListPageFrame({
 }: {
     eyebrow?: string
     title: string
+    resource: MasterDataResource
     description?: React.ReactNode
     alerts?: React.ReactNode
     exportMeta?: ListExportMeta | null
@@ -38,6 +44,17 @@ export function ListPageFrame({
     loading: boolean
     children: React.ReactNode
 }) {
+    const account = useAccountProfileQuery()
+    const canExport =
+        account.isSuccess &&
+        hasPermission(
+            account.data.permissions,
+            masterDataListPermission[resource],
+        )
+    const visibleActions = canExport
+        ? actions
+        : actions.filter((action) => action.actionKey !== "export")
+
     if (loading) {
         return (
             <PageScaffold density="compact" className={styles.page}>
@@ -62,10 +79,10 @@ export function ListPageFrame({
                 title={title}
                 description={description}
             >
-                <PageActions actions={actions} size="sm" />
+                <PageActions actions={visibleActions} size="sm" />
             </ListWorkspaceHeader>
             {alerts}
-            {exportMeta ? (
+            {canExport && exportMeta ? (
                 <BackgroundJobProgress
                     mode="all-or-nothing"
                     status="succeeded"

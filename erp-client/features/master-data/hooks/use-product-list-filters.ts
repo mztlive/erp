@@ -1,6 +1,8 @@
 "use client"
 
 import * as React from "react"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 
 import { useListUrl } from "@/features/master-data/hooks/use-list-url"
 import {
@@ -41,6 +43,19 @@ export type ProductFilterKey =
 export function useProductListFilters(
     searchInputRef: React.RefObject<HTMLInputElement | null>,
 ) {
+    const account = useAccountProfileQuery()
+    const permissions = account.isSuccess ? account.data.permissions : undefined
+    const canFilterCategory = hasPermission(
+        permissions,
+        "product_category:list",
+    )
+    const canFilterBrand = hasPermission(permissions, "product_brand:list")
+    const canFilterSupplier = hasPermission(permissions, "supplier:list")
+    const canFilterOwner = hasPermission(permissions, "business_person:list")
+    const canFilterProcurementOwner = hasPermission(
+        permissions,
+        "procurement_person:list",
+    )
     const {
         searchParams,
         patchUrl,
@@ -49,19 +64,22 @@ export function useProductListFilters(
         setPagination,
         resetPagination,
         changePagination,
-    } = useListUrl()
+    } = useListUrl(
+        {
+            productCategoryId: !canFilterCategory,
+            productBrandId: !canFilterBrand,
+            productSupplierId: !canFilterSupplier,
+            ownerUserIds: !canFilterOwner,
+            procurementOwnerUserIds: !canFilterProcurementOwner,
+            orgUnitIds: true,
+            includeDescendants: true,
+        },
+        account.isSuccess,
+    )
     const { searchDraft, setSearchDraft } = useSearchDraft(q, {
         skipWhileFocused: true,
         inputRef: searchInputRef,
     })
-
-    const hasLegacyOrganizationFilter =
-        searchParams.has("orgUnitIds") || searchParams.has("includeDescendants")
-    React.useEffect(() => {
-        if (!hasLegacyOrganizationFilter) return
-        patchUrl({ orgUnitIds: null, includeDescendants: null, page: null })
-        resetPagination()
-    }, [hasLegacyOrganizationFilter, patchUrl, resetPagination])
 
     const lifecycleStatus = parseLifecycleStatus(
         searchParams.get("lifecycleStatus"),
@@ -72,12 +90,15 @@ export function useProductListFilters(
     const productKind = PRODUCT_KIND_VALUES.find(
         (value) => value === searchParams.get("productKind"),
     )
-    const productCategoryId =
-        searchParams.get("productCategoryId")?.trim() || undefined
-    const productBrandId =
-        searchParams.get("productBrandId")?.trim() || undefined
-    const productSupplierId =
-        searchParams.get("productSupplierId")?.trim() || undefined
+    const productCategoryId = canFilterCategory
+        ? searchParams.get("productCategoryId")?.trim() || undefined
+        : undefined
+    const productBrandId = canFilterBrand
+        ? searchParams.get("productBrandId")?.trim() || undefined
+        : undefined
+    const productSupplierId = canFilterSupplier
+        ? searchParams.get("productSupplierId")?.trim() || undefined
+        : undefined
     const productListingStatus = PRODUCT_LISTING_FILTER_OPTIONS.find(
         (option) => option.value === searchParams.get("productListingStatus"),
     )?.value
@@ -90,9 +111,12 @@ export function useProductListFilters(
         searchParams.get("productSalesPriceMin")?.trim() || undefined
     const productSalesPriceMax =
         searchParams.get("productSalesPriceMax")?.trim() || undefined
-    const ownerUserIds = searchParams.get("ownerUserIds")?.trim() || undefined
-    const procurementOwnerUserIds =
-        searchParams.get("procurementOwnerUserIds")?.trim() || undefined
+    const ownerUserIds = canFilterOwner
+        ? searchParams.get("ownerUserIds")?.trim() || undefined
+        : undefined
+    const procurementOwnerUserIds = canFilterProcurementOwner
+        ? searchParams.get("procurementOwnerUserIds")?.trim() || undefined
+        : undefined
     const metricKey = lifecycleStatus
     const hasStructuredProductFilters = Boolean(
         productKind ||
@@ -196,19 +220,31 @@ export function useProductListFilters(
             productSourceDiffPending: productSourceDiffPendingDraft
                 ? "true"
                 : null,
-            productCategoryId: productCategoryIdDraft,
-            productBrandId: productBrandIdDraft,
-            productSupplierId: productSupplierIdDraft,
+            productCategoryId: canFilterCategory
+                ? productCategoryIdDraft
+                : null,
+            productBrandId: canFilterBrand ? productBrandIdDraft : null,
+            productSupplierId: canFilterSupplier
+                ? productSupplierIdDraft
+                : null,
             productSalesPriceMin: minimum || null,
             productSalesPriceMax: maximum || null,
-            ownerUserIds: ownerUserIdsDraft.trim() || null,
-            procurementOwnerUserIds:
-                procurementOwnerUserIdsDraft.trim() || null,
+            ownerUserIds: canFilterOwner
+                ? ownerUserIdsDraft.trim() || null
+                : null,
+            procurementOwnerUserIds: canFilterProcurementOwner
+                ? procurementOwnerUserIdsDraft.trim() || null
+                : null,
             page: null,
         })
         resetPagination()
         setProductFilterPanelOpen(false)
     }, [
+        canFilterCategory,
+        canFilterBrand,
+        canFilterSupplier,
+        canFilterOwner,
+        canFilterProcurementOwner,
         patchUrl,
         productBrandIdDraft,
         productCategoryIdDraft,
@@ -316,13 +352,16 @@ export function useProductListFilters(
         productListingStatusDraft !== (productListingStatus ?? "all") ||
         productSupplyCoverageDraft !== (productSupplyCoverage ?? "all") ||
         productSourceDiffPendingDraft !== productSourceDiffPending ||
-        productCategoryIdDraft !== (productCategoryId ?? null) ||
-        productBrandIdDraft !== (productBrandId ?? null) ||
-        productSupplierIdDraft !== (productSupplierId ?? null) ||
+        (canFilterCategory &&
+            productCategoryIdDraft !== (productCategoryId ?? null)) ||
+        (canFilterBrand && productBrandIdDraft !== (productBrandId ?? null)) ||
+        (canFilterSupplier &&
+            productSupplierIdDraft !== (productSupplierId ?? null)) ||
         productSalesPriceMinDraft.trim() !== (productSalesPriceMin ?? "") ||
         productSalesPriceMaxDraft.trim() !== (productSalesPriceMax ?? "") ||
-        ownerUserIdsDraft !== (ownerUserIds ?? "") ||
-        procurementOwnerUserIdsDraft !== (procurementOwnerUserIds ?? "")
+        (canFilterOwner && ownerUserIdsDraft !== (ownerUserIds ?? "")) ||
+        (canFilterProcurementOwner &&
+            procurementOwnerUserIdsDraft !== (procurementOwnerUserIds ?? ""))
 
     const clearAllFilters = React.useCallback(() => {
         setSearchDraft("")
@@ -376,6 +415,11 @@ export function useProductListFilters(
         setOwnerUserIdsDraft(ownerUserIds ?? "")
         setProcurementOwnerUserIdsDraft(procurementOwnerUserIds ?? "")
     }, [
+        canFilterCategory,
+        canFilterBrand,
+        canFilterSupplier,
+        canFilterOwner,
+        canFilterProcurementOwner,
         lifecycleStatus,
         productBrandId,
         productCategoryId,
@@ -392,6 +436,11 @@ export function useProductListFilters(
     ])
 
     return {
+        canFilterCategory,
+        canFilterBrand,
+        canFilterSupplier,
+        canFilterOwner,
+        canFilterProcurementOwner,
         q,
         lifecycleStatus,
         revisionTiming,

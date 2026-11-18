@@ -1,26 +1,42 @@
-import { fetchApprovalMaterials } from "@/features/approval-workflow/api/materials"
-import {
-    fetchWorkspaceDocumentFacts,
-    type WorkspaceDocumentFacts,
-    type WorkspaceFactSection,
+import type {
+    ApprovalListMaterial,
+    ApprovalListMaterialReference,
+} from "@/features/approval-workflow/api/materials"
+import type {
+    WorkspaceDocumentFacts,
+    WorkspaceFactSection,
 } from "../lib/document-facts"
 import type { WorkspaceWorkItem } from "../types"
 
-/** 列表仅按任务给出的引用读取材料，不追加任务详情权限或使用最新版本替代。 */
-export async function fetchWorkspaceTaskMaterials(
+/** 审批类列表行读取任务绑定的冻结提交资料。 */
+export function usesApprovalListMaterials(item: WorkspaceWorkItem): boolean {
+    return [
+        "DOCUMENT_APPROVAL",
+        "APPROVAL_REWORK",
+        "APPROVAL_INSTANCE",
+    ].includes(item.workItemType)
+}
+
+/** 从列表行提取当前任务已绑定的精确审批引用。 */
+export function approvalListMaterialReference(
     item: WorkspaceWorkItem,
-): Promise<WorkspaceDocumentFacts | null> {
-    if (
-        !["DOCUMENT_APPROVAL", "APPROVAL_REWORK", "APPROVAL_INSTANCE"].includes(
-            item.workItemType,
-        )
-    )
-        return fetchWorkspaceDocumentFacts(item)
+): ApprovalListMaterialReference | undefined {
     const instanceId =
         item.approvalProcessInstanceId ?? item.approval?.instanceId
-    if (!instanceId) throw new Error("审批资料引用缺失，请刷新任务后重试")
-    const materials = await fetchApprovalMaterials(instanceId, item)
-    const source = materials.display.source
+    if (!instanceId) return undefined
+    return {
+        instanceId,
+        businessObjectType: item.businessObjectType,
+        businessObjectId: item.businessObjectId,
+        subjectVersion: item.subjectVersion,
+    }
+}
+
+/** 将审批资料摘要转成任务列表展示字段。 */
+export function workspaceApprovalListFacts(
+    materials: ApprovalListMaterial,
+): WorkspaceDocumentFacts {
+    const source = materials.source
     const sections: WorkspaceFactSection[] = source.extra_sections.map(
         (section) => ({
             label: section.label,
@@ -37,7 +53,7 @@ export async function fetchWorkspaceTaskMaterials(
         if (value && !sections.some((section) => section.label === label))
             sections.push({ label, value, numeric })
     }
-    for (const sales of materials.display.source_sales ?? []) {
+    for (const sales of materials.source_sales) {
         if (!sections.some((section) => section.objectId === sales.document_id))
             sections.push({
                 label: "来源销售单",
@@ -48,10 +64,8 @@ export async function fetchWorkspaceTaskMaterials(
     return {
         documentNumber: materials.document_no,
         counterparty:
-            materials.display.counterparty_label ??
-            source.customer ??
-            undefined,
-        impact: materials.display.impact_summary ?? "",
+            materials.counterparty_label ?? source.customer ?? undefined,
+        impact: materials.impact_summary ?? "",
         listSummary: source.list_summary,
         sections,
         lines: source.lines.map((line) => ({

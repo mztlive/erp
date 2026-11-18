@@ -101,7 +101,9 @@ function FinancialDraftEditor({
     documentId: string
     onClose: () => void
 }) {
-    const query = useFinancialDraftQuery(kind, documentId)
+    const profile = useAccountProfileQuery()
+    const permitted = hasPermission(profile.data?.permissions, `${kind}:submit`)
+    const query = useFinancialDraftQuery(kind, documentId, permitted)
     const [busy, setBusy] = React.useState(false)
     const id = `financial-draft-edit-${kind.replaceAll("_", "-")}-${toAutomationIdSegment(documentId)}`
 
@@ -120,7 +122,20 @@ function FinancialDraftEditor({
                         保留原单号与来源，保存修改后重新提交审批。
                     </DialogDescription>
                 </DialogHeader>
-                {query.isPending ? (
+                {profile.isPending ? (
+                    <p className="text-sm text-muted-foreground">
+                        正在核对操作权限…
+                    </p>
+                ) : profile.isError || !permitted ? (
+                    <Alert variant="destructive">
+                        <AlertTitle>无法编辑原单</AlertTitle>
+                        <AlertDescription>
+                            {profile.isError
+                                ? getErrorMessage(profile.error)
+                                : "当前账号没有修改此原单的权限。"}
+                        </AlertDescription>
+                    </Alert>
+                ) : query.isPending ? (
                     <p className="text-sm text-muted-foreground">
                         正在读取原单…
                     </p>

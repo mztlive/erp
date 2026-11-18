@@ -528,6 +528,18 @@
     ]
   },
   {
+    "method": "POST",
+    "path": "/approval-instances/materials/batch",
+    "handler": "approval_instance::materials::batch",
+    "code": "approval_instance:read",
+    "group": "审批实例",
+    "group_desc": "审批运行、决定、恢复与取消",
+    "description": "批量读取原提交审批资料摘要",
+    "guards": [
+      "approval_instance:read"
+    ]
+  },
+  {
     "method": "GET",
     "path": "/approval-instances/{id}/invoice-review",
     "handler": "approval_instance::materials::invoice_review",

@@ -14,7 +14,7 @@ import { BACKGROUND_JOBS_ID_PREFIX as ID_PREFIX } from "../lib/constants"
 
 /** 后台任务列展示；预览状态和焦点仍由工作台统一维护。 */
 export function backgroundJobColumns(
-    openPreview: (job: BackgroundJobView) => void,
+    openPreview?: (job: BackgroundJobView) => void,
 ): ColumnDef<BackgroundJobView>[] {
     return [
         {
@@ -74,29 +74,33 @@ export function backgroundJobColumns(
                 </span>
             ),
         },
-        {
-            id: "actions",
-            size: 104,
-            minSize: 104,
-            header: "操作",
-            meta: { label: "操作", align: "end" },
-            enableSorting: false,
-            cell: ({ row }) => (
-                <TableRowActions
-                    moreId={`${ID_PREFIX}-row-${row.original.id}-more`}
-                    moreLabel={`${backgroundJobIdentity(row.original).title} 更多操作`}
-                    actions={[
-                        {
-                            id: `${ID_PREFIX}-row-${row.original.id}-preview`,
-                            label: "查看",
-                            icon: EyeIcon,
-                            onClick: () => {
-                                openPreview(row.original)
-                            },
-                        },
-                    ]}
-                />
-            ),
-        },
+        ...((openPreview
+            ? [
+                  {
+                      id: "actions",
+                      size: 104,
+                      minSize: 104,
+                      header: "操作",
+                      meta: { label: "操作", align: "end" },
+                      enableSorting: false,
+                      cell: ({ row }) => (
+                          <TableRowActions
+                              moreId={`${ID_PREFIX}-row-${row.original.id}-more`}
+                              moreLabel={`${backgroundJobIdentity(row.original).title} 更多操作`}
+                              actions={[
+                                  {
+                                      id: `${ID_PREFIX}-row-${row.original.id}-preview`,
+                                      label: "查看",
+                                      icon: EyeIcon,
+                                      onClick: () => {
+                                          openPreview(row.original)
+                                      },
+                                  },
+                              ]}
+                          />
+                      ),
+                  },
+              ]
+            : []) satisfies ColumnDef<BackgroundJobView>[]),
     ]
 }

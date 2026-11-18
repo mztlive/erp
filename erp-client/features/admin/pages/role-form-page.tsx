@@ -37,6 +37,8 @@ import {
     useRoleMutations,
     useRolesQuery,
 } from "@/features/admin/hooks/queries"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 import { PERMISSION_BY_CODE } from "@/features/admin/lib/permission-catalog"
 import {
     diffPermissions,
@@ -83,16 +85,46 @@ export function RoleFormPage({
     returnTo?: string
 }) {
     const router = useRouter()
-    const rolesQuery = useRolesQuery()
-    const adminsQuery = useAdminsQuery()
-
+    const profile = useAccountProfileQuery()
+    const permissions = profile.data?.permissions
     const isEdit = roleId !== null
+    const canRead = hasPermission(permissions, "role:list")
+    const canSave = hasPermission(
+        permissions,
+        isEdit ? "role:update" : "role:create",
+    )
+    const rolesQuery = useRolesQuery(canRead && canSave)
+    const adminsQuery = useAdminsQuery(
+        isEdit &&
+            canRead &&
+            canSave &&
+            hasPermission(permissions, "admin:list"),
+    )
     const role = isEdit
         ? (rolesQuery.data?.find((candidate) => candidate.id === roleId) ??
           null)
         : null
 
-    if (rolesQuery.isPending) {
+    if (profile.isError || (profile.isSuccess && (!canRead || !canSave))) {
+        return (
+            <PageScaffold density="compact">
+                <PageHeader title={isEdit ? "编辑角色" : "新建角色"} />
+                <BusinessFailureState
+                    kind={profile.isError ? undefined : "permission"}
+                    title={profile.isError ? undefined : "暂无此角色操作的权限"}
+                    error={profile.error}
+                    onRetry={
+                        profile.isError
+                            ? () => void profile.refetch()
+                            : undefined
+                    }
+                    id="governance-admin-role-form-profile-retry"
+                />
+            </PageScaffold>
+        )
+    }
+
+    if (profile.isPending || rolesQuery.isPending) {
         return (
             <PageScaffold density="compact">
                 <div className="h-10 w-56 animate-pulse rounded-lg bg-muted" />

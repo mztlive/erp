@@ -34,6 +34,8 @@ const AVAILABILITY_OPTIONS: ReadonlyArray<{
 }))
 
 interface LedgerToolbarProps {
+    canFilterPeople: boolean
+    canFilterWarehouse: boolean
     view: InventoryView
     actions?: React.ReactNode
     searchInputRef: React.RefObject<HTMLInputElement | null>
@@ -78,6 +80,8 @@ interface LedgerToolbarProps {
  * 流水视图的更多筛选提供流水类型与发生日期。
  */
 export function LedgerToolbar({
+    canFilterPeople,
+    canFilterWarehouse,
     view,
     actions,
     searchInputRef,
@@ -117,7 +121,7 @@ export function LedgerToolbar({
     const dateErrorId = "inventory-ledger-occurred-error"
     const showAvailabilityCommon = view === "balance"
     const showMovementMore = view === "movement"
-    const showAdjustmentMore = view === "adjustment"
+    const showAdjustmentMore = view === "adjustment" && canFilterPeople
     const showMore = showMovementMore || showAdjustmentMore
     const moreCount = appliedChips.filter(({ key }) =>
         showMovementMore
@@ -130,7 +134,7 @@ export function LedgerToolbar({
                   key === "handlerUserIds"),
     ).length
 
-    const warehouseFilter = (
+    const warehouseFilter = canFilterWarehouse ? (
         <WarehouseSearchCombobox
             id="inventory-ledger-warehouse-filter"
             className="w-44 max-w-full min-w-0"
@@ -141,7 +145,7 @@ export function LedgerToolbar({
             aria-label="仓库"
             placeholder="全部"
         />
-    )
+    ) : undefined
 
     return (
         <ListWorkspaceFilterBar
@@ -286,13 +290,15 @@ export function LedgerToolbar({
                                         </p>
                                     ) : null}
                                 </ListWorkspaceFilterField>
-                                <PersonDirectoryFilter
-                                    id="inventory-ledger-operator-filter"
-                                    label="经办人"
-                                    value={operatorUserIdsDraft}
-                                    onChange={setOperatorUserIdsDraft}
-                                    category="business"
-                                />
+                                {canFilterPeople && (
+                                    <PersonDirectoryFilter
+                                        id="inventory-ledger-operator-filter"
+                                        label="经办人"
+                                        value={operatorUserIdsDraft}
+                                        onChange={setOperatorUserIdsDraft}
+                                        category="business"
+                                    />
+                                )}
                             </div>
                         ) : null}
                         {showAdjustmentMore ? (

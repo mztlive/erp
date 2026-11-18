@@ -31,6 +31,8 @@ const MORE_CHIP_KEYS: readonly CustomerFilterKey[] = ["orgUnitIds"]
  * 客户中心目录工具条：负责销售和状态常驻，组织在更多筛选。
  */
 export function CustomerCenterDirectoryToolbar({
+    canFilterOwner,
+    canFilterOrg,
     ownerDraft,
     setOwnerDraft,
     orgDraft,
@@ -55,6 +57,8 @@ export function CustomerCenterDirectoryToolbar({
     loading,
     failed,
 }: {
+    canFilterOwner: boolean
+    canFilterOrg: boolean
     ownerDraft: string
     setOwnerDraft: (value: string) => void
     orgDraft: string
@@ -114,18 +118,20 @@ export function CustomerCenterDirectoryToolbar({
             onResetMore={resetMoreFilters}
             primaryFilters={
                 <>
-                    <div className="empty:hidden w-56 min-w-0 max-w-full">
-                        <PersonDirectoryFilter
-                            id="customers-directory-owner"
-                            category="sales"
-                            label="负责销售"
-                            hideLabel
-                            value={ownerDraft}
-                            onChange={setOwnerDraft}
-                            orgUnitIds={selectedOrgUnitIds(orgDraft)}
-                            includeDescendants={descendantsDraft}
-                        />
-                    </div>
+                    {canFilterOwner && (
+                        <div className="empty:hidden w-56 min-w-0 max-w-full">
+                            <PersonDirectoryFilter
+                                id="customers-directory-owner"
+                                category="sales"
+                                label="负责销售"
+                                hideLabel
+                                value={ownerDraft}
+                                onChange={setOwnerDraft}
+                                orgUnitIds={selectedOrgUnitIds(orgDraft)}
+                                includeDescendants={descendantsDraft}
+                            />
+                        </div>
+                    )}
                     <OptionCombobox
                         id="customers-directory-status"
                         className="w-44 min-w-0 max-w-full"
@@ -146,14 +152,16 @@ export function CustomerCenterDirectoryToolbar({
                 </>
             }
             morePanel={
-                <OrganizationUnitFilter
-                    id="customers-directory-org"
-                    label="组织"
-                    value={orgDraft}
-                    onChange={setOrgDraft}
-                    includeDescendants={descendantsDraft}
-                    onDescendantsChange={setDescendantsDraft}
-                />
+                canFilterOrg ? (
+                    <OrganizationUnitFilter
+                        id="customers-directory-org"
+                        label="组织"
+                        value={orgDraft}
+                        onChange={setOrgDraft}
+                        includeDescendants={descendantsDraft}
+                        onDescendantsChange={setDescendantsDraft}
+                    />
+                ) : undefined
             }
             resultStatus={listWorkspaceFilterStatusText({
                 loading,

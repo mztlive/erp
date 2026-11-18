@@ -12,8 +12,10 @@ import type { PortalCatalogSku } from "../types"
 import { PortalError, PortalSurface } from "../components/surface"
 import { PortalTermsForm } from "../components/terms-form"
 import { PortalImage } from "../components/portal-image"
+import { usePortalProfile } from "../components/portal-session"
 import { PortalBatchDialog } from "../components/batch-dialog"
 export function PortalQuotesPage() {
+    const canMaintain = usePortalProfile()?.role === "maintainer"
     const [search, setSearch] = useState("")
     const [q, setQ] = useState("")
     const [selected, setSelected] = useState<PortalCatalogSku | null>(null)
@@ -54,7 +56,7 @@ export function PortalQuotesPage() {
                         >
                             查看自己的供给
                         </Link>
-                    ) : (
+                    ) : canMaintain ? (
                         <Button
                             id={`supplier-portal-catalog-quote-${toAutomationIdSegment(row.original.id)}`}
                             size="sm"
@@ -63,10 +65,10 @@ export function PortalQuotesPage() {
                         >
                             为此规格报价
                         </Button>
-                    ),
+                    ) : null,
             },
         ],
-        [],
+        [canMaintain],
     )
     return (
         <PortalSurface
@@ -74,13 +76,15 @@ export function PortalQuotesPage() {
             title="已有商品报价"
             description="查看采购方向您开放询价的商品规格，选择规格后可提交供货报价。"
             actions={
-                <Button
-                    id="supplier-portal-quotes-batch"
-                    variant="outline"
-                    onClick={() => setBatch(true)}
-                >
-                    批量报价
-                </Button>
+                canMaintain ? (
+                    <Button
+                        id="supplier-portal-quotes-batch"
+                        variant="outline"
+                        onClick={() => setBatch(true)}
+                    >
+                        批量报价
+                    </Button>
+                ) : undefined
             }
         >
             <ListWorkSurface
@@ -129,7 +133,7 @@ export function PortalQuotesPage() {
                     />
                 }
             />
-            {selected && (
+            {canMaintain && selected && (
                 <section className="space-y-3">
                     <div className="flex items-center justify-between gap-3">
                         <h2 className="font-semibold">
@@ -147,7 +151,7 @@ export function PortalQuotesPage() {
                     <PortalTermsForm key={selected.id} sku={selected} />
                 </section>
             )}
-            {batch && (
+            {canMaintain && batch && (
                 <PortalBatchDialog
                     mode="quote"
                     onClose={() => setBatch(false)}

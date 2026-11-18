@@ -57,6 +57,18 @@ export function useProductListState(
     const { canCreate, createBlockedReason } =
         useCreatePermission("product:create")
     const accountQuery = useAccountProfileQuery()
+    const permissions = accountQuery.isSuccess
+        ? accountQuery.data.permissions
+        : undefined
+    const canReadProductDetail = hasPermission(permissions, "product:detail")
+    const canReadSkus =
+        hasPermission(permissions, "sku:list") &&
+        hasPermission(permissions, "sku_revision:list")
+    const canReadUnits = hasPermission(permissions, "unit_of_measure:list")
+    const canReadOfferings =
+        canReadSkus && hasPermission(permissions, "supplier_offering:list")
+    const canAddSupply =
+        canReadSkus && hasPermission(permissions, "supplier_offering:create")
     const filters = useProductListFilters(searchInputRef)
     const listQuery = useMasterDataListQuery({
         resource: "products",
@@ -79,10 +91,7 @@ export function useProductListState(
     const { exportMeta, exportPending, handleExport } =
         useMasterDataListExport()
     const productListingMutation = useProductListingMutation()
-    const canUpdateProductListing = hasPermission(
-        accountQuery.data?.permissions,
-        "product:update",
-    )
+    const canUpdateProductListing = hasPermission(permissions, "product:update")
     const [disableTarget, setDisableTarget] =
         React.useState<MasterDataListItem | null>(null)
     const [supplyProduct, setSupplyProduct] =
@@ -101,7 +110,10 @@ export function useProductListState(
         () => pageRows.map((row) => row.stableId),
         [pageRows],
     )
-    const productSkusQuery = useProductListSkusQuery(productPageIds)
+    const productSkusQuery = useProductListSkusQuery(
+        canReadSkus ? productPageIds : [],
+        canReadUnits,
+    )
     const productSkusByProduct = React.useMemo(() => {
         const grouped = new Map<string, ProductListSkuSummary[]>()
         for (const sku of productSkusQuery.data ?? []) {
@@ -115,8 +127,9 @@ export function useProductListState(
         () => (productSkusQuery.data ?? []).map((sku) => sku.skuId),
         [productSkusQuery.data],
     )
-    const supplierOfferingsQuery =
-        useSupplierOfferingsForSkusQuery(productPageSkuIds)
+    const supplierOfferingsQuery = useSupplierOfferingsForSkusQuery(
+        canReadOfferings ? productPageSkuIds : [],
+    )
     const currentSupplySkuIds = React.useMemo(
         () =>
             new Set(
@@ -392,6 +405,11 @@ export function useProductListState(
         canCreate,
         createBlockedReason,
         canUpdateProductListing,
+        canReadProductDetail,
+        canReadSkus,
+        canReadUnits,
+        canReadOfferings,
+        canAddSupply,
         disableTarget,
         setDisableTarget,
         supplyProduct,

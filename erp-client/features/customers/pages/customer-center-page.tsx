@@ -23,7 +23,6 @@ import { LoadingButton } from "@/components/ui/loading-button"
 import { CustomerCreateDialog } from "@/features/customers/components/customer-create-dialog"
 import {
     useCustomerCenterDirectoryState,
-    useCustomerCenterScopeGuard,
     useCustomerCenterSearchShortcut,
 } from "@/features/customers/hooks/use-customer-center-directory-state"
 import { useCustomerDirectoryColumns } from "@/features/customers/hooks/use-directory-columns"
@@ -42,8 +41,19 @@ export function CustomerCenterPage() {
     const router = useRouter()
 
     const directoryState = useCustomerCenterDirectoryState()
-    const { scope, status, q, sort, dir, page, pushState } = directoryState
-    const { canCreate, canReadAll } = useCustomerCenterScopeGuard()
+    const {
+        scope,
+        status,
+        q,
+        sort,
+        dir,
+        page,
+        pushState,
+        canCreate,
+        canExport,
+        canOpenDetail,
+        canReadAll,
+    } = directoryState
     useCustomerCenterSearchShortcut()
 
     const [createOpen, setCreateOpen] = React.useState(false)
@@ -72,7 +82,7 @@ export function CustomerCenterPage() {
 
     const data = directoryQuery.data
     const items = React.useMemo(() => data?.items ?? [], [data?.items])
-    const columns = useCustomerDirectoryColumns()
+    const columns = useCustomerDirectoryColumns(canOpenDetail)
 
     // 分页从 URL 派生（P6），筛选/搜索变更写 URL 并回第 1 页。
     const pagination = React.useMemo(
@@ -170,7 +180,11 @@ export function CustomerCenterPage() {
             onPaginationChange={directoryState.handlePaginationChange}
             onClearFilters={directoryState.clearAllFilters}
             onCreate={() => setCreateOpen(true)}
-            onOpenRow={(row) => router.push(`/sales/customers/${row.id}`)}
+            onOpenRow={
+                canOpenDetail
+                    ? (row) => router.push(`/sales/customers/${row.id}`)
+                    : undefined
+            }
         />
     ) : null
 
@@ -201,15 +215,19 @@ export function CustomerCenterPage() {
                     </>
                 }
             >
-                <LoadingButton
-                    id="customers-directory-export"
-                    variant="outline"
-                    disabled={exportMutation.isPending || !data?.totalInScope}
-                    loading={exportMutation.isPending}
-                    onClick={() => exportMutation.mutate()}
-                >
-                    {exportMutation.isPending ? "正在导出…" : "导出"}
-                </LoadingButton>
+                {canExport && (
+                    <LoadingButton
+                        id="customers-directory-export"
+                        variant="outline"
+                        disabled={
+                            exportMutation.isPending || !data?.totalInScope
+                        }
+                        loading={exportMutation.isPending}
+                        onClick={() => exportMutation.mutate()}
+                    >
+                        {exportMutation.isPending ? "正在导出…" : "导出"}
+                    </LoadingButton>
+                )}
                 {canCreate ? (
                     <Button
                         id="customers-directory-create"
@@ -242,6 +260,8 @@ export function CustomerCenterPage() {
                 }
                 toolbar={
                     <CustomerCenterDirectoryToolbar
+                        canFilterOwner={directoryState.canFilterOwner}
+                        canFilterOrg={directoryState.canFilterOrg}
                         ownerDraft={directoryState.ownerDraft}
                         setOwnerDraft={directoryState.setOwnerDraft}
                         orgDraft={directoryState.orgDraft}
@@ -270,10 +290,12 @@ export function CustomerCenterPage() {
                 table={tableSlot}
             />
 
-            <CustomerCreateDialog
-                open={createOpen}
-                onOpenChange={setCreateOpen}
-            />
+            {canCreate && (
+                <CustomerCreateDialog
+                    open={createOpen}
+                    onOpenChange={setCreateOpen}
+                />
+            )}
         </PageScaffold>
     )
 }

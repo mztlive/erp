@@ -1,5 +1,7 @@
 "use client"
 
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
+
 import * as React from "react"
 
 import {
@@ -402,54 +404,64 @@ export function SupplierScopePage() {
                         morePanelAriaLabel="供应商往来范围更多筛选条件"
                         onResetMore={urlState.resetMoreFilters}
                         primaryFilters={
-                            <div className="empty:hidden w-56 max-w-full min-w-0">
-                                <PersonDirectoryFilter
-                                    id={`${toolbarPrefix}-procurement-owner`}
-                                    category="procurement"
-                                    label="采购负责人"
-                                    hideLabel
-                                    value={urlState.procurementOwnerDraft}
-                                    onChange={urlState.setProcurementOwnerDraft}
-                                    orgUnitIds={directoryOrgUnitIds}
-                                    includeDescendants={
-                                        urlState.descendantsDraft
-                                    }
-                                />
-                            </div>
+                            urlState.canUseOwner ? (
+                                <div className="empty:hidden w-56 max-w-full min-w-0">
+                                    <PersonDirectoryFilter
+                                        id={`${toolbarPrefix}-procurement-owner`}
+                                        category="procurement"
+                                        label="采购负责人"
+                                        hideLabel
+                                        value={urlState.procurementOwnerDraft}
+                                        onChange={
+                                            urlState.setProcurementOwnerDraft
+                                        }
+                                        orgUnitIds={directoryOrgUnitIds}
+                                        includeDescendants={
+                                            urlState.descendantsDraft
+                                        }
+                                    />
+                                </div>
+                            ) : null
                         }
                         morePanel={
-                            <div className="grid min-w-0 gap-5">
-                                <PersonDirectoryFilter
-                                    id={`${toolbarPrefix}-operator`}
-                                    category="business"
-                                    label={
-                                        urlState.view === "payment"
-                                            ? "付款经办人"
-                                            : urlState.view ===
-                                                "purchase_invoice"
-                                              ? "收票经办人"
-                                              : "经办人"
-                                    }
-                                    value={urlState.operatorDraft}
-                                    onChange={urlState.setOperatorDraft}
-                                    orgUnitIds={directoryOrgUnitIds}
-                                    includeDescendants={
-                                        urlState.descendantsDraft
-                                    }
-                                />
-                                <OrganizationUnitFilter
-                                    id={`${toolbarPrefix}-org`}
-                                    label="业务组织"
-                                    value={urlState.orgDraft}
-                                    onChange={urlState.setOrgDraft}
-                                    includeDescendants={
-                                        urlState.descendantsDraft
-                                    }
-                                    onDescendantsChange={
-                                        urlState.setDescendantsDraft
-                                    }
-                                />
-                            </div>
+                            urlState.canUseBusiness || urlState.canUseOrg ? (
+                                <div className="grid min-w-0 gap-5">
+                                    {urlState.canUseBusiness && (
+                                        <PersonDirectoryFilter
+                                            id={`${toolbarPrefix}-operator`}
+                                            category="business"
+                                            label={
+                                                urlState.view === "payment"
+                                                    ? "付款经办人"
+                                                    : urlState.view ===
+                                                        "purchase_invoice"
+                                                      ? "收票经办人"
+                                                      : "经办人"
+                                            }
+                                            value={urlState.operatorDraft}
+                                            onChange={urlState.setOperatorDraft}
+                                            orgUnitIds={directoryOrgUnitIds}
+                                            includeDescendants={
+                                                urlState.descendantsDraft
+                                            }
+                                        />
+                                    )}
+                                    {urlState.canUseOrg && (
+                                        <OrganizationUnitFilter
+                                            id={`${toolbarPrefix}-org`}
+                                            label="业务组织"
+                                            value={urlState.orgDraft}
+                                            onChange={urlState.setOrgDraft}
+                                            includeDescendants={
+                                                urlState.descendantsDraft
+                                            }
+                                            onDescendantsChange={
+                                                urlState.setDescendantsDraft
+                                            }
+                                        />
+                                    )}
+                                </div>
+                            ) : null
                         }
                         resultStatus={listWorkspaceFilterStatusText({
                             loading: listQuery.isPending,
@@ -472,19 +484,29 @@ export function SupplierScopePage() {
                 table={table}
             />
 
-            <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-                <LoadingButton
-                    id="supplier-payables-scope-export"
-                    type="button"
-                    loading={exporting}
-                    variant="outline"
-                    size="sm"
-                    disabled={exporting || !data || data.total === 0}
-                    onClick={() => void handleExport()}
-                >
-                    {exporting ? "导出中…" : "导出当前范围"}
-                </LoadingButton>
-            </div>
+            <PermissionGuard
+                permission={
+                    urlState.view === "payment"
+                        ? "supplier_payment:list"
+                        : urlState.view === "purchase_invoice"
+                          ? "purchase_invoice_allocation:list"
+                          : "payable_account:list"
+                }
+            >
+                <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+                    <LoadingButton
+                        id="supplier-payables-scope-export"
+                        type="button"
+                        loading={exporting}
+                        variant="outline"
+                        size="sm"
+                        disabled={exporting || !data || data.total === 0}
+                        onClick={() => void handleExport()}
+                    >
+                        {exporting ? "导出中…" : "导出当前范围"}
+                    </LoadingButton>
+                </div>
+            </PermissionGuard>
 
             <QuickPreviewSheet
                 id="supplier-payables-scope-preview-sheet"

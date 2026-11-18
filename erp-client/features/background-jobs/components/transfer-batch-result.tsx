@@ -15,7 +15,9 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { StatusBadge } from "@/components/ui/status-badge"
-import { getErrorMessage } from "@/lib/api/errors"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { getErrorMessage, isPermissionDeniedError } from "@/lib/api/errors"
+import { hasPermission } from "@/lib/permissions"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import {
     decodeTransferJson,
@@ -142,6 +144,8 @@ export function TransferBatchResult({
     portal?: boolean
 }) {
     const client = useQueryClient()
+    const profile = useAccountProfileQuery()
+    const permissions = profile.data?.permissions
     const [open, setOpen] = useState(false)
     const id = `background-jobs-batch-${toAutomationIdSegment(job.id)}`
     const resultKey = ["data-transfer-batch-result", portal, job.id] as const
@@ -180,6 +184,9 @@ export function TransferBatchResult({
             ])
         },
     })
+    const resultDenied = isPermissionDeniedError(result.error)
+    const canOpenList =
+        portal || hasPermission(permissions, "supplier_offering:list")
     const rows =
         result.isError || expired || !hasResult ? [] : (result.data?.rows ?? [])
     const counts = {
@@ -223,13 +230,15 @@ export function TransferBatchResult({
                             "逐行结果读取失败，请重试",
                         )}
                     </p>
-                    <Button
-                        id={`${id}-retry`}
-                        variant="outline"
-                        onClick={() => void result.refetch()}
-                    >
-                        重新读取结果
-                    </Button>
+                    {!resultDenied && (
+                        <Button
+                            id={`${id}-retry`}
+                            variant="outline"
+                            onClick={() => void result.refetch()}
+                        >
+                            重新读取结果
+                        </Button>
+                    )}
                 </div>
             ) : (
                 <>
@@ -285,15 +294,17 @@ export function TransferBatchResult({
                     </Button>
                 </>
             )}
-            <Button
-                id={`${id}-open-source`}
-                variant="outline"
-                render={<Link href={batchDestination(context, portal)} />}
-            >
-                {portal ? "打开供应商业务页面" : "打开供应商供给"}
-                <ArrowUpRightIcon data-icon="inline-end" />
-            </Button>
-            {hasResult && !expired && (
+            {canOpenList && (
+                <Button
+                    id={`${id}-open-source`}
+                    variant="outline"
+                    render={<Link href={batchDestination(context, portal)} />}
+                >
+                    {portal ? "打开供应商业务页面" : "打开供应商供给"}
+                    <ArrowUpRightIcon data-icon="inline-end" />
+                </Button>
+            )}
+            {hasResult && !expired && !resultDenied && (
                 <TransferResult
                     jobId={job.id}
                     portal={portal}
@@ -324,7 +335,8 @@ export function TransferBatchResult({
                         {rows.map((row, index) => {
                             const state = outcome(row, context)
                             const href =
-                                state === "succeeded" || state === "prepared"
+                                canOpenList &&
+                                (state === "succeeded" || state === "prepared")
                                     ? rowDestination(row, context, portal)
                                     : null
                             const rowId = `${id}-row-${toAutomationIdSegment(row.row_id)}`

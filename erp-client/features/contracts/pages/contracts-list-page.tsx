@@ -1,6 +1,8 @@
 "use client"
 
 import * as React from "react"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 import { DownloadIcon, FileUpIcon, HistoryIcon } from "lucide-react"
 
 import { PageActions, PageScaffold } from "@/components/business"
@@ -21,6 +23,16 @@ import { useContractFilePicker } from "@/features/contracts/hooks/use-contract-f
 
 export function ContractsListPage() {
     const list = useContractsList()
+    const account = useAccountProfileQuery()
+    const canExport = hasPermission(account.data?.permissions, "contract:list")
+    const canReadDetail = hasPermission(
+        account.data?.permissions,
+        "contract:detail",
+    )
+    const canImport = hasPermission(
+        account.data?.permissions,
+        "contract:create",
+    )
     const { contractsQuery } = list
     const { customerId } = list
 
@@ -41,8 +53,12 @@ export function ContractsListPage() {
         [contractsQuery.data, previewId],
     )
 
-    const previewDetailQuery = useContractCenterQuery(previewId ?? "")
-    const paperDetailQuery = useContractCenterQuery(paperId ?? "")
+    const previewDetailQuery = useContractCenterQuery(
+        canReadDetail ? (previewId ?? "") : "",
+    )
+    const paperDetailQuery = useContractCenterQuery(
+        canReadDetail ? (paperId ?? "") : "",
+    )
 
     const actions = useContractListActions({
         query: list.url,
@@ -57,11 +73,13 @@ export function ContractsListPage() {
 
     return (
         <PageScaffold density="compact" className={styles.page}>
-            <input
-                id="contracts-list-upload-input"
-                type="file"
-                {...picker.inputProps}
-            />
+            {canImport && (
+                <input
+                    id="contracts-list-upload-input"
+                    type="file"
+                    {...picker.inputProps}
+                />
+            )}
             <ListWorkspaceHeader
                 eyebrow="销售"
                 title="合同"
@@ -94,6 +112,7 @@ export function ContractsListPage() {
                 <PageActions
                     actions={[
                         {
+                            hidden: !canExport,
                             actionKey: "export",
                             label: actions.exportPending ? "导出中…" : "导出",
                             icon: DownloadIcon,
@@ -105,6 +124,7 @@ export function ContractsListPage() {
                             },
                         },
                         {
+                            hidden: !canImport,
                             actionKey: "import-history",
                             label: "导入记录",
                             icon: HistoryIcon,
@@ -112,6 +132,7 @@ export function ContractsListPage() {
                             onClick: () => setUploadOpen(true),
                         },
                         {
+                            hidden: !canImport,
                             actionKey: "upload",
                             label: "上传合同 PDF",
                             icon: FileUpIcon,
@@ -135,7 +156,7 @@ export function ContractsListPage() {
                 onRetry={() => {
                     void contractsQuery.refetch()
                 }}
-                onOpenUpload={picker.selectFile}
+                onOpenUpload={canImport ? picker.selectFile : undefined}
                 onPreview={setPreviewId}
                 highlightedContractId={
                     actions.highlightedContractId ?? undefined
@@ -145,7 +166,7 @@ export function ContractsListPage() {
             <ContractPreviewSheet
                 row={previewRow}
                 detail={previewDetailQuery.data}
-                detailLoading={previewDetailQuery.isPending}
+                detailLoading={canReadDetail && previewDetailQuery.isPending}
                 onOpenChange={(open) => {
                     if (!open) setPreviewId(null)
                 }}
@@ -160,13 +181,15 @@ export function ContractsListPage() {
                 }}
             />
 
-            <ContractUploadDialog
-                open={uploadOpen}
-                initialFile={uploadFile}
-                onOpenChange={setUploadOpen}
-                initialCustomerId={customerId ?? ""}
-                onSuccess={actions.handleUploadSuccess}
-            />
+            {canImport && (
+                <ContractUploadDialog
+                    open={uploadOpen}
+                    initialFile={uploadFile}
+                    onOpenChange={setUploadOpen}
+                    initialCustomerId={customerId ?? ""}
+                    onSuccess={actions.handleUploadSuccess}
+                />
+            )}
         </PageScaffold>
     )
 }

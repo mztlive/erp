@@ -57,6 +57,19 @@ export const BookDetailPage = ({ bookId }: { bookId: string }) => {
         profile.data?.permissions,
         "sales_selection_booklet:maintain",
     )
+    const permissions = profile.data?.permissions
+    const canPrepare = hasPermission(
+        permissions,
+        "sales_selection_booklet:prepare",
+    )
+    const canCopyLink = hasPermission(
+        permissions,
+        "sales_selection_booklet:copy_link",
+    )
+    const canOpenProposal = hasPermission(
+        permissions,
+        "sales_selection_proposal:get",
+    )
     const detailQuery = useBookDetail(bookId)
     const operations = useBookOperations()
     const detail = detailQuery.data
@@ -149,12 +162,13 @@ export const BookDetailPage = ({ bookId }: { bookId: string }) => {
             <BookDetailHeader
                 detail={detail}
                 pending={pending}
+                permissions={permissions}
                 operations={operations}
                 onOpenInfo={() => setInfoOpen(true)}
                 onEdit={() => setEditing(true)}
                 onCopy={canCopy ? () => setCopying(true) : undefined}
             />
-            {copying ? (
+            {canCopy && copying ? (
                 <BookCopyDialog
                     source={detail}
                     onClose={() => setCopying(false)}
@@ -176,7 +190,7 @@ export const BookDetailPage = ({ bookId }: { bookId: string }) => {
                             ? "客户需验证访问密码后查看选品册。"
                             : "该选品册尚未设置密码，客户无法查看商品。请设置密码后发给客户。"}
                     </p>
-                    {passwordDisabledReason && (
+                    {canMaintain && passwordDisabledReason && (
                         <p
                             id="sales-selection-detail-access-password-wait"
                             className="text-xs text-muted-foreground"
@@ -190,16 +204,8 @@ export const BookDetailPage = ({ bookId }: { bookId: string }) => {
                         id="sales-selection-detail-access-password"
                         variant="outline"
                         size="sm"
-                        disabled={
-                            pending ||
-                            !canMaintain ||
-                            Boolean(passwordDisabledReason)
-                        }
-                        title={
-                            !canMaintain
-                                ? "当前账号无权维护选品册密码"
-                                : passwordDisabledReason
-                        }
+                        disabled={pending || Boolean(passwordDisabledReason)}
+                        title={passwordDisabledReason}
                         aria-describedby={
                             passwordDisabledReason
                                 ? "sales-selection-detail-access-password-wait"
@@ -229,7 +235,7 @@ export const BookDetailPage = ({ bookId }: { bookId: string }) => {
             />
             <BookDetailVoucherPanel detail={detail} />
 
-            {editing ? (
+            {canPrepare && editing ? (
                 <ReprepareDialog
                     key={detail.version}
                     detail={detail}
@@ -260,7 +266,10 @@ export const BookDetailPage = ({ bookId }: { bookId: string }) => {
                 detail={detail}
                 pending={pending}
                 operations={operations}
-                onEdit={() => setEditing(true)}
+                canPrepare={canPrepare}
+                canCopyLink={canCopyLink}
+                canOpenProposal={canOpenProposal}
+                onEdit={canPrepare ? () => setEditing(true) : undefined}
             />
 
             {/* 全宽商品与套餐陈列工作面 */}
@@ -373,7 +382,7 @@ export const BookDetailPage = ({ bookId }: { bookId: string }) => {
                             : undefined
                     }
                     onRegenerateTier={
-                        detail.status === "PENDING_PUBLISH"
+                        canPrepare && detail.status === "PENDING_PUBLISH"
                             ? (tierId) =>
                                   void operations.regenerate.mutateAsync({
                                       bookId: activeBookId,
@@ -384,7 +393,7 @@ export const BookDetailPage = ({ bookId }: { bookId: string }) => {
                             : undefined
                     }
                     onDelete={
-                        detail.status === "PENDING_PUBLISH"
+                        canMaintain && detail.status === "PENDING_PUBLISH"
                             ? (itemId) =>
                                   void operations.deleteItem.mutateAsync({
                                       bookId: activeBookId,

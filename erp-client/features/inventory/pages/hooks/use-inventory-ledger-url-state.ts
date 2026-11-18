@@ -1,6 +1,8 @@
 "use client"
 
 import * as React from "react"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 import { usePathname, useRouter, useSearchParams } from "@/lib/navigation"
 
 import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
@@ -21,6 +23,8 @@ export type LedgerPatchUrl = (
 ) => void
 
 export interface InventoryLedgerUrlState {
+    canFilterPeople: boolean
+    canFilterWarehouse: boolean
     view: InventoryView
     qParam: string
     warehouseId: string | undefined
@@ -49,9 +53,31 @@ export function useInventoryLedgerUrlState(): InventoryLedgerUrlState {
     const pathname = usePathname()
     const searchParams = useSearchParams()
 
+    const profile = useAccountProfileQuery()
+    const canFilterPeople = hasPermission(
+        profile.data?.permissions,
+        "business_person:list",
+    )
+    const canFilterWarehouse = hasPermission(
+        profile.data?.permissions,
+        "warehouse:list",
+    )
+    const unauthorizedKeys = React.useMemo(
+        () =>
+            [
+                ...(!canFilterWarehouse ? ["warehouseId"] : []),
+                ...(!canFilterPeople
+                    ? ["operatorUserIds", "applicantUserIds", "handlerUserIds"]
+                    : []),
+            ].filter((key) => searchParams.has(key)),
+        [canFilterPeople, canFilterWarehouse, searchParams],
+    )
+
     const view = parseView(searchParams.get("view"))
     const qParam = searchParams.get("q") ?? ""
-    const warehouseId = searchParams.get("warehouseId") ?? undefined
+    const warehouseId = canFilterWarehouse
+        ? (searchParams.get("warehouseId") ?? undefined)
+        : undefined
     const skuId = searchParams.get("skuId") ?? undefined
     const salesOrderLineId = searchParams.get("salesOrderLineId") ?? undefined
     const availability = parseAvailability(searchParams.get("availability"))
@@ -74,21 +100,53 @@ export function useInventoryLedgerUrlState(): InventoryLedgerUrlState {
         Number.isSafeInteger(pageSizeParam) && pageSizeParam > 0
             ? Math.min(pageSizeParam, 100)
             : 20
-    const cursorParam = searchParams.get("cursor") ?? undefined
+    const cursorParam = unauthorizedKeys.length
+        ? undefined
+        : (searchParams.get("cursor") ?? undefined)
     const cursorOffset = decodeInventoryCursor(cursorParam, view)
-    const operatorUserIds = searchParams.get("operatorUserIds") ?? undefined
-    const applicantUserIds = searchParams.get("applicantUserIds") ?? undefined
-    const handlerUserIds = searchParams.get("handlerUserIds") ?? undefined
+    const operatorUserIds = canFilterPeople
+        ? (searchParams.get("operatorUserIds") ?? undefined)
+        : undefined
+    const applicantUserIds = canFilterPeople
+        ? (searchParams.get("applicantUserIds") ?? undefined)
+        : undefined
+    const handlerUserIds = canFilterPeople
+        ? (searchParams.get("handlerUserIds") ?? undefined)
+        : undefined
 
     const patchUrl = React.useCallback<LedgerPatchUrl>(
         (patch, options) =>
             patchSearchParams(
                 { router, pathname, searchParams, view, clearCursor: true },
-                patch,
+                {
+                    ...patch,
+                    ...(!canFilterWarehouse ? { warehouseId: null } : {}),
+                    ...(!canFilterPeople
+                        ? {
+                              operatorUserIds: null,
+                              applicantUserIds: null,
+                              handlerUserIds: null,
+                          }
+                        : {}),
+                    ...(unauthorizedKeys.length ? { cursor: null } : {}),
+                },
                 options,
             ),
-        [router, pathname, searchParams, view],
+        [
+            canFilterPeople,
+            canFilterWarehouse,
+            router,
+            pathname,
+            searchParams,
+            unauthorizedKeys,
+            view,
+        ],
     )
+
+    React.useEffect(() => {
+        if (profile.data && unauthorizedKeys.length)
+            patchUrl({}, { replace: true, scroll: false })
+    }, [profile.data, unauthorizedKeys, patchUrl])
 
     const hasOccurredFromParam = Boolean(occurredFrom)
     const hasOccurredToParam = Boolean(occurredTo)
@@ -109,6 +167,8 @@ export function useInventoryLedgerUrlState(): InventoryLedgerUrlState {
     )
 
     return {
+        canFilterPeople,
+        canFilterWarehouse,
         view,
         qParam,
         warehouseId,

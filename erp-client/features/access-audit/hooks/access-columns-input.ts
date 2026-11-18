@@ -17,6 +17,8 @@ export type DeletingRoleState = {
 export type AccessColumnsInput = {
     data?: AccessListView
     policies?: AccessGovernancePolicyView
+    canEditRole: boolean
+    canDeleteRole: boolean
     router: { push: (href: string) => void }
     rowFocusRef: { current: Map<string, HTMLButtonElement | null> }
     openExplain: (type: "ROLE" | "USER", id: string) => void

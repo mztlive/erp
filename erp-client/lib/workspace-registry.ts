@@ -274,14 +274,18 @@ export function filterNavGroupsByPermissions(
             label: group.label,
             items: group.items
                 .filter((item) =>
-                    hasAnyPermission(permissions, item.requiredPermissions),
+                    item.href === "/system/access-audit"
+                        ? hasAnyPermission(permissions, ["role:list"]) ||
+                          (hasAnyPermission(permissions, ["data_scope:list"]) &&
+                              hasAnyPermission(permissions, ["admin:list"]))
+                        : hasAnyPermission(
+                              permissions,
+                              item.requiredPermissions,
+                          ),
                 )
                 .map((item) =>
                     item.href === "/system/access-audit" &&
-                    !hasAnyPermission(permissions, [
-                        "role:list",
-                        "permission:list",
-                    ])
+                    !hasAnyPermission(permissions, ["role:list"])
                         ? { ...item, href: "/system/organization/scopes" }
                         : item.href === "/system/accounts" &&
                             !hasAnyPermission(permissions, ["admin:list"])
@@ -759,11 +763,7 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
                     routeId: "W19",
                     label: "角色与权限",
                     icon: ShieldCheckIcon,
-                    requiredPermissions: [
-                        "role:list",
-                        "permission:list",
-                        "data_scope:list",
-                    ],
+                    requiredPermissions: ["role:list", "data_scope:list"],
                 },
                 {
                     routeId: "W19",

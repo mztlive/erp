@@ -6,6 +6,8 @@ import { selectedObjectDirectory } from "@/lib/object-directory"
 import { LoadingButton } from "@/components/ui/loading-button"
 
 import * as React from "react"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 
 import { PageScaffold } from "@/components/business"
 import { listWorkspaceStyles } from "@/components/business/list-workspace"
@@ -56,6 +58,8 @@ export function InventoryLedgerPage() {
         string | null
     >(null)
     const {
+        canFilterPeople,
+        canFilterWarehouse,
         view,
         qParam,
         warehouseId,
@@ -78,6 +82,13 @@ export function InventoryLedgerPage() {
         hasActiveFilters,
         patchUrl,
     } = useInventoryLedgerUrlState()
+    const profile = useAccountProfileQuery()
+    const grants = profile.data?.permissions
+    const canCreateAdjustment = hasPermission(grants, "stock_adjustment:create")
+    const canEditAdjustment = hasPermission(grants, "stock_adjustment:update")
+    const canSubmitAdjustment = hasPermission(grants, "stock_adjustment:submit")
+    const canViewMovements = hasPermission(grants, "stock_movement:list")
+    const canExport = hasPermission(grants, `stock_${view}:list`)
     const { searchDraft, setSearchDraft, searchInputRef } = useLedgerSearch({
         qParam,
     })
@@ -89,6 +100,8 @@ export function InventoryLedgerPage() {
             patchUrl,
         })
     const filters = useLedgerFilters({
+        canFilterPeople,
+        canFilterWarehouse,
         view,
         q: qParam,
         warehouseId,
@@ -255,7 +268,10 @@ export function InventoryLedgerPage() {
     } = useInventoryColumns({
         rowFocusRef,
         openDetail,
-        startAdjustment: adjustment.startAdjustment,
+        startAdjustment:
+            canCreateAdjustment && canSubmitAdjustment
+                ? adjustment.startAdjustment
+                : undefined,
         isCreating: adjustment.isCreating,
     })
 
@@ -409,7 +425,7 @@ export function InventoryLedgerPage() {
                 queriedAt={data?.queriedAt ?? ""}
                 excludedKindsNote={data?.excludedKindsNote}
                 openingStockNote={data?.openingStockNote}
-                canExport={data?.canExport ?? false}
+                canExport={canExport && (data?.canExport ?? false)}
                 total={data?.total ?? 0}
                 isExporting={isExporting}
                 onRefresh={() => {
@@ -433,7 +449,7 @@ export function InventoryLedgerPage() {
                 />
             ) : null}
 
-            {exportJob ? (
+            {canExport && exportJob ? (
                 <ExportJobProgress job={exportJob} onClose={closeExport} />
             ) : null}
 
@@ -469,20 +485,29 @@ export function InventoryLedgerPage() {
                 isPending={detailQuery.isPending}
                 isCreating={adjustment.isCreating}
                 onClose={closeDetail}
-                onViewMovements={(currentDetail) => {
-                    setPreviewBalanceId(null)
-                    patchUrl(
-                        {
-                            view: "movement",
-                            balanceId: null,
-                            warehouseId: currentDetail.balance.warehouseId,
-                            skuId: currentDetail.balance.skuId,
-                        },
-                        { replace: true },
-                    )
-                    resetPagination()
-                }}
-                onStartAdjustment={adjustment.startAdjustment}
+                onViewMovements={
+                    canViewMovements
+                        ? (currentDetail) => {
+                              setPreviewBalanceId(null)
+                              patchUrl(
+                                  {
+                                      view: "movement",
+                                      balanceId: null,
+                                      warehouseId:
+                                          currentDetail.balance.warehouseId,
+                                      skuId: currentDetail.balance.skuId,
+                                  },
+                                  { replace: true },
+                              )
+                              resetPagination()
+                          }
+                        : undefined
+                }
+                onStartAdjustment={
+                    canCreateAdjustment && canSubmitAdjustment
+                        ? adjustment.startAdjustment
+                        : undefined
+                }
                 onOpenAdjustment={openAdjustment}
             />
 
@@ -494,7 +519,9 @@ export function InventoryLedgerPage() {
                 expectedTaskVersion={decisionWorkItem?.expectedTaskVersion}
                 workItemAllowedActions={decisionWorkItem?.allowedActions}
                 onClose={closeAdjustment}
-                onEditOriginal={setEditingAdjustmentId}
+                onEditOriginal={
+                    canEditAdjustment ? setEditingAdjustmentId : undefined
+                }
                 onCancelled={() => {
                     void listQuery.refetch()
                     void adjustmentDetailQuery.refetch()
@@ -507,10 +534,11 @@ export function InventoryLedgerPage() {
                 }}
             />
 
-            {editingAdjustmentId ? (
+            {canEditAdjustment && editingAdjustmentId ? (
                 <AdjustmentEditDialog
                     key={editingAdjustmentId}
                     id={editingAdjustmentId}
+                    canSubmit={canSubmitAdjustment}
                     onClose={() => setEditingAdjustmentId(null)}
                     onSubmitted={() => {
                         void listQuery.refetch()
@@ -520,61 +548,63 @@ export function InventoryLedgerPage() {
                 />
             ) : null}
 
-            <AdjustmentDialog
-                open={adjustment.adjustDraftId != null}
-                meta={adjustment.adjustMeta}
-                form={adjustment.form}
-                pending={adjustment.isSubmitting}
-                unresolved={adjustment.lastResult?.status === "unknown"}
-                feedback={
-                    <>
-                        {adjustment.actionError ? (
-                            <Alert variant="destructive">
-                                <AlertDescription>
-                                    {adjustment.actionError}
-                                </AlertDescription>
-                            </Alert>
-                        ) : null}
-                        {adjustment.lastResult?.status === "unknown" ? (
-                            <Alert>
-                                <AlertDescription>
-                                    {adjustment.lastResult.description}
-                                    <LoadingButton
-                                        id="inventory-adjustment-dialog-resolve"
-                                        type="button"
-                                        variant="outline"
-                                        disabled={adjustment.isResolving}
-                                        loading={adjustment.isResolving}
-                                        onClick={() =>
-                                            void adjustment.resolveLastUnknown()
-                                        }
-                                    >
-                                        {adjustment.isResolving
-                                            ? "查询中…"
-                                            : "查询提交结果"}
-                                    </LoadingButton>
-                                    <LoadingButton
-                                        id="inventory-adjustment-dialog-retry"
-                                        type="button"
-                                        variant="outline"
-                                        disabled={
-                                            adjustment.isResolving ||
-                                            adjustment.isSubmitting
-                                        }
-                                        loading={adjustment.isSubmitting}
-                                        onClick={() =>
-                                            void adjustment.doSubmit()
-                                        }
-                                    >
-                                        使用本次操作重试
-                                    </LoadingButton>
-                                </AlertDescription>
-                            </Alert>
-                        ) : null}
-                    </>
-                }
-                onCancel={adjustment.closeAdjustment}
-            />
+            {canCreateAdjustment && canSubmitAdjustment && (
+                <AdjustmentDialog
+                    open={adjustment.adjustDraftId != null}
+                    meta={adjustment.adjustMeta}
+                    form={adjustment.form}
+                    pending={adjustment.isSubmitting}
+                    unresolved={adjustment.lastResult?.status === "unknown"}
+                    feedback={
+                        <>
+                            {adjustment.actionError ? (
+                                <Alert variant="destructive">
+                                    <AlertDescription>
+                                        {adjustment.actionError}
+                                    </AlertDescription>
+                                </Alert>
+                            ) : null}
+                            {adjustment.lastResult?.status === "unknown" ? (
+                                <Alert>
+                                    <AlertDescription>
+                                        {adjustment.lastResult.description}
+                                        <LoadingButton
+                                            id="inventory-adjustment-dialog-resolve"
+                                            type="button"
+                                            variant="outline"
+                                            disabled={adjustment.isResolving}
+                                            loading={adjustment.isResolving}
+                                            onClick={() =>
+                                                void adjustment.resolveLastUnknown()
+                                            }
+                                        >
+                                            {adjustment.isResolving
+                                                ? "查询中…"
+                                                : "查询提交结果"}
+                                        </LoadingButton>
+                                        <LoadingButton
+                                            id="inventory-adjustment-dialog-retry"
+                                            type="button"
+                                            variant="outline"
+                                            disabled={
+                                                adjustment.isResolving ||
+                                                adjustment.isSubmitting
+                                            }
+                                            loading={adjustment.isSubmitting}
+                                            onClick={() =>
+                                                void adjustment.doSubmit()
+                                            }
+                                        >
+                                            使用本次操作重试
+                                        </LoadingButton>
+                                    </AlertDescription>
+                                </Alert>
+                            ) : null}
+                        </>
+                    }
+                    onCancel={adjustment.closeAdjustment}
+                />
+            )}
         </PageScaffold>
     )
 }

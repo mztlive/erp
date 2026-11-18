@@ -11,6 +11,8 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 import { useFileAssetQuery } from "../../hooks/queries"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import type {
@@ -138,6 +140,16 @@ function SourceImage({
     idPrefix: string
 }) {
     const [expanded, setExpanded] = React.useState(false)
+    const account = useAccountProfileQuery()
+    if (
+        image.file_asset_id &&
+        !(
+            account.isSuccess &&
+            hasPermission(account.data.permissions, "file_asset:detail")
+        )
+    ) {
+        return <p className="text-xs text-muted-foreground">第 {position} 张</p>
+    }
     return (
         <div className="space-y-2">
             <div className="flex aspect-square items-center justify-center overflow-hidden rounded-md border bg-muted/20">

@@ -46,11 +46,29 @@ export function PaymentRequestsPage({
     purchaseOrderId?: string
     create?: boolean
 }) {
-    const list = useRequestList()
+    const profile = useAccountProfileQuery()
+    const canReadCandidates = hasPermission(
+        profile.data?.permissions,
+        "purchase_payment_request:create",
+    )
+    const canCreate =
+        canReadCandidates &&
+        hasPermission(
+            profile.data?.permissions,
+            "purchase_payment_request:submit",
+        )
+    const canFilterSupplier = hasPermission(
+        profile.data?.permissions,
+        "supplier:list",
+    )
+    const list = useRequestList(
+        canReadCandidates,
+        canFilterSupplier,
+        profile.isSuccess,
+    )
     const { query } = list
     const view = list.url.view
     const queryClient = useQueryClient()
-    const profile = useAccountProfileQuery()
     const pathname = usePathname()
     const searchParams = useSearchParams()
     const listReturnHref = useMemo(() => {
@@ -70,16 +88,6 @@ export function PaymentRequestsPage({
         string[]
     >([])
     const [preview, setPreview] = useState<PaymentRequest | null>(null)
-    const canReadCandidates = hasPermission(
-        profile.data?.permissions,
-        "purchase_payment_request:create",
-    )
-    const canCreate =
-        canReadCandidates &&
-        hasPermission(
-            profile.data?.permissions,
-            "purchase_payment_request:submit",
-        )
     // 标签显示全部可申请采购单数量，不受当前视图、筛选或分页影响。
     const candidateCountQuery = usePaymentCandidatePageQuery(
         { page: 1, page_size: 1 },
@@ -95,26 +103,28 @@ export function PaymentRequestsPage({
                     ["available", "可申请"],
                     ["draft", "草稿"],
                 ] as const
-            ).map(([value, label]) => ({
-                id: `purchase-payment-requests-view-${value}`,
-                label,
-                count:
-                    value === "available" &&
-                    canReadCandidates &&
-                    candidateCountQuery.isSuccess
-                        ? candidateCountQuery.data.total
-                        : undefined,
-                active: view === value,
-                onClick: () => {
-                    list.update({
-                        ...emptyRequestFilters,
-                        purchase_order_id: undefined,
-                        view: value,
-                        page: 1,
-                    })
-                    setPreview(null)
-                },
-            }))}
+            )
+                .filter(([value]) => value !== "available" || canReadCandidates)
+                .map(([value, label]) => ({
+                    id: `purchase-payment-requests-view-${value}`,
+                    label,
+                    count:
+                        value === "available" &&
+                        canReadCandidates &&
+                        candidateCountQuery.isSuccess
+                            ? candidateCountQuery.data.total
+                            : undefined,
+                    active: view === value,
+                    onClick: () => {
+                        list.update({
+                            ...emptyRequestFilters,
+                            purchase_order_id: undefined,
+                            view: value,
+                            page: 1,
+                        })
+                        setPreview(null)
+                    },
+                }))}
         />
     )
     function closePreview() {
@@ -144,12 +154,6 @@ export function PaymentRequestsPage({
                 {canCreate && (
                     <Button
                         id="purchase-payment-requests-create"
-                        disabled={!canCreate}
-                        title={
-                            !canCreate
-                                ? "当前账号需要采购付款申请的创建和提交权限"
-                                : undefined
-                        }
                         onClick={() => {
                             setInitialPayableAccountIds([])
                             setCreateOpen(true)
@@ -179,6 +183,7 @@ export function PaymentRequestsPage({
                         <RequestListFilters
                             key={JSON.stringify([view, list.applied])}
                             applied={list.applied}
+                            canFilterSupplier={canFilterSupplier}
                             view={view}
                             scopeChip={
                                 list.purchaseOrderScope

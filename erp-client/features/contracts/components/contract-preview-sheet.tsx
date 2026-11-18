@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
 import { PrinterIcon } from "lucide-react"
 
 import { BusinessStatusBadge, QuickPreviewSheet } from "@/components/business"
@@ -81,62 +82,67 @@ export function ContractPreviewSheet({
                         >
                             关闭
                         </Button>
-                        <Button
-                            id="card-contracts-preview-sheet-paper-preview"
-                            type="button"
-                            variant="outline"
-                            disabled={!row.allowedActions.includes("PRINT")}
-                            title={
-                                row.actionBlockers.find(
-                                    (b) => b.action === "PRINT",
-                                )?.message
-                            }
-                            onClick={() => onShowPaper(row.contractId)}
-                        >
-                            <PrinterIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                            纸质预览
-                        </Button>
-                        <Button
-                            id="card-contracts-preview-sheet-detail"
-                            type="button"
-                            variant="outline"
-                            render={
-                                <Link
-                                    id="card-contracts-preview-sheet-detail-link"
-                                    href={`/sales/contracts/${row.contractId}`}
-                                />
-                            }
-                        >
-                            查看详情
-                        </Button>
-                        {canCreateSo && createSalesOrderHref ? (
+                        <PermissionGuard permission="contract:detail">
                             <Button
-                                id="card-contracts-preview-sheet-create-sales-order"
+                                id="card-contracts-preview-sheet-paper-preview"
                                 type="button"
+                                variant="outline"
+                                disabled={!row.allowedActions.includes("PRINT")}
+                                title={
+                                    row.actionBlockers.find(
+                                        (b) => b.action === "PRINT",
+                                    )?.message
+                                }
+                                onClick={() => onShowPaper(row.contractId)}
+                            >
+                                <PrinterIcon
+                                    data-icon="inline-start"
+                                    aria-hidden="true"
+                                />
+                                纸质预览
+                            </Button>
+                            <Button
+                                id="card-contracts-preview-sheet-detail"
+                                type="button"
+                                variant="outline"
                                 render={
                                     <Link
-                                        id="card-contracts-preview-sheet-create-sales-order-link"
-                                        href={createSalesOrderHref}
+                                        id="card-contracts-preview-sheet-detail-link"
+                                        href={`/sales/contracts/${row.contractId}`}
                                     />
                                 }
                             >
-                                新建销售单
+                                查看详情
                             </Button>
-                        ) : (
-                            <Button
-                                id="card-contracts-preview-sheet-create-sales-order-disabled"
-                                type="button"
-                                disabled
-                                title={
-                                    soBlocker?.message ?? "当前不可新建销售单"
-                                }
-                            >
-                                新建销售单
-                            </Button>
-                        )}
+                        </PermissionGuard>
+                        <PermissionGuard permission="sales_order:create">
+                            {canCreateSo && createSalesOrderHref ? (
+                                <Button
+                                    id="card-contracts-preview-sheet-create-sales-order"
+                                    type="button"
+                                    render={
+                                        <Link
+                                            id="card-contracts-preview-sheet-create-sales-order-link"
+                                            href={createSalesOrderHref}
+                                        />
+                                    }
+                                >
+                                    新建销售单
+                                </Button>
+                            ) : (
+                                <Button
+                                    id="card-contracts-preview-sheet-create-sales-order-disabled"
+                                    type="button"
+                                    disabled
+                                    title={
+                                        soBlocker?.message ??
+                                        "当前不可新建销售单"
+                                    }
+                                >
+                                    新建销售单
+                                </Button>
+                            )}
+                        </PermissionGuard>
                     </>
                 ) : null
             }

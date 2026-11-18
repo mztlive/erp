@@ -77,6 +77,7 @@ export function SellableItemsListPage() {
     const [exportConfirmOpen, setExportConfirmOpen] = React.useState(false)
     const [selectionLaunchOpen, setSelectionLaunchOpen] = React.useState(false)
     const launchButtonRef = React.useRef<HTMLSpanElement>(null)
+    const { canCreate: canExport } = useCreatePermission("sellable_sku:list")
     const { canCreate: canLaunchSelection } = useCreatePermission(
         "sales_selection_booklet:create",
     )
@@ -168,39 +169,42 @@ export function SellableItemsListPage() {
                         </p>
                     </PopoverContent>
                 </Popover>
-                <LoadingButton
-                    id="master-data-sellable-items-list-export"
-                    loading={exportPending}
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className={styles.exportButton}
-                    disabled={exportDisabled}
-                    onClick={() => {
-                        if (exportsSelection) onSelectionExport()
-                        else
-                            void excelExport.handleExcelExport({
-                                query: state.exportQuery,
-                                filterSnapshotLabel: state.filterSnapshotLabel,
-                                fileLabel: resourceLabel("sellable-items"),
-                            })
-                    }}
-                >
-                    {!exportPending ? (
-                        <DownloadIcon
-                            data-icon="inline-start"
-                            aria-hidden="true"
-                        />
-                    ) : null}
-                    {exportPending
-                        ? "导出中…"
-                        : exportsSelection
-                          ? `${masterDataCopy.sellableExportSelected}${selection.selectedCount > 0 ? ` ${selection.selectedCount}` : ""}`
-                          : "导出当前结果"}
-                </LoadingButton>
+                {canExport ? (
+                    <LoadingButton
+                        id="master-data-sellable-items-list-export"
+                        loading={exportPending}
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className={styles.exportButton}
+                        disabled={exportDisabled}
+                        onClick={() => {
+                            if (exportsSelection) onSelectionExport()
+                            else
+                                void excelExport.handleExcelExport({
+                                    query: state.exportQuery,
+                                    filterSnapshotLabel:
+                                        state.filterSnapshotLabel,
+                                    fileLabel: resourceLabel("sellable-items"),
+                                })
+                        }}
+                    >
+                        {!exportPending ? (
+                            <DownloadIcon
+                                data-icon="inline-start"
+                                aria-hidden="true"
+                            />
+                        ) : null}
+                        {exportPending
+                            ? "导出中…"
+                            : exportsSelection
+                              ? `${masterDataCopy.sellableExportSelected}${selection.selectedCount > 0 ? ` ${selection.selectedCount}` : ""}`
+                              : "导出当前结果"}
+                    </LoadingButton>
+                ) : null}
             </ListWorkspaceHeader>
 
-            {exportMeta ? (
+            {canExport && exportMeta ? (
                 <BackgroundJobProgress
                     mode="all-or-nothing"
                     status="succeeded"
@@ -410,14 +414,16 @@ export function SellableItemsListPage() {
                 }
             />
 
-            <SellableExportConfirmDialog
-                open={exportConfirmOpen}
-                rows={selection.selectedRows}
-                pending={excelExport.pending}
-                onOpenChange={setExportConfirmOpen}
-                onRemove={(id) => selection.toggle(id, false)}
-                onConfirm={onConfirmSelectionExport}
-            />
+            {canExport ? (
+                <SellableExportConfirmDialog
+                    open={exportConfirmOpen}
+                    rows={selection.selectedRows}
+                    pending={excelExport.pending}
+                    onOpenChange={setExportConfirmOpen}
+                    onRemove={(id) => selection.toggle(id, false)}
+                    onConfirm={onConfirmSelectionExport}
+                />
+            ) : null}
 
             {canLaunchSelection ? (
                 <BookCreateDialog

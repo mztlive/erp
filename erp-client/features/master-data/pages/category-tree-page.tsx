@@ -1,6 +1,10 @@
 "use client"
 
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
+
 import * as React from "react"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 import { DownloadIcon, FolderTreeIcon, PlusIcon } from "lucide-react"
 import {
     BusinessFailureState,
@@ -34,6 +38,10 @@ export function CategoryTreePage() {
     const searchInputRef = React.useRef<HTMLInputElement | null>(null)
     const mobileSearchRef = React.useRef<HTMLInputElement | null>(null)
     const state = useMasterDataCategoryTree(searchInputRef)
+    const account = useAccountProfileQuery()
+    const canExport =
+        account.isSuccess &&
+        hasPermission(account.data.permissions, "product_category:list")
     const workspaceRef = React.useRef<HTMLDivElement | null>(null)
     const workspaceScrollKey = `category-workspace-scroll:${state.selectedId ?? "all"}:${state.q}:${state.lifecycleStatus}`
     React.useEffect(() => {
@@ -168,6 +176,7 @@ export function CategoryTreePage() {
                         {
                             id: "master-data-category-tree-export",
                             actionKey: "export",
+                            hidden: !canExport,
                             label: "导出",
                             icon: DownloadIcon,
                             variant: "outline",
@@ -277,7 +286,6 @@ export function CategoryTreePage() {
                             query={state.q.trim()}
                             returnTo={state.returnTo}
                             canCreate={state.canCreate}
-                            createBlockedReason={state.createBlockedReason}
                             onSelect={select}
                             onClearFilters={state.clearFilters}
                             onOpenCreateRoot={state.openCreateRoot}
@@ -306,35 +314,43 @@ export function CategoryTreePage() {
                     </div>
                 </SheetContent>
             </Sheet>
-            <CategoryCreateDialog
-                key={`cat-create-${state.createParentId ?? "root"}-${state.createOpen}`}
-                open={state.createOpen}
-                onOpenChange={state.setCreateOpen}
-                defaultParentId={state.createParentId}
-                onCreated={state.onCreated}
-            />
-            <CategoryReviseDialog
-                open={state.reviseTarget != null}
-                onOpenChange={(open) => {
-                    if (!open) state.setReviseTarget(null)
-                }}
-                target={state.reviseTarget}
-            />
-            <CategoryReviseDialog
-                mode="move"
-                open={state.moveTarget != null}
-                onOpenChange={(open) => {
-                    if (!open) state.setMoveTarget(null)
-                }}
-                target={state.moveTarget}
-            />
-            <CategoryDisableDialog
-                open={state.disableTarget != null}
-                onOpenChange={(open) => {
-                    if (!open) state.setDisableTarget(null)
-                }}
-                target={state.disableTarget}
-            />
+            <PermissionGuard permission="product_category:create">
+                <CategoryCreateDialog
+                    key={`cat-create-${state.createParentId ?? "root"}-${state.createOpen}`}
+                    open={state.createOpen}
+                    onOpenChange={state.setCreateOpen}
+                    defaultParentId={state.createParentId}
+                    onCreated={state.onCreated}
+                />
+            </PermissionGuard>
+            <PermissionGuard permission="product_category:update">
+                <CategoryReviseDialog
+                    open={state.reviseTarget != null}
+                    onOpenChange={(open) => {
+                        if (!open) state.setReviseTarget(null)
+                    }}
+                    target={state.reviseTarget}
+                />
+            </PermissionGuard>
+            <PermissionGuard permission="product_category:update">
+                <CategoryReviseDialog
+                    mode="move"
+                    open={state.moveTarget != null}
+                    onOpenChange={(open) => {
+                        if (!open) state.setMoveTarget(null)
+                    }}
+                    target={state.moveTarget}
+                />
+            </PermissionGuard>
+            <PermissionGuard permission="product_category:update">
+                <CategoryDisableDialog
+                    open={state.disableTarget != null}
+                    onOpenChange={(open) => {
+                        if (!open) state.setDisableTarget(null)
+                    }}
+                    target={state.disableTarget}
+                />
+            </PermissionGuard>
         </PageScaffold>
     )
 }

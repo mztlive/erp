@@ -1,6 +1,6 @@
 import type { UseQueryResult, RefetchOptions } from "@tanstack/react-query"
 
-import { getErrorMessage } from "@/lib/api/errors"
+import { getErrorMessage, isPermissionDeniedError } from "@/lib/api/errors"
 import { mergeSelected } from "@/features/entity-selectors/lib/merge-selected"
 
 export type RemoteSearchListQuery<TItem> = Pick<
@@ -36,7 +36,11 @@ export type RemoteSearchComboboxOptions<TItem> = {
 export function useRemoteSearchCombobox<TItem>(
     options: RemoteSearchComboboxOptions<TItem>,
 ) {
-    const blocked = options.blocked || options.extraLoading
+    const denied = isPermissionDeniedError(options.list.error)
+    const selectedError = isPermissionDeniedError(options.selected?.error)
+        ? undefined
+        : options.selected?.error
+    const blocked = denied || options.blocked || options.extraLoading
     const selectedRow = options.selected
         ? blocked || options.selected.isError || options.selected.isFetching
             ? undefined
@@ -57,12 +61,15 @@ export function useRemoteSearchCombobox<TItem>(
     )
     return {
         rows,
+        denied,
         onRefresh: blocked
             ? undefined
             : () =>
                   Promise.all([
                       options.list.refetch({ throwOnError: true }),
-                      ...(options.selected && options.selectedId
+                      ...(options.selected &&
+                      options.selectedId &&
+                      !isPermissionDeniedError(options.selected.error)
                           ? [options.selected.refetch({ throwOnError: true })]
                           : []),
                   ]),
@@ -72,9 +79,9 @@ export function useRemoteSearchCombobox<TItem>(
             // 回显正在核对时显示加载态；不得由列表旧项恢复名称。
             (Boolean(options.selected?.isFetching) && selectedRow == null),
         emptyLabel:
-            options.list.isError || options.selected?.isError
+            options.list.isError || selectedError
                 ? getErrorMessage(
-                      options.list.error ?? options.selected?.error,
+                      options.list.error ?? selectedError,
                       options.fallbackError,
                   )
                 : options.list.emptyReason === "no_scope"

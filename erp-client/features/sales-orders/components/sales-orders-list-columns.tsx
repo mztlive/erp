@@ -20,6 +20,8 @@ import type { SalesOrderListItem } from "@/features/sales-orders/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 
 export type SalesOrdersListColumnsContext = {
+    canOpen: boolean
+    canDownloadContract: boolean
     downloadingContractId: string | null
     downloadContract: (order: SalesOrderListItem) => void
 }
@@ -27,7 +29,12 @@ export type SalesOrdersListColumnsContext = {
 export function buildSalesOrdersListColumns(
     context: SalesOrdersListColumnsContext,
 ): ColumnDef<SalesOrderListItem>[] {
-    const { downloadingContractId, downloadContract } = context
+    const {
+        canOpen,
+        canDownloadContract,
+        downloadingContractId,
+        downloadContract,
+    } = context
 
     return [
         {
@@ -39,20 +46,27 @@ export function buildSalesOrdersListColumns(
                 <div className="flex min-w-0 items-center gap-2">
                     <div className="min-w-0 flex-1 space-y-1">
                         <div className="flex items-center gap-2">
-                            <Button
-                                id={`sales-orders-list-row-${toAutomationIdSegment(row.original.id)}-open`}
-                                variant="link"
-                                size="xs"
-                                className="num h-auto min-h-0 px-0 text-sm leading-5 font-semibold text-foreground"
-                                aria-label={`查看销售单 ${row.original.documentNumber}`}
-                                render={
-                                    <Link
-                                        href={`/sales/orders/${row.original.id}`}
-                                    />
-                                }
-                            >
-                                {row.original.documentNumber}
-                            </Button>
+                            {canOpen ? (
+                                <Button
+                                    id={`sales-orders-list-row-${toAutomationIdSegment(row.original.id)}-open`}
+                                    variant="link"
+                                    size="xs"
+                                    className="num h-auto min-h-0 px-0 text-sm leading-5 font-semibold text-foreground"
+                                    aria-label={`查看销售单 ${row.original.documentNumber}`}
+                                    render={
+                                        <Link
+                                            href={`/sales/orders/${row.original.id}`}
+                                        />
+                                    }
+                                >
+                                    {row.original.documentNumber}
+                                </Button>
+                            ) : (
+                                <span className="num text-sm font-semibold">
+                                    {row.original.documentNumber}
+                                </span>
+                            )}
+
                             <BusinessStatusBadge
                                 context="list"
                                 label={row.original.primaryStatus.label}
@@ -95,7 +109,7 @@ export function buildSalesOrdersListColumns(
                 const downloading = downloadingContractId === order.contractId
                 return (
                     <div className="min-w-0 space-y-1">
-                        {order.contractId ? (
+                        {canDownloadContract && order.contractId ? (
                             <LoadingButton
                                 id={`sales-orders-list-row-${toAutomationIdSegment(order.id)}-download-contract`}
                                 type="button"

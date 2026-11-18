@@ -122,7 +122,7 @@ export function AllocationSessionPanel({
         submitted ||
         saveMutation.isPending ||
         postMutation.isPending
-    const saveAction = (
+    const saveAction = canOperate ? (
         <LoadingButton
             id="customer-receivables-session-save-draft"
             size="default"
@@ -130,7 +130,6 @@ export function AllocationSessionPanel({
             loading={saveMutation.isPending}
             variant="outline"
             disabled={editingDisabled}
-            title={canOperate ? undefined : permissionReason}
             onClick={() => void doSaveDraft()}
         >
             {!saveMutation.isPending && !isReceipt ? (
@@ -138,7 +137,7 @@ export function AllocationSessionPanel({
             ) : null}
             {saveMutation.isPending ? "保存中…" : "保存草稿"}
         </LoadingButton>
-    )
+    ) : null
     const focusTarget = (targetId: string) => {
         requestAnimationFrame(() => {
             const target =

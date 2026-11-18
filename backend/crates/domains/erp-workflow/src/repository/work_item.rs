@@ -39,6 +39,9 @@ pub struct WorkItemRow {
     /// 类型化审批节点执行；审批任务存在，独立任务为空。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub approval_node_execution_id: Option<String>,
+    /// 驳回待办使用的持久化责任关联，仅供服务端提取原审批实例。
+    #[serde(default, skip_serializing)]
+    pub(crate) responsibility_key: Option<String>,
     /// 业务对象类型。
     pub business_object_type: String,
     /// 业务对象 ID。

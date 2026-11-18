@@ -171,7 +171,7 @@ export function CatalogFilterForm({
                   },
               ]
             : []),
-        ...(value.price_min || value.price_max
+        ...(canReadCost && (value.price_min || value.price_max)
             ? [
                   {
                       key: "price",
@@ -332,7 +332,6 @@ export function CatalogFilterForm({
                                                     : "最高采购报价"
                                             }
                                             inputMode="decimal"
-                                            disabled={!canReadCost}
                                             value={field.state.value}
                                             onChange={(event) =>
                                                 field.handleChange(
@@ -344,11 +343,9 @@ export function CatalogFilterForm({
                                                 0
                                             }
                                             placeholder={
-                                                canReadCost
-                                                    ? name === "price_min"
-                                                        ? "最低，不限"
-                                                        : "最高，不限"
-                                                    : "无查看权限"
+                                                name === "price_min"
+                                                    ? "最低，不限"
+                                                    : "最高，不限"
                                             }
                                         />
                                         <FieldError

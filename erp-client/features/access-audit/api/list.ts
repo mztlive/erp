@@ -4,8 +4,8 @@ import { personScopeRows } from "./person-scopes"
 
 import { fetchCompleteList } from "@/lib/collect-pages"
 import { auditKeywordActions } from "@/features/access-audit/lib/audit-labels"
+import { isPermissionDeniedError } from "@/lib/api/errors"
 import { apiGet } from "@/lib/api"
-import type { Page } from "@/lib/api/paging"
 import type {
     AccessEmptyReason,
     AccessListQuery,
@@ -30,6 +30,7 @@ import {
 
 export async function fetchAccessList(
     query: AccessListQuery,
+    includeAccounts: boolean,
 ): Promise<AccessListView> {
     const gp = governancePolicies()
     const permissionVersion = `pv-live`
@@ -39,25 +40,36 @@ export async function fetchAccessList(
         query.view === "audit"
             ? Promise.resolve<BackendRole[]>([])
             : apiGet<BackendRole[]>("/admin/roles"),
-        query.view === "audit"
-            ? Promise.resolve<BackendAdmin[]>([])
-            : apiGet<BackendAdmin[]>("/admin/admins"),
-        (query.view === "audit"
-            ? fetchCompleteList<BackendAuditEvent>
-            : apiGet<Page<BackendAuditEvent>>)("/admin/audit-events", {
-            q: query.q?.trim() || undefined,
-            keyword_actions: auditKeywordActions(query.q),
-            event_id: query.eventId,
-            trace_id: query.traceId,
-            created_from: auditDate(query.from),
-            created_before: auditDate(query.to, true),
-            page: 1,
-            page_size: 1,
-            actor_id: query.actorId,
-            action_type: query.action,
-            object_id: query.objectId,
-            result: query.result as BackendAuditEvent["result"] | undefined,
-        }),
+        query.view === "audit" || !includeAccounts
+            ? Promise.resolve(null)
+            : apiGet<BackendAdmin[]>("/admin/admins").catch(
+                  (error: unknown) => {
+                      if (
+                          query.view === "roles" &&
+                          isPermissionDeniedError(error)
+                      )
+                          return null
+                      throw error
+                  },
+              ),
+        query.view !== "audit"
+            ? Promise.resolve({ items: [] as BackendAuditEvent[], total: 0 })
+            : fetchCompleteList<BackendAuditEvent>("/admin/audit-events", {
+                  q: query.q?.trim() || undefined,
+                  keyword_actions: auditKeywordActions(query.q),
+                  event_id: query.eventId,
+                  trace_id: query.traceId,
+                  created_from: auditDate(query.from),
+                  created_before: auditDate(query.to, true),
+                  page: 1,
+                  page_size: 1,
+                  actor_id: query.actorId,
+                  action_type: query.action,
+                  object_id: query.objectId,
+                  result: query.result as
+                      | BackendAuditEvent["result"]
+                      | undefined,
+              }),
     ])
 
     const scopeItems =
@@ -65,13 +77,15 @@ export async function fetchAccessList(
         query.subjectType === "ROLE"
             ? []
             : await personScopeRows(
-                  query.subjectId ? [query.subjectId] : admins.map((a) => a.id),
+                  query.subjectId
+                      ? [query.subjectId]
+                      : (admins ?? []).map((a) => a.id),
               )
     const scopesPage = { items: scopeItems, total: scopeItems.length }
     const roleNameById = new Map(roles.map((r) => [r.id, r.name]))
     const labelById = new Map<string, string>([
         ...roles.map((r) => [r.id, r.name] as const),
-        ...admins.map((a) => [a.id, a.name || a.account] as const),
+        ...(admins ?? []).map((a) => [a.id, a.name || a.account] as const),
     ])
 
     // 人员范围只关联账号，不从角色继承。
@@ -95,7 +109,7 @@ export async function fetchAccessList(
         return labels.length > 0 ? labels.join(" · ") : "—"
     }
     const boundAccountsByRole = new Map<string, number>()
-    for (const admin of admins) {
+    for (const admin of admins ?? []) {
         for (const roleId of admin.role_ids) {
             boundAccountsByRole.set(
                 roleId,
@@ -108,11 +122,11 @@ export async function fetchAccessList(
         toRoleRow(
             r,
             permissionVersion,
-            boundAccountsByRole.get(r.id) ?? 0,
+            admins ? (boundAccountsByRole.get(r.id) ?? 0) : null,
             scopeSummaryFor(r.id),
         ),
     )
-    let userRows = admins.map((a) =>
+    let userRows = (admins ?? []).map((a) =>
         toUserRow(a, roleNameById, permissionVersion, scopeSummaryFor(a.id)),
     )
     let scopeRows = scopesPage.items.map((s) =>
@@ -193,7 +207,7 @@ export async function fetchAccessList(
         calculatedAt: asOf,
         metrics: {
             roleCount: roles.length,
-            userCount: admins.length,
+            userCount: admins?.length ?? 0,
             scopeCount: scopesPage.total,
             fieldPolicyCount: 0,
             auditEventCount: auditPage.total,

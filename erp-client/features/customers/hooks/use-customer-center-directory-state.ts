@@ -48,17 +48,38 @@ export function useCustomerCenterDirectoryState() {
     const pathname = usePathname()
     const searchParams = useSearchParams()
 
+    const accountProfile = useAccountProfileQuery()
+    const permissions = accountProfile.data?.permissions
+    const canCreate = hasPermission(permissions, "customer:create")
+    const canExport = hasPermission(permissions, "customer:list")
+    const canOpenDetail = hasPermission(permissions, "customer:detail")
+    const canReadAll = hasPermission(permissions, "customer_scope:detail")
+    const canFilterOwner = hasPermission(permissions, "sales_person:list")
+    const canFilterOrg = hasPermission(permissions, "org_unit:list")
+
     // ---- Applied：URL 唯一事实源；非法枚举值降级默认 ----
-    const scope = parseCustomerScope(searchParams.get("scope"))
+    const requestedScope = parseCustomerScope(searchParams.get("scope"))
+    const scope = accountProfile.data && !canReadAll ? "mine" : requestedScope
+    const hasUnauthorizedFilters =
+        scope !== requestedScope ||
+        (!canFilterOwner && searchParams.has("ownerUserIds")) ||
+        (!canFilterOrg &&
+            (searchParams.has("orgUnitIds") ||
+                searchParams.has("includeDescendants")))
     const statusParam = searchParams.get("status")
     const status: DirectoryStatus =
         statusParam === "disabled" || statusParam === "all"
             ? statusParam
             : "active"
     const q = searchParams.get("q") ?? ""
-    const ownerUserIds = searchParams.get("ownerUserIds") ?? ""
-    const orgUnitIds = searchParams.get("orgUnitIds") ?? ""
-    const includeDescendants = searchParams.get("includeDescendants") === "true"
+    const ownerUserIds = canFilterOwner
+        ? (searchParams.get("ownerUserIds") ?? "")
+        : ""
+    const orgUnitIds = canFilterOrg
+        ? (searchParams.get("orgUnitIds") ?? "")
+        : ""
+    const includeDescendants =
+        Boolean(orgUnitIds) && searchParams.get("includeDescendants") === "true"
     const [ownerDraft, setOwnerDraft] = React.useState(ownerUserIds)
     const [orgDraft, setOrgDraft] = React.useState(orgUnitIds)
     const [descendantsDraft, setDescendantsDraft] =
@@ -72,7 +93,9 @@ export function useCustomerCenterDirectoryState() {
     const sort = "business"
     const dir: "asc" | "desc" =
         searchParams.get("dir") === "asc" ? "asc" : "desc"
-    const page = parsePage(searchParams.get("page"))
+    const page = hasUnauthorizedFilters
+        ? 1
+        : parsePage(searchParams.get("page"))
 
     const searchInputRef = React.useRef<HTMLInputElement | null>(null)
 
@@ -95,10 +118,15 @@ export function useCustomerCenterDirectoryState() {
             router.replace(
                 writeDirectoryUrl(pathname, {
                     scope: next.scope ?? scope,
-                    ownerUserIds: next.ownerUserIds ?? ownerUserIds,
-                    orgUnitIds: next.orgUnitIds ?? orgUnitIds,
+                    ownerUserIds: canFilterOwner
+                        ? (next.ownerUserIds ?? ownerUserIds)
+                        : "",
+                    orgUnitIds: canFilterOrg
+                        ? (next.orgUnitIds ?? orgUnitIds)
+                        : "",
                     includeDescendants:
-                        next.includeDescendants ?? includeDescendants,
+                        canFilterOrg &&
+                        (next.includeDescendants ?? includeDescendants),
                     status: next.status ?? status,
                     q: next.q ?? q,
                     sort: next.sort ?? sort,
@@ -109,6 +137,8 @@ export function useCustomerCenterDirectoryState() {
             )
         },
         [
+            canFilterOwner,
+            canFilterOrg,
             dir,
             includeDescendants,
             orgUnitIds,
@@ -122,6 +152,19 @@ export function useCustomerCenterDirectoryState() {
             ownerUserIds,
         ],
     )
+
+    React.useEffect(() => {
+        if (accountProfile.data && hasUnauthorizedFilters)
+            pushState({ page: 1 })
+    }, [accountProfile.data, hasUnauthorizedFilters, pushState])
+    React.useEffect(() => {
+        if (!canFilterOwner) setOwnerDraft("")
+        if (!canFilterOrg) {
+            setOrgDraft("")
+            setDescendantsDraft(false)
+            setPanelOpen(false)
+        }
+    }, [canFilterOwner, canFilterOrg])
 
     /** 查询与「应用筛选」提交全部草稿，回到第一页并关闭面板。 */
     const applyFilters = React.useCallback(() => {
@@ -243,9 +286,10 @@ export function useCustomerCenterDirectoryState() {
     const hasPendingChanges =
         searchDraft.trim() !== q.trim() ||
         statusDraft !== status ||
-        ownerDraft !== ownerUserIds ||
-        orgDraft !== orgUnitIds ||
-        descendantsDraft !== includeDescendants
+        (canFilterOwner && ownerDraft !== ownerUserIds) ||
+        (canFilterOrg &&
+            (orgDraft !== orgUnitIds ||
+                descendantsDraft !== includeDescendants))
 
     const handlePaginationChange = React.useCallback(
         (next: PaginationState) => {
@@ -273,6 +317,12 @@ export function useCustomerCenterDirectoryState() {
     )
 
     return {
+        canCreate,
+        canExport,
+        canOpenDetail,
+        canReadAll,
+        canFilterOwner,
+        canFilterOrg,
         ownerUserIds,
         ownerDraft,
         setOwnerDraft,
@@ -310,59 +360,6 @@ export function useCustomerCenterDirectoryState() {
         sorting,
         handleSortingChange,
     }
-}
-
-/**
- * 权限守卫：无「全部有权客户」范围权限时，访问 all_authorized 一律重定向到
- * 我的客户视图（等账号资料加载完成后再判定，避免闪跳）。
- */
-export function useCustomerCenterScopeGuard() {
-    const router = useRouter()
-    const pathname = usePathname()
-    const searchParams = useSearchParams()
-    const accountProfile = useAccountProfileQuery()
-    const canCreate = hasPermission(
-        accountProfile.data?.permissions,
-        "customer:create",
-    )
-    const canReadAll = hasPermission(
-        accountProfile.data?.permissions,
-        "customer_scope:detail",
-    )
-    const scope = parseCustomerScope(searchParams.get("scope"))
-    const statusParam = searchParams.get("status")
-    const status: DirectoryStatus =
-        statusParam === "disabled" || statusParam === "all"
-            ? statusParam
-            : "active"
-    React.useEffect(() => {
-        if (!accountProfile.data) return
-        if (scope !== "all_authorized" || canReadAll) return
-        router.replace(
-            writeDirectoryUrl(pathname, {
-                scope: "mine",
-                ownerUserIds: searchParams.get("ownerUserIds") ?? "",
-                orgUnitIds: searchParams.get("orgUnitIds") ?? "",
-                includeDescendants:
-                    searchParams.get("includeDescendants") === "true",
-                status,
-                q: searchParams.get("q") ?? "",
-                sort: "business",
-                dir: searchParams.get("dir") === "asc" ? "asc" : "desc",
-                page: 1,
-            }),
-            { scroll: false },
-        )
-    }, [
-        accountProfile.data,
-        canReadAll,
-        pathname,
-        router,
-        scope,
-        searchParams,
-        status,
-    ])
-    return { accountProfile, canCreate, canReadAll }
 }
 
 /** 在非输入控件焦点、且无 Dialog/Sheet 打开时按 “/” 聚焦客户搜索框。 */

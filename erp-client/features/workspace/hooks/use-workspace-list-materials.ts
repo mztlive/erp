@@ -1,16 +1,31 @@
 "use client"
 
 import { useMemo } from "react"
-import { useQueries, type UseQueryResult } from "@tanstack/react-query"
+import {
+    useQueries,
+    useQuery,
+    type UseQueryResult,
+} from "@tanstack/react-query"
+import {
+    fetchApprovalListMaterials,
+    type ApprovalListMaterialReference,
+} from "@/features/approval-workflow/api/materials"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { isApiError } from "@/lib/api/errors"
 import { displayName } from "@/lib/display-name"
 import { queryKeyRoots } from "@/lib/query-key-roots"
-import { fetchWorkspaceTaskMaterials } from "../api/task-materials"
-import type { WorkspaceDocumentFacts } from "../lib/document-facts"
+import {
+    approvalListMaterialReference,
+    usesApprovalListMaterials,
+    workspaceApprovalListFacts,
+} from "../api/task-materials"
+import {
+    fetchWorkspaceDocumentFacts,
+    type WorkspaceDocumentFacts,
+} from "../lib/document-facts"
 import type { WorkspaceWorkItem } from "../types"
 
-/** 仅订阅材料展示状态，保持表格数据在无变化时的引用稳定。 */
+/** 只订阅资料展示使用的查询状态。 */
 function combineMaterials(
     results: UseQueryResult<WorkspaceDocumentFacts | null>[],
 ) {
@@ -23,49 +38,113 @@ function combineMaterials(
     }))
 }
 
-/** 同一材料引用只查一次；各行独立失败，账号或授权版本变化后不得沿用旧材料。 */
+/** 同一提交引用只发送一次，列表排序变化时复用同一批资料。 */
+function collectReferences(items: readonly WorkspaceWorkItem[]) {
+    const approvals = new Map<string, ApprovalListMaterialReference>()
+    const documents = new Map<string, WorkspaceWorkItem>()
+    const rows = items.map((item) => {
+        if (usesApprovalListMaterials(item)) {
+            const reference = approvalListMaterialReference(item)
+            if (!reference) return { item, kind: "missing" } as const
+            const key = JSON.stringify(reference)
+            approvals.set(key, reference)
+            return { item, kind: "approval", key } as const
+        }
+
+        const key = JSON.stringify([
+            item.workItemType,
+            item.businessObjectType,
+            item.businessObjectId,
+            item.subjectVersion,
+            item.approvalProcessInstanceId ?? item.approval?.instanceId,
+        ])
+        documents.set(key, item)
+        return { item, kind: "document", key } as const
+    })
+    return {
+        rows,
+        approvals: [...approvals].sort(([a], [b]) => a.localeCompare(b)),
+        documents: [...documents],
+    }
+}
+
+type ListMaterialRow = {
+    item: WorkspaceWorkItem
+    materialNotice?: string
+    retryMaterials?: () => void
+}
+
+function rowWithFacts(item: WorkspaceWorkItem, facts: WorkspaceDocumentFacts) {
+    return {
+        item: {
+            ...item,
+            stableNumber: facts.documentNumber || item.stableNumber,
+            counterpartyName: facts.counterparty,
+            objectTitle: facts.counterparty || item.objectTitle,
+            listSummary: facts.listSummary,
+            summarySections: facts.sections,
+            briefLines: facts.lines,
+            briefMoreCount: facts.moreCount,
+            documentSummaryResolved: true,
+        },
+    }
+}
+
+/** 全页审批资料一次请求，普通业务资料继续按原业务接口读取。 */
 export function useWorkspaceListMaterials(items: readonly WorkspaceWorkItem[]) {
     const { data: profile } = useAccountProfileQuery()
-    const references = useMemo(
-        () =>
-            items.map((item) =>
-                JSON.stringify([
-                    item.workItemType,
-                    item.businessObjectType,
-                    item.businessObjectId,
-                    item.subjectVersion,
-                    item.approvalProcessInstanceId ?? item.approval?.instanceId,
-                ]),
-            ),
+    const { rows, approvals, documents } = useMemo(
+        () => collectReferences(items),
         [items],
     )
-    const unique = useMemo(
-        () => [
-            ...new Map(
-                items.map((item, index) => [references[index], item]),
-            ).entries(),
+    const scopeKey = [
+        ...queryKeyRoots.workspaceHome,
+        "list-materials",
+        profile?.userid,
+        profile?.policy_version,
+        profile?.organization_version,
+        profile ? [...profile.permissions].sort() : [],
+        profile ? [...profile.role_ids].sort() : [],
+    ]
+    const {
+        data: approvalData,
+        error: approvalError,
+        isError: approvalFailed,
+        isPending: approvalPending,
+        refetch: refetchApprovals,
+    } = useQuery({
+        queryKey: [
+            ...scopeKey,
+            "approval-batch",
+            approvals.map(([key]) => key),
         ],
-        [items, references],
-    )
-    const queries = useQueries({
+        queryFn: ({ signal }) =>
+            fetchApprovalListMaterials(
+                approvals.map(([, reference]) => reference),
+                signal,
+            ),
+        enabled: Boolean(profile) && approvals.length > 0,
+        retry: false,
+        staleTime: 0,
+        refetchInterval: 60_000,
+        meta: {
+            feedback: {
+                subject: "本页审批资料",
+                impact: "待办事项仍会显示在列表中。",
+            },
+        },
+    })
+    const documentQueries = useQueries({
         combine: combineMaterials,
-        queries: unique.map(([reference, item]) => {
+        queries: documents.map(([key, item]) => {
             const number = displayName(
                 item.stableNumber,
                 item.businessObjectId,
                 item.workItemId,
             )
             return {
-                queryKey: [
-                    ...queryKeyRoots.workspaceHome,
-                    "list-materials",
-                    profile?.userid,
-                    profile?.policy_version,
-                    profile?.organization_version,
-                    profile ? [...profile.permissions].sort() : [],
-                    reference,
-                ],
-                queryFn: () => fetchWorkspaceTaskMaterials(item),
+                queryKey: [...scopeKey, key],
+                queryFn: () => fetchWorkspaceDocumentFacts(item),
                 meta: {
                     feedback: {
                         subject:
@@ -82,49 +161,81 @@ export function useWorkspaceListMaterials(items: readonly WorkspaceWorkItem[]) {
             }
         }),
     })
-    return useMemo(() => {
-        const byReference = new Map(
-            unique.map(([reference], index) => [reference, queries[index]]),
+
+    return useMemo<ListMaterialRow[]>(() => {
+        const approvalResults = new Map(
+            approvals.map(([key], index) => [key, approvalData?.[index]]),
         )
-        return items.map((item, index) => {
-            const query = byReference.get(references[index])!
-            const facts = profile && !query.isError ? query.data : undefined
-            if (!facts) {
-                const forbidden =
-                    isApiError(query.error) && query.error.status === 403
+        const documentResults = new Map(
+            documents.map(([key], index) => [key, documentQueries[index]]),
+        )
+        const approvalUnavailable =
+            isApiError(approvalError) &&
+            (approvalError.status === 403 || approvalError.status === 404)
+        const retryApprovals = () =>
+            void refetchApprovals({ cancelRefetch: false })
+
+        return rows.map((row) => {
+            const { item, kind } = row
+            if (kind === "missing")
+                return { item, materialNotice: "请打开详情查看资料" }
+            const { key } = row
+            if (kind === "approval") {
+                if (!profile || approvalPending)
+                    return { item, materialNotice: "资料加载中…" }
+                const result = approvalFailed
+                    ? undefined
+                    : approvalResults.get(key)
+                if (result?.status === "available")
+                    return rowWithFacts(
+                        item,
+                        workspaceApprovalListFacts(result.materials),
+                    )
+                if (approvalUnavailable || result?.status === "unavailable")
+                    return { item, materialNotice: "资料不可查看" }
+                if (result?.status === "reference_mismatch")
+                    return {
+                        item,
+                        materialNotice: "资料与任务不一致，请刷新任务",
+                    }
                 return {
                     item,
-                    materialNotice:
-                        !profile || query.isPending
-                            ? "资料加载中…"
-                            : forbidden
-                              ? "无权查看业务资料"
-                              : query.isError
-                                ? "资料加载失败"
-                                : "请打开详情查看资料",
-                    retryMaterials:
-                        query.isError && !forbidden
-                            ? () => {
-                                  void query.refetch()
-                              }
-                            : undefined,
+                    materialNotice: "资料加载失败",
+                    retryMaterials: retryApprovals,
                 }
             }
+
+            const query = documentResults.get(key)!
+            if (profile && !query.isError && query.data)
+                return rowWithFacts(item, query.data)
+            const forbidden =
+                isApiError(query.error) && query.error.status === 403
             return {
-                item: {
-                    ...item,
-                    stableNumber: facts.documentNumber || item.stableNumber,
-                    counterpartyName: facts.counterparty,
-                    objectTitle: facts.counterparty || item.objectTitle,
-                    listSummary: facts.listSummary,
-                    summarySections: facts.sections,
-                    briefLines: facts.lines,
-                    briefMoreCount: facts.moreCount,
-                    documentSummaryResolved: true,
-                },
-                materialNotice: undefined,
-                retryMaterials: undefined,
+                item,
+                materialNotice:
+                    !profile || query.isPending
+                        ? "资料加载中…"
+                        : forbidden
+                          ? "无权查看业务资料"
+                          : query.isError
+                            ? "资料加载失败"
+                            : "请打开详情查看资料",
+                retryMaterials:
+                    query.isError && !forbidden
+                        ? () => void query.refetch()
+                        : undefined,
             }
         })
-    }, [items, profile, queries, references, unique])
+    }, [
+        approvalData,
+        approvalError,
+        approvalFailed,
+        approvalPending,
+        approvals,
+        documentQueries,
+        documents,
+        profile,
+        refetchApprovals,
+        rows,
+    ])
 }

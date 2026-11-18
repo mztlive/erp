@@ -12,10 +12,11 @@ export const procurementResponsibilityKeys = {
     list: () => [...procurementResponsibilityKeys.all, "list"] as const,
 }
 
-export function useProcurementResponsibilityRulesQuery() {
+export function useProcurementResponsibilityRulesQuery(enabled = true) {
     return useQuery({
         queryKey: procurementResponsibilityKeys.list(),
         queryFn: fetchProcurementResponsibilityRules,
+        enabled,
     })
 }
 

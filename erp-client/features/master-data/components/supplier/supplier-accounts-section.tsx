@@ -27,16 +27,14 @@ export function SupplierAccountsSection({
     supplierEnabled: boolean
 }) {
     const profile = useAccountProfileQuery()
-    const canList = hasPermission(
-        profile.data?.permissions,
-        "supplier_portal_account:list",
-    )
+    const permissions = profile.isSuccess ? profile.data.permissions : undefined
+    const canList = hasPermission(permissions, "supplier_portal_account:list")
     const canCreate = hasPermission(
-        profile.data?.permissions,
+        permissions,
         "supplier_portal_account:create",
     )
     const canUpdate = hasPermission(
-        profile.data?.permissions,
+        permissions,
         "supplier_portal_account:update",
     )
     const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 50 })
@@ -79,38 +77,34 @@ export function SupplierAccountsSection({
                     </Badge>
                 ),
             },
-            {
-                id: "actions",
-                header: "操作",
-                enableHiding: false,
-                cell: ({ row }) =>
-                    canUpdate ? (
-                        <Button
-                            id={`supplier-portal-account-edit-${toAutomationIdSegment(row.original.account_id)}`}
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setEditing(row.original)}
-                        >
-                            <Settings2Icon
-                                data-icon="inline-start"
-                                aria-hidden
-                            />
-                            配置
-                        </Button>
-                    ) : (
-                        <span className="text-muted-foreground">—</span>
-                    ),
-            },
+            ...(canUpdate
+                ? ([
+                      {
+                          id: "actions",
+                          header: "操作",
+                          enableHiding: false,
+                          cell: ({ row }) => (
+                              <Button
+                                  id={`supplier-portal-account-edit-${toAutomationIdSegment(row.original.account_id)}`}
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setEditing(row.original)}
+                              >
+                                  <Settings2Icon
+                                      data-icon="inline-start"
+                                      aria-hidden
+                                  />
+                                  配置
+                              </Button>
+                          ),
+                      },
+                  ] satisfies ColumnDef<PortalAccount>[])
+                : []),
         ],
         [canUpdate],
     )
 
-    if (!canList && !profile.isPending)
-        return (
-            <p className="text-sm text-muted-foreground">
-                当前账号没有门户账号查看权限。
-            </p>
-        )
+    if (!canList) return null
 
     return (
         <section
@@ -194,7 +188,7 @@ export function SupplierAccountsSection({
                     }
                 />
             )}
-            {creating && (
+            {canCreate && creating && (
                 <SupplierAccountCreateDialog
                     supplierId={supplierId}
                     supplierEnabled={supplierEnabled}
@@ -210,7 +204,7 @@ export function SupplierAccountsSection({
                     onClose={() => setCreating(false)}
                 />
             )}
-            {editing && (
+            {canUpdate && editing && (
                 <SupplierAccountEditDialog
                     key={editing.account_id}
                     account={

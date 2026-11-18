@@ -1,6 +1,8 @@
 "use client"
 
 import * as React from "react"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 import { useSearchParams } from "@/lib/navigation"
 
 import { countScopeIds, parseScopeIdList } from "@/lib/funds-scope"
@@ -27,41 +29,103 @@ export type SupplierScopeChip = Readonly<{
 export function useSupplierScopeUrlState() {
     const pageSize = 20
     const searchParams = useSearchParams()
+    const account = useAccountProfileQuery()
+    const permissions = account.data?.permissions
+    const canUseOwner = hasPermission(permissions, "procurement_person:list")
+    const canUseBusiness = hasPermission(permissions, "business_person:list")
+    const canUseOrg = hasPermission(permissions, "org_unit:list")
+    const unavailableFilters = React.useMemo(
+        () =>
+            Object.fromEntries(
+                [
+                    [canUseOwner, "procurementOwnerUserIds"] as const,
+                    [canUseBusiness, "operatorUserIds"] as const,
+                    [canUseOrg, "orgUnitIds"] as const,
+                    [canUseOrg, "includeDescendants"] as const,
+                ]
+                    .filter(([allowed]) => !allowed)
+                    .map(([, key]) => [key, null]),
+            ),
+        [canUseOwner, canUseBusiness, canUseOrg],
+    )
+    const hasUnavailableFilters = Object.keys(unavailableFilters).some((key) =>
+        searchParams.has(key),
+    )
 
     const viewParam = parseView(searchParams.get("view"))
     const view: SupplierScopeQuery["view"] =
         viewParam === "unallocated" ? "payable" : viewParam
     const qParam = searchParams.get("q") ?? ""
-    const procurementOwnerUserIds = parseScopeIdList(
-        searchParams.get("procurementOwnerUserIds"),
-    )
-    const operatorUserIds = parseScopeIdList(
-        searchParams.get("operatorUserIds"),
-    )
-    const orgUnitIds = parseScopeIdList(searchParams.get("orgUnitIds"))
-    const includeDescendants = searchParams.get("includeDescendants") === "true"
+    const procurementOwnerUserIds = canUseOwner
+        ? parseScopeIdList(searchParams.get("procurementOwnerUserIds"))
+        : undefined
+    const operatorUserIds = canUseBusiness
+        ? parseScopeIdList(searchParams.get("operatorUserIds"))
+        : undefined
+    const orgUnitIds = canUseOrg
+        ? parseScopeIdList(searchParams.get("orgUnitIds"))
+        : undefined
+    const includeDescendants =
+        canUseOrg && searchParams.get("includeDescendants") === "true"
     const supplierId = searchParams.get("supplierId") ?? undefined
     const purchaseOrderId = searchParams.get("purchaseOrderId") ?? undefined
     const payableAccountId = searchParams.get("payableAccountId") ?? undefined
-    const scopeVersion = searchParams.get("scopeVersion") ?? undefined
-    const { pageFromUrl, pagination, patchUrl, handlePaginationChange } =
-        useScopeUrlPagination({ view, pageSize, scopeVersion })
+    const scopeVersion = hasUnavailableFilters
+        ? undefined
+        : (searchParams.get("scopeVersion") ?? undefined)
+    const {
+        pageFromUrl: rawPage,
+        pagination: rawPagination,
+        patchUrl: patchPaginationUrl,
+        handlePaginationChange,
+    } = useScopeUrlPagination({ view, pageSize, scopeVersion })
+
+    const pageFromUrl = hasUnavailableFilters ? 1 : rawPage
+    const pagination = hasUnavailableFilters
+        ? { ...rawPagination, pageIndex: 0 }
+        : rawPagination
+    const patchUrl = React.useCallback(
+        (
+            patch: Parameters<typeof patchPaginationUrl>[0],
+            options?: { replace?: boolean },
+        ) =>
+            patchPaginationUrl(
+                account.data ? { ...patch, ...unavailableFilters } : patch,
+                options,
+            ),
+        [account.data, patchPaginationUrl, unavailableFilters],
+    )
+    React.useEffect(() => {
+        if (account.data && hasUnavailableFilters) {
+            patchUrl({ scopeVersion: null, page: null }, { replace: true })
+        }
+    }, [account.data, hasUnavailableFilters, patchUrl])
 
     const searchInputRef = React.useRef<HTMLInputElement | null>(null)
     const { searchDraft, setSearchDraft } = useSearchDraft(qParam, {
         skipWhileFocused: true,
         inputRef: searchInputRef,
     })
-    const [procurementOwnerDraft, setProcurementOwnerDraft] = React.useState(
-        procurementOwnerUserIds ?? "",
-    )
-    const [operatorDraft, setOperatorDraft] = React.useState(
+    const [procurementOwnerDraftValue, setProcurementOwnerDraft] =
+        React.useState(procurementOwnerUserIds ?? "")
+    const [operatorDraftValue, setOperatorDraft] = React.useState(
         operatorUserIds ?? "",
     )
-    const [orgDraft, setOrgDraft] = React.useState(orgUnitIds ?? "")
-    const [descendantsDraft, setDescendantsDraft] =
+    const [orgDraftValue, setOrgDraft] = React.useState(orgUnitIds ?? "")
+    const [descendantsDraftValue, setDescendantsDraft] =
         React.useState(includeDescendants)
     const [panelOpen, setPanelOpen] = React.useState(false)
+
+    const procurementOwnerDraft = canUseOwner ? procurementOwnerDraftValue : ""
+    const operatorDraft = canUseBusiness ? operatorDraftValue : ""
+    const orgDraft = canUseOrg ? orgDraftValue : ""
+    const descendantsDraft = canUseOrg ? descendantsDraftValue : false
+    React.useEffect(() => {
+        if (!canUseOwner) setProcurementOwnerDraft("")
+        if (!canUseBusiness) setOperatorDraft("")
+        if (!canUseOrg) setOrgDraft("")
+        if (!canUseOrg) setDescendantsDraft(false)
+    }, [canUseOwner, canUseBusiness, canUseOrg])
 
     const query: SupplierScopeQuery = React.useMemo(
         () => ({
@@ -257,6 +321,9 @@ export function useSupplierScopeUrlState() {
     ])
 
     return {
+        canUseOwner,
+        canUseBusiness,
+        canUseOrg,
         view,
         qParam,
         procurementOwnerUserIds,

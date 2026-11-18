@@ -66,7 +66,7 @@ function isActivePath(pathname: string, path: string) {
     return pathname === href || pathname.startsWith(`${href}/`)
 }
 
-function PortalSidebarNav() {
+function PortalSidebarNav({ canMaintain }: { canMaintain: boolean }) {
     const pathname = usePathname()
     const { isMobile, setOpenMobile } = useSidebar()
 
@@ -77,40 +77,45 @@ function PortalSidebarNav() {
                     <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
                     <SidebarGroupContent>
                         <SidebarMenu className="gap-0.5">
-                            {group.items.map(({ path, label, icon: Icon }) => {
-                                const active = isActivePath(pathname, path)
-                                return (
-                                    <SidebarMenuItem key={path}>
-                                        <SidebarMenuButton
-                                            id={`supplier-portal-nav-${path}`}
-                                            data-workspace-nav={
-                                                path === "tasks"
-                                                    ? "supplier-portal-tasks"
-                                                    : undefined
-                                            }
-                                            isActive={active}
-                                            tooltip={label}
-                                            render={
-                                                <Link
-                                                    href={`/supplier-portal/${path}`}
-                                                    aria-current={
-                                                        active
-                                                            ? "page"
-                                                            : undefined
-                                                    }
-                                                />
-                                            }
-                                            onClick={() => {
-                                                if (isMobile)
-                                                    setOpenMobile(false)
-                                            }}
-                                        >
-                                            <Icon aria-hidden="true" />
-                                            <span>{label}</span>
-                                        </SidebarMenuButton>
-                                    </SidebarMenuItem>
+                            {group.items
+                                .filter(
+                                    ({ path }) =>
+                                        canMaintain || path !== "new-products",
                                 )
-                            })}
+                                .map(({ path, label, icon: Icon }) => {
+                                    const active = isActivePath(pathname, path)
+                                    return (
+                                        <SidebarMenuItem key={path}>
+                                            <SidebarMenuButton
+                                                id={`supplier-portal-nav-${path}`}
+                                                data-workspace-nav={
+                                                    path === "tasks"
+                                                        ? "supplier-portal-tasks"
+                                                        : undefined
+                                                }
+                                                isActive={active}
+                                                tooltip={label}
+                                                render={
+                                                    <Link
+                                                        href={`/supplier-portal/${path}`}
+                                                        aria-current={
+                                                            active
+                                                                ? "page"
+                                                                : undefined
+                                                        }
+                                                    />
+                                                }
+                                                onClick={() => {
+                                                    if (isMobile)
+                                                        setOpenMobile(false)
+                                                }}
+                                            >
+                                                <Icon aria-hidden="true" />
+                                                <span>{label}</span>
+                                            </SidebarMenuButton>
+                                        </SidebarMenuItem>
+                                    )
+                                })}
                         </SidebarMenu>
                     </SidebarGroupContent>
                 </SidebarGroup>
@@ -228,7 +233,9 @@ export function PortalShell({
                     </div>
                 </div>
             }
-            sidebarContent={<PortalSidebarNav />}
+            sidebarContent={
+                <PortalSidebarNav canMaintain={profile.role === "maintainer"} />
+            }
             sidebarFooter={
                 <PortalSidebarAccount profile={profile} onLogout={onLogout} />
             }

@@ -249,13 +249,17 @@ function SalesOrderDetailContent({
             canOperateAcceptance &&
             !deliveryQuery.isError &&
             (deliveryQuery.data?.pendingFactCount ?? 0) > 0,
+        canReadAcceptance: canReadDelivery,
         canViewExtraCost,
         canSupplementContract: canSupplementSalesOrderContract(
             order,
             account.data?.permissions,
         ),
     })
-    if (derived.showEditor) {
+    if (
+        derived.showEditor &&
+        hasPermission(account.data?.permissions, "sales_order:update")
+    ) {
         return (
             <SalesOrderEditableCenter
                 order={order}

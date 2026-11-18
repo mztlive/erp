@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo } from "react"
 import { usePathname, useRouter, useSearchParams } from "@/lib/navigation"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 import type { SortingState } from "@tanstack/react-table"
 import {
     candidateListCodec,
@@ -15,10 +17,19 @@ export function useCandidateList(canRead: boolean) {
     const router = useRouter()
     const pathname = usePathname()
     const searchParams = useSearchParams()
-    const url = useMemo(
-        () => candidateListCodec.parse(searchParams),
-        [searchParams],
+    const profile = useAccountProfileQuery()
+    const canFilterSupplier = hasPermission(
+        profile.data?.permissions,
+        "supplier:list",
     )
+    const unavailableSupplier =
+        !canFilterSupplier && searchParams.has("candidate_supplier_id")
+    const url = useMemo(() => {
+        const parsed = candidateListCodec.parse(searchParams)
+        return unavailableSupplier
+            ? { ...parsed, supplier_id: undefined, page: 1 }
+            : parsed
+    }, [searchParams, unavailableSupplier])
     const update = useCallback(
         (patch: Partial<CandidateListQuery>) => {
             const params = new URLSearchParams(searchParams.toString())
@@ -26,15 +37,23 @@ export function useCandidateList(canRead: boolean) {
                 if (key.startsWith("candidate_")) params.delete(key)
             }
             candidateListCodec
-                .buildParams({ ...url, ...patch })
+                .buildParams({
+                    ...url,
+                    ...patch,
+                    ...(!canFilterSupplier && { supplier_id: undefined }),
+                })
                 .forEach((value, key) => params.set(key, value))
             params.set("view", "available")
             router.replace(`${pathname}?${params.toString()}`, {
                 scroll: false,
             })
         },
-        [url, searchParams, pathname, router],
+        [url, searchParams, pathname, router, canFilterSupplier],
     )
+    useEffect(() => {
+        if (canRead && profile.isSuccess && unavailableSupplier)
+            update({ page: 1 })
+    }, [canRead, profile.isSuccess, unavailableSupplier, update])
     const query = usePaymentCandidatePageQuery(url, canRead)
     const applied: CandidateFilters = {
         purchase_order_no: url.purchase_order_no ?? "",
@@ -60,5 +79,5 @@ export function useCandidateList(canRead: boolean) {
             sort_desc: next[0]?.desc ?? false,
             page: 1,
         })
-    return { url, query, applied, update, sorting, sort }
+    return { url, query, applied, update, sorting, sort, canFilterSupplier }
 }

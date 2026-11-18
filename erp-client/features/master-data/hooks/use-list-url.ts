@@ -7,24 +7,50 @@ import type { PaginationState } from "@tanstack/react-table"
 import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
 
 /** 列表筛选 / 分页写入 URL（刷新、后退、分享一致）。 */
-export function useListUrl() {
+export function useListUrl(
+    unavailableFilters: Readonly<Record<string, boolean>> = {},
+    cleanUnavailableFilters = true,
+) {
     const router = useRouter()
     const pathname = usePathname()
     const searchParams = useSearchParams()
 
+    const unavailableFilterKeys = Object.keys(unavailableFilters)
+        .filter((key) => unavailableFilters[key] && searchParams.has(key))
+        .join(",")
+    const shouldClean = cleanUnavailableFilters && unavailableFilterKeys !== ""
+
     const patchUrl = React.useCallback(
         (patch: Record<string, string | null>) => {
-            patchSearchParams({ router, pathname, searchParams }, patch, {
-                replace: true,
-                scroll: false,
-            })
+            const cleanup = shouldClean
+                ? Object.fromEntries(
+                      unavailableFilterKeys
+                          .split(",")
+                          .map((key) => [key, null]),
+                  )
+                : {}
+            patchSearchParams(
+                { router, pathname, searchParams },
+                {
+                    ...patch,
+                    ...(shouldClean ? { ...cleanup, page: null } : {}),
+                },
+                {
+                    replace: true,
+                    scroll: false,
+                },
+            )
         },
-        [pathname, router, searchParams],
+        [pathname, router, searchParams, shouldClean, unavailableFilterKeys],
     )
+
+    React.useEffect(() => {
+        if (shouldClean) patchUrl({})
+    }, [patchUrl, shouldClean])
 
     const pageParamRaw = Number(searchParams.get("page"))
     const pageParamIndex =
-        Number.isFinite(pageParamRaw) && pageParamRaw > 0
+        !shouldClean && Number.isFinite(pageParamRaw) && pageParamRaw > 0
             ? Math.max(0, Math.floor(pageParamRaw) - 1)
             : 0
 
@@ -61,7 +87,7 @@ export function useListUrl() {
         searchParams,
         patchUrl,
         q,
-        pagination,
+        pagination: shouldClean ? { ...pagination, pageIndex: 0 } : pagination,
         setPagination,
         resetPagination,
         changePagination,

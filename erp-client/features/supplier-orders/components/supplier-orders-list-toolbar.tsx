@@ -199,39 +199,44 @@ export function SupplierOrdersListToolbar({
                             </ListWorkspaceFilterField>
                         </div>
                     </fieldset>
-                    <fieldset className="min-w-0 space-y-3 border-t pt-4">
-                        <legend className="pr-2 text-sm font-medium">
-                            人员
-                        </legend>
-                        <div className="grid min-w-0 gap-3">
-                            {/* 未接人员目录：跟进人不是采购查询资格，处理人是开放异常任务负责人。 */}
-                            <PersonDirectoryFilter
-                                id={`${prefix}-owner`}
-                                label="跟进人"
-                                value={f.ownerUserIdsDraft}
-                                onChange={f.setOwnerUserIdsDraft}
-                                category="business"
+                    {f.canFilterPeople && (
+                        <fieldset className="min-w-0 space-y-3 border-t pt-4">
+                            <legend className="pr-2 text-sm font-medium">
+                                人员
+                            </legend>
+                            <div className="grid min-w-0 gap-3">
+                                <PersonDirectoryFilter
+                                    id={`${prefix}-owner`}
+                                    label="跟进人"
+                                    value={f.ownerUserIdsDraft}
+                                    onChange={f.setOwnerUserIdsDraft}
+                                    category="business"
+                                />
+                                <PersonDirectoryFilter
+                                    id={`${prefix}-handler`}
+                                    label="异常处理人"
+                                    value={f.handlerUserIdsDraft}
+                                    onChange={f.setHandlerUserIdsDraft}
+                                    category="business"
+                                />
+                            </div>
+                        </fieldset>
+                    )}
+                    {f.canFilterOrg && (
+                        <fieldset className="min-w-0 border-t pt-4">
+                            <legend className="sr-only">业务组织</legend>
+                            <OrganizationUnitFilter
+                                id={`${prefix}-org`}
+                                label="业务组织"
+                                value={f.orgUnitIdsDraft}
+                                onChange={f.setOrgUnitIdsDraft}
+                                includeDescendants={f.includeDescendantsDraft}
+                                onDescendantsChange={
+                                    f.setIncludeDescendantsDraft
+                                }
                             />
-                            <PersonDirectoryFilter
-                                id={`${prefix}-handler`}
-                                label="异常处理人"
-                                value={f.handlerUserIdsDraft}
-                                onChange={f.setHandlerUserIdsDraft}
-                                category="business"
-                            />
-                        </div>
-                    </fieldset>
-                    <fieldset className="min-w-0 border-t pt-4">
-                        <legend className="sr-only">业务组织</legend>
-                        <OrganizationUnitFilter
-                            id={`${prefix}-org`}
-                            label="业务组织"
-                            value={f.orgUnitIdsDraft}
-                            onChange={f.setOrgUnitIdsDraft}
-                            includeDescendants={f.includeDescendantsDraft}
-                            onDescendantsChange={f.setIncludeDescendantsDraft}
-                        />
-                    </fieldset>
+                        </fieldset>
+                    )}
                 </div>
             }
             resultStatus={listWorkspaceFilterStatusText({

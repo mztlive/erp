@@ -18,6 +18,9 @@ export function useSupplierOrdersListColumns({
     onPreview,
     onQueryResult,
     queryPending,
+    canOpenDetail,
+    canInvestigate,
+    canOpenIntegrationErrors,
 }: {
     rows: SupplierOrderListRow[]
     focusedIndex: number
@@ -25,6 +28,9 @@ export function useSupplierOrdersListColumns({
     onPreview: (orderId: string) => void
     onQueryResult: (row: SupplierOrderListRow) => Promise<void>
     queryPending: boolean
+    canOpenDetail: boolean
+    canInvestigate: boolean
+    canOpenIntegrationErrors: boolean
 }) {
     return React.useMemo<ColumnDef<SupplierOrderListRow>[]>(
         () => [
@@ -42,33 +48,41 @@ export function useSupplierOrdersListColumns({
                                 : undefined
                         }
                     >
-                        <Button
-                            id={`supplier-orders-list-row-${toAutomationIdSegment(row.original.orderId)}-preview`}
-                            type="button"
-                            variant="link"
-                            size="xs"
-                            className="num h-auto justify-start px-0 text-sm"
-                            aria-label={`预览 ${row.original.orderNo}`}
-                            ref={(element) => {
-                                if (element) {
-                                    rowRefs.current.set(
-                                        row.original.orderId,
-                                        element,
-                                    )
-                                } else {
-                                    rowRefs.current.delete(row.original.orderId)
+                        {canOpenDetail ? (
+                            <Button
+                                id={`supplier-orders-list-row-${toAutomationIdSegment(row.original.orderId)}-preview`}
+                                type="button"
+                                variant="link"
+                                size="xs"
+                                className="num h-auto justify-start px-0 text-sm"
+                                aria-label={`预览 ${row.original.orderNo}`}
+                                ref={(element) => {
+                                    if (element) {
+                                        rowRefs.current.set(
+                                            row.original.orderId,
+                                            element,
+                                        )
+                                    } else {
+                                        rowRefs.current.delete(
+                                            row.original.orderId,
+                                        )
+                                    }
+                                }}
+                                tabIndex={
+                                    rows[focusedIndex]?.orderId ===
+                                    row.original.orderId
+                                        ? 0
+                                        : -1
                                 }
-                            }}
-                            tabIndex={
-                                rows[focusedIndex]?.orderId ===
-                                row.original.orderId
-                                    ? 0
-                                    : -1
-                            }
-                            onClick={() => onPreview(row.original.orderId)}
-                        >
-                            {row.original.orderNo}
-                        </Button>
+                                onClick={() => onPreview(row.original.orderId)}
+                            >
+                                {row.original.orderNo}
+                            </Button>
+                        ) : (
+                            <span className="num font-medium">
+                                {row.original.orderNo}
+                            </span>
+                        )}
                         <span className="truncate text-xs text-muted-foreground">
                             {row.original.supplierName}
                         </span>
@@ -191,6 +205,7 @@ export function useSupplierOrdersListColumns({
                 meta: { label: "操作", width: "default", align: "end" },
                 enableSorting: false,
                 cell: ({ row }) => {
+                    if (!canOpenDetail) return null
                     const r = row.original
                     const segment = toAutomationIdSegment(r.orderId)
                     const canQuery = r.allowedActions.includes("QUERY_RESULT")
@@ -211,7 +226,7 @@ export function useSupplierOrdersListColumns({
                                         label: "预览",
                                         icon: EyeIcon,
                                         onClick: () => onPreview(r.orderId),
-                                        ...(resultUnknown
+                                        ...(resultUnknown && canInvestigate
                                             ? { placement: "menu" as const }
                                             : {}),
                                     },
@@ -221,7 +236,7 @@ export function useSupplierOrdersListColumns({
                                         icon: ArrowUpRightIcon,
                                         href: `/supplier-api/orders/${r.orderId}`,
                                     },
-                                    ...(resultUnknown
+                                    ...(resultUnknown && canInvestigate
                                         ? [
                                               {
                                                   id: `supplier-orders-list-row-${segment}-query`,
@@ -241,10 +256,14 @@ export function useSupplierOrdersListColumns({
                                         : []),
                                 ]}
                             />
-                            {resultUnknown && !canQuery && queryBlocker ? (
+                            {canInvestigate &&
+                            resultUnknown &&
+                            !canQuery &&
+                            queryBlocker ? (
                                 <span className="max-w-[14rem] text-xs leading-tight text-muted-foreground">
                                     {queryBlocker.message}
-                                    {queryBlocker.destinationWorkspaceId ? (
+                                    {canOpenIntegrationErrors &&
+                                    queryBlocker.destinationWorkspaceId ? (
                                         <>
                                             ，可
                                             <Link
@@ -258,7 +277,7 @@ export function useSupplierOrdersListColumns({
                                     ) : null}
                                 </span>
                             ) : null}
-                            {resultUnknown && !canReplay ? (
+                            {canInvestigate && resultUnknown && !canReplay ? (
                                 <span className="sr-only">
                                     重发需先查询确认无结果且系统允许重试
                                 </span>
@@ -269,6 +288,14 @@ export function useSupplierOrdersListColumns({
             },
         ],
         // eslint-disable-next-line react-hooks/exhaustive-deps -- handlers stable enough for list
-        [focusedIndex, onPreview, queryPending, rows],
+        [
+            canOpenDetail,
+            canInvestigate,
+            canOpenIntegrationErrors,
+            focusedIndex,
+            onPreview,
+            queryPending,
+            rows,
+        ],
     )
 }

@@ -20,6 +20,7 @@ export function deriveSalesOrderDetailState(
         fromWorkspace: string | null
         returnTo: string | null
         hasEligibleAcceptance: boolean
+        canReadAcceptance?: boolean
         canViewExtraCost?: boolean
         canSupplementContract?: boolean
     },
@@ -61,6 +62,7 @@ export function deriveSalesOrderDetailState(
         }),
     )
     const visibleNav = navItemsFor(order, {
+        canReadAcceptance: input.canReadAcceptance,
         canViewExtraCost: input.canViewExtraCost,
         canSupplementContract: input.canSupplementContract,
     }).filter((item) => item.show)

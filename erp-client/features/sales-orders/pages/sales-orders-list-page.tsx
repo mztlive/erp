@@ -1,6 +1,8 @@
 "use client"
 
 import * as React from "react"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 import { useRouter } from "@/lib/navigation"
 import type { PaginationState, SortingState } from "@tanstack/react-table"
 
@@ -44,6 +46,15 @@ const SUMMARY_FILTER_OPTIONS: ReadonlyArray<{
  */
 export function SalesOrdersListPage() {
     const router = useRouter()
+    const account = useAccountProfileQuery()
+    const canCreate = hasPermission(
+        account.data?.permissions,
+        "sales_order:create",
+    )
+    const canExport = hasPermission(
+        account.data?.permissions,
+        "sales_order:list",
+    )
     const { url, pushUrl } = useSalesOrdersListUrlState()
     const { ordersQuery, query } = useSalesOrdersListQuery(url)
     const filters = useSalesOrdersListFilters(url, pushUrl)
@@ -137,12 +148,14 @@ export function SalesOrdersListPage() {
                 isError={ordersQuery.isError}
                 isFetching={ordersQuery.isFetching}
                 queriedAt={ordersQuery.data?.queriedAt}
+                canCreate={canCreate}
+                canExport={canExport}
                 exportDisabled={total === 0 || isExporting}
                 isExporting={isExporting}
                 onExport={() => {
                     void exportCsv()
                 }}
-                exportJob={exportJob}
+                exportJob={canExport ? exportJob : null}
             />
 
             <ListWorkSurface
@@ -200,6 +213,15 @@ export function SalesOrdersListPage() {
                         onSortingChange={handleSortingChange}
                         pagination={pagination}
                         onPaginationChange={handlePaginationChange}
+                        canCreate={canCreate}
+                        canOpen={hasPermission(
+                            account.data?.permissions,
+                            "sales_order:detail",
+                        )}
+                        canDownloadContract={hasPermission(
+                            account.data?.permissions,
+                            "contract:detail",
+                        )}
                         onRowNavigate={handleRowNavigate}
                         downloadingContractId={downloadingContractId}
                         downloadContract={downloadContract}

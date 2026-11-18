@@ -201,78 +201,88 @@ export function SalesOrderCustomerFinancePanel({
                 </>
             )}
             <div className="divide-y divide-border/70">
-                {section === "receivable" && (
-                    <DetailRecordSection
-                        title="应收明细"
-                        count={readableAccounts?.length}
-                    >
-                        <ReadState
-                            allowed={canRead("receivable_account:list")}
-                            pending={
-                                state.profile.isPending || accounts.isLoading
-                            }
-                            error={accounts.error}
-                            retry={() => void accounts.refetch()}
+                {section === "receivable" &&
+                    canRead("receivable_account:list") && (
+                        <DetailRecordSection
+                            title="应收明细"
+                            count={readableAccounts?.length}
                         >
-                            {!readableAccounts?.length ? (
-                                <p className="text-sm text-muted-foreground">
-                                    {order.currentRevisionNo == null
-                                        ? "本单尚未生效，尚未形成应收。"
-                                        : "本单已生效，当前可见范围未查到应收记录。"}
-                                </p>
-                            ) : (
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>应收</TableHead>
-                                            <TableHead>结算主体</TableHead>
-                                            <TableHead>到期日</TableHead>
-                                            <TableHead>状态</TableHead>
-                                            <TableHead data-align="end">
-                                                待收金额
-                                            </TableHead>
-                                            <TableHead>操作</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {readableAccounts.map((row) => (
-                                            <TableRow key={row.accountId}>
-                                                <TableCell>
-                                                    子账 #{row.accountSeq}
-                                                </TableCell>
-                                                <TableCell>
-                                                    {row.counterpartyPartyName}
-                                                </TableCell>
-                                                <TableCell className="num">
-                                                    {row.dueDate || "未约定"}
-                                                </TableCell>
-                                                <TableCell>
-                                                    <StatusBadge
-                                                        label={row.statusLabel}
-                                                        tone={row.statusTone}
-                                                    />
-                                                </TableCell>
-                                                <TableCell data-align="end">
-                                                    <MoneyValue
-                                                        value={row.openTotal}
-                                                    />
-                                                </TableCell>
-                                                <TableCell>
-                                                    {previewButton(
-                                                        "receivable",
-                                                        row.accountId,
-                                                        `应收子账${row.accountSeq}`,
-                                                    )}
-                                                </TableCell>
+                            <ReadState
+                                pending={
+                                    state.profile.isPending ||
+                                    accounts.isLoading
+                                }
+                                error={accounts.error}
+                                retry={() => void accounts.refetch()}
+                            >
+                                {!readableAccounts?.length ? (
+                                    <p className="text-sm text-muted-foreground">
+                                        {order.currentRevisionNo == null
+                                            ? "本单尚未生效，尚未形成应收。"
+                                            : "本单已生效，当前可见范围未查到应收记录。"}
+                                    </p>
+                                ) : (
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead>应收</TableHead>
+                                                <TableHead>结算主体</TableHead>
+                                                <TableHead>到期日</TableHead>
+                                                <TableHead>状态</TableHead>
+                                                <TableHead data-align="end">
+                                                    待收金额
+                                                </TableHead>
+                                                <TableHead>操作</TableHead>
                                             </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            )}
-                        </ReadState>
-                    </DetailRecordSection>
-                )}
-                {section === "receipt" && (
+                                        </TableHeader>
+                                        <TableBody>
+                                            {readableAccounts.map((row) => (
+                                                <TableRow key={row.accountId}>
+                                                    <TableCell>
+                                                        子账 #{row.accountSeq}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {
+                                                            row.counterpartyPartyName
+                                                        }
+                                                    </TableCell>
+                                                    <TableCell className="num">
+                                                        {row.dueDate ||
+                                                            "未约定"}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <StatusBadge
+                                                            label={
+                                                                row.statusLabel
+                                                            }
+                                                            tone={
+                                                                row.statusTone
+                                                            }
+                                                        />
+                                                    </TableCell>
+                                                    <TableCell data-align="end">
+                                                        <MoneyValue
+                                                            value={
+                                                                row.openTotal
+                                                            }
+                                                        />
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {previewButton(
+                                                            "receivable",
+                                                            row.accountId,
+                                                            `应收子账${row.accountSeq}`,
+                                                        )}
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                )}
+                            </ReadState>
+                        </DetailRecordSection>
+                    )}
+                {section === "receipt" && canRead("customer_receipt:list") && (
                     <DetailRecordSection
                         title="回款记录"
                         count={
@@ -283,7 +293,6 @@ export function SalesOrderCustomerFinancePanel({
                         compact={receiptsEmpty}
                     >
                         <ReadState
-                            allowed={canRead("customer_receipt:list")}
                             pending={
                                 state.profile.isPending || receipts.isLoading
                             }
@@ -475,13 +484,11 @@ export function SalesOrderCustomerFinancePanel({
 }
 
 function ReadState({
-    allowed,
     pending,
     error,
     retry,
     children,
 }: {
-    allowed: boolean
     pending: boolean
     error: unknown
     retry: () => void
@@ -491,12 +498,6 @@ function ReadState({
         return (
             <p role="status" className="text-sm text-muted-foreground">
                 正在加载…
-            </p>
-        )
-    if (!allowed)
-        return (
-            <p className="text-sm text-muted-foreground">
-                当前账号无此类明细查看权限，以上销售单摘要仍可查阅。
             </p>
         )
     if (error)

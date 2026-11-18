@@ -32,6 +32,7 @@ export function SupplierSearchCombobox({
     )
     const {
         rows,
+        denied,
         onRefresh,
         loading,
         emptyLabel: resolvedEmptyLabel,
@@ -44,6 +45,8 @@ export function SupplierSearchCombobox({
         emptyLabel,
         fallbackError: "供应商加载失败，请重试",
     })
+    if (denied) return null
+
     return (
         <div className="min-w-0">
             <SupplierCombobox

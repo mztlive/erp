@@ -27,8 +27,8 @@ type InventoryBalancePreviewProps = {
     isPending: boolean
     isCreating?: boolean
     onClose: () => void
-    onViewMovements: (detail: BalanceDetailView) => void
-    onStartAdjustment: (row: StockBalanceRow) => Promise<void>
+    onViewMovements?: (detail: BalanceDetailView) => void
+    onStartAdjustment?: (row: StockBalanceRow) => Promise<void>
     onOpenAdjustment?: (adjustmentId: string) => void
 }
 
@@ -82,15 +82,18 @@ function InventoryBalancePreview({
                         >
                             关闭
                         </Button>
-                        <Button
-                            id="inventory-balance-preview-view-movements"
-                            type="button"
-                            variant="outline"
-                            onClick={() => onViewMovements(detail)}
-                        >
-                            查看全部流水
-                        </Button>
-                        {detail.balance.allowedActions.includes(
+                        {onViewMovements && (
+                            <Button
+                                id="inventory-balance-preview-view-movements"
+                                type="button"
+                                variant="outline"
+                                onClick={() => onViewMovements(detail)}
+                            >
+                                查看全部流水
+                            </Button>
+                        )}
+                        {onStartAdjustment &&
+                        detail.balance.allowedActions.includes(
                             "CREATE_ADJUSTMENT",
                         ) ? (
                             <LoadingButton

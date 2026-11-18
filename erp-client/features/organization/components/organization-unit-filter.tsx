@@ -11,6 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { useOrganizationStateQuery } from "@/features/organization/hooks/queries"
 import type { OrgUnit } from "@/features/organization/types"
+import { isPermissionDeniedError } from "@/lib/api/errors"
 import { hasPermission } from "@/lib/permissions"
 
 function buildUnitNodes(units: readonly OrgUnit[]): TreeComboboxNode[] {
@@ -92,7 +93,7 @@ export function OrganizationUnitFilter({
               ? "当前账号无可选组织范围"
               : undefined
 
-    if (!canRead) return null
+    if (!canRead || isPermissionDeniedError(query.error)) return null
 
     return (
         <div className="min-w-0 space-y-1.5">

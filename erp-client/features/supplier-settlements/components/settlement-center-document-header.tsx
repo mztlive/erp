@@ -1,5 +1,6 @@
 "use client"
 
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
 import { RefreshCwIcon, SendIcon } from "lucide-react"
 
 import {
@@ -116,44 +117,48 @@ function SettlementCenterHeaderActions({
 }) {
     return (
         <div className="flex flex-wrap gap-2">
-            {allowed.has("REFRESH_TRIAL") ? (
-                <LoadingButton
-                    id="supplier-settlements-center-refresh"
-                    loading={refreshPending}
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={refreshPending}
-                    onClick={() => void onRefresh()}
-                >
-                    <RefreshCwIcon
-                        data-icon="inline-start"
-                        aria-hidden="true"
-                    />
-                    {refreshPending ? "刷新中…" : "刷新试算"}
-                </LoadingButton>
-            ) : null}
-            {allowed.has("SUBMIT_REVIEW") ? (
-                <Button
-                    id="supplier-settlements-center-submit-review"
-                    type="button"
-                    size="sm"
-                    onClick={onSubmitReview}
-                >
-                    <SendIcon data-icon="inline-start" aria-hidden="true" />
-                    提交复核
-                </Button>
-            ) : submitBlocker ? (
-                <GuardedBusinessAction
-                    id="supplier-settlements-center-submit-review-disabled"
-                    type="button"
-                    size="sm"
-                    disabled
-                    reason={submitBlocker.message}
-                >
-                    提交复核
-                </GuardedBusinessAction>
-            ) : null}
+            <PermissionGuard permission="supplier_settlement_statement:update">
+                {allowed.has("REFRESH_TRIAL") ? (
+                    <LoadingButton
+                        id="supplier-settlements-center-refresh"
+                        loading={refreshPending}
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={refreshPending}
+                        onClick={() => void onRefresh()}
+                    >
+                        <RefreshCwIcon
+                            data-icon="inline-start"
+                            aria-hidden="true"
+                        />
+                        {refreshPending ? "刷新中…" : "刷新试算"}
+                    </LoadingButton>
+                ) : null}
+            </PermissionGuard>
+            <PermissionGuard permission="supplier_settlement_statement:submit">
+                {allowed.has("SUBMIT_REVIEW") ? (
+                    <Button
+                        id="supplier-settlements-center-submit-review"
+                        type="button"
+                        size="sm"
+                        onClick={onSubmitReview}
+                    >
+                        <SendIcon data-icon="inline-start" aria-hidden="true" />
+                        提交复核
+                    </Button>
+                ) : submitBlocker ? (
+                    <GuardedBusinessAction
+                        id="supplier-settlements-center-submit-review-disabled"
+                        type="button"
+                        size="sm"
+                        disabled
+                        reason={submitBlocker.message}
+                    >
+                        提交复核
+                    </GuardedBusinessAction>
+                ) : null}
+            </PermissionGuard>
         </div>
     )
 }

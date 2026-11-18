@@ -1,5 +1,7 @@
 "use client"
 
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
+
 import { BanIcon } from "lucide-react"
 import { BusinessStatusBadge, QuickPreviewSheet } from "@/components/business"
 import { Button } from "@/components/ui/button"
@@ -67,28 +69,32 @@ export function UnitOfMeasurePreviewSheet({
                         >
                             关闭
                         </Button>
-                        <DisabledActionHint message={disableReason}>
-                            <Button
-                                id={`${prefix}-disable`}
-                                variant="ghost"
-                                disabled={!canDisable}
-                                title={disableReason}
-                                onClick={() => onDisable(row)}
-                            >
-                                <BanIcon aria-hidden />
-                                {masterDataCopy.actionDisable}
-                            </Button>
-                        </DisabledActionHint>
-                        <DisabledActionHint message={reviseReason}>
-                            <Button
-                                id={`${prefix}-revise`}
-                                disabled={!canRevise}
-                                title={reviseReason}
-                                onClick={() => onRevise(row)}
-                            >
-                                {masterDataCopy.actionUpdate}
-                            </Button>
-                        </DisabledActionHint>
+                        <PermissionGuard permission="unit_of_measure:update">
+                            <DisabledActionHint message={disableReason}>
+                                <Button
+                                    id={`${prefix}-disable`}
+                                    variant="ghost"
+                                    disabled={!canDisable}
+                                    title={disableReason}
+                                    onClick={() => onDisable(row)}
+                                >
+                                    <BanIcon aria-hidden />
+                                    {masterDataCopy.actionDisable}
+                                </Button>
+                            </DisabledActionHint>
+                        </PermissionGuard>
+                        <PermissionGuard permission="unit_of_measure:update">
+                            <DisabledActionHint message={reviseReason}>
+                                <Button
+                                    id={`${prefix}-revise`}
+                                    disabled={!canRevise}
+                                    title={reviseReason}
+                                    onClick={() => onRevise(row)}
+                                >
+                                    {masterDataCopy.actionUpdate}
+                                </Button>
+                            </DisabledActionHint>
+                        </PermissionGuard>
                     </>
                 ) : null
             }

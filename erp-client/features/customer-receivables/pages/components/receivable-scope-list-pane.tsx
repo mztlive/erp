@@ -1,5 +1,7 @@
 "use client"
 
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
+
 import * as React from "react"
 
 import {
@@ -205,6 +207,9 @@ export function ReceivableScopeListPane({
                 {...scopeQueryFrameHeading(data?.total, data?.scopeSummary)}
                 toolbar={
                     <ReceivableScopeToolbar
+                        canUseOwner={urlState.canUseOwner}
+                        canUseBusiness={urlState.canUseBusiness}
+                        canUseOrg={urlState.canUseOrg}
                         view={urlState.view}
                         searchDraft={urlState.searchDraft}
                         setSearchDraft={urlState.setSearchDraft}
@@ -236,19 +241,29 @@ export function ReceivableScopeListPane({
                 table={table}
             />
 
-            <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-                <LoadingButton
-                    id="customer-receivables-scope-export"
-                    type="button"
-                    loading={exporting}
-                    variant="outline"
-                    size="sm"
-                    disabled={exporting || !data || data.total === 0}
-                    onClick={onExport}
-                >
-                    {exporting ? "导出中…" : "导出当前范围"}
-                </LoadingButton>
-            </div>
+            <PermissionGuard
+                permission={
+                    urlState.view === "receipt"
+                        ? "customer_receipt:list"
+                        : urlState.view === "sales_invoice"
+                          ? "invoice:list"
+                          : "receivable_account:list"
+                }
+            >
+                <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+                    <LoadingButton
+                        id="customer-receivables-scope-export"
+                        type="button"
+                        loading={exporting}
+                        variant="outline"
+                        size="sm"
+                        disabled={exporting || !data || data.total === 0}
+                        onClick={onExport}
+                    >
+                        {exporting ? "导出中…" : "导出当前范围"}
+                    </LoadingButton>
+                </div>
+            </PermissionGuard>
         </>
     )
 }

@@ -30,6 +30,9 @@ type Props = {
     searchDraft: string
     setSearchDraft: SetState<string>
     searchInputRef: React.RefObject<HTMLInputElement | null>
+    canUseOwner: boolean
+    canUseBusiness: boolean
+    canUseOrg: boolean
     salesOwnerDraft: string
     setSalesOwnerDraft: SetState<string>
     operatorDraft: string
@@ -60,6 +63,9 @@ export function ReceivableScopeToolbar({
     searchDraft,
     setSearchDraft,
     searchInputRef,
+    canUseOwner,
+    canUseBusiness,
+    canUseOrg,
     salesOwnerDraft,
     setSalesOwnerDraft,
     operatorDraft,
@@ -119,71 +125,79 @@ export function ReceivableScopeToolbar({
             morePanelAriaLabel="客户往来范围更多筛选条件"
             onResetMore={resetMoreFilters}
             primaryFilters={
-                <div className="empty:hidden w-56 max-w-full min-w-0">
-                    <PersonDirectoryFilter
-                        id={`${prefix}-sales-owner`}
-                        category="sales"
-                        label="负责销售"
-                        hideLabel
-                        value={salesOwnerDraft}
-                        onChange={setSalesOwnerDraft}
-                        orgUnitIds={orgUnitIds}
-                        includeDescendants={descendantsDraft}
-                    />
-                </div>
+                canUseOwner ? (
+                    <div className="empty:hidden w-56 max-w-full min-w-0">
+                        <PersonDirectoryFilter
+                            id={`${prefix}-sales-owner`}
+                            category="sales"
+                            label="负责销售"
+                            hideLabel
+                            value={salesOwnerDraft}
+                            onChange={setSalesOwnerDraft}
+                            orgUnitIds={orgUnitIds}
+                            includeDescendants={descendantsDraft}
+                        />
+                    </div>
+                ) : null
             }
             morePanel={
-                <div className="grid min-w-0 gap-5">
-                    <PersonDirectoryFilter
-                        id={`${prefix}-operator`}
-                        category="business"
-                        label={
-                            view === "receipt"
-                                ? "登记/核销经办人"
-                                : "登记经办人"
-                        }
-                        value={operatorDraft}
-                        onChange={setOperatorDraft}
-                        orgUnitIds={orgUnitIds}
-                        includeDescendants={descendantsDraft}
-                    />
-                    {view === "receipt" ? (
-                        <ListWorkspaceFilterField
-                            htmlFor={`${prefix}-operator-kind`}
-                            label="经办人口径"
-                            className="max-w-56"
-                        >
-                            <OptionCombobox
-                                id={`${prefix}-operator-kind`}
-                                className="w-full min-w-0"
-                                aria-label="经办人口径"
-                                allowClear={false}
-                                value={
-                                    operatorKindDraft === ""
-                                        ? "register"
-                                        : operatorKindDraft
+                canUseBusiness || canUseOrg ? (
+                    <div className="grid min-w-0 gap-5">
+                        {canUseBusiness && (
+                            <PersonDirectoryFilter
+                                id={`${prefix}-operator`}
+                                category="business"
+                                label={
+                                    view === "receipt"
+                                        ? "登记/核销经办人"
+                                        : "登记经办人"
                                 }
-                                options={OPERATOR_KIND_OPTIONS}
-                                onValueChange={(value) => {
-                                    if (
-                                        value === "register" ||
-                                        value === "settle"
-                                    ) {
-                                        setOperatorKindDraft(value)
-                                    }
-                                }}
+                                value={operatorDraft}
+                                onChange={setOperatorDraft}
+                                orgUnitIds={orgUnitIds}
+                                includeDescendants={descendantsDraft}
                             />
-                        </ListWorkspaceFilterField>
-                    ) : null}
-                    <OrganizationUnitFilter
-                        id={`${prefix}-org`}
-                        label="业务组织"
-                        value={orgDraft}
-                        onChange={setOrgDraft}
-                        includeDescendants={descendantsDraft}
-                        onDescendantsChange={setDescendantsDraft}
-                    />
-                </div>
+                        )}
+                        {canUseBusiness && view === "receipt" ? (
+                            <ListWorkspaceFilterField
+                                htmlFor={`${prefix}-operator-kind`}
+                                label="经办人口径"
+                                className="max-w-56"
+                            >
+                                <OptionCombobox
+                                    id={`${prefix}-operator-kind`}
+                                    className="w-full min-w-0"
+                                    aria-label="经办人口径"
+                                    allowClear={false}
+                                    value={
+                                        operatorKindDraft === ""
+                                            ? "register"
+                                            : operatorKindDraft
+                                    }
+                                    options={OPERATOR_KIND_OPTIONS}
+                                    onValueChange={(value) => {
+                                        if (
+                                            value === "register" ||
+                                            value === "settle"
+                                        ) {
+                                            setOperatorKindDraft(value)
+                                        }
+                                    }}
+                                />
+                            </ListWorkspaceFilterField>
+                        ) : null}
+                        {canUseOrg && (
+                            <OrganizationUnitFilter
+                                id={`${prefix}-org`}
+                                label="业务组织"
+                                value={orgDraft}
+                                onChange={setOrgDraft}
+                                includeDescendants={descendantsDraft}
+                                onDescendantsChange={setDescendantsDraft}
+                            />
+                        )}
+                    </div>
+                ) : null
             }
             resultStatus={listWorkspaceFilterStatusText({
                 loading,

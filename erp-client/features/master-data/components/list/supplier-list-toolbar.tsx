@@ -140,27 +140,29 @@ export function SupplierListToolbar({
                             aria-label="资质类型，可多选"
                         />
                     </fieldset>
-                    <fieldset className="min-w-0">
-                        <legend className="mb-3 text-xs font-medium">
-                            人员
-                        </legend>
-                        <div className="grid min-w-0 gap-3 sm:grid-cols-2">
-                            <PersonDirectoryFilter
-                                id={`${prefix}-filter-maintainer`}
-                                label="维护人"
-                                value={f.ownerUserIdsDraft}
-                                onChange={f.setOwnerUserIdsDraft}
-                                category="business"
-                            />
-                            <PersonDirectoryFilter
-                                id={`${prefix}-filter-capability-owner`}
-                                label="能力负责人"
-                                value={f.capabilityOwnerUserIdsDraft}
-                                onChange={f.setCapabilityOwnerUserIdsDraft}
-                                category="business"
-                            />
-                        </div>
-                    </fieldset>
+                    {f.canFilterPeople ? (
+                        <fieldset className="min-w-0">
+                            <legend className="mb-3 text-xs font-medium">
+                                人员
+                            </legend>
+                            <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                                <PersonDirectoryFilter
+                                    id={`${prefix}-filter-maintainer`}
+                                    label="维护人"
+                                    value={f.ownerUserIdsDraft}
+                                    onChange={f.setOwnerUserIdsDraft}
+                                    category="business"
+                                />
+                                <PersonDirectoryFilter
+                                    id={`${prefix}-filter-capability-owner`}
+                                    label="能力负责人"
+                                    value={f.capabilityOwnerUserIdsDraft}
+                                    onChange={f.setCapabilityOwnerUserIdsDraft}
+                                    category="business"
+                                />
+                            </div>
+                        </fieldset>
+                    ) : null}
                 </div>
             }
             resultStatus={listWorkspaceFilterStatusText({

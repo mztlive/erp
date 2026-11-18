@@ -12,6 +12,17 @@ export const WAREHOUSE_WRITE_CODE = "WAREHOUSE_WRITE_OWNER_UNCONFIRMED"
 export const WAREHOUSE_WRITE_MESSAGE =
     "仓库资料暂不可维护：目前只能查看，不能新建、更新或停用。维护功能尚未开放。"
 
+export const masterDataListPermission = {
+    "sellable-items": "sellable_sku:list",
+    products: "product:list",
+    categories: "product_category:list",
+    brands: "product_brand:list",
+    "unit-of-measures": "unit_of_measure:list",
+    "voucher-categories": "voucher_category_profile:list",
+    suppliers: "supplier:list",
+    warehouses: "warehouse:list",
+} satisfies Record<MasterDataResource, string>
+
 export function resourceLabel(resource: MasterDataResource): string {
     const found = (
         [

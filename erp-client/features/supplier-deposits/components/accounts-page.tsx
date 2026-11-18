@@ -51,7 +51,6 @@ export function SupplierDepositsPage() {
                 {canCreate && (
                     <Button
                         id="supplier-deposits-create"
-                        disabled={!canCreate}
                         onClick={() => setCreateOpen(true)}
                     >
                         新增账户
@@ -205,7 +204,7 @@ export function SupplierDepositsPage() {
                     }
                 />
             )}
-            {createOpen && (
+            {canCreate && createOpen && (
                 <DepositCommandDialog
                     action="create"
                     open

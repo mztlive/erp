@@ -10,10 +10,11 @@ use axum::response::{IntoResponse, Response};
 use erp_approval_runtime::approval_materials::{self, ApprovalMaterialTarget};
 use erp_read_models::sales_center::approval_materials::{ApprovalDocumentMaterials, materials};
 use erp_read_models::workbench::{InvoiceApprovalReview, invoice_approval_review};
+use erp_workflow::service::approval::execution::runtime_service::ApprovalMaterialsBatchQuery;
 use serde::Deserialize;
 
 use crate::http::errors::Error;
-use crate::http::extractor::Query;
+use crate::http::extractor::{Json, Query};
 use crate::http::handler::file_asset::verify_content;
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
@@ -44,6 +45,24 @@ pub async fn invoice_review(
     )
     .await?;
     let mut response = ApiResponse::ok_with_data(review).into_response();
+    response.headers_mut().insert(CACHE_CONTROL, HeaderValue::from_static("private, no-store"));
+    Ok(response)
+}
+
+/// 返回一页任务引用的审批资料摘要，各实例独立执行读取授权。
+/// # 参数
+/// 认证账号、应用状态和本页任务的精确审批引用。
+/// # 返回
+/// 按输入顺序返回各条资料结果，并禁止缓存。
+/// # 错误
+/// 请求体非法或超过批量上限时拒绝请求。
+pub async fn batch(
+    State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
+    Json(query): Json<ApprovalMaterialsBatchQuery>,
+) -> std::result::Result<Response, Error> {
+    let items = state.application().approval_runtime_service().batch_materials(&actor, query).await?;
+    let mut response = ApiResponse::ok_with_data(items).into_response();
     response.headers_mut().insert(CACHE_CONTROL, HeaderValue::from_static("private, no-store"));
     Ok(response)
 }

@@ -22,6 +22,8 @@ export function useSettlementListState(
     urlState: SettlementsUrlState,
     patchUrl: (patch: Partial<SettlementsUrlState>) => void,
     searchInputRef: React.RefObject<HTMLInputElement | null>,
+    canUsePeople: boolean,
+    canUseOrg: boolean,
 ) {
     // pageSize 固定 50 不入 URL；财务列表不强制加排序（服务端无排序参数），记录在案。
     const pagination = React.useMemo<PaginationState>(
@@ -54,20 +56,35 @@ export function useSettlementListState(
     const [periodToDraft, setPeriodToDraft] = React.useState(
         urlState.periodTo ?? "",
     )
-    const [ownerUserIdsDraft, setOwnerUserIdsDraft] = React.useState(
+    const [ownerUserIdsDraftValue, setOwnerUserIdsDraft] = React.useState(
         urlState.ownerUserIds ?? "",
     )
-    const [operatorUserIdsDraft, setOperatorUserIdsDraft] = React.useState(
+    const [operatorUserIdsDraftValue, setOperatorUserIdsDraft] = React.useState(
         urlState.operatorUserIds ?? "",
     )
-    const [handlerUserIdsDraft, setHandlerUserIdsDraft] = React.useState(
+    const [handlerUserIdsDraftValue, setHandlerUserIdsDraft] = React.useState(
         urlState.handlerUserIds ?? "",
     )
-    const [orgUnitIdsDraft, setOrgUnitIdsDraft] = React.useState(
+    const [orgUnitIdsDraftValue, setOrgUnitIdsDraft] = React.useState(
         urlState.orgUnitIds ?? "",
     )
-    const [includeDescendantsDraft, setIncludeDescendantsDraft] =
+    const [includeDescendantsDraftValue, setIncludeDescendantsDraft] =
         React.useState(Boolean(urlState.includeDescendants))
+
+    const ownerUserIdsDraft = canUsePeople ? ownerUserIdsDraftValue : ""
+    const operatorUserIdsDraft = canUsePeople ? operatorUserIdsDraftValue : ""
+    const handlerUserIdsDraft = canUsePeople ? handlerUserIdsDraftValue : ""
+    const orgUnitIdsDraft = canUseOrg ? orgUnitIdsDraftValue : ""
+    const includeDescendantsDraft = canUseOrg
+        ? includeDescendantsDraftValue
+        : false
+    React.useEffect(() => {
+        if (!canUsePeople) setOwnerUserIdsDraft("")
+        if (!canUsePeople) setOperatorUserIdsDraft("")
+        if (!canUsePeople) setHandlerUserIdsDraft("")
+        if (!canUseOrg) setOrgUnitIdsDraft("")
+        if (!canUseOrg) setIncludeDescendantsDraft(false)
+    }, [canUseOrg, canUsePeople])
 
     // 深链条件显示为标签，不自动打开浮层。
     const [panelOpen, setPanelOpen] = React.useState(false)

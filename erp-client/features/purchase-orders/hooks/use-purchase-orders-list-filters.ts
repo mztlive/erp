@@ -25,6 +25,7 @@ export function usePurchaseOrdersListFilters(
     searchInputRef: React.RefObject<HTMLInputElement | null>,
 ) {
     const {
+        canFilterOwner,
         url,
         pushUrl,
         search,
@@ -63,7 +64,7 @@ export function usePurchaseOrdersListFilters(
     const [ownerDraft, setOwnerDraft] = React.useState(url.ownerUserIds ?? "")
     React.useEffect(
         () => setOwnerDraft(url.ownerUserIds ?? ""),
-        [url.ownerUserIds],
+        [canFilterOwner, url.ownerUserIds],
     )
 
     const { searchDraft, setSearchDraft } = useSearchDraft(search, {
@@ -105,7 +106,7 @@ export function usePurchaseOrdersListFilters(
     const hasPendingChanges =
         typeDraft !== (url.purchaseType ?? "all") ||
         searchDraft.trim() !== search.trim() ||
-        ownerDraft !== (url.ownerUserIds ?? "")
+        (canFilterOwner && ownerDraft !== (url.ownerUserIds ?? ""))
 
     /** 清除全部：Draft 与 URL 筛选参数一并重置；排序与导航上下文保留。 */
     const clearAllFilters = React.useCallback(() => {
@@ -142,6 +143,7 @@ export function usePurchaseOrdersListFilters(
     }, [url.q, url.ownerUserIds, url.purchaseType])
 
     return {
+        canFilterOwner,
         typeDraft,
         setTypeDraft,
         ownerDraft,

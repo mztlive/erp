@@ -134,13 +134,16 @@ export async function fetchProductFilterOptions(
  */
 export async function fetchProductListSkus(
     productIds: readonly string[],
+    canReadUnits: boolean,
 ): Promise<readonly ProductListSkuSummary[]> {
     const selectedProductIds = new Set(productIds.filter(Boolean))
     if (selectedProductIds.size === 0) return []
 
     const [skus, units] = await Promise.all([
         fetchAllPages<SkuDto>("/admin/skus", {}),
-        fetchAllPages<UnitOfMeasureDto>("/admin/unit-of-measures", {}),
+        canReadUnits
+            ? fetchAllPages<UnitOfMeasureDto>("/admin/unit-of-measures", {})
+            : [],
     ])
     const unitById = new Map(units.map((unit) => [unit.id, unit]))
     const selectedSkus = skus.filter(

@@ -40,7 +40,9 @@ export function PortalAdminReviewPage({
             ? (workItemId ?? query.data?.work_item_id ?? "")
             : ""
     const task = useWorkItemDetailQuery(id)
-    const application = query.data
+    const application = access.can("supplier_portal_request:detail")
+        ? query.data
+        : undefined
     const surface = (
         <div className="space-y-5">
             <PortalError
@@ -106,7 +108,7 @@ export function PortalAdminReviewPage({
                                 retry={() => void task.refetch()}
                                 id="supplier-portal-review-task-reload"
                             />
-                            {task.data && (
+                            {access.can("work_item:detail") && task.data && (
                                 <PortalReviewForm
                                     key={application.id}
                                     application={application}

@@ -258,11 +258,18 @@ export function InquiryActions({
               : inquiry.status !== "closed"
                 ? ["close"]
                 : []
+    const permissionForAction = (item: InquiryAction) => {
+        const permission = `${procurement ? "procurement_inquiry" : "sales_inquiry"}:${item === "renew" ? "publish" : item}`
+        return item === "reassign"
+            ? [permission, "procurement_person:list"]
+            : [permission]
+    }
+    const canRunAction = (item: InquiryAction) =>
+        permissionForAction(item).every((code) =>
+            hasPermission(permissions, code),
+        )
     const renderButton = (item: InquiryAction) => (
-        <PermissionGuard
-            key={item}
-            permission={`${procurement ? "procurement_inquiry" : "sales_inquiry"}:${item === "renew" ? "publish" : item}`}
-        >
+        <PermissionGuard key={item} permission={permissionForAction(item)}>
             <Button
                 key={item}
                 id={`sales-inquiry-action-${item}`}
@@ -285,11 +292,7 @@ export function InquiryActions({
                     command.isPending ||
                     command.unresolved ||
                     !command.ready ||
-                    (procurement && !task) ||
-                    !hasPermission(
-                        permissions,
-                        `${procurement ? "procurement_inquiry" : "sales_inquiry"}:${item === "renew" ? "publish" : item}`,
-                    )
+                    (procurement && !task)
                 }
                 title={
                     disabled || (feedbackDirty && item !== "publish")
@@ -384,7 +387,7 @@ export function InquiryActions({
             )}
             <FormalActionConfirmDialog
                 idPrefix="sales-inquiry-close-confirm"
-                open={action === "close"}
+                open={action === "close" && canRunAction(action)}
                 onOpenChange={(open) => {
                     if (!open) setAction(null)
                 }}
@@ -435,7 +438,9 @@ export function InquiryActions({
                 }
             />
             <Dialog
-                open={action != null && action !== "close"}
+                open={
+                    action != null && action !== "close" && canRunAction(action)
+                }
                 onOpenChange={(open) => {
                     if (!open && !submitting.current) setAction(null)
                 }}

@@ -3,13 +3,11 @@
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { OptionCombobox } from "@/components/business/option-combobox"
-import { useAccountProfileQuery } from "@/features/auth/queries"
 import { personDirectoryLabel } from "@/features/entity-selectors/api/person-directory"
 import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
 import { usePersonDirectorySelected } from "@/features/entity-selectors/hooks/person-directory"
 import { OrganizationUnitFilter } from "@/features/organization/components/organization-unit-filter"
 import { useOrganizationStateQuery } from "@/features/organization/hooks/queries"
-import { hasPermission } from "@/lib/permissions"
 import type { CurrentQualityRow } from "../../dual-types"
 import type { useCurrentQualityFilters } from "../../hooks/use-current-quality-filters"
 import type { PatchDual } from "../../lib/dual-filter-state"
@@ -34,6 +32,8 @@ export function CurrentCaliberFilters({
     items?: readonly CurrentQualityRow[]
 }) {
     const {
+        canFilterOwners,
+        canFilterOrgs,
         ownerIds,
         orgIds,
         includeDescendants,
@@ -70,25 +70,16 @@ export function CurrentCaliberFilters({
         (isUserGroup
             ? matchedItem?.ownerUserName
             : matchedItem?.ownerOrgUnitName)
-    const account = useAccountProfileQuery()
     const needPersonLookup = Boolean(
         isUserGroup && strippedGroupId && !itemLabel,
-    )
-    const canReadSales = hasPermission(
-        account.data?.permissions,
-        "sales_person:list",
     )
     const selectedPeople = usePersonDirectorySelected(
         "sales",
         needPersonLookup ? [strippedGroupId] : [],
-        needPersonLookup && canReadSales,
+        needPersonLookup && canFilterOwners,
     )
     const needOrgLookup = Boolean(isOrgGroup && strippedGroupId && !itemLabel)
-    const canReadOrgs = hasPermission(
-        account.data?.permissions,
-        "org_unit:list",
-    )
-    const orgState = useOrganizationStateQuery(needOrgLookup && canReadOrgs)
+    const orgState = useOrganizationStateQuery(needOrgLookup && canFilterOrgs)
     const resolvedPerson = selectedPeople.data?.items.find(
         (item) => item.id === strippedGroupId,
     )
@@ -135,26 +126,30 @@ export function CurrentCaliberFilters({
                         查询
                     </Button>
                 </div>
-                <PersonDirectoryFilter
-                    id="customers-quality-dual-owner"
-                    category="sales"
-                    label="现任负责人"
-                    value={ownerIds.join(",")}
-                    onChange={applyOwners}
-                    orgUnitIds={orgIds}
-                    includeDescendants={
-                        orgIds.length > 0 && includeDescendants === true
-                    }
-                />
+                {canFilterOwners && (
+                    <PersonDirectoryFilter
+                        id="customers-quality-dual-owner"
+                        category="sales"
+                        label="现任负责人"
+                        value={ownerIds.join(",")}
+                        onChange={applyOwners}
+                        orgUnitIds={orgIds}
+                        includeDescendants={
+                            orgIds.length > 0 && includeDescendants === true
+                        }
+                    />
+                )}
             </div>
-            <OrganizationUnitFilter
-                id="customers-quality-dual-org"
-                label="现任组织"
-                value={orgIds.join(",")}
-                onChange={applyOrgs}
-                includeDescendants={includeDescendants === true}
-                onDescendantsChange={applyDescendants}
-            />
+            {canFilterOrgs && (
+                <OrganizationUnitFilter
+                    id="customers-quality-dual-org"
+                    label="现任组织"
+                    value={orgIds.join(",")}
+                    onChange={applyOrgs}
+                    includeDescendants={includeDescendants === true}
+                    onDescendantsChange={applyDescendants}
+                />
+            )}
 
             <div className="flex min-w-0 flex-wrap items-center gap-2 text-body-compact">
                 <label

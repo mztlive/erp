@@ -12,13 +12,29 @@ import {
 } from "../lib/list-query"
 import { usePaymentRequestsQuery } from "./queries"
 
-export function useRequestList() {
+export function useRequestList(
+    canReadCandidates: boolean,
+    canFilterSupplier: boolean,
+    permissionsReady: boolean,
+) {
     const router = useRouter()
     const pathname = usePathname()
     const searchParams = useSearchParams()
-    const url = useMemo(
+    const parsed = useMemo(
         () => requestListCodec.parse(searchParams),
         [searchParams],
+    )
+    const unavailableView = !canReadCandidates && parsed.view === "available"
+    const unavailableSupplier =
+        !canFilterSupplier && searchParams.has("supplier_id")
+    const url = useMemo<RequestListUrl>(
+        () => ({
+            ...parsed,
+            view: unavailableView ? "effective" : parsed.view,
+            supplier_id: canFilterSupplier ? parsed.supplier_id : undefined,
+            page: unavailableView || unavailableSupplier ? 1 : parsed.page,
+        }),
+        [canFilterSupplier, parsed, unavailableView, unavailableSupplier],
     )
     const purchaseOrderScope = useMemo(() => {
         const id = url.purchase_order_id
@@ -32,7 +48,11 @@ export function useRequestList() {
         (patch: Partial<RequestListUrl>) => {
             const clearsPurchaseOrder =
                 "purchase_order_id" in patch && !patch.purchase_order_id
-            const next = requestListCodec.buildParams({ ...url, ...patch })
+            const next = requestListCodec.buildParams({
+                ...url,
+                ...patch,
+                ...(!canFilterSupplier && { supplier_id: undefined }),
+            })
             // 保留新建入口的采购来源及其他导航上下文。
             const params = new URLSearchParams(searchParams.toString())
             for (const key of [
@@ -48,7 +68,7 @@ export function useRequestList() {
             ])
                 params.delete(key)
             if (clearsPurchaseOrder) params.delete("purchase_order_label")
-            if (patch.view && patch.view !== url.view) {
+            if (patch.view && patch.view !== parsed.view) {
                 for (const key of Array.from(params.keys())) {
                     if (key.startsWith("candidate_")) params.delete(key)
                 }
@@ -59,8 +79,19 @@ export function useRequestList() {
                 scroll: false,
             })
         },
-        [url, searchParams, router, pathname],
+        [url, parsed.view, searchParams, router, pathname, canFilterSupplier],
     )
+    useEffect(() => {
+        if (permissionsReady && (unavailableView || unavailableSupplier)) {
+            update({ view: url.view, page: 1 })
+        }
+    }, [
+        permissionsReady,
+        unavailableView,
+        unavailableSupplier,
+        update,
+        url.view,
+    ])
     const query = usePaymentRequestsQuery(
         {
             ...url,

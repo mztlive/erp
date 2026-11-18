@@ -75,7 +75,10 @@ function WorkspaceDetailContent({
         profile.data,
     )
     const detail = approval ? approvalQuery : taskQuery
-    useWorkspaceDetailDocumentTitle(detail.data?.item)
+    const item = detail.data?.item
+    useWorkspaceDetailDocumentTitle(
+        item?.workItemType === "APPROVAL_REWORK" ? undefined : item,
+    )
     const reworkTask = detail.data?.reworkTask
     const [queuePath, queueSearch] = returnTo.split("?")
     const queueState = restrictWorkspaceFilters(

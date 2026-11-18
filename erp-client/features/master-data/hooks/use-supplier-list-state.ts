@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { hasPermission } from "@/lib/permissions"
 
 import { useCreatePermission } from "@/features/master-data/hooks/use-create-permission"
 import { useClientPagedRows } from "@/features/master-data/hooks/use-client-paged-rows"
@@ -29,8 +30,11 @@ export type SupplierAppliedChip = Readonly<{
 export function useSupplierListState(
     searchInputRef: React.RefObject<HTMLInputElement | null>,
 ) {
-    const { canCreate, createBlockedReason } =
+    const { accountQuery, canCreate, createBlockedReason } =
         useCreatePermission("supplier:create")
+    const canReadDetail =
+        accountQuery.isSuccess &&
+        hasPermission(accountQuery.data.permissions, "supplier:detail")
     const filters = useSupplierListFilters(searchInputRef)
     const listQuery = useMasterDataListQuery({
         resource: "suppliers",
@@ -178,6 +182,7 @@ export function useSupplierListState(
         exportMeta,
         exportPending,
         canCreate,
+        canReadDetail,
         createBlockedReason,
         rows,
         pageRows,

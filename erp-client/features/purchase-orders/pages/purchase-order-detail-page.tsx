@@ -268,6 +268,7 @@ export function PurchaseOrderDetailPage({
 
     const activeChange = order.activeChangeOrder
     const continueChange = Boolean(
+        permissions.canContinueChange &&
         activeChange &&
         purchaseChangeOrderApprovalPhase(
             activeChange.approval,

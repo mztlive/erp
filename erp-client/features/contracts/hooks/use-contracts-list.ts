@@ -1,5 +1,7 @@
 "use client"
 
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 import { useQuery } from "@tanstack/react-query"
 import { selectedObjectDirectory } from "@/lib/object-directory"
 
@@ -45,12 +47,63 @@ export function useContractsList() {
     const searchParams = useSearchParams()
     const searchInputRef = React.useRef<HTMLInputElement | null>(null)
 
-    // Applied：稳定序列化签名派生，避免每次 render 新对象导致重复回填
+    const account = useAccountProfileQuery()
+    const canFilterOwners = hasPermission(
+        account.data?.permissions,
+        "sales_person:list",
+    )
+    const canFilterOrgs = hasPermission(
+        account.data?.permissions,
+        "org_unit:list",
+    )
+    const allowedFilters = React.useCallback(
+        (state: ContractsUrlState): ContractsUrlState => ({
+            ...state,
+            ownerUserIds: canFilterOwners ? state.ownerUserIds : undefined,
+            orgUnitIds: canFilterOrgs ? state.orgUnitIds : undefined,
+            includeDescendants: canFilterOrgs && state.includeDescendants,
+        }),
+        [canFilterOrgs, canFilterOwners],
+    )
     const appliedQuery = searchParams.toString()
-    const url = React.useMemo(
+    const parsed = React.useMemo(
         () => contractsUrlCodec.parse(new URLSearchParams(appliedQuery)),
         [appliedQuery],
     )
+    const hasUnavailableFilters =
+        (!canFilterOwners && searchParams.has("ownerUserIds")) ||
+        (!canFilterOrgs &&
+            (searchParams.has("orgUnitIds") ||
+                searchParams.has("includeDescendants")))
+    const url = React.useMemo(
+        () =>
+            allowedFilters({
+                ...parsed,
+                page: hasUnavailableFilters ? 1 : parsed.page,
+            }),
+        [allowedFilters, hasUnavailableFilters, parsed],
+    )
+    React.useEffect(() => {
+        if (!account.data || !hasUnavailableFilters) return
+        const params = new URLSearchParams(appliedQuery)
+        if (!canFilterOwners) params.delete("ownerUserIds")
+        if (!canFilterOrgs) {
+            params.delete("orgUnitIds")
+            params.delete("includeDescendants")
+        }
+        params.delete("page")
+        params.delete("scopeVersion")
+        const qs = params.toString()
+        router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+    }, [
+        account.data,
+        appliedQuery,
+        canFilterOrgs,
+        canFilterOwners,
+        hasUnavailableFilters,
+        pathname,
+        router,
+    ])
     const {
         q,
         metric,
@@ -80,12 +133,16 @@ export function useContractsList() {
     const [settlementPartyIdDraft, setSettlementPartyIdDraft] = React.useState<
         string | null
     >(settlementPartyId ?? null)
-    const [ownerDraft, setOwnerDraft] = React.useState<string | null>(
+    const [ownerDraftValue, setOwnerDraft] = React.useState<string | null>(
         ownerUserIds ?? null,
     )
-    const [orgDraft, setOrgDraft] = React.useState(orgUnitIds ?? "")
-    const [descendantsDraft, setDescendantsDraft] =
+    const [orgDraftValue, setOrgDraft] = React.useState(orgUnitIds ?? "")
+    const [descendantsDraftValue, setDescendantsDraft] =
         React.useState(includeDescendants)
+
+    const ownerDraft = canFilterOwners ? ownerDraftValue : null
+    const orgDraft = canFilterOrgs ? orgDraftValue : ""
+    const descendantsDraft = canFilterOrgs && descendantsDraftValue
 
     const hasStructuredFilters = Boolean(
         settlementPartyId || ownerUserIds || orgUnitIds,
@@ -96,12 +153,12 @@ export function useContractsList() {
 
     const pushUrl = React.useCallback(
         (patch: Partial<ContractsUrlState>) => {
-            const next = { ...url, ...patch }
+            const next = allowedFilters({ ...url, ...patch })
             router.replace(`${pathname}${contractsUrlCodec.build(next)}`, {
                 scroll: false,
             })
         },
-        [pathname, router, url],
+        [allowedFilters, pathname, router, url],
     )
 
     /** 唯一提交路径：收起态 Enter 与主行「查询」共用。 */
@@ -206,7 +263,14 @@ export function useContractsList() {
         setOwnerDraft(ownerUserIds ?? null)
         setOrgDraft(orgUnitIds ?? "")
         setDescendantsDraft(includeDescendants)
-    }, [includeDescendants, orgUnitIds, ownerUserIds, settlementPartyId])
+    }, [
+        canFilterOrgs,
+        canFilterOwners,
+        includeDescendants,
+        orgUnitIds,
+        ownerUserIds,
+        settlementPartyId,
+    ])
 
     useSearchHotkey(searchInputRef)
 
@@ -391,6 +455,8 @@ export function useContractsList() {
         Boolean(orgUnitIds)
 
     return {
+        canFilterOwners,
+        canFilterOrgs,
         url,
         contractsQuery,
         total,

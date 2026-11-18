@@ -3,6 +3,7 @@
 import * as React from "react"
 
 import { OptionCombobox } from "@/components/business"
+import { getErrorMessage, isPermissionDeniedError } from "@/lib/api/errors"
 
 import { useEligibleAssigneesQuery } from "../queries"
 import type { DocumentType, EligibleAssignee } from "../types"
@@ -50,6 +51,14 @@ export function AssigneeCombobox({
         assignees == null && !disabled,
         copies,
     )
+    if (
+        assignees == null &&
+        !disabled &&
+        isPermissionDeniedError(query.error)
+    ) {
+        return selectedName ? <span>{selectedName}</span> : null
+    }
+
     const rows = (assignees ?? query.data ?? []).filter(
         (person) => !excludedIds.includes(person.user_id),
     )
@@ -100,9 +109,11 @@ export function AssigneeCombobox({
             loading={assignees == null && query.isFetching}
             placeholder={placeholder}
             emptyLabel={
-                copies
-                    ? "没有匹配的有效内部账号"
-                    : "未找到具备该单据审批权限的员工"
+                query.isError && assignees == null
+                    ? getErrorMessage(query.error, "候选加载失败，请重试")
+                    : copies
+                      ? "没有匹配的有效内部账号"
+                      : "未找到具备该单据审批权限的员工"
             }
             disabled={disabled}
             allowClear={allowClear}

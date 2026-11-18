@@ -44,7 +44,7 @@ export function WorkspaceAccountMenu() {
 
     return (
         <div className="flex min-w-0 items-center gap-1">
-            {!profileQuery.isPending && !canViewBackgroundJobs && (
+            {profileQuery.isSuccess && !canViewBackgroundJobs && (
                 <div className="min-w-0">
                     <Button
                         id="workspace-topbar-file-tasks"

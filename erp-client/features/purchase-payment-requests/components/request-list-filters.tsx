@@ -9,11 +9,13 @@ import {
 
 export function RequestListFilters({
     applied,
+    canFilterSupplier,
     onApply,
     onReset,
     scopeChip,
     view,
 }: {
+    canFilterSupplier: boolean
     applied: RequestFilters
     onApply: (filters: RequestFilters) => void
     onReset?: () => void
@@ -24,7 +26,9 @@ export function RequestListFilters({
         <PaymentTextFilterBar
             idPrefix="purchase-payment-requests-filters"
             formAriaLabel="付款申请查询条件"
-            fields={requestFilterFields}
+            fields={requestFilterFields.filter(
+                ([key]) => key !== "supplier_id" || canFilterSupplier,
+            )}
             applied={applied}
             empty={emptyRequestFilters}
             onApply={onApply}

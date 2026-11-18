@@ -88,6 +88,7 @@ export function SuppliersListPage() {
 
     return (
         <ListPageFrame
+            resource="suppliers"
             title="供应商与资质"
             description="查看供应商资料、资质与供货能力。"
             exportMeta={state.exportMeta}
@@ -142,7 +143,11 @@ export function SuppliersListPage() {
                         metricKey={filters.metricKey}
                         ariaLabel="供应商与资质指标"
                         allLabel="全部供应商"
-                        hint="选择供应商查看详情"
+                        hint={
+                            state.canReadDetail
+                                ? "选择供应商查看详情"
+                                : undefined
+                        }
                         onChangeLifecycle={filters.changeLifecycle}
                     />
                 }
@@ -222,7 +227,9 @@ export function SuppliersListPage() {
                                             ? "您当前尚未分配供应商的数据查看权限，请联系管理员开通。"
                                             : hasActiveFilters
                                               ? masterDataCopy.filterEmptyDescription
-                                              : "点击「新建」创建第一份资料；历史记录会随资料保留。"
+                                              : state.canCreate
+                                                ? "点击「新建」创建第一份资料；历史记录会随资料保留。"
+                                                : undefined
                                     }
                                     action={
                                         hasActiveFilters ? (
@@ -246,12 +253,20 @@ export function SuppliersListPage() {
                                 />
                             ) : undefined
                         }
-                        onRowPreview={(row) => openDetail(row.stableId)}
-                        onRowOpen={(row) => openDetail(row.stableId)}
+                        onRowPreview={
+                            state.canReadDetail
+                                ? (row) => openDetail(row.stableId)
+                                : undefined
+                        }
+                        onRowOpen={
+                            state.canReadDetail
+                                ? (row) => openDetail(row.stableId)
+                                : undefined
+                        }
                     />
                 }
             />
-            {importOpen && (
+            {state.canCreate && importOpen && (
                 <SupplierImportDialog
                     onClose={() => setImportOpen(false)}
                     onSubmitted={onImportSubmitted}

@@ -36,9 +36,9 @@ export function ConnectionListTable({
     columns: ColumnDef<ConnectionListItem>[]
     pagination: PaginationState
     onPaginationChange: (next: PaginationState) => void
-    onRowOpen: (connectionId: string) => void
+    onRowOpen?: (connectionId: string) => void
     onClearFilters: () => void
-    onCreate: () => void
+    onCreate?: () => void
     loading: boolean
     isError: boolean
     error: unknown
@@ -68,7 +68,9 @@ export function ConnectionListTable({
             }}
             pagination={pagination}
             onPaginationChange={onPaginationChange}
-            onRowOpen={(row) => onRowOpen(row.connectionId)}
+            onRowOpen={
+                onRowOpen ? (row) => onRowOpen(row.connectionId) : undefined
+            }
             loading={loading}
             errorState={
                 isError && !data ? (
@@ -105,7 +107,7 @@ export function ConnectionListTable({
                         title="尚未接入供应商连接"
                         description="还没有连接。有权限时可新建连接。"
                         action={
-                            data?.hasModulePermission ? (
+                            data?.hasModulePermission && onCreate ? (
                                 <Button
                                     id="supplier-api-connections-list-empty-create"
                                     type="button"

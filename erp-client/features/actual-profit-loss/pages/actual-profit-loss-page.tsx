@@ -1,5 +1,8 @@
 "use client"
 
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
+
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
@@ -24,6 +27,10 @@ import { ProfitLossRowsPanel } from "@/features/actual-profit-loss/components/pr
 import { PROFIT_LOSS_SCOPE_LABEL as SCOPE_LABEL } from "@/features/actual-profit-loss/lib/presentation"
 
 export function ActualProfitLossPage() {
+    const account = useAccountProfileQuery()
+    const canTransfer =
+        hasPermission(account.data?.permissions, "cost_entry:list") &&
+        hasPermission(account.data?.permissions, "sales_order:list")
     const page = useActualProfitLossPage()
 
     // —— 初载 / 配置加载 ——
@@ -87,10 +94,13 @@ export function ActualProfitLossPage() {
                 projectedAt={page.data?.freshness.projectedAt}
                 freshnessUi={page.freshnessUi}
                 analysisReady={page.analysisReady}
+                canExport={
+                    canTransfer &&
+                    Boolean(page.data?.fieldPermissions.canExport)
+                }
                 exportDisabled={
                     !page.analysisReady ||
                     !page.data ||
-                    !page.data.fieldPermissions.canExport ||
                     page.data.rows.total === 0 ||
                     page.exportMutation.isPending
                 }

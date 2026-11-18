@@ -15,7 +15,7 @@ import {
     fetchPartyOption,
     type PartySelectorPurpose,
 } from "./api"
-import { getErrorMessage } from "@/lib/api/errors"
+import { getErrorMessage, isPermissionDeniedError } from "@/lib/api/errors"
 
 const STALE_TIME = 0
 
@@ -62,7 +62,8 @@ export function SettlementPartySearchCombobox({
         enabled: Boolean(value),
         staleTime: STALE_TIME,
     })
-    const selectedFailed = Boolean(value) && selected.isError
+    const selectedDenied = isPermissionDeniedError(selected.error)
+    const selectedFailed = Boolean(value) && selected.isError && !selectedDenied
     const failed = list.isError || selectedFailed
     const error = list.error ?? (selectedFailed ? selected.error : null)
     const snapshot =
@@ -83,6 +84,10 @@ export function SettlementPartySearchCombobox({
     ) {
         rows.unshift(selectedRow)
     }
+    if (isPermissionDeniedError(list.error)) {
+        return snapshot ? <span>{snapshot.displayName}</span> : null
+    }
+
     const parties =
         restrictToPartyId && !query
             ? rows.filter((item) => item.partyId === restrictToPartyId)
@@ -103,7 +108,7 @@ export function SettlementPartySearchCombobox({
                 onRefresh={() =>
                     Promise.all([
                         list.refetch({ throwOnError: true }),
-                        ...(value
+                        ...(value && !selectedDenied
                             ? [selected.refetch({ throwOnError: true })]
                             : []),
                     ])
@@ -125,7 +130,7 @@ export function SettlementPartySearchCombobox({
                 error={error}
                 onRetry={() => {
                     void list.refetch()
-                    if (value) void selected.refetch()
+                    if (value && !selectedDenied) void selected.refetch()
                 }}
             />
         </div>

@@ -176,7 +176,7 @@ export function productActionsColumn({
     onAddSupply,
     addSupplyDisabledReason,
 }: ActionColumnInput & {
-    onAddSupply: (item: MasterDataListItem) => void
+    onAddSupply?: (item: MasterDataListItem) => void
     addSupplyDisabledReason: (item: MasterDataListItem) => string | undefined
 }): ColumnDef<MasterDataListItem> {
     return {
@@ -202,17 +202,19 @@ export function productActionsColumn({
                             id: `master-data-product-${segment}-add-supply`,
                             label: "添加供给",
                             icon: PlusIcon,
+                            hidden: !onAddSupply,
                             disabled: addSupplyReason != null,
                             disabledReason: addSupplyReason,
                             onClick: () => {
                                 markFocused(lastFocusedRowId, item)
-                                onAddSupply(item)
+                                onAddSupply?.(item)
                             },
                         },
                         {
                             id: `master-data-list-row-${segment}-disable`,
                             label: masterDataCopy.actionDisable,
                             icon: BanIcon,
+                            hidden: !onDisableTarget,
                             disabled: !canDisable,
                             disabledReason: disableBlocker?.message,
                             destructive: true,
@@ -249,9 +251,6 @@ export function warehouseActionsColumn({
             const allowed =
                 canMaintainHandlers &&
                 item.allowedActions.includes("MAINTAIN_FULFILLMENT_HANDLERS")
-            const message = canMaintainHandlers
-                ? undefined
-                : "当前账号没有仓库更新权限"
             return (
                 <TableRowActions
                     moreId={`master-data-warehouse-row-${segment}-more`}
@@ -272,7 +271,6 @@ export function warehouseActionsColumn({
                             icon: UserRoundCogIcon,
                             hidden: !canMaintainHandlers,
                             disabled: !allowed,
-                            disabledReason: message,
                             onClick: () => {
                                 markFocused(lastFocusedRowId, item)
                                 onReviseTarget?.(item)

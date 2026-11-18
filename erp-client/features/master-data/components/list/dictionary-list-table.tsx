@@ -46,7 +46,7 @@ export function DictionaryListTable({
     hasActiveFilters: boolean
     onClearFilters: () => void
     emptyTitle: string
-    emptyDescription: string
+    emptyDescription?: string
     emptyAction?: React.ReactNode
     onRowPreview: (row: MasterDataListItem) => void
     onRowOpen: (row: MasterDataListItem) => void

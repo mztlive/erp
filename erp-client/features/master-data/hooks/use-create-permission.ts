@@ -7,9 +7,11 @@ import { hasPermission } from "@/lib/permissions"
 /** 列表「新建」按钮的权限与阻断文案。 */
 export function useCreatePermission(permission: string | undefined) {
     const accountQuery = useAccountProfileQuery()
-    const canCreate = permission
-        ? hasPermission(accountQuery.data?.permissions, permission)
-        : false
+    const canCreate = Boolean(
+        permission &&
+        accountQuery.isSuccess &&
+        hasPermission(accountQuery.data.permissions, permission),
+    )
     const createBlockedReason = accountQuery.isPending
         ? "正在核对创建权限，请稍候。"
         : accountQuery.isError

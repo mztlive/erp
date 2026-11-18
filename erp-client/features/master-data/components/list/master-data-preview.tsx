@@ -24,10 +24,14 @@ export function MasterDataPreviewPanel({
     row,
     detail,
     detailLoading,
+    showRevision = true,
+    showActionBlockers = true,
 }: {
     row: MasterDataListItem
     detail: MasterDataCenterView | null | undefined
     detailLoading?: boolean
+    showRevision?: boolean
+    showActionBlockers?: boolean
 }) {
     const accountQuery = useAccountProfileQuery()
     const canRevealSensitive = hasPermission(
@@ -65,32 +69,36 @@ export function MasterDataPreviewPanel({
                             </Badge>
                         ) : null}
                     </dd>
-                    <dt className="text-muted-foreground">
-                        {masterDataCopy.colVersionState}
-                    </dt>
-                    <dd>
-                        <Badge
-                            variant={
-                                row.revisionTiming === "FUTURE"
-                                    ? "warning"
-                                    : "secondary"
-                            }
-                        >
-                            {row.revisionTimingLabel}
-                        </Badge>
-                        <span className="ml-2 num text-muted-foreground">
-                            v{row.revisionNo}
-                        </span>
-                    </dd>
-                    <dt className="text-muted-foreground">
-                        {masterDataCopy.colEffective}
-                    </dt>
-                    <dd className="num">
-                        {formatEffectiveRange(
-                            row.effectiveFrom,
-                            row.effectiveTo,
-                        )}
-                    </dd>
+                    {showRevision ? (
+                        <>
+                            <dt className="text-muted-foreground">
+                                {masterDataCopy.colVersionState}
+                            </dt>
+                            <dd>
+                                <Badge
+                                    variant={
+                                        row.revisionTiming === "FUTURE"
+                                            ? "warning"
+                                            : "secondary"
+                                    }
+                                >
+                                    {row.revisionTimingLabel}
+                                </Badge>
+                                <span className="ml-2 num text-muted-foreground">
+                                    v{row.revisionNo}
+                                </span>
+                            </dd>
+                            <dt className="text-muted-foreground">
+                                {masterDataCopy.colEffective}
+                            </dt>
+                            <dd className="num">
+                                {formatEffectiveRange(
+                                    row.effectiveFrom,
+                                    row.effectiveTo,
+                                )}
+                            </dd>
+                        </>
+                    ) : null}
                     {row.primaryBlocker ? (
                         <>
                             <dt className="text-muted-foreground">
@@ -148,7 +156,7 @@ export function MasterDataPreviewPanel({
                 <PreviewHistorySection revisions={detail.revisionTimeline} />
             ) : null}
 
-            {row.actionBlockers.length > 0 ? (
+            {showActionBlockers && row.actionBlockers.length > 0 ? (
                 <PreviewBlockedSection blockers={row.actionBlockers} />
             ) : null}
         </div>

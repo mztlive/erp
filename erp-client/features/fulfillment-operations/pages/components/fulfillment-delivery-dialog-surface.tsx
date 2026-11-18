@@ -21,6 +21,9 @@ import {
     CollapsibleTrigger,
 } from "@/components/ui/collapsible"
 import { useFulfillmentFieldLocation } from "../hooks/use-fulfillment-field-location"
+import { FulfillmentDraftReadOnly } from "../../components/forms/fulfillment-draft-form"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 import { FulfillmentDeliveryForm } from "../../components/forms/fulfillment-delivery-form"
 import { displayText } from "../../lib/readable-label"
 import type { FulfillmentDraft, FulfillmentOperation } from "../../types"
@@ -42,6 +45,7 @@ export function FulfillmentDeliveryDialogSurface({
     validationIssues,
     showValidation,
     saveMessage,
+    canExecute,
     disabled,
     readOnlyNote,
     headingRef,
@@ -56,12 +60,18 @@ export function FulfillmentDeliveryDialogSurface({
     validationIssues: readonly ValidationIssue[]
     showValidation: boolean
     saveMessage: string | null
+    canExecute: boolean
     disabled: boolean
     readOnlyNote?: string
     headingRef: Ref<HTMLHeadingElement>
     onDraftChange: (draft: FulfillmentDraft) => void
     actions: (locateIssue: (issue: ValidationIssue) => void) => ReactNode
 }) {
+    const profile = useAccountProfileQuery()
+    const canViewPurchase = hasPermission(
+        profile.data?.permissions,
+        "purchase_order:detail",
+    )
     const { deliveryRef, locateIssue } = useFulfillmentFieldLocation()
     const paymentPending =
         draft.type === "SUPPLIER_DIRECT" && operation.gate.state === "BLOCKED"
@@ -153,14 +163,21 @@ export function FulfillmentDeliveryDialogSurface({
                     showPaymentAction={false}
                 />
             )}
-            <FulfillmentDeliveryForm
-                ref={deliveryRef}
-                operation={operation}
-                draft={draft}
-                onChange={onDraftChange}
-                disabled={disabled}
-                compact
-            />
+            {canExecute ? (
+                <FulfillmentDeliveryForm
+                    ref={deliveryRef}
+                    operation={operation}
+                    draft={draft}
+                    onChange={onDraftChange}
+                    disabled={disabled}
+                    compact
+                />
+            ) : (
+                <FulfillmentDraftReadOnly
+                    operation={operation}
+                    draft={operation.draft}
+                />
+            )}
             {showValidation && fieldIssues.length > 0 ? (
                 <ValidationSummary
                     id="fulfillment-dialog-field-validation"
@@ -190,7 +207,8 @@ export function FulfillmentDeliveryDialogSurface({
                         </CollapsibleTrigger>
                         <CollapsibleContent className="pb-3">
                             <p className="num break-all text-sm text-muted-foreground">
-                                {operation.source.purchaseOrderId ? (
+                                {canViewPurchase &&
+                                operation.source.purchaseOrderId ? (
                                     <Link
                                         id="fulfillment-dialog-open-purchase-order"
                                         href={`/procurement/orders/${encodeURIComponent(operation.source.purchaseOrderId)}?${new URLSearchParams({ from: "workspace", returnTo: currentUrl })}`}

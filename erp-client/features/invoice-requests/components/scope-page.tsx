@@ -1,5 +1,7 @@
 "use client"
 
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
+
 import * as React from "react"
 
 import {
@@ -356,58 +358,70 @@ export function InvoiceRequestScopePage() {
                         morePanelAriaLabel="开票申请范围更多筛选条件"
                         onResetMore={urlState.resetMoreFilters}
                         primaryFilters={
-                            <div className="empty:hidden w-56 max-w-full min-w-0">
-                                <PersonDirectoryFilter
-                                    id={`${toolbarPrefix}-sales-owner`}
-                                    category="sales"
-                                    label="负责销售"
-                                    hideLabel
-                                    value={urlState.salesOwnerDraft}
-                                    onChange={urlState.setSalesOwnerDraft}
-                                    orgUnitIds={directoryOrgUnitIds}
-                                    includeDescendants={
-                                        urlState.descendantsDraft
-                                    }
-                                />
-                            </div>
+                            urlState.canUseOwner ? (
+                                <div className="empty:hidden w-56 max-w-full min-w-0">
+                                    <PersonDirectoryFilter
+                                        id={`${toolbarPrefix}-sales-owner`}
+                                        category="sales"
+                                        label="负责销售"
+                                        hideLabel
+                                        value={urlState.salesOwnerDraft}
+                                        onChange={urlState.setSalesOwnerDraft}
+                                        orgUnitIds={directoryOrgUnitIds}
+                                        includeDescendants={
+                                            urlState.descendantsDraft
+                                        }
+                                    />
+                                </div>
+                            ) : null
                         }
                         morePanel={
-                            <div className="grid min-w-0 gap-5">
-                                <PersonDirectoryFilter
-                                    id={`${toolbarPrefix}-applicant`}
-                                    category="business"
-                                    label="申请人"
-                                    value={urlState.applicantDraft}
-                                    onChange={urlState.setApplicantDraft}
-                                    orgUnitIds={directoryOrgUnitIds}
-                                    includeDescendants={
-                                        urlState.descendantsDraft
-                                    }
-                                />
-                                <PersonDirectoryFilter
-                                    id={`${toolbarPrefix}-handler`}
-                                    category="business"
-                                    label="当前开票处理人"
-                                    value={urlState.handlerDraft}
-                                    onChange={urlState.setHandlerDraft}
-                                    orgUnitIds={directoryOrgUnitIds}
-                                    includeDescendants={
-                                        urlState.descendantsDraft
-                                    }
-                                />
-                                <OrganizationUnitFilter
-                                    id={`${toolbarPrefix}-org`}
-                                    label="业务组织"
-                                    value={urlState.orgDraft}
-                                    onChange={urlState.setOrgDraft}
-                                    includeDescendants={
-                                        urlState.descendantsDraft
-                                    }
-                                    onDescendantsChange={
-                                        urlState.setDescendantsDraft
-                                    }
-                                />
-                            </div>
+                            urlState.canUseBusiness || urlState.canUseOrg ? (
+                                <div className="grid min-w-0 gap-5">
+                                    {urlState.canUseBusiness && (
+                                        <PersonDirectoryFilter
+                                            id={`${toolbarPrefix}-applicant`}
+                                            category="business"
+                                            label="申请人"
+                                            value={urlState.applicantDraft}
+                                            onChange={
+                                                urlState.setApplicantDraft
+                                            }
+                                            orgUnitIds={directoryOrgUnitIds}
+                                            includeDescendants={
+                                                urlState.descendantsDraft
+                                            }
+                                        />
+                                    )}
+                                    {urlState.canUseBusiness && (
+                                        <PersonDirectoryFilter
+                                            id={`${toolbarPrefix}-handler`}
+                                            category="business"
+                                            label="当前开票处理人"
+                                            value={urlState.handlerDraft}
+                                            onChange={urlState.setHandlerDraft}
+                                            orgUnitIds={directoryOrgUnitIds}
+                                            includeDescendants={
+                                                urlState.descendantsDraft
+                                            }
+                                        />
+                                    )}
+                                    {urlState.canUseOrg && (
+                                        <OrganizationUnitFilter
+                                            id={`${toolbarPrefix}-org`}
+                                            label="业务组织"
+                                            value={urlState.orgDraft}
+                                            onChange={urlState.setOrgDraft}
+                                            includeDescendants={
+                                                urlState.descendantsDraft
+                                            }
+                                            onDescendantsChange={
+                                                urlState.setDescendantsDraft
+                                            }
+                                        />
+                                    )}
+                                </div>
+                            ) : null
                         }
                         resultStatus={listWorkspaceFilterStatusText({
                             loading: listQuery.isPending,
@@ -430,19 +444,21 @@ export function InvoiceRequestScopePage() {
                 table={table}
             />
 
-            <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-                <LoadingButton
-                    id="invoice-request-scope-export"
-                    type="button"
-                    loading={exporting}
-                    variant="outline"
-                    size="sm"
-                    disabled={exporting || !data || data.total === 0}
-                    onClick={() => void handleExport()}
-                >
-                    {exporting ? "导出中…" : "导出当前范围"}
-                </LoadingButton>
-            </div>
+            <PermissionGuard permission={"sales_invoice_request:list"}>
+                <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+                    <LoadingButton
+                        id="invoice-request-scope-export"
+                        type="button"
+                        loading={exporting}
+                        variant="outline"
+                        size="sm"
+                        disabled={exporting || !data || data.total === 0}
+                        onClick={() => void handleExport()}
+                    >
+                        {exporting ? "导出中…" : "导出当前范围"}
+                    </LoadingButton>
+                </div>
+            </PermissionGuard>
 
             {detailId ? (
                 <section

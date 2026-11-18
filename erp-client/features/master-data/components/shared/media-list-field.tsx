@@ -15,6 +15,8 @@ import {
 import { FileUpload } from "@/components/ui/file-upload"
 import { Label } from "@/components/ui/label"
 import { toast } from "@/components/ui/toast"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 import { fetchFileAssetPreviewBlob } from "@/features/file-assets/api"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import {
@@ -70,11 +72,16 @@ export function MediaListField({
     const basePrefix =
         idPrefix ?? `master-data-media-${toAutomationIdSegment(label)}`
     const queryClient = useQueryClient()
+    const account = useAccountProfileQuery()
+    const canPreviewAsset =
+        account.isSuccess &&
+        hasPermission(account.data.permissions, "file_asset:preview")
     const items = parseMediaList(value)
     const [preview, setPreview] = React.useState<{
         name: string
         src: string
         kind: "image" | "pdf"
+        protected?: boolean
     } | null>(null)
     const [previewLoading, setPreviewLoading] = React.useState<string | null>(
         null,
@@ -98,14 +105,15 @@ export function MediaListField({
     const openPreview = async (name: string) => {
         const kind = mediaPreviewKind(name)
         if (!kind) return
-        const directUrl =
-            localPreviewUrls[name] ?? urlByFileName?.[name]?.trim()
+        const directUrl = assetIdByFileName?.[name]
+            ? urlByFileName?.[name]?.trim()
+            : (localPreviewUrls[name] ?? urlByFileName?.[name]?.trim())
         if (directUrl) {
             setPreview({ name, src: directUrl, kind })
             return
         }
         const assetId = assetIdByFileName?.[name]?.trim()
-        if (!assetId) return
+        if (!assetId || !canPreviewAsset) return
         setPreviewLoading(name)
         try {
             const blob = await queryClient.fetchQuery({
@@ -118,7 +126,7 @@ export function MediaListField({
             const src = URL.createObjectURL(blob)
             localPreviewUrlsRef.current[name] = src
             setLocalPreviewUrls({ ...localPreviewUrlsRef.current })
-            setPreview({ name, src, kind })
+            setPreview({ name, src, kind, protected: true })
         } catch (error) {
             toast.add({
                 title: "文件预览失败",
@@ -163,63 +171,74 @@ export function MediaListField({
                 <ul className="space-y-1.5">
                     {items.map((name, index) => {
                         const url = urlByFileName?.[name]?.trim()
-                        const previewUrl = localPreviewUrls[name] ?? url
+                        const assetId = assetIdByFileName?.[name]?.trim()
+                        const previewUrl =
+                            assetId && !canPreviewAsset
+                                ? url
+                                : (localPreviewUrls[name] ?? url)
                         const canPreview = Boolean(
                             mediaPreviewKind(name) &&
-                            (previewUrl || assetIdByFileName?.[name]?.trim()),
+                            (previewUrl || (canPreviewAsset && assetId)),
+                        )
+                        const attachment = (
+                            <>
+                                <span className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded bg-muted">
+                                    {previewUrl &&
+                                    mediaPreviewKind(name) === "image" ? (
+                                        // eslint-disable-next-line @next/next/no-img-element -- 本地 Blob 与受控文件内容不能交给 Next Image 优化。
+                                        <img
+                                            src={previewUrl}
+                                            alt=""
+                                            className="size-full object-cover"
+                                        />
+                                    ) : (
+                                        <ImageIcon
+                                            className="size-4 text-muted-foreground"
+                                            aria-hidden
+                                        />
+                                    )}
+                                </span>
+                                <span
+                                    className={cn(
+                                        "min-w-0 flex-1 truncate text-sm",
+                                        canPreview &&
+                                            "text-primary underline-offset-2 hover:underline",
+                                    )}
+                                >
+                                    {previewLoading === name
+                                        ? "正在打开预览…"
+                                        : name}
+                                    <span className="block text-xs text-muted-foreground">
+                                        {localPreviewUrls[name] &&
+                                        !assetIdByFileName?.[name] &&
+                                        !url
+                                            ? fileUploadText.pendingSave
+                                            : fileUploadText.saved}
+                                    </span>
+                                </span>
+                            </>
                         )
                         return (
                             <li
                                 key={`${name}-${index}`}
                                 className="flex items-center gap-2 rounded-md border border-border px-2.5 py-1.5"
                             >
-                                <button
-                                    id={`${basePrefix}-item-${toAutomationIdSegment(name)}-preview`}
-                                    type="button"
-                                    className="flex min-w-0 flex-1 items-center gap-2 text-left disabled:cursor-default"
-                                    disabled={
-                                        !canPreview || previewLoading === name
-                                    }
-                                    onClick={() => void openPreview(name)}
-                                    aria-label={
-                                        canPreview ? `预览 ${name}` : name
-                                    }
-                                >
-                                    <span className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded bg-muted">
-                                        {previewUrl &&
-                                        mediaPreviewKind(name) === "image" ? (
-                                            // eslint-disable-next-line @next/next/no-img-element -- 本地 Blob 与受控文件内容不能交给 Next Image 优化。
-                                            <img
-                                                src={previewUrl}
-                                                alt=""
-                                                className="size-full object-cover"
-                                            />
-                                        ) : (
-                                            <ImageIcon
-                                                className="size-4 text-muted-foreground"
-                                                aria-hidden
-                                            />
-                                        )}
-                                    </span>
-                                    <span
-                                        className={cn(
-                                            "min-w-0 flex-1 truncate text-sm",
-                                            canPreview &&
-                                                "text-primary underline-offset-2 hover:underline",
-                                        )}
+                                {canPreview ? (
+                                    <button
+                                        id={`${basePrefix}-item-${toAutomationIdSegment(name)}-preview`}
+                                        type="button"
+                                        className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                                        disabled={previewLoading === name}
+                                        onClick={() => void openPreview(name)}
+                                        aria-label={`预览 ${name}`}
                                     >
-                                        {previewLoading === name
-                                            ? "正在打开预览…"
-                                            : name}
-                                        <span className="block text-xs text-muted-foreground">
-                                            {localPreviewUrls[name] &&
-                                            !assetIdByFileName?.[name] &&
-                                            !url
-                                                ? fileUploadText.pendingSave
-                                                : fileUploadText.saved}
-                                        </span>
+                                        {attachment}
+                                    </button>
+                                ) : (
+                                    <span className="flex min-w-0 flex-1 items-center gap-2">
+                                        {attachment}
                                     </span>
-                                </button>
+                                )}
                                 {!disabled ? (
                                     <Button
                                         id={`${basePrefix}-item-${toAutomationIdSegment(name)}-remove`}
@@ -292,7 +311,9 @@ export function MediaListField({
                 />
             ) : null}
             <Dialog
-                open={preview != null}
+                open={
+                    preview != null && (!preview.protected || canPreviewAsset)
+                }
                 onOpenChange={(open) => {
                     if (!open) setPreview(null)
                 }}

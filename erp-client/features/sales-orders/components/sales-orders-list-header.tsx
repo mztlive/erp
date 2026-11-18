@@ -11,6 +11,8 @@ export function SalesOrdersListHeader(props: {
     isError: boolean
     isFetching: boolean
     queriedAt?: string
+    canCreate: boolean
+    canExport: boolean
     exportDisabled: boolean
     isExporting?: boolean
     onExport: () => void
@@ -20,6 +22,8 @@ export function SalesOrdersListHeader(props: {
         isError,
         isFetching,
         queriedAt,
+        canCreate,
+        canExport,
         exportDisabled,
         isExporting = false,
         onExport,
@@ -52,6 +56,7 @@ export function SalesOrdersListHeader(props: {
                     <PageActions
                         actions={[
                             {
+                                hidden: !canCreate,
                                 actionKey: "create",
                                 id: "sales-orders-list-header-create",
                                 label: "新建销售单",
@@ -61,6 +66,7 @@ export function SalesOrdersListHeader(props: {
                                 ),
                             },
                             {
+                                hidden: !canExport,
                                 actionKey: "export",
                                 id: "sales-orders-list-header-export",
                                 label: isExporting ? "导出中…" : "导出",

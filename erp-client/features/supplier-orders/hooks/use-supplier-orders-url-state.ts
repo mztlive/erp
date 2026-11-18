@@ -1,6 +1,8 @@
 "use client"
 
 import * as React from "react"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 import { usePathname, useRouter, useSearchParams } from "@/lib/navigation"
 
 import {
@@ -24,26 +26,62 @@ export function useSupplierOrdersUrlState() {
     const pathname = usePathname()
     const searchParams = useSearchParams()
 
-    const url = React.useMemo(
-        () => parseSupplierOrdersSearchParams(searchParams),
-        [searchParams],
+    const profile = useAccountProfileQuery()
+    const permissions = profile.data?.permissions
+    const canFilterSupplier = hasPermission(permissions, "supplier:list")
+    const canFilterPeople = hasPermission(permissions, "business_person:list")
+    const canFilterOrg = hasPermission(permissions, "org_unit:list")
+    const sanitizeFilters = React.useCallback(
+        (values: SupplierOrdersUrlState): SupplierOrdersUrlState => ({
+            ...values,
+            supplierId: canFilterSupplier ? values.supplierId : undefined,
+            ownerUserIds: canFilterPeople ? values.ownerUserIds : undefined,
+            handlerUserIds: canFilterPeople ? values.handlerUserIds : undefined,
+            orgUnitIds: canFilterOrg ? values.orgUnitIds : undefined,
+            includeDescendants:
+                canFilterOrg && values.orgUnitIds
+                    ? values.includeDescendants
+                    : undefined,
+        }),
+        [canFilterSupplier, canFilterPeople, canFilterOrg],
     )
+    const unauthorizedKeys = React.useMemo(
+        () =>
+            [
+                ...(!canFilterSupplier ? ["supplierId"] : []),
+                ...(!canFilterPeople ? ["ownerUserIds", "handlerUserIds"] : []),
+                ...(!canFilterOrg ? ["orgUnitIds", "includeDescendants"] : []),
+            ].filter((key) => searchParams.has(key)),
+        [canFilterSupplier, canFilterPeople, canFilterOrg, searchParams],
+    )
+    const url = React.useMemo(() => {
+        const next = sanitizeFilters(
+            parseSupplierOrdersSearchParams(searchParams),
+        )
+        return unauthorizedKeys.length ? { ...next, page: 1 } : next
+    }, [sanitizeFilters, searchParams, unauthorizedKeys])
     const returnTo = searchParams.get("returnTo") ?? undefined
 
-    // 清除旧链接中的无效支付日期，不改其余筛选、分页及返回上下文。
     React.useEffect(() => {
-        if (!searchParams.has("paidFrom") && !searchParams.has("paidTo")) return
+        const unauthorized = profile.data ? unauthorizedKeys : []
+        if (
+            !unauthorized.length &&
+            !searchParams.has("paidFrom") &&
+            !searchParams.has("paidTo")
+        )
+            return
         const target =
             searchParams.get("supplierOrderId") ?? searchParams.get("preview")
         if (target && searchParams.get("openCenter") === "1") return
         const clean = new URLSearchParams(searchParams.toString())
-        clean.delete("paidFrom")
-        clean.delete("paidTo")
+        for (const key of [...unauthorized, "paidFrom", "paidTo"])
+            clean.delete(key)
+        if (unauthorized.length) clean.delete("page")
         const query = clean.toString()
         router.replace(`${pathname}${query ? `?${query}` : ""}`, {
             scroll: false,
         })
-    }, [pathname, router, searchParams])
+    }, [pathname, profile.data, router, searchParams, unauthorizedKeys])
 
     // 对象中心直达：supplierOrderId/preview + openCenter=1 时进入对象中心
     React.useEffect(() => {
@@ -59,7 +97,7 @@ export function useSupplierOrdersUrlState() {
     // 仅预览打开/关闭这类详情导航保留 push（openPreview/closePreview 传 "push"）。
     const updateUrl = React.useCallback<SupplierOrdersUrlUpdater>(
         (patch: SupplierOrdersUrlPatch, navigate = "replace") => {
-            const next = { ...url, ...patch }
+            const next = sanitizeFilters({ ...url, ...patch })
             // 默认值不写 URL：aftersalePending=false 是默认值，直接省略
             if (!next.aftersalePending) next.aftersalePending = undefined
             let qs = buildSupplierOrdersSearchParams(next)
@@ -73,10 +111,13 @@ export function useSupplierOrdersUrlState() {
                 router.replace(`${pathname}${qs}`, { scroll: false })
             }
         },
-        [pathname, router, url, returnTo],
+        [pathname, router, url, returnTo, sanitizeFilters],
     )
 
     return {
+        canFilterSupplier,
+        canFilterPeople,
+        canFilterOrg,
         url,
         returnTo,
         updateUrl,

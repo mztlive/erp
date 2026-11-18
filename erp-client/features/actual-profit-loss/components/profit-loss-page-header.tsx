@@ -11,6 +11,7 @@ export function ProfitLossPageHeader({
     projectedAt,
     freshnessUi,
     analysisReady,
+    canExport,
     exportDisabled,
     exportPending = false,
     refreshing = false,
@@ -21,6 +22,7 @@ export function ProfitLossPageHeader({
     projectedAt?: string
     freshnessUi: { uiState: DataFreshnessState; statusLabel: string }
     analysisReady: boolean
+    canExport: boolean
     exportDisabled: boolean
     exportPending?: boolean
     refreshing?: boolean
@@ -67,6 +69,7 @@ export function ProfitLossPageHeader({
                             },
                         },
                         {
+                            hidden: !canExport,
                             actionKey: "export",
                             id: "actual-profit-loss-header-export",
                             loading: exportPending,

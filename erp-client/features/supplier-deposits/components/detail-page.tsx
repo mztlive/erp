@@ -134,6 +134,11 @@ export function SupplierDepositDetailPage() {
     const [dialog, setDialog] = useState<ActiveDialog>()
     const permitted = (action: string) =>
         hasPermission(permissions, `supplier_deposit:${action}`)
+    const actionPermission: Partial<Record<ActiveDialog["action"], string>> = {
+        approve: "approve_recharge",
+        receive: "receive_recharge",
+        pay: "pay_recharge",
+    }
     const data = query.data
     return (
         <PageScaffold density="compact">
@@ -153,21 +158,27 @@ export function SupplierDepositDetailPage() {
                 >
                     返回账户列表
                 </Button>
-                <Button
-                    id="supplier-deposits-detail-refresh"
-                    variant="outline"
-                    disabled={query.isFetching || !canDetail}
-                    onClick={() => void query.refetch()}
-                >
-                    刷新账户
-                </Button>
-                <Button
-                    id="supplier-deposits-recharge-request"
-                    disabled={!permitted("recharge_request") || !data}
-                    onClick={() => setDialog({ action: "recharge_request" })}
-                >
-                    申请充值
-                </Button>
+                {canDetail && (
+                    <Button
+                        id="supplier-deposits-detail-refresh"
+                        variant="outline"
+                        disabled={query.isFetching}
+                        onClick={() => void query.refetch()}
+                    >
+                        刷新账户
+                    </Button>
+                )}
+                {canDetail && permitted("recharge_request") && (
+                    <Button
+                        id="supplier-deposits-recharge-request"
+                        disabled={!data}
+                        onClick={() =>
+                            setDialog({ action: "recharge_request" })
+                        }
+                    >
+                        申请充值
+                    </Button>
+                )}
             </ListWorkspaceHeader>
             {profile.isPending ? (
                 <div className="h-40 animate-pulse bg-muted" aria-busy />
@@ -194,22 +205,28 @@ export function SupplierDepositDetailPage() {
                 <>
                     <AccountSummary data={data} />
                     <div className="flex flex-wrap justify-end gap-2">
-                        <Button
-                            id="supplier-deposits-authorize"
-                            variant="outline"
-                            disabled={!permitted("authorize")}
-                            onClick={() => setDialog({ action: "authorize" })}
-                        >
-                            授权自动余额执行
-                        </Button>
-                        <Button
-                            id="supplier-deposits-reconcile"
-                            variant="outline"
-                            disabled={!permitted("reconcile")}
-                            onClick={() => setDialog({ action: "reconcile" })}
-                        >
-                            登记资金对账
-                        </Button>
+                        {permitted("authorize") && (
+                            <Button
+                                id="supplier-deposits-authorize"
+                                variant="outline"
+                                onClick={() =>
+                                    setDialog({ action: "authorize" })
+                                }
+                            >
+                                授权自动余额执行
+                            </Button>
+                        )}
+                        {permitted("reconcile") && (
+                            <Button
+                                id="supplier-deposits-reconcile"
+                                variant="outline"
+                                onClick={() =>
+                                    setDialog({ action: "reconcile" })
+                                }
+                            >
+                                登记资金对账
+                            </Button>
+                        )}
                     </div>
                     <Section
                         title="充值办理"
@@ -266,16 +283,12 @@ export function SupplierDepositDetailPage() {
                                             "draft",
                                             "pending",
                                             "requested",
-                                        ].includes(status) ? (
+                                        ].includes(status) &&
+                                        permitted("approve_recharge") ? (
                                             <Button
                                                 id={`supplier-deposits-approve-${segment}`}
                                                 variant="outline"
                                                 size="sm"
-                                                disabled={
-                                                    !permitted(
-                                                        "approve_recharge",
-                                                    )
-                                                }
                                                 onClick={() =>
                                                     setDialog({
                                                         action: "approve",
@@ -285,14 +298,12 @@ export function SupplierDepositDetailPage() {
                                             >
                                                 核对并批准
                                             </Button>
-                                        ) : status === "approved" ? (
+                                        ) : status === "approved" &&
+                                          permitted("pay_recharge") ? (
                                             <Button
                                                 id={`supplier-deposits-pay-${segment}`}
                                                 variant="outline"
                                                 size="sm"
-                                                disabled={
-                                                    !permitted("pay_recharge")
-                                                }
                                                 onClick={() =>
                                                     setDialog({
                                                         action: "pay",
@@ -304,16 +315,11 @@ export function SupplierDepositDetailPage() {
                                             </Button>
                                         ) : ["paid", "bank_paid"].includes(
                                               status,
-                                          ) ? (
+                                          ) && permitted("receive_recharge") ? (
                                             <Button
                                                 id={`supplier-deposits-receive-${segment}`}
                                                 variant="outline"
                                                 size="sm"
-                                                disabled={
-                                                    !permitted(
-                                                        "receive_recharge",
-                                                    )
-                                                }
                                                 onClick={() =>
                                                     setDialog({
                                                         action: "receive",
@@ -397,20 +403,23 @@ export function SupplierDepositDetailPage() {
                                         "0",
                                         2,
                                     ) > 0 ? (
-                                        <Button
-                                            id={`supplier-deposits-release-${toAutomationIdSegment(reservation.id)}`}
-                                            variant="outline"
-                                            size="sm"
-                                            disabled={!permitted("release")}
-                                            onClick={() =>
-                                                setDialog({
-                                                    action: "release",
-                                                    reservation,
-                                                })
-                                            }
-                                        >
-                                            核实剩余占用
-                                        </Button>
+                                        permitted("release") ? (
+                                            <Button
+                                                id={`supplier-deposits-release-${toAutomationIdSegment(reservation.id)}`}
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() =>
+                                                    setDialog({
+                                                        action: "release",
+                                                        reservation,
+                                                    })
+                                                }
+                                            >
+                                                核实剩余占用
+                                            </Button>
+                                        ) : (
+                                            "—"
+                                        )
                                     ) : (
                                         "无剩余占用"
                                     )}
@@ -540,23 +549,22 @@ export function SupplierDepositDetailPage() {
                                             : "有效"}
                                 </TableCell>
                                 <TableCell>
-                                    <Button
-                                        id={`supplier-deposits-revoke-${toAutomationIdSegment(authorization.id)}`}
-                                        variant="outline"
-                                        size="sm"
-                                        disabled={
-                                            authorization.revoked ||
-                                            !permitted("revoke")
-                                        }
-                                        onClick={() =>
-                                            setDialog({
-                                                action: "revoke",
-                                                authorization,
-                                            })
-                                        }
-                                    >
-                                        撤销授权
-                                    </Button>
+                                    {permitted("revoke") && (
+                                        <Button
+                                            id={`supplier-deposits-revoke-${toAutomationIdSegment(authorization.id)}`}
+                                            variant="outline"
+                                            size="sm"
+                                            disabled={authorization.revoked}
+                                            onClick={() =>
+                                                setDialog({
+                                                    action: "revoke",
+                                                    authorization,
+                                                })
+                                            }
+                                        >
+                                            撤销授权
+                                        </Button>
+                                    )}
                                 </TableCell>
                             </TableRow>
                         ))}
@@ -705,23 +713,22 @@ export function SupplierDepositDetailPage() {
                                 <TableCell>
                                     {record.resolved_by ? (
                                         "已核实结案"
-                                    ) : (
+                                    ) : permitted("resolve") ? (
                                         <Button
                                             id={`supplier-deposits-resolve-${toAutomationIdSegment(record.id)}`}
                                             variant="outline"
                                             size="sm"
                                             disabled={
-                                                !permitted("resolve") ||
-                                                (!data.account
+                                                !data.account
                                                     .reconciliation_required &&
-                                                    compareDecimal(
-                                                        record.remote_balance,
-                                                        record.local_balance_at_cutoff,
-                                                        2,
-                                                    ) === 0 &&
-                                                    !record
-                                                        .unresolved_transaction_ids
-                                                        .length)
+                                                compareDecimal(
+                                                    record.remote_balance,
+                                                    record.local_balance_at_cutoff,
+                                                    2,
+                                                ) === 0 &&
+                                                !record
+                                                    .unresolved_transaction_ids
+                                                    .length
                                             }
                                             onClick={() =>
                                                 setDialog({
@@ -742,6 +749,8 @@ export function SupplierDepositDetailPage() {
                                                 ? "核实后恢复使用"
                                                 : "核实对账差异"}
                                         </Button>
+                                    ) : (
+                                        "—"
                                     )}
                                 </TableCell>
                             </TableRow>
@@ -750,6 +759,8 @@ export function SupplierDepositDetailPage() {
                 </>
             )}
             {dialog &&
+                canDetail &&
+                permitted(actionPermission[dialog.action] ?? dialog.action) &&
                 data &&
                 (dialog.action === "pay" ? (
                     <RechargePaymentDialog

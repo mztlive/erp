@@ -10,7 +10,7 @@ import type { SalesOrdersUrlState } from "@/features/sales-orders/lib/url-state"
 export function useSalesOrdersListKeyboardNav(options: {
     items: SalesOrderListItem[]
     url: SalesOrdersUrlState
-    onRowNavigate: (id: string) => void
+    onRowNavigate?: (id: string) => void
 }) {
     const { items, url, onRowNavigate } = options
     const [focusedIndex, setFocusedIndex] = React.useState(0)
@@ -68,7 +68,7 @@ export function useSalesOrdersListKeyboardNav(options: {
                 return
             }
 
-            if (items.length === 0) return
+            if (!onRowNavigate || items.length === 0) return
 
             if (event.key === "j" || event.key === "ArrowDown") {
                 event.preventDefault()

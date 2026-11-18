@@ -184,27 +184,35 @@ export function ProductListToolbar({
             }
             morePanel={
                 <div className="grid min-w-0 gap-5">
-                    <fieldset className="min-w-0">
-                        <legend className="mb-3 text-xs font-medium">
-                            人员
-                        </legend>
-                        <div className="grid min-w-0 gap-3 sm:grid-cols-2">
-                            <PersonDirectoryFilter
-                                id={`${prefix}-owner`}
-                                label="维护人"
-                                value={f.ownerUserIdsDraft}
-                                onChange={f.setOwnerUserIdsDraft}
-                                category="business"
-                            />
-                            <PersonDirectoryFilter
-                                id={`${prefix}-procurement-owner`}
-                                label="采购负责人"
-                                value={f.procurementOwnerUserIdsDraft}
-                                onChange={f.setProcurementOwnerUserIdsDraft}
-                                category="procurement"
-                            />
-                        </div>
-                    </fieldset>
+                    {f.canFilterOwner || f.canFilterProcurementOwner ? (
+                        <fieldset className="min-w-0">
+                            <legend className="mb-3 text-xs font-medium">
+                                人员
+                            </legend>
+                            <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                                {f.canFilterOwner ? (
+                                    <PersonDirectoryFilter
+                                        id={`${prefix}-owner`}
+                                        label="维护人"
+                                        value={f.ownerUserIdsDraft}
+                                        onChange={f.setOwnerUserIdsDraft}
+                                        category="business"
+                                    />
+                                ) : null}
+                                {f.canFilterProcurementOwner ? (
+                                    <PersonDirectoryFilter
+                                        id={`${prefix}-procurement-owner`}
+                                        label="采购负责人"
+                                        value={f.procurementOwnerUserIdsDraft}
+                                        onChange={
+                                            f.setProcurementOwnerUserIdsDraft
+                                        }
+                                        category="procurement"
+                                    />
+                                ) : null}
+                            </div>
+                        </fieldset>
+                    ) : null}
                     <fieldset className="min-w-0">
                         <legend className="mb-3 text-xs font-medium">
                             状态

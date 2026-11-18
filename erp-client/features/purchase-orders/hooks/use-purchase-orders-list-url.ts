@@ -1,6 +1,8 @@
 "use client"
 
 import * as React from "react"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 import { usePathname, useRouter, useSearchParams } from "@/lib/navigation"
 
 import type { PurchaseOrderListQuery } from "@/features/purchase-orders/api/purchase-orders"
@@ -19,21 +21,34 @@ export function usePurchaseOrdersListUrl() {
     const pathname = usePathname()
     const searchParams = useSearchParams()
 
-    const url = React.useMemo(
-        () => parsePurchaseOrdersSearchParams(searchParams),
-        [searchParams],
+    const profile = useAccountProfileQuery()
+    const canFilterOwner = hasPermission(
+        profile.data?.permissions,
+        "procurement_person:list",
     )
+    const hasUnauthorizedFilter =
+        !canFilterOwner && searchParams.has("ownerUserIds")
+    const url = React.useMemo(() => {
+        const values = parsePurchaseOrdersSearchParams(searchParams)
+        return hasUnauthorizedFilter
+            ? { ...values, ownerUserIds: undefined, page: 1 }
+            : values
+    }, [hasUnauthorizedFilter, searchParams])
 
     const pushUrl = React.useCallback(
         (patch: Partial<PurchaseOrdersUrlState>) => {
             const next = { ...url, ...patch }
+            if (!canFilterOwner) next.ownerUserIds = undefined
             router.replace(
                 `${pathname}${buildPurchaseOrdersSearchParams(next)}`,
                 { scroll: false },
             )
         },
-        [pathname, router, url],
+        [canFilterOwner, pathname, router, url],
     )
+    React.useEffect(() => {
+        if (profile.data && hasUnauthorizedFilter) pushUrl({ page: 1 })
+    }, [profile.data, hasUnauthorizedFilter, pushUrl])
 
     // 跨单据跳转的返回目标：保留销售单关系筛选；建单参数带回去会再次进入建单页。
     const listReturnHref = React.useMemo(() => {
@@ -41,9 +56,13 @@ export function usePurchaseOrdersListUrl() {
         sp.delete("basisId")
         sp.delete("action")
         sp.delete("mode")
+        if (hasUnauthorizedFilter) {
+            sp.delete("ownerUserIds")
+            sp.delete("page")
+        }
         const qs = sp.toString()
         return qs ? `${pathname}?${qs}` : pathname
-    }, [pathname, searchParams])
+    }, [hasUnauthorizedFilter, pathname, searchParams])
 
     const [sortBy, sortDir] = React.useMemo(() => {
         const [id, dir] = (url.sort ?? "").split(":")
@@ -75,6 +94,7 @@ export function usePurchaseOrdersListUrl() {
     )
 
     return {
+        canFilterOwner,
         router,
         url,
         pushUrl,

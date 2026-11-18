@@ -33,7 +33,7 @@ type ContractsTablePanelProps = {
     error: Error | null
     isPending: boolean
     onRetry: () => void
-    onOpenUpload: () => void
+    onOpenUpload?: () => void
     onPreview: (contractId: string) => void
     highlightedContractId?: string
 }
@@ -51,6 +51,8 @@ export function ContractsTablePanel({
     highlightedContractId,
 }: ContractsTablePanelProps) {
     const {
+        canFilterOwners,
+        canFilterOrgs,
         searchDraft,
         setSearchDraft,
         searchInputRef,
@@ -131,26 +133,30 @@ export function ContractsTablePanel({
                                 }
                                 placeholder="全部"
                             />
-                            <div className="empty:hidden w-56 max-w-full">
-                                <PersonDirectoryFilter
-                                    id="card-contracts-list-filter-owner"
-                                    label="当前跟进负责人"
-                                    hideLabel
-                                    value={ownerDraft ?? ""}
-                                    onChange={setOwnerDraft}
-                                    category="sales"
-                                />
-                            </div>
+                            {canFilterOwners && (
+                                <div className="empty:hidden w-56 max-w-full">
+                                    <PersonDirectoryFilter
+                                        id="card-contracts-list-filter-owner"
+                                        label="当前跟进负责人"
+                                        hideLabel
+                                        value={ownerDraft ?? ""}
+                                        onChange={setOwnerDraft}
+                                        category="sales"
+                                    />
+                                </div>
+                            )}
                         </>
                     }
                     morePanel={
-                        <OrganizationUnitFilter
-                            id="card-contracts-list-filter-org"
-                            value={orgDraft}
-                            onChange={setOrgDraft}
-                            includeDescendants={descendantsDraft}
-                            onDescendantsChange={setDescendantsDraft}
-                        />
+                        canFilterOrgs ? (
+                            <OrganizationUnitFilter
+                                id="card-contracts-list-filter-org"
+                                value={orgDraft}
+                                onChange={setOrgDraft}
+                                includeDescendants={descendantsDraft}
+                                onDescendantsChange={setDescendantsDraft}
+                            />
+                        ) : null
                     }
                     resultStatus={listWorkspaceFilterStatusText({
                         loading: isPending,
@@ -229,7 +235,7 @@ export function ContractsTablePanel({
                                         >
                                             清除筛选
                                         </Button>
-                                    ) : (
+                                    ) : onOpenUpload ? (
                                         <Button
                                             id="card-contracts-list-empty-upload"
                                             type="button"
@@ -243,7 +249,7 @@ export function ContractsTablePanel({
                                             />
                                             上传合同 PDF
                                         </Button>
-                                    )
+                                    ) : null
                                 }
                             />
                         ) : undefined

@@ -90,6 +90,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         let snapshot = subject.snapshot;
         let mut display =
             snapshot.display.ok_or_else(|| Error::ConflictError("该审批未保存可预览资料".into()))?;
+
         if display.source.needs_submitter_name(&snapshot.payload.submitted_by) {
             let account = self.identity.directory().account(&snapshot.payload.submitted_by, executor).await?;
             display.source.resolve_submitter_name(

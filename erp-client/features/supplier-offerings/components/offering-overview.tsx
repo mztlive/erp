@@ -31,8 +31,6 @@ import {
 } from "../types"
 import { capabilityLabel, OfferingField } from "./offering-terms"
 
-const NO_COST = "无权限"
-
 /** 供给资料页顶部：两种供给价、税率和当前可供，先回答「多少钱、现在能不能供」。 */
 export function OfferingSummary({
     offering,
@@ -41,75 +39,76 @@ export function OfferingSummary({
     offering: SupplierOfferingView
     canViewCosts: boolean
 }) {
-    const hidden = canViewCosts ? undefined : NO_COST
     const available = offering.availability_status === "AVAILABLE"
     return (
-        <DetailSummary label="供给摘要" className="lg:grid-cols-4">
-            <DetailSummaryItem
-                label="一件代发价（含税）"
-                value={
-                    <MoneyValue
-                        value={offering.dropship_supply_price_gross}
-                        unavailableReason={hidden}
-                    />
-                }
-                detail={
-                    canViewCosts ? (
-                        <>
-                            不含税{" "}
+        <DetailSummary
+            label="供给摘要"
+            className={canViewCosts ? "lg:grid-cols-4" : undefined}
+        >
+            {canViewCosts && (
+                <>
+                    <DetailSummaryItem
+                        label="一件代发价（含税）"
+                        value={
                             <MoneyValue
-                                value={offering.dropship_supply_price_net}
+                                value={offering.dropship_supply_price_gross}
                             />
-                        </>
-                    ) : (
-                        NO_COST
-                    )
-                }
-            />
-            <DetailSummaryItem
-                label="集采价（含税）"
-                value={
-                    <MoneyValue
-                        value={offering.bulk_supply_price_gross}
-                        unavailableReason={hidden}
-                    />
-                }
-                detail={
-                    <>
-                        起订{" "}
-                        {offering.bulk_minimum_order_quantity != null ? (
-                            <QuantityValue
-                                value={offering.bulk_minimum_order_quantity}
-                                unit=""
-                            />
-                        ) : (
-                            "未提供"
-                        )}
-                        {canViewCosts ? (
+                        }
+                        detail={
                             <>
+                                不含税{" "}
+                                <MoneyValue
+                                    value={offering.dropship_supply_price_net}
+                                />
+                            </>
+                        }
+                    />
+                    <DetailSummaryItem
+                        label="集采价（含税）"
+                        value={
+                            <MoneyValue
+                                value={offering.bulk_supply_price_gross}
+                            />
+                        }
+                        detail={
+                            <>
+                                起订{" "}
+                                {offering.bulk_minimum_order_quantity !=
+                                null ? (
+                                    <QuantityValue
+                                        value={
+                                            offering.bulk_minimum_order_quantity
+                                        }
+                                        unit=""
+                                    />
+                                ) : (
+                                    "未提供"
+                                )}
                                 {" · 不含税 "}
                                 <MoneyValue
                                     value={offering.bulk_supply_price_net}
                                 />
                             </>
-                        ) : null}
-                    </>
-                }
-            />
-            <DetailSummaryItem
-                label="进项税率"
-                value={
-                    canViewCosts && offering.input_tax_rate != null ? (
-                        <RateValue
-                            value={percentageFromRate(offering.input_tax_rate)}
-                            precision={2}
-                        />
-                    ) : (
-                        "—"
-                    )
-                }
-                detail={canViewCosts ? "不含税价按此税率换算" : NO_COST}
-            />
+                        }
+                    />
+                    <DetailSummaryItem
+                        label="进项税率"
+                        value={
+                            offering.input_tax_rate != null ? (
+                                <RateValue
+                                    value={percentageFromRate(
+                                        offering.input_tax_rate,
+                                    )}
+                                    precision={2}
+                                />
+                            ) : (
+                                "—"
+                            )
+                        }
+                        detail="不含税价按此税率换算"
+                    />
+                </>
+            )}
             <DetailSummaryItem
                 label="当前可供"
                 value={
@@ -147,7 +146,6 @@ export function OfferingTermsCard({
     offering: SupplierOfferingView
     canViewCosts: boolean
 }) {
-    const hidden = canViewCosts ? undefined : NO_COST
     const rows = [
         {
             key: "dropship",
@@ -173,42 +171,38 @@ export function OfferingTermsCard({
                 </CardTitle>
             </CardHeader>
             <CardContent className="space-y-5">
-                <div className="overflow-hidden rounded-lg border">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>价格方式</TableHead>
-                                <TableHead className="text-right">
-                                    含税价
-                                </TableHead>
-                                <TableHead className="text-right">
-                                    不含税价
-                                </TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {rows.map((row) => (
-                                <TableRow key={row.key}>
-                                    <TableCell className="font-medium">
-                                        {row.label}
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        <MoneyValue
-                                            value={row.gross}
-                                            unavailableReason={hidden}
-                                        />
-                                    </TableCell>
-                                    <TableCell className="text-right text-muted-foreground">
-                                        <MoneyValue
-                                            value={row.net}
-                                            unavailableReason={hidden}
-                                        />
-                                    </TableCell>
+                {canViewCosts && (
+                    <div className="overflow-hidden rounded-lg border">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>价格方式</TableHead>
+                                    <TableHead className="text-right">
+                                        含税价
+                                    </TableHead>
+                                    <TableHead className="text-right">
+                                        不含税价
+                                    </TableHead>
                                 </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </div>
+                            </TableHeader>
+                            <TableBody>
+                                {rows.map((row) => (
+                                    <TableRow key={row.key}>
+                                        <TableCell className="font-medium">
+                                            {row.label}
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                            <MoneyValue value={row.gross} />
+                                        </TableCell>
+                                        <TableCell className="text-right text-muted-foreground">
+                                            <MoneyValue value={row.net} />
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </div>
+                )}
                 <dl className="grid gap-x-8 gap-y-3 sm:grid-cols-2">
                     <OfferingField label="集采起订量">
                         {offering.bulk_minimum_order_quantity != null ? (

@@ -8,7 +8,9 @@ import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { CustomerDirectoryItem } from "@/features/customers/types"
 
 /** 客户目录列定义；排序列由 URL 状态驱动，单元格为纯展示。 */
-export function useCustomerDirectoryColumns(): ColumnDef<CustomerDirectoryItem>[] {
+export function useCustomerDirectoryColumns(
+    canOpenDetail: boolean,
+): ColumnDef<CustomerDirectoryItem>[] {
     return React.useMemo<ColumnDef<CustomerDirectoryItem>[]>(
         () => [
             {
@@ -19,13 +21,21 @@ export function useCustomerDirectoryColumns(): ColumnDef<CustomerDirectoryItem>[
                 enableSorting: false,
                 cell: ({ row }) => (
                     <div className="min-w-0">
-                        <Link
-                            id={`customers-directory-row-${toAutomationIdSegment(row.original.id)}-open`}
-                            href={`/sales/customers/${row.original.id}`}
-                            className="font-medium text-foreground underline-offset-4 hover:underline"
-                        >
-                            {row.original.shortName || row.original.legalName}
-                        </Link>
+                        {canOpenDetail ? (
+                            <Link
+                                id={`customers-directory-row-${toAutomationIdSegment(row.original.id)}-open`}
+                                href={`/sales/customers/${row.original.id}`}
+                                className="font-medium text-foreground underline-offset-4 hover:underline"
+                            >
+                                {row.original.shortName ||
+                                    row.original.legalName}
+                            </Link>
+                        ) : (
+                            <span className="font-medium">
+                                {row.original.shortName ||
+                                    row.original.legalName}
+                            </span>
+                        )}
                         <div className="flex flex-wrap items-center gap-1.5">
                             <span className="num text-xs text-muted-foreground">
                                 {row.original.customerNo}
@@ -76,6 +86,6 @@ export function useCustomerDirectoryColumns(): ColumnDef<CustomerDirectoryItem>[
                 ),
             },
         ],
-        [],
+        [canOpenDetail],
     )
 }

@@ -107,7 +107,7 @@ export type RoleRow = Readonly<{
     /** 通配全权角色（不按条目配置）。 */
     allPermissions: boolean
     /** 绑定该角色的账号数。 */
-    boundAccountCount: number
+    boundAccountCount: number | null
     dataScopeSummary: string
     fieldPolicySummary: string
     riskFlags: readonly string[]

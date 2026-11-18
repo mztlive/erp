@@ -1,5 +1,7 @@
 "use client"
 
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
+
 import { useState } from "react"
 import type { MasterDataListItem } from "@/features/master-data/types"
 import { VoucherCategoryStatusDialog } from "@/features/master-data/components/list/voucher-category-status-dialog"
@@ -34,6 +36,7 @@ export function VoucherCategoriesListPage() {
 
     return (
         <ListPageFrame
+            resource="voucher-categories"
             title="卡券类目"
             description="查看卡券类目资料。"
             exportMeta={state.exportMeta}
@@ -68,7 +71,11 @@ export function VoucherCategoriesListPage() {
                 )}
                 codeLabel="类目编号"
                 emptyTitle="还没有卡券类目资料"
-                emptyDescription="点击「新建」创建第一份资料；历史记录会随资料保留。"
+                emptyDescription={
+                    state.canCreate
+                        ? "点击「新建」创建第一份资料；历史记录会随资料保留。"
+                        : undefined
+                }
                 emptyAction={
                     state.canCreate ? (
                         <MasterDataEmptyCreateButton
@@ -104,19 +111,23 @@ export function VoucherCategoriesListPage() {
                 target={statusTarget}
                 onClose={() => setStatusTarget(null)}
             />
-            <VoucherCategoryFormDialog
-                idPrefix="master-data-voucher-categories-list-create-dialog"
-                open={state.createOpen}
-                onOpenChange={state.setCreateOpen}
-            />
-            <VoucherCategoryFormDialog
-                idPrefix="master-data-voucher-categories-list-revise-dialog"
-                open={state.reviseTarget != null}
-                onOpenChange={(open) => {
-                    if (!open) state.setReviseTarget(null)
-                }}
-                target={state.reviseTarget}
-            />
+            <PermissionGuard permission="voucher_category_profile:create">
+                <VoucherCategoryFormDialog
+                    idPrefix="master-data-voucher-categories-list-create-dialog"
+                    open={state.createOpen}
+                    onOpenChange={state.setCreateOpen}
+                />
+            </PermissionGuard>
+            <PermissionGuard permission="voucher_category_profile:update">
+                <VoucherCategoryFormDialog
+                    idPrefix="master-data-voucher-categories-list-revise-dialog"
+                    open={state.reviseTarget != null}
+                    onOpenChange={(open) => {
+                        if (!open) state.setReviseTarget(null)
+                    }}
+                    target={state.reviseTarget}
+                />
+            </PermissionGuard>
         </ListPageFrame>
     )
 }

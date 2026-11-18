@@ -18,9 +18,11 @@ import {
 import type { PortalOffering } from "../types"
 import { PortalError, PortalSurface } from "../components/surface"
 import { PortalImage } from "../components/portal-image"
+import { usePortalProfile } from "../components/portal-session"
 import { PortalBatchDialog } from "../components/batch-dialog"
 export function PortalOfferingsPage() {
     const router = useRouter()
+    const canMaintain = usePortalProfile()?.role === "maintainer"
     const [search, setSearch] = useState("")
     const [q, setQ] = useState("")
     const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 50 })
@@ -113,12 +115,12 @@ export function PortalOfferingsPage() {
                         href={`/supplier-portal/offerings/${encodeURIComponent(row.original.id)}`}
                         className="text-primary hover:underline"
                     >
-                        查看与维护
+                        {canMaintain ? "查看与维护" : "查看供给"}
                     </Link>
                 ),
             },
         ],
-        [],
+        [canMaintain],
     )
     return (
         <PortalSurface
@@ -126,22 +128,24 @@ export function PortalOfferingsPage() {
             title="供货商品目录"
             description="分别查看当前生效条款、可供情况与待采购确认的变更。"
             actions={
-                <>
-                    <Button
-                        id="supplier-portal-batch-terms"
-                        variant="outline"
-                        onClick={() => setBatch("terms")}
-                    >
-                        批量申请调价
-                    </Button>
-                    <Button
-                        id="supplier-portal-batch-availability"
-                        variant="outline"
-                        onClick={() => setBatch("availability")}
-                    >
-                        批量更新可供
-                    </Button>
-                </>
+                canMaintain ? (
+                    <>
+                        <Button
+                            id="supplier-portal-batch-terms"
+                            variant="outline"
+                            onClick={() => setBatch("terms")}
+                        >
+                            批量申请调价
+                        </Button>
+                        <Button
+                            id="supplier-portal-batch-availability"
+                            variant="outline"
+                            onClick={() => setBatch("availability")}
+                        >
+                            批量更新可供
+                        </Button>
+                    </>
+                ) : undefined
             }
         >
             <ListWorkSurface
@@ -195,7 +199,7 @@ export function PortalOfferingsPage() {
                     />
                 }
             />
-            {batch && (
+            {canMaintain && batch && (
                 <PortalBatchDialog
                     mode={batch}
                     onClose={() => setBatch(null)}

@@ -21,7 +21,33 @@ import { masterDataCopy } from "@/features/master-data/lib/copy"
 
 export function SupplierDetailPage({ stableId }: { stableId: string }) {
     const editor = useSupplierEditor(stableId)
-    const { isCreate, detailQuery, data, listHref } = editor
+    const { isCreate, detailQuery, data, listHref, accountQuery, canCreate } =
+        editor
+
+    if (isCreate && accountQuery.isPending) {
+        return (
+            <PageScaffold density="compact">
+                <PageHeader title="新建供应商" />
+                <div
+                    className="h-40 animate-pulse rounded-lg bg-muted"
+                    aria-busy
+                />
+            </PageScaffold>
+        )
+    }
+
+    if (isCreate && !canCreate) {
+        return (
+            <PageScaffold density="compact">
+                <PageHeader title="新建供应商" />
+                <BusinessFailureState
+                    kind="permission"
+                    error={accountQuery.error}
+                    description="当前账号没有创建供应商的权限。"
+                />
+            </PageScaffold>
+        )
+    }
 
     if (!isCreate && detailQuery.isPending) {
         return (

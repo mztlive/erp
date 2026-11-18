@@ -40,8 +40,11 @@ type ProductBasicSectionProps = {
     brandOptions: React.ComponentProps<typeof BrandCombobox>["brands"]
     categoryLoading: boolean
     brandLoading: boolean
+    canSelectUnit: boolean
+    canSelectCategory: boolean
     onRefreshUnits: () => Promise<unknown>
     onRefreshCategories: () => Promise<unknown>
+    canSelectBrand: boolean
     onRefreshBrands: () => Promise<unknown>
 }
 
@@ -58,8 +61,11 @@ function ProductBasicSection({
     brandOptions,
     categoryLoading,
     brandLoading,
+    canSelectUnit,
+    canSelectCategory,
     onRefreshUnits,
     onRefreshCategories,
+    canSelectBrand,
     onRefreshBrands,
 }: ProductBasicSectionProps) {
     const prefix = idPrefix ?? "master-data-product-basic"
@@ -109,88 +115,115 @@ function ProductBasicSection({
                         创建后不可修改，也不随分类变化。
                     </p>
                 </div>
-                <div className="space-y-1.5 sm:col-span-6 xl:col-span-3">
-                    <Label htmlFor={`${prefix}-unit-combobox`}>
-                        {masterDataCopy.fBaseUnit} <RequiredMark />
-                    </Label>
-                    <OptionCombobox
-                        id={`${prefix}-unit-combobox`}
-                        value={fields.baseUnitId || null}
-                        onValueChange={(id) => {
-                            const unit = unitOptions?.find(
-                                (item) => item.id === id,
-                            )
-                            setFields((prev) => ({
-                                ...prev,
-                                baseUnitId: unit?.id ?? "",
-                                baseUnitCode: unit?.code ?? "",
-                                baseUnit: unit?.label ?? "",
-                                skus: prev.skus.map((sku) => ({
-                                    ...sku,
+                {canSelectUnit ? (
+                    <div className="space-y-1.5 sm:col-span-6 xl:col-span-3">
+                        <Label htmlFor={`${prefix}-unit-combobox`}>
+                            {masterDataCopy.fBaseUnit} <RequiredMark />
+                        </Label>
+                        <OptionCombobox
+                            id={`${prefix}-unit-combobox`}
+                            value={fields.baseUnitId || null}
+                            onValueChange={(id) => {
+                                const unit = unitOptions?.find(
+                                    (item) => item.id === id,
+                                )
+                                setFields((prev) => ({
+                                    ...prev,
+                                    baseUnitId: unit?.id ?? "",
+                                    baseUnitCode: unit?.code ?? "",
                                     baseUnit: unit?.label ?? "",
-                                })),
-                            }))
-                        }}
-                        onRefresh={onRefreshUnits}
-                        options={(unitOptions ?? []).map((unit) => ({
-                            value: unit.id,
-                            label: `${unit.label} · ${unit.code}`,
-                        }))}
-                        allowClear={false}
-                        placeholder="请选择基础单位"
-                        className="w-full"
-                    />
-                </div>
-                <div className="space-y-1.5 sm:col-span-6 xl:col-span-3">
-                    <Label htmlFor={`${prefix}-category-combobox`}>
-                        {masterDataCopy.fCategory} <RequiredMark />
-                    </Label>
-                    <CategoryCombobox
-                        id={`${prefix}-category-combobox`}
-                        categories={categoryOptions}
-                        onRefresh={onRefreshCategories}
-                        value={fields.categoryId || undefined}
-                        onValueChange={(id) => {
-                            const hit = categoryOptions.find(
-                                (c) => c.categoryId === id,
-                            )
-                            setFields((prev) => ({
-                                ...prev,
-                                categoryId: id ?? "",
-                                category: hit?.categoryName ?? "",
-                            }))
-                        }}
-                        loading={categoryLoading}
-                        placeholder="请选择分类"
-                        emptyLabel="暂无可用分类，请先在商品分类中维护"
-                        className="w-full"
-                    />
-                </div>
-                <div className="space-y-1.5 sm:col-span-6 xl:col-span-3">
-                    <Label htmlFor={`${prefix}-brand-combobox`}>
-                        {masterDataCopy.fBrand} <RequiredMark />
-                    </Label>
-                    <BrandCombobox
-                        id={`${prefix}-brand-combobox`}
-                        brands={brandOptions}
-                        onRefresh={onRefreshBrands}
-                        value={fields.brandId || undefined}
-                        onValueChange={(id) => {
-                            const hit = brandOptions.find(
-                                (b) => b.brandId === id,
-                            )
-                            setFields((prev) => ({
-                                ...prev,
-                                brandId: id ?? "",
-                                brand: hit?.brandName ?? "",
-                            }))
-                        }}
-                        loading={brandLoading}
-                        placeholder="请选择品牌"
-                        emptyLabel="暂无可用品牌，请先在品牌中维护"
-                        className="w-full"
-                    />
-                </div>
+                                    skus: prev.skus.map((sku) => ({
+                                        ...sku,
+                                        baseUnit: unit?.label ?? "",
+                                    })),
+                                }))
+                            }}
+                            onRefresh={onRefreshUnits}
+                            options={(unitOptions ?? []).map((unit) => ({
+                                value: unit.id,
+                                label: `${unit.label} · ${unit.code}`,
+                            }))}
+                            allowClear={false}
+                            placeholder="请选择基础单位"
+                            className="w-full"
+                        />
+                    </div>
+                ) : fields.baseUnit ? (
+                    <div className="space-y-1.5 sm:col-span-6 xl:col-span-3">
+                        <p className="text-sm font-medium">
+                            {masterDataCopy.fBaseUnit}
+                        </p>
+                        <p className="text-sm">{fields.baseUnit}</p>
+                    </div>
+                ) : null}
+                {canSelectCategory ? (
+                    <div className="space-y-1.5 sm:col-span-6 xl:col-span-3">
+                        <Label htmlFor={`${prefix}-category-combobox`}>
+                            {masterDataCopy.fCategory} <RequiredMark />
+                        </Label>
+                        <CategoryCombobox
+                            id={`${prefix}-category-combobox`}
+                            categories={categoryOptions}
+                            onRefresh={onRefreshCategories}
+                            value={fields.categoryId || undefined}
+                            onValueChange={(id) => {
+                                const hit = categoryOptions.find(
+                                    (c) => c.categoryId === id,
+                                )
+                                setFields((prev) => ({
+                                    ...prev,
+                                    categoryId: id ?? "",
+                                    category: hit?.categoryName ?? "",
+                                }))
+                            }}
+                            loading={categoryLoading}
+                            placeholder="请选择分类"
+                            emptyLabel="暂无可用分类，请先在商品分类中维护"
+                            className="w-full"
+                        />
+                    </div>
+                ) : fields.category ? (
+                    <div className="space-y-1.5 sm:col-span-6 xl:col-span-3">
+                        <p className="text-sm font-medium">
+                            {masterDataCopy.fCategory}
+                        </p>
+                        <p className="text-sm">{fields.category}</p>
+                    </div>
+                ) : null}
+                {canSelectBrand ? (
+                    <div className="space-y-1.5 sm:col-span-6 xl:col-span-3">
+                        <Label htmlFor={`${prefix}-brand-combobox`}>
+                            {masterDataCopy.fBrand} <RequiredMark />
+                        </Label>
+                        <BrandCombobox
+                            id={`${prefix}-brand-combobox`}
+                            brands={brandOptions}
+                            onRefresh={onRefreshBrands}
+                            value={fields.brandId || undefined}
+                            onValueChange={(id) => {
+                                const hit = brandOptions.find(
+                                    (b) => b.brandId === id,
+                                )
+                                setFields((prev) => ({
+                                    ...prev,
+                                    brandId: id ?? "",
+                                    brand: hit?.brandName ?? "",
+                                }))
+                            }}
+                            loading={brandLoading}
+                            placeholder="请选择品牌"
+                            emptyLabel="暂无可用品牌，请先在品牌中维护"
+                            className="w-full"
+                        />
+                    </div>
+                ) : fields.brand ? (
+                    <div className="space-y-1.5 sm:col-span-6 xl:col-span-3">
+                        <p className="text-sm font-medium">
+                            {masterDataCopy.fBrand}
+                        </p>
+                        <p className="text-sm">{fields.brand}</p>
+                    </div>
+                ) : null}
                 <div className="space-y-1.5 sm:col-span-12">
                     <Label htmlFor={`${prefix}-description`}>商品描述</Label>
                     <Textarea

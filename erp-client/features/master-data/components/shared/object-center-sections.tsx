@@ -1,5 +1,7 @@
 "use client"
 
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
+
 import Link from "next/link"
 
 import {
@@ -115,39 +117,43 @@ export function ObjectCenterOverviewSection({
                 </div>
             ) : null}
 
-            {data.warehouseStockSummary ? (
-                <div
-                    className={cn(
-                        surfaceInsetClassName,
-                        "mt-4 space-y-2 p-3 text-sm",
-                    )}
-                >
-                    <p className="text-xs text-muted-foreground">
-                        {data.warehouseStockSummary.policyNote}
-                    </p>
-                    <p>
-                        在库{" "}
-                        <span className="num">
-                            {data.warehouseStockSummary.onHandQty}
-                        </span>
-                        {" · 预占 "}
-                        <span className="num">
-                            {data.warehouseStockSummary.reservedQty}
-                        </span>
-                    </p>
-                    <Button
-                        id="master-data-shared-object-center-sections-button-1"
-                        size="sm"
-                        variant="secondary"
-                        className="rounded-lg shadow-none"
-                        render={
-                            <Link href={data.warehouseStockSummary.w10Href} />
-                        }
+            <PermissionGuard permission="stock_balance:list">
+                {data.warehouseStockSummary ? (
+                    <div
+                        className={cn(
+                            surfaceInsetClassName,
+                            "mt-4 space-y-2 p-3 text-sm",
+                        )}
                     >
-                        打开库存台账
-                    </Button>
-                </div>
-            ) : null}
+                        <p className="text-xs text-muted-foreground">
+                            {data.warehouseStockSummary.policyNote}
+                        </p>
+                        <p>
+                            在库{" "}
+                            <span className="num">
+                                {data.warehouseStockSummary.onHandQty}
+                            </span>
+                            {" · 预占 "}
+                            <span className="num">
+                                {data.warehouseStockSummary.reservedQty}
+                            </span>
+                        </p>
+                        <Button
+                            id="master-data-shared-object-center-sections-button-1"
+                            size="sm"
+                            variant="secondary"
+                            className="rounded-lg shadow-none"
+                            render={
+                                <Link
+                                    href={data.warehouseStockSummary.w10Href}
+                                />
+                            }
+                        >
+                            打开库存台账
+                        </Button>
+                    </div>
+                ) : null}
+            </PermissionGuard>
         </DocumentSection>
     )
 }

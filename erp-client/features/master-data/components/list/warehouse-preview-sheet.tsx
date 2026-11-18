@@ -1,5 +1,7 @@
 "use client"
 
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
+
 import Link from "next/link"
 
 import { BusinessStatusBadge, QuickPreviewSheet } from "@/components/business"
@@ -24,6 +26,7 @@ export function WarehousePreviewSheet({
     onRevise,
     onDisable,
     canMaintainHandlers,
+    canReadRevisions,
 }: {
     previewRow: MasterDataListItem | null
     lastFocusedRowId: { current: string | null }
@@ -33,6 +36,7 @@ export function WarehousePreviewSheet({
     onRevise: (row: MasterDataListItem) => void
     onDisable: (row: MasterDataListItem) => void
     canMaintainHandlers: boolean
+    canReadRevisions: boolean
 }) {
     const previewIdSegment = previewRow
         ? toAutomationIdSegment(previewRow.stableId)
@@ -52,7 +56,10 @@ export function WarehousePreviewSheet({
             identity={
                 previewRow ? (
                     <span className="num">
-                        {previewRow.stableNo} · v{previewRow.revisionNo}
+                        {previewRow.stableNo}
+                        {canReadRevisions
+                            ? ` · v${previewRow.revisionNo}`
+                            : null}
                     </span>
                 ) : null
             }
@@ -64,15 +71,17 @@ export function WarehousePreviewSheet({
                             label={previewRow.lifecycleStatusLabel}
                             tone={previewRow.lifecycleTone}
                         />
-                        <Badge
-                            variant={
-                                previewRow.revisionTiming === "FUTURE"
-                                    ? "warning"
-                                    : "secondary"
-                            }
-                        >
-                            {previewRow.revisionTimingLabel}
-                        </Badge>
+                        {canReadRevisions ? (
+                            <Badge
+                                variant={
+                                    previewRow.revisionTiming === "FUTURE"
+                                        ? "warning"
+                                        : "secondary"
+                                }
+                            >
+                                {previewRow.revisionTimingLabel}
+                            </Badge>
+                        ) : null}
                     </div>
                 ) : null
             }
@@ -87,62 +96,58 @@ export function WarehousePreviewSheet({
                         >
                             关闭
                         </Button>
-                        <DisabledActionHint
-                            message={
-                                canMaintainHandlers
-                                    ? undefined
-                                    : "当前账号没有仓库更新权限"
-                            }
-                        >
-                            {canMaintainHandlers && (
-                                <Button
-                                    id={`master-data-warehouse-preview-${previewIdSegment}-revise-handlers`}
-                                    type="button"
-                                    variant="outline"
-                                    disabled={
-                                        !canMaintainHandlers ||
-                                        !previewRow.allowedActions.includes(
-                                            "MAINTAIN_FULFILLMENT_HANDLERS",
-                                        )
-                                    }
-                                    onClick={() => onRevise(previewRow)}
-                                >
-                                    配置收发责任
-                                </Button>
-                            )}
-                        </DisabledActionHint>
-                        <DisabledActionHint
-                            message={
-                                previewRow.actionBlockers.find(
-                                    (blocker) => blocker.action === "DISABLE",
-                                )?.message
-                            }
-                        >
+                        {canMaintainHandlers ? (
                             <Button
-                                id={`master-data-warehouse-preview-${previewIdSegment}-disable`}
+                                id={`master-data-warehouse-preview-${previewIdSegment}-revise-handlers`}
                                 type="button"
                                 variant="outline"
                                 disabled={
                                     !previewRow.allowedActions.includes(
-                                        "DISABLE",
+                                        "MAINTAIN_FULFILLMENT_HANDLERS",
                                     )
                                 }
-                                onClick={() => onDisable(previewRow)}
+                                onClick={() => onRevise(previewRow)}
                             >
-                                {masterDataCopy.actionDisable}
+                                配置收发责任
                             </Button>
-                        </DisabledActionHint>
-                        <Button
-                            id={`master-data-warehouse-preview-${previewIdSegment}-open-detail`}
-                            type="button"
-                            render={
-                                <Link
-                                    href={`/master-data/warehouses/${previewRow.stableId}?section=overview`}
-                                />
-                            }
-                        >
-                            {masterDataCopy.actionOpenDetail}
-                        </Button>
+                        ) : null}
+                        <PermissionGuard permission="warehouse:update">
+                            <DisabledActionHint
+                                message={
+                                    previewRow.actionBlockers.find(
+                                        (blocker) =>
+                                            blocker.action === "DISABLE",
+                                    )?.message
+                                }
+                            >
+                                <Button
+                                    id={`master-data-warehouse-preview-${previewIdSegment}-disable`}
+                                    type="button"
+                                    variant="outline"
+                                    disabled={
+                                        !previewRow.allowedActions.includes(
+                                            "DISABLE",
+                                        )
+                                    }
+                                    onClick={() => onDisable(previewRow)}
+                                >
+                                    {masterDataCopy.actionDisable}
+                                </Button>
+                            </DisabledActionHint>
+                        </PermissionGuard>
+                        <PermissionGuard permission="warehouse_revision:list">
+                            <Button
+                                id={`master-data-warehouse-preview-${previewIdSegment}-open-detail`}
+                                type="button"
+                                render={
+                                    <Link
+                                        href={`/master-data/warehouses/${previewRow.stableId}?section=overview`}
+                                    />
+                                }
+                            >
+                                {masterDataCopy.actionOpenDetail}
+                            </Button>
+                        </PermissionGuard>
                     </>
                 ) : null
             }
@@ -152,6 +157,8 @@ export function WarehousePreviewSheet({
                     row={previewRow}
                     detail={previewDetail}
                     detailLoading={previewDetailLoading}
+                    showRevision={canReadRevisions}
+                    showActionBlockers={canMaintainHandlers}
                 />
             ) : null}
         </QuickPreviewSheet>

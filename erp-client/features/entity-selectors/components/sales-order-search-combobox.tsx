@@ -31,6 +31,7 @@ export function SalesOrderSearchCombobox({
     )
     const {
         rows,
+        denied,
         onRefresh,
         loading,
         emptyLabel: resolvedEmptyLabel,
@@ -43,6 +44,8 @@ export function SalesOrderSearchCombobox({
         emptyLabel,
         fallbackError: "销售单加载失败，请重试",
     })
+    if (denied) return null
+
     return (
         <SalesOrderCombobox
             {...props}

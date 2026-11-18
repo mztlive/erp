@@ -62,6 +62,11 @@ pub async fn find<T: DeserializeOwned + Send + Sync>(
     rows(collection, prefix, executor).await
 }
 
+#[derive(Deserialize)]
+struct Count {
+    count: u64,
+}
+
 /// 在完整关联和筛选后计数。
 /// # 参数
 /// collection 为集合；filter 为最终条件；prefix 为关联阶段；executor 为原事务。
@@ -75,11 +80,29 @@ pub async fn count<T: Send + Sync>(
     mut prefix: Vec<Document>,
     executor: &mut dyn Executor,
 ) -> Result<u64> {
-    #[derive(Deserialize)]
-    struct Count {
-        count: u64,
-    }
-
     prefix.extend([doc! { "$match": filter }, doc! { "$count": "count" }]);
     Ok(rows(&collection.clone_with_type::<Count>(), prefix, executor).await?.first().map_or(0, |r| r.count))
+}
+
+#[cfg(test)]
+mod tests {
+    use mongodb::bson::{deserialize_from_slice, doc, serialize_to_vec};
+
+    use super::Count;
+
+    #[test]
+    fn aggregate_count_decodes_both_bson_integer_widths() {
+        let cases = [(doc! { "count": 1_i32 }, 1), (doc! { "count": 2_147_483_648_i64 }, 2_147_483_648)];
+        for (row, expected) in cases {
+            let count = deserialize_from_slice::<Count>(&serialize_to_vec(&row).unwrap()).unwrap();
+            assert_eq!(count.count, expected);
+        }
+    }
+
+    #[test]
+    fn aggregate_count_rejects_invalid_values() {
+        for row in [doc! {}, doc! { "count": -1_i32 }, doc! { "count": "1" }] {
+            assert!(deserialize_from_slice::<Count>(&serialize_to_vec(&row).unwrap()).is_err());
+        }
+    }
 }

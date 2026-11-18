@@ -1,6 +1,8 @@
 "use client"
 
 import * as React from "react"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 import { usePathname, useRouter, useSearchParams } from "@/lib/navigation"
 
 import {
@@ -117,15 +119,48 @@ export function useSupplierOfferingsPageState() {
     const pathname = usePathname()
     const searchParams = useSearchParams()
     const searchInputRef = React.useRef<HTMLInputElement | null>(null)
-    /** 稳定序列化签名派生 Applied 状态，避免每次渲染重复回填（§5.4）。 */
-    const appliedQuery = searchParams.toString()
-    const urlState = React.useMemo(
-        () =>
-            parseSupplierOfferingsSearchParams(
-                new URLSearchParams(appliedQuery),
-            ),
-        [appliedQuery],
+    const account = useAccountProfileQuery()
+    const permissions = account.data?.permissions
+    const canFilterSupplier = hasPermission(permissions, "supplier:list")
+    const canFilterOwner = hasPermission(permissions, "business_person:list")
+    const canFilterProcurementOwner = hasPermission(
+        permissions,
+        "procurement_person:list",
     )
+    const canFilterSku = hasPermission(permissions, "sku:list")
+    const sanitizeFilters = React.useCallback(
+        (values: SupplierOfferingsUrlState): SupplierOfferingsUrlState => ({
+            ...values,
+            supplierId: canFilterSupplier ? values.supplierId : undefined,
+            skuId: canFilterSku || values.returnTo ? values.skuId : undefined,
+            ownerUserIds: canFilterOwner ? values.ownerUserIds : undefined,
+            procurementOwnerUserIds: canFilterProcurementOwner
+                ? values.procurementOwnerUserIds
+                : undefined,
+        }),
+        [
+            canFilterSupplier,
+            canFilterSku,
+            canFilterOwner,
+            canFilterProcurementOwner,
+        ],
+    )
+    const hasUnauthorizedFilters =
+        (!canFilterSupplier && searchParams.has("supplierId")) ||
+        (!canFilterSku &&
+            !searchParams.get("returnTo") &&
+            searchParams.has("skuId")) ||
+        (!canFilterOwner && searchParams.has("owner_user_ids")) ||
+        (!canFilterProcurementOwner &&
+            searchParams.has("procurement_owner_user_ids"))
+    const urlState = React.useMemo(() => {
+        const next = sanitizeFilters(
+            parseSupplierOfferingsSearchParams(searchParams),
+        )
+        return hasUnauthorizedFilters
+            ? { ...next, page: 1, scopeVersion: undefined }
+            : next
+    }, [hasUnauthorizedFilters, sanitizeFilters, searchParams])
     const skuLocked = Boolean(urlState.skuId && urlState.returnTo)
     const taskMode = Boolean(urlState.workItemId)
     const hasStructuredFilters = Boolean(
@@ -184,14 +219,18 @@ export function useSupplierOfferingsPageState() {
     /** 合并 URL 补丁并保留未变的导航上下文。 */
     const patchUrl = React.useCallback(
         (patch: Partial<SupplierOfferingsUrlState>) => {
-            const next = { ...urlState, ...patch }
+            const next = sanitizeFilters({ ...urlState, ...patch })
             router.replace(
                 `${pathname}${buildSupplierOfferingsSearchParams(next)}`,
                 { scroll: false },
             )
         },
-        [pathname, router, urlState],
+        [pathname, router, sanitizeFilters, urlState],
     )
+
+    React.useEffect(() => {
+        if (account.data && hasUnauthorizedFilters) patchUrl({ page: 1 })
+    }, [account.data, hasUnauthorizedFilters, patchUrl])
 
     /** 一次提交关键词与全部结构化筛选草稿；成功后收起面板（§8.1）。 */
     const applyFilters = React.useCallback(() => {
@@ -403,6 +442,11 @@ export function useSupplierOfferingsPageState() {
             (urlState.procurementOwnerUserIds ?? "")
 
     return {
+        canFilterSupplier,
+        canFilterOwner,
+        canFilterProcurementOwner,
+        canFilterSku,
+        hasUnauthorizedFilters,
         urlState,
         skuLocked,
         taskMode,

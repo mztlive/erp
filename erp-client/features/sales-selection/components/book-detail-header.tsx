@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { hasPermission } from "@/lib/permissions"
 import {
     BanIcon,
     CopyIcon,
@@ -46,6 +47,7 @@ function withKey(version: number) {
 export function BookDetailHeader({
     detail,
     pending,
+    permissions,
     operations,
     onEdit,
     onCopy,
@@ -53,6 +55,7 @@ export function BookDetailHeader({
 }: {
     detail: SelectionBookDetail
     pending: boolean
+    permissions: readonly string[] | undefined
     operations: Operations
     onEdit: () => void
     onCopy?: () => void
@@ -64,8 +67,14 @@ export function BookDetailHeader({
     const modeLabel = SUBMIT_MODE_LABEL[detail.submit_mode]
     const failure = prepareFailure(detail)
 
+    const can = (action: string) =>
+        hasPermission(permissions, `sales_selection_booklet:${action}`)
+    const canOpenProposal = hasPermission(
+        permissions,
+        "sales_selection_proposal:get",
+    )
     const primaryAction = (() => {
-        if (detail.status === "DRAFT") {
+        if (detail.status === "DRAFT" && can("prepare")) {
             return (
                 <LoadingButton
                     id="sales-selection-detail-prepare"
@@ -96,7 +105,7 @@ export function BookDetailHeader({
                 </LoadingButton>
             )
         }
-        if (detail.status === "PENDING_PUBLISH") {
+        if (detail.status === "PENDING_PUBLISH" && can("publish")) {
             return (
                 <LoadingButton
                     id="sales-selection-detail-publish"
@@ -117,7 +126,7 @@ export function BookDetailHeader({
                 </LoadingButton>
             )
         }
-        if (detail.status === "PUBLISHED") {
+        if (detail.status === "PUBLISHED" && can("copy_link")) {
             return (
                 <LoadingButton
                     id="sales-selection-detail-copy-link"
@@ -132,7 +141,11 @@ export function BookDetailHeader({
                 </LoadingButton>
             )
         }
-        if (detail.status === "SUBMITTED" && detail.proposal_id) {
+        if (
+            detail.status === "SUBMITTED" &&
+            detail.proposal_id &&
+            canOpenProposal
+        ) {
             return (
                 <Button
                     id="sales-selection-detail-open-proposal"
@@ -185,39 +198,49 @@ export function BookDetailHeader({
             ) : null}
             {detail.status === "DRAFT" ? (
                 <>
-                    <Button
-                        id="selection-draft-edit"
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={pending}
-                        onClick={onEdit}
-                    >
-                        <PencilIcon
-                            data-icon="inline-start"
-                            aria-hidden="true"
-                        />
-                        调整来源与档位
-                    </Button>
-                    <LoadingButton
-                        id="sales-selection-detail-void"
-                        loading={operations.void.isPending}
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={pending}
-                        onClick={() =>
-                            void operations.void.mutateAsync({ bookId, ...key })
-                        }
-                    >
-                        <BanIcon data-icon="inline-start" aria-hidden="true" />
-                        作废
-                    </LoadingButton>
+                    {can("prepare") && (
+                        <Button
+                            id="selection-draft-edit"
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={pending}
+                            onClick={onEdit}
+                        >
+                            <PencilIcon
+                                data-icon="inline-start"
+                                aria-hidden="true"
+                            />
+                            调整来源与档位
+                        </Button>
+                    )}
+                    {can("void") && (
+                        <LoadingButton
+                            id="sales-selection-detail-void"
+                            loading={operations.void.isPending}
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={pending}
+                            onClick={() =>
+                                void operations.void.mutateAsync({
+                                    bookId,
+                                    ...key,
+                                })
+                            }
+                        >
+                            <BanIcon
+                                data-icon="inline-start"
+                                aria-hidden="true"
+                            />
+                            作废
+                        </LoadingButton>
+                    )}
                 </>
             ) : null}
             {detail.status === "PENDING_PUBLISH" ? (
                 <>
-                    {detail.selection_form === "PACKAGE" ? (
+                    {detail.selection_form === "PACKAGE" && can("prepare") ? (
                         <LoadingButton
                             id="sales-selection-detail-regenerate"
                             loading={
@@ -243,77 +266,91 @@ export function BookDetailHeader({
                             重新生成整册
                         </LoadingButton>
                     ) : null}
-                    <Button
-                        id="sales-selection-detail-reprepare"
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={pending}
-                        onClick={onEdit}
-                    >
-                        <PencilIcon
-                            data-icon="inline-start"
-                            aria-hidden="true"
-                        />
-                        调整来源与档位
-                    </Button>
-                    <LoadingButton
-                        id="sales-selection-detail-void"
-                        loading={operations.void.isPending}
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={pending}
-                        onClick={() =>
-                            void operations.void.mutateAsync({ bookId, ...key })
-                        }
-                    >
-                        <BanIcon data-icon="inline-start" aria-hidden="true" />
-                        作废
-                    </LoadingButton>
+                    {can("prepare") && (
+                        <Button
+                            id="sales-selection-detail-reprepare"
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={pending}
+                            onClick={onEdit}
+                        >
+                            <PencilIcon
+                                data-icon="inline-start"
+                                aria-hidden="true"
+                            />
+                            调整来源与档位
+                        </Button>
+                    )}
+                    {can("void") && (
+                        <LoadingButton
+                            id="sales-selection-detail-void"
+                            loading={operations.void.isPending}
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={pending}
+                            onClick={() =>
+                                void operations.void.mutateAsync({
+                                    bookId,
+                                    ...key,
+                                })
+                            }
+                        >
+                            <BanIcon
+                                data-icon="inline-start"
+                                aria-hidden="true"
+                            />
+                            作废
+                        </LoadingButton>
+                    )}
                 </>
             ) : null}
             {detail.status === "PUBLISHED" ? (
                 <>
-                    <LoadingButton
-                        id="sales-selection-detail-replace-link"
-                        loading={operations.replaceLink.isPending}
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={pending}
-                        onClick={() =>
-                            void operations.replaceLink.mutateAsync({
-                                bookId,
-                                ...key,
-                            })
-                        }
-                    >
-                        <Link2Icon
-                            data-icon="inline-start"
-                            aria-hidden="true"
-                        />
-                        更换链接
-                    </LoadingButton>
-                    <LoadingButton
-                        id="sales-selection-detail-close"
-                        loading={operations.close.isPending}
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={pending}
-                        onClick={() =>
-                            void operations.close.mutateAsync({
-                                bookId,
-                                ...key,
-                            })
-                        }
-                    >
-                        关闭
-                    </LoadingButton>
+                    {can("rotate_link") && (
+                        <LoadingButton
+                            id="sales-selection-detail-replace-link"
+                            loading={operations.replaceLink.isPending}
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={pending}
+                            onClick={() =>
+                                void operations.replaceLink.mutateAsync({
+                                    bookId,
+                                    ...key,
+                                })
+                            }
+                        >
+                            <Link2Icon
+                                data-icon="inline-start"
+                                aria-hidden="true"
+                            />
+                            更换链接
+                        </LoadingButton>
+                    )}
+                    {can("close") && (
+                        <LoadingButton
+                            id="sales-selection-detail-close"
+                            loading={operations.close.isPending}
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={pending}
+                            onClick={() =>
+                                void operations.close.mutateAsync({
+                                    bookId,
+                                    ...key,
+                                })
+                            }
+                        >
+                            关闭
+                        </LoadingButton>
+                    )}
                 </>
             ) : null}
-            {detail.status === "SUBMITTED" ? (
+            {detail.status === "SUBMITTED" && can("revoke") ? (
                 <LoadingButton
                     id="sales-selection-detail-revoke"
                     loading={operations.revoke.isPending}
@@ -329,7 +366,8 @@ export function BookDetailHeader({
                     撤销链接访问
                 </LoadingButton>
             ) : null}
-            {detail.proposal_id &&
+            {canOpenProposal &&
+            detail.proposal_id &&
             detail.proposal_no &&
             detail.status !== "SUBMITTED" ? (
                 <Button

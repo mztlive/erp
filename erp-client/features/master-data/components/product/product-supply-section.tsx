@@ -25,6 +25,7 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { toFixedSku } from "@/features/master-data/lib/product-fixed-sku"
 import { ProductSupplyIdentity } from "./product-supply-identity"
@@ -41,8 +42,6 @@ import {
 } from "@/features/supplier-offerings/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { hasPermission } from "@/lib/permissions"
-
-const NO_COST = "无权限"
 
 /** 有效供给关系：启用且已有条款版本，不代表供应商当前可供。 */
 function isActive(offering: SupplierOfferingView): boolean {
@@ -71,29 +70,42 @@ function OfferingRows({
     canViewCosts: boolean
     unit: string
 }) {
-    const hidden = canViewCosts ? undefined : NO_COST
     return (
         <Table className="min-w-5xl table-fixed">
             <colgroup>
                 <col className="w-[28%]" />
-                <col className="w-[11%]" />
-                <col className="w-[10%]" />
+                {canViewCosts ? (
+                    <>
+                        <col className="w-[11%]" />
+                        <col className="w-[10%]" />
+                    </>
+                ) : null}
                 <col className="w-[17%]" />
                 <col className="w-[19%]" />
                 <col className="w-[8%]" />
-                <col className="w-[7%]" />
+                <PermissionGuard permission="supplier_offering:detail">
+                    <col className="w-[7%]" />
+                </PermissionGuard>
             </colgroup>
             <TableHeader>
                 <TableRow>
                     <TableHead className="min-w-52">供应商</TableHead>
-                    <TableHead className="text-right">一件代发价</TableHead>
-                    <TableHead className="text-right">集采价</TableHead>
+                    {canViewCosts ? (
+                        <>
+                            <TableHead className="text-right">
+                                一件代发价
+                            </TableHead>
+                            <TableHead className="text-right">集采价</TableHead>
+                        </>
+                    ) : null}
                     <TableHead>当前可供</TableHead>
                     <TableHead>配送模板</TableHead>
                     <TableHead>关系状态</TableHead>
-                    <TableHead className="w-24">
-                        <span className="sr-only">操作</span>
-                    </TableHead>
+                    <PermissionGuard permission="supplier_offering:detail">
+                        <TableHead className="w-24">
+                            <span className="sr-only">操作</span>
+                        </TableHead>
+                    </PermissionGuard>
                 </TableRow>
             </TableHeader>
             <TableBody>
@@ -109,29 +121,33 @@ function OfferingRows({
                                 订货编码 {offering.supplier_sku_code}
                             </div>
                         </TableCell>
-                        <TableCell className="text-right">
-                            <MoneyValue
-                                value={offering.dropship_supply_price_gross}
-                                unavailableReason={hidden}
-                            />
-                        </TableCell>
-                        <TableCell className="text-right">
-                            <MoneyValue
-                                value={offering.bulk_supply_price_gross}
-                                unavailableReason={hidden}
-                            />
-                            {offering.bulk_minimum_order_quantity ? (
-                                <div className="mt-0.5 text-xs text-muted-foreground">
-                                    起订{" "}
-                                    <QuantityValue
+                        {canViewCosts ? (
+                            <>
+                                <TableCell className="text-right">
+                                    <MoneyValue
                                         value={
-                                            offering.bulk_minimum_order_quantity
+                                            offering.dropship_supply_price_gross
                                         }
-                                        unit={unit}
                                     />
-                                </div>
-                            ) : null}
-                        </TableCell>
+                                </TableCell>
+                                <TableCell className="text-right">
+                                    <MoneyValue
+                                        value={offering.bulk_supply_price_gross}
+                                    />
+                                    {offering.bulk_minimum_order_quantity ? (
+                                        <div className="mt-0.5 text-xs text-muted-foreground">
+                                            起订{" "}
+                                            <QuantityValue
+                                                value={
+                                                    offering.bulk_minimum_order_quantity
+                                                }
+                                                unit={unit}
+                                            />
+                                        </div>
+                                    ) : null}
+                                </TableCell>
+                            </>
+                        ) : null}
                         <TableCell>
                             <div className="flex flex-wrap items-center gap-2">
                                 <Badge
@@ -174,24 +190,27 @@ function OfferingRows({
                                 {OFFERING_STATUS_LABELS[offering.status]}
                             </Badge>
                         </TableCell>
-                        <TableCell className="text-right">
-                            <Button
-                                id={`master-data-product-supply-open-${toAutomationIdSegment(offering.id)}`}
-                                variant="ghost"
-                                size="sm"
-                                render={
-                                    <Link
-                                        href={`/procurement/supplier-offerings/${encodeURIComponent(offering.id)}`}
+                        <PermissionGuard permission="supplier_offering:detail">
+                            {" "}
+                            <TableCell className="text-right">
+                                <Button
+                                    id={`master-data-product-supply-open-${toAutomationIdSegment(offering.id)}`}
+                                    variant="ghost"
+                                    size="sm"
+                                    render={
+                                        <Link
+                                            href={`/procurement/supplier-offerings/${encodeURIComponent(offering.id)}`}
+                                        />
+                                    }
+                                >
+                                    查看
+                                    <ArrowUpRightIcon
+                                        data-icon="inline-end"
+                                        aria-hidden
                                     />
-                                }
-                            >
-                                查看
-                                <ArrowUpRightIcon
-                                    data-icon="inline-end"
-                                    aria-hidden
-                                />
-                            </Button>
-                        </TableCell>
+                                </Button>
+                            </TableCell>
+                        </PermissionGuard>
                     </TableRow>
                 ))}
             </TableBody>

@@ -3,6 +3,7 @@
 import { ArrowUpRightIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
 import { useRouter } from "@/lib/navigation"
 import type { BackgroundJobView } from "../api"
 
@@ -11,28 +12,33 @@ type DomainJobPresentation = {
     description: string
     href?: string
     actionLabel?: string
+    permission?: string
     showRowCounts?: boolean
 }
 
 const historicExportRoutes: Record<
     string,
-    { href: string; actionLabel: string }
+    { href: string; actionLabel: string; permission: string }
 > = {
     SALES_ORDER_EXPORT: {
         href: "/sales/orders",
         actionLabel: "打开销售单列表",
+        permission: "sales_order:list",
     },
     INVENTORY_LEDGER_EXPORT: {
         href: "/inventory",
         actionLabel: "打开库存台账",
+        permission: "stock_balance:list",
     },
     CONTRACT_EXPORT: {
         href: "/sales/contracts",
         actionLabel: "打开合同列表",
+        permission: "contract:list",
     },
     supplier_fulfillment_order_export: {
         href: "/supplier-api/orders",
         actionLabel: "打开供应商订单",
+        permission: "supplier_fulfillment_order:list",
     },
 }
 
@@ -59,6 +65,9 @@ function connectionPresentation(
             ? "请在连接资料中核对同步记录、目录更新时间和当前商品可用情况。此处的任务计数按一次同步操作统计。"
             : "请在连接资料中查看本次检测记录和失败原因；是否可启用连接，以当前配置和检测结果为准。此处的任务计数按一次检测操作统计。",
         href,
+        permission: job.domain_job_id
+            ? "supplier_api_connection:detail"
+            : "supplier_api_connection:list",
         actionLabel: catalog ? "查看目录同步记录" : "查看接口检测记录",
     }
 }
@@ -80,6 +89,7 @@ function domainJobPresentation(job: BackgroundJobView): DomainJobPresentation {
                 actionLabel: job.domain_job_id
                     ? "查看导入批次结果"
                     : "打开历史期初导入",
+                permission: "legacy_import_batch:list",
                 showRowCounts: true,
             }
         default: {
@@ -132,16 +142,18 @@ export function DomainJobResult({ job }: { job: BackgroundJobView }) {
                     ))}
                 </dl>
             )}
-            {href && (
-                <Button
-                    id={`background-jobs-domain-${toAutomationIdSegment(job.id)}-open`}
-                    type="button"
-                    variant="outline"
-                    onClick={() => router.push(href)}
-                >
-                    {presentation.actionLabel}
-                    <ArrowUpRightIcon data-icon="inline-end" />
-                </Button>
+            {href && presentation.permission && (
+                <PermissionGuard permission={presentation.permission}>
+                    <Button
+                        id={`background-jobs-domain-${toAutomationIdSegment(job.id)}-open`}
+                        type="button"
+                        variant="outline"
+                        onClick={() => router.push(href)}
+                    >
+                        {presentation.actionLabel}
+                        <ArrowUpRightIcon data-icon="inline-end" />
+                    </Button>
+                </PermissionGuard>
             )}
         </section>
     )

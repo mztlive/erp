@@ -3,85 +3,125 @@
 import Link from "next/link"
 import { ArrowUpRightIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { DataTransferContext, TransferKind } from "@/lib/data-transfer"
 import type { BackgroundJobView } from "../api"
 import { formatJobDateTime } from "../labels"
 import { TransferResult } from "./transfer-result"
 
-type ExportDestination = { href: string; label: string; format: string }
+type ExportDestination = {
+    href: string
+    label: string
+    format: string
+    permission: string
+}
 
 const destinations: Partial<Record<TransferKind, ExportDestination>> = {
     product_pool_excel: {
+        permission: "sellable_sku:list",
         href: "/master-data/sellable-items",
         label: "打开公司商品池",
         format: "Excel 工作簿",
     },
     supplier_quote_archive: {
+        permission: "procurement_inquiry:list",
         href: "/procurement/inquiries",
         label: "打开采购询价",
         format: "ZIP 报价包",
     },
-    sales_orders: { href: "/sales/orders", label: "打开销售单", format: "CSV" },
+    sales_orders: {
+        permission: "sales_order:list",
+        href: "/sales/orders",
+        label: "打开销售单",
+        format: "CSV",
+    },
     purchase_orders: {
+        permission: "purchase_order:list",
         href: "/procurement/orders",
         label: "打开采购订单",
         format: "CSV",
     },
-    contracts: { href: "/sales/contracts", label: "打开合同", format: "CSV" },
-    customers: { href: "/sales/customers", label: "打开客户", format: "CSV" },
-    inventory_balance: { href: "/inventory", label: "打开库存", format: "CSV" },
+    contracts: {
+        permission: "contract:list",
+        href: "/sales/contracts",
+        label: "打开合同",
+        format: "CSV",
+    },
+    customers: {
+        permission: "customer:list",
+        href: "/sales/customers",
+        label: "打开客户",
+        format: "CSV",
+    },
+    inventory_balance: {
+        permission: "stock_balance:list",
+        href: "/inventory",
+        label: "打开库存",
+        format: "CSV",
+    },
     inventory_movement: {
+        permission: "stock_movement:list",
         href: "/inventory?view=movement",
         label: "打开库存",
         format: "CSV",
     },
     inventory_adjustment: {
+        permission: "stock_adjustment:list",
         href: "/inventory?view=adjustment",
         label: "打开库存",
         format: "CSV",
     },
     inventory_reservation: {
+        permission: "stock_reservation:list",
         href: "/inventory?view=reservation",
         label: "打开库存",
         format: "CSV",
     },
     supplier_orders: {
+        permission: "supplier_fulfillment_order:list",
         href: "/supplier-api/orders",
         label: "打开供应商订单",
         format: "CSV",
     },
     receivables: {
+        permission: "receivable_account:list",
         href: "/finance/customer-accounts",
         label: "打开客户往来",
         format: "CSV",
     },
     supplier_payables: {
+        permission: "payable_account:list",
         href: "/finance/supplier-accounts",
         label: "打开供应商往来",
         format: "CSV",
     },
     invoice_requests: {
+        permission: "sales_invoice_request:list",
         href: "/finance/customer-accounts/invoice-requests",
         label: "打开开票申请",
         format: "CSV",
     },
     profit_loss: {
+        permission: "cost_entry:list",
         href: "/analytics/profit-loss",
         label: "打开利润分析",
         format: "CSV",
     },
     customer_quality_current: {
+        permission: "customer:list",
         href: "/analytics/customer-quality",
         label: "打开客户经营质量",
         format: "CSV",
     },
     customer_quality_history: {
+        permission: "sales_order:list",
         href: "/analytics/customer-quality?caliber=history",
         label: "打开客户经营质量",
         format: "CSV",
     },
     master_data: {
+        permission: "product:list",
         href: "/master-data",
         label: "打开基础资料",
         format: "CSV",
@@ -90,10 +130,25 @@ const destinations: Partial<Record<TransferKind, ExportDestination>> = {
 
 function exportDestination(context: DataTransferContext) {
     if (context.kind === "receivables") {
-        const views: Record<string, { view: string; label: string }> = {
-            receivable: { view: "receivable", label: "打开应收台账" },
-            receipt: { view: "receipt", label: "打开客户收款" },
-            sales_invoice: { view: "sales_invoice", label: "打开销项发票" },
+        const views: Record<
+            string,
+            { view: string; label: string; permission: string }
+        > = {
+            receivable: {
+                permission: "receivable_account:list",
+                view: "receivable",
+                label: "打开应收台账",
+            },
+            receipt: {
+                permission: "customer_receipt:list",
+                view: "receipt",
+                label: "打开客户收款",
+            },
+            sales_invoice: {
+                permission: "invoice:list",
+                view: "sales_invoice",
+                label: "打开销项发票",
+            },
         }
         const destination = views[context.context.view ?? "receivable"]
         if (destination)
@@ -101,17 +156,34 @@ function exportDestination(context: DataTransferContext) {
                 ...destinations.receivables!,
                 href: `/finance/customer-accounts/scope?view=${destination.view}`,
                 label: destination.label,
+                permission: destination.permission,
             }
     }
     if (context.kind === "supplier_payables") {
-        const views: Record<string, { view: string; label: string }> = {
-            payable: { view: "payable", label: "打开应付台账" },
-            payment: { view: "payment", label: "打开供应商付款" },
+        const views: Record<
+            string,
+            { view: string; label: string; permission: string }
+        > = {
+            payable: {
+                permission: "payable_account:list",
+                view: "payable",
+                label: "打开应付台账",
+            },
+            payment: {
+                permission: "supplier_payment:list",
+                view: "payment",
+                label: "打开供应商付款",
+            },
             purchase_invoice: {
+                permission: "purchase_invoice_allocation:list",
                 view: "purchase_invoice",
                 label: "打开进项发票分摊",
             },
-            allocation: { view: "purchase_invoice", label: "打开进项发票分摊" },
+            allocation: {
+                permission: "purchase_invoice_allocation:list",
+                view: "purchase_invoice",
+                label: "打开进项发票分摊",
+            },
         }
         const destination = views[context.context.view ?? "payable"]
         if (destination)
@@ -119,6 +191,7 @@ function exportDestination(context: DataTransferContext) {
                 ...destinations.supplier_payables!,
                 href: `/finance/supplier-accounts/scope?view=${destination.view}`,
                 label: destination.label,
+                permission: destination.permission,
             }
     }
     if (
@@ -127,18 +200,28 @@ function exportDestination(context: DataTransferContext) {
     ) {
         return {
             ...destinations.supplier_quote_archive!,
+            permission: "procurement_inquiry:detail",
             href: `/procurement/inquiries/${encodeURIComponent(context.context.inquiry_id)}`,
         }
     }
     if (context.kind === "master_data") {
         const resource = context.context.resource
-        const resources: Record<string, { href: string; label: string }> = {
-            product: { href: "/master-data/products", label: "打开商品资料" },
+        const resources: Record<
+            string,
+            { href: string; label: string; permission: string }
+        > = {
+            product: {
+                permission: "product:list",
+                href: "/master-data/products",
+                label: "打开商品资料",
+            },
             supplier: {
+                permission: "supplier:list",
                 href: "/master-data/suppliers",
                 label: "打开供应商资料",
             },
             sellable: {
+                permission: "sellable_sku:list",
                 href: "/master-data/sellable-items",
                 label: "打开公司商品池",
             },
@@ -214,14 +297,16 @@ export function TransferExportResult({
                 下载时会重新核对当前权限和数据范围；文件不可用时，请重新查询并导出。
             </p>
             {destination && !portal && (
-                <Button
-                    id={`${id}-open-source`}
-                    variant="outline"
-                    render={<Link href={destination.href} />}
-                >
-                    {destination.label}
-                    <ArrowUpRightIcon data-icon="inline-end" />
-                </Button>
+                <PermissionGuard permission={destination.permission}>
+                    <Button
+                        id={`${id}-open-source`}
+                        variant="outline"
+                        render={<Link href={destination.href} />}
+                    >
+                        {destination.label}
+                        <ArrowUpRightIcon data-icon="inline-end" />
+                    </Button>
+                </PermissionGuard>
             )}
         </section>
     )

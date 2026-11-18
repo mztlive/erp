@@ -15,7 +15,7 @@ import {
 } from "@/features/entity-selectors/hooks/person-directory"
 import { useSearchInput } from "@/features/entity-selectors/hooks/use-search-input"
 import { isDataScopeChanged } from "@/features/data-scope/cache"
-import { isApiError } from "@/lib/api/errors"
+import { isApiError, isPermissionDeniedError } from "@/lib/api/errors"
 
 type PersonDirectoryFilterProps = {
     id: string
@@ -142,7 +142,7 @@ export function PersonDirectoryFilter({
             ? "正在加载人员"
             : "没有符合条件的人员"
 
-    if (!canRead) return null
+    if (!canRead || isPermissionDeniedError(list.error)) return null
 
     return (
         <div className={hideLabel ? "min-w-0" : "min-w-0 space-y-1.5"}>
@@ -241,7 +241,9 @@ export function PersonDirectoryFilter({
                     </Button>
                 </p>
             ) : null}
-            {ids.length > 0 && selected.isError ? (
+            {ids.length > 0 &&
+            selected.isError &&
+            !isPermissionDeniedError(selected.error) ? (
                 <p className="text-xs text-destructive" role="alert">
                     {selectedFailureCopy(selected.error)}
                     <Button

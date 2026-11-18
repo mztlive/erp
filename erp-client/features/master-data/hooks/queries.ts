@@ -42,6 +42,8 @@ import type {
     MasterDataResource,
     ProductListingStatus,
 } from "@/features/master-data/types"
+import { hasPermission } from "@/lib/permissions"
+import { fetchUnitOptions } from "@/lib/options"
 import { optionKeys } from "@/hooks/use-options"
 import { queryKeyRoots } from "@/lib/query-key-roots"
 
@@ -86,12 +88,42 @@ export function useUpdateWarehouseFulfillmentHandlersMutation() {
     })
 }
 
-export function useMasterDataListQuery(query: MasterDataListQuery) {
+function masterDataListAccess(
+    resource: MasterDataResource,
+    permissions: readonly string[] | undefined,
+) {
+    return resource === "warehouses"
+        ? hasPermission(permissions, "warehouse_revision:list")
+        : resource === "voucher-categories"
+          ? hasPermission(permissions, "sku:list")
+          : undefined
+}
+
+export function useMasterDataListQuery(
+    query: MasterDataListQuery,
+    enabled = true,
+) {
+    const account = useAccountProfileQuery()
+    const permissions = account.isSuccess ? account.data.permissions : undefined
+    const extraAccess = masterDataListAccess(query.resource, permissions)
     return useQuery({
-        queryKey: masterDataKeys.list(query),
-        queryFn: () => fetchMasterDataList(query),
-        // 筛选进 queryKey：换条件时保留上一页，避免 isPending 把整页卸成骨架
-        placeholderData: keepPreviousData,
+        queryKey:
+            extraAccess === undefined
+                ? masterDataKeys.list(query)
+                : [...masterDataKeys.list(query), extraAccess],
+        queryFn: () => fetchMasterDataList(query, extraAccess),
+        placeholderData: (previous, query) =>
+            query?.queryKey[3] === extraAccess ? previous : undefined,
+        enabled,
+    })
+}
+
+export function useProductUnitOptionsQuery(enabled: boolean) {
+    return useQuery({
+        queryKey: optionKeys.units,
+        queryFn: fetchUnitOptions,
+        staleTime: 5 * 60 * 1000,
+        enabled,
     })
 }
 
@@ -135,11 +167,19 @@ export function useSellableInfiniteQuery(
 }
 
 /** 商品列表当前页的启用 SKU、一件代发价与新增供给所需固定身份。 */
-export function useProductListSkusQuery(productIds: readonly string[]) {
+export function useProductListSkusQuery(
+    productIds: readonly string[],
+    canReadUnits: boolean,
+) {
     const normalized = [...new Set(productIds.filter(Boolean))].sort()
     return useQuery({
-        queryKey: [...masterDataKeys.all, "product-list-skus", normalized],
-        queryFn: () => fetchProductListSkus(normalized),
+        queryKey: [
+            ...masterDataKeys.all,
+            "product-list-skus",
+            normalized,
+            canReadUnits,
+        ],
+        queryFn: () => fetchProductListSkus(normalized, canReadUnits),
         enabled: normalized.length > 0,
     })
 }
@@ -162,8 +202,14 @@ export function useProductFilterOptionsQuery(enabled: boolean) {
 
 /** 导出时重新查询服务端，确保资格与权限按导出时点重新计算。 */
 export function useMasterDataExportMutation() {
+    const account = useAccountProfileQuery()
+    const permissions = account.isSuccess ? account.data.permissions : undefined
     return useMutation({
-        mutationFn: (query: MasterDataListQuery) => fetchMasterDataList(query),
+        mutationFn: (query: MasterDataListQuery) =>
+            fetchMasterDataList(
+                query,
+                masterDataListAccess(query.resource, permissions),
+            ),
     })
 }
 
@@ -171,10 +217,30 @@ export function useMasterDataCenterQuery(
     resource: MasterDataResource,
     stableId: string,
 ) {
+    const account = useAccountProfileQuery()
+    const permissions = account.isSuccess ? account.data.permissions : undefined
+    const extraAccess =
+        resource === "products"
+            ? {
+                  assets: hasPermission(permissions, "file_asset:detail"),
+                  units: hasPermission(permissions, "unit_of_measure:list"),
+                  categories: hasPermission(
+                      permissions,
+                      "product_category:list",
+                  ),
+                  brands: hasPermission(permissions, "product_brand:list"),
+              }
+            : resource === "voucher-categories"
+              ? { skus: hasPermission(permissions, "sku:list") }
+              : resource === "suppliers" || resource === "brands"
+                ? { assets: hasPermission(permissions, "file_asset:detail") }
+                : undefined
     return useQuery({
-        queryKey: masterDataKeys.detail(resource, stableId),
-        queryFn: () => fetchMasterDataCenter(resource, stableId),
-        enabled: Boolean(stableId),
+        queryKey: extraAccess
+            ? [...masterDataKeys.detail(resource, stableId), extraAccess]
+            : masterDataKeys.detail(resource, stableId),
+        queryFn: () => fetchMasterDataCenter(resource, stableId, extraAccess),
+        enabled: Boolean(stableId) && (!extraAccess || !account.isPending),
     })
 }
 
@@ -267,10 +333,15 @@ const FILE_ASSET_STALE_TIME = 5 * 60 * 1000
 
 /** 商品主图等文件资产详情（含公开地址）；按资产 ID 缓存。 */
 export function useFileAssetQuery(assetId: string | undefined) {
+    const account = useAccountProfileQuery()
+    const canReadAsset =
+        account.isSuccess &&
+        hasPermission(account.data.permissions, "file_asset:detail")
+    const allowedId = canReadAsset ? assetId : undefined
     return useQuery({
-        queryKey: [...masterDataKeys.all, "file-asset", assetId ?? ""],
-        queryFn: () => fetchFileAsset(assetId ?? ""),
-        enabled: Boolean(assetId?.trim()),
+        queryKey: [...masterDataKeys.all, "file-asset", allowedId ?? ""],
+        queryFn: () => fetchFileAsset(allowedId ?? ""),
+        enabled: Boolean(allowedId?.trim()),
         staleTime: FILE_ASSET_STALE_TIME,
     })
 }

@@ -83,19 +83,23 @@ function submitModeFromValue(value: string | null): SubmitModeDraft {
 export function BooksListFilterBar({
     query,
     onApply,
+    canFilterOwners,
+    canFilterOrgs,
     onReset,
     resultCount,
     loading,
     failed,
 }: {
     query: BookListQuery
+    canFilterOwners: boolean
+    canFilterOrgs: boolean
     onApply: (next: BookListQuery) => void
     onReset: () => void
     resultCount?: number
     loading: boolean
     failed: boolean
 }) {
-    const [draft, setDraft] = React.useState<FilterDraft>(() =>
+    const [storedDraft, setDraft] = React.useState<FilterDraft>(() =>
         draftFromQuery(query),
     )
     const [moreOpen, setMoreOpen] = React.useState(false)
@@ -151,6 +155,25 @@ export function BooksListFilterBar({
                 : { ...prev, include_descendants: appliedDescendants },
         )
     }, [appliedDescendants])
+
+    const draft = React.useMemo(
+        () => ({
+            ...storedDraft,
+            owner_user_ids: canFilterOwners ? storedDraft.owner_user_ids : "",
+            org_unit_ids: canFilterOrgs ? storedDraft.org_unit_ids : "",
+            include_descendants:
+                canFilterOrgs && storedDraft.include_descendants,
+        }),
+        [canFilterOrgs, canFilterOwners, storedDraft],
+    )
+    React.useEffect(() => {
+        setDraft((prev) => ({
+            ...prev,
+            owner_user_ids: canFilterOwners ? prev.owner_user_ids : "",
+            org_unit_ids: canFilterOrgs ? prev.org_unit_ids : "",
+            include_descendants: canFilterOrgs && prev.include_descendants,
+        }))
+    }, [canFilterOrgs, canFilterOwners])
 
     const applied = draftFromQuery(query)
     const directoryOrgIds = orgIdsOf(draft.org_unit_ids)
@@ -303,26 +326,28 @@ export function BooksListFilterBar({
                         }
                         placeholder="全部"
                     />
-                    <div className="empty:hidden w-56 min-w-0 max-w-full">
-                        <PersonDirectoryFilter
-                            id={`${prefix}-owner`}
-                            category="sales"
-                            label="负责销售"
-                            hideLabel
-                            value={draft.owner_user_ids}
-                            onChange={(owner_user_ids) =>
-                                setDraft((prev) => ({
-                                    ...prev,
-                                    owner_user_ids,
-                                }))
-                            }
-                            orgUnitIds={directoryOrgIds}
-                            includeDescendants={
-                                directoryOrgIds.length > 0 &&
-                                draft.include_descendants
-                            }
-                        />
-                    </div>
+                    {canFilterOwners && (
+                        <div className="empty:hidden w-56 min-w-0 max-w-full">
+                            <PersonDirectoryFilter
+                                id={`${prefix}-owner`}
+                                category="sales"
+                                label="负责销售"
+                                hideLabel
+                                value={draft.owner_user_ids}
+                                onChange={(owner_user_ids) =>
+                                    setDraft((prev) => ({
+                                        ...prev,
+                                        owner_user_ids,
+                                    }))
+                                }
+                                orgUnitIds={directoryOrgIds}
+                                includeDescendants={
+                                    directoryOrgIds.length > 0 &&
+                                    draft.include_descendants
+                                }
+                            />
+                        </div>
+                    )}
                 </>
             }
             morePanel={
@@ -354,21 +379,23 @@ export function BooksListFilterBar({
                             placeholder="全部"
                         />
                     </ListWorkspaceFilterField>
-                    <OrganizationUnitFilter
-                        id={`${prefix}-org`}
-                        label="业务组织"
-                        value={draft.org_unit_ids}
-                        onChange={(org_unit_ids) =>
-                            setDraft((prev) => ({ ...prev, org_unit_ids }))
-                        }
-                        includeDescendants={draft.include_descendants}
-                        onDescendantsChange={(include_descendants) =>
-                            setDraft((prev) => ({
-                                ...prev,
-                                include_descendants,
-                            }))
-                        }
-                    />
+                    {canFilterOrgs && (
+                        <OrganizationUnitFilter
+                            id={`${prefix}-org`}
+                            label="业务组织"
+                            value={draft.org_unit_ids}
+                            onChange={(org_unit_ids) =>
+                                setDraft((prev) => ({ ...prev, org_unit_ids }))
+                            }
+                            includeDescendants={draft.include_descendants}
+                            onDescendantsChange={(include_descendants) =>
+                                setDraft((prev) => ({
+                                    ...prev,
+                                    include_descendants,
+                                }))
+                            }
+                        />
+                    )}
                 </div>
             }
             resultStatus={listWorkspaceFilterStatusText({

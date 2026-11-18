@@ -4,6 +4,9 @@ import * as React from "react"
 import Link from "next/link"
 
 import { Button } from "@/components/ui/button"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { masterDataListPermission } from "@/features/master-data/lib/data"
+import { hasPermission } from "@/lib/permissions"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import { MASTER_DATA_RESOURCES } from "@/features/master-data/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
@@ -18,13 +21,19 @@ function ResourceNav({
     idPrefix?: string
 }) {
     const prefix = idPrefix ?? "master-data-list-chrome-nav"
+    const account = useAccountProfileQuery()
+    const permissions = account.isSuccess ? account.data.permissions : undefined
+    const visibleResources = MASTER_DATA_RESOURCES.filter((item) =>
+        hasPermission(permissions, masterDataListPermission[item.key]),
+    )
+    if (visibleResources.length === 0) return null
     return (
         <nav
             ref={navRef}
             aria-label={masterDataCopy.resourceNavAria}
             className="flex flex-wrap gap-2 border-b border-grid pb-3"
         >
-            {MASTER_DATA_RESOURCES.map((item) => {
+            {visibleResources.map((item) => {
                 const selected = item.key === resource
                 return (
                     <Button

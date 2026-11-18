@@ -1,5 +1,7 @@
 "use client"
 
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
+
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "@/components/ui/toast"
@@ -56,6 +58,7 @@ export function BrandsListPage() {
 
     return (
         <ListPageFrame
+            resource="brands"
             title="品牌"
             description="查看品牌字典，供商品与 SKU 选用。"
             exportMeta={state.exportMeta}
@@ -97,7 +100,11 @@ export function BrandsListPage() {
                 codeLabel="品牌代码"
                 renderCard={(row) => <BrandCardContent row={row} />}
                 emptyTitle="还没有品牌资料"
-                emptyDescription="点击「新建」创建品牌，或使用「批量导入」一次建立多个品牌。"
+                emptyDescription={
+                    state.canCreate
+                        ? "点击「新建」创建品牌，或使用「批量导入」一次建立多个品牌。"
+                        : undefined
+                }
                 emptyAction={
                     state.canCreate ? (
                         <MasterDataEmptyCreateButton
@@ -129,29 +136,37 @@ export function BrandsListPage() {
                 onDisable={state.setDisableTarget}
             />
             {importOpen && (
-                <BrandImportDialog
-                    onClose={() => setImportOpen(false)}
-                    onSubmitted={onImportSubmitted}
-                />
+                <PermissionGuard permission="product_brand:create">
+                    <BrandImportDialog
+                        onClose={() => setImportOpen(false)}
+                        onSubmitted={onImportSubmitted}
+                    />
+                </PermissionGuard>
             )}
-            <BrandCreateDialog
-                open={state.createOpen}
-                onOpenChange={state.setCreateOpen}
-            />
-            <BrandReviseDialog
-                open={state.reviseTarget != null}
-                onOpenChange={(open) => {
-                    if (!open) state.setReviseTarget(null)
-                }}
-                target={state.reviseTarget}
-            />
-            <BrandDisableDialog
-                open={state.disableTarget != null}
-                onOpenChange={(open) => {
-                    if (!open) state.setDisableTarget(null)
-                }}
-                target={state.disableTarget}
-            />
+            <PermissionGuard permission="product_brand:create">
+                <BrandCreateDialog
+                    open={state.createOpen}
+                    onOpenChange={state.setCreateOpen}
+                />
+            </PermissionGuard>
+            <PermissionGuard permission="product_brand:update">
+                <BrandReviseDialog
+                    open={state.reviseTarget != null}
+                    onOpenChange={(open) => {
+                        if (!open) state.setReviseTarget(null)
+                    }}
+                    target={state.reviseTarget}
+                />
+            </PermissionGuard>
+            <PermissionGuard permission="product_brand:update">
+                <BrandDisableDialog
+                    open={state.disableTarget != null}
+                    onOpenChange={(open) => {
+                        if (!open) state.setDisableTarget(null)
+                    }}
+                    target={state.disableTarget}
+                />
+            </PermissionGuard>
         </ListPageFrame>
     )
 }

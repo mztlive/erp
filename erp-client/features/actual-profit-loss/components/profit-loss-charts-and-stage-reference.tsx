@@ -59,6 +59,8 @@ export function ProfitLossChartsAndStageReference({
 }: {
     data: ProfitLossView
 }) {
+    const { canViewRevenue, canViewCost, canViewProfit } = data.fieldPermissions
+    const showTrend = canViewRevenue || canViewCost || canViewProfit
     const trendChartData = data.trend.map((point) => ({
         period: point.period,
         // fixed-decimal-display-boundary: Recharts coordinates require number.
@@ -75,7 +77,7 @@ export function ProfitLossChartsAndStageReference({
                   Number(point.actualProfitLossNet) / 10000,
         reliability: point.reliability,
     }))
-    const compositionChartData = data.fieldPermissions.canViewCost
+    const compositionChartData = canViewCost
         ? data.costComposition
               .filter(
                   (composition) =>
@@ -92,43 +94,48 @@ export function ProfitLossChartsAndStageReference({
 
     return (
         <>
-            <div className="grid min-w-0 gap-4 xl:grid-cols-[3fr_2fr]">
-                <Card size="sm" className={surfacePanelClassName}>
-                    <CardHeader className="border-b border-grid">
-                        <CardTitle>
-                            盈亏趋势（{PROFIT_LOSS_SCOPE_LABEL} · 万元）
-                        </CardTitle>
-                        <CardDescription>
-                            收入 / 实际成本 /
-                            实际盈亏。按销售单生效月份展示当前筛选下的累计结果；利润仅包含成本完整订单。
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="pt-4">
-                        {data.fieldPermissions.canViewProfit ? (
-                            <>
-                                <ChartContainer
-                                    config={trendChartConfig}
-                                    className="aspect-[16/9] w-full"
+            <div
+                className={
+                    showTrend && canViewCost
+                        ? "grid min-w-0 gap-4 xl:grid-cols-[3fr_2fr]"
+                        : "grid min-w-0 gap-4"
+                }
+            >
+                {showTrend && (
+                    <Card size="sm" className={surfacePanelClassName}>
+                        <CardHeader className="border-b border-grid">
+                            <CardTitle>
+                                经营趋势（{PROFIT_LOSS_SCOPE_LABEL} · 万元）
+                            </CardTitle>
+                            <CardDescription>
+                                按销售单生效月份展示当前筛选下的累计结果。
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="pt-4">
+                            <ChartContainer
+                                config={trendChartConfig}
+                                className="aspect-[16/9] w-full"
+                            >
+                                <LineChart
+                                    data={trendChartData}
+                                    accessibilityLayer
                                 >
-                                    <LineChart
-                                        data={trendChartData}
-                                        accessibilityLayer
-                                    >
-                                        <CartesianGrid vertical={false} />
-                                        <XAxis
-                                            dataKey="period"
-                                            tickLine={false}
-                                            axisLine={false}
-                                        />
-                                        <YAxis
-                                            tickLine={false}
-                                            axisLine={false}
-                                            width={40}
-                                        />
-                                        <ChartTooltip
-                                            content={<ChartTooltipContent />}
-                                        />
-                                        <Legend />
+                                    <CartesianGrid vertical={false} />
+                                    <XAxis
+                                        dataKey="period"
+                                        tickLine={false}
+                                        axisLine={false}
+                                    />
+                                    <YAxis
+                                        tickLine={false}
+                                        axisLine={false}
+                                        width={40}
+                                    />
+                                    <ChartTooltip
+                                        content={<ChartTooltipContent />}
+                                    />
+                                    <Legend />
+                                    {canViewRevenue && (
                                         <Line
                                             type="monotone"
                                             dataKey="revenue"
@@ -137,6 +144,8 @@ export function ProfitLossChartsAndStageReference({
                                             strokeWidth={2}
                                             dot={false}
                                         />
+                                    )}
+                                    {canViewCost && (
                                         <Line
                                             type="monotone"
                                             dataKey="cost"
@@ -146,6 +155,8 @@ export function ProfitLossChartsAndStageReference({
                                             strokeDasharray="4 4"
                                             dot={false}
                                         />
+                                    )}
+                                    {canViewProfit && (
                                         <Line
                                             type="monotone"
                                             dataKey="profit"
@@ -154,34 +165,42 @@ export function ProfitLossChartsAndStageReference({
                                             strokeWidth={2}
                                             dot={false}
                                         />
-                                    </LineChart>
-                                </ChartContainer>
-                                <div className="mt-3">
-                                    <Table data-density="compact">
-                                        <TableCaption className="sr-only">
-                                            盈亏趋势数据表（单位：元，非卡券不含税；图内以万元展示）
-                                        </TableCaption>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead>期间</TableHead>
+                                    )}
+                                </LineChart>
+                            </ChartContainer>
+                            <div className="mt-3">
+                                <Table data-density="compact">
+                                    <TableCaption className="sr-only">
+                                        盈亏趋势数据表（单位：元，非卡券不含税；图内以万元展示）
+                                    </TableCaption>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>期间</TableHead>
+                                            {canViewRevenue && (
                                                 <TableHead data-align="end">
                                                     收入
                                                 </TableHead>
+                                            )}
+                                            {canViewCost && (
                                                 <TableHead data-align="end">
                                                     成本
                                                 </TableHead>
+                                            )}
+                                            {canViewProfit && (
                                                 <TableHead data-align="end">
                                                     盈亏
                                                 </TableHead>
-                                                <TableHead>可靠性</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {data.trend.map((t) => (
-                                                <TableRow key={t.period}>
-                                                    <TableCell>
-                                                        {t.period}
-                                                    </TableCell>
+                                            )}
+                                            <TableHead>可靠性</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {data.trend.map((t) => (
+                                            <TableRow key={t.period}>
+                                                <TableCell>
+                                                    {t.period}
+                                                </TableCell>
+                                                {canViewRevenue && (
                                                     <TableCell data-align="end">
                                                         <MoneyValue
                                                             value={
@@ -189,6 +208,8 @@ export function ProfitLossChartsAndStageReference({
                                                             }
                                                         />
                                                     </TableCell>
+                                                )}
+                                                {canViewCost && (
                                                     <TableCell data-align="end">
                                                         <MoneyValue
                                                             value={
@@ -196,6 +217,8 @@ export function ProfitLossChartsAndStageReference({
                                                             }
                                                         />
                                                     </TableCell>
+                                                )}
+                                                {canViewProfit && (
                                                     <TableCell data-align="end">
                                                         {t.actualProfitLossNet !=
                                                         null ? (
@@ -208,193 +231,195 @@ export function ProfitLossChartsAndStageReference({
                                                             "不可用"
                                                         )}
                                                     </TableCell>
-                                                    <TableCell className="text-muted-foreground">
-                                                        {t.reliability ===
-                                                        "reliable"
-                                                            ? "可靠"
-                                                            : t.reliability ===
-                                                                "partial"
-                                                              ? "部分可靠"
-                                                              : "不可用"}
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                </div>
-                            </>
-                        ) : (
-                            <p className="text-sm text-muted-foreground">
-                                无利润查看权限，趋势图暂不展示。
-                            </p>
-                        )}
-                    </CardContent>
-                </Card>
-
-                <Card size="sm" className={surfacePanelClassName}>
-                    <CardHeader className="border-b border-grid">
-                        <CardTitle>
-                            成本构成（{PROFIT_LOSS_SCOPE_LABEL}）
-                        </CardTitle>
-                        <CardDescription>
-                            仅统计实际成本与冲减；返点等冲减显示为负值贡献。费用构成随当前筛选变化，采用已分配到所选销售单的金额。
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="pt-4">
-                        {data.fieldPermissions.canViewCost &&
-                        compositionChartData.length > 0 ? (
-                            <>
-                                <ChartContainer
-                                    config={compositionChartConfig}
-                                    className="aspect-[16/9] w-full"
-                                >
-                                    <BarChart
-                                        data={compositionChartData}
-                                        accessibilityLayer
-                                        layout="vertical"
-                                        margin={{ left: 48 }}
-                                    >
-                                        <CartesianGrid horizontal={false} />
-                                        <XAxis
-                                            type="number"
-                                            tickLine={false}
-                                            axisLine={false}
-                                        />
-                                        <YAxis
-                                            type="category"
-                                            dataKey="label"
-                                            tickLine={false}
-                                            axisLine={false}
-                                            width={72}
-                                        />
-                                        <ChartTooltip
-                                            content={<ChartTooltipContent />}
-                                        />
-                                        <Bar
-                                            dataKey="net"
-                                            name="不含税金额（万元）"
-                                            fill="var(--color-net)"
-                                            radius={4}
-                                        />
-                                    </BarChart>
-                                </ChartContainer>
-                                <ul className="mt-3 space-y-1 text-xs">
-                                    {data.costComposition
-                                        .filter(
-                                            (c) =>
-                                                c.netAmount !== "—" &&
-                                                compareDecimal(
-                                                    c.netAmount,
-                                                    "0",
-                                                    2,
-                                                ) !== 0,
-                                        )
-                                        .map((c) => (
-                                            <li
-                                                key={c.costType}
-                                                className="flex justify-between gap-2 border-b border-grid py-1"
-                                            >
-                                                <span>{c.label}</span>
-                                                <span className="num">
-                                                    <MoneyValue
-                                                        value={c.netAmount}
-                                                    />
-                                                    {c.share ? (
-                                                        <span className="ml-2 text-muted-foreground">
-                                                            {c.share}
-                                                        </span>
-                                                    ) : null}
-                                                </span>
-                                            </li>
+                                                )}
+                                                <TableCell className="text-muted-foreground">
+                                                    {t.reliability ===
+                                                    "reliable"
+                                                        ? "可靠"
+                                                        : t.reliability ===
+                                                            "partial"
+                                                          ? "部分可靠"
+                                                          : "不可用"}
+                                                </TableCell>
+                                            </TableRow>
                                         ))}
-                                </ul>
-                            </>
-                        ) : (
-                            <p className="text-sm text-muted-foreground">
-                                {data.fieldPermissions.canViewCost
-                                    ? "当前范围无成本构成数据。"
-                                    : "暂无成本明细查看权限，暂不展示成本构成占比。"}
-                            </p>
-                        )}
-                    </CardContent>
-                </Card>
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
+
+                {canViewCost && (
+                    <Card size="sm" className={surfacePanelClassName}>
+                        <CardHeader className="border-b border-grid">
+                            <CardTitle>
+                                成本构成（{PROFIT_LOSS_SCOPE_LABEL}）
+                            </CardTitle>
+                            <CardDescription>
+                                仅统计实际成本与冲减；返点等冲减显示为负值贡献。费用构成随当前筛选变化，采用已分配到所选销售单的金额。
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="pt-4">
+                            {compositionChartData.length > 0 ? (
+                                <>
+                                    <ChartContainer
+                                        config={compositionChartConfig}
+                                        className="aspect-[16/9] w-full"
+                                    >
+                                        <BarChart
+                                            data={compositionChartData}
+                                            accessibilityLayer
+                                            layout="vertical"
+                                            margin={{ left: 48 }}
+                                        >
+                                            <CartesianGrid horizontal={false} />
+                                            <XAxis
+                                                type="number"
+                                                tickLine={false}
+                                                axisLine={false}
+                                            />
+                                            <YAxis
+                                                type="category"
+                                                dataKey="label"
+                                                tickLine={false}
+                                                axisLine={false}
+                                                width={72}
+                                            />
+                                            <ChartTooltip
+                                                content={
+                                                    <ChartTooltipContent />
+                                                }
+                                            />
+                                            <Bar
+                                                dataKey="net"
+                                                name="不含税金额（万元）"
+                                                fill="var(--color-net)"
+                                                radius={4}
+                                            />
+                                        </BarChart>
+                                    </ChartContainer>
+                                    <ul className="mt-3 space-y-1 text-xs">
+                                        {data.costComposition
+                                            .filter(
+                                                (c) =>
+                                                    c.netAmount !== "—" &&
+                                                    compareDecimal(
+                                                        c.netAmount,
+                                                        "0",
+                                                        2,
+                                                    ) !== 0,
+                                            )
+                                            .map((c) => (
+                                                <li
+                                                    key={c.costType}
+                                                    className="flex justify-between gap-2 border-b border-grid py-1"
+                                                >
+                                                    <span>{c.label}</span>
+                                                    <span className="num">
+                                                        <MoneyValue
+                                                            value={c.netAmount}
+                                                        />
+                                                        {c.share ? (
+                                                            <span className="ml-2 text-muted-foreground">
+                                                                {c.share}
+                                                            </span>
+                                                        ) : null}
+                                                    </span>
+                                                </li>
+                                            ))}
+                                    </ul>
+                                </>
+                            ) : (
+                                <p className="text-sm text-muted-foreground">
+                                    当前范围无成本构成数据。
+                                </p>
+                            )}
+                        </CardContent>
+                    </Card>
+                )}
             </div>
 
             {/* EXPECTED / CONFIRMED 对照区 */}
-            <Card size="sm" className={surfacePanelClassName}>
-                <CardHeader className="border-b border-grid">
-                    <CardTitle>预计/已确认成本参考</CardTitle>
-                    <CardDescription>
-                        此处仅为预算与执行期估算对照，不计入实际经营盈亏和利润率。
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="pt-4">
-                    <div className="grid gap-3 md:grid-cols-2">
-                        {data.stageReference.map((line) => (
-                            <div
-                                key={line.stage}
-                                className="rounded-lg border border-dashed border-border bg-muted/30 p-3"
-                            >
-                                <div className="flex items-center justify-between gap-2">
-                                    <span className="text-sm font-medium">
-                                        {line.label}
-                                    </span>
-                                    <Badge variant="outline">
-                                        {line.stage === "EXPECTED"
-                                            ? "预计"
-                                            : "已确认"}
-                                    </Badge>
+            {canViewCost && (
+                <Card size="sm" className={surfacePanelClassName}>
+                    <CardHeader className="border-b border-grid">
+                        <CardTitle>预计/已确认成本参考</CardTitle>
+                        <CardDescription>
+                            此处仅为预算与执行期估算对照，不计入实际经营盈亏和利润率。
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="pt-4">
+                        <div className="grid gap-3 md:grid-cols-2">
+                            {data.stageReference.map((line) => (
+                                <div
+                                    key={line.stage}
+                                    className="rounded-lg border border-dashed border-border bg-muted/30 p-3"
+                                >
+                                    <div className="flex items-center justify-between gap-2">
+                                        <span className="text-sm font-medium">
+                                            {line.label}
+                                        </span>
+                                        <Badge variant="outline">
+                                            {line.stage === "EXPECTED"
+                                                ? "预计"
+                                                : "已确认"}
+                                        </Badge>
+                                    </div>
+                                    <DescriptionList
+                                        columns="two"
+                                        className="mt-2"
+                                    >
+                                        <DescriptionItem>
+                                            <DescriptionTerm>
+                                                采购（对照）
+                                            </DescriptionTerm>
+                                            <DescriptionDetails>
+                                                <span className="num text-muted-foreground">
+                                                    <MoneyValue
+                                                        value={
+                                                            line.procurementCostNet
+                                                        }
+                                                    />
+                                                </span>
+                                            </DescriptionDetails>
+                                        </DescriptionItem>
+                                        <DescriptionItem>
+                                            <DescriptionTerm>
+                                                履约（对照）
+                                            </DescriptionTerm>
+                                            <DescriptionDetails>
+                                                <span className="num text-muted-foreground">
+                                                    <MoneyValue
+                                                        value={
+                                                            line.fulfillmentCostNet
+                                                        }
+                                                    />
+                                                </span>
+                                            </DescriptionDetails>
+                                        </DescriptionItem>
+                                        <DescriptionItem>
+                                            <DescriptionTerm>
+                                                合计（对照）
+                                            </DescriptionTerm>
+                                            <DescriptionDetails>
+                                                <span className="num text-muted-foreground">
+                                                    <MoneyValue
+                                                        value={line.totalNet}
+                                                    />
+                                                </span>
+                                            </DescriptionDetails>
+                                        </DescriptionItem>
+                                    </DescriptionList>
+                                    <p className="mt-2 text-xs text-muted-foreground">
+                                        {line.note}
+                                    </p>
                                 </div>
-                                <DescriptionList columns="two" className="mt-2">
-                                    <DescriptionItem>
-                                        <DescriptionTerm>
-                                            采购（对照）
-                                        </DescriptionTerm>
-                                        <DescriptionDetails>
-                                            <span className="num text-muted-foreground">
-                                                <MoneyValue
-                                                    value={
-                                                        line.procurementCostNet
-                                                    }
-                                                />
-                                            </span>
-                                        </DescriptionDetails>
-                                    </DescriptionItem>
-                                    <DescriptionItem>
-                                        <DescriptionTerm>
-                                            履约（对照）
-                                        </DescriptionTerm>
-                                        <DescriptionDetails>
-                                            <span className="num text-muted-foreground">
-                                                <MoneyValue
-                                                    value={
-                                                        line.fulfillmentCostNet
-                                                    }
-                                                />
-                                            </span>
-                                        </DescriptionDetails>
-                                    </DescriptionItem>
-                                    <DescriptionItem>
-                                        <DescriptionTerm>
-                                            合计（对照）
-                                        </DescriptionTerm>
-                                        <DescriptionDetails>
-                                            <span className="num text-muted-foreground">
-                                                <MoneyValue
-                                                    value={line.totalNet}
-                                                />
-                                            </span>
-                                        </DescriptionDetails>
-                                    </DescriptionItem>
-                                </DescriptionList>
-                                <p className="mt-2 text-xs text-muted-foreground">
-                                    {line.note}
-                                </p>
-                            </div>
-                        ))}
-                    </div>
-                </CardContent>
-            </Card>
+                            ))}
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
         </>
     )
 }

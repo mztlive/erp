@@ -1,6 +1,8 @@
 "use client"
 
 import * as React from "react"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 import { parsePriceFilterKind, type PriceFilterKind } from "@/lib/price-filter"
 import { useStore } from "@tanstack/react-form"
 import { useAppForm } from "@/components/form"
@@ -39,6 +41,13 @@ export type SellableFilterKey =
 export function useSellableListFilters(
     searchInputRef: React.RefObject<HTMLInputElement | null>,
 ) {
+    const account = useAccountProfileQuery()
+    const permissions = account.isSuccess ? account.data.permissions : undefined
+    const canFilterCategory = hasPermission(
+        permissions,
+        "product_category:list",
+    )
+    const canFilterBrand = hasPermission(permissions, "product_brand:list")
     const {
         searchParams,
         patchUrl,
@@ -47,16 +56,27 @@ export function useSellableListFilters(
         setPagination,
         resetPagination,
         changePagination,
-    } = useListUrl()
+    } = useListUrl(
+        {
+            productCategoryId: !canFilterCategory,
+            productBrandId: !canFilterBrand,
+            productSupplierId: true,
+            eligibilityAsOf: true,
+            supplyPreset: true,
+        },
+        account.isSuccess,
+    )
 
     const layout = parseSellableListLayout(searchParams.get("layout"))
     const productKind = PRODUCT_KIND_VALUES.find(
         (value) => value === searchParams.get("productKind"),
     )
-    const productCategoryId =
-        searchParams.get("productCategoryId")?.trim() || undefined
-    const productBrandId =
-        searchParams.get("productBrandId")?.trim() || undefined
+    const productCategoryId = canFilterCategory
+        ? searchParams.get("productCategoryId")?.trim() || undefined
+        : undefined
+    const productBrandId = canFilterBrand
+        ? searchParams.get("productBrandId")?.trim() || undefined
+        : undefined
     const deliveryRegion =
         searchParams.get("deliveryRegion")?.trim() || undefined
     const deliveryExtent = parseSellableDeliveryExtent(
@@ -114,8 +134,12 @@ export function useSellableListFilters(
                     value.productKindDraft === "all"
                         ? null
                         : value.productKindDraft,
-                productCategoryId: value.productCategoryIdDraft,
-                productBrandId: value.productBrandIdDraft,
+                productCategoryId: canFilterCategory
+                    ? value.productCategoryIdDraft
+                    : null,
+                productBrandId: canFilterBrand
+                    ? value.productBrandIdDraft
+                    : null,
                 productSupplierId: null,
                 supplyPreset: null,
                 ...deliveryUrlPatch(
@@ -312,8 +336,9 @@ export function useSellableListFilters(
     const hasPendingChanges =
         searchDraft.trim() !== q.trim() ||
         productKindDraft !== (productKind ?? "all") ||
-        productCategoryIdDraft !== (productCategoryId ?? null) ||
-        productBrandIdDraft !== (productBrandId ?? null) ||
+        (canFilterCategory &&
+            productCategoryIdDraft !== (productCategoryId ?? null)) ||
+        (canFilterBrand && productBrandIdDraft !== (productBrandId ?? null)) ||
         deliveryRegionDraft !== (deliveryRegion ?? "") ||
         (Boolean(deliveryRegionDraft) &&
             (deliveryExtentDraft !== deliveryExtent ||
@@ -375,11 +400,11 @@ export function useSellableListFilters(
 
     React.useEffect(() => {
         setProductCategoryIdDraft(productCategoryId ?? null)
-    }, [productCategoryId, setProductCategoryIdDraft])
+    }, [canFilterCategory, productCategoryId, setProductCategoryIdDraft])
 
     React.useEffect(() => {
         setProductBrandIdDraft(productBrandId ?? null)
-    }, [productBrandId, setProductBrandIdDraft])
+    }, [canFilterBrand, productBrandId, setProductBrandIdDraft])
 
     React.useEffect(() => {
         setDeliveryDrafts(
@@ -404,6 +429,8 @@ export function useSellableListFilters(
     ])
 
     return {
+        canFilterCategory,
+        canFilterBrand,
         q,
         layout,
         setLayout,

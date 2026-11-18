@@ -31,6 +31,9 @@ export function SalesOrdersListTable(props: {
     onSortingChange: (next: SortingState) => void
     pagination: PaginationState
     onPaginationChange: (next: PaginationState) => void
+    canCreate: boolean
+    canOpen: boolean
+    canDownloadContract: boolean
     onRowNavigate: (id: string) => void
     downloadingContractId: string | null
     downloadContract: (order: SalesOrderListItem) => void
@@ -49,6 +52,9 @@ export function SalesOrdersListTable(props: {
         onSortingChange,
         pagination,
         onPaginationChange,
+        canCreate,
+        canOpen,
+        canDownloadContract,
         onRowNavigate,
         downloadingContractId,
         downloadContract,
@@ -57,16 +63,18 @@ export function SalesOrdersListTable(props: {
     useSalesOrdersListKeyboardNav({
         items,
         url,
-        onRowNavigate,
+        onRowNavigate: canOpen ? onRowNavigate : undefined,
     })
 
     const columns = React.useMemo(
         () =>
             buildSalesOrdersListColumns({
+                canOpen,
+                canDownloadContract,
                 downloadingContractId,
                 downloadContract,
             }),
-        [downloadingContractId, downloadContract],
+        [canDownloadContract, canOpen, downloadingContractId, downloadContract],
     )
 
     const errorState =
@@ -108,7 +116,7 @@ export function SalesOrdersListTable(props: {
                         >
                             清除筛选
                         </Button>
-                    ) : (
+                    ) : canCreate ? (
                         <Button
                             id="sales-orders-list-empty-create"
                             type="button"
@@ -121,7 +129,7 @@ export function SalesOrdersListTable(props: {
                             />
                             新建销售单
                         </Button>
-                    )
+                    ) : undefined
                 }
             />
         ) : undefined
@@ -148,7 +156,7 @@ export function SalesOrdersListTable(props: {
             emptyState={emptyState}
             layout="flush"
             defaultColumnPinning={{ left: ["document"] }}
-            onRowOpen={(row) => onRowNavigate(row.id)}
+            onRowOpen={canOpen ? (row) => onRowNavigate(row.id) : undefined}
         />
     )
 }

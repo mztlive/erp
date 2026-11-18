@@ -13,6 +13,8 @@ import {
 } from "@/components/business"
 import { useAppFilterForm } from "@/components/form"
 import { Badge } from "@/components/ui/badge"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { compactFixed } from "@/lib/fixed-decimal"
@@ -32,6 +34,8 @@ type BatchReviewTableProps = {
     onEdit: (row: BatchRow) => void
     onReconcile: () => void
     busy: boolean
+    canWrite: boolean
+    canReadCost: boolean
 }
 
 const statusMeta: Record<
@@ -145,26 +149,33 @@ function MatchKind({ row }: { row: BatchRow }) {
 }
 
 /** 报价格式差异不算来源变化，只有真实变化才进入对比列。 */
-function sourceChangeFlags(row: BatchRow) {
+function sourceChangeFlags(row: BatchRow, canReadCost: boolean) {
     const previous = row.previous_source
     if (!previous) return null
     const flags = {
         price:
+            canReadCost &&
             (previous.purchase_price == null
                 ? null
                 : compactFixed(previous.purchase_price)) !==
-            (row.source.purchase_price == null
-                ? null
-                : compactFixed(row.source.purchase_price)),
+                (row.source.purchase_price == null
+                    ? null
+                    : compactFixed(row.source.purchase_price)),
         specification: previous.specification !== row.source.specification,
         unit: catalogUnitLabel(previous) !== catalogUnitLabel(row.source),
     }
     return Object.values(flags).some(Boolean) ? flags : null
 }
 
-function SourceChanges({ row }: { row: BatchRow }) {
+function SourceChanges({
+    row,
+    canReadCost,
+}: {
+    row: BatchRow
+    canReadCost: boolean
+}) {
     const previous = row.previous_source
-    const changes = sourceChangeFlags(row)
+    const changes = sourceChangeFlags(row, canReadCost)
     if (!previous || !changes)
         return <span className="text-muted-foreground">—</span>
     const previousUnit = catalogUnitLabel(previous)
@@ -216,7 +227,18 @@ export function BatchReviewTable({
     onEdit,
     onReconcile,
     busy,
+    canWrite,
+    canReadCost,
 }: BatchReviewTableProps) {
+    const profile = useAccountProfileQuery()
+    const canOpenProduct = hasPermission(
+        profile.data?.permissions,
+        "product:detail",
+    )
+    const canOpenOffering = hasPermission(
+        profile.data?.permissions,
+        "supplier_offering:detail",
+    )
     const prefix = `supplier-catalog-batch-${mode.toLowerCase()}`
     const form = useAppFilterForm({
         defaultValues: { status: "ALL", reason: "ALL" },
@@ -300,8 +322,8 @@ export function BatchReviewTable({
     const selectedCount = selectedIds.filter((id) =>
         selectableIds.has(id),
     ).length
-    const columns = React.useMemo<ColumnDef<BatchRow>[]>(
-        () => [
+    const columns = React.useMemo<ColumnDef<BatchRow>[]>(() => {
+        const columns: ColumnDef<BatchRow>[] = [
             {
                 id: "product",
                 header: "商品与规格",
@@ -350,14 +372,20 @@ export function BatchReviewTable({
                     </div>
                 ),
             },
-            ...(view.rows.some((row) => sourceChangeFlags(row))
+            ...(view.rows.some((row) => sourceChangeFlags(row, canReadCost))
                 ? [
                       {
                           id: "sourceChanges",
                           header: "来源变化",
-                          meta: { label: "来源变化", width: "reference" },
+                          meta: {
+                              label: "来源变化",
+                              width: "reference",
+                          },
                           cell: ({ row }) => (
-                              <SourceChanges row={row.original} />
+                              <SourceChanges
+                                  row={row.original}
+                                  canReadCost={canReadCost}
+                              />
                           ),
                       } satisfies ColumnDef<BatchRow>,
                   ]
@@ -365,13 +393,19 @@ export function BatchReviewTable({
             {
                 id: "match",
                 header: mode === "RESULT" ? "入库方式" : "自动匹配",
-                meta: { label: mode === "RESULT" ? "入库方式" : "自动匹配" },
+                meta: {
+                    label: mode === "RESULT" ? "入库方式" : "自动匹配",
+                },
                 cell: ({ row }) => <MatchKind row={row.original} />,
             },
             {
                 id: "purchase",
                 header: "接口采购报价",
-                meta: { label: "接口采购报价", align: "end", numeric: true },
+                meta: {
+                    label: "接口采购报价",
+                    align: "end",
+                    numeric: true,
+                },
                 cell: ({ row }) => (
                     <MoneyValue
                         className="font-normal"
@@ -382,7 +416,11 @@ export function BatchReviewTable({
             {
                 id: "dropship",
                 header: "公司代发价（含税）",
-                meta: { label: "公司代发价", align: "end", numeric: true },
+                meta: {
+                    label: "公司代发价",
+                    align: "end",
+                    numeric: true,
+                },
                 cell: ({ row }) => (
                     <div>
                         <MoneyValue
@@ -470,7 +508,11 @@ export function BatchReviewTable({
             {
                 id: "market",
                 header: "公司市场价",
-                meta: { label: "公司市场价", align: "end", numeric: true },
+                meta: {
+                    label: "公司市场价",
+                    align: "end",
+                    numeric: true,
+                },
                 cell: ({ row }) => (
                     <MoneyValue
                         value={row.original.sales_prices.market_price.value}
@@ -490,7 +532,7 @@ export function BatchReviewTable({
                     const row = tableRow.original
                     const key = toAutomationIdSegment(row.source.id)
                     if (row.status === "UNKNOWN")
-                        return (
+                        return canWrite ? (
                             <LoadingButton
                                 id={`${prefix}-query-result-${key}`}
                                 type="button"
@@ -501,7 +543,7 @@ export function BatchReviewTable({
                             >
                                 查询原操作结果
                             </LoadingButton>
-                        )
+                        ) : null
                     if (
                         row.status === "SUCCEEDED" ||
                         row.status === "SKIPPED"
@@ -513,7 +555,7 @@ export function BatchReviewTable({
                             row.result?.offering_id || row.source.offering_id
                         return (
                             <div className="flex flex-wrap justify-end gap-1">
-                                {productId ? (
+                                {canOpenProduct && productId ? (
                                     <Link
                                         id={`${prefix}-product-${key}`}
                                         href={`/master-data/products/${encodeURIComponent(productId)}`}
@@ -526,7 +568,7 @@ export function BatchReviewTable({
                                         查看商品
                                     </Link>
                                 ) : null}
-                                {offeringId ? (
+                                {canOpenOffering && offeringId ? (
                                     <Link
                                         id={`${prefix}-offering-${key}`}
                                         href={`/procurement/supplier-offerings/${encodeURIComponent(offeringId)}`}
@@ -554,7 +596,7 @@ export function BatchReviewTable({
                                 未提交
                             </span>
                         )
-                    return (
+                    return canWrite ? (
                         <Button
                             id={`${prefix}-edit-${key}`}
                             type="button"
@@ -567,21 +609,27 @@ export function BatchReviewTable({
                                 ? "调整与确认提示"
                                 : "调整"}
                         </Button>
-                    )
+                    ) : null
                 },
             },
-        ],
-        [
-            prefix,
-            mode,
-            busy,
-            onEdit,
-            onReconcile,
-            view.rows,
-            needsRecheck,
-            allDropshipOnly,
-        ],
-    )
+        ]
+        return canReadCost
+            ? columns
+            : columns.filter((column) => column.id !== "purchase")
+    }, [
+        canReadCost,
+        prefix,
+        mode,
+        busy,
+        canWrite,
+        canOpenProduct,
+        canOpenOffering,
+        onEdit,
+        onReconcile,
+        view.rows,
+        needsRecheck,
+        allDropshipOnly,
+    ])
     return (
         <div className="min-w-0 space-y-3">
             {mode === "RECOVERY" && view.counts.unknown > 0 ? (
@@ -590,16 +638,18 @@ export function BatchReviewTable({
                         {view.counts.unknown} 个 SKU
                         的原操作结果待核实；查明前不能选择重试。
                     </p>
-                    <LoadingButton
-                        id={`${prefix}-query-all-unknown`}
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={busy}
-                        onClick={onReconcile}
-                    >
-                        查询原操作结果
-                    </LoadingButton>
+                    {canWrite && (
+                        <LoadingButton
+                            id={`${prefix}-query-all-unknown`}
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={busy}
+                            onClick={onReconcile}
+                        >
+                            查询原操作结果
+                        </LoadingButton>
+                    )}
                 </div>
             ) : null}
             <BusinessTableFrame
@@ -699,11 +749,11 @@ export function BatchReviewTable({
                         ) : null}
                         <span className="num">
                             当前 {filteredRows.length} 个 SKU
-                            {mode !== "RESULT"
+                            {canWrite && mode !== "RESULT"
                                 ? ` · 已选 ${selectedCount} 个 SKU`
                                 : ""}
                         </span>
-                        {mode !== "RESULT" ? (
+                        {canWrite && mode !== "RESULT" ? (
                             <Button
                                 id={`${prefix}-clear-selection`}
                                 type="button"
@@ -752,7 +802,7 @@ export function BatchReviewTable({
                             )
                         }
                         enableRowSelection={
-                            mode === "RESULT"
+                            !canWrite || mode === "RESULT"
                                 ? false
                                 : (row) =>
                                       !busy &&

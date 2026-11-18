@@ -24,6 +24,7 @@ import {
     useCreateRevisionMutation,
     useMasterDataCenterQuery,
     useMasterDataListQuery,
+    useProductUnitOptionsQuery,
 } from "@/features/master-data/hooks/queries"
 import { useProductDirtyGuard } from "@/features/master-data/hooks/use-product-dirty-guard"
 import { useProductSectionSpy } from "@/features/master-data/hooks/use-product-section-spy"
@@ -31,27 +32,44 @@ import { useProductUploads } from "@/features/master-data/hooks/use-product-uplo
 import type { MasterDataMutationResult } from "@/features/master-data/types"
 import { getErrorPresentation } from "@/lib/api/errors"
 import { hasPermission } from "@/lib/permissions"
-import { useUnitOptionsQuery } from "@/hooks/use-options"
 import type { FixedSku } from "@/features/supplier-offerings/types"
 
 export function useProductEditor(stableId: string) {
     const router = useRouter()
     const isCreate = stableId === "new"
     const accountQuery = useAccountProfileQuery()
+    const granted = accountQuery.isSuccess
+        ? accountQuery.data.permissions
+        : undefined
+    const canCreate = hasPermission(granted, "product:create")
+    const hasUpdatePermission = hasPermission(granted, "product:update")
+    const canWrite = isCreate ? canCreate : hasUpdatePermission
+    const canSelectCategory =
+        canWrite && hasPermission(granted, "product_category:list")
+    const canSelectBrand =
+        canWrite && hasPermission(granted, "product_brand:list")
+    const canSelectUnit =
+        canWrite && hasPermission(granted, "unit_of_measure:list")
     const detailQuery = useMasterDataCenterQuery(
         "products",
         isCreate ? "" : stableId,
     )
-    const categoryListQuery = useMasterDataListQuery({
-        resource: "categories",
-        lifecycleStatus: "enabled",
-        revisionTiming: "current",
-    })
-    const brandListQuery = useMasterDataListQuery({
-        resource: "brands",
-        lifecycleStatus: "enabled",
-        revisionTiming: "current",
-    })
+    const categoryListQuery = useMasterDataListQuery(
+        {
+            resource: "categories",
+            lifecycleStatus: "enabled",
+            revisionTiming: "current",
+        },
+        canSelectCategory,
+    )
+    const brandListQuery = useMasterDataListQuery(
+        {
+            resource: "brands",
+            lifecycleStatus: "enabled",
+            revisionTiming: "current",
+        },
+        canSelectBrand,
+    )
     const categoryOptions = React.useMemo(
         () => toCategoryComboboxItems(categoryListQuery.data?.rows ?? []),
         [categoryListQuery.data?.rows],
@@ -60,7 +78,7 @@ export function useProductEditor(stableId: string) {
         () => toBrandComboboxItems(brandListQuery.data?.rows ?? []),
         [brandListQuery.data?.rows],
     )
-    const unitOptionsQuery = useUnitOptionsQuery()
+    const unitOptionsQuery = useProductUnitOptionsQuery(canSelectUnit)
     const createMutation = useCreateMasterDataMutation()
     const reviseMutation = useCreateRevisionMutation()
 
@@ -102,11 +120,11 @@ export function useProductEditor(stableId: string) {
         data?.stableId,
     )
     React.useEffect(() => {
-        if (activeSection === "effective") {
-            setSaveOpen(true)
+        if (activeSection === "effective" && !accountQuery.isPending) {
+            if (canWrite) setSaveOpen(true)
             setActiveSection("basic")
         }
-    }, [activeSection, setActiveSection])
+    }, [accountQuery.isPending, activeSection, canWrite, setActiveSection])
     useProductDirtyGuard(() => form.state.isDirty)
 
     const initialFormValues = React.useMemo(
@@ -265,9 +283,6 @@ export function useProductEditor(stableId: string) {
     const listHref = "/master-data/products"
     const pending =
         createMutation.isPending || reviseMutation.isPending || uploadingMedia
-    const granted = accountQuery.data?.permissions
-    const canCreate = hasPermission(granted, "product:create")
-    const hasUpdatePermission = hasPermission(granted, "product:update")
     const canRevise = isCreate
         ? canCreate
         : hasUpdatePermission &&
@@ -332,6 +347,9 @@ export function useProductEditor(stableId: string) {
         categoryOptions,
         brandOptions,
         unitOptionsQuery,
+        canSelectUnit,
+        canSelectCategory,
+        canSelectBrand,
         data,
         form,
         formError,

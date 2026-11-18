@@ -53,7 +53,7 @@ export function DictionaryCompactWorkspace({
     showRevisionFilter?: boolean
     codeLabel: string
     emptyTitle: string
-    emptyDescription: string
+    emptyDescription?: string
     emptyAction?: React.ReactNode
     renderCard?: (row: MasterDataListItem) => React.ReactNode
     searchInputRef: React.RefObject<HTMLInputElement | null>

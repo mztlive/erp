@@ -28,6 +28,7 @@ export function CompanySkuSearchCombobox({
     const query = useCompanySkuSelectorQuery({ query: search.input, purpose })
     const {
         rows,
+        denied,
         onRefresh,
         loading,
         emptyLabel: resolvedEmptyLabel,
@@ -39,6 +40,8 @@ export function CompanySkuSearchCombobox({
         emptyLabel,
         fallbackError: "公司 SKU 加载失败，请重试",
     })
+    if (denied) return null
+
     return (
         <ProductCombobox
             {...props}

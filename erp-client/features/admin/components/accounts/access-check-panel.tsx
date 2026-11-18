@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button"
 import { actionLabel, resourceLabel } from "@/lib/permission-catalog"
 import { registeredResources } from "@/features/organization/lib/scope-payload"
 import { SalesOrderSearchCombobox } from "@/features/entity-selectors/components/sales-order-search-combobox"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { useAccessCheck } from "../../hooks/use-access-check"
 import type { AccessCheckInput } from "../../api/access-check"
@@ -15,6 +17,11 @@ import { AccessCheckResult } from "./access-check-result"
 
 export function AccessCheckPanel({ accountId }: { accountId: string }) {
     const [input, setInput] = React.useState<AccessCheckInput | null>(null)
+    const profile = useAccountProfileQuery()
+    const canListOrders = hasPermission(
+        profile.data?.permissions,
+        "sales_order:list",
+    )
     const query = useAccessCheck(input)
     const resources = registeredResources()
     const form = useAppForm({
@@ -36,6 +43,7 @@ export function AccessCheckPanel({ accountId }: { accountId: string }) {
                 resource: value.resource,
                 action: value.action,
                 object_id:
+                    canListOrders &&
                     value.resource === "sales_order" &&
                     ["detail", "update"].includes(value.action)
                         ? value.objectId || null
@@ -55,7 +63,9 @@ export function AccessCheckPanel({ accountId }: { accountId: string }) {
                 检查访问权限
             </h2>
             <p className="text-sm text-muted-foreground">
-                检查此人能否执行所选操作。未选择单据时，只检查权限配置；选择销售单后，可进一步确认此人能否查看或修改这张单据。
+                检查此人能否执行所选操作。
+                {canListOrders &&
+                    "未选择单据时，只检查权限配置；选择销售单后，可进一步确认此人能否查看或修改这张单据。"}
             </p>
             <form
                 className="space-y-3"
@@ -138,6 +148,7 @@ export function AccessCheckPanel({ accountId }: { accountId: string }) {
                 </form.Subscribe>
                 <form.Subscribe selector={(state) => state.values}>
                     {(value) =>
+                        canListOrders &&
                         value.resource === "sales_order" &&
                         ["detail", "update"].includes(value.action) ? (
                             <form.AppField name="objectId">

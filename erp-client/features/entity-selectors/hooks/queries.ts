@@ -103,11 +103,13 @@ function projectDirectorySelected<TItem>(
 export function useSupplierSelectorQuery(
     input: EntitySearch,
     selectedId?: string,
+    enabled = true,
 ) {
     const list = useQuery({
         queryKey: entitySelectorKeys.supplier(input),
         queryFn: () => searchSuppliers(input),
         ...commonQueryOptions(),
+        enabled,
     })
     const selected = useQuery({
         queryKey: entitySelectorKeys.supplierDetail(
@@ -115,7 +117,7 @@ export function useSupplierSelectorQuery(
             input.purpose,
         ),
         queryFn: () => searchSuppliers({ query: "", purpose: input.purpose }),
-        enabled: Boolean(selectedId),
+        enabled: enabled && Boolean(selectedId),
         staleTime: STALE_TIME,
     })
     return {

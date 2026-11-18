@@ -33,6 +33,7 @@ import {
     valuesFromTerms,
 } from "../lib/forms"
 import { PortalCommandConflict } from "../components/command-conflict"
+import { BusinessFailureState } from "@/components/business"
 import { PortalError, PortalSurface } from "../components/surface"
 import { usePortalProfile } from "../components/portal-session"
 import { PortalCategorySuggestion } from "../components/category-suggestion"
@@ -136,6 +137,18 @@ function dictionaryValue(
 }
 export function PortalNewProductPage() {
     const [batch, setBatch] = useState(false)
+    const canMaintain = usePortalProfile()?.role === "maintainer"
+    if (!canMaintain) {
+        return (
+            <PortalSurface title="新品提报">
+                <BusinessFailureState
+                    kind="permission"
+                    title="当前账号仅可查看资料"
+                    description="请联系本供应商的业务经办人提报新品。"
+                />
+            </PortalSurface>
+        )
+    }
     return (
         <PortalSurface
             title="新品提报"

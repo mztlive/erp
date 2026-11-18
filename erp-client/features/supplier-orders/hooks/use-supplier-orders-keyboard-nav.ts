@@ -15,10 +15,12 @@ import type { SupplierOrderListRow } from "@/features/supplier-orders/types"
  * - 全局 keydown：/ 聚焦搜索、j/k 移动、Enter 开预览、Esc 关预览。
  */
 export function useSupplierOrdersKeyboardNav({
+    canOpenDetail,
     url,
     rows,
     updateUrl,
 }: {
+    canOpenDetail: boolean
     url: SupplierOrdersUrlState
     rows: SupplierOrderListRow[]
     updateUrl: SupplierOrdersUrlUpdater
@@ -61,7 +63,7 @@ export function useSupplierOrdersKeyboardNav({
                 return
             }
 
-            if (rows.length === 0) return
+            if (!canOpenDetail || rows.length === 0) return
 
             if (event.key === "j" || event.key === "ArrowDown") {
                 event.preventDefault()
@@ -84,7 +86,7 @@ export function useSupplierOrdersKeyboardNav({
         }
         window.addEventListener("keydown", onKeyDown)
         return () => window.removeEventListener("keydown", onKeyDown)
-    }, [focusedIndex, updateUrl, rows, url.preview])
+    }, [canOpenDetail, focusedIndex, updateUrl, rows, url.preview])
 
     return { focusedIndex, rowRefs }
 }

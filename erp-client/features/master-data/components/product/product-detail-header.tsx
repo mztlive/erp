@@ -78,29 +78,31 @@ export function ProductDetailHeader({
                 ) : null
             }
             media={
-                <button
-                    id="master-data-product-detail-media-shortcut"
-                    type="button"
-                    onClick={onMedia}
-                    className="flex size-16 shrink-0 flex-col items-center justify-center gap-1 overflow-hidden rounded-xl border border-border bg-muted/40 text-muted-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
-                    aria-label={image ? "查看商品图片" : "添加商品图片"}
-                >
-                    {image ? (
-                        <Image
-                            src={image}
-                            alt={title}
-                            width={64}
-                            height={64}
-                            unoptimized
-                            className="size-full object-cover"
-                        />
-                    ) : (
-                        <>
-                            <ImagePlusIcon className="size-5" aria-hidden />
-                            <span className="text-xs">商品图片</span>
-                        </>
-                    )}
-                </button>
+                image || canRevise ? (
+                    <button
+                        id="master-data-product-detail-media-shortcut"
+                        type="button"
+                        onClick={onMedia}
+                        className="flex size-16 shrink-0 flex-col items-center justify-center gap-1 overflow-hidden rounded-xl border border-border bg-muted/40 text-muted-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
+                        aria-label={image ? "查看商品图片" : "添加商品图片"}
+                    >
+                        {image ? (
+                            <Image
+                                src={image}
+                                alt={title}
+                                width={64}
+                                height={64}
+                                unoptimized
+                                className="size-full object-cover"
+                            />
+                        ) : (
+                            <>
+                                <ImagePlusIcon className="size-5" aria-hidden />
+                                <span className="text-xs">商品图片</span>
+                            </>
+                        )}
+                    </button>
+                ) : null
             }
             titleExtra={
                 <Badge

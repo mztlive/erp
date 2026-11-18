@@ -39,6 +39,13 @@ pub fn routes() -> Router<HttpState> {
 fn material_routes() -> Router<HttpState> {
     Router::new()
         .route(
+            "/approval-instances/materials/batch",
+            permission_route(
+                post(approval_instance::materials::batch),
+                &permissions::approval_instance::INSTANCE_LIST,
+            ),
+        )
+        .route(
             "/approval-instances/{id}/invoice-review",
             permission_route(
                 get(approval_instance::materials::invoice_review),

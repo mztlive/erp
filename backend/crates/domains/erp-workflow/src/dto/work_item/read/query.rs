@@ -39,7 +39,7 @@ pub struct WorkItemListParams {
     /// 逗号分隔的来源采购单 ID，最多 100 项；只收窄授权结果。
     #[validate(length(max = 8000, message = "来源采购单筛选不能超过8000个字符"))]
     pub purchase_order_ids: Option<String>,
-    /// 排序方式。
+    /// 排序方式，默认按创建时间倒序。
     pub sort: Option<WorkItemSort>,
     /// 服务端返回的队列上下文；当前实现只接受同查询重算值。
     pub queue_context_id: Option<String>,
@@ -351,7 +351,7 @@ fn ensure_supported_query(params: &WorkItemListParams) -> Result<()> {
 }
 
 fn normalize_sort(sort: Option<WorkItemSort>) -> (&'static str, bool) {
-    match sort.unwrap_or(WorkItemSort::PriorityDue) {
+    match sort.unwrap_or(WorkItemSort::CreatedDesc) {
         WorkItemSort::PriorityDue | WorkItemSort::DueAsc => ("due_at", true),
         WorkItemSort::CreatedDesc => ("created_at", false),
     }

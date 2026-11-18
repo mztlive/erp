@@ -139,7 +139,7 @@ export function listWorkItems(
         handler_user_ids: params.handlerUserIds,
         sales_order_ids: params.salesOrderIds,
         purchase_order_ids: params.purchaseOrderIds,
-        sort: params.sort ?? "priority_due",
+        sort: params.sort ?? "created_desc",
         cursor: params.cursor,
         queue_context_id: params.queueContextId,
         scope_version: params.scopeVersion,

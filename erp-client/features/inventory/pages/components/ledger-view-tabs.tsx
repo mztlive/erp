@@ -1,5 +1,7 @@
 "use client"
 
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 import { ListWorkspaceViews } from "@/components/business/list-workspace"
 import { VIEW_LABEL } from "@/features/inventory/types"
 import type { InventoryView } from "@/features/inventory/types"
@@ -22,10 +24,15 @@ export function LedgerViewTabs({
     total,
     onViewChange,
 }: LedgerViewTabsProps) {
+    const profile = useAccountProfileQuery()
+    const visibleViews = LEDGER_VIEWS.filter((item) =>
+        hasPermission(profile.data?.permissions, `stock_${item}:list`),
+    )
+    if (!visibleViews.length) return null
     return (
         <ListWorkspaceViews
             ariaLabel="库存台账工作视图"
-            items={LEDGER_VIEWS.map((item) => ({
+            items={visibleViews.map((item) => ({
                 id: `inventory-ledger-view-${item}`,
                 label: VIEW_LABEL[item],
                 count:

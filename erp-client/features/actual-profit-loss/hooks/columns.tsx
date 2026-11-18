@@ -8,6 +8,7 @@ import { MoneyCell } from "@/features/actual-profit-loss/components/money-cell"
 import {
     COVERAGE_STATE_UI,
     type ProfitLossRow,
+    type ProfitLossView,
 } from "@/features/actual-profit-loss/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 
@@ -16,12 +17,13 @@ import { toAutomationIdSegment } from "@/lib/automation-id"
  * 列定义本身无状态；表头排序 ↔ URL sort 的接线保留在页面。
  */
 export function buildProfitLossColumns(options: {
+    fieldPermissions?: ProfitLossView["fieldPermissions"]
     openCostDetail: (row: ProfitLossRow) => void
     openHistoricalGroup: (row: ProfitLossRow) => void
     rowFocusRef: React.MutableRefObject<Map<string, HTMLElement | null>>
 }): ColumnDef<ProfitLossRow>[] {
     const { openCostDetail, openHistoricalGroup, rowFocusRef } = options
-    return [
+    const columns: ColumnDef<ProfitLossRow>[] = [
         {
             id: "identityLabel",
             accessorFn: (r) => r.identityLabel,
@@ -114,9 +116,7 @@ export function buildProfitLossColumns(options: {
                 }
                 if (r.actualProcurementCostNet == null) {
                     return (
-                        <span className="text-sm text-muted-foreground">
-                            无权限
-                        </span>
+                        <span className="text-sm text-muted-foreground">—</span>
                     )
                 }
                 return (
@@ -154,9 +154,7 @@ export function buildProfitLossColumns(options: {
                 }
                 if (r.actualFulfillmentCostNet == null) {
                     return (
-                        <span className="text-sm text-muted-foreground">
-                            无权限
-                        </span>
+                        <span className="text-sm text-muted-foreground">—</span>
                     )
                 }
                 return (
@@ -289,4 +287,21 @@ export function buildProfitLossColumns(options: {
             ),
         },
     ]
+    const { fieldPermissions } = options
+    const hidden = new Set<string>()
+    if (!fieldPermissions?.canViewRevenue) hidden.add("netSalesRevenue")
+    if (!fieldPermissions?.canViewCost) {
+        for (const id of [
+            "actualProcurementCostNet",
+            "actualFulfillmentCostNet",
+            "reductionsNet",
+            "latestCostOccurredAt",
+        ])
+            hidden.add(id)
+    }
+    if (!fieldPermissions?.canViewProfit) {
+        hidden.add("actualProfitLossNet")
+        hidden.add("marginRate")
+    }
+    return columns.filter((column) => !hidden.has(column.id ?? ""))
 }

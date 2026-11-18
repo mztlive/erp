@@ -19,6 +19,8 @@ import {
     WorkspaceTaskFooter,
     useWorkspaceTaskPane,
 } from "@/components/business/workspace-task-pane"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 import { Button } from "@/components/ui/button"
 import {
     Card,
@@ -51,6 +53,11 @@ export function WorkItemProcessPanel({
 }) {
     const router = useRouter()
     const inWorkspace = useWorkspaceTaskPane()
+    const profile = useAccountProfileQuery()
+    const canProcess = hasPermission(
+        profile.data?.permissions,
+        "supplier_fulfillment_order:complete",
+    )
 
     return (
         <>
@@ -63,7 +70,7 @@ export function WorkItemProcessPanel({
                 </Alert>
             ) : null}
 
-            {workItem ? (
+            {workItem && canProcess ? (
                 <div className="space-y-2">
                     {inWorkspace ? (
                         <WorkspaceTaskFooter>

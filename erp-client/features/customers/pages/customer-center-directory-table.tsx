@@ -50,7 +50,7 @@ export function CustomerCenterDirectoryTable({
     onPaginationChange: (next: PaginationState) => void
     onClearFilters: () => void
     onCreate: () => void
-    onOpenRow: (row: CustomerDirectoryItem) => void
+    onOpenRow?: (row: CustomerDirectoryItem) => void
 }) {
     return items.length === 0 ? (
         totalInScope === 0 && !q.trim() && status === "active" ? (

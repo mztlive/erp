@@ -45,8 +45,6 @@ export function VoucherCategoryStatusButton({
             type="button"
             variant={surface === "table" ? "ghost" : "outline"}
             size={surface === "table" ? "xs" : "default"}
-            disabled={!canUpdate}
-            title={!canUpdate ? "当前账号没有卡券类目更新权限" : undefined}
             onClick={(event) => {
                 event.stopPropagation()
                 onClick()
@@ -125,7 +123,7 @@ export function VoucherCategoryStatusDialog({
 
     return (
         <Dialog
-            open={target != null}
+            open={canUpdate && target != null}
             onOpenChange={(open) => {
                 if (!open && !mutation.isPending) {
                     setError(null)

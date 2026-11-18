@@ -67,6 +67,10 @@ export function CreateDraftDialog({
     id?: string
 }) {
     const profile = useAccountProfileQuery()
+    const canCreate = hasPermission(
+        profile.data?.permissions,
+        PROCESS_PERMISSIONS.create,
+    )
     const canCopyOther = hasPermission(
         profile.data?.permissions,
         PROCESS_PERMISSIONS.edit,
@@ -174,7 +178,7 @@ export function CreateDraftDialog({
         // 仅在打开对话框或切换目标类型时初始化。
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open, item?.document_type])
-    if (!item) return null
+    if (!item || !canCreate) return null
     return (
         <>
             <Dialog

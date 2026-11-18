@@ -108,7 +108,7 @@ function mapAuditResult(
 function toRoleRow(
     role: BackendRole,
     permissionVersion: string,
-    boundAccountCount = 0,
+    boundAccountCount: number | null = null,
     dataScopeSummary = "—",
 ): RoleRow {
     const summary = summarizePermissions(role.permissions)

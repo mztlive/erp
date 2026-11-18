@@ -167,7 +167,7 @@ export function DemoMasterDataPage() {
             ) : null}
             <FormalActionConfirmDialog
                 idPrefix="demo-master-data-remove"
-                open={confirmRemove}
+                open={canRemove && confirmRemove}
                 onOpenChange={setConfirmRemove}
                 title="重置系统数据（仅保留超管账号）"
                 description="此操作会清除系统内的全部示例数据和业务数据。重置前请确认没有其他人员正在操作系统或执行导入导出任务。"

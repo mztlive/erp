@@ -31,6 +31,9 @@ export function BooksListTable({
     page,
     pageSize,
     onPaginationChange,
+    canOpen,
+    canOpenProposal,
+    canCreate,
     onRowNavigate,
     onCopy,
 }: {
@@ -47,10 +50,16 @@ export function BooksListTable({
     page: number
     pageSize: number
     onPaginationChange: (next: PaginationState) => void
+    canOpen: boolean
+    canOpenProposal: boolean
+    canCreate: boolean
     onRowNavigate: (bookId: string) => void
     onCopy?: (book: SelectionBook) => void
 }) {
-    const columns = React.useMemo(() => buildBooksListColumns(onCopy), [onCopy])
+    const columns = React.useMemo(
+        () => buildBooksListColumns({ canOpen, canOpenProposal, onCopy }),
+        [canOpen, canOpenProposal, onCopy],
+    )
     const pagination = React.useMemo<PaginationState>(
         () => ({
             pageIndex: Math.max(0, page - 1),
@@ -98,7 +107,7 @@ export function BooksListTable({
                         >
                             清除筛选
                         </Button>
-                    ) : (
+                    ) : canCreate ? (
                         <Button
                             id="sales-selection-list-empty-create"
                             type="button"
@@ -107,7 +116,7 @@ export function BooksListTable({
                         >
                             从商品池发起
                         </Button>
-                    )
+                    ) : null
                 }
             />
         ) : undefined
@@ -126,7 +135,9 @@ export function BooksListTable({
             emptyState={emptyState}
             layout="flush"
             defaultColumnPinning={{ left: ["customer"] }}
-            onRowOpen={(row) => onRowNavigate(bookIdentity(row))}
+            onRowOpen={
+                canOpen ? (row) => onRowNavigate(bookIdentity(row)) : undefined
+            }
         />
     )
 }

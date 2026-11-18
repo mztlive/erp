@@ -59,6 +59,14 @@ export function ObjectCenterView({
     const prefix = idPrefix ?? "master-data-shared-object-center-view"
     const accountQuery = useAccountProfileQuery()
     const activeSection = resolveSection(section)
+    const writePermission =
+        data.resource === "categories"
+            ? "product_category:update"
+            : "warehouse:update"
+    const canWrite = hasPermission(
+        accountQuery.data?.permissions,
+        writePermission,
+    )
     const canRevise = data.allowedActions.includes("CREATE_REVISION")
     const canDisable = data.allowedActions.includes("DISABLE")
     const canRevealSensitive = hasPermission(
@@ -127,56 +135,64 @@ export function ObjectCenterView({
                         : []),
                 ]}
                 primaryAction={
-                    <span
-                        title={!canRevise ? reviseBlocker?.message : undefined}
-                        className="inline-flex"
-                    >
-                        <Button
-                            id={`${prefix}-revise`}
-                            type="button"
-                            size="sm"
-                            disabled={!canRevise}
-                            onClick={onRevise}
+                    canWrite ? (
+                        <span
+                            title={
+                                !canRevise ? reviseBlocker?.message : undefined
+                            }
+                            className="inline-flex"
                         >
-                            <HistoryIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                            {masterDataCopy.actionUpdate}
-                        </Button>
-                    </span>
+                            <Button
+                                id={`${prefix}-revise`}
+                                type="button"
+                                size="sm"
+                                disabled={!canRevise}
+                                onClick={onRevise}
+                            >
+                                <HistoryIcon
+                                    data-icon="inline-start"
+                                    aria-hidden="true"
+                                />
+                                {masterDataCopy.actionUpdate}
+                            </Button>
+                        </span>
+                    ) : null
                 }
                 secondaryActions={
-                    <span
-                        title={
-                            !canDisable ? disableBlocker?.message : undefined
-                        }
-                        className="inline-flex"
-                    >
-                        <Button
-                            id={`${prefix}-disable`}
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            disabled={!canDisable}
-                            onClick={onDisable}
+                    canWrite ? (
+                        <span
+                            title={
+                                !canDisable
+                                    ? disableBlocker?.message
+                                    : undefined
+                            }
+                            className="inline-flex"
                         >
-                            <BanIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                            {masterDataCopy.actionDisable}
-                        </Button>
-                    </span>
+                            <Button
+                                id={`${prefix}-disable`}
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={!canDisable}
+                                onClick={onDisable}
+                            >
+                                <BanIcon
+                                    data-icon="inline-start"
+                                    aria-hidden="true"
+                                />
+                                {masterDataCopy.actionDisable}
+                            </Button>
+                        </span>
+                    ) : null
                 }
             />
 
-            {!canRevise && reviseBlocker ? (
+            {canWrite && !canRevise && reviseBlocker ? (
                 <p className="text-xs text-muted-foreground">
                     {masterDataCopy.centerUpdateBlocked(reviseBlocker.message)}
                 </p>
             ) : null}
-            {!canDisable && disableBlocker ? (
+            {canWrite && !canDisable && disableBlocker ? (
                 <p className="text-xs text-muted-foreground">
                     {masterDataCopy.centerDisableBlocked(
                         disableBlocker.message,
@@ -220,7 +236,7 @@ export function ObjectCenterView({
                 <ObjectCenterVersionsSection data={data} />
                 <ObjectCenterAuditSection data={data} />
             </div>
-            {dialogs}
+            {canWrite ? dialogs : null}
         </PageScaffold>
     )
 }

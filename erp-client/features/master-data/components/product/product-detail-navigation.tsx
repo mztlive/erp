@@ -19,10 +19,12 @@ function ProductSummaryStrip({
 function ProductSectionTabs({
     value,
     isCreate,
+    canReadSupply,
     onValueChange,
 }: {
     value: ProductEditorSectionId
     isCreate: boolean
+    canReadSupply: boolean
     onValueChange: (value: ProductEditorSectionId) => void
 }) {
     return (
@@ -44,6 +46,7 @@ function ProductSectionTabs({
                     (section) =>
                         section.id !== "effective" &&
                         section.id !== "sku" &&
+                        (section.id !== "supply" || canReadSupply) &&
                         (!isCreate ||
                             (section.id !== "history" &&
                                 section.id !== "supply")),

@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
 import { PrinterIcon } from "lucide-react"
 
 import { DetailPageHeader } from "@/components/business"
@@ -74,34 +75,36 @@ export function ContractDetailHeader({
                 </span>
             }
             primaryAction={
-                canCreateSo ? (
-                    <Button
-                        id="card-contracts-detail-header-create-sales-order"
-                        type="button"
-                        size="sm"
-                        render={
-                            <Link
-                                id="card-contracts-detail-header-create-sales-order-link"
-                                href={`/sales/orders?mode=create&customerId=${encodeURIComponent(
-                                    contract.customer.id,
-                                )}&contractId=${encodeURIComponent(contract.contractId)}`}
-                            />
-                        }
-                    >
-                        新建销售单
-                    </Button>
-                ) : (
-                    <Button
-                        id="card-contracts-detail-header-create-sales-order-disabled"
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled
-                        title={soBlocker?.message}
-                    >
-                        新建销售单
-                    </Button>
-                )
+                <PermissionGuard permission="sales_order:create">
+                    {canCreateSo ? (
+                        <Button
+                            id="card-contracts-detail-header-create-sales-order"
+                            type="button"
+                            size="sm"
+                            render={
+                                <Link
+                                    id="card-contracts-detail-header-create-sales-order-link"
+                                    href={`/sales/orders?mode=create&customerId=${encodeURIComponent(
+                                        contract.customer.id,
+                                    )}&contractId=${encodeURIComponent(contract.contractId)}`}
+                                />
+                            }
+                        >
+                            新建销售单
+                        </Button>
+                    ) : (
+                        <Button
+                            id="card-contracts-detail-header-create-sales-order-disabled"
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled
+                            title={soBlocker?.message}
+                        >
+                            新建销售单
+                        </Button>
+                    )}
+                </PermissionGuard>
             }
             secondaryActions={
                 <>
@@ -158,11 +161,13 @@ export function ContractDetailHeader({
                     <Badge variant="info">PDF 电子档已归档</Badge>
                 ) : null}
             </div>
-            {!canCreateSo && soBlocker ? (
-                <p className="text-xs text-muted-foreground">
-                    新建销售单不可用：{soBlocker.message}
-                </p>
-            ) : null}
+            <PermissionGuard permission="sales_order:create">
+                {!canCreateSo && soBlocker ? (
+                    <p className="text-xs text-muted-foreground">
+                        新建销售单不可用：{soBlocker.message}
+                    </p>
+                ) : null}
+            </PermissionGuard>
         </DetailPageHeader>
     )
 }

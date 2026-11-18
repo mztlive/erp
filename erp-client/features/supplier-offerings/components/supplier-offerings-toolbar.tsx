@@ -63,6 +63,9 @@ export type SupplierOfferingsToolbarProps = {
     onSourceTypeDraftChange: (value: OfferingSourceFilter) => void
     availabilityStatusDraft: AvailabilityStatusFilter
     onAvailabilityStatusDraftChange: (value: AvailabilityStatusFilter) => void
+    canFilterOwner: boolean
+    canFilterProcurementOwner: boolean
+    canFilterSku: boolean
     skuLocked: boolean
     skuIdDraft: string | null
     onSkuIdDraftChange: (value: string | null) => void
@@ -97,6 +100,9 @@ export function SupplierOfferingsToolbar({
     onSourceTypeDraftChange,
     availabilityStatusDraft,
     onAvailabilityStatusDraftChange,
+    canFilterOwner,
+    canFilterProcurementOwner,
+    canFilterSku,
     skuLocked,
     skuIdDraft,
     onSkuIdDraftChange,
@@ -193,33 +199,41 @@ export function SupplierOfferingsToolbar({
             }
             morePanel={
                 <div className="space-y-5">
-                    <fieldset className="min-w-0 space-y-3">
-                        <legend className="mb-1 text-sm font-medium">
-                            人员
-                        </legend>
-                        <div className="grid min-w-0 gap-3 sm:grid-cols-2">
-                            <PersonDirectoryFilter
-                                id="supplier-offerings-toolbar-owner"
-                                label="维护人"
-                                value={ownerUserIdsDraft}
-                                onChange={onOwnerUserIdsDraftChange}
-                                category="business"
-                            />
-                            <PersonDirectoryFilter
-                                id="supplier-offerings-toolbar-procurement-owner"
-                                label="采购负责人"
-                                value={procurementOwnerUserIdsDraft}
-                                onChange={onProcurementOwnerUserIdsDraftChange}
-                                category="procurement"
-                            />
-                        </div>
-                    </fieldset>
+                    {(canFilterOwner || canFilterProcurementOwner) && (
+                        <fieldset className="min-w-0 space-y-3">
+                            <legend className="mb-1 text-sm font-medium">
+                                人员
+                            </legend>
+                            <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                                {canFilterOwner && (
+                                    <PersonDirectoryFilter
+                                        id="supplier-offerings-toolbar-owner"
+                                        label="维护人"
+                                        value={ownerUserIdsDraft}
+                                        onChange={onOwnerUserIdsDraftChange}
+                                        category="business"
+                                    />
+                                )}
+                                {canFilterProcurementOwner && (
+                                    <PersonDirectoryFilter
+                                        id="supplier-offerings-toolbar-procurement-owner"
+                                        label="采购负责人"
+                                        value={procurementOwnerUserIdsDraft}
+                                        onChange={
+                                            onProcurementOwnerUserIdsDraftChange
+                                        }
+                                        category="procurement"
+                                    />
+                                )}
+                            </div>
+                        </fieldset>
+                    )}
                     <fieldset className="min-w-0 border-t pt-4">
                         <legend className="pr-2 text-sm font-medium">
                             商品
                         </legend>
                         <div className="grid min-w-0 gap-3 sm:grid-cols-2">
-                            {!skuLocked ? (
+                            {!skuLocked && canFilterSku ? (
                                 <ListWorkspaceFilterField
                                     htmlFor="supplier-offerings-toolbar-sku-select"
                                     label="公司 SKU"

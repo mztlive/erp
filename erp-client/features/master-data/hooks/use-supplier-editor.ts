@@ -51,6 +51,9 @@ export function useSupplierEditor(stableId: string) {
     const createMutation = useCreateMasterDataMutation()
     const reviseMutation = useCreateRevisionMutation()
     const accountQuery = useAccountProfileQuery()
+    const granted = accountQuery.isSuccess
+        ? accountQuery.data.permissions
+        : undefined
     const currentUserId = accountQuery.data?.userid ?? ""
 
     const data = detailQuery.data
@@ -83,23 +86,23 @@ export function useSupplierEditor(stableId: string) {
     const searchParams = useSearchParams()
     const requestedSection = searchParams.get("section") ?? "basic"
     const canReadDeliveryTemplates = hasPermission(
-        accountQuery.data?.permissions,
+        granted,
         "supplier_offering:list",
     )
     const canEditDeliveryTemplates = hasPermission(
-        accountQuery.data?.permissions,
+        granted,
         "supplier_offering:update",
     )
     const canReadPortalAccounts = hasPermission(
-        accountQuery.data?.permissions,
+        granted,
         "supplier_portal_account:list",
     )
     const canReadPortalCatalog = hasPermission(
-        accountQuery.data?.permissions,
+        granted,
         "supplier_portal_catalog:list",
     )
     const canReadPortalApplications = hasPermission(
-        accountQuery.data?.permissions,
+        granted,
         "supplier_portal_request:list",
     )
     const activeSection =
@@ -381,7 +384,6 @@ export function useSupplierEditor(stableId: string) {
 
     const listHref = "/master-data/suppliers"
     const pending = createMutation.isPending || reviseMutation.isPending
-    const granted = accountQuery.data?.permissions
     const canCreate = hasPermission(granted, "supplier:create")
     const hasUpdatePermission = hasPermission(granted, "supplier:update")
     const hasDeletePermission = hasPermission(granted, "supplier:delete")
@@ -405,6 +407,7 @@ export function useSupplierEditor(stableId: string) {
 
     return {
         isCreate,
+        accountQuery,
         router,
         detailQuery,
         data,

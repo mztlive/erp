@@ -45,6 +45,19 @@ fn params(scope: WorkItemScope) -> WorkItemListParams {
 }
 
 #[test]
+fn list_defaults_to_newest_created_and_respects_explicit_due_sort() {
+    let mut params = params(WorkItemScope::Mine);
+    let default = params.normalized().unwrap();
+    assert_eq!((default.sort_by, default.sort_ascending), ("created_at", false));
+
+    for sort in [status::WorkItemSort::PriorityDue, status::WorkItemSort::DueAsc] {
+        params.sort = Some(sort);
+        let explicit = params.normalized().unwrap();
+        assert_eq!((explicit.sort_by, explicit.sort_ascending), ("due_at", true));
+    }
+}
+
+#[test]
 fn scope_status_combinations_fail_closed() {
     let mut history = params(WorkItemScope::History);
     history.status = Some(WorkItemStatus::Open);
@@ -231,9 +244,9 @@ fn retired_funds_review_has_no_handler() {
     }
 }
 
-/// 驳回任务详情保留精确旧实例与提交版本，关闭后仍能定位原资料。
+/// 驳回任务列表和详情均保留精确旧实例与提交版本。
 #[test]
-fn rework_detail_exposes_bound_instance_without_fabricating_list_association() {
+fn rework_list_and_detail_expose_the_same_bound_instance() {
     use erp_core::common::time::Instant;
     use erp_core::ids::WorkItemId;
 
@@ -272,13 +285,21 @@ fn rework_detail_exposes_bound_instance_without_fabricating_list_association() {
     }
 
     let row: crate::WorkItemRow = serde_json::from_value(serde_json::to_value(&item).unwrap()).unwrap();
+    assert!(serde_json::to_value(&row).unwrap().get("responsibility_key").is_none());
     let list = WorkItemView::from_fields(row.into(), "queue".into()).unwrap();
-    assert!(list.approval_process_instance_id.is_none());
-    assert!(serde_json::to_value(list).unwrap().get("approval_process_instance_id").is_none());
+    assert_eq!(list.approval_process_instance_id.as_deref(), Some("rejected-instance"));
+    assert_eq!(list.subject_version, "3");
 
     for invalid_key in ["other:instance", "approval_rework:", "approval_rework:   "] {
         let mut invalid = serde_json::to_value(&item).unwrap();
         invalid["responsibility_key"] = serde_json::json!(invalid_key);
+        let row: crate::WorkItemRow = serde_json::from_value(invalid.clone()).unwrap();
+        assert!(
+            WorkItemView::from_fields(row.into(), "queue".into())
+                .unwrap()
+                .approval_process_instance_id
+                .is_none()
+        );
         let invalid: WorkItem = serde_json::from_value(invalid).unwrap();
         let view = WorkItemView::from_fields(invalid.into(), "queue".into()).unwrap();
         assert!(view.approval_process_instance_id.is_none());

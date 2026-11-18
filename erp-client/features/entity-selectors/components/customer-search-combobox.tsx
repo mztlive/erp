@@ -52,6 +52,7 @@ export function CustomerSearchCombobox({
     )
     const {
         rows,
+        denied,
         onRefresh,
         loading,
         emptyLabel: resolvedEmptyLabel,
@@ -66,6 +67,8 @@ export function CustomerSearchCombobox({
         extraLoading: profile.isFetching,
         blocked: !profile.isSuccess,
     })
+    if (denied) return null
+
     return (
         <div className="min-w-0">
             <CustomerCombobox

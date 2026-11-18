@@ -13,8 +13,8 @@ import { toAutomationIdSegment } from "@/lib/automation-id"
 import { freshnessText } from "@/lib/ui-text"
 
 export function useConnectionListColumns(
-    onOpen: (connectionId: string) => void,
-    onOpenCatalog: (connectionId: string) => void,
+    onOpen: ((connectionId: string) => void) | undefined,
+    onOpenCatalog: ((connectionId: string) => void) | undefined,
 ) {
     return React.useMemo<ColumnDef<ConnectionListItem>[]>(
         () => [
@@ -27,17 +27,23 @@ export function useConnectionListColumns(
                     const r = row.original
                     return (
                         <div className="min-w-0 py-0.5">
-                            <Button
-                                id={`supplier-api-connections-list-row-${toAutomationIdSegment(r.connectionId)}-open-code`}
-                                type="button"
-                                variant="link"
-                                size="xs"
-                                className="num h-auto justify-start px-0 text-sm font-medium"
-                                aria-label={`打开连接 ${r.connectionCode}`}
-                                onClick={() => onOpen(r.connectionId)}
-                            >
-                                {r.connectionCode}
-                            </Button>
+                            {onOpen ? (
+                                <Button
+                                    id={`supplier-api-connections-list-row-${toAutomationIdSegment(r.connectionId)}-open-code`}
+                                    type="button"
+                                    variant="link"
+                                    size="xs"
+                                    className="num h-auto justify-start px-0 text-sm font-medium"
+                                    aria-label={`打开连接 ${r.connectionCode}`}
+                                    onClick={() => onOpen(r.connectionId)}
+                                >
+                                    {r.connectionCode}
+                                </Button>
+                            ) : (
+                                <span className="num font-medium">
+                                    {r.connectionCode}
+                                </span>
+                            )}
                             <div className="truncate text-xs text-muted-foreground">
                                 {r.supplier.name}
                             </div>
@@ -147,6 +153,7 @@ export function useConnectionListColumns(
                 meta: { label: "操作", width: "status", align: "end" },
                 enableSorting: false,
                 cell: ({ row }) => {
+                    if (!onOpen || !onOpenCatalog) return null
                     const segment = toAutomationIdSegment(
                         row.original.connectionId,
                     )

@@ -34,6 +34,7 @@ export function WarehouseSearchCombobox({
     )
     const {
         rows,
+        denied,
         onRefresh,
         loading,
         emptyLabel: resolvedEmptyLabel,
@@ -47,6 +48,8 @@ export function WarehouseSearchCombobox({
         noScopeLabel,
         fallbackError: "仓库加载失败，请重试",
     })
+    if (denied) return null
+
     return (
         <div className="min-w-0">
             <WarehouseCombobox

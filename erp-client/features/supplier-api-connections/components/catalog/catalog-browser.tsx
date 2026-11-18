@@ -18,6 +18,8 @@ import {
     QuantityValue,
 } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import {
@@ -100,30 +102,55 @@ export function CatalogBrowser({
     canReadCost: boolean
     canReview: boolean
 }) {
-    const [filters, setFilters] = React.useState<CatalogFilters>({})
+    const [appliedFilters, setFilters] = React.useState<CatalogFilters>({})
     const [page, setPage] = React.useState(1)
     const [previewRow, setPreviewRow] = React.useState<CatalogItem | null>(null)
     const [identityItemId, setIdentityItemId] = React.useState<string | null>(
         null,
     )
     const lastFocusedRowId = React.useRef<string | null>(null)
-    const query = useCatalogQuery(connectionId, page, filters)
+    const profile = useAccountProfileQuery()
+    const canOpenProduct = hasPermission(
+        profile.data?.permissions,
+        "product:detail",
+    )
+    const hasHiddenPriceFilter =
+        !canReadCost &&
+        Boolean(appliedFilters.price_min || appliedFilters.price_max)
+    const filters = React.useMemo(
+        () =>
+            hasHiddenPriceFilter
+                ? {
+                      ...appliedFilters,
+                      price_min: undefined,
+                      price_max: undefined,
+                  }
+                : appliedFilters,
+        [appliedFilters, hasHiddenPriceFilter],
+    )
+    const query = useCatalogQuery(
+        connectionId,
+        hasHiddenPriceFilter ? 1 : page,
+        filters,
+    )
     const choice = useCatalogBatchSelection(connectionId)
-    const selectionBlocker =
-        adoptionBlocker ??
-        (!canReadCost || query.data?.can_read_cost === false
-            ? "当前账号没有接口采购报价权限，不能配置入库。"
-            : !canAdopt
-              ? "当前账号没有选品入库权限，请联系管理员。"
-              : undefined)
-    const canSelect =
-        canAdopt && canReadCost && query.data?.can_read_cost !== false
-    const canConfigure =
-        !selectionBlocker &&
-        canAdopt &&
-        canReadCost &&
-        query.isSuccess &&
-        query.data.can_read_cost !== false
+    const showCosts = canReadCost && query.data?.can_read_cost !== false
+    const canSelect = canAdopt && showCosts
+    const selectionBlocker = canSelect ? adoptionBlocker : undefined
+    const canConfigure = canSelect && !selectionBlocker && query.isSuccess
+    React.useEffect(() => {
+        if (
+            showCosts ||
+            (!appliedFilters.price_min && !appliedFilters.price_max)
+        )
+            return
+        setFilters((current) => ({
+            ...current,
+            price_min: undefined,
+            price_max: undefined,
+        }))
+        setPage(1)
+    }, [appliedFilters.price_min, appliedFilters.price_max, showCosts])
     const columns = React.useMemo<ColumnDef<CatalogItem>[]>(
         () => [
             {
@@ -182,22 +209,28 @@ export function CatalogBrowser({
                 meta: { label: "商品单位" },
                 cell: ({ row }) => catalogUnitLabel(row.original),
             },
-            {
-                accessorKey: "purchase_price",
-                header: "接口采购报价",
-                meta: { label: "接口采购报价", align: "end", numeric: true },
-                cell: ({ row }) =>
-                    !canReadCost || query.data?.can_read_cost === false ? (
-                        "无查看权限"
-                    ) : row.original.purchase_price == null ? (
-                        "暂无接口报价"
-                    ) : (
-                        <MoneyValue
-                            value={row.original.purchase_price}
-                            display="exact"
-                        />
-                    ),
-            },
+            ...(showCosts
+                ? ([
+                      {
+                          accessorKey: "purchase_price",
+                          header: "接口采购报价",
+                          meta: {
+                              label: "接口采购报价",
+                              align: "end",
+                              numeric: true,
+                          },
+                          cell: ({ row }) =>
+                              row.original.purchase_price == null ? (
+                                  "暂无接口报价"
+                              ) : (
+                                  <MoneyValue
+                                      value={row.original.purchase_price}
+                                      display="exact"
+                                  />
+                              ),
+                      },
+                  ] satisfies ColumnDef<CatalogItem>[])
+                : []),
             {
                 id: "purchase-terms",
                 header: "采购要求",
@@ -279,7 +312,6 @@ export function CatalogBrowser({
                                     id={`supplier-catalog-identity-${toAutomationIdSegment(row.original.id)}`}
                                     variant="outline"
                                     size="sm"
-                                    disabled={!canReview}
                                     onClick={(event) => {
                                         event.stopPropagation()
                                         setIdentityItemId(row.original.id)
@@ -288,13 +320,19 @@ export function CatalogBrowser({
                                     核对规格
                                 </Button>
                             ) : null}
-                            <Link
-                                id={`supplier-catalog-product-${toAutomationIdSegment(row.original.id)}`}
-                                href={`/master-data/products/${encodeURIComponent(row.original.company_product_id)}`}
-                                className="text-primary underline"
-                            >
-                                {row.original.sku_no || "打开公司商品"}
-                            </Link>
+                            {canOpenProduct ? (
+                                <Link
+                                    id={`supplier-catalog-product-${toAutomationIdSegment(row.original.id)}`}
+                                    href={`/master-data/products/${encodeURIComponent(row.original.company_product_id)}`}
+                                    className="text-primary underline"
+                                >
+                                    {row.original.sku_no || "打开公司商品"}
+                                </Link>
+                            ) : row.original.sku_no ? (
+                                <span className="num">
+                                    {row.original.sku_no}
+                                </span>
+                            ) : null}
                         </div>
                     ) : (
                         "未入库"
@@ -332,9 +370,9 @@ export function CatalogBrowser({
             canConfigure,
             canSelect,
             selectionBlocker,
-            canReadCost,
             canReview,
-            query.data?.can_read_cost,
+            canOpenProduct,
+            showCosts,
             choice,
         ],
     )
@@ -368,13 +406,11 @@ export function CatalogBrowser({
                 title={`${supplierName} · 商品库`}
                 toolbar={
                     <CatalogFilterForm
-                        key={catalogFilterKey(filters)}
+                        key={`${showCosts}:${catalogFilterKey(filters)}`}
                         value={filters}
                         options={query.data?.filters}
                         loading={query.isFetching || choice.busy}
-                        canReadCost={
-                            canReadCost && query.data?.can_read_cost !== false
-                        }
+                        canReadCost={showCosts}
                         onApply={(next) => {
                             if (
                                 catalogFilterKey(filters) !==
@@ -627,7 +663,7 @@ export function CatalogBrowser({
                     </div>
                 </section>
             ) : null}
-            {identityItemId ? (
+            {canReview && identityItemId ? (
                 <CatalogIdentityReviewDialog
                     connectionId={connectionId}
                     itemId={identityItemId}
@@ -639,9 +675,9 @@ export function CatalogBrowser({
                     key={previewRow.id}
                     item={previewRow}
                     onClose={closePreview}
-                    canReadCost={
-                        canReadCost && query.data?.can_read_cost !== false
-                    }
+                    canReadCost={showCosts}
+                    canSelect={canSelect}
+                    canOpenProduct={canOpenProduct}
                     canConfigure={canConfigure}
                     selectionBlocker={selectionBlocker}
                     choice={choice}

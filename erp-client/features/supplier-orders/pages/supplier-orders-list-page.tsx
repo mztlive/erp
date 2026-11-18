@@ -11,6 +11,8 @@ import {
     ListWorkspaceViews,
     listWorkspaceStyles as styles,
 } from "@/components/business/list-workspace"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 import { Button } from "@/components/ui/button"
 import { SupplierOrdersListExportPreview } from "@/features/supplier-orders/components/supplier-orders-list-export"
 import { SupplierOrdersListExportResult } from "@/features/supplier-orders/components/supplier-orders-list-export"
@@ -47,6 +49,24 @@ const SORT_COLUMN_TO_FIELD: Record<
 const SUPPLIER_ORDER_VIEWS = Object.keys(VIEW_LABEL) as ListView[]
 
 export function SupplierOrdersListPage() {
+    const profile = useAccountProfileQuery()
+    const permissions = profile.data?.permissions
+    const canExport = hasPermission(
+        permissions,
+        "supplier_fulfillment_order:list",
+    )
+    const canOpenDetail = hasPermission(
+        permissions,
+        "supplier_fulfillment_order:detail",
+    )
+    const canInvestigate = hasPermission(
+        permissions,
+        "supplier_fulfillment_order:investigate",
+    )
+    const canOpenIntegrationErrors = hasPermission(
+        permissions,
+        "integration_error_task:list",
+    )
     const searchInputRef = React.useRef<HTMLInputElement | null>(null)
     const filters = useSupplierOrdersFilters(searchInputRef)
     const { url, returnTo, updateUrl } = filters
@@ -75,7 +95,7 @@ export function SupplierOrdersListPage() {
     const listQuery = useSupplierOrdersQuery(listQueryInput)
     const previewQuery = useSupplierOrderDetailQuery({
         orderId: url.preview ?? "",
-        enabled: Boolean(url.preview),
+        enabled: canOpenDetail && Boolean(url.preview),
     })
 
     const rows = React.useMemo(
@@ -94,6 +114,7 @@ export function SupplierOrdersListPage() {
     } = useSupplierOrdersQueryResult({ updateUrl })
 
     const { focusedIndex, rowRefs } = useSupplierOrdersKeyboardNav({
+        canOpenDetail,
         url,
         rows,
         updateUrl,
@@ -173,6 +194,9 @@ export function SupplierOrdersListPage() {
         onPreview: openPreview,
         onQueryResult: handleQueryFromList,
         queryPending,
+        canOpenDetail,
+        canInvestigate,
+        canOpenIntegrationErrors,
     })
 
     return (
@@ -201,32 +225,34 @@ export function SupplierOrdersListPage() {
                     </>
                 }
             >
-                <Button
-                    id="supplier-orders-list-export-trigger"
-                    title="导出与当前查询结果一致"
-                    type="button"
-                    variant="outline"
-                    disabled={
-                        !listQuery.data ||
-                        total === 0 ||
-                        exportMutation.isPending
-                    }
-                    onClick={openExportPreview}
-                >
-                    {exportMutation.isPending ? (
-                        <Loader2Icon
-                            data-icon="inline-start"
-                            className="animate-spin"
-                            aria-hidden="true"
-                        />
-                    ) : (
-                        <DownloadIcon
-                            data-icon="inline-start"
-                            aria-hidden="true"
-                        />
-                    )}
-                    {exportMutation.isPending ? "导出中…" : "导出"}
-                </Button>
+                {canExport && (
+                    <Button
+                        id="supplier-orders-list-export-trigger"
+                        title="导出与当前查询结果一致"
+                        type="button"
+                        variant="outline"
+                        disabled={
+                            !listQuery.data ||
+                            total === 0 ||
+                            exportMutation.isPending
+                        }
+                        onClick={openExportPreview}
+                    >
+                        {exportMutation.isPending ? (
+                            <Loader2Icon
+                                data-icon="inline-start"
+                                className="animate-spin"
+                                aria-hidden="true"
+                            />
+                        ) : (
+                            <DownloadIcon
+                                data-icon="inline-start"
+                                aria-hidden="true"
+                            />
+                        )}
+                        {exportMutation.isPending ? "导出中…" : "导出"}
+                    </Button>
+                )}
             </ListWorkspaceHeader>
 
             {returnTo ? (
@@ -259,11 +285,11 @@ export function SupplierOrdersListPage() {
                 />
             ) : null}
 
-            {exportResult ? (
+            {canExport && exportResult ? (
                 <SupplierOrdersListExportResult result={exportResult} />
             ) : null}
 
-            {exportPreviewOpen ? (
+            {canExport && exportPreviewOpen ? (
                 <SupplierOrdersListExportPreview
                     total={total}
                     filterSummary={listQuery.data?.filterSummary ?? "—"}
@@ -324,13 +350,13 @@ export function SupplierOrdersListPage() {
                                 pageSize: next.pageSize,
                             })
                         }}
-                        onRowPreview={openPreview}
+                        onRowPreview={canOpenDetail ? openPreview : undefined}
                     />
                 }
             />
 
             <SupplierOrdersListPreviewSheet
-                open={Boolean(url.preview)}
+                open={canOpenDetail && Boolean(url.preview)}
                 onOpenChange={(open) => {
                     if (!open) closePreview()
                 }}

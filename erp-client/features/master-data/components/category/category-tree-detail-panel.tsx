@@ -1,5 +1,7 @@
 "use client"
 
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
+
 import Link from "next/link"
 import {
     ArrowUpRightIcon,
@@ -52,7 +54,6 @@ export function CategoryTreeDetailPanel({
     query,
     returnTo,
     canCreate,
-    createBlockedReason,
     onSelect,
     onClearFilters,
     onOpenCreateRoot,
@@ -71,7 +72,6 @@ export function CategoryTreeDetailPanel({
     query: string
     returnTo: string
     canCreate: boolean
-    createBlockedReason: string
     onSelect: (id: string | null) => void
     onClearFilters: () => void
     onOpenCreateRoot: () => void
@@ -177,37 +177,35 @@ export function CategoryTreeDetailPanel({
                 </div>
                 {selected ? (
                     <div className="flex flex-wrap items-center gap-2">
-                        <span title={!canEdit ? editBlocker : undefined}>
-                            <Button
-                                id={`${prefix}-edit`}
-                                size="sm"
-                                disabled={!canEdit}
-                                onClick={() => onReviseTarget(selected)}
+                        <PermissionGuard permission="product_category:update">
+                            <span title={!canEdit ? editBlocker : undefined}>
+                                <Button
+                                    id={`${prefix}-edit`}
+                                    size="sm"
+                                    disabled={!canEdit}
+                                    onClick={() => onReviseTarget(selected)}
+                                >
+                                    <PencilIcon className="size-3.5" />
+                                    编辑分类
+                                </Button>
+                            </span>
+                        </PermissionGuard>
+                        {canCreate ? (
+                            <span
+                                title={!canAddChild ? editBlocker : undefined}
                             >
-                                <PencilIcon className="size-3.5" />
-                                编辑分类
-                            </Button>
-                        </span>
-                        <span
-                            title={
-                                !canAddChild
-                                    ? !canCreate
-                                        ? createBlockedReason
-                                        : editBlocker
-                                    : undefined
-                            }
-                        >
-                            <Button
-                                id={`${prefix}-create-child`}
-                                variant="outline"
-                                size="sm"
-                                disabled={!canAddChild}
-                                onClick={() => onOpenCreateChild(selected)}
-                            >
-                                <PlusIcon className="size-3.5" />
-                                添加子分类
-                            </Button>
-                        </span>
+                                <Button
+                                    id={`${prefix}-create-child`}
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={!canAddChild}
+                                    onClick={() => onOpenCreateChild(selected)}
+                                >
+                                    <PlusIcon className="size-3.5" />
+                                    添加子分类
+                                </Button>
+                            </span>
+                        ) : null}
                         <DropdownMenu>
                             <DropdownMenuTrigger
                                 id={`${prefix}-more`}
@@ -225,14 +223,18 @@ export function CategoryTreeDetailPanel({
                                 align="end"
                                 className="min-w-44"
                             >
-                                <DropdownMenuItem
-                                    id={`${prefix}-move`}
-                                    disabled={!canEdit}
-                                    title={!canEdit ? editBlocker : undefined}
-                                    onClick={() => onMoveTarget(selected)}
-                                >
-                                    调整上级
-                                </DropdownMenuItem>
+                                <PermissionGuard permission="product_category:update">
+                                    <DropdownMenuItem
+                                        id={`${prefix}-move`}
+                                        disabled={!canEdit}
+                                        title={
+                                            !canEdit ? editBlocker : undefined
+                                        }
+                                        onClick={() => onMoveTarget(selected)}
+                                    >
+                                        调整上级
+                                    </DropdownMenuItem>
+                                </PermissionGuard>
                                 <DropdownMenuItem
                                     id={`${prefix}-detail`}
                                     render={
@@ -244,17 +246,23 @@ export function CategoryTreeDetailPanel({
                                     打开完整资料
                                     <ArrowUpRightIcon className="ml-auto size-3.5" />
                                 </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                    id={`${prefix}-disable`}
-                                    disabled={!canDisable}
-                                    title={
-                                        !canDisable ? disableBlocker : undefined
-                                    }
-                                    onClick={() => onDisableTarget(selected)}
-                                >
-                                    停用分类
-                                </DropdownMenuItem>
+                                <PermissionGuard permission="product_category:update">
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                        id={`${prefix}-disable`}
+                                        disabled={!canDisable}
+                                        title={
+                                            !canDisable
+                                                ? disableBlocker
+                                                : undefined
+                                        }
+                                        onClick={() =>
+                                            onDisableTarget(selected)
+                                        }
+                                    >
+                                        停用分类
+                                    </DropdownMenuItem>
+                                </PermissionGuard>
                             </DropdownMenuContent>
                         </DropdownMenu>
                     </div>

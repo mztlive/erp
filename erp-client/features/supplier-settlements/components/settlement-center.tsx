@@ -1,5 +1,7 @@
 "use client"
 
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 import { WorkspaceTaskFooter } from "@/components/business/workspace-task-pane"
 import {
     PageScaffold,
@@ -67,6 +69,11 @@ function SettlementCenter({
     embedded?: boolean
     onTaskCompleted?: (workItemId: string) => void
 }) {
+    const account = useAccountProfileQuery()
+    const canReview = hasPermission(
+        account.data?.permissions,
+        "supplier_settlement_statement:confirm",
+    )
     const actions = useSettlementCenterActions({
         statementId,
         workItemId,
@@ -126,18 +133,20 @@ function SettlementCenter({
                 <WorkspaceTaskFooter inline={!embedded}>
                     <div className="flex flex-wrap items-center gap-2">
                         {embedded ? (
-                            <Button
-                                id="supplier-settlements-center-confirm-task"
-                                disabled={
-                                    actions.responsibilityStatus !==
-                                        "assigned_to_me" ||
-                                    !actions.allowed.has("CONFIRM") ||
-                                    actions.decisionMutation.isPending
-                                }
-                                onClick={() => actions.setConfirmOpen(true)}
-                            >
-                                确认结算
-                            </Button>
+                            canReview && (
+                                <Button
+                                    id="supplier-settlements-center-confirm-task"
+                                    disabled={
+                                        actions.responsibilityStatus !==
+                                            "assigned_to_me" ||
+                                        !actions.allowed.has("CONFIRM") ||
+                                        actions.decisionMutation.isPending
+                                    }
+                                    onClick={() => actions.setConfirmOpen(true)}
+                                >
+                                    确认结算
+                                </Button>
+                            )
                         ) : (
                             <SequentialProcessBar
                                 id="supplier-settlements-center-process-bar"
@@ -147,6 +156,7 @@ function SettlementCenter({
                                     actions.responsibilityStatus
                                 }
                                 processLabel="确认结算"
+                                showProcess={canReview}
                                 processDisabled={
                                     !actions.allowed.has("CONFIRM")
                                 }
@@ -157,7 +167,8 @@ function SettlementCenter({
                                 onProcessNext={() => undefined}
                             />
                         )}
-                        {actions.responsibilityStatus === "assigned_to_me" &&
+                        {canReview &&
+                        actions.responsibilityStatus === "assigned_to_me" &&
                         actions.allowed.has("REJECT") ? (
                             <Button
                                 id="supplier-settlements-center-reject-trigger"
@@ -319,7 +330,7 @@ function SettlementCenter({
             />
 
             <SettlementConfirmSettlementDialog
-                open={actions.confirmOpen}
+                open={canReview && actions.confirmOpen}
                 onOpenChange={actions.setConfirmOpen}
                 statement={st}
                 totals={detail.totals}
@@ -330,7 +341,7 @@ function SettlementCenter({
             />
 
             <SettlementRejectDialog
-                open={actions.rejectOpen}
+                open={canReview && actions.rejectOpen}
                 onOpenChange={actions.setRejectOpen}
                 reasonCode={actions.rejectReason}
                 onReasonCodeChange={actions.setRejectReason}

@@ -80,6 +80,17 @@ function namedProductMedia(
 
 export async function centerProduct(
     stableId: string,
+    access: {
+        assets?: boolean
+        units?: boolean
+        categories?: boolean
+        brands?: boolean
+    } = {
+        assets: true,
+        units: true,
+        categories: true,
+        brands: true,
+    },
 ): Promise<MasterDataCenterView | null> {
     const encodedId = encodeURIComponent(stableId)
     const product = await nullIfNotFound(() =>
@@ -118,18 +129,30 @@ export async function centerProduct(
     }
     // 辅助字典可局部失败，页面必须展示原因；编辑所需的 SKU 修订仍必须成功。
     const [units, categories, brands] = await Promise.all([
-        optional(
-            fetchAllPages<UnitOfMeasureDto>("/admin/unit-of-measures", {}),
-            "单位资料",
-        ),
-        optional(
-            fetchAllPages<ProductCategoryDto>("/admin/product-categories", {}),
-            "分类资料",
-        ),
-        optional(
-            fetchAllPages<ProductBrandDto>("/admin/product-brands", {}),
-            "品牌资料",
-        ),
+        access.units
+            ? optional(
+                  fetchAllPages<UnitOfMeasureDto>(
+                      "/admin/unit-of-measures",
+                      {},
+                  ),
+                  "单位资料",
+              )
+            : [],
+        access.categories
+            ? optional(
+                  fetchAllPages<ProductCategoryDto>(
+                      "/admin/product-categories",
+                      {},
+                  ),
+                  "分类资料",
+              )
+            : [],
+        access.brands
+            ? optional(
+                  fetchAllPages<ProductBrandDto>("/admin/product-brands", {}),
+                  "品牌资料",
+              )
+            : [],
     ])
     const unitById = new Map(units.map((u) => [u.id, u]))
 
@@ -140,10 +163,14 @@ export async function centerProduct(
     const detailMedia = (currentRev?.media ?? [])
         .filter((m) => m.media_role === "detail")
         .sort((a, b) => a.sort_order - b.sort_order)
-    const resolvedAssets = await resolveMediaAssets([
-        ...carouselMedia.map((m) => m.file_asset_id),
-        ...detailMedia.map((m) => m.file_asset_id),
-    ])
+    const resolvedAssets = await resolveMediaAssets(
+        access.assets
+            ? [
+                  ...carouselMedia.map((m) => m.file_asset_id),
+                  ...detailMedia.map((m) => m.file_asset_id),
+              ]
+            : [],
+    )
     const carouselPreviewUrls: Record<string, string> = {}
     const carouselFileAssetIds: Record<string, string> = {}
     const detailPreviewUrls: Record<string, string> = {}
@@ -220,9 +247,10 @@ export async function centerProduct(
             (name) => valuesByAttribute.get(name) ?? "",
         )
         const mainImageAssetId = rev?.source_main_image_asset_id?.trim()
-        const mainAsset = mainImageAssetId
-            ? await fetchFileAsset(mainImageAssetId)
-            : null
+        const mainAsset =
+            access.assets && mainImageAssetId
+                ? await fetchFileAsset(mainImageAssetId)
+                : null
         skuFields.push({
             skuId: sku.id,
             skuRevisionId: rev?.id,

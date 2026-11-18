@@ -287,7 +287,7 @@ export function mapVoucherRow(
     sku?: SkuDto,
 ): MasterDataListItem {
     const lifecycle = asLifecycle(profile.status)
-    const skuNo = profile.sku_no ?? sku?.sku_no ?? profile.sku_id
+    const skuNo = profile.sku_no ?? sku?.sku_no ?? "—"
     const displayName = profile.name?.trim() || profile.description
     // 稳定身份 = SKU（创建后不变）；列表按 SKU 聚合最新扩展修订。
     return {

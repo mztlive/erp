@@ -39,9 +39,13 @@ const PURCHASE_ORDER_VIEWS = Object.entries(PO_STATUS_FILTER_LABEL) as Array<
 export function PurchaseOrdersListPage() {
     const [expenseOpen, setExpenseOpen] = React.useState(false)
     const profile = useAccountProfileQuery()
-    const canCreateExpense =
+    const canCreate =
         !profile.isError &&
         hasPermission(profile.data?.permissions, "purchase_order:create")
+    const canExport = hasPermission(
+        profile.data?.permissions,
+        "purchase_order:list",
+    )
     const ctrl = usePurchaseOrdersListController()
     const exportPending = ctrl.exportQuery.isFetching
 
@@ -92,7 +96,7 @@ export function PurchaseOrdersListPage() {
             >
                 <PageActions
                     actions={[
-                        ...(canCreateExpense
+                        ...(canCreate
                             ? [
                                   {
                                       actionKey: "create-expense",
@@ -106,6 +110,7 @@ export function PurchaseOrdersListPage() {
                             : []),
                         {
                             actionKey: "export",
+                            hidden: !canExport,
                             label: exportPending ? "导出中…" : "导出",
                             icon: DownloadIcon,
                             loading: exportPending,
@@ -116,6 +121,7 @@ export function PurchaseOrdersListPage() {
                         },
                         {
                             actionKey: "create",
+                            hidden: !canCreate,
                             label: "新建采购单",
                             icon: PlusIcon,
                             onClick: ctrl.openCreatePage,
@@ -125,13 +131,15 @@ export function PurchaseOrdersListPage() {
                 />
             </ListWorkspaceHeader>
 
-            <ExpensePurchaseStartDialog
-                open={expenseOpen}
-                onOpenChange={setExpenseOpen}
-                onCreated={(created) =>
-                    ctrl.openDetail(created.purchaseOrderId)
-                }
-            />
+            {canCreate && (
+                <ExpensePurchaseStartDialog
+                    open={expenseOpen}
+                    onOpenChange={setExpenseOpen}
+                    onCreated={(created) =>
+                        ctrl.openDetail(created.purchaseOrderId)
+                    }
+                />
+            )}
             {ctrl.actionResult ? (
                 <FormalActionResult
                     status={
@@ -181,6 +189,7 @@ export function PurchaseOrdersListPage() {
                     <PurchaseOrdersListToolbar
                         typeDraft={filters.typeDraft}
                         setTypeDraft={filters.setTypeDraft}
+                        canFilterOwner={filters.canFilterOwner}
                         ownerDraft={filters.ownerDraft}
                         setOwnerDraft={filters.setOwnerDraft}
                         searchInputRef={ctrl.searchInputRef}
@@ -273,7 +282,9 @@ export function PurchaseOrdersListPage() {
                                             ? "请联系管理员配置可查看的业务范围。"
                                             : filters.hasActiveFilters
                                               ? "没有记录符合当前筛选条件，可清除筛选后重试。"
-                                              : "当前业务范围内还没有采购单，可新建第一张单。"
+                                              : canCreate
+                                                ? "当前业务范围内还没有采购单，可新建第一张单。"
+                                                : "当前业务范围内还没有采购单。"
                                     }
                                     action={
                                         noScope ? undefined : filters.hasActiveFilters ? (
@@ -289,7 +300,7 @@ export function PurchaseOrdersListPage() {
                                             >
                                                 清除筛选
                                             </Button>
-                                        ) : (
+                                        ) : canCreate ? (
                                             <Button
                                                 id="procurement-orders-list-empty-create"
                                                 type="button"
@@ -300,7 +311,7 @@ export function PurchaseOrdersListPage() {
                                             >
                                                 新建采购单
                                             </Button>
-                                        )
+                                        ) : undefined
                                     }
                                 />
                             ) : undefined

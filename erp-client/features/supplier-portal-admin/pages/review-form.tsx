@@ -55,8 +55,12 @@ export function PortalReviewForm({
               (application.input as unknown as NewProductInput))
             : null
     const rawProduct = product as NewProductInput | null
+    const canReview = access.can("supplier_portal_request:review")
+    const canReassign =
+        access.can("work_item:manage") &&
+        !!task.allowed_actions?.includes("REASSIGN")
     const canProcess =
-        access.can("supplier_portal_request:review") &&
+        canReview &&
         task.handler_key === "supplier_portal_review" &&
         task.business_object_type === "supplier_portal_request" &&
         task.business_object_id === application.id &&
@@ -361,6 +365,36 @@ export function PortalReviewForm({
             value: item.id,
             label: item.path ?? item.name,
         }))
+    if (!canReview) {
+        return (
+            <section className="space-y-4 rounded-xl border p-5">
+                <h2 className="font-semibold">采购确认</h2>
+                <p className="text-sm text-muted-foreground">
+                    当前处理人：{task.owner_user?.display_name ?? "待核对"}。
+                </p>
+                {canReassign && (
+                    <Button
+                        id="supplier-portal-review-reassign-toggle"
+                        variant="outline"
+                        onClick={() => setReassign(!reassign)}
+                    >
+                        转交具体处理人
+                    </Button>
+                )}
+                {canReassign && reassign && (
+                    <PortalReassignForm
+                        task={task}
+                        onReload={onReload}
+                        onSuccess={() => {
+                            setReassign(false)
+                            void onReload().catch(setError)
+                        }}
+                    />
+                )}
+                <PortalError error={error} />
+            </section>
+        )
+    }
     return (
         <section className="space-y-4 rounded-xl border p-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -371,7 +405,7 @@ export function PortalReviewForm({
                         。供应商提报资料保持不变，单位、规格含义或报价变化请退回供应商确认。
                     </p>
                 </div>
-                {task.allowed_actions?.includes("REASSIGN") && (
+                {canReassign && (
                     <Button
                         id="supplier-portal-review-reassign-toggle"
                         variant="outline"
@@ -430,7 +464,7 @@ export function PortalReviewForm({
                 }}
                 id="supplier-portal-review-candidates-retry"
             />
-            {reassign && (
+            {canReassign && reassign && (
                 <PortalReassignForm
                     task={task}
                     onReload={onReload}
@@ -440,7 +474,7 @@ export function PortalReviewForm({
                     }}
                 />
             )}
-            {createDictionary && rawProduct && (
+            {canReview && createDictionary && rawProduct && (
                 <PortalDictionaryCreateDialog
                     kind={createDictionary.kind}
                     productKind={rawProduct.product_kind}
@@ -773,7 +807,10 @@ export function PortalReviewForm({
                                                                 row.rowId,
                                                         )
                                                     return update
-                                                        ? { ...row, ...update }
+                                                        ? {
+                                                              ...row,
+                                                              ...update,
+                                                          }
                                                         : row
                                                 },
                                             ),
@@ -820,7 +857,10 @@ export function PortalReviewForm({
                                             label: "请明确核对结果",
                                             disabled: true,
                                         },
-                                        { value: "new", label: "新建公司商品" },
+                                        {
+                                            value: "new",
+                                            label: "新建公司商品",
+                                        },
                                         ...(
                                             duplicates.data?.duplicates ?? []
                                         ).map((item) => ({

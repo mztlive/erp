@@ -12,11 +12,13 @@ export function SalesInvoiceOverview({
     summary,
     availability,
     canRead,
+    canSubmit,
     onCreate,
 }: {
     summary: { invoiced: ReactNode; uninvoiced: ReactNode }
     availability: ReturnType<typeof useInvoiceRequestAvailability>
     canRead: boolean
+    canSubmit: boolean
     onCreate?: () => void
 }) {
     const complete =
@@ -29,6 +31,13 @@ export function SalesInvoiceOverview({
         ["审批中金额", "pending_amount"],
         ["待财务开票", "approved_remaining_amount"],
     ] as const
+    const blockedReason = Array.from(
+        new Set(
+            availability
+                .map((query) => query.data?.unavailable_reason)
+                .filter(Boolean),
+        ),
+    ).join("；")
     return (
         <section
             aria-label="开票概况"
@@ -44,10 +53,14 @@ export function SalesInvoiceOverview({
                         已开票净额只统计分配到本单的含税净额，已扣除冲减金额。未开票金额包含审批中及待财务开票的金额；可申请金额已扣除这些占用。开票与回款分别统计。
                     </DetailHint>
                 </div>
-                {onCreate ? (
+                {canSubmit ? (
                     <Button
                         id="invoice-request-create"
                         size="sm"
+                        disabled={!onCreate}
+                        title={
+                            !onCreate ? blockedReason || undefined : undefined
+                        }
                         onClick={onCreate}
                     >
                         申请开票
@@ -118,18 +131,9 @@ export function SalesInvoiceOverview({
                             </Button>
                         </div>
                     ) : null}
-                    {complete && !onCreate ? (
+                    {complete && canSubmit && !onCreate && blockedReason ? (
                         <p className="mt-2 text-xs text-muted-foreground">
-                            {Array.from(
-                                new Set(
-                                    availability
-                                        .map(
-                                            (query) =>
-                                                query.data?.unavailable_reason,
-                                        )
-                                        .filter(Boolean),
-                                ),
-                            ).join("；") || "当前账号没有申请开票的权限。"}
+                            {blockedReason}
                         </p>
                     ) : null}
                     {onCreate ? (

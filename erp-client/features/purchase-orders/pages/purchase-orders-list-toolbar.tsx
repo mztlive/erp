@@ -26,6 +26,7 @@ const prefix = "procurement-orders-list"
 export type PurchaseOrdersListToolbarProps = {
     typeDraft: PurchaseType | "all"
     setTypeDraft: (value: PurchaseType | "all") => void
+    canFilterOwner: boolean
     ownerDraft: string
     setOwnerDraft: (value: string) => void
     searchInputRef: React.RefObject<HTMLInputElement | null>
@@ -44,6 +45,7 @@ export type PurchaseOrdersListToolbarProps = {
 export function PurchaseOrdersListToolbar({
     typeDraft,
     setTypeDraft,
+    canFilterOwner,
     ownerDraft,
     setOwnerDraft,
     searchInputRef,
@@ -116,16 +118,18 @@ export function PurchaseOrdersListToolbar({
                             )}
                         </SelectContent>
                     </Select>
-                    <div className="empty:hidden w-56 max-w-full min-w-0">
-                        <PersonDirectoryFilter
-                            id="procurement-orders-list-owner"
-                            category="procurement"
-                            label="采购负责人"
-                            hideLabel
-                            value={ownerDraft}
-                            onChange={setOwnerDraft}
-                        />
-                    </div>
+                    {canFilterOwner && (
+                        <div className="empty:hidden w-56 max-w-full min-w-0">
+                            <PersonDirectoryFilter
+                                id="procurement-orders-list-owner"
+                                category="procurement"
+                                label="采购负责人"
+                                hideLabel
+                                value={ownerDraft}
+                                onChange={setOwnerDraft}
+                            />
+                        </div>
+                    )}
                 </div>
             }
             queryButtonId={`${prefix}-apply-filters`}

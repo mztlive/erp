@@ -9,6 +9,7 @@ import { baseCenter } from "./base"
 
 export async function centerBrand(
     stableId: string,
+    canReadAssets = true,
 ): Promise<MasterDataCenterView | null> {
     const items = await fetchAllPages<ProductBrandDto>(
         "/admin/product-brands",
@@ -18,7 +19,8 @@ export async function centerBrand(
     if (!dto) return null
     const row = mapBrandRow(dto)
     const logoAssetId = dto.logo_asset_id?.trim()
-    const logoAsset = logoAssetId ? await fetchFileAsset(logoAssetId) : null
+    const logoAsset =
+        canReadAssets && logoAssetId ? await fetchFileAsset(logoAssetId) : null
     const logoUrl = logoAsset?.public_url?.trim()
     return baseCenter("brands", row, {
         resourceFacts: [

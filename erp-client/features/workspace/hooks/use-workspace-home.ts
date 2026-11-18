@@ -25,6 +25,7 @@ import {
     workspaceHomeKeys,
 } from "@/features/workspace/hooks/queries"
 import {
+    DEFAULT_WORKSPACE_SORT,
     buildWorkspaceSearchParams,
     metricKeyFromUrlState,
     parseWorkspaceSearchParams,
@@ -124,7 +125,7 @@ export function useWorkspaceHome() {
             viewStates.current[urlState.view] = urlState
             const target = urlStateFromMetricKey(key, {
                 view: urlState.view,
-                sort: "priority_due",
+                sort: DEFAULT_WORKSPACE_SORT,
             })
             const saved = viewStates.current[target.view]
             const next = {
@@ -185,7 +186,7 @@ export function useWorkspaceHome() {
     const clearFilters = React.useCallback(() => {
         replaceUrl({
             view: urlState.view,
-            sort: "priority_due",
+            sort: DEFAULT_WORKSPACE_SORT,
             queue: true,
             overviewView: urlState.overviewView,
             overviewPeriod: urlState.overviewPeriod,

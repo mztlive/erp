@@ -15,7 +15,7 @@ import { formatDateTime } from "@/lib/datetime"
 export type BalanceColumnsInput = {
     rowFocusRef: { current: Map<string, HTMLButtonElement | null> }
     openDetail: (balanceId: string) => void
-    startAdjustment: (row: StockBalanceRow) => Promise<void>
+    startAdjustment?: (row: StockBalanceRow) => Promise<void>
     isCreating?: boolean
 }
 
@@ -140,7 +140,7 @@ export function buildBalanceColumns({
                         onClick: () => openDetail(row.original.balanceId),
                     },
                 ]
-                if (hasCreateAction) {
+                if (hasCreateAction && startAdjustment) {
                     actions.push({
                         id: `inventory-ledger-balance-row-${segment}-adjust`,
                         label: isCreating ? "创建中…" : "库存调整",

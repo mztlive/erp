@@ -9,6 +9,11 @@ import type {
     FulfillmentOperation,
 } from "@/features/fulfillment-operations/types"
 
+import { QuantityValue } from "@/components/business"
+import {
+    RESULT_LABEL,
+    SERVICE_RESULT_LABEL,
+} from "@/features/fulfillment-operations/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 
 /**
@@ -152,4 +157,141 @@ export function FulfillmentDraftForm({
                 />
             )
     }
+}
+
+export function FulfillmentDraftReadOnly({
+    operation,
+    draft,
+}: {
+    operation: FulfillmentOperation
+    draft: FulfillmentDraft
+}) {
+    const delivery =
+        draft.type === "WAREHOUSE_SHIP" || draft.type === "SUPPLIER_DIRECT"
+            ? draft
+            : undefined
+    const note = "evidenceNote" in draft ? draft.evidenceNote : undefined
+    return (
+        <section aria-label="履约明细" className="flex flex-col gap-3 text-sm">
+            <ul className="divide-y rounded-lg border">
+                {operation.lines.map((line) => {
+                    const receipt =
+                        draft.type === "RECEIPT"
+                            ? draft.lines.find(
+                                  (item) =>
+                                      item.purchaseRevisionLineId ===
+                                      line.purchaseRevisionLineId,
+                              )
+                            : undefined
+                    const saved =
+                        draft.type !== "RECEIPT"
+                            ? draft.lines.find(
+                                  (item) =>
+                                      item.salesOrderLineId ===
+                                      line.salesOrderLineId,
+                              )
+                            : undefined
+                    return (
+                        <li
+                            key={line.lineId}
+                            className="flex flex-col gap-1 px-4 py-3"
+                        >
+                            <span className="font-medium">{line.itemName}</span>
+                            <span className="text-muted-foreground">
+                                待处理{" "}
+                                <QuantityValue
+                                    value={line.remainingQuantity}
+                                    unit={line.unitCode}
+                                />
+                            </span>
+                            {receipt && (
+                                <span>
+                                    实收{" "}
+                                    <QuantityValue
+                                        value={receipt.receivedQuantity}
+                                        unit={line.unitCode}
+                                    />{" "}
+                                    · 合格{" "}
+                                    <QuantityValue
+                                        value={receipt.qualifiedQuantity}
+                                        unit={line.unitCode}
+                                    />{" "}
+                                    · 不合格{" "}
+                                    <QuantityValue
+                                        value={receipt.rejectedQuantity}
+                                        unit={line.unitCode}
+                                    />
+                                </span>
+                            )}
+                            {saved && (
+                                <span>
+                                    已填数量{" "}
+                                    <QuantityValue
+                                        value={saved.quantity}
+                                        unit={line.unitCode}
+                                    />
+                                </span>
+                            )}
+                            {receipt?.evidenceNote && (
+                                <span>{receipt.evidenceNote}</span>
+                            )}
+                            {saved &&
+                                "evidenceNote" in saved &&
+                                typeof saved.evidenceNote === "string" &&
+                                saved.evidenceNote && (
+                                    <span>{saved.evidenceNote}</span>
+                                )}
+                        </li>
+                    )
+                })}
+            </ul>
+            {draft.type === "ELECTRONIC" && (
+                <p>
+                    接收方：{draft.recipientMasked || "—"} · 交付结果：
+                    {RESULT_LABEL[draft.result]}
+                </p>
+            )}
+            {draft.type === "SERVICE" && (
+                <p>
+                    服务地点：{draft.serviceLocation || "—"} · 服务结果：
+                    {draft.result ? SERVICE_RESULT_LABEL[draft.result] : "—"}
+                    {draft.completionNote ? ` · ${draft.completionNote}` : ""}
+                </p>
+            )}
+            {note && <p>{note}</p>}
+            {delivery?.addressSnapshot?.destinations.map((destination) => (
+                <section
+                    key={destination.key}
+                    className="flex flex-col gap-1 rounded-lg border p-3"
+                >
+                    <p>
+                        {destination.recipient} · {destination.phone}
+                    </p>
+                    <p>{destination.address}</p>
+                    {delivery.packing?.packages
+                        .filter(
+                            (parcel) =>
+                                parcel.destination_key === destination.key,
+                        )
+                        .map((parcel) => (
+                            <p key={parcel.id}>
+                                {parcel.carrier} ·{" "}
+                                <span className="num">
+                                    {parcel.tracking_no}
+                                </span>
+                            </p>
+                        ))}
+                </section>
+            ))}
+            {!delivery?.packing?.packages.length &&
+                delivery?.trackingEntries?.map((entry) => (
+                    <p
+                        key={`${entry.salesOrderLineId}:${entry.carrier}:${entry.trackingNo}`}
+                    >
+                        {entry.carrier || "物流单号"} ·{" "}
+                        <span className="num">{entry.trackingNo}</span>
+                    </p>
+                ))}
+        </section>
+    )
 }

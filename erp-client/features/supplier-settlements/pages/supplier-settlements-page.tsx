@@ -2,6 +2,8 @@
 
 import { buildWorkspaceDetailHref } from "@/lib/workspace-detail-href"
 import * as React from "react"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 import { usePathname, useRouter, useSearchParams } from "@/lib/navigation"
 
 import { SettlementCenter } from "@/features/supplier-settlements/components/settlement-center"
@@ -20,13 +22,52 @@ export function SupplierSettlementsPage() {
     const pathMatch = pathname.match(/\/supplier-api\/settlements\/([^/]+)$/)
     const pathStatementId = pathMatch?.[1]
 
-    const urlState = React.useMemo(() => {
-        const parsed = parseSettlementsSearchParams(searchParams)
-        if (pathStatementId && !parsed.statementId) {
-            return { ...parsed, statementId: pathStatementId }
-        }
-        return parsed
+    const account = useAccountProfileQuery()
+    const canUsePeople = hasPermission(
+        account.data?.permissions,
+        "business_person:list",
+    )
+    const canUseOrg = hasPermission(account.data?.permissions, "org_unit:list")
+    const canFilterSupplier = hasPermission(
+        account.data?.permissions,
+        "supplier:list",
+    )
+    const sanitize = React.useCallback(
+        (state: SettlementsUrlState): SettlementsUrlState => {
+            if (state.statementId) return state
+            const next = { ...state }
+            if (!canFilterSupplier) next.supplierId = undefined
+            if (!canUsePeople) {
+                next.ownerUserIds = undefined
+                next.operatorUserIds = undefined
+                next.handlerUserIds = undefined
+            }
+            if (!canUseOrg) {
+                next.orgUnitIds = undefined
+                next.includeDescendants = false
+            }
+            if (
+                next.supplierId !== state.supplierId ||
+                next.ownerUserIds !== state.ownerUserIds ||
+                next.operatorUserIds !== state.operatorUserIds ||
+                next.handlerUserIds !== state.handlerUserIds ||
+                next.orgUnitIds !== state.orgUnitIds ||
+                next.includeDescendants !== state.includeDescendants
+            ) {
+                next.page = 1
+                next.scopeVersion = undefined
+            }
+            return next
+        },
+        [canFilterSupplier, canUseOrg, canUsePeople],
+    )
+    const parsed = React.useMemo(() => {
+        const state = parseSettlementsSearchParams(searchParams)
+        return pathStatementId && !state.statementId
+            ? { ...state, statementId: pathStatementId }
+            : state
     }, [searchParams, pathStatementId])
+    const urlState = React.useMemo(() => sanitize(parsed), [parsed, sanitize])
 
     const replaceUrl = React.useCallback(
         (next: SettlementsUrlState) => {
@@ -53,10 +94,21 @@ export function SupplierSettlementsPage() {
 
     const patchUrl = React.useCallback(
         (patch: Partial<SettlementsUrlState>) => {
-            replaceUrl({ ...urlState, ...patch })
+            replaceUrl(sanitize({ ...urlState, ...patch }))
         },
-        [replaceUrl, urlState],
+        [replaceUrl, sanitize, urlState],
     )
+
+    React.useEffect(() => {
+        if (
+            account.data &&
+            !urlState.statementId &&
+            buildSettlementsSearchParams(parsed) !==
+                buildSettlementsSearchParams(urlState)
+        ) {
+            replaceUrl(urlState)
+        }
+    }, [account.data, parsed, replaceUrl, urlState])
 
     if (urlState.statementId) {
         const taskReturnTo = urlState.workItemId

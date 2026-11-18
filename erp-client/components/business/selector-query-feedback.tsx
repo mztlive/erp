@@ -1,7 +1,7 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import { getErrorMessage } from "@/lib/api/errors"
+import { getErrorMessage, isPermissionDeniedError } from "@/lib/api/errors"
 
 /** 候选状态独立于业务列表；有已选值时仍显示失败和重试入口。 */
 export function SelectorQueryFeedback({
@@ -19,7 +19,7 @@ export function SelectorQueryFeedback({
     noScopeLabel?: string
     onRetry: () => void
 }) {
-    if (!failed && !noScope) return null
+    if ((!failed && !noScope) || isPermissionDeniedError(error)) return null
     return (
         <div
             role={failed ? "alert" : "status"}

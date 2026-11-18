@@ -29,7 +29,7 @@ export type SupplierOrdersListTableProps = {
     onSortingChange: (next: SortingState) => void
     pagination: PaginationState
     onPaginationChange: (next: PaginationState) => void
-    onRowPreview: (orderId: string) => void
+    onRowPreview?: (orderId: string) => void
 }
 
 export function SupplierOrdersListTable({
@@ -125,8 +125,12 @@ export function SupplierOrdersListTable({
                 left: ["identity"],
                 right: ["actions"],
             }}
-            onRowPreview={(row) => onRowPreview(row.orderId)}
-            onRowOpen={(row) => onRowPreview(row.orderId)}
+            onRowPreview={
+                onRowPreview ? (row) => onRowPreview(row.orderId) : undefined
+            }
+            onRowOpen={
+                onRowPreview ? (row) => onRowPreview(row.orderId) : undefined
+            }
         />
     )
 }

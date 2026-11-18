@@ -5,6 +5,7 @@ import { TriangleAlertIcon } from "lucide-react"
 
 import { BusinessStatusBadge, QuickPreviewSheet } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { SupplierOrderPreviewPanel } from "@/features/supplier-orders/components/supplier-order-preview-panel"
@@ -96,21 +97,25 @@ export function SupplierOrdersListPreviewSheet({
                         </Button>
                         {preview.allowedActions.includes("QUERY_RESULT") &&
                         !preview.workItem ? (
-                            <LoadingButton
-                                id="supplier-orders-list-preview-query"
-                                loading={queryPending}
-                                type="button"
-                                disabled={queryPending}
-                                onClick={() => {
-                                    void onQueryResult({
-                                        orderId: preview.order.id,
-                                        lockVersion: preview.order.lockVersion,
-                                        placeActionId: preview.placeActionId,
-                                    })
-                                }}
-                            >
-                                {queryPending ? "查询中…" : "查询原结果"}
-                            </LoadingButton>
+                            <PermissionGuard permission="supplier_fulfillment_order:investigate">
+                                <LoadingButton
+                                    id="supplier-orders-list-preview-query"
+                                    loading={queryPending}
+                                    type="button"
+                                    disabled={queryPending}
+                                    onClick={() => {
+                                        void onQueryResult({
+                                            orderId: preview.order.id,
+                                            lockVersion:
+                                                preview.order.lockVersion,
+                                            placeActionId:
+                                                preview.placeActionId,
+                                        })
+                                    }}
+                                >
+                                    {queryPending ? "查询中…" : "查询原结果"}
+                                </LoadingButton>
+                            </PermissionGuard>
                         ) : null}
                     </>
                 ) : null

@@ -92,22 +92,54 @@ function isScopeConflict(error: unknown): boolean {
 export const BooksListPage = () => {
     const router = useRouter()
     const profile = useAccountProfileQuery()
-    const canCopy =
-        hasPermission(
-            profile.data?.permissions,
-            "sales_selection_booklet:create",
-        ) &&
-        hasPermission(profile.data?.permissions, "sales_selection_booklet:get")
+    const permissions = profile.data?.permissions
+    const canCreate = hasPermission(
+        permissions,
+        "sales_selection_booklet:create",
+    )
+    const canOpen = hasPermission(permissions, "sales_selection_booklet:get")
+    const canCopy = canCreate && canOpen
+    const canStartFromPool =
+        canCreate && hasPermission(permissions, "sellable_sku:list")
+    const canOpenProposal = hasPermission(
+        permissions,
+        "sales_selection_proposal:get",
+    )
+    const canFilterOwners = hasPermission(permissions, "sales_person:list")
+    const canFilterOrgs = hasPermission(permissions, "org_unit:list")
     const [copySource, setCopySource] = React.useState<SelectionBook | null>(
         null,
     )
     const pathname = usePathname()
     const searchParams = useSearchParams()
-    const query = React.useMemo(
-        () =>
-            queryFromSearchParams(new URLSearchParams(searchParams.toString())),
-        [searchParams],
+    const stripFilters = React.useCallback(
+        (params: URLSearchParams) => {
+            const keys = [
+                ...(!canFilterOwners ? ["owner_user_ids"] : []),
+                ...(!canFilterOrgs
+                    ? ["org_unit_ids", "include_descendants"]
+                    : []),
+            ]
+            const changed = keys.some((key) => params.has(key))
+            for (const key of keys) params.delete(key)
+            if (changed) params.delete("page")
+            return changed
+        },
+        [canFilterOwners, canFilterOrgs],
     )
+    const query = React.useMemo(() => {
+        const params = new URLSearchParams(searchParams.toString())
+        stripFilters(params)
+        return queryFromSearchParams(params)
+    }, [searchParams, stripFilters])
+
+    React.useEffect(() => {
+        if (!profile.data) return
+        const params = new URLSearchParams(searchParams.toString())
+        if (!stripFilters(params)) return
+        const qs = params.toString()
+        router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+    }, [pathname, profile.data, router, searchParams, stripFilters])
 
     const patchUrl = React.useCallback(
         (patch: Record<string, string | null>) => {
@@ -141,13 +173,18 @@ export const BooksListPage = () => {
                     next.submit_mode && next.submit_mode !== "ALL"
                         ? next.submit_mode
                         : null,
-                owner_user_ids: next.owner_user_ids ?? null,
-                org_unit_ids: next.org_unit_ids ?? null,
-                include_descendants: next.include_descendants ? "1" : null,
+                owner_user_ids: canFilterOwners
+                    ? (next.owner_user_ids ?? null)
+                    : null,
+                org_unit_ids: canFilterOrgs
+                    ? (next.org_unit_ids ?? null)
+                    : null,
+                include_descendants:
+                    canFilterOrgs && next.include_descendants ? "1" : null,
                 page: null,
             })
         },
-        [patchUrl],
+        [canFilterOrgs, canFilterOwners, patchUrl],
     )
 
     const handleReset = React.useCallback(() => {
@@ -225,6 +262,7 @@ export const BooksListPage = () => {
                 <PageActions
                     actions={[
                         {
+                            hidden: !canStartFromPool,
                             actionKey: "create",
                             id: "sales-selection-list-create",
                             label: "从商品池发起",
@@ -264,6 +302,8 @@ export const BooksListPage = () => {
                 toolbar={
                     <BooksListFilterBar
                         query={query}
+                        canFilterOwners={canFilterOwners}
+                        canFilterOrgs={canFilterOrgs}
                         onApply={handleApply}
                         onReset={handleReset}
                         resultCount={listQuery.data ? total : undefined}
@@ -286,12 +326,15 @@ export const BooksListPage = () => {
                         page={query.page ?? 1}
                         pageSize={query.page_size ?? DEFAULT_PAGE_SIZE}
                         onPaginationChange={handlePaginationChange}
+                        canOpen={canOpen}
+                        canOpenProposal={canOpenProposal}
+                        canCreate={canStartFromPool}
                         onRowNavigate={handleRowNavigate}
                         onCopy={canCopy ? setCopySource : undefined}
                     />
                 }
             />
-            {copySource ? (
+            {canCopy && copySource ? (
                 <BookCopyDialog
                     source={copySource}
                     onClose={() => setCopySource(null)}

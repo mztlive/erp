@@ -1,4 +1,4 @@
-/** 仓库对象中心：修订时间线 + W10 库存摘要链接 + 敏感字段占位。 */
+/** 仓库对象中心：修订时间线 + W10 库存摘要链接。 */
 
 import type {
     WarehouseDto,
@@ -55,12 +55,5 @@ export async function centerWarehouse(
             timeline.length > 0
                 ? timeline
                 : baseCenter("warehouses", row).revisionTimeline,
-        sensitiveFields: [
-            {
-                label: "联系人 / 地址",
-                maskedValue: "（敏感字段，需授权查看）",
-                visibility: "masked",
-            },
-        ],
     })
 }

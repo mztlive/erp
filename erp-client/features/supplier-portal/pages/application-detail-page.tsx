@@ -123,16 +123,12 @@ export function PortalApplicationDetailPage({
             />
             <PortalApplicationContent application={application} />
             <div className="flex flex-wrap gap-2">
-                {editable && (
+                {writable && editable && (
                     <>
                         <Button
                             id="supplier-portal-application-edit"
                             variant="outline"
-                            disabled={
-                                !writable ||
-                                command.isPending ||
-                                !!intent.current
-                            }
+                            disabled={command.isPending || !!intent.current}
                             onClick={() => setEditing(!editing)}
                         >
                             {editing ? "收起编辑" : "修改申请"}
@@ -140,7 +136,6 @@ export function PortalApplicationDetailPage({
                         <Button
                             id="supplier-portal-application-submit"
                             disabled={
-                                !writable ||
                                 editing ||
                                 command.isPending ||
                                 (intent.current != null &&
@@ -154,12 +149,11 @@ export function PortalApplicationDetailPage({
                         </Button>
                     </>
                 )}
-                {application.status === "pending" && (
+                {writable && application.status === "pending" && (
                     <Button
                         id="supplier-portal-application-withdraw"
                         variant="outline"
                         disabled={
-                            !writable ||
                             command.isPending ||
                             (intent.current != null &&
                                 intent.current.action !== "withdraw")
@@ -172,21 +166,22 @@ export function PortalApplicationDetailPage({
                     </Button>
                 )}
             </div>
-            {editing && application.kind === "new_product" && (
+            {writable && editing && application.kind === "new_product" && (
                 <PortalNewProductEditor
                     key={application.id}
                     draft={application}
                 />
             )}
-            {editing &&
+            {writable &&
+                editing &&
                 (application.kind === "quote" ||
                     application.kind === "terms") && (
                     <PortalTermsForm key={application.id} draft={application} />
                 )}
-            {editing && application.kind === "stop" && (
+            {writable && editing && application.kind === "stop" && (
                 <PortalStopForm key={application.id} draft={application} />
             )}
-            {editing && application.kind === "cooperation" && (
+            {writable && editing && application.kind === "cooperation" && (
                 <>
                     <PortalError
                         error={cooperation.error}

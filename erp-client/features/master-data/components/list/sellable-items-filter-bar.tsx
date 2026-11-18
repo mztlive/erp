@@ -1,5 +1,7 @@
 "use client"
 
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 import { PermissionGuard } from "@/features/auth/components/permission-guard"
 
 import * as React from "react"
@@ -89,6 +91,10 @@ export function SellableItemsFilterBar({
     failed: boolean
     statusActions?: React.ReactNode
 }) {
+    const account = useAccountProfileQuery()
+    const canFilterBrand =
+        account.isSuccess &&
+        hasPermission(account.data.permissions, "product_brand:list")
     const prefix = idPrefix
     const panelId = `${prefix}-more-panel`
     const priceErrorId = `${prefix}-price-error`
@@ -202,27 +208,29 @@ export function SellableItemsFilterBar({
             }
             morePanel={
                 <div className="grid min-w-0 gap-5">
-                    <fieldset className="min-w-0">
-                        <legend className="mb-3 text-xs font-medium">
-                            品牌与供货
-                        </legend>
-                        <div className="grid min-w-0 gap-3 sm:grid-cols-2">
-                            <DirectoryOptionFilter
-                                {...brandDirectoryFilterBindings(
-                                    directory,
-                                    () =>
-                                        filterOptions.refetch({
-                                            throwOnError: true,
-                                        }),
-                                )}
-                                id={`${prefix}-brand`}
-                                comboboxClassName="w-full"
-                                ariaLabel="品牌"
-                                value={f.productBrandIdDraft}
-                                onValueChange={f.setProductBrandIdDraft}
-                            />
-                        </div>
-                    </fieldset>
+                    {canFilterBrand ? (
+                        <fieldset className="min-w-0">
+                            <legend className="mb-3 text-xs font-medium">
+                                品牌与供货
+                            </legend>
+                            <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                                <DirectoryOptionFilter
+                                    {...brandDirectoryFilterBindings(
+                                        directory,
+                                        () =>
+                                            filterOptions.refetch({
+                                                throwOnError: true,
+                                            }),
+                                    )}
+                                    id={`${prefix}-brand`}
+                                    comboboxClassName="w-full"
+                                    ariaLabel="品牌"
+                                    value={f.productBrandIdDraft}
+                                    onValueChange={f.setProductBrandIdDraft}
+                                />
+                            </div>
+                        </fieldset>
+                    ) : null}
                     {deliveryFilter ? (
                         <SellableDeliveryFilterFields
                             idPrefix={prefix}

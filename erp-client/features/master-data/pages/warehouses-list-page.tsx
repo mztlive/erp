@@ -26,16 +26,19 @@ import { hasPermission } from "@/lib/permissions"
 
 export function WarehousesListPage() {
     const accountProfile = useAccountProfileQuery()
-    const canMaintainHandlers = hasPermission(
-        accountProfile.data?.permissions,
-        "warehouse:update",
-    )
+    const permissions = accountProfile.isSuccess
+        ? accountProfile.data.permissions
+        : undefined
+    const canReadDetail = hasPermission(permissions, "warehouse_revision:list")
+    const canMaintainHandlers = hasPermission(permissions, "warehouse:update")
     const { searchInputRef, resultsHeadingRef, lastFocusedRowId } =
         useListPageChrome()
     const state = useDictionaryListState({
         resource: "warehouses",
         searchInputRef,
-        enablePreview: true,
+        enablePreview: canReadDetail,
+        enableRevisionFilter: canReadDetail,
+        filterPermissionsReady: accountProfile.isSuccess,
     })
     const exportPending = state.exportPending
     const columns = useWarehouseListColumns({
@@ -44,6 +47,7 @@ export function WarehousesListPage() {
         onPreview: state.setPreviewId,
         onReviseTarget: state.setReviseTarget,
         canMaintainHandlers,
+        canReadRevisions: canReadDetail,
     })
     const { filters } = state
     const hasActiveFilters =
@@ -54,6 +58,7 @@ export function WarehousesListPage() {
 
     return (
         <ListPageFrame
+            resource="warehouses"
             title="仓库"
             description="查看仓库资料与库存摘要。"
             exportMeta={state.exportMeta}
@@ -69,6 +74,7 @@ export function WarehousesListPage() {
                     actionKey: "create",
                     label: masterDataCopy.actionCreateClosed,
                     icon: PlusIcon,
+                    hidden: !hasPermission(permissions, "warehouse:create"),
                     disabled: true,
                     title: masterDataCopy.warehouseWriteBody,
                 },
@@ -94,6 +100,7 @@ export function WarehousesListPage() {
                     <DictionaryListToolbar
                         idPrefix="master-data-warehouses-list-toolbar"
                         searchInputRef={searchInputRef}
+                        showRevisionFilter={canReadDetail}
                         filters={filters}
                         searchPlaceholder={masterDataSearchPlaceholder(
                             "warehouses",
@@ -137,22 +144,27 @@ export function WarehousesListPage() {
             <WarehousePreviewSheet
                 previewRow={state.previewRow}
                 lastFocusedRowId={lastFocusedRowId}
-                previewDetail={state.previewDetailQuery.data}
-                previewDetailLoading={state.previewDetailQuery.isPending}
+                previewDetail={
+                    canReadDetail ? state.previewDetailQuery.data : undefined
+                }
+                previewDetailLoading={
+                    canReadDetail && state.previewDetailQuery.isPending
+                }
                 onClose={() => state.setPreviewId(null)}
                 onRevise={state.setReviseTarget}
                 onDisable={state.setDisableTarget}
                 canMaintainHandlers={canMaintainHandlers}
+                canReadRevisions={canReadDetail}
             />
             <WarehouseReviseDialog
-                open={state.reviseTarget != null}
+                open={canMaintainHandlers && state.reviseTarget != null}
                 onOpenChange={(open) => {
                     if (!open) state.setReviseTarget(null)
                 }}
                 target={state.reviseTarget}
             />
             <WarehouseDisableDialog
-                open={state.disableTarget != null}
+                open={canMaintainHandlers && state.disableTarget != null}
                 onOpenChange={(open) => {
                     if (!open) state.setDisableTarget(null)
                 }}

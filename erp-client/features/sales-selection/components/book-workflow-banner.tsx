@@ -81,11 +81,17 @@ type Operations = ReturnType<typeof useBookOperations>
 export function BookWorkflowBanner({
     detail,
     pending,
+    canPrepare,
+    canCopyLink,
+    canOpenProposal,
     operations,
     onEdit,
 }: {
     detail: SelectionBookDetail
     pending: boolean
+    canPrepare: boolean
+    canCopyLink: boolean
+    canOpenProposal: boolean
     operations: Operations
     onEdit?: () => void
 }) {
@@ -93,10 +99,11 @@ export function BookWorkflowBanner({
     const activeStep = failure ? 2 : resolveActiveStepIndex(detail.status)
     const isTerminal = detail.status === "CLOSED" || detail.status === "VOIDED"
     const bookId = bookIdentity(detail)
-    const publicHref = publicSelectionHref(
-        operations.copyLink.data?.public_url ?? detail.public_url,
-    )
-
+    const publicHref = canCopyLink
+        ? publicSelectionHref(
+              operations.copyLink.data?.public_url ?? detail.public_url,
+          )
+        : undefined
     const tierTotal = detail.tiers.length
     const completedTiers = detail.completed_tier_count ?? 0
     const preparePercent =
@@ -152,31 +159,35 @@ export function BookWorkflowBanner({
                                 ) : null
                             ) : (
                                 <>
-                                    <LoadingButton
-                                        id="sales-selection-failure-retry"
-                                        type="button"
-                                        size="sm"
-                                        loading={operations.prepare.isPending}
-                                        disabled={pending}
-                                        onClick={() =>
-                                            operations.prepare.mutate({
-                                                bookId,
-                                                kind: "FIRST_PREPARE",
-                                                expected_version:
-                                                    detail.version,
-                                                idempotency_key:
-                                                    createIdempotencyKey(),
-                                            })
-                                        }
-                                    >
-                                        <RefreshCwIcon
-                                            data-icon="inline-start"
-                                            aria-hidden="true"
-                                        />
-                                        {operations.prepare.isPending
-                                            ? "正在启动准备"
-                                            : "重新准备"}
-                                    </LoadingButton>
+                                    {canPrepare && (
+                                        <LoadingButton
+                                            id="sales-selection-failure-retry"
+                                            type="button"
+                                            size="sm"
+                                            loading={
+                                                operations.prepare.isPending
+                                            }
+                                            disabled={pending}
+                                            onClick={() =>
+                                                operations.prepare.mutate({
+                                                    bookId,
+                                                    kind: "FIRST_PREPARE",
+                                                    expected_version:
+                                                        detail.version,
+                                                    idempotency_key:
+                                                        createIdempotencyKey(),
+                                                })
+                                            }
+                                        >
+                                            <RefreshCwIcon
+                                                data-icon="inline-start"
+                                                aria-hidden="true"
+                                            />
+                                            {operations.prepare.isPending
+                                                ? "正在启动准备"
+                                                : "重新准备"}
+                                        </LoadingButton>
+                                    )}
                                     {onEdit ? (
                                         <Button
                                             id="sales-selection-failure-adjust"
@@ -461,7 +472,7 @@ export function BookWorkflowBanner({
                             可进入销售方案查看客户确认明细并继续开单。
                         </p>
                     </div>
-                    {detail.proposal_id ? (
+                    {canOpenProposal && detail.proposal_id ? (
                         <Button
                             id="sales-selection-detail-banner-open-proposal"
                             type="button"

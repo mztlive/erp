@@ -29,6 +29,8 @@ export type LedgerAppliedChip = Readonly<{
 }>
 
 export interface UseLedgerFiltersInput {
+    canFilterPeople: boolean
+    canFilterWarehouse: boolean
     view: InventoryView
     /** Applied：URL 是唯一事实源；非法枚举已在解析时降级为默认。 */
     q: string
@@ -52,6 +54,8 @@ export interface UseLedgerFiltersInput {
  * 查询按钮、Enter 与展开面板共用 applyFilters；重置更多条件只清草稿。
  */
 export function useLedgerFilters({
+    canFilterPeople,
+    canFilterWarehouse,
     view,
     q,
     warehouseId,
@@ -103,6 +107,15 @@ export function useLedgerFilters({
     )
     // 深链只显示已生效标签，不自动打开面板。
     const [panelOpen, setPanelOpen] = React.useState(false)
+    React.useEffect(() => {
+        if (!canFilterWarehouse) setWarehouseIdDraft(null)
+        if (!canFilterPeople) {
+            setOperatorUserIdsDraft("")
+            setApplicantUserIdsDraft("")
+            setHandlerUserIdsDraft("")
+            if (view === "adjustment") setPanelOpen(false)
+        }
+    }, [canFilterPeople, canFilterWarehouse, view])
     const [filterError, setFilterError] = React.useState<string | null>(null)
 
     /** 唯一提交路径：查询按钮与 Enter 共用。 */
@@ -284,17 +297,21 @@ export function useLedgerFilters({
 
     const hasPendingChanges =
         searchDraft.trim() !== q.trim() ||
-        (warehouseIdDraft ?? null) !== (warehouseId ?? null) ||
+        (canFilterWarehouse &&
+            (warehouseIdDraft ?? null) !== (warehouseId ?? null)) ||
         availabilityDraft !== availability ||
         [...movementTypeDraft].sort().join(",") !==
             [...movementType].sort().join(",") ||
         occurredFromDraft !== (occurredFrom ?? "") ||
         occurredToDraft !== (occurredTo ?? "") ||
-        operatorUserIdsDraft !== (operatorUserIds ?? "") ||
-        applicantUserIdsDraft !== (applicantUserIds ?? "") ||
-        handlerUserIdsDraft !== (handlerUserIds ?? "")
+        (canFilterPeople &&
+            (operatorUserIdsDraft !== (operatorUserIds ?? "") ||
+                applicantUserIdsDraft !== (applicantUserIds ?? "") ||
+                handlerUserIdsDraft !== (handlerUserIds ?? "")))
 
     return {
+        canFilterPeople,
+        canFilterWarehouse,
         searchDraft,
         setSearchDraft,
         warehouseIdDraft,

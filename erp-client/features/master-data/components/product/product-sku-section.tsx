@@ -24,6 +24,7 @@ type ProductSkuSectionProps = {
     idPrefix?: string
     isCreate: boolean
     canRevise: boolean
+    canEditLifecycle: boolean
     name: string
     fields: ProductFields
     specDrafts: readonly ProductSpecDraft[]
@@ -43,7 +44,7 @@ type ProductSkuSectionProps = {
     setBatchMarketPrice: (next: string) => void
     onApplyBatchReferencePrices: () => void
     inventoryActionHint: string | undefined
-    onOpenInventory: (
+    onOpenInventory?: (
         skuId: string | undefined,
         trigger: HTMLButtonElement,
     ) => void
@@ -54,6 +55,7 @@ function ProductSkuSection({
     idPrefix,
     isCreate,
     canRevise,
+    canEditLifecycle,
     name,
     fields,
     specDrafts,
@@ -150,7 +152,7 @@ function ProductSkuSection({
                             批量设置价格
                         </Button>
                     ) : null}
-                    {showInventory ? (
+                    {showInventory && onOpenInventory ? (
                         <Button
                             id={`${prefix}-inventory`}
                             type="button"
@@ -242,6 +244,7 @@ function ProductSkuSection({
                 </p>
             ) : (
                 <ProductSkuTable
+                    canEditLifecycle={canEditLifecycle}
                     fields={fields}
                     activeSpecs={activeSpecs}
                     canRevise={canRevise}

@@ -1,6 +1,7 @@
 "use client"
 import { useEffect, useState } from "react"
 import { OptionCombobox } from "@/components/business"
+import { isPermissionDeniedError } from "@/lib/api/errors"
 import { useCompaniesQuery, useCompanyQuery } from "./queries"
 
 /** 只选择我方启用公司，停用的历史已选值仍可回显。 */
@@ -29,8 +30,14 @@ export const CompanySearchCombobox = ({
         page_size: 100,
     })
     const selected = useCompanyQuery(value)
+    if (isPermissionDeniedError(list.error)) return null
+
     const rows = [...(list.data?.items ?? [])]
-    if (selected.data && !rows.some((row) => row.id === selected.data?.id))
+    if (
+        !isPermissionDeniedError(selected.error) &&
+        selected.data &&
+        !rows.some((row) => row.id === selected.data?.id)
+    )
         rows.unshift(selected.data)
     return (
         <OptionCombobox
@@ -50,7 +57,7 @@ export const CompanySearchCombobox = ({
             onRefresh={() =>
                 Promise.all([
                     list.refetch({ throwOnError: true }),
-                    ...(value
+                    ...(value && !isPermissionDeniedError(selected.error)
                         ? [selected.refetch({ throwOnError: true })]
                         : []),
                 ])

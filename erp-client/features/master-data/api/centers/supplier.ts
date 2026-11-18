@@ -31,6 +31,7 @@ import { baseCenter } from "./base"
 
 export async function centerSupplier(
     stableId: string,
+    canReadAssets = true,
 ): Promise<MasterDataCenterView | null> {
     let detail: SupplierDetailDto
     try {
@@ -108,11 +109,13 @@ export async function centerSupplier(
         list.push(q)
         qualGroups.set(q.qualification_type, list)
     }
-    const qualAssets = await resolveMediaAssets(
-        qualifications
-            .map((q) => q.attachment_id)
-            .filter((id): id is string => Boolean(id?.trim())),
-    )
+    const qualAssets = canReadAssets
+        ? await resolveMediaAssets(
+              qualifications
+                  .map((q) => q.attachment_id)
+                  .filter((id): id is string => Boolean(id?.trim())),
+          )
+        : new Map()
     const qualFieldEntries = (
         type: string,
     ): { fileName: string; assetId: string; url: string }[] =>

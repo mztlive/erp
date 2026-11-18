@@ -1,5 +1,6 @@
 "use client"
 
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
 import * as React from "react"
 
 import { BusinessEmptyState, BusinessFailureState } from "@/components/business"
@@ -173,23 +174,28 @@ export function CaliberQueryBody({
                 patchDual={patchDual}
             />
             <div className="flex min-w-0 flex-wrap items-center gap-2">
-                {data.canExport && (
-                    <LoadingButton
-                        id={`${idPrefix}-export`}
-                        type="button"
-                        loading={exportMutation.isPending}
-                        variant="outline"
-                        size="sm"
-                        disabled={
-                            !data.canExport ||
-                            data.rows.total === 0 ||
-                            exportMutation.isPending
-                        }
-                        onClick={() => void handleExport()}
-                    >
-                        {exportMutation.isPending ? "导出中…" : exportIdleLabel}
-                    </LoadingButton>
-                )}
+                <PermissionGuard
+                    permission={["customer:list", "sales_order:list"]}
+                >
+                    {data.canExport && (
+                        <LoadingButton
+                            id={`${idPrefix}-export`}
+                            type="button"
+                            loading={exportMutation.isPending}
+                            variant="outline"
+                            size="sm"
+                            disabled={
+                                data.rows.total === 0 ||
+                                exportMutation.isPending
+                            }
+                            onClick={() => void handleExport()}
+                        >
+                            {exportMutation.isPending
+                                ? "导出中…"
+                                : exportIdleLabel}
+                        </LoadingButton>
+                    )}
+                </PermissionGuard>
                 {exportError ? (
                     <span className="min-w-0 break-all text-body-compact text-destructive">
                         {exportError}

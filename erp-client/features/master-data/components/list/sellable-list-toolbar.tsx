@@ -1,5 +1,7 @@
 "use client"
 
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 import { PermissionGuard } from "@/features/auth/components/permission-guard"
 
 import * as React from "react"
@@ -144,6 +146,11 @@ export function SellableListToolbar({
     loading?: boolean
     failed?: boolean
 }) {
+    const account = useAccountProfileQuery()
+    const permissions = account.isSuccess ? account.data.permissions : undefined
+    const canFilterDirectory =
+        hasPermission(permissions, "product_brand:list") ||
+        hasPermission(permissions, "supplier:list")
     const directory = productFilterDirectoryState(productFilterOptionsQuery)
     const prefix = idPrefix ?? "master-data-list-sellable-list-toolbar"
     const panelId = `${prefix}-more-panel`
@@ -307,41 +314,43 @@ export function SellableListToolbar({
             }
             morePanel={
                 <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-                    <fieldset className="min-w-0">
-                        <legend className="mb-3 text-xs font-medium">
-                            品牌与供货
-                        </legend>
-                        <div className="grid min-w-0 gap-3 sm:grid-cols-3">
-                            <DirectoryOptionFilter
-                                {...brandDirectoryFilterBindings(
-                                    directory,
-                                    () =>
-                                        productFilterOptionsQuery.refetch({
-                                            throwOnError: true,
-                                        }),
-                                )}
-                                id="master-data-list-sellable-list-toolbar-optioncombobox-1"
-                                comboboxClassName="w-full"
-                                ariaLabel="商品品牌"
-                                value={productBrandIdDraft}
-                                onValueChange={setProductBrandIdDraft}
-                            />
-                            <DirectoryOptionFilter
-                                {...supplierDirectoryFilterBindings(
-                                    directory,
-                                    () =>
-                                        productFilterOptionsQuery.refetch({
-                                            throwOnError: true,
-                                        }),
-                                )}
-                                id="master-data-list-sellable-list-toolbar-optioncombobox-2"
-                                comboboxClassName="w-full"
-                                ariaLabel="供应商"
-                                value={productSupplierIdDraft}
-                                onValueChange={setProductSupplierIdDraft}
-                            />
-                        </div>
-                    </fieldset>
+                    {canFilterDirectory ? (
+                        <fieldset className="min-w-0">
+                            <legend className="mb-3 text-xs font-medium">
+                                品牌与供货
+                            </legend>
+                            <div className="grid min-w-0 gap-3 sm:grid-cols-3">
+                                <DirectoryOptionFilter
+                                    {...brandDirectoryFilterBindings(
+                                        directory,
+                                        () =>
+                                            productFilterOptionsQuery.refetch({
+                                                throwOnError: true,
+                                            }),
+                                    )}
+                                    id="master-data-list-sellable-list-toolbar-optioncombobox-1"
+                                    comboboxClassName="w-full"
+                                    ariaLabel="商品品牌"
+                                    value={productBrandIdDraft}
+                                    onValueChange={setProductBrandIdDraft}
+                                />
+                                <DirectoryOptionFilter
+                                    {...supplierDirectoryFilterBindings(
+                                        directory,
+                                        () =>
+                                            productFilterOptionsQuery.refetch({
+                                                throwOnError: true,
+                                            }),
+                                    )}
+                                    id="master-data-list-sellable-list-toolbar-optioncombobox-2"
+                                    comboboxClassName="w-full"
+                                    ariaLabel="供应商"
+                                    value={productSupplierIdDraft}
+                                    onValueChange={setProductSupplierIdDraft}
+                                />
+                            </div>
+                        </fieldset>
+                    ) : null}
                     <fieldset className="min-w-0 lg:border-l lg:pl-5">
                         <legend className="mb-3 text-xs font-medium">
                             一件代发价格

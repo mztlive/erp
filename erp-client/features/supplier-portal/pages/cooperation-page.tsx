@@ -51,6 +51,7 @@ const schema = z.object({
 })
 export function PortalCooperationPage() {
     const query = usePortalCooperation()
+    const canMaintain = usePortalProfile()?.role === "maintainer"
     return (
         <PortalSurface
             title="合作资料"
@@ -80,7 +81,9 @@ export function PortalCooperationPage() {
                         </p>
                         <p>联系电话：{query.data.contact_phone ?? "未提供"}</p>
                     </div>
-                    <PortalCooperationEditor profile={query.data} />
+                    {canMaintain && (
+                        <PortalCooperationEditor profile={query.data} />
+                    )}
                 </>
             )}
         </PortalSurface>

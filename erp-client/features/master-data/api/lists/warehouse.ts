@@ -16,12 +16,16 @@ import { lifecycleStatusParam } from "./query-params"
 
 export async function listWarehouses(
     query: MasterDataListQuery,
+    canReadRevisions = true,
 ): Promise<MasterDataListItem[]> {
     const status = lifecycleStatusParam(query)
     const warehouses = await fetchAllPages<WarehouseDto>("/admin/warehouses", {
         status,
         q: query.q || undefined,
     })
+    if (!canReadRevisions)
+        return warehouses.map((warehouse) => mapWarehouseRow(warehouse))
+
     const rows: MasterDataListItem[] = []
     for (const wh of warehouses) {
         const revPage = await apiGet<BackendPage<WarehouseRevisionDto>>(

@@ -87,6 +87,8 @@ function productSupplyTitle(
 
 export function useProductListColumns({
     canUpdateProductListing,
+    canReadOfferings,
+    canReadSkus,
     currentSupplySkuIds,
     lastFocusedRowId,
     productSkusByProduct,
@@ -104,6 +106,8 @@ export function useProductListColumns({
     onDisableTarget,
 }: {
     canUpdateProductListing: boolean
+    canReadOfferings: boolean
+    canReadSkus: boolean
     currentSupplySkuIds: ReadonlySet<string>
     lastFocusedRowId: React.MutableRefObject<string | null>
     productSkusByProduct: ReadonlyMap<string, readonly ProductListSkuSummary[]>
@@ -119,9 +123,9 @@ export function useProductListColumns({
         listed: boolean,
     ) => Promise<void>
     onSupplyProduct: (item: MasterDataListItem) => void
-    onSourceDiff: (item: MasterDataListItem) => void
-    onAddSupply: (item: MasterDataListItem) => void
-    onDisableTarget: (item: MasterDataListItem) => void
+    onSourceDiff?: (item: MasterDataListItem) => void
+    onAddSupply?: (item: MasterDataListItem) => void
+    onDisableTarget?: (item: MasterDataListItem) => void
 }) {
     return React.useMemo<ColumnDef<MasterDataListItem>[]>(
         () => [
@@ -151,18 +155,8 @@ export function useProductListColumns({
                                 —
                             </span>
                         )
-                    return (
-                        <Button
-                            id={`master-data-product-${toAutomationIdSegment(item.stableId)}-source-diff`}
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="h-auto max-w-48 flex-col items-start gap-1 px-0 text-left"
-                            onClick={(event) => {
-                                event.stopPropagation()
-                                onSourceDiff(item)
-                            }}
-                        >
+                    const summary = (
+                        <>
                             <BusinessStatusBadge
                                 context="list"
                                 tone="warning"
@@ -176,75 +170,107 @@ export function useProductListColumns({
                                     )
                                     .join("、")}
                             </span>
+                        </>
+                    )
+                    if (!onSourceDiff)
+                        return (
+                            <div className="flex flex-col items-start gap-1">
+                                {summary}
+                            </div>
+                        )
+                    return (
+                        <Button
+                            id={`master-data-product-${toAutomationIdSegment(item.stableId)}-source-diff`}
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-auto max-w-48 flex-col items-start gap-1 px-0 text-left"
+                            onClick={(event) => {
+                                event.stopPropagation()
+                                onSourceDiff(item)
+                            }}
+                        >
+                            {summary}
                         </Button>
                     )
                 },
             },
-            {
-                id: "skuNames",
-                header: "SKU 名称",
-                meta: { label: "SKU 名称" },
-                cell: ({ row }) => {
-                    const skus =
-                        productSkusByProduct.get(row.original.stableId) ?? []
-                    if (productSkusPending) {
-                        return (
-                            <span className="text-sm text-muted-foreground">
-                                读取中…
-                            </span>
-                        )
-                    }
-                    if (productSkusError) {
-                        return (
-                            <span className="text-sm text-muted-foreground">
-                                暂不可查
-                            </span>
-                        )
-                    }
-                    if (skus.length === 0) {
-                        return (
-                            <span className="text-sm text-muted-foreground">
-                                —
-                            </span>
-                        )
-                    }
-                    const names = skus
-                        .map((sku) => sku.skuName.trim())
-                        .filter(Boolean)
-                    const label = names.length > 0 ? names.join("、") : "—"
-                    return (
-                        <span
-                            className="line-clamp-2 max-w-56 text-sm"
-                            title={label}
-                        >
-                            {label}
-                        </span>
-                    )
-                },
-            },
-            {
-                id: "skuPriceRange",
-                header: "SKU 售价",
-                meta: {
-                    label: "SKU 售价",
-                    width: "amount",
-                    align: "end",
-                    numeric: true,
-                },
-                cell: ({ row }) => (
-                    <span className="num text-sm">
-                        {productSkusPending
-                            ? "读取中…"
-                            : productSkusError
-                              ? "暂不可查"
-                              : productSkuPriceRange(
-                                    productSkusByProduct.get(
-                                        row.original.stableId,
-                                    ) ?? [],
-                                )}
-                    </span>
-                ),
-            },
+            ...(canReadSkus
+                ? ([
+                      {
+                          id: "skuNames",
+                          header: "SKU 名称",
+                          meta: { label: "SKU 名称" },
+                          cell: ({ row }) => {
+                              const skus =
+                                  productSkusByProduct.get(
+                                      row.original.stableId,
+                                  ) ?? []
+                              if (productSkusPending) {
+                                  return (
+                                      <span className="text-sm text-muted-foreground">
+                                          读取中…
+                                      </span>
+                                  )
+                              }
+                              if (productSkusError) {
+                                  return (
+                                      <span className="text-sm text-muted-foreground">
+                                          暂不可查
+                                      </span>
+                                  )
+                              }
+                              if (skus.length === 0) {
+                                  return (
+                                      <span className="text-sm text-muted-foreground">
+                                          —
+                                      </span>
+                                  )
+                              }
+                              const names = skus
+                                  .map((sku) => sku.skuName.trim())
+                                  .filter(Boolean)
+                              const label =
+                                  names.length > 0 ? names.join("、") : "—"
+                              return (
+                                  <span
+                                      className="line-clamp-2 max-w-56 text-sm"
+                                      title={label}
+                                  >
+                                      {label}
+                                  </span>
+                              )
+                          },
+                      },
+                  ] satisfies ColumnDef<MasterDataListItem>[])
+                : []),
+            ...(canReadSkus
+                ? ([
+                      {
+                          id: "skuPriceRange",
+                          header: "SKU 售价",
+                          meta: {
+                              label: "SKU 售价",
+                              width: "amount",
+                              align: "end",
+                              numeric: true,
+                          },
+                          cell: ({ row }) => (
+                              <span className="num text-sm">
+                                  {productSkusPending
+                                      ? "读取中…"
+                                      : productSkusError
+                                        ? "暂不可查"
+                                        : productSkuPriceRange(
+                                              productSkusByProduct.get(
+                                                  row.original.stableId,
+                                              ) ?? [],
+                                          )}
+                              </span>
+                          ),
+                      },
+                  ] satisfies ColumnDef<MasterDataListItem>[])
+                : []),
             {
                 id: "skuCount",
                 header: "SKU 数量",
@@ -260,59 +286,67 @@ export function useProductListColumns({
                     </span>
                 ),
             },
-            {
-                id: "supply",
-                header: "供给",
-                meta: { label: "供给", width: "status" },
-                cell: ({ row }) => {
-                    const item = row.original
-                    const productSkus =
-                        productSkusByProduct.get(item.stableId) ?? []
-                    const suppliedSkuCount = productSkus.filter((sku) =>
-                        currentSupplySkuIds.has(sku.skuId),
-                    ).length
-                    const offeringPending =
-                        productSkus.length > 0 && supplierOfferingsPending
-                    const offeringFailed =
-                        productSkus.length > 0 && supplierOfferingsError
-                    const pending = productSkusPending || offeringPending
-                    const failed = productSkusError || offeringFailed
-                    const statusLabel = productSupplyLabel(
-                        pending,
-                        failed,
-                        productSkus.length,
-                        suppliedSkuCount,
-                    )
-                    return (
-                        <Button
-                            id={`master-data-product-${toAutomationIdSegment(item.stableId)}-supply`}
-                            type="button"
-                            size="xs"
-                            variant="ghost"
-                            className="h-auto px-0 py-0.5 font-normal"
-                            aria-label={`${item.name}供给详情：${statusLabel}`}
-                            title={productSupplyTitle(
-                                pending,
-                                failed,
-                                productSkus.length,
-                                suppliedSkuCount,
-                            )}
-                            onClick={(event) => {
-                                event.stopPropagation()
-                                lastFocusedRowId.current = item.stableId
-                                onSupplyProduct(item)
-                            }}
-                        >
-                            <ProductSupplyStatus
-                                pending={pending}
-                                failed={failed}
-                                skuCount={productSkus.length}
-                                suppliedSkuCount={suppliedSkuCount}
-                            />
-                        </Button>
-                    )
-                },
-            },
+            ...(canReadOfferings
+                ? ([
+                      {
+                          id: "supply",
+                          header: "供给",
+                          meta: { label: "供给", width: "status" },
+                          cell: ({ row }) => {
+                              const item = row.original
+                              const productSkus =
+                                  productSkusByProduct.get(item.stableId) ?? []
+                              const suppliedSkuCount = productSkus.filter(
+                                  (sku) => currentSupplySkuIds.has(sku.skuId),
+                              ).length
+                              const offeringPending =
+                                  productSkus.length > 0 &&
+                                  supplierOfferingsPending
+                              const offeringFailed =
+                                  productSkus.length > 0 &&
+                                  supplierOfferingsError
+                              const pending =
+                                  productSkusPending || offeringPending
+                              const failed = productSkusError || offeringFailed
+                              const statusLabel = productSupplyLabel(
+                                  pending,
+                                  failed,
+                                  productSkus.length,
+                                  suppliedSkuCount,
+                              )
+                              return (
+                                  <Button
+                                      id={`master-data-product-${toAutomationIdSegment(item.stableId)}-supply`}
+                                      type="button"
+                                      size="xs"
+                                      variant="ghost"
+                                      className="h-auto px-0 py-0.5 font-normal"
+                                      aria-label={`${item.name}供给详情：${statusLabel}`}
+                                      title={productSupplyTitle(
+                                          pending,
+                                          failed,
+                                          productSkus.length,
+                                          suppliedSkuCount,
+                                      )}
+                                      onClick={(event) => {
+                                          event.stopPropagation()
+                                          lastFocusedRowId.current =
+                                              item.stableId
+                                          onSupplyProduct(item)
+                                      }}
+                                  >
+                                      <ProductSupplyStatus
+                                          pending={pending}
+                                          failed={failed}
+                                          skuCount={productSkus.length}
+                                          suppliedSkuCount={suppliedSkuCount}
+                                      />
+                                  </Button>
+                              )
+                          },
+                      },
+                  ] satisfies ColumnDef<MasterDataListItem>[])
+                : []),
             {
                 id: "listing",
                 header: "上架状态",
@@ -330,6 +364,21 @@ export function useProductListColumns({
                           : inherited === "PARTIALLY_LISTED"
                             ? "部分上架"
                             : "已下架"
+                    if (!canUpdateProductListing) {
+                        return (
+                            <BusinessStatusBadge
+                                context="list"
+                                tone={
+                                    inherited === "LISTED"
+                                        ? "success"
+                                        : inherited === "PARTIALLY_LISTED"
+                                          ? "warning"
+                                          : "neutral"
+                                }
+                                label={statusLabel}
+                            />
+                        )
+                    }
                     const accessibleName = `${item.name}整组上架状态：${statusLabel}`
                     return (
                         <Switch
@@ -346,7 +395,6 @@ export function useProductListColumns({
                             checked={inherited === "LISTED"}
                             disabled={
                                 pending ||
-                                !canUpdateProductListing ||
                                 (item.lifecycleStatus !== "ENABLED" &&
                                     inherited === "UNLISTED") ||
                                 (item.skuCount ?? 0) === 0
@@ -362,22 +410,31 @@ export function useProductListColumns({
             },
             revisionTimingColumn(),
             ...blockerColumn(rows),
-            productActionsColumn({
-                lastFocusedRowId,
-                onDisableTarget,
-                onAddSupply,
-                addSupplyDisabledReason: (item) => {
-                    if (productSkusPending) return "正在读取商品规格"
-                    if (productSkusError) return "规格读取失败，请重试"
-                    const skuCount =
-                        productSkusByProduct.get(item.stableId)?.length ?? 0
-                    if (skuCount === 0) return "请先新增或启用商品规格"
-                    return undefined
-                },
-            }),
+            ...(onDisableTarget || onAddSupply
+                ? [
+                      productActionsColumn({
+                          lastFocusedRowId,
+                          onDisableTarget,
+                          onAddSupply,
+                          addSupplyDisabledReason: (item) => {
+                              if (productSkusPending) return "正在读取商品规格"
+                              if (productSkusError)
+                                  return "规格读取失败，请重试"
+                              const skuCount =
+                                  productSkusByProduct.get(item.stableId)
+                                      ?.length ?? 0
+                              if (skuCount === 0)
+                                  return "请先新增或启用商品规格"
+                              return undefined
+                          },
+                      }),
+                  ]
+                : []),
         ],
         [
             canUpdateProductListing,
+            canReadOfferings,
+            canReadSkus,
             currentSupplySkuIds,
             lastFocusedRowId,
             onAddSupply,

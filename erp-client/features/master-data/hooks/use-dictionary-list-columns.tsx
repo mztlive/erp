@@ -21,21 +21,24 @@ export function useWarehouseListColumns({
     onPreview,
     onReviseTarget,
     canMaintainHandlers,
+    canReadRevisions,
 }: {
     lastFocusedRowId: React.MutableRefObject<string | null>
     rows: readonly MasterDataListItem[]
     onPreview: (stableId: string) => void
     onReviseTarget: (item: MasterDataListItem) => void
     canMaintainHandlers: boolean
+    canReadRevisions: boolean
 }) {
     return React.useMemo<ColumnDef<MasterDataListItem>[]>(
         () => [
             stableNoColumn(),
             nameColumn(),
-            revisionNoColumn(),
+            ...(canReadRevisions ? [revisionNoColumn()] : []),
             lifecycleColumn(),
-            revisionTimingColumn(),
-            effectivePeriodColumn(),
+            ...(canReadRevisions
+                ? [revisionTimingColumn(), effectivePeriodColumn()]
+                : []),
             ...blockerColumn(rows),
             warehouseActionsColumn({
                 lastFocusedRowId,
@@ -46,6 +49,7 @@ export function useWarehouseListColumns({
         ],
         [
             canMaintainHandlers,
+            canReadRevisions,
             lastFocusedRowId,
             onPreview,
             onReviseTarget,

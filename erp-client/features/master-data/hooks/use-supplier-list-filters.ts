@@ -1,6 +1,8 @@
 "use client"
 
 import * as React from "react"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 
 import { useListUrl } from "@/features/master-data/hooks/use-list-url"
 import {
@@ -31,6 +33,9 @@ export type SupplierFilterKey =
 export function useSupplierListFilters(
     searchInputRef: React.RefObject<HTMLInputElement | null>,
 ) {
+    const account = useAccountProfileQuery()
+    const permissions = account.isSuccess ? account.data.permissions : undefined
+    const canFilterPeople = hasPermission(permissions, "business_person:list")
     const {
         searchParams,
         patchUrl,
@@ -39,7 +44,13 @@ export function useSupplierListFilters(
         setPagination,
         resetPagination,
         changePagination,
-    } = useListUrl()
+    } = useListUrl(
+        {
+            owner_user_ids: !canFilterPeople,
+            capability_owner_user_ids: !canFilterPeople,
+        },
+        account.isSuccess,
+    )
     const { searchDraft, setSearchDraft } = useSearchDraft(q, {
         skipWhileFocused: true,
         inputRef: searchInputRef,
@@ -78,9 +89,12 @@ export function useSupplierListFilters(
                     searchParams.get("supplierQualificationHealth"),
         )?.value as SupplierQualificationHealth | undefined
     const metricKey = lifecycleStatus
-    const ownerUserIds = searchParams.get("owner_user_ids") ?? ""
-    const capabilityOwnerUserIds =
-        searchParams.get("capability_owner_user_ids") ?? ""
+    const ownerUserIds = canFilterPeople
+        ? (searchParams.get("owner_user_ids") ?? "")
+        : ""
+    const capabilityOwnerUserIds = canFilterPeople
+        ? (searchParams.get("capability_owner_user_ids") ?? "")
+        : ""
     const hasStructuredSupplierFilters = Boolean(
         lifecycleStatus !== "all" ||
         supplierQualificationHealth ||
@@ -144,13 +158,16 @@ export function useSupplierListFilters(
                 supplierQualificationHealthDraft === "all"
                     ? null
                     : supplierQualificationHealthDraft,
-            owner_user_ids: ownerUserIdsDraft || null,
-            capability_owner_user_ids: capabilityOwnerUserIdsDraft || null,
+            owner_user_ids: canFilterPeople ? ownerUserIdsDraft || null : null,
+            capability_owner_user_ids: canFilterPeople
+                ? capabilityOwnerUserIdsDraft || null
+                : null,
             page: null,
         })
         resetPagination()
         setSupplierFilterPanelOpen(false)
     }, [
+        canFilterPeople,
         patchUrl,
         resetPagination,
         searchDraft,
@@ -206,8 +223,9 @@ export function useSupplierListFilters(
             [...supplierCapabilityCodes].sort().join(",") ||
         [...supplierQualificationTypesDraft].sort().join(",") !==
             [...supplierQualificationTypes].sort().join(",") ||
-        ownerUserIdsDraft !== ownerUserIds ||
-        capabilityOwnerUserIdsDraft !== capabilityOwnerUserIds
+        (canFilterPeople && ownerUserIdsDraft !== ownerUserIds) ||
+        (canFilterPeople &&
+            capabilityOwnerUserIdsDraft !== capabilityOwnerUserIds)
 
     const clearAllFilters = React.useCallback(() => {
         setSearchDraft("")
@@ -240,6 +258,7 @@ export function useSupplierListFilters(
         setOwnerUserIdsDraft(ownerUserIds)
         setCapabilityOwnerUserIdsDraft(capabilityOwnerUserIds)
     }, [
+        canFilterPeople,
         lifecycleStatus,
         supplierCapabilityCodes,
         supplierQualificationHealth,
@@ -249,6 +268,7 @@ export function useSupplierListFilters(
     ])
 
     return {
+        canFilterPeople,
         q,
         lifecycleStatus,
         supplierCapabilityCodes,

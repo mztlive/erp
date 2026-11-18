@@ -122,25 +122,7 @@ function candidateMatches(
 /** 审核内独立补建入口；创建权限与读取审核候选的权限分别核对。 */
 export function PortalDictionaryCreateDialog(props: Props) {
     const access = usePortalAdminAccess()
-    if (!access.can(createPermissions[props.kind]))
-        return (
-            <Dialog open onOpenChange={(open) => !open && props.onClose()}>
-                <DialogContent closeButtonId="supplier-portal-review-dictionary-denied-close">
-                    <DialogHeader>
-                        <DialogTitle>暂无新增基础资料权限</DialogTitle>
-                        <DialogDescription>
-                            当前账号没有对应维护权限，请转交具备权限的同事处理。
-                        </DialogDescription>
-                    </DialogHeader>
-                    <Button
-                        id="supplier-portal-review-dictionary-denied-return"
-                        onClick={props.onClose}
-                    >
-                        返回申请
-                    </Button>
-                </DialogContent>
-            </Dialog>
-        )
+    if (!access.can(createPermissions[props.kind])) return null
     return (
         <DictionaryCreateForm
             key={`${access.profile.data?.userid ?? ""}:${props.kind}:${props.productKind}:${props.rawName}`}

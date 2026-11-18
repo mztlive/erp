@@ -178,24 +178,29 @@ export function SalesOrdersListFilterPanel({
                     <legend className="mb-1 text-sm font-medium">
                         组织与关联
                     </legend>
-                    <OrganizationUnitFilter
-                        id="sales-orders-list-filter-org"
-                        label="业务组织"
-                        value={draft.orgUnitIds}
-                        onChange={(orgUnitIds) =>
-                            onDraftChange((current) => ({
-                                ...current,
-                                orgUnitIds,
-                            }))
-                        }
-                        includeDescendants={draft.includeDescendants}
-                        onDescendantsChange={(includeDescendants) =>
-                            onDraftChange((current) => ({
-                                ...current,
-                                includeDescendants,
-                            }))
-                        }
-                    />
+                    {hasPermission(
+                        account.data?.permissions,
+                        "org_unit:list",
+                    ) && (
+                        <OrganizationUnitFilter
+                            id="sales-orders-list-filter-org"
+                            label="业务组织"
+                            value={draft.orgUnitIds}
+                            onChange={(orgUnitIds) =>
+                                onDraftChange((current) => ({
+                                    ...current,
+                                    orgUnitIds,
+                                }))
+                            }
+                            includeDescendants={draft.includeDescendants}
+                            onDescendantsChange={(includeDescendants) =>
+                                onDraftChange((current) => ({
+                                    ...current,
+                                    includeDescendants,
+                                }))
+                            }
+                        />
+                    )}
                     <div className="grid min-w-0 gap-3 empty:hidden sm:grid-cols-2">
                         {hasPermission(
                             account.data?.permissions,
