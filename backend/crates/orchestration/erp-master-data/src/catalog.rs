@@ -75,12 +75,14 @@ pub async fn create_unit_of_measure(
         actor.id(),
     )?;
     let audit = actor.clone().resource_log("unit_of_measure.create", "unit_of_measure", id.to_string())?;
-    let unit_for_tx = unit.clone();
     run_audited(&db, audit, move |db, executor| {
-        Box::pin(async move { persist_unit(db, &authorization, &actor, &unit_for_tx, executor).await })
+        Box::pin(async move {
+            persist_unit(db, &authorization, &actor, &unit, executor).await?;
+            Ok::<_, Error>(unit)
+        })
     })
-    .await?;
-    Ok(unit.into())
+    .await
+    .map(Into::into)
 }
 
 /// 在原审计事务完成创建资格检查和计量单位写入。
@@ -196,18 +198,17 @@ pub async fn create_sku_attribute(
         actor.id(),
     )?;
     let audit = actor.clone().resource_log("sku_attribute.create", "sku_attribute", id.to_string())?;
-    let attribute_for_tx = attribute.clone();
     run_audited(&db, audit, move |db, executor| {
         Box::pin(async move {
             authorization
                 .require(&actor, &catalog::SKU_ATTRIBUTE_CREATE, AccessTarget::Operation, executor)
                 .await?;
-            db.sku_attributes().create(&attribute_for_tx, executor).await?;
-            Ok::<(), Error>(())
+            db.sku_attributes().create(&attribute, executor).await?;
+            Ok::<_, Error>(attribute)
         })
     })
-    .await?;
-    Ok(attribute.into())
+    .await
+    .map(Into::into)
 }
 
 /// 创建 SKU 属性值，并在同一事务中写入成功审计。
@@ -246,19 +247,18 @@ pub async fn create_sku_attribute_value(
     )?;
     let audit =
         actor.clone().resource_log("sku_attribute_value.create", "sku_attribute_value", id.to_string())?;
-    let value_for_tx = value.clone();
     run_audited(&db, audit, move |db, executor| {
         Box::pin(async move {
             authorization
                 .require(&actor, &catalog::SKU_ATTRIBUTE_VALUE_CREATE, AccessTarget::Operation, executor)
                 .await?;
-            service.load_attribute(value_for_tx.attribute_id.as_ref(), executor).await?;
-            db.sku_attribute_values().create(&value_for_tx, executor).await?;
-            Ok::<(), Error>(())
+            service.load_attribute(value.attribute_id.as_ref(), executor).await?;
+            db.sku_attribute_values().create(&value, executor).await?;
+            Ok::<_, Error>(value)
         })
     })
-    .await?;
-    Ok(value.into())
+    .await
+    .map(Into::into)
 }
 
 #[cfg(test)]

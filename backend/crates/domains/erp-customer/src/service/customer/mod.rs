@@ -148,7 +148,7 @@ impl CustomerService {
         }
         let audit =
             self.audit.resource_log(actor.clone(), "customer.create", "customer", account.base.id.clone())?;
-        persist_new_account(&self.db, &account, &assignment, executor).await?;
+        self.persist_new_account(&account, &assignment, executor).await?;
         self.audit.persist(&audit, executor).await?;
         Ok(account.into())
     }
@@ -173,7 +173,9 @@ impl CustomerService {
         assignment: &CustomerAssignment,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        persist_new_account(&self.db, account, assignment, executor).await
+        self.db.customer_accounts().create(account, executor).await?;
+        self.db.customer_assignments().create(assignment, executor).await?;
+        Ok(())
     }
 
     /// 更新客户角色（乐观锁；单集合 + 审计）。
@@ -266,18 +268,6 @@ fn prepare_new_customer(
         },
     )?;
     Ok((account, assignment))
-}
-
-/// 在同一 Executor 上写入客户角色与首条 OWNER 归属。
-async fn persist_new_account(
-    db: &Database,
-    account: &CustomerAccount,
-    assignment: &CustomerAssignment,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    db.customer_accounts().create(account, executor).await?;
-    db.customer_assignments().create(assignment, executor).await?;
-    Ok(())
 }
 
 /// 将批量读取结果按稳定 ID 装配为客户列表视图。

@@ -47,7 +47,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         let request = product_request(template, records, &maintainer_id)?;
         let id = self.create_demo_product(request, actor).await?;
         let sku_ids = self.sku_ids(&id).await?;
-        self.remember_product(step, id, sku_ids).await?;
+        record::save(&self.db, step, id, sku_ids).await?;
         Ok(EnsureOutcome::Created)
     }
 
@@ -68,7 +68,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
                 .await?;
         }
         self.align_product_maintainer(actor, id, maintainer_id).await?;
-        self.remember_product(step, id.to_string(), sku_ids).await?;
+        record::save(&self.db, step, id.to_string(), sku_ids).await?;
         Ok(if live { EnsureOutcome::Skipped } else { EnsureOutcome::Restored })
     }
 
@@ -129,22 +129,6 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
             )
             .await?;
         Ok(skus.into_iter().map(|sku| sku.base.id).collect())
-    }
-
-    /// 登记商品和全部 SKU 的实际主键。
-    async fn remember_product(&self, step: &DemoStep, id: String, sku_ids: Vec<String>) -> Result<()> {
-        record::save(
-            &self.db,
-            &DemoMasterRecord {
-                key: step.key.clone(),
-                kind: step.kind.as_str().to_string(),
-                entity_id: id,
-                related_ids: sku_ids,
-                label: step.request.label().to_string(),
-                removed: false,
-            },
-        )
-        .await
     }
 }
 

@@ -218,7 +218,10 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             Ok(result) => result,
         };
         match result {
-            WorkItemWriteOutcome::Updated(item) => self.applied_outcome(*item, actor).await,
+            WorkItemWriteOutcome::Updated(item) => Ok(WorkItemMutationOutcome::Applied {
+                work_item_id: item.base.id,
+                task_version: item.base.version,
+            }),
             WorkItemWriteOutcome::VersionConflict => {
                 self.conflict_outcome(&audit.resource_id, WorkItemConflictKind::Version, actor).await
             },
@@ -252,26 +255,6 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         let id = receipt.scope_id().ok_or_else(|| Error::Internal("任务命令缺少目标身份".into()))?;
         let item = self.managed_item(id, actor, executor).await?;
         self.idempotent_replay(receipt, &item, executor).await
-    }
-
-    /// 将成功写入的实体映射为命令结果。
-    ///
-    /// # 参数
-    /// * `item` - 已写入的工作项
-    /// * `actor` - 当前操作人；本函数不读取
-    ///
-    /// # 返回
-    /// 返回已应用结果，只带工作项 ID。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub(super) async fn applied_outcome(
-        &self,
-        item: WorkItem,
-        actor: &AuditActor,
-    ) -> Result<WorkItemMutationOutcome> {
-        let _ = actor;
-        Ok(WorkItemMutationOutcome::Applied { work_item_id: item.base.id, task_version: item.base.version })
     }
 
     /// 冲突后返回任务 ID，供 HTTP 向 read-models 投影。

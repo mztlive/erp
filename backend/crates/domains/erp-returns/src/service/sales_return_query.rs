@@ -89,11 +89,10 @@ impl SalesReturnQueryService {
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
         let page = self.db.sales_return_cases().search_sales_return_cases(&filter, executor).await?;
+        let domain = ReturnsService::new(self.db.clone());
         let mut views = Vec::with_capacity(page.items.len());
         for row in page.items {
-            views.push(
-                ReturnsService::new(self.db.clone()).load_sales_return_case_view(&row.id, executor).await?,
-            );
+            views.push(domain.load_sales_return_case_view(&row.id, executor).await?);
         }
         Ok(PageView { items: views, total: page.total, page: filter.page, page_size: filter.page_size })
     }
@@ -173,11 +172,10 @@ impl ReturnsService {
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<SalesReturnCaseView> {
-        let id = id.to_owned();
         let case = self
             .db
             .sales_return_cases()
-            .find_by_id(&id, executor)
+            .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("销售退货处理单不存在".to_string()))?;
         let lines = self
@@ -187,7 +185,7 @@ impl ReturnsService {
             .await?
             .into_iter()
             .map(|line| SalesReturnLineView {
-                id: line.base.id.clone(),
+                id: line.base.id,
                 sales_order_line_id: line.sales_order_line_id.to_string(),
                 requested_quantity: line.requested_quantity,
                 received_quantity: line.received_quantity,
@@ -196,7 +194,7 @@ impl ReturnsService {
             })
             .collect();
         Ok(SalesReturnCaseView {
-            id: case.base.id.clone(),
+            id: case.base.id,
             return_no: case.return_no,
             sales_order_id: case.sales_order_id.to_string(),
             acceptance_id: case.acceptance_id.map(|id| id.to_string()),

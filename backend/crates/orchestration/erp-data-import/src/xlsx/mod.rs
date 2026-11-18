@@ -21,5 +21,15 @@ fn text(node: Node<'_, '_>) -> String {
     node.descendants().filter(|node| node.is_text()).filter_map(|node| node.text()).collect()
 }
 
+fn rich_text(node: Node<'_, '_>) -> String {
+    node.descendants()
+        .filter(|node| node.is_element() && node.tag_name().name() == "t")
+        .filter(|node| {
+            !node.ancestors().any(|parent| parent.is_element() && parent.tag_name().name() == "rPh")
+        })
+        .map(text)
+        .collect()
+}
+
 #[cfg(test)]
 mod tests;

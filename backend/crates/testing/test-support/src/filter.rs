@@ -21,7 +21,7 @@ pub fn matches_filter(filter: &Document, object: &Value) -> bool {
     matches(filter, &object)
 }
 
-/// 只认 `$and`、`$or`、布尔 `$expr`、单键 `$in` 和字段等值；其余操作 panic，避免把未知条件当成不匹配。
+/// 支持 `$and`、`$or`、布尔 `$expr`、单键 `$exists` 或 `$in` 及字段等值；未知查询操作会 panic。
 fn matches(filter: &Document, object: &Document) -> bool {
     filter.iter().all(|(key, condition)| match (key.as_str(), condition) {
         ("$and", Bson::Array(parts)) => {
@@ -33,11 +33,12 @@ fn matches(filter: &Document, object: &Document) -> bool {
         ("$expr", Bson::Boolean(value)) => *value,
         (_, Bson::Document(operator)) => {
             assert_eq!(operator.len(), 1, "未知查询操作必须使测试失败");
-            if let Ok(expected) = operator.get_bool("$exists") {
-                return path_value(object, key).is_some() == expected;
+            if let Some(Bson::Boolean(expected)) = operator.get("$exists") {
+                path_value(object, key).is_some() == *expected
+            } else {
+                let values = operator.get_array("$in").expect("未知查询操作必须使测试失败");
+                path_value(object, key).is_some_and(|value| values.contains(value))
             }
-            let values = operator.get_array("$in").expect("未知查询操作必须使测试失败");
-            path_value(object, key).is_some_and(|value| values.contains(value))
         },
         (key, _) if key.starts_with('$') => unsupported_operator(key),
         (_, value) => path_value(object, key) == Some(value),
@@ -58,31 +59,10 @@ fn path_value<'a>(object: &'a Document, path: &str) -> Option<&'a Bson> {
     Some(value)
 }
 
-/// 将查询数组元素转为文档；非文档一律走统一的未知操作失败路径。
-///
-/// # 参数
-/// * `part` - `$and`/`$or` 数组中的单个元素
-/// * `operator` - 所属的组合操作名，仅用于失败信息
-///
-/// # 返回值
-/// 返回元素对应的文档引用。
-///
-/// # Panics
-/// 元素不是文档时 panic，信息与其他未知查询操作保持一致。
 fn unsupported_as_document<'a>(part: &'a Bson, operator: &str) -> &'a Document {
     part.as_document().unwrap_or_else(|| unsupported_operator(operator))
 }
 
-/// 以统一信息使测试失败；所有不支持的查询操作都走本函数。
-///
-/// # 参数
-/// * `operation` - 不支持的操作名
-///
-/// # 返回值
-/// 永不返回。
-///
-/// # Panics
-/// 总是 panic，信息前缀固定为 `未知查询操作`。
 fn unsupported_operator(operation: &str) -> ! {
     panic!("未知查询操作: {operation}")
 }
@@ -102,6 +82,25 @@ mod tests {
         assert!(matches_filter(&query, &json!({"id":"a","owner":"me"})));
         assert!(!matches_filter(&query, &json!({"id":"c","owner":"me"})));
         assert!(!matches_filter(&query, &json!({"id":"a","org":"two"})));
+    }
+
+    #[test]
+    fn exists_distinguishes_null_from_missing() {
+        let present = doc! {"item.code": {"$exists": true}};
+        let absent = doc! {"item.code": {"$exists": false}};
+        let with_null = json!({"item": {"code": null}});
+        let without_code = json!({"item": {}});
+
+        assert!(matches_filter(&present, &with_null));
+        assert!(!matches_filter(&present, &without_code));
+        assert!(!matches_filter(&absent, &with_null));
+        assert!(matches_filter(&absent, &without_code));
+    }
+
+    #[test]
+    #[should_panic(expected = "未知查询操作必须使测试失败")]
+    fn exists_requires_a_boolean() {
+        matches_filter(&doc! {"id": {"$exists": 1}}, &json!({"id": "a"}));
     }
 
     #[test]

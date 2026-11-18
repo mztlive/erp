@@ -112,17 +112,6 @@ pub async fn query_current(
             regions,
         });
     }
-    query_offer(connection, connector, receipt, sku, registry).await
-}
-
-async fn query_offer(
-    connection: &SupplierApiConnection,
-    connector: &dyn SupplierConnector,
-    receipt: &SupplierCallbackReceipt,
-    sku: SupplierSku,
-    registry: &SupplierConnectorRegistry,
-) -> Result<CatalogUpdate> {
-    let hint = receipt.catalog_hint()?.ok_or_else(|| Error::ConflictError("商品回调已完成".into()))?;
     let source =
         connector.offers().ok_or_else(|| Error::BusinessLogicError("来源尚不支持商品补查".into()))?;
     let Lookup::Found(snapshot) =

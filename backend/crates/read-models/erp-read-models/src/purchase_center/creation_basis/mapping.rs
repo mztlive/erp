@@ -44,7 +44,9 @@ pub(super) fn build_basis_view(
     work_item_id: &str,
     warehouses: &[WarehouseRegionFact],
 ) -> Result<CreationBasisView> {
-    let supplier_name = query::supplier_display(group.scope.supplier_id.as_ref(), &facts.supplier_names);
+    let supplier_id = group.scope.supplier_id.as_ref();
+    let supplier_name =
+        query::supplier_display(supplier_id, facts.supplier_names.get(supplier_id).map(String::as_str));
     let mut estimated = zero_amount();
     let mut lines = Vec::with_capacity(group.lines.len());
     for line in &group.lines {

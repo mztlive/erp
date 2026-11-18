@@ -513,13 +513,19 @@ impl BusinessAuditEvent {
             BusinessEventResult::Rejected => "已拒绝",
             BusinessEventResult::Unknown => "结果待确认",
         };
-        let mut parts =
-            vec![format!("{actor}执行{}，业务对象：{target}，执行结果：{result}", self.action_label)];
-        parts.extend(self.field_changes.iter().map(|change| {
-            format!("{}：{} → {}", change.field_label, change.before.display(), change.after.display())
-        }));
-        parts.extend(self.facts.iter().map(|fact| format!("{}：{}", fact.field_label, fact.value.display())));
-        parts.join("；")
+        let mut message = format!("{actor}执行{}，业务对象：{target}，执行结果：{result}", self.action_label);
+        for change in &self.field_changes {
+            message.push_str(&format!(
+                "；{}：{} → {}",
+                change.field_label,
+                change.before.display(),
+                change.after.display()
+            ));
+        }
+        for fact in &self.facts {
+            message.push_str(&format!("；{}：{}", fact.field_label, fact.value.display()));
+        }
+        message
     }
 }
 

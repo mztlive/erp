@@ -4,12 +4,11 @@ use erp_identity::entity::authorization::{QueryModel, QueryOutput};
 use mongodb::Database;
 use mongodb::bson::doc;
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, PageResult, Pagination, QueryFilter, aggregate};
+use persistence_core::{Executor, PageResult, QueryFilter, aggregate};
 use serde::Deserialize;
 
 use super::CustomerExt;
 use super::customer::{CustomerAccountFilter, CustomerAccountRow};
-use super::customer_shared::{customer_account_projection, sort_doc};
 use crate::entity::customer::CustomerAccount;
 use crate::{CustomerAccess, CustomerResolvedScope, Error, Result};
 
@@ -81,26 +80,13 @@ pub async fn authorized_page(
     ensure_model(compiled.model(), "customer", Database::CUSTOMER_ACCOUNTS)?;
     compiled.ensure_current(executor)?;
     let collection = db.customer_accounts().collection().clone_with_type::<CustomerAccountRow>();
-    let options = page_options(filter);
+    let options = filter.page_options();
     let items =
         aggregate::find(&collection, filter.to_doc(), options, compiled.stages().to_vec(), executor).await?;
     let total = aggregate::count(&collection, filter.to_doc(), compiled.stages().to_vec(), executor).await?;
     compiled.ensure_current(executor)?;
     let total = i64::try_from(total).map_err(|_| Error::ValidationError("客户总数超限".into()))?;
     Ok(PageResult { items, total })
-}
-
-fn page_options(filter: &CustomerAccountFilter) -> FindOptions {
-    FindOptions::builder()
-        .sort(sort_doc(
-            filter.sort_by.as_deref(),
-            filter.sort_ascending,
-            &["created_at", "updated_at", "customer_no", "status"],
-        ))
-        .skip(filter.skip())
-        .limit(filter.limit())
-        .projection(customer_account_projection())
-        .build()
 }
 
 /// 在业务条件收窄后读取完整授权客户身份版本。
@@ -148,7 +134,7 @@ mod tests {
             sort_ascending: false,
             ..Default::default()
         };
-        let options = page_options(&filter);
+        let options = filter.page_options();
         assert_eq!(options.skip, Some(40));
         assert_eq!(options.limit, Some(20));
         assert_eq!(options.sort, Some(doc! {"created_at": -1, "id": -1}));

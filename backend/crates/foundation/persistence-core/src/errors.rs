@@ -113,12 +113,8 @@ fn duplicate_key_message(error: &mongodb::error::Error) -> Option<&str> {
 /// 索引名切片；未匹配时返回 `None`。
 fn parse_index_name_from_message(message: &str) -> Option<&str> {
     let after_index = message.split("index: ").nth(1)?;
-    let name =
-        after_index.split_whitespace().next().map(|token| token.trim().trim_matches([',', '.', ';', ':']))?;
-    if name.is_empty() {
-        return None;
-    }
-    Some(name)
+    let name = after_index.split_whitespace().next()?.trim_matches([',', '.', ';', ':']);
+    (!name.is_empty()).then_some(name)
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -191,6 +187,7 @@ mod tests {
 
         assert_eq!(super::parse_index_name_from_message("E11000 duplicate key error"), None);
         assert_eq!(super::parse_index_name_from_message("E11000 index: "), None);
+        assert_eq!(super::parse_index_name_from_message("E11000 index: ,.;: dup key: {}"), None);
         // 大小写敏感： Mongo 文本固定为小写 `index: `，大写前缀不识别（保持既有语义）。
         assert_eq!(super::parse_index_name_from_message("E11000 Index: foo"), None);
     }

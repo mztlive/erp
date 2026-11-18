@@ -38,14 +38,12 @@ pub(super) fn field(value: &Value, key: &str) -> ConnectorResult<String> {
 }
 
 pub(super) fn id(value: &Value) -> ConnectorResult<String> {
-    if let Value::Number(number) = value
-        && !number.to_string().bytes().all(|byte| byte.is_ascii_digit())
-    {
+    let identifier = text(value)?;
+    if value.is_number() && !identifier.bytes().all(|byte| byte.is_ascii_digit()) {
         return Err(mapping());
     }
-    let value = text(value)?;
-    valid_id(&value)?;
-    Ok(value)
+    valid_id(&identifier)?;
+    Ok(identifier)
 }
 pub(super) fn valid_id(value: &str) -> ConnectorResult<()> {
     if value.is_empty()

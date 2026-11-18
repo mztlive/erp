@@ -178,27 +178,6 @@ pub(super) fn spec_value<'a>(product: &'a Value, sku: &SupplierSku) -> Connector
     Ok(found)
 }
 
-fn availability_value(query: &AvailabilityQuery, product: &Value) -> ConnectorResult<Snapshot<Availability>> {
-    let sku = &query.skus[0];
-    let Some(spec) = spec_value(product, sku)? else {
-        return Ok(snapshot(
-            Availability {
-                sku: sku.clone(),
-                state: AvailabilityState::Unknown,
-                quantity: AvailableQuantity::Unreported,
-                region: query.region.clone(),
-            },
-            None,
-        ));
-    };
-    let quantity = stock(&spec["stock"])?;
-    let state = availability_state(product, spec, &quantity)?;
-    Ok(snapshot(
-        Availability { sku: sku.clone(), state, quantity, region: query.region.clone() },
-        source_time(&spec["updated_at"])?,
-    ))
-}
-
 /// 结合上级状态、规格可购与库存判定可供性；忽略供应商 `is_up` 字段。
 /// # 参数
 /// `product` 为详情响应，`spec` 为目标规格，`quantity` 为已解析库存。
@@ -300,13 +279,22 @@ impl AvailabilitySource for DangaoshushuConnector {
     }
 
     async fn availability(&self, query: &AvailabilityQuery) -> ConnectorResult<Vec<Snapshot<Availability>>> {
-        if query.skus.len() != 1 {
+        let [sku] = query.skus.as_slice() else {
             return Err(mapping());
-        }
-        let sku = &query.skus[0];
+        };
         let city = self.query_city(query.region.as_ref())?;
         let product = self.product(sku, city).await?;
-        Ok(vec![availability_value(query, &product)?])
+        let (state, quantity, changed_at) = if let Some(spec) = spec_value(&product, sku)? {
+            let quantity = stock(&spec["stock"])?;
+            let state = availability_state(&product, spec, &quantity)?;
+            (state, quantity, source_time(&spec["updated_at"])?)
+        } else {
+            (AvailabilityState::Unknown, AvailableQuantity::Unreported, None)
+        };
+        Ok(vec![snapshot(
+            Availability { sku: sku.clone(), state, quantity, region: query.region.clone() },
+            changed_at,
+        )])
     }
 }
 

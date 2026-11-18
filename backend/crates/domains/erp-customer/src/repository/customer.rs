@@ -58,6 +58,21 @@ pub struct CustomerAccountFilter {
     pub sort_ascending: bool,
 }
 
+impl CustomerAccountFilter {
+    pub(super) fn page_options(&self) -> FindOptions {
+        FindOptions::builder()
+            .sort(sort_doc(
+                self.sort_by.as_deref(),
+                self.sort_ascending,
+                &["created_at", "updated_at", "customer_no", "status"],
+            ))
+            .skip(self.skip())
+            .limit(self.limit())
+            .projection(customer_account_projection())
+            .build()
+    }
+}
+
 impl Default for CustomerAccountFilter {
     /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
     ///
@@ -317,16 +332,7 @@ impl CustomerAccountRepositoryExt for Repository<'_, CustomerAccount> {
         filter: &CustomerAccountFilter,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<CustomerAccountRow>> {
-        let options = FindOptions::builder()
-            .sort(sort_doc(
-                filter.sort_by.as_deref(),
-                filter.sort_ascending,
-                &["created_at", "updated_at", "customer_no", "status"],
-            ))
-            .skip(filter.skip())
-            .limit(filter.limit())
-            .projection(customer_account_projection())
-            .build();
+        let options = filter.page_options();
         let collection = self.collection().clone_with_type::<CustomerAccountRow>();
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;

@@ -2,7 +2,6 @@
 use erp_finance::repository::extensions::ReceivableExt;
 use erp_identity::Result;
 use erp_identity::entity::resource_access::SourceKey;
-use erp_identity::entity::resource_access::event::GrantEvent;
 use persistence_core::Executor;
 
 use crate::ResourceGrantProcess;
@@ -56,34 +55,6 @@ pub enum GrantReadiness {
     Terminated,
 }
 impl ResourceGrantProcess {
-    /// 核对合法来源后返回读取授权是否就绪。
-    /// # 参数
-    /// expected 来自服务端正式事实，executor 为请求执行器。
-    /// # 返回
-    /// 待处理合法来源返回 NotReady，供业务接口映射为可刷新状态。
-    /// # 错误
-    /// 关联错误、事实读取失败或同键冲突时返回错误。
-    async fn readiness(&self, expected: &GrantEvent, executor: &mut dyn Executor) -> Result<GrantReadiness> {
-        let Some(event) = self.queue().event(expected, executor).await? else {
-            return Ok(GrantReadiness::Absent);
-        };
-        let update = Facts { db: self.db.clone(), event: None }.compute(&event, executor).await?;
-        let source = self.queue().source(&event.source, executor).await?;
-        Ok(match source {
-            Some(s) if s.terminated => GrantReadiness::Terminated,
-            Some(s)
-                if s.fact_version == update.fact_version
-                    && s.rule_version == update.rule_version
-                    && s.targets == update.targets =>
-            {
-                GrantReadiness::Ready
-            },
-            _ => GrantReadiness::NotReady,
-        })
-    }
-}
-
-impl ResourceGrantProcess {
     /// 对业务确定的来源读取正式事件，并以当前可信事实核验授权就绪。
     /// # 参数
     /// source 为服务端来源身份；executor 为当前请求事务。
@@ -96,9 +67,25 @@ impl ResourceGrantProcess {
         source: &SourceKey,
         executor: &mut dyn Executor,
     ) -> Result<GrantReadiness> {
-        let Some(event) = self.queue().source_event(source, executor).await? else {
+        let queue = self.queue();
+        let Some(expected) = queue.source_event(source, executor).await? else {
             return Ok(GrantReadiness::Absent);
         };
-        self.readiness(&event, executor).await
+        let Some(event) = queue.event(&expected, executor).await? else {
+            return Ok(GrantReadiness::Absent);
+        };
+        let update = Facts { db: self.db.clone(), event: None }.compute(&event, executor).await?;
+        let source = queue.source(&event.source, executor).await?;
+        Ok(match source {
+            Some(s) if s.terminated => GrantReadiness::Terminated,
+            Some(s)
+                if s.fact_version == update.fact_version
+                    && s.rule_version == update.rule_version
+                    && s.targets == update.targets =>
+            {
+                GrantReadiness::Ready
+            },
+            _ => GrantReadiness::NotReady,
+        })
     }
 }

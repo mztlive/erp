@@ -26,15 +26,7 @@ impl SalesReviewService {
         expected_version: u64,
         executor: &mut dyn Executor,
     ) -> Result<SalesChangeOrder> {
-        let change_order = self
-            .db
-            .sales_change_orders()
-            .find_by_id(id, executor)
-            .await?
-            .ok_or_else(|| Error::NotFound("销售变更单不存在".to_string()))?;
-        if !change_order.matches_version(expected_version) {
-            return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
-        }
+        let change_order = self.load_versioned_change(id, expected_version, executor).await?;
         if !change_order.is_editable() {
             return Err(Error::ConflictError("只有草稿或已驳回的销售变更单可以提交审批".to_string()));
         }
@@ -53,6 +45,15 @@ impl SalesReviewService {
     /// # 错误
     /// 缺单或过期版本保持原错误；本方法不修改状态。
     pub async fn load_for_cancellation(
+        &self,
+        id: &str,
+        expected_version: u64,
+        executor: &mut dyn Executor,
+    ) -> Result<SalesChangeOrder> {
+        self.load_versioned_change(id, expected_version, executor).await
+    }
+
+    async fn load_versioned_change(
         &self,
         id: &str,
         expected_version: u64,

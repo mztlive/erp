@@ -70,8 +70,7 @@ impl InventoryService {
                 let balance = StockBalanceRef::from(row);
                 let has_active_reservation =
                     active_reservation_dims.contains(&(balance.warehouse_id.clone(), balance.sku_id.clone()));
-                let can_create_adjustment = enrichments.warehouses.contains_key(&balance.warehouse_id)
-                    && create_warehouses.contains(&balance.warehouse_id);
+                let can_create_adjustment = create_warehouses.contains(&balance.warehouse_id);
                 enrich_balance_view(balance, &enrichments, has_active_reservation, can_create_adjustment)
             })
             .collect();
@@ -309,15 +308,13 @@ async fn search_balance_rows(
         sort_by,
         sort_ascending,
     };
-    let page = db
-        .stock_balances()
+    db.stock_balances()
         .search_authorized_stock_balances(
             &filter,
             authorization.query(InventoryAction::BalanceList),
             executor,
         )
-        .await?;
-    Ok(page)
+        .await
 }
 
 async fn load_balance_enrichments(
@@ -425,9 +422,6 @@ async fn active_reservation_dims(
     sku_ids: &[String],
     executor: &mut dyn Executor,
 ) -> Result<HashSet<(String, String)>> {
-    if warehouse_ids.is_empty() || sku_ids.is_empty() {
-        return Ok(HashSet::new());
-    }
     let reservations =
         db.inventory().operable_reservations_for_dimensions(warehouse_ids, sku_ids, executor).await?;
     Ok(reservations

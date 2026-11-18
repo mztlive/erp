@@ -6,61 +6,21 @@ use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Repository
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
-/// 列表筛选的排序字段（三份 Filter 的 `sort_by` / `sort_ascending` 同构读取）。
-pub(super) trait ListSort {
-    /// 读取筛选上的排序字段名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 未指定排序字段时返回 `None`。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    fn sort_by(&self) -> Option<&str>;
-    /// 读取筛选是否按升序排序。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 升序为 `true`，降序为 `false`。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    fn sort_ascending(&self) -> bool;
-}
-
-/// 执行投影分页查询：组装 `FindOptions`、按行类型投影，并对同一 `filter` 调用两次
-/// `to_doc()`（分别用于 `find_many` 与 `count_documents`）。
-///
-/// # 参数
-/// * `repo` - 实体集合仓储
-/// * `filter` - 筛选、分页与排序条件
-/// * `projection` - 列表投影字段
-/// * `allowed_sort` - 排序字段白名单；未命中回退 `created_at`
-/// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-///
-/// # 返回
-/// 返回当前页投影行与满足筛选条件的总数。
-///
-/// # 错误
-/// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+/// 执行投影分页查询：先取当前页，再按同一筛选条件计数。
 pub(super) async fn search_projected<Row, Entity, Filter>(
     repo: &Repository<'_, Entity>,
     filter: &Filter,
     projection: Document,
-    allowed_sort: &[&str],
+    sort: Document,
     executor: &mut dyn Executor,
 ) -> Result<PageResult<Row>>
 where
     Row: DeserializeOwned + Send + Sync,
     Entity: Serialize + DeserializeOwned + Send + Sync,
-    Filter: QueryFilter + Pagination + ListSort,
+    Filter: QueryFilter + Pagination,
 {
     let options = FindOptions::builder()
-        .sort(sort_doc(filter.sort_by(), filter.sort_ascending(), allowed_sort))
+        .sort(sort)
         .skip(filter.skip())
         .limit(filter.limit())
         .projection(projection)

@@ -6,13 +6,12 @@ use std::str::FromStr;
 
 use erp_core::common::time::Instant;
 use erp_core::money::Amount;
-use id_generator::next_id;
 
 use crate::entity::sales_order::{
-    FormalRevisionContext, FormalRevisionIdentities, FormalRevisionLineIdentity,
-    FormalRevisionSubtypeIdentity, RevisionSource, SalesOrder, SalesOrderRevisionAggregate,
+    FormalRevisionContext, RevisionSource, SalesOrder, SalesOrderRevisionAggregate,
 };
-use crate::entity::sales_review::{LineType, SalesChangeSubmission, SalesChangeSubmissionLine};
+use crate::entity::sales_review::{SalesChangeSubmission, SalesChangeSubmissionLine};
+use crate::service::sales_order::formalize::allocate_formal_revision_identities;
 use crate::{Error, Result};
 
 /// 销售版本聚合载体（版本头 + 公共行 + 子类型行）。
@@ -58,7 +57,7 @@ pub(super) fn build_change_revision(
     effective_at: Instant,
 ) -> Result<RevisionAggregate> {
     SalesOrderRevisionAggregate::from_sales_change_submission(
-        allocate_formal_revision_identities(submission_lines),
+        allocate_formal_revision_identities(submission_lines.iter().map(|line| line.line_type)),
         FormalRevisionContext::new(
             revision_no,
             RevisionSource::SalesChange,
@@ -70,40 +69,4 @@ pub(super) fn build_change_revision(
         submission_lines,
     )
     .map_err(Error::Logic)
-}
-
-/// 为变更提交行分配正式版本头、公共行和子类型身份。
-///
-/// # 参数
-/// * `lines` - 已冻结变更提交行
-///
-/// # 返回
-/// 返回与行顺序一致的身份清单。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// ID 由服务层生成，工厂不得调用 ID 生成器。
-fn allocate_formal_revision_identities(lines: &[SalesChangeSubmissionLine]) -> FormalRevisionIdentities {
-    FormalRevisionIdentities::new(
-        erp_core::ids::SalesOrderRevisionId::new(next_id()),
-        lines
-            .iter()
-            .map(|line| {
-                let subtype = match line.line_type {
-                    LineType::GoodsService => FormalRevisionSubtypeIdentity::goods(
-                        erp_core::ids::SalesOrderGoodsServiceLineRevisionId::new(next_id()),
-                    ),
-                    LineType::Voucher => FormalRevisionSubtypeIdentity::voucher(
-                        erp_core::ids::SalesOrderVoucherLineRevisionId::new(next_id()),
-                    ),
-                };
-                FormalRevisionLineIdentity::new(
-                    erp_core::ids::SalesOrderRevisionLineId::new(next_id()),
-                    subtype,
-                )
-            })
-            .collect(),
-    )
 }

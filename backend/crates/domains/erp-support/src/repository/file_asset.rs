@@ -227,11 +227,7 @@ pub trait FileAssetRepositoryExt {
 
 impl FileAssetRepositoryExt for persistence_core::Repository<'_, FileAsset> {
     async fn create_many_ordered(&self, assets: &[FileAsset], executor: &mut dyn Executor) -> Result<()> {
-        if assets.is_empty() {
-            return Ok(());
-        }
-        mongo_ops::insert_many(&self.collection(), assets, executor).await?;
-        Ok(())
+        mongo_ops::insert_many(&self.collection(), assets, executor).await
     }
 
     async fn find_by_ids(&self, ids: &[FileAssetId], executor: &mut dyn Executor) -> Result<Vec<FileAsset>> {

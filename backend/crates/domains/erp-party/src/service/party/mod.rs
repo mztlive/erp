@@ -406,7 +406,7 @@ impl PartyService {
         self.authorization.require(actor, permission, AccessTarget::Operation, executor).await?;
         let prepared = self.load_party_for_update(id, req, company, actor, executor).await?;
         let next_no = self.db.party_revisions().next_revision_no(&PartyId::new(id), executor).await?;
-        let (mut party, revision, update) = prepared.into_parts();
+        let PendingPartyUpdate { mut party, revision, update } = prepared;
         let revision = PartyRevision { revision: RevisionBase::new(next_no), ..revision };
         party.update(update, actor.id())?;
         ensure_identity_available(&self.db, &party, &revision, executor).await?;
@@ -608,19 +608,6 @@ struct PendingPartyUpdate {
     update: PartyUpdate,
 }
 
-impl PendingPartyUpdate {
-    /// 解包为事务内应用的三元组。
-    ///
-    /// # 参数
-    /// * `self` - 待更新主体包装
-    ///
-    /// # 返回
-    /// 返回 `(主体, 修订草稿, 更新意图)`。
-    fn into_parts(self) -> (Party, PartyRevision, PartyUpdate) {
-        (self.party, self.revision, self.update)
-    }
-}
-
 /// 拒绝通过共享 Party 子资源接口访问已挂供应商角色的主体。
 ///
 /// 供应商的主体、联系人、地址、税务等事实必须由供应商资料根级命令统一维护，
@@ -645,35 +632,7 @@ pub async fn ensure_outside_supplier_profile(
     ensure_supplier_profile_boundary(has_supplier_role)
 }
 
-/// 校验从属事实所属主体存在（erp-party-001）。
-///
-/// 四个从属事实服务（联系人/地址/税务资料/银行账户）创建入口的同一守卫；
-/// 存在性读取使用已授权的原事务执行器。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `party_id` - 主体 ID
-///
-/// # 返回
-/// 主体存在返回 `Ok(())`。
-///
-/// # 错误
-/// * `NotFound` - 主体不存在
-pub(crate) async fn ensure_party_exists(
-    db: &Database,
-    party_id: &str,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    db.parties()
-        .find_by_id(party_id, executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("主体不存在".to_string()))?;
-    Ok(())
-}
-
-/// 校验从属事实创建入口的同一守卫组合（erp-party-011）。
-///
-/// 主体存在性与供应商资料边界按创建路径固定顺序执行；与分开调用两守卫语义一致。
+/// 在原事务中先校验主体存在，再检查供应商资料边界。
 ///
 /// # 参数
 /// * `db` - 数据库实例
@@ -692,7 +651,10 @@ pub(crate) async fn ensure_new_fact_guards(
     party_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    ensure_party_exists(db, party_id, executor).await?;
+    db.parties()
+        .find_by_id(party_id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("主体不存在".to_string()))?;
     ensure_outside_supplier_profile(supplier_roles, &PartyId::new(party_id), executor).await
 }
 
@@ -719,26 +681,6 @@ fn ensure_supplier_profile_boundary(has_supplier_role: bool) -> Result<()> {
     }
     Ok(())
 }
-
-/// 清除同一主体其他行的默认标记（跨行约束，§6.2）。
-///
-/// 适用于联系人/地址/税务资料/银行账户的「同一主体同一时点最多一个默认
-/// 有效行」约束：加载 `is_default = true` 的既有行，除 `exclude_id` 外逐行
-/// 清除默认标记并 CAS 更新。**必须收到事务执行器**：与主写入组成同一
-/// 原子边界，传入 `NoTransaction` 时中途失败会留下多个默认行。
-///
-/// `$accessor` 必须是 `PartyExt` 的集合访问器方法名（`party_contacts`/
-/// `party_addresses`/`party_tax_profiles`/`party_bank_accounts`），行实体
-/// 必须带 `is_default: bool` 字段与公开 `base` 元数据。
-macro_rules! clear_default_marks {
-    ($db:expr, $accessor:ident, $party_id:expr, $exclude:expr, $executor:expr) => {{
-        let exclude: Option<&::std::string::String> = $exclude;
-        $db.$accessor()
-            .clear_other_default_marks(&$party_id, exclude.map(|id| id.as_str()), $executor)
-            .await?;
-    }};
-}
-pub(crate) use clear_default_marks;
 
 #[cfg(test)]
 mod tests {

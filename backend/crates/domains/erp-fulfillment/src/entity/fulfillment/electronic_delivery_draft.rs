@@ -113,7 +113,7 @@ impl ElectronicDeliveryDraft {
                 purchase_order_id: data.purchase_order_id,
                 purchase_line_sales_allocation_id: data.purchase_line_sales_allocation_id,
                 recipient_snapshot: data.recipient_snapshot,
-                recipient_snapshot_fingerprint: data.recipient_snapshot_fingerprint.as_str().to_string(),
+                recipient_snapshot_fingerprint: data.recipient_snapshot_fingerprint.0,
                 quantity: data.quantity,
                 result: data.result,
                 evidence_attachment_id: data.evidence_attachment_id,

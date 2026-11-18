@@ -6,12 +6,9 @@ use erp_core::common::time::Instant;
 use erp_returns::entity::returns::ReceiptReversal;
 use erp_returns::repository::ReturnsExt;
 use erp_returns::service::ReturnsService;
-use erp_workflow::BpmExt;
 use erp_workflow::entity::approval_integration::ApprovalSubjectSnapshotPayload;
 use erp_workflow::entity::document_registry::DocumentType;
-use erp_workflow::service::approval::execution::{
-    PreparedExecution, StartExecutionInput, map_receipt_first_write_error,
-};
+use erp_workflow::service::approval::execution::{PreparedExecution, StartExecutionInput};
 use erp_workflow::service::approval::resubmission::complete_resubmission;
 use mongodb::Database;
 use persistence_core::Executor;
@@ -20,7 +17,7 @@ use super::super::adapter::receipt_reversal_object_readable;
 use super::common::{ReverseStartContracts, ReverseStartInput, build_reverse_start_input};
 use super::ensure_return_start_replay_authorized;
 use super::prepare::load_start_receipt_for_document_type;
-use super::reversal_submit::{committed_reversal_submit, mark_reversal_started, persist_submit_receipt};
+use super::reversal_submit::{committed_reversal_submit, persist_start_guard, persist_submit_receipt};
 use crate::{Error, Result, ReverseFlowPorts};
 
 /// 读取回款冲正同载荷启动收据；不存在时返回 `None`。
@@ -170,11 +167,7 @@ pub async fn persist_receipt_reversal_start(
         return Err(Error::Forbidden("当前账号不能复用其他账号的操作号".to_string()));
     }
     let audit = actor.resource_log("receipt_reversal.submit", "receipt_reversal", id.clone())?;
-    db.bpm_workflow()
-        .insert_command_receipt(&writes.receipt, executor)
-        .await
-        .map_err(map_receipt_first_write_error)?;
-    mark_reversal_started(db, DocumentType::ReceiptReversal, &writes, now, executor).await?;
+    persist_start_guard(db, DocumentType::ReceiptReversal, &writes, now, executor).await?;
     let mut reversal = reversal;
     ReturnsService::persist_receipt_reversal(db, &mut reversal, executor).await?;
     persist_receipt_reversal_runtime(

@@ -43,21 +43,15 @@ pub async fn load_latest_submission(
     Ok((submission, lines))
 }
 
-/// 在构造聚合之前，按冻结提交行顺序分配正式版本头、公共行和子类型身份。
-fn allocate_formal_revision_identities(lines: &[SalesOrderSubmissionLine]) -> FormalRevisionIdentities {
+/// 先分配版本头，再按提交行顺序分配子类型身份和公共行身份。
+pub(in crate::service) fn allocate_formal_revision_identities(
+    line_types: impl Iterator<Item = LineType>,
+) -> FormalRevisionIdentities {
     FormalRevisionIdentities::new(
         SalesOrderRevisionId::new(next_id()),
-        lines
-            .iter()
-            .map(|line| {
-                let subtype = match line.line_type {
-                    LineType::GoodsService => FormalRevisionSubtypeIdentity::goods(
-                        erp_core::ids::SalesOrderGoodsServiceLineRevisionId::new(next_id()),
-                    ),
-                    LineType::Voucher => FormalRevisionSubtypeIdentity::voucher(
-                        erp_core::ids::SalesOrderVoucherLineRevisionId::new(next_id()),
-                    ),
-                };
+        line_types
+            .map(|line_type| {
+                let subtype = FormalRevisionSubtypeIdentity::from_line_type(line_type, next_id());
                 FormalRevisionLineIdentity::new(
                     erp_core::ids::SalesOrderRevisionLineId::new(next_id()),
                     subtype,
@@ -89,7 +83,7 @@ pub fn build_revision_for_order(
     effective_at: Instant,
 ) -> Result<SalesOrderRevisionAggregate> {
     SalesOrderRevisionAggregate::from_sales_order_submission(
-        allocate_formal_revision_identities(submission_lines),
+        allocate_formal_revision_identities(submission_lines.iter().map(|line| line.line_type)),
         FormalRevisionContext::new(
             1,
             RevisionSource::ErpApproval,

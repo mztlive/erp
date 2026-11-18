@@ -183,17 +183,7 @@ impl DocumentNumberKind {
 /// # 错误
 /// 无。
 pub fn format_number(kind: DocumentNumberKind, date: NaiveDate, seq: i64) -> String {
-    format!("{}{}-{:0width$}", kind.prefix(), display_date(date), seq, width = SEQ_WIDTH)
-}
-
-/// 格式化编号展示段日期（YYYYMMDD）。
-fn display_date(date: NaiveDate) -> String {
-    date.format("%Y%m%d").to_string()
-}
-
-/// 格式化计数器追溯段日期（YYYY-MM-DD）。
-fn trace_date(date: NaiveDate) -> String {
-    date.format("%Y-%m-%d").to_string()
+    format!("{}{}-{:0width$}", kind.prefix(), date.format("%Y%m%d"), seq, width = SEQ_WIDTH)
 }
 
 /// 计数器集合中的文档形态。
@@ -277,7 +267,7 @@ impl DocumentNumberGenerator {
                 doc! { "_id": counter_id },
                 doc! {
                     "$inc": { "seq": 1_i64 },
-                    "$set": { "date": trace_date(date) },
+                    "$set": { "date": date.format("%Y-%m-%d").to_string() },
                     "$currentDate": { "updated_at": true },
                 },
             )

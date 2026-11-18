@@ -3,7 +3,10 @@
 use bpm::engine::{CommitRequired, DecideCommand, TransitionPlan, block_current, decide};
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId};
 use bpm::model::types::{ApprovalBlockerCode, ApprovalDecision};
-use bpm::model::{ApprovalCommandReceipt, ApprovalNodeExecution, ApprovalProcessInstance, ParticipantId};
+use bpm::model::{
+    ApprovalCommandIdentity, ApprovalCommandReceipt, ApprovalNodeExecution, ApprovalProcessInstance,
+    ParticipantId,
+};
 
 use super::apply_plan::{DomainActionKind, apply_plan};
 use super::authorization::ensure_triple_responsibility;
@@ -82,7 +85,7 @@ pub fn prepare_decision(input: DecisionExecutionInput) -> Result<PreparedExecuti
         &input.instance_assignee_id,
     )?;
     if input.open_task_count > 1 + input.current.additional_assignees.len() {
-        return prepare_open_task_conflict(input);
+        return prepare_open_task_conflict(input, identity.current());
     }
     let terminal_reject = input.decision == ApprovalDecision::Reject;
     let plan = decide(
@@ -119,7 +122,7 @@ fn decision_domain_action(plan: &TransitionPlan, terminal_reject: bool) -> Optio
 /// 收据构造失败时返回校验错误。
 fn receipt_from_plan(
     id: ApprovalCommandReceiptId,
-    identity: &bpm::model::ApprovalCommandIdentity,
+    identity: &ApprovalCommandIdentity,
     plan: &TransitionPlan,
     now: bpm::model::Timestamp,
 ) -> Result<ApprovalCommandReceipt> {
@@ -131,6 +134,7 @@ fn receipt_from_plan(
 ///
 /// # 参数
 /// * `input` - 已完成幂等与三重责任重验的决定输入
+/// * `identity` - 已验证的当前命令身份
 ///
 /// # 返回
 /// 返回包含收据、标准 `InstanceBlocked` 事件与任务关闭意图的可提交计划。
@@ -140,20 +144,14 @@ fn receipt_from_plan(
 ///
 /// # 关键业务约束
 /// 实例、执行、任务意图与中性事件必须全部来自 BPM 标准阻塞入口。
-fn prepare_open_task_conflict(input: DecisionExecutionInput) -> Result<PreparedExecution> {
+fn prepare_open_task_conflict(
+    input: DecisionExecutionInput,
+    identity: &ApprovalCommandIdentity,
+) -> Result<PreparedExecution> {
     let now = input.command.now;
-    let identity = decision_identity(
-        input.command.idempotency_key,
-        &input.current.base.id,
-        &input.work_item_id,
-        input.decision.as_str(),
-        input.reason.as_deref(),
-        input.expected_task_version,
-        input.actor.as_str(),
-    )?;
     let plan = block_current(input.instance, input.current, ApprovalBlockerCode::OpenTaskConflict, now)
         .map_err(map_engine_error)?;
-    let receipt = receipt_from_plan(input.receipt_id, identity.current(), &plan, now)?;
+    let receipt = receipt_from_plan(input.receipt_id, identity, &plan, now)?;
     Ok(PreparedExecution::Apply(Box::new(apply_plan(plan, receipt, None))))
 }
 

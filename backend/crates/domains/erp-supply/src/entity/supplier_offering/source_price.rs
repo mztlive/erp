@@ -1,6 +1,6 @@
 //! 供应商来源采购价的只读约束与不可变修订。
 use erp_core::ids::SupplierOfferingRevisionId;
-use erp_core::money::UnitPrice;
+use erp_core::money::{Rate, UnitPrice};
 
 use super::{FromGrossPricesParams, SupplierOfferingRevision, SupplierOfferingRevisionData};
 use crate::entity::supplier_catalog::SupplierCatalogItem;
@@ -102,19 +102,7 @@ impl SupplierOfferingRevision {
         if self.dropship_supply_price_gross == price {
             return Ok(None);
         }
-        let data = SupplierOfferingRevisionData::from_gross_prices(FromGrossPricesParams {
-            supplier_offering_id: self.supplier_offering_id.clone(),
-            revision_no,
-            dropship_supply_price_gross: price,
-            bulk_supply_price_gross: self.bulk_supply_price_gross,
-            input_tax_rate: self.input_tax_rate,
-            bulk_minimum_order_quantity: self.bulk_minimum_order_quantity,
-            product_capabilities: self.product_capabilities.clone(),
-            valid_from: self.valid_from,
-            valid_to: self.valid_to,
-            prefill_source_refs: self.prefill_source_refs.clone(),
-        });
-        let mut next = Self::new(id, data)?;
+        let mut next = self.next_priced_revision(id, revision_no, price, self.input_tax_rate)?;
         next.source_purchase_terms = self.source_purchase_terms.clone();
         Ok(Some(next))
     }
@@ -145,21 +133,31 @@ impl SupplierOfferingRevision {
         {
             return Ok(None);
         }
+        let mut next = self.next_priced_revision(id, revision_no, price, tax_rate)?;
+        item.bind_purchase_terms(&mut next)?;
+        Ok(Some(next))
+    }
+
+    fn next_priced_revision(
+        &self,
+        id: SupplierOfferingRevisionId,
+        revision_no: u32,
+        price: UnitPrice,
+        input_tax_rate: Rate,
+    ) -> Result<Self> {
         let data = SupplierOfferingRevisionData::from_gross_prices(FromGrossPricesParams {
             supplier_offering_id: self.supplier_offering_id.clone(),
             revision_no,
             dropship_supply_price_gross: price,
             bulk_supply_price_gross: self.bulk_supply_price_gross,
-            input_tax_rate: tax_rate,
+            input_tax_rate,
             bulk_minimum_order_quantity: self.bulk_minimum_order_quantity,
             product_capabilities: self.product_capabilities.clone(),
             valid_from: self.valid_from,
             valid_to: self.valid_to,
             prefill_source_refs: self.prefill_source_refs.clone(),
         });
-        let mut next = Self::new(id, data)?;
-        item.bind_purchase_terms(&mut next)?;
-        Ok(Some(next))
+        Self::new(id, data).map_err(Error::from)
     }
 }
 

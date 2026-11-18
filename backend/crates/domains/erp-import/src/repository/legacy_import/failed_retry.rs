@@ -79,10 +79,7 @@ impl LegacyImportRowFailedRetryExt for persistence_core::Repository<'_, LegacyIm
         rows: &mut [LegacyImportRow],
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        if rows.is_empty() {
-            return Ok(());
-        }
-        for row in rows.iter_mut() {
+        for row in rows {
             self.update(row, executor).await?;
         }
         Ok(())

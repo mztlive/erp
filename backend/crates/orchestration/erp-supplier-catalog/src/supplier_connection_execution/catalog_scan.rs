@@ -1,4 +1,4 @@
-//! 分页读取及素材准备在事务外；来源、公司资料、检查点与任务心跳同事务。
+//! 分页读取及来源映射在事务外；来源、公司资料、检查点与任务心跳同事务。
 use std::cmp::Ordering;
 
 use application_core::AuditActor;
@@ -23,20 +23,15 @@ use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::SupplierConnectionExecutionProcess;
-use crate::source_media::PreparedSourceMedia;
 use crate::{Error, Result};
 
-struct PreparedObservation {
-    item: SupplierCatalogItem,
-    media: PreparedSourceMedia,
-}
 struct Withdrawal {
     sku: SupplierSku,
     stamp: SourceStamp,
 }
 struct PreparedPage {
     membership: Option<CatalogMembershipPage>,
-    items: Vec<PreparedObservation>,
+    items: Vec<SupplierCatalogItem>,
     withdrawn: Vec<Withdrawal>,
     next: Option<String>,
     count: u64,
@@ -92,7 +87,7 @@ impl SupplierConnectionExecutionProcess {
                 limit: policy.page_size,
             };
             let page = self.gateway.catalog_page(&current, &scan).await?;
-            let prepared = self.prepare_page(&current, &run.base.id, page, actor).await.map_err(classify)?;
+            let prepared = self.prepare_page(&current, &run.base.id, page).await.map_err(classify)?;
             self.save_catalog_page(current, run, prepared, actor).await.map_err(classify)?;
         }
     }
@@ -143,7 +138,6 @@ impl SupplierConnectionExecutionProcess {
         connection: &SupplierApiConnection,
         job: &str,
         page: CatalogPage,
-        actor: &AuditActor,
     ) -> Result<PreparedPage> {
         let count =
             u64::try_from(page.items.len()).map_err(|_| Error::ValidationError("来源商品数量超限".into()))?;
@@ -155,52 +149,31 @@ impl SupplierConnectionExecutionProcess {
             count,
             skipped: page.skipped,
         };
-        if let Err(error) = self.prepare_page_items(connection, job, page.items, actor, &mut prepared).await {
-            for observation in &prepared.items {
-                observation.media.cleanup_handle().discard_uncommitted().await;
-            }
-            return Err(error);
-        }
-        Ok(prepared)
-    }
-
-    async fn prepare_page_items(
-        &self,
-        connection: &SupplierApiConnection,
-        job: &str,
-        items: Vec<Snapshot<OfferChange>>,
-        actor: &AuditActor,
-        prepared: &mut PreparedPage,
-    ) -> Result<()> {
-        for snapshot in items {
+        for snapshot in page.items {
             self.heartbeat_catalog_job(job).await?;
             match snapshot.value {
                 OfferChange::Upsert(offer) => {
-                    let observation = self
-                        .prepare_catalog_observation(
-                            connection,
-                            job,
-                            Snapshot { value: *offer, stamp: snapshot.stamp },
-                            actor,
-                        )
-                        .await?;
-                    prepared.items.push(observation);
+                    let item = self.prepare_catalog_observation(
+                        connection,
+                        job,
+                        Snapshot { value: *offer, stamp: snapshot.stamp },
+                    )?;
+                    prepared.items.push(item);
                 },
                 OfferChange::Withdrawn(sku) => {
                     prepared.withdrawn.push(Withdrawal { sku, stamp: snapshot.stamp })
                 },
             }
         }
-        Ok(())
+        Ok(prepared)
     }
 
-    async fn prepare_catalog_observation(
+    fn prepare_catalog_observation(
         &self,
         connection: &SupplierApiConnection,
         job: &str,
         snapshot: Snapshot<Offer>,
-        actor: &AuditActor,
-    ) -> Result<PreparedObservation> {
+    ) -> Result<SupplierCatalogItem> {
         let mut item = SupplierCatalogItem::observed(
             &connection.base.id,
             connection.supplier_id.as_ref(),
@@ -213,14 +186,12 @@ impl SupplierConnectionExecutionProcess {
             .and_then(|seconds| i64::try_from(seconds).ok())
             .and_then(|seconds| item.observed_at.unix_secs().checked_add(seconds))
             .map(Instant::from_unix_secs);
-        let _ = actor;
         if item.images.as_ref().is_some_and(|images| !images.is_empty())
             || item.detail_images.as_ref().is_some_and(|images| !images.is_empty())
         {
             item.media_retry_at = Some(Instant::now().unix_secs());
         }
-        let media = PreparedSourceMedia::empty();
-        Ok(PreparedObservation { item, media })
+        Ok(item)
     }
 
     async fn heartbeat_catalog_job(&self, id: &str) -> Result<()> {
@@ -239,21 +210,6 @@ impl SupplierConnectionExecutionProcess {
     }
 
     async fn save_catalog_page(
-        &self,
-        connection: SupplierApiConnection,
-        run: SupplierCatalogRun,
-        page: PreparedPage,
-        actor: &AuditActor,
-    ) -> Result<()> {
-        let cleanups = page.items.iter().map(|item| item.media.cleanup_handle()).collect::<Vec<_>>();
-        let outcome = self.commit_catalog_page(connection, run, page, actor).await;
-        for cleanup in cleanups {
-            cleanup.after_transaction(&outcome).await;
-        }
-        outcome
-    }
-
-    async fn commit_catalog_page(
         &self,
         connection: SupplierApiConnection,
         run: SupplierCatalogRun,
@@ -315,9 +271,8 @@ async fn save_page_items(
     save_membership_page(db, connection, checkpoint, &page, executor).await?;
     checkpoint.advance(page.next, page.count)?;
     checkpoint.record_skipped(page.skipped)?;
-    for observation in page.items {
-        observation.media.pending_assets.persist(db, executor).await?;
-        save_observation(db, catalog, observation.item, actor, executor).await?;
+    for item in page.items {
+        save_observation(db, catalog, item, actor, executor).await?;
     }
     for withdrawal in page.withdrawn {
         apply_withdrawal(db, &checkpoint.connection_id, &checkpoint.base.id, withdrawal, actor, executor)

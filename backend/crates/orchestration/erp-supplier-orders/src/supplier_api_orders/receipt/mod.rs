@@ -51,9 +51,15 @@ impl SupplierApiOrderProcess {
             .find(|action| action.state == ReceiptActionState::SentUnknown)
             .cloned()
         {
-            return self
-                .recover_receipt(execution, &action.order, action.topology_version, port, source_error)
-                .await;
+            return dispatch::recover(
+                self,
+                &mut execution,
+                &action.order,
+                action.topology_version,
+                port,
+                source_error,
+            )
+            .await;
         }
         if let Some(error) = source_error {
             execution.receipt_blocker = Some(if execution.receipt_actions.is_empty() {
@@ -98,17 +104,6 @@ impl SupplierApiOrderProcess {
                 self.save_receipt_progress(&mut execution).await
             },
         }
-    }
-
-    async fn recover_receipt(
-        &self,
-        mut execution: ApiOrderExecution,
-        order: &OrderReference,
-        version: u64,
-        port: &dyn OrderReceiptConfirmation,
-        source_error: Option<String>,
-    ) -> Result<()> {
-        dispatch::recover(self, &mut execution, order, version, port, source_error).await
     }
 }
 

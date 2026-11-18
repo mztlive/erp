@@ -11,7 +11,6 @@ use erp_supply::entity::supplier_settlement::SupplierSettlementDifferenceEvidenc
 use erp_supply::service::supplier_settlement::evidence::{evidence_command_hash, evidence_result};
 use erp_supply::service::supplier_settlement::{SettlementAction, SupplierSettlementService};
 use erp_workflow::ports::WorkflowAuthorizationPort;
-use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
@@ -93,15 +92,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             "supplier_settlement_difference",
             req.difference_id.clone(),
         )?;
-        let input = EvidenceWrite {
-            db: self.db.clone(),
-            difference_id: req.difference_id.clone(),
-            statement_id: req.statement_id.clone(),
-            expected_difference_version: req.expected_difference_version,
-            evidence: evidence.clone(),
-            audit,
-        };
-        input.persist(executor).await?;
+        self.persist(req, &evidence, &audit, executor).await?;
         Ok(evidence_result(evidence, "RECORDED", "差异补证已登记，不会直接改变正式差异结论"))
     }
 
@@ -134,30 +125,25 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             .require_action(actor, SettlementAction::AppendEvidence, &req.statement_id, executor)
             .await?)
     }
-}
 
-struct EvidenceWrite {
-    db: Database,
-    difference_id: String,
-    statement_id: String,
-    expected_difference_version: u64,
-    evidence: SupplierSettlementDifferenceEvidence,
-    audit: AuditLog,
-}
-
-impl EvidenceWrite {
     /// 原补证和审计沿命令入口执行器原子写入，恢复仍由入口负责。
-    async fn persist(self, executor: &mut dyn Executor) -> Result<()> {
+    async fn persist(
+        &self,
+        req: &SettlementDifferenceEvidenceRequest,
+        evidence: &SupplierSettlementDifferenceEvidence,
+        audit: &AuditLog,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
         SupplierSettlementService::new(self.db.clone())
             .persist_difference_evidence(
-                &self.difference_id,
-                &self.statement_id,
-                self.expected_difference_version,
-                &self.evidence,
+                &req.difference_id,
+                &req.statement_id,
+                req.expected_difference_version,
+                evidence,
                 executor,
             )
             .await?;
-        persist_log(&self.db, &self.audit, executor).await?;
+        persist_log(&self.db, audit, executor).await?;
         Ok(())
     }
 }

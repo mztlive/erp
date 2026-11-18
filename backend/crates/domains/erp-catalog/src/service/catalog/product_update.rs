@@ -17,7 +17,7 @@ use super::support::ensure_version;
 use crate::dto::{ProductSkuInput, ProductView, UpdateProductRequest};
 use crate::entity::catalog::product::Product;
 use crate::entity::catalog::product_revision::{ProductRevision, ProductRevisionData};
-use crate::entity::catalog::product_revision_media::{MediaRole, ProductRevisionMedia};
+use crate::entity::catalog::product_revision_media::ProductRevisionMedia;
 use crate::entity::catalog::sku::{Sku, SkuEditAction};
 use crate::entity::catalog::{
     ProductId, ProductRevisionId, SkuId, SpecificationSignatureSet, next_revision_no,
@@ -327,26 +327,8 @@ impl CatalogService {
         let next_product_revision_no = self.next_product_revision_no(&product_id, executor).await?;
         let revision_id = ProductRevisionId::new(next_id());
         let media = self
-            .build_media_rows(
-                &revision_id,
-                &req.carousel_media,
-                MediaRole::Carousel,
-                pending_assets,
-                executor,
-            )
-            .await?
-            .into_iter()
-            .chain(
-                self.build_media_rows(
-                    &revision_id,
-                    &req.detail_media,
-                    MediaRole::Detail,
-                    pending_assets,
-                    executor,
-                )
-                .await?,
-            )
-            .collect::<Vec<_>>();
+            .build_spu_media(&revision_id, &req.carousel_media, &req.detail_media, pending_assets, executor)
+            .await?;
         Ok(SpecEditBase { product_id, current_by_signature, next_product_revision_no, revision_id, media })
     }
 

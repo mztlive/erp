@@ -134,11 +134,12 @@ impl From<persistence_core::Error> for Error {
     fn from(error: persistence_core::Error) -> Self {
         match error {
             error @ persistence_core::Error::DuplicateKey(_) => {
-                if historical_http_index(error.duplicate_index_name()) {
+                let index_name = error.duplicate_index_name();
+                if historical_http_index(index_name) {
                     // 这三个索引无活动生产者。保留 typed DuplicateKey，不能伪装成回执重复。
                     Self::RepositoryError(error)
                 } else {
-                    Self::ConflictError(duplicate_key_conflict_message(&error))
+                    Self::ConflictError(duplicate_index_conflict_message(index_name))
                 }
             },
             persistence_core::Error::OptimisticLockingError => {
@@ -161,10 +162,6 @@ fn historical_http_index(index_name: Option<&str>) -> bool {
             | Some("uk_procurement_confirmation_lines_active_confirmation_line")
             | Some("uk_product_publication_revisions_publication_revision")
     )
-}
-
-fn duplicate_key_conflict_message(error: &persistence_core::Error) -> String {
-    duplicate_index_conflict_message(error.duplicate_index_name())
 }
 
 /// 已知提示只由实际拥有域提供。无名/未知索引保持原通用冲突提示。

@@ -13,9 +13,6 @@ pub(super) fn read(
     context: &JdVopRequestContext,
 ) -> ConnectorResult<Box<RawValue>> {
     use JdVopReadRequest as R;
-    if matches!(request, R::Stock { .. } | R::SaleEligibility { .. } | R::Freight { .. }) {
-        return inventory(request, context);
-    }
     match request {
         R::Order { merchant_order_no, external_order_no } => {
             if merchant_order_no.is_none() && external_order_no.is_none() {
@@ -44,13 +41,6 @@ pub(super) fn read(
         R::CancelProgress { external_order_no } => {
             flat(json!({"jdOrderId":identifier(external_order_no)?}), context)
         },
-        _ => funds_messages(request, context),
-    }
-}
-
-fn inventory(request: &JdVopReadRequest, context: &JdVopRequestContext) -> ConnectorResult<Box<RawValue>> {
-    use JdVopReadRequest as R;
-    match request {
         R::Stock { lines, area: address } | R::SaleEligibility { lines, area: address } => envelope(
             "getStockByIdGoodsReq",
             &json!({"skuNumInfoList":lines_value(lines,"skuNumber")?,"areaInfo":area(address)?}),
@@ -66,7 +56,7 @@ fn inventory(request: &JdVopReadRequest, context: &JdVopRequestContext) -> Conne
                 Some(context),
             )
         },
-        _ => Err(mapping("京东预检读取方法不匹配")),
+        _ => funds_messages(request, context),
     }
 }
 

@@ -203,7 +203,10 @@ fn timeout_source(error: &ProviderError) -> Option<&'static str> {
     if error.provider_response_status().is_some_and(|status| matches!(status.as_u16(), 408 | 504)) {
         return Some("upstream_http");
     }
-    http_failure(error).and_then(|failure| transport_failure(failure).1)
+    match http_failure(error) {
+        Some(Failure::Timeout(source)) => Some(source.as_str()),
+        _ => None,
+    }
 }
 
 fn transport_failure(failure: Failure) -> (ImportFailure, Option<&'static str>) {

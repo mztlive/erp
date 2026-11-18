@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{Error, Notification, Result};
 
+pub(crate) const INBOX_PAGE_SIZE: usize = 20;
+
 /// 收件箱游标；时间和 ID 同时参与排序，避免同秒消息遗漏。
 #[derive(Debug, Default, Deserialize)]
 pub struct InboxQuery {
@@ -64,8 +66,8 @@ pub struct InboxPage {
 
 impl InboxPage {
     pub(crate) fn from_records(mut items: Vec<Notification>, unread_count: u64) -> Self {
-        let has_more = items.len() > 20;
-        items.truncate(20);
+        let has_more = items.len() > INBOX_PAGE_SIZE;
+        items.truncate(INBOX_PAGE_SIZE);
         Self { items: items.into_iter().map(NotificationView::from).collect(), unread_count, has_more }
     }
 }

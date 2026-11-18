@@ -303,7 +303,7 @@ impl DefinitionGraph {
         at: Timestamp,
     ) -> ModelResult<Vec<ApprovalNodeDefinition>> {
         self.definition.ensure_mutable()?;
-        let drafts = ordered_replacement_drafts(drafts)?;
+        let drafts = ordered_by_display_order(drafts, |draft| draft.display_order)?;
         let existing = self.nodes.iter().map(|node| (node.base.id.as_str(), node)).collect::<HashMap<_, _>>();
         let mut seen_existing = HashSet::new();
         let mut planned = Vec::with_capacity(drafts.len());
@@ -442,8 +442,12 @@ pub struct NewPopulatedDraftParams {
 pub fn assignee_ids(nodes: &[ApprovalNodeDefinition]) -> Vec<String> {
     let mut ids = nodes
         .iter()
-        .flat_map(|node| node.participants())
-        .map(|person| person.participant_id.as_str().to_string())
+        .flat_map(|node| {
+            node.assignee_participant_id
+                .iter()
+                .chain(node.additional_assignees.iter().map(|person| &person.participant_id))
+        })
+        .map(|id| id.as_str().to_owned())
         .collect::<Vec<_>>();
     ids.sort();
     ids.dedup();
@@ -496,20 +500,6 @@ pub fn copy_nodes_for_definition(
     }
     ensure_unique_node_identities(&copied)?;
     Ok(copied)
-}
-
-/// 按展示顺序排列节点替换输入并校验连续顺序。
-///
-/// # 参数
-/// * `drafts` - 未排序的整组替换输入
-///
-/// # 返回
-/// 返回从 1 开始连续排列的输入引用。
-///
-/// # 错误
-/// 节点数量不在 `1..=20` 或顺序不连续时返回模型错误。
-fn ordered_replacement_drafts(drafts: &[NodeReplacementDraft]) -> ModelResult<Vec<&NodeReplacementDraft>> {
-    ordered_by_display_order(drafts, |draft| draft.display_order)
 }
 
 /// 按展示顺序排列并校验数量与连续性（节点与替换草稿共用）。
@@ -649,8 +639,8 @@ mod tests {
     use crate::ids::{ApprovalNodeDefinitionId, ApprovalProcessDefinitionId, ApprovalTransitionDefinitionId};
     use crate::model::types::{ApprovalDecision, ApprovalTransitionEvent, ModelError};
     use crate::model::{
-        ApprovalNodeDefinition, ApprovalProcessDefinition, ApprovalTransitionDefinition, NewNodeDefinition,
-        ParticipantId, ProcessKind, Timestamp,
+        ApprovalNodeDefinition, ApprovalParticipant, ApprovalProcessDefinition, ApprovalTransitionDefinition,
+        NewNodeDefinition, ParticipantId, ProcessKind, Timestamp,
     };
 
     /// 构造最小草稿定义。
@@ -681,6 +671,25 @@ mod tests {
             at: Timestamp::from_unix_secs(1).unwrap(),
         })
         .unwrap()
+    }
+
+    #[test]
+    fn assignee_ids_include_all_present_participants_sorted_and_deduplicated() {
+        let first = node("id1", "n1", 2, None)
+            .with_additional_assignees(vec![
+                ApprovalParticipant::new(ParticipantId::new("u3").unwrap(), "人员3").unwrap(),
+                ApprovalParticipant::new(ParticipantId::new("u1").unwrap(), "人员1").unwrap(),
+            ])
+            .unwrap();
+        let mut unresolved = node("id2", "n2", 3, None);
+        unresolved.assignee_participant_id = None;
+        let unresolved = unresolved.with_rule(Some("manager".into())).unwrap();
+        let graph = DefinitionGraph {
+            definition: definition("n3"),
+            nodes: vec![first, unresolved, node("id3", "n3", 1, None)],
+            transitions: Vec::new(),
+        };
+        assert_eq!(graph.assignee_ids(), ["u1", "u2", "u3"]);
     }
 
     /// 节点替换保留已有身份、使用调用方新身份，并拒绝重复与跨定义引用。

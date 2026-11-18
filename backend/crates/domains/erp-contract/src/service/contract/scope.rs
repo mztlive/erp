@@ -41,7 +41,7 @@ impl ContractService {
     /// 组织筛选按当前主负责人所属组织收窄，不得扩大授权结果。
     pub(super) async fn list_snapshot(
         &self,
-        query: ContractListQuery,
+        query: &ContractListQuery,
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<ContractSnapshot> {
@@ -52,7 +52,7 @@ impl ContractService {
             self.customers.as_ref(),
             &self.accounts,
             &context,
-            &query,
+            query,
             executor,
         )
         .await?;
@@ -71,7 +71,7 @@ impl ContractService {
     /// 当前授权、筛选事实或仓储读取失败时拒绝。
     pub(super) async fn list_scope_version(
         &self,
-        query: ContractListQuery,
+        query: &ContractListQuery,
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<String> {
@@ -82,7 +82,7 @@ impl ContractService {
             self.customers.as_ref(),
             &self.accounts,
             &context,
-            &query,
+            query,
             executor,
         )
         .await?;

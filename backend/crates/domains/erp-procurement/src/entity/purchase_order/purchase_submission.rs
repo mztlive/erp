@@ -18,6 +18,7 @@ use serde::{Deserialize, Serialize};
 
 pub use super::purchase_submission_line::{PurchaseOrderSubmissionLine, PurchaseOrderSubmissionLineData};
 use crate::entity::purchase_order::PaymentSubjectSnapshot;
+use crate::entity::purchase_order::line_amounts::ensure_header_triple;
 use crate::entity::purchase_order::snapshot::{PaymentTermSnapshot, SupplierSnapshot};
 use crate::entity::purchase_order::types::{FulfillmentResponsibility, PurchaseType, status_display};
 
@@ -179,7 +180,9 @@ impl PurchaseOrderSubmission {
             SUBMISSION_NO_MAX_LEN,
             "提交序号过长",
         )?;
-        ensure_header_triple(data.gross_amount, data.net_amount, data.tax_amount, &submission_no)?;
+        ensure_header_triple(data.gross_amount, data.net_amount, data.tax_amount, || {
+            format!("提交表头金额三元组不守恒（{submission_no}）")
+        })?;
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             purchase_order_id: data.purchase_order_id,
@@ -508,30 +511,6 @@ impl PurchaseOrderSubmission {
 /// 编号匹配前缀且后缀可解析为 `u32` 时返回序号，否则返回 `None`。
 fn parse_sequence(value: &str, prefix: &str) -> Option<u32> {
     value.strip_prefix(prefix)?.parse().ok()
-}
-
-/// 校验表头金额三元组守恒。
-///
-/// # 参数
-/// * `gross_amount` / `net_amount` / `tax_amount` - 表头汇总
-/// * `context` - 错误提示中的上下文（如提交序号）
-///
-/// # 错误
-/// `gross ≠ net + tax` 或任一分量为负时返回错误。
-fn ensure_header_triple(
-    gross_amount: Amount,
-    net_amount: Amount,
-    tax_amount: Amount,
-    context: &str,
-) -> Result<()> {
-    if gross_amount.to_decimal() != net_amount.to_decimal() + tax_amount.to_decimal()
-        || gross_amount.to_decimal() < rust_decimal::Decimal::ZERO
-        || net_amount.to_decimal() < rust_decimal::Decimal::ZERO
-        || tax_amount.to_decimal() < rust_decimal::Decimal::ZERO
-    {
-        return Err(Error::from(format!("提交表头金额三元组不守恒（{context}）")));
-    }
-    Ok(())
 }
 
 #[cfg(test)]

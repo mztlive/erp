@@ -557,8 +557,12 @@ impl S3Storage {
     pub async fn delete<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         let key = self.object_key(path.as_ref())?;
         self.invalidate_content(&key);
-        if !self.object_exists(&key).await? {
-            return Err(Error::NotFound);
+        match self.client.head_object().bucket(&self.bucket).key(&key).send().await {
+            Ok(_) => {},
+            Err(error) if error.as_service_error().is_some_and(HeadObjectError::is_not_found) => {
+                return Err(Error::NotFound);
+            },
+            Err(error) => return Err(s3_error(error)),
         }
 
         let result =
@@ -579,15 +583,6 @@ impl S3Storage {
     fn object_key(&self, path: &Path) -> Result<String> {
         let path = object_key_path(path)?;
         Ok(self.key_prefix.as_ref().map(|prefix| format!("{prefix}/{path}")).unwrap_or(path))
-    }
-
-    /// 通过 `HeadObject` 区分对象不存在与存储服务失败。
-    async fn object_exists(&self, key: &str) -> Result<bool> {
-        match self.client.head_object().bucket(&self.bucket).key(key).send().await {
-            Ok(_) => Ok(true),
-            Err(error) if head_not_found(&error) => Ok(false),
-            Err(error) => Err(s3_error(error)),
-        }
     }
 
     #[cfg(test)]
@@ -711,11 +706,6 @@ fn get_error<R>(error: SdkError<GetObjectError, R>) -> Error {
         return Error::NotFound;
     }
     s3_error(error)
-}
-
-/// 判断 `HeadObject` 失败是否表示对象不存在。
-fn head_not_found<R>(error: &SdkError<HeadObjectError, R>) -> bool {
-    error.as_service_error().is_some_and(HeadObjectError::is_not_found)
 }
 
 #[cfg(test)]

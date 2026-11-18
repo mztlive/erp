@@ -58,12 +58,7 @@ pub(crate) fn hmac_sha256_hex(key: &[u8], data: &[u8]) -> String {
 /// # 错误
 /// 不返回错误。
 pub(crate) fn normalize_account_number(plain: &str) -> String {
-    plain
-        .chars()
-        .filter(|ch| !ch.is_whitespace() && *ch != '-' && *ch != '_')
-        .collect::<String>()
-        .trim()
-        .to_string()
+    plain.chars().filter(|ch| !ch.is_whitespace() && *ch != '-' && *ch != '_').collect()
 }
 
 /// 规范化手机号：仅去首尾空白（不折叠内部格式）。
@@ -91,7 +86,7 @@ pub(crate) fn normalize_mobile(plain: &str) -> String {
 /// # 错误
 /// 不返回错误。
 pub(crate) fn normalize_address(plain: &str) -> String {
-    plain.split_whitespace().collect::<Vec<_>>().join(" ").trim().to_string()
+    plain.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 #[cfg(test)]

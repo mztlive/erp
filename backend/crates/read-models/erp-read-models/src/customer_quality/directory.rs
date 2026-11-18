@@ -2,7 +2,7 @@
 use application_core::AuditActor;
 use persistence_core::Transactional;
 
-use super::source::{CurrentSources, quality_order_filter, version};
+use super::source::{load_orders, quality_order_filter, version};
 use super::{CustomerQualityReadModel, HistoryQualityQuery, QualityAccess};
 use crate::Result;
 use crate::historical_directory::{HistoricalDirectoryQuery, HistoricalDirectoryView};
@@ -45,7 +45,7 @@ impl CustomerQualityReadModel {
                         QualityAccess::new(this.db.clone(), this.rbac.clone(), this.customer_scope.clone());
                     let (context, scope) = access.resolve_history(&tx_actor, executor).await?;
                     let filter = quality_order_filter(&bounds, tx_query.customer_id.map(|id| vec![id]));
-                    let orders = CurrentSources::load_orders(&this.db, filter, &scope, executor).await?;
+                    let orders = load_orders(&this.db, filter, &scope, executor).await?;
                     let expected = version(&context.scope_version, &orders);
                     super::ensure_version(input.scope_version.as_deref(), &expected)?;
                     context.validate(executor).await?;

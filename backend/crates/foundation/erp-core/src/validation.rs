@@ -122,7 +122,7 @@ pub fn normalize_required_text_ref(
     if value.is_empty() {
         return Err(Error::from(empty_message));
     }
-    ensure_max_len(value, max_len, too_long_message)?;
+    ensure_max_len(value, max_len, || too_long_message.to_owned())?;
     Ok(value.to_owned())
 }
 
@@ -218,7 +218,7 @@ pub fn normalize_optional_text(value: Option<String>, label: &str, max_len: usiz
         return Ok(None);
     }
 
-    ensure_max_len(value, max_len, &format!("{label}长度不符合要求"))?;
+    ensure_max_len(value, max_len, || format!("{label}长度不符合要求"))?;
 
     Ok(Some(value.to_owned()))
 }
@@ -279,16 +279,16 @@ fn normalize_field_update(
 /// # 参数
 /// * `value` - 文本内容
 /// * `max_len` - 最大长度
-/// * `message` - 长度超限时错误信息
+/// * `message` - 仅在超限时构造错误信息
 ///
 /// # 返回
 /// 通过返回 `Ok(())`。
 ///
 /// # 错误
 /// 当长度超限时返回错误
-fn ensure_max_len(value: &str, max_len: usize, message: &str) -> Result<()> {
+fn ensure_max_len(value: &str, max_len: usize, message: impl FnOnce() -> String) -> Result<()> {
     if value.chars().count() > max_len {
-        return Err(Error::from(message));
+        return Err(Error::from(message()));
     }
     Ok(())
 }

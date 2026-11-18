@@ -63,11 +63,7 @@ impl LegacyImportRowApplyScopeExt for persistence_core::Repository<'_, LegacyImp
     ) -> Result<LegacyImportApplyScope> {
         let unique_ids = unique_row_ids(row_ids);
         if unique_ids.is_empty() {
-            return Ok(LegacyImportApplyScope {
-                rows: HashMap::new(),
-                missing_row_ids: Vec::new(),
-                pending_outside_request: 0,
-            });
+            return Ok(LegacyImportApplyScope::default());
         }
         let found = load_apply_rows(self, batch_id, &unique_ids, executor).await?;
         let missing_row_ids = missing_row_ids(&unique_ids, &found);

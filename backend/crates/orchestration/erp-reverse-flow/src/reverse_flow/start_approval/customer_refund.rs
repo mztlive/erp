@@ -7,20 +7,16 @@ use erp_returns::entity::returns::CustomerRefund;
 use erp_returns::service::ReturnsService;
 use erp_workflow::entity::approval_integration::ApprovalSubjectSnapshotPayload;
 use erp_workflow::entity::document_registry::DocumentType;
-use erp_workflow::repository::prelude::*;
 use erp_workflow::service::approval::execution::apply_plan::PlannedWrites;
-use erp_workflow::service::approval::execution::{
-    PreparedExecution, StartExecutionInput, map_receipt_first_write_error,
-};
+use erp_workflow::service::approval::execution::{PreparedExecution, StartExecutionInput};
 use erp_workflow::service::approval::resubmission::complete_resubmission;
-use erp_workflow::{BpmExt, DocumentRegistryExt};
 use mongodb::Database;
 use persistence_core::Executor;
 
 use super::super::adapter::customer_refund_object_readable;
 use super::common::{ReverseStartContracts, ReverseStartInput, build_reverse_start_input};
 use super::prepare::load_start_receipt_for_document_type;
-use super::reversal_submit::{committed_reversal_submit, persist_submit_receipt};
+use super::reversal_submit::{committed_reversal_submit, persist_start_guard, persist_submit_receipt};
 use crate::{Error, Result, ReverseFlowPorts};
 
 /// 读取同载荷启动收据；不存在时返回 `None`。
@@ -167,7 +163,7 @@ pub async fn persist_customer_refund_start(
         return Err(Error::ConflictError("提交收据未包含原请求版本，请刷新后重试".into()));
     };
     let audit = actor.resource_log("customer_refund.submit", "customer_refund", id.clone())?;
-    persist_start_guard(db, &writes, now, executor).await?;
+    persist_start_guard(db, DocumentType::CustomerRefund, &writes, now, executor).await?;
     let mut refund = refund;
     ReturnsService::new(db.clone()).persist_customer_refund(&mut refund, executor).await?;
     persist_runtime_writes(
@@ -209,34 +205,6 @@ async fn replay_committed_start(
         return Ok(Some(ReturnsService::new(db.clone()).load_customer_refund(&input.id, executor).await?));
     }
     Ok(None)
-}
-
-/// 回执和注册单据守卫先写入，后续失败由外层事务整体回滚。
-async fn persist_start_guard(
-    db: &Database,
-    writes: &PlannedWrites,
-    now: Instant,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    db.bpm_workflow()
-        .insert_command_receipt(&writes.receipt, executor)
-        .await
-        .map_err(map_receipt_first_write_error)?;
-    let guarded = db
-        .business_documents()
-        .mark_approval_started(
-            writes.instance.subject.subject_id(),
-            DocumentType::CustomerRefund,
-            &writes.instance.process_definition_id,
-            writes.instance.definition_version,
-            now,
-            executor,
-        )
-        .await?;
-    if guarded.is_none() {
-        return Err(Error::ConflictError("客户退款单审批启动守卫冲突，请刷新后重试".to_string()));
-    }
-    Ok(())
 }
 
 /// 将启动计划写入 BPM 集合、不可变快照和入口 WorkItem。

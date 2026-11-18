@@ -30,6 +30,7 @@ impl DeliveryPacking {
         mut next_id: impl FnMut() -> String,
     ) -> Result<PackingPartition> {
         self.validate(source, original, true)?;
+        let max_original_line_no = original.iter().map(|row| row.line_no).max().unwrap_or(0);
         let mut packing = self;
         let mut shipped = Vec::new();
         let mut remaining = Vec::new();
@@ -45,18 +46,13 @@ impl DeliveryPacking {
                     .iter()
                     .find(|line| line.base.id == item.delivery_line_id)
                     .ok_or_else(|| Error::from("发货行已变更"))?;
-                let quantity = dispatch_quantity(&packing, &current.key, &item.delivery_line_id);
-                let left = item
-                    .quantity
-                    .to_decimal()
-                    .checked_sub(quantity)
-                    .ok_or_else(|| Error::from("发货数量超出范围"))?;
+                let (quantity, left) = partition_quantities(&packing, &current.key, item)?;
                 if quantity > Decimal::ZERO {
                     let new = new_line(
                         line,
                         delivery,
                         Quantity::try_from(quantity)?,
-                        original.iter().map(|row| row.line_no).max().unwrap_or(0),
+                        max_original_line_no,
                         shipped.len(),
                         next_id(),
                     )?;
@@ -83,14 +79,21 @@ impl DeliveryPacking {
 }
 
 /// 未选择的地址商品本次发货量为零。
-fn dispatch_quantity(packing: &DeliveryPacking, address: &str, line: &str) -> Decimal {
-    packing
+fn partition_quantities(
+    packing: &DeliveryPacking,
+    address: &str,
+    item: &PackingItem,
+) -> Result<(Decimal, Decimal)> {
+    let quantity = packing
         .dispatch
         .iter()
         .find(|row| row.destination_key == address)
-        .and_then(|row| row.items.iter().find(|item| item.delivery_line_id == line))
-        .map(|item| item.quantity.to_decimal())
-        .unwrap_or(Decimal::ZERO)
+        .and_then(|row| row.items.iter().find(|entry| entry.delivery_line_id == item.delivery_line_id))
+        .map(|entry| entry.quantity.to_decimal())
+        .unwrap_or(Decimal::ZERO);
+    let left =
+        item.quantity.to_decimal().checked_sub(quantity).ok_or_else(|| Error::from("发货数量超出范围"))?;
+    Ok((quantity, left))
 }
 
 fn remap_packing(packing: &mut DeliveryPacking, remap: &BTreeMap<(String, String), String>) {

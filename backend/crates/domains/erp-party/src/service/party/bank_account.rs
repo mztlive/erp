@@ -17,7 +17,6 @@ use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
-use super::clear_default_marks;
 use super::sensitive::SensitiveDataCodec;
 use crate::dto::party::{
     CreatePartyBankAccountRequest, PARTY_BANK_ACCOUNT_SORT_FIELDS, PageView, PartyBankAccountListParams,
@@ -245,7 +244,10 @@ impl PartyBankAccountService {
             account.base.id.clone(),
         )?;
         if account.is_default {
-            clear_default_marks!(self.db, party_bank_accounts, account.party_id, None, executor);
+            self.db
+                .party_bank_accounts()
+                .clear_other_default_marks(&account.party_id, None, executor)
+                .await?;
         }
         self.db.party_bank_accounts().create(&account, executor).await?;
         self.audit.persist(&audit, executor).await?;
@@ -318,13 +320,10 @@ impl PartyBankAccountService {
             account.base.id.clone(),
         )?;
         if account.is_default {
-            clear_default_marks!(
-                self.db,
-                party_bank_accounts,
-                account.party_id,
-                Some(&account.base.id),
-                executor
-            );
+            self.db
+                .party_bank_accounts()
+                .clear_other_default_marks(&account.party_id, Some(account.base.id.as_str()), executor)
+                .await?;
         }
         self.db.party_bank_accounts().update(&mut account, executor).await?;
         self.audit.persist(&audit, executor).await?;

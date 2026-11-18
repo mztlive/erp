@@ -19,18 +19,6 @@ use super::super::authorization::SalesCommandAccess;
 use crate::Result;
 
 impl SalesOrderCommandProcess {
-    /// 按准备阶段的副本身份读取原活跃行，保留原独立展示执行器和查询顺序。
-    async fn saved_draft_lines(
-        &self,
-        copy: &SalesOrderWorkingCopy,
-    ) -> Result<Vec<SalesOrderWorkingCopyLine>> {
-        Ok(self
-            .db
-            .sales_order_working_copy_lines()
-            .list_lines_by_working_copy(&copy.base.id.clone().into(), &mut ReadExecutor::default())
-            .await?)
-    }
-
     /// 保存草稿（整表头覆盖 + 明细整批替换，乐观锁语义）。
     ///
     /// 采购/销售驳回后订单回到草稿，但首次提交工作副本已是 `Submitted` 终态时，
@@ -89,7 +77,11 @@ impl SalesOrderCommandProcess {
             SalesOrderService::prepare_saved_working_copy(&order, &mut working_copy, &stable, &draft, actor)?;
         let created_stable_lines = stable.created;
 
-        let old_lines = self.saved_draft_lines(&working_copy).await?;
+        let old_lines = self
+            .db
+            .sales_order_working_copy_lines()
+            .list_lines_by_working_copy(&working_copy.base.id.clone().into(), &mut ReadExecutor::default())
+            .await?;
         let audit = actor.clone().resource_log("sales_order.save_draft", "sales_order", id.to_string())?;
         let write = SavedWorkingCopyWrite {
             db: self.db.clone(),
@@ -99,8 +91,8 @@ impl SalesOrderCommandProcess {
             working_copy,
             created_stable_lines,
             old_lines,
-            lines: lines.clone(),
             sellable_refs: SalesOrderService::sellable_working_copy_refs(&lines)?,
+            lines,
             audit,
         };
         let client = write.db.client().clone();

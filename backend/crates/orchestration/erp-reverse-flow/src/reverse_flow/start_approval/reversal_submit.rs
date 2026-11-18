@@ -1,15 +1,15 @@
-//! 冲正提交先恢复精确命令收据，未知结果仅 fresh 回读，不重复写入。
+//! 退款与冲正提交先恢复精确命令收据，未知结果仅 fresh 回读，不重复写入。
 
 use application_core::{AuditActor, CommandReceipt};
 use erp_audit::AuditLog;
 use erp_audit::execution::persist_log;
 use erp_core::common::time::Instant;
 use erp_returns::ReturnsCommandReceiptService;
-use erp_workflow::DocumentRegistryExt;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::repository::BusinessDocumentRepositoryExt;
 use erp_workflow::service::approval::execution::apply_plan::PlannedWrites;
-use erp_workflow::service::approval::execution::command_recovery_delay;
+use erp_workflow::service::approval::execution::{command_recovery_delay, map_receipt_first_write_error};
+use erp_workflow::{BpmExt, DocumentRegistryExt};
 use mongodb::Database;
 use mongodb::error::Error as MongoError;
 use persistence_core::{Error as PersistenceError, Executor, Transactional};
@@ -167,27 +167,18 @@ pub(super) async fn committed_reversal_submit(
     Ok(replayed)
 }
 
-/// 沿原单注册事实原子启动审批，复用两类冲正完全一致的守卫。
-///
-/// # 参数
-/// * `db` - 数据库。
-/// * `kind` - 注册单据类型。
-/// * `writes` - 已准备的启动写入计划。
-/// * `now` - 启动时间。
-/// * `executor` - 调用方事务执行器。
-///
-/// # 返回
-/// 成功时无返回值。注册单据已标记审批启动。
-///
-/// # 错误
-/// 守卫未命中时返回冲突。仓储写入失败时返回对应错误。
-pub(super) async fn mark_reversal_started(
+/// 先插入审批命令收据，再以注册单据守卫启动审批；任一步失败由原事务回滚。
+pub(super) async fn persist_start_guard(
     db: &Database,
     kind: DocumentType,
     writes: &PlannedWrites,
     now: Instant,
     executor: &mut dyn Executor,
 ) -> Result<()> {
+    db.bpm_workflow()
+        .insert_command_receipt(&writes.receipt, executor)
+        .await
+        .map_err(map_receipt_first_write_error)?;
     let guarded = db
         .business_documents()
         .mark_approval_started(

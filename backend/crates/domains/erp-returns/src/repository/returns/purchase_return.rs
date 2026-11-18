@@ -10,7 +10,7 @@ use persistence_core::{
 };
 use serde::{Deserialize, Serialize};
 
-use super::search::{ListSort, search_projected};
+use super::search::{search_projected, sort_doc};
 use crate::entity::returns::{PurchaseReturnLine, PurchaseReturnOrder, PurchaseReturnStatus, ReturnMode};
 
 /// 采购退货单列表投影行。
@@ -123,16 +123,6 @@ impl Pagination for PurchaseReturnOrderFilter {
     }
 }
 
-impl ListSort for PurchaseReturnOrderFilter {
-    fn sort_by(&self) -> Option<&str> {
-        self.sort_by.as_deref()
-    }
-
-    fn sort_ascending(&self) -> bool {
-        self.sort_ascending
-    }
-}
-
 /// 采购退货单集合仓储扩展。
 #[allow(async_fn_in_trait)]
 pub trait PurchaseReturnOrderRepositoryExt {
@@ -187,7 +177,7 @@ impl PurchaseReturnOrderRepositoryExt for Repository<'_, PurchaseReturnOrder> {
             self,
             filter,
             purchase_return_order_projection(),
-            &["purchase_return_no", "created_at"],
+            sort_doc(filter.sort_by.as_deref(), filter.sort_ascending, &["purchase_return_no", "created_at"]),
             executor,
         )
         .await

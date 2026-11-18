@@ -14,22 +14,6 @@ use crate::{Error, Result};
 /// JWT 密钥最小字节数（与 web-api `JwtEngine::new` 一致）。
 const MIN_SECRET_LEN: usize = 32;
 
-/// JWT 私有声明键（取值与 web-api `TokenPayload::backoffice` 的序列化结果
-/// 一致；改动 web-api 侧须同步本 crate，反之亦然）。
-const CLAIM_ID: &str = "id";
-/// JWT 私有声明键：登录账号。
-const CLAIM_ACCOUNT: &str = "account";
-/// JWT 私有声明键：主体类型（固定为 `backoffice`）。
-const CLAIM_SUBJECT_KIND: &str = "subject_kind";
-/// JWT 私有声明键：账号类型（固定为 `admin`）。
-const CLAIM_ACCOUNT_KIND: &str = "account_kind";
-/// JWT 私有声明键：账号持久化版本。
-const CLAIM_ACCOUNT_VERSION: &str = "account_version";
-/// JWT 私有声明固定取值：后台主体。
-const SUBJECT_KIND_BACKOFFICE: &str = "backoffice";
-/// JWT 私有声明固定取值：管理员账号。
-const ACCOUNT_KIND_ADMIN: &str = "admin";
-
 /// 为种子账号签发后台 JWT。
 ///
 /// 复制 `apps/erp-server/src/http/auth/jwt.rs` 的 token 结构与 HMAC-SHA256
@@ -62,30 +46,23 @@ pub fn mint_jwt(account_id: &str, secret: &str, exp_seconds: u64) -> Result<Stri
         expiration: Some(expiration),
         ..Default::default()
     });
-    claims.private = private_claims(account_id);
+    // 私有声明须与 `TokenPayload::backoffice` 的序列化结果一致。
+    claims.private = BTreeMap::from([
+        ("id".to_string(), Value::String(account_id.to_string())),
+        ("account".to_string(), Value::String(seed_login(account_id))),
+        ("subject_kind".to_string(), Value::String("backoffice".to_string())),
+        ("account_kind".to_string(), Value::String("admin".to_string())),
+        ("account_version".to_string(), Value::from(ACCOUNT_VERSION)),
+    ]);
     Ok(claims.sign_with_key(&key)?)
-}
-
-/// 构造与 `TokenPayload::backoffice` 序列化结果一致的私有声明。
-///
-/// # 参数
-/// * `account_id` - 种子账号 ID
-///
-/// # 返回值
-/// 返回按稳定顺序排布的 JWT 私有声明映射。
-fn private_claims(account_id: &str) -> BTreeMap<String, Value> {
-    let mut claims = BTreeMap::new();
-    claims.insert(CLAIM_ID.to_string(), Value::String(account_id.to_string()));
-    claims.insert(CLAIM_ACCOUNT.to_string(), Value::String(seed_login(account_id)));
-    claims.insert(CLAIM_SUBJECT_KIND.to_string(), Value::String(SUBJECT_KIND_BACKOFFICE.to_string()));
-    claims.insert(CLAIM_ACCOUNT_KIND.to_string(), Value::String(ACCOUNT_KIND_ADMIN.to_string()));
-    claims.insert(CLAIM_ACCOUNT_VERSION.to_string(), Value::from(ACCOUNT_VERSION));
-    claims
 }
 
 #[cfg(test)]
 mod tests {
-    use super::mint_jwt;
+    use jwt::VerifyWithKey;
+    use serde_json::json;
+
+    use super::{Claims, Hmac, Mac, Sha256, mint_jwt};
 
     const TEST_SECRET: &str = "test-secret-that-is-at-least-32-bytes-long";
 

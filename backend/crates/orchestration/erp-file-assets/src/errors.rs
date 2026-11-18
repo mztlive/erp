@@ -61,7 +61,7 @@ impl From<application_core::Error> for Error {
 
 // 同构提供方只做穷尽载荷移动；非同构场景 adapter 继续在各自调用点处理。
 macro_rules! from_domain {
-    ($provider:ident $(, $extra:ident)*) => {
+    ($provider:ident) => {
         impl From<$provider::Error> for Error {
             fn from(error: $provider::Error) -> Self {
                 match error {
@@ -78,7 +78,6 @@ macro_rules! from_domain {
                     $provider::Error::Logic(payload) => Self::Logic(payload),
                     $provider::Error::OutcomeUnknown(payload) => Self::OutcomeUnknown(payload),
                     $provider::Error::RepositoryError(payload) => Self::RepositoryError(payload),
-                    $( $provider::Error::$extra(payload) => Self::$extra(payload), )*
                 }
             }
         }
@@ -96,7 +95,7 @@ impl From<persistence_core::Error> for Error {
                     // 这三个索引无活动生产者。保留 typed DuplicateKey，不能伪装成回执重复。
                     Self::RepositoryError(error)
                 } else {
-                    Self::ConflictError(duplicate_key_conflict_message(&error))
+                    Self::ConflictError("数据已存在，请勿重复提交".to_string())
                 }
             },
             persistence_core::Error::OptimisticLockingError => {
@@ -119,15 +118,6 @@ fn historical_http_index(index_name: Option<&str>) -> bool {
             | Some("uk_procurement_confirmation_lines_active_confirmation_line")
             | Some("uk_product_publication_revisions_publication_revision")
     )
-}
-
-fn duplicate_key_conflict_message(error: &persistence_core::Error) -> String {
-    duplicate_index_conflict_message(error.duplicate_index_name())
-}
-
-/// 已知提示只由实际拥有域提供。无名/未知索引保持原通用冲突提示。
-fn duplicate_index_conflict_message(_index_name: Option<&str>) -> String {
-    "数据已存在，请勿重复提交".to_string()
 }
 
 impl From<validator::ValidationErrors> for Error {

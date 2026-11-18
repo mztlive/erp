@@ -16,7 +16,6 @@ use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
-use super::clear_default_marks;
 use super::sensitive::SensitiveDataCodec;
 use crate::dto::party::{
     CreatePartyAddressRequest, PARTY_ADDRESS_SORT_FIELDS, PageView, PartyAddressListParams, PartyAddressView,
@@ -229,7 +228,7 @@ impl PartyAddressService {
             address.base.id.clone(),
         )?;
         if address.is_default {
-            clear_default_marks!(self.db, party_addresses, address.party_id, None, executor);
+            self.db.party_addresses().clear_other_default_marks(&address.party_id, None, executor).await?;
         }
         self.db.party_addresses().create(&address, executor).await?;
         self.audit.persist(&audit, executor).await?;
@@ -300,13 +299,10 @@ impl PartyAddressService {
             address.base.id.clone(),
         )?;
         if address.is_default {
-            clear_default_marks!(
-                self.db,
-                party_addresses,
-                address.party_id,
-                Some(&address.base.id),
-                executor
-            );
+            self.db
+                .party_addresses()
+                .clear_other_default_marks(&address.party_id, Some(address.base.id.as_str()), executor)
+                .await?;
         }
         self.db.party_addresses().update(&mut address, executor).await?;
         self.audit.persist(&audit, executor).await?;

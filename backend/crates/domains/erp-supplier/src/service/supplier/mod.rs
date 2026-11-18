@@ -19,10 +19,7 @@ use crate::dto::supplier::{
     CommercialProfileView, SupplierCapabilityView, SupplierDetailView, SupplierQualificationView,
     SupplierSensitiveFieldView, SupplierView,
 };
-use crate::entity::supplier::{
-    SupplierAccountId, SupplierCommercialProfileRevision, SupplierQualification,
-    SupplierQualificationCapability,
-};
+use crate::entity::supplier::{SupplierAccountId, SupplierQualification, SupplierQualificationCapability};
 use crate::error::{Error, Result};
 use crate::ports::{
     PartyAddressFact, PartyBankAccountFact, PartyContactFact, PartyFactsPort, PartyListFact,
@@ -168,16 +165,7 @@ impl SupplierService {
         executor: &mut dyn Executor,
     ) -> Result<SupplierDetailView> {
         let loaded = self.load_detail_facts(id, executor).await?;
-        let current_id = loaded.bundle.supplier.current_commercial_profile_revision_id.as_deref();
-        let current_profiles = loaded
-            .bundle
-            .commercial_profiles
-            .iter()
-            .find(|profile| Some(profile.base.id.as_str()) == current_id)
-            .cloned()
-            .into_iter()
-            .collect();
-        let account = self.assemble_detail_account(&loaded, current_profiles, executor).await?;
+        let account = self.assemble_detail_account(&loaded, executor).await?;
         self.finish_detail_view(loaded, account).await
     }
 
@@ -227,17 +215,15 @@ impl SupplierService {
     ///
     /// # 参数
     /// * `loaded` - 已装载的详情事实
-    /// * `current_profiles` - 当前商务版本子集
     ///
     /// # 返回
-    /// 返回已水合主体与商务名称的账户视图。
+    /// 返回账户投影；当前商务资料由详情历史视图回填。
     ///
     /// # 错误
     /// 装配结果为空时返回 `NotFound`。
     async fn assemble_detail_account(
         &self,
         loaded: &LoadedSupplierDetail,
-        current_profiles: Vec<SupplierCommercialProfileRevision>,
         executor: &mut dyn Executor,
     ) -> Result<SupplierView> {
         let row = SupplierAccountRow::from_account(&loaded.bundle.supplier);
@@ -249,10 +235,10 @@ impl SupplierService {
             rows: vec![row],
             parties: vec![loaded.party.clone()],
             revisions: loaded.party_revision.clone(),
-            profiles: current_profiles,
+            profiles: Vec::new(),
             capabilities: loaded.bundle.capabilities.clone(),
             qualifications: loaded.bundle.qualifications.clone(),
-            entity_names: loaded.commercial_party_names.clone(),
+            entity_names: HashMap::new(),
             maintainer_names,
             as_of: BusinessDate::today(),
         })

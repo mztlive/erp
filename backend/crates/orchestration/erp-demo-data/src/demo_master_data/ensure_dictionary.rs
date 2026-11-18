@@ -1,17 +1,16 @@
 //! 生成或恢复演示用的计量单位、品牌和分类。
 
 use application_core::AuditActor;
-use entity_core::{BaseModel, NOT_DELETED_TIMESTAMP};
+use entity_core::HasBaseModel;
 use erp_catalog::{
     CatalogExt, CreateProductBrandRequest, CreateProductCategoryRequest, CreateUnitOfMeasureRequest,
 };
 use erp_workflow::ports::WorkflowAuthorizationPort;
 use persistence_core::ReadExecutor;
 
-use super::DemoMasterDataProcess;
 use super::lifecycle::{self, DemoKindDictionary};
 use super::plan::DemoStep;
-use super::record::{self, DemoMasterRecord};
+use super::{DemoMasterDataProcess, record};
 use crate::Result;
 
 /// 一条演示主数据的处理结果。
@@ -53,7 +52,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
             actor.clone(),
         )
         .await?;
-        self.remember(step, view.id, Vec::new()).await?;
+        record::save(&self.db, step, view.id, Vec::new()).await?;
         Ok(EnsureOutcome::Created)
     }
 
@@ -77,7 +76,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
             return self.adopt_coded(actor, step, DemoKindDictionary::Brand, id, live).await;
         }
         let view = self.catalog().product_brand_create(request.clone(), actor).await?;
-        self.remember(step, view.id, Vec::new()).await?;
+        record::save(&self.db, step, view.id, Vec::new()).await?;
         Ok(EnsureOutcome::Created)
     }
 
@@ -108,7 +107,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
             actor.clone(),
         )
         .await?;
-        self.remember(step, view.id, Vec::new()).await?;
+        record::save(&self.db, step, view.id, Vec::new()).await?;
         Ok(EnsureOutcome::Created)
     }
 
@@ -125,7 +124,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         if !live {
             lifecycle::restore_dictionary(&self.db, self.authorization.clone(), actor, kind, &id).await?;
         }
-        self.remember(step, id, Vec::new()).await?;
+        record::save(&self.db, step, id, Vec::new()).await?;
         Ok(if live { EnsureOutcome::Skipped } else { EnsureOutcome::Restored })
     }
 
@@ -170,75 +169,12 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
                 .await?,
         ))
     }
-
-    /// 登记本次实际写入的主键及关联 ID。
-    ///
-    /// # 参数
-    /// `step` - 种子身份；`entity_id` - 主键；`related_ids` - 从属记录主键。
-    ///
-    /// # 返回
-    /// 登记成功返回空结果。
-    ///
-    /// # 错误
-    /// 同一种子绑定了其他 ID 或数据库写入失败时返回错误。
-    pub(super) async fn remember(
-        &self,
-        step: &DemoStep,
-        entity_id: String,
-        related_ids: Vec<String>,
-    ) -> Result<()> {
-        record::save(
-            &self.db,
-            &DemoMasterRecord {
-                key: step.key.clone(),
-                kind: step.kind.as_str().to_string(),
-                entity_id,
-                related_ids,
-                label: step_label(step),
-                removed: false,
-            },
-        )
-        .await
-    }
 }
 
-/// 提取字典记录的主键与有效状态。
-fn coded_state<T: Coded>(entity: Option<T>) -> Option<(String, bool)> {
-    entity.map(|item| (item.identity(), item.base().deleted_at == NOT_DELETED_TIMESTAMP))
-}
-
-trait Coded {
-    fn identity(&self) -> String;
-    fn base(&self) -> &BaseModel;
-}
-
-macro_rules! coded {
-    ($ty:ty) => {
-        impl Coded for $ty {
-            fn identity(&self) -> String {
-                self.base.id.clone()
-            }
-            fn base(&self) -> &BaseModel {
-                &self.base
-            }
-        }
-    };
-}
-
-coded!(erp_catalog::UnitOfMeasure);
-coded!(erp_catalog::ProductBrand);
-coded!(erp_catalog::ProductCategory);
-
-/// 读取 JSON 种子的显示名称。
-///
-/// # 参数
-/// `step` - 已校验的种子。
-///
-/// # 返回
-/// 返回种子显示名称的副本。
-///
-/// # 错误
-/// 无。
-pub(super) fn step_label(step: &DemoStep) -> String {
-    step.request.label().to_string()
+/// 提取字典记录的主键，并标记是否未软删除。
+fn coded_state<T: HasBaseModel>(entity: Option<T>) -> Option<(String, bool)> {
+    entity.map(|item| {
+        let base = item.base();
+        (base.id.clone(), !base.is_deleted())
+    })
 }

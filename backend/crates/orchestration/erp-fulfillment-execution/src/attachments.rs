@@ -1,5 +1,7 @@
 //! 履约确认命令：在同一事务中登记已上传的凭证文件。
 
+use std::sync::Arc;
+
 use application_core::AuditActor;
 use erp_file_assets::PendingFileAssets;
 use erp_fulfillment::dto::{
@@ -7,7 +9,7 @@ use erp_fulfillment::dto::{
     ServiceFulfillmentView,
 };
 use erp_fulfillment::entity::fulfillment::ServiceEvidencePolicy;
-use erp_support::PendingFileAssetRequest;
+use erp_support::{PendingAttachmentBatch, PendingFileAssetRequest};
 
 use crate::Result;
 use crate::fulfillment_execution::FulfillmentProcess;
@@ -34,13 +36,7 @@ pub async fn confirm_service_fulfillment_with_assets(
     asset_requests: Vec<PendingFileAssetRequest>,
     actor: AuditActor,
 ) -> Result<ServiceFulfillmentView> {
-    for request in &asset_requests {
-        let (sensitivity, retention) =
-            evidence_metadata(request.registration.sensitivity_class, request.registration.retention_class);
-        ServiceEvidencePolicy::validate(&request.registration.content_type, sensitivity, retention, false)
-            .map_err(|error| crate::Error::ValidationError(error.to_string()))?;
-    }
-    let pending = PendingFileAssets::prepare(asset_requests, &actor)?.shared();
+    let pending = prepare_evidence_assets(asset_requests, &actor)?;
     service.confirm_service_fulfillment_with_assets(&id, req, pending, &actor).await
 }
 
@@ -65,12 +61,19 @@ pub async fn confirm_electronic_delivery_with_assets(
     asset_requests: Vec<PendingFileAssetRequest>,
     actor: AuditActor,
 ) -> Result<ElectronicDeliveryView> {
+    let pending = prepare_evidence_assets(asset_requests, &actor)?;
+    service.confirm_electronic_delivery(&id, req, pending, &actor).await
+}
+
+fn prepare_evidence_assets(
+    asset_requests: Vec<PendingFileAssetRequest>,
+    actor: &AuditActor,
+) -> Result<Arc<dyn PendingAttachmentBatch>> {
     for request in &asset_requests {
         let (sensitivity, retention) =
             evidence_metadata(request.registration.sensitivity_class, request.registration.retention_class);
         ServiceEvidencePolicy::validate(&request.registration.content_type, sensitivity, retention, false)
             .map_err(|error| crate::Error::ValidationError(error.to_string()))?;
     }
-    let pending = PendingFileAssets::prepare(asset_requests, &actor)?.shared();
-    service.confirm_electronic_delivery(&id, req, pending, &actor).await
+    Ok(PendingFileAssets::prepare(asset_requests, actor)?.shared())
 }

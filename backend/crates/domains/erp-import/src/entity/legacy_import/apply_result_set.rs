@@ -210,10 +210,6 @@ impl ApplyResultItem {
             error_code,
             error_detail,
         } = draft;
-        let target_document_id = present_text(target_document_id);
-        let target_object_reference = present_text(target_object_reference);
-        let error_code = present_text(error_code);
-        let error_detail = present_text(error_detail);
         match outcome {
             ApplyResultOutcome::Imported => {
                 ensure_absent(error_code.as_deref(), "导入成功结果不得携带失败错误码")?;
@@ -221,11 +217,17 @@ impl ApplyResultItem {
                 Ok(Self::Imported {
                     row_id,
                     external_identity_map_id,
-                    target_document_id: required_target(
-                        target_document_id,
+                    target_document_id: normalize_required_text(
+                        target_document_id.unwrap_or_default(),
                         "导入成功结果必须提供目标单据 ID",
+                        TARGET_MAX_LEN,
+                        "目标单据 ID 过长",
                     )?,
-                    target_object_reference: optional_target(target_object_reference)?,
+                    target_object_reference: normalize_optional_text(
+                        target_object_reference,
+                        "目标对象引用",
+                        TARGET_MAX_LEN,
+                    )?,
                 })
             },
             ApplyResultOutcome::Failed => {
@@ -266,59 +268,18 @@ fn ensure_unique_row_ids(drafts: &[ApplyResultDraft]) -> Result<()> {
     Ok(())
 }
 
-/// 空白视为缺省。
-///
-/// # 参数
-/// * `value` - 可选文本
-///
-/// # 返回
-/// 去空白后非空时返回原字符串，否则 `None`。
-fn present_text(value: Option<String>) -> Option<String> {
-    value.filter(|text| !text.trim().is_empty())
-}
-
-/// 禁止字段必须缺省。
-///
-/// # 参数
-/// * `value` - 已按空白折叠的可选文本
-/// * `message` - 出现时的错误文案
-///
-/// # 错误
-/// 字段存在时返回错误。
+/// 禁止字段不得有非空白内容。
 fn ensure_absent(value: Option<&str>, message: &str) -> Result<()> {
-    if value.is_some() {
+    if value.is_some_and(|text| !text.trim().is_empty()) {
         return Err(Error::from(message));
     }
     Ok(())
 }
 
-/// 规范化成功目标单据 ID。
-///
-/// # 参数
-/// * `value` - 已按空白折叠的目标 ID
-/// * `empty_message` - 缺失时的错误文案
-///
-/// # 错误
-/// 缺失或超长时返回错误。
-fn required_target(value: Option<String>, empty_message: &str) -> Result<String> {
-    normalize_required_text(value.unwrap_or_default(), empty_message, TARGET_MAX_LEN, "目标单据 ID 过长")
-}
-
-/// 规范化可选目标对象引用。
-///
-/// # 参数
-/// * `value` - 已按空白折叠的引用
-///
-/// # 错误
-/// 超长时返回错误。
-fn optional_target(value: Option<String>) -> Result<Option<String>> {
-    normalize_optional_text(value, "目标对象引用", TARGET_MAX_LEN)
-}
-
 /// 规范化必填错误码。
 ///
 /// # 参数
-/// * `value` - 已按空白折叠的错误码
+/// * `value` - 原始错误码
 /// * `empty_message` - 缺失时的错误文案
 ///
 /// # 错误
@@ -330,7 +291,7 @@ fn required_error_code(value: Option<String>, empty_message: &str) -> Result<Str
 /// 规范化可选错误明细。
 ///
 /// # 参数
-/// * `value` - 已按空白折叠的明细
+/// * `value` - 原始明细
 ///
 /// # 错误
 /// 超长时返回错误。

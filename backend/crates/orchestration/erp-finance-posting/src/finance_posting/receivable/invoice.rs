@@ -8,7 +8,7 @@ use erp_audit::execution::persist_log;
 use erp_core::ids::{FileAssetId, InvoiceId};
 use erp_finance::entity::receivable::{Invoice, InvoiceData, InvoiceStatus};
 use erp_finance::repository::ReceivableExt;
-use erp_finance::repository::prelude::*;
+use erp_finance::repository::prelude::InvoiceRepositoryExt;
 use erp_finance::service::command_receipt::FinanceCommandReceiptService;
 use erp_finance::service::receivable::ReceivableService;
 use erp_finance::service::receivable::invoice_commit::{convert_post_allocations, ensure_sales_invoice};
@@ -82,26 +82,8 @@ impl ReceivableProcess {
     ) -> Result<InvoiceView> {
         req.validate()?;
         super::invoice_attachments::resolve(&mut req.attachment_asset_ids, pending.as_ref())?;
-        let attachment_ids = req.attachment_asset_ids;
-
-        let invoice = Invoice::new(
-            InvoiceId::new(next_id()),
-            InvoiceData {
-                invoice_direction: req.invoice_direction,
-                invoice_kind: req.invoice_kind,
-                party_id: req.party_id,
-                invoice_code: req.invoice_code,
-                invoice_no: req.invoice_no,
-                invoice_date: req.invoice_date,
-                gross_amount: req.gross_amount,
-                net_amount: req.net_amount,
-                tax_amount: req.tax_amount,
-                rounding_adjustment_amount: req.rounding_adjustment_amount.unwrap_or(zero_amount()),
-                rounding_reason: req.rounding_reason,
-                original_invoice_id: None,
-            },
-            actor.id(),
-        )?;
+        let attachment_ids = std::mem::take(&mut req.attachment_asset_ids);
+        let invoice = new_invoice(req, actor.id())?;
         persist_created_invoice(&self.db, &self.rbac, invoice, actor.clone(), attachment_ids, pending).await
     }
 
@@ -258,6 +240,27 @@ impl ReceivableProcess {
     }
 }
 
+pub(super) fn new_invoice(req: CreateInvoiceRequest, actor_id: &str) -> Result<Invoice> {
+    Ok(Invoice::new(
+        InvoiceId::new(next_id()),
+        InvoiceData {
+            invoice_direction: req.invoice_direction,
+            invoice_kind: req.invoice_kind,
+            party_id: req.party_id,
+            invoice_code: req.invoice_code,
+            invoice_no: req.invoice_no,
+            invoice_date: req.invoice_date,
+            gross_amount: req.gross_amount,
+            net_amount: req.net_amount,
+            tax_amount: req.tax_amount,
+            rounding_adjustment_amount: req.rounding_adjustment_amount.unwrap_or(zero_amount()),
+            rounding_reason: req.rounding_reason,
+            original_invoice_id: None,
+        },
+        actor_id,
+    )?)
+}
+
 /// 只加载可过账的销项草稿；非草稿或规范化号码已被其他发票占用时返回冲突。
 async fn load_postable_invoice(db: &Database, id: &str, executor: &mut dyn Executor) -> Result<Invoice> {
     let invoice = db
@@ -266,6 +269,15 @@ async fn load_postable_invoice(db: &Database, id: &str, executor: &mut dyn Execu
         .await?
         .ok_or_else(|| Error::NotFound("发票不存在".to_string()))?;
     ensure_sales_invoice(&invoice)?;
+    ensure_postable_draft(db, &invoice, executor).await?;
+    Ok(invoice)
+}
+
+pub(super) async fn ensure_postable_draft(
+    db: &Database,
+    invoice: &Invoice,
+    executor: &mut dyn Executor,
+) -> Result<()> {
     if invoice.stable.status() != InvoiceStatus::Draft {
         return Err(Error::ConflictError("发票已登记，请勿重复提交".to_string()));
     }
@@ -276,7 +288,7 @@ async fn load_postable_invoice(db: &Database, id: &str, executor: &mut dyn Execu
     if duplicate.as_ref().is_some_and(|other| other.base.id != invoice.base.id) {
         return Err(Error::ConflictError("发票号码已登记，请勿重复提交".to_string()));
     }
-    Ok(invoice)
+    Ok(())
 }
 
 /// 已提交文件后的响应读取失败必须保留对象，由同操作号重试核对已完成结果。

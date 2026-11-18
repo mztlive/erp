@@ -5,7 +5,7 @@ use erp_contract::entity::recognition::{
     ConfirmImport, ContractImport, ImportStatus, ImportView, RecognitionProof, ValidatedFields,
 };
 use erp_contract::repository::prelude::*;
-use erp_contract::repository::recognition::{self, ContractImportExt};
+use erp_contract::repository::recognition::ContractImportExt;
 use erp_contract::{
     Contract, ContractExt, ContractRevision, ContractStatus, PlannedContractArchive, UploadContractRequest,
     UploadContractView, plan_upload_archive,
@@ -57,8 +57,7 @@ impl ContractImportProcess {
         command: &ConfirmImport,
         executor: &mut dyn Executor,
     ) -> Result<(ImportView, bool)> {
-        self.services.contract_access.require_import(actor, executor).await?;
-        let current = recognition::owned(&self.db, actor.id(), &task.base.id, executor).await?;
+        let current = self.task_stage(&task.base.id, actor, executor).await?;
         if !current.check_confirmation(command)? {
             return Ok((current.into(), false));
         }

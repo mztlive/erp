@@ -94,8 +94,7 @@ impl ContractImportProcess {
             .client()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    process.services.contract_access.require_import(&actor, executor).await?;
-                    let task = recognition::owned(&process.db, actor.id(), &id, executor).await?;
+                    let task = process.task_stage(&id, &actor, executor).await?;
                     process.require_source(&task, executor).await
                 })
             })

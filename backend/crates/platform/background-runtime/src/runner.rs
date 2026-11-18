@@ -6,6 +6,7 @@ use std::time::Duration;
 use tokio::sync::watch;
 
 use super::adapter::BackgroundTaskAdapter;
+use super::periodic::should_stop;
 
 /// 统一后台任务执行器。
 ///
@@ -42,12 +43,11 @@ impl BackgroundRunner {
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn register<A>(mut self, adapter: A) -> Self
+    pub fn register<A>(self, adapter: A) -> Self
     where
         A: BackgroundTaskAdapter + 'static,
     {
-        self.adapters.push(Arc::new(adapter));
-        self
+        self.register_shared(Arc::new(adapter))
     }
 
     /// 注册需要与外部调度共享状态的适配器。
@@ -80,7 +80,7 @@ impl BackgroundRunner {
     async fn run_round(&self, stop: Option<&watch::Receiver<bool>>) -> Vec<(&'static str, usize)> {
         let mut counts = Vec::with_capacity(self.adapters.len());
         for adapter in &self.adapters {
-            if stop.is_some_and(|stop| *stop.borrow() || stop.has_changed().is_err()) {
+            if stop.is_some_and(should_stop) {
                 break;
             }
             let started = std::time::Instant::now();

@@ -3,12 +3,13 @@
 //! 审批人取自已发布节点，不接受客户端选择；定义图加载复用
 //! [`start_receipt`] 的带 executor 版本。
 
-use bpm::engine::{DefinitionGraph, StartBindingInput, StartPlanInput, plan_start};
+use bpm::engine::{DefinitionGraph, StartBindingInput, StartPlan, StartPlanInput, plan_start};
 use bpm::ids::{
     ApprovalCommandReceiptId, ApprovalInstanceAssigneeId, ApprovalNodeExecutionId, ApprovalProcessInstanceId,
 };
 use bpm::model::{ParticipantId, SubjectRef, Timestamp};
 use erp_core::common::time::Instant;
+use erp_workflow::entity::approval_integration::document_object_readable;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::service::approval::execution::authorization::{
@@ -20,7 +21,6 @@ use erp_workflow::service::approval::execution::{ExecutionCommandInput, StartExe
 use erp_workflow::service::approval::process_kind::process_kind_of;
 use id_generator::next_id;
 
-use super::super::adapter::purchase_order_object_readable;
 #[cfg(test)]
 use super::start_persist::{StartStep, StartSteps, execute_start_steps};
 use crate::{Error, Result};
@@ -104,13 +104,7 @@ pub(crate) fn build_purchase_order_start_input(
     let actor =
         ParticipantId::new(actor_id).map_err(|_| Error::ValidationError("提交人引用无效".to_string()))?;
     let timestamp = Timestamp::from_utc(now.as_utc());
-    let binding_inputs = start_binding_inputs(&graph, organization_id)?;
-    let plan = plan_start(StartPlanInput {
-        graph: &graph,
-        expected_definition_version: binding.approval_definition_version,
-        bindings: binding_inputs,
-    })
-    .map_err(map_start_plan_error)?;
+    let plan = plan_purchase_approval_start(&graph, binding.approval_definition_version, organization_id)?;
     Ok(StartExecutionInput {
         resubmission_reason,
         command: ExecutionCommandInput {
@@ -134,24 +128,27 @@ pub(crate) fn build_purchase_order_start_input(
     })
 }
 
-fn start_binding_inputs(graph: &DefinitionGraph, organization_id: &str) -> Result<Vec<StartBindingInput>> {
-    graph
+pub(crate) fn plan_purchase_approval_start(
+    graph: &DefinitionGraph,
+    expected_definition_version: u32,
+    organization_id: &str,
+) -> Result<StartPlan> {
+    let bindings = graph
         .nodes
         .iter()
         .map(|node| {
             Ok(StartBindingInput {
                 node_key: node.node_key.clone(),
                 assignee_id: ApprovalInstanceAssigneeId::new(next_id()),
-                eligibility: converge_node_eligibility(
-                    node,
-                    |assignee| match purchase_order_object_readable(organization_id, assignee) {
-                        Ok(_) => None,
-                        Err(_) => Some(AuthorizationFailure::CannotReadSubject),
-                    },
-                )?,
+                eligibility: converge_node_eligibility(node, |assignee| {
+                    document_object_readable(organization_id, assignee)
+                        .err()
+                        .map(|_| AuthorizationFailure::CannotReadSubject)
+                })?,
             })
         })
-        .collect::<Result<Vec<_>>>()
+        .collect::<Result<Vec<_>>>()?;
+    plan_start(StartPlanInput { graph, expected_definition_version, bindings }).map_err(map_start_plan_error)
 }
 
 /// 将启动计划错误映射为服务错误；计划前置条件保持冲突语义。

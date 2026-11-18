@@ -16,6 +16,7 @@ use erp_supply::dto::supplier_settlement::{
     HandoverCandidateView, HandoverSettlementRequest, HandoverSettlementView,
     ReassignSettlementDifferenceHandlerRequest, ReassignSettlementDifferenceHandlerView,
 };
+use erp_supply::entity::supplier_settlement::SupplierSettlementStatement;
 use erp_supply::repository::SupplierSettlementExt;
 use erp_supply::service::supplier_fulfillment::receipt::stable_digest;
 use erp_supply::service::supplier_settlement::SettlementAccess;
@@ -123,13 +124,12 @@ struct SettlementDependencies {
 }
 
 impl SettlementDependencies {
-    /// 捕获事务所需依赖，事务闭包仅消费一次，无需再次复制句柄。
-    fn from_process<A: WorkflowAuthorizationPort>(process: &SupplierSettlementProcess<A>) -> Result<Self> {
-        Ok(Self {
+    fn from_process<A: WorkflowAuthorizationPort>(process: &SupplierSettlementProcess<A>) -> Self {
+        Self {
             db: process.db.clone(),
             access: process.data_scope.clone(),
             authorization: process.authorization.clone(),
-        })
+        }
     }
 
     /// 业务更新之后依次保存独立命令回执与展示审计，沿用同一执行器。
@@ -203,12 +203,12 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             ResponsibilityChange::Handover,
             handover_fingerprint(actor.id(), id, &req),
         );
-        if let Some(existing) = self.replay_handover(&command, executor).await? {
-            return Ok(existing);
+        if let Some(statement) = self.replay_responsibility_change(&command, executor).await? {
+            return Ok(handover_view(statement));
         }
         ensure_target_qualified(&self.authorization, req.target_user_id.trim(), executor).await?;
         ensure_org_enabled(&self.db, req.target_org_unit_id.as_deref(), executor).await?;
-        let dependencies = SettlementDependencies::from_process(self)?;
+        let dependencies = SettlementDependencies::from_process(self);
         apply_handover(&dependencies, &command, &req, executor).await
     }
 
@@ -260,11 +260,11 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             ResponsibilityChange::ReassignDifferenceHandler,
             handler_fingerprint(actor.id(), id, &req),
         );
-        if let Some(existing) = self.replay_handler(&command, executor).await? {
-            return Ok(existing);
+        if let Some(statement) = self.replay_responsibility_change(&command, executor).await? {
+            return Ok(handler_view(statement));
         }
         ensure_target_qualified(&self.authorization, req.target_user_id.trim(), executor).await?;
-        let dependencies = SettlementDependencies::from_process(self)?;
+        let dependencies = SettlementDependencies::from_process(self);
         apply_handler(&dependencies, &command, &req, executor).await
     }
 
@@ -311,12 +311,11 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         list_candidates(&self.authorization, &self.rbac, &current.prepared_by, executor).await
     }
 
-    async fn replay_handover(
+    async fn replay_responsibility_change(
         &self,
         command: &ResponsibilityCommand,
-
         executor: &mut dyn Executor,
-    ) -> Result<Option<HandoverSettlementView>> {
+    ) -> Result<Option<SupplierSettlementStatement>> {
         let Some(stored) =
             self.db.supply_command_receipts().find_command(&command.audit_id, executor).await?
         else {
@@ -329,48 +328,11 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             &command.statement_id,
             &stable_digest(command.key.trim()),
         )?;
-        stored.verify(&command.fingerprint, Some(&command.statement_id), "同一幂等键已用于不同的结算交接")?;
-        command.change.verify_result(&stored.result)?;
-        self.data_scope
-            .require_statement(
-                &command.actor,
-                &supplier_settlement::STATEMENT_REFRESH,
-                &command.statement_id,
-                executor,
-            )
-            .await?;
-        let statement = self.domain().load_statement(&command.statement_id, executor).await?;
-        Ok(Some(HandoverSettlementView {
-            statement_id: statement.base.id,
-            prepared_by: statement.prepared_by,
-            business_org_unit_id: statement.business_org_unit_id,
-            version: statement.base.version,
-        }))
-    }
-
-    async fn replay_handler(
-        &self,
-        command: &ResponsibilityCommand,
-
-        executor: &mut dyn Executor,
-    ) -> Result<Option<ReassignSettlementDifferenceHandlerView>> {
-        let Some(stored) =
-            self.db.supply_command_receipts().find_command(&command.audit_id, executor).await?
-        else {
-            return Ok(None);
+        let conflict_message = match command.change {
+            ResponsibilityChange::Handover => "同一幂等键已用于不同的结算交接",
+            ResponsibilityChange::ReassignDifferenceHandler => "同一幂等键已用于不同的差异处理人改派",
         };
-        stored.verify_identity(
-            &command.audit_id,
-            command.actor.id(),
-            command.change.action(),
-            &command.statement_id,
-            &stable_digest(command.key.trim()),
-        )?;
-        stored.verify(
-            &command.fingerprint,
-            Some(&command.statement_id),
-            "同一幂等键已用于不同的差异处理人改派",
-        )?;
+        stored.verify(&command.fingerprint, Some(&command.statement_id), conflict_message)?;
         command.change.verify_result(&stored.result)?;
         self.data_scope
             .require_statement(
@@ -380,12 +342,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
                 executor,
             )
             .await?;
-        let statement = self.domain().load_statement(&command.statement_id, executor).await?;
-        Ok(Some(ReassignSettlementDifferenceHandlerView {
-            statement_id: statement.base.id.clone(),
-            difference_handler_user_id: statement.difference_handler().to_string(),
-            version: statement.base.version,
-        }))
+        Ok(Some(self.domain().load_statement(&command.statement_id, executor).await?))
     }
 }
 
@@ -415,12 +372,7 @@ async fn apply_handover(
     dependencies.access.require_owner_change(&command.actor, &statement, executor).await?;
     dependencies.db.supplier_settlement_statements().update(&mut statement, executor).await?;
     dependencies.write_audit(command, Some(statement.statement_no.clone()), executor).await?;
-    Ok(HandoverSettlementView {
-        statement_id: statement.base.id,
-        prepared_by: statement.prepared_by,
-        business_org_unit_id: statement.business_org_unit_id,
-        version: statement.base.version,
-    })
+    Ok(handover_view(statement))
 }
 
 /// 差异处理人独立改派，事务授权与保存顺序和对账责任交接一致。
@@ -446,11 +398,25 @@ async fn apply_handler(
     statement.reassign_difference_handler(req.target_user_id.clone())?;
     dependencies.db.supplier_settlement_statements().update(&mut statement, executor).await?;
     dependencies.write_audit(command, Some(statement.statement_no.clone()), executor).await?;
-    Ok(ReassignSettlementDifferenceHandlerView {
-        statement_id: statement.base.id.clone(),
-        difference_handler_user_id: statement.difference_handler().to_string(),
+    Ok(handler_view(statement))
+}
+
+fn handover_view(statement: SupplierSettlementStatement) -> HandoverSettlementView {
+    HandoverSettlementView {
+        statement_id: statement.base.id,
+        prepared_by: statement.prepared_by,
+        business_org_unit_id: statement.business_org_unit_id,
         version: statement.base.version,
-    })
+    }
+}
+
+fn handler_view(statement: SupplierSettlementStatement) -> ReassignSettlementDifferenceHandlerView {
+    let difference_handler_user_id = statement.difference_handler().to_string();
+    ReassignSettlementDifferenceHandlerView {
+        statement_id: statement.base.id,
+        difference_handler_user_id,
+        version: statement.base.version,
+    }
 }
 
 async fn ensure_target_qualified(

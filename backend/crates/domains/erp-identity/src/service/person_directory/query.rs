@@ -89,7 +89,7 @@ pub async fn selected_page(
     if ids.is_empty() || ids.len() > 100 {
         return Err(Error::ValidationError("已选人员须为 1 到 100 项".into()));
     }
-    let page_size = u32::try_from(ids.len()).map_err(|_| Error::ValidationError("已选人员过多".into()))?;
+    let page_size = ids.len() as u32;
     let (access, mut display) = authorize(db, authorization, actor, category, executor).await?;
     let result = directory_page(
         db,

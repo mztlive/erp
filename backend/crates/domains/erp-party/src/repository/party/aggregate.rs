@@ -364,7 +364,7 @@ impl PartyDomainRepository<'_> {
                 .into_iter()
                 .filter_map(|id| id.as_str().map(|s| PartyId::new(s.to_owned()))),
         );
-        ids.sort_by_key(ToString::to_string);
+        ids.sort_by(|left, right| left.as_ref().cmp(right.as_ref()));
         ids.dedup();
         Ok(ids)
     }

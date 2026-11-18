@@ -2,7 +2,7 @@
 
 use mongodb::{Client, Database};
 
-use crate::{Error, Result, test_mongo_uri, uuid_hex_n};
+use crate::{Error, Result, TEST_MONGO_URI_ENV, test_mongo_uri, uuid_hex_n};
 
 /// 数据库名最大字符数（MongoDB 上限 64 字节；字符集已过滤为 ASCII，
 /// 此处按字符计数，预留后缀空间）。
@@ -38,7 +38,7 @@ impl TestDb {
     /// # 错误
     /// `ERP_TEST_MONGO_URI` 未设置或为空时返回 `Error::EnvMissing`；连接或创建标记集合失败时返回 MongoDB 错误。
     pub async fn new(prefix: &str) -> Result<Self> {
-        let uri = mongo_uri()?;
+        let uri = test_mongo_uri().ok_or(Error::EnvMissing(TEST_MONGO_URI_ENV))?;
         let client = Client::with_uri_str(&uri).await?;
         let name = random_db_name(prefix);
         let db = client.database(&name);
@@ -123,17 +123,6 @@ impl Drop for TestDb {
             let _ = runtime.block_on(async move { client.database(&name).drop().await });
         });
     }
-}
-
-/// 读取 `ERP_TEST_MONGO_URI` 环境变量。
-///
-/// # 返回值
-/// 返回连接串。
-///
-/// # 错误
-/// 环境变量未设置或为空时返回 `Error::EnvMissing`。
-fn mongo_uri() -> Result<String> {
-    test_mongo_uri().ok_or(Error::EnvMissing(crate::TEST_MONGO_URI_ENV))
 }
 
 /// 生成 `前缀_uuid短前缀` 形式的合法数据库名。

@@ -4,6 +4,10 @@ use std::time::Duration;
 
 use tokio::sync::watch;
 
+pub(super) fn should_stop(stop: &watch::Receiver<bool>) -> bool {
+    *stop.borrow() || stop.has_changed().is_err()
+}
+
 /// 周期执行工作；发送停止信号或释放所有发送端后结束。
 /// # 参数
 /// `stop` 为停止通知，`period` 为轮次间等待时间，`run` 为一个有界业务轮次。
@@ -17,7 +21,7 @@ where
     Fut: Future<Output = ()>,
 {
     loop {
-        if *stop.borrow() || stop.has_changed().is_err() {
+        if should_stop(&stop) {
             return;
         }
         run().await;

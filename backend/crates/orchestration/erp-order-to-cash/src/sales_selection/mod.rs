@@ -33,8 +33,8 @@ use storage::S3Storage;
 
 use self::adapters::{CatalogAdapter, CustomerAdapter, ImageAdapter};
 use self::scope_checks::{
-    check_create_scope, copy_link_checked, delete_item_checked, image_key_checked, publish_checked,
-    rotate_link_checked, session_checked, start_prepare_checked,
+    check_create_scope, copy_link_checked, image_key_checked, publish_checked, session_checked,
+    start_prepare_checked,
 };
 use crate::{Error, Result};
 
@@ -168,7 +168,10 @@ impl SalesSelectionProcess {
         req: DeleteDisplayItemRequest,
         actor: AuditActor,
     ) -> Result<SalesSelectionBookletView> {
-        delete_item_checked(&self.db, self.services.selections.clone(), booklet_id, item_id, req, actor).await
+        SalesSelectionService::new(self.db.clone(), self.services.selections.authorization())
+            .delete_display_item(&booklet_id, &item_id, req.expected_version, &actor)
+            .await
+            .map_err(Error::from)
     }
 
     /// 发布。
@@ -295,7 +298,10 @@ impl SalesSelectionProcess {
         req: SalesSelectionCommandRequest,
         actor: AuditActor,
     ) -> Result<SalesSelectionBookletView> {
-        rotate_link_checked(&self.db, &self.crypto, self.services.selections.clone(), id, req, actor).await
+        SalesSelectionService::new(self.db.clone(), self.services.selections.authorization())
+            .rotate_link(&id, req, &actor, &self.crypto)
+            .await
+            .map_err(Error::from)
     }
 
     /// 关闭。
@@ -316,7 +322,10 @@ impl SalesSelectionProcess {
         req: SalesSelectionCommandRequest,
         actor: AuditActor,
     ) -> Result<SalesSelectionBookletView> {
-        self.command(id, req, actor, CommandKind::Close).await
+        SalesSelectionService::new(self.db.clone(), self.services.authorization.clone())
+            .close_booklet(&id, req, &actor)
+            .await
+            .map_err(Error::from)
     }
 
     /// 撤销访问。
@@ -337,7 +346,10 @@ impl SalesSelectionProcess {
         req: SalesSelectionCommandRequest,
         actor: AuditActor,
     ) -> Result<SalesSelectionBookletView> {
-        self.command(id, req, actor, CommandKind::Revoke).await
+        SalesSelectionService::new(self.db.clone(), self.services.authorization.clone())
+            .revoke_access(&id, req, &actor)
+            .await
+            .map_err(Error::from)
     }
 
     /// 作废。
@@ -358,7 +370,10 @@ impl SalesSelectionProcess {
         req: SalesSelectionCommandRequest,
         actor: AuditActor,
     ) -> Result<SalesSelectionBookletView> {
-        self.command(id, req, actor, CommandKind::Void).await
+        SalesSelectionService::new(self.db.clone(), self.services.authorization.clone())
+            .void_booklet(&id, req, &actor)
+            .await
+            .map_err(Error::from)
     }
 
     /// 运行到期准备任务。
@@ -464,44 +479,4 @@ impl SalesSelectionProcess {
         }
         Ok(())
     }
-
-    /// 关闭/撤销/作废命令。
-    ///
-    /// # 参数
-    /// * `id` - 选品册
-    /// * `req` - 命令
-    /// * `actor` - 已认证操作人
-    /// * `kind` - 命令种类
-    ///
-    /// # 返回
-    /// 返回详情。
-    ///
-    /// # 错误
-    /// 状态不允许或无权操作。
-    async fn command(
-        &self,
-        id: String,
-        req: SalesSelectionCommandRequest,
-        actor: AuditActor,
-        kind: CommandKind,
-    ) -> Result<SalesSelectionBookletView> {
-        let service = SalesSelectionService::new(self.db.clone(), self.services.authorization.clone());
-        match kind {
-            CommandKind::Close => service.close_booklet(&id, req, &actor).await,
-            CommandKind::Revoke => service.revoke_access(&id, req, &actor).await,
-            CommandKind::Void => service.void_booklet(&id, req, &actor).await,
-        }
-        .map_err(Error::from)
-    }
-}
-
-/// 内部命令种类。
-#[derive(Debug, Clone, Copy)]
-enum CommandKind {
-    /// 关闭。
-    Close,
-    /// 撤销。
-    Revoke,
-    /// 作废。
-    Void,
 }

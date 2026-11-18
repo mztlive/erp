@@ -236,14 +236,14 @@ pub fn pick_purchase_invoice_id(
     command: &CommandReceipt,
     receipts: &[FinanceCommandReceipt],
 ) -> Result<Option<InvoiceId>> {
-    let matching: Vec<_> = receipts.iter().filter(|receipt| receipt.base.id == command.id()).collect();
-    if matching.len() > 1 {
+    let mut matching = receipts.iter().filter(|receipt| receipt.base.id == command.id());
+    let Some(receipt) = matching.next() else {
+        return Ok(None);
+    };
+    if matching.next().is_some() {
         return Err(corrupted_receipt());
     }
-    match matching.first() {
-        Some(receipt) => receipt.purchase_invoice_id(command).map(Some),
-        None => Ok(None),
-    }
+    receipt.purchase_invoice_id(command).map(Some)
 }
 
 /// 保留现有通用回执损坏错误口径。

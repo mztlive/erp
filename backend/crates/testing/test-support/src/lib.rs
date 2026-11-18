@@ -59,8 +59,9 @@ pub(crate) fn test_mongo_uri() -> Option<String> {
 /// # 错误
 /// 不返回错误。
 pub(crate) fn uuid_hex_n(len: usize) -> String {
-    let hex = Uuid::new_v4().simple().to_string();
-    hex[..len.min(hex.len())].to_string()
+    let mut hex = Uuid::new_v4().simple().to_string();
+    hex.truncate(len);
+    hex
 }
 
 /// 判断是否具备真实 MongoDB（单节点副本集）环境。

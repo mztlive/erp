@@ -62,7 +62,8 @@ fn authorize(
     payload_hash: &str,
 ) -> Result<String> {
     let signed = values.keys().copied().collect::<Vec<_>>().join(";");
-    let canonical_headers = values.iter().map(|(k, v)| format!("{k}:{}\n", v.trim())).collect::<String>();
+    let canonical_headers =
+        values.iter().flat_map(|(&key, &value)| [key, ":", value.trim(), "\n"]).collect::<String>();
     let canonical = format!("POST\n/\n{query}\n{canonical_headers}\n{signed}\n{payload_hash}");
     let to_sign = format!("ACS3-HMAC-SHA256\n{}", hex::encode(Sha256::digest(canonical.as_bytes())));
     let mut mac = Hmac::<Sha256>::new_from_slice(credentials.access_key_secret.as_bytes())

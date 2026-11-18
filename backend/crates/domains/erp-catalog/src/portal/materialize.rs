@@ -11,8 +11,8 @@ use persistence_core::Executor;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    CatalogDraftResult, CatalogDraftSkuResult, CatalogPortalService, DraftSku, NewProductDraft,
-    NewProductInput, NormalizedProduct, NormalizedSku,
+    CatalogDraftResult, CatalogDraftSkuResult, CatalogPortalService, DraftSku, NewProductInput,
+    NormalizedProduct, NormalizedSku,
 };
 use crate::entity::catalog::product::ProductData;
 use crate::entity::catalog::product_revision::ProductRevisionData;
@@ -64,7 +64,7 @@ impl CatalogPortalService {
         let input = draft.submitted()?;
         input.ensure_submission_images()?;
         self.ensure_dictionaries(input, &command.normalized, executor).await?;
-        let (product, product_created) = self.resolve_product(&draft, command, executor).await?;
+        let (product, product_created) = self.resolve_product(input, command, executor).await?;
         let mut skus = Vec::with_capacity(input.skus.len());
         for row in &input.skus {
             let mapped = command
@@ -80,11 +80,10 @@ impl CatalogPortalService {
 
     async fn resolve_product(
         &self,
-        draft: &NewProductDraft,
+        input: &NewProductInput,
         command: &CatalogMaterializeCommand,
         executor: &mut dyn Executor,
     ) -> Result<(Product, bool)> {
-        let input = draft.submitted()?;
         if let Some(target) = &command.product_target {
             let product = self
                 .catalog

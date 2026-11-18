@@ -17,7 +17,7 @@ fn is_valid_query_id(id: &str) -> bool {
 }
 
 /// 解析逗号分隔的 ID 集合：限项、去首尾空白、去重排序。
-fn parse_query_ids(raw: &str) -> Result<BTreeSet<String>, &'static str> {
+fn parse_query_ids(raw: &str) -> Result<Vec<String>, &'static str> {
     let parts = raw.split(',');
     if parts.clone().nth(MAX_QUERY_IDS).is_some() {
         return Err("单次人员条件最多 100 个 ID");
@@ -28,9 +28,9 @@ fn parse_query_ids(raw: &str) -> Result<BTreeSet<String>, &'static str> {
         if !is_valid_query_id(id) {
             return Err("人员筛选必须为非空的稳定 ID");
         }
-        ids.insert(id.to_owned());
+        ids.insert(id);
     }
-    Ok(ids)
+    Ok(ids.into_iter().map(str::to_owned).collect())
 }
 
 /// 逗号分隔的稳定 ID 集合。显式空值、空片段及超过 100 项的请求拒绝。
@@ -83,7 +83,7 @@ impl<'de> Deserialize<'de> for QueryIds {
     /// 值不是字符串时返回反序列化错误。按逗号拆分后超过 100 段，或任一段去空白后为空、超过 128 字节、含 ASCII 字母数字与 `-_` 以外的字符时，返回对应校验文案。
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let raw = String::deserialize(deserializer)?;
-        parse_query_ids(&raw).map(|ids| Self(ids.into_iter().collect())).map_err(serde::de::Error::custom)
+        parse_query_ids(&raw).map(Self).map_err(serde::de::Error::custom)
     }
 }
 

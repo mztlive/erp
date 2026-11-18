@@ -18,7 +18,7 @@ use super::dto::{
     QualityTotals,
 };
 use super::query::{BASIS_LABEL, PERIOD_BASIS};
-use super::source::{CustomerFact, QualityOrder, effective_label};
+use super::source::{CustomerFact, QualityOrder, effective_label, load_current_snapshot, load_orders};
 use crate::Result;
 use crate::sales_center::access::SalesReadContext;
 
@@ -58,9 +58,7 @@ impl super::CustomerQualityReadModel {
         let expanded = expand_requested_orgs(&self.customer_scope, query, executor).await?;
         let order_customer_ids = query.customer_id.clone().map(|id| vec![id]);
         let order_filter = super::source::quality_order_filter(&bounds, order_customer_ids);
-        let raw_orders =
-            super::source::CurrentSources::load_orders(&self.db, order_filter, &sales_scope, executor)
-                .await?;
+        let raw_orders = load_orders(&self.db, order_filter, &sales_scope, executor).await?;
         sales_context.validate(executor).await?;
         let compiled =
             Arc::new(self.rbac.query(actor, &internal::CUSTOMER_QUALITY_CUSTOMERS, executor).await?);
@@ -70,7 +68,7 @@ impl super::CustomerQualityReadModel {
             as_of: compiled.as_of(),
             compiled,
         };
-        let mut sources = self.current_sources(query, &customer_context, &raw_orders, executor).await?;
+        let mut sources = self.current_sources(query, &customer_context, raw_orders, executor).await?;
         self.customer_scope.validate(&customer_context, executor).await?;
         apply_request_filters(&mut sources, query, expanded.as_ref());
         let mut view = project_current(query, sources);
@@ -88,7 +86,7 @@ impl super::CustomerQualityReadModel {
         &self,
         query: &CurrentQualityQuery,
         customer: &CustomerResolvedScope,
-        orders: &[QualityOrder],
+        mut orders: Vec<QualityOrder>,
         executor: &mut dyn Executor,
     ) -> Result<super::source::CurrentSnapshot> {
         let mut candidates = orders.iter().map(|order| order.customer_id.clone()).collect::<BTreeSet<_>>();
@@ -104,9 +102,8 @@ impl super::CustomerQualityReadModel {
                 .map(|customer| customer.id)
                 .collect();
         let allowed: BTreeSet<_> = authorized.iter().cloned().collect();
-        let visible_orders =
-            orders.iter().filter(|order| allowed.contains(&order.customer_id)).cloned().collect::<Vec<_>>();
-        super::source::CurrentSources::load_customers(&self.db, authorized, &visible_orders, executor).await
+        orders.retain(|order| allowed.contains(&order.customer_id));
+        load_current_snapshot(&self.db, authorized, orders, executor).await
     }
 
     /// 在新的读取事务内重验账号、组织、协作及业务责任集合，防止返回旧宽范围文件。
@@ -198,9 +195,6 @@ fn apply_request_filters(
     }
     let kept = sources.customers.iter().map(|c| c.id.clone()).collect::<BTreeSet<_>>();
     sources.orders.retain(|o| kept.contains(&o.customer_id));
-    if let Some(q) = query.q.as_deref().map(str::trim).filter(|q| !q.is_empty()) {
-        let _ = q;
-    }
 }
 
 /// 人员、组织和下钻条件同时匹配单据责任；客户名单只保留沉默客户。

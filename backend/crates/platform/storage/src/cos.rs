@@ -16,8 +16,11 @@ pub(crate) fn original_image_uri(uri: &str) -> Result<Option<String>> {
     let mut url = Url::parse(uri).map_err(|_| Error::S3("对象读取地址无效".into()))?;
     let host = url.host_str().unwrap_or_default();
     let is_cos = host.ends_with(".myqcloud.com") && (host.starts_with("cos.") || host.contains(".cos."));
-    let extension = url.path().rsplit('.').next().unwrap_or_default().to_ascii_lowercase();
-    if !is_cos || !matches!(extension.as_str(), "jpg" | "jpeg" | "png" | "gif" | "webp") {
+    if !is_cos {
+        return Ok(None);
+    }
+    let extension = url.path().rsplit('.').next().unwrap_or_default();
+    if !["jpg", "jpeg", "png", "gif", "webp"].iter().any(|image| extension.eq_ignore_ascii_case(image)) {
         return Ok(None);
     }
     url.query_pairs_mut().append_pair("ci-process", "originImage");

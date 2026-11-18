@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_contract::entity::recognition::{ContractImport, ImportFailure, ImportStatus, ImportView};
-use erp_contract::repository::recognition::{self, ContractImportExt};
+use erp_contract::repository::recognition::ContractImportExt;
 use erp_contract::{ContractAccess, ContractService};
 use erp_customer::CustomerAccess;
 use mongodb::Database;
@@ -85,8 +85,7 @@ impl ContractImportProcess {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<(ImportView, Option<ImportAttempt>)> {
-        self.services.contract_access.require_import(actor, executor).await?;
-        let mut task = recognition::owned(&self.db, actor.id(), id, executor).await?;
+        let mut task = self.task_stage(id, actor, executor).await?;
         if !task.begin(now())? {
             return Ok((task.into(), None));
         }

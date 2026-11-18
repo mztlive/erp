@@ -5,8 +5,8 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use erp_permissions::sales_selection;
 use erp_sales::dto::sales_selection::{
-    DeleteDisplayItemRequest, PrepareSalesSelectionRequest, PublishSalesSelectionRequest,
-    SalesSelectionBookletView, SalesSelectionCommandRequest, SalesSelectionSessionView,
+    PrepareSalesSelectionRequest, PublishSalesSelectionRequest, SalesSelectionBookletView,
+    SalesSelectionSessionView,
 };
 use erp_sales::entity::sales_selection::{FirstNonEmptyMemberImage, LinkTokenCrypto};
 use erp_sales::repository::sales_selection::SalesSelectionDomainRepository;
@@ -80,34 +80,6 @@ pub(crate) async fn start_prepare_checked(
     let owned = db.clone();
     Ok(SalesSelectionService::new(owned, access.authorization())
         .start_prepare(command, &actor, &catalog, &images, &FirstNonEmptyMemberImage)
-        .await?)
-}
-
-/// 授权后删除陈列。
-///
-/// # 参数
-/// * `db` - 选品数据库
-/// * `access` - 选品范围访问器
-/// * `booklet_id` - 选品册
-/// * `item_id` - 陈列
-/// * `req` - 版本
-/// * `actor` - 已认证操作人
-///
-/// # 返回
-/// 返回详情。
-///
-/// # 错误
-/// 无权操作、状态或版本非法时拒绝。
-pub(crate) async fn delete_item_checked(
-    db: &Database,
-    access: SelectionAccess,
-    booklet_id: String,
-    item_id: String,
-    req: DeleteDisplayItemRequest,
-    actor: AuditActor,
-) -> Result<SalesSelectionBookletView> {
-    Ok(SalesSelectionService::new(db.clone(), access.authorization())
-        .delete_display_item(&booklet_id, &item_id, req.expected_version, &actor)
         .await?)
 }
 
@@ -247,34 +219,6 @@ pub(crate) async fn session_checked(
             })
         })
         .await
-}
-
-/// 授权后更换链接。
-///
-/// # 参数
-/// * `db` - 选品数据库
-/// * `crypto` - 链接编解码器
-/// * `access` - 选品范围访问器
-/// * `id` - 选品册
-/// * `req` - 命令
-/// * `actor` - 已认证操作人
-///
-/// # 返回
-/// 返回新链接详情。
-///
-/// # 错误
-/// 无权操作、状态或版本非法时拒绝。
-pub(crate) async fn rotate_link_checked(
-    db: &Database,
-    crypto: &LinkTokenCrypto,
-    access: SelectionAccess,
-    id: String,
-    req: SalesSelectionCommandRequest,
-    actor: AuditActor,
-) -> Result<SalesSelectionBookletView> {
-    Ok(SalesSelectionService::new(db.clone(), access.authorization())
-        .rotate_link(&id, req, &actor, crypto)
-        .await?)
 }
 
 /// 授权后读取册图片对象键；同一执行器内重验。

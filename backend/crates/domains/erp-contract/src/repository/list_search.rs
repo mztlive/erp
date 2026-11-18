@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use erp_core::common::time::BusinessDate;
 use mongodb::bson::{Document, doc};
-use persistence_core::{Executor, Pagination, QueryFilter, Result, aggregate, insert_literal_regex_filter};
+use persistence_core::{Executor, Pagination, QueryFilter, aggregate, insert_literal_regex_filter};
 use serde::Deserialize;
 
 use super::ContractExt;
@@ -19,37 +19,6 @@ pub struct ContractCustomer {
     pub id: String,
     pub number: String,
     pub owner: String,
-}
-
-impl ContractCustomer {
-    /// 解析负责人展示标签（纯规则，无 I/O）。
-    ///
-    /// 空显示名回退稳定用户 ID；未分配显示破折号。
-    ///
-    /// # 参数
-    /// * `owner` - 当前主负责人 ID
-    /// * `names` - 账号显示名
-    ///
-    /// # 返回
-    /// 返回展示标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    ///
-    /// # 关键业务约束
-    /// 不得用签约经办姓名填充未分配主责。
-    pub(crate) fn resolve_owner_label(owner: Option<&String>, names: &HashMap<String, String>) -> String {
-        owner
-            .map(|id| {
-                names
-                    .get(id)
-                    .map(|name| name.trim())
-                    .filter(|name| !name.is_empty())
-                    .unwrap_or(id)
-                    .to_string()
-            })
-            .unwrap_or_else(|| "—".to_string())
-    }
 }
 
 impl ContractRow {
@@ -248,9 +217,6 @@ impl ContractDomainRepository<'_> {
 
     /// 在拥有的合同与修订集合内完成分页；元数据基于同一可见范围。
     ///
-    /// 会话/非会话两分支的游标推进与反序列化经 `advance_search_cursor` 收敛；
-    /// 两分支只保留执行器接入差异，空命中返回默认值的行为不变。
-    ///
     /// # 参数
     /// * `filter` - 可见范围筛选。
     /// * `search` - 列表关键词与指标条件。
@@ -270,14 +236,12 @@ impl ContractDomainRepository<'_> {
         if let Some(scope) = &filter.access {
             scope.ensure_current(executor)?;
         }
-        let result: persistence_core::Result<_> = async {
-            let collection = self.db.collection::<Document>(<mongodb::Database as ContractExt>::CONTRACTS);
-            let mut pipeline = filter.stages();
-            pipeline.extend(list_pipeline(filter, search, BusinessDate::today()));
-            run_search_aggregate(&collection, pipeline, executor).await
-        }
-        .await;
-        let result = result?;
+        let collection =
+            self.db.collection::<ContractSearchResult>(<mongodb::Database as ContractExt>::CONTRACTS);
+        let mut pipeline = filter.stages();
+        pipeline.extend(list_pipeline(filter, search, BusinessDate::today()));
+        let result =
+            aggregate::rows(&collection, pipeline, executor).await?.into_iter().next().unwrap_or_default();
         if let Some(scope) = &filter.access {
             scope.ensure_current(executor)?;
         }
@@ -285,38 +249,18 @@ impl ContractDomainRepository<'_> {
     }
 }
 
-/// 执行合同搜索聚合：会话与非会话只差执行器接入，游标推进与反序列化共用。
-///
-/// # 参数
-/// * `collection` - 合同集合文档句柄
-/// * `pipeline` - 已组装的搜索流水线
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回聚合首文档；空命中返回默认值。
-///
-/// # 错误
-/// MongoDB 聚合或反序列化失败。
-async fn run_search_aggregate(
-    collection: &mongodb::Collection<Document>,
-    pipeline: Vec<Document>,
-    executor: &mut dyn Executor,
-) -> Result<ContractSearchResult> {
-    let collection = collection.clone_with_type::<ContractSearchResult>();
-    Ok(aggregate::rows(&collection, pipeline, executor).await?.into_iter().next().unwrap_or_default())
-}
-
 /// 查询流水线：授权及基础条件 → 当前修订 → 派生字段 → 列表与范围指标分面。
 /// 结果行和总数应用 ContractSearch；指标只统计进入分面前的基础范围。
 fn list_pipeline(filter: &ContractFilter, search: &ContractSearch, today: BusinessDate) -> Vec<Document> {
+    let search_match = doc! { "$match": search.filter() };
     vec![
         doc! { "$match": filter.to_doc() },
         doc! { "$lookup": { "from": <mongodb::Database as ContractExt>::CONTRACT_REVISIONS, "localField": "current_revision_id", "foreignField": "id", "as": "current" } },
         doc! { "$set": { "current": { "$arrayElemAt": ["$current", 0] } } },
         doc! { "$set": display_fields(search, today) },
         doc! { "$facet": {
-            "items": [doc! { "$match": search.filter() }, doc! { "$sort": list_sort(filter) }, doc! { "$skip": filter.skip() as i64 }, doc! { "$limit": filter.limit() }],
-            "totals": [doc! { "$match": search.filter() }, doc! { "$count": "total" }],
+            "items": [search_match.clone(), doc! { "$sort": list_sort(filter) }, doc! { "$skip": filter.skip() as i64 }, doc! { "$limit": filter.limit() }],
+            "totals": [search_match, doc! { "$count": "total" }],
             "metrics": [doc! { "$group": metric_group() }],
         } },
     ]
@@ -486,19 +430,6 @@ mod tests {
             &doc! { "$lte": ["$current.valid_to", "2026-10-08"] }
         );
         assert_eq!(ContractSearchResult::default().total(), 0);
-    }
-
-    #[test]
-    fn owner_label_falls_back_to_id_and_dash() {
-        use std::collections::HashMap;
-
-        let names: HashMap<String, String> =
-            [("user-1".to_string(), " 张三 ".to_string()), ("user-2".to_string(), "   ".to_string())]
-                .into_iter()
-                .collect();
-        assert_eq!(ContractCustomer::resolve_owner_label(Some(&"user-1".to_string()), &names), "张三");
-        assert_eq!(ContractCustomer::resolve_owner_label(Some(&"user-2".to_string()), &names), "user-2");
-        assert_eq!(ContractCustomer::resolve_owner_label(None, &names), "—");
     }
 
     #[test]

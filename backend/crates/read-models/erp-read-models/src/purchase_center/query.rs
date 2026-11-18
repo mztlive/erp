@@ -243,16 +243,23 @@ fn map_list_items(
     rows.into_iter()
         .map(|row| -> Result<PurchaseOrderListItemView> {
             let sales_order_id = row.sales_order_id.to_string();
-            let sales_order_no = sales_no_for(&sales_order_id, &facts.sales_order_nos)?;
-            let supplier_name = supplier_display(row.supplier_id.as_ref(), &facts.supplier_names);
+            let sales_order_no =
+                sales_no_for(facts.sales_order_nos.get(&sales_order_id).map(String::as_str))?;
+            let supplier_id = row.supplier_id.as_ref();
+            let supplier_name =
+                supplier_display(supplier_id, facts.supplier_names.get(supplier_id).map(String::as_str));
             let totals = list_row_totals(
                 row.current_submission_id.as_deref(),
                 row.current_revision_id.as_deref(),
                 &facts.submissions,
                 &facts.revisions,
             );
-            let raw_owner = row.owner_user_id.filter(|owner| !owner.trim().is_empty());
-            let (owner_user_id, owner_name) = owner_display(raw_owner, &facts.owner_names);
+            let owner_user_id = row.owner_user_id.filter(|owner| !owner.trim().is_empty());
+            let owner_id = owner_user_id.as_deref();
+            let owner_name = owner_display(
+                owner_id,
+                facts.owner_names.get(owner_id.unwrap_or_default()).map(String::as_str),
+            );
             let payment_progress = payment_progress(facts.payment_statuses.get(&row.id).copied());
             Ok(PurchaseOrderListItemView {
                 id: row.id,
@@ -296,7 +303,7 @@ fn payment_progress(status: Option<PayableAccountStatus>) -> ProgressStatus {
 ///
 /// # 参数
 /// * `supplier_id` - 供应商账号 ID
-/// * `names` - 供应商法定名称映射
+/// * `name` - 对应的供应商法定名称
 ///
 /// # 返回
 /// 返回已登记名称；缺失或空白时返回明确的名称缺失提示。
@@ -306,10 +313,8 @@ fn payment_progress(status: Option<PayableAccountStatus>) -> ProgressStatus {
 ///
 /// # 约束
 /// 账号标识仅用于定位名称，不能作为供应商名称展示。
-pub(super) fn supplier_display(supplier_id: &str, names: &HashMap<String, String>) -> String {
-    names
-        .get(supplier_id)
-        .map(|name| name.trim())
+pub(super) fn supplier_display(supplier_id: &str, name: Option<&str>) -> String {
+    name.map(str::trim)
         .filter(|name| !name.is_empty() && *name != supplier_id)
         .unwrap_or("供应商名称不可用")
         .to_owned()
@@ -318,8 +323,7 @@ pub(super) fn supplier_display(supplier_id: &str, names: &HashMap<String, String
 /// 解析来源销售单业务单号.
 ///
 /// # 参数
-/// * `sales_order_id` - 来源销售单 ID
-/// * `nos` - 销售单号映射
+/// * `no` - 对应的来源销售单业务单号
 ///
 /// # 返回
 /// 返回业务单号；缺失时返回完整性内部错误.
@@ -329,31 +333,26 @@ pub(super) fn supplier_display(supplier_id: &str, names: &HashMap<String, String
 ///
 /// # 约束
 /// 缺失不得回退为 ID，必须失败关闭.
-fn sales_no_for(sales_order_id: &str, nos: &HashMap<String, String>) -> Result<String> {
-    nos.get(sales_order_id).cloned().ok_or_else(|| Error::Internal("采购单关联的销售单不存在".to_string()))
+fn sales_no_for(no: Option<&str>) -> Result<String> {
+    no.map(str::to_owned).ok_or_else(|| Error::Internal("采购单关联的销售单不存在".to_string()))
 }
 
 /// 解析负责人展示名.
 ///
 /// # 参数
 /// * `owner_user_id` - 已去空白的负责人 ID
-/// * `names` - 账号展示名映射
+/// * `name` - 查得的账号展示名
 ///
 /// # 返回
-/// 无负责人时返回 `未指定`，有 ID 但账号缺失时返回 `责任账号不可用`.
+/// 优先使用查得的名称；缺失时按是否有负责人返回 `责任账号不可用` 或 `未指定`。
 ///
 /// # 错误
 /// 无.
 ///
 /// # 约束
 /// 缺失语义与历史实现完全一致，不得改变回退文案.
-fn owner_display(owner_user_id: Option<String>, names: &HashMap<String, String>) -> (Option<String>, String) {
-    let display = names
-        .get(owner_user_id.as_deref().unwrap_or_default())
-        .cloned()
-        .or_else(|| owner_user_id.as_ref().map(|_| "责任账号不可用".to_string()))
-        .unwrap_or_else(|| "未指定".to_string());
-    (owner_user_id, display)
+fn owner_display(owner_user_id: Option<&str>, name: Option<&str>) -> String {
+    name.unwrap_or(if owner_user_id.is_some() { "责任账号不可用" } else { "未指定" }).to_owned()
 }
 
 /// 解析对象中心内容来源优先级.
@@ -598,36 +597,29 @@ mod query_mapping_tests {
     /// 供应商缺失、空白或名称被历史标识污染时明确提示，真实名称正常展示。
     #[test]
     fn supplier_display_requires_readable_name() {
-        assert_eq!(supplier_display("sup-1", &HashMap::new()), "供应商名称不可用");
-        let mut names = HashMap::new();
-        names.insert("sup-1".to_string(), "  ".to_string());
-        assert_eq!(supplier_display("sup-1", &names), "供应商名称不可用");
-        names.insert("sup-1".to_string(), "sup-1".to_string());
-        assert_eq!(supplier_display("sup-1", &names), "供应商名称不可用");
-        names.insert("sup-1".to_string(), "  供应商甲  ".to_string());
-        assert_eq!(supplier_display("sup-1", &names), "供应商甲".to_string());
+        assert_eq!(supplier_display("sup-1", None), "供应商名称不可用");
+        assert_eq!(supplier_display("sup-1", Some("  ")), "供应商名称不可用");
+        assert_eq!(supplier_display("sup-1", Some("sup-1")), "供应商名称不可用");
+        assert_eq!(supplier_display("sup-1", Some("  供应商甲  ")), "供应商甲");
     }
 
     /// 缺失销售单必须报完整性错误，不得回退 ID.
     #[test]
     fn missing_sales_order_is_internal_error() {
-        assert!(sales_no_for("so-1", &HashMap::new()).is_err());
-        let mut nos = HashMap::new();
-        nos.insert("so-1".to_string(), "SO-1".to_string());
-        assert_eq!(sales_no_for("so-1", &nos).unwrap(), "SO-1".to_string());
+        assert!(
+            matches!(sales_no_for(None), Err(crate::Error::Internal(message)) if message == "采购单关联的销售单不存在")
+        );
+        assert_eq!(sales_no_for(Some("SO-1")).unwrap(), "SO-1");
+        assert_eq!(sales_no_for(Some("")).unwrap(), "");
     }
 
     /// 负责人三态回退与历史文案一致.
     #[test]
     fn owner_fallback_matrix() {
-        assert_eq!(owner_display(None, &HashMap::new()).1, "未指定".to_string());
-        assert_eq!(
-            owner_display(Some("buyer-1".to_string()), &HashMap::new()).1,
-            "责任账号不可用".to_string()
-        );
-        let mut names = HashMap::new();
-        names.insert("buyer-1".to_string(), "张三".to_string());
-        assert_eq!(owner_display(Some("buyer-1".to_string()), &names).1, "张三".to_string());
+        assert_eq!(owner_display(None, None), "未指定");
+        assert_eq!(owner_display(Some("buyer-1"), None), "责任账号不可用");
+        assert_eq!(owner_display(Some("buyer-1"), Some("张三")), "张三");
+        assert_eq!(owner_display(Some("buyer-1"), Some("")), "");
     }
 
     /// 内容来源优先级固定为版本大于提交大于草稿.

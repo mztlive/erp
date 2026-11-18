@@ -2,22 +2,20 @@
 use std::sync::Arc;
 
 use application_core::{AuditActor, CommandReceipt};
-use erp_core::ids::{InvoiceId, WorkItemId};
-use erp_finance::dto::receivable::CreateInvoiceRequest;
+use erp_core::ids::WorkItemId;
+use erp_finance::entity::receivable::Invoice;
 use erp_finance::entity::receivable::sales_invoice_allocation_plan::SalesInvoiceAllocationLine;
-use erp_finance::entity::receivable::{Invoice, InvoiceData, InvoiceStatus};
 use erp_finance::repository::ReceivableExt;
-use erp_finance::repository::prelude::*;
 use erp_finance::service::command_receipt::FinanceCommandReceiptService;
 use erp_finance::service::receivable::invoice_commit::{PreparedInvoiceCommit, ensure_sales_invoice};
-use erp_finance::service::receivable::mapping::{ensure_expected_version, zero_amount};
+use erp_finance::service::receivable::mapping::ensure_expected_version;
 use erp_support::PendingAttachmentBatch;
 use mongodb::Database;
 use persistence_core::Executor;
 use validator::Validate;
 
 use super::dto::CommitInvoiceRequest;
-use super::invoice::register_created_invoice_document;
+use super::invoice::{ensure_postable_draft, new_invoice, register_created_invoice_document};
 use super::invoice_posting::{InvoicePostingAllocations, InvoicePostingInput, post_invoice_apply};
 use crate::finance_posting::task_access::TaskPurpose;
 use crate::finance_posting::task_entry::require_entry;
@@ -58,8 +56,8 @@ impl InvoiceCommitTransaction {
         }
         super::invoice_attachments::resolve(&mut self.req.attachment_asset_ids, self.pending.as_ref())?;
         let prepared = self.req.prepare()?;
-        let (mut invoice, lines) = self.load_invoice(&prepared, executor).await?;
-        self.ensure_draft(&invoice, executor).await?;
+        let (mut invoice, lines) = self.load_invoice(prepared, executor).await?;
+        ensure_postable_draft(&self.db, &invoice, executor).await?;
         post_invoice_apply(
             &self.db,
             &mut invoice,
@@ -91,7 +89,7 @@ impl InvoiceCommitTransaction {
     /// 新建路径登记无审批单据；已有草稿路径重验版本及销项方向。
     async fn load_invoice(
         &self,
-        prepared: &PreparedInvoiceCommit,
+        prepared: PreparedInvoiceCommit,
         executor: &mut dyn Executor,
     ) -> Result<(Invoice, Vec<SalesInvoiceAllocationLine>)> {
         match prepared {
@@ -101,57 +99,19 @@ impl InvoiceCommitTransaction {
                 register_created_invoice_document(&self.db, &self.rbac, &invoice, &self.actor, executor)
                     .await?;
                 self.db.invoices().create(&invoice, executor).await?;
-                Ok((invoice, allocations.clone()))
+                Ok((invoice, allocations))
             },
             PreparedInvoiceCommit::Existing { invoice_id, expected_version, allocations } => {
                 let invoice = self
                     .db
                     .invoices()
-                    .find_by_id(invoice_id, executor)
+                    .find_by_id(&invoice_id, executor)
                     .await?
                     .ok_or_else(|| Error::NotFound("发票不存在".into()))?;
-                ensure_expected_version(invoice.base.version, *expected_version)?;
+                ensure_expected_version(invoice.base.version, expected_version)?;
                 ensure_sales_invoice(&invoice)?;
-                Ok((invoice, allocations.clone()))
+                Ok((invoice, allocations))
             },
         }
     }
-
-    /// 保持过账前草稿状态和规范化发票号码的原首错顺序。
-    async fn ensure_draft(&self, invoice: &Invoice, executor: &mut dyn Executor) -> Result<()> {
-        if invoice.stable.status() != InvoiceStatus::Draft {
-            return Err(Error::ConflictError("发票已登记，请勿重复提交".into()));
-        }
-        let duplicate = self
-            .db
-            .invoices()
-            .find_by_direction_and_normalized_no(invoice.invoice_direction, &invoice.normalized_no, executor)
-            .await?;
-        if duplicate.as_ref().is_some_and(|other| other.base.id != invoice.base.id) {
-            return Err(Error::ConflictError("发票号码已登记，请勿重复提交".into()));
-        }
-        Ok(())
-    }
-}
-
-/// 从已校验请求构造新发票；金额和单据身份语义沿用发票实体。
-fn new_invoice(req: &CreateInvoiceRequest, actor_id: &str) -> Result<Invoice> {
-    Ok(Invoice::new(
-        InvoiceId::new(id_generator::next_id()),
-        InvoiceData {
-            invoice_direction: req.invoice_direction,
-            invoice_kind: req.invoice_kind,
-            party_id: req.party_id.clone(),
-            invoice_code: req.invoice_code.clone(),
-            invoice_no: req.invoice_no.clone(),
-            invoice_date: req.invoice_date,
-            gross_amount: req.gross_amount,
-            net_amount: req.net_amount,
-            tax_amount: req.tax_amount,
-            rounding_adjustment_amount: req.rounding_adjustment_amount.unwrap_or(zero_amount()),
-            rounding_reason: req.rounding_reason.clone(),
-            original_invoice_id: None,
-        },
-        actor_id,
-    )?)
 }

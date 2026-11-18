@@ -167,7 +167,6 @@ pub fn inherit_submission_sources(
     inputs: &mut [PurchaseLineInput],
     existing: &[PurchaseOrderSubmissionLine],
 ) -> Result<()> {
-    let requested = inputs.iter().map(|line| line.delivery_allocations.clone()).collect::<Vec<_>>();
     inherit_sources(
         inputs,
         existing.iter().map(|line| SourceBinding {
@@ -178,21 +177,7 @@ pub fn inherit_submission_sources(
             delivery: &line.delivery_allocations,
             kind: line.line_type,
         }),
-    )?;
-    keep_requested_delivery(inputs, requested);
-    Ok(())
-}
-
-/// 请求显式提供交付安排时覆盖继承值。
-fn keep_requested_delivery(
-    inputs: &mut [PurchaseLineInput],
-    requested: Vec<Vec<super::PurchaseDeliveryAllocation>>,
-) {
-    for (input, delivery) in inputs.iter_mut().zip(requested) {
-        if !delivery.is_empty() {
-            input.delivery_allocations = delivery;
-        }
-    }
+    )
 }
 
 /// 采购变更从明确基准行复制原选源，不重新猜测或切换供给。
@@ -208,7 +193,6 @@ pub fn inherit_revision_sources(
     inputs: &mut [PurchaseLineInput],
     existing: &[PurchaseOrderRevisionLine],
 ) -> Result<()> {
-    let requested = inputs.iter().map(|line| line.delivery_allocations.clone()).collect::<Vec<_>>();
     inherit_sources(
         inputs,
         existing.iter().map(|line| SourceBinding {
@@ -219,9 +203,7 @@ pub fn inherit_revision_sources(
             delivery: &line.delivery_allocations,
             kind: line.line_type,
         }),
-    )?;
-    keep_requested_delivery(inputs, requested);
-    Ok(())
+    )
 }
 
 /// 来源按已冻结的销售稳定行、SKU和SKU版本匹配。
@@ -239,6 +221,7 @@ fn inherit_sources<'a>(
     inputs: &mut [PurchaseLineInput],
     existing: impl Iterator<Item = SourceBinding<'a>>,
 ) -> Result<()> {
+    let requested = inputs.iter().map(|line| line.delivery_allocations.clone()).collect::<Vec<_>>();
     let mut sources = HashMap::new();
     for line in existing.filter(|line| line.kind == PurchaseLineType::ItemService) {
         let key = source_key(line.stable_line, line.sku, line.revision)?;
@@ -246,7 +229,7 @@ fn inherit_sources<'a>(
             return Err(Error::from("采购原行身份歧义，不能继承正式选源"));
         }
     }
-    for input in inputs {
+    for input in &mut *inputs {
         (input.supplier_offering_source, input.delivery_allocations) =
             if input.line_type == PurchaseLineType::LogisticsFee {
                 (None, Vec::new())
@@ -261,6 +244,12 @@ fn inherit_sources<'a>(
                     .ok_or_else(|| Error::from("采购来源行或SKU版本已变化，不能继承正式选源"))?;
                 (source.source.cloned(), source.delivery.to_vec())
             };
+    }
+    // 请求交付安排仅在所有行继承成功后恢复。
+    for (input, delivery) in inputs.iter_mut().zip(requested) {
+        if !delivery.is_empty() {
+            input.delivery_allocations = delivery;
+        }
     }
     Ok(())
 }

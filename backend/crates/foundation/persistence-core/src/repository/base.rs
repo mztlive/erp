@@ -277,7 +277,7 @@ where
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
     pub async fn find_by_id(&self, id: &str, executor: &mut dyn Executor) -> Result<Option<T>> {
-        self.find_one_scoped(doc! { "id": id }, executor).await
+        self.find_one(doc! { "id": id }, executor).await
     }
 
     /// 按 ID 查找实体，包含已软删除记录。
@@ -497,8 +497,7 @@ where
     where
         V: Into<mongodb::bson::Bson> + Send,
     {
-        let filter = doc! { field: value.into() };
-        self.find_one_scoped(filter, executor).await
+        self.find_one(doc! { field: value.into() }, executor).await
     }
 
     /// 查找单个未删除实体。
@@ -513,7 +512,7 @@ where
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
     pub async fn find_one(&self, filter: Document, executor: &mut dyn Executor) -> Result<Option<T>> {
-        self.find_one_scoped(filter, executor).await
+        mongo_ops::find_one(&self.collection(), with_active_scope(filter), executor).await
     }
 
     /// 查找多个未删除实体。
@@ -636,21 +635,6 @@ where
     /// 不返回错误。
     pub fn collection(&self) -> Collection<T> {
         self.db.collection::<T>(self.collection_name)
-    }
-
-    /// 以活跃域约束查询单个文档（各单条读取的共用入口）。
-    ///
-    /// # 参数
-    /// * `filter` - 未加域的过滤条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的未删除实体；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    async fn find_one_scoped(&self, filter: Document, executor: &mut dyn Executor) -> Result<Option<T>> {
-        mongo_ops::find_one(&self.collection(), with_active_scope(filter), executor).await
     }
 
     /// 以活跃域约束查询多个文档（各列表读取的共用入口）。

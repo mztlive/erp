@@ -7,9 +7,9 @@ use bpm::ids::ApprovalProcessInstanceId;
 use bpm::model::{ApprovalCommandReceipt, AssigneeResolution, ParticipantId, Timestamp};
 use erp_core::AccountKind;
 use erp_core::common::time::Instant;
+use erp_identity::AuthorizationService;
 use erp_identity::entity::organization::OrgUnitKind;
 use erp_identity::service::organization::leader::applicant_leader;
-use erp_identity::{AccountSummary, AuthorizationService};
 use erp_permissions::approval_instance;
 use erp_workflow::ports::approver_directory::{ApproverDirectory, ResolvedApprover};
 use erp_workflow::service::approval::assignee_source::AssigneeSource;
@@ -26,27 +26,6 @@ use crate::{Error, Result};
 struct OrganizationApprovers<'a> {
     db: &'a Database,
     identity: &'a Arc<AuthorizationService>,
-}
-impl OrganizationApprovers<'_> {
-    /// 通过统一入口核验动态审批人的有效内部账号及同角色完整资格。
-    async fn account(&self, user: &str, ex: &mut dyn Executor) -> WorkflowResult<AccountSummary> {
-        let actor = AuditActor::new(user.into(), user.into(), AccountKind::Admin);
-        let required = [approval_instance::INSTANCE_LIST, approval_instance::SUBMIT_DECISION];
-        let authorization = self.identity.clone();
-        let qualified = authorization
-            .permissions(&actor, &required, ex)
-            .await
-            .map_err(|e| map_service(Error::from(e)))?
-            .ok_or_else(|| {
-                WorkflowError::ValidationError("审批负责人账号不存在或已停用，请调整负责人".into())
-            })?;
-        if !qualified.same_role(&required) {
-            return Err(WorkflowError::ValidationError(
-                "审批负责人缺少审批读取或决定权限，请联系管理员配置角色".into(),
-            ));
-        }
-        Ok(qualified.account().clone())
-    }
 }
 impl ApproverDirectory for OrganizationApprovers<'_> {
     async fn resolve(
@@ -67,7 +46,22 @@ impl ApproverDirectory for OrganizationApprovers<'_> {
             .await
             .map_err(|e| map_service(Error::from(e)))?;
         let leader = unit.leader.ok_or_else(|| WorkflowError::ValidationError("组织未配置负责人".into()))?;
-        let account = self.account(&leader.user_id, ex).await?;
+        let actor = AuditActor::new(leader.user_id.clone(), leader.user_id, AccountKind::Admin);
+        let required = [approval_instance::INSTANCE_LIST, approval_instance::SUBMIT_DECISION];
+        let qualified = self
+            .identity
+            .permissions(&actor, &required, ex)
+            .await
+            .map_err(|e| map_service(Error::from(e)))?
+            .ok_or_else(|| {
+                WorkflowError::ValidationError("审批负责人账号不存在或已停用，请调整负责人".into())
+            })?;
+        if !qualified.same_role(&required) {
+            return Err(WorkflowError::ValidationError(
+                "审批负责人缺少审批读取或决定权限，请联系管理员配置角色".into(),
+            ));
+        }
+        let account = qualified.account();
         let participant_id = ParticipantId::new(account.id.clone())
             .map_err(|e| WorkflowError::ValidationError(e.to_string()))?;
         ResolvedApprover::new(

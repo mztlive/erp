@@ -11,10 +11,9 @@ use erp_customer::{
 use erp_workflow::ports::WorkflowAuthorizationPort;
 use persistence_core::ReadExecutor;
 
-use super::ensure_dictionary::{EnsureOutcome, step_label};
+use super::ensure_dictionary::EnsureOutcome;
 use super::plan::DemoStep;
-use super::record::{self, DemoMasterRecord};
-use super::{DemoMasterDataProcess, lifecycle, spec};
+use super::{DemoMasterDataProcess, lifecycle, record, spec};
 use crate::{Error, Result};
 
 impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
@@ -61,7 +60,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
             lifecycle::restore_customer(&self.db, self.authorization.clone(), actor, &view.customer_id)
                 .await?;
         }
-        record::save(&self.db, &customer_record(step, &view.customer_id, &view.party_id)).await?;
+        record::save(&self.db, step, view.customer_id, vec![view.party_id]).await?;
         Ok(if created { EnsureOutcome::Created } else { EnsureOutcome::Restored })
     }
 
@@ -86,7 +85,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
             lifecycle::restore_customer(&self.db, self.authorization.clone(), actor, customer_id).await?;
         }
         self.align_customer_owner(actor, customer_id, notices).await?;
-        record::save(&self.db, &customer_record(step, customer_id, &party_id)).await?;
+        record::save(&self.db, step, customer_id.to_string(), vec![party_id]).await?;
         Ok(if live { EnsureOutcome::Skipped } else { EnsureOutcome::Restored })
     }
 
@@ -140,18 +139,6 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
             push_unique(notices, &format!("演示客户未能交给销售账号：{error}"));
         }
         Ok(())
-    }
-}
-
-/// 构造客户与主体实际 ID 的登记记录。
-fn customer_record(step: &DemoStep, customer_id: &str, party_id: &str) -> DemoMasterRecord {
-    DemoMasterRecord {
-        key: step.key.clone(),
-        kind: step.kind.as_str().to_string(),
-        entity_id: customer_id.to_string(),
-        related_ids: vec![party_id.to_string()],
-        label: step_label(step),
-        removed: false,
     }
 }
 

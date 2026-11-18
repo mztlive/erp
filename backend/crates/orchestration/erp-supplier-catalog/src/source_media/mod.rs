@@ -168,25 +168,29 @@ fn archived_group(group: &Option<Vec<CatalogImage>>) -> Vec<ProductMediaInput> {
         .flatten()
         .enumerate()
         .filter_map(|(index, image)| {
-            if image.source_valid == Some(false) {
-                return None;
-            }
-            let hash = image.content_fingerprint.as_deref()?;
-            let id = image.file_asset_id.as_deref()?;
-            if hash.len() != 64
-                || !hash.bytes().all(|byte| byte.is_ascii_hexdigit())
-                || id.trim().is_empty()
-                || id.starts_with("pending-file:")
-            {
-                return None;
-            }
             Some(ProductMediaInput {
-                file_asset_id: FileAssetId::new(id),
+                file_asset_id: archived_asset_id(image)?,
                 sort_order: i32::try_from(index).ok()?,
                 alt_text: None,
             })
         })
         .collect()
+}
+
+fn archived_asset_id(image: &CatalogImage) -> Option<FileAssetId> {
+    if image.source_valid == Some(false) {
+        return None;
+    }
+    let hash = image.content_fingerprint.as_deref()?;
+    let id = image.file_asset_id.as_deref()?;
+    if hash.len() != 64
+        || !hash.bytes().all(|byte| byte.is_ascii_hexdigit())
+        || id.trim().is_empty()
+        || id.starts_with("pending-file:")
+    {
+        return None;
+    }
+    Some(FileAssetId::new(id))
 }
 
 fn retain_without_download(
@@ -203,10 +207,12 @@ fn retain_without_download(
     if !only_missing {
         return false;
     }
-    let Some(mut reference) = archived_group(&Some(vec![source.clone()])).into_iter().next() else {
-        return false;
+    let Some(file_asset_id) = archived_asset_id(source) else { return false };
+    let reference = ProductMediaInput {
+        file_asset_id,
+        sort_order: i32::try_from(position).expect("来源图片最多一百张"),
+        alt_text: None,
     };
-    reference.sort_order = i32::try_from(position).expect("来源图片最多一百张");
     sources.push(source.clone());
     media.push(reference);
     true
@@ -397,7 +403,6 @@ impl SourceMediaPreparer {
                     preparation.cleanup.discard_since(checkpoint).await;
                     preparation.verification_errors.push(format!("{label}第 {} 张：{error}", position + 1));
                     sources.push(CatalogImage {
-                        url: source.url.clone(),
                         content_fingerprint: None,
                         file_asset_id: None,
                         ..source.clone()
@@ -429,7 +434,6 @@ impl SourceMediaPreparer {
             .map_err(|_| Error::Internal("供应商商品图片核验中断，请重试".into()))??;
         if let Some(id) = previous.iter().find_map(|previous| verified_existing(previous, &image.digest)) {
             let source = CatalogImage {
-                url: source.url.clone(),
                 content_fingerprint: Some(image.digest),
                 file_asset_id: Some(id.into()),
                 ..source.clone()
@@ -455,7 +459,6 @@ impl SourceMediaPreparer {
             },
         });
         let source = CatalogImage {
-            url: source.url.clone(),
             content_fingerprint: Some(image.digest),
             file_asset_id: Some(reference.clone()),
             ..source.clone()

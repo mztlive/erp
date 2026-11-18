@@ -49,7 +49,7 @@ impl ContractService {
             .client()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    service.list_stage(query, &actor, expected_version.as_deref(), executor).await
+                    service.list_stage(&query, &actor, expected_version.as_deref(), executor).await
                 })
             })
             .await
@@ -58,7 +58,7 @@ impl ContractService {
     /// 列表、版本复核和交付检查使用同一快照执行器。
     async fn list_stage(
         &self,
-        query: ContractListQuery,
+        query: &ContractListQuery,
         actor: &AuditActor,
         expected_version: Option<&str>,
         executor: &mut dyn Executor,
@@ -66,7 +66,7 @@ impl ContractService {
         if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
             return Err(Error::ValidationError("合同列表必须使用快照事务".into()));
         }
-        let snapshot = self.list_snapshot(query.clone(), actor, executor).await?;
+        let snapshot = self.list_snapshot(query, actor, executor).await?;
         ensure_scope_version(expected_version, &snapshot.context.scope_version)?;
         let current = self.list_scope_version(query, actor, executor).await?;
         ensure_stable_snapshot(&snapshot.context.scope_version, &current)?;
@@ -96,7 +96,6 @@ pub(super) async fn list_customer_facts_with(
 ) -> Result<Vec<ContractCustomer>> {
     let customer_ids = ids.iter().cloned().map(CustomerAccountId::new).collect::<Vec<_>>();
     let facts = customers.find_by_ids(&customer_ids, executor).await?;
-    let names = HashMap::new();
     let numbers = facts.into_iter().map(|c| (c.id, c.customer_no)).collect::<HashMap<_, _>>();
     Ok(ids
         .iter()
@@ -105,7 +104,7 @@ pub(super) async fn list_customer_facts_with(
                 id: id.clone(),
                 number: number.clone(),
                 owner_id: None,
-                owner: ContractCustomer::resolve_owner_label(None, &names),
+                owner: "—".into(),
             })
         })
         .collect())
@@ -294,12 +293,12 @@ mod list_snapshot_tests {
             .unwrap()
             .normalized()
             .unwrap();
-        let result = service.list_stage(query.clone(), &actor, None, &mut ReadExecutor::default()).await;
+        let result = service.list_stage(&query, &actor, None, &mut ReadExecutor::default()).await;
         assert!(matches!(
             result,
             Err(Error::ValidationError(message)) if message == "合同列表必须使用快照事务"
         ));
-        let result = service.list_stage(query, &actor, None, &mut SnapshotExecutor::default()).await;
+        let result = service.list_stage(&query, &actor, None, &mut SnapshotExecutor::default()).await;
         assert!(matches!(
             result,
             Err(Error::ValidationError(message)) if message == "缺少查询 Mapping 绑定"

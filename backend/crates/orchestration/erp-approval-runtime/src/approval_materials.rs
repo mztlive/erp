@@ -54,21 +54,6 @@ enum ReadPhase {
     Revalidate,
 }
 
-impl ReadPhase {
-    /// 读取阶段决定是否记录读取事件，审计失败必须向调用方传播。
-    async fn read_asset(
-        self,
-        files: &FileAssetService,
-        actor: &AuditActor,
-        file_id: &str,
-    ) -> Result<FileAssetView> {
-        Ok(match self {
-            Self::Initial => files.preview_asset(file_id, actor, &mut ReadExecutor::default()).await?,
-            Self::Revalidate => files.asset_view(file_id, &mut ReadExecutor::default()).await?,
-        })
-    }
-}
-
 /// 建立关联前验证文件来源资格，冻结提交时仍须在事务内重新验证。
 /// # 参数
 /// * `identity_service` - 同一应用注入的共享身份与权限服务。
@@ -159,7 +144,10 @@ async fn checked<A: WorkflowAuthorizationPort>(
     phase: ReadPhase,
 ) -> Result<FileAssetView> {
     let frozen = target.reference(db, runtime, actor).await?;
-    let view = phase.read_asset(files, actor, target.file_id).await?;
+    let view = match phase {
+        ReadPhase::Initial => files.preview_asset(target.file_id, actor, &mut ReadExecutor::default()).await,
+        ReadPhase::Revalidate => files.asset_view(target.file_id, &mut ReadExecutor::default()).await,
+    }?;
     let current = ApprovalMaterialFile {
         file_asset_id: FileAssetId::new(&view.id),
         file_name: view.file_name.clone(),

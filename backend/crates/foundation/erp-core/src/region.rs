@@ -4,7 +4,7 @@
 //! 每行 `代码\t名称\t上级代码`。不设区县的地级市以市为最末级，台湾、香港、
 //! 澳门以省级为最末级。上下级按代码数位推导：`ab0000` 为省，`abcd00` 为市。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::sync::LazyLock;
 
@@ -31,7 +31,7 @@ pub struct RegionNode {
 struct RegionIndex {
     nodes: Vec<RegionNode>,
     by_code: HashMap<&'static str, usize>,
-    parents: HashMap<&'static str, usize>,
+    parents: HashSet<&'static str>,
 }
 
 static REGIONS: LazyLock<RegionIndex> = LazyLock::new(load_regions);
@@ -49,12 +49,7 @@ fn load_regions() -> RegionIndex {
         })
         .collect::<Vec<_>>();
     let by_code = nodes.iter().enumerate().map(|(index, node)| (node.code, index)).collect();
-    let mut parents = HashMap::new();
-    for node in &nodes {
-        if let Some(parent_code) = node.parent_code {
-            *parents.entry(parent_code).or_insert(0) += 1;
-        }
-    }
+    let parents = nodes.iter().filter_map(|node| node.parent_code).collect();
     RegionIndex { nodes, by_code, parents }
 }
 
@@ -122,7 +117,7 @@ impl RegionCode {
     /// 格式非法、不存在或仍有下级区划时返回错误。
     pub fn parse_leaf(value: &str) -> Result<Self> {
         let code = Self::parse(value)?;
-        if REGIONS.parents.contains_key(code.as_str()) {
+        if REGIONS.parents.contains(code.as_str()) {
             return Err(Error::from("收货地区须选择到区县"));
         }
         Ok(code)

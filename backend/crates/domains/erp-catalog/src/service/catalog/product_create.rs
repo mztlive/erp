@@ -13,7 +13,7 @@ use super::sku_edit::{NewSkuContext, SkuEditItem, specification_signature_for};
 use crate::dto::{CreateProductRequest, ProductSkuInput, ProductView};
 use crate::entity::catalog::product::{Product, ProductData};
 use crate::entity::catalog::product_revision::{ProductRevision, ProductRevisionData};
-use crate::entity::catalog::product_revision_media::{MediaRole, ProductRevisionMedia};
+use crate::entity::catalog::product_revision_media::ProductRevisionMedia;
 use crate::entity::catalog::{EnableStatus, ProductId, ProductRevisionId, SpecificationSignatureSet};
 use crate::error::{Error, Result};
 use crate::ports::{EmptyPendingAttachments, PendingAttachmentBatch};
@@ -204,7 +204,8 @@ impl CatalogService {
             executor,
         )
         .await?;
-        self.build_spu_media(revision_id, request, pending, executor).await
+        self.build_spu_media(revision_id, &request.carousel_media, &request.detail_media, pending, executor)
+            .await
     }
 
     /// 确定新商品编号：请求已指定时沿用，否则按 `SPU` 序列取号。
@@ -232,34 +233,6 @@ impl CatalogService {
             .next_number(DocumentNumberKind::Product, BusinessDate::today().as_naive_date(), executor)
             .await
             .map_err(|error| Error::Internal(error.to_string()))
-    }
-
-    /// 构造 SPU 轮播图与详情图媒体行。
-    ///
-    /// # 参数
-    /// * `revision_id` - 所属商品修订
-    /// * `req` - 创建请求中的媒体输入
-    /// * `pending_assets` - 本次命令携带的临时文件
-    ///
-    /// # 返回
-    /// 返回轮播图与详情图拼接后的媒体行。
-    ///
-    /// # 错误
-    /// 媒体文件不存在或同用途顺序重复时拒绝。
-    async fn build_spu_media(
-        &self,
-        revision_id: &ProductRevisionId,
-        req: &CreateProductRequest,
-        pending_assets: &dyn PendingAttachmentBatch,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<ProductRevisionMedia>> {
-        let carousel = self
-            .build_media_rows(revision_id, &req.carousel_media, MediaRole::Carousel, pending_assets, executor)
-            .await?;
-        let detail = self
-            .build_media_rows(revision_id, &req.detail_media, MediaRole::Detail, pending_assets, executor)
-            .await?;
-        Ok(carousel.into_iter().chain(detail).collect())
     }
 
     /// 构造创建草稿中的 SKU 行并登记规格签名。

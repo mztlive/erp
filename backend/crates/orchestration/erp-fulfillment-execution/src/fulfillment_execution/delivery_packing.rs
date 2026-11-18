@@ -113,8 +113,7 @@ impl PackingContext {
         for line in &shipped {
             db.delivery_lines().create(line, executor).await?;
         }
-        delivery.packing = Some(current_packing);
-        delivery.tracking_entries = delivery.packing.as_ref().expect("本次包裹已赋值").tracking(&shipped)?;
+        delivery.tracking_entries = delivery.packing.insert(current_packing).tracking(&shipped)?;
         freeze_addresses(&self.codec, delivery, &current_source)?;
         if !remaining.is_empty() {
             freeze_addresses(&self.codec, &mut rest, &rest_source)?;

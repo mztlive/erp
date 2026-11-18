@@ -60,55 +60,29 @@ pub(super) struct HistorySnapshot {
     pub org_names: BTreeMap<String, String>,
 }
 
-/// 兼容旧名的当前快照装载器。
-pub(super) struct CurrentSources;
-
-impl CurrentSources {
-    /// 有界装载期间正式销售单；超过 `QUALITY_ORDER_LIMIT` 时整体拒绝，不把超限集合交给调用方。
-    ///
-    /// # 参数
-    /// * `db` - 应用数据库
-    /// * `filter` - 期间、客户与销售范围条件
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 返回未超限的正式销售单快照行。
-    ///
-    /// # 错误
-    /// 超过 `QUALITY_ORDER_LIMIT` 时返回 `ValidationError`；销售单读取失败时返回对应错误。
-    pub async fn load_orders(
-        db: &Database,
-        filter: QualityOrderFilter,
-        scope: &SalesReadScope,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<QualityOrder>> {
-        load_orders(db, filter, scope, executor).await
-    }
-
-    /// 按明确客户集合批量读取现任归属，并附带订单金额与展示名。
-    ///
-    /// # 参数
-    /// * `db` - 应用数据库
-    /// * `customer_ids` - 要读取的客户身份；空集合不访问客户库
-    /// * `orders` - 用于附带版本金额的期间订单
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 返回现任客户事实、订单副本、版本含税金额和组织与账号展示名。
-    ///
-    /// # 错误
-    /// 客户数超过 `QUALITY_ORDER_LIMIT` 时返回 `ValidationError`；客户、主体、归属或名称读取失败时返回对应错误。
-    pub async fn load_customers(
-        db: &Database,
-        customer_ids: Vec<String>,
-        orders: &[QualityOrder],
-        executor: &mut dyn Executor,
-    ) -> Result<CurrentSnapshot> {
-        let customers = load_customer_facts(db, Some(&customer_ids), executor).await?;
-        let revision_gross = load_revision_gross(db, orders, executor).await?;
-        let (org_names, account_names) = names_for_current(db, &customers, orders, executor).await?;
-        Ok(CurrentSnapshot { customers, orders: orders.to_vec(), revision_gross, org_names, account_names })
-    }
+/// 按明确客户集合批量读取现任归属，并附带订单金额与展示名。
+///
+/// # 参数
+/// * `db` - 应用数据库
+/// * `customer_ids` - 要读取的客户身份；空集合不访问客户库
+/// * `orders` - 用于附带版本金额的期间订单
+/// * `executor` - 调用方执行器
+///
+/// # 返回
+/// 返回现任客户事实、期间订单、版本含税金额和组织与账号展示名。
+///
+/// # 错误
+/// 客户数超过 `QUALITY_ORDER_LIMIT` 时返回 `ValidationError`；客户、主体、归属或名称读取失败时返回对应错误。
+pub(super) async fn load_current_snapshot(
+    db: &Database,
+    customer_ids: Vec<String>,
+    orders: Vec<QualityOrder>,
+    executor: &mut dyn Executor,
+) -> Result<CurrentSnapshot> {
+    let customers = load_customer_facts(db, customer_ids, executor).await?;
+    let revision_gross = load_revision_gross(db, &orders, executor).await?;
+    let (org_names, account_names) = names_for_current(db, &customers, &orders, executor).await?;
+    Ok(CurrentSnapshot { customers, orders, revision_gross, org_names, account_names })
 }
 
 /// 历史快照装载器。
@@ -170,27 +144,23 @@ pub(super) struct CustomerFact {
 /// 按明确客户集合批量读取现任归属与法定名称；空集合不访问数据库。
 async fn load_customer_facts(
     db: &Database,
-    customer_ids: Option<&[String]>,
+    mut ids: Vec<String>,
     executor: &mut dyn Executor,
 ) -> Result<Vec<CustomerFact>> {
-    let Some(ids) = customer_ids else {
-        return Ok(Vec::new());
-    };
     if ids.len() > QUALITY_ORDER_LIMIT {
         return Err(Error::ValidationError("客户查询超过上限，请收窄组织或负责人条件".into()));
     }
     if ids.is_empty() {
         return Ok(Vec::new());
     }
-    let mut unique = ids.to_vec();
-    unique.sort();
-    unique.dedup();
-    let typed = unique.iter().map(|id| CustomerAccountId::new(id.clone())).collect::<Vec<_>>();
+    ids.sort();
+    ids.dedup();
+    let typed = ids.iter().map(|id| CustomerAccountId::new(id.clone())).collect::<Vec<_>>();
     let accounts = db.customer_accounts().find_accounts_by_ids(&typed, executor).await?;
     let party_ids: Vec<PartyId> = accounts.iter().map(|a| a.party_id.clone()).collect();
     let names = db.party().current_legal_names_by_party_ids(&party_ids, executor).await?;
     let active =
-        db.customer_assignments().list_active_for_customers(&unique, today_shanghai(), executor).await?;
+        db.customer_assignments().list_active_for_customers(&ids, today_shanghai(), executor).await?;
     let mut owners: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     for assignment in active.iter().filter(|item| item.assignment_role == AssignmentRole::Owner) {
         owners.entry(assignment.customer_id.to_string()).or_default().insert(assignment.user_id.clone());
@@ -333,7 +303,7 @@ async fn owner_orgs(
 }
 
 /// 有界装载期间正式销售单；超过 `QUALITY_ORDER_LIMIT` 时整体拒绝，不截断也不交给调用方。
-async fn load_orders(
+pub(super) async fn load_orders(
     db: &Database,
     filter: QualityOrderFilter,
     scope: &SalesReadScope,

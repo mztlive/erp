@@ -27,7 +27,10 @@ pub async fn load_error_task_for_association(
     id: &str,
     executor: &mut dyn Executor,
 ) -> Result<IntegrationErrorTask> {
-    load_error_task_record(db, id, executor).await
+    db.integration_error_tasks()
+        .find_by_id(id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("集成错误任务不存在".to_string()))
 }
 
 /// 加载错误任务并校验未终结（本域动作入口共用；终态与版本校验收敛于此）。
@@ -47,34 +50,11 @@ pub(super) async fn load_error_task(
     id: &str,
     executor: &mut dyn Executor,
 ) -> Result<IntegrationErrorTask> {
-    let task = load_error_task_record(db, id, executor).await?;
+    let task = load_error_task_for_association(db, id, executor).await?;
     if task.is_terminal() {
         return Err(Error::ConflictError("集成错误任务已终结".to_string()));
     }
     Ok(task)
-}
-
-/// 按主键读取错误任务记录（加载层统一入口；终态与版本校验由调用方装配）。
-///
-/// # 参数
-/// * `db` - 数据库句柄
-/// * `id` - 错误任务主键
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回错误任务记录。
-///
-/// # 错误
-/// 记录不存在时返回 `NotFound`；仓储读取失败时返回对应错误。
-async fn load_error_task_record(
-    db: &Database,
-    id: &str,
-    executor: &mut dyn Executor,
-) -> Result<IntegrationErrorTask> {
-    db.integration_error_tasks()
-        .find_by_id(id, executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("集成错误任务不存在".to_string()))
 }
 
 /// 校验错误任务业务主题版本仍与命令一致。

@@ -212,7 +212,13 @@ impl CustomerProfileProcess {
             };
             let mut entity = take_existing(&mut current, existing_id, "联系人")?;
             if entity.matches_content(&self.contact_content_match(input)) {
-                update_contact_default(&mut entity, input.is_default, actor, &mut changes.updated)?;
+                if entity.is_default != input.is_default {
+                    entity.update(
+                        PartyContactUpdate { is_default: Some(input.is_default), ..Default::default() },
+                        actor,
+                    )?;
+                    changes.updated.push(entity);
+                }
                 continue;
             }
             let mut replacement = input.clone();
@@ -223,7 +229,7 @@ impl CustomerProfileProcess {
             changes.updated.push(entity);
             changes.created.push(self.new_contact(&replacement, party_id, effective_from, actor)?);
         }
-        close_remaining_contacts(current, effective_from, actor, &mut changes.updated)?;
+        close_remaining(current, &mut changes.updated, |item| item.close_at(effective_from, actor))?;
         Ok(changes)
     }
 
@@ -380,7 +386,13 @@ impl CustomerProfileProcess {
             };
             let mut entity = take_existing(&mut current, existing_id, "地址")?;
             if entity.matches_content(&self.address_content_match(input)) {
-                update_address_default(&mut entity, input.is_default, actor, &mut changes.updated)?;
+                if entity.is_default != input.is_default {
+                    entity.update(
+                        PartyAddressUpdate { is_default: Some(input.is_default), ..Default::default() },
+                        actor,
+                    )?;
+                    changes.updated.push(entity);
+                }
                 continue;
             }
             let mut replacement = input.clone();
@@ -391,7 +403,7 @@ impl CustomerProfileProcess {
             changes.updated.push(entity);
             changes.created.push(self.new_address(&replacement, party_id, effective_from, actor)?);
         }
-        close_remaining_addresses(current, effective_from, actor, &mut changes.updated)?;
+        close_remaining(current, &mut changes.updated, |item| item.close_at(effective_from, actor))?;
         Ok(changes)
     }
 
@@ -415,9 +427,15 @@ impl CustomerProfileProcess {
             entity
                 .ensure_unmodified(&self.bank_account_content_match(input))
                 .map_err(|error| Error::ValidationError(error.to_string()))?;
-            update_bank_default(&mut entity, input.is_default, actor, &mut changes.updated)?;
+            if entity.is_default != input.is_default {
+                entity.update(
+                    PartyBankAccountUpdate { is_default: Some(input.is_default), ..Default::default() },
+                    actor,
+                )?;
+                changes.updated.push(entity);
+            }
         }
-        close_remaining_banks(current, effective_from, actor, &mut changes.updated)?;
+        close_remaining(current, &mut changes.updated, |item| item.close_at(effective_from, actor))?;
         Ok(changes)
     }
 }
@@ -521,88 +539,14 @@ fn take_existing<T>(current: &mut HashMap<String, T>, id: &str, label: &str) -> 
     current.remove(id).ok_or_else(|| Error::ConflictError(format!("{label}已变化，请刷新后重试")))
 }
 
-/// 仅在默认标记变化时更新联系人事实。
-fn update_contact_default(
-    contact: &mut PartyContact,
-    is_default: bool,
-    actor: &str,
-    updated: &mut Vec<PartyContact>,
-) -> Result<()> {
-    if contact.is_default == is_default {
-        return Ok(());
-    }
-    contact.update(PartyContactUpdate { is_default: Some(is_default), ..Default::default() }, actor)?;
-    updated.push(contact.clone());
-    Ok(())
-}
-
-/// 仅在默认标记变化时更新地址事实。
-fn update_address_default(
-    address: &mut PartyAddress,
-    is_default: bool,
-    actor: &str,
-    updated: &mut Vec<PartyAddress>,
-) -> Result<()> {
-    if address.is_default == is_default {
-        return Ok(());
-    }
-    address.update(PartyAddressUpdate { is_default: Some(is_default), ..Default::default() }, actor)?;
-    updated.push(address.clone());
-    Ok(())
-}
-
-/// 仅在默认标记变化时更新银行账户事实。
-fn update_bank_default(
-    account: &mut PartyBankAccount,
-    is_default: bool,
-    actor: &str,
-    updated: &mut Vec<PartyBankAccount>,
-) -> Result<()> {
-    if account.is_default == is_default {
-        return Ok(());
-    }
-    account.update(PartyBankAccountUpdate { is_default: Some(is_default), ..Default::default() }, actor)?;
-    updated.push(account.clone());
-    Ok(())
-}
-
-/// 结束未在目标集合中保留的联系人。
-fn close_remaining_contacts(
-    current: HashMap<String, PartyContact>,
-    effective_from: BusinessDate,
-    actor: &str,
-    updated: &mut Vec<PartyContact>,
+/// 结束未在目标集合中保留的事实。
+fn close_remaining<T>(
+    current: HashMap<String, T>,
+    updated: &mut Vec<T>,
+    mut close: impl FnMut(&mut T) -> erp_core::Result<()>,
 ) -> Result<()> {
     for mut item in current.into_values() {
-        item.close_at(effective_from, actor)?;
-        updated.push(item);
-    }
-    Ok(())
-}
-
-/// 结束未在目标集合中保留的地址。
-fn close_remaining_addresses(
-    current: HashMap<String, PartyAddress>,
-    effective_from: BusinessDate,
-    actor: &str,
-    updated: &mut Vec<PartyAddress>,
-) -> Result<()> {
-    for mut item in current.into_values() {
-        item.close_at(effective_from, actor)?;
-        updated.push(item);
-    }
-    Ok(())
-}
-
-/// 结束未在目标集合中保留的银行账户。
-fn close_remaining_banks(
-    current: HashMap<String, PartyBankAccount>,
-    effective_from: BusinessDate,
-    actor: &str,
-    updated: &mut Vec<PartyBankAccount>,
-) -> Result<()> {
-    for mut item in current.into_values() {
-        item.close_at(effective_from, actor)?;
+        close(&mut item)?;
         updated.push(item);
     }
     Ok(())

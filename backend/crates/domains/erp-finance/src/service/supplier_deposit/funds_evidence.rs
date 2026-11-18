@@ -4,6 +4,7 @@ use std::collections::BTreeSet;
 
 use entity_core::BaseModel;
 use erp_core::common::time::Instant;
+use erp_core::money::Amount;
 use persistence_core::Executor;
 
 use super::{SupplierDepositService, fingerprint, require_transaction};
@@ -156,9 +157,9 @@ impl SupplierDepositService {
         require_transaction(executor)?;
         let mut inbox = self.funds_inbox(id, executor).await?;
         self.verify_funds_application(&inbox, &resource, executor).await?;
-        let original = inbox.clone();
+        let original_state = inbox.state;
         inbox.apply(resource)?;
-        if inbox != original {
+        if inbox.state != original_state {
             self.db.funds_evidence_inbox().update(&mut inbox, executor).await?;
         }
         Ok(inbox)
@@ -333,7 +334,15 @@ impl SupplierDepositService {
         };
         match resource {
             FundsAppliedResource::RechargeBatch { batch_id } => {
-                self.verify_funds_recharge(inbox, batch_id, executor).await?
+                self.verify_funds_recharge(
+                    batch_id,
+                    &inbox.account_id,
+                    stable_transaction_id,
+                    *amount,
+                    *direction,
+                    executor,
+                )
+                .await?;
             },
             FundsAppliedResource::DebitUsage { usage_id } => {
                 let usage = self.applied_funds_usage(usage_id, &inbox.account_id, executor).await?;
@@ -371,25 +380,23 @@ impl SupplierDepositService {
 
     async fn verify_funds_recharge(
         &self,
-        inbox: &FundsEvidenceInbox,
         batch_id: &str,
+        account_id: &str,
+        stable_transaction_id: &str,
+        amount: Amount,
+        direction: FundsTransactionDirection,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let FundsEvidenceResult::Transaction { stable_transaction_id, amount, direction, .. } =
-            &inbox.input.result
-        else {
-            return Err(Error::BusinessLogicError("未解释观察不能登记资金应用".into()));
-        };
         let batch = self
             .db
             .supplier_deposit_batches()
             .find_by_id(batch_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("真实到账批次不存在".into()))?;
-        if *direction != FundsTransactionDirection::Recharge
-            || batch.account_id != inbox.account_id
-            || batch.amount != *amount
-            || batch.evidence.external_transaction_id != *stable_transaction_id
+        if direction != FundsTransactionDirection::Recharge
+            || batch.account_id != account_id
+            || batch.amount != amount
+            || batch.evidence.external_transaction_id != stable_transaction_id
         {
             return Err(Error::ConflictError("到账批次与来源交易不一致".into()));
         }

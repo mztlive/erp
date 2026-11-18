@@ -12,7 +12,7 @@ use mongodb::Database;
 
 use super::customer_acceptance_lines::acceptance_line_specs;
 use crate::dto::{
-    AcceptanceAllocationInput, AcceptanceLineInput, CommitCustomerAcceptanceRequest, PostAcceptanceLineInput,
+    AcceptanceAllocationInput, CommitCustomerAcceptanceRequest, PostAcceptanceLineInput,
     PostCustomerAcceptanceRequest, ReverseCustomerAcceptanceRequest,
 };
 use crate::entity::fulfillment::{
@@ -169,7 +169,15 @@ impl super::FulfillmentService {
             db.customer_acceptances().update(acceptance, session).await?;
             db.fulfillment().replace_customer_acceptance_lines(&acceptance_id, final_lines, session).await?;
         }
-        write_line_allocations(db, session, final_lines, &req.lines, &acceptance.sales_order_id).await?;
+        write_matched_line_allocations(
+            db,
+            session,
+            final_lines,
+            req.lines.iter().map(|input| (&input.sales_order_line_id, input.allocations.as_slice())),
+            "登记请求缺少验收行",
+            &acceptance.sales_order_id,
+        )
+        .await?;
         acceptance.mark_posted()?;
         db.customer_acceptances().update(acceptance, session).await?;
         Ok(())
@@ -228,7 +236,15 @@ impl super::FulfillmentService {
             .await?;
         acceptance.ensure_posting_lines(&lines).map_err(|error| Error::ValidationError(error.to_string()))?;
         ensure_post_lines_match(&lines, &req.lines)?;
-        write_post_line_allocations(db, session, &lines, &req.lines, &acceptance.sales_order_id).await?;
+        write_matched_line_allocations(
+            db,
+            session,
+            &lines,
+            req.lines.iter().map(|input| (&input.sales_order_line_id, input.allocations.as_slice())),
+            "过账分配缺少验收行",
+            &acceptance.sales_order_id,
+        )
+        .await?;
         acceptance.mark_posted()?;
         db.customer_acceptances().update(acceptance, session).await?;
         Ok(())
@@ -407,74 +423,7 @@ async fn persist_reverse_acceptance(
     Ok((original, reverse_acceptance))
 }
 
-/// 逐行校验分配守恒并写入分配（commit/post 共用；校验顺序与错误类型不变）。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `session` - 事务会话执行器
-/// * `lines` - 验收行集合
-/// * `inputs` - 每行请求分配（销售明细归属一致）
-/// * `sales_order_id` - 销售单（校验事实归属）
-///
-/// # 返回
-/// 全部行校验并写入完成后返回 `Ok(())`。
-///
-/// # 错误
-/// 行缺失、分配为空、守恒失败或单条写入失败时返回原错误。
-async fn write_line_allocations(
-    db: &Database,
-    session: &mut dyn persistence_core::Executor,
-    lines: &[CustomerAcceptanceLine],
-    inputs: &[AcceptanceLineInput],
-    sales_order_id: &SalesOrderId,
-) -> Result<()> {
-    write_matched_line_allocations(
-        db,
-        session,
-        lines,
-        inputs.iter().map(|input| (&input.sales_order_line_id, input.allocations.as_slice())),
-        "登记请求缺少验收行",
-        sales_order_id,
-    )
-    .await
-}
-
-/// 逐行校验分配守恒并写入分配（post 请求形态；校验顺序与错误类型不变）。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `session` - 事务会话执行器
-/// * `lines` - 草稿验收行
-/// * `inputs` - 过账请求行
-/// * `sales_order_id` - 销售单（校验事实归属）
-///
-/// # 返回
-/// 全部行校验并写入完成后返回 `Ok(())`。
-///
-/// # 错误
-/// 行缺失、分配为空、守恒失败或单条写入失败时返回原错误。
-async fn write_post_line_allocations(
-    db: &Database,
-    session: &mut dyn persistence_core::Executor,
-    lines: &[CustomerAcceptanceLine],
-    inputs: &[PostAcceptanceLineInput],
-    sales_order_id: &SalesOrderId,
-) -> Result<()> {
-    write_matched_line_allocations(
-        db,
-        session,
-        lines,
-        inputs.iter().map(|input| (&input.sales_order_line_id, input.allocations.as_slice())),
-        "过账分配缺少验收行",
-        sales_order_id,
-    )
-    .await
-}
-
-/// 按销售明细匹配验收行与请求分配并逐行写入（commit/post 共用匹配循环）。
-///
-/// 匹配顺序、缺行错误文案（调用方传入）与单行写入语义不变；本函数只消除
-/// 两套逐行查找循环的重复。
+/// 按验收行顺序写入分配；每行使用销售明细匹配的首个请求行。
 ///
 /// # 参数
 /// * `db` - 数据库实例
@@ -489,23 +438,18 @@ async fn write_post_line_allocations(
 ///
 /// # 错误
 /// 行缺失、分配为空、守恒失败或单条写入失败时返回原错误。
-async fn write_matched_line_allocations<'a, I>(
+async fn write_matched_line_allocations<'a>(
     db: &Database,
     session: &mut dyn persistence_core::Executor,
     lines: &[CustomerAcceptanceLine],
-    inputs: I,
+    inputs: impl Iterator<Item = (&'a SalesOrderLineId, &'a [AcceptanceAllocationInput])> + Clone,
     missing_line_message: &str,
     sales_order_id: &SalesOrderId,
-) -> Result<()>
-where
-    I: IntoIterator<Item = (&'a SalesOrderLineId, &'a [AcceptanceAllocationInput])>,
-{
-    let inputs: Vec<(&SalesOrderLineId, &[AcceptanceAllocationInput])> = inputs.into_iter().collect();
+) -> Result<()> {
     for line in lines {
-        let allocations = inputs
-            .iter()
-            .find(|(sales_order_line_id, _)| **sales_order_line_id == line.sales_order_line_id)
-            .map(|(_, allocations)| *allocations)
+        let (_, allocations) = inputs
+            .clone()
+            .find(|(sales_order_line_id, _)| *sales_order_line_id == &line.sales_order_line_id)
             .ok_or_else(|| Error::ValidationError(missing_line_message.to_string()))?;
         write_single_line_allocations(db, session, line, allocations, sales_order_id).await?;
     }

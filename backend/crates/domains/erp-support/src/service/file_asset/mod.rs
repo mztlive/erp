@@ -18,7 +18,7 @@ pub use crate::dto::file_asset::{
     FileAssetListParams, FileAssetView, MarkScanResultRequest, PageView, PendingFileAssetRequest,
     RegisterFileAssetRequest,
 };
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::ports::{BusinessDocumentPort, SupportAuditPort};
 use crate::repository::FileAssetExt;
 use crate::repository::prelude::*;
@@ -168,13 +168,7 @@ impl FileAssetService {
     /// # 错误
     /// 文件不存在或数据库读取失败时拒绝。
     pub async fn asset_view(&self, id: &str, executor: &mut dyn Executor) -> Result<FileAssetView> {
-        let asset = self
-            .db
-            .file_assets()
-            .find_by_id(id, executor)
-            .await?
-            .ok_or_else(|| Error::NotFound("文件资产不存在".into()))?;
-        Ok(asset.into())
+        self.require_asset(id, executor).await.map(Into::into)
     }
     /// 为已通过精确业务授权的文件读取记录敏感审计。
     /// # 参数

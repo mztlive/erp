@@ -66,6 +66,24 @@ impl CatalogService {
         Ok(())
     }
 
+    /// 按轮播图、详情图的顺序校验引用并构造商品媒体行。
+    pub(super) async fn build_spu_media(
+        &self,
+        revision_id: &ProductRevisionId,
+        carousel_media: &[ProductMediaInput],
+        detail_media: &[ProductMediaInput],
+        pending_assets: &dyn PendingAttachmentBatch,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ProductRevisionMedia>> {
+        let carousel = self
+            .build_media_rows(revision_id, carousel_media, MediaRole::Carousel, pending_assets, executor)
+            .await?;
+        let detail = self
+            .build_media_rows(revision_id, detail_media, MediaRole::Detail, pending_assets, executor)
+            .await?;
+        Ok(carousel.into_iter().chain(detail).collect())
+    }
+
     /// 构造媒体行（校验 `file_asset` 引用存在，媒体角色与顺序落位）。
     ///
     /// # 参数
@@ -79,7 +97,7 @@ impl CatalogService {
     ///
     /// # 错误
     /// 媒体文件不存在或同用途顺序重复时返回错误。
-    pub(super) async fn build_media_rows(
+    async fn build_media_rows(
         &self,
         revision_id: &ProductRevisionId,
         inputs: &[ProductMediaInput],

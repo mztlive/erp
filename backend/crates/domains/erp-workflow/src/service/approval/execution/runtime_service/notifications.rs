@@ -370,9 +370,6 @@ pub(super) async fn persist_resume_notifications(
         .map_err(|error| Error::ValidationError(error.to_string()))?;
         db.approval_notification_outbox().create(&record, executor).await?;
     }
-    if !seen.contains(&EventKind::Entered) || !seen.contains(&EventKind::Resumed) {
-        return Err(Error::Internal("原审批人恢复缺少进入节点或恢复通知意图".to_string()));
-    }
     Ok(())
 }
 

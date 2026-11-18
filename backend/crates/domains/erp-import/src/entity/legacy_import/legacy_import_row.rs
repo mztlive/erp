@@ -632,45 +632,13 @@ impl LegacyImportRow {
         error_detail: Option<String>,
     ) -> Result<()> {
         ensure_transition(*status, next)?;
-        let error_code = Self::required_error_code(Some(error_code))?;
-        let error_detail = Self::normalized_error_detail(error_detail)?;
+        let error_code =
+            normalize_required_text(error_code, "错误码不能为空", ERROR_CODE_MAX_LEN, "错误码过长")?;
+        let error_detail = normalize_optional_text(error_detail, "错误明细", ERROR_DETAIL_MAX_LEN)?;
         *status = next;
         *error_code_slot = Some(error_code);
         *error_detail_slot = error_detail;
         Ok(())
-    }
-
-    /// 校验并规范化必填错误码。
-    ///
-    /// # 参数
-    /// * `error_code` - 错误码
-    ///
-    /// # 返回
-    /// 返回规范化后的错误码。
-    ///
-    /// # 错误
-    /// 错误码为空或超长时返回错误。
-    fn required_error_code(error_code: Option<String>) -> Result<String> {
-        normalize_required_text(
-            error_code.unwrap_or_default(),
-            "错误码不能为空",
-            ERROR_CODE_MAX_LEN,
-            "错误码过长",
-        )
-    }
-
-    /// 规范化可选错误明细。
-    ///
-    /// # 参数
-    /// * `error_detail` - 错误明细
-    ///
-    /// # 返回
-    /// 返回规范化后的明细或 `None`。
-    ///
-    /// # 错误
-    /// 明细超长时返回错误。
-    fn normalized_error_detail(error_detail: Option<String>) -> Result<Option<String>> {
-        normalize_optional_text(error_detail, "错误明细", ERROR_DETAIL_MAX_LEN)
     }
 }
 

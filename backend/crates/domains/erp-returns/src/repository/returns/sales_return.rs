@@ -9,7 +9,7 @@ use persistence_core::{
 };
 use serde::{Deserialize, Serialize};
 
-use super::search::{ListSort, search_projected};
+use super::search::{search_projected, sort_doc};
 use crate::entity::returns::{
     CaseType, ReturnRoute, SalesReturnCase, SalesReturnCaseStatus, SalesReturnLine,
 };
@@ -130,16 +130,6 @@ impl Pagination for SalesReturnCaseFilter {
     }
 }
 
-impl ListSort for SalesReturnCaseFilter {
-    fn sort_by(&self) -> Option<&str> {
-        self.sort_by.as_deref()
-    }
-
-    fn sort_ascending(&self) -> bool {
-        self.sort_ascending
-    }
-}
-
 /// 销售退货处理单集合仓储扩展。
 #[allow(async_fn_in_trait)]
 pub trait SalesReturnCaseRepositoryExt {
@@ -174,7 +164,11 @@ impl SalesReturnCaseRepositoryExt for Repository<'_, SalesReturnCase> {
             self,
             filter,
             sales_return_case_projection(),
-            &["discovered_at", "return_no", "created_at"],
+            sort_doc(
+                filter.sort_by.as_deref(),
+                filter.sort_ascending,
+                &["discovered_at", "return_no", "created_at"],
+            ),
             executor,
         )
         .await

@@ -36,14 +36,11 @@ impl JdVopConnector {
         if orders.is_empty() {
             return Ok(Lookup::NotVisible);
         }
-        let roots = orders
-            .values()
-            .filter(|order| order.parent_jd_order_id.as_ref().is_none_or(|id| id.0 == "0"))
-            .collect::<Vec<_>>();
-        if roots.len() != 1 {
+        let mut roots =
+            orders.values().filter(|order| order.parent_jd_order_id.as_ref().is_none_or(|id| id.0 == "0"));
+        let (Some(root), None) = (roots.next(), roots.next()) else {
             return Err(mapping("京东原根订单关系尚未完整可见"));
-        }
-        let root = roots[0];
+        };
         let mut snapshot = order_snapshot(root, &orders, frozen, verify_frozen_price)?;
         let mut shipments = snapshot.shipments.take().unwrap_or_default();
         let mut logistics = Vec::new();

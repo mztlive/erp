@@ -23,12 +23,13 @@ use crate::{Error, Result};
 /// # 错误
 /// 任一索引缺失或 MongoDB 查询失败时返回错误。
 pub async fn assert_indexes(db: &Database, collection: &str, names: &[&str]) -> Result<()> {
-    let existing = db.collection::<Document>(collection).list_index_names().await?;
-    let existing: HashSet<&str> = existing.iter().map(String::as_str).collect();
-    let missing: Vec<String> =
-        names.iter().filter(|name| !existing.contains(**name)).map(|name| name.to_string()).collect();
+    let existing: HashSet<String> =
+        db.collection::<Document>(collection).list_index_names().await?.into_iter().collect();
+    let missing: Vec<_> =
+        names.iter().copied().filter(|name| !existing.contains(*name)).map(str::to_owned).collect();
     if missing.is_empty() {
-        return Ok(());
+        Ok(())
+    } else {
+        Err(Error::IndexMissing { collection: collection.to_string(), missing })
     }
-    Err(Error::IndexMissing { collection: collection.to_string(), missing })
 }

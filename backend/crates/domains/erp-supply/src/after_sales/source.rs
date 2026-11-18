@@ -81,28 +81,26 @@ fn validate_totals(
             SettlementMovement::Refund { amount, .. } => refunds.push(*amount),
         }
     }
-    let goods_total = sum(&goods)?.to_decimal();
-    let freight_total = sum(&freight)?.to_decimal();
-    let service_total = sum(&service)?.to_decimal();
-    let refund_total = sum(&refunds)?.to_decimal();
+    let goods_total = sum_amounts(goods.into_iter())?;
+    let freight_total = sum_amounts(freight.into_iter())?;
+    let service_total = sum_amounts(service.into_iter())?;
+    let refund_total = sum_amounts(refunds.into_iter())?;
     let gross = goods_total
-        .checked_add(freight_total)
-        .and_then(|value| value.checked_add(service_total))
-        .and_then(|value| value.checked_sub(refund_total))
+        .to_decimal()
+        .checked_add(freight_total.to_decimal())
+        .and_then(|value| value.checked_add(service_total.to_decimal()))
+        .and_then(|value| value.checked_sub(refund_total.to_decimal()))
         .ok_or_else(|| Error::ValidationError("结算金额溢出".into()))?;
     if Amount::try_from(gross)? != sum_amounts(lines.iter().map(|l| l.supplier_billed_gross))?
-        || sum(&freight)? != sum_amounts(lines.iter().map(|l| l.freight_gross))?
-        || sum(&service)? != sum_amounts(lines.iter().map(|l| l.service_fee_gross))?
-        || sum(&refunds)? != sum_amounts(lines.iter().map(|l| l.refund_gross))?
+        || freight_total != sum_amounts(lines.iter().map(|l| l.freight_gross))?
+        || service_total != sum_amounts(lines.iter().map(|l| l.service_fee_gross))?
+        || refund_total != sum_amounts(lines.iter().map(|l| l.refund_gross))?
     {
         return Err(Error::ConflictError(
             "API 结算流水与正式来源的扣费、运费、服务费或退款金额不守恒".into(),
         ));
     }
     Ok(())
-}
-fn sum(values: &[Amount]) -> Result<Amount> {
-    sum_amounts(values.iter().copied())
 }
 fn sum_amounts(mut values: impl Iterator<Item = Amount>) -> Result<Amount> {
     let value = values.try_fold(Amount::zero().to_decimal(), |sum, amount| {

@@ -6,8 +6,8 @@ use validator::Validate;
 
 use super::LegacyImportService;
 use crate::dto::legacy_import::{
-    LegacyImportBatchListItem, LegacyImportBatchListParams, LegacyImportBatchListQuery,
-    LegacyImportBatchView, LegacyImportRowListParams, LegacyImportRowView, PageView,
+    LegacyImportBatchListItem, LegacyImportBatchListParams, LegacyImportBatchView, LegacyImportRowListParams,
+    LegacyImportRowView, PageView,
 };
 use crate::entity::legacy_import::{LegacyImportBatch, LegacyImportBatchId};
 use crate::error::{Error, Result};
@@ -43,7 +43,17 @@ impl LegacyImportService {
             .require(actor, &legacy_import::BATCH_LIST, AccessTarget::Operation, executor)
             .await?;
         let query = params.normalized()?;
-        let filter = self.batch_filter_of(query);
+        let filter = LegacyImportBatchFilter {
+            batch_no: query.batch_no,
+            source_system_id: query.source_system_id,
+            status: query.status,
+            baseline_date_from: query.baseline_date_from,
+            baseline_date_to: query.baseline_date_to,
+            page: query.paging.page,
+            page_size: query.paging.page_size,
+            sort_by: Some(query.paging.sort_field()),
+            sort_ascending: query.paging.sort_ascending(),
+        };
         let page = self.db.legacy_import_batches().search_legacy_import_batches(&filter, executor).await?;
         let items = page.items.into_iter().map(LegacyImportBatchListItem::from).collect();
 
@@ -142,27 +152,6 @@ impl LegacyImportService {
         let items = page.items.into_iter().map(LegacyImportRowView::from).collect();
 
         Ok(page_view(items, page.total, filter.page, filter.page_size))
-    }
-
-    /// 构造导入批次列表筛选条件。
-    ///
-    /// # 参数
-    /// * `query` - 归一化查询参数
-    ///
-    /// # 返回
-    /// 返回仓储筛选条件。
-    fn batch_filter_of(&self, query: LegacyImportBatchListQuery) -> LegacyImportBatchFilter {
-        LegacyImportBatchFilter {
-            batch_no: query.batch_no,
-            source_system_id: query.source_system_id,
-            status: query.status,
-            baseline_date_from: query.baseline_date_from,
-            baseline_date_to: query.baseline_date_to,
-            page: query.paging.page,
-            page_size: query.paging.page_size,
-            sort_by: Some(query.paging.sort_field()),
-            sort_ascending: query.paging.sort_ascending(),
-        }
     }
 
     /// 构造导入批次详情视图（补充 D04 后台任务关联）。

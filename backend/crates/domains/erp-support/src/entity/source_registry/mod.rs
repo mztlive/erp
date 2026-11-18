@@ -442,8 +442,13 @@ impl SourceSystem {
     /// # 错误
     /// 当更新字段校验失败时返回错误。
     pub fn update(&mut self, update: SourceSystemUpdate, updated_by: impl Into<String>) -> Result<()> {
-        self.apply_name(update.name)?;
-        self.apply_status(update.status);
+        if let Some(name) = update.name {
+            self.name =
+                normalize_required_text(name, "来源系统名称不能为空", NAME_MAX_LEN, "来源系统名称过长")?;
+        }
+        if let Some(status) = update.status {
+            self.stable.status = status;
+        }
         self.stable.touch(updated_by);
         Ok(())
     }
@@ -460,31 +465,6 @@ impl SourceSystem {
     /// 不返回错误。
     pub fn is_active(&self) -> bool {
         self.stable.status().is_active()
-    }
-
-    /// 应用名称更新。
-    ///
-    /// # 参数
-    /// * `name` - 可选名称
-    ///
-    /// # 错误
-    /// 当名称为空或超长时返回错误。
-    fn apply_name(&mut self, name: Option<String>) -> Result<()> {
-        if let Some(name) = name {
-            self.name =
-                normalize_required_text(name, "来源系统名称不能为空", NAME_MAX_LEN, "来源系统名称过长")?;
-        }
-        Ok(())
-    }
-
-    /// 应用状态更新。
-    ///
-    /// # 参数
-    /// * `status` - 可选状态
-    fn apply_status(&mut self, status: Option<SourceSystemStatus>) {
-        if let Some(status) = status {
-            self.stable.status = status;
-        }
     }
 }
 

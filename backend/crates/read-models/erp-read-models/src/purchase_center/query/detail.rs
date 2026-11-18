@@ -176,20 +176,11 @@ async fn delivery_summary(
 
 /// 保留供应商、销售单号、当前责任人的原校验顺序与默认展示规则。
 fn center_identity(order: &PurchaseOrder, facts: &PurchaseOrderCenterFacts) -> Result<CenterIdentity> {
-    let supplier_name = supplier_display(
-        order.supplier_id.as_ref(),
-        &facts.supplier_name.clone().map(|name| (order.supplier_id.to_string(), name)).into_iter().collect(),
-    );
+    let supplier_name = supplier_display(order.supplier_id.as_ref(), facts.supplier_name.as_deref());
     let sales_order_id = order.sales_order_id.to_string();
-    let sales_order_no = sales_no_for(
-        &sales_order_id,
-        &facts.sales_order_no.clone().map(|no| (sales_order_id.clone(), no)).into_iter().collect(),
-    )?;
+    let sales_order_no = sales_no_for(facts.sales_order_no.as_deref())?;
     let owner_user_id = order.current_owner_user_id()?.to_string();
-    let (_, owner_name) = owner_display(
-        Some(owner_user_id.clone()),
-        &facts.owner_name.clone().map(|name| (owner_user_id.clone(), name)).into_iter().collect(),
-    );
+    let owner_name = owner_display(Some(&owner_user_id), facts.owner_name.as_deref());
     Ok(CenterIdentity { supplier_name, sales_order_id, sales_order_no, owner_user_id, owner_name })
 }
 

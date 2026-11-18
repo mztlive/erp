@@ -1,8 +1,8 @@
 //! 导入命令回执的全局唯一约束，命令身份不得软删除后复用。
+use mongodb::Database;
 use mongodb::bson::doc;
-use mongodb::options::IndexOptions;
-use mongodb::{Database, IndexModel};
 use persistence_core::Result;
+use persistence_core::indexes::unique_index;
 
 use crate::repository::ImportCommandReceiptExt;
 
@@ -20,12 +20,7 @@ pub(super) async fn ensure(db: &Database) -> Result<()> {
         ("uk_import_command_receipts_audit_event", doc! { "audit_event_id": 1 }),
     ]
     .into_iter()
-    .map(|(name, keys)| {
-        IndexModel::builder()
-            .keys(keys)
-            .options(IndexOptions::builder().name(name.to_string()).unique(true).build())
-            .build()
-    });
+    .map(|(name, keys)| unique_index(name, keys));
     db.collection::<mongodb::bson::Document>(<Database as ImportCommandReceiptExt>::IMPORT_COMMAND_RECEIPTS)
         .create_indexes(indexes)
         .await?;

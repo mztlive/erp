@@ -5,9 +5,7 @@ use mongodb::{Database, IndexModel};
 use persistence_core::Result;
 use persistence_core::indexes::{named_index, unique_index};
 
-use crate::repository::AuditAttemptExt;
-
-const AUDIT_LOGS: &str = "audit_logs";
+use crate::repository::{AuditAttemptExt, AuditExt};
 
 /// 为 `audit_logs` 与 `audit_attempts` 创建幂等命名索引。
 ///
@@ -20,7 +18,7 @@ const AUDIT_LOGS: &str = "audit_logs";
 /// # 错误
 /// 已有数据违反唯一约束，或 MongoDB 无法创建索引时返回错误。
 pub async fn ensure(db: &Database) -> Result<()> {
-    db.collection::<Document>(AUDIT_LOGS).create_indexes(audit_log_indexes()).await?;
+    db.collection::<Document>(<Database as AuditExt>::AUDIT_LOGS).create_indexes(audit_log_indexes()).await?;
     db.collection::<Document>(<Database as AuditAttemptExt>::AUDIT_ATTEMPTS)
         .create_indexes(vec![
             unique_index("uk_audit_attempts_id", doc! { "id": 1 }),

@@ -427,18 +427,13 @@ fn choose(
             choice.method == previous.method && choice.shipping_fee == previous.shipping_fee
         });
     }
-    let candidates = snapshot
-        .choices
-        .iter()
-        .enumerate()
-        .filter(|(_, choice)| match &choice.method {
-            DeliveryMethod::Courier => true,
-            DeliveryMethod::LocalDelivery { date, .. } => snapshot.expected_delivery_date == Some(*date),
-            DeliveryMethod::Pickup { .. } => false,
-        })
-        .map(|(index, _)| index)
-        .collect::<Vec<_>>();
-    (candidates.len() == 1).then(|| candidates[0])
+    let mut candidates = snapshot.choices.iter().enumerate().filter(|(_, choice)| match &choice.method {
+        DeliveryMethod::Courier => true,
+        DeliveryMethod::LocalDelivery { date, .. } => snapshot.expected_delivery_date == Some(*date),
+        DeliveryMethod::Pickup { .. } => false,
+    });
+    let (index, _) = candidates.next()?;
+    candidates.next().is_none().then_some(index)
 }
 
 pub(super) fn record_failure(

@@ -124,8 +124,7 @@ impl PendingAttachmentBatch for PendingFileAssets {
 
     async fn persist(&self, db: &Database, executor: &mut dyn Executor) -> erp_support::Result<()> {
         db.file_assets().create_many_ordered(&self.assets, executor).await?;
-        persist_logs(db, &self.audits, executor).await.map_err(map_audit_to_support)?;
-        Ok(())
+        persist_logs(db, &self.audits, executor).await.map_err(map_audit_to_support)
     }
 
     fn content_manifest(&self) -> Vec<PendingFileContent> {

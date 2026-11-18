@@ -87,23 +87,21 @@ impl ResourceGrantProcess {
     }
 
     async fn publish(&self, claim: GrantEvent, ex: &mut dyn Executor) -> Result<()> {
-        let access = self.access(Some(claim.clone()));
-        let current = self.queue().claimed_event(&claim, ex).await?;
+        let queue = self.queue();
+        let current = queue.claimed_event(&claim, ex).await?;
         if current.status == GrantEventStatus::Applied {
             return Ok(());
         }
 
-        let old = self.queue().source(&current.source, ex).await?;
-        if old.as_ref().is_some_and(|s| s.terminated) {
-            return self.queue().complete_event(current, ex).await;
+        let old = queue.source(&current.source, ex).await?;
+        if !old.as_ref().is_some_and(|s| s.terminated) {
+            let update = Facts { db: self.db.clone(), event: None }.compute(&current, ex).await?;
+            if !old.as_ref().is_some_and(|s| s.fact_version > update.fact_version) {
+                self.access(Some(claim)).apply_source(update, ex).await?;
+            }
         }
 
-        let update = Facts { db: self.db.clone(), event: None }.compute(&current, ex).await?;
-        if !old.as_ref().is_some_and(|s| s.fact_version > update.fact_version) {
-            access.apply_source(update, ex).await?;
-        }
-
-        self.queue().complete_event(current, ex).await
+        queue.complete_event(current, ex).await
     }
 }
 

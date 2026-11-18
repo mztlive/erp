@@ -85,7 +85,7 @@ impl AuditLog {
     /// # 错误
     /// 编号超长时返回 `Error::Logic`。缺少结构化事件或编号含控制字符时返回 `Error::ValidationError`。
     pub fn with_request_id(self, request_id: Option<String>) -> AuditResult<Self> {
-        self.update_snapshot(request_id, "请求编号", |event, value| {
+        self.update_snapshot(request_id, "请求编号", false, |event, value| {
             event.request_id = value;
         })
     }
@@ -101,7 +101,7 @@ impl AuditLog {
     /// # 错误
     /// 名称超长时返回 `Error::Logic`。缺少结构化事件或名称含控制字符时返回 `Error::ValidationError`。
     pub fn with_actor_name_snapshot(self, name: Option<String>) -> AuditResult<Self> {
-        self.update_snapshot_and_message(name, "操作人名称", |event, value| {
+        self.update_snapshot(name, "操作人名称", true, |event, value| {
             event.actor_name_snapshot = value;
         })
     }
@@ -117,7 +117,7 @@ impl AuditLog {
     /// # 错误
     /// 编号超长时返回 `Error::Logic`。缺少结构化事件或编号含控制字符时返回 `Error::ValidationError`。
     pub fn with_command_id(self, command_id: Option<String>) -> AuditResult<Self> {
-        self.update_snapshot(command_id, "命令编号", |event, value| {
+        self.update_snapshot(command_id, "命令编号", false, |event, value| {
             event.command_id = value;
         })
     }
@@ -133,7 +133,7 @@ impl AuditLog {
     /// # 错误
     /// 编号超长时返回 `Error::Logic`。缺少结构化事件或编号含控制字符时返回 `Error::ValidationError`。
     pub fn with_resource_number(self, number: Option<String>) -> AuditResult<Self> {
-        self.update_snapshot_and_message(number, "业务编号", |event, value| {
+        self.update_snapshot(number, "业务编号", true, |event, value| {
             event.resource_number_snapshot = value;
         })
     }
@@ -142,21 +142,13 @@ impl AuditLog {
         mut self,
         value: Option<String>,
         field: &str,
+        refresh_message: bool,
         assign: impl FnOnce(&mut BusinessAuditEvent, Option<String>),
     ) -> AuditResult<Self> {
         let value = normalized_snapshot(value, field)?;
-        assign(structured_event_mut(&mut self)?, value);
-        Ok(self)
-    }
-
-    fn update_snapshot_and_message(
-        mut self,
-        value: Option<String>,
-        field: &str,
-        assign: impl FnOnce(&mut BusinessAuditEvent, Option<String>),
-    ) -> AuditResult<Self> {
-        self = self.update_snapshot(value, field, assign)?;
-        if let Some(event) = &self.structured_event {
+        let event = structured_event_mut(&mut self)?;
+        assign(event, value);
+        if refresh_message {
             self.message = Some(event.message());
         }
         Ok(self)

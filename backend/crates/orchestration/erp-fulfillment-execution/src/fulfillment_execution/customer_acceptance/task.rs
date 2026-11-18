@@ -67,21 +67,22 @@ pub async fn ensure_customer_acceptance_task(
     executor: &mut dyn Executor,
 ) -> Result<WorkItem> {
     let order = load_goods_service_order(db, sales_order_id, executor).await?;
-    let existing = open_customer_acceptance_tasks(db, sales_order_id, executor).await?;
-    match existing.as_slice() {
-        [task] => {
-            ensure_task_identity(task, &order)?;
-            return Ok(task.clone());
+    let mut existing = db
+        .work_items()
+        .list_active_by_object(OBJECT_TYPE, sales_order_id.as_ref(), executor)
+        .await?
+        .into_iter()
+        .filter(|item| item.work_item_type == WorkItemType::CustomerAcceptanceRegistration);
+    match existing.next() {
+        Some(task) if existing.next().is_none() => {
+            ensure_task_identity(&task, &order)?;
+            Ok(task)
         },
-        [] => {},
-        _ => {
-            return Err(Error::BusinessLogicError(
-                "当前销售单存在多个开放客户验收任务，请联系管理员处理后重试".to_string(),
-            ));
-        },
+        Some(_) => Err(Error::BusinessLogicError(
+            "当前销售单存在多个开放客户验收任务，请联系管理员处理后重试".to_string(),
+        )),
+        None => create_customer_acceptance_task(db, authorization, &order, reason, executor).await,
     }
-
-    create_customer_acceptance_task(db, authorization, &order, reason, executor).await
 }
 
 /// 为验收正式命令加载当前任务并校验责任、任务身份和可选乐观锁。
@@ -199,20 +200,6 @@ async fn load_goods_service_order(
         return Err(Error::BusinessLogicError("卡券销售单不形成客户验收登记任务".to_string()));
     }
     Ok(order)
-}
-
-async fn open_customer_acceptance_tasks(
-    db: &mongodb::Database,
-    sales_order_id: &SalesOrderId,
-    executor: &mut dyn Executor,
-) -> Result<Vec<WorkItem>> {
-    Ok(db
-        .work_items()
-        .list_active_by_object(OBJECT_TYPE, sales_order_id.as_ref(), executor)
-        .await?
-        .into_iter()
-        .filter(|item| item.work_item_type == WorkItemType::CustomerAcceptanceRegistration)
-        .collect())
 }
 
 /// 开放任务的责任必须与销售单当前负责销售一致，否则失败关闭。

@@ -18,10 +18,7 @@ const MAX_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
 /// `with_state` 组装后以 `Router<()>` 形态传入（`web-api` 的 `create()` 已满足）。
 ///
 /// # Panics
-/// 本客户端专供测试使用，失败时直接 panic 而不返回 `Result`，与其他辅助
-/// 返回 `Result` 的风格差异是刻意为之：`Bearer` token 非法、请求构造失败、
-/// 路由调用失败、响应体读取失败或超限（见 [`MAX_RESPONSE_BYTES`]）均会
-/// panic，调用方无需在测试中处理这些不可能恢复的夹具错误。
+/// `Bearer` token 非法、请求构造失败、响应体读取失败或超限（见 [`MAX_RESPONSE_BYTES`]）时 panic。
 pub struct TestApi {
     router: Router,
 }
@@ -54,7 +51,7 @@ impl TestApi {
     /// 不返回错误。
     ///
     /// # Panics
-    /// 转调 [`Self::request`]，token 非法、请求构造失败、路由调用失败，或响应体读取失败、超过 [`MAX_RESPONSE_BYTES`] 时 panic。
+    /// 见 [`Self::request`]。
     pub async fn get(&self, path: &str, token: Option<&str>) -> (u16, Value) {
         self.request(Method::GET, path, token, None).await
     }
@@ -73,7 +70,7 @@ impl TestApi {
     /// 不返回错误。
     ///
     /// # Panics
-    /// 转调 [`Self::request`]，token 非法、请求构造失败、路由调用失败，或响应体读取失败、超过 [`MAX_RESPONSE_BYTES`] 时 panic。
+    /// 见 [`Self::request`]。
     pub async fn post(&self, path: &str, token: Option<&str>, json: Option<Value>) -> (u16, Value) {
         self.request(Method::POST, path, token, json).await
     }
@@ -95,7 +92,7 @@ impl TestApi {
     /// 不返回错误。
     ///
     /// # Panics
-    /// `Bearer` token 无法写入头、请求构造失败、路由 `oneshot` 失败，或响应体读取失败、超过 [`MAX_RESPONSE_BYTES`] 时 panic。
+    /// `Bearer` token 非法、请求构造失败、响应体读取失败或超限（见 [`MAX_RESPONSE_BYTES`]）时 panic。
     pub async fn request(
         &self,
         method: Method,
@@ -116,7 +113,7 @@ impl TestApi {
             None => Body::empty(),
         };
         let request = builder.body(body).expect("HTTP 请求构造失败");
-        let response = self.router.clone().oneshot(request).await.expect("路由调用失败");
+        let Ok(response) = self.router.clone().oneshot(request).await;
         let status = response.status().as_u16();
         let bytes = to_bytes(response.into_body(), MAX_RESPONSE_BYTES).await.expect("响应体读取失败");
         let value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);

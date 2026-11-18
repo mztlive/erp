@@ -41,10 +41,7 @@ impl OrderTracking {
         if let Some(tree) = &observation.topology {
             tree.validate_tracking(&self.source_lines)?;
         }
-        let mut quantities = BTreeMap::new();
-        for applied in &self.applied_shipments {
-            add_lines(&mut quantities, &applied.lines)?;
-        }
+        let mut quantities = self.applied_quantities()?;
         let mut pending = Vec::new();
         let mut seen = HashSet::new();
         let mut per_order = BTreeMap::new();
@@ -87,10 +84,7 @@ impl OrderTracking {
             }
             return Ok(());
         }
-        let mut quantities = BTreeMap::new();
-        for applied in &self.applied_shipments {
-            add_lines(&mut quantities, &applied.lines)?;
-        }
+        let mut quantities = self.applied_quantities()?;
         add_lines(&mut quantities, &shipment.lines)?;
         self.ensure_shipment_totals(&quantities)?;
         self.applied_shipments.push(AppliedShipment {
@@ -110,10 +104,7 @@ impl OrderTracking {
     /// # 错误
     /// 数量溢出或凭据超发时返回错误。
     pub fn quantities_fully_applied(&self) -> Result<bool> {
-        let mut quantities = BTreeMap::new();
-        for applied in &self.applied_shipments {
-            add_lines(&mut quantities, &applied.lines)?;
-        }
+        let quantities = self.applied_quantities()?;
         self.ensure_shipment_totals(&quantities)?;
         Ok(self.source_lines.iter().all(|line| {
             quantities.get(&line.fulfillment_item_id).copied().unwrap_or(Decimal::ZERO)
@@ -165,6 +156,14 @@ impl OrderTracking {
             return Err(Error::ConflictError("同一来源包裹数量发生变化，请核对原发货记录".into()));
         }
         Ok(Some(previous))
+    }
+
+    fn applied_quantities(&self) -> Result<BTreeMap<String, Decimal>> {
+        let mut quantities = BTreeMap::new();
+        for applied in &self.applied_shipments {
+            add_lines(&mut quantities, &applied.lines)?;
+        }
+        Ok(quantities)
     }
 
     fn ensure_shipment_totals(&self, quantities: &BTreeMap<String, Decimal>) -> Result<()> {

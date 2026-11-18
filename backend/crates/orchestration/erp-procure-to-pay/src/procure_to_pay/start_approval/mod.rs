@@ -12,7 +12,9 @@ mod supply_selection;
 
 #[cfg(test)]
 pub(crate) use start_input::tests;
-pub(super) use start_input::{PurchaseOrderStartInput, build_purchase_order_start_input};
+pub(super) use start_input::{
+    PurchaseOrderStartInput, build_purchase_order_start_input, plan_purchase_approval_start,
+};
 pub(super) use start_persist::{
     PurchaseOrderStartPersistInput, PurchaseSubmitProcurementGuard, persist_purchase_order_start,
 };

@@ -159,10 +159,16 @@ impl CustomerAssignment {
     /// # 错误
     /// 结束日期不晚于开始日期，或晚于既有结束日期时返回错误。
     pub fn end_directly(&mut self, valid_to: BusinessDate) -> Result<()> {
+        self.validate_direct_end(valid_to)?;
+        self.valid_to = Some(valid_to);
+        Ok(())
+    }
+
+    fn validate_direct_end(&self, valid_to: BusinessDate) -> Result<()> {
         if self.valid_to.is_some_and(|current| valid_to > current) {
             return Err(Error::from("结束负责关系只能缩短有效期，不能延后原结束日期"));
         }
-        self.set_valid_to(valid_to)
+        ensure_window_valid(self.valid_from, Some(valid_to))
     }
 
     /// 兼容归属生命周期更新入口。
@@ -293,8 +299,7 @@ impl CustomerAssignment {
         assignments: &[Self],
         at: BusinessDate,
     ) -> Result<Vec<BTreeSet<String>>> {
-        let mut ended = self.clone();
-        ended.end_directly(at)?;
+        self.validate_direct_end(at)?;
         self.ensure_owner_retained(assignments, at)?;
         if self.assignment_role != AssignmentRole::Owner || self.valid_to == Some(at) {
             return Ok(Vec::new());

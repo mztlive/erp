@@ -2,10 +2,8 @@
 
 use std::sync::Arc;
 
-use bpm::engine::{DefinitionGraph, StartBindingInput, StartPlanInput, plan_start};
-use bpm::ids::{
-    ApprovalCommandReceiptId, ApprovalInstanceAssigneeId, ApprovalNodeExecutionId, ApprovalProcessInstanceId,
-};
+use bpm::engine::DefinitionGraph;
+use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::{ParticipantId, SubjectRef, Timestamp};
 use erp_approval_runtime::ApprovalRuntimePort;
 use erp_approval_runtime::approval_start::{StartTaskContext, persist_start_runtime, persist_start_tasks};
@@ -23,11 +21,7 @@ use erp_workflow::entity::approval_integration::ApprovalSubjectSnapshotPayload;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::repository::prelude::*;
-use erp_workflow::service::approval::execution::authorization::{
-    AuthorizationFailure, converge_node_eligibility,
-};
 use erp_workflow::service::approval::execution::idempotency::normalize_idempotency_key;
-use erp_workflow::service::approval::execution::start::map_engine_error;
 use erp_workflow::service::approval::execution::{
     ExecutionCommandInput, PlannedWrites, PreparedExecution, StartExecutionInput,
     map_receipt_first_write_error,
@@ -41,7 +35,7 @@ use mongodb::Database;
 use persistence_core::Executor;
 
 use super::change::replay_change_command;
-use super::change_adapter::purchase_change_order_object_readable;
+use super::start_approval::plan_purchase_approval_start;
 use crate::procure_to_pay::PurchaseOrderPorts;
 use crate::{Error, Result};
 
@@ -177,13 +171,7 @@ pub(super) fn build_purchase_change_start_input(
     let actor =
         ParticipantId::new(actor_id).map_err(|_| Error::ValidationError("提交人引用无效".to_string()))?;
     let timestamp = Timestamp::from_utc(now.as_utc());
-    let binding_inputs = change_start_bindings(&graph, organization_id)?;
-    let plan = plan_start(StartPlanInput {
-        graph: &graph,
-        expected_definition_version: binding.approval_definition_version,
-        bindings: binding_inputs,
-    })
-    .map_err(map_start_plan_error)?;
+    let plan = plan_purchase_approval_start(&graph, binding.approval_definition_version, organization_id)?;
     Ok(StartExecutionInput {
         resubmission_reason,
         command: ExecutionCommandInput {
@@ -205,39 +193,6 @@ pub(super) fn build_purchase_change_start_input(
         receipt_id: ApprovalCommandReceiptId::new(next_id()),
         bindings: plan.bindings,
     })
-}
-
-fn change_start_bindings(graph: &DefinitionGraph, organization_id: &str) -> Result<Vec<StartBindingInput>> {
-    graph
-        .nodes
-        .iter()
-        .map(|node| {
-            Ok(StartBindingInput {
-                node_key: node.node_key.clone(),
-                assignee_id: ApprovalInstanceAssigneeId::new(next_id()),
-                eligibility: converge_node_eligibility(node, |assignee| {
-                    match purchase_change_order_object_readable(organization_id, assignee) {
-                        Ok(_) => None,
-                        Err(_) => Some(AuthorizationFailure::CannotReadSubject),
-                    }
-                })?,
-            })
-        })
-        .collect::<Result<Vec<_>>>()
-}
-
-/// 将启动计划错误映射为服务错误；计划前置条件保持冲突语义。
-///
-/// # 参数
-/// * `error` - BPM 启动计划错误
-///
-/// # 返回
-/// 计划前置条件返回冲突，其余错误按引擎错误映射。
-fn map_start_plan_error(error: bpm::engine::EngineError) -> Error {
-    match error {
-        bpm::engine::EngineError::InvalidCommand(message) => Error::ConflictError(message.to_string()),
-        other => Error::from(map_engine_error(other)),
-    }
 }
 
 /// 采购变更提交事务内需要一并写入的冻结提交。

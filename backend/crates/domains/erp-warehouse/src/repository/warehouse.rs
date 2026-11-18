@@ -77,8 +77,7 @@ macro_rules! filter_default {
             /// # 错误
             /// 无。
             fn default() -> Self {
-                let (page, page_size, sort_by, sort_ascending) = default_paging();
-                Self { $($field: $init,)* page, page_size, sort_by, sort_ascending }
+                Self { $($field: $init,)* page: 1, page_size: 20, sort_by: None, sort_ascending: false }
             }
         }
     };
@@ -663,14 +662,6 @@ where
     .await
 }
 
-/// 首页空筛选的分页初值（三类列表 Filter 共用；查询语义不变）。
-///
-/// # 返回
-/// 返回 `(page, page_size, sort_by, sort_ascending)` = `(1, 20, None, false)`。
-fn default_paging() -> (u64, u32, Option<String>, bool) {
-    (1, 20, None, false)
-}
-
 /// 关键词查询单次允许装入 `$in` 的修订 ID 上限（约束单次读取规模）。
 const KEYWORD_REVISION_ID_CAP: usize = 500;
 
@@ -719,7 +710,7 @@ where
 ///
 /// # 返回
 /// 返回排序条件文档。
-fn sort_doc(sort_by: Option<&str>, sort_ascending: bool, allowed: &[&str]) -> Document {
+pub(super) fn sort_doc(sort_by: Option<&str>, sort_ascending: bool, allowed: &[&str]) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
     let field = sort_by.filter(|field| allowed.contains(field)).unwrap_or("created_at");
     doc! { field: direction, "id": direction }

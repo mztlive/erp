@@ -8,10 +8,9 @@ use erp_warehouse::{
 use erp_workflow::ports::WorkflowAuthorizationPort;
 use persistence_core::{Executor, ReadExecutor};
 
-use super::ensure_dictionary::{EnsureOutcome, step_label};
+use super::ensure_dictionary::EnsureOutcome;
 use super::plan::DemoStep;
-use super::record::{self, DemoMasterRecord};
-use super::{DemoMasterDataProcess, lifecycle};
+use super::{DemoMasterDataProcess, lifecycle, record};
 use crate::{Error, Result};
 
 impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
@@ -52,7 +51,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
                     .await?;
             }
             self.verify_warehouse_ready(&existing.base.id).await?;
-            self.remember_warehouse(step, existing.base.id).await?;
+            record::save(&self.db, step, existing.base.id, Vec::new()).await?;
             return Ok(if live { EnsureOutcome::Skipped } else { EnsureOutcome::Restored });
         }
         let view = match self
@@ -66,7 +65,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
             },
             Err(error) => return Err(error.into()),
         };
-        self.remember_warehouse(step, view.id.clone()).await?;
+        record::save(&self.db, step, view.id.clone(), Vec::new()).await?;
         self.verify_warehouse_ready(&view.id).await?;
         Ok(EnsureOutcome::Created)
     }
@@ -81,22 +80,6 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
             .await?
             .ok_or_else(|| Error::NotFound("演示仓库未能读回，请核对登记记录".into()))?;
         warehouse_ready(&warehouse, self.ports.warehouse_identity.as_ref(), &mut executor).await
-    }
-
-    /// 登记仓库实际主键。
-    async fn remember_warehouse(&self, step: &DemoStep, id: String) -> Result<()> {
-        record::save(
-            &self.db,
-            &DemoMasterRecord {
-                key: step.key.clone(),
-                kind: step.kind.as_str().to_string(),
-                entity_id: id,
-                related_ids: Vec::new(),
-                label: step_label(step),
-                removed: false,
-            },
-        )
-        .await
     }
 }
 

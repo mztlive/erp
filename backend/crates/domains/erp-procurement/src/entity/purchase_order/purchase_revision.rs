@@ -17,6 +17,7 @@ use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::entity::purchase_order::change_order::{PurchaseChangeSubmission, PurchaseChangeSubmissionLine};
+use crate::entity::purchase_order::line_amounts::ensure_header_triple;
 use crate::entity::purchase_order::line_common::{PurchaseLineFields, normalize_expense};
 use crate::entity::purchase_order::offering_source::ensure_offering_source;
 use crate::entity::purchase_order::purchase_submission::{
@@ -99,7 +100,9 @@ impl PurchaseOrderRevision {
         if data.revision_no == 0 {
             return Err(Error::from("版本号必须从 1 开始"));
         }
-        ensure_header_triple(data.gross_amount, data.net_amount, data.tax_amount, &data.purchase_order_id)?;
+        ensure_header_triple(data.gross_amount, data.net_amount, data.tax_amount, || {
+            format!("采购版本表头金额三元组不守恒（采购单 {}）", data.purchase_order_id)
+        })?;
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             revision: RevisionBase::new(data.revision_no),
@@ -516,30 +519,6 @@ impl PurchaseOrderRevisionLine {
             },
         )
     }
-}
-
-/// 校验表头金额三元组守恒。
-///
-/// # 参数
-/// * `gross_amount` / `net_amount` / `tax_amount` - 表头汇总
-/// * `purchase_order_id` - 所属采购单（错误提示上下文）
-///
-/// # 错误
-/// `gross ≠ net + tax` 或任一分量为负时返回错误。
-fn ensure_header_triple(
-    gross_amount: Amount,
-    net_amount: Amount,
-    tax_amount: Amount,
-    purchase_order_id: &PurchaseOrderId,
-) -> Result<()> {
-    if gross_amount.to_decimal() != net_amount.to_decimal() + tax_amount.to_decimal()
-        || gross_amount.to_decimal() < rust_decimal::Decimal::ZERO
-        || net_amount.to_decimal() < rust_decimal::Decimal::ZERO
-        || tax_amount.to_decimal() < rust_decimal::Decimal::ZERO
-    {
-        return Err(Error::from(format!("采购版本表头金额三元组不守恒（采购单 {purchase_order_id}）")));
-    }
-    Ok(())
 }
 
 #[cfg(test)]

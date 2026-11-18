@@ -6,7 +6,7 @@ use mongodb::{Database, IndexModel};
 use persistence_core::{Executor, ReadExecutor, mongo_ops};
 use serde::{Deserialize, Serialize};
 
-use super::super::plan::DemoKind;
+use super::super::plan::{DemoKind, DemoStep};
 use crate::{Error, Result};
 
 pub(in crate::demo_master_data) const COLLECTION: &str = "demo_master_records";
@@ -73,20 +73,23 @@ pub(in crate::demo_master_data) async fn load(
     Ok(mongo_ops::find_many(&db.collection(COLLECTION), doc! {}, Default::default(), executor).await?)
 }
 
-/// 按稳定身份写入或覆盖一条清单。
-///
-/// # 参数
-/// * `db` - 目标数据库
-/// * `record` - 要保存的清单行
-///
-/// # 返回
-/// 按 `key` 与 `entity_id` 写入或覆盖成功时无返回值。
-///
-/// # 错误
-/// 序列化或写入失败时返回错误。
-pub(in crate::demo_master_data) async fn save(db: &Database, record: &DemoMasterRecord) -> Result<()> {
+/// 按种子键与实际主键写入或覆盖清单登记。
+pub(in crate::demo_master_data) async fn save(
+    db: &Database,
+    step: &DemoStep,
+    entity_id: String,
+    related_ids: Vec<String>,
+) -> Result<()> {
+    let record = DemoMasterRecord {
+        key: step.key.clone(),
+        kind: step.kind.as_str().to_string(),
+        entity_id,
+        related_ids,
+        label: step.request.label().to_string(),
+        removed: false,
+    };
     let document =
-        mongodb::bson::serialize_to_document(record).map_err(|error| Error::Internal(error.to_string()))?;
+        mongodb::bson::serialize_to_document(&record).map_err(|error| Error::Internal(error.to_string()))?;
     db.collection::<Document>(COLLECTION)
         .update_one(doc! { "key": &record.key, "entity_id": &record.entity_id }, doc! { "$set": document })
         .with_options(UpdateOptions::builder().upsert(true).build())

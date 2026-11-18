@@ -3,7 +3,7 @@ use std::io::{Cursor, Read};
 
 use zip::ZipArchive;
 
-use super::{document, invalid, text};
+use super::{document, invalid, rich_text};
 use crate::Result;
 
 pub(crate) const MAX_XML_BYTES: u64 = 16 * 1024 * 1024;
@@ -101,17 +101,7 @@ impl<'a> Archive<'a> {
             .root_element()
             .children()
             .filter(|node| node.is_element() && node.tag_name().name() == "si")
-            .map(|node| {
-                node.descendants()
-                    .filter(|node| node.is_element() && node.tag_name().name() == "t")
-                    .filter(|node| {
-                        !node
-                            .ancestors()
-                            .any(|parent| parent.is_element() && parent.tag_name().name() == "rPh")
-                    })
-                    .map(text)
-                    .collect()
-            })
+            .map(rich_text)
             .collect())
     }
 }

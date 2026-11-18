@@ -141,7 +141,7 @@ impl DirectoryPage {
 /// 每段先写 8 字节大端长度，避免搜索词与授权版本或目录 JSON 粘连。
 /// 页码、页大小、请求中的版本和已选身份不参与计算。
 fn snapshot_scope_version(scope_version: &str, q: Option<&str>, items: &[DirectoryItem]) -> Result<String> {
-    let search = q.map(str::trim).filter(|value| !value.is_empty()).unwrap_or("");
+    let search = q.unwrap_or_default().trim();
     let encoded_items = serde_json::to_vec(items).map_err(|error| Error::Internal(error.to_string()))?;
     let mut hash = Sha256::new();
     for field in [

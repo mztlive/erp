@@ -190,7 +190,7 @@ impl ApprovalNodeExecution {
     /// 轮次或序号不是从 1 开始、分派来源与替换引用不匹配、节点或显示名非法，
     /// 或调用方时间无法持久化时返回错误。
     pub fn new_active(input: NewNodeExecution) -> ModelResult<Self> {
-        Self::new_current(input, ApprovalNodeExecutionStatus::Active, None)
+        Self::new_current(input, None)
     }
 
     /// 创建受阻执行。
@@ -206,7 +206,7 @@ impl ApprovalNodeExecution {
     /// 轮次或序号不是从 1 开始、分派来源与替换引用不匹配、节点或显示名非法，
     /// 或调用方时间无法持久化时返回错误。原审批人恢复不得直接构造受阻执行。
     pub fn new_blocked(input: NewNodeExecution, blocker_code: ApprovalBlockerCode) -> ModelResult<Self> {
-        Self::new_current(input, ApprovalNodeExecutionStatus::Blocked, Some(blocker_code))
+        Self::new_current(input, Some(blocker_code))
     }
 
     /// 将活动执行标记为通过。
@@ -321,17 +321,15 @@ impl ApprovalNodeExecution {
     }
 
     /// 只构造当前令牌：轮次与序号从 1 起；定义进入不得带替换引用，原审批人恢复必须关联旧执行且为活动态。
-    fn new_current(
-        input: NewNodeExecution,
-        status: ApprovalNodeExecutionStatus,
-        blocker_code: Option<ApprovalBlockerCode>,
-    ) -> ModelResult<Self> {
+    fn new_current(input: NewNodeExecution, blocker_code: Option<ApprovalBlockerCode>) -> ModelResult<Self> {
         if input.round_no == 0 || input.execution_no == 0 {
             return Err(ModelError::InvalidField("轮次和执行序号必须从 1 开始"));
         }
-        if !status.is_current() {
-            return Err(ModelError::InvalidStatus("构造器不得创建已结束执行"));
-        }
+        let status = if blocker_code.is_some() {
+            ApprovalNodeExecutionStatus::Blocked
+        } else {
+            ApprovalNodeExecutionStatus::Active
+        };
         match (input.assignment_source, input.replaces_execution_id.is_some(), status) {
             (ApprovalExecutionAssignmentSource::Definition, false, _)
             | (

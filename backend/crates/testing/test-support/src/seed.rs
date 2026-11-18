@@ -52,7 +52,7 @@ const SEED_PERMISSIONS: &[(&str, &str)] = &[("role", "list"), ("admin", "list"),
 /// # 错误
 /// 集合写入失败时返回 MongoDB 错误；`Role::new` 校验失败时返回 `Error::Entity`。
 pub async fn seed_admin_account(db: &Database) -> Result<String> {
-    let account_id = new_account_id();
+    let account_id = format!("acc-{}", uuid_hex_n(UUID_ACCOUNT_SUFFIX_LEN));
     let login = seed_login(&account_id);
     insert_account(db, &account_id, &login).await?;
     insert_role_and_policies(db, &account_id).await?;
@@ -94,36 +94,19 @@ async fn insert_role_and_policies(db: &Database, account_id: &str) -> Result<()>
 
     let mut rules: Vec<Document> = SEED_PERMISSIONS
         .iter()
-        .map(|(resource, action)| casbin_rule("p", "p", &[&role_key, resource, action]))
+        .map(|(resource, action)| casbin_rule("p", &[&role_key, resource, action]))
         .collect();
     let subject = format!("{SUBJECT_PREFIX}{account_id}");
-    rules.push(casbin_rule("g", "g", &[&subject, &role_key]));
+    rules.push(casbin_rule("g", &[&subject, &role_key]));
     db.collection::<Document>(CASBIN_RULES).insert_many(rules).await?;
     Ok(())
 }
 
-/// 构造与 Casbin Adapter 完全同构的规则文档。
-///
-/// # 参数
-/// * `sec` - 规则区段（`p` 或 `g`）
-/// * `ptype` - 规则类型
-/// * `values` - 规则值（权限规则为 `[角色键, 资源, 动作]`，绑定规则为
-///   `[主体, 角色键]`）
-///
-/// # 返回值
-/// 返回可插入 `casbin_rules` 集合的文档。
-fn casbin_rule(sec: &str, ptype: &str, values: &[&str]) -> Document {
+/// 种子的 `p`/`g` 规则各用同一个值作为 Casbin 的区段和类型。
+fn casbin_rule(kind: &str, values: &[&str]) -> Document {
     let values = values.iter().map(|value| value.to_string()).collect::<Vec<String>>();
-    let id = format!("{sec}\u{1f}{ptype}\u{1f}{}", values.join("\u{1f}"));
-    doc! { "_id": id, "sec": sec, "ptype": ptype, "values": values }
-}
-
-/// 生成随机账号 ID。
-///
-/// # 返回值
-/// 返回 `acc-<12 位十六进制>` 形式的账号 ID。
-fn new_account_id() -> String {
-    format!("acc-{}", uuid_hex_n(UUID_ACCOUNT_SUFFIX_LEN))
+    let id = format!("{kind}\u{1f}{kind}\u{1f}{}", values.join("\u{1f}"));
+    doc! { "_id": id, "sec": kind, "ptype": kind, "values": values }
 }
 
 /// 按种子派生规则生成登录账号。

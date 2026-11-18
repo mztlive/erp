@@ -2,6 +2,7 @@
 mod image;
 mod render;
 
+use std::future::Future;
 use std::path::PathBuf;
 
 use aliyun_ocr::{Client, Credentials, Error as OcrError};
@@ -47,15 +48,13 @@ impl ContractOcr for AliyunContractOcr {
     }
 }
 
-#[async_trait]
 trait PageSource: Send + Sync {
-    async fn recognize(&self, number: u32) -> Result<(OcrPage, String)>;
+    fn recognize(&self, number: u32) -> impl Future<Output = Result<(OcrPage, String)>> + Send;
 }
 struct LivePages {
     client: Client,
     pdf: PdfFile,
 }
-#[async_trait]
 impl PageSource for LivePages {
     async fn recognize(&self, number: u32) -> Result<(OcrPage, String)> {
         let image = self.pdf.page(number).await?;
@@ -72,7 +71,7 @@ impl PageSource for LivePages {
     }
 }
 
-async fn collect_pages(source: &dyn PageSource, page_count: u32) -> Result<OcrDocument> {
+async fn collect_pages(source: &impl PageSource, page_count: u32) -> Result<OcrDocument> {
     if !(1..=200).contains(&page_count) {
         return Err(ImportFailure::new("PAGE_COVERAGE", "合同须包含 1 至 200 页"));
     }
@@ -98,13 +97,15 @@ async fn collect_pages(source: &dyn PageSource, page_count: u32) -> Result<OcrDo
             error.page = Some(number);
             return Err(error);
         }
-        if !version.is_empty() && document.version.is_empty() {
-            document.version = version;
-        } else if !version.is_empty() && document.version != version {
-            return Err(ImportFailure::new(
-                "OCR_VERSION_CHANGED",
-                "识别服务版本发生变化，请重新识别整份合同",
-            ));
+        if !version.is_empty() {
+            if document.version.is_empty() {
+                document.version = version;
+            } else if document.version != version {
+                return Err(ImportFailure::new(
+                    "OCR_VERSION_CHANGED",
+                    "识别服务版本发生变化，请重新识别整份合同",
+                ));
+            }
         }
         document.pages.push(page);
     }
@@ -163,7 +164,6 @@ mod tests {
         empty_at: Option<u32>,
         blank_at: Option<u32>,
     }
-    #[async_trait]
     impl PageSource for FakePages {
         async fn recognize(&self, number: u32) -> Result<(OcrPage, String)> {
             self.calls.lock().unwrap().push(number);

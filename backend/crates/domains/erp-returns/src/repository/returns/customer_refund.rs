@@ -10,7 +10,7 @@ use persistence_core::{
 };
 use serde::{Deserialize, Serialize};
 
-use super::search::{ListSort, originals_filter, search_projected};
+use super::search::{originals_filter, search_projected, sort_doc};
 use crate::entity::returns::{CustomerRefund, CustomerRefundStatus};
 
 /// 客户退款列表投影行。
@@ -138,16 +138,6 @@ impl Pagination for CustomerRefundFilter {
     }
 }
 
-impl ListSort for CustomerRefundFilter {
-    fn sort_by(&self) -> Option<&str> {
-        self.sort_by.as_deref()
-    }
-
-    fn sort_ascending(&self) -> bool {
-        self.sort_ascending
-    }
-}
-
 /// 客户退款集合仓储扩展。
 #[allow(async_fn_in_trait)]
 pub trait CustomerRefundRepositoryExt {
@@ -200,7 +190,11 @@ impl CustomerRefundRepositoryExt for Repository<'_, CustomerRefund> {
             self,
             filter,
             customer_refund_projection(),
-            &["occurred_at", "amount", "created_at"],
+            sort_doc(
+                filter.sort_by.as_deref(),
+                filter.sort_ascending,
+                &["occurred_at", "amount", "created_at"],
+            ),
             executor,
         )
         .await
@@ -254,8 +248,7 @@ mod tests {
     use mongodb::bson::doc;
     use persistence_core::QueryFilter;
 
-    use super::super::search::sort_doc;
-    use super::{CustomerRefundFilter, customer_refund_projection};
+    use super::{CustomerRefundFilter, customer_refund_projection, sort_doc};
     use crate::entity::returns::CustomerRefundStatus;
 
     #[test]

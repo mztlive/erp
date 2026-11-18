@@ -9,8 +9,7 @@ use persistence_core::ReadExecutor;
 
 use super::ensure_dictionary::EnsureOutcome;
 use super::plan::DemoStep;
-use super::record::{self, DemoMasterRecord};
-use super::{DemoMasterDataProcess, lifecycle, spec};
+use super::{DemoMasterDataProcess, lifecycle, record, spec};
 use crate::{Error, Result};
 
 impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
@@ -73,10 +72,10 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         let created = supplier.base.deleted_at == entity_core::NOT_DELETED_TIMESTAMP;
         lifecycle::restore_party(&self.db, self.authorization.clone(), actor, supplier.party_id.as_ref())
             .await?;
-        if supplier.base.deleted_at != entity_core::NOT_DELETED_TIMESTAMP {
+        if !created {
             lifecycle::restore_supplier(&self.db, self.authorization.clone(), actor, supplier_id).await?;
         }
-        record::save(&self.db, &supplier_record(step, supplier_id, supplier.party_id.as_ref())).await?;
+        record::save(&self.db, step, supplier_id.to_string(), vec![supplier.party_id.to_string()]).await?;
         Ok(if created { EnsureOutcome::Created } else { EnsureOutcome::Restored })
     }
 
@@ -160,18 +159,6 @@ fn supplier_request(
         owner.owner_user_id = maintainer_id.to_string();
     }
     request
-}
-
-/// 构造供应商与主体实际 ID 的登记记录。
-fn supplier_record(step: &DemoStep, supplier_id: &str, party_id: &str) -> DemoMasterRecord {
-    DemoMasterRecord {
-        key: step.key.clone(),
-        kind: step.kind.as_str().to_string(),
-        entity_id: supplier_id.to_string(),
-        related_ids: vec![party_id.to_string()],
-        label: step.request.label().to_string(),
-        removed: false,
-    }
 }
 
 /// 合并不重复的供应商准备提示。

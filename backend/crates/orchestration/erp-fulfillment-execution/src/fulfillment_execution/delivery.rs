@@ -130,10 +130,7 @@ async fn apply_delivery_update(
 ) -> Result<Delivery> {
     super::task::require_fulfillment_entry(db, task_identity, "delivery", id, actor, executor).await?;
     let service = FulfillmentService::new(db.clone());
-    let (mut delivery, lines) = service.prepare_delivery_update(id, req.clone(), executor).await?;
-    if delivery.packing.is_some() && req.tracking_entries.is_some() {
-        return Err(Error::ConflictError("请刷新后使用地址包裹登记".into()));
-    }
+    let (mut delivery, lines) = service.prepare_delivery_update(id, req, executor).await?;
     packing_context.apply(db, &mut delivery, &lines, false, executor).await?;
     super::delivery_tracking::ensure_tracking_sources(db, &delivery, &lines, executor).await?;
     service.persist_delivery(&mut delivery, executor).await?;

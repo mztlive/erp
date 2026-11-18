@@ -7,7 +7,7 @@ use super::guard::{
     ensure_difference_open, ensure_difference_subject, ensure_error_task_subject, latest_resolution,
     load_difference, load_error_task,
 };
-use super::{DirectFact, append_resolution};
+use super::{DirectFact, persist_appended_resolution};
 use crate::dto::{
     ControlledEvidenceKind, ControlledEvidenceRef, DirectReconciliationStatus, IntegrationActionOutcome,
     IntegrationItemType, IntegrationNonTerminalTaskAction, IntegrationTaskActionCommand,
@@ -164,7 +164,7 @@ async fn error_action_fact(
         IntegrationTaskActionKind::AddEvidence => {
             let verified =
                 verify_evidence_refs(authority, &subject, &action.evidence_refs, actor_id, executor).await?;
-            Ok(ActionFact::with_verified(IntegrationActionOutcome::EvidenceAdded, verified)?)
+            ActionFact::with_verified(IntegrationActionOutcome::EvidenceAdded, verified)
         },
         IntegrationTaskActionKind::ReplayOriginal => {
             if !task.can_replay_original() {
@@ -188,7 +188,7 @@ async fn error_action_fact(
             ensure_compensation_evidence(&action.evidence_refs)?;
             let verified =
                 verify_evidence_refs(authority, &subject, &action.evidence_refs, actor_id, executor).await?;
-            Ok(ActionFact::with_verified(IntegrationActionOutcome::EvidenceLinked, verified)?)
+            ActionFact::with_verified(IntegrationActionOutcome::EvidenceLinked, verified)
         },
     }
 }
@@ -208,12 +208,8 @@ async fn query_action_fact(
         OriginalResultFact::NoResult => {
             Ok(ActionFact::outcome_only(IntegrationActionOutcome::NoResultConfirmed))
         },
-        OriginalResultFact::Unknown => Ok(unknown_action_fact()),
+        OriginalResultFact::Unknown => Ok(ActionFact::outcome_only(IntegrationActionOutcome::ResultUnknown)),
     }
-}
-
-fn unknown_action_fact() -> ActionFact {
-    ActionFact::outcome_only(IntegrationActionOutcome::ResultUnknown)
 }
 
 /// 动作证据摘要上限（字节口径；摘要为 ASCII 固定前缀 + 紧凑证据编码，字节 == 字符）。
@@ -250,9 +246,9 @@ async fn execute_difference_task_action(
     let fact =
         difference_action_fact(authority, &difference, &command.action, receipt_id, actor_id, executor)
             .await?;
-    let record = append_resolution(&difference, latest.as_ref(), &fact, receipt_id, actor_id)?;
-    let next_subject_version = record.resolution_no.to_string();
-    db.reconciliation_difference_resolutions().create(&record, executor).await?;
+    let next_subject_version =
+        persist_appended_resolution(db, &difference, latest.as_ref(), &fact, receipt_id, actor_id, executor)
+            .await?;
     Ok(ActionFact {
         outcome: fact.outcome,
         business_result_reference: fact.business_result_reference,

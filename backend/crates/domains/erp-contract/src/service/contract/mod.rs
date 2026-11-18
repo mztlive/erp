@@ -99,8 +99,7 @@ impl ContractService {
     /// 跨集合事务写入 `contract`、`contract_revision` 与审计日志；客户存在性
     /// 经客户事实 Port 校验；contract_no 唯一性由唯一索引兜底（重复提交映射 409）。
     ///
-    /// 编排经 [`execute_authorized_transaction`] 统一接入授权事务执行、
-    /// 审计落盘与详情回读；动作闭包只声明本命令的仓储写入。
+    /// 客户来源授权、合同写入和审计落盘共用同一事务。
     ///
     /// # 参数
     /// * `req` - 创建请求（含 PDF 文件资产 ID 与版本快照）
@@ -129,28 +128,30 @@ impl ContractService {
             planned.contract.base.id.clone(),
         )?;
 
-        let db = self.db.clone();
-        let audit_port = self.audit.clone();
-        let access = self.data_scope.clone();
+        self.execute_authorized_transaction(planned, audit, customer_id, actor.clone()).await
+    }
+
+    async fn execute_authorized_transaction(
+        &self,
+        mut planned: PlannedContractArchive,
+        audit: PreparedContractAudit,
+        customer_id: String,
+        actor: AuditActor,
+    ) -> Result<ContractView> {
         let service = self.clone();
-        let actor_for_tx = actor.clone();
-        let mut contract_for_tx = planned.contract;
-        let revision = planned.revision;
-        execute_authorized_transaction(
-            &db,
-            &audit_port,
-            &audit,
-            customer_id,
-            access,
-            actor_for_tx,
-            Box::new(move |_, executor| {
+        let audit_port = self.audit.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    service.apply_create(&mut contract_for_tx, &revision, executor).await?;
-                    Ok(contract_for_tx.into())
+                    service.data_scope.require_create(&actor, &customer_id, executor).await?;
+                    service.apply_create(&mut planned.contract, &planned.revision, executor).await?;
+                    let view = ContractView::from(planned.contract);
+                    audit_port.persist(&audit, executor).await?;
+                    Ok(view)
                 })
-            }),
-        )
-        .await
+            })
+            .await
     }
 
     /// 按已登记文件资产规划合同首次归档，不读取数据库、不写附件。
@@ -336,58 +337,6 @@ impl ContractService {
         let facts = self.customers.find_by_ids(slice::from_ref(customer_id), executor).await?;
         customer_eligibility(facts.into_iter().find(|fact| fact.id == customer_id.as_ref()))
     }
-}
-
-/// 本命令的仓储写入闭包：事务内执行，失败整事务回滚。
-type TxAction<T> = Box<
-    dyn for<'a> FnOnce(
-            &'a Database,
-            &'a mut dyn Executor,
-        ) -> std::pin::Pin<Box<dyn Future<Output = Result<T>> + Send + 'a>>
-        + Send,
->;
-
-/// 首次归档的授权事务和审计编排。
-///
-/// 原事务先核验真实客户候选，再执行合同写入和审计；任一步失败整事务回滚。
-///
-/// # 参数
-/// * `db` - 合同数据库
-/// * `audit_port` - 审计写入端口
-/// * `audit` - 已规划的审计记录
-/// * `customer_id` - 真实客户来源身份
-/// * `access` - 合同范围访问器
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `action` - 本命令的仓储写入闭包
-///
-/// # 返回
-/// 事务提交成功时返回本命令在原事务生成的响应。
-///
-/// # 错误
-/// 授权拒绝、仓储写入或审计落盘失败时返回原错误。
-async fn execute_authorized_transaction<T: Send + 'static>(
-    db: &Database,
-    audit_port: &Arc<dyn ContractAuditPort>,
-    audit: &PreparedContractAudit,
-    customer_id: String,
-    access: ContractAccess,
-    actor: AuditActor,
-    action: TxAction<T>,
-) -> Result<T> {
-    let client = db.client().clone();
-    let db = db.clone();
-    client
-        .with_transaction(move |executor| {
-            let audit_port = audit_port.clone();
-            let audit = audit.clone();
-            Box::pin(async move {
-                access.require_create(&actor, &customer_id, executor).await?;
-                let result = action(&db, executor).await?;
-                audit_port.persist(&audit, executor).await?;
-                Ok::<T, crate::error::Error>(result)
-            })
-        })
-        .await
 }
 
 #[cfg(test)]

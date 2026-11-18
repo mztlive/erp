@@ -44,23 +44,21 @@ impl SalesOrderService {
                         WorkingPurpose::FirstSubmission,
                         executor,
                     )
-                    .await?;
-                if let Some(copy) = copy {
-                    if copy.customer_id != order.customer_id
-                        || copy.settlement_party_id != order.settlement_party_id
-                    {
-                        return Err(Error::ConflictError("销售草稿归属不一致，请刷新后重试".into()));
-                    }
-                    return Ok(ContractBindingBasis {
-                        terms: ContractTerms {
-                            payment: copy.payment_term_snapshot.clone(),
-                            invoice: copy.invoice_requirement_snapshot.clone(),
-                        },
-                        label: "当前已保存草稿".into(),
-                        working_copy: Some(copy),
-                    });
+                    .await?
+                    .ok_or_else(|| Error::ConflictError("请先保存销售草稿，再补录合同".into()))?;
+                if copy.customer_id != order.customer_id
+                    || copy.settlement_party_id != order.settlement_party_id
+                {
+                    return Err(Error::ConflictError("销售草稿归属不一致，请刷新后重试".into()));
                 }
-                Err(Error::ConflictError("请先保存销售草稿，再补录合同".into()))
+                Ok(ContractBindingBasis {
+                    terms: ContractTerms {
+                        payment: copy.payment_term_snapshot.clone(),
+                        invoice: copy.invoice_requirement_snapshot.clone(),
+                    },
+                    label: "当前已保存草稿".into(),
+                    working_copy: Some(copy),
+                })
             },
             CommercialStatus::PendingReview => self.contract_submission_basis(order, executor).await,
         }
@@ -106,8 +104,7 @@ impl SalesOrderService {
             .ok_or_else(|| Error::ConflictError("销售单缺少已保存条款，请先保存草稿再补录合同".into()))?;
         if submission.customer_id != order.customer_id
             || submission.settlement_party_id != order.settlement_party_id
-            || (order.commercial_status == CommercialStatus::PendingReview
-                && submission.stable.status != SubmissionStatus::InReview)
+            || submission.stable.status != SubmissionStatus::InReview
         {
             return Err(Error::ConflictError("销售提交归属或审批状态不一致，请刷新后重试".into()));
         }

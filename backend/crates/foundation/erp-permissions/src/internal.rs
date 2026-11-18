@@ -1,5 +1,5 @@
 //! 内部对象资格；不作为可分配的菜单功能展示。
-use crate::Permission;
+use crate::{Permission, sales_review};
 
 /// 按持久化任务种类核验完整办理资格；沿用工作项详情与业务动作资格。
 pub const WORK_ITEM_EXECUTE: Permission = Permission::new("work_item", "execute");
@@ -143,7 +143,7 @@ pub const APPROVAL_COPY_READ: Permission = Permission::new("approval_copy", "rea
 pub const PURCHASE_RETURN_SOURCE: Permission = Permission::new("purchase_order", "return_source");
 
 /// 兼容既有销售时间线展示资格的隐藏权限，不加入角色配置目录。
-pub const SALES_CHANGE_DETAIL: Permission = Permission::new("sales_change_order", "detail");
+pub const SALES_CHANGE_DETAIL: Permission = sales_review::SALES_CHANGE_ORDER_DETAIL;
 
 /// 查询实际经营盈亏的期间口径，仅要求成本列表功能资格。
 pub const PROFIT_LOSS_PERIOD_BASIS: Permission =

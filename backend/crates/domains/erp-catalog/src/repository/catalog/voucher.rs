@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use erp_core::ids::{ProductId, SkuId};
+use erp_core::ids::SkuId;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
 use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result};
@@ -260,9 +260,8 @@ impl<'a> CatalogRepository<'a> {
         row.status = revision.status;
         row.version = revision.base.version;
         row.created_at = revision.base.created_at;
-        let mut rows = vec![row];
-        self.attach_voucher_profile_context(&mut rows, executor).await?;
-        Ok(rows.remove(0))
+        self.attach_voucher_profile_context(std::slice::from_mut(&mut row), executor).await?;
+        Ok(row)
     }
 
     /// 读取指定卡券类目 SKU 的历史最大扩展修订序号。
@@ -384,15 +383,11 @@ impl<'a> CatalogRepository<'a> {
         skus: &[Sku],
         executor: &mut dyn Executor,
     ) -> Result<Vec<Product>> {
-        let product_ids =
-            skus.iter().map(|sku| ProductId::new(sku.product_id.to_string())).collect::<Vec<_>>();
-        if product_ids.is_empty() {
+        if skus.is_empty() {
             return Ok(Vec::new());
         }
-        self.db
-            .products()
-            .find_many(in_filter("id", product_ids.into_iter().map(|id| id.to_string())), executor)
-            .await
+        let filter = in_filter("id", skus.iter().map(|sku| sku.product_id.to_string()));
+        self.db.products().find_many(filter, executor).await
     }
 }
 

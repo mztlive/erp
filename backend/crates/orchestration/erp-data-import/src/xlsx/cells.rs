@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use roxmltree::Node;
 
-use super::{document, invalid, text};
+use super::{document, invalid, rich_text, text};
 use crate::Result;
 
 #[derive(Clone, Default)]
@@ -98,14 +98,7 @@ fn read_cell(node: Node<'_, '_>, shared: &[String]) -> Result<Cell> {
     let formula_node = node.children().find(|child| child.is_element() && child.tag_name().name() == "f");
     let raw = node.children().find(|child| child.is_element() && child.tag_name().name() == "v").map(text);
     let value = match kind {
-        Some("inlineStr") => node
-            .descendants()
-            .filter(|child| child.is_element() && child.tag_name().name() == "t")
-            .filter(|child| {
-                !child.ancestors().any(|parent| parent.is_element() && parent.tag_name().name() == "rPh")
-            })
-            .map(text)
-            .collect(),
+        Some("inlineStr") => rich_text(node),
         Some("s") => {
             let index = raw
                 .as_deref()

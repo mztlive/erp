@@ -12,6 +12,7 @@ use persistence_core::{
 
 use crate::authorization::{WarehouseQuery, ensure_warehouse_query};
 use crate::dto::warehouse::WAREHOUSE_SORT_FIELDS;
+use crate::repository::warehouse::sort_doc;
 use crate::repository::warehouse_projection::warehouse_projection;
 use crate::repository::{WarehouseExt, WarehouseFilter, WarehouseRow};
 use crate::{Error, Result};
@@ -46,12 +47,8 @@ pub(crate) async fn snapshot(
 fn pipeline(authorization: &[Document], query: &DirectoryQuery) -> Vec<Document> {
     let mut filter = doc! { "deleted_at": 0 };
 
-    let mut clauses = Vec::new();
     if let Some(ids) = &query.ids {
-        clauses.push(doc! { "id": { "$in": ids.as_slice() } });
-    }
-    if !clauses.is_empty() {
-        filter.insert("$and", clauses);
+        filter.insert("$and", vec![doc! { "id": { "$in": ids.as_slice() } }]);
     }
     let mut pipeline = vec![doc! { "$match": filter }];
     pipeline.extend_from_slice(authorization);
@@ -120,14 +117,8 @@ fn warehouse_prefix(authorization: &[Document], filter: &WarehouseFilter) -> Vec
 }
 
 fn warehouse_options(filter: &WarehouseFilter) -> FindOptions {
-    let direction = if filter.sort_ascending { 1 } else { -1 };
-    let field = filter
-        .sort_by
-        .as_deref()
-        .filter(|field| WAREHOUSE_SORT_FIELDS.contains(field))
-        .unwrap_or("created_at");
     FindOptions::builder()
-        .sort(doc! { field: direction, "id": direction })
+        .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending, WAREHOUSE_SORT_FIELDS))
         .skip(filter.skip())
         .limit(filter.limit())
         .projection(warehouse_projection())

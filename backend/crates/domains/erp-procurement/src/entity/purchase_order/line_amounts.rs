@@ -16,6 +16,7 @@ use erp_core::ids::{
     SalesOrderRevisionLineId, SalesOrderSubmissionLineId, SkuId, SkuRevisionId,
 };
 use erp_core::money::{Amount, Quantity, Rate, UnitPrice, line_amounts, round_to_cent};
+use erp_core::{Error, Result};
 
 use super::change_order::PurchaseChangeSubmissionLineData;
 use super::purchase_submission::PurchaseOrderSubmissionLineData;
@@ -248,6 +249,23 @@ pub fn compute_header_totals(
         tax = tax.checked_add(tax_line);
     }
     Ok((gross, net, tax))
+}
+
+/// 表头金额须非负，且含税金额等于净额与税额之和。
+pub(super) fn ensure_header_triple(
+    gross_amount: Amount,
+    net_amount: Amount,
+    tax_amount: Amount,
+    error_message: impl FnOnce() -> String,
+) -> Result<()> {
+    if gross_amount.to_decimal() != net_amount.to_decimal() + tax_amount.to_decimal()
+        || gross_amount.to_decimal() < rust_decimal::Decimal::ZERO
+        || net_amount.to_decimal() < rust_decimal::Decimal::ZERO
+        || tax_amount.to_decimal() < rust_decimal::Decimal::ZERO
+    {
+        return Err(Error::from(error_message()));
+    }
+    Ok(())
 }
 
 /// 零金额（crate 内金额汇总的唯一规范零值）。

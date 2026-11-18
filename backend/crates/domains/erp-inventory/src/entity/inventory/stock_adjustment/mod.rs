@@ -357,19 +357,7 @@ impl StockAdjustment {
             normalize_required_text(data.prepared_by, "仓储经办人不能为空", ACTOR_MAX_LEN, "仓储经办人过长")?;
         let created_by =
             normalize_required_text(created_by.into(), "创建人不能为空", ACTOR_MAX_LEN, "创建人标识过长")?;
-        let note = match data.note {
-            Some(text) => {
-                let text = text.trim().to_string();
-                if text.is_empty() {
-                    None
-                } else if text.len() > NOTE_MAX_LEN {
-                    return Err(Error::from("原因说明过长"));
-                } else {
-                    Some(text)
-                }
-            },
-            None => None,
-        };
+        let note = normalize_note(data.note.as_deref().unwrap_or_default())?;
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             created_by,
@@ -434,12 +422,8 @@ impl StockAdjustment {
                 "成本影响确认人过长",
             )?);
         }
-        if let Some(note) = update.note {
-            let note = note.trim().to_string();
-            if note.len() > NOTE_MAX_LEN {
-                return Err(Error::from("原因说明过长"));
-            }
-            self.note = if note.is_empty() { None } else { Some(note) };
+        if let Some(note) = update.note.as_deref() {
+            self.note = normalize_note(note)?;
         }
         if let Some(occurred_at) = update.occurred_at {
             self.occurred_at = Some(occurred_at);
@@ -787,6 +771,14 @@ impl StockAdjustment {
         }
         Ok(())
     }
+}
+
+fn normalize_note(note: &str) -> Result<Option<String>> {
+    let note = note.trim();
+    if note.len() > NOTE_MAX_LEN {
+        return Err(Error::from("原因说明过长"));
+    }
+    Ok((!note.is_empty()).then(|| note.to_owned()))
 }
 
 /// 校验仓储复核人与经办人不同（岗位分离，§6.7）。

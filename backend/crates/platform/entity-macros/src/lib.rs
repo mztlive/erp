@@ -1,7 +1,7 @@
 use proc_macro::TokenStream;
 use quote::__private::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{Data, DeriveInput, Error, Fields, FieldsNamed, Ident, Result, parse_macro_input};
+use syn::{Data, DeriveInput, Error, Fields, Ident, Result, parse_macro_input};
 
 /// 派生 Entity 宏实现。
 ///
@@ -33,16 +33,16 @@ pub fn derive_entity(input: TokenStream) -> TokenStream {
 /// # 错误
 /// 输入不是结构体、不是具名结构体，或缺 `base` 字段时返回 `syn::Error`。
 fn expand_derive_entity(input: &DeriveInput) -> Result<TokenStream2> {
+    let name = &input.ident;
     let Data::Struct(data) = &input.data else {
-        return Err(entity_error(&input.ident, "Entity 派生仅支持结构体"));
+        return Err(Error::new_spanned(name, "Entity 派生仅支持结构体"));
     };
     let Fields::Named(fields) = &data.fields else {
-        return Err(entity_error(&input.ident, "Entity 派生要求具名结构体并含有 base 字段"));
+        return Err(Error::new_spanned(name, "Entity 派生要求具名结构体并含有 base 字段"));
     };
-    if !has_base_field(fields) {
-        return Err(entity_error(&input.ident, "Entity 派生要求含有 base 字段"));
+    if !fields.named.iter().any(|field| field.ident.as_ref().is_some_and(|id| id == "base")) {
+        return Err(Error::new_spanned(name, "Entity 派生要求含有 base 字段"));
     }
-    let name = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
     Ok(quote! {
         impl #impl_generics ::entity_core::HasBaseModel for #name #ty_generics #where_clause {
@@ -75,16 +75,6 @@ fn expand_derive_entity(input: &DeriveInput) -> Result<TokenStream2> {
             }
         }
     })
-}
-
-/// Entity 派生错误的统一构造入口。
-fn entity_error(target: &Ident, message: &str) -> Error {
-    Error::new_spanned(target, message)
-}
-
-/// 判定具名字段是否含有 `base` 字段。
-fn has_base_field(fields: &FieldsNamed) -> bool {
-    fields.named.iter().any(|field| field.ident.as_ref().is_some_and(|id| id == "base"))
 }
 
 /// 生成透明主键 ID newtype。

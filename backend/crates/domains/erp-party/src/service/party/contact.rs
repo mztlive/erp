@@ -16,7 +16,6 @@ use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
-use super::clear_default_marks;
 use super::sensitive::SensitiveDataCodec;
 use crate::dto::party::{
     CreatePartyContactRequest, PARTY_CONTACT_SORT_FIELDS, PageView, PartyContactListParams, PartyContactView,
@@ -238,7 +237,7 @@ impl PartyContactService {
             contact.base.id.clone(),
         )?;
         if contact.is_default {
-            clear_default_marks!(self.db, party_contacts, contact.party_id, None, executor);
+            self.db.party_contacts().clear_other_default_marks(&contact.party_id, None, executor).await?;
         }
         self.db.party_contacts().create(&contact, executor).await?;
         self.audit.persist(&audit, executor).await?;
@@ -309,7 +308,10 @@ impl PartyContactService {
             contact.base.id.clone(),
         )?;
         if contact.is_default {
-            clear_default_marks!(self.db, party_contacts, contact.party_id, Some(&contact.base.id), executor);
+            self.db
+                .party_contacts()
+                .clear_other_default_marks(&contact.party_id, Some(contact.base.id.as_str()), executor)
+                .await?;
         }
         self.db.party_contacts().update(&mut contact, executor).await?;
         self.audit.persist(&audit, executor).await?;

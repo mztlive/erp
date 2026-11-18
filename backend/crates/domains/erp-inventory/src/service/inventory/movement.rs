@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use mongodb::Database;
-use persistence_core::{Executor, PageResult, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::InventoryService;
@@ -14,7 +14,7 @@ use crate::dto::{
 };
 use crate::entity::inventory::{MovementType, StockMovement};
 use crate::error::{Error, Result};
-use crate::ports::{InventoryAction, InventoryAuthorization, WarehouseFactsPort};
+use crate::ports::{InventoryAction, WarehouseFactsPort};
 use crate::repository::prelude::*;
 use crate::repository::{InventoryExt, StockMovementFilter, StockMovementRow};
 
@@ -50,7 +50,7 @@ impl InventoryService {
         self.db
             .client()
             .with_transaction(move |executor| {
-                Box::pin(async move { service.search_stock_movements(&query, &actor, executor).await })
+                Box::pin(async move { service.search_stock_movements(query, &actor, executor).await })
             })
             .await
     }
@@ -58,7 +58,7 @@ impl InventoryService {
     /// 在原快照中读取完整列表、来源单号及仓库名称，最后检查交付。
     async fn search_stock_movements(
         &self,
-        query: &StockMovementListQuery,
+        mut query: StockMovementListQuery,
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<InventoryListPage<StockMovementView>> {
@@ -67,9 +67,26 @@ impl InventoryService {
         if !authorization.actor_is_active() {
             return Err(Error::Forbidden("当前账号无库存流水读取权限".to_string()));
         }
-        let page = self.movement_page(query, &authorization, executor).await?;
+        let search = super::search::sku_filter(
+            self.catalog_facts.as_ref(),
+            query.q.as_deref(),
+            query.sku_id.as_ref(),
+            executor,
+        )
+        .await?;
+        let scope_version = query.scope_version.take();
+        let filter = movement_filter(query, search);
+        let page = self
+            .db
+            .stock_movements()
+            .search_authorized_stock_movements(
+                &filter,
+                authorization.query(InventoryAction::MovementList),
+                executor,
+            )
+            .await?;
         let meta = authorization.meta(InventoryAction::MovementList);
-        ensure_scope_version(query.paging.page, query.scope_version.as_deref(), meta.scope_version())?;
+        ensure_scope_version(filter.page, scope_version.as_deref(), meta.scope_version())?;
         let mut items = page.items.into_iter().map(movement_row_view).collect::<Vec<_>>();
         let numbers =
             load_movement_source_document_nos(&self.db, self.fulfillment_facts.as_ref(), &items, executor)
@@ -79,7 +96,7 @@ impl InventoryService {
             item.source_document_no = numbers.get(&item.source_document_id).cloned();
         }
         let result = InventoryListPage::from_page(
-            PageView { items, total: page.total, page: query.paging.page, page_size: query.paging.page_size },
+            PageView { items, total: page.total, page: filter.page, page_size: filter.page_size },
             meta,
             authorization.no_scope(InventoryAction::MovementList),
             MOVEMENT_SCOPE_SUMMARY,
@@ -87,31 +104,6 @@ impl InventoryService {
         );
         authorization.validate(executor).await?;
         Ok(result)
-    }
-
-    /// 授权过滤先于分页和计数，保留原执行器。
-    async fn movement_page(
-        &self,
-        query: &StockMovementListQuery,
-        authorization: &InventoryAuthorization,
-        executor: &mut dyn Executor,
-    ) -> Result<PageResult<StockMovementRow>> {
-        let search = super::search::sku_filter(
-            self.catalog_facts.as_ref(),
-            query.q.as_deref(),
-            query.sku_id.as_ref(),
-            executor,
-        )
-        .await?;
-        let filter = movement_filter(query.clone(), search);
-        self.db
-            .stock_movements()
-            .search_authorized_stock_movements(
-                &filter,
-                authorization.query(InventoryAction::MovementList),
-                executor,
-            )
-            .await
     }
 }
 

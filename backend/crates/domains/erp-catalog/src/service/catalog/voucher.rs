@@ -262,19 +262,7 @@ impl CatalogService {
         executor: &mut dyn Executor,
     ) -> Result<VoucherCategoryProfileView> {
         let row = self.db.catalog().voucher_profile(revision, executor).await?;
-        Ok(VoucherCategoryProfileView {
-            id: row.id,
-            sku_id: row.sku_id,
-            sku_no: row.sku_no,
-            product_id: row.product_id,
-            product_version: row.product_version,
-            name: row.name,
-            revision_no: row.revision_no,
-            description: row.description,
-            status: row.status,
-            created_at: row.created_at,
-            version: row.version,
-        })
+        Ok(row.into())
     }
 
     /// 构造卡券类目原子创建草稿。

@@ -15,7 +15,6 @@ use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
-use super::clear_default_marks;
 use crate::dto::party::{
     CreatePartyTaxProfileRequest, PARTY_TAX_PROFILE_SORT_FIELDS, PageView, PartyTaxProfileListParams,
     PartyTaxProfileView, SortDir, UpdatePartyTaxProfileRequest, normalize_paging,
@@ -222,7 +221,7 @@ impl PartyTaxProfileService {
             profile.base.id.clone(),
         )?;
         if profile.is_default {
-            clear_default_marks!(self.db, party_tax_profiles, profile.party_id, None, executor);
+            self.db.party_tax_profiles().clear_other_default_marks(&profile.party_id, None, executor).await?;
         }
         self.db.party_tax_profiles().create(&profile, executor).await?;
         self.audit.persist(&audit, executor).await?;
@@ -295,13 +294,10 @@ impl PartyTaxProfileService {
             profile.base.id.clone(),
         )?;
         if profile.is_default {
-            clear_default_marks!(
-                self.db,
-                party_tax_profiles,
-                profile.party_id,
-                Some(&profile.base.id),
-                executor
-            );
+            self.db
+                .party_tax_profiles()
+                .clear_other_default_marks(&profile.party_id, Some(profile.base.id.as_str()), executor)
+                .await?;
         }
         self.db.party_tax_profiles().update(&mut profile, executor).await?;
         self.audit.persist(&audit, executor).await?;

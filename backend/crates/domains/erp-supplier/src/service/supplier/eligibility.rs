@@ -10,8 +10,7 @@ use mongodb::Database;
 use persistence_core::Executor;
 
 use crate::entity::supplier::eligibility::{
-    CapabilityEligibilityViolation, OfferingProductKind,
-    ensure_capability_qualified as ensure_qualified_domain, required_offering_capability,
+    OfferingProductKind, ensure_capability_qualified as ensure_qualified_domain, required_offering_capability,
 };
 use crate::entity::supplier::{
     CapabilityCode, SupplierAccount, SupplierCapability, SupplierCapabilityRevision,
@@ -98,7 +97,11 @@ impl QualificationFactsPort for MongoQualificationFacts<'_> {
         id: &SupplierCapabilityRevisionId,
         executor: &mut dyn Executor,
     ) -> Result<SupplierCapabilityRevision> {
-        load_capability_revision(self.db, id, executor).await
+        self.db
+            .supplier_capability_revisions()
+            .find_by_id(id, executor)
+            .await?
+            .ok_or_else(|| Error::BusinessLogicError("供应商能力版本不存在".to_string()))
     }
     async fn capability(
         &self,
@@ -150,40 +153,12 @@ async fn ensure_qualified_with_port<P: QualificationFactsPort>(
         .capability(supplier_id, revision.capability_code, executor)
         .await?
         .ok_or_else(|| Error::BusinessLogicError("供应商能力不存在".to_string()))?;
-    ensure_qualified_domain(&supplier, &capability, &revision, on_date).map_err(
-        |violation| match violation {
-            CapabilityEligibilityViolation::SupplierDisabled => {
-                Error::BusinessLogicError("供应商已停用，不能用于供给或采购".to_string())
-            },
-            _ => Error::BusinessLogicError("供应商能力已停用、过期或版本已变化".to_string()),
-        },
-    )?;
+    ensure_qualified_domain(&supplier, &capability, &revision, on_date)
+        .map_err(|violation| Error::BusinessLogicError(violation.to_string()))?;
 
     let contracts = port.linked_contracts(supplier_id, &capability.base.id, executor).await?;
     crate::entity::supplier::eligibility::ensure_linked_contracts_qualified(&contracts, on_date)
         .map_err(|error| Error::BusinessLogicError(error.to_string()))
-}
-/// 加载能力修订。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `revision_id` - 修订 ID
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回能力修订实体。
-///
-/// # 错误
-/// 修订不存在时返回 `BusinessLogicError`；仓储读取失败时返回对应错误。
-async fn load_capability_revision(
-    db: &Database,
-    revision_id: &SupplierCapabilityRevisionId,
-    executor: &mut dyn Executor,
-) -> Result<SupplierCapabilityRevision> {
-    db.supplier_capability_revisions()
-        .find_by_id(revision_id, executor)
-        .await?
-        .ok_or_else(|| Error::BusinessLogicError("供应商能力版本不存在".to_string()))
 }
 
 #[cfg(test)]
