@@ -21,14 +21,8 @@ impl SupplierApiGovernanceProcess {
     /// 唯一性（`connection_code`、`(connection_id, capability_code)`）由唯一索引
     /// 透出 `DuplicateKey` → 409，不做「先查后插」。
     ///
-    /// # 参数
-    /// * `req` - 创建请求
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
     /// 返回新建连接的响应视图。
     ///
-    /// # 错误
     /// * `NotFound` - API 供应商不存在
     /// * `ConflictError` - 连接代码重复
     /// * `ValidationError` - 请求体校验失败

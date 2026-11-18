@@ -53,16 +53,7 @@ pub enum QualificationType {
 }
 
 impl QualificationType {
-    /// 返回类型的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为供应商资质类型提供中文展示名；界面展示时使用，不以文案作为稳定标识。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Certificate => "资质证照",
@@ -73,16 +64,7 @@ impl QualificationType {
         }
     }
 
-    /// 返回类型的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得供应商资质类型的稳定标识，供需要按代码而非展示文案识别取值的调用方使用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Certificate => "certificate",
@@ -93,18 +75,9 @@ impl QualificationType {
         }
     }
 
-    /// 由稳定代码反查资质类型。
-    ///
+    /// 按稳定代码识别供应商资质类型，让调用方区分已登记枚举值和无法识别的输入。
     /// 列表查询的逗号分隔代码经此归一化。
-    ///
-    /// # 参数
-    /// * `code` - 稳定代码（如 `contract`）
-    ///
-    /// # 返回
     /// 命中时返回对应资质类型，未知代码返回 `None`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn from_code(code: &str) -> Option<Self> {
         match code {
             "certificate" => Some(Self::Certificate),
@@ -117,20 +90,13 @@ impl QualificationType {
     }
 
     /// 校验日期窗口；只有合同允许缺少起始日期。
-    ///
-    /// 写入路径的权威校验（erp-supplier-011）：修订创建与更新经此拒绝非法窗口；
-    /// 展示判定 [`Self::validity_verified`] 只读已落库数据的资料完备性，
-    /// 两者适用场景不同，判定结果保持不变。
-    ///
-    /// # 参数
-    /// * `start` - 生效开始日期；合同可以为空
-    /// * `end` - 生效结束日期；`None` 表示未登记
-    ///
-    /// # 返回
+    /// 写入路径的权威校验（erp-supplier-011）：修订创建与更新经此拒绝非法窗口；展示判定
+    /// [`Self::validity_verified`] 只读已落库数据的资料完备性，两者适用场景不同，判定结果保持不变。
     /// 窗口合法时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 非合同缺少开始日期，或已给出开始日期且结束日期不晚于开始日期时返回错误。合同缺少开始日期时不比较结束日期。
+    /// 非合同缺少开始日期，或已给出开始日期且结束日期不晚于开始日期时返回错误。合同缺少开始日期时不比较
+    /// 结束日期。
+    /// `start`：合同可以为空。
+    /// `end`：生效结束日期；`None` 表示未登记。
     pub fn ensure_validity_window(
         self,
         start: Option<BusinessDate>,
@@ -146,37 +112,17 @@ impl QualificationType {
     }
 
     /// 判断日期资料是否足以核实有效期。
-    ///
-    /// 合同须有完整起止日期；其他资质保留已登记起始日、截止日为空表示长期有效的规则。
-    /// 展示路径判定（erp-supplier-011）：只用于已通过
-    /// [`Self::ensure_validity_window`] 校验的落库数据，不做起止顺序复查；
-    /// 写入拒绝一律走校验入口，判定结果保持不变。
-    ///
-    /// # 参数
-    /// * `start` - 已登记的开始日期
-    /// * `end` - 已登记的结束日期
-    ///
-    /// # 返回
+    /// 合同须有完整起止日期；其他资质保留已登记起始日、截止日为空表示长期有效的规则。展示路径判定
+    /// （erp-supplier-011）：只用于已通过[`Self::ensure_validity_window`] 校验的落库数据，不做起止顺序复
+    /// 查；写入拒绝一律走校验入口，判定结果保持不变。
     /// 开始日期存在，且类型为合同时同时有结束日期，返回 `true`；否则返回 `false`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn validity_verified(self, start: Option<BusinessDate>, end: Option<BusinessDate>) -> bool {
         start.is_some() && (self != Self::Contract || end.is_some())
     }
 
     /// 判断附件敏感级别是否满足该资质类型的最低要求。
-    ///
     /// 法人身份证必须为高敏感；其他资质允许敏感或高敏感。
-    ///
-    /// # 参数
-    /// * `actual` - 文件资产登记的实际敏感级别
-    ///
-    /// # 返回
     /// 满足最低要求时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn accepts_attachment_sensitivity(self, actual: QualificationAttachmentSensitivity) -> bool {
         if self == Self::LegalPersonId {
             return actual == QualificationAttachmentSensitivity::HighlySensitive;
@@ -206,16 +152,7 @@ pub enum QualificationStatus {
 }
 
 impl QualificationStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为资质状态提供中文展示名；界面展示时使用，不以文案作为稳定标识。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Active => "有效",
@@ -224,16 +161,7 @@ impl QualificationStatus {
         }
     }
 
-    /// 返回状态的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得资质状态的稳定标识，供需要按代码而非展示文案识别取值的调用方使用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Active => "active",
@@ -243,31 +171,17 @@ impl QualificationStatus {
     }
 
     /// 判断资质状态是否为有效。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 状态为 `Active` 时返回 `true`。不读取日期；日期核实见 [`SupplierQualification::is_valid`]。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn is_valid(&self) -> bool {
         matches!(self, Self::Active)
     }
 }
 
 impl DocumentState for QualificationStatus {
-    /// 返回合法后继：有效 → 失效/停用；停用 → 有效；失效 → 有效（续期）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// `Active` 的静态切片依次为 `Expired`、`Disabled`；`Disabled` 与 `Expired` 的切片都只含 `Active`。切片不含当前状态自身。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 提供资质状态允许迁移到的后继状态，供状态更新校验。
+    // 允许的迁移为：有效 → 失效/停用；停用 → 有效；失效 → 有效（续期）。
+    // `Active` 的静态切片依次为 `Expired`、`Disabled`；`Disabled` 与 `Expired` 的切片都只含 `Active`。切
+    // 片不含当前状态自身。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Active => &[Self::Expired, Self::Disabled],
@@ -348,7 +262,7 @@ pub struct SupplierQualification {
 }
 
 impl PartialEq for SupplierQualification {
-    /// 全字段语义相等。
+    // 按全部实体字段比较供应商资质，而非只比较稳定 ID。
     fn eq(&self, other: &Self) -> bool {
         self.base == other.base
             && self.stable.status == other.stable.status
@@ -369,19 +283,9 @@ impl Eq for SupplierQualification {}
 
 impl SupplierQualification {
     /// 创建供应商资质。
-    ///
-    /// 完成证书编号必填校验与发证机构的规范化（去首尾空白、长度上限）；
-    /// 日期窗口经 [`QualificationType::ensure_validity_window`]：非合同必须有开始日期，已知结束日期必须晚于开始日期。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::SupplierQualificationId`）
-    /// * `data` - 创建数据
-    /// * `created_by` - 创建人（账号或系统身份）
-    ///
-    /// # 返回
+    /// 完成证书编号必填校验与发证机构的规范化（去首尾空白、长度上限）；日期窗口经
+    /// [`QualificationType::ensure_validity_window`]：非合同必须有开始日期，已知结束日期必须晚于开始日期。
     /// 返回新建的资质实体。
-    ///
-    /// # 错误
     /// 证书编号为空或超长、发证机构超长、非合同缺少开始日期，或结束日期不晚于开始日期时返回错误。
     pub fn new(
         id: SupplierQualificationId,
@@ -411,18 +315,8 @@ impl SupplierQualification {
     }
 
     /// 更新供应商资质。
-    ///
-    /// `supplier_id`、`qualification_type` 与 `certificate_no` 是稳定身份，
-    /// 不允许在通用更新中修改；状态迁移按固定状态机校验（§13.3）。
-    ///
-    /// # 参数
-    /// * `update` - 更新数据
-    /// * `updated_by` - 本次更新执行人
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// `supplier_id`、`qualification_type` 与 `certificate_no` 是稳定身份，不允许在通用更新中修改；状态
+    /// 迁移按固定状态机校验（§13.3）。
     /// 发证机构超长、非合同缺少开始日期、结束日期不晚于开始日期，或状态迁移非法时返回错误。
     pub fn update(
         &mut self,
@@ -438,17 +332,8 @@ impl SupplierQualification {
     }
 
     /// 标记资质到期失效。
-    ///
-    /// 由 P3 按业务日期对照 `valid_to` 触发。`Active → Expired` 合法；
-    /// 已是 `Expired` 时按状态机幂等成功（§6.2：有效、失效、停用）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 迁移成功返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// 由 P3 按业务日期对照 `valid_to` 触发。`Active → Expired` 合法；已是 `Expired` 时按状态机幂等成功
+    /// （§6.2：有效、失效、停用）。
     /// 当前状态为 `Disabled` 时返回 [`erp_core::Error::InvalidStateTransition`]。
     pub fn mark_expired(&mut self) -> Result<()> {
         ensure_transition(self.stable.status, QualificationStatus::Expired)?;
@@ -457,31 +342,15 @@ impl SupplierQualification {
     }
 
     /// 判断日期资料是否已核实，不读取时钟。
-    ///
     /// 合同须同时有起止日期；其他资质有开始日期即可，截止日为空表示长期有效。未知日期不会按登记日补齐。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 日期已核实时返回 `true`，否则返回 `false`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn validity_verified(&self) -> bool {
         self.qualification_type.validity_verified(self.valid_from, self.valid_to)
     }
 
     /// 按业务日判断资质是否可用。
-    ///
-    /// # 参数
-    /// * `on_date` - 业务日
-    ///
-    /// # 返回
-    /// [`Self::is_valid`] 为真，且 `on_date` 落在开始日与结束日的闭区间内时返回 `true`。结束日为空时只要求不早于开始日。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// [`Self::is_valid`] 为真，且 `on_date` 落在开始日与结束日的闭区间内时返回 `true`。结束日为空时只要
+    /// 求不早于开始日。
     pub fn is_valid_on(&self, on_date: BusinessDate) -> bool {
         self.is_valid()
             && self.valid_from.is_some_and(|start| start <= on_date)
@@ -489,29 +358,13 @@ impl SupplierQualification {
     }
 
     /// 判断资质当前是否有效（§6.2 业务校验用）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 状态为 `Active` 且 [`Self::validity_verified`] 为真时返回 `true`。不判断业务日是否落在窗口内。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn is_valid(&self) -> bool {
         self.stable.status().is_valid() && self.validity_verified()
     }
 
     /// 计算资质到期预警窗口的结束业务日。
-    ///
-    /// # 参数
-    /// * `as_of` - 预警窗口起始业务日
-    /// * `days` - 窗口包含的自然日数
-    ///
-    /// # 返回
     /// 返回 `as_of` 之后指定天数对应的业务日。
-    ///
-    /// # 错误
     /// 日期超出可表示范围时返回业务错误。
     pub fn expiry_cutoff(as_of: BusinessDate, days: u64) -> Result<BusinessDate> {
         let date = as_of
@@ -527,32 +380,14 @@ impl SupplierQualification {
     }
 
     /// 返回由资质类型和规范化证书编号组成的稳定身份键。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回可用于根资料差异计算的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn identity_key(&self) -> String {
         qualification_identity_key(self.qualification_type, &self.certificate_no)
     }
 
     /// 判断当前资质是否与根资料命令中的可变字段一致。
-    ///
-    /// # 参数
-    /// * `issuer` - 发证机构输入
-    /// * `valid_from` - 生效日期输入
-    /// * `valid_to` - 失效日期输入
-    /// * `attachment_id` - 附件输入
-    ///
-    /// # 返回
-    /// 状态为 `Active`（不要求日期已核实），且发证机构、起止日期、附件与输入一致时返回 `true`。空白发证机构视为未登记。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 状态为 `Active`（不要求日期已核实），且发证机构、起止日期、附件与输入一致时返回 `true`。空白发证
+    /// 机构视为未登记。
     pub fn matches_profile_fields(
         &self,
         issuer: Option<&str>,
@@ -568,13 +403,8 @@ impl SupplierQualification {
             && self.attachment_id.as_ref() == attachment_id
     }
 
-    /// 应用发证机构更新。
-    ///
-    /// # 参数
-    /// * `update` - 机构更新意图
-    ///
-    /// # 错误
-    /// 当机构名称超长时返回错误。
+    // 应用发证机构更新。
+    // 当机构名称超长时返回错误。
     fn apply_issuer(&mut self, update: FieldUpdate<String>) -> Result<()> {
         match update {
             FieldUpdate::Unchanged => {},
@@ -586,22 +416,14 @@ impl SupplierQualification {
         Ok(())
     }
 
-    /// 应用附件更新。
-    ///
-    /// # 参数
-    /// * `update` - 附件更新意图
+    // 应用附件更新。
     fn apply_attachment(&mut self, update: FieldUpdate<FileAssetId>) {
         update.apply_to(&mut self.attachment_id);
     }
 
-    /// 整体应用生效区间更新。
-    ///
-    /// # 参数
-    /// * `valid_from` - 可选的新生效日期
-    /// * `valid_to` - 失效日期更新意图
-    ///
-    /// # 错误
-    /// 非合同缺少开始日期，或结束日期不晚于开始日期时返回错误。
+    // 整体应用生效区间更新。
+    // 非合同缺少开始日期，或结束日期不晚于开始日期时返回错误。
+    // `valid_from`：可选的新生效日期。
     fn apply_valid_window(
         &mut self,
         valid_from: FieldUpdate<BusinessDate>,
@@ -621,13 +443,9 @@ impl SupplierQualification {
         Ok(())
     }
 
-    /// 应用状态更新。
-    ///
-    /// # 参数
-    /// * `status` - 可选目标状态
-    ///
-    /// # 错误
-    /// 目标状态不在固定状态机后继中时返回错误。
+    // 应用状态更新。
+    // 目标状态不在固定状态机后继中时返回错误。
+    // `status`：可选目标状态。
     fn apply_status(&mut self, status: Option<QualificationStatus>) -> Result<()> {
         if let Some(to) = status {
             ensure_transition(self.stable.status, to)?;
@@ -637,19 +455,11 @@ impl SupplierQualification {
     }
 
     /// 从当前资质状态构造不可变修订快照。
-    ///
-    /// # 参数
-    /// * `revision_id` - 新修订主键，由 Service 分配
-    /// * `revision_no` - 修订序号，由 Service 查询得出；溢出由调用方提前校验
-    ///
-    /// # 返回
     /// 返回与当前资质字段逐字段一致的修订快照。
-    ///
-    /// # 错误
     /// 证书编号为空或超长、发证机构超长、非合同缺少开始日期，或结束日期不晚于开始日期时返回错误。
-    ///
-    /// # 约束
     /// 纯内存，不触及 MongoDB 或 ID 生成器；快照字段必须与实体当前状态完全一致。
+    /// `revision_id`：新修订主键，由 Service 分配。
+    /// `revision_no`：溢出由调用方提前校验。
     pub fn snapshot_revision(
         &self,
         revision_id: erp_core::ids::SupplierQualificationRevisionId,
@@ -673,16 +483,7 @@ impl SupplierQualification {
 }
 
 /// 构造由资质类型和规范化证书编号组成的稳定身份键。
-///
-/// # 参数
-/// * `qualification_type` - 资质类型
-/// * `certificate_no` - 原始证书编号
-///
-/// # 返回
 /// 返回用于去重和差异计算的稳定字符串。证书编号只去掉首尾空白。
-///
-/// # 错误
-/// 不返回错误。
 pub fn qualification_identity_key(qualification_type: QualificationType, certificate_no: &str) -> String {
     format!("{}::{}", qualification_type.as_str(), certificate_no.trim())
 }
@@ -712,7 +513,7 @@ mod tests {
         }
     }
 
-    /// happy path：编号去空白，类型/附件/状态落库。
+    // 验证编号去空白，类型/附件/状态落库。
     #[test]
     fn new_trims_and_normalizes() {
         let qualification = SupplierQualification::new(
@@ -728,7 +529,7 @@ mod tests {
         assert!(qualification.is_valid());
     }
 
-    /// 失败路径：编号为空/超长、机构超长、区间倒挂。
+    // 验证编号为空/超长、机构超长、区间倒挂。
     #[test]
     fn new_rejects_invalid_inputs() {
         let blank = SupplierQualificationData { certificate_no: "   ".to_string(), ..qualification_data() };
@@ -744,8 +545,7 @@ mod tests {
         assert!(SupplierQualification::new(SupplierQualificationId::new("q"), reversed, "admin-1").is_err());
     }
 
-    /// 状态机：邻接矩阵闭包完整（有效 ⇄ 失效、有效 ⇄ 停用、失效 → 有效
-    /// 续期边），并对不存在的边做逐边定向断言。
+    // 验证邻接矩阵闭包完整（有效 ⇄ 失效、有效 ⇄ 停用、失效 → 有效续期边），并对不存在的边做逐边定向断言。
     #[test]
     fn status_transitions_follow_fixed_matrix() {
         assert_adjacency_closed(&[
@@ -763,7 +563,7 @@ mod tests {
         }
     }
 
-    /// 到期标记：仅 Active → Expired 合法；更新支持续期回到有效。
+    // 验证到期标记：仅 Active → Expired 合法；更新支持续期回到有效。
     #[test]
     fn expiry_and_renewal_transitions() {
         let mut qualification = SupplierQualification::new(
@@ -792,7 +592,7 @@ mod tests {
         assert!(qualification.is_valid(), "续期（失效 → 有效）合法");
     }
 
-    /// 更新：稳定身份不可修改（不在更新面），机构/附件可更新。
+    // 验证稳定身份不可修改（不在更新面），机构/附件可更新。
     #[test]
     fn update_keeps_stable_identity() {
         let mut qualification = SupplierQualification::new(
@@ -820,7 +620,7 @@ mod tests {
         assert_eq!(qualification.supplier_id, SupplierAccountId::new("supplier-1"));
     }
 
-    /// 有效期起止按同一窗口更新，并支持明确清空结束日期。
+    // 验证有效期起止按同一窗口更新，并支持明确清空结束日期。
     #[test]
     fn update_replaces_complete_validity_window() {
         let mut qualification = SupplierQualification::new(
@@ -845,7 +645,7 @@ mod tests {
         assert_eq!(qualification.valid_to, None);
     }
 
-    /// 附件敏感级别由资质类型决定，法人身份证要求高敏感。
+    // 验证附件敏感级别由资质类型决定，法人身份证要求高敏感。
     #[test]
     fn attachment_sensitivity_is_qualification_specific() {
         assert!(
@@ -871,7 +671,7 @@ mod tests {
         );
     }
 
-    /// 稳定身份与可变字段比较统一执行规范化。
+    // 验证稳定身份与可变字段比较统一执行规范化。
     #[test]
     fn profile_identity_and_field_matching_are_stable() {
         let qualification = SupplierQualification::new(
@@ -895,7 +695,7 @@ mod tests {
         ));
     }
 
-    /// 到期预警窗口按自然日计算，日期溢出时失败关闭。
+    // 验证到期预警窗口按自然日计算，日期溢出时失败关闭。
     #[test]
     fn expiry_cutoff_uses_business_date_bounds() {
         let as_of = BusinessDate::from_ymd(2026, 1, 31).unwrap();
@@ -914,7 +714,7 @@ mod tests {
         assert!(SupplierQualification::expiry_cutoff(max, 1).is_err());
     }
 
-    /// 快照字段必须与实体当前状态完全一致，无遗漏且修订号溢出仍由调用方校验。
+    // 验证快照字段必须与实体当前状态完全一致，无遗漏且修订号溢出仍由调用方校验。
     #[test]
     fn snapshot_matches_entity_fields() {
         let qualification = SupplierQualification::new(
@@ -937,7 +737,7 @@ mod tests {
         assert_eq!(rev.revision.revision_no, 7);
     }
 
-    /// 修订号溢出由调用方通过 `RevisionBase::next_revision_no` 失败关闭，禁止在溢出时调用快照。
+    // 验证修订号溢出由调用方通过 `RevisionBase::next_revision_no` 失败关闭，禁止在溢出时调用快照。
     #[test]
     fn revision_overflow_fails_closed_and_snapshot_not_invoked() {
         use erp_core::common::revision::RevisionBase;
@@ -956,7 +756,7 @@ mod tests {
         assert_eq!(rev.revision.revision_no, 1);
     }
 
-    /// 实体 BSON 往返。
+    // 验证该实体写成 BSON 后能还原成原实体。
     #[test]
     fn bson_roundtrip() {
         let qualification = SupplierQualification::new(

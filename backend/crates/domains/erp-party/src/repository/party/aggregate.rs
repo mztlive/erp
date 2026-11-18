@@ -23,10 +23,8 @@ impl<'a> PartyDomainRepository<'a> {
     /// * `party_id` - 主体 ID
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回
     /// 返回匹配主体；不存在时返回 `None`。
     ///
-    /// # 错误
     /// 当 MongoDB 查询或反序列化失败时返回错误。
     pub async fn party(&self, party_id: &PartyId, executor: &mut dyn Executor) -> Result<Option<Party>> {
         PartyRepository::new(self.db, PARTIES).find_party(party_id, executor).await
@@ -41,10 +39,8 @@ impl<'a> PartyDomainRepository<'a> {
     /// * `record_id` - 联系人 ID
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回
     /// 返回匹配联系人；不存在时返回 `None`。
     ///
-    /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
     pub async fn contact(
         &self,
@@ -62,10 +58,8 @@ impl<'a> PartyDomainRepository<'a> {
     /// * `record_id` - 地址 ID
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回
     /// 返回匹配地址；不存在时返回 `None`。
     ///
-    /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
     pub async fn address(
         &self,
@@ -83,10 +77,8 @@ impl<'a> PartyDomainRepository<'a> {
     /// * `record_id` - 银行账户 ID
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回
     /// 返回匹配银行账户；不存在时返回 `None`。
     ///
-    /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
     pub async fn bank_account(
         &self,
@@ -105,10 +97,8 @@ impl<'a> PartyDomainRepository<'a> {
     /// * `party_ids` - 稳定 Party ID 集合；为空时直接返回两个空集合
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回
     /// 返回主体集合与其命中的当前修订集合。
     ///
-    /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
     pub async fn list_with_current_revisions(
         &self,
@@ -135,7 +125,6 @@ impl<'a> PartyDomainRepository<'a> {
     /// 主体不存在时返回 `None`；存在时返回主体与当前修订候选，修订指针
     /// 缺失或目标不存在时第二项为 `None`。
     ///
-    /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
     pub async fn find_with_current_revision(
         &self,
@@ -166,10 +155,8 @@ impl<'a> PartyDomainRepository<'a> {
     /// * `as_of` - 业务日期
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回
     /// 返回联系人、地址、税务资料与银行账户四类当前事实。
     ///
-    /// # 错误
     /// 当任一 MongoDB 查询或游标读取失败时返回错误。
     pub async fn load_current_facts(
         &self,
@@ -193,10 +180,8 @@ impl<'a> PartyDomainRepository<'a> {
     /// * `keyword` - 名称关键词，按字面量忽略大小写匹配
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回
     /// 返回去重并按稳定 ID 排序的当前主体 ID。
     ///
-    /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
     pub async fn matching_current_party_ids_by_name(
         &self,
@@ -213,12 +198,9 @@ impl<'a> PartyDomainRepository<'a> {
     ///
     /// # 参数
     /// * `name` - 法定名称。
-    /// * `executor` - 数据访问执行器。
     ///
-    /// # 返回
     /// 返回命中的主体 ID；空白名称或没有命中修订时返回空列表。
     ///
-    /// # 错误
     /// 修订或主体查询失败时返回仓储错误。
     pub async fn exact_current_party_ids_by_name(
         &self,
@@ -256,13 +238,10 @@ impl<'a> PartyDomainRepository<'a> {
     /// * `party_ids` - 稳定主体 ID 集合；允许重复，空集合直接返回空映射
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回
     /// 返回主体 ID 字符串到当前法定名称的映射；关联不完整的主体无键。
     ///
-    /// # 错误
     /// 当主体或修订批量查询失败时返回错误。
     ///
-    /// # 约束
     /// 只经主体域属主查询（`parties`/`party_revisions`）组装，不直查外域集合。
     pub async fn current_legal_names_by_party_ids(
         &self,
@@ -299,7 +278,7 @@ impl<'a> PartyDomainRepository<'a> {
             .collect())
     }
 
-    /// 追加主体修订并切换当前生效版本（跨集合多步骤写入）。
+    /// 追加往来主体的法定资料修订，并把主体指针切到新修订；两笔写入需要共用调用方事务。
     ///
     /// 依次写入 `party_revisions` 并 CAS 更新 `parties.current_revision_id`
     /// （基类乐观锁按 `id + version` 判定），保证「修订 + 生效指针」原子可见
@@ -347,12 +326,9 @@ impl PartyDomainRepository<'_> {
     ///
     /// # 参数
     /// * `keyword` - 名称或统一社会信用代码关键词。
-    /// * `executor` - 数据访问执行器。
     ///
-    /// # 返回
     /// 返回去重并排序后的主体 ID。
     ///
-    /// # 错误
     /// 名称查询或信用代码 `distinct` 失败时返回仓储错误。
     pub async fn matching_current_party_ids(
         &self,
@@ -377,9 +353,9 @@ impl PartyDomainRepository<'_> {
     }
 }
 
-/// 构造精确名称匹配的正则并兼容空白及全半角括号（erp-party-005）。
-///
-/// 字面量转义、全半角括号展开与 `\s*` 包裹只在此一处实现；空白名称返回 `None`。
+// 构造精确名称匹配的正则并兼容空白及全半角括号（erp-party-005）。
+//
+// 字面量转义、全半角括号展开与 `\s*` 包裹只在此一处实现；空白名称返回 `None`。
 fn exact_name_pattern(name: &str) -> Option<String> {
     let parts = name
         .chars()

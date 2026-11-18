@@ -30,44 +30,48 @@ pub struct SalesReadContext {
     authorization: Arc<AuthorizationService>,
 }
 impl SalesReadContext {
-    /// 记录同次解析的根交付凭证。
-    /// # 参数
-    /// access 为原始根凭证，authorization 为共享服务。
-    /// # 返回
-    /// 展示元信息及最终交付检查载体。
-    /// # 错误
-    /// 无；交付时复验原根凭证。
+    // 生成销售对象范围视图时，记录同次解析的根交付凭证。
+    //
+    // 调用参数：
+    // access 为原始根凭证，authorization 为共享服务。
+    //
+    // 展示元信息及最终交付检查载体。
+    //
+    // 失败边界：
+    // 无；交付时复验原根凭证。
     pub(crate) fn from_access(access: Arc<CompiledAccess>, authorization: Arc<AuthorizationService>) -> Self {
         Self { scope_version: access.version(), as_of: access.as_of(), access, authorization }
     }
-    /// 组合业务版本，不改变 identity 凭证。
+    /// 生成销售对象范围视图时，组合业务版本，不改变 identity 凭证。
+    ///
     /// # 参数
     /// map 为业务版本组合器。
-    /// # 返回
-    /// 无。
-    /// # 错误
-    /// 无。
     pub fn map_read_version(&mut self, map: impl FnOnce(&str) -> String) {
         self.scope_version = map(&self.scope_version);
     }
-    /// 在原读取执行器复验身份和全部映射依赖。
+    /// 销售对象读取和展示补齐完成后，沿签发凭证的原执行器复验身份和全部映射依赖。
+    ///
     /// # 参数
     /// executor 为本次读取执行器。
+    ///
     /// # 返回
     /// 仍有效时成功。
+    ///
     /// # 错误
     /// 返回 identity 的原始分类。
     pub async fn validate(&self, executor: &mut dyn Executor) -> Result<()> {
         self.authorization.validate(&self.access, executor).await?;
         Ok(())
     }
-    /// 核验边界及期限，不结束本次读取阶段。
-    /// # 参数
-    /// executor 为原执行器。
-    /// # 返回
-    /// 本阶段仍有效时成功。
-    /// # 错误
-    /// 跨阶段或到期拒绝。
+    // 核对销售对象范围边界时，核验边界及期限，不结束本次读取阶段。
+    //
+    // 调用参数：
+    // executor 为原执行器。
+    //
+    // 本阶段仍有效时成功。
+    //
+    // 失败边界：
+    // 跨阶段或到期拒绝。
     pub(crate) fn ensure_current(&self, executor: &mut dyn Executor) -> Result<()> {
         self.access.ensure_current(executor)?;
         Ok(())
@@ -81,22 +85,25 @@ pub struct SalesAccess {
     rbac: Arc<AuthorizationService>,
 }
 impl SalesAccess {
-    /// 绑定销售及历史参与事实所在数据库和共享身份设施。
+    /// 装配销售对象范围时，绑定销售及历史参与事实所在数据库和共享身份设施。
+    ///
     /// # 参数
     /// db 为数据库，rbac 为身份设施。
+    ///
     /// # 返回
     /// 无缓存访问器。
-    /// # 错误
-    /// 无。
     pub fn new(db: Database, rbac: Arc<AuthorizationService>) -> Self {
         Self { db, rbac }
     }
 
-    /// 读取并验证完整销售对象。
+    /// 处理销售对象范围时，读取并验证完整销售对象。
+    ///
     /// # 参数
     /// actor 为操作人，id 为销售单身份。
+    ///
     /// # 返回
     /// 销售单及本次身份和业务版本。
+    ///
     /// # 错误
     /// 身份、权限、对象或数据库错误原样返回。
     pub async fn detail(&self, actor: &AuditActor, id: &str) -> Result<(SalesOrder, String)> {
@@ -124,11 +131,14 @@ impl SalesAccess {
             })
             .await
     }
-    /// 生成完整销售查询凭证。
+    /// 确定销售对象范围的适用条件时，生成完整销售查询凭证。
+    ///
     /// # 参数
     /// actor 为当前操作人，permission 为公共权限常量，executor 为原执行器。
+    ///
     /// # 返回
     /// 展示上下文及仓储执行载体。
+    ///
     /// # 错误
     /// 未登记组合或授权失效返回错误。
     pub async fn resolve(
@@ -142,11 +152,14 @@ impl SalesAccess {
         let scope = SalesReadScope::from_compiled(compiled.clone(), self.rbac.clone());
         Ok((SalesReadContext::from_access(compiled, self.rbac.clone()), scope))
     }
-    /// 在当前写事务验证完整销售对象；状态校验由业务执行。
+    /// 确定销售对象范围的适用条件时，在当前写事务验证完整销售对象；状态校验由业务执行。
+    ///
     /// # 参数
     /// actor、permission、id 为实际操作目标；executor 为原事务。
+    ///
     /// # 返回
     /// 已授权的完整销售单。
+    ///
     /// # 错误
     /// 身份、对象或读取错误返回原始分类。
     pub async fn require_object(
@@ -164,11 +177,14 @@ impl SalesAccess {
             .await?
             .ok_or_else(|| Error::NotFound("销售单不存在或无权操作".into()))
     }
-    /// 检查本次命令已经确定的完整销售责任事实。
+    /// 确定销售对象范围的适用条件时，检查本次命令已经确定的完整销售责任事实。
+    ///
     /// # 参数
     /// actor、permission 为当前操作，order 为服务端组装的完整候选，executor 为原事务。
+    ///
     /// # 返回
     /// 候选事实满足 identity 政策时成功。
+    ///
     /// # 错误
     /// 授权、事实或存储错误原样返回。
     pub async fn require_loaded(
@@ -200,12 +216,11 @@ impl SalesAccess {
         self.rbac.require(actor, permission, target, executor).await?;
         Ok(())
     }
-    /// 展开请求中的内部组织及其可选有效下级。
+    /// 准备销售对象范围候选时，展开请求中的内部组织及其可选有效下级。
     ///
     /// # 参数
     /// * `org_unit_ids` - 请求中的组织 ID
     /// * `include_descendants` - 是否包含有效下级
-    /// * `executor` - 调用方执行器
     ///
     /// # 返回
     /// 返回启用节点的组织 ID 集合。
@@ -230,10 +245,9 @@ impl SalesAccess {
         Ok(expanded)
     }
 
-    /// 独立事务中重验销售单据附件资格。
+    /// 确定销售对象范围的适用条件时，独立事务中重验销售单据附件资格。
     ///
     /// # 参数
-    /// * `actor` - 已认证操作人
     /// * `permission` - 固定销售权限常量
     /// * `document_id` - 业务单据主键
     ///
@@ -266,13 +280,11 @@ impl SalesAccess {
             .await
     }
 
-    /// 附件与独立打印消费者按单据类型重验销售范围。
+    /// 确定销售对象范围的适用条件时，附件与独立打印消费者按单据类型重验销售范围。
     ///
     /// # 参数
-    /// * `actor` - 已认证操作人
     /// * `permission` - 固定销售读取或写权限常量
     /// * `document_id` - 业务单据主键
-    /// * `executor` - 调用方执行器
     ///
     /// # 返回
     /// 销售单或销售变更单在范围内时成功；其他单据类型原样放行给各自消费者。
@@ -313,7 +325,7 @@ impl SalesAccess {
 
 pub use super::repository::authorization::{SalesFacts, SalesMapping};
 
-/// 访问器只解释销售根，其他资源的许可不能用来读取同名销售身份。
+// 核对销售对象范围边界时，访问器只解释销售根，其他资源的许可不能用来读取同名销售身份。
 fn ensure_sales_permission(permission: &AccessPermission) -> Result<()> {
     if permission.resource() != sales_order::DETAIL.resource() {
         return Err(Error::ValidationError("销售访问器收到其他资源权限".into()));

@@ -22,11 +22,11 @@ pub struct ExecutionQueryRequest {
 
 impl SupplierApiOrderProcess {
     /// 有权限的经办人请求调查原外部动作，绝不重新创建或确认。
-    /// # 参数
+    ///
     /// `id` 和预期版本指向原执行；调用人及对象授权在事务内重新校验。
-    /// # 返回
+    ///
     /// 唤醒原调查和订单跟踪后的当前资料。
-    /// # 错误
+    ///
     /// 越权、版本变化、没有原请求证据或数据库提交未知时拒绝。
     pub async fn query_execution_result(
         &self,

@@ -22,44 +22,48 @@ pub(super) const PERMISSIONS: &[Permission] = &[
 
 pub(super) struct ProfileDisplay(pub PermissionSet);
 impl ProfileDisplay {
-    /// 检查固定字段或按钮的功能资格。
-    /// # 参数
-    /// permission 为本批已请求的权限。
-    /// # 返回
-    /// 当前资格覆盖该权限时为 true。
-    /// # 错误
-    /// 不执行 I/O。
+    // 生成客户资料的可选字段或操作按钮时，只使用这次读取阶段已冻结的对应功能资格。
+    //
+    // 调用参数：
+    // permission 为本批已请求的权限。
+    //
+    // 当前资格覆盖该权限时为 true。
+    //
+    // 不执行 I/O。
     pub(super) fn visible(&self, permission: &Permission) -> bool {
         self.0.covers_one(permission)
     }
-    /// 按当前字段资格保留或移除从属事实集合。
-    /// # 参数
-    /// permission 为字段详情权限，rows 为本次快照的事实。
-    /// # 返回
-    /// 有资格时保留原序列，否则返回空集合。
-    /// # 错误
-    /// 不执行 I/O。
+    // 应用客户资料字段展示筛选时，按当前字段资格保留或移除从属事实集合。
+    //
+    // 调用参数：
+    // permission 为字段详情权限，rows 为本次快照的事实。
+    //
+    // 有资格时保留原序列，否则返回空集合。
+    //
+    // 不执行 I/O。
     pub(super) fn filter<T>(&self, permission: &Permission, rows: Vec<T>) -> Vec<T> {
         if self.visible(permission) { rows } else { Vec::new() }
     }
 
-    /// 揭示入口同时要求字段详情和揭示资格。
-    /// # 参数
-    /// kind 为实际敏感事实类型。
-    /// # 返回
-    /// 两项资格分别成立时为 true。
-    /// # 错误
-    /// 不执行 I/O。
+    // 请求揭示客户资料敏感字段时，必须同时具备该字段的详情资格和独立揭示资格。
+    //
+    // 调用参数：
+    // kind 为实际敏感事实类型。
+    //
+    // 两项资格分别成立时为 true。
+    //
+    // 不执行 I/O。
     pub(super) fn reveal(&self, kind: SensitiveFieldKind) -> bool {
         field_permissions(kind).iter().all(|permission| self.visible(permission))
     }
-    /// 按字段资格及客户状态生成既有按钮列表。
-    /// # 参数
-    /// active 为客户当前启用状态。
-    /// # 返回
-    /// 保持既有顺序的按钮编码，不签发对象授权。
-    /// # 错误
-    /// 不执行 I/O。
+    // 组装客户资料字段展示时，按字段资格及客户状态生成既有按钮列表。
+    //
+    // 调用参数：
+    // active 为客户当前启用状态。
+    //
+    // 保持既有顺序的按钮编码，不签发对象授权。
+    //
+    // 不执行 I/O。
     pub(super) fn actions(&self, active: bool) -> Vec<String> {
         let candidates = [
             ("EDIT_CUSTOMER", customer::UPDATE, false),

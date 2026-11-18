@@ -24,13 +24,7 @@ pub enum RefreshTopic {
     Authorization,
 }
 impl RefreshTopic {
-    /// 返回首次连接及恢复时必须同步的全部主题。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 稳定主题集合。
-    /// # 错误
-    /// 无。
+    /// 提供首次连接、重连或信号丢失后需要重新查询的全部刷新主题。
     pub fn all() -> BTreeSet<Self> {
         use RefreshTopic::*;
         [
@@ -59,13 +53,7 @@ pub enum RefreshSignal {
     Unavailable,
 }
 impl RefreshSignal {
-    /// 将内部信号折叠为本人的刷新主题。
-    /// # 参数
-    /// account 为认证账号；topics 为本次待刷新集合。
-    /// # 返回
-    /// 通道可用返回 true；故障返回 false，不能伪装为零。
-    /// # 错误
-    /// 无。
+    /// 将共享信号和属于当前认证账号的个人信号并入待刷新集合，重同步则加入全部主题。订阅不可用时返回 `false`，调用方不能将故障视为无更新。
     pub fn collect(&self, account: &str, topics: &mut BTreeSet<RefreshTopic>) -> bool {
         match self {
             Self::Changed { topic, recipient } if recipient.as_deref().is_none_or(|id| id == account) => {
@@ -92,46 +80,22 @@ impl Default for RefreshHub {
     }
 }
 impl RefreshHub {
-    /// 先订阅再读取快照，避免两者之间丢失变化。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 本页面独立的有界接收器。
-    /// # 错误
-    /// 接收落后时消费者必须完整同步。
+    /// 为当前页面取得有界广播接收器；应先订阅再读快照，避免漏掉期间的变化。接收落后时必须完整同步。
     pub fn subscribe(&self) -> broadcast::Receiver<RefreshSignal> {
         self.sender.subscribe()
     }
 
-    /// 读取变更流是否已经建立。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// false 表示未建立或中断。
-    /// # 错误
-    /// 无。
+    /// 检查数据库变更订阅是否就绪；尚未建立或已中断均返回 `false`，避免将不可用当作正常空流。
     pub fn is_available(&self) -> bool {
         self.available.load(Ordering::Acquire)
     }
 
-    /// 发布内部刷新信号；没有在线页面时无需保留。
-    /// # 参数
-    /// signal 为不包含业务正文的信号。
-    /// # 返回
-    /// 无。离线页面重连必须完整同步。
-    /// # 错误
-    /// 无接收器不算业务投递失败。
+    /// 向本进程在线连接广播无正文信号，不持久化，也不把无接收器视为业务投递失败；离线页面通过重连完整同步。
     pub fn publish(&self, signal: RefreshSignal) {
         let _ = self.sender.send(signal);
     }
 
-    /// 设置订阅健康状态；恢复总是要求完整同步。
-    /// # 参数
-    /// ready 表示已建立数据库订阅。
-    /// # 返回
-    /// 无。
-    /// # 错误
-    /// 无。
+    /// 更新数据库订阅的可用状态，并通知在线连接完整同步或结束不可用连接，避免静默丢失变更。
     pub fn set_available(&self, ready: bool) {
         self.available.store(ready, Ordering::Release);
         self.publish(if ready { RefreshSignal::Resync } else { RefreshSignal::Unavailable });

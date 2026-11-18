@@ -13,13 +13,11 @@ pub(super) enum TaskPurpose {
     Fulfillment,
 }
 
-/// 身份资格和当前任务分配共用调用方已经读取的可信事实。
-/// # 参数
-/// identity 为共享授权服务；actor、task、executor 为当前办理上下文。
-/// # 返回
-/// 同角色完整执行资格与任务分配均成立时成功。
-/// # 错误
-/// 账号、角色或任务分配不足时拒绝；设施错误透传。
+// 身份资格和当前任务分配共用调用方已经读取的可信事实。
+//
+// identity 为共享授权服务；actor、task、executor 为当前办理上下文。同角色完整执行资格与任务分配均成立时成功。
+//
+// 账号、角色或任务分配不足时拒绝；设施错误透传。
 pub(super) async fn require_assignee(
     identity: &AuthorizationService,
     actor: &AuditActor,

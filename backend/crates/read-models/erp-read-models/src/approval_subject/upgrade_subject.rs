@@ -79,17 +79,16 @@ enum UpgradeSubjectKind {
     PaymentReversal,
 }
 
-/// load 与 Fresh 门禁共用的唯一单据分类表。
-///
-/// # 参数
-/// * `document_type` - 路由给出的精确单据类型
-///
-/// # 返回
-/// 返回后续 load 与 Fresh 门禁共用的内部路由种类。
-///
-/// # 错误
-/// `NO_APPROVAL` 类型或开票申请以外的政策门禁失败时返回错误；调用方不得
-/// 再各自重复 `NO_APPROVAL` 穷尽分派。
+// 处理审批绑定升级时，load 与 Fresh 门禁共用的唯一单据分类表。
+//
+// 调用参数：
+// * `document_type` - 路由给出的精确单据类型
+//
+// 返回后续 load 与 Fresh 门禁共用的内部路由种类。
+//
+// 失败边界：
+// `NO_APPROVAL` 类型或开票申请以外的政策门禁失败时返回错误；调用方不得
+// 再各自重复 `NO_APPROVAL` 穷尽分派。
 fn classify_upgrade_subject(document_type: DocumentType) -> Result<UpgradeSubjectKind> {
     require_process_required(document_type)?;
     match document_type {
@@ -120,16 +119,15 @@ fn classify_upgrade_subject(document_type: DocumentType) -> Result<UpgradeSubjec
     }
 }
 
-/// 开票申请升级绑定的统一拒绝。
-///
-/// # 参数
-/// * `document_type` - 仅用于错误文案的单据类型
-///
-/// # 返回
-/// 恒返回冲突错误。
-///
-/// # 错误
-/// 恒返回冲突：开票申请创建即提交，不支持升级已提交申请的审批绑定。
+// 核对审批绑定升级边界时，开票申请升级绑定的统一拒绝。
+//
+// 调用参数：
+// * `document_type` - 仅用于错误文案的单据类型
+//
+// 恒返回冲突错误。
+//
+// 失败边界：
+// 恒返回冲突：开票申请创建即提交，不支持升级已提交申请的审批绑定。
 fn reject_invoice_request_upgrade(document_type: DocumentType) -> Error {
     Error::ConflictError(format!(
         "{}提交时已确定审批流程，提交后不能更换，请查看原审批记录",
@@ -138,10 +136,9 @@ fn reject_invoice_request_upgrade(document_type: DocumentType) -> Error {
 }
 
 impl ApprovalUpgradeSubjectFacts {
-    /// 读取并校验一张必须审批单据的强业务事实。
+    /// 为审批绑定升级取数时，读取并校验一张必须审批单据的强业务事实。
     ///
     /// # 参数
-    /// * `db` - MongoDB 数据库
     /// * `document_type` - 路由给出的精确单据类型
     /// * `document_id` - 路由给出的精确强业务对象主键
     /// * `executor` - 调用方持有的读或事务执行器
@@ -178,21 +175,15 @@ impl ApprovalUpgradeSubjectFacts {
         }
     }
 
-    /// 构造定义图资格重验所需的强业务上下文。
-    ///
-    /// # 参数
-    /// 无。
+    /// 处理审批绑定升级时，生成定义图资格重验所需的强业务上下文。
     ///
     /// # 返回
     /// 返回责任组织与不可变创建人；不读取或注入当前操作人。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn binding_context(&self) -> BindingRevalidationContext {
         BindingRevalidationContext::new(self.responsible_org_id.clone(), self.creator_id.clone())
     }
 
-    /// 校验客户端期望版本仍等于强业务对象版本。
+    /// 核对审批绑定升级边界时，确认客户端期望版本仍等于强业务对象版本。
     ///
     /// # 参数
     /// * `expected` - 客户端持有的强业务对象版本。
@@ -209,10 +200,9 @@ impl ApprovalUpgradeSubjectFacts {
         Ok(())
     }
 
-    /// 仅为无收据 Fresh 分支证明对象仍是从未提交的初始草稿。
+    /// 只为无收据 Fresh 分支证明对象仍是从未提交的初始草稿。
     ///
     /// # 参数
-    /// * `db` - MongoDB 数据库。
     /// * `executor` - 与事实加载、收据查询相同的外层事务执行器。
     ///
     /// # 返回
@@ -226,10 +216,9 @@ impl ApprovalUpgradeSubjectFacts {
     }
 }
 
-/// 读取并校验一张必须审批单据的强业务事实。
+/// 为审批绑定升级取数时，读取并校验一张必须审批单据的强业务事实。
 ///
 /// # 参数
-/// * `db` - MongoDB 数据库。
 /// * `document_type` - 路由给出的精确单据类型。
 /// * `document_id` - 路由给出的精确强业务对象主键。
 /// * `executor` - 调用方持有的读或事务执行器。
@@ -248,10 +237,9 @@ pub async fn load_approval_upgrade_subject_facts(
     ApprovalUpgradeSubjectFacts::load(db, document_type, document_id, executor).await
 }
 
-/// 仅为无收据 Fresh 分支证明对象仍是从未提交的初始草稿。
+/// 只为无收据 Fresh 分支证明对象仍是从未提交的初始草稿。
 ///
 /// # 参数
-/// * `db` - MongoDB 数据库
 /// * `facts` - 同一外层事务先前加载的强业务授权事实
 /// * `executor` - 与事实加载、收据查询相同的外层事务执行器
 ///
@@ -292,22 +280,16 @@ pub struct ApprovalUpgradeReadModel {
 }
 
 impl ApprovalUpgradeReadModel {
-    /// 把适配器绑定到当前命令使用的数据库。
-    ///
-    /// # 参数
-    /// * `db` - MongoDB 数据库
+    /// 装配审批绑定升级时，把适配器绑定到当前命令使用的数据库。
     ///
     /// # 返回
     /// 返回可注入 workflow `UpgradeSubjectPort` 的适配器。
-    ///
-    /// # 错误
-    /// 无。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 }
 
-/// 同名错误原样交给工作流；没有对应变体的流程错误收成内部错误。
+// 生成审批绑定升级视图时，同名错误原样交给工作流；没有对应变体的流程错误收成内部错误。
 fn map_upgrade_error(error: Error) -> erp_workflow::Error {
     match error {
         Error::ValidationError(message) => erp_workflow::Error::ValidationError(message),

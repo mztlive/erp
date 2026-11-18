@@ -57,15 +57,14 @@ struct ReturnReversal {
 }
 
 impl SupplierDepositService {
-    /// 将原真实扣款在逐采购批准范围内核销，重放不重复形成付款或核销。
-    /// # 参数
-    /// * `usage_id` / `operation_key` - 原使用及本次独立核销身份。
-    /// * `pending` - 当前已批准且可归属原采购的应付分配。
-    /// * `actor` / `executor` - 核验人及账户、申请和核销共同事务。
-    /// # 返回
+    /// 已核实实际扣款后按逐采购批准范围登记付款和应付核销；同命令重放不重复形成这些财务事实。
     /// 返回保存本次正式核销后的使用；充值不再次计作采购付款。
-    /// # 错误
     /// 来源、批准版本、归属、余额或幂等载荷不合法及仓储失败时拒绝。
+    ///
+    /// 输入约定：
+    /// - `usage_id` / `operation_key`：原使用及本次独立核销身份。
+    /// - `pending`：当前已批准且可归属原采购的应付分配。
+    /// - `actor` / `executor`：核验人及账户、申请和核销共同事务。
     pub async fn settle_usage(
         &self,
         usage_id: &str,
@@ -118,15 +117,14 @@ impl SupplierDepositService {
         Ok(usage)
     }
 
-    /// 保存原扣款的真实到账返款，并只冲回可证明的原核销。
-    /// # 参数
-    /// * `usage_id` / `operation_key` - 原使用及独立返款操作身份。
-    /// * `amount` / `evidence` - 已核实到账金额和稳定外部证据。
-    /// * `actor` / `executor` - 核验人和当前共同事务。
-    /// # 返回
+    /// 真实返款到账后记录原扣款对应的来账，并只冲减能关联到原核销的部分。
     /// 返回真实返款及正式冲回分别保存的使用；未核销部分保留批准额度锁。
-    /// # 错误
     /// 交易无原单归属、超返、异载荷、资金不守恒或数据库失败时拒绝。
+    ///
+    /// 输入约定：
+    /// - `usage_id` / `operation_key`：原使用及独立返款操作身份。
+    /// - `amount` / `evidence`：已核实到账金额和稳定外部证据。
+    /// - `actor` / `executor`：核验人和当前共同事务。
     pub async fn return_usage(
         &self,
         usage_id: &str,

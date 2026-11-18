@@ -13,18 +13,8 @@ use crate::repository::SupplierOfferingExt;
 use crate::repository::supplier_offering::history::OfferingHistoryRepositoryExt;
 
 impl SupplierOfferingService {
-    /// 读取单条供给授权范围内的一页历史版本。
-    ///
-    /// # 参数
-    /// * `id` - 供给稳定 ID
-    /// * `params` - 可选的版本游标
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 返回至多 20 条不可变条款和下一页游标。
-    ///
-    /// # 错误
-    /// 无效游标拒绝；越权对象与不存在对象统一返回 NotFound。
+    /// 按供给稳定 ID 查询不可变商业条款历史：校验版本游标，在同一事务先按供给列表动作授权，再倒序交付至
+    /// 多 20 个版本和续页游标。无效游标或授权错误不返回历史，缺失对象返回 `NotFound`。
     pub async fn history(
         &self,
         id: &str,

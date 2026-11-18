@@ -32,20 +32,8 @@ pub enum Error {
 }
 
 impl From<mongodb::error::Error> for Error {
-    /// 将 MongoDB 错误转换为稳定的仓储错误分类。
-    ///
-    /// 服务端错误码 `11000` 归类为唯一键冲突；带
-    /// `TransientTransactionError` 标签的错误归类为可重试并发事务冲突；
-    /// 其余驱动错误归类为 `DatabaseError`。
-    ///
-    /// # 参数
-    /// * `error` - MongoDB 驱动错误。
-    ///
-    /// # 返回
-    /// 分类后的仓储 `Error`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 仓储接收驱动错误时优先识别 `11000` 唯一键冲突，再按 `TransientTransactionError` 区分瞬态事务冲突；
+    // 其余保留为数据库错误。
     fn from(error: mongodb::error::Error) -> Self {
         if duplicate_key_message(&error).is_some() {
             return Self::DuplicateKey(error);
@@ -58,19 +46,8 @@ impl From<mongodb::error::Error> for Error {
 }
 
 impl Error {
-    /// 从唯一键冲突错误中提取 MongoDB 索引名（若可识别）。
-    ///
-    /// 解析服务端 `E11000` 错误信息中的 `index: <name>` 片段，供上层将
-    /// 已知唯一索引映射为面向用户的业务冲突提示；无法解析时返回 `None`。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 唯一索引名；非 `DuplicateKey` 或无法解析时返回 `None`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 从唯一键冲突的 `E11000` 消息提取索引名，供领域将已知索引映射为业务提示；
+    /// 非唯一键冲突或消息无法识别时返回 `None`。
     pub fn duplicate_index_name(&self) -> Option<&str> {
         match self {
             Self::DuplicateKey(error) => duplicate_key_message(error).and_then(parse_index_name_from_message),
@@ -79,10 +56,7 @@ impl Error {
     }
 }
 
-/// 以一次匹配提取唯一键冲突的错误文本；命中返回 `Some`，否则返回 `None`。
-///
-/// 错误分类（`From`）与索引名解析（`duplicate_index_name`）共用同一视图，
-/// 判重码 `11000` 匹配逻辑只维护一处。
+// 命令、单笔及批量写入共用 `11000` 判定；同时取出同一错误文本，保证错误分类与索引名提取按相同条件识别。
 fn duplicate_key_message(error: &mongodb::error::Error) -> Option<&str> {
     match error.kind.as_ref() {
         ErrorKind::Command(error) if error.code == DUPLICATE_KEY_CODE => Some(error.message.as_str()),
@@ -104,13 +78,7 @@ fn duplicate_key_message(error: &mongodb::error::Error) -> Option<&str> {
     }
 }
 
-/// 从 `E11000` 错误文本中解析 `index: <name>`。
-///
-/// # 参数
-/// * `message` - MongoDB 错误消息
-///
-/// # 返回
-/// 索引名切片；未匹配时返回 `None`。
+// 取 `index: ` 后的首个词并剪去外围标点；识别失败留给调用方走通用冲突提示。
 fn parse_index_name_from_message(message: &str) -> Option<&str> {
     let after_index = message.split("index: ").nth(1)?;
     let name = after_index.split_whitespace().next()?.trim_matches([',', '.', ';', ':']);

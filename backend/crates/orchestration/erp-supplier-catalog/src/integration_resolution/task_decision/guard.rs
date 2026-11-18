@@ -14,7 +14,7 @@ use serde::Serialize;
 use crate::wiring::CatalogWorkItems;
 use crate::{Error, Result};
 
-/// 回放使用当前任务和原快照；不能将任务办理资格降为普通读取资格。
+// 回放使用当前任务和原快照；不能将任务办理资格降为普通读取资格。
 pub(super) async fn authorize_replay_task(
     db: &Database,
     work_items: &dyn CatalogWorkItems,
@@ -26,7 +26,7 @@ pub(super) async fn authorize_replay_task(
     authorize_replay_with_source(&MongoAssociation(db), work_items, item, action, actor, executor).await
 }
 
-/// 先验证完整命令资格，再验证当前真实来源；回放不套用旧业务状态或版本。
+// 先验证完整命令资格，再验证当前真实来源；回放不套用旧业务状态或版本。
 async fn authorize_replay_with_source(
     source: &impl AssociationSource,
     work_items: &dyn CatalogWorkItems,
@@ -43,21 +43,18 @@ async fn authorize_replay_with_source(
     Ok(())
 }
 
-/// 序列化 W29 命令并构造领域幂等身份。
-///
-/// # 参数
-/// * `actor_id` - 命令操作人
-/// * `action` - 稳定动作名
-/// * `resource_type` - 审计资源类型
-/// * `resource_id` - 审计资源 ID
-/// * `idempotency_key` - 客户端幂等键
-/// * `command` - 完整强命令载荷
-///
-/// # 返回
-/// 返回不暴露原始幂等键的领域命令身份。
-///
-/// # 错误
-/// 命令无法序列化时返回内部错误。
+// 序列化 W29 命令并构造领域幂等身份。
+//
+// - `actor_id`：命令操作人
+// - `action`：稳定动作名
+// - `resource_type`：审计资源类型
+// - `resource_id`：审计资源 ID
+// - `idempotency_key`：客户端幂等键
+// - `command`：完整强命令载荷
+//
+// 返回不暴露原始幂等键的领域命令身份。
+//
+// 命令无法序列化时返回内部错误。
 pub(super) fn command_identity<T: Serialize>(
     actor_id: &str,
     action: &str,
@@ -78,24 +75,20 @@ pub(super) fn command_identity<T: Serialize>(
     ))
 }
 
-/// 加载与命令绑定的正式任务，并校验责任归属与版本。
-///
-/// 任务版本与业务主题版本取自 Prepared 目标（DTO 层单次解析），此处只做
-/// typed 比较，不再解析版本字符串。
-///
-/// # 参数
-/// * `db` - 数据库。
-/// * `work_items` - 已装配的正式任务授权能力。
-/// * `target` - 已解析的任务与主题版本。
-/// * `action` - 非终态动作，用于核对对象关联。
-/// * `actor` - 当前账号。
-/// * `executor` - 读取所用执行器。
-///
-/// # 返回
-/// 仍开放且归属当前人的正式任务。
-///
-/// # 错误
-/// 任务不存在返回 `NotFound`；版本变化或任务不再开放返回 `ConflictError`；不是当前责任人返回 `Forbidden`；关联或仓储读取失败返回对应错误。
+// 加载与命令绑定的正式任务，并校验责任归属与版本。
+//
+// 任务版本与业务主题版本取自 Prepared 目标（DTO 层单次解析），此处只做
+// typed 比较，不再解析版本字符串。
+//
+// - `work_items`：已装配的正式任务授权能力。
+// - `target`：已解析的任务与主题版本。
+// - `action`：非终态动作，用于核对对象关联。
+// - `actor`：当前账号。
+// - `executor`：读取所用执行器。
+//
+// 仍开放且归属当前人的正式任务。
+//
+// 任务不存在返回 `NotFound`；版本变化或任务不再开放返回 `ConflictError`；不是当前责任人返回 `Forbidden`；关联或仓储读取失败返回对应错误。
 pub(super) async fn load_bound_work_item(
     db: &Database,
     work_items: &dyn CatalogWorkItems,
@@ -114,7 +107,7 @@ pub(super) async fn load_bound_work_item(
     Ok(item)
 }
 
-/// 当前完整任务资格先成立，再向调用方报告版本或业务状态冲突。
+// 当前完整任务资格先成立，再向调用方报告版本或业务状态冲突。
 async fn authorize_bound_work_item(
     work_items: &dyn CatalogWorkItems,
     item: &WorkItem,
@@ -127,7 +120,7 @@ async fn authorize_bound_work_item(
     ensure_work_item_open(item)
 }
 
-/// 校验任务与业务主题版本与调用方冻结的 typed 版本一致（无二次解析）。
+// 校验任务与业务主题版本与调用方冻结的 typed 版本一致（无二次解析）。
 fn ensure_work_item_version(item: &WorkItem, task_version: u64, subject_version: &str) -> Result<()> {
     if item.base.version != task_version || item.subject_version != subject_version {
         return Err(Error::ConflictError("任务或业务主题版本已变化，请刷新后重试".to_string()));
@@ -450,7 +443,7 @@ mod replay_tests {
         }
     }
 
-    /// 当前分配、真实主题和完整办理资格沿同一快照通过；撤权停止后续检查。
+    // 验证：当前分配、真实主题和完整办理资格沿同一快照通过；撤权停止后续检查。
     #[tokio::test]
     async fn replay_authorization_reuses_snapshot_and_stops_on_revocation() {
         let actor = AuditActor::new("actor".into(), "operator".into(), AccountKind::Admin);
@@ -480,7 +473,7 @@ mod replay_tests {
         }
     }
 
-    /// 已完成任务保留当前责任下的结果回放；普通执行器和错误关联仍拒绝。
+    // 验证：已完成任务保留当前责任下的结果回放；普通执行器和错误关联仍拒绝。
     #[tokio::test]
     async fn completed_replay_keeps_qualification_and_rejects_invalid_boundary_or_association() {
         let actor = AuditActor::new("actor".into(), "operator".into(), AccountKind::Admin);
@@ -532,7 +525,7 @@ mod replay_tests {
         assert_eq!(*tasks.calls.lock().unwrap(), vec!["result_access"]);
     }
 
-    /// 完成后的稳定结果仍要求同快照中的真实未删除来源和精确来源身份。
+    // 验证：完成后的稳定结果仍要求同快照中的真实未删除来源和精确来源身份。
     #[tokio::test]
     async fn completed_replay_requires_the_real_current_difference_without_old_version_checks() {
         let actor = AuditActor::new("actor".into(), "operator".into(), AccountKind::Admin);

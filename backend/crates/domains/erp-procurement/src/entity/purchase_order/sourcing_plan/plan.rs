@@ -51,24 +51,15 @@ pub struct SourcingPlan {
 impl SourcingPlan {
     /// 由销售单、当前依据事实与规范化选源行形成选源计划。
     ///
-    /// # 参数
-    /// * `order` - 已加载的销售稳定单
-    /// * `purchase_groups` - 当前任务范围内的精确采购依据
-    /// * `stock_groups` - 当前任务范围内的现有库存余额依据
-    /// * `work_item_id` - 冻结本依据责任范围的开放任务
-    /// * `assignments` - 已规范化选源行
+    /// 同一拆分维度合并为一张采购单；同一销售行可拆库存与采购依据，但一次命令的合计不得突破同一份最新剩余量；本方法只基于当前快照校验，
+    /// 事务内必须由调用方以最新依据再次验证。
     ///
-    /// # 返回
-    /// 返回分组完成且通过命令内总量校验的计划。
+    /// 返回分组完成且通过命令内总量校验的计划。选源行依据失效、仓库履约契约违规或库存与采购合计超过剩余量时返回领域错误。
     ///
-    /// # 错误
-    /// 选源行依据失效、仓库履约契约违规或库存与采购合计超过剩余量时返回
-    /// 领域错误。
-    ///
-    /// # 关键业务约束
-    /// 同一拆分维度合并为一张采购单；同一销售行可拆库存与采购依据，但一次
-    /// 命令的合计不得突破同一份最新剩余量；本方法只基于当前快照校验，事务
-    /// 内必须由调用方以最新依据再次验证。
+    /// - `order`：已加载的销售稳定单。
+    /// - `purchase_groups`：当前任务范围内的精确采购依据。
+    /// - `stock_groups`：当前任务范围内的现有库存余额依据。
+    /// - `work_item_id`：冻结本依据责任范围的开放任务。
     pub fn plan(
         order: &SalesOrderBasisFact,
         purchase_groups: &[BasisGroup],
@@ -86,18 +77,10 @@ impl SourcingPlan {
 
     /// 以 guard 推进后重新加载的最新库存余额依据验证计划。
     ///
-    /// # 参数
-    /// * `latest_groups` - 事务内 guard 推进后重新计算的最新库存余额依据
+    /// 必须在 guard 推进且余额重载之后调用；单次快照校验不得替代事务内重验，实际预占仍依赖余额 CAS。
     ///
-    /// # 返回
-    /// 全部预占数量未超过最新行剩余量与余额可用量时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 余额失效或逐行、逐余额累计超量时返回 [`SourcingPlanError::StaleFacts`]。
-    ///
-    /// # 关键业务约束
-    /// 必须在 guard 推进且余额重载之后调用；单次快照校验不得替代事务内
-    /// 重验，实际预占仍依赖余额 CAS。
+    /// 全部预占数量未超过最新行剩余量与余额可用量时返回 `Ok(())`。余额失效或逐行、逐余额累计超量时返回
+    /// [`SourcingPlanError::StaleFacts`]。
     pub fn validate_against_latest_stock(
         &self,
         latest_groups: &[StockBasisGroup],
@@ -134,20 +117,10 @@ impl SourcingPlan {
 
     /// 以 guard 推进后重新加载的最新精确依据验证计划。
     ///
-    /// # 参数
-    /// * `latest_groups` - 事务内 guard 推进后重新计算的最新采购依据
+    /// 一条销售行可以拆到多个方案，但一次命令的总量不得突破同一份最新剩余量；同一供应商供给跨销售行或履约责任时仍共享该供给的可用量。
     ///
-    /// # 返回
-    /// 全部拆分数量未超过最新销售剩余量且同一供给未被跨方案超量占用时返回
-    /// `Ok(())`。
-    ///
-    /// # 错误
-    /// 依据失效、销售行累计超量或同一供给跨履约责任累计超量时返回
-    /// [`SourcingPlanError::StaleFacts`]。
-    ///
-    /// # 关键业务约束
-    /// 一条销售行可以拆到多个方案，但一次命令的总量不得突破同一份最新剩余
-    /// 量；同一供应商供给跨销售行或履约责任时仍共享该供给的可用量。
+    /// 全部拆分数量未超过最新销售剩余量且同一供给未被跨方案超量占用时返回`Ok(())`。依据失效、
+    /// 销售行累计超量或同一供给跨履约责任累计超量时返回[`SourcingPlanError::StaleFacts`]。
     pub fn validate_against_latest_sourcing(
         &self,
         latest_groups: &[BasisGroup],
@@ -193,50 +166,25 @@ impl SourcingPlan {
         Ok(())
     }
 
-    /// 返回按拆分维度稳定排序的采购草稿计划。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回待创建采购单计划切片。
-    ///
-    /// # 错误
-    /// 无。
+    /// 按固定拆单顺序提供采购草稿计划，使下游逐单写入和分配审计序号使用同一顺序。
     pub fn purchase_plans(&self) -> &[SourcingDraftPlan] {
         &self.purchase_plans
     }
 
-    /// 返回按库存余额稳定排序的现有库存分配计划。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回待预占库存余额计划切片。
-    ///
-    /// # 错误
-    /// 无。
+    /// 按库存余额的稳定顺序提供预占计划，供选源编排逐项落实现有库存分配。
     pub fn stock_plans(&self) -> &[StockAllocationPlan] {
         &self.stock_plans
     }
 }
 
-/// 把采购来源行归入精确依据分组，形成待创建采购单计划。
-///
-/// # 参数
-/// * `groups` - 当前任务范围内的精确依据
-/// * `assignments` - 已规范化选源行
-///
-/// # 返回
-/// 返回按拆分维度稳定排序的草稿计划。
-///
-/// # 错误
-/// 销售行不属于当前任务或依据失效时返回 [`SourcingPlanError::StaleFacts`]；
-/// 仓库履约契约违规时返回 [`SourcingPlanError::WarehouseContract`]。
-///
-/// # 关键业务约束
-/// 同一拆分维度的选源行合并为一张采购单；不同目标仓必须拆分。
+// 把采购来源行归入精确依据分组，形成待创建采购单计划。
+//
+// 同一拆分维度的选源行合并为一张采购单；不同目标仓必须拆分。
+//
+// 返回按拆分维度稳定排序的草稿计划。销售行不属于当前任务或依据失效时返回 [`SourcingPlanError::StaleFacts`]；仓库履约契约违规时返回
+// [`SourcingPlanError::WarehouseContract`]。
+//
+// `groups` 为当前任务范围内的精确依据。
 fn plan_sourcing_drafts(
     order: &SalesOrderBasisFact,
     groups: &[BasisGroup],
@@ -279,21 +227,11 @@ fn plan_sourcing_drafts(
     Ok(plans.into_values().collect())
 }
 
-/// 校验采购选源行的目标仓库契约。
-///
-/// # 参数
-/// * `group` - 选源行命中的采购依据
-/// * `assignment` - 已规范化选源行
-///
-/// # 返回
-/// 仓库履约返回目标仓库，其他履约返回空。
-///
-/// # 错误
-/// 仓库履约缺少目标仓，或非仓库履约携带目标仓时返回
-/// [`SourcingPlanError::WarehouseContract`]。
-///
-/// # 关键业务约束
-/// 目标仓只在仓库履约下参与依据身份与建单，其他履约不得携带。
+// 校验采购选源行的目标仓库契约。
+//
+// 目标仓只在仓库履约下参与依据身份与建单，其他履约不得携带。
+//
+// 仓库履约返回目标仓库，其他履约返回空。仓库履约缺少目标仓，或非仓库履约携带目标仓时返回[`SourcingPlanError::WarehouseContract`]。
 fn target_warehouse_for_assignment(
     group: &BasisGroup,
     assignment: &SourcingAssignment,
@@ -311,22 +249,15 @@ fn target_warehouse_for_assignment(
     }
 }
 
-/// 把现有库存选源行按库存余额归组。
-///
-/// # 参数
-/// * `order` - 已加载的销售稳定单
-/// * `groups` - 当前任务范围内的库存余额依据
-/// * `work_item_id` - 冻结本依据责任范围的开放任务
-/// * `assignments` - 已规范化选源行
-///
-/// # 返回
-/// 返回按余额主键稳定排序的现有库存分配计划。
-///
-/// # 错误
-/// 选源行依据失效时返回 [`SourcingPlanError::StaleFacts`]。
-///
-/// # 关键业务约束
-/// 同一余额的选源行合并为一次预占；同一依据不得被重复分配。
+// 把现有库存选源行按库存余额归组。
+//
+// 同一余额的选源行合并为一次预占；同一依据不得被重复分配。
+//
+// 返回按余额主键稳定排序的现有库存分配计划。选源行依据失效时返回 [`SourcingPlanError::StaleFacts`]。
+//
+// - `order`：已加载的销售稳定单。
+// - `groups`：当前任务范围内的库存余额依据。
+// - `work_item_id`：冻结本依据责任范围的开放任务。
 fn plan_stock_allocations(
     order: &SalesOrderBasisFact,
     groups: &[StockBasisGroup],
@@ -360,22 +291,11 @@ fn plan_stock_allocations(
     Ok(plans.into_values().collect())
 }
 
-/// 校验同一命令内库存和采购拆分合计不超过当前销售缺口。
-///
-/// # 参数
-/// * `purchase_plans` - 采购草稿计划
-/// * `stock_plans` - 现有库存分配计划
-///
-/// # 返回
-/// 全部销售行合计未超过当前剩余量时返回 `Ok(())`。
-///
-/// # 错误
-/// 计划行依据失效或任一销售行合计超量时返回
-/// [`SourcingPlanError::StaleFacts`]。
-///
-/// # 关键业务约束
-/// 库存与采购按同一份剩余量共享上限；本校验基于计划形成时的快照，事务内
-/// 必须再次以最新依据验证。
+// 校验同一命令内库存和采购拆分合计不超过当前销售缺口。
+//
+// 库存与采购按同一份剩余量共享上限；本校验基于计划形成时的快照，事务内必须再次以最新依据验证。
+//
+// 全部销售行合计未超过当前剩余量时返回 `Ok(())`。计划行依据失效或任一销售行合计超量时返回[`SourcingPlanError::StaleFacts`]。
 fn validate_combined_line_totals(
     purchase_plans: &[SourcingDraftPlan],
     stock_plans: &[StockAllocationPlan],
@@ -425,22 +345,13 @@ struct QuantityTotal {
     cap: Decimal,
 }
 
-/// 累加一条请求数量并登记该稳定身份的统一上限。
-///
-/// # 参数
-/// * `totals` - 稳定身份到累计数量与上限的映射
-/// * `line_id` - 稳定销售行、库存余额或供给身份
-/// * `quantity` - 本次请求数量
-/// * `cap` - 该行最新剩余量上限
-///
-/// # 返回
-/// 无。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 同一身份跨方案累计，上限取最后登记值；累计数量与上限始终成对存储。
+// 累加一条请求数量并登记该稳定身份的统一上限。
+//
+// 同一身份跨方案累计，上限取最后登记值；累计数量与上限始终成对存储。
+//
+// - `totals`：稳定身份到累计数量与上限的映射。
+// - `line_id`：稳定销售行、库存余额或供给身份。
+// - `cap`：该行最新剩余量上限。
 fn add_requested_total(
     totals: &mut HashMap<String, QuantityTotal>,
     line_id: &str,
@@ -452,20 +363,11 @@ fn add_requested_total(
     entry.cap = cap;
 }
 
-/// 查找最新库存余额依据。
-///
-/// # 参数
-/// * `groups` - 最新库存余额依据
-/// * `balance_id` - 计划命中的余额主键
-///
-/// # 返回
-/// 命中时返回该余额依据。
-///
-/// # 错误
-/// 余额已失效时返回 [`SourcingPlanError::StaleFacts`]。
-///
-/// # 关键业务约束
-/// 余额依据在 guard 推进后可能被作废释放，必须以最新集合查找。
+// 查找最新库存余额依据。
+//
+// 余额依据在 guard 推进后可能被作废释放，必须以最新集合查找。
+//
+// 命中时返回该余额依据。余额已失效时返回 [`SourcingPlanError::StaleFacts`]。
 fn latest_stock_group<'a>(
     groups: &'a [StockBasisGroup],
     balance_id: &str,
@@ -473,20 +375,13 @@ fn latest_stock_group<'a>(
     groups.iter().find(|group| group.balance.base.id == balance_id).ok_or(SourcingPlanError::StaleFacts)
 }
 
-/// 查找一条选源行命中的精确依据。
-///
-/// # 参数
-/// * `groups` - 当前任务范围内的精确依据
-/// * `assignment` - 已规范化选源行
-///
-/// # 返回
-/// 返回同时包含该销售行且 ID 与客户端选择一致的依据分组。
-///
-/// # 错误
-/// 销售行不存在或依据已失效时返回 [`SourcingPlanError::StaleFacts`]。
-///
-/// # 关键业务约束
-/// 不以供应商或 SKU 猜测路线，只接受当前开放任务生成的精确依据。
+// 查找一条选源行命中的精确依据。
+//
+// 不以供应商或 SKU 猜测路线，只接受当前开放任务生成的精确依据。
+//
+// 返回同时包含该销售行且 ID 与客户端选择一致的依据分组。销售行不存在或依据已失效时返回 [`SourcingPlanError::StaleFacts`]。
+//
+// `groups` 为当前任务范围内的精确依据。
 fn find_assignment_group<'a>(
     order: &SalesOrderBasisFact,
     groups: &'a [BasisGroup],
@@ -502,42 +397,25 @@ fn find_assignment_group<'a>(
         .ok_or(SourcingPlanError::StaleFacts)
 }
 
-/// 判断任一累计数量是否超过其对应上限。
-///
-/// # 参数
-/// * `totals` - 稳定身份到累计数量与上限的映射
-///
-/// # 返回
-/// 任一累计数量超过上限时返回 `true`。
-///
-/// # 错误
-/// 无。
-///
+// 判断任一累计数量是否超过其对应上限。任一累计数量超过上限时返回 `true`。
+//
+// `totals` 为稳定身份到累计数量与上限的映射。
 fn exceeds_any_cap(totals: &HashMap<String, QuantityTotal>) -> bool {
     totals.values().any(|entry| entry.total > entry.cap)
 }
 
-/// 返回合法分配数量零值。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回六位精度数量零值。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 只用于边界比较，不代表缺失业务数量。
-///
-/// # Panics
-/// 数量文本 `"0"` 无法解析时 panic；零数量是合法数量，panic 只表示数量类型不变量被破坏。
+// 返回合法分配数量零值。
+//
+// 只用于边界比较，不代表缺失业务数量。
+//
+// 返回六位精度数量零值。
+//
+// 数量文本 `"0"` 无法解析时 panic；零数量是合法数量，panic 只表示数量类型不变量被破坏。
 pub(super) fn zero_quantity() -> Quantity {
     Quantity::from_str("0").expect("零数量合法")
 }
 
-/// 用当前依据单位精度校验采购与库存分配；缺失或不符统一返回数量合同错误。
+// 用当前依据单位精度校验采购与库存分配；缺失或不符统一返回数量合同错误。
 fn validate_quantity(
     coverage: &crate::entity::purchase_order::SalesProcurementCoverageLine,
     quantity: Quantity,
@@ -550,7 +428,7 @@ fn validate_quantity(
     .map_err(|error| SourcingPlanError::QuantityContract(error.to_string()))
 }
 
-/// 按销售稳定行累计本批拆单，地址上限只扣一次历史已承担数量。
+// 按销售稳定行累计本批拆单，地址上限只扣一次历史已承担数量。
 fn validate_delivery_plans(plans: &[SourcingDraftPlan]) -> Result<(), SourcingPlanError> {
     let mut assigned = HashMap::new();
     for plan in plans {

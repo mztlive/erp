@@ -65,18 +65,9 @@ pub struct SupplierSettlementItemFilter {
 }
 
 impl QueryFilter for SupplierSettlementItemFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// 仅在 `statement_id` 为 `Some` 时追加所属结算单等值条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 将结算明细筛选条件转换为 MongoDB 谓词，供仓储取数使用。
+    // 查询仅包含未删除记录。
+    // 仅在 `statement_id` 为 `Some` 时追加所属结算单等值条件。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(statement_id) = &self.statement_id {
@@ -87,16 +78,8 @@ impl QueryFilter for SupplierSettlementItemFilter {
 }
 
 impl Pagination for SupplierSettlementItemFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。`page_size` 由 `u32` 转为 `u64`，页码不在此方法内归一。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 向通用仓储提供结算明细查询的页码和页长；不在此处改写页码。
+    // `page_size` 由 `u32` 转为 `u64`。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -106,15 +89,7 @@ impl Pagination for SupplierSettlementItemFilter {
 #[allow(async_fn_in_trait)]
 pub trait SupplierSettlementItemRepositoryExt {
     /// 按结算单读取全部冻结明细，按创建时间和主键升序排列。
-    ///
-    /// # 参数
-    /// * `statement_id` - 供应商结算单主键
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回该结算单的全部未删除冻结明细。
-    ///
-    /// # 错误
     /// MongoDB 查询或游标读取失败时返回错误。
     async fn list_by_statement(
         &self,
@@ -123,16 +98,9 @@ pub trait SupplierSettlementItemRepositoryExt {
     ) -> Result<Vec<SupplierSettlementItem>>;
 
     /// 按结算单主键批量读取全部冻结明细。
-    ///
-    /// # 参数
-    /// * `statement_ids` - 已授权结算单主键集合
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回按结算单、创建时间和主键稳定排序的冻结明细。
-    ///
-    /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
+    /// `statement_ids`：已授权结算单主键集合。
     async fn list_by_statement_ids(
         &self,
         statement_ids: &[String],
@@ -140,18 +108,9 @@ pub trait SupplierSettlementItemRepositoryExt {
     ) -> Result<Vec<SupplierSettlementItem>>;
 
     /// 分页检索供应商结算明细列表（投影查询）。
-    ///
-    /// 只返回 [`SupplierSettlementItemRow`] 所需的列表字段，不加载整文档；
-    /// 排序字段走白名单映射（`ITEM_SORT_FIELDS`），白名单外一律回退 `created_at`。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
+    /// 只返回 [`SupplierSettlementItemRow`] 所需的列表字段，不加载整文档；排序字段走白名单映射
+    /// （`ITEM_SORT_FIELDS`），白名单外一律回退 `created_at`。
     /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
     async fn search_supplier_settlement_items(
         &self,

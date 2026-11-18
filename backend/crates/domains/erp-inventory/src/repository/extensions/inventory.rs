@@ -44,88 +44,25 @@ pub trait InventoryExt {
     /// 库存调整单列表筛选条件类型（定义见 `repository::inventory`）。
     type StockAdjustmentFilter;
 
-    /// 获取 `stock_movement` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `StockMovementRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得 `stock_movement` 集合的仓储，供库存增减流水查询与登记；由调用方提供执行器。
     fn stock_movements(&self) -> StockMovementRepository<'_>;
 
-    /// 获取 `stock_balance` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `StockBalanceRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得 `stock_balance` 集合的仓储，供按仓库和 SKU 读取与条件更新库存余额；由调用方提供执行器。
     fn stock_balances(&self) -> StockBalanceRepository<'_>;
 
-    /// 获取 `stock_reservation` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `StockReservationRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得 `stock_reservation` 集合的仓储，供库存预占查询、消耗和释放；由调用方提供执行器。
     fn stock_reservations(&self) -> StockReservationRepository<'_>;
 
-    /// 获取 `stock_reservation_entry` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `persistence_core::Repository<'_, crate::entity::inventory::StockReservationEntry>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得 `stock_reservation_entry` 集合的仓储，供预占流水登记和读取；由调用方提供执行器。
     fn stock_reservation_entries(&self) -> persistence_core::Repository<'_, StockReservationEntry>;
 
-    /// 获取 `stock_adjustment` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `StockAdjustmentRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得 `stock_adjustment` 集合的仓储，供库存调整表头的查询与状态保存；由调用方提供执行器。
     fn stock_adjustments(&self) -> StockAdjustmentRepository<'_>;
 
-    /// 获取 `stock_adjustment_line` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `StockAdjustmentLineRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得 `stock_adjustment_line` 集合的仓储，供库存调整明细读写；由调用方提供执行器。
     fn stock_adjustment_lines(&self) -> StockAdjustmentLineRepository<'_>;
 
-    /// 获取承载跨集合写入的域专用仓储。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `InventoryRepository` 实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得库存余额、流水、预占及调整单的跨集合操作入口；原子写入沿用用例事务，不在仓储内开启事务。
     fn inventory(&self) -> InventoryRepository<'_>;
 }
 

@@ -5,12 +5,6 @@ use crate::{NotificationData, Result};
 /// 站外渠道适配端口。实现必须按收件人及 dedup_key 幂等，并设置超时。
 #[async_trait]
 pub trait NotificationChannel: Send + Sync {
-    /// 投递规范化消息；不得在数据库事务中调用。
-    /// # 参数
-    /// message 包含稳定去重键、内部收件人 ID 与展示内容。
-    /// # 返回
-    /// 提供方确认接收后返回成功。
-    /// # 错误
-    /// 可重试失败返回 Retryable；永久拒绝返回 Rejected；未配置返回 ChannelUnavailable。
+    /// 在业务事务外按收件人和去重键幂等投递规范化消息；提供方确认接收才返回成功。可重试故障、永久拒绝和渠道未配置分别返回 `Retryable`、`Rejected`、`ChannelUnavailable`。
     async fn deliver(&self, message: &NotificationData) -> Result<()>;
 }

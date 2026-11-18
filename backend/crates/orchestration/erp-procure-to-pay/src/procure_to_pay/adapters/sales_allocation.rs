@@ -36,13 +36,11 @@ impl SalesAllocationPort for SalesAllocationAdapter {
     }
 }
 
-/// 按精确正式版本连接销售公共商品行与子类型 SKU，不从其他版本猜测。
-/// # 参数
-/// `db` 为组合数据库；`revision_id` 为正式销售版本；`executor` 沿用调用方执行器。
-/// # 返回
-/// 返回稳定行、正式版本行和 SKU 身份完整的商品/服务事实。
-/// # 错误
-/// 商品公共行缺少精确子类型行或仓储查询失败时拒绝。
+// 按精确正式版本连接销售公共商品行与子类型 SKU，不从其他版本猜测。
+//
+// `db` 为组合数据库；`revision_id` 为正式销售版本；`executor` 沿用调用方执行器。返回稳定行、正式版本行和 SKU 身份完整的商品/服务事实。
+//
+// 商品公共行缺少精确子类型行或仓储查询失败时拒绝。
 pub(crate) async fn current_revision_lines(
     db: &Database,
     revision_id: &SalesOrderRevisionId,

@@ -26,15 +26,9 @@ pub struct ChangeSubmissionHeader {
 }
 /// 保持原行校验、金额计算和付款代码回退先于付款提供方解析。
 ///
-/// # 参数
-/// * `base_revision` - 基准采购版本，请求未给付款代码时回退其快照
-/// * `req` - 变更提交请求
+/// 返回含税、未税、税额和待解析的付款代码。行转换或金额计算失败时返回原采购错误。
 ///
-/// # 返回
-/// 返回含税、未税、税额和待解析的付款代码。
-///
-/// # 错误
-/// 行转换或金额计算失败时返回原采购错误。
+/// `base_revision` 为基准采购版本，请求未给付款代码时回退其快照。
 pub fn prepare_submission_header(
     base_revision: &PurchaseOrderRevision,
     req: &SubmitPurchaseChangeRequest,
@@ -51,17 +45,11 @@ pub fn prepare_submission_header(
 impl PurchaseOrderService {
     /// 从变更单冻结的基准采购版本恢复完整目标行。
     ///
-    /// # 参数
-    /// * `revision_id` - 变更单冻结的采购生效版本稳定身份
-    ///
-    /// # 返回
-    /// 返回按版本行号和稳定主键排序的完整目标行请求。
-    ///
-    /// # 错误
-    /// 仓储读取失败或基准版本没有明细时返回错误。
-    ///
-    /// # 关键约束
     /// 排序由单版本仓储查询保证；空版本校验和 DTO 转换仍由 Service 负责。
+    ///
+    /// 返回按版本行号和稳定主键排序的完整目标行请求。仓储读取失败或基准版本没有明细时返回错误。
+    ///
+    /// `revision_id` 为变更单冻结的采购生效版本稳定身份。
     pub async fn change_lines_from_base_revision(
         &self,
         revision_id: &erp_core::ids::PurchaseOrderRevisionId,
@@ -72,7 +60,7 @@ impl PurchaseOrderService {
         }
         Ok(lines.iter().map(SavePurchaseOrderLine::from).collect())
     }
-    /// 计算下一个变更提交序号。
+    // 计算下一个变更提交序号。
     async fn next_change_submission_no(&self, change: &PurchaseChangeOrder) -> Result<String> {
         let existing = self
             .db
@@ -85,18 +73,13 @@ impl PurchaseOrderService {
     ///
     /// 序号用 `NoTransaction` 读取该变更单已有提交后计算。不写库。
     ///
-    /// # 参数
-    /// * `change` - 变更单，提供单号和基准版本
-    /// * `order` - 来源采购单，提供供应商、采购类型和履约责任
-    /// * `base_revision` - 基准版本，提供供应商修订和快照
-    /// * `header` - 已算好的金额；付款代码字段不写入提交
-    /// * `payment_term_snapshot` - 调用方解析后的付款快照
+    /// 返回尚未落库的变更提交。序号读取失败时返回仓储错误；序号溢出或提交头不合法时返回 `Logic`。
     ///
-    /// # 返回
-    /// 返回尚未落库的变更提交。
-    ///
-    /// # 错误
-    /// 序号读取失败时返回仓储错误；序号溢出或提交头不合法时返回 `Logic`。
+    /// - `change`：变更单，提供单号和基准版本。
+    /// - `order`：来源采购单，提供供应商、采购类型和履约责任。
+    /// - `base_revision`：基准版本，提供供应商修订和快照。
+    /// - `header`：已算好的金额；付款代码字段不写入提交。
+    /// - `payment_term_snapshot`：调用方解析后的付款快照。
     pub async fn build_change_submission(
         &self,
         change: &PurchaseChangeOrder,
@@ -130,18 +113,11 @@ impl PurchaseOrderService {
 }
 /// 使用销售当前版本稳定行映射刷新采购变更请求行。
 ///
-/// # 参数
-/// * `lines` - 采购变更目标行
-/// * `sales_lines` - 稳定销售行到当前销售版本行的映射
-///
-/// # 返回
-/// 返回当前版本销售关联和分配数量已规范化的行。
-///
-/// # 错误
-/// 商品行缺少稳定销售行、数量或当前销售版本对应行，或精确 SKU 不一致时返回错误。
-///
-/// # 关键业务约束
 /// 商品行 `allocated_quantity` 恒等于变更后的 `quantity`，物流行清空销售关联。
+///
+/// 返回当前版本销售关联和分配数量已规范化的行。商品行缺少稳定销售行、数量或当前销售版本对应行，或精确 SKU 不一致时返回错误。
+///
+/// `sales_lines` 为稳定销售行到当前销售版本行的映射。
 pub fn enrich_change_lines(
     lines: &[SavePurchaseOrderLine],
     sales_lines: &std::collections::HashMap<String, crate::ports::change::CurrentSalesRevisionLineFact>,
@@ -182,16 +158,7 @@ pub fn enrich_change_lines(
     }
     Ok(enriched)
 }
-/// 内容指纹（Debug 形态经 `DefaultHasher` 后的十六进制；同二进制内稳定，用于变更目标内容比对）。
-///
-/// # 参数
-/// * `lines` - 参与比对的变更目标行
-///
-/// # 返回
-/// 返回 16 位小写十六进制指纹。
-///
-/// # 错误
-/// 不返回错误。
+/// 内容指纹（Debug 形态经 `DefaultHasher` 后的十六进制；同二进制内稳定，用于变更目标内容比对）。返回 16 位小写十六进制指纹。
 pub fn content_fingerprint(lines: &[SavePurchaseOrderLine]) -> String {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};

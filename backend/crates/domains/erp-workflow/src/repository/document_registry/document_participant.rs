@@ -19,12 +19,11 @@ struct ParticipantDocumentIdRow {
 #[allow(async_fn_in_trait)]
 pub trait DocumentParticipantRepositoryExt {
     /// 查询本次目标中的历史参与记录，不枚举用户其他单据。
-    /// # 参数
-    /// user_id 为当前账号；ids 为本次目标；executor 为调用方事务。
-    /// # 返回
     /// 去重后的参与单据 ID；空目标返回空集合。
-    /// # 错误
+    ///
     /// 数据库读取失败返回错误。
+    ///
+    /// user_id 为当前账号；ids 为本次目标；executor 为调用方事务。
     async fn document_ids_in(
         &self,
         user_id: &str,
@@ -33,29 +32,17 @@ pub trait DocumentParticipantRepositoryExt {
     ) -> Result<Vec<String>>;
 
     /// 按参与人返回去重后的业务单据 ID，仅投影 `document_id`。
-    ///
-    /// # 参数
-    /// * `user_id` - 参与人用户 ID
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回按 ID 升序排列的未删除参与单据 ID。
     ///
-    /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
     async fn document_ids_by_user(&self, user_id: &str, executor: &mut dyn Executor) -> Result<Vec<String>>;
 
     /// 按参与人查询其参与过的全部单据（“我的参与单据”）。
-    ///
-    /// # 参数
-    /// * `user_id` - 参与人用户 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回按参与时间倒序排列的参与记录。
     ///
-    /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
+    ///
+    /// `executor`：数据访问执行器，由 Service 决定是否位于事务中。
     async fn list_by_user(
         &self,
         user_id: &str,

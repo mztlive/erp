@@ -19,21 +19,13 @@ use persistence_core::Executor;
 
 use crate::Result;
 
-/// 按主体加载 RUNNING/BLOCKED 实例、当前执行与开放任务。
-///
-/// `RUNNING` 必须恰有一个开放任务，`BLOCKED` 必须没有开放任务。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `binding` - 创建时冻结的定义绑定
-/// * `subject` - 业务对象引用
-/// * `subject_version` - 冻结提交版本
-///
-/// # 返回
-/// 返回定义图、实例、当前执行、任务关闭策略与开放任务快照。
-///
-/// # 错误
-/// 实例或当前执行缺失、状态与开放任务数量不一致或仓储失败时返回错误。
+// 按主体加载 RUNNING/BLOCKED 实例、当前执行与开放任务。
+//
+// `RUNNING` 必须恰有一个开放任务，`BLOCKED` 必须没有开放任务。
+//
+// `binding` 为创建时冻结的定义绑定；`subject_version` 为冻结提交版本。返回定义图、实例、当前执行、任务关闭策略与开放任务快照。
+//
+// 实例或当前执行缺失、状态与开放任务数量不一致或仓储失败时返回错误。
 pub(super) async fn load_cancel_runtime(
     db: &Database,
     binding: &ApprovalDefinitionBinding,
@@ -56,18 +48,8 @@ pub(super) async fn load_cancel_runtime(
 ///
 /// 人员失效走业务取消；非人员一致性 blocker 必须走受阻取消。
 ///
-/// # 参数
-/// * `runtime` - 已加载运行事实
-/// * `reason` - 已校验的非空原因
-/// * `actor_id` - 撤回人
-/// * `idempotency_key` - 幂等键
-/// * `receipt` - 已存在收据
-/// * `now` - 调用方时间
+/// `runtime` 为已加载运行事实；`reason` 为已校验的非空原因；使用调用方提供的幂等键。返回可交给统一 `prepare_cancel` 的取消编排输入。
 ///
-/// # 返回
-/// 返回可交给统一 `prepare_cancel` 的取消编排输入。
-///
-/// # 错误
 /// 原因/幂等键非法、审批人引用无效或端口与 blocker 不匹配时返回错误。
 pub fn build_sales_change_cancel_input(
     runtime: &LoadedCancelRuntime,
@@ -116,23 +98,13 @@ pub(super) struct SalesChangeCancelPersistInput {
     pub actor: application_core::AuditActor,
 }
 
-/// 在同一事务内应用取消计划、关闭任务并写回变更单。
-///
-/// # 用途
-/// 撤回审批后原子写回运行事实与变更单。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `input` - 变更单、取消计划与开放任务
-///
-/// # 返回
-/// 成功时无返回值。
-///
-/// # 错误
-/// CAS 冲突或仓储失败时返回错误，事务回滚。
-///
-/// # 关键业务约束
-/// Replay 不得重复关闭任务；Apply 必须关闭开放任务并写回草稿。
+// 在同一事务内应用取消计划、关闭任务并写回变更单。
+//
+// 撤回审批后原子写回运行事实与变更单。
+//
+// `input` 为变更单、取消计划与开放任务。CAS 冲突或仓储失败时返回错误，事务回滚。
+//
+// Replay 不得重复关闭任务；Apply 必须关闭开放任务并写回草稿。
 pub(super) async fn persist_sales_change_cancel(
     db: &Database,
     input: SalesChangeCancelPersistInput,

@@ -23,16 +23,7 @@ pub enum ImportExecutionAction {
 }
 
 impl ImportExecutionAction {
-    /// 返回稳定的 wire code。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `START_APPLY`、`CANCEL_PENDING` 或 `RETRY_FAILED`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 提供请求、回执共用的稳定动作码：`START_APPLY`、`CANCEL_PENDING` 或 `RETRY_FAILED`。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::StartApply => "START_APPLY",
@@ -152,16 +143,7 @@ pub struct PreparedImportExecution {
 impl TryFrom<ImportExecutionCommand> for PreparedImportExecution {
     type Error = Error;
 
-    /// 从强类型命令构造已规范化的执行准备（INT-E24 纯转换）。
-    ///
-    /// # 参数
-    /// * `command` - 强类型执行命令
-    ///
-    /// # 返回
-    /// 返回动作矩阵已校验的准备。
-    ///
-    /// # 错误
-    /// 版本非法或动作专属试算/原因矩阵非法时返回错误。
+    // 在执行业务写入前规范化版本、请求身份和说明。启动或重试须提供试算版本；取消须提供原因，启动不得带原因。版本非法或动作参数不符时拒绝。
     fn try_from(command: ImportExecutionCommand) -> Result<Self> {
         let expected_trial_version = command
             .expected_trial_version

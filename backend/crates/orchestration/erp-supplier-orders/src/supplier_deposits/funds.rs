@@ -21,12 +21,10 @@ pub struct SupplierDepositFundsAdapter {
 
 impl SupplierDepositFundsAdapter {
     /// 绑定应用数据库。
-    /// # 参数
-    /// * `db` - 当前应用数据库。
-    /// # 返回
+    ///
+    /// `db`：当前应用数据库。
+    ///
     /// 返回供应链资金 Port 实现。
-    /// # 错误
-    /// 无。
     pub fn new(db: Database) -> Self {
         Self { db }
     }

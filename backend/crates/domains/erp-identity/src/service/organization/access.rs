@@ -13,20 +13,12 @@ use crate::service::access_control::resolve::AuthorizedDataScope;
 use crate::service::access_control::resolve::DataScopeFacts;
 use crate::{Error, Result};
 
-/// 以组织对象身份判断配置边界，不使用“同部门”作为权限。
-///
-/// # 参数
-/// * `access` - 当前组织配置授权
-/// * `id` - 目标组织；根节点创建时为空
-///
-/// # 返回
-/// 授权覆盖该目标时为 `true`。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 缺范围保持拒绝，不得补 Company。
+// 以组织对象身份判断配置边界，不使用“同部门”作为权限。
+// 缺范围保持拒绝，不得补 Company。
+//
+// 授权覆盖该目标时为 `true`。
+//
+// `access`：当前组织配置授权；`id`：目标组织；根节点创建时为空。
 fn covers(access: &AuthorizedDataScope, id: Option<&str>) -> bool {
     access.scope.allows(
         &ScopedObject {
@@ -41,20 +33,14 @@ fn covers(access: &AuthorizedDataScope, id: Option<&str>) -> bool {
     )
 }
 
-/// 组织移动须覆盖整个相关子树；调岗同时检查原组织和新组织。
-///
-/// # 参数
-/// * `change` - 待执行的组织命令
-/// * `access` - 当前组织配置授权
-///
-/// # 返回
-/// 目标均在配置边界内时成功。
-///
-/// # 错误
-/// 目标超出配置边界时返回 `Forbidden`；旧管理关系命令返回 `ValidationError`。
-///
-/// # 关键业务约束
-/// 越界目标不得部分生效；所属部门不代替配置动作。
+// 组织移动须覆盖整个相关子树；调岗同时检查原组织和新组织。
+// 越界目标不得部分生效；所属部门不代替配置动作。
+//
+// 目标均在配置边界内时成功。
+//
+// 目标超出配置边界时返回 `Forbidden`；旧管理关系命令返回 `ValidationError`。
+//
+// `access`：当前组织配置授权。
 pub(crate) fn ensure_targets(change: &OrganizationOperation, access: &AuthorizedDataScope) -> Result<()> {
     use OrganizationOperation::*;
     let state = &access.organizations;
@@ -98,21 +84,14 @@ pub(crate) fn ensure_targets(change: &OrganizationOperation, access: &Authorized
     Ok(())
 }
 
-/// 使用完整树验证子树边界；不按当前页或名称判断。
-///
-/// # 参数
-/// * `state` - 完整组织事实
-/// * `id` - 子树根
-/// * `targets` - 追加检查的组织 ID
-///
-/// # 返回
-/// 子树节点追加成功。
-///
-/// # 错误
-/// 组织树不合法时返回校验错误。
-///
-/// # 关键业务约束
-/// 必须覆盖原子树全部节点，禁止只检查可见页。
+// 使用完整树验证子树边界；不按当前页或名称判断。
+// 必须覆盖原子树全部节点，禁止只检查可见页。
+//
+// 子树节点追加成功。
+//
+// 组织树不合法时返回校验错误。
+//
+// `targets`：追加检查的组织 ID。
 fn add_subtree_targets<'a>(
     state: &'a OrganizationState,
     id: &str,
@@ -124,21 +103,15 @@ fn add_subtree_targets<'a>(
     Ok(())
 }
 
-/// 幂等回放前仍检查当前管理边界，撤权后不能通过回执取回旧宽范围事实。
-///
-/// # 参数
-/// * `receipt` - 已保存的回执
-/// * `request` - 当前命令
-/// * `access` - 当前授权
-///
-/// # 返回
-/// 投影到当前边界后的回执。
-///
-/// # 错误
-/// 幂等键已用于不同载荷时返回 `ConflictError`；越界时返回 `Forbidden`。
-///
-/// # 关键业务约束
-/// 异载荷复用幂等键必须拒绝，不得覆盖原回执。
+// 幂等回放前仍检查当前管理边界，撤权后不能通过回执取回旧宽范围事实。
+// 异载荷复用幂等键必须拒绝，不得覆盖原回执。
+//
+// 投影到当前边界后的回执。
+//
+// 幂等键已用于不同载荷时返回 `ConflictError`；越界时返回 `Forbidden`。
+//
+// `receipt`：已保存的回执；`request`：当前命令。
+// `access`：当前授权。
 pub(crate) fn replay(
     receipt: OrganizationChangeReceipt,
     request: &OrganizationChangeRequest,
@@ -151,20 +124,12 @@ pub(crate) fn replay(
     Ok(visible_receipt(receipt, access))
 }
 
-/// 客户端只接收当前可管理节点和相应关系，隐藏不可见父身份。
-///
-/// # 参数
-/// * `state` - 完整或回执中的组织事实
-/// * `access` - 当前授权
-///
-/// # 返回
-/// 裁剪后的可见组织事实。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 缺范围得到空集，不得补 Company 或泄露不可见父节点身份。
+// 客户端只接收当前可管理节点和相应关系，隐藏不可见父身份。
+// 缺范围得到空集，不得补 Company 或泄露不可见父节点身份。
+//
+// 裁剪后的可见组织事实。
+//
+// `state`：完整或回执中的组织事实；`access`：当前授权。
 pub(crate) fn visible_state(mut state: OrganizationState, access: &AuthorizedDataScope) -> OrganizationState {
     state.units.retain(|u| covers(access, Some(&u.base.id)));
     let ids = state.units.iter().map(|u| u.base.id.clone()).collect::<std::collections::BTreeSet<_>>();
@@ -179,20 +144,12 @@ pub(crate) fn visible_state(mut state: OrganizationState, access: &AuthorizedDat
     state
 }
 
-/// 审计回执仅投影当前管理范围内的前后事实。
-///
-/// # 参数
-/// * `receipt` - 原始回执
-/// * `access` - 当前授权
-///
-/// # 返回
-/// 可见前后事实的回执。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 不可见组织不得出现在客户端回执中。
+// 审计回执仅投影当前管理范围内的前后事实。
+// 不可见组织不得出现在客户端回执中。
+//
+// 可见前后事实的回执。
+//
+// `receipt`：原始回执；`access`：当前授权。
 pub(crate) fn visible_receipt(
     mut receipt: OrganizationChangeReceipt,
     access: &AuthorizedDataScope,
@@ -202,25 +159,16 @@ pub(crate) fn visible_receipt(
     receipt
 }
 
-/// 在已解析授权快照上准备预览或提交回执，不触达仓储。
-///
-/// # 参数
-/// * `preview` - 预览不要求调用方写入
-/// * `existing` - 已有幂等回执
-/// * `request` - 当前命令
-/// * `access` - 当前组织配置授权
-/// * `change_id` - 新建关系主键
-/// * `actor_id` - 操作人
-/// * `at` - 变更时点
-///
-/// # 返回
-/// `(可见回执, 是否持久化)`。预览与已有回放均不持久化。
-///
-/// # 错误
-/// 幂等异载荷、期望版本冲突、越界目标或实体校验失败。
-///
-/// # 关键业务约束
-/// 预览与提交共用校验；只有提交且无回放时写入。缺范围投影为空集。
+// 在已解析授权快照上准备预览或提交回执，不触达仓储。
+// 预览与提交共用校验；只有提交且无回放时写入。缺范围投影为空集。
+//
+// `(可见回执, 是否持久化)`。预览与已有回放均不持久化。
+//
+// 幂等异载荷、期望版本冲突、越界目标或实体校验失败。
+//
+// `preview`：预览不要求调用方写入；`existing`：已有幂等回执。
+// `request`：当前命令；`access`：当前组织配置授权。
+// `at`：变更时点。
 pub(crate) fn prepare_organization_change(
     preview: bool,
     existing: Option<OrganizationChangeReceipt>,
@@ -332,7 +280,7 @@ mod tests {
         assert!(ensure_targets(&change, &company_access(state())).is_ok());
     }
 
-    /// 批量调岗必须逐一校验每个人的原组织和目标组织。
+    // 验证：批量调岗必须逐一校验每个人的原组织和目标组织。
     #[test]
     fn batch_transfer_checks_every_member_org() {
         let mut state = state();
@@ -355,7 +303,7 @@ mod tests {
         assert!(ensure_targets(&change, &company_access(state)).is_ok());
     }
 
-    /// 合并命令必须检查每一项边界，回放必须匹配完整载荷。
+    // 验证：合并命令必须检查每一项边界，回放必须匹配完整载荷。
     #[test]
     fn profile_change_checks_all_targets_and_replay_payload() {
         use crate::entity::person_profile_change::PersonProfileChange;
@@ -417,7 +365,7 @@ mod tests {
         assert!(matches!(replay(receipt, &altered, &current), Err(Error::ConflictError(_))));
     }
 
-    /// 预览不写入，提交才要求持久化；二者都重验期望版本。
+    // 验证：预览不写入，提交才要求持久化；二者都重验期望版本。
     #[test]
     fn preview_does_not_persist_and_stale_version_fails_for_both_paths() {
         let access = company_access(state());
@@ -464,7 +412,7 @@ mod tests {
         ));
     }
 
-    /// 角色缺范围时可见状态为空集，不得补 Company。
+    // 验证：角色缺范围时可见状态为空集，不得补 Company。
     #[test]
     fn no_scope_projects_empty_visible_state() {
         let access = access_with(ResolvedScope { role_clauses: Vec::new(), user_limit: None }, state());
@@ -474,7 +422,7 @@ mod tests {
         assert!(!access.scope.has_role_scope());
     }
 
-    /// 越界目标在预览和提交前拒绝。
+    // 验证：越界目标在预览和提交前拒绝。
     #[test]
     fn out_of_boundary_target_is_forbidden() {
         let access = access_with(
@@ -500,7 +448,7 @@ mod tests {
         assert!(matches!(err, Error::Forbidden(_)));
     }
 
-    /// 幂等键复用于不同载荷必须冲突，相同载荷回放且不写入。
+    // 验证：幂等键复用于不同载荷必须冲突，相同载荷回放且不写入。
     #[test]
     fn idempotent_replay_rejects_different_payload() {
         let access = company_access(state());

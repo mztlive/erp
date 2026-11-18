@@ -20,16 +20,8 @@ use crate::http::state::HttpState;
 use crate::wiring::receivable_posting_ports;
 
 /// 登记发票草稿同时上传图片或 PDF。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 当前认证账号
-/// * `multipart` - 发票 JSON 命令和按临时引用命名的文件
-///
-/// # 返回
+/// `multipart` 为发票 JSON 命令和按临时引用命名的文件。
 /// 原发票草稿响应。
-///
-/// # 错误
 /// 文件、业务字段或事务失败时拒绝并按确定回滚补偿存储对象。
 pub async fn invoice_create_with_files(
     State(state): State<HttpState>,
@@ -59,16 +51,8 @@ pub async fn invoice_create_with_files(
 }
 
 /// 原子开票时在同一事务登记文件和关联；重放删除本次未消费上传。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 当前认证账号
-/// * `multipart` - 开票 JSON 命令和按临时引用命名的文件
-///
-/// # 返回
+/// `multipart` 为开票 JSON 命令和按临时引用命名的文件。
 /// 原销项发票响应。
-///
-/// # 错误
 /// 文件或事务失败时拒绝；提交结果未知时保留存储对象。
 pub async fn invoice_commit_with_files(
     State(state): State<HttpState>,
@@ -98,16 +82,8 @@ pub async fn invoice_commit_with_files(
 }
 
 /// 按剩余批准金额完成开票并关联附件；重放删除未消费上传。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 当前认证账号
-/// * `multipart` - 开票 JSON 命令和按临时引用命名的文件
-///
-/// # 返回
+/// `multipart` 为开票 JSON 命令和按临时引用命名的文件。
 /// 原销项发票响应。
-///
-/// # 错误
 /// 文件或事务失败时拒绝；提交结果未知时保留存储对象。
 pub async fn invoice_complete_with_files(
     State(state): State<HttpState>,

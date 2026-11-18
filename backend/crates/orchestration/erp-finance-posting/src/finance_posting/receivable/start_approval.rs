@@ -31,18 +31,9 @@ use persistence_core::Executor;
 use super::adapter::customer_receipt_object_readable;
 use crate::{Error, FinancePostingPorts, Result};
 
-/// 使用调用方执行器加载绑定定义图。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `binding` - 创建时冻结的定义绑定
-/// * `executor` - 调用方事务执行器
-///
-/// # 返回
-/// 返回已持久化的定义图。
-///
-/// # 错误
-/// 定义不存在或仓储失败时返回错误。
+// 使用调用方执行器加载绑定定义图。
+//
+// `binding` 为创建时冻结的定义绑定。返回已持久化的定义图。定义不存在或仓储失败时返回错误。
 pub(crate) async fn load_bound_definition_graph_with_executor(
     db: &Database,
     binding: &ApprovalDefinitionBinding,
@@ -53,22 +44,11 @@ pub(crate) async fn load_bound_definition_graph_with_executor(
         .map_err(Error::from)
 }
 
-/// 使用调用方执行器读取候选启动收据。
-///
-/// 本步骤不比较载荷；调用方须通过后续启动校验确认候选收据与请求一致。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `subject` - 业务对象引用
-/// * `subject_version` - 冻结提交版本
-/// * `idempotency_key` - 调用方幂等键
-/// * `executor` - 调用方事务执行器
-///
-/// # 返回
-/// 尚待启动校验确认载荷一致性的候选收据或空。
-///
-/// # 错误
-/// 幂等键非法或仓储失败时返回错误。
+// 使用调用方执行器读取候选启动收据。
+//
+// 本步骤不比较载荷；调用方须通过后续启动校验确认候选收据与请求一致。
+//
+// `subject_version` 为冻结提交版本；使用调用方提供的幂等键。尚待启动校验确认载荷一致性的候选收据或空。幂等键非法或仓储失败时返回错误。
 pub(crate) async fn load_start_receipt_with_executor(
     db: &Database,
     subject: &SubjectRef,
@@ -128,24 +108,15 @@ pub(crate) struct DocumentStartInput<'a> {
     pub now: Instant,
 }
 
-/// 由定义图与单据组织构造启动输入。
-///
-/// 审批人取自已发布节点，不接受客户端选择。对象读取权失败时收敛为 BLOCKED。
-///
-/// # 用途
-/// 把启动参数收敛为引擎 `prepare_start` 输入。
-///
-/// # 参数
-/// * `input` - 定义图、绑定、主体与提交人
-///
-/// # 返回
-/// 返回可交给 `prepare_start` 的输入。
-///
-/// # 错误
-/// 入口缺失、审批人非法、幂等键非法或读取权校验失败时返回错误。
-///
-/// # 关键业务约束
-/// 定义版本必须与冻结绑定一致；对象读取权失败时收敛为 BLOCKED。
+// 由定义图与单据组织构造启动输入。
+//
+// 审批人取自已发布节点，不接受客户端选择。对象读取权失败时收敛为 BLOCKED。
+//
+// 把启动参数收敛为引擎 `prepare_start` 输入。
+//
+// `input` 为定义图、绑定、主体与提交人。返回可交给 `prepare_start` 的输入。入口缺失、审批人非法、幂等键非法或读取权校验失败时返回错误。
+//
+// 定义版本必须与冻结绑定一致；对象读取权失败时收敛为 BLOCKED。
 pub(crate) fn build_document_start_input(input: DocumentStartInput<'_>) -> Result<StartExecutionInput> {
     let DocumentStartInput {
         resubmission_reason,
@@ -187,17 +158,9 @@ pub(crate) fn build_document_start_input(input: DocumentStartInput<'_>) -> Resul
     )?)
 }
 
-/// 为定义全部节点冻结启动绑定，并按单据组织重验对象读取权。
-///
-/// # 参数
-/// * `graph` - 定义图
-/// * `organization_id` - 单据责任组织
-///
-/// # 返回
-/// 返回与节点一一对应的绑定。
-///
-/// # 错误
-/// 节点审批人引用非法或显示名为空时返回校验错误。
+// 为定义全部节点冻结启动绑定，并按单据组织重验对象读取权。
+//
+// `graph` 为定义图；`organization_id` 为单据责任组织。返回与节点一一对应的绑定。节点审批人引用非法或显示名为空时返回校验错误。
 fn start_bindings_from_graph(
     graph: &DefinitionGraph,
     organization_id: &str,
@@ -248,24 +211,12 @@ pub(crate) struct CustomerReceiptStartPersistInput {
     pub now: Instant,
 }
 
-/// 在调用方事务内写入回款审批启动事实。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `input` - 已进入审批的回款、快照与启动计划
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回更新后的回款实体。
-///
-/// # 错误
-/// 运行事实或回款写入失败时返回错误。
-///
-/// # 关键业务约束
-/// 独立提交通过上层新建事务，本方法的启动收据必须是整笔事务第一写。创建并
-/// 提交由外层创建命令先完成自身幂等仲裁；本方法作为不可独立调用的审批子步骤，
-/// 其写段固定为“启动收据 -> 注册行启动守卫 -> 回款单 -> BPM”。
-/// 成功财务回执与业务事件由外层主命令在同一执行器写入，本子步骤不重复记录。
+// 在调用方事务内写入回款审批启动事实。
+//
+// `input` 为已进入审批的回款、快照与启动计划。返回更新后的回款实体。运行事实或回款写入失败时返回错误。
+//
+// 独立提交通过上层新建事务，本方法的启动收据必须是整笔事务第一写。创建并提交由外层创建命令先完成自身幂等仲裁；本方法作为不可独立调用的审批子步骤，其写段固定为“启动收据 -> 注册行启动守卫 -> 回款单 ->
+// BPM”。成功财务回执与业务事件由外层主命令在同一执行器写入，本子步骤不重复记录。
 pub(crate) async fn persist_customer_receipt_start_apply(
     db: &Database,
     rbac: &FinancePostingPorts,
@@ -313,17 +264,11 @@ pub(crate) async fn persist_customer_receipt_start_apply(
     Ok(receipt)
 }
 
-/// 依次仲裁启动收据和注册行，保持审批子步骤的首写顺序。
-///
-/// # 参数
-/// * `db` - 数据库。
-/// * `writes` - 已准备的审批启动写集。
-/// * `now` - 本次启动时间。
-/// * `executor` - 调用方事务。
-/// # 返回
-/// 两项启动守卫均已写入。
-/// # 错误
-/// 收据争用、注册行状态冲突或仓储错误时返回错误。
+// 依次仲裁启动收据和注册行，保持审批子步骤的首写顺序。
+//
+// `writes` 为已准备的审批启动写集；`now` 为本次启动时间；`executor` 为调用方事务。两项启动守卫均已写入。
+//
+// 收据争用、注册行状态冲突或仓储错误时返回错误。
 async fn claim_receipt_start(
     db: &Database,
     writes: &PlannedWrites,
@@ -364,19 +309,11 @@ pub(crate) struct RuntimeStartInput<'a> {
     pub now: Instant,
 }
 
-/// 将启动计划写入 BPM 集合、不可变快照和入口 WorkItem。
-///
-/// # 参数
-/// * `db` - 数据库。
-/// * `writes` - 已规划的启动写入。
-/// * `input` - 单据类型、提交快照、入口任务责任与启动时刻。
-/// * `executor` - 调用方事务执行器。
-///
-/// # 返回
-/// 运行时、快照和入口任务写入成功时无返回值。
-///
-/// # 错误
-/// 计划缺少入口执行、快照构造、展示捕获或任一步写入失败时返回错误。
+// 将启动计划写入 BPM 集合、不可变快照和入口 WorkItem。
+//
+// `writes` 为已规划的启动写入；`input` 为单据类型、提交快照、入口任务责任与启动时刻；沿用原事务的执行器。运行时、快照和入口任务写入成功时无返回值。
+//
+// 计划缺少入口执行、快照构造、展示捕获或任一步写入失败时返回错误。
 pub(crate) async fn persist_runtime_writes(
     db: &Database,
     rbac: &FinancePostingPorts,
@@ -453,7 +390,7 @@ mod tests {
         .expect("入口执行夹具")
     }
 
-    /// 列表投影必须来自入口执行，不得推断未知审批人。
+    // 列表投影必须来自入口执行，不得推断未知审批人。
     #[test]
     fn list_projection_copies_entry_assignee() {
         let projection =

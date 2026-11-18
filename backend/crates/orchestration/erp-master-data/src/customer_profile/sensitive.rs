@@ -21,14 +21,10 @@ impl CustomerProfileProcess {
     ///
     /// 本入口在同一事务检查客户对象、字段详情和揭示资格。
     ///
-    /// # 参数
-    /// * `req` - 揭示请求，只携带短时令牌。
-    /// * `actor` - 已认证操作人，用于成功审计。
+    /// `req`：揭示请求，只携带短时令牌；`actor`：已认证操作人，用于成功审计。
     ///
-    /// # 返回
     /// 返回解密后的单个敏感字段明文。
     ///
-    /// # 错误
     /// 请求校验失败、令牌非法或过期、客户或事实不存在、事实不属于令牌客户、密文不可用或审计写入失败时返回错误。
     pub async fn reveal_sensitive(
         &self,
@@ -46,7 +42,7 @@ impl CustomerProfileProcess {
             .await
     }
 
-    /// 字段资格、客户归属、密文读取及审计共用原事务。
+    // 字段资格、客户归属、密文读取及审计共用原事务。
     async fn reveal_snapshot(
         &self,
         req: &RevealCustomerSensitiveRequest,
@@ -74,7 +70,7 @@ impl CustomerProfileProcess {
         Ok(CustomerSensitiveRevealView { value })
     }
 
-    /// 读取令牌指定事实的密文并校验其 Party 归属。
+    // 读取令牌指定事实的密文并校验其 Party 归属。
     async fn sensitive_ciphertext(
         &self,
         kind: SensitiveFieldKind,
@@ -117,12 +113,12 @@ impl CustomerProfileProcess {
     }
 }
 
-/// 读取当前时刻的 Unix 秒；负值或溢出不能签发令牌。
+// 读取当前时刻的 Unix 秒；负值或溢出不能签发令牌。
 fn unix_now() -> Result<u64> {
     u64::try_from(Instant::now().unix_secs()).map_err(|_| Error::Internal("系统时间非法".to_string()))
 }
 
-/// 每类字段保留独立的详情与揭示资格。
+// 每类字段保留独立的详情与揭示资格。
 pub(super) fn field_permissions(kind: SensitiveFieldKind) -> [Permission; 2] {
     match kind {
         SensitiveFieldKind::ContactMobile => [party::CONTACT_DETAIL, party::CONTACT_REVEAL],

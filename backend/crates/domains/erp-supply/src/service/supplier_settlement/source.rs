@@ -32,19 +32,8 @@ use crate::repository::supplier_settlement::SupplierSettlementSourceScope;
 use crate::{Error, Result};
 
 impl SupplierSettlementService {
-    /// 查询供应商与周期下最新的完整来源证据批次。
-    ///
-    /// 该读模型供创建表单取得服务端冻结的期间策略，不返回逐行金额。
-    ///
-    /// # 参数
-    /// * `query` - 供应商与结算期间查询条件
-    /// * `actor` - 当前认证账号，按共享服务检查来源证据读取资格。
-    ///
-    /// # 返回
-    /// 功能资格和来源证据共用同一快照；提交成功后返回概要视图。
-    ///
-    /// # 错误
-    /// 日期或期间非法、仓储查询失败或当前范围没有来源证据时返回错误。
+    /// 为创建结算单表单读取该供应商与期间的最新完整来源概要。在同一快照先验功能资格，再读服务端冻结的期
+    /// 间策略；不返回逐行金额。资格无效、日期或期间非法、无来源或读库失败时不返回概要。
     pub async fn latest_source_evidence(
         &self,
         query: &SupplierSettlementSourceEvidenceQuery,
@@ -61,13 +50,8 @@ impl SupplierSettlementService {
             .await
     }
 
-    /// 在原读取快照检查功能资格，并使用原执行器读取最新完整来源证据。
-    /// # 参数
-    /// query 为供应商与期间，actor 为认证账号，executor 为公开入口的原事务执行器。
-    /// # 返回
-    /// 功能资格检查通过后的最新完整来源证据概要。
-    /// # 错误
-    /// 授权、参数校验、来源缺失或业务读取失败时返回对应错误。
+    // 在入口原快照先检查最新来源查询权限，再按供应商和业务期间读取概要；授权、参数或读库失败向上传播，没
+    // 有完整来源返回 `NotFound`。
     pub(super) async fn source_evidence_view(
         &self,
         query: &SupplierSettlementSourceEvidenceQuery,
@@ -95,19 +79,8 @@ impl SupplierSettlementService {
             })
     }
 
-    /// 从已验证命令和正式履约/退款事实构建不可变来源证据批次。
-    ///
-    /// # 参数
-    /// * `req` - 来源证据命令
-    /// * `actor_id` - 已鉴权记录人
-    /// * `executor` - 调用方执行器
-    /// * `request_hash` - 当前命令的稳定幂等指纹
-    ///
-    /// # 返回
-    /// 返回可在事务中直接持久化的完整来源证据实体。
-    ///
-    /// # 错误
-    /// 周期/版本非法、跨域事实缺失、范围不完整、关系不一致或金额构造失败时返回错误。
+    /// 在来源录入事务中校验期间及明细身份，用正式履约和退款事实逐行组装可冻结的完整来源批次，并保留命令
+    /// 指纹。版本、覆盖范围、归属或金额不合法时不返回可落库事实。
     pub async fn build_source_evidence(
         &self,
         req: &RecordSettlementSourceEvidenceRequest,
@@ -152,19 +125,9 @@ impl SupplierSettlementService {
     }
 }
 
-/// 加载来源范围快照：新版本守卫与跨集合范围读取。
-///
-/// # 参数
-/// * `req` - 来源证据命令
-/// * `period` - 已校验的结算期间
-/// * `input_item_ids` - 去重后的命令明细身份
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回订单、明细与退款事实的范围快照。
-///
-/// # 错误
-/// 版本回退、范围为空或仓储失败时返回错误。
+// 加载来源范围快照：新版本守卫与跨集合范围读取。
+// 返回订单、明细与退款事实的范围快照。
+// 版本回退、范围为空或仓储失败时返回错误。
 async fn load_source_scope(
     db: &Database,
     req: &super::RecordSettlementSourceEvidenceRequest,
@@ -206,19 +169,10 @@ async fn load_source_scope(
     Ok(scope)
 }
 
-/// 由范围快照组装全部冻结来源行：建索引、完整性校验与逐行派生。
-///
-/// # 参数
-/// * `supplier_id` - 结算供应商
-/// * `inputs` - 来源证据命令明细
-/// * `scope` - 已加载的范围快照
-/// * `period` - 已校验的结算期间
-///
-/// # 返回
-/// 返回与命令同序的冻结来源行。
-///
-/// # 错误
-/// 范围不完整、归属不一致或金额恒等失败时返回错误。
+// 由范围快照组装全部冻结来源行：建索引、完整性校验与逐行派生。
+// 返回与命令同序的冻结来源行。
+// 范围不完整、归属不一致或金额恒等失败时返回错误。
+// `scope`：已加载的范围快照。
 fn assemble_source_lines(
     supplier_id: &SupplierAccountId,
     inputs: &[super::RecordSettlementSourceEvidenceLineRequest],
@@ -253,19 +207,9 @@ fn assemble_source_lines(
     Ok(lines)
 }
 
-/// 校验单行命令的订单与明细归属一致性。
-///
-/// # 参数
-/// * `input` - 当前来源命令行
-/// * `order_map` - 范围订单索引
-/// * `item_map` - 范围明细索引
-/// * `supplier_id` - 结算供应商
-///
-/// # 返回
-/// 返回已核验的订单与明细引用。
-///
-/// # 错误
-/// 订单或明细缺失、明细不属于订单或订单不属于供应商时返回错误。
+// 校验单行命令的订单与明细归属一致性。
+// 返回已核验的订单与明细引用。
+// 订单或明细缺失、明细不属于订单或订单不属于供应商时返回错误。
 fn check_source_line<'a>(
     input: &super::RecordSettlementSourceEvidenceLineRequest,
     order_map: &'a HashMap<String, SupplierFulfillmentOrder>,
@@ -291,21 +235,9 @@ fn check_source_line<'a>(
     Ok((order, item))
 }
 
-/// 由一条命令输入及已查询的正式事实构建冻结来源行。
-///
-/// # 参数
-/// * `input` - 当前来源命令行
-/// * `order` - 已加载的供应商履约订单
-/// * `item` - 已加载的供应商履约明细
-/// * `refund_allocations` - 供应商订单范围内的退款分配
-/// * `refund_fact_map` - 退款事实头索引
-/// * `period` - 当前结算期间
-///
-/// # 返回
-/// 返回由实体工厂派生 ERP 金额并规范化证据的冻结来源行。
-///
-/// # 错误
-/// 订单状态、取消证据、退款关系、期间归属或金额恒等不一致时返回错误。
+// 由一条命令输入及已查询的正式事实构建冻结来源行。
+// 返回由实体工厂派生 ERP 金额并规范化证据的冻结来源行。
+// 订单状态、取消证据、退款关系、期间归属或金额恒等不一致时返回错误。
 fn build_source_line(
     input: &super::RecordSettlementSourceEvidenceLineRequest,
     order: &SupplierFulfillmentOrder,
@@ -397,20 +329,9 @@ fn build_source_line(
     .map_err(Into::into)
 }
 
-/// 汇总当前履约明细在结算期间内的退款分配金额与证据。
-///
-/// # 参数
-/// * `input` - 当前来源命令行
-/// * `refund_allocations` - 供应商订单范围内的全部退款分配
-/// * `refund_fact_map` - 退款事实头索引
-/// * `period` - 当前结算期间
-/// * `evidence_reference_ids` - 待追加退款证据引用的集合
-///
-/// # 返回
-/// 返回 APPLY 减 REVERSE 后的非负退款金额三元组。
-///
-/// # 错误
-/// 分配缺少退款头、净退款为负或金额三元组不一致时返回错误。
+// 汇总当前履约明细在结算期间内的退款分配金额与证据。
+// 返回 APPLY 减 REVERSE 后的非负退款金额三元组。
+// 分配缺少退款头、净退款为负或金额三元组不一致时返回错误。
 fn refund_amounts(
     input: &super::RecordSettlementSourceEvidenceLineRequest,
     refund_allocations: &[SupplierRefundAllocation],
@@ -465,16 +386,9 @@ struct CompleteSourceScope<'a> {
     period: SettlementPeriod,
 }
 
-/// 校验来源命令完整覆盖服务端可枚举的期间内正式事实。
-///
-/// # 参数
-/// * `scope` - 命令输入、履约事实、退款事实与结算期间的只读集合
-///
-/// # 返回
-/// 所有期间内完成、退款和显式取消明细均被命令覆盖时返回 `Ok(())`。
-///
-/// # 错误
-/// 明细缺少订单头、退款分配缺少事实头或命令漏行时返回错误。
+// 校验来源命令完整覆盖服务端可枚举的期间内正式事实。
+// 所有期间内完成、退款和显式取消明细均被命令覆盖时返回 `Ok(())`。
+// 明细缺少订单头、退款分配缺少事实头或命令漏行时返回错误。
 fn ensure_complete_source_scope(scope: CompleteSourceScope<'_>) -> Result<()> {
     let CompleteSourceScope {
         inputs,
@@ -523,15 +437,7 @@ fn ensure_complete_source_scope(scope: CompleteSourceScope<'_>) -> Result<()> {
 }
 
 /// 计算来源证据命令的稳定幂等指纹。
-///
-/// # 参数
-/// * `req` - 客户端来源证据命令
-///
-/// # 返回
 /// 返回对行和证据输入顺序稳定的 SHA-256 指纹。
-///
-/// # 错误
-/// 不返回错误。
 pub fn source_request_hash(req: &RecordSettlementSourceEvidenceRequest) -> String {
     let mut parts = vec![
         "supplier-settlement-source-evidence-command-v1".to_string(),
@@ -579,16 +485,7 @@ pub fn source_request_hash(req: &RecordSettlementSourceEvidenceRequest) -> Strin
 
 impl SupplierSettlementService {
     /// 按请求 ID 重放已冻结来源，并保持不同载荷的原冲突。
-    ///
-    /// # 参数
-    /// * `request_id` - 来源证据请求身份。
-    /// * `request_hash` - 本次命令指纹。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
     /// 没有该请求时返回 `None`。指纹一致时返回已冻结来源的概要视图。
-    ///
-    /// # 错误
     /// 同一请求已用于不同命令时返回 `ConflictError`。仓储读取失败时返回对应错误。
     pub async fn replay_source(
         &self,
@@ -607,16 +504,8 @@ impl SupplierSettlementService {
         Ok(Some(existing.into()))
     }
     /// 持久化已经完成逐行核验的来源证据；审计由根流程在其后写入。
-    ///
-    /// # 参数
-    /// * `evidence` - 已逐行核验的来源证据。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 无返回值。来源证据已写入。
-    ///
-    /// # 错误
-    /// 仓储写入失败时返回对应错误。
+    /// 来源证据已写入。
+    /// 仓储写入失败时向上传播错误。
     pub async fn persist_source_evidence(
         &self,
         evidence: &SupplierSettlementSourceEvidence,

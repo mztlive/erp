@@ -27,20 +27,10 @@ use crate::{Error, Result};
 impl SalesOrderCommandProcess {
     /// 撤回审批中的销售单，回到可修正草稿。
     ///
-    /// `GoodsService` 与 `Voucher` 均先按主体加载 RUNNING/BLOCKED 实例并调用
-    /// 统一 `prepare_cancel`，关闭开放任务后再执行 `cancel_action`。
-    /// 已 `APPROVED` 必须拒绝。
+    /// `GoodsService` 与 `Voucher` 均先按主体加载 RUNNING/BLOCKED 实例并调用统一 `prepare_cancel`，关闭开放任务后再执行 `cancel_action`。已
+    /// `APPROVED` 必须拒绝。
     ///
-    /// # 参数
-    /// * `id` - 销售单主键
-    /// * `req` - 撤回请求（原因必填）
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回撤回后的销售单详情。
-    ///
-    /// # 错误
-    /// 非审批中、已最终通过、原因缺失或并发冲突时返回错误。
+    /// `req` 为撤回请求（原因必填）。返回撤回后的销售单详情。非审批中、已最终通过、原因缺失或并发冲突时返回错误。
     #[tracing::instrument(
         name = "sales_order.cancel_approval",
         skip_all,
@@ -70,7 +60,7 @@ impl SalesOrderCommandProcess {
         self.command_result(id, actor, &sales_order::CANCEL_APPROVAL).await
     }
 
-    /// 对象授权和版本检查通过后，在原事务准备并应用取消计划。
+    // 对象授权和版本检查通过后，在原事务准备并应用取消计划。
     async fn cancel_stage(
         &self,
         id: &str,
@@ -123,10 +113,10 @@ impl SalesOrderCommandProcess {
 /// 撤回命令只将完整对象授权和后续取消执行作为替身边界。
 #[async_trait]
 trait CancellationSource: Sync {
-    /// 在原事务中返回已授权的当前销售单。
+    // 在原事务中返回已授权的当前销售单。
     async fn authorized_order(&self, executor: &mut dyn Executor) -> Result<SalesOrder>;
 
-    /// 使用已检查版本的单据继续准备和写入取消计划。
+    // 使用已检查版本的单据继续准备和写入取消计划。
     async fn apply(&self, order: SalesOrder, executor: &mut dyn Executor) -> Result<()>;
 }
 
@@ -140,18 +130,18 @@ struct Cancellation<'a> {
 
 #[async_trait]
 impl CancellationSource for Cancellation<'_> {
-    /// 完整授权先于版本、审批绑定和运行状态检查。
+    // 完整授权先于版本、审批绑定和运行状态检查。
     async fn authorized_order(&self, executor: &mut dyn Executor) -> Result<SalesOrder> {
         self.service.command_access(self.actor, sales_order::CANCEL_APPROVAL).current(self.id, executor).await
     }
 
-    /// 原事务继续读取审批事实并写入，不创建新执行器。
+    // 原事务继续读取审批事实并写入，不创建新执行器。
     async fn apply(&self, order: SalesOrder, executor: &mut dyn Executor) -> Result<()> {
         self.service.cancel_stage(self.id, self.request, self.actor, order, executor).await
     }
 }
 
-/// 先证明完整对象资格，再暴露版本结果及取消状态。
+// 先证明完整对象资格，再暴露版本结果及取消状态。
 async fn cancel(
     source: &impl CancellationSource,
     expected_version: u64,
@@ -210,7 +200,7 @@ mod tests {
             Self { order, failure, events: Mutex::new(vec![]), executors: Mutex::new(vec![]) }
         }
 
-        /// 记录实际生产编排传入的阶段执行器。
+        // 记录实际生产编排传入的阶段执行器。
         fn record(&self, event: &'static str, executor: &mut dyn Executor) {
             self.events.lock().unwrap().push(event);
             self.executors.lock().unwrap().push(executor as *mut dyn Executor as *mut () as usize);
@@ -219,7 +209,7 @@ mod tests {
 
     #[async_trait]
     impl CancellationSource for Source {
-        /// 拒绝和设施错误必须先于对象版本错误返回。
+        // 拒绝和设施错误必须先于对象版本错误返回。
         async fn authorized_order(&self, executor: &mut dyn Executor) -> Result<SalesOrder> {
             self.record("authorize", executor);
             match self.failure {
@@ -229,7 +219,7 @@ mod tests {
             }
         }
 
-        /// 只有授权和版本均满足才允许进入取消准备与写入。
+        // 只有授权和版本均满足才允许进入取消准备与写入。
         async fn apply(&self, order: SalesOrder, executor: &mut dyn Executor) -> Result<()> {
             self.record("apply", executor);
             assert_eq!(order.base.id, self.order.base.id);

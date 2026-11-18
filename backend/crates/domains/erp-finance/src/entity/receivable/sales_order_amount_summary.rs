@@ -23,18 +23,8 @@ pub struct SalesOrderReceivableAmountSummary {
 
 impl SalesOrderReceivableAmountSummary {
     /// 返回无子账时的精确零摘要。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回 `account_count = 0` 且三金额均为精确零的摘要。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    ///
-    /// # 关键业务约束
-    /// 无子账不得被结案规则解释为已结清；调用方必须读取 `has_accounts`。
+    /// 业务边界：无子账不得被结案规则解释为已结清；调用方必须读取 `has_accounts`。
     pub fn empty() -> Self {
         Self {
             account_count: 0,
@@ -45,32 +35,18 @@ impl SalesOrderReceivableAmountSummary {
     }
 
     /// 是否存在未删除应收子账。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// `account_count > 0` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 结果：`account_count > 0` 时返回 `true`。
     pub fn has_accounts(&self) -> bool {
         self.account_count > 0
     }
 
     /// 按实体字段精确相加构造摘要（聚合对拍基准算法）。
-    ///
-    /// # 参数
-    /// * `accounts` - 同一销售单的未删除应收子账
-    ///
-    /// # 返回
     /// 返回子账数量与三金额精确合计；空迭代器返回 [`Self::empty`]。
+    /// 金额值对象保持定点精度。
+    /// 业务边界：必须与 MongoDB Decimal128 `$sum` 结果逐项相等，禁止浮点或舍入。
     ///
-    /// # 错误
-    /// 不返回错误。金额值对象保持定点精度。
-    ///
-    /// # 关键业务约束
-    /// 必须与 MongoDB Decimal128 `$sum` 结果逐项相等，禁止浮点或舍入。
+    /// 输入约定：
+    /// - `accounts`：同一销售单的未删除应收子账
     pub fn from_accounts<'a, I>(accounts: I) -> Self
     where
         I: IntoIterator<Item = &'a ReceivableAccount>,

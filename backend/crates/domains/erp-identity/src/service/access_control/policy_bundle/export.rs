@@ -10,12 +10,11 @@ use crate::{Error, Result};
 
 impl PolicyBundleService {
     /// 导出明确选择的角色及人员当前配置。
-    /// # 参数
-    /// request 为最多100个角色及100个人员的选择，actor 为认证身份。
-    /// # 返回
     /// 可再次预览的文件、版本及不能保存为追加项的系统规则。
-    /// # 错误
+    ///
     /// 越权、目标失效、复杂旧配置或角色继承时拒绝。
+    ///
+    /// request 为最多100个角色及100个人员的选择，actor 为认证身份。
     pub async fn export(&self, request: ExportPolicyRequest, actor: AuditActor) -> Result<PolicyExport> {
         let selection = request.selection()?;
         let service = self.clone();
@@ -29,7 +28,7 @@ impl PolicyBundleService {
             .await
     }
 
-    /// 使用单个只读事务导出，并核对缓存与原快照一致。
+    // 在同一个只读快照取证和导出，核对读取的策略缓存与原执行阶段一致，不将跨快照结果写入文件。
     async fn export_steps(
         &self,
         selection: PolicyDocument,

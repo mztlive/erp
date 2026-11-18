@@ -16,12 +16,9 @@ pub struct TaskAccess {
 }
 impl TaskAccess {
     /// 创建尚未授予任何动作的账号事实。
-    /// # 参数
-    /// actor_id 为真实账号身份。
-    /// # 返回
     /// 返回空权限、空任务管理集合。
-    /// # 错误
-    /// 无。
+    ///
+    /// actor_id 为真实账号身份。
     pub fn new(actor_id: String) -> Self {
         Self {
             actor_id,
@@ -30,13 +27,10 @@ impl TaskAccess {
             managed_task_ids: BTreeSet::new(),
         }
     }
-    /// 判断当前任务的管理证明和管理动作权限是否同时成立。
-    /// # 参数
-    /// id 为精确任务 ID。
-    /// # 返回
+    /// 当当前任务的管理证明和管理动作权限同时成立时返回 `true`。
     /// 其他任务、空集合或无功能权限均返回 false。
-    /// # 错误
-    /// 无。
+    ///
+    /// id 为精确任务 ID。
     pub fn can_manage(&self, id: &str) -> bool {
         self.managed_task_ids.contains(id)
     }
@@ -44,12 +38,9 @@ impl TaskAccess {
 
 impl TaskAccess {
     /// 根据精确任务管理资格、操作权限和实体责任规则计算动作。
-    /// # 参数
-    /// policy 为任务状态和责任事实，id 为任务 ID，actor_id 为实际账号，managed_queue 表示当前可展示管理动作。
-    /// # 返回
     /// 返回满足当前责任和权限的动作；执行入口仍须重验。
-    /// # 错误
-    /// 无。
+    ///
+    /// policy 为任务状态和责任事实，id 为任务 ID，actor_id 为实际账号，managed_queue 表示当前可展示管理动作。
     pub fn actions(
         &self,
         policy: WorkItemActionPolicy<'_>,

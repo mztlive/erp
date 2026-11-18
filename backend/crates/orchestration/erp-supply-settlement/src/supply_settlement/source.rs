@@ -14,21 +14,10 @@ use validator::Validate;
 use super::SupplierSettlementProcess;
 use crate::{Error, Result};
 impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
-    /// 录入一个经服务端逐行核验、不可变且可幂等恢复的来源证据批次。
+    /// 逐行核验并登记不可变来源批次，供结算试算回读。
+    /// 成本及退款三元组仅从 D32 正式事实派生；客户端只能补充运费、服务费、取消时间和供应商账单行，且必须提供正式证据引用。
     ///
-    /// 订单成本和退款三元组只从 D32 正式事实派生；客户端只能补充仓库尚无模型的
-    /// 运费、服务费、取消时间与供应商账单行，并必须携带正式证据引用。
-    ///
-    /// # 参数
-    /// * `req` - 客户端来源证据命令
-    /// * `actor` - 已鉴权记录人
-    ///
-    /// # 返回
-    /// 返回新建或幂等恢复的不可变来源证据概要。
-    ///
-    /// # 错误
-    /// 策略/周期非法、订单与行不精确配对、事实不在周期内、金额恒等失败或幂等键
-    /// 被不同命令复用时 fail-closed。
+    /// 周期、策略、订单行归属、期间内事实或金额恒等不符时拒绝；幂等键不能用于不同载荷，写入失败后只读查证原请求结果。
     pub async fn record_source_evidence(
         &self,
         req: RecordSettlementSourceEvidenceRequest,
@@ -78,7 +67,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         }
     }
 
-    /// 全部来源校验、正式关联和证据写入沿用入口快照。
+    // 在原事务核验录入资格并查找同载荷回执；首次录入时核对来源、关联正式证据、保存批次和审计，保证依据与批次一起提交。
     async fn record_source(
         &self,
         req: &RecordSettlementSourceEvidenceRequest,

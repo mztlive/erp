@@ -11,13 +11,7 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
 /// 持久化品牌导入任务，返回已登记的任务。
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已鉴权提交人
-/// * `request` - 全部行与稳定提交身份
-/// # 返回
 /// 统一后台任务视图。
-/// # 错误
 /// 参数错误、权限不足、异载荷冲突、持久化失败。
 pub async fn submit(
     State(state): State<HttpState>,
@@ -28,13 +22,7 @@ pub async fn submit(
 }
 
 /// 读取原提交人已结束任务的待处理行。
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 当前操作人
-/// * `id` - 后台任务身份
-/// # 返回
 /// 可供修正重导的源行与失败说明。
-/// # 错误
 /// 任务不存在、非原提交人、权限失效、任务未结束或源内容不可读。
 pub async fn failures(
     State(state): State<HttpState>,

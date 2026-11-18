@@ -5,13 +5,9 @@ use crate::repository::authorization::{AccessProof, CompiledAccess};
 use crate::{Error, Result};
 
 impl AuthorizationService {
-    /// 复验完整身份、范围、映射及有效期。
-    /// # 参数
-    /// access 为本服务编译的查询结果；executor 为原执行器。
-    /// # 返回
-    /// 当前依赖仍满足原授权时成功。
-    /// # 错误
-    /// 任一版本、会话、模型或有效期变化时拒绝。
+    /// 在业务结果交付前，沿原执行器复验本服务签发的查询凭证。事务内核对原快照的边界和有效期；非事务路径重读身份、范围及实际动态映射依赖。
+    ///
+    /// 依赖变化或到期返回范围变化错误，调用方须丢弃结果；设施读取错误不降级。成功会结束凭证所属的读取阶段。
     pub async fn validate(&self, access: &CompiledAccess, executor: &mut dyn Executor) -> Result<()> {
         self.validate_proof(&access.proof, executor).await?;
         for dependency in &access.dependencies {
@@ -23,7 +19,7 @@ impl AuthorizationService {
         Ok(())
     }
 
-    /// 重读所有授权依赖，而非只比较记录授权修订号。
+    // 交付前验证凭证所属服务和执行边界。非事务读取须用原授权时点重算身份、范围与实际规则，不能只比较记录授权修订号；原快照无需重读。
     pub(super) async fn validate_proof(
         &self,
         proof: &AccessProof,
@@ -75,12 +71,12 @@ impl AuthorizationService {
     }
 }
 
-/// 稳定范围失效错误，调用方须丢弃读取结果。
+// 统一构造 `DATA_SCOPE_CHANGED`，通知读取用例丢弃现有结果并重新发起授权查询。
 fn changed() -> Error {
     Error::ConflictError("DATA_SCOPE_CHANGED：授权范围已变化，请重新读取".into())
 }
 
-/// 已经授权后的资格失效统一按范围变化处理；取证故障保留原错误。
+// 交付复验时，将已授权身份失效、权限撤销或版本冲突报告为范围变化；保留取证设施故障的原始错误类别。
 pub(super) fn revalidation_error(error: Error) -> Error {
     match error {
         Error::Forbidden(_) | Error::Unauthenticated(_) | Error::ConflictError(_) => changed(),

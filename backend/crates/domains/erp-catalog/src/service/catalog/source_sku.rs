@@ -16,13 +16,12 @@ use crate::{EnableStatus, Error, ListingStatus, ProductSkuInput, Result, Sku};
 
 impl CatalogService {
     /// 将经内部确认的新规格加入已有商品，保持未上架并保存采购确认的销售参考价。
-    /// # 参数
-    /// `product_id` 为已经绑定的公司商品；`input` 为新规格；`actor` 为当前操作人；
+    ///
+    /// 新建的公司 SKU。商品越权、停用、字典失效、规格重复、非法新身份或写入失败时拒绝。
+    ///
+    /// `product_id` 为已经绑定的公司商品；`input` 为新规格；`actor` 为当前操作人。
+    ///
     /// `executor` 由选品用例提供，商品、供给和来源关系必须沿用同一事务。
-    /// # 返回
-    /// 新建的公司 SKU。
-    /// # 错误
-    /// 商品越权、停用、字典失效、规格重复、非法新身份或写入失败时拒绝。
     pub async fn append_source_sku(
         &self,
         product_id: &str,

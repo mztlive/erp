@@ -33,32 +33,19 @@ impl fmt::Debug for PurchaseDeliveryAllocation {
 }
 
 impl PurchaseDeliveryAllocation {
-    /// 返回收件资料身份：收货人、电话、地区与详细地址。
+    // 返回收件资料身份：收货人、电话、地区与详细地址。
     pub(super) fn key(&self) -> (&str, &str, &str, &str) {
         (&self.recipient, &self.phone, self.region_code.as_str(), &self.address)
     }
 
-    /// 返回"省市区 + 详细地址"的完整地址。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回拼接后的完整地址。
-    ///
-    /// # 错误
-    /// 无。
+    /// 把省、市、区和详细地址拼成完整地址，供采购配送信息展示。
     pub fn full_address(&self) -> String {
         format!("{}{}", self.region_name, self.address)
     }
 
     /// 校验冻结采购行的交付数量和字段归属，并按地区代码重新生成地区名称。
-    /// # 参数
-    /// `rows` 为交付安排，`kind`、`quantity` 为采购行内容。
-    /// # 返回
-    /// 空安排或交付合计等于采购数量时成功。
-    /// # 错误
-    /// 资料非法、数量非正、重复地址或数量不守恒时拒绝。
+    ///
+    /// 空安排或交付合计等于采购数量时成功。资料非法、数量非正、重复地址或数量不守恒时拒绝。
     pub fn validate(rows: &mut [Self], kind: PurchaseLineType, quantity: Option<Quantity>) -> Result<()> {
         if rows.is_empty() {
             return Ok(());
@@ -97,12 +84,10 @@ impl PurchaseDeliveryAllocation {
     }
 
     /// 以授权销售要求和已有采购安排核验本次分配。
-    /// # 参数
+    ///
+    /// 来源、合计和地址剩余量全部符合时成功。仓发泄露客户地址、伪造地址、分配缺失或超量时拒绝。
+    ///
     /// `rows` 为本次分配，`source` 为销售冻结要求，`assigned` 为已有采购承担数量；其余参数为采购数量、履约方式和单位精度。
-    /// # 返回
-    /// 来源、合计和地址剩余量全部符合时成功。
-    /// # 错误
-    /// 仓发泄露客户地址、伪造地址、分配缺失或超量时拒绝。
     pub fn validate_source(
         rows: &[Self],
         source: &[Self],

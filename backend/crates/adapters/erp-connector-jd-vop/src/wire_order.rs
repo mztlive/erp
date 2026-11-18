@@ -26,13 +26,8 @@ pub(super) struct JdOrder {
 }
 
 impl JdOrder {
-    /// 核对来源明确报告的未确认、未拆分原预占父单。
-    /// # 参数
-    /// 无；只使用本次原订单查询事实。
-    /// # 返回
-    /// 原根、parentType=1、确认状态0且未报告非空子单时返回真。
-    /// # 错误
-    /// 不返回错误；缺少确认状态不能推定为预占根单。
+    // 确认预占或核对当前操作目标时，仅接受本次查询明确返回的根单：parentType=1、确认状态为 0 且未报告非空子单。
+    // 确认状态缺失时不能推断为预占根单。
     pub(super) fn is_reservation_root(&self) -> bool {
         self.parent_type.0 == "1"
             && self.parent_jd_order_id.as_ref().is_none_or(|id| id.0 == "0")
@@ -45,24 +40,14 @@ impl JdOrder {
                 .is_some_and(|value| value.0 == "0")
     }
 
-    /// 读取来源已经提供的子单身份，不单独以缺失列表判定操作资格。
-    /// # 参数
-    /// 无；预占根资格还须由 is_reservation_root 核对原根及明确未确认状态。
-    /// # 返回
-    /// 用于查询缺失节点及叶子验证的子单切片。
-    /// # 错误
-    /// 不返回错误，空切片本身不证明拆单完成。
+    // 补查缺失节点和验证叶子单时读取来源列出的子单号。
+    // 空列表不证明拆单完成或具备操作资格；预占根单还须核对根身份及明确的未确认状态。
     pub(super) fn child_order_ids(&self) -> &[WireId] {
         self.child_jd_order_id_list.as_deref().unwrap_or_default()
     }
 
-    /// 判断已请求扩展标记中是否包含首期未支持的专门履约流程。
-    /// # 参数
-    /// 无；请求层须显式查询qcjbylx、qyfwsp、kmjhyy和medicine。
-    /// # 返回
-    /// 任何非零特殊标记返回真，不静默降级为普通实物。
-    /// # 错误
-    /// 不返回错误，未知非空标记同样按不支持处理。
+    // 核对订单能否走普通履约时，检查查询扩展中的 qcjbylx、qyfwsp、kmjhyy 和 medicine。
+    // 顶层专门流程字段存在，或扩展标记非零（包括未知值）时，均不按普通实物处理。
     pub(super) fn requires_special_fulfillment(&self) -> bool {
         self.qcjbylx.is_some()
             || self.qyfwsp.is_some()

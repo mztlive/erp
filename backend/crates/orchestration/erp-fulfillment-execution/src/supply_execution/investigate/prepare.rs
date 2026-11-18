@@ -54,16 +54,11 @@ struct InvestigationGatewayInput {
 }
 
 impl SupplierFulfillmentProcess {
-    /// 在任何供应商查询或重放之前原子登记稳定调查意图。
-    ///
-    /// # 参数
-    /// * `context` - 原命令及正式任务身份。
-    /// * `identity` - 稳定命令和证据身份。
-    /// * `actor` - 当前操作人。
-    /// # 返回
-    /// 已冻结的结果；首次登记无结果时返回 `None`。
-    /// # 错误
-    /// 当前事实、任务授权、版本、重放证据或持久化失败时返回原错误。
+    // 在任何供应商查询或重放之前原子登记稳定调查意图。
+    //
+    // `context` 为原命令及正式任务身份；`identity` 为稳定命令和证据身份。已冻结的结果；首次登记无结果时返回 `None`。
+    //
+    // 当前事实、任务授权、版本、重放证据或持久化失败时返回原错误。
     pub(super) async fn ensure_investigation_intent(
         &self,
         context: &InvestigationCommandContext,
@@ -85,16 +80,11 @@ impl SupplierFulfillmentProcess {
             .await
     }
 
-    /// 冻结事务外网关结果，使后续任务或对象 CAS 失败时可复用原结果。
-    ///
-    /// # 参数
-    /// * `context` - 原调查命令。
-    /// * `identity` - 原调查意图的稳定身份。
-    /// * `prepared` - 事务外取得的结果。
-    /// # 返回
-    /// 返回已冻结结果；并发命令已冻结结果时直接复用它。
-    /// # 错误
-    /// 意图身份、结果解析或持久化失败时返回原错误。
+    // 冻结事务外网关结果，使后续任务或对象 CAS 失败时可复用原结果。
+    //
+    // `context` 为原调查命令；`identity` 为原调查意图的稳定身份；`prepared` 为事务外取得的结果。
+    //
+    // 返回已冻结结果；并发命令已冻结结果时直接复用它。意图身份、结果解析或持久化失败时返回原错误。
     pub(super) async fn persist_prepared_investigation(
         &self,
         context: &InvestigationCommandContext,
@@ -129,15 +119,9 @@ impl SupplierFulfillmentProcess {
             .await
     }
 
-    /// 在意图提交后重验调用事实，并在事务外查询或重放供应商原动作。
-    ///
-    /// # 参数
-    /// * `context` - 原调查命令及可选正式任务。
-    /// * `actor` - 当前操作人。
-    /// # 返回
-    /// 返回已有终态，或本次网关取得的结果。
-    /// # 错误
-    /// 事实、任务、版本、重放证据或连接能力不符时停止外呼。
+    // 在意图提交后重验调用事实，并在事务外查询或重放供应商原动作。
+    //
+    // `context` 为原调查命令及可选正式任务。返回已有终态，或本次网关取得的结果。事实、任务、版本、重放证据或连接能力不符时停止外呼。
     pub(super) async fn prepare_investigation(
         &self,
         context: &InvestigationCommandContext,
@@ -158,7 +142,7 @@ impl SupplierFulfillmentProcess {
         }
     }
 
-    /// 授权、业务版本、任务来源及外呼连接沿同一快照取证。
+    // 授权、业务版本、任务来源及外呼连接沿同一快照取证。
     async fn investigation_input(
         &self,
         context: &InvestigationCommandContext,
@@ -264,7 +248,7 @@ impl InvestigationIntent {
         create_action(db, &intent, executor).await?;
         Ok(None)
     }
-    /// 在订单事实读取前核对原任务或对象资格，并执行旧入口排除检查。
+    // 在订单事实读取前核对原任务或对象资格，并执行旧入口排除检查。
     async fn authorize(&self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
         authorize_investigation(
             db,
@@ -280,14 +264,11 @@ impl InvestigationIntent {
     }
 }
 
-/// 统一调查预检、意图和提交阶段的原对象或精确任务授权。
-///
-/// # 参数
-/// db、authorization、access、workflow 为同一应用注入的事实与授权能力；context、actor 和 executor 属于当前调查命令。
-/// # 返回
-/// 当前完整资格与原入口约束均成立时，返回原快照中已核验的正式任务；对象入口返回 None。
-/// # 错误
-/// 无活动快照、当前资格或任务来源失效，以及旧入口约束不符时拒绝。
+// 统一调查预检、意图和提交阶段的原对象或精确任务授权。
+//
+// db、authorization、access、workflow 为同一应用注入的事实与授权能力；context、actor 和 executor 属于当前调查命令。
+//
+// 当前完整资格与原入口约束均成立时，返回原快照中已核验的正式任务；对象入口返回 None。无活动快照、当前资格或任务来源失效，以及旧入口约束不符时拒绝。
 pub(super) async fn authorize_investigation(
     db: &Database,
     authorization: &AuthorizationService,
@@ -329,16 +310,9 @@ pub(super) async fn authorize_investigation(
     Ok(task)
 }
 
-/// 在调用方读取边界内按订单、版本、原动作的次序取得调查事实。
-///
-/// # 参数
-/// * `db` - 当前数据库。
-/// * `context` - 原调查命令。
-/// * `executor` - 调用方执行器。
-/// # 返回
-/// 返回已校验版本和原动作关联的订单与动作。
-/// # 错误
-/// 缺失、版本冲突或原动作关联不符时返回首个错误。
+// 在调用方读取边界内按订单、版本、原动作的次序取得调查事实。
+//
+// `context` 为原调查命令；沿用调用方的执行器。返回已校验版本和原动作关联的订单与动作。缺失、版本冲突或原动作关联不符时返回首个错误。
 pub(super) async fn load_investigation_facts(
     db: &Database,
     context: &InvestigationCommandContext,
@@ -364,20 +338,11 @@ pub(super) async fn load_investigation_facts(
     Ok((order, target_action))
 }
 
-/// 按版本、主体、责任、资格、决策权限的顺序重验调查任务。
-///
-/// # 参数
-/// * `db` - 当前数据库。
-/// * `task` - 原命令的任务身份与期望版本。
-/// * `order_id` - 当前订单。
-/// * `order_version` - 调查前订单版本。
-/// * `actor` - 当前操作人。
-/// * `workflow` - 原快照中必须验证的任务决策权限。
-/// * `executor` - 调用方执行器。
-/// # 返回
-/// 返回已校验任务。
-/// # 错误
-/// 任务缺失或任一版本、授权检查失败时立即返回首个错误。
+// 按版本、主体、责任、资格、决策权限的顺序重验调查任务。
+//
+// `task` 为原命令的任务身份与期望版本；`order_id` 为当前订单；`order_version` 为调查前订单版本；`workflow` 为原快照中必须验证的任务决策权限；沿用调用方的执行器。
+//
+// 返回已校验任务。任务缺失或任一版本、授权检查失败时立即返回首个错误。
 pub(super) async fn load_investigation_task(
     db: &Database,
     task: &InvestigationTaskContext,

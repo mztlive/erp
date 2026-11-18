@@ -11,16 +11,12 @@ use crate::{Error, Result};
 
 impl SalesOrderService {
     /// 校验请求草稿中的实物及服务行仍引用公司商品池内的精确 SKU 修订。
+    /// 结果：全部引用仍可销售时返回 `Ok(())`。没有实物行时直接成功。
+    /// 失败条件：任一 `sku_id + sku_revision_id` 不在当日可销售集合时返回 `BusinessLogicError`；资格查询失败时返回对应错误。
     ///
-    /// # 参数
-    /// * `lines` - 草稿行请求。
-    /// * `port` - 公司商品池可销售资格查询。
-    ///
-    /// # 返回
-    /// 全部引用仍可销售时返回 `Ok(())`。没有实物行时直接成功。
-    ///
-    /// # 错误
-    /// 任一 `sku_id + sku_revision_id` 不在当日可销售集合时返回 `BusinessLogicError`；资格查询失败时返回对应错误。
+    /// 输入约定：
+    /// - `lines`：草稿行请求。
+    /// - `port`：公司商品池可销售资格查询。
     pub async fn ensure_sellable_draft_lines(
         &self,
         lines: &[SalesOrderDraftLineRequest],
@@ -35,16 +31,12 @@ impl SalesOrderService {
     }
 
     /// 提交前重新校验已保存工作副本的精确 SKU 修订资格。
+    /// 结果：全部引用仍可销售时返回 `Ok(())`。
+    /// 失败条件：实物行缺少 SKU 或修订时返回 `ValidationError`；引用不在当日可销售集合时返回 `BusinessLogicError`；资格查询失败时返回对应错误。
     ///
-    /// # 参数
-    /// * `lines` - 已保存工作副本行。
-    /// * `port` - 公司商品池可销售资格查询。
-    ///
-    /// # 返回
-    /// 全部引用仍可销售时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 实物行缺少 SKU 或修订时返回 `ValidationError`；引用不在当日可销售集合时返回 `BusinessLogicError`；资格查询失败时返回对应错误。
+    /// 输入约定：
+    /// - `lines`：已保存工作副本行。
+    /// - `port`：公司商品池可销售资格查询。
     pub async fn ensure_sellable_working_copy_lines(
         &self,
         lines: &[SalesOrderWorkingCopyLine],
@@ -55,15 +47,11 @@ impl SalesOrderService {
     }
 
     /// 从工作副本行提取必须成对存在的销售 SKU 与修订引用。
-    ///
-    /// # 参数
-    /// * `lines` - 工作副本行
-    ///
-    /// # 返回
     /// 返回 `(sku_id, sku_revision_id)` 列表。
+    /// 失败条件：实物行缺少 SKU 或修订身份时返回校验错误。
     ///
-    /// # 错误
-    /// 实物行缺少 SKU 或修订身份时返回校验错误。
+    /// 输入约定：
+    /// - `lines`：工作副本行
     pub fn sellable_working_copy_refs(lines: &[SalesOrderWorkingCopyLine]) -> Result<Vec<(String, String)>> {
         lines
             .iter()
@@ -76,17 +64,13 @@ impl SalesOrderService {
     }
 
     /// 批量执行公司商品池资格校验并对缺失引用 fail-closed。
+    /// 结果：全部引用仍可销售时返回 `Ok(())`。空列表直接成功。
+    /// 失败条件：任一引用不在当日可销售集合中时返回 `BusinessLogicError`；资格查询失败时返回对应错误。
     ///
-    /// # 参数
-    /// * `refs` - `(sku_id, sku_revision_id)` 列表。
-    /// * `port` - 公司商品池可销售资格查询。
-    /// * `executor` - 事务会话或 `NoTransaction`。
-    ///
-    /// # 返回
-    /// 全部引用仍可销售时返回 `Ok(())`。空列表直接成功。
-    ///
-    /// # 错误
-    /// 任一引用不在当日可销售集合中时返回 `BusinessLogicError`；资格查询失败时返回对应错误。
+    /// 输入约定：
+    /// - `refs`：`(sku_id, sku_revision_id)` 列表。
+    /// - `port`：公司商品池可销售资格查询。
+    /// - `executor`：事务会话或 `NoTransaction`。
     pub async fn ensure_sellable_refs(
         &self,
         refs: &[(String, String)],

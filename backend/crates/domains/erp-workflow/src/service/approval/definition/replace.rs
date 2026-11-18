@@ -35,15 +35,8 @@ use crate::service::approval::scope::approver_qualification;
 
 impl ApprovalDefinitionService {
     /// 整组替换草稿节点。
-    ///
-    /// # 参数
-    /// * `request` - 节点替换请求
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
     /// 返回替换后的草稿详情；同载荷回放返回已有结果。
     ///
-    /// # 错误
     /// 锁版本冲突、节点不合法或账号校验失败时返回错误。
     pub async fn replace_definition_nodes(
         &self,
@@ -69,10 +62,8 @@ impl ApprovalDefinitionService {
         self.commit_replace_nodes(request, actor, identity).await
     }
 
-    /// 在唯一事务中替换草稿图。
-    ///
-    /// # 错误
-    /// 陈旧锁、节点非法或账号校验失败时返回错误。
+    // 在唯一事务中替换草稿图。
+    // 陈旧锁、节点非法或账号校验失败时返回错误。
     async fn commit_replace_nodes(
         &self,
         request: ReplaceDefinitionNodesRequest,
@@ -139,24 +130,16 @@ struct ReplaceNodesTxInput<'a> {
     identity: &'a PreparedDefinitionIdentity,
 }
 
-/// 事务内替换草稿节点。
-///
-/// # 用途
-/// 回放收据或校验并持久化新草稿图。
-///
-/// # 参数
-/// * `service` - 同一应用注入的定义服务与基础设施
-/// * `input` - 请求、摘要与操作人
-/// * `executor` - 执行器
-///
-/// # 返回
-/// 返回替换后的定义详情。
-///
-/// # 错误
-/// 陈旧锁、节点非法、账号校验失败或写入失败时返回错误。
-///
-/// # 关键业务约束
-/// 已有收据必须原样回放，不得重复 persist。
+// 事务内替换草稿节点。
+// 已有收据必须原样回放，不得重复 persist。
+//
+// 回放收据或校验并持久化新草稿图。
+//
+// 返回替换后的定义详情。
+//
+// 陈旧锁、节点非法、账号校验失败或写入失败时返回错误。
+//
+// `service`：同一应用注入的定义服务与基础设施。
 async fn replace_nodes_tx(
     service: &ApprovalDefinitionService,
     input: ReplaceNodesTxInput<'_>,
@@ -182,7 +165,7 @@ async fn replace_nodes_tx(
     apply_replacement(service, graph, request, actor, identity, executor).await
 }
 
-/// 只用已授权的原事务图规划节点、保留抄送并写入草稿。
+// 更换草稿节点时仅使用原写事务内已授权的定义图，保留适用的抄送规则后写回草稿。
 async fn apply_replacement(
     service: &ApprovalDefinitionService,
     graph: DefinitionGraph,
@@ -224,7 +207,7 @@ async fn apply_replacement(
     .await
 }
 
-/// 旧客户端省略配置时按节点身份保留规则，禁止随顺序变更抄送到其他节点。
+// 整组编辑省略抄送配置时，按旧节点身份保留抄送规则，不能按序号把收件人挪到其他节点。
 fn preserve_copy_rules(
     mut rules: Vec<ApprovalCopyRule>,
     previous: &[ApprovalNodeDefinition],
@@ -243,22 +226,15 @@ fn preserve_copy_rules(
     ApprovalCopyRule::prepare(rules, next.len())
 }
 
-/// 按请求构造替换后的草稿图。
-///
-/// # 参数
-/// * `identity_service` - 同一应用注入的共享身份与权限服务。
-/// * `graph` - 当前草稿图
-/// * `requests` - 客户端整组节点请求
-/// * `session` - 调用方事务执行器
-///
-/// # 返回
-/// 返回已刷新审批人快照并由 BPM 重建的草稿图。
-///
-/// # 错误
-/// 审批人、权限、节点请求或 BPM 图规则失败时返回错误。
-///
-/// # 关键业务约束
-/// Service 只转换 DTO、加载账号并编排校验，节点身份与图规则由 BPM 决定。
+// 按请求构造替换后的草稿图。
+// Service 只转换 DTO、加载账号并编排校验，节点身份与图规则由 BPM 决定。
+//
+// 返回已刷新审批人快照并由 BPM 重建的草稿图。
+//
+// 审批人、权限、节点请求或 BPM 图规则失败时返回错误。
+//
+// `identity_service`：同一应用注入的共享身份与权限服务；`graph`：当前草稿图。
+// `session`：调用方事务执行器。
 async fn prepare_replacement(
     authorization: &AuthorizationService,
     db: &Database,
@@ -275,8 +251,7 @@ async fn prepare_replacement(
     rebuild_draft_graph(&graph.definition, nodes)
 }
 
-/// 以 CAS 写回草稿图并记录审计。
-// 草稿落盘 8 参数：db/审计/图/版本/操作人/动作/摘要/执行器随事务一体传递，拆包增加错序风险；告警逐项压制。
+// 替换草稿图时按原锁版本 CAS 写回，再在同一事务留下变更审计。
 #[allow(clippy::too_many_arguments)]
 async fn apply_draft_graph(
     db: &Database,
@@ -302,19 +277,12 @@ async fn apply_draft_graph(
     detail_with_copies(db, &applied, session).await
 }
 
-/// 调用仓储整组替换草稿图。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `graph` - 待写回的草稿图
-/// * `expected` - 期望的定义锁版本
-/// * `session` - 调用方执行器
-///
-/// # 返回
-/// 返回 CAS 成功后的定义图；节点与连线沿用入参。
-///
-/// # 错误
-/// 仓储写入失败，或 CAS 结果不是成功应用时返回错误。
+// 调用仓储整组替换草稿图。
+// 返回 CAS 成功后的定义图；节点与连线沿用入参。
+//
+// 仓储写入失败，或 CAS 结果不是成功应用时返回错误。
+//
+// `expected`：期望的定义锁版本。
 pub(super) async fn replace_graph(
     db: &Database,
     graph: DefinitionGraph,
@@ -332,19 +300,14 @@ pub(super) async fn replace_graph(
     })
 }
 
-/// 将 Service 节点请求转换为 BPM 整组替换输入。
-///
-/// # 参数
-/// * `requests` - 客户端提交的完整节点列表
-///
-/// # 返回
-/// 返回携带调用方生成新身份与 BPM 参与人引用的替换输入。
-///
-/// # 错误
-/// 审批人引用无效时返回校验错误。
-///
-/// # 关键业务约束
-/// Service 只提供 ID，不判断节点顺序、已有身份归属或用途清理规则。
+// 将 Service 节点请求转换为 BPM 整组替换输入。
+// Service 只提供 ID，不判断节点顺序、已有身份归属或用途清理规则。
+//
+// 返回携带调用方生成新身份与 BPM 参与人引用的替换输入。
+//
+// 审批人引用无效时返回校验错误。
+//
+// `requests`：客户端提交的完整节点列表。
 fn node_replacement_drafts(requests: &[DefinitionNodeRequest]) -> Result<Vec<NodeReplacementDraft>> {
     requests
         .iter()
@@ -378,13 +341,12 @@ fn node_replacement_drafts(requests: &[DefinitionNodeRequest]) -> Result<Vec<Nod
         })
         .collect()
 }
-/// 在同一执行器内校验审批人并返回该次取证的账号摘要。
-/// # 参数
-/// identity_service 为共享身份服务，user_ids 为 BPM 提取的有序账号，executor 为原事务。
-/// # 返回
-/// 已核验账号和同角色读写资格的显示资料，不再次查询账号目录。
-/// # 错误
-/// 账号失效返回校验错误，权限不足返回业务错误；基础设施失败原样传播。
+// 在同一执行器内校验审批人并返回该次取证的账号摘要。
+// 已核验账号和同角色读写资格的显示资料，不再次查询账号目录。
+//
+// 账号失效返回校验错误，权限不足返回业务错误；基础设施失败原样传播。
+//
+// identity_service 为共享身份服务，user_ids 为 BPM 提取的有序账号，executor 为原事务。
 pub(super) async fn validate_assignees(
     authorization: &AuthorizationService,
     db: &Database,
@@ -410,20 +372,14 @@ pub(super) async fn validate_assignees(
     Ok(accounts)
 }
 
-/// 把账号显示名写入节点快照。
-///
-/// # 参数
-/// * `nodes` - BPM 已规划的节点集合
-/// * `accounts` - Repository 返回的账号 ID 到快照映射
-///
-/// # 返回
-/// 返回由 BPM 节点方法刷新显示名后的节点集合。
-///
-/// # 错误
-/// 账号快照缺失或 BPM 拒绝显示名时返回错误。
-///
-/// # 关键业务约束
-/// Service 只把仓储快照与节点关联，不复制节点重建或名称规范化规则。
+// 把账号显示名写入节点快照。
+// Service 只把仓储快照与节点关联，不复制节点重建或名称规范化规则。
+//
+// 返回由 BPM 节点方法刷新显示名后的节点集合。
+//
+// 账号快照缺失或 BPM 拒绝显示名时返回错误。
+//
+// `nodes`：BPM 已规划的节点集合；`accounts`：Repository 返回的账号 ID 到快照映射。
 pub(super) fn apply_snapshots(
     nodes: Vec<ApprovalNodeDefinition>,
     accounts: &HashMap<String, AccountSummary>,
@@ -463,20 +419,14 @@ pub(super) fn apply_snapshots(
     Ok(refreshed)
 }
 
-/// 由节点快照重建草稿入口与线性连线。
-///
-/// # 参数
-/// * `definition` - 需要保持身份与业务版本的草稿定义
-/// * `nodes` - 已完成账号快照刷新的完整节点集合
-///
-/// # 返回
-/// 返回 BPM 已校验的完整草稿图。
-///
-/// # 错误
-/// 节点、入口或线性连线模型非法时返回校验错误。
-///
-/// # 关键业务约束
-/// Service 只提供连线 ID 与时间，不实现节点顺序或图完整性规则。
+// 由节点快照重建草稿入口与线性连线。
+// Service 只提供连线 ID 与时间，不实现节点顺序或图完整性规则。
+//
+// 返回 BPM 已校验的完整草稿图。
+//
+// 节点、入口或线性连线模型非法时返回校验错误。
+//
+// `definition`：需要保持身份与业务版本的草稿定义；`nodes`：已完成账号快照刷新的完整节点集合。
 pub(super) fn rebuild_draft_graph(
     definition: &ApprovalProcessDefinition,
     nodes: Vec<ApprovalNodeDefinition>,
@@ -485,37 +435,24 @@ pub(super) fn rebuild_draft_graph(
     DefinitionGraph::rebuild_draft(definition, nodes, transition_ids, now()?).map_err(map_model_error)
 }
 
-/// 为线性定义图生成调用方负责的连线 ID。
-///
-/// # 参数
-/// * `node_count` - 定义节点数量
-///
-/// # 返回
-/// 返回每节点两条连线所需的 ID 集合。
-///
-/// # 错误
-/// 无；节点数量合法性由 BPM 构图方法校验。
-///
-/// # 关键业务约束
-/// 只生成身份，不在 Service 推导连线来源、事件或目标。
+// 为线性定义图生成调用方负责的连线 ID。
+// 只生成身份，不在 Service 推导连线来源、事件或目标。
+//
+// 返回每节点两条连线所需的 ID 集合。
+//
+// 节点数量合法性由 BPM 构图方法校验。
 pub(super) fn next_transition_ids(node_count: usize) -> Vec<ApprovalTransitionDefinitionId> {
     (0..node_count.saturating_mul(2)).map(|_| ApprovalTransitionDefinitionId::new(next_id())).collect()
 }
 
-/// 校验定义仍为草稿且锁版本匹配。
-///
-/// # 参数
-/// * `definition` - 当前定义快照
-/// * `expected` - 调用方期望的定义锁版本
-///
-/// # 返回
-/// 定义可修改且锁版本一致时返回 `Ok(())`。
-///
-/// # 错误
-/// 已发布、已退役或锁版本陈旧时返回冲突错误。
-///
-/// # 关键业务约束
-/// 可变状态与锁版本规则由 BPM 定义实体提供，本层只映射稳定错误语义。
+// 校验定义仍为草稿且锁版本匹配。
+// 可变状态与锁版本规则由 BPM 定义实体提供，本层只映射稳定错误语义。
+//
+// 定义可修改且锁版本一致时返回 `Ok(())`。
+//
+// 已发布、已退役或锁版本陈旧时返回冲突错误。
+//
+// `definition`：当前定义快照；`expected`：调用方期望的定义锁版本。
 pub(super) fn ensure_draft_lock(definition: &ApprovalProcessDefinition, expected: u64) -> Result<()> {
     definition
         .ensure_mutable()
@@ -523,16 +460,10 @@ pub(super) fn ensure_draft_lock(definition: &ApprovalProcessDefinition, expected
     ensure_lock(definition, expected)
 }
 
-/// 使用 DTO 清洗规则准备完整有序节点载荷。
-///
-/// # 参数
-/// * `nodes` - 客户端节点请求
-///
-/// # 返回
-/// 返回按 `display_order` 排序的已清洗节点。
-///
-/// # 错误
-/// 单个节点 `prepare` 失败时映射为模型错误。
+// 使用 DTO 清洗规则准备完整有序节点载荷。
+// 返回按 `display_order` 排序的已清洗节点。
+//
+// 单个节点 `prepare` 失败时映射为模型错误。
 pub(super) fn prepare_definition_nodes(
     nodes: Vec<DefinitionNodeRequest>,
 ) -> Result<Vec<DefinitionNodeRequest>> {
@@ -645,7 +576,7 @@ mod tests {
         assert!(preserve_copy_rules(vec![rule], &old, &[node("second", 1)]).is_err());
     }
 
-    /// 陈旧锁或 VersionConflict 立即失败，不得继续规划或写图。
+    // 验证：陈旧锁或 VersionConflict 立即失败，不得继续规划或写图。
     #[test]
     fn stale_lock_has_no_partial_write() {
         let definition = draft_definition(ProcessKind::StockAdjustment, "n1");
@@ -659,7 +590,7 @@ mod tests {
         ));
     }
 
-    /// 已发布结构不可改。
+    // 验证：已发布结构不可改。
     #[test]
     fn published_and_retired_are_immutable() {
         let mut definition = draft_definition(ProcessKind::StockAdjustment, "n1");

@@ -11,19 +11,8 @@ use super::{SupplierSettlementProcess, SupplierSettlementStatementView, VoidSett
 use crate::Result;
 
 impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
-    /// 作废尚未提交复核的结算草稿。
-    ///
-    /// # 参数
-    /// * `id` - 结算单 ID
-    /// * `req` - 作废请求（含期望版本与原因）
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回作废后结算单的响应视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 结算单不存在
-    /// * `ConflictError` - 版本冲突
+    /// 作废尚未提交复核的结算草稿，让其退出后续结算，返回更新后的视图。
+    /// 单据不存在或版本不匹配时分别返回 `NotFound` 或 `ConflictError`。
     pub async fn void_statement(
         &self,
         id: &str,
@@ -41,7 +30,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             .await
     }
 
-    /// 在入口事务内完成授权、准备、重放与持久化。
+    // 在原事务核验作废功能与单据范围；已作废的幂等结果直接返回，否则重验范围后写入作废状态和审计。
     async fn void_statement_apply(
         &self,
         id: &str,

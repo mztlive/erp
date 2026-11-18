@@ -43,23 +43,9 @@ use crate::procure_to_pay::PurchaseOrderPorts;
 use crate::{Error, Result};
 
 impl PurchaseOrderProcess {
-    /// 撤回审批中的采购单，回到可修正草稿且 `subject_version` 不回退。
-    ///
-    /// 作为合同 `cancel_action`，供业务撤回与管理员受阻取消共用。
-    ///
-    /// # 参数
-    /// * `id` - 采购单主键
-    /// * `req` - 撤回请求（原因必填）
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 撤回成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 非审批中、已最终通过、原因缺失、无权操作或并发冲突时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 撤回必须按当前采购对象范围重验，历史参与不授予撤回。
+    /// 经办人撤回审批中的采购单时，在撤回事务按当前对象范围核验权限，历史参与不能替代该资格。
+    /// 业务撤回与管理员受阻取消复用合同 `cancel_action`；撤回后恢复可改草稿，不回退 `subject_version`。
+    /// 原因缺失、无权操作、非审批中、已最终通过或并发冲突时返回错误。
     pub async fn cancel_approval(
         &self,
         id: &str,
@@ -159,19 +145,11 @@ impl PurchaseOrderProcess {
 }
 
 impl PurchaseOrderProcess {
-    /// 加载冻结绑定与审批运行事实，准备用户撤回的取消计划。
-    ///
-    /// # 参数
-    /// * `order` - 已按当前对象范围读取的采购单
-    /// * `subject` - 采购单审批主体
-    /// * `command` - 已规范化的撤回命令
-    /// * `actor` - 撤回人
-    ///
-    /// # 返回
-    /// 返回取消计划、待关闭的开放任务与计划时间。
-    ///
-    /// # 错误
-    /// 绑定未冻结、没有可撤回的审批实例或引擎拒绝取消时返回错误。
+    // 加载冻结绑定与审批运行事实，准备用户撤回的取消计划。
+    //
+    // `order` 为已按当前对象范围读取的采购单；`subject` 为采购单审批主体；`command` 为已规范化的撤回命令；`actor` 为撤回人。
+    //
+    // 返回取消计划、待关闭的开放任务与计划时间。绑定未冻结、没有可撤回的审批实例或引擎拒绝取消时返回错误。
     async fn prepare_user_cancel(
         &self,
         order: &PurchaseOrder,
@@ -201,7 +179,7 @@ impl PurchaseOrderProcess {
     }
 }
 
-/// 使用独立 snapshot 会话回读采购单撤回 winner；本函数只读。
+// 使用独立 snapshot 会话回读采购单撤回 winner；本函数只读。
 async fn replay_purchase_order_cancel(
     db: &Database,
     command: &DocumentCancelCommand,
@@ -223,7 +201,7 @@ async fn replay_purchase_order_cancel(
         .await
 }
 
-/// 失败事务退出后只在新会话有限回读，不盲重跑 Fresh。
+// 失败事务退出后只在新会话有限回读，不盲重跑 Fresh。
 async fn recover_purchase_order_cancel(
     db: &Database,
     command: &DocumentCancelCommand,
@@ -249,21 +227,13 @@ pub(super) struct LoadedCancelRuntime {
     pub open_tasks: Vec<WorkItem>,
 }
 
-/// 按主体加载 RUNNING/BLOCKED 实例、当前执行与开放任务，并由 BPM 形成取消计划。
-///
-/// `RUNNING` 必须恰有一个开放任务，`BLOCKED` 必须没有开放任务。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `binding` - 创建时冻结的定义绑定
-/// * `subject` - 业务对象引用
-/// * `subject_version` - 冻结提交版本
-///
-/// # 返回
-/// 返回定义图、实例、当前执行、取消计划与开放任务快照。
-///
-/// # 错误
-/// 实例或当前执行缺失、状态与开放任务数量不一致或仓储失败时返回错误。
+// 按主体加载 RUNNING/BLOCKED 实例、当前执行与开放任务，并由 BPM 形成取消计划。
+//
+// `RUNNING` 必须恰有一个开放任务，`BLOCKED` 必须没有开放任务。
+//
+// `binding` 为创建时冻结的定义绑定；`subject_version` 为冻结提交版本。返回定义图、实例、当前执行、取消计划与开放任务快照。
+//
+// 实例或当前执行缺失、状态与开放任务数量不一致或仓储失败时返回错误。
 pub(super) async fn load_cancel_runtime(
     db: &Database,
     binding: &ApprovalDefinitionBinding,
@@ -305,23 +275,11 @@ pub(super) async fn load_cancel_runtime(
 ///
 /// 人员失效走业务取消；非人员一致性 blocker 必须走受阻取消。
 ///
-/// # 参数
-/// * `runtime` - 已加载运行事实与 BPM 取消计划
-/// * `reason` - 已校验的非空原因
-/// * `actor_id` - 撤回人
-/// * `idempotency_key` - 幂等键
-/// * `receipt` - 已存在收据
-/// * `now` - 调用方时间
+/// `runtime` 为已加载运行事实与 BPM 取消计划；`reason` 为已校验的非空原因；使用调用方提供的幂等键。
 ///
-/// # 返回
-/// 返回可交给统一 `prepare_document_cancel` 的取消编排输入。
+/// 返回可交给统一 `prepare_document_cancel` 的取消编排输入。原因/幂等键非法、审批人引用无效或端口与 blocker 不匹配时返回错误。
 ///
-/// # 错误
-/// 原因/幂等键非法、审批人引用无效或端口与 blocker 不匹配时返回错误。
-///
-/// # 关键业务约束
-/// 状态、开放任务数量与 blocker 端口分类由 BPM `plan_cancel` 计算；本端口为
-/// 业务单据普通撤回，受阻取消由统一取消端口承担。
+/// 状态、开放任务数量与 blocker 端口分类由 BPM `plan_cancel` 计算；本端口为业务单据普通撤回，受阻取消由统一取消端口承担。
 pub fn build_purchase_order_cancel_input(
     runtime: &LoadedCancelRuntime,
     reason: &str,
@@ -361,13 +319,9 @@ pub fn build_purchase_order_cancel_input(
     })
 }
 
-/// 将取消计划错误映射为服务错误；状态与任务数量错误保持冲突语义。
-///
-/// # 参数
-/// * `error` - BPM 取消计划错误
-///
-/// # 返回
-/// 模型状态错误返回冲突，其余错误按引擎错误映射。
+// 将取消计划错误映射为服务错误；状态与任务数量错误保持冲突语义。
+//
+// `error` 为BPM 取消计划错误。模型状态错误返回冲突，其余错误按引擎错误映射。
 fn map_cancel_plan_error(error: bpm::engine::EngineError) -> Error {
     match error {
         bpm::engine::EngineError::Model(error) => Error::ConflictError(error.to_string()),
@@ -412,24 +366,13 @@ pub(super) struct PurchaseOrderCancelPersistInput {
     pub object_scope: Option<super::authorization::PurchaseCommandAccess>,
 }
 
-/// 在同一事务内应用取消计划、关闭任务并写回采购单。
-///
-/// # 用途
-/// 撤回审批后原子写回运行事实与采购单。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `input` - 采购单、取消计划与开放任务
-///
-/// # 返回
-/// 成功时无返回值。
-///
-/// # 错误
-/// CAS 冲突或仓储失败时返回错误，事务回滚。
-///
-/// # 关键业务约束
-/// Replay 不得重复关闭任务；Apply 必须关闭开放任务并写回草稿。
-/// 写事务必须重验采购对象范围，历史参与不授予撤回。
+// 在同一事务内应用取消计划、关闭任务并写回采购单。
+//
+// 撤回审批后原子写回运行事实与采购单。
+//
+// `input` 为采购单、取消计划与开放任务。CAS 冲突或仓储失败时返回错误，事务回滚。
+//
+// Replay 不得重复关闭任务；Apply 必须关闭开放任务并写回草稿。写事务必须重验采购对象范围，历史参与不授予撤回。
 async fn apply_purchase_order_cancel(
     db: &Database,
     input: PurchaseOrderCancelPersistInput,
@@ -479,26 +422,18 @@ enum CancelStep {
 
 #[async_trait]
 trait CancelSteps: Send {
-    /// 用同一执行器应用单步；原错误必须终止后续写入。
+    // 用同一执行器应用单步；原错误必须终止后续写入。
     async fn apply(&mut self, step: CancelStep, executor: &mut dyn Executor) -> Result<()>;
 }
 
-/// 在调用方事务内按既有写序写入撤回事实。
-///
-/// # 参数
-/// * `posting` - 撤回写入所需事实
-/// * `executor` - 调用方事务执行器
-///
-/// # 返回
-/// 全部步骤写入成功时返回 `Ok(())`。
-///
-/// # 错误
-/// 任一步失败时返回该错误并停止后续写入。
+// 在调用方事务内按既有写序写入撤回事实。
+//
+// `posting` 为撤回写入所需事实。全部步骤写入成功时返回 `Ok(())`。任一步失败时返回该错误并停止后续写入。
 pub(super) async fn post_cancel(posting: &mut CancelPosting<'_>, executor: &mut dyn Executor) -> Result<()> {
     execute_cancel_steps(posting, executor).await
 }
 
-/// 生产撤回持久化顺序，供真实写入和失败注入测试共同使用。
+// 生产撤回持久化顺序，供真实写入和失败注入测试共同使用。
 async fn execute_cancel_steps(steps: &mut impl CancelSteps, executor: &mut dyn Executor) -> Result<()> {
     for step in [CancelStep::Runtime, CancelStep::Order, CancelStep::Audit] {
         steps.apply(step, executor).await?;
@@ -628,7 +563,7 @@ mod tests {
         LoadedCancelRuntime { graph: two_node_graph(), instance, current, plan, open_tasks }
     }
 
-    /// 运行中撤回按 BPM 计划关闭唯一开放任务，并携带实例、执行与任务版本 CAS。
+    // 运行中撤回按 BPM 计划关闭唯一开放任务，并携带实例、执行与任务版本 CAS。
     #[test]
     fn purchase_order_cancel_uses_bpm_plan_for_open_task_close() {
         let instance = running_instance();
@@ -650,7 +585,7 @@ mod tests {
         assert_eq!(input.reason, "撤销重提");
     }
 
-    /// 非人员 blocker 不得走业务撤回端口；统一取消端口由 `prepare_cancel` 承担。
+    // 验证非人员 blocker 不得走业务撤回端口；统一取消端口由 `prepare_cancel` 承担。
     #[test]
     fn purchase_order_cancel_keeps_document_withdraw_port() {
         let instance = blocked_instance();
@@ -672,7 +607,7 @@ mod tests {
         );
     }
 
-    /// 空白撤回原因失败关闭。
+    // 验证空白撤回原因失败关闭。
     #[test]
     fn purchase_order_cancel_rejects_empty_reason() {
         let instance = running_instance();
@@ -688,7 +623,7 @@ mod tests {
         assert!(matches!(error, Error::ValidationError(_)));
     }
 
-    /// 取消计划状态错误映射保持冲突语义。
+    // 取消计划状态错误映射保持冲突语义。
     #[test]
     fn cancel_plan_error_maps_to_conflict() {
         let error = map_cancel_plan_error(EngineError::Model(ModelError::InvalidStatus(
@@ -697,7 +632,7 @@ mod tests {
         assert!(matches!(error, Error::ConflictError(_)));
     }
 
-    /// 运行实例状态不变式由 BPM 计划保证。
+    // 运行实例状态不变式由 BPM 计划保证。
     #[test]
     fn purchase_order_cancel_plan_status_is_running() {
         let instance = running_instance();
@@ -747,7 +682,7 @@ mod tests {
         }
     }
 
-    /// 实际生产写序使用同一调用方执行器，覆盖领域写入两侧的跨域步骤。
+    // 实际生产写序使用同一调用方执行器，覆盖领域写入两侧的跨域步骤。
     #[tokio::test]
     async fn cancel_posting_keeps_original_order_and_executor() {
         use super::CancelStep::*;
@@ -762,7 +697,7 @@ mod tests {
         assert_eq!(steps.seen, [Runtime, Order, Audit]);
     }
 
-    /// 每一生产步骤失败后立即停止；保留原冲突错误，不推进任何后续写入。
+    // 每一生产步骤失败后立即停止；保留原冲突错误，不推进任何后续写入。
     #[tokio::test]
     async fn cancel_posting_stops_at_each_failure() {
         use super::CancelStep::*;

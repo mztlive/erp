@@ -32,8 +32,8 @@ def digest(value): return hashlib.sha256(value if isinstance(value,bytes) else c
 def now(): return datetime.now(timezone.utc).isoformat()
 def identity(kind,value): return digest({'namespace':'erp.measurement.context.v1.'+kind,'value':value})
 
+# 执行环境观测命令并返回标准输出供采集器解析；失败只暴露固定标签，不记录命令参数、环境或标准错误。
 def run(argv, cwd):
-    """Do not persist argv, environment or stderr; failures expose only fixed labels."""
     try:
         p=subprocess.run(argv,cwd=cwd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=15,check=False)
     except (OSError,subprocess.TimeoutExpired): raise CaptureError('command_unavailable_or_timeout') from None
@@ -41,7 +41,7 @@ def run(argv, cwd):
     return p.stdout
 
 def safe_value(value):
-    """Never dump arbitrary config/env strings, even under allowed build keys."""
+    """保留安全标量和白名单词，对其余配置值记录类型和摘要，供比较构建设置而不泄露任意配置或环境字符串。"""
     if isinstance(value,bool) or type(value) is int or value is None:return value
     if isinstance(value,str) and value in SAFE_WORDS:return value
     if isinstance(value,list):return [safe_value(v) for v in value]
@@ -73,8 +73,8 @@ def load_toml(path):
     except (OSError,UnicodeError,tomllib.TOMLDecodeError):raise CaptureError('config_unreadable_or_invalid') from None
     return raw,doc
 
+# 按从 Cargo home 到实际执行目录的优先级收集配置文件，供构建环境采集还原配置项的覆盖顺序。
 def config_candidates(backend,env):
-    """Cargo home lowest priority, then root toward the actual invocation cwd."""
     home=Path(env.get('CARGO_HOME') or str(Path.home()/'.cargo')).expanduser()
     dirs=[home]+[p/'.cargo' for p in reversed([backend,*backend.parents])]
     paths=[]
@@ -209,7 +209,7 @@ MEASUREMENT_INPUTS = {
 }
 
 def select_measurement_inputs(repo,measurement_script=None,measurement_spec=None,measurement_contract=None):
-    """Bind selected files without inventing a historical in-repo tool or execution."""
+    """为环境采集解析明确指定或仓库默认的测量脚本、探针规格与测量合同，记录来源而不臆测历史执行情况。"""
     supplied={'measurement_script':measurement_script,'probe_spec':measurement_spec,'measurement_contract':measurement_contract}
     selected={}
     for label,(flag,rel) in MEASUREMENT_INPUTS.items():

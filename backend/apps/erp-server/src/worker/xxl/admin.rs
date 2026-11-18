@@ -16,11 +16,7 @@ pub struct XxlAdmin {
 }
 impl XxlAdmin {
     /// 构造受控 HTTP 客户端。
-    /// # 参数
-    /// config 为启动时校验并固定的配置。
-    /// # 返回
     /// 注册和回报客户端。
-    /// # 错误
     /// TLS 或 HTTP 客户端构造失败时返回错误。
     pub fn new(config: XxlJobConfig) -> Result<Self, reqwest::Error> {
         Ok(Self {
@@ -34,11 +30,7 @@ impl XxlAdmin {
     }
 
     /// 注册或注销内部执行器地址。
-    /// # 参数
-    /// remove 为 true 时注销。
-    /// # 返回
     /// HTTP 和协议 code 同时成功时为 true。
-    /// # 错误
     /// 网络或协议失败返回 false，不记录远端响应或 token。
     pub async fn registry(&self, remove: bool) -> bool {
         self.post(
@@ -51,13 +43,13 @@ impl XxlAdmin {
         .await
     }
 
-    /// 构造固定协议请求，集中约束路径和凭据传递位置。
+    // 注册和回报共用 XXL 管理端 `/api` 请求构造；凭据只放固定访问令牌头，不进入 URL 或请求体。
     fn request(&self, action: &str, body: &Value) -> RequestBuilder {
         let url = format!("{}/api/{action}", self.config.admin_url.trim_end_matches('/'));
         self.client.post(url).header("XXL-JOB-ACCESS-TOKEN", &self.config.access_token).json(body)
     }
 
-    /// 发送固定管理协议，并限制响应体大小。
+    // 以管理协议发送请求，最多读取 64 KiB 响应，并要求 HTTP 和协议码都成功。
     async fn post(&self, action: &str, body: &Value) -> bool {
         let Ok(mut response) = self.request(action, body).send().await else {
             return false;
@@ -86,7 +78,7 @@ impl ScheduleCallback for XxlAdmin {
     }
 }
 
-/// logDateTim 为 XXL-JOB 2.4.1 的协议字段，不得改为 logDateTime。
+// 用持久化回执生成 XXL 完成回报；时间字段保留 2.4.1 要求的 `logDateTim`，不能改成 `logDateTime`。
 fn callback_body(run: &ScheduledRun) -> Value {
     json!([{
         "logId":run.request.log_id, "logDateTim":run.request.log_time,

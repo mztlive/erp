@@ -42,13 +42,14 @@ impl From<&SalesOrderWorkingCopyLineView> for SalesLinePrices {
     }
 }
 
-/// 为已授权行批量补齐精确修订价格，缺失档位保持空值。
-/// # 参数
-/// `db`、已授权的 `lines` 与调用方 `executor`。
-/// # 返回
-/// 原地补齐价格，不修改保存的销售价和供给价。
-/// # 错误
-/// 数据库读取失败时返回错误。
+// 组装销售历史价格对比时，为已授权行批量补齐精确修订价格，缺失档位保持空值。
+//
+// 调用参数：
+// `db`、已授权的 `lines` 与调用方 `executor`。
+//
+// 原地补齐价格，不修改保存的销售价和供给价。
+//
+// 数据库读取失败时返回错误。
 pub(crate) async fn enrich_line_prices(
     db: &Database,
     lines: &mut [SalesOrderWorkingCopyLineView],
@@ -75,13 +76,14 @@ pub(crate) async fn enrich_line_prices(
     Ok(())
 }
 
-/// 按调用方已经授权的精确销售版本行批量返回价格对比。
-/// # 参数
-/// `db`、允许的版本行 `ids` 与调用方 `executor`；不得传入未授权行。
-/// # 返回
-/// 按版本行 ID 索引的价格；不扩大销售单范围。
-/// # 错误
-/// 数据库读取失败或商品行快照不完整时返回错误。
+// 依据调用方已经授权的精确销售版本行批量返回价格对比。
+//
+// 调用参数：
+// `db`、允许的版本行 `ids` 与调用方 `executor`；不得传入未授权行。
+//
+// 按版本行 ID 索引的价格；不扩大销售单范围。
+//
+// 数据库读取失败或商品行快照不完整时返回错误。
 pub(crate) async fn revision_line_prices(
     db: &Database,
     ids: &[String],
@@ -126,13 +128,14 @@ pub(crate) async fn revision_line_prices(
     Ok(views.iter().map(|line| (line.id.clone(), SalesLinePrices::from(line))).collect())
 }
 
-/// 为已授权销售行补齐询价转单时保存的原报价，价格精度保留四位。
-/// # 参数
-/// `db`、授权行 `lines`、这些行所属的 `order_ids` 与调用方执行器。
-/// # 返回
-/// 仅在稳定行及 SKU 修订匹配且没有商品池取价档位时采用原询价快照。
-/// # 错误
-/// 来源读取失败时返回错误；不匹配的行保持原来的未知值。
+// 为已授权销售行补齐询价转单时保存的原报价，价格精度沿用四位。
+//
+// 调用参数：
+// `db`、授权行 `lines`、这些行所属的 `order_ids` 与调用方执行器。
+//
+// 仅在稳定行及 SKU 修订匹配且没有商品池取价档位时采用原询价快照。
+//
+// 来源读取失败时返回错误；不匹配的行保持原来的未知值。
 pub(crate) async fn enrich_inquiry_prices(
     db: &Database,
     lines: &mut [SalesOrderWorkingCopyLineView],

@@ -13,15 +13,8 @@ use crate::repository::supplier_settlement::SupplierSettlementItemFilter;
 
 impl SupplierSettlementService {
     /// 分页查询供应商结算明细列表。
-    ///
-    /// # 参数
-    /// * `params` - 查询参数（`statement_id` 扁平筛选）
-    /// * `actor` - 当前认证账号。
-    ///
-    /// # 返回
     /// 功能资格、分页和计数共用同一快照；提交成功后返回分页视图。
-    ///
-    /// # 错误
+    /// 失败条件：
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
     /// * `RepositoryError` - 数据库查询失败
     pub async fn supplier_settlement_item_list(
@@ -40,7 +33,7 @@ impl SupplierSettlementService {
             .await
     }
 
-    /// 在原读取快照检查功能资格，并使用原执行器读取分页和计数。
+    // 在原读取快照检查功能资格，并使用原执行器读取分页和计数。
     async fn item_page(
         &self,
         params: &SupplierSettlementItemListParams,
@@ -99,7 +92,7 @@ mod tests {
     use crate::Error;
     use crate::service::supplier_settlement::SettlementAccess;
 
-    /// 原读取步骤必须先完成授权；设施失败时不得读取明细、差异或来源证据。
+    // 验证原读取步骤必须先完成授权；设施失败时不得读取明细、差异或来源证据。
     #[tokio::test]
     async fn settlement_reads_stop_before_business_io_when_authorization_fails() {
         let db = Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("unit_test");

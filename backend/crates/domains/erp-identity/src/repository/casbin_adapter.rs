@@ -41,7 +41,7 @@ impl CasbinRule {
         Self { id: Self::id(sec, ptype, &values), sec: sec.to_string(), ptype: ptype.to_string(), values }
     }
 
-    /// 用单元分隔符拼接 `sec`、`ptype` 与取值，作为规则文档 `_id`。
+    // 持久化 Casbin 规则时以单元分隔符拼接 `sec`、`ptype` 与规则值，生成稳定文档 `_id`。
     fn id(sec: &str, ptype: &str, values: &[String]) -> String {
         format!("{sec}\u{1f}{ptype}\u{1f}{}", values.join("\u{1f}"))
     }
@@ -63,31 +63,20 @@ pub(crate) struct SubjectPolicy {
 
 impl MongoCasbinAdapter {
     /// 创建 MongoDB Casbin Adapter。
-    ///
-    /// # 参数
-    /// * `db` - 存放 Casbin 规则与策略版本的数据库
-    ///
-    /// # 返回
     /// 返回绑定该数据库、且未处于过滤加载状态的 Adapter。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// `db`：存放 Casbin 规则与策略版本的数据库。
     pub fn new(db: Database) -> Self {
         Self { db, filtered: false }
     }
 
-    /// 保留 admin 的直接 root 绑定、全量动作权限和策略版本，不保留其他授权。
-    ///
-    /// # 参数
-    /// * `account_id` - admin 账号 ID，用于拼出主体键
-    /// * `retained` - 全库重置必须保留的文档集合
-    /// * `executor` - 调用方事务执行器
-    ///
-    /// # 返回
-    /// 两条规则和策略版本文档都登记为保留后无额外返回值。
-    ///
-    /// # 错误
-    /// 保留登记或仓储读取失败时返回错误。
+    // 保留 admin 的直接 root 绑定、全量动作权限和策略版本，不保留其他授权。
+    // 两条规则和策略版本文档都登记为保留后无额外返回值。
+    //
+    // 保留登记或仓储读取失败时返回错误。
+    //
+    // `account_id`：admin 账号 ID，用于拼出主体键；`retained`：全库重置必须保留的文档集合。
+    // `executor`：调用方事务执行器。
     pub(crate) async fn retain_root_authorization(
         &self,
         account_id: &str,
@@ -125,7 +114,7 @@ impl MongoCasbinAdapter {
         AdapterError(Box::new(error)).into()
     }
 
-    /// 模型中没有对应 `sec` 或 `ptype` 时跳过该行，不报错。
+    // 装载策略快照时把规则放入模型对应区段；遇到模型没有登记的 `sec` 或 `ptype` 跳过该行。
     fn load_rule(model: &mut dyn Model, rule: CasbinRule) {
         let Some(section) = model.get_mut_model().get_mut(&rule.sec) else {
             return;
@@ -136,7 +125,7 @@ impl MongoCasbinAdapter {
         assertion.get_mut_policy().insert(rule.values);
     }
 
-    /// 过滤值为空表示该列不限制；`sec` 不是 `p` 或 `g` 时不匹配。
+    // 在策略读取中按匹配过滤逐列比较，空过滤值不限制该列；不接受 `p`、`g` 之外的区段。
     fn matches_filter(rule: &CasbinRule, filter: &Filter<'_>) -> bool {
         let values = if rule.sec == "p" {
             &filter.p
@@ -151,7 +140,7 @@ impl MongoCasbinAdapter {
         })
     }
 
-    /// 只把非空过滤值写入 `values.N`，空值不构成条件。
+    // 将非空 Casbin 过滤条件转成 MongoDB 的 `values.N` 查询，空列不添筛选条件。
     fn filtered_query(sec: &str, ptype: &str, field_index: usize, field_values: &[String]) -> Document {
         let mut filter = doc! {
             "sec": sec,
@@ -189,7 +178,7 @@ impl MongoCasbinAdapter {
         }
     }
 
-    /// 消费策略行中的角色键，排序去重后返回已有字符串所有权。
+    // 读取已加载策略行中的角色键，转移已有字符串的所有权并稳定排序去重。
     fn subject_role_keys(rules: Vec<CasbinRule>) -> Vec<String> {
         let mut role_keys =
             rules.into_iter().filter_map(|rule| rule.values.into_iter().nth(1)).collect::<Vec<_>>();
@@ -207,7 +196,7 @@ impl MongoCasbinAdapter {
             .collect()
     }
 
-    /// 在 Adapter 自有事务中写 policy；闭包返回是否需要递增全局 revision。
+    // 由适配器独立写策略时开启事务，并依闭包是否报告实际变更决定是否推进全局策略修订号。
     async fn run_policy_write<T, F>(&self, operation: F) -> casbin::Result<T>
     where
         T: Send + 'static,
@@ -238,14 +227,11 @@ impl MongoCasbinAdapter {
     ///
     /// 缺少版本文档表示尚未发生由新版本服务提交的 policy 变更，返回 `0`。
     ///
-    /// # 参数
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回单调递增的已提交 policy 版本。
     ///
-    /// # 错误
     /// 当 MongoDB 查询失败或持久化版本非法时返回错误。
+    ///
+    /// `executor`：数据访问执行器，由 Service 决定是否位于事务中。
     pub async fn policy_revision(&self, executor: &mut dyn Executor) -> Result<u64> {
         let state =
             mongo_ops::find_one(&self.policy_state_collection(), Self::policy_revision_filter(), executor)
@@ -262,15 +248,11 @@ impl MongoCasbinAdapter {
     /// 该方法直接读取持久化的 `g` 规则，并遵循调用方事务快照；不得以 Enforcer
     /// 缓存替代本查询。返回值只包含规则第二列中的 Casbin 角色键。
     ///
-    /// # 参数
-    /// * `subject` - Casbin 主体标识
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回已排序、去重的 Casbin 角色键。
     ///
-    /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
+    ///
+    /// `subject`：Casbin 主体标识；`executor`：数据访问执行器，由 Service 决定是否位于事务中。
     pub async fn subject_roles(&self, subject: &str, executor: &mut dyn Executor) -> Result<Vec<String>> {
         let rules = mongo_ops::find_many(
             &self.collection(),
@@ -282,13 +264,12 @@ impl MongoCasbinAdapter {
         Ok(Self::subject_role_keys(rules))
     }
 
-    /// 批量读取指定主体的直接权限及父角色，继承展开由调用方按层执行。
-    /// # 参数
-    /// subjects 为本批主体键，executor 为原事务执行器。
-    /// # 返回
-    /// 按主体分组且去重的直接策略；无规则的主体不出现在映射中。
-    /// # 错误
-    /// 数据库失败或任一策略行损坏时返回错误；空主体不发起读取。
+    // 批量读取指定主体的直接权限及父角色，继承展开由调用方按层执行。
+    // 按主体分组且去重的直接策略；无规则的主体不出现在映射中。
+    //
+    // 数据库失败或任一策略行损坏时返回错误；空主体不发起读取。
+    //
+    // subjects 为本批主体键，executor 为原事务执行器。
     pub(crate) async fn subject_policies(
         &self,
         subjects: &[String],
@@ -311,7 +292,7 @@ impl MongoCasbinAdapter {
         Self::group_subject_policies(rows)
     }
 
-    /// 保留每条规则的真实主体，损坏行不得变为空权限。
+    // 按策略中原主体组织权限规则，保留实际归属；解析受损的策略行时不得当成无权限继续。
     fn group_subject_policies(rows: Vec<CasbinRule>) -> Result<HashMap<String, SubjectPolicy>> {
         let mut grouped: HashMap<String, SubjectPolicy> = HashMap::new();
         for row in rows {
@@ -339,13 +320,12 @@ impl MongoCasbinAdapter {
         Ok(grouped)
     }
 
-    /// 在原事务中读取直接绑定角色的主体事实。
-    /// # 参数
-    /// role_key 为角色键，executor 为原执行器。
-    /// # 返回
-    /// 最多1001条排序主体键，供领域判断角色继承及影响规模。
-    /// # 错误
-    /// 查询失败或绑定行损坏时拒绝。
+    // 在原事务中读取直接绑定角色的主体事实。
+    // 最多1001条排序主体键，供领域判断角色继承及影响规模。
+    //
+    // 查询失败或绑定行损坏时拒绝。
+    //
+    // role_key 为角色键，executor 为原执行器。
     pub(crate) async fn role_subjects(
         &self,
         role_key: &str,
@@ -370,13 +350,12 @@ impl MongoCasbinAdapter {
         Ok(ids)
     }
 
-    /// 在原事务内读取角色的直接权限，不展开角色继承。
-    /// # 参数
-    /// role_key 为 Casbin 角色键；executor 为调用方执行器。
-    /// # 返回
-    /// 排序后的资源动作对。
-    /// # 错误
-    /// 持久化读取失败或策略行损坏时拒绝。
+    // 在原事务内读取角色的直接权限，不展开角色继承。
+    // 排序后的资源动作对。
+    //
+    // 持久化读取失败或策略行损坏时拒绝。
+    //
+    // role_key 为 Casbin 角色键；executor 为调用方执行器。
     pub(crate) async fn role_permissions(
         &self,
         role_key: &str,
@@ -407,14 +386,11 @@ impl MongoCasbinAdapter {
     /// 所有 policy 事务写入同一个版本文档，使不同实例上的并发写产生 MongoDB
     /// 事务写冲突，而不是基于彼此不可见的快照同时提交；因此调用方必须传入事务执行器。
     ///
-    /// # 参数
-    /// * `executor` - 数据访问执行器，policy 写入必须传入事务执行器
-    ///
-    /// # 返回
     /// 版本递增成功时返回 `Ok(())`。
     ///
-    /// # 错误
     /// 当版本文档无法更新时返回数据库错误。
+    ///
+    /// `executor`：数据访问执行器，policy 写入必须传入事务执行器。
     pub async fn bump_policy_revision(&self, executor: &mut dyn Executor) -> Result<()> {
         mongo_ops::update_one(
             &self.policy_state_collection(),
@@ -432,15 +408,11 @@ impl MongoCasbinAdapter {
     /// 该方法用于把事务前完成的授权快照与最终 policy 写入绑定；版本已变化时返回
     /// 乐观锁冲突并回滚整个业务事务，因此调用方必须传入事务执行器。
     ///
-    /// # 参数
-    /// * `expected_revision` - 授权检查使用的 policy 版本
-    /// * `executor` - 数据访问执行器，policy 写入必须传入事务执行器
-    ///
-    /// # 返回
     /// 版本比较并递增成功时返回 `Ok(())`。
     ///
-    /// # 错误
     /// 当版本超出 BSON 范围、版本已变化或 MongoDB 更新失败时返回错误。
+    ///
+    /// `expected_revision`：授权检查使用的 policy 版本；`executor`：数据访问执行器，policy 写入必须传入事务执行器。
     pub async fn bump_policy_revision_if_matches(
         &self,
         expected_revision: u64,
@@ -471,16 +443,12 @@ impl MongoCasbinAdapter {
     /// 该方法先删除再写入，本身不构成原子边界；调用方应传入事务执行器，
     /// 把账号、Profile 与角色绑定放入同一原子边界。
     ///
-    /// # 参数
-    /// * `subject` - Casbin 主体标识
-    /// * `role_keys` - 目标 Casbin 角色键
-    /// * `executor` - 数据访问执行器，多步骤写入必须传入事务执行器
-    ///
-    /// # 返回
     /// 角色绑定替换成功时返回 `Ok(())`。
     ///
-    /// # 错误
     /// 当规则删除或写入失败时返回数据库错误。
+    ///
+    /// `subject`：Casbin 主体标识；`role_keys`：目标 Casbin 角色键。
+    /// `executor`：数据访问执行器，多步骤写入必须传入事务执行器。
     pub async fn replace_subject_roles(
         &self,
         subject: &str,
@@ -507,16 +475,11 @@ impl MongoCasbinAdapter {
     }
 
     /// 清除指定主体的全部角色绑定。
-    ///
-    /// # 参数
-    /// * `subject` - Casbin 主体标识
-    /// * `executor` - 数据访问执行器，多步骤写入必须传入事务执行器
-    ///
-    /// # 返回
     /// 角色绑定清除成功时返回 `Ok(())`。
     ///
-    /// # 错误
     /// 当规则删除失败时返回数据库错误。
+    ///
+    /// `subject`：Casbin 主体标识；`executor`：数据访问执行器，多步骤写入必须传入事务执行器。
     pub async fn clear_subject_roles(&self, subject: &str, executor: &mut dyn Executor) -> Result<()> {
         self.replace_subject_roles(subject, &[], executor).await
     }
@@ -526,16 +489,12 @@ impl MongoCasbinAdapter {
     /// 该方法先删除再写入，本身不构成原子边界；调用方应传入事务执行器，
     /// 把角色实体更新与权限规则写入放入同一个事务。
     ///
-    /// # 参数
-    /// * `role_key` - Casbin 角色键
-    /// * `permissions` - 目标权限的 `(resource, action)` 集合
-    /// * `executor` - 数据访问执行器，多步骤写入必须传入事务执行器
-    ///
-    /// # 返回
     /// 权限规则全部替换成功时返回 `Ok(())`。
     ///
-    /// # 错误
     /// 当规则删除或写入失败时返回数据库错误。
+    ///
+    /// `role_key`：Casbin 角色键；`permissions`：目标权限的 `(resource, action)` 集合。
+    /// `executor`：数据访问执行器，多步骤写入必须传入事务执行器。
     pub async fn replace_role_permissions(
         &self,
         role_key: &str,
@@ -555,15 +514,11 @@ impl MongoCasbinAdapter {
     /// 两步删除本身不构成原子边界，调用方应传入事务执行器，
     /// 把角色实体删除与规则删除放入同一个事务。
     ///
-    /// # 参数
-    /// * `role_key` - Casbin 角色键
-    /// * `executor` - 数据访问执行器，多步骤写入必须传入事务执行器
-    ///
-    /// # 返回
     /// 相关规则全部删除成功时返回 `Ok(())`。
     ///
-    /// # 错误
     /// 当任一规则删除失败时返回数据库错误。
+    ///
+    /// `role_key`：Casbin 角色键；`executor`：数据访问执行器，多步骤写入必须传入事务执行器。
     pub async fn remove_role(&self, role_key: &str, executor: &mut dyn Executor) -> Result<()> {
         let collection = self.collection();
         mongo_ops::delete_many(&collection, Self::role_permission_filter(role_key), &mut *executor).await?;
@@ -571,17 +526,12 @@ impl MongoCasbinAdapter {
         Ok(())
     }
 
-    /// 覆盖全部 Casbin policy 规则。
-    ///
-    /// # 参数
-    /// * `rules` - 覆盖后的全量规则
-    /// * `executor` - 数据访问执行器，全量覆盖必须传入事务执行器
-    ///
-    /// # 返回
-    /// 全量覆盖成功时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 当规则删除或写入失败时返回数据库错误。
+    // 覆盖全部 Casbin policy 规则。
+    // 全量覆盖成功时返回 `Ok(())`。
+    //
+    // 当规则删除或写入失败时返回数据库错误。
+    //
+    // `rules`：覆盖后的全量规则；`executor`：数据访问执行器，全量覆盖必须传入事务执行器。
     async fn replace_all_rules(&self, rules: Vec<CasbinRule>, executor: &mut dyn Executor) -> Result<()> {
         let collection = self.collection();
         mongo_ops::delete_many(&collection, doc! {}, &mut *executor).await?;
@@ -827,7 +777,7 @@ mod tests {
         assert_eq!(roles, ["role:finance", "role:sales"]);
     }
 
-    /// 批量结果按真实主体拆开父角色与直接权限，并排序去重。
+    // 验证：批量结果按真实主体拆开父角色与直接权限，并排序去重。
     #[test]
     fn subject_policy_batch_preserves_each_subject_and_rule_kind() {
         let binding = CasbinRule::new("g", "g", vec!["user:admin:actor".into(), "role:sales".into()]);
@@ -848,7 +798,7 @@ mod tests {
         assert_eq!(rows["role:sales"].permissions, [("customer".into(), "list".into())]);
     }
 
-    /// 行长度或规则种类损坏时拒绝整批，不解释为空策略。
+    // 验证：行长度或规则种类损坏时拒绝整批，不解释为空策略。
     #[test]
     fn subject_policy_batch_rejects_malformed_permission_or_binding_rows() {
         for rule in [

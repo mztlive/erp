@@ -40,16 +40,7 @@ pub enum CustomerReceiptStatus {
 }
 
 impl CustomerReceiptStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为界面或响应展示提供客户回款状态的中文名称；机器筛选和存储不使用该名称。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Draft => "草稿",
@@ -60,16 +51,7 @@ impl CustomerReceiptStatus {
         }
     }
 
-    /// 返回状态的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将客户回款状态转成用于持久化和查询的稳定代码，与中文展示文案分开。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Draft => "draft",
@@ -82,19 +64,11 @@ impl CustomerReceiptStatus {
 }
 
 impl DocumentState for CustomerReceiptStatus {
-    /// 返回全部合法后继状态。
-    ///
-    /// 提交进入 `IN_APPROVAL`，最终通过过账，撤回回到草稿；`REVERSED` 是终态。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// `Draft`、`Rejected` 返回 `InApproval`；`InApproval` 返回 `Posted`、`Draft` 与 `Rejected`；
-    /// `Posted` 只返回 `Reversed`；`Reversed` 返回空切片。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 校验客户回款状态迁移时查本状态可直接到达的后继状态；无后继即不能再迁移。
+    //
+    // 提交进入 `IN_APPROVAL`，最终通过过账，撤回回到草稿；`REVERSED` 是终态。
+    // 结果：`Draft`、`Rejected` 返回 `InApproval`；`InApproval` 返回 `Posted`、`Draft` 与 `Rejected`；
+    // `Posted` 只返回 `Reversed`；`Reversed` 返回空切片。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Draft | Self::Rejected => &[Self::InApproval],
@@ -115,17 +89,13 @@ pub struct PendingReceiptAllocation {
 }
 
 impl PendingReceiptAllocation {
-    /// 构造待过账核销行。
-    ///
-    /// # 参数
-    /// * `receivable_entry_id` - 被核销应收分录
-    /// * `allocated_amount` - 核销金额
-    ///
-    /// # 返回
-    /// 金额为正时返回待过账核销行。
-    ///
-    /// # 错误
+    /// 核销客户回款之前把请求金额绑定到目标应收分录，先拒绝非正金额。
+    /// 结果：金额为正时返回待过账核销行。
     /// 金额非正时返回错误。
+    ///
+    /// 输入约定：
+    /// - `receivable_entry_id`：被核销应收分录
+    /// - `allocated_amount`：核销金额
     pub fn new(receivable_entry_id: ReceivableEntryId, allocated_amount: Amount) -> Result<Self> {
         ensure_positive_amount(&allocated_amount)?;
         Ok(Self { receivable_entry_id, allocated_amount })
@@ -215,15 +185,10 @@ pub struct CustomerReceiptApprovalFacts {
 
 impl CustomerReceipt {
     /// 校验回款单处于允许编辑的业务状态。
+    /// 结果：草稿或已驳回时成功。
+    /// 失败条件：其他状态返回状态冲突。
     ///
-    /// # 参数
-    /// 无；调用方先通过 identity 核验原登记人的对象权限。
-    ///
-    /// # 返回
-    /// 草稿或已驳回时成功。
-    ///
-    /// # 错误
-    /// 其他状态返回状态冲突。
+    /// 输入约定：无；调用方先通过 identity 核验原登记人的对象权限。
     pub fn ensure_draft_editable(&self) -> DraftEditResult<()> {
         if !matches!(self.status, CustomerReceiptStatus::Draft | CustomerReceiptStatus::Rejected) {
             return Err(DraftEditError::ConflictError("只有草稿或已驳回回款可以修改".into()));
@@ -231,20 +196,15 @@ impl CustomerReceipt {
         Ok(())
     }
 
-    /// 创建客户回款单（初始状态为草稿）。
+    /// 为后续编辑建立客户回款单（初始状态为草稿），构造阶段校验输入后再交给调用方保存。
     ///
     /// 完成回款单号与银行引用的 trim/非空/长度校验和金额正数校验。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::CustomerReceiptId`）
-    /// * `data` - 创建数据
-    /// * `created_by` - 已认证创建人；创建后不得由更新命令覆盖
-    ///
-    /// # 返回
     /// 返回新建的回款单实体。
-    ///
-    /// # 错误
     /// 当回款单号或创建人为空/超长、银行引用超长或金额非正时返回错误。
+    ///
+    /// 输入约定：
+    /// - `id`：实体主键（`erp_core::ids::CustomerReceiptId`）
+    /// - `created_by`：已认证创建人；创建后不得由更新命令覆盖
     pub fn new(
         id: CustomerReceiptId,
         data: CustomerReceiptData,
@@ -280,14 +240,7 @@ impl CustomerReceipt {
     /// 返回审批责任组织（FIN-E09）。
     ///
     /// 取往来主体，不得用空串或当前登录人组织补位。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回非空责任组织。
-    ///
-    /// # 错误
     /// 往来主体为空时返回错误。
     pub fn approval_responsible_org_id(&self) -> Result<String> {
         let org = self.counterparty_party_id.to_string();
@@ -300,14 +253,7 @@ impl CustomerReceipt {
     /// 生成稳定的审批事实快照（FIN-E09）。
     ///
     /// 同一实体重复生成结果确定；空分配、空组织与行数溢出失败关闭。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回文档号、责任组织、对手方、金额与行数事实。
-    ///
-    /// # 错误
     /// 无冻结分配、往来主体为空或行数溢出 `u32` 时返回错误。
     pub fn approval_facts(&self) -> Result<CustomerReceiptApprovalFacts> {
         if self.pending_allocations.is_empty() {
@@ -324,14 +270,7 @@ impl CustomerReceipt {
     }
 
     /// 校验客户回款仍是从未提交审批的初始草稿。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 状态为草稿、审批主题版本为 0 且没有冻结分配时返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// 结果：状态为草稿、审批主题版本为 0 且没有冻结分配时返回 `Ok(())`。
     /// 非草稿、审批主题版本已递增或已经冻结待过账分配时返回错误。
     pub fn ensure_initial_approval_state(&self) -> Result<()> {
         if self.status != CustomerReceiptStatus::Draft
@@ -347,14 +286,6 @@ impl CustomerReceipt {
     ///
     /// 复用 `new` 的校验规则；`POSTED` 后内容不可编辑（§7.5），草稿修改不改变
     /// 回款单号与往来主体等关键字段。
-    ///
-    /// # 参数
-    /// * `update` - 更新数据
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 当状态非草稿或更新字段校验失败时返回错误。
     pub fn update(&mut self, update: CustomerReceiptUpdate) -> Result<()> {
         self.ensure_editable()?;
@@ -373,12 +304,11 @@ impl CustomerReceipt {
     }
 
     /// 保存草稿拟核销分配，不启动审批或占用应收余额。
-    /// # 参数
-    /// * `allocations` - 合法正金额分配，可为空。
-    /// # 返回
-    /// 保存后的分配仅用于草稿回显。
-    /// # 错误
+    /// 结果：保存后的分配仅用于草稿回显。
     /// 非草稿、重复来源、超额或改变已提交原单来源时拒绝。
+    ///
+    /// 输入约定：
+    /// - `allocations`：合法正金额分配，可为空。
     pub fn save_allocations(&mut self, allocations: Vec<PendingReceiptAllocation>) -> Result<()> {
         self.ensure_editable()?;
         if !allocations.is_empty() {
@@ -400,18 +330,13 @@ impl CustomerReceipt {
         Ok(())
     }
 
-    /// 迁移回款单状态。
+    /// 处理回款单生命周期动作时，先按固定迁移规则校验目标，再更新状态。
     ///
     /// 按 §7.5 固定邻接矩阵校验并应用状态迁移。
+    /// 失败条件：目标状态不在邻接矩阵中时返回 [`Error::InvalidStateTransition`]。
     ///
-    /// # 参数
-    /// * `to` - 目标状态
-    ///
-    /// # 返回
-    /// 迁移成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 目标状态不在邻接矩阵中时返回 [`Error::InvalidStateTransition`]。
+    /// 输入约定：
+    /// - `to`：目标状态
     pub fn transition(&mut self, to: CustomerReceiptStatus) -> Result<()> {
         ensure_transition(self.status, to)?;
         self.status = to;
@@ -421,15 +346,11 @@ impl CustomerReceipt {
     /// 提交并启动审批：递增 `approval_subject_version` 并进入 `IN_APPROVAL`。
     ///
     /// 版本使用 checked add，成功后不回退。不得改写 `BaseModel.version`。
-    ///
-    /// # 参数
-    /// * `allocations` - 提交时冻结的待过账核销分配
-    ///
-    /// # 返回
     /// 返回冻结后的提交版本。
+    /// 失败条件：非草稿、分配非法或版本溢出时返回冲突。
     ///
-    /// # 错误
-    /// 非草稿、分配非法或版本溢出时返回冲突。
+    /// 输入约定：
+    /// - `allocations`：提交时冻结的待过账核销分配
     pub fn start_approval(&mut self, allocations: Vec<PendingReceiptAllocation>) -> Result<u32> {
         if !matches!(self.status, CustomerReceiptStatus::Draft | CustomerReceiptStatus::Rejected) {
             return Err(Error::from("只有草稿或已驳回的客户回款单可以提交审批"));
@@ -448,15 +369,8 @@ impl CustomerReceipt {
     }
 
     /// 撤回审批：回到草稿，且 `approval_subject_version` 不回退。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 无返回值。成功时状态回到 `Draft`，审批主题版本不回退。
-    ///
-    /// # 错误
-    /// 非审批中时返回冲突。
+    /// 结果：无返回值。成功时状态回到 `Draft`，审批主题版本不回退。
+    /// 失败条件：非审批中时返回冲突。
     pub fn cancel_approval(&mut self) -> Result<()> {
         if self.status != CustomerReceiptStatus::InApproval {
             return Err(Error::from("只有审批中的客户回款单可以撤回审批"));
@@ -465,13 +379,8 @@ impl CustomerReceipt {
     }
 
     /// 驳回本次审批，保留分配依据及提交版本以供修改重提。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 回款状态变为已驳回；审批中占用由状态查询自动释放。
-    /// # 错误
-    /// 非审批中状态拒绝，禁止重复执行或撤销已过账事实。
+    /// 结果：回款状态变为已驳回；审批中占用由状态查询自动释放。
+    /// 失败条件：非审批中状态拒绝，禁止重复执行或撤销已过账事实。
     pub fn reject_approval(&mut self) -> Result<()> {
         if self.status != CustomerReceiptStatus::InApproval {
             return Err(Error::from("只有审批中的客户回款单可以驳回"));
@@ -480,15 +389,8 @@ impl CustomerReceipt {
     }
 
     /// 最终通过过账：仅 `IN_APPROVAL` 可进入 `POSTED`。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 无返回值。成功时状态变为 `Posted`。
-    ///
-    /// # 错误
-    /// 状态不是审批中时返回冲突。
+    /// 结果：无返回值。成功时状态变为 `Posted`。
+    /// 失败条件：状态不是审批中时返回冲突。
     pub fn mark_posted(&mut self) -> Result<()> {
         if self.status != CustomerReceiptStatus::InApproval {
             return Err(Error::from("只有审批中的客户回款单可以由最终通过动作过账"));
@@ -497,26 +399,14 @@ impl CustomerReceipt {
     }
 
     /// 判断回款单是否已过账。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 状态为 `Posted` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 结果：状态为 `Posted` 时返回 `true`。
     pub fn is_posted(&self) -> bool {
         self.status == CustomerReceiptStatus::Posted
     }
 
-    /// 校验回款单仍可编辑。
-    ///
-    /// # 返回
-    /// 草稿状态返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 状态非草稿时返回错误。
+    // 校验回款单仍可编辑。
+    // 结果：草稿状态返回 `Ok(())`。
+    // 状态非草稿时返回错误。
     fn ensure_editable(&self) -> Result<()> {
         if !matches!(self.status, CustomerReceiptStatus::Draft | CustomerReceiptStatus::Rejected) {
             return Err(Error::from("已过账或已冲正的回款单不可编辑"));
@@ -525,10 +415,8 @@ impl CustomerReceipt {
     }
 }
 
-/// 校验金额为正数。
-///
-/// # 错误
-/// 零或负数时返回错误。
+// 校验金额为正数。
+// 零或负数时返回错误。
 fn ensure_positive_amount(amount: &Amount) -> Result<()> {
     if amount.to_decimal().is_sign_negative() || amount.to_decimal().is_zero() {
         return Err(Error::from("回款金额必须为正数"));
@@ -536,10 +424,8 @@ fn ensure_positive_amount(amount: &Amount) -> Result<()> {
     Ok(())
 }
 
-/// 校验待过账分配合计不超过回款金额。
-///
-/// # 错误
-/// 无分配行或合计超额时返回错误。
+// 校验待过账分配合计不超过回款金额。
+// 无分配行或合计超额时返回错误。
 fn ensure_pending_allocations(amount: &Amount, allocations: &[PendingReceiptAllocation]) -> Result<()> {
     if allocations.is_empty() {
         return Err(Error::from("提交审批至少提供一条核销分配"));
@@ -554,7 +440,7 @@ fn ensure_pending_allocations(amount: &Amount, allocations: &[PendingReceiptAllo
     Ok(())
 }
 
-/// 原单重提可以调整核销金额，但不能替换、删除或新增原拟核销来源行。
+// 回款原单再次提交前比对拟核销来源；可改分配金额，不能替换、删减或新增原来源行。
 fn ensure_resubmit_sources(
     original: &[PendingReceiptAllocation],
     submitted: &[PendingReceiptAllocation],
@@ -764,7 +650,7 @@ mod tests {
         assert!(receipt.approval_facts().is_err());
     }
 
-    /// 撤回回款审批后编辑同一单据并重提，原单号和资金来源不变。
+    // 回归检查：撤回回款审批后编辑同一单据并重提，原单号和资金来源不变。
     #[test]
     fn cancelled_receipt_can_be_edited_and_resubmitted() {
         let mut receipt =
@@ -815,7 +701,7 @@ mod tests {
         assert_eq!(receipt.start_approval(allocations()).unwrap(), 2);
     }
 
-    /// 撤回原单保留拟核销来源，改金额可重提，换来源失败且不迁移状态或主题版本。
+    // 回归检查：撤回原单保留拟核销来源，改金额可重提，换来源失败且不迁移状态或主题版本。
     #[test]
     fn resubmit_changes_allocation_amount_but_preserves_original_sources() {
         let mut receipt =
@@ -855,7 +741,7 @@ mod tests {
         assert!(receipt.save_allocations(vec![line("two", "10")]).is_err());
         receipt.save_allocations(vec![line("three", "10")]).unwrap();
     }
-    /// 驳回后可直接编辑并重提，保存不清除驳回状态且旧决定不可再执行。
+    // 回归检查：驳回后可直接编辑并重提，保存不清除驳回状态且旧决定不可再执行。
     #[test]
     fn rejected_receipt_preserves_identity_and_can_be_edited_and_resubmitted() {
         let mut receipt =

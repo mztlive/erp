@@ -146,11 +146,7 @@ pub struct FundsBalanceObservation {
 
 impl FundsEvidenceInput {
     /// 验证来源身份和脱敏字段，缺少金额的真实观察仍按未解释证据保存。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 字段有界且来源身份稳定时成功。
-    /// # 错误
+    /// 结果：字段有界且来源身份稳定时成功。
     /// 缺少稳定交易/观察身份、原归档依据或非法业务代码时拒绝。
     pub fn validate(&self) -> Result<()> {
         self.archive.validate()?;
@@ -159,11 +155,7 @@ impl FundsEvidenceInput {
     }
 
     /// 返回带类型的来源身份，交易与未知观察不会相互误合并。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 返回原稳定身份。
-    /// # 错误
     /// 身份非法时拒绝。
     pub fn key(&self) -> Result<FundsEvidenceKey> {
         match &self.result {
@@ -259,12 +251,10 @@ impl FundsEvidenceResult {
 
 impl FundsEvidenceInbox {
     /// 仅在服务已重验原真实资金资源后完成原待核验收件。
-    /// # 参数
-    /// 原方向对应的实际资源及带核验人、附件、操作身份的人工重核依据。
-    /// # 返回
-    /// 原证据和原核验原因保留，状态变为已应用。
-    /// # 错误
+    /// 结果：原证据和原核验原因保留，状态变为已应用。
     /// 来源冲突、未解释观察、资源改派或无完整人工依据时拒绝。
+    ///
+    /// 输入约定：原方向对应的实际资源及带核验人、附件、操作身份的人工重核依据。
     pub fn resolve_reviewed(
         &mut self,
         resource: FundsAppliedResource,
@@ -295,13 +285,12 @@ impl FundsEvidenceInbox {
     }
 
     /// 只有本次精确资金交易已可靠应用才允许结束对应消息线索。
-    /// # 参数
-    /// * `account` - 服务端已核验的原资金账户。
-    /// * `transaction` / `order` / `expected` - 消息协议已核实的精确身份和方向。
-    /// # 返回
-    /// 本次交易已应用且无待核对事实时成功。
-    /// # 错误
+    /// 结果：本次交易已应用且无待核对事实时成功。
     /// 仅同单历史交易、未知结果、跨账户或资金仍待核对时拒绝。
+    ///
+    /// 输入约定：
+    /// - `account`：服务端已核验的原资金账户。
+    /// - `transaction` / `order` / `expected`：消息协议已核实的精确身份和方向。
     pub fn ensure_message_conclusion(
         &self,
         account: &SupplierDepositAccount,
@@ -352,12 +341,11 @@ impl FundsEvidenceInbox {
         Ok(())
     }
     /// 保留原证据及原应用引用并转人工核对。
-    /// # 参数
-    /// * `reason_code` - 脱敏、稳定的业务原因代码。
-    /// # 返回
-    /// 状态变为待核对，原内容保持不变。
-    /// # 错误
-    /// 原因代码非法时拒绝且不修改。
+    /// 结果：状态变为待核对，原内容保持不变。
+    /// 失败条件：原因代码非法时拒绝且不修改。
+    ///
+    /// 输入约定：
+    /// - `reason_code`：脱敏、稳定的业务原因代码。
     pub fn needs_review(&mut self, reason_code: &str) -> Result<()> {
         code(reason_code)?;
         self.state = FundsEvidenceInboxState::NeedsReview;
@@ -366,12 +354,11 @@ impl FundsEvidenceInbox {
     }
 
     /// 校验应用结果与原交易方向一致；未解释或冲突证据不能自动完成。
-    /// # 参数
-    /// * `resource` - 同一事务已形成的真实财务资源。
-    /// # 返回
-    /// 新应用或相同资源重放成功。
-    /// # 错误
-    /// 未解释、待核对、改换资源或方向不符时拒绝且不修改。
+    /// 结果：新应用或相同资源重放成功。
+    /// 失败条件：未解释、待核对、改换资源或方向不符时拒绝且不修改。
+    ///
+    /// 输入约定：
+    /// - `resource`：同一事务已形成的真实财务资源。
     pub fn apply(&mut self, resource: FundsAppliedResource) -> Result<()> {
         if self.state == FundsEvidenceInboxState::Applied {
             if self.applied_resource.as_ref() == Some(&resource) {

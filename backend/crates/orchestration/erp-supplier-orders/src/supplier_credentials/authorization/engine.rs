@@ -258,7 +258,7 @@ impl AuthorizationEngine {
         self.save_grant(exchange, grant, context).await
     }
 
-    /// 将已取得授权的身份、令牌和到期时间加密并保存到原执行记录。
+    // 将已取得授权的身份、令牌和到期时间加密并保存到原执行记录。
     async fn save_grant(
         &self,
         exchange: SupplierCredential,

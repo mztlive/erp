@@ -26,20 +26,10 @@ const CREATED_BY_MAX_LEN: usize = 128;
 const HMAC_HEX_LEN: usize = 64;
 
 /// 计算内容指纹（keyed HMAC-SHA256，十六进制）。
-///
-/// 数据模型 §4.5.5 / §6.1：`content_hmac` 必须使用带密钥 HMAC，禁止保存可被
-/// 离线枚举的裸摘要；本函数是全系统唯一实现（§13.6）。同一明文在不同密钥下
-/// 产生不同指纹，同一密钥下指纹稳定可复现。
-///
-/// # 参数
-/// * `plain` - 文件内容（或内容规范化摘要）的明文形态
-/// * `key` - 密钥字节
-///
-/// # 返回
+/// 数据模型 §4.5.5 / §6.1：`content_hmac` 必须使用带密钥 HMAC，禁止保存可被离线枚举的裸摘要；本函数是全系统唯一实现（§13.6）。同一明文在不同密钥下产生不同指纹，
+/// 同一密钥下指纹稳定可复现。
 /// 返回 64 位小写十六进制 HMAC-SHA256 指纹。
-///
-/// # 错误
-/// 不返回错误。
+/// `plain` 为文件内容（或内容规范化摘要）的明文形态；`key` 为密钥字节。
 ///
 /// # Panics
 /// HMAC-SHA256 接受任意长度密钥，半字节也恒可编码为十六进制。这两处 `expect`
@@ -66,14 +56,8 @@ pub struct ContentHmac(String);
 
 impl ContentHmac {
     /// 解析并校验内容指纹。
-    ///
-    /// # 参数
-    /// * `value` - 十六进制指纹（64 字符）
-    ///
-    /// # 返回
     /// 校验通过返回 `Ok`，否则返回 `Err`。
-    ///
-    /// # 错误
+    /// `value` 为十六进制指纹（64 字符）。
     /// 指纹长度不是 64 或含非十六进制字符时返回 `LogicError`。
     pub fn parse(value: impl AsRef<str>) -> Result<Self> {
         let value = value.as_ref().trim().to_ascii_lowercase();
@@ -84,22 +68,14 @@ impl ContentHmac {
     }
 
     /// 返回指纹字符串。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回小写十六进制指纹。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn as_str(&self) -> &str {
         &self.0
     }
 }
 
 impl fmt::Display for ContentHmac {
-    /// 以十六进制字符串展示指纹。
+    // 以十六进制字符串展示指纹。
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(&self.0)
     }
@@ -185,15 +161,7 @@ crate::entity::enum_str!(RetentionClass {
 
 impl RetentionClass {
     /// 判断保留策略是否要求显式到期时间。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 非长期保留策略返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn requires_expiry(self) -> bool {
         !matches!(self, Self::LongTerm)
     }
@@ -256,7 +224,7 @@ pub struct FileAsset {
 }
 
 impl fmt::Debug for FileAsset {
-    /// 自定义调试输出：不泄漏对象存储键正文（§6.1 对象存储地址不得写业务日志）。
+    // 自定义调试输出：不泄漏对象存储键正文（§6.1 对象存储地址不得写业务日志）。
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("FileAsset")
@@ -278,11 +246,8 @@ impl fmt::Debug for FileAsset {
 
 impl FileAsset {
     /// 校验发票图片或 PDF 的文件形态与治理状态。
-    /// # 参数
-    /// 使用当前资产的文件名、MIME、大小与保存策略。
-    /// # 返回
     /// 有效的敏感长期发票文件返回成功。
-    /// # 错误
+    /// 使用当前资产的文件名、MIME、大小与保存策略。
     /// 类型、大小、扩展名不匹配或资产不可读取时拒绝。
     pub fn ensure_invoice_evidence(&self) -> Result<()> {
         let extension = self.file_name.rsplit_once('.').map(|(_, value)| value.to_ascii_lowercase());
@@ -314,21 +279,10 @@ impl FileAsset {
     }
 
     /// 创建文件资产。
-    ///
-    /// 完成对象键/文件名/内容类型的校验与规范化（trim、非空、长度上限），
-    /// 并强制保留策略一致性：非长期保留策略必须携带 `expires_at`
-    /// （§4.5.7：失败诊断与导出按保留期销毁）。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::FileAssetId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
+    /// 完成对象键/文件名/内容类型的校验与规范化（trim、非空、长度上限），并强制保留策略一致性：非长期保留策略必须携带 `expires_at` （§4.5.7：失败诊断与导出按保留期销毁）。
     /// 返回新建的文件资产实体（安全检查状态 `PENDING`）。
-    ///
-    /// # 错误
-    /// 当对象键/文件名/内容类型为空或超长，或非长期保留策略缺少到期时间时
-    /// 返回错误。
+    /// `id` 为实体主键（`erp_core::ids::FileAssetId`）。
+    /// 当对象键/文件名/内容类型为空或超长，或非长期保留策略缺少到期时间时返回错误。
     pub fn new(id: FileAssetId, data: FileAssetData) -> Result<Self> {
         let storage_object_key = normalize_required_text(
             data.storage_object_key,
@@ -367,14 +321,7 @@ impl FileAsset {
     }
 
     /// 记录安全检查结果。
-    ///
-    /// # 参数
-    /// * `status` - 检查结果（通过/拒绝/隔离；隔离后经人工复核可放行或拒绝）
-    ///
-    /// # 返回
-    /// 无返回值。
-    ///
-    /// # 错误
+    /// `status` 为检查结果（通过/拒绝/隔离；隔离后经人工复核可放行或拒绝）。
     /// 当迁移不在安全检查状态机内（如已通过后再次隔离）时返回错误。
     pub fn mark_scan_result(&mut self, status: SecurityScanStatus) -> Result<()> {
         if status == SecurityScanStatus::ContentChecked {
@@ -386,11 +333,8 @@ impl FileAsset {
     }
 
     /// 登记可信上传流程完成的基础内容检查，保留后续扫描和隔离能力。
-    /// # 参数
-    /// 使用受控上传流程完成真实内容检查后的当前文件事实。
-    /// # 返回
     /// 返回内容已检查状态，不登记安全扫描通过。
-    /// # 错误
+    /// 使用受控上传流程完成真实内容检查后的当前文件事实。
     /// 已隔离、拒绝或通过安全扫描的文件不得倒退为内容检查状态。
     pub fn mark_content_checked(&mut self) -> Result<()> {
         ensure_transition(self.security_scan_status, SecurityScanStatus::ContentChecked)?;
@@ -399,16 +343,8 @@ impl FileAsset {
     }
 
     /// 标记销毁。
-    ///
     /// 销毁审计只记录一次；销毁状态保留为治理记录，不影响既有或新增业务关联。
-    ///
-    /// # 参数
-    /// * `at` - 销毁时刻
-    ///
-    /// # 返回
-    /// 无返回值。
-    ///
-    /// # 错误
+    /// `at` 为销毁时刻。
     /// 当资产已标记销毁时返回错误。
     pub fn destroy(&mut self, at: Instant) -> Result<()> {
         if self.destroyed_at.is_some() {
@@ -419,19 +355,9 @@ impl FileAsset {
     }
 
     /// 判断文件资产在指定时点是否可用作受控证据。
-    ///
-    /// 有界内容检查或安全扫描通过、未被销毁且未过期时视为可用；
-    /// `CONTENT_CHECKED` 仅允许受控业务使用，不表示病毒或恶意内容扫描已经通过。
-    /// 该判断为纯时点快照，不执行 I/O、时钟或加密。
-    ///
-    /// # 参数
-    /// * `now` - 校验的统一时点
-    ///
-    /// # 返回
+    /// 有界内容检查或安全扫描通过、未被销毁且未过期时视为可用；`CONTENT_CHECKED` 仅允许受控业务使用，不表示病毒或恶意内容扫描已经通过。该判断为纯时点快照，不执行 I/O、时钟或加密。
     /// 可用时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// `now` 为校验的统一时点。
     pub fn is_usable_at(&self, now: Instant) -> bool {
         matches!(self.security_scan_status, SecurityScanStatus::ContentChecked | SecurityScanStatus::Passed)
             && self.destroyed_at.is_none()
@@ -493,7 +419,7 @@ mod tests {
         assert!(!asset.is_usable_at(now));
     }
 
-    /// happy path：字段 trim、初始待扫描、指纹稳定且带密钥。
+    // 验证字段 trim、初始待扫描、指纹稳定且带密钥。
     #[test]
     fn new_trims_fields_and_fingerprint_is_keyed_and_stable() {
         let asset = FileAsset::new(FileAssetId::new("fa-1"), data()).unwrap();
@@ -514,7 +440,7 @@ mod tests {
         assert_eq!(fingerprint, expected, "与生产实现同一口径");
     }
 
-    /// 敏感字段：Debug 不泄漏对象键正文；指纹校验形态。
+    // 验证敏感字段：Debug 不泄漏对象键正文；指纹校验形态。
     #[test]
     fn debug_redacts_object_key_and_hmac_validates_shape() {
         let asset = FileAsset::new(FileAssetId::new("fa-1"), data()).unwrap();
@@ -528,21 +454,21 @@ mod tests {
         assert!(ContentHmac::parse("A".repeat(64)).is_ok(), "大小写十六进制均可");
     }
 
-    /// 失败路径：必填为空被拒。
+    // 验证登记文件时只含空白的文件名被拒，避免产生无展示名的文件资产。
     #[test]
     fn new_rejects_empty_file_name() {
         let payload = FileAssetData { file_name: "  ".to_string(), ..data() };
         assert!(FileAsset::new(FileAssetId::new("fa-1"), payload).is_err());
     }
 
-    /// 失败路径：超长对象键被拒。
+    // 验证超长对象键被拒。
     #[test]
     fn new_rejects_overlong_object_key() {
         let payload = FileAssetData { storage_object_key: "x".repeat(513), ..data() };
         assert!(FileAsset::new(FileAssetId::new("fa-1"), payload).is_err());
     }
 
-    /// 失败路径：保留策略不一致（非长期缺少到期时间）被拒。
+    // 验证保留策略不一致（非长期缺少到期时间）被拒。
     #[test]
     fn new_rejects_missing_expiry_for_short_retention() {
         let payload = FileAssetData { expires_at: None, ..data() };
@@ -552,7 +478,7 @@ mod tests {
         assert!(FileAsset::new(FileAssetId::new("fa-2"), payload).is_ok());
     }
 
-    /// 状态机：安全检查合法迁移（隔离后可复核放行/拒绝）。
+    // 验证安全检查合法迁移（隔离后可复核放行/拒绝）。
     #[test]
     fn scan_lifecycle_passes_and_reviews() {
         let mut asset = FileAsset::new(FileAssetId::new("fa-1"), data()).unwrap();
@@ -562,7 +488,7 @@ mod tests {
         assert_eq!(asset.security_scan_status, SecurityScanStatus::Passed);
     }
 
-    /// 状态机：非法迁移被拒（终态回退、隔离后放行再隔离）。
+    // 验证非法迁移被拒（终态回退、隔离后放行再隔离）。
     #[test]
     fn illegal_scan_transitions_are_rejected() {
         let mut asset = FileAsset::new(FileAssetId::new("fa-1"), data()).unwrap();
@@ -577,7 +503,7 @@ mod tests {
         assert!(rejected.mark_scan_result(SecurityScanStatus::Quarantined).is_err());
     }
 
-    /// 状态机：逐边定向断言（含不可逆终态）。
+    // 验证各状态只能沿允许的方向迁移（含不可逆终态）。
     #[test]
     fn directed_edge_assertions() {
         for &(from, to) in &[
@@ -595,7 +521,7 @@ mod tests {
         assert!(ensure_transition(SecurityScanStatus::Pending, SecurityScanStatus::Pending).is_ok());
     }
 
-    /// 销毁审计只记录一次，且状态保留供治理查询。
+    // 验证销毁审计只记录一次，且状态保留供治理查询。
     #[test]
     fn destroy_is_recorded_once() {
         let mut asset = FileAsset::new(FileAssetId::new("fa-1"), data()).unwrap();
@@ -604,7 +530,7 @@ mod tests {
         assert!(asset.destroy(Instant::from_unix_secs(1_703_000_000)).is_err(), "销毁审计只记录一次");
     }
 
-    /// 裸摘要对比：指纹不等于无密钥 SHA-256，证明使用了带密钥 HMAC。
+    // 验证裸摘要对比：指纹不等于无密钥 SHA-256，证明使用了带密钥 HMAC。
     #[test]
     fn fingerprint_differs_from_bare_digest() {
         use sha2::Digest as _;
@@ -616,12 +542,12 @@ mod tests {
         assert_ne!(content_fingerprint("content", b"secret-key"), bare);
     }
 
-    /// 测试内半字节转十六进制（与生产实现同一编码口径）。
+    // 测试内半字节转十六进制（与生产实现同一编码口径）。
     fn nibble(value: u8) -> char {
         char::from_digit(u32::from(value), 16).expect("半字节恒可编码为十六进制")
     }
 
-    /// 枚举序列化与标签稳定。
+    // 验证文件状态、保留和敏感级别的枚举序列化代码和中文标签不随实现变化。
     #[test]
     fn enums_codes_and_labels_are_stable() {
         assert_eq!(serde_json::to_string(&SecurityScanStatus::Quarantined).unwrap(), "\"quarantined\"");

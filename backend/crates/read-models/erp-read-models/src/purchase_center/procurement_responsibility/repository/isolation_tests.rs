@@ -84,19 +84,18 @@ fn test_sku(id: &str, product_id: &str) -> Sku {
     .unwrap()
 }
 
-/// 空输入返回空 bundle，不触发数据库查询错误。
-///
-/// # 参数
-/// 无，内部创建隔离库。
-///
-/// # 返回
-/// 空 bundle 时断言全部映射为空。
-///
-/// # 错误
-/// MongoDB 连接或 bundle 加载失败时测试失败。
-///
-/// # 约束
-/// Batch 维度空输入必须返回空集合；不适用 Page/Aggregation/Index 标记 N/A。
+// 验证采购责任规则：空输入返回空 bundle，不触发数据库查询错误。
+//
+// 调用参数：
+// 无，内部创建隔离库。
+//
+// 空 bundle 时断言全部映射为空。
+//
+// 失败边界：
+// MongoDB 连接或 bundle 加载失败时测试失败。
+//
+// 调用约束：
+// Batch 维度空输入必须返回空集合；不适用 Page/Aggregation/Index 标记 N/A。
 #[tokio::test]
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn empty_sku_ids_returns_empty_bundle() {
@@ -113,19 +112,18 @@ async fn empty_sku_ids_returns_empty_bundle() {
     });
 }
 
-/// 重复 SkuId 输入经幂等处理后结果与去重输入一致，保持调用方去重语义。
-///
-/// # 参数
-/// 无，内部创建 1 SKU 及其关联事实。
-///
-/// # 返回
-/// 断言重复输入 bundle 与单次输入 bundle 一致。
-///
-/// # 错误
-/// 写入或 bundle 加载失败时测试失败。
-///
-/// # 约束
-/// Batch 去重保持调用方顺序，查询次数不随重复数增长；Page/Aggregation/Index 标记 N/A。
+// 验证采购责任规则：重复 SkuId 输入经幂等处理后结果与去重输入一致，保持调用方去重语义。
+//
+// 调用参数：
+// 无，内部创建 1 SKU 及其关联事实。
+//
+// 断言重复输入 bundle 与单次输入 bundle 一致。
+//
+// 失败边界：
+// 写入或 bundle 加载失败时测试失败。
+//
+// 调用约束：
+// Batch 去重保持调用方顺序，查询次数不随重复数增长；Page/Aggregation/Index 标记 N/A。
 #[tokio::test]
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn duplicate_sku_ids_are_deduplicated_and_stable() {
@@ -157,19 +155,19 @@ async fn duplicate_sku_ids_are_deduplicated_and_stable() {
     });
 }
 
-/// 缺失 SKU/product/revision/category 时 Repository 返回稀疏映射，由 Entity 层检出缺失。
-///
-/// # 参数
-/// 无，内部仅创建部分事实。
-///
-/// # 返回
-/// 断言稀疏映射及 Entity 校验错误。
-///
-/// # 错误
-/// 写入或 bundle 加载失败时测试失败。
-///
-/// # 约束
-/// Batch 缺项由 Repository 稀疏返回，Entity 负责 exact 校验；软删除通过 base.rs 已过滤。
+// 验证采购责任规则：缺失 SKU/product/revision/category 时 Repository 返回稀疏映射，
+// 由 Entity 层检出缺失。
+//
+// 调用参数：
+// 无，内部仅创建部分事实。
+//
+// 断言稀疏映射及 Entity 校验错误。
+//
+// 失败边界：
+// 写入或 bundle 加载失败时测试失败。
+//
+// 调用约束：
+// Batch 缺项由 Repository 稀疏返回，Entity 负责 exact 校验；软删除通过 base.rs 已过滤。
 #[tokio::test]
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn missing_facts_are_sparse_and_detected_by_entity() {
@@ -264,19 +262,19 @@ async fn missing_facts_are_sparse_and_detected_by_entity() {
     });
 }
 
-/// 软删除的 SKU/product/revision/category 不应出现在 bundle 中，由 base.rs 过滤。
-///
-/// # 参数
-/// 无，内部创建后软删除。
-///
-/// # 返回
-/// 断言软删除后 bundle 为稀疏映射。
-///
-/// # 错误
-/// 写入、软删除或 bundle 加载失败时测试失败。
-///
-/// # 约束
-/// 软删除语义由 Repository 层 base.rs 统一过滤，Entity 仍检出缺失；Page/Aggregation/Index 标记 N/A。
+// 验证采购责任规则：软删除的 SKU/product/revision/category 不应出现在 bundle 中，
+// 由 base.rs 过滤。
+//
+// 调用参数：
+// 无，内部创建后软删除。
+//
+// 断言软删除后 bundle 为稀疏映射。
+//
+// 失败边界：
+// 写入、软删除或 bundle 加载失败时测试失败。
+//
+// 调用约束：
+// 软删除语义由 Repository 层 base.rs 统一过滤，Entity 仍检出缺失；Page/Aggregation/Index 标记 N/A。
 #[tokio::test]
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn soft_deleted_facts_are_filtered() {
@@ -334,19 +332,18 @@ async fn soft_deleted_facts_are_filtered() {
     });
 }
 
-/// 批量查询次数不随 SKU 数量线性增长：N 个 SKU 共用 1+1+1+depth 次批量读取，无 N+1。
-///
-/// # 参数
-/// 无，内部创建多 SKU 共享同商品与分类链。
-///
-/// # 返回
-/// 断言 bundle 正确包含全部事实且分类按深度分层批量加载。
-///
-/// # 错误
-/// 写入或 bundle 加载失败时测试失败。
-///
-/// # 约束
-/// Batch 查询次数固定为 SKU、商品、修订各一次，分类按深度分层；稳定 grouping 经 dedup_sorted 保证字典序。
+// 验证采购责任规则：批量查询次数不随 SKU 数量线性增长：N 个 SKU 共用 1+1+1+depth 次批量读取，无 N+1。
+//
+// 调用参数：
+// 无，内部创建多 SKU 共享同商品与分类链。
+//
+// 断言 bundle 正确包含全部事实且分类按深度分层批量加载。
+//
+// 失败边界：
+// 写入或 bundle 加载失败时测试失败。
+//
+// 调用约束：
+// Batch 查询次数固定为 SKU、商品、修订各一次，分类按深度分层；稳定 grouping 经 dedup_sorted 保证字典序。
 #[tokio::test]
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn bounded_batch_queries_no_n_plus_one() {
@@ -391,19 +388,18 @@ async fn bounded_batch_queries_no_n_plus_one() {
     });
 }
 
-/// 同一事务内调用 bundle 复用调用方 executor，能读取事务内未提交写入（read-your-writes）。
-///
-/// # 参数
-/// 无，内部通过 with_transaction 写入后即时读取。
-///
-/// # 返回
-/// 断言事务内 bundle 能见未提交 SKU。
-///
-/// # 错误
-/// 事务或 bundle 加载失败时测试失败。
-///
-/// # 约束
-/// Repository 必须接收 &mut dyn Executor 且不自行开启事务，事务内重验复用同一 session。
+// 验证采购责任规则：同一事务内调用 bundle 复用调用方 executor，能读取事务内未提交写入（read-your-writes）。
+//
+// 调用参数：
+// 无，内部通过 with_transaction 写入后即时读取。
+//
+// 断言事务内 bundle 能见未提交 SKU。
+//
+// 失败边界：
+// 事务或 bundle 加载失败时测试失败。
+//
+// 调用约束：
+// Repository 必须接收 &mut dyn Executor 且不自行开启事务，事务内重验复用同一 session。
 #[tokio::test]
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn transaction_reuses_caller_executor_read_your_writes() {
@@ -461,19 +457,18 @@ async fn transaction_reuses_caller_executor_read_your_writes() {
     });
 }
 
-/// 代表性 id 查询的 explain 应优先命中索引而非全表扫描；若未建索引则标记 N/A。
-///
-/// # 参数
-/// 无，内部对各集合执行 explain。
-///
-/// # 返回
-/// 断言 explain 包含 IXSCAN 且不为 COLLSCAN，缺索引时记录 N/A 原因。
-///
-/// # 错误
-/// explain 执行失败时测试失败。
-///
-/// # 约束
-/// Index 维度：当前批次不新增索引，代表性数据量下 explain 需显示 IXSCAN；若仍为 COLLSCAN 则标记 N/A 并说明依赖 PROC-R10 索引批次。
+// 验证采购责任规则：代表性 id 查询的 explain 应优先命中索引而非全表扫描；若未建索引则标记 N/A。
+//
+// 调用参数：
+// 无，内部对各集合执行 explain。
+//
+// 断言 explain 包含 IXSCAN 且不为 COLLSCAN，缺索引时记录 N/A 原因。
+//
+// 失败边界：
+// explain 执行失败时测试失败。
+//
+// 调用约束：
+// Index 维度：当前批次不新增索引，代表性数据量下 explain 需显示 IXSCAN；若仍为 COLLSCAN 则标记 N/A 并说明依赖 PROC-R10 索引批次。
 #[tokio::test]
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn explain_id_queries_use_ixscan() {
@@ -506,19 +501,18 @@ async fn explain_id_queries_use_ixscan() {
     });
 }
 
-/// 父分类链成环由 Entity 检出，Repository 仅返回原始映射。
-///
-/// # 参数
-/// 无，内部构造环状分类链。
-///
-/// # 返回
-/// 断言 bundle 返回环上分类，Entity 层 category_chain 报错。
-///
-/// # 错误
-/// 写入或 bundle 加载失败时测试失败。
-///
-/// # 约束
-/// 环检测由 Entity 值对象负责，Repository 不自行判定环。
+// 验证采购责任规则：父分类链成环由 Entity 检出，Repository 仅返回原始映射。
+//
+// 调用参数：
+// 无，内部构造环状分类链。
+//
+// 断言 bundle 返回环上分类，Entity 层 category_chain 报错。
+//
+// 失败边界：
+// 写入或 bundle 加载失败时测试失败。
+//
+// 调用约束：
+// 环检测由 Entity 值对象负责，Repository 不自行判定环。
 #[tokio::test]
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn category_ring_is_detected_by_entity() {

@@ -12,11 +12,8 @@ use crate::error::{Error, Result};
 #[async_trait]
 pub trait ContractCreationPort: Send + Sync {
     /// 在原事务内读取指定客户并构造合同候选归属。
-    /// # 参数
-    /// actor 为真实操作人，customer_id 为完整客户来源，executor 为原执行器。
-    /// # 返回
     /// 从实际客户当前负责人和组织构造、无持久化版本的合同候选事实。
-    /// # 错误
+    /// actor 为真实操作人，customer_id 为完整客户来源，executor 为原执行器。
     /// 来源不存在、无权限、版本变化或事实读取失败时拒绝。
     async fn candidate(
         &self,
@@ -43,28 +40,15 @@ pub struct CustomerAccountFact {
 #[async_trait]
 pub trait CustomerFactsPort: Send + Sync {
     /// 读取一条未删除的客户角色。
-    ///
-    /// # 参数
-    /// * `customer_id` - 客户角色 ID。
-    ///
-    /// # 返回
     /// 客户不存在或已删除时返回 `None`。
-    ///
-    /// # 错误
-    /// 适配器查询失败时返回对应错误。
+    /// `customer_id` 为客户角色 ID。
+    /// 传播适配器查询错误。
     async fn find_by_id(&self, customer_id: &CustomerAccountId) -> Result<Option<CustomerAccountFact>>;
 
     /// 按 ID 读取未删除的客户角色。缺失的 ID 省略。
-    ///
-    /// # 参数
-    /// * `customer_ids` - 客户角色 ID。
-    /// * `executor` - 调用方执行器，用于核对来源是否存在。
-    ///
-    /// # 返回
     /// 仍存在的客户事实。缺失的 ID 不出现。
-    ///
-    /// # 错误
-    /// 适配器查询失败时返回对应错误。
+    /// `customer_ids` 为客户角色 ID；`executor` 为调用方执行器，用于核对来源是否存在。
+    /// 传播适配器查询错误。
     async fn find_by_ids(
         &self,
         customer_ids: &[CustomerAccountId],

@@ -10,16 +10,7 @@ use persistence_core::indexes::{named_index, unique_index};
 use crate::repository::extensions::ProcurementResponsibilityExt;
 use crate::repository::procurement_responsibility::migration::migrate_pools;
 
-/// 创建采购责任规则索引。
-///
-/// # 参数
-/// * `db` - 目标 MongoDB 数据库
-///
-/// # 返回
-/// 全部命名索引创建成功返回 `Ok(())`。
-///
-/// # 错误
-/// 已有启用规则违反选择器唯一性或 MongoDB 创建失败时返回错误。
+// 创建采购责任规则索引。已有启用规则违反选择器唯一性或 MongoDB 创建失败时返回错误。
 pub(crate) async fn ensure(db: &Database) -> Result<()> {
     migrate_pools(db).await?;
 
@@ -29,10 +20,7 @@ pub(crate) async fn ensure(db: &Database) -> Result<()> {
     Ok(())
 }
 
-/// 构造采购责任规则索引集合。
-///
-/// # 返回
-/// 返回启用选择器唯一索引及列表、负责人查询索引。
+// 构造采购责任规则索引集合。返回启用选择器唯一索引及列表、负责人查询索引。
 fn indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_procurement_responsibility_rules_id", doc! { "id": 1 }),
@@ -62,7 +50,7 @@ fn indexes() -> Vec<IndexModel> {
 
 #[cfg(test)]
 mod tests {
-    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    // 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
     #[test]
     fn collections_look_up_by_unique_stable_id() {
         let indexes = super::indexes();

@@ -88,14 +88,10 @@ impl fmt::Debug for JdVopConfig {
 }
 
 impl JdVopConfig {
-    /// 校验启用参数；关闭模板允许空值，未知认证或写入开关一律拒绝反序列化。
+    /// 加载启用的京东 VOP 配置时，检查凭据身份、网关、调用渠道和配额，并验证已配置的消息
+    /// 及订单执行范围是否绑定当前部署账号。错误不暴露配置值。
     ///
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 参数满足部署边界时返回 `Ok(())`。
-    /// # 错误
-    /// 地址、凭据身份、调用渠道或配额无效时返回脱敏配置错误。
+    /// 停用模板可以留空；未知配置字段（如未定义的认证或写入开关）在反序列化时即被拒绝。
     pub fn validate(&self) -> Result<()> {
         if !self.enabled {
             return Ok(());
@@ -105,13 +101,10 @@ impl JdVopConfig {
         self.validate_execution_binding()
     }
 
-    /// 校验 Mongo 凭据配置，允许停用业务连接时受控导入或查询凭据。
-    /// # 参数
-    /// 无；仅检查部署账号、稳定凭据身份和专用加密密钥。
-    /// # 返回
-    /// enabled 为 false 时也执行相同凭据校验，不执行外部调用。
-    /// # 错误
-    /// 身份非法、密钥不足三十二字节或复用应用凭据密钥时返回脱敏错误。
+    /// 运维命令在导入或查询 MongoDB 中的京东凭据前，校验应用凭据、账号范围、记录 ID 和超时。
+    /// 即使业务对接停用也执行此检查；不调用京东接口。
+    ///
+    /// 加密密钥至少 32 字节且不得复用京东应用密钥，校验错误不暴露配置值。
     pub fn validate_credential_settings(&self) -> Result<()> {
         if !identifier(&self.app_key)
             || !secret(&self.app_secret)
@@ -128,13 +121,8 @@ impl JdVopConfig {
         Ok(())
     }
 
-    /// 禁止以应用登录密钥保护京东长期凭据。
-    /// # 参数
-    /// `application_secret` 为同一 SafeConfig 快照中的应用密钥。
-    /// # 返回
-    /// 独立密钥或尚未填写的停用模板返回成功，是否缺失由凭据校验负责。
-    /// # 错误
-    /// 已填写凭据密钥与应用密钥相同时返回脱敏错误。
+    // 整份配置加载时，将京东凭据加密密钥与同一快照的 JWT 签名密钥比对，禁止复用。
+    // 此处允许未填写的停用模板；导入或装配前的凭据校验负责检查是否缺失。
     pub(crate) fn ensure_independent_key(&self, application_secret: &str) -> Result<()> {
         if !self.credential_encryption_key.is_empty() && self.credential_encryption_key == application_secret
         {

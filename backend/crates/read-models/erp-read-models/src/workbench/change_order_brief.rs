@@ -43,48 +43,32 @@ pub(super) struct DiffLineState {
 }
 
 impl DiffLineState {
-    /// 构造行比较状态。
-    ///
-    /// # 参数
-    /// * `title` - 行标题
-    /// * `amount` - 行金额
-    ///
-    /// # 返回
-    /// 返回首行、可选字段全空的状态。
-    ///
-    /// # 错误
-    /// 无。
+    // 初始化行比较状态，供销售与采购变更简报使用。
+    //
+    // 调用参数：
+    // * `title` - 行标题
+    // * `amount` - 行金额
+    //
+    // 返回首行、可选字段全空的状态。
     pub(super) fn new(title: String, amount: String) -> Self {
         Self { line_no: 1, title, amount, quantity: None, unit_price: None, due: None, supply_price: None }
     }
 
-    /// 设置业务行号。
-    ///
-    /// # 参数
-    /// * `line_no` - 业务行号
-    ///
-    /// # 返回
-    /// 返回更新后的状态。
-    ///
-    /// # 错误
-    /// 无。
+    // 组装销售与采购变更简报时填入业务行号。
+    //
+    // 调用参数：
+    // * `line_no` - 业务行号
     pub(super) fn with_line_no(mut self, line_no: u32) -> Self {
         self.line_no = line_no;
         self
     }
 
-    /// 设置数量、单价与交期。
-    ///
-    /// # 参数
-    /// * `quantity` - 数量展示
-    /// * `unit_price` - 单价展示
-    /// * `due` - 交期展示
-    ///
-    /// # 返回
-    /// 返回更新后的状态。
-    ///
-    /// # 错误
-    /// 无。
+    // 组装销售与采购变更简报时补充数量、单价与交期。
+    //
+    // 调用参数：
+    // * `quantity` - 数量展示
+    // * `unit_price` - 单价展示
+    // * `due` - 交期展示
     pub(super) fn with_details(
         mut self,
         quantity: Option<String>,
@@ -97,16 +81,10 @@ impl DiffLineState {
         self
     }
 
-    /// 设置销售填写的采购供给价，仅供审批对照。
-    ///
-    /// # 参数
-    /// * `supply_price` - 采购供给价展示
-    ///
-    /// # 返回
-    /// 返回更新后的状态。
-    ///
-    /// # 错误
-    /// 无。
+    // 组装销售与采购变更简报时填入采购供给价展示。
+    //
+    // 调用参数：
+    // * `supply_price` - 采购供给价展示
     pub(super) fn with_supply_price(mut self, supply_price: Option<String>) -> Self {
         self.supply_price = supply_price;
         self
@@ -130,18 +108,13 @@ struct PurchaseChangeBriefContext {
 }
 
 impl WorkbenchFactsReader<'_> {
-    /// 销售变更审批任务的对象事实：任务对象是变更单本身。
-    ///
-    /// # 参数
-    /// * `keys` - 本批任务引用的对象键
-    /// * `facts` - 输出的对象事实表
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 成功时写入来源销售单、原因、提交信息及冻结版本前后差异。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
+    // 读取销售与采购变更简报时，销售变更审批任务的对象事实：任务对象是变更单本身。
+    //
+    // 调用参数：
+    // * `keys` - 本批任务引用的对象键
+    // * `facts` - 输出的对象事实表
+    //
+    // 成功时写入来源销售单、原因、提交信息及冻结版本前后差异。
     pub(super) async fn load_sales_change_review_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -206,18 +179,13 @@ impl WorkbenchFactsReader<'_> {
         Ok(())
     }
 
-    /// 采购变更审批任务的对象事实：任务对象是变更单本身。
-    ///
-    /// # 参数
-    /// * `keys` - 本批任务引用的对象键
-    /// * `facts` - 输出的对象事实表
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 成功时写入来源采购单、原因、提交信息及冻结版本前后差异。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
+    // 读取销售与采购变更简报时，采购变更审批任务的对象事实：任务对象是变更单本身。
+    //
+    // 调用参数：
+    // * `keys` - 本批任务引用的对象键
+    // * `facts` - 输出的对象事实表
+    //
+    // 成功时写入来源采购单、原因、提交信息及冻结版本前后差异。
     pub(super) async fn load_purchase_change_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -283,7 +251,7 @@ impl WorkbenchFactsReader<'_> {
         Ok(())
     }
 
-    /// 批量读取销售变更的冻结基准、全部提交与两侧明细。
+    // 处理销售与采购变更简报时，批量读取销售变更的冻结基准、全部提交与两侧明细。
     async fn sales_change_brief_context(
         &self,
         changes: &[SalesChangeOrder],
@@ -344,7 +312,7 @@ impl WorkbenchFactsReader<'_> {
         })
     }
 
-    /// 批量读取采购变更的冻结基准、全部提交与两侧明细。
+    // 处理销售与采购变更简报时，批量读取采购变更的冻结基准、全部提交与两侧明细。
     async fn purchase_change_brief_context(
         &self,
         changes: &[PurchaseChangeOrder],

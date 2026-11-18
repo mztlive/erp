@@ -6,11 +6,8 @@ use super::{DeliveryAddressSnapshot, DeliveryDispatch, DeliveryPacking, PackingI
 
 impl DeliveryPacking {
     /// 将包裹草稿切换到新收货安排，只移除地址或分配数量变化的包裹。
-    /// # 参数
-    /// `previous` 为原可信快照，`next` 为已通过数量保护的新快照。
-    /// # 返回
     /// 新包裹草稿及需要重新登记的包裹数量。
-    /// # 错误
+    /// `previous` 为原可信快照，`next` 为已通过数量保护的新快照。
     /// 不返回错误；调用方在保存前继续执行完整草稿校验。
     pub fn rebase(
         &self,

@@ -15,13 +15,9 @@ use sources::SubjectFacts;
 
 use super::{FactsBindings, MappingBindings};
 
-/// 连接审批实例唯一事实读取器及列表查询映射。
-/// # 参数
-/// db 为工作流共享数据库；roots 为已经构造完成的各拥有领域根事实读取器。
-/// # 返回
-/// 审批实例的资源绑定与固定查询入口。
-/// # 错误
-/// 拥有领域模型构造错误原样返回，不使用占位实现。
+// 连接审批实例唯一事实读取器及列表查询映射。
+// 审批实例的资源绑定与固定查询入口。
+// 拥有领域模型构造错误原样返回，不使用占位实现。
 pub(super) fn bindings(
     db: Database,
     roots: &FactsBindings,
@@ -42,7 +38,7 @@ pub(super) fn bindings(
     ))
 }
 
-/// 按真实业务对象的固定查询入口复用来源，避免同资源任务模型覆盖订单模型。
+// 为审批来源绑定实际业务对象的固定查询实现，不让同资源下的任务投影覆盖订单授权模型。
 fn source_mappings(mappings: &MappingBindings) -> Result<BTreeMap<String, Arc<dyn AccessMapping>>> {
     [
         sales_order::DETAIL,

@@ -20,16 +20,7 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
 /// 查询销售单上的附加费用。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 销售单主键
-///
-/// # 返回
 /// 返回附加费用列表及合计。
-///
-/// # 错误
 /// 销售单不可见或读取失败时返回错误。
 pub async fn sales_extra_cost_list(
     State(state): State<HttpState>,
@@ -46,17 +37,8 @@ pub async fn sales_extra_cost_list(
 ///
 /// 命令与凭证一次 multipart 提交：`command` 为 JSON，凭证字段名须与
 /// `evidence_attachment_id` 的 `pending-file:` 临时引用一致。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 销售单主键
-/// * `multipart` - 登记命令与凭证文件
-///
-/// # 返回
+/// `multipart` 为登记命令与凭证文件。
 /// 返回成本事实主键与是否重放。
-///
-/// # 错误
 /// 凭证缺失或类型不符、业务校验或写入失败时返回错误。
 pub async fn sales_extra_cost_register(
     State(state): State<HttpState>,
@@ -76,17 +58,8 @@ pub async fn sales_extra_cost_register(
 }
 
 /// 冲减一笔财务登记的附加费用。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `path` - 销售单主键与原附加费用成本事实
-/// * `multipart` - 冲减命令与凭证文件
-///
-/// # 返回
+/// `multipart` 为冲减命令与凭证文件。
 /// 返回冲减成本事实主键与是否重放。
-///
-/// # 错误
 /// 凭证缺失或类型不符、冲减超额、业务校验或写入失败时返回错误。
 pub async fn sales_extra_cost_reduce(
     State(state): State<HttpState>,
@@ -105,7 +78,7 @@ pub async fn sales_extra_cost_reduce(
     finish(&state, &pending, result).await
 }
 
-/// 业务失败或重放时删除本次已写入对象存储、未登记的凭证。
+// 结算费用凭证的上传收尾只清理明确未被本次事务消费的对象；重放或明确失败可清理，结果未知时保留。
 async fn finish(
     state: &HttpState,
     pending: &[erp_support::PendingFileAssetRequest],
@@ -128,17 +101,10 @@ async fn finish(
     }
 }
 
-/// 校验费用凭证：恰好一个与命令引用一致的图片或 PDF。
-///
-/// # 参数
-/// * `reference` - 命令中的凭证引用
-/// * `files` - 本次解析出的具名文件
-///
-/// # 返回
-/// 引用与上传文件一一对应且类型允许时成功。
-///
-/// # 错误
-/// 文件数量、临时引用或类型不符时返回 400。
+// 校验费用凭证：恰好一个与命令引用一致的图片或 PDF。
+// `reference` 为命令中的凭证引用。
+// 引用与上传文件一一对应且类型允许时成功。
+// 文件数量、临时引用或类型不符时返回 400。
 fn validate_cost_evidence(reference: &str, files: &[PendingAssetFile]) -> std::result::Result<(), Error> {
     let [file] = files else {
         return Err(Error::BadRequest("请上传一个费用凭证文件".to_string()));

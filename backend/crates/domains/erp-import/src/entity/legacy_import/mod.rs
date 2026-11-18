@@ -43,24 +43,7 @@ pub struct LegacyImportCommandIdentity {
 }
 
 impl LegacyImportCommandIdentity {
-    /// 从命令身份字段与规范化载荷片段构造不可逆收据身份。
-    ///
-    /// 命令主键只保存幂等键参与计算后的摘要；载荷指纹对每个字段加长度前缀，
-    /// 避免简单拼接产生歧义并拒绝同键异参。
-    ///
-    /// # 参数
-    /// * `prefix` - 命令 ID 固定前缀
-    /// * `actor_id` - 命令操作人
-    /// * `action` - 稳定动作名
-    /// * `resource_id` - 命令资源 ID
-    /// * `idempotency_key` - 客户端幂等键
-    /// * `parts` - 已规范化的完整命令字段序列
-    ///
-    /// # 返回
-    /// 返回不暴露原始幂等键的命令 ID 与命令指纹。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 从操作人、动作、资源及客户端幂等键派生稳定命令 ID，并对完整规范化载荷逐字段加长度前缀计算 SHA-256 指纹；不保存原键，避免拼接歧义并识别同键异参。
     pub fn new(
         prefix: &str,
         actor_id: &str,
@@ -90,41 +73,17 @@ impl LegacyImportCommandIdentity {
         }
     }
 
-    /// 返回稳定命令 ID。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不含原始幂等键的 SHA-256 派生 ID。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 提供 SHA-256 派生的稳定命令 ID，用于定位回执而不暴露原幂等键。
     pub fn command_id(&self) -> &str {
         &self.command_id
     }
 
-    /// 返回完整命令指纹。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于拒绝同键异参的长度前缀 SHA-256 指纹。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 提供长度前缀编码后计算的 SHA-256 指纹，用于核对同一幂等键的完整载荷。
     pub fn fingerprint(&self) -> &str {
         &self.fingerprint
     }
 
-    /// 将原稳定命令身份投影到独立领域回执，不查询旧审计。
-    /// # 参数
-    /// * `resource_type` - 本命令固定拥有的结果资源类型。
-    /// # 返回
-    /// 返回保留原稳定 ID、覆盖原完整载荷摘要的 v1 结构化身份。
-    /// # 错误
-    /// 身份字段不完整时拒绝构造回执。
+    /// 将原命令 ID 与完整载荷摘要写入固定资源类型的 v1 结构化回执身份；身份不完整则拒绝，不查旧审计。
     pub fn structured_receipt(
         &self,
         resource_type: &str,
@@ -144,32 +103,12 @@ impl LegacyImportCommandIdentity {
     }
 }
 
-/// 计算稳定 SHA-256 十六进制文本。
-///
-/// # 参数
-/// * `value` - 待摘要字节
-///
-/// # 返回
-/// 返回 64 位小写十六进制摘要。
+// 对输入计算 SHA-256 并编码成 64 个小写十六进制字符，供派生命令身份和指纹。
 fn sha256_hex(value: &[u8]) -> String {
     encode_digest(Sha256::digest(value))
 }
 
-/// 按首次出现顺序保序去重，返回去重后的元素引用（三处行 ID 去重共用原语）。
-///
-/// 键归一化口径由调用方 `key` 决定（是否 trim）：`apply_scope` 按行 ID 原值，
-/// 行工厂按去首尾空白后的 `(object_type, row_key)` 元组，`apply_result_set`
-/// 按行 ID 原值。语义差异保留在调用方，本函数只收敛保序去重样板。
-///
-/// # 参数
-/// * `items` - 待去重元素切片
-/// * `key` - 去重键提取（含调用方约定的归一化口径）
-///
-/// # 返回
-/// 返回首次出现顺序的元素引用。
-///
-/// # 错误
-/// 不返回错误。
+/// 按键保留首次出现的元素引用，使去重不改变请求顺序。应用范围和结果集使用原始行 ID；行工厂使用去首尾空白后的 `(object_type, row_key)`，由调用方决定键的口径。
 pub fn dedupe_by_key<T, K>(items: &[T], mut key: impl FnMut(&T) -> K) -> Vec<&T>
 where
     K: Eq + std::hash::Hash,
@@ -178,19 +117,7 @@ where
     items.iter().filter(|item| seen.insert(key(item))).collect()
 }
 
-/// 查找首个重复键（存在重复时返回该键；无重复返回 `None`）。
-///
-/// 键口径约定同 [`dedupe_by_key`]；调用方保留各自的重复错误文案。
-///
-/// # 参数
-/// * `items` - 待检查元素切片
-/// * `key` - 去重键提取（含调用方约定的归一化口径）
-///
-/// # 返回
-/// 返回首个重复键；无重复时返回 `None`。
-///
-/// # 错误
-/// 不返回错误。
+/// 用与 [`dedupe_by_key`] 相同的调用方键规则找首个重复键，供各入口生成自己的拒绝文案；无重复返回 `None`。
 pub fn first_duplicate_key<'a, T: 'a, K>(items: &'a [T], mut key: impl FnMut(&'a T) -> K) -> Option<K>
 where
     K: Eq + std::hash::Hash,
@@ -199,13 +126,7 @@ where
     items.iter().find(|item| !seen.insert(key(item))).map(key)
 }
 
-/// 将摘要字节编码为小写十六进制文本（与 `format!("{digest:x}")` 同形态）。
-///
-/// # 参数
-/// * `digest` - SHA-256 摘要字节
-///
-/// # 返回
-/// 返回 64 位小写十六进制摘要。
+// 将 SHA-256 摘要字节编码成 64 个小写十六进制字符，输出与 `format!("{digest:x}")` 一致，以保持历史身份兼容。
 fn encode_digest(digest: impl AsRef<[u8]>) -> String {
     digest.as_ref().iter().map(|byte| format!("{byte:02x}")).collect()
 }

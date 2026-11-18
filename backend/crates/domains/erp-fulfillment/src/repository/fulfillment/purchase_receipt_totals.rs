@@ -41,26 +41,11 @@ struct QualifiedReceivedTotalRow {
     total: Quantity,
 }
 
-/// 统计采购单已过账入库的累计有效收货（按采购版本行分组）。
-///
-/// 先在 `purchase_receipts` 上按采购单过滤未删除且已过账的入库单并只投影
-/// 主键，再在 `purchase_receipt_lines` 上按入库单主键 `$in` 过滤未删除行并
-/// 按 `purchase_order_revision_line_id` 聚合 `qualified_quantity`。空结果返回
-/// 空映射，不发送空 `$in`。两个查询都使用调用方执行器：位于事务内时看到
-/// 同一事务的未提交写入，不自行开启事务。
-///
-/// # 参数
-/// * `db` - 目标 MongoDB 数据库
-/// * `purchase_order_id` - 采购单主键
-/// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-///
-/// # 返回
-/// 返回「采购版本行 → 累计合格数量」映射；无任何已过账未删除入库行时返回
-/// 空映射。
-///
-/// # 错误
-/// 聚合或游标读取失败时返回错误；Decimal128 求和结果无法转换为
-/// `Quantity`（精度或上限越界）时返回错误而非 panic。
+// 统计采购单已过账入库的累计有效收货（按采购版本行分组）。
+// 先在 `purchase_receipts` 上按采购单过滤未删除且已过账的入库单并只投影主键，再在 `purchase_receipt_lines` 上按入库单主键 `$in` 过滤未删除行并按 `purchase_order_revision_line_id` 聚合 `qualified_quantity`。空结果返回空映射，不发送空 `$in`。两个查询都使用调用方执行器：位于事务内时看到同一事务的未提交写入，不自行开启事务。
+// 返回「采购版本行 → 累计合格数量」映射；无任何已过账未删除入库行时返回空映射。
+// `purchase_order_id` 为采购单主键；沿用调用方执行器 `executor`。
+// 聚合或游标读取失败时返回错误；Decimal128 求和结果无法转换为 `Quantity`（精度或上限越界）时返回错误而非 panic。
 pub(super) async fn load_qualified_received_totals(
     db: &Database,
     purchase_order_id: &PurchaseOrderId,
@@ -91,14 +76,9 @@ pub(super) async fn load_qualified_received_totals(
     Ok(rows.into_iter().map(|row| (row.purchase_order_revision_line_id, row.total)).collect())
 }
 
-/// 构造入库行累计合格收货聚合管道。
-///
-/// # 参数
-/// * `receipt_ids` - 已过账且未删除的入库单主键集合（非空）
-///
-/// # 返回
-/// 返回两段聚合管道：`$match` 按入库单过滤未删除行，`$group` 按采购版本行
-/// 对 `qualified_quantity` 求和。
+// 构造入库行累计合格收货聚合管道。
+// 返回两段聚合管道：`$match` 按入库单过滤未删除行，`$group` 按采购版本行对 `qualified_quantity` 求和。
+// `receipt_ids` 为已过账且未删除的入库单主键集合（非空）。
 fn qualified_received_totals_pipeline(receipt_ids: &[String]) -> Vec<Document> {
     vec![
         doc! {
@@ -124,7 +104,7 @@ mod tests {
 
     use super::*;
 
-    /// 聚合管道只包含未删除行并按采购版本行求和合格数量。
+    // 验证聚合管道只包含未删除行并按采购版本行求和合格数量。
     #[test]
     fn totals_pipeline_filters_undelted_lines_and_groups_by_revision_line() {
         let pipeline =
@@ -149,7 +129,7 @@ mod tests {
         );
     }
 
-    /// Decimal128 聚合结果可反序列化为 `Quantity`。
+    // 验证Decimal128 聚合结果可反序列化为 `Quantity`。
     #[test]
     fn row_deserializes_decimal128_total() {
         let document = doc! { "_id": "po-line-1", "total": { "$numberDecimal": "12.500000" } };
@@ -159,7 +139,7 @@ mod tests {
         assert_eq!(row.total, Quantity::from_str("12.5").expect("合法数量"));
     }
 
-    /// 超精度 Decimal128 必须返回反序列化错误而非 panic。
+    // 验证超精度 Decimal128 必须返回反序列化错误而非 panic。
     #[test]
     fn row_rejects_precision_overflow_without_panicking() {
         let document = doc! { "_id": "po-line-2", "total": { "$numberDecimal": "1.1234567" } };

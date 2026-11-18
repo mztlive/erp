@@ -28,24 +28,28 @@ pub(super) struct CostSelection {
 }
 
 impl CostSelection {
-    /// 独立详情沿原成本身份约束读取。
+    /// 处理成本列表时，独立详情沿原成本身份约束读取。
     ///
     /// # 参数
     /// * `id` - 成本身份。
+    ///
     /// # 返回
     /// 返回仅按该身份筛选的读取选择。
+    ///
     /// # 错误
     /// 无；构造不执行 I/O。
     pub fn entry(id: &str) -> Self {
         Self { id: Some(id.to_owned()), allocations: None }
     }
 
-    /// 分配联合条件用于缩小金额投影；版本仍覆盖原完整成本范围。
+    /// 处理成本列表时，分配联合条件用于缩小金额投影；版本仍覆盖原完整成本范围。
     ///
     /// # 参数
     /// * `query` - 已规范化的成本分配条件。
+    ///
     /// # 返回
     /// 返回包含原成本身份条件和联合分配条件的读取选择。
+    ///
     /// # 错误
     /// 无；构造不执行 I/O。
     pub fn allocations(query: CostAllocationListQuery) -> Self {
@@ -68,7 +72,7 @@ struct CostAuthorization {
     fingerprint: DefaultHasher,
 }
 impl CostAuthorization {
-    /// 部分来源范围禁止探测整笔来源引用，初读与返回前重验使用相同规则。
+    // 确定成本列表的适用条件时，部分来源范围禁止探测整笔来源引用，初读与返回前重验使用相同规则。
     fn require_filter(&self, filter: &CostEntryFilter) -> Result<()> {
         if self.whole.is_empty() && filter.source_document_id.is_some() {
             return Err(Error::ValidationError("当前只能读取成本分配，不能按整笔来源单据筛选".into()));
@@ -77,7 +81,7 @@ impl CostAuthorization {
     }
 }
 impl Snapshot {
-    /// 记录授权元信息，金额和范围指纹由同事务读取完成。
+    // 装配成本列表时，记录授权元信息，金额和范围指纹由同事务读取完成。
     fn new(access: &CostAuthorization) -> Self {
         Self {
             rows: vec![],
@@ -86,12 +90,14 @@ impl Snapshot {
             as_of: access.context.as_of.as_utc().to_rfc3339(),
         }
     }
-    /// 为当前结果附加已经复验的范围凭据。
+    /// 生成成本列表展示时，为当前结果附加已经复验的范围凭据。
     ///
     /// # 参数
     /// * `data` - 首次快照生成的当前页面或详情。
+    ///
     /// # 返回
     /// 返回数据与范围元信息。
+    ///
     /// # 错误
     /// 无；版本复验由调用方在交付前完成。
     pub fn result<T>(self, data: T) -> CostReadResult<T> {
@@ -104,7 +110,7 @@ impl Snapshot {
             ownership_basis: "current_sales_allocation",
         }
     }
-    /// 在分页前裁剪完整候选；保留分配本身的创建时间，不能用成本创建时间替代。
+    // 生成成本列表视图时，在分页前裁剪完整候选；保留分配本身的创建时间，不能用成本创建时间替代。
     fn project(
         &mut self,
         candidates: Vec<CostEntryRow>,
@@ -129,14 +135,14 @@ impl Snapshot {
     }
 }
 impl CostReadModel {
-    /// 返回前重读授权及候选事实版本；变化时拒绝交付原结果。
-    ///
-    /// # 参数
-    /// 原业务条件、读取选择、资源动作、操作人及可选跨页版本。
-    /// # 返回
-    /// 返回轻量版本重验通过的首次金额快照。
-    /// # 错误
-    /// 无权限、范围变化、非法参数、候选超限或持久化失败时拒绝。
+    // 交付成本列表前重新读取授权及完整候选事实版本；比对发现变化时拒绝原结果。
+    //
+    // 调用参数：
+    // 原业务条件、读取选择、资源动作、操作人及可选跨页版本。
+    //
+    // 返回轻量版本重验通过的首次金额快照。
+    //
+    // 无权限、范围变化、非法参数、候选超限或持久化失败时拒绝。
     pub(super) async fn checked(
         &self,
         params: &CostEntryListParams,
@@ -149,7 +155,7 @@ impl CostReadModel {
         checked_snapshot(snapshot, expected, || self.current_version(params, selection, permission, actor))
             .await
     }
-    /// 身份和业务事实均使用调用方同一事务，不缓存权限解析结果。
+    // 读取成本列表事实时，将身份解析与业务查询放在调用方同一事务中，不复用缓存的授权结论。
     async fn snapshot(
         &self,
         params: &CostEntryListParams,
@@ -173,7 +179,7 @@ impl CostReadModel {
             })
             .await
     }
-    /// 证明目标成本动作并继承销售来源边界；整账职责独立重验。
+    // 检查成本列表资格时，证明目标成本动作并继承销售来源边界；整账职责独立重验。
     async fn authorize(
         &self,
         actor: &AuditActor,
@@ -191,7 +197,7 @@ impl CostReadModel {
         whole.version().hash(&mut fingerprint);
         Ok(CostAuthorization { access, sales, whole, context, fingerprint })
     }
-    /// 隐藏来源条件拒绝，空范围保持空集；完整装载并裁剪后才允许分页。
+    // 读取成本列表时，隐藏来源条件拒绝，空范围保持空集；完整装载并裁剪后才允许分页。
     async fn load_snapshot(
         &self,
         filter: &CostEntryFilter,
@@ -217,7 +223,7 @@ impl CostReadModel {
         snapshot.version = format!("{:x}", access.fingerprint.finish());
         Ok(snapshot)
     }
-    /// 候选成本超过上限必须整体拒绝，不把截断集合当成完整统计。
+    // 准备成本列表候选时，候选成本超过上限必须整体拒绝，不把截断集合当成完整统计。
     async fn cost_candidates(
         &self,
         filter: &CostEntryFilter,
@@ -233,7 +239,7 @@ impl CostReadModel {
         Ok(candidates)
     }
 
-    /// 分配只给匹配成本装载金额；完整原候选仍以轻量事实绑定范围版本。
+    // 处理成本列表时，分配只给匹配成本装载金额；完整原候选仍以轻量事实绑定范围版本。
     async fn candidate_facts(
         &self,
         filter: &CostEntryFilter,
@@ -274,7 +280,7 @@ impl CostReadModel {
         let allocations = self.candidate_allocations(&entries, executor).await?;
         Ok((entries, allocations, versions))
     }
-    /// 批量装载全部分配并跨批次累计上限，避免部分结果漏掉资金份额。
+    // 处理成本列表时，批量装载全部分配并跨批次累计上限，避免部分结果漏掉资金份额。
     async fn candidate_allocations(
         &self,
         candidates: &[CostEntryRow],
@@ -291,7 +297,7 @@ impl CostReadModel {
         Ok(allocations)
     }
 }
-/// 先验证跨页凭据再启动轻量重验；成功只交付首次金额快照。
+// 处理成本列表时，先验证跨页凭据再启动轻量重验；成功只交付首次金额快照。
 async fn checked_snapshot<F, Fut>(snapshot: Snapshot, expected: Option<&str>, current: F) -> Result<Snapshot>
 where
     F: FnOnce() -> Fut,
@@ -306,7 +312,7 @@ where
     Ok(snapshot)
 }
 
-/// 保持成本范围变化的既有冲突分类及提示。
+// 处理成本列表时，保持成本范围变化的既有冲突分类及提示。
 fn changed() -> Error {
     crate::support::data_scope_changed("数据范围已变化，请从第一页刷新")
 }

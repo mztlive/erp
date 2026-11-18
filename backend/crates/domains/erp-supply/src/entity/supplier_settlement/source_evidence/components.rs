@@ -26,16 +26,8 @@ pub enum SettlementSourceFactType {
 }
 
 impl SettlementSourceFactType {
-    /// 返回摘要与审计使用的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
+    /// 取得 `SettlementSourceFactType` 的稳定标识，供需要按代码而非展示文案识别取值的调用方使用。
     /// 返回不会随展示文案变化的正式事实代码。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::FulfillmentCompleted => "FULFILLMENT_COMPLETED",
@@ -54,17 +46,9 @@ pub struct SettlementPeriod {
 
 impl SettlementPeriod {
     /// 创建当前策略支持的上海时区结算期间。
-    ///
-    /// # 参数
-    /// * `start` - 期间开始日期（含）
-    /// * `end` - 期间结束日期（含）
-    /// * `timezone` - 期间策略时区，当前必须为 `Asia/Shanghai`
-    ///
-    /// # 返回
     /// 返回可用于正式事实归期判断的期间值对象。
-    ///
-    /// # 错误
     /// 期间倒挂或时区不是当前固定策略时返回领域错误。
+    /// `timezone`：期间策略时区，当前必须为 `Asia/Shanghai`。
     pub fn new(start: BusinessDate, end: BusinessDate, timezone: &str) -> Result<Self> {
         if end < start {
             return Err(Error::from("来源证据期间结束不得早于开始"));
@@ -76,43 +60,19 @@ impl SettlementPeriod {
     }
 
     /// 返回期间开始日期。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回包含边界的开始日期。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn start(self) -> BusinessDate {
         self.start
     }
 
     /// 返回期间结束日期。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回包含边界的结束日期。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn end(self) -> BusinessDate {
         self.end
     }
 
     /// 判断时间点按上海业务日期是否落在当前期间内。
-    ///
-    /// # 参数
-    /// * `value` - 待归期的正式事实时间
-    ///
-    /// # 返回
     /// 业务日期位于开始和结束边界之间时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     ///
     /// # Panics
     /// `+08:00` 是合法固定偏移；只有构造失败才 panic，正常路径不会发生。
@@ -123,21 +83,10 @@ impl SettlementPeriod {
     }
 
     /// 计算上海业务日期区间的秒级边界。
-    ///
-    /// 与 [`SettlementPeriod::contains`] 同口径：开始日 `00:00`（+08:00）含，
-    /// 结束日次日 `00:00`（+08:00）不含；返回可直接用于秒级时间戳比较的
-    /// `$gte`/`$lt` 边界。仓储层的时间范围过滤必须复用本方法，禁止在
+    /// 与 [`SettlementPeriod::contains`] 同口径：开始日 `00:00`（+08:00）含，结束日次日 `00:00`（+08:00）
+    /// 不含；返回可直接用于秒级时间戳比较的`$gte`/`$lt` 边界。仓储层的时间范围过滤必须复用本方法，禁止在
     /// Repository 复制第二份边界计算。
-    ///
-    /// # 参数
-    /// * `start` - 期间开始日期（含）
-    /// * `end` - 期间结束日期（含）
-    ///
-    /// # 返回
     /// 返回 `(开始秒级时间戳, 结束次日零点的秒级时间戳)`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     ///
     /// # Panics
     /// 上海偏移、午夜和公历次日都是固定不变量；只有构造失败才 panic，正常业务日期不会发生。
@@ -175,18 +124,9 @@ pub struct SettlementAmountComponents {
 
 impl SettlementAmountComponents {
     /// 创建非负且满足 `gross = net + tax` 的金额三元组。
-    ///
-    /// # 参数
-    /// * `gross` - 含税金额
-    /// * `net` - 不含税金额
-    /// * `tax` - 税额
-    /// * `field` - 错误消息使用的业务字段名称
-    ///
-    /// # 返回
     /// 返回已校验金额三元组。
-    ///
-    /// # 错误
     /// 任一金额为负或三元组恒等不成立时返回领域错误。
+    /// `net`：不含税金额。
     pub fn new(gross: Amount, net: Amount, tax: Amount, field: &str) -> Result<Self> {
         ensure_non_negative(gross, &format!("{field}含税金额"))?;
         ensure_non_negative(net, &format!("{field}不含税金额"))?;
@@ -196,15 +136,7 @@ impl SettlementAmountComponents {
     }
 
     /// 返回三项均为零的金额三元组。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回合法零金额组合。
-    ///
-    /// # 错误
-    /// 不返回错误。
     ///
     /// # Panics
     /// `Decimal::ZERO` 是合法金额；只有构造失败才 panic，正常路径不会发生。
@@ -214,15 +146,7 @@ impl SettlementAmountComponents {
     }
 
     /// 将两组三元组逐项相加并校验结果。
-    ///
-    /// # 参数
-    /// * `other` - 待累加金额三元组
-    /// * `field` - 错误消息使用的业务字段名称
-    ///
-    /// # 返回
     /// 返回逐项相加后的合法金额三元组。
-    ///
-    /// # 错误
     /// 结果为负或恒等不成立时返回领域错误。
     pub fn checked_add(self, other: Self, field: &str) -> Result<Self> {
         Self::new(
@@ -234,15 +158,7 @@ impl SettlementAmountComponents {
     }
 
     /// 将两组三元组逐项相减并校验结果。
-    ///
-    /// # 参数
-    /// * `other` - 待扣减金额三元组
-    /// * `field` - 错误消息使用的业务字段名称
-    ///
-    /// # 返回
     /// 返回逐项相减后的合法金额三元组。
-    ///
-    /// # 错误
     /// 结果为负或恒等不成立时返回领域错误。
     pub fn checked_sub(self, other: Self, field: &str) -> Result<Self> {
         Self::new(
@@ -263,16 +179,7 @@ pub struct SettlementCancelEvidence {
 
 impl SettlementCancelEvidence {
     /// 从可选取消时间和证据引用构造取消证据。
-    ///
-    /// # 参数
-    /// * `occurred_at` - 客户端补证的取消发生时间
-    /// * `reference_id` - 与发生时间配对的正式证据引用
-    /// * `period` - 当前结算期间
-    ///
-    /// # 返回
     /// 两项均省略时返回 `None`，两项完整且合法时返回规范化证据。
-    ///
-    /// # 错误
     /// 两项未成对、时间不在期间或证据引用为空/超长时返回领域错误。
     pub fn from_optional(
         occurred_at: Option<Instant>,
@@ -298,29 +205,13 @@ impl SettlementCancelEvidence {
     }
 
     /// 返回取消发生时间。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回已确认落在结算期间内的时间点。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn occurred_at(&self) -> Instant {
         self.occurred_at
     }
 
     /// 返回规范化证据引用。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回非空正式证据引用。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn reference_id(&self) -> &str {
         &self.reference_id
     }

@@ -14,13 +14,11 @@ use crate::{AccessControlExt, Error, LoginAccount, Result};
 
 impl PortalIdentityService {
     /// 从独立门户入口认证外部账号，不接受客户端身份类型。
-    ///
-    /// # 参数
-    /// `request` 为固定登录允许字段。
-    /// # 返回
     /// 当前账号和绑定身份；组合层还须检查供应商启用事实后才能签发会话。
-    /// # 错误
+    ///
     /// 不存在、类型错误、停用、绑定撤销和密码错误均返回同一凭证错误。
+    ///
+    /// `request` 为固定登录允许字段。
     pub async fn authenticate(&self, request: &PortalLoginPayload) -> Result<PortalActor> {
         request.validate()?;
         let login = LoginAccount::new(&request.account)?;
@@ -53,13 +51,11 @@ impl PortalIdentityService {
     }
 
     /// 在每次门户访问或调用方写事务中重新读取账号和绑定。
-    ///
-    /// # 参数
-    /// `account_id`、`account` 和两个版本来自已验证会话；`executor` 由调用方指定。
-    /// # 返回
     /// 基于当前绑定的供应商归属及门户岗位，绝不采用客户端 supplier_id。
-    /// # 错误
+    ///
     /// 任一账号或绑定事实失效均拒绝；供应商停用仍由组合层继续检查。
+    ///
+    /// `account_id`、`account` 和两个版本来自已验证会话；`executor` 由调用方指定。
     pub async fn validate_session(
         &self,
         account_id: &str,
@@ -80,7 +76,7 @@ impl PortalIdentityService {
     }
 }
 
-/// 统一凭证失败，不暴露内部账号是否存在或供应商绑定状态。
+// 统一报告供应商门户凭证失败，不泄露内部账号是否存在或供应商绑定的具体状态。
 fn invalid_credentials() -> Error {
     Error::Unauthenticated("用户名或密码错误".into())
 }

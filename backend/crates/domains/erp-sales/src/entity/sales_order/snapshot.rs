@@ -36,15 +36,11 @@ pub struct CustomerSnapshot {
 
 impl CustomerSnapshot {
     /// 构造客户名称快照（trim、非空、长度上限）。
-    ///
-    /// # 参数
-    /// * `customer_name` - 客户名称
-    ///
-    /// # 返回
     /// 返回规范化后的快照。
-    ///
-    /// # 错误
     /// 名称为空或超长时返回错误。
+    ///
+    /// 输入约定：
+    /// - `customer_name`：客户名称
     pub fn new(customer_name: impl Into<String>) -> Result<Self> {
         let customer_name = normalize_required_text(
             customer_name.into(),
@@ -65,15 +61,11 @@ pub struct ContractSnapshot {
 
 impl ContractSnapshot {
     /// 构造合同编号快照（trim、非空、长度上限）。
-    ///
-    /// # 参数
-    /// * `contract_no` - 合同编号
-    ///
-    /// # 返回
     /// 返回规范化后的快照。
-    ///
-    /// # 错误
     /// 编号为空或超长时返回错误。
+    ///
+    /// 输入约定：
+    /// - `contract_no`：合同编号
     pub fn new(contract_no: impl Into<String>) -> Result<Self> {
         let contract_no = normalize_required_text(
             contract_no.into(),
@@ -94,15 +86,11 @@ pub struct SettlementPartySnapshot {
 
 impl SettlementPartySnapshot {
     /// 构造结算主体快照（trim、非空、长度上限）。
-    ///
-    /// # 参数
-    /// * `settlement_party_name` - 结算主体名称
-    ///
-    /// # 返回
     /// 返回规范化后的快照。
-    ///
-    /// # 错误
     /// 名称为空或超长时返回错误。
+    ///
+    /// 输入约定：
+    /// - `settlement_party_name`：结算主体名称
     pub fn new(settlement_party_name: impl Into<String>) -> Result<Self> {
         let settlement_party_name = normalize_required_text(
             settlement_party_name.into(),
@@ -125,16 +113,12 @@ pub struct PaymentTermSnapshot {
 
 impl PaymentTermSnapshot {
     /// 构造付款条件快照（trim、非空、长度上限）。
-    ///
-    /// # 参数
-    /// * `payment_term_code` - 付款条件代码
-    /// * `payment_term_name` - 付款条件名称
-    ///
-    /// # 返回
     /// 返回规范化后的快照。
-    ///
-    /// # 错误
     /// 代码或名称为空、超长时返回错误。
+    ///
+    /// 输入约定：
+    /// - `payment_term_code`：付款条件代码
+    /// - `payment_term_name`：付款条件名称
     pub fn new(payment_term_code: impl Into<String>, payment_term_name: impl Into<String>) -> Result<Self> {
         let payment_term_code = normalize_required_text(
             payment_term_code.into(),
@@ -163,16 +147,12 @@ pub struct InvoiceRequirementSnapshot {
 
 impl InvoiceRequirementSnapshot {
     /// 构造开票要求快照（trim、非空、长度上限）。
-    ///
-    /// # 参数
-    /// * `invoice_type` - 开票类型
-    /// * `tax_point` - 税点
-    ///
-    /// # 返回
     /// 返回规范化后的快照。
-    ///
-    /// # 错误
     /// 类型或税点为空、超长时返回错误。
+    ///
+    /// 输入约定：
+    /// - `invoice_type`：开票类型
+    /// - `tax_point`：税点
     pub fn new(invoice_type: impl Into<String>, tax_point: impl Into<String>) -> Result<Self> {
         let invoice_type = normalize_required_text(
             invoice_type.into(),
@@ -206,16 +186,11 @@ pub struct HeaderSnapshotData {
 }
 
 impl HeaderSnapshotData {
-    /// 从已保存的结构化快照复制表头入参，不重新规范化历史值。
-    ///
-    /// # 参数
-    /// * `customer`、`contract`、`settlement_party`、`payment_term`、`invoice_requirement` - 各项表头快照。
-    ///
-    /// # 返回
-    /// 原样保留字段值与可选快照缺失状态的表头入参。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 从已保存的结构化快照复制表头入参，不重新规范化历史值。
+    // 结果：原样保留字段值与可选快照缺失状态的表头入参。
+    //
+    // 输入约定：
+    // * `customer`、`contract`、`settlement_party`、`payment_term`、`invoice_requirement` - 各项表头快照。
     pub(crate) fn from_snapshots(
         customer: &CustomerSnapshot,
         contract: Option<&ContractSnapshot>,
@@ -236,7 +211,7 @@ impl HeaderSnapshotData {
 }
 
 impl Default for HeaderSnapshotData {
-    /// 空表头快照（供测试与占位使用；实体 `new` 仍会校验非空字段）。
+    // 为测试或占位生成空表头快照；建正式实体仍须通过非空校验。
     fn default() -> Self {
         Self {
             customer_name: String::new(),
@@ -267,15 +242,11 @@ pub struct HeaderSnapshots {
 
 impl HeaderSnapshots {
     /// 从原始入参构建快照集合（统一 trim、非空与长度上限校验）。
-    ///
-    /// # 参数
-    /// * `data` - 表头快照入参
-    ///
-    /// # 返回
     /// 返回规范化后的快照集合。
-    ///
-    /// # 错误
     /// 必填快照为空或超长，或已提供的合同编号、结算主体名称超长时返回错误。
+    ///
+    /// 输入约定：
+    /// - `data`：表头快照入参
     pub fn build(data: &HeaderSnapshotData) -> Result<Self> {
         let contract_snapshot =
             normalize_optional_text(data.contract_no.clone(), "合同编号", CONTRACT_NO_MAX_LEN)?

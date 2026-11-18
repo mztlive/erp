@@ -11,9 +11,9 @@ use crate::{Error, Party, PartyKind, PartyRevision, Result};
 /// # 参数
 /// * `db` / `party` / `revision` - 数据库、目标主体及拟生效名称修订。
 /// * `executor` - 原写入事务。
-/// # 返回
+///
 /// 无其他主体命中时成功；非企业沿用其原有身份规则。
-/// # 错误
+///
 /// 名称或信用代码已占用、并发写入或数据库失败时拒绝。
 pub async fn ensure_identity_available(
     db: &Database,

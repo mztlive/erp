@@ -8,45 +8,27 @@
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{Document, doc};
 
-/// 未删除行条件（`deleted_at` 哨兵等值）。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回单条件查询文档。
-///
-/// # 错误
-/// 不返回错误。
+// 未删除行条件（`deleted_at` 哨兵等值）。
+// 返回单条件查询文档。
 pub(crate) fn undeleted_condition() -> Document {
     doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON }
 }
 
-/// 向 `$and` 数组追加未删除条件。
-///
-/// # 参数
-/// * `and` - 待追加的 `$and` 条件数组。
-///
-/// # 返回
-/// 无返回值。未删除条件已追加到 `and`。
-///
-/// # 错误
-/// 不返回错误。
+// 向 `$and` 数组追加未删除条件。
+// 结果：无返回值。未删除条件已追加到 `and`。
+//
+// 输入约定：
+// - `and`：待追加的 `$and` 条件数组。
 pub(crate) fn push_undeleted(and: &mut Vec<Document>) {
     and.push(undeleted_condition());
 }
 
-/// 构建排序文档（默认 `created_at` 倒序，`id` 同向平局决胜保证稳定分页）。
-///
-/// # 参数
-/// * `sort_by` - 排序字段；`None` 时默认 `created_at`
-/// * `sort_ascending` - 升序为 `true`，降序为 `false`
-///
-/// # 返回
-/// 返回排序条件文档。
-///
-/// # 错误
-/// 不返回错误。
+// 构建排序文档（默认 `created_at` 倒序，`id` 同向平局决胜保证稳定分页）。
+// 返回排序条件文档。
+//
+// 输入约定：
+// - `sort_by`：排序字段；`None` 时默认 `created_at`
+// - `sort_ascending`：升序为 `true`，降序为 `false`
 pub(crate) fn sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
     doc! { sort_by.unwrap_or("created_at"): direction, "id": direction }

@@ -57,19 +57,13 @@ struct DocumentApprovalDuplicateInstance {
     approval_process_instance_id: String,
     open_execution_count: i64,
 }
-/// 分页查询指定账号当前开放的单据审批任务。
-///
-/// # 参数
-/// * `collection` - `work_items` 集合。
-/// * `query` - 当前任务负责人、业务对象类型、检索、分页游标与非零页大小。
-/// * `access` - 原读取阶段的审批实例授权条件；先于分页和计数执行。
-/// * `executor` - 数据访问执行器。
-///
-/// # 返回
-/// 返回当前页、总数、是否还有下一页、下一页游标，以及聚合发现的完整性冲突。
-///
-/// # 错误
-/// 页大小为 0 或加一后无法表示为 `i64`、计数越界、页内缺少 `assigned_at`，或 MongoDB 聚合与反序列化失败时返回错误。
+// 分页查询指定账号当前开放的单据审批任务。
+// 返回当前页、总数、是否还有下一页、下一页游标，以及聚合发现的完整性冲突。
+//
+// 页大小为 0 或加一后无法表示为 `i64`、计数越界、页内缺少 `assigned_at`，或 MongoDB 聚合与反序列化失败时返回错误。
+//
+// `collection`：`work_items` 集合；`query`：当前任务负责人、业务对象类型、检索、分页游标与非零页大小。
+// `access`：原读取阶段的审批实例授权条件；先于分页和计数执行。
 pub(super) async fn page_open_document_approval_owned_by(
     collection: &Collection<WorkItem>,
     query: DocumentApprovalPageQuery<'_>,
@@ -91,7 +85,7 @@ pub(super) async fn page_open_document_approval_owned_by(
     Ok(document_approval_page(facet, limit)?)
 }
 
-/// 同一MongoDB聚合先执行中央实例条件，再分页计数；损坏责任链仍整页拒绝。
+// 为本人审批待办把中央实例授权并入 MongoDB 聚合，在总数与分页之前过滤。责任链完整性另保留检查分支，供读取用例拒绝损坏结果。
 fn authorized_page_pipeline(
     mut pipeline: Vec<Document>,
     access: &CompiledAccess,
@@ -141,7 +135,7 @@ fn authorized_page_pipeline(
     Ok(pipeline)
 }
 
-/// 执行本人审批任务聚合并保持调用方会话语义。
+// 沿调用方会话执行本人审批待办聚合，使授权约束、分页及完整性检测使用同一快照。
 async fn aggregate_document_approval_page(
     collection: &Collection<WorkItem>,
     pipeline: Vec<Document>,
@@ -150,7 +144,7 @@ async fn aggregate_document_approval_page(
     aggregate::rows(&collection.clone_with_type::<DocumentApprovalWorkItemFacet>(), pipeline, executor).await
 }
 
-/// 构造本人审批任务的单次计数与稳定游标聚合。
+// 生成本人审批任务的单次计数与稳定游标聚合。
 fn document_approval_page_pipeline(
     owner_user_id: &str,
     business_object_type: Option<&str>,
@@ -175,7 +169,7 @@ fn document_approval_page_pipeline(
     Ok(pipeline)
 }
 
-/// 构造能命中部分页索引的固定责任范围。
+// 生成能命中部分页索引的固定责任范围。
 fn document_approval_owner_filter(owner_user_id: &str, business_object_type: Option<&str>) -> Document {
     let mut filter = doc! {
         "owner_user_id": owner_user_id,
@@ -189,7 +183,7 @@ fn document_approval_owner_filter(owner_user_id: &str, business_object_type: Opt
     filter
 }
 
-/// 构造字面量检索所需的有界 execution、instance 与精确快照关联。
+// 生成字面量检索所需的有界 execution、instance 与精确快照关联。
 fn document_approval_query_stages(query: &str) -> Vec<Document> {
     let literal = regex::escape(query);
     let regex = doc! { "$regex": literal, "$options": "i" };
@@ -212,7 +206,7 @@ fn document_approval_query_stages(query: &str) -> Vec<Document> {
     ]
 }
 
-/// 按审批任务执行引用读取唯一节点执行。
+// 聚合本人审批待办时沿真实任务的执行引用查找单一节点执行，供关联实例及冻结快照。
 fn document_approval_execution_lookup() -> Document {
     doc! {
         "$lookup": {
@@ -230,7 +224,7 @@ fn document_approval_execution_lookup() -> Document {
     }
 }
 
-/// 按节点执行所属实例读取检索投影与不可变 subject 引用。
+// 从节点执行的实际所属实例取检索字段及不可变主体引用，供快照精确关联。
 fn document_approval_instance_lookup() -> Document {
     doc! {
         "$lookup": {
@@ -257,7 +251,7 @@ fn document_approval_instance_lookup() -> Document {
     }
 }
 
-/// 只关联同时匹配任务、执行、实例和快照三元组的不可变快照。
+// 仅关联与任务、执行、实例及精确冻结主体同时匹配的快照，避免使用同对象的其他提交版本匹配列表。
 fn document_approval_snapshot_lookup() -> Document {
     doc! {
         "$lookup": {
@@ -296,7 +290,7 @@ fn document_approval_snapshot_lookup() -> Document {
     }
 }
 
-/// 构造游标页与不含游标总数的 facet。
+// 将本人审批候选分为稳定游标页和完整总数两支；游标只缩小当前页，不改变完整计数范围。
 fn document_approval_page_facets(
     cursor: Option<&DocumentApprovalWorkItemCursor>,
     overfetch: i64,
@@ -326,7 +320,7 @@ fn document_approval_page_facets(
     }
 }
 
-/// 检测同一 execution 挂接多条开放任务的持久化事实。
+// 在本人审批查询的完整性分支检测同一节点执行是否错误关联多条开放任务，不任取其中一条。
 fn document_approval_duplicate_execution_stages() -> Vec<Document> {
     vec![
         doc! { "$match": {
@@ -347,7 +341,7 @@ fn document_approval_duplicate_execution_stages() -> Vec<Document> {
     ]
 }
 
-/// 检测同一 instance 挂接多个不同 execution 的持久化事实。
+// 在本人审批查询的完整性分支识别同一实例是否关联了不同节点执行的开放任务。
 fn document_approval_duplicate_instance_stages(execution_already_loaded: bool) -> Vec<Document> {
     let mut stages = Vec::new();
     if !execution_already_loaded {
@@ -399,7 +393,7 @@ fn document_approval_duplicate_instance_stages(execution_already_loaded: bool) -
     stages
 }
 
-/// 构造倒序稳定游标的“小于”条件。
+// 为本人审批待办生成倒序继续条件，按分配时间与任务 ID 的稳定顺序选择游标之后的数据。
 fn document_approval_cursor_or(cursor: &DocumentApprovalWorkItemCursor) -> Vec<Document> {
     vec![
         doc! { "assigned_at": { "$lt": cursor.assigned_at } },
@@ -407,7 +401,7 @@ fn document_approval_cursor_or(cursor: &DocumentApprovalWorkItemCursor) -> Vec<D
     ]
 }
 
-/// 校验页大小并计算 `limit + 1`。
+// 校验本人审批任务页的请求上限，再计算多查一条的数量以判定是否还有后页。
 fn document_approval_overfetch_limit(limit: u32) -> Result<i64> {
     if limit == 0 {
         return Err(Error::EntityMetadataOutOfRange("document_approval_page_limit"));
@@ -415,7 +409,7 @@ fn document_approval_overfetch_limit(limit: u32) -> Result<i64> {
     limit.checked_add(1).map(i64::from).ok_or(Error::EntityMetadataOutOfRange("document_approval_page_limit"))
 }
 
-/// 将 facet 行切为当前页并形成下一页游标。
+// 解包本人审批聚合的 facet，使用页尾有效任务和超取结果计算下一页游标。
 fn document_approval_page(
     facet: Option<DocumentApprovalWorkItemFacet>,
     limit: u32,
@@ -436,7 +430,7 @@ fn document_approval_page(
     document_approval_page_from_items(facet.items, total, limit, integrity_conflicts)
 }
 
-/// 将聚合完整性行转为不包含 MongoDB 细节的仓储事实。
+// 把聚合命中的责任链完整性问题转换成稳定业务仓储事实，不把 MongoDB 查询细节交给服务层。
 fn document_approval_integrity_conflicts(
     duplicate_executions: Vec<DocumentApprovalDuplicateExecution>,
     duplicate_instances: Vec<DocumentApprovalDuplicateInstance>,
@@ -458,13 +452,13 @@ fn document_approval_integrity_conflicts(
     Ok(conflicts)
 }
 
-/// 将 MongoDB group count 校验为公开仓储事实使用的非负数。
+// 将 MongoDB 分组计数转换为仓储公开的非负数量，异常计数不用于完整性判断。
 fn document_approval_integrity_count(count: i64) -> Result<u64> {
     u64::try_from(count)
         .map_err(|_| Error::EntityMetadataOutOfRange("document_approval_work_item_integrity_count"))
 }
 
-/// 以多取一条的结果形成 `has_more` 与稳定下一页游标。
+// 本人审批待办多取一条判断是否还有后页，以保留页末条记录的分配时间和任务 ID 生成游标；缺少游标所需事实时拒绝。
 fn document_approval_page_from_items(
     mut items: Vec<WorkItem>,
     total: u64,
@@ -487,16 +481,10 @@ fn document_approval_page_from_items(
     Ok(DocumentApprovalWorkItemPage { items, total, has_more, next_cursor, integrity_conflicts })
 }
 
-/// 构造按节点执行读取开放审批任务的索引友好过滤条件。
-///
-/// # 参数
-/// * `execution_id` - 当前审批节点执行
-///
-/// # 返回
-/// 返回固定约束任务类型、开放状态和节点执行的查询文档。
-///
-/// # 错误
-/// 无。
+// 构造按节点执行读取开放审批任务的索引友好过滤条件。
+// 返回固定约束任务类型、开放状态和节点执行的查询文档。
+//
+// `execution_id`：当前审批节点执行。
 pub(super) fn open_approval_execution_filter(execution_id: &ApprovalNodeExecutionId) -> Document {
     doc! {
         "work_item_type": WorkItemType::DocumentApproval.as_str(),
@@ -658,9 +646,9 @@ mod tests {
         assert!(page.integrity_conflicts.is_empty());
     }
 
-    /// 节点执行开放任务查询固定约束审批类型、开放状态和执行引用。
-    ///
-    /// 该形态命中执行唯一索引且不会混入独立任务。
+    // 验证：节点执行开放任务查询固定约束审批类型、开放状态和执行引用。
+    //
+    // 该形态命中执行唯一索引且不会混入独立任务。
     #[test]
     fn open_approval_execution_filter_is_semantic_and_bounded() {
         let filter = open_approval_execution_filter(&ApprovalNodeExecutionId::new("exec-1"));

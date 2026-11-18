@@ -43,13 +43,11 @@ pub struct DirectoryTotal {
 }
 
 /// 同事务执行目录聚合。
-///
-/// # 参数
-/// `read` 为已经完成范围解析的条件，`executor` 为用例事务。
-/// # 返回
 /// 分页、总数及不含账号凭证的内容版本索引。
-/// # 错误
+///
 /// 数据库读取或版本索引超过上限时拒绝，不返回部分结果。
+///
+/// `read` 为已经完成范围解析的条件，`executor` 为用例事务。
 pub async fn directory_page(
     db: &Database,
     read: &DirectoryRead<'_>,
@@ -70,7 +68,7 @@ pub async fn directory_page(
     Ok(result)
 }
 
-/// 目录只能消费对应固定资源的完整账号查询，不能将份额凭证用于人员详情。
+// 在人员目录执行前核对凭证绑定的固定资源及完整账号模型，不能把份额或其他资源凭证用于人员详情。
 fn ensure_model(model: &QueryModel, category: PersonDirectoryCategory) -> Result<()> {
     if model.resource != category.resource()
         || model.collection != "accounts"
@@ -82,7 +80,7 @@ fn ensure_model(model: &QueryModel, category: PersonDirectoryCategory) -> Result
     Ok(())
 }
 
-/// 生成授权、资格和分页流水线，回显 ID 在资格关联前限定。
+// 在数据库内组合中央授权、类别资格、计数及分页；按 ID 回显时先收窄身份再关联资格。
 fn directory_pipeline(read: &DirectoryRead<'_>, as_of: Instant) -> Result<Vec<Document>> {
     let mut filters =
         vec![doc! { "kind": AccountKind::Admin.as_str(), "deleted_at": NOT_DELETED_TIMESTAMP_BSON }];
@@ -117,7 +115,7 @@ fn directory_pipeline(read: &DirectoryRead<'_>, as_of: Instant) -> Result<Vec<Do
     Ok(pipeline)
 }
 
-/// 请求组织条件只收窄中央授权管道，在分页和计数前匹配真实有效主属关系。
+// 把调用方部门筛选追加到中央授权查询，按授权时点的真实主属关系在计数和分页前收窄候选。
 fn organization_filter(ids: &[String], as_of: Instant) -> Result<Vec<Document>> {
     let ids = ids.iter().cloned().collect();
     let QueryFragment::Exists { collection, bindings, pipeline } =
@@ -132,7 +130,7 @@ fn organization_filter(ids: &[String], as_of: Instant) -> Result<Vec<Document>> 
     ])
 }
 
-/// 在身份域内部按账号索引关联资格；后台目录无需此关联。
+// 销售或采购人员目录按账号索引关联该类别查询资格；后台人员目录不查询这种附加资格。
 fn qualification_stages(category: PersonDirectoryCategory) -> Vec<Document> {
     vec![
         doc! { "$lookup": { "from": <Database as AccessControlExt>::PERSON_QUERY_QUALIFICATIONS,

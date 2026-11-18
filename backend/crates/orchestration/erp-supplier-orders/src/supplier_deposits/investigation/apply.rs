@@ -82,11 +82,11 @@ impl<'a> Transaction<'a> {
 
 impl MongoFundsInvestigationStore {
     /// 应用一笔可靠接收的资金证据，正常扣款、核销和任务在同一事务提交。
-    /// # 参数
+    ///
     /// `evidence` 为服务端已保存的原证据，实际处理状态在事务内重读。
-    /// # 返回
+    ///
     /// 已完成应用、异常保留或终态重放的分类计数。
-    /// # 错误
+    ///
     /// 存储、租约或提交未知时返回原错误；提交未知不会自动再次执行资金步骤。
     pub async fn apply_received(&self, evidence: FundsEvidenceInbox) -> Result<FundsInvestigationRun> {
         match self.application_transaction(&evidence.base.id, ApplicationMode::Complete).await {
@@ -380,11 +380,11 @@ impl MongoFundsInvestigationStore {
     }
 
     /// 将无法自动解释的原资金证据交由财务核对，限制新增使用。
-    /// # 参数
+    ///
     /// `inbox`、`reason` 为原证据身份和稳定脱敏原因。
-    /// # 返回
+    ///
     /// 返回一项待核对计数；不修改已发生资金事实。
-    /// # 错误
+    ///
     /// 租约、证据状态、持久化或提交失败时返回错误。
     pub async fn review(&self, inbox: &str, reason: &str) -> Result<FundsInvestigationRun> {
         let store = self.clone();

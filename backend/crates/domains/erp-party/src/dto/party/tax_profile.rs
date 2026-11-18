@@ -61,7 +61,7 @@ pub struct PartyTaxProfileView {
 }
 
 impl From<PartyTaxProfile> for PartyTaxProfileView {
-    /// 从实体构造响应视图。
+    // 将税务资料的内部字段转换成外部响应格式，供接口展示。
     fn from(profile: PartyTaxProfile) -> Self {
         Self {
             id: profile.base.id,

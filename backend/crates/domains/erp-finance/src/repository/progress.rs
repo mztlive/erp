@@ -8,44 +8,34 @@ use persistence_core::{Executor, Repository, Result, mongo_ops};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
-/// 将金额按 BSON Decimal128 形态转换（仓储层禁止任何舍入或换算）。
-///
-/// `bson::serialize_to_bson` 默认走 human-readable 字符串形态，与实体持久化的
-/// Decimal128 形态不一致；这里直接构造 Decimal128，确保 `$add`/`$lte`
-/// 等表达式与库内金额类型一致。
-///
-/// # 参数
-/// * `amount` - 定点金额
-///
-/// # 返回
-/// 返回 Decimal128 形态的 BSON 值。
-///
-/// # 错误
-/// 金额无法表示为 Decimal128 时返回错误。
+// 将金额按 BSON Decimal128 形态转换（仓储层禁止任何舍入或换算）。
+//
+// `bson::serialize_to_bson` 默认走 human-readable 字符串形态，与实体持久化的
+// Decimal128 形态不一致；这里直接构造 Decimal128，确保 `$add`/`$lte`
+// 等表达式与库内金额类型一致。
+// 返回 Decimal128 形态的 BSON 值。
+// 金额无法表示为 Decimal128 时返回错误。
+//
+// 输入约定：
+// - `amount`：定点金额
 pub(super) fn amount_bson(amount: &Amount) -> Result<Bson> {
     Ok(Bson::Decimal128(amount.to_string().parse()?))
 }
 
-/// 构建核销/收票进度条件更新管道。
-///
-/// 在单条 MongoDB 原子更新内重算进度字段、开放余额与派生状态：
-/// 增加方向 `progress = progress + amount`、`balance = total - progress`；
-/// 减少方向 `progress = progress - amount`、`balance = total - progress`。
-/// 状态仅由开放余额派生：增加后开放余额归零为 `settled`，减少后已核销归零为
-/// `open`，其余为 `partially_settled`；收票/开票进度不派生状态。
-///
-/// # 参数
-/// * `progress_field` - 进度字段名（`settled_total` 或 `invoiced_total`）
-/// * `balance_field` - 开放余额字段名（`open_total` 或 `open_invoiceable_total`）
-/// * `amount` - 本次金额（正数，Decimal128 形态）
-/// * `increase` - `true` 为增加进度，`false` 为冲减进度
-/// * `updated_by` - 本次更新执行人
-///
-/// # 返回
-/// 返回聚合管道更新文档。
-///
-/// # 错误
-/// 不返回错误。
+// 构建核销/收票进度条件更新管道。
+//
+// 在单条 MongoDB 原子更新内重算进度字段、开放余额与派生状态：
+// 增加方向 `progress = progress + amount`、`balance = total - progress`；
+// 减少方向 `progress = progress - amount`、`balance = total - progress`。
+// 状态仅由开放余额派生：增加后开放余额归零为 `settled`，减少后已核销归零为
+// `open`，其余为 `partially_settled`；收票/开票进度不派生状态。
+// 返回聚合管道更新文档。
+//
+// 输入约定：
+// - `progress_field`：进度字段名（`settled_total` 或 `invoiced_total`）
+// - `balance_field`：开放余额字段名（`open_total` 或 `open_invoiceable_total`）
+// - `amount`：本次金额（正数，Decimal128 形态）
+// - `increase`：`true` 为增加进度，`false` 为冲减进度
 pub(super) fn progress_pipeline(
     progress_field: &str,
     balance_field: &str,
@@ -92,18 +82,14 @@ pub(super) fn progress_pipeline(
 
 /// 财务账户进度的单文档条件写入。
 pub(crate) trait AccountProgressWrite: Sync {
-    /// 沿用调用方执行器执行条件更新，不开启或提交事务。
-    ///
-    /// # 参数
-    /// * `filter` - 账户身份、软删除与额度条件。
-    /// * `pipeline` - 更新进度及派生余额的聚合管道。
-    /// * `executor` - 调用方的数据访问执行器。
-    ///
-    /// # 返回
-    /// 条件匹配一个账户时返回 `true`，未匹配时返回 `false`。
-    ///
-    /// # 错误
-    /// 数据库更新失败时返回原仓储错误。
+    // 沿用调用方执行器执行条件更新，不开启或提交事务。
+    // 结果：条件匹配一个账户时返回 `true`，未匹配时返回 `false`。
+    // 失败条件：数据库更新失败时返回原仓储错误。
+    //
+    // 输入约定：
+    // - `filter`：账户身份、软删除与额度条件。
+    // - `pipeline`：更新进度及派生余额的聚合管道。
+    // - `executor`：调用方的数据访问执行器。
     fn conditional_update(
         &self,
         filter: Document,

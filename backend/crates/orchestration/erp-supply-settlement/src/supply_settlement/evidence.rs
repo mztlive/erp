@@ -17,22 +17,10 @@ use validator::Validate;
 use super::SupplierSettlementProcess;
 use crate::{Error, Result};
 impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
-    /// 为一个精确差异追加不可变证据引用与业务意见。
+    /// 为指定差异追加不可变证据引用和业务意见，供后续财务判断，不直接改变差异结论。
+    /// 请求 ID 全局唯一；同 ID 同载荷返回原结果，摘要不符时拒绝。
     ///
-    /// 请求 ID 是数据库唯一幂等键；同一请求 ID 的载荷摘要不一致时冲突。补证不会
-    /// 直接改变差异结论，正式处理仍需单独差异决定命令。
-    ///
-    /// # 参数
-    /// * `difference_id` - 路径中的差异 ID。
-    /// * `req` - 补证命令。
-    /// * `actor` - 当前操作人。
-    ///
-    /// # 返回
-    /// 返回已登记的补证结果；同一请求重放返回原结果。
-    ///
-    /// # 错误
-    /// 请求校验失败、路径与载荷 ID 不一致、缺少差异操作或结算单补证资格、差异不可补证或事务写入失败时返回对应错误。
-    /// 写入失败后若原请求已落库，则返回该结果而不是原错误。
+    /// 路径不一致、无差异操作或补证权限、差异不可补证时失败。写入失败后若查证原请求已提交，则返回对应结果。
     pub async fn append_difference_evidence(
         &self,
         difference_id: &str,
@@ -71,7 +59,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         }
     }
 
-    /// 同一快照内核验固定资格、幂等收据和精确差异，再原子写入补证。
+    // 在同一事务核验功能资格、既有请求和精确差异；只在没有可复用结果时追加证据，避免重复登记或写入他单。
     async fn append_evidence(
         &self,
         req: &SettlementDifferenceEvidenceRequest,
@@ -100,7 +88,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         Ok(evidence_result(evidence, "RECORDED", "差异补证已登记，不会直接改变正式差异结论"))
     }
 
-    /// 恢复读取前，在恢复事务内重验差异操作和结算单补证资格。
+    // 在独立恢复事务重验差异操作和本单补证资格，再查找原请求的补证结果，不重写证据。
     async fn recover_evidence(
         &self,
         req: &SettlementDifferenceEvidenceRequest,
@@ -114,7 +102,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             .await?)
     }
 
-    /// 补证和重放均沿原执行器核验差异操作及实际结算单的补证范围。
+    // 补证与读取回执共用功能权限和实际结算单范围校验，防止持有请求 ID 的无权账号绕过授权。
     async fn require_evidence_access(
         &self,
         req: &SettlementDifferenceEvidenceRequest,
@@ -130,7 +118,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             .await?)
     }
 
-    /// 原补证和审计沿命令入口执行器原子写入，恢复仍由入口负责。
+    // 用入口事务写入不可变补证和审计，保证两者同时提交；写入失败后的原命令查证由入口处理。
     async fn persist(
         &self,
         req: &SettlementDifferenceEvidenceRequest,

@@ -119,22 +119,17 @@ pub struct SalesOrderWorkingCopyLine {
 }
 
 impl SalesOrderWorkingCopyLine {
-    /// 创建工作副本行。
+    /// 为后续编辑建立工作副本行，构造阶段校验输入后再交给调用方保存。
     ///
     /// 完成文本字段校验与规范化，行金额三元组按
     /// [`erp_core::money::line_amounts`] 统一计算（§4.2 逐行舍入）；卡券行按 §6.4
     /// 校验面额小计、成交金额与配赠金额一致性。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::SalesOrderWorkingCopyLineId`）
-    /// * `working_copy_id` - 所属工作副本
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
     /// 返回新建的工作副本行。
-    ///
-    /// # 错误
     /// 行号为零、必填为空、超长、行类型与字段组不一致或卡券金额不一致时返回错误。
+    ///
+    /// 输入约定：
+    /// - `id`：实体主键（`erp_core::ids::SalesOrderWorkingCopyLineId`）
+    /// - `working_copy_id`：所属工作副本
     pub fn new(
         id: SalesOrderWorkingCopyLineId,
         working_copy_id: SalesOrderWorkingCopyId,
@@ -189,28 +184,16 @@ impl SalesOrderWorkingCopyLine {
     }
 
     /// 判断明细是否属于给定工作副本。
+    /// 结果：明细所属工作副本一致时返回 `true`。
     ///
-    /// # 参数
-    /// * `working_copy_id` - 待校验的工作副本
-    ///
-    /// # 返回
-    /// 明细所属工作副本一致时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 输入约定：
+    /// - `working_copy_id`：待校验的工作副本
     pub fn belongs_to_working_copy(&self, working_copy_id: &SalesOrderWorkingCopyId) -> bool {
         &self.working_copy_id == working_copy_id
     }
 
     /// 返回公司商品池可售校验所需的精确 SKU 引用。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 卡券及数量归零的历史商品行返回 `None`；有效实物及服务行返回 `(SKU, SKU 修订)`。
-    ///
-    /// # 错误
+    /// 结果：卡券及数量归零的历史商品行返回 `None`；有效实物及服务行返回 `(SKU, SKU 修订)`。
     /// 实物及服务行缺少 SKU 或 SKU 修订时返回错误。
     pub fn sellable_sku_ref(&self) -> Result<Option<(&SkuId, &erp_core::ids::SkuRevisionId)>> {
         if self.line_type != LineType::GoodsService {
@@ -229,14 +212,7 @@ impl SalesOrderWorkingCopyLine {
     }
 
     /// 还原实物及服务字段组。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 实物及服务行返回完整字段组；卡券行返回 `None`。
-    ///
-    /// # 错误
+    /// 结果：实物及服务行返回完整字段组；卡券行返回 `None`。
     /// 实物及服务行缺少任一必填字段时返回错误。
     pub fn goods_fields(&self) -> Result<Option<GoodsLineFields>> {
         if self.line_type != LineType::GoodsService {
@@ -246,14 +222,7 @@ impl SalesOrderWorkingCopyLine {
     }
 
     /// 还原卡券字段组。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 卡券行返回完整字段组；实物及服务行返回 `None`。
-    ///
-    /// # 错误
+    /// 结果：卡券行返回完整字段组；实物及服务行返回 `None`。
     /// 卡券行缺少任一必填字段时返回错误。
     pub fn voucher_fields(&self) -> Result<Option<VoucherLineDraft>> {
         if self.line_type != LineType::Voucher {
@@ -263,15 +232,11 @@ impl SalesOrderWorkingCopyLine {
     }
 
     /// 汇总工作副本行已经舍入的金额三元组。
-    ///
-    /// # 参数
-    /// * `lines` - 同一工作副本的冻结明细行
-    ///
-    /// # 返回
     /// 返回 `(含税合计, 不含税合计, 税额合计)`。
+    /// 失败条件：金额值对象负责保持精度和范围。
     ///
-    /// # 错误
-    /// 无；金额值对象负责保持精度和范围。
+    /// 输入约定：
+    /// - `lines`：同一工作副本的冻结明细行
     pub fn amount_totals(lines: &[Self]) -> (Amount, Amount, Amount) {
         sum_line_amounts(lines.iter().map(|line| (line.gross_amount, line.net_amount, line.tax_amount)))
     }

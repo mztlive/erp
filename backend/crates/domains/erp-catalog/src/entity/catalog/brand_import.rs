@@ -9,12 +9,8 @@ pub struct BrandImportKey(String);
 
 impl BrandImportKey {
     /// 解析稳定导入身份。
-    /// # 参数
-    /// * `value` - UUID 格式的请求身份
-    /// # 返回
-    /// 已验证的导入身份。
-    /// # 错误
-    /// 格式不合法。
+    ///
+    /// 已验证的导入身份。格式不合法。
     pub fn new(value: &str) -> Result<Self> {
         let valid = value.len() == 36
             && value.bytes().enumerate().all(|(index, byte)| {
@@ -26,13 +22,9 @@ impl BrandImportKey {
         Ok(Self(value.to_ascii_lowercase()))
     }
 
-    /// 生成仅用于该导入行的品牌身份。
-    /// # 参数
-    /// * `row_number` - 原始 Excel 行号
-    /// # 返回
-    /// 受品牌 ID 唯一索引保护的稳定身份。
-    /// # 错误
-    /// 无。
+    /// 生成仅用于该导入行的品牌身份。受品牌 ID 唯一索引保护的稳定身份。
+    ///
+    /// `row_number` 为原始 Excel 行号。
     pub fn brand_id(&self, row_number: u32) -> ProductBrandId {
         ProductBrandId::new(format!("brand-import-{}-{row_number}", self.0))
     }
@@ -45,7 +37,7 @@ pub(crate) struct PreparedBrandImport {
 }
 
 impl PreparedBrandImport {
-    /// 规范化行内容，空代码暂用占位值，写入前由取号器替换。
+    // 规范化行内容，空代码暂用占位值，写入前由取号器替换。
     pub(crate) fn new(id: ProductBrandId, name: String, code: String, actor: &str) -> Result<Self> {
         let automatic_code = code.trim().is_empty();
         let data = ProductBrandData::new(if automatic_code { "AUTO".into() } else { code }, name);
@@ -56,7 +48,7 @@ impl PreparedBrandImport {
         })
     }
 
-    /// 判断已存在记录能否作为跳过结果；停用记录保持停用。
+    // 判断已存在记录能否作为跳过结果；停用记录保持停用。
     pub(crate) fn ensure_matches(&self, existing: &ProductBrand) -> Result<()> {
         if existing.base.is_deleted() {
             return Err(Error::ConflictError("原品牌已删除，请核对品牌资料后使用新的文件重新导入".into()));

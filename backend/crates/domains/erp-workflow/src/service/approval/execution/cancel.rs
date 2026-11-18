@@ -40,20 +40,12 @@ pub struct DocumentCancelCommand {
 
 impl DocumentCancelCommand {
     /// 在任何仓储读取前冻结普通撤回的完整业务身份。
-    ///
-    /// # 参数
-    /// * `subject` - 精确业务主体。
-    /// * `subject_version` - 冻结提交版本，必须从 1 开始。
-    /// * `expected_document_version` - 业务单据乐观锁版本，必须从 1 开始。
-    /// * `reason` - 撤回原因，会先去掉首尾空白。
-    /// * `actor_id` - 撤回人引用。
-    /// * `idempotency_key` - 原始幂等键，写入前会规范化。
-    ///
-    /// # 返回
     /// 返回已规范化的撤回命令。
     ///
-    /// # 错误
     /// 主体版本、业务版本、原因、操作人或幂等键不合法时返回校验错误。
+    ///
+    /// `subject_version`：冻结提交版本，必须从 1 开始；`expected_document_version`：业务单据乐观锁版本，必须从 1 开始。
+    /// `reason`：撤回原因，会先去掉首尾空白；`idempotency_key`：原始幂等键，写入前会规范化。
     pub fn new(
         subject: SubjectRef,
         subject_version: u32,
@@ -76,85 +68,37 @@ impl DocumentCancelCommand {
     }
 
     /// 返回精确业务主体。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回构造时冻结的业务主体。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn subject(&self) -> &SubjectRef {
         &self.subject
     }
 
     /// 返回冻结提交版本。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回构造时冻结的提交版本。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn subject_version(&self) -> u32 {
         self.subject_version
     }
 
     /// 返回强业务乐观锁版本。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回构造时冻结的业务单据版本。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn expected_document_version(&self) -> u64 {
         self.expected_document_version
     }
 
     /// 返回规范化撤回原因。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回已去掉首尾空白的撤回原因。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn reason(&self) -> &str {
         &self.reason
     }
 
     /// 返回规范化撤回人。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回已校验的撤回人。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn actor(&self) -> &ParticipantId {
         &self.actor
     }
 
     /// 返回规范化幂等键。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回构造时规范化的幂等键。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn idempotency_key(&self) -> &IdempotencyKey {
         &self.idempotency_key
     }
@@ -169,58 +113,30 @@ pub struct DocumentCancelReplayProof {
 
 impl DocumentCancelReplayProof {
     /// 返回撤回命令的稳定结果引用。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回已证明收据上的 `result_ref`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn result_ref(&self) -> &str {
         &self.receipt.result_ref
     }
 
     /// 返回已取消的精确审批实例。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回与收据共同证明的已取消实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn instance(&self) -> &ApprovalProcessInstance {
         &self.instance
     }
 
     /// 返回已分类的命令收据。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回证明本次撤回的命令收据。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn receipt(&self) -> &ApprovalCommandReceipt {
         &self.receipt
     }
 }
 
 /// 规范化业务单据撤回原因。
-///
-/// # 参数
-/// * `reason` - 原始撤回原因。
-///
-/// # 返回
 /// 返回去掉首尾空白后的原因。
 ///
-/// # 错误
 /// 去除首尾空白后为空时返回校验错误。
+///
+/// `reason`：原始撤回原因。
 pub fn normalize_document_cancel_reason(reason: &str) -> Result<String> {
     let reason = reason.trim();
     if reason.is_empty() {
@@ -230,17 +146,11 @@ pub fn normalize_document_cancel_reason(reason: &str) -> Result<String> {
 }
 
 /// 按 V3 与已知历史 scope 的精确顺序读取普通撤回收据。
-///
-/// # 参数
-/// * `db` - 工作流数据库。
-/// * `identity` - 已形成的撤回收据身份。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
 /// 命中第一个收据时返回该收据；全部 scope 都没有收据时返回 `None`。
 ///
-/// # 错误
 /// 仓储读取失败时返回对应错误。
+///
+/// `identity`：已形成的撤回收据身份。
 pub async fn find_document_cancel_receipt(
     db: &Database,
     identity: &PreparedCommandIdentity,
@@ -268,16 +178,11 @@ pub async fn find_document_cancel_receipt(
 /// 本函数只读取，不重跑 Fresh 命令。调用方必须在同一个事务快照内先完成当前
 /// 授权重验，再调用本函数；失败事务后的恢复每次都必须创建新会话。
 ///
-/// # 参数
-/// * `db` - 工作流数据库。
-/// * `command` - 已规范化的撤回命令。
-/// * `executor` - 本次只读快照的执行器。
-///
-/// # 返回
 /// 实例不存在、尚未取消或找不到匹配收据时返回 `None`；证明成功时返回收据与实例。
 ///
-/// # 错误
 /// 终态事实与命令不一致、收据异载荷，或仓储与身份构造失败时返回错误。
+///
+/// `command`：已规范化的撤回命令；`executor`：本次只读快照的执行器。
 pub async fn replay_committed_document_cancel(
     db: &Database,
     command: &DocumentCancelCommand,
@@ -343,18 +248,10 @@ pub async fn replay_committed_document_cancel(
 /// 调用方只能在本函数返回后写业务单据、通知和审计；所有写入必须复用同一事务
 /// executor。
 ///
-/// # 参数
-/// * `db` - 工作流数据库。
-/// * `writes` - 已规划的取消写入。
-/// * `closed_tasks` - 随取消关闭的任务。
-/// * `actor_id` - 实际撤回人，用于判断是否提醒发起人。
-/// * `executor` - 调用方事务执行器。
-///
-/// # 返回
-/// 收据、取消运行事实和关闭任务都写入后无返回值。
-///
-/// # 错误
 /// 计划身份不是 V3 取消或实例未取消时返回内部错误；收据首写或后续仓储失败时返回对应错误。
+///
+/// `writes`：已规划的取消写入；`actor_id`：实际撤回人，用于判断是否提醒发起人。
+/// `executor`：调用方事务执行器。
 pub async fn claim_and_persist_document_cancel_runtime(
     db: &Database,
     writes: &PlannedWrites,
@@ -388,7 +285,7 @@ pub async fn claim_and_persist_document_cancel_runtime(
     Ok(())
 }
 
-/// 在有界历史页中寻找本轮唯一已取消执行；缺失、重复或翻页停滞时失败。
+// 为撤回终态证明分页寻找本轮唯一被取消执行；缺失、重复或翻页游标不前进时拒绝证明。
 async fn cancelled_execution(
     db: &Database,
     instance: &ApprovalProcessInstance,
@@ -433,7 +330,7 @@ async fn cancelled_execution(
     Ok(execution.clone())
 }
 
-/// 由唯一已关闭任务或可恢复 blocker 的空任务推导期望版本，其余形态视为终态冲突。
+// 回读撤回终态时由唯一已关闭任务推导任务版本；可恢复 blocker 无任务时允许空版本，其他形状按冲突处理。
 fn terminal_task_version(
     tasks: &[WorkItem],
     instance: &ApprovalProcessInstance,
@@ -468,7 +365,7 @@ fn terminal_task_version(
     }
 }
 
-/// 撤回收据与终态事实不一致时的稳定冲突。
+// 同一撤回收据未被持久化终态事实证实时返回稳定冲突，不按尚未执行继续写入。
 fn document_cancel_terminal_conflict() -> Error {
     Error::ConflictError("业务单据撤回收据与终态事实不一致".to_string())
 }
@@ -503,31 +400,20 @@ pub struct CancelExecutionInput {
 }
 
 /// 规划取消。允许原审批人恢复的 blocker 走业务取消，其余 blocker 必须走受阻取消。
-///
-/// # 参数
-/// * `input` - 取消输入
-///
-/// # 返回
 /// 同载荷返回 `PreparedExecution::Replay`；否则返回待应用的取消计划。
 ///
-/// # 错误
 /// 端口与 blocker 类别不匹配、命令身份不合法、异载荷冲突、引擎失败或收据构造失败时返回错误。
 pub fn prepare_cancel(input: CancelExecutionInput) -> Result<PreparedExecution> {
     prepare_cancel_with_document_version(input, None)
 }
 
 /// 规划业务单据普通撤回，并把业务乐观锁版本纳入命令收据摘要。
-///
-/// # 参数
-/// * `input` - 普通撤回输入；不得标记为受阻取消端口
-/// * `expected_document_version` - 调用方已重验的业务单据版本
-///
-/// # 返回
 /// 同载荷返回 `PreparedExecution::Replay`；否则返回待应用的普通撤回计划。
 ///
-/// # 错误
 /// 输入误用受阻端口、端口与 blocker 类别不匹配、命令身份不合法、异载荷冲突、引擎失败或收据构造失败时
 /// 返回错误。
+///
+/// `input`：普通撤回输入；不得标记为受阻取消端口；`expected_document_version`：调用方已重验的业务单据版本。
 pub fn prepare_document_cancel(
     input: CancelExecutionInput,
     expected_document_version: u64,
@@ -538,7 +424,7 @@ pub fn prepare_document_cancel(
     prepare_cancel_with_document_version(input, Some(expected_document_version))
 }
 
-/// 使用可选业务单据版本形成取消计划。
+// 取消规划可带业务单据期望版本，用于把普通撤回的强单据并发条件带入命令。
 fn prepare_cancel_with_document_version(
     input: CancelExecutionInput,
     expected_document_version: Option<u64>,

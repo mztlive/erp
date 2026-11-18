@@ -12,7 +12,7 @@ use persistence_core::testing::SnapshotExecutor;
 
 use super::*;
 
-/// 使用不可用授权设施隔离验证读取入口，不连接数据库。
+// 为登记读取测试接入故意不可用的授权设施及认证主体，使入口验证可以在不连接数据库时运行。
 fn service_and_actor() -> (DocumentRegistryService, AuditActor) {
     let options = ClientOptions::builder()
         .hosts(vec![ServerAddress::Tcp { host: "127.0.0.1".into(), port: Some(1) }])
@@ -24,7 +24,7 @@ fn service_and_actor() -> (DocumentRegistryService, AuditActor) {
     (service, actor)
 }
 
-/// 执行五个真实步骤入口，保留原执行器供每项读取验证事务合同。
+// 逐个调用五个正式登记读取步骤并复用原执行器，检查每个入口都遵循快照事务合同。
 async fn read_errors(
     service: &DocumentRegistryService,
     actor: &AuditActor,

@@ -11,15 +11,9 @@ use crate::repository::direct_return::confirmed_direct_returns;
 use crate::{Error, Result};
 
 /// 在采购改单生效的同一事务完成该采购已核实直退的双向处理单。
-/// # 参数
-/// * `db` - 数据库。
-/// * `purchase_id` - 已通过数量、来源、应付及票款校验的新生效采购标识。
-/// * `sales_order_id` - 该采购已冻结的销售来源标识。
-/// * `actor` - 生效操作人。
-/// * `executor` - 原生效事务执行器。
-/// # 返回
 /// 完成已登记的客户直退；不创建金额分录或改写原发货。
-/// # 错误
+/// `purchase_id` 为已通过数量、来源、应付及票款校验的新生效采购标识；`sales_order_id` 为该采购已冻结的销售来源标识。
+/// `actor` 为生效操作人；`executor` 为原生效事务执行器。
 /// 关联处理单缺失或状态、仓储异常时整体回滚改单。
 pub async fn complete_direct_returns(
     db: &Database,

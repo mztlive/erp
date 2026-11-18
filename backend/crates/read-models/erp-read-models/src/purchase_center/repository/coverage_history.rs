@@ -19,14 +19,12 @@ use super::mapping::{sales_goods_fact, sales_line_fact};
 /// 采购引用版本与维持登记版本的判定基准。
 type SourceBaselines = (HashMap<String, HistoricalSalesLineFact>, HashMap<String, String>);
 
-/// 加载采购的受影响判定基准：维持登记版本，以及采购引用或维持的历史版本行。
+/// 为采购覆盖历史取数时，读取采购的受影响判定基准：维持登记版本，以及采购引用或维持的历史版本行。
 ///
 /// # 参数
-/// * `db` - MongoDB 数据库句柄
 /// * `current_revision_id` - 销售当前版本
 /// * `sales_order_id` - 来源销售单
 /// * `orders` - 参与覆盖的采购单
-/// * `executor` - 调用方执行器
 ///
 /// # 返回
 /// 返回历史版本行映射与采购单 ID 到维持版本的映射。
@@ -51,10 +49,9 @@ pub async fn load_source_baselines(
     Ok((historical, maintained))
 }
 
-/// 批量加载指定历史销售版本的商品/服务行。
+/// 读取采购覆盖历史时，批量加载指定历史销售版本的商品/服务行。
 ///
 /// # 参数
-/// * `db` - MongoDB 数据库句柄
 /// * `current_revision_id` - 销售当前版本；不在结果中重复加载
 /// * `revision_ids` - 采购引用或维持登记的销售版本，可重复
 /// * `executor` - 调用方执行器；事务内重验必须复用

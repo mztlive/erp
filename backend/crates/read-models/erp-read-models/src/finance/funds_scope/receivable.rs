@@ -24,14 +24,15 @@ use list::{receivable_page_rows, receivable_summary};
 
 /// M07 应收子账范围查询：负责销售与登记经办人分别查询，同一事务内解析与取数。
 impl FundsAccess {
-    /// 在同一事务按正式应收来源范围读取客户汇总。
+    /// 生成应收子账视图时，在同一事务按正式应收来源范围读取客户汇总。
     ///
     /// # 参数
     /// * `customer_id` - 已证明可读的客户
-    /// * `actor` - 当前认证操作人
     /// * `executor` - 客户资料与资金授权共用的执行器
+    ///
     /// # 返回
     /// 仅汇总当前资金动作允许读取的子账。
+    ///
     /// # 错误
     /// 授权、查询超限或汇总读取失败时返回错误。
     pub async fn customer_receivable_summary(
@@ -63,11 +64,10 @@ impl FundsAccess {
         Ok(result)
     }
 
-    /// 分页查询应收往来子账范围行。
+    /// 处理应收子账时，分页查询应收往来子账范围行。
     ///
     /// # 参数
     /// * `params` - 列表请求，含筛选、分页与回传的范围版本。
-    /// * `actor` - 已认证操作人。
     ///
     /// # 返回
     /// 最终授权子账页及同口径汇总。
@@ -88,11 +88,10 @@ impl FundsAccess {
         Ok(snapshot)
     }
 
-    /// 独立详情重新解析应收子账详情动作；不可见与不存在统一为 NotFound。
+    /// 调用此入口时，独立详情重新解析应收子账详情动作；不可见与不存在统一为 NotFound。
     ///
     /// # 参数
     /// * `id` - 应收往来子账主键。
-    /// * `actor` - 已认证操作人。
     ///
     /// # 返回
     /// 当前详情动作允许的子账行，并补上名称与分录。
@@ -116,7 +115,7 @@ impl FundsAccess {
             .await
     }
 
-    /// 在调用方事务内读取授权后的应收详情。
+    // 读取应收子账时，在调用方事务内读取授权后的应收详情。
     async fn load_receivable_detail(
         &self,
         id: &str,
@@ -165,7 +164,7 @@ impl FundsAccess {
         })
     }
 
-    /// 由已经过来源授权的子账组装完整财务视图。
+    // 生成应收子账视图时，由已经过来源授权的子账组装完整财务视图。
     async fn receivable_detail_row(
         &self,
         account: &ReceivableAccount,
@@ -201,19 +200,14 @@ impl FundsAccess {
         Ok(row)
     }
 
-    /// 返回前重读授权及候选事实版本；变化时拒绝交付原结果。
-    ///
-    /// # 参数
-    /// * `params` - 原始列表请求。
-    /// * `query` - 已规范化的列表查询。
-    /// * `actor` - 已认证操作人。
-    /// * `expected` - 调用方回传的范围版本；首页可为 `None`。
-    ///
-    /// # 返回
-    /// 两次版本一致时返回第一次子账页。
-    ///
-    /// # 错误
-    /// 首次版本失配或复核版本变化时返回范围变化冲突错误；授权或读取失败时返回对应错误。
+    // 交付应收子账前重新读取授权及完整候选事实版本；比对发现变化时拒绝原结果。
+    //
+    // 调用参数：
+    // * `expected` - 调用方回传的范围版本；首页可为 `None`。
+    //
+    // 两次版本一致时返回第一次子账页。
+    //
+    // 首次版本失配或复核版本变化时返回范围变化冲突错误；授权或读取失败时返回对应错误。
     pub(super) async fn checked_receivable_accounts(
         &self,
         params: &erp_finance::dto::receivable::ReceivableAccountListParams,
@@ -229,18 +223,11 @@ impl FundsAccess {
         .await
     }
 
-    /// 身份和业务事实均使用调用方同一事务，不缓存权限解析结果。
-    ///
-    /// # 参数
-    /// * `params` - 原始列表请求。
-    /// * `query` - 已规范化的列表查询。
-    /// * `actor` - 已认证操作人。
-    ///
-    /// # 返回
-    /// 同一事务内形成的授权子账页。
-    ///
-    /// # 错误
-    /// 事务、授权或读取失败时返回对应错误。
+    // 读取应收子账事实时，将身份解析与业务查询放在调用方同一事务中，不复用缓存的授权结论。
+    //
+    // 同一事务内形成的授权子账页。
+    //
+    // 事务、授权或读取失败时返回对应错误。
     pub(super) async fn snapshot_receivable_accounts(
         &self,
         params: &erp_finance::dto::receivable::ReceivableAccountListParams,
@@ -262,19 +249,14 @@ impl FundsAccess {
             .await
     }
 
-    /// 来源授权和业务条件进入数据库，再按最终匹配结果分页与计数。
-    ///
-    /// # 参数
-    /// * `params` - 原始列表请求，用于比对范围版本。
-    /// * `query` - 已规范化的列表查询。
-    /// * `actor` - 已认证操作人。
-    /// * `executor` - 调用方事务。
-    ///
-    /// # 返回
-    /// 无可见范围时返回空页；否则返回数据库分页、计数与同口径汇总。
-    ///
-    /// # 错误
-    /// 授权、组织展开、聚合、版本不一致或核销事实读取失败时返回对应错误。
+    // 读取应收子账时，来源授权和业务条件进入数据库，再按最终匹配结果分页与计数。
+    //
+    // 调用参数：
+    // * `params` - 原始列表请求，用于比对范围版本。
+    //
+    // 无可见范围时返回空页；否则返回数据库分页、计数与同口径汇总。
+    //
+    // 授权、组织展开、聚合、版本不一致或核销事实读取失败时返回对应错误。
     pub(super) async fn load_receivable_accounts(
         &self,
         params: &erp_finance::dto::receivable::ReceivableAccountListParams,
@@ -314,7 +296,7 @@ impl FundsAccess {
         })
     }
 
-    /// 独立新事务重读动作、授权和完整匹配版本，不再生成页面或金额汇总。
+    // 交付应收子账结果前，独立新事务重读动作、授权和完整匹配版本，不再生成页面或金额汇总。
     async fn revalidate_receivable_accounts(
         &self,
         query: &erp_finance::dto::receivable::ReceivableAccountListQuery,
@@ -342,17 +324,14 @@ impl FundsAccess {
             .await
     }
 
-    /// 计算子账获授权核销份额；未分配与未授权份额不计入，禁止差额推导。
-    ///
-    /// # 参数
-    /// * `account_id` - 应收子账主键。
-    /// * `executor` - 调用方事务。
-    ///
-    /// # 返回
-    /// 该子账已装载的净核销额；没有分录或分配时为零。
-    ///
-    /// # 错误
-    /// 分录或核销分配读取失败时返回对应错误。
+    // 处理应收子账时，计算子账获授权核销份额；未分配与未授权份额不计入，禁止差额推导。
+    //
+    // 调用参数：
+    // * `account_id` - 应收子账主键。
+    //
+    // 该子账已装载的净核销额；没有分录或分配时为零。
+    //
+    // 分录或核销分配读取失败时返回对应错误。
     pub(super) async fn receivable_visible_share(
         &self,
         account_id: &str,

@@ -9,11 +9,7 @@ use crate::{Error, Result};
 
 impl ApiOrderExecution {
     /// 以真实查询且已应用的取消结果停止原执行，保留外部身份和动作历史。
-    /// # 参数
-    /// 替代版本、当前正式订单、同身份跟踪检查点及其已应用的不可变观察。
-    /// # 返回
     /// 取消已确认、没有已知发货或未决退款时，标记原执行由新版本替代。
-    /// # 错误
     /// 身份不符、取消未应用、创建/通知未知、已履约或退款未决时拒绝。
     pub fn stop_cancelled_for_purchase_change(
         &mut self,

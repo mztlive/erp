@@ -24,20 +24,16 @@ pub(super) struct HistorySnapshotOutput {
 }
 
 impl super::CustomerQualityReadModel {
-    /// 在调用方事务内完成历史授权、冻结筛选与事实装载。
-    ///
-    /// # 参数
-    /// * `query` - 历史口径筛选；其中的范围版本用于和本次快照比对
-    /// * `actor` - 已认证操作人
-    /// * `bounds` - 已校验的期间边界
-    /// * `export` - 为真时不按页截断行
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 返回历史视图、原查询，以及销售授权与订单集合合成的版本指纹。
-    ///
-    /// # 错误
-    /// 销售授权解析失败、订单或展示名读取失败，或已带的范围版本与本次快照不一致时返回错误。超限时由装载返回 `ValidationError`。
+    // 处理客户质量历史贡献报表的版本事实时，在调用方事务内完成历史授权、冻结筛选与事实装载。
+    //
+    // 调用参数：
+    // * `query` - 历史口径筛选；其中的范围版本用于和本次快照比对
+    // * `bounds` - 已校验的期间边界
+    // * `export` - 为真时不按页截断行
+    //
+    // 返回历史视图、原查询，以及销售授权与订单集合合成的版本指纹。
+    //
+    // 销售授权解析失败、订单或展示名读取失败，或已带的范围版本与本次快照不一致时返回错误。超限时由装载返回 `ValidationError`。
     pub(super) async fn snapshot_history(
         &self,
         query: &HistoryQualityQuery,
@@ -64,18 +60,15 @@ impl super::CustomerQualityReadModel {
         Ok((HistorySnapshotOutput { view, query: query.clone() }, expected))
     }
 
-    /// 在新的读取事务内重验销售范围与业务责任集合，防止返回旧宽范围文件。
-    ///
-    /// # 参数
-    /// * `query` - 与快照相同的历史筛选
-    /// * `actor` - 已认证操作人
-    /// * `expected` - 快照事务返回的版本指纹
-    ///
-    /// # 返回
-    /// 重算版本与 `expected` 一致时无返回值。
-    ///
-    /// # 错误
-    /// 重验事务内的授权、筛选或事实读取失败时返回错误。重算版本与 `expected` 不一致时返回范围变化错误。
+    // 交付客户质量历史贡献报表结果前，在新的读取事务内重验销售范围与业务责任集合，防止返回旧宽范围文件。
+    //
+    // 调用参数：
+    // * `query` - 与快照相同的历史筛选
+    // * `expected` - 快照事务返回的版本指纹
+    //
+    // 重算版本与 `expected` 一致时无返回值。
+    //
+    // 重验事务内的授权、筛选或事实读取失败时返回错误。重算版本与 `expected` 不一致时返回范围变化错误。
     pub(super) async fn recheck_history(
         &self,
         query: &HistoryQualityQuery,
@@ -112,7 +105,7 @@ impl super::CustomerQualityReadModel {
     }
 }
 
-/// 在冻结归属条件下汇总报表，目录由独立端点提供。
+// 生成客户质量历史贡献报表视图时，在冻结归属条件下汇总报表，目录由独立端点提供。
 fn project_history(query: &HistoryQualityQuery, sources: HistorySnapshot) -> HistoryQualityView {
     let has_period_orders = !sources.orders.is_empty();
     let matched: Vec<&QualityOrder> =
@@ -130,7 +123,7 @@ fn project_history(query: &HistoryQualityQuery, sources: HistorySnapshot) -> His
     view
 }
 
-/// 同字段 OR、不同字段 AND；组织匹配冻结祖先路径，移动后不漂移。
+// 应用客户质量历史贡献报表筛选时，同字段 OR、不同字段 AND；组织匹配冻结祖先路径，移动后不漂移。
 fn matches_history(order: &QualityOrder, query: &HistoryQualityQuery, sources: &HistorySnapshot) -> bool {
     if !matches_group(order, query.attribution_group.as_deref()) {
         return false;
@@ -166,7 +159,7 @@ fn matches_history(order: &QualityOrder, query: &HistoryQualityQuery, sources: &
     true
 }
 
-/// 分组下钻匹配冻结的直接归属，不能用祖先路径条件扩大原分组；空身份仅匹配未知归属。
+// 应用客户质量历史贡献报表筛选时，分组下钻匹配冻结的直接归属，不能用祖先路径条件扩大原分组；空身份仅匹配未知归属。
 fn matches_group(order: &QualityOrder, group: Option<&str>) -> bool {
     let Some(group) = group else {
         return true;
@@ -182,7 +175,7 @@ fn matches_group(order: &QualityOrder, group: Option<&str>) -> bool {
     actual.unwrap_or_default() == id
 }
 
-/// 历史分组：冻结人员、冻结组织二者互斥；未知归属单列，不用现任回填。
+// 汇总客户质量历史贡献报表时，历史分组：冻结人员、冻结组织二者互斥；未知归属单列，不用现任回填。
 fn group_history_rows(
     orders: &[&QualityOrder],
     dimension: &str,
@@ -217,7 +210,7 @@ fn group_history_rows(
 type HistoryIdentity =
     (String, Option<String>, Option<String>, Option<String>, Option<String>, Option<Vec<String>>);
 
-/// 分组身份只用快照名称；同一身份存在不同历史名称时稳定列出。
+// 汇总客户质量历史贡献报表时，分组身份只用快照名称；同一身份存在不同历史名称时稳定列出。
 fn group_identity(dimension: &str, key: &str, values: &[&QualityOrder]) -> HistoryIdentity {
     if key.is_empty() {
         return ("未知归属".into(), None, None, None, None, None);
@@ -258,7 +251,7 @@ fn group_identity(dimension: &str, key: &str, values: &[&QualityOrder]) -> Histo
     )
 }
 
-/// 分组汇总只累计一次；缺版本不写作零。
+// 在冻结归属分组内累加订单金额和计数；缺版本的订单不计金额，也不重复计入汇总。
 fn aggregate_orders(
     orders: &[&QualityOrder],
     gross: &BTreeMap<String, rust_decimal::Decimal>,
@@ -276,7 +269,7 @@ fn aggregate_orders(
     (orders.len(), total, unpriced)
 }
 
-/// 全量汇总不依赖当前分页；缺版本订单不计入总额但保留计数。
+// 计算客户质量历史贡献报表金额时，全量汇总不依赖当前分页；缺版本订单不计入总额但保留计数。
 fn totals_for(rows: &[HistoryQualityRow]) -> QualityTotals {
     let mut orders = 0;
     let mut gross = Decimal::ZERO;
@@ -296,18 +289,18 @@ fn totals_for(rows: &[HistoryQualityRow]) -> QualityTotals {
     }
 }
 
-/// 金额保留分，服务端已完成舍入。
+// 处理客户质量历史贡献报表时，金额保留分，服务端已完成舍入。
 fn money(value: Decimal) -> String {
     format!("{value:.2}")
 }
 
-/// 排序分页最后执行；导出保留全部匹配行。
+// 处理客户质量历史贡献报表时，排序分页最后执行；导出保留全部匹配行。
 fn page_items(mut items: Vec<HistoryQualityRow>, query: &HistoryQualityQuery) -> Vec<HistoryQualityRow> {
     items.sort_by(|a, b| compare_history(a, b, &query.sort));
     items.into_iter().skip((query.page - 1) * query.page_size).take(query.page_size).collect()
 }
 
-/// 页内顺序与导出一致，同值按稳定键排序。
+// 排列客户质量历史贡献报表结果时，页内顺序与导出一致，同值按稳定键排序。
 fn compare_history(a: &HistoryQualityRow, b: &HistoryQualityRow, sort: &str) -> std::cmp::Ordering {
     use std::cmp::Ordering;
     let (field, direction) = sort.split_once(':').unwrap_or(("orderCount", "desc"));
@@ -323,12 +316,12 @@ fn compare_history(a: &HistoryQualityRow, b: &HistoryQualityRow, sort: &str) -> 
     ordering
 }
 
-/// 字符串金额排序使用 Decimal，禁止按字典序排列负数和大金额。
+// 处理客户质量历史贡献报表时，字符串金额排序使用 Decimal，禁止按字典序排列负数和大金额。
 fn numeric(value: &str) -> Decimal {
     value.parse::<Decimal>().unwrap_or(Decimal::ZERO)
 }
 
-/// 页面主合同只装配各独立投影，金额与字段来源不在 HTTP 层重算。
+// 生成客户质量历史贡献报表视图时，页面主合同只装配各独立投影，金额与字段来源不在 HTTP 层重算。
 fn assemble_history(
     query: &HistoryQualityQuery,
     rows: Vec<HistoryQualityRow>,
@@ -356,7 +349,7 @@ fn assemble_history(
     }
 }
 
-/// 导出必须保留所有已应用筛选，内部身份只作为精确筛选追溯值。
+// 应用客户质量历史贡献报表筛选时，导出必须保留所有已应用筛选，内部身份只作为精确筛选追溯值。
 fn history_filter_summary(query: &HistoryQualityQuery) -> String {
     let mut parts =
         vec![format!("{} 至 {}", query.from, query.to), BASIS_LABEL.into(), "口径：历史负责订单".into()];
@@ -378,7 +371,7 @@ fn history_filter_summary(query: &HistoryQualityQuery) -> String {
     parts.join("；")
 }
 
-/// 授权时点与版本随响应返回；不暴露完整角色证明或人员集合。
+// 组装客户质量历史贡献报表时，授权时点与版本随响应返回；不暴露完整角色证明或人员集合。
 fn apply_context(view: &mut HistoryQualityView, sales: &SalesReadContext) {
     view.as_of = sales.as_of.as_utc().to_rfc3339();
 }

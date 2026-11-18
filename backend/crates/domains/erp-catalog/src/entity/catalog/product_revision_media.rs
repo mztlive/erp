@@ -30,16 +30,7 @@ pub enum MediaRole {
 }
 
 impl MediaRole {
-    /// 返回用途的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将商品媒体用途映射为中文标签，供界面显示。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Carousel => "轮播图",
@@ -48,16 +39,7 @@ impl MediaRole {
         }
     }
 
-    /// 返回用途的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将商品媒体用途编码为稳定字符串，供持久化和精确查询复用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Carousel => "carousel",
@@ -104,15 +86,9 @@ impl ProductRevisionMedia {
     ///
     /// 完成 alt_text 的可选校验与规范化，并要求 `sort_order` 非负。
     ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::ProductRevisionMediaId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
-    /// 返回新建的媒体实体。
-    ///
-    /// # 错误
     /// 当 alt_text 超长或 sort_order 为负数时返回错误。
+    ///
+    /// `id` 为实体主键（`erp_core::ids::ProductRevisionMediaId`）。
     pub fn new(id: ProductRevisionMediaId, data: ProductRevisionMediaData) -> Result<Self> {
         let alt_text = normalize_optional_text(data.alt_text, "替代文本", ALT_TEXT_MAX_LEN)?;
         ensure_non_negative_sort_order(data.sort_order)?;
@@ -129,15 +105,7 @@ impl ProductRevisionMedia {
 
     /// 把当前媒体快照复制到新的商品修订。
     ///
-    /// # 参数
-    /// * `id` - 新媒体行主键
-    /// * `product_revision_id` - 目标商品修订 ID
-    ///
-    /// # 返回
-    /// 返回文件、用途、顺序和替代文本保持不变的新媒体行。
-    ///
-    /// # 错误
-    /// 复制后的字段违反媒体实体不变式时返回领域错误。
+    /// 返回文件、用途、顺序和替代文本保持不变的新媒体行。复制后的字段违反媒体实体不变式时返回领域错误。
     pub fn copy_to_revision(
         &self,
         id: ProductRevisionMediaId,
@@ -158,14 +126,9 @@ impl ProductRevisionMedia {
 
 /// 校验同一商品修订内每种媒体用途的展示顺序唯一。
 ///
-/// # 参数
-/// * `rows` - 同一商品修订下待写入的全部媒体行
+/// 每个 `(media_role, sort_order)` 组合唯一时返回 `Ok(())`。同一媒体用途出现重复展示顺序时返回领域错误。
 ///
-/// # 返回
-/// 每个 `(media_role, sort_order)` 组合唯一时返回 `Ok(())`。
-///
-/// # 错误
-/// 同一媒体用途出现重复展示顺序时返回领域错误。
+/// `rows` 为同一商品修订下待写入的全部媒体行。
 pub fn ensure_unique_media_sort_orders(rows: &[ProductRevisionMedia]) -> Result<()> {
     let mut seen = HashSet::with_capacity(rows.len());
     for row in rows {
@@ -176,16 +139,9 @@ pub fn ensure_unique_media_sort_orders(rows: &[ProductRevisionMedia]) -> Result<
     Ok(())
 }
 
-/// 校验展示顺序为非负整数。
-///
-/// # 参数
-/// * `sort_order` - 展示顺序
-///
-/// # 返回
-/// 非负时返回 `Ok(())`。
-///
-/// # 错误
-/// 为负数时返回错误。
+// 校验展示顺序为非负整数。
+//
+// 非负时返回 `Ok(())`。为负数时返回错误。
 fn ensure_non_negative_sort_order(sort_order: i32) -> Result<()> {
     if sort_order < 0 {
         return Err(Error::from("展示顺序不能为负数"));
@@ -209,7 +165,7 @@ mod tests {
         }
     }
 
-    /// happy path：alt_text trim 规范化，媒体角色与归属落位。
+    // alt_text 去除首尾空白，媒体角色与归属按请求保存。
     #[test]
     fn new_trims_and_normalizes_fields() {
         let media = ProductRevisionMedia::new(ProductRevisionMediaId::new("media-1"), data()).unwrap();
@@ -220,7 +176,7 @@ mod tests {
         assert_eq!(media.sort_order, 0);
     }
 
-    /// 失败路径：越界（负排序）与超长（alt_text）各一条。
+    // 越界（负排序）与超长（alt_text）均应拒绝。
     #[test]
     fn new_rejects_negative_sort_and_overlong_alt_text() {
         let negative_sort = ProductRevisionMediaData { sort_order: -1, ..data() };
@@ -230,7 +186,7 @@ mod tests {
         assert!(ProductRevisionMedia::new(ProductRevisionMediaId::new("media-1"), overlong_alt).is_err());
     }
 
-    /// 媒体复制保持内容快照并切换所属商品修订。
+    // 媒体复制保持内容快照并切换所属商品修订。
     #[test]
     fn copy_to_revision_preserves_media_snapshot() {
         let media = ProductRevisionMedia::new(ProductRevisionMediaId::new("media-1"), data()).unwrap();
@@ -244,7 +200,7 @@ mod tests {
         assert_eq!(copied.sort_order, media.sort_order);
     }
 
-    /// 同一用途的重复顺序被拒绝，不同用途可复用相同顺序。
+    // 同一用途的重复顺序被拒绝，不同用途可复用相同顺序。
     #[test]
     fn media_sort_orders_are_unique_per_role() {
         let carousel = ProductRevisionMedia::new(ProductRevisionMediaId::new("media-1"), data()).unwrap();
@@ -257,7 +213,7 @@ mod tests {
         assert!(ensure_unique_media_sort_orders(&[carousel.clone(), carousel]).is_err());
     }
 
-    /// 媒体用途 serde 形态与中文标签。
+    // 媒体用途 serde 形态与中文标签。
     #[test]
     fn media_role_exposes_labels_and_codes() {
         assert_eq!(serde_json::to_string(&MediaRole::Detail).unwrap(), "\"detail\"");

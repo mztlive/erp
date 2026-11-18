@@ -11,15 +11,11 @@ pub struct SalesProcurementLineFact {
     pub sku_id: SkuId,
 }
 /// 从工作副本行构造稳定采购责任解析输入。
-///
-/// # 参数
-/// * `lines` - 工作副本行。
-///
-/// # 返回
 /// 返回与实物及服务行一一对应的责任解析输入；行键取稳定销售明细身份。
+/// 失败条件：含非实物服务行时返回冲突；任一行缺少 SKU 时返回校验错误。
 ///
-/// # 错误
-/// 含非实物服务行时返回冲突；任一行缺少 SKU 时返回校验错误。
+/// 输入约定：
+/// - `lines`：工作副本行。
 pub fn working_copy_inputs(lines: &[SalesOrderWorkingCopyLine]) -> Result<Vec<SalesProcurementLineFact>> {
     collect_procurement_facts(
         lines.iter().map(|line| ProcurementLineRef {
@@ -33,15 +29,11 @@ pub fn working_copy_inputs(lines: &[SalesOrderWorkingCopyLine]) -> Result<Vec<Sa
 }
 
 /// 从冻结提交行构造最终生效采购责任解析输入。
-///
-/// # 参数
-/// * `lines` - 冻结提交行。
-///
-/// # 返回
 /// 返回与实物及服务行一一对应的责任解析输入；行键取稳定销售明细身份。
+/// 失败条件：含非实物服务行时返回冲突；任一行缺少 SKU 时返回校验错误。
 ///
-/// # 错误
-/// 含非实物服务行时返回冲突；任一行缺少 SKU 时返回校验错误。
+/// 输入约定：
+/// - `lines`：冻结提交行。
 pub fn submission_procurement_inputs(
     lines: &[SalesOrderSubmissionLine],
 ) -> Result<Vec<SalesProcurementLineFact>> {
@@ -68,20 +60,16 @@ struct ProcurementLineRef {
     line_no: u32,
 }
 
-/// 由行引用收集采购责任解析输入（草稿与提交的公共规则）。
-///
-/// 实物及服务单只能由实物及服务行解析责任，且每行必须携带 SKU；两种来源的
-/// 差异仅在非实物服务行的冲突文案。
-///
-/// # 参数
-/// * `lines` - 行引用
-/// * `non_goods_message` - 非实物服务行时的冲突说明
-///
-/// # 返回
-/// 返回与行一一对应的责任解析输入。
-///
-/// # 错误
-/// 含非实物服务行或任一行缺少 SKU 时返回错误。
+// 由行引用收集采购责任解析输入（草稿与提交的公共规则）。
+//
+// 实物及服务单只能由实物及服务行解析责任，且每行必须携带 SKU；两种来源的
+// 差异仅在非实物服务行的冲突文案。
+// 返回与行一一对应的责任解析输入。
+// 含非实物服务行或任一行缺少 SKU 时返回错误。
+//
+// 输入约定：
+// - `lines`：行引用
+// - `non_goods_message`：非实物服务行时的冲突说明
 fn collect_procurement_facts(
     lines: impl IntoIterator<Item = ProcurementLineRef>,
     non_goods_message: &str,

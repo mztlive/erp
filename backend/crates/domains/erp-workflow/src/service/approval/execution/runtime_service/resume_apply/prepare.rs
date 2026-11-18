@@ -71,19 +71,13 @@ pub(super) struct PreparedResume {
 }
 
 impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
-    /// 读取原执行并按当前权限准备恢复；此阶段不写入正式事实。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证的恢复操作人
-    /// * `command` - 客户端期望的实例、执行、绑定及关闭任务版本
-    /// * `idempotency_key` - 已规范化的恢复幂等键
-    /// * `executor` - 恢复入口持有的原事务执行器
-    ///
-    /// # 返回
-    /// 新命令返回冻结的写入计划；规划器要求回放时返回 `None`。
-    ///
-    /// # 错误
-    /// 恢复动作、版本、冻结主体、管理资格、原审批人资格或定义图不合法时返回错误。
+    // 读取原执行并按当前权限准备恢复；此阶段不写入正式事实。
+    // 新命令返回冻结的写入计划；规划器要求回放时返回 `None`。
+    //
+    // 恢复动作、版本、冻结主体、管理资格、原审批人资格或定义图不合法时返回错误。
+    //
+    // `actor`：已认证的恢复操作人；`command`：客户端期望的实例、执行、绑定及关闭任务版本。
+    // `idempotency_key`：已规范化的恢复幂等键；`executor`：恢复入口持有的原事务执行器。
     pub(super) async fn prepare_resume_runtime(
         &self,
         actor: &AuditActor,
@@ -124,7 +118,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         finish_prepared_resume(actor, command, runtime, *writes, now).map(Some)
     }
 
-    /// 先证明当前管理者与来源，再核对恢复动作、版本及冻结主体。
+    // 准备恢复时先检查管理者和真实来源的权限，再读取可用恢复动作、各期望版本及精确提交快照。
     async fn load_resume_runtime(
         &self,
         actor: &AuditActor,
@@ -152,7 +146,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         Ok(ResumeRuntime { instance, current, assignee, closed_task_guard, snapshot, document_type, spec })
     }
 
-    /// 分别读取实例、当前执行和原节点绑定，立即核对每项期望版本。
+    // 沿恢复事务依次读取实例、当前执行与节点原审批人绑定，并在每步按命令期望版本核对后再继续。
     async fn load_resume_execution(
         &self,
         command: &ApprovalResumeCommand,
@@ -185,7 +179,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         Ok((instance, current, assignee))
     }
 
-    /// 冻结快照必须精确匹配原实例的类型、主体 ID 与提交版本。
+    // 恢复前读取原实例冻结的提交快照，要求单据类型、业务对象 ID 及提交版本完全一致，不能替换为当前单据。
     async fn load_resume_subject(
         &self,
         instance: &ApprovalProcessInstance,
@@ -214,7 +208,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         Ok((snapshot, document_type))
     }
 
-    /// 账号启用、审批静态资格和岗位分离由现有领域授权入口统一判定。
+    // 准备原审批人恢复时，统一使用领域资格入口判断当前账号、静态审批权限及岗位分离。
     async fn revalidate_approver(
         &self,
         assignee_id: &str,
@@ -241,7 +235,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         .await
     }
 
-    /// 原任务必须唯一且已关闭；声明了版本却没有任务，或多任务时失败。
+    // 为恢复建立历史任务并发条件，只允许唯一关闭任务。多任务，或请求明确给了版本却查不到任务，均拒绝。
     async fn load_resume_task_guard(
         &self,
         execution_id: &ApprovalNodeExecutionId,
@@ -272,7 +266,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     }
 }
 
-/// 委托现有 BPM 恢复规划器；此处只分配新身份和组合已验证输入。
+// 为恢复分配所需的新身份并组装已核验事实，再交给 BPM 原规划器决定状态变化。
 fn plan_resume(
     actor: &AuditActor,
     command: &ApprovalResumeCommand,
@@ -305,7 +299,7 @@ fn plan_resume(
     })
 }
 
-/// 计划成功后分配任务身份并冻结投影、审计及事务重验事实。
+// 恢复规划通过后分配新任务身份，并保存供投影、审计和写事务重验使用的冻结事实。
 fn finish_prepared_resume(
     actor: &AuditActor,
     command: &ApprovalResumeCommand,

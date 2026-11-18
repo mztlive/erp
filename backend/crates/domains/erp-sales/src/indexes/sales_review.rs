@@ -16,16 +16,9 @@ pub(crate) const SALES_CHANGE_SUBMISSIONS: &str =
 pub(crate) const SALES_CHANGE_SUBMISSION_LINES: &str =
     <mongodb::Database as SalesReviewExt>::SALES_CHANGE_SUBMISSION_LINES;
 
-/// 创建本域集合的幂等命名索引。
-///
-/// # 参数
-/// * `db` - 目标 MongoDB 数据库
-///
-/// # 返回
-/// 本域各集合索引创建或已存在时返回空结果。
-///
-/// # 错误
-/// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
+// 创建本域集合的幂等命名索引。
+// 结果：本域各集合索引创建或已存在时返回空结果。
+// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub(crate) async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, SALES_CHANGE_ORDERS, sales_change_order_indexes()).await?;
     create_indexes(db, SALES_CHANGE_SUBMISSIONS, sales_change_submission_indexes()).await?;
@@ -33,21 +26,18 @@ pub(crate) async fn ensure(db: &Database) -> Result<()> {
     Ok(())
 }
 
-/// 为单个集合创建一组幂等命名索引。
-///
-/// # 参数
-/// * `db` - 目标 MongoDB 数据库
-/// * `collection` - 集合名
-/// * `indexes` - 待创建的命名索引
-///
-/// # 错误
-/// 当已有数据违反唯一约束、同名索引定义冲突或 MongoDB 无法创建索引时返回错误。
+// 安装本模块定义的命名索引；服务启动时按集合注册，重复注册沿用现有定义。
+// 当已有数据违反唯一约束、同名索引定义冲突或 MongoDB 无法创建索引时返回错误。
+//
+// 输入约定：
+// - `collection`：集合名
+// - `indexes`：待创建的命名索引
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
     db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
-/// 返回 `sales_change_order` 的进行中唯一约束与列表查询索引。
+// 为 `sales_change_order` 注册进行中唯一约束与列表查询索引，供所在领域的索引安装入口使用。
 fn sales_change_order_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_sales_change_orders_id", doc! { "id": 1 }),
@@ -68,7 +58,7 @@ fn sales_change_order_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `sales_change_submission` 的身份约束与历史查询索引。
+// 为 `sales_change_submission` 注册身份约束与历史查询索引，供所在领域的索引安装入口使用。
 fn sales_change_submission_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_sales_change_submissions_id", doc! { "id": 1 }),
@@ -83,7 +73,7 @@ fn sales_change_submission_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `sales_change_submission_line` 的明细唯一约束。
+// 为 `sales_change_submission_line` 注册明细唯一约束，供所在领域的索引安装入口使用。
 fn sales_change_submission_line_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_sales_change_submission_lines_id", doc! { "id": 1 }),
@@ -96,7 +86,7 @@ fn sales_change_submission_line_indexes() -> Vec<IndexModel> {
 
 #[cfg(test)]
 mod tests {
-    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    // 检查各集合是否声明稳定 `id` 的唯一索引，防止主键读取和乐观锁写入退化为集合扫描。
     #[test]
     fn collections_look_up_by_unique_stable_id() {
         for indexes in [

@@ -21,24 +21,14 @@ pub struct ProcurementInquiryEligibility {
 impl ProcurementInquiryEligibility {
     /// 绑定当前账号事实与共享授权源。
     ///
-    /// # 参数
-    /// `db` 为账号数据库，`rbac` 为当前授权服务。
-    /// # 返回
-    /// 不缓存资格的读取器。
-    /// # 错误
-    /// 不返回错误。
+    /// `db` 为账号数据库，`rbac` 为当前授权服务。不缓存资格的读取器。
     pub fn new(db: Database, rbac: Arc<AuthorizationService>) -> Self {
         Self { db, rbac }
     }
 
     /// 重新证明目标采购账号、组织与全部询价处理权限。
     ///
-    /// # 参数
-    /// `owner` 为目标账号，`executor` 为当前写事务。
-    /// # 返回
-    /// 目标账号当前有效主属组织。
-    /// # 错误
-    /// 账号、组织或必要执行权限失效时拒绝，不以销售权限代替。
+    /// `owner` 为目标账号，`executor` 为当前写事务。目标账号当前有效主属组织。账号、组织或必要执行权限失效时拒绝，不以销售权限代替。
     pub async fn assignment_owner(&self, owner: &str, executor: &mut dyn Executor) -> Result<String> {
         let account = AccountDirectoryService::new(self.db.clone())
             .account(owner, executor)
@@ -73,12 +63,7 @@ impl ProcurementInquiryEligibility {
 
     /// 在同一执行器证明当前询价处理动作权限。
     ///
-    /// # 参数
-    /// `actor`、`permission` 为当前身份及固定询价采购权限，`executor` 为原事务。
-    /// # 返回
-    /// 返回当前有效策略版本。
-    /// # 错误
-    /// 账号、同角色动作权限或策略失效时拒绝。
+    /// `actor`、`permission` 为当前身份及固定询价采购权限，`executor` 为原事务。返回当前有效策略版本。账号、同角色动作权限或策略失效时拒绝。
     pub async fn ensure_permission(
         &self,
         actor: &AuditActor,

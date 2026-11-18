@@ -52,12 +52,10 @@ pub struct SupplierCatalogAdoptionProcess {
 
 impl SupplierCatalogAdoptionProcess {
     /// 绑定现有数据库和权威 RBAC，不隐式授予公司范围。
-    /// # 参数
+    ///
     /// `db` 为应用数据库，`authorization` 为已有共享权限实例，`services` 为同一政策下的已装配领域服务。
-    /// # 返回
+    ///
     /// 尚未装配远程素材准备器的流程。
-    /// # 错误
-    /// 不返回错误。
     pub fn new(
         db: Database,
         authorization: Arc<AuthorizationService>,
@@ -67,18 +65,16 @@ impl SupplierCatalogAdoptionProcess {
     }
 
     /// 注入供应商适配器注册表，选品不要求开启自动下单。
-    /// # 参数
+    ///
     /// `registry` 为组合根已配置注册表。
-    /// # 返回
+    ///
     /// 绑定后的流程。
-    /// # 错误
-    /// 不返回错误。
     pub fn with_registry(mut self, registry: Arc<dyn SupplierReferenceRegistry>) -> Self {
         self.registry = Some(registry);
         self
     }
 
-    /// 校验选品来源配置与商品读取能力，不发送网络请求。
+    // 校验选品来源配置与商品读取能力，不发送网络请求。
     fn ensure_source(&self, connection: &SupplierApiConnection) -> Result<()> {
         connection.ensure_catalog_available()?;
         let registry = self.registry.as_ref().ok_or_else(|| {
@@ -97,12 +93,10 @@ impl SupplierCatalogAdoptionProcess {
     }
 
     /// 注入事务外执行的受控来源图片准备器。
-    /// # 参数
+    ///
     /// `preparer` 为组合根已有素材客户端。
-    /// # 返回
+    ///
     /// 已绑定素材能力的流程。
-    /// # 错误
-    /// 不返回错误。
     pub fn with_media_preparer(mut self, preparer: Arc<SourceMediaPreparer>) -> Self {
         self.media_preparer = Some(preparer);
         self

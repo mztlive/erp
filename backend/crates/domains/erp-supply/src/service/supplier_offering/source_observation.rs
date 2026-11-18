@@ -8,11 +8,7 @@ use crate::{Error, Result};
 
 impl PreparedCreate {
     /// 为 API 新供给沿用真实来源观察与已配置的有效期。
-    /// # 参数
-    /// `observed_at` 为目录成功读取时间，`valid_until` 为该观察的有效期限。
-    /// # 返回
     /// 更新待提交事实的接收、核验与期限，不改变来源业务更新时间或报价。
-    /// # 错误
     /// 非 API 来源不得使用该入口。
     pub fn retain_api_observation(
         &mut self,

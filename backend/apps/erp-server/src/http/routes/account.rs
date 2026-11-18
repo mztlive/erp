@@ -7,13 +7,7 @@ use crate::http::handler::{auth, data_transfer as transfers, notification, regio
 use crate::http::middleware::authenticate;
 use crate::http::state::HttpState;
 
-/// 当前账号相关路由入口。
-///
-/// # 参数
-/// * `state` - 应用状态
-///
-/// # 返回值
-/// 返回账号相关路由
+/// 挂载已登录账号的个人资料、审批进展与收件接口；个人业务范围仍由各用例校验。
 pub fn routes(state: HttpState) -> Router<HttpState> {
     Router::new()
         // 本人收件箱沿用 account 路由认证；所有读写强制绑定会话账号。
@@ -36,7 +30,7 @@ pub fn routes(state: HttpState) -> Router<HttpState> {
         .with_state(state)
 }
 
-// 个人收件接口仅要求后台登录；领域服务逐条验证本人收件和冻结资料边界。
+// 在个人账号路由下挂载审批收件接口，只要求后台登录；收件归属和冻结资料访问由领域服务逐条校验。
 fn copy_routes() -> Router<HttpState> {
     Router::new()
         .route("/approval-copies", get(copies::list))

@@ -21,15 +21,7 @@ pub struct ExpenseDraftLines {
 
 /// 由请求构造费用采购单草稿行；每行生成新的稳定费用行身份。
 ///
-/// # 参数
-/// * `submission_id` - 所属草稿提交
-/// * `requested` - 请求费用行
-///
-/// # 返回
-/// 返回草稿行与汇总金额；金额按含税金额与税率拆分。
-///
-/// # 错误
-/// 行数为 0 或超限、金额不为正、税率越界或费用内容非法时返回 `ValidationError`。
+/// 返回草稿行与汇总金额；金额按含税金额与税率拆分。行数为 0 或超限、金额不为正、税率越界或费用内容非法时返回 `ValidationError`。
 pub fn build_expense_draft_lines(
     submission_id: &PurchaseOrderSubmissionId,
     requested: &[CreateExpenseLineRequest],
@@ -108,15 +100,10 @@ fn expense_line(
 
 /// 在采购当前版本中查找费用行。
 ///
-/// # 参数
-/// * `lines` - 采购当前生效版本行
-/// * `expense_line_id` - 稳定费用行身份
+/// 返回该费用行。当前版本不存在该费用行时返回 `NotFound`。
 ///
-/// # 返回
-/// 返回该费用行。
-///
-/// # 错误
-/// 当前版本不存在该费用行时返回 `NotFound`。
+/// - `lines`：采购当前生效版本行。
+/// - `expense_line_id`：稳定费用行身份。
 pub fn find_expense_line<'a>(
     lines: &'a [PurchaseOrderRevisionLine],
     expense_line_id: &str,

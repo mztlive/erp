@@ -18,17 +18,8 @@ pub(super) struct PdfFile {
     program: PathBuf,
 }
 impl PdfFile {
-    /// 把 PDF 写入进程私有临时目录，不启动转图。
-    ///
-    /// # 参数
-    /// * `pdf` - 调用方已校验不超过 20 MB 的原文件字节；空文件会被拒绝。
-    /// * `program` - `pdftoppm` 可执行文件路径。
-    ///
-    /// # 返回
-    /// 持有临时目录和 PDF 路径的渲染上下文。
-    ///
-    /// # 错误
-    /// 文件为空、临时目录或写盘失败时返回 `OCR_RENDER_FAILED`。
+    // 逐页渲染前，将已检查不超过 20 MiB 的原始 PDF 写入私有临时目录，暂不启动 pdftoppm。
+    // 目录由渲染上下文持有；空文件、临时目录创建或写盘失败均报 OCR_RENDER_FAILED。
     pub(super) async fn create(pdf: &[u8], program: &Path) -> Result<Self> {
         if pdf.is_empty() {
             return Err(render_error());
@@ -39,16 +30,9 @@ impl PdfFile {
         Ok(Self { _directory: directory, path, program: program.into() })
     }
 
-    /// 在 20 秒内把指定页渲染为单张 PNG。
-    ///
-    /// # 参数
-    /// * `number` - 传给 `pdftoppm` 的起止页码。
-    ///
-    /// # 返回
-    /// 以 PNG 魔数开头、且不超过图片大小上限的字节。
-    ///
-    /// # 错误
-    /// 超时返回 `OCR_RENDER_TIMEOUT`；程序不可用返回 `OCR_RENDER_UNAVAILABLE`；空图、超限、非 PNG 或进程失败返回渲染失败或 `OCR_IMAGE_SIZE`。
+    // OCR 按页调用 pdftoppm，以相同起止页码获取一张大小受限且具有 PNG 文件头的图片，供后续完整解码。
+    // 单页限时 20 秒；超时和启动失败分别报 OCR_RENDER_TIMEOUT、OCR_RENDER_UNAVAILABLE，空图或超限报 OCR_IMAGE_SIZE，
+    // 非 PNG 或进程失败报 OCR_RENDER_FAILED。
     pub(super) async fn page(&self, number: u32) -> Result<Vec<u8>> {
         timeout(Duration::from_secs(20), self.render(number)).await.map_err(|_| {
             ImportFailure::new(

@@ -28,11 +28,11 @@ use crate::{Error, Result};
 
 impl SupplierAfterSalesProcess {
     /// 经既有退款权限登记 API 收据的明确财务分配，未验证收据不得人工覆盖。
-    /// # 参数
+    ///
     /// 原订单、结果命令、操作人与原数据范围。
-    /// # 返回
+    ///
     /// API 订单返回正式供应商退款事实，非 API 返回 None。
-    /// # 错误
+    ///
     /// 来源不一致、重复异载荷、超额及事务失败时拒绝。
     pub async fn record_refund_if_api(
         &self,

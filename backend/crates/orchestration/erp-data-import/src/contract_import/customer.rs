@@ -22,14 +22,13 @@ use super::matching::identity_from_candidates;
 use crate::{Error, Result};
 
 impl ContractImportProcess {
-    /// 在归档事务内取得客户身份；缺失时只按明确确认建立身份。
-    /// # 参数
-    /// * `task` / `values` / `allow_create` - 本人任务、确认身份和建档选择。
-    /// * `actor` / `executor` - 当前操作人及归档事务。
-    /// # 返回
-    /// 当前客户角色及企业身份。
-    /// # 错误
-    /// 主体冲突、停用、缺失确认、权限不足或数据库失败。
+    // 在归档事务内取得客户身份；缺失时只按明确确认建立身份。
+    //
+    // `task` / `values` / `allow_create`：本人任务、确认身份和建档选择；`actor` / `executor`：当前操作人及归档事务。
+    //
+    // 当前客户角色及企业身份。
+    //
+    // 主体冲突、停用、缺失确认、权限不足或数据库失败。
     pub(super) async fn customer(
         &self,
         task: &ContractImport,

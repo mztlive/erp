@@ -20,12 +20,8 @@ use crate::{Error, Result};
 
 impl FulfillmentProcess {
     /// 保存销售单收货安排；只影响未发部分，不创建商业改单。
-    /// # 参数
-    /// 销售单身份、完整地址输入及认证操作人。
-    /// # 返回
-    /// 成功后由客户端重新读取安排和履约任务。
-    /// # 错误
-    /// 范围、版本、数量、已发保护或包裹重核确认不满足时整笔回滚。
+    ///
+    /// 销售单身份、完整地址输入及认证操作人。成功后由客户端重新读取安排和履约任务。范围、版本、数量、已发保护或包裹重核确认不满足时整笔回滚。
     pub async fn save_sales_address_arrangement(
         &self,
         id: &str,
@@ -35,12 +31,8 @@ impl FulfillmentProcess {
         self.save_address_arrangement(id, false, req, actor).await
     }
     /// 当前任务处理人补充本任务地址，不获得其他任务的编辑权限。
-    /// # 参数
-    /// 发货身份、完整任务地址输入及认证操作人。
-    /// # 返回
-    /// 保存成功。
-    /// # 错误
-    /// 非当前处理人、已发货、版本冲突或地址数量非法时回滚。
+    ///
+    /// 发货身份、完整任务地址输入及认证操作人。保存成功。非当前处理人、已发货、版本冲突或地址数量非法时回滚。
     pub async fn save_delivery_address_arrangement(
         &self,
         id: &str,

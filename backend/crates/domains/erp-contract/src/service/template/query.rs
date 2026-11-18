@@ -13,12 +13,9 @@ use crate::repository::templates::{applications_page, templates_page};
 
 impl ContractTemplateService {
     /// 查询共享模板目录，已停用模板只用于维护回显。
-    /// # 参数
-    /// * `params` - 分页与停用回显选项。
-    /// # 返回
     /// 稳定排序的模板公开视图。
-    /// # 错误
-    /// 数据读取失败。
+    /// `params` 为分页与停用回显选项。
+    /// 传播读取错误。
     pub async fn templates(
         &self,
         actor: &AuditActor,
@@ -36,7 +33,7 @@ impl ContractTemplateService {
             .await
     }
 
-    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    // 在同一授权快照读取业务数据；执行器由公开入口提供。
     async fn templates_snapshot(
         &self,
         actor: &AuditActor,
@@ -57,13 +54,9 @@ impl ContractTemplateService {
     }
 
     /// 查询本人合同申请，不能通过查询参数指定他人。
-    /// # 参数
-    /// * `params` - 分页参数。
-    /// * `actor` - 当前销售。
-    /// # 返回
     /// 本人的申请记录。
-    /// # 错误
-    /// 数据读取失败。
+    /// `params` 为分页参数；`actor` 为当前销售。
+    /// 传播读取错误。
     pub async fn applications(
         &self,
         params: &TemplateListParams,
@@ -81,7 +74,7 @@ impl ContractTemplateService {
             .await
     }
 
-    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    // 在同一授权快照读取业务数据；执行器由公开入口提供。
     async fn applications_snapshot(
         &self,
         params: &TemplateListParams,

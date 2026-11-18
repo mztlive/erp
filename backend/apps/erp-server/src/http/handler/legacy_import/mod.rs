@@ -22,17 +22,7 @@ use crate::http::extractor::{Json, Query};
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
-/// 查询导入批次列表。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 当前已认证账号。
-/// * `query` - 分页与筛选参数（扁平传递）
-///
-/// # 返回
-/// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
-///
-/// # 错误
+/// 按请求条件查询导入批次列表。
 /// 功能资格、参数或批次及来源名称读取失败时返回对应错误。
 pub async fn legacy_import_batch_list(
     State(state): State<HttpState>,
@@ -51,13 +41,7 @@ pub async fn legacy_import_batch_list(
 }
 
 /// 创建导入批次（批次 + 来源行 + 后台任务原子写入，批次号重复按幂等返回）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 创建请求（批次头 + 来源行）
-///
-/// # 返回
+/// `req` 为创建请求（批次头 + 来源行）。
 /// 返回新建（或既有）批次的响应视图。
 pub async fn legacy_import_batch_create(
     State(state): State<HttpState>,
@@ -70,16 +54,7 @@ pub async fn legacy_import_batch_create(
 }
 
 /// 查询导入批次详情（含后台任务关联）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 当前已认证账号。
-/// * `id` - 导入批次 ID
-///
-/// # 返回
 /// 返回批次的响应视图。
-///
-/// # 错误
 /// 功能资格、批次不存在或批次及来源名称读取失败时返回对应错误。
 pub async fn legacy_import_batch_detail(
     State(state): State<HttpState>,
@@ -98,14 +73,6 @@ pub async fn legacy_import_batch_detail(
 }
 
 /// 应用导入批次（后台应用阶段逐行结果，批次/行终态后重复提交按幂等返回）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 导入批次 ID
-/// * `req` - 逐行结果
-///
-/// # 返回
 /// 返回应用后批次的响应视图。
 pub async fn legacy_import_batch_apply(
     State(state): State<HttpState>,
@@ -119,14 +86,8 @@ pub async fn legacy_import_batch_apply(
 }
 
 /// 执行 W18 导入应用阶段强命令。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 导入批次 ID；必须与命令体 `batch_id` 一致
-/// * `command` - `START_APPLY` / `CANCEL_PENDING` / `RETRY_FAILED` 强命令
-///
-/// # 返回
+/// `id` 为导入批次 ID；必须与命令体 `batch_id` 一致。
+/// `command` 为 `START_APPLY` / `CANCEL_PENDING` / `RETRY_FAILED` 强命令。
 /// 返回事务提交后的批次、后台任务、下一步与审计收据。
 pub async fn legacy_import_execution_command(
     State(state): State<HttpState>,
@@ -141,14 +102,6 @@ pub async fn legacy_import_execution_command(
 }
 
 /// 查询导入行列表（按批次）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `id` - 导入批次 ID
-/// * `query` - 分页与筛选参数
-///
-/// # 返回
-/// 返回契约形状的分页视图。
 pub async fn legacy_import_row_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -160,15 +113,8 @@ pub async fn legacy_import_row_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-/// 查询导入确认事实列表。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的当前查询人
-/// * `query` - 分页与筛选参数（`batch_id` 为主要筛选）
-///
-/// # 返回
-/// 返回契约形状的分页视图。
+/// 按请求条件查询导入确认事实列表。
+/// `query` 为分页与筛选参数（`batch_id` 为主要筛选）。
 pub async fn legacy_import_confirmation_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -180,13 +126,6 @@ pub async fn legacy_import_confirmation_list(
 }
 
 /// 创建待确认确认事实（批次推进到待确认阶段，重复提交按幂等返回）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 创建请求
-///
-/// # 返回
 /// 返回新建（或既有）确认事实的响应视图。
 pub async fn legacy_import_confirmation_create(
     State(state): State<HttpState>,
@@ -199,13 +138,7 @@ pub async fn legacy_import_confirmation_create(
 }
 
 /// 执行 W18 唯一 `CompleteImportBusinessConfirmation` 强类型命令。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 带任务、批次、试算版本和幂等键的强类型命令
-///
-/// # 返回
+/// `req` 为带任务、批次、试算版本和幂等键的强类型命令。
 /// 返回确认事实、已完成任务、批次新版本、下一步与审计收据。
 pub async fn legacy_import_confirmation_complete(
     State(state): State<HttpState>,

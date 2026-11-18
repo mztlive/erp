@@ -4,12 +4,7 @@ use super::OrderTracking;
 
 impl OrderTracking {
     /// 判定消息接收之后是否已经取得新观察并完成原业务应用。
-    /// # 参数
-    /// `received_at` 为可靠保存消息的时间，不是供应商来源事件时间。
-    /// # 返回
     /// 观察身份已应用、无未决错误且查询时间不早于接收时返回true。
-    /// # 错误
-    /// 不返回错误。
     pub fn applied_since(&self, received_at: Instant) -> bool {
         self.latest_observation_id.is_some()
             && self.latest_observation_id == self.applied_observation_id

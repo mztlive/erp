@@ -45,7 +45,7 @@ pub struct FileAssetListItemView {
 }
 
 impl From<crate::repository::FileAssetRow> for FileAssetListItemView {
-    /// 从列表投影行构造响应视图（字段取值与实体转换一致）。
+    // 从列表投影行构造响应视图（字段取值与实体转换一致）。
     fn from(row: crate::repository::FileAssetRow) -> Self {
         Self {
             id: row.id,
@@ -98,7 +98,7 @@ pub struct FileAssetView {
 }
 
 impl From<FileAsset> for FileAssetView {
-    /// 从实体构造详情视图。
+    // 从实体构造详情视图。
     fn from(asset: FileAsset) -> Self {
         Self {
             id: asset.base.id,
@@ -159,18 +159,9 @@ pub(crate) struct FileAssetListQuery {
 }
 
 impl FileAssetListParams {
-    /// 归一化文件资产列表查询参数。
-    ///
-    /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    // 查询文件资产列表前校验并规范化筛选和分页输入，返回独立于仓储的查询参数。
+    // 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
+    // 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<FileAssetListQuery> {
         Ok(FileAssetListQuery {
             file_name: normalized_text(self.file_name.as_deref()),
@@ -229,14 +220,7 @@ pub struct PendingFileAssetRequest {
 
 impl RegisterFileAssetRequest {
     /// 转换为实体创建数据。
-    ///
-    /// # 参数
-    /// * `created_by` - 创建人
-    ///
-    /// # 返回
     /// 返回实体层创建数据。
-    ///
-    /// # 错误
     /// 内容指纹形态非法时返回错误。
     pub fn into_data(self, created_by: &str) -> Result<FileAssetData> {
         Ok(FileAssetData {
@@ -268,16 +252,9 @@ pub struct AttachToDocumentRequest {
 }
 
 impl AttachToDocumentRequest {
-    /// 转换为实体创建数据。
-    ///
-    /// # 参数
-    /// * `created_by` - 记录人（账号或系统身份）
-    ///
-    /// # 返回
-    /// 返回实体层创建数据。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 转换为实体创建数据。
+    // 返回实体层创建数据。
+    // `created_by` 为记录人（账号或系统身份）。
     pub(crate) fn into_data(self, created_by: &str) -> DocumentAttachmentData {
         DocumentAttachmentData {
             document_id: self.document_id,
@@ -306,7 +283,7 @@ pub struct DocumentAttachmentView {
 }
 
 impl From<DocumentAttachment> for DocumentAttachmentView {
-    /// 从实体构造响应视图。
+    // 从实体构造响应视图。
     fn from(attachment: DocumentAttachment) -> Self {
         Self {
             id: attachment.base.id,

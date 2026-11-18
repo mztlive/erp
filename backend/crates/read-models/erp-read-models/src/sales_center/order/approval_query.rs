@@ -12,23 +12,20 @@ use super::dto::DocumentApprovalView;
 use crate::Result;
 use crate::approval_runtime::{binding_route, load_approval_summary};
 
-/// 加载销售单详情的只读审批结构。
-///
-/// 未提交时实例为空；已启动后填入最新实例摘要与有界历史。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `business_type` - 用于分派 `SalesOrder` / `VoucherSalesOrder` 主体
-/// * `sales_order_id` - 销售单主键
-/// * `binding` - 创建时冻结的定义绑定
-/// * `commercial` - 当前商业主状态
-/// * `review` - 当前审核轨
-///
-/// # 返回
-/// 返回绑定、可选实例与最近历史。
-///
-/// # 错误
-/// 主体引用非法或仓储失败时返回错误。
+// 为销售审批详情取数时，读取销售单详情的只读审批结构。
+//
+// 未提交时实例为空；已启动后填入最新实例摘要与有界历史。
+//
+// 调用参数：
+// * `business_type` - 用于分派 `SalesOrder` / `VoucherSalesOrder` 主体
+// * `sales_order_id` - 销售单主键
+// * `binding` - 创建时冻结的定义绑定
+// * `commercial` - 当前商业主状态
+// * `review` - 当前审核轨
+//
+// 返回绑定、可选实例与最近历史。
+//
+// 主体引用非法或仓储失败时返回错误。
 #[tracing::instrument(
     name = "sales_order.load_document_approval",
     skip_all,

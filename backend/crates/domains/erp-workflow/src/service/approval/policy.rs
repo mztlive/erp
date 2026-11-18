@@ -56,7 +56,7 @@ const STOCK_SNAPSHOT: &[ApprovalSubjectSnapshotField] = &[
     ApprovalSubjectSnapshotField::LineCount,
 ];
 
-/// 断言三快照表公共前缀与真相源一致（`debug` 构建防漂移，`release` 零开销）。
+// 调试构建检查三张快照表与唯一登记的公共前缀一致，及早发现政策漂移；发布构建不执行断言。
 fn debug_assert_snapshot_prefixes() {
     debug_assert_eq!(&SALES_PURCHASE_SNAPSHOT[..SNAPSHOT_COMMON_PREFIX.len()], SNAPSHOT_COMMON_PREFIX);
     debug_assert_eq!(&FINANCE_SNAPSHOT[..SNAPSHOT_COMMON_PREFIX.len()], SNAPSHOT_COMMON_PREFIX);
@@ -80,16 +80,8 @@ pub enum ApprovalNodePurpose {
 }
 
 impl ApprovalNodePurpose {
-    /// 返回稳定用途键。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
+    /// 取得稳定用途键。
     /// 返回合同签署的用途代码。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::SalesOrderProcurementConfirmation => SALES_ORDER_PROCUREMENT_CONFIRMATION,
@@ -136,16 +128,8 @@ pub struct WorkItemOwnerRole {
 }
 
 impl WorkItemOwnerRole {
-    /// 返回稳定责任角色标签。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
+    /// 取得稳定责任角色标签。
     /// 返回 `<prefix>_approver`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         self.value
     }
@@ -229,15 +213,7 @@ pub enum DocumentApprovalPolicy {
 
 impl DocumentApprovalPolicy {
     /// 返回审批要求。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回 `NO_APPROVAL` 或 `PROCESS_REQUIRED`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn requirement(&self) -> ApprovalRequirement {
         match self {
             Self::NoApproval(_) => ApprovalRequirement::NoApproval,
@@ -246,15 +222,7 @@ impl DocumentApprovalPolicy {
     }
 
     /// 返回对应流程种类。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回已冻结映射的 `ProcessKind`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn process_kind(&self) -> ProcessKind {
         match self {
             Self::NoApproval(policy) => policy.process_kind,
@@ -263,15 +231,7 @@ impl DocumentApprovalPolicy {
     }
 
     /// 返回单据类型。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回政策绑定的 `DocumentType`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn document_type(&self) -> DocumentType {
         match self {
             Self::NoApproval(policy) => policy.document_type,
@@ -281,14 +241,8 @@ impl DocumentApprovalPolicy {
 }
 
 /// 按合同 §4.3 返回该单据类型的唯一政策。
-///
-/// # 参数
-/// * `document_type` - 固定单据类型
-///
-/// # 返回
 /// 返回穷尽注册的政策。
 ///
-/// # 错误
 /// 类型级权限字符串无法解析时返回部署不变量错误。
 pub fn policy_of(document_type: DocumentType) -> Result<DocumentApprovalPolicy> {
     debug_assert_snapshot_prefixes();
@@ -418,14 +372,8 @@ fn finance_policy(document_type: DocumentType) -> Result<DocumentApprovalPolicy>
 }
 
 /// 要求该类型政策为必须审批并返回完整政策。
-///
-/// # 参数
-/// * `document_type` - 固定单据类型
-///
-/// # 返回
 /// 返回该类型的 `ProcessRequiredApprovalPolicy`。
 ///
-/// # 错误
 /// 类型为 `NO_APPROVAL` 时返回业务错误；政策构造失败时传播 `policy_of` 的错误。
 pub fn require_process_required(document_type: DocumentType) -> Result<ProcessRequiredApprovalPolicy> {
     match policy_of(document_type)? {
@@ -437,15 +385,11 @@ pub fn require_process_required(document_type: DocumentType) -> Result<ProcessRe
 }
 
 /// 校验三类强类型动作均已注册且互不相同。
-///
-/// # 参数
-/// * `policy` - 必须审批政策
-///
-/// # 返回
 /// 三类动作互异时无返回值。
 ///
-/// # 错误
 /// 三类动作不互异时返回 `ApprovalPolicyNotRegistered`。
+///
+/// `policy`：必须审批政策。
 pub fn ensure_actions_registered(policy: &ProcessRequiredApprovalPolicy) -> Result<()> {
     if !ApprovalDomainAction::are_distinct(
         policy.start_action,
@@ -461,16 +405,11 @@ pub fn ensure_actions_registered(policy: &ProcessRequiredApprovalPolicy) -> Resu
 }
 
 /// 按政策校验节点用途完整性。
-///
-/// # 参数
-/// * `policy` - 必须审批政策
-/// * `node_purposes` - 当前定义各节点用途
-///
-/// # 返回
 /// 校验通过时返回 `()`。
 ///
-/// # 错误
 /// 非销售单出现任何用途，或销售单出现未知用途时返回错误。销售单允许没有用途，也允许遗留采购确认用途。
+///
+/// `policy`：必须审批政策；`node_purposes`：当前定义各节点用途。
 pub fn validate_required_purposes(
     policy: &ProcessRequiredApprovalPolicy,
     node_purposes: &[Option<&str>],
@@ -490,10 +429,8 @@ pub fn validate_required_purposes(
     }
 }
 
-/// 构造资金类必须审批政策。
-///
-/// # 错误
-/// 类型级权限无法解析时返回部署不变量错误。
+// 构造资金类必须审批政策。
+// 类型级权限无法解析时返回部署不变量错误。
 fn finance_required(
     document_type: DocumentType,
     start_action: ApprovalDomainAction,
@@ -511,10 +448,8 @@ fn finance_required(
     )
 }
 
-/// 构造必须审批政策。
-///
-/// # 错误
-/// 单据类型没有稳定责任角色时返回内部错误。
+// 构造必须审批政策。
+// 单据类型没有稳定责任角色时返回内部错误。
 fn process_required(
     document_type: DocumentType,
     required_node_purposes: &'static [ApprovalNodePurpose],
@@ -548,7 +483,7 @@ fn process_required(
     }))
 }
 
-/// 解析必须审批单据的终态驳回动作。
+// 从必须审批的单据政策选择终态驳回时应调用的领域动作，不由运行请求选择实现。
 fn reject_action(document_type: DocumentType) -> Result<ApprovalDomainAction> {
     match document_type {
         DocumentType::SalesOrder => Ok(ApprovalDomainAction::SalesOrderReject),
@@ -568,7 +503,7 @@ fn reject_action(document_type: DocumentType) -> Result<ApprovalDomainAction> {
     }
 }
 
-/// 构造无审批政策。
+// 为不进入审批引擎的单据构造固定政策，保留其强类型单据身份。
 fn no_approval(document_type: DocumentType) -> DocumentApprovalPolicy {
     DocumentApprovalPolicy::NoApproval(NoApprovalPolicy {
         document_type,
@@ -576,10 +511,8 @@ fn no_approval(document_type: DocumentType) -> DocumentApprovalPolicy {
     })
 }
 
-/// 解析类型级管理权限。
-///
-/// # 错误
-/// 类型或管理动作未登记时返回校验错误。
+// 解析类型级管理权限。
+// 类型或管理动作未登记时返回校验错误。
 fn type_permission(document_type: DocumentType, action: &str) -> Result<Permission> {
     let (_, definition, runtime) = approval_admin::TYPES
         .iter()
@@ -592,10 +525,8 @@ fn type_permission(document_type: DocumentType, action: &str) -> Result<Permissi
     }
 }
 
-/// 返回该必须审批类型的稳定责任角色。
-///
-/// # 错误
-/// 无审批类型误入时返回部署不变量错误。
+// 返回该必须审批类型的稳定责任角色。
+// 无审批类型误入时返回部署不变量错误。
 fn owner_role(document_type: DocumentType) -> Result<WorkItemOwnerRole> {
     let value = match document_type {
         DocumentType::SalesOrder => "sales_order_approver",
@@ -616,16 +547,12 @@ fn owner_role(document_type: DocumentType) -> Result<WorkItemOwnerRole> {
     Ok(WorkItemOwnerRole { value })
 }
 
-/// 销售单不再强制采购确认用途；仅拒绝未知用途字符串。
-///
-/// # 参数
-/// * `actual` - 节点上已出现的用途值
-///
-/// # 返回
-/// 全为空或均为遗留采购确认用途时返回 `()`。
-///
-/// # 错误
-/// 出现其它用途字符串时返回校验错误。
+// 销售单不再强制采购确认用途；仅拒绝未知用途字符串。
+// 全为空或均为遗留采购确认用途时返回 `()`。
+//
+// 出现其它用途字符串时返回校验错误。
+//
+// `actual`：节点上已出现的用途值。
 fn ensure_sales_order_purposes_optional(actual: &[&str]) -> Result<()> {
     if actual
         .iter()
@@ -641,7 +568,7 @@ mod tests {
     use super::*;
     use crate::service::approval::process_kind::{document_type_of, process_kind_of};
 
-    /// 22 行政策穷尽：13 个 PROCESS_REQUIRED 逐行断言矩阵，9 个 NO_APPROVAL 仅身份字段。
+    // 验证：22 行政策穷尽：13 个 PROCESS_REQUIRED 逐行断言矩阵，9 个 NO_APPROVAL 仅身份字段。
     #[test]
     fn policies_are_exhaustive_and_match_process_kind() {
         assert_eq!(ALL_DOCUMENT_TYPES.len(), 22);
@@ -667,7 +594,7 @@ mod tests {
         assert_eq!(no_approval, 9);
     }
 
-    /// 无审批政策不得进入定义管理。
+    // 验证：无审批政策不得进入定义管理。
     #[test]
     fn no_approval_policy_has_only_identity_fields() {
         for document_type in ALL_DOCUMENT_TYPES {
@@ -679,7 +606,7 @@ mod tests {
         }
     }
 
-    /// 销售单政策不含强制用途、提交版本与三类真实动作。
+    // 验证：销售单政策不含强制用途、提交版本与三类真实动作。
     #[test]
     fn sales_order_policy_matches_contract_matrix() {
         let policy = require_process_required(DocumentType::SalesOrder).expect("销售单必须审批");
@@ -696,7 +623,7 @@ mod tests {
         assert_ne!(policy.start_action, policy.cancel_action);
     }
 
-    /// 库存调整使用实体版本与数量快照，不含金额必填。
+    // 验证：库存调整使用实体版本与数量快照，不含金额必填。
     #[test]
     fn stock_adjustment_uses_entity_version_and_quantity_snapshot() {
         let policy = require_process_required(DocumentType::StockAdjustment).expect("库存调整必须审批");
@@ -707,7 +634,7 @@ mod tests {
         assert!(!policy.subject_snapshot_fields.contains(&ApprovalSubjectSnapshotField::TotalAmount));
     }
 
-    /// 三快照表公共前缀与 `SNAPSHOT_COMMON_PREFIX` 一致（顺序固定，防漂移）。
+    // 验证：三快照表公共前缀与 `SNAPSHOT_COMMON_PREFIX` 一致（顺序固定，防漂移）。
     #[test]
     fn snapshot_tables_share_common_prefix() {
         for table in [SALES_PURCHASE_SNAPSHOT, FINANCE_SNAPSHOT, STOCK_SNAPSHOT] {
@@ -715,7 +642,7 @@ mod tests {
         }
     }
 
-    /// 资金类快照必填金额、不要求数量。
+    // 验证：资金类快照必填金额、不要求数量。
     #[test]
     fn finance_policies_require_amount_not_quantity() {
         for document_type in [
@@ -934,7 +861,7 @@ mod tests {
         assert!(require_process_required(document_type).is_err());
     }
 
-    /// 销售单不强制采购确认用途；其它必须审批类型不得带用途。
+    // 验证：销售单不强制采购确认用途；其它必须审批类型不得带用途。
     #[test]
     fn sales_order_does_not_require_procurement_purpose() {
         for document_type in ALL_DOCUMENT_TYPES {
@@ -967,7 +894,7 @@ mod tests {
         );
     }
 
-    /// 无审批类型不能进入定义管理。
+    // 验证：无审批类型不能进入定义管理。
     #[test]
     fn no_approval_cannot_enter_definition_management() {
         let error = require_process_required(DocumentType::Invoice).expect_err("发票不得管理定义");

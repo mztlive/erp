@@ -10,13 +10,13 @@ pub(super) struct Deployment {
     config: SupplierDeploymentConfig,
 }
 impl SupplierApiGovernanceProcess {
-    /// 只读解析当前部署，不发送外部请求。
-    /// # 参数
-    /// connection 为原授权快照中读取的连接。
-    /// # 返回
-    /// 当前连接与部署配置的绑定。
-    /// # 错误
-    /// 连接不存在或配置未登记时拒绝。
+    // 只读解析当前部署，不发送外部请求。
+    //
+    // connection 为原授权快照中读取的连接。
+    //
+    // 当前连接与部署配置的绑定。
+    //
+    // 连接不存在或配置未登记时拒绝。
     pub(super) fn deployment(&self, connection: &SupplierApiConnection) -> Result<Deployment> {
         let target = SupplierReferenceTarget::from(connection);
         let config = self
@@ -27,13 +27,13 @@ impl SupplierApiGovernanceProcess {
     }
 }
 impl Deployment {
-    /// 提交前核对连接身份，禁止将预检配置绑定给已变化的连接。
-    /// # 参数
-    /// `connection` 为当前事务连接，`actor` 为操作人。
-    /// # 返回
-    /// 配置引用发生变化时为 true。
-    /// # 错误
-    /// 连接身份变化或实体配置更新失败时拒绝。
+    // 提交前核对连接身份，禁止将预检配置绑定给已变化的连接。
+    //
+    // `connection` 为当前事务连接，`actor` 为操作人。
+    //
+    // 配置引用发生变化时为 true。
+    //
+    // 连接身份变化或实体配置更新失败时拒绝。
     pub(super) fn apply(&self, connection: &mut SupplierApiConnection, actor: &str) -> Result<bool> {
         if SupplierReferenceTarget::from(&*connection) != self.target {
             return Err(Error::ConflictError("连接身份已变化，请刷新后重试".into()));

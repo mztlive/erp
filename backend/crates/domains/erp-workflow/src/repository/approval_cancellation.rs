@@ -9,12 +9,7 @@ use crate::entity::approval_cancellation::ApprovalCancellationFact;
 pub trait ApprovalCancellationExt {
     const APPROVAL_CANCELLATION_FACTS: &'static str = "approval_cancellation_facts";
     /// 取得 ERP 取消事实仓储。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 返回本域不可变取消事实仓储。
-    /// # 错误
-    /// 无。
     fn approval_cancellation_facts(&self) -> Repository<'_, ApprovalCancellationFact>;
 }
 

@@ -21,15 +21,7 @@ pub struct FileAssetFact {
 #[async_trait]
 pub trait FileAssetFactsPort: Send + Sync {
     /// 按文件 ID 读取未删除附件事实。
-    ///
-    /// # 参数
-    /// * `attachment_id` - 文件资产 ID
-    /// * `executor` - 调用方选择的执行器
-    ///
-    /// # 返回
     /// 附件不存在或已删除时返回 `None`。
-    ///
-    /// # 错误
     /// 文件资产查询失败时返回仓储或映射错误。
     async fn find_by_id(
         &self,

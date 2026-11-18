@@ -29,17 +29,7 @@ use crate::repository::approval_copy::ApprovalCopyExt;
 use crate::service::approval::copies::validate_recipients;
 
 impl ApprovalDefinitionService {
-    /// 发布草稿为当前唯一已发布版本。
-    ///
-    /// # 参数
-    /// * `request` - 发布请求
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 返回发布后的定义详情；同载荷回放返回已发布结果。
-    ///
-    /// # 错误
-    /// 图、用途、账号或权限校验失败时零写入返回错误。
+    /// 按命令身份将草稿发布为该单据类型唯一当前版本；同载荷重放返回已发布详情。图结构、节点用途、审批账号或权限校验失败时不提交发布写入。
     pub async fn publish_definition(
         &self,
         mut request: PublishDefinitionRequest,
@@ -58,10 +48,8 @@ impl ApprovalDefinitionService {
         self.commit_publish(request, actor, identity).await
     }
 
-    /// 在唯一事务中发布草稿并退役旧版本。
-    ///
-    /// # 错误
-    /// 任一校验失败时整体回滚。
+    // 在唯一事务中发布草稿并退役旧版本。
+    // 任一校验失败时整体回滚。
     async fn commit_publish(
         &self,
         request: PublishDefinitionRequest,
@@ -120,24 +108,16 @@ struct PublishTxInput<'a> {
     identity: &'a PreparedDefinitionIdentity,
 }
 
-/// 事务内发布草稿。
-///
-/// # 用途
-/// 回放收据或刷新快照并发布当前草稿。
-///
-/// # 参数
-/// * `service` - 同一应用注入的定义服务与基础设施
-/// * `input` - 请求、摘要与操作人
-/// * `executor` - 执行器
-///
-/// # 返回
-/// 返回发布后的定义详情。
-///
-/// # 错误
-/// 陈旧锁、图校验失败或写入失败时返回错误。
-///
-/// # 关键业务约束
-/// 任一校验失败必须整体回滚。
+// 事务内发布草稿。
+// 任一校验失败必须整体回滚。
+//
+// 回放收据或刷新快照并发布当前草稿。
+//
+// 返回发布后的定义详情。
+//
+// 陈旧锁、图校验失败或写入失败时返回错误。
+//
+// `service`：同一应用注入的定义服务与基础设施。
 async fn publish_tx(
     service: &ApprovalDefinitionService,
     input: PublishTxInput<'_>,
@@ -167,7 +147,7 @@ async fn publish_tx(
     apply_publication(service, current, request, actor, identity, executor).await
 }
 
-/// 在同一事务规划新旧发布状态并持久化结果。
+// 把新定义发布与旧发布版本退役放在同一事务内规划并保存，使当前发布版本唯一。
 async fn apply_publication(
     service: &ApprovalDefinitionService,
     current: DefinitionGraph,
@@ -214,7 +194,7 @@ struct Publication {
     previous_lock: Option<u64>,
 }
 
-/// 先构造新旧定义的发布状态，写收据前不落库。
+// 在发布事务内先规划草稿发布及旧发布退役的实体结果；构造收据以前不落库。
 async fn plan_publication(
     db: &Database,
     current: &DefinitionGraph,

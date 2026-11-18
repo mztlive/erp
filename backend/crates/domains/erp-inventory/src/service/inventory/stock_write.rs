@@ -17,23 +17,9 @@ use crate::error::{Error, Result};
 use crate::repository::InventoryExt;
 use crate::repository::prelude::*;
 
-/// 在调用方事务内写入过账流水、余额与预占释放，并把调整单标为已过账。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `adjustment` - 已通过审批校验的调整单
-/// * `lines` - 调整明细
-/// * `actor` - 已认证操作人
-/// * `executor` - 调用方持有的事务执行器（不得另开事务）
-///
-/// # 返回
-/// 全部明细过账并标记调整单后返回 `Ok(())`。
-///
-/// # 错误
-/// 明细为空时返回 `ValidationError`。
-/// 方向与原因不一致、流水或分录构造不合法，或当前状态不能迁到已过账时返回 `Error::Logic`。
-/// 余额不存在、可用量不足、预占与余额不一致，或释放数量超出精度时返回 `Error::BusinessLogicError`。
-/// 仓储写入失败时返回对应错误。
+/// 调整单通过审批校验后，沿调用方事务逐行核对原因和方向，写库存流水、余额及适用的预占释放。仅在全部明细通过后标记调整单已过账。
+/// 空明细返回 `ValidationError`；方向、流水或分录不合法及状态迁移失败返回 `Logic`。
+/// 余额缺失、可用量不足、预占与余额不一致或释放数量超精度返回 `BusinessLogicError`；传播仓储错误。
 pub async fn apply_posted_adjustment(
     db: &Database,
     adjustment: &mut StockAdjustment,
@@ -56,21 +42,8 @@ pub async fn apply_posted_adjustment(
     Ok(())
 }
 
-/// 过账单条调整明细（流水 + 余额 + 适用预占释放，位于调用方事务内）。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `executor` - 调用方持有的事务执行器
-/// * `adjustment` - 待过账的调整单
-/// * `line` - 当前调整明细
-/// * `occurred_at` - 业务发生时间
-/// * `actor` - 已认证操作人
-///
-/// # 返回
-/// 单条明细的流水、余额与预占写入完成后返回 `Ok(())`。
-///
-/// # 错误
-/// 余额缺失、可用量不足或任一库存写入失败。
+// 过账当前明细时在原事务登记变动流水，再按调整仓库和 SKU 更新余额；扣减分支先释放适用预占。
+// 数量更新后登记该流水为余额的最后流水；余额缺失、可用量不足或写入失败时中止。
 async fn post_adjustment_line(
     db: &Database,
     executor: &mut dyn Executor,
@@ -143,21 +116,8 @@ async fn post_adjustment_line(
     Ok(())
 }
 
-/// 释放调整仓库/SKU 上的适用预占（盘亏/损坏扣减前）。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `executor` - 调用方持有的事务执行器
-/// * `warehouse_id` - 调整仓库
-/// * `sku_id` - 调整 SKU
-/// * `balance_id` - 余额主键
-/// * `line` - 当前调整明细
-///
-/// # 返回
-/// 适用预占释放并同步余额预占后返回 `Ok(())`。
-///
-/// # 错误
-/// 余额预占与预占记录不一致或任一写入失败。
+// 盘亏或损坏扣减前，在原事务按最早优先全额释放调整仓库/SKU 中的适用预占，达到或超过本次扣减量即停止。
+// 条件写未命中则跳过该条；释放成功后同步余额预占并登记释放流水。余额与预占不一致、数量精度超限或写入失败时返回错误。
 async fn release_applicable_reservations(
     db: &Database,
     executor: &mut dyn Executor,

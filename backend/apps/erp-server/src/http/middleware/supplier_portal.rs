@@ -15,13 +15,7 @@ use crate::http::auth::jwt::{SubjectKind, TokenPayload};
 use crate::http::errors::Error;
 use crate::http::state::HttpState;
 
-/// 在每次访问时重读账号、绑定及供应商状态。
-/// # 参数
-/// `state` 是组合根，凭证来自标准 Authorization 请求头。
-/// # 返回
-/// 成功仅装入门户身份，继续门户处理器。
-/// # 错误
-/// 凭证类型、版本或当前状态无效时返回401；读取失败返回系统错误。
+/// 进入供应商门户 Handler 前，重读当前账号、绑定版本与供应商状态；成功只注入门户身份。凭证和会话无效返回 401，读取失败按系统错误处理。
 pub async fn authenticate_portal(
     State(state): State<HttpState>,
     mut request: Request,

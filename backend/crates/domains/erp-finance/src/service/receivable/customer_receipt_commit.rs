@@ -35,19 +35,13 @@ pub enum PreparedCustomerReceiptCommit {
 }
 
 /// 将提交请求行的集合转换为领域待过账分配。
-///
-/// # 参数
-/// * `lines` - 请求中的核销分配行（`receivable_entry_id` + `allocated_amount`）
-///
-/// # 返回
-/// 全部行均合法时返回与输入顺序一致的 `PendingReceiptAllocation` 集合。
-///
-/// # 错误
-/// 任一行的 `allocated_amount` 非正或形态非法时返回 `ValidationError`。
-///
-/// # 约束
-/// 纯转换，不触及 I/O、时钟或 ID 生成；首个失败即短路，保证调用方可
+/// 结果：全部行均合法时返回与输入顺序一致的 `PendingReceiptAllocation` 集合。
+/// 失败条件：任一行的 `allocated_amount` 非正或形态非法时返回 `ValidationError`。
+/// 调用边界：纯转换，不触及 I/O、时钟或 ID 生成；首个失败即短路，保证调用方可
 /// 以确定性复现首错语义。
+///
+/// 输入约定：
+/// - `lines`：请求中的核销分配行（`receivable_entry_id` + `allocated_amount`）
 pub fn convert_allocations(
     lines: &[crate::dto::receivable::ReceiptAllocationLineRequest],
 ) -> Result<Vec<PendingReceiptAllocation>> {
@@ -66,24 +60,20 @@ impl CommitCustomerReceiptRequest {
     /// 判定 `receipt` / `receipt_id + expected_version` 的互斥形态，
     /// 校验 `expected_version` 为正数，并将 `allocations` 转换为
     /// 强类型的 `PendingReceiptAllocation` 集合。
-    ///
-    /// # 参数
-    /// * `&self` - 原始提交请求（`receipt_id` / `expected_version` / `receipt` / `allocations`）
-    ///
-    /// # 返回
-    /// 合法时返回 `PreparedCustomerReceiptCommit::New` 或 `::Existing`，
+    /// 结果：合法时返回 `PreparedCustomerReceiptCommit::New` 或 `::Existing`，
     /// 携带已验证的分配集合；非法组合在进入事务前即失败。
-    ///
-    /// # 错误
+    /// 失败条件：
     /// * `ValidationError` - `new` 与 `existing` 字段同时提供、同时缺失、
     ///   `expected_version` 为 `None` 或 `0`、`allocations` 为空或任一
     ///   分配行金额非法/溢出时返回
-    ///
-    /// # 约束
+    /// 调用边界：
     /// * I/O-free：不查询数据库、不触及全局时钟/ID 生成器
     /// * 确定性：同输入必得同输出或同首错，分配顺序与输入一致
     /// * 兼容性：错误文案保持与原 `commit_customer_receipt` 分支一致，
     ///   以免改变前端对非法形态的展示
+    ///
+    /// 输入约定：
+    /// - `&self`：原始提交请求（`receipt_id` / `expected_version` / `receipt` / `allocations`）
     pub fn prepare(&self) -> Result<PreparedCustomerReceiptCommit> {
         let allocations = convert_allocations(&self.allocations)?;
         if allocations.is_empty() {

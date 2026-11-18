@@ -24,22 +24,27 @@ pub struct ContractAttachmentReadService {
 }
 
 impl ContractAttachmentReadService {
-    /// 连接合同完整授权和已有文件资产读取步骤。
+    /// 装配合同附件读取时接入完整合同授权和既有文件资产服务，不另外要求文件管理菜单资格。
+    ///
     /// # 参数
     /// db为业务数据库，access为共享合同授权，files为文件元数据与审计能力。
+    ///
     /// # 返回
     /// 不缓存账号、附件身份或读取凭证的用例。
-    /// # 错误
-    /// 构造不执行I/O。
+    ///
+    /// 构造不执行 I/O。
     pub fn new(db: Database, access: ContractAccess, files: FileAssetService) -> Self {
         Self { db, access, files }
     }
 
-    /// 在独立请求的同一快照读取合同附件元数据。
+    /// 查看合同附件信息时，在同一快照内核对合同详情权限、指定文件与不可变修订的关联及资产元数据，并在返回前复验原凭证。
+    ///
     /// # 参数
     /// contract_id、file_id为精确合同和文件，actor为当前认证账号。
+    ///
     /// # 返回
     /// 当前合同详情范围及不可变修订关联均通过的文件元数据。
+    ///
     /// # 错误
     /// 越界、关联不符、文件不存在或交付检查失败时不返回数据。
     pub async fn metadata(
@@ -51,11 +56,15 @@ impl ContractAttachmentReadService {
         self.read(contract_id, file_id, actor, false).await
     }
 
-    /// 在同一快照读取预览元数据并持久化敏感读取审计。
+    /// 预览合同附件时，在同一快照完成合同及修订关联检查、资产元数据读取和敏感读取审计；复验凭证后只返回元数据，
+    /// 对象内容由调用方在事务外读取。
+    ///
     /// # 参数
     /// contract_id、file_id为精确合同和文件，actor为当前认证账号。
+    ///
     /// # 返回
     /// 当前可预览附件的元数据；对象存储读取由调用方在事务外执行。
+    ///
     /// # 错误
     /// 合同、修订关联、资产、审计或交付检查失败时不返回数据。
     pub async fn preview(
@@ -159,7 +168,7 @@ impl AttachmentRead for ContractAttachmentReadService {
     }
 }
 
-/// 附件只能在原合同查询凭证覆盖的同一阶段完成补齐和交付检查后返回。
+// 合同附件元数据或预览只能在快照内执行：沿同一执行器解析合同权限、核对文件归属并读取资产，最后复验原凭证。
 async fn read<P: AttachmentRead>(
     port: &P,
     contract_id: &str,

@@ -24,12 +24,14 @@ pub struct PortalGrantView {
 }
 
 impl SupplierPortalReadService {
-    /// 查看已授权供应商的实名门户账号，过滤哈希及内部身份事实。
+    /// 处理门户账号与定向开放管理时，查看已授权供应商的实名门户账号，过滤哈希及内部身份事实。
     ///
     /// # 参数
     /// `actor` 为内部账号；`params` 指定供应商及有界分页、账号名搜索和启停状态。
+    ///
     /// # 返回
     /// 包含固定门户岗位、启停及会话版本的安全分页视图。
+    ///
     /// # 错误
     /// 内部资格、供应商范围、筛选或查询失败时拒绝。
     pub async fn accounts(
@@ -48,7 +50,7 @@ impl SupplierPortalReadService {
             .await
     }
 
-    /// 同一快照完成供应商资格、账号分页与计数。
+    // 处理门户账号与定向开放管理时，同一快照完成供应商资格、账号分页与计数。
     async fn account_page(
         &self,
         actor: &AuditActor,
@@ -60,12 +62,14 @@ impl SupplierPortalReadService {
         accounts_page(&self.db, &params.supplier_id, &query, active, executor).await
     }
 
-    /// 查看已授权供应商的定向 SKU 开放关系及必要商品资料。
+    /// 处理门户账号与定向开放管理时，查看已授权供应商的定向 SKU 开放关系及必要商品资料。
     ///
     /// # 参数
     /// `actor` 为内部账号；`params` 指定供应商及有界分页、商品搜索和启停状态。
+    ///
     /// # 返回
     /// 当前及已撤销开放关系的分页，不包含其他报价或销售价。
+    ///
     /// # 错误
     /// 内部资格、供应商范围、筛选或查询失败时拒绝。
     pub async fn grants(
@@ -84,7 +88,7 @@ impl SupplierPortalReadService {
             .await
     }
 
-    /// 同一快照完成供应商资格、开放关系及商品资料分页。
+    // 处理门户账号与定向开放管理时，同一快照完成供应商资格、开放关系及商品资料分页。
     async fn grant_page(
         &self,
         actor: &AuditActor,
@@ -96,13 +100,15 @@ impl SupplierPortalReadService {
         grants_page(&self.db, &params.supplier_id, &query, active, executor).await
     }
 
-    /// 所有内部列表读取先在原快照中证明正式供应商详情资格。
-    /// # 参数
-    /// actor 为内部账号，supplier_id 为精确供应商，executor 为覆盖完整读取的原事务。
-    /// # 返回
-    /// 供应商可读时成功，不签发跨阶段凭证。
-    /// # 错误
-    /// 非快照执行器、缺失供应商或范围外拒绝；授权取证故障原样传播。
+    // 确定门户账号与定向开放管理的适用条件时，所有内部列表读取先在原快照中证明正式供应商详情资格。
+    //
+    // 调用参数：
+    // actor 为内部账号，supplier_id 为精确供应商，executor 为覆盖完整读取的原事务。
+    //
+    // 供应商可读时成功，不签发跨阶段凭证。
+    //
+    // 失败边界：
+    // 非快照执行器、缺失供应商或范围外拒绝；授权取证故障原样传播。
     pub(super) async fn require_management_supplier(
         &self,
         actor: &AuditActor,
@@ -124,7 +130,7 @@ impl SupplierPortalReadService {
     }
 }
 
-/// 统一分页与字面量搜索，管理状态只支持明确启停。
+// 处理门户账号与定向开放管理时，统一分页与字面量搜索，管理状态只支持明确启停。
 fn management_query(params: &PortalAdminListParams) -> Result<(PortalQuery, Option<bool>)> {
     let query = PortalQuery::new(&PortalListParams {
         q: params.q.clone(),

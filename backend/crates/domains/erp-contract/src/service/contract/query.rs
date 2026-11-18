@@ -21,18 +21,9 @@ use crate::repository::{ContractExt, ContractRow};
 
 impl ContractService {
     /// 分页查询合同并返回授权及基础条件内的范围指标。
-    ///
-    /// # 参数
-    /// * `params` - 关键词、结构化筛选、组织与范围版本
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
     /// 返回分页视图及 `scope_summary`、`as_of` 与权限／组织／范围版本。
-    ///
-    /// # 错误
+    /// `params` 为关键词、结构化筛选、组织与范围版本。
     /// 参数非法、跨页缺版本、范围变化、无 list 动作或仓储失败。
-    ///
-    /// # 关键业务约束
     /// 角色无有效范围返回空集并标记 `no_scope`；不得用公司范围兜底。
     pub async fn contract_list(
         &self,
@@ -56,7 +47,7 @@ impl ContractService {
             .await
     }
 
-    /// 列表、版本复核和交付检查使用同一快照执行器。
+    // 列表、版本复核和交付检查使用同一快照执行器。
     async fn list_stage(
         &self,
         query: &ContractListQuery,
@@ -77,21 +68,11 @@ impl ContractService {
     }
 }
 
-/// 在指定执行器上读取列表所需的客户编号。
-///
-/// # 参数
-/// * `customers` - 客户编号事实
-/// * `ids` - 客户 ID
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回列表搜索所需客户事实。
-///
-/// # 错误
-/// 外域读取失败。
-///
-/// # 关键业务约束
-/// 客户事实不提供合同负责人；合同独立责任字段负责展示。
+// 在指定执行器上读取列表所需的客户编号。
+// 返回列表搜索所需客户事实。
+// `customers` 为客户编号事实，`ids` 为客户 ID，沿用调用方执行器 `executor`。
+// 外域读取失败。
+// 客户事实不提供合同负责人；合同独立责任字段负责展示。
 pub(super) async fn list_customer_facts_with(
     customers: &dyn CustomerFactsPort,
     ids: &[String],
@@ -113,22 +94,12 @@ pub(super) async fn list_customer_facts_with(
         .collect())
 }
 
-/// 按结果页批量读取不可变当前修订，避免重复读取客户与负责人。
-///
-/// # 参数
-/// * `db` - 合同数据库
-/// * `rows` - 当前页合同行
-/// * `customers` - 同一批客户事实
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回装配后的列表视图。
-///
-/// # 错误
-/// 修订读取失败。
-///
-/// # 关键业务约束
-/// 当前负责人来自合同独立责任字段，客户事实只补齐编号。
+// 按结果页批量读取不可变当前修订，避免重复读取客户与负责人。
+// 返回装配后的列表视图。
+// `db` 为合同数据库；`rows` 为当前页合同行。
+// `customers` 为同一批客户事实；沿用调用方执行器 `executor`。
+// 修订读取失败。
+// 当前负责人来自合同独立责任字段，客户事实只补齐编号。
 pub(super) async fn contract_rows(
     db: &Database,
     rows: Vec<ContractRow>,

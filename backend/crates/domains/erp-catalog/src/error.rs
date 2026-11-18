@@ -59,15 +59,15 @@ impl_repository_error!(
     duplicate = |error| { Error::ConflictError(duplicate_key_conflict_message(&error)) }
 );
 
-/// 将唯一键冲突映射为面向用户的冲突提示。
+// 将唯一键冲突映射为面向用户的冲突提示。
 fn duplicate_key_conflict_message(error: &persistence_core::Error) -> String {
     duplicate_index_conflict_message(error.duplicate_index_name())
 }
 
-/// 将商品域唯一索引名称映射为面向用户的冲突提示。
-///
-/// `uk_sku_barcode_claims_barcode` 与 `uk_sku_barcode_claims_id` 返回条码占用文案；
-/// 其余索引返回通用「数据已存在」文案，不要再编造字段级提示。
+// 将商品域唯一索引名称映射为面向用户的冲突提示。
+//
+// `uk_sku_barcode_claims_barcode` 与 `uk_sku_barcode_claims_id` 返回条码占用文案；
+// 其余索引返回通用「数据已存在」文案，不要再编造字段级提示。
 fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
     match index_name {
         Some("uk_sku_barcode_claims_barcode" | "uk_sku_barcode_claims_id") => {

@@ -59,13 +59,7 @@ pub struct SkuRevisionView {
 }
 
 impl From<SkuRevision> for SkuRevisionView {
-    /// 从实体构造响应视图。
-    ///
-    /// # 参数
-    /// * `revision` - SKU 修订实体
-    ///
-    /// # 返回
-    /// 返回响应视图。
+    // 将SKU 修订实体投影为接口视图，不在转换时另查关联资料。
     fn from(revision: SkuRevision) -> Self {
         Self {
             id: revision.base.id,
@@ -92,13 +86,7 @@ impl From<SkuRevision> for SkuRevisionView {
 }
 
 impl From<SkuRevisionRow> for SkuRevisionView {
-    /// 从投影行构造响应视图，与 `From<SkuRevision>` 同语义（erp-catalog-002）。
-    ///
-    /// # 参数
-    /// * `row` - SKU 修订列表投影行
-    ///
-    /// # 返回
-    /// 返回响应视图。
+    // 从投影行构造响应视图，与 `From<SkuRevision>` 同语义（erp-catalog-002）。
     fn from(row: SkuRevisionRow) -> Self {
         Self {
             id: row.id,
@@ -163,18 +151,11 @@ pub(crate) struct SkuRevisionListQuery {
 }
 
 impl SkuRevisionListParams {
-    /// 归一化 SKU 修订列表查询参数。
-    ///
-    /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    // 归一化 SKU 修订列表查询参数。
+    //
+    // 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
+    //
+    // 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<SkuRevisionListQuery> {
         Ok(SkuRevisionListQuery {
             sku_id: self.sku_id.as_ref().map(|id| id.to_string()),

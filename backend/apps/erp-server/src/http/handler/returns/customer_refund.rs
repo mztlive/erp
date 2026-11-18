@@ -18,17 +18,7 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 use crate::wiring::local_reverse_flow_ports;
 
-/// 查询客户退款列表。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `query` - 分页与筛选参数（扁平传递）
-///
-/// # 返回
-/// 返回契约形状的分页视图。
-///
-/// # 错误
-/// 业务处理或数据读取失败时返回对应错误。
+/// 按请求条件查询客户退款列表。
 pub async fn customer_refund_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -41,17 +31,8 @@ pub async fn customer_refund_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-/// 查询客户退款详情。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `id` - 退款单 ID
-///
-/// # 返回
+/// 查询客户退款详情，将认证操作人与路径对象交给读模型校验。
 /// 返回退款单视图。
-///
-/// # 错误
-/// 业务处理或数据读取失败时返回对应错误。
 pub async fn customer_refund_detail(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -65,17 +46,7 @@ pub async fn customer_refund_detail(
 }
 
 /// 登记客户退款草稿（退款单号唯一构成幂等去重；经办/复核分离）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 创建请求
-///
-/// # 返回
 /// 返回新建退款单视图。
-///
-/// # 错误
-/// 业务处理或数据读取失败时返回对应错误。
 pub async fn customer_refund_create(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -92,17 +63,7 @@ pub async fn customer_refund_create(
 }
 
 /// 按原回款一次创建客户退款并启动审批。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已认证的当前操作人
-/// * `req` - 业务命令与期望版本
-///
-/// # 返回
-/// 返回处理后的单据视图。
-///
-/// # 错误
-/// 业务处理或数据读取失败时返回对应错误。
+/// `req` 为业务命令与期望版本。
 pub async fn customer_refund_commit(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -118,18 +79,8 @@ pub async fn customer_refund_commit(
 }
 
 /// 提交客户退款并启动统一审批。客户端不得选择定义或审批人。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 退款单 ID
-/// * `req` - 提交请求（版本与幂等键）
-///
-/// # 返回
+/// `req` 为提交请求（版本与幂等键）。
 /// 返回提交后的退款单视图。
-///
-/// # 错误
-/// 业务处理或数据读取失败时返回对应错误。
 pub async fn customer_refund_submit(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -147,18 +98,8 @@ pub async fn customer_refund_submit(
 }
 
 /// 撤回尚未最终通过的客户退款审批。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 退款单 ID
-/// * `req` - 撤回请求（原因必填）
-///
-/// # 返回
+/// `req` 为撤回请求（原因必填）。
 /// 返回撤回后的退款单视图。
-///
-/// # 错误
-/// 业务处理或数据读取失败时返回对应错误。
 pub async fn customer_refund_cancel_approval(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -175,19 +116,8 @@ pub async fn customer_refund_cancel_approval(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 客户端直接过账失败关闭。过账只允许作为审批最终通过动作。
-///
-/// # 参数
-/// * `_state` - 应用状态
-/// * `_actor` - 已通过鉴权的审计操作人
-/// * `_id` - 退款单 ID
-/// * `_req` - 过账请求（客户端不得据此形成资金事实）
-///
-/// # 错误
-/// 始终返回冲突，防止 HTTP 旁路过账。
-///
-/// # 返回
-/// 无成功返回；始终拒绝客户端直接过账。
+/// 兼容旧的客户退款直接过账入口，始终返回冲突，不接受客户端据此改写业务事实。
+/// 实际过账只在审批最终通过动作中执行。
 pub async fn customer_refund_post(
     State(_state): State<HttpState>,
     Extension(_actor): Extension<AuditActor>,

@@ -10,14 +10,11 @@ use crate::dto::sales_selection::SalesSelectionBookletView;
 use crate::entity::sales_selection::IdempotencyOperation;
 
 impl SalesSelectionService {
-    /// 回放结果和当前发布资格使用发布入口的同一执行器，拒绝后不读取历史业务数据。
-    ///
-    /// # 参数
-    /// booklet_id 为原选品册，actor 为当前认证人，key/hash 为原请求标识，executor 为入口执行器。
-    /// # 返回
-    /// 返回原发布结果；收据不存在时返回 None。
-    /// # 错误
-    /// 当前授权拒绝、请求冲突或读取失败时返回原错误。
+    // 回放结果和当前发布资格使用发布入口的同一执行器，拒绝后不读取历史业务数据。
+    // 返回原发布结果；收据不存在时返回 None。
+    // 当前授权拒绝、请求冲突或读取失败时返回原错误。
+    //
+    // 输入约定：booklet_id 为原选品册，actor 为当前认证人，key/hash 为原请求标识，executor 为入口执行器。
     pub(super) async fn publish_replay(
         &self,
         booklet_id: &str,
@@ -76,7 +73,7 @@ impl ReplaySource for SalesSelectionService {
     }
 }
 
-/// 同键重试不能用原授权代替当前资格、范围和真实客户来源检查。
+// 恢复选品发布结果之前按原执行器重验当前资格、授权范围及真实客户来源，不能沿用首次命令的旧授权。
 async fn replay(
     source: &impl ReplaySource,
     request: &PublishReplay,

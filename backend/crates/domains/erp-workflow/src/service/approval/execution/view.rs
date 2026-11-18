@@ -56,21 +56,9 @@ pub struct ApprovalCommandView {
 }
 
 /// 由提交后的实例、当前执行和可选任务构造视图。
-///
-/// # 参数
-/// * `instance` - 持久化实例
-/// * `current_execution` - 当前执行
-/// * `latest_rejection_reason` - 最近驳回
-/// * `subject_status` - 单据状态
-/// * `next_open_task` - 下一开放任务
-/// * `commit` - 本次提交类别
-/// * `replay` - 是否幂等回读
-///
-/// # 返回
 /// 返回不得用命令输入拼装的最新视图。
 ///
-/// # 错误
-/// 不返回错误。
+/// `current_execution`：当前执行。
 pub fn map_command_view(
     instance: &ApprovalProcessInstance,
     current_execution: Option<&ApprovalNodeExecution>,
@@ -96,7 +84,7 @@ pub fn map_command_view(
     }
 }
 
-/// 由实例状态和提交类别计算对外结果。
+// 组合实例状态和已应用或回放的提交类别，生成命令结果对外使用的状态。
 fn outcome_of(
     status: ApprovalProcessInstanceStatus,
     commit: CommitRequired,
@@ -121,7 +109,7 @@ mod tests {
 
     use super::{ApprovalCommandOutcome, OpenTaskSummary, map_command_view};
 
-    /// 视图取自持久化事实，幂等回读不重放可变快照承诺。
+    // 验证：视图取自持久化事实，幂等回读不重放可变快照承诺。
     #[test]
     fn execution_view_maps_persisted_facts() {
         let instance = ApprovalProcessInstance::start_running(NewProcessInstance {

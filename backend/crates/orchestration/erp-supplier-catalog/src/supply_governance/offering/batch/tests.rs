@@ -13,60 +13,30 @@ struct Fake {
 }
 #[async_trait]
 impl BatchOperation for Fake {
-    /// 返回测试业务身份。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `identity` 的副本。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 返回测试业务身份。
+    //
+    // 返回 `identity` 的副本。
     fn identity(&self) -> String {
         self.identity.clone()
     }
-    /// 返回测试命令键。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回可改写的 `key`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 返回测试命令键。
+    //
+    // 返回可改写的 `key`。
     fn key(&mut self) -> &mut String {
         &mut self.key
     }
-    /// 模拟规则失败和持久化回执。
-    ///
-    /// # 参数
-    /// * `_` - 未使用的供给流程。
-    /// * `_` - 未使用的操作人。
-    ///
-    /// # 返回
-    /// `replay` 为真时返回 `Some(true)`，否则返回 `None`。
-    ///
-    /// # 错误
-    /// `invalid` 为真时返回 `ValidationError`。
+    // 模拟规则失败和持久化回执。
+    //
+    // `replay` 为真时返回 `Some(true)`，否则返回 `None`。
+    //
+    // `invalid` 为真时返回 `ValidationError`。
     async fn prepare(&self, _: &SupplierOfferingProcess, _: &AuditActor) -> Result<Option<Value>> {
         if self.invalid {
             return Err(Error::ValidationError("订货编码重复".into()));
         }
         Ok(self.replay.then_some(Value::Bool(true)))
     }
-    /// 记录实际执行次数。
-    ///
-    /// # 参数
-    /// * `_` - 未使用的供给流程。
-    /// * `_` - 未使用的操作人。
-    ///
-    /// # 返回
-    /// 写入计数加一后返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 记录实际执行次数。写入计数加一后返回 `true`。
     async fn execute(self, _: &SupplierOfferingProcess, _: &AuditActor) -> Result<Value> {
         self.writes.fetch_add(1, Ordering::SeqCst);
         Ok(Value::Bool(true))
@@ -90,7 +60,7 @@ fn request(count: usize) -> BatchRequest<Fake> {
             .collect(),
     }
 }
-/// 验证批量容器及错误恢复约束。
+// 验证批量供给请求拒绝空批次、超限及重复的行号、供给身份或命令键。
 #[test]
 fn rejects_empty_oversize_and_duplicates() {
     assert!(validate_envelope(&mut request(0), "a").is_err());
@@ -107,7 +77,7 @@ fn rejects_empty_oversize_and_duplicates() {
         assert!(validate_envelope(&mut batch, "a").is_err());
     }
 }
-/// 验证批量容器及错误恢复约束。
+// 验证批量供给命令键按操作人隔离，且内部错误不进入逐行响应。
 #[test]
 fn isolates_keys_by_actor_and_hides_internal_messages() {
     let mut a = request(1);
@@ -125,32 +95,26 @@ fn isolates_keys_by_actor_and_hides_internal_messages() {
 struct FakeRunner;
 #[async_trait]
 impl BatchRunner<Fake> for FakeRunner {
-    /// 模拟准备，不读取数据库。
-    ///
-    /// # 参数
-    /// * `input` - 测试行。
-    ///
-    /// # 返回
-    /// `replay` 为真时返回 `Some(true)`，否则返回 `None`。
-    ///
-    /// # 错误
-    /// `invalid` 为真时返回 `ValidationError`。
+    // 模拟准备，不读取数据库。
+    //
+    // `input`：测试行。
+    //
+    // `replay` 为真时返回 `Some(true)`，否则返回 `None`。
+    //
+    // `invalid` 为真时返回 `ValidationError`。
     async fn prepare(&self, input: &Fake) -> Result<Option<Value>> {
         if input.invalid {
             return Err(Error::ValidationError("订货编码重复".into()));
         }
         Ok(input.replay.then_some(Value::Bool(true)))
     }
-    /// 模拟写入，不连接外部服务。
-    ///
-    /// # 参数
-    /// * `input` - 测试行；按其 `identity` 决定结果。
-    ///
-    /// # 返回
-    /// 先把写入计数加一。身份不是 `reject` 或 `unknown` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 身份为 `reject` 时返回 `ConflictError`；为 `unknown` 时返回 `Internal`。计数仍已增加。
+    // 模拟写入，不连接外部服务。
+    //
+    // - `input`：测试行；按其 `identity` 决定结果。
+    //
+    // 先把写入计数加一。身份不是 `reject` 或 `unknown` 时返回 `true`。
+    //
+    // 身份为 `reject` 时返回 `ConflictError`；为 `unknown` 时返回 `Internal`。计数仍已增加。
     async fn execute(&self, input: Fake) -> Result<Value> {
         input.writes.fetch_add(1, Ordering::SeqCst);
         match input.identity.as_str() {
@@ -160,7 +124,7 @@ impl BatchRunner<Fake> for FakeRunner {
         }
     }
 }
-/// 验证批量预检和逐行执行边界。
+// 验证批量预检和逐行执行边界。
 #[tokio::test]
 async fn preflight_failure_blocks_all_writes_and_replays_stay_locked() {
     let mut batch = request(3);
@@ -174,7 +138,7 @@ async fn preflight_failure_blocks_all_writes_and_replays_stay_locked() {
     assert_eq!(result.rows[1].status, RowStatus::Invalid);
     assert_eq!(result.rows[2].status, RowStatus::Succeeded);
 }
-/// 验证批量预检和逐行执行边界。
+// 验证批量预检和逐行执行边界。
 #[tokio::test]
 async fn validation_does_not_write_and_execution_skips_replays() {
     for validate_only in [true, false] {
@@ -191,7 +155,7 @@ async fn validation_does_not_write_and_execution_skips_replays() {
     }
 }
 
-/// 单行明确失败和结果不明均不得抹去其他行的成功结果。
+// 验证：单行明确失败和结果不明均不得抹去其他行的成功结果。
 #[tokio::test]
 async fn partial_failure_preserves_successes_and_continues_later_rows() {
     let mut batch = request(4);

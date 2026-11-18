@@ -2,16 +2,12 @@
 use super::dto::{ProfitLossExport, ProfitLossRow, ProfitLossView};
 use crate::support::csv_record as record;
 
-/// 直接序列化服务端全量结果，不使用客户端金额或当前页数据。
-///
-/// # 参数
-/// * `view` - 服务端全量盈亏视图。
-///
-/// # 返回
-/// 返回 CSV 内容、文件名、行数和生成时点。
-///
-/// # 错误
-/// 不返回错误。
+// 生成实际盈亏报表导出内容时，直接序列化服务端全量结果，不使用客户端金额或当前页数据。
+//
+// 调用参数：
+// * `view` - 服务端全量盈亏视图。
+//
+// 返回 CSV 内容、文件名、行数和生成时点。
 pub(super) fn export(view: ProfitLossView) -> ProfitLossExport {
     let mut lines = metadata(&view);
     lines.push(header());
@@ -23,7 +19,7 @@ pub(super) fn export(view: ProfitLossView) -> ProfitLossExport {
         generated_at: view.freshness.projected_at,
     }
 }
-/// 导出文件记录生成时的口径和授权范围。
+// 处理实际盈亏报表时，导出文件记录生成时的口径和授权范围。
 fn metadata(view: &ProfitLossView) -> Vec<String> {
     vec![
         record(&["实际经营盈亏", "非卡券", "不含税"]),
@@ -34,7 +30,7 @@ fn metadata(view: &ProfitLossView) -> Vec<String> {
         record(&["统计说明", &view.excluded_note]),
     ]
 }
-/// 列名与行数据顺序固定。
+// 处理实际盈亏报表时，列名与行数据顺序固定。
 fn header() -> String {
     record(&[
         "对象",
@@ -51,7 +47,7 @@ fn header() -> String {
         "缺口原因",
     ])
 }
-/// 每个分组行使用服务端已校验金额，缺利润保留空值。
+// 生成实际盈亏报表展示时，每个分组行使用服务端已校验金额，缺利润保留空值。
 fn row(row: &ProfitLossRow) -> String {
     let t = &row.totals;
     let blockers = row.coverage_blockers.iter().map(|b| b.message.as_str()).collect::<Vec<_>>().join("；");

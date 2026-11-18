@@ -39,19 +39,16 @@ pub(super) enum RowMediaSource<'a> {
     },
 }
 
-/// 按来源获取行媒体；清单来源不产生任何上传。
-///
-/// # 参数
-/// * `storage` - 对象存储（仅源文件来源使用）
-/// * `secret` - 内容指纹密钥（仅源文件来源使用）
-/// * `cells` - 当前行单元格（仅源文件来源使用）
-/// * `source` - 行媒体来源
-///
-/// # 返回
-/// 返回临时文件引用与待登记资产。
-///
-/// # 错误
-/// 源文件来源上传失败时返回错误；清单来源无错误。
+// 按来源获取行媒体；清单来源不产生任何上传。
+//
+// - `storage`：对象存储（仅源文件来源使用）
+// - `secret`：内容指纹密钥（仅源文件来源使用）
+// - `cells`：当前行单元格（仅源文件来源使用）
+// - `source`：行媒体来源
+//
+// 返回临时文件引用与待登记资产。
+//
+// 源文件来源上传失败时返回错误；清单来源无错误。
 pub(super) async fn resolve_row_media(
     storage: &S3Storage,
     secret: &[u8],
@@ -68,17 +65,10 @@ pub(super) async fn resolve_row_media(
 
 /// 为指定行提取并上传主图、副图。
 ///
-/// # 参数
-/// * `storage` - 对象存储
-/// * `secret` - 内容指纹密钥
-/// * `xlsx` - 源文件字节
-/// * `sheet` - 已解析工作表
-/// * `cells` - 当前行单元格
+/// `secret`：内容指纹密钥；`xlsx`：源文件字节；`sheet`：已解析工作表。
 ///
-/// # 返回
 /// 返回临时文件引用与待登记资产。
 ///
-/// # 错误
 /// 对象存储写入失败时返回错误；找不到图片时跳过该图。
 pub async fn upload_row_images(
     storage: &S3Storage,
@@ -112,7 +102,7 @@ pub async fn upload_row_images(
     Ok(media)
 }
 
-/// 上传一个独立图片对象，复用阻塞任务生成的摘要构造待登记事实。
+// 上传一个独立图片对象，复用阻塞任务生成的摘要构造待登记事实。
 async fn store_image(
     storage: &S3Storage,
     secret: &[u8],

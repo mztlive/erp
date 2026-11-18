@@ -23,11 +23,11 @@ use crate::{Error, Result};
 
 impl SupplierPortalProcess {
     /// 在内部对象范围内读取指定供应商具名账号。
-    /// # 参数
-    /// * `supplier_id` / `actor` - 目标供应商与内部操作人。
-    /// # 返回
+    ///
+    /// `supplier_id` / `actor`：目标供应商与内部操作人。
+    ///
     /// 返回安全账号视图，不含密码或权限秘密。
-    /// # 错误
+    ///
     /// 无对象范围或账号状态失效时拒绝。
     pub async fn account_list(
         &self,
@@ -60,13 +60,13 @@ impl SupplierPortalProcess {
             .await
     }
 
-    /// 在原快照编译详情范围并确认精确供应商；凭证保留到完整列表交付。
-    /// # 参数
-    /// db、suppliers 为已装配的数据库及供应商授权；actor、supplier_id 为真实目标，executor 为原快照。
-    /// # 返回
-    /// 供应商启用且可读时返回当前查询凭证，调用方在完整读取后 validate。
-    /// # 错误
-    /// 无快照、无资格、范围外、供应商停用或取证失败时拒绝。
+    // 在原快照编译详情范围并确认精确供应商；凭证保留到完整列表交付。
+    //
+    // db、suppliers 为已装配的数据库及供应商授权；actor、supplier_id 为真实目标，executor 为原快照。
+    //
+    // 供应商启用且可读时返回当前查询凭证，调用方在完整读取后 validate。
+    //
+    // 无快照、无资格、范围外、供应商停用或取证失败时拒绝。
     pub(super) async fn management_supplier(
         db: &Database,
         suppliers: &SupplierAccess,
@@ -109,11 +109,11 @@ impl SupplierPortalProcess {
     }
 
     /// 允许当前实名账号自助修改密码，密码计算在事务之外。
-    /// # 参数
-    /// * `actor` / `input` - 原有效会话、原密码及新密码。
-    /// # 返回
+    ///
+    /// `actor` / `input`：原有效会话、原密码及新密码。
+    ///
     /// 返回更新后的会话版本，协议层重新签发会话。
-    /// # 错误
+    ///
     /// 原密码不符、绑定或供应商失效时拒绝。
     pub async fn password_update(
         &self,
@@ -148,12 +148,11 @@ impl SupplierPortalProcess {
     }
 
     /// 为已启用供应商开通具名门户账号。
-    /// # 参数
-    /// * `supplier_id` / `params` - 已有供应商和账号资料。
-    /// * `idempotency_key` / `actor` - 原命令号及内部操作人。
-    /// # 返回
+    ///
+    /// `supplier_id` / `params`：已有供应商和账号资料；`idempotency_key` / `actor`：原命令号及内部操作人。
+    ///
     /// 返回原成功账号结果，密码不进入响应或审计。
-    /// # 错误
+    ///
     /// 无对象范围、供应商停用、账号冲突时拒绝。
     pub async fn account_create(
         &self,
@@ -181,12 +180,11 @@ impl SupplierPortalProcess {
     }
 
     /// 修改门户角色或同步停用账号及绑定。
-    /// # 参数
-    /// * `account_id` / `params` - 目标账号及原账号绑定版本。
-    /// * `idempotency_key` / `actor` - 原命令号及内部操作人。
-    /// # 返回
+    ///
+    /// `account_id` / `params`：目标账号及原账号绑定版本；`idempotency_key` / `actor`：原命令号及内部操作人。
+    ///
     /// 返回已保存的账号状态。
-    /// # 错误
+    ///
     /// 原版本失效或无供应商范围时拒绝。
     pub async fn account_update(
         &self,
@@ -235,7 +233,7 @@ mod read_tests {
     use super::SupplierPortalProcess;
     use crate::Error;
 
-    /// 非快照读取在身份或供应商读取前拒绝，避免再次引入无边界授权。
+    // 验证：非快照读取在身份或供应商读取前拒绝，避免再次引入无边界授权。
     #[tokio::test]
     async fn management_lists_reject_unscoped_executors_before_reading_supplier() {
         let db = Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("unit_test");
@@ -250,7 +248,7 @@ mod read_tests {
         }
     }
 
-    /// 同快照进入真实查询授权；缺少绑定时不得继续读取供应商或列表。
+    // 验证：同快照进入真实查询授权；缺少绑定时不得继续读取供应商或列表。
     #[tokio::test]
     async fn management_lists_stop_before_business_reads_when_query_binding_is_missing() {
         let db = Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("unit_test");

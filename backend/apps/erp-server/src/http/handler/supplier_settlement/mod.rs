@@ -43,14 +43,8 @@ fn settlement_process(state: &HttpState) -> SupplierSettlementProcess<WorkflowAu
     )
 }
 
-/// 查询供应商结算单列表。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `query` - 分页与筛选参数（`statement_no`/`supplier_id`/`status` 扁平传递）
-///
-/// # 返回
-/// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
+/// 按请求条件查询供应商结算单列表。
+/// `query` 为分页与筛选参数（`statement_no`/`supplier_id`/`status` 扁平传递）。
 pub async fn supplier_settlement_statement_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -67,13 +61,7 @@ pub async fn supplier_settlement_statement_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-/// 查询供应商结算单详情。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `id` - 结算单 ID
-///
-/// # 返回
+/// 查询供应商结算单详情，将认证操作人与路径对象交给读模型校验。
 /// 返回结算单详情视图（结算单 + 明细 + 差异）。
 pub async fn supplier_settlement_statement_detail(
     State(state): State<HttpState>,
@@ -89,13 +77,6 @@ pub async fn supplier_settlement_statement_detail(
 }
 
 /// 创建供应商结算草稿（幂等键：`statement_no`）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人（经办人）
-/// * `req` - 创建请求
-///
-/// # 返回
 /// 返回新建结算单的响应视图。
 pub async fn supplier_settlement_statement_create(
     State(state): State<HttpState>,
@@ -111,7 +92,7 @@ pub async fn supplier_settlement_statement_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 从冻结策略下最新来源证据刷新尚未提交复核的结算试算。
+/// 在结算试算尚未提交复核时，根据冻结策略和最新来源证据刷新草稿，再投影为结算展示视图。
 pub async fn supplier_settlement_statement_refresh(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -126,7 +107,7 @@ pub async fn supplier_settlement_statement_refresh(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 查询创建草稿所需的最新完整来源证据批次，不返回金额明细。
+/// 创建结算草稿前读取最新的完整来源证据批次；此查询只交付批次信息，不含金额明细。
 pub async fn supplier_settlement_source_evidence_latest(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -141,7 +122,7 @@ pub async fn supplier_settlement_source_evidence_latest(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 逐行核验 D32 正式事实并冻结供应商结算来源证据批次。
+/// 为供应商结算准备证据时，由编排逐行核对 D32 正式事实，再冻结这批结算来源。
 pub async fn supplier_settlement_source_evidence_record(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -152,14 +133,7 @@ pub async fn supplier_settlement_source_evidence_record(
 }
 
 /// 提交结算复核（乐观锁；存在未解决差异时拒绝）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 结算单 ID
-/// * `req` - 提交请求（含期望版本）
-///
-/// # 返回
+/// `req` 为提交请求（含期望版本）。
 /// 返回提交后结算单的响应视图。
 pub async fn supplier_settlement_statement_submit_review(
     State(state): State<HttpState>,
@@ -177,14 +151,6 @@ pub async fn supplier_settlement_statement_submit_review(
 }
 
 /// 执行 `REJECT` 或 `CONFIRM` 正式复核决定。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 结算单 ID
-/// * `req` - 携带任务、任务版本、主题版本与结算版本的强类型命令
-///
-/// # 返回
 /// 返回正式决定、任务终态、应付与成本差额引用。
 pub async fn supplier_settlement_statement_review_decide(
     State(state): State<HttpState>,
@@ -202,14 +168,7 @@ pub async fn supplier_settlement_statement_review_decide(
 }
 
 /// 作废结算单（乐观锁；已作废为终态）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 结算单 ID
-/// * `req` - 作废请求（含期望版本与原因）
-///
-/// # 返回
+/// `req` 为作废请求（含期望版本与原因）。
 /// 返回作废后结算单的响应视图。
 pub async fn supplier_settlement_statement_void(
     State(state): State<HttpState>,
@@ -226,14 +185,8 @@ pub async fn supplier_settlement_statement_void(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 查询供应商结算明细列表。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `query` - 分页与筛选参数（`statement_id` 扁平传递）
-///
-/// # 返回
-/// 返回契约形状的分页视图。
+/// 按请求条件查询供应商结算明细列表。
+/// `query` 为分页与筛选参数（`statement_id` 扁平传递）。
 pub async fn supplier_settlement_item_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -253,14 +206,8 @@ pub async fn supplier_settlement_item_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-/// 查询供应商结算差异列表。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `query` - 分页与筛选参数（`statement_item_id`/`status` 扁平传递）
-///
-/// # 返回
-/// 返回契约形状的分页视图。
+/// 按请求条件查询供应商结算差异列表。
+/// `query` 为分页与筛选参数（`statement_item_id`/`status` 扁平传递）。
 pub async fn supplier_settlement_difference_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -281,14 +228,7 @@ pub async fn supplier_settlement_difference_list(
 }
 
 /// 登记结算差异处理结论（乐观锁；处理结果三元组成组校验）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 结算差异 ID
-/// * `req` - 处理请求（含期望版本与结论状态）
-///
-/// # 返回
+/// `req` 为处理请求（含期望版本与结论状态）。
 /// 返回处理后差异的响应视图。
 pub async fn supplier_settlement_difference_decide(
     State(state): State<HttpState>,
@@ -306,7 +246,7 @@ pub async fn supplier_settlement_difference_decide(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 追加不可变差异补证；不直接改变差异结论。
+/// 为正在处理的结算差异追加不可变补证；补证本身不修改差异结论。
 pub async fn supplier_settlement_difference_evidence_append(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -321,7 +261,7 @@ pub async fn supplier_settlement_difference_evidence_append(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 显式交接对账负责人；开放复核任务不改派。
+/// 对账负责人变更时走显式交接命令；开放中的复核任务仍由原责任人处理。
 pub async fn supplier_settlement_statement_handover(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -332,7 +272,7 @@ pub async fn supplier_settlement_statement_handover(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 返回可交接的合格有效人员。
+/// 开始结算对账责任交接前查询符合资格且仍有效的人员，供办理人选择交接目标。
 pub async fn supplier_settlement_statement_handover_candidates(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -342,7 +282,7 @@ pub async fn supplier_settlement_statement_handover_candidates(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 独立改派差异处理人，不得强制等于对账负责人。
+/// 单独改派供应商结算差异的处理人；该任务责任不要求与结算单对账负责人相同。
 pub async fn supplier_settlement_statement_reassign_difference_handler(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,

@@ -16,13 +16,7 @@ use persistence_core::Executor;
 /// 财务过账消费的任务资格；责任规则解析沿用工作流领域合同。
 #[async_trait]
 pub trait FinanceTaskPort: FinanceResponsibilityPort {
-    /// 在调用方事务验证当前责任人的正式任务决定资格。
-    /// # 参数
-    /// `actor`、`task` 和 `executor` 为原命令身份、任务及执行器。
-    /// # 返回
-    /// 当前任务决定资格成立时成功。
-    /// # 错误
-    /// 保留工作流的权限、冲突和存储错误。
+    /// 财务命令在调用方事务内验证当前责任人能否决定原正式任务，保留工作流的权限、冲突和存储错误。
     async fn ensure_domain_decision_access(
         &self,
         actor: &AuditActor,
@@ -30,13 +24,8 @@ pub trait FinanceTaskPort: FinanceResponsibilityPort {
         executor: &mut dyn Executor,
     ) -> erp_workflow::Result<()>;
 
-    /// 先读取当前人员任务范围，再在原事务校验具体任务访问权。
-    /// # 参数
-    /// `actor`、`task` 和 `executor` 为原揭示命令的身份、任务及执行器。
-    /// # 返回
-    /// 当前任务可读时成功。
-    /// # 错误
-    /// 资格撤销、范围不足及存储失败保持领域错误。
+    /// 财务揭示命令在原事务内先读取经办人的当前任务范围，再查具体任务访问权。
+    /// 资格撤销、范围不足或存储失败时保留工作流领域错误。
     async fn ensure_item_access(
         &self,
         actor: &AuditActor,
@@ -78,12 +67,8 @@ pub struct FinancePostingPorts {
 
 impl FinancePostingPorts {
     /// 注入身份、统一来源授权及财务任务事实提供者。
-    /// # 参数
-    /// 各参数为应用共享身份、审批运行、资金来源访问及任务能力。
-    /// # 返回
-    /// 返回无I/O的财务能力集合。
-    /// # 错误
-    /// 构造时不返回错误；业务校验仍在原调用位置执行。
+    ///
+    /// 各参数为应用共享身份、审批运行、资金来源访问及任务能力。返回无I/O的财务能力集合。构造时不返回错误；业务校验仍在原调用位置执行。
     pub fn new(
         identity: SharedRbacService,
         authorization: Arc<AuthorizationService>,

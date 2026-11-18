@@ -11,22 +11,8 @@ use crate::repository::PurchaseOrderExt;
 use crate::service::purchase_order::PurchaseOrderService;
 use crate::{Error, Result};
 impl PurchaseOrderService {
-    /// 准备采购变更生效事务所需的修订、差额和响应引用。
-    ///
-    /// # 参数
-    /// * `change` - 已通过最终审批动作校验的采购变更单
-    /// * `submission_id` - 当前冻结且待生效的变更提交主键
-    ///
-    /// # 返回
-    /// 返回可直接进入事务的完整写聚合及响应所需稳定引用。
-    ///
-    /// # 错误
-    /// 原采购单、基准版本或提交缺失，基准版本漂移，或修订与差额构建
-    /// 失败时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 这里只准备不可变写内容；采购、销售 guard、allocation 和任务的可见性
-    /// 由后续事务保证。
+    /// 最终审批动作已校验后，以当前冻结且待处理的变更提交构造新采购版本、财务差额和响应引用。
+    /// 原采购单、基准版本或提交缺失，基准已变或构造失败时拒绝；实际写入及与销售、分配和任务的原子性由调用方事务负责。
     pub async fn prepare_purchase_effective_change(
         &self,
         change: &PurchaseChangeOrder,
@@ -59,10 +45,7 @@ impl PurchaseOrderService {
             base_revision,
         ))
     }
-    /// 加载待生效的变更提交及其明细。
-    ///
-    /// # 错误
-    /// 提交不存在或已处理时返回错误。
+    // 加载待生效的变更提交及其明细。提交不存在或已处理时返回错误。
     async fn load_pending_change_submission(
         &self,
         submission_id: &str,
@@ -85,16 +68,7 @@ impl PurchaseOrderService {
             .await?;
         Ok((submission, lines))
     }
-    /// 客户端直接生效失败关闭。最终动作只能由审批运行时调用。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 无成功返回值。
-    ///
-    /// # 错误
-    /// 恒返回 `ConflictError`。
+    /// 拒绝客户端绕过审批直接生效采购变更，固定返回 `ConflictError`；正式生效只允许由审批运行时发起。
     pub fn reject_client_effect() -> Result<PurchaseChangeEffectResult> {
         Err(Error::ConflictError("采购变更生效只能由审批最终通过动作执行，客户端不得直接生效".to_string()))
     }
@@ -116,28 +90,11 @@ pub struct EffectiveChangeWrite {
 impl EffectiveChangeWrite {
     /// 标记变更已生效；调用方保持原审计构造之后、来源销售 guard 之前的时点。
     ///
-    /// # 参数
-    /// * `actor_id` - 最终通过执行人
-    ///
-    /// # 返回
-    /// 变更单进入生效并记下新版本后无返回值。
-    ///
-    /// # 错误
-    /// 变更单不是审批中时，实体错误经 `?` 变为 `Logic`。
+    /// 变更单进入生效并记下新版本后无返回值。变更单不是审批中时，实体错误经 `?` 变为 `Logic`。
     pub fn mark_effective(&mut self, actor_id: &str) -> Result<()> {
         Ok(self.change.apply_effective(self.revision.base.id.clone().into(), actor_id)?)
     }
     /// 写本次正式版本和版本行，不改变其他域或开启事务。
-    ///
-    /// # 参数
-    /// * `db` - 采购数据库
-    /// * `executor` - 调用方事务执行器
-    ///
-    /// # 返回
-    /// 版本和版本行写入成功时无返回值。
-    ///
-    /// # 错误
-    /// 仓储插入失败时返回对应错误。
     pub async fn persist_revision(&self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
         Ok(db
             .purchase_order()
@@ -146,16 +103,9 @@ impl EffectiveChangeWrite {
     }
     /// 原分配持久化成功后切当前版本并 CAS 更新采购单。
     ///
-    /// # 参数
-    /// * `db` - 采购数据库
-    /// * `actor_id` - 最终通过执行人
-    /// * `executor` - 调用方事务执行器
-    ///
-    /// # 返回
-    /// 当前版本指针更新并 CAS 成功时无返回值。
-    ///
-    /// # 错误
     /// 采购单状态不允许应用变更时返回 `Logic`；版本冲突或其他仓储失败时返回对应错误。
+    ///
+    /// 沿用调用方事务的执行器。
     pub async fn persist_current_order(
         &mut self,
         db: &Database,
@@ -167,17 +117,9 @@ impl EffectiveChangeWrite {
         db.purchase_orders().update(&mut self.order, executor).await?;
         Ok(())
     }
-    /// 原财务差额写入成功后通过冻结提交并 CAS 更新。
+    /// 原财务差额写入成功后通过冻结提交并 CAS 更新。提交不是待审核时返回 `Logic`；仓储更新失败时返回对应错误。
     ///
-    /// # 参数
-    /// * `db` - 采购数据库
-    /// * `executor` - 调用方事务执行器
-    ///
-    /// # 返回
-    /// 提交改为已通过并 CAS 成功时无返回值。
-    ///
-    /// # 错误
-    /// 提交不是待审核时返回 `Logic`；仓储更新失败时返回对应错误。
+    /// 沿用调用方事务的执行器。
     pub async fn persist_approved_submission(
         &mut self,
         db: &Database,
@@ -189,15 +131,7 @@ impl EffectiveChangeWrite {
     }
     /// 写已生效变更状态，不生成审计或产生财务副作用。
     ///
-    /// # 参数
-    /// * `db` - 采购数据库
-    /// * `executor` - 调用方事务执行器
-    ///
-    /// # 返回
-    /// 变更单 CAS 成功时无返回值。
-    ///
-    /// # 错误
-    /// 仓储更新失败时返回对应错误。
+    /// 沿用调用方事务的执行器。
     pub async fn persist_change(&mut self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
         Ok(db.purchase_change_orders().update(&mut self.change, executor).await?)
     }

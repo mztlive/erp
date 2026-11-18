@@ -18,12 +18,11 @@ use crate::{AccessControlExt, AuthorizationService, Error, Result, RoleId};
 
 impl RbacService {
     /// 查询可审阅的岗位权限及当前生成状态。
-    /// # 参数
-    /// actor 为当前操作人，authorization 为应用注入的共享授权服务。
-    /// # 返回
     /// 固定目录、可生成标记及权限版本。
-    /// # 错误
+    ///
     /// 读取权限不足、策略变化或存储失败时拒绝。
+    ///
+    /// actor 为当前操作人，authorization 为应用注入的共享授权服务。
     pub async fn builtin_role_catalog(
         self: &Arc<Self>,
         actor: &AuditActor,
@@ -45,7 +44,7 @@ impl RbacService {
             .await
     }
 
-    /// 使用当前读取快照生成岗位模板与允许动作。
+    // 角色目录读取沿当前快照生成岗位模板及允许动作，不交付跨快照的模板资格信息。
     async fn role_catalog(
         &self,
         actor: &AuditActor,
@@ -78,12 +77,11 @@ impl RbacService {
     }
 
     /// 以服务端模板原子生成全部所选岗位，任何既有身份保持不变。
-    /// # 参数
-    /// request 为已预览的模板选择及版本，actor 为发起人，authorization 为共享授权服务。
-    /// # 返回
     /// 每个岗位的新建或保留结果。
-    /// # 错误
+    ///
     /// 模板、授予上限、版本或任一写入失败时整批拒绝。
+    ///
+    /// request 为已预览的模板选择及版本，actor 为发起人，authorization 为共享授权服务。
     pub async fn generate_builtin_roles(
         self: &Arc<Self>,
         request: GenerateBuiltinRolesRequest,
@@ -114,7 +112,7 @@ impl RbacService {
         .await
     }
 
-    /// 在调用方事务内重验固定身份，写入角色、权限和审计。
+    // 创建模板角色时沿调用方事务重新证明固定身份，再保存角色、权限规则及审计。
     async fn generate_builtin_role(
         &self,
         template: BuiltinRoleTemplate,

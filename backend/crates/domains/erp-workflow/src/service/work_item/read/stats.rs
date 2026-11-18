@@ -54,14 +54,14 @@ struct SelectedCounts {
 }
 
 impl StatsCounts {
-    /// 消费并释放本人开放任务批次，累计器不持有任务或对象资料。
+    // 累计一批经授权的本人开放任务后释放该批数据；累计器只保留计数，不留任务和单据明细。
     fn extend_batch(&mut self, batch: impl IntoIterator<Item = StatIdentity>, context: &StatsContext<'_>) {
         for item in batch {
             self.observe(item, context);
         }
     }
 
-    /// 同一任务分配条件供总数与各类型统计使用；业务筛选只收窄结果。
+    // 在同一当前分配范围内计算总数和各类型计数；业务筛选只能收窄要计数的集合。
     fn extend_pending(
         &mut self,
         fields: impl IntoIterator<Item = dto::WorkItemFields>,
@@ -78,7 +78,7 @@ impl StatsCounts {
         );
     }
 
-    /// 任务已经通过当前分配与开放状态筛选，缺少办理权限不影响计数。
+    // 只统计已通过当前分配及开放状态筛选的任务；没有办理权限不从本人待办计数中移除。
     fn observe(&mut self, item: StatIdentity, context: &StatsContext<'_>) {
         increment_family_count(&mut self.family_counts, item.work_item_type);
         let count = self.work_item_type_counts.entry(item.work_item_type).or_default();
@@ -114,14 +114,11 @@ impl StatsCounts {
 
 impl WorkItemReadService {
     /// 查询与正式队列复用同一授权快照的待办统计。
-    ///
-    /// # 参数
-    /// * `params` - 责任范围、任务族、类型、时限与工作时区
-    /// * `actor` - 已认证操作人
-    /// # 返回
     /// 返回个人、今日到期、超期、异常、任务族计数及服务端统计时点。
-    /// # 错误
+    ///
     /// 查询参数、权限范围或对象事实读取失败时返回错误。
+    ///
+    /// `params`：责任范围、任务族、类型、时限与工作时区。
     #[inline(never)]
     pub fn work_item_stats(
         &self,
@@ -143,7 +140,7 @@ impl WorkItemReadService {
         })
     }
 
-    /// 个人统计与任务族统计单遍计算；非个人范围校验入口后保留零待办指标。
+    // 在指定时点单遍计算本人待办和任务族统计。若请求不是个人范围，先校验入口再返回零待办指标。
     async fn stats_at(
         &self,
         query: dto::WorkItemListQuery,
@@ -189,7 +186,7 @@ impl WorkItemReadService {
         })
     }
 
-    /// 按当前任务分配分批扫描，累计器只保留类型和时限计数。
+    // 分批扫描满足当前指派的任务，只累计类型和时限计数，不在内存保留全部命中任务。
     async fn stream_stats(
         &self,
         query: &dto::WorkItemListQuery,
@@ -222,19 +219,17 @@ impl WorkItemReadService {
     }
 }
 
-/// 正式列表按调用时点构造到期条件；统计另用固定响应时点。
-///
-/// # 参数
-/// `filter` 为候选范围，`due` 为可选时限筛选。
-/// # 返回
-/// 原地写入时限条件；无筛选时保持不变。
-/// # 错误
-/// 工作时区窗口无法形成时返回错误。
+// 正式列表按调用时点构造到期条件；统计另用固定响应时点。
+// 原地写入时限条件；无筛选时保持不变。
+//
+// 工作时区窗口无法形成时返回错误。
+//
+// `filter` 为候选范围，`due` 为可选时限筛选。
 pub(super) fn apply_due_filter(filter: &mut WorkItemFilter, due: Option<WorkItemDueFilter>) -> Result<()> {
     apply_due_filter_at(filter, due, Instant::now())
 }
 
-/// 使用固定服务端时点构造到期范围，保证各统计批次和响应时点一致。
+// 按与响应相同的固定服务端时点计算到期窗口，并在各统计批次使用该窗口，不随扫描耗时漂移。
 fn apply_due_filter_at(
     filter: &mut WorkItemFilter,
     due: Option<WorkItemDueFilter>,
@@ -249,17 +244,15 @@ fn apply_due_filter_at(
     Ok(())
 }
 
-/// 按固定时点计算工作时区的今日半开区间。
-///
-/// # 参数
-/// `now_unix_secs` 为与响应一致的服务端时点。
-/// # 返回
-/// 返回今日下界与明日上界。
-/// # 错误
-/// 工作时区窗口无法形成时返回错误。
-///
-/// # Panics
-/// `window.from` 为 `None` 时 panic。`WorkItemDueFilter::Today` 的窗口总会带下界，此分支不应发生。
+// 按固定时点计算工作时区的今日半开区间。
+// 返回今日下界与明日上界。
+//
+// 工作时区窗口无法形成时返回错误。
+//
+// 触发 panic 的条件：
+// `window.from` 为 `None` 时 panic。`WorkItemDueFilter::Today` 的窗口总会带下界，此分支不应发生。
+//
+// `now_unix_secs` 为与响应一致的服务端时点。
 pub(super) fn business_day_bounds_at(now_unix_secs: i64) -> Result<(Instant, Instant)> {
     let window = WorkItemDueFilter::Today
         .window_at(Instant::from_unix_secs(now_unix_secs))
@@ -267,7 +260,7 @@ pub(super) fn business_day_bounds_at(now_unix_secs: i64) -> Result<(Instant, Ins
     Ok((window.from.expect("今日窗口必须有下界"), window.before))
 }
 
-/// 返回服务器注册的全部任务类型，不受当前选中分组限制。
+// 为全族统计取得服务端登记的全部任务种类，不按当前选中的用户分组缩减。
 fn registered_work_item_types() -> Vec<WorkItemType> {
     [
         WorkItemFamily::Approval,
@@ -281,7 +274,7 @@ fn registered_work_item_types() -> Vec<WorkItemType> {
     .collect()
 }
 
-/// 单条任务族计数只依赖领域的固定映射。
+// 统计一条任务时通过领域固定映射增加其任务族计数，不从展示名称推断分类。
 fn increment_family_count(counts: &mut WorkItemFamilyCountsView, work_item_type: WorkItemType) {
     let count = match family_of(work_item_type) {
         WorkItemFamily::Approval => &mut counts.approval,
@@ -313,7 +306,7 @@ mod tests {
 
     use super::*;
 
-    /// 仅有待办列表权限时，审批与采购任务按同一当前分配规则进入列表和统计。
+    // 验证：仅有待办列表权限时，审批与采购任务按同一当前分配规则进入列表和统计。
     #[test]
     fn pending_counts_match_assignment_pages_without_business_or_execution_permissions() {
         use bpm::ids::ApprovalNodeExecutionId;
@@ -385,13 +378,13 @@ mod tests {
         assert_eq!(narrowed.selected.assigned, 0);
     }
 
-    /// 使用固定业务时点构造实际计数上下文。
+    // 以固定业务时间构造统计测试上下文，避免运行单测时跨越真实日期或时限。
     fn context<'a>(actor: &'a AuditActor, types: &'a [WorkItemType], as_of: Instant) -> StatsContext<'a> {
         let (today_start, tomorrow_start) = business_day_bounds_at(as_of.unix_secs()).unwrap();
         StatsContext { actor, selected_types: types, as_of, today_start, tomorrow_start }
     }
 
-    /// 构造已由当前任务分配确定的最小统计身份。
+    // 搭建已明确当前个人分配的最小任务身份，使计数断言只依赖分配及开放状态。
     fn assigned(kind: WorkItemType, due: Option<Instant>) -> StatIdentity {
         StatIdentity { work_item_type: kind, due_at: due }
     }
@@ -413,7 +406,7 @@ mod tests {
         }
     }
 
-    /// 全族计数与选定类型并行累计，且消费完每一批后释放原批次。
+    // 验证：全族计数与选定类型并行累计，且消费完每一批后释放原批次。
     #[test]
     fn batches_release_items_and_keep_selected_and_personal_family_counts() {
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
@@ -475,7 +468,7 @@ mod tests {
         );
     }
 
-    /// 空队列不产生分类，跨越多个页面的任务仍完整累计并返回稳定类型码。
+    // 验证：空队列不产生分类，跨越多个页面的任务仍完整累计并返回稳定类型码。
     #[test]
     fn type_counts_cover_multiple_pages_and_empty_queues() {
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
@@ -498,7 +491,7 @@ mod tests {
         );
     }
 
-    /// 今日使用半开窗口，等于统计时点的任务不算逾期，午夜两侧按同一时点判定。
+    // 验证：今日使用半开窗口，等于统计时点的任务不算逾期，午夜两侧按同一时点判定。
     #[test]
     fn midnight_due_and_overdue_boundaries_use_response_timestamp() {
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);

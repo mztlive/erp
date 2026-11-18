@@ -18,13 +18,14 @@ type ReadFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T>> + Send + 'a>>;
 pub(super) trait ReadAuthorization: Send + Sync {
     type Scope: Send + Sync;
 
-    /// 为固定入口取得当前读取凭证。
-    /// # 参数
-    /// actor/permission 为固定入口，executor 为原事务执行器。
-    /// # 返回
-    /// 当前查询阶段凭证。
-    /// # 错误
-    /// 功能资格、查询映射或依赖读取失败时拒绝。
+    // 读取销售选品册与方案时，为固定入口取得当前读取凭证。
+    //
+    // 调用参数：
+    // actor/permission 为固定入口，executor 为原事务执行器。
+    //
+    // 当前查询阶段凭证。
+    //
+    // 功能资格、查询映射或依赖读取失败时拒绝。
     async fn query(
         &self,
         actor: &AuditActor,
@@ -32,13 +33,14 @@ pub(super) trait ReadAuthorization: Send + Sync {
         executor: &mut dyn Executor,
     ) -> Result<Self::Scope>;
 
-    /// 在业务读取和展示补齐后检查原凭证。
-    /// # 参数
-    /// scope 为原查询凭证，executor 为相同事务执行器。
-    /// # 返回
-    /// 当前阶段及依赖均有效时成功。
-    /// # 错误
-    /// 阶段变化或授权依赖到期时拒绝交付。
+    // 校验销售选品册与方案时，在业务读取和展示补齐后检查原凭证。
+    //
+    // 调用参数：
+    // scope 为原查询凭证，executor 为相同事务执行器。
+    //
+    // 当前阶段及依赖均有效时成功。
+    //
+    // 阶段变化或授权依赖到期时拒绝交付。
     async fn validate(&self, scope: &Self::Scope, executor: &mut dyn Executor) -> Result<()>;
 }
 
@@ -60,13 +62,15 @@ impl ReadAuthorization for SelectionAccess {
     }
 }
 
-/// 在同一快照执行查询、完整业务读取与最终交付检查。
-/// # 参数
-/// authorization 为共享授权能力，actor/permission 为固定入口，executor 为原事务；read 完成根读取及全部补齐。
-/// # 返回
-/// 仅在最终交付检查成功后返回读取结果。
-/// # 错误
-/// 查询、业务读取或交付检查失败时丢弃结果并保留错误分类。
+// 读取销售选品册与方案时，在同一快照执行查询、完整业务读取与最终交付检查。
+//
+// 调用参数：
+// authorization 为共享授权能力，actor/permission 为固定入口，executor 为原事务；read 完成根读取及全部补齐。
+//
+// 仅在最终交付检查成功后返回读取结果。
+//
+// 失败边界：
+// 查询、业务读取或交付检查失败时丢弃结果并保留错误分类。
 pub(super) async fn checked<A, T, F>(
     authorization: &A,
     actor: &AuditActor,
@@ -105,7 +109,7 @@ mod tests {
     }
 
     impl Authorization {
-        /// 记录真实编排访问的执行器，要求授权、读取和交付始终复用同一实例。
+        // 处理销售选品册与方案时，记录真实编排访问的执行器，要求授权、读取和交付始终复用同一实例。
         fn observe(&self, event: &'static str, executor: &mut dyn Executor) {
             let pointer = executor as *mut dyn Executor as *mut () as usize;
             let mut expected = self.executor.lock().unwrap();
@@ -141,7 +145,7 @@ mod tests {
         }
     }
 
-    /// 册详情、链接、方案详情和附属读取共用同一真实交付编排。
+    // 验证销售选品册与方案：册详情、链接、方案详情和附属读取共用同一真实交付编排。
     #[tokio::test]
     async fn delivery_follows_complete_read_and_uses_original_executor() {
         for permission in [
@@ -182,7 +186,7 @@ mod tests {
         }
     }
 
-    /// 补齐期间到期或跨阶段时，已组装结果仍须丢弃。
+    // 验证销售选品册与方案：补齐期间到期或跨阶段时，已组装结果仍须丢弃。
     #[tokio::test]
     async fn changed_delivery_discards_the_completed_view() {
         for expire in [true, false] {
@@ -226,7 +230,7 @@ mod tests {
         }
     }
 
-    /// 根读取失败时保留原错误，不执行后续补齐或交付检查。
+    // 验证销售选品册与方案：根读取失败时保留原错误，不执行后续补齐或交付检查。
     #[tokio::test]
     async fn failed_root_read_stops_before_delivery() {
         let authorization = Arc::new(Authorization {

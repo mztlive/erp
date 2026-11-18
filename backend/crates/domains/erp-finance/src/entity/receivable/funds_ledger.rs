@@ -40,21 +40,15 @@ impl ReceivableFundsLedger {
     ///
     /// 完成既有净额（APPLY 加、REVERSE 减）、待过账合计与「净已核销不得超过
     /// 回款金额」上限校验，并为本次待过账行预分配连续序号。
-    ///
-    /// # 参数
-    /// * `receipt_id` - 被核销回款单
-    /// * `receipt_amount` - 回款含税金额（上限）
-    /// * `existing` - 同一回款单已持久化核销分配
-    /// * `pending` - 本次待过账行（顺序即序号顺序）
-    ///
-    /// # 返回
     /// 返回可逐行 [`Self::apply`] 的账本。
+    /// 失败条件：净额／合计溢出、合计超过回款金额或序号溢出时返回 [`Error::LogicError`]。
+    /// 调用边界：不生成 ID、不读写数据库、不校验分录／账户存在性。
     ///
-    /// # 错误
-    /// 净额／合计溢出、合计超过回款金额或序号溢出时返回 [`Error::LogicError`]。
-    ///
-    /// # 约束
-    /// 不生成 ID、不读写数据库、不校验分录／账户存在性。
+    /// 输入约定：
+    /// - `receipt_id`：被核销回款单
+    /// - `receipt_amount`：回款含税金额（上限）
+    /// - `existing`：同一回款单已持久化核销分配
+    /// - `pending`：本次待过账行（顺序即序号顺序）
     pub fn new(
         receipt_id: CustomerReceiptId,
         receipt_amount: erp_core::money::Amount,
@@ -74,23 +68,17 @@ impl ReceivableFundsLedger {
     /// 按显式 APPLY／REVERSE 动作构建账本，允许冲减既有占用。
     ///
     /// APPLY 行增加净额，REVERSE 行减少净额；净额必须落在 `[0, receipt_amount]`。
-    ///
-    /// # 参数
-    /// * `receipt_id` - 被核销回款单
-    /// * `receipt_amount` - 回款含税金额（上限）
-    /// * `existing` - 同一回款单已持久化核销分配
-    /// * `pending` - 本次待过账行
-    /// * `actions` - 与 pending 等长的动作
-    /// * `reverses` - REVERSE 行对应的原 APPLY；APPLY 行为 `None`
-    ///
-    /// # 返回
     /// 返回可按动作逐行 [`Self::apply`]／[`Self::reverse`] 的账本。
+    /// 失败条件：长度不一致、净额为负或超过回款、溢出或序号溢出时返回 [`Error::LogicError`]。
+    /// 调用边界：过账路径继续走 [`Self::new`]（全部 APPLY）；冲减既有占用必须走本入口。
     ///
-    /// # 错误
-    /// 长度不一致、净额为负或超过回款、溢出或序号溢出时返回 [`Error::LogicError`]。
-    ///
-    /// # 约束
-    /// 过账路径继续走 [`Self::new`]（全部 APPLY）；冲减既有占用必须走本入口。
+    /// 输入约定：
+    /// - `receipt_id`：被核销回款单
+    /// - `receipt_amount`：回款含税金额（上限）
+    /// - `existing`：同一回款单已持久化核销分配
+    /// - `pending`：本次待过账行
+    /// - `actions`：与 pending 等长的动作
+    /// - `reverses`：REVERSE 行对应的原 APPLY；APPLY 行为 `None`
     pub fn new_with_actions(
         receipt_id: CustomerReceiptId,
         receipt_amount: erp_core::money::Amount,
@@ -143,20 +131,14 @@ impl ReceivableFundsLedger {
     }
 
     /// 按历史登记计划构造待过账行并构建账本。
-    ///
-    /// # 参数
-    /// * `receipt_id` - 新建历史回款
-    /// * `receipt_amount` - 登记含税金额
-    /// * `plan` - 调用方提供的核销分配计划
-    ///
-    /// # 返回
     /// 返回待逐行 apply 的账本。
+    /// 失败条件：计划行为空或金额非正时返回 [`Error::LogicError`]。
+    /// 调用边界：历史路径与审批过账共享同一账本类型。
     ///
-    /// # 错误
-    /// 计划行为空或金额非正时返回 [`Error::LogicError`]。
-    ///
-    /// # 约束
-    /// 历史路径与审批过账共享同一账本类型。
+    /// 输入约定：
+    /// - `receipt_id`：新建历史回款
+    /// - `receipt_amount`：登记含税金额
+    /// - `plan`：调用方提供的核销分配计划
     pub fn from_historical_plan(
         receipt_id: CustomerReceiptId,
         receipt_amount: erp_core::money::Amount,
@@ -170,22 +152,16 @@ impl ReceivableFundsLedger {
     }
 
     /// 按待过账行顺序核销一条分录。
-    ///
-    /// # 参数
-    /// * `line` - 必须等于冻结的 `pending[applied_count]`
-    /// * `entry` - 该行已装载分录
-    /// * `allocation_id` - Service 注入的分配 ID
-    /// * `allocated_at` - Service 注入的核销时间
-    ///
-    /// # 返回
-    /// 本行写入成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 乱序、分录不一致、开放余额不足或溢出时返回 [`Error::LogicError`]；
+    /// 结果：本行写入成功返回 `Ok(())`。
+    /// 失败条件：乱序、分录不一致、开放余额不足或溢出时返回 [`Error::LogicError`]；
     /// 失败保持调用前状态。
+    /// 调用边界：同分录多行共享开放余额；账户增量按首次出现顺序聚合。
     ///
-    /// # 约束
-    /// 同分录多行共享开放余额；账户增量按首次出现顺序聚合。
+    /// 输入约定：
+    /// - `line`：必须等于冻结的 `pending[applied_count]`
+    /// - `entry`：该行已装载分录
+    /// - `allocation_id`：Service 注入的分配 ID
+    /// - `allocated_at`：Service 注入的核销时间
     pub fn apply(
         &mut self,
         line: &PendingReceiptAllocation,
@@ -197,22 +173,16 @@ impl ReceivableFundsLedger {
     }
 
     /// 按待过账行顺序冲减一条分录占用。
+    /// 结果：本行写入成功返回 `Ok(())`。
+    /// 失败条件：乱序、分录不一致、冲减超过已占用或溢出时返回 [`Error::LogicError`]。
+    /// 调用边界：冲减减少账户聚合增量；账户增量保持首次出现顺序。
     ///
-    /// # 参数
-    /// * `line` - 必须等于冻结的 `pending[applied_count]`
-    /// * `entry` - 该行已装载分录
-    /// * `allocation_id` - Service 注入的分配 ID
-    /// * `allocated_at` - Service 注入的核销时间
-    /// * `reverses_allocation_id` - 被冲减的原 APPLY
-    ///
-    /// # 返回
-    /// 本行写入成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 乱序、分录不一致、冲减超过已占用或溢出时返回 [`Error::LogicError`]。
-    ///
-    /// # 约束
-    /// 冲减减少账户聚合增量；账户增量保持首次出现顺序。
+    /// 输入约定：
+    /// - `line`：必须等于冻结的 `pending[applied_count]`
+    /// - `entry`：该行已装载分录
+    /// - `allocation_id`：Service 注入的分配 ID
+    /// - `allocated_at`：Service 注入的核销时间
+    /// - `reverses_allocation_id`：被冲减的原 APPLY
     pub fn reverse(
         &mut self,
         line: &PendingReceiptAllocation,
@@ -232,53 +202,23 @@ impl ReceivableFundsLedger {
     }
 
     /// 返回本次构造的核销分配。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回按待过账行顺序排列的分配切片。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    ///
-    /// # 约束
-    /// 供 Service 批量插入。
+    /// 调用边界：供 Service 批量插入。
     pub fn new_allocations(&self) -> &[ReceiptAllocation] {
         &self.allocations
     }
 
     /// 返回按子账聚合的本次核销增量。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回 `(子账, 正增量)`，供 `apply_settlements_many`。REVERSE 净额见
     /// [`Self::account_revert_deltas`]。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    ///
-    /// # 约束
-    /// 过账路径只产出 APPLY 正增量。
+    /// 调用边界：过账路径只产出 APPLY 正增量。
     pub fn account_settlement_deltas(&self) -> Vec<(ReceivableAccountId, erp_core::money::Amount)> {
         self.account_deltas.iter().filter(|(_, amount)| *amount > zero_amount()).cloned().collect()
     }
 
     /// 返回按子账聚合的本次冲减增量（正数）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回既有占用被本批 REVERSE 冲减的 `(子账, 正数金额)`。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    ///
-    /// # 约束
-    /// 供 `revert_settlement`；过账 APPLY 路径为空。
+    /// 调用边界：供 `revert_settlement`；过账 APPLY 路径为空。
     pub fn account_revert_deltas(&self) -> Vec<(ReceivableAccountId, erp_core::money::Amount)> {
         self.account_deltas
             .iter()
@@ -290,57 +230,31 @@ impl ReceivableFundsLedger {
     }
 
     /// 返回冻结的待过账行。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回构造时的 pending 切片。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    ///
-    /// # 约束
-    /// `apply` 必须按此顺序传入。
+    /// 调用边界：`apply` 必须按此顺序传入。
     pub fn pending(&self) -> &[PendingReceiptAllocation] {
         &self.pending
     }
 
     /// 返回净已核销合计。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回既有净额加本次待过账合计。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    ///
-    /// # 约束
-    /// 构造时已保证不超过回款金额。
+    /// 调用边界：构造时已保证不超过回款金额。
     pub fn net_allocated_total(&self) -> erp_core::money::Amount {
         self.net_allocated_total
     }
 
-    /// 按动作写入一行并更新分录占用与账户增量。
-    ///
-    /// # 参数
-    /// * `line` - 待过账行
-    /// * `entry` - 分录事实
-    /// * `allocation_id` - 分配 ID
-    /// * `allocated_at` - 核销时间
-    /// * `action` - APPLY 或 REVERSE
-    /// * `reverses_allocation_id` - REVERSE 必填
-    ///
-    /// # 返回
-    /// 成功写入返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 顺序、余额或溢出失败时不写入本行。
-    ///
-    /// # 约束
-    /// 账户增量按符号聚合：APPLY 为正，REVERSE 为负；既有占用冲减允许从零起记负数。
+    // 按动作写入一行并更新分录占用与账户增量。
+    // 结果：成功写入返回 `Ok(())`。
+    // 失败条件：顺序、余额或溢出失败时不写入本行。
+    // 调用边界：账户增量按符号聚合：APPLY 为正，REVERSE 为负；既有占用冲减允许从零起记负数。
+    //
+    // 输入约定：
+    // - `line`：待过账行
+    // - `entry`：分录事实
+    // - `allocation_id`：分配 ID
+    // - `allocated_at`：核销时间
+    // - `action`：APPLY 或 REVERSE
+    // - `reverses_allocation_id`：REVERSE 必填
     fn apply_action(
         &mut self,
         line: &PendingReceiptAllocation,
@@ -414,17 +328,13 @@ impl ReceivableFundsLedger {
         Ok(())
     }
 
-    /// 校验当前核销动作与反向引用匹配冻结计划。
-    ///
-    /// # 参数
-    /// * `action` - 本行核销动作
-    /// * `reverses_allocation_id` - 反向核销引用的原分配身份
-    ///
-    /// # 返回
-    /// 动作与反向引用均匹配时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 先检查动作，再检查反向引用；不匹配时返回原顺序错误。
+    // 校验当前核销动作与反向引用匹配冻结计划。
+    // 结果：动作与反向引用均匹配时返回 `Ok(())`。
+    // 失败条件：先检查动作，再检查反向引用；不匹配时返回原顺序错误。
+    //
+    // 输入约定：
+    // - `action`：本行核销动作
+    // - `reverses_allocation_id`：反向核销引用的原分配身份
     fn ensure_action_order(
         &self,
         action: AllocationAction,
@@ -442,19 +352,13 @@ impl ReceivableFundsLedger {
         Ok(())
     }
 
-    /// 校验传入行即冻结的下一待过账行并返回预分配序号。
-    ///
-    /// # 参数
-    /// * `line` - 调用方传入行
-    ///
-    /// # 返回
-    /// 顺序匹配时返回该行序号。
-    ///
-    /// # 错误
-    /// 已用尽或乱序时返回 [`Error::LogicError`]。
-    ///
-    /// # 约束
-    /// 不修改账本。
+    // 校验传入行即冻结的下一待过账行并返回预分配序号。
+    // 结果：顺序匹配时返回该行序号。
+    // 失败条件：已用尽或乱序时返回 [`Error::LogicError`]。
+    // 调用边界：不修改账本。
+    //
+    // 输入约定：
+    // - `line`：调用方传入行
     fn expected_seq(&self, line: &PendingReceiptAllocation) -> Result<u32> {
         let expected =
             self.pending.get(self.applied_count).ok_or_else(|| Error::from("核销计划行数超过待过账行数"))?;

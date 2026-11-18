@@ -12,21 +12,12 @@ use crate::http::handler::bulk_job;
 use crate::http::routes::permission_route;
 use crate::http::state::HttpState;
 
-/// 返回本域管理端路由集合。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回声明公共权限目录信息的路由集合。
-///
-/// # 错误
-/// 不执行 I/O，不返回错误。
+/// 为管理端挂载批量作业与选择快照接口，按操作登记公共权限目录信息。
 pub fn routes() -> Router<HttpState> {
     Router::new().merge(selection_routes()).merge(job_routes())
 }
 
-/// 批量选择快照路由。
+// 为父路由挂载批量选择快照路由。
 fn selection_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -66,7 +57,7 @@ fn selection_routes() -> Router<HttpState> {
         )
 }
 
-/// 后台任务查询与控制路由。
+// 为父路由挂载后台任务查询与控制路由。
 fn job_routes() -> Router<HttpState> {
     Router::new()
         .route(

@@ -7,12 +7,10 @@ use persistence_core::Result;
 use crate::repository::SalesCommandExt;
 
 /// 登记销售命令 ID 唯一索引。
-/// # 参数
-/// `db` 为目标数据库。
-/// # 返回
-/// 索引存在或创建成功时返回空结果。
-/// # 错误
-/// 身份重复或存储失败时拒绝启动。
+/// 结果：索引存在或创建成功时返回空结果。
+/// 失败条件：身份重复或存储失败时拒绝启动。
+///
+/// 输入约定：`db` 为目标数据库。
 pub async fn ensure(db: &Database) -> Result<()> {
     let keys = Document::from_iter([("id".to_string(), 1.into())]);
     let index = IndexModel::builder()

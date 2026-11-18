@@ -7,12 +7,7 @@ use crate::entity::address_arrangement::AddressArrangement;
 pub trait AddressArrangementExt {
     const ADDRESS_ARRANGEMENTS: &'static str = "fulfillment_address_arrangements";
     /// 返回地址安排仓储。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 绑定独立集合的仓储。
-    /// # 错误
-    /// 不返回错误。
     fn address_arrangements(&self) -> Repository<'_, AddressArrangement>;
 }
 impl AddressArrangementExt for Database {

@@ -36,12 +36,7 @@ pub enum PreparationAction {
 
 impl BatchPreparation {
     /// 创建尚未生成草稿的准备任务。
-    /// # 参数
-    /// `request_key` 为作用域内原操作身份，`fingerprint` 为原选择请求摘要。
-    /// # 返回
     /// 进度为零的排队状态。
-    /// # 错误
-    /// 不返回错误。
     pub fn new(request_key: String, fingerprint: String) -> Self {
         Self {
             request_key,
@@ -54,22 +49,13 @@ impl BatchPreparation {
     }
 
     /// 判断后台是否仍需准备。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 排队及准备中为真。
-    /// # 错误
-    /// 不返回错误。
     pub fn runnable(&self) -> bool {
         matches!(self.status, PreparationStatus::Queued | PreparationStatus::Preparing)
     }
 
     /// 提交一块真实完成的进度。
-    /// # 参数
-    /// `count` 为本块行数，`total` 为不可变成员总数。
-    /// # 返回
     /// 更新累计数量、下一块与完成状态。
-    /// # 错误
     /// 非运行态、空块、溢出或超过冻结总数时拒绝。
     pub fn advance(&mut self, count: usize, total: usize) -> Result<()> {
         let completed = self.completed.checked_add(count).filter(|value| *value <= total);
@@ -88,11 +74,7 @@ impl BatchPreparation {
     }
 
     /// 保存确定的准备失败，保留原进度供重试。
-    /// # 参数
-    /// `message` 为可向操作人展示的失败原因。
-    /// # 返回
     /// 进入失败状态，已完成数量保持不变。
-    /// # 错误
     /// 已终止或不在准备中的任务拒绝覆盖。
     pub fn fail(&mut self, message: String) -> Result<()> {
         if !self.runnable() {
@@ -104,11 +86,7 @@ impl BatchPreparation {
     }
 
     /// 对原任务执行重试或取消，不改变冻结范围及已提交进度。
-    /// # 参数
-    /// `action` 为用户明确动作。
-    /// # 返回
     /// 合法状态迁移完成；相同取消或已排队重试幂等。
-    /// # 错误
     /// 完成后取消、取消后重试或不支持的状态拒绝。
     pub fn apply(&mut self, action: PreparationAction) -> Result<()> {
         match action {

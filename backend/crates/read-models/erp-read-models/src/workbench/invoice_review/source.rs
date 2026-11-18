@@ -15,13 +15,14 @@ use super::super::brief::{BRIEF_LINE_LIMIT, BriefLine, BriefSection, ObjectBrief
 use super::super::presentation::format_yuan;
 use crate::{Error, Result};
 
-/// 验证申请、应收和销售属于同一业务来源，禁止跨主体补取资料。
-/// # 参数
-/// `request` 为已授权申请，`account` 为其绑定应收。
-/// # 返回
-/// 申请和应收的全部来源身份一致时成功。
-/// # 错误
-/// 应收、销售、客户或购方主体不一致时返回冲突。
+// 校验开票核对时，检查申请、应收和销售属于同一业务来源，禁止跨主体补取资料。
+//
+// 调用参数：
+// `request` 为已授权申请，`account` 为其绑定应收。
+//
+// 申请和应收的全部来源身份一致时成功。
+//
+// 应收、销售、客户或购方主体不一致时返回冲突。
 pub(super) fn validate_binding(request: &SalesInvoiceRequest, account: &ReceivableAccount) -> Result<()> {
     if request.receivable_account_id.as_ref() != account.base.id
         || request.sales_order_id != account.sales_order_id
@@ -33,13 +34,14 @@ pub(super) fn validate_binding(request: &SalesInvoiceRequest, account: &Receivab
     Ok(())
 }
 
-/// 读取本次绑定销售单的生效版本；版本改变由上层明确展示。
-/// # 参数
-/// 数据库、已授权申请及调用方事务执行器。
-/// # 返回
-/// 当前销售单、生效版本及有界展示摘要。
-/// # 错误
-/// 来源缺失、客户或版本归属不一致、明细不完整时拒绝，仓储错误原样返回。
+// 为开票核对取数时，读取本次绑定销售单的生效版本；版本改变由上层明确展示。
+//
+// 调用参数：
+// 数据库、已授权申请及调用方事务执行器。
+//
+// 当前销售单、生效版本及有界展示摘要。
+//
+// 来源缺失、客户或版本归属不一致、明细不完整时拒绝，仓储错误原样返回。
 pub(super) async fn load(
     db: &Database,
     request: &SalesInvoiceRequest,

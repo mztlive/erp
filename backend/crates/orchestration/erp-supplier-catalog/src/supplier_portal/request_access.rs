@@ -55,13 +55,13 @@ pub(super) struct RequestTarget {
 }
 
 impl RequestTarget {
-    /// 从原执行器读取的供给申请提取完整来源身份。
-    /// # 参数
-    /// app 为拥有领域返回的真实申请。
-    /// # 返回
-    /// 固定申请类型及当前供应商、供给来源。
-    /// # 错误
-    /// 不执行 I/O。
+    // 从原执行器读取的供给申请提取完整来源身份。
+    //
+    // app 为拥有领域返回的真实申请。
+    //
+    // 固定申请类型及当前供应商、供给来源。
+    //
+    // 不执行 I/O。
     pub(super) fn offering(app: &OfferingApplication) -> Self {
         let offering = app.snapshot.target().map(|(id, _, _)| id.to_string());
         Self {
@@ -73,13 +73,13 @@ impl RequestTarget {
         }
     }
 
-    /// 从真实新品草稿提取其供应商来源。
-    /// # 参数
-    /// draft 为拥有领域返回的草稿。
-    /// # 返回
-    /// 新品申请固定身份。
-    /// # 错误
-    /// 不执行 I/O。
+    // 从真实新品草稿提取其供应商来源。
+    //
+    // draft 为拥有领域返回的草稿。
+    //
+    // 新品申请固定身份。
+    //
+    // 不执行 I/O。
     pub(super) fn new_product(draft: &NewProductDraft) -> Self {
         Self {
             id: draft.base.id.clone(),
@@ -104,13 +104,13 @@ impl RequestTarget {
         supplier_id.is_none_or(|id| id == self.supplier.as_str()).then_some(self.kind)
     }
 
-    /// 按拥有领域加载精确申请，不由客户端选择来源类型。
-    /// # 参数
-    /// db、id、executor 为原数据库、申请身份及读取执行器。
-    /// # 返回
-    /// 真实申请及其完整来源；不存在时返回 None。
-    /// # 错误
-    /// 拥有领域读取失败保留原分类。
+    // 按拥有领域加载精确申请，不由客户端选择来源类型。
+    //
+    // db、id、executor 为原数据库、申请身份及读取执行器。
+    //
+    // 真实申请及其完整来源；不存在时返回 None。
+    //
+    // 拥有领域读取失败保留原分类。
     pub(super) async fn load(db: &Database, id: &str, executor: &mut dyn Executor) -> Result<Option<Self>> {
         if let Some(app) = db.portal_applications().find_by_id(id, executor).await? {
             Ok(Some(Self::offering(&app)))
@@ -122,13 +122,13 @@ impl RequestTarget {
     }
 }
 
-/// 按持久化申请种类执行固定材料授权。
-/// # 参数
-/// authorization 为共享服务，target 为同一执行器读取的真实申请。
-/// # 返回
-/// 完整来源和功能资格均成立时成功。
-/// # 错误
-/// 任一来源、真实申请种类或必要资格不符时拒绝。
+// 按持久化申请种类执行固定材料授权。
+//
+// authorization 为共享服务，target 为同一执行器读取的真实申请。
+//
+// 完整来源和功能资格均成立时成功。
+//
+// 任一来源、真实申请种类或必要资格不符时拒绝。
 pub(super) async fn require_request(
     authorization: &AuthorizationService,
     actor: &AuditActor,
@@ -143,11 +143,11 @@ pub(super) async fn require_request(
 }
 
 /// 构造从拥有领域读取真实申请和完整来源的事实适配器。
-/// # 参数
+///
 /// db 为各拥有领域所在数据库。
-/// # 返回
+///
 /// 不保存请求种类或临时目标的资源事实读取器。
-/// # 错误
+///
 /// 不执行 I/O。
 pub fn material_facts_port(db: Database) -> Arc<dyn AccessFactsPort> {
     Arc::new(RequestFacts { db })
@@ -227,7 +227,7 @@ impl RequestFacts {
         Ok(root)
     }
 }
-/// 原申请身份、种类及供应商引用均来自同次持久化读取。
+// 原申请身份、种类及供应商引用均来自同次持久化读取。
 fn request_root(target: &RequestTarget, supplier: ObjectFacts) -> IdentityResult<ObjectFacts> {
     let mut root = ObjectFacts {
         resource: MATERIAL_RESOURCE.into(),

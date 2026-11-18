@@ -41,40 +41,33 @@ pub(crate) const SALES_ORDER_GOODS_SERVICE_LINE_REVISIONS: &str =
 pub(crate) const SALES_ORDER_VOUCHER_LINE_REVISIONS: &str =
     <mongodb::Database as SalesOrderExt>::SALES_ORDER_VOUCHER_LINE_REVISIONS;
 
-/// 创建本域集合的幂等命名索引。
-///
-/// 逐条落地数据模型 §6.4/§6.5「必需约束与索引」：
-/// - `order_no` 是身份类字段，使用**全局唯一索引**（与 accounts 的 code 处理
-///   一致）：软删除后仍保留单号，避免复用破坏恢复语义；
-/// - 工作副本「同一销售单和编辑目的同时最多一个有效工作副本」使用**部分唯一
-///   索引**（仅 `EDITING`/`CONFLICT` 状态参与唯一）：历史草稿以
-///   `SUBMITTED`/`ABANDONED` 状态永久保留，全局唯一会阻塞后续提交。回滚方式：
-///   先删除该部分唯一索引、用应用层查重过渡，再由数据修复任务收敛数据后重建；
-/// - 提交/版本是事实类集合，全部唯一约束直接建在身份组合上（无软删除语义）；
-/// - `(sales_order_id, content_hash)` 用于幂等与历史查询，但同一内容可能被合法
-///   重建，故为普通索引而非唯一索引（幂等判定由 P3 结合来源快照完成）；
-/// - 数据模型「负责人参与人 + 状态」「履约期限」索引：显式负责销售通过
-///   `sales_owner_user_id + deleted_at + created_at + id` 查询，本域以审核轨
-///   `review_status + created_at` 覆盖审核列表，履约期限按版本行落地
-///   `idx_sales_order_revision_lines_due`；
-/// - 销售单列表的「待我处理 / 我创建的」固定视图以 `created_by` 为首要等值条件，
-///   并按 `created_at` 倒序分页，因此增加 `created_by + created_at` 复合索引。
-///   来源、合同和各进度筛选均为低选择性可选组合，不为每种组合建立索引，避免
-///   写放大与索引爆炸；后续依据慢查询样本补充高频组合。若需回滚，删除该普通
-///   索引即可，不影响字段兼容性和查询正确性。
-/// - 实际经营盈亏按当前负责销售和业务组织做期间查询，分别由
-///   `idx_sales_orders_profit_owner`（`sales_owner_user_id` 首列）与
-///   `idx_sales_orders_profit_org`（`business_org_unit_id` 首列）覆盖；
-///   两者均为普通索引，回滚时仅移除这两个索引，不改动单据或历史快照。
-///
-/// # 参数
-/// * `db` - 目标 MongoDB 数据库
-///
-/// # 返回
-/// 本域各集合索引创建或已存在时返回空结果。
-///
-/// # 错误
-/// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
+// 创建本域集合的幂等命名索引。
+//
+// 逐条落地数据模型 §6.4/§6.5「必需约束与索引」：
+// - `order_no` 是身份类字段，使用**全局唯一索引**（与 accounts 的 code 处理
+//   一致）：软删除后仍保留单号，避免复用破坏恢复语义；
+// - 工作副本「同一销售单和编辑目的同时最多一个有效工作副本」使用**部分唯一
+//   索引**（仅 `EDITING`/`CONFLICT` 状态参与唯一）：历史草稿以
+//   `SUBMITTED`/`ABANDONED` 状态永久保留，全局唯一会阻塞后续提交。回滚方式：
+//   先删除该部分唯一索引、用应用层查重过渡，再由数据修复任务收敛数据后重建；
+// - 提交/版本是事实类集合，全部唯一约束直接建在身份组合上（无软删除语义）；
+// - `(sales_order_id, content_hash)` 用于幂等与历史查询，但同一内容可能被合法
+//   重建，故为普通索引而非唯一索引（幂等判定由 P3 结合来源快照完成）；
+// - 数据模型「负责人参与人 + 状态」「履约期限」索引：显式负责销售通过
+//   `sales_owner_user_id + deleted_at + created_at + id` 查询，本域以审核轨
+//   `review_status + created_at` 覆盖审核列表，履约期限按版本行落地
+//   `idx_sales_order_revision_lines_due`；
+// - 销售单列表的「待我处理 / 我创建的」固定视图以 `created_by` 为首要等值条件，
+//   并按 `created_at` 倒序分页，因此增加 `created_by + created_at` 复合索引。
+//   来源、合同和各进度筛选均为低选择性可选组合，不为每种组合建立索引，避免
+//   写放大与索引爆炸；后续依据慢查询样本补充高频组合。若需回滚，删除该普通
+//   索引即可，不影响字段兼容性和查询正确性。
+// - 实际经营盈亏按当前负责销售和业务组织做期间查询，分别由
+//   `idx_sales_orders_profit_owner`（`sales_owner_user_id` 首列）与
+//   `idx_sales_orders_profit_org`（`business_org_unit_id` 首列）覆盖；
+//   两者均为普通索引，回滚时仅移除这两个索引，不改动单据或历史快照。
+// 结果：本域各集合索引创建或已存在时返回空结果。
+// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub(crate) async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, SALES_ORDERS, sales_order_indexes()).await?;
     create_indexes(db, SALES_ORDER_LINES, sales_order_line_indexes()).await?;
@@ -93,13 +86,13 @@ pub(crate) async fn ensure(db: &Database) -> Result<()> {
     Ok(())
 }
 
-/// 为单个集合创建一组幂等命名索引。
+// 安装本模块定义的命名索引；服务启动时按集合注册，重复注册沿用现有定义。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
     db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
-/// 返回 `sales_order` 的身份约束与业务列表查询索引。
+// 为 `sales_order` 注册身份约束与业务列表查询索引，供所在领域的索引安装入口使用。
 fn sales_order_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_sales_orders_id", doc! { "id": 1 }),
@@ -133,7 +126,7 @@ fn sales_order_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `sales_order_line` 的稳定明细唯一约束。
+// 为 `sales_order_line` 注册稳定明细唯一约束，供所在领域的索引安装入口使用。
 fn sales_order_line_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_sales_order_lines_id", doc! { "id": 1 }),
@@ -141,7 +134,7 @@ fn sales_order_line_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `sales_order_working_copy` 的有效唯一约束与列表查询索引。
+// 为 `sales_order_working_copy` 注册有效唯一约束与列表查询索引，供所在领域的索引安装入口使用。
 fn working_copy_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_sales_order_working_copies_id", doc! { "id": 1 }),
@@ -163,7 +156,7 @@ fn working_copy_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `sales_order_working_copy_line` 的明细唯一约束。
+// 为 `sales_order_working_copy_line` 注册明细唯一约束，供所在领域的索引安装入口使用。
 fn working_copy_line_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_sales_order_working_copy_lines_id", doc! { "id": 1 }),
@@ -174,7 +167,7 @@ fn working_copy_line_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `sales_order_submission` 的身份约束与历史查询索引。
+// 为 `sales_order_submission` 注册身份约束与历史查询索引，供所在领域的索引安装入口使用。
 fn submission_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_sales_order_submissions_id", doc! { "id": 1 }),
@@ -190,7 +183,7 @@ fn submission_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `sales_order_submission_line` 的明细唯一约束。
+// 为 `sales_order_submission_line` 注册明细唯一约束，供所在领域的索引安装入口使用。
 fn submission_line_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_sales_order_submission_lines_id", doc! { "id": 1 }),
@@ -201,7 +194,7 @@ fn submission_line_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `sales_order_revision` 的身份约束与历史/幂等查询索引。
+// 为 `sales_order_revision` 注册身份约束与历史/幂等查询索引，供所在领域的索引安装入口使用。
 fn revision_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_sales_order_revisions_id", doc! { "id": 1 }),
@@ -220,7 +213,7 @@ fn revision_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `sales_order_revision_line` 的公共行唯一约束与履约期限索引。
+// 为 `sales_order_revision_line` 注册公共行唯一约束与履约期限索引，供所在领域的索引安装入口使用。
 fn revision_line_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_sales_order_revision_lines_id", doc! { "id": 1 }),
@@ -235,7 +228,7 @@ fn revision_line_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `sales_order_goods_service_line_revision` 的一对一唯一约束。
+// 为 `sales_order_goods_service_line_revision` 注册一对一唯一约束，供所在领域的索引安装入口使用。
 fn goods_service_line_revision_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_sales_order_goods_service_line_revisions_id", doc! { "id": 1 }),
@@ -243,7 +236,7 @@ fn goods_service_line_revision_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `sales_order_voucher_line_revision` 的一对一唯一约束。
+// 为 `sales_order_voucher_line_revision` 注册一对一唯一约束，供所在领域的索引安装入口使用。
 fn voucher_line_revision_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_sales_order_voucher_line_revisions_id", doc! { "id": 1 }),
@@ -253,7 +246,7 @@ fn voucher_line_revision_indexes() -> Vec<IndexModel> {
 
 #[cfg(test)]
 mod tests {
-    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    // 检查各集合是否声明稳定 `id` 的唯一索引，防止主键读取和乐观锁写入退化为集合扫描。
     #[test]
     fn collections_look_up_by_unique_stable_id() {
         for indexes in [

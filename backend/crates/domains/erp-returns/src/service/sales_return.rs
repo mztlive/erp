@@ -10,17 +10,9 @@ use crate::entity::returns::{SalesReturnCase, SalesReturnCaseData, SalesReturnLi
 use crate::repository::ReturnsExt;
 
 /// 由创建请求构造处理单与首条明细。
-///
 /// 明细验收字段在创建时为空；累计有效退回数量由后续验收事务校验。
-///
-/// # 参数
-/// * `req` - 已通过 `Validate` 的创建请求。
-/// * `created_by` - 创建人。
-///
-/// # 返回
 /// 返回草稿处理单与对应明细。
-///
-/// # 错误
+/// `req` 为已通过 `Validate` 的创建请求。
 /// 处理号或原因为空、超长，或申请数量非正时返回 `Logic`。
 ///
 /// # Panics
@@ -59,17 +51,9 @@ pub fn build_sales_return_case_and_line(
 }
 
 /// 在调用方 Executor 上依次写入退货头与首条明细。
-///
-/// # 参数
-/// * `db` - 数据库句柄。
-/// * `case` - 待写入的处理单头。
-/// * `line` - 待写入的首条明细。
-/// * `executor` - 调用方执行器；事务由外层根持有。
-///
-/// # 返回
 /// 头和明细都写入成功时无返回值。
-///
-/// # 错误
+/// `case` 为待写入的处理单头；`line` 为待写入的首条明细。
+/// `executor` 为调用方执行器；事务由外层根持有。
 /// 头或明细写入失败时返回原仓储错误。
 pub async fn persist_sales_return_case_with_line(
     db: &Database,

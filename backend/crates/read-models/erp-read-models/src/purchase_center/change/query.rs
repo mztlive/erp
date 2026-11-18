@@ -43,11 +43,7 @@ pub struct PurchaseChangeListView {
 }
 
 impl PurchaseOrderReadService {
-    /// 分页查询采购变更单列表。
-    ///
-    /// # 参数
-    /// * `params` - 查询参数
-    /// * `actor` - 已认证操作人
+    /// 调用此入口时，分页查询采购变更单列表。
     ///
     /// # 返回
     /// 返回带范围版本的分页视图。
@@ -75,13 +71,12 @@ impl PurchaseOrderReadService {
         Ok(snapshot)
     }
 
-    /// 查询采购变更单详情。
+    /// 读取采购变更单详情。
     ///
     /// 返回统一只读审批结构；创建后未提交只返回绑定定义。
     ///
     /// # 参数
     /// * `id` - 变更单 ID
-    /// * `actor` - 已认证操作人
     ///
     /// # 返回
     /// 返回变更单视图。
@@ -95,11 +90,14 @@ impl PurchaseOrderReadService {
         load_authorized_change(&self.db, &self.access(), self.rbac.clone(), actor, id).await
     }
 
-    /// 在原命令资格下重新授权并读取采购变更结果。
+    /// 生成采购变更视图时，在原命令资格下重新授权并读取采购变更结果。
+    ///
     /// # 参数
     /// id、actor 为真实变更与当前账号，permission 为固定提交或作废回包权限，executor 为新快照。
+    ///
     /// # 返回
     /// 同一快照的完整变更结果，不追加详情菜单资格。
+    ///
     /// # 错误
     /// 非快照、入口不支持、撤权、来源无权或读取失败时拒绝。
     pub async fn command_change_order_view(
@@ -146,20 +144,14 @@ impl PurchaseOrderReadService {
         Ok(view)
     }
 
-    /// 授权、总数与变更单版本全部在同一个事务读取。
-    ///
-    /// # 参数
-    /// * `params` - 原始查询
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 返回带范围版本的列表快照。
-    ///
-    /// # 错误
-    /// 范围变化、筛选非法或仓储失败时拒绝。
-    ///
-    /// # 关键业务约束
-    /// 筛选只能收窄授权结果；缺范围保持空集。
+    // 处理采购变更时，授权、总数与变更单版本全部在同一个事务读取。
+    //
+    // 返回带范围版本的列表快照。
+    //
+    // 范围变化、筛选非法或仓储失败时拒绝。
+    //
+    // 业务边界：
+    // 筛选只能收窄授权结果；缺范围保持空集。
     async fn change_list_snapshot(
         &self,
         params: &PurchaseChangeOrderListParams,
@@ -182,7 +174,7 @@ impl PurchaseOrderReadService {
     }
 }
 
-/// 在原事务内读取业务筛选与来源授权交集的列表及版本。
+// 读取采购变更时，在原事务内读取业务筛选与来源授权交集的列表及版本。
 async fn read_change_list(
     db: &Database,
     access: &PurchaseAccess,
@@ -234,7 +226,7 @@ async fn read_change_list(
     })
 }
 
-/// 只对完整业务授权交集的变更版本执行上限和指纹绑定。
+// 为采购变更绑定范围版本时，只对完整业务授权交集的变更版本执行上限和指纹绑定。
 fn change_scope_version(scope_version: &str, versions: &[PurchaseVersion]) -> Result<String> {
     if versions.len() > 10_000 {
         return Err(Error::ValidationError("采购变更查询超过上限，请收窄原采购单条件".into()));
@@ -244,22 +236,18 @@ fn change_scope_version(scope_version: &str, versions: &[PurchaseVersion]) -> Re
     Ok(format!("{scope_version}:{:x}", fingerprint.finish()))
 }
 
-/// 在独立事务中重验来源采购单后装配变更单详情。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `access` - 采购范围访问器
-/// * `actor` - 已认证操作人
-/// * `id` - 变更单主键
-///
-/// # 返回
-/// 返回通过完整来源权限检查的变更视图。
-///
-/// # 错误
-/// 变更单不存在或来源采购单不可见时返回 NotFound。
-///
-/// # 关键业务约束
-/// 不泄露越权变更单的存在性。
+// 读取采购变更时，在独立事务中重验来源采购单后装配变更单详情。
+//
+// 调用参数：
+// * `access` - 采购范围访问器
+// * `id` - 变更单主键
+//
+// 返回通过完整来源权限检查的变更视图。
+//
+// 变更单不存在或来源采购单不可见时返回 NotFound。
+//
+// 业务边界：
+// 不泄露越权变更单的存在性。
 async fn load_authorized_change(
     db: &mongodb::Database,
     access: &super::super::access::PurchaseAccess,
@@ -281,7 +269,7 @@ async fn load_authorized_change(
         .await
 }
 
-/// 在同一快照内先检查变更入口，再核验实际采购来源及交付。
+// 读取采购变更时，在同一快照内先检查变更入口，再核验实际采购来源及交付。
 async fn load_change_snapshot(
     db: &Database,
     access: &PurchaseAccess,
@@ -312,7 +300,7 @@ async fn load_change_snapshot(
     Ok(view)
 }
 
-/// 使用原执行器渲染已取得授权的完整变更事实。
+// 组装采购变更时，使用原执行器渲染已取得授权的完整变更事实。
 async fn render_change(
     db: &Database,
     change: PurchaseChangeOrder,
@@ -342,13 +330,12 @@ async fn render_change(
     Ok(view)
 }
 
-/// 规范化可选列表筛选文本。
-///
-/// # 参数
-/// * `value` - 原始可选筛选值
-///
-/// # 返回
-/// 空白值返回 `None`，否则返回去除首尾空白后的字符串。
+// 应用采购变更筛选时，规范化可选列表筛选文本。
+//
+// 调用参数：
+// * `value` - 原始可选筛选值
+//
+// 空白值返回 `None`，否则返回去除首尾空白后的字符串。
 fn normalized_filter(value: Option<&str>) -> Option<String> {
     value.map(str::trim).filter(|value| !value.is_empty()).map(str::to_string)
 }

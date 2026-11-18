@@ -89,19 +89,7 @@ pub(super) struct ApprovalNodeSpec {
     pub assignee: String,
 }
 
-/// 返回进程内只解析一次的演示基础规格。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回嵌入的 `dev-foundation.json` 解析结果。
-///
-/// # 错误
-/// 不返回错误。
-///
-/// # Panics
-/// 嵌入 JSON 无法反序列化为 `FoundationFile` 时 panic。该文件随编译嵌入，解析失败表示规格损坏。
+// 首次使用时解析内嵌 `dev-foundation.json` 并在进程内复用，使角色、组织与审批准备读取同一规格；反序列化失败会触发 panic，视为随程序发布的规格损坏。
 pub(super) fn foundation_spec() -> &'static FoundationFile {
     static SPEC: OnceLock<FoundationFile> = OnceLock::new();
     SPEC.get_or_init(|| {
@@ -109,16 +97,7 @@ pub(super) fn foundation_spec() -> &'static FoundationFile {
     })
 }
 
-/// 把规格里的单据类型代码还原成工作流类型。
-///
-/// # 参数
-/// * `code` - 规格中的单据类型代码
-///
-/// # 返回
-/// 返回对应的单据类型。
-///
-/// # 错误
-/// 代码不在单据类型表中时返回错误。
+// 用工作流注册表解析演示规格中的单据代码，供政策校验和发布使用，不接受未知类型。
 pub(super) fn document_type(code: &str) -> Result<DocumentType> {
     DocumentType::try_from_code(code).map_err(|error| Error::Internal(error.to_string()))
 }
@@ -126,13 +105,8 @@ pub(super) fn document_type(code: &str) -> Result<DocumentType> {
 /// 演示范围配置的固定输入选择。
 pub(super) struct DemoPersonScope;
 impl DemoPersonScope {
-    /// 只为未配置的准入动作生成追加范围，保留撤权和旧表达式。
-    /// # 参数
-    /// 账号、服务端业务准入、已有记录与本次策略版本。
-    /// # 返回
-    /// 需要写入的正式规范化请求；本人基础或已有配置返回 None。
-    /// # 错误
-    /// 维度、动作或范围违反当前合同则失败。
+    // 仅针对还没有配置记录的准入动作构造带策略版本的追加请求，保留撤权和旧表达式。
+    // 没有缺项或默认本人范围已覆盖时不写入，违反范围合同时返回错误。
     pub(super) fn request(
         login: &str,
         business: &PersonBusinessOption,
@@ -167,13 +141,7 @@ impl DemoPersonScope {
         Ok(Some(request))
     }
 
-    /// 演示岗位初始选择；跨维度业务明确使用公司范围。
-    /// # 参数
-    /// 登录名、资源、本人基础标记及登记维度。
-    /// # 返回
-    /// 声明的本人、部门或公司范围条件。
-    /// # 错误
-    /// 未登记维度时返回错误。
+    // 根据岗位和资源选择初始本人、部门或公司范围；跨维度业务使用公司范围，缺少登记维度时拒绝构造条件。
     pub(super) fn term(
         login: &str,
         resource: &str,

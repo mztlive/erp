@@ -7,20 +7,11 @@ use crate::repository::OrganizationRepository;
 use crate::{Error, Result};
 
 /// 校验显式目标组织整条路径均启用。
+/// 只做启用检查，不提供任何范围授权；需拒绝公司组织的调用方先自检。
 ///
-/// # 参数
-/// * `db` - 目标数据库
-/// * `target_org` - 可选目标组织
-/// * `executor` - 调用方执行器
-///
-/// # 返回
 /// 未指定组织或路径全部启用时成功。
 ///
-/// # 错误
 /// 目标组织停用时拒绝。
-///
-/// # 关键业务约束
-/// 只做启用检查，不提供任何范围授权；需拒绝公司组织的调用方先自检。
 pub async fn ensure_org_enabled(
     db: &Database,
     target_org: Option<&str>,

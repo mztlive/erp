@@ -32,20 +32,17 @@ pub struct ActualProfitLossReadModel {
     rbac: Arc<AuthorizationService>,
 }
 impl ActualProfitLossReadModel {
-    /// 复用应用数据库与 RBAC，不持有独立连接或缓存旧权限。
+    /// 装配实际盈亏报表时，复用应用数据库与 RBAC，不持有独立连接或缓存旧权限。
     ///
     /// # 参数
     /// `db`、`rbac` 必须来自同一应用组合根。
     ///
     /// # 返回
     /// 返回执行一致快照查询的读模型。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: Database, rbac: Arc<AuthorizationService>) -> Self {
         Self { db, rbac }
     }
-    /// 提供已实现的口径，由用户显式选择，不伪装已配置财务收入确认规则。
+    /// 处理实际盈亏报表时，提供已实现的口径，由用户显式选择，不伪装已配置财务收入确认规则。
     ///
     /// # 参数
     /// `actor` 为当前已认证账号。
@@ -76,7 +73,7 @@ impl ActualProfitLossReadModel {
             })
             .await
     }
-    /// 分页视图包含同一筛选下的全量指标、趋势和覆盖率。
+    /// 打开实际盈亏报表时，返回同一授权和筛选下的分页明细，以及基于完整匹配集合的指标、趋势和覆盖率。
     ///
     /// # 参数
     /// `query` 为业务筛选；`actor` 为认证用户；`access` 不能替代事务内的对象授权。
@@ -94,12 +91,11 @@ impl ActualProfitLossReadModel {
     ) -> Result<ProfitLossView> {
         self.read(query, access, actor, false).await
     }
-    /// 重新查询当前授权下全部匹配行并同步生成 CSV；不接受客户端水印和金额。
+    /// 生成实际盈亏报表导出内容时，重新查询当前授权下全部匹配行并同步生成 CSV；不接受客户端水印和金额。
     ///
     /// # 参数
     /// * `query` - 业务筛选；分页参数不截断导出行。
     /// * `access` - 入口成本详情资格，不能替代事务内的对象授权。
-    /// * `actor` - 认证用户。
     ///
     /// # 返回
     /// 返回当前筛选的全量 CSV，分页参数不截断行集合。
@@ -114,7 +110,7 @@ impl ActualProfitLossReadModel {
     ) -> Result<ProfitLossExport> {
         Ok(export::export(self.read(query, access, actor, true).await?))
     }
-    /// 在同一授权快照产生全部投影，返回前再检查撤权。
+    // 实际盈亏的列表与导出共用同一授权快照生成投影，并在交付前重新检查权限和范围。
     async fn read(
         &self,
         query: ProfitLossQuery,
@@ -140,7 +136,7 @@ impl ActualProfitLossReadModel {
         Ok(view)
     }
 
-    /// 在新的读取事务内重验账号、组织、协作及业务责任集合，防止返回旧宽范围文件。
+    // 交付实际盈亏报表结果前，在新的读取事务内重验账号、组织、协作及业务责任集合，防止返回旧宽范围文件。
     async fn recheck(&self, query: &ProfitLossQuery, actor: &AuditActor, expected: &str) -> Result<()> {
         let this = self.clone();
         let query = query.clone();
@@ -166,7 +162,7 @@ impl ActualProfitLossReadModel {
         ensure_version(Some(expected), &current)
     }
 
-    /// 授权和销售、成本事实由同一只读事务装载，期间超限整体拒绝。
+    // 处理实际盈亏报表时，授权和销售、成本事实由同一只读事务装载，期间超限整体拒绝。
     async fn snapshot(
         &self,
         query: ProfitLossQuery,
@@ -195,12 +191,12 @@ impl ActualProfitLossReadModel {
     }
 }
 
-/// 已发布的期间口径配置；授权入口通过后才向当前账号返回。
+// 处理实际盈亏报表时，已发布的期间口径配置；授权入口通过后才向当前账号返回。
 fn period_basis_config() -> PeriodBasisConfig {
     PeriodBasisConfig { configuration_version: query::FORMULA_VERSION.into(), allowed_period_bases: vec![PeriodBasisOption { code: query::PERIOD_BASIS.into(), label: query::BASIS_LABEL.into(), explanation: "按上海自然日的销售单首次生效日期选单，采用当前正式收入与查询时点累计实际成本；后补费用会更新原订单盈亏。".into() }] }
 }
 
-/// 跨页与生成返回前必须使用相同授权版本；不拼接撤权前后的结果。
+// 读取实际盈亏的下一页或生成文件时核对已携带的范围版本，避免拼接授权变化前后的数据。
 fn ensure_version(expected: Option<&str>, current: &str) -> Result<()> {
     ScopeVersion::new(expected, EmptyScopeVersion::Provided)
         .verify(current)

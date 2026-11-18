@@ -6,16 +6,13 @@ use erp_support::BackgroundJob;
 use super::BrandImportProcess;
 use crate::{Error, Result};
 impl BrandImportProcess {
-    /// 读取并解密任务源内容，只供执行器和已校验归属的失败下载调用。解密失败不返回源字节。
-    ///
-    /// # 参数
-    /// * `job` - 已登记的品牌导入任务。
-    ///
-    /// # 返回
-    /// 返回校验通过且指纹属于该任务的导入请求。
-    ///
-    /// # 错误
-    /// 源路径非法、读取或解密失败、内容损坏、校验失败、指纹不属于该任务，或与任务登记不一致时返回错误。
+    // 读取并解密任务源内容，只供执行器和已校验归属的失败下载调用。解密失败不返回源字节。
+    //
+    // `job`：已登记的品牌导入任务。
+    //
+    // 返回校验通过且指纹属于该任务的导入请求。
+    //
+    // 源路径非法、读取或解密失败、内容损坏、校验失败、指纹不属于该任务，或与任务登记不一致时返回错误。
     pub(super) async fn source(&self, job: &BackgroundJob) -> Result<BrandImportJobRequest> {
         let source = job
             .domain_job_id

@@ -22,19 +22,8 @@ use crate::FinancePostingPorts;
 
 /// 最终审批通过时原子授予额度并生成申请专属财务执行任务。
 ///
-/// # 参数
-/// * `db` - 数据库。
-/// * `rbac` - 财务办理与任务权限端口。
-/// * `id` - 开票申请 ID。
-/// * `approval_instance_id` - 本次最终通过的正式审批实例 ID。
-/// * `actor` - 已认证审批人。
-/// * `executor` - 审批事务执行器。
-///
-/// # 返回
-/// 申请已批准、执行任务与审计写入成功时无返回值。
-///
-/// # 错误
-/// 申请或应收不存在、占用额度超过可开票金额、批准状态不允许、财务负责人缺失、任务构造或写入失败时返回错误。
+/// `rbac` 为财务办理与任务权限端口；`id` 为开票申请 ID；`approval_instance_id` 为本次最终通过的正式审批实例 ID；`actor` 为已认证审批人；`executor`
+/// 为审批事务执行器。申请已批准、执行任务与审计写入成功时无返回值。申请或应收不存在、占用额度超过可开票金额、批准状态不允许、财务负责人缺失、任务构造或写入失败时返回错误。
 pub async fn approve(
     db: &Database,
     rbac: &FinancePostingPorts,
@@ -85,21 +74,11 @@ pub async fn approve(
     persist_log(db, &audit, executor).await?;
     Ok(())
 }
-/// 消耗与任务一一关联的已批准申请；旧任务及错配任务一律拒绝。
-///
-/// # 参数
-/// * `db` - 数据库。
-/// * `task_id` - 开票执行任务 ID。
-/// * `account_id` - 当前应收子账 ID。
-/// * `party_id` - 发票往来主体。
-/// * `amount` - 本次登记的开票金额。
-/// * `executor` - 调用方事务执行器。
-///
-/// # 返回
-/// 返回被消耗的开票申请 ID。
-///
-/// # 错误
-/// 没有已批准申请、主体或应收不符、金额无法入账、应收锁或申请更新失败时返回错误。
+// 消耗与任务一一关联的已批准申请；旧任务及错配任务一律拒绝。
+//
+// `task_id` 为开票执行任务 ID；`account_id` 为当前应收子账 ID；`party_id` 为发票往来主体；`amount` 为本次登记的开票金额；沿用原事务的执行器。
+//
+// 返回被消耗的开票申请 ID。没有已批准申请、主体或应收不符、金额无法入账、应收锁或申请更新失败时返回错误。
 pub(crate) async fn consume_authorization(
     db: &Database,
     task_id: &str,
@@ -121,18 +100,11 @@ pub(crate) async fn consume_authorization(
     db.sales_invoice_requests().update(&mut request, executor).await?;
     Ok(request.base.id)
 }
-/// 开票登记后按每张申请剩余授权更新任务，不按销售单全部余额关闭任务。
-///
-/// # 参数
-/// * `db` - 数据库。
-/// * `account` - 当前应收子账。
-/// * `executor` - 调用方事务执行器。
-///
-/// # 返回
-/// 开放任务已按剩余授权完成或更新摘要时无返回值。没有对应申请的开放任务跳过。
-///
-/// # 错误
-/// 任务查询、完成、摘要更新或任务写回失败时返回错误。
+// 开票登记后按每张申请剩余授权更新任务，不按销售单全部余额关闭任务。
+//
+// `account` 为当前应收子账；沿用原事务的执行器。开放任务已按剩余授权完成或更新摘要时无返回值。没有对应申请的开放任务跳过。
+//
+// 任务查询、完成、摘要更新或任务写回失败时返回错误。
 pub(crate) async fn sync_authorized_tasks(
     db: &Database,
     account: &ReceivableAccount,
@@ -165,7 +137,7 @@ pub(crate) async fn sync_authorized_tasks(
     Ok(())
 }
 
-/// 使用已保存的申请版本和实际任务责任人记录授权来源。
+// 使用已保存的申请版本和实际任务责任人记录授权来源。
 async fn append_invoice_grant(
     db: &Database,
     request: &SalesInvoiceRequest,

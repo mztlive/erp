@@ -14,23 +14,17 @@ pub struct PurchaseFacts {
 
 impl PurchaseFacts {
     /// 绑定采购拥有域数据库。
-    /// # 参数
-    /// db 为与业务事务相同的数据库。
-    /// # 返回
-    /// 不保存授权结果的事实提供器。
-    /// # 错误
-    /// 构造不执行 I/O。
+    ///
+    /// 不保存授权结果的事实提供器。构造不执行 I/O。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
     /// 构造即将持久化采购单的责任候选。
-    /// # 参数
+    ///
+    /// 固定采购资源、无记录身份版本且不携带来源对象的候选事实。不执行 I/O；输入合法性由创建用例保证。
+    ///
     /// order 为创建用例已校验的拟持久化采购责任。
-    /// # 返回
-    /// 固定采购资源、无记录身份版本且不携带来源对象的候选事实。
-    /// # 错误
-    /// 不执行 I/O；输入合法性由创建用例保证。
     pub fn candidate(order: &PurchaseOrder) -> ObjectFacts {
         let mut candidate = Self::object(order, "purchase_order");
         candidate.id.clear();
@@ -39,12 +33,10 @@ impl PurchaseFacts {
     }
 
     /// 将原执行器读取的真实采购单转换为统一授权对象事实。
-    /// # 参数
+    ///
+    /// 真实身份、版本、当前责任人、业务组织及目标仓库；不补造缺失责任人。不执行 I/O；缺少责任人的事实保持已知空值。
+    ///
     /// order 为当前采购事实，resource 为服务端固定的根或来源资源。
-    /// # 返回
-    /// 真实身份、版本、当前责任人、业务组织及目标仓库；不补造缺失责任人。
-    /// # 错误
-    /// 不执行 I/O；缺少责任人的事实保持已知空值。
     pub fn object(order: &PurchaseOrder, resource: &str) -> ObjectFacts {
         ObjectFacts {
             resource: resource.into(),

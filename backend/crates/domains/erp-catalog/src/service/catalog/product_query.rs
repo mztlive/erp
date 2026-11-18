@@ -15,14 +15,9 @@ use crate::repository::{CatalogExt, ProductFilter, ProductRevisionFilter, SkuFil
 impl CatalogService {
     /// 分页查询商品修订列表。
     ///
-    /// # 参数
-    /// * `params` - 商品、状态、分页与排序筛选参数
+    /// 返回已批量装配 SPU 级媒体的商品修订分页视图。分页或排序参数非法，以及仓储查询失败时返回错误。
     ///
-    /// # 返回
-    /// 返回已批量装配 SPU 级媒体的商品修订分页视图。
-    ///
-    /// # 错误
-    /// 分页或排序参数非法，以及仓储查询失败时返回错误。
+    /// `params` 为商品、状态、分页与排序筛选参数。
     pub async fn product_revision_list(
         &self,
         actor: &AuditActor,
@@ -42,7 +37,7 @@ impl CatalogService {
             .await
     }
 
-    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    // 分页查询商品修订，沿用公开入口提供的授权快照完成查询。
     async fn product_revision_list_snapshot(
         &self,
         actor: &AuditActor,
@@ -56,7 +51,7 @@ impl CatalogService {
         self.product_revision_rows(params, executor).await
     }
 
-    /// 读取已由拥有入口校验过的商品明细，不追加其他入口资格。
+    // 读取已由拥有入口校验过的商品明细，不追加其他入口资格。
     pub(super) async fn product_revision_rows(
         &self,
         params: &ProductRevisionListParams,
@@ -80,14 +75,9 @@ impl CatalogService {
 
     /// 分页查询 SKU 列表。
     ///
-    /// # 参数
-    /// * `params` - SKU 编号、关键字、商品、状态、分页与排序筛选参数
+    /// 返回已批量装配当前修订名称的 SKU 分页视图。分页或排序参数非法，以及仓储查询失败时返回错误。
     ///
-    /// # 返回
-    /// 返回已批量装配当前修订名称的 SKU 分页视图。
-    ///
-    /// # 错误
-    /// 分页或排序参数非法，以及仓储查询失败时返回错误。
+    /// `params` 为 SKU 编号、关键字、商品、状态、分页与排序筛选参数。
     pub async fn sku_list(&self, actor: &AuditActor, params: &SkuListParams) -> Result<PageView<SkuView>> {
         let service = self.clone();
         let actor = actor.clone();
@@ -101,7 +91,7 @@ impl CatalogService {
             .await
     }
 
-    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    // 分页查询SKU，沿用公开入口提供的授权快照完成查询。
     async fn sku_list_snapshot(
         &self,
         actor: &AuditActor,
@@ -115,7 +105,7 @@ impl CatalogService {
         self.sku_rows(params, executor).await
     }
 
-    /// 读取已由拥有入口校验过的商品明细，不追加其他入口资格。
+    // 读取已由拥有入口校验过的商品明细，不追加其他入口资格。
     pub(super) async fn sku_rows(
         &self,
         params: &SkuListParams,
@@ -141,16 +131,9 @@ impl CatalogService {
         Ok(PageView { items, total: page.total, page: query.paging.page, page_size: query.paging.page_size })
     }
 
-    /// 分页查询 SKU 修订列表。
+    /// 分页查询 SKU 修订列表。分页或排序参数非法，以及仓储查询失败时返回错误。
     ///
-    /// # 参数
-    /// * `params` - SKU、名称、条码、状态、分页与排序筛选参数
-    ///
-    /// # 返回
-    /// 返回 SKU 修订分页视图。
-    ///
-    /// # 错误
-    /// 分页或排序参数非法，以及仓储查询失败时返回错误。
+    /// `params` 为 SKU、名称、条码、状态、分页与排序筛选参数。
     pub async fn sku_revision_list(
         &self,
         actor: &AuditActor,
@@ -168,7 +151,7 @@ impl CatalogService {
             .await
     }
 
-    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    // 分页查询SKU 修订，沿用公开入口提供的授权快照完成查询。
     async fn sku_revision_list_snapshot(
         &self,
         actor: &AuditActor,
@@ -182,7 +165,7 @@ impl CatalogService {
         self.sku_revision_rows(params, executor).await
     }
 
-    /// 读取已由拥有入口校验过的商品明细，不追加其他入口资格。
+    // 读取已由拥有入口校验过的商品明细，不追加其他入口资格。
     pub(super) async fn sku_revision_rows(
         &self,
         params: &SkuRevisionListParams,
@@ -209,14 +192,10 @@ impl CatalogService {
 
 /// 校验并规范化商品列表请求；保持原首错顺序。
 ///
-/// # 参数
-/// * `params` - 商品列表筛选、分页与排序参数
+/// 返回尚未套用授权范围的仓储筛选；`ids` 与 `scope` 保持为空。请求体校验失败、销售价为负或下限高于上限、排序字段不在白名单或排序方向非法时返回
+/// `ValidationError`。
 ///
-/// # 返回
-/// 返回尚未套用授权范围的仓储筛选；`ids` 与 `scope` 保持为空。
-///
-/// # 错误
-/// 请求体校验失败、销售价为负或下限高于上限、排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+/// `params` 为商品列表筛选、分页与排序参数。
 pub fn prepare_product_list(params: &ProductListParams) -> Result<ProductFilter> {
     params.validate()?;
     let query = params.normalized()?;
@@ -244,17 +223,7 @@ pub fn prepare_product_list(params: &ProductListParams) -> Result<ProductFilter>
     })
 }
 
-/// 将已读取的商品行投影为原列表响应，不读取额外事实。
-///
-/// # 参数
-/// * `page` - 已读取的商品分页行
-/// * `filter` - 提供页码与单页条数的筛选
-///
-/// # 返回
-/// 返回与 `filter` 分页一致的商品列表视图。
-///
-/// # 错误
-/// 不产生失败，始终返回 `Ok`。
+/// 将已读取的商品行投影为原列表响应，不读取额外事实。返回与 `filter` 分页一致的商品列表视图。
 pub fn product_page_view(
     page: persistence_core::PageResult<crate::repository::ProductRow>,
     filter: &ProductFilter,

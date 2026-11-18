@@ -28,20 +28,13 @@ pub struct ProcurementCoverageSummary {
 impl ProcurementCoverageSummary {
     /// 从单行目标数量与覆盖数量构造采购覆盖汇总。
     ///
-    /// # 参数
-    /// * `total_quantity` - 当前销售版本目标数量
-    /// * `covered_quantity` - 按采购当前提交或当前版本汇总的覆盖数量
+    /// 剩余数量与超出数量至多一个非零；进度按不超过目标的覆盖计算，封顶为 1，零目标的进度固定为零。
     ///
-    /// # 返回
-    /// 返回剩余数量、超出数量与六位小数进度均已派生的覆盖汇总。
+    /// 返回剩余数量、超出数量与六位小数进度均已派生的覆盖汇总。任一数量为负、派生数量无法构造为 [`Quantity`]，或进度无法构造为
+    /// [`Rate`]时返回一致性错误。
     ///
-    /// # 错误
-    /// 任一数量为负、派生数量无法构造为 [`Quantity`]，或进度无法构造为 [`Rate`]
-    /// 时返回一致性错误。
-    ///
-    /// # 关键业务约束
-    /// 剩余数量与超出数量至多一个非零；进度按不超过目标的覆盖计算，封顶为 1，
-    /// 零目标的进度固定为零。
+    /// - `total_quantity`：当前销售版本目标数量。
+    /// - `covered_quantity`：按采购当前提交或当前版本汇总的覆盖数量。
     pub fn new(total_quantity: Quantity, covered_quantity: Quantity) -> Result<Self> {
         ensure_non_negative(total_quantity, covered_quantity)?;
         let difference = total_quantity.to_decimal() - covered_quantity.to_decimal();
@@ -57,17 +50,9 @@ impl ProcurementCoverageSummary {
 
     /// 汇总多行覆盖，剩余与超出逐行累计，不在行间互相抵消。
     ///
-    /// # 参数
-    /// * `lines` - 逐行覆盖汇总
-    ///
-    /// # 返回
-    /// 返回整单目标、覆盖、剩余、超出与进度。
-    ///
-    /// # 错误
-    /// 累计结果超过数量精度或进度无法构造时返回一致性错误。
-    ///
-    /// # 关键业务约束
     /// 一行超出不得冲抵另一行缺口；进度只按各行不超过目标的覆盖计算。
+    ///
+    /// 返回整单目标、覆盖、剩余、超出与进度。累计结果超过数量精度或进度无法构造时返回一致性错误。
     pub fn aggregate<'a>(lines: impl IntoIterator<Item = &'a Self>) -> Result<Self> {
         let mut sums = [Decimal::ZERO; 5];
         for line in lines {
@@ -95,17 +80,12 @@ impl ProcurementCoverageSummary {
     }
 }
 
-/// 校验采购目标与覆盖数量非负。
-///
-/// # 参数
-/// * `total_quantity` - 当前销售版本目标数量
-/// * `covered_quantity` - 当前采购覆盖数量
-///
-/// # 返回
-/// 数量非负时返回 `Ok(())`。
-///
-/// # 错误
-/// 任一数量为负时返回领域错误。
+// 校验采购目标与覆盖数量非负。
+//
+// 数量非负时返回 `Ok(())`。任一数量为负时返回领域错误。
+//
+// - `total_quantity`：当前销售版本目标数量。
+// - `covered_quantity`：当前采购覆盖数量。
 fn ensure_non_negative(total_quantity: Quantity, covered_quantity: Quantity) -> Result<()> {
     if total_quantity.to_decimal().is_sign_negative() || covered_quantity.to_decimal().is_sign_negative() {
         return Err(Error::from("采购目标数量与覆盖数量不能为负"));
@@ -113,20 +93,13 @@ fn ensure_non_negative(total_quantity: Quantity, covered_quantity: Quantity) -> 
     Ok(())
 }
 
-/// 计算采购数量覆盖进度。
-///
-/// # 参数
-/// * `total_quantity` - 当前销售版本目标数量
-/// * `effective_quantity` - 不超过目标的覆盖数量
-///
-/// # 返回
-/// 返回范围为 0 到 1、保留最多六位小数的进度。
-///
-/// # 错误
-/// 派生结果无法构造为 [`Rate`] 时返回领域错误。
-///
-/// # 关键业务约束
-/// 零目标返回零进度，非零目标使用 `effective / total`。
+// 计算采购数量覆盖进度。
+//
+// 零目标返回零进度，非零目标使用 `effective / total`。
+//
+// 返回范围为 0 到 1、保留最多六位小数的进度。派生结果无法构造为 [`Rate`] 时返回领域错误。
+//
+// `total_quantity` 为当前销售版本目标数量。
 fn coverage_progress(total_quantity: Quantity, effective_quantity: Quantity) -> Result<Rate> {
     if total_quantity.to_decimal().is_zero() {
         return Rate::try_from(Decimal::ZERO);
@@ -134,10 +107,9 @@ fn coverage_progress(total_quantity: Quantity, effective_quantity: Quantity) -> 
     Rate::try_from((effective_quantity.to_decimal() / total_quantity.to_decimal()).round_dp(6))
 }
 
-/// 返回合法的零数量，供缺省反序列化使用。
-///
-/// # Panics
-/// 数量类型拒绝零值时 panic；零数量合法，panic 只表示数量类型不变量被破坏。
+// 返回合法的零数量，供缺省反序列化使用。
+//
+// 数量类型拒绝零值时 panic；零数量合法，panic 只表示数量类型不变量被破坏。
 fn zero_quantity() -> Quantity {
     Quantity::try_from(Decimal::ZERO).expect("零数量合法")
 }
@@ -150,7 +122,7 @@ mod tests {
 
     use super::ProcurementCoverageSummary;
 
-    /// 部分覆盖时应精确派生剩余数量与进度。
+    // 部分覆盖时应精确派生剩余数量与进度。
     #[test]
     fn summary_derives_remaining_and_progress() {
         let summary = ProcurementCoverageSummary::new(
@@ -163,7 +135,7 @@ mod tests {
         assert_eq!(summary.progress, Rate::from_str("0.4").unwrap());
     }
 
-    /// 零目标保持零进度，完全覆盖保持零剩余。
+    // 零目标保持零进度，完全覆盖保持零剩余。
     #[test]
     fn summary_handles_zero_and_complete_boundaries() {
         let zero = ProcurementCoverageSummary::new(
@@ -182,7 +154,7 @@ mod tests {
         assert_eq!(complete.progress, Rate::from_str("1").unwrap());
     }
 
-    /// 销售减量后覆盖超过目标时剩余为零、超出单独计量、进度封顶。
+    // 销售减量后覆盖超过目标时剩余为零、超出单独计量、进度封顶。
     #[test]
     fn summary_reports_excess_without_negative_remaining() {
         let summary = ProcurementCoverageSummary::new(
@@ -196,7 +168,7 @@ mod tests {
         assert_eq!(summary.progress, Rate::from_str("1").unwrap());
     }
 
-    /// 整单汇总不得用一行超出冲抵另一行缺口。
+    // 整单汇总不得用一行超出冲抵另一行缺口。
     #[test]
     fn aggregate_keeps_line_gaps_and_excess_separate() {
         let over = ProcurementCoverageSummary::new(
@@ -218,7 +190,7 @@ mod tests {
         assert_eq!(total.progress, Rate::from_str("0.6").unwrap());
     }
 
-    /// 空集合汇总为全零。
+    // 空集合汇总为全零。
     #[test]
     fn aggregate_of_no_lines_is_zero() {
         let total = ProcurementCoverageSummary::aggregate([]).unwrap();

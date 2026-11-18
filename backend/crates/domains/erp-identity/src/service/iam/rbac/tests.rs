@@ -51,7 +51,7 @@ fn commit_outcome_unknown_is_detected_separately_from_definite_errors() {
     assert!(!commit_outcome_unknown(&definite));
 }
 
-/// 角色绑定与逐角色授权必须来自同一个可验证 revision，禁止 R/R+1 拼接。
+// 验证：角色绑定与逐角色授权必须来自同一个可验证 revision，禁止 R/R+1 拼接。
 #[test]
 fn role_permission_snapshot_keeps_roles_grants_and_revision_together() {
     let permission = Permission::parse("approval_instance:decide").unwrap();
@@ -109,7 +109,7 @@ fn all_required_permissions_cannot_be_spliced_across_roles() {
     assert!(snapshot.granting_role_ids_for_all(&[]).is_empty());
 }
 
-/// 经营盈亏继承销售范围，但收入与成本权限必须由同一角色授予。
+// 验证：经营盈亏继承销售范围，但收入与成本权限必须由同一角色授予。
 #[test]
 fn profit_loss_source_scope_still_requires_cost_permission_in_the_same_role() {
     let sales = Permission::parse("sales_order:list").unwrap();

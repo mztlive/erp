@@ -21,16 +21,11 @@ impl IntegrationOpsService {
     ///
     /// 排序字段必须经过白名单校验。
     ///
-    /// # 参数
-    /// * `params` - 查询参数
-    /// * `actor` - 当前认证操作人。
-    ///
-    /// # 返回
-    /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
-    ///
-    /// # 错误
+    /// 失败情形如下：
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
     /// * `RepositoryError` - 数据库查询失败
+    ///
+    /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
     pub async fn inbox_message_list(
         &self,
         params: &InboxMessageListParams,
@@ -47,7 +42,7 @@ impl IntegrationOpsService {
             .await
     }
 
-    /// 在同一快照内检查功能资格并读取消息分页。
+    // 在原读取快照内先检查入站消息列表资格，再按请求分页；仓储不另建授权阶段。
     async fn inbox_page(
         &self,
         params: &InboxMessageListParams,
@@ -98,14 +93,7 @@ impl IntegrationOpsService {
 
     /// 查询入站消息详情（含规范化内容引用）。
     ///
-    /// # 参数
-    /// * `id` - 消息 ID
-    /// * `actor` - 当前认证操作人。
-    ///
-    /// # 返回
-    /// 返回消息详情视图。
-    ///
-    /// # 错误
+    /// 失败情形如下：
     /// * `NotFound` - 消息不存在
     /// * 仓储读取失败时返回对应错误。
     pub async fn inbox_message_detail(&self, id: &str, actor: &AuditActor) -> Result<InboxMessageView> {
@@ -120,7 +108,7 @@ impl IntegrationOpsService {
             .await
     }
 
-    /// 在同一快照内检查功能资格并读取消息详情。
+    // 在原读取快照内先检查入站消息详情资格，再读取该消息及规范化内容引用。
     async fn inbox_detail(
         &self,
         id: &str,
@@ -143,15 +131,9 @@ impl IntegrationOpsService {
 }
 /// 构造已通过请求与来源存在性检查的入站消息。
 ///
-/// # 参数
-/// * `req` - 入站消息登记请求
-/// * `received_at` - 调用方注入的接收时间
+/// 返回状态为已接收的入站消息。`InboxMessage::received` 的字段不变量失败时返回 `Logic`。
 ///
-/// # 返回
-/// 返回状态为已接收的入站消息。
-///
-/// # 错误
-/// `InboxMessage::received` 的字段不变量失败时返回 `Logic`。
+/// `received_at` 为调用方注入的接收时间。
 pub fn prepare_registered_inbox_message(
     req: RegisterInboxMessageRequest,
     received_at: Instant,
@@ -173,15 +155,7 @@ pub fn prepare_registered_inbox_message(
 }
 /// 应用已准备的 processed 结果，不写入数据库。
 ///
-/// # 参数
-/// * `message` - 待更新的入站消息
-/// * `processed_at` - 处理完成时间
-///
-/// # 返回
-/// 成功时消息状态为已处理并带有处理完成时间。
-///
-/// # 错误
-/// `InboxMessage::update` 的领域校验失败时返回 `Logic`。
+/// 成功时消息状态为已处理并带有处理完成时间。`InboxMessage::update` 的领域校验失败时返回 `Logic`。
 pub fn apply_processed_outcome(message: &mut InboxMessage, processed_at: Instant) -> Result<()> {
     message.update(InboxMessageUpdate {
         status: Some(InboxMessageStatus::Processed),
@@ -191,33 +165,18 @@ pub fn apply_processed_outcome(message: &mut InboxMessage, processed_at: Instant
 }
 /// 应用 failed 结果，不生成任务或写入数据库。
 ///
-/// # 参数
-/// * `message` - 待更新的入站消息
-///
-/// # 返回
-/// 成功时消息状态为失败且不写处理完成时间。
-///
-/// # 错误
-/// `InboxMessage::update` 的领域校验失败时返回 `Logic`。
+/// 成功时消息状态为失败且不写处理完成时间。`InboxMessage::update` 的领域校验失败时返回 `Logic`。
 pub fn apply_failed_outcome(message: &mut InboxMessage) -> Result<()> {
     message.update(InboxMessageUpdate { status: Some(InboxMessageStatus::Failed), processed_at: None })?;
     Ok(())
 }
 /// 按原责任政策构造失败任务；仅摘要存在时记录尝试。
 ///
-/// # 参数
-/// * `message_id` - 失败消息 ID
-/// * `error_class` - 错误分类
-/// * `actor_id` - 当前处理人
-/// * `owner_org_unit_id` - 处理人内部组织
-/// * `attempt_summary` - 脱敏尝试摘要；`None` 不记尝试
-/// * `attempt_at` - 尝试时间
+/// 返回失败消息对应的错误任务。任务构造或尝试记录不满足实体不变量时返回 `Logic`。
 ///
-/// # 返回
-/// 返回失败消息对应的错误任务。
-///
-/// # 错误
-/// 任务构造或尝试记录不满足实体不变量时返回 `Logic`。
+/// - `message_id`：失败消息 ID。
+/// - `actor_id`：当前处理人。
+/// - `attempt_summary`：脱敏尝试摘要；`None` 不记尝试。
 pub fn prepare_failed_message_task(
     message_id: InboxMessageId,
     error_class: ErrorClass,
@@ -240,18 +199,9 @@ pub fn prepare_failed_message_task(
     Ok(task)
 }
 
-/// 在调用方 Executor 写入收到的消息。
+/// 在调用方 Executor 写入收到的消息。成功时消息已写入。
 ///
-/// # 参数
-/// * `db` - 目标数据库
-/// * `message` - 待写入的入站消息
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 成功时消息已写入。
-///
-/// # 错误
-/// 仓储写入失败时返回对应错误。
+/// 沿用调用方的执行器，不另开事务。
 pub async fn persist_inbox_message(
     db: &Database,
     message: &InboxMessage,
@@ -262,16 +212,9 @@ pub async fn persist_inbox_message(
 }
 /// 在调用方 Executor 按原版本写回消息。
 ///
-/// # 参数
-/// * `db` - 目标数据库
-/// * `message` - 待写回的入站消息
-/// * `executor` - 调用方执行器
+/// 成功时消息已按原版本更新。版本冲突或仓储写入失败时返回对应错误。
 ///
-/// # 返回
-/// 成功时消息已按原版本更新。
-///
-/// # 错误
-/// 版本冲突或仓储写入失败时返回对应错误。
+/// 沿用调用方的执行器，不另开事务。
 pub async fn update_inbox_message(
     db: &Database,
     message: &mut InboxMessage,
@@ -280,19 +223,8 @@ pub async fn update_inbox_message(
     db.inbox_messages().update(message, executor).await?;
     Ok(())
 }
-/// 错误任务写入后更新失败消息，复用调用方 Executor。
-///
-/// # 参数
-/// * `db` - 目标数据库
-/// * `task` - 待写入的错误任务
-/// * `message` - 待置为失败的消息
-/// * `executor` - 调用方执行器；本函数不开启事务
-///
-/// # 返回
-/// 成功时任务已插入且消息已写回。
-///
-/// # 错误
-/// 任一步写入失败立即返回对应错误。
+/// 登记消息处理失败时，先插入错误任务，再按原版本更新消息。
+/// 两步复用调用方事务的执行器；任一步失败立即返回，由调用方处理回滚。
 pub async fn persist_error_task_with_message_failure(
     db: &Database,
     task: &IntegrationErrorTask,

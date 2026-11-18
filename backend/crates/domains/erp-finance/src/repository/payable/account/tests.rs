@@ -116,7 +116,7 @@ fn settlement_guard_builds_expected_guard() {
     assert_eq!(reserved[1], doc! {"$subtract": ["$open_total", "$payment_request_reserved_total"]}.into());
 }
 
-/// 空输入必须返回空结果且不访问数据库。
+// 覆盖批量核销的空输入分支：直接返回空结果，不访问数据库。
 #[tokio::test]
 async fn apply_settlements_many_empty_input_returns_empty_without_db() {
     let client = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1").await.expect("客户端句柄创建失败");
@@ -131,7 +131,7 @@ async fn apply_settlements_many_empty_input_returns_empty_without_db() {
     assert!(result.rejected.is_empty());
 }
 
-/// 批量条件核销：聚合增量逐账户生效，超出开放余额的账户被拒绝且金额不变。
+// 回归检查：批量条件核销：聚合增量逐账户生效，超出开放余额的账户被拒绝且金额不变。
 #[tokio::test]
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn batch_settlement_applies_aggregated_deltas_and_reports_rejected() {
@@ -203,7 +203,7 @@ async fn batch_settlement_applies_aggregated_deltas_and_reports_rejected() {
     });
 }
 
-/// 任一账户被拒绝时整个事务回滚，不产生半写入。
+// 验证批量核销有任一账户被拒绝时，原事务回滚其他账户的更新。
 #[tokio::test]
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn batch_settlement_rejected_rolls_back_whole_transaction() {
@@ -288,7 +288,7 @@ async fn batch_settlement_rejected_rolls_back_whole_transaction() {
     });
 }
 
-/// 并发批量核销：同一账户额度只允许一次命中，绝不产生超额核销。
+// 回归检查：并发批量核销：同一账户额度只允许一次命中，绝不产生超额核销。
 #[tokio::test]
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn concurrent_batch_settlement_never_exceeds_open_balance() {
@@ -373,7 +373,7 @@ fn invoicing_guard_builds_expected_guard() {
     assert_eq!(lte[1], Bson::String("$invoiceable_total".to_string()));
 }
 
-/// 空输入必须返回空结果且不访问数据库。
+// 覆盖批量收票的空输入分支：直接返回空结果，不访问数据库。
 #[tokio::test]
 async fn apply_invoicings_many_empty_input_returns_empty_without_db() {
     let client = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1").await.expect("客户端句柄创建失败");
@@ -388,7 +388,7 @@ async fn apply_invoicings_many_empty_input_returns_empty_without_db() {
     assert!(result.rejected.is_empty());
 }
 
-/// 空输入批量红冲直接成功且不访问数据库（FIN-R11）。
+// 回归检查：空输入批量红冲直接成功且不访问数据库（FIN-R11）。
 #[tokio::test]
 async fn revert_invoicings_many_empty_input_returns_empty_without_db() {
     let client = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1").await.expect("客户端句柄创建失败");
@@ -403,7 +403,7 @@ async fn revert_invoicings_many_empty_input_returns_empty_without_db() {
     assert!(result.rejected.is_empty());
 }
 
-/// 批量条件收票：聚合增量逐账户生效，超出可收票额度的账户被拒绝且金额不变。
+// 回归检查：批量条件收票：聚合增量逐账户生效，超出可收票额度的账户被拒绝且金额不变。
 #[tokio::test]
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn batch_invoicing_applies_aggregated_deltas_and_reports_rejected() {
@@ -475,7 +475,7 @@ async fn batch_invoicing_applies_aggregated_deltas_and_reports_rejected() {
     });
 }
 
-/// 任一账户被拒绝时整个事务回滚，不产生半写入。
+// 验证批量收票有任一账户被拒绝时，原事务回滚其他账户的更新。
 #[tokio::test]
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn batch_invoicing_rejected_rolls_back_whole_transaction() {
@@ -560,7 +560,7 @@ async fn batch_invoicing_rejected_rolls_back_whole_transaction() {
     });
 }
 
-/// 并发批量收票：同一账户额度只允许一次命中，绝不产生超额收票。
+// 回归检查：并发批量收票：同一账户额度只允许一次命中，绝不产生超额收票。
 #[tokio::test]
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn concurrent_batch_invoicing_never_exceeds_invoiceable_balance() {

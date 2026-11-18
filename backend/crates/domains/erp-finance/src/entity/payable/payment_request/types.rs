@@ -30,14 +30,7 @@ pub enum PurchasePaymentRequestStatus {
 }
 
 impl PurchasePaymentRequestStatus {
-    /// 返回稳定状态代码。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 返回持久化与接口共用的状态代码。
-    /// # 错误
-    /// 不返回错误。
+    /// 将采购付款申请状态转成用于持久化和查询的稳定代码，与中文展示文案分开。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Draft => "draft",
@@ -51,14 +44,7 @@ impl PurchasePaymentRequestStatus {
         }
     }
 
-    /// 返回经办人可读的状态名称。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 返回申请审批和实际付款分别表达的状态名称。
-    /// # 错误
-    /// 不返回错误。
+    /// 为界面或响应展示提供采购付款申请状态的中文名称；机器筛选和存储不使用该名称。
     pub fn label(self) -> &'static str {
         match self {
             Self::Draft => "草稿",
@@ -73,13 +59,7 @@ impl PurchasePaymentRequestStatus {
     }
 
     /// 判断原批准付款授权是否允许显式终止。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 待付款、部分付款和已付清允许关闭；已付清关闭不释放额度。
-    /// # 错误
-    /// 不返回错误。
+    /// 结果：待付款、部分付款和已付清允许关闭；已付清关闭不释放额度。
     pub fn can_close(self) -> bool {
         matches!(self, Self::Approved | Self::PartiallyPaid | Self::Paid)
     }
@@ -114,12 +94,7 @@ pub struct PurchasePaymentRequestData {
 
 impl PurchasePaymentRequestData {
     /// 规范化申请表单并拒绝重复采购和非正金额。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 返回已规范化且有界的表单。
-    /// # 错误
     /// 缺少必要身份、说明、金额、重复采购或附件超限时返回错误。
     pub fn normalize(mut self) -> Result<Self> {
         self.supplier_id = required(self.supplier_id, "供应商", 128)?;
@@ -199,13 +174,8 @@ pub struct PurchasePaymentRequestLine {
 
 impl PurchasePaymentRequestLine {
     /// 返回该行尚未支付且尚未关闭的批准金额。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 返回申请金额减去净已付及关闭金额。
-    /// # 错误
-    /// 不返回错误；实体构造和生命周期校验保持非负。
+    /// 实体构造和生命周期校验保持非负。
     pub fn remaining(&self) -> Amount {
         self.requested_amount.checked_sub(self.paid_amount).checked_sub(self.closed_amount)
     }

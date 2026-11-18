@@ -20,13 +20,14 @@ pub(crate) struct CreationTaskFilter {
     pub work_item_id: Option<String>,
 }
 
-/// 执行 identity 编译的任务条件，再按业务身份收窄及排序。
-/// # 参数
-/// db、executor 为原事务；access 为本阶段授权，query 为业务身份条件。
-/// # 返回
-/// 允许读取的真实任务，按创建时间排序。
-/// # 错误
-/// 数据库查询或反序列化失败时返回原错误；凭证复验由调用编排执行。
+// 读取采购创建任务时，执行 identity 编译的任务条件，再按业务身份收窄及排序。
+//
+// 调用参数：
+// db、executor 为原事务；access 为本阶段授权，query 为业务身份条件。
+//
+// 允许读取的真实任务，按创建时间排序。
+//
+// 数据库查询或反序列化失败时返回原错误；凭证复验由调用编排执行。
 pub(in crate::purchase_center) async fn read_creation_tasks(
     db: &Database,
     query: &CreationTaskFilter,
@@ -60,11 +61,11 @@ fn filter(sales_order_id: Option<&str>, work_item_id: Option<&str>) -> Document 
 /// 采购创建入口的真实开放任务查询模型。
 pub struct CreationTaskMapping(QueryModel);
 impl CreationTaskMapping {
-    /// 绑定实际工作项集合、当前负责人及其当前主属组织事实。
-    /// # 参数
-    /// 无。
+    /// 装配采购创建任务时，绑定实际工作项集合、当前负责人及其当前主属组织事实。
+    ///
     /// # 返回
     /// 固定任务查询映射。
+    ///
     /// # 错误
     /// 固定模型标识非法时拒绝。
     pub fn new() -> IdentityResult<Self> {

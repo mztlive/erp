@@ -16,13 +16,7 @@ use crate::http::state::HttpState;
 use crate::wiring::data_transfer::process;
 use crate::wiring::errors::Error as ProcessError;
 
-/// 登记当前业务权限允许的私有任务。
-/// # 参数
-/// 当前认证人及固定类型任务请求。
-/// # 返回
-/// 持久化任务身份。
-/// # 错误
-/// 越权、非法输入或登记失败时拒绝。
+/// 登记已认证用户在当前业务权限内发起的固定类型导入导出任务，返回持久化任务 ID 供轮询；越权、输入非法或登记失败时拒绝。
 pub async fn submit(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -33,13 +27,7 @@ pub async fn submit(
             .into_response(),
     ))
 }
-/// 查询本人任务状态。
-/// # 参数
-/// 当前认证人与任务 ID。
-/// # 返回
-/// 服务端真实任务进度。
-/// # 错误
-/// 非本人或任务不存在时拒绝。
+/// 根据任务 ID 查询该操作人自己提交的任务进度；非本人或任务不存在时拒绝。
 pub async fn status(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -49,13 +37,7 @@ pub async fn status(
         ApiResponse::ok_with_data(process(state.application()).status(&id, &actor).await?).into_response(),
     ))
 }
-/// 读取获授权导出的分类信息，或本人任务的业务续办上下文。
-/// # 参数
-/// 当前认证人与原任务 ID。
-/// # 返回
-/// 受控业务引用、续办状态和取消能力。
-/// # 错误
-/// 非本人读取导入、源文件不可恢复或当前业务授权失效时拒绝。
+/// 为现有任务读取导出分类或导入续办信息，包括受控业务引用、续办状态与取消能力；源文件不可恢复或业务授权失效时拒绝，导入只向本人交付。
 pub async fn context(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -66,13 +48,7 @@ pub async fn context(
     ))
 }
 
-/// 查询原批量命令回执并原子确认结果未知项。
-/// # 参数
-/// 当前认证人与原任务 ID；不接受替换输入或命令号。
-/// # 返回
-/// 原任务更新后的受控处理结果。
-/// # 错误
-/// 无待确认项、任务过期、授权或回执查询失败时拒绝。
+/// 出现批量提交结果未知时，凭原任务查回执并原子更新未确认项；不接受替换输入、命令号或重新提交。任务过期、无待确认项或回执核对失败时拒绝。
 pub async fn recover(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -82,13 +58,7 @@ pub async fn recover(
     Ok(private(ApiResponse::ok_with_data(json!({"file_name":result.file_name,"content_type":result.content_type,"content_base64":result.content_base64,"metadata":result.metadata})).into_response()))
 }
 
-/// 按当前业务权限读取未过期结果；导出允许非原提交人下载。
-/// # 参数
-/// 当前认证人与任务 ID。
-/// # 返回
-/// 文件名、类型及 Base64 字节，不返回内部授权依据。
-/// # 错误
-/// 撤权、范围变化、未完成或过期时拒绝。
+/// 下载已完成且未过期的任务结果，返回文件名、类型、Base64 内容及元数据，不公开内部授权依据。导出可由当前仍有业务权限的非提交人读取；撤权或范围变化时拒绝。
 pub async fn result(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -97,13 +67,7 @@ pub async fn result(
     let result = process(state.application()).result(&id, &actor).await?;
     Ok(private(ApiResponse::ok_with_data(json!({"file_name":result.file_name,"content_type":result.content_type,"content_base64":result.content_base64,"metadata":result.metadata})).into_response()))
 }
-/// 绑定门户认证版本后登记批量任务。
-/// # 参数
-/// 服务端认证门户身份及批量请求。
-/// # 返回
-/// 本人任务。
-/// # 错误
-/// 任务类型、身份或业务校验失败时拒绝。
+/// 仅受理供应商门户批量任务，从认证会话写入账号与绑定版本，供异步处理时重验；不接受后台任务类型。
 pub async fn portal_submit(
     State(state): State<HttpState>,
     Extension(actor): Extension<PortalActor>,
@@ -115,13 +79,7 @@ pub async fn portal_submit(
     request.input = json!({"request":request.input,"session":{"account":actor.account,"account_version":actor.account_version,"binding_version":actor.binding_version}});
     submit(State(state), Extension(actor.audit_actor()), Json(request)).await
 }
-/// 查询门户本人任务。
-/// # 参数
-/// 门户身份及任务 ID。
-/// # 返回
-/// 任务状态。
-/// # 错误
-/// 身份或归属无效时拒绝。
+/// 供应商门户轮询时，用认证身份查本人任务进度；不交付其他人的任务。
 pub async fn portal_status(
     State(state): State<HttpState>,
     Extension(actor): Extension<PortalActor>,
@@ -129,13 +87,7 @@ pub async fn portal_status(
 ) -> Result<Response, Error> {
     status(State(state), Extension(actor.audit_actor()), Path(id)).await
 }
-/// 读取门户本人任务的受控业务上下文。
-/// # 参数
-/// 当前门户身份与原任务 ID。
-/// # 返回
-/// 当前供应商范围允许的任务上下文。
-/// # 错误
-/// 身份、归属或业务授权无效时拒绝。
+/// 供应商续办批量任务时，用原任务 ID 读取当前供应商范围内的上下文；身份、归属或权限失效时拒绝。
 pub async fn portal_context(
     State(state): State<HttpState>,
     Extension(actor): Extension<PortalActor>,
@@ -144,13 +96,7 @@ pub async fn portal_context(
     context(State(state), Extension(actor.audit_actor()), Path(id)).await
 }
 
-/// 按原门户命令查询结果未知项的回执。
-/// # 参数
-/// 当前门户身份与原任务 ID。
-/// # 返回
-/// 原任务已核对的结果，不启动新的业务提交。
-/// # 错误
-/// 身份、归属、有效期或回执查询失败时拒绝。
+/// 门户批量办理结果未知时，只核对原任务回执，不发起新的业务提交。身份、归属、有效期或回执核对不符时拒绝。
 pub async fn portal_recover(
     State(state): State<HttpState>,
     Extension(actor): Extension<PortalActor>,
@@ -158,13 +104,7 @@ pub async fn portal_recover(
 ) -> Result<Response, Error> {
     recover(State(state), Extension(actor.audit_actor()), Path(id)).await
 }
-/// 读取门户本人任务结果。
-/// # 参数
-/// 门户身份及任务 ID。
-/// # 返回
-/// 经当前供应商归属重验的结果。
-/// # 错误
-/// 身份、归属或有效期无效时拒绝。
+/// 为供应商下载本人批量任务的未过期结果，交付前重验当前门户身份及供应商归属。
 pub async fn portal_result(
     State(state): State<HttpState>,
     Extension(actor): Extension<PortalActor>,
@@ -178,11 +118,7 @@ fn private(mut response: Response) -> Response {
 }
 
 /// 分页查询本人文件任务，不要求全局任务管理权限。
-/// # 参数
-/// 当前身份与分页条件；服务端固定任务类型并覆盖所有者。
-/// # 返回
 /// 本人导入导出记录。
-/// # 错误
 /// 非法分页或读取失败时拒绝。
 pub async fn list(
     State(state): State<HttpState>,
@@ -198,11 +134,7 @@ pub async fn list(
     ))
 }
 /// 门户本人文件任务分页。
-/// # 参数
-/// 当前门户身份与分页条件。
-/// # 返回
 /// 仅本人提交记录。
-/// # 错误
 /// 认证或分页无效时拒绝。
 pub async fn portal_list(
     State(state): State<HttpState>,

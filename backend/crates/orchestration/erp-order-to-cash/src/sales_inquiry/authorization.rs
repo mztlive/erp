@@ -11,13 +11,11 @@ use persistence_core::Executor;
 use crate::repository::sales_inquiry_access::inquiry_candidate;
 use crate::{Error, Result};
 
-/// 检查询价的当前对象或创建候选。
-/// # 参数
-/// authorization 为共享服务，actor/permission 为入口身份和动作，inquiry 为业务事实，executor 为原事务。
-/// # 返回
-/// 固定权限和对象检查通过时成功。
-/// # 错误
-/// 缺少资格、范围、事实或执行边界时拒绝。
+// 检查询价的当前对象或创建候选。
+//
+// authorization 为共享服务，actor/permission 为入口身份和动作，inquiry 为业务事实，executor 为原事务。
+//
+// 固定权限和对象检查通过时成功。缺少资格、范围、事实或执行边界时拒绝。
 pub(super) async fn require(
     authorization: &AuthorizationService,
     actor: &AuditActor,
@@ -37,13 +35,11 @@ pub(super) async fn require(
     Ok(())
 }
 
-/// 编译销售询价固定查询。
-/// # 参数
-/// authorization 为共享服务，actor/permission 为当前查询入口，executor 为原读取阶段。
-/// # 返回
-/// 查询凭证和原共享服务。
-/// # 错误
-/// 缺少资格、范围、事实或执行边界时拒绝。
+// 编译销售询价固定查询。
+//
+// authorization 为共享服务，actor/permission 为当前查询入口，executor 为原读取阶段。查询凭证和原共享服务。
+//
+// 缺少资格、范围、事实或执行边界时拒绝。
 pub(super) async fn query(
     authorization: &Arc<AuthorizationService>,
     actor: &AuditActor,
@@ -55,13 +51,11 @@ pub(super) async fn query(
     Ok((Arc::new(compiled), authorization.clone()))
 }
 
-/// 检查精确采购任务及版本。
-/// # 参数
-/// authorization 为共享服务，actor/permission 为当前入口，task 为读取的精确任务，executor 为原事务。
-/// # 返回
-/// 任务、版本和操作关系均符合时成功。
-/// # 错误
-/// 缺少资格、范围、事实或执行边界时拒绝。
+// 检查精确采购任务及版本。
+//
+// authorization 为共享服务，actor/permission 为当前入口，task 为读取的精确任务，executor 为原事务。
+//
+// 任务、版本和操作关系均符合时成功。缺少资格、范围、事实或执行边界时拒绝。
 pub(super) async fn require_task_owner(
     authorization: &AuthorizationService,
     actor: &AuditActor,
@@ -83,7 +77,7 @@ pub(super) async fn require_task_owner(
     Ok(())
 }
 
-/// 销售读取器只接受销售询价根，禁止用其他资源的同名记录放行。
+// 销售读取器只接受销售询价根，禁止用其他资源的同名记录放行。
 fn ensure_sales_permission(permission: &Permission) -> Result<()> {
     if permission.resource() != sales_inquiry::QUERY_SALES_LIST.resource() {
         return Err(Error::ValidationError("销售询价访问器收到其他资源权限".into()));

@@ -54,20 +54,14 @@ pub struct PaymentAllocationLineRequest {
 
 impl PaymentAllocationLineRequest {
     /// 将请求行转换为领域待过账核销行。
-    ///
-    /// # 参数
-    /// * `&self` - 请求分配行（分录 ID + 核销金额）
-    ///
-    /// # 返回
-    /// 金额为正时返回 [`PendingPaymentAllocation`]，顺序与调用方输入一致。
-    ///
-    /// # 错误
-    /// 金额非正时返回实体层 [`crate::Error::Logic`]（文案保持
+    /// 结果：金额为正时返回 [`PendingPaymentAllocation`]，顺序与调用方输入一致。
+    /// 失败条件：金额非正时返回实体层 [`crate::Error::Logic`]（文案保持
     /// `付款金额必须为正数`）。
-    ///
-    /// # 约束
-    /// 纯转换，不触及 I/O、时钟或 ID 生成；正数校验由
+    /// 调用边界：纯转换，不触及 I/O、时钟或 ID 生成；正数校验由
     /// [`PendingPaymentAllocation::new`] 唯一承担，本方法不复制规则。
+    ///
+    /// 输入约定：
+    /// - `&self`：请求分配行（分录 ID + 核销金额）
     pub fn to_pending(&self) -> Result<PendingPaymentAllocation> {
         PendingPaymentAllocation::new(self.payable_entry_id.clone(), self.allocated_amount)
             .map_err(Into::into)
@@ -128,20 +122,14 @@ pub struct CommitSupplierPaymentRequest {
 
 impl CommitSupplierPaymentRequest {
     /// 将全部请求分配行转换为领域待过账集合。
-    ///
-    /// # 参数
-    /// * `&self` - 原子付款提交请求
-    ///
-    /// # 返回
-    /// 全部行合法时返回与输入顺序一致的 [`PendingPaymentAllocation`] 集合。
-    ///
-    /// # 错误
-    /// 任一行金额非正时返回 [`crate::Error::Logic`]，首个失败即短路。
-    ///
-    /// # 约束
-    /// 纯转换；净额、分录余额、序号与分配实体构造由
+    /// 结果：全部行合法时返回与输入顺序一致的 [`PendingPaymentAllocation`] 集合。
+    /// 失败条件：任一行金额非正时返回 [`crate::Error::Logic`]，首个失败即短路。
+    /// 调用边界：纯转换；净额、分录余额、序号与分配实体构造由
     /// [`crate::entity::payable::PaymentAllocationLedger`] 承担，本方法不下沉
     /// 那些规则，也不读取数据库。
+    ///
+    /// 输入约定：
+    /// - `&self`：原子付款提交请求
     pub fn pending_allocations(&self) -> Result<Vec<PendingPaymentAllocation>> {
         self.allocations.iter().map(PaymentAllocationLineRequest::to_pending).collect()
     }
@@ -179,13 +167,11 @@ pub struct PaymentAllocationView {
 
 /// 分配视图装配辅助（金额正数校验由实体层完成）。
 impl From<&PaymentAllocation> for PaymentAllocationView {
-    /// 从付款核销分配实体构造视图。
-    ///
-    /// # 参数
-    /// * `allocation` - 付款核销分配实体
-    ///
-    /// # 返回
-    /// 返回响应视图。
+    // 从付款核销分配实体构造视图。
+    // 返回响应视图。
+    //
+    // 输入约定：
+    // - `allocation`：付款核销分配实体
     fn from(allocation: &PaymentAllocation) -> Self {
         Self {
             id: allocation.base.id.clone(),
@@ -342,15 +328,8 @@ pub struct SupplierPaymentListQuery {
 
 impl SupplierPaymentListParams {
     /// 归一化供应商付款单列表查询参数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`；
+    /// 失败条件：排序字段不在白名单或排序方向非法时返回 `ValidationError`；
     /// 包含下级但未提供组织时同样返回 `ValidationError`。
     pub fn normalized(&self) -> Result<SupplierPaymentListQuery> {
         let (sort_by, sort_dir) =

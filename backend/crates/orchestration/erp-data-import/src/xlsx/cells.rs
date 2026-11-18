@@ -44,13 +44,13 @@ pub(crate) struct Sheet {
     pub(crate) hyperlinks: bool,
 }
 
-/// 读取有界单元格、合并区及公式元数据，不执行模板业务规则。
-/// # 参数
-/// `xml` 为工作表，`shared` 为字符串表，`limits` 为行列和保留列限制。
-/// # 返回
-/// 稀疏行转成的行列表、合并范围及超链接标记。
-/// # 错误
-/// XML、坐标、共享文本索引、重复单元格或合并范围非法时拒绝。
+// 读取有界单元格、合并区及公式元数据，不执行模板业务规则。
+//
+// `xml` 为工作表，`shared` 为字符串表，`limits` 为行列和保留列限制。
+//
+// 稀疏行转成的行列表、合并范围及超链接标记。
+//
+// XML、坐标、共享文本索引、重复单元格或合并范围非法时拒绝。
 pub(crate) fn rows(xml: &str, shared: &[String], limits: SheetLimits) -> Result<Sheet> {
     let doc = document(xml)?;
     let root = doc.root_element();

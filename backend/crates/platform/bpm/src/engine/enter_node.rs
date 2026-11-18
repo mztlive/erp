@@ -38,22 +38,8 @@ pub(crate) struct EnterNodeInput<'a> {
     pub now: Timestamp,
 }
 
-/// 规划进入指定节点。
-///
-/// 资格有效时创建 `ACTIVE` 执行和中性任务请求；资格无效时创建 `BLOCKED`
-/// 执行且不产生任务。图缺少节点时，若无法形成合法快照则返回不可提交错误。
-///
-/// # 参数
-/// * `input` - 实例、目标节点与责任快照
-///
-/// # 返回
-/// 返回可提交的进入计划。
-///
-/// # 错误
-/// 节点缺失且无法形成合法快照，或模型不变式失败时返回错误。
-///
-/// # 约束
-/// 启动、通过与恢复必须复用本函数。
+// 启动、通过交接和原人恢复共用这条进入路径，以冻结节点和资格创建并挂上新执行。
+// 仍有合格参与人时按人生成任务意图；无人可办则记录受阻而不派任务。缺失目标节点时无法形成合法快照，必须返回不可提交错误。
 pub(crate) fn plan_enter_node(mut input: EnterNodeInput<'_>) -> EngineResult<TransitionPlan> {
     let Some(node) = input.graph.node(input.node_key) else {
         return Err(EngineError::Uncommittable(if input.node_key.trim().is_empty() {
@@ -136,17 +122,8 @@ fn add_enter_intents(
     }
 }
 
-/// 读取当前节点的通过与驳回连线，必须各恰好一条。
-///
-/// # 参数
-/// * `graph` - 定义图
-/// * `from_node_key` - 当前节点键
-///
-/// # 返回
-/// 返回该节点唯一的通过连线与唯一的驳回连线。
-///
-/// # 错误
-/// 连线缺失或重复时返回 [`EngineError::GraphCorrupted`]。连线形状非法时返回模型错误。
+// 接收决定前同时读取通过和驳回边，防止仅校验命令所选的分支而忽略坏图。
+// 缺边或重复边返回 `EngineError::GraphCorrupted` 供决定入口转为阻塞；非法形状仍返回模型错误。
 pub(crate) fn require_decision_edges<'a>(
     graph: &'a DefinitionGraph,
     from_node_key: &str,

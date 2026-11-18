@@ -16,16 +16,7 @@ pub struct MongoOfferingQualification {
     pub(super) db: Database,
 }
 impl MongoOfferingQualification {
-    /// 绑定数据库；资格读取由 `ensure_qualified` 在原命令位置触发。
-    ///
-    /// # 参数
-    /// * `db` - 数据库。
-    ///
-    /// # 返回
-    /// 尚未读取资格事实的适配器。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 绑定数据库；资格读取由 `ensure_qualified` 在原命令位置触发。尚未读取资格事实的适配器。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
@@ -101,7 +92,7 @@ impl QualificationPort for MongoOfferingQualification {
         qualify(self, supplier_id, sku_id, on_date, executor).await
     }
 }
-/// SKU存在/启用先于商品与供应商读取；供应商能力政策只委派一次。
+// SKU存在/启用先于商品与供应商读取；供应商能力政策只委派一次。
 async fn qualify<P: CatalogQualificationPort>(
     port: &P,
     supplier_id: &SupplierAccountId,

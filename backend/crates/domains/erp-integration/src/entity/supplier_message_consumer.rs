@@ -21,12 +21,10 @@ pub struct SupplierMessageConsumer {
 
 impl SupplierMessageConsumer {
     /// 创建账号的唯一消费连接绑定；账号更换必须使用新命名空间。
-    /// # 参数
+    ///
+    /// 尚未持有租期的账号绑定。空身份、过长范围或无效连接时拒绝。
+    ///
     /// `id` 为稳定本地号，`account_scope` 为配置账号范围，`connection_id` 为服务端绑定连接。
-    /// # 返回
-    /// 尚未持有租期的账号绑定。
-    /// # 错误
-    /// 空身份、过长范围或无效连接时拒绝。
     pub fn bind(id: String, account_scope: String, connection_id: SupplierApiConnectionId) -> Result<Self> {
         if id.is_empty()
             || id.len() > 128
@@ -47,12 +45,10 @@ impl SupplierMessageConsumer {
     }
 
     /// 核验本地处理仍持有当前账号的消费资格。
-    /// # 参数
+    ///
+    /// 当前连接的消费者仍可继续。租期失效、被替代或归属不符时失败关闭。
+    ///
     /// `owner` 和 `epoch` 来自原子领取结果，`now` 为服务端当前时间。
-    /// # 返回
-    /// 当前连接的消费者仍可继续。
-    /// # 错误
-    /// 租期失效、被替代或归属不符时失败关闭。
     pub fn require_lease(&self, owner: &str, epoch: i64, now: Instant) -> Result<()> {
         if self.lease_owner.as_deref() != Some(owner) || self.lease_epoch != epoch || self.lease_until <= now
         {

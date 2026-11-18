@@ -20,11 +20,10 @@ use super::rows::*;
 use crate::{Error, Result};
 
 impl FundsAccess {
-    /// 分页查询开票申请范围行：负责销售/申请人/当前开票处理人分别查询。
+    /// 调用此入口时，分页查询开票申请范围行：负责销售/申请人/当前开票处理人分别查询。
     ///
     /// # 参数
     /// * `query` - 开票申请列表查询。
-    /// * `actor` - 已认证操作人。
     ///
     /// # 返回
     /// 最终授权申请页及同口径汇总。
@@ -44,11 +43,10 @@ impl FundsAccess {
         Ok(snapshot)
     }
 
-    /// 独立详情重新解析开票申请详情动作；不可见与不存在统一为 NotFound。
+    /// 调用此入口时，独立详情重新解析开票申请详情动作；不可见与不存在统一为 NotFound。
     ///
     /// # 参数
     /// * `id` - 开票申请主键。
-    /// * `actor` - 已认证操作人。
     ///
     /// # 返回
     /// 当前详情动作允许的申请行。
@@ -72,18 +70,15 @@ impl FundsAccess {
             .await
     }
 
-    /// 返回前重读授权及候选事实版本；变化时拒绝交付原结果。
-    ///
-    /// # 参数
-    /// * `query` - 开票申请列表查询。
-    /// * `actor` - 已认证操作人。
-    /// * `expected` - 调用方回传的范围版本；首页可为 `None`。
-    ///
-    /// # 返回
-    /// 两次快照版本一致时返回第一次申请页。
-    ///
-    /// # 错误
-    /// 任一拍版本失配时返回范围变化冲突错误；授权或读取失败时返回对应错误。
+    // 交付开票申请前重新读取授权及完整候选事实版本；比对发现变化时拒绝原结果。
+    //
+    // 调用参数：
+    // * `query` - 开票申请列表查询。
+    // * `expected` - 调用方回传的范围版本；首页可为 `None`。
+    //
+    // 两次快照版本一致时返回第一次申请页。
+    //
+    // 任一拍版本失配时返回范围变化冲突错误；授权或读取失败时返回对应错误。
     pub(super) async fn checked_requests(
         &self,
         query: &erp_finance::dto::receivable::InvoiceRequestQuery,
@@ -98,17 +93,14 @@ impl FundsAccess {
         .await
     }
 
-    /// 身份和业务事实均使用调用方同一事务，不缓存权限解析结果。
-    ///
-    /// # 参数
-    /// * `query` - 开票申请列表查询。
-    /// * `actor` - 已认证操作人。
-    ///
-    /// # 返回
-    /// 同一事务内形成的授权申请页。
-    ///
-    /// # 错误
-    /// 事务、授权或读取失败时返回对应错误。
+    // 读取开票申请事实时，将身份解析与业务查询放在调用方同一事务中，不复用缓存的授权结论。
+    //
+    // 调用参数：
+    // * `query` - 开票申请列表查询。
+    //
+    // 同一事务内形成的授权申请页。
+    //
+    // 事务、授权或读取失败时返回对应错误。
     pub(super) async fn snapshot_requests(
         &self,
         query: &erp_finance::dto::receivable::InvoiceRequestQuery,
@@ -126,18 +118,14 @@ impl FundsAccess {
             .await
     }
 
-    /// 分页查询开票申请范围行：申请人取创建人，处理人优先工作项负责人、否则完成人。
-    ///
-    /// # 参数
-    /// * `query` - 开票申请列表查询。
-    /// * `actor` - 已认证操作人。
-    /// * `executor` - 调用方事务。
-    ///
-    /// # 返回
-    /// 无可见范围时返回空页；否则返回裁剪后的申请页与汇总。
-    ///
-    /// # 错误
-    /// 授权、候选读取、来源事实或版本不一致时返回对应错误。
+    // 读取开票申请时，分页查询开票申请范围行：申请人取创建人，处理人优先工作项负责人、否则完成人。
+    //
+    // 调用参数：
+    // * `query` - 开票申请列表查询。
+    //
+    // 无可见范围时返回空页；否则返回裁剪后的申请页与汇总。
+    //
+    // 授权、候选读取、来源事实或版本不一致时返回对应错误。
     pub(super) async fn load_requests(
         &self,
         query: &erp_finance::dto::receivable::InvoiceRequestQuery,
@@ -165,17 +153,15 @@ impl FundsAccess {
         finish_requests(query, snapshot, authorization, version)
     }
 
-    /// 仅水合已经通过数据库授权和业务筛选的申请，不再解释范围或重做条件裁剪。
-    ///
-    /// # 参数
-    /// * `rows` - 数据库返回的完整授权候选。
-    /// * `executor` - 原读取事务。
-    ///
-    /// # 返回
-    /// 候选顺序不变的申请、展示处理人及销售责任事实。
-    ///
-    /// # 错误
-    /// 销售来源或工作项读取失败时返回原错误。
+    // 生成开票申请视图时，仅水合已经通过数据库授权和业务筛选的申请，不再解释范围或重做条件裁剪。
+    //
+    // 调用参数：
+    // * `rows` - 数据库返回的完整授权候选。
+    // * `executor` - 原读取事务。
+    //
+    // 候选顺序不变的申请、展示处理人及销售责任事实。
+    //
+    // 销售来源或工作项读取失败时返回原错误。
     async fn assemble_requests(
         &self,
         rows: Vec<SalesInvoiceRequest>,
@@ -191,7 +177,7 @@ impl FundsAccess {
         Ok(RequestSnapshot { decided, facts, order_nos })
     }
 
-    /// 独立复核完整候选及销售版本，不重读展示处理人、不构造页面和汇总。
+    // 为开票申请绑定范围版本时，独立复核完整候选及销售版本，不重读展示处理人、不构造页面和汇总。
     async fn request_fingerprint_snapshot(
         &self,
         query: &erp_finance::dto::receivable::InvoiceRequestQuery,
@@ -224,17 +210,14 @@ impl FundsAccess {
             .await
     }
 
-    /// 开票申请关联筛选条件：负责人、申请人、处理人与组织分别精确匹配。
-    ///
-    /// # 参数
-    /// * `query` - 开票申请列表查询。
-    /// * `executor` - 调用方事务。
-    ///
-    /// # 返回
-    /// 销售负责人、申请人、处理人与展开组织的精确条件。
-    ///
-    /// # 错误
-    /// 组织展开失败时返回对应错误。
+    // 应用开票申请筛选时，开票申请关联筛选条件：负责人、申请人、处理人与组织分别精确匹配。
+    //
+    // 调用参数：
+    // * `query` - 开票申请列表查询。
+    //
+    // 销售负责人、申请人、处理人与展开组织的精确条件。
+    //
+    // 组织展开失败时返回对应错误。
     pub(super) async fn request_condition(
         &self,
         query: &erp_finance::dto::receivable::InvoiceRequestQuery,
@@ -255,7 +238,7 @@ impl FundsAccess {
         })
     }
 
-    /// 本次快照一次读取销售来源，同时供授权、版本及单号展示使用。
+    // 处理开票申请时，本次快照一次读取销售来源，同时供授权、版本及单号展示使用。
     async fn request_sales_context(
         &self,
         ids: &[String],
@@ -281,18 +264,14 @@ impl FundsAccess {
         Ok((facts, numbers))
     }
 
-    /// 开票申请详情同一事务内解析、取数与裁剪；版本绑定关联销售单。
-    ///
-    /// # 参数
-    /// * `id` - 开票申请主键。
-    /// * `actor` - 已认证操作人。
-    /// * `executor` - 调用方事务。
-    ///
-    /// # 返回
-    /// 详情动作允许的申请行及范围版本。
-    ///
-    /// # 错误
-    /// 授权、读取或未接线的资源动作失败时返回对应错误；申请不存在、来源销售单缺失、不在销售单集合内或单对象判定不允许时返回 `NotFound`。
+    // 读取开票申请时，开票申请详情同一事务内解析、取数与裁剪；版本绑定关联销售单。
+    //
+    // 调用参数：
+    // * `id` - 开票申请主键。
+    //
+    // 详情动作允许的申请行及范围版本。
+    //
+    // 授权、读取或未接线的资源动作失败时返回对应错误；申请不存在、来源销售单缺失、不在销售单集合内或单对象判定不允许时返回 `NotFound`。
     pub(super) async fn load_request_detail(
         &self,
         id: &str,
@@ -343,7 +322,7 @@ impl FundsAccess {
     }
 }
 
-/// 只对已经确定的完整候选分页并汇总，不执行授权或数据库读取。
+// 处理开票申请时，只对已经确定的完整候选分页并汇总，不执行授权或数据库读取。
 fn finish_requests(
     query: &erp_finance::dto::receivable::InvoiceRequestQuery,
     snapshot: RequestSnapshot,
@@ -387,7 +366,7 @@ fn finish_requests(
     })
 }
 
-/// 范围及完整匹配集合的业务版本共用同一编码，复核拍不依赖展示字段。
+// 处理开票申请的版本事实时，范围及完整匹配集合的业务版本共用同一编码，复核拍不依赖展示字段。
 fn request_version<'a>(
     context: &FundsReadContext,
     rows: impl Iterator<Item = &'a SalesInvoiceRequest>,
@@ -411,7 +390,7 @@ struct RequestSnapshot {
     order_nos: HashMap<String, String>,
 }
 
-/// 完整候选达到 10001 条时整体拒绝，恰好 10000 条仍完整返回。
+// 准备开票申请候选时，完整候选达到 10001 条时整体拒绝，恰好 10000 条仍完整返回。
 pub(super) fn bounded_request_candidates(rows: Vec<SalesInvoiceRequest>) -> Result<Vec<SalesInvoiceRequest>> {
     if rows.len() > 10_000 {
         return Err(Error::ValidationError("开票申请查询超过上限，请收窄组织或负责人条件".into()));
@@ -419,7 +398,7 @@ pub(super) fn bounded_request_candidates(rows: Vec<SalesInvoiceRequest>) -> Resu
     Ok(rows)
 }
 
-/// 原候选已在数据库完成授权和筛选，仅补展示处理人，缺失来源沿既有合同跳过。
+// 处理开票申请时，原候选已在数据库完成授权和筛选，仅补展示处理人，缺失来源沿既有合同跳过。
 fn hydrate_requests(
     rows: Vec<SalesInvoiceRequest>,
     facts: &HashMap<String, LinkedSalesFact>,
@@ -434,7 +413,7 @@ fn hydrate_requests(
         .collect()
 }
 
-/// 来源责任、申请人和工作项处理人沿用各自事实口径。
+// 处理开票申请时，来源责任、申请人和工作项处理人沿用各自事实口径。
 fn request_linked_facts(
     row: &SalesInvoiceRequest,
     fact: &LinkedSalesFact,
@@ -450,7 +429,7 @@ fn request_linked_facts(
     }
 }
 
-/// 按同拍已读取的来源事实生成范围行，申请金额始终作为行级金额返回。
+// 依据同拍已读取的来源事实生成范围行，申请金额始终作为行级金额返回。
 fn request_row(
     row: &SalesInvoiceRequest,
     handler: Option<String>,
@@ -480,7 +459,7 @@ fn request_row(
 }
 
 impl FundsAccess {
-    /// 先按正常来源范围取证，仅为可信待处理来源返回可重试状态。
+    // 核对开票申请边界时，先按正常来源范围取证，仅为可信待处理来源返回可重试状态。
     async fn ensure_request_ready(
         &self,
         row: &SalesInvoiceRequest,
@@ -510,7 +489,7 @@ mod tests {
 
     use super::*;
 
-    /// 构造来自仓储的开票申请候选。
+    // 生成来自仓储的开票申请候选。
     fn request(id: &str, order: &str, work: Option<&str>) -> SalesInvoiceRequest {
         SalesInvoiceRequest {
             base: BaseModel { id: id.into(), version: 4, ..BaseModel::fake() },
@@ -534,12 +513,12 @@ mod tests {
         }
     }
 
-    /// 构造同拍来源责任和业务版本。
+    // 处理开票申请时，生成同拍来源责任和业务版本。
     fn fact(owner: &str, org: &str, version: u64) -> LinkedSalesFact {
         LinkedSalesFact { owner_user_id: owner.into(), business_org_unit_id: org.into(), version }
     }
 
-    /// 空候选及恰好上限完整交付，哨兵触发既有整体拒绝和原文案。
+    // 验证开票申请：空候选及恰好上限完整交付，哨兵触发既有整体拒绝和原文案。
     #[test]
     fn scoped_request_candidates_keep_exact_limit_and_reject_overflow() {
         assert!(bounded_request_candidates(Vec::new()).unwrap().is_empty());
@@ -554,7 +533,7 @@ mod tests {
         ));
     }
 
-    /// 共享来源上下文保留候选顺序、缺来源跳过、无任务处理人及展示字段。
+    // 验证开票申请：共享来源上下文保留候选顺序、缺来源跳过、无任务处理人及展示字段。
     #[test]
     fn scoped_request_snapshot_reuses_source_facts_and_keeps_order_missing_and_handler_behavior() {
         let rows = vec![
@@ -591,7 +570,7 @@ mod tests {
         assert_eq!(linked.linked_document_id, "so-a");
     }
 
-    /// 范围列表及详情必须保留原申请开票资料和实际已开票额，不依赖提交页面缓存。
+    // 验证开票申请：范围列表及详情必须保留原申请开票资料和实际已开票额，不依赖提交页面缓存。
     #[test]
     fn scoped_request_keeps_saved_invoice_data_and_actual_invoiced_amount() {
         let mut request = request("invoice", "so-a", None);
@@ -614,7 +593,7 @@ mod tests {
         assert_eq!(json["invoiced_amount"], "3.25");
     }
 
-    /// 开票使用当前申请版本，来源与任务身份不依赖浏览器提交缓存或任务负责人映射。
+    // 验证开票申请：开票使用当前申请版本，来源与任务身份不依赖浏览器提交缓存或任务负责人映射。
     #[test]
     fn scoped_request_keeps_command_version_and_bound_identity() {
         let mut request = request("invoice", "so-a", Some("work"));
@@ -640,7 +619,7 @@ mod tests {
         assert!(serde_json::to_value(refreshed).unwrap()["work_item_id"].is_null());
     }
 
-    /// 复核覆盖全部候选业务版本；页外申请或销售来源变化也会使首拍失效。
+    // 验证开票申请：复核覆盖全部候选业务版本；页外申请或销售来源变化也会使首拍失效。
     #[test]
     fn request_fingerprint_binds_authorization_and_all_candidate_business_versions() {
         let context = FundsReadContext {

@@ -29,23 +29,8 @@ pub struct ApprovalTransitionDefinition {
 }
 
 impl ApprovalTransitionDefinition {
-    /// 创建指向下一节点的连线。
-    ///
-    /// 通过连线指向下一节点；历史驳回连线仅用于读取已冻结定义。
-    ///
-    /// # 参数
-    /// * `id` - 连线主键
-    /// * `process_definition_id` - 所属定义
-    /// * `from_node_key` - 来源节点
-    /// * `event` - 事件
-    /// * `to_node_key` - 目标节点
-    /// * `at` - 调用方时间
-    ///
-    /// # 返回
-    /// 返回指向节点、终态为空的连线。
-    ///
-    /// # 错误
-    /// 来源或目标节点键为空或超长，或调用方时间无法持久化时返回错误。
+    /// 为草稿线性图创建从当前节点到下一节点的通过边，不写终态。旧驳回节点边仅用于读取冻结图，新定义应使用 [`Self::to_rejected`]。
+    /// 来源键或目标键非法、时间不可持久化时返回错误；是否为相邻节点由整图校验。
     pub fn to_node(
         id: ApprovalTransitionDefinitionId,
         process_definition_id: ApprovalProcessDefinitionId,
@@ -74,22 +59,8 @@ impl ApprovalTransitionDefinition {
         })
     }
 
-    /// 创建指向最终通过的连线。
-    ///
-    /// 通过事件只能指向通过终态。
-    ///
-    /// # 参数
-    /// * `id` - 连线主键
-    /// * `process_definition_id` - 所属定义
-    /// * `from_node_key` - 来源节点
-    /// * `event` - 必须是通过
-    /// * `at` - 调用方时间
-    ///
-    /// # 返回
-    /// 返回终态为通过、目标节点为空的连线。
-    ///
-    /// # 错误
-    /// 事件不是通过、来源键为空或超长，或调用方时间无法持久化时返回错误。
+    /// 为线性图末节点创建指向最终通过的边，不再指定后继节点。
+    /// 只接受通过事件；来源键非法或时间不可持久化时返回错误。
     pub fn to_approved(
         id: ApprovalTransitionDefinitionId,
         process_definition_id: ApprovalProcessDefinitionId,
@@ -115,17 +86,7 @@ impl ApprovalTransitionDefinition {
         })
     }
 
-    /// 创建指向本次审批已驳回终态的连线。
-    ///
-    /// # 参数
-    /// * `id` - 连线主键。
-    /// * `process_definition_id` - 所属定义。
-    /// * `from_node_key` - 来源节点。
-    /// * `at` - 调用方时间。
-    /// # 返回
-    /// 返回驳回事件对应的终态连线。
-    /// # 错误
-    /// 来源键非法或时间无法持久化时返回错误。
+    /// 为新线性图的每个节点创建驳回终态边，让驳回收结当前审批而不回到入口；来源键非法或时间不可持久化时返回错误。
     pub fn to_rejected(
         id: ApprovalTransitionDefinitionId,
         process_definition_id: ApprovalProcessDefinitionId,
@@ -144,18 +105,8 @@ impl ApprovalTransitionDefinition {
         Ok(transition)
     }
 
-    /// 校验单条连线形状：节点目标与终态恰有一个。
-    ///
-    /// 本方法不判断该节点是否入口或末节点。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 形状合法时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 目标组合不合法时返回 [`ModelError::InvalidTransition`]。
+    /// 构图或解释决定时确认连线有且仅有一个目标：非空节点键，或与事件匹配的终态。
+    /// 非法组合返回 [`ModelError::InvalidTransition`]；是否为入口、末节点或兼容的历史驳回目标须由整图或运行规则判断。
     pub fn validate_shape(&self) -> ModelResult<()> {
         match (self.event, self.to_node_key.as_deref(), self.terminal_result) {
             (_, Some(to), None) => {
@@ -187,7 +138,7 @@ mod tests {
         ApprovalProcessDefinitionId::new("def")
     }
 
-    /// 通过与驳回终态匹配事件，并兼容历史驳回节点连线。
+    // 验证事件与终态必须配对，同时保留单边层面对历史驳回节点目标的读取兼容。
     #[test]
     fn transition_shape_rules() {
         let at = Timestamp::from_unix_secs(1).unwrap();

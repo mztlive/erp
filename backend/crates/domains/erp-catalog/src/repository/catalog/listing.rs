@@ -26,16 +26,10 @@ pub struct ProductListingSummary {
 impl ProductListingSummary {
     /// 构造上架计数投影。
     ///
-    /// # 参数
-    /// * `product_id` - 商品稳定主键
-    /// * `listed_sku_count` - 当前启用且已上架的 SKU 数
-    /// * `sku_count` - 当前启用 SKU 总数
-    ///
-    /// # 返回
     /// 返回仓储投影事实，不含 `ProductListingStatus` 或 HTTP View。
     ///
-    /// # 错误
-    /// 无。
+    /// - `listed_sku_count`：当前启用且已上架的 SKU 数。
+    /// - `sku_count`：当前启用 SKU 总数。
     pub fn new(product_id: impl Into<String>, listed_sku_count: u32, sku_count: u32) -> Self {
         Self { product_id: product_id.into(), listed_sku_count, sku_count }
     }
@@ -44,24 +38,16 @@ impl ProductListingSummary {
 impl<'a> CatalogRepository<'a> {
     /// 按商品 ID 批量投影上架汇总。
     ///
-    /// 只读取 `product_id`/`status`/`listing_status`/`deleted_at`，在数据库内按商品
-    /// 聚合启用数与已上架数。空输入不访问数据库；非空输入固定一次 `$in` 聚合，
-    /// 查询次数不随商品数增长。缺失 `listing_status` 的旧 SKU 与商品列表管道共用
-    /// 同一 `$ifNull` 口径，兼容为已上架。本方法不开启事务。
+    /// 只读取 `product_id`/`status`/`listing_status`/`deleted_at`，在数据库内按商品聚合启用数与已上架数。
+    /// 空输入不访问数据库；非空输入固定一次 `$in` 聚合，查询次数不随商品数增长。缺失 `listing_status` 的旧 SKU 与商品列表管道共用同一
+    /// `$ifNull` 口径，兼容为已上架。本方法不开启事务。
     ///
-    /// # 参数
-    /// * `product_ids` - 商品稳定 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 统计口径必须与 `product_list_pipeline` 共用 [`sku_is_listed_expr`]；不返回 services DTO、HTTP
+    /// View 或 `ProductListingStatus`。
     ///
-    /// # 返回
-    /// 返回去重后按输入首次出现顺序排列的上架计数；无启用 SKU 的商品计数为零。
+    /// 返回去重后按输入首次出现顺序排列的上架计数；无启用 SKU 的商品计数为零。MongoDB 聚合或反序列化失败时返回错误。
     ///
-    /// # 错误
-    /// MongoDB 聚合或反序列化失败时返回错误。
-    ///
-    /// # 约束
-    /// 统计口径必须与 `product_list_pipeline` 共用 [`sku_is_listed_expr`]；
-    /// 不返回 services DTO、HTTP View 或 `ProductListingStatus`。
+    /// `product_ids` 为商品稳定 ID 集合。
     pub async fn listing_summaries(
         &self,
         product_ids: &[ProductId],
@@ -82,14 +68,7 @@ impl<'a> CatalogRepository<'a> {
 ///
 /// 与商品列表管道共用：缺失 `listing_status` 视为已上架，保持旧文档可售语义。
 ///
-/// # 参数
-/// 无。
-///
-/// # 返回
 /// 返回 `$eq`/`$ifNull` 表达式文档。
-///
-/// # 错误
-/// 无。
 pub fn sku_is_listed_expr() -> Document {
     doc! {
         "$eq": [
@@ -99,16 +78,11 @@ pub fn sku_is_listed_expr() -> Document {
     }
 }
 
-/// 构造按商品聚合上架计数的管道。
-///
-/// # 参数
-/// * `product_ids` - 已去重的商品稳定主键
-///
-/// # 返回
-/// 返回 `$match` + `$group` + `$project` 三段管道。
-///
-/// # 错误
-/// 无。
+// 构造按商品聚合上架计数的管道。
+//
+// 返回 `$match` + `$group` + `$project` 三段管道。
+//
+// `product_ids` 为已去重的商品稳定主键。
 fn listing_summary_pipeline(product_ids: &[String]) -> Vec<Document> {
     let listed = sku_is_listed_expr();
     vec![
@@ -139,18 +113,13 @@ fn listing_summary_pipeline(product_ids: &[String]) -> Vec<Document> {
     ]
 }
 
-/// 执行上架汇总聚合并收集全部结果行。
-///
-/// # 参数
-/// * `collection` - SKU 集合
-/// * `product_ids` - 已去重的商品稳定主键
-/// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-///
-/// # 返回
-/// 返回至少有一个启用 SKU 的商品计数行。
-///
-/// # 错误
-/// MongoDB 聚合、游标读取或反序列化失败时返回错误。
+// 执行上架汇总聚合并收集全部结果行。
+//
+// 返回至少有一个启用 SKU 的商品计数行。MongoDB 聚合、游标读取或反序列化失败时返回错误。
+//
+// 沿用调用方的执行器，不另开事务。
+//
+// `product_ids` 为已去重的商品稳定主键。
 async fn aggregate_listing_summaries(
     collection: &mongodb::Collection<Document>,
     product_ids: &[String],
@@ -161,16 +130,9 @@ async fn aggregate_listing_summaries(
     aggregate::rows(&collection, pipeline, executor).await
 }
 
-/// 按输入首次出现顺序去重商品 ID。
-///
-/// # 参数
-/// * `product_ids` - 原始商品 ID 集合
-///
-/// # 返回
-/// 返回稳定去重后的主键列表。
-///
-/// # 错误
-/// 无。
+// 按输入首次出现顺序去重商品 ID。返回稳定去重后的主键列表。
+//
+// `product_ids` 为原始商品 ID 集合。
 fn unique_product_ids(product_ids: &[ProductId]) -> Vec<String> {
     let mut seen = HashSet::new();
     let mut unique = Vec::with_capacity(product_ids.len());
@@ -182,17 +144,12 @@ fn unique_product_ids(product_ids: &[ProductId]) -> Vec<String> {
     unique
 }
 
-/// 把聚合行归组为请求商品的上架汇总；缺项计为零。
-///
-/// # 参数
-/// * `product_ids` - 已去重的请求商品主键
-/// * `rows` - 数据库聚合出行（仅包含有启用 SKU 的商品）
-///
-/// # 返回
-/// 返回与请求顺序一致的上架计数；无启用 SKU 时 `sku_count` 与 `listed_sku_count` 为零。
-///
-/// # 错误
-/// 无。
+// 把聚合行归组为请求商品的上架汇总；缺项计为零。
+//
+// 返回与请求顺序一致的上架计数；无启用 SKU 时 `sku_count` 与 `listed_sku_count` 为零。
+//
+// - `product_ids`：已去重的请求商品主键。
+// - `rows`：数据库聚合出行（仅包含有启用 SKU 的商品）。
 fn fill_listing_summaries(
     product_ids: &[String],
     rows: Vec<ProductListingSummary>,
@@ -220,7 +177,7 @@ mod tests {
         ProductListingSummary::new(product_id, listed_sku_count, sku_count)
     }
 
-    /// 上架汇总管道固定一次 `$in` 聚合，并与列表管道共用缺失 `listing_status` 口径。
+    // 上架汇总管道固定一次 `$in` 聚合，并与列表管道共用缺失 `listing_status` 口径。
     #[test]
     fn listing_summary_pipeline_is_bounded_and_shares_listed_expr() {
         let pipeline = listing_summary_pipeline(&["product-1".to_string(), "product-2".to_string()]);
@@ -241,7 +198,7 @@ mod tests {
         assert!(json.contains(&listed[1..listed.len().saturating_sub(1)]) || json.contains("$ifNull"));
     }
 
-    /// 空输入不产生管道访问；零 SKU 与全部停用均归为零计数。
+    // 空输入不产生管道访问；零 SKU 与全部停用均归为零计数。
     #[test]
     fn fill_listing_summaries_covers_zero_and_disabled() {
         assert!(unique_product_ids(&[]).is_empty());
@@ -249,7 +206,7 @@ mod tests {
         assert_eq!(filled, vec![summary("product-1", 0, 0)]);
     }
 
-    /// 全部上架、部分上架、全部未上架及多商品批量按输入顺序归组。
+    // 全部上架、部分上架、全部未上架及多商品批量按输入顺序归组。
     #[test]
     fn fill_listing_summaries_covers_listed_partial_unlisted_and_batch() {
         let filled = fill_listing_summaries(
@@ -268,7 +225,7 @@ mod tests {
         assert_eq!(filled[3], summary("missing", 0, 0));
     }
 
-    /// 重复商品 ID 按首次出现去重，缺项仍补零。
+    // 重复商品 ID 按首次出现去重，缺项仍补零。
     #[test]
     fn unique_product_ids_preserve_first_seen_order() {
         let ids = [ProductId::new("p-2"), ProductId::new("p-1"), ProductId::new("p-2")];

@@ -36,18 +36,9 @@ pub struct OrganizationService {
 
 impl OrganizationService {
     /// 装配组织用例和外域未结事实检查。
-    ///
-    /// # 参数
-    /// * `db` - 身份数据库。
-    /// * `rbac` - 共享 RBAC 服务。
-    /// * `business` - 外域未结事实端口。
-    /// * `authorization` - 应用注入的共享统一授权服务。
-    ///
-    /// # 返回
     /// 返回无宽范围兜底的组织服务。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// `rbac`：共享 RBAC 服务；`authorization`：应用注入的共享统一授权服务。
     pub fn new(
         db: Database,
         rbac: SharedRbacService,
@@ -58,18 +49,11 @@ impl OrganizationService {
     }
 
     /// 返回当前有权配置的组织、关系及展示字段。
+    /// 缺范围返回空集并标记 `no_scope`；所属部门不代替 `org_unit:list`。
     ///
-    /// # 参数
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
     /// 配置边界内的组织事实，以及范围版本、空集原因和人员/角色标签。
     ///
-    /// # 错误
     /// 无读取动作、失效账号或快照不一致时拒绝。
-    ///
-    /// # 关键业务约束
-    /// 缺范围返回空集并标记 `no_scope`；所属部门不代替 `org_unit:list`。
     pub async fn state(&self, actor: &AuditActor) -> Result<OrganizationStateView> {
         let this = self.clone();
         let actor = actor.clone();
@@ -82,7 +66,7 @@ impl OrganizationService {
             .await
     }
 
-    /// 在原快照内取得配置范围、展示事实并完成交付期限检查。
+    // 沿同一快照取得配置范围、展示事实并完成交付期限检查。
     async fn state_snapshot(
         &self,
         actor: &AuditActor,
@@ -106,16 +90,11 @@ impl OrganizationService {
     }
 
     /// 预览通过同一校验准备的变更前后事实，不写入组织或业务任务。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证操作人。
-    /// * `request` - 含期望版本、幂等键和变更命令。
-    ///
-    /// # 返回
     /// 返回可见边界内的变更回执。
     ///
-    /// # 错误
     /// 与正式提交相同的权限、版本和业务约束错误。
+    ///
+    /// `request`：含期望版本、幂等键和变更命令。
     pub async fn preview(
         &self,
         actor: &AuditActor,
@@ -125,16 +104,11 @@ impl OrganizationService {
     }
 
     /// 原子提交组织关系、全局版本、幂等回执及前后值审计。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证操作人。
-    /// * `request` - 含期望版本、幂等键和变更命令。
-    ///
-    /// # 返回
     /// 返回已提交或幂等回放的变更回执。
     ///
-    /// # 错误
     /// 并发或幂等异载荷冲突、越权及存储失败时全部回滚。
+    ///
+    /// `request`：含期望版本、幂等键和变更命令。
     pub async fn change(
         &self,
         actor: &AuditActor,
@@ -143,21 +117,14 @@ impl OrganizationService {
         self.execute(actor, request, false).await
     }
 
-    /// 统一预览和提交的事务快照与授权校验路径。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证操作人
-    /// * `request` - 含期望版本、幂等键和变更命令
-    /// * `preview` - 预览不写入仓储
-    ///
-    /// # 返回
-    /// 可见边界内的变更回执。
-    ///
-    /// # 错误
-    /// 权限、期望版本、越界、未结业务或幂等异载荷失败时回滚。
-    ///
-    /// # 关键业务约束
-    /// 预览与提交共用校验；只有提交且无回放时持久化。
+    // 统一预览和提交的事务快照与授权校验路径。
+    // 预览与提交共用校验；只有提交且无回放时持久化。
+    //
+    // 可见边界内的变更回执。
+    //
+    // 权限、期望版本、越界、未结业务或幂等异载荷失败时回滚。
+    //
+    // `request`：含期望版本、幂等键和变更命令；`preview`：预览不写入仓储。
     async fn execute(
         &self,
         actor: &AuditActor,
@@ -183,7 +150,7 @@ impl OrganizationService {
             .await
     }
 
-    /// 同一事务完成授权、资料、组织关系及幂等回执，不自行开启事务。
+    // 一个事务完成授权、资料、组织关系及幂等回执，不自行开启事务。
     async fn execute_change(
         &self,
         actor: &AuditActor,
@@ -224,12 +191,12 @@ impl OrganizationService {
         Ok(receipt)
     }
 
-    /// 解析组织配置资源；所属部门与操作权限分别校验。
+    // 为组织配置读取建立资源授权上下文，操作入口权限和所在部门管理范围各自核验。
     async fn access(&self, actor: &AuditActor, executor: &mut dyn Executor) -> Result<OrganizationScope> {
         self.authorization.organization_scope(actor, &organization::LIST, executor).await
     }
 
-    /// 核对修改目标、原边界及接收方资格，组织关系不自动交接业务对象。
+    // 组织写入前核对目标、原管辖边界和接收方资格；验证组织关系不代表完成业务对象责任交接。
     async fn ensure_change(
         &self,
         change: &OrganizationOperation,
@@ -265,7 +232,7 @@ impl OrganizationService {
         Ok(())
     }
 
-    /// 未结业务会阻止组织停用，查询失败不能视为没有业务。
+    // 停用组织前检查权威业务端口是否仍有未结事项；有记录或取证失败都不能视作可停用。
     async fn ensure_no_unsettled(&self, org: &str, executor: &mut dyn Executor) -> Result<()> {
         if self.business.has_unsettled_business(org, executor).await? {
             return Err(Error::ConflictError("组织仍有未结业务，请先完成交接".into()));
@@ -273,7 +240,7 @@ impl OrganizationService {
         Ok(())
     }
 
-    /// 成员关系只授予有效后台账号。
+    // 创建或调整成员关系前确认目标为有效后台账号，不将主属关系授予外部或失效账号。
     async fn ensure_account(&self, user: &str, executor: &mut dyn Executor) -> Result<()> {
         if self.db.accounts().find_by_id(user, executor).await?.is_none_or(|a| !a.is_active_backoffice()) {
             return Err(Error::ValidationError("接收人不是有效后台账号".into()));
@@ -282,19 +249,13 @@ impl OrganizationService {
     }
 }
 
-/// 读取组织页面人员展示与分派候选，消费账号的展示字段。
-///
-/// # 参数
-/// * `db` - 数据库句柄（只借用，不克隆 client/actor）
-/// * `visible` - 当前可管理组织事实（借用）
-/// * `as_of` - 与范围解析相同的时点
-/// * `executor` - 调用方事务执行器
-///
-/// # 返回
-/// 后台账号 ID、显示名、登录账号、状态和当前主属组织；排序与空集语义不变。
-///
-/// # 错误
-/// 账号读取或主属关系冲突时失败。
+// 读取组织页面人员展示与分派候选，消费账号的展示字段。
+// 后台账号 ID、显示名、登录账号、状态和当前主属组织；排序与空集语义不变。
+//
+// 账号读取或主属关系冲突时失败。
+//
+// `db`：数据库句柄（只借用，不克隆 client/actor）；`visible`：当前可管理组织事实（借用）。
+// `as_of`：与范围解析相同的时点；`executor`：调用方事务执行器。
 async fn people_for(
     db: &Database,
     visible: &OrganizationState,
@@ -318,17 +279,12 @@ async fn people_for(
     Ok(people)
 }
 
-/// 读取账号资料的可选角色，不因旧管理关系补入失效角色。
-///
-/// # 参数
-/// * `db` - 数据库句柄（只借用，不克隆 client/actor）
-/// * `executor` - 调用方事务执行器
-///
-/// # 返回
-/// 按名称稳定排序的启用角色。
-///
-/// # 错误
-/// 角色读取失败时返回错误。
+// 读取账号资料的可选角色，不因旧管理关系补入失效角色。
+// 按名称稳定排序的启用角色。
+//
+// 角色读取失败时返回错误。
+//
+// `db`：数据库句柄（只借用，不克隆 client/actor）；`executor`：调用方事务执行器。
 async fn roles_for(db: &Database, executor: &mut dyn Executor) -> Result<Vec<OrgRoleView>> {
     let roles = db.roles().list_enabled(executor).await?;
     let mut views = roles

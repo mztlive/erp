@@ -24,13 +24,9 @@ pub struct PurchaseDataScope {
 }
 
 impl PurchaseDataScope {
-    /// 注入已完成全部业务绑定的共享授权服务。
-    /// # 参数
+    /// 注入已完成全部业务绑定的共享授权服务。不执行 I/O、也不构造授权政策的采购端口。
+    ///
     /// db 为业务数据库，authorization 为组合根注入的共享统一授权服务。
-    /// # 返回
-    /// 不执行 I/O、也不构造授权政策的采购端口。
-    /// # 错误
-    /// 无。
     pub fn shared(db: Database, authorization: Arc<AuthorizationService>) -> Arc<dyn PurchaseDataScopePort> {
         Arc::new(Self { directory: OrganizationDirectoryService::new(db), authorization })
     }
@@ -113,7 +109,7 @@ impl PurchaseDataScopePort for PurchaseDataScope {
     }
 }
 
-/// 采购端口拒绝其他根资源，防止同名身份被用于另一领域的授权。
+// 采购端口拒绝其他根资源，防止同名身份被用于另一领域的授权。
 fn purchase_entry(entry: &Permission) -> Result<()> {
     if entry.resource() != resources::PURCHASE_ORDER {
         return Err(Error::ValidationError("采购端口只接受采购单入口".into()));

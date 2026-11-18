@@ -41,17 +41,7 @@ pub struct SourceRegistryService {
 
 impl SourceRegistryService {
     /// 创建来源注册服务实例。
-    ///
-    /// # 参数
-    /// * `db` - 数据库实例
-    /// * `audit` - 审计写入端口
-    /// * `authorization` - 进程共享的统一授权服务。
-    ///
-    /// # 返回
-    /// 返回服务实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// `audit` 为审计写入端口；`authorization` 为进程共享的统一授权服务。
     pub fn new(
         db: Database,
         audit: Arc<dyn SupportAuditPort>,
@@ -61,17 +51,11 @@ impl SourceRegistryService {
     }
 
     /// 分页查询来源系统列表。
-    ///
     /// 排序字段白名单在 Service 层校验（api-contract §4），禁止任意字段透传。
-    ///
-    /// # 参数
-    /// * `params` - 查询参数
-    /// * `actor` - 当前认证操作人。
-    ///
-    /// # 返回
     /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
+    /// `params` 为查询参数。
     ///
-    /// # 错误
+    /// 失败条件：
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
     /// * `RepositoryError` - 数据库查询失败
     pub async fn source_system_list(
@@ -90,7 +74,7 @@ impl SourceRegistryService {
             .await
     }
 
-    /// 功能资格、分页及计数共用原快照事务。
+    // 功能资格、分页及计数共用原快照事务。
     async fn source_system_page(
         &self,
         params: &SourceSystemListParams,
@@ -120,20 +104,11 @@ impl SourceRegistryService {
     }
 
     /// 更新来源系统（乐观锁语义）。
-    ///
-    /// 期望版本 `req.version` 与当前版本不一致时直接返回冲突（409）；
-    /// 仓储层 `Repository::update` 同时以 `id + version` CAS 兜底并发竞争
-    /// （base.rs：`OptimisticLockingError` → 服务层 `ConflictError`）。
-    ///
-    /// # 参数
-    /// * `id` - 来源系统 ID
-    /// * `req` - 更新请求（含期望版本）
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
+    /// 期望版本 `req.version` 与当前版本不一致时直接返回冲突（409）；仓储层 `Repository::update` 同时以 `id + version` CAS 兜底并发竞争（base.rs：`OptimisticLockingError` → 服务层 `ConflictError`）。
     /// 返回更新后来源系统的响应视图。
+    /// `id` 为来源系统 ID；`req` 为更新请求（含期望版本）。
     ///
-    /// # 错误
+    /// 失败条件：
     /// * `NotFound` - 来源系统不存在
     /// * `ConflictError` - 期望版本与当前版本不一致
     /// * `ValidationError` - 请求体校验失败
@@ -186,20 +161,11 @@ impl SourceRegistryService {
     }
 
     /// 建立外部身份映射（跨集合事务写入）。
-    ///
-    /// 在一个事务内写入 `external_identity_maps`、`external_identity_targets`
-    /// 与审计日志，保证「映射身份 + 目标谱系」原子可见（数据模型 §6.1）。
-    /// 唯一性冲突由唯一索引透出 `DuplicateKey` → `ConflictError`，
-    /// 不做应用层「先查后插」的重复性判断。
-    ///
-    /// # 参数
-    /// * `req` - 创建请求
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
+    /// 在一个事务内写入 `external_identity_maps`、`external_identity_targets` 与审计日志，保证「映射身份 + 目标谱系」原子可见（数据模型 §6.1）。
+    /// 唯一性冲突由唯一索引透出 `DuplicateKey` → `ConflictError`，不做应用层「先查后插」的重复性判断。
     /// 返回新建映射的响应视图。
     ///
-    /// # 错误
+    /// 失败条件：
     /// * `NotFound` - 来源系统不存在
     /// * `ConflictError` - 同一 (来源系统, 对象类型, 比较键) 已存在
     /// * `ValidationError` - 请求体校验失败
@@ -249,15 +215,10 @@ impl SourceRegistryService {
     }
 
     /// 分页查询外部身份映射列表。
-    ///
-    /// # 参数
-    /// * `params` - 查询参数（`source_system_id`/`mapping_status` 扁平筛选）
-    /// * `actor` - 当前认证操作人。
-    ///
-    /// # 返回
     /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
+    /// `params` 为查询参数（`source_system_id`/`mapping_status` 扁平筛选）。
     ///
-    /// # 错误
+    /// 失败条件：
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
     /// * `RepositoryError` - 数据库查询失败
     pub async fn external_identity_map_list(
@@ -276,7 +237,7 @@ impl SourceRegistryService {
             .await
     }
 
-    /// 功能资格、外部身份映射分页及计数共用原快照事务。
+    // 功能资格、外部身份映射分页及计数共用原快照事务。
     async fn external_identity_page(
         &self,
         params: &ExternalIdentityMapListParams,
@@ -305,16 +266,10 @@ impl SourceRegistryService {
     }
 }
 
-/// 由创建请求组装外部身份映射与目标谱系两实体（初始状态均为待处理）。
-///
-/// # 参数
-/// * `req` - 创建请求（含来源系统、外部身份与内部对象指向）
-///
-/// # 返回
-/// 返回待写入同一事务的映射与目标实体。
-///
-/// # 错误
-/// 任一实体校验失败时返回错误。
+// 由创建请求组装外部身份映射与目标谱系两实体（初始状态均为待处理）。
+// 返回待写入同一事务的映射与目标实体。
+// `req` 为创建请求（含来源系统、外部身份与内部对象指向）。
+// 任一实体校验失败时返回错误。
 fn build_identity_link(
     req: CreateExternalIdentityMapRequest,
 ) -> Result<(ExternalIdentityMap, ExternalIdentityTarget)> {

@@ -32,21 +32,9 @@ pub struct SupplierSettlementDraftSnapshot {
 
 impl SupplierSettlementDraftSnapshot {
     /// 从不可变来源证据批次确定性派生结算草稿快照。
-    ///
-    /// 每条来源行生成一条结算明细；`供应商账单 − ERP 计算` 非零时追加一条
-    /// 待处理金额差异（负数表示 ERP 金额大于供应商金额），零差异不生成；
-    /// `erp_amount` 与 `supplier_amount` 分别按来源行含税金额精确累加。
-    ///
-    /// # 参数
-    /// * `statement_id` - 结算单主键（由 Service 注入）
-    /// * `source` - 已冻结的权威来源证据批次
-    /// * `next_item_id` - 按来源行顺序提供结算明细主键的注入器
-    /// * `next_difference_id` - 按差异生成顺序提供差异主键的注入器
-    ///
-    /// # 返回
+    /// 每条来源行生成一条结算明细；`供应商账单 − ERP 计算` 非零时追加一条待处理金额差异（负数表示 ERP 金
+    /// 额大于供应商金额），零差异不生成；`erp_amount` 与 `supplier_amount` 分别按来源行含税金额精确累加。
     /// 返回明细、差异与两侧总额的草稿快照。
-    ///
-    /// # 错误
     /// 来源批次没有可结算行，或明细/差异构造校验失败时返回领域错误。
     pub fn from_source(
         statement_id: &SupplierSettlementStatementId,
@@ -108,13 +96,11 @@ impl SupplierSettlementDraftSnapshot {
     }
 }
 
-/// 返回草稿快照累加使用的零金额。
-///
-/// # 返回
-/// 返回精确到分的零金额。
-///
-/// # Panics
-/// `Decimal::ZERO` 是合法金额；只有构造失败才 panic，正常路径不会发生。
+// 返回草稿快照累加使用的零金额。
+// 返回精确到分的零金额。
+//
+// # Panics
+// `Decimal::ZERO` 是合法金额；只有构造失败才 panic，正常路径不会发生。
 fn zero() -> Amount {
     Amount::try_from(Decimal::ZERO).expect("零是合法金额")
 }

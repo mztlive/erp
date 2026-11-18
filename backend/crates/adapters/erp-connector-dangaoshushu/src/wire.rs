@@ -11,16 +11,8 @@ use super::parsing::mapping;
 const MAX_DEPTH: usize = 32;
 const MAX_DECIMAL_LEN: usize = 4096;
 
-/// 按供应商原始数字词法解析响应，避免金额或标识先经过浮点数。
-///
-/// # 参数
-/// - `body`：完整 JSON 响应字节；传输层负责响应大小限制。
-///
-/// # 返回
-/// 返回保留精确数字的 JSON；小数及指数数字转成十进制字符串。
-///
-/// # 错误
-/// JSON 非法、重复字段、嵌套过深、数字身份不合法或十进制展开过长时失败。
+// 传输层限制响应大小后，按原始数字词法解码完整 JSON；小数和指数形式转成十进制文本，不让金额或标识经过浮点数。
+// 拒绝非法 JSON、重复键、嵌套过深、格式非法的数字编号和过长的十进制展开。
 pub(super) fn parse(body: &[u8]) -> ConnectorResult<Value> {
     let raw: Box<RawValue> = from_slice(body).map_err(|_| mapping())?;
     value(&raw, None, 0)

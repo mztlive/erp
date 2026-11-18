@@ -22,14 +22,8 @@ use crate::http::extractor::{Json, Query};
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
-/// 查询模板目录。
-/// # 参数
-/// * `state` - 应用状态。
-/// * `params` - 目录分页。
-/// # 返回
+/// 按请求条件查询模板目录。
 /// 模板公开视图。
-/// # 错误
-/// 查询失败。
 pub async fn list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -41,13 +35,7 @@ pub async fn list(
 }
 
 /// 上传不可变 Word 模板，处理及对象写入位于数据库事务外。
-/// # 参数
-/// * `state` - 应用状态。
-/// * `actor` - 管理员。
-/// * `multipart` - DOCX 及模板命令。
-/// # 返回
 /// 新模板。
-/// # 错误
 /// 非 DOCX、模板不兼容、主体冲突或写入失败。
 pub async fn create(
     State(state): State<HttpState>,
@@ -79,14 +67,7 @@ pub async fn create(
 }
 
 /// 更改模板启停状态。
-/// # 参数
-/// * `state` - 应用状态。
-/// * `actor` - 管理员。
-/// * `id` - 模板。
-/// * `request` - 版本及状态。
-/// # 返回
 /// 更新模板。
-/// # 错误
 /// 版本冲突或写入失败。
 pub async fn status(
     State(state): State<HttpState>,
@@ -100,12 +81,7 @@ pub async fn status(
 }
 
 /// 读取本年度流水。
-/// # 参数
-/// * `state` - 应用状态。
-/// # 返回
 /// 四组流水。
-/// # 错误
-/// 查询失败。
 pub async fn counters(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -114,13 +90,8 @@ pub async fn counters(
 }
 
 /// 只向前校准流水。
-/// # 参数
-/// * `state` - 应用状态。
-/// * `actor` - 管理员。
-/// * `request` - 期望版本及流水。
-/// # 返回
+/// `request` 为期望版本及流水。
 /// 新流水。
-/// # 错误
 /// 回退或版本冲突。
 pub async fn configure(
     State(state): State<HttpState>,
@@ -133,14 +104,7 @@ pub async fn configure(
 }
 
 /// 查询本人记录。
-/// # 参数
-/// * `state` - 应用状态。
-/// * `actor` - 销售。
-/// * `params` - 分页。
-/// # 返回
 /// 本人的合同号。
-/// # 错误
-/// 查询失败。
 pub async fn applications(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -152,13 +116,7 @@ pub async fn applications(
 }
 
 /// 从启用模板领号。
-/// # 参数
-/// * `state` - 应用状态。
-/// * `actor` - 销售。
-/// * `request` - 稳定申请键。
-/// # 返回
 /// 原子生成的合同号。
-/// # 错误
 /// 申请内容冲突或流水耗尽。
 pub async fn apply(
     State(state): State<HttpState>,
@@ -171,13 +129,7 @@ pub async fn apply(
 }
 
 /// 独立授权后返回带原编号的 DOCX。
-/// # 参数
-/// * `state` - 应用状态。
-/// * `actor` - 销售。
-/// * `id` - 本人申请。
-/// # 返回
 /// 私有不可缓存的 DOCX。
-/// # 错误
 /// 越权、对象读取或 Word 处理失败。
 pub async fn download(
     State(state): State<HttpState>,
@@ -189,13 +141,7 @@ pub async fn download(
 }
 
 /// 下载不占流水的样张，用于管理员在 Word 中核对首页排版。
-/// # 参数
-/// * `state` - 应用状态。
-/// * `actor` - 管理员。
-/// * `id` - 模板。
-/// # 返回
 /// 带 SAMPLE 编号的 Word。
-/// # 错误
 /// 模板不存在或读取失败。
 pub async fn sample(
     State(state): State<HttpState>,

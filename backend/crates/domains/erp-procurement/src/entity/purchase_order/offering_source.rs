@@ -36,14 +36,8 @@ pub struct PurchaseOfferingSource {
 }
 
 impl PurchaseOfferingSource {
-    /// 从当前事务验证的精确采购依据冻结正式选源。
-    ///
-    /// # 参数
-    /// * `supply` - 采购创建实际选用的供给、条款和可供事实。
-    /// # 返回
-    /// 返回不可由客户端改写的完整选源值。
-    /// # 错误
-    /// 条款或可供投影不属于当前供给，或身份、版本缺失时拒绝创建。
+    /// 创建普通采购行时，从原事务核实的选中供给冻结供给、当前条款与可供投影的身份和版本。
+    /// 条款或可供投影归属不符、当前指针不一致或身份版本缺失时拒绝；不从客户端补造选源。
     pub fn from_supply(supply: &LineSupply) -> Result<Self> {
         if supply.revision.supplier_offering_id.as_ref() != supply.offering.base.id.as_str()
             || supply.availability.supplier_offering_id.as_ref() != supply.offering.base.id.as_str()
@@ -64,18 +58,8 @@ impl PurchaseOfferingSource {
         Ok(source)
     }
 
-    /// 核对提交事务读取的精确供给仍与采购冻结来源一致且可用。
-    ///
-    /// # 参数
-    /// * `supply` - 提供方筛选为启用状态的当前供给、条款和可供事实。
-    /// * `supplier_id` - 本采购冻结的供应商身份。
-    /// * `sku_id` - 本采购行冻结的 SKU 身份。
-    /// * `quantity` - 本采购行本次提交的基础单位数量。
-    /// * `on_date` - 提交时的业务日期。
-    /// # 返回
-    /// 原身份、当前指针及三种版本相同，条款有效且数量可供时返回成功。
-    /// # 错误
-    /// 来源、归属、版本、有效期或可供资格变化时拒绝；不替换冻结价格和版本。
+    /// 提交普通供给的采购行时，用同一事务读取已启用供给，重验冻结供应商、SKU、当前条款及供给、条款和可供版本。
+    /// 同时检查业务日期上的条款有效性与本次数量可供性；任一事实变化即拒绝，不替换原冻结价格或版本。专项报价必须走专项重验。
     pub fn ensure_current_supply(
         &self,
         supply: &LineSupply,
@@ -105,7 +89,7 @@ impl PurchaseOfferingSource {
         Ok(())
     }
 
-    /// 校验来源身份及三种版本均可追溯。
+    // 冻结采购行选源前核验供给、条款和可供投影的版本可追溯；若携带询价专项条款，还须验证其冻结商业条件。
     fn ensure_valid(&self) -> Result<()> {
         if let Some(quote) = &self.inquiry_quote {
             quote.validate()?;
@@ -122,17 +106,8 @@ impl PurchaseOfferingSource {
     }
 }
 
-/// 行归属只允许商品行持有完整选源，未知历史行保留空值。
-///
-/// # 参数
-/// * `kind` - 采购行类型。
-/// * `source` - 已冻结的供给选源；`None` 表示历史行尚未记录选源。
-///
-/// # 返回
-/// 未记录选源，或商品行选源的身份与三种版本都可追溯时返回 `Ok(())`。
-///
-/// # 错误
-/// 物流费用行携带选源，或选源身份为空白、任一版本为 0 时返回领域错误。
+// 构造采购行时只允许商品或服务行携带选源，未记录来源的历史行保持空值。
+// 已提供的选源须有完整身份及版本；专项报价行的采购含税单价与进项税率必须等于原报价，物流费用行不得选源。
 pub(super) fn ensure_offering_source(
     kind: PurchaseLineType,
     source: Option<&PurchaseOfferingSource>,
@@ -157,14 +132,11 @@ pub(super) fn ensure_offering_source(
 
 /// 从真实旧草稿行继承选源，客户端编辑只影响已允许的采购内容。
 ///
-/// # 参数
-/// * `inputs` - 已验证原销售、SKU来源不变的请求行。
-/// * `existing` - 当前服务端草稿或冻结提交的完整行。
-/// # 返回
-/// 原地补齐对应原行的选源；旧行未知仍为None。请求显式调整交付安排时保留请求值，
-/// 由调用方按销售当前收件资料复验；未调整时沿用原行。
-/// # 错误
-/// 来源行缺失、SKU版本变化或原行身份歧义时拒绝。
+/// 原地补齐对应原行的选源；旧行未知仍为None。请求显式调整交付安排时保留请求值，由调用方按销售当前收件资料复验；未调整时沿用原行。来源行缺失、
+/// SKU版本变化或原行身份歧义时拒绝。
+///
+/// - `inputs`：已验证原销售、SKU来源不变的请求行。
+/// - `existing`：当前服务端草稿或冻结提交的完整行。
 pub fn inherit_submission_sources(
     inputs: &mut [PurchaseLineInput],
     existing: &[PurchaseOrderSubmissionLine],
@@ -184,13 +156,7 @@ pub fn inherit_submission_sources(
 
 /// 采购变更从明确基准行复制原选源，不重新猜测或切换供给。
 ///
-/// # 参数
-/// * `inputs` - 已规范化销售关联的采购变更目标行。
-/// * `existing` - 本次变更基准版本的完整正式行。
-/// # 返回
-/// 原地继承精确供给选源，冻结价格等原有规则由调用方执行。
-/// # 错误
-/// 来源不匹配或歧义时拒绝。
+/// 原地继承精确供给选源，冻结价格等原有规则由调用方执行。来源不匹配或歧义时拒绝。
 pub fn inherit_revision_sources(
     inputs: &mut [PurchaseLineInput],
     existing: &[PurchaseOrderRevisionLine],
@@ -218,7 +184,7 @@ struct SourceBinding<'a> {
     kind: PurchaseLineType,
 }
 
-/// 对应原行必须唯一；没有原选源的历史数据不补造来源。
+// 对应原行必须唯一；没有原选源的历史数据不补造来源。
 fn inherit_sources<'a>(
     inputs: &mut [PurchaseLineInput],
     existing: impl Iterator<Item = SourceBinding<'a>>,
@@ -258,7 +224,7 @@ fn inherit_sources<'a>(
     Ok(())
 }
 
-/// 构造原行精确身份，不使用供应商和SKU作为供给关联。
+// 构造原行精确身份，不使用供应商和SKU作为供给关联。
 fn source_key<'a>(
     stable: Option<&'a str>,
     sku: Option<&'a SkuId>,

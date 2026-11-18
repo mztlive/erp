@@ -42,88 +42,25 @@ pub trait PayableExt {
     /// 进项发票分配服务端分页筛选条件类型（定义见 `repository::payable`）。
     type PurchaseInvoiceAllocationFilter;
 
-    /// 获取 `payable_account` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `PayableAccountRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 从当前数据库取得 `payable_account` 集合的类型化仓储，供调用方按自身执行器访问。
     fn payable_accounts(&self) -> PayableAccountRepository<'_>;
 
-    /// 获取 `payable_entry` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `PayableEntryRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 从当前数据库取得 `payable_entry` 集合的类型化仓储，供调用方按自身执行器访问。
     fn payable_entries(&self) -> PayableEntryRepository<'_>;
 
-    /// 获取 `payable_entry_offset` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `PayableEntryOffsetRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 从当前数据库取得 `payable_entry_offset` 集合的类型化仓储，供调用方按自身执行器访问。
     fn payable_entry_offsets(&self) -> PayableEntryOffsetRepository<'_>;
 
-    /// 获取 `supplier_payment` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `SupplierPaymentRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 从当前数据库取得 `supplier_payment` 集合的类型化仓储，供调用方按自身执行器访问。
     fn supplier_payments(&self) -> SupplierPaymentRepository<'_>;
 
-    /// 获取 `payment_allocation` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `PaymentAllocationRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 从当前数据库取得 `payment_allocation` 集合的类型化仓储，供调用方按自身执行器访问。
     fn payment_allocations(&self) -> PaymentAllocationRepository<'_>;
 
-    /// 获取 `purchase_invoice_allocation` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `PurchaseInvoiceAllocationRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 从当前数据库取得 `purchase_invoice_allocation` 集合的类型化仓储，供调用方按自身执行器访问。
     fn purchase_invoice_allocations(&self) -> PurchaseInvoiceAllocationRepository<'_>;
 
-    /// 获取承载跨集合事务写入的域专用仓储。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `PayableRepository` 实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得应付仓储，供应付建账、付款分配与采购发票分配沿用调用方事务。
     fn payable(&self) -> PayableRepository<'_>;
 }
 

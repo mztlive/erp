@@ -141,7 +141,7 @@ impl ProcurementInquiryDetail {
     }
 }
 
-/// 已授权当前页仍须保持任务对应的完整业务需求和责任行快照。
+// 核对销售与采购询价边界时，已授权当前页仍须保持任务对应的完整业务需求和责任行快照。
 fn ensure_task_snapshot(inquiry: &SalesInquiry, task: &WorkItem) -> Result<()> {
     let requirement = if task.status == WorkItemStatus::Open {
         inquiry.current_procurement_requirement()?
@@ -191,22 +191,25 @@ pub struct InquiryReadService {
 }
 
 impl InquiryReadService {
-    /// 装配当前权限与领域读取服务。
+    /// 装配销售与采购询价时，接入当前权限与领域读取服务。
+    ///
     /// # 参数
     /// `db` 为业务库，`authorization` 为当前权限服务。
+    ///
     /// # 返回
     /// 无缓存读取器。
-    /// # 错误
-    /// 无。
     pub fn new(db: Database, authorization: Arc<AuthorizationService>) -> Self {
         Self { access: SalesInquiryAccess::new(db.clone(), authorization.clone()), db, authorization }
     }
 
-    /// 分页读取当前销售责任范围内的安全询价。
+    /// 处理销售与采购询价时，分页读取当前销售责任范围内的安全询价。
+    ///
     /// # 参数
     /// `actor` 为当前账号，`params` 为业务筛选和范围版本。
+    ///
     /// # 返回
     /// 返回销售独立投影及稳定分页范围版本。
+    ///
     /// # 错误
     /// 账号、权限、范围版本或分页非法时拒绝。
     pub async fn sales_list(
@@ -247,11 +250,14 @@ impl InquiryReadService {
         Ok(list_view(items, page.total, params, version, false))
     }
 
-    /// 读取销售安全详情，工作报价不会进入响应。
+    /// 处理销售与采购询价时，读取销售安全详情，工作报价不会进入响应。
+    ///
     /// # 参数
     /// `actor` 为当前账号，`id` 为询价稳定身份。
+    ///
     /// # 返回
     /// 返回客户需求、已发布结果与可追溯来源。
+    ///
     /// # 错误
     /// 无权限和不存在统一拒绝，授权源失效时失败关闭。
     pub async fn sales_detail(&self, actor: &AuditActor, id: &str) -> Result<InquirySalesView> {
@@ -280,11 +286,14 @@ impl InquiryReadService {
         Ok(InquirySalesView::from_inquiry(&inquiry))
     }
 
-    /// 分页读取当前及本人已完成询价任务，不授予普通销售数据读取。
+    /// 处理销售与采购询价时，分页读取当前及本人已完成询价任务，不授予普通销售数据读取。
+    ///
     /// # 参数
     /// `actor` 为当前采购，`params` 为业务筛选和范围版本。
+    ///
     /// # 返回
     /// 每张询价优先展示当前任务，否则展示最近完成任务的历史只读结果。
+    ///
     /// # 错误
     /// 权限、任务或范围版本变化时拒绝。
     pub async fn procurement_list(
@@ -334,11 +343,14 @@ impl InquiryReadService {
         Ok(list_view(items, page.total, params, version, false))
     }
 
-    /// 按精确责任任务读取完整当前资料或本人完成时的历史结果。
+    /// 依据精确责任任务读取完整当前资料或本人完成时的历史结果。
+    ///
     /// # 参数
     /// `actor` 为当前采购，`id` 为询价，`task_id` 为当前责任任务。
+    ///
     /// # 返回
     /// 返回完整采购视图与当前任务版本，不返回销售参考价。
+    ///
     /// # 错误
     /// 关闭、改派、历史证据缺失、账号或权限失效时拒绝。
     pub async fn procurement_detail(
@@ -380,11 +392,14 @@ impl InquiryReadService {
         ProcurementInquiryDetail::from_task(&inquiry, &task)
     }
 
-    /// 通过当前任务和独立采购权限读取本询价的内部报价。
+    /// 借助当前任务和独立采购权限读取本询价的内部报价。
+    ///
     /// # 参数
     /// `actor` 为当前采购，`id` 与 `task_id` 为精确询价任务。
+    ///
     /// # 返回
     /// 返回本需求版本全部商品行的不可变内部报价历史。
+    ///
     /// # 错误
     /// 当前任务或内部报价权限失效时拒绝。
     pub async fn internal_quotes(
@@ -423,11 +438,14 @@ impl InquiryReadService {
         Ok(quotes)
     }
 
-    /// 通过当前任务授权并按明确反馈轮次读取内部费用依据。
+    /// 借助当前任务授权并按明确反馈轮次读取内部费用依据。
+    ///
     /// # 参数
     /// `actor` 为当前采购，`id` 为询价，`params` 为任务和反馈轮次。
+    ///
     /// # 返回
     /// 返回本询价对应轮次费用的内部收款及付款依据。
+    ///
     /// # 错误
     /// 当前任务或独立内部资料权限失效、轮次非法时拒绝。
     pub async fn fee_bases(
@@ -488,12 +506,15 @@ impl InquiryReadService {
         Ok(bases.into_iter().filter(|basis| fee_ids.contains(&basis.data.fee_id)).collect())
     }
 
-    /// 当前费用任务只能读取本责任费用依据上实际登记的附件。
+    /// 确定销售与采购询价的适用条件时，当前费用任务只能读取本责任费用依据上实际登记的附件。
+    ///
     /// # 参数
     /// `actor` 为当前认证操作人，`id` 为询价主键，`params` 限定当前任务与反馈，
     /// `basis_id` 为费用依据主键，`asset_id` 为该依据登记的文件资产主键。
+    ///
     /// # 返回
     /// 本任务可见费用依据和精确附件关系均存在时通过。
+    ///
     /// # 错误
     /// 任务失效、依据越范围或附件关系不匹配时统一拒绝。
     pub async fn require_fee_basis_attachment(
@@ -552,11 +573,14 @@ impl InquiryReadService {
         Ok(())
     }
 
-    /// 按当前商品选择资格重验模板商品，结果只包含对客字段。
+    /// 依据当前商品选择资格重验模板商品，结果只包含对客字段。
+    ///
     /// # 参数
     /// `actor` 为当前销售，`ids` 为至多 1000 个唯一 SKU 稳定身份。
+    ///
     /// # 返回
     /// 全部可选商品的客户安全快照，不存在和无权采用统一语义。
+    ///
     /// # 错误
     /// 任一商品不可选、权限失效或数量超限时整体拒绝。
     pub async fn template_products(
@@ -743,7 +767,7 @@ mod tests {
         (inquiry, task)
     }
 
-    /// 分页后只对当前结果检查真实需求与责任行，不再逐项重新发起授权。
+    // 验证销售与采购询价：分页后只对当前结果检查真实需求与责任行，不再逐项重新发起授权。
     #[test]
     fn procurement_page_keeps_open_and_completed_task_snapshot_guards() {
         let (inquiry, mut task) = inquiry_task_fixture();

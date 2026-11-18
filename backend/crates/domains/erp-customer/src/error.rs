@@ -60,7 +60,7 @@ impl_repository_error!(
         |error| { Error::ConflictError(duplicate_index_conflict_message(error.duplicate_index_name())) }
 );
 
-/// 将客户域唯一索引名称映射为面向用户的冲突提示。
+// 将客户域唯一索引名称映射为面向用户的冲突提示。
 fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
     index_name.and_then(known_duplicate_index_message).unwrap_or("数据已存在，请勿重复提交").to_string()
 }
@@ -70,13 +70,8 @@ fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
 /// # 参数
 /// * `index_name` - 已由 persistence-core 提取的 MongoDB 索引名称
 ///
-/// # 返回
 /// 精确命中本域注册索引时返回原提示；未知名称返回 `None`，由调用边界选择通用提示。
 ///
-/// # 错误
-/// 不返回错误。
-///
-/// # 约束
 /// 不匹配子串或前后缀、不规范化索引名称，不拥有其他领域或 HTTP 历史索引的提示。
 pub fn known_duplicate_index_message(index_name: &str) -> Option<&'static str> {
     match index_name {
@@ -87,7 +82,7 @@ pub fn known_duplicate_index_message(index_name: &str) -> Option<&'static str> {
 }
 
 impl From<erp_identity::Error> for Error {
-    /// 保留身份授权的错误类别与原始载荷。
+    // 保留身份授权的错误类别与原始载荷。
     fn from(error: erp_identity::Error) -> Self {
         match error {
             erp_identity::Error::Internal(v) | erp_identity::Error::Rbac(v) => Self::Internal(v),

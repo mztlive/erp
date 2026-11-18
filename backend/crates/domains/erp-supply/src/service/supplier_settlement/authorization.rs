@@ -146,7 +146,7 @@ mod tests {
         assert_eq!(facts.assignee_id, FactValue::Known(Some("handler".into())));
     }
 
-    /// 旧结算无业务组织时显式无组织，不将供应商或创建人填入内部范围。
+    // 验证旧结算无业务组织时显式无组织，不将供应商或创建人填入内部范围。
     #[test]
     fn empty_statement_organization_remains_known_absent() {
         let mut statement = statement();

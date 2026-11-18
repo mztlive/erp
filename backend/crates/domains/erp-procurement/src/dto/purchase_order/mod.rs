@@ -76,16 +76,7 @@ mod tests {
         PurchaseLineType, PurchaseOrderStatus, PurchaseOrderSubmissionLine, RequestedLine, SourcingAssignment,
     };
 
-    /// 作废路径指纹金值：锁定历史算法绝对摘要。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 无。
-    ///
-    /// # 错误
-    /// 指纹算法或载荷形态变化导致摘要漂移时测试失败。
+    // 作废路径指纹金值：锁定历史算法绝对摘要。
     #[test]
     fn purchase_type_filter_is_typed_and_optional() {
         let expense: PurchaseOrderListParams =
@@ -114,16 +105,7 @@ mod tests {
         );
     }
 
-    /// 保存草稿路径指纹金值：锁定历史算法绝对摘要。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 无。
-    ///
-    /// # 错误
-    /// 指纹算法或载荷形态变化导致摘要漂移时测试失败。
+    // 保存草稿路径指纹金值：锁定历史算法绝对摘要。
     #[test]
     fn save_fingerprint_golden() {
         let request = SavePurchaseOrderDraftRequest::new("save-key-1")
@@ -155,16 +137,7 @@ mod tests {
         );
     }
 
-    /// 依据创建路径指纹金值：锁定历史算法绝对摘要。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 无。
-    ///
-    /// # 错误
-    /// 指纹算法或载荷形态变化导致摘要漂移时测试失败。
+    // 依据创建路径指纹金值：锁定历史算法绝对摘要。
     #[test]
     fn create_fingerprint_golden() {
         let request = CreatePurchaseOrderFromBasisRequest {
@@ -196,16 +169,7 @@ mod tests {
         );
     }
 
-    /// 选源创建路径指纹金值：锁定历史算法绝对摘要。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 无。
-    ///
-    /// # 错误
-    /// 指纹算法或载荷形态变化导致摘要漂移时测试失败。
+    // 选源创建路径指纹金值：锁定历史算法绝对摘要。
     #[test]
     fn sourcing_fingerprint_golden() {
         let request = CreatePurchaseOrdersFromSourcingRequest {
@@ -248,16 +212,7 @@ mod tests {
         );
     }
 
-    /// 提交路径指纹金值：锁定历史算法绝对摘要。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 无。
-    ///
-    /// # 错误
-    /// 指纹算法或形态编码变化导致摘要漂移时测试失败。
+    // 提交路径指纹金值：锁定历史算法绝对摘要。
     #[test]
     fn submit_fingerprint_golden() {
         let request = SubmitPurchaseOrderRequest {
@@ -281,16 +236,7 @@ mod tests {
         );
     }
 
-    /// 提交形态文本必须与历史 Debug 派生字节逐字一致。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 无。
-    ///
-    /// # 错误
-    /// 显式编码与历史 Debug 输出不一致时测试失败。
+    // 提交形态文本必须与历史 Debug 派生字节逐字一致。
     #[test]
     fn submit_shape_matches_historical_debug_bytes() {
         let payment_term_code = Some("NET-30".to_string());
@@ -327,7 +273,7 @@ mod tests {
         );
     }
 
-    /// 调整交付安排的补丁进入提交指纹，不同地址分配不得复用同一幂等结果。
+    // 调整交付安排的补丁进入提交指纹，不同地址分配不得复用同一幂等结果。
     #[test]
     fn submit_shape_includes_delivery_adjustments() {
         let mut patch = SavePurchaseOrderLinePatch {
@@ -362,7 +308,7 @@ mod tests {
         }
     }
 
-    /// 补丁提供的预计交付日与交付安排覆盖草稿原值；未提供时沿用原值。
+    // 补丁提供的预计交付日与交付安排覆盖草稿原值；未提供时沿用原值。
     #[test]
     fn resolve_line_patches_applies_delivery_adjustments() {
         let mut existing = draft_line("subl-1", "sol-1", "2");
@@ -590,7 +536,7 @@ mod tests {
             .with_line_patches(line_patches)
     }
 
-    /// 完整行与行补丁必须且只能提供一种。
+    // 完整行与行补丁必须且只能提供一种。
     #[test]
     fn save_request_shape_requires_exactly_one_line_payload() {
         let empty = draft_request(vec![]);
@@ -641,7 +587,7 @@ mod tests {
         assert!(blank_patch.ensure_shape().is_err());
     }
 
-    /// 完整行路径原样返回，补丁路径合并冻结字段与可编辑字段。
+    // 完整行路径原样返回，补丁路径合并冻结字段与可编辑字段。
     #[test]
     fn resolve_lines_merges_patches_with_frozen_draft_fields() {
         let existing = vec![draft_line("subl-1", "sol-1", "2")];
@@ -694,7 +640,7 @@ mod tests {
         assert_eq!(full[0].sales_order_line_id.as_deref(), Some("sol-9"));
     }
 
-    /// 补丁必须覆盖全部当前草稿行且不得重复。
+    // 补丁必须覆盖全部当前草稿行且不得重复。
     #[test]
     fn resolve_line_patches_rejects_partial_and_duplicate_patches() {
         let existing = vec![draft_line("subl-1", "sol-1", "2"), draft_line("subl-2", "sol-2", "1")];
@@ -725,7 +671,7 @@ mod tests {
         assert!(SavePurchaseOrderLinePatch::resolve_all(&changed_type.line_patches, &existing).is_err());
     }
 
-    /// 草稿行编辑请求保留全部字段供领域校验。
+    // 草稿行编辑请求保留全部字段供领域校验。
     #[test]
     fn to_draft_edit_carries_all_line_fields() {
         let line = SavePurchaseOrderLine {

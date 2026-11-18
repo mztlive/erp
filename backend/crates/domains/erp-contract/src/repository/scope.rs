@@ -23,19 +23,9 @@ pub struct ContractVersion {
 #[allow(async_fn_in_trait)]
 pub trait ContractRepositoryScopeExt {
     /// 按明确授权条件读取单个合同。
-    ///
-    /// # 参数
-    /// * `id` - 合同稳定主键
-    /// * `scope` - 已证明的授权条件
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
     /// 不存在或不在范围内均返回 `None`。
-    ///
-    /// # 错误
+    /// `id` 为合同稳定主键，`scope` 为已证明的授权条件，沿用调用方执行器 `executor`。
     /// 数据库读取失败时返回仓储错误。
-    ///
-    /// # 关键业务约束
     /// ID 条件不能替换范围交集；空授权不得返回文档。
     async fn find_authorized(
         &self,
@@ -73,18 +63,9 @@ impl ContractRepositoryScopeExt for persistence_core::Repository<'_, Contract> {
 
 impl ContractDomainRepository<'_> {
     /// 装载查询的有界身份与版本集合，用于跨页及导出一致性校验。
-    ///
-    /// # 参数
-    /// * `filter` - 已与授权条件求交的列表筛选
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
     /// 最多 10001 行；调用方必须整体拒绝超限。
-    ///
-    /// # 错误
+    /// `filter` 为已与授权条件求交的列表筛选；沿用调用方执行器 `executor`。
     /// 数据库读取失败时返回仓储错误。
-    ///
-    /// # 关键业务约束
     /// 不得截断版本集合后继续拼接跨页结果。
     pub async fn query_versions(
         &self,

@@ -22,30 +22,12 @@ pub enum FieldUpdate<T> {
 }
 
 impl<T> FieldUpdate<T> {
-    /// 判断请求是否未携带该字段。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 更新意图为 [`FieldUpdate::Unchanged`] 时返回 `true`，否则返回 `false`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 识别 [`FieldUpdate::Unchanged`]，供容器序列化跳过未提交字段；否则往返时可能被误解为清空。
     pub fn is_unchanged(&self) -> bool {
         matches!(self, Self::Unchanged)
     }
 
-    /// 将更新意图转换为创建可空字段时使用的值。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// `Set` 返回具体值，`Unchanged` 与 `Clear` 返回 `None`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 创建对象时将更新意图转成初始值：仅 `Set` 有值。修改已有对象时须用 [`Self::apply_to`] 保留缺省与清空的区别。
     pub fn into_option(self) -> Option<T> {
         match self {
             Self::Set(value) => Some(value),
@@ -53,16 +35,7 @@ impl<T> FieldUpdate<T> {
         }
     }
 
-    /// 将更新意图应用到可空字段。
-    ///
-    /// # 参数
-    /// * `target` - 待更新的可空字段。
-    ///
-    /// # 返回
-    /// 无返回值。`Unchanged` 不修改 `target`；`Clear` 将其设为 `None`；`Set` 写入具体值。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 把补丁写入已有可空字段：未提供保持原值，`Clear` 置空，`Set` 覆盖。
     pub fn apply_to(self, target: &mut Option<T>) {
         match self {
             Self::Unchanged => {},
@@ -73,26 +46,8 @@ impl<T> FieldUpdate<T> {
 }
 
 impl FieldUpdate<String> {
-    /// 将可选请求文本映射为唯一的字段更新意图。
-    ///
-    /// `None` 表示请求未携带该字段，保持原值；空串或纯空白表示清除；
-    /// 其他值原样进入 `Set`。本入口不截断、不去首尾空白；字段长度、格式
-    /// 和最终规范化仍由具体实体负责。
-    ///
-    /// 本转换独立于 Serde：JSON 字段缺失由容器 `#[serde(default)]` 解析为
-    /// `Unchanged`，显式 `null` 仍解析为 `Clear`。
-    ///
-    /// # 参数
-    /// * `value` - 请求可选文本；`None` 表示字段缺失
-    ///
-    /// # 返回
-    /// 返回 `Unchanged`、`Clear` 或保留原始字符的 `Set`。
-    ///
-    /// # 错误
-    /// 无。非法长度或格式由后续实体方法拒绝。
-    ///
-    /// # 关键业务约束
-    /// 不得在保存前 trim 或截断；空白判定只用于区分 `Clear` 与 `Set`。
+    /// 把非 serde 入口的可选文本解释为补丁：未提供保留旧值，空串或纯空白清空，其余原样设置。不裁剪或截断 `Set`；
+    /// 长度、格式及最终规范化仍由领域实体负责。serde 入口另由容器默认值处理缺失字段，显式 `null` 则清空。
     pub fn from_optional_text(value: Option<String>) -> Self {
         match value {
             Some(value) if value.trim().is_empty() => Self::Clear,
@@ -106,19 +61,8 @@ impl<'de, T> Deserialize<'de> for FieldUpdate<T>
 where
     T: Deserialize<'de>,
 {
-    /// 从 JSON 字段值解析更新意图。
-    ///
-    /// 显式 `null` 解析为 `Clear`，具体值解析为 `Set`；字段缺失由容器字段的
-    /// `#[serde(default)]` 解析为 `Unchanged`。
-    ///
-    /// # 参数
-    /// * `deserializer` - serde 反序列化器。
-    ///
-    /// # 返回
-    /// 显式 `null` 返回 `Clear`，具体值返回 `Set`。本方法看不到字段缺失。
-    ///
-    /// # 错误
-    /// 内层 `T` 反序列化失败时返回 serde 错误。
+    // 解码补丁字段时仅区分显式 `null` 和具体值：分别为清空和设置；
+    // 缺失字段本方法不可见，容器须用 `#[serde(default)]` 保留不变。内部值解码失败时向上传递。
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -134,21 +78,8 @@ impl<T> Serialize for FieldUpdate<T>
 where
     T: Serialize,
 {
-    /// 序列化更新意图。
-    ///
-    /// `Clear` 序列化为 `null`，`Set` 序列化为具体值。容器必须通过
-    /// `#[serde(skip_serializing_if = "FieldUpdate::is_unchanged")]` 跳过
-    /// `Unchanged`，否则往返后 `Unchanged` 会变为 `Clear`（保持不对称是已知
-    /// 取舍，见类型级文档）。
-    ///
-    /// # 参数
-    /// * `serializer` - serde 序列化器。
-    ///
-    /// # 返回
-    /// `Set` 写入具体值；`Unchanged` 与 `Clear` 都写入 `null`。
-    ///
-    /// # 错误
-    /// `T` 序列化失败或写入失败时返回 serde 错误。
+    // 把 `Set` 写为具体值，其他意图都写为 `null`。容器必须用 `FieldUpdate::is_unchanged` 跳过未提供的值，
+    // 避免序列化往返把保留旧值变成清空。
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,

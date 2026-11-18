@@ -12,12 +12,11 @@ use crate::ports::approver_directory::ApproverDirectory;
 use crate::{Error, Result};
 
 /// 按本次申请人解析全部动态节点；已发布定义不被写回。
-/// # 参数
-/// 负责人端口、定义图、申请人、解析时点及调用方执行器。
-/// # 返回
 /// 返回可交给引擎的已解析图。
-/// # 错误
+///
 /// 任一节点无法解析或违反岗位分离时拒绝整次启动。
+///
+/// 负责人端口、定义图、申请人、解析时点及调用方执行器。
 pub async fn resolve_graph(
     directory: &impl ApproverDirectory,
     mut graph: DefinitionGraph,
@@ -49,12 +48,11 @@ pub async fn resolve_graph(
 }
 
 /// 在最终写入事务中复验预解析依据，拒绝提交期间负责人或资格变化。
-/// # 参数
-/// 负责人端口、待写实例及全部冻结指派、提交时点和原事务。
-/// # 返回
 /// 全部动态指派与当前有效关系一致时允许写入。
-/// # 错误
+///
 /// 申请人、组织、负责人指派发生变化或资格失效时拒绝；不得替换已准备的任务。
+///
+/// 负责人端口、待写实例及全部冻结指派、提交时点和原事务。
 pub async fn revalidate_assignments(
     directory: &impl ApproverDirectory,
     instance: &ApprovalProcessInstance,

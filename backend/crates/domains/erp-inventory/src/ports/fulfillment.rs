@@ -20,16 +20,9 @@ pub struct ReceiptNoFact {
 #[async_trait]
 pub trait FulfillmentFactsPort: Send + Sync {
     /// 按采购入库单标识返回单号。
-    ///
-    /// # 参数
-    /// * `ids` - 采购入库单标识。
-    /// * `executor` - 调用方选择的数据访问执行器。
-    ///
-    /// # 返回
     /// 返回以入库单标识为键的单号事实映射。
-    ///
-    /// # 错误
-    /// 适配器查询失败时返回对应错误。
+    /// `ids` 为采购入库单标识；沿用调用方执行器 `executor`。
+    /// 传播适配器查询错误。
     async fn receipt_nos_by_ids(
         &self,
         ids: &[String],

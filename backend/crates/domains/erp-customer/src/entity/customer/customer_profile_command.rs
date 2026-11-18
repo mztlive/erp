@@ -25,16 +25,12 @@ const SHA256_HEX_LEN: usize = 64;
 pub struct CustomerProfileRequestFingerprint(String);
 
 impl CustomerProfileRequestFingerprint {
-    /// 从调用方已固定的 v1 JSON 字节形成当前版本稳定指纹。
+    /// 对已按 v1 契约固定的 JSON 字节计算带版本指纹，供同一客户资料请求重试时比对。
     ///
     /// # 参数
     /// * `payload` - DTO 层按 v1 字段顺序形成的 JSON 字节
     ///
-    /// # 返回
     /// 返回 `sha256-json-v1:<64hex>` 形态的请求指纹。
-    ///
-    /// # 错误
-    /// 不返回错误。
     ///
     /// # 关键业务约束
     /// VO 只对显式字节计算摘要，不依赖或反向引用 Service DTO；调用方必须用
@@ -43,15 +39,13 @@ impl CustomerProfileRequestFingerprint {
         Self(format!("{REQUEST_FINGERPRINT_V1_PREFIX}{}", hex::encode(Sha256::digest(payload))))
     }
 
-    /// 解析当前版本或历史裸 SHA-256 指纹。
+    /// 把带版本指纹和旧版纯 SHA-256 摘要统一解析成可比较的指纹，支持历史命令重放。
     ///
     /// # 参数
     /// * `value` - 当前带版本前缀或历史 64 位裸摘要
     ///
-    /// # 返回
     /// 返回规范化为当前版本前缀和小写摘要的值对象。
     ///
-    /// # 错误
     /// 指纹版本、长度或十六进制格式非法时返回错误。
     pub fn parse_compatible(value: impl AsRef<str>) -> Result<Self> {
         let value = value.as_ref();
@@ -67,27 +61,20 @@ impl CustomerProfileRequestFingerprint {
 
     /// 返回内存比较与诊断使用的带版本指纹。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回 `sha256-json-v1:<64hex>` 字符串切片。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn as_str(&self) -> &str {
         &self.0
     }
 
-    /// 返回 SHA-256 摘要部分。
-    ///
-    /// # Panics
-    /// 指纹不含已验证的 v1 前缀时 panic；构造路径保证前缀存在。
+    // 返回 SHA-256 摘要部分。
+    //
+    // # Panics
+    // 指纹不含已验证的 v1 前缀时 panic；构造路径保证前缀存在。
     fn digest_hex(&self) -> &str {
         self.0.strip_prefix(REQUEST_FINGERPRINT_V1_PREFIX).expect("已验证客户资料指纹必须包含 v1 前缀")
     }
 
-    /// 核对持久化的当前或历史指纹是否与本请求相同。
+    // 核对持久化的当前或历史指纹是否与本请求相同。
     fn matches_persisted(&self, persisted: &str) -> bool {
         Self::parse_compatible(persisted)
             .map(|candidate| candidate.digest_hex() == self.digest_hex())
@@ -118,10 +105,8 @@ impl CustomerProfileReplayContext {
     /// * `initiated_by` - 发起命令的账号 ID
     /// * `request_fingerprint` - 当前请求的版本化指纹
     ///
-    /// # 返回
     /// 返回已规范化、可用于查询和重放核对的上下文。
     ///
-    /// # 错误
     /// 幂等键、发起人或修订客户 ID 非法，或创建命令携带客户 ID 时返回错误。
     pub fn new(
         idempotency_key: impl Into<String>,
@@ -146,70 +131,35 @@ impl CustomerProfileReplayContext {
 
     /// 返回规范化后的幂等键。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回仓储查询和新命令持久化共用的幂等键。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn idempotency_key(&self) -> &str {
         &self.idempotency_key
     }
 
     /// 返回命令操作。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回创建或修订操作。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn operation(&self) -> CustomerProfileOperation {
         self.operation
     }
 
     /// 返回修订目标客户 ID。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 修订命令返回客户 ID，创建命令返回 `None`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn customer_id(&self) -> Option<&str> {
         self.customer_id.as_deref()
     }
 
     /// 返回命令发起人。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回已完成精确形态校验的账号 ID。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn initiated_by(&self) -> &str {
         &self.initiated_by
     }
 
     /// 返回当前请求指纹。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回版本化请求指纹值对象。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn request_fingerprint(&self) -> &CustomerProfileRequestFingerprint {
         &self.request_fingerprint
     }
@@ -311,10 +261,8 @@ impl CustomerProfileCommand {
     /// * `id` - 命令记录 ID
     /// * `data` - 成功结果字段
     ///
-    /// # 返回
     /// 返回字段已规范化的命令实体。
     ///
-    /// # 错误
     /// 幂等键为空或超长、操作不是 `create` 或 `update`、请求指纹格式非法，或发起人、客户、主体、修订 ID 与变更原因为空白时返回领域错误。
     pub fn new(id: impl Into<String>, data: CustomerProfileCommandData) -> Result<Self> {
         let idempotency_key = normalize_required_text(
@@ -372,10 +320,8 @@ impl CustomerProfileCommand {
     /// * `context` - 已验证的请求重放身份
     /// * `result` - 事务成功后的稳定结果身份和版本
     ///
-    /// # 返回
     /// 返回可与业务写入同事务持久化的命令记录。
     ///
-    /// # 错误
     /// 修订客户不匹配或结果字段非法时返回错误。
     pub fn record_success(
         id: impl Into<String>,
@@ -405,7 +351,7 @@ impl CustomerProfileCommand {
         )
     }
 
-    /// 核对已提交命令是否可安全重放给当前请求。
+    /// 返回原成功结果前核对当前请求的操作、客户、发起人和指纹，防止另一条修改复用同一幂等键。
     ///
     /// 操作、修订客户、发起人和请求指纹必须全部一致；创建命令没有既有
     /// 客户 ID，因此只核对其余身份。当前带版本指纹与历史裸摘要按摘要兼容。
@@ -413,10 +359,8 @@ impl CustomerProfileCommand {
     /// # 参数
     /// * `context` - 当前请求构造的稳定重放身份
     ///
-    /// # 返回
     /// 全部身份一致时返回 `Ok(())`。
     ///
-    /// # 错误
     /// 任一身份不一致或持久化指纹损坏时返回错误。
     pub fn ensure_replay_matches(&self, context: &CustomerProfileReplayContext) -> Result<()> {
         let same_customer = context.customer_id().is_none_or(|customer_id| customer_id == self.customer_id);
@@ -433,7 +377,7 @@ impl CustomerProfileCommand {
     }
 }
 
-/// 校验创建或修订命令的客户身份形状。
+// 按操作类型校验幂等上下文里的客户标识：修订必须有目标客户，创建使用独立的重放身份。
 fn replay_customer_id(
     operation: CustomerProfileOperation,
     customer_id: Option<String>,

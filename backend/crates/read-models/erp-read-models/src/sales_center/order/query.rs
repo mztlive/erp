@@ -36,14 +36,10 @@ use crate::support::ensure_deep_page;
 use crate::{Error, Result};
 
 impl SalesOrderReadService {
-    /// 分页查询销售单列表。
+    /// 调用此入口时，分页查询销售单列表。
     ///
     /// 排序字段白名单在 Service 层校验（api-contract §4），禁止任意字段透传。
     /// 负责销售候选不由本接口生产。
-    ///
-    /// # 参数
-    /// * `params` - 查询参数
-    /// * `actor` - 已认证操作人
     ///
     /// # 返回
     /// 返回带范围版本的分页视图，不含负责销售候选。
@@ -72,14 +68,14 @@ impl SalesOrderReadService {
         self.list_snapshot(params, actor).await
     }
 
-    /// 在原授权事务补齐当前页金额、责任人与客户展示，不改变分页成员。
-    ///
-    /// # 参数
-    /// page 为已授权分页；executor 为签发该页凭证的原事务执行器。
-    /// # 返回
-    /// 完整列表页；总数、页码、行序及页大小保持原值。
-    /// # 错误
-    /// 任一金额、任务、账号或客户事实读取失败时拒绝交付整页。
+    // 读取销售单时，在原授权事务补齐当前页金额、责任人与客户展示，不改变分页成员。
+    //
+    // 调用参数：
+    // page 为已授权分页；executor 为签发该页凭证的原事务执行器。
+    //
+    // 完整列表页；总数、页码、行序及页大小保持原值。
+    //
+    // 任一金额、任务、账号或客户事实读取失败时拒绝交付整页。
     pub(super) async fn list_view(
         &self,
         page: PageView<SalesOrderRow>,
@@ -114,23 +110,21 @@ impl SalesOrderReadService {
         Ok(PageView { items, total: page.total, page: page.page, page_size: page.page_size })
     }
 
-    /// 计算当前账号从销售单继续执行供给分配的访问投影。
-    ///
-    /// # 参数
-    /// * `order` - 当前销售稳定单
-    /// * `coverage` - 按销售与采购当前版本计算的采购覆盖
-    /// * `actor` - 当前已认证账号；内部无账号上下文时为空
-    ///
-    /// # 返回
-    /// 返回账号状态、静态供给分配权限与开放责任任务共同决定的访问投影.
-    ///
-    /// # 错误
-    /// 任务查询失败，以及权限值对象不合法时返回错误。
-    ///
-    /// # 关键业务约束
-    /// `allowed` 只在账号仍可登录、身份未变化、拥有 `purchase_order:create`
-    /// 且持有该销售单开放供给分配任务时为真，与 basis/create 接口的认证和
-    /// 授权边界一致。
+    // 调用此入口时，计算当前账号从销售单继续执行供给分配的访问投影。
+    //
+    // 调用参数：
+    // * `order` - 当前销售稳定单
+    // * `coverage` - 按销售与采购当前版本计算的采购覆盖
+    // * `actor` - 当前已认证账号；内部无账号上下文时为空
+    //
+    // 返回账号状态、静态供给分配权限与开放责任任务共同决定的访问投影.
+    //
+    // 任务查询失败，以及权限值对象不合法时返回错误。
+    //
+    // 业务边界：
+    // `allowed` 只在账号仍可登录、身份未变化、拥有 `purchase_order:create`
+    // 且持有该销售单开放供给分配任务时为真，与 basis/create 接口的认证和
+    // 授权边界一致。
     async fn purchase_creation_access(
         &self,
         order: &SalesOrder,
@@ -172,18 +166,16 @@ impl SalesOrderReadService {
         Ok(PurchaseCreationAccessView { allowed: true, task_count, blocker: None })
     }
 
-    /// 读取运费另计尚未处理的采购商品，仅对可追加采购的账号返回。
-    ///
-    /// # 参数
-    /// * `order` - 销售单
-    /// * `actor` - 当前操作人；内部查询为空
-    /// * `executor` - 原详情读取事务执行器。
-    ///
-    /// # 返回
-    /// 返回待追加运费的采购商品；无权或无待跟进时为空。
-    ///
-    /// # 错误
-    /// 账号、权限或采购事实读取失败时返回错误。
+    // 处理销售单时，读取运费另计尚未处理的采购商品，仅对可追加采购的账号返回。
+    //
+    // 调用参数：
+    // * `order` - 销售单
+    // * `actor` - 当前操作人；内部查询为空
+    // * `executor` - 原详情读取事务执行器。
+    //
+    // 返回待追加运费的采购商品；无权或无待跟进时为空。
+    //
+    // 账号、权限或采购事实读取失败时返回错误。
     pub(super) async fn freight_follow_ups(
         &self,
         order: &SalesOrder,
@@ -201,18 +193,16 @@ impl SalesOrderReadService {
         Ok(grouped.remove(&order.base.id).unwrap_or_default())
     }
 
-    /// 解析当前审核轨阶段的责任角色、责任人和时限（详情页专用）。
-    ///
-    /// # 参数
-    /// * `sales_order_id` - 销售单稳定身份
-    /// * `business_type` - 业务性质，用于确定审批任务对象类型
-    /// * `review_status` - 当前审核轨状态
-    ///
-    /// # 返回
-    /// 返回 `(责任角色, 责任人账号, 时限)`；非在途状态或无开放审批任务时均为空。
-    ///
-    /// # 错误
-    /// 数据库查询失败时返回仓储错误。
+    // 确定销售单的适用条件时，解析当前审核轨阶段的责任角色、责任人和时限（详情页专用）。
+    //
+    // 调用参数：
+    // * `sales_order_id` - 销售单稳定身份
+    // * `business_type` - 业务性质，用于确定审批任务对象类型
+    // * `review_status` - 当前审核轨状态
+    //
+    // 返回 `(责任角色, 责任人账号, 时限)`；非在途状态或无开放审批任务时均为空。
+    //
+    // 数据库查询失败时返回仓储错误。
     async fn resolve_stage_owner(
         &self,
         sales_order_id: &SalesOrderId,
@@ -235,7 +225,7 @@ impl SalesOrderReadService {
         Ok((Some(task.owner_role), task.owner_user_id, task.due_at.map(|due_at| due_at.unix_secs() as u64)))
     }
 
-    /// 构建当前操作人可安全执行的卡券审批工作面投影。
+    // 确定销售单的适用条件时，构建当前操作人可安全执行的卡券审批工作面投影。
     async fn resolve_active_card_sales_approval(
         &self,
         _order: &SalesOrder,
@@ -247,9 +237,9 @@ impl SalesOrderReadService {
         Ok(None)
     }
 
-    /// 批量补齐当前页的阶段责任人和时限，不改变列表顺序与成员。
-    ///
-    /// 无开放审核任务的单据保持空阶段责任，仓储失败时返回错误。
+    // 组装销售单时，批量补齐当前页的阶段责任人和时限，不改变列表顺序与成员。
+    //
+    // 无开放审核任务的单据保持空阶段责任，仓储失败时返回错误。
     async fn fill_stage_owners(
         &self,
         items: &mut [SalesOrderView],
@@ -301,7 +291,7 @@ impl SalesOrderReadService {
         Ok(())
     }
 
-    /// 批量补齐当前页负责销售姓名；缺失账号保持空名称，查询失败时返回错误。
+    // 组装销售单时，批量补齐当前页负责销售姓名；缺失账号保持空名称，查询失败时返回错误。
     async fn fill_owner_names(
         &self,
         items: &mut [SalesOrderView],
@@ -315,17 +305,15 @@ impl SalesOrderReadService {
         Ok(())
     }
 
-    /// 批量读取列表当前正式版本的金额。
-    ///
-    /// # 参数
-    /// * `rows` - 当前页销售单投影行
-    /// * `executor` - 原授权事务执行器。
-    ///
-    /// # 返回
-    /// 返回按正式版本身份索引的金额快照；无正式版本的单据不在结果中。
-    ///
-    /// # 错误
-    /// 版本仓储查询失败时返回仓储错误。
+    // 计算销售单金额时，批量读取列表当前正式版本的金额。
+    //
+    // 调用参数：
+    // * `rows` - 当前页销售单投影行
+    // * `executor` - 原授权事务执行器。
+    //
+    // 返回按正式版本身份索引的金额快照；无正式版本的单据不在结果中。
+    //
+    // 版本仓储查询失败时返回仓储错误。
     async fn revision_amounts(
         &self,
         rows: &[SalesOrderRow],
@@ -354,17 +342,15 @@ impl SalesOrderReadService {
             .collect())
     }
 
-    /// 批量解析账号展示姓名。
-    ///
-    /// # 参数
-    /// * `account_ids` - 账号 ID 集合，允许重复或为空
-    /// * `executor` - 原授权事务执行器。
-    ///
-    /// # 返回
-    /// 返回按账号 ID 索引的展示姓名；已删除或不存在的账号不会进入结果。
-    ///
-    /// # 错误
-    /// 账号仓储查询失败时返回仓储错误。
+    // 补齐销售单的展示名称时，批量解析账号展示姓名。
+    //
+    // 调用参数：
+    // * `account_ids` - 账号 ID 集合，允许重复或为空
+    // * `executor` - 原授权事务执行器。
+    //
+    // 返回按账号 ID 索引的展示姓名；已删除或不存在的账号不会进入结果。
+    //
+    // 账号仓储查询失败时返回仓储错误。
     async fn account_names(
         &self,
         account_ids: &[String],
@@ -387,7 +373,7 @@ struct SalesOrderAmounts {
     tax: Amount,
 }
 
-/// 映射销售列表行，首次生效后仅使用当前正式版本金额。
+// 生成销售单视图时，映射销售列表行，首次生效后仅使用当前正式版本金额。
 fn map_sales_row(
     row: SalesOrderRow,
     revision_amounts: &HashMap<String, SalesOrderAmounts>,
@@ -443,32 +429,29 @@ fn map_sales_row(
     }
 }
 
-/// 构造禁止创建采购单的稳定访问投影。
-///
-/// # 参数
-/// * `message` - 可直接展示给调用方的明确业务阻塞说明
-///
-/// # 返回
-/// 返回 `allowed = false`、任务数为零且携带 blocker 的访问投影。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 禁止分支不得泄露任何开放任务数量，避免把未授权任务事实下发给调用方。
+// 处理销售单时，生成禁止创建采购单的稳定访问投影。
+//
+// 调用参数：
+// * `message` - 可直接展示给调用方的明确业务阻塞说明
+//
+// 返回 `allowed = false`、任务数为零且携带 blocker 的访问投影。
+//
+// 业务边界：
+// 禁止分支不得泄露任何开放任务数量，避免把未授权任务事实下发给调用方。
 fn blocked_purchase_creation_access(message: &str) -> PurchaseCreationAccessView {
     PurchaseCreationAccessView { blocker: Some(message.to_string()), ..Default::default() }
 }
 
 impl SalesOrderReadService {
-    /// 在分页前经拥有领域解析客户名称、合同号；空关键词不读取关联表。
-    ///
-    /// # 参数
-    /// q 为可选关键词，executor 为当前读取用例的执行器。
-    /// # 返回
-    /// 返回销售域中性的搜索条件；空关键词得到默认条件。
-    /// # 错误
-    /// 客户、主体或合同关联读取失败时整次查询失败。
+    // 读取销售单时，在分页前经拥有领域解析客户名称、合同号；空关键词不读取关联表。
+    //
+    // 调用参数：
+    // q 为可选关键词，executor 为当前读取用例的执行器。
+    //
+    // 返回销售域中性的搜索条件；空关键词得到默认条件。
+    //
+    // 失败边界：
+    // 客户、主体或合同关联读取失败时整次查询失败。
     pub(crate) async fn keyword_search(
         &self,
         q: Option<&str>,
@@ -522,19 +505,12 @@ mod tests {
         }
     }
 
-    /// 禁止访问投影必须返回明确 blocker 且隐藏任务数量。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 无；禁止投影仍允许创建、泄露任务数或缺少说明时测试失败。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 未授权账号不能从销售详情推断其名下或他人的采购任务数量。
+    // 验证销售单：禁止访问投影必须返回明确 blocker 且隐藏任务数量。
+    //
+    // 无；禁止投影仍允许创建、泄露任务数或缺少说明时测试失败。
+    //
+    // 业务边界：
+    // 未授权账号不能从销售详情推断其名下或他人的采购任务数量。
     #[test]
     fn blocked_purchase_creation_access_is_explicit_and_hides_tasks() {
         let view = blocked_purchase_creation_access("当前账号缺少创建采购单的权限，请联系管理员");

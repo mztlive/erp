@@ -10,14 +10,13 @@ use crate::repository::{PurchasePaymentRequestExt, SupplierDepositExt};
 use crate::{Error, Result};
 
 impl SupplierDepositService {
-    /// 在登记首个外部写意图的同一事务标记资金可能已发送。
-    /// # 参数
-    /// * `id` - 本执行组原占用。
-    /// * `executor` - 包含外部动作意图登记的同一事务。
-    /// # 返回
-    /// 后续任何超时都不能释放原占用。
-    /// # 错误
+    /// 登记首次外部写入意图时在同一事务把占用标为可能已发送，后续不能当未发送资金直接释放。
+    /// 结果：后续任何超时都不能释放原占用。
     /// 原占用已释放、缺失或持久化失败时拒绝。
+    ///
+    /// 输入约定：
+    /// - `id`：本执行组原占用。
+    /// - `executor`：包含外部动作意图登记的同一事务。
     pub async fn mark_external_write_sent(&self, id: &str, executor: &mut dyn Executor) -> Result<()> {
         require_transaction(executor)?;
         let mut reservation = self.reservation(id, executor).await?;
@@ -63,15 +62,14 @@ impl SupplierDepositService {
         Ok(())
     }
 
-    /// 释放有明确原执行风险消解证据的剩余占用和申请额度。
-    /// # 参数
-    /// * `id` / `amount` - 原占用与释放金额。
-    /// * `clearance` - 组合层已核验的无扣款、冻结及后续风险依据。
-    /// * `executor` - 账户、批次和申请共同事务。
-    /// # 返回
+    /// 原执行风险已由明确证据解除时释放剩余资金占用及对应申请额度。
     /// 返回保存历史的占用；金额不会增加账面余额。
-    /// # 错误
     /// 缺原申请、未核实外部风险或超额时拒绝。
+    ///
+    /// 输入约定：
+    /// - `id` / `amount`：原占用与释放金额。
+    /// - `clearance`：组合层已核验的无扣款、冻结及后续风险依据。
+    /// - `executor`：账户、批次和申请共同事务。
     pub async fn release_reservation(
         &self,
         id: &str,

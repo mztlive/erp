@@ -9,13 +9,9 @@ use mongodb::Database;
 
 use super::{FactsBindings, MappingBindings};
 
-/// 绑定销售询价、精确采购任务和本人导入预览的完整实现。
-/// # 参数
-/// db 为进程共享业务库。
-/// # 返回
-/// 按资源唯一的事实和按权限唯一的查询映射。
-/// # 错误
-/// 不执行 I/O；完整绑定能力由统一 Builder 校验。
+// 绑定销售询价、精确采购任务和本人导入预览的完整实现。
+// 按资源唯一的事实和按权限唯一的查询映射。
+// 不执行 I/O；完整绑定能力由统一 Builder 校验。
 pub(super) fn bindings(db: Database) -> Result<(FactsBindings, MappingBindings)> {
     let facts: FactsBindings = vec![
         (resources::SALES_INQUIRY.into(), inquiry_facts(db.clone())),

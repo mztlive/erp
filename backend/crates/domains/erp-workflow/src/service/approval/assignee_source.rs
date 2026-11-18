@@ -14,12 +14,7 @@ pub enum AssigneeSource {
 }
 impl AssigneeSource {
     /// 返回写入 BPM 的不透明规则键。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 指定人员为空，负责人来源返回稳定键。
-    /// # 错误
-    /// 无。
     pub fn rule(self) -> Option<&'static str> {
         match self {
             Self::Specified => None,
@@ -28,12 +23,11 @@ impl AssigneeSource {
         }
     }
     /// 从持久化规则读取受支持来源。
-    /// # 参数
-    /// `rule` 为定义规则。
-    /// # 返回
     /// 返回对应来源。
-    /// # 错误
+    ///
     /// 未知规则失败关闭。
+    ///
+    /// `rule` 为定义规则。
     pub fn from_rule(rule: Option<&str>) -> Result<Self> {
         match rule {
             None => Ok(Self::Specified),
@@ -43,12 +37,7 @@ impl AssigneeSource {
         }
     }
     /// 返回配置阶段可读标签。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 中文来源标签。
-    /// # 错误
-    /// 无。
     pub fn label(self) -> &'static str {
         match self {
             Self::Specified => "指定人员",

@@ -35,20 +35,11 @@ pub(super) struct SalesCommandAccess {
 }
 
 impl SalesOrderCommandProcess {
-    /// 构造在原事务执行对象授权的写命令检查器。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证操作人
-    /// * `permission` - 本次销售写动作
-    ///
-    /// # 返回
-    /// 返回可在原事务重验销售单及关联合同／客户的检查器。
-    ///
-    /// # 错误
-    /// 不执行 I/O，不返回错误。
-    ///
-    /// # 关键业务约束
-    /// 关联合同／客户必须另走各自资源动作，不能复用本销售动作码。
+    // 构造在原事务执行对象授权的写命令检查器。
+    //
+    // `permission` 为本次销售写动作。返回可在原事务重验销售单及关联合同／客户的检查器。
+    //
+    // 关联合同／客户必须另走各自资源动作，不能复用本销售动作码。
     pub(super) fn command_access(
         &self,
         actor: &AuditActor,
@@ -70,44 +61,21 @@ impl SalesOrderCommandProcess {
 }
 
 impl SalesCommandAccess {
-    /// 创建并提交必须由同一角色同时提供两个动作。
-    ///
-    /// # 参数
-    /// * `submit` - 为真时追加 `sales_order:submit` 权限要求。
-    ///
-    /// # 返回
-    /// 返回可能追加了提交权限的检查器。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 建单即提交时标记还需 `sales_order:submit`，后续校验要求同一角色同时授予创建和提交；只保存草稿不追加该权限。
     pub(super) fn require_submit(mut self, submit: bool) -> Self {
         self.submit = submit;
         self
     }
 
-    /// 将本次客户关系变更标记为开展新业务。
-    /// # 参数
-    /// 无；调用方须先比较当前单据与本次选择的客户或合同。
-    /// # 返回
-    /// 后续客户检查只接受当前选择资格的命令检查器。
-    /// # 错误
-    /// 不执行 I/O，不返回错误。
+    // 将本次客户关系变更标记为开展新业务。
+    //
+    // 调用方须先比较当前单据与本次选择的客户或合同。后续客户检查只接受当前选择资格的命令检查器。
     pub(super) fn selecting_customer(mut self) -> Self {
         self.customer_selection = true;
         self
     }
 
-    /// 在调用方事务内读取当前可操作单据，并复用公共单对象判定。
-    ///
-    /// # 参数
-    /// * `id` - 销售单主键。
-    /// * `executor` - 调用方事务执行器。
-    ///
-    /// # 返回
-    /// 返回当前可操作的销售单。
-    ///
-    /// # 错误
-    /// 单据不可见或缺失时返回错误；已要求提交时，缺少创建权限同样拒绝。
+    // 在调用方事务内读取当前可操作单据，并复用公共单对象判定。返回当前可操作的销售单。单据不可见或缺失时返回错误；已要求提交时，缺少创建权限同样拒绝。
     pub(super) async fn current(&self, id: &str, executor: &mut dyn Executor) -> Result<SalesOrder> {
         let order = if self.permission == sales_order_permissions::CREATE {
             let permission = if self.submit {
@@ -131,18 +99,9 @@ impl SalesCommandAccess {
         Ok(order)
     }
 
-    /// 写入前重新读取当前责任与版本，防止预读取后交接或状态变化。
-    ///
-    /// # 参数
-    /// * `id` - 销售单主键。
-    /// * `expected` - 预读时的单据版本。
-    /// * `executor` - 调用方事务执行器。
-    ///
-    /// # 返回
-    /// 当前版本仍为 `expected` 时返回。
-    ///
-    /// # 错误
-    /// 单据不可操作时返回对应错误；版本已变化时返回冲突。
+    // 写入前重新读取当前责任与版本，防止预读取后交接或状态变化。
+    //
+    // `expected` 为预读时的单据版本；沿用原事务的执行器。当前版本仍为 `expected` 时返回。单据不可操作时返回对应错误；版本已变化时返回冲突。
     pub(super) async fn revalidate(
         &self,
         id: &str,
@@ -156,17 +115,11 @@ impl SalesCommandAccess {
         Ok(())
     }
 
-    /// 新单使用即将持久化的显式责任解释创建范围，不能由创建人审计字段兜底。
-    ///
-    /// # 参数
-    /// * `order` - 即将持久化、带显式责任的销售单。
-    /// * `executor` - 调用方事务执行器。
-    ///
-    /// # 返回
-    /// 创建范围允许该责任时返回；已要求提交时，提交范围也必须允许。
-    ///
-    /// # 错误
-    /// 责任不在动作范围内，或权限码无法解析时返回错误。
+    // 新单使用即将持久化的显式责任解释创建范围，不能由创建人审计字段兜底。
+    //
+    // `order` 为即将持久化、带显式责任的销售单；沿用原事务的执行器。创建范围允许该责任时返回；已要求提交时，提交范围也必须允许。
+    //
+    // 责任不在动作范围内，或权限码无法解析时返回错误。
     pub(super) async fn creation(&self, order: &SalesOrder, executor: &mut dyn Executor) -> Result<()> {
         self.services
             .customer_access
@@ -183,20 +136,13 @@ impl SalesCommandAccess {
         Ok(())
     }
 
-    /// 在调用方事务内按合同 detail 动作证明所选合同可见。
-    ///
-    /// # 参数
-    /// * `contract_id` - 本次命令选择的合同
-    /// * `executor` - 调用方执行器，必须是原写入事务或同一授权读取
-    ///
-    /// # 返回
-    /// 合同在范围内时成功。
-    ///
-    /// # 错误
-    /// 不可见或缺失时返回 NotFound；缺动作时拒绝。
-    ///
-    /// # 关键业务约束
-    /// handler 事前检查不能代替；不得用无范围 `find_by_id` 作为授权读取。
+    // 在调用方事务内按合同 detail 动作证明所选合同可见。
+    //
+    // `contract_id` 为本次命令选择的合同；`executor` 为调用方执行器，必须是原写入事务或同一授权读取。合同在范围内时成功。
+    //
+    // 不可见或缺失时返回 NotFound；缺动作时拒绝。
+    //
+    // handler 事前检查不能代替；不得用无范围 `find_by_id` 作为授权读取。
     async fn require_contract(&self, contract_id: &str, executor: &mut dyn Executor) -> Result<()> {
         self.services
             .contracts
@@ -205,20 +151,13 @@ impl SalesCommandAccess {
         Ok(())
     }
 
-    /// 在调用方事务内检查本次命令需要的客户资格。
-    ///
-    /// # 参数
-    /// * `customer_id` - 合同所属客户
-    /// * `executor` - 调用方执行器，必须是原写入事务或同一授权读取
-    ///
-    /// # 返回
-    /// 新业务使用当前选择资格；关系未变的已有单据继续使用详情资格。
-    ///
-    /// # 错误
-    /// 客户缺失、不满足本次范围或缺少功能资格时拒绝。
-    ///
-    /// # 关键业务约束
-    /// 不得用销售范围或合同范围代替客户对象判定。
+    // 在调用方事务内检查本次命令需要的客户资格。
+    //
+    // `customer_id` 为合同所属客户；`executor` 为调用方执行器，必须是原写入事务或同一授权读取。
+    //
+    // 新业务使用当前选择资格；关系未变的已有单据继续使用详情资格。客户缺失、不满足本次范围或缺少功能资格时拒绝。
+    //
+    // 不得用销售范围或合同范围代替客户对象判定。
     async fn require_customer(&self, customer_id: &str, executor: &mut dyn Executor) -> Result<()> {
         if self.customer_selection {
             self.services.customer_access.require_current(&self.actor, customer_id, executor).await?;
@@ -231,21 +170,13 @@ impl SalesCommandAccess {
         Ok(())
     }
 
-    /// 首次补录合同时分别重验合同可读资格与客户当前选择资格。
-    ///
-    /// # 参数
-    /// * `contract_id` - 本次命令选择的合同
-    /// * `customer_id` - 合同所属客户
-    /// * `executor` - 原写入事务执行器
-    ///
-    /// # 返回
-    /// 合同可读且客户具备开展新业务的当前资格时成功。
-    ///
-    /// # 错误
-    /// 合同不可读，或客户不具备当前选择资格时拒绝。
-    ///
-    /// # 关键业务约束
-    /// 创建／保存／提交必须在原写入事务调用；独立 HTTP 事前检查不是凭证。
+    // 首次补录合同时分别重验合同可读资格与客户当前选择资格。
+    //
+    // `contract_id` 为本次命令选择的合同；`customer_id` 为合同所属客户；`executor` 为原写入事务执行器。
+    //
+    // 合同可读且客户具备开展新业务的当前资格时成功。合同不可读，或客户不具备当前选择资格时拒绝。
+    //
+    // 创建／保存／提交必须在原写入事务调用；独立 HTTP 事前检查不是凭证。
     pub(super) async fn related(
         &self,
         contract_id: &str,
@@ -257,20 +188,13 @@ impl SalesCommandAccess {
         Ok(())
     }
 
-    /// 按本次销售命令的合同与客户重验对应业务资格。
-    ///
-    /// # 参数
-    /// * `order` - 即将写入的销售单，带明确客户及可选合同
-    /// * `executor` - 原写入事务执行器
-    ///
-    /// # 返回
-    /// 合同可读且客户满足当前命令需要的资格时成功。
-    ///
-    /// # 错误
-    /// 客户不满足本次范围，或已选合同不可读时拒绝。
-    ///
-    /// # 关键业务约束
-    /// 客户始终独立重验；只有已选择合同时才重验合同对象。
+    // 按本次销售命令的合同与客户重验对应业务资格。
+    //
+    // `order` 为即将写入的销售单，带明确客户及可选合同；`executor` 为原写入事务执行器。合同可读且客户满足当前命令需要的资格时成功。
+    //
+    // 客户不满足本次范围，或已选合同不可读时拒绝。
+    //
+    // 客户始终独立重验；只有已选择合同时才重验合同对象。
     pub(super) async fn related_order(&self, order: &SalesOrder, executor: &mut dyn Executor) -> Result<()> {
         if let Some(contract_id) = order.contract_id.as_ref() {
             let contract = self.load_contract(contract_id.as_ref(), executor).await?;
@@ -285,20 +209,11 @@ impl SalesCommandAccess {
         }
     }
 
-    /// 在调用方执行器内按合同 detail 动作装载合同实体。
-    ///
-    /// # 参数
-    /// * `contract_id` - 所选合同稳定身份
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 合同在范围内时返回实体。
-    ///
-    /// # 错误
-    /// 不可见或缺失时返回 NotFound。
-    ///
-    /// # 关键业务约束
-    /// `find_by_id` 只在 `require_with` 之后装载业务字段，不得单独作为授权。
+    // 在调用方执行器内按合同 detail 动作装载合同实体。
+    //
+    // `contract_id` 为所选合同稳定身份。合同在范围内时返回实体。不可见或缺失时返回 NotFound。
+    //
+    // `find_by_id` 只在 `require_with` 之后装载业务字段，不得单独作为授权。
     pub(super) async fn load_contract(
         &self,
         contract_id: &str,
@@ -312,20 +227,11 @@ impl SalesCommandAccess {
             .ok_or_else(|| Error::NotFound("合同不存在或无权查看".into()))
     }
 
-    /// 在调用方执行器内检查本次客户资格后装载实体。
-    ///
-    /// # 参数
-    /// * `customer_id` - 合同所属客户
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 客户满足当前命令需要的资格时返回实体。
-    ///
-    /// # 错误
-    /// 客户资格不足或缺失时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 新建、提交及关系变更须先检查当前资格；已有关系的读取保留详情资格。
+    // 在调用方执行器内检查本次客户资格后装载实体。
+    //
+    // `customer_id` 为合同所属客户。客户满足当前命令需要的资格时返回实体。客户资格不足或缺失时返回错误。
+    //
+    // 新建、提交及关系变更须先检查当前资格；已有关系的读取保留详情资格。
     pub(super) async fn load_customer(
         &self,
         customer_id: &str,

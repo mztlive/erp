@@ -18,13 +18,13 @@ use crate::Result;
 const PREVIEW_RESOURCE: &str = "sales_inquiry_import_preview";
 
 impl SalesInquiryImportProcess {
-    /// 在当前读取或写事务内证明询价导入预览的本人资格。
-    /// # 参数
-    /// actor 为当前操作人，id 为真实预览 ID，executor 为原执行器。
-    /// # 返回
-    /// 预览属于当前有效账号且仍有询价导入权限时成功。
-    /// # 错误
-    /// 预览不存在、无权或身份设施失败时拒绝。
+    // 在当前读取或写事务内证明询价导入预览的本人资格。
+    //
+    // actor 为当前操作人，id 为真实预览 ID，executor 为原执行器。
+    //
+    // 预览属于当前有效账号且仍有询价导入权限时成功。
+    //
+    // 预览不存在、无权或身份设施失败时拒绝。
     pub(crate) async fn require_preview(
         &self,
         actor: &AuditActor,
@@ -69,12 +69,10 @@ fn preview_facts(preview: &InquiryImportPreview) -> ObjectFacts {
 }
 
 /// 构造询价导入预览的真实事实读取器。
-/// # 参数
+///
 /// db 为业务数据库。
-/// # 返回
+///
 /// 读取持久化预览发起人及版本的实现。
-/// # 错误
-/// 无。
 pub fn preview_facts_reader(db: Database) -> Arc<dyn AccessFactsPort> {
     Arc::new(PreviewFacts(db))
 }

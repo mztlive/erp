@@ -15,19 +15,9 @@ pub struct ConfirmedCooperation {
     pub result: CooperationResult,
 }
 
-/// 用冻结提交创建商务修订，并保留原商务档案的非申请字段。
-///
-/// # 参数
-/// * `application` - 服务器已授权的待确认申请。
-/// * `supplier` - 同事务读取的当前供应商。
-/// * `current` - 当前商务指针指向的版本。
-/// * `revision_id` - 新修订身份。
-/// * `actor` - 真实内部确认人。
-/// * `now` - 确认时间。
-/// # 返回
-/// 返回待持久化的 supplier、profile 和确认结果。
-/// # 错误
-/// 状态、绑定、当前版本、指针或商务规则不满足时拒绝。
+/// 内部人员确认已授权的待办申请时，以冻结提交准备下一商务修订和供应商指针，保留原发票、经营类目及签约与
+/// 付款主体。供应商停用、归属不符或申请状态错误时拒绝，版本、指针、新身份或商务条款不合法时也不返回计划；
+/// 不写入或改动以往采购快照。
 pub fn plan_confirmed_cooperation(
     application: &CooperationApplication,
     supplier: &SupplierAccount,
@@ -80,7 +70,7 @@ pub fn plan_confirmed_cooperation(
     Ok(ConfirmedCooperation { supplier, profile, result })
 }
 
-/// 供应商须启用且与申请绑定，商务指针和期望版本必须仍是当前值。
+// 供应商须启用且与申请绑定，商务指针和期望版本必须仍是当前值。
 fn ensure_current(
     application: &CooperationApplication,
     proposal: &CooperationRequest,

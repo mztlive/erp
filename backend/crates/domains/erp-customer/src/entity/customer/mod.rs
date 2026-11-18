@@ -29,17 +29,15 @@ pub use profile_validation::{
     CustomerProfileRequestShape,
 };
 
-/// 校验乐观锁版本一致（客户账户与归属共用同一文案与语义）。
-///
-/// # 参数
-/// * `current` - 当前持久化版本
-/// * `expected` - 客户端期望版本
-///
-/// # 返回
-/// 版本一致时返回 `Ok(())`。
-///
-/// # 错误
-/// 版本不一致时返回领域逻辑错误。
+// 写入前确认目标记录仍是调用方读取的版本，发现并发修改时返回版本冲突。
+//
+// # 参数
+// * `current` - 当前持久化版本
+// * `expected` - 客户端期望版本
+//
+// 版本一致时返回 `Ok(())`。
+//
+// 版本不一致时返回领域逻辑错误。
 pub(crate) fn ensure_entity_version(current: u64, expected: u64) -> erp_core::Result<()> {
     if current == expected {
         return Ok(());

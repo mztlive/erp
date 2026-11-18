@@ -32,14 +32,10 @@ impl IntegrationResolutionProcess {
     /// 消息状态由服务端置为 `received`；来源系统存在性经 D01 `SourceRegistryExt`
     /// 跨域只读校验。重复投递（同来源事件或同业务事实键）由唯一索引透出 409。
     ///
-    /// # 参数
-    /// * `req` - 登记请求
-    /// * `actor` - 已通过鉴权的审计操作人
+    /// `req`：登记请求。
     ///
-    /// # 返回
     /// 返回新建消息的详情视图。
     ///
-    /// # 错误
     /// * `NotFound` - 来源系统不存在
     /// * `ConflictError` - 消息身份或业务事实键重复（唯一索引透出）
     /// * `ValidationError` - 请求体校验失败
@@ -56,7 +52,7 @@ impl IntegrationResolutionProcess {
         .await
     }
 
-    /// 原快照先核验固定资格，再读取真实来源、版本及责任组织并写入。
+    // 原快照先核验固定资格，再读取真实来源、版本及责任组织并写入。
     async fn register_inbox_message_stage(
         &self,
         req: RegisterInboxMessageRequest,
@@ -90,15 +86,10 @@ impl IntegrationResolutionProcess {
     /// 并在同一事务登记错误任务（仓库 `create_error_task_with_message_failure`
     /// 必须收到事务执行器）。消息处理状态与任务登记原子可见。
     ///
-    /// # 参数
-    /// * `id` - 消息 ID
-    /// * `req` - 回写请求（含期望版本）
-    /// * `actor` - 已通过鉴权的审计操作人
+    /// `id`：消息 ID；`req`：回写请求（含期望版本）。
     ///
-    /// # 返回
     /// 返回回写后的消息详情视图。
     ///
-    /// # 错误
     /// * `NotFound` - 消息不存在
     /// * `ConflictError` - 期望版本不一致，或消息已有进行中的同分类错误任务
     /// * `ValidationError` - 请求体校验失败或失败回写缺少错误分类
@@ -117,7 +108,7 @@ impl IntegrationResolutionProcess {
         .await
     }
 
-    /// 原快照先核验固定资格，再读取真实来源、版本及责任组织并写入。
+    // 原快照先核验固定资格，再读取真实来源、版本及责任组织并写入。
     async fn write_back_inbox_result_stage(
         &self,
         id: &str,
@@ -198,7 +189,7 @@ struct InboxResultWrite {
 }
 
 impl InboxResultWrite {
-    /// 准备阶段已完成领域校验；这里仅在入口提供的执行器上保留原写入顺序。
+    // 准备阶段已完成领域校验；这里仅在入口提供的执行器上保留原写入顺序。
     async fn persist(mut self, db: &Database, executor: &mut dyn Executor) -> Result<InboxMessage> {
         if let Some(failure) = self.failure {
             persist_created(
@@ -228,7 +219,7 @@ fn prepare_processed_message(
     Ok(InboxResultWrite { message, audit, failure: None })
 }
 
-/// 返回当前时间的秒级时间戳。
+// 返回当前时间的秒级时间戳。
 fn now_secs() -> i64 {
     Instant::now().unix_secs()
 }

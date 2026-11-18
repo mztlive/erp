@@ -25,16 +25,7 @@ pub enum DeliveryMode {
 }
 
 impl DeliveryMode {
-    /// 返回中文名称。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回"代发"或"集采"。
-    ///
-    /// # 错误
-    /// 无。
+    /// 供规则编辑和错误提示展示「代发」或「集采」，不要用中文标签替代固定接口代码。
     pub fn label(self) -> &'static str {
         match self {
             Self::Dropship => "代发",
@@ -56,16 +47,7 @@ pub enum DeliveryTerm {
 }
 
 impl DeliveryTerm {
-    /// 判断是否可配送。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 包邮或运费另计返回 `true`。
-    ///
-    /// # 错误
-    /// 无。
+    /// 只需判断能否送达时，将包邮与运费另计均视为可送；不用于判断是否另收运费。
     pub fn is_deliverable(self) -> bool {
         self != Self::NotDeliverable
     }
@@ -90,30 +72,12 @@ pub struct DeliveryRuleSet {
 }
 
 impl DeliveryRuleSet {
-    /// 构造全部地区同一判定、没有例外的规则。
-    ///
-    /// # 参数
-    /// * `term` - 全部地区的判定
-    ///
-    /// # 返回
-    /// 返回无例外规则。
-    ///
-    /// # 错误
-    /// 无。
+    /// 创建没有地区例外的规则时，让所有地区沿用同一结果，例如默认全国包邮。
     pub fn uniform(term: DeliveryTerm) -> Self {
         Self { default_term: term, rules: Vec::new() }
     }
 
-    /// 按最具体的地区例外判定，未命中时取其他地区判定。
-    ///
-    /// # 参数
-    /// * `region` - 收货或仓库所在地区
-    ///
-    /// # 返回
-    /// 区县、市、省依次查找，命中即返回该例外的判定。
-    ///
-    /// # 错误
-    /// 无。
+    /// 查询指定区域在该供货方式下的规则，从所选区划逐级向上取第一个例外；没有命中才用其他地区的默认判定。
     pub fn judge(&self, region: &RegionCode) -> DeliveryTerm {
         region
             .self_and_ancestors()
@@ -169,17 +133,8 @@ impl Default for DeliveryPolicy {
 }
 
 impl DeliveryPolicy {
-    /// 校验并规范化配送规则。
-    ///
-    /// # 参数
-    /// * `dropship` - 代发规则
-    /// * `bulk` - 集采规则
-    ///
-    /// # 返回
-    /// 返回例外按地区代码排序的政策。
-    ///
-    /// # 错误
-    /// 代发出现运费另计、地区不存在、同一方式内地区重复或例外超过上限时返回错误。
+    /// 保存配送模板前分别校验代发、集采并将例外按区划代码排序。代发不得另收运费；
+    /// 不存在的地区、同一方式内的重复地区或超出 [`MAX_DELIVERY_RULES`] 均拒绝。
     pub fn new(dropship: DeliveryRuleSet, bulk: DeliveryRuleSet) -> Result<Self> {
         Ok(Self {
             dropship: dropship.normalized(DeliveryMode::Dropship)?,
@@ -187,16 +142,7 @@ impl DeliveryPolicy {
         })
     }
 
-    /// 未设置配送模板时使用的政策：全国配送，代发与集采均包邮。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回无例外的全国包邮政策。
-    ///
-    /// # 错误
-    /// 无。
+    /// 供给未选择配送模板时，使用无地区例外的全国规则；代发价已含运费，集采统一包邮。
     pub fn nationwide_included() -> Self {
         Self {
             dropship: DeliveryRuleSet::uniform(DeliveryTerm::FreightIncluded),
@@ -204,17 +150,8 @@ impl DeliveryPolicy {
         }
     }
 
-    /// 判定指定供货方式发往某地区的配送结果。
-    ///
-    /// # 参数
-    /// * `mode` - 代发或集采
-    /// * `region` - 收货或仓库所在地区
-    ///
-    /// # 返回
-    /// 返回最具体规则的判定。
-    ///
-    /// # 错误
-    /// 无。
+    /// 采购或读取模型判断发往收货地或仓库的结果时，按实际供货方式选用规则，
+    /// 再由 [`DeliveryRuleSet::judge`] 取最具体的地区判定。
     pub fn judge(&self, mode: DeliveryMode, region: &RegionCode) -> DeliveryTerm {
         match mode {
             DeliveryMode::Dropship => self.dropship.judge(region),

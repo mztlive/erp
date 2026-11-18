@@ -29,15 +29,17 @@ use crate::{Error, Result, work_item_links};
 mod payment_request;
 pub(super) mod related_sales;
 
-/// 在原提交事务内冻结显示与附件版本，历史快照不补取当前材料。
+/// 提交审批时在原事务冻结本次决定可见的业务展示与附件版本；历史快照不得补读当前材料。
 ///
 /// # 参数
 /// * `identity_service` - 同一应用注入的共享身份与权限服务。
 /// * `db` / `executor` - 原业务提交事务。
 /// * `auth` - 在同一事务中重验提交账号和文件预览资格的权限端口。
 /// * `snapshot` - 已匹配本次提交的强类型快照。
+///
 /// # 返回
 /// 返回本单直接附件、锁定销售合同与采购来源销售材料的不可变快照。
+///
 /// # 错误
 /// 单据类型不匹配、附件资产缺失或材料超限时中止提交。
 pub async fn freeze_approval_materials(
@@ -105,14 +107,14 @@ pub async fn freeze_approval_materials(
     snapshot.with_material_files(unique_materials(materials)).map_err(Error::from)
 }
 
-/// 相同冻结文件跨合同和来源版本去重；不同文件版本继续交给领域快照拒绝。
+// 处理审批冻结材料时，相同冻结文件跨合同和来源版本去重；不同文件版本继续交给领域快照拒绝。
 fn unique_materials(mut materials: Vec<ApprovalMaterialFile>) -> Vec<ApprovalMaterialFile> {
     materials.sort_by(|left, right| left.file_asset_id.as_ref().cmp(right.file_asset_id.as_ref()));
     materials.dedup();
     materials
 }
 
-/// 本单直接附件保持原上传者或通用文件预览资格，不以关联记录替代转授授权。
+// 处理审批冻结材料时，本单直接附件保持原上传者或通用文件预览资格，不以关联记录替代转授授权。
 async fn direct_materials(
     identity_service: &Arc<AuthorizationService>,
     db: &Database,
@@ -158,7 +160,7 @@ async fn direct_materials(
     Ok((files.iter().map(material_from_asset).collect(), actor))
 }
 
-/// 销售提交只转授本次锁定且提交者当前可读的唯一合同正文，不遍历合同其他附件。
+// 处理审批冻结材料时，销售提交只转授本次锁定且提交者当前可读的唯一合同正文，不遍历合同其他附件。
 async fn sales_contract_material(
     db: &Database,
     auth: &impl WorkflowAuthorizationPort,
@@ -209,7 +211,7 @@ async fn sales_contract_material(
     Ok(Some(material))
 }
 
-/// 销售变更审批继承基准版本的冻结凭证，历史材料关闭时保留清晰限制说明。
+// 处理审批冻结材料时，销售变更审批继承基准版本的冻结凭证，历史材料关闭时保留清晰限制说明。
 async fn sales_change_evidence(
     db: &Database,
     snapshot: &mut ApprovalSubjectSnapshot,
@@ -240,7 +242,7 @@ async fn sales_change_evidence(
     }
 }
 
-/// 退款与冲正只允许各自保存的直接凭证，不扩展到原资金单其他附件。
+// 处理审批冻结材料时，退款与冲正只允许各自保存的直接凭证，不扩展到原资金单其他附件。
 async fn evidence(
     db: &Database,
     kind: DocumentType,

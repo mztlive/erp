@@ -14,11 +14,8 @@ pub struct PeriodBounds {
     pub until: i64,
 }
 impl ProfitLossQuery {
-    /// 单次最多一年；分页和所有枚举在读取事实前验证。
+    /// 校验实际盈亏报表时，单次最多一年；分页和所有枚举在读取事实前验证。
     /// 第二页起缺范围版本按范围变化冲突拒绝，与销售／成本列表一致。
-    ///
-    /// # 参数
-    /// 无。
     ///
     /// # 返回
     /// 成功时返回上海自然日的起止边界，`until` 为结束日的下一自然日零点。
@@ -63,7 +60,7 @@ impl ProfitLossQuery {
             to.checked_add_days(Days::new(1)).ok_or_else(|| Error::ValidationError("结束日期无效".into()))?;
         Ok(PeriodBounds { from: midnight(from), until: midnight(next) })
     }
-    /// 下钻仅接受历史人员或组织的精确分组身份；空后缀明确表示未知归属。
+    // 校验实际盈亏报表时，下钻仅接受历史人员或组织的精确分组身份；空后缀明确表示未知归属。
     fn validate_attribution_group(&self) -> Result<()> {
         let Some(group) = &self.attribution_group else {
             return Ok(());
@@ -79,7 +76,7 @@ impl ProfitLossQuery {
         }
         Ok(())
     }
-    /// 使用界面列排序白名单，空值统一排最后。
+    // 校验实际盈亏报表时，使用界面列排序白名单，空值统一排最后。
     fn validate_sort(&self) -> Result<()> {
         let Some((field, direction)) = self.sort.split_once(':') else {
             return invalid("排序参数无效");
@@ -101,7 +98,7 @@ impl ProfitLossQuery {
         }
         Ok(())
     }
-    /// 文本有界，成本类别只接受财务领域已有代码。
+    // 校验实际盈亏报表时，文本有界，成本类别只接受财务领域已有代码。
     fn validate_text(&self) -> Result<()> {
         for value in
             [&self.q, &self.customer_id, &self.sales_order_id, &self.benefit_scenario, &self.cost_types]
@@ -120,30 +117,18 @@ impl ProfitLossQuery {
         }
         Ok(())
     }
-    /// 成本筛选命中销售单后保留整单成本，不能只减所选类别而虚增利润。
-    ///
-    /// # 参数
-    /// 无。
+    /// 处理实际盈亏报表时，成本筛选命中销售单后保留整单成本，不能只减所选类别而虚增利润。
     ///
     /// # 返回
     /// 返回逗号分隔的成本代码；未筛选时为空。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn cost_codes(&self) -> Vec<&str> {
         self.cost_types.as_deref().unwrap_or("").split(',').map(str::trim).filter(|s| !s.is_empty()).collect()
     }
 }
-/// 完整费用字典，也用于空结果时仍可修改筛选。
-///
-/// # 参数
-/// 无。
+/// 处理实际盈亏报表时，完整费用字典，也用于空结果时仍可修改筛选。
 ///
 /// # 返回
 /// 返回九种 `CostType`。
-///
-/// # 错误
-/// 不返回错误。
 pub fn cost_types() -> [CostType; 9] {
     [
         CostType::Product,
@@ -157,7 +142,7 @@ pub fn cost_types() -> [CostType; 9] {
         CostType::Other,
     ]
 }
-/// 严格校验零填充日期。
+// 规范化实际盈亏报表输入时，严格校验零填充日期。
 fn parse_date(text: &str) -> Result<NaiveDate> {
     let date = NaiveDate::parse_from_str(text, "%Y-%m-%d")
         .map_err(|_| Error::ValidationError("请选择有效日期，或按「2026-01-31」的格式填写".into()))?;
@@ -166,14 +151,14 @@ fn parse_date(text: &str) -> Result<NaiveDate> {
     }
     Ok(date)
 }
-/// 上海自然日零点换算 UTC 秒，固定时区不依赖机器时区。
-///
-/// # Panics
-/// `NaiveDate::and_hms_opt(0, 0, 0)` 对合法日期应成功；失败时 panic。
+// 处理实际盈亏报表时，上海自然日零点换算 UTC 秒，固定时区不依赖机器时区。
+//
+// # Panics
+// `NaiveDate::and_hms_opt(0, 0, 0)` 对合法日期应成功；失败时 panic。
 fn midnight(date: NaiveDate) -> i64 {
     date.and_hms_opt(0, 0, 0).expect("合法零点").and_utc().timestamp() - 8 * 3600
 }
-/// 保留统一参数错误分类。
+// 组装实际盈亏报表时，保留统一参数错误分类。
 fn invalid<T>(message: &str) -> Result<T> {
     Err(Error::ValidationError(message.into()))
 }

@@ -16,7 +16,7 @@ pub enum FulfillmentCommandResult {
     CustomerAcceptance(CustomerAcceptanceId),
 }
 impl FulfillmentCommandResult {
-    /// 返回正式结果对象 ID。
+    // 返回正式结果对象 ID。
     fn id(&self) -> &str {
         match self {
             Self::CustomerAcceptance(id) => id.as_ref(),
@@ -39,16 +39,8 @@ pub struct FulfillmentCommandReceipt {
     pub audit_event_id: String,
 }
 impl FulfillmentCommandReceipt {
-    /// 按显式动作目录构造独立成功回执。
-    ///
-    /// # 参数
-    /// * `command` - 原请求身份及载荷。
-    /// * `resource_id` - 正式结果对象 ID。
-    /// * `audit_event_id` - 成功审计关联 ID。
-    /// # 返回
-    /// 返回已验证的领域回执。
-    /// # 错误
-    /// 目录、身份、schema 或结果无效时返回错误。
+    /// 首次成功后将原命令身份和版本化载荷指纹绑定到已登记的客户验收结果类型及成功审计 ID。
+    /// 回执使用命令 ID 作为主键；动作目录、身份、结果模式版本或关联不合法时拒绝构造。
     pub fn resource(command: &CommandReceipt, resource_id: String, audit_event_id: String) -> Result<Self> {
         let value = Self {
             base: BaseModel::new(command.id().to_string()),
@@ -61,14 +53,8 @@ impl FulfillmentCommandReceipt {
         Ok(value)
     }
 
-    /// 校验持久化结果与原动作目录。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 合法时返回空结果。
-    /// # 错误
-    /// 身份、结果或关联损坏时返回内部错误。
+    /// 构造或回放时核对命令身份、结果模式版本、动作/资源/结果类型和审计关联。
+    /// 反向验收必须记录原单作用域，且结果须为不同的反向单；软删除或关联损坏均按内部错误处理。
     pub fn validate(&self) -> Result<()> {
         self.command.validate().map_err(|_| corrupted())?;
         if self.result_schema_version != 1
@@ -88,14 +74,8 @@ impl FulfillmentCommandReceipt {
         Ok(())
     }
 
-    /// 比对原命令并返回原结果对象 ID，不写入或追加审计。
-    ///
-    /// # 参数
-    /// * `command` - 当前请求的原身份及载荷。
-    /// # 返回
-    /// 返回结果对象 ID；调用方执行原授权和当前视图查询。
-    /// # 错误
-    /// 异载荷返回稳定冲突；身份或结果损坏返回内部错误。
+    /// 回放时先校验持久化回执，再与同一命令身份下的请求载荷比对。
+    /// 匹配时只返回结果对象 ID，由调用方完成当前授权和视图读取；同键异载荷返回冲突，身份或结果损坏返回内部错误。
     pub fn resource_id(&self, command: &CommandReceipt) -> Result<String> {
         self.validate()?;
 
@@ -108,7 +88,7 @@ impl FulfillmentCommandReceipt {
         }
     }
 }
-/// 明确登记合法动作与强类型结果，不接受任意资源字符串。
+// 只允许客户验收登记、反向验收两个动作绑定客户验收单结果；空 ID 或其他动作、资源均视为损坏。
 fn result_for_command(action: &str, resource_type: &str, id: String) -> Result<FulfillmentCommandResult> {
     if id.trim().is_empty() {
         return Err(corrupted());
@@ -123,7 +103,7 @@ fn result_for_command(action: &str, resource_type: &str, id: String) -> Result<F
         _ => Err(corrupted()),
     }
 }
-/// 原回执损坏保持明确内部错误，不当作命令未执行。
+// 回执损坏按内部错误暴露，不视为命令未执行，以免重试产生第二次业务效果。
 fn corrupted() -> Error {
     Error::Internal("业务命令收据格式无效".to_string())
 }

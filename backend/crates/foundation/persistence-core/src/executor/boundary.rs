@@ -15,24 +15,24 @@ pub(crate) struct ExecutionScope {
 }
 
 impl Default for ExecutionScope {
-    /// 为一次非事务读取创建独立阶段。
+    // 非事务授权查询开始时创建独立阶段，使其他执行器不能共享该读凭证。
     fn default() -> Self {
         Self { stage: Arc::new(Mode::Read) }
     }
 }
 
 impl ExecutionScope {
-    /// 仅在统一设施已开启快照事务后创建。
+    // 统一事务设施已开启快照事务后创建阶段；普通会话不能据此充当快照证明。
     pub(crate) fn snapshot() -> Self {
         Self { stage: Arc::new(Mode::Snapshot) }
     }
 
-    /// 签发只读弱引用，无法由凭证重新构造执行器。
+    // 为授权读取签发当前阶段的弱引用，复制凭证既不能保活阶段，也不能据此重建执行器。
     pub(crate) fn boundary(&self) -> ExecutionBoundary {
         ExecutionBoundary { stage: Arc::downgrade(&self.stage) }
     }
 
-    /// 丢弃旧阶段的唯一强引用，使全部旧凭证同时失效。
+    // 用新阶段替换唯一强引用，使旧授权读取凭证一起失效，同时保留快照或非事务的模式。
     pub(crate) fn advance(&mut self) {
         self.stage = Arc::new(*self.stage);
     }
@@ -45,24 +45,12 @@ pub struct ExecutionBoundary {
 }
 
 impl ExecutionBoundary {
-    /// 判断凭证是否仍属于存活的快照事务阶段。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 阶段推进、会话泄露或事务退出后返回 false。
-    /// # 错误
-    /// 无。
+    /// 判断授权证明是否仍指向存活的快照阶段；阶段推进、会话暴露或事务退出后，原凭证不再有效。
     pub fn is_snapshot(&self) -> bool {
         self.stage.upgrade().is_some_and(|mode| matches!(*mode, Mode::Snapshot))
     }
 
-    /// 核对原事务及读取阶段，不访问数据库。
-    /// # 参数
-    /// executor 为持久化设施提供的结果使用执行器。
-    /// # 返回
-    /// 当前执行器仍持有签发凭证的阶段时返回 true。
-    /// # 错误
-    /// 无；已失效或其他执行器的边界返回 false。
+    /// 在交付查询结果前核对原阶段是否仍由所给执行器持有；不用访问数据库，过期或其他实例的边界均不匹配。
     pub fn is_current(&self, executor: &dyn Executor) -> bool {
         self.stage.strong_count() > 0
             && executor.boundary().is_some_and(|current| Weak::ptr_eq(&self.stage, &current.stage))

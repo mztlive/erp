@@ -94,16 +94,7 @@ pub struct CostEntryFilter {
 }
 
 impl Default for CostEntryFilter {
-    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回第 1 页、每页 20 条的空筛选条件。
-    ///
-    /// # 错误
-    /// 无。
+    // 未提供列表条件时，从第 1 页读取，每页 20 条，不预设可选业务筛选。
     fn default() -> Self {
         Self {
             cost_type: None,
@@ -120,17 +111,9 @@ impl Default for CostEntryFilter {
 }
 
 impl QueryFilter for CostEntryFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。有值时等值匹配 `cost_type`、`cost_stage`、
-    /// `cost_scope`、`supplier_id`；`source_document_id` 按字面量模糊匹配。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 转换为 MongoDB 查询条件（自动追加未删除过滤）。
+    // 返回查询条件文档。有值时等值匹配 `cost_type`、`cost_stage`、
+    // `cost_scope`、`supplier_id`；`source_document_id` 按字面量模糊匹配。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(cost_type) = self.cost_type {
@@ -151,16 +134,7 @@ impl QueryFilter for CostEntryFilter {
 }
 
 impl Pagination for CostEntryFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。`page` 原样返回，`page_size` 由 `u32` 转为 `u64`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 向仓储分页器交付筛选中的页码与每页条数；页码原样保留，条数转为 `u64`。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -207,16 +181,7 @@ pub struct CostAllocationFilter {
 }
 
 impl Default for CostAllocationFilter {
-    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回第 1 页、每页 20 条的空筛选条件。
-    ///
-    /// # 错误
-    /// 无。
+    // 未提供列表条件时，从第 1 页读取，每页 20 条，不预设可选业务筛选。
     fn default() -> Self {
         Self {
             cost_entry_id: None,
@@ -230,16 +195,8 @@ impl Default for CostAllocationFilter {
 }
 
 impl QueryFilter for CostAllocationFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。有值时等值匹配 `cost_entry_id`、`sales_order_id`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 转换为 MongoDB 查询条件（自动追加未删除过滤）。
+    // 返回查询条件文档。有值时等值匹配 `cost_entry_id`、`sales_order_id`。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(cost_entry_id) = &self.cost_entry_id {
@@ -253,16 +210,7 @@ impl QueryFilter for CostAllocationFilter {
 }
 
 impl Pagination for CostAllocationFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。`page` 原样返回，`page_size` 由 `u32` 转为 `u64`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 向仓储分页器交付筛选中的页码与每页条数；页码原样保留，条数转为 `u64`。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -274,16 +222,12 @@ pub trait CostEntryRepositoryExt {
     ///
     /// 只返回 [`CostEntryRow`] 所需的列表字段；来源单据 ID 支持字面量模糊匹配
     /// （复用 `regex_filter`，禁止自拼正则）。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回当前页投影行与满足筛选条件的总数。
+    /// 传播数据库查询、游标读取或计数失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// 输入约定：
+    /// - `filter`：筛选与分页条件
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn search_cost_entries(
         &self,
         filter: &CostEntryFilter,
@@ -320,16 +264,12 @@ pub trait CostAllocationRepositoryExt {
     /// 分页检索成本分配列表（投影查询）。
     ///
     /// 只返回 [`CostAllocationRow`] 所需的列表字段；支持按成本事实与销售单筛选。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回当前页投影行与满足筛选条件的总数。
+    /// 传播数据库查询、游标读取或计数失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// 输入约定：
+    /// - `filter`：筛选与分页条件
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn search_cost_allocations(
         &self,
         filter: &CostAllocationFilter,
@@ -339,16 +279,12 @@ pub trait CostAllocationRepositoryExt {
     /// 批量按成本事实集合取回分配（`$in` 一次取回，禁止 N+1）。
     ///
     /// 用于校验「成本分配合计等于成本事实金额」（数据模型 §6.10）。
-    ///
-    /// # 参数
-    /// * `entry_ids` - 成本事实 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回全部匹配分配。
+    /// 传播数据库查询或游标读取失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 输入约定：
+    /// - `entry_ids`：成本事实 ID 集合
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn find_allocations_by_entries(
         &self,
         entry_ids: &[CostEntryId],
@@ -401,16 +337,7 @@ pub struct CostRepository<'a> {
 }
 
 impl<'a> CostRepository<'a> {
-    /// 创建域专用仓储。
-    ///
-    /// # 参数
-    /// * `db` - 目标 MongoDB 数据库
-    ///
-    /// # 返回
-    /// 返回仓储实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将本领域的集合访问器绑定到当前 MongoDB 数据库，构造时不读写集合。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
@@ -422,18 +349,14 @@ impl<'a> CostRepository<'a> {
     /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction` 时
     /// 各笔写入自动提交，后续分配失败会留下没有分配行的成本事实；
     /// Service 必须通过 `persistence_core::Transactional::with_transaction` 传入事务会话。
-    ///
-    /// # 参数
-    /// * `entry` - 待写入的成本事实
-    /// * `allocations` - 待写入的分配行集合（可为空）
-    /// * `executor` - 数据访问执行器，必须位于事务中
-    ///
-    /// # 返回
-    /// 成本事实与分配行都写入成功时返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// 结果：成本事实与分配行都写入成功时返回 `Ok(())`。
     /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射
     /// 为冲突语义）或 MongoDB 写入失败时返回错误。
+    ///
+    /// 输入约定：
+    /// - `entry`：待写入的成本事实
+    /// - `allocations`：待写入的分配行集合（可为空）
+    /// - `executor`：数据访问执行器，必须位于事务中
     pub async fn create_cost_entry_with_allocations(
         &self,
         entry: &CostEntry,
@@ -456,25 +379,21 @@ impl<'a> CostRepository<'a> {
     }
 }
 
-/// 构建排序文档：字段名经白名单映射，未命中回退 `created_at`，方向由 `sort_ascending` 决定。
-///
-/// # 参数
-/// * `sort_by` - 排序字段（白名单内有效）
-/// * `sort_ascending` - 升序为 `true`，降序为 `false`
-/// * `allowed` - 允许的排序字段名集合（防止透传任意字段名）
-///
-/// # 返回
-/// 返回排序条件文档。
+// 构建排序文档：字段名经白名单映射，未命中回退 `created_at`，方向由 `sort_ascending` 决定。
+// 返回排序条件文档。
+//
+// 输入约定：
+// - `sort_by`：排序字段（白名单内有效）
+// - `sort_ascending`：升序为 `true`，降序为 `false`
+// - `allowed`：允许的排序字段名集合（防止透传任意字段名）
 fn sort_doc(sort_by: Option<&str>, sort_ascending: bool, allowed: &[&str]) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
     let field = sort_by.filter(|name| allowed.contains(name)).unwrap_or("created_at");
     doc! { field: direction }
 }
 
-/// 成本事实列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
+// 限定成本事实列表查询返回的字段，避免读出列表不需要的完整实体。
+// 返回投影条件文档。
 fn cost_entry_projection() -> Document {
     doc! {
         "id": 1,
@@ -498,10 +417,8 @@ fn cost_entry_projection() -> Document {
     }
 }
 
-/// 成本分配列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
+// 限定成本分配列表查询返回的字段，避免读出列表不需要的完整实体。
+// 返回投影条件文档。
 fn cost_allocation_projection() -> Document {
     doc! {
         "id": 1,

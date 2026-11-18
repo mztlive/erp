@@ -18,11 +18,8 @@ pub struct PackingItem {
 
 impl PackingItem {
     /// 安全汇总来源分配数量。
-    /// # 参数
-    /// `quantities` 为同一真实发货行的来源数量。
-    /// # 返回
     /// 返回保持六位精度的数量合计。
-    /// # 错误
+    /// `quantities` 为同一真实发货行的来源数量。
     /// 数值溢出或超过数量精度时拒绝。
     pub fn total(quantities: impl IntoIterator<Item = Quantity>) -> Result<Quantity> {
         let total = quantities.into_iter().try_fold(Decimal::ZERO, |sum, value| {
@@ -88,11 +85,8 @@ type Quantities = BTreeMap<(String, String), Decimal>;
 
 impl DeliveryPacking {
     /// 校验地址、明细、数量、包裹归属和确认前的覆盖关系。
-    /// # 参数
-    /// `source` 为服务端收件分配，`lines` 为真实发货行，`posting` 表示正式确认。
-    /// # 返回
     /// 草稿允许尚未登记物流；正式确认要求每项本次数量恰好分配到包裹。
-    /// # 错误
+    /// `source` 为服务端收件分配，`lines` 为真实发货行，`posting` 表示正式确认。
     /// 来源过期、跨地址、重复包裹、数量超额或物流未完整时拒绝。
     pub fn validate(
         &self,
@@ -155,11 +149,7 @@ impl DeliveryPacking {
     }
 
     /// 汇总本次各真实发货行数量，不依赖商品名称或列表序号。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 发货行身份到数量的映射。
-    /// # 错误
     /// 数量求和溢出时拒绝。
     pub fn line_totals(&self) -> Result<BTreeMap<String, Decimal>> {
         let mut totals = BTreeMap::new();
@@ -171,11 +161,8 @@ impl DeliveryPacking {
     }
 
     /// 为既有物流查询派生兼容的商品物流关系，包裹数量以 packing 为准。
-    /// # 参数
-    /// `lines` 为已核验的发货行。
-    /// # 返回
     /// 已登记非空单号的去重物流关系。
-    /// # 错误
+    /// `lines` 为已核验的发货行。
     /// 来源明细缺失或物流字段非法时拒绝。
     pub fn tracking(&self, lines: &[DeliveryLine]) -> Result<Vec<DeliveryTrackingEntry>> {
         let mut entries = Vec::new();
@@ -202,12 +189,8 @@ impl DeliveryPacking {
 
 impl DeliveryAddressSnapshot {
     /// 比较地址分配与来源版本，忽略展示排序。
-    /// # 参数
-    /// `other` 为新计算的可信快照。
-    /// # 返回
     /// 地址、商品数量及来源版本相同返回 true。
-    /// # 错误
-    /// 不返回错误。
+    /// `other` 为新计算的可信快照。
     pub fn same_arrangement(&self, other: &Self) -> bool {
         fn sorted(mut value: DeliveryAddressSnapshot) -> DeliveryAddressSnapshot {
             value.destinations.sort_by(|left, right| left.key.cmp(&right.key));

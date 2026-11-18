@@ -17,21 +17,10 @@ use crate::wiring::errors::{Error, Result};
 use crate::wiring::funds_access;
 use crate::wiring::inventory::inventory_service;
 
-/// 管理访问必须覆盖完整来源对象；缺失来源和未接入类型一律拒绝。
-///
-/// # 参数
-/// * `db` - 业务单据集合所在数据库。
-/// * `authorization` - 启动时完整绑定的共享授权服务。
-/// * `actor` - 当前操作人。
-/// * `kind` - 审批单据类型。
-/// * `id` - 单据编号。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
-/// 来源详情可读时返回 `true`；类型未接入、来源缺失或无权限时返回 `false`。
-///
-/// # 错误
-/// 订单来源、库存或资金来源查询中的非拒绝类错误原样返回。
+// 管理访问必须覆盖完整来源对象；缺失来源和未接入类型一律拒绝。
+// `authorization` 为启动时完整绑定的共享授权服务，`executor` 为调用方执行器。
+// 来源详情可读时返回 `true`；类型未接入、来源缺失或无权限时返回 `false`。
+// 订单来源、库存或资金来源查询中的非拒绝类错误原样返回。
 pub(super) async fn readable(
     db: &Database,
     authorization: &Arc<AuthorizationService>,
@@ -59,7 +48,7 @@ pub(super) async fn readable(
     }
 }
 
-/// 库存管理读取复用真实库存调整仓库范围。
+// 审批管理员查看库存调整资料时，沿真实调整单的仓库范围决定读取资格。
 async fn stock_readable(
     db: &Database,
     authorization: &Arc<AuthorizationService>,
@@ -78,7 +67,7 @@ async fn stock_readable(
     }
 }
 
-/// 按强外键取得财务源，结算主体身份不得代替来源授权。
+// 校验审批材料权限时按强外键获取真实财务来源，结算主体身份不能替代来源数据授权。
 async fn finance_source(
     db: &Database,
     kind: DocumentType,
@@ -105,7 +94,7 @@ async fn finance_source(
     }
 }
 
-/// 客户退款严格选择原回款或应收分录的真实子账。
+// 为客户退款审批查找可授权来源时，只使用关联原回款或应收分录的真实子账。
 async fn customer_refund_source(
     db: &Database,
     id: &str,
@@ -125,7 +114,7 @@ async fn customer_refund_source(
     }
 }
 
-/// 供应商退款沿原付款或应付分录授权，采购与结算来源由资金读取器识别。
+// 为供应商退款审批沿原付款或应付分录确定访问范围，由资金读取器识别采购或结算来源。
 async fn supplier_refund_source(
     db: &Database,
     id: &str,

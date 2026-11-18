@@ -98,16 +98,7 @@ pub struct PurchaseOrderFilter {
 }
 
 impl Default for PurchaseOrderFilter {
-    /// 返回首页空筛选（`page: 1`，`page_size: 20`）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回筛选为空、降序的首页过滤条件。
-    ///
-    /// # 错误
-    /// 无。
+    // 采购单列表未传筛选时默认第 1 页、每页 20 条，不另加筛选条件。返回筛选为空、降序的首页过滤条件。
     fn default() -> Self {
         Self {
             owner_user_ids: None,
@@ -127,22 +118,12 @@ impl Default for PurchaseOrderFilter {
 }
 
 impl QueryFilter for PurchaseOrderFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// `owner_user_ids` 为 `Some` 时按 `owner_user_id` 做 `$in`。`keyword_sales_order_ids` 或
-    /// `keyword_supplier_ids` 非空时，`$or` 固定包含这两侧的 `$in`，且仅当 `purchase_no` 为
-    /// `Some` 时再加入忽略大小写的字面量正则；两侧皆空时，该正则只在 `purchase_no` 为 `Some`
-    /// 时写在顶层。`sales_order_id` 与 `supplier_id` 为 `Some` 时按字符串精确匹配，`status` 为
-    /// `Some` 时写入其稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 将采购单筛选条件编译为 MongoDB 查询，排除软删除记录。
+    //
+    // `owner_user_ids` 为 `Some` 时按 `owner_user_id` 做 `$in`。`keyword_sales_order_ids`
+    // 或`keyword_supplier_ids` 非空时，`$or` 固定包含这两侧的 `$in`，且仅当 `purchase_no` 为`Some`
+    // 时再加入忽略大小写的字面量正则；两侧皆空时，该正则只在 `purchase_no` 为 `Some`时写在顶层。`sales_order_id` 与
+    // `supplier_id` 为 `Some` 时按字符串精确匹配，`status` 为`Some` 时写入其稳定代码。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(ids) = &self.owner_user_ids {
@@ -181,18 +162,11 @@ impl QueryFilter for PurchaseOrderFilter {
 }
 
 impl Pagination for PurchaseOrderFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// `page` 原样返回，`page_size` 由 `u32` 拓宽为 `u64`。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 读取页码与单页条数。
+    //
+    // `page` 原样返回，`page_size` 由 `u32` 拓宽为 `u64`。
+    //
+    // 返回 `(page, page_size)` 元组。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -201,15 +175,11 @@ impl Pagination for PurchaseOrderFilter {
 impl<'a> PurchaseOrderDomainRepository<'a> {
     /// 按采购单 ID 集合批量读取采购单。
     ///
-    /// # 参数
-    /// * `purchase_order_ids` - 采购单 ID 字符串集合；空集合直接返回空结果
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回全部匹配且未删除的采购单；返回顺序不承诺与输入一致。当 MongoDB 查询或游标读取失败时返回错误。
     ///
-    /// # 返回
-    /// 返回全部匹配且未删除的采购单；返回顺序不承诺与输入一致。
+    /// 沿用调用方的执行器，不另开事务。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// `purchase_order_ids` 为采购单 ID 字符串集合；空集合直接返回空结果。
     pub async fn find_orders_by_ids(
         &self,
         purchase_order_ids: &[String],
@@ -223,19 +193,12 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
 
     /// 按采购单 ID 集合一次批量返回来源 ID 到采购单号的事实映射（FIN-R03）。
     ///
-    /// 只投影 `id` 与 `purchase_no`；空输入不访问数据库；仓储内去重后单次
-    /// `$in` 查询。空单号按缺失处理，不进入映射，Service 保持 `None`
-    /// 且不得回退内部 ID。
+    /// 只投影 `id` 与 `purchase_no`；空输入不访问数据库；仓储内去重后单次`$in` 查询。空单号按缺失处理，不进入映射，Service 保持
+    /// `None`且不得回退内部 ID。
     ///
-    /// # 参数
-    /// * `purchase_order_ids` - 采购单 ID 字符串集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回来源 ID 到非空采购单号的映射；缺失来源不上表。当 MongoDB 查询或游标读取失败时返回错误。
     ///
-    /// # 返回
-    /// 返回来源 ID 到非空采购单号的映射；缺失来源不上表。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 沿用调用方的执行器，不另开事务。
     pub async fn purchase_nos_by_ids(
         &self,
         purchase_order_ids: &[String],
@@ -278,22 +241,16 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
 pub trait PurchaseOrderRepositoryExt {
     /// 分页检索采购单列表（投影查询）。
     ///
-    /// 只返回 [`PurchaseOrderRow`] 所需的列表字段，不加载整文档；排序字段
-    /// 经白名单校验（`created_at`/`purchase_no`/`status`），未知字段回退默认值。
+    /// 只返回 [`PurchaseOrderRow`] 所需的列表字段，不加载整文档；排序字段经白名单校验（`created_at`/`purchase_no`/`status`）
+    /// ，未知字段回退默认值。
     ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `scope` - 已证明的对象范围，必须与筛选求交
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    ///
-    /// # 关键业务约束
     /// 授权条件由调用方传入，仓储不得按登录用户推断权限。
+    ///
+    /// 返回当前页投影行与满足筛选条件的总数。当 MongoDB 查询、游标读取或计数失败时返回错误。
+    ///
+    /// 沿用调用方传入的执行器。
+    ///
+    /// `scope` 为已证明的对象范围，必须与筛选求交。
     async fn search_purchase_orders(
         &self,
         filter: &PurchaseOrderFilter,
@@ -303,19 +260,12 @@ pub trait PurchaseOrderRepositoryExt {
 
     /// 查询销售单当前采购覆盖所需的采购单。
     ///
-    /// 只返回未删除且状态为草稿、旧待财务、审批中、生效、部分执行或已完成的
-    /// 采购单；作废采购单不占用销售数量。调用方必须继续沿每张采购单的当前提交
-    /// 或当前版本指针读取数量，禁止累计历史提交或历史版本。
+    /// 只返回未删除且状态为草稿、旧待财务、审批中、生效、部分执行或已完成的采购单；作废采购单不占用销售数量。调用方必须继续沿每张采购单的当前提交或当前版本指针读取数量，
+    /// 禁止累计历史提交或历史版本。
     ///
-    /// # 参数
-    /// * `sales_order_id` - 来源销售单稳定身份
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回参与当前采购覆盖计算的采购单。当 MongoDB 查询或游标读取失败时返回错误。
     ///
-    /// # 返回
-    /// 返回参与当前采购覆盖计算的采购单。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 沿用调用方传入的执行器。
     async fn find_covering_by_sales_order(
         &self,
         sales_order_id: &SalesOrderId,
@@ -324,18 +274,11 @@ pub trait PurchaseOrderRepositoryExt {
 
     /// 统计销售单关联的有效采购单。
     ///
-    /// 统计口径与采购创建依据一致：草稿、审批中、生效、部分执行和已完成均视为
-    /// 已建采购；作废单不阻断重新建单，也不计入销售单的有效采购关联数。
+    /// 统计口径与采购创建依据一致：草稿、审批中、生效、部分执行和已完成均视为已建采购；作废单不阻断重新建单，也不计入销售单的有效采购关联数。
     ///
-    /// # 参数
-    /// * `sales_order_id` - 来源销售单稳定身份
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回未删除且非作废的关联采购单数量。当 MongoDB 计数失败时返回错误。
     ///
-    /// # 返回
-    /// 返回未删除且非作废的关联采购单数量。
-    ///
-    /// # 错误
-    /// 当 MongoDB 计数失败时返回错误。
+    /// 沿用调用方传入的执行器。
     async fn count_active_by_sales_order(
         &self,
         sales_order_id: &SalesOrderId,
@@ -346,29 +289,17 @@ pub trait PurchaseOrderRepositoryExt {
     ///
     /// 只取 `id`、排除软删除；`keyword` 按 `purchase_no` 的大小写不敏感字面量正则匹配。
     ///
-    /// # 参数
-    /// * `keyword` - 采购单号关键字
-    /// * `executor` - 数据访问执行器
+    /// 返回命中的采购单 ID；没有命中时返回空向量。MongoDB `distinct` 失败时返回仓储错误。
     ///
-    /// # 返回
-    /// 返回命中的采购单 ID；没有命中时返回空向量。
-    ///
-    /// # 错误
-    /// MongoDB `distinct` 失败时返回仓储错误。
+    /// 沿用调用方传入的执行器。
     async fn matching_ids_by_number(&self, keyword: &str, executor: &mut dyn Executor)
     -> Result<Vec<String>>;
 
     /// 判断组织是否仍有需要交接的未结单据。
     ///
-    /// # 参数
-    /// * `org` - 业务组织单元 ID
-    /// * `executor` - 数据访问执行器
+    /// 存在未删除且状态不是 `COMPLETED` 或 `VOIDED` 的采购单时返回 `true`。查询失败返回仓储错误；失败不得解释为没有业务。
     ///
-    /// # 返回
-    /// 存在未删除且状态不是 `COMPLETED` 或 `VOIDED` 的采购单时返回 `true`。
-    ///
-    /// # 错误
-    /// 查询失败返回仓储错误；失败不得解释为没有业务。
+    /// 沿用调用方传入的执行器。
     async fn has_unsettled_business_org(&self, org: &str, executor: &mut dyn Executor) -> Result<bool>;
 }
 
@@ -442,13 +373,7 @@ impl PurchaseOrderRepositoryExt for persistence_core::Repository<'_, PurchaseOrd
     }
 }
 
-/// 构造销售单有效采购关联的统一统计条件。
-///
-/// # 参数
-/// * `sales_order_id` - 来源销售单稳定身份
-///
-/// # 返回
-/// 返回排除软删除与作废采购单的 MongoDB 条件。
+// 构造销售单有效采购关联的统一统计条件。返回排除软删除与作废采购单的 MongoDB 条件。
 fn active_purchase_order_filter(sales_order_id: &SalesOrderId) -> Document {
     doc! {
         "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
@@ -465,10 +390,7 @@ fn active_purchase_order_filter(sales_order_id: &SalesOrderId) -> Document {
     }
 }
 
-/// 采购单列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
+// 采购单列表投影字段。
 fn purchase_order_projection() -> Document {
     doc! {
         "id": 1,
@@ -523,7 +445,7 @@ mod tests {
         assert_eq!(regex.get_str("$options").unwrap(), "i");
     }
 
-    /// 关键词三路 OR 匹配不得冲掉状态、供应商和软删除的 AND 约束。
+    // 关键词三路 OR 匹配不得冲掉状态、供应商和软删除的 AND 约束。
     #[test]
     fn keyword_matches_references_before_paging_and_preserves_filters() {
         let mut filter = PurchaseOrderFilter {

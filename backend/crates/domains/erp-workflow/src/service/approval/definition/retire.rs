@@ -19,15 +19,8 @@ use crate::repository::BpmExt;
 
 impl ApprovalDefinitionService {
     /// 退役当前已发布定义。
-    ///
-    /// # 参数
-    /// * `request` - 退役请求
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
     /// 返回退役后的定义详情；同载荷回放返回已退役结果。
     ///
-    /// # 错误
     /// 目标不是当前发布版本或锁冲突时返回错误。
     pub async fn retire_definition(
         &self,
@@ -47,10 +40,8 @@ impl ApprovalDefinitionService {
         self.commit_retire(request, actor, identity).await
     }
 
-    /// 在唯一事务中退役当前发布版本。
-    ///
-    /// # 错误
-    /// 目标不是当前发布版本或写入失败时返回错误。
+    // 在唯一事务中退役当前发布版本。
+    // 目标不是当前发布版本或写入失败时返回错误。
     async fn commit_retire(
         &self,
         request: RetireDefinitionRequest,
@@ -109,24 +100,16 @@ struct RetireTxInput<'a> {
     identity: &'a PreparedDefinitionIdentity,
 }
 
-/// 事务内退役当前发布版本。
-///
-/// # 用途
-/// 回放收据或退役当前已发布定义并写入审计。
-///
-/// # 参数
-/// * `service` - 同一应用注入的定义服务与基础设施
-/// * `input` - 请求、摘要与操作人
-/// * `executor` - 执行器
-///
-/// # 返回
-/// 返回退役后的定义详情。
-///
-/// # 错误
-/// 目标不是当前发布版本或写入失败时返回错误。
-///
-/// # 关键业务约束
-/// 已有收据必须原样回放，不得重复 persist。
+// 事务内退役当前发布版本。
+// 已有收据必须原样回放，不得重复 persist。
+//
+// 回放收据或退役当前已发布定义并写入审计。
+//
+// 返回退役后的定义详情。
+//
+// 目标不是当前发布版本或写入失败时返回错误。
+//
+// `service`：同一应用注入的定义服务与基础设施。
 async fn retire_tx(
     service: &ApprovalDefinitionService,
     input: RetireTxInput<'_>,
@@ -152,7 +135,7 @@ async fn retire_tx(
     apply_retirement(service, graph, request, actor, identity, executor).await
 }
 
-/// 使用原事务图和当前唯一发布记录退役定义，仅更新定义文档。
+// 在原事务以已授权定义图及唯一当前发布记录校验退役目标；命令只更新定义文档，不改节点图。
 async fn apply_retirement(
     service: &ApprovalDefinitionService,
     mut graph: DefinitionGraph,
@@ -188,9 +171,8 @@ async fn apply_retirement(
     detail_with_copies(db, &graph, executor).await
 }
 
-/// 取得目标和锁版本均匹配的当前发布定义。
-/// # 错误
-/// 无发布版、ID 不匹配或锁版本陈旧时拒绝。
+// 取得目标和锁版本均匹配的当前发布定义。
+// 无发布版、ID 不匹配或锁版本陈旧时拒绝。
 fn retire_target(
     published: Option<ApprovalProcessDefinition>,
     requested_id: &str,
@@ -244,7 +226,7 @@ mod tests {
         assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
     }
 
-    /// 只能退役当前 PUBLISHED；无发布版或非当前版失败，锁匹配才允许写回。
+    // 验证：只能退役当前 PUBLISHED；无发布版或非当前版失败，锁匹配才允许写回。
     #[test]
     fn retire_only_current_published() {
         let published = {

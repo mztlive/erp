@@ -27,13 +27,7 @@ use mongodb::Database;
 pub(super) type FactsBindings = Vec<(String, Arc<dyn AccessFactsPort>)>;
 pub(super) type MappingBindings = Vec<(Permission, Arc<dyn AccessMapping>)>;
 
-/// 连接全部真实身份设施、业务事实和查询映射。
-/// # 参数
-/// db、rbac 为进程共享数据库与身份设施。
-/// # 返回
-/// 通过完整规则与实现能力校验的共享服务；应用工厂只注入该实例。
-/// # 错误
-/// 缺失、重复、未知或能力错配均拒绝，不构造部分生产服务。
+/// 供 API 与 Worker 启动时将真实业务事实端口和查询映射接入身份授权服务。只返回通过完整能力校验的共享实例；缺失、重复、未知或能力错配均拒绝启动装配。
 pub fn build(db: Database, rbac: SharedRbacService) -> Result<Arc<AuthorizationService>> {
     let (facts, mappings) = bindings(db.clone())?;
     let mut builder = AuthorizationService::builder(db, rbac);

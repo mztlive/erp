@@ -79,7 +79,7 @@ impl Error {
 }
 
 impl From<application_core::Error> for Error {
-    /// 将应用合同错误映射为应用错误。
+    // 将应用合同错误映射为应用错误。
     fn from(error: application_core::Error) -> Self {
         match error {
             application_core::Error::Internal(message) => Self::Internal(message),
@@ -128,9 +128,9 @@ from_domain!(erp_integration);
 from_domain!(erp_supply);
 from_domain!(erp_returns);
 impl From<erp_fulfillment::Error> for Error {
-    /// 将履约领域错误映射为流程边界错误。
-    /// 履约域已删除 `ReceiptDuplicate` 变体（唯一冲突按 `uk_*` 索引名细化为 `ConflictError`），故手写映射；
-    /// 分类语义不变（冲突仍归冲突）。
+    // 将履约领域错误映射为流程边界错误。
+    // 履约域已删除 `ReceiptDuplicate` 变体（唯一冲突按 `uk_*` 索引名细化为 `ConflictError`），故手写映射；
+    // 分类语义不变（冲突仍归冲突）。
     fn from(error: erp_fulfillment::Error) -> Self {
         match error {
             erp_fulfillment::Error::Internal(payload) => Self::Internal(payload),
@@ -151,7 +151,7 @@ impl From<erp_fulfillment::Error> for Error {
 from_domain!(erp_procurement);
 
 impl From<persistence_core::Error> for Error {
-    /// 保留持久化分类和原错误；仅归档索引交 HTTP 的兼容分支最终形成文案。
+    // 保留持久化分类和原错误；仅归档索引交 HTTP 的兼容分支最终形成文案。
     fn from(error: persistence_core::Error) -> Self {
         match error {
             error @ persistence_core::Error::DuplicateKey(_) => {
@@ -175,7 +175,7 @@ impl From<persistence_core::Error> for Error {
     }
 }
 
-/// 仅识别 HTTP 持有的三个历史索引；不拥有其提示文案，也不增加命令恢复范围。
+// 仅识别 HTTP 持有的三个历史索引；不拥有其提示文案，也不增加命令恢复范围。
 fn historical_http_index(index_name: Option<&str>) -> bool {
     matches!(
         index_name,
@@ -185,7 +185,7 @@ fn historical_http_index(index_name: Option<&str>) -> bool {
     )
 }
 
-/// 已知提示只由实际拥有域提供。无名/未知索引保持原通用冲突提示。
+// 已知提示只由实际拥有域提供。无名/未知索引保持原通用冲突提示。
 fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
     index_name
         .and_then(|name| {
@@ -200,13 +200,7 @@ fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
 }
 
 impl From<validator::ValidationErrors> for Error {
-    /// 从给定值构建实例。
-    ///
-    /// # 参数
-    /// * `err` - 错误对象
-    ///
-    /// # 返回
-    /// 返回创建的实例。
+    // 将请求字段校验失败转换为 `InvalidInput`，保留结构化校验信息供调用方区分无效输入。
     fn from(err: validator::ValidationErrors) -> Self {
         Error::InvalidInput(err.into())
     }
@@ -215,14 +209,7 @@ impl From<validator::ValidationErrors> for Error {
 impl Error {
     /// 判断失败后服务端是否仍可能已经提交。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// `OutcomeUnknown`、`ReceiptDuplicate` 或 `TransientTransaction` 时返回 `true`，其余返回 `false`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn command_may_have_committed(&self) -> bool {
         matches!(self, Self::OutcomeUnknown(_) | Self::ReceiptDuplicate(_) | Self::TransientTransaction(_))
     }
@@ -231,28 +218,14 @@ impl Error {
     /// 类别仍由稳定码自身决定：`APPROVAL_POLICY_NOT_REGISTERED` 为内部错误，
     /// 未指派给操作人为拒绝，定义非法与驳回原因必填为业务规则，其余为冲突。
     ///
-    /// # 参数
-    /// * `code` - 合同冻结的结构化错误码。
+    /// `code`：合同冻结的结构化错误码。
     ///
-    /// # 返回
     /// 返回已带该稳定码的应用错误。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub const fn from_approval_code(code: WorkflowErrorCode) -> Self {
         Self::Coded(code)
     }
 
-    /// 返回结构化应用错误码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 仅 `Coded` 返回稳定码；普通业务文案返回 `None`，不得被反向解析。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回结构化应用错误码。仅 `Coded` 返回稳定码；普通业务文案返回 `None`，不得被反向解析。
     pub const fn code(&self) -> Option<WorkflowErrorCode> {
         match self {
             Self::Coded(code) => Some(*code),

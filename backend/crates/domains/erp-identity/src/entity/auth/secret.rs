@@ -41,15 +41,11 @@ impl LoginAccount {
     pub const BACKOFFICE_MAX_LEN: usize = 32;
 
     /// 规范化并校验登录账号。
-    ///
-    /// # 参数
-    /// * `value` - 原始登录账号
-    ///
-    /// # 返回
     /// 返回已去除首尾空白的登录账号。
     ///
-    /// # 错误
     /// 当账号为空或字符数不在允许区间时返回错误。
+    ///
+    /// `value`：原始登录账号。
     pub fn new(value: impl Into<String>) -> Result<Self> {
         let value = value.into();
         let value = value.trim();
@@ -61,29 +57,13 @@ impl LoginAccount {
     }
 
     /// 返回规范化后的账号字符串。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回账号的借用视图。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn as_str(&self) -> &str {
         self.0.as_str()
     }
 
     /// 消费值对象并返回账号字符串。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回规范化后的账号所有权。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn into_string(self) -> String {
         self.0
     }
@@ -107,16 +87,8 @@ pub struct Secret {
 }
 
 impl fmt::Debug for Secret {
-    /// 调试输出登录账号，密码哈希固定写成 `[REDACTED]`。
-    ///
-    /// # 参数
-    /// * `formatter` - 调试格式化器。
-    ///
-    /// # 返回
-    /// 写入成功时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 格式化写入失败时返回 `fmt::Error`。
+    // 调试输出登录账号，密码哈希固定写成 `[REDACTED]`。
+    // 格式化写入失败时返回 `fmt::Error`。
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("Secret")
@@ -128,71 +100,36 @@ impl fmt::Debug for Secret {
 
 impl Secret {
     /// 使用已规范化账号和明文密码创建登录凭证。
-    ///
-    /// # 参数
-    /// * `account` - 已规范化的登录账号
-    /// * `password` - 明文密码
-    ///
-    /// # 返回
     /// 返回采用 Argon2id 哈希的新凭证。
     ///
-    /// # 错误
     /// 当密码为空或密码哈希失败时返回错误。
+    ///
+    /// `account`：已规范化的登录账号。
     pub fn new(account: LoginAccount, password: impl AsRef<str>) -> Result<Self> {
         Ok(Self { account: account.into_string(), password_hash: hash_password(password.as_ref())? })
     }
 
     /// 返回规范化后的登录账号。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回账号字符串的借用视图。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn account(&self) -> &str {
         self.account.as_str()
     }
 
     /// 消费凭证并返回登录账号。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回账号字符串所有权；密码哈希随凭证一起丢弃。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn into_account(self) -> String {
         self.account
     }
 
     /// 使用已规范化账号替换当前登录账号。
-    ///
-    /// # 参数
-    /// * `account` - 已规范化的新登录账号
-    ///
-    /// # 返回
-    /// 无返回值。就地替换登录账号，不改密码哈希。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// `account`：已规范化的新登录账号。
     pub fn change_account(&mut self, account: LoginAccount) {
         self.account = account.into_string();
     }
 
     /// 使用 Argon2id 替换当前密码哈希。
-    ///
-    /// # 参数
-    /// * `password` - 新的明文密码
-    ///
-    /// # 返回
     /// 成功时用新的 Argon2id 哈希替换当前密码哈希。
     ///
-    /// # 错误
     /// 当密码为空或密码哈希失败时返回错误。
     pub fn change_password(&mut self, password: impl AsRef<str>) -> Result<()> {
         self.password_hash = hash_password(password.as_ref())?;
@@ -207,15 +144,9 @@ impl Secret {
     ///
     /// 该方法是 CPU 密集型同步能力，异步调用方必须通过有界阻塞任务执行。
     ///
-    /// # 参数
-    /// * `secret` - 已加载凭证；账号不存在或不可认证时传入 `None`
-    /// * `password` - 待验证的明文密码
-    ///
-    /// # 返回
     /// 匹配当前 Argon2 时返回 `Current`，匹配旧 MD5 时返回 `Legacy`，其余情况返回 `Mismatch`。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// `secret`：已加载凭证；账号不存在或不可认证时传入 `None`。
     pub fn verify_password_or_dummy(secret: Option<&Self>, password: &str) -> PasswordVerification {
         let Some(secret) = secret else {
             perform_dummy_argon2(password);
@@ -243,23 +174,15 @@ impl Secret {
         PasswordVerification::Mismatch
     }
 
-    /// 判断当前凭证是否仍使用可迁移的旧 MD5 摘要。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
+    /// 当当前凭证仍使用可迁移的旧 MD5 摘要时返回 `true`。
     /// 哈希是合法的 32 位十六进制 MD5 摘要时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn is_legacy_password_hash(&self) -> bool {
         self.password_hash.len() == LEGACY_MD5_LEN
             && self.password_hash.bytes().all(|byte| byte.is_ascii_hexdigit())
     }
 }
 
-/// 使用 Argon2id 生成 PHC 格式的密码哈希。
+// 保存新密码时生成 PHC 文本格式的 Argon2id 哈希，不将明文带入凭证。
 fn hash_password(password: &str) -> Result<String> {
     if password.is_empty() {
         return Err(Error::LogicError("密码不能为空".to_string()));
@@ -272,7 +195,7 @@ fn hash_password(password: &str) -> Result<String> {
         .map_err(|_| Error::LogicError("密码处理失败".to_string()))
 }
 
-/// 验证 Argon2 PHC 密码哈希，格式损坏时返回 `None`。
+// 验证已有 Argon2 凭证与输入密码；无法解析 PHC 时返回 `None`，与正常的密码不匹配区分。
 fn verify_argon2(password: &str, encoded_hash: &str) -> Option<bool> {
     let hash = PasswordHash::new(encoded_hash).ok()?;
     if hash.salt.is_none() || hash.hash.is_none() {
@@ -286,22 +209,22 @@ fn verify_argon2(password: &str, encoded_hash: &str) -> Option<bool> {
     }
 }
 
-/// 使用与新密码哈希相同的默认参数执行一次 Argon2 工作。
-///
-/// # Panics
-/// 固定盐常量无法按 Base64 编码时 panic；该常量在源码中写死，正常构建不应发生。
+// 使用与新密码哈希相同的默认参数执行一次 Argon2 工作。
+//
+// 触发 panic 的条件：
+// 固定盐常量无法按 Base64 编码时 panic；该常量在源码中写死，正常构建不应发生。
 fn perform_dummy_argon2(password: &str) {
     let salt = SaltString::encode_b64(DUMMY_ARGON2_SALT).expect("dummy Argon2 salt constant must be valid");
     let _ = Argon2::default().hash_password(password.as_bytes(), &salt);
 }
 
-/// 验证兼容期内的旧 MD5 密码摘要。
+// 兼容迁移期间用于核验尚未升级的 MD5 凭证，不生成新账号密码哈希。
 fn verify_legacy_md5(password: &str, encoded_hash: &str) -> bool {
     let candidate = format!("{:x}", md5::compute(password.as_bytes()));
     constant_time_eq(candidate.as_bytes(), encoded_hash.as_bytes())
 }
 
-/// 以固定遍历次数比较两个等长摘要，避免提前退出。
+// 对已知等长的密码摘要遍历全部字节再比较结果，不在发现首个差异时返回。
 fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
     if left.len() != right.len() {
         return false;

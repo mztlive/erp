@@ -10,16 +10,12 @@ use crate::supplier_profile::{SupplierProfileProcess, SupplierProfileWithAssetsR
 
 /// 创建供应商资料，并在同一事务中持久化已上传的资质文件。
 ///
-/// # 参数
-/// * `service` - 由应用组合根注入授权源及敏感字段编解码器的供应商资料服务。
-/// * `req` - 供应商资料保存请求。
-/// * `asset_requests` - 已写入对象存储的资质文件。
-/// * `actor` - 已认证的审计操作人。
+/// - `service`：由应用组合根注入授权源及敏感字段编解码器的供应商资料服务。
+/// - `req`：供应商资料保存请求。
+/// - `asset_requests`：已写入对象存储的资质文件。
 ///
-/// # 返回
 /// 返回创建结果及附件提交状态。
 ///
-/// # 错误
 /// 临时文件校验失败，或资料创建与附件事务失败时返回错误。
 pub async fn supplier_profile_create_with_assets(
     service: &SupplierProfileProcess,
@@ -33,17 +29,13 @@ pub async fn supplier_profile_create_with_assets(
 
 /// 更新供应商资料，并在同一事务中持久化已上传的资质文件。
 ///
-/// # 参数
-/// * `service` - 由应用组合根注入授权源及敏感字段编解码器的供应商资料服务。
-/// * `id` - 供应商资料主键。
-/// * `req` - 供应商资料保存请求。
-/// * `asset_requests` - 已写入对象存储的资质文件。
-/// * `actor` - 已认证的审计操作人。
+/// - `service`：由应用组合根注入授权源及敏感字段编解码器的供应商资料服务。
+/// - `id`：供应商资料主键。
+/// - `req`：供应商资料保存请求。
+/// - `asset_requests`：已写入对象存储的资质文件。
 ///
-/// # 返回
 /// 返回更新结果及附件提交状态。
 ///
-/// # 错误
 /// 临时文件校验失败，或资料更新与附件事务失败时返回错误。
 pub async fn supplier_profile_update_with_assets(
     service: &SupplierProfileProcess,
@@ -70,7 +62,7 @@ mod tests {
 
     use super::*;
     use crate::Error;
-    /// 只构造惰性客户端；输入校验必须在任何数据库或对象存储读取前返回。
+    // 只构造惰性客户端；输入校验必须在任何数据库或对象存储读取前返回。
     async fn service() -> SupplierProfileProcess {
         let db = Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("unit_test");
         let rbac = unavailable_authorization();

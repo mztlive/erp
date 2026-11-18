@@ -87,7 +87,7 @@ pub(crate) fn object(inquiry: &SalesInquiry) -> ObjectFacts {
     }
 }
 
-/// 新对象候选只提供可信归属，不携带已有记录版本。
+// 新对象候选只提供可信归属，不携带已有记录版本。
 pub(crate) fn inquiry_candidate(inquiry: &SalesInquiry) -> ObjectFacts {
     let mut candidate = object(inquiry);
     candidate.version.clear();
@@ -180,33 +180,15 @@ fn task_object(task: &WorkItem) -> ObjectFacts {
     }
 }
 
-/// 构造真实销售询价事实读取器。
-/// # 参数
-/// db 为共享业务库。
-/// # 返回
-/// 不缓存请求对象的事实实现。
-/// # 错误
-/// 无。
+/// 供应用注册询价对象授权事实读取器，按请求的执行器读取真实询价，不缓存当前对象。
 pub fn inquiry_facts(db: Database) -> Arc<dyn AccessFactsPort> {
     Arc::new(InquiryFacts { db })
 }
-/// 构造采购任务事实读取器。
-/// # 参数
-/// db 为共享业务库。
-/// # 返回
-/// 从原执行器读取精确任务的实现。
-/// # 错误
-/// 无。
+/// 供应用注册采购询价任务授权事实读取器，用原执行器按精确任务身份取证。
 pub fn procurement_facts(db: Database) -> Arc<dyn AccessFactsPort> {
     Arc::new(TaskFacts { db })
 }
-/// 构造静态销售询价查询映射。
-/// # 参数
-/// 无。
-/// # 返回
-/// 当前责任与组织的字段映射。
-/// # 错误
-/// 无。
+/// 构造静态销售询价查询映射。当前责任与组织的字段映射。
 pub fn inquiry_mapping() -> Arc<dyn AccessMapping> {
     Arc::new(InquiryMapping(model(
         "sales_inquiry",
@@ -214,13 +196,7 @@ pub fn inquiry_mapping() -> Arc<dyn AccessMapping> {
         [FactKind::Owner, FactKind::Organization, FactKind::Collaborators].into(),
     )))
 }
-/// 构造实际任务关系查询映射。
-/// # 参数
-/// 无。
-/// # 返回
-/// 用数据库存在性关联证明完整任务关系。
-/// # 错误
-/// 无。
+/// 构造实际任务关系查询映射。用数据库存在性关联证明完整任务关系。
 pub fn procurement_mapping() -> Arc<dyn AccessMapping> {
     Arc::new(TaskInquiryMapping {
         model: model(

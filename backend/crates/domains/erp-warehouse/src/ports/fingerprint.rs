@@ -8,17 +8,7 @@
 /// 改为 `Result` 需同步修改组合层 `erp-processes` 适配器，属跨组共享改动，
 /// 见 `erp-warehouse-013` 的 `wont_fix` 说明）。
 pub trait AttachmentFingerprintPort: Send + Sync {
-    /// 返回 `plain` 的带密钥 HMAC-SHA256 十六进制指纹。
-    ///
-    /// # 参数
-    /// * `plain` - 明文（仓库当前在 `SensitiveText` 去首尾空白前对请求原值计算指纹）
-    /// * `key` - HMAC 密钥字节
-    ///
-    /// # 返回
-    /// 返回 64 位小写十六进制指纹；未接线时返回空字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 用注入密钥为原始明文计算 64 位小写十六进制 HMAC-SHA256 指纹，供地址和联系人匹配。当前在 `SensitiveText` 清理首尾空白前计算；未接线返回空字符串，由敏感值校验失败关闭。
     fn content_fingerprint(&self, plain: &str, key: &[u8]) -> String;
 }
 

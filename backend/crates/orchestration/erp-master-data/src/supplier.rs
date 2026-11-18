@@ -12,16 +12,10 @@ use crate::{Error, Result};
 
 /// 软删除供应商角色，并在同一事务中写入成功审计。
 ///
-/// # 参数
-/// * `db` - 供应商所在数据库。
-/// * `access` - 使用当前授权源的供应商范围服务。
-/// * `id` - 供应商角色主键。
-/// * `actor` - 已认证的审计操作人。
+/// `db`：供应商所在数据库；`access`：使用当前授权源的供应商范围服务；`id`：供应商角色主键。
 ///
-/// # 返回
 /// 软删除和审计写入成功后返回。
 ///
-/// # 错误
 /// 无删除资格、供应商不存在、审计构造失败，或删除与审计事务失败时返回错误。
 pub async fn delete_supplier(
     db: Database,
@@ -36,13 +30,13 @@ pub async fn delete_supplier(
     .await
 }
 
-/// 在成功审计所属事务中先授权，再读取当前供应商版本并软删除。
-/// # 参数
-/// db、access、id、actor 和 executor 均属于本次删除用例。
-/// # 返回
-/// 供应商软删除成功时返回。
-/// # 错误
-/// 无删除资格、供应商不存在、版本冲突或持久化失败时停止。
+// 在成功审计所属事务中先授权，再读取当前供应商版本并软删除。
+//
+// db、access、id、actor 和 executor 均属于本次删除用例。
+//
+// 供应商软删除成功时返回。
+//
+// 无删除资格、供应商不存在、版本冲突或持久化失败时停止。
 async fn delete_stage(
     db: &Database,
     access: &SupplierAccess,
@@ -70,7 +64,7 @@ mod tests {
 
     use super::*;
 
-    /// 事务边界或当前资格不成立时，不能加载供应商或尝试删除。
+    // 验证：事务边界或当前资格不成立时，不能加载供应商或尝试删除。
     #[tokio::test]
     async fn deletion_requires_snapshot_and_authorization_before_business_reads_or_writes() {
         let db = Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("supplier_deletion");

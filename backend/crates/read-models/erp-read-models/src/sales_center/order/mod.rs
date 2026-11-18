@@ -26,17 +26,13 @@ pub struct SalesOrderReadService {
     authorization: Arc<AuthorizationService>,
 }
 impl SalesOrderReadService {
-    /// 使用数据库句柄及共享授权服务构造只读查询服务。
+    /// 装配销售单时，使用数据库句柄及共享授权服务构造只读查询服务。
     ///
     /// # 参数
-    /// * `db` - 业务数据库。
     /// * `authorization` - 应用启动时完整装配的共享授权服务。
     ///
     /// # 返回
     /// 返回可执行完整授权读取的服务；构造不执行查询。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: Database, authorization: Arc<AuthorizationService>) -> Self {
         Self { db, authorization }
     }
@@ -44,14 +40,14 @@ impl SalesOrderReadService {
         erp_sales::service::sales_order::SalesOrderService::new(self.db.clone())
     }
 }
-/// 按销售业务性质显式选择审批对象类型，保留实物服务与卡券的独立主体。
+// 依据销售业务性质显式选择审批对象类型，保留实物服务与卡券的独立主体。
 fn document_type_of_sales_business(business_type: BusinessType) -> DocumentType {
     match business_type {
         BusinessType::GoodsService => DocumentType::SalesOrder,
         BusinessType::Voucher => DocumentType::VoucherSalesOrder,
     }
 }
-/// 由销售身份构造审批读取主体；非法身份按原销售校验错误传播。
+// 由销售身份构造审批取得主体；非法身份按原销售校验错误传播。
 fn subject_ref_for_sales_business(business_type: BusinessType, id: &str) -> Result<bpm::SubjectRef> {
     read_subject_ref(document_type_of_sales_business(business_type), id)
 }

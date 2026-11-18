@@ -9,13 +9,12 @@ use super::{SearchOptions, collect_options};
 use crate::Result;
 
 impl WorkItemReadService {
-    /// 扫描数据库授权后的任务，完成业务筛选后仅保留请求页。
-    /// # 参数
-    /// `filter`、`query` 为服务端查询，`actor`、`access` 为真实账号范围，`executor` 为同一事务。
-    /// # 返回
-    /// 返回匹配总数、请求页、结果版本与授权候选项。
-    /// # 错误
-    /// 授权、资料或仓储读取失败时中止查询。
+    // 扫描数据库授权后的任务，完成业务筛选后仅保留请求页。
+    // 返回匹配总数、请求页、结果版本与授权候选项。
+    //
+    // 授权、资料或仓储读取失败时中止查询。
+    //
+    // `filter`、`query` 为服务端查询，`actor`、`access` 为真实账号范围，`executor` 为同一事务。
     pub(in crate::service::work_item::read) async fn authorized_page_fields(
         &self,
         filter: &WorkItemFilter,

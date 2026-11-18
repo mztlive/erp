@@ -29,17 +29,8 @@ pub struct WorkflowAuth {
 
 impl WorkflowAuth {
     /// 以业务数据库和共享身份服务装配来源授权，构造时不查询。
-    ///
-    /// # 参数
-    /// * `db` - 身份与业务集合所在数据库。
-    /// * `rbac` - 现有 RBAC 快照服务。
-    /// * `authorization` - 启动时完整绑定的共享授权服务。
-    ///
-    /// # 返回
+    /// `authorization` 为启动时完整绑定的共享授权服务。
     /// 返回未执行 I/O 的授权 adapter。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: Database, rbac: SharedRbacService, authorization: Arc<AuthorizationService>) -> Self {
         Self { db, rbac, authorization }
     }
@@ -119,16 +110,10 @@ impl WorkflowAuthorizationPort for WorkflowAuth {
         .map_err(map_service)
     }
 
-    /// 在提交原执行器中复用合同详情授权，来源客户责任由合同领域解释。
-    ///
-    /// # 参数
-    /// * `actor` - 当前提交者。
-    /// * `contract_id` - 提交锁定的合同。
-    /// * `executor` - 原业务提交执行器。
-    /// # 返回
-    /// 当前合同动作及来源边界已证明时返回 true；不可见时返回 false。
-    /// # 错误
-    /// 配置、授权版本及基础设施错误保持失败关闭。
+    // 在提交原执行器中复用合同详情授权，来源客户责任由合同领域解释。
+    // `executor` 为原业务提交执行器。
+    // 当前合同动作及来源边界已证明时返回 true；不可见时返回 false。
+    // 配置、授权版本及基础设施错误保持失败关闭。
     async fn approval_contract_readable(
         &self,
         actor: &AuditActor,
@@ -157,7 +142,7 @@ impl WorkflowAuthorizationPort for WorkflowAuth {
     }
 }
 
-/// 对象不可见只证明材料转授被拒绝；配置和版本错误不得吞成普通拒绝。
+// 把合同对象不可见映射成材料转授拒绝；配置或版本异常继续传播，不降级为普通无权。
 fn contract_readable_result(result: Result<()>) -> WorkflowResult<bool> {
     match result {
         Ok(()) => Ok(true),

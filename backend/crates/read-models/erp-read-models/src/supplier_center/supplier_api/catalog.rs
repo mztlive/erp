@@ -68,11 +68,14 @@ pub struct CatalogJobView {
     pub sync_mode: CatalogSyncMode,
 }
 impl SupplierApiReadService {
-    /// 读取限定连接的商品分页与最近二十次实际运行结果。
+    /// 处理供应连接目录时，读取限定连接的商品分页与最近二十次实际运行结果。
+    ///
     /// # 参数
     /// id 为授权连接，query 为分页与筛选，actor 为当前账号；不接受供应商身份替换。
+    ///
     /// # 返回
     /// 同一快照内的来源观察、成本展示资格与真实同步计数。
+    ///
     /// # 错误
     /// 连接不存在、分页非法或数据库失败时拒绝。
     pub async fn catalog(&self, id: &str, query: CatalogQuery, actor: &AuditActor) -> Result<CatalogView> {
@@ -92,13 +95,14 @@ impl SupplierApiReadService {
             .await
     }
 
-    /// 在同一快照内完成展示资格、根查询及目录全部补齐后再校验交付。
-    /// # 参数
-    /// id、query 为已校验的连接和分页筛选，actor 为当前账号，executor 为原快照执行器。
-    /// # 返回
-    /// 返回原查询凭证覆盖的商品、任务及筛选项投影。
-    /// # 错误
-    /// 执行边界、资格、成本筛选或读取失败时拒绝；最终凭证失效时不交付。
+    // 读取供应连接目录时，在同一快照内完成展示资格、根查询及目录全部补齐后再校验交付。
+    //
+    // 调用参数：
+    // id、query 为已校验的连接和分页筛选，actor 为当前账号，executor 为原快照执行器。
+    //
+    // 返回原查询凭证覆盖的商品、任务及筛选项投影。
+    //
+    // 执行边界、资格、成本筛选或读取失败时拒绝；最终凭证失效时不交付。
     pub(super) async fn catalog_snapshot(
         &self,
         id: &str,
@@ -145,13 +149,14 @@ impl SupplierApiReadService {
         Ok(view)
     }
 
-    /// 成本展示资格先于最终目录查询，后续读取不再开启授权阶段。
-    /// # 参数
-    /// actor 为当前账号，executor 必须属于活动快照事务。
-    /// # 返回
-    /// 返回最终目录查询凭证与本快照的成本展示资格。
-    /// # 错误
-    /// 执行边界、展示资格取证或目录查询资格失败时拒绝。
+    // 处理供应连接目录时，成本展示资格先于最终目录查询，后续读取不再开启授权阶段。
+    //
+    // 调用参数：
+    // actor 为当前账号，executor 必须属于活动快照事务。
+    //
+    // 返回最终目录查询凭证与本快照的成本展示资格。
+    //
+    // 执行边界、展示资格取证或目录查询资格失败时拒绝。
     pub(super) async fn catalog_access(
         &self,
         actor: &AuditActor,

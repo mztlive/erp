@@ -15,11 +15,9 @@ use crate::{Error, Result};
 
 impl DataTransferProcess {
     /// 独立执行循环每轮最多读取八条、并发执行两条，不阻塞其他业务 worker。
-    /// # 参数
-    /// 无。
-    /// # 返回
+    ///
     /// 扫描到的任务数。
-    /// # 错误
+    ///
     /// 查询失败返回错误；单任务失败记录状态或等待执行权恢复。
     pub async fn run_due(&self) -> Result<usize> {
         let jobs = self

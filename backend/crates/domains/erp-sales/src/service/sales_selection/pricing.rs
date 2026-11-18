@@ -16,15 +16,10 @@ use crate::{Error, Result};
 impl SalesSelectionService {
     /// 调整已授权册的当前批次客户售价。
     /// 调用方须在同一执行器核验册维护资格；actor 只用于领域留痕和幂等作用域。
-    ///
-    /// # 参数
-    /// `id` 为册，`req` 为版本、批次与改价方式，`actor` 为操作人，`executor` 为调用方事务。
-    ///
-    /// # 返回
     /// 返回更新详情及是否首次执行；重放不再次加价。
-    ///
-    /// # 错误
     /// 状态、版本、批次、金额、幂等冲突或任一步写入失败时拒绝。
+    ///
+    /// 输入约定：`id` 为册，`req` 为版本、批次与改价方式，`actor` 为操作人，`executor` 为调用方事务。
     pub async fn update_prices(
         &self,
         id: &str,

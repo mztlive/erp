@@ -409,7 +409,7 @@ id_type!(SalesSelectionIdempotencyId);
 mod tests {
     use super::*;
 
-    /// 序列化透明性：serde_json 中 ID 是普通字符串，反序列化还原为同一新类型。
+    // 验证类型化销售订单 ID 在 JSON 中仍是裸字符串，回读时恢复为同一类型，不改变接口形状。
     #[test]
     fn ids_serialize_as_transparent_strings() {
         let value = "00112233445566778899aabbccddeeff";
@@ -431,7 +431,7 @@ mod tests {
         assert!(bson::deserialize_from_bson::<SalesOrderId>(bson::Bson::Int64(17)).is_err());
     }
 
-    /// 代表性 ID 集（跨域引用面）的构造、Deref、Display 与比较。
+    // 覆盖多个领域的 ID 构造、字符串借用、展示和同类型比较，确保引入类型约束不破坏字符串用法。
     #[test]
     fn representative_ids_construct_display_compare() {
         let customer = CustomerAccountId::new("c100");
@@ -454,7 +454,7 @@ mod tests {
         assert_eq!(SalesOrderId::from("o400".to_string()), order);
     }
 
-    /// 批量构造（Deref）与从字符串反序列化。
+    // 核对单个 ID 可借用字符串操作、发票 ID 列表可直接从字符串数组回读。
     #[test]
     fn ids_deref_and_deserialize() {
         let party = PartyId::new("p1");
@@ -465,7 +465,7 @@ mod tests {
         assert_eq!(ids[2].as_ref(), "inv3");
     }
 
-    /// ERP 集成审批 ID 透明序列化，且与彼此、旧审批 ID 类型隔离。
+    // 确认审批快照和通知发件箱 ID 保留裸字符串格式，同时在 Rust 类型上互不混用，也不等同于旧工作项 ID。
     #[test]
     fn erp_approval_integration_ids_are_transparent_and_type_isolated() {
         let value = "00112233445566778899aabbccddeeff";

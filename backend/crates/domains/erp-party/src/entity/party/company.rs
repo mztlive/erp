@@ -21,11 +21,7 @@ pub struct CompanyProfile {
 /// # 参数
 /// * `raw` - 原始名称。
 ///
-/// # 返回
 /// 返回可用于精确比较的名称键。
-///
-/// # 错误
-/// 不返回错误。
 pub fn identity_name(raw: &str) -> String {
     raw.chars()
         .filter(|c| !c.is_whitespace())
@@ -49,10 +45,8 @@ impl CompanyProfile {
     /// * `short_name` - 公司简称；空白视为没有简称。
     /// * `aliases` - 导入别名。
     ///
-    /// # 返回
     /// 返回包含规范化名称与匹配键的公司资料。
     ///
-    /// # 错误
     /// 全称为空、全称超过 256 字、别名超过 32 个，或简称/别名超过 128 字时，返回 [`erp_core::Error`]。
     pub fn new(legal_name: String, short_name: Option<String>, aliases: Vec<String>) -> Result<Self> {
         let legal_name = legal_name.trim().to_string();

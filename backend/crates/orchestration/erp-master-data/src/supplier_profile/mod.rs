@@ -48,11 +48,10 @@ pub struct SupplierProfileWithAssetsResult {
 impl SupplierProfileProcess {
     /// 创建具备完整授权能力的供应商资料服务。
     ///
-    /// # 参数
     /// db 为业务数据库，sensitive_data 为敏感数据编解码器；rbac 与 access 为同次装配的身份及供应商授权能力。
-    /// # 返回
+    ///
     /// 在业务事务中执行授权重验的资料服务。
-    /// # 错误
+    ///
     /// 构造不执行 I/O。
     pub fn new(
         db: Database,

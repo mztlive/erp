@@ -25,13 +25,10 @@ pub struct PortalLoginResponse {
     pub profile: PortalActor,
 }
 
-/// 验证外部账号密码、绑定和供应商启用状态，签发独立门户凭证。
-/// # 参数
-/// 请求仅包含账号密码；限流基于连接来源。
-/// # 返回
-/// 门户凭证和必要身份。
-/// # 错误
-/// 非供应商身份、密码错误、绑定或供应商失效时拒绝。
+// 验证外部账号密码、绑定和供应商启用状态，签发独立门户凭证。
+// 请求仅包含账号密码；限流基于连接来源。
+// 门户凭证和必要身份。
+// 非供应商身份、密码错误、绑定或供应商失效时拒绝。
 pub(crate) async fn login(
     State(state): State<HttpState>,
     Extension(limiter): Extension<RateLimiter>,
@@ -64,7 +61,7 @@ async fn authenticate(state: &HttpState, input: &PortalLoginPayload) -> StdResul
     Ok(process(state).session_validate(&actor, &mut NoTransaction).await?)
 }
 
-/// 登录独立留痕不记录密码，也不因审计失败改变凭证结果。
+// 另行记录门户登录尝试，不持久化密码；审计失败也不改变登录凭证结果。
 async fn record_login_audit(state: &HttpState, account: &str, id: Option<&str>, success: bool) {
     let data = AuditLogData {
         actor_id: id.unwrap_or("unknown").into(),
@@ -82,11 +79,7 @@ async fn record_login_audit(state: &HttpState, account: &str, id: Option<&str>, 
 }
 
 /// 自助更换密码，成功后原凭证失效。
-/// # 参数
-/// 身份来自当前门户认证，请求只含原密码和新密码。
-/// # 返回
 /// 返回新账号版本，界面须重新登录。
-/// # 错误
 /// 原密码错误、身份失效或并发修改时拒绝。
 pub async fn password(
     State(state): State<HttpState>,

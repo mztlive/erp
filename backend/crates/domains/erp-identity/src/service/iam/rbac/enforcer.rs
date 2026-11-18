@@ -12,7 +12,7 @@ use crate::entity::Permission;
 use crate::error::{Error, Result};
 
 impl RbacService {
-    /// 首次使用时从 MongoDB 装载 Enforcer；模型或策略加载失败则不缓存。
+    // 首次使用本地策略执行器时从 MongoDB 加载 Enforcer；模型或策略读取失败不留下缓存结果供后续使用。
     async fn enforcer(&self) -> Result<&RwLock<Enforcer>> {
         self.enforcer
             .get_or_try_init(|| async {
@@ -27,19 +27,14 @@ impl RbacService {
             .await
     }
 
-    /// 返回已恢复到最新 MongoDB policy 的 Enforcer。
-    ///
-    /// 上一次持久化或 reload 失败后，任何鉴权和 policy 查询都会先重试 reload；
-    /// reload 继续失败时直接返回错误，禁止使用旧授权缓存。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回与当前数据库 policy 版本一致的 Enforcer 锁。
-    ///
-    /// # 错误
-    /// 提交结果未知、策略持续变化或重新加载失败时返回错误。
+    // 返回已恢复到最新 MongoDB policy 的 Enforcer。
+    //
+    // 上一次持久化或 reload 失败后，任何鉴权和 policy 查询都会先重试 reload；
+    // reload 继续失败时直接返回错误，禁止使用旧授权缓存。
+    //
+    // 返回与当前数据库 policy 版本一致的 Enforcer 锁。
+    //
+    // 提交结果未知、策略持续变化或重新加载失败时返回错误。
     pub(super) async fn fresh_enforcer(&self) -> Result<&RwLock<Enforcer>> {
         self.ensure_policy_consistency_known()?;
         let enforcer = self.enforcer().await?;
@@ -57,7 +52,7 @@ impl RbacService {
         Ok(enforcer)
     }
 
-    /// 判断本地 Enforcer 是否对应数据库当前 policy 版本。
+    // 对照数据库策略版号判断进程内 Enforcer 缓存是否还能用于当前判定。
     async fn policy_cache_is_current(&self) -> Result<bool> {
         if self.policy_stale.load(Ordering::Acquire) {
             return Ok(false);
@@ -66,7 +61,7 @@ impl RbacService {
         Ok(self.loaded_policy_revision.load(Ordering::Acquire) == database_revision)
     }
 
-    /// 从 MongoDB 重新加载稳定 policy 快照，并维护 fail-closed stale 状态。
+    // 缓存过期时重读 MongoDB 的稳定策略快照；刷新失败保留过期状态，不能继续使用旧授权。
     async fn reload_enforcer(&self, enforcer: &mut Enforcer) -> Result<()> {
         self.policy_stale.store(true, Ordering::Release);
         for _ in 0..MAX_STABLE_POLICY_LOAD_ATTEMPTS {
@@ -82,32 +77,21 @@ impl RbacService {
         Err(Error::Rbac("授权策略持续变化，无法加载稳定快照，请稍后重试".to_string()))
     }
 
-    /// 提交外部 policy 事务后，立即刷新本地 Enforcer。
-    ///
-    /// reload 失败时服务保持 stale；后续鉴权和 policy 查询会先重试，
-    /// 在恢复前不会继续使用旧缓存。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 本地 Enforcer 已对齐当前 policy 时无返回值。
-    ///
-    /// # 错误
-    /// 当 MongoDB policy 无法重新加载时返回错误。
+    // 提交外部 policy 事务后，立即刷新本地 Enforcer。
+    //
+    // reload 失败时服务保持 stale；后续鉴权和 policy 查询会先重试，
+    // 在恢复前不会继续使用旧缓存。
+    //
+    // 本地 Enforcer 已对齐当前 policy 时无返回值。
+    //
+    // 当 MongoDB policy 无法重新加载时返回错误。
     pub(super) async fn refresh_policy(&self) -> Result<()> {
         self.fresh_enforcer().await.map(|_| ())
     }
 
     /// 返回当前已稳定加载的授权策略版本。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回与本地 Enforcer 一致的 MongoDB policy revision。
     ///
-    /// # 错误
     /// 策略缓存无法刷新或数据库版本读取失败时返回错误。
     pub async fn current_policy_revision(&self) -> Result<u64> {
         self.fresh_enforcer().await?;
@@ -115,31 +99,21 @@ impl RbacService {
     }
 
     /// 在指定执行器快照中读取授权策略版本。
-    ///
-    /// # 参数
-    /// * `executor` - 数据库执行器，可为销售形式化事务会话
-    ///
-    /// # 返回
     /// 返回执行器所见的 policy revision。
     ///
-    /// # 错误
     /// 数据库读取失败时返回错误。
+    ///
+    /// `executor`：数据库执行器，可为销售形式化事务会话。
     pub async fn policy_revision_with_executor(&self, executor: &mut dyn Executor) -> Result<u64> {
         Ok(self.policy_store.policy_revision(executor).await?)
     }
 
     /// 在一次 Enforcer 读锁下冻结账号角色及指定权限的逐角色授权结果。
-    ///
-    /// # 参数
-    /// * `account_kind` - 账号类型。
-    /// * `account_id` - 账号 ID。
-    /// * `permissions` - 需要逐角色核对的权限；为空时只冻结角色列表。
-    ///
-    /// # 返回
     /// 返回角色、各角色命中的权限以及当时的 policy 版本。
     ///
-    /// # 错误
     /// Enforcer 无法刷新或权限匹配失败时返回错误。
+    ///
+    /// `permissions`：需要逐角色核对的权限；为空时只冻结角色列表。
     pub async fn role_permission_snapshot(
         &self,
         account_kind: AccountKind,
@@ -167,16 +141,11 @@ impl RbacService {
     }
 
     /// 证明冻结 Enforcer revision 与调用方事务快照可见 revision 完全一致。
-    ///
-    /// # 参数
-    /// * `expected_revision` - 冻结快照中的 policy 版本。
-    /// * `executor` - 调用方事务执行器。
-    ///
-    /// # 返回
     /// 两个版本一致时无返回值。
     ///
-    /// # 错误
     /// 版本读取失败或两边不一致时返回错误。
+    ///
+    /// `expected_revision`：冻结快照中的 policy 版本；`executor`：调用方事务执行器。
     pub async fn ensure_policy_snapshot_with_executor(
         &self,
         expected_revision: u64,

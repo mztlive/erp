@@ -29,43 +29,18 @@ pub(in crate::demo_master_data) struct DemoMasterRecord {
 }
 
 impl DemoMasterRecord {
-    /// 按种类代码读取种类。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 种类代码能还原时返回 `DemoKind`；无法识别时返回 `None`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 将登记里的固定种类代码解析为 `DemoKind`，供分组统计；不认识的历史代码返回 `None`。
     pub(in crate::demo_master_data) fn kind(&self) -> Option<DemoKind> {
         DemoKind::parse(&self.kind)
     }
 }
 
-/// 读取全部演示清单。
-///
-/// # 参数
-/// * `db` - 目标数据库
-///
-/// # 返回
-/// 返回清单中的全部记录。
-///
-/// # 错误
-/// 查询失败时返回错误。
+// 读取全部演示登记，供批次构建种子键到真实主键的索引；查询失败时不以空清单继续。
 pub(in crate::demo_master_data) async fn load_all(db: &Database) -> Result<Vec<DemoMasterRecord>> {
     load(db, &mut ReadExecutor::default()).await
 }
 
-/// 在调用方事务内读取登记，包含旧版软删除记录。
-///
-/// # 参数
-/// `db` - 数据库；`executor` - 当前事务。
-/// # 返回
-/// 返回全部登记。
-/// # 错误
-/// 数据库读取失败时返回错误。
+// 沿调用方事务读取全部登记，包括旧版软删除记录，使权限检查后的状态统计仍能区分活跃和已删除条目。
 pub(in crate::demo_master_data) async fn load(
     db: &Database,
     executor: &mut dyn Executor,
@@ -73,7 +48,7 @@ pub(in crate::demo_master_data) async fn load(
     Ok(mongo_ops::find_many(&db.collection(COLLECTION), doc! {}, Default::default(), executor).await?)
 }
 
-/// 按种子键与实际主键写入或覆盖清单登记。
+// 用稳定种子键和实际主键写入或更新清单，登记关联主键并标记为有效，供后续步骤解析或恢复相同实体。
 pub(in crate::demo_master_data) async fn save(
     db: &Database,
     step: &DemoStep,
@@ -99,16 +74,7 @@ pub(in crate::demo_master_data) async fn save(
     Ok(())
 }
 
-/// 创建演示清单的唯一索引。
-///
-/// # 参数
-/// * `db` - 目标数据库
-///
-/// # 返回
-/// `key` 唯一索引已创建时无返回值。
-///
-/// # 错误
-/// 索引创建失败时返回持久化错误。
+/// 创建本库演示登记的 `key` 唯一索引，保证一个种子只对应一条登记；不代建其他领域索引，持久化失败向调用方返回。
 pub async fn ensure_indexes(db: &Database) -> persistence_core::Result<()> {
     let index = IndexModel::builder()
         .keys(doc! { "key": 1 })
@@ -118,16 +84,7 @@ pub async fn ensure_indexes(db: &Database) -> persistence_core::Result<()> {
     Ok(())
 }
 
-/// 拒绝把同编号的非演示记录自动收编进删除清单。
-///
-/// # 参数
-/// `db` - 数据库；`key` - 稳定种子键；`id` - 拟复用的实际主键。
-///
-/// # 返回
-/// 归属一致时返回空结果。
-///
-/// # 错误
-/// 记录未登记、ID 不符或查询失败时返回错误。
+// 核对拟复用实体是否已由同一个种子键登记，未登记或实际 ID 不符时拒绝，防止同编号的非演示资料被纳入删除清单。
 pub(in crate::demo_master_data) async fn ensure_owned(db: &Database, key: &str, id: &str) -> Result<()> {
     let record = db
         .collection::<DemoMasterRecord>(COLLECTION)
@@ -137,7 +94,7 @@ pub(in crate::demo_master_data) async fn ensure_owned(db: &Database, key: &str, 
     check_owner(record.as_ref(), id)
 }
 
-/// 只有清单登记的同一 ID 可以恢复或继续使用。
+// 只允许继续处理与登记主键相同的实体，避免恢复或认领同编号的正式记录。
 fn check_owner(record: Option<&DemoMasterRecord>, id: &str) -> Result<()> {
     if record.is_none_or(|row| row.entity_id != id) {
         return Err(Error::BusinessLogicError("演示编号已被未登记的资料占用，请先核对资料归属".into()));

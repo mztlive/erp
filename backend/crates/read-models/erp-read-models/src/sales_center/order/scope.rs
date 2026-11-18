@@ -54,7 +54,7 @@ struct SalesListSnapshot<C> {
 trait SalesListRead: Sync {
     type Context: Send + Sync;
 
-    /// 在原执行器解析权限、关键词与组织筛选，并读取分页和完整匹配版本。
+    // 读取销售单列表时，在原执行器解析权限、关键词与组织筛选，并读取分页和完整匹配版本。
     async fn load(
         &self,
         params: &SalesListParams,
@@ -62,26 +62,26 @@ trait SalesListRead: Sync {
         executor: &mut dyn Executor,
     ) -> Result<SalesListSnapshot<Self::Context>>;
 
-    /// 在原执行器补齐本页金额、任务、账号和客户展示。
+    // 读取销售单列表时，在原执行器补齐本页金额、任务、账号和客户展示。
     async fn present(
         &self,
         page: PageView<SalesOrderRow>,
         executor: &mut dyn Executor,
     ) -> Result<PageView<SalesOrderView>>;
 
-    /// 所有读取完成后核验原凭证，失败时丢弃完整分页。
+    // 校验销售单列表时，所有读取完成后核验原凭证，失败时丢弃完整分页。
     async fn validate(&self, context: &Self::Context, executor: &mut dyn Executor) -> Result<()>;
 }
 
 impl SalesOrderReadService {
-    /// 在同一事务内完成授权、关键词、列表、全部展示事实与最终交付检查。
-    ///
-    /// # 参数
-    /// params 为原始列表查询；actor 为本次已认证操作人。
-    /// # 返回
-    /// 返回携带完整匹配版本指纹的列表，不提供负责销售候选。
-    /// # 错误
-    /// 身份、筛选、范围版本、任何事实读取或交付检查失败时拒绝整页。
+    // 读取销售单列表时，在同一事务内完成授权、关键词、列表、全部展示事实与最终交付检查。
+    //
+    // 调用参数：
+    // params 为原始列表查询；actor 为本次已认证操作人。
+    //
+    // 返回携带完整匹配版本指纹的列表，不提供负责销售候选。
+    //
+    // 身份、筛选、范围版本、任何事实读取或交付检查失败时拒绝整页。
     pub(super) async fn list_snapshot(
         &self,
         params: &SalesListParams,
@@ -104,7 +104,7 @@ impl SalesOrderReadService {
 impl SalesListRead for SalesOrderReadService {
     type Context = SalesReadContext;
 
-    /// 签发根凭证后，全部筛选、分页和版本事实使用原事务。
+    // 读取销售单列表时，签发根凭证后，全部筛选、分页和版本事实使用原事务。
     async fn load(
         &self,
         params: &SalesListParams,
@@ -125,7 +125,7 @@ impl SalesListRead for SalesOrderReadService {
         Ok(SalesListSnapshot { page, context, scope_version, as_of })
     }
 
-    /// 使用原列表执行器读取展示事实，保持分页与行序。
+    // 使用原列表执行器取得展示事实，保持分页与行序。
     async fn present(
         &self,
         page: PageView<SalesOrderRow>,
@@ -134,13 +134,13 @@ impl SalesListRead for SalesOrderReadService {
         self.list_view(page, executor).await
     }
 
-    /// 交付前检查根凭证的原事务、阶段与有效期。
+    // 校验销售单列表时，交付前检查根凭证的原事务、阶段与有效期。
     async fn validate(&self, context: &Self::Context, executor: &mut dyn Executor) -> Result<()> {
         context.validate(executor).await
     }
 }
 
-/// 只有完整页面通过原阶段的最终交付检查，才能构造列表响应。
+// 读取销售单列表时，只有完整页面通过原阶段的最终交付检查，才能构造列表响应。
 async fn read_list(
     reader: &impl SalesListRead,
     params: &SalesListParams,
@@ -168,28 +168,25 @@ async fn read_list(
     })
 }
 
-/// 保留原跨页合同：授权版本与全部匹配销售单身份、版本组成指纹。
+// 为销售单列表绑定范围版本时，保留原跨页合同：授权版本与全部匹配销售单身份、版本组成指纹。
 fn list_scope_version(base: &str, versions: &[SalesVersion]) -> String {
     let mut fingerprint = DefaultHasher::new();
     versions.hash(&mut fingerprint);
     format!("{base}:{:x}", fingerprint.finish())
 }
 
-/// 将请求中的组织筛选展开为单据业务组织条件。
-///
-/// # 参数
-/// * `access` - 销售范围访问器
-/// * `params` - 原始列表查询
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 无组织筛选时返回 `None`；否则返回已展开的组织 ID。
-///
-/// # 错误
-/// 包含下级但未提供组织、未知组织或展开失败时拒绝。
-///
-/// # 关键业务约束
-/// 组织筛选匹配当前 `business_org_unit_id`，不得改写历史归属快照。
+// 准备销售单列表候选时，将请求中的组织筛选展开为单据业务组织条件。
+//
+// 调用参数：
+// * `access` - 销售范围访问器
+// * `params` - 原始列表查询
+//
+// 无组织筛选时返回 `None`；否则返回已展开的组织 ID。
+//
+// 包含下级但未提供组织、未知组织或展开失败时拒绝。
+//
+// 业务边界：
+// 组织筛选匹配当前 `business_org_unit_id`，不得改写历史归属快照。
 async fn requested_business_org_units(
     access: &SalesAccess,
     params: &SalesOrderListParams,
@@ -234,7 +231,7 @@ mod tests {
         assert_eq!(org.include_descendants, Some(true));
     }
 
-    /// 列表响应不携带负责销售候选，已授权行仍返回负责销售姓名。
+    // 验证销售单列表：列表响应不携带负责销售候选，已授权行仍返回负责销售姓名。
     #[test]
     fn sales_list_omits_owner_candidates_and_keeps_row_owner_name() {
         use application_core::PageView;

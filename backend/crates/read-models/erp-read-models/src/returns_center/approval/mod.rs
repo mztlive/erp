@@ -15,7 +15,7 @@ use super::dto::{
 /// 详情最近审批历史条数上限。完整历史走分页端点。
 pub const RECENT_HISTORY_LIMIT: usize = 8;
 
-/// 逆向资金单据只读审批：requirement 固定，动作只由草稿/审批中决定。
+// 生成退货退款审批视图时，逆向资金单据只读审批：requirement 固定，动作只由草稿/审批中决定。
 fn process_required_view(
     binding: Option<&ApprovalDefinitionBinding>,
     instance: Option<DocumentApprovalInstanceView>,
@@ -42,7 +42,7 @@ fn process_required_allowed_actions(is_draft: bool, is_in_approval: bool) -> Vec
     }
 }
 
-/// 由绑定与可选实例事实构造只读审批结构。
+/// 为退货退款审批组装审批视图时，只使用冻结的定义绑定与实际读到的可选实例。
 ///
 /// 创建后未提交只返回绑定定义；客户端不得据此选择定义或审批人。
 ///
@@ -53,9 +53,6 @@ fn process_required_allowed_actions(is_draft: bool, is_in_approval: bool) -> Vec
 ///
 /// # 返回
 /// 返回有界只读审批结构。
-///
-/// # 错误
-/// 无。
 pub fn document_approval_view(
     binding: Option<&ApprovalDefinitionBinding>,
     instance: Option<DocumentApprovalInstanceView>,
@@ -69,7 +66,7 @@ pub fn document_approval_view(
     )
 }
 
-/// 由绑定与可选实例事实构造供应商退款只读审批结构。
+/// 由绑定与可选实例事实生成供应商退款只读审批结构。
 ///
 /// 创建后未提交只返回绑定定义；客户端不得据此选择定义或审批人。
 ///
@@ -80,9 +77,6 @@ pub fn document_approval_view(
 ///
 /// # 返回
 /// 返回有界只读审批结构。
-///
-/// # 错误
-/// 无。
 pub fn supplier_refund_approval_view(
     binding: Option<&ApprovalDefinitionBinding>,
     instance: Option<DocumentApprovalInstanceView>,
@@ -96,7 +90,7 @@ pub fn supplier_refund_approval_view(
     )
 }
 
-/// 由绑定与可选实例事实构造回款冲正只读审批结构。
+/// 由绑定与可选实例事实生成回款冲正只读审批结构。
 ///
 /// 创建后未提交只返回绑定定义；客户端不得据此选择定义或审批人。
 ///
@@ -107,9 +101,6 @@ pub fn supplier_refund_approval_view(
 ///
 /// # 返回
 /// 返回有界只读审批结构。
-///
-/// # 错误
-/// 无。
 pub fn receipt_reversal_approval_view(
     binding: Option<&ApprovalDefinitionBinding>,
     instance: Option<DocumentApprovalInstanceView>,
@@ -123,7 +114,7 @@ pub fn receipt_reversal_approval_view(
     )
 }
 
-/// 由绑定与可选实例事实构造付款冲正只读审批结构。
+/// 由绑定与可选实例事实生成付款冲正只读审批结构。
 ///
 /// 创建后未提交只返回绑定定义；客户端不得据此选择定义或审批人。
 ///
@@ -134,9 +125,6 @@ pub fn receipt_reversal_approval_view(
 ///
 /// # 返回
 /// 返回有界只读审批结构。
-///
-/// # 错误
-/// 无。
 pub fn payment_reversal_approval_view(
     binding: Option<&ApprovalDefinitionBinding>,
     instance: Option<DocumentApprovalInstanceView>,
@@ -150,17 +138,15 @@ pub fn payment_reversal_approval_view(
     )
 }
 
-/// 缺注册行时把 NotFound 吞成未绑定，其它错误原样上抛。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `document_id` - 业务单据主键
-///
-/// # 返回
-/// 返回冻结绑定；单据未注册或未绑定时为 `None`。
-///
-/// # 错误
-/// 仓储失败等非 NotFound 错误原样返回。
+// 处理退货退款审批时，缺注册行时把 NotFound 吞成未绑定，其它错误原样上抛。
+//
+// 调用参数：
+// * `document_id` - 业务单据主键
+//
+// 返回冻结绑定；单据未注册或未绑定时为 `None`。
+//
+// 失败边界：
+// 仓储失败等非 NotFound 错误原样返回。
 pub(super) async fn optional_approval_binding(
     db: &mongodb::Database,
     document_id: &str,

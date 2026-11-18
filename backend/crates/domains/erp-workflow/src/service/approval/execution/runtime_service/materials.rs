@@ -43,16 +43,11 @@ pub struct ApprovalMaterialsView {
 
 impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     /// 在精确实例读取授权后返回冻结展示及允许材料目录。
-    ///
-    /// # 参数
-    /// * `actor` - 当前认证账号。
-    /// * `instance_id` - 审批实例 ID。
-    ///
-    /// # 返回
     /// 返回提交时冻结的版本、展示与材料安全元数据。
     ///
-    /// # 错误
     /// 无权、主体链不一致、展示或材料校验失败，或旧实例未保存展示快照时拒绝，不补读当前业务数据。
+    ///
+    /// `actor`：当前认证账号；`instance_id`：审批实例 ID。
     pub async fn materials(&self, actor: &AuditActor, instance_id: &str) -> Result<ApprovalMaterialsView> {
         let service = self.clone();
         let actor = actor.clone();
@@ -66,12 +61,11 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     }
 
     /// 在调用方的原快照中授权并读取冻结审批资料。
-    /// # 参数
-    /// actor、instance_id 为真实账号及精确实例，executor 为完整读取用例的活动快照事务。
-    /// # 返回
     /// 返回当前实例授权下的冻结资料，供调用方沿原事务继续补齐结果。
-    /// # 错误
+    ///
     /// 非快照执行器、实例无权、冻结主体不一致或读取失败时拒绝。
+    ///
+    /// actor、instance_id 为真实账号及精确实例，executor 为完整读取用例的活动快照事务。
     pub async fn materials_with(
         &self,
         actor: &AuditActor,
@@ -117,17 +111,12 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     }
 
     /// 验证精确实例访问及冻结允许清单，返回仅供服务器比对的原始文件引用。
-    ///
-    /// # 参数
-    /// * `actor` - 当前读者。
-    /// * `instance_id` - 审批实例 ID。
-    /// * `file_id` - 请求预览的文件资产 ID。
-    ///
-    /// # 返回
     /// 返回冻结元数据；调用方必须校验当前文件的版本、指纹及状态后才读取内容。
     ///
-    /// # 错误
     /// 未授权、文件不在冻结允许清单或找不到该文件时隐藏为不存在；仓储失败时返回对应错误。
+    ///
+    /// `actor`：当前读者；`instance_id`：审批实例 ID。
+    /// `file_id`：请求预览的文件资产 ID。
     pub async fn material_reference(
         &self,
         actor: &AuditActor,
@@ -148,7 +137,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             .await
     }
 
-    /// 文件允许清单检查与实例读取资格使用同一事务。
+    // 材料引用读取须在同一原事务证明实例阅读资格并核对文件允许列表，不能只靠文件 ID 放行。
     async fn material_reference_stage(
         &self,
         actor: &AuditActor,

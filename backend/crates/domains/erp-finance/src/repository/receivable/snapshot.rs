@@ -51,20 +51,15 @@ impl ReceivableSnapshotFacts {
     /// 事实容器（读取形态）与 [`ReceivableSnapshot`]（决策快照）的边界：本转
     /// 换只做字段搬运，不裁决缺失（`expected_*_count` 仍由调用方解释首错），
     /// 字段与顺序语义不变。
-    ///
-    /// # 参数
-    /// * `current_sales_order_revision_id` - 当前正式销售版本
-    /// * `sales_order_no` - 来源销售单号
-    /// * `sales_order_revision_no` - 当前正式版本号
-    /// * `sales_order_snapshot_at` - 版本生效秒级时间戳
-    /// * `customer_name` - 销售快照客户名
-    /// * `counterparty_party_name` - 结算主体快照名（可空）
-    ///
-    /// # 返回
     /// 返回字段搬运后的 [`ReceivableSnapshot`]。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// 输入约定：
+    /// - `current_sales_order_revision_id`：当前正式销售版本
+    /// - `sales_order_no`：来源销售单号
+    /// - `sales_order_revision_no`：当前正式版本号
+    /// - `sales_order_snapshot_at`：版本生效秒级时间戳
+    /// - `customer_name`：销售快照客户名
+    /// - `counterparty_party_name`：结算主体快照名（可空）
     pub fn into_snapshot(
         self,
         current_sales_order_revision_id: String,
@@ -95,20 +90,14 @@ impl<'a> ReceivableRepository<'a> {
     ///
     /// 读取次数与分录／分配行数无关：分录按账户一次、分配按 ID 集合各一次、
     /// 回款／发票按去重 ID `$in` 各一次。
-    ///
-    /// # 参数
-    /// * `account_id` - 应收往来子账
-    /// * `executor` - 调用方执行器，必须复用以保持同一事务快照
-    ///
-    /// # 返回
     /// 返回 [`ReceivableSnapshotFacts`]；关联单据缺失时仍返回已读到的子集，
     /// 由 Service 按回款优先于发票的首错顺序解释。
+    /// 传播数据库查询失败。
+    /// 调用边界：不装载销售单（跨聚合），不裁决业务，不开事务。
     ///
-    /// # 错误
-    /// MongoDB 查询失败时返回错误。
-    ///
-    /// # 约束
-    /// 不装载销售单（跨聚合），不裁决业务，不开事务。
+    /// 输入约定：
+    /// - `account_id`：应收往来子账
+    /// - `executor`：调用方执行器，必须复用以保持同一事务快照
     pub async fn receivable_snapshot_facts(
         &self,
         account_id: &ReceivableAccountId,
@@ -148,19 +137,13 @@ impl<'a> ReceivableRepository<'a> {
     }
 
     /// 批量创建回款核销分配（`insert_many`，调用方事务内原子写入，FIN-R09）。
+    /// 结果：全部写入成功或空输入时返回 `Ok(())`。
+    /// 失败条件：唯一键冲突透出 [`persistence_core::Error::DuplicateKey`]，由 Service 转译。
+    /// 调用边界：不开启事务；空输入不访问数据库。
     ///
-    /// # 参数
-    /// * `allocations` - 待持久化的回款核销分配
-    /// * `executor` - 必须位于事务中
-    ///
-    /// # 返回
-    /// 全部写入成功或空输入时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 唯一键冲突透出 [`persistence_core::Error::DuplicateKey`]，由 Service 转译。
-    ///
-    /// # 约束
-    /// 不开启事务；空输入不访问数据库。
+    /// 输入约定：
+    /// - `allocations`：待持久化的回款核销分配
+    /// - `executor`：必须位于事务中
     pub async fn create_receipt_allocations_many(
         &self,
         allocations: &[ReceiptAllocation],
@@ -180,20 +163,12 @@ impl<'a> ReceivableRepository<'a> {
 #[allow(async_fn_in_trait)]
 pub trait ReceivableAccountSnapshotExt {
     /// 批量条件核销：按账户聚合增量逐个执行不超额核销（FIN-R09）。
-    ///
-    /// # 参数
-    /// * `deltas` - 按账户聚合的本次核销增量（同一账户只出现一次）
-    /// * `updated_by` - 本次更新执行人
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
     /// 返回逐账户命中结果；空输入不访问数据库。
+    /// 传播数据库更新失败。
+    /// 调用边界：聚合口径由领域账本保证；本方法不裁决跨账户业务结论、不开事务。
     ///
-    /// # 错误
-    /// MongoDB 更新失败时返回错误。
-    ///
-    /// # 约束
-    /// 聚合口径由领域账本保证；本方法不裁决跨账户业务结论、不开事务。
+    /// 输入约定：
+    /// - `deltas`：按账户聚合的本次核销增量（同一账户只出现一次）
     async fn apply_settlements_many(
         &self,
         deltas: &[(ReceivableAccountId, Amount)],
@@ -233,19 +208,12 @@ impl ReceivableAccountSnapshotExt for persistence_core::Repository<'_, Receivabl
 #[allow(async_fn_in_trait)]
 pub trait ReceivableEntrySnapshotExt {
     /// 按主键集合批量取回应收分录（`$in` 一次取回，禁止 N+1）。
-    ///
-    /// # 参数
-    /// * `entry_ids` - 应收分录 ID 集合
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
     /// 返回全部匹配分录；空集合直接返回空列表。
+    /// 传播数据库查询失败。
+    /// 调用边界：仓储内不去重业务结论；调用方负责解释缺项。
     ///
-    /// # 错误
-    /// MongoDB 查询失败时返回错误。
-    ///
-    /// # 约束
-    /// 仓储内不去重业务结论；调用方负责解释缺项。
+    /// 输入约定：
+    /// - `entry_ids`：应收分录 ID 集合
     async fn find_entries_by_ids(
         &self,
         entry_ids: &[ReceivableEntryId],
@@ -267,20 +235,13 @@ impl ReceivableEntrySnapshotExt for persistence_core::Repository<'_, ReceivableE
     }
 }
 
-/// 构造条件核销的写前置条件（不超额核销）。
-///
-/// # 参数
-/// * `id` - 应收往来子账 ID
-/// * `amount` - 本次核销含税金额（Decimal128）
-///
-/// # 返回
-/// 返回未删除账户的核销额度守卫文档。
-///
-/// # 错误
-/// 不返回错误。
-///
-/// # 约束
-/// 与单笔 [`Repository::apply_settlement`] 守卫一致。
+// 构造条件核销的写前置条件（不超额核销）。
+// 返回未删除账户的核销额度守卫文档。
+// 调用边界：与单笔 [`Repository::apply_settlement`] 守卫一致。
+//
+// 输入约定：
+// - `id`：应收往来子账 ID
+// - `amount`：本次核销含税金额（Decimal128）
 fn settlement_guard(id: &str, amount: &Bson) -> Document {
     doc! {
         "id": id,
@@ -294,19 +255,12 @@ fn settlement_guard(id: &str, amount: &Bson) -> Document {
     }
 }
 
-/// 按首次出现顺序去重 ID。
-///
-/// # 参数
-/// * `ids` - ID 迭代
-///
-/// # 返回
-/// 返回去重后的 ID 列表。
-///
-/// # 错误
-/// 不返回错误。
-///
-/// # 约束
-/// 空输入返回空向量。
+// 按首次出现顺序去重 ID。
+// 返回去重后的 ID 列表。
+// 调用边界：空输入返回空向量。
+//
+// 输入约定：
+// - `ids`：ID 迭代
 fn unique_ids(ids: impl IntoIterator<Item = String>) -> Vec<String> {
     let mut seen = HashSet::new();
     let mut unique = Vec::new();
@@ -383,7 +337,7 @@ mod tests {
         .unwrap()
     }
 
-    /// 批量按 ID 读取：空输入、去重、乱序结果、缺项与软删排除。
+    // 回归检查：批量按 ID 读取：空输入、去重、乱序结果、缺项与软删排除。
     #[tokio::test]
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn find_entries_by_ids_dedups_unordered_missing_and_excludes_soft_deleted() {
@@ -542,7 +496,7 @@ mod tests {
         .unwrap()
     }
 
-    /// 批量条件核销：聚合增量逐账户生效，超额账户被拒绝且金额不变。
+    // 回归检查：批量条件核销：聚合增量逐账户生效，超额账户被拒绝且金额不变。
     #[tokio::test]
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn batch_settlement_applies_aggregated_deltas_and_reports_rejected() {
@@ -593,7 +547,7 @@ mod tests {
         });
     }
 
-    /// 快照有界读取：缺失回款 count 先于缺失发票 count，供 Service 保持首错顺序。
+    // 回归检查：快照有界读取：缺失回款 count 先于缺失发票 count，供 Service 保持首错顺序。
     #[tokio::test]
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn snapshot_facts_reports_missing_receipts_before_invoices() {

@@ -23,35 +23,17 @@ pub struct PaymentTermSnapshotParts {
 /// 把历史编码的付款条件快照拆成付款条件与经营类目。
 impl PaymentTermSnapshotParts {
     /// 以必填付款条件构造快照拆分结果；经营类目默认为空。
-    ///
-    /// # 参数
-    /// * `payment_term_code` - 付款条件代码
-    ///
-    /// # 返回
     /// 返回无经营类目的拆分结果。
-    ///
-    /// # 错误
-    /// 无。
     pub fn new(payment_term_code: String) -> Self {
         Self { payment_term_code, business_category: None }
     }
 }
 
 /// 把历史编码的付款条件快照拆成付款条件与经营类目。
-///
 /// 同时识别全角 `｜` 与半角 `|`，并容忍标记前后空白。无标记时整串视为付款条件。
-///
-/// # 参数
-/// * `raw` - 商务版本付款条件快照或采购单付款条件代码
-///
-/// # 返回
 /// 付款条件代码（可能为空串）与可选经营类目。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
 /// 拆分必须确定：同一输入始终得到同一对字段，供采购单落单与审核展示共用。
+/// `raw`：商务版本付款条件快照或采购单付款条件代码。
 pub fn split_encoded_payment_term_snapshot(raw: &str) -> PaymentTermSnapshotParts {
     let trimmed = raw.trim();
     let Some(label_at) = trimmed.find(CATEGORY_LABEL) else {
@@ -67,29 +49,14 @@ pub fn split_encoded_payment_term_snapshot(raw: &str) -> PaymentTermSnapshotPart
 }
 
 /// 规范化可选经营类目（去空白、空值视为未登记、长度上限）。
-///
-/// # 参数
-/// * `value` - 原始经营类目
-///
-/// # 返回
 /// 空白返回 `None`，否则返回去空白后的类目。
-///
-/// # 错误
 /// 超过 64 个字符时返回错误。
 pub fn normalize_business_category(value: Option<String>) -> Result<Option<String>> {
     normalize_optional_text(value, "经营类目", BUSINESS_CATEGORY_MAX_LEN)
 }
 
-/// 去掉付款条件与类目标记之间的分隔竖线。
-///
-/// # 参数
-/// * `prefix` - 类目标记之前、已去掉右侧空白的前缀
-///
-/// # 返回
-/// 去掉末尾 `|` / `｜` 后再 trim 的付款条件。
-///
-/// # 错误
-/// 无。
+// 去掉付款条件与类目标记之间的分隔竖线。
+// 去掉末尾 `|` / `｜` 后再 trim 的付款条件。
 fn strip_trailing_pipe(prefix: &str) -> &str {
     prefix.strip_suffix('|').or_else(|| prefix.strip_suffix('｜')).map(str::trim_end).unwrap_or(prefix)
 }
@@ -108,7 +75,7 @@ mod tests {
         }
     }
 
-    /// 全角/半角竖线、标记前后空白都能拆出结算文案与类目。
+    // 验证全角/半角竖线、标记前后空白都能拆出结算文案与类目。
     #[test]
     fn split_recognizes_fullwidth_and_ascii_marks() {
         assert_eq!(split_encoded_payment_term_snapshot("现结｜经营类目：礼盒"), parts("现结", Some("礼盒")));
@@ -122,7 +89,7 @@ mod tests {
         );
     }
 
-    /// 无标记时整串就是付款条件，空白输入得到空代码。
+    // 验证无标记时整串就是付款条件，空白输入得到空代码。
     #[test]
     fn split_without_mark_keeps_payment_term_only() {
         assert_eq!(split_encoded_payment_term_snapshot("PREPAY_30"), parts("PREPAY_30", None));
@@ -130,13 +97,13 @@ mod tests {
         assert_eq!(split_encoded_payment_term_snapshot("   "), parts("", None));
     }
 
-    /// 标记存在但类目为空时只保留付款条件。
+    // 验证标记存在但类目为空时只保留付款条件。
     #[test]
     fn split_drops_blank_category() {
         assert_eq!(split_encoded_payment_term_snapshot("现结｜经营类目：  "), parts("现结", None));
     }
 
-    /// 经营类目去空白、空值清除，超长拒绝。
+    // 验证经营类目去空白、空值清除，超长拒绝。
     #[test]
     fn normalize_trims_clears_and_rejects_overlong() {
         assert_eq!(normalize_business_category(Some(" 礼盒 ".to_string())).unwrap().as_deref(), Some("礼盒"));

@@ -19,20 +19,13 @@ pub(crate) struct CancelledPurchaseDraft {
 }
 
 impl PurchaseOrder {
-    /// 从真正取消审批的采购单派生独立草稿并切换当前提交指针。
-    ///
-    /// # 参数
-    /// * `previous` - 同一事务重读的取消前采购单
-    /// * `source` - 取消前采购单引用的冻结提交
-    /// * `source_lines` - 原冻结提交的完整明细
-    /// * `draft_id` - 新草稿提交身份
-    /// * `line_ids` - 与原明细一一对应的新草稿行身份
-    ///
-    /// # 返回
-    /// 返回独立草稿头和完整行；仅成功时切换本采购单的当前提交指针。
-    ///
-    /// # 错误
-    /// 取消状态、版本、来源或新身份不一致，明细金额不守恒时返回领域错误。
+    // 从真正取消审批的采购单派生独立草稿并切换当前提交指针。
+    //
+    // 返回独立草稿头和完整行；仅成功时切换本采购单的当前提交指针。取消状态、版本、来源或新身份不一致，明细金额不守恒时返回领域错误。
+    //
+    // - `previous`：同一事务重读的取消前采购单。
+    // - `source`：取消前采购单引用的冻结提交。
+    // - `source_lines`：原冻结提交的完整明细。
     pub(crate) fn reopen_cancelled_draft(
         &mut self,
         previous: &Self,
@@ -58,7 +51,7 @@ impl PurchaseOrder {
         Ok(CancelledPurchaseDraft { submission, lines })
     }
 
-    /// 校验传入采购单恰为同一版本执行取消动作后的结果，且来源仍为冻结提交。
+    // 校验传入采购单恰为同一版本执行取消动作后的结果，且来源仍为冻结提交。
     fn ensure_cancelled_draft_source(&self, previous: &Self, source: &PurchaseOrderSubmission) -> Result<()> {
         if previous.stable.status != PurchaseOrderStatus::InApproval
             || previous.approval_subject_version == 0
@@ -95,7 +88,7 @@ impl PurchaseOrder {
     }
 }
 
-/// 校验新草稿头行使用独立身份，禁止覆盖或复用历史冻结行。
+// 校验新草稿头行使用独立身份，禁止覆盖或复用历史冻结行。
 fn ensure_new_draft_identities(
     source: &PurchaseOrderSubmission,
     source_lines: &[PurchaseOrderSubmissionLine],
@@ -117,7 +110,7 @@ fn ensure_new_draft_identities(
     Ok(())
 }
 
-/// 复制冻结业务资料并通过构造函数清除提交、审核审计，生成可编辑草稿头。
+// 复制冻结业务资料并通过构造函数清除提交、审核审计，生成可编辑草稿头。
 fn reopened_header(
     source: &PurchaseOrderSubmission,
     draft_id: PurchaseOrderSubmissionId,
@@ -291,7 +284,7 @@ mod tests {
         (order, cancelled, source, lines)
     }
 
-    /// 执行实际生产恢复规则，使用固定且独立的草稿头行身份。
+    // 执行实际生产恢复规则，使用固定且独立的草稿头行身份。
     fn reopen(
         cancelled: &mut PurchaseOrder,
         previous: &PurchaseOrder,
@@ -310,7 +303,7 @@ mod tests {
         )
     }
 
-    /// 驳回生成可编辑的新提交，原冻结提交和来源占用身份保留。
+    // 驳回生成可编辑的新提交，原冻结提交和来源占用身份保留。
     #[test]
     fn rejected_order_reopens_independent_draft_without_changing_history() {
         let (previous, _, source, lines) = fixture();

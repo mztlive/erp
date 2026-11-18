@@ -27,11 +27,10 @@ use super::repository::difference as authorized_difference;
 use crate::{Error, Result};
 
 impl IntegrationCenterReadService {
-    /// 查询对账差异详情与不可变决定时间线，独立按 detail 动作解析。
+    /// 读取对账差异详情与不可变决定时间线，独立按 detail 动作解析。
     ///
     /// # 参数
     /// * `id` - 差异稳定 ID
-    /// * `actor` - 已认证操作人
     ///
     /// # 返回
     /// 返回差异详情、处理时间线与证据视图。
@@ -51,7 +50,7 @@ impl IntegrationCenterReadService {
             .await
     }
 
-    /// 原查询凭证覆盖根记录、处理历史及证据装配，全部读取后再交付。
+    // 处理对账差异详情时，原查询凭证覆盖根记录、处理历史及证据装配，全部读取后再交付。
     async fn difference_snapshot(
         &self,
         id: &str,
@@ -72,7 +71,7 @@ impl IntegrationCenterReadService {
         Ok(view)
     }
 
-    /// 最近一条决议覆盖状态与版本；终态不再附证据策略。
+    // 生成对账差异详情视图时，最近一条决议覆盖状态与版本；终态不再附证据策略。
     async fn assemble_difference_detail(
         &self,
         difference: ReconciliationDifference,
@@ -128,7 +127,7 @@ impl IntegrationCenterReadService {
         Ok(())
     }
 
-    /// 多个正式责任关联时返回 `ConflictError`。
+    // 处理对账差异详情时，多个正式责任关联时返回 `ConflictError`。
     async fn has_difference_work_item(
         &self,
         difference_id: &str,
@@ -162,16 +161,15 @@ fn resolution_views(history: Vec<ResolutionHistoryRow>) -> Vec<ResolutionView> {
         .collect()
 }
 
-/// 推导对账差异开放动作与阻断视图（动作规则归领域，此处只做 view 映射）。
-///
-/// # 参数
-/// * `difference` - 对账差异（提供资金影响策略）
-/// * `terminal` - 差异是否已形成正式结论
-/// * `has_work_item` - 是否已建立正式任务
-/// * `linked_evidence` - 服务端发现的受控证据
-///
-/// # 返回
-/// 返回开放动作代码与阻断视图。
+// 组装对账差异详情的聚合管道时，推导对账差异开放动作与阻断视图（动作规则归领域，此处只做 view 映射）。
+//
+// 调用参数：
+// * `difference` - 对账差异（提供资金影响策略）
+// * `terminal` - 差异是否已形成正式结论
+// * `has_work_item` - 是否已建立正式任务
+// * `linked_evidence` - 服务端发现的受控证据
+//
+// 返回开放动作代码与阻断视图。
 fn difference_action_projection(
     difference: &ReconciliationDifference,
     terminal: bool,

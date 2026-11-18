@@ -43,16 +43,7 @@ macro_rules! decimal_newtype {
         pub struct $name(Decimal);
 
         impl $name {
-            /// 返回底层 `Decimal`（小数位已受类型约束）。
-            ///
-            /// # 参数
-            /// 无。
-            ///
-            /// # 返回
-            /// 返回封装值的 `Decimal` 副本。
-            ///
-            /// # 错误
-            /// 不返回错误。
+            /// 在领域计算需要底层定点运算时取 `Decimal` 副本；原值的有效小数位已由对应类型约束。
             pub fn to_decimal(self) -> Decimal {
                 self.0
             }
@@ -61,17 +52,8 @@ macro_rules! decimal_newtype {
         impl TryFrom<Decimal> for $name {
             type Error = Error;
 
-            /// 从 `Decimal` 构造并校验小数位。
-            ///
-            /// # 参数
-            /// * `value` - 原始定点数值
-            ///
-            /// # 返回
-            /// 小数位（去尾零后）不超过上限时返回 `Ok`，否则返回 `Err`。
-            ///
-            /// # 错误
-            /// 有效小数位超过 `$scale` 时返回 `LogicError`（禁止静默舍入；
-            /// 需要舍入请显式使用 [`round_to_cent`]）。
+            // 将计算结果收回定点类型前，以去尾零后的有效小数位检查上限，保留原 `Decimal`。超出类型精度即拒绝；
+            // 金额需舍入时显式调用 `round_to_cent`。
             fn try_from(value: Decimal) -> Result<Self> {
                 if value.normalize().scale() > $scale {
                     return Err(Error::from(format!("{}最多保留 {} 位小数，请修改后重试", $label, $scale)));
@@ -83,16 +65,8 @@ macro_rules! decimal_newtype {
         impl FromStr for $name {
             type Err = Error;
 
-            /// 从字符串解析并校验小数位。
-            ///
-            /// # 参数
-            /// * `value` - 定点数值字符串（如 `"123.45"`）
-            ///
-            /// # 返回
-            /// 解析成功且小数位合规时返回 `Ok`，否则返回 `Err`。
-            ///
-            /// # 错误
-            /// 字符串不是合法数字或有效小数位超过 `$scale` 时返回 `LogicError`。
+            // 将表单或导入的十进制文本解析成业务数值（如 `123.45`），不经浮点转换；
+            // 无效数字或超过类型的有效小数位限制时返回业务值错误。
             fn from_str(value: &str) -> Result<Self> {
                 let decimal =
                     Decimal::from_str(value).map_err(|_| Error::from(concat!("请填写有效的", $label)))?;
@@ -107,17 +81,8 @@ macro_rules! decimal_newtype {
         }
 
         impl Serialize for $name {
-            /// 序列化：human-readable 输出字符串；非 human-readable（mongodb
-            /// 驱动 raw 序列化）委托 `bson::Decimal128` 的 serde 形态。
-            ///
-            /// # 参数
-            /// * `serializer` - serde 序列化器。
-            ///
-            /// # 返回
-            /// human-readable 时写入十进制字符串；否则写入 `Decimal128` 的 serde 形态。
-            ///
-            /// # 错误
-            /// 当前值无法转成 `bson::Decimal128`，或序列化器写入失败时返回 serde 错误。
+            // HTTP 等可读格式用十进制字符串避免浮点精度丢失；MongoDB 原始序列化交给 `bson::Decimal128`。
+            // 转换或写入失败返回 serde 错误。
             fn serialize<S: Serializer>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> {
                 if serializer.is_human_readable() {
                     serializer.serialize_str(&self.0.to_string())
@@ -130,17 +95,8 @@ macro_rules! decimal_newtype {
         }
 
         impl<'de> Deserialize<'de> for $name {
-            /// 反序列化：接受字符串（JSON）与 Decimal128 变体（BSON，经
-            /// `$numberDecimal` / `$numberDecimalBytes` 扩展形态）。
-            ///
-            /// # 参数
-            /// * `deserializer` - serde 反序列化器。
-            ///
-            /// # 返回
-            /// 解析成功且有效小数位不超过该类型上限时返回本类型。
-            ///
-            /// # 错误
-            /// 形态不被接受、字符串或 Decimal128 无法解析，或有效小数位超过该类型上限时返回 serde 错误。JSON 数字会被拒绝。
+            // 读入 HTTP 数值字符串或 BSON Decimal128 扩展形态，再检查对应类型的有效小数位上限。
+            // JSON 数字、非法表示和超位均拒绝。
             fn deserialize<D: Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
                 let decimal = deserializer.deserialize_any(MoneyVisitor)?;
                 Self::try_from(decimal).map_err(de::Error::custom)
@@ -155,109 +111,41 @@ decimal_newtype!(Quantity, "数量", 6);
 decimal_newtype!(Rate, "比率", 6);
 
 impl Amount {
-    /// 零金额（`0.00`，构造期即满足两位小数约束）。
-    ///
-    /// # 用途
-    /// 为纯金额折叠提供无失败的求和起点，避免在领域与服务层使用 `expect`。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回精确 `0.00` 金额（保留两位小数显示）。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    ///
-    /// # 关键约束
-    /// 常量零值由确定性构造直接产生，不做字符串解析；求和仍使用
-    /// [`Amount::checked_add`] 保持精度。
+    /// 为折叠汇总金额提供精确的 `0.00` 起点，直接构造而不解析字符串；用 [`Amount::checked_add`] 累加。
     pub fn zero() -> Amount {
         Amount(Decimal::new(0, 2))
     }
 
-    /// 两个金额相加（精确，不触发舍入）。
-    ///
-    /// 命名说明：本方法实为 infallible 精确加法（直接返回 `Amount`），与标准库
-    /// `checked_*`（溢出返回 `Option`）的惯例不同。曾提议改名为 `add`/`sub`，但全仓提交门禁
-    /// `clippy -- -D warnings` 的 `should_implement_trait` 会拒绝与 `std::ops::Add`/`Sub`
-    /// 同名的 inherent 方法（含 deprecated 别名），故保留历史名称并在此注明语义。
-    /// 溢出行为：`rust_decimal` 按其自身语义处理（不静默回绕）。
-    ///
-    /// # 参数
-    /// * `other` - 另一金额
-    ///
-    /// # 返回
-    /// 返回精确和（不舍入）。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 汇总或核对两个金额时直接相加，不触发业务舍入。保留历史方法名；
+    /// 它直接返回 `Amount`，不是标准 `checked_*` 的 `Option` 合同，改用 `add` 则与 `Add` 同名并触发 Clippy。
     ///
     /// # Panics
-    /// 和超出 `Decimal` 可表示范围时，`+` 会 panic（`Addition overflowed`），不回绕。
+    /// 和超出 `Decimal` 可表示范围时 panic，不回绕。
     pub fn checked_add(self, other: Amount) -> Amount {
         Amount(self.0 + other.0)
     }
 
-    /// 两个金额相减（精确，不触发舍入）。
-    ///
-    /// 命名说明：同 [`Amount::checked_add`]，infallible 精确减法，保留历史名称。
-    ///
-    /// # 参数
-    /// * `other` - 另一金额
-    ///
-    /// # 返回
-    /// 返回精确差（不舍入）。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 需要从含税金额扣除税额等场景时直接相减，不重复舍入。
+    /// 沿用 [`Amount::checked_add`] 的历史命名和非 `Option` 返回合同。
     ///
     /// # Panics
-    /// 差超出 `Decimal` 可表示范围时，`-` 会 panic（`Subtraction overflowed`），不回绕。
+    /// 差超出 `Decimal` 可表示范围时 panic，不回绕。
     pub fn checked_sub(self, other: Amount) -> Amount {
         Amount(self.0 - other.0)
     }
 }
 
-/// 唯一舍入实现：四舍五入到分（银行家舍入，`MidpointNearestEven`，
-/// conventions.md 第 5 节固定规则）。
-///
-/// # 参数
-/// * `value` - 任意定点数值
-///
-/// # 返回
-/// 舍入到 2 位小数后的 `Decimal`（`.005` 边界按银行家规则取偶数位，
-/// 负数按绝对值对称处理）。
-///
-/// # 错误
-/// 不返回错误。
+/// 统一把定点金额舍入到分（conventions.md 第 5 节）。恰在中点时取偶数位（`MidpointNearestEven`），
+/// 负数按绝对值对称处理。
 pub fn round_to_cent(value: Decimal) -> Decimal {
     value.round_dp(AMOUNT_SCALE)
 }
 
-/// 计算一行销售/采购明细的金额三元组。
-///
-/// 规则（数据模型 4.2 铁律 1）：
-/// - `gross` = 单价 × 数量，舍入到分；
-/// - `tax` = `gross` × 税率，舍入到分；
-/// - `net` = `gross` − `tax`（精确）。
-///
-/// 恒等式：`gross = net + tax` 精确成立。
-///
-/// # 参数
-/// * `unit_price` - 含税单价
-/// * `quantity` - 数量
-/// * `tax_rate` - 税率（如 `0.13` 表示 13%）
-///
-/// # 返回
-/// 返回 `(gross, net, tax)` 三元组，均为 `Amount`。
-///
-/// # 错误
-/// 不返回错误。舍入结果直接构造 `Amount`，不再校验小数位。
+/// 销售或采购明细用含税单价乘数量并以 [`round_to_cent`] 舍入，再乘税率（如 `0.13` 表示 13%）并舍入得税额。
+/// 净额直接以含税额减税额，保证返回的 `(gross, net, tax)` 精确满足 `gross = net + tax`。
 ///
 /// # Panics
-/// 单价乘数量、含税金额乘税率或相减超出 `Decimal` 范围时，运算符会 panic。
-/// debug 构建下，若舍入后任一金额的有效小数位超过 2 位，`debug_assert` 也会 panic；release 不检查该断言。
+/// 乘法或减法超出 `Decimal` 范围时 panic；调试构建还断言三个结果的有效小数位均不超过两位。
 pub fn line_amounts(unit_price: UnitPrice, quantity: Quantity, tax_rate: Rate) -> (Amount, Amount, Amount) {
     let gross = Amount(round_to_cent(unit_price.to_decimal() * quantity.to_decimal()));
     let amounts = fee_amounts(gross, tax_rate);
@@ -270,22 +158,11 @@ pub fn line_amounts(unit_price: UnitPrice, quantity: Quantity, tax_rate: Rate) -
     amounts
 }
 
-/// 由含税总额拆分不带数量的费用金额三元组。
-///
-/// 规则与 [`line_amounts`] 一致：`tax` = `gross` × 税率舍入到分，`net` = `gross` − `tax`。
-///
-/// # 参数
-/// * `gross` - 含税金额
-/// * `tax_rate` - 税率（如 `0.06` 表示 6%）
-///
-/// # 返回
-/// 返回 `(gross, net, tax)` 三元组，恒等式 `gross = net + tax` 精确成立。
-///
-/// # 错误
-/// 不返回错误。
+/// 拆分不带数量的含税费用时，沿用 [`line_amounts`] 的税额口径：含税额乘税率后舍入到分，净额用原含税额减税额。
+/// 返回 `(gross, net, tax)`，确保 `gross = net + tax` 精确成立。
 ///
 /// # Panics
-/// 含税金额乘税率超出 `Decimal` 范围时，运算符会 panic。
+/// 含税额乘税率或扣税超出 `Decimal` 范围时 panic。
 pub fn fee_amounts(gross: Amount, tax_rate: Rate) -> (Amount, Amount, Amount) {
     let tax = round_to_cent(gross.0 * tax_rate.to_decimal());
     let net = gross.0 - tax;
@@ -302,16 +179,7 @@ impl<'de> Visitor<'de> for MoneyVisitor {
         formatter.write_str("定点小数字符串，或 $numberDecimal/$numberDecimalBytes 扩展形态")
     }
 
-    /// 按十进制字符串解析；非法数字返回 serde 错误。
-    ///
-    /// # 参数
-    /// * `value` - 十进制数字字符串。
-    ///
-    /// # 返回
-    /// 解析成功时返回对应的 `Decimal`。
-    ///
-    /// # 错误
-    /// `Decimal::from_str` 无法解析 `value` 时，经 `E::custom` 返回 serde 错误。
+    // HTTP 字符串直接按十进制解析，不经浮点；文本非法时由 serde 报解码错误。
     fn visit_str<E: de::Error>(self, value: &str) -> std::result::Result<Decimal, E> {
         Decimal::from_str(value).map_err(E::custom)
     }
@@ -320,58 +188,22 @@ impl<'de> Visitor<'de> for MoneyVisitor {
         self.visit_str(&value)
     }
 
-    /// JSON 整数不能当作金额，统一拒绝。
-    ///
-    /// # 参数
-    /// * `value` - JSON 有符号整数。
-    ///
-    /// # 返回
-    /// 没有成功值。
-    ///
-    /// # 错误
-    /// 不论 `value` 是多少，都经 `json_integer_rejected` 返回 serde 错误，要求金额以字符串传输。
+    // 有符号 JSON 整数也不得进入定点数值，复用要求用字符串传输的提示。
     fn visit_i64<E: de::Error>(self, value: i64) -> std::result::Result<Decimal, E> {
         Err(json_integer_rejected(value))
     }
 
-    /// JSON 无符号整数不能当作金额，统一拒绝。
-    ///
-    /// # 参数
-    /// * `value` - JSON 无符号整数。
-    ///
-    /// # 返回
-    /// 没有成功值。
-    ///
-    /// # 错误
-    /// 不论 `value` 是多少，都经 `json_integer_rejected` 返回 serde 错误，要求金额以字符串传输。
+    // 无符号 JSON 整数与有符号整数遵循同一拒绝规则，不因缺少负号而接受。
     fn visit_u64<E: de::Error>(self, value: u64) -> std::result::Result<Decimal, E> {
         Err(json_integer_rejected(value))
     }
 
-    /// JSON 浮点不能当作金额，统一拒绝。
-    ///
-    /// # 参数
-    /// * `value` - JSON 浮点数。
-    ///
-    /// # 返回
-    /// 没有成功值。
-    ///
-    /// # 错误
-    /// 不论 `value` 是多少，都返回 serde 错误，说明金额必须用字符串传输、不接受 JSON 浮点数。
+    // 拒绝 JSON 浮点，避免以二进制近似值构造本应精确的业务金额。
     fn visit_f64<E: de::Error>(self, value: f64) -> std::result::Result<Decimal, E> {
         Err(E::custom(format!("金额必须用字符串传输，不接受 JSON 浮点数 {value}，见 P0-4.1")))
     }
 
-    /// 只接受 `$numberDecimal` 字符串或 `$numberDecimalBytes` 原始字节；缺值或未知键返回 serde 错误。
-    ///
-    /// # 参数
-    /// * `map` - 扩展文档的映射访问器。
-    ///
-    /// # 返回
-    /// 存在 `$numberDecimal` 时解析其十进制字符串并返回 `Decimal`；否则把 `$numberDecimalBytes` 还原为 `Decimal`。两者都在时只用 `$numberDecimal`。
-    ///
-    /// # 错误
-    /// 读取键或值失败时传播访问器错误。未知键、两个键都不存在、十进制字符串无法解析，或原始字节无法还原为 `Decimal` 时，经 `de::Error::custom` 返回 serde 错误。
+    // 解码 BSON 扩展表示时按键读取文本或原始字节，两者都有时优先文本。未知键、缺值或无效编码均向 serde 报错。
     fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> std::result::Result<Decimal, A::Error> {
         let mut value: Option<String> = None;
         let mut bytes: Option<Vec<u8>> = None;
@@ -393,7 +225,7 @@ impl<'de> Visitor<'de> for MoneyVisitor {
     }
 }
 
-/// JSON 整数形态的统一拒绝文案（P0-4.1：金额与数量以字符串传输）。
+// 为两条整数解码路径统一提示 P0-4.1 的字符串传输约束，并示例如何传该值。
 fn json_integer_rejected<E: de::Error>(value: impl fmt::Display) -> E {
     E::custom(format!("金额必须用字符串传输（如 \"{value}\"），见 P0-4.1，不接受 JSON 数字"))
 }
@@ -407,16 +239,7 @@ struct D128BytesSeed;
 impl<'de> de::DeserializeSeed<'de> for D128BytesSeed {
     type Value = Vec<u8>;
 
-    /// 按字节访问读取 Decimal128 原始字节，不走 `Vec<u8>` 的序列反序列化。
-    ///
-    /// # 参数
-    /// * `deserializer` - serde 反序列化器。
-    ///
-    /// # 返回
-    /// `visit_bytes` 复制为 `Vec<u8>`；`visit_byte_buf` 原样返回缓冲区。
-    ///
-    /// # 错误
-    /// 反序列化失败，或值不是原始字节时，返回 serde 错误。
+    // 通过字节访问而非序列接收 BSON 驱动暴露的 Decimal128 数据；借用切片须复制，已有缓冲区直接移交。
     fn deserialize<D: Deserializer<'de>>(self, deserializer: D) -> std::result::Result<Vec<u8>, D::Error> {
         struct BytesVisitor;
 
@@ -440,16 +263,7 @@ impl<'de> de::DeserializeSeed<'de> for D128BytesSeed {
     }
 }
 
-/// 将 BSON Decimal128 的 16 字节原始表示转回 `Decimal`。
-///
-/// # 参数
-/// * `bytes` - Decimal128 原始 16 字节（bson `Decimal128Access` 以字节暴露）
-///
-/// # 返回
-/// 解析成功返回 `Ok(Decimal)`。
-///
-/// # 错误
-/// 字节长度不是 16，或 Decimal128 文本无法解析为 `Decimal` 时返回 `Err(String)`。
+// 将 BSON 扩展访问器给出的 16 字节转换为 Decimal128，再将十进制文本读入 `Decimal`；长度或数值不支持时拒绝。
 fn decimal_from_d128_bytes(bytes: Vec<u8>) -> std::result::Result<Decimal, String> {
     let bytes: [u8; 16] = bytes.try_into().map_err(|_| "Decimal128 必须为 16 字节".to_string())?;
     let decimal128 = bson::Decimal128::from_bytes(bytes);
@@ -495,7 +309,7 @@ mod tests {
         }
     }
 
-    /// 零金额：确定性构造为精确 `0.00`，保留两位小数显示。
+    // 确认汇总的起点数值精确为零，展示初始金额时仍保留两位小数。
     #[test]
     fn zero_is_exact_with_two_decimal_display() {
         let zero = Amount::zero();
@@ -504,7 +318,7 @@ mod tests {
         assert_eq!(zero, Amount::from_str("0.00").unwrap());
     }
 
-    /// 小数位上限校验：超位（含有效尾数）拒绝构造，禁止静默舍入。
+    // 覆盖四种定点类型的有效小数位上限：尾零不提高精度，真正超位不允许靠暗中舍入通过。
     #[test]
     fn scale_limit_is_enforced() {
         assert!(Amount::from_str("1.23").is_ok());
@@ -524,7 +338,7 @@ mod tests {
         assert!(Amount::from_str("not a number").is_err());
     }
 
-    /// 舍入边界：.005、负数与大额（银行家舍入，MidpointNearestEven）。
+    // 固定财务舍入的中点取偶规则，覆盖负数对称和大额跨位进位。
     #[test]
     fn round_to_cent_boundaries() {
         // 0.005 → 0.00（偶数位）；0.015 → 0.02；0.025 → 0.02（保留偶数）
@@ -540,7 +354,7 @@ mod tests {
         assert_eq!(round_to_cent(Decimal::new(9_999_999_999_999, 3)), Decimal::new(1_000_000_000_000, 2));
     }
 
-    /// 行金额一致性：gross = net + tax 精确成立，各分量均舍入到分。
+    // 用不同单价、数量和税率核对明细含税额等于净额加税额，并检查含税额以分计。
     #[test]
     fn line_amounts_consistency() {
         let cases = [
@@ -565,7 +379,7 @@ mod tests {
         }
     }
 
-    /// 确定性用例：9.99 × 3 @ 13% = (29.97, 26.07, 3.90)。
+    // 固定单价 `9.99`、数量 `3`、税率 `13%` 的含税额、净额和税额，防止明细拆税公式漂移。
     #[test]
     fn line_amounts_known_case() {
         let (gross, net, tax) = line_amounts(
@@ -578,7 +392,7 @@ mod tests {
         assert_eq!(tax.to_decimal(), Decimal::new(390, 2));
     }
 
-    /// serde_json 往返：金额/单价/数量/税率均为字符串。
+    // 锁定四种定点值的 JSON 字符串合同及往返，保留单价、数量和税率的显示精度。
     #[test]
     fn json_roundtrip_as_strings() {
         let doc = sample_doc();
@@ -594,7 +408,7 @@ mod tests {
         assert_eq!(back, doc);
     }
 
-    /// JSON 数字形态拒绝：整数（含负数）与浮点均不得解析为定点数值。
+    // 验证正负整数及浮点都不能绕过字符串合同，且合法字符串仍须满足小数位限制。
     #[test]
     fn json_numbers_are_rejected() {
         let err = serde_json::from_str::<Amount>("123").unwrap_err().to_string();
@@ -605,16 +419,8 @@ mod tests {
         assert!(serde_json::from_str::<Amount>("\"1.234\"").is_err());
     }
 
-    /// Decimal128 往返（非 human-readable，mongodb 驱动 wire 路径）：
-    /// 序列化为原始字节后，BSON 中必须为 Decimal128 变体，且 to_vec/from_slice
-    /// 与 deserialize_from_document 两条路径均可还原。
-    ///
-    /// 说明：bson 2.15 的 `serialize_to_document`（默认选项）以 human-readable 形态工作
-    /// （bson 文档明确：`serialize_to_document` 的 Serializer 表现为 human readable，
-    /// 与 `to_vec` 不同），因此这里用非 human-readable 的 `to_vec`/`from_slice`
-    /// 精确对应 mongodb 驱动的持久化路径（`human_readable(false)` 选项的
-    /// builder 在 bson 2.15 已废弃）；`deserialize_from_document` 默认形态也兼容
-    /// Decimal128 变体。
+    // 用非 human-readable 的字节路径模拟驱动持久化，断言四种定点值在 BSON 上均为 Decimal128 且可回读。
+    // 默认文档序列化是 human-readable，不能代替字节路径的类型断言；单独核对文档往返。
     #[test]
     fn decimal128_wire_roundtrip() {
         use bson::Bson;
@@ -635,7 +441,7 @@ mod tests {
         assert_eq!(back_from_doc, doc);
     }
 
-    /// Amount 精确加减：不触发舍入，恒等式可用 `Amount::checked_add` 复现。
+    // 用一笔扣税和还原含税额的计算核对加减不触发舍入，并确认零值可作为汇总起点。
     #[test]
     fn amount_add_sub_is_exact() {
         let gross = Amount::from_str("29.97").unwrap();

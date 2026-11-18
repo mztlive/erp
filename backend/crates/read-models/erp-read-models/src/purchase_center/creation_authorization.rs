@@ -13,11 +13,14 @@ pub(crate) use query::query_tasks;
 pub(crate) use super::repository::creation_tasks::CreationTaskFilter;
 use crate::Result;
 
-/// 检查当前任务版本及采购创建入口资格。
+/// 确定采购创建任务授权的适用条件时，检查当前任务版本及采购创建入口资格。
+///
 /// # 参数
 /// db 为业务数据库，authorization 为共享服务，task 为同事务读取的精确任务。
+///
 /// # 返回
 /// 固定入口的任务与来源条件都满足时成功。
+///
 /// # 错误
 /// 账号、任务、版本、来源或身份设施失败原样返回。
 pub async fn require_creation_task(

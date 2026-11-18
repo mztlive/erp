@@ -23,7 +23,7 @@ pub(crate) enum ActionResult {
 }
 
 impl ActionResult {
-    /// 使用原退款或取消资格，不追加独立详情资格。
+    // 查证售后动作原结果时，沿用相应退款或取消权限，不额外要求独立详情权限。
     fn permission(&self) -> Permission {
         match self {
             Self::Refund(_) => supplier_fulfillment::ORDER_REFUND,
@@ -42,13 +42,13 @@ trait ActionResultRead: Sync {
     type Scope: Send + Sync;
     type View: Send;
 
-    /// 在当前读取阶段取得原命令动作的完整条件。
-    /// # 参数
-    /// actor/permission 为真实身份及固定动作；executor 为新读取快照。
-    /// # 返回
-    /// 仅供本次完整结果读取的查询条件。
-    /// # 错误
-    /// 身份、功能资格、范围或执行边界无效时拒绝。
+    // 在当前读取阶段取得原命令动作的完整条件。
+    //
+    // actor/permission 为真实身份及固定动作；executor 为新读取快照。
+    //
+    // 仅供本次完整结果读取的查询条件。
+    //
+    // 身份、功能资格、范围或执行边界无效时拒绝。
     async fn authorize(
         &self,
         actor: &AuditActor,
@@ -56,13 +56,13 @@ trait ActionResultRead: Sync {
         executor: &mut dyn Executor,
     ) -> Result<Self::Scope>;
 
-    /// 对完整订单执行授权过滤，再按精确订单读取动作与明细。
-    /// # 参数
-    /// order_id/target 为真实结果定位；scope 为本阶段条件；executor 为原读取执行器。
-    /// # 返回
-    /// 已经过滤的完整命令结果。
-    /// # 错误
-    /// 无权、对象缺失、动作不属于订单或读取失败时拒绝。
+    // 对完整订单执行授权过滤，再按精确订单读取动作与明细。
+    //
+    // order_id/target 为真实结果定位；scope 为本阶段条件；executor 为原读取执行器。
+    //
+    // 已经过滤的完整命令结果。
+    //
+    // 无权、对象缺失、动作不属于订单或读取失败时拒绝。
     async fn view(
         &self,
         order_id: &str,
@@ -71,13 +71,13 @@ trait ActionResultRead: Sync {
         executor: &mut dyn Executor,
     ) -> Result<Self::View>;
 
-    /// 在全部关联读取之后完成本阶段交付检查。
-    /// # 参数
-    /// scope 为原查询条件，executor 为原读取执行器。
-    /// # 返回
-    /// 原边界和期限仍有效时成功。
-    /// # 错误
-    /// 跨阶段、到期或授权依赖变化时拒绝交付。
+    // 在全部关联读取之后完成本阶段交付检查。
+    //
+    // scope 为原查询条件，executor 为原读取执行器。
+    //
+    // 原边界和期限仍有效时成功。
+    //
+    // 跨阶段、到期或授权依赖变化时拒绝交付。
     async fn validate(&self, scope: &Self::Scope, executor: &mut dyn Executor) -> Result<()>;
 }
 
@@ -140,7 +140,7 @@ impl ActionResultRead for MongoActionResultRead {
 }
 
 impl MongoActionResultRead {
-    /// 在原读取快照定位取消动作；退款只接受原命令产生的精确动作身份。
+    // 在原读取快照定位取消动作；退款只接受原命令产生的精确动作身份。
     async fn action_id(
         &self,
         order_id: &str,
@@ -160,7 +160,7 @@ impl MongoActionResultRead {
     }
 }
 
-/// 原写事务结束后，在新快照中按原动作授权并复验完整结果。
+// 原写事务结束后，在新快照中按原动作授权并复验完整结果。
 pub(crate) async fn read_action_result(
     db: &Database,
     access: &FulfillmentOrderAccess,
@@ -179,13 +179,13 @@ pub(crate) async fn read_action_result(
         .await
 }
 
-/// 原命令结束后重新授权完整回包；交付失败时丢弃已经读取的数据。
-/// # 参数
-/// port 为原命令结果读取设施；actor/order_id/target 为真实身份及目标；executor 为新读取快照。
-/// # 返回
-/// 原动作完整授权及交付检查均通过后的结果。
-/// # 错误
-/// 授权、读取或交付检查任一失败时返回原错误。
+// 原命令结束后重新授权完整回包；交付失败时丢弃已经读取的数据。
+//
+// port 为原命令结果读取设施；actor/order_id/target 为真实身份及目标；executor 为新读取快照。
+//
+// 原动作完整授权及交付检查均通过后的结果。
+//
+// 授权、读取或交付检查任一失败时返回原错误。
 async fn read_result<P: ActionResultRead>(
     port: &P,
     actor: &AuditActor,

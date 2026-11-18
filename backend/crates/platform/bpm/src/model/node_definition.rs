@@ -67,26 +67,15 @@ pub struct ApprovalNodeDefinition {
 }
 
 impl ApprovalNodeDefinition {
-    /// 配置动态指派规则，指定人员节点传空。
-    /// # 参数
-    /// `rule` 是调用方识别的规则键。
-    /// # 返回
-    /// 返回校验后的节点。
-    /// # 错误
-    /// 规则与人员混用或均缺失时拒绝。
+    /// 草稿组装节点时设置动态指派规则；指定人员节点用 `None`。设置后立即核验指派形态，拒绝不完整或混用的规则与人员。
     pub fn with_rule(mut self, rule: Option<String>) -> ModelResult<Self> {
         self.assignee_rule = rule;
         self.validate_assignment()?;
         Ok(self)
     }
 
-    /// 校验定义规则或已解析运行图的指派完整性。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 合法指派返回成功。
-    /// # 错误
-    /// 缺少规则或人员、动态规则混合或签时拒绝。
+    /// 校验草稿定义或已解析运行图的指派：指定人员必须有身份且没有解析依据，动态规则则允许尚未解析。
+    /// 动态节点不能混入或签人员；已解析事实须匹配规则和显示名，且申请人、来源与指派标识齐全。
     pub fn validate_assignment(&self) -> ModelResult<()> {
         trim_required(
             &self.assignee_label_snapshot,
@@ -116,37 +105,19 @@ impl ApprovalNodeDefinition {
         Ok(())
     }
 
-    /// 读取已确定的审批人；未解析规则不得进入引擎。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 返回首位审批人。
-    /// # 错误
-    /// 未解析时拒绝。
+    /// 引擎准备冻结绑定或创建执行时取已确定的首位审批人；未解析的动态节点无身份，不能进入运行路径。
     pub fn assignee(&self) -> ModelResult<&ParticipantId> {
         self.assignee_participant_id.as_ref().ok_or(ModelError::InvalidField("审批人来源尚未解析"))
     }
 
-    /// 设置同节点的其他或签审批人。
-    /// # 参数
-    /// `assignees` 为除首位之外的参与人快照。
-    /// # 返回
-    /// 返回包含完整或签集合的节点。
-    /// # 错误
-    /// 人员重复、超限或显示名非法时失败。
+    /// 为指定人员节点附上其他或签人，供运行时按成员派任务；人数、身份重复或显示名不合法时返回错误。
     pub fn with_additional_assignees(mut self, assignees: Vec<ApprovalParticipant>) -> ModelResult<Self> {
         self.additional_assignees = assignees;
         self.validate_additional_assignees()?;
         Ok(self)
     }
 
-    /// 校验当前节点的其他或签审批人，不复制节点快照。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 成员身份与显示名有效时成功。
-    /// # 错误
-    /// 人员重复、超限、显示名非法或动态节点混用指定人员时失败。
+    // 校验构图或回读所得的或签名单，不复制快照；禁止身份重复、超过 50 人，或未解析动态节点混入指定人员。
     pub(crate) fn validate_additional_assignees(&self) -> ModelResult<()> {
         if let Some(id) = &self.assignee_participant_id {
             validate_additional(id, &self.additional_assignees)?;
@@ -156,13 +127,7 @@ impl ApprovalNodeDefinition {
         Ok(())
     }
 
-    /// 返回冻结的全部参与人。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 首位与其他参与人按定义顺序返回。
-    /// # 错误
-    /// 无。
+    /// 为资格收敛或展示提取人员快照，首位在前、其他或签成员随后；未解析动态节点不会凭规则生成成员。
     pub fn participants(&self) -> Vec<ApprovalParticipant> {
         let mut result = self
             .assignee_participant_id
@@ -176,47 +141,20 @@ impl ApprovalNodeDefinition {
         result
     }
 
-    /// 判断身份是否属于冻结参与人。
-    /// # 参数
-    /// `id` 为待校验身份。
-    /// # 返回
-    /// 集合内身份返回 true。
-    /// # 错误
-    /// 无。
+    /// 校验指定身份是否命中节点已知的主审批人或其他或签成员；不尝试解析动态规则。
     pub fn has_participant(&self, id: &str) -> bool {
         self.assignee_participant_id.as_ref().is_some_and(|value| value.as_str() == id)
             || self.additional_assignees.iter().any(|item| item.participant_id.as_str() == id)
     }
 
-    /// 规范化节点显示名称，供命令摘要与实体构造共享同一规则源。
-    ///
-    /// # 参数
-    /// * `name` - 调用方提供的节点名称
-    ///
-    /// # 返回
-    /// 返回去除首尾空白后的名称。
-    ///
-    /// # 错误
-    /// trim 后为空或超过 [`NAME_MAX_LEN`] 个 UTF-8 字节时返回 [`ModelError::InvalidField`]。
+    /// 规范化节点显示名，供构造节点和计算命令摘要使用同一值。
+    /// 裁剪后为空或超过 [`NAME_MAX_LEN`] 个 UTF-8 字节时返回 [`ModelError::InvalidField`]。
     pub fn normalize_name(name: impl Into<String>) -> ModelResult<String> {
         normalize_required(name, "节点名称不能为空", NAME_MAX_LEN, "节点名称过长")
     }
 
-    /// 创建人工审批节点。
-    ///
-    /// 处理人与显示名由调用方提供；本模块不查询账号或组织。
-    ///
-    /// # 参数
-    /// * `input` - 节点身份、顺序与审批人快照
-    ///
-    /// # 返回
-    /// 返回人工审批节点。
-    ///
-    /// # 错误
-    /// 键、名称、顺序或快照非法时返回错误。
-    ///
-    /// # 约束
-    /// 节点类型固定为人工审批，BPM 不解释 `node_purpose`。
+    /// 组装草稿时用调用方提供的人员快照创建人工审批节点，规范化节点键、名称和可选用途，不查询账号或解释用途。
+    /// 初始不含规则、解析依据和其他或签人；组装后再校验完整指派。顺序为零、文本非法或时间不可持久化时返回错误。
     pub fn new(input: NewNodeDefinition) -> ModelResult<Self> {
         if input.display_order == 0 {
             return Err(ModelError::InvalidField("节点顺序必须从 1 开始"));
@@ -242,20 +180,8 @@ impl ApprovalNodeDefinition {
         })
     }
 
-    /// 以当前节点身份与流程字段刷新审批人显示名快照。
-    ///
-    /// # 参数
-    /// * `assignee_label_snapshot` - 当前账号显示名
-    /// * `at` - 调用方提供的快照时间
-    ///
-    /// # 返回
-    /// 返回保留节点 ID、键、顺序、用途与审批人引用的新节点快照。
-    ///
-    /// # 错误
-    /// 显示名为空、超长或当前节点字段已损坏时返回模型错误。
-    ///
-    /// # 关键业务约束
-    /// BPM 不查询账号；调用方必须先完成账号与权限重验，再把显示名传入本方法。
+    /// 调用方复核账号和权限后，用取得的显示名重建草稿节点快照，沿用节点身份、顺序、用途、规则与人员引用。
+    /// 此操作不就地更新节点，也不查询账号；显示名或重建后的字段非法时返回错误。
     pub fn with_assignee_label_snapshot(
         &self,
         assignee_label_snapshot: impl Into<String>,
@@ -284,7 +210,7 @@ mod tests {
     use crate::model::types::ApprovalNodeType;
     use crate::model::{ParticipantId, Timestamp};
 
-    /// 节点只允许人工审批类型，顺序 0 被拒。
+    // 覆盖构建人工节点时的零顺序和空键，并验证刷新显示名不会更换稳定身份。
     #[test]
     fn node_rejects_zero_order_and_empty_key() {
         let at = Timestamp::from_unix_secs(1).unwrap();
@@ -341,7 +267,7 @@ mod tests {
         assert!(node.with_assignee_label_snapshot("   ", Timestamp::from_unix_secs(2).unwrap()).is_err());
     }
 
-    /// 摘要准备与实体构造必须共享 trim 和 UTF-8 字节边界。
+    // 检查公开名称规范化的裁剪和 UTF-8 字节边界，使命令摘要能与模型中落下的名称保持一致。
     #[test]
     fn node_name_normalization_is_public_and_matches_constructor() {
         assert_eq!(ApprovalNodeDefinition::normalize_name("  仓储复核  ").unwrap(), "仓储复核");

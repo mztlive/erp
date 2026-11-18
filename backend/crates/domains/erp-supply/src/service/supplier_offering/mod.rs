@@ -79,64 +79,29 @@ pub struct SupplierOfferingService {
 }
 impl SupplierOfferingService {
     /// 创建供应商供给服务。
-    ///
-    /// # 参数
-    /// * `db` - 数据库
-    ///
-    /// # 返回
     /// 返回服务实例；授权访问器 缺省失败关闭。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db: db.clone(), data_scope: OfferingAccess::unwired(db.clone()) }
     }
 
     /// 注入供给授权访问器。
-    ///
-    /// # 参数
-    /// * `data_scope` - 组合层装配的本域授权访问器
-    ///
-    /// # 返回
     /// 返回绑定授权访问器 的服务。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
     /// HTTP 与写命令必须注入生产授权设施，不得保留未接线访问器。
+    /// `data_scope`：组合层装配的本域授权访问器。
     pub fn with_data_scope(mut self, data_scope: OfferingAccess) -> Self {
         self.data_scope = data_scope;
         self
     }
 
-    /// 构造本域范围访问器。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回绑定当前数据库与授权访问器 的访问器。
-    ///
-    /// # 错误
-    /// 无。
+    // 构造本域范围访问器。
+    // 返回绑定当前数据库与授权访问器 的访问器。
     pub(crate) fn access(&self) -> OfferingAccess {
         self.data_scope.clone()
     }
-    /// 当前创建资格成立后读取回执，回放核验真实供给；新建核验候选及来源。
-    /// 任一授权或业务错误立即停止，所有读取使用原事务执行器。
-    ///
-    /// # 参数
-    /// * `req` - 创建供给请求。
-    /// * `actor` - 已认证操作人。
-    /// * `qualification` - 供应资格 Port；仅在构造条款后调用。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 同一幂等键且载荷可重放时返回 `CommandPreparation::Replay`。否则返回待写入的供给、首版、可供和命令。
-    ///
-    /// # 错误
-    /// 参数、指纹、身份冲突、范围、SKU 重复、来源连接、条款构造或资格检查失败时返回对应错误。同一幂等键载荷不同返回 `ConflictError`；已存结果无法解码返回 `Internal`。
+    /// 在创建供给事务中校验请求和当前授权；同键同载荷且仍可访问真实供给时返回原结果。新命令核对责任归属、
+    /// 唯一 SKU、来源及资格后，仅准备供给、首版条款、实时可供和回执。
+    /// 同键异载荷为冲突；回执无法解码为内部错误，不当作新命令执行。新建输入、范围、来源或资格有误时不返
+    /// 回待写事实。
     pub async fn prepare_create<P: QualificationPort + ?Sized>(
         &self,
         req: &CreateSupplierOfferingRequest,
@@ -183,17 +148,8 @@ impl SupplierOfferingService {
             fingerprint,
         }))
     }
-    /// 同一执行器写入供给、首版、可供与原命令；审计由process随后写入。
-    ///
-    /// # 参数
-    /// * `prepared` - 已准备的创建事实和命令。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 无返回值。供给、首版、可供和命令已写入。
-    ///
-    /// # 错误
-    /// 仓储写入失败时返回对应错误。
+    /// 重验待创建 API 供给的来源采购价后，用原执行器写入稳定供给、首版条款、实时可供和命令回执。调用方须
+    /// 在同一事务完成审计；校验或写入失败向上传播。
     pub async fn persist_created(
         &self,
         prepared: &PreparedCreate,
@@ -202,20 +158,9 @@ impl SupplierOfferingService {
         self.ensure_api_create_price(&prepared.offering, &prepared.revision, executor).await?;
         write::created(&self.db, prepared, executor).await
     }
-    /// 加载最大修订并构造新版本；仅Active目标状态读取资格。
-    ///
-    /// # 参数
-    /// * `id` - 供给主键。
-    /// * `req` - 修订请求。
-    /// * `actor` - 已认证操作人。
-    /// * `qualification` - 供应资格 Port；仅目标状态为 `Active` 时调用。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 同一幂等键且载荷可重放时返回 `CommandPreparation::Replay`。否则返回待写入的新修订和已改状态的供给。
-    ///
-    /// # 错误
-    /// 参数、指纹、范围或修订构造失败时返回对应错误。供给缺少维护人或组织时返回 `BusinessLogicError`。期望修订号与当前最大修订不一致时返回 `ConflictError`。同一幂等键载荷不同返回 `ConflictError`；已存结果无法解码返回 `Internal`。
+    /// 在调用方执行器内核验目标供给权限并尝试重放。新命令按最大修订号做版本检查，核对责任与来源报价，准
+    /// 备追加条款；只有目标为 `Active` 才重新取供应资格。
+    /// 缺责任或资格不合格时拒绝，期望修订号或幂等载荷不一致时冲突，损坏回执不得重跑。
     pub async fn prepare_revise<P: QualificationPort + ?Sized>(
         &self,
         id: &str,
@@ -270,17 +215,8 @@ impl SupplierOfferingService {
             fingerprint,
         }))
     }
-    /// 新修订insert、供给CAS后构造原响应与命令并写入；不另开事务。
-    ///
-    /// # 参数
-    /// * `prepared` - 已准备的修订；命令在写入时构造。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 返回修订后的供给、修订身份、修订号、状态和版本。
-    ///
-    /// # 错误
-    /// 修订写入、供给 CAS 或命令写入失败时返回对应错误。
+    /// 用原执行器追加不可变条款修订，并用 CAS 切换供给当前指针和状态。两步成功后才写入相同命令的原结果回
+    /// 执；修订、CAS 或回执失败时向上传播，由调用方控制事务。
     pub async fn persist_revised(
         &self,
         prepared: &mut PreparedRevision,
@@ -288,19 +224,9 @@ impl SupplierOfferingService {
     ) -> Result<ReviseSupplierOfferingResult> {
         write::revised(&self.db, prepared, executor).await
     }
-    /// 按原投影版本、来源时间和数量顺序准备可供更新。
-    ///
-    /// # 参数
-    /// * `id` - 供给主键。
-    /// * `req` - 可供更新请求。
-    /// * `actor` - 已认证操作人。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 同一幂等键且载荷可重放时返回 `CommandPreparation::Replay`。否则返回已应用但未写回的可供状态。
-    ///
-    /// # 错误
-    /// 参数、指纹、范围或可供构造失败时返回对应错误。供给缺少维护人或组织时返回 `BusinessLogicError`。可供记录不存在时返回 `NotFound`。期望版本不一致时返回 `ConflictError`。同一幂等键载荷不同返回 `ConflictError`；已存结果无法解码返回 `Internal`。
+    /// 核验对象和命令回执后，仅为允许手工维护且有责任归属的供给准备实时可供更新；不修改供给或商业修订。
+    /// 旧版本、倒退来源时间或非法数量拒绝，缺投影返回 `NotFound`。
+    /// 同键同载荷可返回原结果；异载荷冲突，损坏回执不能当作新命令执行。
     pub async fn prepare_availability(
         &self,
         id: &str,
@@ -353,17 +279,8 @@ impl SupplierOfferingService {
             fingerprint,
         }))
     }
-    /// 可供CAS后构造原响应与命令并写入，保留命令ID生成时点。
-    ///
-    /// # 参数
-    /// * `prepared` - 已准备的可供更新。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 返回可供状态、版本和来源更新时间。
-    ///
-    /// # 错误
-    /// 可供 CAS 或命令写入失败时返回对应错误。
+    /// 用调用方事务执行器 CAS 更新可供投影，成功后写入含状态、版本及来源时间的原结果回执；任一步失败即返
+    /// 回错误。
     pub async fn persist_availability(
         &self,
         prepared: &mut PreparedAvailability,
@@ -371,7 +288,7 @@ impl SupplierOfferingService {
     ) -> Result<UpdateSupplierOfferingAvailabilityResult> {
         write::availability(&self.db, prepared, executor).await
     }
-    /// 同一供应商 SKU 已有供给时拒绝创建。
+    // 同一供应商 SKU 已有供给时拒绝创建。
     async fn ensure_identity_available(
         &self,
         offering: &SupplierOffering,
@@ -387,7 +304,7 @@ impl SupplierOfferingService {
         }
         Ok(())
     }
-    /// 来源连接若存在，必须属于该供应商且为启用态；未绑定连接则跳过。
+    // 来源连接若存在，必须属于该供应商且为启用态；未绑定连接则跳过。
     async fn ensure_source_connection(
         &self,
         offering: &SupplierOffering,
@@ -406,7 +323,7 @@ impl SupplierOfferingService {
             .ensure_offering_source(offering.supplier_id.as_ref())
             .map_err(|error| Error::BusinessLogicError(error.to_string()))
     }
-    /// 新增时指定的配送模板必须存在且属于本供应商；未指定时跟随供应商默认模板。
+    // 新增时指定的配送模板必须存在且属于本供应商；未指定时跟随供应商默认模板。
     async fn assign_requested_template(
         &self,
         offering: &mut SupplierOffering,
@@ -477,12 +394,9 @@ impl SupplierOfferingService {
             .map_err(Into::into)
     }
     /// 在调用方的新快照内恢复创建命令的已提交结果。
-    /// # 参数
-    /// request、actor 为原请求和当前身份，executor 为新的快照事务。
-    /// # 返回
     /// 当前资格及原供给授权通过时返回原回执；没有回执时返回 None。
-    /// # 错误
     /// 当前身份、范围、回执指纹或读取失效时拒绝。
+    /// request、actor 为原请求和当前身份，executor 为新的快照事务。
     pub async fn created_result(
         &self,
         request: &CreateSupplierOfferingRequest,
@@ -497,12 +411,9 @@ impl SupplierOfferingService {
     }
 
     /// 在调用方的新快照内恢复修订命令的已提交结果。
-    /// # 参数
-    /// id、request 为原目标与请求，actor 为当前身份，executor 为新的快照事务。
-    /// # 返回
     /// 当前修订授权通过时返回原回执；没有回执时返回 None。
-    /// # 错误
     /// 当前身份、对象、回执指纹或读取失效时拒绝。
+    /// id、request 为原目标与请求，actor 为当前身份，executor 为新的快照事务。
     pub async fn revised_result(
         &self,
         id: &str,
@@ -518,12 +429,9 @@ impl SupplierOfferingService {
     }
 
     /// 在调用方的新快照内恢复可供更新命令的已提交结果。
-    /// # 参数
-    /// id、request 为原目标与请求，actor 为当前身份，executor 为新的快照事务。
-    /// # 返回
     /// 完整可供更新授权通过时返回原回执；没有回执时返回 None。
-    /// # 错误
     /// 当前身份、对象、回执指纹或读取失效时拒绝。
+    /// id、request 为原目标与请求，actor 为当前身份，executor 为新的快照事务。
     pub async fn availability_result(
         &self,
         id: &str,
@@ -544,7 +452,7 @@ mod tests {
     use crate::entity::supplier_offering::{
         AvailabilityStatus, OfferingSourceType, SupplierOfferingCommandData,
     };
-    /// 覆盖存量命令重放：历史裸指纹命令与 DTO 新指纹同键同载荷可重放，跨操作必须冲突。
+    // 验证历史裸指纹命令与 DTO 新指纹同键同载荷可重放，跨操作必须冲突。
     #[test]
     fn stored_command_replays_dto_fingerprint_and_decodes_result() {
         let req = create_request();

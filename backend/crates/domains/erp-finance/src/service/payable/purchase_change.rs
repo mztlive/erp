@@ -44,30 +44,18 @@ pub struct PurchaseChangePayableWrite {
 }
 impl PurchaseChangePayableWrite {
     /// 返回本次差额分录的稳定身份。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回已准备的分录身份，不分配第二个身份。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn entry_id(&self) -> &str {
         self.entry_id.as_ref()
     }
 
     /// 在调用方事务中读取原子账，追加差额分录并 CAS 更新原子账。
-    ///
-    /// # 参数
-    /// * `db` - 财务事实所在数据库
-    /// * `executor` - 采购变更生效事务的同一执行器
-    ///
-    /// # 返回
     /// 成功时返回已更新的原应付子账身份，供组合层同步付款任务。
+    /// 失败条件：缺少原子账、金额规则、唯一键、CAS 或仓储错误由外层事务回滚。
     ///
-    /// # 错误
-    /// 缺少原子账、金额规则、唯一键、CAS 或仓储错误由外层事务回滚。
+    /// 输入约定：
+    /// - `db`：财务事实所在数据库
+    /// - `executor`：采购变更生效事务的同一执行器
     pub async fn persist(&self, db: &Database, executor: &mut dyn Executor) -> Result<PayableAccountId> {
         let existing =
             db.payable_accounts().find_by_purchase_order(&self.input.purchase_order_id, executor).await?;
@@ -77,7 +65,7 @@ impl PurchaseChangePayableWrite {
         Ok(account.base.id.into())
     }
 
-    /// 将事务内读取的原子账及冻结差额转为实际写入内容。
+    // 用本次事务已读取的原应付子账和冻结采购差额准备后续写入，保持子账金额与差额来源一致。
     fn build_posting(&self, existing: Option<PayableAccount>) -> Result<(PayableAccount, PayableEntry)> {
         let mut account = existing
             .ok_or_else(|| Error::BusinessLogicError("采购单缺少正式应付子账，不能生效采购变更".into()))?;
@@ -113,15 +101,11 @@ impl PurchaseChangePayableWrite {
 }
 
 /// 准备冻结差额及分录身份；零差额不分配身份、不读取时钟。
+/// 结果：零差额返回 `None`，非零返回在调用方事务内追加到原子账的写入计划。
+/// 失败条件：版本金额非法时返回错误；原子账及核销约束在事务内读取后校验。
 ///
-/// # 参数
-/// * `input` - 基准与目标采购版本的冻结金额及来源身份
-///
-/// # 返回
-/// 零差额返回 `None`，非零返回在调用方事务内追加到原子账的写入计划。
-///
-/// # 错误
-/// 版本金额非法时返回错误；原子账及核销约束在事务内读取后校验。
+/// 输入约定：
+/// - `input`：基准与目标采购版本的冻结金额及来源身份
 pub fn prepare_purchase_change_payable(
     input: PurchaseChangePayableInput,
 ) -> Result<Option<PurchaseChangePayableWrite>> {
@@ -129,18 +113,16 @@ pub fn prepare_purchase_change_payable(
 }
 
 /// 同步正式采购主体和版本，包括金额未变化的正式变更。
-///
-/// # 参数
-/// * `db` - 财务数据库。
-/// * `order_id` - 采购单身份。
-/// * `revision_id` - 最新正式采购版本。
-/// * `party_id` - 正式来源我方主体。
-/// * `party_name` - 正式主体名称快照。
-/// * `executor` - 采购变更生效的同一事务执行器。
-/// # 返回
 /// 成功时更新既有应付的来源身份并保留金额和占用。
-/// # 错误
 /// 来源缺失或 CAS 写入失败时返回错误。
+///
+/// 输入约定：
+/// - `db`：财务数据库。
+/// - `order_id`：采购单身份。
+/// - `revision_id`：最新正式采购版本。
+/// - `party_id`：正式来源我方主体。
+/// - `party_name`：正式主体名称快照。
+/// - `executor`：采购变更生效的同一事务执行器。
 pub async fn sync_purchase_subject(
     db: &Database,
     order_id: &PurchaseOrderId,
@@ -161,7 +143,7 @@ pub async fn sync_purchase_subject(
     Ok(())
 }
 
-/// 生产使用原身份和时钟来源，单测注入值验证零差额与确定身份。
+// 计算采购变更的应付写入计划时延迟取得新分录身份与时间；允许测试注入固定值验证零差额与非零差额路径。
 fn build(
     input: PurchaseChangePayableInput,
     next_identity: impl FnOnce() -> PayableEntryId,

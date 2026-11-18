@@ -8,11 +8,8 @@ type Result<T> = std::result::Result<T, ImportFailure>;
 
 impl OcrDocument {
     /// 校验实际 PDF 页数与 OCR 覆盖一致。
-    /// # 参数
-    /// * `page_count` - 由本地 PDF 解析器独立计算的页数。
-    /// # 返回
     /// 全部页面可识别时成功。
-    /// # 错误
+    /// `page_count` 由本地 PDF 解析器独立计算的页数。
     /// 缺页、重复页、不可读页或结果过大。
     pub fn validate(&self, page_count: u32) -> Result<()> {
         if page_count == 0 || page_count > 200 || self.pages.len() != usize::try_from(page_count).unwrap_or(0)
@@ -59,16 +56,9 @@ pub struct ValidatedFields {
 }
 
 impl ContractValues {
-    /// 校验确认后的合同字段，不补默认值、不修正识别错字。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 通过校验的结构化业务值。有效期止为「长期」时 `valid_to` 为 `None`。
-    ///
-    /// # 错误
-    /// 必填缺失、开票类型或税率不在允许集合、日期无效，或有效期止早于生效日时返回 `ImportFailure`。
+    // 校验确认后的合同字段，不补默认值、不修正识别错字。
+    // 通过校验的结构化业务值。有效期止为「长期」时 `valid_to` 为 `None`。
+    // 必填缺失、开票类型或税率不在允许集合、日期无效，或有效期止早于生效日时返回 `ImportFailure`。
     pub(super) fn validate_values(&self) -> Result<ValidatedFields> {
         let contract_no = self.required(ContractNo)?;
         for field in [CustomerName, CompanyName] {
@@ -106,11 +96,8 @@ impl ContractValues {
     }
 
     /// 读取必需字段，不补默认值。
-    /// # 参数
-    /// * `field` - 字段类型。
-    /// # 返回
     /// 用户确认值。
-    /// # 错误
+    /// `field` 为字段类型。
     /// 必填信息缺失。
     pub fn required(&self, field: ContractField) -> Result<&str> {
         self.fields
@@ -120,16 +107,10 @@ impl ContractValues {
             .ok_or_else(|| self.failure(field, "MISSING_FIELD", "合同缺少必需信息，请补充后确认"))
     }
 
-    /// 把确认值解析为业务日。`年`、`月`、`/` 换成 `-`，去掉 `日`；不猜测残缺日期。
-    ///
-    /// # 参数
-    /// * `field` - 日期字段。
-    ///
-    /// # 返回
-    /// 解析后的 [`BusinessDate`]。
-    ///
-    /// # 错误
-    /// 字段缺失，或不是可解析的年月日三段时返回 `ImportFailure`。
+    // 把确认值解析为业务日。`年`、`月`、`/` 换成 `-`，去掉 `日`；不猜测残缺日期。
+    // 解析后的 [`BusinessDate`]。
+    // `field` 为日期字段。
+    // 字段缺失，或不是可解析的年月日三段时返回 `ImportFailure`。
     pub(super) fn date(&self, field: ContractField) -> Result<BusinessDate> {
         let raw = self.required(field)?;
         let normalized = raw.replace(['年', '月', '/'], "-").replace('日', "");
@@ -143,16 +124,9 @@ impl ContractValues {
         parsed.ok_or_else(|| self.failure(field, "INVALID_DATE", "日期格式无效，请填写有效日期"))
     }
 
-    /// 把确认的付款条件匹配到固定代码与展示名。比较前去掉空白。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// `(代码, 展示名)`。
-    ///
-    /// # 错误
-    /// 付款条件缺失或不在支持列表时返回 `ImportFailure`。
+    // 把确认的付款条件匹配到固定代码与展示名。比较前去掉空白。
+    // `(代码, 展示名)`。
+    // 付款条件缺失或不在支持列表时返回 `ImportFailure`。
     pub(super) fn payment(&self) -> Result<(String, String)> {
         let raw = self.required(PaymentTerms)?;
         let compact = raw.split_whitespace().collect::<String>();
@@ -176,12 +150,9 @@ impl ContractValues {
 }
 
 /// 对有界候选执行名称和信用代码双重一致性检查，拒绝模糊或多义匹配。
-/// # 参数
-/// * `name` / `credit` - 用户确认的法定名称及可选信用代码。
-/// * `candidates` - 当前未删除、启用主数据候选。
-/// # 返回
 /// 唯一身份及其版本。
-/// # 错误
+/// `candidates` 为当前未删除、启用主数据候选。
+/// `name` / `credit` - 用户确认的法定名称及可选信用代码。
 /// 无匹配、多匹配或信用代码冲突。
 pub fn match_identity(
     name: &str,

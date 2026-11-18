@@ -20,20 +20,11 @@ use super::read;
 use crate::services::SalesServices;
 use crate::{Error, Result};
 
-/// 校验认证创建人及其主属组织在创建动作范围内。
-///
-/// # 参数
-/// * `access` - 选品范围访问器
-/// * `actor` - 已认证操作人
-/// * `owner` - 拟写入的显式销售负责人
-/// * `org` - 拟写入的业务组织
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 范围允许时成功。
-///
-/// # 错误
-/// 无动作权限或责任不在范围内时拒绝。
+// 校验认证创建人及其主属组织在创建动作范围内。
+//
+// `access` 为选品范围访问器；`owner` 为拟写入的显式销售负责人；`org` 为拟写入的业务组织；沿用调用方的执行器。范围允许时成功。
+//
+// 无动作权限或责任不在范围内时拒绝。
 pub(crate) async fn check_create_scope(
     access: &SelectionAccess,
     actor: &AuditActor,
@@ -49,21 +40,9 @@ pub(crate) async fn check_create_scope(
     Ok(())
 }
 
-/// 启动准备，并在实际写事务内重验统一授权。
-///
-/// # 参数
-/// * `db` - 选品数据库
-/// * `storage` - 对象存储
-/// * `access` - 选品范围访问器
-/// * `id` - 选品册
-/// * `req` - 准备命令
-/// * `actor` - 已认证操作人
-///
-/// # 返回
-/// 返回准备中详情。
-///
-/// # 错误
-/// 无权操作、状态或版本非法时拒绝。
+// 启动准备，并在实际写事务内重验统一授权。
+//
+// `storage` 为对象存储；`access` 为选品范围访问器；`req` 为准备命令。返回准备中详情。无权操作、状态或版本非法时拒绝。
 pub(crate) async fn start_prepare_checked(
     db: &Database,
     storage: &S3Storage,
@@ -83,22 +62,11 @@ pub(crate) async fn start_prepare_checked(
         .await?)
 }
 
-/// 授权后发布。
-///
-/// # 参数
-/// * `db` - 选品数据库
-/// * `storage` - 对象存储
-/// * `crypto` - 链接编解码器
-/// * `access` - 选品范围访问器
-/// * `id` - 选品册
-/// * `req` - 发布命令
-/// * `actor` - 已认证操作人
-///
-/// # 返回
-/// 返回含链接的详情。
-///
-/// # 错误
-/// 无权操作、复核失败或状态不允许时拒绝。
+// 授权后发布。
+//
+// `storage` 为对象存储；`crypto` 为链接编解码器；`access` 为选品范围访问器；`req` 为发布命令。返回含链接的详情。
+//
+// 无权操作、复核失败或状态不允许时拒绝。
 pub(crate) async fn publish_checked(
     db: &Database,
     services: &SalesServices,
@@ -114,20 +82,9 @@ pub(crate) async fn publish_checked(
         .await?)
 }
 
-/// 授权后复制链接详情。
-///
-/// # 参数
-/// * `db` - 选品数据库
-/// * `crypto` - 链接编解码器
-/// * `access` - 选品范围访问器
-/// * `id` - 选品册
-/// * `actor` - 已认证操作人
-///
-/// # 返回
-/// 返回含路径的详情。
-///
-/// # 错误
-/// 无链接或无权操作时拒绝。
+// 授权后复制链接详情。
+//
+// `crypto` 为链接编解码器；`access` 为选品范围访问器。返回含路径的详情。无链接或无权操作时拒绝。
 pub(crate) async fn copy_link_checked(
     db: &Database,
     crypto: &LinkTokenCrypto,
@@ -171,21 +128,11 @@ pub(crate) async fn copy_link_checked(
         .await
 }
 
-/// 授权后读取内部会话。
-///
-/// 授权和业务资料使用同一快照执行器。
-///
-/// # 参数
-/// * `db` - 选品数据库
-/// * `access` - 选品范围访问器
-/// * `id` - 选品册
-/// * `actor` - 已认证操作人
-///
-/// # 返回
-/// 返回当前会话。
-///
-/// # 错误
-/// 无会话或无权查看时拒绝。
+// 授权后读取内部会话。
+//
+// 授权和业务资料使用同一快照执行器。
+//
+// `access` 为选品范围访问器。返回当前会话。无会话或无权查看时拒绝。
 pub(crate) async fn session_checked(
     db: &Database,
     access: SelectionAccess,
@@ -223,22 +170,11 @@ pub(crate) async fn session_checked(
         .await
 }
 
-/// 授权后读取册图片对象键；同一执行器内重验。
-///
-/// 授权和业务资料使用同一快照执行器。
-///
-/// # 参数
-/// * `db` - 选品数据库
-/// * `access` - 选品范围访问器
-/// * `id` - 选品册
-/// * `asset_id` - 资产
-/// * `actor` - 已认证操作人
-///
-/// # 返回
-/// 返回快照对象键。
-///
-/// # 错误
-/// 资产不属于本册或无权查看时拒绝。
+// 授权后读取册图片对象键；同一执行器内重验。
+//
+// 授权和业务资料使用同一快照执行器。
+//
+// `access` 为选品范围访问器；`asset_id` 为资产。返回快照对象键。资产不属于本册或无权查看时拒绝。
 pub(crate) async fn image_key_checked(
     db: &Database,
     access: SelectionAccess,

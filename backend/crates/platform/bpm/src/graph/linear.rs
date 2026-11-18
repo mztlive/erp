@@ -23,18 +23,11 @@ pub struct LinearTransitionDraft {
     pub terminal_result: Option<ApprovalTerminalResult>,
 }
 
-/// 按节点顺序生成线性通过链与驳回终止的连线。
-///
-/// 调用方传入的第一个键视为入口。本函数不读取定义实体，也不判断运行时末节点。
-///
-/// # 参数
-/// * `node_keys` - 从入口开始的有序节点键
-///
-/// # 返回
-/// 每个节点一条通过连线与一条驳回连线。
+/// 用从入口起排列的节点键生成线性连线草稿，供新图构建和既有图校验使用。
+/// 每个节点各有一条通过边和驳回边：通过去往下一个节点或最终通过，驳回一律终结本实例。此时不分配 ID，也不读取定义实体。
 ///
 /// # 错误
-/// 节点为空、键非法或存在重复时返回错误。
+/// 节点键列表为空、键非法或规范化后重复时返回错误。
 pub fn generate_linear_transitions(node_keys: &[String]) -> ModelResult<Vec<LinearTransitionDraft>> {
     let keys = normalize_keys(node_keys)?;
 
@@ -57,22 +50,8 @@ pub fn generate_linear_transitions(node_keys: &[String]) -> ModelResult<Vec<Line
     Ok(drafts)
 }
 
-/// 由完整节点集合和调用方提供的 ID 构造线性连线实体。
-///
-/// # 参数
-/// * `definition_id` - 连线所属定义 ID
-/// * `nodes` - 待构图节点，展示顺序必须连续
-/// * `transition_ids` - 与生成连线一一对应的调用方生成 ID
-/// * `at` - 调用方提供的构图时间
-///
-/// # 返回
-/// 返回每个节点一条通过与一条驳回的完整连线实体。
-///
-/// # 错误
-/// 节点非法、ID 数量不匹配或连线实体构造失败时返回模型错误。
-///
-/// # 关键业务约束
-/// BPM 不生成 ID 或读取时钟，连线形态完全由线性生成器决定。
+/// 为新建或重建草稿按展示顺序生成连线实体，并依生成顺序为每条边使用调用方提供的 ID 与时间。
+/// 连线形态由线性生成器决定；节点顺序非法、ID 数量不匹配或实体校验失败时返回模型错误。
 pub fn build_linear_transitions(
     definition_id: &ApprovalProcessDefinitionId,
     nodes: &[ApprovalNodeDefinition],
@@ -118,10 +97,7 @@ pub fn build_linear_transitions(
         .collect()
 }
 
-/// 规范化并拒绝空、超长与重复节点键。
-///
-/// # 错误
-/// 节点集合不合法时返回 [`ModelError::InvalidField`]。
+// 生成连线前借用裁剪后的键，按 UTF-8 字节长度校验，并将规范化后相同的键视为重复；空集合或非法键返回 `ModelError::InvalidField`。
 fn normalize_keys(node_keys: &[String]) -> ModelResult<Vec<&str>> {
     if node_keys.is_empty() {
         return Err(ModelError::InvalidField("线性流程至少需要一个节点"));
@@ -146,7 +122,7 @@ mod tests {
         ApprovalTerminalResult, ApprovalTransitionEvent, ModelError, NODE_KEY_MAX_LEN,
     };
 
-    /// 单节点的通过与驳回分别进入对应终态。
+    // 验证单节点既是入口也是末节点，两种决定都不会再生成节点目标。
     #[test]
     fn single_node_approves_to_terminal() {
         let drafts = generate_linear_transitions(&["n1".to_string()]).unwrap();
@@ -158,7 +134,7 @@ mod tests {
         assert_eq!(drafts[1].terminal_result, Some(ApprovalTerminalResult::Rejected));
     }
 
-    /// 多节点按顺序通过，驳回一律进入驳回终态。
+    // 验证多节点只沿通过边逐级前进，任一节点驳回都不回到入口。
     #[test]
     fn linear_chain_rejects_to_terminal() {
         let drafts = generate_linear_transitions(&[" n1 ".to_string(), "n2".to_string()]).unwrap();
@@ -174,7 +150,7 @@ mod tests {
         );
     }
 
-    /// 空列表与重复键失败关闭。
+    // 验证无节点或键重复时不生成无法定位来源的连线。
     #[test]
     fn rejects_empty_or_duplicate_keys() {
         assert!(generate_linear_transitions(&[]).is_err());
@@ -182,7 +158,7 @@ mod tests {
         assert!(generate_linear_transitions(&["  ".into()]).is_err());
     }
 
-    /// 规范化按 UTF-8 字节校验上限，并在 trim 后识别重复键。
+    // 用多字节键验证长度按 UTF-8 字节计，并覆盖去除首尾空白后发生的键冲突。
     #[test]
     fn normalized_keys_preserve_utf8_byte_boundary_and_duplicate_detection() {
         let longest = "界".repeat(NODE_KEY_MAX_LEN / 3);

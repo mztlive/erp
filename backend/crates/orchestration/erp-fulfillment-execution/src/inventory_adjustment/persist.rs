@@ -94,24 +94,15 @@ pub struct StockAdjustmentStartPersistInput {
     pub expected_subject_version: u32,
 }
 
-/// 在同一事务中写入单据迁移、快照、BPM 运行事实与入口任务。
-///
-/// # 用途
-/// 提交启动后原子写入调整单、快照与运行事实。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `input` - 调整单、快照与启动计划
-/// * `executor` - 已完成草稿授权和审批规划的原提交事务。
-///
-/// # 返回
-/// 返回提交后的调整单视图。
-///
-/// # 错误
-/// 仓储写入失败或计划不完整时返回错误，事务回滚。
-///
-/// # 关键业务约束
-/// Replay 不得重复写运行事实；Apply 必须写入快照与入口任务。
+// 在同一事务中写入单据迁移、快照、BPM 运行事实与入口任务。
+//
+// 提交启动后原子写入调整单、快照与运行事实。
+//
+// `input` 为调整单、快照与启动计划；`executor` 为已完成草稿授权和审批规划的原提交事务。返回提交后的调整单视图。
+//
+// 仓储写入失败或计划不完整时返回错误，事务回滚。
+//
+// Replay 不得重复写运行事实；Apply 必须写入快照与入口任务。
 pub(super) async fn persist_stock_adjustment_start(
     db: &Database,
     mut input: StockAdjustmentStartPersistInput,
@@ -144,7 +135,7 @@ pub(super) async fn persist_stock_adjustment_start(
     Ok(input.adjustment.into())
 }
 
-/// 在原启动事务内按既有顺序重验单据、提交资格、绑定、候选人、明细和余额。
+// 在原启动事务内按既有顺序重验单据、提交资格、绑定、候选人、明细和余额。
 async fn validate_stock_adjustment_start(
     db: &Database,
     input: &StockAdjustmentStartPersistInput,
@@ -195,7 +186,7 @@ async fn validate_stock_adjustment_start(
     )
 }
 
-/// 以命令收据为首写，随后写启动守卫、最终明细与表头；保持原事务边界。
+// 以命令收据为首写，随后写启动守卫、最终明细与表头；保持原事务边界。
 async fn persist_start_document(
     db: &Database,
     input: &mut StockAdjustmentStartPersistInput,
@@ -237,7 +228,7 @@ async fn persist_start_document(
     Ok(())
 }
 
-/// 校验事务内草稿与预先构造的启动后单据仍为同一条原子迁移。
+// 校验事务内草稿与预先构造的启动后单据仍为同一条原子迁移。
 fn ensure_fresh_start_document(
     current: &StockAdjustment,
     target: &StockAdjustment,
@@ -263,7 +254,7 @@ fn ensure_fresh_start_document(
     Ok(())
 }
 
-/// 在事务快照内重读明细身份与版本；数量和方向可由本次提交命令修改。
+// 在事务快照内重读明细身份与版本；数量和方向可由本次提交命令修改。
 async fn revalidate_start_lines(
     db: &Database,
     current: &StockAdjustment,
@@ -292,7 +283,7 @@ async fn revalidate_start_lines(
     Ok(())
 }
 
-/// 校验引擎启动计划精确绑定本次业务命令。
+// 校验引擎启动计划精确绑定本次业务命令。
 fn validate_start_writes(
     writes: &PlannedWrites,
     graph: &DefinitionGraph,
@@ -407,17 +398,11 @@ fn ensure_start_tasks(writes: &PlannedWrites, first: &ApprovalNodeExecution) -> 
     Ok(())
 }
 
-/// 在提交事务内校验余额身份、维度与乐观锁版本。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `adjustment` - 待提交调整单
-/// * `lines` - 最终调整明细
-/// * `expected` - 客户端编辑时冻结的余额版本
-/// * `executor` - 数据访问执行器
-///
-/// # 错误
-/// 余额缺失、版本冲突、重复或不能完整覆盖明细维度时返回错误。
+// 在提交事务内校验余额身份、维度与乐观锁版本。
+//
+// `adjustment` 为待提交调整单；`lines` 为最终调整明细；`expected` 为客户端编辑时冻结的余额版本。
+//
+// 余额缺失、版本冲突、重复或不能完整覆盖明细维度时返回错误。
 async fn validate_balance_versions(
     db: &Database,
     adjustment: &StockAdjustment,
@@ -444,7 +429,7 @@ struct StartRuntimeContext<'a> {
     now: Instant,
 }
 
-/// 使用已写入的业务事实冻结审批展示，并沿原事务写入运行事实与入口任务。
+// 使用已写入的业务事实冻结审批展示，并沿原事务写入运行事实与入口任务。
 async fn persist_runtime_writes(
     db: &Database,
     identity: &Arc<AuthorizationService>,
@@ -505,7 +490,7 @@ async fn persist_runtime_writes(
     .await
 }
 
-/// 严格消费启动计划的 `Started`/`Entered` 通知意图并同事务追加 outbox。
+// 严格消费启动计划的 `Started`/`Entered` 通知意图并同事务追加 outbox。
 async fn persist_start_notifications(
     db: &Database,
     writes: &PlannedWrites,
@@ -559,18 +544,11 @@ async fn persist_start_notifications(
     Ok(())
 }
 
-/// 校验启动通知恰为一条 Started 与一条 Entered，且去重键绑定运行身份。
-///
-/// # 参数
-/// * `notifications` - 计划中的通知种类与去重键。
-/// * `instance_id` - 新审批实例 ID。
-/// * `execution_id` - 入口执行 ID。
-///
-/// # 返回
-/// 恰好一条匹配的 `Started` 和一条匹配的 `Entered` 时无返回值。
-///
-/// # 错误
-/// 条数或去重键不匹配时返回 `Internal`。
+// 校验启动通知恰为一条 Started 与一条 Entered，且去重键绑定运行身份。
+//
+// `notifications` 为计划中的通知种类与去重键；`instance_id` 为新审批实例 ID；`execution_id` 为入口执行 ID。
+//
+// 恰好一条匹配的 `Started` 和一条匹配的 `Entered` 时无返回值。条数或去重键不匹配时返回 `Internal`。
 pub(super) fn validate_start_notification_identities(
     notifications: &[(ApprovalNotificationEventKind, String)],
     instance_id: &str,

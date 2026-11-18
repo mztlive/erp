@@ -33,19 +33,8 @@ pub struct SupplierQualificationCapability {
 
 impl SupplierQualificationCapability {
     /// 创建资质适用能力关联。
-    ///
-    /// 关联行按「资质与其适用能力」的成对关系整体替换维护（P3 事务
-    /// 重写关联集合），不做原地修改。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::SupplierQualificationCapabilityId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
+    /// 关联行按「资质与其适用能力」的成对关系整体替换维护（P3 事务重写关联集合），不做原地修改。
     /// 返回新建的关联实体。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(
         id: SupplierQualificationCapabilityId,
         data: SupplierQualificationCapabilityData,
@@ -58,21 +47,14 @@ impl SupplierQualificationCapability {
     }
 
     /// 为指定资质批量构造完整适用能力关联集合。
-    ///
-    /// # 参数
-    /// * `qualification_id` - 资质稳定主键
-    /// * `capability_codes` - 请求携带的适用能力代码集合，按输入顺序保留；由调用方保证已去重并与 `capability_ids` 交集校验
-    /// * `capability_ids` - 当前有效能力代码到稳定能力 ID 的映射，必须包含 `capability_codes` 的全部代码
-    /// * `link_ids` - 关联主键集合，按 `capability_codes` 顺序一一对应，由 Service 分配
-    ///
-    /// # 返回
     /// 返回与当前能力集合一一对应的关联实体；若 `capability_codes` 为空则返回空集合。
-    ///
-    /// # 错误
     /// `capability_codes` 中任一代码未在 `capability_ids` 中、或 `link_ids` 长度不一致时返回错误。
+    /// 纯内存，不触及 MongoDB 或 ID 生成器；关联必须无遗漏、无重复且只引用当前能力，重复由调用方通过
+    /// `validate_profile_selection` 前置去重。
     ///
-    /// # 约束
-    /// 纯内存，不触及 MongoDB 或 ID 生成器；关联必须无遗漏、无重复且只引用当前能力，重复由调用方通过 `validate_profile_selection` 前置去重。
+    /// `capability_codes`：由调用方保证已去重并与 `capability_ids` 交集校验。
+    /// `capability_ids`：当前有效能力代码到稳定能力 ID 的映射，必须包含 `capability_codes` 的全部代码。
+    /// `link_ids`：关联主键集合，按 `capability_codes` 顺序一一对应，由 Service 分配。
     pub fn links_for_qualification(
         qualification_id: SupplierQualificationId,
         capability_codes: &[crate::entity::supplier::CapabilityCode],
@@ -106,7 +88,7 @@ mod tests {
 
     use super::{SupplierQualificationCapability, SupplierQualificationCapabilityData};
 
-    /// happy path：成对关联落库。
+    // 验证成对关联落库。
     #[test]
     fn new_links_qualification_to_capability() {
         let link = SupplierQualificationCapability::new(
@@ -121,7 +103,7 @@ mod tests {
         assert_eq!(link.capability_id, SupplierCapabilityId::new("cap-1"));
     }
 
-    /// 关联按当前能力集合完整重建，空集合与缺失均覆盖。
+    // 验证关联按当前能力集合完整重建，空集合与缺失均覆盖。
     #[test]
     fn links_for_qualification_covers_empty_and_missing() {
         use std::collections::HashMap;
@@ -172,7 +154,7 @@ mod tests {
         assert_eq!(links[0].capability_id, SupplierCapabilityId::new("cap-1"));
     }
 
-    /// 实体 BSON 往返。
+    // 验证资质适用能力关联写成 BSON 后能还原成原实体。
     #[test]
     fn bson_roundtrip() {
         let link = SupplierQualificationCapability::new(

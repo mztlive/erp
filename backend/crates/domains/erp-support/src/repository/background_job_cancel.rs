@@ -10,16 +10,8 @@ use crate::{BackgroundJob, JobStatus, JobType};
 #[allow(async_fn_in_trait)]
 pub trait BackgroundJobRepositoryCancelExt {
     /// 查询未删除且可能被批量取消的后台任务。
-    ///
-    /// # 参数
-    /// * `job_type` - 可选任务类型；省略时查询全部类型。
-    /// * `executor` - 由服务层指定的数据访问执行器。
-    ///
-    /// # 返回
-    /// 返回等待、执行中和部分成功的候选实体；服务层逐个复核终态与取消规则。
-    /// 已完成的部分成功仍作为候选返回，以保留批量取消的跳过计数口径。
-    ///
-    /// # 错误
+    /// 返回等待、执行中和部分成功的候选实体；服务层逐个复核终态与取消规则。已完成的部分成功仍作为候选返回，以保留批量取消的跳过计数口径。
+    /// `job_type` 为可选任务类型；省略时查询全部类型；`executor` 由服务层指定的数据访问执行器。
     /// MongoDB 查询或实体解码失败时返回持久层错误。
     async fn cancellation_candidates(
         &self,
@@ -44,7 +36,7 @@ impl BackgroundJobRepositoryCancelExt for persistence_core::Repository<'_, Backg
     }
 }
 
-/// 保留原候选范围和软删除过滤；不在查询中提前改变服务层的跳过计数。
+// 保留原候选范围和软删除过滤；不在查询中提前改变服务层的跳过计数。
 fn cancellation_filter(job_type: Option<JobType>) -> Document {
     let mut filter = doc! {
         "deleted_at": NOT_DELETED_TIMESTAMP_BSON,

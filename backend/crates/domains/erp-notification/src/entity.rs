@@ -25,13 +25,7 @@ pub struct NotificationData {
 }
 
 impl NotificationData {
-    /// 规范化通知并拒绝无效或外部跳转地址。
-    /// # 参数
-    /// self 为生产者构造的内容。
-    /// # 返回
-    /// 可交给仓储或渠道的不可变内容。
-    /// # 错误
-    /// 空白、超长或非站内跳转返回 Invalid。
+    /// 清理去重键、收件人、标题和正文的首尾空白，供站内仓储与站外适配复用同一份稳定内容。必填项为空、超长或跳转地址不是合法站内路径时返回 `Invalid`。
     pub fn normalized(mut self) -> Result<Self> {
         self.dedup_key = required(&self.dedup_key, 256)?;
         self.recipient_id = required(&self.recipient_id, 128)?;

@@ -49,136 +49,37 @@ pub trait SalesOrderExt {
     /// 提交历史列表筛选条件类型（定义见 `repository::sales_order`）。
     type SubmissionFilter;
 
-    /// 获取 `sales_order` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `SalesOrderRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 从当前数据库取得 `sales_order` 集合的类型化仓储，供调用方按自身执行器访问。
     fn sales_orders(&self) -> SalesOrderRepository<'_>;
 
-    /// 获取 `sales_order_line` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `SalesOrderLineRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 从当前数据库取得 `sales_order_line` 集合的类型化仓储，供调用方按自身执行器访问。
     fn sales_order_lines(&self) -> SalesOrderLineRepository<'_>;
 
-    /// 获取 `sales_order_working_copy` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `SalesOrderWorkingCopyRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 从当前数据库取得 `sales_order_working_copy` 集合的类型化仓储，供调用方按自身执行器访问。
     fn sales_order_working_copies(&self) -> SalesOrderWorkingCopyRepository<'_>;
 
-    /// 获取 `sales_order_working_copy_line` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `SalesOrderWorkingCopyLineRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 从当前数据库取得 `sales_order_working_copy_line` 集合的类型化仓储，供调用方按自身执行器访问。
     fn sales_order_working_copy_lines(&self) -> SalesOrderWorkingCopyLineRepository<'_>;
 
-    /// 获取 `sales_order_submission` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `SalesOrderSubmissionRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 从当前数据库取得 `sales_order_submission` 集合的类型化仓储，供调用方按自身执行器访问。
     fn sales_order_submissions(&self) -> SalesOrderSubmissionRepository<'_>;
 
-    /// 获取 `sales_order_submission_line` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `SalesOrderSubmissionLineRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 从当前数据库取得 `sales_order_submission_line` 集合的类型化仓储，供调用方按自身执行器访问。
     fn sales_order_submission_lines(&self) -> SalesOrderSubmissionLineRepository<'_>;
 
-    /// 获取 `sales_order_revision` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `SalesOrderRevisionRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 从当前数据库取得 `sales_order_revision` 集合的类型化仓储，供调用方按自身执行器访问。
     fn sales_order_revisions(&self) -> SalesOrderRevisionRepository<'_>;
 
-    /// 获取 `sales_order_revision_line` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `SalesOrderRevisionLineRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 从当前数据库取得 `sales_order_revision_line` 集合的类型化仓储，供调用方按自身执行器访问。
     fn sales_order_revision_lines(&self) -> SalesOrderRevisionLineRepository<'_>;
 
-    /// 获取 `sales_order_goods_service_line_revision` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `SalesOrderGoodsServiceLineRevisionRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 从当前数据库取得 `sales_order_goods_service_line_revision` 集合的类型化仓储，供调用方按自身执行器访问。
     fn sales_order_goods_service_line_revisions(&self) -> SalesOrderGoodsServiceLineRevisionRepository<'_>;
 
-    /// 获取 `sales_order_voucher_line_revision` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `SalesOrderVoucherLineRevisionRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 从当前数据库取得 `sales_order_voucher_line_revision` 集合的类型化仓储，供调用方按自身执行器访问。
     fn sales_order_voucher_line_revisions(&self) -> SalesOrderVoucherLineRevisionRepository<'_>;
 
-    /// 获取承载跨集合事务写入的域专用仓储。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `SalesOrderDomainRepository` 实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得销售单领域仓储，供调用方使用原执行器处理销售单、工作副本和修订。
     fn sales_order(&self) -> SalesOrderDomainRepository<'_>;
 }
 

@@ -5,13 +5,12 @@ use persistence_core::{Executor, rotation as cursor};
 
 use crate::Result;
 const COLLECTION: &str = "finance_dispatch_rotation";
-/// 读取当前池位置，不推进轮次。
-/// # 参数
-/// 数据库、规则 ID 与原执行器。
-/// # 返回
-/// 当前池位置。
-/// # 错误
-/// 仓储读取失败时返回错误。
+// 读取当前池位置，不推进轮次。
+// 当前池位置。
+//
+// 仓储读取失败时返回错误。
+//
+// 数据库、规则 ID 与原执行器。
 pub(crate) async fn rotation(
     db: &Database,
     rule_id: &str,
@@ -19,13 +18,12 @@ pub(crate) async fn rotation(
 ) -> Result<DispatchRotation> {
     Ok(cursor::rotation(db, COLLECTION, rule_id, executor).await?)
 }
-/// 在原事务中比较版本并更新位置。
-/// # 参数
-/// 数据库、规则 ID、预期位置、新位置与原执行器。
-/// # 返回
-/// 成功返回空值。
-/// # 错误
-/// 缺少事务、溢出或并发冲突时返回错误。
+// 在原事务中比较版本并更新位置。
+// 成功返回空值。
+//
+// 缺少事务、溢出或并发冲突时返回错误。
+//
+// 数据库、规则 ID、预期位置、新位置与原执行器。
 pub(crate) async fn advance(
     db: &Database,
     rule_id: &str,

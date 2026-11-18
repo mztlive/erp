@@ -86,11 +86,9 @@ impl PreparedCustomerAudit {
     /// # 参数
     /// * `snapshot` - 已校验的审计实体快照
     ///
-    /// # 返回
     /// 返回稍后持久化的不透明审计事实。
     ///
-    /// # 错误
-    /// 无；输入字段由调用方预先校验。
+    /// 失败条件：无；输入字段由调用方预先校验。
     pub fn from_snapshot(snapshot: ValidatedAuditSnapshot) -> Self {
         Self {
             id: snapshot.base.id.clone(),
@@ -128,11 +126,9 @@ impl PreparedCustomerAudit {
     /// * `success` - 成功标记
     /// * `message` - 业务说明
     ///
-    /// # 返回
     /// 返回稍后持久化的不透明审计事实。
     ///
-    /// # 错误
-    /// 无；输入字段由调用方预先校验。
+    /// 失败条件：无；输入字段由调用方预先校验。
     #[allow(clippy::too_many_arguments)]
     pub fn from_validated(
         base: &BaseModel,
@@ -161,15 +157,12 @@ impl PreparedCustomerAudit {
     /// 由已认证操作人构造一条成功的资源审计。
     ///
     /// # 参数
-    /// * `actor` - 已通过鉴权的审计操作人
     /// * `action` - 业务动作名
     /// * `resource_type` - 资源类型
     /// * `resource_id` - 资源业务 ID，空白视为缺失
     ///
-    /// # 返回
     /// 返回已校验的成功资源审计预制事实。
     ///
-    /// # 错误
     /// 资源 ID 为空时返回校验错误。
     pub fn resource(
         actor: AuditActor,
@@ -206,15 +199,12 @@ pub trait CustomerAuditPort: Send + Sync {
     /// 在事务开始前校验并准备一条成功的资源审计。
     ///
     /// # 参数
-    /// * `actor` - 已通过鉴权的审计操作人
     /// * `action` - 业务动作名
     /// * `resource_type` - 资源类型
     /// * `resource_id` - 资源业务 ID
     ///
-    /// # 返回
     /// 返回可在调用方执行器上持久化的审计事实。
     ///
-    /// # 错误
     /// 资源 ID 为空或审计事实无法准备时返回对应错误。
     fn resource_log(
         &self,
@@ -228,12 +218,9 @@ pub trait CustomerAuditPort: Send + Sync {
     ///
     /// # 参数
     /// * `audit` - 已准备的审计事实
-    /// * `executor` - 调用方执行器
     ///
-    /// # 返回
     /// 审计写入完成。
     ///
-    /// # 错误
     /// 审计持久化失败时返回对应错误。
     async fn persist(&self, audit: &PreparedCustomerAudit, executor: &mut dyn Executor) -> Result<()>;
 }

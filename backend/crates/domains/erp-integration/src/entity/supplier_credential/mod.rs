@@ -160,12 +160,8 @@ impl fmt::Debug for SupplierCredentialPayload {
 
 impl SupplierCredentialBinding {
     /// 校验固定供应商账号和应用身份，拒绝空白及不可见字符。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 身份有界且完整时成功。
-    /// # 错误
-    /// 账号或应用为空、包含控制符及首尾空白时拒绝。
+    ///
+    /// 身份有界且完整时成功。账号或应用为空、包含控制符及首尾空白时拒绝。
     pub fn validate(&self) -> Result<()> {
         identity(&self.account_scope, 256)?;
         identity(&self.app_key, 256)
@@ -174,12 +170,10 @@ impl SupplierCredentialBinding {
 
 impl SupplierCredentialPayload {
     /// 校验密文和明确的有效期，不从远端余额或缺省值推断有效期。
-    /// # 参数
+    ///
+    /// 有界非空密文且有效期晚于当前时刻时成功。密文为空、过长或授权已到期时拒绝。
+    ///
     /// `now` 为服务器当前时间。
-    /// # 返回
-    /// 有界非空密文且有效期晚于当前时刻时成功。
-    /// # 错误
-    /// 密文为空、过长或授权已到期时拒绝。
     pub fn validate(&self, now: Instant) -> Result<()> {
         self.validate_shape()?;
         if self.expires_at <= now {
@@ -202,12 +196,10 @@ impl SupplierCredentialPayload {
 
 impl SupplierCredential {
     /// 创建稳定凭据身份；同账号及应用的唯一性由仓储唯一索引仲裁。
-    /// # 参数
+    ///
+    /// 初始版本为1且未开始刷新的凭据。身份、密文或时间无效时拒绝。
+    ///
     /// 稳定引用、服务端绑定、受控密文及当前时间。
-    /// # 返回
-    /// 初始版本为1且未开始刷新的凭据。
-    /// # 错误
-    /// 身份、密文或时间无效时拒绝。
     pub fn new(
         id: String,
         binding: SupplierCredentialBinding,
@@ -244,13 +236,7 @@ impl SupplierCredential {
         })
     }
 
-    /// 返回原绑定身份，调用方不得将其替换为外部请求中的身份。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 当前账号和应用的固定绑定。
-    /// # 错误
-    /// 不返回错误。
+    /// 返回原绑定身份，调用方不得将其替换为外部请求中的身份。当前账号和应用的固定绑定。
     pub fn binding(&self) -> SupplierCredentialBinding {
         SupplierCredentialBinding {
             provider: self.provider,
@@ -260,12 +246,8 @@ impl SupplierCredential {
     }
 
     /// 核对读取或更新没有跨账号、应用或已删除身份。
-    /// # 参数
-    /// `binding` 为部署配置中的原技术绑定。
-    /// # 返回
-    /// 身份一致时成功。
-    /// # 错误
-    /// 身份变化或原记录已删除时拒绝。
+    ///
+    /// 身份一致时成功。身份变化或原记录已删除时拒绝。
     pub fn require_binding(&self, binding: &SupplierCredentialBinding) -> Result<()> {
         binding.validate()?;
         if self.base.is_deleted()
@@ -279,12 +261,10 @@ impl SupplierCredential {
     }
 
     /// 普通导入仅更新同身份及所见版本，不能覆盖已发送刷新或失效授权。
-    /// # 参数
+    ///
+    /// 成功时推进版本并替换令牌。版本不符、刷新仍在领取、发送未知或需要重新授权时拒绝。
+    ///
     /// 新密文、原记录版本和当前服务器时间。
-    /// # 返回
-    /// 成功时推进版本并替换令牌。
-    /// # 错误
-    /// 版本不符、刷新仍在领取、发送未知或需要重新授权时拒绝。
     pub fn import(&mut self, payload: SupplierCredentialPayload, expected: u64, now: Instant) -> Result<()> {
         self.require_unbound_import()?;
         self.require_version(expected)?;

@@ -35,17 +35,10 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 use crate::wiring::funds_access;
 
-/// 查询应付往来子账列表。
+/// 按请求条件查询应付往来子账列表。
 ///
 /// DataScope v2：按来源采购单当前采购负责人查询，同一事务快照；
 /// 部分授权仅返获授权份额，整单金额为 null，跨页原样回传 `scope_version`。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的当前操作人
-/// * `query` - 分页与筛选参数（扁平传递）
-///
-/// # 返回
 /// 返回范围分页视图（`items`/`total`/`summary`/`scope_version`）。采购负责人候选不随列表返回。
 pub async fn payable_account_list(
     State(state): State<HttpState>,
@@ -60,13 +53,6 @@ pub async fn payable_account_list(
 }
 
 /// 查询应付往来子账详情（DataScope v2 范围裁剪行）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的当前操作人
-/// * `id` - 应付往来子账 ID
-///
-/// # 返回
 /// 返回范围裁剪后的子账行；不可见与不存在统一为 NotFound。
 pub async fn payable_account_detail(
     State(state): State<HttpState>,
@@ -81,14 +67,7 @@ pub async fn payable_account_detail(
 }
 
 /// 在付款任务责任、版本和收款账户身份校验后揭示完整收款账号。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 当前付款任务绑定的应付往来子账 ID
-/// * `req` - 任务版本与页面所见收款账户身份
-///
-/// # 返回
+/// `id` 为当前付款任务绑定的应付往来子账 ID。
 /// 返回完整收款账号；成功揭示同时记录敏感数据审计。
 pub async fn payment_recipient_reveal(
     State(state): State<HttpState>,
@@ -112,13 +91,6 @@ pub async fn payment_recipient_reveal(
 }
 
 /// 建立应付往来子账与原始应付分录（跨集合事务）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 创建请求
-///
-/// # 返回
 /// 返回新建子账的响应视图。
 pub async fn payable_account_create(
     State(state): State<HttpState>,
@@ -139,17 +111,10 @@ pub async fn payable_account_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 查询供应商付款单列表。
+/// 按请求条件查询供应商付款单列表。
 ///
 /// DataScope v2：按核销关联采购当前负责人与付款经办人分别查询；
 /// 付款金额按分配事实只算匹配份额，未分配单列。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的当前操作人
-/// * `query` - 分页与筛选参数（扁平传递）
-///
-/// # 返回
 /// 返回范围分页视图（`items`/`total`/`summary`/`scope_version`）。采购负责人候选不随列表返回。
 pub async fn supplier_payment_list(
     State(state): State<HttpState>,
@@ -164,13 +129,6 @@ pub async fn supplier_payment_list(
 }
 
 /// 查询供应商付款单详情（DataScope v2 范围裁剪行）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的当前操作人
-/// * `id` - 付款单 ID
-///
-/// # 返回
 /// 返回范围裁剪后的付款行；不可见与不存在统一为 NotFound。
 pub async fn supplier_payment_detail(
     State(state): State<HttpState>,
@@ -185,13 +143,6 @@ pub async fn supplier_payment_detail(
 }
 
 /// 查询当前付款任务可合并的同供应商开放任务。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `params` - 当前工作台打开的付款执行任务
-///
-/// # 返回
 /// 返回当前任务及同一供应商下可勾选的其它开放付款任务。
 pub async fn supplier_payment_merge_candidates(
     State(state): State<HttpState>,
@@ -212,11 +163,7 @@ pub async fn supplier_payment_merge_candidates(
 }
 
 /// 拒绝已停止的采购应付直付入口。
-/// # 参数
-/// state 和 actor 为现有后台认证上下文。
-/// # 返回
 /// 无成功结果；付款须从已批准的付款申请登记。
-/// # 错误
 /// 始终返回已停止入口的业务错误，不读取文件或写入存储。
 pub async fn supplier_payment_commit(
     State(_state): State<HttpState>,
@@ -226,8 +173,6 @@ pub async fn supplier_payment_commit(
 }
 
 /// 在校验付款归属并记录审计后，返回银行回单图片内容。
-///
-/// # 错误
 /// 付款、回单或对象不存在，文件不可预览，审计或对象存储读取失败时返回错误。
 pub async fn supplier_payment_bank_receipt(
     State(state): State<HttpState>,
@@ -276,7 +221,7 @@ pub async fn supplier_payment_bank_receipt(
     Ok(response)
 }
 
-/// 校验 multipart 中的银行回单字段与命令临时引用一一对应。
+// 入库前核对 multipart 里的银行回单字段与付款命令中的临时引用，避免引用缺失或多传文件。
 pub(crate) fn validate_bank_receipt_upload(
     req: &CommitSupplierPaymentRequest,
     files: &[PendingAssetFile],
@@ -299,13 +244,6 @@ pub(crate) fn validate_bank_receipt_upload(
 /// 进项发票登记过账并分配（§8.3-2 事务不变量，资金入口幂等去重）。
 ///
 /// 发票实体经 D18 `invoices()` 仓储写入，D19 只写进项发票分配。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 进项发票登记请求
-///
-/// # 返回
 /// 返回登记后发票与分配行视图。
 pub async fn purchase_invoice_allocation_post(
     State(state): State<HttpState>,
@@ -330,13 +268,7 @@ pub async fn purchase_invoice_allocation_post(
 ///
 /// DataScope v2：按应付子账来源采购当前负责人与收票经办人分别查询；
 /// 部分授权仅返获授权份额，整单分配金额为 null。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的当前操作人
-/// * `query` - 分页与筛选参数（`payable_account_id` 必填）
-///
-/// # 返回
+/// `query` 为分页与筛选参数（`payable_account_id` 必填）。
 /// 返回范围分页视图（`items`/`total`/`summary`/`scope_version`）。采购负责人候选不随列表返回。
 pub async fn purchase_invoice_allocation_list(
     State(state): State<HttpState>,

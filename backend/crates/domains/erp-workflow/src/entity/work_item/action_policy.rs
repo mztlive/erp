@@ -65,16 +65,11 @@ pub enum WorkItemActionRequirement {
 
 impl WorkItemActionPolicy<'_> {
     /// 依据已授权任务及独立权限事实计算允许动作。
-    ///
-    /// # 参数
-    /// * `access` - 当前账号的责任与管理范围；调用方已完成对象读取授权。
-    /// * `permits` - 按需解析独立权限事实；仅在前置责任、状态和范围条件满足时调用。
-    ///
-    /// # 返回
     /// 按查看、处理、通过、驳回、转派、关闭的固定顺序返回适用动作。
     ///
-    /// # 错误
     /// 不返回错误。该结果不替代写入入口的授权与版本重验。
+    ///
+    /// `access`：当前账号的责任与管理范围；调用方已完成对象读取授权；`permits`：按需解析独立权限事实；仅在前置责任、状态和范围条件满足时调用。
     pub fn allowed_actions(
         &self,
         access: WorkItemActionAccess<'_>,
@@ -246,7 +241,7 @@ mod tests {
         }
     }
 
-    /// 管理动作使用外层精确任务证明，不再重复解释负责人名单。
+    // 验证：管理动作使用外层精确任务证明，不再重复解释负责人名单。
     #[test]
     fn management_requires_queue_and_exact_task_qualification() {
         let policy = exception_policy();

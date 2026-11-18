@@ -18,20 +18,13 @@ use crate::service::offset_index::{
 use crate::{Error, Result};
 
 /// 批量读取应付分录及其账户，缺任一项失败关闭。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `entry_ids` - 冲减块引用的增加分录 ID；可含重复
-/// * `executor` - 调用方执行器，须与写入共用事务快照
-///
-/// # 返回
 /// 返回按 ID 索引的分录与账户。
+/// 失败条件：缺任一分录或账户时返回 `NotFound`；仓储失败时传播基础设施错误。
+/// 调用边界：固定两次批量读取，次数不随冲减块数量增长；不执行条件更新。
 ///
-/// # 错误
-/// 缺任一分录或账户时返回 `NotFound`；仓储失败时传播基础设施错误。
-///
-/// # 约束
-/// 固定两次批量读取，次数不随冲减块数量增长；不执行条件更新。
+/// 输入约定：
+/// - `entry_ids`：冲减块引用的增加分录 ID；可含重复
+/// - `executor`：调用方执行器，须与写入共用事务快照
 pub async fn load_payable_offset_facts(
     db: &Database,
     entry_ids: impl IntoIterator<Item = PayableEntryId>,

@@ -7,13 +7,9 @@ use tokio::sync::watch;
 
 use crate::wiring::Application;
 
-/// 运行授权消费及有界对账，停止后排空当前事务。
-/// # 参数
-/// state 为组合根，stop 为进程停止信号。
-/// # 返回
-/// 收到停止信号后结束循环。
-/// # 错误
-/// 轮次错误记录后重试，panic 由进程监督器检测。
+// 运行授权消费及有界对账，停止后排空当前事务。
+// 收到停止信号后结束循环。
+// 轮次错误记录后重试，panic 由进程监督器检测。
 pub(super) async fn run(state: Application, mut stop: watch::Receiver<bool>) {
     let process = ResourceGrantProcess::new(state.db(), state.authorization());
     let mut cursor = None;

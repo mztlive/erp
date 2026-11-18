@@ -42,16 +42,7 @@ pub enum FundsImpact {
 }
 
 impl FundsImpact {
-    /// 返回资金影响的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 无影响返回 `NONE`，潜在影响返回 `POTENTIAL`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将资金影响编码为稳定字符串，供持久化和精确查询复用。无影响返回 `NONE`，潜在影响返回 `POTENTIAL`。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::None => "NONE",
@@ -76,31 +67,13 @@ pub struct TerminalEvidencePolicy {
 }
 
 impl TerminalEvidencePolicy {
-    /// 判断已发现证据是否满足策略的类型集合。
-    ///
-    /// # 参数
-    /// * `present` - 已发现的证据类型集合
-    ///
-    /// # 返回
-    /// 全部必需类型均已发现时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 判断已发现证据是否满足策略的类型集合。全部必需类型均已发现时返回 `true`。
     pub fn satisfied_by(&self, present: &[RequiredEvidenceKind]) -> bool {
         self.required.iter().all(|kind| present.contains(kind))
     }
 }
 
-/// 错误任务终态证据策略：有关联消息取外部结果，否则取业务对象核验。
-///
-/// # 参数
-/// * `task` - 集成错误任务
-///
-/// # 返回
-/// 返回 typed 终态证据策略；资金影响恒为无。
-///
-/// # 错误
-/// 不返回错误。
+/// 错误任务终态证据策略：有关联消息取外部结果，否则取业务对象核验。返回 typed 终态证据策略；资金影响恒为无。
 pub fn error_terminal_policy(task: &IntegrationErrorTask) -> TerminalEvidencePolicy {
     TerminalEvidencePolicy {
         policy_id: ERROR_POLICY_ID,
@@ -115,16 +88,7 @@ pub fn error_terminal_policy(task: &IntegrationErrorTask) -> TerminalEvidencePol
     }
 }
 
-/// 对账差异终态证据策略：资金影响取补偿与财务对账，否则取业务对象核验。
-///
-/// # 参数
-/// * `difference` - 对账差异
-///
-/// # 返回
-/// 返回 typed 终态证据策略。
-///
-/// # 错误
-/// 不返回错误。
+/// 对账差异终态证据策略：资金影响取补偿与财务对账，否则取业务对象核验。返回 typed 终态证据策略。
 pub fn difference_terminal_policy(difference: &ReconciliationDifference) -> TerminalEvidencePolicy {
     let financial = difference.has_financial_impact();
     TerminalEvidencePolicy {
@@ -167,31 +131,15 @@ pub struct ReasonRegistry {
 }
 
 impl ReasonRegistry {
-    /// 按注册原因 ID 查找原因。
+    /// 按注册原因 ID 查找原因。命中时返回注册原因，否则返回 `None`。
     ///
-    /// # 参数
-    /// * `reason_id` - 注册原因稳定 ID
-    ///
-    /// # 返回
-    /// 命中时返回注册原因，否则返回 `None`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// `reason_id` 为注册原因稳定 ID。
     pub fn find(&self, reason_id: &str) -> Option<&RegisteredReason> {
         self.reasons.iter().find(|reason| reason.id == reason_id)
     }
 }
 
-/// 返回无任务直接对账固定原因注册表。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回来源更正、业务确认无误、补偿闭环三项注册原因。
-///
-/// # 错误
-/// 不返回错误。
+/// 为无需关联处理任务的对账终结提供允许的原因清单：来源更正、业务确认无误、补偿闭环。
 pub fn reconciliation_reason_registry() -> ReasonRegistry {
     ReasonRegistry {
         id: REASON_REGISTRY_ID,
@@ -254,16 +202,7 @@ pub enum DecidedAction {
 }
 
 impl DecidedAction {
-    /// 返回动作的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回服务 view 沿用的稳定动作代码。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将动作编码为稳定字符串，供持久化和精确查询复用。返回服务 view 沿用的稳定动作代码。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::QueryOriginalResult => "QUERY_ORIGINAL_RESULT",
@@ -305,16 +244,9 @@ pub struct ErrorActionProjection {
     pub policy: TerminalEvidencePolicy,
 }
 
-/// 推导错误任务开放动作与阻断。
+/// 推导错误任务开放动作与阻断。返回开放动作与阻断；终态返回双空，无任务时只返回缺责任阻断。
 ///
-/// # 参数
-/// * `input` - 终态、任务关联、重放条件、已发现证据与固定策略
-///
-/// # 返回
-/// 返回开放动作与阻断；终态返回双空，无任务时只返回缺责任阻断。
-///
-/// # 错误
-/// 不返回错误。
+/// `input` 为终态、任务关联、重放条件、已发现证据与固定策略。
 pub fn project_error_actions(input: ErrorActionProjection) -> (Vec<DecidedAction>, Vec<ActionBlocker>) {
     if input.terminal {
         return (Vec::new(), Vec::new());
@@ -363,16 +295,9 @@ pub struct DifferenceActionProjection {
     pub policy: TerminalEvidencePolicy,
 }
 
-/// 推导对账差异开放动作与阻断。
+/// 推导对账差异开放动作与阻断。返回开放动作与阻断；终态返回双空，无任务时开放直接对账结论动作。
 ///
-/// # 参数
-/// * `input` - 终态、任务关联、已发现证据与固定策略
-///
-/// # 返回
-/// 返回开放动作与阻断；终态返回双空，无任务时开放直接对账结论动作。
-///
-/// # 错误
-/// 不返回错误。
+/// `input` 为终态、任务关联、已发现证据与固定策略。
 pub fn project_difference_actions(
     input: DifferenceActionProjection,
 ) -> (Vec<DecidedAction>, Vec<ActionBlocker>) {
@@ -432,17 +357,7 @@ pub enum ProjectionOutcome {
     Other,
 }
 
-/// 推导单次非终结动作后的下一开放动作。
-///
-/// # 参数
-/// * `subject` - 业务项类型
-/// * `outcome` - 本次动作结果类型
-///
-/// # 返回
-/// 返回查询与补证基础动作，及满足条件时开放的重放或完成动作。
-///
-/// # 错误
-/// 不返回错误。
+/// 推导单次非终结动作后的下一开放动作。返回查询与补证基础动作，及满足条件时开放的重放或完成动作。
 pub fn next_actions_after_outcome(
     subject: ProjectionSubject,
     outcome: ProjectionOutcome,

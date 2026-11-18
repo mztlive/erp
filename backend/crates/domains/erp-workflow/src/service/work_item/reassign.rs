@@ -70,21 +70,9 @@ pub(super) struct AssignmentPolicyAuditInput<'a> {
 }
 
 impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
-    /// 查询当前开放非审批任务可转交的具体账号。
+    /// 管理端选择新的责任人时，列出当前开放非审批任务可转交的有效账号。采购单候选人还须能处理该单全部开放履约任务。
     ///
-    /// # 参数
-    /// * `id` - 工作项稳定 ID
-    /// * `actor` - 已通过鉴权且具有责任管理范围的操作人
-    ///
-    /// # 返回
-    /// 返回当前仍有效、具备完整执行权限且满足任务责任约束的账号。
-    ///
-    /// # 错误
-    /// 任务不存在、不是开放非审批任务、操作人不在管理范围，或授权事实读取失败时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 采购单责任任务的候选人必须同时能够执行该采购单全部开放履约任务；列表只作交互提示，
-    /// 最终转交命令仍须在写事务内重验全部账号、授权与业务事实。
+    /// 列表只供选择，不能作为写入资格；转交时必须在写事务重验任务、账号和目标业务资格。任务缺失、不属于开放的非审批任务、超出管理范围或取证失败时拒绝。
     pub async fn reassign_candidates(
         self,
         id: String,
@@ -98,7 +86,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             .await
     }
 
-    /// 候选列表和目标资格全部来自原管理授权快照。
+    // 在原管理快照读取任务及级联履约范围，按完整执行资格筛出候选人并排除当前负责人。候选筛选可能跨有效期，交付前重新检查精确任务管理权。
     async fn candidate_list(
         &self,
         id: &str,
@@ -138,7 +126,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         Ok(candidates)
     }
 
-    /// 沿原执行器检查具体候选及其全部级联履约任务。
+    // 检查候选人是否可承接当前任务；存在采购级联范围时，沿原执行器一并验证关联的全部开放履约任务。
     async fn candidate_allowed(
         &self,
         id: &str,
@@ -153,7 +141,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         Ok(())
     }
 
-    /// 采购责任转交必须同时覆盖该采购单的全部开放履约任务。
+    // 发现采购责任转交时读取该采购单全部开放履约任务，供候选选择和实际转交使用同一范围；其他任务不扩大为级联。
     async fn cascade_tasks(
         &self,
         item: &WorkItem,
@@ -164,18 +152,9 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         Ok(Some(tasks))
     }
 
-    /// 受控转交开放任务。
+    /// 按期望版本将开放非审批任务交给具备完整资格的目标责任人。写事务内重新确认管理范围、任务状态及目标资格，并按幂等命令处理回放。
     ///
-    /// # 参数
-    /// * `id` - 待转交任务 ID
-    /// * `req` - 目标责任人、预期版本与幂等键
-    /// * `actor` - 当前操作人
-    ///
-    /// # 返回
-    /// 返回经编译器验证为 `Send` 的 future，完成后取得转交结果或版本冲突。
-    ///
-    /// # 错误
-    /// 缺少任务管理权限、目标资格无法证明、审批受阻或任务版本陈旧时返回错误。
+    /// 返回可跨线程调度的 `Send` future；管理或目标资格不足、任务状态不支持或版本冲突时拒绝。
     #[expect(
         clippy::manual_async_fn,
         reason = "显式 Send 返回边界用于验证嵌套异步调用，避免调用方的高阶生命周期推导失败"
@@ -201,7 +180,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         }
     }
 
-    /// 规范化命令身份和安全审计，不读取事务外的决定事实。
+    // 开启转交事务前规范化请求的版本、目标、幂等身份和安全审计；决定能否转交的事实留到写事务读取。
     fn reassign_command(
         &self,
         id: String,
@@ -228,7 +207,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         Ok(ReassignCommand { id, actor, expected_version, target_user_id, reason, receipt, audit })
     }
 
-    /// 授权、重放、版本和目标资格在原写事务中核验。
+    // 在原转交写事务内核验精确管理目标、命令回放、任务版本和接收人资格，不能以候选列表先前的判断代替本次取证。
     async fn apply_reassign(
         &self,
         command: &ReassignCommand,
@@ -261,7 +240,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         Ok(WorkItemWriteOutcome::Updated(Box::new(item)))
     }
 
-    /// 原事务读取目标账号并检查完整执行资格，不冻结事务外授权快照。
+    // 在转交原事务读取目标账号的当前状态，同时核验该任务类型的完整办理资格；不使用事务外候选缓存。
     async fn assignment_kind(
         &self,
         assignee_id: &str,
@@ -285,20 +264,13 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         Ok(assignee.kind)
     }
 
-    /// 在调用方事务快照中重验目标账号资格、对象访问权与岗位分离。
-    ///
-    /// # 参数
-    /// * `user_id` - 待接收任务的具体账号 ID
-    /// * `expected_kind` - 原事务中读取的账号类型
-    /// * `item` - 待转交任务
-    /// * `allow_current_owner` - 是否允许目标账号保持为当前负责人
-    /// * `executor` - 调用方事务执行器
-    ///
-    /// # 返回
-    /// 目标账号仍有效、具备任务所需权限且满足岗位分离时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 账号失效、权限撤销、对象版本变化或岗位分离不满足时返回错误。
+    // 在调用方事务快照中重验目标账号资格、对象访问权与岗位分离。
+    // 目标账号仍有效、具备任务所需权限且满足岗位分离时返回 `Ok(())`。
+    //
+    // 账号失效、权限撤销、对象版本变化或岗位分离不满足时返回错误。
+    //
+    // `user_id`：待接收任务的具体账号 ID；`expected_kind`：原事务中读取的账号类型。
+    // `allow_current_owner`：是否允许目标账号保持为当前负责人；`executor`：调用方事务执行器。
     pub(super) async fn ensure_assignment_candidate(
         &self,
         user_id: &str,
@@ -325,7 +297,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         self.ensure_assignment_separation(user_id, item, allow_current_owner, executor).await
     }
 
-    /// 审批任务在形成个人责任前排除启动人、既往责任人、前序和当前决定人。
+    // 创建审批个人责任前核对岗位分离，排除启动人、已形成责任者和原先或当前实际决定人。
     async fn ensure_assignment_separation(
         &self,
         user_id: &str,
@@ -351,7 +323,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         }
     }
 
-    /// 审批步骤按实例启动人、业务提交人、责任历史和决定历史排除候选人。
+    // 以实例启动人、业务提交人、持久化责任历史和决定历史核验审批候选，不借当前负责人投影替代历史。
     async fn ensure_approval_assignment_separation(
         &self,
         user_id: &str,
@@ -363,7 +335,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         Err(Error::Forbidden("单据审批任务不得通过通用责任入口改派".to_string()))
     }
 
-    /// 读取非审批正式决定任务的权威提交人、经办人及历史决定人。
+    // 为非审批正式决定任务读取权威提交人、经办人和历史决定记录，供判断岗位分离。
     async fn domain_assignment_actors(
         &self,
         item: &WorkItem,
@@ -373,20 +345,14 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         non_empty_assignment_actors(actors)
     }
 
-    /// 统一接收者授权后，沿原执行器核验冻结业务版本。
-    ///
-    /// # 参数
-    /// * `item` - 待转交任务
-    /// * `executor` - 调用方事务执行器
-    ///
-    /// # 返回
-    /// 对象存在、版本匹配且目标账号满足任务类型的访问条件时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 对象未注册、不存在、版本变化或目标账号访问条件不足时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 供给分配任务按具体账号和 `purchase_order:create` 授权，不额外引入团队池或固定角色约束。
+    // 统一接收者授权后，沿原执行器核验冻结业务版本。
+    // 供给分配任务按具体账号和 `purchase_order:create` 授权，不额外引入团队池或固定角色约束。
+    //
+    // 对象存在、版本匹配且目标账号满足任务类型的访问条件时返回 `Ok(())`。
+    //
+    // 对象未注册、不存在、版本变化或目标账号访问条件不足时返回错误。
+    //
+    // `executor`：调用方事务执行器。
     async fn ensure_assignment_candidate_access_with_executor(
         &self,
         item: &WorkItem,
@@ -405,16 +371,10 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     }
 }
 
-/// 解析采购单履约任务冻结的采购责任键。
-///
-/// # 参数
-/// * `item` - 待转交工作项
-///
-/// # 返回
-/// 非采购履约任务返回空；采购履约任务返回采购单 ID。
-///
-/// # 错误
-/// 对象类型、责任角色、原因码或责任键不符合固定履约合同时返回错误。
+// 解析采购单履约任务冻结的采购责任键。
+// 非采购履约任务返回空；采购履约任务返回采购单 ID。
+//
+// 对象类型、责任角色、原因码或责任键不符合固定履约合同时返回错误。
 pub(super) fn purchase_order_fulfillment_responsibility_id(item: &WorkItem) -> Result<Option<String>> {
     let key = item.fulfillment_responsibility_key().map_err(|_| {
         Error::BusinessLogicError(
@@ -432,19 +392,12 @@ pub(super) fn purchase_order_fulfillment_responsibility_id(item: &WorkItem) -> R
 }
 const SYSTEM_OBJECT_OWNER: &str = "__system__";
 
-/// 校验目标账号可执行给定全部开放履约任务。
-///
-/// # 参数
-/// * `service` - 工作项服务
-/// * `tasks` - 待校验的开放履约任务
-/// * `target_user_id` - 目标账号 ID
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 每个任务都通过候选人访问校验时无返回值。空任务列表也通过。
-///
-/// # 错误
-/// 任一任务的对象访问校验失败时返回对应错误。
+// 校验目标账号可执行给定全部开放履约任务。
+// 每个任务都通过候选人访问校验时无返回值。空任务列表也通过。
+//
+// 任一任务的对象访问校验失败时返回对应错误。
+//
+// `tasks`：待校验的开放履约任务。
 pub(super) async fn ensure_fulfillment_tasks_candidate<A: WorkflowAuthorizationPort>(
     service: &WorkItemService<A>,
     tasks: &[WorkItem],
@@ -468,22 +421,11 @@ pub(super) async fn ensure_fulfillment_tasks_candidate<A: WorkflowAuthorizationP
     Ok(())
 }
 
-/// 判断审批候选人是否避开启动人、提交人、既有责任人和决定人。
-///
-/// # 参数
-/// * `candidate_id` - 候选人账号 ID
-/// * `started_by` - 实例启动人
-/// * `submitted_by` - 业务提交人
-/// * `responsibility_actor_ids` - 既有责任人
-/// * `current_owner_user_id` - 当前负责人
-/// * `allow_current_owner` - 是否允许候选人保持为当前负责人
-/// * `decided_by` - 既有决定人
-///
-/// # 返回
-/// 候选人不是启动人、提交人或决定人，且既有责任人中的同名账号仅在允许当前负责人时被放过，则返回 `true`。
-///
-/// # 错误
-/// 不返回错误。
+// 当审批候选人避开启动人、提交人、既有责任人和决定人时返回 `true`。
+// 候选人不是启动人、提交人或决定人，且既有责任人中的同名账号仅在允许当前负责人时被放过，则返回 `true`。
+//
+// `responsibility_actor_ids`：既有责任人；`current_owner_user_id`：当前负责人。
+// `allow_current_owner`：是否允许候选人保持为当前负责人。
 #[cfg(test)]
 pub(super) fn approval_assignment_separated(
     candidate_id: &str,
@@ -509,20 +451,13 @@ pub(super) fn approval_assignment_separated(
 #[cfg(test)]
 pub(super) type AssignmentSeparationPolicy = WorkItemAssignmentSeparationPolicy;
 
-/// 按资源逐一证明正式票款审计，并返回创建、过账或红冲等经办人。
-///
-/// # 参数
-/// * `resource_type` - 审计资源类型
-/// * `resource_ids` - 必须逐一证明的资源 ID
-/// * `audits` - 已读取的审计事实
-/// * `operator_actions` - 经办动作前缀
-/// * `formal_actions` - 正式登记动作前缀
-///
-/// # 返回
-/// 每个资源都有成功的正式动作时，返回匹配经办前缀的操作人。
-///
-/// # 错误
-/// 任一资源缺少成功的正式登记审计时返回禁止。
+// 按资源逐一证明正式票款审计，并返回创建、过账或红冲等经办人。
+// 每个资源都有成功的正式动作时，返回匹配经办前缀的操作人。
+//
+// 任一资源缺少成功的正式登记审计时返回禁止。
+//
+// `resource_ids`：必须逐一证明的资源 ID；`audits`：已读取的审计事实。
+// `operator_actions`：经办动作前缀；`formal_actions`：正式登记动作前缀。
 #[cfg(test)]
 pub(super) fn audited_fact_operator_actors(
     resource_type: &str,
@@ -556,16 +491,12 @@ pub(super) fn audited_fact_operator_actors(
     Ok(actors)
 }
 
-/// 去掉空白和系统占位后，要求岗位分离仍有权威责任人。
-///
-/// # 参数
-/// * `actors` - 候选责任人 ID
-///
-/// # 返回
-/// 返回去空白、去空值并排除 `__system__` 后的非空集合。
-///
-/// # 错误
-/// 过滤后没有责任人时返回禁止。
+// 去掉空白和系统占位后，要求岗位分离仍有权威责任人。
+// 返回去空白、去空值并排除 `__system__` 后的非空集合。
+//
+// 过滤后没有责任人时返回禁止。
+//
+// `actors`：候选责任人 ID。
 pub(super) fn non_empty_assignment_actors(actors: Vec<String>) -> Result<HashSet<String>> {
     let actors = actors
         .into_iter()

@@ -6,13 +6,13 @@ use rust_decimal::prelude::ToPrimitive;
 
 use super::parse::Row;
 
-/// 将可明确识别的数字手机号和 Excel 日期转换为领域输入文本。
-/// # 参数
-/// `rows` 为已映射的配送行；`date1904` 为工作簿声明的日期系统。
-/// # 返回
-/// 原位转换成功的单元格；保留文本电话的前导零。
-/// # 错误
-/// 无法可靠转换时保留原值，交由领域校验定位错误；公式不参与转换。
+// 将可明确识别的数字手机号和 Excel 日期转换为领域输入文本。
+//
+// `rows` 为已映射的配送行；`date1904` 为工作簿声明的日期系统。
+//
+// 原位转换成功的单元格；保留文本电话的前导零。
+//
+// 无法可靠转换时保留原值，交由领域校验定位错误；公式不参与转换。
 pub(super) fn normalize(rows: &mut [Row], date1904: bool) {
     for row in rows {
         for index in [2, 8] {
@@ -29,14 +29,14 @@ pub(super) fn normalize(rows: &mut [Row], date1904: bool) {
     }
 }
 
-/// Excel 数值只兼容可精确表示的 11 位大陆手机号；其他电话须保留文本原样。
+// Excel 数值只兼容可精确表示的 11 位大陆手机号；其他电话须保留文本原样。
 fn mobile(value: &str) -> Option<String> {
     let value = integer(value)?.to_string();
     (value.len() == 11 && value.starts_with('1') && matches!(value.as_bytes()[1], b'3'..=b'9'))
         .then_some(value)
 }
 
-/// 日期序号必须为整天，拒绝 Excel 虚构的 1900-02-29 及超出四位年份的日期。
+// 日期序号必须为整天，拒绝 Excel 虚构的 1900-02-29 及超出四位年份的日期。
 fn date(value: &str, date1904: bool) -> Option<String> {
     let serial = integer(value)?;
     let (epoch, days) = if date1904 {
@@ -51,7 +51,7 @@ fn date(value: &str, date1904: bool) -> Option<String> {
     (date.year() <= 9999).then(|| date.format("%Y-%m-%d").to_string())
 }
 
-/// 精确读取 Excel 数值（含科学记数法），禁止舍入小数或截断溢出值。
+// 精确读取 Excel 数值（含科学记数法），禁止舍入小数或截断溢出值。
 fn integer(value: &str) -> Option<u64> {
     if let Some((base, _)) = value.split_once(['e', 'E']) {
         // from_scientific 的底数解析允许舍入，先用严格入口排除精度损失。

@@ -8,21 +8,9 @@ use super::{ProductSource, SourceResolutionReceipt};
 pub trait ProductSourceExt {
     const PRODUCT_SOURCES: &'static str = "product_sources";
     const SOURCE_RESOLUTION_RECEIPTS: &'static str = "product_source_resolution_receipts";
-    /// 获取每件商品唯一来源的仓储。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 带标准乐观锁的来源仓储。
-    /// # 错误
-    /// 无。
+    /// 获取每件商品唯一来源的仓储。带标准乐观锁的来源仓储。
     fn product_sources(&self) -> Repository<'_, ProductSource>;
-    /// 获取稳定操作回执仓储。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 不依赖展示审计的回执仓储。
-    /// # 错误
-    /// 无。
+    /// 获取稳定操作回执仓储。不依赖展示审计的回执仓储。
     fn source_resolution_receipts(&self) -> Repository<'_, SourceResolutionReceipt>;
 }
 impl ProductSourceExt for Database {

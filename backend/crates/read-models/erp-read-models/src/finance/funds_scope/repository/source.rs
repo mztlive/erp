@@ -6,13 +6,12 @@ use mongodb::bson::{Bson, Document, doc};
 use super::super::{FundsAuthorization, FundsLinkedCondition};
 
 impl FundsAuthorization {
-    /// 为实际销售来源生成完整授权阶段。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 有销售来源时返回其阶段；未登记该来源时拒绝全部销售份额。
-    /// # 错误
-    /// 无；使用前后仍须复验整个授权。
+    // 组装财务来源范围的聚合管道时，为实际销售来源生成完整授权阶段。
+    //
+    // 有销售来源时返回其阶段；未登记该来源时拒绝全部销售份额。
+    //
+    // 失败边界：
+    // 无；使用前后仍须复验整个授权。
     pub(super) fn sales_stages(&self) -> Vec<Document> {
         self.sales
             .as_ref()
@@ -20,21 +19,17 @@ impl FundsAuthorization {
     }
 }
 
-/// 关联一个真实来源并分别保留最小责任事实与授权布尔值。
-///
-/// # 参数
-/// * `collection` - 来源集合名。
-/// * `local_expression` - 原单引用表达式。
-/// * `as_field` - 来源事实输出字段。
-/// * `scope` - 已解析来源范围条件。
-/// * `owner_field` - 来源负责人字段。
-/// * `number_field` - 来源单号字段。
-///
-/// # 返回
-/// 关联阶段。`as_field` 为存在来源的事实，`{as_field}_allowed` 为实际范围资格；缺失来源时事实留空且资格为 false。
-///
-/// # 错误
-/// 不返回错误。
+// 组装财务来源范围的聚合管道时，关联一个真实来源并分别保留最小责任事实与授权布尔值。
+//
+// 调用参数：
+// * `collection` - 来源集合名。
+// * `local_expression` - 原单引用表达式。
+// * `as_field` - 来源事实输出字段。
+// * `scope` - 已解析来源范围条件。
+// * `owner_field` - 来源负责人字段。
+// * `number_field` - 来源单号字段。
+//
+// 关联阶段。`as_field` 为存在来源的事实，`{as_field}_allowed` 为实际范围资格；缺失来源时事实留空且资格为 false。
 pub(crate) fn source_stages(
     collection: &str,
     local_expression: Bson,
@@ -68,7 +63,7 @@ pub(crate) fn source_stages(
     ]
 }
 
-/// 存量采购责任缺省或全空白时沿用领域当前责任事实的 None 口径。
+// 组装财务来源范围的聚合管道时，存量采购责任缺省或全空白时沿用领域当前责任事实的 None 口径。
 fn owner_expression(field: &str) -> Bson {
     let reference = format!("${field}");
     if field != "owner_user_id" {
@@ -80,17 +75,13 @@ fn owner_expression(field: &str) -> Bson {
     .into()
 }
 
-/// 业务筛选与来源授权求交，不替换授权分支。
-///
-/// # 参数
-/// * `condition` - 已展开组织和精确身份条件。
-/// * `owner_field` - 来源负责人字段名。
-///
-/// # 返回
-/// 负责人和组织的 `$in` 条件；未提供的维度不写入。经办维度不在此文档中。
-///
-/// # 错误
-/// 不返回错误。
+// 应用财务来源范围筛选时，业务筛选与来源授权求交，不替换授权分支。
+//
+// 调用参数：
+// * `condition` - 已展开组织和精确身份条件。
+// * `owner_field` - 来源负责人字段名。
+//
+// 负责人和组织的 `$in` 条件；未提供的维度不写入。经办维度不在此文档中。
 pub(crate) fn linked_condition_document(condition: &FundsLinkedCondition, owner_field: &str) -> Document {
     let mut document = Document::new();
     if let Some(ids) = &condition.owner_user_ids {

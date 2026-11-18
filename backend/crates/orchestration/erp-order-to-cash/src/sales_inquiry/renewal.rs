@@ -17,11 +17,9 @@ use crate::{Error, Result};
 
 impl SalesInquiryProcess {
     /// 从本人已完成的询价任务主动开启新一轮整体报价。
-    /// # 参数
-    /// `actor` 为采购，`id` 为询价，`request` 包含原任务、版本、原因及命令键。
-    /// # 返回
-    /// 原子更新询价并创建当前责任任务；重放返回原回执。
-    /// # 错误
+    ///
+    /// `actor` 为采购，`id` 为询价，`request` 包含原任务、版本、原因及命令键。原子更新询价并创建当前责任任务；重放返回原回执。
+    ///
     /// 任务不是本人完成、当前责任已变化、需求或版本变化、状态不允许时拒绝。
     pub async fn renew(
         &self,
@@ -77,7 +75,7 @@ impl SalesInquiryProcess {
         Ok((inquiry, tasks))
     }
 
-    /// 命中池内的历史采购可发起后续轮次，下一位调度人只决定新任务归属。
+    // 命中池内的历史采购可发起后续轮次，下一位调度人只决定新任务归属。
     async fn renewal_dispatcher(
         &self,
         inquiry: &SalesInquiry,
@@ -94,7 +92,7 @@ impl SalesInquiryProcess {
     }
 }
 
-/// 仅本单仍命中相同规则池且原采购仍在启用池内时保留发起资格。
+// 仅本单仍命中相同规则池且原采购仍在启用池内时保留发起资格。
 fn dispatcher_can_renew(
     actor: &str,
     candidates: &[CandidateResolution],

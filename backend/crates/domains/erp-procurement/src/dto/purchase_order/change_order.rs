@@ -80,12 +80,10 @@ pub struct SubmitPurchaseChangeRequest {
 
 impl SubmitPurchaseChangeRequest {
     /// 构造与当前状态无关的精确提交命令身份。
-    /// # 参数
+    ///
+    /// 返回稳定幂等身份。身份为空时拒绝。
+    ///
     /// * `change_id` / `actor_id` - 已授权变更单及当前提交人。
-    /// # 返回
-    /// 返回稳定幂等身份。
-    /// # 错误
-    /// 身份为空时拒绝。
     pub fn command_identity(
         &self,
         change_id: &str,
@@ -101,12 +99,10 @@ impl SubmitPurchaseChangeRequest {
     }
 
     /// 冻结原请求版本、完整目标及说明，避免相同键回放不同内容。
-    /// # 参数
-    /// * `change_id` - 已授权变更单。
-    /// # 返回
-    /// 返回不包含幂等键的完整请求摘要。
-    /// # 错误
-    /// 请求序列化失败时拒绝。
+    ///
+    /// 返回不包含幂等键的完整请求摘要。请求序列化失败时拒绝。
+    ///
+    /// `change_id` 为已授权变更单。
     pub fn request_fingerprint(&self, change_id: &str) -> Result<String> {
         Ok(payload_fingerprint(
             PURCHASE_CHANGE_SUBMIT_ACTION,
@@ -224,7 +220,7 @@ mod submit_tests {
         }
     }
 
-    /// 首次结果经真实回执解码可重放，改原锁版本、完整行或任一说明均冲突。
+    // 首次结果经真实回执解码可重放，改原锁版本、完整行或任一说明均冲突。
     #[test]
     fn exact_change_submission_replays_and_changed_payload_conflicts() {
         let request = request();
@@ -300,7 +296,7 @@ mod submit_tests {
         }
     }
 
-    /// 重提说明在统一的一千字符边界内接受，超限拒绝。
+    // 重提说明在统一的一千字符边界内接受，超限拒绝。
     #[test]
     fn resubmission_reason_uses_shared_thousand_character_limit() {
         let mut request = request();

@@ -109,35 +109,16 @@ document_number_kinds! {
 }
 
 impl Display for DocumentNumberKind {
-    /// 格式化计数器标识。
-    ///
-    /// # 参数
-    /// * `formatter` - 格式化器
-    ///
-    /// # 返回
-    /// 写入静态计数器名。
-    ///
-    /// # 错误
-    /// 写入失败时返回格式化错误。
+    // 格式化单据种类时使用与 MongoDB `_id` 一致的计数器标识，便于从取号错误定位计数器，
+    // 而不是输出供业务编号展示的大写前缀。
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         formatter.write_str(self.counter_id_str())
     }
 }
 
-/// 组装业务编号：前缀 + 业务日期（YYYYMMDD）+ 连字符 + 6 位补零序号段。
-///
-/// 例如 `SO20260701-000123`。序号段超过 6 位时直接展开位数，不截断。
-///
-/// # 参数
-/// * `kind` - 单据种类，决定前缀
-/// * `date` - 业务日期，决定日期段
-/// * `seq` - 已消费的序号
-///
-/// # 返回
-/// 返回完整业务编号字符串。
-///
-/// # 错误
-/// 无。
+/// 将已分配的序号组装为可展示的业务编号，例如 `SO20260701-000123`。
+/// 日期使用业务方传入的 `YYYYMMDD`，只用于展示；序号补足 6 位，超过 6 位不截断。
+/// 此函数只格式化，不会访问数据库或消费序号。
 pub fn format_number(kind: DocumentNumberKind, date: NaiveDate, seq: i64) -> String {
     format!("{}{}-{:0width$}", kind.prefix(), date.format("%Y%m%d"), seq, width = SEQ_WIDTH)
 }
@@ -162,32 +143,18 @@ pub struct DocumentNumberGenerator {
 }
 
 impl DocumentNumberGenerator {
-    /// 创建业务编号取号器。
-    ///
-    /// # 参数
-    /// * `db` - 目标数据库（调用方业务库）
-    ///
-    /// # 返回
-    /// 返回取号器实例。
-    ///
-    /// # 错误
-    /// 无。
+    /// 在装配业务用例时，绑定保存 `document_number_counters` 的业务数据库；构造时不会取号。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
-    /// 取下一个业务编号。
+    /// 在单据提交、过账或登记等正式化时分配业务编号（例如 `SO20260701-000123`），草稿不预占正式号。
+    /// API 供应商批量入库使用作业编号，在创建选择快照时取号，后续沿用同一编号。
+    /// 序号按种类跨日递增，业务日期只用于编号展示。即使传入事务执行器，计数器也独立提交；
+    /// 业务回滚后不得回收已消费的序号，调用方须允许跳号。
     ///
-    /// # 参数
-    /// * `kind` - 单据种类，决定编号前缀与计数器标识
-    /// * `date` - 业务日期，决定编号日期段（YYYYMMDD）
-    /// * `executor` - 数据访问执行器；计数器自增始终独立提交，不加入调用方事务
-    ///
-    /// # 返回
-    /// 返回形如 `SO20260701-000123` 的业务编号字符串。
-    ///
-    /// # 错误
-    /// 底层 MongoDB 写入失败或计数器 upsert 后未返回文档时返回错误。
+    /// # Errors
+    /// MongoDB 写入失败或计数器 upsert 后没有返回文档时返回错误。
     pub async fn next_number(
         &self,
         kind: DocumentNumberKind,
@@ -201,20 +168,8 @@ impl DocumentNumberGenerator {
         Ok(format_number(kind, date, seq))
     }
 
-    /// 原子自增计数器并返回新序号。
-    ///
-    /// 计数器自增不使用执行器会话，按自动提交方式执行，保证序号一经消费
-    /// 不随调用方事务回滚而回收（防重复优先于防跳号）。
-    ///
-    /// # 参数
-    /// * `kind` - 单据种类
-    /// * `date` - 业务日期，写入计数器文档用于追溯
-    ///
-    /// # 返回
-    /// 返回本次消费的序号（首次取号为 1）。
-    ///
-    /// # 错误
-    /// 底层 MongoDB 写入失败或计数器 upsert 后未返回文档时返回错误。
+    // 正式取号时按单据种类原子自增并取回新序号，首次取号由 upsert 建档并从 1 开始。
+    // 业务日期写入计数器仅用于追溯；独立提交使已消费序号不随业务事务回滚，宁可跳号也不重号。
     async fn next_seq(&self, kind: DocumentNumberKind, date: NaiveDate) -> Result<i64> {
         let counter_id = kind.counter_id_str();
         let counter = self

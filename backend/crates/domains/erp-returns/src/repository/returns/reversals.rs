@@ -10,16 +10,9 @@ use crate::entity::returns::{PaymentReversal, ReceiptReversal};
 #[allow(async_fn_in_trait)]
 pub trait ReceiptReversalRepositoryExt {
     /// 批量按原回款集合取回冲正单（`$in`，用于累计有效冲正校验）。
-    ///
-    /// # 参数
-    /// * `receipt_ids` - 原客户回款 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回全部匹配冲正单。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// `receipt_ids` 为原客户回款 ID 集合；沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询或游标读取错误。
     async fn find_reversals_by_receipts(
         &self,
         receipt_ids: &[CustomerReceiptId],
@@ -45,16 +38,9 @@ impl ReceiptReversalRepositoryExt for Repository<'_, ReceiptReversal> {
 #[allow(async_fn_in_trait)]
 pub trait PaymentReversalRepositoryExt {
     /// 批量按原付款集合取回冲正单（`$in`，用于累计有效冲正校验）。
-    ///
-    /// # 参数
-    /// * `payment_ids` - 原供应商付款 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回全部匹配冲正单。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// `payment_ids` 为原供应商付款 ID 集合；沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询或游标读取错误。
     async fn find_reversals_by_payments(
         &self,
         payment_ids: &[SupplierPaymentId],

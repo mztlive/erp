@@ -26,10 +26,9 @@ use super::mapping::{
     product_fact, reservation_fact, sales_goods_fact, sales_line_fact, sales_revision_fact, sku_fact,
 };
 
-/// 批量加载采购覆盖计算所需的最小持久化事实。
+/// 读取采购覆盖时，批量加载采购覆盖计算所需的最小持久化事实。
 ///
 /// # 参数
-/// * `db` - MongoDB 数据库句柄
 /// * `revision_id` - 销售单当前版本身份（Service 已校验指针存在）
 /// * `sales_order_id` - 来源销售单稳定身份
 /// * `executor` - 数据访问执行器，由 Service 决定事务边界；事务内重验必须复用调用方 executor
@@ -111,18 +110,14 @@ struct CatalogFacts {
     quantity_scales: HashMap<String, u8>,
 }
 
-/// 批量读取 SKU、基础单位与商品，各一次查询。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库句柄
-/// * `sku_ids` - 销售商品行引用的 SKU
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回 SKU、商品与单位精度；缺失的 SKU、商品或单位不写入结果。
-///
-/// # 错误
-/// MongoDB 查询或反序列化失败时返回错误。
+// 读取采购覆盖时，批量读取 SKU、基础单位与商品，各一次查询。
+//
+// 调用参数：
+// * `sku_ids` - 销售商品行引用的 SKU
+//
+// 返回 SKU、商品与单位精度；缺失的 SKU、商品或单位不写入结果。
+//
+// MongoDB 查询或反序列化失败时返回错误。
 async fn load_catalog_facts(
     db: &Database,
     sku_ids: &[SkuId],
@@ -202,7 +197,7 @@ mod isolation_tests {
     use super::load_procurement_coverage_facts;
     use crate::test_indexes::ensure_indexes;
 
-    /// 构造销售当前版本头。
+    // 处理采购覆盖的版本事实时，生成销售当前版本头。
     fn test_revision(id: &str) -> SalesOrderRevision {
         SalesOrderRevision::new(
             SalesOrderRevisionId::new(id),
@@ -238,7 +233,7 @@ mod isolation_tests {
         .unwrap()
     }
 
-    /// 构造销售当前版本公共行。
+    // 处理采购覆盖的版本事实时，生成销售当前版本公共行。
     fn test_revision_line(id: &str, stable_line_id: &str) -> SalesOrderRevisionLine {
         SalesOrderRevisionLine::new(
             SalesOrderRevisionLineId::new(id),
@@ -259,7 +254,7 @@ mod isolation_tests {
         .unwrap()
     }
 
-    /// 构造销售当前版本商品/服务子类型行。
+    // 处理采购覆盖时，生成销售当前版本商品/服务子类型行。
     fn test_goods_line(revision_line_id: &str) -> SalesOrderGoodsServiceLineRevision {
         SalesOrderGoodsServiceLineRevision::new(
             erp_core::ids::SalesOrderGoodsServiceLineRevisionId::new(format!("goods-{revision_line_id}")),
@@ -281,7 +276,7 @@ mod isolation_tests {
         .unwrap()
     }
 
-    /// 构造 SKU 事实。
+    // 处理采购覆盖时，生成 SKU 事实。
     fn test_sku(id: &str) -> Sku {
         Sku::new(
             SkuId::new(id),
@@ -298,7 +293,7 @@ mod isolation_tests {
         .unwrap()
     }
 
-    /// 构造商品事实。
+    // 处理采购覆盖时，生成商品事实。
     fn test_product(id: &str) -> Product {
         Product::new(
             ProductId::new(id),
@@ -314,7 +309,7 @@ mod isolation_tests {
         .unwrap()
     }
 
-    /// 构造指定状态和当前指针的采购单。
+    // 处理采购覆盖时，生成指定状态和当前指针的采购单。
     fn purchase_order(
         id: &str,
         status: PurchaseOrderStatus,
@@ -346,7 +341,7 @@ mod isolation_tests {
         order
     }
 
-    /// 构造草稿类采购提交。
+    // 处理采购覆盖时，生成草稿类采购提交。
     fn submission(id: &str, order_id: &str) -> PurchaseOrderSubmission {
         PurchaseOrderSubmission::new(
             PurchaseOrderSubmissionId::new(id),
@@ -381,7 +376,7 @@ mod isolation_tests {
         .unwrap()
     }
 
-    /// 构造草稿类采购提交行。
+    // 处理采购覆盖时，生成草稿类采购提交行。
     fn submission_line(id: &str, submission_id: &str, stable_line_id: &str) -> PurchaseOrderSubmissionLine {
         PurchaseOrderSubmissionLine::new(
             PurchaseOrderSubmissionLineId::new(id),
@@ -416,7 +411,7 @@ mod isolation_tests {
         .unwrap()
     }
 
-    /// 构造正式采购版本。
+    // 处理采购覆盖的版本事实时，生成正式采购版本。
     fn purchase_revision(id: &str, order_id: &str) -> PurchaseOrderRevision {
         PurchaseOrderRevision::new(
             PurchaseOrderRevisionId::new(id),
@@ -449,7 +444,7 @@ mod isolation_tests {
         .unwrap()
     }
 
-    /// 构造正式采购版本行。
+    // 处理采购覆盖的版本事实时，生成正式采购版本行。
     fn purchase_revision_line(
         id: &str,
         revision_id: &str,
@@ -487,7 +482,7 @@ mod isolation_tests {
         .unwrap()
     }
 
-    /// 构造正式采购分配。
+    // 处理采购覆盖时，生成正式采购分配。
     fn allocation(
         id: &str,
         purchase_line_id: &str,
@@ -505,7 +500,7 @@ mod isolation_tests {
         .unwrap()
     }
 
-    /// 构造现有库存预占。
+    // 处理采购覆盖时，生成现有库存预占。
     fn reservation(id: &str) -> StockReservation {
         StockReservation::new(
             StockReservationId::new(id),
@@ -591,19 +586,18 @@ mod isolation_tests {
             .expect("库存预占写入失败");
     }
 
-    /// 当前销售版本文档缺失时返回空事实集合，不触发后续查询。
-    ///
-    /// # 参数
-    /// 无，内部创建隔离库。
-    ///
-    /// # 返回
-    /// 断言 revision 为空且其余事实集合全部为空。
-    ///
-    /// # 错误
-    /// MongoDB 连接或事实加载失败时测试失败。
-    ///
-    /// # 约束
-    /// Exact 维度：缺失事实由 Entity 层校验，Repository 只负责读取整形。
+    // 验证当前销售版本文档缺失时返回空事实集合，不触发后续查询。
+    //
+    // 调用参数：
+    // 无，内部创建隔离库。
+    //
+    // 断言 revision 为空且其余事实集合全部为空。
+    //
+    // 失败边界：
+    // MongoDB 连接或事实加载失败时测试失败。
+    //
+    // 调用约束：
+    // Exact 维度：缺失事实由 Entity 层校验，Repository 只负责读取整形。
     #[tokio::test]
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn missing_revision_doc_returns_empty_facts() {
@@ -631,19 +625,18 @@ mod isolation_tests {
         });
     }
 
-    /// 完整夹具下一次性返回当前销售目标与全部当前覆盖来源。
-    ///
-    /// # 参数
-    /// 无，内部创建隔离库并写入完整夹具。
-    ///
-    /// # 返回
-    /// 断言各事实集合均包含夹具写入的当前指针数据。
-    ///
-    /// # 错误
-    /// MongoDB 连接、夹具写入或事实加载失败时测试失败。
-    ///
-    /// # 约束
-    /// Batch 维度：一次调用返回全部来源，查询次数与行数无关。
+    // 验证采购覆盖：完整夹具下一次性返回当前销售目标与全部当前覆盖来源。
+    //
+    // 调用参数：
+    // 无，内部创建隔离库并写入完整夹具。
+    //
+    // 断言各事实集合均包含夹具写入的当前指针数据。
+    //
+    // 失败边界：
+    // MongoDB 连接、夹具写入或事实加载失败时测试失败。
+    //
+    // 调用约束：
+    // Batch 维度：一次调用返回全部来源，查询次数与行数无关。
     #[tokio::test]
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn loads_current_target_and_all_coverage_sources() {
@@ -674,19 +667,18 @@ mod isolation_tests {
         });
     }
 
-    /// 作废采购单与其历史提交/版本行不进入事实集合。
-    ///
-    /// # 参数
-    /// 无，内部创建隔离库并写入含作废单的夹具。
-    ///
-    /// # 返回
-    /// 断言作废采购单不参与覆盖事实。
-    ///
-    /// # 错误
-    /// MongoDB 连接、夹具写入或事实加载失败时测试失败。
-    ///
-    /// # 约束
-    /// 软删除与作废过滤由 Repository 查询条件保证，历史提交不进入当前指针读取。
+    // 验证采购覆盖：作废采购单与其历史提交/版本行不进入事实集合。
+    //
+    // 调用参数：
+    // 无，内部创建隔离库并写入含作废单的夹具。
+    //
+    // 断言作废采购单不参与覆盖事实。
+    //
+    // 失败边界：
+    // MongoDB 连接、夹具写入或事实加载失败时测试失败。
+    //
+    // 调用约束：
+    // 软删除与作废过滤由 Repository 查询条件保证，历史提交不进入当前指针读取。
     #[tokio::test]
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn voided_orders_and_historical_pointers_are_excluded() {
@@ -737,19 +729,18 @@ mod isolation_tests {
         });
     }
 
-    /// 事务内调用复用调用方 session，读取自身未提交写入。
-    ///
-    /// # 参数
-    /// 无，内部创建隔离库。
-    ///
-    /// # 返回
-    /// 断言事务内可读到同一 session 刚写入的覆盖事实。
-    ///
-    /// # 错误
-    /// MongoDB 连接、夹具写入、事务或事实加载失败时测试失败。
-    ///
-    /// # 约束
-    /// 事务内重验必须复用调用方 executor，不得另开连接或独立事务。
+    // 验证采购覆盖：事务内调用复用调用方 session，读取自身未提交写入。
+    //
+    // 调用参数：
+    // 无，内部创建隔离库。
+    //
+    // 断言事务内可读到同一 session 刚写入的覆盖事实。
+    //
+    // 失败边界：
+    // MongoDB 连接、夹具写入、事务或事实加载失败时测试失败。
+    //
+    // 调用约束：
+    // 事务内重验必须复用调用方 executor，不得另开连接或独立事务。
     #[tokio::test]
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn transaction_reads_own_writes_with_same_session() {

@@ -22,22 +22,10 @@ use super::{CustomerProfileProcess, field_changes};
 use crate::{Result, command_insert_error};
 
 impl CustomerProfileProcess {
-    /// 原子创建 Party、客户角色、首条 OWNER 与首批资料事实。
+    /// 客户首次建档时，在同一事务创建或复用 Party，并登记客户角色、首条 OWNER、首批资料、命令回执与审计。
+    /// 首条 OWNER 固定为认证创建人，忽略请求中的 `owner_user_id`；真实创建候选必须在事务内校验，入口预检不能代替。
     ///
-    /// 首条 OWNER 固定为当前创建人；请求体中的 `owner_user_id` 即使提交也会被忽略。
-    ///
-    /// # 参数
-    /// * `req` - 创建客户资料命令
-    /// * `actor` - 已通过鉴权的审计操作人；其账号 ID 写入首条 OWNER 归属
-    ///
-    /// # 返回
-    /// 返回创建命令的稳定结果视图。
-    ///
-    /// # 错误
-    /// 输入非法、无创建范围、创建人账号不存在或已停用、身份重复、敏感值加密失败或事务失败时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 写入事务内必须校验真实创建候选；handler 事前检查不能代替。
+    /// 成功后返回稳定结果视图。输入非法、创建范围不足、账号不存在或停用、身份重复、加密或事务失败时返回错误。
     pub async fn create(
         &self,
         req: SaveCustomerProfileRequest,
@@ -52,20 +40,8 @@ impl CustomerProfileProcess {
         self.resolve_transaction(transaction, &replay, actor, &fields).await
     }
 
-    /// 在同一写入事务内重验创建范围并持久化资料。
-    ///
-    /// # 参数
-    /// * `req` / `replay` - 创建请求及幂等上下文
-    /// * `actor` - 将写入首条主责的操作人
-    ///
-    /// # 返回
-    /// 事务成功时返回 `Ok`；失败时返回原事务错误供幂等恢复。
-    ///
-    /// # 错误
-    /// 无创建资格、范围为空或写入冲突时拒绝。
-    ///
-    /// # 关键业务约束
-    /// 必须在原领域事务持久化前校验真实创建候选，handler 事前检查不能代替。
+    // 客户建档事务先校验创建及字段资格，再查原回执；未命中时，以真实候选重验范围后才持久化。
+    // 资料归属使用认证创建人。无资格、范围为空或写入冲突时保留原事务错误，由外层决定是否查证。
     async fn commit_create(
         &self,
         req: SaveCustomerProfileRequest,
@@ -104,22 +80,8 @@ impl CustomerProfileProcess {
             .await
     }
 
-    /// 构造完整创建事务载荷；不写入、不重验范围。
-    ///
-    /// # 参数
-    /// * `req` - 创建命令
-    /// * `identity` - 已在当前事务内查重的新建或复用主体
-    /// * `replay` - 幂等上下文
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 返回可在事务内持久化的创建载荷。
-    ///
-    /// # 错误
-    /// 身份、客户或归属构造失败时拒绝。
-    ///
-    /// # 关键业务约束
-    /// 范围重验必须留在 `commit_create` 的同一写入事务内。
+    // 在写事务内完成主体查重后，按已选主体、认证人及原幂等上下文组装创建载荷，不写入。
+    // 身份、客户或归属构造失败时停止；真实候选范围仍由 `commit_create` 在同一事务校验。
     fn prepare_create(
         &self,
         req: SaveCustomerProfileRequest,
@@ -167,7 +129,7 @@ struct PreparedCreate {
 }
 
 impl PreparedCreate {
-    /// 构造命令、审计及稳定结果。
+    // 客户建档载荷准备完成后，生成包含客户和主体版本的稳定回执及成功审计，留待同一事务写入。
     fn new(
         parts: PreparedCreateParts,
         req: SaveCustomerProfileRequest,
@@ -200,7 +162,7 @@ impl PreparedCreate {
         Ok(Self { party, revision, account, assignment, facts, reused, command, audit, result })
     }
 
-    /// 将完整客户资料与幂等结果写入同一事务。
+    // 将完整客户资料与幂等结果写入同一事务。
     async fn persist(mut self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
         if self.reused {
             // 校验被复用主体仍是当前版本，防止并发停用或改名后继续按旧身份建档。
@@ -222,13 +184,13 @@ impl PreparedCreate {
     }
 }
 
-/// 创建 Party 与首个名称修订。
-/// # 参数
-/// * `req` / `party_id` / `revision_id` / `actor` - 请求、新主体和修订 ID 及操作人。
-/// # 返回
-/// 返回尚未写入的新主体和首个名称修订。
-/// # 错误
-/// 名称、信用代码等字段非法时返回领域错误。
+// 创建 Party 与首个名称修订。
+//
+// `req` / `party_id` / `revision_id` / `actor`：请求、新主体和修订 ID 及操作人。
+//
+// 返回尚未写入的新主体和首个名称修订。
+//
+// 名称、信用代码等字段非法时返回领域错误。
 pub(super) fn create_party(
     req: &SaveCustomerProfileRequest,
     party_id: &PartyId,
@@ -259,7 +221,7 @@ pub(super) fn create_party(
     Ok((party, revision))
 }
 
-/// 创建客户角色。
+// 客户建档时为已选定的 Party 构造尚未入库的客户角色。
 fn create_customer(
     req: &SaveCustomerProfileRequest,
     customer_id: &CustomerAccountId,
@@ -278,7 +240,7 @@ fn create_customer(
     )?)
 }
 
-/// 创建首条 OWNER 归属。
+// 客户首次建档时，以认证操作人而不是请求中的负责人建立首条 OWNER 归属。
 fn create_owner(
     req: &SaveCustomerProfileRequest,
     customer_id: &CustomerAccountId,
@@ -310,7 +272,7 @@ mod tests {
 
     use super::*;
 
-    /// 仅调用纯载荷准备，不执行数据库读写。
+    // 验证建档载荷复用既有主体时只准备客户角色及首条归属，不改原身份；测试不执行数据库读写。
     #[tokio::test]
     async fn reuse_creates_only_customer_role_and_preserves_existing_identity() {
         let db = Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("unit_test");

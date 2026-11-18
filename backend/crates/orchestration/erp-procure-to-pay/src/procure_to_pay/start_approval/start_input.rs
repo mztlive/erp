@@ -64,27 +64,9 @@ pub(crate) struct PurchaseOrderStartInput<'a> {
     pub now: Instant,
 }
 
-/// 由定义图与单据组织构造启动输入。
-///
-/// 审批人取自已发布节点，不接受客户端选择。对象读取权失败时收敛为 BLOCKED。
-///
-/// # 用途
-/// 计算逐节点对象读取授权结果并交给 BPM 通用启动计划，再把计划组装为引擎
-/// `prepare_start` 输入。
-///
-/// # 参数
-/// * `input` - 定义图、绑定、主体与提交人
-///
-/// # 返回
-/// 返回可交给 `prepare_start` 的输入。
-///
-/// # 错误
-/// 入口缺失、审批人非法、幂等键非法或读取权校验失败时返回错误。
-///
-/// # 关键业务约束
-/// 定义版本漂移、空节点、入口缺失与办理人校验由 BPM `plan_start` 失败关闭；
-/// 对象读取权失败收敛为 BLOCKED 资格，由引擎启动校验统一拒绝。采购变更单
-/// 与采购单必须复用同一 BPM 规则。
+// 采购提交审批时，由冻结绑定、定义图、单据组织和提交人生成 `prepare_start` 输入。
+// 审批人只从已发布节点取得；对象读取权失败收敛为 `BLOCKED`，由引擎启动校验拒绝。
+// 采购单与采购变更共用 BPM `plan_start` 对定义版本、空节点、入口和办理人的检查，幂等键不合法也不启动。
 pub(crate) fn build_purchase_order_start_input(
     input: PurchaseOrderStartInput<'_>,
 ) -> Result<StartExecutionInput> {
@@ -154,13 +136,9 @@ pub(crate) fn plan_purchase_approval_start(
     plan_start(StartPlanInput { graph, expected_definition_version, bindings }).map_err(map_start_plan_error)
 }
 
-/// 将启动计划错误映射为服务错误；计划前置条件保持冲突语义。
-///
-/// # 参数
-/// * `error` - BPM 启动计划错误
-///
-/// # 返回
-/// 计划前置条件返回冲突，其余错误按引擎错误映射。
+// 将启动计划错误映射为服务错误；计划前置条件保持冲突语义。
+//
+// `error` 为BPM 启动计划错误。计划前置条件返回冲突，其余错误按引擎错误映射。
 fn map_start_plan_error(error: bpm::engine::EngineError) -> Error {
     match error {
         bpm::engine::EngineError::InvalidCommand(message) => Error::ConflictError(message.to_string()),
@@ -306,7 +284,7 @@ pub(crate) mod tests {
         }
     }
 
-    /// 采购单启动输入逐节点冻结绑定，并复用 BPM 通用计划解析入口资格。
+    // 采购单启动输入逐节点冻结绑定，并复用 BPM 通用计划解析入口资格。
     #[test]
     fn purchase_order_start_freezes_all_nodes_with_bpm_plan() {
         let graph = two_node_graph();
@@ -324,7 +302,7 @@ pub(crate) mod tests {
         assert_eq!(built.subject_version, 1);
     }
 
-    /// 定义版本漂移时失败关闭，不得用旧冻结绑定启动新图。
+    // 定义版本漂移时失败关闭，不得用旧冻结绑定启动新图。
     #[test]
     fn purchase_order_start_rejects_definition_version_drift() {
         let graph = two_node_graph();
@@ -334,7 +312,7 @@ pub(crate) mod tests {
         );
     }
 
-    /// 空节点定义不得启动。
+    // 验证空节点定义不得启动。
     #[test]
     fn purchase_order_start_rejects_empty_node_graph() {
         let error =
@@ -342,7 +320,7 @@ pub(crate) mod tests {
         assert!(matches!(error, Error::ConflictError(message) if message.contains("审批定义没有节点")));
     }
 
-    /// 入口键缺失时失败关闭。
+    // 验证入口键缺失时失败关闭。
     #[test]
     fn purchase_order_start_rejects_missing_entry_node() {
         let mut graph = two_node_graph();
@@ -351,7 +329,7 @@ pub(crate) mod tests {
         assert!(matches!(error, Error::ConflictError(message) if message.contains("审批定义缺少入口节点")));
     }
 
-    /// 对象读取失败收敛为 BLOCKED 资格，并由引擎启动校验统一拒绝。
+    // 对象读取失败收敛为 BLOCKED 资格，并由引擎启动校验统一拒绝。
     #[test]
     fn purchase_order_start_converges_read_failure_to_blocked() {
         let built = build_purchase_order_start_input(input(two_node_graph(), &binding(1), "")).unwrap();
@@ -366,7 +344,7 @@ pub(crate) mod tests {
         );
     }
 
-    /// 同键同载荷启动收据必须重放，不重复规划写入。
+    // 验证同键同载荷启动收据必须重放，不重复规划写入。
     #[test]
     fn purchase_order_start_replays_matching_receipt() {
         let identity = start_identity(StartIdentityParams {
@@ -395,7 +373,7 @@ pub(crate) mod tests {
         assert!(matches!(prepare_start(built).unwrap(), PreparedExecution::Replay { .. }));
     }
 
-    /// 计划前置条件映射保持冲突语义。
+    // 验证采购审批启动计划的前置条件失败仍归冲突，不改成内部错误。
     #[test]
     fn start_plan_error_maps_to_conflict() {
         let error = map_start_plan_error(EngineError::InvalidCommand("定义版本与冻结绑定不一致"));
@@ -454,7 +432,7 @@ pub(crate) mod tests {
         }
     }
 
-    /// 实际生产写序使用同一调用方执行器，覆盖领域写入两侧的跨域步骤。
+    // 实际生产写序使用同一调用方执行器，覆盖领域写入两侧的跨域步骤。
     #[tokio::test]
     async fn start_posting_keeps_original_order_and_executor() {
         use super::StartStep::*;
@@ -485,7 +463,7 @@ pub(crate) mod tests {
         );
     }
 
-    /// 每一生产步骤失败后立即停止；保留原冲突错误，不推进任何后续写入。
+    // 每一生产步骤失败后立即停止；保留原冲突错误，不推进任何后续写入。
     #[tokio::test]
     async fn start_posting_stops_at_each_failure() {
         use super::StartStep::*;

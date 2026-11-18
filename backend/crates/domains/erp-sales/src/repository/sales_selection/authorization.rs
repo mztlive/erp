@@ -24,12 +24,10 @@ pub struct SelectionMapping {
 }
 impl SelectionMapping {
     /// 创建固定业务模型。
-    /// # 参数
-    /// resource 为选品册或选品方案资源。
-    /// # 返回
-    /// 提供选品拥有集合的映射。
-    /// # 错误
+    /// 结果：提供选品拥有集合的映射。
     /// 未知资源拒绝。
+    ///
+    /// 输入约定：resource 为选品册或选品方案资源。
     pub fn new(resource: &str) -> IdentityResult<Self> {
         let collection = match resource {
             "sales_selection_booklet" => Database::SALES_SELECTION_BOOKLETS,
@@ -55,12 +53,10 @@ impl SelectionMapping {
         })
     }
     /// 绑定客户拥有领域的来源映射。
-    /// # 参数
-    /// resource 为固定选品资源，customer 为客户集合映射。
-    /// # 返回
-    /// 同时提供选品责任与真实客户关系的映射。
-    /// # 错误
+    /// 结果：同时提供选品责任与真实客户关系的映射。
     /// 未知选品资源或非客户映射时拒绝。
+    ///
+    /// 输入约定：resource 为固定选品资源，customer 为客户集合映射。
     pub fn with_customer(resource: &str, customer: Arc<dyn AccessMapping>) -> IdentityResult<Self> {
         if customer.model().resource != "customer" {
             return Err(IdentityError::ValidationError("选品客户来源映射不匹配".into()));
@@ -70,7 +66,7 @@ impl SelectionMapping {
         Ok(mapping)
     }
 
-    /// 方案通过有效父册解释当前责任；选品册直接使用本行字段。
+    // 解释选品授权中的当前责任：方案沿有效父册取得责任，册对象直接使用本身的责任字段。
     fn responsibility(&self, condition: Document) -> QueryFragment {
         if self.model.resource == "sales_selection_booklet" {
             QueryFragment::Match(condition)
@@ -148,12 +144,9 @@ pub struct SelectionFacts {
 }
 impl SelectionFacts {
     /// 绑定本域集合。
-    /// # 参数
-    /// db 为选品数据库，customers 为客户拥有领域的事实读取器。
-    /// # 返回
-    /// 不执行查询的事实端口。
-    /// # 错误
-    /// 无。
+    /// 结果：不执行查询的事实端口。
+    ///
+    /// 输入约定：db 为选品数据库，customers 为客户拥有领域的事实读取器。
     pub fn new(db: Database, customers: Arc<dyn AccessFactsPort>) -> Self {
         Self { db, customers }
     }
@@ -218,12 +211,10 @@ fn book_object(resource: &str, id: &str, version: String, book: &SalesSelectionB
     object(resource, id, version, &book.sales_owner_user_id, &book.business_org_unit_id)
 }
 /// 构造选品册拟创建责任，候选不携带任何持久化身份版本。
-/// # 参数
-/// customer_id 为实际客户身份；owner、org 为创建用例已校验的销售负责人和业务组织。
-/// # 返回
-/// 固定选品册资源、空记录身份及空版本的创建候选。
-/// # 错误
+/// 结果：固定选品册资源、空记录身份及空版本的创建候选。
 /// 客户身份为空、未规范化或超过上限时拒绝。
+///
+/// 输入约定：customer_id 为实际客户身份；owner、org 为创建用例已校验的销售负责人和业务组织。
 pub fn candidate(customer_id: &str, owner: &str, org: &str) -> IdentityResult<ObjectFacts> {
     let targets = ResourceTargets::new(&[customer_id])?;
     let mut candidate = object("sales_selection_booklet", "", String::new(), owner, org);
@@ -234,13 +225,11 @@ pub fn candidate(customer_id: &str, owner: &str, org: &str) -> IdentityResult<Ob
     Ok(candidate)
 }
 
-/// 将已经读取或校验的责任字段转换为选品事实。
-/// # 参数
-/// resource、id、version 为业务身份，owner、org 为已校验的销售责任。
-/// # 返回
-/// 保留原始身份、版本和当前责任的对象事实。
-/// # 错误
-/// 不执行 I/O，字段合法性由创建用例保证。
+// 将已经读取或校验的责任字段转换为选品事实。
+// 结果：保留原始身份、版本和当前责任的对象事实。
+// 失败条件：不执行 I/O，字段合法性由创建用例保证。
+//
+// 输入约定：resource、id、version 为业务身份，owner、org 为已校验的销售责任。
 fn object(resource: &str, id: &str, version: String, owner: &str, org: &str) -> ObjectFacts {
     ObjectFacts {
         resource: resource.into(),

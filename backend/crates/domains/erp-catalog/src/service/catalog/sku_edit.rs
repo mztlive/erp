@@ -36,20 +36,8 @@ pub(super) struct NewSkuContext<'a> {
 }
 
 impl CatalogService {
-    /// 构造新 SKU 行。
-    ///
-    /// 规范化自由规格、校验新身份意图与条码占用，并创建稳定 SKU 及首个修订。
-    ///
-    /// # 参数
-    /// * `executor` - 原授权事务或读取阶段的执行器。
-    /// * `ctx` - 新 SKU 所属商品、生效区间与创建人
-    /// * `input` - SKU 输入行
-    ///
-    /// # 返回
-    /// 返回 `Create` 动作的规格编辑行。
-    ///
-    /// # 错误
-    /// 身份、规格、条码或实体字段违反规则，以及仓储查询失败时返回错误。
+    // SKU 编辑确认规范签名从未存在时，核验新建意图、规格及条码占用，构造稳定 SKU 与首个修订。
+    // 原执行器用于查询条码；校验失败时不生成编辑项，本步骤不写库。
     pub(super) async fn build_new_sku_item(
         &self,
         ctx: NewSkuContext<'_>,
@@ -78,18 +66,8 @@ impl CatalogService {
         Ok(SkuEditItem { action: SkuEditAction::Create, sku, revision })
     }
 
-    /// 校验条码未被其他在用 SKU 使用。
-    ///
-    /// # 参数
-    /// * `executor` - 原授权事务或读取阶段的执行器。
-    /// * `barcode` - 条码原值
-    /// * `current_sku_id` - 本次写入归属 SKU；同一 SKU 自身修订不视为冲突
-    ///
-    /// # 返回
-    /// 条码为空或未被其他 SKU 占用时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 条码已被其他在用 SKU 使用，或仓储查询失败时返回错误。
+    // 生成 SKU 修订前，沿用原执行器检查非空条码是否被其他在用 SKU 占用。
+    // 归属本 SKU 的占用不冲突；他方占用或仓储读取失败时拒绝。
     pub(super) async fn ensure_barcode_available(
         &self,
         barcode: &Option<String>,
@@ -106,17 +84,11 @@ impl CatalogService {
         Ok(())
     }
 
-    /// 计算某 SKU 应写入的下一修订序号。
-    ///
-    /// # 参数
-    /// * `executor` - 原授权事务或读取阶段的执行器。
-    /// * `sku_id` - SKU 稳定 ID
-    ///
-    /// # 返回
-    /// 返回从 1 开始、按历史最大修订号递增的下一序号。
-    ///
-    /// # 错误
-    /// 仓储查询失败或修订序号达到上限时返回错误。
+    // 计算某 SKU 应写入的下一修订序号。
+    //
+    // 返回从 1 开始、按历史最大修订号递增的下一序号。仓储查询失败或修订序号达到上限时返回错误。
+    //
+    // 沿用调用方的执行器，不另开事务。
     pub(super) async fn next_sku_revision_no(
         &self,
         sku_id: &SkuId,
@@ -127,23 +99,8 @@ impl CatalogService {
     }
 }
 
-/// 构造 SKU 修订（`Create` 首个修订与 `Keep`/`Reactivate` 追加修订共用）。
-///
-/// 修订内容字段（名称/条码/主图/重量/体积/价格）全部取自 SKU 输入行；
-/// 首个修订传新稳定 ID 与序号 1，追加修订传既有 ID 与下个序号。
-/// 启停一律落 `Active`，停用只走稳定主表状态机。
-///
-/// # 参数
-/// * `sku_id` - 修订归属的稳定 SKU
-/// * `revision_no` - 修订序号（首个为 1）
-/// * `effective_from` / `effective_to` - 修订生效区间
-/// * `input` - SKU 输入行（含独立 SKU 名称）
-///
-/// # 返回
-/// 返回不可变 SKU 修订实体。
-///
-/// # 错误
-/// SKU 修订字段违反实体不变式时返回错误。
+// 新建、保留或重新启用 SKU 时，用本次输入的名称、条码、主图、物流属性和价格构造不可变修订。
+// 首修订用新 SKU ID 和序号 1；追加用原 SKU ID 和下一序号。修订标为 `Active`，停用只改稳定 SKU 主表。
 pub(super) fn sku_revision_for_input(
     sku_id: SkuId,
     revision_no: u32,
@@ -174,16 +131,9 @@ pub(super) fn sku_revision_for_input(
     )?)
 }
 
-/// 根据请求中的 SPU 局部规格名和值计算 SKU 身份签名。
-///
-/// # 参数
-/// * `entries` - 一个 SKU 的全部规格名和值
-///
-/// # 返回
-/// 返回去除首尾空白并按规格名和值排序后的规范化签名。
-///
-/// # 错误
-/// 规格名值为空、超长或同一规格名重复时返回领域错误。
+// 根据请求中的 SPU 局部规格名和值计算 SKU 身份签名。
+//
+// 返回去除首尾空白并按规格名和值排序后的规范化签名。规格名值为空、超长或同一规格名重复时返回领域错误。
 pub(super) fn specification_signature_for(entries: &[SpecEntryInput]) -> Result<String> {
     let signature_entries = entries
         .iter()
@@ -195,20 +145,8 @@ pub(super) fn specification_signature_for(entries: &[SpecEntryInput]) -> Result<
     Ok(compute_specification_signature(&signature_entries)?)
 }
 
-/// 由请求输入构造 SKU 编辑身份（erp-catalog-012）。
-///
-/// Create 路径传 `None`，编辑路径传请求级原因；两种构造仅差一个参数，
-/// 调用方不再需要记住用哪个函数。
-///
-/// # 参数
-/// * `input` - 客户端提交的 SKU 行
-/// * `change_reason` - 请求级变更原因；新建时为 `None`
-///
-/// # 返回
-/// 返回借用输入字段的 SKU 编辑身份快照。
-///
-/// # 错误
-/// 无；具体身份规则由 [`Sku::classify_edit`] 校验。
+// 规划 SKU 编辑时借用请求中的身份字段；新建不传变更原因，编辑沿用请求级原因。
+// 身份意图与当前修订是否匹配由 `Sku::classify_edit` 核验。
 pub(super) fn sku_edit_identity<'a>(
     input: &'a ProductSkuInput,
     change_reason: Option<&'a str>,
@@ -223,16 +161,9 @@ pub(super) fn sku_edit_identity<'a>(
     }
 }
 
-/// 把 SKU 身份领域错误映射为稳定的 Service 错误语义。
-///
-/// # 参数
-/// * `error` - SKU 身份规则错误
-///
-/// # 返回
-/// 修订过期映射为 409 冲突，其余输入意图错误映射为参数验证错误。
-///
-/// # 错误
-/// 无；本方法只做错误边界适配。
+// 把 SKU 身份领域错误映射为稳定的 Service 错误语义。
+//
+// 修订过期映射为 409 冲突，其余输入意图错误映射为参数验证错误。本方法只做错误边界适配。
 pub(super) fn map_sku_edit_error(error: SkuEditIdentityError) -> Error {
     match error {
         SkuEditIdentityError::RevisionConflict => Error::ConflictError(error.to_string()),

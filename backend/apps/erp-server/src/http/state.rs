@@ -27,12 +27,7 @@ pub struct HttpState {
 }
 impl HttpState {
     /// 为 HTTP 装配独立的缓存和任务管理。
-    /// # 参数
-    /// application 为已完成初始化的共享装配。
-    /// # 返回
     /// HTTP 状态。
-    /// # 错误
-    /// 不执行 I/O，不返回错误。
     pub fn from_application(application: Application) -> Self {
         Self {
             application,
@@ -43,41 +38,22 @@ impl HttpState {
         }
     }
     /// 构造使用失败关闭连接器的 HTTP 状态。
-    /// # 参数
-    /// db、config、storage 为已经建立的基础资源。
-    /// # 返回
-    /// HTTP 状态。
-    /// # 错误
-    /// 不执行 I/O，不返回错误。
     pub fn new(db: Database, config: SafeConfig, storage: S3Storage) -> Self {
         Self::from_application(Application::new(db, config, storage))
     }
     /// 访问进程共享业务装配。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 共享装配引用。
-    /// # 错误
-    /// 无。
     pub fn application(&self) -> &Application {
         &self.application
     }
-    /// 访问请求衍生任务管理器。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 同一 HTTP 进程的任务管理器。
-    /// # 错误
-    /// 无。
+    // 访问请求衍生任务管理器。
+    // 同一 HTTP 进程的任务管理器。
     pub(crate) fn tasks(&self) -> &RequestTasks {
         &self.tasks
     }
     /// 装配指定京东连接的页面授权入口，复用应用共享任务生命周期。
-    /// # 参数
     /// 无；账号配置只从SafeConfig当前快照读取。
-    /// # 返回
     /// 不发送HTTP的授权用例，未配置时状态保持未就绪。
-    /// # 错误
     /// 不返回错误，敏感配置错误由用例转换为脱敏状态。
     pub fn jd_vop_authorization_process(&self) -> JdVopAuthorizationProcess {
         let config = self.application().config_snapshot();
@@ -95,24 +71,12 @@ impl HttpState {
         )
     }
 
-    /// 返回应用共享授权任务边界，供停止HTTP受理后等待已开始授权保存完成。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 同一任务边界的共享引用。
-    /// # 错误
-    /// 不执行I/O，不返回错误。
+    /// 在 Web API 停止受理并排空请求后，取出共享京东授权任务管理器，等待已启动的原授权保存结束。
     pub fn jd_vop_authorization_tasks(&self) -> Arc<JdVopAuthorizationTasks> {
         self.jd_vop_authorization.clone()
     }
 
-    /// 获取 JWT 引擎实例。
-    ///
-    /// # 返回
-    /// 返回执行结果，`Ok` 表示成功，`Err` 表示失败。
-    ///
-    /// # 错误
-    /// 当验证失败或底层操作失败时返回错误。
+    /// 用当前配置快照的密钥获取 JWT 引擎，供签发和验签复用；密钥变化时重建，初始化失败不沿用旧密钥。
     pub async fn jwt_engine(&self) -> std::result::Result<JwtEngine, JwtError> {
         let mut engine_guard = self.jwt_engine.write().await;
 
@@ -120,7 +84,7 @@ impl HttpState {
     }
 }
 
-/// 缓存只复用相同密钥的引擎；配置变化后在持锁期间原子替换。
+// 签发或验签时只复用与当前密钥相同的缓存引擎。持锁构造新引擎，成功后原子替换；构造错误返回给调用方。
 fn engine_for_secret(cache: &mut Option<(String, JwtEngine)>, secret: String) -> Result<JwtEngine, JwtError> {
     if let Some((active, engine)) = cache.as_ref()
         && active == &secret

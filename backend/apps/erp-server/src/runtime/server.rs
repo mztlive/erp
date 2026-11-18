@@ -16,7 +16,7 @@ use crate::http::state::HttpState;
 use crate::wiring::Application;
 use crate::worker::Workers;
 
-/// 绑定成功后才启动后台循环；停止时先关闭领取，再排空 HTTP 和任务。
+// 绑定监听端口后才启动相应角色的路由和后台任务。收到退出信号、HTTP 退出或常驻循环失败时，先停止新请求和任务领取，再统一排空。
 pub(crate) async fn serve(state: Application, role: ProcessRole, port: u16) -> Result<()> {
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}")).await?;
     let readiness = Arc::new(AtomicBool::new(true));
@@ -50,7 +50,7 @@ pub(crate) async fn serve(state: Application, role: ProcessRole, port: u16) -> R
     result
 }
 
-/// 在同一个总预算内排空 HTTP、常驻任务与请求衍生任务。
+// 停机时并行排空 HTTP 和 Worker；存量 HTTP 结束后再等请求衍生任务和京东授权保存。总预算为 60 秒，超时返回进程错误，后续按原任务状态恢复或核实。
 async fn drain(
     mut http: tokio::task::JoinHandle<std::io::Result<()>>,
     http_finished: bool,
@@ -87,7 +87,7 @@ async fn drain(
     }
 }
 
-/// API 只提供业务路由，Worker 只提供探针和已启用的执行器协议。
+// 按进程职责选择路由：Web API 挂业务接口，Worker 只挂探针和已装配的 XXL 协议。
 fn application(state: Option<&HttpState>, workers: Option<&Workers>, ready: Arc<AtomicBool>) -> Router {
     if let Some(state) = state {
         routes::create(state.clone())
@@ -96,7 +96,7 @@ fn application(state: Option<&HttpState>, workers: Option<&Workers>, ready: Arc<
     }
 }
 
-/// 不启动后台循环的 API 只等待进程信号。
+// 启动 Worker 时等待监督器发现常驻循环退出；没有 Worker 的 API 保持等待，不触发此退出分支。
 async fn worker_failure(workers: Option<&Workers>) {
     match workers {
         Some(workers) => workers.failed().await,
@@ -104,13 +104,13 @@ async fn worker_failure(workers: Option<&Workers>) {
     }
 }
 
-/// 传播 HTTP 服务或监督任务异常。
+// 把 HTTP 监听任务的 I/O 失败与 join 异常统一传给进程生命周期，避免把异常退出当作正常关闭。
 fn http_result(result: std::result::Result<std::io::Result<()>, tokio::task::JoinError>) -> Result<()> {
     result??;
     Ok(())
 }
 
-/// Worker 不装配业务路由；ready 在排空阶段关闭。
+// 装配 Worker 存活和就绪探针；进入排空时 `/ready` 返回 503，探针不代表 XXL 注册成功或业务无积压。
 fn probes(ready: Arc<AtomicBool>) -> Router {
     Router::new().route("/health", get(|| async { StatusCode::OK })).route(
         "/ready",
@@ -123,7 +123,7 @@ fn probes(ready: Arc<AtomicBool>) -> Router {
     )
 }
 
-/// 同时响应容器 SIGTERM 和本地 Ctrl-C。
+// 等待运行环境的停止信号，供服务进入统一的有界停机流程；Unix 环境兼容 SIGTERM 和 Ctrl-C。
 async fn shutdown_signal() {
     #[cfg(unix)]
     wait_for_unix_shutdown().await;
@@ -131,14 +131,14 @@ async fn shutdown_signal() {
     wait_for_ctrl_c().await;
     info!("Shutdown signal received");
 }
-/// 等待跨平台 Ctrl-C 信号；注册失败时记录错误并触发安全关闭。
+// 等待跨平台 Ctrl-C；若处理器注册失败，记日志并结束等待，让进程进入安全关闭流程。
 async fn wait_for_ctrl_c() {
     if let Err(error) = tokio::signal::ctrl_c().await {
         warn!(%error, "Failed to install Ctrl-C signal handler");
     }
 }
 
-/// 在 Unix 环境同时等待 SIGTERM 与 Ctrl-C，覆盖容器标准停止流程。
+// 在 Unix 上同时等待 SIGTERM 与 Ctrl-C，以兼容容器停止和本地退出；SIGTERM 注册失败时继续等 Ctrl-C。
 #[cfg(unix)]
 async fn wait_for_unix_shutdown() {
     let terminate = async {

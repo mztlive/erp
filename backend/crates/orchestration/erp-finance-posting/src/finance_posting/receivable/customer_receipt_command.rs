@@ -33,44 +33,25 @@ const RECEIPT_FIELDS: &[AuditField] = &[
 pub(super) trait ReceiptReplayPort: Send + Sync {
     type Output: Send;
 
-    /// 读取领域回执；不存在时返回空结果，异载荷或损坏时失败。
-    ///
-    /// # 参数
-    /// * `command` - 原请求的稳定命令身份。
-    /// * `executor` - 调用方执行器。
-    /// # 返回
-    /// 返回原命令结果资源或空。
-    /// # 错误
-    /// 身份、载荷、回执损坏或读取失败时返回错误。
+    // 读取领域回执；不存在时返回空结果，异载荷或损坏时失败。
+    //
+    // `command` 为原请求的稳定命令身份；沿用调用方的执行器。返回原命令结果资源或空。身份、载荷、回执损坏或读取失败时返回错误。
     async fn committed_resource_id(
         &self,
         command: &CommandReceipt,
         executor: &mut dyn Executor,
     ) -> Result<Option<String>>;
 
-    /// 沿用入口结果形态回读原业务对象；读取失败时返回原错误。
-    ///
-    /// # 参数
-    /// * `id` - 回执确认的原结果资源。
-    /// * `executor` - 当前调用方执行器。
-    /// # 返回
-    /// 返回当前授权结果。
-    /// # 错误
-    /// 原业务对象不存在或结果读取失败时返回错误。
+    // 沿用入口结果形态回读原业务对象；读取失败时返回原错误。
+    //
+    // `id` 为回执确认的原结果资源；`executor` 为当前调用方执行器。返回当前授权结果。原业务对象不存在或结果读取失败时返回错误。
     async fn current_result(&self, id: &str, executor: &mut dyn Executor) -> Result<Self::Output>;
 }
 
-/// 查证独立回执并回读原结果；命中其他原单时不得读取其业务详情。
-///
-/// # 参数
-/// * `port` - 对应入口的领域回执与结果读取边界。
-/// * `command` - 原请求命令身份。
-/// * `expected_resource` - 提交已有原单时必须匹配的资源 ID。
-/// * `executor` - 调用方读取或事务执行器。
-/// # 返回
-/// 命中时返回原对象当前结果，否则返回空。
-/// # 错误
-/// 指纹、原单不一致或回执/结果读取失败时返回错误。
+// 查证独立回执并回读原结果；命中其他原单时不得读取其业务详情。
+//
+// `port` 为对应入口的领域回执与结果读取边界；`command` 为原请求命令身份；`expected_resource` 为提交已有原单时必须匹配的资源 ID；`executor`
+// 为调用方读取或事务执行器。命中时返回原对象当前结果，否则返回空。指纹、原单不一致或回执/结果读取失败时返回错误。
 pub(super) async fn replay_receipt_command<P: ReceiptReplayPort>(
     port: &P,
     command: &CommandReceipt,
@@ -84,15 +65,11 @@ pub(super) async fn replay_receipt_command<P: ReceiptReplayPort>(
     port.current_result(&id, executor).await.map(Some)
 }
 
-/// 合并原事务错误与当前授权快照的查证结果，未知提交查证失败保留首次错误。
-///
-/// # 参数
-/// * `probe` - 当前快照核对回执、当前资格及结果后的查证结果。
-/// * `original_error` - 事务首次错误。
-/// # 返回
-/// 查证成功时返回原结果。
-/// # 错误
-/// 无命中时返回原错误；未知提交查证失败时保留原未知错误。
+// 合并原事务错误与当前授权快照的查证结果，未知提交查证失败保留首次错误。
+//
+// `probe` 为当前快照核对回执、当前资格及结果后的查证结果；`original_error` 为事务首次错误。查证成功时返回原结果。
+//
+// 无命中时返回原错误；未知提交查证失败时保留原未知错误。
 pub(super) fn recover_receipt_command<T>(probe: Result<Option<T>>, original_error: Error) -> Result<T> {
     match probe {
         Ok(Some(result)) => Ok(result),
@@ -102,15 +79,9 @@ pub(super) fn recover_receipt_command<T>(probe: Result<Option<T>>, original_erro
     }
 }
 
-/// 原单提交回执只能关联请求中的原单。
-///
-/// # 参数
-/// * `id` - 财务回执记录的结果资源。
-/// * `expected_resource` - 原请求资源，可为空。
-/// # 返回
-/// 资源一致或不限制资源时返回成功。
-/// # 错误
-/// 关联其他原单时返回冲突。
+// 原单提交回执只能关联请求中的原单。
+//
+// `id` 为财务回执记录的结果资源；`expected_resource` 为原请求资源，可为空。资源一致或不限制资源时返回成功。关联其他原单时返回冲突。
 pub(super) fn ensure_committed_resource(id: &str, expected_resource: Option<&str>) -> Result<()> {
     if expected_resource.is_some_and(|expected| expected != id) {
         return Err(Error::ConflictError("原回款提交记录与当前回款单不符，请核对办理记录".into()));
@@ -121,17 +92,11 @@ pub(super) fn ensure_committed_resource(id: &str, expected_resource: Option<&str
 /// 首次成功回执与业务事件的事务写入边界。
 #[async_trait]
 pub(super) trait ReceiptCommandWritePort: AuditEventSink<Error = Error> {
-    /// 在业务事务中保存首次命令成功回执及其事件关联。
-    ///
-    /// # 参数
-    /// * `command` - 已执行的原命令。
-    /// * `resource_id` - 正式结果资源。
-    /// * `audit_event_id` - 同事务关联业务事件。
-    /// * `executor` - 原业务事务执行器。
-    /// # 返回
-    /// 写入成功时返回空结果。
-    /// # 错误
-    /// 回执无效、唯一身份冲突或持久化失败时返回错误。
+    // 在业务事务中保存首次命令成功回执及其事件关联。
+    //
+    // `command` 为已执行的原命令；`resource_id` 为正式结果资源；`audit_event_id` 为同事务关联业务事件；`executor` 为原业务事务执行器。
+    //
+    // 写入成功时返回空结果。回执无效、唯一身份冲突或持久化失败时返回错误。
     async fn save_receipt(
         &self,
         command: &CommandReceipt,
@@ -170,18 +135,10 @@ impl ReceiptCommandWritePort for MongoReceiptCommandWrites<'_> {
     }
 }
 
-/// 正式提交成功后在原执行器写回执和一次中文事件；不保存原请求或机器消息。
-///
-/// # 参数
-/// * `port` - 回执与成功事件写入边界。
-/// * `command` - 原命令身份。
-/// * `context` - 业务写入前已验证的动作与身份上下文。
-/// * `receipt` - 已完成业务提交的回款实体。
-/// * `executor` - 正式业务写入使用的原执行器。
-/// # 返回
-/// 回执与业务事件成功写入时返回空结果。
-/// # 错误
-/// 回执、结果投影或事件写入失败时停止并返回原错误。
+// 正式提交成功后在原执行器写回执和一次中文事件；不保存原请求或机器消息。
+//
+// `port` 为回执与成功事件写入边界；`command` 为原命令身份；`context` 为业务写入前已验证的动作与身份上下文；`receipt` 为已完成业务提交的回款实体；`executor`
+// 为正式业务写入使用的原执行器。回执与业务事件成功写入时返回空结果。回执、结果投影或事件写入失败时停止并返回原错误。
 pub(super) async fn persist_receipt_command_success<P: ReceiptCommandWritePort>(
     port: &P,
     command: &CommandReceipt,
@@ -205,16 +162,11 @@ impl<P: ReceiptCommandWritePort> AuditedCommand for ReceiptSuccessCommand<'_, P>
     type Error = Error;
     type Output = ();
 
-    /// 在原执行器保存成功回执，并只为首次成功生成一条回款事件。
-    ///
-    /// # 参数
-    /// * `executor` - 正式业务写入使用的原执行器。
-    ///
-    /// # 返回
-    /// 回执保存成功后返回 `AuditedWrite::Fresh`，结果为 `()`，事件内容含到账金额与状态。本实现不走回放分支。
-    ///
-    /// # 错误
-    /// 回执保存失败时返回对应错误。
+    // 在原执行器保存成功回执，并只为首次成功生成一条回款事件。
+    //
+    // `executor` 为正式业务写入使用的原执行器。
+    //
+    // 回执保存成功后返回 `AuditedWrite::Fresh`，结果为 `()`，事件内容含到账金额与状态。本实现不走回放分支。回执保存失败时返回对应错误。
     async fn execute(&self, executor: &mut dyn Executor) -> Result<AuditedWrite<()>> {
         self.port
             .save_receipt(self.command, self.receipt.base.id.clone(), self.audit_event_id.into(), executor)
@@ -223,7 +175,7 @@ impl<P: ReceiptCommandWritePort> AuditedCommand for ReceiptSuccessCommand<'_, P>
     }
 }
 
-/// 回款事件只记录到账金额、业务编号与审批结果状态。
+// 回款事件只记录到账金额、业务编号与审批结果状态。
 fn receipt_content(receipt: &CustomerReceipt) -> BusinessEventContent {
     BusinessEventContent {
         target_id: receipt.base.id.clone(),
@@ -243,15 +195,9 @@ fn receipt_content(receipt: &CustomerReceipt) -> BusinessEventContent {
     }
 }
 
-/// 在业务写入前校验动作和静态身份，回执与事件共用原稳定命令 ID。
-///
-/// # 参数
-/// * `command` - 稳定命令身份及动作。
-/// * `actor` - 认证操作人。
-/// # 返回
-/// 返回已验证的业务事件上下文。
-/// # 错误
-/// 动作未登记、元数据或操作人无效时返回错误。
+// 在业务写入前校验动作和静态身份，回执与事件共用原稳定命令 ID。
+//
+// `command` 为稳定命令身份及动作；`actor` 为认证操作人。返回已验证的业务事件上下文。动作未登记、元数据或操作人无效时返回错误。
 pub(super) fn receipt_command_context(
     command: &CommandReceipt,
     actor: &AuditActor,
@@ -260,7 +206,7 @@ pub(super) fn receipt_command_context(
         .with_command_id(Some(command.id().to_string()))?)
 }
 
-/// 动作目录仅包含本文件拥有的两类成功财务命令。
+// 动作目录仅包含本文件拥有的两类成功财务命令。
 fn receipt_action(command: &CommandReceipt) -> Result<AuditAction> {
     let (code, label) = match command.action() {
         "customer_receipt.commit" => ("customer_receipt.commit", "登记并提交客户回款"),
@@ -504,7 +450,7 @@ mod tests {
         assert_eq!(*probe.calls.lock().unwrap(), ["read_receipt", "current_result"]);
     }
 
-    /// 新快照初始化或当前授权取证失败不能掩盖未知提交，普通失败仍返回查证错误。
+    // 新快照初始化或当前授权取证失败不能掩盖未知提交，普通失败仍返回查证错误。
     #[test]
     fn recovery_keeps_unknown_commit_for_snapshot_or_authorization_failure() {
         for failure in [

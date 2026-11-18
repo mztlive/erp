@@ -105,7 +105,7 @@ fn execute(
     Ok(prepared)
 }
 
-/// 确认先完成财务构造，再记录领域决定；成本构造失败仍不改变结算单和任务。
+// 先构造确认所需的应付与成本，再在单据上记录决定，避免财务计算失败后留下提前变更的结算状态。
 fn prepare_confirmation(
     finance: &mut impl FinancePreparation,
     statement: &mut SupplierSettlementStatement,
@@ -145,21 +145,8 @@ fn prepare_confirmation(
     })
 }
 
-/// 在变更结算状态与完成任务之前构造应付和成本。
-///
-/// # 参数
-/// * `statement` - 待复核结算单；确认或驳回成功后就地记录决定。
-/// * `work_item` - 正式复核任务；准备成功后记活动并完成。
-/// * `items` - 结算明细。
-/// * `differences` - 结算差异。
-/// * `input` - 复核命令、驳回原因、操作人与时间。
-///
-/// # 返回
-/// 返回应付、成本分录、成本差额和决定状态。驳回时财务字段为空。
-///
-/// # 错误
-/// 应付或成本构造失败时不改结算状态与任务。驳回缺少原因时返回 `ValidationError`。
-/// 确认前提、决定记录或任务完成失败时返回对应错误。
+// 准备复核决定供过账使用：确认时先构造应付、成本分录和差额，成功才变更结算状态并完成任务；驳回无财务结果且必须提供原因。
+// 财务构造、决定记录或任务完成失败时返回对应错误；缺少驳回原因返回 `ValidationError`。
 pub(super) fn prepare(
     statement: &mut SupplierSettlementStatement,
     work_item: &mut WorkItem,

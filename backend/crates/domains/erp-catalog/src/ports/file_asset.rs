@@ -22,15 +22,9 @@ pub struct FileAssetFact {
 pub trait FileAssetFactsPort: Send + Sync {
     /// 按 ID 读取未删除的文件资产事实。
     ///
-    /// # 参数
-    /// * `asset_id` - 文件资产 ID
-    /// * `executor` - 调用方执行器
+    /// 资产存在且未删除时返回事实；不存在或已删除时返回 `None`。读取失败时返回下层错误。
     ///
-    /// # 返回
-    /// 资产存在且未删除时返回事实；不存在或已删除时返回 `None`。
-    ///
-    /// # 错误
-    /// 读取失败时返回下层错误。
+    /// 沿用调用方传入的执行器。
     async fn find_by_id(
         &self,
         asset_id: &FileAssetId,
@@ -41,15 +35,9 @@ pub trait FileAssetFactsPort: Send + Sync {
     ///
     /// 空输入返回空向量。重复的缺失 ID 只出现一次。
     ///
-    /// # 参数
-    /// * `asset_ids` - 待核对的文件资产 ID
-    /// * `executor` - 调用方执行器
+    /// 返回尚未登记的 ID。核对失败时返回下层错误。
     ///
-    /// # 返回
-    /// 返回尚未登记的 ID。
-    ///
-    /// # 错误
-    /// 核对失败时返回下层错误。
+    /// 沿用调用方传入的执行器。
     async fn missing_ids(
         &self,
         asset_ids: &[FileAssetId],

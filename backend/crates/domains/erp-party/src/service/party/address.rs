@@ -40,19 +40,12 @@ pub struct PartyAddressService {
 }
 
 impl PartyAddressService {
-    /// 创建地址服务实例。
+    /// 装配往来主体的地址服务，供列表和写入入口共用授权、供应商档案边界及审计。
     ///
     /// # 参数
-    /// * `db` - 数据库实例
     /// * `sensitive_data` - 敏感数据编解码器
     /// * `audit` - 审计写入端口
     /// * `supplier_roles` - 供应商角色事实端口
-    ///
-    /// # 返回
-    /// 返回服务实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(
         db: Database,
         sensitive_data: Arc<SensitiveDataCodec>,
@@ -63,13 +56,11 @@ impl PartyAddressService {
         Self { db, sensitive_data, audit, supplier_roles, authorization }
     }
 
-    /// 分页查询地址列表（投影查询，敏感字段不进投影）。
+    /// 按条件分页读取主体地址，用于业务表单选择和主体地址维护。列表响应省略地址密文。
     ///
     /// # 参数
     /// * `party_id` - 所属企业主体 ID
-    /// * `params` - 查询参数
     ///
-    /// # 返回
     /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
     ///
     /// # 错误
@@ -95,7 +86,7 @@ impl PartyAddressService {
             .await
     }
 
-    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    // 沿用列表入口建立的快照，先校验读取资格，再查询地址分页，确保权限与结果取自同一读取阶段。
     async fn party_address_list_snapshot(
         &self,
         actor: &AuditActor,
@@ -150,14 +141,12 @@ impl PartyAddressService {
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
-    /// 创建地址（跨行事务：默认地址唯一 + 新建 + 审计原子写入）。
+    /// 为主体新增地址。设为默认时同时调整其他默认标记，并将新记录和审计一起提交。
     ///
     /// # 参数
     /// * `party_id` - 所属企业主体 ID
     /// * `req` - 创建请求（含地址明文）
-    /// * `actor` - 已通过鉴权的审计操作人
     ///
-    /// # 返回
     /// 返回新建地址的响应视图。
     ///
     /// # 错误
@@ -181,7 +170,7 @@ impl PartyAddressService {
             .await
     }
 
-    /// 仅使用已验证输入构造本域事实，不读取数据库。
+    // 将已经验证的输入转换为待写入的地址记录。写库前生成地址指纹和密文。
     fn prepare_record(
         &self,
         party_id: &str,
@@ -208,7 +197,7 @@ impl PartyAddressService {
         Ok(address)
     }
 
-    /// 在授权快照中核验主体和供应商边界，再原子写入默认标记、事实与审计。
+    // 在创建事务中核验主体和供应商资料边界，再一起保存地址、默认标记调整及审计。
     async fn create_stage(
         &self,
         party_id: &str,
@@ -235,14 +224,12 @@ impl PartyAddressService {
         Ok(address.into())
     }
 
-    /// 更新地址（仅生命周期字段；默认标记跨行事务）。
+    /// 维护现有地址的生命周期字段和默认状态，使用请求版本保护并发修改。
     ///
     /// # 参数
     /// * `id` - 地址 ID
     /// * `req` - 更新请求（含期望版本）
-    /// * `actor` - 已通过鉴权的审计操作人
     ///
-    /// # 返回
     /// 返回更新后地址的响应视图。
     ///
     /// # 错误
@@ -266,7 +253,7 @@ impl PartyAddressService {
             .await
     }
 
-    /// 先验证功能资格，再从原事务读取版本及完整事实，修改与审计使用同一执行器。
+    // 在原事务核验资格和版本后修改地址，沿用同一执行器调整默认标记并保存审计。
     async fn update_stage(
         &self,
         id: &str,

@@ -6,13 +6,14 @@ use persistence_core::Executor;
 
 use super::{link, required};
 use crate::Result;
-/// 读取当前写事务确认的直接上级引用。
-/// # 参数
-/// 数据库、已分派的对象类型与 ID、调用方执行器。
-/// # 返回
-/// 返回类型与 ID 成对的上级业务对象。
-/// # 错误
-/// 对象缺失、引用非法或仓储读取失败时返回错误。
+// 处理资金任务上级链路时，读取当前写事务确认的直接上级引用。
+//
+// 调用参数：
+// 数据库、已分派的对象类型与 ID、调用方执行器。
+//
+// 返回类型与 ID 成对的上级业务对象。
+//
+// 对象缺失、引用非法或仓储读取失败时返回错误。
 pub(super) async fn parents(
     db: &Database,
     kind: &str,
@@ -92,7 +93,7 @@ async fn payments(
     }
 }
 
-/// 一份付款申请可以横跨多张采购单及销售单，必须保留每一行的冻结身份。
+// 处理资金任务上级链路时，一份付款申请可以横跨多张采购单及销售单，必须保留每一行的冻结身份。
 fn request_links(lines: &[PurchasePaymentRequestLine]) -> Result<Vec<WorkItemLink>> {
     let mut links = Vec::new();
     for line in lines {

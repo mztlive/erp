@@ -21,20 +21,11 @@ pub(super) struct SalesChangeCommandAccess {
 }
 
 impl SalesChangeProcess {
-    /// 构造写命令范围检查器。授权源使用构造时注入的 RBAC，不退回路由级授权。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证操作人
-    /// * `permission` - 对应的公共销售单权限常量。
-    ///
-    /// # 返回
-    /// 返回可在事务内重验来源销售单范围的检查器。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 每次检查均重新解析服务端授权，不得复用列表上下文。
+    // 构造写命令范围检查器。授权源使用构造时注入的 RBAC，不退回路由级授权。
+    //
+    // `permission` 为对应的公共销售单权限常量。返回可在事务内重验来源销售单范围的检查器。
+    //
+    // 每次检查均重新解析服务端授权，不得复用列表上下文。
     pub(super) fn command_access(
         &self,
         actor: &AuditActor,
@@ -49,20 +40,11 @@ impl SalesChangeProcess {
 }
 
 impl SalesChangeCommandAccess {
-    /// 在调用方事务内读取当前可操作的来源销售单；历史参与不会产生写资格。
-    ///
-    /// # 参数
-    /// * `id` - 来源销售单主键
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 对象在范围内时返回销售单。
-    ///
-    /// # 错误
-    /// 不存在或越权时返回 NotFound，不泄露存在性。
-    ///
-    /// # 关键业务约束
-    /// 写命令必须在原事务重验，不得把入口事前检查当作凭证。
+    // 在调用方事务内读取当前可操作的来源销售单；历史参与不会产生写资格。
+    //
+    // `id` 为来源销售单主键。对象在范围内时返回销售单。不存在或越权时返回 NotFound，不泄露存在性。
+    //
+    // 写命令必须在原事务重验，不得把入口事前检查当作凭证。
     pub(super) async fn current(&self, id: &str, executor: &mut dyn Executor) -> Result<SalesOrder> {
         self.access
             .require_object(&self.actor, &self.permission, id, executor)

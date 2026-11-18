@@ -28,11 +28,7 @@ pub struct SaveCustomerReceiptDraftRequest {
 }
 impl SaveCustomerReceiptDraftRequest {
     /// 校验新建或原单编辑的互斥身份。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 合法身份返回空结果。
-    /// # 错误
+    /// 结果：合法身份返回空结果。
     /// 缺失原单版本、空主键或新建携带版本时拒绝。
     pub fn validate_identity(&self) -> Result<()> {
         match (&self.receipt_id, self.expected_version) {

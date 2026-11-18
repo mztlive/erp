@@ -52,14 +52,8 @@ pub struct OrgValidity {
 
 impl OrgValidity {
     /// 校验有效期起止顺序。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 终点晚于起点，或没有终点时无返回值。
     ///
-    /// # 错误
     /// 终点存在且不晚于起点时返回 `Error::ValidationError`。空区间和倒置区间都拒绝。
     pub fn validate(&self) -> Result<()> {
         if self.valid_to.is_some_and(|end| end <= self.valid_from) {
@@ -68,30 +62,18 @@ impl OrgValidity {
         Ok(())
     }
 
-    /// 判断指定服务端时点是否处于有效期。
-    ///
-    /// # 参数
-    /// * `at` - 服务端时点。
-    ///
-    /// # 返回
+    /// 当指定服务端时点处于有效期时返回 `true`。
     /// 起点包含、终点排除时返回 `true`。没有终点表示持续有效。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// `at`：服务端时点。
     pub fn contains(&self, at: Instant) -> bool {
         self.valid_from <= at && self.valid_to.is_none_or(|end| at < end)
     }
 
-    /// 判断两个半开区间是否重叠。
-    ///
-    /// # 参数
-    /// * `other` - 另一个半开有效期。
-    ///
-    /// # 返回
+    /// 当两个半开区间重叠时返回 `true`。
     /// 两端都严格早于对方起点时返回 `false`。相邻区间不重叠；没有终点表示持续有效。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// `other`：另一个半开有效期。
     pub fn overlaps(&self, other: &Self) -> bool {
         self.valid_to.is_none_or(|end| other.valid_from < end)
             && other.valid_to.is_none_or(|end| self.valid_from < end)
@@ -113,12 +95,11 @@ pub struct OrgMembership {
 
 impl OrgMembership {
     /// 返回指定账号在解释时点之后最近的主属关系变化边界。
-    /// # 参数
-    /// memberships 为当前关系和最近未来关系，user_id 为账号，at 为解释时点。
-    /// # 返回
     /// 最近未来的生效或失效时点；没有未来边界时为 None。
-    /// # 错误
+    ///
     /// 不返回错误；重叠当前关系由 primary_org 校验。
+    ///
+    /// memberships 为当前关系和最近未来关系，user_id 为账号，at 为解释时点。
     pub fn next_boundary(memberships: &[Self], user_id: &str, at: Instant) -> Option<Instant> {
         memberships
             .iter()
@@ -130,13 +111,11 @@ impl OrgMembership {
     }
 
     /// 从成员事实中解析指定时点的唯一主属组织。
-    ///
-    /// # 参数
-    /// `memberships` 为完整或已按账号及时点限定的成员事实；`at` 为授权时点。
-    /// # 返回
     /// 返回唯一有效关系的组织 ID；没有有效关系时返回 `None`。
-    /// # 错误
+    ///
     /// 同一账号有多条有效关系时拒绝，软删除及半开区间外的关系不参与判定。
+    ///
+    /// `memberships` 为完整或已按账号及时点限定的成员事实；`at` 为授权时点。
     pub fn primary_org<'a>(memberships: &'a [Self], user_id: &str, at: Instant) -> Result<Option<&'a str>> {
         let mut current = memberships.iter().filter(|membership| {
             membership.user_id == user_id && !membership.base.is_deleted() && membership.validity.contains(at)
@@ -172,15 +151,11 @@ pub struct OrgTree<'a> {
 
 impl<'a> OrgTree<'a> {
     /// 验证唯一身份、父节点存在及无环，建立组织树索引。
-    ///
-    /// # 参数
-    /// * `nodes` - 完整组织树节点，按输入顺序验证
-    ///
-    /// # 返回
     /// 返回包含节点与子节点索引的完整、已验证组织树。
     ///
-    /// # 错误
     /// 重复节点、悬空父节点、自引用或环均拒绝。
+    ///
+    /// `nodes`：完整组织树节点，按输入顺序验证。
     pub fn new(nodes: &'a [OrgUnit]) -> Result<Self> {
         let mut tree = Self {
             nodes: nodes.iter().map(|node| (node.base.id.as_str(), node)).collect(),
@@ -200,14 +175,8 @@ impl<'a> OrgTree<'a> {
     }
 
     /// 返回根节点至当前节点的路径，包含当前节点。
-    ///
-    /// # 参数
-    /// * `id` - 目标组织 ID。
-    ///
-    /// # 返回
     /// 成功时返回自根到该节点的路径。
     ///
-    /// # 错误
     /// 目标节点缺失时返回 `Error::ValidationError`；父链完整和无环已由构造函数保证。
     pub fn path(&self, id: &str) -> Result<Vec<&'a OrgUnit>> {
         let mut path = Vec::new();
@@ -224,7 +193,7 @@ impl<'a> OrgTree<'a> {
         Ok(path)
     }
 
-    /// 构造阶段验证父链完整且无环。
+    // 构造组织树时逐级检查父链，不允许孤立节点或循环路径进入后续范围解析。
     fn validate_path(&self, id: &str) -> Result<()> {
         let mut seen = BTreeSet::new();
         let mut current = Some(id);
@@ -239,16 +208,11 @@ impl<'a> OrgTree<'a> {
     }
 
     /// 展开明确目标及可选的有效下级。
-    ///
-    /// # 参数
-    /// * `id` - 目标组织 ID
-    /// * `descendants` - 是否包含目标的启用下级
-    ///
-    /// # 返回
     /// 返回按 ID 排序的有效范围；停用分支不贡献节点。
     ///
-    /// # 错误
     /// 未知节点拒绝；停用节点及位于停用祖先下的节点不贡献范围。
+    ///
+    /// `descendants`：是否包含目标的启用下级。
     pub fn expand(&self, id: &str, descendants: bool) -> Result<BTreeSet<String>> {
         let target_path = self.path(id)?;
         if target_path.iter().any(|node| !node.enabled) {
@@ -275,12 +239,11 @@ impl<'a> OrgTree<'a> {
 
 impl OrgUnit {
     /// 验证完整祖先路径后选择最近同类组织，不跨过缺负责人节点兜底。
-    /// # 参数
-    /// `path` 从本人主属组织向根排列，`kind` 是目标类型，`at` 是解析时点。
-    /// # 返回
     /// 含有效负责人配置的最近组织。
-    /// # 错误
+    ///
     /// 祖先停用、目标类型或负责人缺失、指派尚未生效时拒绝。
+    ///
+    /// `path` 从本人主属组织向根排列，`kind` 是目标类型，`at` 是解析时点。
     pub fn leader_on_path(path: Vec<Self>, kind: OrgUnitKind, at: Instant) -> Result<Self> {
         if path.iter().any(|unit| !unit.enabled || unit.base.is_deleted()) {
             return Err(Error::ValidationError("申请人所属组织或上级组织已停用，请调整所属组织".into()));
@@ -304,20 +267,11 @@ impl OrgUnit {
     }
 
     /// 构造启用组织；父子关系由完整树在事务中校验。
-    ///
-    /// # 参数
-    /// * `id` - 组织 ID。
-    /// * `name` - 组织名称。
-    /// * `parent_id` - 父组织 ID；根节点为 `None`。
-    /// * `kind` - 部门或团队。
-    /// * `actor` - 操作人身份。
-    /// * `reason` - 变更原因。
-    ///
-    /// # 返回
     /// 返回 `enabled` 为真的新节点。
     ///
-    /// # 错误
     /// 名称、操作人或原因缺失及过长时返回校验错误。
+    ///
+    /// `parent_id`：父组织 ID；根节点为 `None`；`reason`：变更原因。
     pub fn new(
         id: String,
         name: String,
@@ -346,7 +300,7 @@ mod tests {
 
     use super::*;
 
-    /// 构造指定账号和半开区间的主属事实。
+    // 为组织有效期测试构造指定账号的主属关系，按半开区间解释起止时点。
     fn membership(user: &str, org: &str, from: i64, to: Option<i64>) -> OrgMembership {
         OrgMembership {
             base: BaseModel::fake(),
@@ -361,7 +315,7 @@ mod tests {
         }
     }
 
-    /// 窄事实查询与完整状态解析共用有效期、软删除及重叠冲突规则。
+    // 验证：窄事实查询与完整状态解析共用有效期、软删除及重叠冲突规则。
     #[test]
     fn primary_org_preserves_validity_deletion_and_overlap_rules() {
         let mut rows = vec![
@@ -445,7 +399,7 @@ mod tests {
         assert_eq!(OrgTree::new(&nodes).unwrap().expand("a", true).unwrap(), BTreeSet::from(["a".into()]));
     }
 
-    /// 多根组织树只展开目标分支，并保留有序结果。
+    // 验证：多根组织树只展开目标分支，并保留有序结果。
     #[test]
     fn large_subtree_expansion_sample() {
         let mut nodes = Vec::new();
@@ -467,7 +421,7 @@ mod tests {
         eprintln!("org_subtree_5100_nodes_20_runs={:?}", started.elapsed());
     }
 
-    /// 子节点输入顺序不限制展开；停用祖先下的目标返回空范围，未知目标仍报错。
+    // 验证：子节点输入顺序不限制展开；停用祖先下的目标返回空范围，未知目标仍报错。
     #[test]
     fn subtree_index_preserves_disabled_ancestor_and_sorted_output_rules() {
         let mut nodes = vec![
@@ -493,7 +447,7 @@ mod tests {
         assert_eq!(tree.expand("a", true).unwrap(), BTreeSet::from(["a".into(), "c".into()]));
     }
 
-    /// 建索引仍验证完整输入，重复节点优先报错，路径错误按节点输入顺序报告。
+    // 验证：建索引仍验证完整输入，重复节点优先报错，路径错误按节点输入顺序报告。
     #[test]
     fn subtree_index_keeps_full_tree_validation_and_error_precedence() {
         let duplicate = [unit("a", Some("missing")), unit("a", None)];

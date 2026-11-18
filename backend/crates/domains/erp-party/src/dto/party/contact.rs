@@ -79,7 +79,7 @@ pub struct PartyContactView {
 }
 
 impl From<PartyContact> for PartyContactView {
-    /// 从实体构造响应视图。
+    // 将联系人的内部字段转换成外部响应格式，供接口展示。
     fn from(contact: PartyContact) -> Self {
         Self {
             id: contact.base.id,

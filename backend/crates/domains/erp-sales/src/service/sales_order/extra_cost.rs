@@ -10,18 +10,13 @@ use crate::repository::prelude::*;
 use crate::{Error, Result};
 
 /// 校验归属明细在销售当前生效版本中且数量大于 0。
+/// 结果：明细可归属时返回 `Ok(())`。
+/// 失败条件：明细不在当前版本、不是实物与服务明细或数量为 0 时返回 `ValidationError`；仓储失败返回对应错误。
 ///
-/// # 参数
-/// * `db` - 数据库
-/// * `order` - 已生效销售单
-/// * `line_id` - 归属销售明细；为空表示整张销售单，直接通过
-/// * `executor` - 调用方事务执行器
-///
-/// # 返回
-/// 明细可归属时返回 `Ok(())`。
-///
-/// # 错误
-/// 明细不在当前版本、不是实物与服务明细或数量为 0 时返回 `ValidationError`；仓储失败返回对应错误。
+/// 输入约定：
+/// - `order`：已生效销售单
+/// - `line_id`：归属销售明细；为空表示整张销售单，直接通过
+/// - `executor`：调用方事务执行器
 pub async fn ensure_attributable_line(
     db: &Database,
     order: &SalesOrder,

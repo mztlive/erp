@@ -12,7 +12,7 @@ use mongodb::Database;
 use super::acceptance_eligibility::{EligibilityGroupSources, build_line_eligibilities, so_line_ids};
 use crate::{Error, Result};
 
-/// 验收过账/冲正后读取履约进度投影（§4.3.1：实物与服务「客户验收通过即履约完成」）。
+/// 读取客户验收时，验收过账/冲正后读取履约进度投影（§4.3.1：实物与服务「客户验收通过即履约完成」）。
 ///
 /// 净验收（APPLY − REVERSE）、剩余可验收与进度派生全部由领域投影
 /// `AcceptanceProgress` 执行（与验收工作台同一规则源）：全部明细验收通过 →
@@ -20,7 +20,6 @@ use crate::{Error, Result};
 /// 降为零。卡券销售单进度由履约期限到期任务写入（§4.3.1），本函数不触碰。
 ///
 /// # 参数
-/// * `db` - 数据库实例
 /// * `session` - 事务会话执行器
 /// * `sales_order_id` - 销售单
 ///

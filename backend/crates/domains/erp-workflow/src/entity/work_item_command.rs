@@ -32,12 +32,11 @@ pub struct WorkItemCommandReceipt {
 
 impl WorkItemCommandReceipt {
     /// 从正式转派回执构造独立开票授权事件。
-    /// # 参数
-    /// task 为当前任务，允许已再次转派、完成或关闭。
-    /// # 返回
     /// 开票转派返回稳定事件；其他任务或命令不生成事件。
-    /// # 错误
+    ///
     /// 回执损坏、任务错配、版本倒退或历史分配缺失时拒绝。
+    ///
+    /// task 为当前任务，允许已再次转派、完成或关闭。
     pub fn invoice_grant(&self, task: &WorkItem) -> Result<Option<GrantEventEvidence>> {
         self.validate()?;
         let WorkItemCommandResult::Reassigned { work_item_id, task_version, target_user_id, .. } =
@@ -68,14 +67,12 @@ impl WorkItemCommandReceipt {
     }
 
     /// 构造已成功执行的领域命令回执。
-    /// # 参数
-    /// * `command` - 保持原算法的命令身份。
-    /// * `result` - 任务写入后形成的强类型事实。
-    /// * `audit_event_id` - 同事务业务事件关联。
-    /// # 返回
     /// 返回已校验的独立回执。
-    /// # 错误
+    ///
     /// 身份、动作、结果或关联无效时返回错误。
+    ///
+    /// `command`：保持原算法的命令身份；`result`：任务写入后形成的强类型事实。
+    /// `audit_event_id`：同事务业务事件关联。
     pub fn new(
         command: &CommandReceipt,
         result: WorkItemCommandResult,
@@ -93,11 +90,8 @@ impl WorkItemCommandReceipt {
     }
 
     /// 校验持久化结果与命令身份，禁止损坏记录被当作未执行。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 合法时返回空结果。
-    /// # 错误
+    ///
     /// schema、结果、命令动作或关联不一致时返回内部错误。
     pub fn validate(&self) -> Result<()> {
         self.command.validate().map_err(|_| corrupted())?;
@@ -136,12 +130,11 @@ impl WorkItemCommandReceipt {
     }
 
     /// 按当前请求匹配回执并取得任务及最低已提交版本。
-    /// # 参数
-    /// * `command` - 当前请求身份和原载荷。
-    /// # 返回
     /// 返回已执行任务ID及结果版本。
-    /// # 错误
+    ///
     /// 异载荷保持稳定冲突；身份或结果损坏明确失败。
+    ///
+    /// `command`：当前请求身份和原载荷。
     pub fn committed_task(&self, command: &CommandReceipt) -> Result<(&str, u64)> {
         self.validate()?;
         match command.match_structured(&self.command) {

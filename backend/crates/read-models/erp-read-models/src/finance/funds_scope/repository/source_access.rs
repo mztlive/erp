@@ -36,13 +36,14 @@ pub(crate) struct SalesSourceFact {
 }
 
 impl SourceQuery {
-    /// 绑定根凭证中已有的固定来源，不生成新的授权凭证。
-    /// # 参数
-    /// root 为本次根凭证，relation 为服务端固定关系。
-    /// # 返回
-    /// 该入口提供来源时返回其内部查询，否则返回 None。
-    /// # 错误
-    /// 固定关系标识非法时拒绝。
+    // 装配财务来源范围时，绑定根凭证中已有的固定来源，不生成新的授权凭证。
+    //
+    // 调用参数：
+    // root 为本次根凭证，relation 为服务端固定关系。
+    //
+    // 该入口提供来源时返回其内部查询，否则返回 None。
+    //
+    // 固定关系标识非法时拒绝。
     pub(crate) fn new(root: Arc<CompiledAccess>, relation: &str) -> Result<Option<Self>> {
         let relation = RelationKey::parse(relation)?;
         let Ok(model) = root.source_model(&relation).cloned() else {
@@ -51,36 +52,38 @@ impl SourceQuery {
         Ok(Some(Self { root, relation, model }))
     }
 
-    /// 核验当前阶段及期限，不结束根凭证的读取阶段。
-    /// # 参数
-    /// executor 为原读取执行器。
-    /// # 返回
-    /// 根凭证仍有效时成功。
-    /// # 错误
-    /// 跨阶段、到期或事务失效拒绝。
+    // 校验财务来源范围时，核验当前阶段及期限，不结束根凭证的读取阶段。
+    //
+    // 调用参数：
+    // executor 为原读取执行器。
+    //
+    // 根凭证仍有效时成功。
+    //
+    // 失败边界：
+    // 跨阶段、到期或事务失效拒绝。
     pub(crate) async fn validate(&self, executor: &mut dyn Executor) -> Result<()> {
         self.root.ensure_current(executor)?;
         Ok(())
     }
 
-    /// 返回原根授权内固定来源条件，仅用于本模块的投影查询。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 原根绑定关系的数据库阶段。
-    /// # 错误
-    /// 构造已检查来源存在，凭证内关系不可变。
+    // 处理财务来源范围时，给出原根授权内固定来源条件，仅用于本模块的投影查询。
+    //
+    // 原根绑定关系的数据库阶段。
+    //
+    // 失败边界：
+    // 构造已检查来源存在，凭证内关系不可变。
     pub(crate) fn stages(&self) -> &[Document] {
         self.root.source_stages(&self.relation).expect("SourceQuery构造已校验固定来源，根凭证不可变")
     }
 
-    /// 只读取本批实际来源的身份，不交付完整订单对象。
-    /// # 参数
-    /// db 为数据库，ids 为本批引用，executor 为原执行器。
-    /// # 返回
-    /// 本批授权身份集合。
-    /// # 错误
-    /// 边界失效、必要版本缺失或查询失败时拒绝。
+    // 处理财务来源范围时，仅读取本批实际来源的身份，不交付完整订单对象。
+    //
+    // 调用参数：
+    // db 为数据库，ids 为本批引用，executor 为原执行器。
+    //
+    // 本批授权身份集合。
+    //
+    // 边界失效、必要版本缺失或查询失败时拒绝。
     pub(crate) async fn ids_in(
         &self,
         db: &Database,
@@ -90,13 +93,14 @@ impl SourceQuery {
         Ok(self.versions_in(db, ids, executor).await?.into_iter().map(|row| row.id).collect())
     }
 
-    /// 使用固定字段读取身份和版本，不开放调用方投影选择。
-    /// # 参数
-    /// db 为数据库，ids 为实际来源，executor 为原执行器。
-    /// # 返回
-    /// 固定版本投影，按身份排序。
-    /// # 错误
-    /// 边界失效、版本缺失或查询失败时拒绝。
+    // 使用固定字段取得身份和版本，不开放调用方投影选择。
+    //
+    // 调用参数：
+    // db 为数据库，ids 为实际来源，executor 为原执行器。
+    //
+    // 固定版本投影，按身份排序。
+    //
+    // 边界失效、版本缺失或查询失败时拒绝。
     pub(crate) async fn versions_in(
         &self,
         db: &Database,
@@ -122,13 +126,14 @@ impl SourceQuery {
         Ok(result)
     }
 
-    /// 读取真实销售来源所需的最小责任事实。
-    /// # 参数
-    /// db 为数据库，id 为实际销售引用，executor 为原执行器。
-    /// # 返回
-    /// 当前可读销售的身份、版本、单号及责任；不存在或无权时为 None。
-    /// # 错误
-    /// 来源资源错配、阶段失效或必要字段缺失时拒绝。
+    // 处理财务来源范围时，读取真实销售来源所需的最小责任事实。
+    //
+    // 调用参数：
+    // db 为数据库，id 为实际销售引用，executor 为原执行器。
+    //
+    // 当前可读销售的身份、版本、单号及责任；不存在或无权时为 None。
+    //
+    // 来源资源错配、阶段失效或必要字段缺失时拒绝。
     pub(crate) async fn sales_fact(
         &self,
         db: &Database,
@@ -154,7 +159,7 @@ impl SourceQuery {
     }
 }
 
-/// 固定投影只开放资金关联需要的责任元数据。
+// 组装财务来源范围的聚合管道时，固定投影只开放资金关联需要的责任元数据。
 fn sales_fact_projection() -> Document {
     doc! {"$project": {"_id":0, "id":1, "version":1, "owner_user_id":"$sales_owner_user_id", "business_org_unit_id":1, "document_no":"$order_no"}}
 }

@@ -13,20 +13,8 @@ use crate::entity::fulfillment::{
 };
 use crate::{Error, Result};
 
-/// 在 Service/crypto port 计算交付对象快照指纹。
-///
-/// # 参数
-/// * `plain` - 交付对象原文
-/// * `key` - 查询指纹密钥字节
-///
-/// # 返回
-/// 返回交付对象强类型指纹（算法 `HMAC-SHA256-v1`）。
-///
-/// # 错误
-/// 指纹格式非法时返回错误。
-///
-/// # 约束
-/// 密钥与明文不得进入实体、错误、日志或持久化。
+/// 服务履约草稿构建前，以注入密钥对交付对象计算 `HMAC-SHA256-v1`，供后续比对同一对象。
+/// 格式错误映射为 `Logic`；密钥与明文不得进入实体、日志、错误或持久化。
 pub fn service_recipient_fingerprint(plain: &str, key: &[u8]) -> Result<ServiceRecipientFingerprint> {
     ServiceRecipientFingerprint::from_precomputed(ServiceFulfillment::recipient_snapshot_fingerprint(
         plain, key,
@@ -34,36 +22,16 @@ pub fn service_recipient_fingerprint(plain: &str, key: &[u8]) -> Result<ServiceR
     .map_err(Error::Logic)
 }
 
-/// 在 Service/crypto port 计算服务地点指纹。
-///
-/// # 参数
-/// * `plain` - 服务地点原文
-/// * `key` - 查询指纹密钥字节
-///
-/// # 返回
-/// 返回服务地点强类型指纹（算法 `HMAC-SHA256-v1`，与交付对象指纹不可混用）。
-///
-/// # 错误
-/// 指纹格式非法时返回错误。
-///
-/// # 约束
-/// 密钥与明文不得进入实体、错误、日志或持久化。
+/// 服务履约草稿构建前，以注入密钥计算服务地点的 `HMAC-SHA256-v1` 查询指纹；该强类型不能替代交付对象指纹。
+/// 格式错误映射为 `Logic`；密钥与明文不得进入实体、日志、错误或持久化。
 pub fn service_location_fingerprint(plain: &str, key: &[u8]) -> Result<ServiceLocationFingerprint> {
     ServiceLocationFingerprint::from_precomputed(ServiceFulfillment::service_location_fingerprint(plain, key))
         .map_err(Error::Logic)
 }
 
 /// 由创建请求构造线下服务履约草稿（来源默认 `Erp` 由领域工厂负责）。
-///
-/// # 参数
-/// * `req` - 已通过校验的创建请求
-/// * `actor_id` - 已通过鉴权的操作人 ID
-/// * `fingerprint_key` - 查询指纹密钥
-///
-/// # 返回
 /// 返回新建草稿实体。
-///
-/// # 错误
+/// `actor_id` 为已通过鉴权的操作人 ID；`fingerprint_key` 为查询指纹密钥。
 /// 双指纹计算或实体规范化失败时返回错误。
 pub fn service_fulfillment_draft_from_request(
     req: CreateServiceFulfillmentRequest,
@@ -107,7 +75,7 @@ pub fn service_fulfillment_draft_from_request(
 mod tests {
     use super::{service_location_fingerprint, service_recipient_fingerprint};
 
-    /// 双指纹 golden：分别固定算法与密钥版本，且类型不可混用。
+    // 验证双指纹 golden：分别固定算法与密钥版本，且类型不可混用。
     #[test]
     fn dual_fingerprints_golden_pin_algorithm_and_key_version() {
         let recipient =

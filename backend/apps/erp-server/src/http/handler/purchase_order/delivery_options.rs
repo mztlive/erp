@@ -11,13 +11,6 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
 /// 按销售当前版本读取采购各行的预计交付日上限与收件地址剩余量。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 采购单 ID
-///
-/// # 返回
 /// 返回采购当前内容引用的商品行交付安排范围。
 pub async fn purchase_delivery_options(
     State(state): State<HttpState>,

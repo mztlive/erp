@@ -8,15 +8,7 @@ use super::*;
 #[allow(async_fn_in_trait)]
 pub trait SupplierOrderActionRepositoryExt {
     /// 按履约订单读取动作，按创建时间和主键倒序排列。
-    ///
-    /// # 参数
-    /// * `order_id` - 供应商履约订单主键
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回最新动作在前的动作集合。
-    ///
-    /// # 错误
     /// MongoDB 查询或游标读取失败时返回错误。
     async fn list_by_order_newest(
         &self,
@@ -25,16 +17,7 @@ pub trait SupplierOrderActionRepositoryExt {
     ) -> Result<Vec<SupplierOrderAction>>;
 
     /// 按履约订单和动作类型读取动作，按创建时间和主键倒序排列。
-    ///
-    /// # 参数
-    /// * `order_id` - 供应商履约订单主键
-    /// * `action_type` - 供应商动作类型
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回最新动作在前的动作集合。
-    ///
-    /// # 错误
     /// MongoDB 查询或游标读取失败时返回错误。
     async fn list_by_order_and_type_newest(
         &self,
@@ -44,16 +27,7 @@ pub trait SupplierOrderActionRepositoryExt {
     ) -> Result<Vec<SupplierOrderAction>>;
 
     /// 读取履约订单最近一次指定类型动作。
-    ///
-    /// # 参数
-    /// * `order_id` - 供应商履约订单主键
-    /// * `action_type` - 供应商动作类型
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回最近动作；不存在时返回 `None`。
-    ///
-    /// # 错误
     /// MongoDB 查询或游标读取失败时返回错误。
     async fn latest_by_order_and_type(
         &self,
@@ -63,19 +37,11 @@ pub trait SupplierOrderActionRepositoryExt {
     ) -> Result<Option<SupplierOrderAction>>;
 
     /// 按对供应商动作幂等键查找唯一动作。
-    ///
-    /// 唯一性由 `uk_supplier_order_actions_idempotency_key` 唯一索引保证；人工重放
-    /// 与网络超时恢复继续使用原幂等键（§6.19），本方法返回既有动作避免重复创建。
-    ///
-    /// # 参数
-    /// * `idempotency_key` - 对供应商动作幂等键
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
+    /// 唯一性由 `uk_supplier_order_actions_idempotency_key` 唯一索引保证；人工重放与网络超时恢复继续使用
+    /// 原幂等键（§6.19），本方法返回既有动作避免重复创建。
     /// 返回匹配的未删除动作；无匹配时返回 `None`。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
+    /// `idempotency_key`：对供应商动作幂等键。
     async fn find_by_idempotency_key(
         &self,
         idempotency_key: &str,
@@ -136,18 +102,9 @@ impl SupplierOrderActionRepositoryExt for SupplierOrderActionRepository<'_> {
 #[allow(async_fn_in_trait)]
 pub trait SupplierOrderActionLineRepositoryExt {
     /// 批量按动作头查询动作行（`$in` 一次取回，避免 N+1）。
-    ///
-    /// 动作行随动作头同事务创建且创建后不可修改（§6.19），本方法供详情页
-    /// 加载一次取消/退款实际提交给供应商的范围。
-    ///
-    /// # 参数
-    /// * `action_ids` - 供应商动作 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
+    /// 动作行随动作头同事务创建且创建后不可修改（§6.19），本方法供详情页加载一次取消/退款实际提交给供应
+    /// 商的范围。
     /// 返回命中集合对应的全部未删除动作行。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
     async fn find_lines_by_action_ids(
         &self,

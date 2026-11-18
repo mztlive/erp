@@ -19,13 +19,10 @@ pub struct PurchaseOrderPorts {
 
 impl PurchaseOrderPorts {
     /// 绑定应用提供的现有领域能力，不查询或写入。
-    /// # 参数
-    /// `scope`、`approval` 和 `finance_responsibility` 分别为采购范围、审批和财务任务责任。
-    /// `task_identity` 为履约资格核验复用进程共享授权服务。
-    /// # 返回
+    ///
+    /// `scope`、`approval` 和 `finance_responsibility` 分别为采购范围、审批和财务任务责任。 `task_identity` 为履约资格核验复用进程共享授权服务。
+    ///
     /// 返回可共享的采购命令能力。
-    /// # 错误
-    /// 不返回错误。
     pub fn new(
         scope: Arc<dyn PurchaseDataScopePort>,
         approval: Arc<dyn ApprovalRuntimePort>,

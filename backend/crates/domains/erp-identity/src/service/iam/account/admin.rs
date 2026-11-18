@@ -63,7 +63,7 @@ struct AdminUpdateContext {
 }
 
 impl SuperAdminInitialization {
-    /// 将内部状态转换为现有响应合同所需的字段。
+    // 将新建、恢复或补绑后的初始化状态拆为管理员账号及客户端需要的结果标记。
     fn into_parts(self) -> (AccountCore, bool, bool, bool) {
         match self {
             Self::Created(account) => (account, true, false, true),
@@ -75,36 +75,14 @@ impl SuperAdminInitialization {
 }
 
 impl AdminService {
-    /// 使用共享 RBAC 服务创建管理员服务实例。
-    ///
-    /// # 参数
-    /// * `db` - 数据库实例
-    /// * `rbac` - 共享 Casbin RBAC 服务
-    ///
-    /// # 返回
-    /// 返回管理员服务实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 在应用装配时用身份库和共享 RBAC 服务构造管理员用例，不在构造时取证或写库。
     pub fn new(db: Database, rbac: SharedRbacService) -> Self {
         Self { db, rbac }
     }
 
-    /// 创建管理员账号。
+    /// 通过管理员创建入口预检后，验证账号唯一性、密码和可授予角色，生成密码哈希。实际写事务重新检查入口与授予条件，并一并保存账号、角色绑定和审计。
     ///
-    /// 会校验账号唯一性以及角色存在性，然后为管理员生成安全凭证并持久化。
-    ///
-    /// # 参数
-    /// actor 为当前身份，authorization 为应用注入的共享授权服务。
-    /// * `params` - 创建管理员所需参数
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 管理员账号与角色绑定写入完成后无返回值。
-    ///
-    /// # 错误
-    /// * `ConflictError` - 账号已存在
-    /// * `BusinessLogicError` - 角色不存在或密码策略等业务校验失败
+    /// 账号已占用、指定角色无效、权限不足或密码校验不通过时拒绝创建。
     pub async fn create_admin(
         &self,
         params: CreateAdminParams,
@@ -131,17 +109,7 @@ impl AdminService {
         Ok(())
     }
 
-    /// 初始化系统超级管理员账号。
-    ///
-    /// # 参数
-    /// * `params` - 初始化参数，账号/密码/名称均必填
-    ///
-    /// # 返回
-    /// 返回初始化执行结果
-    ///
-    /// # 错误
-    /// * `BusinessLogicError` - 参数非法、账号冲突或账号域不合法
-    /// * `RepositoryError` - 数据库读写失败
+    /// 供系统初始化流程准备内建根角色和系统管理员。结果区分新建账号、恢复启用和补齐根角色绑定；输入非法、账号冲突或持久化失败时返回错误。
     pub async fn initialize_super_admin(
         &self,
         params: InitializeSuperAdminParams,
@@ -160,17 +128,7 @@ impl AdminService {
         })
     }
 
-    /// 获取管理员列表。
-    ///
-    /// # 参数
-    /// actor 为当前身份，authorization 为应用注入的共享授权服务。
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回包含角色 ID 的管理员集合。
-    ///
-    /// # 错误
-    /// 账号列表或角色绑定读取失败时返回错误。
+    /// 供管理员管理页读取管理员和当前角色 ID。通过固定列表资格后在同一事务读取账号与角色绑定，返回前再次检查入口；授权或读取失败不返回部分列表。
     pub async fn admin_list(
         &self,
         actor: &AuditActor,
@@ -208,21 +166,9 @@ impl AdminService {
             .await
     }
 
-    /// 更新管理员信息。
+    /// 管理端更新管理员姓名、密码、状态或角色时，先检查入口、目标管理资格及角色授予上限，再在写事务重验并保存。
     ///
-    /// 支持更新姓名、密码、角色（角色需存在）。
-    ///
-    /// # 参数
-    /// actor 为当前身份，authorization 为应用注入的共享授权服务。
-    /// * `params` - 更新参数（包含管理员ID与可选更新字段）
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 管理员资料或角色绑定更新完成后无返回值。
-    ///
-    /// # 错误
-    /// * `NotFound` - 管理员不存在
-    /// * `BusinessLogicError` - 指定角色不存在
+    /// 找不到目标、角色无效或试图停用当前登录账号时拒绝。
     pub async fn update_admin(
         &self,
         params: UpdateAdminParams,
@@ -250,7 +196,7 @@ impl AdminService {
         Ok(())
     }
 
-    /// 在事务前应用管理员账号更新并规范化可选角色集合。
+    // 在写事务前加载并校验目标管理员、规范化可选角色，并准备资料变更；实际写入仍须重验管理授权。
     async fn prepare_admin_update(
         &self,
         params: UpdateAdminParams,
@@ -276,7 +222,7 @@ impl AdminService {
         Ok(AdminUpdateContext { account, authorization })
     }
 
-    /// 在单个事务中更新管理员账号与审计日志。
+    // 未变更角色时在同一个管理员写事务内更新账号资料并保存审计，不另开策略写事务。
     async fn update_account_only(
         &self,
         mut account: AccountCore,
@@ -294,19 +240,7 @@ impl AdminService {
         .await
     }
 
-    /// 单独更新管理员角色。
-    ///
-    /// # 参数
-    /// actor 为当前身份，authorization 为应用注入的共享授权服务。
-    /// * `params` - 包含管理员ID与新角色ID集合
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 角色绑定替换完成后无返回值。
-    ///
-    /// # 错误
-    /// * `NotFound` - 管理员不存在
-    /// * `BusinessLogicError` - 角色不存在
+    /// 管理端仅换角色时替换目标管理员的完整角色集。写入前核对目标及新角色的授予资格；目标不存在或角色无效时拒绝。
     pub async fn update_admin_role(
         &self,
         params: UpdateAdminRoleParams,
@@ -346,18 +280,7 @@ impl AdminService {
         .await
     }
 
-    /// 删除管理员（软删除）。
-    ///
-    /// # 参数
-    /// actor 为当前身份，authorization 为应用注入的共享授权服务。
-    /// * `id` - 管理员ID
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 账号软删除且角色绑定清除后无返回值。
-    ///
-    /// # 错误
-    /// * `NotFound` - 管理员不存在
+    /// 通过管理员删除入口和目标管理资格后，在写事务内软删除管理员、清除其角色绑定并记录审计。目标不存在、资格或持久化校验失败均拒绝。
     pub async fn delete_admin(
         &self,
         id: String,
@@ -382,18 +305,12 @@ impl AdminService {
         self.delete_account_with_roles(account, audit, authorization.policy_revision(), access).await
     }
 
-    /// 在同一事务中创建管理员账号并写入完整角色绑定。
-    ///
-    /// # 参数
-    /// * `account` - 待创建管理员实体
-    /// * `grant` - 已校验的完整角色授予
-    /// * `audit` - 已准备的管理端资源审计
-    ///
-    /// # 返回值
-    /// 账号、角色绑定和审计写入成功时返回成功。
-    ///
-    /// # 错误
-    /// 当账号、角色绑定、事务提交或 policy 刷新失败时返回错误。
+    // 在同一事务中创建管理员账号并写入完整角色绑定。
+    // 账号、角色绑定和审计写入成功时返回成功。
+    //
+    // 当账号、角色绑定、事务提交或 policy 刷新失败时返回错误。
+    //
+    // `grant`：已校验的完整角色授予；`audit`：已准备的管理端资源审计。
     async fn create_account_with_roles(
         &self,
         account: AccountCore,
@@ -415,18 +332,13 @@ impl AdminService {
         .await
     }
 
-    /// 在同一事务中更新管理员账号并覆盖完整角色绑定。
-    ///
-    /// # 参数
-    /// * `account` - 已应用领域更新的管理员实体
-    /// * `grant` - 已校验的替换后角色授予
-    /// * `audit` - 已准备的管理端资源审计
-    ///
-    /// # 返回值
-    /// 账号、角色绑定和审计更新成功时返回成功。
-    ///
-    /// # 错误
-    /// 当账号、角色绑定、事务提交或 policy 刷新失败时返回错误。
+    // 在同一事务中更新管理员账号并覆盖完整角色绑定。
+    // 账号、角色绑定和审计更新成功时返回成功。
+    //
+    // 当账号、角色绑定、事务提交或 policy 刷新失败时返回错误。
+    //
+    // `account`：已应用领域更新的管理员实体；`grant`：已校验的替换后角色授予。
+    // `audit`：已准备的管理端资源审计。
     async fn update_account_with_roles(
         &self,
         mut account: AccountCore,
@@ -448,7 +360,7 @@ impl AdminService {
         .await
     }
 
-    /// 在系统初始化事务中创建管理员并绑定内建角色。
+    // 系统引导创建根管理员时，在同一初始化事务中保存账号和内建角色绑定。
     async fn create_system_account_with_roles(
         &self,
         account: AccountCore,
@@ -469,7 +381,7 @@ impl AdminService {
             .await
     }
 
-    /// 在系统初始化事务中更新或恢复管理员并绑定 root 角色。
+    // 初始化命中已有系统管理员时，按需在同一事务恢复账号并补齐 `role-root` 绑定。
     async fn repair_system_account(
         &self,
         mut account: AccountCore,
@@ -498,18 +410,12 @@ impl AdminService {
             .await
     }
 
-    /// 在同一事务中软删除管理员账号并清除全部角色绑定。
-    ///
-    /// # 参数
-    /// * `account` - 待软删除管理员实体
-    /// * `audit` - 已验证的管理操作审计日志
-    /// * `policy_revision` - 授权快照中的 policy 版本
-    ///
-    /// # 返回值
-    /// 账号和绑定均删除成功时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 当账号、角色绑定、事务提交或 policy 刷新失败时返回错误。
+    // 在同一事务中软删除管理员账号并清除全部角色绑定。
+    // 账号和绑定均删除成功时返回 `Ok(())`。
+    //
+    // 当账号、角色绑定、事务提交或 policy 刷新失败时返回错误。
+    //
+    // `audit`：已验证的管理操作审计日志；`policy_revision`：授权快照中的 policy 版本。
     async fn delete_account_with_roles(
         &self,
         mut account: AccountCore,
@@ -530,9 +436,8 @@ impl AdminService {
         .await
     }
 
-    /// 管理端账号写入：授权快照版本上的 policy 事务，并原子持久化审计。
-    ///
-    /// 系统初始化必须走 `run_system_policy_transaction`，不得并入本入口。
+    // 管理端写账号时按授权策略的期望版本开启事务，重验入口，并原子保存业务修改和审计。
+    // 系统初始化不走此入口，须使用 `run_system_policy_transaction`。
     async fn run_admin_account_write<T, F>(
         &self,
         policy_revision: u64,
@@ -556,7 +461,7 @@ impl AdminService {
             .await
     }
 
-    /// 确保超级管理员账号存在、启用并绑定 root 角色。
+    // 系统初始化按当前账号形状决定新建还是修复，目标是合法且启用的系统管理员及其 `role-root` 绑定。
     async fn ensure_super_admin(
         &self,
         account: LoginAccount,
@@ -573,18 +478,12 @@ impl AdminService {
         Ok(SuperAdminInitialization::Created(admin))
     }
 
-    /// 校验并原子修复已存在的超级管理员账号。
-    ///
-    /// # 参数
-    /// * `current` - 已存在账号
-    /// * `password` - 要写回的明文密码
-    /// * `name` - 要写回的名称
-    ///
-    /// # 返回值
-    /// 返回修复后的账号与实际写入状态。
-    ///
-    /// # 错误
-    /// 账号不是系统管理员时返回业务错误；角色读取、密码处理或修复写入失败时返回对应错误。
+    // 校验并原子修复已存在的超级管理员账号。
+    // 返回修复后的账号与实际写入状态。
+    //
+    // 账号不是系统管理员时返回业务错误；角色读取、密码处理或修复写入失败时返回对应错误。
+    //
+    // `current`：已存在账号。
     async fn ensure_existing_super_admin(
         &self,
         current: AccountCore,
@@ -620,18 +519,10 @@ impl AdminService {
         })
     }
 
-    /// 创建系统超级管理员账号。
-    ///
-    /// # 参数
-    /// * `account` - 超级管理员账号
-    /// * `password` - 超级管理员密码
-    /// * `name` - 超级管理员名称
-    ///
-    /// # 返回
-    /// 返回新建的管理员账号
-    ///
-    /// # 错误
-    /// 当参数校验或持久化失败时返回错误。
+    // 创建系统超级管理员账号。
+    // 返回新建的管理员账号。
+    //
+    // 当参数校验或持久化失败时返回错误。
     pub(super) async fn create_super_admin(
         &self,
         account: LoginAccount,

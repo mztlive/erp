@@ -21,28 +21,13 @@ pub struct BankReceiptEvidencePolicy;
 
 impl BankReceiptEvidencePolicy {
     /// 校验银行回单证据可用（FIN-E05 唯一规则入口）。
-    ///
-    /// 待登记路径传入登记元数据（`destroyed = false`），已落库路径传入
-    /// `FileAsset` 已落库元数据（`destroyed = destroyed_at.is_some()`）；
-    /// 两种输入适配得到相同结论。校验不依赖当前时间：按某一时点
-    /// 判断过期不属于本策略（FIN-E10 另行承担）。
-    ///
-    /// # 参数
-    /// * `content_type` - 文件内容类型（大小写敏感精确匹配）
-    /// * `sensitivity` - 敏感级别
-    /// * `retention` - 保留策略
-    /// * `destroyed` - 是否已销毁（由 Service 按销毁审计时间适配）
-    ///
-    /// # 返回
+    /// 待登记路径传入登记元数据（`destroyed = false`），已落库路径传入 `FileAsset` 已落库元数据（`destroyed = destroyed_at.is_some()`）；
+    /// 两种输入适配得到相同结论。校验不依赖当前时间：按某一时点判断过期不属于本策略（FIN-E10 另行承担）。
     /// 全部规则通过时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// MIME 不支持、敏感级别为 `General`、保留策略非长期或已销毁时返回
-    /// [`Error`]；错误消息与首错顺序保持既有合同。
-    ///
-    /// # 约束
-    /// 不执行 I/O、不判断文件存在性、不生成脱敏视图；文件存在性、临时
-    /// 引用落库与批量装载仍由 Service／Repository 负责。
+    /// `content_type` 为文件内容类型（大小写敏感精确匹配）；`sensitivity` 为敏感级别。
+    /// `retention` 为保留策略；`destroyed` 为是否已销毁（由 Service 按销毁审计时间适配）。
+    /// MIME 不支持、敏感级别为 `General`、保留策略非长期或已销毁时返回 [`Error`]；错误消息与首错顺序保持既有合同。
+    /// 不执行 I/O、不判断文件存在性、不生成脱敏视图；文件存在性、临时引用落库与批量装载仍由 Service／Repository 负责。
     pub fn validate(
         content_type: &str,
         sensitivity: SensitivityClass,
@@ -69,7 +54,7 @@ impl BankReceiptEvidencePolicy {
 mod tests {
     use super::{BankReceiptEvidencePolicy, RetentionClass, SensitivityClass};
 
-    /// 允许的 MIME 与合法元数据组合全部通过。
+    // 验证允许的 MIME 与合法元数据组合全部通过。
     #[test]
     fn accepts_sensitive_long_term_images() {
         for content_type in ["image/jpeg", "image/png", "image/webp"] {
@@ -96,7 +81,7 @@ mod tests {
         }
     }
 
-    /// 拒绝的 MIME 及边界形态：非图片、简写、大小写、空白均不得通过。
+    // 验证拒绝的 MIME 及边界形态：非图片、简写、大小写、空白均不得通过。
     #[test]
     fn rejects_unsupported_content_types() {
         for content_type in
@@ -113,7 +98,7 @@ mod tests {
         }
     }
 
-    /// 敏感级别：必须为敏感或高敏感，`General` 拒绝且错误消息稳定。
+    // 验证敏感级别：必须为敏感或高敏感，`General` 拒绝且错误消息稳定。
     #[test]
     fn rejects_general_sensitivity() {
         let error = BankReceiptEvidencePolicy::validate(
@@ -126,7 +111,7 @@ mod tests {
         assert_eq!(error.to_string(), "银行回单必须按敏感文件保存");
     }
 
-    /// 保留策略：非长期保留（30 天／7 天）拒绝且错误消息稳定。
+    // 验证保留策略：非长期保留（30 天／7 天）拒绝且错误消息稳定。
     #[test]
     fn rejects_non_long_term_retention() {
         for retention in [RetentionClass::ThirtyDays, RetentionClass::SevenDays] {
@@ -141,7 +126,7 @@ mod tests {
         }
     }
 
-    /// 销毁状态：已销毁拒绝且错误消息稳定。
+    // 验证销毁状态：已销毁拒绝且错误消息稳定。
     #[test]
     fn rejects_destroyed_evidence() {
         let error = BankReceiptEvidencePolicy::validate(
@@ -154,7 +139,7 @@ mod tests {
         assert_eq!(error.to_string(), "银行回单已销毁");
     }
 
-    /// 首错顺序：多规则同时违反时固定先报 MIME，随后敏感级别，再保留策略。
+    // 验证首错顺序：多规则同时违反时固定先报 MIME，随后敏感级别，再保留策略。
     #[test]
     fn reports_first_error_in_stable_order() {
         let error = BankReceiptEvidencePolicy::validate(

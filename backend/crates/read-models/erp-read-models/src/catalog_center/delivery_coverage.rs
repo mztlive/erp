@@ -73,7 +73,7 @@ pub struct DeliveryCoverageView {
     pub items: Vec<DeliveryCoverageItemView>,
 }
 
-/// 按有效供给的配送政策判定一个地区的提示。
+/// 依据有效供给的配送政策判定一个地区的提示。
 ///
 /// # 参数
 /// * `policies` - 该 SKU 全部有效且可供供给的生效政策
@@ -82,9 +82,6 @@ pub struct DeliveryCoverageView {
 /// # 返回
 /// 没有有效供给时不提示（由销售资格另行约束）；代发与集采都不配送时提示无可配送供给；
 /// 代发都不配送且集采只能运费另计时提示需另付运费。
-///
-/// # 错误
-/// 无。
 pub fn coverage_hint(policies: &[&DeliveryPolicy], region: &RegionCode) -> DeliveryCoverageHint {
     if policies.is_empty() {
         return DeliveryCoverageHint::None;
@@ -96,12 +93,10 @@ pub fn coverage_hint(policies: &[&DeliveryPolicy], region: &RegionCode) -> Deliv
     }
 }
 
-/// 查询销售收货地区的配送提示。
+/// 销售录入收货地区时，使用可售商品池的固定资格读取当前供给覆盖，按商品和地区生成配送提示。
 ///
 /// # 参数
 /// * `authorization` - 组合根共享的统一授权服务。
-/// * `actor` - 本次已认证账号。
-/// * `db` - 数据库
 /// * `req` - 商品与收货地区
 ///
 /// # 返回
@@ -124,7 +119,7 @@ pub async fn sellable_delivery_coverage(
         .await
 }
 
-/// 配送提示与商品池使用同一固定资格；全部供给事实在原快照内读取。
+// 查询配送提示时，沿商品池相同的固定功能资格读取供给、按请求投影地区，并在交付前确认原快照仍有效。
 async fn delivery_snapshot(
     db: &Database,
     req: DeliveryCoverageRequest,
@@ -151,7 +146,7 @@ async fn delivery_snapshot(
     Ok(view)
 }
 
-/// 仅投影当前快照的供给事实，地区去重且保留请求顺序。
+// 生成 SKU 配送覆盖视图时，仅投影当前快照的供给事实，地区去重且保留请求顺序。
 fn delivery_view(req: &DeliveryCoverageRequest, facts: &CreationBasisFacts) -> Result<DeliveryCoverageView> {
     let supplies = effective_supply(facts, BusinessDate::today());
     let mut items = Vec::new();
@@ -178,7 +173,7 @@ fn delivery_view(req: &DeliveryCoverageRequest, facts: &CreationBasisFacts) -> R
     Ok(DeliveryCoverageView { items })
 }
 
-/// 为后台重算生成一批 SKU 配送覆盖记录。
+/// 调用此入口时，为后台重算生成一批 SKU 配送覆盖记录。
 ///
 /// # 参数
 /// * `db` - 供给、商品与配送模板所在数据库。
@@ -211,7 +206,7 @@ pub async fn delivery_coverage_refresh_records(
         .collect())
 }
 
-/// 仅为当前后台投影批次读取有效供给与商品配送限制。
+// 只为当前后台投影批次读取有效供给与商品配送限制。
 async fn sku_delivery_inputs(
     db: &Database,
     sku_ids: &[String],
@@ -244,7 +239,7 @@ async fn sku_delivery_inputs(
         .collect())
 }
 
-/// 读取 SKU 是否为实物商品；虚拟商品、线下服务与卡券不受配送范围限制。
+// 处理 SKU 配送覆盖时，读取 SKU 是否为实物商品；虚拟商品、线下服务与卡券不受配送范围限制。
 async fn restricted_skus(
     db: &Database,
     sku_ids: &[SkuId],
@@ -275,7 +270,7 @@ struct EffectiveSupply {
     next_change_date: Option<BusinessDate>,
 }
 
-/// 按 SKU 归集有效且当前可供供给的生效配送政策与供应商，并记录各供给条款最近一次按日期变化。
+// 依据 SKU 归集有效且当前可供供给的生效配送政策与供应商，并记录各供给条款最近一次按日期变化。
 fn effective_supply(facts: &CreationBasisFacts, today: BusinessDate) -> HashMap<String, EffectiveSupply> {
     let mut supplies: HashMap<String, EffectiveSupply> = HashMap::new();
     for offering in &facts.offerings {
@@ -311,7 +306,7 @@ fn effective_supply(facts: &CreationBasisFacts, today: BusinessDate) -> HashMap<
     supplies
 }
 
-/// 条款下一次按日期改变有效性的日期：未来的生效日或失效日。
+// 处理 SKU 配送覆盖时，条款下一次按日期改变有效性的日期：未来的生效日或失效日。
 fn next_validity_change(revision: &OfferingRevisionFact, today: BusinessDate) -> Option<BusinessDate> {
     let start = (revision.valid_from > today).then_some(revision.valid_from);
     let end = revision.valid_to.filter(|until| *until > today);

@@ -16,10 +16,10 @@ use crate::{Error, Result};
 /// 规则列表只暴露固定资格检查与包含展示事实的完整分页读取。
 #[async_trait]
 trait RuleListSource: Send + Sync {
-    /// 在调用方快照中检查规则列表功能资格。
+    // 确定采购责任规则的适用条件时，在调用方快照中检查规则列表功能资格。
     async fn require(&self, actor: &AuditActor, executor: &mut dyn Executor) -> Result<()>;
 
-    /// 使用原执行器读取规则、总数和本页全部展示事实。
+    // 使用原执行器取得规则、总数和本页全部展示事实。
     async fn page(
         &self,
         filter: &ProcurementResponsibilityRuleFilter,
@@ -29,7 +29,7 @@ trait RuleListSource: Send + Sync {
 
 #[async_trait]
 impl RuleListSource for ProcurementResponsibilityReadService {
-    /// 固定资格由共享授权服务执行，不由列表调用方组合。
+    // 确定采购责任规则的适用条件时，固定资格由共享授权服务执行，不由列表调用方组合。
     async fn require(&self, actor: &AuditActor, executor: &mut dyn Executor) -> Result<()> {
         self.authorization
             .require(actor, &admin::PROCUREMENT_RESPONSIBILITY_LIST_RULES, AccessTarget::Operation, executor)
@@ -37,7 +37,7 @@ impl RuleListSource for ProcurementResponsibilityReadService {
         Ok(())
     }
 
-    /// 仓储在同一执行器内完成分页、计数和关联事实补齐。
+    // 生成采购责任规则分页时，仓储在同一执行器内完成分页、计数和关联事实补齐。
     async fn page(
         &self,
         filter: &ProcurementResponsibilityRuleFilter,
@@ -48,10 +48,9 @@ impl RuleListSource for ProcurementResponsibilityReadService {
 }
 
 impl ProcurementResponsibilityReadService {
-    /// 在同一授权快照中分页查询采购责任规则及全部展示事实。
+    /// 读取采购责任规则时，在同一授权快照中分页查询采购责任规则及全部展示事实。
     ///
     /// # 参数
-    /// * `actor` - 本次已认证账号。
     /// * `params` - 类型、负责人、状态及分页筛选
     ///
     /// # 返回
@@ -75,7 +74,7 @@ impl ProcurementResponsibilityReadService {
     }
 }
 
-/// 固定资格、完整分页和响应补齐只能在原快照读取阶段完成。
+// 处理采购责任规则时，固定资格、完整分页和响应补齐只能在原快照读取阶段完成。
 async fn rule_list_page(
     source: &dyn RuleListSource,
     params: ProcurementResponsibilityRuleListParams,
@@ -140,7 +139,7 @@ mod tests {
     }
 
     impl Source {
-        /// 验证资格与读取均使用活动快照并记录执行器身份。
+        // 生成采购责任规则展示时，检查资格与读取均使用活动快照并记录执行器身份。
         fn record(&self, stage: &'static str, executor: &mut dyn Executor) {
             assert!(executor.boundary().is_some_and(|boundary| boundary.is_snapshot()));
             self.calls.lock().unwrap().push((stage, executor as *mut dyn Executor as *mut () as usize));
@@ -149,7 +148,7 @@ mod tests {
 
     #[async_trait]
     impl RuleListSource for Source {
-        /// 模拟真实授权入口推进读取阶段并检查当前账号。
+        // 确定采购责任规则的适用条件时，模拟真实授权入口推进读取阶段并检查当前账号。
         async fn require(&self, actor: &AuditActor, executor: &mut dyn Executor) -> Result<()> {
             self.record("require", executor);
             assert_eq!(actor.id(), "actor-1");
@@ -160,7 +159,7 @@ mod tests {
             Ok(())
         }
 
-        /// 返回一页真实规则实体与稀疏展示事实，或注入读取失败。
+        // 生成采购责任规则分页时，给出一页真实规则实体与稀疏展示事实，或注入读取失败。
         async fn page(
             &self,
             filter: &ProcurementResponsibilityRuleFilter,
@@ -181,7 +180,7 @@ mod tests {
         }
     }
 
-    /// 构造显式筛选，验证生产编排保留全部分页参数。
+    // 处理采购责任规则时，生成显式筛选，验证生产编排保留全部分页参数。
     fn params() -> ProcurementResponsibilityRuleListParams {
         ProcurementResponsibilityRuleListParams {
             rule_type: Some(ProcurementResponsibilityRuleType::Sku),
@@ -192,12 +191,12 @@ mod tests {
         }
     }
 
-    /// 构造当前调用身份。
+    // 处理采购责任规则时，生成当前调用身份。
     fn actor() -> AuditActor {
         AuditActor::new("actor-1".into(), "操作者".into(), AccountKind::Admin)
     }
 
-    /// 用真实规则实体和展示事实验证最终回包。
+    // 处理采购责任规则时，用真实规则实体和展示事实验证最终回包。
     fn sample_page() -> ProcurementRuleListPage {
         let rule = ProcurementResponsibilityRule::new(
             ProcurementResponsibilityRuleId::new("rule-1"),
@@ -225,7 +224,7 @@ mod tests {
         }
     }
 
-    /// 允许路径使用同一执行器完成授权、完整读取和最终展示补齐。
+    // 验证采购责任规则：允许路径使用同一执行器完成授权、完整读取和最终展示补齐。
     #[tokio::test]
     async fn allowed_page_keeps_original_executor_and_fills_display_facts() {
         let source = Source::default();
@@ -243,7 +242,7 @@ mod tests {
         assert_eq!(view.items[0].sku_name.as_deref(), Some("零件"));
     }
 
-    /// 缺少功能资格时终止，不读取分页或人员事实。
+    // 验证采购责任规则：缺少功能资格时终止，不读取分页或人员事实。
     #[tokio::test]
     async fn denied_permission_stops_before_page_reading() {
         let source = Source { denied: true, ..Default::default() };
@@ -253,7 +252,7 @@ mod tests {
         assert_eq!(source.calls.lock().unwrap().len(), 1);
     }
 
-    /// 读取错误原样返回，不交付部分页面。
+    // 验证采购责任规则：读取错误原样返回，不交付部分页面。
     #[tokio::test]
     async fn page_failure_is_preserved() {
         let source = Source { failed: true, ..Default::default() };
@@ -263,7 +262,7 @@ mod tests {
         assert_eq!(source.calls.lock().unwrap().len(), 2);
     }
 
-    /// 非快照读取在访问身份和业务数据之前拒绝。
+    // 验证采购责任规则：非快照读取在访问身份和业务数据之前拒绝。
     #[tokio::test]
     async fn non_snapshot_executor_is_rejected_before_authorization() {
         let source = Source::default();
@@ -274,7 +273,7 @@ mod tests {
         assert!(source.calls.lock().unwrap().is_empty());
     }
 
-    /// 读取阶段被推进后丢弃已取出的页面。
+    // 验证采购责任规则：读取阶段被推进后丢弃已取出的页面。
     #[tokio::test]
     async fn changed_read_phase_discards_page() {
         let source = Source { advance: true, ..Default::default() };

@@ -44,20 +44,18 @@ pub use party_revision::{PartyRevision, PartyRevisionData};
 pub use party_tax_profile::{PartyTaxProfile, PartyTaxProfileData, PartyTaxProfileUpdate};
 pub use status::{EffectiveRecordStatus, SymmetricActiveStatus, select_current_default};
 
-/// 校验期望版本与实体当前版本一致（erp-party-008）。
-///
-/// 主体与四个从属事实的乐观锁冲突文案唯一来源；各实体 `ensure_version`
-/// 均转调本函数，Service 层只做错误类映射。
-///
-/// # 参数
-/// * `base` - 实体基础字段（含当前版本）
-/// * `expected` - 调用方持有的期望版本
-///
-/// # 返回
-/// 版本一致返回 `Ok(())`。
-///
-/// # 错误
-/// 版本不一致时返回版本冲突错误。
+// 校验期望版本与实体当前版本一致（erp-party-008）。
+//
+// 主体与四个从属事实的乐观锁冲突文案唯一来源；各实体 `ensure_version`
+// 均转调本函数，Service 层只做错误类映射。
+//
+// # 参数
+// * `base` - 实体基础字段（含当前版本）
+// * `expected` - 调用方持有的期望版本
+//
+// 版本一致返回 `Ok(())`。
+//
+// 版本不一致时返回版本冲突错误。
 pub(crate) fn ensure_base_version(base: &entity_core::BaseModel, expected: u64) -> Result<()> {
     if base.version == expected {
         return Ok(());
@@ -65,20 +63,18 @@ pub(crate) fn ensure_base_version(base: &entity_core::BaseModel, expected: u64) 
     Err(Error::from("数据已被其他请求修改，请刷新后重试"))
 }
 
-/// 校验从属事实生效区间（erp-party-010）。
-///
-/// 四个从属事实（联系人/地址/税务资料/银行账户）的生效区间规则唯一来源；
-/// 各实体 `new`/`update` 均转调本函数。空结束日期表示长期有效。
-///
-/// # 参数
-/// * `valid_from` - 生效开始日期
-/// * `valid_to` - 生效结束日期；`None` 表示长期有效
-///
-/// # 返回
-/// 区间合法返回 `Ok(())`。
-///
-/// # 错误
-/// 结束日期不晚于开始日期时返回错误。
+// 校验从属事实生效区间（erp-party-010）。
+//
+// 四个从属事实（联系人/地址/税务资料/银行账户）的生效区间规则唯一来源；
+// 各实体 `new`/`update` 均转调本函数。空结束日期表示长期有效。
+//
+// # 参数
+// * `valid_from` - 生效开始日期
+// * `valid_to` - 生效结束日期；`None` 表示长期有效
+//
+// 区间合法返回 `Ok(())`。
+//
+// 结束日期不晚于开始日期时返回错误。
 pub(crate) fn ensure_valid_window(valid_from: BusinessDate, valid_to: Option<BusinessDate>) -> Result<()> {
     if let Some(valid_to) = valid_to
         && valid_to <= valid_from
@@ -92,14 +88,7 @@ pub(crate) fn ensure_valid_window(valid_from: BusinessDate, valid_to: Option<Bus
 pub trait PartyOwned {
     /// 返回实体所属 Party ID。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回稳定 Party ID 引用。
-    ///
-    /// # 错误
-    /// 不返回错误。
     fn party_id(&self) -> &PartyId;
 
     /// 校验实体属于指定 Party。
@@ -107,10 +96,8 @@ pub trait PartyOwned {
     /// # 参数
     /// * `expected` - 期望的 Party ID
     ///
-    /// # 返回
     /// Party 归属一致时返回 `Ok(())`。
     ///
-    /// # 错误
     /// 实体归属其他 Party 时返回错误。
     fn ensure_party(&self, expected: &PartyId) -> Result<()> {
         if self.party_id() == expected {

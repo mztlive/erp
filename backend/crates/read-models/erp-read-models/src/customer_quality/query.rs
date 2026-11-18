@@ -13,10 +13,7 @@ pub struct PeriodBounds {
 }
 
 impl CurrentQualityQuery {
-    /// 单次最多一年；现任分组下钻只接受现任人员或组织精确身份。
-    ///
-    /// # 参数
-    /// 无。
+    /// 校验客户质量报表筛选时，单次最多一年；现任分组下钻只接受现任人员或组织精确身份。
     ///
     /// # 返回
     /// 返回上海自然日左闭右开的 UTC 秒边界：`from` 为开始日零点，`until` 为结束日次日零点。
@@ -37,10 +34,7 @@ impl CurrentQualityQuery {
 }
 
 impl HistoryQualityQuery {
-    /// 单次最多一年；历史下钻只接受冻结人员或组织的精确分组身份。
-    ///
-    /// # 参数
-    /// 无。
+    /// 校验客户质量报表筛选时，单次最多一年；历史下钻只接受冻结人员或组织的精确分组身份。
     ///
     /// # 返回
     /// 返回上海自然日左闭右开的 UTC 秒边界：`from` 为开始日零点，`until` 为结束日次日零点。
@@ -64,7 +58,7 @@ impl HistoryQualityQuery {
     }
 }
 
-/// 分页与跨页版本在读取事实前验证。
+// 生成客户质量报表筛选分页时，分页与跨页版本在读取事实前验证。
 fn validate_paging(page: usize, page_size: usize, scope_version: Option<&str>) -> Result<()> {
     if page == 0 || page > 1_000_000 || ![20, 50, 100].contains(&page_size) {
         return invalid("页码超出范围，或每页条数不是 20、50、100，请从第一页重新查询");
@@ -78,7 +72,7 @@ fn validate_paging(page: usize, page_size: usize, scope_version: Option<&str>) -
     Ok(())
 }
 
-/// 使用界面列排序白名单，空值统一排最后。
+// 校验客户质量报表筛选时，使用界面列排序白名单，空值统一排最后。
 fn validate_sort(sort: &str, fields: &[&str]) -> Result<()> {
     let Some((field, direction)) = sort.split_once(':') else {
         return invalid("无法应用当前排序，请重新选择排序列和升降顺序");
@@ -89,7 +83,7 @@ fn validate_sort(sort: &str, fields: &[&str]) -> Result<()> {
     Ok(())
 }
 
-/// 文本有界且不接受超长身份。
+// 校验客户质量报表筛选时，文本有界且不接受超长身份。
 fn validate_text<'a>(values: impl IntoIterator<Item = &'a Option<String>>) -> Result<()> {
     for value in values.into_iter().flatten() {
         if value.len() > 512 {
@@ -99,7 +93,7 @@ fn validate_text<'a>(values: impl IntoIterator<Item = &'a Option<String>>) -> Re
     Ok(())
 }
 
-/// 下钻仅接受精确分组身份；空后缀明确表示未知归属。
+// 校验客户质量报表筛选时，下钻仅接受精确分组身份；空后缀明确表示未知归属。
 fn validate_group(group: Option<&str>, name: &str, dimensions: &[&str]) -> Result<()> {
     let Some(group) = group else {
         return Ok(());
@@ -116,7 +110,7 @@ fn validate_group(group: Option<&str>, name: &str, dimensions: &[&str]) -> Resul
     Ok(())
 }
 
-/// 严格校验零填充日期，区间左闭右开且不超过 367 天。
+// 校验客户质量报表筛选时，严格校验零填充日期，区间左闭右开且不超过 367 天。
 fn validate_period(from: &str, to: &str) -> Result<PeriodBounds> {
     let from = parse_date(from)?;
     let to = parse_date(to)?;
@@ -128,7 +122,7 @@ fn validate_period(from: &str, to: &str) -> Result<PeriodBounds> {
     Ok(PeriodBounds { from: midnight(from), until: midnight(next) })
 }
 
-/// 严格校验零填充日期。
+// 规范化客户质量报表筛选输入时，严格校验零填充日期。
 fn parse_date(text: &str) -> Result<NaiveDate> {
     let date = NaiveDate::parse_from_str(text, "%Y-%m-%d")
         .map_err(|_| Error::ValidationError("请选择有效日期，或按「2026-01-31」的格式填写".into()))?;
@@ -138,12 +132,12 @@ fn parse_date(text: &str) -> Result<NaiveDate> {
     Ok(date)
 }
 
-/// 上海自然日零点换算 UTC 秒，固定时区不依赖机器时区。
+// 处理客户质量报表筛选时，上海自然日零点换算 UTC 秒，固定时区不依赖机器时区。
 fn midnight(date: NaiveDate) -> i64 {
     date.and_hms_opt(0, 0, 0).expect("合法零点").and_utc().timestamp() - 8 * 3600
 }
 
-/// 保留统一参数错误分类。
+// 组装客户质量报表筛选时，保留统一参数错误分类。
 fn invalid<T>(message: &str) -> Result<T> {
     Err(Error::ValidationError(message.into()))
 }

@@ -14,50 +14,14 @@ use crate::entity::legacy_import::{ImportStatus, LegacyImportRow};
 /// 导入行集合仓储扩展：失败重试范围读取与批量写回。
 #[allow(async_fn_in_trait)]
 pub trait LegacyImportRowFailedRetryExt {
-    /// 按批次读取失败导入行（INT-R31 批量读取）。
-    ///
-    /// 取代执行命令事务中先全量加载再内存过滤的旧路径；已导入、已跳过与
-    /// 待导入行不在结果中，软删除行视为不存在。空批次返回空集合。
-    ///
-    /// # 参数
-    /// * `batch_id` - 目标导入批次
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回该批次全部失败且未删除的导入行，按 `created_at/id` 稳定排序。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    ///
-    /// # 约束
-    /// 不返回 services DTO、HTTP View 或授权结论；不改变软删除、批次约束
-    /// 与稳定排序语义；不自行开启或提交事务。
+    /// 用调用方执行器只取指定批次未删除的失败行，按 `created_at/id` 稳定排序，避免为重试读入全批数据。无匹配则返回空集合；查询或游标失败直接返回，不另开事务或给出授权结论。
     async fn list_failed_by_batch(
         &self,
         batch_id: &LegacyImportBatchId,
         executor: &mut dyn Executor,
     ) -> Result<Vec<LegacyImportRow>>;
 
-    /// 在调用方事务内批量重置已就地 `prepare_failed_retry` 的行（INT-R31 批量写）。
-    ///
-    /// 调用方先经实体 `prepare_failed_retry` 完成 `Failed → PendingImport`
-    /// 状态迁移，本方法只执行逐项 CAS 写回；空集合零写，不访问数据库。
-    /// 任一项版本冲突或写入失败时返回错误，由调用方事务整体回滚，
-    /// 不产生部分提交。并发重试依赖每行 `id + version` 乐观锁，
-    /// 单次快照查询不构成并发保护。
-    ///
-    /// # 参数
-    /// * `rows` - 已完成失败重置 mutation 的行（就地更新版本号）
-    /// * `executor` - 调用方事务执行器，必须位于同一事务中
-    ///
-    /// # 返回
-    /// 返回执行结果，`Ok` 表示全部写回成功。
-    ///
-    /// # 错误
-    /// 当任一行 CAS 未命中或 MongoDB 写入失败时返回错误。
-    ///
-    /// # 约束
-    /// 不自行开启或提交事务；不做业务状态裁决，只持久化已 mutation 行。
+    /// 用调用方原事务逐行按 `id + version` 写回已由 `prepare_failed_retry` 重置为待导入的记录；行集合为空时不访问数据库。任何 CAS 未命中或写入失败由调用方整体回滚，不能部分提交；查询快照本身不能防并发重试。
     async fn persist_failed_retry_rows(
         &self,
         rows: &mut [LegacyImportRow],
@@ -86,13 +50,7 @@ impl LegacyImportRowFailedRetryExt for persistence_core::Repository<'_, LegacyIm
     }
 }
 
-/// 失败重试读取的精确过滤条件。
-///
-/// # 参数
-/// * `batch_id` - 目标导入批次
-///
-/// # 返回
-/// 返回含批次、失败状态与未软删除过滤的文档。
+// 为失败重试准备精确条件，只匹配该批次未软删除且应用失败的行。
 fn failed_retry_filter(batch_id: &LegacyImportBatchId) -> mongodb::bson::Document {
     doc! {
         "batch_id": batch_id.to_string(),
@@ -101,10 +59,7 @@ fn failed_retry_filter(batch_id: &LegacyImportBatchId) -> mongodb::bson::Documen
     }
 }
 
-/// 失败重试读取的稳定排序。
-///
-/// # 返回
-/// 返回 `created_at/id` 升序排序文档。
+// 让重试按 `created_at`、`id` 升序读取，创建时间相同也能稳定排序。
 fn failed_retry_sort() -> mongodb::bson::Document {
     doc! { "created_at": 1, "id": 1 }
 }

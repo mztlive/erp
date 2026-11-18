@@ -75,7 +75,7 @@ fn render_delivery_lines(lines: &[PurchaseOrderLineView]) -> String {
     html.push_str("</tbody></table>");
     html
 }
-/// 采购改单移除的商品行数量为零，保留在采购单上并标注已取消。
+// 采购改单移除的商品行数量为零，保留在采购单上并标注已取消。
 fn is_removed(line: &PurchaseOrderLineView) -> bool {
     line.line_type == PurchaseLineType::ItemService
         && line

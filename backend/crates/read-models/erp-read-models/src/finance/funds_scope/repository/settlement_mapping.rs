@@ -16,13 +16,11 @@ pub(in crate::finance::funds_scope) struct SettlementMapping {
 }
 
 impl SettlementMapping {
-    /// 创建结算单来源模型。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 固定集合、对象粒度及已支持事实维度的映射。
-    /// # 错误
-    /// 固定模型标识无效时返回接入错误。
+    // 初始化结算单来源模型，供结算应付来源使用。
+    //
+    // 固定集合、对象粒度及已支持事实维度的映射。
+    //
+    // 固定模型标识无效时返回接入错误。
     pub(in crate::finance::funds_scope) fn new() -> IdentityResult<Self> {
         Ok(Self {
             model: QueryModel {

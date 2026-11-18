@@ -6,13 +6,7 @@ use persistence_core::indexes::unique_index;
 
 use crate::repository::ImportCommandReceiptExt;
 
-/// 登记独立回执身份和事件关联约束。
-/// # 参数
-/// * `db` - 当前组合根目标数据库。
-/// # 返回
-/// 索引建立完成返回空值。
-/// # 错误
-/// 唯一约束冲突或 MongoDB 操作失败。
+// 注册独立回执的命令身份与事件关联唯一约束，供恢复时唯一定位原结果；现有数据冲突或 MongoDB 创建失败时返回错误。
 pub(super) async fn ensure(db: &Database) -> Result<()> {
     let indexes = [
         ("uk_import_command_receipts_id", doc! { "id": 1 }),

@@ -29,21 +29,18 @@ pub(super) struct CurrentSnapshotOutput {
 }
 
 impl super::CustomerQualityReadModel {
-    /// 在调用方事务内完成现任授权、业务筛选与事实装载。
-    ///
-    /// # 参数
-    /// * `query` - 现任口径筛选；其中的范围版本用于和本次快照比对
-    /// * `actor` - 已认证操作人
-    /// * `bounds` - 已校验的期间边界
-    /// * `export` - 为真时不按页截断行
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 返回当前视图、原查询，以及本次客户与销售范围合成的版本指纹。
-    ///
-    /// # 错误
-    /// 授权解析失败、期间订单或候选客户数超过业务上限、包含下级却没有组织、
-    /// 组织展开或订单与客户事实读取失败时返回错误。查询已带的范围版本与本次快照不一致时返回范围变化错误。
+    // 读取客户质量现任负责报表时，在调用方事务内完成现任授权、业务筛选与事实装载。
+    //
+    // 调用参数：
+    // * `query` - 现任口径筛选；其中的范围版本用于和本次快照比对
+    // * `bounds` - 已校验的期间边界
+    // * `export` - 为真时不按页截断行
+    //
+    // 返回当前视图、原查询，以及本次客户与销售范围合成的版本指纹。
+    //
+    // 失败边界：
+    // 授权解析失败、期间订单或候选客户数超过业务上限、包含下级却没有组织、
+    // 组织展开或订单与客户事实读取失败时返回错误。查询已带的范围版本与本次快照不一致时返回范围变化错误。
     pub(super) async fn snapshot_current(
         &self,
         query: &CurrentQualityQuery,
@@ -85,7 +82,7 @@ impl super::CustomerQualityReadModel {
         Ok((CurrentSnapshotOutput { view, query: query.clone() }, expected))
     }
 
-    /// 只读取期间订单关联客户及显式客户，并保留无订单客户的授权检查。
+    // 处理客户质量现任负责报表时，仅读取期间订单关联客户及显式客户，并保留无订单客户的授权检查。
     async fn current_sources(
         &self,
         query: &CurrentQualityQuery,
@@ -112,18 +109,15 @@ impl super::CustomerQualityReadModel {
         load_current_snapshot(&self.db, authorized, orders, executor).await
     }
 
-    /// 在新的读取事务内重验账号、组织、协作及业务责任集合，防止返回旧宽范围文件。
-    ///
-    /// # 参数
-    /// * `query` - 与快照相同的现任筛选
-    /// * `actor` - 已认证操作人
-    /// * `expected` - 快照事务返回的版本指纹
-    ///
-    /// # 返回
-    /// 重算版本与 `expected` 一致时无返回值。
-    ///
-    /// # 错误
-    /// 重验事务内的授权、筛选、组织展开或事实读取失败时返回错误。重算版本与 `expected` 不一致时返回范围变化错误。
+    // 交付客户质量现任负责报表结果前，在新的读取事务内重验账号、组织、协作及业务责任集合，防止返回旧宽范围文件。
+    //
+    // 调用参数：
+    // * `query` - 与快照相同的现任筛选
+    // * `expected` - 快照事务返回的版本指纹
+    //
+    // 重算版本与 `expected` 一致时无返回值。
+    //
+    // 重验事务内的授权、筛选、组织展开或事实读取失败时返回错误。重算版本与 `expected` 不一致时返回范围变化错误。
     pub(super) async fn recheck_current(
         &self,
         query: &CurrentQualityQuery,
@@ -152,7 +146,7 @@ impl super::CustomerQualityReadModel {
     }
 }
 
-/// 请求组织展开为启用节点；未知组织拒绝，不得忽略后查询全部。
+// 准备客户质量现任负责报表候选时，请求组织展开为启用节点；未知组织拒绝，不得忽略后查询全部。
 async fn expand_requested_orgs(
     port: &CustomerAccess,
     query: &CurrentQualityQuery,
@@ -175,7 +169,7 @@ async fn expand_requested_orgs(
     Ok(Some(expanded))
 }
 
-/// 现任负责人、组织、分组与关键词在同一快照内求交；只看现任归属。
+// 组装客户质量现任负责报表时，现任负责人、组织、分组与关键词在同一快照内求交；只看现任归属。
 fn apply_request_filters(
     sources: &mut super::source::CurrentSnapshot,
     query: &CurrentQualityQuery,
@@ -204,7 +198,7 @@ fn apply_request_filters(
     sources.orders.retain(|o| kept.contains(&o.customer_id));
 }
 
-/// 人员、组织和下钻条件同时匹配单据责任；客户名单只保留沉默客户。
+// 应用客户质量现任负责报表筛选时，人员、组织和下钻条件同时匹配单据责任；客户名单只保留沉默客户。
 fn matches_current_owner(
     user: &str,
     org: Option<&str>,
@@ -241,7 +235,7 @@ fn filter_current_owners(
     }
 }
 
-/// 同一快照内投影汇总、分组与排序；排序分页最后执行。
+// 生成客户质量现任负责报表视图时，同一快照内投影汇总、分组与排序；排序分页最后执行。
 fn project_current(
     query: &CurrentQualityQuery,
     sources: super::source::CurrentSnapshot,
@@ -263,7 +257,7 @@ fn project_current(
     view
 }
 
-/// 按单据负责销售和业务组织分摊客户业务；客户明细总额只计算一次。
+// 依据单据负责销售和业务组织分摊客户业务；客户明细总额只计算一次。
 fn current_customer_rows(
     customer: &CustomerFact,
     orders: &[&QualityOrder],
@@ -351,7 +345,7 @@ fn customer_order_groups<'a>(
     groups
 }
 
-/// 按客户聚合订单引用；同一订单只归属其当前客户一次。
+// 依据客户聚合订单引用；同一订单只归属其当前客户一次。
 fn group_orders_by_customer(orders: &[QualityOrder]) -> BTreeMap<String, Vec<&QualityOrder>> {
     let mut map: BTreeMap<String, Vec<&QualityOrder>> = BTreeMap::new();
     for order in orders {
@@ -360,7 +354,7 @@ fn group_orders_by_customer(orders: &[QualityOrder]) -> BTreeMap<String, Vec<&Qu
     map
 }
 
-/// 汇总订单数、含税总额与缺版本数；缺版本不写作零。
+// 汇总客户质量现任负责报表时，汇总订单数、含税总额与缺版本数；缺版本不写作零。
 fn summarize_orders(
     orders: &[&QualityOrder],
     gross: &BTreeMap<String, Decimal>,
@@ -384,7 +378,7 @@ fn summarize_orders(
     (orders.len(), total, unpriced, first, latest)
 }
 
-/// 现任分组：客户行、负责人分组、组织分组三者互斥，永不混排。
+// 汇总客户质量现任负责报表时，现任分组：客户行、负责人分组、组织分组三者互斥，永不混排。
 fn group_current_rows(
     rows: Vec<CurrentQualityRow>,
     dimension: &str,
@@ -428,7 +422,7 @@ fn group_current_rows(
         .collect()
 }
 
-/// 分组汇总只累计一次；缺版本数按行累加。
+// 处理客户质量现任负责报表时，分组汇总只累计一次；缺版本数按行累加。
 fn aggregate_group(rows: &[CurrentQualityRow]) -> (usize, Decimal, usize, usize) {
     let mut orders = 0;
     let mut gross = Decimal::ZERO;
@@ -448,7 +442,7 @@ fn aggregate_group(rows: &[CurrentQualityRow]) -> (usize, Decimal, usize, usize)
     )
 }
 
-/// 分组标签只用现任名称；未知分组单列，不用其他分组回填。
+// 汇总客户质量现任负责报表时，分组标签只用现任名称；未知分组单列，不用其他分组回填。
 fn group_labels(
     dimension: &str,
     key: &str,
@@ -472,7 +466,7 @@ fn group_labels(
     (label, None, Some(name))
 }
 
-/// 全量汇总不依赖当前分页；缺版本订单不计入总额但保留计数。
+// 计算客户质量现任负责报表金额时，全量汇总不依赖当前分页；缺版本订单不计入总额但保留计数。
 fn totals_for(rows: &[CurrentQualityRow]) -> QualityTotals {
     let mut orders = 0;
     let mut gross = Decimal::ZERO;
@@ -492,18 +486,18 @@ fn totals_for(rows: &[CurrentQualityRow]) -> QualityTotals {
     }
 }
 
-/// 金额保留分，服务端已完成舍入。
+// 处理客户质量现任负责报表时，金额保留分，服务端已完成舍入。
 fn money(value: Decimal) -> String {
     format!("{value:.2}")
 }
 
-/// 排序分页最后执行；导出保留全部匹配行。
+// 处理客户质量现任负责报表时，排序分页最后执行；导出保留全部匹配行。
 fn page_items(mut items: Vec<CurrentQualityRow>, query: &CurrentQualityQuery) -> Vec<CurrentQualityRow> {
     items.sort_by(|a, b| compare_current(a, b, &query.sort));
     items.into_iter().skip((query.page - 1) * query.page_size).take(query.page_size).collect()
 }
 
-/// 页内顺序与导出一致，同值按稳定键排序。
+// 排列客户质量现任负责报表结果时，页内顺序与导出一致，同值按稳定键排序。
 fn compare_current(a: &CurrentQualityRow, b: &CurrentQualityRow, sort: &str) -> std::cmp::Ordering {
     use std::cmp::Ordering;
     let (field, direction) = sort.split_once(':').unwrap_or(("orderCount", "desc"));
@@ -521,12 +515,12 @@ fn compare_current(a: &CurrentQualityRow, b: &CurrentQualityRow, sort: &str) -> 
     ordering
 }
 
-/// 字符串金额排序使用 Decimal，禁止按字典序排列负数和大金额。
+// 处理客户质量现任负责报表时，字符串金额排序使用 Decimal，禁止按字典序排列负数和大金额。
 fn numeric(value: &str) -> Decimal {
     value.parse::<Decimal>().unwrap_or(Decimal::ZERO)
 }
 
-/// 页面主合同只装配各独立投影，金额与字段来源不在 HTTP 层重算。
+// 生成客户质量现任负责报表视图时，页面主合同只装配各独立投影，金额与字段来源不在 HTTP 层重算。
 fn assemble_current(
     query: &CurrentQualityQuery,
     rows: Vec<CurrentQualityRow>,
@@ -554,7 +548,7 @@ fn assemble_current(
     }
 }
 
-/// 导出必须保留所有已应用筛选，内部身份只作为精确筛选追溯值。
+// 应用客户质量现任负责报表筛选时，导出必须保留所有已应用筛选，内部身份只作为精确筛选追溯值。
 fn current_filter_summary(query: &CurrentQualityQuery) -> String {
     let mut parts =
         vec![format!("{} 至 {}", query.from, query.to), BASIS_LABEL.into(), "口径：当前负责客户".into()];
@@ -576,12 +570,12 @@ fn current_filter_summary(query: &CurrentQualityQuery) -> String {
     parts.join("；")
 }
 
-/// 授权时点与版本随响应返回；不暴露完整角色证明或人员集合。
+// 组装客户质量现任负责报表时，授权时点与版本随响应返回；不暴露完整角色证明或人员集合。
 fn apply_context(view: &mut CurrentQualityView, customer: &CustomerResolvedScope) {
     view.as_of = customer.as_of.as_utc().to_rfc3339();
 }
 
-/// 组合版本覆盖客户与销售双重授权及业务责任版本；不返回身份集合。
+// 处理客户质量现任负责报表的版本事实时，组合版本覆盖客户与销售双重授权及业务责任版本；不返回身份集合。
 fn combined_version(customer_version: &str, sales_version: &str, view: &CurrentQualityView) -> String {
     use std::hash::{Hash, Hasher};
     let mut fingerprint = std::collections::hash_map::DefaultHasher::new();

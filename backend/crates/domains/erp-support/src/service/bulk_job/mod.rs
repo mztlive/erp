@@ -66,18 +66,8 @@ pub struct BulkJobService {
 
 impl BulkJobService {
     /// 创建批量任务服务实例。
-    ///
-    /// # 参数
-    /// * `db` - 数据库实例
-    /// * `audit` - 审计写入端口
-    /// * `documents` - 业务单据注册端口
-    /// * `authorization` - 完成启动绑定的共享授权服务。
-    ///
-    /// # 返回
-    /// 返回服务实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// `audit` 为审计写入端口；`documents` 为业务单据注册端口。
+    /// `authorization` 为完成启动绑定的共享授权服务。
     pub fn new(
         db: Database,
         audit: Arc<dyn SupportAuditPort>,
@@ -89,15 +79,10 @@ impl BulkJobService {
     }
 
     /// 分页查询选择快照列表。
-    ///
-    /// # 参数
-    /// * `params` - 查询参数（`selection_type`/`status`/`created_by` 扁平筛选）
-    /// * `actor` - 当前认证账号，由共享服务检查列表资格。
-    ///
-    /// # 返回
     /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
+    /// `params` 为查询参数（`selection_type`/`status`/`created_by` 扁平筛选）；`actor` 为当前认证账号，由共享服务检查列表资格。
     ///
-    /// # 错误
+    /// 失败条件：
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
     /// * `RepositoryError` - 数据库查询失败
     pub async fn bulk_selection_snapshot_list(
@@ -116,7 +101,7 @@ impl BulkJobService {
             .await
     }
 
-    /// 选择快照列表资格与完整分页共用原快照事务。
+    // 选择快照列表资格与完整分页共用原快照事务。
     async fn selection_snapshot_page(
         &self,
         params: &BulkSelectionSnapshotListParams,
@@ -147,19 +132,11 @@ impl BulkJobService {
     }
 
     /// 创建选择快照并冻结逐项目标（跨集合事务写入）。
-    ///
-    /// 「快照 + 冻结目标集合」原子可见（§6.1）；冻结目标命中 `DocumentType`
-    /// 目录时校验目标单据已在 D02 注册。唯一性由
-    /// `(selection_snapshot_id, object_type, object_id)` 唯一索引承担。
-    ///
-    /// # 参数
-    /// * `req` - 创建请求
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
+    /// 「快照 + 冻结目标集合」原子可见（§6.1）；冻结目标命中 `DocumentType` 目录时校验目标单据已在 D02 注册。
+    /// 唯一性由 `(selection_snapshot_id, object_type, object_id)` 唯一索引承担。
     /// 返回新建的快照视图。
     ///
-    /// # 错误
+    /// 失败条件：
     /// * `ValidationError` - 请求体校验失败
     /// * `NotFound` - 业务单据类目标未注册
     /// * `ConflictError` - 唯一索引冲突（透出）
@@ -210,7 +187,7 @@ impl BulkJobService {
         Ok(snapshot.into())
     }
 
-    /// 在创建事务中完成资格、真实目标注册检查和快照原子写入。
+    // 在创建事务中完成资格、真实目标注册检查和快照原子写入。
     async fn persist_snapshot(
         &self,
         snapshot: BulkSelectionSnapshot,
@@ -236,19 +213,11 @@ impl BulkJobService {
     }
 
     /// 确认选择快照。
-    ///
-    /// 快照确认后目标集合、截止水位和预期版本不可修改（§6.1，实体无目标字段
-    /// 变更方法）。
-    ///
-    /// # 参数
-    /// * `id` - 快照 ID
-    /// * `req` - 确认请求（含期望版本）
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
+    /// 快照确认后目标集合、截止水位和预期版本不可修改（§6.1，实体无目标字段变更方法）。
     /// 返回确认后的快照视图。
+    /// `id` 为快照 ID；`req` 为确认请求（含期望版本）。
     ///
-    /// # 错误
+    /// 失败条件：
     /// * `NotFound` - 快照不存在
     /// * `ConflictError` - 版本陈旧或状态机不允许确认
     pub async fn confirm_bulk_selection_snapshot(
@@ -280,18 +249,11 @@ impl BulkJobService {
     }
 
     /// 标记选择快照失效。
-    ///
     /// 仅 `PENDING` / `CONFIRMED` 可失效；执行中的快照只能走向完成（实体状态机）。
-    ///
-    /// # 参数
-    /// * `id` - 快照 ID
-    /// * `req` - 失效请求（含期望版本）
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
     /// 返回失效后的快照视图。
+    /// `id` 为快照 ID；`req` 为失效请求（含期望版本）。
     ///
-    /// # 错误
+    /// 失败条件：
     /// * `NotFound` - 快照不存在
     /// * `ConflictError` - 版本陈旧或状态机不允许失效
     pub async fn expire_bulk_selection_snapshot(
@@ -323,18 +285,9 @@ impl BulkJobService {
     }
 
     /// 分页查询快照逐项结果。
-    ///
-    /// # 参数
-    /// * `snapshot_id` - 选择快照 ID
-    /// * `result_status` - 逐项执行结果筛选
-    /// * `page` - 页码（1 起）
-    /// * `page_size` - 单页条数
-    /// * `actor` - 当前认证账号，由共享服务检查逐项读取资格。
-    ///
-    /// # 返回
     /// 返回当前页逐项结果行与总数。
-    ///
-    /// # 错误
+    /// `snapshot_id` 为选择快照 ID；`result_status` 为逐项执行结果筛选。
+    /// `actor` 为当前认证账号，由共享服务检查逐项读取资格。
     /// 分页参数非法或数据库查询失败时返回错误。
     pub async fn bulk_selection_item_list(
         &self,
@@ -359,7 +312,7 @@ impl BulkJobService {
             .await
     }
 
-    /// 选择项读取资格、分页与计数共用原快照事务。
+    // 选择项读取资格、分页与计数共用原快照事务。
     async fn selection_item_page(
         &self,
         snapshot_id: &str,
@@ -388,17 +341,11 @@ impl BulkJobService {
     }
 
     /// 分页查询后台任务列表（任务中心）。
-    ///
     /// identity 统一执行本人或启用管理员范围；requested_by 仅收窄结果。
-    ///
-    /// # 参数
-    /// * `params` - 查询参数（`job_no`/`job_type`/`status`/`requested_by` 扁平筛选）
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
     /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
+    /// `params` 为查询参数（`job_no`/`job_type`/`status`/`requested_by` 扁平筛选）。
     ///
-    /// # 错误
+    /// 失败条件：
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
     /// * `RepositoryError` - 数据库查询失败
     pub async fn background_job_list(
@@ -432,11 +379,8 @@ impl BulkJobService {
     }
 
     /// 查询认证入口的本人任务；该入口也服务供应商门户，不授予后台管理资格。
-    /// # 参数
-    /// params 为分页条件，actor 为原入口认证的当前账号。
-    /// # 返回
     /// 固定发起人为当前账号的任务页，忽略请求中的其他发起人。
-    /// # 错误
+    /// params 为分页条件，actor 为原入口认证的当前账号。
     /// 分页、筛选或数据库读取失败时返回错误。
     pub async fn own_background_job_list(
         &self,
@@ -455,17 +399,11 @@ impl BulkJobService {
     }
 
     /// 查询后台任务详情。
-    ///
     /// 数据隔离：普通用户只能查看自己创建的任务。
-    ///
-    /// # 参数
-    /// * `id` - 后台任务 ID
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
     /// 返回完整任务视图（含进度与错误摘要）。
+    /// `id` 为后台任务 ID。
     ///
-    /// # 错误
+    /// 失败条件：
     /// * `NotFound` - 任务不存在
     /// * `Forbidden` - 非管理员查看他人创建的任务
     pub async fn background_job_detail(&self, id: &str, actor: &AuditActor) -> Result<BackgroundJobView> {
@@ -485,7 +423,7 @@ impl BulkJobService {
             .await
     }
 
-    /// 先检查完整任务资格，再从原快照读取业务对象；拒绝时不探测存在性。
+    // 先检查完整任务资格，再从原快照读取业务对象；拒绝时不探测存在性。
     async fn authorized_job(
         &self,
         id: &str,
@@ -502,18 +440,10 @@ impl BulkJobService {
     }
 
     /// 创建后台任务并登记逐项结果表（跨集合事务写入，按 `request_id` 幂等）。
-    ///
-    /// 同一 `request_id` 重复提交时返回既有任务（幂等命中），不产生第二条
-    /// 任务；唯一约束由 `uk_background_jobs_request_id` 承担。
-    ///
-    /// # 参数
-    /// * `req` - 创建请求
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
+    /// 同一 `request_id` 重复提交时返回既有任务（幂等命中），不产生第二条任务；唯一约束由 `uk_background_jobs_request_id` 承担。
     /// 返回任务视图（新建或幂等命中的既有任务）。
     ///
-    /// # 错误
+    /// 失败条件：
     /// * `ValidationError` - 请求体校验失败
     /// * `ConflictError` - `job_no`/`request_id` 与既有任务冲突（唯一索引透出）
     pub async fn create_background_job(
@@ -568,17 +498,13 @@ impl BulkJobService {
         }
     }
 
-    /// 唯一键竞争后按 `request_id` 回查仲裁结果（幂等恢复路径）。
-    ///
-    /// # 参数
-    /// * `job` - 本次尝试创建的任务（含 `request_id` 幂等身份）
-    ///
-    /// # 返回
-    /// 幂等命中的既有任务视图。
-    ///
-    /// # 错误
-    /// * `ConflictError` - 请求身份已被不同载荷占用，或竞争结果已变化需刷新重试
-    /// * `RepositoryError` - 回查仲裁结果时数据库查询失败
+    // 唯一键竞争后按 `request_id` 回查仲裁结果（幂等恢复路径）。
+    // 幂等命中的既有任务视图。
+    // `job` 为本次尝试创建的任务（含 `request_id` 幂等身份）。
+    //
+    // 失败条件：
+    // * `ConflictError` - 请求身份已被不同载荷占用，或竞争结果已变化需刷新重试
+    // * `RepositoryError` - 回查仲裁结果时数据库查询失败
     async fn resolve_creation_race(
         &self,
         job: &BackgroundJob,
@@ -593,7 +519,7 @@ impl BulkJobService {
             .await
     }
 
-    /// 在新快照核验原创建资格，再按原身份只读查证，不重放写入。
+    // 在新快照核验原创建资格，再按原身份只读查证，不重放写入。
     async fn creation_replay(
         &self,
         job: &BackgroundJob,
@@ -617,23 +543,8 @@ impl BulkJobService {
         }
     }
 
-    /// 取消后台任务。
-    ///
-    /// 任务取消只停止尚未开始的项目；已经提交的正式事实不回滚、不删除（§6.1）。
-    /// 数据隔离：普通用户只能取消自己创建的任务。
-    ///
-    /// # 参数
-    /// * `id` - 后台任务 ID
-    /// * `req` - 取消请求（含期望版本）
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回取消后的任务视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 任务不存在
-    /// * `Forbidden` - 非管理员取消他人创建的任务
-    /// * `ConflictError` - 版本陈旧或任务已处于终态
+    /// 任务中心取消单个任务时，在写事务按实际任务检查本人与管理员的取消资格，再核对请求版本、执行领域取消并写审计。
+    /// 任务缺失、无权、版本陈旧、状态不可取消或写入失败时拒绝。
     pub async fn cancel_background_job(
         &self,
         id: &str,
@@ -664,22 +575,8 @@ impl BulkJobService {
             .await
     }
 
-    /// 分页查询任务逐项结果。
-    ///
-    /// 数据隔离：普通用户只能查看自己创建任务的逐项结果。
-    ///
-    /// # 参数
-    /// * `job_id` - 后台任务 ID
-    /// * `status` - 逐项执行结果筛选
-    /// * `page` - 页码（1 起）
-    /// * `page_size` - 单页条数
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回当前页逐项结果行与总数。
-    ///
-    /// # 错误
-    /// 分页参数非法、任务不存在、无权查看或数据库查询失败时返回错误。
+    /// 翻页查看任务执行结果时，在同一快照按任务 ID 检查本人或管理员的逐项读取资格，再按逐项状态分页及计数。
+    /// 分页非法、任务缺失、无权或查询失败时不返回结果。
     pub async fn background_job_item_list(
         &self,
         job_id: &str,
@@ -729,16 +626,7 @@ impl BulkJobService {
             .await
     }
 
-    /// 校验批量冻结目标中业务单据类对象已注册（跨域 D02 仓储读取）。
-    ///
-    /// # 参数
-    /// * `items` - 待保存的冻结目标实体
-    ///
-    /// # 返回
-    /// 无返回值。
-    ///
-    /// # 错误
-    /// 目标命中 `DocumentType` 目录但单据未注册时返回 `NotFound`。
+    // 冻结批量目标前把已知业务单据类型的目标按 ID 去重，沿原执行器批量核对是否已登记；至少一个缺失即返回 `NotFound`。
     async fn ensure_items_registered(
         documents: &dyn BusinessDocumentPort,
         items: &[BulkSelectionItem],
@@ -761,7 +649,7 @@ impl BulkJobService {
         Ok(())
     }
 
-    /// 在授权事务中读取、校验版本并迁移选择快照。
+    // 在授权事务中读取、校验版本并迁移选择快照。
     async fn change_snapshot(
         &self,
         id: &str,
@@ -797,17 +685,10 @@ impl BulkJobService {
     }
 }
 
-/// 由创建请求组装后台任务聚合并拆分为父实体与逐项行。
-///
-/// # 参数
-/// * `req` - 创建请求（含逐项结果与声明总数）
-/// * `actor` - 已通过鉴权的审计操作人（记为发起人）
-///
-/// # 返回
-/// 返回待写入事务的任务实体与逐项行。
-///
-/// # 错误
-/// 请求体校验失败或聚合不变量（空目标、总数不一致）失败时返回错误。
+// 由创建请求组装后台任务聚合并拆分为父实体与逐项行。
+// 返回待写入事务的任务实体与逐项行。
+// `req` 为创建请求（含逐项结果与声明总数）；`actor` 为已通过鉴权的审计操作人（记为发起人）。
+// 请求体校验失败或聚合不变量（空目标、总数不一致）失败时返回错误。
 fn build_job_parts(
     req: CreateBackgroundJobRequest,
     actor: &AuditActor,
@@ -945,7 +826,7 @@ mod tests {
         assert!(matches!(error, Error::ValidationError(message) if message == "写入授权必须使用快照事务"));
     }
 
-    /// 选择快照的两个公开读取入口必须先通过共享授权，再访问数据库。
+    // 验证选择快照的两个公开读取入口必须先通过共享授权，再访问数据库。
     #[tokio::test]
     async fn selection_reads_require_identity_before_loading_rows() {
         use std::sync::Arc;

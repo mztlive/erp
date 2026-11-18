@@ -10,16 +10,7 @@ use crate::http::handler::sales_review;
 use crate::http::routes::permission_route;
 use crate::http::state::HttpState;
 
-/// 返回本域管理端路由集合。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回声明公共权限目录信息的路由集合。
-///
-/// # 错误
-/// 不执行 I/O，不返回错误。
+/// 为管理端挂载销售变更接口，按操作登记公共权限目录信息。
 pub fn routes() -> Router<HttpState> {
     Router::new()
         .merge(draft_routes())
@@ -67,14 +58,7 @@ pub fn routes() -> Router<HttpState> {
         )
 }
 
-/// 销售变更草稿读取与保存路由。
-///
-/// # 参数
-/// 无。
-/// # 返回
-/// 返回逐操作声明权限目录信息并保留上传限制的路由集合。
-/// # 错误
-/// 无；业务错误由各处理器返回。
+// 为父路由挂载销售变更草稿读取与保存路由。
 fn draft_routes() -> Router<HttpState> {
     Router::new()
         .route(

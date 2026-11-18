@@ -19,30 +19,13 @@ pub struct BackgroundRunner {
 }
 
 impl BackgroundRunner {
-    /// 创建执行器。
-    ///
-    /// # 参数
-    /// * `interval` - 每轮轮询结束后的等待时长
-    ///
-    /// # 返回
-    /// 返回空适配器的执行器，需继续调用 `register` 装配任务。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 在装配后台进程时创建空执行器，`interval` 是每轮结束后到下一轮开始前的等待时长。
+    /// 启动前通过 [`Self::register`] 或 [`Self::register_shared`] 登记任务。
     pub fn new(interval: Duration) -> Self {
         Self { adapters: Vec::new(), interval }
     }
 
-    /// 注册任务适配器。
-    ///
-    /// # 参数
-    /// * `adapter` - 领域任务适配器实现
-    ///
-    /// # 返回
-    /// 返回装配后的执行器，支持链式调用。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 装配 worker 时将具体任务交给执行器，并追加到队尾；登记顺序就是每轮的执行顺序。
     pub fn register<A>(self, adapter: A) -> Self
     where
         A: BackgroundTaskAdapter + 'static,
@@ -50,35 +33,22 @@ impl BackgroundRunner {
         self.register_shared(Arc::new(adapter))
     }
 
-    /// 注册需要与外部调度共享状态的适配器。
-    /// # 参数
-    /// adapter 为共享适配器。
-    /// # 返回
-    /// 已登记适配器的执行器。
-    /// # 错误
-    /// 无。
+    /// 任务适配器已由应用持有或还要供其他调度入口复用时，登记现有的 `Arc`，使双方共享同一实例。
     pub fn register_shared(mut self, adapter: Arc<dyn BackgroundTaskAdapter>) -> Self {
         self.adapters.push(adapter);
         self
     }
 
-    /// 执行一轮所有适配器。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回各适配器本轮认领数，顺序与注册顺序一致。
-    ///
-    /// # 错误
-    /// 无；单个适配器的轮询失败只记日志，不中断其余适配器。
+    /// 手动触发单轮轮询，按登记顺序返回各任务名和认领数，不等待下一个周期。
+    /// 某个适配器轮询失败时记录原错误、将该项计为 0，并继续轮询其余任务。
     pub async fn run_once(&self) -> Vec<(&'static str, usize)> {
         let mut counts = Vec::with_capacity(self.adapters.len());
         self.run_round(None, |name, count| counts.push((name, count))).await;
         counts
     }
 
-    /// 顺序执行适配器，在停止通知后不进入下一个适配器。
+    // 单次与常驻轮询共用这段顺序执行逻辑；只有常驻调用传入停止信号，
+    // 在当前适配器返回后、开始下一个适配器前检查，避免退出时再认领新工作。
     async fn run_round(
         &self,
         stop: Option<&watch::Receiver<bool>>,
@@ -115,13 +85,9 @@ impl BackgroundRunner {
         }
     }
 
-    /// 运行可停止的轮询并排空适配器派生任务。
-    /// # 参数
-    /// `stop` 为进程停止通知。
-    /// # 返回
-    /// 所有轮次及其派生工作均已结束。
-    /// # 错误
-    /// 单轮失败记录日志；总退出预算由进程监督器负责。
+    /// 后台进程启动后持续轮询已登记任务，收到停止信号后不再调用下一个适配器，
+    /// 并等待各适配器已派生的工作结束。轮询错误单独记日志，不退出循环；
+    /// 整个排空过程的退出预算由进程监督器控制。
     pub async fn run(&self, stop: watch::Receiver<bool>) {
         super::periodic(stop.clone(), self.interval, || async {
             self.run_round(Some(&stop), |_, _| {}).await;
@@ -180,7 +146,7 @@ mod tests {
         }
     }
 
-    /// 执行器按顺序调用全部适配器。
+    // 用两个各认领一项的适配器确认单轮结果按登记顺序汇报，且每个适配器只调用一次。
     #[tokio::test]
     async fn run_once_calls_adapters_in_order() {
         let calls = Arc::new(AtomicUsize::new(0));

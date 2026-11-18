@@ -68,20 +68,19 @@ struct RecordingQuery {
 
 #[async_trait]
 impl CatalogSupplyQueryPort for RecordingQuery {
-    /// 记录生产责任筛选传入的完整条件，返回预设的候选身份。
-    ///
-    /// # 参数
-    /// * `filter` - 完整商品筛选；本替身克隆后记入 `candidate_filter`，不按页码收窄。
-    /// * `_` - 调用方执行器；本替身不读取。
-    ///
-    /// # 返回
-    /// `fail` 为假时返回预设 `candidates` 的克隆。
-    ///
-    /// # 错误
-    /// `fail` 为真时，仍先记下调用与 `filter`，再返回 `persistence_core::Error::OptimisticLockingError`。
-    ///
-    /// # Panics
-    /// `candidates` 为 `None` 时 `expect` 失败，表示普通商品查询不得读取采购候选。观测 `Mutex` 中毒时 `unwrap` 也会 panic。
+    // 准备商品采购负责人筛选候选时，记录生产责任筛选传入的完整条件，返回预设的候选身份。
+    //
+    // 调用参数：
+    // * `filter` - 完整商品筛选；本替身克隆后记入 `candidate_filter`，不按页码收窄。
+    // * `_` - 调用方执行器；本替身不读取。
+    //
+    // `fail` 为假时返回预设 `candidates` 的克隆。
+    //
+    // 失败边界：
+    // `fail` 为真时，仍先记下调用与 `filter`，再返回 `persistence_core::Error::OptimisticLockingError`。
+    //
+    // # Panics
+    // `candidates` 为 `None` 时 `expect` 失败，表示普通商品查询不得读取采购候选。观测 `Mutex` 中毒时 `unwrap` 也会 panic。
     async fn product_candidate_ids(
         &self,
         filter: &ProductFilter,
@@ -191,7 +190,7 @@ async fn sellable_query_keeps_normalized_filters_explicit_date_and_default_page(
     assert_eq!(*query.calls.lock().unwrap(), vec!["sellable"]);
 }
 
-/// 不可用数据库只用于证明拒绝路径不会开始商品或供应商读取。
+// 处理商品采购负责人筛选时，不可用数据库只用于证明拒绝路径不会开始商品或供应商读取。
 async fn sellable_service(query: Arc<RecordingQuery>) -> CatalogCenterReadService {
     let client =
         mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1").await.unwrap();
@@ -272,7 +271,7 @@ async fn product_list_rejects_unknown_owner_alias() {
 }
 
 #[tokio::test]
-/// 实际编排先传入完整筛选，再在全部候选内按采购负责人收窄，不依赖目标页。
+// 准备商品采购负责人筛选候选时，实际编排先传入完整筛选，再在全部候选内按采购负责人收窄，不依赖目标页。
 async fn procurement_candidates_receive_complete_filters_and_preserve_paging() {
     let query =
         RecordingQuery { candidates: Some(vec!["prod-a".into(), "prod-b".into()]), ..Default::default() };
@@ -306,7 +305,7 @@ async fn procurement_candidates_receive_complete_filters_and_preserve_paging() {
 }
 
 #[tokio::test]
-/// 空候选保持显式零结果；候选超限与读取失败在责任解析前整体拒绝。
+// 准备商品采购负责人筛选候选时，空候选保持显式零结果；候选超限与读取失败在责任解析前整体拒绝。
 async fn procurement_candidates_keep_empty_results_and_reject_invalid_snapshots() {
     let params = serde_json::from_value(json!({"procurement_owner_user_ids": "buyer"})).unwrap();
     let port = MapProductProcurementOwners { owners: [("outside".into(), "buyer".into())].into() };

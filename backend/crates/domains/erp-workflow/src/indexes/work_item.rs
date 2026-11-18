@@ -18,14 +18,6 @@ pub const FINANCE_RESPONSIBILITY_RULES: &str =
     <mongodb::Database as WorkItemExt>::FINANCE_RESPONSIBILITY_RULES;
 
 /// 幂等创建任务责任合同要求的命名索引。
-///
-/// # 参数
-/// * `db` - 目标 MongoDB 数据库。
-///
-/// # 返回
-/// 无返回值。
-///
-/// # 错误
 /// 既有数据违反开放唯一性，或 MongoDB 无法创建索引时返回错误。
 pub async fn ensure(db: &Database) -> Result<()> {
     migrate_scalar_array(db, FINANCE_RESPONSIBILITY_RULES, "owner_user_id", "owner_user_ids").await?;
@@ -71,19 +63,12 @@ pub async fn ensure(db: &Database) -> Result<()> {
     Ok(())
 }
 
-/// 将开放任务唯一索引升级为包含采购责任键的当前契约。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库
-///
-/// # 返回
-/// 既有索引不存在或已符合当前契约时直接返回；否则删除旧同名索引。
-///
-/// # 错误
-/// 集合或索引读取、删除失败时返回错误。
-///
-/// # 关键业务约束
-/// 旧索引不含 `responsibility_key`，会错误阻止同一销售单按多个采购负责人创建任务。
+// 将开放任务唯一索引升级为包含采购责任键的当前契约。
+// 旧索引不含 `responsibility_key`，会错误阻止同一销售单按多个采购负责人创建任务。
+//
+// 既有索引不存在或已符合当前契约时直接返回；否则删除旧同名索引。
+//
+// 集合或索引读取、删除失败时返回错误。
 async fn reconcile_open_object_type_index(db: &Database) -> Result<()> {
     let collection_names = db.list_collection_names().await?;
     if !collection_names.iter().any(|name| name == WORK_ITEMS) {
@@ -102,13 +87,10 @@ async fn reconcile_open_object_type_index(db: &Database) -> Result<()> {
     Ok(())
 }
 
-/// 判断开放任务唯一索引是否符合当前责任范围契约。
-///
-/// # 参数
-/// * `index` - MongoDB 已存在索引
-///
-/// # 返回
-/// 键、唯一性和部分过滤条件全部一致时返回 `true`。
+// 当开放任务唯一索引符合当前责任范围契约时返回 `true`。
+// 键、唯一性和部分过滤条件全部一致时返回 `true`。
+//
+// `index`：MongoDB 已存在索引。
 fn is_current_open_object_type_index(index: &IndexModel) -> bool {
     let Some(options) = index.options.as_ref() else {
         return false;
@@ -180,7 +162,7 @@ fn work_item_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 本人开放审批任务无业务类型筛选时的稳定倒序页索引。
+// 为本人开放审批任务在不筛单据类型时的稳定倒序分页建索引。
 fn document_approval_owner_page_index() -> IndexModel {
     IndexModel::builder()
         .keys(doc! { "owner_user_id": 1, "assigned_at": -1, "id": -1 })
@@ -193,7 +175,7 @@ fn document_approval_owner_page_index() -> IndexModel {
         .build()
 }
 
-/// 本人开放审批任务带业务类型筛选时的稳定倒序页索引。
+// 为本人开放审批任务按业务类型筛选后的稳定倒序分页建索引。
 fn document_approval_owner_type_page_index() -> IndexModel {
     IndexModel::builder()
         .keys(doc! {
@@ -211,7 +193,7 @@ fn document_approval_owner_type_page_index() -> IndexModel {
         .build()
 }
 
-/// 返回两条审批页索引共用的开放生命周期部分条件。
+// 让两种本人审批分页索引复用同一开放状态部分过滤，不收录非开放历史任务。
 fn document_approval_page_partial_filter() -> Document {
     doc! {
         "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
@@ -220,7 +202,7 @@ fn document_approval_page_partial_filter() -> Document {
     }
 }
 
-/// W09 从当前个人开放履约责任进入批量投影的候选索引。
+// 为 W09 批量投影提供按当前个人责任查询开放履约任务的候选索引。
 fn fulfillment_queue_index() -> IndexModel {
     IndexModel::builder()
         .keys(doc! {
@@ -242,7 +224,7 @@ fn fulfillment_queue_index() -> IndexModel {
         .build()
 }
 
-/// 同一申请责任键只允许一条开放销项任务；同一应收支持多张批准申请。
+// 用唯一索引约束：同一申请责任键只允许一条开放销项任务；同一应收支持多张批准申请。
 fn unique_open_sales_invoice_execution_object_index() -> IndexModel {
     IndexModel::builder()
         .keys(doc! {
@@ -264,7 +246,7 @@ fn unique_open_sales_invoice_execution_object_index() -> IndexModel {
         .build()
 }
 
-/// 财务责任规则的启用唯一性与管理查询索引。
+// 注册财务责任规则使用的索引，约束启用规则的唯一性并支持管理查询。
 fn finance_responsibility_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_finance_responsibility_rules_id", doc! { "id": 1 }),
@@ -313,7 +295,7 @@ fn unique_open_object_type_index() -> IndexModel {
         .build()
 }
 
-/// 履约对象不允许通过不同责任键并存多条开放任务。
+// 以履约对象为粒度约束开放任务唯一性，不能改用另一个责任键创建并存任务。
 fn unique_open_fulfillment_object_index() -> IndexModel {
     IndexModel::builder()
         .keys(doc! {
@@ -334,7 +316,7 @@ fn unique_open_fulfillment_object_index() -> IndexModel {
         .build()
 }
 
-/// 同一销售单只允许一条开放客户验收登记任务。
+// 用唯一索引约束：同一销售单只允许一条开放客户验收登记任务。
 fn unique_open_customer_acceptance_object_index() -> IndexModel {
     IndexModel::builder()
         .keys(doc! {
@@ -355,7 +337,7 @@ fn unique_open_customer_acceptance_object_index() -> IndexModel {
         .build()
 }
 
-/// 同一应付子账只允许一条开放付款执行任务。
+// 用唯一索引约束：同一应付子账只允许一条开放付款执行任务。
 fn unique_open_payment_execution_object_index() -> IndexModel {
     IndexModel::builder()
         .keys(doc! {
@@ -412,7 +394,7 @@ fn unique_approval_execution_index() -> IndexModel {
 
 #[cfg(test)]
 mod tests {
-    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    // 验证按稳定主键读取或乐观锁更新的集合均声明 `id` 唯一索引，避免退化为集合扫描。
     #[test]
     fn collections_look_up_by_unique_stable_id() {
         for indexes in [super::work_item_indexes(), super::finance_responsibility_indexes()] {

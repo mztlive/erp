@@ -16,11 +16,14 @@ use crate::ports::approval_instance::ApprovalInstanceReadPort;
 use crate::{Error, Result};
 
 impl WorkbenchReadService {
-    /// 在同一快照内完成本人审批的完整检索、筛选和分页。
+    /// 准备本人发起的审批检索时，在同一快照内完成本人审批的完整检索、筛选和分页。
+    ///
     /// # 参数
     /// `runtime` 为审批授权服务，`actor` 为当前账号，`query` 为关键词查询；`filters` 为结构化筛选，`page` 从1开始。
+    ///
     /// # 返回
     /// 返回完整筛选总数、当前页和授权候选选项。
+    ///
     /// # 错误
     /// 非法页码、授权或查询失败时返回错误。
     #[inline(never)]

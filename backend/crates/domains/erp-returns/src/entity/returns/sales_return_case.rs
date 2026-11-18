@@ -34,16 +34,7 @@ pub enum CaseType {
 }
 
 impl CaseType {
-    /// 返回类型的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回当前取值的中文名称，供业务界面展示，不作为持久化代码。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Return => "退货",
@@ -53,16 +44,7 @@ impl CaseType {
         }
     }
 
-    /// 返回类型的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回当前取值的稳定代码，供持久化与查询匹配使用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Return => "return",
@@ -86,16 +68,7 @@ pub enum ReturnRoute {
 }
 
 impl ReturnRoute {
-    /// 返回路线的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回当前取值的中文名称，供业务界面展示，不作为持久化代码。
     pub fn label(&self) -> &'static str {
         match self {
             Self::CompanyWarehouse => "退公司仓",
@@ -104,16 +77,7 @@ impl ReturnRoute {
         }
     }
 
-    /// 返回路线的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回当前取值的稳定代码，供持久化与查询匹配使用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::CompanyWarehouse => "company_warehouse",
@@ -146,16 +110,7 @@ pub enum SalesReturnCaseStatus {
 }
 
 impl SalesReturnCaseStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回销售退货单状态的中文名称，供业务界面展示，不作为持久化代码。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Draft => "草稿",
@@ -168,16 +123,7 @@ impl SalesReturnCaseStatus {
         }
     }
 
-    /// 返回状态的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回销售退货单状态的稳定代码，供持久化与查询匹配使用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Draft => "draft",
@@ -191,15 +137,7 @@ impl SalesReturnCaseStatus {
     }
 
     /// 判断是否处于终态。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 状态为 `Completed` 或 `Voided` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn is_terminal(self) -> bool {
         matches!(self, Self::Completed | Self::Voided)
     }
@@ -266,7 +204,7 @@ pub struct SalesReturnCase {
 }
 
 impl PartialEq for SalesReturnCase {
-    /// 全字段语义相等。
+    // 全字段语义相等。
     fn eq(&self, other: &Self) -> bool {
         self.base == other.base
             && self.stable.status == other.stable.status
@@ -287,18 +225,9 @@ impl Eq for SalesReturnCase {}
 
 impl SalesReturnCase {
     /// 创建销售退货/拒收处理单。
-    ///
     /// 完成退货处理号与原因的 trim/非空/长度校验。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::SalesReturnCaseId`）
-    /// * `data` - 创建数据
-    /// * `created_by` - 创建人（账号或系统身份）
-    ///
-    /// # 返回
     /// 返回新建的处理单实体（状态为草稿）。
-    ///
-    /// # 错误
+    /// `id` 为实体主键（`erp_core::ids::SalesReturnCaseId`）；`created_by` 为创建人（账号或系统身份）。
     /// 当退货处理号或原因为空/超长时返回错误。
     pub fn new(
         id: SalesReturnCaseId,
@@ -327,18 +256,8 @@ impl SalesReturnCase {
     }
 
     /// 更新退货/拒收处理单。
-    ///
-    /// 复用 `new` 的校验规则；已完成与作废是终态（§6.11），终态不可编辑；
-    /// 原销售单与处理类型是固定字段不允许修改。
-    ///
-    /// # 参数
-    /// * `update` - 更新数据
-    /// * `updated_by` - 本次更新执行人
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// 复用 `new` 的校验规则；已完成与作废是终态（§6.11），终态不可编辑；原销售单与处理类型是固定字段不允许修改。
+    /// `updated_by` 为本次更新执行人。
     /// 当状态为终态或原因为空/超长时返回错误。
     pub fn update(&mut self, update: SalesReturnCaseUpdate, updated_by: impl Into<String>) -> Result<()> {
         if self.stable.status().is_terminal() {
@@ -363,15 +282,7 @@ impl SalesReturnCase {
     }
 
     /// 判断处理单是否已完成。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 状态为 `Completed` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn is_completed(&self) -> bool {
         self.stable.status() == SalesReturnCaseStatus::Completed
     }

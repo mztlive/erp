@@ -17,22 +17,8 @@ use crate::ports::evidence::{EvidenceSubject, IntegrationEvidenceAuthority};
 use crate::service::evidence::{ensure_direct_reason, verified_reference, verify_evidence_refs};
 use crate::{Error, Result};
 
-/// 正式任务关联已由流程检查后，按原顺序读取版本、验证证据并追加决定。
-///
-/// # 参数
-/// * `db` - 目标数据库
-/// * `authority` - 权威证据端口
-/// * `prepared` - 已解析的差异身份与版本
-/// * `command` - 直接对账命令
-/// * `receipt_id` - 决定记录主键
-/// * `actor_id` - 当前操作人
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回已验证的决定事实；决定记录已追加。
-///
-/// # 错误
-/// 差异不存在、版本变化、已有终态结论、原因或证据校验失败、权威端口失败或决定写入失败时返回对应错误。
+/// 流程确认差异未绑定正式任务后，在原执行器中读取差异及最新决定，依次检查期望版本、开放状态和证据。
+/// 成功时以命令回执 ID 追加决定并返回其事实；差异缺失、已终结、版本变化、权威核验或写入失败均停止。
 pub async fn execute_direct_decision(
     db: &Database,
     authority: &dyn IntegrationEvidenceAuthority,
@@ -53,9 +39,9 @@ pub async fn execute_direct_decision(
     Ok(fact)
 }
 
-/// 校验直接对账差异版本与当前决定序号一致（typed 比较，无二次解析）。
-///
-/// 非十进制输入已由 Prepared 目标在 DTO 层拒绝；此处只区分当前与陈旧。
+// 校验直接对账差异版本与当前决定序号一致（typed 比较，无二次解析）。
+//
+// 非十进制输入已由 Prepared 目标在 DTO 层拒绝；此处只区分当前与陈旧。
 fn ensure_direct_version(expected: u64, latest: Option<&ReconciliationDifferenceResolution>) -> Result<()> {
     if ReconciliationDifferenceResolution::current_version(latest) == expected {
         Ok(())
@@ -136,7 +122,8 @@ struct TerminalConclusionInput<'a> {
     evidence_refs: &'a [ControlledEvidenceRef],
 }
 
-/// 终结结论分支（门禁 50 行内拆分）。
+// 直接对账选择终态时，先核对版本化原因注册表和该结论的证据类型，再沿原执行器验证证据。
+// 生成“确认无误”或“确认有效差异”的决定事实，由外层追加落库。
 async fn terminal_conclusion_fact(
     authority: &dyn IntegrationEvidenceAuthority,
     difference: &ReconciliationDifference,

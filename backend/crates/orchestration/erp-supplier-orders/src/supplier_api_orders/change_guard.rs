@@ -17,11 +17,11 @@ use crate::supplier_deposits::prepare_execution_funds_replacement;
 use crate::{Error, Result};
 
 /// 在采购变更根事务内替代未发单或已经可信取消的旧 API 执行。
-/// # 参数
+///
 /// 旧采购单、新正式修订身份、已授权变更执行人与同一事务。
-/// # 返回
+///
 /// 返回是否存在应在新采购版本重新安排的 API 执行。
-/// # 错误
+///
 /// 已发单但未确认取消、结果未知、已发货或任一 CAS 失败时拒绝。
 pub async fn supersede_purchase_executions(
     db: &Database,
@@ -98,7 +98,7 @@ async fn confirm_cancelled_replacement(
     Ok(())
 }
 
-/// 仅退役当前执行确定生成、从未发货的 API 直发草稿；保留文档与行记录。
+// 仅退役当前执行确定生成、从未发货的 API 直发草稿；保留文档与行记录。
 async fn retire_api_delivery_draft(
     db: &Database,
     purchase: &PurchaseOrder,

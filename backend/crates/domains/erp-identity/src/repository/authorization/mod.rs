@@ -42,7 +42,7 @@ struct Compiler<'a> {
     versions: Vec<String>,
 }
 
-/// 编译服务端生成的完整表达式，保留所有事实依赖。
+// 接收服务端生成的完整授权证明，编译固定模型的过滤与投影，同时保留交付时需要检查的依赖。
 pub(crate) async fn compile(
     proof: &AccessProof,
     mapping: &Arc<dyn AccessMapping>,
@@ -98,7 +98,7 @@ pub(crate) async fn compile(
     Ok(compiled)
 }
 
-/// 仅提取根关系的份额规则，嵌套来源保持在相应子模型内。
+// 为份额计划收集根层来源关系的授权规则；嵌套关系仍由各自来源模型独立编译。
 fn source_rules(
     rule: &AccessRule,
     permission: Option<&Permission>,
@@ -124,7 +124,7 @@ fn source_rules(
 }
 
 impl Compiler<'_> {
-    /// 工作项按钮使用固定管理条件，不开启第二次授权读取阶段。
+    // 工作项展示需要管理按钮时，在根查询同一读取阶段编译固定管理规则；不发起另一份授权查询。
     async fn management(
         &mut self,
         proof: &AccessProof,
@@ -137,7 +137,7 @@ impl Compiler<'_> {
         Ok(Some(self.model(rule, mapping, &context, 0).await?.0.finish()))
     }
 
-    /// 来源和整账计划共享本次资格、范围、动态准备及执行边界。
+    // 复合资金查询需要来源份额和整账时，使用同一次身份、范围及映射准备编译两类固定计划，沿用根执行边界。
     async fn plans(
         &mut self,
         proof: &AccessProof,
@@ -175,7 +175,7 @@ impl Compiler<'_> {
         Ok((sources, Some(whole)))
     }
 
-    /// 每个模型都限定有效行，来源公司范围也不能读取已删除记录。
+    // 构造根或来源模型的条件片段；各模型都应用有效行约束，即便公司范围分支也不读取已删除记录。
     fn model<'a>(
         &'a mut self,
         rule: &'a AccessRule,
@@ -191,7 +191,7 @@ impl Compiler<'_> {
         })
     }
 
-    /// 同一根集合中的独立资格分支共享关联作用域，来源子查询另建作用域。
+    // 编译独立资格条件时复用所在集合的关联作用域；来源子查询使用自己的作用域，避免临时别名冲突。
     fn condition<'a>(
         &'a mut self,
         rule: &'a AccessRule,
@@ -212,7 +212,7 @@ impl Compiler<'_> {
         })
     }
 
-    /// 同一映射实例及完整上下文只准备一次；缓存不跨查询或读取阶段。
+    // 编译时按 Mapping 实例及完整授权上下文缓存实际准备事实，仅在本次读取阶段复用。静态映射不制造空事实；有效期和资源标识仍须核验。
     async fn prepare(
         &mut self,
         mapping: &Arc<dyn AccessMapping>,
@@ -269,7 +269,7 @@ impl Compiler<'_> {
         Ok(Some(facts))
     }
 
-    /// 节点递归只在查询模型内执行，拒绝过深登记。
+    // 在当前查询模型内递归编译单个授权节点；规则登记过深时拒绝，不能截断后继续执行。
     fn node<'a>(
         &'a mut self,
         rule: &'a AccessRule,
@@ -324,7 +324,7 @@ impl Compiler<'_> {
         })
     }
 
-    /// 记录读取授权只关联当前模型的主键及有效来源。
+    // 编译记录读取补充分支时，以当前模型主键查找该账号可用的有效来源，不把授权表变成根查询。
     fn read_grant(
         &mut self,
         resource: ResourceKind,
@@ -341,7 +341,7 @@ impl Compiler<'_> {
         Ok(exists(&alias))
     }
 
-    /// 来源条件只作用于实际引用；全量判定比较完整引用集合与通过集合。
+    // 按真实引用编译来源条件；需要完整覆盖时比较全部原始引用与通过来源集合，不能先过滤掉缺失或无权引用。
     async fn related(
         &mut self,
         relation: (&RelationKey, &str, RelationMatch, &AccessRule),
@@ -398,7 +398,7 @@ impl Compiler<'_> {
     }
 }
 
-/// 来源分区仅生成条件；不得在关联准备阶段过滤根记录。
+// 为来源分区计算完整引用是否存在的条件，仅形成谓词，不在关联准备时剔除根候选。
 fn relation_presence(
     mapping: &dyn AccessMapping,
     relation: &RelationKey,

@@ -5,20 +5,12 @@ use persistence_core::Executor;
 use super::*;
 use crate::ReverseFlowPorts;
 impl ReturnsProcess {
-    /// 从绑定读取定义并持久化启动事实。
-    ///
-    /// # 参数
-    /// * `refund` - 已进入提交状态的退款单。
-    /// * `idempotency_key` - 启动幂等键。
-    /// * `resubmission_reason` - 本次重提说明。
-    /// * `submission` - 绑定原单、已授权操作人与精确请求收据的提交上下文。
-    /// * `adapter` - 客户退款审批适配器。
-    ///
-    /// # 返回
-    /// 返回提交后的退款单视图。
-    ///
-    /// # 错误
-    /// 无绑定、定义缺失、写入失败或视图读取失败时返回错误。提交结果未知且有界回读未确认时返回原错误。
+    // 从绑定读取定义并持久化启动事实。
+    //
+    // `refund` 为已进入提交状态的退款单；`idempotency_key` 为启动幂等键；`resubmission_reason` 为本次重提说明；`submission` 为绑定原单、
+    // 已授权操作人与精确请求收据的提交上下文；`adapter` 为客户退款审批适配器。返回提交后的退款单视图。
+    //
+    // 无绑定、定义缺失、写入失败或视图读取失败时返回错误。提交结果未知且有界回读未确认时返回原错误。
     pub(super) async fn dispatch_customer_refund_start(
         &self,
         refund: CustomerRefund,
@@ -83,19 +75,11 @@ impl ReturnsProcess {
         .await
     }
 
-    /// 加载撤回运行事实并写回草稿。
-    ///
-    /// # 参数
-    /// * `id` - 退款单主键。
-    /// * `refund` - 待撤回的退款单；领域动作成功后会先改成草稿。
-    /// * `req` - 撤回请求。
-    /// * `actor` - 撤回人。
-    ///
-    /// # 返回
-    /// 成功时无返回值。
-    ///
-    /// # 错误
-    /// 无绑定、实例终态或写入失败时返回错误。
+    // 加载撤回运行事实并写回草稿。
+    //
+    // `id` 为退款单主键；`refund` 为待撤回的退款单；领域动作成功后会先改成草稿；`req` 为撤回请求；`actor` 为撤回人。
+    //
+    // 无绑定、实例终态或写入失败时返回错误。
     pub(super) async fn persist_cancelled_customer_refund(
         &self,
         id: &str,
@@ -149,15 +133,11 @@ impl ReturnsProcess {
     }
 }
 
-/// 先执行真实单据的完整提交规则，再读取退款业务状态，沿用调用方事务。
-/// # 参数
-/// * `db` / `rbac` - 数据库与审批授权端口。
-/// * `actor` / `refund_id` - 当前操作人与退款单主键。
-/// * `executor` - 同一事务执行器。
-/// # 返回
-/// 返回完成原来源授权重验的退款单。
-/// # 错误
-/// 原单或往来主体不存在、来源无权限或提交资格失效时返回错误。
+// 先执行真实单据的完整提交规则，再读取退款业务状态，沿用调用方事务。
+//
+// `db` / `rbac` 为数据库与审批授权端口；`actor` / `refund_id` 为当前操作人与退款单主键。返回完成原来源授权重验的退款单。
+//
+// 原单或往来主体不存在、来源无权限或提交资格失效时返回错误。
 pub(in crate::reverse_flow) async fn authorized_customer_refund(
     db: &Database,
     rbac: &ReverseFlowPorts,

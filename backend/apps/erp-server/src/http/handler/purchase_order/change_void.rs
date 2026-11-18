@@ -14,17 +14,8 @@ use crate::http::state::HttpState;
 use crate::wiring::purchase_ports;
 
 /// 作废采购改单草稿（仅草稿态，乐观锁）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 变更单 ID
-/// * `req` - 作废请求（期望版本）
-///
-/// # 返回
+/// `req` 为作废请求（期望版本）。
 /// 返回作废后的变更单视图。
-///
-/// # 错误
 /// 不可写、版本冲突或非草稿时返回错误。
 pub async fn purchase_change_void(
     State(state): State<HttpState>,

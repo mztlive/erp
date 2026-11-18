@@ -102,33 +102,15 @@ pub struct SupplierFulfillmentRepository<'a> {
 }
 
 impl<'a> SupplierFulfillmentRepository<'a> {
-    /// 创建域专用仓储。
-    ///
-    /// # 参数
-    /// * `db` - 目标 MongoDB 数据库
-    ///
-    /// # 返回
-    /// 返回仓储实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 绑定供应商履约集合所在的数据库，供调用方通过仓储访问本域记录。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
 
     /// 按供给修订主键批量加载对应供给稳定身份。
-    ///
-    /// 仓储负责修订与稳定身份的两段 `$in` 查询及关联；Service 只校验请求中的
-    /// 供应商和连接关系，不接触 BSON 或通用查询方法。
-    ///
-    /// # 参数
-    /// * `revision_ids` - 供给商业条款修订主键集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
+    /// 仓储负责修订与稳定身份的两段 `$in` 查询及关联；Service 只校验请求中的供应商和连接关系，不接触
+    /// BSON 或通用查询方法。
     /// 返回以修订主键为键的供给稳定身份；缺失修订或供给时不生成对应条目。
-    ///
-    /// # 错误
     /// MongoDB 查询或游标读取失败时返回错误。
     pub async fn load_offerings_by_revision_ids(
         &self,
@@ -165,26 +147,15 @@ impl<'a> SupplierFulfillmentRepository<'a> {
     }
 
     /// 原子创建履约子订单、全部明细与首个 `PLACE` 动作。
-    ///
-    /// 依次写入 `supplier_fulfillment_orders`、`supplier_fulfillment_items` 与
-    /// `supplier_order_actions`，保证「子订单、全部明细和首个 PLACE 动作」同事务
-    /// 可见（§6.19）；唯一键冲突时服务层加载既有子订单继续原幂等动作。
-    /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction`
-    /// 时各笔写入各自自动提交，中途失败会留下只有订单没有明细的半成品；
-    /// Service 必须通过 `persistence_core::Transactional::with_transaction` 传入事务会话。
-    ///
-    /// # 参数
-    /// * `order` - 待写入的履约子订单
-    /// * `items` - 待写入的全部履约明细
-    /// * `action` - 待写入的首个 `PLACE` 动作
-    /// * `executor` - 数据访问执行器，必须位于事务中
-    ///
-    /// # 返回
+    /// 依次写入 `supplier_fulfillment_orders`、`supplier_fulfillment_items` 与`supplier_order_actions`，
+    /// 保证「子订单、全部明细和首个 PLACE 动作」同事务可见（§6.19）；唯一键冲突时服务层加载既有子订单继
+    /// 续原幂等动作。**必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction`时各笔写入各自自
+    /// 动提交，中途失败会留下只有订单没有明细的半成品；Service 必须通过
+    /// `persistence_core::Transactional::with_transaction` 传入事务会话。
     /// 三笔写入都成功时无返回值。
-    ///
-    /// # 错误
-    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射
-    /// 为幂等命中）或 MongoDB 写入失败时返回错误。
+    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射为幂等命中）或
+    /// MongoDB 写入失败时返回错误。
+    /// `executor`：数据访问执行器，必须位于事务中。
     pub async fn create_fulfillment_with_items_and_place_action(
         &self,
         order: &SupplierFulfillmentOrder,
@@ -215,25 +186,14 @@ impl<'a> SupplierFulfillmentRepository<'a> {
     }
 
     /// 原子创建供应商退款事实头与全部分配行。
-    ///
-    /// 依次写入 `supplier_refund_facts` 与 `supplier_refund_allocations`，保证
-    /// 「退款头 + 分配行」同事务可见（§6.19：供应商退款成功是冲减供应商成本和
-    /// 应付的唯一事实；纠错只追加成组 REVERSE 并引用原分配）。
-    /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction`
-    /// 时两笔写入各自自动提交，中途失败会留下只有事实头没有分配行的半成品；
-    /// Service 必须通过 `persistence_core::Transactional::with_transaction` 传入事务会话。
-    ///
-    /// # 参数
-    /// * `fact` - 待写入的退款事实头
-    /// * `allocations` - 待写入的全部分配行
-    /// * `executor` - 数据访问执行器，必须位于事务中
-    ///
-    /// # 返回
+    /// 依次写入 `supplier_refund_facts` 与 `supplier_refund_allocations`，保证「退款头 + 分配行」同事务
+    /// 可见（§6.19：供应商退款成功是冲减供应商成本和应付的唯一事实；纠错只追加成组 REVERSE 并引用原分配）。
+    /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction`时两笔写入各自自动提交，中途失
+    /// 败会留下只有事实头没有分配行的半成品；Service 必须通过
+    /// `persistence_core::Transactional::with_transaction` 传入事务会话。
     /// 两笔写入都成功时无返回值。
-    ///
-    /// # 错误
-    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）或 MongoDB 写入
-    /// 失败时返回错误。
+    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）或 MongoDB 写入失败时返回错误。
+    /// `executor`：数据访问执行器，必须位于事务中。
     pub async fn create_refund_fact_with_allocations(
         &self,
         fact: &SupplierRefundFact,
@@ -256,27 +216,14 @@ impl<'a> SupplierFulfillmentRepository<'a> {
     }
 
     /// 读取订单退款财务快照（FUL-R05）。
-    ///
-    /// 在数据库内分别聚合未删除履约明细的含税成本快照合计
-    /// （`order_cost_gross`）与未删除退款事实的实际退款金额合计
-    /// （`refunded_total`），只返回两个金额，不反序列化明细或事实实体；
-    /// 任一集合为空时对应金额为精确零。固定两次数据库访问，不随明细或
-    /// 退款事实数增长；全部使用调用方执行器，事务内调用看到同一事务的
-    /// 未提交写入，本方法不自行开启或提交事务。退款上限「历史累计 + 本次
-    /// 退款不超过订单成本」的跨聚合决定仍由 Service 承担，本方法不返回
-    /// services DTO 或授权结论。
-    ///
-    /// # 参数
-    /// * `order_id` - 供应商子订单主键
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回订单含税成本合计与历史退款合计；无明细或无退款事实时对应
-    /// 金额为精确零。
-    ///
-    /// # 错误
-    /// MongoDB 聚合失败时返回错误；Decimal128 求和结果无法转换为
-    /// `Amount`（精度或上限越界）时返回错误而非 panic。
+    /// 在数据库内分别聚合未删除履约明细的含税成本快照合计（`order_cost_gross`）与未删除退款事实的实际退
+    /// 款金额合计（`refunded_total`），只返回两个金额，不反序列化明细或事实实体；任一集合为空时对应金额
+    /// 为精确零。固定两次数据库访问，不随明细或退款事实数增长；全部使用调用方执行器，事务内调用看到同一
+    /// 事务的未提交写入，本方法不自行开启或提交事务。退款上限「历史累计 + 本次退款不超过订单成本」的跨聚
+    /// 合决定仍由 Service 承担，本方法不返回services DTO 或授权结论。
+    /// 返回订单含税成本合计与历史退款合计；无明细或无退款事实时对应金额为精确零。
+    /// MongoDB 聚合失败时返回错误；Decimal128 求和结果无法转换为`Amount`（精度或上限越界）时返回错误而非
+    /// panic。
     pub async fn refund_financial_snapshot(
         &self,
         order_id: &SupplierFulfillmentOrderId,
@@ -298,23 +245,12 @@ impl<'a> SupplierFulfillmentRepository<'a> {
     }
 
     /// 按订单读取退款事实及其分配行的归组快照（FUL-R04）。
-    ///
-    /// 先按订单主键批量读取未删除退款事实头，再以事实头主键集合一次
-    /// `$in` 取回全部未删除分配行，最后在内存中按事实头归组并保持主键
-    /// 稳定排序。固定两次数据库访问，不随事实头数量增长；无事实头时
-    /// 直接返回空集合且不发送空 `$in`；有事实头但无分配行时保留事实头
-    /// 并返回空分配集合。全部使用调用方执行器，事务内调用看到同一事务
-    /// 的未提交写入，本方法不自行开启或提交事务。最终响应映射仍由
-    /// Service 承担，本方法不返回 services DTO 或授权结论。
-    ///
-    /// # 参数
-    /// * `order_id` - 供应商子订单主键
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
+    /// 先按订单主键批量读取未删除退款事实头，再以事实头主键集合一次`$in` 取回全部未删除分配行，最后在内
+    /// 存中按事实头归组并保持主键稳定排序。固定两次数据库访问，不随事实头数量增长；无事实头时直接返回空
+    /// 集合且不发送空 `$in`；有事实头但无分配行时保留事实头并返回空分配集合。全部使用调用方执行器，事务
+    /// 内调用看到同一事务的未提交写入，本方法不自行开启或提交事务。最终响应映射仍由Service 承担，本方法
+    /// 不返回 services DTO 或授权结论。
     /// 返回按事实头主键稳定排序的归组快照；无事实头时返回空集合。
-    ///
-    /// # 错误
     /// MongoDB 查询或游标读取失败时返回错误。
     pub async fn refund_fact_bundles_by_order(
         &self,
@@ -338,21 +274,10 @@ impl<'a> SupplierFulfillmentRepository<'a> {
     }
 }
 
-/// 按执行器语义执行聚合管道并收集全部结果行。
-///
-/// 带会话时使用 `SessionCursor` 逐条读取，与非会话游标返回同样的结果集合。
-///
-/// # 参数
-/// * `collection` - 目标集合
-/// * `pipeline` - 聚合管道
-/// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-///
-/// # 返回
-/// 返回全部聚合结果行。
-///
-/// # 错误
-/// 聚合执行、游标读取或结果行反序列化（含 Decimal128 精度/上限越界）
-/// 失败时返回错误。
+// 按执行器语义执行聚合管道并收集全部结果行。
+// 带会话时使用 `SessionCursor` 逐条读取，与非会话游标返回同样的结果集合。
+// 返回全部聚合结果行。
+// 聚合执行、游标读取或结果行反序列化（含 Decimal128 精度/上限越界）失败时返回错误。
 async fn aggregate_rows<T>(
     collection: &mongodb::Collection<T>,
     pipeline: Vec<Document>,
@@ -364,19 +289,9 @@ where
     aggregate::rows(collection, pipeline, executor).await
 }
 
-/// 执行订单金额合计管道并返回合计金额。
-///
-/// # 参数
-/// * `collection` - 目标集合
-/// * `pipeline` - 已构造的过滤与合计管道（`$match` + `$group` + `$project`）
-/// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-///
-/// # 返回
-/// 返回合计金额；无匹配文档时返回精确零。
-///
-/// # 错误
-/// 聚合执行、游标读取或结果反序列化（含 Decimal128 精度/上限越界）
-/// 失败时返回错误。
+// 执行订单金额合计管道并返回合计金额。
+// 返回合计金额；无匹配文档时返回精确零。
+// 聚合执行、游标读取或结果反序列化（含 Decimal128 精度/上限越界）失败时返回错误。
 async fn aggregate_single_total(
     collection: &mongodb::Collection<AmountTotalRow>,
     pipeline: Vec<Document>,
@@ -386,42 +301,25 @@ async fn aggregate_single_total(
     Ok(first_total_or_zero(rows))
 }
 
-/// 返回金额合计的空集合兜底值（精确零）。
-///
-/// `Amount::from_str("0.00")` 对定点金额恒合法，集中为纯函数以便
-/// 「无历史为精确零」维度直接单测。
-///
-/// # 返回
-/// 返回精确零金额。
-///
-/// # Panics
-/// `Amount::from_str("0.00")` 被当作恒合法；解析失败时 `expect` 会 panic。
+// 返回金额合计的空集合兜底值（精确零）。
+// `Amount::from_str("0.00")` 对定点金额恒合法，集中为纯函数以便「无历史为精确零」维度直接单测。
+// 返回精确零金额。
+//
+// # Panics
+// `Amount::from_str("0.00")` 被当作恒合法；解析失败时 `expect` 会 panic。
 fn zero_total() -> Amount {
     Amount::from_str("0.00").expect("零是合法金额")
 }
 
-/// 把单行金额合计聚合结果映射为合计金额；无行时返回精确零。
-///
-/// # 参数
-/// * `rows` - 金额合计聚合行（`$group` 管道至多一行）
-///
-/// # 返回
-/// 返回首行合计金额；空集合返回 [`zero_total`]。
+// 把单行金额合计聚合结果映射为合计金额；无行时返回精确零。
+// 返回首行合计金额；空集合返回 [`zero_total`]。
 fn first_total_or_zero(rows: Vec<AmountTotalRow>) -> Amount {
     rows.into_iter().next().map(|row| row.total).unwrap_or_else(zero_total)
 }
 
-/// 构造订单金额合计管道（FUL-R05）。
-///
-/// 按订单主键过滤未删除文档，对指定 Decimal128 金额字段求和，并移除
-/// 分组键 `_id`。
-///
-/// # 参数
-/// * `order_id` - 供应商子订单主键
-/// * `amount_field` - 待求和金额字段名
-///
-/// # 返回
-/// 返回三段聚合管道（`$match` + `$group` + `$project`）。
+// 构造订单金额合计管道（FUL-R05）。
+// 按订单主键过滤未删除文档，对指定 Decimal128 金额字段求和，并移除分组键 `_id`。
+// 返回三段聚合管道（`$match` + `$group` + `$project`）。
 fn financial_total_pipeline(order_id: &SupplierFulfillmentOrderId, amount_field: &str) -> Vec<Document> {
     vec![
         doc! {
@@ -440,29 +338,19 @@ fn financial_total_pipeline(order_id: &SupplierFulfillmentOrderId, amount_field:
     ]
 }
 
-/// 把 ID 集合转换为 BSON `$in` 需要的字符串集合。
-///
-/// # 参数
-/// * `ids` - ID 值对象集合
-///
-/// # 返回
-/// 返回 ID 的字符串形态（ID newtype 以字符串持久化）。
+// 把 ID 集合转换为 BSON `$in` 需要的字符串集合。
+// 返回 ID 的字符串形态（ID newtype 以字符串持久化）。
 fn ids_to_strings<T: ToString>(ids: &[T]) -> Vec<String> {
     ids.iter().map(ToString::to_string).collect()
 }
 
-/// 按事实头主键把分配行归组为退款事实快照（FUL-R04）。
-///
-/// 事实头的输出顺序与输入一致。分配行按事实头归组后，每组再按主键排序，
-/// 不依赖分配行的输入顺序，也不跨事实头泄漏。无分配行的事实头保留为空集合。
-///
-/// # 参数
-/// * `facts` - 退款事实头；输出顺序与此输入一致
-/// * `allocations` - 待归组的分配行；即使输入乱序，本函数仍按主键对每组稳定排序
-///
-/// # 返回
-/// 返回与事实头一一对应的归组快照，顺序与输入事实头一致；每组分配行按主键
-/// 稳定排序，无分配行时为空集合，未知事实头的孤儿分配行直接丢弃。
+// 按事实头主键把分配行归组为退款事实快照（FUL-R04）。
+// 事实头的输出顺序与输入一致。分配行按事实头归组后，每组再按主键排序，不依赖分配行的输入顺序，也不跨事实
+// 头泄漏。无分配行的事实头保留为空集合。
+// 返回与事实头一一对应的归组快照，顺序与输入事实头一致；每组分配行按主键稳定排序，无分配行时为空集合，未
+// 知事实头的孤儿分配行直接丢弃。
+// `facts`：退款事实头；输出顺序与此输入一致。
+// `allocations`：待归组的分配行；即使输入乱序，本函数仍按主键对每组稳定排序。
 fn group_refund_allocations(
     facts: Vec<SupplierRefundFact>,
     allocations: Vec<SupplierRefundAllocation>,
@@ -682,7 +570,7 @@ mod snapshot_tests {
 
     use super::{AmountTotalRow, financial_total_pipeline, first_total_or_zero, zero_total};
 
-    /// FUL-R05 金额合计管道：按订单过滤未删除文档、单值求和并移除分组键。
+    // 验证FUL-R05 金额合计管道：按订单过滤未删除文档、单值求和并移除分组键。
     #[test]
     fn financial_total_pipeline_filters_undelted_documents_and_sums_single_total() {
         let pipeline = financial_total_pipeline(
@@ -704,7 +592,7 @@ mod snapshot_tests {
         assert_eq!(project_stage.get_i32("_id").expect("移除分组键"), 0);
     }
 
-    /// FUL-R05 求和字段随调用方指定，退款事实走 `refund_amount`。
+    // 验证FUL-R05 求和字段随调用方指定，退款事实走 `refund_amount`。
     #[test]
     fn financial_total_pipeline_sums_refund_amount_field() {
         let pipeline = financial_total_pipeline(&SupplierFulfillmentOrderId::new("order-1"), "refund_amount");
@@ -715,7 +603,7 @@ mod snapshot_tests {
         );
     }
 
-    /// FUL-R05 Decimal128 合计结果可反序列化为 `Amount`。
+    // 验证FUL-R05 Decimal128 合计结果可反序列化为 `Amount`。
     #[test]
     fn amount_total_row_deserializes_decimal128_total() {
         let document = doc! { "total": { "$numberDecimal": "1234.56" } };
@@ -724,7 +612,7 @@ mod snapshot_tests {
         assert_eq!(row.total, Amount::from_str("1234.56").expect("合法金额"));
     }
 
-    /// FUL-R05 超精度 Decimal128 必须返回反序列化错误而非 panic。
+    // 验证FUL-R05 超精度 Decimal128 必须返回反序列化错误而非 panic。
     #[test]
     fn amount_total_row_rejects_precision_overflow_without_panicking() {
         let document = doc! { "total": { "$numberDecimal": "1.235" } };
@@ -733,7 +621,7 @@ mod snapshot_tests {
         assert!(result.is_err(), "超精度 Decimal128 必须失败而非 panic");
     }
 
-    /// FUL-R05 无行聚合结果映射为精确零（「空集合为精确零」验收的单元级证据）。
+    // 验证FUL-R05 无行聚合结果映射为精确零（「空集合为精确零」验收的单元级证据）。
     #[test]
     fn first_total_or_zero_maps_empty_rows_to_exact_zero() {
         assert_eq!(zero_total(), Amount::from_str("0.00").expect("合法金额"));

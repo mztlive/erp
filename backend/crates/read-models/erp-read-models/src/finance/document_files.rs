@@ -47,7 +47,7 @@ pub struct FinancialFileView {
 }
 
 impl FinancialFileView {
-    /// 只从财务来源关系及文件展示字段构造响应。
+    // 装配财务关联文件时，只从财务来源关系及文件展示字段构造响应。
     pub(super) fn new(document_id: String, document_no: String, file: FileAsset) -> Self {
         Self {
             document_id,
@@ -68,22 +68,25 @@ pub struct BusinessFinanceFiles {
 }
 
 impl BusinessFinanceFiles {
-    /// 装配数据库及当前销售范围授权源。
+    /// 装配财务关联文件时，接入数据库及当前销售范围授权源。
+    ///
     /// # 参数
     /// `db` 为各域事实源，`rbac` 为权限服务。
+    ///
     /// # 返回
     /// 返回无授权缓存的读取服务。
-    /// # 错误
-    /// 无。
     pub fn new(db: Database, rbac: Arc<AuthorizationService>) -> Self {
         Self { db, rbac }
     }
 
-    /// 在同一事务证明销售单详情资格并读取该单的已登记发票附件。
+    /// 读取财务关联文件时，在同一事务证明销售单详情资格并读取该单的已登记发票附件。
+    ///
     /// # 参数
     /// `actor` 为当前账号，`sales_id` 为来源销售单。
+    ///
     /// # 返回
     /// 返回本单发票文件，不包含整张发票金额或其他单据分配。
+    ///
     /// # 错误
     /// 来源不可见或关联事实读取失败时拒绝。
     pub async fn sales(&self, actor: &AuditActor, sales_id: &str) -> Result<Vec<FinancialFileView>> {
@@ -99,7 +102,7 @@ impl BusinessFinanceFiles {
             .await
     }
 
-    /// 沿应收子账与有效发票分配读取文件，禁止按客户或往来主体扩大范围。
+    // 沿应收子账与有效发票分配取得文件，禁止按客户或往来主体扩大范围。
     async fn sales_files(
         &self,
         sales_id: &str,
@@ -142,11 +145,14 @@ impl BusinessFinanceFiles {
         Ok(result)
     }
 
-    /// 在原快照内授权履约任务，再读取真实采购来源已付款的银行回单。
+    /// 准备财务关联文件时，在原快照内授权履约任务，再读取真实采购来源已付款的银行回单。
+    ///
     /// # 参数
     /// `actor`、`task_id` 为当前账号与正式任务，`auth` 为共享工作流授权端口。
+    ///
     /// # 返回
     /// 返回该采购来源关联的银行回单。
+    ///
     /// # 错误
     /// 无任务资格、非采购履约对象、缺失来源、凭证失效或读取失败时拒绝。
     pub async fn fulfillment(
@@ -169,7 +175,7 @@ impl BusinessFinanceFiles {
             .await
     }
 
-    /// 授权、真实来源与回单补齐共用原阶段，交付前验证原任务凭证。
+    // 处理财务关联文件时，授权、真实来源与回单补齐共用原阶段，交付前验证原任务凭证。
     async fn fulfillment_files_read(
         &self,
         actor: &AuditActor,
@@ -194,7 +200,7 @@ impl BusinessFinanceFiles {
         Ok(files)
     }
 
-    /// 强类型履约来源只允许采购入库、供应商直发、电子交付与服务履约。
+    // 处理财务关联文件时，强类型履约来源只允许采购入库、供应商直发、电子交付与服务履约。
     async fn purchase_source(
         &self,
         kind: &str,
@@ -236,7 +242,7 @@ impl BusinessFinanceFiles {
         }
     }
 
-    /// 精确沿采购应付分录、核销分配和付款单读取回单，去重后支持多笔付款。
+    // 处理财务关联文件时，精确沿采购应付分录、核销分配和付款单读取回单，去重后支持多笔付款。
     async fn payment_files(
         &self,
         purchase_id: &PurchaseOrderId,
@@ -252,12 +258,12 @@ impl BusinessFinanceFiles {
     }
 }
 
-/// 正式发票包含已登记票及已由红票冲销的原票；草稿没有下载资格。
+// 处理财务关联文件时，正式发票包含已登记票及已由红票冲销的原票；草稿没有下载资格。
 fn published_invoice(status: InvoiceStatus) -> bool {
     matches!(status, InvoiceStatus::Registered | InvoiceStatus::RedInvoiced)
 }
 
-/// 列表与下载同时关闭被销毁、隔离或无有效内容的文件。
+// 处理财务关联文件时，列表与下载同时关闭被销毁、隔离或无有效内容的文件。
 pub(super) fn readable_file(file: &FileAsset) -> bool {
     file.destroyed_at.is_none()
         && file.byte_size > 0
@@ -268,7 +274,7 @@ pub(super) fn readable_file(file: &FileAsset) -> bool {
         && matches!(file.content_type.as_str(), "application/pdf" | "image/jpeg" | "image/png" | "image/webp")
 }
 
-/// 只返回在本采购应付上仍有正向净核销额的付款，全部冲减不能保留下载资格。
+// 计算财务关联文件金额时，仅给出在本采购应付上仍有正向净核销额的付款，全部冲减不能保留下载资格。
 pub(super) fn effective_payment_totals(allocations: &[PaymentAllocation]) -> BTreeMap<String, Amount> {
     let mut totals = BTreeMap::new();
     for row in allocations {
@@ -279,7 +285,7 @@ pub(super) fn effective_payment_totals(allocations: &[PaymentAllocation]) -> BTr
     totals.into_iter().filter(|(_, amount)| *amount > Amount::zero()).collect()
 }
 
-/// 对下载请求按所属财务单和文件双键精确匹配，禁止跨单或替换资产。
+/// 应用财务关联文件筛选时，对下载请求按所属财务单和文件双键精确匹配，禁止跨单或替换资产。
 ///
 /// # 参数
 /// * `files` - 当前财务单可见文件。

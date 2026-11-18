@@ -24,13 +24,14 @@ struct CatalogCount {
     total: i64,
 }
 
-/// 从本供应商开放关系出发读取，不扩大到全公司商品。
-/// # 参数
-/// `db` 为数据库，`supplier_id` 为验证绑定，`query` 为有界筛选，`executor` 为当前执行器。
-/// # 返回
-/// 返回同一资格过滤下的外部目录和总数。
-/// # 错误
-/// 联查、聚合或允许列表解析失败时拒绝。
+// 从本供应商开放关系出发取出，不扩大到全公司商品。
+//
+// 调用参数：
+// `db` 为数据库，`supplier_id` 为验证绑定，`query` 为有界筛选，`executor` 为当前执行器。
+//
+// 返回同一资格过滤下的外部目录和总数。
+//
+// 联查、聚合或允许列表解析失败时拒绝。
 pub(in crate::supplier_portal) async fn catalog_page(
     db: &Database,
     supplier_id: &str,
@@ -49,7 +50,7 @@ pub(in crate::supplier_portal) async fn catalog_page(
     Ok((items, page.count.first().map_or(0, |count| count.total)))
 }
 
-/// 开放、正式状态与搜索在分页前执行，保持目录和统计一致。
+// 组装门户定向开放目录的聚合管道时，开放、正式状态与搜索在分页前执行，保持目录和统计一致。
 fn catalog_pipeline(supplier_id: &str, query: &PortalQuery) -> Vec<Document> {
     let mut pipeline = vec![
         doc! {"$match":{"supplier_id":supplier_id,"active":true,"deleted_at":NOT_DELETED_TIMESTAMP_BSON}},
@@ -69,18 +70,19 @@ fn catalog_pipeline(supplier_id: &str, query: &PortalQuery) -> Vec<Document> {
     pipeline
 }
 
-/// 只联查本供应商供给编号，不读取或投影任何其他报价。
+// 处理门户定向开放目录时，只联查本供应商供给编号，不读取或投影任何其他报价。
 fn own_offering(supplier_id: &str) -> Document {
     doc! {"$lookup":{"from":<Database as SupplierOfferingExt>::SUPPLIER_OFFERINGS,"let":{"sku_id":"$sku.id"},"pipeline":[{"$match":{"supplier_id":supplier_id,"deleted_at":NOT_DELETED_TIMESTAMP_BSON,"$expr":{"$eq":["$sku_id","$$sku_id"]}}},{"$sort":{"id":1}},{"$limit":1},{"$project":{"_id":0,"id":1}}],"as":"own_offering"}}
 }
 
-/// 图片来源复用目录的当前修订和启用关联，不能扩大到任意历史图。
-/// # 参数
-/// `db` 为数据库，`sku_id` 为已授权来源，`executor` 为授权读取执行器。
-/// # 返回
-/// 返回精确当前启用事实，失效身份或指针返回空。
-/// # 错误
-/// 联查或解析失败时拒绝。
+// 处理门户定向开放目录时，图片来源复用目录的当前修订和启用关联，不能扩大到任意历史图。
+//
+// 调用参数：
+// `db` 为数据库，`sku_id` 为已授权来源，`executor` 为授权读取执行器。
+//
+// 返回精确当前启用事实，失效身份或指针返回空。
+//
+// 联查或解析失败时拒绝。
 pub(in crate::supplier_portal) async fn current_sku(
     db: &Database,
     sku_id: &str,

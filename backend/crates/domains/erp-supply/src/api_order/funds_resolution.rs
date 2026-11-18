@@ -17,12 +17,9 @@ pub enum ExecutionFundsFinality {
 
 impl ApiOrderExecution {
     /// 核对原执行尚未提交或已有完整供应商终态，未知动作严格阻断。
-    /// # 参数
-    /// 预期终态、原履约单及同事务读取的最新来源跟踪和观察；未提交时后二者可以缺失。
-    /// # 返回
     /// 返回已经核验的供应商终态及最后外部观察时刻。
-    /// # 错误
     /// 缺原单、身份不一致、仍有未知写动作、未核验拓扑或叶子未全部终止时拒绝。
+    /// 预期终态、原履约单及同事务读取的最新来源跟踪和观察；未提交时后二者可以缺失。
     pub fn ensure_funds_finality(
         &self,
         expected: ExecutionFundsFinality,

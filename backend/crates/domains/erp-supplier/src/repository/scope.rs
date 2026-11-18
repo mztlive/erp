@@ -23,16 +23,9 @@ pub struct SupplierVersion {
 #[allow(async_fn_in_trait)]
 pub trait SupplierAccountRepositoryScopeExt {
     /// 装载查询的有界身份与版本集合，用于跨页及导出一致性校验。
-    ///
-    /// # 参数
-    /// * `filter` - 已与授权条件求交的列表筛选
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
     /// 最多 10001 行；调用方必须整体拒绝超限。
-    ///
-    /// # 错误
-    /// 数据库读取失败时返回仓储错误。
+    /// 数据库读取失败时向上传播错误。
+    /// `filter`：已与授权条件求交的列表筛选。
     async fn query_versions(
         &self,
         filter: &SupplierAccountFilter,

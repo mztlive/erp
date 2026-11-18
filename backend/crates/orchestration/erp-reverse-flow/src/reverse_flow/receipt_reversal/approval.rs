@@ -39,20 +39,11 @@ use crate::Result;
 impl ReturnsProcess {
     /// 提交回款冲正并调用统一 `start_approval`。
     ///
-    /// 按合同 §4.4.1 冻结 `approval_subject_version` 与 `subject_snapshot`，
-    /// 单据进入 `IN_APPROVAL`。定义与审批人取自已绑定事实，不接受客户端选择。
+    /// 按合同 §4.4.1 冻结 `approval_subject_version` 与 `subject_snapshot`，单据进入 `IN_APPROVAL`。定义与审批人取自已绑定事实，不接受客户端选择。
     ///
-    /// # 参数
-    /// * `id` - 冲正单主键
-    /// * `req` - 提交请求（版本与幂等键）
-    /// * `actor` - 已通过鉴权的审计操作人
+    /// `id` 为冲正单主键；`req` 为提交请求（版本与幂等键）。返回提交后的冲正单视图。`NotFound`：冲正单或原回款不存在。
     ///
-    /// # 返回
-    /// 返回提交后的冲正单视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 冲正单或原回款不存在
-    /// * `ConflictError` - 非草稿、无绑定或并发冲突
+    /// `ConflictError`：非草稿、无绑定或并发冲突。
     pub async fn submit_receipt_reversal(
         &self,
         id: &str,
@@ -88,7 +79,7 @@ impl ReturnsProcess {
         .map_err(reversal_result_read_error)
     }
 
-    /// 原提交事务先授权与匹配收据，再读取版本、来源、定义和人员并写入。
+    // 原提交事务先授权与匹配收据，再读取版本、来源、定义和人员并写入。
     async fn submit_receipt_reversal_stage(
         &self,
         req: SubmitReceiptReversalRequest,
@@ -118,17 +109,9 @@ impl ReturnsProcess {
     ///
     /// 作为合同 `cancel_action`，供业务撤回与管理员受阻取消共用。
     ///
-    /// # 参数
-    /// * `id` - 冲正单主键
-    /// * `req` - 撤回请求（原因必填）
-    /// * `actor` - 已通过鉴权的审计操作人
+    /// `id` 为冲正单主键；`req` 为撤回请求（原因必填）。返回撤回后的冲正单视图。`NotFound`：冲正单不存在。
     ///
-    /// # 返回
-    /// 返回撤回后的冲正单视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 冲正单不存在
-    /// * `ConflictError` - 非审批中、已最终通过或并发冲突
+    /// `ConflictError`：非审批中、已最终通过或并发冲突。
     pub async fn cancel_receipt_reversal_approval(
         &self,
         id: &str,
@@ -148,7 +131,7 @@ impl ReturnsProcess {
             .await
     }
 
-    /// 原撤回事务内先授权，再读取精确版本及审批事实并写入。
+    // 原撤回事务内先授权，再读取精确版本及审批事实并写入。
     async fn cancel_receipt_reversal_approval_stage(
         &self,
         id: &str,
@@ -181,10 +164,7 @@ impl ReturnsProcess {
         .await
     }
 
-    /// 从绑定读取定义并持久化启动事实。
-    ///
-    /// # 错误
-    /// 无绑定、定义缺失或写入失败时返回错误。
+    // 从绑定读取定义并持久化启动事实。无绑定、定义缺失或写入失败时返回错误。
     async fn dispatch_receipt_reversal_start(
         &self,
         reversal: ReceiptReversal,
@@ -245,7 +225,7 @@ impl ReturnsProcess {
         .await
     }
 
-    /// 沿原回款冻结提交组织、客户和单据快照。
+    // 沿原回款冻结提交组织、客户和单据快照。
     async fn receipt_reversal_start_snapshot(
         &self,
         reversal: &ReceiptReversal,
@@ -265,10 +245,7 @@ impl ReturnsProcess {
         Ok((organization_id, snapshot))
     }
 
-    /// 加载撤回运行事实并写回草稿。
-    ///
-    /// # 错误
-    /// 无绑定、实例终态或写入失败时返回错误。
+    // 加载撤回运行事实并写回草稿。无绑定、实例终态或写入失败时返回错误。
     async fn persist_cancelled_receipt_reversal(
         &self,
         id: &str,

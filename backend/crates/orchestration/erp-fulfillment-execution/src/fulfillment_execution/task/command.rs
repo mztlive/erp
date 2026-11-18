@@ -77,15 +77,11 @@ impl TaskCommandPort for MongoTaskCommand<'_> {
         Ok(())
     }
 }
-/// 先按真实业务身份找到开放任务并核验办理权限，再允许入口读取单据。
-/// # 参数
-/// db 为业务数据库，authorization 为共享授权服务，object_type 与 object_id 为原业务对象身份，
-/// actor 为当前认证操作人，executor 为原命令事务执行器。
-/// # 返回
-/// 当前账号是开放任务的有效办理人时成功。
-/// # 错误
-/// 任务缺失、重复、当前办理资格失效或执行器不是快照事务时拒绝。
-/// 授权及仓储读取错误按原分类传播。
+// 先按真实业务身份找到开放任务并核验办理权限，再允许入口读取单据。
+//
+// db 为业务数据库，authorization 为共享授权服务，object_type 与 object_id 为原业务对象身份， actor 为当前认证操作人，executor 为原命令事务执行器。
+//
+// 当前账号是开放任务的有效办理人时成功。任务缺失、重复、当前办理资格失效或执行器不是快照事务时拒绝。授权及仓储读取错误按原分类传播。
 pub(super) async fn require_entry(
     db: &Database,
     authorization: &Arc<AuthorizationService>,
@@ -105,7 +101,7 @@ pub(super) async fn require_entry(
     .await
 }
 
-/// 入口授权只读取任务事实，不依赖尚未获准读取的履约单据。
+// 入口授权只读取任务事实，不依赖尚未获准读取的履约单据。
 async fn authorize_entry<P: TaskCommandPort>(
     port: &P,
     authorization: &(dyn Fn() -> P::Identity + Send + Sync),
@@ -119,7 +115,7 @@ async fn authorize_entry<P: TaskCommandPort>(
     port.authorize(&identity, &task, actor, executor).await
 }
 
-/// 同一执行器先核验当前任务指定人，再同步活动或完成事实并写回。
+// 同一执行器先核验当前任务指定人，再同步活动或完成事实并写回。
 async fn execute<P: TaskCommandPort>(
     port: &P,
     authorization: &(dyn Fn() -> P::Identity + Send + Sync),
@@ -144,22 +140,13 @@ async fn execute<P: TaskCommandPort>(
     port.update(&mut task, executor).await?;
     Ok(())
 }
-/// 在调用方执行器内记录履约任务活动。
-///
-/// 先核验当前任务指定人及完整资格，再形成活动事实并写回。
-///
-/// # 参数
-/// * `db` - 业务数据库。
-/// * `authorization` - 共享授权服务；在当前执行器内重验任务办理资格。
-/// * `object` - 冻结责任身份的履约对象。
-/// * `actor` - 已认证的真实操作人。
-/// * `executor` - 调用方事务执行器。
-///
-/// # 返回
-/// 活动写入成功时返回。
-///
-/// # 错误
-/// 开放任务缺失或重复、责任身份不一致、操作人无执行权限，或领域事实与写入失败时返回错误。
+// 在调用方执行器内记录履约任务活动。
+//
+// 先核验当前任务指定人及完整资格，再形成活动事实并写回。
+//
+// `authorization` 为共享授权服务；在当前执行器内重验任务办理资格；`object` 为冻结责任身份的履约对象；`actor` 为已认证的真实操作人。
+//
+// 活动写入成功时返回。开放任务缺失或重复、责任身份不一致、操作人无执行权限，或领域事实与写入失败时返回错误。
 pub(super) async fn record(
     db: &Database,
     authorization: &Arc<AuthorizationService>,
@@ -177,22 +164,13 @@ pub(super) async fn record(
     )
     .await
 }
-/// 在调用方执行器内完成履约执行任务。
-///
-/// 先核验当前任务指定人及完整资格，再形成完成事实并写回。
-///
-/// # 参数
-/// * `db` - 业务数据库。
-/// * `authorization` - 共享授权服务；在当前执行器内重验任务办理资格。
-/// * `object` - 冻结责任身份的履约对象。
-/// * `actor` - 已认证的真实操作人。
-/// * `executor` - 调用方事务执行器。
-///
-/// # 返回
-/// 完成事实写入成功时返回。
-///
-/// # 错误
-/// 开放任务缺失或重复、责任身份不一致、操作人无执行权限，或领域事实与写入失败时返回错误。
+// 在调用方执行器内完成履约执行任务。
+//
+// 先核验当前任务指定人及完整资格，再形成完成事实并写回。
+//
+// `authorization` 为共享授权服务；在当前执行器内重验任务办理资格；`object` 为冻结责任身份的履约对象；`actor` 为已认证的真实操作人。
+//
+// 完成事实写入成功时返回。开放任务缺失或重复、责任身份不一致、操作人无执行权限，或领域事实与写入失败时返回错误。
 pub(super) async fn complete(
     db: &Database,
     authorization: &Arc<AuthorizationService>,
@@ -320,7 +298,7 @@ mod tests {
         .await;
         (result, port.recorded.into_inner().unwrap())
     }
-    /// 入口授权透传真实账号种类及同一执行器，失败时不继续处理任务。
+    // 入口授权透传真实账号种类及同一执行器，失败时不继续处理任务。
     #[tokio::test]
     async fn entry_authorization_preserves_real_actor_and_stops_on_failure() {
         for fail_at in [None, Some(0), Some(2)] {
@@ -350,7 +328,7 @@ mod tests {
         }
     }
 
-    /// 连续保存草稿时同步任务关联版本，保留开放状态、当前责任人与任务身份。
+    // 连续保存草稿时同步任务关联版本，保留开放状态、当前责任人与任务身份。
     #[tokio::test]
     async fn saving_draft_keeps_open_task_aligned_with_document_version() {
         let mut current = task();
@@ -398,7 +376,7 @@ mod tests {
         }
     }
 
-    /// 活动与完成均先核验当前任务指定人，再改变任务并写回同一执行器。
+    // 活动与完成均先核验当前任务指定人，再改变任务并写回同一执行器。
     #[tokio::test]
     async fn task_command_authorizes_before_mutating_and_preserves_executor() {
         for (kind, status) in [
@@ -413,7 +391,7 @@ mod tests {
             assert_eq!(recorded.written.unwrap().status, status);
         }
     }
-    /// 读取、权限重验和写入任一步失败均停止后续步骤，保留原错误。
+    // 读取、权限重验和写入任一步失败均停止后续步骤，保留原错误。
     #[tokio::test]
     async fn task_command_stops_at_every_provider_failure() {
         let order = ["load", "identity", "authorize", "update"];
@@ -469,7 +447,7 @@ mod tests {
             assert!(recorded.written.is_some());
         }
     }
-    /// 冻结责任身份不匹配在账号权限重验之前失败，不能写任务。
+    // 冻结责任身份不匹配在账号权限重验之前失败，不能写任务。
     #[tokio::test]
     async fn frozen_responsibility_mismatch_stops_before_authorization() {
         let mut task = task();

@@ -32,64 +32,19 @@ pub trait BulkJobExt {
     /// 后台任务列表筛选条件类型（定义见 `repository::bulk_job`）。
     type BackgroundJobFilter;
 
-    /// 获取 `bulk_selection_snapshot` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `BulkSelectionSnapshotRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得 `bulk_selection_snapshot` 集合的仓储，供批量选择快照表头的读写；由调用方提供执行器。
     fn bulk_selection_snapshots(&self) -> BulkSelectionSnapshotRepository<'_>;
 
-    /// 获取 `bulk_selection_item` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `BulkSelectionItemRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得 `bulk_selection_item` 集合的仓储，供已冻结选择目标的读写；由调用方提供执行器。
     fn bulk_selection_items(&self) -> BulkSelectionItemRepository<'_>;
 
-    /// 获取 `background_job` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `BackgroundJobRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得 `background_job` 集合的仓储，供任务表头、执行状态与汇总结果的读写；由调用方提供执行器。
     fn background_jobs(&self) -> BackgroundJobRepository<'_>;
 
-    /// 获取 `background_job_item` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `BackgroundJobItemRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得 `background_job_item` 集合的仓储，供任务逐项状态与结果的读写；由调用方提供执行器。
     fn background_job_items(&self) -> BackgroundJobItemRepository<'_>;
 
-    /// 获取承载跨集合事务写入的域专用仓储。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `BulkJobRepository` 实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得任务、选择快照与各自逐项记录的跨集合操作入口；原子写入沿用用例事务，不在仓储内开启事务。
     fn bulk_job(&self) -> BulkJobRepository<'_>;
 }
 

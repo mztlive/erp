@@ -179,7 +179,7 @@ fn mark_deleted(entity: &mut entity_core::BaseModel) {
     entity.deleted_at = 1_700_000_001;
 }
 
-/// 缺失的结算单返回 `None`（调用方映射为 `NotFound`）。
+// 验证详情快照找不到结算单时返回 `None`，供调用方统一映射为 `NotFound`。
 #[tokio::test]
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn detail_snapshot_missing_statement_returns_none() {
@@ -195,7 +195,7 @@ async fn detail_snapshot_missing_statement_returns_none() {
     });
 }
 
-/// 已软删除的结算单返回 `None`，与主键读取的软删除语义一致。
+// 验证详情快照与主键查询口径一致，软删除的结算单不能再返回详情。
 #[tokio::test]
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn detail_snapshot_soft_deleted_statement_returns_none() {
@@ -219,7 +219,7 @@ async fn detail_snapshot_soft_deleted_statement_returns_none() {
     });
 }
 
-/// 无明细、无差异、无补证时稳定返回空集合（空明细/空差异不发空 `$in`）。
+// 验证结算单没有明细、差异或补证时返回空集合，覆盖跳过空 `$in` 查询的路径。
 #[tokio::test]
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn detail_snapshot_empty_detail_returns_empty_sets() {
@@ -244,7 +244,7 @@ async fn detail_snapshot_empty_detail_returns_empty_sets() {
     });
 }
 
-/// 已软删除的明细、差异、补证一律排除，只返回未删除事实。
+// 验证详情只返回未删除的明细、差异和补证，避免已撤下的资料仍出现在快照中。
 #[tokio::test]
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn detail_snapshot_excludes_soft_deleted_facts() {
@@ -301,8 +301,7 @@ async fn detail_snapshot_excludes_soft_deleted_facts() {
     });
 }
 
-/// 他单事实不泄漏；明细/差异按 `created_at` 与主键稳定排序，
-/// 补证组内按 `provided_at` 与主键稳定排序。
+// 验证快照不混入他单事实；明细和差异按创建时间与主键排序，组内补证按提供时间与主键排序，保证重复读取顺序一致。
 #[tokio::test]
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn detail_snapshot_isolates_statement_and_keeps_stable_order() {

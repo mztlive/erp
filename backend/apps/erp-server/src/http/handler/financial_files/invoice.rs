@@ -11,7 +11,7 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 use crate::wiring::funds_access;
 
-/// 复用财务详情授权，文件清单与资格由读取事务同时核验。
+// 为发票附件清单和下载取得同一授权结果；在财务详情读取事务内核验资格与文件关联。
 async fn files(
     state: &HttpState,
     actor: &AuditActor,
@@ -23,11 +23,7 @@ async fn files(
 }
 
 /// 按整票详情资格列出文件。
-/// # 参数
-/// 应用状态、当前账号及发票身份。
-/// # 返回
 /// 已授权发票的文件清单。
-/// # 错误
 /// 无整票权限或读取失败时拒绝。
 pub async fn invoice_files(
     State(state): State<HttpState>,
@@ -38,11 +34,7 @@ pub async fn invoice_files(
 }
 
 /// 下载前后重验发票资格、文件关联及文件状态。
-/// # 参数
-/// 应用状态、当前账号、发票及文件身份。
-/// # 返回
 /// 私有不可缓存文件响应。
-/// # 错误
 /// 跨票、权限变化、资产变化或读取失败时拒绝。
 pub async fn invoice_download(
     State(state): State<HttpState>,

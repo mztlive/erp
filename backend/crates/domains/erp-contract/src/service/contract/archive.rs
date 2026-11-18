@@ -92,21 +92,8 @@ impl From<ArchiveContractRevisionRequest> for ArchiveSnapshotFields {
     }
 }
 
-/// 组装指定序号的不可变修订（三处规划函数共用版本落盘形状）。
-///
-/// # 参数
-/// * `contract` - 所属合同（提供编号与默认结算主体）
-/// * `contract_pdf_file_id` - 本版本 PDF 文件资产
-/// * `archive_source` - 归档来源
-/// * `settlement_party_id` - 结算主体
-/// * `snapshot` - 归档快照字段组
-/// * `revision_no` - 聚合内版本号
-///
-/// # 返回
-/// 返回新建的合同版本实体。
-///
-/// # 错误
-/// 快照非法或有效期倒挂时返回错误。
+// 归档规划共用的修订构造器：以稳定合同的编号和身份绑定指定修订序号、已分配的 PDF 文件资产以及当次结算和开票快照。
+// 非法快照或有效期倒挂时拒绝，不写入数据库。
 fn build_revision(
     contract: &Contract,
     contract_pdf_file_id: FileAssetId,
@@ -137,17 +124,8 @@ fn build_revision(
     )?)
 }
 
-/// 由首次归档请求构造合同身份与首个不可变修订。
-///
-/// # 参数
-/// * `req` - 已通过 `Validate` 的创建请求
-/// * `actor_id` - 创建人
-///
-/// # 返回
-/// 返回尚未持久化的合同与修订。
-///
-/// # 错误
-/// 编号/快照为空、超长或有效期倒挂。
+/// 首次归档请求通过 `Validate` 后，用已登记的 PDF 文件资产身份和请求快照规划稳定合同及其首个不可变修订。
+/// 返回未持久化的规划；合同编号或快照为空、超长或有效期倒挂时拒绝。
 pub fn plan_first_archive(
     req: CreateContractRequest,
     actor_id: impl Into<String>,
@@ -165,19 +143,8 @@ pub fn plan_first_archive(
     )
 }
 
-/// 由一次上传命令构造合同身份与首个不可变修订。
-///
-/// # 参数
-/// * `req` - 已通过 `Validate` 的上传命令
-/// * `file_asset_id` - 已分配的文件资产 ID
-/// * `settlement_party_id` - 结算主体；调用方已按客户缺省补齐
-/// * `actor_id` - 创建人
-///
-/// # 返回
-/// 返回尚未持久化的合同与修订。
-///
-/// # 错误
-/// 编号/快照为空、超长或有效期倒挂。
+/// 上传归档已取得文件资产 ID 并补齐结算主体后，用请求快照规划稳定合同与首修订；不读取或写入 PDF 对象。
+/// 返回未持久化的规划；合同编号或快照为空、超长或有效期倒挂时拒绝。
 pub fn plan_upload_archive(
     req: UploadContractRequest,
     file_asset_id: FileAssetId,
@@ -210,18 +177,8 @@ fn plan_initial_archive(
     Ok(PlannedContractArchive { contract, revision })
 }
 
-/// 由追加版本请求构造下一不可变修订。
-///
-/// # 参数
-/// * `contract` - 所属合同
-/// * `req` - 追加版本请求
-/// * `current_revision_no` - 当前历史最大修订序号
-///
-/// # 返回
-/// 返回携带新修订与原合同身份的规划结果。
-///
-/// # 错误
-/// 序号溢出、快照非法或有效期倒挂时返回错误。
+// 追加归档时从当前历史最大修订序号求下一个序号，保持合同稳定身份，将新 PDF 与当次快照绑定到不同修订。
+// 序号溢出、快照非法或有效期倒挂时返回错误。
 pub(crate) fn plan_next_revision(
     contract: Contract,
     req: ArchiveContractRevisionRequest,
@@ -239,16 +196,7 @@ pub(crate) fn plan_next_revision(
     Ok(PlannedContractArchive { contract, revision })
 }
 
-/// 将客户事实映射为归档资格；缺失或停用保持原错误文案。
-///
-/// # 参数
-/// * `customer` - 客户最小事实；`None` 表示不存在
-///
-/// # 返回
-/// 返回可归档的客户事实。
-///
-/// # 错误
-/// 缺失时返回 `NotFound`，停用时返回 `BusinessLogicError`。
+// 归档前核对客户事实仍存在并启用。缺失映射 `NotFound`，停用映射 `BusinessLogicError`，保留原文案。
 pub(crate) fn customer_eligibility(
     customer: Option<crate::ports::CustomerAccountFact>,
 ) -> Result<crate::ports::CustomerAccountFact> {
@@ -259,19 +207,7 @@ pub(crate) fn customer_eligibility(
     Ok(customer)
 }
 
-/// 将实体版本匹配结果映射为稳定 409 语义.
-///
-/// # 参数
-/// * `matched` - `Contract::matches_version(expected)` 的结果
-///
-/// # 返回
-/// 匹配时返回 `Ok(())`。
-///
-/// # 错误
-/// 不匹配时返回 `ConflictError`（HTTP 409）。
-///
-/// # 约束
-/// 不比较版本号；调用方必须先调用实体 `matches_version`。
+// 合同命令用实体的 `matches_version` 比较期望版本后，经此把不匹配统一映射为 `ConflictError`（HTTP 409）。
 pub(crate) fn conflict_if_stale_version(matched: bool) -> Result<()> {
     if matched {
         return Ok(());

@@ -20,18 +20,7 @@ pub struct LegacyImportService {
 }
 
 impl LegacyImportService {
-    /// 创建旧数据导入查询服务实例。
-    ///
-    /// # 参数
-    /// * `db` - 数据库实例
-    /// * `bulk_jobs` - 后台任务身份事实端口
-    /// * `authorization` - 应用唯一共享授权服务
-    ///
-    /// # 返回
-    /// 返回服务实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 装配历史导入查询所需数据库、后台任务事实端口和应用共享授权服务，供在原快照内验权及补齐关联。
     pub fn new(
         db: Database,
         bulk_jobs: Arc<dyn BulkJobFactsPort>,

@@ -14,11 +14,7 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
 /// 列出当前后台连接可绑定的地址或密钥配置。
-/// # 参数
-/// 应用状态、操作人、连接 ID 和配置种类。
-/// # 返回
 /// 安全别名及短时绑定票据，不返回地址或密钥正文。
-/// # 错误
 /// 缺少绑定权限、连接不存在、参数无效或目录不可用时返回错误。
 pub async fn options(
     State(state): State<HttpState>,

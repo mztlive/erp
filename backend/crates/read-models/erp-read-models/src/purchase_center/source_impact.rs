@@ -30,25 +30,21 @@ pub struct PurchaseSourceState {
 }
 
 impl PurchaseSourceState {
-    /// 查找指定采购的受影响判定。
+    /// 处理采购来源影响时，查找指定采购的受影响判定。
     ///
     /// # 参数
     /// * `purchase_order_id` - 采购单 ID
     ///
     /// # 返回
     /// 采购受影响时返回判定；否则返回 `None`。
-    ///
-    /// # 错误
-    /// 无。
     pub fn impact_of(&self, purchase_order_id: &str) -> Option<&PurchaseSourceImpact> {
         self.impacts.iter().find(|impact| impact.purchase_order_id == purchase_order_id)
     }
 }
 
-/// 加载销售单当前覆盖并判定受影响采购。
+/// 为采购来源影响取数时，读取销售单当前覆盖并判定受影响采购。
 ///
 /// # 参数
-/// * `db` - MongoDB 数据库句柄
 /// * `order` - 已加载的销售单
 /// * `executor` - 调用方执行器；事务内重验必须复用
 ///
@@ -78,10 +74,9 @@ pub async fn load_purchase_source_state(
     Ok(PurchaseSourceState { facts, coverage, impacts })
 }
 
-/// 判断采购是否因销售变更减量或移除而暂停付款。
+/// 处理采购来源影响时，判断采购是否因销售变更减量或移除而暂停付款。
 ///
 /// # 参数
-/// * `db` - MongoDB 数据库句柄
 /// * `purchase_order_id` - 采购单 ID
 /// * `executor` - 调用方执行器；付款事务内复验必须复用
 ///
@@ -104,13 +99,11 @@ pub async fn payment_paused_by_source_update(
         .is_some_and(|update| update.blocks_payment))
 }
 
-/// 按待审批销售变更的提交内容预判受影响采购。
+/// 依据待审批销售变更的提交内容预判受影响采购。
 ///
 /// # 参数
-/// * `db` - MongoDB 数据库句柄
 /// * `order` - 来源销售单
 /// * `submission_id` - 变更当前提交
-/// * `executor` - 调用方执行器
 ///
 /// # 返回
 /// 返回参与覆盖的采购与预判结果；预判仅供审批参考。

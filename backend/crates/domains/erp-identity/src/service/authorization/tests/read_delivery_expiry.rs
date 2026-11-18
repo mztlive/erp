@@ -7,7 +7,7 @@ use persistence_core::{Executor, ReadExecutor};
 use super::fixtures::{actor, complete};
 use crate::Error;
 
-/// 执行真实 query/validate，分别核对正常交付和查询后授权到期。
+// 沿真实 `query` 和 `validate` 路径验证正常交付，以及读取完成后到期时必须拒绝交付。
 async fn require_current_delivery(executor: &mut dyn Executor) {
     let service = complete().build().unwrap();
     for permission in [

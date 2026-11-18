@@ -8,13 +8,8 @@ use crate::http::handler::demo_master_data;
 use crate::http::routes::permission_route;
 use crate::http::state::HttpState;
 
-/// 演示主数据路由。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回查看、生成和删除三条路由。
+// 为父路由挂载演示主数据路由。
+// 返回查看、生成和删除三条路由。
 pub(super) fn routes() -> Router<HttpState> {
     Router::new()
         .route(

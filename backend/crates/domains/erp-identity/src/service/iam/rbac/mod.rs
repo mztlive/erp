@@ -90,29 +90,15 @@ pub struct RolePermissionSnapshot {
 
 impl RolePermissionSnapshot {
     /// 返回账号在该 policy revision 下直接绑定的角色。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回冻结时的角色 ID 切片。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn role_ids(&self) -> &[RoleId] {
         &self.role_ids
     }
 
     /// 返回实际授予指定权限的角色，保持冻结角色顺序。
-    ///
-    /// # 参数
-    /// * `permission` - 待核对的权限。
-    ///
-    /// # 返回
     /// 返回冻结角色中包含该权限的角色 ID。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// `permission`：待核对的权限。
     pub fn granting_role_ids(&self, permission: &Permission) -> Vec<RoleId> {
         self.role_ids
             .iter()
@@ -127,14 +113,9 @@ impl RolePermissionSnapshot {
     ///
     /// 权限交集必须在同一角色内完成；调用方不得分别汇总不同角色的授权结果。
     ///
-    /// # 参数
-    /// * `permissions` - 必须由同一角色同时授予的权限。
-    ///
-    /// # 返回
     /// 返回同时具备全部权限的角色 ID；`permissions` 为空时返回空列表。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// `permissions`：必须由同一角色同时授予的权限。
     pub fn granting_role_ids_for_all(&self, permissions: &[Permission]) -> Vec<RoleId> {
         if permissions.is_empty() {
             return Vec::new();
@@ -151,12 +132,9 @@ impl RolePermissionSnapshot {
     }
 
     /// 区分确实缺少功能权限与同角色或有效角色配置不满足。
-    /// # 参数
-    /// `permissions` 为本次完整要求；调用方仅在授权拒绝时使用。
-    /// # 返回
     /// 单项缺权使用稳定提示格式，供 HTTP 边界输出权限字段；不猜测数据范围原因。
-    /// # 错误
-    /// 无。
+    ///
+    /// `permissions` 为本次完整要求；调用方仅在授权拒绝时使用。
     pub fn denial_message(&self, permissions: &[Permission]) -> String {
         permissions.iter().find(|permission| self.granting_role_ids(permission).is_empty()).map_or_else(
             || "所需操作权限未由同一有效角色授予，请联系管理员检查角色配置".into(),
@@ -165,15 +143,7 @@ impl RolePermissionSnapshot {
     }
 
     /// 返回冻结 Enforcer 对应的 policy revision。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回快照中的 policy 版本。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn policy_revision(&self) -> u64 {
         self.policy_revision
     }
@@ -187,15 +157,7 @@ pub struct AuthorizedRoleGrant {
 
 impl AuthorizedRoleGrant {
     /// 返回授权检查使用的 policy 版本。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回授予上下文中的 policy 版本。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn policy_revision(&self) -> u64 {
         self.policy_revision
     }
@@ -209,29 +171,13 @@ pub struct AuthorizedAccountManagement {
 
 impl AuthorizedAccountManagement {
     /// 返回授权检查使用的 policy 版本。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回账号管理上下文中的 policy 版本。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn policy_revision(&self) -> u64 {
         self.policy_revision
     }
 
     /// 取出同一授权快照校验的可选角色授予上下文。
-    ///
-    /// # 参数
-    /// 消耗 `self`。
-    ///
-    /// # 返回
     /// 本次校验包含新角色集合时返回授予上下文，否则返回 `None`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn into_role_grant(self) -> Option<AuthorizedRoleGrant> {
         self.role_grant
     }
@@ -254,15 +200,7 @@ impl RbacService {
     ///
     /// Casbin Enforcer 在首次使用时异步加载 MongoDB policy。
     ///
-    /// # 参数
-    /// * `db` - 身份数据库。
-    /// * `audit` - 资源审计端口。
-    ///
-    /// # 返回
     /// 返回尚未加载 Enforcer 的服务。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: Database, audit: Arc<dyn IdentityAuditPort>) -> Self {
         let policy_store = MongoCasbinAdapter::new(db.clone());
         Self {
@@ -277,32 +215,15 @@ impl RbacService {
         }
     }
 
-    /// 返回身份数据库，供启动期组织引导复用同一连接。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 RBAC 持有的 MongoDB 数据库句柄。
-    ///
-    /// # 错误
-    /// 无。
+    // 返回身份数据库，供启动期组织引导复用同一连接。
+    // 返回 RBAC 持有的 MongoDB 数据库句柄。
     pub(crate) fn database(&self) -> &Database {
         &self.db
     }
 
     /// 通过审计端口在事务前构造成功资源审计。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证操作人。
-    /// * `action` - 审计动作。
-    /// * `resource_type` - 资源类型。
-    /// * `resource_id` - 资源 ID。
-    ///
-    /// # 返回
     /// 返回可在事务内持久化的资源审计。
     ///
-    /// # 错误
     /// 审计端口构造失败时返回对应错误。
     pub fn prepare_resource_log(
         &self,
@@ -316,31 +237,13 @@ impl RbacService {
 }
 
 /// 创建共享 RBAC 服务。
-///
-/// # 参数
-/// * `db` - 身份数据库。
-/// * `audit` - 资源审计端口。
-///
-/// # 返回
 /// 返回延迟初始化 Casbin Enforcer 的共享服务。
-///
-/// # 错误
-/// 不返回错误。
 pub fn shared_rbac_service(db: Database, audit: Arc<dyn IdentityAuditPort>) -> SharedRbacService {
     Arc::new(RbacService::new(db, audit))
 }
 
 /// 构建 Casbin 主体标识。
-///
-/// # 参数
-/// * `account_kind` - 账号类型。
-/// * `account_id` - 账号 ID。
-///
-/// # 返回
 /// 返回包含账号类型和账号 ID 的稳定主体标识。
-///
-/// # 错误
-/// 不返回错误。
 pub fn subject(account_kind: AccountKind, account_id: &str) -> String {
     format!("user:{}:{account_id}", account_kind.as_str())
 }

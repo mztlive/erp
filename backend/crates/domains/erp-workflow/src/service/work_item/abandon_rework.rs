@@ -25,12 +25,11 @@ pub struct AbandonApprovalReworkRequest {
 
 impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     /// 原提交人关闭自己的驳回待处理任务。
-    /// # 参数
-    /// 任务ID、原版本与幂等键和放弃说明、已认证操作人。
-    /// # 返回
     /// 写入或同载荷回放时返回任务ID；单据仍保留已驳回及编辑重提资格。
-    /// # 错误
+    ///
     /// 账号或权限失效、责任不符、任务版本冲突、异载荷重放或持久化失败时拒绝。
+    ///
+    /// 任务ID、原版本与幂等键和放弃说明、已认证操作人。
     pub async fn abandon_rework(
         self,
         id: String,
@@ -74,7 +73,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             .await
     }
 
-    /// 同一事务内重新授权、仲裁幂等并关闭任务。
+    // 放弃返工在单一事务核对原提交人和当前权限、仲裁幂等身份，再关闭精确任务。
     #[allow(clippy::too_many_arguments)]
     async fn apply_abandon_rework(
         &self,
@@ -132,7 +131,7 @@ fn ensure_rework_owner(item: &WorkItem, actor: &str) -> Result<()> {
     Ok(())
 }
 
-/// 回放必须证明原提交人已经关闭同一任务，禁止把其它终态或损坏结果当作已放弃。
+// 放弃返工回放仅在原提交人已关闭同一任务且持久化结果完好时成立；其他终态不能冒充命令成功。
 fn verify_abandon_replay(
     item: &WorkItem,
     committed: &WorkItemCommandReceipt,

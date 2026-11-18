@@ -5,13 +5,12 @@ use erp_core::{Error, Result};
 use super::{WorkItem, WorkItemCloseData, WorkItemStatus, WorkItemType};
 
 impl WorkItem {
-    /// 判断当前读者是否持有指定提交实例的开放驳回责任。
-    /// # 参数
-    /// 实例 ID、单据类型与 ID、提交版本和当前读者。
-    /// # 返回
+    /// 当当前读者持有指定提交实例的开放驳回责任时返回 `true`。
     /// 任务身份、原提交人和开放状态全部匹配时返回 true。
-    /// # 错误
-    /// 无；不完整或不匹配的责任返回 false。
+    ///
+    /// 不完整或不匹配的责任返回 false。
+    ///
+    /// 实例 ID、单据类型与 ID、提交版本和当前读者。
     pub fn is_open_rework_for(
         &self,
         instance_id: &str,
@@ -29,12 +28,11 @@ impl WorkItem {
     }
 
     /// 原提交人放弃继续处理本次驳回，保留单据及历史。
-    /// # 参数
-    /// `actor` 为原提交人，`reason` 为必填说明，`now` 为操作时间。
-    /// # 返回
     /// 任务关闭；后续业务重提仍可创建新审批实例。
-    /// # 错误
+    ///
     /// 类型、责任人、状态或原因不合法时拒绝。
+    ///
+    /// `actor` 为原提交人，`reason` 为必填说明，`now` 为操作时间。
     pub fn abandon_approval_rework(&mut self, actor: &str, reason: &str, now: Instant) -> Result<()> {
         self.ensure_approval_rework()?;
         self.ensure_current_owner(actor)?;
@@ -42,12 +40,11 @@ impl WorkItem {
     }
 
     /// 业务重提或作废已成功时结束驳回处理责任。
-    /// # 参数
-    /// `actor` 为已由业务命令授权的操作人，`now` 为业务时间。
-    /// # 返回
     /// 开放任务标为已完成并保留原提交人责任历史。
-    /// # 错误
+    ///
     /// 非驳回处理任务、缺失实例关联或任务已结束时拒绝。
+    ///
+    /// `actor` 为已由业务命令授权的操作人，`now` 为业务时间。
     pub fn complete_approval_rework(&mut self, actor: &str, now: Instant) -> Result<()> {
         self.ensure_approval_rework()?;
         if actor.trim().is_empty() {
@@ -58,7 +55,7 @@ impl WorkItem {
         Ok(())
     }
 
-    /// 校验驳回任务绑定固定实例和原提交人。
+    // 驳回返工任务进入专用命令之前，检查固定原实例与提交人责任，不让其他任务冒充返工任务。
     pub(super) fn ensure_approval_rework(&self) -> Result<()> {
         if self.work_item_type != WorkItemType::ApprovalRework
             || self.approval_node_execution_id.is_some()

@@ -12,16 +12,7 @@ use crate::http::handler::purchase_order;
 use crate::http::routes::permission_route;
 use crate::http::state::HttpState;
 
-/// 返回本域管理端路由集合。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回声明公共权限目录信息的路由集合。
-///
-/// # 错误
-/// 不执行 I/O，不返回错误。
+/// 为管理端挂载采购单与采购变更接口，按操作登记公共权限目录信息。
 pub fn routes() -> Router<HttpState> {
     purchase_document_routes()
         .merge(purchase_detail_routes())
@@ -33,7 +24,7 @@ pub fn routes() -> Router<HttpState> {
         .merge(purchase_correspondence_routes())
 }
 
-/// 采购关联销售材料下载始终使用采购对象详情资格及其准确销售版本。
+// 挂载采购上下文中的销售材料下载，资格按采购单详情判断，并限定到准确的销售版本。
 fn purchase_sales_material_routes() -> Router<HttpState> {
     Router::new().route(
         "/purchase-orders/{id}/sales-materials/{asset_id}/download",
@@ -44,7 +35,7 @@ fn purchase_sales_material_routes() -> Router<HttpState> {
     )
 }
 
-/// 采购单列表、创建与详情入口。
+// 为父路由挂载采购单列表、创建与详情入口。
 fn purchase_document_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -74,7 +65,7 @@ fn purchase_document_routes() -> Router<HttpState> {
         )
 }
 
-/// 采购单详情下的付款记录、交付安排范围和原单草稿保存入口。
+// 为父路由挂载采购单详情下的付款记录、交付安排范围和原单草稿保存入口。
 fn purchase_detail_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -107,7 +98,7 @@ fn purchase_detail_routes() -> Router<HttpState> {
         )
 }
 
-/// 采购单审批、作废、建单依据及发起变更入口。
+// 为父路由挂载采购单审批、作废、建单依据及发起变更入口。
 fn purchase_workflow_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -151,7 +142,7 @@ fn purchase_workflow_routes() -> Router<HttpState> {
         )
 }
 
-/// 采购变更详情和既有审批命令入口。
+// 为父路由挂载采购变更详情和既有审批命令入口。
 fn purchase_change_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -191,7 +182,7 @@ fn purchase_change_routes() -> Router<HttpState> {
         )
 }
 
-/// 采购改单草稿读取（复用提交权限）与作废入口。
+// 为父路由挂载采购改单草稿读取（复用提交权限）与作废入口。
 fn purchase_change_draft_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -282,7 +273,7 @@ fn expense_source_routes() -> Router<HttpState> {
         )
 }
 
-/// 采购付款安排查询与当前负责人跟进日期登记。
+// 挂载采购付款安排查询与当前负责人跟进日期登记。
 fn payment_arrangement_routes() -> Router<HttpState> {
     Router::new()
         .route(

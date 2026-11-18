@@ -15,12 +15,11 @@ use crate::service::approval::process_kind::document_type_of;
 use crate::{Error, Result};
 
 /// 为终态驳回实例建立唯一原提交人待办。
-/// # 参数
-/// 数据库、已驳回实例、责任组织、单号、原因、时间及原事务执行器。
-/// # 返回
 /// 创建任务；同一实例已经存在任务时校验身份后保持原状态。
-/// # 错误
+///
 /// 实例未驳回、既有任务身份不符或持久化失败时拒绝。
+///
+/// 数据库、已驳回实例、责任组织、单号、原因、时间及原事务执行器。
 pub async fn create_rework(
     db: &Database,
     instance: &ApprovalProcessInstance,
@@ -81,12 +80,11 @@ pub async fn create_rework(
 }
 
 /// 重提成功后完成指定旧审批实例的待办。
-/// # 参数
-/// 数据库、旧实例ID、已授权业务操作人、时间和原事务执行器。
-/// # 返回
 /// 开放任务完成；不存在或已放弃的任务保持原状。
-/// # 错误
+///
 /// 固定任务身份损坏或更新失败时返回错误。
+///
+/// 数据库、旧实例ID、已授权业务操作人、时间和原事务执行器。
 pub async fn complete_rework(
     db: &Database,
     instance_id: &ApprovalProcessInstanceId,
@@ -110,12 +108,11 @@ pub async fn complete_rework(
 }
 
 /// 单据作废或合法放弃业务办理时完成当前驳回待办。
-/// # 参数
-/// 数据库、单据类型和ID、已授权操作人、时间和原业务事务执行器。
-/// # 返回
 /// 只完成该对象开放的驳回处理任务，保留审批和已关闭任务。
-/// # 错误
+///
 /// 任务身份或仓储读写失败时返回错误。
+///
+/// 数据库、单据类型和ID、已授权操作人、时间和原业务事务执行器。
 pub async fn complete_document_rework(
     db: &Database,
     document_type: &str,
@@ -134,12 +131,11 @@ pub async fn complete_document_rework(
 }
 
 /// 返回原提交人当前可办理的精确实例待办引用。
-/// # 参数
-/// 数据库、已授权读取的审批实例、当前读者与执行器。
-/// # 返回
 /// 仅已驳回实例的原提交人持有匹配的开放任务时返回任务 ID。
-/// # 错误
+///
 /// 仓储读取失败时返回错误；身份不匹配或历史任务返回 None。
+///
+/// 数据库、已授权读取的审批实例、当前读者与执行器。
 pub async fn open_rework_id(
     db: &Database,
     instance: &ApprovalProcessInstance,

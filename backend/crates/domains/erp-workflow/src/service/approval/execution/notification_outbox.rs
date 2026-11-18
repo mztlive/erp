@@ -14,20 +14,12 @@ pub struct NotificationIntent {
 }
 
 /// 按合同 §16.5 把中性事件映射为通知意图。
-///
-/// # 参数
-/// * `events` - BPM 事件
-///
-/// # 返回
 /// 返回去重键已固定的通知意图；不包含模板敏感字段。缺少执行引用或未知事件组合的事件被略去。
-///
-/// # 错误
-/// 不返回错误。
 pub fn map_notification_intents(events: &[BpmEvent]) -> Vec<NotificationIntent> {
     events.iter().filter_map(map_one).collect()
 }
 
-/// 映射单个事件。未知组合不产生通知。
+// 将引擎事件和业务事实转换为单条受支持的审批通知；当前组合未登记时不产生通知。
 fn map_one(event: &BpmEvent) -> Option<NotificationIntent> {
     let instance_id = event.instance_id.as_ref();
     let execution_id = event.execution_id.as_ref().map(|id| id.as_ref());
@@ -72,7 +64,7 @@ mod tests {
     use super::map_notification_intents;
     use crate::entity::approval_integration::ApprovalNotificationEventKind;
 
-    /// 去重键遵循合同固定格式。
+    // 验证：去重键遵循合同固定格式。
     #[test]
     fn execution_outbox_dedup_keys_are_stable() {
         let started = BpmEvent::new(BpmEventKind::InstanceStarted, ApprovalProcessInstanceId::new("inst"), 1);
@@ -90,7 +82,7 @@ mod tests {
         assert_eq!(intents[2].event_kind, ApprovalNotificationEventKind::Resumed);
     }
 
-    /// 恢复事件缺少新执行引用时必须失败关闭，不得回退到实例 ID。
+    // 验证：恢复事件缺少新执行引用时必须失败关闭，不得回退到实例 ID。
     #[test]
     fn resumed_outbox_requires_replacement_execution_id() {
         let resumed_without_execution =

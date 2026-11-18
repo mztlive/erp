@@ -18,11 +18,11 @@ use super::access::audit;
 use crate::{Error, Result};
 
 /// 为原采购执行替代核实资金；调用方必须复用采购变更根事务。
-/// # 参数
-/// * `db` / `execution` / `actor` / `executor` - 原执行、已获变更权限人员及根事务。
-/// # 返回
+///
+/// `db` / `execution` / `actor` / `executor`：原执行、已获变更权限人员及根事务。
+///
 /// 未发送占用已安全释放，或原已发送资金有完整清偿及无后续风险依据。
-/// # 错误
+///
 /// 未决证据、未知发送、未返款/冲回或缺风险消解依据时阻断，不按取消状态猜测。
 pub async fn prepare_execution_funds_replacement(
     db: &Database,

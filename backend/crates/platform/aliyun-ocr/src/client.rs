@@ -19,13 +19,9 @@ pub struct Client {
     credentials: Credentials,
 }
 impl Client {
-    /// 构造图片识别客户端。
-    /// # 参数
-    /// * `credentials` - 配置中心提供的 AK/SK 和可选 STS token
-    /// # 返回
-    /// 连接与单次请求分别限时 5 秒和 30 秒的客户端。
-    /// # 错误
-    /// 无效凭据或 TLS 客户端初始化失败。
+    /// 在装配图片 OCR 时，用部署配置提供的 AK/SK 和可选 STS token 创建可复用的 HTTPS 客户端。
+    /// 连接限时 5 秒，单次调用限时 30 秒；不跟随重定向，也不自动重试计费请求。
+    /// 凭据格式不合法或 TLS 客户端无法初始化时返回 [`Error::Configuration`]。
     pub fn new(credentials: Credentials) -> Result<Self> {
         credentials.validate()?;
 
@@ -39,13 +35,9 @@ impl Client {
         Ok(Self { http, credentials })
     }
 
-    /// 上传单张图片字节并识别全部文字，保留签章。
-    /// # 参数
-    /// * `image` - 不超过 10 MB 的 API 支持图片；PDF 须由调用层逐页渲染
-    /// # 返回
-    /// 图片文字和供应商算法版本。
-    /// # 错误
-    /// 超时、授权、限流、网络、业务错误及非法或超限响应；不包含原文。
+    /// 识别一张图片的完整文字，保留签章，返回文字及供应商版本信息。
+    /// PDF 由调用方逐页渲染；此处只接收非空且不超过 10 MB 的原始图片字节。
+    /// 空文字不能作为空白页的依据。请求或响应失败时仅返回脱敏后的错误分类。
     pub async fn recognize_image(&self, image: &[u8]) -> Result<Page> {
         let request = self.request(image)?;
         let response = self.http.execute(request).await.map_err(transport_error)?;
@@ -77,7 +69,8 @@ impl Client {
     }
 }
 
-/// 声明长度或累计块长度超过 `MAX_RESPONSE_BYTES` 时停止并返回 `Error::ResponseSize`。
+// HTTP 成功后才聚合响应正文；声明长度或累计分块超过上限时立即返回 ResponseSize，
+// 防止在解析供应商 JSON 前将过大的正文读入内存。
 async fn read_response(mut response: Response) -> Result<Vec<u8>> {
     if response.content_length().is_some_and(|length| length > MAX_RESPONSE_BYTES as u64) {
         return Err(Error::ResponseSize);

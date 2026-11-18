@@ -16,13 +16,8 @@ use persistence_core::Executor;
 use crate::repository::prelude::*;
 use crate::{FileAssetExt, Result};
 
-/// 沿当前写入执行器核验全部文件的转授资格。
-/// # 参数
-/// authorization 为共享服务，actor 为真实发起人，ids 为完整文件集合，executor 为原事务执行器。
-/// # 返回
-/// 在快照事务内全部文件均可转授时成功；空集合仍核验账号有效性。
-/// # 错误
-/// 非快照事务、账号失效、任一文件缺失或无权、身份或事实读取失败时返回错误。
+/// 转授文件材料前，在原业务快照内通过共享授权逐一检查当前有效账号和完整文件集合的固定转授权限。
+/// 空集合仍校验账号；非快照、缺文件、无权或身份/事实读取失败时拒绝。
 pub async fn require_transfer(
     authorization: &AuthorizationService,
     actor: &AuditActor,
@@ -32,13 +27,8 @@ pub async fn require_transfer(
     require_files(authorization, actor, ids, &file_asset::TRANSFER, executor).await
 }
 
-/// 核验全部文件由当前有效账号上传。
-/// # 参数
-/// authorization 为共享服务，actor、ids 为真实账号和完整文件集合，executor 为原业务事务。
-/// # 返回
-/// 在快照事务内所有文件均为本人上传时成功；空集合仍核验账号有效性。
-/// # 错误
-/// 非快照事务、账号失效、缺失文件、非本人文件或基础设施失败时拒绝。
+/// 仅允许使用本人上传材料的写入用例，用原事务向共享授权核对完整文件集合的真实上传人。
+/// 空集合仍检查账号有效性；非快照、缺文件、非本人上传或设施读取失败时拒绝。
 pub async fn require_owned(
     authorization: &AuthorizationService,
     actor: &AuditActor,
@@ -48,7 +38,7 @@ pub async fn require_owned(
     require_files(authorization, actor, ids, &file_asset::OWNED_TRANSFER, executor).await
 }
 
-/// 沿原事务分批核验完整文件集合，不在调用方组合授权政策。
+// 先拒绝非快照执行器；空集合验证账号有效性，其余按每批 1000 个 ID 沿原事务检查固定对象权限，不在本域拼接授权结论。
 async fn require_files(
     authorization: &AuthorizationService,
     actor: &AuditActor,
@@ -73,13 +63,7 @@ async fn require_files(
     }
     Ok(())
 }
-/// 提供文件真实上传者事实。
-/// # 参数
-/// db 为文件数据库。
-/// # 返回
-/// 文件根 Facts。
-/// # 错误
-/// 构造不执行 I/O。
+/// 装配读取文件真实上传者的对象事实端口，绑定文件库但不执行 I/O；供 identity 作所有权检查。
 pub fn facts(db: Database) -> Arc<dyn AccessFactsPort> {
     Arc::new(FileFacts(db))
 }
@@ -88,7 +72,7 @@ struct FileFacts(Database);
 
 #[async_trait]
 impl AccessFactsPort for FileFacts {
-    /// 从拥有领域仓储读取当前文件身份、版本与上传者。
+    // 在授权原执行器上从文件仓储读取实际资产 ID、当前版本和上传者，以仓储事实而非请求声明证明归属。
     async fn load(
         &self,
         _: &AccessContext,

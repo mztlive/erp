@@ -22,7 +22,7 @@ use super::SalesOrderReadService;
 use crate::Result;
 
 impl SalesOrderReadService {
-    /// 在原执行器依次读取稳定行、提交、版本和采购数量。
+    // 读取销售详情时，在原执行器依次读取稳定行、提交、版本和采购数量。
     async fn load_detail_batch_a(
         &self,
         order_id: &SalesOrderId,
@@ -36,7 +36,7 @@ impl SalesOrderReadService {
         Ok((lines, submissions, revisions, count))
     }
 
-    /// 在原执行器读取应收摘要、审批绑定和当前工作副本。
+    // 读取销售详情时，在原执行器读取应收摘要、审批绑定和当前工作副本。
     async fn load_detail_batch_b(
         &self,
         order_id: &SalesOrderId,
@@ -63,20 +63,16 @@ impl SalesOrderReadService {
         Ok((summary, binding, view))
     }
 
-    /// 在原执行器加载详情事实，再按提交身份批量读取提交行。
-    ///
-    /// # 参数
-    /// * `order` - 已授权的销售稳定单
-    /// * `executor` - 同一授权事务的执行器。
-    ///
-    /// # 返回
-    /// 返回稳定行、草稿视图、提交、版本视图、采购数、应收摘要与审批绑定。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 全部事实使用同一快照，按顺序借用原执行器。
+    // 读取销售详情时，在原执行器加载详情事实，再按提交身份批量读取提交行。
+    //
+    // 调用参数：
+    // * `order` - 已授权的销售稳定单
+    // * `executor` - 同一授权事务的执行器。
+    //
+    // 返回稳定行、草稿视图、提交、版本视图、采购数、应收摘要与审批绑定。
+    //
+    // 业务边界：
+    // 全部事实使用同一快照，按顺序借用原执行器。
     pub(super) async fn load_detail_facts(
         &self,
         order: &SalesOrder,
@@ -128,17 +124,13 @@ pub(super) struct DetailFacts {
     pub(super) binding: Option<ApprovalDefinitionBinding>,
 }
 
-/// 组装提交视图，纯内存分组排序不触库。
-///
-/// # 参数
-/// * `submissions` - 已并行加载的提交头，新提交在前
-/// * `lines` - 已按提交批量加载的提交行
-///
-/// # 返回
-/// 返回按提交分组、行号排序的提交视图。
-///
-/// # 错误
-/// 无。
+// 销售详情已取得冻结提交及行事实后，在内存分组和排序以形成提交视图，不再访问数据库。
+//
+// 调用参数：
+// * `submissions` - 已并行加载的提交头，新提交在前
+// * `lines` - 已按提交批量加载的提交行
+//
+// 返回按提交分组、行号排序的提交视图。
 fn assemble_submission_views(
     submissions: Vec<SalesOrderSubmission>,
     lines: Vec<SalesOrderSubmissionLine>,

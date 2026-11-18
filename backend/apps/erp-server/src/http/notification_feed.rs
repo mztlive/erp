@@ -23,13 +23,9 @@ impl Default for NotificationFeed {
     }
 }
 impl NotificationFeed {
-    /// 由进程启动入口调用一次，任务交给 HTTP 排空管理器。
-    /// # 参数
-    /// app 为共享装配，tasks 为生命周期管理器。
-    /// # 返回
-    /// 后台订阅已经登记；建立连接前 hub 保持不可用。
-    /// # 错误
-    /// 停机或任务管理器拒绝时返回错误。
+    // 由进程启动入口调用一次，任务交给 HTTP 排空管理器。
+    // 后台订阅已经登记；建立连接前 hub 保持不可用。
+    // 停机或任务管理器拒绝时返回错误。
     pub(crate) fn start(&self, app: Application, tasks: &RequestTasks) -> Result<(), Error> {
         let hub = self.hub.clone();
         let mut stop = self.stop.subscribe();
@@ -52,13 +48,8 @@ impl NotificationFeed {
             hub.set_available(false);
         })
     }
-    /// 停止订阅并唤醒 SSE，使 HTTP 可以及时排空。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 已广播停止信号。
-    /// # 错误
-    /// 无。
+    // 停止订阅并唤醒 SSE，使 HTTP 可以及时排空。
+    // 已广播停止信号。
     pub(crate) fn stop(&self) {
         self.stop.send_replace(true);
         self.hub.set_available(false);

@@ -16,16 +16,17 @@ use persistence_core::Executor;
 
 use crate::{Error, Result};
 
-/// 空关键词不读取任何关联；非空关键词解析完整身份，不截断结果。
-///
-/// 名称、来源单号、财务关系任何一段失败时整次查询失败。
-///
-/// # 参数
-/// 数据库、可选关键词、需要解析的财务对象类型及原读取执行器。
-/// # 返回
-/// 返回完整关键词命中身份；空关键词不限制列表。
-/// # 错误
-/// 关联读取按原名称、供应商、来源单号、财务关系顺序返回首个错误。
+// 定位票款往来搜索关联时，空关键词不读取任何关联；非空关键词解析完整身份，不截断结果。
+//
+// 名称、来源单号、财务关系任何一段失败时整次查询失败。
+//
+// 调用参数：
+// 数据库、可选关键词、需要解析的财务对象类型及原读取执行器。
+//
+// 返回完整关键词命中身份；空关键词不限制列表。
+//
+// 失败边界：
+// 关联读取按原名称、供应商、来源单号、财务关系顺序返回首个错误。
 pub(super) async fn keyword_ids(
     db: &Database,
     q: Option<&str>,
@@ -46,14 +47,14 @@ pub(super) async fn keyword_ids(
     Ok(Some(FinanceKeywordRepository::new(db).matching_ids(target, &facts, executor).await?))
 }
 
-/// 销售单号和主体名称沿原执行器串行读取，保持与授权及最终页面相同快照。
+// 处理票款往来搜索时，销售单号和主体名称沿原执行器串行读取，保持与授权及最终页面相同快照。
 async fn sales_facts(db: &Database, q: String, executor: &mut dyn Executor) -> Result<FinanceKeyword> {
     let parties = db.party().matching_current_party_ids_by_name(&q, executor).await;
     let orders = db.sales_orders().matching_ids_by_number(&q, executor).await;
     sales_keyword(q, parties.map_err(Error::from), orders.map_err(Error::from))
 }
 
-/// 名称、供应商与两类来源单号沿同一执行器读取，不混入事务外物化身份。
+// 处理票款往来搜索时，名称、供应商与两类来源单号沿同一执行器读取，不混入事务外物化身份。
 async fn purchase_facts(db: &Database, q: String, executor: &mut dyn Executor) -> Result<FinanceKeyword> {
     let parties = async {
         let parties = db.party().matching_current_party_ids_by_name(&q, executor).await?;
@@ -66,7 +67,7 @@ async fn purchase_facts(db: &Database, q: String, executor: &mut dyn Executor) -
     purchase_keyword(q, parties, orders.map_err(Error::from), statements.map_err(Error::from))
 }
 
-/// 销售侧先解包主体名称错误，再解包单号错误，保留所有命中身份及原顺序。
+// 处理票款往来搜索时，销售侧先解包主体名称错误，再解包单号错误，保留所有命中身份及原顺序。
 fn sales_keyword(
     q: String,
     parties: Result<Vec<PartyId>>,
@@ -77,7 +78,7 @@ fn sales_keyword(
     Ok(FinanceKeyword { q, party_ids, sales_order_ids, ..Default::default() })
 }
 
-/// 采购侧先解包名称和供应商错误，再按原采购、结算顺序传播单号错误。
+// 处理票款往来搜索时，采购侧先解包名称和供应商错误，再按原采购、结算顺序传播单号错误。
 fn purchase_keyword(
     q: String,
     parties: Result<(Vec<PartyId>, Vec<SupplierAccountId>)>,
@@ -101,7 +102,7 @@ fn purchase_keyword(
 mod tests {
     use super::*;
 
-    /// 读取结果保留销售侧所有命中身份，不把空集合或大量结果解释为无筛选。
+    // 验证票款往来搜索：读取结果保留销售侧所有命中身份，不把空集合或大量结果解释为无筛选。
     #[test]
     fn sales_facts_keep_complete_ids_and_empty_matches() {
         let orders = (0..10_001).map(|index| SalesOrderId::new(index.to_string())).collect();
@@ -117,7 +118,7 @@ mod tests {
         assert_eq!(empty.q, "q");
     }
 
-    /// 名称与单号同时失败时，错误优先级沿用原串行查询合同。
+    // 验证票款往来搜索：名称与单号同时失败时，错误优先级沿用原串行查询合同。
     #[test]
     fn sales_errors_keep_party_before_order_priority() {
         let error = sales_keyword(
@@ -130,7 +131,7 @@ mod tests {
         assert!(matches!(error, Err(Error::Internal(message)) if message == "order"));
     }
 
-    /// 采购与结算单号始终保持独立来源身份，即使原始主键相同。
+    // 验证票款往来搜索：采购与结算单号始终保持独立来源身份，即使原始主键相同。
     #[test]
     fn purchase_facts_keep_supplier_and_typed_source_ids() {
         let facts = purchase_keyword(
@@ -147,7 +148,7 @@ mod tests {
         assert!(facts.sales_order_ids.is_empty());
     }
 
-    /// 名称或供应商失败优先于采购；采购错误优先于结算，成功空集继续生成查询事实。
+    // 验证票款往来搜索：名称或供应商失败优先于采购；采购错误优先于结算，成功空集继续生成查询事实。
     #[test]
     fn purchase_errors_keep_original_priority() {
         for first_error in ["party", "supplier"] {

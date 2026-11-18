@@ -3,17 +3,13 @@ use mongodb::bson::{Document, doc};
 
 use crate::entity::party::EffectiveRecordStatus;
 
-/// 构造指定日期生效的 Party 从属事实过滤条件。
-///
-/// # 参数
-/// * `party_id` - 所属 Party ID
-/// * `as_of` - 业务日期
-///
-/// # 返回
-/// 返回启用状态且日期落在左闭右开有效期内的查询文档。
-///
-/// # 错误
-/// 不返回错误。
+// 构造指定日期生效的 Party 从属事实过滤条件。
+//
+// # 参数
+// * `party_id` - 所属 Party ID
+// * `as_of` - 业务日期
+//
+// 返回启用状态且日期落在左闭右开有效期内的查询文档。
 pub(super) fn active_fact_filter(
     party_id: &PartyId,
     as_of: erp_core::common::time::BusinessDate,
@@ -23,16 +19,12 @@ pub(super) fn active_fact_filter(
     filter
 }
 
-/// 构造指定日期生效的 Party 从属事实公共时间窗过滤条件。
-///
-/// # 参数
-/// * `as_of` - 业务日期
-///
-/// # 返回
-/// 返回启用状态且日期落在左闭右开有效期内的公共查询文档。
-///
-/// # 错误
-/// 不返回错误。
+// 构造指定日期生效的 Party 从属事实公共时间窗过滤条件。
+//
+// # 参数
+// * `as_of` - 业务日期
+//
+// 返回启用状态且日期落在左闭右开有效期内的公共查询文档。
 pub(super) fn active_fact_window_filter(as_of: erp_core::common::time::BusinessDate) -> Document {
     let as_of = as_of.to_string();
     doc! {
@@ -45,40 +37,29 @@ pub(super) fn active_fact_window_filter(as_of: erp_core::common::time::BusinessD
     }
 }
 
-/// 构建排序文档（仓储白名单）。
-///
-/// `sort_by` 不在 `allowed` 白名单内时回落默认 `created_at`，禁止透传任意
-/// 字段名（P2 §2.3）。
-///
-/// # 参数
-/// * `sort_by` - 排序字段；`None` 或不在白名单时默认 `created_at`
-/// * `sort_ascending` - 升序为 `true`，降序为 `false`
-/// * `allowed` - 允许的排序字段白名单
-///
-/// # 返回
-/// 返回排序条件文档。
-///
-/// # 错误
-/// 不返回错误。
+// 构建排序文档（仓储白名单）。
+//
+// `sort_by` 不在 `allowed` 白名单内时回落默认 `created_at`，禁止透传任意
+// 字段名（P2 §2.3）。
+//
+// # 参数
+// * `sort_by` - 排序字段；`None` 或不在白名单时默认 `created_at`
+// * `sort_ascending` - 升序为 `true`，降序为 `false`
+// * `allowed` - 允许的排序字段白名单
+//
+// 返回排序条件文档。
 pub(super) fn sort_doc(sort_by: Option<&str>, sort_ascending: bool, allowed: &[&str]) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
     let field = sort_by.filter(|candidate| allowed.contains(candidate)).unwrap_or("created_at");
     doc! { field: direction }
 }
 
-/// 构造从属事实默认优先的稳定排序（erp-party-012）。
-///
-/// 四个从属事实的 `list_current_on`/`list_by_party` 共用同一排序语义；
-/// 排序文档唯一来源，避免默认优先与创建时间顺序漂移。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回默认标记优先、同组内最新创建优先的排序文档。
-///
-/// # 错误
-/// 不返回错误。
+// 构造从属事实默认优先的稳定排序（erp-party-012）。
+//
+// 四个从属事实的 `list_current_on`/`list_by_party` 共用同一排序语义；
+// 排序文档唯一来源，避免默认优先与创建时间顺序漂移。
+//
+// 返回默认标记优先、同组内最新创建优先的排序文档。
 pub(super) fn default_first_sort() -> Document {
     doc! { "is_default": -1, "created_at": -1 }
 }
@@ -111,19 +92,15 @@ macro_rules! impl_clear_other_default_marks {
 
 pub(super) use impl_clear_other_default_marks;
 
-/// 构造同一主体默认标记行的查询条件（erp-party-012）。
-///
-/// 四个从属事实的 `clear_other_default_marks` 共用同一过滤语义；调用方
-/// 在同一事务执行器内逐行清除，与主写入组成原子边界。
-///
-/// # 参数
-/// * `party_id` - 所属 Party ID
-///
-/// # 返回
-/// 返回限定同一主体默认行的查询文档。
-///
-/// # 错误
-/// 不返回错误。
+// 构造同一主体默认标记行的查询条件（erp-party-012）。
+//
+// 四个从属事实的 `clear_other_default_marks` 共用同一过滤语义；调用方
+// 在同一事务执行器内逐行清除，与主写入组成原子边界。
+//
+// # 参数
+// * `party_id` - 所属 Party ID
+//
+// 返回限定同一主体默认行的查询文档。
 pub(super) fn party_default_marks_filter(party_id: &PartyId) -> Document {
     doc! { "party_id": party_id.to_string(), "is_default": true }
 }

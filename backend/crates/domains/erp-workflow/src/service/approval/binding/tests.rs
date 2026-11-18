@@ -19,7 +19,7 @@ use crate::service::approval::policy::{ALL_DOCUMENT_TYPES, ApprovalRequirement, 
 use crate::service::approval::upgrade_subject::ApprovalUpgradeSubjectFacts;
 use crate::service::document_registry::new_registered_document;
 
-/// 构造严格回读单测命令。
+// 准备升级命令测试输入，供断言回放严格比对绑定及命令身份。
 fn upgrade_command() -> UpgradeUnsubmittedDefinitionCommand {
     let identity = upgrade_binding_identity(
         DocumentType::StockAdjustment.as_str(),
@@ -43,7 +43,7 @@ fn upgrade_command() -> UpgradeUnsubmittedDefinitionCommand {
     }
 }
 
-/// 构造收据指向的不可变升级动作。
+// 准备与测试收据关联的不可变升级动作，用于验证原结果只从精确事实回读。
 fn upgrade_action(command: &UpgradeUnsubmittedDefinitionCommand) -> WorkflowAction {
     WorkflowAction::new_with_approval_binding_context(
         command.action_id.clone(),
@@ -69,7 +69,7 @@ fn upgrade_action(command: &UpgradeUnsubmittedDefinitionCommand) -> WorkflowActi
     .unwrap()
 }
 
-/// 绑定政策：无审批跳过，必须审批要求发布定义。
+// 验证：绑定政策：无审批跳过，必须审批要求发布定义。
 #[test]
 fn binding_policy_skips_no_approval_and_requires_published() {
     for document_type in ALL_DOCUMENT_TYPES {
@@ -85,7 +85,7 @@ fn binding_policy_skips_no_approval_and_requires_published() {
     }
 }
 
-/// 同载荷结果必须完全由收据指向的不可变动作重建。
+// 验证：同载荷结果必须完全由收据指向的不可变动作重建。
 #[test]
 fn upgrade_result_is_rebuilt_from_strict_action_proof() {
     let command = upgrade_command();
@@ -131,7 +131,7 @@ fn upgrade_result_is_rebuilt_from_strict_action_proof() {
     );
 }
 
-/// 单号只在注册与强实体两端均有值时作为一致性证明。
+// 验证：单号只在注册与强实体两端均有值时作为一致性证明。
 #[test]
 fn upgrade_registry_identity_allows_one_sided_empty_document_number() {
     let document = new_registered_document("adjustment-1", DocumentType::StockAdjustment, "").unwrap();
@@ -152,7 +152,7 @@ fn upgrade_registry_identity_allows_one_sided_empty_document_number() {
     assert!(ensure_registered_upgrade_subject(&conflicting, &facts).is_err());
 }
 
-/// 缺失发布定义失败关闭。
+// 验证：缺失发布定义失败关闭。
 #[test]
 fn missing_published_definition_fails_closed() {
     let error = published_definition_or_not_configured::<()>(None).unwrap_err();
@@ -160,7 +160,7 @@ fn missing_published_definition_fails_closed() {
     assert!(published_definition_or_not_configured(Some(1)).is_ok());
 }
 
-/// BPM 确认已发布线性图；草稿/退役映射为未配置，损坏发布图不得被仓储过滤放过。
+// 验证：BPM 确认已发布线性图；草稿/退役映射为未配置，损坏发布图不得被仓储过滤放过。
 #[test]
 fn published_graph_revalidation_uses_bpm_and_maps_configuration_errors() {
     let at = bpm::Timestamp::from_unix_secs(1).unwrap();
@@ -185,14 +185,14 @@ fn published_graph_revalidation_uses_bpm_and_maps_configuration_errors() {
     assert_ne!(corrupt.to_string(), ErrorCode::ApprovalProcessNotConfigured.as_str());
 }
 
-/// 全部必须审批类型进入目标运行时。
+// 验证：全部必须审批类型进入目标运行时。
 #[test]
 fn process_required_types_are_cut_over() {
     assert!(ensure_runtime_cut_over(DocumentType::StockAdjustment).is_ok());
     assert!(ensure_runtime_cut_over(DocumentType::PurchaseOrder).is_ok());
 }
 
-/// 20 个 DocumentType 的 BusinessDocument 注册清点。
+// 验证：20 个 DocumentType 的 BusinessDocument 注册清点。
 #[test]
 fn business_document_registration_inventory() {
     const ROWS: &[(DocumentType, &str, &str)] = &[
@@ -260,7 +260,7 @@ fn business_document_registration_inventory() {
     }
 }
 
-/// 草稿允许空编号；正式号原样登记。
+// 验证：草稿允许空编号；正式号原样登记。
 #[test]
 fn draft_allows_empty_document_no() {
     let empty = new_registered_document("po-1", DocumentType::PurchaseOrder, "   ").unwrap();

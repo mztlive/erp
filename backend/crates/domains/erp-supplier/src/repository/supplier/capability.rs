@@ -42,18 +42,9 @@ impl Default for SupplierCapabilityFilter {
 }
 
 impl QueryFilter for SupplierCapabilityFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。始终写入未删除的 `deleted_at`。
-    /// `supplier_id`、`capability_code`、`status` 为 `Some` 时分别按字符串或 `as_str()` 精确写入；
-    /// 为 `None` 时不筛选。分页与排序字段不进入条件。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 将供应能力筛选条件转换为 MongoDB 谓词，供仓储取数使用。
+    // 始终写入未删除的 `deleted_at`。`supplier_id`、`capability_code`、`status` 为 `Some` 时分别按字符串
+    // 或 `as_str()` 精确写入；为 `None` 时不筛选。分页与排序字段不进入条件。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(supplier_id) = &self.supplier_id {
@@ -70,16 +61,8 @@ impl QueryFilter for SupplierCapabilityFilter {
 }
 
 impl Pagination for SupplierCapabilityFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。`page_size` 由 `u32` 展成 `u64`，不把 `0` 归一成第一页。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 向通用仓储提供供应能力查询的页码和页长；不在此处改写页码。
+    // `page_size` 由 `u32` 展成 `u64`。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -88,18 +71,8 @@ impl Pagination for SupplierCapabilityFilter {
 /// 供应商能力集合上的域查询。
 #[allow(async_fn_in_trait)]
 pub trait SupplierCapabilityRepositoryExt {
-    /// 按「供应商 + 能力代码」查找能力（唯一性由
-    /// `uk_supplier_capabilities_supplier_code` 保证）。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 供应商角色 ID
-    /// * `capability_code` - 能力代码
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
+    /// 按「供应商 + 能力代码」查找能力（唯一性由`uk_supplier_capabilities_supplier_code` 保证）。
     /// 返回匹配的未删除能力；无匹配时返回 `None`。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
     async fn find_by_supplier_and_code(
         &self,
@@ -108,17 +81,9 @@ pub trait SupplierCapabilityRepositoryExt {
         executor: &mut dyn Executor,
     ) -> Result<Option<SupplierCapability>>;
 
-    /// 检索启用能力的到期预警列表（§6.2：`capability_code + status + valid_to`
-    /// 用于选品和到期预警），按 `valid_to` 升序。
-    ///
-    /// # 参数
-    /// * `capability_code` - 能力代码
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
+    /// 检索启用能力的到期预警列表（§6.2：`capability_code + status + valid_to`用于选品和到期预警），按
+    /// `valid_to` 升序。
     /// 返回匹配的启用能力（含已到期记录，由调用方按业务日期过滤）。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
     async fn list_active_for_expiry_warning(
         &self,
@@ -127,17 +92,9 @@ pub trait SupplierCapabilityRepositoryExt {
     ) -> Result<Vec<SupplierCapability>>;
 
     /// 查询命中任一当前有效能力的供应商角色 ID。
-    ///
-    /// # 参数
-    /// * `capability_codes` - 供应能力代码；调用方保证非空
-    /// * `as_of` - 当前业务日，格式为 `YYYY-MM-DD`
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回去重、稳定排序后的供应商角色 ID。
-    ///
-    /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
+    /// `capability_codes`：调用方保证非空。
     async fn list_supplier_ids_by_active_capability_codes(
         &self,
         capability_codes: &[CapabilityCode],
@@ -205,16 +162,7 @@ impl SupplierCapabilityRepositoryExt for Repository<'_, SupplierCapability> {
 
 impl<'a> SupplierRepository<'a> {
     /// 查询命中任一当前有效能力的供应商角色 ID。
-    ///
-    /// # 参数
-    /// * `capability_codes` - 供应能力代码
-    /// * `as_of` - 当前业务日，格式为 `YYYY-MM-DD`
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回去重、稳定排序后的供应商角色 ID。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询或反序列化失败时返回错误。
     pub async fn list_supplier_ids_by_active_capability_codes(
         &self,
@@ -228,16 +176,9 @@ impl<'a> SupplierRepository<'a> {
     }
 
     /// 按当前页供应商角色 ID 批量读取能力。
-    ///
-    /// # 参数
-    /// * `supplier_ids` - 当前页供应商角色 ID；空集合时不访问数据库
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回这些供应商的全部未删除能力，不按页大小之外的供应商扩展。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询或反序列化失败时返回错误。
+    /// `supplier_ids`：空集合时不访问数据库。
     pub async fn list_capabilities_by_supplier_ids(
         &self,
         supplier_ids: &[SupplierAccountId],
@@ -253,15 +194,7 @@ impl<'a> SupplierRepository<'a> {
     }
 
     /// 按创建时间升序读取供应商全部能力。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 供应商角色 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回该供应商的全部未删除能力。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询或反序列化失败时返回错误。
     pub async fn list_capabilities(
         &self,

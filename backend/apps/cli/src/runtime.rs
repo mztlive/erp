@@ -11,13 +11,9 @@ pub struct JdVopCredentialRuntime {
 }
 
 impl JdVopCredentialRuntime {
-    /// 校验停用模式下也必需的凭据配置，并连接目标数据库。
-    /// # 参数
-    /// `source` 为本地或 Nacos 的统一配置来源。
-    /// # 返回
-    /// 精确绑定凭据 ID、账号范围及 app key 的用例。
-    /// # 错误
-    /// 配置缺失、绑定设置无效、数据库连接或用例装配失败时返回错误。
+    /// 京东凭据导入或查询前，读取一次部署配置，校验凭据设置并连接目标数据库，
+    /// 按凭据 ID、账号范围和 app key 装配用例。即使业务对接已停用，也不放宽凭据校验，
+    /// 且不启动远端调用或刷新任务。
     pub async fn connect(source: &ConfigArgs) -> Result<Self> {
         let config = source.load().await?;
         let settings =
@@ -35,19 +31,8 @@ pub struct AdminRuntime {
 }
 
 impl AdminRuntime {
-    /// 读取配置、连接 MongoDB 并构造管理员服务。
-    ///
-    /// 会校验副本集/分片事务能力。初始化超级管理员还会写入角色与 Casbin
-    /// 规则，因此同时确保索引存在。
-    ///
-    /// # 参数
-    /// * `source` - 文件或 Nacos 配置来源
-    ///
-    /// # 返回值
-    /// 返回可调用 `AdminService` 的运行时。
-    ///
-    /// # 错误
-    /// 配置无效、数据库不可用或不支持事务时返回错误。
+    /// 为初始化和重置密码命令装配目标库的管理员服务。先确认 MongoDB 支持事务（副本集或
+    /// 分片集群），再确保索引就绪；初始化可能同时写入账号、角色和 Casbin 规则。
     pub async fn connect(source: &ConfigArgs) -> Result<Self> {
         let config = source.load().await?;
         let (_, db) = persistence_core::connect(&config.database.uri, &config.database.db_name).await?;

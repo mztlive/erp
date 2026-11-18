@@ -38,7 +38,7 @@ pub enum ApplyError {
 }
 
 impl From<ApplyError> for Error {
-    /// 将应用失败映射为服务错误。
+    // 把 BPM 应用阶段的失败映射到工作流领域错误，供调用方按稳定类别处理。
     fn from(error: ApplyError) -> Self {
         match error {
             ApplyError::DuplicateReceipt => super::idempotency::payload_conflict_error(),
@@ -74,8 +74,6 @@ pub struct TaskApplyContext {
 /// 强类型领域动作执行器。
 pub trait DomainActionExecutor {
     /// 在写入 BPM 终态前执行签署动作。
-    ///
-    /// # 错误
     /// 领域动作失败时返回错误，调用方必须回滚。
     fn execute(&self, kind: DomainActionKind) -> std::result::Result<(), ApplyError>;
 }
@@ -113,9 +111,6 @@ pub struct MemoryRuntimeStore {
 
 impl MemoryRuntimeStore {
     /// 开启事务快照。
-    ///
-    /// # 返回
-    /// 无。
     pub fn begin(&mut self) {
         let mut clone = self.clone();
         clone.snapshot = None;
@@ -123,17 +118,11 @@ impl MemoryRuntimeStore {
     }
 
     /// 提交事务并丢弃快照。
-    ///
-    /// # 返回
-    /// 无。
     pub fn commit(&mut self) {
         self.snapshot = None;
     }
 
     /// 回滚到 begin 时的快照。
-    ///
-    /// # 返回
-    /// 无。
     pub fn rollback(&mut self) {
         if let Some(snapshot) = self.snapshot.take() {
             *self = *snapshot;
@@ -141,13 +130,6 @@ impl MemoryRuntimeStore {
     }
 
     /// 按收据键查找。
-    ///
-    /// # 参数
-    /// * `kind` - 命令种类
-    /// * `scope_id` - 作用域
-    /// * `idempotency_key` - 幂等键
-    ///
-    /// # 返回
     /// 命中时返回收据。
     pub fn find_receipt(
         &self,
@@ -159,22 +141,12 @@ impl MemoryRuntimeStore {
     }
 
     /// 返回已持久化实例。
-    ///
-    /// # 参数
-    /// * `id` - 实例主键
-    ///
-    /// # 返回
     /// 命中时返回实例。
     pub fn instance(&self, id: &str) -> Option<&ApprovalProcessInstance> {
         self.instances.get(id)
     }
 
     /// 返回指定执行的开放任务数。
-    ///
-    /// # 参数
-    /// * `execution_id` - 节点执行
-    ///
-    /// # 返回
     /// 返回 OPEN 任务数量。
     pub fn open_task_count(&self, execution_id: &ApprovalNodeExecutionId) -> usize {
         self.work_items
@@ -187,34 +159,21 @@ impl MemoryRuntimeStore {
     }
 
     /// 返回全部任务。
-    ///
-    /// # 返回
     /// 返回任务切片。
     pub fn work_items(&self) -> impl Iterator<Item = &WorkItem> {
         self.work_items.values()
     }
 
     /// 返回 outbox 条目。
-    ///
-    /// # 返回
     /// 返回通知记录。
     pub fn outbox_items(&self) -> impl Iterator<Item = &ApprovalNotificationOutbox> {
         self.outbox.values()
     }
 
     /// 向内存适配器注入已有任务，供重复开放任务契约测试使用。
-    ///
-    /// # 参数
-    /// * `item` - 已构造的待办
-    ///
-    /// # 返回
-    /// 无。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
     /// 仅测试适配器可预置脏数据；生产仓储不得提供绕过 CAS 的注入入口。
+    ///
+    /// `item`：已构造的待办。
     pub fn insert_work_item(&mut self, item: WorkItem) {
         self.work_items.insert(item.base.id.clone(), item);
     }
@@ -224,14 +183,9 @@ impl MemoryRuntimeStore {
 ///
 /// 顺序：领域动作 → 收据 → 实例 → 执行 → 绑定 → 任务 → outbox。
 ///
-/// # 参数
-/// * `store` - 事务会话
-/// * `writes` - 计划写入
-/// * `ctx` - 任务映射上下文
-/// * `domain` - 领域动作
-///
-/// # 错误
 /// 重复收据、版本冲突或领域动作失败时回滚并返回错误。
+///
+/// `store`：事务会话；`ctx`：任务映射上下文。
 pub fn commit_writes(
     store: &mut MemoryRuntimeStore,
     writes: &PlannedWrites,
@@ -248,16 +202,9 @@ pub fn commit_writes(
 }
 
 /// 收据 duplicate-key 后按已提交收据回读。
-///
-/// # 参数
-/// * `store` - 已提交会话
-/// * `kind` - 命令种类
-/// * `scope_id` - 作用域
-/// * `idempotency_key` - 幂等键
-/// * `digest` - 本次摘要
-///
-/// # 返回
 /// 同载荷返回已提交收据，异载荷冲突。
+///
+/// `store`：已提交会话。
 pub fn replay_after_duplicate(
     store: &MemoryRuntimeStore,
     kind: ApprovalCommandKind,
@@ -274,10 +221,7 @@ pub fn replay_after_duplicate(
     }
 }
 
-/// 按收据与本次摘要选择旧内存测试分支。
-///
-/// 新生产调用必须使用 [`super::idempotency::PreparedCommandIdentity::classify`]；此函数只保留给
-/// 不含 scope 查询的内存存储测试。
+// 内存持久化测试用原摘要与已存收据区分新执行、回放或异载荷冲突。
 fn classify_receipt<'a>(
     receipt: Option<&'a ApprovalCommandReceipt>,
     payload_digest: &str,
@@ -330,20 +274,14 @@ pub(super) fn insert_receipt(
     Ok(())
 }
 
-/// 按引擎自增后的版本对实例做 CAS 写入。
-///
-/// # 参数
-/// * `store` - 内存事务会话
-/// * `instance` - 引擎变更后的实例
-///
-/// # 返回
-/// 新建或版本恰好前进 1 时写入成功。
-///
-/// # 错误
-/// 已存在实例的版本不是 `instance.version - 1` 时返回版本冲突。
-///
-/// # 关键业务约束
-/// 冲突不得覆盖已提交快照，调用方必须回滚。
+// 按引擎自增后的版本对实例做 CAS 写入。
+// 冲突不得覆盖已提交快照，调用方必须回滚。
+//
+// 新建或版本恰好前进 1 时写入成功。
+//
+// 已存在实例的版本不是 `instance.version - 1` 时返回版本冲突。
+//
+// `store`：内存事务会话；`instance`：引擎变更后的实例。
 fn persist_instance(
     store: &mut MemoryRuntimeStore,
     instance: &ApprovalProcessInstance,
@@ -369,20 +307,14 @@ fn insert_execution(
     Ok(())
 }
 
-/// 按引擎自增后的版本替换已有节点执行。
-///
-/// # 参数
-/// * `store` - 内存事务会话
-/// * `execution` - 引擎变更后的执行
-///
-/// # 返回
-/// 版本恰好前进 1 时替换成功。
-///
-/// # 错误
-/// 执行不存在或版本不匹配时返回版本冲突。
-///
-/// # 关键业务约束
-/// 不得插入新执行或覆盖并发写入。
+// 按引擎自增后的版本替换已有节点执行。
+// 不得插入新执行或覆盖并发写入。
+//
+// 版本恰好前进 1 时替换成功。
+//
+// 执行不存在或版本不匹配时返回版本冲突。
+//
+// `store`：内存事务会话；`execution`：引擎变更后的执行。
 fn replace_execution(
     store: &mut MemoryRuntimeStore,
     execution: &ApprovalNodeExecution,
@@ -439,7 +371,7 @@ fn apply_task_intents(
     Ok(())
 }
 
-/// 内存持久化沿已登记的同实例任务复用生产日期身份校验。
+// 内存存储接入生产日期匹配规则，从同一审批实例已登记的真实任务继承希望付款日。
 fn inherited_task_due_at(
     store: &MemoryRuntimeStore,
     writes: &PlannedWrites,
@@ -466,22 +398,14 @@ fn inherited_task_due_at(
     Ok(None)
 }
 
-/// 完成指定执行下全部开放审批任务。
-///
-/// # 参数
-/// * `store` - 内存事务会话
-/// * `execution_id` - 当前结束的节点执行
-/// * `actor_id` - 操作人
-/// * `now` - 调用方时间
-///
-/// # 返回
-/// 全部开放任务已完成时返回 `Ok(())`。
-///
-/// # 错误
-/// 实体状态变更失败时返回不变量错误。
-///
-/// # 关键业务约束
-/// 重复开放任务必须全部完成。
+// 完成指定执行下全部开放审批任务。
+// 重复开放任务必须全部完成。
+//
+// 全部开放任务已完成时返回 `Ok(())`。
+//
+// 实体状态变更失败时返回不变量错误。
+//
+// `store`：内存事务会话；`execution_id`：当前结束的节点执行。
 fn complete_open_task(
     store: &mut MemoryRuntimeStore,
     execution_id: &ApprovalNodeExecutionId,
@@ -491,23 +415,15 @@ fn complete_open_task(
     end_open_tasks(store, execution_id, actor_id, &ApprovalRuntimeTaskEnding::Complete, now)
 }
 
-/// 关闭指定执行下全部开放审批任务。
-///
-/// # 参数
-/// * `store` - 内存事务会话
-/// * `execution_id` - 当前结束的节点执行
-/// * `reason` - 关闭原因
-/// * `actor_id` - 操作人
-/// * `now` - 调用方时间
-///
-/// # 返回
-/// 全部开放任务已关闭时返回 `Ok(())`。
-///
-/// # 错误
-/// 实体状态变更失败时返回不变量错误。
-///
-/// # 关键业务约束
-/// 重复开放任务必须全部关闭，语义与生产 Mongo CAS 路径一致。
+// 关闭指定执行下全部开放审批任务。
+// 重复开放任务必须全部关闭，语义与生产 Mongo CAS 路径一致。
+//
+// 全部开放任务已关闭时返回 `Ok(())`。
+//
+// 实体状态变更失败时返回不变量错误。
+//
+// `store`：内存事务会话；`execution_id`：当前结束的节点执行。
+// `reason`：关闭原因。
 pub(super) fn close_open_tasks(
     store: &mut MemoryRuntimeStore,
     execution_id: &ApprovalNodeExecutionId,
@@ -524,23 +440,14 @@ pub(super) fn close_open_tasks(
     )
 }
 
-/// 结束指定执行下全部开放审批任务，语义与生产 Mongo CAS 路径一致。
-///
-/// # 参数
-/// * `store` - 内存事务会话
-/// * `execution_id` - 当前结束的节点执行
-/// * `actor_id` - 操作人
-/// * `ending` - 完成或关闭
-/// * `now` - 调用方时间
-///
-/// # 返回
-/// 全部开放任务已终结时返回 `Ok(())`。
-///
-/// # 错误
-/// 实体状态变更失败时返回不变量错误。
-///
-/// # 关键业务约束
-/// 同一执行的重复开放任务必须全部关闭；不得只处理第一条。
+// 结束指定执行下全部开放审批任务，语义与生产 Mongo CAS 路径一致。
+// 同一执行的重复开放任务必须全部关闭；不得只处理第一条。
+//
+// 全部开放任务已终结时返回 `Ok(())`。
+//
+// 实体状态变更失败时返回不变量错误。
+//
+// `store`：内存事务会话；`execution_id`：当前结束的节点执行。
 fn end_open_tasks(
     store: &mut MemoryRuntimeStore,
     execution_id: &ApprovalNodeExecutionId,
@@ -562,20 +469,14 @@ fn end_open_tasks(
     persist_ended_tasks(store, &ended)
 }
 
-/// 按加载版本 CAS 写回已终结任务，语义对齐生产 `persist_ended_approval_tasks`。
-///
-/// # 参数
-/// * `store` - 内存事务会话
-/// * `items` - 已由实体方法终结、仍持有加载版本的任务
-///
-/// # 返回
-/// 全部任务仍为开放且版本匹配时写入终结快照。
-///
-/// # 错误
-/// 任一任务缺失、非开放或版本不匹配时返回版本冲突，不写入任何任务。
-///
-/// # 关键业务约束
-/// 先校验再写入，避免只关闭第一条；调用方失败时必须 rollback。
+// 按加载版本 CAS 写回已终结任务，语义对齐生产 `persist_ended_approval_tasks`。
+// 先校验再写入，避免只关闭第一条；调用方失败时必须 rollback。
+//
+// 全部任务仍为开放且版本匹配时写入终结快照。
+//
+// 任一任务缺失、非开放或版本不匹配时返回版本冲突，不写入任何任务。
+//
+// `store`：内存事务会话；`items`：已由实体方法终结、仍持有加载版本的任务。
 pub(super) fn persist_ended_tasks(
     store: &mut MemoryRuntimeStore,
     items: &[WorkItem],
@@ -665,7 +566,7 @@ mod tests {
         .expect("开放任务")
     }
 
-    /// 同一执行两个 OPEN 任务必须全部关闭，OPEN 数为 0。
+    // 验证：同一执行两个 OPEN 任务必须全部关闭，OPEN 数为 0。
     #[test]
     fn memory_store_closes_duplicate_open_tasks() {
         let mut store = MemoryRuntimeStore::default();
@@ -686,7 +587,7 @@ mod tests {
         assert!(store.work_items().all(|item| item.status == WorkItemStatus::Closed));
     }
 
-    /// 实例版本跳跃必须 CAS 失败且不覆盖已提交快照。
+    // 验证：实例版本跳跃必须 CAS 失败且不覆盖已提交快照。
     #[test]
     fn memory_store_instance_cas_rejects_version_gap() {
         use bpm::ids::{ApprovalProcessDefinitionId, ApprovalProcessInstanceId};
@@ -712,7 +613,7 @@ mod tests {
         assert_eq!(store.instance("inst").unwrap().base.version, instance.base.version);
     }
 
-    /// 同载荷收据回放、异载荷冲突。
+    // 验证：同载荷收据回放、异载荷冲突。
     #[test]
     fn memory_store_receipt_replay_matches_duplicate_semantics() {
         use bpm::model::types::ApprovalCommandKind;

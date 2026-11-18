@@ -12,24 +12,19 @@ pub trait SettlementStatementResult {
     /// 带名称投影的原结果容器。
     type Display;
 
-    /// 读取原结果中的结算单事实。
+    /// 处理供应商结算命令结果时，读取原结果中的结算单事实。
     ///
-    /// # 参数
-    /// 无。
     /// # 返回
     /// 返回结算单借用。
-    /// # 错误
-    /// 无。
     fn statement(&self) -> &SupplierSettlementStatementView;
 
-    /// 用名称视图替换结果中的结算单，保留其它正式事实。
+    /// 组装供应商结算命令结果时填入同一结算单的名称投影。
     ///
     /// # 参数
     /// * `statement` - 同一结算单的名称投影。
+    ///
     /// # 返回
     /// 返回原结果容器的展示类型。
-    /// # 错误
-    /// 无。
     fn with_statement(self, statement: SettlementStatementDisplayView) -> Self::Display;
 }
 

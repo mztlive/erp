@@ -26,18 +26,9 @@ use crate::entity::source_registry::{
 };
 
 /// 把外部身份比较键编码为 BSON Binary（Generic）。
-///
-/// 唯一索引 `uk_external_identity_maps_identity` 建在该二进制字段上。
-/// 调用方必须使用本函数，不要在实体层自行编码 BSON。
-///
-/// # 参数
-/// * `key` - 外部身份比较键
-///
-/// # 返回
+/// 唯一索引 `uk_external_identity_maps_identity` 建在该二进制字段上。调用方必须使用本函数，不要在实体层自行编码 BSON。
 /// 返回子类型为 Generic 的 BSON 二进制值，字节与 `key` 相同。
-///
-/// # 错误
-/// 不返回错误。
+/// `key` 为外部身份比较键。
 pub fn external_id_key_bson(key: &ExternalIdKey) -> mongodb::bson::Binary {
     mongodb::bson::Binary {
         subtype: mongodb::bson::spec::BinarySubtype::Generic,
@@ -84,16 +75,7 @@ pub struct SourceSystemFilter {
 }
 
 impl Default for SourceSystemFilter {
-    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回第 1 页、每页 20 条的空筛选条件。
-    ///
-    /// # 错误
-    /// 无。
+    // 初始化来源系统筛选：第一页、每页 20 条，业务筛选默认留空。
     fn default() -> Self {
         Self {
             code: None,
@@ -108,19 +90,8 @@ impl Default for SourceSystemFilter {
 }
 
 impl QueryFilter for SourceSystemFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// `code` 为 `Some` 时精确匹配。`system_type`、`status` 为 `Some` 时分别写入
-    /// 对应字段的 `as_str()`。分页与排序字段不进入条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 转换为 MongoDB 查询条件（自动追加未删除过滤）。
+    // `code` 为 `Some` 时精确匹配。`system_type`、`status` 为 `Some` 时分别写入对应字段的 `as_str()`。分页与排序字段不进入条件。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(code) = &self.code {
@@ -137,16 +108,7 @@ impl QueryFilter for SourceSystemFilter {
 }
 
 impl Pagination for SourceSystemFilter {
-    /// 返回来源系统筛选保存的页码与单页条数，不把小于 1 的页码归一成第一页。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组；`page_size` 由 `u32` 转为 `u64`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 返回来源系统筛选保存的页码与单页条数，不把小于 1 的页码归一成第一页。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -156,19 +118,10 @@ impl Pagination for SourceSystemFilter {
 #[allow(async_fn_in_trait)]
 pub trait SourceSystemRepositoryExt {
     /// 分页检索来源系统列表（投影查询）。
-    ///
-    /// 只返回 [`SourceSystemRow`] 所需的列表字段，不加载整文档；
-    /// 排序字段由 Service 层白名单校验后传入（api-contract §4）。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
+    /// 只返回 [`SourceSystemRow`] 所需的列表字段，不加载整文档；排序字段由 Service 层白名单校验后传入（api-contract §4）。
     /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// 沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询、游标读取或计数错误。
     async fn search_source_systems(
         &self,
         filter: &SourceSystemFilter,
@@ -176,20 +129,10 @@ pub trait SourceSystemRepositoryExt {
     ) -> Result<PageResult<SourceSystemRow>>;
 
     /// 按来源系统 ID 集合批量读取来源系统（INT-R17）。
-    ///
     /// 一次 `$in` 查询装载页面所需的全部来源商城；空输入不访问数据库。
-    ///
-    /// # 参数
-    /// * `source_system_ids` - 来源系统 ID 集合；空集合直接返回空结果
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回全部匹配且未删除的来源系统；返回顺序不承诺与输入一致。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    ///
-    /// # 约束
+    /// `source_system_ids` 为来源系统 ID 集合；空集合直接返回空结果；沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询或游标读取错误。
     /// 只返回实体，不返回 services DTO、HTTP View 或授权结论。
     async fn find_systems_by_ids(
         &self,
@@ -265,19 +208,8 @@ pub struct ExternalIdentityMapFilter {
 }
 
 impl QueryFilter for ExternalIdentityMapFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// `source_system_id` 为 `Some` 时写入其 `to_string()`。`mapping_status` 为
-    /// `Some` 时写入 `as_str()`。分页与排序字段不进入条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 转换为 MongoDB 查询条件（自动追加未删除过滤）。
+    // `source_system_id` 为 `Some` 时写入其 `to_string()`。`mapping_status` 为 `Some` 时写入 `as_str()`。分页与排序字段不进入条件。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(source_system_id) = &self.source_system_id {
@@ -291,16 +223,7 @@ impl QueryFilter for ExternalIdentityMapFilter {
 }
 
 impl Pagination for ExternalIdentityMapFilter {
-    /// 返回外部身份映射筛选保存的页码与单页条数，不把小于 1 的页码归一成第一页。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组；`page_size` 由 `u32` 转为 `u64`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 返回外部身份映射筛选保存的页码与单页条数，不把小于 1 的页码归一成第一页。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -310,19 +233,10 @@ impl Pagination for ExternalIdentityMapFilter {
 #[allow(async_fn_in_trait)]
 pub trait ExternalIdentityMapRepositoryExt {
     /// 分页检索外部身份映射列表（投影查询）。
-    ///
-    /// 只返回 [`ExternalIdentityMapRow`] 所需的列表字段，不加载整文档
-    /// （`external_id_key` 二进制字段不进入列表投影）。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
+    /// 只返回 [`ExternalIdentityMapRow`] 所需的列表字段，不加载整文档（`external_id_key` 二进制字段不进入列表投影）。
     /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// 沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询、游标读取或计数错误。
     async fn search_external_identity_maps(
         &self,
         filter: &ExternalIdentityMapFilter,
@@ -330,21 +244,11 @@ pub trait ExternalIdentityMapRepositoryExt {
     ) -> Result<PageResult<ExternalIdentityMapRow>>;
 
     /// 按「来源系统 + 对象类型 + 规范化比较键」查找唯一映射。
-    ///
-    /// 唯一性由 `uk_external_identity_maps_identity` 唯一索引保证；本方法
-    /// 用于映射查询与幂等判定，服务层不得做「先查后插」的重复性判断。
-    ///
-    /// # 参数
-    /// * `source_system_id` - 来源系统 ID
-    /// * `object_type` - 外部对象类型
-    /// * `external_id_key` - 规范化比较键（实体 `ExternalIdentityMap::external_id_key` 生成）
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
+    /// 唯一性由 `uk_external_identity_maps_identity` 唯一索引保证；本方法用于映射查询与幂等判定，服务层不得做「先查后插」的重复性判断。
     /// 返回匹配的未删除映射；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
+    /// `source_system_id` 为来源系统 ID；`object_type` 为外部对象类型。
+    /// `external_id_key` 为规范化比较键（实体 `ExternalIdentityMap::external_id_key` 生成）；沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询错误。
     async fn find_by_identity(
         &self,
         source_system_id: &SourceSystemId,
@@ -354,22 +258,10 @@ pub trait ExternalIdentityMapRepositoryExt {
     ) -> Result<Option<ExternalIdentityMap>>;
 
     /// 按页面来源身份集合批量读取外部身份映射（INT-R17）。
-    ///
-    /// 一次 `$or` 查询装载本页全部任务的谱系映射；空输入不访问数据库。返回
-    /// 顺序不承诺与输入一致，调用方按来源身份归组。元组项为
-    /// （来源系统，对象类型，规范化比较键）。
-    ///
-    /// # 参数
-    /// * `lookups` - 本页任务的来源身份集合；空集合直接返回空结果
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
+    /// 一次 `$or` 查询装载本页全部任务的谱系映射；空输入不访问数据库。返回顺序不承诺与输入一致，调用方按来源身份归组。元组项为（来源系统，对象类型，规范化比较键）。
     /// 返回全部匹配且未删除的映射；无谱系的身份不出现。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    ///
-    /// # 约束
+    /// `lookups` 为本页任务的来源身份集合；空集合直接返回空结果；沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询或游标读取错误。
     /// 只返回实体，不返回 services DTO、HTTP View 或授权结论。
     async fn find_maps_by_identities(
         &self,
@@ -437,18 +329,9 @@ impl ExternalIdentityMapRepositoryExt for persistence_core::Repository<'_, Exter
 #[allow(async_fn_in_trait)]
 pub trait ExternalIdentityTargetRepositoryExt {
     /// 查询外部身份映射的全部目标历史，最新有效期优先。
-    ///
-    /// # 参数
-    /// * `mapping_id` - 外部身份映射 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回全部目标历史，按 `valid_from` 降序、ID 升序稳定排列。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    ///
-    /// # 约束
+    /// `mapping_id` 为外部身份映射 ID；沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询或游标读取错误。
     /// 仅查询本仓储拥有的 `external_identity_targets` 集合，不访问映射集合。
     async fn list_for_external_identity_map(
         &self,
@@ -457,18 +340,9 @@ pub trait ExternalIdentityTargetRepositoryExt {
     ) -> Result<Vec<ExternalIdentityTarget>>;
 
     /// 查询外部身份映射当前有效目标，按生效时间稳定排序。
-    ///
-    /// # 参数
-    /// * `mapping_id` - 外部身份映射 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回状态为 `Active` 的目标，按 `valid_from` 与 ID 升序排列。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    ///
-    /// # 约束
+    /// `mapping_id` 为外部身份映射 ID；沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询或游标读取错误。
     /// 仅查询本仓储拥有的 `external_identity_targets` 集合，不访问映射集合。
     async fn list_active_for_external_identity_map(
         &self,
@@ -477,23 +351,11 @@ pub trait ExternalIdentityTargetRepositoryExt {
     ) -> Result<Vec<ExternalIdentityTarget>>;
 
     /// 在调用方执行器下批量 CAS 过期谱系目标（INT-R24）。
-    ///
-    /// 逐目标复用基类 `update` 的 `id + version` 乐观锁；全部调用共享同一个
-    /// 调用方执行器，Service 在事务内调用时任一冲突随事务整体回滚。版本冲突
-    /// 的目标 ID 收集为类型化结果，不抛 services DTO、HTTP View 或授权结论。
-    ///
-    /// # 参数
-    /// * `targets` - 已调用 `expire` 的待写入目标（可变，成功时版本递增）
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回批量 CAS 结果：`applied` 为成功目标 ID，`conflicts` 为版本冲突目标
-    /// ID；空输入不访问数据库并返回双空结果。
-    ///
-    /// # 错误
+    /// 逐目标复用基类 `update` 的 `id + version` 乐观锁；全部调用共享同一个调用方执行器，Service 在事务内调用时任一冲突随事务整体回滚。版本冲突的目标 ID 收集为类型化结果，
+    /// 不抛 services DTO、HTTP View 或授权结论。
+    /// 返回批量 CAS 结果：`applied` 为成功目标 ID，`conflicts` 为版本冲突目标 ID；空输入不访问数据库并返回双空结果。
+    /// `targets` 为已调用 `expire` 的待写入目标（可变，成功时版本递增）；沿用调用方执行器 `executor`。
     /// 非版本冲突的 MongoDB 写入失败时返回错误；版本冲突只进入 `conflicts`。
-    ///
-    /// # 约束
     /// 不开事务、不提交事务；调用方必须在 `conflicts` 非空时失败关闭并回滚。
     async fn expire_targets_batch(
         &self,
@@ -502,21 +364,10 @@ pub trait ExternalIdentityTargetRepositoryExt {
     ) -> Result<ExpireTargetsOutcome>;
 
     /// 按映射 ID 集合批量加载谱系目标历史（INT-R17）。
-    ///
-    /// 一次 `$in` 查询装载本页全部谱系的目标历史，按映射归组由 Service 解释；
-    /// 返回按 `valid_from` 降序、ID 升序稳定排列。
-    ///
-    /// # 参数
-    /// * `mapping_ids` - 外部身份映射 ID 集合；空集合直接返回空结果
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
+    /// 一次 `$in` 查询装载本页全部谱系的目标历史，按映射归组由 Service 解释；返回按 `valid_from` 降序、ID 升序稳定排列。
     /// 返回全部匹配的目标历史；无目标的映射不出现。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    ///
-    /// # 约束
+    /// `mapping_ids` 为外部身份映射 ID 集合；空集合直接返回空结果；沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询或游标读取错误。
     /// 仅查询本仓储拥有的 `external_identity_targets` 集合，不访问映射集合。
     async fn list_targets_for_maps(
         &self,
@@ -613,36 +464,17 @@ pub struct SourceRegistryRepository<'a> {
 
 impl<'a> SourceRegistryRepository<'a> {
     /// 创建域专用仓储。
-    ///
-    /// # 参数
-    /// * `db` - 目标 MongoDB 数据库
-    ///
-    /// # 返回
-    /// 返回仓储实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
 
     /// 反向解析指定商城下某个 ERP 规范对象的当前有效外部身份。
-    ///
-    /// 只接受 `PRIMARY + ACTIVE` 且有效期覆盖 `as_of_unix_secs` 的目标谱系，随后
-    /// 关联同一来源系统、同一对象类型且状态为 `MAPPED` 的映射。返回全部命中，
+    /// 只接受 `PRIMARY + ACTIVE` 且有效期覆盖 `as_of_unix_secs` 的目标谱系，随后关联同一来源系统、同一对象类型且状态为 `MAPPED` 的映射。返回全部命中，
     /// 由 Service 强制“恰好一条”；这样零条与多条不会被仓储静默猜测。
-    ///
-    /// # 参数
-    /// * `source_system_id` - 目标商城来源系统
-    /// * `object_type` - 客户或卡券类目
-    /// * `internal_object_id` - ERP 规范对象 ID
-    /// * `as_of_unix_secs` - 提交时服务端 Unix 秒
-    /// * `executor` - 数据访问执行器，由 Service 决定事务边界
-    ///
-    /// # 返回
     /// 按目标谱系逐条返回匹配的外部 ID；重复活动目标不会被去重。
-    ///
-    /// # 错误
+    /// `source_system_id` 为目标商城来源系统；`object_type` 为客户或卡券类目。
+    /// `internal_object_id` 为ERP 规范对象 ID；`as_of_unix_secs` 为提交时服务端 Unix 秒。
+    /// `executor` 为数据访问执行器，由 Service 决定事务边界。
     /// MongoDB 查询或反序列化失败时返回错误。
     pub async fn active_external_identities_for_internal_object(
         &self,
@@ -686,24 +518,13 @@ impl<'a> SourceRegistryRepository<'a> {
     }
 
     /// 建立外部身份映射（跨集合多步骤写入）。
-    ///
-    /// 依次写入 `external_identity_maps` 与 `external_identity_targets`，
-    /// 保证「映射身份 + 目标谱系」原子可见（数据模型 §6.1）。
-    /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction`
-    /// 时两笔写入各自自动提交，中途失败会留下只有映射没有目标的半成品；
+    /// 依次写入 `external_identity_maps` 与 `external_identity_targets`，保证「映射身份 + 目标谱系」原子可见（数据模型 §6.1）。
+    /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction` 时两笔写入各自自动提交，中途失败会留下只有映射没有目标的半成品；
     /// Service 必须通过 `persistence_core::Transactional::with_transaction` 传入事务会话。
-    ///
-    /// # 参数
-    /// * `map` - 待写入的外部身份映射
-    /// * `target` - 待写入的映射目标（谱系记录）
-    /// * `executor` - 数据访问执行器，必须位于事务中
-    ///
-    /// # 返回
     /// 映射与目标全部写入成功时无返回值。
-    ///
-    /// # 错误
-    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射
-    /// 为冲突语义）或 MongoDB 写入失败时返回错误。
+    /// `map` 为待写入的外部身份映射；`target` 为待写入的映射目标（谱系记录）。
+    /// 沿用调用方当前事务的执行器 `executor`。
+    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射为冲突语义）或 MongoDB 写入失败时返回错误。
     pub async fn create_external_identity_link(
         &self,
         map: &ExternalIdentityMap,
@@ -730,7 +551,7 @@ impl<'a> SourceRegistryRepository<'a> {
     }
 }
 
-/// 构造商城外部身份反向解析的活动目标过滤条件。
+// 构造商城外部身份反向解析的活动目标过滤条件。
 fn active_identity_target_filter(
     object_type: ExternalObjectType,
     internal_object_id: &str,
@@ -751,7 +572,7 @@ fn active_identity_target_filter(
     }
 }
 
-/// 构造商城外部身份反向解析的已确认映射过滤条件。
+// 构造商城外部身份反向解析的已确认映射过滤条件。
 fn active_identity_map_filter(
     source_system_id: &SourceSystemId,
     object_type: ExternalObjectType,
@@ -766,22 +587,13 @@ fn active_identity_map_filter(
     }
 }
 
-/// 构建排序文档。
-///
-/// # 参数
-/// * `sort_by` - 排序字段；`None` 时默认 `created_at`
-/// * `sort_ascending` - 升序为 `true`，降序为 `false`
-///
-/// # 返回
-/// 返回排序条件文档。
+// 构建排序文档。
+// `sort_by` 为排序字段；`None` 时默认 `created_at`；`sort_ascending` 为升序为 `true`，降序为 `false`。
 fn sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
     doc! { sort_by.unwrap_or("created_at"): sort_direction(sort_ascending) }
 }
 
-/// 来源系统列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
+// 来源系统列表投影字段。
 fn source_system_projection() -> Document {
     doc! {
         "id": 1,
@@ -794,10 +606,7 @@ fn source_system_projection() -> Document {
     }
 }
 
-/// 外部身份映射列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
+// 外部身份映射列表投影字段。
 fn external_identity_map_projection() -> Document {
     doc! {
         "id": 1,

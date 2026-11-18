@@ -20,13 +20,14 @@ pub(in crate::purchase_center) struct InquiryBasis {
 }
 
 impl InquiryBasis {
-    /// 每张销售单读取一次来源及报价，供该单全部任务复用。
-    /// # 参数
-    /// `db` 为数据库，`order` 为已授权销售单，`executor` 为当前查询或写事务。
-    /// # 返回
-    /// 返回来源及其准确反馈版本的报价候选。
-    /// # 错误
-    /// 来源、报价或余额读取失败时返回错误，不降级成无询价来源。
+    // 读取采购询价创建依据时，每张销售单读取一次来源及报价，供该单全部任务复用。
+    //
+    // 调用参数：
+    // `db` 为数据库，`order` 为已授权销售单，`executor` 为当前查询或写事务。
+    //
+    // 返回来源及其准确反馈版本的报价候选。
+    //
+    // 来源、报价或余额读取失败时返回错误，不降级成无询价来源。
     pub(in crate::purchase_center) async fn load(
         db: &Database,
         order: &SalesOrder,
@@ -39,13 +40,14 @@ impl InquiryBasis {
         Ok(Self { source_id: (!source.released).then_some(source.inquiry_id), candidates })
     }
 
-    /// 同时构造通用与专项采购依据，并设置本销售单的改选要求。
-    /// # 参数
-    /// `order`、`coverage` 为当前销售及覆盖；`scope` 为任务责任行；`facts` 为批量供给。
-    /// # 返回
-    /// 返回按任务范围限制的通用及有效询价专项方案。
-    /// # 错误
-    /// 供给、数量或专项条款非法时返回错误。
+    // 处理采购询价创建依据时，同时构造通用与专项采购依据，并设置本销售单的改选要求。
+    //
+    // 调用参数：
+    // `order`、`coverage` 为当前销售及覆盖；`scope` 为任务责任行；`facts` 为批量供给。
+    //
+    // 返回按任务范围限制的通用及有效询价专项方案。
+    //
+    // 供给、数量或专项条款非法时返回错误。
     pub(in crate::purchase_center) fn groups(
         &self,
         order: &SalesOrderBasisFact,

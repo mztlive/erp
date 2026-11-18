@@ -66,21 +66,17 @@ struct ListTxDeps {
 }
 
 impl CustomerService {
-    /// 授权、总数与业务身份版本全部在同一个事务读取。
-    ///
-    /// # 参数
-    /// * `query` - 已归一化查询
-    /// * `actor` - 已认证操作人
-    /// * `executor` - 当前列表用例的快照执行器
-    ///
-    /// # 返回
-    /// 返回带范围版本的列表快照，不含负责销售候选。
-    ///
-    /// # 错误
-    /// 缺范围版本的后续页、范围变化、筛选非法或仓储失败时拒绝。
-    ///
-    /// # 关键业务约束
-    /// 组织筛选与负责人筛选只收窄授权客户，不从归属记录生成销售候选。
+    // 在同一次读取里构建客户目录页，并保留授权条件对应的总数和业务身份版本。
+    //
+    // # 参数
+    // * `query` - 已归一化查询
+    // * `executor` - 当前列表用例的快照执行器
+    //
+    // 返回带范围版本的列表快照，不含负责销售候选。
+    //
+    // 缺范围版本的后续页、范围变化、筛选非法或仓储失败时拒绝。
+    //
+    // 组织筛选与负责人筛选只收窄授权客户，不从归属记录生成销售候选。
     pub(super) async fn list_snapshot(
         &self,
         query: CustomerListQuery,
@@ -90,22 +86,19 @@ impl CustomerService {
         run_list_snapshot(self.list_deps(query, actor), true, executor).await
     }
 
-    /// 轻量版本复核快照（erp-customer-003）。
-    ///
-    /// 与 [`Self::list_snapshot`] 共用授权、过滤与版本指纹逻辑，
-    /// 跳过分页查询与行水合；调用方仅用 `context.scope_version`
-    /// 做稳定性比对，丢弃的 `items` 不再付出水合成本。
-    ///
-    /// # 参数
-    /// * `query` - 已归一化查询
-    /// * `actor` - 已认证操作人
-    /// * `executor` - 当前列表用例的快照执行器
-    ///
-    /// # 返回
-    /// 返回仅带范围版本的轻量快照（`items` 为空、`total` 为零）。
-    ///
-    /// # 错误
-    /// 授权或版本读取失败时拒绝，语义与完整快照一致。
+    // 目录交付前重新计算范围版本，供调用方比对读取期间是否发生变化。
+    //
+    // 与 [`Self::list_snapshot`] 共用授权、过滤与版本指纹逻辑，
+    // 跳过分页查询与行水合；调用方仅用 `context.scope_version`
+    // 做稳定性比对，丢弃的 `items` 不再付出水合成本。
+    //
+    // # 参数
+    // * `query` - 已归一化查询
+    // * `executor` - 当前列表用例的快照执行器
+    //
+    // 返回仅带范围版本的轻量快照（`items` 为空、`total` 为零）。
+    //
+    // 授权或版本读取失败时拒绝，语义与完整快照一致。
     pub(super) async fn list_version_snapshot(
         &self,
         query: CustomerListQuery,
@@ -115,14 +108,12 @@ impl CustomerService {
         run_list_snapshot(self.list_deps(query, actor), false, executor).await
     }
 
-    /// 组装列表事务依赖。
-    ///
-    /// # 参数
-    /// * `query` - 已归一化查询
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 返回事务内复用的只读依赖。
+    // 整理客户列表读取所需的查询、操作人和依赖，供完整查询与轻量版本复核共用。
+    //
+    // # 参数
+    // * `query` - 已归一化查询
+    //
+    // 返回事务内复用的只读依赖。
     fn list_deps(&self, query: CustomerListQuery, actor: &AuditActor) -> ListTxDeps {
         ListTxDeps {
             db: self.db.clone(),
@@ -135,20 +126,17 @@ impl CustomerService {
     }
 }
 
-/// 执行列表事务体（erp-customer-003）。
-///
-/// `hydrate` 为假时跳过分页查询与水合，仅重算版本指纹供复核使用。
-///
-/// # 参数
-/// * `deps` - 列表事务只读依赖
-/// * `hydrate` - 是否装配分页行
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回完整或轻量列表快照。
-///
-/// # 错误
-/// 授权、筛选或版本读取失败时拒绝。
+// 在同一快照计算列表范围版本，完整读取时同时查询分页行并补全展示字段。
+//
+// `hydrate` 为假时跳过分页查询与水合，仅重算版本指纹供复核使用。
+//
+// # 参数
+// * `deps` - 列表事务只读依赖
+// * `hydrate` - 是否装配分页行
+//
+// 返回完整或轻量列表快照。
+//
+// 授权、筛选或版本读取失败时拒绝。
 async fn run_list_snapshot(
     deps: ListTxDeps,
     hydrate: bool,
@@ -188,17 +176,14 @@ async fn run_list_snapshot(
     Ok(CustomerSnapshot { items, total: page.total, page: filter.page, page_size: filter.page_size, context })
 }
 
-/// 解析授权并与业务筛选求交（erp-customer-003）。
-///
-/// # 参数
-/// * `deps` - 列表事务只读依赖
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回授权上下文、授权客户集合与归属时点。
-///
-/// # 错误
-/// 授权或组织筛选失败时拒绝。
+// 将操作人可读范围与业务筛选叠加，让目录只返回既匹配条件又可见的客户。
+//
+// # 参数
+// * `deps` - 列表事务只读依赖
+//
+// 返回授权上下文、授权客户集合与归属时点。
+//
+// 授权或组织筛选失败时拒绝。
 async fn resolve_list_authorized(
     deps: &ListTxDeps,
     executor: &mut dyn Executor,
@@ -210,17 +195,15 @@ async fn resolve_list_authorized(
     Ok((context, authorized, as_of))
 }
 
-/// 装配关键词过滤后的仓储筛选（erp-customer-003）。
-///
-/// # 参数
-/// * `deps` - 列表事务只读依赖
-/// * `authorized` - 已授权客户集合
-///
-/// # 返回
-/// 返回仓储可消费的账户筛选。
-///
-/// # 错误
-/// 主体关键词匹配失败时拒绝。
+// 把主体名称匹配的客户 ID 和既有可见范围组合为仓储查询条件，供分页及计数使用。
+//
+// # 参数
+// * `deps` - 列表事务只读依赖
+// * `authorized` - 已授权客户集合
+//
+// 返回仓储可消费的账户筛选。
+//
+// 主体关键词匹配失败时拒绝。
 async fn build_account_filter(
     deps: &ListTxDeps,
     authorized: Option<Vec<String>>,
@@ -244,11 +227,11 @@ async fn build_account_filter(
     })
 }
 
-/// 将版本指纹拼接到基线范围版本（erp-customer-003）。
-///
-/// # 参数
-/// * `context` - 待更新的授权上下文
-/// * `versions` - 已按 `id` 排序的客户版本
+// 把客户身份事实的版本指纹合入范围版本，使后续页能检测身份数据变化。
+//
+// # 参数
+// * `context` - 待更新的授权上下文
+// * `versions` - 已按 `id` 排序的客户版本
 fn apply_version_fingerprint(context: &mut CustomerResolvedScope, versions: &[CustomerVersion]) {
     context.scope_version = fingerprint_versions(
         &context.scope_version,
@@ -264,12 +247,12 @@ fn apply_version_fingerprint(context: &mut CustomerResolvedScope, versions: &[Cu
 struct ScopeFingerprint(u64);
 
 impl ScopeFingerprint {
-    /// 以 FNV-1a 偏移基数创建空指纹。
+    // 以 FNV-1a 偏移基数创建空指纹。
     fn new() -> Self {
         Self(FNV_OFFSET_BASIS)
     }
 
-    /// 写入字符串字节并以 `0xff` 分隔。
+    // 写入字符串字节并以 `0xff` 分隔。
     fn feed_str(&mut self, value: &str) {
         for byte in value.as_bytes() {
             self.feed_byte(*byte);
@@ -277,36 +260,35 @@ impl ScopeFingerprint {
         self.feed_byte(0xff);
     }
 
-    /// 写入单个字节。
+    // 写入单个字节。
     fn feed_byte(&mut self, byte: u8) {
         self.0 ^= u64::from(byte);
         self.0 = self.0.wrapping_mul(FNV_PRIME);
     }
 
-    /// 写入小端版本字节。
+    // 写入小端版本字节。
     fn feed_version(&mut self, version: u64) {
         for byte in version.to_le_bytes() {
             self.feed_byte(byte);
         }
     }
 
-    /// 拼接到基线版本，返回 `{base}:{hex指纹}`。
+    // 拼接到基线版本，返回 `{base}:{hex指纹}`。
     fn finish(self, base: &str) -> String {
         format!("{base}:{:016x}", self.0)
     }
 }
 
-/// 用确定性哈希计算客户身份版本指纹并拼接到基线版本（erp-customer-004）。
-///
-/// 与 [`fingerprint_scope_version`] 共用同一 FNV-1a 算法；`query_versions`
-/// 已按 `id` 排序，调用方按迭代顺序传入 `(id, version)` 即可。
-///
-/// # 参数
-/// * `base` - 基线范围版本
-/// * `versions` - 客户身份与版本对
-///
-/// # 返回
-/// 返回 `{base}:{hex指纹}` 格式的范围版本。
+// 按稳定顺序计算客户身份版本指纹并合入基线，让列表读前和交付前可以判断范围是否一致。
+//
+// 与 [`fingerprint_scope_version`] 共用同一 FNV-1a 算法；`query_versions`
+// 已按 `id` 排序，调用方按迭代顺序传入 `(id, version)` 即可。
+//
+// # 参数
+// * `base` - 基线范围版本
+// * `versions` - 客户身份与版本对
+//
+// 返回 `{base}:{hex指纹}` 格式的范围版本。
 fn fingerprint_versions<'a>(base: &str, versions: impl IntoIterator<Item = (&'a str, u64)>) -> String {
     let mut fingerprint = ScopeFingerprint::new();
     for (id, version) in versions {
@@ -321,101 +303,82 @@ const FNV_OFFSET_BASIS: u64 = 0xcbf29ce484222325;
 /// FNV-1a 64 位素数。
 const FNV_PRIME: u64 = 0x100000001b3;
 
-/// 构造可被 HTTP 边界识别的范围变化冲突。
-///
-/// # 参数
-/// * `detail` - 面向用户的中文恢复说明
-///
-/// # 返回
-/// 返回带 `DATA_SCOPE_CHANGED` 前缀的冲突错误。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 稳定码必须出现在错误载荷中，供 HTTP 映射为独立 `code`，不得只依赖展示文案。
+// 将客户目录范围变化表达为稳定业务冲突，供 HTTP 调用方提示重新加载。
+//
+// # 参数
+// * `detail` - 面向用户的中文恢复说明
+//
+// 返回带 `DATA_SCOPE_CHANGED` 前缀的冲突错误。
+//
+// 稳定码必须出现在错误载荷中，供 HTTP 映射为独立 `code`，不得只依赖展示文案。
 pub(super) fn data_scope_changed(detail: &str) -> Error {
     Error::ConflictError(format!("DATA_SCOPE_CHANGED：{detail}"))
 }
 
-/// 后续页必须携带当前范围版本，禁止拼接不同授权快照。
-///
-/// # 参数
-/// * `page` - 请求页码
-/// * `version` - 客户端回传的范围版本
-///
-/// # 返回
-/// 第一页或版本非空时成功。
-///
-/// # 错误
-/// 第二页及之后缺少版本时返回 `DATA_SCOPE_CHANGED`。
-///
-/// # 关键业务约束
-/// 不得在缺版本时继续查询并默默使用新授权。
+// 要求从第二页起带上前页交付的范围版本，以便发现分页期间客户数据或授权范围变化。
+//
+// # 参数
+// * `page` - 请求页码
+// * `version` - 客户端回传的范围版本
+//
+// 第一页或版本非空时成功。
+//
+// 失败条件：第二页及之后缺少版本时返回 `DATA_SCOPE_CHANGED`。
+//
+// 不得在缺版本时继续查询并默默使用新授权。
 pub(super) fn ensure_page(page: u64, version: Option<&str>) -> Result<()> {
     ScopeVersion::new(version, EmptyScopeVersion::Missing)
         .require_for_page(page)
         .map_err(|error| data_scope_changed(error.detail()))
 }
 
-/// 客户端回传的范围版本必须与当前快照一致。
-///
-/// # 参数
-/// * `expected` - 后续页携带的范围版本；第一页可为空
-/// * `actual` - 本次查询快照的范围版本
-///
-/// # 返回
-/// 未携带或完全一致时成功。
-///
-/// # 错误
-/// 版本不一致时返回 `DATA_SCOPE_CHANGED`。
-///
-/// # 关键业务约束
-/// 不得把新旧授权结果拼接成同一列表。
+// 用当前快照的范围版本核对客户端继续分页的依据，检测上一页读取后发生的变化。
+//
+// # 参数
+// * `expected` - 后续页携带的范围版本；第一页可为空
+// * `actual` - 本次查询快照的范围版本
+//
+// 未携带或完全一致时成功。
+//
+// 失败条件：版本不一致时返回 `DATA_SCOPE_CHANGED`。
+//
+// 不得把新旧授权结果拼接成同一列表。
 pub(super) fn ensure_scope_version(expected: Option<&str>, actual: &str) -> Result<()> {
     ScopeVersion::new(expected, EmptyScopeVersion::Provided)
         .verify(actual)
         .map_err(|error| data_scope_changed(error.detail()))
 }
 
-/// 同一快照内两次读取的范围版本必须一致。
-///
-/// # 参数
-/// * `first` - 首次快照版本
-/// * `second` - 复核快照版本
-///
-/// # 返回
-/// 两次版本相同时成功。
-///
-/// # 错误
-/// 查询过程中范围或客户资料变化时返回 `DATA_SCOPE_CHANGED`。
-///
-/// # 关键业务约束
-/// 复核失败必须整页拒绝，不得返回半新半旧结果。
+// 在目录交付前比对两次读取到的范围版本，发现不一致时终止交付。
+//
+// # 参数
+// * `first` - 首次快照版本
+// * `second` - 复核快照版本
+//
+// 两次版本相同时成功。
+//
+// 失败条件：查询过程中范围或客户资料变化时返回 `DATA_SCOPE_CHANGED`。
+//
+// 复核失败必须整页拒绝，不得返回半新半旧结果。
 pub(super) fn ensure_stable_snapshot(first: &str, second: &str) -> Result<()> {
     ScopeVersion::new(Some(first), EmptyScopeVersion::Provided)
         .verify(second)
         .map_err(|_| data_scope_changed("数据范围或客户资料已变化，请刷新"))
 }
 
-/// 将业务筛选与授权集合求交。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `data_scope` - 组织目录访问器
-/// * `context` - 已解析的客户范围事实
-/// * `scope` - 已映射的客户范围
-/// * `query` - 归一化查询
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// `None` 表示公司范围且无额外身份筛选；`Some` 为明确客户 ID。
-///
-/// # 错误
-/// 组织展开失败、成员超限或归属查询失败时拒绝。
-///
-/// # 关键业务约束
-/// Mine/协作只是收窄条件；AllAuthorized 不得绕过 DataScope。
+// 按人员、组织及请求范围筛选已授权客户，让业务筛选只缩小可见范围。
+//
+// # 参数
+// * `data_scope` - 组织目录访问器
+// * `context` - 已解析的客户范围事实
+// * `scope` - 已映射的客户范围
+// * `query` - 归一化查询
+//
+// `None` 表示公司范围且无额外身份筛选；`Some` 为明确客户 ID。
+//
+// 组织展开失败、成员超限或归属查询失败时拒绝。
+//
+// Mine/协作只是收窄条件；AllAuthorized 不得绕过 DataScope。
 async fn apply_list_filters(
     db: &mongodb::Database,
     data_scope: &CustomerAccess,
@@ -432,25 +395,20 @@ async fn apply_list_filters(
     apply_org_unit_filter(db, data_scope, context, ids, query, as_of, executor).await
 }
 
-/// 按请求中的组织筛选收窄已授权客户集合。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `data_scope` - 组织目录访问器
-/// * `context` - 已解析的客户范围事实
-/// * `ids` - 当前授权客户集合
-/// * `query` - 归一化查询
-/// * `as_of` - 客户归属自然日
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 无组织筛选时原样返回；否则返回主负责人属于筛选组织的客户。
-///
-/// # 错误
-/// 包含下级但未提供组织、展开失败或成员超限时拒绝。
-///
-/// # 关键业务约束
-/// 组织筛选只看当前主负责人所属组织，不得用协作人员组织代替。
+// 按请求中的组织筛选收窄已授权客户集合。
+//
+// # 参数
+// * `data_scope` - 组织目录访问器
+// * `context` - 已解析的客户范围事实
+// * `ids` - 当前授权客户集合
+// * `query` - 归一化查询
+// * `as_of` - 客户归属自然日
+//
+// 无组织筛选时原样返回；否则返回主负责人属于筛选组织的客户。
+//
+// 包含下级但未提供组织、展开失败或成员超限时拒绝。
+//
+// 组织筛选只看当前主负责人所属组织，不得用协作人员组织代替。
 async fn apply_org_unit_filter(
     db: &mongodb::Database,
     data_scope: &CustomerAccess,
@@ -480,23 +438,18 @@ async fn apply_org_unit_filter(
     Ok(Some(current_owner_customer_ids(db, ids.as_deref(), &members, as_of, executor).await?))
 }
 
-/// 读取指定负责人集合的当前主责客户。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `customer_ids` - 已授权客户；`None` 表示公司范围
-/// * `owners` - 主负责人 ID
-/// * `as_of` - 客户归属自然日
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回这些负责人当前主责的客户 ID。
-///
-/// # 错误
-/// 归属查询失败时拒绝。
-///
-/// # 关键业务约束
-/// 空负责人集合保持空结果，不得查询全部客户。
+// 按业务日期批量查询指定负责人的有效负责客户，为客户目录的按人筛选提供候选。
+//
+// # 参数
+// * `customer_ids` - 已授权客户；`None` 表示公司范围
+// * `owners` - 主负责人 ID
+// * `as_of` - 客户归属自然日
+//
+// 返回这些负责人当前主责的客户 ID。
+//
+// 归属查询失败时拒绝。
+//
+// 空负责人集合保持空结果，不得查询全部客户。
 async fn current_owner_customer_ids(
     db: &mongodb::Database,
     customer_ids: Option<&[String]>,
@@ -513,21 +466,17 @@ async fn current_owner_customer_ids(
         .collect())
 }
 
-/// 将目录范围标签转换为授权集合上的额外收窄。
-///
-/// # 参数
-/// * `scope` - 已证明的客户范围，用于取出当前账号主责与协作客户
-/// * `requested` - 页面请求的目录范围
-///
-/// # 返回
-/// AllAuthorized 不额外收窄；其余范围返回对应客户 ID。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 目录范围不是授权来源，不能把 AllAuthorized 解释为公司范围。
-/// `collaborating` 与 `assigned` 按当前主责解释，不再按协作销售展开。
+// 根据目录的范围标签应用对应的归属筛选，所得条件与完整授权范围一起使用。
+//
+// # 参数
+// * `scope` - 已证明的客户范围，用于取出当前账号主责与协作客户
+// * `requested` - 页面请求的目录范围
+//
+// AllAuthorized 不额外收窄；其余范围返回对应客户 ID。
+//
+// # 关键业务约束
+// 目录范围不是授权来源，不能把 AllAuthorized 解释为公司范围。
+// `collaborating` 与 `assigned` 按当前主责解释，不再按协作销售展开。
 fn assignment_filter(scope: &CustomerReadScope, requested: CustomerScope) -> Option<Vec<String>> {
     match requested {
         CustomerScope::AllAuthorized => None,
@@ -537,25 +486,20 @@ fn assignment_filter(scope: &CustomerReadScope, requested: CustomerScope) -> Opt
     }
 }
 
-/// 批量补齐客户当前主体身份与归属。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `facts` - 主体与账号事实端口
-/// * `rows` - 当前页客户行
-/// * `actor_user_id` - 当前账号
-/// * `requested_scope` - 目录范围标签
-/// * `as_of` - 归属自然日
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回装配后的列表视图。
-///
-/// # 错误
-/// 跨域读取失败时拒绝整页。
-///
-/// # 关键业务约束
-/// 范围标签只描述命中原因，不授予额外权限。
+// 将主体身份和归属批量补到已读取的客户列表行，供目录显示主体名称及负责人。
+//
+// # 参数
+// * `facts` - 主体与账号事实端口
+// * `rows` - 当前页客户行
+// * `actor_user_id` - 当前账号
+// * `requested_scope` - 目录范围标签
+// * `as_of` - 归属自然日
+//
+// 返回装配后的列表视图。
+//
+// 跨域读取失败时拒绝整页。
+//
+// 范围标签只描述命中原因，不授予额外权限。
 async fn hydrate_rows(
     db: &mongodb::Database,
     facts: (&dyn PartyFactPort, &AccountDirectoryService),

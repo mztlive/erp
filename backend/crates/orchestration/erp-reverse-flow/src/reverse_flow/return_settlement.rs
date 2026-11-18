@@ -16,14 +16,11 @@ use persistence_core::Executor;
 
 use crate::{Error, Result};
 
-/// 在财务提交和最终过账时复核采购方案、金额与实际退回。
-/// # 参数
-/// * `db` / `executor` - 原事务。
-/// * `refund` - 本次现金或留抵处理记录。
-/// # 返回
-/// 指定来源采购的应付；历史普通退款返回空。
-/// # 错误
-/// 未提交方案、来源变化、跨供应商或超过选定方式金额时拒绝。
+// 在财务提交和最终过账时复核采购方案、金额与实际退回。
+//
+// `db` / `executor` 为原事务；`refund` 为本次现金或留抵处理记录。指定来源采购的应付；历史普通退款返回空。
+//
+// 未提交方案、来源变化、跨供应商或超过选定方式金额时拒绝。
 pub(super) async fn validate_settlement(
     db: &Database,
     refund: &SupplierRefund,
@@ -76,16 +73,11 @@ pub(super) async fn validate_settlement(
     Ok(Some(account))
 }
 
-/// 审批通过后建立留抵余额；该操作不生成现金退款或新付款。
-/// # 参数
-/// * `db` / `executor` - 财务过账事务。
-/// * `refund` - 已审批的留抵意图。
-/// * `payment` - 原实际付款。
-/// * `account` - 经本次事务复核的原应付。
-/// # 返回
-/// 一份来源唯一、尚未使用的余额。
-/// # 错误
-/// 付款主体缺失或与应付主体不一致时拒绝。
+// 审批通过后建立留抵余额；该操作不生成现金退款或新付款。
+//
+// `db` / `executor` 为财务过账事务；`refund` 为已审批的留抵意图；`payment` 为原实际付款；`account` 为经本次事务复核的原应付。
+//
+// 一份来源唯一、尚未使用的余额。付款主体缺失或与应付主体不一致时拒绝。
 pub(super) async fn create_credit(
     db: &Database,
     refund: &SupplierRefund,
@@ -116,14 +108,9 @@ pub(super) async fn create_credit(
     Ok(())
 }
 
-/// 冻结本次财务审批引用的供应商确认依据。
-/// # 参数
-/// * `db` / `executor` - 提交事务。
-/// * `refund` - 已按当前方案校验的处置记录。
-/// # 返回
-/// 记录留存提交时的确认依据，后续采购调整不会覆盖。
-/// # 错误
-/// 来源方案缺失时拒绝。
+// 冻结本次财务审批引用的供应商确认依据。
+//
+// `db` / `executor` 为提交事务；`refund` 为已按当前方案校验的处置记录。记录留存提交时的确认依据，后续采购调整不会覆盖。来源方案缺失时拒绝。
 pub(super) async fn freeze_confirmation(
     db: &Database,
     refund: &mut SupplierRefund,

@@ -15,17 +15,13 @@ type ServiceFulfillmentFilter = <mongodb::Database as FulfillmentExt>::ServiceFu
 impl FulfillmentService {
     // ---------------------------------------------------------- service_fulfillment
 
-    /// 分页查询线下服务履约记录列表（W01 履约任务作业面）。
-    ///
-    /// # 参数
-    /// * `params` - 查询参数（`sales_order_line_id`/`status` 扁平筛选）
-    ///
-    /// # 返回
-    /// 返回契约形状的分页视图。
-    ///
-    /// # 错误
-    /// * `ValidationError` - 分页参数非法或排序字段不在白名单
-    /// * `RepositoryError` - 数据库查询失败
+    // 分页查询线下服务履约记录列表（W01 履约任务作业面）。
+    // 返回契约形状的分页视图。
+    // `params` 为查询参数（`sales_order_line_id`/`status` 扁平筛选）。
+    //
+    // 失败条件：
+    // * `ValidationError` - 分页参数非法或排序字段不在白名单
+    // * `RepositoryError` - 数据库查询失败
     #[tracing::instrument(
         name = "fulfillment.service_fulfillment_list",
         skip_all,
@@ -69,20 +65,13 @@ impl FulfillmentService {
     }
 
     /// 按主键查询线下服务履约记录。
-    ///
     /// W01 履约任务以工作项冻结的业务对象主键精确读取，不经列表分页扫描。
-    ///
-    /// # 参数
-    /// * `id` - 服务履约记录主键
-    ///
-    /// # 返回
     /// 返回服务履约记录视图。
+    /// `id` 为服务履约记录主键。
     ///
-    /// # 错误
+    /// 失败条件：
     /// * `NotFound` - 服务履约记录不存在
     /// * `RepositoryError` - 数据库查询失败
-    ///
-    /// # 关键业务约束
     /// 调用方必须已完成所属业务授权，并传入原读取阶段执行器。
     #[tracing::instrument(
         name = "fulfillment.service_fulfillment_detail",
@@ -104,7 +93,7 @@ impl FulfillmentService {
 }
 
 impl From<ServiceFulfillment> for ServiceFulfillmentView {
-    /// 从服务履约记录实体构造视图。
+    // 从服务履约记录实体构造视图。
     fn from(record: ServiceFulfillment) -> Self {
         Self {
             id: record.base.id,
@@ -124,16 +113,8 @@ impl From<ServiceFulfillment> for ServiceFulfillmentView {
 
 impl FulfillmentService {
     /// 在调用方事务中写入已准备的线下服务履约草稿；不创建第二事务。
-    ///
-    /// # 参数
-    /// * `record` - 已准备的线下服务履约草稿
-    /// * `executor` - 调用方事务执行器
-    ///
-    /// # 返回
-    /// 写入成功时无返回值。
-    ///
-    /// # 错误
-    /// 仓储写入失败时返回对应错误。
+    /// `record` 为已准备的线下服务履约草稿；沿用调用方当前事务的执行器 `executor`。
+    /// 传播仓储写入错误。
     pub async fn persist_created_service_fulfillment(
         &self,
         record: &ServiceFulfillment,

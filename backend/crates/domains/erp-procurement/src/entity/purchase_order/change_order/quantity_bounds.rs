@@ -38,30 +38,14 @@ pub struct ChangeQuantityBound {
 }
 
 impl ChangeQuantityBound {
-    /// 返回可填写的最小数量。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回已发生数量。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 以已发生数量作为采购变更的最小可填数量，避免调整抹去已经发生的业务。
     pub fn min_quantity(&self) -> Quantity {
         self.fulfilled_quantity
     }
 
     /// 返回可填写的最大数量。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 受影响行返回剩余量；未受影响行返回剩余量与原数量的较大者；两者都低于已发生数量时返回已发生数量。
-    ///
-    /// # 错误
-    /// 数量超出精度范围时返回错误。
+    /// 受影响行返回剩余量；未受影响行返回剩余量与原数量的较大者；两者都低于已发生数量时返回已发生数量。数量超出精度范围时返回错误。
     pub fn max_quantity(&self) -> Result<Quantity> {
         let capacity = self.capacity();
         let upper =
@@ -71,28 +55,14 @@ impl ChangeQuantityBound {
 
     /// 返回改为指定数量后该销售行仍待覆盖的数量。
     ///
-    /// # 参数
-    /// * `requested` - 本行改后数量
-    ///
-    /// # 返回
-    /// 返回非负的缺口数量；缺口生效后进入供给分配。
-    ///
-    /// # 错误
-    /// 数量超出精度范围时返回错误。
+    /// 返回非负的缺口数量；缺口生效后进入供给分配。数量超出精度范围时返回错误。
     pub fn gap_after(&self, requested: Quantity) -> Result<Quantity> {
         quantity((self.capacity() - requested.to_decimal()).max(Decimal::ZERO))
     }
 
     /// 返回改为指定数量后该销售行超出目标的数量。
     ///
-    /// # 参数
-    /// * `requested` - 本行改后数量
-    ///
-    /// # 返回
-    /// 返回非负的超出数量。
-    ///
-    /// # 错误
-    /// 数量超出精度范围时返回错误。
+    /// 返回非负的超出数量。数量超出精度范围时返回错误。
     pub fn excess_after(&self, requested: Quantity) -> Result<Quantity> {
         let covered = self.other_covered_quantity.to_decimal() + requested.to_decimal();
         quantity((covered - self.sales_quantity.to_decimal()).max(Decimal::ZERO))
@@ -100,14 +70,7 @@ impl ChangeQuantityBound {
 
     /// 校验本行改后数量。
     ///
-    /// # 参数
-    /// * `requested` - 本行改后数量
-    ///
-    /// # 返回
-    /// 数量在可填范围内时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 低于已发生数量、高于可填上限或数量越界时返回领域错误，文案指明行和下一步。
+    /// 数量在可填范围内时返回 `Ok(())`。低于已发生数量、高于可填上限或数量越界时返回领域错误，文案指明行和下一步。
     pub fn check(&self, requested: Quantity) -> Result<()> {
         let value = requested.to_decimal();
         if value < self.fulfilled_quantity.to_decimal() {
@@ -126,12 +89,12 @@ impl ChangeQuantityBound {
         Ok(())
     }
 
-    /// 销售目标扣除其他来源覆盖后的剩余量。
+    // 销售目标扣除其他来源覆盖后的剩余量。
     fn capacity(&self) -> Decimal {
         (self.sales_quantity.to_decimal() - self.other_covered_quantity.to_decimal()).max(Decimal::ZERO)
     }
 
-    /// 超出上限时的提示：受影响行指向维持登记，其余指向销售剩余量。
+    // 超出上限时的提示：受影响行指向维持登记，其余指向销售剩余量。
     fn above_max_message(&self, max: Quantity) -> String {
         let max = max.to_decimal().normalize();
         if self.quantity_affected {
@@ -150,17 +113,12 @@ impl ChangeQuantityBound {
 
 /// 由采购当前版本、销售覆盖和已发生数量构造逐行数量范围。
 ///
-/// # 参数
-/// * `base_lines` - 采购当前生效版本行
-/// * `coverage` - 销售当前版本覆盖（含本采购当前版本的分配）
-/// * `impact` - 本采购当前受影响原因；未受影响为空
-/// * `fulfilled` - 稳定销售行到本采购已发生数量
+/// 按采购行号返回商品/服务行的数量范围；物流费用行不参与。商品行缺少数量或销售稳定行，或数量越界时返回领域错误。
 ///
-/// # 返回
-/// 按采购行号返回商品/服务行的数量范围；物流费用行不参与。
-///
-/// # 错误
-/// 商品行缺少数量或销售稳定行，或数量越界时返回领域错误。
+/// - `base_lines`：采购当前生效版本行。
+/// - `coverage`：销售当前版本覆盖（含本采购当前版本的分配）。
+/// - `impact`：本采购当前受影响原因；未受影响为空。
+/// - `fulfilled`：稳定销售行到本采购已发生数量。
 pub fn build_change_quantity_bounds(
     base_lines: &[PurchaseOrderRevisionLine],
     coverage: &SalesProcurementCoverage,
@@ -204,15 +162,10 @@ pub fn build_change_quantity_bounds(
 
 /// 校验改单目标覆盖每条原商品行一次且数量都在可填范围内。
 ///
-/// # 参数
-/// * `bounds` - 原商品行数量范围
-/// * `requested` - 改单目标中的（稳定销售行，数量）
+/// 全部商品行齐全且数量合规时返回 `Ok(())`。新增商品、遗漏或重复原商品行，或任一行数量越界时返回领域错误。
 ///
-/// # 返回
-/// 全部商品行齐全且数量合规时返回 `Ok(())`。
-///
-/// # 错误
-/// 新增商品、遗漏或重复原商品行，或任一行数量越界时返回领域错误。
+/// - `bounds`：原商品行数量范围。
+/// - `requested`：改单目标中的（稳定销售行，数量）。
 pub fn validate_change_quantities(
     bounds: &[ChangeQuantityBound],
     requested: &[(String, Quantity)],
@@ -236,7 +189,7 @@ pub fn validate_change_quantities(
     Ok(())
 }
 
-/// 本采购因销售归零或减量受影响的稳定销售行。
+// 本采购因销售归零或减量受影响的稳定销售行。
 fn quantity_affected_lines(impact: Option<&PurchaseSourceImpact>) -> HashSet<&str> {
     impact
         .into_iter()
@@ -248,7 +201,7 @@ fn quantity_affected_lines(impact: Option<&PurchaseSourceImpact>) -> HashSet<&st
         .collect()
 }
 
-/// 构造数量；超出精度或范围时返回领域错误。
+// 构造数量；超出精度或范围时返回领域错误。
 fn quantity(value: Decimal) -> Result<Quantity> {
     Quantity::try_from(value.round_dp(6))
 }
@@ -276,7 +229,7 @@ mod tests {
         }
     }
 
-    /// 未受影响行可保持或调减原数量，增加不能超过销售剩余量；改为 0 形成缺口。
+    // 未受影响行可保持或调减原数量，增加不能超过销售剩余量；改为 0 形成缺口。
     #[test]
     fn unaffected_line_keeps_base_and_caps_increase_by_capacity() {
         let line = bound("5", "10", "3", "0", false);
@@ -288,7 +241,7 @@ mod tests {
         assert!(line.check(qty("7.000001")).unwrap_err().to_string().contains("最多可采购 7"));
     }
 
-    /// 已维持的超量采购仍可保持原数量（例如只改价格），但不能继续增加。
+    // 已维持的超量采购仍可保持原数量（例如只改价格），但不能继续增加。
     #[test]
     fn unaffected_overcovered_line_may_keep_base_quantity() {
         let line = bound("5", "4", "2", "0", false);
@@ -298,7 +251,7 @@ mod tests {
         assert_eq!(line.excess_after(qty("5")).unwrap(), qty("3"));
     }
 
-    /// 受影响行必须调减到剩余量以内，原数量不再被接受。
+    // 受影响行必须调减到剩余量以内，原数量不再被接受。
     #[test]
     fn affected_line_must_be_reduced_within_capacity() {
         let zeroed = bound("5", "0", "0", "0", true);
@@ -312,7 +265,7 @@ mod tests {
         assert!(reduced.check(qty("4")).is_err());
     }
 
-    /// 已发生数量是下限；高于上限时以已发生数量为准。
+    // 已发生数量是下限；高于上限时以已发生数量为准。
     #[test]
     fn fulfilled_quantity_is_floor_and_wins_over_capacity() {
         let line = bound("5", "0", "0", "2", true);
@@ -323,7 +276,7 @@ mod tests {
         assert!(message.contains("不能少于") && message.contains("采购退货"));
     }
 
-    /// 目标必须恰好覆盖每条原商品行一次，不得新增。
+    // 目标必须恰好覆盖每条原商品行一次，不得新增。
     #[test]
     fn requested_lines_must_match_base_lines() {
         let bounds = vec![bound("5", "10", "0", "0", false)];

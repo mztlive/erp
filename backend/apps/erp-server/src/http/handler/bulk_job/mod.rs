@@ -19,14 +19,8 @@ use crate::http::extractor::{Json, Query};
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
-/// 查询选择快照列表。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `query` - 分页与筛选参数（`selection_type`/`status`/`created_by`）
-///
-/// # 返回
-/// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
+/// 按请求条件查询选择快照列表。
+/// `query` 为分页与筛选参数（`selection_type`/`status`/`created_by`）。
 pub async fn bulk_selection_snapshot_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -38,13 +32,7 @@ pub async fn bulk_selection_snapshot_list(
 }
 
 /// 创建选择快照并冻结逐项目标（跨集合事务写入）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 创建请求（`{ selection_type, data_cutoff_at, expires_at, items }`）
-///
-/// # 返回
+/// `req` 为创建请求（`{ selection_type, data_cutoff_at, expires_at, items }`）。
 /// 返回新建的快照视图。
 pub async fn bulk_selection_snapshot_create(
     State(state): State<HttpState>,
@@ -57,14 +45,7 @@ pub async fn bulk_selection_snapshot_create(
 }
 
 /// 确认选择快照（确认后目标集合与预期版本不可修改）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 快照 ID
-/// * `req` - 确认请求（含期望版本）
-///
-/// # 返回
+/// `req` 为确认请求（含期望版本）。
 /// 返回确认后的快照视图。
 pub async fn bulk_selection_snapshot_confirm(
     State(state): State<HttpState>,
@@ -79,14 +60,7 @@ pub async fn bulk_selection_snapshot_confirm(
 }
 
 /// 标记选择快照失效（仅待确认/已确认可失效）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 快照 ID
-/// * `req` - 失效请求（含期望版本）
-///
-/// # 返回
+/// `req` 为失效请求（含期望版本）。
 /// 返回失效后的快照视图。
 pub async fn bulk_selection_snapshot_expire(
     State(state): State<HttpState>,
@@ -101,13 +75,7 @@ pub async fn bulk_selection_snapshot_expire(
 }
 
 /// 分页查询选择快照逐项结果。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `id` - 选择快照 ID
-/// * `query` - 分页参数（`result_status`/`page`/`page_size`）
-///
-/// # 返回
+/// `query` 为分页参数（`result_status`/`page`/`page_size`）。
 /// 返回当前页逐项结果行与总数。
 pub async fn bulk_selection_item_list(
     State(state): State<HttpState>,
@@ -127,14 +95,7 @@ pub async fn bulk_selection_item_list(
 /// 查询后台任务列表（任务中心）。
 ///
 /// 数据隔离：普通用户只能看到自己创建的任务；管理员可查看全部。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `query` - 分页与筛选参数（`job_no`/`job_type`/`status`/`requested_by`）
-///
-/// # 返回
-/// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
+/// `query` 为分页与筛选参数（`job_no`/`job_type`/`status`/`requested_by`）。
 pub async fn background_job_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -148,13 +109,6 @@ pub async fn background_job_list(
 /// 查询后台任务详情。
 ///
 /// 数据隔离：普通用户只能查看自己创建的任务。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 后台任务 ID
-///
-/// # 返回
 /// 返回完整任务视图（含进度与错误摘要）。
 pub async fn background_job_detail(
     State(state): State<HttpState>,
@@ -167,13 +121,7 @@ pub async fn background_job_detail(
 }
 
 /// 创建后台任务并登记逐项结果表（按 `request_id` 幂等）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 创建请求（`{ job_no, job_type, request_id, total_count, items }`）
-///
-/// # 返回
+/// `req` 为创建请求（`{ job_no, job_type, request_id, total_count, items }`）。
 /// 返回任务视图（新建或幂等命中的既有任务）。
 pub async fn background_job_create(
     State(state): State<HttpState>,
@@ -188,14 +136,7 @@ pub async fn background_job_create(
 /// 取消后台任务（只停止尚未开始的项目）。
 ///
 /// 数据隔离：普通用户只能取消自己创建的任务。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 后台任务 ID
-/// * `req` - 取消请求（含期望版本）
-///
-/// # 返回
+/// `req` 为取消请求（含期望版本）。
 /// 返回取消后的任务视图。
 pub async fn background_job_cancel(
     State(state): State<HttpState>,
@@ -211,13 +152,7 @@ pub async fn background_job_cancel(
 /// 停止并取消全部未完成后台任务（仅管理员）。
 ///
 /// 单个任务失败不阻塞其余任务，调用方按返回计数决定是否重试。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 批量取消请求（可选 `job_type` 缩小范围）
-///
-/// # 返回
+/// `req` 为批量取消请求（可选 `job_type` 缩小范围）。
 /// 返回已取消、跳过与失败的任务数。
 pub async fn background_job_cancel_all(
     State(state): State<HttpState>,
@@ -232,14 +167,7 @@ pub async fn background_job_cancel_all(
 /// 分页查询后台任务逐项结果。
 ///
 /// 数据隔离：普通用户只能查看自己创建任务的逐项结果。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 后台任务 ID
-/// * `query` - 分页参数（`status`/`page`/`page_size`）
-///
-/// # 返回
+/// `query` 为分页参数（`status`/`page`/`page_size`）。
 /// 返回当前页逐项结果行与总数。
 pub async fn background_job_item_list(
     State(state): State<HttpState>,

@@ -82,16 +82,13 @@ pub(in crate::finance::funds_scope) struct InvoiceVersion {
 }
 
 impl InvoiceVersion {
-    /// 保留旧协议逐票哈希主键、版本及按来源键排序的责任版本。
+    /// 组装发票授权分页时，保留旧协议逐票哈希主键、版本及按来源键排序的责任版本。
     ///
     /// # 参数
     /// * `fingerprint` - 调用方持有的指纹 hasher。
     ///
     /// # 返回
     /// 按既有协议把发票主键、版本以及销项、进项来源版本写入 `fingerprint`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn hash_into(&self, fingerprint: &mut impl Hasher) {
         self.id.hash(fingerprint);
         self.version.hash(fingerprint);
@@ -102,10 +99,7 @@ impl InvoiceVersion {
 }
 
 impl InvoiceSnapshot {
-    /// 用最终授权集合执行原查询保护，超限整体拒绝而不截断结果。
-    ///
-    /// # 参数
-    /// 无。
+    /// 核对发票授权分页边界时，用最终授权集合执行原查询保护，超限整体拒绝而不截断结果。
     ///
     /// # 返回
     /// 版本条数少于 10000 时成功。
@@ -119,21 +113,15 @@ impl InvoiceSnapshot {
         Ok(())
     }
 
-    /// 返回与页面同一最终条件的数据库计数，空匹配为零。
-    ///
-    /// # 参数
-    /// 无。
+    /// 计算发票授权分页金额时，给出与页面同一最终条件的数据库计数，空匹配为零。
     ///
     /// # 返回
     /// 数据库最终授权条件的计数；计数分支为空时为零。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn total(&self) -> u64 {
         self.total.first().map_or(0, |row| row.count)
     }
 
-    /// 完整轻量金额流继续使用原 Rust 定点算法归并，部分整单合计为 null。
+    /// 汇总发票授权分页时，完整轻量金额流继续使用原 Rust 定点算法归并，部分整单合计为 null。
     ///
     /// # 参数
     /// * `version` - 本次范围版本，传给汇总归并。
@@ -141,24 +129,17 @@ impl InvoiceSnapshot {
     /// # 返回
     /// 由已装载金额流行归并的授权份额与整票金额资格。
     ///
-    /// # 错误
-    /// 不返回错误。归并不产生失败分支。
+    /// 归并不产生失败分支。
     pub fn summary(&self, version: &str) -> Result<FundsSummaryView> {
         invoice_summary(&self.summary, version)
     }
 }
 
 impl InvoicePageRow {
-    /// 当前页分配恢复原裁剪单元，金额正反不由票面差额推导。
-    ///
-    /// # 参数
-    /// 无。
+    /// 处理发票授权分页时，当前页分配恢复原裁剪单元，金额正反不由票面差额推导。
     ///
     /// # 返回
     /// 保持原顺序和金额方向的销项、进项裁剪单元。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn links(&self) -> (Vec<SalesInvoiceLink>, Vec<PurchaseInvoiceLink>) {
         let sales = self
             .sales
@@ -183,7 +164,7 @@ impl InvoicePageRow {
     }
 }
 
-/// 当前页进项分配字段保持既有对外 DTO 口径。
+// 生成发票授权分页视图时，当前页进项分配字段保持既有对外 DTO 口径。
 fn purchase_view(item: &PurchaseInvoiceAllocation) -> PurchaseInvoiceAllocationView {
     PurchaseInvoiceAllocationView {
         id: item.base.id.clone(),
@@ -198,7 +179,7 @@ fn purchase_view(item: &PurchaseInvoiceAllocation) -> PurchaseInvoiceAllocationV
     }
 }
 
-/// 销项原正反分配的方向金额。
+// 处理发票授权分页时，销项原正反分配的方向金额。
 fn signed_sale(item: &SalesInvoiceAllocation) -> Amount {
     match item.allocation_action {
         SalesAction::Apply => item.allocated_gross_amount,
@@ -206,7 +187,7 @@ fn signed_sale(item: &SalesInvoiceAllocation) -> Amount {
     }
 }
 
-/// 进项原正反分配的方向金额。
+// 处理发票授权分页时，进项原正反分配的方向金额。
 fn signed_purchase(item: &PurchaseInvoiceAllocation) -> Amount {
     match item.allocation_action {
         PurchaseAction::Apply => item.allocated_gross_amount,
@@ -214,22 +195,19 @@ fn signed_purchase(item: &PurchaseInvoiceAllocation) -> Amount {
     }
 }
 
-/// 在同一执行器查询最终授权页；复核拍只执行轻量版本分支。
-///
-/// # 参数
-/// * `db` - 发票集合所在数据库。
-/// * `filter` - 发票主表筛选。
-/// * `query` - 已规范化的发票列表查询。
-/// * `authorization` - 已解析授权。
-/// * `condition` - 负责人、经办人与组织条件。
-/// * `materialize` - 为 true 时同时读取当前页和汇总事实。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
-/// 最终授权页面、计数和完整轻量版本；首拍另包含原流汇总事实。
-///
-/// # 错误
-/// 聚合或解码失败时返回对应错误。`versions` 达到 10000 条时返回校验错误，文案为发票查询超过上限。`materialize` 为 true 时，分页投影缺失或版本缺少首拍汇总资格会返回 `Internal`。
+// 读取发票授权分页时，在同一执行器查询最终授权页；复核拍只执行轻量版本分支。
+//
+// 调用参数：
+// * `db` - 发票集合所在数据库。
+// * `filter` - 发票主表筛选。
+// * `query` - 已规范化的发票列表查询。
+// * `authorization` - 已解析授权。
+// * `condition` - 负责人、经办人与组织条件。
+// * `materialize` - 为 true 时同时读取当前页和汇总事实。
+//
+// 最终授权页面、计数和完整轻量版本；首拍另包含原流汇总事实。
+//
+// 聚合或解码失败时返回对应错误。`versions` 达到 10000 条时返回校验错误，文案为发票查询超过上限。`materialize` 为 true 时，分页投影缺失或版本缺少首拍汇总资格会返回 `Internal`。
 pub(in crate::finance::funds_scope) async fn invoice_snapshot(
     db: &Database,
     filter: &InvoiceFilter,
@@ -274,7 +252,7 @@ pub(in crate::finance::funds_scope) async fn invoice_snapshot(
     Ok(result)
 }
 
-/// 页面聚合只有有界实体页和计数，完整版本与金额流独立游标读取。
+// 处理发票授权分页时，页面聚合只有有界实体页和计数，完整版本与金额流独立游标读取。
 async fn invoice_page(
     db: &Database,
     mut pipeline: Vec<Document>,
@@ -289,7 +267,7 @@ async fn invoice_page(
     result.pop().ok_or_else(|| Error::Internal("发票分页投影缺失".into()))
 }
 
-/// 所有来源存在性、授权和用户条件均先于页、计数和汇总。
+// 组装发票授权分页的聚合管道时，所有来源存在性、授权和用户条件均先于页、计数和汇总。
 fn invoice_pipeline(
     filter: &InvoiceFilter,
     query: &InvoiceListQuery,
@@ -323,7 +301,7 @@ fn invoice_pipeline(
     pipeline
 }
 
-/// 登记人直接收窄发票主表，未命中的发票不读取分配与真实来源。
+// 应用发票授权分页筛选时，登记人直接收窄发票主表，未命中的发票不读取分配与真实来源。
 fn header_filter(filter: &InvoiceFilter, condition: &FundsLinkedCondition) -> Document {
     let mut document = filter.to_doc();
     if let Some(ids) = &condition.operator_user_ids {
@@ -332,7 +310,7 @@ fn header_filter(filter: &InvoiceFilter, condition: &FundsLinkedCondition) -> Do
     document
 }
 
-/// 来源去重和稳定键排序对应原 BTreeSet，不能只绑定当前页来源。
+// 应用发票授权分页筛选时，来源去重和稳定键排序对应原 BTreeSet，不能只绑定当前页来源。
 fn matched_sources(links: &str) -> Document {
     doc! { "$sortArray": { "input": { "$setUnion": [{ "$map": {
         "input": { "$filter": { "input": links, "as": "link", "cond": "$$link.matched" } },
@@ -341,7 +319,7 @@ fn matched_sources(links: &str) -> Document {
     } }, []] }, "sortBy": { "key": 1 } } }
 }
 
-/// 双方向字段按原合同匹配，来源销售单不扩展到未登记关系。
+// 应用发票授权分页筛选时，双方向字段按原合同匹配，来源销售单不扩展到未登记关系。
 fn final_match(query: &InvoiceListQuery, condition: &FundsLinkedCondition) -> Document {
     let visible = doc! { "$or": [{ "_whole": true }, { "_sales_sources.0": { "$exists": true } },
     { "_purchase_sources.0": { "$exists": true } }] };
@@ -369,7 +347,7 @@ fn final_match(query: &InvoiceListQuery, condition: &FundsLinkedCondition) -> Do
     doc! { "$and": conditions }
 }
 
-/// 当前页保留原票面字段；完整分配仅解码当前页，再执行原金额裁剪。
+// 生成发票授权分页展示时，当前页保留原票面字段；完整分配仅解码当前页，再执行原金额裁剪。
 fn item_projection() -> Document {
     let mut projection = doc! { "_id": 0, "sales": "$_sales", "purchase": "$_purchase", "whole": "$_whole",
     "sales_matched": "$_sales_sources.key", "purchase_matched": "$_purchase_sources.key" };
@@ -400,7 +378,7 @@ fn item_projection() -> Document {
     projection
 }
 
-/// 完整结果指纹材料保留原哈希字段和来源顺序。
+// 组装发票授权分页的聚合管道时，完整结果指纹材料保留原哈希字段和来源顺序。
 fn version_projection(materialize: bool) -> Document {
     let mut projection = doc! { "_id": 0, "id": 1, "version": 1, "sales_versions": "$_sales_sources.version",
     "purchase_versions": "$_purchase_sources.version" };
@@ -416,7 +394,7 @@ fn version_projection(materialize: bool) -> Document {
     projection
 }
 
-/// 全部存在来源只提供原负责人覆盖口径，不扩大匹配份额或版本材料。
+// 处理发票授权分页时，全部存在来源只提供原负责人覆盖口径，不扩大匹配份额或版本材料。
 fn all_sources(links: &str) -> Document {
     doc! { "$map": { "input": links, "as": "link", "in": {
         "key": "$$link.order", "owner": { "$ifNull": ["$$link._source.owner_user_id", null] },
@@ -429,7 +407,7 @@ mod tests {
 
     use super::*;
 
-    /// 主表登记人筛选与领域已有条件求交，空经办人集合仍为零匹配条件。
+    // 验证发票授权分页：主表登记人筛选与领域已有条件求交，空经办人集合仍为零匹配条件。
     #[test]
     fn header_operator_filter_keeps_original_constraints_and_empty_set() {
         let filter = InvoiceFilter { keyword_ids: Some(vec!["invoice".into()]), ..Default::default() };
@@ -450,7 +428,7 @@ mod tests {
         assert_eq!(header_filter(&filter, &condition), expected);
     }
 
-    /// 轻量完整指纹与旧逐票协议一致，并检测非当前页来源责任版本变化。
+    // 验证发票授权分页：轻量完整指纹与旧逐票协议一致，并检测非当前页来源责任版本变化。
     #[test]
     fn invoice_versions_preserve_legacy_hash_and_outside_page_changes() {
         let mut rows: Vec<InvoiceVersion> = serde_json::from_value(serde_json::json!([
@@ -482,7 +460,7 @@ mod tests {
         assert_ne!(actual.finish(), current.finish());
     }
 
-    /// 保护应用于最终已授权集合，9999 完整成功，10000 整体拒绝。
+    // 验证发票授权分页：保护应用于最终已授权集合，9999 完整成功，10000 整体拒绝。
     #[test]
     fn invoice_final_set_rejects_sentinel_without_truncating_success() {
         let mut snapshot = InvoiceSnapshot {
@@ -510,7 +488,7 @@ mod tests {
             if message == "发票查询超过上限，请收窄组织或负责人条件"));
     }
 
-    /// 空页仍使用数据库最终计数及全匹配份额，部分授权票面不能返回。
+    // 验证发票授权分页：空页仍使用数据库最终计数及全匹配份额，部分授权票面不能返回。
     #[test]
     fn invoice_empty_page_keeps_count_summary_and_partial_null() {
         let snapshot: InvoiceSnapshot = serde_json::from_value(serde_json::json!({

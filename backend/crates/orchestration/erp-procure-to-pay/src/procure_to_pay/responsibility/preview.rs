@@ -18,15 +18,7 @@ use crate::{Error, Result};
 impl ProcurementResponsibilityProcess {
     /// 在同一快照中核验入口资格并逐行预览采购责任。
     ///
-    /// # 参数
-    /// * `request` - 预览场景和稳定需求行。
-    /// * `actor` - 当前已认证账号。
-    ///
-    /// # 返回
-    /// 返回与请求顺序一致的成功结果或逐行诊断。
-    ///
-    /// # 错误
-    /// 缺少预览权限、输入非法或事务失败时拒绝整个请求。
+    /// `request` 为预览场景和稳定需求行。返回与请求顺序一致的成功结果或逐行诊断。缺少预览权限、输入非法或事务失败时拒绝整个请求。
     pub async fn resolve_preview(
         &self,
         request: ProcurementResponsibilityResolveRequest,
@@ -82,7 +74,7 @@ impl PreviewSource for ProcurementResponsibilityProcess {
     }
 }
 
-/// 正常整批与逐行诊断共用原快照；嵌套统一资格检查允许推进读取阶段。
+// 正常整批与逐行诊断共用原快照；嵌套统一资格检查允许推进读取阶段。
 async fn preview(
     source: &impl PreviewSource,
     actor: &AuditActor,
@@ -101,7 +93,7 @@ async fn preview(
     Ok(view)
 }
 
-/// 整批失败时保留逐行诊断，所有分支只使用入口传入的执行器。
+// 整批失败时保留逐行诊断，所有分支只使用入口传入的执行器。
 async fn preview_lines(
     source: &impl PreviewSource,
     request: ProcurementResponsibilityResolveRequest,
@@ -136,7 +128,7 @@ async fn preview_lines(
     Ok(ProcurementResponsibilityResolveView { lines })
 }
 
-/// 将成功解析转换为逐行预览视图。
+// 采购责任预览命中规则时，返回该稳定行的负责人和命中规则，不附错误。
 fn success_preview(
     resolution: ProcurementResponsibilityResolutionView,
 ) -> ProcurementResponsibilityResolveLineView {
@@ -151,7 +143,7 @@ fn success_preview(
     }
 }
 
-/// 将单行解析错误转换为失败预览。
+// 单行责任无法解析时，保留行键并返回可展示诊断，不返回负责人或规则。
 fn failed_preview(line_key: String, error: Error) -> ProcurementResponsibilityResolveLineView {
     let message = match error {
         Error::ValidationError(message)

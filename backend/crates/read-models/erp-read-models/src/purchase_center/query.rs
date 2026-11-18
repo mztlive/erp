@@ -28,14 +28,10 @@ use super::scope::PurchaseListView;
 use crate::{Error, Result};
 
 impl PurchaseOrderReadService {
-    /// 分页查询采购单列表。
+    /// 处理采购单查询时，分页查询采购单列表。
     ///
     /// 排序字段白名单在 Service 层校验（api-contract §4）；行金额取自当前
     /// 提交/版本表头汇总（批量取回，禁止 N+1）。
-    ///
-    /// # 参数
-    /// * `params` - 查询参数
-    /// * `actor` - 已认证操作人
     ///
     /// # 返回
     /// 返回带范围版本的分页视图。
@@ -86,7 +82,7 @@ impl PurchaseOrderReadService {
         })
     }
 
-    /// 查询采购单对象中心。
+    /// 处理采购单查询时，查询采购单对象中心。
     ///
     /// # 参数
     /// * `id` - 采购单 ID
@@ -120,12 +116,14 @@ impl PurchaseOrderReadService {
             .await
     }
 
-    /// 在发送用例的原事务内读取采购邮件依据。
+    /// 组装采购单查询时，在发送用例的原事务内读取采购邮件依据。
     ///
     /// # 参数
     /// `id` 为采购单身份，`actor` 为当前操作人，`executor` 为发送用例的原事务执行器。
+    ///
     /// # 返回
     /// 发送资格和真实采购对象均已授权的当前采购视图。
+    ///
     /// # 错误
     /// 发送资格或对象范围拒绝、采购单缺失及关联事实读取失败时返回错误。
     pub async fn purchase_order_email_source(
@@ -140,7 +138,7 @@ impl PurchaseOrderReadService {
         self.detail_view(id, executor).await
     }
 
-    /// 在原快照完成详情授权、关联资料读取与结果交付检查。
+    // 读取采购单查询时，在原快照完成详情授权、关联资料读取与结果交付检查。
     async fn detail_snapshot(
         &self,
         id: &str,
@@ -153,20 +151,19 @@ impl PurchaseOrderReadService {
         Ok(view)
     }
 
-    /// 批量解析账号展示姓名。
-    ///
-    /// 用于采购创建依据「负责人」列：把销售单创建人解析为账号姓名，避免把账号 ID 直接展示给用户。
-    /// 采购单列表与对象中心已改用 Repository 批量事实，不再经由本 helper。
-    ///
-    /// # 参数
-    /// * `account_ids` - 账号 ID 列表（可重复；空串会被忽略）
-    /// * `executor` - 当前读取用例的事务执行器。
-    ///
-    /// # 返回
-    /// 返回账号 ID → 姓名映射；账号不存在时不写入该键。
-    ///
-    /// # 错误
-    /// * `RepositoryError` - 数据库查询失败
+    // 确定采购单查询的适用条件时，批量解析账号展示姓名。
+    //
+    // 用于采购创建依据「负责人」列：把销售单创建人解析为账号姓名，避免把账号 ID 直接展示给用户。
+    // 采购单列表与对象中心已改用 Repository 批量事实，不再经由本 helper。
+    //
+    // 调用参数：
+    // * `account_ids` - 账号 ID 列表（可重复；空串会被忽略）
+    // * `executor` - 当前读取用例的事务执行器。
+    //
+    // 返回账号 ID → 姓名映射；账号不存在时不写入该键。
+    //
+    // 失败边界：
+    // * `RepositoryError` - 数据库查询失败
     pub(super) async fn resolve_account_names(
         &self,
         account_ids: &[String],
@@ -181,23 +178,20 @@ impl PurchaseOrderReadService {
     }
 }
 
-/// 按指针命名空间解析列表行金额.
-///
-/// # 参数
-/// * `submission_pointer` - 行当前提交指针
-/// * `revision_pointer` - 行当前版本指针
-/// * `submissions` - 当前提交头映射
-/// * `revisions` - 当前版本头映射
-///
-/// # 返回
-/// 返回 `(含税, 不含税, 税额)` 字符串；提交指针只查提交映射，版本指针只查
-/// 版本映射，缺失时返回空字符串三元组.
-///
-/// # 错误
-/// 无.
-///
-/// # 约束
-/// 两种命名空间不得交叉；历史表头不进入映射.
+// 读取采购单查询时，按指针命名空间解析列表行金额。
+//
+// 调用参数：
+// * `submission_pointer` - 行当前提交指针
+// * `revision_pointer` - 行当前版本指针
+// * `submissions` - 当前提交头映射
+// * `revisions` - 当前版本头映射
+//
+// 结果：
+// 返回 `(含税, 不含税, 税额)` 字符串；提交指针只查提交映射，版本指针只查
+// 版本映射，缺失时返回空字符串三元组.
+//
+// 调用约束：
+// 两种命名空间不得交叉；历史表头不进入映射.
 fn list_row_totals(
     submission_pointer: Option<&str>,
     revision_pointer: Option<&str>,
@@ -226,20 +220,18 @@ fn list_row_totals(
     (String::new(), String::new(), String::new())
 }
 
-/// 把当前页投影行映射为列表视图。
-///
-/// # 参数
-/// * `rows` - 已授权的当前页投影；行字段移入返回视图
-/// * `facts` - 同一快照下的关联事实
-///
-/// # 返回
-/// 返回列表行视图。
-///
-/// # 错误
-/// 来源销售单号缺失时返回内部错误。
-///
-/// # 关键业务约束
-/// 映射不得改变授权集合；金额取自当前提交或版本指针。
+// 生成采购单查询视图时，把当前页投影行映射为列表视图。
+//
+// 调用参数：
+// * `rows` - 已授权的当前页投影；行字段移入返回视图
+// * `facts` - 同一快照下的关联事实
+//
+// 返回列表行视图。
+//
+// 来源销售单号缺失时返回内部错误。
+//
+// 业务边界：
+// 映射不得改变授权集合；金额取自当前提交或版本指针。
 fn map_list_items(
     rows: Vec<PurchaseOrderRow>,
     facts: &PurchaseOrderListFacts,
@@ -297,7 +289,7 @@ fn map_list_items(
         .collect()
 }
 
-/// 付款进度只转换财务子账状态；无应付账时无已确认付款。
+// 处理采购单查询时，付款进度只转换财务子账状态；无应付账时无已确认付款。
 fn payment_progress(status: Option<PayableAccountStatus>) -> ProgressStatus {
     match status {
         None | Some(PayableAccountStatus::Open) => ProgressStatus::None,
@@ -306,20 +298,16 @@ fn payment_progress(status: Option<PayableAccountStatus>) -> ProgressStatus {
     }
 }
 
-/// 解析供应商展示名.
-///
-/// # 参数
-/// * `supplier_id` - 供应商账号 ID
-/// * `name` - 对应的供应商法定名称
-///
-/// # 返回
-/// 返回已登记名称；缺失或空白时返回明确的名称缺失提示。
-///
-/// # 错误
-/// 无.
-///
-/// # 约束
-/// 账号标识仅用于定位名称，不能作为供应商名称展示。
+// 生成采购单查询视图时，解析供应商展示名。
+//
+// 调用参数：
+// * `supplier_id` - 供应商账号 ID
+// * `name` - 对应的供应商法定名称
+//
+// 返回已登记名称；缺失或空白时返回明确的名称缺失提示。
+//
+// 调用约束：
+// 账号标识仅用于定位名称，不能作为供应商名称展示。
 pub(super) fn supplier_display(supplier_id: &str, name: Option<&str>) -> String {
     name.map(str::trim)
         .filter(|name| !name.is_empty() && *name != supplier_id)
@@ -327,55 +315,46 @@ pub(super) fn supplier_display(supplier_id: &str, name: Option<&str>) -> String 
         .to_owned()
 }
 
-/// 解析来源销售单业务单号.
-///
-/// # 参数
-/// * `no` - 对应的来源销售单业务单号
-///
-/// # 返回
-/// 返回业务单号；缺失时返回完整性内部错误.
-///
-/// # 错误
-/// * `Internal` - 采购单关联的销售单不存在
-///
-/// # 约束
-/// 缺失不得回退为 ID，必须失败关闭.
+// 处理采购单查询时，解析来源销售单业务单号。
+//
+// 调用参数：
+// * `no` - 对应的来源销售单业务单号
+//
+// 返回业务单号；缺失时返回完整性内部错误.
+//
+// 失败边界：
+// * `Internal` - 采购单关联的销售单不存在
+//
+// 调用约束：
+// 缺失不得回退为 ID，必须失败关闭.
 fn sales_no_for(no: Option<&str>) -> Result<String> {
     no.map(str::to_owned).ok_or_else(|| Error::Internal("采购单关联的销售单不存在".to_string()))
 }
 
-/// 解析负责人展示名.
-///
-/// # 参数
-/// * `owner_user_id` - 已去空白的负责人 ID
-/// * `name` - 查得的账号展示名
-///
-/// # 返回
-/// 优先使用查得的名称；缺失时按是否有负责人返回 `责任账号不可用` 或 `未指定`。
-///
-/// # 错误
-/// 无.
-///
-/// # 约束
-/// 缺失语义与历史实现完全一致，不得改变回退文案.
+// 生成采购单查询视图时，解析负责人展示名。
+//
+// 调用参数：
+// * `owner_user_id` - 已去空白的负责人 ID
+// * `name` - 查得的账号展示名
+//
+// 优先使用查得的名称；缺失时按是否有负责人返回 `责任账号不可用` 或 `未指定`。
+//
+// 调用约束：
+// 缺失语义与历史实现完全一致，不得改变回退文案.
 fn owner_display(owner_user_id: Option<&str>, name: Option<&str>) -> String {
     name.unwrap_or(if owner_user_id.is_some() { "责任账号不可用" } else { "未指定" }).to_owned()
 }
 
-/// 解析对象中心内容来源优先级.
-///
-/// # 参数
-/// * `has_revision` - 当前版本是否存在
-/// * `submission_source` - 当前提交的内容来源
-///
-/// # 返回
-/// 版本存在时返回 `REVISION`，否则有提交时返回提交来源，无内容时返回 `DRAFT`.
-///
-/// # 错误
-/// 无.
-///
-/// # 约束
-/// 优先级固定为版本大于提交大于草稿，不得改变.
+// 处理采购单查询时，解析对象中心内容来源优先级。
+//
+// 调用参数：
+// * `has_revision` - 当前版本是否存在
+// * `submission_source` - 当前提交的内容来源
+//
+// 版本存在时返回 `REVISION`，否则有提交时返回提交来源，无内容时返回 `DRAFT`.
+//
+// 调用约束：
+// 优先级固定为版本大于提交大于草稿，不得改变.
 fn center_content_source(has_revision: bool, submission_source: Option<&str>) -> String {
     if has_revision {
         return "REVISION".to_string();
@@ -447,7 +426,7 @@ mod query_mapping_tests {
         owner_display, sales_no_for, supplier_display,
     };
 
-    /// 构造已授权的采购列表行，用于执行实际视图映射。
+    // 读取采购单查询时，生成已授权的采购列表行，用于执行实际视图映射。
     fn list_row(id: &str) -> PurchaseOrderRow {
         PurchaseOrderRow {
             id: id.to_string(),
@@ -471,7 +450,7 @@ mod query_mapping_tests {
         }
     }
 
-    /// 消费投影行后保持授权行序、身份、指针及负责人回退。
+    // 验证采购单查询：消费投影行后保持授权行序、身份、指针及负责人回退。
     #[test]
     fn list_mapping_preserves_row_order_and_owned_fields() {
         let mut facts = PurchaseOrderListFacts::default();
@@ -497,7 +476,7 @@ mod query_mapping_tests {
         assert_eq!(items[1].owner_name, "未指定");
     }
 
-    /// 非空列表关联销售单缺失时必须停止映射。
+    // 验证采购单查询：非空列表关联销售单缺失时必须停止映射。
     #[test]
     fn list_mapping_rejects_missing_sales_order() {
         let error = map_list_items(vec![list_row("po-1")], &PurchaseOrderListFacts::default()).unwrap_err();
@@ -544,7 +523,7 @@ mod query_mapping_tests {
         assert_eq!(items[0].payment_progress, ProgressStatus::None);
     }
 
-    /// 构造最小提交头用于金额映射测试.
+    // 处理采购单查询时，生成最小提交头用于金额映射测试。
     fn submission(id: &str, gross: &str) -> PurchaseOrderSubmission {
         PurchaseOrderSubmission::new(
             PurchaseOrderSubmissionId::new(id.to_string()),
@@ -579,7 +558,7 @@ mod query_mapping_tests {
         .unwrap()
     }
 
-    /// 提交指针只读提交命名空间，即使版本映射存在同名键也不得交叉.
+    // 验证采购单查询：提交指针只读提交命名空间，即使版本映射存在同名键也不得交叉。
     #[test]
     fn submission_pointer_never_reads_revision_namespace() {
         let mut submissions = HashMap::new();
@@ -595,7 +574,7 @@ mod query_mapping_tests {
         );
     }
 
-    /// 版本指针只读版本命名空间.
+    // 验证采购单查询：版本指针只读版本命名空间。
     #[test]
     fn revision_pointer_reads_revision_only() {
         let submissions = HashMap::new();
@@ -605,7 +584,7 @@ mod query_mapping_tests {
         );
     }
 
-    /// 供应商缺失、空白或名称被历史标识污染时明确提示，真实名称正常展示。
+    // 验证采购单查询：供应商缺失、空白或名称被历史标识污染时明确提示，真实名称正常展示。
     #[test]
     fn supplier_display_requires_readable_name() {
         assert_eq!(supplier_display("sup-1", None), "供应商名称不可用");
@@ -614,7 +593,7 @@ mod query_mapping_tests {
         assert_eq!(supplier_display("sup-1", Some("  供应商甲  ")), "供应商甲");
     }
 
-    /// 缺失销售单必须报完整性错误，不得回退 ID.
+    // 验证采购单查询：缺失销售单必须报完整性错误，不得回退 ID。
     #[test]
     fn missing_sales_order_is_internal_error() {
         assert!(
@@ -624,7 +603,7 @@ mod query_mapping_tests {
         assert_eq!(sales_no_for(Some("")).unwrap(), "");
     }
 
-    /// 负责人三态回退与历史文案一致.
+    // 验证采购单查询：负责人三态回退与历史文案一致。
     #[test]
     fn owner_fallback_matrix() {
         assert_eq!(owner_display(None, None), "未指定");
@@ -633,7 +612,7 @@ mod query_mapping_tests {
         assert_eq!(owner_display(Some("buyer-1"), Some("")), "");
     }
 
-    /// 内容来源优先级固定为版本大于提交大于草稿.
+    // 验证采购单查询：内容来源优先级固定为版本大于提交大于草稿。
     #[test]
     fn content_source_priority_is_revision_over_submission_over_draft() {
         assert_eq!(center_content_source(true, Some("SUBMISSION")), "REVISION".to_string());
@@ -641,7 +620,7 @@ mod query_mapping_tests {
         assert_eq!(center_content_source(false, None), "DRAFT".to_string());
     }
 
-    /// 空采购页映射保持为空，不要求关联事实存在。
+    // 验证采购单查询：空采购页映射保持为空，不要求关联事实存在。
     #[test]
     fn empty_list_mapping_stays_empty() {
         assert!(map_list_items(Vec::new(), &PurchaseOrderListFacts::default()).unwrap().is_empty());

@@ -49,7 +49,7 @@ pub enum Error {
 }
 
 impl From<application_core::Error> for Error {
-    /// 将应用合同错误映射为应用错误。
+    // 遇到应用合同错误时保留内部错误、校验错误和字段输入错误的分类，供编排入口按原语义向上返回。
     fn from(error: application_core::Error) -> Self {
         match error {
             application_core::Error::Internal(message) => Self::Internal(message),
@@ -87,7 +87,7 @@ macro_rules! from_domain {
 from_domain!(erp_support);
 from_domain!(erp_audit);
 impl From<persistence_core::Error> for Error {
-    /// 保留持久化分类和原错误；仅归档索引交 HTTP 的兼容分支最终形成文案。
+    // 转换持久化错误时区分版本冲突、瞬态事务和未知提交；三个历史索引保留原重复键错误，交给 HTTP 兼容分支处理，不触发回执恢复。
     fn from(error: persistence_core::Error) -> Self {
         match error {
             error @ persistence_core::Error::DuplicateKey(_) => {
@@ -110,7 +110,7 @@ impl From<persistence_core::Error> for Error {
     }
 }
 
-/// 仅识别 HTTP 持有的三个历史索引；不拥有其提示文案，也不增加命令恢复范围。
+// 识别仅由 HTTP 兼容层处理的三个已归档唯一索引，避免把这些重复键归入业务命令的回执恢复范围。
 fn historical_http_index(index_name: Option<&str>) -> bool {
     matches!(
         index_name,
@@ -121,19 +121,13 @@ fn historical_http_index(index_name: Option<&str>) -> bool {
 }
 
 impl From<validator::ValidationErrors> for Error {
-    /// 从给定值构建实例。
-    ///
-    /// # 参数
-    /// * `err` - 错误对象
-    ///
-    /// # 返回
-    /// 返回创建的实例。
+    // 将校验器的字段错误封装为结构化 `InvalidInput`，让上层能指出具体输入问题。
     fn from(err: validator::ValidationErrors) -> Self {
         Error::InvalidInput(err.into())
     }
 }
 
-/// 按变体搬运审计错误，不重新解释持久化分类。
+// 逐个保留审计错误的类型和载荷，供文件资产事务通过文件域端口返回写入失败。
 pub(crate) fn map_audit_to_support(error: erp_audit::Error) -> erp_support::Error {
     match error {
         erp_audit::Error::Internal(payload) => erp_support::Error::Internal(payload),

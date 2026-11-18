@@ -24,15 +24,8 @@ use crate::{Error, Result};
 impl ReturnsProcess {
     /// 保存原单的可编辑财务字段，并保留原单号、资金来源和岗位。
     ///
-    /// # 参数
-    /// * `id` - 原单主键
-    /// * `req` - 当前版本和可编辑字段
-    /// * `actor` - 当前已认证的经办人
+    /// `id` 为原单主键；`req` 为当前版本和可编辑字段；`actor` 为当前已认证的经办人。返回保存后的原单详情，含新乐观锁版本。
     ///
-    /// # 返回
-    /// 返回保存后的原单详情，含新乐观锁版本。
-    ///
-    /// # 错误
     /// 非原经办人、无提交或资金来源读取资格、非草稿、版本变化或字段非法时拒绝。
     pub async fn update_customer_refund(
         &self,
@@ -52,15 +45,8 @@ impl ReturnsProcess {
 
     /// 保存原单的可编辑财务字段，并保留原单号、资金来源和岗位。
     ///
-    /// # 参数
-    /// * `id` - 原单主键
-    /// * `req` - 当前版本和可编辑字段
-    /// * `actor` - 当前已认证的经办人
+    /// `id` 为原单主键；`req` 为当前版本和可编辑字段；`actor` 为当前已认证的经办人。返回保存后的原单详情，含新乐观锁版本。
     ///
-    /// # 返回
-    /// 返回保存后的原单详情，含新乐观锁版本。
-    ///
-    /// # 错误
     /// 非原经办人、无提交或资金来源读取资格、非草稿、版本变化或字段非法时拒绝。
     pub async fn update_supplier_refund(
         &self,
@@ -80,15 +66,8 @@ impl ReturnsProcess {
 
     /// 保存原单的可编辑财务字段，并保留原单号、资金来源和岗位。
     ///
-    /// # 参数
-    /// * `id` - 原单主键
-    /// * `req` - 当前版本和可编辑字段
-    /// * `actor` - 当前已认证的经办人
+    /// `id` 为原单主键；`req` 为当前版本和可编辑字段；`actor` 为当前已认证的经办人。返回保存后的原单详情，含新乐观锁版本。
     ///
-    /// # 返回
-    /// 返回保存后的原单详情，含新乐观锁版本。
-    ///
-    /// # 错误
     /// 非原经办人、无提交或资金来源读取资格、非草稿、版本变化或字段非法时拒绝。
     pub async fn update_receipt_reversal(
         &self,
@@ -108,15 +87,8 @@ impl ReturnsProcess {
 
     /// 保存原单的可编辑财务字段，并保留原单号、资金来源和岗位。
     ///
-    /// # 参数
-    /// * `id` - 原单主键
-    /// * `req` - 当前版本和可编辑字段
-    /// * `actor` - 当前已认证的经办人
+    /// `id` 为原单主键；`req` 为当前版本和可编辑字段；`actor` 为当前已认证的经办人。返回保存后的原单详情，含新乐观锁版本。
     ///
-    /// # 返回
-    /// 返回保存后的原单详情，含新乐观锁版本。
-    ///
-    /// # 错误
     /// 非原经办人、无提交或资金来源读取资格、非草稿、版本变化或字段非法时拒绝。
     pub async fn update_payment_reversal(
         &self,
@@ -134,7 +106,7 @@ impl ReturnsProcess {
         .await
     }
 
-    /// 在同一事务重验当前资格，保存草稿并追加成功审计。
+    // 在同一事务重验当前资格，保存草稿并追加成功审计。
     async fn update_financial_draft(
         &self,
         kind: DocumentType,
@@ -159,7 +131,7 @@ impl ReturnsProcess {
     }
 }
 
-/// 按拥有领域的实际单据类型分派草稿更新，不改变任何资金过账事实。
+// 按拥有领域的实际单据类型分派草稿更新，不改变任何资金过账事实。
 async fn persist_financial_draft(
     db: &Database,
     kind: DocumentType,
@@ -176,7 +148,7 @@ async fn persist_financial_draft(
     }
 }
 
-/// 在调用方事务内加载原单、执行实体资格与版本守卫，再调用本域 CAS 保存。
+// 修改客户退款草稿时在调用方事务读原单，执行实体资格及版本守卫，再调用本域 CAS 保存。
 async fn persist_customer_refund_draft(
     db: &Database,
     id: &str,
@@ -195,7 +167,7 @@ async fn persist_customer_refund_draft(
     Ok(())
 }
 
-/// 在调用方事务内加载原单、执行实体资格与版本守卫，再调用本域 CAS 保存。
+// 修改供应商退款草稿时在调用方事务读原单，执行实体资格及版本守卫，再调用本域 CAS 保存。
 async fn persist_supplier_refund_draft(
     db: &Database,
     id: &str,
@@ -214,7 +186,7 @@ async fn persist_supplier_refund_draft(
     Ok(())
 }
 
-/// 在调用方事务内加载原单、执行实体资格与版本守卫，再调用本域 CAS 保存。
+// 修改回款冲正草稿时在调用方事务读原单，执行实体资格及版本守卫，再调用本域 CAS 保存。
 async fn persist_receipt_reversal_draft(
     db: &Database,
     id: &str,
@@ -233,7 +205,7 @@ async fn persist_receipt_reversal_draft(
     Ok(())
 }
 
-/// 在调用方事务内加载原单、执行实体资格与版本守卫，再调用本域 CAS 保存。
+// 修改付款冲正草稿时在调用方事务读原单，执行实体资格及版本守卫，再调用本域 CAS 保存。
 async fn persist_payment_reversal_draft(
     db: &Database,
     id: &str,

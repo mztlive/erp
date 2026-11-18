@@ -9,11 +9,7 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
 /// 在创建连接资格内列出当前已实现的接口类型。
-/// # 参数
-/// state 为共享应用，actor 为当前认证账号。
-/// # 返回
 /// 稳定协议代码及中文名称，不表示对应部署已配置凭据。
-/// # 错误
 /// 身份、创建资格或授权读取失败时返回统一错误。
 pub async fn options(
     State(state): State<HttpState>,

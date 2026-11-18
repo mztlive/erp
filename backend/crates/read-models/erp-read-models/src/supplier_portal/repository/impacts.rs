@@ -23,19 +23,16 @@ struct ReceiptId {
     id: String,
 }
 
-/// 精确采购责任键及真正关联入库单定位当前开放任务，最多一千个。
-///
-/// # 参数
-/// * `db` - 数据库。
-/// * `order` - 已授权的采购单。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
-/// 返回责任键、对象和当前草稿同时匹配的开放履约任务。
-///
-/// # 错误
-/// 草稿入库单或开放任务超过一千个时返回 `ValidationError`。
-/// 采购单缺责任人、履约责任键不合法或仓储读取失败时返回对应错误。
+// 处理供给变更采购影响时，精确采购责任键及真正关联入库单定位当前开放任务，最多一千个。
+//
+// 调用参数：
+// * `order` - 已授权的采购单。
+//
+// 返回责任键、对象和当前草稿同时匹配的开放履约任务。
+//
+// 失败边界：
+// 草稿入库单或开放任务超过一千个时返回 `ValidationError`。
+// 采购单缺责任人、履约责任键不合法或仓储读取失败时返回对应错误。
 pub(in crate::supplier_portal) async fn actual_open_tasks(
     db: &Database,
     order: &PurchaseOrder,
@@ -74,7 +71,7 @@ struct OperationFact {
     warehouse_id: Option<String>,
 }
 
-/// 同一页任务按对象类型批量读取草稿，避免逐任务读取。
+// 处理供给变更采购影响时，同一页任务按对象类型批量读取草稿，避免逐任务读取。
 async fn current_operation_facts(
     db: &Database,
     tasks: &[WorkItem],
@@ -133,7 +130,7 @@ async fn current_operation_facts(
     Ok(facts)
 }
 
-/// 入库任务按实际采购来源及仓库责任键批量读取。
+// 处理供给变更采购影响时，入库任务按实际采购来源及仓库责任键批量读取。
 async fn receipt_operation_facts(
     db: &Database,
     ids: &[String],
@@ -155,7 +152,7 @@ async fn receipt_operation_facts(
     Ok(facts)
 }
 
-/// 当前草稿版本、采购来源、责任键和真实个人责任必须同时匹配。
+// 处理供给变更采购影响时，当前草稿版本、采购来源、责任键和真实个人责任必须同时匹配。
 fn current_operation(task: &WorkItem, order_id: &str, owner: &str, fact: &OperationFact) -> bool {
     if fact.order_id != order_id || !task.matches_subject_version(&fact.version.to_string()) {
         return false;
@@ -178,7 +175,7 @@ mod tests {
 
     use super::*;
 
-    /// 构造具有真实当前个人责任和冻结版本的履约工作项。
+    // 处理供给变更采购影响时，生成具有真实当前个人责任和冻结版本的履约工作项。
     fn task(kind: &str, key: &str, role: &str, reason: &str) -> WorkItem {
         WorkItem::new_with_responsibility_key(
             erp_core::ids::WorkItemId::new("task1"),

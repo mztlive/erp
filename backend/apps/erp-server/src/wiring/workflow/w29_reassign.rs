@@ -12,19 +12,10 @@ use persistence_core::Executor;
 use super::map_service;
 use crate::wiring::errors::Error;
 
-/// 同步 W29 对象当前处理人及其有效内部组织。
-///
-/// # 参数
-/// * `db` - 业务数据库
-/// * `item` - 已改派的正式任务
-/// * `target_user_id` - 接收人
-/// * `executor` - 与任务写入相同的执行器
-///
-/// # 返回
-/// 非 W29 对象时成功且不写入。
-///
-/// # 错误
-/// 处理人缺少有效内部组织或对象不存在时拒绝。
+// 同步 W29 对象当前处理人及其有效内部组织。
+// `executor` 为与任务写入相同的执行器。
+// 非 W29 对象时成功且不写入。
+// 处理人缺少有效内部组织或对象不存在时拒绝。
 pub(super) async fn reassign_handler(
     db: &Database,
     item: &mut WorkItem,

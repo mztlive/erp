@@ -14,24 +14,11 @@ use crate::{Error, Result};
 /// JWT 密钥最小字节数（与 web-api `JwtEngine::new` 一致）。
 const MIN_SECRET_LEN: usize = 32;
 
-/// 为种子账号签发后台 JWT。
-///
-/// 复制 `apps/erp-server/src/http/auth/jwt.rs` 的 token 结构与 HMAC-SHA256
-/// 签名算法（标准声明 `sub`/`exp` + 私有声明 `id`/`account`/
-/// `subject_kind`/`account_kind`/`account_version`）。本 crate 不依赖
-/// web-api，只能复制格式；密钥必须与构造 AppState 时使用的 `app.secret`
-/// 完全一致，否则 `authenticate` 验签失败。
-///
-/// # 参数
-/// * `account_id` - 种子账号 ID（`seed_admin_account` 的返回值）
-/// * `secret` - 与 web-api 配置一致的 JWT 密钥（至少 32 字节）
-/// * `exp_seconds` - token 有效期（秒）
-///
-/// # 返回
-/// 返回可直接放入 `Authorization: Bearer <token>` 的 JWT。
-///
-/// # 错误
-/// 密钥过短、HMAC 初始化失败或签名失败时返回错误。
+/// 用种子管理员的账号 ID 和以秒计的有效期签发后台 JWT，供路由测试作为 Bearer 凭据使用。
+/// 不依赖 Web API，但 `sub`、`exp` 及私有声明 `id`、`account`、`subject_kind`、`account_kind`、
+/// `account_version` 必须与 `apps/erp-server/src/http/auth/jwt.rs` 同步。
+/// HMAC-SHA256 密钥须与测试应用的 `app.secret` 一致，且至少 32 字节；密钥过短、HMAC 初始化失败
+/// 或签名失败时返回错误。
 pub fn mint_jwt(account_id: &str, secret: &str, exp_seconds: u64) -> Result<String> {
     if secret.len() < MIN_SECRET_LEN {
         return Err(Error::JwtSecretTooShort);

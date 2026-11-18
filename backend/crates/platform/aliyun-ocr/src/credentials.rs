@@ -15,13 +15,9 @@ pub struct Credentials {
 }
 
 impl Credentials {
-    /// 验证凭据可以安全构造签名请求头。
-    /// # 参数
-    /// 无；读取当前配置。
-    /// # 返回
-    /// 配置完整时成功，不联网验证权限。
-    /// # 错误
-    /// 空白、控制字符、无效 ID 或超长凭据返回脱敏错误。
+    /// 在加载配置或创建客户端时校验 AK/SK 与可选 STS token 的格式，避免用非法头值构造签名请求。
+    /// ID 必须是 1～128 个 ASCII 字母或数字；密钥和 token 必须是非空的可打印 ASCII，
+    /// 不含空格且不超过 16384 字节。此检查不联网，不验证权限或 token 是否过期。
     pub fn validate(&self) -> Result<()> {
         if self.access_key_id.is_empty()
             || self.access_key_id.len() > 128
@@ -35,7 +31,8 @@ impl Credentials {
     }
 }
 
-/// 空串、空格、控制字符、非 ASCII 或超过 16384 字节都不能作为签名材料。
+// 本地凭据检查共用此规则：SK 和 STS token 必须是 1～16384 字节的可打印 ASCII，
+// 不接受空格或控制字符，以免把非法材料带入签名或 HTTP 请求头。
 fn valid_secret(value: &str) -> bool {
     !value.is_empty() && value.len() <= 16384 && value.bytes().all(|b| (33..=126).contains(&b))
 }

@@ -25,18 +25,10 @@ struct Data {
     prism_version: String,
 }
 
-/// 解码 HTTP 成功响应。空 `content` 仍是成功结果。
-///
-/// # 参数
-/// * `bytes` - 成功响应正文；仅在不超过上限时按 JSON 解析。
-///
-/// # 返回
-/// `Page`：`text` 为内层 `content`，`version` 为 `{API_VERSION};algo=…;prism=…`。
-///
-/// # 错误
-/// `bytes` 超过 `MAX_RESPONSE_BYTES`，或 `content` 超过 100000 字节、`algo_version` 或 `prism_version` 超过 80 字节时，返回 `Error::ResponseSize`。
-/// 信封或内层 `Data` 不是合法 JSON，或成功响应缺少 `Data` 时，返回 `Error::InvalidResponse`。
-/// 业务 `Code` 存在且不是 `200` 时返回对应的脱敏错误。
+// HTTP 成功后先检查信封的业务码，再将字符串 Data 解码为内层 JSON；业务错误不带供应商原文。
+// 返回原样的 content 和 `API版本;algo=…;prism=…`；缺失的版本段留空，空文字不等于空白页。
+// 正文上限 8 MiB，文本上限 100000 字节，两个版本字段分别限 80 字节。JSON 无效或缺少 Data
+// 返回 InvalidResponse，长度超限返回 ResponseSize。
 pub(super) fn decode(bytes: &[u8]) -> Result<Page> {
     if bytes.len() > MAX_RESPONSE_BYTES {
         return Err(Error::ResponseSize);
@@ -66,7 +58,8 @@ pub(super) fn classify_http_error(status: u16) -> Error {
     }
 }
 
-/// 只按稳定错误码归类，不把供应商正文写入 `Error`。
+// HTTP 成功但业务码非 200 时，仅将已知代码归为授权、限流或服务不可用；
+// 其他错误统一视为请求被拒绝，避免供应商正文或原始错误码进入日志。
 fn classify_business_error(code: &str) -> Error {
     if code == "noPermission"
         || code.starts_with("InvalidAccessKeyId")

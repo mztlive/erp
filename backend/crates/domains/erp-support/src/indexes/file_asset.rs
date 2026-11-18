@@ -10,8 +10,7 @@ use persistence_core::Result;
 use super::{create_indexes, named_index, unique_index};
 use crate::repository::extensions::FileAssetExt;
 
-/// 创建本域集合的幂等命名索引。
-///
+/// 启动时注册该集合的命名索引，多次调用沿用同名索引。
 /// 落地数据模型 §6.1 / §4.5.7：
 /// - `file_asset`：`storage_object_key` 是加密受控对象存储中的不可猜测对象键，
 ///   全局唯一（身份字段，软删除后仍保留，避免复用破坏销毁审计链）；
@@ -19,21 +18,7 @@ use crate::repository::extensions::FileAssetExt;
 ///   `expires_at` 覆盖到期资产查询；
 /// - `document_attachment`：追加式关联（§4.5.7 审计留痕）无自然业务唯一键，
 ///   用 `id` 唯一索引防止重复身份静默写入；按单据与按资产的正反查询索引。
-///
-/// 到期清理说明：实体 `Instant` 按 P0 固化的 Int64（秒级时间戳）持久化，而
-/// MongoDB TTL 索引要求索引字段为 BSON Date，**无法直接对 `expires_at` 建 TTL
-/// 索引**（§4.5.7 导出结果保留 7 天 / 失败诊断 30 天）。本域以
-/// `idx_file_assets_expires_at` 提供到期查询索引，物理销毁由 P5 后台任务按
-/// `expires_at` 扫描并标记 `destroyed_at`；将 `expires_at` 改为 BSON Date 需要
-/// P0 地基修订（entity `Instant` 序列化形态），不在本阶段冻结范围内。
-///
-/// # 参数
-/// * `db` - 目标 MongoDB 数据库
-///
-/// # 返回
-/// 本域索引全部创建成功时无返回值。
-///
-/// # 错误
+/// 到期清理说明：实体 `Instant` 按 P0 固化的 Int64（秒级时间戳）持久化，而 MongoDB TTL 索引要求索引字段为 BSON Date，**无法直接对 `expires_at` 建 TTL 索引**（§4.5.7 导出结果保留 7 天 / 失败诊断 30 天）。本域以 `idx_file_assets_expires_at` 提供到期查询索引，物理销毁由 P5 后台任务按 `expires_at` 扫描并标记 `destroyed_at`；将 `expires_at` 改为 BSON Date 需要 P0 地基修订（entity `Instant` 序列化形态），不在本阶段冻结范围内。
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, <Database as FileAssetExt>::FILE_ASSETS, file_asset_indexes()).await?;
@@ -42,7 +27,7 @@ pub async fn ensure(db: &Database) -> Result<()> {
     Ok(())
 }
 
-/// 返回 `file_asset` 的身份约束、扫描队列与到期查询索引。
+// 返回 `file_asset` 的身份约束、扫描队列与到期查询索引。
 fn file_asset_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_file_assets_id", doc! { "id": 1 }),
@@ -55,7 +40,7 @@ fn file_asset_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `document_attachment` 的身份约束与单据/资产查询索引。
+// 返回 `document_attachment` 的身份约束与单据/资产查询索引。
 fn document_attachment_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_document_attachments_id", doc! { "id": 1 }),
@@ -66,7 +51,7 @@ fn document_attachment_indexes() -> Vec<IndexModel> {
 
 #[cfg(test)]
 mod tests {
-    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    // 验证按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
     #[test]
     fn collections_look_up_by_unique_stable_id() {
         let indexes = super::file_asset_indexes();

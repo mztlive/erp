@@ -40,16 +40,7 @@ pub enum IdempotencyOperation {
 }
 
 impl IdempotencyOperation {
-    /// 返回稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回持久化与索引使用的代码。
-    ///
-    /// # 错误
-    /// 无。
+    /// 将选品幂等操作类型转成用于持久化和查询的稳定代码，与中文展示文案分开。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Create => "CREATE",
@@ -70,15 +61,7 @@ impl IdempotencyOperation {
     /// 重试时是否回读选品册当前事实，而不是返回落库时的摘要。
     ///
     /// 创建已包含首次准备排队，摘要会过时；发布后令牌也可能再次变化。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 册级写操作返回 `true`。
-    ///
-    /// # 错误
-    /// 无。
+    /// 结果：册级写操作返回 `true`。
     pub fn replays_live_booklet(self) -> bool {
         matches!(
             self,
@@ -138,17 +121,13 @@ pub struct SalesSelectionIdempotency {
 }
 
 impl SalesSelectionIdempotency {
-    /// 创建幂等记录。
-    ///
-    /// # 参数
-    /// * `id` - 记录稳定身份
-    /// * `data` - 创建字段
-    ///
-    /// # 返回
+    /// 为选品命令保存作用域、动作与结果快照，供同键重放查回；键长度由调用方校验。
     /// 返回新记录。
+    /// 失败条件：键长度由调用方经 `normalize_idempotency_key` 校验。
     ///
-    /// # 错误
-    /// 无。键长度由调用方经 `normalize_idempotency_key` 校验。
+    /// 输入约定：
+    /// - `id`：记录稳定身份
+    /// - `data`：创建字段
     pub fn new(id: SalesSelectionIdempotencyId, data: SalesSelectionIdempotencyData) -> Self {
         Self {
             base: BaseModel::new(id.to_string()),
@@ -163,29 +142,20 @@ impl SalesSelectionIdempotency {
     }
 
     /// 判断是否为相同请求。
+    /// 结果：相同载荷返回 `true`。
     ///
-    /// # 参数
-    /// * `request_hash` - 本次请求哈希
-    ///
-    /// # 返回
-    /// 相同载荷返回 `true`。
-    ///
-    /// # 错误
-    /// 无。
+    /// 输入约定：
+    /// - `request_hash`：本次请求哈希
     pub fn is_same_request(&self, request_hash: &str) -> bool {
         self.request_hash == request_hash
     }
 
     /// 校验同键同载荷。
-    ///
-    /// # 参数
-    /// * `request_hash` - 本次请求哈希
-    ///
-    /// # 返回
-    /// 一致返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// 结果：一致返回 `Ok(())`。
     /// 同键不同请求时拒绝。
+    ///
+    /// 输入约定：
+    /// - `request_hash`：本次请求哈希
     pub fn ensure_same_request(&self, request_hash: &str) -> Result<()> {
         if self.is_same_request(request_hash) {
             return Ok(());
@@ -195,15 +165,10 @@ impl SalesSelectionIdempotency {
 }
 
 /// 计算请求载荷哈希。
-///
-/// # 参数
-/// * `payload` - 规范化后的请求载荷
-///
-/// # 返回
 /// 返回十六进制哈希。
 ///
-/// # 错误
-/// 无。
+/// 输入约定：
+/// - `payload`：规范化后的请求载荷
 pub fn request_hash(payload: &str) -> String {
     hex::encode(Sha256::digest(payload.as_bytes()))
 }

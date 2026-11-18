@@ -4,39 +4,14 @@ use super::{LinearTransitionDraft, generate_linear_transitions};
 use crate::model::types::{ApprovalTransitionEvent, ModelError, ModelResult, NODE_KEY_MAX_LEN};
 use crate::model::{ApprovalNodeDefinition, ApprovalProcessDefinition, ApprovalTransitionDefinition};
 
-/// 校验单条连线实体形状。
-///
-/// 本函数不把来源节点解释为入口或末节点。
-///
-/// # 参数
-/// * `transition` - 已构造的连线
-///
-/// # 返回
-/// 连线形状合法时返回 `Ok(())`。
-///
-/// # 错误
-/// 形状不合法时返回 [`ModelError::InvalidTransition`]。
-///
-/// # 关键业务约束
-/// 目标节点与终态结果必须恰有一个。
+/// 单独读取或校验连线时检查自身目标形状，不判断来源是否为入口或末节点。
+/// 不合法的形状返回 [`ModelError::InvalidTransition`]；节点在图中的位置由整图校验负责。
 pub fn validate_transition(transition: &ApprovalTransitionDefinition) -> ModelResult<()> {
     transition.validate_shape()
 }
 
-/// 校验入口键存在于已给出的节点键集合。
-///
-/// # 参数
-/// * `entry_node_key` - 定义入口
-/// * `node_keys` - 定义内节点键
-///
-/// # 返回
-/// 入口规范且存在于节点集合时返回 `Ok(())`。
-///
-/// # 错误
-/// 入口为空、超长或不在集合内时返回错误。
-///
-/// # 关键业务约束
-/// 本方法只验证入口存在性，不推断展示顺序。
+/// 整图校验前确认入口键裁剪后非空、未超字节上限，并能在提供的节点键集合中找到。
+/// 这里只检查键可用且存在，是否排第一由线性图校验决定。
 pub fn validate_entry_node(entry_node_key: &str, node_keys: &[String]) -> ModelResult<()> {
     let entry = entry_node_key.trim();
     if entry.is_empty() {
@@ -52,39 +27,13 @@ pub fn validate_entry_node(entry_node_key: &str, node_keys: &[String]) -> ModelR
     Err(ModelError::InvalidField("入口节点必须存在于节点集合"))
 }
 
-/// 按展示顺序排列节点并校验数量与连续性。
-///
-/// # 参数
-/// * `nodes` - 未保证存储顺序的完整节点集合
-///
-/// # 返回
-/// 返回从 `display_order = 1` 开始连续排列的节点引用。
-///
-/// # 错误
-/// 节点数量不在 `1..=20` 或顺序不连续时返回模型错误。
-///
-/// # 关键业务约束
-/// 存储返回顺序不参与流程语义，展示顺序是唯一权威顺序。
+/// 构图和读取定义时按展示顺序统一排列节点；数量须为 1 至 [`super::MAX_DEFINITION_NODES`]，顺序从 1 连续且无重复，不能依赖持久化顺序。
 pub fn ordered_nodes(nodes: &[ApprovalNodeDefinition]) -> ModelResult<Vec<&ApprovalNodeDefinition>> {
     super::ordered_by_display_order(nodes, |node| node.display_order)
 }
 
-/// 校验完整定义图与线性生成器完全一致。
-///
-/// # 参数
-/// * `definition` - 流程定义
-/// * `nodes` - 定义节点
-/// * `transitions` - 已持久化连线
-///
-/// # 返回
-/// 节点、入口和连线构成合法线性审批图时返回 `Ok(())`。
-///
-/// # 错误
-/// 节点数量、顺序、入口、连线数量、形状或目标不一致时返回模型错误。
-///
-/// # 关键业务约束
-/// 入口必须是顺序第一节点，驳回进入终态，末节点通过进入已批准终态。
-/// 历史冻结的驳回到入口连线仍可读取，运行时一律解释为终止。
+/// 发布、绑定或读取冻结图时校验逐节点指派、入口和连线。入口必须排第一，通过按顺序推进，末节点通过和任一驳回都收结实例。
+/// 允许读取指回入口的历史冻结驳回边，但只按终态理解；其它边、目标或数量与生成结果不一致时返回错误。
 pub fn validate_linear_graph(
     definition: &ApprovalProcessDefinition,
     nodes: &[ApprovalNodeDefinition],
@@ -110,17 +59,7 @@ pub fn validate_linear_graph(
     Ok(())
 }
 
-/// 比较已持久化连线与线性生成器输出。
-///
-/// # 参数
-/// * `actual` - 已持久化连线
-/// * `expected` - 线性生成器输出
-///
-/// # 返回
-/// 忽略存储顺序后形态完全一致时返回 `Ok(())`。
-///
-/// # 错误
-/// 数量或任一来源、事件、目标、终态不一致时返回模型错误。
+// 整图校验时忽略存储顺序，对比实际和生成的来源、事件、节点目标与终态；数量或内容不同即拒绝。
 fn ensure_transitions_match(
     actual: &[ApprovalTransitionDefinition],
     expected: &[LinearTransitionDraft],
@@ -152,16 +91,7 @@ fn ensure_transitions_match(
     Err(ModelError::InvalidTransition("连线与线性生成器结果不一致"))
 }
 
-/// 构造连线比较使用的稳定键。
-///
-/// # 参数
-/// * `transition` - 已持久化连线
-///
-/// # 返回
-/// 返回来源、事件、目标与终态组成的比较元组。
-///
-/// # 错误
-/// 无。
+// 为连线对比构造稳定元组；历史驳回回入口边映射为驳回终态，只用于比较，不改写冻结记录。
 fn transition_key<'a>(
     transition: &'a ApprovalTransitionDefinition,
     entry: &str,
@@ -207,7 +137,7 @@ mod tests {
         .unwrap()
     }
 
-    /// 合法连线通过；入口必须命中节点集合。
+    // 覆盖合法单边及入口键存在、缺失和空白的情况，区分连线形状和入口校验。
     #[test]
     fn validates_transition_and_entry() {
         let transition = ApprovalTransitionDefinition::to_node(
@@ -225,9 +155,7 @@ mod tests {
         assert!(validate_entry_node("  ", &["n1".into()]).is_err());
     }
 
-    /// 节点顺序确定化，并拒绝空、超限与不连续顺序。
-    ///
-    /// 测试集合必须在排序引用存续期间保持所有权。
+    // 从乱序节点取得确定的首节点，并验证空集合、超出数量上限或未从 1 起步时无法排序构图。
     #[test]
     fn ordered_nodes_enforce_count_and_continuity() {
         let second = node("id2", "n2", 2);
@@ -259,7 +187,7 @@ mod tests {
         assert_eq!(orders, (1..=20).collect::<Vec<_>>());
     }
 
-    /// 完整线性图必须入口正确且连线与生成器一致。
+    // 覆盖入口、连线和参与名单损坏，同时验证旧驳回边只在指回入口时兼容，且解析不会改写冻结图。
     #[test]
     fn linear_graph_validation_fails_closed() {
         let nodes = vec![node("id1", "n1", 1), node("id2", "n2", 2)];

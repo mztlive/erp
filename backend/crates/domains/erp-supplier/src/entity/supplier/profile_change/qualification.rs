@@ -11,26 +11,8 @@ use crate::entity::supplier::{
     SupplierQualificationData, SupplierQualificationRevision, SupplierQualificationUpdate,
 };
 
-/// 创建一项新能力及首版快照。
-///
-/// # 参数
-/// * `supplier_id` - 供应商角色 ID
-/// * `code` - 能力代码
-/// * `valid_from` - 生效起始日
-/// * `owner_user_id` - 显式能力负责人，禁止传入操作人兜底
-/// * `actor_id` - 创建人，只写入审计
-/// * `capability_id` - 新能力主键，Service 分配
-/// * `revision_id` - 首版修订主键，Service 分配
-///
-/// # 返回
-/// 返回 `(Capability, Revision)`，修订号固定为 `1` 且 `current_revision_id` 已推进。
-///
-/// # 错误
-/// 能力字段校验失败或修订创建失败时返回错误。
-///
-/// # 约束
-/// 纯内存，不生成 ID，不查询 DB，修订号不做溢出判断（首版恒为 1）；修订快照
-/// 通过 `SupplierCapability::snapshot_revision` 生成，字段与实体当前状态逐字段一致。
+/// 用调用方分配的主键创建指定供应商的能力及首版修订，修订号为 1 并设置当前指针。负责人必须显式指定，创建
+/// 人只用于审计，不能兜底；字段或修订构造失败时不返回结果。
 pub fn new_capability(
     supplier_id: &SupplierAccountId,
     code: CapabilityCode,
@@ -61,24 +43,8 @@ pub fn new_capability(
     Ok((capability, revision))
 }
 
-/// 将根命令资质字段应用到同一稳定资质。
-///
-/// # 参数
-/// * `qualification` - 待更新的资质实体；若当前为 `Disabled/Expired` 则自动切回 `Active`
-/// * `issuer` - 发证机构输入，`Some` 设置、`None` 清空
-/// * `valid_from` - 生效起始日输入
-/// * `valid_to` - 失效日输入，`Some` 设置、`None` 清空
-/// * `attachment_id` - 附件输入
-/// * `actor_id` - 操作人 ID
-///
-/// # 返回
-/// 原地更新资质实体。
-///
-/// # 错误
-/// 资质状态迁移或区间校验失败时返回错误。
-///
-/// # 约束
-/// `valid_from` 按完全替换语义写入；`status` 仅在非 Active 时自动置 Active，保持与旧 Service 一致。
+/// 保存根资料时原地替换同一稳定资质的字段，缺省可空字段表示清空，并将停用或过期资质恢复启用；状态迁移不
+/// 合法或生效区间冲突时返回错误。
 pub fn apply_qualification_input(
     qualification: &mut SupplierQualification,
     issuer: Option<String>,
@@ -132,19 +98,8 @@ pub struct NewQualificationParams<'a> {
     pub link_ids: Vec<SupplierQualificationCapabilityId>,
 }
 
-/// 创建一份新资质、首版快照及适用能力关联的领域组装数据。
-///
-/// # 参数
-/// * `params` - 供应商、资质字段、能力映射与新建身份
-///
-/// # 返回
-/// 返回 `(Qualification, Revision, Links)`，修订号固定为 1。
-///
-/// # 错误
-/// 任一能力码未在 `capability_ids` 中、字段校验或关联构造失败时返回错误；`link_ids` 长度与 `capability_codes` 不一致时也返回错误。
-///
-/// # 约束
-/// 纯内存，不触及 DB；`supplier_id` 与 `capability_ids` 由 Service 保证为当前有效能力。
+/// 用调用方分配的身份组装新资质、首版修订及适用能力关联；任一能力不在已确认映射中、关联 ID 数量不匹配或
+/// 字段非法时拒绝，不查询数据库。
 pub fn new_qualification(
     params: NewQualificationParams<'_>,
 ) -> erp_core::Result<(

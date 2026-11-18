@@ -43,27 +43,14 @@ pub struct SensitiveText {
 }
 
 impl fmt::Debug for SensitiveText {
-    /// 调试输出只暴露查询指纹，不输出密文与明文。
+    // 调试敏感值时只显示查询指纹，避免日志输出明文或密文内容。
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.debug_struct("SensitiveText").field("fingerprint", &self.fingerprint).finish()
     }
 }
 
 impl SensitiveText {
-    /// 构造敏感值。
-    ///
-    /// 校验密文与指纹非空、长度不超上限，并要求指纹是 64 位十六进制
-    /// （HMAC-SHA256 规范形态，数据模型 §13.6 固化为唯一实现）。
-    ///
-    /// # 参数
-    /// * `encrypted` - 数据库加密列的密文（由 P3 服务层加密产生）
-    /// * `fingerprint` - 带密钥 HMAC 查询指纹（由指纹函数计算产生）
-    ///
-    /// # 返回
-    /// 返回敏感值实例。
-    ///
-    /// # 错误
-    /// 当密文/指纹为空、超长或指纹不是 64 位十六进制时返回错误。
+    /// 将调用方准备的密文列内容与带密钥 HMAC-SHA256 指纹封装为敏感值。两项去空白后不能为空、不得超长，指纹必须是 64 位十六进制；任一不合规时返回错误。
     pub fn new(encrypted: String, fingerprint: String) -> Result<Self> {
         let encrypted =
             normalize_required_text(encrypted, "加密值不能为空", ENCRYPTED_MAX_LEN, "加密值过长")?;
@@ -76,30 +63,12 @@ impl SensitiveText {
         Ok(Self { encrypted, fingerprint })
     }
 
-    /// 返回加密列密文。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回密文字符串（调用方负责按权限展示）。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 提供加密列内容供受控读取，调用方负责按权限展示；不得用于列表投影或调试日志。
     pub fn encrypted(&self) -> &str {
         &self.encrypted
     }
 
-    /// 返回带密钥 HMAC 查询指纹。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回指纹字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 提供带密钥的 HMAC 查询指纹，供匹配敏感字段而不读取原值。
     pub fn fingerprint_value(&self) -> &str {
         &self.fingerprint
     }
@@ -155,22 +124,7 @@ pub struct WarehouseRevision {
 }
 
 impl WarehouseRevision {
-    /// 创建仓库修订。
-    ///
-    /// 完成 name/change_reason 的校验与规范化（去首尾空白、非空、长度上限），
-    /// 校验修订序号从 1 开始、生效区间不倒挂；地址与联系人由
-    /// [`SensitiveText::new`] 完成密文/指纹校验。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::WarehouseRevisionId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
-    /// 返回新建的仓库修订实体。
-    ///
-    /// # 错误
-    /// 当 name/change_reason 为空/超长、revision_no 为 0、生效区间倒挂，
-    /// 或密文/指纹非法时返回错误。
+    /// 建立仓库资料修订，验证名称和变更原因去空白后非空且不超长、序号从 `1` 开始、地区为叶级编码、结束日严格晚于开始日。地址和联系人由 [`SensitiveText::new`] 预先校验后随修订保存。
     pub fn new(id: WarehouseRevisionId, data: WarehouseRevisionData) -> Result<Self> {
         let name = normalize_required_text(data.name, "仓库名称不能为空", NAME_MAX_LEN, "仓库名称过长")?;
         let change_reason = normalize_required_text(
@@ -201,19 +155,7 @@ impl WarehouseRevision {
         })
     }
 
-    /// 判断修订当前是否处于生效区间（不含结束日）。
-    ///
-    /// 半开区间语义收敛到 [`WarehouseSkuPolicyPeriod::contains`]；非法区间恒返回 `false`
-    ///（退化区间在任何业务日都不生效，与原逐字段比较一致）。
-    ///
-    /// # 参数
-    /// * `business_day` - 当前业务日
-    ///
-    /// # 返回
-    /// 业务日落在 `[effective_from, effective_to)` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 按 [`WarehouseSkuPolicyPeriod::contains`] 判断业务日是否位于修订半开区间；包括开始日，不包括结束日，历史非法区间始终返回 `false`。
     pub fn is_effective_on(&self, business_day: BusinessDate) -> bool {
         WarehouseSkuPolicyPeriod::new(self.effective_from, self.effective_to)
             .is_ok_and(|period| period.contains(business_day))
@@ -230,10 +172,7 @@ mod tests {
 
     type HmacSha256 = Hmac<Sha256>;
 
-    /// 带密钥的规范化 HMAC-SHA256 指纹（数据模型 §4.5.5：禁止裸摘要）。
-    ///
-    /// `hmac`/`sha2` 当前是 `[dev-dependencies]`（P0 修订提交 3786fac），
-    /// 指纹函数暂在测试内定义；生产使用需地基修订提升为正式依赖。
+    // 测试使用开发依赖按去空白后的明文计算带密钥 HMAC-SHA256，固定指纹形状和匹配语义；生产指纹由注入端口提供，不可用裸摘要。
     fn fingerprint(plain: &str, key: &[u8]) -> String {
         let mut mac = HmacSha256::new_from_slice(key).expect("HMAC 密钥接受任意长度");
         mac.update(plain.trim().as_bytes());
@@ -260,7 +199,7 @@ mod tests {
         }
     }
 
-    /// happy path：名称与变更原因 trim 规范化，敏感值与修订序号落位。
+    // 验证名称和变更原因去首尾空白，且序号与敏感值随修订保存。
     #[test]
     fn new_trims_and_normalizes_fields() {
         let revision = WarehouseRevision::new(WarehouseRevisionId::new("rev-1"), data()).unwrap();
@@ -273,7 +212,7 @@ mod tests {
         assert!(revision.is_effective_on(BusinessDate::from_ymd(2026, 6, 1).unwrap()));
     }
 
-    /// 失败路径：必填空与超长各一条。
+    // 验证必填字段为空或超过上限时不构造修订，避免保存无法展示或追溯的快照。
     #[test]
     fn new_rejects_empty_and_overlong_fields() {
         let empty_name = WarehouseRevisionData { name: "  ".to_string(), ..data() };
@@ -283,7 +222,7 @@ mod tests {
         assert!(WarehouseRevision::new(WarehouseRevisionId::new("rev-1"), overlong_reason).is_err());
     }
 
-    /// 失败路径：越界（修订序号为 0）与关联不一致（生效区间倒挂）各一条。
+    // 验证零序号与倒挂日期均被拒绝，保证修订有可排序身份与有效窗口。
     #[test]
     fn new_rejects_zero_revision_no_and_reversed_window() {
         let zero_revision = WarehouseRevisionData { revision_no: 0, ..data() };
@@ -297,8 +236,7 @@ mod tests {
         assert!(WarehouseRevision::new(WarehouseRevisionId::new("rev-1"), reversed).is_err());
     }
 
-    /// 敏感字段：指纹稳定且带密钥——同一明文同密钥结果一致，
-    /// 不同密钥/不同明文结果不同；不是可离线枚举的裸摘要。
+    // 验证同一规范化值和密钥生成稳定指纹，改变密钥或原值后结果不同，不以裸摘要替代。
     #[test]
     fn fingerprint_is_stable_keyed_and_distinguishable() {
         let plain = "北京市朝阳区望京街道 1 号";
@@ -315,7 +253,7 @@ mod tests {
         );
     }
 
-    /// 敏感字段：Debug 不泄漏明文与密文，只暴露指纹。
+    // 验证调试敏感字段只显示指纹，不能泄漏明文或密文。
     #[test]
     fn debug_never_leaks_plaintext_or_ciphertext() {
         let revision = WarehouseRevision::new(WarehouseRevisionId::new("rev-1"), data()).unwrap();
@@ -331,7 +269,7 @@ mod tests {
         );
     }
 
-    /// 敏感字段：空密文/空指纹/非法指纹均被拒绝。
+    // 验证空的密文列值、空指纹和非规范十六进制指纹均不能构造敏感值。
     #[test]
     fn sensitive_text_rejects_empty_and_malformed_values() {
         let key = b"test-key-1";
@@ -344,7 +282,7 @@ mod tests {
         assert!(SensitiveText::new("cipher".to_string(), "a".repeat(65)).is_err());
     }
 
-    /// 生效区间判定：结束日当天不在生效区间内。
+    // 验证修订包含首日、不包含结束日，以同一边界决定业务日是否有效。
     #[test]
     fn effectiveness_window_is_half_open() {
         let revision = WarehouseRevision::new(
@@ -361,7 +299,7 @@ mod tests {
         assert!(!revision.is_effective_on(BusinessDate::from_ymd(2025, 12, 31).unwrap()));
     }
 
-    /// 实体 JSON 往返：敏感值以密文 + 指纹两个字段持久化。
+    // 验证修订 JSON 往返保留敏感值的密文列和指纹两个字段。
     #[test]
     fn revision_roundtrips_through_json() {
         let revision = WarehouseRevision::new(WarehouseRevisionId::new("rev-1"), data()).unwrap();

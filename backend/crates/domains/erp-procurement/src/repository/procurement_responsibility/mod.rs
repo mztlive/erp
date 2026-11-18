@@ -22,34 +22,20 @@ pub struct ProcurementResponsibilityRuleFilter {
 }
 
 impl Default for ProcurementResponsibilityRuleFilter {
-    /// 返回首页空筛选（`page: 1`，`page_size: 20`）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回规则类型、负责人和状态均不筛选的首页条件（`page` 为 1，`page_size` 为 20）。
-    ///
-    /// # 错误
-    /// 无。
+    // 列表未传筛选时默认第 1 页、每页 20 条，不另加筛选条件。
+    //
+    // 返回规则类型、负责人和状态均不筛选的首页条件（`page` 为 1，`page_size` 为 20）。
     fn default() -> Self {
         Self { rule_type: None, owner_user_id: None, status: None, page: 1, page_size: 20 }
     }
 }
 
 impl QueryFilter for ProcurementResponsibilityRuleFilter {
-    /// 构造包含软删除约束的 MongoDB 查询文档。
-    ///
-    /// `rule_type`、`owner_user_id`、`status` 为 `None` 时不写入；有值时规则类型与状态写入稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回规则类型、负责人及状态筛选文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 构造包含软删除约束的 MongoDB 查询文档。
+    //
+    // `rule_type`、`owner_user_id`、`status` 为 `None` 时不写入；有值时规则类型与状态写入稳定代码。
+    //
+    // 返回规则类型、负责人及状态筛选文档。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(rule_type) = self.rule_type {
@@ -66,18 +52,11 @@ impl QueryFilter for ProcurementResponsibilityRuleFilter {
 }
 
 impl Pagination for ProcurementResponsibilityRuleFilter {
-    /// 返回页码与每页条数。
-    ///
-    /// `page` 原样返回，`page_size` 由 `u32` 拓宽为 `u64`。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 读取页码与每页条数。
+    //
+    // `page` 原样返回，`page_size` 由 `u32` 拓宽为 `u64`。
+    //
+    // 返回 `(page, page_size)`。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }

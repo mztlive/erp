@@ -19,12 +19,11 @@ pub(super) struct PersonScopeFacts {
 
 impl AccessControlService {
     /// 获取人员唯一范围及服务端有效操作候选。
-    /// # 参数
-    /// 人员与当前管理员。
-    /// # 返回
     /// 业务范围及用于保存的策略版本。
-    /// # 错误
+    ///
     /// 配置读取越权、人员不存在或数据库失败拒绝。
+    ///
+    /// 人员与当前管理员。
     pub async fn person_scopes(&self, user: &str, actor: &AuditActor) -> Result<PersonScopeView> {
         let service = self.clone();
         let (user, actor) = (user.to_owned(), actor.clone());
@@ -45,13 +44,12 @@ impl AccessControlService {
             .await
     }
 
-    /// 公司组织配置边界与配置动作必须由同一有效角色提供。
-    /// # 参数
-    /// 当前管理员、读写模式及调用方事务执行器。
-    /// # 返回
-    /// 已证明配置资格的完整上下文，可在本阶段复用其组织事实。
-    /// # 错误
-    /// 无公司配置资格、策略漂移或持久化失败时拒绝。
+    // 公司组织配置边界与配置动作必须由同一有效角色提供。
+    // 已证明配置资格的完整上下文，可在本阶段复用其组织事实。
+    //
+    // 无公司配置资格、策略漂移或持久化失败时拒绝。
+    //
+    // 当前管理员、读写模式及调用方事务执行器。
     pub(super) async fn authorize_person_scope(
         &self,
         actor: &AuditActor,
@@ -67,17 +65,12 @@ impl AccessControlService {
         })
     }
 
-    /// 各操作独立证明，可来自人员不同的有效角色。
-    ///
-    /// # 参数
-    /// * `user` - 人员账号 ID。
-    /// * `executor` - 调用方事务执行器。
-    ///
-    /// # 返回
-    /// 返回该人员全部已接线业务的有效操作候选；非在职后台账号得到空列表。
-    ///
-    /// # 错误
-    /// 人员不存在、策略漂移或持久化失败时拒绝。
+    // 各操作独立证明，可来自人员不同的有效角色。
+    // 返回该人员全部已接线业务的有效操作候选；非在职后台账号得到空列表。
+    //
+    // 人员不存在、策略漂移或持久化失败时拒绝。
+    //
+    // `executor`：调用方事务执行器。
     pub(super) async fn person_business_options(
         &self,
         user: &str,
@@ -86,13 +79,12 @@ impl AccessControlService {
         self.person_business_options_for(user, None, executor).await
     }
 
-    /// 按本次所需业务冻结资格，读取页面时仍返回全部业务候选。
-    /// # 参数
-    /// 人员、可选业务及原事务执行器。
-    /// # 返回
-    /// 各动作分别由当前有效角色证明的候选。
-    /// # 错误
-    /// 人员不存在、策略漂移或持久化失败时拒绝。
+    // 按本次所需业务冻结资格，读取页面时仍返回全部业务候选。
+    // 各动作分别由当前有效角色证明的候选。
+    //
+    // 人员不存在、策略漂移或持久化失败时拒绝。
+    //
+    // 人员、可选业务及原事务执行器。
     pub(super) async fn person_business_options_for(
         &self,
         user: &str,

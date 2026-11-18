@@ -8,12 +8,7 @@ use persistence_core::Result;
 use crate::repository::handover_receipt::OfferingHandoverReceiptExt;
 
 /// 登记交接回执的稳定命令唯一索引。
-///
-/// # 参数
-/// * `db` - 目标数据库。
-/// # 返回
 /// 索引建立或已存在时成功。
-/// # 错误
 /// 重复身份或 MongoDB 索引错误时失败。
 pub async fn ensure(db: &Database) -> Result<()> {
     let index = IndexModel::builder()

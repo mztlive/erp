@@ -9,17 +9,12 @@ use crate::entity::sales_order::SalesOrderRevisionLine;
 #[allow(async_fn_in_trait)]
 pub trait SalesOrderRevisionLineRepositoryFulfillmentExt {
     /// 查询同时匹配版本行主键与销售稳定明细的销售版本行。
-    ///
-    /// # 参数
-    /// * `revision_line_id` - 销售版本行主键
-    /// * `sales_order_line_id` - 销售稳定明细主键
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回匹配记录；不存在时返回 `None`。
+    /// 传播数据库查询失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
+    /// 输入约定：
+    /// - `revision_line_id`：销售版本行主键
+    /// - `sales_order_line_id`：销售稳定明细主键
     async fn sales_revision_line_for_allocation(
         &self,
         revision_line_id: &SalesOrderRevisionLineId,

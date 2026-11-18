@@ -21,16 +21,9 @@ pub struct ProcurementOfferingFact {
 #[allow(async_fn_in_trait)]
 pub trait ProcurementOfferingRepositoryExt {
     /// 按完整列表条件读取责任解析候选身份，忽略页面边界。
-    ///
-    /// # 参数
-    /// * `filter` - 包含授权与已解析关键词、编号、状态的完整筛选
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
     /// 返回至多 10001 个候选身份；调用方必须整体拒绝超限。
-    ///
-    /// # 错误
     /// MongoDB 查询或身份反序列化失败时返回错误。
+    /// `filter`：包含授权与已解析关键词、编号、状态的完整筛选。
     async fn procurement_candidate_ids(
         &self,
         filter: &SupplierOfferingFilter,
@@ -38,16 +31,9 @@ pub trait ProcurementOfferingRepositoryExt {
     ) -> crate::Result<Vec<String>>;
 
     /// 批量读取候选供给的 SKU 引用。
-    ///
-    /// # 参数
-    /// * `ids` - 已授权且满足基础查询的候选供给
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
     /// 返回未删除供给的身份引用；空输入不查询。
-    ///
-    /// # 错误
     /// MongoDB 查询或事实反序列化失败时返回错误。
+    /// `ids`：已授权且满足基础查询的候选供给。
     async fn procurement_facts(
         &self,
         ids: &[String],
@@ -111,7 +97,7 @@ mod tests {
     use super::*;
 
     #[test]
-    /// 供给采购责任事实不需要商业条款、订货编码和审计内容。
+    // 供给采购责任事实不需要商业条款、订货编码和审计内容。
     fn offering_procurement_fact_keeps_only_identity_and_sku() {
         let fact: ProcurementOfferingFact =
             deserialize_from_document(doc! { "id": "offering", "sku_id": "sku" }).unwrap();

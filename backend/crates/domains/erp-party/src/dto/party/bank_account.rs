@@ -87,7 +87,7 @@ pub struct PartyBankAccountView {
 }
 
 impl From<PartyBankAccount> for PartyBankAccountView {
-    /// 从实体构造响应视图。
+    // 将银行账户的内部字段转换成外部响应格式，供接口展示。
     fn from(account: PartyBankAccount) -> Self {
         Self {
             id: account.base.id,

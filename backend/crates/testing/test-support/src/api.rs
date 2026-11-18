@@ -24,75 +24,30 @@ pub struct TestApi {
 }
 
 impl TestApi {
-    /// 绑定待测试路由。
-    ///
-    /// # 参数
-    /// * `router` - 已组装完成的路由（状态已通过 `with_state` 注入）。
-    ///
-    /// # 返回
-    /// 返回测试客户端实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 测试已装配的 Axum 路由时，用状态已通过 `with_state` 注入的 `Router<()>` 构造进程内客户端，
+    /// 直接经过路由及中间件，不启动 HTTP 监听端口。
     pub fn new(router: Router) -> Self {
         Self { router }
     }
 
-    /// 发送 GET 请求。
-    ///
-    /// # 参数
-    /// * `path` - 请求路径（如 `/admin/roles`）。
-    /// * `token` - 可选 JWT，携带时写入 `Authorization: Bearer <token>`。
-    ///
-    /// # 返回
-    /// 返回 `(HTTP 状态码, JSON 响应体)`；响应体非 JSON 时 JSON 为 `Value::Null`。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    ///
-    /// # Panics
-    /// 见 [`Self::request`]。
+    /// 向进程内路由发起 GET，例如用 `/admin/roles` 断言查询或鉴权结果。
+    /// 可选 JWT 放入 `Authorization: Bearer <token>`，返回 HTTP 状态码与 JSON；非 JSON 响应为 `Value::Null`。
+    /// 请求构造及读取限制见 [`Self::request`]。
     pub async fn get(&self, path: &str, token: Option<&str>) -> (u16, Value) {
         self.request(Method::GET, path, token, None).await
     }
 
-    /// 发送 POST 请求。
-    ///
-    /// # 参数
-    /// * `path` - 请求路径。
-    /// * `token` - 可选 JWT，携带时写入 `Authorization: Bearer <token>`。
-    /// * `json` - 可选的 JSON 请求体，携带时写入 `Content-Type: application/json`。
-    ///
-    /// # 返回
-    /// 返回 `(HTTP 状态码, JSON 响应体)`；响应体非 JSON 时 JSON 为 `Value::Null`。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    ///
-    /// # Panics
-    /// 见 [`Self::request`]。
+    /// 测试提交类路由时发起 POST；传入 JSON 即设置 `Content-Type: application/json`，可选 JWT 作为 Bearer 凭据。
+    /// 返回 HTTP 状态码与 JSON，非 JSON 响应为 `Value::Null`。请求构造及读取限制见 [`Self::request`]。
     pub async fn post(&self, path: &str, token: Option<&str>, json: Option<Value>) -> (u16, Value) {
         self.request(Method::POST, path, token, json).await
     }
 
-    /// 发送任意方法的请求（`get`/`post` 均转调本方法，此处为唯一实现）。
-    ///
-    /// 新增 `PUT`/`PATCH`/`DELETE` 等方法时直接调用本方法。
-    ///
-    /// # 参数
-    /// * `method` - HTTP 方法。
-    /// * `path` - 请求路径（如 `/admin/roles`）。
-    /// * `token` - 可选 JWT，携带时写入 `Authorization: Bearer <token>`。
-    /// * `json` - 可选的 JSON 请求体，携带时写入 `Content-Type: application/json`。
-    ///
-    /// # 返回
-    /// 返回 `(HTTP 状态码, JSON 响应体)`；响应体非 JSON 时返回 `Value::Null`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 在进程内对已装配路由执行任意 HTTP 方法，是 GET、POST 辅助入口及 PUT、PATCH、DELETE 等测试的共同入口。
+    /// 按需附加 Bearer JWT 和 JSON 请求体，返回 HTTP 状态码与解析后的 JSON；非 JSON 正文返回 `Value::Null`。
     ///
     /// # Panics
-    /// `Bearer` token 非法、请求构造失败、响应体读取失败或超限（见 [`MAX_RESPONSE_BYTES`]）时 panic。
+    /// Bearer 头或请求非法、响应体无法读取或超过 8 MiB（[`MAX_RESPONSE_BYTES`]）时中止测试。
     pub async fn request(
         &self,
         method: Method,

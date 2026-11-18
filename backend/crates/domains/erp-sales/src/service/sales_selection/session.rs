@@ -22,16 +22,11 @@ use crate::repository::prelude::*;
 use crate::{Error, Result};
 
 impl SalesSelectionService {
-    /// 按当前令牌与个人授权读取公开页。
-    ///
-    /// # 参数
-    /// `token` 为链接令牌，`grant` 为解码授权，`now` 为服务端时间，`executor` 为读取边界。
-    ///
-    /// # 返回
-    /// 终态返回已结束页；其它未授权访问返回锁定页，两者均不含敏感信息。
-    ///
-    /// # 错误
+    /// 客户打开公开链接时按当前令牌状态及个人访问凭证决定可交付页面，未获个人授权不读取其选择。
+    /// 结果：终态返回已结束页；其它未授权访问返回锁定页，两者均不含敏感信息。
     /// 链接不存在或数据库读取失败时拒绝。
+    ///
+    /// 输入约定：`token` 为链接令牌，`grant` 为解码授权，`now` 为服务端时间，`executor` 为读取边界。
     pub async fn public_page_by_token(
         &self,
         token: &str,
@@ -57,16 +52,11 @@ impl SalesSelectionService {
         self.participant_page(&booklet, &session, now, executor).await
     }
 
-    /// 保存授权参与人的完整选择集合。
-    ///
-    /// # 参数
-    /// `token`、`grant` 为访问资格，`req` 为带版本和幂等键的选择，`now` 为当前时间，`executor` 必须为事务。
-    ///
-    /// # 返回
+    /// 客户在链接有效且个人授权通过时保存整份选择集，并按会话版本拒绝并发覆盖。
     /// 返回该参与人的最新页面。
-    ///
-    /// # 错误
     /// 授权失效、版本冲突、超额度或非法选择时原子拒绝。
+    ///
+    /// 输入约定：`token`、`grant` 为访问资格，`req` 为带版本和幂等键的选择，`now` 为当前时间，`executor` 必须为事务。
     pub async fn public_save(
         &self,
         token: &str,
@@ -122,16 +112,11 @@ impl SalesSelectionService {
         Ok(page)
     }
 
-    /// 冻结个人选择与地址，并原子生成个人销售方案。
-    ///
-    /// # 参数
-    /// `token`、`grant` 为访问资格，`req` 为最终确认，`now` 为当前时间，`executor` 必须为事务。
-    ///
-    /// # 返回
-    /// 返回当前参与人的只读回执。
-    ///
-    /// # 错误
+    /// 客户提交时冻结其选择和收件地址，在同一事务写入个人提交与销售方案；重试不生成第二份。
+    /// 成功提交或有效重放返回该参与人的只读回执；链接已终止时返回结束页。
     /// 授权、版本、额度、地址或任何写入失败时整次拒绝。
+    ///
+    /// 输入约定：`token`、`grant` 为访问资格，`req` 为最终确认，`now` 为当前时间，`executor` 必须为事务。
     pub async fn public_submit(
         &self,
         token: &str,
@@ -361,16 +346,11 @@ impl SalesSelectionService {
         self.items_of(&booklet.base.id, booklet.current_batch_id.as_deref().unwrap_or(""), executor).await
     }
 
-    /// 校验个人授权后读取本册快照图片。
-    ///
-    /// # 参数
-    /// `token` 为链接，`asset_id` 为图片，`grant` 为个人授权，`now` 为时间，`executor` 为读取边界。
-    ///
-    /// # 返回
+    /// 服务公开图片之前重验令牌与个人资格，只解析本册快照实际引用的对象键。
     /// 返回仅属于当前册的对象键。
-    ///
-    /// # 错误
     /// 缺少授权、授权失效、结束或图片越权时拒绝。
+    ///
+    /// 输入约定：`token` 为链接，`asset_id` 为图片，`grant` 为个人授权，`now` 为时间，`executor` 为读取边界。
     pub async fn public_image_key(
         &self,
         token: &str,
@@ -392,20 +372,15 @@ impl SalesSelectionService {
             .ok_or_else(|| Error::Forbidden("无权查看该图片".into()))
     }
 
-    /// 管理端历史图片授权。入口已校验客户归属，资产必须由该册的历史陈列引用。
+    /// 为已校验客户归属的管理端历史图片请求解析对象键，要求该资产由本册某个历史陈列实际引用。
     ///
     /// 组合层已在调用方事务内完成对象重验；本方法只映射对象键。
-    ///
-    /// # 参数
-    /// * `booklet_id` - 选品册
-    /// * `asset_id` - 文件资产
-    /// * `executor` - 执行器
-    ///
-    /// # 返回
     /// 返回快照对象键。
-    ///
-    /// # 错误
     /// 任意文件身份、其他册资产或不存在的册均拒绝。
+    ///
+    /// 输入约定：
+    /// - `booklet_id`：选品册
+    /// - `asset_id`：文件资产
     pub async fn image_key_of(
         &self,
         booklet_id: &str,
@@ -420,18 +395,13 @@ impl SalesSelectionService {
             .ok_or_else(|| Error::Forbidden("无权查看该图片".into()))
     }
 
-    /// 读取批次有效陈列。
-    ///
-    /// # 参数
-    /// * `booklet_id` - 选品册
-    /// * `batch_id` - 准备批次
-    /// * `executor` - 执行器
-    ///
-    /// # 返回
-    /// 返回有效且未删除的陈列项。
-    ///
-    /// # 错误
-    /// 查询失败时返回仓储错误。
+    // 加载选品册指定有效批次的陈列供公开页或提交核对使用，沿用调用方的执行器。
+    // 返回有效且未删除的陈列项。
+    // 查询失败时返回仓储错误。
+    //
+    // 输入约定：
+    // - `booklet_id`：选品册
+    // - `batch_id`：准备批次
     pub(super) async fn items_of(
         &self,
         booklet_id: &str,
@@ -442,17 +412,12 @@ impl SalesSelectionService {
         domain.list_effective_items(booklet_id, batch_id, executor).await.map_err(Error::from)
     }
 
-    /// 按令牌哈希加载选品册。
-    ///
-    /// # 参数
-    /// * `token` - 明文令牌
-    /// * `executor` - 执行器
-    ///
-    /// # 返回
-    /// 返回选品册。
-    ///
-    /// # 错误
-    /// 令牌无效。
+    // 公开请求收件时先对令牌取哈希并定位册，不以明文值查询数据库。
+    // 返回选品册。
+    // 失败条件：令牌无效。
+    //
+    // 输入约定：
+    // - `token`：明文令牌
     pub(super) async fn load_by_token(
         &self,
         token: &str,
@@ -466,17 +431,12 @@ impl SalesSelectionService {
     }
 }
 
-/// 若资产属于该陈列则返回快照对象键。
-///
-/// # 参数
-/// * `item` - 陈列
-/// * `asset_id` - 请求的资产
-///
-/// # 返回
-/// 授权时返回对象键。
-///
-/// # 错误
-/// 无。
+// 解析图片对象键之前核对资产确实出现在目标陈列的冻结图片引用中。
+// 结果：授权时返回对象键。
+//
+// 输入约定：
+// - `item`：陈列
+// - `asset_id`：请求的资产
 fn image_key_if_authorized(
     item: &crate::entity::sales_selection::SalesSelectionDisplayItem,
     asset_id: &str,
@@ -569,16 +529,10 @@ fn apply_choices(
     ensure_budget(booklet, session, items)
 }
 
-/// 在读取任何个人会话前投影公开终态。
-///
-/// # 参数
-/// `booklet` 为当前册事实，`now` 为服务端时间。
-///
-/// # 返回
-/// 结束、撤销或到期时返回不含商品、选择及个人信息的结束页，其它状态继续授权读取。
-///
-/// # 错误
-/// 无。
+// 链接终止时先投影结束态，避免为了显示空页面而加载个人会话。
+// 结果：结束、撤销或到期时返回不含商品、选择及个人信息的结束页，其它状态继续授权读取。
+//
+// 输入约定：`booklet` 为当前册事实，`now` 为服务端时间。
 fn ended_public_page(booklet: &SalesSelectionBooklet, now: Instant) -> Option<PublicSelectionPageView> {
     (public_kind(booklet, now) == PublicSelectionPageKind::Ended)
         .then(|| SalesSelectionService::public_page(PublicSelectionPageKind::Ended, booklet, &[], None, None))

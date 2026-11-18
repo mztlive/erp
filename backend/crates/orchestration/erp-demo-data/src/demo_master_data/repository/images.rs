@@ -8,13 +8,7 @@ use persistence_core::Executor;
 use super::super::image_request;
 use crate::{Error, Result};
 
-/// 读取商品的当前媒体与启用 SKU。
-/// # 参数
-/// `product` 已由调用方完成更新权限校验；所有读取使用 `executor`。
-/// # 返回
-/// 保留当前字段与修订号的正式更新请求。
-/// # 错误
-/// 修订缺失、读取失败或规格签名非法时拒绝补图。
+// 在调用方执行器中读取已获更新权限商品的当前修订、媒体及启用 SKU，构造保留字段和版本的补图请求；缺失修订、读取失败或规格签名无效时停止。
 pub(in crate::demo_master_data) async fn update_request(
     db: &Database,
     product: &Product,

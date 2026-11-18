@@ -13,15 +13,15 @@ use crate::{Error, Result};
 pub(super) struct PaymentRequestList;
 
 impl PaymentRequestList {
-    /// 在完整授权结果上筛选姓名、稳定排序并截取当前页。
-    ///
-    /// # 参数
-    /// * `rows` / `names` - 已授权申请及同一事务读取的申请人姓名。
-    /// * `query` - 规范化后的筛选、排序与分页条件。
-    /// # 返回
-    /// 返回当前页及筛选后的准确总数。
-    /// # 错误
-    /// 总数无法表示为接口整数时返回错误。
+    // 生成采购付款申请分页时，在完整授权结果上筛选姓名、稳定排序并截取当前页。
+    //
+    // 调用参数：
+    // * `rows` / `names` - 已授权申请及同一事务读取的申请人姓名。
+    // * `query` - 规范化后的筛选、排序与分页条件。
+    //
+    // 返回当前页及筛选后的准确总数。
+    //
+    // 总数无法表示为接口整数时返回错误。
     pub(super) fn page(
         mut rows: Vec<PurchasePaymentRequest>,
         names: &HashMap<String, String>,

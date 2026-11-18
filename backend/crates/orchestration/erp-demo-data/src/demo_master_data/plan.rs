@@ -30,16 +30,7 @@ pub(super) enum DemoKind {
 }
 
 impl DemoKind {
-    /// 返回清单里保存的种类代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `unit`、`brand`、`category`、`warehouse`、`customer`、`supplier` 或 `product`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 返回写入演示清单的稳定种类代码，供登记和后续统计使用，不使用展示名称作为标识。
     pub(super) fn as_str(self) -> &'static str {
         match self {
             Self::Unit => "unit",
@@ -52,16 +43,7 @@ impl DemoKind {
         }
     }
 
-    /// 从清单种类代码还原种类。
-    ///
-    /// # 参数
-    /// * `value` - 清单里的种类代码。
-    ///
-    /// # 返回
-    /// 代码属于固定清单时返回对应种类；否则返回 `None`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 把清单保存的固定种类代码还原为枚举，使统计可以分组；未知代码返回 `None`。
     pub(super) fn parse(value: &str) -> Option<Self> {
         Some(match value {
             "unit" => Self::Unit,
@@ -96,7 +78,7 @@ pub struct DemoCounts {
 }
 
 impl DemoCounts {
-    /// 取得对应种类的计数位置。
+    // 将种类映射到对应计数字段，供计划和实际清单统计使用同一分组口径。
     fn slot(&mut self, kind: DemoKind) -> &mut u32 {
         match kind {
             DemoKind::Unit => &mut self.unit,
@@ -109,7 +91,7 @@ impl DemoCounts {
         }
     }
 
-    /// 增加一种主数据的计划数量。
+    // 按种类累计计划或登记数量，供状态接口对比各类主数据的进度。
     fn add(&mut self, kind: DemoKind) {
         *self.slot(kind) += 1;
     }
@@ -126,30 +108,12 @@ pub(super) struct DemoStep {
     pub request: SeedRequest,
 }
 
-/// 读取并校验嵌入程序的种子，按 JSON 顺序返回。
-///
-/// # 参数
-/// 无；读取内嵌 JSON。
-///
-/// # 返回
-/// 返回已完成字段和引用校验的种子清单。
-///
-/// # 错误
-/// JSON 或领域输入无效时返回错误。
+// 加载内嵌 JSON 并校验字段及引用后按声明顺序返回执行步骤，使依赖项先于使用方准备。
 pub(super) fn demo_steps() -> Result<Vec<DemoStep>> {
     seed::load(include_str!("master-data.json"))
 }
 
-/// 从种子清单统计计划条数。
-///
-/// # 参数
-/// `steps` - 已校验的种子清单。
-///
-/// # 返回
-/// 返回各类计划数量。
-///
-/// # 错误
-/// 无。
+// 从已校验种子汇总各类计划数量，让状态接口可将应生成条数与登记实况对照。
 pub(super) fn planned_counts(steps: &[DemoStep]) -> DemoCounts {
     let mut counts = DemoCounts::default();
     for step in steps {
@@ -158,16 +122,7 @@ pub(super) fn planned_counts(steps: &[DemoStep]) -> DemoCounts {
     counts
 }
 
-/// 统计清单里仍在列表中和已删除的条数。
-///
-/// # 参数
-/// * `rows` - 种类，以及是否已从列表删除
-///
-/// # 返回
-/// 返回 `(仍在列表中, 已删除)`。
-///
-/// # 错误
-/// 不返回错误。
+// 按种类分别统计有效登记与旧版删除登记，状态查询不会把已删除条数算作已生成。
 pub(super) fn count_records(rows: &[(DemoKind, bool)]) -> (DemoCounts, DemoCounts) {
     let mut active = DemoCounts::default();
     let mut removed = DemoCounts::default();
@@ -181,17 +136,7 @@ pub(super) fn count_records(rows: &[(DemoKind, bool)]) -> (DemoCounts, DemoCount
     (active, removed)
 }
 
-/// 取本轮要生成的下标区间。
-///
-/// # 参数
-/// * `cursor` - 上一次返回的下标
-/// * `len` - 清单总条数
-///
-/// # 返回
-/// 返回本轮下标，区间不超过 [`CHUNK_LEN`]。`cursor` 超过 `len` 时区间为空。
-///
-/// # 错误
-/// 不返回错误。
+// 根据清单下标计算本轮执行区间，长度不超过 `CHUNK_LEN`；游标超过总数时返回空区间，便于结束分批任务。
 pub(super) fn apply_window(cursor: usize, len: usize) -> std::ops::Range<usize> {
     let start = cursor.min(len);
     let end = start.saturating_add(CHUNK_LEN).min(len);

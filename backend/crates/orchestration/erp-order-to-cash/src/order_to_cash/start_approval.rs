@@ -40,18 +40,9 @@ use super::authorization::SalesCommandAccess;
 use crate::order_to_cash::command_event::{SalesCommandEvent, replay_submission_with_executor};
 use crate::{Error, Result};
 
-/// 使用调用方执行器加载绑定定义图，供创建并提交的同一事务复用。
-///
-/// # 参数
-/// * `db` - 数据库。
-/// * `binding` - 创建时冻结的定义绑定。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
-/// 返回已转成引擎图的已持久化定义图。
-///
-/// # 错误
-/// 定义不存在时返回冲突；仓储失败时返回对应错误。
+// 使用调用方执行器加载绑定定义图，供创建并提交的同一事务复用。
+//
+// `binding` 为创建时冻结的定义绑定。返回已转成引擎图的已持久化定义图。定义不存在时返回冲突；仓储失败时返回对应错误。
 pub(super) async fn load_bound_definition_graph_with_executor(
     db: &Database,
     binding: &ApprovalDefinitionBinding,
@@ -62,21 +53,8 @@ pub(super) async fn load_bound_definition_graph_with_executor(
         .map_err(Error::from)
 }
 
-/// 读取同载荷启动收据；不存在时返回 `None`。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `document_type` - 按业务性质分派的单据类型
-/// * `subject` - 业务对象引用
-/// * `subject_version` - 冻结提交版本
-/// * `idempotency_key` - 调用方幂等键
-/// * `executor` - 原提交事务执行器。
-///
-/// # 返回
-/// 已提交收据或空。
-///
-/// # 错误
-/// 幂等键非法或仓储失败时返回错误。
+// 销售提交时，按实际单据类型、审批主体、冻结版本和原幂等键在原事务查询已提交启动回执。
+// 未命中返回 `None`；幂等键非法或仓储失败返回原错误。
 pub(super) async fn load_start_receipt(
     db: &Database,
     document_type: DocumentType,
@@ -130,24 +108,15 @@ pub(super) struct SalesOrderStartInput<'a> {
     pub now: Instant,
 }
 
-/// 由定义图与单据组织构造启动输入。
-///
-/// 审批人取自已发布节点，不接受客户端选择。对象读取权失败时收敛为 BLOCKED。
-///
-/// # 用途
-/// 把启动参数收敛为引擎 `prepare_start` 输入。
-///
-/// # 参数
-/// * `input` - 定义图、绑定、单据类型、主体与提交人
-///
-/// # 返回
-/// 返回可交给 `prepare_start` 的输入。
-///
-/// # 错误
-/// 入口缺失、审批人非法、幂等键非法或读取权校验失败时返回错误。
-///
-/// # 关键业务约束
-/// 定义版本必须与冻结绑定一致；对象读取权失败时收敛为 BLOCKED。
+// 由定义图与单据组织构造启动输入。
+//
+// 审批人取自已发布节点，不接受客户端选择。对象读取权失败时收敛为 BLOCKED。
+//
+// 把启动参数收敛为引擎 `prepare_start` 输入。
+//
+// `input` 为定义图、绑定、单据类型、主体与提交人。返回可交给 `prepare_start` 的输入。入口缺失、审批人非法、幂等键非法或读取权校验失败时返回错误。
+//
+// 定义版本必须与冻结绑定一致；对象读取权失败时收敛为 BLOCKED。
 pub(super) fn build_sales_order_start_input(input: SalesOrderStartInput<'_>) -> Result<StartExecutionInput> {
     let SalesOrderStartInput {
         resubmission_reason,
@@ -188,17 +157,9 @@ pub(super) fn build_sales_order_start_input(input: SalesOrderStartInput<'_>) -> 
     )?)
 }
 
-/// 为定义全部节点冻结启动绑定，并按单据组织重验对象读取权。
-///
-/// # 参数
-/// * `graph` - 定义图
-/// * `organization_id` - 单据责任组织
-///
-/// # 返回
-/// 返回与节点一一对应的绑定。
-///
-/// # 错误
-/// 节点审批人引用非法或显示名为空时返回校验错误。
+// 为定义全部节点冻结启动绑定，并按单据组织重验对象读取权。
+//
+// `graph` 为定义图；`organization_id` 为单据责任组织。返回与节点一一对应的绑定。节点审批人引用非法或显示名为空时返回校验错误。
 fn start_bindings_from_graph(
     graph: &DefinitionGraph,
     organization_id: &str,
@@ -269,26 +230,15 @@ pub(super) struct SalesOrderStartPersistInput {
 /// 会在同一事务新建并直接锁定副本。
 pub(super) use erp_sales::service::sales_order::lifecycle::SalesOrderWorkingCopyPersistPlan;
 
-/// 在同一事务中写入提交快照、单据迁移、快照、BPM 运行事实与入口任务。
-///
-/// # 用途
-/// 提交启动后原子写入销售单、提交快照与运行事实。
-///
-/// # 参数
-/// * `db` - 数据库。
-/// * `access` - 原命令授权检查器，事务内重验关联、责任与版本。
-/// * `expected_order_version` - 预读时的销售单版本。
-/// * `input` - 提交写入集合。
-/// * `executor` - 原提交事务执行器。
-///
-/// # 返回
-/// 返回提交快照视图。
-///
-/// # 错误
-/// 仓储写入失败或计划不完整时返回错误，事务回滚。
-///
-/// # 关键业务约束
-/// Replay 不得重复写运行事实；Apply 必须写入快照与入口任务。
+// 在同一事务中写入提交快照、单据迁移、快照、BPM 运行事实与入口任务。
+//
+// 提交启动后原子写入销售单、提交快照与运行事实。
+//
+// `access` 为原命令授权检查器，事务内重验关联、责任与版本；`expected_order_version` 为预读时的销售单版本；`input` 为提交写入集合；`executor` 为原提交事务执行器。
+//
+// 返回提交快照视图。仓储写入失败或计划不完整时返回错误，事务回滚。
+//
+// Replay 不得重复写运行事实；Apply 必须写入快照与入口任务。
 pub(super) async fn persist_sales_order_start(
     db: &Database,
     access: super::authorization::SalesCommandAccess,
@@ -302,7 +252,7 @@ pub(super) async fn persist_sales_order_start(
 }
 
 impl SalesOrderStartPersistInput {
-    /// 事务内先重验关联和回执，未命中才执行首次提交绑定检查。
+    // 事务内先重验关联和回执，未命中才执行首次提交绑定检查。
     async fn validate(
         &self,
         db: &Database,
@@ -339,7 +289,7 @@ impl SalesOrderStartPersistInput {
         Ok(None)
     }
 
-    /// 在调用方事务中依次写入收据、守卫、销售事实、运行态与审计。
+    // 在调用方事务中依次写入收据、守卫、销售事实、运行态与审计。
     async fn persist(
         mut self,
         db: &Database,
@@ -401,7 +351,7 @@ impl SalesOrderStartPersistInput {
     }
 }
 
-/// 在原写入位置登记审批启动守卫，保留守卫冲突语义。
+// 在原写入位置登记审批启动守卫，保留守卫冲突语义。
 async fn guard_sales_approval_start(
     db: &Database,
     writes: &PlannedWrites,
@@ -459,25 +409,13 @@ pub(super) struct SalesOrderRuntimeWriteInput<'a> {
     pub now: Instant,
 }
 
-/// 将启动计划写入 BPM 集合、不可变快照和入口 WorkItem。
-///
-/// # 用途
-/// 把启动计划落到 BPM 运行事实、不可变快照与入口任务。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `writes` - 启动写入集合
-/// * `input` - 快照、单据类型与责任组织
-/// * `executor` - 当前执行器
-///
-/// # 返回
-/// 成功时无返回值。
-///
-/// # 错误
-/// 计划缺少入口执行或写入失败时返回错误。
-///
-/// # 关键业务约束
-/// 缺少入口执行时不得提交销售单。
+// 将启动计划写入 BPM 集合、不可变快照和入口 WorkItem。
+//
+// 把启动计划落到 BPM 运行事实、不可变快照与入口任务。
+//
+// `writes` 为启动写入集合；`input` 为快照、单据类型与责任组织；沿用调用方的执行器。计划缺少入口执行或写入失败时返回错误。
+//
+// 缺少入口执行时不得提交销售单。
 pub(super) async fn persist_runtime_writes(
     db: &Database,
     writes: &erp_workflow::service::approval::execution::apply_plan::PlannedWrites,
@@ -552,7 +490,7 @@ mod tests {
         .expect("入口执行夹具")
     }
 
-    /// 列表投影必须来自入口执行，不得推断未知审批人。
+    // 列表投影必须来自入口执行，不得推断未知审批人。
     #[test]
     fn list_projection_copies_entry_assignee() {
         let projection =

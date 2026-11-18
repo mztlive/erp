@@ -35,13 +35,15 @@ pub struct InvoiceRequestView {
     pub approval: Option<DocumentApprovalView>,
 }
 impl ReceivableReadService {
-    /// 在调用方已授权事务内读取申请及审批详情，避免授权和响应读取跨快照。
+    /// 读取开票申请时，在调用方已授权事务内读取申请及审批详情，避免授权和响应读取跨快照。
     ///
     /// # 参数
     /// * `id` - 已授权申请身份。
     /// * `executor` - 当前命令或回放的同一事务。
+    ///
     /// # 返回
     /// 返回同一快照内的申请详情。
+    ///
     /// # 错误
     /// 非活动快照、申请、来源或审批资料缺失及仓储错误时拒绝。
     pub async fn invoice_request_detail_with_executor(
@@ -58,11 +60,10 @@ impl ReceivableReadService {
             .ok_or_else(|| Error::NotFound("开票申请不存在".into()))?;
         self.invoice_request_view(request, executor).await
     }
-    /// 汇总本应收的审批中、批准待开与可申请额度。
+    /// 计算开票申请金额时，汇总本应收的审批中、批准待开与可申请额度。
     ///
     /// # 参数
     /// * `account_id` - 应收子账身份。
-    /// * `actor` - 当前已认证操作人。
     /// * `authorization` - 组合根共享的统一授权服务。
     ///
     /// # 返回
@@ -88,7 +89,7 @@ impl ReceivableReadService {
             .await
     }
 
-    /// 额度读取只使用既有开票申请列表功能资格，所有来源资料共用原快照。
+    // 计算开票申请金额时，额度读取只使用既有开票申请列表功能资格，所有来源资料共用原快照。
     async fn amounts_snapshot(
         &self,
         account_id: &str,
@@ -115,7 +116,7 @@ impl ReceivableReadService {
         Ok(view)
     }
 
-    /// 装配原用例的额度、抬头和税号，不执行额外菜单或对象资格判断。
+    // 生成开票申请视图时，组合原用例的额度、抬头和税号，不执行额外菜单或对象资格判断。
     async fn amounts_view(
         &self,
         account_id: &str,
@@ -156,7 +157,7 @@ impl ReceivableReadService {
             invoiced_amount: account.invoiced_total,
         })
     }
-    /// 装配申请的真实销售单号与审批绑定，缺失来源时失败关闭。
+    // 生成开票申请视图时，组合申请的真实销售单号与审批绑定，缺失来源时失败关闭。
     async fn invoice_request_view(
         &self,
         request: SalesInvoiceRequest,
@@ -210,14 +211,12 @@ impl ReceivableReadService {
     }
 }
 
-/// 把开票申请状态投影到共用审批动作策略，不改变原单据状态。
-///
-/// # 参数
-/// * `status` - 当前开票申请业务状态。
-/// # 返回
-/// 草稿、驳回和审批中分别保留动作资格，其余状态禁止提交或撤回。
-/// # 错误
-/// 不返回错误。
+// 将开票申请状态投影到共用审批动作策略，不改变原单据状态。
+//
+// 调用参数：
+// * `status` - 当前开票申请业务状态。
+//
+// 草稿、驳回和审批中分别保留动作资格，其余状态禁止提交或撤回。
 fn approval_status(status: InvoiceRequestStatus) -> CustomerReceiptStatus {
     match status {
         InvoiceRequestStatus::Draft => CustomerReceiptStatus::Draft,

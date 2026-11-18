@@ -19,17 +19,15 @@ pub struct QualityOrderFilter {
 
 impl QualityOrderFilter {
     /// 将期间与业务筛选前置于完整销售授权。
-    /// # 参数
-    /// scope 为本阶段不可缺失的完整授权凭证。
-    /// # 返回
-    /// 未分页的业务筛选与授权阶段。
-    /// # 错误
-    /// 不执行 I/O；仓储须在执行前后复验。
+    /// 结果：未分页的业务筛选与授权阶段。
+    /// 失败条件：不执行 I/O；仓储须在执行前后复验。
+    ///
+    /// 输入约定：scope 为本阶段不可缺失的完整授权凭证。
     pub fn stages(&self, scope: &SalesReadScope) -> Vec<Document> {
         scope.lookup_after(self.business_filter())
     }
 
-    /// 期间与业务筛选先于授权关联，不能把用户条件作为授权依据。
+    // 先将期间和用户给定条件编为交付质量筛选以缩小候选行；访问资格仍由后续授权关联决定。
     fn business_filter(&self) -> Document {
         let mut filter = doc! { "deleted_at": 0_i64,
         "commercial_status": CommercialStatus::Effective.as_str(),
@@ -51,17 +49,12 @@ impl QualityOrderFilter {
 #[allow(async_fn_in_trait)]
 pub trait SalesOrderRepositoryQualityExt {
     /// 有界读取期间正式销售单；调用方必须对超限结果整体拒绝。
+    /// 结果：最多返回 `QUALITY_ORDER_LIMIT + 1` 条，按 `effective_at`、`id` 升序；多出的一条表示超限。
+    /// 传播数据库读取或反序列化失败。
     ///
-    /// # 参数
-    /// * `filter` - 生效区间与客户集合。
-    /// * `scope` - 当前读取阶段的完整销售授权。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 最多返回 `QUALITY_ORDER_LIMIT + 1` 条，按 `effective_at`、`id` 升序；多出的一条表示超限。
-    ///
-    /// # 错误
-    /// 数据库读取或反序列化失败时返回仓储错误。
+    /// 输入约定：
+    /// - `filter`：生效区间与客户集合。
+    /// - `scope`：当前读取阶段的完整销售授权。
     async fn quality_orders(
         &self,
         filter: &QualityOrderFilter,

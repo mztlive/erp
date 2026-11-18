@@ -46,20 +46,10 @@ const ACCEPTANCE_OBJECT_TYPE: &str = "sales_order";
 impl SalesOrderCommandProcess {
     /// 显式交接销售单当前负责人与业务组织，并原子转交开放验收任务。
     ///
-    /// # 参数
-    /// * `id` - 销售单 ID
-    /// * `req` - 交接请求（含期望版本、目标、原因与幂等键）
-    /// * `actor` - 已通过鉴权的审计操作人
+    /// `req` 为交接请求（含期望版本、目标、原因与幂等键）。返回交接后责任与转交任务清单。
     ///
-    /// # 返回
-    /// 返回交接后责任与转交任务清单。
+    /// 账号失效、动作权限不足、对象不可见、版本冲突、目标不合格（含与开放审批人岗位分离冲突）、异载荷同幂等键或组织停用时拒绝；失败零部分变更。
     ///
-    /// # 错误
-    /// 账号失效、动作权限不足、对象不可见、版本冲突、目标不合格
-    /// （含与开放审批人岗位分离冲突）、异载荷同幂等键或组织停用时拒绝；
-    /// 失败零部分变更。
-    ///
-    /// # 关键业务约束
     /// 开放验收任务随交接转交；审批任务、已完成验收与历史归属保持不变。
     pub async fn handover_sales_order(
         &self,
@@ -119,21 +109,9 @@ impl SalesOrderCommandProcess {
         }
     }
 
-    /// 查询当前销售单可交接的合格目标候选。
+    /// 查询当前销售单可交接的合格目标候选。返回有效且具备验收执行资格的账号；只作交互提示，提交仍重验。对象不可见或授权读取失败时拒绝。
     ///
-    /// # 参数
-    /// * `id` - 销售单 ID
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回有效且具备验收执行资格的账号；只作交互提示，提交仍重验。
-    ///
-    /// # 错误
-    /// 对象不可见或授权读取失败时拒绝。
-    ///
-    /// # 关键业务约束
-    /// 不按部门相同与否过滤；同部门无资格不得接收，跨部门有资格正常接收；
-    /// 销售单允许负责人兼任已配置的审批人，审批任务保持原指派。
+    /// 不按部门相同与否过滤；同部门无资格不得接收，跨部门有资格正常接收；销售单允许负责人兼任已配置的审批人，审批任务保持原指派。
     pub async fn handover_candidates(
         &self,
         id: &str,
@@ -205,7 +183,7 @@ impl SalesOrderCommandProcess {
         Ok(candidates)
     }
 
-    /// 查证独立回执并返回当前责任与开放任务，不执行第二次交接。
+    // 查证独立回执并返回当前责任与开放任务，不执行第二次交接。
     async fn replay_sales_handover(
         &self,
         audit_id: &str,
@@ -275,7 +253,7 @@ struct SalesHandoverWrite {
     reason: String,
 }
 
-/// 保持原事务先查证回执，再重验版本、交接与保存结果的顺序。
+// 保持原事务先查证回执，再重验版本、交接与保存结果的顺序。
 async fn handover_transaction(
     db: Database,
     input: SalesHandoverWrite,
@@ -317,7 +295,7 @@ async fn handover_transaction(
         .await
 }
 
-/// 只更新销售单负责人／组织与开放验收任务；审批、已完成与快照不变。
+// 只更新销售单负责人／组织与开放验收任务；审批、已完成与快照不变。
 #[allow(clippy::too_many_arguments)]
 async fn apply_handover(
     db: &Database,
@@ -357,7 +335,7 @@ async fn apply_handover(
     Ok(transferred)
 }
 
-/// 在原快照先核验原对象，再检查版本、接收资格及拟交接后的双方范围。
+// 在原快照先核验原对象，再检查版本、接收资格及拟交接后的双方范围。
 async fn prepare_handover_order(
     db: &Database,
     authorization: &Arc<AuthorizationService>,
@@ -395,7 +373,7 @@ async fn prepare_handover_order(
     Ok(order)
 }
 
-/// 同执行器验证交接命令的完整身份，再读取当前责任及开放任务。
+// 同执行器验证交接命令的完整身份，再读取当前责任及开放任务。
 async fn replay_handover_with_executor(
     db: &Database,
     command_id: &str,
@@ -428,7 +406,7 @@ async fn replay_handover_with_executor(
     Ok(Some(handover_view(&order, acceptance_ids, approval_assignees.len())))
 }
 
-/// 回放视图沿当前销售责任与开放任务构建，不冻结首次交接目标。
+// 回放视图沿当前销售责任与开放任务构建，不冻结首次交接目标。
 fn handover_view(
     order: &SalesOrder,
     acceptance_ids: Vec<String>,
@@ -444,22 +422,13 @@ fn handover_view(
     }
 }
 
-/// 校验目标账号有效且具备验收完整执行资格。
-///
-/// # 参数
-/// * `db` - 目标数据库
-/// * `authorization` - 共享授权服务
-/// * `target` - 目标负责销售
-/// * `executor` - 原交接事务执行器
-///
-/// # 返回
-/// 目标有效且具备验收读取与执行资格时成功。
-///
-/// # 错误
-/// 账号缺失、失效或缺少验收完整执行权限时拒绝。
-///
-/// # 关键业务约束
-/// 只判定账号与权限事实；提交—审批分离另由 `ensure_handover_separation` 执行。
+// 校验目标账号有效且具备验收完整执行资格。
+//
+// `db` 为目标数据库；`authorization` 为共享授权服务；`target` 为目标负责销售；`executor` 为原交接事务执行器。
+//
+// 目标有效且具备验收读取与执行资格时成功。账号缺失、失效或缺少验收完整执行权限时拒绝。
+//
+// 只判定账号与权限事实；提交—审批分离另由 `ensure_handover_separation` 执行。
 async fn ensure_target_qualified(
     db: &Database,
     authorization: &Arc<AuthorizationService>,
@@ -472,22 +441,13 @@ async fn ensure_target_qualified(
     Err(Error::Forbidden("目标账号不存在、已失效或不具备销售验收读取与执行资格".to_string()))
 }
 
-/// 按销售审批政策校验交接目标与开放审批任务的人员关系。
-///
-/// # 参数
-/// * `db` - 目标数据库
-/// * `sales_order_id` - 销售单 ID
-/// * `target` - 目标负责销售（交接后承担提交侧责任）
-/// * `executor` - 原交接事务执行器
-///
-/// # 返回
-/// 目标满足销售审批政策时成功，允许兼任已配置审批人。
-///
-/// # 错误
-/// 政策读取或审批任务查询失败时返回错误；失败不产生任何写入。
-///
-/// # 关键业务约束
-/// 复用销售单类型审批政策；开放审批任务本身保持不变。
+// 按销售审批政策校验交接目标与开放审批任务的人员关系。
+//
+// `db` 为目标数据库；`sales_order_id` 为销售单 ID；`target` 为目标负责销售（交接后承担提交侧责任）；`executor` 为原交接事务执行器。
+//
+// 目标满足销售审批政策时成功，允许兼任已配置审批人。政策读取或审批任务查询失败时返回错误；失败不产生任何写入。
+//
+// 复用销售单类型审批政策；开放审批任务本身保持不变。
 async fn ensure_handover_separation(
     db: &Database,
     sales_order_id: &str,
@@ -502,7 +462,7 @@ async fn ensure_handover_separation(
     Ok(())
 }
 
-/// 沿原执行器取得验收完整资格与同次读取的目标账号摘要。
+// 沿原执行器取得验收完整资格与同次读取的目标账号摘要。
 async fn acceptance_qualification(
     _db: &Database,
     authorization: &Arc<AuthorizationService>,
@@ -534,7 +494,7 @@ async fn acceptance_qualification(
     Ok(authorization.permissions(&actor, &[], executor).await?.map(|qualified| qualified.account().clone()))
 }
 
-/// 用拟交接后的责任事实判断接收人的详情范围，不能使用旧负责人或旧组织。
+// 用拟交接后的责任事实判断接收人的详情范围，不能使用旧负责人或旧组织。
 async fn target_can_read_order(
     db: &Database,
     authorization: &Arc<AuthorizationService>,
@@ -554,7 +514,7 @@ async fn target_can_read_order(
     }
 }
 
-/// 列出该销售单全部开放验收任务。
+// 销售责任交接时，按销售单读取开放待办并筛出可随单移交的验收任务。
 async fn open_acceptance_tasks(
     db: &Database,
     sales_order_id: &str,
@@ -569,25 +529,16 @@ async fn open_acceptance_tasks(
         .collect())
 }
 
-/// 判定任务类型是否随销售交接转交。
-///
-/// 仅客户验收任务随交接转交；审批任务、交付与其他任务类型保持不变，
-/// 由各自领域命令处理。调用方传入的已是开放任务，存续状态由
-/// `list_active_by_object` 保证，本判定只做类型分流。
-///
-/// # 参数
-/// * `work_item_type` - 待判定任务的固定类型
-///
-/// # 返回
-/// 客户验收任务返回 `true`，其他类型返回 `false`。
-///
-/// # 错误
-/// 无。
+// 判定任务类型是否随销售交接转交。
+//
+// 仅客户验收任务随交接转交；审批任务、交付与其他任务类型保持不变，由各自领域命令处理。调用方传入的已是开放任务，存续状态由 `list_active_by_object` 保证，本判定只做类型分流。
+//
+// `work_item_type` 为待判定任务的固定类型。客户验收任务返回 `true`，其他类型返回 `false`。
 fn is_handover_transferable_type(work_item_type: WorkItemType) -> bool {
     work_item_type == WorkItemType::CustomerAcceptanceRegistration
 }
 
-/// 列出开放验收任务 ID（幂等回放用，不校验身份）。
+// 列出开放验收任务 ID（幂等回放用，不校验身份）。
 async fn open_acceptance_task_ids(
     db: &Database,
     sales_order_id: &str,
@@ -600,21 +551,13 @@ async fn open_acceptance_task_ids(
         .collect())
 }
 
-/// 列出该销售单全部开放审批任务的当前审批人。
-///
-/// # 参数
-/// * `db` - 目标数据库
-/// * `sales_order_id` - 销售单 ID
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回开放 `DocumentApproval` 任务的 `owner_user_id` 清单。
-///
-/// # 错误
-/// 任务读取失败时返回错误。
-///
-/// # 关键业务约束
-/// 只读审批任务用于岗位分离校验、候选过滤与随转计数，不得改写。
+// 列出该销售单全部开放审批任务的当前审批人。
+//
+// `db` 为目标数据库；`sales_order_id` 为销售单 ID；沿用调用方的执行器。
+//
+// 返回开放 `DocumentApproval` 任务的 `owner_user_id` 清单。任务读取失败时返回错误。
+//
+// 只读审批任务用于岗位分离校验、候选过滤与随转计数，不得改写。
 async fn open_approval_assignees(
     db: &Database,
     sales_order_id: &str,
@@ -683,7 +626,7 @@ mod tests {
         .expect("销售单应合法")
     }
 
-    /// 实际回放视图保持当前责任和开放任务，不回写首次交接人。
+    // 实际回放视图保持当前责任和开放任务，不回写首次交接人。
     #[test]
     fn handover_replay_view_tracks_current_responsibility_and_open_tasks() {
         let mut order = sales_order_owned_by("sales-a", "org-a");
@@ -701,14 +644,14 @@ mod tests {
         assert!(view.transferred_acceptance_task_ids.is_empty());
     }
 
-    /// 仅开放验收任务随交接转交；审批与其他任务类型保持不变。
+    // 仅开放验收任务随交接转交；审批与其他任务类型保持不变。
     #[test]
     fn handover_transfers_only_acceptance_task_type() {
         assert!(is_handover_transferable_type(WorkItemType::CustomerAcceptanceRegistration));
         assert!(!is_handover_transferable_type(WorkItemType::DocumentApproval));
     }
 
-    /// 交接实体只改负责人与组织，不改归属快照与状态；显式组织留空保留。
+    // 交接实体只改负责人与组织，不改归属快照与状态；显式组织留空保留。
     #[test]
     fn handover_entity_keeps_attribution_and_status() {
         let mut order = sales_order_owned_by("sales-a", "org-a");
@@ -724,7 +667,7 @@ mod tests {
         assert_eq!(order.commercial_status, CommercialStatus::Draft);
     }
 
-    /// 失败交接零部分变更：责任、组织与版本保持原值（原子性）。
+    // 失败交接零部分变更：责任、组织与版本保持原值（原子性）。
     #[test]
     fn failed_handover_leaves_order_unchanged() {
         let mut order = sales_order_owned_by("sales-b", "org-a");
@@ -738,7 +681,7 @@ mod tests {
         assert_eq!(order.commercial_status, CommercialStatus::Draft);
     }
 
-    /// 销售交接按同一审批政策允许目标兼任该单已配置审批人。
+    // 销售交接按同一审批政策允许目标兼任该单已配置审批人。
     #[test]
     fn handover_target_may_be_a_configured_approver() {
         let policy = require_process_required(DocumentType::SalesOrder).unwrap().separation_of_duties_policy;

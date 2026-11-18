@@ -8,17 +8,17 @@ use crate::entity::access_control::ResolvedScope;
 use crate::entity::authorization::{AccessRule, FactKind, RelationKey, RelationMatch};
 use crate::{Error, Permission, QualifiedPermissions, Result};
 
-/// 客户列表资格独立于销售列表资格，允许来自不同启用角色。
+// 为该类质量查询独立取证客户列表资格；它不要求和销售列表资格出自同一启用角色。
 pub(crate) fn qualifications(permission: &Permission) -> Vec<Permission> {
     if current(permission) { vec![customer::LIST] } else { vec![] }
 }
 
-/// 客户范围使用客户入口自身的合格角色；不沿用销售入口角色。
+// 解析质量查询涉及的客户范围时只选择授予客户入口的角色，不沿用销售列表的合格角色。
 pub(crate) fn scope_requests(permission: &Permission) -> Vec<(Permission, Permission)> {
     if current(permission) { vec![(customer::LIST, customer::LIST)] } else { vec![] }
 }
 
-/// 保留销售基础条件，并要求完整真实客户来源满足当前客户范围。
+// 在销售基础数据条件上追加真实客户来源的完整覆盖要求；客户必须落入本次独立客户范围。
 pub(crate) fn condition(
     permission: &Permission,
     qualified: &QualifiedPermissions,
@@ -39,7 +39,7 @@ pub(crate) fn condition(
     Ok(AccessRule::all(vec![base, customer_condition(scope)?]))
 }
 
-/// 启动时检查销售根与真实客户关系的完整事实能力。
+// 启动时核对质量查询对销售根模型和真实客户关联所需的全部事实能力。
 pub(crate) fn binding_condition(permission: &Permission, base: AccessRule) -> Result<AccessRule> {
     if !current(permission) {
         return Ok(base);

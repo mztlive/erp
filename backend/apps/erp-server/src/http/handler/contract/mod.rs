@@ -27,7 +27,7 @@ use crate::http::extractor::{Json, Query};
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
-/// 维护本合同的明确共享名单，路由同时要求客户人员分配权限。
+/// 在维护合同共享范围时调整本合同的明确销售共享名单；此入口沿用客户人员分配资格。
 pub async fn contract_sales_access(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -38,14 +38,7 @@ pub async fn contract_sales_access(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 查询合同列表。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已认证操作人
-/// * `query` - 分页与筛选参数（扁平传递）
-///
-/// # 返回
+/// 按请求条件查询合同列表。
 /// 返回契约形状的分页视图及范围元数据。
 pub async fn contract_list(
     State(state): State<HttpState>,
@@ -57,15 +50,7 @@ pub async fn contract_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-/// 首次归档合同（合同身份 + 首个不可变版本 + PDF 关联原子形成）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 创建请求（`contract_no`、客户、结算主体与版本快照）
-///
-/// # 返回
-/// 返回新建合同的响应视图。
+/// 保留旧的合同手填归档入口，但始终拒绝请求；首次归档必须通过合同 PDF 自动识别导入。
 pub async fn contract_create(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -76,13 +61,6 @@ pub async fn contract_create(
 }
 
 /// 查询合同详情（合同 + 全部不可变版本时间线）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已认证操作人
-/// * `id` - 合同 ID
-///
-/// # 返回
 /// 返回详情视图（版本按序号倒序）。
 pub async fn contract_detail(
     State(state): State<HttpState>,
@@ -95,14 +73,6 @@ pub async fn contract_detail(
 }
 
 /// 独立重验合同读取资格后返回合同 PDF 元数据。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已认证操作人
-/// * `id` - 合同 ID
-/// * `file_id` - 文件资产 ID
-///
-/// # 返回
 /// 返回附件元数据；不暴露未授权合同的存在性。
 pub async fn contract_file(
     State(state): State<HttpState>,
@@ -115,14 +85,6 @@ pub async fn contract_file(
 }
 
 /// 独立重验合同读取资格后以内联内容返回合同 PDF。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已认证操作人
-/// * `id` - 合同 ID
-/// * `file_id` - 文件资产 ID
-///
-/// # 返回
 /// 返回 PDF 字节流。
 pub async fn contract_file_preview(
     State(state): State<HttpState>,
@@ -148,16 +110,7 @@ pub async fn contract_file_preview(
     Ok(response)
 }
 
-/// 归档合同新版本（追加不可变版本并切换当前版本指针，乐观锁）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 合同 ID
-/// * `req` - 追加版本请求（含期望版本）
-///
-/// # 返回
-/// 返回追加后的合同详情视图。
+/// 关闭手填合同版本入口；追加正式版本必须通过 PDF 自动识别导入，此接口不切换当前版本。
 pub async fn contract_archive_revision(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -169,14 +122,7 @@ pub async fn contract_archive_revision(
 }
 
 /// 终止合同（乐观锁；历史销售引用保持不变）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 合同 ID
-/// * `req` - 终止请求（含期望版本）
-///
-/// # 返回
+/// `req` 为终止请求（含期望版本）。
 /// 返回终止后的合同详情视图。
 pub async fn contract_terminate(
     State(state): State<HttpState>,
@@ -199,19 +145,9 @@ mod tests {
     use super::*;
     use crate::http::extractor::Query;
 
-    /// 合同 Query 解码必须消费范围版本与组织筛选，并拒绝旧姓名参数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 无。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 未知或已废弃姓名参数不得被忽略后返回全部合同。
+    // 合同 Query 解码必须消费范围版本与组织筛选，并拒绝旧姓名参数。
+    //
+    // 未知或已废弃姓名参数不得被忽略后返回全部合同。
     #[test]
     fn contract_scope_version_and_org_filters_decode_from_url() {
         let uri: Uri =

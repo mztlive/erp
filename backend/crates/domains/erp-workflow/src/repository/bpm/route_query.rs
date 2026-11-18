@@ -11,17 +11,12 @@ use super::{BpmWorkflowRepository, EXECUTIONS};
 
 impl BpmWorkflowRepository<'_> {
     /// 批量读取指定轮次各节点的最近执行，不受历史分页截断影响。
-    ///
-    /// # 参数
-    /// * `instance_id` - 已授权的精确实例。
-    /// * `round_no` - 实例当前轮次。
-    /// * `executor` - 调用方数据访问执行器。
-    ///
-    /// # 返回
     /// 每个节点至多一条执行；额外保留一条用于调用方检测损坏数据。
     ///
-    /// # 错误
     /// 数据库聚合或执行反序列化失败时返回错误。
+    ///
+    /// `instance_id`：已授权的精确实例；`round_no`：实例当前轮次。
+    /// `executor`：调用方数据访问执行器。
     pub async fn latest_node_executions(
         &self,
         instance_id: &ApprovalProcessInstanceId,

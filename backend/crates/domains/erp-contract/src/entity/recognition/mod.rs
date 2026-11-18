@@ -86,12 +86,8 @@ pub struct ImportFailure {
 
 impl ImportFailure {
     /// 创建不包含外部响应或凭据的失败原因。
-    /// # 参数
-    /// * `code` / `message` - 稳定代码及可操作提示。
-    /// # 返回
     /// 导入失败。
-    /// # 错误
-    /// 无。
+    /// `code` / `message` - 稳定代码及可操作提示。
     pub fn new(code: &str, message: &str) -> Self {
         Self { code: code.into(), message: message.into(), field: None, page: None }
     }

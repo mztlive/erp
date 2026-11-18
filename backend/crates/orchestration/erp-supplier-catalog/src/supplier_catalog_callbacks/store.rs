@@ -18,13 +18,13 @@ use crate::supplier_connection_execution::{guard_catalog_refresh, save_catalog_o
 use crate::{Error, Result};
 
 impl SupplierCatalogCallbackProcess {
-    /// 按候选记录版本领取到期回调。
-    /// # 参数
-    /// 队列读取的候选接收记录。
-    /// # 返回
-    /// 取得租约的记录，或尚未到期。
-    /// # 错误
-    /// 并发领取、非法提示或保存失败时拒绝。
+    // 按候选记录版本领取到期回调。
+    //
+    // 队列读取的候选接收记录。
+    //
+    // 取得租约的记录，或尚未到期。
+    //
+    // 并发领取、非法提示或保存失败时拒绝。
     pub(super) async fn claim(
         &self,
         candidate: &SupplierCallbackReceipt,
@@ -38,13 +38,13 @@ impl SupplierCatalogCallbackProcess {
         Ok(Some(receipt))
     }
 
-    /// 同事务应用一个规格并推进回调检查点。
-    /// # 参数
-    /// 当前租约、补查上下文和当前事实。
-    /// # 返回
-    /// 已提交的新版本检查点。
-    /// # 错误
-    /// 租约失效、配置变化或任一写入失败时回滚。
+    // 同事务应用一个规格并推进回调检查点。
+    //
+    // 当前租约、补查上下文和当前事实。
+    //
+    // 已提交的新版本检查点。
+    //
+    // 租约失效、配置变化或任一写入失败时回滚。
     pub(super) async fn save_step(
         &self,
         receipt: &SupplierCallbackReceipt,
@@ -63,7 +63,7 @@ impl SupplierCatalogCallbackProcess {
             .await
     }
 
-    /// 当前采集资格必须在写入快照内成立，事务外预检不能代替保存授权。
+    // 当前采集资格必须在写入快照内成立，事务外预检不能代替保存授权。
     async fn save_step_stage(
         &self,
         receipt: &SupplierCallbackReceipt,
@@ -91,13 +91,13 @@ impl SupplierCatalogCallbackProcess {
         Ok(current)
     }
 
-    /// 完成或交接当前有界批次。
-    /// # 参数
-    /// 本轮最后已提交的回调版本。
-    /// # 返回
-    /// 已结算的新版本。
-    /// # 错误
-    /// 并发变更或保存失败时拒绝。
+    // 完成或交接当前有界批次。
+    //
+    // 本轮最后已提交的回调版本。
+    //
+    // 已结算的新版本。
+    //
+    // 并发变更或保存失败时拒绝。
     pub(super) async fn settle(&self, receipt: &SupplierCallbackReceipt) -> Result<SupplierCallbackReceipt> {
         let mut settled = receipt.clone();
         settled.settle_catalog(Instant::now())?;
@@ -105,13 +105,13 @@ impl SupplierCatalogCallbackProcess {
         Ok(settled)
     }
 
-    /// 保留原检查点并延迟失败通知。
-    /// # 参数
-    /// 最后已提交版本和脱敏失败原因。
-    /// # 返回
-    /// 延期保存成功。
-    /// # 错误
-    /// 版本已变化或数据库失败时拒绝覆盖。
+    // 保留原检查点并延迟失败通知。
+    //
+    // 最后已提交版本和脱敏失败原因。
+    //
+    // 延期保存成功。
+    //
+    // 版本已变化或数据库失败时拒绝覆盖。
     pub(super) async fn defer(&self, receipt: &SupplierCallbackReceipt, summary: &str) -> Result<()> {
         let mut deferred = receipt.clone();
         deferred.processing_error = Some(summary.into());
@@ -177,7 +177,7 @@ async fn apply_update(
     }
 }
 
-/// 只有业务应用成功后才推进提示；失败保留上次已提交的进度。
+// 只有业务应用成功后才推进提示；失败保留上次已提交的进度。
 async fn advance_after_apply(
     receipt: &mut SupplierCallbackReceipt,
     applied: impl Future<Output = Result<Option<String>>>,

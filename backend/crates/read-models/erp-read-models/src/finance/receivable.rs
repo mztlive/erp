@@ -16,18 +16,9 @@ pub struct ReceivableReadService {
 }
 
 impl ReceivableReadService {
-    /// 为给定数据库构造应收读模型。
+    /// 装配客户应收与回款时，为给定数据库构造应收读模型。
     ///
     /// 构造不读不写。
-    ///
-    /// # 参数
-    /// * `db` - 目标数据库。
-    ///
-    /// # 返回
-    /// 返回应收读模型。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: mongodb::Database) -> Self {
         Self { db }
     }

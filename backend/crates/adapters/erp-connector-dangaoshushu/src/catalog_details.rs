@@ -10,13 +10,8 @@ use serde_json::Value;
 use super::catalog::{availability_state, stock};
 use super::parsing::{context, fixed, id, mapping};
 
-/// 提取目录资料，并在必需状态完整时计算可供性；`is_up` 不参与完整性检查。
-/// # 参数
-/// `product` 与 `spec` 为来源商品和规格，`root` 为可选的完整详情响应。
-/// # 返回
-/// 规范化资料；缺少必需状态时保留未知可供状态。
-/// # 错误
-/// 来源标识、素材、库存或参与判定的状态字段非法时返回映射错误。
+// 列表和详情转为来源报价时都从这里提取品牌、分类、条码与市场价；有完整详情才补图片和库存。
+// 品牌、商品、规格状态不齐时保留未知可供性，不用 is_up 补齐；无效标识、状态或金额仍按映射错误处理。
 pub(super) fn details(product: &Value, spec: &Value, root: Option<&Value>) -> ConnectorResult<OfferDetails> {
     let category_id = optional_id(product, "cat_id3")?
         .or(optional_id(product, "cat_id2")?)
@@ -110,7 +105,7 @@ fn image_list(value: &Value, key: &str) -> Option<Vec<CatalogImage>> {
     )
 }
 
-/// 读取规格市场价；零价保留，缺失留空，非法值按单项映射错误暴露。
+// 目录展示用的是供应商市场价，不是采购结算价。缺失留空、零值照录，负数或格式错误由采集按单项失败处理。
 fn market_price(spec: &Value) -> ConnectorResult<Option<Amount>> {
     if spec["market_price"].is_null() {
         return Ok(None);

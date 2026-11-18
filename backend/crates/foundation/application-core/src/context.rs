@@ -21,30 +21,13 @@ pub struct AuditActor {
 }
 
 impl AuditActor {
-    /// 创建审计操作人。
-    ///
-    /// # 参数
-    /// * `actor_id` - 操作人账号 ID
-    /// * `actor_account` - 操作人登录账号
-    /// * `actor_type` - 操作人账号类型
-    ///
-    /// # 返回
-    /// 返回只包含鉴权身份的审计操作人；名称快照和请求号均为 `None`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将已认证的账号 ID、登录名和账号类型带入服务，供其记录业务操作人；此处不填充名称快照或请求号。
     pub fn new(actor_id: String, actor_account: String, actor_type: AccountKind) -> Self {
         Self { actor_id, actor_account, actor_type, actor_name_snapshot: None, request_id: None }
     }
 
-    /// 捕获本次鉴权已经读取的操作人名称，不查询账号或补齐历史名称。
-    ///
-    /// # 参数
-    /// * `name` - 已鉴权会话名称；缺失明确传 `None`。
-    /// # 返回
-    /// 返回冻结安全名称的操作人。
-    /// # 错误
-    /// 名称超过128字符或包含控制字符时返回错误。
+    /// 将鉴权时已读取的名称固定为审计快照，不查询账号或补齐历史名称。去掉首尾空白，空白视为缺失；
+    /// 超过 128 个字符或裁剪后含控制字符时拒绝。
     pub fn with_actor_name_snapshot(mut self, name: Option<String>) -> CoreResult<Self> {
         let name = normalize_optional_text(name, "操作人名称", 128)?;
         if name.as_ref().is_some_and(|value| value.chars().any(char::is_control)) {
@@ -54,26 +37,13 @@ impl AuditActor {
         Ok(self)
     }
 
-    /// 返回本次鉴权捕获的安全名称快照。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 已捕获名称返回引用；旧调用或未知名称返回 `None`。
-    /// # 错误
-    /// 无。
+    /// 审计展示可取鉴权时捕获的安全名称，不受后来改名影响；未捕获则返回 `None`。
     pub fn actor_name_snapshot(&self) -> Option<&str> {
         self.actor_name_snapshot.as_deref()
     }
 
-    /// 捕获当前 HTTP 请求已经确定的追踪号；内部调用不生成请求号。
-    ///
-    /// # 参数
-    /// * `request_id` - 入口已验证的请求关联；非请求入口保持 `None`。
-    /// # 返回
-    /// 返回冻结当前请求关联的操作人。
-    /// # 错误
-    /// 请求号超过128字符或包含控制字符时返回错误。
+    /// 附上 HTTP 入口已确定的追踪号，以关联同次请求的审计；内部调用不生成请求号。裁剪首尾空白，空白视为缺失；
+    /// 超过 128 个字符或裁剪后含控制字符时拒绝。
     pub fn with_request_id(mut self, request_id: Option<String>) -> CoreResult<Self> {
         let request_id = normalize_optional_text(request_id, "请求编号", 128)?;
         if request_id.as_ref().is_some_and(|value| value.chars().any(char::is_control)) {
@@ -83,85 +53,34 @@ impl AuditActor {
         Ok(self)
     }
 
-    /// 返回入口捕获的当前请求追踪号。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 当前请求关联返回引用；内部或旧调用返回 `None`。
-    /// # 错误
-    /// 无。
+    /// 读取入口捕获的追踪号以关联请求与审计，内部调用或未捕获时返回 `None`。
     pub fn request_id(&self) -> Option<&str> {
         self.request_id.as_deref()
     }
 
-    /// 返回操作人账号 ID。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回已认证身份中的账号 ID。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 借用已认证的稳定账号 ID，供业务审计关联操作人而不依赖可变名称。
     pub fn id(&self) -> &str {
         &self.actor_id
     }
 
-    /// 返回操作人账号类型。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回已认证身份中的后台账号类型。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取已认证的账号类型，以区分审计中的操作人类别。
     pub fn kind(&self) -> AccountKind {
         self.actor_type
     }
-    /// 返回操作人登录账号。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回已认证身份中的登录账号。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 借用已认证的登录账号，供审计记录本次鉴权所用的登录名。
     pub fn account(&self) -> &str {
         &self.actor_account
     }
 
-    /// 消费操作人并返回身份字段。
-    ///
-    /// # 参数
-    /// * `self` - 被消费的操作人。名称快照和请求号不进入结果。
-    ///
-    /// # 返回
-    /// 返回 `(actor_id, actor_account, actor_type)`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 兼容只消费 `(actor_id, actor_account, actor_type)` 的调用方；
+    /// 若须保留名称快照和请求号，应转换为 [`AuditContext`]。
     pub fn into_parts(self) -> (String, String, AccountKind) {
         (self.actor_id, self.actor_account, self.actor_type)
     }
 }
 
 impl From<AuditActor> for AuditContext {
-    /// 消费已认证操作人，完整保留本次身份与安全关联。
-    ///
-    /// # 参数
-    /// * `actor` - 已捕获身份、名称和请求号的操作人。
-    ///
-    /// # 返回
-    /// 返回首个事件的上下文；序号为一，缺失的快照保持缺失。
-    ///
-    /// # 错误
-    /// 不返回错误；原字段直接移动，不执行重新查询或规范化。
+    // 用认证时捕获的值建立首条事件的审计上下文；序号为一，缺失字段不补齐，也不重新查询或规范化。
     fn from(actor: AuditActor) -> Self {
         Self {
             actor_id: actor.actor_id,
@@ -178,7 +97,7 @@ impl From<AuditActor> for AuditContext {
 mod tests {
     use super::*;
 
-    /// 旧构造保持名称缺失；显式名称规范化且不改变原身份三元组。
+    // 确认显式名称会去除首尾空白，且兼容旧构造与原身份三元组。
     #[test]
     fn actor_name_snapshot_keeps_original_identity_contract() {
         let actor = AuditActor::new("actor-1".into(), "sales".into(), AccountKind::Admin);
@@ -193,7 +112,7 @@ mod tests {
         assert_eq!(blank.actor_name_snapshot(), None);
     }
 
-    /// 名称上限与业务事件一致，以字符数计；内部控制字符不能成为快照。
+    // 用多字节名称检验 128 字符上限，并阻止内部控制字符进入快照。
     #[test]
     fn actor_name_snapshot_accepts_128_characters_and_rejects_unsafe_text() {
         let name = "名".repeat(128);
@@ -209,7 +128,7 @@ mod tests {
         }
     }
 
-    /// 请求关联由显式入口提供，旧构造不会伪造请求号，身份三元组保持原值。
+    // 确认追踪号需显式传入且受长度和控制字符限制；旧构造不伪造关联，也不改变原身份。
     #[test]
     fn request_id_is_optional_bounded_and_independent_of_identity() {
         let actor = AuditActor::new("actor-1".into(), "sales".into(), AccountKind::Admin);

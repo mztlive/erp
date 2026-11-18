@@ -29,16 +29,7 @@ pub struct CancelAuthorization {
 }
 
 impl CancelAuthority {
-    /// 返回撤回授权身份的展示名称。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回原提交人或审批管理员的中文名称。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 将撤回时使用的身份转换成中文名称，区分原提交人和审批管理员。
     pub(crate) fn label(self) -> &'static str {
         match self {
             Self::Submitter => "原提交人",
@@ -47,13 +38,11 @@ impl CancelAuthority {
     }
 }
 
-/// 读取取消计划所需的冻结提交人及责任组织；写事务另行执行完整授权。
-/// # 参数
-/// service、instance为当前用例与精确实例，actor为待执行操作人，executor为已授权准备快照。
-/// # 返回
-/// 仅用于准备计划的责任事实，不代表授权通过。
-/// # 错误
-/// 冻结快照缺失或与实例不匹配时返回错误。
+// 读取取消计划所需的冻结提交人及责任组织；写事务另行执行完整授权。
+//
+// service、instance为当前用例与精确实例，actor为待执行操作人，executor为已授权准备快照。仅用于准备计划的责任事实，不代表授权通过。
+//
+// 冻结快照缺失或与实例不匹配时返回错误。
 pub(crate) async fn cancel_authority_facts(
     service: &InventoryAdjustmentProcess,
     instance: &ApprovalProcessInstance,
@@ -64,7 +53,7 @@ pub(crate) async fn cancel_authority_facts(
     Ok(cancel_facts(snapshot, actor))
 }
 
-/// 写事务按已校验的审批实例重新证明根资格和完整来源资格。
+// 写事务按已校验的审批实例重新证明根资格和完整来源资格。
 pub(crate) async fn authorize_with(
     identity_service: &AuthorizationService,
     db: &Database,
@@ -96,7 +85,7 @@ fn cancel_facts(snapshot: ApprovalSubjectSnapshot, actor: &AuditActor) -> Cancel
     }
 }
 
-/// 在原授权步骤的快照读取位置，验证冻结业务对象仍对应同一运行实例。
+// 在原授权步骤的快照读取位置，验证冻结业务对象仍对应同一运行实例。
 async fn cancel_authorization_snapshot(
     db: &Database,
     instance: &ApprovalProcessInstance,

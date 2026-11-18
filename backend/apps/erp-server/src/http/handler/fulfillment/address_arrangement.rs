@@ -13,11 +13,7 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
 /// 查询销售收货安排。
-/// # 参数
-/// 应用状态、认证身份和销售单身份。
-/// # 返回
 /// 授权编辑上下文。
-/// # 错误
 /// 无销售范围权限或来源无效时拒绝。
 pub async fn sales_get(
     State(state): State<HttpState>,
@@ -27,11 +23,6 @@ pub async fn sales_get(
     Ok(ApiResponse::ok_with_data(process(&state).sales_address_arrangement(&id, &actor).await?))
 }
 /// 保存销售收货安排。
-/// # 参数
-/// 应用状态、认证身份、销售单身份和版本化输入。
-/// # 返回
-/// 成功响应。
-/// # 错误
 /// 版本、已发保护或权限校验失败时拒绝。
 pub async fn sales_save(
     State(state): State<HttpState>,
@@ -43,11 +34,7 @@ pub async fn sales_save(
     Ok(ApiResponse::ok_with_data(()))
 }
 /// 查询当前发货任务收货安排。
-/// # 参数
-/// 应用状态、认证身份和发货身份。
-/// # 返回
 /// 限定当前任务数量的编辑上下文。
-/// # 错误
 /// 非当前处理人或已发货时拒绝。
 pub async fn delivery_get(
     State(state): State<HttpState>,
@@ -57,11 +44,6 @@ pub async fn delivery_get(
     Ok(ApiResponse::ok_with_data(process(&state).delivery_address_arrangement(&id, &actor).await?))
 }
 /// 保存当前任务收货安排。
-/// # 参数
-/// 应用状态、认证身份、发货身份和版本化输入。
-/// # 返回
-/// 成功响应。
-/// # 错误
 /// 身份、版本、数量或包裹重核确认不满足时拒绝。
 pub async fn delivery_save(
     State(state): State<HttpState>,

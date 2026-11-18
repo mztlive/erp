@@ -15,17 +15,12 @@ pub(super) struct GovernanceContext {
     pub(super) health_runs: Vec<SupplierHealthCheckRun>,
 }
 impl SupplierApiReadService {
-    /// 读取手动连接诊断记录，不加载人工能力和采购确认。
-    ///
-    /// # 参数
-    /// * `connection` - 已加载的供应连接。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 返回连接诊断记录。
-    ///
-    /// # 错误
-    /// 治理事实或后台任务计数读取失败时返回对应错误。
+    // 处理供应连接时，读取手动连接诊断记录，不加载人工能力和采购确认。
+    //
+    // 调用参数：
+    // * `connection` - 已加载的供应连接。
+    //
+    // 治理事实或后台任务计数读取失败时返回对应错误。
     pub(super) async fn governance_context(
         &self,
         connection: &SupplierApiConnection,
@@ -38,17 +33,14 @@ impl SupplierApiReadService {
             .await?;
         Ok(GovernanceContext { health_runs })
     }
-    /// 在同次身份快照读取连接详情的全部独立功能资格。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证操作人。
-    /// * `executor` - 最终详情查询前的原快照执行器。
-    ///
-    /// # 返回
-    /// 返回已授予的动作与引用元数据权限；失效账号返回空集合。
-    ///
-    /// # 错误
-    /// 权限码无法解析或 RBAC 执行失败时返回对应错误。
+    // 读取供应连接时，在同次身份快照读取连接详情的全部独立功能资格。
+    //
+    // 调用参数：
+    // * `executor` - 最终详情查询前的原快照执行器。
+    //
+    // 返回已授予的动作与引用元数据权限；失效账号返回空集合。
+    //
+    // 权限码无法解析或 RBAC 执行失败时返回对应错误。
     pub(super) async fn connection_permissions(
         &self,
         actor: &AuditActor,

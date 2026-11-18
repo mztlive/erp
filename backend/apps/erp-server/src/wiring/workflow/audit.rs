@@ -29,7 +29,7 @@ const OWNER_FIELDS: &[AuditField] = &[
 const CLOSE_FIELDS: &[AuditField] =
     &[AuditField { code: "status", label: "任务状态", kind: AuditFieldKind::Code(CLOSED) }];
 
-/// 将事务前工作流输入映射为静态动作；禁止把说明正文复制到结构化事实。
+// 进入事务前把工作流输入映射成静态审计动作；结构化事实不复制用户说明正文。
 fn event_context(audit: &PreparedWorkflowAudit) -> Result<BusinessEventContext> {
     let (code, resource_type, label, fields) = match audit.operation {
         Some(WorkflowAuditOperation::Reassigned) => {
@@ -61,13 +61,10 @@ fn event_context(audit: &PreparedWorkflowAudit) -> Result<BusinessEventContext> 
     .with_command_id(audit.command_id.clone())?)
 }
 
-/// 按领域已冻结的上下文构造普通工作流事件，保留原事件序号。
-/// # 参数
-/// * `audit` - 原调用方准备的安全事件输入。
-/// # 返回
-/// 返回保留事件编号、名称、请求及顺序的结构化日志。
-/// # 错误
-/// 身份、动作或上下文非法时返回原错误分类。
+// 按领域已冻结的上下文构造普通工作流事件，保留原事件序号。
+// `audit` 为原调用方准备的安全事件输入。
+// 返回保留事件编号、名称、请求及顺序的结构化日志。
+// 身份、动作或上下文非法时返回原错误分类。
 fn resource_log_from_prepared(audit: &PreparedWorkflowAudit) -> Result<AuditLog> {
     let actor_type =
         AccountKind::parse(&audit.actor_type).map_err(|error| Error::ValidationError(error.to_string()))?;
@@ -140,15 +137,7 @@ pub struct WorkflowAudit {
 }
 impl WorkflowAudit {
     /// 绑定业务事务所在数据库。
-    ///
-    /// # 参数
-    /// * `db` - 原用例数据库。
-    ///
-    /// # 返回
     /// 返回同事务审计 adapter。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
@@ -256,7 +245,7 @@ mod tests {
         assert!(event_context(&audit).is_err());
     }
 
-    /// 工作流准备端口携带本次名称，组合适配保留冻结快照和原命令。
+    // 验证通过组合适配准备工作流审计时，本次操作人名称和原命令一起进入冻结快照。
     #[test]
     fn workflow_prepared_port_preserves_current_actor_name() {
         let actor = AuditActor::new("actor".into(), "account".into(), AccountKind::Admin)

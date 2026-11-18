@@ -13,7 +13,7 @@ pub use delivery_coverage_adapter::DeliveryCoverageRefreshAdapter;
 mod sellable_projection_adapter;
 pub use sellable_projection_adapter::SellableProjectionRefreshAdapter;
 
-/// 轮询查询先按本业务错误合同分类，再交给无业务依赖的后台执行器。
+// 轮询查询先按本业务错误合同分类，再交给无业务依赖的后台执行器。
 fn polling_result<T>(result: PersistenceResult<T>) -> TaskResult<T> {
     Ok(result.map_err(Error::from)?)
 }

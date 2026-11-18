@@ -82,13 +82,11 @@ pub struct CategoryMappingSuggestion {
 }
 
 impl SupplierCategoryMapping {
-    /// 根据一次真实内部确认建立独立供应商映射。
-    /// # 参数
-    /// 稳定标识、服务端供应商、原始路径、商品类型及本次核对事实。
-    /// # 返回
-    /// 初始版本的独立映射，原始输入仍由提报历史保存。
-    /// # 错误
-    /// 归属、路径、核对理由或完整分类层级非法时拒绝。
+    // 根据一次真实内部确认建立独立供应商映射。
+    //
+    // 初始版本的独立映射，原始输入仍由提报历史保存。归属、路径、核对理由或完整分类层级非法时拒绝。
+    //
+    // 稳定标识、服务端供应商、原始路径、商品类型及本次核对事实。
     pub(super) fn new(
         id: String,
         supplier_id: String,
@@ -110,13 +108,11 @@ impl SupplierCategoryMapping {
         })
     }
 
-    /// 在精确乐观锁版本下追加核对，不替换以往核对事实。
-    /// # 参数
-    /// `expected_version` 为当前映射版本，`confirmation` 为新的真实核对。
-    /// # 返回
-    /// 追加成功；仓储负责递增持久化版本。
-    /// # 错误
-    /// 版本冲突、重复提交决定或核对事实不一致时拒绝。
+    // 在精确乐观锁版本下追加核对，不替换以往核对事实。
+    //
+    // 追加成功；仓储负责递增持久化版本。版本冲突、重复提交决定或核对事实不一致时拒绝。
+    //
+    // `expected_version` 为当前映射版本，`confirmation` 为新的真实核对。
     pub(super) fn confirm(
         &mut self,
         expected_version: u64,
@@ -134,13 +130,11 @@ impl SupplierCategoryMapping {
         Ok(())
     }
 
-    /// 将历史核对与当前完整有效路径逐级比较，始终返回待人工核对的建议。
-    /// # 参数
-    /// `current` 为当前仍有效的完整分类链及最小候选；不可用时为空。
-    /// # 返回
-    /// 供应商安全投影，必须再次人工确认。
-    /// # 错误
-    /// 映射缺失内部核对历史时拒绝。
+    // 将历史核对与当前完整有效路径逐级比较，始终返回待人工核对的建议。
+    //
+    // 供应商安全投影，必须再次人工确认。映射缺失内部核对历史时拒绝。
+    //
+    // `current` 为当前仍有效的完整分类链及最小候选；不可用时为空。
     pub(super) fn suggestion(
         &self,
         current: Option<(DictionaryCandidate, Vec<CategoryHierarchyNode>)>,
@@ -173,30 +167,24 @@ impl SupplierCategoryMapping {
     }
 }
 
-/// 原始完整路径只去首尾空白，不合并名称、父级、分隔符或供应商。
-/// # 参数
-/// `path` 为供应商原始完整路径。
-/// # 返回
-/// 保留原含义的去首尾空白借用。
-/// # 错误
-/// 路径为空或过长时拒绝。
+// 原始完整路径只去首尾空白，不合并名称、父级、分隔符或供应商。
+//
+// 保留原含义的去首尾空白借用。路径为空或过长时拒绝。
+//
+// `path` 为供应商原始完整路径。
 pub(super) fn source_path(path: &str) -> Result<&str> {
     require_text(path, "供应商原始完整分类路径", 10_000)?;
     Ok(path.trim())
 }
 
-/// 用已核对的逐级名称生成展示路径，标识与版本另行保留。
-/// # 参数
-/// `hierarchy` 为从根到目标的分类链。
-/// # 返回
-/// 完整展示路径。
-/// # 错误
-/// 无；分类链资格由调用方复验。
+// 用已核对的逐级名称生成展示路径，标识与版本另行保留。
+//
+// 完整展示路径。分类链资格由调用方复验。
 pub(super) fn hierarchy_path(hierarchy: &[CategoryHierarchyNode]) -> String {
     hierarchy.iter().map(|node| node.name.as_str()).collect::<Vec<_>>().join(" / ")
 }
 
-/// 核对事实必须指向原始分类含义与完整有效公司分类层级。
+// 核对事实必须指向原始分类含义与完整有效公司分类层级。
 fn validate_confirmation(
     confirmation: &CategoryMappingConfirmation,
     original_category_path: &str,
@@ -225,7 +213,7 @@ fn validate_confirmation(
     Ok(())
 }
 
-/// 分类链须从根开始，类型一致，身份无环且每一级版本明确。
+// 分类链须从根开始，类型一致，身份无环且每一级版本明确。
 fn validate_hierarchy(hierarchy: &[CategoryHierarchyNode], kind: ProductKind) -> Result<()> {
     if hierarchy.is_empty() || hierarchy.len() > 32 {
         return Err(Error::ValidationError("分类完整层级非法".into()));
@@ -246,7 +234,7 @@ fn validate_hierarchy(hierarchy: &[CategoryHierarchyNode], kind: ProductKind) ->
     Ok(())
 }
 
-/// 校验需要人工确认的必要文本，不修改原始资料。
+// 校验需要人工确认的必要文本，不修改原始资料。
 fn require_text(value: &str, label: &str, limit: usize) -> Result<()> {
     if value.trim().is_empty() || value.trim().chars().count() > limit {
         return Err(Error::ValidationError(format!("{label}为空或过长")));

@@ -11,7 +11,7 @@ use super::SupplierApiReadService;
 use super::dto::SupplierConnectionJobView;
 use crate::{Error, Result};
 impl SupplierApiReadService {
-    /// 查询连接下健康检查或目录同步后台任务的当前终态/进度。
+    /// 处理供应连接后台任务时，查询连接下健康检查或目录同步后台任务的当前终态/进度。
     ///
     /// # 参数
     /// * `connection_id` - 连接主键。

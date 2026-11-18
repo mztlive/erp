@@ -27,10 +27,7 @@ impl<T> IntoResponse for ApiResponse<T>
 where
     T: Serialize,
 {
-    /// 转换为 HTTP 响应。
-    ///
-    /// # 返回
-    /// 返回 `axum::response::Response` 实例。
+    // 把业务信封序列化为 JSON，并用其状态码作为真实 HTTP 状态；无法转换的状态回退到 HTTP 500。
     fn into_response(self) -> Response {
         let http_status = StatusCode::from_u16(self.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
         (http_status, Json(self)).into_response()
@@ -38,10 +35,7 @@ where
 }
 
 impl ApiResponse<()> {
-    /// 构造成功响应。
-    ///
-    /// # 返回
-    /// 返回成功响应。
+    /// 用于已完成且没有业务数据的操作，返回 200 成功信封。
     pub fn ok() -> Self {
         Self {
             status: 200,
@@ -55,10 +49,7 @@ impl ApiResponse<()> {
         }
     }
 
-    /// 构造未授权响应。
-    ///
-    /// # 返回
-    /// 返回未认证响应。
+    /// 在请求身份缺失或失效时返回 401 与 `UNAUTHENTICATED`，提示重新登录。
     pub fn unauthorized() -> Self {
         Self {
             status: 401,
@@ -72,10 +63,7 @@ impl ApiResponse<()> {
         }
     }
 
-    /// 构造系统错误响应。
-    ///
-    /// # 返回
-    /// 返回不包含底层错误细节的系统错误响应。
+    /// 在 HTTP 层只能公开通用失败时返回 500 与固定提示，不附底层错误细节。
     pub fn system_error() -> Self {
         Self {
             status: 500,
@@ -89,10 +77,7 @@ impl ApiResponse<()> {
         }
     }
 
-    /// 构造无权限响应。
-    ///
-    /// # 返回
-    /// 返回无权限响应。
+    /// 请求身份有效但操作未获准时返回 403；在未知具体权限码时不填 `requiredPermission`。
     pub fn permission_denied() -> Self {
         Self {
             status: 403,
@@ -105,13 +90,7 @@ impl ApiResponse<()> {
             success: false,
         }
     }
-    /// 构造明确指出所缺功能权限的拒绝响应。
-    /// # 参数
-    /// `permission` 为路由实际校验且被拒绝的权限码。
-    /// # 返回
-    /// 保留 403 与 PERMISSION_DENIED，附带可定位的权限码。
-    /// # 错误
-    /// 无。
+    /// 缺少可明确标识的功能权限时，在 403 `PERMISSION_DENIED` 上追加 `requiredPermission`，便于管理员定位所需权限。
     pub fn missing_permission(permission: &Permission) -> Self {
         Self {
             message: format!("缺少功能权限：{permission}，请联系管理员授权后重试"),
@@ -122,13 +101,7 @@ impl ApiResponse<()> {
 }
 
 impl<T> ApiResponse<T> {
-    /// 构造携带数据的成功响应。
-    ///
-    /// # 参数
-    /// * `data` - 数据内容
-    ///
-    /// # 返回
-    /// 返回携带数据的成功响应。
+    /// 把已成功计算的业务视图放入统一 200 响应的 `data` 字段。
     pub fn ok_with_data(data: T) -> Self {
         Self {
             status: 200,

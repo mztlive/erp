@@ -15,14 +15,13 @@ use crate::{Error, Result};
 
 impl SupplierDepositService {
     /// 在实际银行付款与供应商到账均已核实后登记可用充值一次。
-    /// # 参数
-    /// * `account_id` / `operation_key` - 账户及稳定操作身份。
-    /// * `amount` / `evidence` - 实际到账金额与完整证据。
-    /// * `actor` / `executor` - 核验人和调用方事务。
-    /// # 返回
     /// 返回唯一到账批次；重放返回原批次。
-    /// # 错误
     /// 银行付款不真实、不属于充值、归属/金额/审批依据不符或重复异载荷时拒绝。
+    ///
+    /// 输入约定：
+    /// - `account_id` / `operation_key`：账户及稳定操作身份。
+    /// - `amount` / `evidence`：实际到账金额与完整证据。
+    /// - `actor` / `executor`：核验人和调用方事务。
     pub async fn receive_recharge(
         &self,
         account_id: &str,

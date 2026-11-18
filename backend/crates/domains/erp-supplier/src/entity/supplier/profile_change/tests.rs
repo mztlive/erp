@@ -64,7 +64,7 @@ fn capability_plan_preserves_fact_order_and_deduplicates_requested_creates() {
     assert!(plan.capability_toggles.iter().all(|toggle| toggle.target_status == CapabilityStatus::Active));
 }
 
-/// 根资料移除日期不完整的启用合同仍须停用；不能用采购资格替代生命周期。
+// 验证根资料移除日期不完整的启用合同仍须停用；不能用采购资格替代生命周期。
 #[test]
 fn omitted_unverified_contracts_are_disabled_once() {
     use super::SupplierProfileChangePlan;
@@ -120,7 +120,7 @@ fn omitted_unverified_contracts_are_disabled_once() {
     }
 }
 
-/// 覆盖商务资料修订：推进供应商当前指针。
+// 验证推进供应商当前指针。
 #[test]
 fn commercial_profile_revision_advances_pointer() {
     let mut supplier = SupplierAccount::new(
@@ -163,7 +163,7 @@ fn commercial_profile_revision_advances_pointer() {
     );
 }
 
-/// 覆盖能力启停：新能力首版为 Active 且修订号 1。
+// 验证新能力首版为 Active 且修订号 1。
 #[test]
 fn new_capability_creates_active_with_revision_one() {
     let (cap, rev) = new_capability(
@@ -182,7 +182,7 @@ fn new_capability_creates_active_with_revision_one() {
     assert_eq!(rev.capability_code, CapabilityCode::Physical);
 }
 
-/// 覆盖资质字段变化：停用资质经 `apply` 后回 Active 且字段被替换。
+// 验证停用资质经 `apply` 后回 Active 且字段被替换。
 #[test]
 fn apply_qualification_input_reactivates_and_replaces_fields() {
     let mut q = SupplierQualification::new(
@@ -226,7 +226,7 @@ fn apply_qualification_input_reactivates_and_replaces_fields() {
     assert_eq!(q.valid_from, Some(business_date(2026, 8, 31)));
 }
 
-/// 覆盖资质无变化：同样字段再次 apply 应保持幂等（不改变有效状态的重复更新不报错）。
+// 验证同样字段再次 apply 应保持幂等（不改变有效状态的重复更新不报错）。
 #[test]
 fn apply_qualification_input_no_change_keeps_valid() {
     let mut q = SupplierQualification::new(
@@ -251,7 +251,8 @@ fn apply_qualification_input_no_change_keeps_valid() {
     assert!(q.matches_profile_fields(None, q.valid_from, None, None));
 }
 
-/// 覆盖重复能力：同一代码重复请求在 Service 层已由 `validate_profile_selection` 拒绝，领域层新建时依赖外部去重；此处验证新资质创建时未启用能力会失败。
+// 验证同一代码重复请求在 Service 层已由 `validate_profile_selection` 拒绝，领域层新建时依赖外部去重；此
+// 处验证新资质创建时未启用能力会失败。
 #[test]
 fn new_qualification_fails_when_capability_missing() {
     let mut cap_ids = HashMap::new();
@@ -275,7 +276,7 @@ fn new_qualification_fails_when_capability_missing() {
     assert!(err.to_string().contains("资质适用能力不存在"));
 }
 
-/// 覆盖新资质创建：字段与关联一致，首版修订号 1。
+// 验证字段与关联一致，首版修订号 1。
 #[test]
 fn new_qualification_creates_with_links() {
     let mut cap_ids = HashMap::new();
@@ -305,7 +306,7 @@ fn new_qualification_creates_with_links() {
     assert_eq!(qual.certificate_no, "C-004");
 }
 
-/// 覆盖 link 数量不一致：返回错误。
+// 验证返回错误。
 #[test]
 fn new_qualification_rejects_mismatched_link_ids() {
     let cap_ids = HashMap::new();
@@ -328,7 +329,7 @@ fn new_qualification_rejects_mismatched_link_ids() {
     assert!(err.to_string().contains("关联 ID 数量不一致"));
 }
 
-/// 覆盖能力 Disabled→Active 重新启用：先停用再启用保持同一能力身份且可生成新快照。
+// 验证先停用再启用保持同一能力身份且可生成新快照。
 #[test]
 fn capability_disable_then_reenable_via_update() {
     let (mut cap, _) = new_capability(
@@ -368,7 +369,7 @@ fn capability_disable_then_reenable_via_update() {
     assert_eq!(snap.revision.revision_no, 2);
 }
 
-/// 覆盖无变化过滤保持 is_valid：相同可变字段与关联集合时不产生更新。
+// 验证相同可变字段与关联集合时不产生更新。
 #[test]
 fn qualification_no_change_preserves_valid_and_matches_fields() {
     let mut cap_ids = HashMap::new();
@@ -407,7 +408,7 @@ fn qualification_no_change_preserves_valid_and_matches_fields() {
     assert_eq!(qual.valid_from, before.valid_from);
 }
 
-/// 覆盖重复能力代码由 `validate_profile_selection` 拒绝。
+// 验证重复能力代码由 `validate_profile_selection` 拒绝。
 #[test]
 fn duplicate_capability_codes_rejected_via_validate_profile_selection() {
     use crate::entity::supplier::{SupplierQualificationSelection, validate_profile_selection};
@@ -434,8 +435,8 @@ fn duplicate_capability_codes_rejected_via_validate_profile_selection() {
     assert!(validate_profile_selection(&[CapabilityCode::Api], &dup_qual).is_err());
 }
 
-/// 覆盖 `SupplierProfileChangePlan::from_loaded` 的完整变更矩阵：
-/// 能力启停（含 Disabled→Active 重新启用）、无变化过滤、资质字段与关联比对及新增/停用。
+// 验证 `SupplierProfileChangePlan::from_loaded` 的完整变更矩阵：能力启停（含 Disabled→Active 重新启用）、
+// 无变化过滤、资质字段与关联比对及新增/停用。
 #[test]
 fn profile_change_plan_from_loaded_covers_full_matrix() {
     use std::collections::{HashMap, HashSet};

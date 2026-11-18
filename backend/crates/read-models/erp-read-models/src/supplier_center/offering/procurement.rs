@@ -21,7 +21,7 @@ use crate::catalog_center::procurement::{
 /// 在授权供给集合内按采购规则解析负责人。
 #[async_trait]
 pub trait OfferingProcurementOwners: Send + Sync {
-    /// 返回采购负责人落在请求集合内的供给 ID。
+    /// 应用供给采购负责人筛选时，给出采购负责人落在请求集合内的供给 ID。
     ///
     /// # 参数
     /// * `authorized_ids` - 已按完整条件裁剪的供给候选
@@ -47,30 +47,18 @@ pub struct MongoOfferingProcurementOwners {
 }
 
 impl MongoOfferingProcurementOwners {
-    /// 绑定采购规则与供给集合。
-    ///
-    /// # 参数
-    /// * `db` - 数据库
+    /// 装配供给采购负责人筛选时，绑定采购规则与供给集合。
     ///
     /// # 返回
     /// 返回未执行 I/O 的解析器。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
-    /// 包装为共享 Port。
-    ///
-    /// # 参数
-    /// * `db` - 数据库
+    /// 将供给采购负责人筛选的规则解析器包装为可注入的共享端口。
     ///
     /// # 返回
     /// 返回供给列表可注入的采购负责人解析器。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn shared(db: Database) -> Arc<dyn OfferingProcurementOwners> {
         Arc::new(Self::new(db))
     }

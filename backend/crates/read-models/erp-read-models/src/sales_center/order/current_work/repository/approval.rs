@@ -11,13 +11,14 @@ use super::CurrentWorkRepository;
 use crate::Result;
 
 impl CurrentWorkRepository<'_> {
-    /// 批量校验审批任务的实例、当前节点、轮次、对象版本与实际责任人。
-    /// # 参数
-    /// `tasks` 为关联本销售单的开放任务，`node_names` 接收仍有效的当前审批节点名称。
-    /// # 返回
-    /// 返回仍匹配当前审批责任的任务及其他业务任务。
-    /// # 错误
-    /// 审批实例或节点读取失败时返回错误。
+    // 处理销售当前办理时，批量校验审批任务的实例、当前节点、轮次、对象版本与实际责任人。
+    //
+    // 调用参数：
+    // `tasks` 为关联本销售单的开放任务，`node_names` 接收仍有效的当前审批节点名称。
+    //
+    // 返回仍匹配当前审批责任的任务及其他业务任务。
+    //
+    // 审批实例或节点读取失败时返回错误。
     pub(super) async fn current_approvals(
         &self,
         tasks: Vec<WorkItem>,
@@ -64,7 +65,7 @@ impl CurrentWorkRepository<'_> {
     }
 }
 
-/// 仅展示与正在运行实例的当前活动节点完全匹配的审批责任。
+// 应用销售当前办理筛选时，仅展示与正在运行实例的当前活动节点完全匹配的审批责任。
 fn matches_current_approval(
     task: &WorkItem,
     execution: Option<&ApprovalNodeExecution>,

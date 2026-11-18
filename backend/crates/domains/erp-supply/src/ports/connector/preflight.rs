@@ -41,12 +41,9 @@ pub struct PreflightProof {
 
 impl PreflightProof {
     /// 核对预检覆盖原行、数量、地址和批准金额。
-    /// # 参数
-    /// `request` 为原冻结创建请求；`now` 为检查时刻。
-    /// # 返回
     /// 事实完整且未超出批准范围时允许后续资格核验。
-    /// # 错误
     /// 缺行、重复、身份或地址变化、过期、不可采或超批时阻断。
+    /// `request` 为原冻结创建请求；`now` 为检查时刻。
     pub fn validate(&self, request: &CreateOrder, now: Instant) -> Result<()> {
         if self.delivery_context != request.delivery_context
             || self.valid_until.is_some_and(|until| until <= now)
@@ -113,12 +110,9 @@ impl PreflightProof {
 #[async_trait]
 pub trait OrderPreflight: Send + Sync {
     /// 以本次完整冻结明细、数量和确认地址只读核验下单条件。
-    /// # 参数
-    /// `request` 包含批准含税价格、费用、配送及原动作身份；不得修改请求。
-    /// # 返回
     /// 完整预检证据，未知的价格、库存、资格或费用必须失败关闭。
-    /// # 错误
     /// 资料缺失、采购限制、金额超批或外部读取失败时返回分类错误。
+    /// `request` 包含批准含税价格、费用、配送及原动作身份；不得修改请求。
     async fn inspect(&self, request: &CreateOrder) -> ConnectorResult<Snapshot<PreflightProof>>;
 }
 

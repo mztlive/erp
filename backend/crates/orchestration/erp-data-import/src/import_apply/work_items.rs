@@ -12,15 +12,10 @@ use persistence_core::Executor;
 pub trait ImportWorkItems: Send + Sync {
     /// 读取当前操作人可见的工作项及允许动作。
     ///
-    /// # 参数
-    /// * `id` - 正式工作项身份。
-    /// * `actor` - 当前认证操作人。
-    /// * `executor` - 导入查询持有的原快照执行器。
+    /// `id`：正式工作项身份；`executor`：导入查询持有的原快照执行器。
     ///
-    /// # 返回
     /// 返回按当前责任资格生成的安全任务视图。
     ///
-    /// # 错误
     /// 任务不存在、无权查看或授权读取失败时返回工作流错误。
     async fn authorize_work_item(
         &self,
@@ -31,16 +26,10 @@ pub trait ImportWorkItems: Send + Sync {
 
     /// 在原确认事务中重验当前决定资格。
     ///
-    /// # 参数
-    /// * `actor` - 当前认证操作人。
-    /// * `executor` - 导入查询持有的原快照执行器。
-    /// * `item` - 已核对身份、版本和责任的正式工作项。
-    /// * `executor` - 确认命令沿用的同一事务执行器。
+    /// `executor`：导入查询持有的原快照执行器；`item`：已核对身份、版本和责任的正式工作项；`executor`：确认命令沿用的同一事务执行器。
     ///
-    /// # 返回
     /// 当前账号、权限和对象资格仍有效时成功。
     ///
-    /// # 错误
     /// 账号失效、责任或权限不满足，或事实查询失败时返回工作流错误。
     async fn ensure_domain_decision_access(
         &self,
@@ -50,11 +39,11 @@ pub trait ImportWorkItems: Send + Sync {
     ) -> WorkflowResult<()>;
 
     /// 在原写事务证明正式任务仍分配给当前账号，业务状态由调用方核对。
-    /// # 参数
+    ///
     /// actor 为当前操作人，id 为精确任务 ID，executor 为调用方事务。
-    /// # 返回
+    ///
     /// 当前任务分配及详情范围均满足时成功。
-    /// # 错误
+    ///
     /// 账号、任务分配、范围或身份设施失效时拒绝。
     async fn require_assigned(
         &self,

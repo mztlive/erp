@@ -12,18 +12,13 @@ use crate::errors::Result;
 use crate::workbench::authority::funds::mapping as authority_mapping;
 
 impl WorkbenchFactsReader<'_> {
-    /// 应收子账销项开票任务的对象事实。
-    ///
-    /// # 参数
-    /// * `keys` - 本批任务引用的对象键
-    /// * `facts` - 输出的对象事实表
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 成功时写入子账号、销售单号和开放余额。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
+    // 读取应收应付任务简报时，应收子账销项开票任务的对象事实。
+    //
+    // 调用参数：
+    // * `keys` - 本批任务引用的对象键
+    // * `facts` - 输出的对象事实表
+    //
+    // 成功时写入子账号、销售单号和开放余额。
     pub(crate) async fn load_receivable_account_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -172,18 +167,13 @@ impl WorkbenchFactsReader<'_> {
         Ok(())
     }
 
-    /// 付款执行任务的应付子账对象事实。
-    ///
-    /// # 参数
-    /// * `keys` - 本批任务引用的对象键
-    /// * `facts` - 输出的对象事实表
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 成功时写入供应商、采购单、计划付款日与开放金额摘要。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
+    // 读取应收应付任务简报时，付款执行任务的应付子账对象事实。
+    //
+    // 调用参数：
+    // * `keys` - 本批任务引用的对象键
+    // * `facts` - 输出的对象事实表
+    //
+    // 成功时写入供应商、采购单、计划付款日与开放金额摘要。
     pub(crate) async fn load_payable_account_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,

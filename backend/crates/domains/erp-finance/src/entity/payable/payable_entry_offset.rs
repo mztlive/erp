@@ -40,19 +40,14 @@ pub struct PayableEntryOffset {
 }
 
 impl PayableEntryOffset {
-    /// 创建应付分录抵销。
+    /// 冲减应付分录时构造可追溯的抵销，记录被冲分录、减少分录及本次金额。
     ///
     /// 完成金额正数、序号从 1 起与「减少分录不得冲减自身」校验。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::PayableEntryOffsetId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
     /// 返回新建的抵销实体。
-    ///
-    /// # 错误
     /// 当冲减金额非正、序号为 0 或两端为同一分录时返回错误。
+    ///
+    /// 输入约定：
+    /// - `id`：实体主键（`erp_core::ids::PayableEntryOffsetId`）
     pub fn new(id: PayableEntryOffsetId, data: PayableEntryOffsetData) -> Result<Self> {
         if data.offset_amount.to_decimal().is_sign_negative() || data.offset_amount.to_decimal().is_zero() {
             return Err(Error::from("冲减金额必须为正数"));
@@ -73,19 +68,7 @@ impl PayableEntryOffset {
         })
     }
 
-    /// 更新应付分录抵销。
-    ///
-    /// 正式事实过账后不可更新或删除（数据模型 §6.9 末尾），任何修改都被拒绝。
-    ///
-    /// # 参数
-    /// * `update` - 更新数据（恒被拒绝）
-    /// * `updated_by` - 更新执行人（恒被拒绝）
-    ///
-    /// # 返回
-    /// 恒返回错误。
-    ///
-    /// # 错误
-    /// 任何调用都返回错误：正式事实过账后不可更新或删除。
+    /// 拒绝更新已过账的应付分录抵销；已过账抵销也不可直接删除。
     pub fn update(&mut self, update: PayableEntryOffsetData, updated_by: impl Into<String>) -> Result<()> {
         let _ = (update, updated_by);
         Err(Error::from("正式事实过账后不可更新或删除"))

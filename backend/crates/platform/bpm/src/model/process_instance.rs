@@ -40,30 +40,13 @@ pub enum ApprovalCancellationTaskPolicy {
 }
 
 impl ApprovalCancellationTaskPolicy {
-    /// 判断取消计划是否必须关闭当前开放任务。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// [`Self::CloseOpenTask`] 返回 `true`，[`Self::NoOpenTask`] 返回 `false`。
-    ///
-    /// # 错误
-    /// 无。
+    /// 构造撤回命令时据此决定是否发出关闭任务意图；[`Self::CloseOpenTask`] 需要关闭，[`Self::NoOpenTask`] 不需要。
     pub fn closes_open_task(self) -> bool {
         self == Self::CloseOpenTask
     }
 
-    /// 校验实际开放任务数量是否符合取消策略。
-    ///
-    /// # 参数
-    /// * `open_task_count` - 当前节点执行关联的开放审批任务数量
-    ///
-    /// # 返回
-    /// 运行中实例恰有一个任务，或受阻实例没有任务时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 开放任务数量与策略不一致时返回模型状态错误。
+    /// 撤回时校验传入数量符合策略：运行中要求一项，受阻要求零项；或签实际数量先由节点执行按冻结人数校验并折算。
+    /// 不符时返回状态错误，防止按错误任务事实撤回。
     pub fn ensure_open_task_count(self, open_task_count: usize) -> ModelResult<()> {
         match (self, open_task_count) {
             (Self::CloseOpenTask, 1) | (Self::NoOpenTask, 0) => Ok(()),
@@ -107,19 +90,8 @@ pub struct ApprovalProcessInstance {
 }
 
 impl ApprovalProcessInstance {
-    /// 创建运行中的第 1 轮实例。
-    ///
-    /// # 参数
-    /// * `input` - 实例身份、绑定定义与启动人
-    ///
-    /// # 返回
-    /// 返回运行中、第 1 轮、尚未进入节点的实例。
-    ///
-    /// # 错误
-    /// 定义版本为零时返回错误。
-    ///
-    /// # 约束
-    /// 启动后不得改写 `subject` 与 `subject_version`。
+    /// 启动审批先创建第 1 轮运行实例，冻结定义版本与业务对象提交版本；当前执行由引擎进入入口时再挂上。
+    /// 后续状态推进不得改写业务对象引用及提交版本。定义版本为零或启动时间不可持久化时返回错误。
     pub fn start_running(input: NewProcessInstance) -> ModelResult<Self> {
         if input.definition_version == 0 {
             return Err(ModelError::InvalidField("定义版本必须从 1 开始"));
@@ -143,47 +115,18 @@ impl ApprovalProcessInstance {
         })
     }
 
-    /// 返回克隆后的强类型实例 ID，避免调用方手写字符串克隆与重包。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回与 `base.id` 同值的 [`ApprovalProcessInstanceId`]。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 构造执行、事件或任务关联时取得与 `base.id` 同值的 [`ApprovalProcessInstanceId`]，无需调用方自行转换。
     pub fn typed_id(&self) -> ApprovalProcessInstanceId {
         ApprovalProcessInstanceId::new(self.base.id.clone())
     }
 
-    /// 返回实例乐观锁版本。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `base.version`。
-    ///
-    /// # 错误
-    /// 无。
+    /// 提交迁移时读取实例的乐观锁版本，用于 CAS 区分并发变更，而不是比较已冻结的单据提交版本。
     pub fn instance_version(&self) -> u64 {
         self.base.version
     }
 
-    /// 校验实例状态与当前执行引用是否允许取消，并返回任务关闭策略。
-    ///
-    /// 运行中实例取消时必须关闭开放任务；受阻实例取消时不得再关闭任务。最终通过、
-    /// 已取消或缺少当前执行引用时失败关闭。实际任务数量由返回策略继续校验。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回取消时应关闭唯一开放任务，或证明无需关闭任务的固定策略。
-    ///
-    /// # 错误
-    /// 实例已终态或缺少当前执行引用时返回错误。
+    /// 撤回前用实例状态和当前令牌引用选择任务策略：运行中需要关闭任务，受阻不得仍有开放任务。
+    /// 终态或缺当前执行引用时拒绝；实际任务数量由执行与任务事实校验。
     pub fn cancellation_task_policy(&self) -> ModelResult<ApprovalCancellationTaskPolicy> {
         match (self.status, self.current_node_execution_id.is_some()) {
             (ApprovalProcessInstanceStatus::Approved, _) => {
@@ -205,17 +148,7 @@ impl ApprovalProcessInstance {
         }
     }
 
-    /// 设置当前节点执行引用。
-    ///
-    /// # 参数
-    /// * `execution_id` - 当前执行
-    /// * `at` - 调用方时间
-    ///
-    /// # 返回
-    /// 无返回值。成功时写入当前执行引用并推进乐观锁版本。
-    ///
-    /// # 错误
-    /// 实例已终态、时间无法持久化或版本溢出时返回错误。
+    /// 启动、节点交接或恢复进入新执行时更新当前令牌引用并推进锁版本；不允许为终态实例再挂执行。
     pub fn set_current_execution(
         &mut self,
         execution_id: ApprovalNodeExecutionId,
@@ -226,16 +159,8 @@ impl ApprovalProcessInstance {
         touch_base(&mut self.base, at)
     }
 
-    /// 从运行中进入下一轮，轮次 checked add。
-    ///
-    /// # 参数
-    /// * `at` - 调用方时间
-    ///
-    /// # 返回
-    /// 返回加一后的当前轮次，并清空当前执行引用。
-    ///
-    /// # 错误
-    /// 当前不是运行中、轮次溢出、时间无法持久化或版本溢出时返回错误。
+    /// 显式进入下一轮时，只允许运行中实例递增轮次并清除旧执行引用；当前驳回路径不调用它。
+    /// 轮次或版本溢出、时间不可持久化时返回错误。
     pub fn next_round(&mut self, at: Timestamp) -> ModelResult<u32> {
         if self.status != ApprovalProcessInstanceStatus::Running {
             return Err(ModelError::InvalidStatus("只有运行中的实例可以进入下一轮"));
@@ -247,17 +172,8 @@ impl ApprovalProcessInstance {
         Ok(self.current_round_no)
     }
 
-    /// 进入受阻并写入当前 blocker 投影。
-    ///
-    /// # 参数
-    /// * `code` - 结构化阻塞原因
-    /// * `at` - 阻塞时间
-    ///
-    /// # 返回
-    /// 无返回值。成功时把状态改为受阻，并写入阻塞码与阻塞时间。
-    ///
-    /// # 错误
-    /// 实例已终态、时间无法持久化或版本溢出时返回错误。
+    /// 引擎记录当前无法推进时，把阻塞码和时间投影到未终结的实例，供调用方识别受阻状态。
+    /// 执行历史和任务变更由迁移计划携带；终态、时间非法或版本溢出时不允许提交。
     pub fn enter_blocked(&mut self, code: ApprovalBlockerCode, at: Timestamp) -> ModelResult<()> {
         self.ensure_not_terminal()?;
         self.status = ApprovalProcessInstanceStatus::Blocked;
@@ -266,18 +182,8 @@ impl ApprovalProcessInstance {
         touch_base(&mut self.base, at)
     }
 
-    /// 退出受阻并清空当前 blocker 投影。
-    ///
-    /// 执行历史中的 blocker 事实不得改写。
-    ///
-    /// # 参数
-    /// * `at` - 调用方时间
-    ///
-    /// # 返回
-    /// 无返回值。成功时恢复为运行中，并清空实例上的阻塞码与阻塞时间。
-    ///
-    /// # 错误
-    /// 当前不是受阻、时间无法持久化或版本溢出时返回错误。
+    /// 原人恢复重新进入活动执行时，将受阻实例恢复为运行并清除实例上的阻塞码和时间；旧执行中的历史不动。
+    /// 非受阻、时间非法或版本溢出时返回错误。
     pub fn exit_blocked(&mut self, at: Timestamp) -> ModelResult<()> {
         if self.status != ApprovalProcessInstanceStatus::Blocked {
             return Err(ModelError::InvalidStatus("只有受阻实例可以恢复运行"));
@@ -288,16 +194,8 @@ impl ApprovalProcessInstance {
         touch_base(&mut self.base, at)
     }
 
-    /// 最终通过并清空当前 blocker 投影。
-    ///
-    /// # 参数
-    /// * `at` - 结束时间
-    ///
-    /// # 返回
-    /// 无返回值。成功时把状态改为最终通过，清空当前执行与阻塞投影，并写入结束时间。
-    ///
-    /// # 错误
-    /// 实例已终态、时间无法持久化或版本溢出时返回错误。
+    /// 末节点通过时将实例收结为已批准，记录结束时间并清掉当前令牌与阻塞投影。
+    /// 实例已终结、时间非法或版本溢出时返回错误。
     pub fn complete_approved(&mut self, at: Timestamp) -> ModelResult<()> {
         self.ensure_not_terminal()?;
         self.status = ApprovalProcessInstanceStatus::Approved;
@@ -307,14 +205,8 @@ impl ApprovalProcessInstance {
         touch_base(&mut self.base, at)
     }
 
-    /// 最终驳回并终止当前审批令牌。
-    ///
-    /// # 参数
-    /// * `at` - 驳回决定时间。
-    /// # 返回
-    /// 清空当前执行和阻塞投影并记录结束时间。
-    /// # 错误
-    /// 非运行中实例、时间非法或版本溢出时返回错误。
+    /// 接受运行中节点的驳回决定后终结本实例，清除当前令牌和阻塞投影并记录决定时间；不会创建新轮。
+    /// 非运行中、时间非法或版本溢出时返回错误。
     pub fn complete_rejected(&mut self, at: Timestamp) -> ModelResult<()> {
         if self.status != ApprovalProcessInstanceStatus::Running {
             return Err(ModelError::InvalidStatus("只有运行中的实例可以最终驳回"));
@@ -327,16 +219,8 @@ impl ApprovalProcessInstance {
         touch_base(&mut self.base, at)
     }
 
-    /// 取消实例并清空当前执行引用与 blocker 投影。
-    ///
-    /// # 参数
-    /// * `at` - 结束时间
-    ///
-    /// # 返回
-    /// 无返回值。成功时把状态改为已取消，清空当前执行与阻塞投影，并写入结束时间。
-    ///
-    /// # 错误
-    /// 实例已终态、时间无法持久化或版本溢出时返回错误。
+    /// 撤回计划结束当前执行时一并终结实例，清除令牌和阻塞投影并记录结束时间，避免继续办理。
+    /// 终态、时间非法或版本溢出时返回错误；权限、任务与取消端口由上层计划校验。
     pub fn cancel(&mut self, at: Timestamp) -> ModelResult<()> {
         self.ensure_not_terminal()?;
         self.status = ApprovalProcessInstanceStatus::Cancelled;
@@ -346,16 +230,8 @@ impl ApprovalProcessInstance {
         touch_base(&mut self.base, at)
     }
 
-    /// 校验当前实例 blocker 是否允许恢复原审批人。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 当前为人员失效受阻时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 终态、非受阻、缺少阻塞码，或阻塞码不允许恢复原审批人时返回 [`ModelError::InvalidStatus`]。
+    /// 原人恢复前要求实例确实因人员失效受阻；不把图损坏或一致性异常当成可重派任务。
+    /// 终态、非受阻、缺阻塞码或不支持恢复时返回 [`ModelError::InvalidStatus`]。
     pub fn ensure_assignee_recovery_allowed(&self) -> ModelResult<()> {
         self.ensure_not_terminal().map_err(|_| ModelError::InvalidStatus("终态实例不得恢复原审批人"))?;
         if self.status != ApprovalProcessInstanceStatus::Blocked {
@@ -370,7 +246,7 @@ impl ApprovalProcessInstance {
         Err(ModelError::InvalidStatus("结构性或一致性阻塞不得恢复原审批人"))
     }
 
-    /// 最终通过或已取消的实例不得再改运行字段。
+    // 写实例运行字段前拦截已批准、已驳回和已取消状态，防止终态重新获得令牌或阻塞信息。
     fn ensure_not_terminal(&self) -> ModelResult<()> {
         if self.status.is_terminal() {
             return Err(ModelError::InvalidStatus("终态实例不得再变更运行字段"));
@@ -409,7 +285,7 @@ mod tests {
         .unwrap()
     }
 
-    /// 新实例为运行中第 1 轮，不带 blocker。
+    // 验证启动模型先创建未挂执行、未受阻的第 1 轮实例，入口执行随后由引擎写入。
     #[test]
     fn start_running_round_one() {
         let inst = instance();
@@ -419,7 +295,7 @@ mod tests {
         assert!(inst.blocker_code.is_none());
     }
 
-    /// 下一轮只能从运行中调用，并清空当前执行。
+    // 验证运行中可以递增轮次并清掉旧令牌，受阻后不能借换轮跳过恢复规则。
     #[test]
     fn next_round_requires_running() {
         let mut inst = instance();
@@ -439,7 +315,7 @@ mod tests {
         assert!(inst.next_round(Timestamp::from_unix_secs(14).unwrap()).is_err());
     }
 
-    /// 受阻投影在恢复或终态时清空；历史事实不在本实体改写。
+    // 验证恢复清除实例阻塞投影，最终通过清除令牌，且终结后不允许再取消。
     #[test]
     fn blocker_projection_clears_on_exit_or_terminal() {
         let mut inst = instance();
@@ -458,9 +334,7 @@ mod tests {
         assert!(inst.cancel(Timestamp::from_unix_secs(23).unwrap()).is_err());
     }
 
-    /// 运行中实例只在存在当前执行和唯一开放任务时允许取消。
-    ///
-    /// 零任务或重复任务都表示运行事实不一致，必须失败关闭。
+    // 用带当前令牌的运行实例检查基础取消策略，确认零项或两项开放任务都不能按单任务处理。
     #[test]
     fn running_cancellation_requires_exactly_one_open_task() {
         let mut inst = instance();
@@ -483,9 +357,7 @@ mod tests {
         );
     }
 
-    /// 受阻实例取消时必须证明当前执行不再关联开放任务。
-    ///
-    /// 已最终通过、已取消和缺少当前执行引用也不得形成取消策略。
+    // 验证受阻执行必须无开放任务才能撤回，且终态实例或没有当前令牌的运行实例拿不到取消策略。
     #[test]
     fn blocked_and_terminal_cancellation_facts_fail_closed() {
         let mut blocked = instance();
@@ -527,7 +399,7 @@ mod tests {
         );
     }
 
-    /// 只有人员类 blocker 允许恢复原审批人。
+    // 验证人员失效受阻可走原人恢复，结构损坏和终态则拒绝。
     #[test]
     fn only_personnel_blocker_allows_assignee_recovery() {
         let mut inst = instance();
@@ -551,7 +423,7 @@ mod tests {
         );
     }
 
-    /// 实例公开 API 不提供驳回或终止终态。
+    // 验证受阻不等于流程收结，使恢复和取消仍可按各自的前置条件处理。
     #[test]
     fn instance_has_no_reject_or_terminate() {
         let names = ["reject", "terminate"];

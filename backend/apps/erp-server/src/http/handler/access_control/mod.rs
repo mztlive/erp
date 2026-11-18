@@ -24,13 +24,7 @@ use crate::http::state::HttpState;
 use crate::wiring::scope_configuration;
 
 /// 查询权限定义列表（权限目录）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `query` - 分页与筛选参数（`resource`/`disabled`/`system`）
-///
-/// # 返回
-/// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
+/// `query` 为分页与筛选参数（`resource`/`disabled`/`system`）。
 pub async fn permission_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -48,13 +42,7 @@ pub async fn permission_list(
 }
 
 /// 创建权限定义（`resource:action` 唯一）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 创建请求（`{ resource, action, name }`）
-///
-/// # 返回
+/// `req` 为创建请求（`{ resource, action, name }`）。
 /// 返回新建的权限定义视图。
 pub async fn permission_create(
     State(state): State<HttpState>,
@@ -73,14 +61,7 @@ pub async fn permission_create(
 }
 
 /// 更新权限定义（乐观锁：请求携带期望版本，冲突返回 409）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 权限定义 ID
-/// * `req` - 更新请求（含期望版本）
-///
-/// # 返回
+/// `req` 为更新请求（含期望版本）。
 /// 返回更新后的权限定义视图。
 pub async fn permission_update(
     State(state): State<HttpState>,
@@ -100,14 +81,6 @@ pub async fn permission_update(
 }
 
 /// 删除权限定义（软删除；系统内建权限禁止删除）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 权限定义 ID
-///
-/// # 返回
-/// 无返回值。
 pub async fn permission_delete(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -125,12 +98,7 @@ pub async fn permission_delete(
 }
 
 /// 按用户查询角色绑定（含撤权历史，只读展示）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `query` - 查询参数（`user_id` 必填）
-///
-/// # 返回
+/// `query` 为查询参数（`user_id` 必填）。
 /// 返回绑定视图列表。
 pub async fn user_role_list(
     State(state): State<HttpState>,
@@ -149,13 +117,7 @@ pub async fn user_role_list(
 }
 
 /// 分配用户角色（绑定记录 + 审计事件原子写入）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 分配请求（`{ user_id, role_id }`）
-///
-/// # 返回
+/// `req` 为分配请求（`{ user_id, role_id }`）。
 /// 返回新建的绑定视图。
 pub async fn user_role_create(
     State(state): State<HttpState>,
@@ -174,14 +136,7 @@ pub async fn user_role_create(
 }
 
 /// 撤权用户角色（立即紧急撤权，必须记录结构化原因）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 绑定 ID
-/// * `req` - 撤权请求（含期望版本与原因）
-///
-/// # 返回
+/// `id` 为绑定 ID，`req` 为撤权请求（含期望版本与原因）。
 /// 返回撤权后的绑定视图。
 pub async fn user_role_revoke(
     State(state): State<HttpState>,
@@ -201,13 +156,7 @@ pub async fn user_role_revoke(
 }
 
 /// 查询审计事件列表（事实型留痕，不可编辑不可删除）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `query` - 分页与筛选参数（`actor_id`/`action_type`/`object_type`/`result`）
-///
-/// # 返回
-/// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
+/// `query` 为分页与筛选参数（`actor_id`/`action_type`/`object_type`/`result`）。
 pub async fn audit_event_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -236,7 +185,7 @@ mod tests {
 
     use crate::http::errors::Error;
 
-    /// 请求中的无效时间返回 400；正常请求与响应保持秒级数字协议。
+    // 覆盖角色授予请求与回包的秒级数字时间合同，并确认非法时间实际返回 400。
     #[test]
     fn role_assignment_time_contract() {
         for seconds in [0, u64::MAX, u64::try_from(i64::MAX).unwrap()] {

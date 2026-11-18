@@ -26,32 +26,15 @@ pub struct PermissionFilter {
 }
 
 impl Default for PermissionFilter {
-    /// 返回首页空筛选（`page: 1`，`page_size: 20`）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回筛选为空、降序的首页过滤条件。
-    ///
-    /// # 错误
-    /// 无。
+    // 返回首页空筛选（`page: 1`，`page_size: 20`）。
+    // 返回筛选为空、降序的首页过滤条件。
     fn default() -> Self {
         Self { resource: None, disabled: None, system: None, paging: PageParams::default() }
     }
 }
 
 impl QueryFilter for PermissionFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_literal_regex_filter(&mut filter, "resource", self.resource.as_deref());
@@ -66,16 +49,7 @@ impl QueryFilter for PermissionFilter {
 }
 
 impl Pagination for PermissionFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 返回页码与单页条数。
     fn page_and_size(&self) -> (u64, u64) {
         (self.paging.page, u64::from(self.paging.page_size))
     }
@@ -90,15 +64,11 @@ pub trait PermissionRepositoryExt {
     /// 字面量忽略大小写模糊匹配（复用 `insert_literal_regex_filter`），停用/系统
     /// 标记精确匹配覆盖 `idx_permissions_disabled`。
     ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回当前页投影行与满足筛选条件的总数。
     ///
-    /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    ///
+    /// `executor`：数据访问执行器，由 Service 决定是否位于事务中。
     async fn search_permissions(
         &self,
         filter: &PermissionFilter,
@@ -131,16 +101,11 @@ impl PermissionRepositoryExt for Repository<'_, PermissionDefinition> {
 #[allow(async_fn_in_trait)]
 pub trait UserRoleRepositoryExt {
     /// 按用户批量取回全部角色绑定（W19：按当前、未来、已过期分开只读展示）。
-    ///
-    /// # 参数
-    /// * `user_id` - 用户 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回按生效时间倒序排列的绑定记录（含已撤权历史）。
     ///
-    /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
+    ///
+    /// `executor`：数据访问执行器，由 Service 决定是否位于事务中。
     async fn list_by_user(&self, user_id: &str, executor: &mut dyn Executor) -> Result<Vec<UserRole>>;
 }
 
@@ -156,7 +121,7 @@ mod tests {
     use mongodb::bson;
 
     use crate::entity::access_control::{PermissionData, PermissionDefinition};
-    /// BSON 往返保留既有字段，不新增嵌套权限字段。
+    // 验证 BSON 序列化与反序列化保留既有字段，不新增嵌套权限字段。
     #[test]
     fn entity_roundtrips_through_bson() {
         let permission = PermissionDefinition::new(

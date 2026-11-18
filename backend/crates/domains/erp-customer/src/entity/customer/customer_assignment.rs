@@ -33,16 +33,7 @@ pub enum AssignmentRole {
 }
 
 impl AssignmentRole {
-    /// 返回角色的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 把客户归属角色转换为中文展示名称，供详情、列表或业务提示显示。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Owner => "负责销售",
@@ -50,16 +41,7 @@ impl AssignmentRole {
         }
     }
 
-    /// 返回角色的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回客户归属角色的固定代码，供持久化值和查询条件使用同一口径。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Owner => "OWNER",
@@ -123,12 +105,9 @@ impl CustomerAssignment {
     ///
     /// # 参数
     /// * `id` - 实体主键（`erp_core::ids::CustomerAssignmentId`）
-    /// * `data` - 创建数据
     ///
-    /// # 返回
     /// 返回新建的归属实体。
     ///
-    /// # 错误
     /// 当 user_id / change_reason 为空或超长，或生效区间倒挂时返回错误。
     pub fn new(id: CustomerAssignmentId, data: CustomerAssignmentData) -> Result<Self> {
         let user_id = normalize_user_id(data.user_id)?;
@@ -153,10 +132,8 @@ impl CustomerAssignment {
     /// # 参数
     /// * `valid_to` - 生效结束日期
     ///
-    /// # 返回
     /// 结束成功返回 `Ok(())`。
     ///
-    /// # 错误
     /// 结束日期不晚于开始日期，或晚于既有结束日期时返回错误。
     pub fn end_directly(&mut self, valid_to: BusinessDate) -> Result<()> {
         self.validate_direct_end(valid_to)?;
@@ -179,10 +156,8 @@ impl CustomerAssignment {
     /// # 参数
     /// * `update` - 结束日期更新意图
     ///
-    /// # 返回
     /// 更新成功返回 `Ok(())`。
     ///
-    /// # 错误
     /// 结束日期不晚于开始日期时返回错误。
     pub fn update(&mut self, update: CustomerAssignmentUpdate) -> Result<()> {
         if let Some(valid_to) = update.valid_to.into_option() {
@@ -199,10 +174,8 @@ impl CustomerAssignment {
     /// # 参数
     /// * `replacement` - 待建立的新归属
     ///
-    /// # 返回
     /// 当前归属被结束时返回 `true`；无冲突时返回 `false`。
     ///
-    /// # 错误
     /// 新归属开始日期不晚于冲突旧归属开始日期时返回错误。
     pub fn end_for_replacement(&mut self, replacement: &Self) -> Result<bool> {
         if !self.conflicts_with(replacement) {
@@ -220,11 +193,7 @@ impl CustomerAssignment {
     /// # 参数
     /// * `other` - 待比较的新归属
     ///
-    /// # 返回
     /// 同一客户下角色/用户组合需要唯一且有效期重叠时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn conflicts_with(&self, other: &Self) -> bool {
         if self.customer_id != other.customer_id || self.assignment_role != other.assignment_role {
             return false;
@@ -237,9 +206,9 @@ impl CustomerAssignment {
     ///
     /// # 参数
     /// * `existing` - 原写入事务读取的人员关系
-    /// # 返回
+    ///
     /// 没有重叠区间时返回成功。
-    /// # 错误
+    ///
     /// 同人同角色已有重叠关系时返回错误。
     pub fn ensure_no_overlap(&self, existing: &[Self]) -> Result<()> {
         if existing.iter().any(|item| !item.base.is_deleted() && self.conflicts_with(item)) {
@@ -248,14 +217,14 @@ impl CustomerAssignment {
         Ok(())
     }
 
-    /// 校验被缩短的整个区间仍由其他有效负责销售连续覆盖。
+    /// 提前结束负责人关系前，检查其他有效负责人是否连续覆盖整个待缩短区间，避免客户在期间失去负责人。
     ///
     /// # 参数
     /// * `remaining` - 同一事务读取的客户全部人员关系
     /// * `at` - 拟提前结束日期
-    /// # 返回
+    ///
     /// 从新结束日到原结束日连续有人负责时返回成功。
-    /// # 错误
+    ///
     /// 被移除的任意区间无人负责时返回错误。
     pub fn ensure_owner_retained(&self, remaining: &[Self], at: BusinessDate) -> Result<()> {
         if self.assignment_role != AssignmentRole::Owner || self.valid_to.is_some_and(|end| at >= end) {
@@ -287,15 +256,15 @@ impl CustomerAssignment {
         Err(Error::from("至少保留一名有效负责销售，请先添加接任人员"))
     }
 
-    /// 计算提前结束后，被缩短区间内各段实际生效的完整负责人集合。
-    ///
-    /// # 参数
-    /// * `assignments` - 原事务读取的该客户全部归属。
-    /// * `at` - 拟结束日期，按原归属的左闭右开区间解释。
-    /// # 返回
-    /// 返回需要校验目标归属的去重集合；协作归属或未缩短区间时为空。
-    /// # 错误
-    /// 结束窗口非法，或被缩短区间存在无人负责的部分时返回领域错误。
+    // 计算提前结束后，被缩短区间内各段实际生效的完整负责人集合。
+    //
+    // # 参数
+    // * `assignments` - 原事务读取的该客户全部归属。
+    // * `at` - 拟结束日期，按原归属的左闭右开区间解释。
+    //
+    // 返回需要校验目标归属的去重集合；协作归属或未缩短区间时为空。
+    //
+    // 结束窗口非法，或被缩短区间存在无人负责的部分时返回领域错误。
     pub(crate) fn owners_after_end(
         &self,
         assignments: &[Self],
@@ -337,10 +306,8 @@ impl CustomerAssignment {
     /// # 参数
     /// * `customer_id` - 期望的客户角色 ID
     ///
-    /// # 返回
     /// 归属客户匹配时返回 `Ok(())`。
     ///
-    /// # 错误
     /// 归属不属于指定客户时返回错误。
     pub fn ensure_customer(&self, customer_id: &CustomerAccountId) -> Result<()> {
         if &self.customer_id == customer_id {
@@ -349,44 +316,36 @@ impl CustomerAssignment {
         Err(Error::from("归属不属于该客户"))
     }
 
-    /// 校验乐观锁版本。
+    /// 写入前确认客户归属仍是调用方读取的版本，发现并发修改时返回版本冲突。
     ///
     /// # 参数
     /// * `expected` - 客户端期望版本
     ///
-    /// # 返回
     /// 版本一致时返回 `Ok(())`。
     ///
-    /// # 错误
     /// 当前版本与期望版本不一致时返回错误。
     pub fn ensure_version(&self, expected: u64) -> Result<()> {
         super::ensure_entity_version(self.base.version, expected)
     }
 
-    /// 判断归属当前是否有效（按业务日期判定有效期，结束日为开区间）。
+    /// 按业务日期判断归属是否生效，结束日当天已失效；供负责人查询和授权事实复用。
     ///
     /// # 参数
     /// * `as_of` - 业务日期
     ///
-    /// # 返回
     /// `as_of` 不早于 `valid_from`，且早于 `valid_to` 时返回 `true`；`valid_to` 为 `None` 时开始日及之后有效。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn is_active_on(&self, as_of: BusinessDate) -> bool {
         as_of >= self.valid_from && self.valid_to.is_none_or(|valid_to| as_of < valid_to)
     }
 
-    /// 设置结束日期并复用有效期不变式。
-    ///
-    /// # 参数
-    /// * `valid_to` - 生效结束日期
-    ///
-    /// # 返回
-    /// 设置成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 结束日期不晚于开始日期时返回错误。
+    // 设置结束日期并复用有效期不变式。
+    //
+    // # 参数
+    // * `valid_to` - 生效结束日期
+    //
+    // 设置成功返回 `Ok(())`。
+    //
+    // 结束日期不晚于开始日期时返回错误。
     fn set_valid_to(&mut self, valid_to: BusinessDate) -> Result<()> {
         ensure_window_valid(self.valid_from, Some(valid_to))?;
         self.valid_to = Some(valid_to);
@@ -399,10 +358,8 @@ impl CustomerAssignment {
     ///
     /// # 参数
     /// * `assignments` - 已按有效期读取的客户人员关系
-    /// # 返回
+    ///
     /// 返回全部未删除负责销售账号。
-    /// # 错误
-    /// 无。
     pub fn owner_ids(assignments: &[Self]) -> Vec<String> {
         let mut ids = assignments
             .iter()
@@ -420,11 +377,7 @@ impl CustomerAssignment {
     /// * `assignments` - 同一客户的归属行
     /// * `account_names` - 账号显示名
     ///
-    /// # 返回
     /// 返回切片中首个 `Owner` 的账号 ID 与显示名，以及 `Collaborator` 行数。没有 `Owner` 时 ID 为 `None`；ID 不在 `account_names` 中时显示名为 `None`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn owner_summary(
         assignments: &[Self],
         account_names: &HashMap<String, String>,
@@ -442,58 +395,51 @@ impl CustomerAssignment {
     }
 }
 
-/// 规范化销售人员 ID（归属实体与归属命令共用同一文案与长度）。
-///
-/// # 参数
-/// * `value` - 原始输入
-///
-/// # 返回
-/// 返回去空白后的账号 ID。
-///
-/// # 错误
-/// 为空或超长时返回领域逻辑错误。
+// 规范化销售人员 ID（归属实体与归属命令共用同一文案与长度）。
+//
+// # 参数
+// * `value` - 原始输入
+//
+// 返回去空白后的账号 ID。
+//
+// 为空或超长时返回领域逻辑错误。
 pub(crate) fn normalize_user_id(value: String) -> Result<String> {
     normalize_required_text(value, "销售人员不能为空", USER_ID_MAX_LEN, "销售人员标识过长")
 }
 
-/// 规范化归属调整原因（归属实体与归属命令共用同一文案与长度）。
-///
-/// # 参数
-/// * `value` - 原始输入
-///
-/// # 返回
-/// 返回去空白后的原因文本。
-///
-/// # 错误
-/// 为空或超长时返回领域逻辑错误。
+// 规范化归属调整原因（归属实体与归属命令共用同一文案与长度）。
+//
+// # 参数
+// * `value` - 原始输入
+//
+// 返回去空白后的原因文本。
+//
+// 为空或超长时返回领域逻辑错误。
 pub(crate) fn normalize_change_reason(value: String) -> Result<String> {
     normalize_required_text(value, "调整原因不能为空", CHANGE_REASON_MAX_LEN, "调整原因过长")
 }
 
-/// 规范化结束归属的目标归属 ID。
-///
-/// # 参数
-/// * `value` - 原始输入
-///
-/// # 返回
-/// 返回去空白后的归属主键。
-///
-/// # 错误
-/// 为空或超长时返回领域逻辑错误。
+// 规范化结束归属的目标归属 ID。
+//
+// # 参数
+// * `value` - 原始输入
+//
+// 返回去空白后的归属主键。
+//
+// 为空或超长时返回领域逻辑错误。
 pub(crate) fn normalize_assignment_id(value: String) -> Result<String> {
     normalize_required_text(value, "目标归属 ID 不能为空", ASSIGNMENT_ID_MAX_LEN, "目标归属 ID 过长")
 }
 
-/// 判断两个生效区间是否重叠（结束日为开区间）。
-///
-/// # 参数
-/// * `a_from` - 第一个区间开始日
-/// * `a_to` - 第一个区间结束日；`None` 表示无穷远
-/// * `b_from` - 第二个区间开始日
-/// * `b_to` - 第二个区间结束日；`None` 表示无穷远
-///
-/// # 返回
-/// 两个左闭右开区间存在交集时返回 `true`。
+// 用半开有效期判断两条人员关系是否冲突，允许新关系从上一条的结束日生效。
+//
+// # 参数
+// * `a_from` - 第一个区间开始日
+// * `a_to` - 第一个区间结束日；`None` 表示无穷远
+// * `b_from` - 第二个区间开始日
+// * `b_to` - 第二个区间结束日；`None` 表示无穷远
+//
+// 两个左闭右开区间存在交集时返回 `true`。
 fn windows_overlap(
     a_from: BusinessDate,
     a_to: Option<BusinessDate>,
@@ -505,20 +451,18 @@ fn windows_overlap(
     a_covers(b_from) && b_covers(a_from)
 }
 
-/// 校验生效区间：`valid_to` 必须晚于 `valid_from`（erp-customer-002）。
-///
-/// 窗口不变式的权威实现：实体构造、实体结束日期设置与命令层构造均复用本函数；
-/// DTO 只做字段组合分流，不再各自实现同语义校验。
-///
-/// # 参数
-/// * `valid_from` - 生效开始日期
-/// * `valid_to` - 生效结束日期（可空）
-///
-/// # 返回
-/// 区间合法返回 `Ok(())`。
-///
-/// # 错误
-/// 结束日期不晚于开始日期时返回错误。
+// 校验生效区间：`valid_to` 必须晚于 `valid_from`（erp-customer-002）。
+//
+// 窗口不变式的权威实现：实体构造、实体结束日期设置与命令层构造均复用本函数；
+// DTO 只做字段组合分流，不再各自实现同语义校验。
+//
+// # 参数
+// * `valid_from` - 生效开始日期
+// * `valid_to` - 生效结束日期（可空）
+//
+// 区间合法返回 `Ok(())`。
+//
+// 结束日期不晚于开始日期时返回错误。
 pub(crate) fn ensure_window_valid(valid_from: BusinessDate, valid_to: Option<BusinessDate>) -> Result<()> {
     if let Some(valid_to) = valid_to
         && valid_to <= valid_from
@@ -549,7 +493,7 @@ mod tests {
         }
     }
 
-    /// happy path：用户与原因去空白，角色代码稳定。
+    // 验证：用户与原因去空白，角色代码稳定。
     #[test]
     fn new_trims_and_normalizes() {
         let assignment =
@@ -561,7 +505,7 @@ mod tests {
         assert_eq!(AssignmentRole::Collaborator.as_str(), "COLLABORATOR");
     }
 
-    /// 失败路径：用户为空/超长、原因为空/超长、区间倒挂。
+    // 验证：用户为空/超长、原因为空/超长、区间倒挂。
     #[test]
     fn new_rejects_invalid_inputs() {
         let blank_user = CustomerAssignmentData { user_id: "   ".to_string(), ..assignment_data() };
@@ -580,7 +524,7 @@ mod tests {
         assert!(CustomerAssignment::new(CustomerAssignmentId::new("a"), reversed).is_err());
     }
 
-    /// 有效期判定：区间内有效、边界与区间外无效。
+    // 有效期判定：区间内有效、边界与区间外无效。
     #[test]
     fn validity_window_is_active_checked() {
         let assignment =
@@ -595,7 +539,7 @@ mod tests {
         assert!(open_assignment.is_active_on(BusinessDate::from_ymd(2030, 1, 1).unwrap()));
     }
 
-    /// 正常路径：协作归属可以直接结束，人员与角色保持不变。
+    // 验证：协作归属可以直接结束，人员与角色保持不变。
     #[test]
     fn collaborator_can_end_directly() {
         let data =
@@ -611,7 +555,7 @@ mod tests {
         assert_eq!(assignment.assignment_role, AssignmentRole::Collaborator);
     }
 
-    /// 负责销售可以结束单行关系，倒挂结束日期被拒绝。
+    // 负责销售可以结束单行关系，倒挂结束日期被拒绝。
     #[test]
     fn direct_end_allows_owner_and_rejects_reversed_window() {
         let mut owner =
@@ -625,7 +569,7 @@ mod tests {
         assert!(collaborator.end_directly(BusinessDate::from_ymd(2025, 1, 1).unwrap()).is_err());
     }
 
-    /// 不同负责销售可以同时有效；同人同角色仍拒绝重叠。
+    // 不同负责销售可以同时有效；同人同角色仍拒绝重叠。
     #[test]
     fn replacement_conflicts_follow_role_and_user_rules() {
         let mut owner =
@@ -663,7 +607,7 @@ mod tests {
         assert!(!collaborator.conflicts_with(&other_user));
     }
 
-    /// 边界路径：结束日为开区间，相接窗口不冲突；同日起点无法换任。
+    // 验证：结束日为开区间，相接窗口不冲突；同日起点无法换任。
     #[test]
     fn replacement_respects_exclusive_end_and_start_boundary() {
         let mut old = CustomerAssignment::new(CustomerAssignmentId::new("old"), assignment_data()).unwrap();
@@ -684,7 +628,7 @@ mod tests {
         assert!(old.end_for_replacement(&same_start).is_err());
     }
 
-    /// 版本与客户归属校验覆盖成功和失败路径。
+    // 版本与客户归属校验覆盖成功和失败路径。
     #[test]
     fn version_and_customer_identity_are_enforced() {
         let assignment =
@@ -695,7 +639,7 @@ mod tests {
         assert!(assignment.ensure_customer(&CustomerAccountId::new("customer-2")).is_err());
     }
 
-    /// 规范化 helper：去空白成功，空值与超长失败。
+    // 规范化 helper：去空白成功，空值与超长失败。
     #[test]
     fn normalize_helpers_trim_and_reject() {
         assert_eq!(super::normalize_user_id(" sales-1 ".to_string()).unwrap(), "sales-1");
@@ -707,7 +651,7 @@ mod tests {
         assert!(super::normalize_user_id("u".repeat(129)).is_err());
     }
 
-    /// 负责人汇总：解析主负责人显示名并统计协作人数。
+    // 负责人汇总：解析主负责人显示名并统计协作人数。
     #[test]
     fn owner_summary_resolves_names_and_counts() {
         let owner = CustomerAssignment::new(CustomerAssignmentId::new("o"), assignment_data()).unwrap();

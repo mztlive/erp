@@ -28,12 +28,11 @@ pub struct ApprovalRelatedSalesSnapshot {
 
 impl ApprovalRelatedSalesSnapshot {
     /// 校验准确销售身份和单层摘要边界。
-    /// # 参数
-    /// 无；读取当前冻结字段。
-    /// # 返回
     /// 身份、版本和摘要有效时成功。
-    /// # 错误
+    ///
     /// 缺失或越界身份、零版本及无界摘要时拒绝。
+    ///
+    /// 读取当前冻结字段。
     pub fn validate(&self) -> Result<()> {
         if self.document_no.trim().is_empty()
             || self.revision_id.trim().is_empty()
@@ -48,15 +47,7 @@ impl ApprovalRelatedSalesSnapshot {
 }
 impl ApprovalDisplaySnapshot {
     /// 以必填根单据构造展示快照；展示维度默认为空。
-    ///
-    /// # 参数
-    /// * `root_document_id` - 根单据 ID
-    ///
-    /// # 返回
     /// 返回空展示来源的快照。
-    ///
-    /// # 错误
-    /// 无。
     pub fn new(root_document_id: String) -> Self {
         Self {
             root_document_id,
@@ -81,25 +72,18 @@ pub struct ApprovalBriefSource {
 }
 
 impl ApprovalBriefSource {
-    /// 判断提交人展示是否缺失或仍为该提交人的内部身份。
-    /// # 参数
-    /// * `submitter_id` - 当前快照载荷保存的提交人身份。
-    /// # 返回
+    /// 当提交人展示缺失或仍为该提交人的内部身份时返回 `true`。
     /// 缺少姓名或错误保存为身份时返回 true。
-    /// # 错误
-    /// 不返回错误。
+    ///
+    /// `submitter_id`：当前快照载荷保存的提交人身份。
     pub fn needs_submitter_name(&self, submitter_id: &str) -> bool {
         self.submitter_name.as_deref().is_none_or(|name| name.trim().is_empty() || name == submitter_id)
     }
 
     /// 补齐可读姓名；已有冻结姓名保持原值，无法解析时不展示内部身份。
-    /// # 参数
-    /// * `submitter_id` - 快照保存的提交人身份。
-    /// * `name` - 授权后读取到的姓名。
-    /// # 返回
     /// 就地补齐姓名或清除无法解析的身份值。
-    /// # 错误
-    /// 不返回错误。
+    ///
+    /// `submitter_id`：快照保存的提交人身份；`name`：授权后读取到的姓名。
     pub fn resolve_submitter_name(&mut self, submitter_id: &str, name: Option<&str>) {
         if self.needs_submitter_name(submitter_id) {
             self.submitter_name = name
@@ -128,16 +112,7 @@ pub struct ApprovalBriefSection {
 }
 impl ApprovalBriefSection {
     /// 以必填键值构造展示节；关联默认为空。
-    ///
-    /// # 参数
-    /// * `label` - 业务键
-    /// * `value` - 业务值
-    ///
-    /// # 返回
     /// 返回非数值型的展示节。
-    ///
-    /// # 错误
-    /// 无。
     pub fn new(label: String, value: String) -> Self {
         Self { label, value, numeric: false, object_id: None }
     }
@@ -146,13 +121,6 @@ impl ApprovalBriefSection {
 impl ApprovalDisplaySnapshot {
     /// 校验快照边界，防止把无限明细或任意大文本写进审批事实。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 合法展示返回成功。
-    ///
-    /// # 错误
     /// 根单据 ID 为空、关联销售超过 100 个或其身份无效、附加字段超过 128 个、明细超过 100 行，或单项文本超过 8192 字符时返回错误。
     pub fn validate(&self) -> Result<()> {
         if self.source_sales.len() > 100 {
@@ -244,7 +212,7 @@ mod tests {
         assert!(!section.numeric && section.object_id.is_none());
     }
 
-    /// 有界快照持久化后按原值还原；拒绝无界文本、字段和空关联。
+    // 验证：有界快照持久化后按原值还原；拒绝无界文本、字段和空关联。
     #[test]
     fn display_snapshot_roundtrip_and_bounds() {
         let mut display = ApprovalDisplaySnapshot {

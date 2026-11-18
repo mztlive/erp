@@ -50,20 +50,7 @@ pub struct SupplierSettlementProcess<A: WorkflowAuthorizationPort> {
     work_items: WorkItemService<A>,
 }
 impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
-    /// 绑定原数据库、已装配的结算范围及必需授权源。
-    ///
-    /// # 参数
-    /// * `db` - MongoDB 数据库。
-    /// * `data_scope` - 已接入身份域的结算范围。
-    /// * `rbac` - 应用共享的权威授权源。
-    /// * `work_items` - 应用注入且复用同一授权源的工作项服务。
-    /// * `authorization` - 应用共享的完整授权服务。
-    ///
-    /// # 返回
-    /// 返回依赖完整的结算流程。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 绑定数据库、结算数据范围、共享授权和工作项服务，供应用使用同一权限来源编排供应商结算及财务复核。
     pub fn new(
         db: Database,
         data_scope: SettlementAccess,

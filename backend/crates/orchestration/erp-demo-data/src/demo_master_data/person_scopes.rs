@@ -13,13 +13,7 @@ use super::spec::DemoPersonScope;
 use crate::Result;
 
 impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
-    /// 对明确演示人员补齐尚未配置的操作，保留已有配置。
-    /// # 参数
-    /// 操作人及演示账号登录名到身份映射。
-    /// # 返回
-    /// 全部人员初次配置完成。
-    /// # 错误
-    /// 资格、范围或版本失败立即停止，不隐藏错误。
+    // 只为明确的演示岗位追加未配置的准入动作，保留人工授权、撤权和旧表达式。岗位、范围校验或版本写入失败时立即停止。
     pub(super) async fn ensure_person_scopes(
         &self,
         actor: &AuditActor,

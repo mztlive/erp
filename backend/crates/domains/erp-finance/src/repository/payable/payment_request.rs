@@ -17,14 +17,8 @@ use crate::entity::payable::PurchasePaymentRequest;
 pub trait PurchasePaymentRequestExt {
     const PURCHASE_PAYMENT_REQUESTS: &'static str = "purchase_payment_requests";
 
-    /// 获取申请的标准 CAS 仓储。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
+    /// 为申请的标准 CAS 读写提供绑定当前数据库的仓储，由调用方控制执行器。
     /// 返回本域申请集合仓储。
-    /// # 错误
-    /// 不返回错误。
     fn purchase_payment_requests(&self) -> Repository<'_, PurchasePaymentRequest>;
 }
 
@@ -37,15 +31,13 @@ impl PurchasePaymentRequestExt for Database {
 #[allow(async_fn_in_trait)]
 pub trait PurchasePaymentRequestRepositoryExt {
     /// 数据库先执行完整授权，再装载有界候选供组合层排序和分页。
+    /// 结果：稳定倒序最多返回 10001 个候选，额外一行供调用方拒绝超限。
+    /// 传播数据库查询或反序列化失败。
     ///
-    /// # 参数
-    /// * `query` - 来源、状态和关键词筛选。
-    /// * `access` - 同次查询的付款申请完整对象授权凭证。
-    /// * `executor` - 当前事务执行器。
-    /// # 返回
-    /// 稳定倒序最多返回 10001 个候选，额外一行供调用方拒绝超限。
-    /// # 错误
-    /// 仓储查询或反序列化失败时返回错误。
+    /// 输入约定：
+    /// - `query`：来源、状态和关键词筛选。
+    /// - `access`：同次查询的付款申请完整对象授权凭证。
+    /// - `executor`：当前事务执行器。
     async fn scope_candidates(
         &self,
         query: &PurchasePaymentRequestQuery,
@@ -54,12 +46,10 @@ pub trait PurchasePaymentRequestRepositoryExt {
     ) -> crate::Result<Vec<PurchasePaymentRequest>>;
 
     /// 在已授权采购上下文中读取该应付关联的有界申请候选。
-    /// # 参数
-    /// account_id 为上游已验证属于授权采购的应付账户，executor 为同一事务。
-    /// # 返回
-    /// 最多10001条关联申请；调用方只投影该采购的份额，禁止交付其他来源。
-    /// # 错误
-    /// 数据库读取或反序列化失败时返回错误。
+    /// 结果：最多10001条关联申请；调用方只投影该采购的份额，禁止交付其他来源。
+    /// 传播数据库读取或反序列化失败。
+    ///
+    /// 输入约定：account_id 为上游已验证属于授权采购的应付账户，executor 为同一事务。
     async fn linked_for_account(
         &self,
         account_id: &str,
@@ -67,14 +57,11 @@ pub trait PurchasePaymentRequestRepositoryExt {
     ) -> Result<Vec<PurchasePaymentRequest>>;
 
     /// 查找唯一执行任务对应的申请。
-    ///
-    /// # 参数
-    /// * `task_id` - 当前或历史执行任务身份。
-    /// * `executor` - 当前执行器。
-    /// # 返回
     /// 返回关联申请；没有关联时为空。
-    /// # 错误
-    /// 仓储读取失败时返回错误。
+    /// 传播数据库读取失败。
+    ///
+    /// 输入约定：
+    /// - `task_id`：当前或历史执行任务身份。
     async fn find_for_task(
         &self,
         task_id: &str,
@@ -82,14 +69,11 @@ pub trait PurchasePaymentRequestRepositoryExt {
     ) -> Result<Option<PurchasePaymentRequest>>;
 
     /// 按当前筛选返回列表和总数，仅供已完成权限范围收敛的单域读取。
-    ///
-    /// # 参数
-    /// * `query` - 筛选与分页条件。
-    /// * `executor` - 当前执行器。
-    /// # 返回
     /// 返回稳定倒序、分页上限为 100 的列表。
-    /// # 错误
     /// 查询、计数或总数转换失败时返回错误。
+    ///
+    /// 输入约定：
+    /// - `query`：筛选与分页条件。
     async fn page(
         &self,
         query: &PurchasePaymentRequestQuery,
@@ -97,14 +81,12 @@ pub trait PurchasePaymentRequestRepositoryExt {
     ) -> Result<PageResult<PurchasePaymentRequest>>;
 
     /// 读取占用指定应付的全部进行中申请。
-    ///
-    /// # 参数
-    /// * `account_id` - 应付子账身份。
-    /// * `executor` - 当前来源额度事务执行器。
-    /// # 返回
     /// 返回审批中、待付款或部分付款的申请。
-    /// # 错误
     /// 读取失败时返回错误。
+    ///
+    /// 输入约定：
+    /// - `account_id`：应付子账身份。
+    /// - `executor`：当前来源额度事务执行器。
     async fn reserved_for_account(
         &self,
         account_id: &str,

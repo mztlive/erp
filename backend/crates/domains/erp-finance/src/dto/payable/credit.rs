@@ -18,11 +18,7 @@ pub struct UseSupplierCreditRequest {
 
 impl UseSupplierCreditRequest {
     /// 验证身份、金额及版本的输入边界。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 完整且金额为正时成功。
-    /// # 错误
+    /// 结果：完整且金额为正时成功。
     /// 空身份、非法版本和非正金额时拒绝。
     pub fn validate(&self) -> Result<()> {
         if [&self.credit_id, &self.payable_account_id, &self.payable_entry_id, &self.idempotency_key]

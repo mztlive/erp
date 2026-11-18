@@ -10,13 +10,12 @@ use crate::{Error, Result};
 
 const REVISIONS: &str = "resource_grant_revisions";
 
-/// 读取单个账号资源的修订号；不存在的记录使用初始版本零。
-/// # 参数
-/// user、resource 为可信授权身份；executor 为调用事务。
-/// # 返回
-/// 非负修订号，通过 MongoDB 内建 _id 唯一索引读取。
-/// # 错误
-/// 数据库失败或版本损坏时拒绝。
+// 读取单个账号资源的修订号；不存在的记录使用初始版本零。
+// 非负修订号，通过 MongoDB 内建 _id 唯一索引读取。
+//
+// 数据库失败或版本损坏时拒绝。
+//
+// user、resource 为可信授权身份；executor 为调用事务。
 pub(crate) async fn revision(
     db: &Database,
     user: &str,
@@ -34,13 +33,12 @@ pub(crate) async fn revision(
     .map(|value| value.unwrap_or(0))
 }
 
-/// 为发生变化的资源递增版本；必须与来源及授权行共享事务。
-/// # 参数
-/// user 为接收人；resources 为修改前后目标资源的并集；executor 为发布事务。
-/// # 返回
-/// 全部受影响资源的版本已递增。
-/// # 错误
-/// 没有事务、唯一键冲突或持久化失败时拒绝并回滚整个发布。
+// 为发生变化的资源递增版本；必须与来源及授权行共享事务。
+// 全部受影响资源的版本已递增。
+//
+// 没有事务、唯一键冲突或持久化失败时拒绝并回滚整个发布。
+//
+// user 为接收人；resources 为修改前后目标资源的并集；executor 为发布事务。
 pub(crate) async fn advance(
     db: &Database,
     user: &str,
@@ -59,7 +57,7 @@ pub(crate) async fn advance(
     Ok(())
 }
 
-/// 结构化主键避免账号与资源代码的拼接碰撞。
+// 用结构化键绑定账号及资源的授权修订，避免简单拼接产生重叠身份。
 fn revision_id(user: &str, resource: ResourceKind) -> Result<String> {
     Ok(serde_json::to_string(&(user, resource))?)
 }

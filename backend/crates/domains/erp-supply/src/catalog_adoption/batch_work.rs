@@ -54,22 +54,13 @@ pub struct BatchWorkRequest {
 
 impl BatchWork {
     /// 判断是否阻止其他草稿修改和入库确认。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 正在处理及失败待恢复时为真。
-    /// # 错误
-    /// 不返回错误。
     pub fn blocking(&self) -> bool {
         self.status != BatchWorkStatus::Completed
     }
 
     /// 记录一块已经与草稿原子提交的扫描位置。
-    /// # 参数
-    /// `count` 为处理数量，`after` 为本块末行身份。
-    /// # 返回
     /// 推进进度；行处理包括明确跳过的不可编辑项。
-    /// # 错误
     /// 非运行态、重复游标或进度超过总数时拒绝。
     pub fn advance(&mut self, count: usize, after: String) -> Result<()> {
         let completed = self.completed.checked_add(count).filter(|value| *value <= self.total);
@@ -83,11 +74,7 @@ impl BatchWork {
     }
 
     /// 将已保存草稿交给核对阶段，保留同一任务身份与预览代次。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 清零核对阶段游标，已保存内容不重新应用。
-    /// # 错误
     /// 保存未完成或阶段不符时拒绝。
     pub fn start_review(&mut self) -> Result<()> {
         if self.status != BatchWorkStatus::Running
@@ -103,11 +90,7 @@ impl BatchWork {
     }
 
     /// 重试原失败任务，不重放已完成行。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 恢复运行，保留阶段、游标与原预览代次。
-    /// # 错误
     /// 已完成的任务不能重试。
     pub fn retry(&mut self) -> Result<()> {
         if self.status == BatchWorkStatus::Completed {

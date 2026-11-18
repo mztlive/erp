@@ -16,13 +16,12 @@ use crate::Result;
 
 pub(super) type SubjectKey = (String, String, String);
 impl WorkbenchReadService {
-    /// 批量读取精确提交版本的全部商品与 SKU 编号。
-    /// # 参数
-    /// `keys` 为已授权单据类型、身份及提交号；`executor` 沿用调用方快照。
-    /// # 返回
-    /// 返回按提交归属的检索文档，缺失版本不回退。
-    /// # 错误
-    /// 仓储读取失败时返回错误。
+    // 处理审批业务检索时，批量读取精确提交版本的全部商品与 SKU 编号。
+    //
+    // 调用参数：
+    // `keys` 为已授权单据类型、身份及提交号；`executor` 沿用调用方快照。
+    //
+    // 返回按提交归属的检索文档，缺失版本不回退。
     pub(in crate::workbench) async fn submission_search(
         &self,
         keys: &[SubjectKey],

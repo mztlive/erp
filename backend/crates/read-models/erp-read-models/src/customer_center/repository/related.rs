@@ -49,43 +49,19 @@ pub struct CustomerCenterRepository<'a> {
 }
 
 impl<'a> CustomerCenterRepository<'a> {
-    /// Bind the repository to a database.
-    ///
-    /// # 参数
-    /// * `db` - MongoDB 数据库
-    ///
-    /// # 返回
-    /// 返回客户中心只读仓储。
-    ///
-    /// # 错误
-    /// 无。
+    /// 绑定客户中心的只读仓储，供详情查询统计可见合同和销售单、读取近期单据。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
 
-    /// 客户账号集合。
-    ///
-    /// # 返回
-    /// 返回客户账号 Mongo 集合。
-    ///
-    /// # 错误
-    /// 无。
+    // 从客户账户发起聚合，以便区分客户不存在和已有客户没有可见关联单据。
     fn collection(&self) -> mongodb::Collection<erp_customer::CustomerAccount> {
         self.db.collection(<Database as erp_customer::CustomerExt>::CUSTOMER_ACCOUNTS)
     }
 
-    /// 查询指定客户的关联业务跨页指标与最近摘要。
+    /// 为客户中心汇总有效合同、进行中销售单及各自近期摘要。合同和销售分别使用传入的授权条件；某类权限缺失时，该类无可见结果。
     ///
-    /// # 参数
-    /// * `customer_id` - 已由 Handler 校验数据范围的客户 ID
-    /// * `recent_limit` - 每类最近摘要上限
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 客户存在时返回单行读模型；客户不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// 摘要上限溢出、MongoDB 聚合或反序列化失败时返回错误。
+    /// `recent_limit` 限制每类摘要条数，汇总计数仍覆盖整个授权范围。客户不存在时返回 `None`；上限为零、聚合或解码失败时返回错误。
     pub async fn customer_center_related(
         &self,
         customer_id: &str,
@@ -151,7 +127,7 @@ fn related_pipeline(
     ]
 }
 
-/// 最近业务及数量在同一资源范围内计算，分页不得影响总数。
+// 组装客户合同及销售摘要的聚合管道时，最近业务及数量在同一资源范围内计算，分页不得影响总数。
 fn related_lookup(
     collection: &str,
     output: &str,

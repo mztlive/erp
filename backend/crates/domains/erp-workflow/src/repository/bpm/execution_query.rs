@@ -12,19 +12,13 @@ use super::{
 
 impl<'a> BpmWorkflowRepository<'a> {
     /// 按主键读取审批节点执行。
+    /// 本方法不推断当前执行，调用方需要当前令牌时应使用 `find_current_execution`。
     ///
-    /// # 参数
-    /// * `execution_id` - 审批节点执行 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回匹配且未软删除的节点执行；不存在时返回 `None`。
     ///
-    /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
     ///
-    /// # 关键业务约束
-    /// 本方法不推断当前执行，调用方需要当前令牌时应使用 `find_current_execution`。
+    /// `execution_id`：审批节点执行 ID；`executor`：数据访问执行器，由 Service 决定是否位于事务中。
     pub async fn find_execution_by_id(
         &self,
         execution_id: &ApprovalNodeExecutionId,
@@ -34,19 +28,13 @@ impl<'a> BpmWorkflowRepository<'a> {
     }
 
     /// 按主键批量读取审批节点执行。
+    /// 本方法只批量解析工作项已经持有的运行身份，不按审批人扩大查询范围。
     ///
-    /// # 参数
-    /// * `execution_ids` - 已授权工作项引用的审批节点执行 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回匹配且未软删除的节点执行；不存在的 ID 不产生占位记录。
     ///
-    /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
     ///
-    /// # 关键业务约束
-    /// 本方法只批量解析工作项已经持有的运行身份，不按审批人扩大查询范围。
+    /// `execution_ids`：已授权工作项引用的审批节点执行 ID；`executor`：数据访问执行器，由 Service 决定是否位于事务中。
     pub async fn list_executions_by_ids(
         &self,
         execution_ids: &[ApprovalNodeExecutionId],
@@ -60,20 +48,13 @@ impl<'a> BpmWorkflowRepository<'a> {
     }
 
     /// 查询实例指定节点的当前审批人绑定。
+    /// `(process_instance_id, node_key)` 由唯一索引保证单值语义。
     ///
-    /// # 参数
-    /// * `instance_id` - 审批流程实例 ID
-    /// * `node_key` - 定义内节点键
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回匹配且未软删除的实例审批人绑定；不存在时返回 `None`。
     ///
-    /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
     ///
-    /// # 关键业务约束
-    /// `(process_instance_id, node_key)` 由唯一索引保证单值语义。
+    /// `instance_id`：审批流程实例 ID；`executor`：数据访问执行器，由 Service 决定是否位于事务中。
     pub async fn find_assignee_for_node(
         &self,
         instance_id: &ApprovalProcessInstanceId,
@@ -93,16 +74,11 @@ impl<'a> BpmWorkflowRepository<'a> {
     }
 
     /// 查询实例当前 `ACTIVE|BLOCKED` 执行。
-    ///
-    /// # 参数
-    /// * `instance_id` - 审批流程实例 ID。
-    /// * `executor` - 数据访问执行器。
-    ///
-    /// # 返回
     /// 返回当前活动或受阻执行；没有时返回 `None`。
     ///
-    /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// `instance_id`：审批流程实例 ID。
     pub async fn find_current_execution(
         &self,
         instance_id: &ApprovalProcessInstanceId,
@@ -112,14 +88,11 @@ impl<'a> BpmWorkflowRepository<'a> {
     }
 
     /// 读取实例最后一次真实驳回，不受详情首屏历史的页大小影响。
-    ///
-    /// # 参数
-    /// * `instance_id` - 已授权单据对应的审批实例
-    /// * `executor` - 原单据读取执行器
-    /// # 返回
     /// 返回执行序号最大的驳回执行，没有驳回时为空。
-    /// # 错误
+    ///
     /// 仓储读取或反序列化失败时返回错误。
+    ///
+    /// `instance_id`：已授权单据对应的审批实例；`executor`：原单据读取执行器。
     pub async fn find_latest_rejected_execution(
         &self,
         instance_id: &ApprovalProcessInstanceId,
@@ -136,18 +109,12 @@ impl<'a> BpmWorkflowRepository<'a> {
     }
 
     /// 按执行序号稳定游标读取实例历史，单次不超过上限。
-    ///
-    /// # 参数
-    /// * `instance_id` - 审批流程实例 ID。
-    /// * `after_execution_no` - 上一页最后一条执行序号；首页为 `None`。
-    /// * `limit` - 请求条数；夹紧到 `[1, MAX_EXECUTION_HISTORY]`。
-    /// * `executor` - 数据访问执行器。
-    ///
-    /// # 返回
     /// 按 `execution_no` 升序返回本页历史执行。
     ///
-    /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// `instance_id`：审批流程实例 ID；`after_execution_no`：上一页最后一条执行序号；首页为 `None`。
+    /// `limit`：请求条数；夹紧到 `[1, MAX_EXECUTION_HISTORY]`。
     pub async fn list_execution_history(
         &self,
         instance_id: &ApprovalProcessInstanceId,
@@ -166,19 +133,12 @@ impl<'a> BpmWorkflowRepository<'a> {
     }
 
     /// 按指定方向读取历史；为最多 100 条的 HTTP 分页保留一条额外记录。
-    ///
-    /// # 参数
-    /// * `instance_id` - 审批流程实例 ID。
-    /// * `cursor` - 上一页最后执行序号；首页为空。
-    /// * `limit` - 本次读取条数，夹紧至 `[1, 101]`。
-    /// * `order` - 执行序号排序方向，同时决定游标比较方向。
-    /// * `executor` - 数据访问执行器。
-    ///
-    /// # 返回
     /// 返回含当前未完成执行的有界历史列表，使用已有实例与执行序号索引。
     ///
-    /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// `instance_id`：审批流程实例 ID；`cursor`：上一页最后执行序号；首页为空。
+    /// `limit`：本次读取条数，夹紧至 `[1, 101]`；`order`：执行序号排序方向，同时决定游标比较方向。
     pub async fn list_execution_history_ordered(
         &self,
         instance_id: &ApprovalProcessInstanceId,
@@ -198,18 +158,10 @@ impl<'a> BpmWorkflowRepository<'a> {
     }
 }
 
-/// 构造实例执行历史的稳定游标过滤条件。
-///
-/// # 参数
-/// * `instance_id` - 所属流程实例
-/// * `after_execution_no` - 上一页最后一条执行序号；首页为空
-/// * `order` - 排序方向，升序使用 `$gt`，降序使用 `$lt`。
-///
-/// # 返回
-/// 返回含软删除约束、实例主键与指定方向游标的查询文档。
-///
-/// # 错误
-/// 不返回错误。
+// 构造实例执行历史的稳定游标过滤条件。
+// 返回含软删除约束、实例主键与指定方向游标的查询文档。
+//
+// `after_execution_no`：上一页最后一条执行序号；首页为空；`order`：排序方向，升序使用 `$gt`，降序使用 `$lt`。
 pub(super) fn execution_history_filter(
     instance_id: &ApprovalProcessInstanceId,
     after_execution_no: Option<u32>,
@@ -229,16 +181,8 @@ pub(super) fn execution_history_filter(
     filter
 }
 
-/// 构造与历史游标方向一致的排序。
-///
-/// # 参数
-/// * `order` - 执行序号读取方向。
-///
-/// # 返回
-/// 返回现有唯一执行序号索引支持的稳定排序。
-///
-/// # 错误
-/// 不返回错误。
+// 构造与历史游标方向一致的排序。
+// 返回现有唯一执行序号索引支持的稳定排序。
 pub(super) fn execution_history_sort(order: ExecutionHistoryOrder) -> Document {
     let direction = match order {
         ExecutionHistoryOrder::Asc => 1,
@@ -247,44 +191,24 @@ pub(super) fn execution_history_sort(order: ExecutionHistoryOrder) -> Document {
     doc! { "execution_no": direction }
 }
 
-/// 限制分页读取上限，并为最多 100 条记录保留一条后续页判断记录。
-///
-/// # 参数
-/// * `limit` - 包含后续页判断记录的请求条数。
-///
-/// # 返回
-/// 返回 `[1, 101]` 内的 MongoDB 读取上限。
-///
-/// # 错误
-/// 不返回错误。
+// 限制分页读取上限，并为最多 100 条记录保留一条后续页判断记录。
+// 返回 `[1, 101]` 内的 MongoDB 读取上限。
+//
+// `limit`：包含后续页判断记录的请求条数。
 pub(super) fn execution_history_page_limit(limit: u32) -> i64 {
     clamp_limit(limit, 101)
 }
 
-/// 将执行历史请求页大小夹紧到 `[1, MAX_EXECUTION_HISTORY]`。
-///
-/// # 参数
-/// * `limit` - 调用方请求条数
-///
-/// # 返回
-/// 返回可交给 MongoDB `limit` 的有界整数。
-///
-/// # 错误
-/// 不返回错误。
+// 将执行历史请求页大小夹紧到 `[1, MAX_EXECUTION_HISTORY]`。
+// 返回可交给 MongoDB `limit` 的有界整数。
 pub(super) fn execution_history_limit(limit: u32) -> i64 {
     clamp_limit(limit, MAX_EXECUTION_HISTORY)
 }
 
-/// 构造当前 `ACTIVE|BLOCKED` 执行过滤；软删除由 `find_one` 追加。
-///
-/// # 参数
-/// * `instance_id` - 审批流程实例 ID。
-///
-/// # 返回
-/// 返回含实例主键与当前状态集合的查询文档。
-///
-/// # 错误
-/// 不返回错误。
+// 构造当前 `ACTIVE|BLOCKED` 执行过滤；软删除由 `find_one` 追加。
+// 返回含实例主键与当前状态集合的查询文档。
+//
+// `instance_id`：审批流程实例 ID。
 pub(super) fn current_execution_filter(instance_id: &ApprovalProcessInstanceId) -> Document {
     doc! {
         "process_instance_id": instance_id.as_ref(),

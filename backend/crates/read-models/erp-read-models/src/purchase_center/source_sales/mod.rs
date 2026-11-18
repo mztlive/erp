@@ -25,19 +25,15 @@ use crate::sales_center::materials::revision_materials;
 use crate::sales_center::prices::revision_line_prices;
 use crate::{Error, Result};
 
-/// 沿采购行精确销售版本引用加载销售正文、价格和允许材料，不读取当前销售内容。
-///
-/// # 参数
-/// * `db` - 目标数据库。
-/// * `order` - 采购单。
-/// * `purchase_lines` - 已投影的采购行。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
-/// 返回精确销售版本上的正文、成交价和允许材料；材料目录不可读时 `materials_unavailable` 为真且材料为空。
-///
-/// # 错误
-/// 销售版本关系不一致、来源销售单或版本不存在、版本不属于来源销售单，或销售行与账号读取失败时返回对应错误。
+// 沿采购行精确销售版本引用加载销售正文、价格和允许材料，不取得当前销售内容。
+//
+// 调用参数：
+// * `order` - 采购单。
+// * `purchase_lines` - 已投影的采购行。
+//
+// 返回精确销售版本上的正文、成交价和允许材料；材料目录不可读时 `materials_unavailable` 为真且材料为空。
+//
+// 销售版本关系不一致、来源销售单或版本不存在、版本不属于来源销售单，或销售行与账号读取失败时返回对应错误。
 pub(crate) async fn source_sales(
     db: &Database,
     order: &PurchaseOrder,
@@ -77,7 +73,7 @@ pub(crate) async fn source_sales(
     Ok(view)
 }
 
-/// 文件治理异常仅关闭材料目录，不抹去已经精确证明的销售正文和成交价。
+// 处理采购关联销售来源时，文件治理异常仅关闭材料目录，不抹去已经精确证明的销售正文和成交价。
 async fn source_materials(
     db: &Database,
     revision: &SalesOrderRevision,
@@ -96,7 +92,7 @@ async fn source_materials(
     }
 }
 
-/// 显示内容引用优先于建单版本；采购生效时行引用可能重绑为当时的销售版本。
+// 处理采购关联销售来源的版本事实时，显示内容引用优先于建单版本；采购生效时行引用可能重绑为当时的销售版本。
 async fn source_revision(
     db: &Database,
     order: &PurchaseOrder,
@@ -125,7 +121,7 @@ async fn source_revision(
     Ok(revision)
 }
 
-/// 批量读取同一销售版本实物服务子行，成交价格仅取该不可变销售子行。
+// 处理采购关联销售来源时，批量读取同一销售版本实物服务子行，成交价格仅取该不可变销售子行。
 async fn sales_lines(
     db: &Database,
     revision: &SalesOrderRevision,

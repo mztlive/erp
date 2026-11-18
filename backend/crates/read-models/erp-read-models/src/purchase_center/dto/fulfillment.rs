@@ -38,12 +38,15 @@ pub struct PurchaseFulfillmentQuantityView {
 }
 
 impl PurchaseApiExecutionView {
-    /// 从当前采购的关联事实生成摘要，尚未初始化的排队任务不要求履约单存在。
+    /// 生成采购履约覆盖视图时，从当前采购的关联事实生成摘要，尚未初始化的排队任务不要求履约单存在。
+    ///
     /// # 参数
     /// `execution`、`connection`、`root` 为服务端反查的执行、连接和可选履约单。
     /// `purchase`、`current` 为已经授权的采购单及当前修订明细。
+    ///
     /// # 返回
     /// 返回归属已核验的执行摘要；排队任务不提供尚未生成的详情入口。
+    ///
     /// # 错误
     /// 来源不属当前采购、连接或修订时拒绝；非原始排队任务缺履约单时拒绝。
     pub fn from_purchase_execution(
@@ -82,13 +85,14 @@ impl PurchaseApiExecutionView {
         }
     }
 
-    /// 从已核验采购归属的执行及履约单生成安全摘要。
-    /// # 参数
-    /// `execution` 为当前采购版本执行；`order_no` 为反查得到的原履约业务单号。
-    /// # 返回
-    /// 仅阶段、子单确认数量及不包含原始金额或个人资料的异常提示。
-    /// # 错误
-    /// 不返回错误；调用前由 `from_purchase_execution` 统一核验归属。
+    // 生成采购履约覆盖视图时，从已核验采购归属的执行及履约单生成安全摘要。
+    //
+    // 调用参数：
+    // `execution` 为当前采购版本执行；`order_no` 为反查得到的原履约业务单号。
+    //
+    // 仅阶段、子单确认数量及不包含原始金额或个人资料的异常提示。
+    //
+    // 调用前由 `from_purchase_execution` 统一核验归属。
     fn from_execution(execution: &ApiOrderExecution, order_no: &str) -> Self {
         let leaves = execution.order_tree.as_ref().map(|tree| tree.leaves()).unwrap_or_default();
         let confirmed = leaves
@@ -145,12 +149,15 @@ impl PurchaseApiExecutionView {
 }
 
 impl PurchaseFulfillmentQuantityView {
-    /// 由冻结采购行及已经应用的ERP数量生成逐行展示，不读取供应商状态。
+    /// 由冻结采购行及已经应用的ERP数量生成逐行展示，不取得供应商状态。
+    ///
     /// # 参数
     /// `line` 为当前版本行；`inbound`、`shipped` 仅来自适用的完整ERP事实查询。
     /// `ambiguous` 表示多个当前行共用稳定归集身份，不能安全重复分配历史数量。
+    ///
     /// # 返回
     /// 适用轨道和剩余数量；缺少依据、归集冲突或超量时保留空值及核对提示。
+    ///
     /// # 错误
     /// 负数量、十进制溢出或不适用轨道混入数量时返回错误。
     pub fn from_applied_facts(

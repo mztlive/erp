@@ -39,41 +39,14 @@ pub struct ApprovalProcessDefinition {
 }
 
 impl ApprovalProcessDefinition {
-    /// 规范化流程定义名称。
-    ///
-    /// # 参数
-    /// * `name` - 调用方提供的定义名称
-    ///
-    /// # 返回
-    /// 返回去除首尾空白后的有效名称。
-    ///
-    /// # 错误
-    /// 名称为空或超过模型长度上限时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 幂等摘要与实体构造必须复用同一规范化结果，避免空白差异形成双份规则源。
+    /// 新建或重命名草稿前裁剪定义名，使命令摘要和实体存储使用相同名称；空白或超过 UTF-8 字节上限时返回错误。
     pub fn normalize_name(name: impl Into<String>) -> ModelResult<String> {
         normalize_required(name, "定义名称不能为空", NAME_MAX_LEN, "定义名称过长")
     }
 
-    /// 创建草稿定义。
-    ///
-    /// 调用方必须提供主键、时间与处理人；本方法不读取系统时钟。
-    ///
-    /// # 参数
-    /// * `id` - 定义主键
-    /// * `process_kind` - 流程种类
-    /// * `definition_version` - 业务版本，必须从 1 开始
-    /// * `name` - 管理名称
-    /// * `entry_node_key` - 入口节点键
-    /// * `created_by` - 创建人
-    /// * `at` - 创建时间
-    ///
-    /// # 返回
-    /// 返回状态为草稿、名称与入口键已规范化的定义。
-    ///
-    /// # 错误
-    /// 版本为零、名称为空或超长、入口键非法，或调用方时间无法持久化时返回错误。
+    /// 新建流程版本时生成可编辑的定义实体，保存调用方指定的种类、业务版本、入口键、创建人和时间。
+    /// 业务版本从 1 起；名称和入口键必须是有效文本，入口是否实际命中节点由构图阶段检查。
+    /// 初始没有发布或退役审计记录，不在这里生成 ID 或读取时钟。
     pub fn new_draft(
         id: ApprovalProcessDefinitionId,
         process_kind: ProcessKind,
@@ -107,33 +80,12 @@ impl ApprovalProcessDefinition {
         })
     }
 
-    /// 返回草稿并发修改使用的乐观锁版本。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `base.version`，不与 `definition_version` 混用。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 提交草稿编辑或状态流转时读取用于 CAS 的乐观锁版本；它不是审批实例冻结的定义业务版本。
     pub fn definition_lock_version(&self) -> u64 {
         self.base.version
     }
 
-    /// 校验定义乐观锁版本与调用方预期一致。
-    ///
-    /// # 参数
-    /// * `expected` - 调用方持有的定义锁版本
-    ///
-    /// # 返回
-    /// 当前锁版本一致时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 锁版本不一致时返回状态错误。
-    ///
-    /// # 关键业务约束
-    /// `definition_version` 是业务版本，不得用于替代持久化乐观锁版本。
+    /// 接受带预期版本的定义命令前识别已过期输入；版本不符返回状态错误，实际写入仍需调用方做 CAS。
     pub fn ensure_lock_version(&self, expected: u64) -> ModelResult<()> {
         if self.definition_lock_version() == expected {
             return Ok(());
@@ -141,32 +93,12 @@ impl ApprovalProcessDefinition {
         Err(ModelError::InvalidStatus("定义锁版本已过期"))
     }
 
-    /// 由历史最高业务版本计算下一定义版本。
-    ///
-    /// # 参数
-    /// * `current_max` - 同流程种类历史最高业务版本；无历史时传入 `0`
-    ///
-    /// # 返回
-    /// 返回单调递增的下一业务版本。
-    ///
-    /// # 错误
-    /// `u32` 溢出时返回模型计数错误。
-    ///
-    /// # 关键业务约束
-    /// 版本不得回绕或复用，调用方必须在持久化新草稿前完成计算。
+    /// 保存新草稿前，从同流程种类的历史最大业务版本递增（无历史传 `0`），不复用旧版本或溢出回绕。
     pub fn next_version_after(current_max: u32) -> ModelResult<u32> {
         current_max.checked_add(1).ok_or(ModelError::Overflow("定义版本"))
     }
 
-    /// 草稿仍可修改时返回成功。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 当前为草稿时返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// 改名、替换节点或重设入口之前确认仍是草稿，避免改写已冻结定义。
     /// 已发布或已退役时返回 [`ModelError::InvalidStatus`]。
     pub fn ensure_mutable(&self) -> ModelResult<()> {
         if self.status.is_draft() {
@@ -175,51 +107,19 @@ impl ApprovalProcessDefinition {
         Err(ModelError::InvalidStatus("只有草稿定义可以修改"))
     }
 
-    /// 判断定义是否为当前可绑定的已发布状态。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 状态为已发布时返回 `true`。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 草稿与退役均不可绑定；本判断不读取仓储过滤结果。
+    /// 绑定流程定义前复核它是否仍已发布；这里只查生命周期状态，绑定入口还须校验完整图。
     pub fn is_published(&self) -> bool {
         self.status.is_published()
     }
 
-    /// 重命名草稿。
-    ///
-    /// # 参数
-    /// * `name` - 新名称
-    /// * `at` - 调用方时间
-    ///
-    /// # 返回
-    /// 无返回值。成功时写回名称并推进乐观锁版本。
-    ///
-    /// # 错误
-    /// 非草稿、名称为空或超长、时间无法持久化或版本溢出时返回错误。
+    /// 在定义仍可编辑时更新规范化名称，并推进锁版本和更新时间；已发布或退役定义不能重命名。
     pub fn rename_draft(&mut self, name: impl Into<String>, at: Timestamp) -> ModelResult<()> {
         self.ensure_mutable()?;
         self.name = Self::normalize_name(name)?;
         touch_base(&mut self.base, at)
     }
 
-    /// 设置草稿入口节点。
-    ///
-    /// # 参数
-    /// * `entry_node_key` - 入口节点键
-    /// * `at` - 调用方时间
-    ///
-    /// # 返回
-    /// 无返回值。成功时写回入口键并推进乐观锁版本。
-    ///
-    /// # 错误
-    /// 非草稿、入口键为空或超长、时间无法持久化或版本溢出时返回错误。
+    /// 重建草稿图时写入首位节点的规范键并更新锁版本；键对应的节点及位置由整图校验，不在实体里查询。
     pub fn set_entry_node_draft(
         &mut self,
         entry_node_key: impl Into<String>,
@@ -231,17 +131,8 @@ impl ApprovalProcessDefinition {
         touch_base(&mut self.base, at)
     }
 
-    /// 将草稿发布。只维护本实体状态。
-    ///
-    /// # 参数
-    /// * `actor` - 发布人
-    /// * `at` - 发布时间
-    ///
-    /// # 返回
-    /// 无返回值。成功时把状态改为已发布，并写入发布人、发布时间与新的乐观锁版本。
-    ///
-    /// # 错误
-    /// 当前不是草稿、时间无法持久化或版本溢出时返回错误。
+    /// 上层完成发布所需的图校验后，把草稿切为已发布，记录发布人、时间并推进乐观锁。
+    /// 非草稿、时间不可持久化或版本溢出时返回错误；本方法不保存数据或退役旧版本。
     pub fn publish(&mut self, actor: ParticipantId, at: Timestamp) -> ModelResult<()> {
         self.ensure_mutable()?;
         self.status = ApprovalDefinitionStatus::Published;
@@ -250,21 +141,8 @@ impl ApprovalProcessDefinition {
         touch_base(&mut self.base, at)
     }
 
-    /// 发布当前草稿并同步退役此前的已发布定义。
-    ///
-    /// # 参数
-    /// * `previous` - 同流程种类当前已发布定义；没有历史发布版时为空
-    /// * `actor` - 发布与退役操作人
-    /// * `at` - 同一状态切换时间
-    ///
-    /// # 返回
-    /// 返回已发布的新定义与可选已退役旧定义。
-    ///
-    /// # 错误
-    /// 当前定义不是草稿或旧定义不是已发布状态时返回模型错误。
-    ///
-    /// # 关键业务约束
-    /// 旧定义必须先按模型退役，新定义再发布；Repository 负责把两次写入置于同一事务。
+    /// 发布新草稿时先退役调用方提供的同种类现行版本（首次发布可为空），再以同一人和时间发布新版本。
+    /// 返回新发布版和可选退役版，供调用方在同一事务内保存；状态、时间或版本非法时不返回迁移结果。
     pub fn publish_replacing(
         mut self,
         previous: Option<Self>,
@@ -283,17 +161,8 @@ impl ApprovalProcessDefinition {
         Ok((self, previous))
     }
 
-    /// 将已发布定义退役。只维护本实体状态。
-    ///
-    /// # 参数
-    /// * `actor` - 退役人
-    /// * `at` - 退役时间
-    ///
-    /// # 返回
-    /// 无返回值。成功时把状态改为已退役，并写入退役人、退役时间与新的乐观锁版本。
-    ///
-    /// # 错误
-    /// 当前不是已发布、时间无法持久化或版本溢出时返回错误。
+    /// 停用当前发布版时将其设为退役，记录退役人、时间和新锁版本，使它不再可绑定。
+    /// 只有已发布版本可退役；时间不可持久化或版本溢出时返回错误。
     pub fn retire(&mut self, actor: ParticipantId, at: Timestamp) -> ModelResult<()> {
         if self.status != ApprovalDefinitionStatus::Published {
             return Err(ModelError::InvalidStatus("只有已发布定义可以退役"));
@@ -326,7 +195,7 @@ mod tests {
         .unwrap()
     }
 
-    /// 草稿创建成功且锁版本独立于业务版本。
+    // 验证新草稿能继续编辑，且业务版本不会被当作并发锁版本使用。
     #[test]
     fn new_draft_starts_mutable() {
         let definition = draft();
@@ -337,7 +206,7 @@ mod tests {
         assert!(definition.ensure_mutable().is_ok());
     }
 
-    /// 名称规范化、下一版本与锁校验由定义模型统一提供。
+    // 覆盖名称裁剪、后继业务版本计算和过期锁拒绝，确保定义命令按统一规则准备。
     #[test]
     fn definition_helpers_are_deterministic_and_fail_closed() {
         assert_eq!(ApprovalProcessDefinition::normalize_name(" 库存调整 ").unwrap(), "库存调整");
@@ -352,7 +221,7 @@ mod tests {
         assert!(definition.ensure_lock_version(definition.definition_lock_version() + 1).is_err());
     }
 
-    /// 版本 0 与空名称失败关闭。
+    // 验证不能为零业务版本或空白定义名建立草稿。
     #[test]
     fn new_draft_rejects_invalid_fields() {
         let at = Timestamp::from_unix_secs(1).unwrap();
@@ -376,7 +245,7 @@ mod tests {
         );
     }
 
-    /// 发布后不得再改草稿字段；退役只能从已发布进入。
+    // 验证发布冻结草稿字段，只有当前发布版能退役，防止定义状态任意回退。
     #[test]
     fn publish_and_retire_are_stateful() {
         let mut definition = draft();

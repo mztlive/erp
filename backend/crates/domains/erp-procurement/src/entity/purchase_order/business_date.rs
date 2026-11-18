@@ -9,17 +9,9 @@ const BUSINESS_TZ_OFFSET_SECS: i32 = 8 * 60 * 60;
 
 /// 将精确时间转换为上海业务自然日。
 ///
-/// # 参数
-/// * `instant` - 销售履约期限
-///
-/// # 返回
-/// 返回 Asia/Shanghai 自然日。
-///
-/// # 错误
-/// 时区或日期构造失败时返回领域错误。
-///
-/// # 关键业务约束
 /// 不按 UTC 日期截断。
+///
+/// 返回 Asia/Shanghai 自然日。时区或日期构造失败时返回领域错误。
 pub fn business_date_of(instant: Instant) -> Result<BusinessDate> {
     let business_tz = FixedOffset::east_opt(BUSINESS_TZ_OFFSET_SECS)
         .ok_or_else(|| Error::from("无法形成 Asia/Shanghai 时区"))?;
@@ -34,7 +26,7 @@ mod tests {
 
     use super::business_date_of;
 
-    /// UTC 16:00 落在上海次日零点。
+    // UTC 16:00 落在上海次日零点。
     #[test]
     fn converts_to_shanghai_calendar_date() {
         let date = business_date_of(Instant::from_unix_secs(1_699_977_600)).unwrap();

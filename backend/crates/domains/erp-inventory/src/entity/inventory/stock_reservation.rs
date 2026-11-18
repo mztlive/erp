@@ -36,16 +36,7 @@ pub enum StockReservationSourceType {
 }
 
 impl StockReservationSourceType {
-    /// 返回用于持久化与查询的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 采购入库为 `PURCHASE_RECEIPT`，现有库存为 `EXISTING_STOCK`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回库存预占来源的稳定代码，供持久化与查询匹配使用。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::PurchaseReceipt => "PURCHASE_RECEIPT",
@@ -69,16 +60,7 @@ pub enum ReservationStatus {
 }
 
 impl ReservationStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回库存预占状态的中文名称，供业务界面展示，不作为持久化代码。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Active => "有效",
@@ -88,16 +70,7 @@ impl ReservationStatus {
         }
     }
 
-    /// 返回状态的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回库存预占状态的稳定代码，供持久化与查询匹配使用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Active => "ACTIVE",
@@ -108,29 +81,13 @@ impl ReservationStatus {
     }
 
     /// 返回仍允许消耗或释放的预占状态集合。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回有效与部分消耗两个可操作状态。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn operable() -> &'static [Self] {
         &[Self::Active, Self::PartiallyConsumed]
     }
 
     /// 判断当前预占状态是否仍可操作。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 有效或部分消耗状态返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn is_operable(self) -> bool {
         Self::operable().contains(&self)
     }
@@ -151,16 +108,7 @@ pub enum ReservationEntryType {
 }
 
 impl ReservationEntryType {
-    /// 返回类型的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回预占流水类型的中文名称，供业务界面展示，不作为持久化代码。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Establish => "建立",
@@ -170,16 +118,7 @@ impl ReservationEntryType {
         }
     }
 
-    /// 返回类型的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回预占流水类型的稳定代码，供持久化与查询匹配使用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Establish => "ESTABLISH",
@@ -272,24 +211,11 @@ pub struct StockReservation {
 
 impl StockReservation {
     /// 创建库存预占。
-    ///
-    /// 完成三个数量非负校验与状态一致性校验：`RELEASED` 必须有释放数量且无
-    /// 剩余预占；`CONSUMED` 必须无剩余预占且无释放；`PARTIALLY_CONSUMED` 必须
-    /// 有消耗且无释放；`ACTIVE` 必须无消耗无释放。预占建立动作与合格入库来源
-    /// 的唯一性由唯一索引保证；累计不得超原建立数量由 P3 对照建立流水校验
-    /// （§6.7）。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::StockReservationId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
+    /// 完成三个数量非负校验与状态一致性校验：`RELEASED` 必须有释放数量且无剩余预占；`CONSUMED` 必须无剩余预占且无释放；`PARTIALLY_CONSUMED` 必须有消耗且无释放；
+    /// `ACTIVE` 必须无消耗无释放。预占建立动作与合格入库来源的唯一性由唯一索引保证；累计不得超原建立数量由 P3 对照建立流水校验（§6.7）。
     /// 返回新建的预占实体。
-    ///
-    /// # 错误
-    /// 数量为负、状态与数量不一致，或来源字段与 `source_type` 不匹配时返回错误。
-    /// 采购入库必须有采购销售分配和入库行且不得带现有库存分配身份；
-    /// 现有库存必须有非空且未超长的分配身份，且不得带采购引用。
+    /// `id` 为实体主键（`erp_core::ids::StockReservationId`）。
+    /// 数量为负、状态与数量不一致，或来源字段与 `source_type` 不匹配时返回错误。采购入库必须有采购销售分配和入库行且不得带现有库存分配身份；现有库存必须有非空且未超长的分配身份，且不得带采购引用。
     pub fn new(id: StockReservationId, data: StockReservationData) -> Result<Self> {
         ensure_non_negative_quantities(
             data.reserved_quantity,
@@ -323,18 +249,7 @@ impl StockReservation {
     }
 
     /// 更新库存预占。
-    ///
-    /// 复用 `new` 的数量与状态一致性校验；预占变化只能由审核生效的销售变更、
-    /// 销售单作废、采购退货、库存调整或仓发消耗触发（§6.7，跨聚合动作由
-    /// P3 把关）。
-    ///
-    /// # 参数
-    /// * `update` - 更新数据
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// 复用 `new` 的数量与状态一致性校验；预占变化只能由审核生效的销售变更、销售单作废、采购退货、库存调整或仓发消耗触发（§6.7，跨聚合动作由 P3 把关）。
     /// 更新后数量为负或状态与数量不一致时返回错误。
     pub fn update(&mut self, update: StockReservationUpdate) -> Result<()> {
         let reserved = update.reserved_quantity.unwrap_or(self.reserved_quantity);
@@ -352,7 +267,7 @@ impl StockReservation {
     }
 }
 
-/// 按来源类型校验采购引用与现有库存分配身份互斥，并规范化分配身份。
+// 按来源类型校验采购引用与现有库存分配身份互斥，并规范化分配身份。
 fn normalize_reservation_source(data: &StockReservationData) -> Result<Option<String>> {
     match data.source_type {
         StockReservationSourceType::PurchaseReceipt => {
@@ -383,19 +298,10 @@ fn normalize_reservation_source(data: &StockReservationData) -> Result<Option<St
     }
 }
 
-/// 校验预占状态与数量的一致性。
-///
-/// # 参数
-/// * `status` - 预占状态
-/// * `reserved` - 当前有效预占
-/// * `consumed` - 已消耗数量
-/// * `released` - 已释放数量
-///
-/// # 返回
-/// 通过返回 `Ok(())`。
-///
-/// # 错误
-/// 状态与数量不一致时返回错误。
+// 校验预占状态与数量的一致性。
+// `status` 为预占状态；`reserved` 为当前有效预占。
+// `consumed` 为已消耗数量；`released` 为已释放数量。
+// 状态与数量不一致时返回错误。
 fn ensure_status_coherent(
     status: ReservationStatus,
     reserved: Quantity,
@@ -452,20 +358,10 @@ pub struct StockReservationEntry {
 
 impl StockReservationEntry {
     /// 创建预占流水。
-    ///
-    /// 完成数量正数校验与来源单据规范化。`source_document_id` 是入库、仓发、
-    /// 销售变更、销售作废、采购退货或库存调整等单据的跨域多态引用，无统一
-    /// ID newtype，以字符串承载（地基修订候选：公共的 `SourceDocumentRef`
-    /// 值对象），P3 按单据类型解析并校验。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::StockReservationEntryId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
+    /// 完成数量正数校验与来源单据规范化。`source_document_id` 是入库、仓发、销售变更、销售作废、采购退货或库存调整等单据的跨域多态引用，无统一 ID newtype，
+    /// 以字符串承载（地基修订候选：公共的 `SourceDocumentRef` 值对象），P3 按单据类型解析并校验。
     /// 返回新建的预占流水实体。
-    ///
-    /// # 错误
+    /// `id` 为实体主键（`erp_core::ids::StockReservationEntryId`）。
     /// 数量非正或来源单据为空/超长时返回错误。
     pub fn new(id: StockReservationEntryId, data: StockReservationEntryData) -> Result<Self> {
         ensure_positive_quantity(data.quantity, "预占流水数量必须为正数")?;
@@ -519,7 +415,7 @@ mod tests {
         }
     }
 
-    /// happy path：预占创建成功，数量与状态一致。
+    // 验证预占创建成功，数量与状态一致。
     #[test]
     fn new_succeeds_with_coherent_state() {
         let reservation = StockReservation::new(StockReservationId::new("rsv-1"), data()).unwrap();
@@ -527,7 +423,7 @@ mod tests {
         assert_eq!(reservation.status, ReservationStatus::Active);
     }
 
-    /// 现有库存来源必须使用独立分配身份，不能伪造采购引用。
+    // 验证现有库存来源必须使用独立分配身份，不能伪造采购引用。
     #[test]
     fn existing_stock_source_has_exclusive_identity() {
         let direct = StockReservationData {
@@ -548,7 +444,7 @@ mod tests {
         assert!(StockReservation::new(StockReservationId::new("direct-2"), invalid).is_err());
     }
 
-    /// 缺失、空白与超长分配身份保留各自错误；字符长度上限允许中文身份。
+    // 验证缺失、空白与超长分配身份保留各自错误；字符长度上限允许中文身份。
     #[test]
     fn existing_stock_identity_preserves_validation_boundaries() {
         for (source_allocation_id, expected) in [
@@ -581,7 +477,7 @@ mod tests {
         assert_eq!(reservation.source_allocation_id, Some(identity));
     }
 
-    /// 同时存在采购引用与非法分配身份时，先报告来源互斥错误。
+    // 验证同时存在采购引用与非法分配身份时，先报告来源互斥错误。
     #[test]
     fn existing_stock_source_checks_purchase_references_before_identity() {
         for source_allocation_id in [None, Some(" ".to_string()), Some("x".repeat(257))] {
@@ -597,7 +493,7 @@ mod tests {
         }
     }
 
-    /// 旧库存预占没有来源字段时必须按采购入库来源读取。
+    // 验证旧库存预占没有来源字段时必须按采购入库来源读取。
     #[test]
     fn legacy_reservation_data_defaults_to_purchase_receipt() {
         let legacy: StockReservationData = serde_json::from_value(serde_json::json!({
@@ -616,7 +512,7 @@ mod tests {
         assert!(StockReservation::new(StockReservationId::new("legacy-1"), legacy).is_ok());
     }
 
-    /// 状态一致性：全部状态 × 数量组合的合法与非法判定。
+    // 验证状态一致性：全部状态 × 数量组合的合法与非法判定。
     #[test]
     fn status_coherence_is_enforced() {
         let partially_consumed = StockReservationData {
@@ -667,7 +563,7 @@ mod tests {
         );
     }
 
-    /// 失败路径：负数量。
+    // 验证负数量。
     #[test]
     fn new_rejects_negative_quantities() {
         let negative =
@@ -675,7 +571,7 @@ mod tests {
         assert!(StockReservation::new(StockReservationId::new("r8"), negative).is_err());
     }
 
-    /// 更新：数量与状态同步变化，不一致被拒。
+    // 验证更新：数量与状态同步变化，不一致被拒。
     #[test]
     fn update_keeps_coherence() {
         let mut reservation = StockReservation::new(StockReservationId::new("rsv-9"), data()).unwrap();
@@ -701,7 +597,7 @@ mod tests {
         assert_eq!(reservation.status, ReservationStatus::PartiallyConsumed, "失败更新不得破坏原状态");
     }
 
-    /// 状态可操作性：只有有效与部分消耗允许继续消耗或释放。
+    // 验证状态可操作性：只有有效与部分消耗允许继续消耗或释放。
     #[test]
     fn operable_statuses_are_owned_by_status_type() {
         assert_eq!(
@@ -714,7 +610,7 @@ mod tests {
         assert!(!ReservationStatus::Released.is_operable());
     }
 
-    /// happy path：预占流水创建成功并规范化来源。
+    // 验证预占流水创建成功并规范化来源。
     #[test]
     fn entry_new_succeeds() {
         let entry =
@@ -723,7 +619,7 @@ mod tests {
         assert_eq!(entry.entry_type, ReservationEntryType::Establish);
     }
 
-    /// 失败路径：数量非正、来源为空。
+    // 验证数量非正、来源为空。
     #[test]
     fn entry_rejects_invalid_inputs() {
         let zero_quantity =
@@ -739,7 +635,7 @@ mod tests {
         assert!(StockReservationEntry::new(StockReservationEntryId::new("e4"), overlong_source).is_err());
     }
 
-    /// 序列化：枚举稳定代码。
+    // 验证枚举稳定代码。
     #[test]
     fn serde_shapes_and_bson_roundtrip() {
         assert_eq!(

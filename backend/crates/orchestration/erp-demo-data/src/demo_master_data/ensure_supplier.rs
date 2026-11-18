@@ -13,16 +13,8 @@ use super::{DemoMasterDataProcess, lifecycle, record, spec};
 use crate::{Error, Result};
 
 impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
-    /// 解析公司及采购岗位后执行供应商种子。
-    ///
-    /// # 参数
-    /// `actor` - 操作人；`step` - 种子身份；`request` - 供应商创建输入；`company_party_id` - 公司 ID；`notices` - 跳过原因集合。
-    ///
-    /// # 返回
-    /// 返回供应商创建、恢复或跳过结果。
-    ///
-    /// # 错误
-    /// 命令回执失效、领域写入或清单登记失败时返回错误。
+    // 用实际公司主体和采购岗位执行供应商种子；重试优先恢复原创建回执对应的供应商。
+    // 缺少前置岗位或公司时返回提示，回执失效、写入或登记失败时停止。
     pub(super) async fn ensure_supplier(
         &self,
         actor: &AuditActor,
@@ -59,7 +51,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         self.remember_created_supplier(actor, step, &view.supplier_id).await
     }
 
-    /// 从供应商实际外键读取主体并登记两个 ID。
+    // 从供应商记录的实际外键读回主体并登记两个主键，使后续恢复和关联使用正式关系而不是种子占位值。
     async fn remember_created_supplier(
         &self,
         actor: &AuditActor,
@@ -84,7 +76,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         Ok(if created { EnsureOutcome::Created } else { EnsureOutcome::Restored })
     }
 
-    /// 恢复已登记命令对应的供应商并对齐维护人。
+    // 以原命令绑定的真实主键恢复供应商及主体，随后对齐采购维护人，避免重试重复创建资料。
     async fn adopt_supplier(
         &self,
         actor: &AuditActor,
@@ -100,7 +92,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         })
     }
 
-    /// 通过移交用例对齐采购维护人。
+    // 通过正式移交用例把供应商维护责任对齐采购岗位，使演示采购可在实际业务范围内使用供应商。
     async fn align_supplier_maintainer(
         &self,
         actor: &AuditActor,
@@ -140,7 +132,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         Ok(())
     }
 
-    /// 按稳定幂等键读取此前创建的供应商。
+    // 按稳定种子键读取供应商创建回执，重试沿用原供应商身份，不按相似名称认领记录。
     async fn supplier_command(&self, key: &str) -> Result<Option<String>> {
         let command = self
             .db
@@ -151,7 +143,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
     }
 }
 
-/// 将公司和采购账号占位引用解析为当前数据库 ID。
+// 将模板中的公司与采购账号占位值换成当前环境的主键，使正式创建命令能校验真实归属和维护责任。
 fn supplier_request(
     template: &SaveSupplierProfileRequest,
     maintainer_id: &str,
@@ -167,7 +159,7 @@ fn supplier_request(
     request
 }
 
-/// 合并不重复的供应商准备提示。
+// 合并供应商准备时的业务提示，重复原因只保留一次，让批次报告可直接指出阻断项。
 fn push_supplier_notice(notices: &mut Vec<String>, text: &str) {
     if !notices.iter().any(|item| item == text) {
         notices.push(text.to_string());

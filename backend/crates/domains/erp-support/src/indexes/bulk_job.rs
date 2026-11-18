@@ -10,24 +10,13 @@ use persistence_core::Result;
 use super::{create_indexes, named_index, unique_index};
 use crate::repository::extensions::BulkJobExt;
 
-/// 创建本域集合的幂等命名索引。
-///
+/// 启动时注册该集合的命名索引，多次调用沿用同名索引。
 /// 逐条落地数据模型 §6.1「必需约束与索引」：
 /// - `bulk_selection_item`：`(selection_snapshot_id, object_type, object_id)` 唯一；
 /// - `background_job`：`job_no`、`request_id` 分别唯一；
 /// - `background_job_item`：`(background_job_id, item_no)` 唯一；
 /// - 快照/任务按创建人、状态与有效期查询索引（W02、W18 工作台）。
-///
-/// 身份类字段全局唯一（与 accounts 处理一致）：软删除后仍保留身份，避免
-/// 复用破坏恢复语义。
-///
-/// # 参数
-/// * `db` - 目标 MongoDB 数据库
-///
-/// # 返回
-/// 本域索引全部创建成功时无返回值。
-///
-/// # 错误
+/// 身份类字段全局唯一（与 accounts 处理一致）：软删除后仍保留身份，避免复用破坏恢复语义。
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, <Database as BulkJobExt>::BULK_SELECTION_SNAPSHOTS, bulk_selection_snapshot_indexes())
@@ -38,11 +27,11 @@ pub async fn ensure(db: &Database) -> Result<()> {
     Ok(())
 }
 
-/// 返回 `bulk_selection_snapshot` 的身份约束与工作台查询索引。
-///
-/// 快照是一次性工作结构，无自然业务唯一键，用 `id` 唯一索引防止重复身份
-/// 静默写入；`created_by + created_at` 覆盖「我的快照」列表，`status + expires_at`
-/// 覆盖待办与过期扫描（W02）。
+// 返回 `bulk_selection_snapshot` 的身份约束与工作台查询索引。
+//
+// 快照是一次性工作结构，无自然业务唯一键，用 `id` 唯一索引防止重复身份
+// 静默写入；`created_by + created_at` 覆盖「我的快照」列表，`status + expires_at`
+// 覆盖待办与过期扫描（W02）。
 fn bulk_selection_snapshot_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_bulk_selection_snapshots_id", doc! { "id": 1 }),
@@ -51,7 +40,7 @@ fn bulk_selection_snapshot_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `bulk_selection_item` 的目标唯一约束与结果筛选索引。
+// 返回 `bulk_selection_item` 的目标唯一约束与结果筛选索引。
 fn bulk_selection_item_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_bulk_selection_items_id", doc! { "id": 1 }),
@@ -70,7 +59,7 @@ fn bulk_selection_item_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `background_job` 的身份约束与任务中心查询索引。
+// 返回 `background_job` 的身份约束与任务中心查询索引。
 fn background_job_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_background_jobs_id", doc! { "id": 1 }),
@@ -90,7 +79,7 @@ fn background_job_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `background_job_item` 的逐项唯一约束与结果筛选索引。
+// 返回 `background_job_item` 的逐项唯一约束与结果筛选索引。
 fn background_job_item_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_background_job_items_id", doc! { "id": 1 }),
@@ -101,7 +90,7 @@ fn background_job_item_indexes() -> Vec<IndexModel> {
 
 #[cfg(test)]
 mod tests {
-    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    // 验证按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
     #[test]
     fn collections_look_up_by_unique_stable_id() {
         for indexes in [

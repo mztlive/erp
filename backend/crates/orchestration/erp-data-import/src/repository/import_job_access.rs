@@ -19,13 +19,11 @@ pub(crate) struct ImportJobAccess {
 }
 
 impl ImportJobAccess {
-    /// 绑定共享授权和本用例任务类型。
-    /// # 参数
-    /// db 为数据库，service 为进程共享授权服务，domain 为固定任务类型，permission 为该类型的固定内部读取操作。
-    /// # 返回
-    /// 不缓存权限结果的任务访问器。
-    /// # 错误
-    /// 无。
+    // 绑定共享授权和本用例任务类型。
+    //
+    // db 为数据库，service 为进程共享授权服务，domain 为固定任务类型，permission 为该类型的固定内部读取操作。
+    //
+    // 不缓存权限结果的任务访问器。
     pub(crate) fn new(
         db: Database,
         service: Arc<AuthorizationService>,
@@ -35,13 +33,13 @@ impl ImportJobAccess {
         Self { service, db, domain, permission }
     }
 
-    /// 在原授权快照读取任务，调用方在该快照内读取关联数据。
-    /// # 参数
-    /// id、actor 为真实任务与当前账号；executor 沿用调用方读取事务。
-    /// # 返回
-    /// 满足固定入口资格、归属和类型的真实任务。
-    /// # 错误
-    /// 身份、资格、归属、类型或数据库读取失败时拒绝。
+    // 在原授权快照读取任务，调用方在该快照内读取关联数据。
+    //
+    // id、actor 为真实任务与当前账号；executor 沿用调用方读取事务。
+    //
+    // 满足固定入口资格、归属和类型的真实任务。
+    //
+    // 身份、资格、归属、类型或数据库读取失败时拒绝。
     pub(crate) async fn load(
         &self,
         id: &str,
@@ -61,13 +59,13 @@ impl ImportJobAccess {
         Ok(job)
     }
 
-    /// 在短读取事务内授权任务，事务结束后才允许读取对象存储。
-    /// # 参数
-    /// id、actor 为真实任务和当前账号。
-    /// # 返回
-    /// 同一快照授权并读取的任务。
-    /// # 错误
-    /// 资格、归属、类型或事务失败时拒绝。
+    // 在短读取事务内授权任务，事务结束后才允许读取对象存储。
+    //
+    // id、actor 为真实任务和当前账号。
+    //
+    // 同一快照授权并读取的任务。
+    //
+    // 资格、归属、类型或事务失败时拒绝。
     pub(crate) async fn snapshot(&self, id: &str, actor: &AuditActor) -> Result<BackgroundJob> {
         let access = self.clone();
         let id = id.to_owned();
@@ -80,13 +78,13 @@ impl ImportJobAccess {
             .await
     }
 
-    /// 外部源读取完成后重新授权，并拒绝交付其他任务版本的数据。
-    /// # 参数
-    /// original 为读取外部源前的任务；actor 为当前账号；executor 为交付读取事务。
-    /// # 返回
-    /// 当前授权仍成立且版本未变的真实任务。
-    /// # 错误
-    /// 当前授权失败、任务变化或数据库读取失败时拒绝。
+    // 外部源读取完成后重新授权，并拒绝交付其他任务版本的数据。
+    //
+    // original 为读取外部源前的任务；actor 为当前账号；executor 为交付读取事务。
+    //
+    // 当前授权仍成立且版本未变的真实任务。
+    //
+    // 当前授权失败、任务变化或数据库读取失败时拒绝。
     pub(crate) async fn reload(
         &self,
         original: &BackgroundJob,
@@ -99,7 +97,7 @@ impl ImportJobAccess {
     }
 }
 
-/// 任务版本覆盖源身份、归属和状态；变化后必须重新读取源内容。
+// 任务版本覆盖源身份、归属和状态；变化后必须重新读取源内容。
 fn ensure_same_job_version(original: &BackgroundJob, current: &BackgroundJob) -> Result<()> {
     if original.base.id != current.base.id || original.base.version != current.base.version {
         return Err(Error::ConflictError("导入任务已变化，请重新下载".into()));
@@ -137,7 +135,7 @@ mod tests {
         .unwrap()
     }
 
-    /// 只有当前任务及原版本可以消费已经读取的外部源。
+    // 验证：只有当前任务及原版本可以消费已经读取的外部源。
     #[test]
     fn download_rejects_changed_task_version_or_identity() {
         let original = job();
@@ -152,7 +150,7 @@ mod tests {
         assert!(matches!(ensure_same_job_version(&original, &changed), Err(Error::ConflictError(_))));
     }
 
-    /// 外部源已读取后也必须重新取证；身份设施失效时不能读取行或交付源数据。
+    // 验证：外部源已读取后也必须重新取证；身份设施失效时不能读取行或交付源数据。
     #[tokio::test]
     async fn reload_reauthorizes_before_reading_current_job() {
         let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")

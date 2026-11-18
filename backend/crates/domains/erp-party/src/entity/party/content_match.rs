@@ -22,13 +22,10 @@ impl QueryFingerprint {
     /// # 参数
     /// * `hex` - 预计算的指纹字符串
     ///
-    /// # 返回
     /// 返回可供实体比较的强类型指纹。
     ///
-    /// # 错误
-    /// 无。指纹格式由计算方保证。
+    /// 失败条件：无。指纹格式由计算方保证。
     ///
-    /// # 关键业务约束
     /// 不得在此计算 HMAC 或接收密钥。
     pub fn from_precomputed(hex: impl Into<String>) -> Self {
         Self(hex.into())
@@ -36,16 +33,8 @@ impl QueryFingerprint {
 
     /// 返回指纹字符串。
     ///
-    /// # 返回
     /// 返回预计算指纹的借用。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
     /// 指纹不是明文，但仍不得写入日志以外的敏感上下文。
     pub fn as_str(&self) -> &str {
         &self.0
@@ -67,16 +56,6 @@ impl SensitiveFactReuse {
     /// Service 在敏感明文缺失或去空白后为空时使用本构造；本方法不接收明文、
     /// 密钥或指纹计算闭包。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回沿用原事实的比较意图。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
     /// 沿用原事实表示跳过敏感字段比较，仅比较非敏感规范值。
     pub fn reuse_original() -> Self {
         Self::ReuseOriginal
@@ -90,25 +69,21 @@ impl SensitiveFactReuse {
     /// # 参数
     /// * `fingerprint` - Service 预计算的强类型查询指纹
     ///
-    /// # 返回
     /// 返回携带预计算指纹的比较意图。
     ///
-    /// # 错误
-    /// 无。指纹格式由计算方保证。
+    /// 失败条件：无。指纹格式由计算方保证。
     ///
-    /// # 关键业务约束
     /// 密钥与敏感明文不得进入本 VO。
     pub fn from_fingerprint(fingerprint: QueryFingerprint) -> Self {
         Self::Fingerprint(fingerprint)
     }
 
-    /// 判断敏感字段是否与库存指纹一致。
-    ///
-    /// # 参数
-    /// * `stored_hmac` - 实体已持久化的查询指纹
-    ///
-    /// # 返回
-    /// 沿用原事实或指纹相等时返回 `true`。
+    // 判断敏感字段是否与库存指纹一致。
+    //
+    // # 参数
+    // * `stored_hmac` - 实体已持久化的查询指纹
+    //
+    // 沿用原事实或指纹相等时返回 `true`。
     fn matches(&self, stored_hmac: &str) -> bool {
         match self {
             Self::ReuseOriginal => true,
@@ -137,13 +112,10 @@ impl PartyContactContentMatch {
     /// * `email` - 邮箱；空白视为未提供
     /// * `mobile` - 手机号比较意图
     ///
-    /// # 返回
     /// 返回可与既有联系人比较的值对象。
     ///
-    /// # 错误
     /// 无。空姓名只导致比较失败，不在本构造拒绝。
     ///
-    /// # 关键业务约束
     /// 不接收密钥或敏感明文；手机号比较必须使用预计算 fingerprint。
     pub fn new(
         contact_name: impl AsRef<str>,
@@ -178,13 +150,8 @@ impl PartyAddressContentMatch {
     /// * `contact_name` - 地址联系人；空白视为未提供
     /// * `address` - 地址明文比较意图
     ///
-    /// # 返回
     /// 返回可与既有地址比较的值对象。
     ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
     /// 不接收密钥或敏感明文。
     pub fn new(address_type: AddressType, contact_name: Option<String>, address: SensitiveFactReuse) -> Self {
         Self { address_type, contact_name: canonicalize_optional(contact_name), address }
@@ -209,13 +176,8 @@ impl PartyBankAccountContentMatch {
     /// * `bank_branch_name` - 支行名称；空白视为未提供
     /// * `account_number` - 账号比较意图
     ///
-    /// # 返回
     /// 返回可与既有银行账户比较的值对象。
     ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
     /// 不接收密钥或敏感明文。
     pub fn new(
         account_name: impl AsRef<str>,
@@ -240,13 +202,8 @@ impl PartyContact {
     /// # 参数
     /// * `candidate` - 预计算指纹与非敏感规范值
     ///
-    /// # 返回
     /// 内容一致时返回 `true`。
     ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
     /// 敏感明文缺失或空白时沿用原手机号事实。
     pub fn matches_content(&self, candidate: &PartyContactContentMatch) -> bool {
         candidate.mobile.matches(&self.mobile_query_hmac)
@@ -265,13 +222,8 @@ impl PartyAddress {
     /// # 参数
     /// * `candidate` - 预计算指纹与非敏感规范值
     ///
-    /// # 返回
     /// 内容一致时返回 `true`。
     ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
     /// 敏感明文缺失或空白时沿用原地址事实。
     pub fn matches_content(&self, candidate: &PartyAddressContentMatch) -> bool {
         candidate.address.matches(&self.address_query_hmac)
@@ -288,13 +240,10 @@ impl PartyBankAccount {
     /// # 参数
     /// * `candidate` - 预计算指纹与非敏感规范值
     ///
-    /// # 返回
     /// 稳定内容一致时返回 `true`。
     ///
-    /// # 错误
     /// 无。原地修改拒绝见 [`Self::ensure_unmodified`]。
     ///
-    /// # 关键业务约束
     /// 敏感明文缺失或空白时沿用原账号事实。
     pub fn matches_content(&self, candidate: &PartyBankAccountContentMatch) -> bool {
         candidate.account_number.matches(&self.account_number_query_hmac)
@@ -308,13 +257,10 @@ impl PartyBankAccount {
     /// # 参数
     /// * `candidate` - 预计算指纹与非敏感规范值
     ///
-    /// # 返回
     /// 内容未变化时返回 `Ok(())`。
     ///
-    /// # 错误
     /// 任一稳定字段变化时返回 [`Error::LogicError`]，提示结束旧账户后新增。
     ///
-    /// # 关键业务约束
     /// 银行账户内容只能追加/结束，不能原地改写户名、银行、支行或账号。
     pub fn ensure_unmodified(&self, candidate: &PartyBankAccountContentMatch) -> Result<()> {
         if self.matches_content(candidate) {
@@ -324,7 +270,7 @@ impl PartyBankAccount {
     }
 }
 
-/// 将可选文本规范为去空白后的非空值。
+// 将可选文本规范为去空白后的非空值。
 fn canonicalize_optional(value: Option<String>) -> Option<String> {
     value.and_then(|value| {
         let trimmed = value.trim();
@@ -332,7 +278,7 @@ fn canonicalize_optional(value: Option<String>) -> Option<String> {
     })
 }
 
-/// 比较库存可选文本与已规范化期望值。
+// 比较库存可选文本与已规范化期望值。
 fn optional_eq(stored: &Option<String>, expected: &Option<String>) -> bool {
     stored.as_deref().map(str::trim).filter(|value| !value.is_empty()) == expected.as_deref()
 }

@@ -42,14 +42,8 @@ pub struct ResumeExecutionInput {
 }
 
 /// 规划原审批人恢复。
-///
-/// # 参数
-/// * `input` - 恢复输入
-///
-/// # 返回
 /// 同载荷返回 `PreparedExecution::Replay`；否则返回待应用的恢复计划。
 ///
-/// # 错误
 /// 命令身份不合法、当前运行事实不允许原审批人恢复、异载荷冲突、引擎失败或收据构造失败时返回错误。
 pub fn prepare_resume(input: ResumeExecutionInput) -> Result<PreparedExecution> {
     let identity = resume_identity(

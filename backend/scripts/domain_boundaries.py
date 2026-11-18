@@ -179,18 +179,18 @@ class CheckResult:
     notes: list[str] = field(default_factory=list)
 
     def extend(self, other: CheckResult) -> None:
-        """Merge another result into this one."""
+        """合并子检查的错误与说明，供领域边界门禁汇总各项结果而不丢失上下文。"""
         self.errors.extend(other.errors)
         self.notes.extend(other.notes)
 
 
+# 将 Cargo 包名转换成 Rust crate 标识符，供源码门禁把 `use` 的根标识符对回依赖包名。
 def crate_ident(name: str) -> str:
-    """Map a Cargo package name to the Rust crate identifier."""
     return name.replace("-", "_")
 
 
+# 通过已知映射将 Rust crate 标识符解析为 Cargo 包名；未知项返回 `None`，不猜测归属。
 def ident_to_package(ident: str, known: Mapping[str, str]) -> str | None:
-    """Map a Rust crate identifier back to a package name when known."""
     return known.get(ident)
 
 
@@ -206,15 +206,15 @@ def _mask_comment_match(match: re.Match[str]) -> str:
     return "\n".join(" " * len(line) for line in token.split("\n"))
 
 
+# 以空格屏蔽 Rust 注释并保留行号与字符串，避免导入和实体边界扫描把注释误判为代码。
 def strip_comments(source: str) -> str:
-    """Replace comments with spaces so lexical scans ignore them."""
     if "//" not in source and "/*" not in source:
         return source
     return COMMENT_OR_STR_RE.sub(_mask_comment_match, source)
 
 
+# 递归拆开分组 `use` 并去除别名，供导入扫描按原始路径判定 crate 依赖方向。
 def _parse_use_tree(text: str, prefix: str, paths: list[str]) -> None:
-    """Parse a `use` tree such as `foo::{bar, baz as Q}` into crate paths."""
     text = text.strip()
     if not text:
         return
@@ -253,8 +253,8 @@ def _parse_use_tree(text: str, prefix: str, paths: list[str]) -> None:
     paths.append(f"{prefix}::{text}" if prefix else text)
 
 
+# 提取 `use` 和 `pub use` 引用的路径，含分组与别名写法，供门禁识别源码中的跨域及旧三层依赖。
 def extract_use_paths(source: str) -> list[str]:
-    """Return crate paths referenced by `use` / `pub use`, including grouped trees."""
     if "use" not in source:
         return []
     code = strip_comments(source)
@@ -287,8 +287,8 @@ def extract_use_paths(source: str) -> list[str]:
     return paths
 
 
+# 取导入路径的首段供包名映射使用；忽略 `self`、`super`、`crate`，不把本地模块当成外部依赖。
 def root_crate(path: str) -> str | None:
-    """Return the leading crate identifier of a use path, ignoring self/super/crate."""
     root = path.split("::", 1)[0]
     if root in {"self", "super", "crate"}:
         return None
@@ -296,7 +296,7 @@ def root_crate(path: str) -> str | None:
 
 
 def graph_from_packages(payload: Mapping[str, Any]) -> Graph:
-    """Build a Graph from fixture or metadata-like package lists."""
+    """把简化包清单转换为保留依赖类型及别名的 `Graph`，让规则自检与工作区检查共用同一图模型。"""
     graph = Graph()
     for package in payload.get("packages") or []:
         name = package["name"]
@@ -314,7 +314,7 @@ def graph_from_packages(payload: Mapping[str, Any]) -> Graph:
 
 
 def graph_from_metadata(metadata: Mapping[str, Any]) -> Graph:
-    """Build a Graph from `cargo metadata` workspace members."""
+    """从 Cargo metadata 建立活动成员的依赖图，保留 normal/build/dev 声明，供分层与跨域检查使用。"""
     members = set(metadata.get("workspace_members") or [])
     graph = Graph()
     id_to_name = {}
@@ -338,13 +338,13 @@ def graph_from_metadata(metadata: Mapping[str, Any]) -> Graph:
     return graph
 
 
+# 统一依赖图和源码导入的跨域规则：普通领域间不得直接依赖，其他领域可依赖身份域。
 def forbidden_domain_dependency(source: str, target: str | None) -> bool:
-    """Business domains may consume identity; identity must remain below them."""
     return source in BUSINESS_DOMAINS and target in BUSINESS_DOMAINS and source != target and target != "erp-identity"
 
 
 def forbidden_graph_errors(graph: Graph) -> list[str]:
-    """Return forbidden-edge errors for an instantiated package graph."""
+    """核对实际依赖边是否违反 crate 分层、业务域隔离及 BPM 纯度，供门禁报告越界依赖和相关回边。"""
     errors: list[str] = layer_dependency_errors(graph.edges)
     present_domains = sorted(graph.packages & BUSINESS_DOMAINS)
     present_foundations = sorted(graph.packages & FOUNDATION)
@@ -383,8 +383,8 @@ def forbidden_graph_errors(graph: Graph) -> list[str]:
     return errors
 
 
+# 检查指定包集合内部的有向依赖环，供分层门禁核对领域和基础层，并在最终切换时覆盖全部活动成员。
 def _cycle_notes(graph: Graph, interesting: Sequence[str]) -> list[str]:
-    """Detect directed cycles among foundation/domain packages."""
     adj: dict[str, list[str]] = defaultdict(list)
     interesting_set = set(interesting)
     for edge in graph.edges:
@@ -414,6 +414,7 @@ def _cycle_notes(graph: Graph, interesting: Sequence[str]) -> list[str]:
     return errors
 
 
+# 检查实体是否引入 HTTP、MongoDB 或仓储执行接口，避免领域实体承担协议适配或持久化访问。
 def scan_entity_source(
     path: str,
     source: str,
@@ -421,7 +422,6 @@ def scan_entity_source(
     money_exception: bool,
     use_paths: Sequence[str] | None = None,
 ) -> list[str]:
-    """Flag entity modules that reach HTTP/Mongo/Repository APIs."""
     errors: list[str] = []
     if any(k in source for k in ("axum", "mongodb", "Repository", "Executor", "NoTransaction", "bson")):
         code = strip_comments(source)
@@ -437,7 +437,7 @@ def scan_entity_source(
 
 
 def scan_service_mongo(path: str, source: str) -> list[str]:
-    """Flag Service/Process modules that assemble raw Mongo/BSON queries."""
+    """检查 Service 或 Process 中的原始 MongoDB/BSON 操作，避免应用用例和编排绕过领域仓储。"""
     errors: list[str] = []
     # An inner cfg(test) applies to the entire module; its BSON is unit-test data.
     if re.match(r"\s*#!\s*\[\s*cfg\s*\(\s*test\s*\)\s*\]", strip_comments(source)):
@@ -468,8 +468,8 @@ def scan_service_mongo(path: str, source: str) -> list[str]:
     return errors
 
 
+# 检查指向旧三层的重导出和 `#[path]`，避免迁移后仍能通过兼容门面引用已退役实现。
 def scan_facade(path: str, source: str) -> list[str]:
-    """Flag leftover re-export façades onto the old three-layer crates."""
     if "entities" not in source and "database" not in source and "services" not in source:
         return []
     errors: list[str] = []
@@ -483,15 +483,15 @@ def scan_facade(path: str, source: str) -> list[str]:
     return errors
 
 
+# 检查 BPM 源码是否引用 ERP、I/O、时钟或 ID 生成符号，防止通用流程计算依赖业务或外部状态。
 def scan_bpm_source(path: str, source: str) -> list[str]:
-    """Flag BPM production sources that mention ERP/I-O/clock/ID generation."""
     if BPM_FORBIDDEN_RE.search(source):
         return [f"BPM 源码包含禁止的 ERP/I-O/时钟/ID 生成符号: {path}"]
     return []
 
 
+# 按本域与外域的集合清单检查仓储源码，阻断借集合名字面量绕过领域所有权的访问。
 def scan_foreign_collections(path: str, source: str, own: set[str], foreign: set[str]) -> list[str]:
-    """Flag a domain repository that names another domain's collection."""
     errors: list[str] = []
     for match in re.finditer(r'"([a-z][a-z0-9_]*)"', source):
         name = match.group(1)
@@ -500,14 +500,14 @@ def scan_foreign_collections(path: str, source: str, own: set[str], foreign: set
     return errors
 
 
+# 识别 `repository/` 与 `repository.rs`，供 Service/Process 门禁排除实际拥有持久化职责的仓储模块。
 def is_repository_source(path: str) -> bool:
-    """Return whether a source path is a repository module (directory or `repository.rs`)."""
     normalized = "/" + path.replace("\\", "/").strip("/") + "/"
     return "/repository/" in normalized or Path(path).name == "repository.rs"
 
 
+# 收集指定仓储目录声明的集合名字面量，作为核对 crate 集合所有权的源码依据。
 def crate_collection_literals(repo_root: Path) -> set[str]:
-    """Collect collection string literals declared under a crate repository tree."""
     owned: set[str] = set()
     if not repo_root.is_dir():
         return owned
@@ -517,18 +517,18 @@ def crate_collection_literals(repo_root: Path) -> set[str]:
     return owned
 
 
+# 定位领域规则夹具目录，使命令行自检不依赖调用时的工作目录。
 def load_fixtures(root: Path) -> Path:
-    """Return the fixture directory next to this script."""
     return root / "domain-boundary-fixtures"
 
 
+# 按 UTF-8 读取 Rust 或 JSON 规则输入，确保自检不受宿主默认编码影响。
 def read_text(path: Path) -> str:
-    """Read a UTF-8 file."""
     return path.read_text(encoding="utf-8")
 
 
+# 核对规则的正例能通过、反例能触发阻断，避免门禁规则失效后仍将工作区判为通过。
 def run_fixture_suite(fixture_dir: Path) -> CheckResult:
-    """Assert every rule has a passing positive fixture and a failing negative fixture."""
     result = CheckResult()
     if not fixture_dir.is_dir():
         result.errors.append(f"缺失夹具目录: {fixture_dir}")
@@ -685,7 +685,7 @@ def run_fixture_suite(fixture_dir: Path) -> CheckResult:
 
 
 def cargo_metadata(backend: Path) -> dict[str, Any]:
-    """Load full cargo metadata including the dependency resolve graph."""
+    """读取锁定且启用全部 feature 的 Cargo metadata（含解析图），供领域及其他源码门禁共用实际活动成员和依赖。"""
     proc = subprocess.run(
         [
             "cargo",
@@ -708,8 +708,8 @@ def cargo_metadata(backend: Path) -> dict[str, Any]:
     return json.loads(proc.stdout)
 
 
+# 读取迁移阶段计划，供过渡期门禁仅对已验收阶段核销旧源码。
 def load_plan_manifest(backend: Path) -> dict[str, Any]:
-    """Read plan-manifest.json for accepted-phase clearance."""
     path = (
         backend
         / "docs/superpowers/plans/domain-crate-migration/plan-manifest.json"
@@ -717,8 +717,8 @@ def load_plan_manifest(backend: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+# 读取迁移源路径映射，供过渡期门禁定位已验收阶段移动后不应残留的旧文件。
 def load_source_map(backend: Path) -> list[dict[str, str]]:
-    """Read source-map.tsv rows."""
     path = backend / "docs/superpowers/plans/domain-crate-migration/source-map.tsv"
     rows: list[dict[str, str]] = []
     lines = path.read_text(encoding="utf-8").splitlines()
@@ -729,8 +729,8 @@ def load_source_map(backend: Path) -> list[dict[str, str]]:
     return rows
 
 
+# 从旧仓储的 `extensions/<domain>.rs` 提取集合归属，供门禁识别尚未迁移的外域集合。
 def collection_ownership(backend: Path) -> dict[str, str]:
-    """Map collection string literals to the extensions/<domain>.rs that owns them."""
     owned: dict[str, str] = {}
     ext_dir = backend / "database/src/repository/extensions"
     if not ext_dir.is_dir():
@@ -744,8 +744,8 @@ def collection_ownership(backend: Path) -> dict[str, str]:
     return owned
 
 
+# 遍历指定根下的 Rust 源码并跳过其 `tests` 归档，供生产边界检查限定扫描范围。
 def iter_rs(root: Path) -> Iterable[Path]:
-    """Yield production .rs files under root, skipping tests archives."""
     if not root.is_dir():
         return
     for path in root.rglob("*.rs"):
@@ -756,7 +756,7 @@ def iter_rs(root: Path) -> Iterable[Path]:
 
 
 def check_workspace(backend: Path, metadata: Mapping[str, Any], *, cutover: bool = False) -> CheckResult:
-    """Apply boundary rules to the current workspace."""
+    """基于实际活动成员执行领域依赖与源码检查；最终切换模式额外拒绝残留旧包、目录和引用。"""
     backend = backend.resolve()
     result = CheckResult()
     # Once old members are absent, the normal CI entry must not silently retain
@@ -925,8 +925,8 @@ def check_workspace(backend: Path, metadata: Mapping[str, Any], *, cutover: bool
     return result
 
 
+# 分别呈现规则自检和工作区结果，便于调用方区分门禁失效与业务源码违规。
 def format_report(fixtures: CheckResult, workspace: CheckResult) -> str:
-    """Render a human-readable report."""
     lines = ["领域边界检查"]
     lines.append(f"夹具: errors={len(fixtures.errors)}")
     for note in fixtures.notes:
@@ -946,7 +946,7 @@ def format_report(fixtures: CheckResult, workspace: CheckResult) -> str:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Run fixture self-checks, then the workspace graph and source scan."""
+    """先验证领域边界规则；常规运行还核验实际依赖图和源码，并以退出码告知 CI 是否阻断。"""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--backend", type=Path, required=True, help="backend 目录")
     parser.add_argument("--cutover", action="store_true", help="阶段 17：完整 workspace 与零 legacy 强制验收")

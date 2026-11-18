@@ -38,18 +38,11 @@ pub struct PartyTaxProfileService {
 }
 
 impl PartyTaxProfileService {
-    /// 创建税务资料服务实例。
+    /// 装配往来主体的税务资料服务，供列表和写入入口共用授权、供应商档案边界及审计。
     ///
     /// # 参数
-    /// * `db` - 数据库实例
     /// * `audit` - 审计写入端口
     /// * `supplier_roles` - 供应商角色事实端口
-    ///
-    /// # 返回
-    /// 返回服务实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(
         db: Database,
         audit: Arc<dyn PartyAuditPort>,
@@ -59,13 +52,11 @@ impl PartyTaxProfileService {
         Self { db, audit, supplier_roles, authorization }
     }
 
-    /// 分页查询税务资料列表。
+    /// 按条件分页读取主体税务资料，用于选择开票资料和维护主体税务档案。
     ///
     /// # 参数
     /// * `party_id` - 所属企业主体 ID
-    /// * `params` - 查询参数
     ///
-    /// # 返回
     /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
     ///
     /// # 错误
@@ -91,7 +82,7 @@ impl PartyTaxProfileService {
             .await
     }
 
-    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    // 沿用列表入口建立的快照，先校验读取资格，再查询税务资料分页，确保权限与结果取自同一读取阶段。
     async fn party_tax_profile_list_snapshot(
         &self,
         actor: &AuditActor,
@@ -146,14 +137,12 @@ impl PartyTaxProfileService {
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
-    /// 创建税务资料（跨行事务：默认资料唯一 + 新建 + 审计原子写入）。
+    /// 为主体新增税务资料。设为默认时同时调整其他默认标记，并将新记录和审计一起提交。
     ///
     /// # 参数
     /// * `party_id` - 所属企业主体 ID
     /// * `req` - 创建请求
-    /// * `actor` - 已通过鉴权的审计操作人
     ///
-    /// # 返回
     /// 返回新建税务资料的响应视图。
     ///
     /// # 错误
@@ -177,7 +166,7 @@ impl PartyTaxProfileService {
             .await
     }
 
-    /// 仅使用已验证输入构造本域事实，不读取数据库。
+    // 将已经验证的输入转换为待写入的税务资料记录。这一步只准备实体。
     fn prepare_record(
         &self,
         party_id: &str,
@@ -199,7 +188,7 @@ impl PartyTaxProfileService {
         Ok(profile)
     }
 
-    /// 在授权快照中核验主体和供应商边界，再原子写入默认标记、事实与审计。
+    // 在创建事务中核验主体和供应商资料边界，再一起保存税务资料、默认标记调整及审计。
     async fn create_stage(
         &self,
         party_id: &str,
@@ -228,14 +217,12 @@ impl PartyTaxProfileService {
         Ok(profile.into())
     }
 
-    /// 更新税务资料（仅生命周期字段；默认标记跨行事务）。
+    /// 维护现有税务资料的生命周期字段和默认状态，使用请求版本保护并发修改。
     ///
     /// # 参数
     /// * `id` - 税务资料 ID
     /// * `req` - 更新请求（含期望版本）
-    /// * `actor` - 已通过鉴权的审计操作人
     ///
-    /// # 返回
     /// 返回更新后税务资料的响应视图。
     ///
     /// # 错误
@@ -259,7 +246,7 @@ impl PartyTaxProfileService {
             .await
     }
 
-    /// 先验证功能资格，再从原事务读取版本及完整事实，修改与审计使用同一执行器。
+    // 在原事务核验资格和版本后修改税务资料，沿用同一执行器调整默认标记并保存审计。
     async fn update_stage(
         &self,
         id: &str,

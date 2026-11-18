@@ -80,16 +80,7 @@ pub struct LegacyImportRowListQuery {
 }
 
 impl LegacyImportRowListParams {
-    /// 归一化导入行列表查询参数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    /// 将导入行的状态、来源行键和分页归一化为仓储无关的查询参数；排序字段不在白名单或方向非法时返回 `ValidationError`。
     pub fn normalized(&self) -> Result<LegacyImportRowListQuery> {
         Ok(LegacyImportRowListQuery {
             source_object_type: normalized_text(self.source_object_type.as_deref()),

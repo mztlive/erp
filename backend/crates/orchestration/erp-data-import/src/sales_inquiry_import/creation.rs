@@ -13,11 +13,11 @@ use crate::{Error, Result};
 
 impl SalesInquiryImportProcess {
     /// 将客户专用预览一次性创建为草稿；相同命令重试返回原结果。
-    /// # 参数
+    ///
     /// `actor` 为当前销售，`command` 绑定客户、预览、文件指纹及合并确认。
-    /// # 返回
+    ///
     /// 新草稿与已保存的导入结果。
-    /// # 错误
+    ///
     /// 权限、客户、预览或商品失效时整体拒绝；未知提交只恢复原回执。
     pub async fn create_from_preview(
         &self,

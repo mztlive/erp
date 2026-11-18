@@ -14,17 +14,7 @@ use crate::repository::SupplierFulfillmentExt;
 
 impl SupplierFulfillmentService {
     /// 在调用方事务内交接跟进人；供组合层与幂等收据共用执行器。
-    ///
-    /// # 参数
-    /// * `id` - 订单稳定 ID
-    /// * `req` - 已校验交接请求
-    /// * `actor` - 已认证操作人
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
     /// 返回交接后视图。
-    ///
-    /// # 错误
     /// 版本、范围或目标非法时拒绝。
     pub async fn apply_fulfillment_handover(
         &self,
@@ -38,7 +28,7 @@ impl SupplierFulfillmentService {
     }
 }
 
-/// 在调用方事务内重验范围、CAS 并写入跟进人。
+// 在调用方事务内重验范围、CAS 并写入跟进人。
 async fn persist_handover(
     db: &Database,
     access: &FulfillmentOrderAccess,
@@ -57,7 +47,7 @@ async fn persist_handover(
     Ok(handover_view(&order, Vec::new()))
 }
 
-/// 先应用领域交接规则，再用实际拟保存归属重验原记录与目标。
+// 先应用领域交接规则，再用实际拟保存归属重验原记录与目标。
 async fn authorize_handover(
     access: &FulfillmentOrderAccess,
     order: &mut SupplierFulfillmentOrder,
@@ -69,17 +59,8 @@ async fn authorize_handover(
     access.require_owner_change(actor, order, executor).await
 }
 
-/// 构造交接响应。
-///
-/// # 参数
-/// * `order` - 已写回跟进人的履约订单。
-/// * `transferred_work_item_ids` - 已移交的工作项身份。
-///
-/// # 返回
-/// 返回订单、跟进人、业务组织、版本和工作项身份。
-///
-/// # 错误
-/// 不返回错误。
+// 构造交接响应。
+// 返回订单、跟进人、业务组织、版本和工作项身份。
 pub(crate) fn handover_view(
     order: &SupplierFulfillmentOrder,
     transferred_work_item_ids: Vec<String>,

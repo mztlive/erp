@@ -51,7 +51,7 @@ impl ConnectionAccess {
     }
 }
 
-/// 隐藏对象存在性，设施失败和授权漂移仍保留原分类。
+// 隐藏对象存在性，设施失败和授权漂移仍保留原分类。
 pub(super) fn conceal_missing(error: ProcessError) -> ProcessError {
     match error {
         ProcessError::NotFound(_) => ProcessError::Forbidden("当前账号不能操作此供应商连接".into()),
@@ -60,7 +60,7 @@ pub(super) fn conceal_missing(error: ProcessError) -> ProcessError {
 }
 
 impl From<ProcessError> for AuthorizationError {
-    /// 将内部授权失败转为固定脱敏分类，不把设施失败伪装成无权。
+    // 将内部授权失败转为固定脱敏分类，不把设施失败伪装成无权。
     fn from(error: ProcessError) -> Self {
         match error {
             ProcessError::Forbidden(_) | ProcessError::NotFound(_) | ProcessError::Unauthenticated(_) => {
@@ -83,13 +83,13 @@ fn connection_permission(action: &str) -> ProcessResult<Permission> {
     }
 }
 
-/// 核对当前部署配置与协议绑定，不执行身份访问或远程授权。
-/// # 参数
-/// settings/protocol 为固定部署能力；connection 为已授权的真实连接。
-/// # 返回
-/// 配置存在且协议绑定匹配时成功。
-/// # 错误
-/// 配置缺失或绑定不符时保留脱敏协议错误。
+// 核对当前部署配置与协议绑定，不执行身份访问或远程授权。
+//
+// settings/protocol 为固定部署能力；connection 为已授权的真实连接。
+//
+// 配置存在且协议绑定匹配时成功。
+//
+// 配置缺失或绑定不符时保留脱敏协议错误。
 pub(super) fn verify_binding(
     settings: Option<&JdVopConfig>,
     protocol: &Result<Arc<dyn AuthorizationHttp>>,

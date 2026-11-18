@@ -93,7 +93,7 @@ fn revert_pipeline_derives_open_when_progress_reaches_zero() {
     assert_eq!(nested[2], Bson::String("partially_settled".to_string()));
 }
 
-/// 空输入批量回退直接成功且不访问数据库。
+// 回归检查：空输入批量回退直接成功且不访问数据库。
 #[tokio::test]
 async fn revert_invoicings_many_empty_input_returns_empty_without_db() {
     let client = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1").await.expect("客户端句柄创建失败");

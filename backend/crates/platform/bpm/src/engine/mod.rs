@@ -48,7 +48,7 @@ pub enum EngineError {
 }
 
 impl From<ModelError> for EngineError {
-    /// 将模型错误提升为引擎错误。
+    // 用 `?` 从模型操作返回时保留原始不变式错误，不把它转换成可提交的阻塞计划。
     fn from(error: ModelError) -> Self {
         Self::Model(error)
     }
@@ -86,13 +86,10 @@ pub enum Eligibility {
 }
 
 impl Eligibility {
-    /// 组合同节点参与人的资格。
-    /// # 参数
-    /// `members` 按定义顺序提供全部人员资格。
-    /// # 返回
-    /// 单人保持原格式，多人返回或签资格。
+    /// 调用方收敛节点内各人的资格后，按定义顺序合成进入节点所用的结果。单人保持原形，多人保留首位以兼容旧快照。
+    ///
     /// # 错误
-    /// 空集合、重复人员或嵌套集合时失败。
+    /// 人数不在 1 至 50、存在重复人员或传入嵌套资格时拒绝组合。
     pub fn any_of(mut members: Vec<Self>) -> EngineResult<Self> {
         if members.is_empty() || members.len() > 50 {
             return Err(EngineError::InvalidCommand("节点审批人数必须为 1 至 50"));
@@ -112,13 +109,7 @@ impl Eligibility {
         }
     }
 
-    /// 返回节点内逐人的资格。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 返回有序资格引用。
-    /// # 错误
-    /// 无。
+    /// 按定义顺序展开逐人资格，供启动核验全部参与人、进入节点只向有效成员派发任务。
     pub fn members(&self) -> Vec<&Self> {
         match self {
             Self::AnyOf { primary, additional } => {
@@ -142,16 +133,7 @@ impl Eligibility {
         Ok(())
     }
 
-    /// 返回资格对应的显示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回构造时写入的快照。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为节点执行取资格携带的显示名，不另查账号；或签时返回首位参与人快照以沿用旧字段。
     pub fn name_snapshot(&self) -> &str {
         match self {
             Self::AnyOf { primary, .. } => primary.name_snapshot(),
@@ -161,16 +143,7 @@ impl Eligibility {
         }
     }
 
-    /// 返回受阻资格上的阻塞码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 有效资格返回 `None`；`Blocked` 返回其中的 [`ApprovalBlockerCode`]，不限人员失效。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 进入节点时用此结果判断是否无人可办；单人失效返回其 [`ApprovalBlockerCode`]，或签仅在全员受阻时返回首位阻塞码。
     pub fn blocked_code(&self) -> Option<ApprovalBlockerCode> {
         match self {
             Self::AnyOf { primary, additional } => {
@@ -182,30 +155,12 @@ impl Eligibility {
         }
     }
 
-    /// 返回资格对应的责任人。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回构造时写入的处理人。
-    ///
-    /// # 错误
-    /// 无。
+    /// 为执行或任务意图复制处理人 ID；或签返回首位参与人，兼容旧快照中的单人字段。
     pub fn participant(&self) -> ParticipantId {
         self.participant_ref().clone()
     }
 
-    /// 借用资格对应的责任人，供 crate 内校验而不复制身份。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回构造时写入的处理人引用。
-    ///
-    /// # 错误
-    /// 无。
+    // 在资格归属校验中借用身份，避免复制；或签按首位身份与原单人绑定字段比较。
     pub(crate) fn participant_ref(&self) -> &ParticipantId {
         match self {
             Self::AnyOf { primary, .. } => primary.participant_ref(),
@@ -215,16 +170,7 @@ impl Eligibility {
 }
 
 impl DefinitionGraph {
-    /// 返回入口节点。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回定义入口键对应的节点引用。
-    ///
-    /// # 错误
-    /// 入口不存在时返回图损坏。
+    /// 启动前按定义冻结的入口键定位首个执行节点；找不到时返回图损坏，不以节点存储顺序兜底。
     pub fn entry_node(&self) -> EngineResult<&ApprovalNodeDefinition> {
         self.node(&self.definition.entry_node_key).ok_or(EngineError::GraphCorrupted)
     }
@@ -253,7 +199,7 @@ mod tests {
         SubjectRef,
     };
 
-    /// 相同启动输入产生相同计划语义。
+    // 对同一份定义、绑定、ID 和时间重复启动，验证计划不受外部状态影响。
     #[test]
     fn engine_start_is_deterministic() {
         let first = start_two_node(eligible("u1", "张三"));
@@ -289,7 +235,7 @@ mod tests {
         );
     }
 
-    /// 即使入口合格，任一非入口审批人失效时也必须拒绝启动。
+    // 让入口合格而后继人员失效，验证启动会检查整条链，而不是只检查首个待办。
     #[test]
     fn engine_start_rejects_ineligible_non_entry_assignee() {
         let error = start(
@@ -322,7 +268,7 @@ mod tests {
         assert!(matches!(error, EngineError::InvalidCommand(_)));
     }
 
-    /// 入口审批人失效时同样不得创建运行链。
+    // 入口人员失效时拒绝启动，不留下起步即受阻的新实例。
     #[test]
     fn engine_start_rejects_ineligible_entry_assignee() {
         let error = try_start_two_node(
@@ -333,14 +279,14 @@ mod tests {
         assert_eq!(error, EngineError::InvalidCommand("启动时全部审批人必须有效，不得创建受阻实例"));
     }
 
-    /// 资格结果必须逐节点属于定义中冻结的审批人。
+    // 用其他人的资格替代节点冻结人员，验证启动不会误用该资格。
     #[test]
     fn engine_start_rejects_eligibility_for_another_participant() {
         let error = try_start_two_node(eligible("u9", "钱七"), eligible("u2", "李四")).unwrap_err();
         assert_eq!(error, EngineError::InvalidCommand("资格结果必须属于定义审批人"));
     }
 
-    /// 通过进入下一节点；下一审批人失效时保留本次通过。
+    // 验证下一节点人员失效时，当前通过和后继受阻仍在同一 `Proceed` 计划中提交。
     #[test]
     fn engine_approve_keeps_decision_when_next_blocked() {
         let started = start_two_node(eligible("u1", "张三"));
@@ -388,7 +334,7 @@ mod tests {
         );
     }
 
-    /// 下一节点资格主体不得伪装成定义责任人形成隐藏换人通道。
+    // 下一节点收到其他人的资格时应拒绝推进，不能借通过命令暗中换人。
     #[test]
     fn engine_decide_rejects_next_participant_outside_definition() {
         let started = start_two_node(eligible("u1", "张三"));
@@ -411,7 +357,7 @@ mod tests {
         assert_eq!(error, EngineError::InvalidCommand("节点责任人必须匹配定义审批人"));
     }
 
-    /// 末节点通过生成待终结计划。
+    // 验证末节点通过会清除当前执行引用，并以 `TerminalApproved` 通知调用方收结实例。
     #[test]
     fn engine_final_approve_marks_terminal() {
         let started = start_single_node(eligible("u1", "张三"));
@@ -477,7 +423,7 @@ mod tests {
         assert_eq!(blocked_plan.instance.status, ApprovalProcessInstanceStatus::Blocked);
     }
 
-    /// 任一节点驳回都终止本次实例，subject_version 和历史轮次不变。
+    // 验证驳回终结本实例、不重启或新建执行，也不会改写已冻结的提交版本和轮次。
     #[test]
     fn engine_reject_terminates_without_restart() {
         let started = start_two_node(eligible("u1", "张三"));
@@ -509,7 +455,7 @@ mod tests {
         assert!(!plan.events.iter().any(|event| event.kind == BpmEventKind::RoundRestarted));
     }
 
-    /// 当前审批人失效提交 BLOCKED 事实并关闭任务，而不是返回不可提交错误。
+    // 验证当前单人审批资格失效时，计划关闭任务并提交阻塞事实，但不记下决定。
     #[test]
     fn engine_decide_blocks_current_actor_without_accepting() {
         let started = start_two_node(eligible("u1", "张三"));
@@ -538,7 +484,7 @@ mod tests {
         ));
     }
 
-    /// 标准阻塞入口生成完整事件与任务关闭计划。
+    // 验证标准阻塞计划同时包含阻塞码、执行变更、任务关闭和可关联节点的事件。
     #[test]
     fn engine_block_current_emits_complete_standard_plan() {
         let started = start_two_node(eligible("u1", "张三"));
@@ -562,7 +508,7 @@ mod tests {
         assert_eq!(event.blocker_code, Some(ApprovalBlockerCode::OpenTaskConflict));
     }
 
-    /// 公开阻塞入口必须拒绝非实例当前令牌的执行。
+    // 传入已不是当前令牌的执行，验证阻塞入口不允许旧执行影响实例。
     #[test]
     fn engine_block_current_rejects_non_current_execution() {
         let started = start_two_node(eligible("u1", "张三"));
@@ -574,7 +520,7 @@ mod tests {
         assert_eq!(error, EngineError::InvalidCommand("执行不是实例当前令牌"));
     }
 
-    /// 公开阻塞入口仍必须拒绝非活动执行。
+    // 验证当前令牌已受阻时不会通过同一入口再写一次阻塞迁移。
     #[test]
     fn engine_block_current_rejects_non_active_execution() {
         let started = start_two_node(eligible("u1", "张三"));
@@ -586,7 +532,7 @@ mod tests {
         assert_eq!(error, EngineError::InvalidCommand("只有活动执行可以接受决定"));
     }
 
-    /// 图损坏且能形成合法快照时提交结构阻塞。
+    // 破坏当前决定连线，验证可形成合法执行快照时以结构阻塞代替接受决定。
     #[test]
     fn engine_decide_blocks_on_corrupted_graph() {
         let started = start_two_node(eligible("u1", "张三"));
@@ -617,7 +563,7 @@ mod tests {
         );
     }
 
-    /// 取消清空当前执行引用。
+    // 验证取消同时结束实例和节点执行，不留下可继续办理的当前令牌。
     #[test]
     fn engine_cancel_clears_current_execution() {
         let started = start_two_node(eligible("u1", "张三"));
@@ -639,7 +585,7 @@ mod tests {
         assert_eq!(plan.updated_executions[0].status, ApprovalNodeExecutionStatus::Cancelled);
     }
 
-    /// 恢复创建新执行和新任务，旧任务保持关闭。
+    // 验证原人恢复会替换旧执行、为新执行派任务，且不重开旧任务或改写原绑定。
     #[test]
     fn engine_resume_creates_new_execution() {
         let blocked = block_after_start(ApprovalBlockerCode::ApproverEmploymentInvalid);
@@ -693,7 +639,7 @@ mod tests {
         );
     }
 
-    /// 结构性 blocker 不得进入原审批人恢复。
+    // 验证图或一致性问题不能通过刷新人员资格解除。
     #[test]
     fn engine_resume_rejects_structural_blocker() {
         let started = start_two_node(eligible("u1", "张三"));
@@ -722,7 +668,7 @@ mod tests {
         );
     }
 
-    /// 原审批人仍失效时恢复失败且输入事实保持不变。
+    // 验证资格未恢复时不能生成计划，原实例、执行和绑定保持不变。
     #[test]
     fn engine_resume_rejects_still_ineligible_assignee_without_state_change() {
         let blocked_plan = block_after_start(ApprovalBlockerCode::ApproverAccountInactive);
@@ -753,7 +699,7 @@ mod tests {
         assert_eq!(assignee, original_assignee);
     }
 
-    /// 当前责任或保留变更审计漂移时恢复失败关闭。
+    // 篡改冻结责任人或历史变更审计字段，验证恢复不会接纳已漂移的绑定。
     #[test]
     fn engine_resume_rejects_corrupted_definition_binding() {
         let blocked = block_after_start(ApprovalBlockerCode::ApproverAccountInactive);
@@ -799,7 +745,7 @@ mod tests {
         }
     }
 
-    /// 旧执行、资格结果与轮次必须全部属于同一原审批人恢复事实。
+    // 分别让旧执行责任人、资格身份或轮次不一致，验证恢复不能拼接不同来源的事实。
     #[test]
     fn engine_resume_rejects_mismatched_recovery_facts() {
         let blocked = block_after_start(ApprovalBlockerCode::ApproverAccountInactive);
@@ -857,7 +803,7 @@ mod tests {
         assert_eq!(error, EngineError::InvalidCommand("受阻执行不属于实例当前轮次"));
     }
 
-    /// 缺失节点不得构造缺字段执行。
+    // 验证目标节点缺失时不会编造节点信息来写入阻塞执行。
     #[test]
     fn engine_enter_missing_node_is_uncommittable() {
         let graph = two_node_graph();
@@ -932,7 +878,7 @@ mod tests {
         }
     }
 
-    /// 计划不得包含 ERP 语义字段名。
+    // 检查计划不混入路由、权限或通知细节，维持 BPM 到应用适配层的边界。
     #[test]
     fn engine_plan_has_no_erp_payload() {
         let plan = start_two_node(eligible("u1", "张三"));

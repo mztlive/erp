@@ -39,20 +39,16 @@ struct PublishCommand {
 }
 
 impl SalesSelectionService {
-    /// 发布选品册并建立空会话。
-    ///
-    /// # 参数
-    /// * `booklet_id` - 选品册身份
-    /// * `req` - 发布请求
-    /// * `actor` - 已认证发布人
-    /// * `catalog` - 供给复核端口
-    /// * `crypto` - 链接令牌编解码器
-    ///
-    /// # 返回
+    /// 管理端发布已准备的选品册时，复核当前批次资格并原子保存发布状态与初始会话。
     /// 返回已发布详情，不含令牌明文。
-    ///
-    /// # 错误
     /// 版本冲突、批次漂移、复核失效或写入失败时拒绝。
+    ///
+    /// 输入约定：
+    /// - `booklet_id`：选品册身份
+    /// - `req`：发布请求
+    /// - `actor`：已认证发布人
+    /// - `catalog`：供给复核端口
+    /// - `crypto`：链接令牌编解码器
     pub async fn publish(
         &self,
         booklet_id: &str,
@@ -80,7 +76,7 @@ impl SalesSelectionService {
             .await
     }
 
-    /// 发布回放、准备与正式写入必须使用入口持有的同一事务执行器。
+    // 发布入口先查同键结果，再准备或执行首次发布；回放检查与所有写入共享入口持有的执行器。
     async fn apply_publish(
         &self,
         command: &PublishCommand,
@@ -143,20 +139,16 @@ impl SalesSelectionService {
             .collect()
     }
 
-    /// 使用发布入口的执行器更新选品册、会话与幂等记录。
-    ///
-    /// # 参数
-    /// * `booklet` - 已发布态的选品册
-    /// * `sessions` - 新建空会话
-    /// * `items` - 有效陈列（仅用于视图）
-    /// * `command` - 已认证发布人、幂等键与请求哈希
-    /// * `executor` - 发布入口持有的事务执行器
-    ///
-    /// # 返回
-    /// 返回已发布详情。
-    ///
-    /// # 错误
-    /// 版本冲突或写入失败时回滚。
+    // 复核完成后在发布事务内更新册并写入会话、幂等记录，避免返回无法重新打开的发布结果。
+    // 返回已发布详情。
+    // 失败条件：版本冲突或写入失败时回滚。
+    //
+    // 输入约定：
+    // - `booklet`：已发布态的选品册
+    // - `sessions`：新建空会话
+    // - `items`：有效陈列（仅用于视图）
+    // - `command`：已认证发布人、幂等键与请求哈希
+    // - `executor`：发布入口持有的事务执行器
     async fn commit_publish(
         &self,
         mut booklet: SalesSelectionBooklet,
@@ -189,17 +181,12 @@ impl SalesSelectionService {
         Ok(view)
     }
 
-    /// 校验发布批次未漂移。
-    ///
-    /// # 参数
-    /// * `booklet` - 选品册
-    /// * `batch_id` - 已确认批次
-    ///
-    /// # 返回
-    /// 一致返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 批次不一致时拒绝重新预览。
+    // 正式发布前再次确认准备批次仍是当前批次，拒绝发布已被新准备结果替代的陈列。
+    // 失败条件：批次不一致时拒绝重新预览。
+    //
+    // 输入约定：
+    // - `booklet`：选品册
+    // - `batch_id`：已确认批次
     fn ensure_batch_current(&self, booklet: &SalesSelectionBooklet, batch_id: &str) -> Result<()> {
         if booklet.current_batch_id.as_deref() == Some(batch_id) {
             return Ok(());
@@ -207,20 +194,14 @@ impl SalesSelectionService {
         Err(Error::ValidationError("准备批次已变化，请重新预览后发布".into()))
     }
 
-    /// 复核陈列修订与资格。
-    ///
-    /// # 参数
-    /// * `booklet` - 选品册
-    /// * `batch_id` - 批次
-    /// * `publishable` - 可发布陈列
-    /// * `catalog` - 复核端口
-    /// * `executor` - 执行器
-    ///
-    /// # 返回
-    /// 全部有效返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 任一成员失效或修订变化整批拒绝并列明。
+    // 对拟发布陈列核对冻结 SKU 修订及其当日可售资格，防止商品资格变化后仍按旧快照发布。
+    // 失败条件：任一成员失效或修订变化整批拒绝并列明。
+    //
+    // 输入约定：
+    // - `booklet`：选品册
+    // - `batch_id`：批次
+    // - `publishable`：可发布陈列
+    // - `catalog`：复核端口
     async fn review_publishable(
         &self,
         booklet: &SalesSelectionBooklet,
@@ -241,19 +222,14 @@ impl SalesSelectionService {
         self.ensure_revisions_unchanged(booklet, batch_id, publishable, executor).await
     }
 
-    /// 复核修订未变化。
-    ///
-    /// # 参数
-    /// * `booklet` - 选品册
-    /// * `batch_id` - 批次
-    /// * `publishable` - 可发布陈列
-    /// * `executor` - 执行器
-    ///
-    /// # 返回
-    /// 修订一致返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 任一修订变化整批拒绝。
+    // 发布复核时对照当前 SKU 修订与陈列冻结修订，不因源商品更新而静默改写选品内容。
+    // 结果：修订一致返回 `Ok(())`。
+    // 任一修订变化整批拒绝。
+    //
+    // 输入约定：
+    // - `booklet`：选品册
+    // - `batch_id`：批次
+    // - `publishable`：可发布陈列
     async fn ensure_revisions_unchanged(
         &self,
         booklet: &SalesSelectionBooklet,
@@ -266,19 +242,15 @@ impl SalesSelectionService {
         ensure_revision_match(&members, publishable)
     }
 
-    /// 待发布删除陈列项。
-    ///
-    /// # 参数
-    /// * `booklet_id` - 选品册身份
-    /// * `display_id` - 陈列项身份
-    /// * `expected_version` - 册版本
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
+    /// 册尚待发布时移除当前批次指定陈列，沿用发布前的版本竞争规则。
     /// 返回更新后的详情。
-    ///
-    /// # 错误
     /// 版本冲突、非待发布或项不属于当前批次时拒绝。
+    ///
+    /// 输入约定：
+    /// - `booklet_id`：选品册身份
+    /// - `display_id`：陈列项身份
+    /// - `expected_version`：册版本
+    /// - `actor`：已认证操作人
     pub async fn delete_display_item(
         &self,
         booklet_id: &str,
@@ -300,7 +272,7 @@ impl SalesSelectionService {
             .await
     }
 
-    /// 陈列删除与册版本竞争更新共用调用方事务，发布竞争时整次回滚。
+    // 在调用方事务中同时删除陈列并以乐观锁更新册；与发布发生版本冲突时本次删除整体回滚。
     async fn delete_display_item_in(
         &self,
         booklet_id: &str,
@@ -334,19 +306,15 @@ impl SalesSelectionService {
         self.detail_view(&booklet, Some(batch), executor).await
     }
 
-    /// 更换公开链接。
-    ///
-    /// # 参数
-    /// * `booklet_id` - 选品册身份
-    /// * `req` - 版本与幂等
-    /// * `actor` - 已认证操作人
-    /// * `crypto` - 令牌编解码器
-    ///
-    /// # 返回
+    /// 管理端需要换掉旧访问链接时更新令牌及其幂等结果，不生成新的选品册。
     /// 返回详情，原令牌立即失效。
-    ///
-    /// # 错误
     /// 版本冲突或非已发布时拒绝。
+    ///
+    /// 输入约定：
+    /// - `booklet_id`：选品册身份
+    /// - `req`：版本与幂等
+    /// - `actor`：已认证操作人
+    /// - `crypto`：令牌编解码器
     pub async fn rotate_link(
         &self,
         booklet_id: &str,
@@ -358,18 +326,14 @@ impl SalesSelectionService {
             .await
     }
 
-    /// 复制当前链接令牌。
-    ///
-    /// # 参数
-    /// * `booklet_id` - 选品册身份
-    /// * `crypto` - 令牌编解码器
-    /// * `executor` - 已完成精确册授权的原快照执行器。
-    ///
-    /// # 返回
+    /// 在已授权且现有链接仍可读时恢复当前公开令牌，供管理端复制链接而不轮换令牌。
     /// 返回明文令牌，调用方拼接公开地址，不记录完整链接。
-    ///
-    /// # 错误
     /// 无链接或密文损坏时拒绝。
+    ///
+    /// 输入约定：
+    /// - `booklet_id`：选品册身份
+    /// - `crypto`：令牌编解码器
+    /// - `executor`：已完成精确册授权的原快照执行器。
     pub async fn copy_link(
         &self,
         booklet_id: &str,
@@ -385,18 +349,14 @@ impl SalesSelectionService {
         crypto.decrypt(cipher).map_err(|error| Error::Internal(error.to_string()))
     }
 
-    /// 关闭未提交选品册。
-    ///
-    /// # 参数
-    /// * `booklet_id` - 选品册身份
-    /// * `req` - 版本与幂等
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
+    /// 不再收集选择时关闭尚未提交的已发布选品册，通过共同生命周期入口处理重放与版本检查。
     /// 返回已关闭详情。
-    ///
-    /// # 错误
     /// 版本冲突或非已发布时拒绝。
+    ///
+    /// 输入约定：
+    /// - `booklet_id`：选品册身份
+    /// - `req`：版本与幂等
+    /// - `actor`：已认证操作人
     pub async fn close_booklet(
         &self,
         booklet_id: &str,
@@ -406,18 +366,14 @@ impl SalesSelectionService {
         self.lifecycle_command(booklet_id, req, actor, IdempotencyOperation::Close, None).await
     }
 
-    /// 撤销已提交选品册的链接访问。
-    ///
-    /// # 参数
-    /// * `booklet_id` - 选品册身份
-    /// * `req` - 版本与幂等
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
+    /// 管理端撤销已提交册的公开访问时停用链接，保留已提交记录。
     /// 返回详情，不改变已提交状态。
-    ///
-    /// # 错误
     /// 非已提交时拒绝。
+    ///
+    /// 输入约定：
+    /// - `booklet_id`：选品册身份
+    /// - `req`：版本与幂等
+    /// - `actor`：已认证操作人
     pub async fn revoke_access(
         &self,
         booklet_id: &str,
@@ -427,18 +383,14 @@ impl SalesSelectionService {
         self.lifecycle_command(booklet_id, req, actor, IdempotencyOperation::RevokeAccess, None).await
     }
 
-    /// 作废发布前选品册。
-    ///
-    /// # 参数
-    /// * `booklet_id` - 选品册身份
-    /// * `req` - 版本与幂等
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
+    /// 发布之前放弃本册时迁移到作废状态，不误作关闭已发布的册。
     /// 返回已作废详情。
-    ///
-    /// # 错误
     /// 终态或已发布后拒绝。
+    ///
+    /// 输入约定：
+    /// - `booklet_id`：选品册身份
+    /// - `req`：版本与幂等
+    /// - `actor`：已认证操作人
     pub async fn void_booklet(
         &self,
         booklet_id: &str,
@@ -449,17 +401,12 @@ impl SalesSelectionService {
     }
 }
 
-/// 校验资格引用全覆盖。
-///
-/// # 参数
-/// * `refs` - 陈列精确引用
-/// * `qualified` - 仍合格的引用
-///
-/// # 返回
-/// 全合格返回 `Ok(())`。
-///
-/// # 错误
-/// 任一失效整批拒绝并列明。
+// 发布前要求拟展示的每个精确 SKU 修订都出现在资格复核结果中，缺一即拒绝发布。
+// 失败条件：任一失效整批拒绝并列明。
+//
+// 输入约定：
+// - `refs`：陈列精确引用
+// - `qualified`：仍合格的引用
 fn ensure_refs_qualified(refs: &[(String, String)], qualified: &[(String, String)]) -> Result<()> {
     if refs.iter().all(|item| qualified.contains(item)) {
         return Ok(());
@@ -469,17 +416,12 @@ fn ensure_refs_qualified(refs: &[(String, String)], qualified: &[(String, String
     Err(Error::ValidationError(format!("以下陈列已失效: {}", missing.join("、"))))
 }
 
-/// 校验修订与快照一致。
-///
-/// # 参数
-/// * `members` - 批次冻结成员
-/// * `publishable` - 可发布陈列
-///
-/// # 返回
-/// 一致返回 `Ok(())`。
-///
-/// # 错误
-/// 任一修订变化整批拒绝。
+// 核对复验得到的 SKU 修订与准备时冻结值，两者不一致时保留旧快照并拒绝发布。
+// 任一修订变化整批拒绝。
+//
+// 输入约定：
+// - `members`：批次冻结成员
+// - `publishable`：可发布陈列
 fn ensure_revision_match(
     members: &[SalesSelectionPoolMember],
     publishable: &[&SalesSelectionDisplayItem],
@@ -503,18 +445,13 @@ fn ensure_revision_match(
     Err(Error::ValidationError(format!("以下陈列修订已变化: {}", changed.join("、"))))
 }
 
-/// 校验陈列归属当前批次。
-///
-/// # 参数
-/// * `item` - 陈列项
-/// * `booklet_id` - 选品册
-/// * `batch_id` - 当前批次
-///
-/// # 返回
-/// 归属一致返回 `Ok(())`。
-///
-/// # 错误
-/// 跨册或跨批次时拒绝。
+// 编辑当前册陈列前校验条目确实属于本册的有效批次，避免处理另一册或旧批次的条目。
+// 跨册或跨批次时拒绝。
+//
+// 输入约定：
+// - `item`：陈列项
+// - `booklet_id`：选品册
+// - `batch_id`：当前批次
 fn ensure_item_of_batch(item: &SalesSelectionDisplayItem, booklet_id: &str, batch_id: &str) -> Result<()> {
     if item.booklet_id.as_ref() == booklet_id && item.batch_id == batch_id {
         return Ok(());

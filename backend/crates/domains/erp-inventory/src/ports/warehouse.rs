@@ -31,29 +31,15 @@ pub struct WarehouseRevisionFact {
 #[async_trait]
 pub trait WarehouseFactsPort: Send + Sync {
     /// 判断仓库标识是否存在。
-    ///
-    /// # 参数
-    /// * `id` - 仓库标识。
-    /// * `executor` - 调用方选择的数据访问执行器。
-    ///
-    /// # 返回
     /// 存在时为 `true`，不存在时为 `false`。
-    ///
-    /// # 错误
-    /// 适配器查询失败时返回对应错误。
+    /// `id` 为仓库标识；沿用调用方执行器 `executor`。
+    /// 传播适配器查询错误。
     async fn warehouse_exists(&self, id: &str, executor: &mut dyn Executor) -> Result<bool>;
 
     /// 按标识返回仓库事实。
-    ///
-    /// # 参数
-    /// * `ids` - 仓库标识。
-    /// * `executor` - 调用方选择的数据访问执行器。
-    ///
-    /// # 返回
     /// 返回以仓库标识为键的事实映射。
-    ///
-    /// # 错误
-    /// 适配器查询失败时返回对应错误。
+    /// `ids` 为仓库标识；沿用调用方执行器 `executor`。
+    /// 传播适配器查询错误。
     async fn warehouses_by_ids(
         &self,
         ids: &[String],
@@ -61,16 +47,9 @@ pub trait WarehouseFactsPort: Send + Sync {
     ) -> Result<HashMap<String, WarehouseFact>>;
 
     /// 按标识返回仓库版本展示事实。
-    ///
-    /// # 参数
-    /// * `ids` - 仓库版本标识。
-    /// * `executor` - 调用方选择的数据访问执行器。
-    ///
-    /// # 返回
     /// 返回以版本标识为键的展示事实映射。
-    ///
-    /// # 错误
-    /// 适配器查询失败时返回对应错误。
+    /// `ids` 为仓库版本标识；沿用调用方执行器 `executor`。
+    /// 传播适配器查询错误。
     async fn warehouse_revisions_by_ids(
         &self,
         ids: &[String],

@@ -22,13 +22,8 @@ pub struct JdVopRequestContext {
 }
 
 impl JdVopRequestContext {
-    /// 固化业务调用渠道，不要求调用方提供网关系统字段。
-    /// # 参数
-    /// `source_type` 来自部署配置；配置默认3，允许明确覆盖为合法 Java int。
-    /// # 返回
-    /// 仅包含渠道的上下文。
-    /// # 错误
-    /// 渠道不是正 Java int 时返回脱敏映射错误。
+    /// 装配请求编码器时固定部署的 `source_type`（配置默认 3），供各方法复用同一业务渠道；网关系统字段无需由调用方传入。
+    /// 渠道必须能表示为正 Java `int`，否则返回脱敏映射错误。
     pub fn new(source_type: u32) -> ConnectorResult<Self> {
         if source_type == 0 || source_type > u32::try_from(i32::MAX).expect("int正上限可表示") {
             return Err(mapping("京东调用渠道超出接口范围"));
@@ -44,13 +39,8 @@ impl JdVopRequestContext {
     }
 }
 
-/// 编码已白名单化的只读请求，返回不会丢失长整数的原始业务 JSON。
-/// # 参数
-/// `request` 为标准读取意图，`context` 为受信账号上下文。
-/// # 返回
-/// 符合各方法网关参数层级的业务 JSON，不包含访问令牌和签名。
-/// # 错误
-/// 数量、标识、渠道或方法字段不合法时返回脱敏错误。
+/// 签名前，把白名单查询按受信账号和对应网关方法的参数层级编码成保留长整数的业务 JSON，不包含访问令牌或签名。
+/// 数量、标识、渠道或方法字段非法时返回脱敏错误。
 pub fn read_payload(
     request: &JdVopReadRequest,
     context: &JdVopRequestContext,
@@ -69,13 +59,8 @@ pub fn read_payload(
     }
 }
 
-/// 编码唯一外部写动作，不改变原动作、价格、目标或业务范围。
-/// # 参数
-/// `request` 为持久化动作的类型化请求，`context` 为受信账号上下文。
-/// # 返回
-/// 官方请求 JSON；创建金额直接序列化，不经浮点数中转。
-/// # 错误
-/// 渠道、目标、批次数或载荷不合法时返回脱敏错误。
+/// 签名前，把已持久化的单个写动作转成官方业务 JSON，不替换动作、目标、价格或批次范围。
+/// 创建金额直接按十进制序列化，不经过浮点数；渠道、目标、批次或载荷不合法时返回脱敏错误。
 pub fn write_payload(
     request: &JdVopWriteRequest,
     context: &JdVopRequestContext,
@@ -116,12 +101,12 @@ fn nested(
     envelope(name, &fields_with_source(fields, context)?, None)
 }
 
-/// 编码使用顶层业务参数的网关方法，保留数字精度与稳定字段顺序。
+// 京东方法要求顶层业务参数时，用稳定字段顺序输出原始 JSON，保留长编号精度供签名和发送复用。
 fn flat(fields: Value, context: &JdVopRequestContext) -> ConnectorResult<Box<RawValue>> {
     to_raw_value(&fields_with_source(fields, context)?).map_err(|_| mapping("京东业务请求无法编码"))
 }
 
-/// 在唯一的业务参数层加入部署渠道，不添加网关提供的系统字段。
+// 在方法指定的唯一参数层注入部署渠道，避免调用方另填 sourceType；网关系统字段不在这里生成。
 fn fields_with_source(
     fields: Value,
     context: &JdVopRequestContext,

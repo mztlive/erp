@@ -109,12 +109,11 @@ struct ApprovalRuntimeReadScanFacet {
 
 impl<'a> ApprovalRuntimeReadRepository<'a> {
     /// 在中央授权过滤后执行原实例查询的检索、计数和分页。
-    /// # 参数
-    /// filter、scope为原业务筛选，access为当前实例查询凭证，executor为原快照。
-    /// # 返回
     /// 完整来源授权后的页面与完整计数。
-    /// # 错误
+    ///
     /// 模型错配、凭证过期或数据库失败时拒绝。
+    ///
+    /// filter、scope为原业务筛选，access为当前实例查询凭证，executor为原快照。
     pub async fn search_authorized(
         &self,
         filter: &ApprovalInstanceListFilter,
@@ -137,12 +136,11 @@ impl<'a> ApprovalRuntimeReadRepository<'a> {
     }
 
     /// 在中央授权条件后读取本人发起实例的有界候选批次。
-    /// # 参数
-    /// filter、scope为原业务筛选，access为当前实例凭证，executor为原读取事务。
-    /// # 返回
     /// 原稳定游标语义的候选与末行。
-    /// # 错误
+    ///
     /// 凭证错配、跨阶段或数据库错误拒绝。
+    ///
+    /// filter、scope为原业务筛选，access为当前实例凭证，executor为原读取事务。
     pub async fn scan_authorized(
         &self,
         filter: &ApprovalInstanceListFilter,
@@ -165,21 +163,15 @@ impl<'a> ApprovalRuntimeReadRepository<'a> {
         Ok((facet.items, facet.last.into_iter().next()))
     }
     /// 创建审批运行联合只读仓储。
-    ///
-    /// # 参数
-    /// * `db` - 当前 MongoDB 数据库
-    ///
-    /// # 返回
     /// 返回不自行开启事务的只读仓储。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// `db`：当前 MongoDB 数据库。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
 }
 
-/// 仓储只消费同一根实例的完整对象凭证，授权条件位于所有业务分页前。
+// 实例列表的仓储入口只接受绑定同一根实例模型的完整对象凭证，并在业务分页、计数之前执行授权过滤。
 fn authorized_pipeline(
     access: &CompiledAccess,
     business: Vec<Document>,
@@ -197,7 +189,7 @@ fn authorized_pipeline(
     Ok(access.stages().iter().cloned().chain(business).collect())
 }
 
-/// 用调用方执行器执行联合读取，返回指定的有界聚合投影。
+// 用原执行器运行实例及快照的聚合，按调用层需要返回有界的列表或扫描投影。
 async fn aggregate_runtime_read<T: DeserializeOwned + Send + Sync>(
     collection: &Collection<Document>,
     pipeline: Vec<Document>,
@@ -206,7 +198,7 @@ async fn aggregate_runtime_read<T: DeserializeOwned + Send + Sync>(
     aggregate::rows(&collection.clone_with_type::<T>(), pipeline, executor).await
 }
 
-/// 从联合分页分支恢复完整总数与当前页。
+// 将实例聚合的分页分支解包为完整匹配数与当前页，不以页内条数代替总数。
 fn runtime_read_page(facet: Option<ApprovalRuntimeReadFacet>) -> Result<ApprovalRuntimeReadPage> {
     let Some(facet) = facet else {
         return Ok(ApprovalRuntimeReadPage::default());
@@ -224,7 +216,7 @@ fn runtime_read_page(facet: Option<ApprovalRuntimeReadFacet>) -> Result<Approval
     Ok(ApprovalRuntimeReadPage { items: facet.items, total, document_type_counts })
 }
 
-/// 拒绝空范围、错接视图和不在已证明范围内的请求类型。
+// 联合实例查询前识别空授权范围、不匹配视图及越出已证明范围的请求种类，避免将无访问解释为不限范围。
 fn runtime_read_scope_empty(filter: &ApprovalInstanceListFilter, scope: &ApprovalRuntimeReadScope) -> bool {
     let process_kinds = runtime_read_process_kinds(scope);
     instance_list_scope_empty(filter)
@@ -240,9 +232,9 @@ fn runtime_read_scope_empty(filter: &ApprovalInstanceListFilter, scope: &Approva
         }
 }
 
-/// 构造实例列表与唯一快照的授权聚合。
-///
-/// 游标只进入 `items` facet；`total` 在同一授权、检索与状态条件上独立计数。
+// 生成实例列表与唯一快照的授权聚合。
+//
+// 游标只进入 `items` facet；`total` 在同一授权、检索与状态条件上独立计数。
 fn runtime_read_pipeline(
     filter: &ApprovalInstanceListFilter,
     scope: &ApprovalRuntimeReadScope,
@@ -259,7 +251,7 @@ fn runtime_read_pipeline(
     pipeline
 }
 
-/// 游标和批大小先收窄实例，冻结快照只关联本批候选。
+// 有界扫描时先以实例游标和批量上限收窄候选，再关联各自冻结快照，避免对页外记录展开联查。
 fn runtime_scan_pipeline(
     filter: &ApprovalInstanceListFilter,
     scope: &ApprovalRuntimeReadScope,
@@ -284,7 +276,7 @@ fn runtime_scan_pipeline(
     ]
 }
 
-/// 编译类型、状态及实例游标；快照字段检索由关联分支处理。
+// 为聚合的实例侧构造类型、状态和游标条件；快照展示字段的搜索留给关联分支。
 fn runtime_instance_match(filter: &ApprovalInstanceListFilter, scope: &ApprovalRuntimeReadScope) -> Document {
     let mut base_filter = filter.clone();
     base_filter.text_query = None;
@@ -304,7 +296,7 @@ fn runtime_instance_match(filter: &ApprovalInstanceListFilter, scope: &ApprovalR
     instance_match
 }
 
-/// 仅保留列表和检索所需冻结事实，排除提交材料及展示明细。
+// 构造实例列表的冻结快照投影，只读取筛选和展示摘要所需字段，排除提交材料和展示明细。
 fn runtime_snapshot_stages(filter: &ApprovalInstanceListFilter) -> Vec<Document> {
     let mut pipeline = vec![
         doc! {
@@ -348,7 +340,7 @@ fn runtime_snapshot_stages(filter: &ApprovalInstanceListFilter) -> Vec<Document>
     pipeline
 }
 
-/// 证明仅一个未删除快照与实例、类型、对象及提交版本精确一致。
+// 在实例列表关联中核对只存在一条未删除快照，且其单据类型、对象 ID、提交版本和实例 ID 都匹配；不取近似或当前草稿快照。
 fn runtime_snapshot_exact_expr() -> Document {
     doc! {
         "$and": [
@@ -362,7 +354,7 @@ fn runtime_snapshot_exact_expr() -> Document {
     }
 }
 
-/// 返回去重并稳定排序的已证明流程种类。
+// 为列表候选过滤收集已经证明的流程种类，按稳定代码排序并去重。
 fn runtime_read_process_kinds(scope: &ApprovalRuntimeReadScope) -> Vec<ProcessKind> {
     let mut process_kinds = match scope {
         ApprovalRuntimeReadScope::Started { process_kinds, .. } => process_kinds.clone(),
@@ -375,7 +367,7 @@ fn runtime_read_process_kinds(scope: &ApprovalRuntimeReadScope) -> Vec<ProcessKi
     process_kinds
 }
 
-/// 在实例和精确快照中执行同一字面量检索。
+// 为实例列表编译大小写无关的字面量检索，沿实例字段与其精确冻结快照使用同一搜索串。
 fn runtime_text_match(query: &str) -> Document {
     let literal = regex::escape(query.trim());
     let regex = doc! { "$regex": literal, "$options": "i" };
@@ -398,7 +390,7 @@ fn runtime_text_match(query: &str) -> Document {
     }
 }
 
-/// 当前页应用游标；总数保持完整的精确快照匹配范围。
+// 将同一授权且精确匹配冻结快照的候选拆成游标页与完整总数；游标只应用于结果页。
 fn runtime_read_facets(filter: &ApprovalInstanceListFilter) -> Document {
     let mut items = Vec::new();
     if let Some(cursor) = &filter.cursor {
@@ -413,7 +405,7 @@ fn runtime_read_facets(filter: &ApprovalInstanceListFilter) -> Document {
     }
 }
 
-/// 返回列表摘要与已证明的精确冻结载荷，不带提交材料和展示明细。
+// 实例关联通过后输出业务摘要和精确冻结载荷的窄投影，不把提交材料或展示明细带入列表。
 fn runtime_read_projection() -> Document {
     let mut projection = instance_summary_projection();
     projection.insert(
@@ -467,7 +459,7 @@ mod tests {
         ApprovalRuntimeReadScope::Managed { type_scopes: runtime_type_scopes() }
     }
 
-    /// 类型数量覆盖完整结果，即使游标页为空仍保留各类型总数。
+    // 验证：类型数量覆盖完整结果，即使游标页为空仍保留各类型总数。
     #[test]
     fn runtime_type_counts_survive_empty_page() {
         let facet = deserialize_from_document(doc! {
@@ -486,7 +478,7 @@ mod tests {
         assert_eq!(page.document_type_counts.get("purchase_payment_request"), Some(&22));
     }
 
-    /// 空授权结果不伪造类型；损坏计数必须失败。
+    // 验证：空授权结果不伪造类型；损坏计数必须失败。
     #[test]
     fn runtime_type_counts_reject_negative_and_allow_empty() {
         assert!(runtime_read_page(None).unwrap().document_type_counts.is_empty());
@@ -575,7 +567,7 @@ mod tests {
         assert!(projection.get_document("snapshot").unwrap().contains_key("$cond"));
     }
 
-    /// 批次的游标和上限先进入候选集合；零匹配批次仍返回原始末行用于继续扫描。
+    // 验证：批次的游标和上限先进入候选集合；零匹配批次仍返回原始末行用于继续扫描。
     #[test]
     fn runtime_scan_bounds_snapshot_reads_and_keeps_raw_last_candidate() {
         let filter = runtime_filter();

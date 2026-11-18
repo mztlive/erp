@@ -54,11 +54,7 @@ pub struct DepositReservationBasis {
 
 impl DepositReservationBasis {
     /// 返回本执行组全部批准预算，不能只占用预付比例。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 返回商品和批准运费合计。
-    /// # 错误
     /// 非正总额、负运费/商品或溢出时拒绝。
     pub fn total(&self) -> Result<Amount> {
         if self.approved_goods_amount < Amount::zero() || self.approved_freight < Amount::zero() {
@@ -91,11 +87,7 @@ pub struct SupplierDepositReservation {
 
 impl SupplierDepositReservation {
     /// 计算尚未消耗或释放的原占用。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 返回剩余资金保障。
-    /// # 错误
     /// 运算溢出或持久化金额不守恒时拒绝。
     pub fn remaining(&self) -> Result<Amount> {
         let value = subtract(subtract(self.amount, self.consumed_amount)?, self.released_amount)?;
@@ -106,12 +98,8 @@ impl SupplierDepositReservation {
     }
 
     /// 标记外部写请求可能已经送达，必须先持久化再发送。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 标记后超时、授权失效或任务接手均不能释放。
-    /// # 错误
-    /// 已释放或已消解执行不得重新发送。
+    /// 结果：标记后超时、授权失效或任务接手均不能释放。
+    /// 失败条件：已释放或已消解执行不得重新发送。
     pub fn mark_sent(&mut self) -> Result<()> {
         if self.exposure != DepositExposure::NotSent || self.released_amount > Amount::zero() {
             return Err(Error::from("预存款执行已有发送或释放事实，请查询原结果"));
@@ -121,12 +109,11 @@ impl SupplierDepositReservation {
     }
 
     /// 以明确的无后续扣款或冻结风险证据消解发送状态。
-    /// # 参数
-    /// * `evidence` - 无外部风险的核验记录，不得仅为一次查不到订单。
-    /// # 返回
-    /// 保留原证据并允许受控释放未使用尾款。
-    /// # 错误
+    /// 结果：保留原证据并允许受控释放未使用尾款。
     /// 缺少证据时拒绝。
+    ///
+    /// 输入约定：
+    /// - `evidence`：无外部风险的核验记录，不得仅为一次查不到订单。
     pub fn clear_exposure(&mut self, evidence: String) -> Result<()> {
         let evidence = super::required(evidence, "无扣款及冻结风险核验依据")?;
         if self.clearance_evidence_reference.as_ref().is_some_and(|previous| previous != &evidence) {
@@ -138,12 +125,11 @@ impl SupplierDepositReservation {
     }
 
     /// 记录可归属原占用的真实资金扣款。
-    /// # 参数
-    /// * `amount` - 本次归属扣款。
-    /// # 返回
-    /// 原占用减少；调用方同步更新账户、批次和应付依据。
-    /// # 错误
+    /// 结果：原占用减少；调用方同步更新账户、批次和应付依据。
     /// 超过剩余占用或非正时拒绝。
+    ///
+    /// 输入约定：
+    /// - `amount`：本次归属扣款。
     pub fn consume(&mut self, amount: Amount) -> Result<()> {
         positive(amount)?;
         if amount > self.remaining()? {
@@ -154,12 +140,11 @@ impl SupplierDepositReservation {
     }
 
     /// 释放未使用部分；已发送未知不能释放。
-    /// # 参数
-    /// * `amount` - 本次释放金额。
-    /// # 返回
-    /// 占用减少且保留历史。
-    /// # 错误
+    /// 结果：占用减少且保留历史。
     /// 可能已送达、超额或非正时拒绝。
+    ///
+    /// 输入约定：
+    /// - `amount`：本次释放金额。
     pub fn release(&mut self, amount: Amount) -> Result<()> {
         positive(amount)?;
         if self.exposure == DepositExposure::PossiblySent || amount > self.remaining()? {

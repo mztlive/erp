@@ -21,12 +21,11 @@ pub struct DepositAutomaticReservationData {
 
 impl DepositAutomaticReservationData {
     /// 选择能覆盖本执行组全额预算的唯一原批准申请。
-    /// # 参数
-    /// * `candidates` - 同主体、账号、采购和当前修订的已批准候选。
-    /// # 返回
     /// 返回唯一具备未被其他执行占用额度的原申请。
-    /// # 错误
-    /// 原归属不合法、无全额批准或存在多个合格申请时拒绝，须指定出纳处理。
+    /// 失败条件：原归属不合法、无全额批准或存在多个合格申请时拒绝，须指定出纳处理。
+    ///
+    /// 输入约定：
+    /// - `candidates`：同主体、账号、采购和当前修订的已批准候选。
     pub fn request<'a>(
         &self,
         candidates: &'a [PurchasePaymentRequest],
@@ -47,13 +46,12 @@ impl DepositAutomaticReservationData {
     }
 
     /// 选择当前有限额且适用本采购的自动授权，人工授权不进入候选。
-    /// # 参数
-    /// * `grants` - 按稳定顺序读取的账号自动授权。
-    /// * `now` - 本次服务器时间。
-    /// # 返回
     /// 返回首个能够覆盖完整预算的有效自动条款，尚未消费额度。
-    /// # 错误
-    /// 不存在有效自动条款时明确要求指定出纳执行，不创建假授权。
+    /// 失败条件：不存在有效自动条款时明确要求指定出纳执行，不创建假授权。
+    ///
+    /// 输入约定：
+    /// - `grants`：按稳定顺序读取的账号自动授权。
+    /// - `now`：本次服务器时间。
     pub fn authorization<'a>(
         &self,
         grants: &'a [SupplierDepositAuthorization],
@@ -76,12 +74,11 @@ impl DepositAutomaticReservationData {
     }
 
     /// 根据服务器已核验的逐单申请和自动条款构造专属资金占用依据。
-    /// # 参数
-    /// * `request` / `grant` - 已选择的原批准申请及明确自动条款。
-    /// # 返回
     /// 返回可交给拥有领域占用事务的完整依据。
-    /// # 错误
     /// 账号、采购或人工授权混入时拒绝。
+    ///
+    /// 输入约定：
+    /// - `request` / `grant`：已选择的原批准申请及明确自动条款。
     pub fn basis(
         &self,
         request: &PurchasePaymentRequest,

@@ -25,13 +25,12 @@ pub struct DepositRechargePaymentTarget<'a> {
 
 impl SupplierDepositService {
     /// 创建空余额资金账户，禁止以外部余额初始化。
-    /// # 参数
-    /// * `operation_key` / `identity_data` - 稳定命令及已核验归属。
-    /// * `executor` - 账户和审计共同事务。
-    /// # 返回
     /// 返回原账户或新账户。
-    /// # 错误
     /// 重放归属变化、非法身份或唯一冲突时拒绝。
+    ///
+    /// 输入约定：
+    /// - `operation_key` / `identity_data`：稳定命令及已核验归属。
+    /// - `executor`：账户和审计共同事务。
     pub async fn open_account(
         &self,
         operation_key: &str,
@@ -54,14 +53,13 @@ impl SupplierDepositService {
     }
 
     /// 登记尚不可用的充值申请；申请批准不代表资金到账。
-    /// # 参数
-    /// * `account` / `operation` - 账户与命令身份。
-    /// * `amount` / `reason` / `actor` - 金额、用途和申请人。
-    /// * `executor` - 当前事务。
-    /// # 返回
     /// 返回原申请或新待批准申请。
-    /// # 错误
     /// 金额、账户或重复载荷非法时拒绝。
+    ///
+    /// 输入约定：
+    /// - `account` / `operation`：账户与命令身份。
+    /// - `amount` / `reason` / `actor`：金额、用途和申请人。
+    /// - `executor`：当前事务。
     pub async fn request_recharge(
         &self,
         account: &str,
@@ -103,14 +101,13 @@ impl SupplierDepositService {
     }
 
     /// 由独立财务人员明确批准充值申请。
-    /// # 参数
-    /// * `account` / `id` / `version` - 原归属、申请和所见版本。
-    /// * `reference` / `actor` - 批准依据及批准人。
-    /// * `executor` - 同一批准事务。
-    /// # 返回
     /// 返回尚未付款的已批准充值申请。
-    /// # 错误
     /// 状态、版本或独立批准资格不符时拒绝。
+    ///
+    /// 输入约定：
+    /// - `account` / `id` / `version`：原归属、申请和所见版本。
+    /// - `reference` / `actor`：批准依据及批准人。
+    /// - `executor`：同一批准事务。
     pub async fn approve_recharge(
         &self,
         account: &str,
@@ -135,15 +132,14 @@ impl SupplierDepositService {
     }
 
     /// 登记已批准充值的真实银行付款一次，不核销任何采购应付。
-    /// # 参数
-    /// * `target` - 原账户、充值申请和所见版本的共同定位。
-    /// * `data` - 组合层已核验收款账户与回单的实际付款数据。
-    /// * `payer_name` / `actor` - 已核验主体名称及执行人。
-    /// * `executor` - 申请、银行付款和审计共同事务。
-    /// # 返回
     /// 返回银行已付、供应商到账仍待核实的申请。
-    /// # 错误
     /// 未批准、金额或主体不符、重复付款或版本漂移时拒绝。
+    ///
+    /// 输入约定：
+    /// - `target`：原账户、充值申请和所见版本的共同定位。
+    /// - `data`：组合层已核验收款账户与回单的实际付款数据。
+    /// - `payer_name` / `actor`：已核验主体名称及执行人。
+    /// - `executor`：申请、银行付款和审计共同事务。
     pub async fn register_recharge_payment(
         &self,
         target: DepositRechargePaymentTarget<'_>,
@@ -240,13 +236,12 @@ impl SupplierDepositService {
     }
 
     /// 保存有期限、有单笔与累计限额的财务授权，不使用客户端指定授权人。
-    /// # 参数
-    /// * `authorization` - 组合层装配实际授权人和版本的条款。
-    /// * `executor` - 当前事务。
-    /// # 返回
     /// 返回唯一已保存授权；同命令相同条款恢复原结果。
-    /// # 错误
     /// 无效期限、限额、归属或重复异载荷时拒绝。
+    ///
+    /// 输入约定：
+    /// - `authorization`：组合层装配实际授权人和版本的条款。
+    /// - `executor`：当前事务。
     pub async fn authorize(
         &self,
         authorization: SupplierDepositAuthorization,
@@ -289,13 +284,12 @@ impl SupplierDepositService {
     }
 
     /// 撤销新余额执行权限，已发送调查和已发生资金事实继续处理。
-    /// # 参数
-    /// * `account` / `id` / `version` - 原账户、授权和版本。
-    /// * `executor` - 当前财务事务。
-    /// # 返回
-    /// 授权标记撤销，不释放原占用。
-    /// # 错误
+    /// 结果：授权标记撤销，不释放原占用。
     /// 越账户或版本漂移时拒绝。
+    ///
+    /// 输入约定：
+    /// - `account` / `id` / `version`：原账户、授权和版本。
+    /// - `executor`：当前财务事务。
     pub async fn revoke_authorization(
         &self,
         account: &str,
@@ -321,13 +315,12 @@ impl SupplierDepositService {
     }
 
     /// 追加同一时间范围对账证据；差异限制新增使用，不覆盖本地余额。
-    /// # 参数
-    /// * `record` - 已核验时间范围与来源证据。
-    /// * `executor` - 账户限制和对账记录共同事务。
-    /// # 返回
     /// 返回原对账或新记录。
-    /// # 错误
     /// 不完整时间/证据、重复异载荷或写入失败时拒绝。
+    ///
+    /// 输入约定：
+    /// - `record`：已核验时间范围与来源证据。
+    /// - `executor`：账户限制和对账记录共同事务。
     pub async fn record_reconciliation(
         &self,
         record: SupplierDepositReconciliation,

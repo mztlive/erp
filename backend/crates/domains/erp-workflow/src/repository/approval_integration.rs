@@ -14,19 +14,15 @@ pub use runtime_read::{
 
 use crate::entity::approval_integration::ApprovalSubjectSnapshot;
 
-/// 从 facet `total` 段提取计数（`items`/`total` 两段式分页拼装的共用入口）。
-///
-/// 空页兜底为 0；负数或越界计数失败关闭。重复检查的 stage 定义仍保留在各自调用方。
-///
-/// # 参数
-/// * `count` - facet `total` 段首行计数（`None` 表示空页）
-/// * `scope` - 计数越界时的错误域标签
-///
-/// # 返回
-/// 返回非负总数。
-///
-/// # 错误
-/// 计数为负或超出 `u64` 时返回越界错误。
+// 从 facet `total` 段提取计数（`items`/`total` 两段式分页拼装的共用入口）。
+//
+// 空页兜底为 0；负数或越界计数失败关闭。重复检查的 stage 定义仍保留在各自调用方。
+//
+// 返回非负总数。
+//
+// 计数为负或超出 `u64` 时返回越界错误。
+//
+// `count`：facet `total` 段首行计数（`None` 表示空页）；`scope`：计数越界时的错误域标签。
 pub(crate) fn facet_total_or_empty(count: Option<i64>, scope: &'static str) -> Result<u64> {
     let Some(count) = count else {
         return Ok(0);
@@ -38,16 +34,11 @@ pub(crate) fn facet_total_or_empty(count: Option<i64>, scope: &'static str) -> R
 #[allow(async_fn_in_trait)]
 pub trait ApprovalSubjectSnapshotRepositoryExt {
     /// 插入启动时冻结的业务对象快照；写后不得再更新。
-    ///
-    /// # 参数
-    /// * `snapshot` - 启动时冻结的业务对象快照。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
     /// 插入成功时无返回值。
     ///
-    /// # 错误
     /// 同一实例已有快照或 MongoDB 写入失败时返回错误。
+    ///
+    /// `snapshot`：启动时冻结的业务对象快照。
     async fn create_immutable_snapshot(
         &self,
         snapshot: &ApprovalSubjectSnapshot,
@@ -55,14 +46,11 @@ pub trait ApprovalSubjectSnapshotRepositoryExt {
     ) -> Result<()>;
 
     /// 按已授权对象批量读取提交快照；调用方仍须校验对象类型和审批版本。
-    ///
-    /// # 参数
-    /// * `objects` - 单据类型和业务身份；使用现有类型/对象/版本复合索引
-    /// * `executor` - 调用方事务执行器
-    /// # 返回
     /// 返回未删除的匹配快照。
-    /// # 错误
+    ///
     /// 数据库读取失败时返回错误。
+    ///
+    /// `objects`：单据类型和业务身份；使用现有类型/对象/版本复合索引；`executor`：调用方事务执行器。
     async fn list_by_business_objects(
         &self,
         objects: &[(crate::entity::document_registry::DocumentType, String)],
@@ -70,16 +58,11 @@ pub trait ApprovalSubjectSnapshotRepositoryExt {
     ) -> Result<Vec<ApprovalSubjectSnapshot>>;
 
     /// 按审批实例读取唯一快照。
-    ///
-    /// # 参数
-    /// * `approval_process_instance_id` - 审批实例 ID。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
     /// 返回该实例的快照；没有时返回 `None`。
     ///
-    /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// `approval_process_instance_id`：审批实例 ID。
     async fn find_by_process_instance_id(
         &self,
         approval_process_instance_id: &str,
@@ -87,16 +70,11 @@ pub trait ApprovalSubjectSnapshotRepositoryExt {
     ) -> Result<Option<ApprovalSubjectSnapshot>>;
 
     /// 按审批实例批量读取不可变业务对象快照。
-    ///
-    /// # 参数
-    /// * `approval_process_instance_ids` - 当前列表页内的审批实例 ID
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回全部匹配且未删除的快照；调用方按实例 ID 关联。
     ///
-    /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// `approval_process_instance_ids`：当前列表页内的审批实例 ID。
     async fn find_by_process_instance_ids(
         &self,
         approval_process_instance_ids: &[String],
@@ -148,12 +126,12 @@ impl ApprovalSubjectSnapshotRepositoryExt for Repository<'_, ApprovalSubjectSnap
     }
 }
 
-/// 只按审批实例 ID 过滤；软删除由 `find_one` 追加。
+// 按审批实例 ID 定位其冻结快照，由仓储 `find_one` 统一追加未删除条件。
 fn snapshot_by_process_instance_filter(approval_process_instance_id: &str) -> Document {
     doc! { "approval_process_instance_id": approval_process_instance_id }
 }
 
-/// 按审批实例 ID 集合构造冻结主体快照筛选。
+// 给批量实例读取构造实例 ID 集合筛选，只定位这些实例的提交快照。
 fn snapshot_by_process_instances_filter(approval_process_instance_ids: &[String]) -> Document {
     doc! {
         "approval_process_instance_id": {

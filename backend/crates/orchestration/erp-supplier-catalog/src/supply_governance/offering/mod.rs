@@ -26,15 +26,9 @@ pub struct SupplierOfferingProcess {
 impl SupplierOfferingProcess {
     /// 使用生产 catalog 与 supplier 资格适配器创建流程，数据范围默认失败关闭。
     ///
-    /// # 参数
-    /// * `db` - 数据库。
-    /// * `fresh_work_items` - 每个命令创建独立身份的正式任务操作工厂。
+    /// `fresh_work_items`：每个命令创建独立身份的正式任务操作工厂。
     ///
-    /// # 返回
     /// 尚未替换数据授权访问器的供给流程。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(
         db: Database,
         fresh_work_items: Arc<dyn Fn() -> Arc<dyn CatalogWorkItems> + Send + Sync>,
@@ -48,14 +42,9 @@ impl SupplierOfferingProcess {
     }
     /// 注入供给授权访问器。
     ///
-    /// # 参数
-    /// * `data_scope` - 组合层装配的本域授权访问器
+    /// `data_scope`：组合层装配的本域授权访问器。
     ///
-    /// # 返回
     /// 返回绑定授权访问器 的流程。消耗 `self`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn with_data_scope(mut self, data_scope: OfferingAccess) -> Self {
         self.data_scope = data_scope;
         self

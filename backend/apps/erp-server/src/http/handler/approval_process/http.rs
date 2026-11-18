@@ -24,16 +24,7 @@ pub struct ReplaceNodesHttpRequest {
 
 impl ReplaceNodesHttpRequest {
     /// 以必填版本与幂等键构造替换请求；节点默认为空。
-    ///
-    /// # 参数
-    /// * `expected_definition_lock_version` - 期望的定义锁版本
-    /// * `idempotency_key` - 幂等键
-    ///
-    /// # 返回
     /// 返回无节点的替换请求。
-    ///
-    /// # 错误
-    /// 无。
     pub fn new(expected_definition_lock_version: String, idempotency_key: String) -> Self {
         Self { copy_rules: None, expected_definition_lock_version, nodes: Vec::new(), idempotency_key }
     }
@@ -70,14 +61,8 @@ pub const MAX_ASSIGNEE_LIMIT: u32 = 50;
 
 impl EligibleAssigneesQuery {
     /// 规范化候选查询的页大小。
-    ///
-    /// # 参数
-    /// * `self` - 含可选页大小的 HTTP 查询
-    ///
-    /// # 返回
+    /// `self` 为含可选页大小的 HTTP 查询。
     /// 未传值时返回默认 20，否则返回范围内的原值。
-    ///
-    /// # 错误
     /// 页大小为零或超过 50 时返回字段范围说明。
     pub fn normalized_limit(&self) -> Result<u32, String> {
         let limit = self.limit.unwrap_or(DEFAULT_ASSIGNEE_LIMIT);

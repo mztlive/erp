@@ -97,19 +97,11 @@ pub(crate) struct ErrorTaskListQuery {
 }
 
 impl ErrorTaskListParams {
-    /// 归一化错误任务列表查询参数。
-    ///
-    /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 范围版本为空或超长、包含下级却无组织筛选、处理人 ID 为 `me`、
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    // 归一化错误任务列表查询参数。
+    //
+    // 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
+    //
+    // 范围版本为空或超长、包含下级却无组织筛选、处理人 ID 为 `me`、排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<ErrorTaskListQuery> {
         check_scoped_version(&self.scope_version, &self.org_unit_ids, self.include_descendants)?;
         let (handler_user_ids, operator_user_ids) =
@@ -196,13 +188,7 @@ pub struct ErrorTaskListView {
 }
 
 impl From<IntegrationErrorTask> for ErrorTaskView {
-    /// 从错误任务实体构造任务视图。
-    ///
-    /// # 参数
-    /// * `task` - 错误任务实体
-    ///
-    /// # 返回
-    /// 返回任务视图。
+    // 从错误任务实体构造任务视图。
     fn from(task: IntegrationErrorTask) -> Self {
         Self {
             id: task.base.id,

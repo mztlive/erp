@@ -9,30 +9,12 @@ pub trait AuditExt {
     /// 审计日志集合名。
     const AUDIT_LOGS: &'static str = "audit_logs";
 
-    /// 返回绑定 `audit_logs` 的审计日志仓储。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回当前数据库上的审计日志仓储。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得当前数据库的 `audit_logs` 仓储，供审计写入和授权后的查询复用。
     fn audit_logs(&self) -> AuditLogRepository<'_>;
 }
 
 impl AuditExt for Database {
-    /// 返回绑定 `AUDIT_LOGS` 的审计日志仓储。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回当前数据库上的审计日志仓储。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 用 `AUDIT_LOGS` 集合名绑定当前数据库，避免各调用方各自选择日志集合。
     fn audit_logs(&self) -> AuditLogRepository<'_> {
         AuditLogRepository::new(self, Self::AUDIT_LOGS)
     }

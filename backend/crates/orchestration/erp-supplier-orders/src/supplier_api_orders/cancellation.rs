@@ -26,12 +26,13 @@ use crate::supplier_after_sales::action_result::{ActionResult, read_action_resul
 use crate::{Error, Result};
 
 impl SupplierApiOrderProcess {
-    /// 复用原取消权限和订单范围，为 API 执行建立逐叶取消意图。
-    /// # 参数
+    /// 履约取消入口遇到 API 订单时，按原冻结商品范围登记逐叶取消意图，复用原取消权限及订单范围。
+    /// 非 API 订单仍由原履约流程处理；本入口不发送外部取消请求。
+    ///
     /// `id` 为原履约订单，`request` 为完整冻结商品范围，`actor` 和 `access` 为现有权限入口。
-    /// # 返回
+    ///
     /// API 订单返回已有动作响应；非 API 订单返回空，由原流程处理。
-    /// # 错误
+    ///
     /// 越权、范围变更、能力缺失、未知确认或持久化冲突时拒绝；不发送外部请求。
     pub async fn submit_cancel_if_api(
         &self,
@@ -73,13 +74,13 @@ impl SupplierApiOrderProcess {
         read_action_result(&self.db, access, actor, id, ActionResult::Cancellation).await.map(Some)
     }
 
-    /// 调度一组原取消动作，每次至多发送一个尚未发送的叶子。
-    /// # 参数
-    /// `execution` 为已领取的原执行，取消不受新增下单或余额授权开关限制。
-    /// # 返回
-    /// 查询和动作状态可靠保存；受理后只调查原结果，不重复发送。
-    /// # 错误
-    /// 数据库失败或持久化竞争时拒绝；供应商异常按原动作保存。
+    // 后台取得原取消执行后，先刷新原订单树，再至多发送一项仍就绪且未发送的叶子取消；受理后只查证原动作。
+    //
+    // `execution` 为已领取的原执行，取消不受新增下单或余额授权开关限制。
+    //
+    // 查询和动作状态可靠保存；受理后只调查原结果，不重复发送。
+    //
+    // 数据库失败或持久化竞争时拒绝；供应商异常按原动作保存。
     pub(super) async fn process_cancellations(&self, mut execution: ApiOrderExecution) -> Result<()> {
         if let Err(error) = self.refresh_cancellation_tree(&mut execution).await {
             execution.defer(error.supplier_order_message());

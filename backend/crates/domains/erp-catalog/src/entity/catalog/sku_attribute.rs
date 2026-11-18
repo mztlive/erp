@@ -26,16 +26,7 @@ pub enum AttributeValueType {
 }
 
 impl AttributeValueType {
-    /// 返回类型的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将SKU 规格属性映射为中文标签，供界面显示。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Enum => "受控枚举",
@@ -43,16 +34,7 @@ impl AttributeValueType {
         }
     }
 
-    /// 返回类型的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将SKU 规格属性编码为稳定字符串，供持久化和精确查询复用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Enum => "enum",
@@ -104,7 +86,7 @@ pub struct SkuAttribute {
 }
 
 impl PartialEq for SkuAttribute {
-    /// 全字段语义相等。
+    // 逐字段比较SKU 规格属性，仅持有相同标识不视为内容相等。
     fn eq(&self, other: &Self) -> bool {
         self.base == other.base
             && self.stable.status == other.stable.status
@@ -124,16 +106,10 @@ impl SkuAttribute {
     ///
     /// 完成 attribute_code/name 的校验与规范化（去首尾空白、非空、长度上限）。
     ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::SkuAttributeId`）
-    /// * `data` - 创建数据
-    /// * `created_by` - 创建人（账号或系统身份）
-    ///
-    /// # 返回
-    /// 返回新建的属性实体。
-    ///
-    /// # 错误
     /// 当 attribute_code/name 为空或超长时返回错误。
+    ///
+    /// - `id`：实体主键（`erp_core::ids::SkuAttributeId`）。
+    /// - `created_by`：创建人（账号或系统身份）。
     pub fn new(id: SkuAttributeId, data: SkuAttributeData, created_by: impl Into<String>) -> Result<Self> {
         let attribute_code =
             normalize_required_text(data.attribute_code, "属性代码不能为空", CODE_MAX_LEN, "属性代码过长")?;
@@ -152,14 +128,6 @@ impl SkuAttribute {
     ///
     /// 复用 `new` 的校验规则；`attribute_code` 是稳定代码，不允许在通用更新中修改。
     ///
-    /// # 参数
-    /// * `update` - 更新数据
-    /// * `updated_by` - 本次更新执行人
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 当更新字段校验失败时返回错误。
     pub fn update(&mut self, update: SkuAttributeUpdate, updated_by: impl Into<String>) -> Result<()> {
         if let Some(name) = update.name {
@@ -175,16 +143,7 @@ impl SkuAttribute {
         Ok(())
     }
 
-    /// 判断属性是否处于启用状态。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 状态为 `Active` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 读取SKU 规格属性的启用标记，供调用方过滤停用记录。
     pub fn is_active(&self) -> bool {
         self.stable.status().is_active()
     }
@@ -206,7 +165,7 @@ mod tests {
         }
     }
 
-    /// happy path：字段 trim 规范化，值类型与状态落位。
+    // 字段 去除首尾空白，值类型与状态按请求保存。
     #[test]
     fn new_trims_and_normalizes_fields() {
         let attribute = SkuAttribute::new(SkuAttributeId::new("attr-1"), data(), "admin-1").unwrap();
@@ -217,7 +176,7 @@ mod tests {
         assert!(attribute.is_active());
     }
 
-    /// 失败路径：必填空与超长各一条。
+    // SKU 规格属性的必填字段为空或超长时均应拒绝创建。
     #[test]
     fn new_rejects_empty_and_overlong_fields() {
         let empty_code = SkuAttributeData { attribute_code: "  ".to_string(), ..data() };
@@ -227,7 +186,7 @@ mod tests {
         assert!(SkuAttribute::new(SkuAttributeId::new("attr-1"), overlong_name, "admin-1").is_err());
     }
 
-    /// update 修改名称/值类型/状态并 touch 审计人。
+    // 更新时修改名称/值类型/状态并更新审计人。
     #[test]
     fn update_applies_fields_and_preserves_code() {
         let mut attribute = SkuAttribute::new(SkuAttributeId::new("attr-1"), data(), "admin-1").unwrap();
@@ -250,7 +209,7 @@ mod tests {
         assert_eq!(attribute.stable.updated_by, "admin-2");
     }
 
-    /// 值类型 serde 形态与中文标签。
+    // 值类型 serde 形态与中文标签。
     #[test]
     fn value_type_exposes_labels_and_codes() {
         assert_eq!(serde_json::to_string(&AttributeValueType::Enum).unwrap(), "\"enum\"");
@@ -258,7 +217,7 @@ mod tests {
         assert_eq!(AttributeValueType::Enum.as_str(), "enum");
     }
 
-    /// 状态机：合法迁移通过，邻接矩阵对称闭合。
+    // 锁定SKU 规格属性启停的正向、反向与幂等迁移，防止状态表缺边。
     #[test]
     fn status_transitions_follow_document_state() {
         assert!(ensure_transition(EnableStatus::Active, EnableStatus::Disabled).is_ok());

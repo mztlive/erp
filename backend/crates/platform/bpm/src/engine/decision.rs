@@ -34,24 +34,12 @@ pub struct DecideCommand {
     pub now: Timestamp,
 }
 
-/// 对当前活动执行应用决定，并进入下一节点或终态。
-///
-/// 当前责任人失效，或当前节点的通过/驳回连线缺失、重复时，不接受决定，但返回可提交的阻塞计划。
-/// 驳回连线非法、通过连线缺少目标节点仍返回错误。下一审批人失效时保留本次通过事实。
-///
-/// # 参数
-/// * `instance` - 当前流程实例
-/// * `current` - 当前节点执行
-/// * `graph` - 定义图
-/// * `command` - 决定、两侧资格、下一执行身份与调用方时间
-///
-/// # 返回
-/// 决定被接受时返回推进后的计划。当前资格受阻，或通过/驳回连线缺失、重复时，
-/// 返回 `CommitRequired::Blocked` 的阻塞计划。
+/// 收到审批决定后，按冻结图推进当前活动执行。通过时进入下一节点或最终通过，驳回则终结本实例。
+/// 单人节点当前人员失效或决定连线缺失、重复时，不接受决定，改为返回应提交的 `CommitRequired::Blocked`；
+/// 或签节点仅拒绝失去资格的决定人。若通过已接受而下一节点无有效办理人，计划保留通过事实并记录下一节点受阻。
 ///
 /// # 错误
-/// 实例已终态、执行不是当前活动令牌、驳回原因为空、驳回连线非法、
-/// 无法形成合法快照，或模型不变式失败时返回错误。
+/// 终态、令牌或参与人不匹配、驳回事由为空、连线形状非法、缺少通过目标节点等无法形成合法迁移的情况返回错误。
 pub fn decide(
     instance: ApprovalProcessInstance,
     current: ApprovalNodeExecution,
@@ -83,16 +71,8 @@ pub fn decide(
     }
 }
 
-/// 驳回当前执行并终止实例，不生成新轮次或新任务。
-///
-/// # 参数
-/// * `instance` / `current` - 当前实例与活动令牌。
-/// * `graph` - 冻结流程定义；仍须证明当前决定连线合法。
-/// * `command` - 当前决定人、资格、必填原因和确定时间。
-/// # 返回
-/// 返回终态驳回计划；当前资格失效时返回可提交的阻塞计划。
-/// # 错误
-/// 非驳回命令、空原因、令牌不一致或定义非法时返回错误。
+/// 供只允许驳回的入口计算决定：接受后终止实例，不产生新轮次或新任务。
+/// 沿用 [`decide`] 的当前令牌、资格和冻结图校验；非驳回命令直接拒绝，单人资格失效或当前连线缺失、重复仍可返回阻塞计划。
 pub fn reject_terminal(
     instance: ApprovalProcessInstance,
     current: ApprovalNodeExecution,
@@ -129,7 +109,7 @@ fn ensure_actor(
     Ok(())
 }
 
-/// 通过当前节点，再进入下一节点或最终通过。
+// 当前决定通过校验后先记下通过事实；末节点收结实例，其余节点在同轮交接给下一执行。
 fn apply_approve(
     instance: ApprovalProcessInstance,
     mut current: ApprovalNodeExecution,
@@ -156,7 +136,7 @@ fn apply_approve(
     enter_after_decision(plan, graph, next_key, command)
 }
 
-/// 驳回当前节点并终止本次实例，冻结提交与历史轮次保持不变。
+// 在驳回路径校验事由和冻结连线后结束当前执行与实例，不重启轮次，也不改写提交版本。
 fn apply_reject(
     mut instance: ApprovalProcessInstance,
     mut current: ApprovalNodeExecution,
@@ -177,7 +157,7 @@ fn apply_reject(
     Ok(completed_current_plan(instance, current, command.actor, BpmEventKind::NodeRejected))
 }
 
-/// 记录已完成的当前执行，并关闭对应任务。
+// 接受决定后把已结束的执行、对应节点事件和任务完成意图放入同一计划，供通过与驳回共用。
 fn completed_current_plan(
     instance: ApprovalProcessInstance,
     current: ApprovalNodeExecution,
@@ -197,7 +177,7 @@ fn completed_current_plan(
     plan
 }
 
-/// 复用统一进入规则创建下一执行。已接受决定时保留 `Proceed`。
+// 非末节点通过后复用进入规则创建同轮执行；即使下一节点受阻，也保留已接受决定所需的 `Proceed` 提交类别。
 fn enter_after_decision(
     mut plan: TransitionPlan,
     graph: &DefinitionGraph,
@@ -221,23 +201,11 @@ fn enter_after_decision(
     Ok(plan)
 }
 
-/// 为当前活动执行规划标准阻塞迁移。
-///
-/// 计划同时包含实例与执行阻塞快照、任务关闭意图以及
-/// `InstanceBlocked` 中性领域事件，调用方不得只手工复制部分计划字段。
-///
-/// # 参数
-/// * `instance` - 当前流程实例快照
-/// * `current` - 必须与实例当前令牌一致的活动执行
-/// * `code` - 结构化阻塞码
-/// * `now` - 调用方提供的确定时间
-///
-/// # 返回
-/// 返回 `CommitRequired::Blocked` 的完整确定性迁移计划。
+/// 发现当前活动执行无法继续时，生成一次完整的阻塞迁移：更新实例和执行、关闭关联任务并发出 `InstanceBlocked`。
+/// 调用方须一并提交这些事实，不能只写实例的阻塞投影。
 ///
 /// # 错误
-/// 实例已终态、执行不是当前令牌、执行非活动态，或模型拒绝
-/// 阻塞迁移时返回引擎错误。
+/// 终态、非当前令牌、非活动执行或模型拒绝阻塞迁移时，不生成可提交计划。
 pub fn block_current(
     mut instance: ApprovalProcessInstance,
     mut current: ApprovalNodeExecution,
@@ -262,7 +230,7 @@ pub fn block_current(
     Ok(plan)
 }
 
-/// 校验执行仍是实例当前令牌且为活动态。
+// 接受决定或记录阻塞前，确认实例未终结、执行仍是其当前活动令牌，避免更新已被替换或结束的执行。
 fn ensure_current_token(
     instance: &ApprovalProcessInstance,
     current: &ApprovalNodeExecution,
@@ -282,7 +250,7 @@ fn ensure_current_token(
     Ok(())
 }
 
-/// 驳回指向终态；历史冻结的入口边仍按终止解释。
+// 驳回前确认连线表示终止；旧定义指回入口的驳回边也按终止处理，不再用它重开流程。
 fn ensure_reject_transition(
     graph: &DefinitionGraph,
     reject_edge: &ApprovalTransitionDefinition,

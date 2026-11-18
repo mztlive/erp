@@ -8,13 +8,8 @@ use crate::ResourceGrantProcess;
 use crate::facts::Facts;
 
 impl ResourceGrantProcess {
-    /// 查询开票审批及后续转派的独立授权来源是否仍在生成。
-    /// # 参数
-    /// request_id 为申请 ID，recipient 为读取账号，executor 为当前读取事务。
-    /// # 返回
-    /// 任一已核实来源尚未生成时返回 true；永久终止或无证据不会提示待处理。
-    /// # 错误
-    /// 事实关联或读取失败时拒绝。
+    /// 用当前读取事务查看账号的开票初次审批和后续转派授权，任一已核实来源待生成才返回 `true`，供业务区分权限尚未就绪与无授权依据。
+    /// 无正式证据或来源已永久终止不提示等待；事实错配或读取失败直接返回错误，不能代替完整的权限检查。
     pub async fn invoice_pending(
         &self,
         request_id: &str,
@@ -56,13 +51,8 @@ pub enum GrantReadiness {
     Terminated,
 }
 impl ResourceGrantProcess {
-    /// 对业务确定的来源读取正式事件，并以当前可信事实核验授权就绪。
-    /// # 参数
-    /// source 为服务端来源身份；executor 为当前请求事务。
-    /// # 返回
-    /// 没有正式事件返回 Absent；其他状态按当前来源、事实和授权结果判定。
-    /// # 错误
-    /// 关联损坏、账号失效或读取失败不作为待处理返回。
+    /// 按服务端确定的来源查找正式事件，并用同一执行器重算目标，与当前来源版本和目标对比，区分不存在、待生成、已就绪和已终止。
+    /// 没有正式事件返回 `Absent`；账号失效、关联损坏或读取失败不得当作待生成，也不能以就绪结果替代访问授权。
     pub async fn source_readiness(
         &self,
         source: &SourceKey,

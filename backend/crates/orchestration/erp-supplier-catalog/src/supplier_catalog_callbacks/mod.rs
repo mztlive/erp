@@ -37,12 +37,10 @@ struct Context {
 
 impl SupplierCatalogCallbackProcess {
     /// 绑定应用已有数据库、协议注册表及权限服务。
-    /// # 参数
+    ///
     /// 组合根提供数据库、协议注册表、权限来源及商品服务，不读取额外凭据。
-    /// # 返回
+    ///
     /// 尚未领取任务的消费者。
-    /// # 错误
-    /// 不返回错误。
     pub fn new(
         db: Database,
         registry: Arc<SupplierConnectorRegistry>,
@@ -53,11 +51,11 @@ impl SupplierCatalogCallbackProcess {
     }
 
     /// 每轮至多五条通知，每条至多十个步骤；失败保留检查点并延期。
-    /// # 参数
+    ///
     /// 无，所有目标读取自已持久化且验签通过的回调。
-    /// # 返回
+    ///
     /// 成功领取的通知数，不表示已全部应用。
-    /// # 错误
+    ///
     /// 队列读取失败返回错误；单项失败隔离并继续下一项。
     pub async fn run_once(&self) -> Result<usize> {
         let candidates = pending_catalog_callbacks(&self.db, &mut ReadExecutor::default()).await?;

@@ -19,16 +19,12 @@ use crate::integration_center::display::object_labels;
 use crate::integration_center::error_labels::{IntegrationTaskLabels, integration_error_labels};
 use crate::integration_center::integration_attempt_note;
 
-/// 组装集成错误任务的结构化简报。
-///
-/// # 参数
-/// * `task` - 集成错误任务正式事实
-///
-/// # 返回
-/// 返回错误分类、关联参考号、发生时间、重试证据、脱敏摘要和处理结果。
-///
-/// # 错误
-/// 无。
+// 处理集成异常与对账简报时，组装集成错误任务的结构化简报。
+//
+// 调用参数：
+// * `task` - 集成错误任务正式事实
+//
+// 返回错误分类、关联参考号、发生时间、重试证据、脱敏摘要和处理结果。
 fn integration_error_brief_source(
     task: &IntegrationErrorTask,
     labels: &IntegrationTaskLabels,
@@ -92,16 +88,12 @@ fn integration_error_brief_source(
     }
 }
 
-/// 按固定错误分类返回可执行且安全的下一步。
-///
-/// # 参数
-/// * `error_class` - 错误分类
-///
-/// # 返回
-/// 返回不泄露内部实现的处理指引。
-///
-/// # 错误
-/// 无。
+// 依据固定错误分类返回可执行且安全的下一步。
+//
+// 调用参数：
+// * `error_class` - 错误分类
+//
+// 返回不泄露内部实现的处理指引。
 fn integration_error_next_step(error_class: ErrorClass) -> &'static str {
     match error_class {
         ErrorClass::CapabilityGap => "请确认对方是否支持这项操作；如不支持，请联系经办人转人工处理",
@@ -116,16 +108,12 @@ fn integration_error_next_step(error_class: ErrorClass) -> &'static str {
     }
 }
 
-/// 组装对账差异的结构化业务异常简报。
-///
-/// # 参数
-/// * `difference` - 不可变对账差异事实
-///
-/// # 返回
-/// 返回异常对象、差异类型、发现时间与两侧证据引用。
-///
-/// # 错误
-/// 无。
+// 处理集成异常与对账简报时，组装对账差异的结构化业务异常简报。
+//
+// 调用参数：
+// * `difference` - 不可变对账差异事实
+//
+// 返回异常对象、差异类型、发现时间与两侧证据引用。
 fn reconciliation_difference_brief_source(
     difference: &ReconciliationDifference,
     object_label: Option<&str>,
@@ -172,16 +160,12 @@ fn reconciliation_difference_brief_source(
     }
 }
 
-/// 把实体基础时间转换为业务时区展示；非法或测试零值不上屏。
-///
-/// # 参数
-/// * `created_at` - 实体 Unix 秒级创建时间
-///
-/// # 返回
-/// 返回分钟级时间；零值或超出 `i64` 时返回 `None`。
-///
-/// # 错误
-/// 无。
+// 组装集成异常与对账简报时，把实体基础时间转换为业务时区展示；非法或测试零值不上屏。
+//
+// 调用参数：
+// * `created_at` - 实体 Unix 秒级创建时间
+//
+// 返回分钟级时间；零值或超出 `i64` 时返回 `None`。
 fn base_created_at_datetime(created_at: u64) -> Option<String> {
     (created_at > 0)
         .then(|| i64::try_from(created_at).ok())

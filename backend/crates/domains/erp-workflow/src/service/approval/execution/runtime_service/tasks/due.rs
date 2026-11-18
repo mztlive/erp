@@ -12,15 +12,12 @@ use crate::repository::prelude::*;
 use crate::repository::{BpmExt, WorkItemExt};
 use crate::service::approval::execution::apply_plan::PlannedWrites;
 
-/// 同一事务从刚结束任务或同实例历史任务继承日期；无付款申请新任务时不读取。
-///
-/// # 参数
-/// * `db` / `executor` - 已授权审批命令持有的数据库与事务。
-/// * `writes` - 已核对主体、提交版本和当前执行的审批计划。
-/// # 返回
-/// 付款申请返回旧任务的冻结日期，其他类型保持无日期。
-/// # 错误
-/// 原任务缺失、重复、串实例、串版本或缺少日期时拒绝新任务写入。
+// 同一事务从刚结束任务或同实例历史任务继承日期；无付款申请新任务时不读取。
+// 付款申请返回旧任务的冻结日期，其他类型保持无日期。
+//
+// 原任务缺失、重复、串实例、串版本或缺少日期时拒绝新任务写入。
+//
+// `db` / `executor`：已授权审批命令持有的数据库与事务；`writes`：已核对主体、提交版本和当前执行的审批计划。
 pub(super) async fn inherited_due_at(
     db: &Database,
     writes: &PlannedWrites,
@@ -64,7 +61,7 @@ async fn from_executions(
     Ok(None)
 }
 
-/// 日期只取同实例、同提交、同审批执行及责任人的原审批任务。
+// 付款申请后续节点或恢复任务继承希望付款日时，只认同实例、同提交、同节点执行且责任人属原执行的任务。身份不符或日期缺失返回冲突。
 pub(in crate::service::approval::execution) fn task_due_at(
     instance: &ApprovalProcessInstance,
     execution: &ApprovalNodeExecution,

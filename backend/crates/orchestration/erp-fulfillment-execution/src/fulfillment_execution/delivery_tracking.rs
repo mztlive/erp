@@ -11,17 +11,11 @@ use persistence_core::Executor;
 use super::purchase_context::ensure_allocation_valid;
 use crate::{Error, Result};
 
-/// 在相同执行器中核对包裹明细的销售归属和直发采购分配。
-///
-/// # 参数
-/// * `db` - 销售、采购和履约集合所在数据库。
-/// * `delivery` - 已在本事务构造或加载的发货表头。
-/// * `lines` - 该发货单真实明细。
-/// * `executor` - 同一授权和写入事务的执行器。
-/// # 返回
-/// 所有包裹明细真实归属和采购分配有效时成功。
-/// # 错误
-/// 包裹关联不在本次发货、销售明细缺失/跨销售或采购当前分配失效时拒绝。
+// 在相同执行器中核对包裹明细的销售归属和直发采购分配。
+//
+// `db` 为销售、采购和履约集合所在数据库；`delivery` 为已在本事务构造或加载的发货表头；`lines` 为该发货单真实明细；`executor` 为同一授权和写入事务的执行器。
+//
+// 所有包裹明细真实归属和采购分配有效时成功。包裹关联不在本次发货、销售明细缺失/跨销售或采购当前分配失效时拒绝。
 pub(super) async fn ensure_tracking_sources(
     db: &Database,
     delivery: &Delivery,

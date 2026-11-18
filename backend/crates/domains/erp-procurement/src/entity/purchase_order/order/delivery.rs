@@ -10,16 +10,6 @@ use crate::entity::purchase_order::types::SupplyPriceBasis;
 
 impl PurchaseOrder {
     /// 冻结选源确定的价格依据与逐行配送判定。
-    ///
-    /// # 参数
-    /// * `price_basis` - 价格依据
-    /// * `judgements` - 逐行配送判定
-    ///
-    /// # 返回
-    /// 无。
-    ///
-    /// # 错误
-    /// 无。
     pub fn record_sourcing_delivery(
         &mut self,
         price_basis: SupplyPriceBasis,
@@ -29,19 +19,9 @@ impl PurchaseOrder {
         self.sourcing_delivery.delivery_judgements = judgements;
     }
 
-    /// 标记某销售明细的运费另计由供应商免收。
+    /// 标记某销售明细的运费另计由供应商免收。该行不是运费另计、已标记过或原因不合法时返回错误。
     ///
-    /// # 参数
-    /// * `sales_order_line_id` - 运费另计的稳定销售行
-    /// * `reason` - 原因
-    /// * `actor` - 操作人
-    /// * `at` - 标记时间
-    ///
-    /// # 返回
-    /// 标记成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 该行不是运费另计、已标记过或原因不合法时返回错误。
+    /// `sales_order_line_id` 为运费另计的稳定销售行。
     pub fn waive_freight(
         &mut self,
         sales_order_line_id: &SalesOrderLineId,
@@ -70,16 +50,7 @@ impl PurchaseOrder {
         Ok(())
     }
 
-    /// 返回运费另计且尚未标记供应商不收运费的销售行。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 按冻结顺序返回待跟进的销售行；是否已有物流费用采购由读取模型另行判定。
-    ///
-    /// # 错误
-    /// 无。
+    /// 返回运费另计且尚未标记供应商不收运费的销售行。按冻结顺序返回待跟进的销售行；是否已有物流费用采购由读取模型另行判定。
     pub fn unwaived_freight_lines(&self) -> Vec<&SalesOrderLineId> {
         self.sourcing_delivery
             .delivery_judgements

@@ -8,17 +8,13 @@ use crate::{Error, Result};
 
 impl SalesOrderWorkingCopyLineView {
     /// 从同版正式行快照构造成交明细；不查商品当前资料或重新计算金额。
-    ///
-    /// # 参数
-    /// * `line` - 不可变公共行
-    /// * `goods` - 与公共行一对一的实物服务快照
-    /// * `voucher` - 与公共行一对一的卡券快照
-    ///
-    /// # 返回
     /// 返回保留稳定明细身份、成交金额、数量、单价与履约期限的视图。
-    ///
-    /// # 错误
     /// 对应子类型缺失、类型冲突或引用其他公共行时拒绝。
+    ///
+    /// 输入约定：
+    /// - `line`：不可变公共行
+    /// - `goods`：与公共行一对一的实物服务快照
+    /// - `voucher`：与公共行一对一的卡券快照
     pub fn from_revision_line(
         line: &SalesOrderRevisionLine,
         goods: Option<&SalesOrderGoodsServiceLineRevision>,
@@ -44,7 +40,7 @@ impl SalesOrderWorkingCopyLineView {
         Ok(view)
     }
 
-    /// 构造正式公共行的冻结字段与尚未补齐的子类型字段。
+    // 组装正式公共行的冻结字段与尚未补齐的子类型字段。
     fn revision_common_fields(line: &SalesOrderRevisionLine) -> Self {
         Self {
             id: line.base.id.clone(),
@@ -78,7 +74,7 @@ impl SalesOrderWorkingCopyLineView {
         }
     }
 
-    /// 将同一公共行的实物服务冻结字段写入视图。
+    // 装配正式实物服务行视图时，把同一公共行的实物服务子快照补齐到响应。
     fn apply_goods_snapshot(&mut self, goods: &SalesOrderGoodsServiceLineRevision) {
         self.sku_id = Some(goods.sku_id.clone());
         self.sku_revision_id = Some(goods.sku_revision_id.clone());
@@ -93,7 +89,7 @@ impl SalesOrderWorkingCopyLineView {
         self.delivery_allocations = goods.delivery_allocations.clone();
     }
 
-    /// 将同一公共行的卡券冻结字段写入视图。
+    // 装配正式卡券行视图时，把同一公共行的卡券子快照补齐到响应。
     fn apply_voucher_snapshot(&mut self, voucher: &SalesOrderVoucherLineRevision) {
         self.unit_price_gross = Some(voucher.unit_price_gross);
         self.face_value = Some(voucher.face_value);
@@ -117,7 +113,7 @@ mod tests {
     use super::*;
     use crate::entity::sales_order::{CardForm, SalesPricingMode, WelfareScenario};
 
-    /// 构造金额与成交单价均来自旧 SKU 修订的公共行快照。
+    // 组装金额与成交单价均来自旧 SKU 修订的公共行快照。
     fn line(line_type: LineType) -> SalesOrderRevisionLine {
         let mut base = BaseModel::fake();
         base.id = "revision-line-2".into();
@@ -137,7 +133,7 @@ mod tests {
         }
     }
 
-    /// 构造同版实物快照，数量和单价与原提交不同。
+    // 组装同版实物快照，数量和单价与原提交不同。
     fn goods() -> SalesOrderGoodsServiceLineRevision {
         SalesOrderGoodsServiceLineRevision {
             base: BaseModel::fake(),
@@ -156,7 +152,7 @@ mod tests {
         }
     }
 
-    /// 构造同版卡券快照。
+    // 组装同版卡券快照。
     fn voucher() -> SalesOrderVoucherLineRevision {
         SalesOrderVoucherLineRevision {
             base: BaseModel::fake(),

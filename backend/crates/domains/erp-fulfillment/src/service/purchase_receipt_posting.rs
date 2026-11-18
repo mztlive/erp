@@ -15,20 +15,8 @@ use crate::entity::fulfillment::{
 use crate::repository::FulfillmentExt;
 use crate::{Error, Result};
 impl FulfillmentService {
-    /// 在调用方事务读取草稿、按原顺序校验状态/版本/冻结仓库，再读取并校验行。
-    ///
-    /// # 参数
-    /// * `receipt_id` - 入库单主键
-    /// * `expected_version` - 期望的乐观锁版本
-    /// * `warehouse_id` - 过账请求中的仓库；与已冻结仓库不一致时拒绝
-    /// * `session` - 调用方事务执行器
-    ///
-    /// # 返回
-    /// 返回通过守卫的草稿入库单及其行。
-    ///
-    /// # 错误
-    /// 入库单不存在时返回 `NotFound`；不是草稿或版本不一致时返回 `ConflictError`；
-    /// 仓库被改或行不满足过账条件时返回 `ValidationError`；表头更新或行查询失败时返回对应错误。
+    /// 采购收货过账前沿用调用方事务，依次读取表头、核对草稿与期望版本、核对冻结仓库，再加载并验证明细。
+    /// 找不到原单时返回 `NotFound`，状态或版本失效返回 `ConflictError`，仓库不符或明细不合法返回 `ValidationError`；传播实体更新和查询错误。
     pub async fn prepare_purchase_receipt_posting(
         &self,
         receipt_id: &PurchaseReceiptId,
@@ -61,19 +49,8 @@ impl FulfillmentService {
         receipt.ensure_posting_lines(&lines).map_err(|error| Error::ValidationError(error.to_string()))?;
         Ok((receipt, lines))
     }
-    /// 在逐行库存写入后标记已过账，并以同一执行器持久化状态。
-    ///
-    /// # 参数
-    /// * `receipt` - 待标记已过账的入库单
-    /// * `occurred_at` - 过账发生时间
-    /// * `actor_id` - 过账操作人
-    /// * `session` - 与库存写入相同的执行器
-    ///
-    /// # 返回
-    /// 状态迁移并写回成功时无返回值。
-    ///
-    /// # 错误
-    /// 已冲正不能过账、经办人为空或超长，或仓储写入失败时返回对应错误。
+    /// 逐行库存写入完成后，用同一执行器登记收货单的过账状态、业务时间和操作人。
+    /// 已冲正、操作人为空或超长以及仓储写入失败时返回错误。
     pub async fn mark_purchase_receipt_posted(
         &self,
         receipt: &mut PurchaseReceipt,
@@ -85,18 +62,7 @@ impl FulfillmentService {
         self.db.purchase_receipts().update(receipt, session).await?;
         Ok(())
     }
-    /// 查询同销售单、同仓库可复用的仓发草稿。
-    ///
-    /// # 参数
-    /// * `sales_order_id` - 销售单主键
-    /// * `warehouse_id` - 发货仓库主键
-    /// * `session` - 调用方事务执行器
-    ///
-    /// # 返回
-    /// 返回匹配的未删除仓发草稿；不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回对应错误。
+    /// 入库形成销售预占后，在原事务按销售单和发货仓库查找可复用的未删除仓发草稿。无匹配返回 `None`，传播仓储错误。
     pub async fn draft_warehouse_delivery(
         &self,
         sales_order_id: &SalesOrderId,
@@ -105,19 +71,8 @@ impl FulfillmentService {
     ) -> Result<Option<Delivery>> {
         Ok(self.db.fulfillment().draft_warehouse_delivery(sales_order_id, warehouse_id, session).await?)
     }
-    /// 按原身份/编号生成顺序创建入库预占对应的仓发草稿及其行。
-    ///
-    /// # 参数
-    /// * `sales_order_id` - 销售单主键
-    /// * `warehouse_id` - 发货仓库主键
-    /// * `reservations` - 本次入库形成的销售预占
-    /// * `session` - 调用方事务执行器
-    ///
-    /// # 返回
-    /// 返回已写入的仓发草稿表头。
-    ///
-    /// # 错误
-    /// 单号生成、表头或行构造失败，或仓储写入失败时返回对应错误；行构造失败返回 `Logic`。
+    /// 无可复用仓发草稿时，用本次入库的销售预占创建仓发表头和明细，保持 ID、单号及明细的生成顺序。
+    /// 表头和行沿调用方事务写入；单号、表头或写入失败返回原错误，明细构造失败映射为 `Logic`。
     pub async fn create_receipt_stock_delivery(
         &self,
         sales_order_id: &SalesOrderId,
@@ -150,18 +105,8 @@ impl FulfillmentService {
         self.db.fulfillment().create_delivery_with_lines(&delivery, &lines, session).await?;
         Ok(delivery)
     }
-    /// 向既有仓发草稿追加尚未引用的采购入库预占。
-    ///
-    /// # 参数
-    /// * `delivery` - 已存在的仓发草稿
-    /// * `reservations` - 本次入库形成的销售预占；已引用的预占会被跳过
-    /// * `session` - 调用方事务执行器
-    ///
-    /// # 返回
-    /// 追加完成时无返回值；没有待追加预占时也不写入新行。
-    ///
-    /// # 错误
-    /// 既有行读取失败、新行构造失败或逐行写入失败时返回对应错误；行构造失败返回 `Logic`。
+    /// 复用仓发草稿时沿原事务读取已有关联，从最大行号之后逐行追加还未引用的入库预占。
+    /// 无新增预占时不写入；传播读取及写入错误，明细构造失败映射为 `Logic`。
     pub async fn append_receipt_stock_delivery_lines(
         &self,
         delivery: &Delivery,

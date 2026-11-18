@@ -27,33 +27,13 @@ pub struct PurchaseOrderFormalizationProcess {
 impl PurchaseOrderFormalizationProcess {
     /// 使用组合根数据库与授权源构造采购形式化流程。
     ///
-    /// # 参数
-    /// * `db` - 组合根数据库。
-    /// * `rbac` - 形式化时绑定采购单服务的授权源。
-    /// * `ports` - 与普通采购命令共用的已装配应用能力。
-    ///
-    /// # 返回
-    /// 返回形式化流程。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// `rbac` 为形式化时绑定采购单服务的授权源；`ports` 为与普通采购命令共用的已装配应用能力。返回形式化流程。
     pub fn new(db: Database, rbac: Arc<AuthorizationService>, ports: Arc<PurchaseOrderPorts>) -> Self {
         Self { db, rbac, ports }
     }
 
-    /// 最终通过并生效：形成采购版本、应付与成本事实。
-    ///
-    /// 仅由合同 §4.4.4 `on_final_approve` 调用，不得再作为人工财务审核旁路。
-    ///
-    /// # 参数
-    /// * `id` - 采购单主键
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回生效结果。
-    ///
-    /// # 错误
-    /// 非审批中、缺少提交、来源复验失败或仓储失败时返回错误。
+    /// 采购审批最终通过时，由 §4.4.4 的 `on_final_approve` 调用以形成采购正式版本、应付及成本并返回生效结果，
+    /// 不可作为人工财务审核的旁路。非审批中、冻结提交缺失、来源复验或仓储失败时返回错误。
     pub async fn formalize_approved_order(
         &self,
         id: &str,
@@ -73,18 +53,8 @@ impl PurchaseOrderFormalizationProcess {
         Ok(result)
     }
 
-    /// 在审批运行时持有的事务内形式化最终通过的采购单。
-    ///
-    /// # 参数
-    /// * `id` - 采购单主键。
-    /// * `actor` - 已通过鉴权的审计操作人。
-    /// * `executor` - 审批运行时持有的事务执行器。
-    ///
-    /// # 返回
-    /// 形式化写入在调用方事务内完成。
-    ///
-    /// # 错误
-    /// 提交、来源复验、应付/成本或履约草稿写入失败时返回错误。
+    /// 审批运行时已持有事务时，复用其执行器写入最终通过的采购正式版本、应付、成本和履约草稿。
+    /// 冻结提交准备、来源复验或任一写入失败时返回错误，不另开写事务。
     pub async fn formalize_approved_order_apply(
         &self,
         id: &str,
@@ -97,7 +67,7 @@ impl PurchaseOrderFormalizationProcess {
     }
 }
 
-/// 在同一事务内写入生效版本、采购单、提交结论、应付、任务、成本、履约与审计。
+// 在同一事务内写入生效版本、采购单、提交结论、应付、任务、成本、履约与审计。
 async fn persist_formalized_order_write(
     db: &Database,
     persist: FormalizedOrderPersist,

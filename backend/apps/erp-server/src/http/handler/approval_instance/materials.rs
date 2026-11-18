@@ -26,11 +26,7 @@ pub struct MaterialQuery {
 }
 
 /// 返回实例授权内唯一应收的当前票款核对依据。
-/// # 参数
-/// 应用状态、认证账号和开票审批实例 ID。
-/// # 返回
 /// 当前额度、回款与销售依据；不改写提交快照。
-/// # 错误
 /// 未授权、非开票审批、申请版本或来源不匹配时拒绝。
 pub async fn invoice_review(
     State(state): State<HttpState>,
@@ -50,11 +46,8 @@ pub async fn invoice_review(
 }
 
 /// 返回一页任务引用的审批资料摘要，各实例独立执行读取授权。
-/// # 参数
 /// 认证账号、应用状态和本页任务的精确审批引用。
-/// # 返回
 /// 按输入顺序返回各条资料结果，并禁止缓存。
-/// # 错误
 /// 请求体非法或超过批量上限时拒绝请求。
 pub async fn batch(
     State(state): State<HttpState>,
@@ -68,11 +61,7 @@ pub async fn batch(
 }
 
 /// 返回授权实例的冻结资料；开票审批另列当前销售来源资料。
-/// # 参数
-/// 应用状态、认证账号和审批实例 ID。
-/// # 返回
 /// 提交资料与独立的当前销售依据；不含草稿、存储键或内容指纹。
-/// # 错误
 /// 无权或冻结资料缺失时拒绝。
 pub async fn list(
     State(state): State<HttpState>,
@@ -88,11 +77,7 @@ pub async fn list(
 }
 
 /// 预览实例允许清单中的同一版本图片或 PDF。
-/// # 参数
-/// 应用状态、认证账号、实例和附件 ID。
-/// # 返回
 /// 带禁止缓存和禁止类型嗅探响应头的文件内容。
-/// # 错误
 /// 未授权、资产变化、安全检查失败或类型不支持时拒绝。
 pub async fn preview(
     State(state): State<HttpState>,
@@ -115,11 +100,7 @@ pub async fn preview(
 }
 
 /// 下载允许清单中的同一版本文件，强制以附件响应避免执行活动内容。
-/// # 参数
-/// 应用状态、认证账号、实例和附件 ID。
-/// # 返回
 /// 禁止缓存的二进制附件响应。
-/// # 错误
 /// 未授权、资产变化、安全检查失败或存储读取失败时拒绝。
 pub async fn download(
     State(state): State<HttpState>,
@@ -141,7 +122,7 @@ pub async fn download(
     .await
 }
 
-/// 文件授权由组合层执行；对象存储读取在事务之外完成。
+// 交付审批资料字节时先由组合层验证文件来源资格，随后在事务外读取对象存储。
 pub(super) async fn content(
     state: &HttpState,
     actor: &AuditActor,
@@ -192,7 +173,7 @@ pub(super) async fn content(
     Ok(response)
 }
 
-/// 在线预览仅允许不执行活动内容的图片及 PDF 类型。
+// 决定已授权审批附件能否在页面内打开；仅允许不会执行活动内容的受控图片和 PDF。
 fn previewable(content_type: &str) -> bool {
     matches!(content_type, "image/jpeg" | "image/png" | "image/webp" | "application/pdf")
 }

@@ -77,38 +77,16 @@ pub struct FulfillmentRepository<'a> {
 
 impl<'a> FulfillmentRepository<'a> {
     /// 创建域专用仓储。
-    ///
-    /// # 参数
-    /// * `db` - 目标 MongoDB 数据库
-    ///
-    /// # 返回
-    /// 返回仓储实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
 
     /// 统计采购单已过账入库的累计有效收货（按采购版本行分组）。
-    ///
-    /// 只在数据库内过滤未删除且 `POSTED` 的入库单，并按
-    /// `purchase_order_revision_line_id` 聚合未删除入库行的
-    /// `qualified_quantity`；不反序列化入库单/入库行整实体，也不随单据或
-    /// 行数增长数据库访问次数。查询使用调用方执行器：事务内调用看到同一
-    /// 事务的未提交写入；本方法不自行开启或提交事务。
-    ///
-    /// # 参数
-    /// * `purchase_order_id` - 采购单主键
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回「采购版本行 → 累计合格数量」映射；无任何已过账未删除入库行时
-    /// 返回空映射。
-    ///
-    /// # 错误
-    /// 聚合或游标读取失败时返回错误；Decimal128 求和结果无法转换为
-    /// `Quantity`（精度或上限越界）时返回错误而非 panic。
+    /// 只在数据库内过滤未删除且 `POSTED` 的入库单，并按 `purchase_order_revision_line_id` 聚合未删除入库行的 `qualified_quantity`；
+    /// 不反序列化入库单/入库行整实体，也不随单据或行数增长数据库访问次数。查询使用调用方执行器：事务内调用看到同一事务的未提交写入；本方法不自行开启或提交事务。
+    /// 返回「采购版本行 → 累计合格数量」映射；无任何已过账未删除入库行时返回空映射。
+    /// `purchase_order_id` 为采购单主键；沿用调用方执行器 `executor`。
+    /// 聚合或游标读取失败时返回错误；Decimal128 求和结果无法转换为 `Quantity`（精度或上限越界）时返回错误而非 panic。
     pub async fn qualified_received_totals_by_purchase_revision_line(
         &self,
         purchase_order_id: &PurchaseOrderId,
@@ -118,22 +96,12 @@ impl<'a> FulfillmentRepository<'a> {
     }
 }
 
-/// 执行通用筛选分页投影查询（五类列表共用；查询语义与返回形状不变）。
-///
-/// # 参数
-/// * `base` - 基集合句柄（用于计数）
-/// * `filter` - 查询条件文档
-/// * `sort` - 排序文档
-/// * `skip` - 跳过行数
-/// * `limit` - 单页条数
-/// * `projection` - 投影文档
-/// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-///
-/// # 返回
-/// 返回当前页投影行与满足筛选条件的总数.
-///
-/// # 错误
-/// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+// 执行通用筛选分页投影查询（五类列表共用；查询语义与返回形状不变）。
+// 返回当前页投影行与满足筛选条件的总数.
+// `base` 为基集合句柄（用于计数）；`filter` 为查询条件文档。
+// `sort` 为排序文档；`skip` 为跳过行数。
+// `projection` 为投影文档；沿用调用方执行器 `executor`。
+// 传播 MongoDB 查询、游标读取或计数错误。
 pub(super) async fn search_projected_page<Entity, Row>(
     base: &mongodb::Collection<Entity>,
     filter: mongodb::bson::Document,
@@ -154,15 +122,9 @@ where
     Ok(PageResult { items, total: total as i64 })
 }
 
-/// 构建排序文档（字段名白名单映射）。
-///
-/// # 参数
-/// * `sort_by` - 排序字段；`None` 或不在白名单内时默认 `created_at`
-/// * `sort_ascending` - 升序为 `true`，降序为 `false`
-/// * `allowed` - 允许的排序字段白名单
-///
-/// # 返回
-/// 返回排序条件文档。
+// 构建排序文档（字段名白名单映射）。
+// `sort_by` 为排序字段；`None` 或不在白名单内时默认 `created_at`；`sort_ascending` 为升序为 `true`，降序为 `false`。
+// `allowed` 为允许的排序字段白名单。
 fn sort_doc(sort_by: Option<&str>, sort_ascending: bool, allowed: &[&str]) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
     let field = sort_by.filter(|field| allowed.contains(field)).unwrap_or("created_at");

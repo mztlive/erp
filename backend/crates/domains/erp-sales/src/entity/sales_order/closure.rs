@@ -67,18 +67,8 @@ pub struct SalesOrderClosureAssessment {
 
 impl SalesOrder {
     /// 抽取结案判定所需的单聚合状态事实。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回业务性质、商业/结案状态与履约/回款/开票进度。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    ///
-    /// # 关键业务约束
-    /// 不含应收摘要、进行中变更单等仓储事实。
+    /// 业务边界：不含应收摘要、进行中变更单等仓储事实。
     pub fn closure_facts(&self) -> SalesOrderClosureFacts {
         SalesOrderClosureFacts {
             business_type: self.business_type,
@@ -93,20 +83,13 @@ impl SalesOrder {
 
 impl SalesOrderClosureFacts {
     /// 结合应收子账摘要评估结案资格。
-    ///
-    /// # 参数
-    /// * `has_receivable_accounts` - 是否存在未删除应收子账
-    /// * `settled_total` - 子账已核销含税合计；无子账时为精确零
-    /// * `gross_total` - 子账含税应收合计；无子账时为精确零
-    ///
-    /// # 返回
     /// 返回结案资格纯事实；中文阻断文案由 Service 映射。
+    /// 业务边界：无子账不得因 `0 >= 0` 视为结清；合法零额子账允许金额兜底；开票进度永不阻断。
     ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 无子账不得因 `0 >= 0` 视为结清；合法零额子账允许金额兜底；开票进度永不阻断。
+    /// 输入约定：
+    /// - `has_receivable_accounts`：是否存在未删除应收子账
+    /// - `settled_total`：子账已核销含税合计；无子账时为精确零
+    /// - `gross_total`：子账含税应收合计；无子账时为精确零
     pub fn assess(
         &self,
         has_receivable_accounts: bool,
@@ -152,10 +135,8 @@ impl SalesOrderClosureFacts {
         }
     }
 
-    /// 返回结案终态分支。
-    ///
-    /// # 返回
-    /// 已关闭、已作废或草稿时返回对应终态；其余返回 `None`。
+    // 返回结案终态分支。
+    // 结果：已关闭、已作废或草稿时返回对应终态；其余返回 `None`。
     fn terminal_kind(&self) -> Option<SalesOrderClosureTerminal> {
         if self.close_status == CloseStatus::Closed {
             Some(SalesOrderClosureTerminal::Closed)

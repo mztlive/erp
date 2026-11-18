@@ -11,14 +11,14 @@ use persistence_core::Executor;
 use super::query::aggregate;
 use crate::{Error, Result};
 
-/// 按精确供应商和供给获取待确认修订与停供申请，使用101项探测上限。
-///
-/// # 参数
-/// 数据库、已验证绑定的供应商、已证明归属的供给及调用方执行器。
-/// # 返回
-/// 返回至多100项冻结申请事实，不混入其他供给的申请。
-/// # 错误
-/// 超限或持久化错误时拒绝，不截断或猜测结果。
+// 依据精确供应商和供给获取待确认修订与停供申请，使用101项探测上限。
+//
+// 调用参数：
+// 数据库、已验证绑定的供应商、已证明归属的供给及调用方执行器。
+//
+// 返回至多100项冻结申请事实，不混入其他供给的申请。
+//
+// 超限或持久化错误时拒绝，不截断或猜测结果。
 pub(in crate::supplier_portal) async fn pending_applications(
     db: &Database,
     supplier_id: &str,
@@ -48,14 +48,15 @@ fn pending_filter(supplier_id: &str, offering_id: &str) -> Document {
     "deleted_at":NOT_DELETED_TIMESTAMP_BSON}
 }
 
-/// 查询精确本供应商及本行订货码对应的可维护供给。
-///
-/// # 参数
-/// 数据库、已由申请解析的供应商、原订货码及调用方执行器。
-/// # 返回
-/// 返回精确候选；上层仍须逐个执行供给对象范围读取授权。
-/// # 错误
-/// 数据库或领域仓储错误保持失败关闭。
+// 处理门户新品审核核对时，查询精确本供应商及本行订货码对应的可维护供给。
+//
+// 调用参数：
+// 数据库、已由申请解析的供应商、原订货码及调用方执行器。
+//
+// 返回精确候选；上层仍须逐个执行供给对象范围读取授权。
+//
+// 失败边界：
+// 数据库或领域仓储错误保持失败关闭。
 pub(in crate::supplier_portal) async fn existing_offerings(
     db: &Database,
     supplier_id: &str,

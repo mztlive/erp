@@ -12,21 +12,12 @@ use crate::http::handler::integration_ops;
 use crate::http::routes::permission_route;
 use crate::http::state::HttpState;
 
-/// 返回本域管理端路由集合。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回声明公共权限目录信息的路由集合。
-///
-/// # 错误
-/// 不执行 I/O，不返回错误。
+/// 为管理端挂载集成运维与对账接口，按操作登记公共权限目录信息。
 pub fn routes() -> Router<HttpState> {
     Router::new().merge(inbox_routes()).merge(task_routes()).merge(difference_routes())
 }
 
-/// 集成消息登记与读取路由。
+// 为父路由挂载集成消息登记与读取路由。
 fn inbox_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -59,7 +50,7 @@ fn inbox_routes() -> Router<HttpState> {
         )
 }
 
-/// 集成异常任务与处置路由。
+// 为父路由挂载集成异常任务与处置路由。
 fn task_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -99,7 +90,7 @@ fn task_routes() -> Router<HttpState> {
         )
 }
 
-/// 集成差异查询与确认路由。
+// 为父路由挂载集成差异查询与确认路由。
 fn difference_routes() -> Router<HttpState> {
     Router::new()
         .route(

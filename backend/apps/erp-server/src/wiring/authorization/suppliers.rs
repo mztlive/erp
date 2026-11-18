@@ -15,13 +15,10 @@ use mongodb::Database;
 
 use super::{FactsBindings, MappingBindings};
 
-/// 创建供应商相关资源的唯一事实读取器与固定查询映射。
-/// # 参数
-/// db 为共享业务数据库；读取器与映射仅在启动时构造。
-/// # 返回
-/// 按资源登记的事实与按权限登记的映射；同资源查询权限复用同一实例。
-/// # 错误
-/// 拥有领域拒绝资源描述时返回接入错误，不构造占位实现。
+// 创建供应商相关资源的唯一事实读取器与固定查询映射。
+// db 为共享业务数据库；读取器与映射仅在启动时构造。
+// 按资源登记的事实与按权限登记的映射；同资源查询权限复用同一实例。
+// 拥有领域拒绝资源描述时返回接入错误，不构造占位实现。
 pub(super) fn bindings(db: Database) -> Result<(FactsBindings, MappingBindings)> {
     let (supplier_facts, supplier_mapping) = supplier_bindings(db.clone())?;
     let connection_mapping = connection_mapping(supplier_mapping.clone())?;

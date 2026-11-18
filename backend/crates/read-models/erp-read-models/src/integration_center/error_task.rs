@@ -18,11 +18,10 @@ use super::{IntegrationCenterReadService, IntegrationErrorDetailView};
 use crate::{Error, Result};
 
 impl IntegrationCenterReadService {
-    /// 查询集成错误任务详情，独立按 detail 动作解析。
+    /// 处理集成异常详情时，查询集成错误任务详情，独立按 detail 动作解析。
     ///
     /// # 参数
     /// * `id` - 任务稳定 ID
-    /// * `actor` - 已认证操作人
     ///
     /// # 返回
     /// 返回任务详情、开放动作与证据视图。
@@ -46,7 +45,7 @@ impl IntegrationCenterReadService {
             .await
     }
 
-    /// 授权、根记录和全部关联事实在同一读取阶段内完成后统一交付。
+    // 处理集成异常详情时，授权、根记录和全部关联事实在同一读取阶段内完成后统一交付。
     async fn error_detail(
         &self,
         id: &str,
@@ -61,7 +60,7 @@ impl IntegrationCenterReadService {
         Ok(view)
     }
 
-    /// 只装配当前授权根的证据、责任、名称和审计，不切换执行器。
+    // 生成集成异常详情视图时，只装配当前授权根的证据、责任、名称和审计，不切换执行器。
     async fn error_view(
         &self,
         task: IntegrationErrorTask,
@@ -95,7 +94,7 @@ impl IntegrationCenterReadService {
         Ok(IntegrationErrorDetailView { detail, work_item_id, connection_failure, audit_history })
     }
 
-    /// 多个正式责任关联时返回 `ConflictError`，避免任选一条任务。
+    // 读取集成异常详情时，多个正式责任关联时返回 `ConflictError`，避免任选一条任务。
     async fn find_task_work_item(
         &self,
         task_id: &str,
@@ -112,15 +111,14 @@ impl IntegrationCenterReadService {
     }
 }
 
-/// 推导错误任务开放动作与阻断视图（动作规则归领域，此处只做 view 映射）。
-///
-/// # 参数
-/// * `task` - 集成错误任务（提供终态与重放条件）
-/// * `has_work_item` - 是否已建立正式任务
-/// * `linked_evidence` - 服务端发现的受控证据
-///
-/// # 返回
-/// 返回开放动作代码与阻断视图。
+// 组装集成异常详情的聚合管道时，推导错误任务开放动作与阻断视图（动作规则归领域，此处只做 view 映射）。
+//
+// 调用参数：
+// * `task` - 集成错误任务（提供终态与重放条件）
+// * `has_work_item` - 是否已建立正式任务
+// * `linked_evidence` - 服务端发现的受控证据
+//
+// 返回开放动作代码与阻断视图。
 fn error_action_projection(
     task: &IntegrationErrorTask,
     has_work_item: bool,

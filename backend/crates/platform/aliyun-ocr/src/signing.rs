@@ -7,20 +7,9 @@ use sha2::{Digest, Sha256};
 
 use crate::{API_VERSION, Credentials, ENDPOINT, Error, Result};
 
-/// 组装参与 ACS3 签名的请求头；`authorization` 始终标为敏感，STS token 存在时同样标为敏感。
-///
-/// # 参数
-/// * `credentials` - 访问密钥；`security_token` 为 `Some` 时加入 `x-acs-security-token`。
-/// * `body` - 原始请求体，其 SHA-256 十六进制摘要写入 `x-acs-content-sha256`。
-/// * `query` - 查询串，原样进入规范请求，不再编码。
-/// * `date` - 写入 `x-acs-date` 的时间字符串。
-/// * `nonce` - 写入 `x-acs-signature-nonce` 的随机串。
-///
-/// # 返回
-/// 包含 `content-type`、`host`、`x-acs-*` 和 `authorization` 的请求头。
-///
-/// # 错误
-/// 头值或签名字符串含非法 HTTP 头字符，或 HMAC 密钥初始化失败时，返回 `Error::Configuration`。
+// 构造 OCR 请求时用原始图片字节计算 SHA-256，把摘要、host、content-type 和全部 x-acs-* 头
+// 纳入 ACS3 签名。查询串须与发送内容一致，不在签名阶段重新编码；日期和 nonce 由每次调用提供。
+// 有 STS token 时将其一同签名，并与 authorization 一样标为敏感；签名或头值无效返回 Configuration。
 pub(crate) fn headers(
     credentials: &Credentials,
     body: &[u8],
@@ -55,7 +44,9 @@ pub(crate) fn headers(
     Ok(headers)
 }
 
-/// 查询串和头值不再编码；HMAC 初始化失败时返回 `Error::Configuration`。
+// 用有序请求头、查询串和正文摘要构造 POST / 的 ACS3 规范请求，再用 SK 计算授权头。
+// 头值只去首尾空白、不转码，查询串原样参与摘要，以便供应商用收到的请求重算签名。
+// HMAC 密钥初始化失败时返回 Configuration。
 fn authorize(
     credentials: &Credentials,
     values: &BTreeMap<&str, &str>,

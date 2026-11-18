@@ -101,16 +101,10 @@ impl PurchaseOrderSubmissionLineData {
         Ok(fields)
     }
 
-    /// 按行类型校验销售分配字段。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 商品行已引用销售稳定行与当前版本行且分配数量为正，或物流费用行不携带销售分配时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 商品行缺少销售行引用、分配数量缺失或非正，或物流费用行携带销售行、历史提交行或分配数量时返回领域错误。
+    // 按行类型校验销售分配字段。
+    //
+    // 商品行已引用销售稳定行与当前版本行且分配数量为正，或物流费用行不携带销售分配时返回 `Ok(())`。商品行缺少销售行引用、分配数量缺失或非正，
+    // 或物流费用行携带销售行、历史提交行或分配数量时返回领域错误。
     fn ensure_allocation(&self) -> Result<()> {
         match self.line_type {
             PurchaseLineType::ItemService => {
@@ -195,19 +189,11 @@ pub struct PurchaseOrderSubmissionLine {
 impl PurchaseOrderSubmissionLine {
     /// 创建采购提交行。
     ///
-    /// 完成快照文本的规范化，并按行类型强制字段归属与金额三元组守恒（§6.6）；
-    /// 商品行必须引用销售稳定行与当前版本行，且分配数量必须为正。
+    /// 完成快照文本的规范化，并按行类型强制字段归属与金额三元组守恒（§6.6）；商品行必须引用销售稳定行与当前版本行，且分配数量必须为正。
     ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::PurchaseOrderSubmissionLineId`）
-    /// * `data` - 创建数据
+    /// 行号为零、字段归属与行类型不符、快照超长、数量/单价/税率越界或金额三元组不守恒时返回错误。
     ///
-    /// # 返回
-    /// 返回新建的提交行实体。
-    ///
-    /// # 错误
-    /// 行号为零、字段归属与行类型不符、快照超长、数量/单价/税率越界或
-    /// 金额三元组不守恒时返回错误。
+    /// `id` 为实体主键（`erp_core::ids::PurchaseOrderSubmissionLineId`）。
     pub fn new(id: PurchaseOrderSubmissionLineId, mut data: PurchaseOrderSubmissionLineData) -> Result<Self> {
         let fields = data.take_validated_fields()?;
         Ok(Self {
@@ -240,16 +226,11 @@ impl PurchaseOrderSubmissionLine {
 
     /// 把草稿行复制到新的冻结提交。
     ///
-    /// # 参数
-    /// * `id` - 新提交行稳定身份
-    /// * `submission_id` - 新正式提交稳定身份
-    /// * `draft_line` - 当前草稿行
+    /// 返回业务内容与草稿行一致、重新挂接到正式提交的新行。草稿行本身不满足当前采购行不变式时返回领域错误。
     ///
-    /// # 返回
-    /// 返回业务内容与草稿行一致、重新挂接到正式提交的新行。
-    ///
-    /// # 错误
-    /// 草稿行本身不满足当前采购行不变式时返回领域错误。
+    /// - `id`：新提交行稳定身份。
+    /// - `submission_id`：新正式提交稳定身份。
+    /// - `draft_line`：当前草稿行。
     pub fn freeze_from_draft(
         id: PurchaseOrderSubmissionLineId,
         submission_id: PurchaseOrderSubmissionId,
@@ -287,15 +268,7 @@ impl PurchaseOrderSubmissionLine {
 
     /// 校验客户端没有改写服务端冻结的销售与 SKU 来源引用。
     ///
-    /// # 参数
-    /// * `requested` - 待保存请求行的草稿编辑请求
-    ///
-    /// # 返回
-    /// 所有来源引用一致时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 任一稳定身份或版本引用变化时返回
-    /// [`DraftLineEditViolation::RewrittenSourceReference`]。
+    /// 所有来源引用一致时返回 `Ok(())`。任一稳定身份或版本引用变化时返回[`DraftLineEditViolation::RewrittenSourceReference`]。
     pub fn ensure_source_references_unchanged(
         &self,
         requested: &super::draft_edit::DraftLineEdit,
@@ -640,7 +613,7 @@ mod tests {
         }
     }
 
-    /// 规格可空不影响 SKU、商品名称和单位的必填约束。
+    // 规格可空不影响 SKU、商品名称和单位的必填约束。
     #[test]
     fn unspecified_goods_still_require_identity_name_and_unit() {
         let mut missing_sku = goods_line_data();

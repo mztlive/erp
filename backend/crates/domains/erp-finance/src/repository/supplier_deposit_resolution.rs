@@ -15,12 +15,10 @@ use crate::repository::funds_evidence::FundsEvidenceExt;
 use crate::{Error, Result};
 
 /// 平衡依据必须晚于全账户最后资金风险水位，已应用收件也不能被旧记录忽略。
-/// # 参数
-/// 已授权账户、已保存平衡依据和持有账号调查屏障的同一事务。
-/// # 返回
-/// 无范围外资金发生、晚记账、晚观察或晚核销时成功。
-/// # 错误
-/// 任一较新资金风险存在或查询失败时拒绝，保持原账户限制。
+/// 结果：无范围外资金发生、晚记账、晚观察或晚核销时成功。
+/// 失败条件：任一较新资金风险存在或查询失败时拒绝，保持原账户限制。
+///
+/// 输入约定：已授权账户、已保存平衡依据和持有账号调查屏障的同一事务。
 pub async fn ensure_account_risk_covered(
     db: &Database,
     account: &str,
@@ -69,12 +67,10 @@ pub async fn ensure_account_risk_covered(
 }
 
 /// 由原资金流水定位同账户的唯一使用，不允许按业务名称或金额猜测。
-/// # 参数
-/// 当前账户、已保存流水身份和原重核事务。
-/// # 返回
 /// 返回原真实使用或缺失。
-/// # 错误
 /// 查询失败时拒绝。
+///
+/// 输入约定：当前账户、已保存流水身份和原重核事务。
 pub async fn usage_for_ledger(
     db: &Database,
     account: &str,
@@ -93,12 +89,10 @@ pub async fn usage_for_ledger(
 }
 
 /// 读取全部仍有剩余占用的原记录，历史占用不因页面最新一百条而失去办理入口。
-/// # 参数
-/// 已授权账户与当前只读执行器。
-/// # 返回
 /// 返回按创建时间及身份排序的最多一千项剩余占用。
-/// # 错误
-/// 超过上限或查询失败时拒绝，不能截断后冒充完整候选。
+/// 失败条件：超过上限或查询失败时拒绝，不能截断后冒充完整候选。
+///
+/// 输入约定：已授权账户与当前只读执行器。
 pub async fn outstanding_reservations(
     db: &Database,
     account: &str,
@@ -119,12 +113,10 @@ pub async fn outstanding_reservations(
 }
 
 /// 以账户和外部交易联合读取充值批次，外部交易号不跨账户去重。
-/// # 参数
-/// 已核验账户、稳定交易身份及同一重核事务。
-/// # 返回
 /// 返回当前账户的唯一到账批次或缺失。
-/// # 错误
 /// 查询失败时拒绝。
+///
+/// 输入约定：已核验账户、稳定交易身份及同一重核事务。
 pub async fn recharge_batch_for_transaction(
     db: &Database,
     account: &str,
@@ -143,12 +135,10 @@ pub async fn recharge_batch_for_transaction(
 }
 
 /// 读取本账户全部待人工核验收件，超过有界上限时拒绝整次结案。
-/// # 参数
-/// 当前账户与已授权结案事务。
-/// # 返回
 /// 返回最多一千条待核验原证据，不能只读取页面最近记录。
-/// # 错误
 /// 超限或读取失败时拒绝。
+///
+/// 输入约定：当前账户与已授权结案事务。
 pub async fn reviewed_funds_evidence(
     db: &Database,
     account: &str,
@@ -168,12 +158,10 @@ pub async fn reviewed_funds_evidence(
 }
 
 /// 读取原占用全部资金方向中的最后发生时刻，包含返款而非仅原始扣款。
-/// # 参数
-/// 已核验账户、可选原占用身份和当前事务。
-/// # 返回
 /// 返回最后扣款/返款时刻；没有资金使用时为空。
-/// # 错误
 /// 查询失败时拒绝。
+///
+/// 输入约定：已核验账户、可选原占用身份和当前事务。
 pub async fn latest_reservation_funds_time(
     db: &Database,
     account: &str,
@@ -194,12 +182,10 @@ pub async fn latest_reservation_funds_time(
 }
 
 /// 账户任一未应用资金、身份冲突或未完成核销都会阻止解除新增使用限制。
-/// # 参数
-/// `db`、`account`、`executor` 为同一结案事务的拥有域数据源。
-/// # 返回
-/// 全账户无未决资金事实时成功。
-/// # 错误
+/// 结果：全账户无未决资金事实时成功。
 /// 任一未决项、真实资金未核销或查询失败时拒绝。
+///
+/// 输入约定：`db`、`account`、`executor` 为同一结案事务的拥有域数据源。
 pub async fn ensure_account_funds_resolved(
     db: &Database,
     account: &str,
@@ -230,12 +216,10 @@ pub async fn ensure_account_funds_resolved(
 }
 
 /// 核对资金查询已连续覆盖所选对账范围，未完成窗口不作为无扣款证明。
-/// # 参数
-/// `from`、`through` 为已持久化的对账范围，其他参数来自当前事务。
-/// # 返回
-/// 固定资金窗口完整、连续且均已完成可靠收件时成功。
-/// # 错误
+/// 结果：固定资金窗口完整、连续且均已完成可靠收件时成功。
 /// 覆盖有缺口、窗口未结束、记录超限或查询失败时拒绝。
+///
+/// 输入约定：`from`、`through` 为已持久化的对账范围，其他参数来自当前事务。
 pub async fn ensure_funds_window_covered(
     db: &Database,
     account: &str,
@@ -253,12 +237,10 @@ pub async fn ensure_funds_window_covered(
 }
 
 /// 有界读取全部未结案差异，恢复账户不得忽略页面范围外的历史记录。
-/// # 参数
-/// 账户身份与当前结案事务执行器。
-/// # 返回
 /// 返回未结案差异；超过一千项时拒绝恢复而非截断。
-/// # 错误
 /// 数量超限或读取失败时拒绝。
+///
+/// 输入约定：账户身份与当前结案事务执行器。
 pub async fn unresolved_reconciliations(
     db: &Database,
     account: &str,

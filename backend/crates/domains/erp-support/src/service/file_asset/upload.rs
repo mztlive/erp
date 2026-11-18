@@ -8,14 +8,8 @@ use crate::Result;
 
 impl FileAssetService {
     /// 在写入外部对象前确认当前账号具有文件上传资格。
-    ///
-    /// # 参数
-    /// `actor` 为当前已认证账号。
-    ///
-    /// # 返回
     /// 当前快照具备上传功能资格时成功；登记资产的写事务仍须重新授权。
-    ///
-    /// # 错误
+    /// `actor` 为当前已认证账号。
     /// 缺少上传资格、身份无效或授权读取失败时拒绝。
     pub async fn prepare_upload(&self, actor: &AuditActor) -> Result<()> {
         let service = self.clone();
@@ -29,7 +23,7 @@ impl FileAssetService {
             .await
     }
 
-    /// 只证明本次外部上传资格，不产生登记或附件授权凭证。
+    // 只证明本次外部上传资格，不产生登记或附件授权凭证。
     async fn upload_qualification(&self, actor: &AuditActor, executor: &mut dyn Executor) -> Result<()> {
         self.require_operation(actor, &file_asset::UPLOAD, executor).await
     }

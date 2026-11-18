@@ -12,13 +12,8 @@ use crate::http::handler::file_asset::{asset_download_response, read_asset, reva
 use crate::http::state::HttpState;
 
 /// 下载来源销售单自身的建单凭证。
-///
-/// # 参数
-/// * `state` / `actor` - 应用状态及当前用户
-/// * `order_id` / `asset_id` - 当前销售单及其建单凭证
-/// # 返回
+/// `order_id` / `asset_id` 为当前销售单及其建单凭证。
 /// 返回经源对象及文件治理复验的 PDF 或图片内容。
-/// # 错误
 /// 来源越权、关系变化、文件销毁或隔离时拒绝。
 pub async fn sales_order_evidence_download(
     State(state): State<HttpState>,

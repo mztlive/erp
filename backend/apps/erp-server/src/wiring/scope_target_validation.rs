@@ -51,14 +51,8 @@ impl ScopeTargetPort for ScopeTargets {
 }
 
 /// 装配范围配置的公共授权与外部目标校验。
-///
-/// # 参数
-/// * `db` - 业务数据库
-/// * `rbac` - 现有 RBAC 服务
-/// * `authorization` - 完整绑定的共享授权服务
-/// # 返回
+/// `authorization` 为完整绑定的共享授权服务。
 /// 返回无嵌套事务的配置服务。
-/// # 错误
 /// 无；目标错误由创建命令在原事务中返回。
 pub fn scope_configuration(
     db: Database,

@@ -13,11 +13,11 @@ use super::SupplierApiOrderProcess;
 use crate::{Error, Result};
 
 /// 从服务器保存的加密快照读取执行组批准预算。
-/// # 参数
+///
 /// `execution` 必须由调用方按当前权限读取，`codec` 为应用敏感资料加密器。
-/// # 返回
+///
 /// 与原执行组及采购修订精确绑定的商品、运费和总预算。
-/// # 错误
+///
 /// 快照缺失、历史记录无预算或来源版本不符时拒绝，不能采用客户端金额。
 pub fn execution_budget(
     execution: &ApiOrderExecution,
@@ -104,7 +104,7 @@ impl SupplierApiOrderProcess {
     }
 }
 
-/// 使用原执行身份和服务端冻结预算构造资金资格查询。
+// 使用原执行身份和服务端冻结预算构造资金资格查询。
 fn funds_query(execution: &ApiOrderExecution, approved_total: Amount) -> OrderFundsQuery {
     OrderFundsQuery {
         execution_group_id: execution.base.id.clone(),
@@ -116,7 +116,7 @@ fn funds_query(execution: &ApiOrderExecution, approved_total: Amount) -> OrderFu
     }
 }
 
-/// 使用注入的 ERP 资金资格端口核验原执行，保留存储及未知结果错误。
+// 使用注入的 ERP 资金资格端口核验原执行，保留存储及未知结果错误。
 async fn require_coverage(
     funds: &dyn SupplierOrderFunds<Error = Error>,
     execution: &ApiOrderExecution,

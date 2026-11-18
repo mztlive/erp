@@ -60,21 +60,11 @@ struct DraftSaveServices<'a> {
 impl PurchaseOrderProcess {
     /// 保存采购草稿（表头 + 完整行替换，单事务）。
     ///
-    /// # 参数
-    /// * `id` - 采购单 ID
-    /// * `req` - 期望版本、完整草稿行与幂等键
-    /// * `actor` - 已通过鉴权的审计操作人
+    /// `req` 为期望版本、完整草稿行与幂等键。首次执行返回新版本与服务端金额；同键同载荷返回首次成功的原结果。
     ///
-    /// # 返回
-    /// 首次执行返回新版本与服务端金额；同键同载荷返回首次成功的原结果。
+    /// 采购单或草稿不存在、操作人不是原采购制单人、版本或状态冲突、来源行变化、超采、同键异载荷、事务写入失败或提交结果仍无法确认时返回错误。
     ///
-    /// # 错误
-    /// 采购单或草稿不存在、操作人不是原采购制单人、版本或状态冲突、来源行变化、
-    /// 超采、同键异载荷、事务写入失败或提交结果仍无法确认时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 先校验 `created_by` 再校验版本和状态；草稿替换、覆盖重算、任务同步和命令
-    /// 收据必须同事务提交，事务失败后必须回读收据覆盖已提交但响应丢失的情况。
+    /// 先校验 `created_by` 再校验版本和状态；草稿替换、覆盖重算、任务同步和命令收据必须同事务提交，事务失败后必须回读收据覆盖已提交但响应丢失的情况。
     pub async fn save_draft(
         &self,
         id: &str,
@@ -107,25 +97,14 @@ impl PurchaseOrderProcess {
     }
 }
 
-/// 执行保存草稿事务并在失败后回读命令收据。
-///
-/// # 参数
-/// * `context` - 原采购单服务及此前已取得的应用能力
-/// * `purchase_order_id` - 当前路径采购单 ID
-/// * `request` - 已通过 DTO 校验的保存请求
-/// * `receipt_id` - 稳定命令收据 ID
-/// * `fingerprint` - 请求载荷指纹
-/// * `actor` - 已认证审计操作人
-///
-/// # 返回
-/// 返回首次事务结果或提交成功后回读到的原结果。
-///
-/// # 错误
-/// 事务失败且没有匹配收据，或回读发现同键异载荷时返回错误。
-///
-/// # 关键业务约束
-/// 任意事务错误都必须执行一次无事务收据回读，以覆盖提交响应丢失。
-/// 写事务必须重验采购对象范围，历史参与不授予保存。
+// 执行保存草稿事务并在失败后回读命令收据。
+//
+// `context` 为原采购单服务及此前已取得的应用能力；`purchase_order_id` 为当前路径采购单 ID；`request` 为已通过 DTO 校验的保存请求；`receipt_id`
+// 为稳定命令收据 ID；`fingerprint` 为请求载荷指纹；`actor` 为已认证审计操作人。返回首次事务结果或提交成功后回读到的原结果。
+//
+// 事务失败且没有匹配收据，或回读发现同键异载荷时返回错误。
+//
+// 任意事务错误都必须执行一次无事务收据回读，以覆盖提交响应丢失。写事务必须重验采购对象范围，历史参与不授予保存。
 async fn execute_save_draft_transaction(
     context: DraftSaveServices<'_>,
     purchase_order_id: &str,
@@ -165,21 +144,11 @@ async fn execute_save_draft_transaction(
         .await
 }
 
-/// 在 MongoDB 事务内校验并替换采购草稿提交。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `command` - 保存请求、收据身份和操作人上下文
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回首次保存结果或事务内命中的原收据结果。
-///
-/// # 错误
-/// 目标、版本、状态、来源数量、金额计算或持久化失败时返回错误。
-///
-/// # 关键业务约束
-/// 事务内先查收据；未命中时先校验创建人，再校验版本和状态。
+// 在 MongoDB 事务内校验并替换采购草稿提交。
+//
+// `command` 为保存请求、收据身份和操作人上下文。返回首次保存结果或事务内命中的原收据结果。目标、版本、状态、来源数量、金额计算或持久化失败时返回错误。
+//
+// 事务内先查收据；未命中时先校验创建人，再校验版本和状态。
 async fn save_draft_apply(
     db: &mongodb::Database,
     ports: &PurchaseOrderPorts,
@@ -214,23 +183,13 @@ async fn save_draft_apply(
     replace_current_draft(db, ports, &mut order, command, executor).await
 }
 
-/// 加载并替换当前采购草稿提交。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `order` - 已完成创建人、版本和状态校验的采购单
-/// * `command` - 保存请求、收据身份和操作人上下文
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回事务内持久化后的保存结果。
-///
-/// # 错误
-/// 草稿、销售来源、覆盖、预计交付日、交付地址、金额计算、实体更新或仓储写入失败时返回错误。
-///
-/// # 关键业务约束
-/// 销售 procurement guard 推进后必须重算覆盖，再校验本次完整行替换；预计交付日与
-/// 收件分配按销售当前版本校验。
+// 加载并替换当前采购草稿提交。
+//
+// `order` 为已完成创建人、版本和状态校验的采购单；`command` 为保存请求、收据身份和操作人上下文。返回事务内持久化后的保存结果。
+//
+// 草稿、销售来源、覆盖、预计交付日、交付地址、金额计算、实体更新或仓储写入失败时返回错误。
+//
+// 销售 procurement guard 推进后必须重算覆盖，再校验本次完整行替换；预计交付日与收件分配按销售当前版本校验。
 async fn replace_current_draft(
     db: &mongodb::Database,
     ports: &PurchaseOrderPorts,
@@ -263,24 +222,12 @@ async fn replace_current_draft(
     persist_draft_replacement(db, ports, order, &mut old_draft, &replacement, command, executor).await
 }
 
-/// 校验草稿行；草稿引用旧销售版本时按当前版本刷新来源。
-///
-/// # 参数
-/// * `order` - 当前采购单；刷新时改写其销售来源版本
-/// * `old_draft` - 当前草稿提交
-/// * `old_lines` - 当前草稿行
-/// * `requested` - 已合并补丁的请求行
-/// * `coverage` - 推进 guard 后的当前覆盖
-///
-/// # 返回
-/// 返回待写入的请求行与付款主体。
-///
-/// # 错误
-/// 行编辑违反草稿或刷新规则时返回错误。
-///
-/// # 关键业务约束
-/// 第一期 §6.3“销售变更对采购的影响”第 5 条：修改原单时刷新到当前销售版本，
-/// 保留单号与未受影响行，不要求作废重建。
+// 校验草稿行；草稿引用旧销售版本时按当前版本刷新来源。
+//
+// `order` 为当前采购单；刷新时改写其销售来源版本；`old_draft` 为当前草稿提交；`old_lines` 为当前草稿行；`requested` 为已合并补丁的请求行；`coverage` 为推进
+// guard 后的当前覆盖。返回待写入的请求行与付款主体。行编辑违反草稿或刷新规则时返回错误。
+//
+// 第一期 §6.3“销售变更对采购的影响”第 5 条：修改原单时刷新到当前销售版本，保留单号与未受影响行，不要求作废重建。
 fn prepare_draft_lines(
     order: &mut PurchaseOrder,
     old_draft: &PurchaseOrderSubmission,
@@ -306,22 +253,13 @@ fn prepare_draft_lines(
     Ok((requested, subject))
 }
 
-/// 推进销售采购 guard 并加载最新采购覆盖。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `order` - 当前采购单
-/// * `actor_id` - 当前操作人 ID
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回 guard CAS 成功后的最新采购覆盖。
-///
-/// # 错误
-/// 来源销售单不存在、guard 冲突或覆盖加载失败时返回错误。
-///
-/// # 关键业务约束
-/// guard 与后续草稿写入处于同一事务，保证与采购创建命令串行化。
+// 推进销售采购 guard 并加载最新采购覆盖。
+//
+// `order` 为当前采购单；`actor_id` 为当前操作人 ID。返回 guard CAS 成功后的最新采购覆盖。
+//
+// 来源销售单不存在、guard 冲突或覆盖加载失败时返回错误。
+//
+// guard 与后续草稿写入处于同一事务，保证与采购创建命令串行化。
 pub(super) async fn advance_guard_and_load_coverage(
     db: &mongodb::Database,
     order: &PurchaseOrder,
@@ -338,24 +276,13 @@ pub(super) async fn advance_guard_and_load_coverage(
     load_sales_procurement_coverage(db, &sales_order, executor).await.map_err(crate::Error::from)
 }
 
-/// 持久化草稿替换、同步任务并写入稳定命令收据。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `order` - 已切换当前提交指针的采购单
-/// * `old_draft` - 已标记为被替代的旧草稿
-/// * `replacement` - 新草稿提交、完整行和金额
-/// * `command` - 保存请求、收据身份和操作人上下文
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回首次成功响应中需要稳定回放的结果。
-///
-/// # 错误
-/// 任一仓储写入、任务同步、回执构造或审计写入失败时返回错误。
-///
-/// # 关键业务约束
-/// 采购单更新后取得的新版本必须写入同事务命令收据。
+// 持久化草稿替换、同步任务并写入稳定命令收据。
+//
+// `order` 为已切换当前提交指针的采购单；`old_draft` 为已标记为被替代的旧草稿；`replacement` 为新草稿提交、完整行和金额；`command` 为保存请求、收据身份和操作人上下文。
+//
+// 返回首次成功响应中需要稳定回放的结果。任一仓储写入、任务同步、回执构造或审计写入失败时返回错误。
+//
+// 采购单更新后取得的新版本必须写入同事务命令收据。
 async fn persist_draft_replacement(
     db: &mongodb::Database,
     ports: &PurchaseOrderPorts,
@@ -411,24 +338,13 @@ async fn persist_draft_replacement(
     Ok(receipt.into_result())
 }
 
-/// 查询并校验保存草稿命令收据。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `receipt_id` - 稳定命令收据 ID
-/// * `expected_fingerprint` - 当前请求载荷指纹
-/// * `purchase_order_id` - 当前路径采购单 ID
-/// * `actor` - 当前操作人
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 收据不存在返回 `None`；身份与载荷一致时返回首次保存结果。
-///
-/// # 错误
-/// 同键异载荷、收据身份不一致、收据损坏、采购单缺失或版本倒退时返回错误。
-///
-/// # 关键业务约束
-/// 事务前、事务内和事务失败后必须复用同一回放校验。
+// 查询并校验保存草稿命令收据。
+//
+// `receipt_id` 为稳定命令收据 ID；`expected_fingerprint` 为当前请求载荷指纹；`purchase_order_id` 为当前路径采购单 ID。
+//
+// 收据不存在返回 `None`；身份与载荷一致时返回首次保存结果。同键异载荷、收据身份不一致、收据损坏、采购单缺失或版本倒退时返回错误。
+//
+// 事务前、事务内和事务失败后必须复用同一回放校验。
 async fn replay_saved_draft(
     db: &mongodb::Database,
     receipt_id: &PurchaseCommandReceiptIdentity,
@@ -469,24 +385,12 @@ async fn replay_saved_draft(
     Ok(Some(receipt.into_payload().into_result()))
 }
 
-/// 在事务错误后回读保存草稿收据并决定最终响应。
-///
-/// # 参数
-/// * `transaction_result` - MongoDB 事务返回结果
-/// * `db` - MongoDB 数据库
-/// * `receipt_id` - 稳定命令收据 ID
-/// * `fingerprint` - 当前请求载荷指纹
-/// * `purchase_order_id` - 当前路径采购单 ID
-/// * `actor` - 当前操作人
-///
-/// # 返回
-/// 事务成功返回原结果；事务失败但收据存在时返回已提交结果。
-///
-/// # 错误
-/// 事务失败且没有匹配收据，或回读收据冲突、损坏时返回错误。
-///
-/// # 关键业务约束
-/// 回读只执行一次，不把没有收据的失败请求误判为成功。
+// 在事务错误后回读保存草稿收据并决定最终响应。
+//
+// `transaction_result` 为MongoDB 事务返回结果；`receipt_id` 为稳定命令收据 ID；`fingerprint` 为当前请求载荷指纹；`purchase_order_id`
+// 为当前路径采购单 ID。事务成功返回原结果；事务失败但收据存在时返回已提交结果。事务失败且没有匹配收据，或回读收据冲突、损坏时返回错误。
+//
+// 回读只执行一次，不把没有收据的失败请求误判为成功。
 async fn recover_saved_draft(
     transaction_result: Result<SavePurchaseOrderDraftResult>,
     service: &PurchaseOrderProcess,
@@ -565,16 +469,7 @@ mod tests {
         }
     }
 
-    /// 验证保存请求拒绝超过命令身份边界的幂等键。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 无。
-    ///
-    /// # 错误
-    /// 超过 128 字符的幂等键通过 DTO 校验时测试失败。
+    // 验证保存请求拒绝超过命令身份边界的幂等键。超过 128 字符的幂等键通过 DTO 校验时测试失败。
     #[test]
     fn save_request_rejects_unbounded_idempotency_key() {
         let mut request = save_request("1");
@@ -583,16 +478,7 @@ mod tests {
         assert!(request.validate().is_err());
     }
 
-    /// 验证保存请求指纹排除幂等键并覆盖实际命令载荷。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 无。
-    ///
-    /// # 错误
-    /// 相同业务载荷因幂等键变化而改变或数量变化未改变指纹时测试失败。
+    // 验证保存请求指纹排除幂等键并覆盖实际命令载荷。相同业务载荷因幂等键变化而改变或数量变化未改变指纹时测试失败。
     #[test]
     fn save_fingerprint_is_payload_stable_and_key_independent() {
         let first = save_request("1");

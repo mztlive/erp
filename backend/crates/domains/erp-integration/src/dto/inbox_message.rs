@@ -121,18 +121,11 @@ pub(crate) struct InboxMessageListQuery {
 }
 
 impl InboxMessageListParams {
-    /// 归一化入站消息列表查询参数。
-    ///
-    /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    // 归一化入站消息列表查询参数。
+    //
+    // 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
+    //
+    // 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<InboxMessageListQuery> {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, INBOX_MESSAGE_SORT_FIELDS)?;
         Ok(InboxMessageListQuery {
@@ -213,13 +206,7 @@ pub struct InboxMessageView {
 }
 
 impl From<InboxMessage> for InboxMessageView {
-    /// 从入站消息实体构造详情视图。
-    ///
-    /// # 参数
-    /// * `message` - 入站消息实体
-    ///
-    /// # 返回
-    /// 返回详情视图。
+    // 从入站消息实体构造详情视图。
     fn from(message: InboxMessage) -> Self {
         Self {
             id: message.base.id,

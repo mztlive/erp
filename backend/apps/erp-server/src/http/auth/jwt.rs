@@ -43,10 +43,7 @@ pub enum SubjectKind {
 }
 
 impl SubjectKind {
-    /// 返回主体类型字符串。
-    ///
-    /// # 返回值
-    /// 返回稳定的主体类型字符串。
+    /// 把已知主体类型编码成稳定的 JWT 声明值，后台与供应商门户使用不同取值。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Backoffice => "backoffice",
@@ -58,16 +55,9 @@ impl SubjectKind {
 impl TryFrom<&str> for SubjectKind {
     type Error = ();
 
-    /// 从字符串解析主体类型。
-    ///
-    /// # 参数
-    /// * `value` - 主体类型字符串
-    ///
-    /// # 返回值
-    /// 成功返回主体类型，失败返回空错误。
-    ///
-    /// # 错误
-    /// 字符串不是精确的已知主体类型时返回空错误。
+    // 从字符串解析主体类型。
+    // 成功返回主体类型，失败返回空错误。
+    // 字符串不是精确的已知主体类型时返回空错误。
     fn try_from(value: &str) -> std::result::Result<Self, Self::Error> {
         Self::from_str(value)
     }
@@ -76,16 +66,9 @@ impl TryFrom<&str> for SubjectKind {
 impl FromStr for SubjectKind {
     type Err = ();
 
-    /// 按精确字符串解析 JWT 主体类型。
-    ///
-    /// # 参数
-    /// * `value` - 主体类型字符串。
-    ///
-    /// # 返回
-    /// 返回已知的后台或供应商门户主体类型。
-    ///
-    /// # 错误
-    /// 未知值、大小写变化或首尾空白均返回空错误。
+    // 按精确字符串解析 JWT 主体类型。
+    // 返回已知的后台或供应商门户主体类型。
+    // 未知值、大小写变化或首尾空白均返回空错误。
     fn from_str(value: &str) -> std::result::Result<Self, Self::Err> {
         match value {
             "backoffice" => Ok(Self::Backoffice),
@@ -105,16 +88,7 @@ pub struct TokenPayload {
 }
 
 impl TokenPayload {
-    /// 创建后台账号 JWT 载荷。
-    ///
-    /// # 参数
-    /// * `id` - 用户ID
-    /// * `account` - 账号
-    /// * `account_kind` - 账号类型
-    /// * `account_version` - 签发时的账号版本
-    ///
-    /// # 返回值
-    /// 返回后台账号载荷。
+    /// 为认证成功的后台账号构造签发载荷，将账号类型和当前持久化版本写入声明，供请求认证时复验。
     pub fn backoffice(id: String, account: String, account_kind: AccountKind, account_version: u64) -> Self {
         Self {
             id,
@@ -126,13 +100,7 @@ impl TokenPayload {
         }
     }
 
-    /// 构造独立门户凭证，供应商归属始终由当前绑定解析。
-    /// # 参数
-    /// `id`、`account` 为实名账号，版本对应账号及门户绑定。
-    /// # 返回
-    /// 返回供应商主体的令牌载荷。
-    /// # 错误
-    /// 无。
+    /// 构造独立门户 JWT 载荷，带账号及绑定版本；请求使用时仍由当前绑定解析供应商归属。
     pub fn supplier_portal(id: String, account: String, account_version: u64, binding_version: u64) -> Self {
         Self {
             id,
@@ -146,13 +114,8 @@ impl TokenPayload {
 }
 
 impl From<TokenPayload> for BTreeMap<String, Value> {
-    /// 从 TokenPayload 生成 JWT 载荷映射。
-    ///
-    /// # 参数
-    /// * `payload` - JWT 载荷
-    ///
-    /// # 返回值
-    /// 返回载荷映射
+    // 从 TokenPayload 生成 JWT 载荷映射。
+    // 返回载荷映射。
     fn from(payload: TokenPayload) -> Self {
         let mut out: BTreeMap<String, Value> = BTreeMap::new();
         out.insert("id".to_string(), payload.id.into());
@@ -175,13 +138,7 @@ impl From<TokenPayload> for BTreeMap<String, Value> {
 impl TryFrom<BTreeMap<String, Value>> for TokenPayload {
     type Error = Error;
 
-    /// 从给定值构建实例。
-    ///
-    /// # 参数
-    /// * `payload_map` - 载荷映射
-    ///
-    /// # 返回
-    /// 返回创建的实例。
+    // 把验签后的声明解码为后台或门户身份；两类主体要求不同的账号类型与绑定版本，缺少账号版本的旧凭证不再有效。
     fn try_from(mut payload_map: BTreeMap<String, Value>) -> Result<Self, Self::Error> {
         let id = required_string(&mut payload_map, "id")?;
         let account = required_string(&mut payload_map, "account")?;
@@ -207,16 +164,7 @@ impl TryFrom<BTreeMap<String, Value>> for TokenPayload {
 }
 
 impl Engine {
-    /// 创建 Engine 实例。
-    ///
-    /// # 参数
-    /// * `secret` - 密钥/凭证
-    ///
-    /// # 返回
-    /// 返回执行结果，`Ok` 表示成功，`Err` 表示失败。
-    ///
-    /// # 错误
-    /// 当密钥少于 32 字节或 HMAC 初始化失败时返回错误。
+    /// 为当前 JWT 密钥初始化签发与验签共用的 HMAC 引擎；密钥少于 32 字节或 HMAC 初始化失败时返回错误。
     pub fn new(secret: String) -> Result<Self, Error> {
         if secret.len() < 32 {
             return Err(Error::InvalidSecret);
@@ -226,12 +174,7 @@ impl Engine {
         Ok(out)
     }
 
-    /// create a token str from a user id
-    ///
-    /// # Errors
-    ///
-    /// This function will return an error if .
-    /// * the token can not be created (sign failed)
+    /// 认证后用服务端身份载荷签发含标准主体和时效声明的 JWT；签名失败时不交付令牌。
     pub fn create_token<T: Into<TokenPayload>>(&self, payload: T) -> Result<String, Error> {
         let expiration =
             Utc::now().checked_add_signed(Duration::days(30)).ok_or(Error::TokenCreationFailed)?.timestamp();
@@ -251,22 +194,13 @@ impl Engine {
         Ok(token)
     }
 
-    /// 校验 JWT 签名、有效期和主体一致性并返回载荷。
-    ///
-    /// # 参数
-    /// * `token` - 待校验的 JWT。
-    ///
-    /// # 返回值
-    /// 返回已验证的 token 载荷。
-    ///
-    /// # 错误
-    /// token 签名无效、已过期、尚未生效、缺少必要声明或主体不一致时返回错误。
+    /// 在接收 JWT 时验证签名、时效和标准主体与私有载荷的一致性；必要声明缺失、过期或尚未生效时拒绝。
     pub fn verify_token(&self, token: &str) -> Result<TokenPayload, Error> {
         let now = u64::try_from(Utc::now().timestamp()).map_err(|_| Error::InvalidClaims)?;
         self.verify_token_at(token, now)
     }
 
-    /// 在指定时间点校验 JWT，便于集中实现时效与主体规则。
+    // 签名通过后按给定时间检查有效期、生效时间和主体一致性；显式时钟也用于覆盖边界测试。
     fn verify_token_at(&self, token: &str, now: u64) -> Result<TokenPayload, Error> {
         let claims: Claims = token.verify_with_key(&self.key)?;
         let subject =
@@ -343,17 +277,14 @@ mod tests {
         assert!(TokenPayload::try_from(map).is_err());
     }
 
-    /// 使用当前 Engine 的密钥签发自定义声明，覆盖验签后的声明校验分支。
+    // 用单测引擎签发自定义声明，让声明校验测试走真实验签路径。
     fn signed_token(engine: &Engine, registered: RegisteredClaims, payload: TokenPayload) -> String {
         let mut claims = Claims::new(registered);
         claims.private = payload.into();
         claims.sign_with_key(&engine.key).expect("token should be signed")
     }
 
-    /// 验证后台载荷会写入后台主体类型和账号类型字段。
-    ///
-    /// # 返回值
-    /// 不返回数据，仅表示执行结果。
+    // 验证后台载荷会写入后台主体类型和账号类型字段。
     #[test]
     fn backoffice_payload_contains_subject_kind_and_account_kind() {
         let payload =
@@ -365,7 +296,7 @@ mod tests {
         assert_eq!(payload_map.get("account_version"), Some(&Value::from(7)));
     }
 
-    /// 验证后台载荷包含有效账号类型时可被解析。
+    // 覆盖认证后台令牌所需的账号类型声明，确认合法后台身份能解码。
     #[test]
     fn backoffice_payload_with_account_kind_should_be_accepted() {
         let mut payload_map = BTreeMap::new();
@@ -380,7 +311,7 @@ mod tests {
         assert_eq!(payload.account_kind, Some(AccountKind::Admin));
     }
 
-    /// 验证旧版后台 token 缺少账号版本时会被拒绝并要求重新登录。
+    // 签名有效但缺少账号版本的旧后台令牌应失效，迫使客户端重新登录获取新版凭证。
     #[test]
     fn backoffice_payload_without_account_version_should_be_rejected() {
         let mut payload_map = BTreeMap::new();
@@ -392,13 +323,13 @@ mod tests {
         assert!(matches!(TokenPayload::try_from(payload_map), Err(Error::InvalidClaims)));
     }
 
-    /// 验证空白密钥不会被接受。
+    // 检查空白密钥不能初始化 JWT 引擎，避免在无有效密钥时签发或验签。
     #[test]
     fn blank_secret_should_be_rejected() {
         assert!(matches!(Engine::new("  ".to_string()), Err(Error::InvalidSecret)));
     }
 
-    /// 验证正常签发的 token 可通过完整校验。
+    // 用真实引擎完成签发再验签，确认正常令牌能通过全部声明检查。
     #[test]
     fn created_token_should_be_verified() {
         let engine = Engine::new(TEST_SECRET.to_string()).expect("engine");
@@ -417,7 +348,7 @@ mod tests {
         assert_eq!(payload.subject_kind, SubjectKind::Backoffice);
     }
 
-    /// 验证到达过期时间的 token 会被拒绝。
+    // 把校验时间推进到到期边界，确认签名正确的 JWT 也不能继续使用。
     #[test]
     fn expired_token_should_be_rejected() {
         let engine = Engine::new(TEST_SECRET.to_string()).expect("engine");
@@ -434,7 +365,7 @@ mod tests {
         assert!(matches!(engine.verify_token_at(&token, 100), Err(Error::TokenExpired)));
     }
 
-    /// 验证缺少过期声明的 token 即使签名正确也会被拒绝。
+    // 通过有效签名构造缺少 `exp` 的 JWT，确保签名通过不能替代时效校验。
     #[test]
     fn token_without_expiration_should_be_rejected() {
         let engine = Engine::new(TEST_SECRET.to_string()).expect("engine");
@@ -447,7 +378,7 @@ mod tests {
         assert!(matches!(engine.verify_token_at(&token, 100), Err(Error::InvalidClaims)));
     }
 
-    /// 验证尚未生效的 token 会被拒绝。
+    // 在生效时间之前验证已签发令牌，锁定 `nbf` 边界的拒绝行为。
     #[test]
     fn token_before_not_before_should_be_rejected() {
         let engine = Engine::new(TEST_SECRET.to_string()).expect("engine");
@@ -465,7 +396,7 @@ mod tests {
         assert!(matches!(engine.verify_token_at(&token, 100), Err(Error::InvalidClaims)));
     }
 
-    /// 验证标准主体与私有载荷身份不一致时会被拒绝。
+    // 给已正确签名的令牌设置不同的标准主体和私有载荷身份，确认验签后仍拒绝错配。
     #[test]
     fn token_with_mismatched_subject_should_be_rejected() {
         let engine = Engine::new(TEST_SECRET.to_string()).expect("engine");

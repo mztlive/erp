@@ -12,18 +12,8 @@ use crate::repository::owned::SupplierOfferingRevisionRepository;
 /// 单个供给条款历史的有界游标查询。
 #[allow(async_fn_in_trait)]
 pub trait OfferingHistoryRepositoryExt {
-    /// 读取 20 条历史和一个后续探测条目。
-    ///
-    /// # 参数
-    /// * `offering_id` - 已通过范围校验的供给 ID
-    /// * `before` - 严格小于此版本号；首页省略
-    /// * `executor` - 调用方事务执行器
-    ///
-    /// # 返回
-    /// 至多 21 条、按版本号倒序排列的未删除条款。
-    ///
-    /// # 错误
-    /// 数据库或反序列化错误原样传播。
+    /// 在调用方事务中按已授权供给读取未删除条款，按修订号倒序取最多 21 条；历史页用最后一条做续页探测。
+    /// 续页只取小于游标的修订，读取或反序列化失败向上传播错误。
     async fn history_page(
         &self,
         offering_id: &SupplierOfferingId,
@@ -49,7 +39,7 @@ impl OfferingHistoryRepositoryExt for SupplierOfferingRevisionRepository<'_> {
     }
 }
 
-/// 构造稳定供给下的游标条件，始终排除软删除记录。
+// 每页都按同一供给 ID 排除软删除条款；有游标时加严格小于该修订号的条件，避免续页重复返回边界行。
 fn history_filter(offering_id: &SupplierOfferingId, before: Option<u32>) -> Document {
     let mut filter =
         doc! { "supplier_offering_id": offering_id.as_ref(), "deleted_at": NOT_DELETED_TIMESTAMP_BSON };

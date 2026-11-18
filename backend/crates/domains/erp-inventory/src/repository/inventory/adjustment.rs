@@ -74,16 +74,7 @@ pub struct StockAdjustmentFilter {
 }
 
 impl Default for StockAdjustmentFilter {
-    /// 返回首页空筛选（`page: 1`，`page_size: 20`）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回筛选为空、降序的首页过滤条件。
-    ///
-    /// # 错误
-    /// 无。
+    // 初始化库存调整单筛选：第一页、每页 20 条，业务筛选默认留空，默认降序排序。
     fn default() -> Self {
         Self {
             search: super::InventorySearch::default(),
@@ -100,20 +91,9 @@ impl Default for StockAdjustmentFilter {
 }
 
 impl QueryFilter for StockAdjustmentFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// 基底来自 `scoped_base_filter`（未删除，以及 `warehouse_ids`：`None` 不限仓库，空集合保持空 `$in`）。
-    /// 有值时按稳定代码匹配 `status`；`prepared_by_ids`、`id_in` 为 `Some` 时分别对 `prepared_by`、`id`
-    /// 做 `$in`（空集合无命中）。最后并入 `search`。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 转换为 MongoDB 查询条件（自动追加未删除过滤）。
+    // 基底来自 `scoped_base_filter`（未删除，以及 `warehouse_ids`：`None` 不限仓库，空集合保持空 `$in`）。有值时按稳定代码匹配 `status`；
+    // `prepared_by_ids`、`id_in` 为 `Some` 时分别对 `prepared_by`、`id` 做 `$in`（空集合无命中）。最后并入 `search`。
     fn to_doc(&self) -> Document {
         let mut filter = scoped_base_filter(self.warehouse_ids.as_deref());
         if let Some(status) = self.status {
@@ -131,18 +111,8 @@ impl QueryFilter for StockAdjustmentFilter {
 }
 
 impl Pagination for StockAdjustmentFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// 原样返回 `page`，并把 `page_size` 从 `u32` 拓宽为 `u64`；不在此处把小于 1 的页码归一。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 向仓储分页传递页码与单页条数。
+    // 原样返回 `page`，并把 `page_size` 从 `u32` 拓宽为 `u64`；不在此处把小于 1 的页码归一。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -152,26 +122,11 @@ impl Pagination for StockAdjustmentFilter {
 #[allow(async_fn_in_trait)]
 pub trait StockAdjustmentRepositoryExt {
     /// 分页检索库存调整单列表（投影查询）。
-    ///
-    /// 只返回 [`StockAdjustmentRow`] 所需的列表字段，不加载整文档；排序字段
-    /// 走白名单映射（`created_at`/`adjustment_no`）。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
+    /// 只返回 [`StockAdjustmentRow`] 所需的列表字段，不加载整文档；排序字段走白名单映射（`created_at`/`adjustment_no`）。
     /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    /// 按统一库存模型凭证分页查询；候选条件只收窄结果。
-    /// # 参数
-    /// filter 为业务筛选，access 为当前动作凭证，executor 为原读取执行器。
-    /// # 返回
     /// 完整授权条件下的页与总数；缺资格返回空页。
-    /// # 错误
-    /// 模型错配、复验或数据库失败返回错误。
+    /// `executor` 为数据访问执行器，由 Service 决定是否位于事务中 filter 为业务筛选，access 为当前动作凭证，executor 为原读取执行器。
+    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。按统一库存模型凭证分页查询；候选条件只收窄结果。模型错配、复验或数据库失败返回错误。
     async fn search_authorized_stock_adjustments(
         &self,
         filter: &StockAdjustmentFilter,
@@ -180,20 +135,10 @@ pub trait StockAdjustmentRepositoryExt {
     ) -> InventoryResult<PageResult<StockAdjustmentRow>>;
 
     /// 按稳定 ID 读取库存调整岗位分离事实。
-    ///
     /// 工作项入口的历史名称；纯主键读取，直接委托基类单条查询。
-    ///
-    /// # 参数
-    /// * `id` - 库存调整单 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回未删除库存调整单；不存在时返回 `None`。
-    ///
-    /// # 错误
+    /// `id` 为库存调整单 ID；沿用调用方执行器 `executor`。
     /// 当 MongoDB 查询或反序列化失败时返回错误。
-    ///
-    /// # 约束
     /// 仅查询本仓储拥有的库存调整单集合，不访问明细集合。
     async fn find_work_item_stock_adjustment(
         &self,
@@ -242,20 +187,10 @@ impl StockAdjustmentRepositoryExt for Repository<'_, StockAdjustment> {
 #[allow(async_fn_in_trait)]
 pub trait StockAdjustmentLineRepositoryExt {
     /// 批量读取库存调整简报明细。
-    ///
     /// 工作项简报 hydration 入口：按调整单 `$in` 一次取回全部明细，禁止 N+1。
-    ///
-    /// # 参数
-    /// * `adjustment_ids` - 库存调整单 ID 集合；为空时直接返回空集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回全部匹配的库存调整明细。
-    ///
-    /// # 错误
+    /// `adjustment_ids` 为库存调整单 ID 集合；为空时直接返回空集合；沿用调用方执行器 `executor`。
     /// 当 MongoDB 查询或反序列化失败时返回错误。
-    ///
-    /// # 约束
     /// 仅查询本仓储拥有的库存调整明细集合，按所属调整单引用过滤，不访问表头集合。
     async fn list_work_item_brief_lines_by_adjustments(
         &self,
@@ -277,7 +212,7 @@ impl StockAdjustmentLineRepositoryExt for Repository<'_, StockAdjustmentLine> {
     }
 }
 
-/// 为调整单分页追加唯一主键 tie-breaker，避免相同主排序值跨页重复或遗漏。
+// 为调整单分页追加唯一主键 tie-breaker，避免相同主排序值跨页重复或遗漏。
 fn stock_adjustment_sort(filter: &StockAdjustmentFilter) -> Document {
     with_id_tie_breaker(
         sort_doc(filter.sort_by.as_deref(), filter.sort_ascending, &["created_at", "adjustment_no"]),
@@ -287,16 +222,9 @@ fn stock_adjustment_sort(filter: &StockAdjustmentFilter) -> Document {
 
 impl<'a> InventoryRepository<'a> {
     /// 按主键读取未删除的库存调整单。
-    ///
-    /// # 参数
-    /// * `id` - 调整单主键
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回匹配调整单；不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// MongoDB 查询失败时返回错误。
+    /// `id` 为调整单主键；沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询错误。
     pub async fn stock_adjustment(
         &self,
         id: &str,
@@ -306,16 +234,9 @@ impl<'a> InventoryRepository<'a> {
     }
 
     /// 读取指定仓库尚未过账的库存调整单。
-    ///
-    /// # 参数
-    /// * `warehouse_id` - 仓库主键
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回草稿与审批中的调整单。
-    ///
-    /// # 错误
-    /// MongoDB 查询或游标读取失败时返回错误。
+    /// `warehouse_id` 为仓库主键；沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询或游标读取错误。
     #[tracing::instrument(
         name = "repository.inventory.pending_adjustments_for_warehouse",
         skip_all,
@@ -347,16 +268,9 @@ impl<'a> InventoryRepository<'a> {
     }
 
     /// 按主键集合批量读取库存调整单。
-    ///
-    /// # 参数
-    /// * `ids` - 调整单主键集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回全部命中的未删除调整单。
-    ///
-    /// # 错误
-    /// MongoDB 查询或游标读取失败时返回错误。
+    /// `ids` 为调整单主键集合；沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询或游标读取错误。
     pub async fn stock_adjustments_by_ids(
         &self,
         ids: &[String],
@@ -366,18 +280,10 @@ impl<'a> InventoryRepository<'a> {
     }
 
     /// 批量读取库存调整明细（`$in` 一次取回）。
-    ///
     /// 供调整单详情/过账计算一次性加载全部明细，禁止 N+1。
-    ///
-    /// # 参数
-    /// * `adjustment_ids` - 调整单主键集合（为空时直接返回空列表）
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回全部匹配明细。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// `adjustment_ids` 为调整单主键集合（为空时直接返回空列表）；沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询或游标读取错误。
     pub async fn adjustment_lines_by_adjustment_ids(
         &self,
         adjustment_ids: &[StockAdjustmentId],
@@ -393,24 +299,13 @@ impl<'a> InventoryRepository<'a> {
     }
 
     /// 创建库存调整单及全部明细（跨集合多步骤写入）。
-    ///
-    /// 依次写入 `stock_adjustments` 与 `stock_adjustment_lines`，保证表头与
-    /// 明细原子可见（§6.7）。**必须收到事务执行器**：本方法不构成原子边界，
-    /// 传入 `NoTransaction` 时两笔写入各自自动提交，中途失败会留下只有表头
-    /// 没有明细的半成品；Service 必须通过
-    /// `persistence_core::Transactional::with_transaction` 传入事务会话。
-    ///
-    /// # 参数
-    /// * `adjustment` - 待写入的调整单表头
-    /// * `lines` - 待写入的调整明细集合
-    /// * `executor` - 数据访问执行器，必须位于事务中
-    ///
-    /// # 返回
+    /// 依次写入 `stock_adjustments` 与 `stock_adjustment_lines`，保证表头与明细原子可见（§6.7）。**必须收到事务执行器**：本方法不构成原子边界，
+    /// 传入 `NoTransaction` 时两笔写入各自自动提交，中途失败会留下只有表头没有明细的半成品；
+    /// Service 必须通过 `persistence_core::Transactional::with_transaction` 传入事务会话。
     /// 表头与明细都写入完成。
-    ///
-    /// # 错误
-    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）或 MongoDB 写入
-    /// 失败时返回错误。
+    /// `adjustment` 为待写入的调整单表头；`lines` 为待写入的调整明细集合。
+    /// 沿用调用方当前事务的执行器 `executor`。
+    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）或 MongoDB 写入失败时返回错误。
     #[tracing::instrument(
         name = "repository.inventory.create_stock_adjustment_with_lines",
         skip_all,
@@ -443,21 +338,11 @@ impl<'a> InventoryRepository<'a> {
     }
 
     /// 更新调整明细数量与方向（草稿/驳回编辑；数量必须为正）。
-    ///
-    /// 行命中即 `$set quantity`（方向非空时一并更新）并推进行版本；
-    /// 行不存在或已软删除时返回 `false`。
-    ///
-    /// # 参数
-    /// * `id` - 明细行主键
-    /// * `quantity` - 正数调整数量
-    /// * `direction` - 调整方向（`None` 表示保持现状）
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
+    /// 行命中即 `$set quantity`（方向非空时一并更新）并推进行版本；行不存在或已软删除时返回 `false`。
     /// 命中并更新返回 `true`；行不存在时返回 `false`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 写入失败时返回错误。
+    /// `id` 为明细行主键；`quantity` 为正数调整数量。
+    /// `direction` 为调整方向（`None` 表示保持现状）；沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 写入错误。
     pub async fn update_adjustment_line(
         &self,
         id: &str,
@@ -492,15 +377,8 @@ impl<'a> InventoryRepository<'a> {
     }
 
     /// 持久化已通过实体规则校验的调整明细值。
-    ///
-    /// # 参数
-    /// * `line` - 已更新的调整明细实体
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 命中并更新返回 `true`；行不存在或已删除时返回 `false`。
-    ///
-    /// # 错误
+    /// `line` 为已更新的调整明细实体；沿用调用方执行器 `executor`。
     /// MongoDB 写入或字段序列化失败时返回错误。
     pub async fn persist_adjustment_line(
         &self,
@@ -511,21 +389,14 @@ impl<'a> InventoryRepository<'a> {
     }
 }
 
-/// 把调整单状态集合转换为持久化代码。
-///
-/// # 参数
-/// * `statuses` - 调整单状态集合
-///
-/// # 返回
-/// 返回用于 MongoDB `$in` 的稳定代码集合。
+// 把调整单状态集合转换为持久化代码。
+// 返回用于 MongoDB `$in` 的稳定代码集合。
+// `statuses` 为调整单状态集合。
 fn stock_adjustment_state_codes(statuses: &[StockAdjustmentState]) -> Vec<&'static str> {
     statuses.iter().map(StockAdjustmentState::as_str).collect()
 }
 
-/// 库存调整单列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
+// 库存调整单列表投影字段。
 fn stock_adjustment_projection() -> Document {
     doc! {
         "id": 1,

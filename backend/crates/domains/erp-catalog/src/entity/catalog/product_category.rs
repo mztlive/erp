@@ -67,7 +67,7 @@ pub struct ProductCategory {
 }
 
 impl PartialEq for ProductCategory {
-    /// 全字段语义相等。
+    // 逐字段比较商品分类，仅持有相同标识不视为内容相等。
     fn eq(&self, other: &Self) -> bool {
         self.base == other.base
             && self.stable.status == other.stable.status
@@ -86,19 +86,12 @@ impl Eq for ProductCategory {}
 impl ProductCategory {
     /// 创建商品分类。
     ///
-    /// 完成 category_code/name 的校验与规范化（去首尾空白、非空、长度上限），
-    /// 并拒绝「父分类为自身」的环。
+    /// 完成 category_code/name 的校验与规范化（去首尾空白、非空、长度上限），并拒绝「父分类为自身」的环。
     ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::ProductCategoryId`）
-    /// * `data` - 创建数据
-    /// * `created_by` - 创建人（账号或系统身份）
-    ///
-    /// # 返回
-    /// 返回新建的分类实体。
-    ///
-    /// # 错误
     /// 当 category_code/name 为空、超长，或父分类为自身时返回错误。
+    ///
+    /// - `id`：实体主键（`erp_core::ids::ProductCategoryId`）。
+    /// - `created_by`：创建人（账号或系统身份）。
     pub fn new(
         id: ProductCategoryId,
         data: ProductCategoryData,
@@ -125,14 +118,6 @@ impl ProductCategory {
     ///
     /// 复用 `new` 的校验规则；`category_code` 是稳定代码，不允许在通用更新中修改。
     ///
-    /// # 参数
-    /// * `update` - 更新数据
-    /// * `updated_by` - 本次更新执行人
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 当更新字段校验失败时返回错误。
     pub fn update(&mut self, update: ProductCategoryUpdate, updated_by: impl Into<String>) -> Result<()> {
         self.apply_name(update.name)?;
@@ -146,18 +131,11 @@ impl ProductCategory {
 
     /// 移动分类到新的父分类。
     ///
-    /// 只拒绝「父分类为自身」；跨节点的成环检测需要整棵分类树，
-    /// 由 P3 服务层在事务内完成（数据模型 §6.3：分类父子关系不得形成环）。
+    /// 只拒绝「父分类为自身」；跨节点的成环检测需要整棵分类树，由 P3 服务层在事务内完成（数据模型 §6.3：分类父子关系不得形成环）。
     ///
-    /// # 参数
-    /// * `parent` - 新父分类；`None` 表示提升为根分类
-    /// * `updated_by` - 本次更新执行人
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 当父分类为自身时返回错误。
+    ///
+    /// `parent` 为新父分类；`None` 表示提升为根分类。
     pub fn set_parent(
         &mut self,
         parent: Option<ProductCategoryId>,
@@ -171,41 +149,19 @@ impl ProductCategory {
         Ok(())
     }
 
-    /// 判断是否为根分类。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 没有父分类时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 判断是否为根分类。没有父分类时返回 `true`。
     pub fn is_root(&self) -> bool {
         self.parent_category_id.is_none()
     }
 
-    /// 判断分类是否处于启用状态。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 状态为 `Active` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 读取商品分类的启用标记，供调用方过滤停用记录。
     pub fn is_active(&self) -> bool {
         self.stable.status().is_active()
     }
 
-    /// 应用名称更新。
-    ///
-    /// # 参数
-    /// * `name` - 可选名称
-    ///
-    /// # 错误
-    /// 当名称为空或超长时返回错误。
+    // 应用名称更新。当名称为空或超长时返回错误。
+    //
+    // `name` 为可选名称。
     fn apply_name(&mut self, name: Option<String>) -> Result<()> {
         if let Some(name) = name {
             self.name = normalize_required_text(name, "分类名称不能为空", NAME_MAX_LEN, "分类名称过长")?;
@@ -213,10 +169,9 @@ impl ProductCategory {
         Ok(())
     }
 
-    /// 应用状态更新。
-    ///
-    /// # 参数
-    /// * `status` - 可选状态
+    // 应用状态更新。
+    //
+    // `status` 为可选状态。
     fn apply_status(&mut self, status: Option<EnableStatus>) {
         if let Some(status) = status {
             self.stable.status = status;
@@ -241,7 +196,7 @@ mod tests {
         }
     }
 
-    /// happy path：字段 trim 规范化、根分类、商品类型与状态落位。
+    // 字段 去除首尾空白、根分类、商品类型与状态按请求保存。
     #[test]
     fn new_trims_and_normalizes_fields() {
         let category = ProductCategory::new(ProductCategoryId::new("cat-1"), data(), "admin-1").unwrap();
@@ -255,7 +210,7 @@ mod tests {
         assert_eq!(category.stable.created_by, "admin-1");
     }
 
-    /// 失败路径：必填空、超长各一条。
+    // 商品分类的必填字段为空或超长时均应拒绝创建。
     #[test]
     fn new_rejects_empty_and_overlong_fields() {
         let empty_code = ProductCategoryData { category_code: "   ".to_string(), ..data() };
@@ -265,7 +220,7 @@ mod tests {
         assert!(ProductCategory::new(ProductCategoryId::new("cat-1"), overlong_name, "admin-1").is_err());
     }
 
-    /// 失败路径：父分类为自身（单节点可判定的环）被拒绝。
+    // 父分类为自身（单节点可判定的环）被拒绝。
     #[test]
     fn new_rejects_self_parent() {
         let self_parent =
@@ -273,7 +228,7 @@ mod tests {
         assert!(ProductCategory::new(ProductCategoryId::new("cat-1"), self_parent, "admin-1").is_err());
     }
 
-    /// update 修改名称/商品类型/状态并 touch 审计人；稳定代码不可修改。
+    // 更新时修改名称/商品类型/状态并更新审计人；稳定代码不可修改。
     #[test]
     fn update_applies_fields_and_touches_auditor() {
         let mut category = ProductCategory::new(ProductCategoryId::new("cat-1"), data(), "admin-1").unwrap();
@@ -296,7 +251,7 @@ mod tests {
         assert_eq!(category.category_code, "CAT-001");
     }
 
-    /// 状态机：合法迁移通过，邻接矩阵对称闭合。
+    // 锁定商品分类启停的正向、反向与幂等迁移，防止状态表缺边。
     #[test]
     fn status_transitions_follow_document_state() {
         assert!(ensure_transition(EnableStatus::Active, EnableStatus::Disabled).is_ok());

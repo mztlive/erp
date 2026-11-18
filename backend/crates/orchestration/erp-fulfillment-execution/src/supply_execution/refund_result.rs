@@ -21,25 +21,14 @@ use super::SupplierFulfillmentProcess;
 use crate::{Error, Result};
 
 impl SupplierFulfillmentProcess {
-    /// 登记供应商退款成功结果（幂等键 `(connection_id, external_refund_no,
-    /// external_refund_version)`，§6.19）。
+    /// 登记供应商退款成功结果（幂等键 `(connection_id, external_refund_no, external_refund_version)`，§6.19）。
     ///
-    /// 同事务写入 `inbox_message`、退款事实头与全部分配行并推进退款进度
-    /// （累计等于订单成本余额时为 `REFUNDED`，否则为 `PARTIAL`）；累计净退款
-    /// 不得超过订单成本余额（§6.19）。重复登记返回原退款事实。
+    /// 同事务写入 `inbox_message`、退款事实头与全部分配行并推进退款进度（累计等于订单成本余额时为 `REFUNDED`，否则为 `PARTIAL`）；累计净退款不得超过订单成本余额（§6.19）。
+    /// 重复登记返回原退款事实。
     ///
-    /// # 参数
-    /// * `id` - 供应商子订单 ID
-    /// * `req` - 退款成功结果请求
-    /// * `actor` - 已通过鉴权的审计操作人
+    /// `id` 为供应商子订单 ID；`req` 为退款成功结果请求。返回退款事实视图（含分配行）。`NotFound`：订单不存在。
     ///
-    /// # 返回
-    /// 返回退款事实视图（含分配行）。
-    ///
-    /// # 错误
-    /// * `NotFound` - 订单不存在
-    /// * `BusinessLogicError` - 退款金额超过订单成本净可退余额
-    /// * `ConflictError` - 外部退款身份冲突（事务注入失败时全部不可见）
+    /// `BusinessLogicError`：退款金额超过订单成本净可退余额。`ConflictError`：外部退款身份冲突（事务注入失败时全部不可见）。
     pub async fn record_refund_result(
         &self,
         id: &str,
@@ -134,19 +123,11 @@ impl SupplierFulfillmentProcess {
     }
 }
 
-/// 构建退款结果 `inbox_message` 信封（来源事件取外部退款身份）。
-///
-/// # 参数
-/// * `order` - 供应商子订单
-/// * `req` - 退款成功结果请求
-/// * `connection_id` - 供应商连接
-/// * `status` - 初始消息状态（已接收）
-///
-/// # 返回
-/// 返回消息实体。
-///
-/// # 错误
-/// 实体构造校验失败时返回 `Logic`。
+// 构建退款结果 `inbox_message` 信封（来源事件取外部退款身份）。
+//
+// `order` 为供应商子订单；`req` 为退款成功结果请求；`connection_id` 为供应商连接；`status` 为初始消息状态（已接收）。返回消息实体。
+//
+// 实体构造校验失败时返回 `Logic`。
 fn build_refund_message(
     order: &SupplierFulfillmentOrder,
     req: &RecordRefundResultRequest,

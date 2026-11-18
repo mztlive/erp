@@ -31,28 +31,18 @@ pub struct RowImportOutcome {
 impl RowImportOutcome {
     /// 构造单行导入结果。
     ///
-    /// # 参数
-    /// * `message` - 结果说明
+    /// `message`：结果说明。
     ///
-    /// # 返回
     /// 返回未跳过、商品为空的结果。
-    ///
-    /// # 错误
-    /// 无。
     pub fn new(message: String) -> Self {
         Self { product_id: None, message, skipped: false }
     }
 
     /// 设置商品 ID。
     ///
-    /// # 参数
-    /// * `product_id` - 成功或跳过时的商品 ID
+    /// `product_id`：成功或跳过时的商品 ID。
     ///
-    /// # 返回
     /// 返回更新后的结果。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_product_id(mut self, product_id: Option<String>) -> Self {
         self.product_id = product_id;
         self
@@ -60,14 +50,9 @@ impl RowImportOutcome {
 
     /// 设置是否跳过。
     ///
-    /// # 参数
-    /// * `skipped` - 是否跳过
+    /// `skipped`：是否跳过。
     ///
-    /// # 返回
     /// 返回更新后的结果。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_skipped(mut self, skipped: bool) -> Self {
         self.skipped = skipped;
         self
@@ -75,20 +60,13 @@ impl RowImportOutcome {
 }
 
 impl ProductImportProcess {
-    /// 导入报价表中的一行商品。
-    ///
-    /// # 参数
-    /// * `row_number` - Excel 行号
-    /// * `cells` - 单元格
-    /// * `media_source` - 行媒体来源（清单复用或源文件提取）
-    /// * `actor` - 审计操作人
-    /// * `cache` - 字典缓存
-    ///
-    /// # 返回
-    /// 返回成功、跳过或失败说明。
-    ///
-    /// # 错误
-    /// 校验失败或写入失败时返回错误。
+    // 导入报价表中的一行商品。
+    //
+    // `cells`：单元格；`media_source`：行媒体来源（清单复用或源文件提取）。
+    //
+    // 返回成功、跳过或失败说明。
+    //
+    // 校验失败或写入失败时返回错误。
     pub(super) async fn import_row(
         &self,
         row_number: u32,
@@ -147,7 +125,7 @@ impl ProductImportProcess {
         self.import_create_outcome(created.map_err(Error::from), row_number, cells).await
     }
 
-    /// 保留创建冲突时按原单元格重新定位已存在商品的恢复规则。
+    // 保留创建冲突时按原单元格重新定位已存在商品的恢复规则。
     async fn import_create_outcome(
         &self,
         created: Result<ProductView>,
@@ -174,7 +152,7 @@ impl ProductImportProcess {
     }
 }
 
-/// 把已规范化行转换为商品与完整三价 SKU 输入，媒体上传及字典解析由调用方完成。
+// 把已规范化行转换为商品与完整三价 SKU 输入，媒体上传及字典解析由调用方完成。
 pub(super) fn imported_product_request(
     row: NormalizedImportRow,
     unit_id: UnitOfMeasureId,

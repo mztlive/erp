@@ -25,35 +25,21 @@ pub struct PersonDirectoryService {
 
 impl PersonDirectoryService {
     /// 绑定身份库和统一授权服务。
-    ///
-    /// # 参数
-    /// * `db` - 身份数据库
-    /// * `authorization` - 应用注入的共享授权服务
-    ///
-    /// # 返回
     /// 返回人员目录服务。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// `authorization`：应用注入的共享授权服务。
     pub fn new(db: Database, authorization: Arc<AuthorizationService>) -> Self {
         Self { db, authorization }
     }
 
     /// 分页查询某一固定类别的人员目录。
+    /// 授权、资格与组织在同一个事务读取；本方法不接收业务列表条件。
     ///
-    /// # 参数
-    /// * `actor` - 已认证操作人
-    /// * `category` - 路由固定的类别
-    /// * `query` - 目录自身的搜索、分页和组织筛选
-    ///
-    /// # 返回
     /// 返回目录页。
     ///
-    /// # 错误
     /// 参数、权限、版本或读取失败时返回错误。
     ///
-    /// # 关键业务约束
-    /// 授权、资格与组织在同一个事务读取；本方法不接收业务列表条件。
+    /// `query`：目录自身的搜索、分页和组织筛选。
     pub async fn list(
         &self,
         actor: AuditActor,
@@ -65,17 +51,11 @@ impl PersonDirectoryService {
     }
 
     /// 按已选 ID 回显当前仍可读的人员。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证操作人
-    /// * `category` - 路由固定的类别
-    /// * `ids` - 已选账号 ID
-    ///
-    /// # 返回
     /// 返回可读人员；无权或不存在的 ID 被省略。
     ///
-    /// # 错误
     /// 无权限或读取失败时返回错误。
+    ///
+    /// `ids`：已选账号 ID。
     pub async fn selected(
         &self,
         actor: AuditActor,
@@ -85,7 +65,7 @@ impl PersonDirectoryService {
         self.read(actor, category, Read::Selected(ids)).await
     }
 
-    /// 在同一事务内读取目录列表或已选人员，消费本次查询输入。
+    // 在一个事务中读取目录列表或已选人员，消费本次查询输入。
     async fn read(
         &self,
         actor: AuditActor,

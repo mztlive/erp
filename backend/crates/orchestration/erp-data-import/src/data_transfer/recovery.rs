@@ -14,11 +14,11 @@ use crate::{Error, Result};
 
 impl DataTransferProcess {
     /// 仅核对原批量任务中结果未知项，不重新执行业务命令。
-    /// # 参数
+    ///
     /// `id` 为原任务，`actor` 为原提交人当前身份。
-    /// # 返回
+    ///
     /// 已确认回执合并后的原任务结果。
-    /// # 错误
+    ///
     /// 非本人、不是批量任务、无结果未知项、过期或权限失效时拒绝。
     pub async fn recover(&self, id: &str, actor: &AuditActor) -> Result<TransferResult> {
         let job = self.owned_job(id, actor).await?;

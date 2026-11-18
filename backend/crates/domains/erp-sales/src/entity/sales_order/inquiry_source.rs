@@ -48,11 +48,7 @@ pub struct InquirySalesSourceRequest {
 
 impl InquirySalesSourceRequest {
     /// 校验稳定身份、行号与数量分配，不执行数据库读取。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 所有来源选择均唯一且数量守恒时成功。
-    /// # 错误
+    /// 结果：所有来源选择均唯一且数量守恒时成功。
     /// 身份缺失、重复、数量非正或地址数量不守恒时拒绝。
     pub fn validate(&self) -> Result<()> {
         if self.inquiry_id.trim().is_empty()
@@ -189,12 +185,10 @@ pub struct SalesOrderInquirySource {
 
 impl SalesOrderInquirySource {
     /// 按已接受的精确需求与反馈建立来源；成交单价不参与来源复制。
-    /// # 参数
-    /// `id` 为销售单 ID；`inquiry` 为当前授权询价，`request` 为明确选择，`lines` 为服务端销售行。
-    /// # 返回
     /// 返回不含内部报价的稳定行及地址来源快照。
-    /// # 错误
     /// 选择无效、报价失效、客户或服务端行不匹配时拒绝。
+    ///
+    /// 输入约定：`id` 为销售单 ID；`inquiry` 为当前授权询价，`request` 为明确选择，`lines` 为服务端销售行。
     pub fn from_inquiry(
         id: String,
         inquiry: &SalesInquiry,
@@ -236,12 +230,7 @@ impl SalesOrderInquirySource {
     }
 
     /// 取得当前有效来源数量，稳定需求、价格和地址身份随生命周期延续。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 返回非零商品及地址数量；已删除来源行保留快照但不参与占用。
-    /// # 错误
-    /// 无。
     pub fn selections(&self) -> Vec<InquiryQuantitySelection> {
         let mut result = Vec::new();
         for line in self.lines.iter().filter(|line| !line.quantity.to_decimal().is_zero()) {
@@ -269,12 +258,10 @@ impl SalesOrderInquirySource {
     }
 
     /// 校验正式变更仍在原消耗身份与数量内，减量不恢复来源余额。
-    /// # 参数
-    /// `customer` 与 `lines` 为即将生效的新销售版本事实。
-    /// # 返回
-    /// 保持原客户、商品、交期、地址且未增加来源数量时成功。
-    /// # 错误
+    /// 结果：保持原客户、商品、交期、地址且未增加来源数量时成功。
     /// 未消耗或已释放、改来源身份、商品或地址数量增加时拒绝。
+    ///
+    /// 输入约定：`customer` 与 `lines` 为即将生效的新销售版本事实。
     pub fn ensure_formal_change(
         &self,
         customer: &CustomerAccountId,
@@ -306,12 +293,10 @@ impl SalesOrderInquirySource {
     }
 
     /// 校验询价来源草稿的供给单价与冻结报价一致。
-    /// # 参数
-    /// `lines` 为即将保存或提交的完整销售行。
-    /// # 返回
-    /// 有效来源行的价格与取价方式未被修改时成功。
-    /// # 错误
+    /// 结果：有效来源行的价格与取价方式未被修改时成功。
     /// 修改来源报价或指定商品池取价方式时拒绝。
+    ///
+    /// 输入约定：`lines` 为即将保存或提交的完整销售行。
     pub fn ensure_supply_prices(&self, lines: &[InquirySalesLineFact]) -> Result<()> {
         for line in lines {
             if line.quantity.is_some_and(|quantity| quantity.to_decimal().is_zero()) {
@@ -332,12 +317,10 @@ impl SalesOrderInquirySource {
     }
 
     /// 将草稿与原需求身份对齐，减少数量允许，客户、SKU、地址与交期变化拒绝。
-    /// # 参数
-    /// `customer` 为本次客户，`lines` 为即将保存或提交的完整销售行。
-    /// # 返回
     /// 返回同一来源身份下的新数量绑定，删除的来源行保留零数量记录。
-    /// # 错误
     /// 改变客户、来源身份或原地址，及来源地址数量无法唯一匹配时拒绝。
+    ///
+    /// 输入约定：`customer` 为本次客户，`lines` 为即将保存或提交的完整销售行。
     pub fn reconciled(
         &self,
         customer: &CustomerAccountId,
@@ -369,12 +352,10 @@ impl SalesOrderInquirySource {
 
 impl InquirySalesLineSelection {
     /// 读取已经接受的需求及选中价格段，并校验本次范围。
-    /// # 参数
-    /// `inquiry` 为当前询价；`round` 为明确轮次；`now` 为服务端时间。
-    /// # 返回
     /// 返回原不可变需求行与公开供给价格段。
-    /// # 错误
-    /// 未接受、失效、档位或地址不适用时拒绝，不查找替代报价。
+    /// 失败条件：未接受、失效、档位或地址不适用时拒绝，不查找替代报价。
+    ///
+    /// 输入约定：`inquiry` 为当前询价；`round` 为明确轮次；`now` 为服务端时间。
     pub fn source_parts<'a>(
         &self,
         inquiry: &'a SalesInquiry,
@@ -474,12 +455,9 @@ fn binding_from_selection(
 }
 
 /// 复制历史收件身份，数量使用本次明确选择，不使用当前客户地址主数据。
-/// # 参数
-/// `original` 为询价冻结地址，`quantity` 为转单数量。
-/// # 返回
 /// 返回销售配送快照。
-/// # 错误
-/// 无。
+///
+/// 输入约定：`original` 为询价冻结地址，`quantity` 为转单数量。
 pub fn copied_delivery(original: &InquiryDeliveryAllocation, quantity: Quantity) -> SalesDeliveryAllocation {
     SalesDeliveryAllocation {
         recipient: original.recipient.clone(),
@@ -492,7 +470,7 @@ pub fn copied_delivery(original: &InquiryDeliveryAllocation, quantity: Quantity)
 }
 
 impl InquirySalesLineBinding {
-    /// 对齐来源行的同一 SKU、交期和地址，不从最新主数据重建历史来源。
+    // 销售草稿调整询价绑定时沿用原需求行的 SKU、交期与地址，不能用最新主数据重做历史来源。
     fn reconciled(&self, line: &InquirySalesLineFact) -> Result<Self> {
         let quantity = line.quantity.ok_or_else(|| invalid("询价来源行缺少商品数量"))?;
         if quantity.to_decimal().is_zero() {

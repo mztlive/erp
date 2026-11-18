@@ -16,15 +16,9 @@ use crate::entity::purchase_order::{PurchaseOrderRevision, PurchaseOrderRevision
 impl<'a> PurchaseOrderDomainRepository<'a> {
     /// 按采购单读取全部生效版本，并按版本号升序返回。
     ///
-    /// # 参数
-    /// * `purchase_order_id` - 采购单稳定身份
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回匹配的采购生效版本。当 MongoDB 查询或游标读取失败时返回错误。
     ///
-    /// # 返回
-    /// 返回匹配的采购生效版本。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 沿用调用方的执行器，不另开事务。
     pub async fn list_revisions_by_order(
         &self,
         purchase_order_id: &PurchaseOrderId,
@@ -42,15 +36,11 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
 
     /// 批量读取采购生效版本头。
     ///
-    /// # 参数
-    /// * `revision_ids` - 采购生效版本稳定身份集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回已存在的采购生效版本；空输入直接返回空集合。当 MongoDB 查询或游标读取失败时返回错误。
     ///
-    /// # 返回
-    /// 返回已存在的采购生效版本；空输入直接返回空集合。
+    /// 沿用调用方的执行器，不另开事务。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// `revision_ids` 为采购生效版本稳定身份集合。
     pub async fn find_revisions_by_ids(
         &self,
         revision_ids: &[PurchaseOrderRevisionId],
@@ -71,18 +61,11 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
 
     /// 按采购生效版本读取全部明细，并按行号升序返回。
     ///
-    /// # 参数
-    /// * `revision_id` - 采购生效版本稳定身份
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的采购版本行。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    ///
-    /// # 关键约束
     /// 查询必须排除软删除行，与通用 `Repository::find_many` 的活动行语义一致。
+    ///
+    /// 返回匹配的采购版本行。当 MongoDB 查询或游标读取失败时返回错误。
+    ///
+    /// 沿用调用方的执行器，不另开事务。
     pub async fn list_revision_lines(
         &self,
         revision_id: &PurchaseOrderRevisionId,
@@ -99,19 +82,11 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
     }
 }
 
-/// 构建单个采购生效版本的活动明细过滤条件。
-///
-/// # 参数
-/// * `revision_id` - 采购生效版本稳定身份
-///
-/// # 返回
-/// 返回同时限定版本身份和未删除时间戳的 MongoDB 查询文档。
-///
-/// # 错误
-/// 不返回错误。
-///
-/// # 关键约束
-/// 专用单版本查询必须与通用 Repository 的软删除过滤语义保持一致。
+// 构建单个采购生效版本的活动明细过滤条件。
+//
+// 专用单版本查询必须与通用 Repository 的软删除过滤语义保持一致。
+//
+// 返回同时限定版本身份和未删除时间戳的 MongoDB 查询文档。
 fn revision_lines_filter(revision_id: &PurchaseOrderRevisionId) -> Document {
     doc! {
         "purchase_order_revision_id": revision_id.to_string(),
@@ -126,15 +101,9 @@ pub trait PurchaseOrderRevisionLineRepositoryExt {
     ///
     /// 用于版本详情页一次取回行集合；空集合直接返回空结果。
     ///
-    /// # 参数
-    /// * `revision_ids` - 生效版本 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回全部匹配的版本明细。当 MongoDB 查询或游标读取失败时返回错误。
     ///
-    /// # 返回
-    /// 返回全部匹配的版本明细。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 沿用调用方传入的执行器。
     async fn find_lines_by_revision_ids(
         &self,
         revision_ids: &[PurchaseOrderRevisionId],
@@ -166,9 +135,9 @@ mod tests {
 
     use super::revision_lines_filter;
 
-    /// 验证单版本明细查询保留版本条件并排除软删除行。
-    ///
-    /// 测试直接断言过滤文档，不连接 MongoDB；任一活动行条件缺失时失败。
+    // 验证单版本明细查询保留版本条件并排除软删除行。
+    //
+    // 测试直接断言过滤文档，不连接 MongoDB；任一活动行条件缺失时失败。
     #[test]
     fn revision_lines_filter_targets_active_rows() {
         assert_eq!(

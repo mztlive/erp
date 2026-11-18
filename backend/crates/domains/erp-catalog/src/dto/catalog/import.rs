@@ -61,14 +61,7 @@ pub struct ProductImportJobListParams {
 impl ProductImportJobListParams {
     /// 归一化分页参数。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回页码与单页条数；排序固定为 `created_at` 降序。
-    ///
-    /// # 错误
-    /// 不返回错误；非法页码由 `Validate` 拦截。
+    /// 返回页码与单页条数；排序固定为 `created_at` 降序。非法页码由 `Validate` 拦截。
     pub fn paging(&self) -> PageParams {
         PageParams {
             page: page_or_default(self.page),
@@ -91,16 +84,7 @@ pub struct ProductImportItemListParams {
 }
 
 impl ProductImportItemListParams {
-    /// 归一化分页参数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回页码与单页条数。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 归一化分页参数。返回页码与单页条数。
     pub fn paging(&self) -> (u64, u32) {
         (page_or_default(self.page), page_size_or_default(self.page_size))
     }
@@ -158,14 +142,9 @@ pub struct ProductImportItemView {
 
 /// 校验导入表头是否为「对内」原模板。
 ///
-/// # 参数
-/// * `headers` - 第 1 行单元格
+/// 表头完全匹配时返回 `Ok(())`。列数或列名不一致时返回 `ValidationError`。
 ///
-/// # 返回
-/// 表头完全匹配时返回 `Ok(())`。
-///
-/// # 错误
-/// 列数或列名不一致时返回 `ValidationError`。
+/// `headers` 为第 1 行单元格。
 pub fn ensure_product_import_headers(headers: &[String]) -> Result<()> {
     if headers.len() < PRODUCT_IMPORT_HEADERS.len() {
         return Err(crate::error::Error::ValidationError(

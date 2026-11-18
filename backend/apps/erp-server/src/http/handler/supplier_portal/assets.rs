@@ -117,12 +117,8 @@ impl AssetSource {
 }
 
 /// 上传真实内容已检查的图片或静态 PDF，并原子登记新品原稿关联。
-///
-/// # 参数
 /// 当前门户身份、原申请、原版本和操作号，以及唯一图片或资料文件。
-/// # 返回
 /// 文件 ID、版本及申请新版本；已完成操作恢复其原结果。
-/// # 错误
 /// 身份或来源无效、版本变化、非法内容、存储失败或登记失败时拒绝。
 pub async fn upload(
     State(state): State<HttpState>,
@@ -164,12 +160,8 @@ pub async fn upload(
 }
 
 /// 按当前申请及历史原稿引用下载完整受控文件字节。
-///
-/// # 参数
 /// 当前门户身份、文件 ID 及其唯一申请、供给或开放SKU来源。
-/// # 返回
 /// 带禁止缓存和内容嗅探响应头的下载响应。
-/// # 错误
 /// 归属变化、版本变化、治理状态禁止或存储内容与登记不符时拒绝。
 pub async fn download(
     State(state): State<HttpState>,
@@ -193,12 +185,8 @@ pub async fn download(
 }
 
 /// 下载当前专项审核资格允许查看的供应商原稿图片与资料。
-///
-/// # 参数
 /// 真实后台操作人、当前申请与原稿明确引用的文件。
-/// # 返回
 /// 完整受控文件字节及禁止缓存、嗅探的响应头。
-/// # 错误
 /// 专项任务资格失效、来源不符、版本变化或文件治理禁止时拒绝。
 pub async fn review_download(
     State(state): State<HttpState>,
@@ -216,7 +204,7 @@ pub async fn review_download(
     asset_download_response(&view, bytes)
 }
 
-/// 保存对象后提交原子元数据命令，按明确提交结果清理本次独立对象。
+// 门户附件保存到对象存储后原子登记元数据；仅在提交结果明确允许时清理本次独立对象。
 async fn persist_asset(
     state: &HttpState,
     actor: &PortalActor,
@@ -248,7 +236,7 @@ enum CheckedContent {
     Pdf(u32),
 }
 
-/// 完整内容检查放在阻塞线程；保留供应商原始文件，不自行重编码。
+// 把门户原件的完整内容检查交给阻塞线程；持久化仍使用原始字节，不用重编码替代原件。
 async fn check_prepared_asset(
     asset: ValidatedPortalAsset,
 ) -> StdResult<(ValidatedPortalAsset, CheckedContent), Error> {
@@ -268,7 +256,7 @@ async fn check_prepared_asset(
     })?
 }
 
-/// 用当前验证的MIME选解码器，并限制边长与解码分配预算。
+// 内容检查时用已验证 MIME 选择图像解码器，并对像素边长和解码分配设上限。
 fn decode_image(bytes: &[u8], content_type: &str) -> StdResult<(u32, u32), Error> {
     decode_image_with_budget(bytes, content_type, MAX_IMAGE_DECODE_BYTES)
 }
@@ -292,7 +280,7 @@ pub(super) fn decode_image_with_budget(
     Ok((decoded.width(), decoded.height()))
 }
 
-/// JPEG 仅用标量解码路径；先验尺寸及像素预算，再完整解码并验证输出。
+// 对门户 JPEG 先核对尺寸及像素预算，再使用标量路径完整解码，最后核验输出。
 fn decode_jpeg(bytes: &[u8], allocation_budget: u64) -> StdResult<(u32, u32), Error> {
     // 基线解码器允许缺失最终 EOI，门户图片须保留完整的结束标记。
     if !bytes.starts_with(&[0xff, 0xd8]) || !bytes.ends_with(&[0xff, 0xd9]) {
@@ -337,7 +325,7 @@ fn image_format(content_type: &str) -> StdResult<ImageFormat, Error> {
     }
 }
 
-/// 安全文件名、真实内容指纹及长期保留策略全部由服务端生成。
+// 用校验后的实际字节生成登记指纹和安全对象名，并由服务端固定长期保留策略。
 fn asset_registration(
     asset: &ValidatedPortalAsset,
     secret: &[u8],
@@ -364,7 +352,7 @@ fn require_portal_type(content_type: &str) -> StdResult<(), Error> {
     image_format(content_type).map(|_| ())
 }
 
-/// 来源授权、存储读取及后置来源授权必须指向同一文件版本和内容。
+// 交付门户文件前确认读取的版本和内容与前后两次来源授权对应同一资产，防止并发变化跨越访问边界。
 fn require_same_asset(before: &FileAssetView, after: &FileAssetView) -> StdResult<(), Error> {
     if before.id != after.id
         || before.version != after.version

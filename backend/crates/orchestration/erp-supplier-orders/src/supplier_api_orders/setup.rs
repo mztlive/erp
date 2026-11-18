@@ -127,13 +127,8 @@ pub struct ExecutionRecipientView {
 }
 
 impl ExecutionSetupView {
-    /// 按既有成本读取资格移除费用及可能含成本的来源错误正文。
-    /// # 参数
-    /// 无；Handler 仅在缺少 supplier_offering_cost:detail 时调用。
-    /// # 返回
-    /// 保留可操作业务原因、阶段、数量和物流，费用保持缺失而非伪造零。
-    /// # 错误
-    /// 不返回错误。
+    /// 下单准备资料交付给缺少 `supplier_offering_cost:detail` 的调用人前，移除运费和可能泄露成本的原错误正文。
+    /// 保留可操作原因、阶段、数量和物流；费用保持缺失，不用零代替。
     pub fn without_costs(&mut self) {
         for choice in &mut self.choices {
             choice.shipping_fee = None;

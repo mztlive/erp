@@ -18,22 +18,14 @@ use crate::{Error, Result};
 
 /// 加载销售单当前版本及采购覆盖数量。
 ///
-/// # 参数
-/// * `port` - 由组合层装配的唯一覆盖事实提供方
-/// * `current_revision_id` - 销售已加载的当前修订指针，缺失保留原首错
-/// * `sales_order_id` - 销售稳定身份
-/// * `executor` - 数据访问执行器；创建命令必须传入事务会话
+/// 只沿销售与采购的当前指针读取，稳定关联键为 `sales_order_line_id`；事务内调用必须复用调用方 executor，保证与同事务写入的
+/// read-your-writes。
 ///
-/// # 返回
-/// 返回当前销售版本商品/服务目标行、逐行覆盖与总汇总。
+/// 返回当前销售版本商品/服务目标行、逐行覆盖与总汇总。当前版本缺失、当前采购指针缺失、正式分配未绑定销售当前版本行、覆盖超过目标或仓储查询失败时返回错误。
 ///
-/// # 错误
-/// 当前版本缺失、当前采购指针缺失、正式分配未绑定销售当前版本行、覆盖超过目标
-/// 或仓储查询失败时返回错误。
-///
-/// # 关键业务约束
-/// 只沿销售与采购的当前指针读取，稳定关联键为 `sales_order_line_id`；事务内
-/// 调用必须复用调用方 executor，保证与同事务写入的 read-your-writes。
+/// - `port`：由组合层装配的唯一覆盖事实提供方。
+/// - `current_revision_id`：销售已加载的当前修订指针，缺失保留原首错。
+/// - `executor`：数据访问执行器；创建命令必须传入事务会话。
 pub async fn load_sales_procurement_coverage(
     port: &dyn ProcurementCoveragePort,
     current_revision_id: Option<&str>,
@@ -80,7 +72,7 @@ mod tests {
             Err(Error::Internal("coverage provider failed".to_string()))
         }
     }
-    /// 当前版本缺失不得触发外域读取，保留原首错。
+    // 当前版本缺失不得触发外域读取，保留原首错。
     #[tokio::test]
     async fn missing_current_revision_stops_before_facts_read() {
         let mut executor = ReadExecutor::default();
@@ -95,7 +87,7 @@ mod tests {
         );
         assert!(port.calls.into_inner().unwrap().is_empty());
     }
-    /// 覆盖事实必须使用同一非零大小执行器，提供方失败阻止规则构造。
+    // 覆盖事实必须使用同一非零大小执行器，提供方失败阻止规则构造。
     #[tokio::test]
     async fn coverage_port_preserves_executor_and_provider_failure() {
         let mut executor = ReadExecutor::default();

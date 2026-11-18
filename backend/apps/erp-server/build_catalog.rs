@@ -14,7 +14,7 @@ use crate::build_route_overrides;
 #[path = "build_routes.rs"]
 mod route_parser;
 
-/// 收集管理端注册，保留既有模块与路由顺序。
+// 按模块顺序提取真实管理端路由，供权限分组和路由合同复用同一组注册事实。
 pub(crate) fn collect_routes(manifest: &Path) -> Result<Vec<RouteHandler>, String> {
     let root = manifest.join("src/http/routes");
     let mut routes = Vec::new();
@@ -35,7 +35,7 @@ pub(crate) fn collect_routes(manifest: &Path) -> Result<Vec<RouteHandler>, Strin
     Ok(routes)
 }
 
-/// 新管理端路由模块必须进入生成清单，避免带权限的接口被静默遗漏。
+// 生成前核对管理端挂载是否都在采集清单中；新路由模块未登记时返回错误，避免遗漏权限接口。
 fn reject_unscanned_modules(root: &Path) -> Result<(), String> {
     for entry in fs::read_dir(root).map_err(|error| error.to_string())? {
         let path = entry.map_err(|error| error.to_string())?.path();
@@ -55,7 +55,7 @@ fn reject_unscanned_modules(root: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// 校验并索引实际编译的静态定义；同权限的不同展示引用可以共存。
+// 校验并索引实际编译的权限定义，供解析路由引用；允许同一权限使用不同展示引用。
 pub(crate) fn registry(modules: &[PermissionModule]) -> Result<HashMap<String, PermissionDef>, String> {
     let mut definitions = HashMap::new();
     let mut module_names = HashSet::new();
@@ -85,7 +85,7 @@ pub(crate) fn registry(modules: &[PermissionModule]) -> Result<HashMap<String, P
     Ok(definitions)
 }
 
-/// 从同一显式定义生成保持既有顺序和展示内容的权限分组。
+// 用路由引用的显式定义生成前端权限分组，保留原业务顺序和展示差异。
 pub(crate) fn groups(
     prefix: &str,
     routes: &[RouteHandler],
@@ -171,7 +171,7 @@ fn resolve(
     Ok(catalog)
 }
 
-/// 输出可对比的路由权限事实；不包含源码符号的迁移噪声。
+// 把采集结果写成可比较的路由权限合同，只记录协议事实，不把源码符号改名当成合同变化。
 pub(crate) fn route_contract(routes: &[RouteHandler]) -> Result<String, String> {
     let definitions = registry(MODULES)?;
     let mut rows = Vec::new();
@@ -190,7 +190,7 @@ pub(crate) fn route_contract(routes: &[RouteHandler]) -> Result<String, String> 
     serde_json::to_string_pretty(&rows).map_err(|error| error.to_string())
 }
 
-/// 为库测试生成对真实 Rust 常量的引用，防止显式索引名称与值配错。
+// 为库测试生成对真实 Rust 权限常量的引用，防止生成器的显式符号索引指向错误值。
 #[cfg(not(test))]
 pub(crate) fn compiled_references() -> Result<String, String> {
     let definitions = registry(MODULES)?;

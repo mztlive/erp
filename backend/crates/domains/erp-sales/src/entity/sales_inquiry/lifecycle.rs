@@ -8,13 +8,11 @@ use super::*;
 use crate::{Error, Result};
 
 impl SalesInquiry {
-    /// 保存工作副本；已提交快照保持不变。
-    /// # 参数
-    /// `expected_version` 为聚合版本；`data` 为完整需求草稿；`deadline_at` 未传时保留原截止时间。
-    /// # 返回
+    /// 销售补录或修改询价需求时仅保存工作副本，已提交的需求快照继续为原轮次提供依据。
     /// 成功后原子替换草稿及传入的截止时间，已提交快照保持不变。
-    /// # 错误
     /// 版本、状态、稳定身份或占用下限不满足时拒绝。
+    ///
+    /// 输入约定：`expected_version` 为聚合版本；`data` 为完整需求草稿；`deadline_at` 未传时保留原截止时间。
     pub fn save_draft(
         &mut self,
         expected_version: u64,
@@ -33,13 +31,11 @@ impl SalesInquiry {
         Ok(())
     }
 
-    /// 提交并追加完整冻结需求；相同需求仅开启新处理轮次。
-    /// # 参数
-    /// `expected_version` 为聚合版本；`actor` 为销售；`reason` 为改版原因；`now` 为提交时刻。
-    /// # 返回
-    /// 更新当前需求版本并直接进入采购处理中。
-    /// # 错误
+    /// 销售把当前需求交给采购处理时冻结需求并开启处理轮次；需求未变时沿用原快照，不追加等同版本。
+    /// 结果：更新当前需求版本并直接进入采购处理中。
     /// 需求不完整、改版原因缺失、身份或来源数量下限非法时拒绝。
+    ///
+    /// 输入约定：`expected_version` 为聚合版本；`actor` 为销售；`reason` 为改版原因；`now` 为提交时刻。
     pub fn submit(&mut self, expected_version: u64, actor: &str, reason: String, now: Instant) -> Result<()> {
         self.ensure_version(expected_version)?;
         self.ensure_state(&[InquiryStatus::Draft, InquiryStatus::AwaitingSalesSupplement])?;
@@ -62,13 +58,11 @@ impl SalesInquiry {
         Ok(())
     }
 
-    /// 退回销售补充并冻结本轮全部采购工作。
-    /// # 参数
-    /// `expected_version`、`actor`、`reason`、`now` 为版本及退回事实。
-    /// # 返回
-    /// 进入待销售补充状态。
-    /// # 错误
+    /// 采购确认需求需要补充时记录退回原因、冻结本轮采购草稿，并将询价置为待销售补充。
+    /// 结果：进入待销售补充状态。
     /// 非采购处理中、版本过期或未填原因时拒绝。
+    ///
+    /// 输入约定：`expected_version`、`actor`、`reason`、`now` 为版本及退回事实。
     pub fn request_supplement(
         &mut self,
         expected_version: u64,
@@ -84,13 +78,11 @@ impl SalesInquiry {
         Ok(())
     }
 
-    /// 保存当前责任行的采购工作；未发布资料不进入销售投影。
-    /// # 参数
-    /// `line_ids` 为事务内已授权责任范围；`data` 为该范围的工作内容。
-    /// # 返回
-    /// 追加当前版本工作片段并冻结本人的旧片段。
-    /// # 错误
+    /// 采购在当前处理轮次保存已授权责任行的反馈工作；冻结本人的旧片段，未发布工作仍不对销售展示。
+    /// 结果：追加当前版本工作片段并冻结本人的旧片段。
     /// 版本、状态、需求范围、重复行或越出责任范围时拒绝。
+    ///
+    /// 输入约定：`line_ids` 为事务内已授权责任范围；`data` 为该范围的工作内容。
     pub fn save_feedback_work(
         &mut self,
         expected_version: u64,
@@ -133,13 +125,11 @@ impl SalesInquiry {
         Ok(())
     }
 
-    /// 发布完整反馈；发布前重验全部行、费用及跨版本来源余额。
-    /// # 参数
-    /// `data` 为合并全部责任结果后的完整白名单快照。
-    /// # 返回
-    /// 追加新反馈轮次并进入待销售处理。
-    /// # 错误
+    /// 采购合并各责任人的结果后发布整轮反馈；冻结前重验需求覆盖、费用责任和跨版本已办理数量及金额下限。
+    /// 结果：追加新反馈轮次并进入待销售处理。
     /// 待确认、缺失责任结果、失效报价或余额下限违反时拒绝。
+    ///
+    /// 输入约定：`data` 为合并全部责任结果后的完整白名单快照。
     pub fn publish(
         &mut self,
         expected_version: u64,
@@ -171,13 +161,11 @@ impl SalesInquiry {
         Ok(())
     }
 
-    /// 接受当前整轮反馈；可供应部分仍由销售按需转单。
-    /// # 参数
-    /// `round` 为正在查看的反馈轮次。
-    /// # 返回
-    /// 追加接受事实并进入已确认。
-    /// # 错误
+    /// 销售确认正在查看的整轮发布反馈时，记录接受的需求版本与报价轮次；接受不是自动转单，仅为后续办理提供依据。
+    /// 结果：追加接受事实并进入已确认。
     /// 版本或反馈不是当前待处理轮次时拒绝。
+    ///
+    /// 输入约定：`round` 为正在查看的反馈轮次。
     pub fn accept(&mut self, expected_version: u64, actor: &str, round: u32, now: Instant) -> Result<()> {
         self.ensure_version(expected_version)?;
         self.ensure_state(&[InquiryStatus::AwaitingSales])?;
@@ -203,13 +191,11 @@ impl SalesInquiry {
         Ok(())
     }
 
-    /// 对未转部分重询，需求变化时冻结新需求版本。
-    /// # 参数
-    /// `data` 包含原因、稳定范围及可选完整新版需求。
-    /// # 返回
-    /// 追加重询记录并进入待采购处理；既有来源保持不变。
-    /// # 错误
+    /// 销售对尚可重询的范围要求采购重新报价时记录原因与目标；完整需求变化才追加版本，原已办理来源不变。
+    /// 结果：追加重询记录并进入待采购处理；既有来源保持不变。
     /// 状态、范围、原因、需求身份或占用下限非法时拒绝。
+    ///
+    /// 输入约定：`data` 包含原因、稳定范围及可选完整新版需求。
     pub fn reinquire(
         &mut self,
         expected_version: u64,
@@ -245,13 +231,11 @@ impl SalesInquiry {
         Ok(())
     }
 
-    /// 采购主动开启整单新报价，保留既有需求、接受及来源台账。
-    /// # 参数
-    /// `expected_version` 为聚合版本，`actor`、`reason`、`now` 为本次报价发起事实。
-    /// # 返回
-    /// 冻结旧工作并进入采购处理中；发布时再生成新的反馈轮次。
-    /// # 错误
+    /// 采购主动重报整单时冻结旧工作并回到采购处理中，不重写需求、原接受记录或台账；发布时才递增反馈轮次。
+    /// 结果：冻结旧工作并进入采购处理中；发布时再生成新的反馈轮次。
     /// 版本冲突、尚在处理中、已关闭或原因缺失时拒绝。
+    ///
+    /// 输入约定：`expected_version` 为聚合版本，`actor`、`reason`、`now` 为本次报价发起事实。
     pub fn renew_quote(
         &mut self,
         expected_version: u64,
@@ -281,13 +265,11 @@ impl SalesInquiry {
         Ok(())
     }
 
-    /// 关闭询价并冻结工作资料，已转销售采购仍按自身生命周期运行。
-    /// # 参数
-    /// `reason` 为必填关闭原因，其余为版本及操作事实。
-    /// # 返回
-    /// 状态改为已关闭。
-    /// # 错误
+    /// 结束询价时冻结采购工作、停止该询价继续处理；已派生的销售和采购单据仍走各自生命周期。
+    /// 结果：状态改为已关闭。
     /// 已关闭、版本过期或原因缺失时拒绝。
+    ///
+    /// 输入约定：`reason` 为必填关闭原因，其余为版本及操作事实。
     pub fn close(&mut self, expected_version: u64, actor: &str, reason: String, now: Instant) -> Result<()> {
         self.ensure_version(expected_version)?;
         if self.status == InquiryStatus::Closed {

@@ -26,12 +26,8 @@ pub struct AcceptanceEvidencePolicy;
 
 impl AcceptanceEvidencePolicy {
     /// 校验待签收凭证元数据。
-    ///
-    /// # 参数
-    /// * `metadata` - 已登记资产的真实元数据
-    /// # 返回
     /// 全部条件满足时成功。
-    /// # 错误
+    /// `metadata` 为已登记资产的真实元数据。
     /// 类型、大小、扩展名、敏感级别、保留策略或治理状态不满足时拒绝。
     pub fn validate(metadata: &AcceptanceEvidenceMetadata<'_>) -> Result<()> {
         let extension = metadata.file_name.rsplit_once('.').map(|(_, value)| value.to_ascii_lowercase());

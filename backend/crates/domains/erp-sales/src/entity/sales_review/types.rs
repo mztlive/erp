@@ -44,16 +44,11 @@ pub struct VoucherLineDraft {
 }
 
 impl From<VoucherLineDraft> for crate::entity::sales_order::types::VoucherLineDraft {
-    /// 将审核域卡券字段组转为销售单域同形字段组。
-    ///
-    /// # 参数
-    /// * `value` - 审核域卡券草稿字段组
-    ///
-    /// # 返回
-    /// 返回销售单域卡券草稿字段组。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 将审核域卡券字段组转为销售单域同形字段组。
+    // 返回销售单域卡券草稿字段组。
+    //
+    // 输入约定：
+    // - `value`：审核域卡券草稿字段组
     fn from(value: VoucherLineDraft) -> Self {
         Self {
             face_value: value.face_value,
@@ -69,16 +64,11 @@ impl From<VoucherLineDraft> for crate::entity::sales_order::types::VoucherLineDr
 }
 
 impl From<crate::entity::sales_order::types::VoucherLineDraft> for VoucherLineDraft {
-    /// 将销售单域卡券字段组转为审核域同形字段组。
-    ///
-    /// # 参数
-    /// * `value` - 销售单域卡券草稿字段组
-    ///
-    /// # 返回
-    /// 返回审核域卡券草稿字段组。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 将销售单域卡券字段组转为审核域同形字段组。
+    // 返回审核域卡券草稿字段组。
+    //
+    // 输入约定：
+    // - `value`：销售单域卡券草稿字段组
     fn from(value: crate::entity::sales_order::types::VoucherLineDraft) -> Self {
         Self {
             face_value: value.face_value,
@@ -93,24 +83,20 @@ impl From<crate::entity::sales_order::types::VoucherLineDraft> for VoucherLineDr
     }
 }
 
-/// 构建行字段组并计算行金额三元组。
-///
-/// 行类型与字段组必须一一对应：实物及服务行只允许 `goods`，卡券行只允许 `voucher`。
-/// 金额按数据模型 §4.2 铁律 1 逐行计算并舍入到分；卡券行按 §6.4 校验面额小计、
-/// 成交金额与配赠金额的一致性，成交金额为零时拒绝生效（配赠率无定义）。
-/// 规则实现复用销售单域 [`crate::entity::sales_order::types::build_line_groups`]。
-///
-/// # 参数
-/// * `line_type` - 行类型
-/// * `goods` - 实物及服务字段组
-/// * `voucher` - 卡券字段组
-/// * `sales_tax_rate` - 销项税率
-///
-/// # 返回
-/// 返回含行金额三元组的构建结果。
-///
-/// # 错误
-/// 字段组与行类型不匹配、卡券金额不一致或成交金额为零时返回错误。
+// 构建行字段组并计算行金额三元组。
+//
+// 行类型与字段组必须一一对应：实物及服务行只允许 `goods`，卡券行只允许 `voucher`。
+// 金额按数据模型 §4.2 铁律 1 逐行计算并舍入到分；卡券行按 §6.4 校验面额小计、
+// 成交金额与配赠金额的一致性，成交金额为零时拒绝生效（配赠率无定义）。
+// 规则实现复用销售单域 [`crate::entity::sales_order::types::build_line_groups`]。
+// 返回含行金额三元组的构建结果。
+// 字段组与行类型不匹配、卡券金额不一致或成交金额为零时返回错误。
+//
+// 输入约定：
+// - `line_type`：行类型
+// - `goods`：实物及服务字段组
+// - `voucher`：卡券字段组
+// - `sales_tax_rate`：销项税率
 pub(crate) fn build_line_groups(
     line_type: LineType,
     goods: Option<GoodsLineFields>,

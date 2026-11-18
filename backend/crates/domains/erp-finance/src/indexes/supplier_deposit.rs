@@ -8,12 +8,11 @@ use persistence_core::Result;
 use crate::repository::SupplierDepositExt;
 
 /// 登记供应商预存款集合索引，不删除历史资金证据。
-/// # 参数
-/// * `db` - 财务数据库。
-/// # 返回
-/// 全部唯一和查询索引创建成功。
-/// # 错误
-/// 历史重复或数据库失败时拒绝启动。
+/// 结果：全部唯一和查询索引创建成功。
+/// 失败条件：历史重复或数据库失败时拒绝启动。
+///
+/// 输入约定：
+/// - `db`：财务数据库。
 pub async fn ensure(db: &Database) -> Result<()> {
     for (collection, definitions) in definitions() {
         let mut indexes = vec![index("uk_id", doc! {"id": 1}, true)];

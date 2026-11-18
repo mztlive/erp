@@ -8,16 +8,11 @@ use crate::entity::payable::{PayableAccount, PayableSourceType};
 #[allow(async_fn_in_trait)]
 pub trait PayableAccountFulfillmentFactsExt {
     /// 查询采购单来源的应付往来子账。
-    ///
-    /// # 参数
-    /// * `purchase_order_id` - 采购单主键
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回来源类型为采购单且来源主键匹配的应付子账。
+    /// 传播数据库查询或游标读取失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 输入约定：
+    /// - `purchase_order_id`：采购单主键
     async fn list_payable_accounts_for_purchase_order(
         &self,
         purchase_order_id: &PurchaseOrderId,

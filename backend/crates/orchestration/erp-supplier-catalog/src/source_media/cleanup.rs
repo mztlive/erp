@@ -34,23 +34,23 @@ impl SourceMediaCleanup {
     }
 
     /// 清理已证明未被业务事务接纳的本次对象。
-    /// # 参数
+    ///
     /// 无；调用方必须已经确定尚未开始事务、事务回滚或幂等重放未使用本批次。
-    /// # 返回
+    ///
     /// 尽力清理；失败登记安全日志，不覆盖原业务错误。
-    /// # 错误
-    /// 不返回错误；提交结果未知或核查失败时禁止调用。
+    ///
+    /// 提交结果未知或核查失败时禁止调用。
     pub async fn discard_uncommitted(&self) {
         self.discard_keys(&self.object_keys).await;
     }
 
     /// 仅根据原始事务结果执行补偿，未知提交与成功提交保留对象。
-    /// # 参数
+    ///
     /// `outcome` 必须是事务入口直接返回的结果，禁止传入提交后的读取或返回值构造结果。
-    /// # 返回
+    ///
     /// 明确失败时尽力清理；提交成功或未知时不删除任何对象。
-    /// # 错误
-    /// 不返回错误；也不以一次只读查询查不到为删除依据。
+    ///
+    /// 也不以一次只读查询查不到为删除依据。
     pub async fn after_transaction<T>(&self, outcome: &Result<T>) {
         if outcome.as_ref().is_err_and(|error| !unknown_commit(error)) {
             self.discard_uncommitted().await;

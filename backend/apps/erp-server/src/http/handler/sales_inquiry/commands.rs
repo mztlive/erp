@@ -15,11 +15,8 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
 /// 创建销售询价。
-/// # 参数
 /// `state` 为应用，`actor` 为认证账号，`request` 为带命令身份及版本的请求。
-/// # 返回
 /// 返回已提交状态及当前责任任务。
-/// # 错误
 /// 权限、当前责任、版本、状态或业务校验失败时拒绝。
 pub async fn sales_create(
     State(state): State<HttpState>,
@@ -31,11 +28,8 @@ pub async fn sales_create(
 }
 
 /// 保存询价需求。
-/// # 参数
 /// `state` 为应用，`actor` 为认证账号，`request` 为带命令身份及版本的请求。
-/// # 返回
 /// 返回已提交状态及当前责任任务。
-/// # 错误
 /// 权限、当前责任、版本、状态或业务校验失败时拒绝。
 pub async fn sales_save(
     State(state): State<HttpState>,
@@ -48,11 +42,8 @@ pub async fn sales_save(
 }
 
 /// 提交询价需求。
-/// # 参数
 /// `state` 为应用，`actor` 为认证账号，`request` 为带命令身份及版本的请求。
-/// # 返回
 /// 返回已提交状态及当前责任任务。
-/// # 错误
 /// 权限、当前责任、版本、状态或业务校验失败时拒绝。
 pub async fn sales_submit(
     State(state): State<HttpState>,
@@ -65,11 +56,8 @@ pub async fn sales_submit(
 }
 
 /// 接受询价反馈。
-/// # 参数
 /// `state` 为应用，`actor` 为认证账号，`request` 为带命令身份及版本的请求。
-/// # 返回
 /// 返回已提交状态及当前责任任务。
-/// # 错误
 /// 权限、当前责任、版本、状态或业务校验失败时拒绝。
 pub async fn sales_accept(
     State(state): State<HttpState>,
@@ -82,11 +70,8 @@ pub async fn sales_accept(
 }
 
 /// 要求重新询价。
-/// # 参数
 /// `state` 为应用，`actor` 为认证账号，`request` 为带命令身份及版本的请求。
-/// # 返回
 /// 返回已提交状态及当前责任任务。
-/// # 错误
 /// 权限、当前责任、版本、状态或业务校验失败时拒绝。
 pub async fn sales_reinquire(
     State(state): State<HttpState>,
@@ -99,11 +84,8 @@ pub async fn sales_reinquire(
 }
 
 /// 关闭销售询价。
-/// # 参数
 /// `state` 为应用，`actor` 为认证账号，`request` 为带命令身份及版本的请求。
-/// # 返回
 /// 返回已提交状态及当前责任任务。
-/// # 错误
 /// 权限、当前责任、版本、状态或业务校验失败时拒绝。
 pub async fn sales_close(
     State(state): State<HttpState>,
@@ -116,11 +98,8 @@ pub async fn sales_close(
 }
 
 /// 要求补充询价需求。
-/// # 参数
 /// `state` 为应用，`actor` 为认证账号，`request` 为带命令身份及版本的请求。
-/// # 返回
 /// 返回已提交状态及当前责任任务。
-/// # 错误
 /// 权限、当前责任、版本、状态或业务校验失败时拒绝。
 pub async fn procurement_supplement(
     State(state): State<HttpState>,
@@ -133,11 +112,8 @@ pub async fn procurement_supplement(
 }
 
 /// 改派询价责任。
-/// # 参数
 /// `state` 为应用，`actor` 为认证账号，`request` 为带命令身份及版本的请求。
-/// # 返回
 /// 返回已提交状态及当前责任任务。
-/// # 错误
 /// 权限、当前责任、版本、状态或业务校验失败时拒绝。
 pub async fn procurement_reassign(
     State(state): State<HttpState>,
@@ -150,11 +126,8 @@ pub async fn procurement_reassign(
 }
 
 /// 保存询价反馈草稿。
-/// # 参数
 /// `state` 为应用，`actor` 为认证账号，`request` 为带命令身份及版本的请求。
-/// # 返回
 /// 返回已提交状态及当前责任任务。
-/// # 错误
 /// 权限、当前责任、版本、状态或业务校验失败时拒绝。
 pub async fn procurement_save_feedback(
     State(state): State<HttpState>,
@@ -167,11 +140,8 @@ pub async fn procurement_save_feedback(
 }
 
 /// 发布询价完整反馈。
-/// # 参数
 /// `state` 为应用，`actor` 为认证账号，`request` 为带命令身份及版本的请求。
-/// # 返回
 /// 返回已提交状态及当前责任任务。
-/// # 错误
 /// 权限、当前责任、版本、状态或业务校验失败时拒绝。
 pub async fn procurement_publish(
     State(state): State<HttpState>,
@@ -184,11 +154,8 @@ pub async fn procurement_publish(
 }
 
 /// 采购主动发起新一轮整体报价。
-/// # 参数
 /// `state`、`actor` 为应用及认证身份，`id`、`request` 为询价和任务版本。
-/// # 返回
 /// 返回新一轮任务的安全回执。
-/// # 错误
 /// 当前责任、历史任务、版本或状态不满足时拒绝。
 pub async fn procurement_renew(
     State(state): State<HttpState>,

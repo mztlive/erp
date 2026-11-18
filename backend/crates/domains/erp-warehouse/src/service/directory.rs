@@ -15,24 +15,12 @@ pub struct WarehouseDirectoryService {
     access: WarehouseAuthorization,
 }
 impl WarehouseDirectoryService {
-    /// 装配数据库与目录授权。
-    /// # 参数
-    /// `db` 为本域数据库，`access` 为独立目录授权。
-    /// # 返回
-    /// 不执行I/O的服务。
-    /// # 错误
-    /// 无。
+    /// 将仓库数据库与独立目录授权装配为查询服务，构造不执行 I/O。
     pub fn new(db: Database, access: WarehouseAuthorization) -> Self {
         Self { db, access }
     }
 
-    /// 查询独立目录或已选身份。
-    /// # 参数
-    /// `actor` 为已认证操作人，`query` 不得包含业务列表条件。
-    /// # 返回
-    /// 当前仍可读的目录项和独立版本。
-    /// # 错误
-    /// 缺动作、非法请求、目录超限、旧版本或持久化失败时拒绝。
+    /// 用当前认证账号读取目录或已选 ID 的回显，不接受业务列表条件；只交付仍可读的目录项和独立范围版本。无权限、请求非法、超过目录上限、版本过期或持久化失败时拒绝。
     pub async fn list(&self, actor: AuditActor, query: DirectoryQuery) -> Result<DirectoryPage> {
         let query = query.normalized()?;
 
@@ -61,13 +49,7 @@ impl WarehouseDirectoryService {
 }
 
 impl WarehouseDirectoryService {
-    /// 按同一 warehouse:list 范围读取原仓库列表，防止绕过目录授权。
-    /// # 参数
-    /// `actor` 为操作人，`params` 保留原业务条件及范围版本。
-    /// # 返回
-    /// 原仓库行和独立范围元信息。
-    /// # 错误
-    /// 无权限、非法请求、旧范围版本或仓储失败时拒绝。
+    /// 在同一 `warehouse:list` 授权范围内执行原仓库列表筛选，返回原分页形状与独立范围元信息。第二页起须传范围版本；无权、非法请求、版本过期或仓储失败均拒绝。
     pub async fn warehouses(
         &self,
         actor: AuditActor,
@@ -109,7 +91,7 @@ impl WarehouseDirectoryService {
     }
 }
 
-/// 响应元信息只记录本次已授权结果身份，不参与仓储授权条件。
+// 用本次授权结果 ID 和冻结版本生成响应元信息，供调用方识别范围变化；不将这些 ID 反向当作仓储授权。
 fn directory_scope(read: &WarehouseQuery, ids: Vec<String>) -> DirectoryScope {
     let (policy_version, organization_version, as_of) = read.metadata();
     DirectoryScope {

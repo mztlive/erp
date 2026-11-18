@@ -10,20 +10,11 @@ use crate::fulfillment_execution::service_crypto::evidence_metadata;
 use crate::workflow::FulfillmentWorkflow;
 use crate::{Error, Result};
 
-/// 在签收事务内校验凭证，不读取对象存储。
-///
-/// # 参数
-/// * `db` - 业务数据库。
-/// * `rbac` - 权限服务。
-/// * `asset_id` - 凭证文件身份。
-/// * `actor` - 操作人。
-/// * `executor` - 同一签收事务的执行器。
-///
-/// # 返回
-/// 现有文件可作为当前签收凭证时成功。
-///
-/// # 错误
-/// 文件缺失、格式不支持、治理状态无效或不可转授时拒绝。
+// 在签收事务内校验凭证，不读取对象存储。
+//
+// `asset_id` 为凭证文件身份；`executor` 为同一签收事务的执行器。现有文件可作为当前签收凭证时成功。
+//
+// 文件缺失、格式不支持、治理状态无效或不可转授时拒绝。
 pub(super) async fn ensure_evidence(
     db: &Database,
     workflow: &dyn FulfillmentWorkflow,

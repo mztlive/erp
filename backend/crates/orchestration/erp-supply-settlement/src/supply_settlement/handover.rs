@@ -37,7 +37,7 @@ enum ResponsibilityChange {
 }
 
 impl ResponsibilityChange {
-    /// 返回当前操作登记的审计与回执动作。
+    // 为对账交接和差异改派返回各自登记的动作码，使审计与原命令回执可以独立查询。
     fn action(self) -> &'static str {
         match self {
             Self::Handover => "supplier_settlement.handover",
@@ -45,7 +45,7 @@ impl ResponsibilityChange {
         }
     }
 
-    /// 与动作同时确定成功回执种类，禁止由任意字符串推断结果。
+    // 按责任变更类型选择固定成功回执，避免根据外部字符串推断操作结果。
     fn result(self) -> SupplyCommandResult {
         match self {
             Self::Handover => SupplyCommandResult::SettlementHandover,
@@ -53,7 +53,7 @@ impl ResponsibilityChange {
         }
     }
 
-    /// 损坏或跨操作回执保持原入口的内部错误。
+    // 用动作对应的回执类型校验恢复结果，遇到损坏或跨动作数据时返回该入口的内部错误。
     fn verify_result(self, result: &SupplyCommandResult) -> Result<()> {
         if result == &self.result() {
             return Ok(());
@@ -77,7 +77,7 @@ struct ResponsibilityCommand {
 }
 
 impl ResponsibilityCommand {
-    /// 生成与既有入口相同的稳定命令编号，幂等键仅在持久化时保存摘要。
+    // 以操作人、结算单、动作及去首尾空白的键构造稳定命令编号，确保重试一致；持久化时只写幂等键摘要。
     fn new(
         actor: &AuditActor,
         statement_id: &str,
@@ -99,7 +99,7 @@ impl ResponsibilityCommand {
         }
     }
 
-    /// 从本次命令身份构造与业务更新同事务保存的成功事件。
+    // 用结算单和本次稳定命令号构造责任变更成功审计，供业务更新后在同一事务登记。
     fn audit(&self, number: Option<String>) -> Result<AuditLog> {
         Ok(self
             .actor
@@ -132,7 +132,7 @@ impl SettlementDependencies {
         }
     }
 
-    /// 业务更新之后依次保存独立命令回执与展示审计，沿用同一执行器。
+    // 责任写入成功后，沿用同一执行器先登记命令回执再保存展示审计，使重试可查证原操作。
     async fn write_audit(
         &self,
         command: &ResponsibilityCommand,
@@ -157,18 +157,9 @@ impl SettlementDependencies {
 }
 
 impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
-    /// 显式交接对账负责人；开放复核任务不改派。
+    /// 将指定结算单的对账责任移交给合格人员，可一并调整业务组织。返回新负责人、组织和版本；已打开的财务复核任务不改派。
     ///
-    /// # 参数
-    /// * `id` - 结算单 ID
-    /// * `req` - 目标人员、可选组织、原因、版本与幂等键
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 返回交接后的对账负责人、业务组织与版本。
-    ///
-    /// # 错误
-    /// 目标不合格、版本冲突、范围不足或责任未变化时拒绝。
+    /// 目标不合格、范围不足、版本冲突或责任未变化时拒绝交接。
     pub async fn handover_statement(
         &self,
         id: &str,
@@ -186,7 +177,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             .await
     }
 
-    /// 在入口事务内完成授权、准备、重放与持久化。
+    // 在事务内按原命令回执分流：重试先核对归属和当前范围，首次交接则核验目标人员及组织后更新对账责任。
     async fn handover_statement_apply(
         &self,
         id: &str,
@@ -214,18 +205,9 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         apply_handover(&dependencies, &command, &req, executor).await
     }
 
-    /// 独立改派差异处理人。
+    /// 独立更换结算差异处理人，供差异转办时保留原对账责任，返回新处理人和版本。
     ///
-    /// # 参数
-    /// * `id` - 结算单 ID
-    /// * `req` - 目标人员、原因、版本与幂等键
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 返回改派后的差异处理人与版本。
-    ///
-    /// # 错误
-    /// 目标不合格、版本冲突或目标已是当前处理人时拒绝。
+    /// 目标不合格、版本冲突或目标就是当前处理人时拒绝。
     pub async fn reassign_difference_handler(
         &self,
         id: &str,
@@ -245,7 +227,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             .await
     }
 
-    /// 在入口事务内完成授权、准备、重放与持久化。
+    // 在事务内核验差异改派权限并识别原回执，首次执行才提交处理人变更，不与对账交接共用回执。
     async fn reassign_difference_handler_apply(
         &self,
         id: &str,
@@ -272,17 +254,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         apply_handler(&dependencies, &command, &req, executor).await
     }
 
-    /// 查询可交接的合格有效人员。
-    ///
-    /// # 参数
-    /// * `id` - 结算单 ID
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 返回具备结算维护资格的有效人员。
-    ///
-    /// # 错误
-    /// 结算单不在更新范围内时拒绝。
+    /// 列出有效且具备结算维护资格的人员，供经办人选择对账交接目标；结算单不在更新范围内时拒绝查询。
     pub async fn handover_candidates(
         &self,
         id: &str,
@@ -299,7 +271,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             .await
     }
 
-    /// 在同一读取快照内检查结算范围并返回合格交接人。
+    // 用同一读取快照确认结算单在更新范围内并筛选合格人员，避免向无权经办人交付候选结果。
     async fn handover_candidates_apply(
         &self,
         id: &str,
@@ -353,7 +325,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
     }
 }
 
-/// 交接在事务内重验范围、版本和目标资格，再保存新责任及命令结果。
+// 用写事务复验结算范围、版本和目标人员资格，随后保存对账责任、回执和审计，避免人员或单据变化后仍交接。
 async fn apply_handover(
     dependencies: &SettlementDependencies,
     command: &ResponsibilityCommand,
@@ -384,7 +356,7 @@ async fn apply_handover(
     Ok(handover_view(statement))
 }
 
-/// 差异处理人独立改派，事务授权与保存顺序和对账责任交接一致。
+// 按与对账交接相同的事务授权和保存顺序更新差异处理人，单独登记改派结果而不变更对账责任。
 async fn apply_handler(
     dependencies: &SettlementDependencies,
     command: &ResponsibilityCommand,
@@ -509,7 +481,7 @@ mod tests {
 
     use super::*;
 
-    /// 执行生产审计构造，两个动作分别生成自己的回执种类和事件身份。
+    // 验证两种责任命令使用不同的审计动作、回执类型和事件身份，防止串用恢复结果。
     #[test]
     fn responsibility_commands_keep_distinct_actions_results_and_event_identity() {
         let actor = AuditActor::new("actor-1".into(), "operator".into(), AccountKind::Admin)
@@ -548,7 +520,7 @@ mod tests {
         assert_ne!(command_ids[0], command_ids[1]);
     }
 
-    /// 重试键去首尾空白，操作人、结算单与操作种类仍属于命令身份。
+    // 验证幂等键首尾空白不改变重试身份，但换人、换单或换动作后必须生成新的命令身份。
     #[test]
     fn responsibility_command_identity_normalizes_key_and_keeps_actor_and_scope() {
         let actor = AuditActor::new("actor-1".into(), "operator".into(), AccountKind::Admin);
@@ -563,7 +535,7 @@ mod tests {
         assert_ne!(original.audit_id, command(&actor, "statement-1", "other-key").audit_id);
     }
 
-    /// 两种恢复入口只接受对应回执，跨动作结果保持明确内部错误。
+    // 验证两种恢复入口只接受本动作回执，误读其他动作时保留明确的内部错误。
     #[test]
     fn responsibility_result_replay_accepts_own_result_and_rejects_other_actions() {
         for (change, wrong_result, message) in [
@@ -590,7 +562,7 @@ mod tests {
         }
     }
 
-    /// 无效审计身份继续失败关闭，不能生成供回执持久化的成功事件。
+    // 验证审计缺少有效主体或业务编号非法时拒绝生成成功事件，以免留下不可追溯的回执。
     #[test]
     fn responsibility_audit_rejects_invalid_actor_and_resource_number() {
         let invalid_actor = AuditActor::new(String::new(), "operator".into(), AccountKind::Admin);

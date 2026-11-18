@@ -63,14 +63,8 @@ pub struct ReverseStartContracts {
 ///
 /// 审批人取自已发布节点，不接受客户端选择。对象读取权失败时收敛为 BLOCKED。
 ///
-/// # 参数
-/// * `input` - 定义图、绑定、主体与提交人共用载荷
-/// * `contracts` - 随单据种类变化的声明
+/// `input` 为定义图、绑定、主体与提交人共用载荷；`contracts` 为随单据种类变化的声明。返回可交给 `prepare_start` 的输入。
 ///
-/// # 返回
-/// 返回可交给 `prepare_start` 的输入。
-///
-/// # 错误
 /// 定义版本漂移、入口缺失、审批人非法、幂等键非法或读取权校验失败时返回错误。
 pub fn build_reverse_start_input(
     input: ReverseStartInput<'_>,
@@ -118,17 +112,9 @@ pub fn build_reverse_start_input(
 
 /// 为定义全部节点冻结启动绑定，并按单据组织重验对象读取权。
 ///
-/// # 参数
-/// * `graph` - 定义图
-/// * `organization_id` - 单据责任组织
-/// * `readable` - 单据的对象读取权判定函数
-/// * `empty_definition` - 定义无节点时的冲突文案
+/// `graph` 为定义图；`organization_id` 为单据责任组织；`readable` 为单据的对象读取权判定函数；`empty_definition` 为定义无节点时的冲突文案。
 ///
-/// # 返回
-/// 返回与节点一一对应的绑定。
-///
-/// # 错误
-/// 节点审批人引用非法、显示名为空或定义无节点时返回错误。
+/// 返回与节点一一对应的绑定。节点审批人引用非法、显示名为空或定义无节点时返回错误。
 pub fn reverse_start_bindings(
     graph: &DefinitionGraph,
     organization_id: &str,

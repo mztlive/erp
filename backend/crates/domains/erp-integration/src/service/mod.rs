@@ -22,27 +22,12 @@ pub struct IntegrationOpsService {
 }
 
 impl IntegrationOpsService {
-    /// 绑定本域数据库及完整授权能力。
-    /// # 参数
-    /// db 为本域数据库，data_scope 为组合根构造的授权访问器。
-    /// # 返回
-    /// 授权依赖完整的集成服务。
-    /// # 错误
-    /// 构造不执行 I/O。
+    /// 由组合根注入集成数据库和共享授权访问器，供后续查询及命令共用；装配时不访问数据库。
     pub fn new(db: Database, data_scope: IntegrationAccess) -> Self {
         Self { db, data_scope }
     }
 
-    /// 返回绑定当前授权访问器 的对象访问器。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回可解析处理人组织与对象范围的访问器。
-    ///
-    /// # 错误
-    /// 无。
+    /// 取得当前集成服务的授权访问器，供用例解析处理人组织和对象范围。
     pub fn access(&self) -> IntegrationAccess {
         self.data_scope.clone()
     }

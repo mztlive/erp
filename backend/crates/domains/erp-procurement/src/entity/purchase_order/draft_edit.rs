@@ -98,23 +98,13 @@ pub enum DraftLineEditViolation {
 
 /// 校验采购草稿只调整原销售来源行数量且不会造成超采。
 ///
-/// # 参数
-/// * `requested` - 客户端编辑后的草稿行（补丁路径已由 DTO 与当前草稿合并）
-/// * `existing` - 当前草稿不可变来源行
-/// * `coverage_lines` - Service 传入的推进销售 guard 后的最新采购覆盖行
+/// 当前覆盖包含本采购单旧草稿，因此编辑上限需加回本单原占用后再比较；并发覆盖变化必须由调用方在事务内传入最新覆盖重新校验，返回可刷新冲突而非静默截断。
 ///
-/// # 返回
-/// 来源行集合、引用、数量与覆盖上限全部有效时返回 `Ok(())`。
+/// 来源行集合、引用、数量与覆盖上限全部有效时返回 `Ok(())`。来源行增删或改写、数量与分配不一致、销售来源行缺失、当前销售行已移除、新数量超过
+/// `当前目标 - 其他来源覆盖` 或草稿行缺少稳定身份时返回对应[`DraftLineEditViolation`]。
 ///
-/// # 错误
-/// 来源行增删或改写、数量与分配不一致、销售来源行缺失、当前销售行已移除、
-/// 新数量超过 `当前目标 - 其他来源覆盖` 或草稿行缺少稳定身份时返回对应
-/// [`DraftLineEditViolation`]。
-///
-/// # 关键业务约束
-/// 当前覆盖包含本采购单旧草稿，因此编辑上限需加回本单原占用后再比较；并发
-/// 覆盖变化必须由调用方在事务内传入最新覆盖重新校验，返回可刷新冲突而非
-/// 静默截断。
+/// - `requested`：客户端编辑后的草稿行（补丁路径已由 DTO 与当前草稿合并）。
+/// - `existing`：当前草稿不可变来源行。
 pub fn validate_draft_line_edits(
     requested: &[DraftLineEdit],
     existing: &[PurchaseOrderSubmissionLine],
@@ -130,21 +120,14 @@ pub fn validate_draft_line_edits(
 
 /// 校验引用旧销售版本的草稿按当前销售版本刷新时的行编辑。
 ///
-/// # 参数
-/// * `requested` - 客户端编辑后的草稿行，仍携带原销售版本行引用
-/// * `existing` - 当前草稿不可变来源行
-/// * `coverage_lines` - 推进销售 guard 后按当前销售版本计算的覆盖行
+/// 第一期 §6.3“销售变更对采购的影响”第 5 条：只能删除在新版本下已无可采购数量的行（归零或已被其他来源覆盖满），至少保留一行，否则应作废采购单。
 ///
-/// # 返回
-/// 保留行与删除行均合法时返回 `Ok(())`。
+/// 保留行与删除行均合法时返回 `Ok(())`。新增或改写来源行、数量超出可采购上限、删除仍可采购的行，或所有行都已无可采购数量时返回对应
+/// [`DraftLineEditViolation`]。
 ///
-/// # 错误
-/// 新增或改写来源行、数量超出可采购上限、删除仍可采购的行，或所有行都已无
-/// 可采购数量时返回对应 [`DraftLineEditViolation`]。
-///
-/// # 关键业务约束
-/// 第一期 §6.3“销售变更对采购的影响”第 5 条：只能删除在新版本下已无可采购
-/// 数量的行（归零或已被其他来源覆盖满），至少保留一行，否则应作废采购单。
+/// - `requested`：客户端编辑后的草稿行，仍携带原销售版本行引用。
+/// - `existing`：当前草稿不可变来源行。
+/// - `coverage_lines`：推进销售 guard 后按当前销售版本计算的覆盖行。
 pub fn validate_rebased_draft_line_edits(
     requested: &[DraftLineEdit],
     existing: &[PurchaseOrderSubmissionLine],
@@ -174,10 +157,7 @@ struct DraftEditContext<'a> {
 }
 
 impl<'a> DraftEditContext<'a> {
-    /// 建立索引。
-    ///
-    /// # 错误
-    /// 草稿商品行缺少销售稳定行时返回错误。
+    // 建立索引。草稿商品行缺少销售稳定行时返回错误。
     fn new(
         existing: &'a [PurchaseOrderSubmissionLine],
         coverage_lines: &'a [SalesProcurementCoverageLine],
@@ -202,10 +182,7 @@ impl<'a> DraftEditContext<'a> {
         Ok(Self { existing, coverage })
     }
 
-    /// 逐行校验请求行，返回保留的稳定销售行。
-    ///
-    /// # 错误
-    /// 重复、改写、数量非法或超出可采购上限时返回错误。
+    // 逐行校验请求行，返回保留的稳定销售行。重复、改写、数量非法或超出可采购上限时返回错误。
     fn check_requested(
         &self,
         requested: &[&DraftLineEdit],
@@ -238,10 +215,7 @@ impl<'a> DraftEditContext<'a> {
         Ok(seen)
     }
 
-    /// 本行可采购上限：当前目标减去其他来源覆盖，不小于零。
-    ///
-    /// # 错误
-    /// 当前销售行已移除或草稿行缺少原分配数量时返回错误。
+    // 本行可采购上限：当前目标减去其他来源覆盖，不小于零。当前销售行已移除或草稿行缺少原分配数量时返回错误。
     fn capacity(
         &self,
         stable_id: &str,
@@ -257,50 +231,32 @@ impl<'a> DraftEditContext<'a> {
     }
 }
 
-/// 只保留商品/服务行编辑。
+// 只保留商品/服务行编辑。
 fn item_edits(requested: &[DraftLineEdit]) -> Vec<&DraftLineEdit> {
     requested.iter().filter(|line| line.line_type == PurchaseLineType::ItemService).collect()
 }
 
-/// 规范化必填销售稳定行 ID。
-///
-/// # 参数
-/// * `value` - 请求中的可选 ID
-///
-/// # 返回
-/// 返回去除首尾空白的稳定行 ID。
-///
-/// # 错误
-/// ID 缺失或为空时返回 [`DraftLineEditViolation::MissingSalesLineId`]。
+// 规范化必填销售稳定行 ID。
+//
+// 返回去除首尾空白的稳定行 ID。ID 缺失或为空时返回 [`DraftLineEditViolation::MissingSalesLineId`]。
+//
+// `value` 为请求中的可选 ID。
 fn normalized_line_id(value: Option<&str>) -> Result<String, DraftLineEditViolation> {
     normalized_optional_id(value).ok_or(DraftLineEditViolation::MissingSalesLineId)
 }
 
-/// 规范化可选引用 ID：空白视为缺失。
-///
-/// # 参数
-/// * `value` - 可选原始 ID
-///
-/// # 返回
-/// 空值或空白返回 `None`，否则返回去除首尾空白的字符串。
-///
-/// # 错误
-/// 无。
+// 规范化可选引用 ID：空白视为缺失。空值或空白返回 `None`，否则返回去除首尾空白的字符串。
+//
+// `value` 为可选原始 ID。
 pub(super) fn normalized_optional_id(value: Option<&str>) -> Option<String> {
     value.map(str::trim).filter(|value| !value.is_empty()).map(str::to_string)
 }
 
-/// 解析必填正数量。
-///
-/// # 参数
-/// * `value` - 数量文本
-/// * `missing` - 缺失时的失败原因
-///
-/// # 返回
-/// 返回领域数量。
-///
-/// # 错误
-/// 缺失、格式非法或非正时返回对应 [`DraftLineEditViolation`]。
+// 解析必填正数量。
+//
+// 返回领域数量。缺失、格式非法或非正时返回对应 [`DraftLineEditViolation`]。
+//
+// `missing` 为缺失时的失败原因。
 fn parse_required_quantity(
     value: Option<&str>,
     missing: DraftLineEditViolation,
@@ -461,7 +417,7 @@ mod tests {
         edit("sol-1", Some("5"), Some("5"), "sku-1", "sorl-1", Some("sosl-1"))
     }
 
-    /// 零、部分、完整覆盖边界：等于 `剩余 + 原占用` 允许，超过拒绝。
+    // 零、部分、完整覆盖边界：等于 `剩余 + 原占用` 允许，超过拒绝。
     #[test]
     fn quantity_within_latest_available_is_accepted_at_boundary() {
         let existing = vec![draft_line("sol-1", "2", "sku-1", "sorl-1", Some("sosl-1"))];
@@ -473,7 +429,7 @@ mod tests {
         }
     }
 
-    /// 超过 `剩余 + 原占用` 必须返回可刷新冲突。
+    // 超过 `剩余 + 原占用` 必须返回可刷新冲突。
     #[test]
     fn exceeding_available_quantity_is_rejected() {
         let existing = vec![draft_line("sol-1", "2", "sku-1", "sorl-1", Some("sosl-1"))];
@@ -485,7 +441,7 @@ mod tests {
         );
     }
 
-    /// 同一销售来源行出现多次必须拒绝。
+    // 同一销售来源行出现多次必须拒绝。
     #[test]
     fn duplicate_sales_source_lines_are_rejected() {
         let existing = vec![
@@ -500,7 +456,7 @@ mod tests {
         );
     }
 
-    /// 新增或删除销售来源行必须拒绝。
+    // 新增或删除销售来源行必须拒绝。
     #[test]
     fn source_line_count_changes_are_rejected() {
         let existing = vec![draft_line("sol-1", "2", "sku-1", "sorl-1", Some("sosl-1"))];
@@ -512,7 +468,7 @@ mod tests {
         );
     }
 
-    /// 把行挂到不存在的销售来源行必须拒绝。
+    // 把行挂到不存在的销售来源行必须拒绝。
     #[test]
     fn rewriting_sales_source_line_is_rejected() {
         let existing = vec![draft_line("sol-1", "2", "sku-1", "sorl-1", Some("sosl-1"))];
@@ -524,7 +480,7 @@ mod tests {
         );
     }
 
-    /// 任一冻结来源引用被改写都必须拒绝。
+    // 任一冻结来源引用被改写都必须拒绝。
     #[test]
     fn rewriting_frozen_source_references_is_rejected() {
         let existing = vec![draft_line("sol-1", "2", "sku-1", "sorl-1", Some("sosl-1"))];
@@ -542,7 +498,7 @@ mod tests {
         }
     }
 
-    /// 采购数量与销售分配数量必须一致。
+    // 采购数量与销售分配数量必须一致。
     #[test]
     fn quantity_allocation_mismatch_is_rejected() {
         let existing = vec![draft_line("sol-1", "2", "sku-1", "sorl-1", Some("sosl-1"))];
@@ -554,7 +510,7 @@ mod tests {
         );
     }
 
-    /// 商品行缺少采购数量或分配数量必须拒绝。
+    // 商品行缺少采购数量或分配数量必须拒绝。
     #[test]
     fn missing_quantities_are_rejected() {
         let existing = vec![draft_line("sol-1", "2", "sku-1", "sorl-1", Some("sosl-1"))];
@@ -572,7 +528,7 @@ mod tests {
         );
     }
 
-    /// 空白或缺失销售来源行必须拒绝。
+    // 空白或缺失销售来源行必须拒绝。
     #[test]
     fn blank_sales_line_id_is_rejected() {
         let existing = vec![draft_line("sol-1", "2", "sku-1", "sorl-1", Some("sosl-1"))];
@@ -585,7 +541,7 @@ mod tests {
         );
     }
 
-    /// 数量非正或格式非法必须拒绝且保留文案。
+    // 数量非正或格式非法必须拒绝且保留文案。
     #[test]
     fn invalid_quantities_are_rejected() {
         let existing = vec![draft_line("sol-1", "2", "sku-1", "sorl-1", Some("sosl-1"))];
@@ -602,7 +558,7 @@ mod tests {
         assert!(error.to_string().contains("数量非法"));
     }
 
-    /// 销售当前版本已移除采购来源行必须返回可刷新冲突。
+    // 销售当前版本已移除采购来源行必须返回可刷新冲突。
     #[test]
     fn removed_sales_source_line_is_rejected() {
         let existing = vec![draft_line("sol-1", "2", "sku-1", "sorl-1", Some("sosl-1"))];
@@ -613,7 +569,7 @@ mod tests {
         );
     }
 
-    /// 物流费用行不参与销售来源与覆盖校验。
+    // 物流费用行不参与销售来源与覆盖校验。
     #[test]
     fn logistics_lines_are_ignored() {
         let existing = vec![draft_line("sol-1", "2", "sku-1", "sorl-1", Some("sosl-1"))];
@@ -626,7 +582,7 @@ mod tests {
         assert!(validate_draft_line_edits(&requested, &existing, &coverage).is_ok());
     }
 
-    /// 首尾空白在比较前规范化，与既有校验语义一致。
+    // 首尾空白在比较前规范化，与既有校验语义一致。
     #[test]
     fn whitespace_padded_ids_and_quantities_are_normalized() {
         let existing = vec![draft_line("sol-1", "2", "sku-1", "sorl-1", Some("sosl-1"))];
@@ -638,7 +594,7 @@ mod tests {
         assert!(validate_draft_line_edits(&[requested], &existing, &coverage).is_ok());
     }
 
-    /// 草稿行缺少销售稳定行或原分配数量按一致性错误失败。
+    // 草稿行缺少销售稳定行或原分配数量按一致性错误失败。
     #[test]
     fn inconsistent_existing_lines_are_rejected() {
         let coverage = vec![coverage_line("sol-1", "3")];
@@ -658,7 +614,7 @@ mod tests {
         );
     }
 
-    /// 多行场景稳定校验：既有行与请求行一一对应时全部通过。
+    // 多行场景稳定校验：既有行与请求行一一对应时全部通过。
     #[test]
     fn multi_line_edits_validate_stably() {
         let existing = vec![
@@ -685,7 +641,7 @@ mod tests {
         line
     }
 
-    /// 销售减量后草稿上限为目标减去其他来源覆盖，保持原量会被拒绝。
+    // 销售减量后草稿上限为目标减去其他来源覆盖，保持原量会被拒绝。
     #[test]
     fn rebased_draft_must_absorb_excess() {
         let existing = vec![draft_line("sol-1", "6", "sku-1", "old-1", None)];
@@ -706,7 +662,7 @@ mod tests {
         assert_eq!(reduce, Ok(()));
     }
 
-    /// 刷新时可删除新版本下已无可采购数量的行，不能删除仍可采购的行。
+    // 刷新时可删除新版本下已无可采购数量的行，不能删除仍可采购的行。
     #[test]
     fn rebased_draft_removes_only_exhausted_lines() {
         let existing = vec![
@@ -728,7 +684,7 @@ mod tests {
         );
     }
 
-    /// 全部行都已无可采购数量时提示作废。
+    // 全部行都已无可采购数量时提示作废。
     #[test]
     fn rebased_draft_without_lines_must_be_voided() {
         let existing = vec![draft_line("sol-1", "5", "sku-1", "old-1", None)];

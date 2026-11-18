@@ -8,19 +8,8 @@ use serde::de::DeserializeOwned;
 
 use crate::{Executor, Result, mongo_ops};
 
-/// 按字段值集合读取未删除记录，空集合不访问数据库或执行器。
-///
-/// # 参数
-/// * `collection` - 拥有领域提供的类型化集合。
-/// * `field` - 由领域指定的主键或关联字段。
-/// * `values` - 精确匹配值，保持输入顺序和重复值。
-/// * `executor` - 调用方提供的事务或非事务执行器。
-///
-/// # 返回
-/// 返回全部命中记录，不附加排序、分页或投影；空值集合直接返回空列表。
-///
-/// # 错误
-/// 查询、游标读取或反序列化失败时返回下层持久化错误。
+/// 按领域指定的主键或关联字段批量取活跃记录。`$in` 使用原值、顺序和重复项，结果不承诺排序，也不分页或投影。
+/// 空输入直接返回，不访问数据库或执行器。
 pub async fn find_active_by_field_in<T>(
     collection: &Collection<T>,
     field: &str,
@@ -63,7 +52,7 @@ mod tests {
         }
     }
 
-    /// 仅构造驱动句柄，空输入路径不发起数据库操作。
+    // 仅创建集合句柄并传入不可借会话的执行器，确认空匹配值在访问数据库前即返回空列表。
     #[tokio::test]
     async fn empty_values_return_without_accessing_executor() {
         let options = ClientOptions::builder()

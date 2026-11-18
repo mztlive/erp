@@ -11,22 +11,12 @@ use crate::entity::purchase_order::{PurchaseOrder, PurchaseOrderSubmission, Purc
 use crate::repository::PurchaseOrderExt;
 /// 按当前草稿派生正式提交头和行。
 ///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `order` - 采购主表
-/// * `draft` - 当前草稿提交
-/// * `draft_lines` - 当前草稿行
-/// * `actor` - 提交人
-/// * `session` - 建单事务会话
-///
-/// # 返回
-/// 返回冻结提交头与重新挂接的行。
-///
-/// # 错误
-/// 提交序号溢出或草稿行不变式失败时返回错误。
-///
-/// # 关键业务约束
 /// 序号只识别 `SUB-{n}`，忽略草稿编号。
+///
+/// 返回冻结提交头与重新挂接的行。提交序号溢出或草稿行不变式失败时返回错误。
+///
+/// - `draft`：当前草稿提交。
+/// - `draft_lines`：当前草稿行。
 pub async fn freeze_submission_from_created_draft(
     db: &Database,
     order: &PurchaseOrder,

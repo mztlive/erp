@@ -17,14 +17,7 @@ use crate::http::extractor::{Json, Query};
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
-/// 查询来源系统列表。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `query` - 分页与筛选参数（扁平传递）
-///
-/// # 返回
-/// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
+/// 按请求条件查询来源系统列表。
 pub async fn source_system_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -36,13 +29,7 @@ pub async fn source_system_list(
 }
 
 /// 创建来源系统。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 创建请求（`{ code, name, system_type }`）
-///
-/// # 返回
+/// `req` 为创建请求（`{ code, name, system_type }`）。
 /// 返回新建来源系统的响应视图。
 pub async fn source_system_create(
     State(state): State<HttpState>,
@@ -57,14 +44,7 @@ pub async fn source_system_create(
 }
 
 /// 更新来源系统（乐观锁：请求携带期望版本，冲突返回 409）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 来源系统 ID
-/// * `req` - 更新请求（含期望版本）
-///
-/// # 返回
+/// `id` 为来源系统 ID，`req` 为更新请求（含期望版本）。
 /// 返回更新后来源系统的响应视图。
 pub async fn source_system_update(
     State(state): State<HttpState>,
@@ -77,14 +57,8 @@ pub async fn source_system_update(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 查询外部身份映射列表。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `query` - 分页与筛选参数（`source_system_id` 等扁平传递）
-///
-/// # 返回
-/// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
+/// 按请求条件查询外部身份映射列表。
+/// `query` 为分页与筛选参数（`source_system_id` 等扁平传递）。
 pub async fn external_identity_map_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -97,13 +71,6 @@ pub async fn external_identity_map_list(
 }
 
 /// 建立外部身份映射（跨集合事务：映射身份 + 目标谱系原子写入）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 创建请求
-///
-/// # 返回
 /// 返回新建映射的响应视图。
 pub async fn external_identity_map_create(
     State(state): State<HttpState>,

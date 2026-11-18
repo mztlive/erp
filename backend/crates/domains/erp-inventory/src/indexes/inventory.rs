@@ -38,15 +38,8 @@ pub(crate) const STOCK_ADJUSTMENTS: &str = <mongodb::Database as InventoryExt>::
 /// `stock_adjustment_line` 集合名。
 pub(crate) const STOCK_ADJUSTMENT_LINES: &str = <mongodb::Database as InventoryExt>::STOCK_ADJUSTMENT_LINES;
 
-/// 创建本域集合的幂等命名索引。
-///
-/// # 参数
-/// * `db` - 目标 MongoDB 数据库。
-///
-/// # 返回
+/// 启动时注册该集合的命名索引，多次调用沿用同名索引。
 /// 各集合索引创建完成。
-///
-/// # 错误
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, STOCK_MOVEMENTS, stock_movement_indexes()).await?;
@@ -68,11 +61,11 @@ pub async fn ensure(db: &Database) -> Result<()> {
     Ok(())
 }
 
-/// 升级库存预占来源字段及唯一索引。
-///
-/// 旧文档没有 `source_type`，其业务语义均为采购合格入库；先回填来源，再移除旧的
-/// 全量复合唯一索引。目标索引由 [`stock_reservation_indexes`] 以两个部分唯一索引重建，
-/// 使现有库存分配不需要伪造采购引用。
+// 升级库存预占来源字段及唯一索引。
+//
+// 旧文档没有 `source_type`，其业务语义均为采购合格入库；先回填来源，再移除旧的
+// 全量复合唯一索引。目标索引由 [`stock_reservation_indexes`] 以两个部分唯一索引重建，
+// 使现有库存分配不需要伪造采购引用。
 async fn reconcile_stock_reservation_source_indexes(db: &Database) -> Result<()> {
     let collection_names = db.list_collection_names().await?;
     if !collection_names.iter().any(|name| name == STOCK_RESERVATIONS) {
@@ -98,13 +91,13 @@ async fn reconcile_stock_reservation_source_indexes(db: &Database) -> Result<()>
     Ok(())
 }
 
-/// 为单个集合创建一组幂等命名索引。
+// 为单个集合创建一组幂等命名索引。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
     db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
-/// 返回 `stock_movement` 的来源去重与台账查询索引（§6.7）。
+// 返回 `stock_movement` 的来源去重与台账查询索引（§6.7）。
 fn stock_movement_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_stock_movements_id", doc! { "id": 1 }),
@@ -123,7 +116,7 @@ fn stock_movement_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `stock_balance` 的库存维度唯一约束（§6.7）。
+// 返回 `stock_balance` 的库存维度唯一约束（§6.7）。
 fn stock_balance_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_stock_balances_id", doc! { "id": 1 }),
@@ -131,7 +124,7 @@ fn stock_balance_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `stock_reservation` 的建立动作唯一与预占查询索引（§6.7）。
+// 返回 `stock_reservation` 的建立动作唯一与预占查询索引（§6.7）。
 fn stock_reservation_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_stock_reservations_id", doc! { "id": 1 }),
@@ -156,7 +149,7 @@ fn stock_reservation_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `stock_reservation_entry` 的预占流水查询索引（§6.7）。
+// 返回 `stock_reservation_entry` 的预占流水查询索引（§6.7）。
 fn stock_reservation_entry_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_stock_reservation_entries_id", doc! { "id": 1 }),
@@ -167,7 +160,7 @@ fn stock_reservation_entry_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `stock_adjustment` 的身份约束与列表查询索引（§6.7）。
+// 返回 `stock_adjustment` 的身份约束与列表查询索引（§6.7）。
 fn stock_adjustment_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_stock_adjustments_id", doc! { "id": 1 }),
@@ -180,7 +173,7 @@ fn stock_adjustment_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `stock_adjustment_line` 的明细查询索引（§6.7）。
+// 返回 `stock_adjustment_line` 的明细查询索引（§6.7）。
 fn stock_adjustment_line_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_stock_adjustment_lines_id", doc! { "id": 1 }),
@@ -190,7 +183,7 @@ fn stock_adjustment_line_indexes() -> Vec<IndexModel> {
 
 #[cfg(test)]
 mod tests {
-    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    // 验证按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
     #[test]
     fn collections_look_up_by_unique_stable_id() {
         for indexes in [

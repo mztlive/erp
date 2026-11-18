@@ -11,7 +11,7 @@ use persistence_core::Executor;
 
 use crate::Result;
 
-/// 同一事务证明调用人可以把指定资产关联到单据或交付给审批参与者。
+/// 检查审批材料转授资格时，同一事务证明调用人可以把指定资产关联到单据或交付给审批参与者。
 ///
 /// # 参数
 /// * `identity_service` - 同一应用注入的共享身份与权限服务。
@@ -22,6 +22,7 @@ use crate::Result;
 ///
 /// # 返回
 /// 每个资产均由当前账号真实上传时成功。
+///
 /// # 错误
 /// 账号停用、资产来源未授权或策略版本变化时拒绝。
 pub async fn authorize_material_transfer(

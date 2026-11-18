@@ -41,11 +41,7 @@ pub struct QuoteReservationHistory {
 }
 impl InquiryQuoteBalance {
     /// 返回原条款下尚未采用的逐地址上限，历史采用不因新候选重置。
-    /// # 参数
-    /// `quote`为本稳定报价准确修订。
-    /// # 返回
     /// 返回剩余大于零的原地址范围。
-    /// # 错误
     /// 数量账损坏或归属不符时拒绝。
     pub fn remaining_addresses(&self, quote: &InquiryQuote) -> Result<Vec<QuoteAddressLimit>> {
         validate_quantity_rows(self.reserved_quantity, &self.address_quantities, false)?;
@@ -90,11 +86,7 @@ impl InquiryQuoteBalance {
     }
 
     /// 按正式作废事实释放尚未履行的采用量，保留原采用记录。
-    /// # 参数
-    /// `reservation` 为当前未释放的正式采购采用。
-    /// # 返回
     /// 更新内存余额；重复释放由调用方按released标记跳过。
-    /// # 错误
     /// 余额不足、地址不匹配或累计账损坏时拒绝。
     pub fn release(&mut self, reservation: &InquiryQuoteReservation) -> Result<()> {
         validate_quantity_rows(self.reserved_quantity, &self.address_quantities, false)?;
@@ -134,12 +126,9 @@ impl InquiryQuoteBalance {
         Ok(())
     }
     /// 按既有正式采用缩减待生效最大保留量，不重新取得任何采购资格。
-    /// # 参数
-    /// `reservation`为同一原采用；目标数量及地址必须完全包含在已保留范围内。
-    /// # 返回
     /// 返回保留历史的新采用，仅减少当前余额。
-    /// # 错误
     /// 缺失、已释放、增量、新地址、超原地址量或账损坏时拒绝。
+    /// `reservation`为同一原采用；目标数量及地址必须完全包含在已保留范围内。
     pub fn restore_existing_usage(
         &mut self,
         reservation: &InquiryQuoteReservation,
@@ -194,11 +183,7 @@ impl InquiryQuoteBalance {
     }
 
     /// 在同一余额中替换采用，审批中保留原数量和地址的最大暴露范围。
-    /// # 参数
-    /// `quote`和`usage`为准确条款与新目标，`reservation`为原采用，`keep_existing`控制审批中保留旧范围。
-    /// # 返回
     /// 返回更新后的采用并保留旧数量历史；失败不修改当前余额。
-    /// # 错误
     /// 条件失效、MOQ或累计余额不足时拒绝。
     pub fn resized(
         &mut self,
@@ -235,11 +220,7 @@ impl InquiryQuoteBalance {
         })
     }
     /// 以当前CAS余额核对并登记本次采购，跨版本和销售共享供应限额。
-    /// # 参数
-    /// `quote` 为精确报价，`usage` 为本次经服务器核验的采购分配。
-    /// # 返回
     /// 更新内存余额；持久化由调用方在采购事务内执行。
-    /// # 错误
     /// 供量、地址累计或本次MOQ不符合时拒绝，失败不修改余额。
     pub fn reserve(&mut self, quote: &InquiryQuote, usage: &InquiryQuoteUse) -> Result<()> {
         validate_quantity_rows(self.reserved_quantity, &self.address_quantities, false)?;

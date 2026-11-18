@@ -9,12 +9,7 @@ use crate::entity::cancellation::StockAdjustmentCancellation;
 pub trait StockAdjustmentCancellationExt {
     const STOCK_ADJUSTMENT_CANCELLATIONS: &'static str = "stock_adjustment_cancellations";
     /// 获取库存撤回事实仓储。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 返回本域不可变事实仓储。
-    /// # 错误
-    /// 不返回错误。
     fn stock_adjustment_cancellations(&self) -> Repository<'_, StockAdjustmentCancellation>;
 }
 

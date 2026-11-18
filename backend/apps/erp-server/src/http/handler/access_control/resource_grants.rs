@@ -21,11 +21,8 @@ fn process(state: &HttpState) -> ResourceGrantProcess {
 }
 
 /// 按稳定操作号授予指定记录读取权。
-/// # 参数
 /// state 为共享应用，actor 为管理员，request 为人工来源及完整目标。
-/// # 返回
 /// 当前来源、目标与版本。
-/// # 错误
 /// 越权、目标无效、操作号异载荷或已终止来源时拒绝。
 pub async fn grant(
     State(state): State<HttpState>,
@@ -36,11 +33,8 @@ pub async fn grant(
 }
 
 /// 永久终止一个授权来源。
-/// # 参数
 /// state、actor 为当前上下文，request 含来源身份、期望版本及原因。
-/// # 返回
 /// 终止后的来源。
-/// # 错误
 /// 越权、版本变化或来源缺失时拒绝。
 pub async fn revoke(
     State(state): State<HttpState>,
@@ -56,11 +50,7 @@ pub async fn revoke(
 }
 
 /// 查看指定账号的来源及终止记录。
-/// # 参数
-/// state、actor 为当前上下文，query 为账号与排他游标。
-/// # 返回
 /// 最多 100 个来源及下一页游标。
-/// # 错误
 /// 越权、参数非法或读取失败时拒绝。
 pub async fn sources(
     State(state): State<HttpState>,
@@ -74,11 +64,7 @@ pub async fn sources(
 }
 
 /// 对一页现有正式事件执行受控重算。
-/// # 参数
-/// state、actor 为当前上下文，request 为维护范围与游标。
-/// # 返回
 /// 下一页游标；空页返回空值。
-/// # 错误
 /// 越权、参数非法或事务失败时拒绝。
 pub async fn recompute(
     State(state): State<HttpState>,
@@ -94,11 +80,7 @@ pub async fn recompute(
 }
 
 /// 预览或追加一页历史正式证据对应的授权事件。
-/// # 参数
-/// state、actor 为当前上下文，request 为证据类型、游标和 dry_run。
-/// # 返回
 /// 候选数量、已有来源、终止来源、无效证据及下一页游标。
-/// # 错误
 /// 越权或基础设施故障中止整页，不自动重放业务命令。
 pub async fn backfill(
     State(state): State<HttpState>,

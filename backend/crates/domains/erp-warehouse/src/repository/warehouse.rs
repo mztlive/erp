@@ -43,18 +43,7 @@ const WAREHOUSE_SKU_POLICIES: &str = <mongodb::Database as WarehouseExt>::WAREHO
 macro_rules! filter_pagination {
     ($filter:ty) => {
         impl Pagination for $filter {
-            /// 返回页码与单页条数。
-            ///
-            /// 直接取筛选条件上的 `page` 与 `page_size`，不把小于 1 的页码归一。
-            ///
-            /// # 参数
-            /// 无。
-            ///
-            /// # 返回
-            /// 返回 `(page, page_size)` 元组。`page_size` 由 `u32` 转为 `u64`。
-            ///
-            /// # 错误
-            /// 不返回错误。
+            // 让三类仓库列表统一交出原页码和扩为 `u64` 的条数，不在仓储把小于 `1` 的页码修正为首页。
             fn page_and_size(&self) -> (u64, u64) {
                 (self.page, u64::from(self.page_size))
             }
@@ -66,16 +55,7 @@ macro_rules! filter_pagination {
 macro_rules! filter_default {
     ($ty:ident { $($field:ident: $init:expr),* $(,)? }) => {
         impl Default for $ty {
-            /// 返回首页空筛选（`page: 1`，`page_size: 20`，降序）。
-            ///
-            /// # 参数
-            /// 无。
-            ///
-            /// # 返回
-            /// 返回筛选为空、降序的首页过滤条件。
-            ///
-            /// # 错误
-            /// 无。
+            // 为未指定筛选的三类列表提供首页、每页 `20` 条和降序设置。
             fn default() -> Self {
                 Self { $($field: $init,)* page: 1, page_size: 20, sort_by: None, sort_ascending: false }
             }
@@ -136,20 +116,7 @@ filter_default!(WarehouseFilter {
 });
 
 impl QueryFilter for WarehouseFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// 已设置的 `warehouse_code`、`warehouse_id` 精确匹配；`status` 写入 `EnableStatus::as_str`。
-    /// `require_inbound_handler` 为真时要求
-    /// `inbound_handler_user_id` 为含非空白字符的字符串。不读取 `q` 与排序字段。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 生成未删除仓库的 MongoDB 条件：仓库代码、ID 精确匹配，状态按稳定代码筛选。要求有入库经办人时只匹配含非空白字符的字符串；关键词 `q` 和排序由后续阶段处理。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(code) = &self.warehouse_code {
@@ -173,20 +140,7 @@ filter_pagination!(WarehouseFilter);
 /// 仓库集合仓储的域特有查询。
 #[allow(async_fn_in_trait)]
 pub trait WarehouseRepositoryExt {
-    /// 分页检索仓库列表（投影查询）。
-    ///
-    /// 只返回 [`WarehouseRow`] 所需的列表字段，不加载整文档；
-    /// 排序字段白名单化（`created_at`/`warehouse_code`）。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// 用同一执行器获取仓库列表投影和同条件总数，不读取整文档；只允许 `created_at` 或 `warehouse_code` 排序。MongoDB 查询、游标或计数失败时返回错误。
     async fn search_warehouses(
         &self,
         filter: &WarehouseFilter,
@@ -263,20 +217,7 @@ pub struct WarehouseRevisionFilter {
 filter_default!(WarehouseRevisionFilter { warehouse_id: None, name: None });
 
 impl QueryFilter for WarehouseRevisionFilter {
-    /// 转换为 MongoDB 查询条件。
-    ///
-    /// 修订表不提供软删除方法，但落库文档仍有 `deleted_at`；查询继续写入
-    /// `deleted_at: NOT_DELETED`，与既有文档形态一致。`warehouse_id` 为 `Some` 时精确匹配。
-    /// `name` 为 `Some` 时按字面量、忽略大小写匹配；`None` 不写入该字段。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 构造修订筛选，沿用既有记录的未删除条件，但不提供修订软删除。仓库 ID 精确匹配，名称按字面量忽略大小写，未提供的字段不进入谓词。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(warehouse_id) = &self.warehouse_id {
@@ -292,20 +233,7 @@ filter_pagination!(WarehouseRevisionFilter);
 /// 仓库修订集合仓储的域特有查询。
 #[allow(async_fn_in_trait)]
 pub trait WarehouseRevisionRepositoryExt {
-    /// 分页检索仓库修订列表（投影查询）。
-    ///
-    /// 只返回 [`WarehouseRevisionRow`] 所需的列表字段，**不返回加密地址与
-    /// 联系人**；排序字段白名单化（`created_at`/`revision_no`）。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// 分页读取仓库修订列表及总数，仅返回所需字段，不暴露地址或联系人加密列；排序限定 `created_at`、`revision_no`。查询、游标或计数失败时返回错误。
     async fn search_warehouse_revisions(
         &self,
         filter: &WarehouseRevisionFilter,
@@ -375,19 +303,7 @@ pub struct WarehouseSkuPolicyFilter {
 }
 
 impl QueryFilter for WarehouseSkuPolicyFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// 已设置的 `warehouse_id`、`sku_id` 精确匹配；`status` 写入 `EnableStatus::as_str`。
-    /// 未设置的字段不进入条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 构造未删除预警策略的查询条件，按已提供的仓库、SKU 和状态稳定代码精确匹配，省略未设置的条件。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(warehouse_id) = &self.warehouse_id {
@@ -410,39 +326,14 @@ filter_default!(WarehouseSkuPolicyFilter { warehouse_id: None, sku_id: None, sta
 /// 仓库-SKU 预警策略集合仓储的域特有查询。
 #[allow(async_fn_in_trait)]
 pub trait WarehouseSkuPolicyRepositoryExt {
-    /// 分页检索仓库-SKU 预警策略列表（投影查询）。
-    ///
-    /// 只返回 [`WarehouseSkuPolicyRow`] 所需的列表字段（含 Decimal128 预警阈值，
-    /// 不做舍入或换算）；排序字段白名单化（`created_at`/`effective_from`）。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// 分页读取仓库 SKU 策略投影和总数，Decimal128 阈值不舍入或换算，排序限于 `created_at`、`effective_from`。查询、游标或计数失败直接返回。
     async fn search_warehouse_sku_policies(
         &self,
         filter: &WarehouseSkuPolicyFilter,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<WarehouseSkuPolicyRow>>;
 
-    /// 批量查询一组 SKU 的仓库预警策略（`$in`，一次取回）。
-    ///
-    /// 用于按 SKU 聚合策略明细，避免逐 SKU N+1。
-    ///
-    /// # 参数
-    /// * `sku_ids` - SKU ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的未删除策略实体集合。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 用一次 `$in` 查询取回多个 SKU 的未删除仓库策略，避免逐 SKU 加载；查询或游标读取失败返回对应错误。
     async fn find_by_sku_ids(
         &self,
         sku_ids: &[SkuId],
@@ -490,46 +381,17 @@ pub struct WarehouseDomainRepository<'a> {
 }
 
 impl<'a> WarehouseDomainRepository<'a> {
-    /// 创建域专用仓储。
-    ///
-    /// # 参数
-    /// * `db` - 目标 MongoDB 数据库
-    ///
-    /// # 返回
-    /// 返回仓储实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将领域仓储绑定到目标数据库，供仓库与修订等多集合访问共用。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
 
-    /// 按主键读取未删除仓库。
-    ///
-    /// # 参数
-    /// * `id` - 仓库主键
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配仓库；不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// MongoDB 查询失败时返回错误。
+    /// 按实际主键读取未删除仓库供用例核对，不存在返回 `None`，MongoDB 查询失败保持原错误。
     pub async fn warehouse(&self, id: &str, executor: &mut dyn Executor) -> Result<Option<Warehouse>> {
         self.db.warehouses().find_by_id(id, executor).await
     }
 
-    /// 计算仓库下一个修订序号。
-    ///
-    /// # 参数
-    /// * `warehouse_id` - 仓库主键
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回已有最大修订序号加一；没有修订时返回 `1`。
-    ///
-    /// # 错误
-    /// MongoDB 查询或游标读取失败时返回错误。
+    /// 读取当前仓库最大修订序号并加一，供追加修订；无历史时从 `1` 开始，查询或游标失败直接返回。
     pub async fn next_revision_no(&self, warehouse_id: &str, executor: &mut dyn Executor) -> Result<u32> {
         let revisions = mongo_ops::find_many(
             &self.db.collection::<WarehouseRevision>(WAREHOUSE_REVISIONS),
@@ -544,18 +406,7 @@ impl<'a> WarehouseDomainRepository<'a> {
         Ok(revisions.first().map(|revision| revision.revision.revision_no).unwrap_or(0) + 1)
     }
 
-    /// 读取同一仓库与 SKU 的全部未删除策略。
-    ///
-    /// # 参数
-    /// * `warehouse_id` - 仓库主键
-    /// * `sku_id` - SKU 主键
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回同维度策略，供实体执行启用区间重叠校验。
-    ///
-    /// # 错误
-    /// MongoDB 查询或游标读取失败时返回错误。
+    /// 在原执行器取回同一仓库和 SKU 的全部未删除策略，供实体执行完整启用区间重叠校验；查询或游标失败直接返回。
     pub async fn sku_policies_for_dimensions(
         &self,
         warehouse_id: &WarehouseId,
@@ -575,26 +426,8 @@ impl<'a> WarehouseDomainRepository<'a> {
         .await
     }
 
-    /// 建立「仓库稳定身份 + 首个仓库修订」（跨集合多步骤写入）。
-    ///
-    /// 先把首个修订 ID 链入 `warehouse.stable.current_revision_id`，再依次写入
-    /// `warehouses` 与 `warehouse_revisions`，保证「仓库身份 + 当前修订指针 +
-    /// 修订快照」原子可见（数据模型 §6.3）。**必须收到事务执行器**：本方法
-    /// 不构成原子边界，传入 `NoTransaction` 时两笔写入各自自动提交，中途失败
-    /// 会留下没有修订的仓库；Service 必须通过
-    /// `persistence_core::Transactional::with_transaction` 传入事务会话。
-    ///
-    /// # 参数
-    /// * `warehouse` - 待写入的仓库（首修订链入后写库）
-    /// * `revision` - 待写入的仓库首个修订
-    /// * `executor` - 数据访问执行器，必须位于事务中
-    ///
-    /// # 返回
-    /// 无返回值。成功时两个集合都已写入，且 `warehouse` 的当前修订指针指向 `revision`。
-    ///
-    /// # 错误
-    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射
-    /// 为冲突语义）或 MongoDB 写入失败时返回错误。
+    /// 先把首修订链接为当前修订，再依次写入仓库和修订，使身份、指针与快照原子可见。调用方必须通过 `Transactional::with_transaction` 提供事务执行器；传 `NoTransaction` 时中途失败会留下没有修订的仓库。
+    /// 唯一索引冲突透出 [`persistence_core::Error::DuplicateKey`] 供服务映射，其他 MongoDB 写入失败直接返回。
     pub async fn create_warehouse_with_revision(
         &self,
         warehouse: &mut Warehouse,
@@ -616,22 +449,7 @@ impl<'a> WarehouseDomainRepository<'a> {
 /// 关键词查询单次允许装入 `$in` 的修订 ID 上限（约束单次读取规模）。
 const KEYWORD_REVISION_ID_CAP: usize = 500;
 
-/// 执行通用筛选分页投影查询（三类列表共用；查询语义与返回形状不变）。
-///
-/// # 参数
-/// * `base` - 基集合句柄（用于计数）
-/// * `filter` - 查询条件文档
-/// * `sort` - 排序文档
-/// * `skip` - 跳过行数
-/// * `limit` - 单页条数
-/// * `projection` - 投影文档
-/// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-///
-/// # 返回
-/// 返回当前页投影行与满足筛选条件的总数。
-///
-/// # 错误
-/// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+// 用相同条件及执行器完成三类列表的投影分页和计数；查询、游标或计数失败直接返回，不交付不完整结果。
 async fn search_projected_page<Entity, Row>(
     base: &mongodb::Collection<Entity>,
     filter: Document,
@@ -652,24 +470,14 @@ where
     Ok(PageResult { items, total: total as i64 })
 }
 
-/// 构建排序文档（字段名白名单映射，未命中回落 `created_at` 并追加 `id` 同向 tie-breaker）。
-///
-/// # 参数
-/// * `sort_by` - 排序字段；`None` 或不在白名单内时默认 `created_at`
-/// * `sort_ascending` - 升序为 `true`，降序为 `false`
-/// * `allowed` - 允许的排序字段白名单
-///
-/// # 返回
-/// 返回排序条件文档。
+// 按白名单生成排序，缺省或非法字段回退 `created_at`，追加同向 `id` 打破并列，使分页顺序稳定。
 pub(super) fn sort_doc(sort_by: Option<&str>, sort_ascending: bool, allowed: &[&str]) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
     let field = sort_by.filter(|field| allowed.contains(field)).unwrap_or("created_at");
     doc! { field: direction, "id": direction }
 }
 
-/// 代码 OR 当前修订名称；历史修订命中不能使仓库进入结果。
-///
-/// 名称关联仅读取修订 ID，读取失败向调用方传播。
+// 按仓库代码或当前修订名称匹配关键词，历史修订不算命中。按名称只取未删除修订的 ID；超过 500 项时要求缩小关键词，查询失败直接返回。
 async fn keyword_filter(
     repo: &Repository<'_, Warehouse>,
     filter: &WarehouseFilter,

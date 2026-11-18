@@ -32,19 +32,15 @@ pub struct PortalIdentityService {
 
 impl PortalIdentityService {
     /// 绑定身份领域数据库，不执行外部 I/O。
-    ///
-    /// # 参数
-    /// `db` 为身份集合所在数据库。
-    /// # 返回
     /// 门户身份服务。
-    /// # 错误
-    /// 无。
+    ///
+    /// `db` 为身份集合所在数据库。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 }
 
-/// 内部账号才允许开通、停用和配置外部身份。
+// 开通、停用或配置门户账号前确认当前管理者属于内部账号，不让外部身份执行维护命令。
 fn require_internal_actor(actor: &AuditActor) -> Result<()> {
     if actor.kind() == AccountKind::Admin {
         return Ok(());
@@ -52,7 +48,7 @@ fn require_internal_actor(actor: &AuditActor) -> Result<()> {
     Err(Error::Forbidden("供应商账号管理仅允许内部人员执行".into()))
 }
 
-/// 统一失效错误避免暴露账号或绑定具体状态。
+// 供应商门户会话失效时统一返回安全错误，不暴露究竟是账号还是绑定状态变化。
 fn invalid_session() -> Error {
     Error::Unauthenticated("认证已失效".into())
 }

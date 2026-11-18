@@ -17,11 +17,7 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
 /// 原子导入核对后的供应商回填报价。
-/// # 参数
-/// 当前应用、采购身份、询价与包含任务版本的批量报价。
-/// # 返回
 /// 返回可按原命令恢复的安全回执。
-/// # 错误
 /// 任一行数据、任务、供应资格或需求版本不符时整批拒绝。
 pub async fn import_quotes(
     State(state): State<HttpState>,
@@ -35,11 +31,8 @@ pub async fn import_quotes(
 }
 
 /// 追加当前责任商品的内部报价版本，不隐式修改通用供给。
-/// # 参数
 /// `state`、`actor` 为当前应用及采购，`id` 为询价，`request` 为带版本及任务的报价。
-/// # 返回
 /// 返回安全询价命令回执。
-/// # 错误
 /// 任务、权限、供应资格、报价范围或版本不符时拒绝。
 pub async fn save_quote(
     State(state): State<HttpState>,
@@ -53,11 +46,8 @@ pub async fn save_quote(
 }
 
 /// 保存明确费用的内部收款依据，公开反馈只保留对销售金额及说明。
-/// # 参数
 /// `state`、`actor` 为当前应用及采购，`id` 为询价，`request` 为责任任务和费用内部依据。
-/// # 返回
 /// 返回安全询价命令回执。
-/// # 错误
 /// 任务、费用范围、供应商或付款条件非法时拒绝。
 pub async fn save_fee_basis(
     State(state): State<HttpState>,
@@ -71,11 +61,8 @@ pub async fn save_fee_basis(
 }
 
 /// 读取当前责任范围内明确轮次的内部费用依据。
-/// # 参数
 /// `state`、`actor` 为当前应用及采购，`id` 为询价，`params` 为当前任务及反馈轮次。
-/// # 返回
 /// 返回责任范围内费用收款资料。
-/// # 错误
 /// 权限、当前任务、轮次或范围失效时拒绝。
 pub async fn fee_bases(
     State(state): State<HttpState>,
@@ -91,11 +78,8 @@ pub async fn fee_bases(
 }
 
 /// 在存储读取前后复核当前费用责任、反馈轮次及精确依据附件关系。
-/// # 参数
 /// `state`、`actor` 为当前应用及采购，路径含询价、依据及文件；查询含任务和反馈轮次。
-/// # 返回
 /// 返回禁止缓存及嗅探的附件下载，存储键不进入响应。
-/// # 错误
 /// 当前任务、费用范围、附件关系、文件治理或指纹失效时拒绝。
 pub async fn fee_basis_attachment(
     State(state): State<HttpState>,

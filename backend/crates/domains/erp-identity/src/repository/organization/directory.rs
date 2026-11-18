@@ -18,13 +18,11 @@ use crate::{Error, Result};
 
 impl OrganizationRepository<'_> {
     /// 只读取一个账号在授权时点的有效主属关系。
-    ///
-    /// # 参数
-    /// `user_id` 为明确账号；`at` 与调用方授权时点一致；沿用调用方执行器。
-    /// # 返回
     /// 返回至多两条未删除关系；两条已足以证明主属关系冲突，不读取其他组织集合。
-    /// # 错误
+    ///
     /// 数据库查询或成员事实反序列化失败时返回仓储错误。
+    ///
+    /// `user_id` 为明确账号；`at` 与调用方授权时点一致；沿用调用方执行器。
     pub async fn primary_memberships(
         &self,
         user_id: &str,
@@ -44,12 +42,11 @@ impl OrganizationRepository<'_> {
     }
 
     /// 读取账号当前主属关系及最近一条未来生效关系。
-    /// # 参数
-    /// user_id 为明确账号，at 为解释时点，executor 为调用方原执行器。
-    /// # 返回
     /// 至多两条当前关系及一条最近未来关系，用于完整性和到期边界判断。
-    /// # 错误
+    ///
     /// 查询或反序列化失败时返回仓储错误。
+    ///
+    /// user_id 为明确账号，at 为解释时点，executor 为调用方原执行器。
     pub async fn primary_membership_context(
         &self,
         user_id: &str,
@@ -69,24 +66,22 @@ impl OrganizationRepository<'_> {
         Ok(memberships)
     }
 
-    /// 读取有界组织树，供路径启用检查使用。
-    /// # 参数
-    /// executor 为调用方执行器。
-    /// # 返回
-    /// 当前未删除组织单元，不读取成员或管理关系。
-    /// # 错误
-    /// 超过组织上限或查询失败时拒绝。
+    // 读取有界组织树，供路径启用检查使用。
+    // 当前未删除组织单元，不读取成员或管理关系。
+    //
+    // 超过组织上限或查询失败时拒绝。
+    //
+    // executor 为调用方执行器。
     pub(crate) async fn units(&self, executor: &mut dyn Executor) -> Result<Vec<OrgUnit>> {
         bounded::<OrgUnit>(self.db, ORG_UNITS, doc! {}, executor).await
     }
 
-    /// 读取目录授权所需的组织树和操作人当前关系。
-    /// # 参数
-    /// `actor_id` 为操作人，`at` 为同一授权时点，`executor` 为调用方事务。
-    /// # 返回
-    /// 有界组织树及操作人关系；不预加载其他人员或历史关系。
-    /// # 错误
-    /// 任一索引超过 10000 项或读取失败时整体拒绝。
+    // 读取目录授权所需的组织树和操作人当前关系。
+    // 有界组织树及操作人关系；不预加载其他人员或历史关系。
+    //
+    // 任一索引超过 10000 项或读取失败时整体拒绝。
+    //
+    // `actor_id` 为操作人，`at` 为同一授权时点，`executor` 为调用方事务。
     pub(crate) async fn directory_state(
         &self,
         actor_id: &str,
@@ -101,13 +96,12 @@ impl OrganizationRepository<'_> {
         })
     }
 
-    /// 按账号或明确组织集合读取当前主属关系。
-    /// # 参数
-    /// `ids` 与 `orgs` 至少提供一个，均与数据库条件求交；`at` 与授权时点一致。
-    /// # 返回
-    /// 最多 10000 条当前关系，稳定排序；空身份集合不查库。
-    /// # 错误
-    /// 无限定、输入或结果超限、数据库失败均拒绝，不返回截断结果。
+    // 按账号或明确组织集合读取当前主属关系。
+    // 最多 10000 条当前关系，稳定排序；空身份集合不查库。
+    //
+    // 无限定、输入或结果超限、数据库失败均拒绝，不返回截断结果。
+    //
+    // `ids` 与 `orgs` 至少提供一个，均与数据库条件求交；`at` 与授权时点一致。
     pub(crate) async fn directory_memberships(
         &self,
         ids: Option<&[String]>,
@@ -136,7 +130,7 @@ impl OrganizationRepository<'_> {
     }
 }
 
-/// 有效期条件与 OrgValidity 的半开区间保持一致。
+// 构造授权时点的成员过滤条件，保持开始包含、结束不包含的半开有效期语义。
 fn current_filter(at: Instant) -> Document {
     doc! {
         "valid_from": { "$lte": at.unix_secs() },
@@ -144,7 +138,7 @@ fn current_filter(at: Instant) -> Document {
     }
 }
 
-/// 数据库最多读取上限加一，超限整体拒绝；不先装载全集再裁剪。
+// 对有界组织查询最多读取上限加一条以发现溢出；超限拒绝整次读取，不将截断的组织事实当成完整结果。
 async fn bounded<T: DeserializeOwned + Send + Sync>(
     db: &Database,
     name: &str,
@@ -163,12 +157,11 @@ async fn bounded<T: DeserializeOwned + Send + Sync>(
 
 impl OrganizationRepository<'_> {
     /// 批量读取明确账号当前主属组织的可读名称。
-    /// # 参数
-    /// `ids` 为调用方已授权展示的账号，`at` 为统一查询时点，沿用 `executor`。
-    /// # 返回
     /// 返回账号与有效组织名称；无关系或组织已停用时不补造名称。
-    /// # 错误
+    ///
     /// 查询超限、主属关系冲突或数据库错误时拒绝。
+    ///
+    /// `ids` 为调用方已授权展示的账号，`at` 为统一查询时点，沿用 `executor`。
     pub async fn primary_org_names(
         &self,
         ids: &[String],
@@ -193,7 +186,7 @@ impl OrganizationRepository<'_> {
     }
 }
 
-/// 保留唯一有效主属关系，缺少组织名称时维持未知。
+// 给账号展示补齐唯一有效主属组织的名称；名称未查到时保留未知，不推测部门。
 fn primary_names(
     ids: &[String],
     memberships: &[OrgMembership],

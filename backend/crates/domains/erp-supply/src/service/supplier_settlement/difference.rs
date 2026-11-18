@@ -20,15 +20,8 @@ use crate::repository::supplier_settlement::SupplierSettlementDifferenceFilter;
 use crate::{Error, Result};
 impl SupplierSettlementService {
     /// 分页查询供应商结算差异列表。
-    ///
-    /// # 参数
-    /// * `params` - 查询参数（`statement_item_id`/`status` 扁平筛选）
-    /// * `actor` - 当前认证账号。
-    ///
-    /// # 返回
     /// 功能资格、分页和计数共用同一快照；提交成功后返回分页视图。
-    ///
-    /// # 错误
+    /// 失败条件：
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
     /// * `RepositoryError` - 数据库查询失败
     pub async fn supplier_settlement_difference_list(
@@ -47,13 +40,10 @@ impl SupplierSettlementService {
             .await
     }
 
-    /// 在原读取快照检查功能资格，并使用原执行器读取分页和计数。
-    /// # 参数
-    /// params 为列表条件，actor 为认证账号，executor 为公开入口的原事务执行器。
-    /// # 返回
-    /// 功能资格检查通过后的结算差异分页。
-    /// # 错误
-    /// 授权、参数校验或业务读取失败时返回对应错误。
+    // 在原读取快照检查功能资格，并使用原执行器读取分页和计数。
+    // 功能资格检查通过后的结算差异分页。
+    // 授权、参数校验或业务读取失败时返回对应错误。
+    // params 为列表条件，actor 为认证账号，executor 为公开入口的原事务执行器。
     pub(super) async fn difference_page(
         &self,
         params: &SupplierSettlementDifferenceListParams,
@@ -99,19 +89,10 @@ impl SupplierSettlementService {
     }
 
     /// 先授权结算单，再读取差异、核验归属和版本并准备正式结论。
-    ///
-    /// # 参数
-    /// * `id` - 结算差异主键。
-    /// * `req` - 差异决定请求，含结算单、期望版本和操作身份。
-    /// * `conclusion` - 已规范化的正式结论。
-    /// * `actor` - 当前真实差异处理账号。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
     /// 返回已更新主题摘要的结算单，以及已记入结论但尚未写回的差异。
-    ///
-    /// # 错误
-    /// 差异或所属明细不存在时返回 `NotFound`。版本不一致、差异不属于当前结算单时返回 `ConflictError`。操作人不是差异处理人时返回 `Forbidden`。结算单不可编辑，或结论引用了未登记证据时返回 `BusinessLogicError`。结论记录或仓储读取失败时返回对应错误。
+    /// 差异或所属明细不存在时返回 `NotFound`。版本不一致、差异不属于当前结算单时返回 `ConflictError`。操
+    /// 作人不是差异处理人时返回 `Forbidden`。结算单不可编辑，或结论引用了未登记证据时返回
+    /// `BusinessLogicError`。结论记录或仓储读取失败时返回对应错误。
     pub async fn prepare_difference_decision(
         &self,
         id: &str,
@@ -153,7 +134,7 @@ impl SupplierSettlementService {
         Ok((statement, difference))
     }
 
-    /// 结算单授权后核验差异版本和明细归属。
+    // 结算单授权后核验差异版本和明细归属。
     async fn load_decision_difference(
         &self,
         id: &str,
@@ -180,7 +161,7 @@ impl SupplierSettlementService {
         }
         Ok(difference)
     }
-    /// 确保正式差异结论仅引用该差异已登记的证据。
+    // 确保正式差异结论仅引用该差异已登记的证据。
     async fn ensure_conclusion_evidence(
         &self,
         difference: &SupplierSettlementDifference,
@@ -212,17 +193,10 @@ impl SupplierSettlementService {
     }
 
     /// 同一执行器依次 CAS 结算单和差异，审计仅在两步成功后写入。
-    ///
-    /// # 参数
-    /// * `statement` - 待按 CAS 写回的结算单。
-    /// * `difference` - 待按 CAS 写回的差异。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 无返回值。先写结算单，再写差异。
-    ///
-    /// # 错误
+    /// 先写结算单，再写差异。
     /// 任一步仓储更新失败时返回对应错误。
+    /// `statement`：待按 CAS 写回的结算单。
+    /// `difference`：待按 CAS 写回的差异。
     pub async fn persist_difference_decision(
         &self,
         statement: &mut SupplierSettlementStatement,
@@ -235,15 +209,7 @@ impl SupplierSettlementService {
     }
 }
 /// 将 API 差异决定适配为领域结论类别。
-///
-/// # 参数
-/// * `resolution` - 客户端提交的强类型差异决定
-///
-/// # 返回
 /// 返回实体层用于校验原因、证据和状态推进的结论类别。
-///
-/// # 错误
-/// 不返回错误。
 pub fn difference_conclusion_kind(
     resolution: dto::SettlementDifferenceResolution,
 ) -> SettlementDifferenceConclusionKind {
@@ -260,16 +226,7 @@ pub fn difference_conclusion_kind(
 }
 
 /// 计算差异决定命令指纹。
-///
-/// # 参数
-/// * `req` - 原始差异决定请求
-/// * `conclusion` - 已由实体值对象规范化的正式结论
-///
-/// # 返回
 /// 返回不受证据输入顺序和重复项影响的稳定 SHA-256 指纹。
-///
-/// # 错误
-/// 不返回错误。
 pub fn difference_decision_fingerprint(
     req: &SettlementDifferenceDecisionRequest,
     conclusion: &SettlementDifferenceConclusion,
@@ -287,15 +244,7 @@ pub fn difference_decision_fingerprint(
 }
 
 /// 从结算差异实体构造响应视图。
-///
-/// # 参数
-/// * `difference` - 结算差异实体
-///
-/// # 返回
 /// 返回不含补证列表的差异响应视图。
-///
-/// # 错误
-/// 不返回错误。
 pub fn settlement_difference_view(
     difference: SupplierSettlementDifference,
 ) -> SupplierSettlementDifferenceView {

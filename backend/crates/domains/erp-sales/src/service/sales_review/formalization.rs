@@ -17,38 +17,29 @@ use crate::{Error, Result};
 /// 销售版本聚合载体（版本头 + 公共行 + 子类型行）。
 pub(super) type RevisionAggregate = SalesOrderRevisionAggregate;
 
-/// 汇总版本聚合的含税金额（取公共行合计；与版本头金额一致由实体保证）。
-///
-/// # 参数
-/// * `revision` - 版本聚合
-///
-/// # 返回
-/// 返回公共行含税合计；没有公共行时返回零。
-///
-/// # 错误
-/// 函数体不产生 `Err`。
-///
-/// # Panics
-/// `Amount::from_str("0.00")` 失败时 panic；该字面量应为合法静态零值。
+// 正式变更交给后续用例前汇总公共行含税金额；实体保证与版本头合计一致，无行时取零。
+// 返回公共行含税合计；没有公共行时返回零。
+//
+// # Panics
+// `Amount::from_str("0.00")` 失败时 panic；该字面量应为合法静态零值。
+//
+// 输入约定：
+// - `revision`：版本聚合
 pub(super) fn revision_gross(revision: &RevisionAggregate) -> Result<Amount> {
     let zero = Amount::from_str("0.00").expect("静态零值必须合法");
     Ok(revision.lines.iter().fold(zero, |acc, line| acc.checked_add(line.gross_amount)))
 }
 
-/// 从变更提交构建正式版本聚合（§8.1.3 变更生效）。
-///
-/// # 参数
-/// * `order` - 销售单
-/// * `submission` - 变更提交
-/// * `submission_lines` - 变更提交行
-/// * `revision_no` - 目标版本号（既有最大版本号 + 1）
-/// * `effective_at` - 生效时间
-///
-/// # 返回
-/// 返回版本聚合。
-///
-/// # 错误
-/// 行字段组缺失或版本字段校验失败时返回错误。
+// 销售变更生效时，用本轮冻结提交的字段组构建下一个正式版本，并把当前生效版本记录为前版依据。
+// 返回版本聚合。
+// 行字段组缺失或版本字段校验失败时返回错误。
+//
+// 输入约定：
+// - `order`：销售单
+// - `submission`：变更提交
+// - `submission_lines`：变更提交行
+// - `revision_no`：目标版本号（既有最大版本号 + 1）
+// - `effective_at`：生效时间
 pub(super) fn build_change_revision(
     order: &SalesOrder,
     submission: &SalesChangeSubmission,

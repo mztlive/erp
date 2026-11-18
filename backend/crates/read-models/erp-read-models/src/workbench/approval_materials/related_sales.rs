@@ -29,18 +29,17 @@ use crate::sales_center::materials::repository::revision_lines;
 use crate::sales_center::materials::revision_materials;
 use crate::{Error, Result};
 
-/// 在采购提交原事务冻结准确销售版本与材料，不依赖采购人的全局销售/文件权限。
-///
-/// # 参数
-/// * `db` - 当前数据库。
-/// * `snapshot` - 本次采购提交快照。
-/// * `executor` - 原提交事务执行器。
-///
-/// # 返回
-/// 返回来源销售修订的展示快照，以及成功读到的材料文件。材料按 `material_unavailable` 关闭时仍返回展示，并写明暂不可读。
-///
-/// # 错误
-/// 来源修订、提交或行校验失败，以及材料读取中未被关闭的错误，原样返回。
+// 读取采购审批冻结销售资料时，在采购提交原事务冻结准确销售版本与材料，不依赖采购人的全局销售/文件权限。
+//
+// 调用参数：
+// * `db` - 当前数据库。
+// * `snapshot` - 本次采购提交快照。
+// * `executor` - 原提交事务执行器。
+//
+// 返回来源销售修订的展示快照，以及成功读到的材料文件。材料按 `material_unavailable` 关闭时仍返回展示，并写明暂不可读。
+//
+// 失败边界：
+// 来源修订、提交或行校验失败，以及材料读取中未被关闭的错误，原样返回。
 pub(super) async fn capture(
     db: &Database,
     snapshot: &ApprovalSubjectSnapshot,
@@ -69,16 +68,15 @@ pub(super) async fn capture(
     Ok((display, files))
 }
 
-/// 历史材料单独关闭；来源版本与摘要仍由严格读取证明，基础设施故障继续传播。
-///
-/// # 参数
-/// * `error` - 读取修订材料时的错误。
-///
-/// # 返回
-/// `NotFound`、`ConflictError`、`Forbidden`、`ValidationError` 与 `Logic` 视为材料不可用，返回 `Ok(())`。
-///
-/// # 错误
-/// 其余错误原样返回。
+// 处理采购审批冻结销售资料时，历史材料单独关闭；来源版本与摘要仍由严格读取证明，基础设施故障继续传播。
+//
+// 调用参数：
+// * `error` - 读取修订材料时的错误。
+//
+// `NotFound`、`ConflictError`、`Forbidden`、`ValidationError` 与 `Logic` 视为材料不可用，返回 `Ok(())`。
+//
+// 失败边界：
+// 其余错误原样返回。
 pub(in crate::workbench) fn material_unavailable(error: Error) -> Result<()> {
     match error {
         Error::NotFound(_)
@@ -90,7 +88,7 @@ pub(in crate::workbench) fn material_unavailable(error: Error) -> Result<()> {
     }
 }
 
-/// 按本次采购提交行的稳定销售行关系批量解析来源修订。
+// 依据本次采购提交行的稳定销售行关系批量解析来源修订。
 async fn source_revisions(
     db: &Database,
     snapshot: &ApprovalSubjectSnapshot,
@@ -136,7 +134,7 @@ async fn source_revisions(
     Ok(revisions)
 }
 
-/// 只读取订单当前指针锁定的正式提交，并在原 Executor 中证明快照版本关系。
+// 处理采购审批冻结销售资料的版本事实时，仅读取订单当前指针锁定的正式提交，并在原 Executor 中证明快照版本关系。
 async fn source_submission(
     db: &Database,
     order: &PurchaseOrder,
@@ -162,7 +160,7 @@ async fn source_submission(
     Ok(submission)
 }
 
-/// 采购单的当前审批版本必须仍对应待冻结的快照，缺指针时不得回退历史提交。
+// 处理采购审批冻结销售资料的版本事实时，采购单的当前审批版本必须仍对应待冻结的快照，缺指针时不得回退历史提交。
 fn current_submission_id(
     order_version: u32,
     subject_version: u32,
@@ -176,7 +174,7 @@ fn current_submission_id(
         .ok_or_else(|| Error::ConflictError("采购审批缺少当前正式提交".into()))
 }
 
-/// 验证跨快照的提交身份与正式序号，提交可用状态由采购实体规则判定。
+// 处理采购审批冻结销售资料的版本事实时，检查跨快照的提交身份与正式序号，提交可用状态由采购实体规则判定。
 fn validate_submission(
     order_id: &PurchaseOrderId,
     submission_id: &PurchaseOrderSubmissionId,
@@ -192,7 +190,7 @@ fn validate_submission(
     submission.ensure_pending().map_err(|_| Error::ConflictError("采购审批正式提交已失效".into()))
 }
 
-/// 商品行必须准确引用同一稳定销售行的实物版本；费用行不制造来源行。
+// 校验采购审批冻结销售资料时，商品行必须准确引用同一稳定销售行的实物版本；费用行不制造来源行。
 fn validate_source_lines(
     lines: &[PurchaseOrderSubmissionLine],
     sources: &[SalesOrderRevisionLine],
@@ -215,7 +213,7 @@ fn validate_source_lines(
     Ok(())
 }
 
-/// 用不可变正式销售修订读取完整行，再按审批摘要上限截断。
+// 生成采购审批冻结销售资料视图时，用不可变正式销售修订读取完整行，再按审批摘要上限截断。
 async fn revision_display(
     db: &Database,
     revision: &SalesOrderRevision,
@@ -244,7 +242,7 @@ async fn revision_display(
     })
 }
 
-/// 成交数量、含税销售单价及行金额均来自同一准确正式版本，不回退目录参考价。
+// 处理采购审批冻结销售资料时，成交数量、含税销售单价及行金额均来自同一准确正式版本，不回退目录参考价。
 fn sales_brief_line(
     line: &SalesOrderRevisionLine,
     goods: &[SalesOrderGoodsServiceLineRevision],
@@ -266,7 +264,7 @@ fn sales_brief_line(
     })
 }
 
-/// 来源销售只展示该修订保存的客户、金额、合同及明细，不查当前草稿。
+// 生成采购审批冻结销售资料视图时，来源销售只展示该修订保存的客户、金额、合同及明细，不查当前草稿。
 fn revision_brief(revision: &SalesOrderRevision, mut lines: Vec<BriefLine>) -> Result<ApprovalBriefSource> {
     let more_count = u32::try_from(lines.len().saturating_sub(BRIEF_LINE_LIMIT))
         .map_err(|_| Error::ValidationError("来源销售明细数量超出允许范围".into()))?;

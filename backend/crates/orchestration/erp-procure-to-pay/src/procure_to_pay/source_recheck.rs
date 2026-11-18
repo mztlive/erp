@@ -12,19 +12,11 @@ use persistence_core::Executor;
 
 use crate::{Error, Result};
 
-/// 确认采购不受来源销售变更影响。
-///
-/// # 参数
-/// * `db` - 业务数据库
-/// * `order` - 已持久化当前提交或版本的采购单
-/// * `message` - 受影响时返回给用户的下一步说明
-/// * `executor` - 调用方事务执行器
-///
-/// # 返回
-/// 采购引用当前销售版本或未受影响时返回 `Ok(())`。
-///
-/// # 错误
-/// 来源销售单不存在、覆盖事实不完整、仓储失败，或采购受影响时返回错误。
+// 确认采购不受来源销售变更影响。
+//
+// `order` 为已持久化当前提交或版本的采购单；`message` 为受影响时返回给用户的下一步说明；沿用原事务的执行器。
+//
+// 采购引用当前销售版本或未受影响时返回 `Ok(())`。来源销售单不存在、覆盖事实不完整、仓储失败，或采购受影响时返回错误。
 pub(super) async fn ensure_source_unaffected(
     db: &Database,
     order: &PurchaseOrder,
@@ -44,12 +36,12 @@ pub(super) async fn ensure_source_unaffected(
     reject_if_affected(&state, order, message)
 }
 
-/// 采购是否仍引用销售当前版本；是则无需重算覆盖。
+// 采购是否仍引用销售当前版本；是则无需重算覆盖。
 fn references_current(current_revision_id: Option<&str>, order: &PurchaseOrder) -> bool {
     current_revision_id == Some(order.sales_order_revision_id.as_ref())
 }
 
-/// 按当前事实判定，采购受影响时拒绝并返回下一步说明。
+// 按当前事实判定，采购受影响时拒绝并返回下一步说明。
 fn reject_if_affected(state: &PurchaseSourceState, order: &PurchaseOrder, message: &str) -> Result<()> {
     if state.impact_of(&order.base.id).is_some() {
         return Err(Error::ConflictError(message.to_string()));
@@ -130,7 +122,7 @@ mod tests {
         }
     }
 
-    /// 引用当前销售版本时直接通过，不重算覆盖。
+    // 引用当前销售版本时直接通过，不重算覆盖。
     #[test]
     fn current_revision_skips_impact_check() {
         let order = purchase("po-1");
@@ -140,7 +132,7 @@ mod tests {
         assert!(!references_current(None, &order));
     }
 
-    /// 引用旧版本时只有受影响才拒绝，并返回调用方给出的下一步说明。
+    // 引用旧版本时只有受影响才拒绝，并返回调用方给出的下一步说明。
     #[test]
     fn old_revision_is_rejected_only_when_affected() {
         let order = purchase("po-1");

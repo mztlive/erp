@@ -30,16 +30,12 @@ impl fmt::Debug for SelectionRecipient {
 }
 
 impl SelectionRecipient {
-    /// 构造并规范化完整收件信息。
-    ///
-    /// # 参数
-    /// * `data` - 请求提供的姓名、电话及地址
-    ///
-    /// # 返回
+    /// 提交需要配送的选择前校验并规范化收件资料，避免把无法联系的地址冻结进方案。
     /// 返回去除字段首尾空白的收件信息。
-    ///
-    /// # 错误
     /// 任一字段为空、超长，或电话不是 7 到 20 位数字及可选前导加号时拒绝。
+    ///
+    /// 输入约定：
+    /// - `data`：请求提供的姓名、电话及地址
     pub fn new(data: Self) -> Result<Self> {
         let phone = normalize_required_text(data.phone, "收件电话不能为空", 21, "收件电话过长")?;
         let digits = phone.strip_prefix('+').unwrap_or(&phone);

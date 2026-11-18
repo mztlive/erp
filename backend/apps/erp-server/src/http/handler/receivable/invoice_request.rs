@@ -10,11 +10,10 @@ use erp_read_models::finance::receivable::invoice_request::InvoiceRequestView;
 use super::*;
 use crate::wiring::receivable_posting_ports;
 
-/// 查询开票申请列表。
+/// 按请求条件查询开票申请列表。
 ///
 /// DataScope v2：按关联销售当前负责人、申请人与当前开票处理人分别查询；
 /// 不改变正式开票准入，申请金额为行级事实始终返回。
-/// # 返回
 /// 返回范围分页视图（`items`/`total`/`summary`/`scope_version`）。负责销售候选不随列表返回。
 pub async fn invoice_request_list(
     State(state): State<HttpState>,
@@ -29,7 +28,6 @@ pub async fn invoice_request_list(
 }
 
 /// 查询开票申请详情（DataScope v2 范围裁剪行）。
-/// # 返回
 /// 返回范围裁剪后的申请行；不可见与不存在统一为 NotFound。
 pub async fn invoice_request_detail(
     State(state): State<HttpState>,
@@ -44,7 +42,6 @@ pub async fn invoice_request_detail(
 }
 
 /// 查询可申请开票额度。
-/// # 返回
 /// 返回已授权业务用例的结果；失败保留既有错误类型。
 pub async fn invoice_request_amounts(
     State(state): State<HttpState>,
@@ -59,7 +56,6 @@ pub async fn invoice_request_amounts(
 }
 
 /// 提交开票申请。
-/// # 返回
 /// 返回已授权业务用例的结果；失败保留既有错误类型。
 pub async fn invoice_request_submit(
     State(state): State<HttpState>,
@@ -77,14 +73,7 @@ pub async fn invoice_request_submit(
 }
 
 /// 保存草稿或已驳回开票申请的修改。
-/// # 参数
-/// * `state` - 应用资源。
-/// * `actor` - 已认证的原申请人。
-/// * `id` - 当前申请。
-/// * `req` - 当前版本与待保存内容。
-/// # 返回
 /// 返回保存后的申请；已驳回状态保持，保存不占用开票额度。
-/// # 错误
 /// 权限、原申请人、版本、状态或内容不合法时拒绝。
 pub async fn invoice_request_update(
     State(state): State<HttpState>,
@@ -103,7 +92,6 @@ pub async fn invoice_request_update(
 }
 
 /// 撤回开票申请。
-/// # 返回
 /// 返回已授权业务用例的结果；失败保留既有错误类型。
 pub async fn invoice_request_cancel(
     State(state): State<HttpState>,

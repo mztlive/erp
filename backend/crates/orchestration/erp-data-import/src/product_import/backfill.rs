@@ -16,19 +16,13 @@ use super::row::RowImportOutcome;
 use crate::{Error, Result};
 
 impl ProductImportProcess {
-    /// 已存在的商品若还没有图片，则用本行图片补齐。
-    ///
-    /// # 参数
-    /// * `product` - 已存在商品
-    /// * `cells` - 当前行单元格
-    /// * `media_source` - 行媒体来源（清单复用或源文件提取）
-    /// * `actor` - 审计操作人
-    ///
-    /// # 返回
-    /// 补图成功、无需补图或仍跳过时的行结果。
-    ///
-    /// # 错误
-    /// 读取现有商品、上传图片或更新失败时返回错误。
+    // 已存在的商品若还没有图片，则用本行图片补齐。
+    //
+    // `product`：已存在商品；`media_source`：行媒体来源（清单复用或源文件提取）。
+    //
+    // 补图成功、无需补图或仍跳过时的行结果。
+    //
+    // 读取现有商品、上传图片或更新失败时返回错误。
     pub(super) async fn import_existing_with_images(
         &self,
         product: Product,
@@ -137,18 +131,13 @@ fn already_imported(product_id: String) -> RowImportOutcome {
         .with_skipped(true)
 }
 
-/// 把当前启用 SKU 转成编辑请求中的保留行。
-///
-/// # 参数
-/// * `skus` - 商品下 SKU
-/// * `revisions` - 当前修订
-/// * `main_image` - 可选覆盖到第一个 SKU 的主图
-///
-/// # 返回
-/// 返回可提交的 SKU 行。
-///
-/// # 错误
-/// 规格签名无法解析或没有启用 SKU 时返回错误。
+// 把当前启用 SKU 转成编辑请求中的保留行。
+//
+// `skus`：商品下 SKU；`revisions`：当前修订；`main_image`：可选覆盖到第一个 SKU 的主图。
+//
+// 返回可提交的 SKU 行。
+//
+// 规格签名无法解析或没有启用 SKU 时返回错误。
 pub(super) fn sku_inputs_with_main_image(
     skus: &[Sku],
     revisions: &HashMap<String, SkuRevision>,
@@ -213,7 +202,7 @@ mod tests {
 
     use super::*;
 
-    /// 既有商品补图和新增同 SPU 的 SKU 必须保留现存 SKU 的三价与集采门槛。
+    // 验证：既有商品补图和新增同 SPU 的 SKU 必须保留现存 SKU 的三价与集采门槛。
     #[test]
     fn image_backfill_keeps_existing_company_price_facts() {
         let sku = Sku::new(

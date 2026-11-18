@@ -73,16 +73,9 @@ impl CustomerAccountFilter {
 }
 
 impl Default for CustomerAccountFilter {
-    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回第 1 页、每页 20 条的空筛选条件。
-    ///
-    /// # 错误
-    /// 无。
+    // 初始化客户账户列表的默认筛选，从第 1 页开始每页 20 条，其余筛选留空。
+    //
+    // 返回第 1 页、每页 20 条的空筛选条件。
     fn default() -> Self {
         Self {
             keyword: None,
@@ -100,21 +93,12 @@ impl Default for CustomerAccountFilter {
 }
 
 impl QueryFilter for CustomerAccountFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// `keyword` 为 `Some` 时对 `customer_no` 做忽略大小写的字面量正则；若同时给出
-    /// `keyword_party_ids`，再与 `party_id` 的 `$in` 组成 `$or`。`keyword` 为 `None`
-    /// 时忽略 `keyword_party_ids`。`party_id`、`party_ids`、`customer_ids`、`status`
-    /// 为 `Some` 时分别写入对应条件；`party_id` 与 `party_ids` 都存在时后者覆盖前者。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 把客户账户筛选转换为 MongoDB 查询条件，并排除软删除记录，供列表和计数共用。
+    //
+    // `keyword` 为 `Some` 时对 `customer_no` 做忽略大小写的字面量正则；若同时给出
+    // `keyword_party_ids`，再与 `party_id` 的 `$in` 组成 `$or`。`keyword` 为 `None`
+    // 时忽略 `keyword_party_ids`。`party_id`、`party_ids`、`customer_ids`、`status`
+    // 为 `Some` 时分别写入对应条件；`party_id` 与 `party_ids` 都存在时后者覆盖前者。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(keyword) = self.keyword.as_deref() {
@@ -144,18 +128,11 @@ impl QueryFilter for CustomerAccountFilter {
 }
 
 impl Pagination for CustomerAccountFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// 原样返回本筛选条件的 `page`，并把 `page_size` 从 `u32` 转为 `u64`，不把小于 1 的页码归一。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 提供客户账户列表的页码和每页条数，供分页查询计算读取窗口。
+    //
+    // 原样返回本筛选条件的 `page`，并把 `page_size` 从 `u32` 转为 `u64`，不把小于 1 的页码归一。
+    //
+    // 返回 `(page, page_size)` 元组。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -168,12 +145,9 @@ pub trait CustomerAccountRepositoryExt {
     ///
     /// # 参数
     /// * `customer_ids` - 客户 ID 集合；空集合不访问数据库
-    /// * `executor` - 数据访问执行器
     ///
-    /// # 返回
     /// 返回实际存在的客户编号映射；停用但未删除客户仍保留编号，软删除或缺失不补行。
     ///
-    /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
     async fn customer_numbers_by_ids(
         &self,
@@ -187,12 +161,9 @@ pub trait CustomerAccountRepositoryExt {
     ///
     /// # 参数
     /// * `customer_ids` - 客户角色 ID
-    /// * `executor` - 数据访问执行器
     ///
-    /// # 返回
     /// 返回未删除且 ID 命中的客户；缺失或已软删除的 ID 不补行。
     ///
-    /// # 错误
     /// MongoDB 查询失败时返回错误。
     async fn find_accounts_by_ids(
         &self,
@@ -206,10 +177,8 @@ pub trait CustomerAccountRepositoryExt {
     /// * `id` - 客户角色 ID
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回
     /// 返回匹配的未删除客户；不存在时返回 `None`。
     ///
-    /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
     async fn find_customer(&self, id: &str, executor: &mut dyn Executor) -> Result<Option<CustomerAccount>>;
 
@@ -223,10 +192,8 @@ pub trait CustomerAccountRepositoryExt {
     /// * `filter` - 筛选与分页条件
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回
     /// 返回当前页投影行与满足筛选条件的总数。
     ///
-    /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
     async fn search_customer_accounts(
         &self,
@@ -241,10 +208,8 @@ pub trait CustomerAccountRepositoryExt {
     /// * `party_id` - 共用企业主体 ID
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回
     /// 返回匹配的未删除客户角色；无匹配时返回 `None`。
     ///
-    /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
     async fn find_by_party(
         &self,
@@ -258,10 +223,8 @@ pub trait CustomerAccountRepositoryExt {
     /// * `party_id` - 稳定主体 ID
     /// * `executor` - 调用方执行器，可位于事务中
     ///
-    /// # 返回
     /// 已存在的客户身份；不存在时返回 `None`。
     ///
-    /// # 错误
     /// 数据库读取失败。
     async fn find_by_party_including_deleted(
         &self,
@@ -273,12 +236,9 @@ pub trait CustomerAccountRepositoryExt {
     ///
     /// # 参数
     /// * `party_ids` - 主体 ID 集合
-    /// * `executor` - 数据访问执行器
     ///
-    /// # 返回
     /// 返回未删除客户的 ID；无命中时为空集合，不扩大范围。
     ///
-    /// # 错误
     /// 数据库查询失败时返回错误。
     async fn matching_ids_by_parties(
         &self,
@@ -416,19 +376,10 @@ pub struct CustomerAssignmentFilter {
 }
 
 impl QueryFilter for CustomerAssignmentFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// `customer_id`、`user_id`、`assignment_role` 为 `Some` 时分别按客户、销售人员与归属角色精确匹配；
-    /// `None` 不写入对应字段。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 把客户归属筛选转换为 MongoDB 查询条件，并排除软删除记录，供列表和计数共用。
+    //
+    // `customer_id`、`user_id`、`assignment_role` 为 `Some` 时分别按客户、销售人员与归属角色精确匹配；
+    // `None` 不写入对应字段。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(customer_id) = &self.customer_id {
@@ -445,18 +396,11 @@ impl QueryFilter for CustomerAssignmentFilter {
 }
 
 impl Pagination for CustomerAssignmentFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// 原样返回本筛选条件的 `page`，并把 `page_size` 从 `u32` 转为 `u64`，不把小于 1 的页码归一。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 提供客户归属列表的页码和每页条数，供分页查询计算读取窗口。
+    //
+    // 原样返回本筛选条件的 `page`，并把 `page_size` 从 `u32` 转为 `u64`，不把小于 1 的页码归一。
+    //
+    // 返回 `(page, page_size)` 元组。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -473,10 +417,8 @@ pub trait CustomerAssignmentRepositoryExt {
     /// * `as_of` - 归属有效期判定业务日期
     /// * `executor` - 事务或无事务执行器
     ///
-    /// # 返回
     /// 返回未删除客户的生效主责关系。
     ///
-    /// # 错误
     /// 查询或归属关系反序列化失败向上传播。
     async fn current_owners(
         &self,
@@ -497,10 +439,8 @@ pub trait CustomerAssignmentRepositoryExt {
     /// * `as_of` - 业务日期
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回
     /// 命中当前有效 OWNER 或 COLLABORATOR 归属时返回 `true`。
     ///
-    /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
     async fn has_active_assignment_for_customer_user(
         &self,
@@ -516,10 +456,8 @@ pub trait CustomerAssignmentRepositoryExt {
     /// * `id` - 客户归属 ID
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回
     /// 返回匹配的未删除归属；不存在时返回 `None`。
     ///
-    /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
     async fn find_assignment(
         &self,
@@ -536,10 +474,8 @@ pub trait CustomerAssignmentRepositoryExt {
     /// * `customer_id` - 客户角色 ID
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回
     /// 返回该客户全部未删除归属。
     ///
-    /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
     async fn list_for_customer(
         &self,
@@ -553,10 +489,8 @@ pub trait CustomerAssignmentRepositoryExt {
     /// * `customer_id` - 客户角色 ID
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回
     /// 返回最近生效的归属优先的完整历史。
     ///
-    /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
     async fn list_history_for_customer(
         &self,
@@ -571,10 +505,8 @@ pub trait CustomerAssignmentRepositoryExt {
     /// * `as_of` - 业务日期
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回
     /// 返回指定日期生效的 OWNER 与 COLLABORATOR 归属。
     ///
-    /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
     async fn list_active_for_customers(
         &self,
@@ -590,10 +522,8 @@ pub trait CustomerAssignmentRepositoryExt {
     /// * `as_of` - 业务日期
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回
     /// 返回当前 OWNER；没有生效负责人时返回 `None`。
     ///
-    /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
     async fn find_current_owner(
         &self,
@@ -611,10 +541,8 @@ pub trait CustomerAssignmentRepositoryExt {
     /// * `filter` - 筛选与分页条件
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回
     /// 返回当前页投影行与满足筛选条件的总数。
     ///
-    /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
     async fn search_customer_assignments(
         &self,
@@ -632,10 +560,8 @@ pub trait CustomerAssignmentRepositoryExt {
     /// * `as_of` - 业务日期
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回
     /// 返回该业务日期生效的归属行。
     ///
-    /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
     async fn find_active_assignments_for_user(
         &self,
@@ -655,10 +581,8 @@ pub trait CustomerAssignmentRepositoryExt {
     /// * `as_of` - 业务日期边界，由 Service 显式注入
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回
     /// 返回排序去重后的客户 ID；无生效归属时为空集合。
     ///
-    /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
     ///
     /// # 约束
@@ -813,12 +737,9 @@ pub trait CustomerProfileCommandRepositoryExt {
     ///
     /// # 参数
     /// * `idempotency_key` - 客户端生成且重试时保持不变的幂等键
-    /// * `executor` - 数据访问执行器
     ///
-    /// # 返回
     /// 返回已提交的稳定命令结果；不存在时返回 `None`。
     ///
-    /// # 错误
     /// MongoDB 查询失败时返回错误。
     async fn find_by_idempotency_key(
         &self,

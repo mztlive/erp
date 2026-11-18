@@ -11,11 +11,7 @@ use crate::http::state::HttpState;
 use crate::wiring::scope_configuration;
 
 /// 读取人员配置及有效操作。
-/// # 参数
-/// 人员、当前身份及应用依赖。
-/// # 返回
 /// 配置与策略版本。
-/// # 错误
 /// 越权或读取失败使用统一信封。
 pub async fn list(
     State(state): State<HttpState>,
@@ -34,11 +30,7 @@ pub async fn list(
 }
 
 /// 保存所选操作的完整附加授权；旧表达式须显式确认转换。
-/// # 参数
-/// 人员、完整选择、预期版本及当前身份。
-/// # 返回
 /// 原子保存成功。
-/// # 错误
 /// 越权、无资格、目标失效及冲突拒绝整次操作。
 pub async fn save(
     State(state): State<HttpState>,

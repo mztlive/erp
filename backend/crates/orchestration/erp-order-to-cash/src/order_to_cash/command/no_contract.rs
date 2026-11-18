@@ -19,17 +19,10 @@ use super::super::authorization::SalesCommandAccess;
 use crate::{Error, Result};
 
 impl SalesOrderCommandProcess {
-    /// 按原命令顺序解析编辑内容并接纳首次合同关联。
-    ///
-    /// # 参数
-    /// * `access` / `order` - 当前命令授权及已授权稳定对象
-    /// * `input` - 所选合同、客户及可编辑草稿
-    /// * `actor` / `require_editable` - 当前用户及提交前的状态检查要求
-    /// * `executor` - 调用方读取事务执行器
-    /// # 返回
-    /// 返回已准备的稳定对象与完整草稿，不执行写入。
-    /// # 错误
-    /// 关系、编辑状态或合同上下文不一致时保留原首错順序。
+    // 按原命令顺序解析编辑内容并接纳首次合同关联。
+    //
+    // `access` / `order` 为当前命令授权及已授权稳定对象；`input` 为所选合同、客户及可编辑草稿；`actor` / `require_editable` 为当前用户及提交前的状态检查要求；
+    // `executor` 为调用方读取事务执行器。返回已准备的稳定对象与完整草稿，不执行写入。关系、编辑状态或合同上下文不一致时保留原首错順序。
     pub(super) async fn prepare_sales_edit(
         &self,
         access: &SalesCommandAccess,
@@ -62,16 +55,11 @@ impl SalesOrderCommandProcess {
         Ok((order, draft))
     }
 
-    /// 解析所选合同，或按客户主体现行资料冻结无合同销售草稿。
-    ///
-    /// # 参数
-    /// * `access` / `executor` - 调用方授权与执行器
-    /// * `contract_id` / `customer_id` - 所选业务关系
-    /// * `editable` - 可编辑行和约定条款
-    /// # 返回
-    /// 返回客户、结算主体及服务端完整草稿。
-    /// # 错误
-    /// 客户缺失、停用、版本缺失或非法条款时拒绝。
+    // 解析所选合同，或按客户主体现行资料冻结无合同销售草稿。
+    //
+    // `access` / `executor` 为调用方授权与执行器；`contract_id` / `customer_id` 为所选业务关系；`editable` 为可编辑行和约定条款。
+    //
+    // 返回客户、结算主体及服务端完整草稿。客户缺失、停用、版本缺失或非法条款时拒绝。
     pub(super) async fn resolve_sales_command_draft(
         &self,
         access: &SalesCommandAccess,
@@ -113,15 +101,11 @@ impl SalesOrderCommandProcess {
         Ok((CustomerAccountId::new(customer.base.id), settlement_id, draft))
     }
 
-    /// 在建单原事务中验证并关联首次凭证，供详情与审批材料授权读取。
-    ///
-    /// # 参数
-    /// * `db` / `authorization` / `executor` - 原建单授权及事务
-    /// * `order` / `actor` - 待创建稳定单据及当前用户
-    /// # 返回
-    /// 原子创建全部凭证与单据的关联。
-    /// # 错误
-    /// 资产缺失、非 PDF/图片、归属未授权或关联保存失败时拒绝。
+    // 在建单原事务中验证并关联首次凭证，供详情与审批材料授权读取。
+    //
+    // `db` / `authorization` / `executor` 为原建单授权及事务；`order` / `actor` 为待创建稳定单据及当前用户。
+    //
+    // 原子创建全部凭证与单据的关联。资产缺失、非 PDF/图片、归属未授权或关联保存失败时拒绝。
     pub(super) async fn persist_creation_evidence(
         db: &Database,
         approvals: &dyn ApprovalRuntimePort,

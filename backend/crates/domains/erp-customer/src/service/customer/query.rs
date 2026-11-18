@@ -22,15 +22,13 @@ use crate::repository::prelude::*;
 use crate::repository::scope::authorized_customer;
 
 impl CustomerService {
-    /// 分页查询客户角色列表。
+    /// 按操作人的可见范围查询客户目录，并返回范围版本，供后续页面检测授权或客户数据是否变化。
     ///
     /// 授权、筛选和计数在同一查询快照中完成。负责销售候选不由本接口生产。
     ///
     /// # 参数
     /// * `params` - 查询参数，含范围版本与组织筛选
-    /// * `actor` - 已认证操作人
     ///
-    /// # 返回
     /// 返回分页视图及 `scope_summary`、`as_of` 与权限／组织／范围版本。
     ///
     /// # 错误
@@ -65,7 +63,7 @@ impl CustomerService {
             .await
     }
 
-    /// 在同一快照内读取列表、复核请求版本并验证交付版本。
+    // 在列表读取阶段校验请求携带的范围版本，并在交付前重新验证结果版本，避免拼接不同范围的数据。
     async fn list_stage(
         &self,
         query: CustomerListQuery,
@@ -85,13 +83,11 @@ impl CustomerService {
         Ok(to_list_view(snapshot))
     }
 
-    /// 查询客户角色详情（客户 + 主体身份 + 当前生效 OWNER）。
+    /// 读取单个客户的账户、往来主体身份和当前负责人，供客户详情展示；结果交付前复核授权。
     ///
     /// # 参数
     /// * `id` - 客户角色 ID
-    /// * `actor` - 已认证操作人
     ///
-    /// # 返回
     /// 返回客户详情视图。
     ///
     /// # 错误
@@ -100,7 +96,6 @@ impl CustomerService {
     ///
     /// 动作未授权或详情读取失败时返回对应错误。
     ///
-    /// # 关键业务约束
     /// 详情必须独立重验当前权限；历史参与只补充读取。
     pub async fn customer_detail(&self, id: &str, actor: &AuditActor) -> Result<CustomerDetailView> {
         let service = self.clone();
@@ -114,7 +109,7 @@ impl CustomerService {
             .await
     }
 
-    /// 同一读取阶段完成完整授权过滤、详情水合和交付检查。
+    // 在一次读取中应用客户授权条件、补齐详情字段并检查交付凭证，保证展示范围与读取时一致。
     async fn detail_stage(
         &self,
         id: &str,
@@ -140,7 +135,7 @@ impl CustomerService {
         Ok(view)
     }
 
-    /// 装载详情展示字段，不解释数据范围。
+    /// 为已按范围筛选的客户装配详情展示字段；由调用方持有并复核读取资格。
     ///
     /// HTTP 详情入口必须先调用 `customer_detail`；跨域事实端口在入口已证明对象资格后可调用本方法。
     ///
@@ -148,13 +143,10 @@ impl CustomerService {
     /// * `id` - 客户角色 ID
     /// * `executor` - 原业务事务或读取阶段执行器。
     ///
-    /// # 返回
     /// 返回客户详情视图。
     ///
-    /// # 错误
     /// 客户不存在时返回 `NotFound`。主体、归属或账号读取失败时返回对应错误。
     ///
-    /// # 关键业务约束
     /// 本方法不解释权限，避免仓储按登录人推断范围。
     pub async fn load_customer_detail(
         &self,
@@ -170,7 +162,7 @@ impl CustomerService {
         self.detail_view(account, BusinessDate::today(), executor).await
     }
 
-    /// 在原执行器补充主体、有效负责人及姓名，不开启新读取阶段。
+    // 沿用详情读取的执行器补齐往来主体、有效负责人和姓名，让展示字段来自同一读取阶段。
     async fn detail_view(
         &self,
         account: CustomerAccount,
@@ -208,19 +200,14 @@ impl CustomerService {
     }
 }
 
-/// 将内部快照转换为对外列表视图。
-///
-/// # 参数
-/// * `snapshot` - 同一事务读取的授权与业务快照
-///
-/// # 返回
-/// 返回可序列化的列表响应。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 不把内部授权证明或全量人员集合返回给客户端。
+// 将内部快照转换为对外列表视图。
+//
+// # 参数
+// * `snapshot` - 同一事务读取的授权与业务快照
+//
+// 返回可序列化的列表响应。
+//
+// 不把内部授权证明或全量人员集合返回给客户端。
 fn to_list_view(snapshot: CustomerSnapshot) -> CustomerListView {
     list_view(
         PageView {
@@ -234,7 +221,7 @@ fn to_list_view(snapshot: CustomerSnapshot) -> CustomerListView {
     )
 }
 
-/// 用同一次授权查询的分页及版本元信息生成响应。
+// 用同一次授权查询的分页及版本元信息生成响应。
 fn list_view(page: PageView<CustomerView>, scope_version: String, as_of: Instant) -> CustomerListView {
     CustomerListView {
         scope_version,
@@ -263,7 +250,7 @@ mod tests {
     use crate::error::Error;
     use crate::ports::{FailClosedAuditPort, FailClosedPartyFactPort};
 
-    /// 数据库句柄不发起连接，授权失败必须先于任何仓储或事实端口读取。
+    // 数据库句柄不发起连接，授权失败必须先于任何仓储或事实端口读取。
     async fn service() -> CustomerService {
         let client =
             mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1").await.unwrap();
@@ -345,7 +332,7 @@ mod tests {
         assert!(ensure_stable_snapshot("scope-a", "scope-a").is_ok());
     }
 
-    /// 常规列表与全部有权客户共用该视图：不返回负责销售候选，已授权行仍带负责人姓名。
+    // 常规列表与全部有权客户共用该视图：不返回负责销售候选，已授权行仍带负责人姓名。
     #[test]
     fn customer_list_omits_owner_candidates_and_keeps_row_owner_name() {
         use application_core::PageView;

@@ -23,36 +23,15 @@ pub struct IdRepository {
 }
 
 impl<T: Serialize + DeserializeOwned + Send + Sync> Repository<'_, T> {
-    /// 获取当前领域仓储的 ID 操作入口。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回绑定同一集合的操作入口。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 需要扫描关联标识而不加载整个实体时，从领域仓储派生绑定同一集合的轻量查询入口。
     pub fn ids(&self) -> IdRepository {
         IdRepository { collection: self.collection().clone_with_type() }
     }
 }
 
 impl IdRepository {
-    /// 按指定字段精确匹配 ID 集合，保留软删除记录。
-    ///
-    /// # 参数
-    /// * `field` - 外键字段。
-    /// * `values` - 精确匹配值；空集合不查询。
-    /// * `parent` - 可选父键投影字段。
-    /// * `tag` - 可选分类键投影字段。
-    /// * `executor` - 数据访问执行器，不要求处于事务中。
-    ///
-    /// # 返回
-    /// 返回匹配记录的 `id`，以及请求投影的父键和分类键。
-    ///
-    /// # 错误
-    /// 查询失败时返回下层错误。文档缺少有效 `id`、`parent` 指定的父键缺失，或投影字段类型与内容无效时返回 `EntityMetadataOutOfRange`。
+    /// 清理等需追踪历史关联的场景，分批按外键精确匹配并保留软删除记录，只投影业务 ID 和请求的父键、分类键。
+    /// 空输入不查询；主键无效、要求的父键缺失或投影值格式非法时拒绝，不悄悄跳过记录。
     pub async fn linked(
         &self,
         field: &str,
@@ -83,7 +62,7 @@ impl IdRepository {
     }
 }
 
-/// 解析主键，异常数据不得被静默跳过。
+// 把投影结果还原为主键、父键和分类键供清理流程使用；不跳过缺少有效业务 ID 的记录。
 fn linked_id(document: &Document, parent: Option<&str>, tag: Option<&str>) -> Result<LinkedId> {
     let id = document
         .get_str("id")
@@ -95,12 +74,12 @@ fn linked_id(document: &Document, parent: Option<&str>, tag: Option<&str>) -> Re
     Ok(LinkedId { id: id.to_string(), parent, tag })
 }
 
-/// 父引用缺失时停止清理，避免遗留不可追踪的父单据。
+// 请求了父引用就要求有有效值；缺失时停止清理，避免留下无法追踪的父单据。
 fn required_text(document: &Document, field: &str) -> Result<String> {
     optional_text(document, field)?.ok_or(Error::EntityMetadataOutOfRange("关联记录缺少父 id"))
 }
 
-/// 可空分类字段允许缺省，但已存在的非法值必须报错。
+// 读取投影的可空分类或父键时允许缺省及 `null`，但字段存在且不是有效非空白字符串则报错。
 fn optional_text(document: &Document, field: &str) -> Result<Option<String>> {
     match document.get(field) {
         None | Some(Bson::Null) => Ok(None),

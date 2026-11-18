@@ -32,20 +32,11 @@ pub enum ConnectorPurpose {
 /// 一个协议运行时提供技术治理与用途绑定，所有业务能力来自绑定后的 Connector。
 pub trait SupplierRuntime: SupplierReferenceRegistry {
     /// 返回本运行时唯一实现的协议类型。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 与部署配置一致的协议类型。
-    /// # 错误
-    /// 不返回错误。
     fn connector_type(&self) -> SupplierConnectorType;
 
     /// 按调用用途验证服务端连接并返回实际能力。
-    /// # 参数
-    /// `connection` 为服务端记录，`purpose` 为业务流程指定用途。
-    /// # 返回
     /// 身份及用途资格已核对的连接器。
-    /// # 错误
     /// 技术绑定失效、跨账号或对应业务资格不足时拒绝。
     fn bind(
         &self,
@@ -54,11 +45,7 @@ pub trait SupplierRuntime: SupplierReferenceRegistry {
     ) -> Result<Arc<dyn SupplierConnector>, ClassifiedError>;
 
     /// 返回目录调度及映射版本，不要求已打开自动下单。
-    /// # 参数
-    /// `connection` 为服务端连接。
-    /// # 返回
     /// 有目录实现时返回策略，未实现时返回 None。
-    /// # 错误
     /// 连接身份或配置非法时返回分类错误。
     fn catalog_schedule(
         &self,
@@ -66,22 +53,13 @@ pub trait SupplierRuntime: SupplierReferenceRegistry {
     ) -> Result<Option<CatalogSyncPolicy>, ClassifiedError>;
 
     /// 返回配置已核实的可供观察有效期。
-    /// # 参数
-    /// `connection` 为服务端连接。
-    /// # 返回
     /// 秒数或未知，不推断永久有效。
-    /// # 错误
-    /// 不返回错误。
     fn availability_validity(&self, _connection: &SupplierApiConnection) -> Option<u64> {
         None
     }
 
     /// 执行独立只读健康检查，不创建业务订单。
-    /// # 参数
-    /// 服务端连接与冻结检查种类。
-    /// # 返回
     /// 对应检查完成的结果。
-    /// # 错误
     /// 绑定、认证或外部读取失败时返回分类错误。
     fn check_health<'a>(
         &'a self,
@@ -91,11 +69,7 @@ pub trait SupplierRuntime: SupplierReferenceRegistry {
 }
 
 /// 在公共入口复验协议与返回连接身份，阻止错误适配器串用账号。
-/// # 参数
-/// 已注册运行时、服务端连接及本次用途。
-/// # 返回
 /// 与请求连接身份完全一致的连接器。
-/// # 错误
 /// 协议、身份或用途资格不匹配时返回分类错误。
 pub fn bind_checked<R: SupplierRuntime + ?Sized>(
     runtime: &R,

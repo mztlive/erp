@@ -140,17 +140,7 @@ struct ResumeVersionHints {
 }
 
 impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
-    /// 按固定 view 查询实例摘要。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证操作人
-    /// * `query` - 已规范化查询
-    ///
-    /// # 返回
-    /// 返回当前视图的一页实例摘要。
-    ///
-    /// # 错误
-    /// 查询合同不成立、读者无效或列表读取失败时返回错误。
+    /// 按固定视图读取当前账号有权访问的一页审批实例摘要。本人待办走精确任务责任链；管理和本人发起走各自固定范围。查询非法、账号失效或持久化读取失败时拒绝。
     pub async fn instance_list(
         &self,
         actor: &AuditActor,
@@ -163,17 +153,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         }
     }
 
-    /// 读取实例详情与最近执行。
-    ///
-    /// # 参数
-    /// * `actor` - 操作人
-    /// * `instance_id` - 实例 ID
-    ///
-    /// # 返回
-    /// 返回实例状态、当前审批人及该实例冻结的单据身份、金额与版本。
-    ///
-    /// # 错误
-    /// 不存在或无权时不泄露存在性；仓储失败时返回对应错误。
+    /// 从同一快照读取指定实例的状态、当前审批人及精确冻结单据身份、金额和版本。实例缺失与无权使用同一隐藏结果，仓储故障保留原类别。
     pub async fn instance_detail(
         &self,
         actor: &AuditActor,
@@ -190,13 +170,12 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             .await
     }
 
-    /// 在原快照中执行实例读取资格、主体和当前返工任务读取。
-    /// # 参数
-    /// actor、instance_id 为已认证读者与精确实例，executor 为原快照执行器。
-    /// # 返回
-    /// 同一快照授权的实例详情。
-    /// # 错误
-    /// 无权、主体链不一致或仓储读取失败时拒绝。
+    // 在原快照中执行实例读取资格、主体和当前返工任务读取。
+    // 同一快照授权的实例详情。
+    //
+    // 无权、主体链不一致或仓储读取失败时拒绝。
+    //
+    // actor、instance_id 为已认证读者与精确实例，executor 为原快照执行器。
     pub(in crate::service::approval) async fn instance_detail_stage(
         &self,
         actor: &AuditActor,
@@ -211,19 +190,11 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     }
 
     /// 读取实例执行历史。
-    ///
-    /// # 参数
-    /// * `actor` - 操作人
-    /// * `instance_id` - 实例 ID
-    /// * `after_execution_no` - 上一页最后执行序号；首页为空
-    /// * `limit` - 页大小
-    /// * `order` - 分页方向。
-    ///
-    /// # 返回
     /// 返回指定方向的历史页，字段对齐审批 Tab。
     ///
-    /// # 错误
     /// 读者无效或不存在、无权时不泄露存在性；仓储失败时返回对应错误。
+    ///
+    /// `after_execution_no`：上一页最后执行序号；首页为空。
     pub async fn instance_history(
         &self,
         actor: &AuditActor,
@@ -254,7 +225,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             .await
     }
 
-    /// 历史授权、执行记录和冻结路线沿同一事务读取。
+    // 在同一事务取证审批历史读取、查询执行记录和加载冻结路线，避免拼接不同版本历史。
     async fn instance_history_stage(
         &self,
         actor: &AuditActor,
@@ -290,19 +261,13 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     }
 
     /// 返回当前 blocker 的唯一合法恢复动作。
+    /// 版本提示与动作判定基于同一读取快照；调用方仍须按恢复命令重验版本。
     ///
-    /// # 参数
-    /// * `actor` - 已认证操作人
-    /// * `instance_id` - 审批实例 ID
-    ///
-    /// # 返回
     /// 返回实例 ID、允许的恢复动作集合与恢复命令所需的期望版本提示。
     ///
-    /// # 错误
     /// 实例不存在或无权时不泄露存在性；版本提示读取失败时传播仓储错误。
     ///
-    /// # 关键业务约束
-    /// 版本提示与动作判定基于同一读取快照；调用方仍须按恢复命令重验版本。
+    /// `instance_id`：审批实例 ID。
     pub async fn recovery_options(
         &self,
         actor: &AuditActor,
@@ -352,19 +317,14 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         })
     }
 
-    /// 读取恢复命令所需的实例、执行、绑定与历史任务版本提示。
-    ///
-    /// # 参数
-    /// * `subject` - 已加载的实例、当前执行、快照与单据类型
-    ///
-    /// # 返回
-    /// 返回十进制字符串形式的版本提示；缺失执行、绑定或唯一历史任务时对应项为空。
-    ///
-    /// # 错误
-    /// 仓储读取失败时传播持久化错误；多历史任务不断言失败，仅返回空提示。
-    ///
-    /// # 关键业务约束
-    /// 提示仅供调用方构造恢复命令，事务提交前仍须按期望版本做 CAS 重验。
+    // 读取恢复命令所需的实例、执行、绑定与历史任务版本提示。
+    // 提示仅供调用方构造恢复命令，事务提交前仍须按期望版本做 CAS 重验。
+    //
+    // 返回十进制字符串形式的版本提示；缺失执行、绑定或唯一历史任务时对应项为空。
+    //
+    // 仓储读取失败时传播持久化错误；多历史任务不断言失败，仅返回空提示。
+    //
+    // `subject`：已加载的实例、当前执行、快照与单据类型。
     async fn resume_version_hints(
         &self,
         subject: &RuntimeReadSubject,
@@ -396,19 +356,14 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         })
     }
 
-    /// 读取受阻执行关联的唯一历史任务版本。
-    ///
-    /// # 参数
-    /// * `execution` - 当前受阻执行
-    ///
-    /// # 返回
-    /// 唯一历史任务存在时返回其版本字符串；无任务或多任务时返回空。
-    ///
-    /// # 错误
-    /// 仓储读取失败时传播持久化错误。
-    ///
-    /// # 关键业务约束
-    /// 多任务属于恢复命令的失败关闭场景，此处不提前报错，由命令执行时判定。
+    // 读取受阻执行关联的唯一历史任务版本。
+    // 多任务属于恢复命令的失败关闭场景，此处不提前报错，由命令执行时判定。
+    //
+    // 唯一历史任务存在时返回其版本字符串；无任务或多任务时返回空。
+    //
+    // 仓储读取失败时传播持久化错误。
+    //
+    // `execution`：当前受阻执行。
     async fn closed_resume_task_version(
         &self,
         execution: &ApprovalNodeExecution,
@@ -422,7 +377,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         Ok(Some(task.base.version.to_string()))
     }
 
-    /// 在原执行器读取并核对实例、当前执行与冻结快照。
+    // 读取审批详情或历史前，用原执行器将实例、当前执行和冻结快照的主体对齐，再交给读取授权判断。
     pub(super) async fn load_runtime_read_subject_stage(
         &self,
         instance_id: &str,
@@ -466,7 +421,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         Ok(RuntimeReadSubject { instance, current_execution, snapshot, document_type })
     }
 
-    /// 普通与管理读取由同一固定入口选择，业务只保留运行主体完整性检查。
+    // 按固定实例入口检查普通或管理读取，由统一授权选择分支；工作流只补验运行主体完整性。
     pub(super) async fn ensure_ordinary_runtime_read_stage(
         &self,
         actor: &AuditActor,
@@ -508,20 +463,14 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     }
 }
 
-/// 构造实例列表的授权过滤与稳定游标。
-///
-/// # 参数
-/// * `actor` - 当前账号
-/// * `query` - 已规范化列表查询
-///
-/// # 返回
-/// 返回仓储过滤条件；无检索串时 `text_query` 为空。
-///
-/// # 错误
-/// 单据类型未登记时返回校验错误。
-///
-/// # 关键业务约束
-/// `Started` 必须带 `started_by`。检索在仓储内施加，不得先分页再内存过滤。
+// 构造实例列表的授权过滤与稳定游标。
+// `Started` 必须带 `started_by`。检索在仓储内施加，不得先分页再内存过滤。
+//
+// 返回仓储过滤条件；无检索串时 `text_query` 为空。
+//
+// 单据类型未登记时返回校验错误。
+//
+// `actor`：当前账号；`query`：已规范化列表查询。
 pub(super) fn instance_list_filter(
     actor: &AuditActor,
     query: &RuntimeInstanceListQuery,
@@ -550,17 +499,10 @@ pub(super) fn instance_list_filter(
     })
 }
 
-/// 从当前视图最后一行生成下一页游标。
-///
-/// # 参数
-/// * `view` - 仓储列表视图。
-/// * `row` - 当前页最后一行摘要。
-///
-/// # 返回
-/// `Started` 用启动时间，`Blocked` 用受阻时间或回退到更新时间，其余用更新时间；ID 取实例 ID。
-///
-/// # 错误
-/// 不返回错误。
+// 从当前视图最后一行生成下一页游标。
+// `Started` 用启动时间，`Blocked` 用受阻时间或回退到更新时间，其余用更新时间；ID 取实例 ID。
+//
+// `row`：当前页最后一行摘要。
 pub(super) fn cursor_from_summary(
     view: ApprovalInstanceListView,
     row: &ApprovalInstanceSummary,
@@ -574,7 +516,7 @@ pub(super) fn cursor_from_summary(
     RuntimeInstanceListCursor { sort_time, id: row.id.clone() }
 }
 
-/// 映射列表状态过滤。
+// 将实例列表协议状态翻译为仓储过滤类型，使持久化查询沿用同一状态语义。
 fn map_status_filter(
     status: RuntimeInstanceStatusFilter,
 ) -> bpm::model::types::ApprovalProcessInstanceStatus {
@@ -587,17 +529,12 @@ fn map_status_filter(
     }
 }
 
-/// 由仓储摘要与启动快照映射列表行。
-///
-/// # 参数
-/// * `row` - 仓储实例摘要。
-/// * `snapshot` - 同实例的冻结快照；缺失或不匹配时只清空展示字段。
-///
-/// # 返回
-/// 返回带运行投影的列表行；快照不匹配时单据号和金额为空。
-///
-/// # 错误
-/// 主体种类与流程种类不能解析为正式单据类型时隐藏为不存在。
+// 由仓储摘要与启动快照映射列表行。
+// 返回带运行投影的列表行；快照不匹配时单据号和金额为空。
+//
+// 主体种类与流程种类不能解析为正式单据类型时隐藏为不存在。
+//
+// `snapshot`：同实例的冻结快照；缺失或不匹配时只清空展示字段。
 pub(super) fn item_from_summary(
     row: ApprovalInstanceSummary,
     snapshot: Option<&ApprovalSubjectSnapshot>,
@@ -634,19 +571,13 @@ pub(super) fn item_from_summary(
     })
 }
 
-/// 核对已授权聚合行的视图归属和流程类型，然后映射公开列表行。
-///
-/// # 参数
-/// * `row` - 已聚合的实例与可选快照。
-/// * `actor` - 当前读者。
-/// * `view` - 对外列表视图。
-/// * `type_scopes` - 本视图允许进入仓储的流程种类。
-///
-/// # 返回
-/// 授权通过后返回公开列表行。
-///
-/// # 错误
-/// `Mine`、类型不在范围内、流程种类不一致或主体无法解析时隐藏为不存在。
+// 核对已授权聚合行的视图归属和流程类型，然后映射公开列表行。
+// 授权通过后返回公开列表行。
+//
+// `Mine`、类型不在范围内、流程种类不一致或主体无法解析时隐藏为不存在。
+//
+// `row`：已聚合的实例与可选快照；`actor`：当前读者。
+// `type_scopes`：本视图允许进入仓储的流程种类。
 pub(super) fn item_from_runtime_read_row(
     row: ApprovalRuntimeReadRow,
     actor: &AuditActor,
@@ -672,19 +603,10 @@ pub(super) fn item_from_runtime_read_row(
     item_from_summary(row.instance, row.snapshot.as_ref())
 }
 
-/// 由决定后的写入构造实例列表投影。
-///
-/// # 参数
-/// * `writes` - 决定计划。
-/// * `ended_execution_id` - 刚结束的执行 ID。
-/// * `reject_reason` - 驳回原因；通过时为空。
-/// * `now` - 状态变更时间。
-///
-/// # 返回
-/// 当前节点取最后一条新建执行；有驳回原因时记录刚结束的执行。
-///
-/// # 错误
-/// 不返回错误。
+// 由决定后的写入构造实例列表投影。
+// 当前节点取最后一条新建执行；有驳回原因时记录刚结束的执行。
+//
+// `ended_execution_id`：刚结束的执行 ID；`reject_reason`：驳回原因；通过时为空。
 pub(super) fn list_projection_from_writes(
     writes: &PlannedWrites,
     ended_execution_id: &str,
@@ -704,17 +626,10 @@ pub(super) fn list_projection_from_writes(
     }
 }
 
-/// 视图中的首个新建开放任务摘要。
-///
-/// # 参数
-/// * `writes` - 决定或恢复计划。
-/// * `new_task_ids` - 与新建任务意图对齐的任务 ID。
-///
-/// # 返回
-/// 首个意图是人工任务且已分配 ID 时返回摘要；否则返回 `None`。版本固定为 `"1"`。
-///
-/// # 错误
-/// 不返回错误。
+// 视图中的首个新建开放任务摘要。
+// 首个意图是人工任务且已分配 ID 时返回摘要；否则返回 `None`。版本固定为 `"1"`。
+//
+// `new_task_ids`：与新建任务意图对齐的任务 ID。
 pub(super) fn first_open_task(writes: &PlannedWrites, new_task_ids: &[String]) -> Option<OpenTaskSummary> {
     let intent = writes.create_tasks.first()?;
     let task_id = new_task_ids.first()?;
@@ -728,7 +643,7 @@ pub(super) fn first_open_task(writes: &PlannedWrites, new_task_ids: &[String]) -
     })
 }
 
-/// 恢复动作展示复用写端的完整同角色权限及真实来源授权。
+// 在详情展示恢复选项时复用实际命令的完整同角色权限和真实来源授权；显示选项不能保证随后写入仍获准。
 async fn authorized_recovery_actions(
     authorization: &AuthorizationService,
     actor: &AuditActor,
@@ -768,7 +683,7 @@ mod runtime_recovery_options_view_tests {
 
     use super::{RuntimeRecoveryAction, RuntimeRecoveryOptionsView};
 
-    /// 旧恢复选项载荷缺版本提示时须兼容反序列化为空提示。
+    // 验证：旧恢复选项载荷缺版本提示时须兼容反序列化为空提示。
     #[test]
     fn legacy_payload_without_version_hints_deserializes_with_defaults() {
         let view: RuntimeRecoveryOptionsView = serde_json::from_value(json!({
@@ -784,7 +699,7 @@ mod runtime_recovery_options_view_tests {
         assert_eq!(view.expected_closed_task_version, None);
     }
 
-    /// 版本提示序列化往返须保留十进制字符串。
+    // 验证：版本提示序列化往返须保留十进制字符串。
     #[test]
     fn version_hints_round_trip_preserves_strings() {
         let view = RuntimeRecoveryOptionsView {

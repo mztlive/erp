@@ -48,14 +48,9 @@ pub(super) struct ResolvedInquiryQuote<'a> {
 }
 
 impl<'a> ResolvedInquiryQuote<'a> {
-    /// 将报价输入绑定到已由当前责任范围定位的冻结需求行。
-    ///
-    /// # 参数
-    /// `input` 为原始报价；`line` 为已定位的需求行。
-    /// # 返回
-    /// 返回复用同一份配送范围与商业条件的内部输入。
-    /// # 错误
-    /// 可供数量、单位精度、配送范围或商业条件非法时返回原错误。
+    // 将报价输入绑定到已由当前责任范围定位的冻结需求行。
+    //
+    // `input` 为原始报价；`line` 为已定位的需求行。返回复用同一份配送范围与商业条件的内部输入。可供数量、单位精度、配送范围或商业条件非法时返回原错误。
     pub(super) fn new(input: &'a InquiryQuoteInput, line: &'a InquiryRequirementLine) -> Result<Self> {
         Ok(Self { input, line, terms: input.terms.for_requirement(line)? })
     }
@@ -68,14 +63,9 @@ impl<'a> ResolvedInquiryQuote<'a> {
         }
     }
 
-    /// 核对是否已经保存相同作用域、供应身份与商业条件的回复。
-    ///
-    /// # 参数
-    /// `prior` 为既有报价；`inquiry` 与 `round` 指定当前需求版本和反馈轮次。
-    /// # 返回
-    /// 存在完全相同且未删除的回复时为真。
-    /// # 错误
-    /// 不返回错误。
+    // 核对是否已经保存相同作用域、供应身份与商业条件的回复。
+    //
+    // `prior` 为既有报价；`inquiry` 与 `round` 指定当前需求版本和反馈轮次。存在完全相同且未删除的回复时为真。
     pub(super) fn matches_prior_reply(
         &self,
         prior: &[InquiryQuote],
@@ -199,11 +189,8 @@ pub struct SaveInquiryFeeBasisCommand {
 impl SalesInquiryProcess {
     /// 为当前责任需求追加不可变供应商报价版本。
     ///
-    /// # 参数
-    /// `actor` 为当前采购，`id` 为询价，`req` 为版本、任务及内部条件。
-    /// # 返回
-    /// 同事务写入询价CAS、报价、任务活动、审计和安全回执后的结果。
-    /// # 错误
+    /// `actor` 为当前采购，`id` 为询价，`req` 为版本、任务及内部条件。同事务写入询价CAS、报价、任务活动、审计和安全回执后的结果。
+    ///
     /// 任务、SKU、地址、供应身份或商业条件无效时拒绝。
     pub async fn save_internal_quote(
         &self,
@@ -216,11 +203,8 @@ impl SalesInquiryProcess {
 
     /// 为当前责任公开费用保存独立采购内部收款依据。
     ///
-    /// # 参数
-    /// `actor` 为当前采购，`id` 为询价，`req` 为任务及内部费用依据。
-    /// # 返回
-    /// 不产生采购、应付或付款授权的安全命令结果。
-    /// # 错误
+    /// `actor` 为当前采购，`id` 为询价，`req` 为任务及内部费用依据。不产生采购、应付或付款授权的安全命令结果。
+    ///
     /// 费用不属于当前工作、供应商不可见、付款条件或附件无效时拒绝。
     pub async fn save_fee_basis(
         &self,
@@ -231,15 +215,11 @@ impl SalesInquiryProcess {
         self.execute(actor, id, InquiryCommand::FeeBasis(req)).await
     }
 
-    /// 保存已授权任务的一条内部报价，单条录入与批量导入共用相同校验和写入。
-    ///
-    /// # 参数
-    /// `actor` 为采购，`inquiry` 与 `task` 为已授权事实，`expected_version` 为请求版本，
-    /// `input` 为当前报价，`executor` 沿用调用方事务。
-    /// # 返回
-    /// 报价已通过供应资格校验并追加保存。
-    /// # 错误
-    /// 版本、责任范围、供应商权限、报价条件或持久化失败时返回对应错误。
+    // 保存已授权任务的一条内部报价，单条录入与批量导入共用相同校验和写入。
+    //
+    // `actor` 为采购，`inquiry` 与 `task` 为已授权事实，`expected_version` 为请求版本， `input` 为当前报价，`executor` 沿用调用方事务。
+    //
+    // 报价已通过供应资格校验并追加保存。版本、责任范围、供应商权限、报价条件或持久化失败时返回对应错误。
     pub(super) async fn append_internal_quote(
         &self,
         actor: &AuditActor,
@@ -260,15 +240,11 @@ impl SalesInquiryProcess {
         self.append_resolved_quote(actor, inquiry, quote, executor).await
     }
 
-    /// 对已完成供应商授权和条款转换的报价执行最终构造与资格写入。
-    ///
-    /// # 参数
-    /// `actor` 为已授权采购；`inquiry` 为当前询价；`input` 为已绑定需求的报价；
-    /// `executor` 沿用调用方事务。
-    /// # 返回
-    /// 报价通过最终领域与供应资格校验并追加保存。
-    /// # 错误
-    /// 轮次溢出、最终报价不合法、供应资格失效或写入失败时返回原错误。
+    // 对已完成供应商授权和条款转换的报价执行最终构造与资格写入。
+    //
+    // `actor` 为已授权采购；`inquiry` 为当前询价；`input` 为已绑定需求的报价； `executor` 沿用调用方事务。
+    //
+    // 报价通过最终领域与供应资格校验并追加保存。轮次溢出、最终报价不合法、供应资格失效或写入失败时返回原错误。
     pub(super) async fn append_resolved_quote(
         &self,
         actor: &AuditActor,

@@ -38,16 +38,8 @@ pub struct AuditContext {
 macro_rules! impl_audit_context {
     ($audit:ty) => {
         impl $audit {
-            /// 复制原事件的操作人、请求关联与命令内顺序。
-            ///
-            /// # 参数
-            /// 无。
-            ///
-            /// # 返回
-            /// 返回原字段的独立快照，不读取当前账号或生成替代关联。
-            ///
-            /// # 错误
-            /// 不返回错误；本方法不替代持久化时的安全字段校验。
+            /// 预制审计跨领域端口传递时，复制原有操作人、请求关联和命令内顺序，不读取当前账号或生成替代值。
+            /// 落库前仍须校验安全字段。
             pub fn audit_context(&self) -> $crate::AuditContext {
                 $crate::AuditContext {
                     actor_id: self.actor_id.clone(),
@@ -59,46 +51,20 @@ macro_rules! impl_audit_context {
                 }
             }
 
-            /// 携带事件发生时已经捕获的操作人名称。
-            ///
-            /// # 参数
-            /// * `name` - 原事件名称快照；未知保持 `None`。
-            ///
-            /// # 返回
-            /// 返回保留其他字段的预制审计。
-            ///
-            /// # 错误
-            /// 不返回错误；持久化适配器重新校验名称。
+            /// 为预制审计附上事件发生时的名称；未知时保留 `None`，不以当前名称补齐。持久化适配器仍须重新校验。
             pub fn with_actor_name_snapshot(mut self, name: Option<String>) -> Self {
                 self.actor_name_snapshot = name;
                 self
             }
 
-            /// 携带原请求关联，不生成新的请求号。
-            ///
-            /// # 参数
-            /// * `request_id` - 原事件请求号；内部或历史事件保持 `None`。
-            ///
-            /// # 返回
-            /// 返回保留其他字段的预制审计。
-            ///
-            /// # 错误
-            /// 不返回错误；持久化适配器重新校验请求号。
+            /// 把原请求号带入预制审计，便于关联同次请求的事件。内部或历史事件可保持 `None`；
+            /// 这里不生成新值，也不代替落库校验。
             pub fn with_request_id(mut self, request_id: Option<String>) -> Self {
                 self.request_id = request_id;
                 self
             }
 
-            /// 保留业务命令已经确定的非零事件顺序。
-            ///
-            /// # 参数
-            /// * `event_sequence` - 命令内从一开始的原事件序号。
-            ///
-            /// # 返回
-            /// 返回保留其他字段的预制审计。
-            ///
-            /// # 错误
-            /// 不返回错误；参数类型保证序号非零。
+            /// 同一命令产生多条审计时，带上命令已分配的原序号；从一开始，参数类型排除零。
             pub fn with_event_sequence(mut self, event_sequence: ::std::num::NonZeroU32) -> Self {
                 self.event_sequence = event_sequence;
                 self

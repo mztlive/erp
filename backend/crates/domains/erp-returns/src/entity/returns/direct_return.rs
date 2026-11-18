@@ -27,11 +27,8 @@ pub struct DirectReturnRequest {
 }
 impl DirectReturnRequest {
     /// 校验当前采购可直退量，允许分批实际退回。
-    /// # 参数
-    /// * `limits` - 事务内核实的当前采购行及可退上限。
-    /// # 返回
     /// 所有数量均在范围内时成功。
-    /// # 错误
+    /// `limits` 为事务内核实的当前采购行及可退上限。
     /// 非当前行、非正数、重复或累计超退时拒绝。
     pub fn check_limits(&self, limits: &[(&str, Quantity)]) -> Result<()> {
         self.validate()?;
@@ -50,11 +47,7 @@ impl DirectReturnRequest {
     }
 
     /// 校验回单、原因及去重后的正数数量。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 返回可持久化请求。
-    /// # 错误
     /// 空白、超长、重复行及非正数拒绝。
     pub fn validate(&self) -> Result<()> {
         let key = &self.idempotency_key;
@@ -95,12 +88,8 @@ pub struct DirectReturnEvidence {
 }
 
 /// 从累计履约中扣除已证明退回的数量，越界时拒绝隐式归零。
-/// # 参数
-/// * `fulfilled` - 原累计履约量。
-/// * `returned` - 供应商实际接收的累计退回量。
-/// # 返回
 /// 非负净履约量。
-/// # 错误
+/// `fulfilled` 为原累计履约量；`returned` 为供应商实际接收的累计退回量。
 /// 负数、退回超量或溢出时拒绝。
 pub fn net_fulfilled(fulfilled: Quantity, returned: Quantity) -> Result<Quantity> {
     let net = fulfilled

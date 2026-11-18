@@ -30,20 +30,13 @@ use crate::{Error, Result};
 #[async_trait]
 pub trait PortalTermsValidationPort: Send + Sync {
     /// 验证供给条款允许列表。
-    /// # 参数
-    /// `terms` 是供应商输入；`on_date` 是提交时业务日。
-    /// # 返回
     /// 校验通过。
-    /// # 错误
     /// 金额、税率、起订量或当前有效期非法时拒绝。
+    /// `terms` 是供应商输入；`on_date` 是提交时业务日。
     async fn validate_terms(&self, terms: &SupplierOfferingTermsWrite, on_date: BusinessDate) -> Result<()>;
 }
 /// 复用正式供给实体验证门户条款。
-/// # 参数
-/// 条款及业务日。
-/// # 返回
 /// 类型化条款合法时成功。
-/// # 错误
 /// 非法金额税率、未来生效或已过期时拒绝。
 pub fn validate_portal_terms(terms: &SupplierOfferingTermsWrite, on_date: BusinessDate) -> Result<()> {
     terms.validate()?;
@@ -61,21 +54,12 @@ pub struct PortalOfferingService {
 }
 impl PortalOfferingService {
     /// 创建本域门户步骤服务。
-    /// # 参数
-    /// `db` 为目标数据库。
-    /// # 返回
     /// 无授权缓存的服务。
-    /// # 错误
-    /// 无。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
     /// 加载申请供组合层执行归属或任务授权。
-    /// # 参数
-    /// 服务器申请标识及调用方执行器。
-    /// # 返回
     /// 当前未删除申请。
-    /// # 错误
     /// 不存在统一返回NotFound。
     pub async fn load_application(
         &self,
@@ -89,12 +73,9 @@ impl PortalOfferingService {
             .ok_or_else(|| Error::NotFound("申请不存在或无权查看".into()))
     }
     /// 在调用方事务保存申请状态；更新采用CAS。
-    /// # 参数
-    /// 已完成授权和纯规则迁移的申请，是否新建及执行器。
-    /// # 返回
     /// 写入成功并推进持久化版本。
-    /// # 错误
     /// 唯一性、版本或数据库错误。
+    /// 已完成授权和纯规则迁移的申请，是否新建及执行器。
     pub async fn save_application(
         &self,
         app: &mut OfferingApplication,
@@ -111,11 +92,7 @@ impl PortalOfferingService {
         Ok(())
     }
     /// 加载本供应商的供给，未知及范围外使用相同结果。
-    /// # 参数
-    /// 当前有效绑定、真实供应商身份和供给标识。
-    /// # 返回
     /// 本供应商供给。
-    /// # 错误
     /// 外部身份无效或供给不可见时拒绝。
     pub async fn require_owned_offering(
         &self,
@@ -133,12 +110,9 @@ impl PortalOfferingService {
             .ok_or_else(|| Error::NotFound("供给不存在或无权查看".into()))
     }
     /// 拒绝门户覆盖API管理事实。
-    /// # 参数
-    /// 当前已授权供给。
-    /// # 返回
     /// 手工或Excel来源成功。
-    /// # 错误
     /// API来源只读。
+    /// 当前已授权供给。
     pub fn ensure_portal_writable(offering: &SupplierOffering) -> Result<()> {
         if offering.source_type == OfferingSourceType::Api {
             return Err(Error::Forbidden("自动同步的供给不能在门户修改，请在来源系统更新后重新同步".into()));
@@ -146,11 +120,7 @@ impl PortalOfferingService {
         Ok(())
     }
     /// 在确认事务重验首次报价开放资格。
-    /// # 参数
-    /// 服务器供应商绑定和精确SKU标识。
-    /// # 返回
     /// 定向开放仍有效时成功。
-    /// # 错误
     /// 未开放或撤销统一拒绝。
     pub async fn ensure_quote_access(
         &self,
@@ -169,11 +139,7 @@ impl PortalOfferingService {
         Ok(())
     }
     /// 更新本供应商可供事实；不修改条款、来源或关系状态。
-    /// # 参数
-    /// 绑定、真实供应商操作人、目标、允许列表及执行器。
-    /// # 返回
     /// 当前正式可供状态和CAS新版本。
-    /// # 错误
     /// API来源、范围外、版本或输入无效时拒绝。
     pub async fn update_availability(
         &self,
@@ -186,11 +152,7 @@ impl PortalOfferingService {
         Ok(self.update_availability_with_change(supplier_id, actor, id, req, executor).await?.current)
     }
     /// 更新可供并返回同事务读取的变更前后事实。
-    /// # 参数
-    /// 当前有效供应商绑定、真实供应商身份、目标和允许列表。
-    /// # 返回
     /// 原成功结果以及审计before/after。
-    /// # 错误
     /// 归属、API来源、版本或输入非法时拒绝。
     pub async fn update_availability_with_change(
         &self,
@@ -222,11 +184,7 @@ impl PortalOfferingService {
         })
     }
     /// 批量整批预检复用同一归属、API只读、版本和数量规则，不写入。
-    /// # 参数
-    /// 当前供应商绑定、操作人、目标、版本输入和执行器。
-    /// # 返回
     /// 当前事实仍可更新时成功。
-    /// # 错误
     /// 身份、来源、版本、数量或时间冲突拒绝。
     pub async fn validate_availability(
         &self,
@@ -239,7 +197,7 @@ impl PortalOfferingService {
         self.prepare_availability(supplier_id, actor, id, req, executor).await?;
         Ok(())
     }
-    /// 在内存中套用可供变更并返回前后事实，此处不写库。
+    // 在内存中套用可供变更并返回前后事实，此处不写库。
     async fn prepare_availability(
         &self,
         supplier_id: &str,
@@ -281,11 +239,7 @@ impl PortalOfferingService {
         Ok((before, availability))
     }
     /// 恢复独立成功回执，读取包括软删除记录以失败关闭。
-    /// # 参数
-    /// 原规范命令和执行器。
-    /// # 返回
     /// 已成功命令返回原结果；不存在返回None。
-    /// # 错误
     /// 载荷不符或回执损坏拒绝。
     pub async fn command_result(
         &self,
@@ -300,11 +254,7 @@ impl PortalOfferingService {
             .transpose()
     }
     /// 与正式结果及审计同事务登记原命令结果。
-    /// # 参数
-    /// 原命令、供应商归属、原结果及执行器。
-    /// # 返回
     /// 回执成功写入。
-    /// # 错误
     /// 身份无效、重复命令或数据库失败。
     pub async fn command_commit(
         &self,
@@ -321,11 +271,7 @@ impl PortalOfferingService {
         Ok(())
     }
     /// 检查供应商订货编码身份，禁止同编码改绑SKU。
-    /// # 参数
-    /// 服务端供应商、精确SKU与订货编码。
-    /// # 返回
     /// 尚不存在或相同SKU的已有供给。
-    /// # 错误
     /// 编码已关联其他SKU时冲突。
     pub async fn ordering_identity(
         &self,
@@ -345,11 +291,7 @@ impl PortalOfferingService {
         Ok(offering)
     }
     /// 提交前校验原稿身份，首次报价存在相同供给时转为冻结版本修订。
-    /// # 参数
-    /// 当前有效绑定、供应商操作人、原稿、业务日及执行器。
-    /// # 返回
     /// 身份和正式基线已核对的快照。
-    /// # 错误
     /// 开放失效、跨供应商、API来源、版本或条款非法拒绝。
     pub async fn prepare_snapshot(
         &self,
@@ -382,7 +324,7 @@ impl PortalOfferingService {
             },
         }
     }
-    /// 订货编码已占用时改成条款修订快照，否则重验报价资格与可供填报。
+    // 订货编码已占用时改成条款修订快照，否则重验报价资格与可供填报。
     async fn prepare_quote_snapshot(
         &self,
         supplier_id: &str,

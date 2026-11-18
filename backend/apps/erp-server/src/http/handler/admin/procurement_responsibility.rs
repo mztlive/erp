@@ -17,7 +17,7 @@ use crate::http::extractor::{Json, Query};
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
-/// 分页查询采购责任规则。
+/// 为采购责任配置分页读取已有规则，先校验查询参数，再由读模型按当前操作人权限取数。
 pub async fn list_rules(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -33,7 +33,7 @@ pub async fn list_rules(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 创建采购责任规则。
+/// 新增采购责任规则时校验请求结构，并将认证操作人交给采购编排执行创建。
 pub async fn create_rule(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -47,7 +47,7 @@ pub async fn create_rule(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 整项更新采购责任规则。
+/// 修改现有采购责任规则时，以路径 ID 和完整规则请求调用采购编排，不把局部输入当补丁应用。
 pub async fn update_rule(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -62,7 +62,7 @@ pub async fn update_rule(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 逐行预览采购责任解析结果。
+/// 建规则或调整规则前预览逐行责任解析结果；校验待解析请求后调用采购预览流程。
 pub async fn resolve(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,

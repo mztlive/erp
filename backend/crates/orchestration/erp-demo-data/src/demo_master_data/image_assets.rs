@@ -3,13 +3,7 @@ use image::ImageFormat;
 
 use crate::{Error, Result};
 
-/// 读取固定清单对应的已生成 JPEG，并检查大小与文件类型。
-/// # 参数
-/// `product_no` 为演示商品种子身份。
-/// # 返回
-/// 可上传的 JPEG 字节。
-/// # 错误
-/// 未配置图片、类型或大小错误时拒绝生成。
+// 按演示商品编号读取固定清单中的内嵌 JPEG，仅在文件非空、不超过 5 MiB 且识别为 JPEG 时交给上传流程；否则阻断补图。
 pub(super) fn for_product(product_no: &str) -> Result<&'static [u8]> {
     let bytes: &[u8] = match product_no {
         "DEMO-MD-P-01" => include_bytes!("images/01.jpg"),

@@ -61,11 +61,11 @@ pub struct PreparedPortalAsset {
 }
 impl PreparedPortalAsset {
     /// 接收可信组合层已经完整解码的图像及安全文件记录。
-    /// # 参数
+    ///
     /// 受控元数据和真实解码得到的宽高，禁止取自请求自报尺寸。
-    /// # 返回
+    ///
     /// 返回可登记的准备对象。
-    /// # 错误
+    ///
     /// MIME、大小、边长或零尺寸不满足门户图片合同则拒绝。
     pub fn from_decoded_image(data: FileAssetData, width: u32, height: u32) -> Result<Self> {
         if !matches!(data.content_type.as_str(), "image/png" | "image/jpeg" | "image/webp")
@@ -82,11 +82,11 @@ impl PreparedPortalAsset {
     }
 
     /// 接收可信组合层严格解析并检查完成的静态 PDF 资料。
-    /// # 参数
+    ///
     /// 受控文件元数据与真实解析验证的页面数，不接受客户端声明。
-    /// # 返回
+    ///
     /// 仅可登记为资料附件的准备对象。
-    /// # 错误
+    ///
     /// MIME、大小或页面数不满足门户资料合同则拒绝。
     pub fn from_checked_pdf(data: FileAssetData, page_count: u32) -> Result<Self> {
         if data.content_type != "application/pdf"
@@ -120,11 +120,11 @@ impl PortalAssetKind {
 
 impl SupplierPortalProcess {
     /// 在供应商申请审核对象范围内读取原稿素材，不依赖普通文件列表权限。
-    /// # 参数
+    ///
     /// 精确申请、素材及真实内部身份；入口负责开启覆盖全部读取的快照事务。
-    /// # 返回
+    ///
     /// 返回当前或历史提交明确关联且仍可用的文件。
-    /// # 错误
+    ///
     /// 身份、申请读取范围、素材来源或治理状态失效时拒绝。
     pub async fn asset_review_access(
         &self,
@@ -146,7 +146,7 @@ impl SupplierPortalProcess {
             .await
     }
 
-    /// 文件元数据与原稿引用在原读取快照中取证，事务内不读取对象存储。
+    // 文件元数据与原稿引用在原读取快照中取证，事务内不读取对象存储。
     async fn read_review_asset(
         &self,
         request_id: &str,
@@ -175,11 +175,11 @@ impl SupplierPortalProcess {
     }
 
     /// 按自有供给或仍开放SKU读取当前商品图片。
-    /// # 参数
+    ///
     /// 文件、两种来源之一、门户身份与同一读取执行器。
-    /// # 返回
+    ///
     /// 返回来源当前修订明确引用的图片文件。
-    /// # 错误
+    ///
     /// 来源缺失、交叉来源、开放撤销或图片引用失效时拒绝。
     pub async fn asset_catalog_access(
         &self,
@@ -224,11 +224,11 @@ impl SupplierPortalProcess {
     }
 
     /// 将事务外已准备的受控文件关联当前可编辑新品草稿。
-    /// # 参数
+    ///
     /// 申请、已上传的安全元数据、原操作号及当前门户身份。
-    /// # 返回
+    ///
     /// 返回文件及草稿的新版本，不包含对象存储秘密。
-    /// # 错误
+    ///
     /// 越界、非可编辑申请、文件元数据非法时拒绝。
     pub async fn asset_register(
         &self,
@@ -295,11 +295,11 @@ impl SupplierPortalProcess {
     }
 
     /// 允许原上传命令重试时恢复原结果，随机对象键不参加指纹。
-    /// # 参数
+    ///
     /// 申请、原版本、安全内容元数据、原操作号及当前门户身份。
-    /// # 返回
+    ///
     /// 已提交时返回原上传结果；未提交为空。
-    /// # 错误
+    ///
     /// 绑定失效或同号不同文件内容时拒绝。
     pub async fn asset_upload_replay(
         &self,
@@ -328,11 +328,11 @@ impl SupplierPortalProcess {
     }
 
     /// 在读取文件正文前证明原上传命令可以继续预检或查证。
-    /// # 参数
+    ///
     /// 原申请、原版本及原操作号，绑定身份和当前读取执行器。
-    /// # 返回
+    ///
     /// 原命令已有回执时允许后续完整指纹核对；未提交时检查原草稿版本。
-    /// # 错误
+    ///
     /// 越界、无写角色或未提交命令的草稿版本变化时拒绝。
     pub async fn asset_precheck_command(
         &self,
@@ -366,11 +366,11 @@ impl SupplierPortalProcess {
     }
 
     /// 在外部对象上传前证明申请归属、可编辑状态和原版本。
-    /// # 参数
+    ///
     /// 当前申请、预期版本、门户身份与读取执行器。
-    /// # 返回
+    ///
     /// 返回可上传资格，不执行任何文件或草稿写入。
-    /// # 错误
+    ///
     /// 越界、只读、已提交或版本失效时拒绝。
     pub async fn asset_precheck(
         &self,
@@ -387,11 +387,11 @@ impl SupplierPortalProcess {
     }
 
     /// 只允许下载当前供应商申请或其历史原稿明确引用的文件。
-    /// # 参数
+    ///
     /// 申请、文件、当前门户身份及读取执行器。
-    /// # 返回
+    ///
     /// 返回供协议层读取字节的受控文件事实。
-    /// # 错误
+    ///
     /// 来源不匹配、越界、过期或被销毁时统一拒绝。
     pub async fn asset_access(
         &self,
@@ -418,20 +418,17 @@ impl SupplierPortalProcess {
         Ok(asset)
     }
 
-    /// 核对新品输入引用的图片和附件仍属于当前供应商与提报单，并在需要时改为长期保留。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 附件所属供应商。
-    /// * `request_id` - 已创建的提报单；输入含附件时必须提供。
-    /// * `input` - 新品原稿中的图片、附件和 SKU 图片。
-    /// * `permanent` - 为真时把仍带过期时间的附件改为长期保留并写回。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 没有附件，或全部附件归属、槽位和保留状态通过时无返回值。
-    ///
-    /// # 错误
-    /// 有附件但没有提报单、附件未关联、不存在、归属或类型不合法，或长期保留写回失败时返回对应错误。
+    // 核对新品输入引用的图片和附件仍属于当前供应商与提报单，并在需要时改为长期保留。
+    //
+    // - `supplier_id`：附件所属供应商。
+    // - `request_id`：已创建的提报单；输入含附件时必须提供。
+    // - `input`：新品原稿中的图片、附件和 SKU 图片。
+    // - `permanent`：为真时把仍带过期时间的附件改为长期保留并写回。
+    // - `executor`：调用方执行器。
+    //
+    // 没有附件，或全部附件归属、槽位和保留状态通过时无返回值。
+    //
+    // 有附件但没有提报单、附件未关联、不存在、归属或类型不合法，或长期保留写回失败时返回对应错误。
     pub(super) async fn validate_assets(
         &self,
         supplier_id: &str,

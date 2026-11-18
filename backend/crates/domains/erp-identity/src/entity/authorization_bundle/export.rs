@@ -8,13 +8,12 @@ use crate::entity::access_control::scope_spec;
 use crate::{Error, Permission, PermissionSet, Result, RoleId};
 
 impl PolicyFacts {
-    /// 从完整事实生成可执行文件；复杂旧表达式不能被静默丢弃。
-    /// # 参数
-    /// policy_version 为同一快照的授权版本。
-    /// # 返回
-    /// 规范化文件及不能序列化为附加授权的系统规则说明。
-    /// # 错误
-    /// 角色失效、缺少动作资格、复杂旧范围或文件超限时拒绝。
+    // 从完整事实生成可执行文件；复杂旧表达式不能被静默丢弃。
+    // 规范化文件及不能序列化为附加授权的系统规则说明。
+    //
+    // 角色失效、缺少动作资格、复杂旧范围或文件超限时拒绝。
+    //
+    // policy_version 为同一快照的授权版本。
     pub(crate) fn export(&self, policy_version: u64) -> Result<PolicyExport> {
         let mut document = PolicyDocument {
             version: PolicyVersion::V1,
@@ -54,7 +53,7 @@ impl PolicyFacts {
         Ok(PolicyExport { document: document.normalized()?, policy_version, policy_notes: notes })
     }
 
-    /// 显式保存所选人员当前有效动作的空配置，避免重导入保留后来新增的范围。
+    // 导出时为所选人员当前有效动作显式保留空配置，避免重新导入时意外保留后来新增的范围。
     fn export_default_scopes(&self, document: &mut PolicyDocument) -> Result<()> {
         for (user_id, user) in &self.users {
             let permissions = PermissionSet::new(
@@ -94,7 +93,7 @@ impl PolicyFacts {
         Ok(())
     }
 
-    /// 每个动作独立导出，保留追加项的并集和维度交集。
+    // 逐动作导出人员范围，将每个追加条款内各维度的交集和多个条款的并集原样保留。
     fn export_scopes(&self, document: &mut PolicyDocument, notes: &mut Vec<String>) -> Result<()> {
         for scope in &self.scopes {
             if !scope_spec::is_configurable(&scope.resource, &scope.action) {
@@ -132,7 +131,7 @@ impl PolicyFacts {
         Ok(())
     }
 
-    /// 保留已撤动作后的休眠配置，但不能将其伪装成可直接重导入的文件。
+    // 导出前区分可重新导入的配置与资格撤销后的休眠配置；不能把失去动作资格的配置签为可直接回放的授权文件。
     fn ensure_scope_qualification(&self, scope: &PersonDataScope) -> Result<()> {
         let user = self.users.get(&scope.user_id).ok_or_else(|| Error::NotFound("范围人员不存在".into()))?;
         let required = Permission::parse(format!("{}:{}", scope.resource, scope.action))?;

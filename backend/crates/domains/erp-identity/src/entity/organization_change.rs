@@ -108,14 +108,8 @@ pub struct OrganizationChangeReceipt {
 
 impl OrganizationChangeRequest {
     /// 校验版本请求的原因、幂等键，并拒绝已停用的管理关系命令。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 命令、幂等键和原因都可用时无返回值。
     ///
-    /// # 错误
     /// `GrantManagement` 与 `RevokeManagement` 返回校验错误。
     /// `UpdatePersonProfile` 在展开子操作失败时传播其错误。
     /// 幂等键为空、长于 128 字节，或含有字母、数字、下划线、短横线以外的字节时返回校验错误。
@@ -157,18 +151,12 @@ impl OrganizationChangeRequest {
 
 impl OrganizationState {
     /// 按当前版本准备变更结果，失败不修改调用方状态。
-    ///
-    /// # 参数
-    /// * `request` - 带期望版本、幂等键和命令的变更请求。
-    /// * `id` - 本次新建组织或成员关系使用的身份。
-    /// * `actor` - 操作人身份。
-    /// * `at` - 本次变更时点。
-    ///
-    /// # 返回
     /// 返回版本加一后的新状态；调用方持有的 `self` 保持不变。
     ///
-    /// # 错误
     /// 请求校验失败、期望版本不一致、命令应用失败、组织树无效、成员有效期非法或重叠，以及版本号溢出时返回对应错误。
+    ///
+    /// `request`：带期望版本、幂等键和命令的变更请求；`id`：本次新建组织或成员关系使用的身份。
+    /// `at`：本次变更时点。
     pub fn changed(
         &self,
         request: &OrganizationChangeRequest,
@@ -192,21 +180,16 @@ impl OrganizationState {
     }
 
     /// 查询当前唯一主属组织；重复关系失败关闭，不默认放入根组织。
-    ///
-    /// # 参数
-    /// * `user_id` - 用户账号 ID。
-    /// * `at` - 判断时点。
-    ///
-    /// # 返回
     /// 该时点唯一有效主属组织的 ID；没有有效关系时返回 `None`。
     ///
-    /// # 错误
     /// 同一时点存在多条主属关系时返回 `Error::ConflictError`。
+    ///
+    /// `at`：判断时点。
     pub fn own_org(&self, user_id: &str, at: Instant) -> Result<Option<&str>> {
         OrgMembership::primary_org(&self.memberships, user_id, at)
     }
 
-    /// 校验单用户全部有效期不重叠，含未来关系。
+    // 在组织状态校验中拒绝同一用户的主属有效期重叠，也检查尚未生效的关系，避免未来出现多条有效归属。
     fn validate_memberships(&self) -> Result<()> {
         let mut members = self.memberships.iter().filter(|m| !m.base.is_deleted()).collect::<Vec<_>>();
         members.sort_by_key(|m| (&m.user_id, m.validity.valid_from));
@@ -223,7 +206,7 @@ impl OrganizationState {
         Ok(())
     }
 
-    /// 分派固定命令；业务责任与任务字段不属于组织状态，不参与自动更新。
+    // 按组织命令类型应用领域变更。业务对象负责人和任务不属于组织聚合，不随组织关系自动迁移。
     fn apply(
         &mut self,
         change: &OrganizationOperation,
@@ -280,7 +263,7 @@ impl OrganizationState {
         Ok(())
     }
 
-    /// 创建组织节点，父组织必须存在且整条祖先路径有效。
+    // 接收新增组织命令后创建节点；若指定父级，须先确认父组织及其全祖先路径均有效。
     fn create_unit(
         &mut self,
         name: &str,
@@ -304,7 +287,7 @@ impl OrganizationState {
         Ok(())
     }
 
-    /// 移动组织节点；完整树的成环约束由变更入口统一校验。
+    // 更新组织节点的父级关系，变更入口统一校验整棵树是否成环。
     fn move_unit(&mut self, id: &str, parent_id: Option<&str>, actor: &str, reason: &str) -> Result<()> {
         if let Some(parent) = parent_id {
             self.ensure_enabled(parent)?;
@@ -313,14 +296,14 @@ impl OrganizationState {
         Ok(())
     }
 
-    /// 规范化组织名称后更新可用节点及审计信息。
+    // 处理改名命令时先规范化组织名称，再更新仍可用的节点与审计信息。
     fn rename_unit(&mut self, id: &str, name: &str, actor: &str, reason: &str) -> Result<()> {
         let name = normalize_required_text(name.into(), "组织名称不能为空", 100, "组织名称过长")?;
         self.unit_mut(id, actor, reason)?.name = name;
         Ok(())
     }
 
-    /// 加载可用节点并保存此次操作人和原因。
+    // 组织变更前取得有效节点的可变引用，并记下本次操作人和原因。
     fn unit_mut(&mut self, id: &str, actor: &str, reason: &str) -> Result<&mut OrgUnit> {
         self.ensure_enabled(id)?;
         let unit = self
@@ -334,7 +317,7 @@ impl OrganizationState {
         Ok(unit)
     }
 
-    /// 停用前必须结束有效或未来成员及下级关系；业务未结事实由 Service 的 Port 补验。
+    // 停止组织使用前拒绝仍有有效或未来成员及下级关系的节点；未结业务由服务调用业务端口补验。
     fn disable(&mut self, id: &str, actor: &str, reason: &str, at: Instant) -> Result<()> {
         let pending_members = self
             .memberships
@@ -349,7 +332,7 @@ impl OrganizationState {
         Ok(())
     }
 
-    /// 结束旧关系并创建新主属关系；时点相同时不产生空有效期。
+    // 按同一边界时间结束旧主属并建立新主属；与原开始时点相同时避免写出空有效期。
     fn transfer(
         &mut self,
         user: &str,
@@ -376,7 +359,7 @@ impl OrganizationState {
         Ok(())
     }
 
-    /// 结束当前有效关系，保留原始关系记录和此次变更原因。
+    // 处理离开组织时结束当前有效的主属关系，不抹掉历史记录与变更原因。
     fn end_membership(&mut self, user: &str, actor: &str, reason: &str, at: Instant) -> Result<()> {
         for membership in self.memberships.iter_mut().filter(|m| m.user_id == user && m.validity.contains(at))
         {
@@ -390,7 +373,7 @@ impl OrganizationState {
         Ok(())
     }
 
-    /// 组织必须存在且整条祖先路径有效。
+    // 组织变更及成员分配前确认目标节点存在，并且整条祖先链均启用。
     fn ensure_enabled(&self, id: &str) -> Result<()> {
         if OrgTree::new(&self.units)?.expand(id, false)?.is_empty() {
             return Err(Error::ValidationError("组织已停用".into()));
@@ -477,7 +460,7 @@ mod tests {
         }
     }
 
-    /// 节点命令保留规范化、拓扑变更和审计信息，原状态不受影响。
+    // 验证：节点命令保留规范化、拓扑变更和审计信息，原状态不受影响。
     #[test]
     fn unit_commands_update_identity_topology_and_audit() {
         let before = state();
@@ -534,7 +517,7 @@ mod tests {
         assert_eq!(before.units[1].parent_id, None);
     }
 
-    /// 不存在节点、停用祖先和无效名称仍返回错误，不触发节点存在性断言。
+    // 验证：不存在节点、停用祖先和无效名称仍返回错误，不触发节点存在性断言。
     #[test]
     fn unit_commands_reject_missing_nodes_disabled_ancestors_and_invalid_names() {
         let mut before = state();
@@ -675,7 +658,7 @@ mod tests {
         assert_eq!(before.units[0].parent_id, None);
     }
 
-    /// 已停用的管理命令仍可读取审计，但预览、提交与回放入口均不得重新执行。
+    // 验证：已停用的管理命令仍可读取审计，但预览、提交与回放入口均不得重新执行。
     #[test]
     fn legacy_management_commands_deserialize_but_cannot_change_state() {
         let before = state();
@@ -700,7 +683,7 @@ mod tests {
         assert!(before.management.is_empty());
     }
 
-    /// 历史管理关系不得继续阻止普通部门停用，历史本身保留不变。
+    // 验证：历史管理关系不得继续阻止普通部门停用，历史本身保留不变。
     #[test]
     fn historical_management_does_not_block_department_disable() {
         let mut before = state();
@@ -731,7 +714,7 @@ mod tests {
         assert_eq!(after.management, before.management);
     }
 
-    /// 新快照省略旧管理关系，缺失字段和历史空数组均可读取。
+    // 验证：新快照省略旧管理关系，缺失字段和历史空数组均可读取。
     #[test]
     fn current_snapshots_omit_retired_management_and_accept_empty_history() {
         let before = state();

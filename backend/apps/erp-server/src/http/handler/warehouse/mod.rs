@@ -20,14 +20,8 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 use crate::wiring::warehouse_directory;
 
-/// 查询仓库列表。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `query` - 分页与筛选参数（`warehouse_code`/`status` 扁平传递）
-///
-/// # 返回
-/// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
+/// 按请求条件查询仓库列表。
+/// `query` 为分页与筛选参数（`warehouse_code`/`status` 扁平传递）。
 pub async fn warehouse_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -41,13 +35,7 @@ pub async fn warehouse_list(
 }
 
 /// 创建仓库（仓库稳定身份 + 首个修订，跨集合事务）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 创建请求（`{ warehouse_code, name, address, contact, effective_from, ... }`）
-///
-/// # 返回
+/// `req` 为创建请求（`{ warehouse_code, name, address, contact, effective_from, ... }`）。
 /// 返回新建仓库的响应视图。
 pub async fn warehouse_create(
     State(state): State<HttpState>,
@@ -60,14 +48,7 @@ pub async fn warehouse_create(
 }
 
 /// 更新仓库（追加新修订并更新稳定身份，跨集合事务；乐观锁）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 仓库 ID
-/// * `req` - 更新请求（含期望版本与新修订快照）
-///
-/// # 返回
+/// `req` 为更新请求（含期望版本与新修订快照）。
 /// 返回更新后仓库的响应视图。
 pub async fn warehouse_update(
     State(state): State<HttpState>,
@@ -81,14 +62,7 @@ pub async fn warehouse_update(
 }
 
 /// 更新仓库入库与仓发经办人。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 仓库 ID
-/// * `req` - 期望版本与两个具体账号
-///
-/// # 返回
+/// `req` 为期望版本与两个具体账号。
 /// 返回更新后的仓库视图。
 pub async fn warehouse_fulfillment_handlers_update(
     State(state): State<HttpState>,
@@ -105,11 +79,6 @@ pub async fn warehouse_fulfillment_handlers_update(
 }
 
 /// 查询可用的仓库收发经办人选项。
-///
-/// # 参数
-/// * `state` - 应用状态
-///
-/// # 返回
 /// 返回可登录账号及其入库、仓发资格。
 pub async fn warehouse_fulfillment_handler_options(
     State(state): State<HttpState>,
@@ -121,13 +90,7 @@ pub async fn warehouse_fulfillment_handler_options(
 }
 
 /// 查询仓库修订列表（不含加密地址/联系人等敏感字段）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `query` - 分页与筛选参数（`warehouse_id`/`name` 扁平传递）
-///
-/// # 返回
-/// 返回契约形状的分页视图。
+/// `query` 为分页与筛选参数（`warehouse_id`/`name` 扁平传递）。
 pub async fn warehouse_revision_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -138,14 +101,8 @@ pub async fn warehouse_revision_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-/// 查询仓库-SKU 预警策略列表。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `query` - 分页与筛选参数（`warehouse_id`/`sku_id`/`status` 扁平传递）
-///
-/// # 返回
-/// 返回契约形状的分页视图。
+/// 按请求条件查询仓库-SKU 预警策略列表。
+/// `query` 为分页与筛选参数（`warehouse_id`/`sku_id`/`status` 扁平传递）。
 pub async fn warehouse_sku_policy_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -157,13 +114,7 @@ pub async fn warehouse_sku_policy_list(
 }
 
 /// 创建仓库-SKU 预警策略（启用区间不得与既有策略重叠）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 创建请求（`{ warehouse_id, sku_id, minimum_available_quantity, ... }`）
-///
-/// # 返回
+/// `req` 为创建请求（`{ warehouse_id, sku_id, minimum_available_quantity, ... }`）。
 /// 返回新建策略的响应视图。
 pub async fn warehouse_sku_policy_create(
     State(state): State<HttpState>,
@@ -182,14 +133,7 @@ pub async fn warehouse_sku_policy_create(
 }
 
 /// 更新仓库-SKU 预警策略（乐观锁）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 策略 ID
-/// * `req` - 更新请求（含期望版本）
-///
-/// # 返回
+/// `req` 为更新请求（含期望版本）。
 /// 返回更新后策略的响应视图。
 pub async fn warehouse_sku_policy_update(
     State(state): State<HttpState>,
@@ -203,13 +147,6 @@ pub async fn warehouse_sku_policy_update(
 }
 
 /// 删除仓库-SKU 预警策略（软删除）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 策略 ID
-///
-/// # 返回
 /// 返回删除结果（`data` 为 `null`）。
 pub async fn warehouse_sku_policy_delete(
     State(state): State<HttpState>,

@@ -20,16 +20,11 @@ use super::{
 };
 use crate::procure_to_pay::PurchaseOrderPorts;
 
-/// 按任务、计划、guard、库存、采购和收据的原顺序执行事务内命令。
-///
-/// # 参数
-/// * `db` - 数据库。
-/// * `input` - 已规范化请求、授权、审计和幂等上下文。
-/// * `executor` - 本次事务的原执行器。
-/// # 返回
-/// 返回首次执行或事务内幂等回放结果。
-/// # 错误
-/// 首个任务、计划、版本、库存、采购、审批或持久化错误原样传播。
+// 按任务、计划、guard、库存、采购和收据的原顺序执行事务内命令。
+//
+// `input` 为已规范化请求、授权、审计和幂等上下文；`executor` 为本次事务的原执行器。返回首次执行或事务内幂等回放结果。
+//
+// 首个任务、计划、版本、库存、采购、审批或持久化错误原样传播。
 pub(super) async fn create_from_sourcing_apply(
     db: &Database,
     ports: &PurchaseOrderPorts,
@@ -56,7 +51,7 @@ pub(super) async fn create_from_sourcing_apply(
     writes.finish_sourcing(&order, orders, stock_reservations, sequences, executor).await
 }
 
-/// guard 前形成计划，再按原顺序推进一次销售单供给 guard。
+// guard 前形成计划，再按原顺序推进一次销售单供给 guard。
 async fn prepare_plan(
     db: &Database,
     input: &CreateFromSourcingApplyInput<'_>,
@@ -90,7 +85,7 @@ async fn prepare_plan(
     Ok((task, order, plan, sequences))
 }
 
-/// guard 后重新取库存依据，预占并生成仓发草稿，再返回实际登记的结果。
+// guard 后重新取库存依据，预占并生成仓发草稿，再返回实际登记的结果。
 async fn reserve_stock(
     db: &Database,
     ports: &PurchaseOrderPorts,
@@ -119,7 +114,7 @@ async fn reserve_stock(
     Ok(persisted.into_iter().map(|allocation| allocation.result).collect())
 }
 
-/// 构造单张采购命令的收据，再沿原 Executor 登记草稿、冻结和审批。
+// 构造单张采购命令的收据，再沿原 Executor 登记草稿、冻结和审批。
 async fn persist_order(
     db: &Database,
     ports: &PurchaseOrderPorts,
@@ -157,7 +152,7 @@ async fn persist_order(
     persist_basis_draft(db, ports, input.rbac, verified, &command, executor).await
 }
 
-/// 按原字段和行顺序组装单张采购请求，不改变规范化或首错处理。
+// 按原字段和行顺序组装单张采购请求，不改变规范化或首错处理。
 fn item_request(
     input: &CreateFromSourcingApplyInput<'_>,
     latest: &BasisGroup,
@@ -192,7 +187,7 @@ struct SourcingWriteContext<'a, 'input> {
 }
 
 impl SourcingWriteContext<'_, '_> {
-    /// 库存写入后重新取采购依据，逐单保留数量复验及完整持久化顺序。
+    // 库存写入后重新取采购依据，逐单保留数量复验及完整持久化顺序。
     async fn create_orders(
         &self,
         task: &WorkItem,
@@ -227,7 +222,7 @@ impl SourcingWriteContext<'_, '_> {
         Ok(orders)
     }
 
-    /// 完成任务同步后读取最终状态、登记命令收据，并返回同一份实际写入结果。
+    // 完成任务同步后读取最终状态、登记命令收据，并返回同一份实际写入结果。
     async fn finish_sourcing(
         &self,
         sales_order: &SalesOrder,

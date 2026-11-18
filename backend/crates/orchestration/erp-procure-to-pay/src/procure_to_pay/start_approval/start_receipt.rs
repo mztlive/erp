@@ -16,21 +16,11 @@ use persistence_core::Executor;
 
 use crate::{Error, Result};
 
-/// 使用调用方执行器加载绑定定义图，供创建并提交的同一事务复用。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `binding` - 创建时冻结的定义绑定
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回已持久化的定义图。
-///
-/// # 错误
-/// 定义不存在或仓储失败时返回冲突或仓储错误。
-///
-/// # 关键业务约束
-/// 新建采购单后立即提交时必须用同一事务会话读取绑定定义。
+// 使用调用方执行器加载绑定定义图，供创建并提交的同一事务复用。
+//
+// `binding` 为创建时冻结的定义绑定。返回已持久化的定义图。定义不存在或仓储失败时返回冲突或仓储错误。
+//
+// 新建采购单后立即提交时必须用同一事务会话读取绑定定义。
 pub(crate) async fn load_bound_definition_graph_with_executor(
     db: &Database,
     binding: &ApprovalDefinitionBinding,
@@ -41,22 +31,12 @@ pub(crate) async fn load_bound_definition_graph_with_executor(
         .map_err(Error::from)
 }
 
-/// 在 fresh 事务快照内按完整 V3/legacy 身份回读已提交的采购启动结果。
-///
-/// # 参数
-/// * `db` - 审批运行时数据库。
-/// * `subject` - 采购单主体引用。
-/// * `subject_version` - 冻结提交版本。
-/// * `idempotency_key` - 尚未规范化的幂等键。
-/// * `binding` - 创建时冻结的定义绑定。
-/// * `actor_id` - 启动人。
-/// * `executor` - 调用方事务执行器。
-///
-/// # 返回
-/// 没有匹配收据时返回 `None`；同键同载荷且运行事实一致时返回审批实例 ID。
-///
-/// # 错误
-/// 幂等键非法、同键异载荷、收据引用的实例不存在、收据与冻结运行事实不一致，或仓储读取失败时返回错误。
+// 在 fresh 事务快照内按完整 V3/legacy 身份回读已提交的采购启动结果。
+//
+// `db` 为审批运行时数据库；`subject` 为采购单主体引用；`subject_version` 为冻结提交版本；`idempotency_key` 为尚未规范化的幂等键；`binding`
+// 为创建时冻结的定义绑定；`actor_id` 为启动人；沿用原事务的执行器。没有匹配收据时返回 `None`；同键同载荷且运行事实一致时返回审批实例 ID。
+//
+// 幂等键非法、同键异载荷、收据引用的实例不存在、收据与冻结运行事实不一致，或仓储读取失败时返回错误。
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn replay_purchase_order_start_with_executor(
     db: &Database,

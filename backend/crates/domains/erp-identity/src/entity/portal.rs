@@ -22,12 +22,6 @@ pub enum PortalRole {
 
 impl PortalRole {
     /// 校验门户写入资格。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 供给维护员返回成功。
-    /// # 错误
     /// 只读人员返回稳定权限错误。
     pub fn require_write(self) -> Result<()> {
         match self {
@@ -52,13 +46,11 @@ pub struct PortalBinding {
 
 impl PortalBinding {
     /// 创建仅绑定一家供应商的外部账号关系。
-    ///
-    /// # 参数
-    /// `id`、`account_id`、`supplier_id` 是稳定身份；`role` 是门户岗位；`actor_id` 是开通人。
-    /// # 返回
     /// 已规范化的有效绑定。
-    /// # 错误
+    ///
     /// 任一身份为空或超长时拒绝。
+    ///
+    /// `id`、`account_id`、`supplier_id` 是稳定身份；`role` 是门户岗位；`actor_id` 是开通人。
     pub fn new(
         id: String,
         account_id: String,
@@ -81,13 +73,11 @@ impl PortalBinding {
     }
 
     /// 在已核对的绑定版本上调整岗位或撤销绑定。
-    ///
-    /// # 参数
-    /// `expected_version` 为读取版本；`role`、`active` 为目标状态；`actor_id` 为内部操作人。
-    /// # 返回
     /// 更新已应用的绑定；身份和原始开通人保持稳定。
-    /// # 错误
+    ///
     /// 版本过期、绑定删除或操作人无效时拒绝。
+    ///
+    /// `expected_version` 为读取版本；`role`、`active` 为目标状态；`actor_id` 为内部操作人。
     pub fn update(
         &mut self,
         expected_version: u64,
@@ -105,13 +95,11 @@ impl PortalBinding {
     }
 
     /// 将当前账号与绑定收窄为可信门户身份。
-    ///
-    /// # 参数
-    /// `account` 为当前账号；`login` 和两个版本为已签发会话身份。
-    /// # 返回
     /// 当前岗位及供应商归属，均取自持久化事实。
-    /// # 错误
+    ///
     /// 账号、类型、状态、绑定或任一版本失效时返回统一认证错误。
+    ///
+    /// `account` 为当前账号；`login` 和两个版本为已签发会话身份。
     pub fn identity(
         &self,
         account: &AccountCore,
@@ -154,31 +142,19 @@ pub struct PortalActor {
 
 impl PortalActor {
     /// 校验当前门户岗位是否允许写入。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 供给维护员返回成功。
-    /// # 错误
     /// 只读人员返回权限错误。
     pub fn require_write(&self) -> Result<()> {
         self.role.require_write()
     }
 
     /// 生成保留供应商身份类别的审计操作人。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 真实外部操作人；不授予后台资格。
-    /// # 错误
-    /// 不返回错误。
     pub fn audit_actor(&self) -> AuditActor {
         AuditActor::new(self.account_id.clone(), self.account.clone(), AccountKind::Supplier)
     }
 }
 
-/// 规范化稳定身份，避免无效绑定进入持久化。
+// 写入供应商门户绑定前规范化必填稳定身份，不接受空白等无效标识。
 fn required_id(value: String, field: &str) -> Result<String> {
     Ok(normalize_required_text(value, &format!("{field}不能为空"), 128, &format!("{field}过长"))?)
 }

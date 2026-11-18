@@ -45,18 +45,8 @@ pub struct FulfillmentProcess {
 impl FulfillmentProcess {
     /// 使用原入口配置构造流程；指纹密钥和敏感信息编解码器保持启动期共享。
     ///
-    /// # 参数
-    /// * `db` - 业务数据库。
-    /// * `fingerprint_key` - 启动期共享的指纹密钥。
-    /// * `sensitive_data` - 启动期共享的敏感信息编解码器。
-    /// * `workflow` - 应用装配的工作流绑定、材料和正式任务能力。
-    /// * `task_identity` - 进程共享授权服务。
-    ///
-    /// # 返回
-    /// 返回对象读取默认失败关闭的履约流程。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// `fingerprint_key` 为启动期共享的指纹密钥；`sensitive_data` 为启动期共享的敏感信息编解码器；`workflow` 为应用装配的工作流绑定、材料和正式任务能力；
+    /// `task_identity` 为进程共享授权服务。返回对象读取默认失败关闭的履约流程。
     pub fn new(
         db: Database,
         fingerprint_key: Vec<u8>,
@@ -67,16 +57,7 @@ impl FulfillmentProcess {
         Self { workflow, db, fingerprint_key, sensitive_data, task_identity }
     }
 
-    /// 用本流程的数据库构造履约领域服务，不另开事务。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回绑定同一数据库的 `FulfillmentService`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 用本流程的数据库构造履约领域服务，不另开事务。返回绑定同一数据库的 `FulfillmentService`。
     pub(super) fn domain(&self) -> FulfillmentService {
         FulfillmentService::new(self.db.clone())
     }

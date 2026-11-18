@@ -5,11 +5,7 @@ use crate::ports::supplier_reference_registry::SupplierDeploymentConfig;
 
 impl SupplierApiConnection {
     /// 更新当前部署引用；配置变化使旧健康证据失效。
-    /// # 参数
-    /// `config` 是注册表解析结果，`actor` 是本次操作人。
-    /// # 返回
     /// 引用实际变化时返回 true；相同配置不改变版本或健康状态。
-    /// # 错误
     /// 引用非法或技术版本溢出时拒绝。
     pub fn apply_deployment(&mut self, config: &SupplierDeploymentConfig, actor: &str) -> Result<bool> {
         if self.technical_references_ready()

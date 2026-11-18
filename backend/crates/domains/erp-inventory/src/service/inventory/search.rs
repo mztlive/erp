@@ -7,19 +7,11 @@ use crate::error::Result;
 use crate::ports::CatalogFactsPort;
 use crate::repository::InventorySearch;
 
-/// 关键词无命中必须形成空集合条件，不能退回不筛选。
-///
-/// # 参数
-/// * `catalog` - SKU 字面量匹配端口。
-/// * `q` - 关键词；`None` 时不调用端口，`Some` 时原样交给端口。
-/// * `sku` - 显式 SKU；`None` 表示未指定。
-/// * `executor` - 调用方选择的数据访问执行器。
-///
-/// # 返回
-/// 返回关键词命中集合与显式 SKU 的交集搜索条件。
-///
-/// # 错误
-/// 商品匹配端口失败时返回对应错误。
+// 关键词无命中必须形成空集合条件，不能退回不筛选。
+// 返回关键词命中集合与显式 SKU 的交集搜索条件。
+// `catalog` 为 SKU 字面量匹配端口；`q` 为关键词；`None` 时不调用端口，`Some` 时原样交给端口。
+// `sku` 为显式 SKU；`None` 表示未指定；沿用调用方执行器 `executor`。
+// 商品匹配端口失败时返回对应错误。
 pub(super) async fn sku_filter(
     catalog: &dyn CatalogFactsPort,
     q: Option<&str>,
@@ -61,7 +53,7 @@ mod tests {
         }
     }
 
-    /// 商品关键词和显式 SKU 求交；冲突时保持空集合而非扩大范围。
+    // 验证商品关键词和显式 SKU 求交；冲突时保持空集合而非扩大范围。
     #[tokio::test]
     async fn keyword_intersects_explicit_sku_without_page_truncation() {
         let mut executor = persistence_core::NoTransaction;

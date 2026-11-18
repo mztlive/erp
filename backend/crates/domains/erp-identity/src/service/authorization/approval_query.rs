@@ -9,7 +9,7 @@ use crate::entity::access_control::scope_spec::{self, ActionKind};
 use crate::entity::authorization::{AccessContext, AccessRule, RelationKey, RelationMatch};
 use crate::{Permission, QualifiedPermissions, Result};
 
-/// 关系名只表达固定的冻结主体类型与来源资源，不携带请求状态。
+// 以冻结主体类型和来源资源生成审批列表关联键，键不含任何请求或账号状态。
 fn relation(subject: &str, source: &Permission, rule: AccessRule) -> Result<AccessRule> {
     Ok(AccessRule::Related {
         relation: RelationKey::parse(format!("management_{subject}_{}", source.resource()))?,
@@ -19,7 +19,7 @@ fn relation(subject: &str, source: &Permission, rule: AccessRule) -> Result<Acce
     })
 }
 
-/// 启动时校验所有固定分区与嵌套来源能力，不受账号当前资格影响。
+// 启动登记审批列表时构造涵盖全部固定分区及嵌套来源的能力条件，不按当前操作人的资格删减。
 pub(super) fn query_binding_condition() -> Result<AccessRule> {
     let mut partitions = Vec::new();
     for (subject, _, _) in approval_admin::TYPES {
@@ -40,7 +40,7 @@ pub(super) fn query_binding_condition() -> Result<AccessRule> {
 }
 
 impl AuthorizationService {
-    /// 所有分区共用一次身份取证；每类管理资格独立约束其来源范围。
+    // 为实例列表按同次身份取证生成分区；每一真实单据类型使用自己的管理资格来限制来源范围。
     pub(super) async fn approval_query_condition(
         &self,
         context: &AccessContext,

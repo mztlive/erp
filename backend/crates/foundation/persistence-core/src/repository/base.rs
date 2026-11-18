@@ -17,16 +17,7 @@ use crate::{Executor, mongo_ops};
 ///
 /// 由提供查询过滤条件的类型实现。
 pub trait QueryFilter {
-    /// 将过滤条件转换为 MongoDB 文档。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 表示过滤条件的 MongoDB `Document`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 由领域筛选器生成 MongoDB 条件；通用分页查询按原样同时用于取数和计数。
     fn to_doc(&self) -> Document;
 }
 
@@ -34,45 +25,16 @@ pub trait QueryFilter {
 ///
 /// 由提供分页参数的类型实现。
 pub trait Pagination {
-    /// 返回请求的页码与每页条数。
-    ///
-    /// 页码从 1 开始。实现可以返回 `0`；默认偏移计算会把它归一为第一页。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// `(页码, 每页条数)`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 提供计算分页偏移与上限的 `(页码, 每页条数)`。页码从一开始；旧调用返回零时，默认偏移仍从第一页开始。
     fn page_and_size(&self) -> (u64, u64);
 
-    /// 返回结果集应跳过的文档数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 默认实现按 `(page.max(1) - 1) * page_size` 计算。页码小于 1 时跳过数为 0。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 给查询提供 `(page.max(1) - 1) * page_size` 的偏移，将页码零视为首页。
     fn skip(&self) -> u64 {
         let (page, page_size) = self.page_and_size();
         (page.max(1) - 1) * page_size
     }
 
-    /// 返回单页最多返回的文档数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 默认实现返回 `page_and_size` 的每页条数；超出 `i64` 范围时钳制为 `i64::MAX`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为 MongoDB 查询提供单页上限；每页条数超过 `i64` 时取 `i64::MAX`，不截断成更小或负的值。
     fn limit(&self) -> i64 {
         let (_, page_size) = self.page_and_size();
         saturating_i64(page_size)
@@ -93,7 +55,7 @@ pub struct Repository<'a, T> {
     _phantom: std::marker::PhantomData<T>,
 }
 
-/// 将 `u64` 饱和转换为 `i64`，极端值钳制到 `i64::MAX` 而非静默截断。
+// 分页条数或总数必须用 `i64` 表达时，超限取上界，防止截断改变查询和响应语义。
 fn saturating_i64(value: u64) -> i64 {
     i64::try_from(value).unwrap_or(i64::MAX)
 }
@@ -107,12 +69,12 @@ struct WriteMetadata {
     updated_at_bson: i64,
 }
 
-/// 计算一次实体写入所需的版本与更新时间。
+// 构造乐观锁写入前捕获一次当前秒，用于计算待比较版本、新版本和更新时间。
 fn write_metadata(base: &BaseModel) -> Result<WriteMetadata> {
     write_metadata_at(base, chrono::Local::now().timestamp())
 }
 
-/// 使用指定时间计算实体写入元数据。
+// 从实体版本和指定时间构造写入元数据，同时校验版本加一及 BSON 表示范围；失败时不改内存实体。
 fn write_metadata_at(base: &BaseModel, updated_at_bson: i64) -> Result<WriteMetadata> {
     let next_version = base.version.checked_add(1).ok_or(Error::EntityMetadataOutOfRange("version"))?;
     let expected_version =
@@ -125,9 +87,7 @@ fn write_metadata_at(base: &BaseModel, updated_at_bson: i64) -> Result<WriteMeta
     Ok(WriteMetadata { expected_version, next_version, next_version_bson, updated_at, updated_at_bson })
 }
 
-/// 构建 CAS 写入的乐观锁过滤条件。
-///
-/// `expected_deleted` 决定条件匹配活跃实体还是已删除实体。
+// 更新、删除和恢复共用业务 ID 与期望版本条件，再按操作限定已删除或活跃状态，以免并发写错状态。
 fn cas_filter(base: &BaseModel, metadata: WriteMetadata, expected_deleted: bool) -> Document {
     let mut filter = doc! {
         "id": &base.id,
@@ -141,13 +101,13 @@ fn cas_filter(base: &BaseModel, metadata: WriteMetadata, expected_deleted: bool)
     filter
 }
 
-/// 为查询附加软删除活跃约束，新增查询统一经此入口，避免遗漏 `deleted_at` 域。
+// 统一给日常读取加未删除条件，覆盖同名过滤值，防止仓储漏加软删约束。
 fn with_active_scope(mut filter: Document) -> Document {
     filter.insert("deleted_at", NOT_DELETED_TIMESTAMP_BSON);
     filter
 }
 
-/// 在 MongoDB 写入命中后同步内存中的持久化元数据。
+// CAS 命中才将新版本、更新时间及可选删除时间同步到实体；零命中返回乐观锁冲突且不改内存。
 fn apply_write_result(
     base: &mut BaseModel,
     metadata: WriteMetadata,
@@ -166,7 +126,7 @@ fn apply_write_result(
     Ok(())
 }
 
-/// 校验实体状态并组装 CAS 元数据和过滤器。
+// 组装 CAS 前先核对内存实体的删除状态，再生成版本元数据和过滤；状态不合预期时不写数据库。
 fn cas_metadata_and_filter(base: &BaseModel, expected_deleted: bool) -> Result<(WriteMetadata, Document)> {
     if base.is_deleted() != expected_deleted {
         return Err(Error::OptimisticLockingError);
@@ -175,7 +135,7 @@ fn cas_metadata_and_filter(base: &BaseModel, expected_deleted: bool) -> Result<(
     Ok((metadata, cas_filter(base, metadata, expected_deleted)))
 }
 
-/// 执行 CAS 更新并同步内存元数据。
+// 用原执行器做不带 upsert 的比较写入，只有匹配时才同步内存元数据，避免把过期实体当作已保存。
 async fn exec_cas<T>(
     collection: &Collection<T>,
     base: &mut BaseModel,
@@ -196,87 +156,32 @@ impl<'a, T> Repository<'a, T>
 where
     T: Serialize + DeserializeOwned + Send + Sync,
 {
-    /// 创建新的 Repository 实例。
-    ///
-    /// # 参数
-    /// * `db` - 数据库实例。
-    /// * `collection_name` - 集合名称。
-    ///
-    /// # 返回
-    /// 返回创建的实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 领域仓储初始化时绑定数据库和本域集合，使后续通用操作按实体类型取集合；构造本身不执行 I/O。
     pub fn new(db: &'a Database, collection_name: &'a str) -> Self {
         Self { db, collection_name, _phantom: std::marker::PhantomData }
     }
 
-    /// 声明本仓储集合的已提交变更来源，不暴露业务文档。
-    /// # 参数
-    /// topic 为消费方刷新主题。
-    /// # 返回
-    /// 可交给统一订阅器的来源声明。
-    /// # 错误
-    /// 不执行 I/O。
+    /// 为本仓储的集合登记已提交变更的共享刷新主题，供统一订阅器使用；不读取或暴露业务文档。
     pub fn changes<U>(&self, topic: U) -> ChangeSource<U> {
         ChangeSource::shared(self.collection_name, topic)
     }
 
-    /// 返回本仓储绑定的 MongoDB 数据库句柄。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 构造本仓储时使用的数据库句柄。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 需要同一数据库上的领域专用操作时，借用仓储已绑定的句柄；事务仍由调用方执行器决定。
     pub fn database(&self) -> &'a Database {
         self.db
     }
 
-    /// 创建实体。
-    ///
-    /// # 参数
-    /// * `entity` - 实体对象
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 无返回值。实体已插入集合。
-    ///
-    /// # 错误
-    /// 唯一索引冲突或底层写入失败时返回对应错误。
+    /// 新建领域实体时沿用 Service 提供的执行器插入集合。重复唯一键和其他数据库写入失败保留仓储分类。
     pub async fn create(&self, entity: &T, executor: &mut dyn Executor) -> Result<()> {
         mongo_ops::insert_one(&self.collection(), entity, executor).await
     }
 
-    /// 根据ID查找未删除实体。
-    ///
-    /// # 参数
-    /// * `id` - 标识符
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的未删除实体；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
+    /// 普通详情读取按业务 ID 取未删除实体；未命中返回 `None`，沿用本次读取执行器。
     pub async fn find_by_id(&self, id: &str, executor: &mut dyn Executor) -> Result<Option<T>> {
         self.find_one(doc! { "id": id }, executor).await
     }
 
-    /// 按 ID 查找实体，包含已软删除记录。
-    ///
-    /// # 参数
-    /// * `id` - 标识符
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配实体；无匹配时返回 `None`。已软删除的记录也会返回。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
+    /// 恢复或追溯场景可以按业务 ID 读取历史软删除记录；无匹配仍返回 `None`，不用于默认活跃列表。
     pub async fn find_by_id_including_deleted(
         &self,
         id: &str,
@@ -285,18 +190,7 @@ where
         mongo_ops::find_one(&self.collection(), doc! { "id": id }, executor).await
     }
 
-    /// 按字段查找实体，包含已软删除记录。
-    ///
-    /// # 参数
-    /// * `field` - 字段名
-    /// * `value` - 字段值
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回第一条匹配实体；无匹配时返回 `None`。已软删除的记录也会返回。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
+    /// 需要按唯一业务键等字段追溯记录时，精确取首个匹配值，不排除软删除；无匹配返回 `None`。
     pub async fn find_one_by_field_including_deleted<V>(
         &self,
         field: &str,
@@ -309,18 +203,7 @@ where
         mongo_ops::find_one(&self.collection(), doc! { field: value.into() }, executor).await
     }
 
-    /// 按字段查找全部实体，包含已软删除记录。
-    ///
-    /// # 参数
-    /// * `field` - 字段名
-    /// * `value` - 字段值
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回全部匹配实体，包括已软删除记录。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
+    /// 按外键追溯全量关联记录时，取该字段的所有精确匹配，不过滤软删除，也不附加排序或分页。
     pub async fn find_many_by_field_including_deleted<V>(
         &self,
         field: &str,
@@ -339,18 +222,9 @@ where
         .await
     }
 
-    /// 更新实体（带乐观锁）。
-    ///
-    /// # 参数
-    /// * `entity` - 实体对象
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 无返回值。写入命中后推进内存中的 `version` 与 `updated_at`。
-    /// 调用开始时使旧读取凭证失效，前置校验失败也不保留旧阶段。
-    ///
-    /// # 错误
-    /// 实体已删除或版本未命中时返回 `OptimisticLockingError`。版本或 `updated_at` 超出范围时返回 `EntityMetadataOutOfRange`。实体无法编码为 BSON 时返回 `BsonError`。底层写入失败时返回对应错误。
+    /// 保存活跃实体时按原版本比较写入；状态或版本不匹配返回乐观锁错误，命中后才同步内存版本和更新时间。
+    /// 方法一开始就撤销旧读取凭证，即使前置校验或 BSON 编码失败也不会保留它。
+    /// 版本或时间越界返回 `EntityMetadataOutOfRange`，BSON 编码错误单独返回。
     pub async fn update(&self, entity: &mut T, executor: &mut dyn Executor) -> Result<()>
     where
         T: HasBaseModel,
@@ -374,18 +248,8 @@ where
         .await
     }
 
-    /// 软删除活跃实体。
-    ///
-    /// # 参数
-    /// * `entity` - 待删除实体
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 无返回值。写入命中后推进内存中的 `version` 与 `updated_at`，并把 `deleted_at` 设为同一时间。
-    /// 调用开始时使旧读取凭证失效，前置校验失败也不保留旧阶段。
-    ///
-    /// # 错误
-    /// 实体已删除或版本未命中时返回 `OptimisticLockingError`。版本或 `updated_at` 超出范围时返回 `EntityMetadataOutOfRange`。底层写入失败时返回对应错误。
+    /// 删除业务对象但需保留历史时，按原版本匹配活跃实体；命中后将删除时间设为本次更新时间，并更新内存版本和时间。
+    /// 旧读取凭证在前置校验前即失效。已删除或版本未命中报乐观锁错误，元数据越界则单独报错。
     pub async fn soft_delete(&self, entity: &mut T, executor: &mut dyn Executor) -> Result<()>
     where
         T: HasBaseModel,
@@ -393,18 +257,8 @@ where
         self.set_deleted(entity, true, executor).await
     }
 
-    /// 恢复已软删除实体。
-    ///
-    /// # 参数
-    /// * `entity` - 待恢复实体
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 无返回值。写入命中后推进内存中的 `version` 与 `updated_at`，并把 `deleted_at` 写回 `NOT_DELETED_TIMESTAMP`。
-    /// 调用开始时使旧读取凭证失效，前置校验失败也不保留旧阶段。
-    ///
-    /// # 错误
-    /// 实体未删除或版本未命中时返回 `OptimisticLockingError`。版本或 `updated_at` 超出范围时返回 `EntityMetadataOutOfRange`。底层写入失败时返回对应错误。
+    /// 恢复历史软删除实体时比较原版本，命中后清除删除标记并同步内存版本和时间。开始即使旧读取凭证失效；
+    /// 原记录未删除、版本冲突或元数据越界时拒绝写入。
     pub async fn restore(&self, entity: &mut T, executor: &mut dyn Executor) -> Result<()>
     where
         T: HasBaseModel,
@@ -436,32 +290,12 @@ where
             .await
     }
 
-    /// 查找所有未删除的实体。
-    ///
-    /// # 参数
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回全部未删除实体。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 无需额外筛选且调用方能承受全量结果时，沿用当前执行器读全部未删除实体，不附加排序或分页。
     pub async fn list_all(&self, executor: &mut dyn Executor) -> Result<Vec<T>> {
         self.find_many_scoped(Document::new(), FindOptions::default(), executor).await
     }
 
-    /// 根据单个字段查找一个未删除实体。
-    ///
-    /// # 参数
-    /// * `field` - 字段名
-    /// * `value` - 值
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的未删除实体；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
+    /// 按单个业务字段精确定位活跃实体；会排除软删除记录，未匹配时返回 `None`。
     pub async fn find_one_by_field<V>(
         &self,
         field: &str,
@@ -474,48 +308,17 @@ where
         self.find_one(doc! { field: value.into() }, executor).await
     }
 
-    /// 查找单个未删除实体。
-    ///
-    /// # 参数
-    /// * `filter` - 过滤条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的未删除实体；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
+    /// 领域已组装完整过滤条件时，附加未删除约束并取首条匹配实体。无匹配返回 `None`，读失败向上返回。
     pub async fn find_one(&self, filter: Document, executor: &mut dyn Executor) -> Result<Option<T>> {
         mongo_ops::find_one(&self.collection(), with_active_scope(filter), executor).await
     }
 
-    /// 查找多个未删除实体。
-    ///
-    /// # 参数
-    /// * `filter` - 过滤条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回符合条件且未删除的实体集合。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 批量取符合领域条件的活跃实体，不提供固定顺序；需要排序时用 [`Self::find_many_sorted`]。
     pub async fn find_many(&self, filter: Document, executor: &mut dyn Executor) -> Result<Vec<T>> {
         self.find_many_scoped(filter, FindOptions::default(), executor).await
     }
 
-    /// 查找多个未删除实体（带排序）。
-    ///
-    /// # 参数
-    /// * `filter` - 过滤条件
-    /// * `sort` - 排序条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回排序后的未删除实体集合。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 当列表或处理顺序明确时，按调用方的排序文档读取活跃匹配项，不隐式分页。
     pub async fn find_many_sorted(
         &self,
         filter: Document,
@@ -525,19 +328,7 @@ where
         self.find_many_scoped(filter, FindOptions::builder().sort(sort).build(), executor).await
     }
 
-    /// 按稳定 ID 批量读取未删除实体。
-    ///
-    /// 通用按 ID 批量加载原语，不绑定具体业务类型。
-    ///
-    /// # 参数
-    /// * `ids` - 业务对象稳定 ID 集合
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回全部匹配且未删除的业务对象；输入为空时返回空集合。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
+    /// 解析一组稳定业务引用时批量取未删除对象，不按输入顺序补位；空 ID 集合直接返回，不发起查询。
     pub async fn list_active_by_ids(&self, ids: &[String], executor: &mut dyn Executor) -> Result<Vec<T>> {
         if ids.is_empty() {
             return Ok(Vec::new());
@@ -545,37 +336,13 @@ where
         self.find_many(doc! { "id": { "$in": ids } }, executor).await
     }
 
-    /// 判断是否存在符合条件的活跃实体。
-    ///
-    /// 查询只投影 MongoDB `_id`，并在首条命中后停止，
-    /// 避免为存在性判断加载完整实体或结果集合。
-    ///
-    /// # 参数
-    /// * `filter` - 过滤条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 存在匹配的活跃实体时返回 `true`，否则返回 `false`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
+    /// 唯一性检查或前置条件只关心有无活跃记录时，附加软删约束并用 `_id` 投影探测，不读取完整实体。
     pub async fn exists(&self, filter: Document, executor: &mut dyn Executor) -> Result<bool> {
         mongo_ops::exists(&self.collection(), with_active_scope(filter), executor).await
     }
 
-    /// 分页检索实体。
-    ///
-    /// 结果固定按 `created_at` 降序。过滤条件原样使用，不附加软删除约束。
-    ///
-    /// # 参数
-    /// * `filter` - 过滤与分页条件。
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中。
-    ///
-    /// # 返回
-    /// 返回当前页实体与匹配总数。总数超出 `i64` 范围时钳制为 `i64::MAX`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// 用同一领域条件在原执行器中取页和计数，固定按 `created_at` 降序。不会自动排除软删除，过滤由调用方指定；
+    /// 总数超出 `i64` 时取上界。
     pub async fn search<F>(&self, filter: &F, executor: &mut dyn Executor) -> Result<PageResult<T>>
     where
         F: QueryFilter + Pagination + Send + Sync,
@@ -597,32 +364,12 @@ where
         Ok(PageResult { items, total: saturating_i64(total) })
     }
 
-    /// 获取当前实体对应的 MongoDB 集合（内部使用）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回按实体类型参数化的集合句柄。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 领域仓储需要实现通用入口未覆盖的操作时，从既有仓储取绑定实体的 MongoDB 集合句柄。读写继续使用调用方执行器。
     pub fn collection(&self) -> Collection<T> {
         self.db.collection::<T>(self.collection_name)
     }
 
-    /// 以活跃域约束查询多个文档（各列表读取的共用入口）。
-    ///
-    /// # 参数
-    /// * `filter` - 未加域的过滤条件
-    /// * `options` - 排序与分页等查询选项
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回符合条件且未删除的实体集合。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    // 集中为列表查询补上活跃约束，保留各入口给出的排序、分页和执行器。
     async fn find_many_scoped(
         &self,
         filter: Document,
@@ -633,14 +380,8 @@ where
     }
 }
 
-/// 更新与 MongoDB 插入使用相同的非 human-readable BSON 形态，保持数值原生类型。
-///
-/// # 参数
-/// * `value` - 待写入的实体快照
-/// # 返回
-/// 返回可用于 `$set` 的原生 BSON 文档。
-/// # 错误
-/// 实体无法编码为 BSON 或解码为文档时返回序列化错误。
+/// 把实体快照编码为与 MongoDB 插入相同的非 human-readable BSON，再取出文档用于 `$set`，
+/// 使 Decimal128 等原生类型在更新时不变成字符串；编码或文档解码失败时返回错误。
 pub fn persisted_document<T: Serialize>(value: &T) -> Result<Document> {
     Ok(deserialize_from_slice(&serialize_to_vec(value)?)?)
 }

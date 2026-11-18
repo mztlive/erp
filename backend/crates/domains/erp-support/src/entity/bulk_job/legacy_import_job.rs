@@ -15,19 +15,9 @@ pub const LEGACY_IMPORT_JOB_NO_PREFIX: &str = "BJ";
 pub const LEGACY_IMPORT_DOMAIN_JOB_TYPE: &str = "LEGACY_IMPORT";
 
 /// 构造批次后台任务编号（INT-E26 确定性构造）。
-///
 /// `BJ-<batch_no>`，批次号全局唯一 → 任务编号全局唯一。
-///
-/// # 参数
-/// * `batch_no` - 导入批次号
-///
-/// # 返回
 /// 返回后台任务编号字符串。
-///
-/// # 错误
-/// 不返回错误。
-///
-/// # 约束
+/// `batch_no` 为导入批次号。
 /// 纯字符串拼接，不访问数据库或时钟。
 pub fn legacy_import_job_no(batch_no: &str) -> String {
     format!("{LEGACY_IMPORT_JOB_NO_PREFIX}-{batch_no}")
@@ -35,25 +25,12 @@ pub fn legacy_import_job_no(batch_no: &str) -> String {
 
 impl BackgroundJob {
     /// 为导入批次登记后台任务（INT-E26 领域工厂）。
-    ///
-    /// 固定任务类型 `Import`、领域任务类型 `LEGACY_IMPORT`、领域任务 ID
-    /// 为批次 ID、`request_id` 为批次号（幂等定位）、总数为批次总行数，
-    /// 初始 `PENDING`。任务 ID 与发起人由 Service 显式注入。
-    ///
-    /// # 参数
-    /// * `job_id` - 任务主键（由 Service 预分配并注入）
-    /// * `batch_no` - 导入批次号
-    /// * `batch_id` - 导入批次实体 ID
-    /// * `total_rows` - 批次总行数
-    /// * `requested_by` - 发起人账号 ID
-    ///
-    /// # 返回
-    /// 返回新建的后台任务实体。
-    ///
-    /// # 错误
+    /// 固定任务类型 `Import`、领域任务类型 `LEGACY_IMPORT`、领域任务 ID 为批次 ID、`request_id` 为批次号（幂等定位）、总数为批次总行数，初始 `PENDING`。
+    /// 任务 ID 与发起人由 Service 显式注入。
+    /// `job_id` 为任务主键（由 Service 预分配并注入）；`batch_no` 为导入批次号。
+    /// `batch_id` 为导入批次实体 ID；`total_rows` 为批次总行数。
+    /// `requested_by` 为发起人账号 ID。
     /// 当编号/发起人/请求身份校验失败时返回错误。
-    ///
-    /// # 约束
     /// 纯确定性构造；不访问 MongoDB、时钟、ID 生成器或密钥。
     pub fn for_legacy_import(
         job_id: BackgroundJobId,

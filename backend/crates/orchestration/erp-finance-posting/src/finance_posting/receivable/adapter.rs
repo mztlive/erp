@@ -52,26 +52,14 @@ pub struct CustomerReceiptAdapter {
     pub read_scope: AdapterReadScope,
 }
 
-/// 返回客户回款单的完整适配器登记。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回已校验完整性的规格与显式字段声明。
-///
-/// # 错误
-/// 政策缺失或三类动作不互异时返回部署不变量错误。
+/// 装配客户回款单的审批适配器，启动、通过和撤回时按已登记的动作分派。政策缺失或动作重复时拒绝装配。
 pub fn customer_receipt_adapter() -> Result<CustomerReceiptAdapter> {
     let spec = adapter_spec_of(DocumentType::CustomerReceipt)?;
     ensure_adapter_spec_complete(&spec)?;
     adapter_from_spec(spec)
 }
 
-/// 由政策规格填充显式 Adapter 字段。
-///
-/// # 错误
-/// 字段与合同签署值不一致时返回错误。
+// 由政策规格填充显式 Adapter 字段。字段与合同签署值不一致时返回错误。
 fn adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<CustomerReceiptAdapter> {
     if spec.document_type != DocumentType::CustomerReceipt
         || spec.process_kind != process_kind_of(DocumentType::CustomerReceipt)
@@ -103,14 +91,7 @@ fn adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<CustomerReceiptAdapter
 
 /// 为客户回款单构造唯一 `bpm::SubjectRef`。
 ///
-/// # 参数
-/// * `business_object_id` - 回款单主键
-///
-/// # 返回
-/// 返回客户回款单的 `SubjectRef`。
-///
-/// # 错误
-/// 主键为空或超长时返回校验错误。
+/// `business_object_id` 为回款单主键。返回客户回款单的 `SubjectRef`。主键为空或超长时返回校验错误。
 pub fn customer_receipt_subject_ref(business_object_id: &str) -> Result<SubjectRef> {
     erp_workflow::entity::approval_integration::subject_ref_for(
         DocumentType::CustomerReceipt,
@@ -121,15 +102,7 @@ pub fn customer_receipt_subject_ref(business_object_id: &str) -> Result<SubjectR
 
 /// 提交并启动：冻结 `approval_subject_version` 并进入 `IN_APPROVAL`。
 ///
-/// # 参数
-/// * `receipt` - 待提交回款单
-/// * `allocations` - 冻结的待过账核销分配
-///
-/// # 返回
-/// 返回冻结后的提交版本。
-///
-/// # 错误
-/// 非草稿、分配非法或版本溢出时返回冲突。
+/// `receipt` 为待提交回款单；`allocations` 为冻结的待过账核销分配。返回冻结后的提交版本。非草稿、分配非法或版本溢出时返回冲突。
 pub fn start_customer_receipt_approval(
     receipt: &mut CustomerReceipt,
     allocations: Vec<PendingReceiptAllocation>,
@@ -139,28 +112,12 @@ pub fn start_customer_receipt_approval(
 
 /// 撤回审批：回到草稿，且 `approval_subject_version` 不回退。
 ///
-/// # 参数
-/// * `receipt` - 审批中的回款单
-///
-/// # 返回
-/// 撤回成功时无返回值；回款单回到草稿，且 `approval_subject_version` 不回退。
-///
-/// # 错误
-/// 非审批中时返回冲突。
+/// `receipt` 为审批中的回款单。撤回成功时无返回值；回款单回到草稿，且 `approval_subject_version` 不回退。非审批中时返回冲突。
 pub fn cancel_customer_receipt_to_draft(receipt: &mut CustomerReceipt) -> Result<()> {
     Ok(receipt.cancel_approval()?)
 }
 
-/// 最终通过过账前置：仅 `IN_APPROVAL` 可进入过账。
-///
-/// # 参数
-/// * `receipt` - 待过账的客户回款单。
-///
-/// # 返回
-/// 状态为审批中时无返回值。
-///
-/// # 错误
-/// 状态不是审批中时返回冲突。
+/// 最终通过动作登记核销前先检查回款状态；只接受 `IN_APPROVAL`，其他状态返回冲突。
 pub fn ensure_final_approve_posting(receipt: &CustomerReceipt) -> Result<()> {
     if receipt.status != CustomerReceiptStatus::InApproval {
         return Err(Error::ConflictError("只有审批中的客户回款单可以由最终通过动作过账".to_string()));
@@ -170,31 +127,15 @@ pub fn ensure_final_approve_posting(receipt: &CustomerReceipt) -> Result<()> {
 
 /// 无已绑定定义的必须审批单据不得提交。
 ///
-/// # 参数
-/// * `binding` - 已查到的审批定义绑定；缺失时为 `None`。
-///
-/// # 返回
-/// 绑定存在时返回该绑定的引用。
-///
-/// # 错误
-/// 绑定缺失时返回冲突。
+/// `binding` 为已查到的审批定义绑定；缺失时为 `None`。绑定存在时返回该绑定的引用。绑定缺失时返回冲突。
 pub fn require_frozen_binding(
     binding: Option<&ApprovalDefinitionBinding>,
 ) -> Result<&ApprovalDefinitionBinding> {
     binding.ok_or_else(|| Error::ConflictError("无有效审批绑定的客户回款单不得提交".to_string()))
 }
 
-/// 执行签署的客户回款单领域动作。
-///
-/// # 参数
-/// * `receipt` - 业务实体
-/// * `action` - 合同强类型动作
-///
-/// # 返回
-/// 动作允许时无返回值。过账只做状态前置检查；撤回会把回款单改回草稿。
-///
-/// # 错误
-/// 动作不属于本类型或状态不允许时返回错误。
+/// 审批运行时分派客户回款动作：最终通过只校验过账前状态，撤回将回款改回草稿。
+/// 不属于回款的动作或当前状态不允许时返回错误。
 pub fn execute_customer_receipt_domain_action(
     receipt: &mut CustomerReceipt,
     action: ApprovalDomainAction,
@@ -210,51 +151,25 @@ pub fn execute_customer_receipt_domain_action(
 ///
 /// 未提供组织或审批人时失败关闭，不得默认放行。
 ///
-/// # 参数
-/// * `organization_id` - 单据责任组织（往来主体）
-/// * `assignee_user_id` - 指定审批人
-///
-/// # 返回
-/// 组织与审批人均非空时允许读取。
-///
-/// # 错误
-/// 组织或审批人为空时返回校验错误。
+/// `organization_id` 为单据责任组织（往来主体）。组织与审批人均非空时允许读取。组织或审批人为空时返回校验错误。
 pub fn customer_receipt_object_readable(organization_id: &str, assignee_user_id: &str) -> Result<bool> {
     document_object_readable(organization_id, assignee_user_id).map_err(Into::into)
 }
 
 /// 责任组织取往来主体，不得用空串或当前登录人组织补位。
 ///
-/// 唯一规则源为 `CustomerReceipt::approval_responsible_org_id`；本函数只做
-/// 错误适配，不复制取值与缺省规则。
+/// 唯一规则源为 `CustomerReceipt::approval_responsible_org_id`；本函数只做错误适配，不复制取值与缺省规则。
 ///
-/// # 参数
-/// * `receipt` - 回款单
-///
-/// # 返回
-/// 返回非空责任组织。
-///
-/// # 错误
-/// 往来主体为空时返回校验错误。
+/// `receipt` 为回款单。返回非空责任组织。往来主体为空时返回校验错误。
 pub fn customer_receipt_responsible_org_id(receipt: &CustomerReceipt) -> Result<String> {
     receipt.approval_responsible_org_id().map_err(|error| Error::ValidationError(error.to_string()))
 }
 
 /// 按合同 §4.4.5 冻结客户回款快照。
 ///
-/// 领域事实唯一来源为 `CustomerReceipt::approval_facts`；本函数只把领域
-/// facts 映射到 BPM action 载荷（注入提交人/提交时间），不复制取值与缺省规则。
+/// 领域事实唯一来源为 `CustomerReceipt::approval_facts`；本函数只把领域 facts 映射到 BPM action 载荷（注入提交人/提交时间），不复制取值与缺省规则。
 ///
-/// # 参数
-/// * `receipt` - 已冻结提交版本的回款单
-/// * `submitted_by` - 提交人
-/// * `submitted_at` - 提交时间
-///
-/// # 返回
-/// 返回注入提交人与提交时间后的审批主体快照。
-///
-/// # 错误
-/// 组织为空、分配行为空或行数溢出时返回校验错误。
+/// `receipt` 为已冻结提交版本的回款单。返回注入提交人与提交时间后的审批主体快照。组织为空、分配行为空或行数溢出时返回校验错误。
 pub fn build_customer_receipt_snapshot(
     receipt: &CustomerReceipt,
     submitted_by: &str,
@@ -310,7 +225,7 @@ mod tests {
         .expect("分配必须可构造")
     }
 
-    /// 适配器必须显式声明合同要求的全部字段。
+    // 验证客户回款审批适配器逐项声明合同规定的字段。
     #[test]
     fn adapter_declares_all_required_fields() {
         let adapter = customer_receipt_adapter().expect("客户回款单必须可登记");
@@ -341,7 +256,7 @@ mod tests {
         assert_ne!(adapter.on_approval_start, adapter.cancel_action);
     }
 
-    /// 提交进入审批中；撤回不回退版本。
+    // 验证客户回款提交后进入审批中，撤回恢复草稿但保留已推进的提交版本。
     #[test]
     fn submit_enters_in_approval_and_cancel_returns_draft() {
         let mut receipt = draft_receipt();
@@ -358,7 +273,7 @@ mod tests {
         assert_eq!(receipt.approval_subject_version, 1);
     }
 
-    /// 非草稿不得提交；非审批中不得撤回或过账。
+    // 对照客户回款的非法状态：非草稿不能提交，非审批中不能撤回或过账。
     #[test]
     fn illegal_status_transitions_fail_closed() {
         let mut posted = draft_receipt();
@@ -369,7 +284,7 @@ mod tests {
         assert!(ensure_final_approve_posting(&posted).is_err());
     }
 
-    /// 过账只允许审批中，草稿不得直接过账。
+    // 验证客户回款只有审批中允许过账，草稿不能跳过审批。
     #[test]
     fn post_only_accepts_in_approval() {
         let mut receipt = draft_receipt();
@@ -378,13 +293,13 @@ mod tests {
         assert!(ensure_final_approve_posting(&receipt).is_ok());
     }
 
-    /// 缺少冻结审批定义时拒绝提交。
+    // 验证客户回款缺少冻结审批定义时不能提交。
     #[test]
     fn missing_frozen_binding_is_rejected() {
         assert!(require_frozen_binding(None).is_err());
     }
 
-    /// 快照冻结客户对手方、回款单号与金额合计。
+    // 快照冻结客户对手方、回款单号与金额合计。
     #[test]
     fn snapshot_freezes_customer_and_amount() {
         let mut receipt = draft_receipt();
@@ -403,7 +318,7 @@ mod tests {
         assert!(build_customer_receipt_snapshot(&empty, "user-1", Instant::from_unix_secs(10)).is_err());
     }
 
-    /// 详情只读审批结构；未加载历史时为空，允许动作不含选择定义或审批人。
+    // 详情只读审批结构；未加载历史时为空，允许动作不含选择定义或审批人。
     #[test]
     fn detail_approval_is_read_only_without_loaded_history() {
         let binding =
@@ -421,7 +336,7 @@ mod tests {
         assert_eq!(running.allowed_actions, vec!["CANCEL".to_string()]);
     }
 
-    /// 对象读取权空组织或空审批人失败关闭。
+    // 验证客户回款审批读取缺少责任组织或办理人时不放行。
     #[test]
     fn object_read_fails_closed_on_empty_identity() {
         assert!(customer_receipt_object_readable("party-1", "u1").unwrap());
@@ -429,7 +344,7 @@ mod tests {
         assert!(customer_receipt_object_readable("party-1", "").is_err());
     }
 
-    /// 领域动作分派只接受签署的撤回与过账动作。
+    // 验证客户回款的领域分派只接受已登记的撤回和过账动作，拒绝其他单据动作。
     #[test]
     fn domain_action_dispatch_rejects_foreign_actions() {
         let mut receipt = draft_receipt();

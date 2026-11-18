@@ -29,19 +29,11 @@ pub struct DraftReplacement {
 }
 /// 按 ID 加载采购单。
 ///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `purchase_order_id` - 采购单 ID
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回存在的采购单。
-///
-/// # 错误
-/// 采购单不存在或仓储读取失败时返回错误。
-///
-/// # 关键业务约束
 /// 本函数不执行版本或状态校验，避免打乱调用方的安全校验顺序。
+///
+/// 返回存在的采购单。采购单不存在或仓储读取失败时返回错误。
+///
+/// 沿用调用方的执行器，不另开事务。
 pub async fn load_purchase_order(
     db: &mongodb::Database,
     purchase_order_id: &str,
@@ -51,21 +43,12 @@ pub async fn load_purchase_order(
 }
 /// 校验采购草稿保存目标的创建人、版本和状态。
 ///
-/// # 参数
-/// * `created_by` - 采购单创建人 ID
-/// * `current_version` - 采购单当前乐观锁版本
-/// * `status` - 采购单当前状态
-/// * `expected_lock_version` - 客户端期望版本
-/// * `actor_id` - 当前操作人 ID
-///
-/// # 返回
-/// 创建人、版本和草稿状态全部匹配时返回 `Ok(())`。
-///
-/// # 错误
-/// 非创建人统一返回不存在；其后才允许返回版本或状态错误。
-///
-/// # 关键业务约束
 /// 创建人校验必须先于版本和状态，禁止向其他账号泄露资源版本或生命周期状态。
+///
+/// 创建人、版本和草稿状态全部匹配时返回 `Ok(())`。非创建人统一返回不存在；其后才允许返回版本或状态错误。
+///
+/// - `current_version`：采购单当前乐观锁版本。
+/// - `status`：采购单当前状态。
 pub fn ensure_save_target(
     created_by: &str,
     current_version: u64,
@@ -84,21 +67,8 @@ pub fn ensure_save_target(
     }
     Ok(())
 }
-/// 加载当前可编辑草稿提交及其完整行。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `order` - 已校验可编辑的采购单
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回草稿提交头和该提交的完整行。
-///
-/// # 错误
-/// 当前草稿引用缺失、提交不存在、提交已冻结或仓储读取失败时返回错误。
-///
-/// # 关键业务约束
-/// 只允许替换状态仍为 `Draft` 的当前提交。
+/// 保存采购草稿前，沿原执行器按当前提交指针取得草稿头与完整明细。
+/// 指针或草稿缺失、提交已冻结或查询失败时拒绝，不能以历史提交替代。
 pub async fn load_current_draft(
     db: &mongodb::Database,
     order: &PurchaseOrder,
@@ -127,21 +97,14 @@ pub async fn load_current_draft(
 }
 /// 构造完整替换后的新草稿提交、行和金额。
 ///
-/// # 参数
-/// * `order` - 当前采购单
-/// * `old_draft` - 当前草稿提交
-/// * `old_lines` - 当前服务端完整来源行
-/// * `lines` - 已通过草稿编辑校验的完整请求行
-/// * `payment_subject` - 新草稿的付款主体；按新销售版本刷新时替换销售来源
-///
-/// # 返回
-/// 返回已通过实体校验的新提交、完整行和服务端金额。
-///
-/// # 错误
-/// 金额计算、提交构造或草稿行构造失败时返回错误。
-///
-/// # 关键业务约束
 /// 供应商、采购类型、履约责任和供应商快照均继承原草稿，不接受客户端改写。
+///
+/// 返回已通过实体校验的新提交、完整行和服务端金额。金额计算、提交构造或草稿行构造失败时返回错误。
+///
+/// - `order`：当前采购单。
+/// - `old_draft`：当前草稿提交。
+/// - `old_lines`：当前服务端完整来源行。
+/// - `payment_subject`：新草稿的付款主体；按新销售版本刷新时替换销售来源。
 pub fn build_draft_replacement(
     order: &PurchaseOrder,
     old_draft: &PurchaseOrderSubmission,
@@ -176,14 +139,9 @@ pub fn build_draft_replacement(
 }
 /// 把领域草稿编辑校验失败映射为稳定 HTTP 语义。
 ///
-/// # 参数
-/// * `violation` - 领域校验失败原因
+/// 返回校验、业务或冲突错误，文案与既有实现一致。本函数构造错误值，不产生 `Result`。
 ///
-/// # 返回
-/// 返回校验、业务或冲突错误，文案与既有实现一致。
-///
-/// # 错误
-/// 不返回错误。本函数构造错误值，不产生 `Result`。
+/// `violation` 为领域校验失败原因。
 pub fn map_draft_edit_violation(violation: DraftLineEditViolation) -> Error {
     match violation {
         DraftLineEditViolation::SourceLineCountChanged
@@ -206,20 +164,9 @@ pub fn map_draft_edit_violation(violation: DraftLineEditViolation) -> Error {
         },
     }
 }
-/// 在调用方事务内依次替代旧草稿、创建新提交与行、更新采购单；失败停止并保留原错误。
+/// 在调用方事务内依次替代旧草稿、创建新提交与行、更新采购单；失败停止并保留原错误。任一步仓储写入或 CAS 失败时返回对应错误，不再继续后续写入。
 ///
-/// # 参数
-/// * `db` - 采购数据库
-/// * `order` - 已带期望版本的采购单
-/// * `old_draft` - 待更新的旧草稿
-/// * `replacement` - 新提交、新行和金额
-/// * `session` - 调用方事务执行器
-///
-/// # 返回
-/// 四类写入都成功时无返回值。
-///
-/// # 错误
-/// 任一步仓储写入或 CAS 失败时返回对应错误，不再继续后续写入。
+/// `replacement` 为新提交、新行和金额。
 pub async fn persist_replacement(
     db: &mongodb::Database,
     order: &mut PurchaseOrder,
@@ -277,16 +224,7 @@ mod tests {
                 expense: None,
             }])
     }
-    /// 验证非创建人无法观察目标采购单的版本或状态错误。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 无。
-    ///
-    /// # 错误
-    /// 创建人校验未优先返回统一不存在错误时测试失败。
+    // 验证非创建人无法观察目标采购单的版本或状态错误。
     #[test]
     fn save_target_checks_creator_before_version_and_status() {
         let mut request = save_request("1");

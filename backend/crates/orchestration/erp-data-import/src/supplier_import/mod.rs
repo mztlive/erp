@@ -32,18 +32,13 @@ pub const SUPPLIER_IMPORT_DOMAIN: &str = "SUPPLIER_IMPORT";
 impl SupplierImportProcess {
     /// 绑定数据库、实时授权源、对象存储和敏感数据编解码器。
     ///
-    /// # 参数
-    /// * `db` - 业务数据库
-    /// * `profile` - 已注入实时授权和供应商数据范围的根资料流程
-    /// * `authorization` - 实时身份与权限服务
-    /// * `storage` - 加密导入源的对象存储
-    /// * `codec` - 敏感数据编解码器
+    /// - `db`：业务数据库
+    /// - `profile`：已注入实时授权和供应商数据范围的根资料流程
+    /// - `authorization`：实时身份与权限服务
+    /// - `storage`：加密导入源的对象存储
+    /// - `codec`：敏感数据编解码器
     ///
-    /// # 返回
     /// 返回供 HTTP 和统一 worker 共用的流程；不执行 I/O。
-    ///
-    /// # 错误
-    /// 无。
     pub fn new(
         db: Database,
         profile: Arc<SupplierProfileProcess>,

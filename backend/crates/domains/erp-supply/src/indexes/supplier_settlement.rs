@@ -27,21 +27,12 @@ pub(crate) const SUPPLIER_SETTLEMENT_SOURCE_EVIDENCE: &str =
 pub(crate) const SUPPLIER_SETTLEMENT_DIFFERENCE_EVIDENCE: &str =
     <mongodb::Database as SupplierSettlementExt>::SUPPLIER_SETTLEMENT_DIFFERENCE_EVIDENCE;
 
-/// 创建本域集合的幂等命名索引。
-///
-/// 逐条落地数据模型 §6.20「必需约束与索引」。结算单号使用**全局唯一索引**
-/// （与 accounts 的 code 处理一致）：软删除后仍保留身份，避免复用破坏恢复语义；
-/// 可空外部账单身份与「已确认不重复覆盖」使用**部分唯一索引**（仅满足条件的
-/// 文档参与唯一约束），保证 `NULL` 不阻塞多条未填写记录的写入。
-///
-/// # 参数
-/// * `db` - 目标 MongoDB 数据库
-///
-/// # 返回
-/// 结算单、明细、差异及两类证据索引都登记成功时返回 `Ok(())`。
-///
-/// # 错误
-/// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
+// 创建本域集合的幂等命名索引。
+// 逐条落地数据模型 §6.20「必需约束与索引」。结算单号使用**全局唯一索引**（与 accounts 的 code 处理一致）：
+// 软删除后仍保留身份，避免复用破坏恢复语义；可空外部账单身份与「已确认不重复覆盖」使用**部分唯一索引**
+// （仅满足条件的文档参与唯一约束），保证 `NULL` 不阻塞多条未填写记录的写入。
+// 结算单、明细、差异及两类证据索引都登记成功时返回 `Ok(())`。
+// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub(crate) async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, SUPPLIER_SETTLEMENT_STATEMENTS, supplier_settlement_statement_indexes()).await?;
     create_indexes(db, SUPPLIER_SETTLEMENT_ITEMS, supplier_settlement_item_indexes()).await?;
@@ -97,13 +88,13 @@ fn supplier_settlement_difference_evidence_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 为单个集合创建一组幂等命名索引。
+// 为单个集合创建一组幂等命名索引。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
     db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
-/// 返回 `supplier_settlement_statement` 的身份约束和查询索引（§6.20）。
+// 提供 `supplier_settlement_statement` 的身份约束和查询索引（§6.20）。
 fn supplier_settlement_statement_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_supplier_settlement_statements_id", doc! { "id": 1 }),
@@ -152,7 +143,7 @@ fn supplier_settlement_statement_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `supplier_settlement_item` 的身份约束索引（§6.20）。
+// 提供 `supplier_settlement_item` 的身份约束索引（§6.20）。
 fn supplier_settlement_item_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_supplier_settlement_items_id", doc! { "id": 1 }),
@@ -163,7 +154,7 @@ fn supplier_settlement_item_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `supplier_settlement_difference` 的查询索引（§6.20）。
+// 提供 `supplier_settlement_difference` 的查询索引（§6.20）。
 fn supplier_settlement_difference_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_supplier_settlement_differences_id", doc! { "id": 1 }),
@@ -172,7 +163,7 @@ fn supplier_settlement_difference_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 构建命名部分唯一索引（仅匹配部分筛选表达式的文档参与唯一约束）。
+// 构建命名部分唯一索引（仅匹配部分筛选表达式的文档参与唯一约束）。
 fn partial_unique_index(name: impl Into<String>, keys: Document, filter: Document) -> IndexModel {
     IndexModel::builder()
         .keys(keys)
@@ -184,7 +175,7 @@ fn partial_unique_index(name: impl Into<String>, keys: Document, filter: Documen
 
 #[cfg(test)]
 mod tests {
-    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    // 验证按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
     #[test]
     fn collections_look_up_by_unique_stable_id() {
         for indexes in [

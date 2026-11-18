@@ -51,16 +51,7 @@ pub enum ServiceFulfillmentState {
 }
 
 impl ServiceFulfillmentState {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回服务履约状态的中文名称，供业务界面展示，不作为持久化代码。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Draft => "草稿",
@@ -69,16 +60,7 @@ impl ServiceFulfillmentState {
         }
     }
 
-    /// 返回状态的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回服务履约状态的稳定代码，供持久化与查询匹配使用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Draft => "DRAFT",
@@ -87,61 +69,26 @@ impl ServiceFulfillmentState {
         }
     }
 
-    /// 判断是否可编辑（仅草稿）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 草稿状态返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 编辑入口据此判断是否能继续修改当前记录；仅草稿状态允许。
     pub fn is_editable(&self) -> bool {
         matches!(self, Self::Draft)
     }
 
-    /// 判断当前状态能否执行首次确认。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 仅草稿状态返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 判断能否进入服务履约的首次确认，只接受草稿；该判断不处理已确认记录的幂等路径。
     pub fn is_confirmable(self) -> bool {
         self.allowed_next().contains(&Self::Confirmed)
     }
 
     /// 判断当前状态能否作为客户验收履约事实。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 已确认状态返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn is_acceptance_eligible(self) -> bool {
         matches!(self, Self::Confirmed)
     }
 }
 
 impl DocumentState for ServiceFulfillmentState {
-    /// 固定邻接矩阵（§7.5 定向链，`REVERSED` 为不可逆终态）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// `Draft` 只允许进入 `Confirmed`；`Confirmed` 只允许进入 `Reversed`；
-    /// `Reversed` 没有后继。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 固定邻接矩阵（§7.5 定向链，`REVERSED` 为不可逆终态）。
+    // `Draft` 只允许进入 `Confirmed`；`Confirmed` 只允许进入 `Reversed`；`Reversed` 没有后继。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Draft => &[Self::Confirmed],
@@ -256,19 +203,9 @@ pub struct ServiceFulfillmentConfirmationParams {
 
 impl ServiceFulfillmentConfirmation {
     /// 规范化并校验确认现场事实。
-    ///
-    /// # 参数
-    /// * `params` - 确认现场事实的全部输入
-    ///
-    /// # 返回
     /// 返回可写入草稿的确认事实。
-    ///
-    /// # 错误
-    /// 结果为部分成功、说明/地点/指纹为空或超长、指纹格式非法、数量非正、
-    /// 结束早于开始或凭证主键为空时返回错误。
-    ///
-    /// # 约束
-    /// 无。
+    /// `params` 为确认现场事实的全部输入。
+    /// 结果为部分成功、说明/地点/指纹为空或超长、指纹格式非法、数量非正、结束早于开始或凭证主键为空时返回错误。
     pub fn new(params: ServiceFulfillmentConfirmationParams) -> Result<Self> {
         if params.result == FulfillmentResult::PartialSuccess {
             return Err(Error::from("线下服务履约结果只能是成功或失败"));
@@ -345,7 +282,7 @@ pub struct ServiceFulfillment {
 }
 
 impl fmt::Debug for ServiceFulfillment {
-    /// 脱敏调试输出：交付对象快照、服务地点及指纹一律以 `<redacted>` 呈现。
+    // 脱敏调试输出：交付对象快照、服务地点及指纹一律以 `<redacted>` 呈现。
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("ServiceFulfillment")
@@ -378,7 +315,7 @@ impl fmt::Debug for ServiceFulfillment {
 }
 
 impl PartialEq for ServiceFulfillment {
-    /// 全字段语义相等（`Debug` 脱敏不影响比较）。
+    // 全字段语义相等（`Debug` 脱敏不影响比较）。
     fn eq(&self, other: &Self) -> bool {
         self.base == other.base
             && self.fact.fact_no == other.fact.fact_no
@@ -411,55 +348,26 @@ impl Eq for ServiceFulfillment {}
 
 impl ServiceFulfillment {
     /// 生成交付对象快照查询指纹（与电子交付共用同一 HMAC 规则）。
-    ///
-    /// # 参数
-    /// * `plain` - 交付对象原文字符串
-    /// * `key` - 查询指纹密钥字节
-    ///
-    /// # 返回
     /// 返回 64 位小写十六进制指纹。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// `plain` 为交付对象原文字符串；`key` 为查询指纹密钥字节。
     pub fn recipient_snapshot_fingerprint(plain: &str, key: &[u8]) -> String {
         ElectronicDelivery::recipient_snapshot_fingerprint(plain, key)
     }
 
     /// 生成服务地点查询指纹。
-    ///
-    /// 对规范化后的服务地点原文字符串计算带密钥 HMAC-SHA256（§4.5.5，
-    /// 禁止裸摘要）；密钥不持久化，精确查询时用同一密钥比对指纹。
-    ///
-    /// # 参数
-    /// * `plain` - 服务地点原文字符串
-    /// * `key` - 查询指纹密钥字节
-    ///
-    /// # 返回
+    /// 对规范化后的服务地点原文字符串计算带密钥 HMAC-SHA256（§4.5.5，禁止裸摘要）；密钥不持久化，精确查询时用同一密钥比对指纹。
     /// 返回 64 位小写十六进制指纹。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// `plain` 为服务地点原文字符串；`key` 为查询指纹密钥字节。
     pub fn service_location_fingerprint(plain: &str, key: &[u8]) -> String {
         hmac_sha256_hex(key, plain.as_bytes())
     }
 
     /// 创建线下服务履约记录（初始状态为草稿）。
-    ///
-    /// 完成履约记录号、记录人、完成说明与快照指纹格式校验；校验
-    /// `recorded_at` 不早于 `occurred_at`、服务结束时间不早于开始时间。
-    /// Service 加载采购单、当前版本和采购销售分配后，由履约资格值对象校验
-    /// 关联；本实体负责确认与验收事实状态。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::ServiceFulfillmentId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
+    /// 完成履约记录号、记录人、完成说明与快照指纹格式校验；校验 `recorded_at` 不早于 `occurred_at`、服务结束时间不早于开始时间。Service 加载采购单、当前版本和采购销售分配后，
+    /// 由履约资格值对象校验关联；本实体负责确认与验收事实状态。
     /// 返回新建的服务履约记录实体。
-    ///
-    /// # 错误
-    /// 必填字段为空/超长、指纹格式非法、服务数量非正、记录时间早于发生时间
-    /// 或服务结束时间早于开始时间时返回错误。
+    /// `id` 为实体主键（`erp_core::ids::ServiceFulfillmentId`）。
+    /// 必填字段为空/超长、指纹格式非法、服务数量非正、记录时间早于发生时间或服务结束时间早于开始时间时返回错误。
     pub fn new(id: ServiceFulfillmentId, data: ServiceFulfillmentData) -> Result<Self> {
         let fulfillment_no = normalize_required_text(
             data.fulfillment_no,
@@ -512,14 +420,7 @@ impl ServiceFulfillment {
     }
 
     /// 返回单据注册与无审批绑定重验使用的组织上下文。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回所属销售稳定明细主键。
-    ///
-    /// # 错误
     /// 销售稳定明细主键为空时返回错误。
     pub fn registration_context_id(&self) -> Result<&str> {
         let id = self.sales_order_line_id.as_ref();
@@ -530,14 +431,7 @@ impl ServiceFulfillment {
     }
 
     /// 校验记录可执行首次确认。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 草稿状态返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 非草稿状态返回错误。
     pub fn ensure_confirmable(&self) -> Result<()> {
         if !self.status.is_confirmable() {
@@ -547,14 +441,8 @@ impl ServiceFulfillment {
     }
 
     /// 校验记录仍为调用方看到的草稿版本。
-    ///
-    /// # 参数
-    /// * `expected_version` - 调用方提交的乐观锁版本
-    ///
-    /// # 返回
     /// 草稿且版本一致时返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// `expected_version` 为调用方提交的乐观锁版本。
     /// 状态不是草稿或版本不一致时返回错误。
     pub fn ensure_draft_version(&self, expected_version: u64) -> Result<()> {
         self.ensure_confirmable()?;
@@ -565,14 +453,7 @@ impl ServiceFulfillment {
     }
 
     /// 校验确认前已登记图片凭证。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 凭证主键非空时返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 缺少图片凭证或凭证主键为空白时返回错误。
     pub fn ensure_evidence_present(&self) -> Result<()> {
         let Some(evidence_attachment_id) = self.evidence_attachment_id.as_ref() else {
@@ -583,14 +464,8 @@ impl ServiceFulfillment {
     }
 
     /// 校验服务履约可作为指定验收行的履约事实并返回成功数量。
-    ///
-    /// # 参数
-    /// * `sales_order_line_id` - 验收行所属销售稳定明细
-    ///
-    /// # 返回
     /// 履约成功、已确认且销售明细一致时返回服务数量。
-    ///
-    /// # 错误
+    /// `sales_order_line_id` 为验收行所属销售稳定明细。
     /// 未成功确认（状态不是已确认，或结果不是 `Success`，含部分成功与失败）或销售明细不一致时返回错误。
     pub fn acceptance_quantity(&self, sales_order_line_id: &SalesOrderLineId) -> Result<Quantity> {
         if !self.is_acceptance_eligible() {
@@ -603,30 +478,13 @@ impl ServiceFulfillment {
     }
 
     /// 判断服务履约事实是否可进入客户验收。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 仅已确认且履约结果成功时返回 `true`；失败记录只保留尝试事实。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn is_acceptance_eligible(&self) -> bool {
         self.status.is_acceptance_eligible() && self.result == FulfillmentResult::Success
     }
 
     /// 更新线下服务履约记录（仅草稿）。
-    ///
     /// 已确认记录不可覆盖（§6.7）；确认后的纠错只能冲正并新建记录。
-    ///
-    /// # 参数
-    /// * `update` - 更新数据
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 状态不可编辑，或完成说明超长时返回错误。
     pub fn update(&mut self, update: ServiceFulfillmentUpdate) -> Result<()> {
         self.ensure_editable()?;
@@ -641,17 +499,9 @@ impl ServiceFulfillment {
     }
 
     /// 把确认现场事实写入草稿（仅草稿）。
-    ///
-    /// 覆盖占位地点、时间窗、完成说明和图片凭证；确认数量必须等于冻结的
-    /// 采购销售分配数量，不在确认时改写计划数量。
-    ///
-    /// # 参数
-    /// * `confirmation` - 已规范化的确认现场事实
-    ///
-    /// # 返回
+    /// 覆盖占位地点、时间窗、完成说明和图片凭证；确认数量必须等于冻结的采购销售分配数量，不在确认时改写计划数量。
     /// 写入成功返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// `confirmation` 为已规范化的确认现场事实。
     /// 状态不可编辑，或确认数量与冻结分配数量不一致时返回错误。
     pub fn apply_confirmation(&mut self, confirmation: ServiceFulfillmentConfirmation) -> Result<()> {
         self.ensure_editable()?;
@@ -670,17 +520,8 @@ impl ServiceFulfillment {
     }
 
     /// 确认服务履约（草稿 → 已确认）。
-    ///
-    /// 确认前必须已写入图片凭证；现场地点和时间由 [`Self::apply_confirmation`]
-    /// 在同一确认命令内写入。已确认记录再次确认保持幂等。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
+    /// 确认前必须已写入图片凭证；现场地点和时间由 [`Self::apply_confirmation`] 在同一确认命令内写入。已确认记录再次确认保持幂等。
     /// 迁移成功或已确认幂等时返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 当前状态不允许迁移，或草稿尚未上传图片凭证时返回错误。
     pub fn confirm(&mut self) -> Result<()> {
         if self.status == ServiceFulfillmentState::Confirmed {
@@ -693,17 +534,8 @@ impl ServiceFulfillment {
     }
 
     /// 冲正服务履约（已确认 → 已冲正，终态）。
-    ///
-    /// `REVERSED` 表示存在正式反向事实，不删除原记录（§4.5.1、§7.5）；
-    /// 反向事实由 P3 形成。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
+    /// `REVERSED` 表示存在正式反向事实，不删除原记录（§4.5.1、§7.5）；反向事实由 P3 形成。
     /// 迁移成功返回 `Ok(())`。已冲正再次冲正按幂等成功。
-    ///
-    /// # 错误
     /// 草稿不能冲正时返回错误。
     pub fn reverse(&mut self) -> Result<()> {
         ensure_transition(self.status, ServiceFulfillmentState::Reversed)?;
@@ -711,27 +543,13 @@ impl ServiceFulfillment {
         Ok(())
     }
 
-    /// 判断当前状态是否可编辑。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 草稿状态返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 编辑入口据此判断是否能继续修改当前记录；仅草稿状态允许。
     pub fn is_editable(&self) -> bool {
         self.status.is_editable()
     }
 
-    /// 校验当前状态可编辑。
-    ///
-    /// # 返回
-    /// 可编辑返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 已确认/已冲正的记录不可编辑时返回错误。
+    // 校验当前状态可编辑。
+    // 已确认/已冲正的记录不可编辑时返回错误。
     fn ensure_editable(&self) -> Result<()> {
         if !self.is_editable() {
             return Err(Error::from("已确认或已冲正的服务履约记录不可覆盖"));
@@ -740,16 +558,9 @@ impl ServiceFulfillment {
     }
 }
 
-/// 校验服务数量为正。
-///
-/// # 参数
-/// * `quantity` - 待校验数量
-///
-/// # 返回
-/// 数量为正时返回 `Ok(())`。
-///
-/// # 错误
-/// 数量小于或等于零时返回错误。
+// 校验服务数量为正。
+// 数量为正时返回 `Ok(())`。
+// 数量小于或等于零时返回错误。
 fn ensure_positive_quantity(quantity: &Quantity) -> Result<()> {
     if quantity.to_decimal() <= Decimal::ZERO {
         return Err(Error::from("服务数量必须为正数"));
@@ -757,17 +568,10 @@ fn ensure_positive_quantity(quantity: &Quantity) -> Result<()> {
     Ok(())
 }
 
-/// 校验服务结束时间不早于开始时间。
-///
-/// # 参数
-/// * `started_at` - 服务开始时间
-/// * `ended_at` - 服务结束时间
-///
-/// # 返回
-/// 时间窗合法时返回 `Ok(())`。
-///
-/// # 错误
-/// 结束早于开始时返回错误。
+// 校验服务结束时间不早于开始时间。
+// 时间窗合法时返回 `Ok(())`。
+// `started_at` 为服务开始时间；`ended_at` 为服务结束时间。
+// 结束早于开始时返回错误。
 fn ensure_service_window(started_at: Instant, ended_at: Instant) -> Result<()> {
     if ended_at < started_at {
         return Err(Error::from("服务结束时间不得早于开始时间"));
@@ -787,16 +591,10 @@ fn normalize_service_location(location: String, fingerprint: String) -> Result<(
     Ok((location, fingerprint))
 }
 
-/// 校验图片凭证主键非空。
-///
-/// # 参数
-/// * `evidence_attachment_id` - 文件资产主键
-///
-/// # 返回
-/// 主键非空时返回 `Ok(())`。
-///
-/// # 错误
-/// 主键空白时返回错误。
+// 校验图片凭证主键非空。
+// 主键非空时返回 `Ok(())`。
+// `evidence_attachment_id` 为文件资产主键。
+// 主键空白时返回错误。
 fn require_evidence_attachment_id(evidence_attachment_id: &FileAssetId) -> Result<()> {
     if evidence_attachment_id.as_ref().trim().is_empty() {
         return Err(Error::from("线下服务履约必须上传图片凭证"));
@@ -849,7 +647,7 @@ pub(crate) mod tests {
         }
     }
 
-    /// happy path：字段规范化、双指纹生成、FactBase 组合与状态机全链路。
+    // 验证字段规范化、双指纹生成、FactBase 组合与状态机全链路。
     #[test]
     fn new_normalizes_fields_and_drives_state_machine() {
         let mut fulfillment = ServiceFulfillment::new(ServiceFulfillmentId::new("sf-1"), data()).unwrap();
@@ -864,7 +662,7 @@ pub(crate) mod tests {
         assert_eq!(fulfillment.status, ServiceFulfillmentState::Reversed);
     }
 
-    /// 失败路径：必填空、指纹格式非法、服务时间倒挂。
+    // 验证必填空、指纹格式非法、服务时间倒挂。
     #[test]
     fn new_rejects_invalid_inputs() {
         let blank_no = ServiceFulfillmentData { fulfillment_no: "   ".to_string(), ..data() };
@@ -890,7 +688,7 @@ pub(crate) mod tests {
         assert!(ServiceFulfillment::new(ServiceFulfillmentId::new("sf-6"), overlong_note).is_err());
     }
 
-    /// 状态机：合法/非法/终态定向断言（含幂等迁移）。
+    // 验证合法迁移、非法迁移和终态边界（含幂等迁移）。
     #[test]
     fn state_machine_directed_edges() {
         let mut fulfillment = ServiceFulfillment::new(ServiceFulfillmentId::new("sf-7"), data()).unwrap();
@@ -927,7 +725,7 @@ pub(crate) mod tests {
         );
     }
 
-    /// 草稿确认必须先写入图片凭证；已确认幂等，冲正后不可再确认。
+    // 验证草稿确认必须先写入图片凭证；已确认幂等，冲正后不可再确认。
     #[test]
     fn confirm_requires_image_evidence_and_stays_idempotent() {
         let mut missing_evidence = ServiceFulfillment::new(
@@ -984,7 +782,7 @@ pub(crate) mod tests {
         assert_eq!(fulfillment, expected);
     }
 
-    /// 确认不得放大或缩小采购销售分配冻结的服务数量。
+    // 确认不得放大或缩小采购销售分配冻结的服务数量。
     #[test]
     fn confirmation_quantity_must_match_frozen_allocation() {
         let fingerprint =
@@ -1054,7 +852,7 @@ pub(crate) mod tests {
         assert_eq!(confirmation.service_started_at, confirmation.service_ended_at);
     }
 
-    /// 确认与验收资格由实体状态及销售明细关联共同决定。
+    // 确认与验收资格由实体状态及销售明细关联共同决定。
     #[test]
     fn confirmation_and_acceptance_rules_are_entity_owned() {
         let mut fulfillment = ServiceFulfillment::new(ServiceFulfillmentId::new("sf-rule"), data()).unwrap();
@@ -1085,7 +883,7 @@ pub(crate) mod tests {
         assert!(failed.acceptance_quantity(&SalesOrderLineId::new("so-line-1")).is_err());
     }
 
-    /// 敏感字段：双指纹稳定且带密钥；Debug 不泄漏明文/密文/指纹。
+    // 验证敏感字段：双指纹稳定且带密钥；Debug 不泄漏明文/密文/指纹。
     #[test]
     fn sensitive_fingerprints_and_redacted_debug() {
         let recipient_fp =

@@ -11,13 +11,14 @@ use persistence_core::Executor;
 
 /// 仅提供已授权的审批实例页；不暴露决定、撤回或迁移能力。
 pub trait ApprovalInstanceReadPort: Send + Sync {
-    /// 按原运行服务读取一页实例，保留其独立读取边界。
+    /// 依据原运行服务读取一页实例，保留其独立读取边界。
     ///
     /// # 参数
-    /// * `actor` - 已认证操作人。
     /// * `query` - 原实例列表查询。
+    ///
     /// # 返回
     /// 返回授权后的实例、总数及游标。
+    ///
     /// # 错误
     /// 原参数、身份、范围和仓储错误原样传播。
     fn instance_list<'a>(
@@ -26,14 +27,15 @@ pub trait ApprovalInstanceReadPort: Send + Sync {
         query: RuntimeInstanceListQuery,
     ) -> BoxFuture<'a, Result<RuntimeInstanceListPage>>;
 
-    /// 在调用方事务快照中读取本人发起审批的一批授权候选。
+    /// 读取审批实例时，在调用方事务快照中读取本人发起审批的一批授权候选。
     ///
     /// # 参数
-    /// * `actor` - 当前账号。
     /// * `query` - 仅允许本人发起范围的查询。
     /// * `executor` - 调用方原执行器。
+    ///
     /// # 返回
     /// 返回原顺序的候选页与续读游标。
+    ///
     /// # 错误
     /// 原视图、身份、范围和仓储错误原样传播。
     fn started_instance_page<'a>(

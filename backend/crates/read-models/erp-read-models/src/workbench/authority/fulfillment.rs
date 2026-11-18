@@ -13,21 +13,18 @@ use super::{ObjectFact, ObjectFactMap, ObjectKind, WorkItemFactsReader, object_i
 use crate::errors::Result;
 
 impl super::WorkItemFactsReader {
-    /// 装载入库、发货、电子交付与服务履约工作项的权威对象事实。
-    ///
-    /// # 参数
-    /// * `keys` - 本批任务引用的对象键
-    /// * `facts` - 输出对象事实表
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 成功时写入全部存在的履约对象事实。
-    ///
-    /// # 错误
-    /// 任一仓储查询失败时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 标题只使用作业类型与来源销售/采购单号；不得拼接履约对象主键或单据草稿状态。
+    // 为履约工作项事实取数时，读取入库、发货、电子交付与服务履约工作项的权威对象事实。
+    //
+    // 调用参数：
+    // * `keys` - 本批任务引用的对象键
+    // * `facts` - 输出对象事实表
+    //
+    // 成功时写入全部存在的履约对象事实。
+    //
+    // 任一仓储查询失败时返回错误。
+    //
+    // 业务边界：
+    // 标题只使用作业类型与来源销售/采购单号；不得拼接履约对象主键或单据草稿状态。
     pub(in crate::workbench) async fn load_fulfillment_operation_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -132,21 +129,16 @@ impl super::WorkItemFactsReader {
 
 const SYSTEM_OBJECT_OWNER: &str = "__system__";
 
-/// 批量读取销售单号，避免按履约对象 N+1。
-///
-/// # 参数
-/// * `service` - 工作项服务
-/// * `sales_order_ids` - 销售单主键
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回销售单 ID 到单号的映射；空输入返回空表。
-///
-/// # 错误
-/// 仓储查询失败时返回错误。
-///
-/// # 关键业务约束
-/// 单号缺失时调用方回退为只有作业类型的标题，不得把销售单 ID 写进标题。
+// 定位履约工作项事实关联时，批量读取销售单号，避免按履约对象 N+1。
+//
+// 调用参数：
+// * `service` - 工作项服务
+// * `sales_order_ids` - 销售单主键
+//
+// 返回销售单 ID 到单号的映射；空输入返回空表。
+//
+// 业务边界：
+// 单号缺失时调用方回退为只有作业类型的标题，不得把销售单 ID 写进标题。
 async fn sales_order_numbers(
     service: &WorkItemFactsReader,
     sales_order_ids: Vec<String>,
@@ -166,21 +158,16 @@ async fn sales_order_numbers(
         .collect())
 }
 
-/// 批量读取采购单号，避免按履约对象 N+1。
-///
-/// # 参数
-/// * `service` - 工作项服务
-/// * `purchase_order_ids` - 采购单主键
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回采购单 ID 到单号的映射；空输入返回空表。
-///
-/// # 错误
-/// 仓储查询失败时返回错误。
-///
-/// # 关键业务约束
-/// 单号缺失时调用方回退为只有作业类型的标题，不得把采购单 ID 写进标题。
+// 定位履约工作项事实关联时，批量读取采购单号，避免按履约对象 N+1。
+//
+// 调用参数：
+// * `service` - 工作项服务
+// * `purchase_order_ids` - 采购单主键
+//
+// 返回采购单 ID 到单号的映射；空输入返回空表。
+//
+// 业务边界：
+// 单号缺失时调用方回退为只有作业类型的标题，不得把采购单 ID 写进标题。
 async fn purchase_order_numbers(
     service: &WorkItemFactsReader,
     purchase_order_ids: Vec<String>,
@@ -200,21 +187,17 @@ async fn purchase_order_numbers(
         .collect())
 }
 
-/// 拼工作台履约任务标题。
-///
-/// # 参数
-/// * `operation_label` - 作业类型中文名
-/// * `source_kind` - 「销售单」或「采购单」
-/// * `source_no` - 已解析的来源单号
-///
-/// # 返回
-/// 有单号时返回「供应商直发 · 销售单 SO-1」；否则只返回作业类型。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 不附加草稿/已发货等内部状态；空单号不得回退成对象 ID。
+// 生成履约工作项事实视图时，拼工作台履约任务标题。
+//
+// 调用参数：
+// * `operation_label` - 作业类型中文名
+// * `source_kind` - 「销售单」或「采购单」
+// * `source_no` - 已解析的来源单号
+//
+// 有单号时返回「供应商直发 · 销售单 SO-1」；否则只返回作业类型。
+//
+// 业务边界：
+// 不附加草稿/已发货等内部状态；空单号不得回退成对象 ID。
 pub(in crate::workbench) fn fulfillment_source_label(
     operation_label: &str,
     source_kind: &str,

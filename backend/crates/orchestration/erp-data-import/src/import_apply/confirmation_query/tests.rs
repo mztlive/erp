@@ -134,7 +134,7 @@ fn authorized_projection_uses_registered_destinations_and_preserves_route_errors
     ));
 }
 
-/// 入口资格不可用时，禁止读取确认页或降级返回工作项内容。
+// 验证：入口资格不可用时，禁止读取确认页或降级返回工作项内容。
 #[tokio::test]
 async fn confirmation_list_stops_before_records_when_identity_is_unavailable() {
     let (service, actor) = super::super::testing::fixture().await;

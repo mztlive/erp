@@ -22,23 +22,16 @@ pub struct IntegrationAccess {
 
 impl IntegrationAccess {
     /// 绑定共享身份设施和本域固定目录。
-    /// # 参数
+    ///
+    /// 不缓存授权结果的访问器。固定目录非法时启动失败；构造不执行 I/O。
+    ///
     /// db、rbac 为组合根共享身份设施。
-    /// # 返回
-    /// 不缓存授权结果的访问器。
-    /// # 错误
-    /// 固定目录非法时启动失败；构造不执行 I/O。
     pub fn new(db: Database, service: Arc<AuthorizationService>) -> Self {
         Self { service, db }
     }
 
-    /// 查询并编译固定资源的完整授权条件。
-    /// # 参数
-    /// actor、permission 指定服务端入口，executor 为原执行器。
-    /// # 返回
-    /// identity 生成的不可伪造查询凭证。
-    /// # 错误
-    /// 未登记入口、无权、映射或事实失败时拒绝。
+    /// 为当前列表动作编译集成域的完整授权查询条件，供仓储和交付复验共用。
+    /// 只接受服务端登记的权限，使用原执行器；入口未登记、无权或授权事实不可用时拒绝。
     pub async fn resolve(
         &self,
         actor: &AuditActor,
@@ -48,24 +41,13 @@ impl IntegrationAccess {
         Ok(self.service.query(actor, permission, executor).await?)
     }
 
-    /// 复验同一服务生成的读取凭证。
-    /// # 参数
-    /// access、executor 为本次凭证及原执行器。
-    /// # 返回
-    /// 仍有效时成功。
-    /// # 错误
-    /// 身份、权限、映射或版本变化时拒绝。
+    /// 交付集成列表前，用原读取执行器复验本次查询凭证；账号、权限、映射或事实版本变化时不交付结果。
     pub async fn validate(&self, access: &CompiledAccess, executor: &mut dyn Executor) -> Result<()> {
         Ok(self.service.validate(access, executor).await?)
     }
 
-    /// 按真实记录身份执行完整对象授权。
-    /// # 参数
-    /// actor、permission 为固定入口，id 为实际根记录，executor 为原执行器。
-    /// # 返回
-    /// 全部对象事实及身份检查通过时成功。
-    /// # 错误
-    /// 对象缺失、无权或版本变化拒绝。
+    /// 在原执行器上检查集成处理入口：新建错误任务或差异只检查功能资格，已有记录的操作按实际对象做完整授权。
+    /// 对象缺失、无权或授权事实不可用时拒绝。
     pub async fn require_handler(
         &self,
         actor: &AuditActor,
@@ -82,13 +64,8 @@ impl IntegrationAccess {
         };
         Ok(self.service.require(actor, permission, target, executor).await?)
     }
-    /// 检查无正式任务差异的当前处理人及决定资格。
-    /// # 参数
-    /// actor、id 为真实账号和差异ID，executor 为决定写事务。
-    /// # 返回
-    /// 差异存在、当前责任及固定资格均通过时成功；业务决定版本由命令执行阶段检查。
-    /// # 错误
-    /// 差异缺失、无决定资格或当前处理人不符时拒绝。
+    /// 无正式任务的差异进入直接对账前，在写事务内检查实际差异、当前处理人归属和固定决定资格。
+    /// 任一条件不满足即拒绝；决定的乐观锁版本由命令执行阶段核对。
     pub async fn require_decide(
         &self,
         actor: &AuditActor,
@@ -103,16 +80,9 @@ impl IntegrationAccess {
 
     /// 查询处理人在解析时点的唯一主属组织。
     ///
-    /// # 参数
-    /// * `user_id` - 拟写入的处理人
-    /// * `at` - 与授权相同的解析时点
-    /// * `executor` - 调用方执行器
+    /// 存在唯一主属组织时返回其 ID。处理人 ID 为 `me` 时返回 `ValidationError`；组织关系非法或缺少有效内部组织时拒绝。
     ///
-    /// # 返回
-    /// 存在唯一主属组织时返回其 ID。
-    ///
-    /// # 错误
-    /// 处理人 ID 为 `me` 时返回 `ValidationError`；组织关系非法或缺少有效内部组织时拒绝。
+    /// 沿用调用方的执行器，不另开事务。
     pub async fn require_handler_org(
         &self,
         user_id: &str,
@@ -131,16 +101,9 @@ impl IntegrationAccess {
 
     /// 展开请求组织及其可选下级。
     ///
-    /// # 参数
-    /// * `org_unit_ids` - 请求中的组织 ID
-    /// * `include_descendants` - 是否包含有效下级
-    /// * `executor` - 调用方执行器
+    /// 返回启用节点的组织 ID 集合。未知组织时拒绝。
     ///
-    /// # 返回
-    /// 返回启用节点的组织 ID 集合。
-    ///
-    /// # 错误
-    /// 未知组织时拒绝。
+    /// 沿用调用方的执行器，不另开事务。
     pub async fn expand_org_units(
         &self,
         org_unit_ids: &[String],

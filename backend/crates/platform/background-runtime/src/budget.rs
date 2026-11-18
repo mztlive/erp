@@ -13,31 +13,14 @@ pub struct ExecutionBudget {
 }
 
 impl ExecutionBudget {
-    /// 创建一个任务的执行切片。
-    ///
-    /// # 参数
-    /// * `max_rows` - 每个切片最多完成的步骤数。
-    /// * `duration` - 完成首个步骤后生效的软时限。
-    ///
-    /// # 返回
-    /// 返回只在步骤完成边界判断的预算；当前步骤不会被强制中断。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 在批任务开始处理一个切片时记录起点，配置可完成的行数和软时限。
+    /// 预算只在当前行完成后检查，即使时限已经用完，也不会取消第一行或中断进行中的工作。
     pub fn new(max_rows: usize, duration: Duration) -> Self {
         Self { started: Instant::now(), rows: 0, max_rows, duration }
     }
 
-    /// 计入当前行并判断保存成功后是否应让出执行机会。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 达到行数或软时限时返回 true；调用方必须先原子保存当前行和进度。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 当前行及其进度原子保存后，将该行计入切片预算。
+    /// 达到行数或耗时上限时返回 `true`，调用方应结束切片，以便后续轮次从已保存进度继续。
     pub fn after_row(&mut self) -> bool {
         self.rows += 1;
         self.rows >= self.max_rows || self.started.elapsed() >= self.duration

@@ -14,16 +14,7 @@ use crate::http::routes::{
 };
 use crate::http::state::HttpState;
 
-/// 管理后台路由入口。
-///
-/// # 返回值
-/// 返回统一 JWT 认证的管理后台路由；业务用例完成授权。
-///
-/// # 参数
-/// `state` 为 HTTP 状态。
-///
-/// # 错误
-/// 不执行 I/O，不返回错误。
+/// 把各领域路由合并到 `/admin` 并统一验证后台 JWT。路由权限标记供目录生成，操作与对象访问仍由业务用例授权。
 pub fn routes(state: HttpState) -> Router<HttpState> {
     Router::new()
         .merge(account_routes())
@@ -70,13 +61,8 @@ pub fn routes(state: HttpState) -> Router<HttpState> {
         .with_state(state)
 }
 
-/// 管理后台账号相关路由。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回值
-/// 返回账号相关路由集合
+// 为父路由挂载管理后台账号相关路由。
+// 返回账号相关路由集合。
 fn account_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -104,18 +90,13 @@ fn account_routes() -> Router<HttpState> {
         )
 }
 
-/// 管理后台角色相关路由。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回值
-/// 返回角色相关路由集合
+// 为父路由挂载管理后台角色相关路由。
+// 返回角色相关路由集合。
 fn role_routes() -> Router<HttpState> {
     role_template_routes().merge(role_crud_routes())
 }
 
-/// 内建岗位模板预览和生成，复用角色查看与创建权限。
+// 在角色管理下挂载内建岗位模板预览和生成，分别沿用普通角色查看与创建资格。
 fn role_template_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -134,7 +115,7 @@ fn role_template_routes() -> Router<HttpState> {
         )
 }
 
-/// 普通角色的列表、创建、修改和删除入口。
+// 为父路由挂载普通角色的列表、创建、修改和删除入口。
 fn role_crud_routes() -> Router<HttpState> {
     Router::new()
         .route("/roles", permission_route(get(admin::role::list_roles), &permissions::admin::ROLE_LIST_ROLES))
@@ -159,13 +140,8 @@ fn role_crud_routes() -> Router<HttpState> {
         )
 }
 
-/// 管理后台审计日志相关路由。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回值
-/// 返回审计日志相关路由集合
+// 为父路由挂载管理后台审计日志相关路由。
+// 返回审计日志相关路由集合。
 fn audit_log_routes() -> Router<HttpState> {
     Router::new().route(
         "/audit-logs",
@@ -176,13 +152,8 @@ fn audit_log_routes() -> Router<HttpState> {
     )
 }
 
-/// 采购责任规则维护与解析预览路由。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回规则查询、创建、更新和逐行解析路由集合。
+// 为父路由挂载采购责任规则维护与解析预览路由。
+// 返回规则查询、创建、更新和逐行解析路由集合。
 fn procurement_responsibility_routes() -> Router<HttpState> {
     Router::new()
         .route(

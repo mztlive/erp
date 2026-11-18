@@ -27,13 +27,14 @@ pub(super) struct CurrentWorkTasks {
 }
 
 impl CurrentWorkRepository<'_> {
-    /// 读取已授权销售单及其直接来源对象的开放任务。
-    /// # 参数
-    /// `order` 为调用方已授权的销售单。
-    /// # 返回
-    /// 返回按创建时间、任务 ID 稳定排序的开放任务。
-    /// # 错误
-    /// 任一来源或任务查询失败时返回错误。
+    // 处理销售当前办理时，读取已授权销售单及其直接来源对象的开放任务。
+    //
+    // 调用参数：
+    // `order` 为调用方已授权的销售单。
+    //
+    // 返回按创建时间、任务 ID 稳定排序的开放任务。
+    //
+    // 任一来源或任务查询失败时返回错误。
     pub(super) async fn tasks(
         &self,
         order: &SalesOrder,
@@ -58,13 +59,14 @@ impl CurrentWorkRepository<'_> {
         })
     }
 
-    /// 按本单销售、采购、交付与应收关系构建对象查询，不扫描全量工作队列。
-    /// # 参数
-    /// `order` 为已经过销售详情范围授权的单据。
-    /// # 返回
-    /// 返回绑定本单及其关联身份的查询分支；空来源保持空匹配。
-    /// # 错误
-    /// 关联仓储读取失败时返回错误。
+    // 依据本单销售、采购、交付与应收关系构建对象查询，不扫描全量工作队列。
+    //
+    // 调用参数：
+    // `order` 为已经过销售详情范围授权的单据。
+    //
+    // 返回绑定本单及其关联身份的查询分支；空来源保持空匹配。
+    //
+    // 关联仓储读取失败时返回错误。
     async fn objects(&self, order: &SalesOrder, executor: &mut dyn Executor) -> Result<Vec<Document>> {
         let sale = &order.base.id;
         let mut objects = vec![doc! {
@@ -96,7 +98,7 @@ impl CurrentWorkRepository<'_> {
         Ok(objects)
     }
 
-    /// 加载本单采购对应的入库、电子交付和服务交付身份，不输出其业务内容。
+    // 处理销售当前办理时，读取本单采购对应的入库、电子交付和服务交付身份，不输出其业务内容。
     async fn fulfillment_objects(
         &self,
         purchases: &[String],
@@ -124,7 +126,7 @@ impl CurrentWorkRepository<'_> {
     }
 }
 
-/// 空身份列表保持空匹配，防止扩大到整个对象类型。
+// 应用销售当前办理筛选时，空身份列表保持空匹配，防止扩大到整个对象类型。
 fn object_filter(kind: &str, ids: Vec<String>) -> Document {
     doc! { "business_object_type": kind, "business_object_id": { "$in": ids } }
 }

@@ -129,16 +129,9 @@ struct PreparedSalesSubmission {
     input: SalesOrderStartPersistInput,
 }
 
-/// 禁止回退 `CARD_SALES_APPROVAL` 或卡券专用工作项。
-///
-/// # 参数
-/// * `start` - 目标启动命令。
-///
-/// # 返回
-/// 主体种类不是旧卡券定义时返回。
-///
-/// # 错误
-/// 主体种类为旧卡券定义时返回冲突。
+// 禁止回退 `CARD_SALES_APPROVAL` 或卡券专用工作项。
+//
+// `start` 为目标启动命令。主体种类不是旧卡券定义时返回。主体种类为旧卡券定义时返回冲突。
 pub(super) fn ensure_unified_start_command(start: &SalesOrderStartCommand) -> Result<()> {
     reject_legacy_card_sales_work_item("DOCUMENT_APPROVAL")?;
     if start.subject_kind == "CARD_SALES_APPROVAL" {
@@ -150,21 +143,12 @@ pub(super) fn ensure_unified_start_command(start: &SalesOrderStartCommand) -> Re
 impl SalesOrderCommandProcess {
     /// 提交销售单并冻结提交快照。
     ///
-    /// `GoodsService` 与 `Voucher` 均直接调用统一 `start_approval`，以
-    /// `submission_no` 冻结 `subject_version` 与快照；禁止经 `sales_review`
-    /// 准入、`CARD_SALES_APPROVAL` 或第二条启动路径。
+    /// `GoodsService` 与 `Voucher` 均直接调用统一 `start_approval`，以 `submission_no` 冻结 `subject_version` 与快照；禁止经
+    /// `sales_review` 准入、`CARD_SALES_APPROVAL` 或第二条启动路径。
     ///
-    /// # 参数
-    /// * `id` - 销售单 ID
-    /// * `req` - 提交请求（含期望草稿版本与幂等键）
-    /// * `actor` - 已通过鉴权的审计操作人
+    /// `req` 为提交请求（含期望草稿版本与幂等键）。返回提交快照视图；已提交过的草稿幂等返回既有提交。`NotFound`：销售单或有效工作副本不存在。
     ///
-    /// # 返回
-    /// 返回提交快照视图；已提交过的草稿幂等返回既有提交。
-    ///
-    /// # 错误
-    /// * `NotFound` - 销售单或有效工作副本不存在
-    /// * `ConflictError` - 期望版本与当前版本不一致
+    /// `ConflictError`：期望版本与当前版本不一致。
     #[tracing::instrument(
         name = "sales_order.submit",
         skip_all,
@@ -201,7 +185,7 @@ impl SalesOrderCommandProcess {
         }
     }
 
-    /// 先授权读取原单和回执，再在同一事务准备并保存提交。
+    // 先授权读取原单和回执，再在同一事务准备并保存提交。
     async fn submit_command(
         &self,
         id: &str,
@@ -240,7 +224,7 @@ impl SalesOrderCommandProcess {
         self.submit_prepared_draft(id, req, actor, draft, identity, executor).await
     }
 
-    /// 原读取事务确认关系后，完成目录预检、冻结副本及现有提交写入流程。
+    // 原读取事务确认关系后，完成目录预检、冻结副本及现有提交写入流程。
     async fn submit_prepared_draft(
         &self,
         id: &str,
@@ -286,7 +270,7 @@ impl SalesOrderCommandProcess {
         .await
     }
 
-    /// 从最新冻结提交递增序号，保留原仓储读取及溢出校验。
+    // 从最新冻结提交递增序号，保留原仓储读取及溢出校验。
     async fn next_submission_no(&self, order: &SalesOrder, executor: &mut dyn Executor) -> Result<u32> {
         let order_id = SalesOrderId::new(order.base.id.clone());
         let latest = self
@@ -299,7 +283,7 @@ impl SalesOrderCommandProcess {
         SalesOrderSubmission::next_submission_no(latest).map_err(Error::from)
     }
 
-    /// 按原读取顺序加载并准备首次提交工作副本，不执行写入。
+    // 按原读取顺序加载并准备首次提交工作副本，不执行写入。
     async fn prepare_submission_copy(
         &self,
         req: SubmitSalesOrderRequest,
@@ -337,7 +321,7 @@ impl SalesOrderCommandProcess {
         Ok(PreparedSubmissionCopy { order, working_copy, copy_lines, working_copy_plan })
     }
 
-    /// 按原读取顺序回读工作副本已冻结的提交头与原行。
+    // 按原读取顺序回读工作副本已冻结的提交头与原行。
     async fn submission_for_copy(
         &self,
         working_copy: &SalesOrderWorkingCopy,
@@ -360,23 +344,13 @@ impl SalesOrderCommandProcess {
         Ok(Some(submission_view(existing, existing_lines)))
     }
 
-    /// 销售单提交并启动统一审批。
-    ///
-    /// # 用途
-    /// 冻结提交快照并启动统一审批。
-    ///
-    /// # 参数
-    /// * `start` - 销售单、工作副本与提交快照
-    /// * `actor` - 审计操作人
-    /// * `idempotency_key` - 客户端幂等键
-    /// * `audit_id` - 幂等审计主键
-    /// * `fingerprint` - 请求摘要
-    ///
-    /// # 返回
-    /// 返回提交快照视图。
-    ///
-    /// # 错误
-    /// 无绑定、定义缺失、状态不允许或写入失败时返回错误。
+    // 销售单提交并启动统一审批。
+    //
+    // 冻结提交快照并启动统一审批。
+    //
+    // `start` 为销售单、工作副本与提交快照；`idempotency_key` 为客户端幂等键；`audit_id` 为幂等审计主键；`fingerprint` 为请求摘要。
+    //
+    // 返回提交快照视图。无绑定、定义缺失、状态不允许或写入失败时返回错误。
     async fn start_approval_submission(
         &self,
         start: ApprovalSubmissionStart<'_>,
@@ -392,7 +366,7 @@ impl SalesOrderCommandProcess {
         persist_sales_order_start(&self.db, access, expected_order_version, input, executor).await
     }
 
-    /// 按既有顺序准备领域状态、审批输入、审计和商品引用，不在此开启事务。
+    // 按既有顺序准备领域状态、审批输入、审计和商品引用，不在此开启事务。
     async fn prepare_sales_submission(
         &self,
         mut start: ApprovalSubmissionStart<'_>,
@@ -449,7 +423,7 @@ impl SalesOrderCommandProcess {
         })
     }
 
-    /// 保持授权、绑定、状态迁移、快照和责任组织的首错顺序。
+    // 保持授权、绑定、状态迁移、快照和责任组织的首错顺序。
     async fn prepare_submission_domain(
         &self,
         start: &mut ApprovalSubmissionStart<'_>,
@@ -495,7 +469,7 @@ impl SalesOrderCommandProcess {
         })
     }
 
-    /// 从绑定定义和原收据解析人员后生成启动计划；重放语义继续由审批引擎负责。
+    // 从绑定定义和原收据解析人员后生成启动计划；重放语义继续由审批引擎负责。
     async fn prepare_submission_runtime(
         &self,
         start: &ApprovalSubmissionStart<'_>,
@@ -541,7 +515,7 @@ impl SalesOrderCommandProcess {
         prepare_start(input).map_err(Error::from)
     }
 
-    /// 从独立回执恢复原提交快照及行，再重验当前提交访问资格。
+    // 从独立回执恢复原提交快照及行，再重验当前提交访问资格。
     async fn replay_sales_submission(
         &self,
         audit_id: &str,
@@ -576,7 +550,7 @@ impl SalesOrderCommandProcess {
             .await
     }
 
-    /// 未知提交只查证同一完整命令，不重跑提交准备或写入。
+    // 未知提交只查证同一完整命令，不重跑提交准备或写入。
     async fn recover_sales_submission(
         &self,
         id: &str,
@@ -609,7 +583,7 @@ impl SalesOrderCommandProcess {
     }
 }
 
-/// 构造原销售单与精确提交快照关联的单个成功事件。
+// 构造原销售单与精确提交快照关联的单个成功事件。
 fn submission_event(
     command_id: String,
     actor: &AuditActor,
@@ -631,7 +605,7 @@ fn submission_event(
     )
 }
 
-/// 创建与本次提交同事务保存的状态变更记录。
+// 创建与本次提交同事务保存的状态变更记录。
 fn submission_workflow_action(
     id: &str,
     actor: &AuditActor,

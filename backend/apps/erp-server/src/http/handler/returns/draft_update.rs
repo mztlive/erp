@@ -16,17 +16,7 @@ use crate::http::state::HttpState;
 use crate::wiring::local_reverse_flow_ports;
 
 /// 保存原财务单据的草稿字段；服务端校验原经办人、状态、版本及完整资金源。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 当前已认证经办人
-/// * `id` - 原财务单据主键
-/// * `req` - 当前版本与可编辑字段
-///
-/// # 返回
 /// 返回原单当前详情，含保存后的乐观锁版本。
-///
-/// # 错误
 /// 无资格、非原经办人、非草稿、版本变化或非法字段时返回对应错误。
 pub async fn customer_refund_update(
     State(state): State<HttpState>,
@@ -44,17 +34,7 @@ pub async fn customer_refund_update(
 }
 
 /// 保存原财务单据的草稿字段；服务端校验原经办人、状态、版本及完整资金源。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 当前已认证经办人
-/// * `id` - 原财务单据主键
-/// * `req` - 当前版本与可编辑字段
-///
-/// # 返回
 /// 返回原单当前详情，含保存后的乐观锁版本。
-///
-/// # 错误
 /// 无资格、非原经办人、非草稿、版本变化或非法字段时返回对应错误。
 pub async fn supplier_refund_update(
     State(state): State<HttpState>,
@@ -72,17 +52,7 @@ pub async fn supplier_refund_update(
 }
 
 /// 保存原财务单据的草稿字段；服务端校验原经办人、状态、版本及完整资金源。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 当前已认证经办人
-/// * `id` - 原财务单据主键
-/// * `req` - 当前版本与可编辑字段
-///
-/// # 返回
 /// 返回原单当前详情，含保存后的乐观锁版本。
-///
-/// # 错误
 /// 无资格、非原经办人、非草稿、版本变化或非法字段时返回对应错误。
 pub async fn receipt_reversal_update(
     State(state): State<HttpState>,
@@ -100,17 +70,7 @@ pub async fn receipt_reversal_update(
 }
 
 /// 保存原财务单据的草稿字段；服务端校验原经办人、状态、版本及完整资金源。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 当前已认证经办人
-/// * `id` - 原财务单据主键
-/// * `req` - 当前版本与可编辑字段
-///
-/// # 返回
 /// 返回原单当前详情，含保存后的乐观锁版本。
-///
-/// # 错误
 /// 无资格、非原经办人、非草稿、版本变化或非法字段时返回对应错误。
 pub async fn payment_reversal_update(
     State(state): State<HttpState>,

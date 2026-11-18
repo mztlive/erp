@@ -78,30 +78,21 @@ struct AccountCount {
 }
 
 impl<T> AccountListSnapshot<T> {
-    /// 返回数据库完整计数；空结果保持零。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 与最终条件一致的总数。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 计算应收与应付子账金额时，给出数据库完整计数；空结果保持零。
+    //
+    // 与最终条件一致的总数。
     pub(in crate::finance::funds_scope) fn total(&self) -> u64 {
         self.total.first().map_or(0, |row| row.count)
     }
 
-    /// 保留原授权版本、每条匹配行与真实来源版本的哈希输入顺序。
-    ///
-    /// # 参数
-    /// * `authorization` - 原事务中解析的授权。资源名决定超限文案，`scope_version` 进入指纹。
-    ///
-    /// # 返回
-    /// 完整匹配集合的跨页指纹。
-    ///
-    /// # 错误
-    /// `versions` 达到 10000 条时返回校验错误。资源为 `receivable_account` 时文案以「应收」开头，否则以「应付」开头。
+    // 组装应收与应付子账时，保留原授权版本、每条匹配行与真实来源版本的哈希输入顺序。
+    //
+    // 调用参数：
+    // * `authorization` - 原事务中解析的授权。资源名决定超限文案，`scope_version` 进入指纹。
+    //
+    // 完整匹配集合的跨页指纹。
+    //
+    // `versions` 达到 10000 条时返回校验错误。资源为 `receivable_account` 时文案以「应收」开头，否则以「应付」开头。
     pub(in crate::finance::funds_scope) fn version(
         &self,
         authorization: &FundsAuthorization,
@@ -126,20 +117,17 @@ impl<T> AccountListSnapshot<T> {
 }
 
 impl FundsAccess {
-    /// 应收查询的授权和来源筛选先进入关联管道，页外仅返回版本与金额摘要。
-    ///
-    /// # 参数
-    /// * `query` - 已规范化的应收账户列表条件。
-    /// * `authorization` - 已解析销售授权。
-    /// * `condition` - 已展开的负责人、经办人与组织条件。
-    /// * `include_page` - 为 true 时生成当前页、计数和金额摘要；为 false 时这些分支恒为空，只保留版本。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 同一最终条件的页面、计数、完整轻量版本和窄金额输入。
-    ///
-    /// # 错误
-    /// 关键词查询、聚合或解码失败时返回对应错误。聚合没有快照文档时返回校验错误，文案为资金查询快照缺失。
+    // 处理应收与应付子账时，应收查询的授权和来源筛选先进入关联管道，页外仅返回版本与金额摘要。
+    //
+    // 调用参数：
+    // * `query` - 已规范化的应收账户列表条件。
+    // * `authorization` - 已解析销售授权。
+    // * `condition` - 已展开的负责人、经办人与组织条件。
+    // * `include_page` - 为 true 时生成当前页、计数和金额摘要；为 false 时这些分支恒为空，只保留版本。
+    //
+    // 同一最终条件的页面、计数、完整轻量版本和窄金额输入。
+    //
+    // 关键词查询、聚合或解码失败时返回对应错误。聚合没有快照文档时返回校验错误，文案为资金查询快照缺失。
     pub(in crate::finance::funds_scope) async fn receivable_database_snapshot(
         &self,
         query: &ReceivableAccountListQuery,
@@ -203,20 +191,17 @@ impl FundsAccess {
         Ok(result)
     }
 
-    /// 应付按真实来源类型关联；采购与结算同名主键不能串权。
-    ///
-    /// # 参数
-    /// * `query` - 已规范化的应付账户列表条件。
-    /// * `authorization` - 已解析采购与结算授权。
-    /// * `condition` - 已展开的负责人、经办人与组织条件。
-    /// * `include_page` - 为 true 时生成当前页、计数和金额摘要；为 false 时这些分支恒为空，只保留版本。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 同一最终来源条件的页面、计数、版本和金额摘要。
-    ///
-    /// # 错误
-    /// 关键词查询、聚合或解码失败时返回对应错误。聚合没有快照文档时返回校验错误，文案为资金查询快照缺失。
+    // 处理应收与应付子账时，应付按真实来源类型关联；采购与结算同名主键不能串权。
+    //
+    // 调用参数：
+    // * `query` - 已规范化的应付账户列表条件。
+    // * `authorization` - 已解析采购与结算授权。
+    // * `condition` - 已展开的负责人、经办人与组织条件。
+    // * `include_page` - 为 true 时生成当前页、计数和金额摘要；为 false 时这些分支恒为空，只保留版本。
+    //
+    // 同一最终来源条件的页面、计数、版本和金额摘要。
+    //
+    // 关键词查询、聚合或解码失败时返回对应错误。聚合没有快照文档时返回校验错误，文案为资金查询快照缺失。
     pub(in crate::finance::funds_scope) async fn payable_database_snapshot(
         &self,
         query: &PayableAccountListQuery,
@@ -261,7 +246,7 @@ impl FundsAccess {
         Ok(result)
     }
 
-    /// 一次最终条件生成页与完整轻量索引；重验仅保留版本分支。
+    // 处理应收与应付子账时，一次最终条件生成页与完整轻量索引；重验仅保留版本分支。
     #[allow(clippy::too_many_arguments)]
     async fn account_snapshot<T: for<'de> Deserialize<'de> + Send + Sync>(
         &self,
@@ -299,7 +284,7 @@ impl FundsAccess {
     }
 }
 
-/// 保留应收领域原业务条件，分页由最终范围管道执行。
+// 应用应收与应付子账筛选时，保留应收领域原业务条件，分页由最终范围管道执行。
 fn receivable_filter(
     query: &ReceivableAccountListQuery,
     keyword_ids: Option<Vec<String>>,
@@ -317,7 +302,7 @@ fn receivable_filter(
     }
 }
 
-/// 保留应付领域业务条件，不把来源授权解释放入财务领域仓储。
+// 应用应收与应付子账筛选时，保留应付领域业务条件，不把来源授权解释放入财务领域仓储。
 fn payable_filter(query: &PayableAccountListQuery, keyword_ids: Option<Vec<String>>) -> PayableAccountFilter {
     PayableAccountFilter {
         source_document_id: query.source_document_id.clone(),
@@ -332,7 +317,7 @@ fn payable_filter(query: &PayableAccountListQuery, keyword_ids: Option<Vec<Strin
     }
 }
 
-/// 当前页投影沿用财务领域列表字段，附带最小真实来源事实。
+// 组装应收与应付子账的聚合管道时，当前页投影沿用财务领域列表字段，附带最小真实来源事实。
 fn account_projection() -> Document {
     doc! { "_id": 0, "id": 1, "status": 1, "current_revision_id": 1,
     "created_by": 1, "updated_by": 1, "sales_order_id": 1, "account_seq": 1,
@@ -343,7 +328,7 @@ fn account_projection() -> Document {
     "created_at": 1, "_source": 1 }
 }
 
-/// 两种来源独立授权后按真实类型选择；未知类型保持不可见。
+// 组装应收与应付子账的聚合管道时，两种来源独立授权后按真实类型选择；未知类型保持不可见。
 fn payable_source_stages(
     authorization: &FundsAuthorization,
     condition: &FundsLinkedCondition,
@@ -389,7 +374,7 @@ mod tests {
     use super::super::super::FundsReadContext;
     use super::*;
 
-    /// 构造已解析上下文；版本测试不访问持久化或静态资格。
+    // 处理应收与应付子账时，生成已解析上下文；版本测试不访问持久化或静态资格。
     fn authorization() -> FundsAuthorization {
         FundsAuthorization {
             access: None,
@@ -408,7 +393,7 @@ mod tests {
         }
     }
 
-    /// 只保留范围内两个账户的版本，当前实体页为空以验证页外变化仍有效。
+    // 处理应收与应付子账时，只保留范围内两个账户的版本，当前实体页为空以验证页外变化仍有效。
     fn snapshot() -> AccountListSnapshot<ReceivableAccountRow> {
         AccountListSnapshot {
             items: vec![],
@@ -421,7 +406,7 @@ mod tests {
         }
     }
 
-    /// 页外记录、来源交接、插入、删除和授权变化均使完整指纹失效。
+    // 验证应收与应付子账：页外记录、来源交接、插入、删除和授权变化均使完整指纹失效。
     #[test]
     fn account_version_covers_all_matches_and_their_real_sources() {
         let access = authorization();
@@ -452,7 +437,7 @@ mod tests {
         assert_ne!(snapshot().version(&changed).unwrap(), original);
     }
 
-    /// 原有恰一万条拒绝边界保持，数据库计数不以当前页长度代替。
+    // 验证应收与应付子账：原有恰一万条拒绝边界保持，数据库计数不以当前页长度代替。
     #[test]
     fn account_complete_index_keeps_existing_capacity_boundary() {
         let access = authorization();

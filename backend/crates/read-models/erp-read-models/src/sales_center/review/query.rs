@@ -42,11 +42,7 @@ pub struct SalesChangeListView {
 }
 
 impl SalesChangeReadService {
-    /// 分页查询销售变更单列表。
-    ///
-    /// # 参数
-    /// * `params` - 查询参数
-    /// * `actor` - 已认证操作人
+    /// 调用此入口时，分页查询销售变更单列表。
     ///
     /// # 返回
     /// 返回带范围版本的分页视图。
@@ -81,14 +77,10 @@ impl SalesChangeReadService {
         Ok(snapshot)
     }
 
-    /// 查询销售变更单详情。
+    /// 读取销售变更单详情。
     ///
     /// # 参数
     /// * `id` - 变更单 ID
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 返回详情视图。
     ///
     /// # 错误
     /// * `NotFound` - 变更单不存在或来源销售单不可见
@@ -108,11 +100,14 @@ impl SalesChangeReadService {
                 .await?;
         Ok(view)
     }
-    /// 在新快照按原命令资格及来源详情权限重新读取结果。
+    /// 准备销售变更时，在新快照按原命令资格及来源详情权限重新读取结果。
+    ///
     /// # 参数
     /// id、actor 为原命令对象及当前账号，permission 为固定的创建、提交、作废或生效回包入口。
+    ///
     /// # 返回
     /// 本次授权快照中的完整变更结果。
+    ///
     /// # 错误
     /// 不支持的入口、撤权、来源无权、交付失效或数据库错误均拒绝。
     pub async fn command_detail(
@@ -137,22 +132,18 @@ impl SalesChangeReadService {
     }
 }
 
-/// 在独立事务中重验来源销售单后装配变更单详情。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `rbac` - 当前 RBAC 快照
-/// * `actor` - 已认证操作人
-/// * `id` - 变更单主键
-///
-/// # 返回
-/// 返回视图和范围版本绑定。
-///
-/// # 错误
-/// 变更单不存在或来源销售单不可见时返回 NotFound。
-///
-/// # 关键业务约束
-/// 不泄露越权变更单的存在性。
+// 读取销售变更时，在独立事务中重验来源销售单后装配变更单详情。
+//
+// 调用参数：
+// * `rbac` - 当前 RBAC 快照
+// * `id` - 变更单主键
+//
+// 返回视图和范围版本绑定。
+//
+// 变更单不存在或来源销售单不可见时返回 NotFound。
+//
+// 业务边界：
+// 不泄露越权变更单的存在性。
 async fn load_authorized_change(
     db: &Database,
     rbac: &Arc<AuthorizationService>,
@@ -175,20 +166,17 @@ async fn load_authorized_change(
         .await
 }
 
-/// 在同一执行器先核验来源详情范围，再装配当前变更事实。
-///
-/// # 参数
-/// * `db` - 销售集合数据库
-/// * `rbac` - 当前授权源
-/// * `actor` - 当前账号
-/// * `id` - 原变更单身份
-/// * `executor` - 当前读取事务执行器
-///
-/// # 返回
-/// 返回原单视图及来源范围版本。
-///
-/// # 错误
-/// 来源不可见、缺单、审批关系非法或仓储失败时拒绝。
+// 读取销售变更时，在同一执行器先核验来源详情范围，再装配当前变更事实。
+//
+// 调用参数：
+// * `db` - 销售集合数据库
+// * `rbac` - 当前授权源
+// * `id` - 原变更单身份
+// * `executor` - 当前读取事务执行器
+//
+// 返回原单视图及来源范围版本。
+//
+// 来源不可见、缺单、审批关系非法或仓储失败时拒绝。
 async fn load_change_snapshot(
     db: &Database,
     rbac: &Arc<AuthorizationService>,
@@ -229,7 +217,7 @@ struct AuthorizedChange {
     version: String,
 }
 
-/// 在原执行器内独立证明变更单与来源销售单资格，并绑定两者业务版本。
+// 读取销售变更时，在原执行器内独立证明变更单与来源销售单资格，并绑定两者业务版本。
 async fn load_change_facts(
     db: &Database,
     rbac: &Arc<AuthorizationService>,
@@ -255,21 +243,18 @@ async fn load_change_facts(
     Ok(AuthorizedChange { context, version })
 }
 
-/// 使用已授权原单装配定义、真实运行审批与冻结目标身份。
-///
-/// # 参数
-/// * `db` - 销售集合数据库
-/// * `rbac` - 当前授权源
-/// * `actor` - 当前账号
-/// * `change` - 已核验来源可见的变更单
-/// * `binding` - 变更创建时冻结的定义
-/// * `executor` - 原授权事务执行器
-///
-/// # 返回
-/// 返回完整只读详情。
-///
-/// # 错误
-/// 定义缺失、当前提交来源或审批事实不一致时拒绝。
+// 使用已授权原单组装定义、真实运行审批与冻结目标身份。
+//
+// 调用参数：
+// * `db` - 销售集合数据库
+// * `rbac` - 当前授权源
+// * `change` - 已核验来源可见的变更单
+// * `binding` - 变更创建时冻结的定义
+// * `executor` - 原授权事务执行器
+//
+// 返回完整只读详情。
+//
+// 定义缺失、当前提交来源或审批事实不一致时拒绝。
 async fn runtime_detail_view(
     db: &Database,
     rbac: &Arc<AuthorizationService>,
@@ -309,14 +294,11 @@ async fn runtime_detail_view(
     Ok(view)
 }
 
-/// 构建详情视图，并附带只读审批结构。
-///
-/// # 参数
-/// * `change_order` - 变更单
-/// * `binding` - 创建时冻结的定义绑定
-///
-/// # 返回
-/// 返回详情视图。
+// 生成销售变更视图时，构建详情视图，并附带只读审批结构。
+//
+// 调用参数：
+// * `change_order` - 变更单
+// * `binding` - 创建时冻结的定义绑定
 fn detail_view(
     change_order: SalesChangeOrder,
     binding: Option<ApprovalDefinitionBinding>,

@@ -49,16 +49,7 @@ pub enum MessageType {
 }
 
 impl MessageType {
-    /// 返回消息类型的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将消息类型映射为中文标签，供界面显示。
     pub fn label(&self) -> &'static str {
         match self {
             Self::PaymentSucceeded => "支付成功",
@@ -71,16 +62,7 @@ impl MessageType {
         }
     }
 
-    /// 返回消息类型的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将消息类型编码为稳定字符串，供持久化和精确查询复用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::PaymentSucceeded => "PAYMENT_SUCCEEDED",
@@ -117,16 +99,7 @@ pub enum InboxMessageStatus {
 }
 
 impl InboxMessageStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将入站消息映射为中文标签，供界面显示。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Received => "已接收",
@@ -138,16 +111,7 @@ impl InboxMessageStatus {
         }
     }
 
-    /// 返回状态的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将入站消息编码为稳定字符串，供持久化和精确查询复用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Received => "received",
@@ -248,18 +212,12 @@ pub struct InboxMessage {
 impl InboxMessage {
     /// 登记入站消息（登记态：状态固定为已接收，无处理完成时间）。
     ///
-    /// 字段校验与规范化规则与 [`InboxMessage::new`] 一致；来源系统发送时间与
-    /// 接收时间由调用方注入，实体不读取全局时钟。
+    /// 字段校验与规范化规则与 [`InboxMessage::new`] 一致；来源系统发送时间与接收时间由调用方注入，实体不读取全局时钟。
     ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::InboxMessageId`）
-    /// * `data` - 登记数据（不含处理状态与处理完成时间）
-    ///
-    /// # 返回
-    /// 返回状态为已接收的新建入站消息实体。
-    ///
-    /// # 错误
     /// 当来源事件 ID/业务事实键/契约版本为空或超长、内容引用超长时返回错误。
+    ///
+    /// - `id`：实体主键（`erp_core::ids::InboxMessageId`）。
+    /// - `data`：登记数据（不含处理状态与处理完成时间）。
     pub fn received(id: InboxMessageId, data: InboxMessageReceivedData) -> Result<Self> {
         Self::new(
             id,
@@ -280,20 +238,12 @@ impl InboxMessage {
 
     /// 创建入站消息记录。
     ///
-    /// 完成 `source_event_id`、`business_fact_key`、`payload_schema_version` 的校验与
-    /// 规范化（去首尾空白、非空、长度上限），并强制不变式：状态为已处理时必须同时
-    /// 提供处理完成时间（关联一致性）。
+    /// 完成 `source_event_id`、`business_fact_key`、`payload_schema_version` 的校验与规范化（去首尾空白、
+    /// 非空、长度上限），并强制不变式：状态为已处理时必须同时提供处理完成时间（关联一致性）。
     ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::InboxMessageId`）
-    /// * `data` - 创建数据
+    /// 当来源事件 ID/业务事实键/契约版本为空或超长、内容引用超长，或已处理状态缺少处理完成时间时返回错误。
     ///
-    /// # 返回
-    /// 返回新建的入站消息实体。
-    ///
-    /// # 错误
-    /// 当来源事件 ID/业务事实键/契约版本为空或超长、内容引用超长，或已处理状态
-    /// 缺少处理完成时间时返回错误。
+    /// `id` 为实体主键（`erp_core::ids::InboxMessageId`）。
     pub fn new(id: InboxMessageId, data: InboxMessageData) -> Result<Self> {
         let source_event_id = normalize_required_text(
             data.source_event_id,
@@ -338,17 +288,9 @@ impl InboxMessage {
 
     /// 更新入站消息的处理状态与处理完成时间。
     ///
-    /// 消息身份（来源系统、来源事件 ID）与幂等键（业务事实键）不在通用更新中修改；
-    /// 强制不变式：状态置为已处理必须同时提供处理完成时间，设置处理完成时间必须
-    /// 同时把状态置为已处理。
+    /// 消息身份（来源系统、来源事件 ID）与幂等键（业务事实键）不在通用更新中修改；强制不变式：状态置为已处理必须同时提供处理完成时间，
+    /// 设置处理完成时间必须同时把状态置为已处理。
     ///
-    /// # 参数
-    /// * `update` - 更新数据
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 当已处理状态与处理完成时间不配套时返回错误。
     pub fn update(&mut self, update: InboxMessageUpdate) -> Result<()> {
         if update.status == Some(InboxMessageStatus::Processed) && update.processed_at.is_none() {

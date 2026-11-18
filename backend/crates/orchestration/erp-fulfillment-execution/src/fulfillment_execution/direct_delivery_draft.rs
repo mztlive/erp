@@ -11,15 +11,7 @@ use crate::{Error, Result};
 
 /// 在原调用位置分配发货标识和单号；行验证仍在此步骤之后执行。
 ///
-/// # 参数
-/// * `db` - 履约单号所在数据库。
-/// * `order` - 已由消费方校验的采购来源。
-///
-/// # 返回
-/// 返回尚未保存明细的直发草稿。
-///
-/// # 错误
-/// 单号分配或领域构造失败时返回原错误。
+/// `db` 为履约单号所在数据库；`order` 为已由消费方校验的采购来源。返回尚未保存明细的直发草稿。单号分配或领域构造失败时返回原错误。
 pub async fn prepare_direct_delivery(db: &Database, order: &PurchaseOrder) -> Result<Delivery> {
     let delivery_id = DeliveryId::new(next_id());
     Delivery::new(

@@ -29,46 +29,20 @@ pub struct CreateProductBrandRequest {
 }
 
 impl CreateProductBrandRequest {
-    /// 以稳定品牌代码与品牌名称构造创建请求。
-    ///
-    /// # 参数
-    /// * `brand_code` - 稳定品牌代码
-    /// * `name` - 品牌名称
-    ///
-    /// # 返回
-    /// 返回待补齐可选字段的创建请求。
-    ///
-    /// # 错误
-    /// 无。
+    /// 以稳定品牌代码与品牌名称构造创建请求。返回待补齐可选字段的创建请求。
     pub fn new(brand_code: impl Into<String>, name: impl Into<String>) -> Self {
         Self { brand_code: brand_code.into(), name: name.into(), status: None, logo_file_asset_id: None }
     }
 
-    /// 设置启停状态。
-    ///
-    /// # 参数
-    /// * `status` - 启停状态
-    ///
-    /// # 返回
-    /// 返回更新后的创建请求。
-    ///
-    /// # 错误
-    /// 无。
+    /// 设置启停状态。返回更新后的创建请求。
     pub fn with_status(mut self, status: EnableStatus) -> Self {
         self.status = Some(status);
         self
     }
 
-    /// 设置品牌 Logo。
+    /// 设置品牌 Logo。返回更新后的创建请求。
     ///
-    /// # 参数
-    /// * `logo_file_asset_id` - 已登记受控文件
-    ///
-    /// # 返回
-    /// 返回更新后的创建请求。
-    ///
-    /// # 错误
-    /// 无。
+    /// `logo_file_asset_id` 为已登记受控文件。
     pub fn with_logo_file_asset_id(mut self, logo_file_asset_id: FileAssetId) -> Self {
         self.logo_file_asset_id = Some(logo_file_asset_id);
         self
@@ -109,13 +83,7 @@ pub struct ProductBrandView {
 }
 
 impl From<ProductBrand> for ProductBrandView {
-    /// 从实体构造响应视图。
-    ///
-    /// # 参数
-    /// * `brand` - 商品品牌实体
-    ///
-    /// # 返回
-    /// 返回响应视图。
+    // 将品牌实体投影为接口视图，不在转换时另查关联资料。
     fn from(brand: ProductBrand) -> Self {
         Self {
             id: brand.base.id,
@@ -130,13 +98,7 @@ impl From<ProductBrand> for ProductBrandView {
 }
 
 impl From<ProductBrandRow> for ProductBrandView {
-    /// 从投影行构造响应视图，与 `From<ProductBrand>` 同语义。
-    ///
-    /// # 参数
-    /// * `row` - 商品品牌列表投影行
-    ///
-    /// # 返回
-    /// 返回响应视图。
+    // 从投影行构造响应视图，与 `From<ProductBrand>` 同语义。
     fn from(row: ProductBrandRow) -> Self {
         Self {
             id: row.id,
@@ -190,18 +152,11 @@ pub(crate) struct ProductBrandListQuery {
 }
 
 impl ProductBrandListParams {
-    /// 归一化商品品牌列表查询参数。
-    ///
-    /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    // 归一化商品品牌列表查询参数。
+    //
+    // 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
+    //
+    // 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<ProductBrandListQuery> {
         Ok(ProductBrandListQuery {
             q: normalized_text(self.q.as_deref()),
@@ -277,13 +232,7 @@ pub struct UnitOfMeasureView {
 }
 
 impl From<UnitOfMeasure> for UnitOfMeasureView {
-    /// 从实体构造响应视图。
-    ///
-    /// # 参数
-    /// * `unit` - 计量单位实体
-    ///
-    /// # 返回
-    /// 返回响应视图。
+    // 将计量单位实体投影为接口视图，不在转换时另查关联资料。
     fn from(unit: UnitOfMeasure) -> Self {
         Self {
             id: unit.base.id,
@@ -299,13 +248,7 @@ impl From<UnitOfMeasure> for UnitOfMeasureView {
 }
 
 impl From<UnitOfMeasureRow> for UnitOfMeasureView {
-    /// 从投影行构造响应视图，与 `From<UnitOfMeasure>` 同语义。
-    ///
-    /// # 参数
-    /// * `row` - 计量单位列表投影行
-    ///
-    /// # 返回
-    /// 返回响应视图。
+    // 从投影行构造响应视图，与 `From<UnitOfMeasure>` 同语义。
     fn from(row: UnitOfMeasureRow) -> Self {
         Self {
             id: row.id,
@@ -355,18 +298,11 @@ pub(crate) struct UnitOfMeasureListQuery {
 }
 
 impl UnitOfMeasureListParams {
-    /// 归一化计量单位列表查询参数。
-    ///
-    /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    // 归一化计量单位列表查询参数。
+    //
+    // 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
+    //
+    // 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<UnitOfMeasureListQuery> {
         Ok(UnitOfMeasureListQuery {
             unit_code: normalized_text(self.unit_code.as_deref()),

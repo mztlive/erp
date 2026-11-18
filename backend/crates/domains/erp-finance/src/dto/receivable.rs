@@ -222,7 +222,7 @@ mod tests {
         );
     }
 
-    /// 发票创建请求拒绝定义 ID / 审批人；视图不暴露审批区。
+    // 回归检查：发票创建请求拒绝定义 ID / 审批人；视图不暴露审批区。
     #[test]
     fn invoice_create_and_view_have_no_approval_surface() {
         let valid = serde_json::json!({

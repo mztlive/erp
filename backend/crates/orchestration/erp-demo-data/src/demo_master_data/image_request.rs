@@ -9,11 +9,7 @@ use erp_core::ids::{SkuId, SkuRevisionId};
 
 use crate::Result;
 
-/// 保留当前商品字段及全部现有媒体。
-/// # 参数
-/// 当前商品、修订、媒体及全部启用 SKU 的更新输入。
-/// # 返回
-/// 仅供补图流程使用的正式商品更新请求。
+// 从当前商品及修订拼出正式更新请求，完整保留已有媒体和启用 SKU，使演示补图不覆盖现行业务资料。
 pub(super) fn product_request(
     product: &Product,
     revision: &ProductRevision,
@@ -49,13 +45,7 @@ fn media_inputs(media: &[ProductRevisionMedia], role: MediaRole) -> Vec<ProductM
         .collect()
 }
 
-/// 保留稳定身份、精确修订、三价和规格。
-/// # 参数
-/// 当前 SKU 稳定实体及其当前修订。
-/// # 返回
-/// 保留原值的 SKU 更新输入。
-/// # 错误
-/// 历史规格签名不合法时拒绝更新，禁止改成空规格。
+// 把当前 SKU 和修订转换成保留身份、版本、三价、集采门槛及规格的更新输入；历史规格签名无效就停止，不以空规格替代。
 pub(super) fn sku_input(sku: &Sku, revision: &SkuRevision) -> Result<ProductSkuInput> {
     let spec_entries = parse_specification_signature(&sku.specification_signature)?
         .into_iter()

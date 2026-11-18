@@ -8,17 +8,7 @@ use crate::error::{Error, Result};
 /// 导入批次视图使用的最小后台任务身份事实。
 #[async_trait]
 pub trait BulkJobFactsPort: Send + Sync {
-    /// 按导入批次请求身份查找后台任务 ID。
-    ///
-    /// # 参数
-    /// * `request_id` - 用作任务请求身份的导入批次号。
-    /// * `executor` - 调用方选择的数据访问执行器。
-    ///
-    /// # 返回
-    /// 找到时返回后台任务 ID；没有对应任务时返回 `None`。
-    ///
-    /// # 错误
-    /// 任务身份查询失败时返回对应错误。
+    /// 用批次号作为任务请求身份，在调用方原执行器上查关联后台任务。无关联返回 `None`，查询失败保留原错误，供批次详情区分未关联与不可查。
     async fn background_job_id_by_request_id(
         &self,
         request_id: &str,
@@ -32,17 +22,7 @@ pub struct FailClosedBulkJobFacts;
 
 #[async_trait]
 impl BulkJobFactsPort for FailClosedBulkJobFacts {
-    /// 拒绝查询且不编造任务身份。
-    ///
-    /// # 参数
-    /// * `_request_id` - 未使用；任意批次号都失败关闭。
-    /// * `_executor` - 未使用。
-    ///
-    /// # 返回
-    /// 不返回任务 ID。
-    ///
-    /// # 错误
-    /// 总是返回 [`Error::Internal`]，文案为导入后台任务端口未接线。
+    // 未接线时不为任何批次编造任务身份，统一返回 [`Error::Internal`] 并指出导入后台任务端口不可用。
     async fn background_job_id_by_request_id(
         &self,
         _request_id: &str,

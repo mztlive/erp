@@ -38,21 +38,15 @@ pub struct ScopedObject<'a> {
 }
 
 impl ScopeClause {
-    /// 判断对象是否满足该角色的各适用维度。
-    ///
-    /// # 参数
-    /// * `object` - 业务域给出的对象责任事实。
-    ///
-    /// # 返回
+    /// 当对象满足该角色的各适用维度时返回 `true`。
     /// `company` 为真时直接返回 `true`。否则已出现的归属、结算主体和仓库维度都要命中；没有任何正向范围时返回 `false`。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// `object`：业务域给出的对象责任事实。
     pub fn covers(&self, object: &ScopedObject<'_>) -> bool {
         AccessRule::clause(self).allows_scope(object)
     }
 
-    /// 校验资源要求的维度均有该角色自己的范围证据。
+    // 检查单个角色条款是否覆盖资源所需维度。公司范围直接通过；其他范围不能借用别的角色补齐缺失维度。
     pub(crate) fn complete(&self, dimensions: &[ScopeDimension]) -> bool {
         self.company
             || dimensions.iter().all(|dimension| match dimension {
@@ -67,33 +61,17 @@ impl ScopeClause {
 
 impl ResolvedScope {
     /// 判断读取或写入范围；调用方必须先证明有效账号和完整动作权限。
-    ///
-    /// # 参数
-    /// * `object` - 业务域给出的对象责任事实。
-    /// * `allow_history` - 为真时，历史参与可以补读取。
-    ///
-    /// # 返回
     /// 任一角色条款覆盖，或允许历史且对象是历史参与者时为真；若存在用户上限，还要再被上限覆盖。没有角色条款时，历史参与仍可单独放行读取。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// `object`：业务域给出的对象责任事实；`allow_history`：为真时，历史参与可以补读取。
     pub fn allows(&self, object: &ScopedObject<'_>, allow_history: bool) -> bool {
         AccessRule::scope(self, allow_history).allows_scope(object)
     }
 
-    /// 判断角色是否贡献该资源动作的正向范围。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 至少一条角色条款时为 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    ///
-    /// # 关键业务约束
+    /// 当角色贡献该资源动作的正向范围时返回 `true`。
     /// 个人上限只收窄已有角色结果，不构成授权，也不得补 Company。
+    ///
+    /// 至少一条角色条款时为 `true`。
     pub fn has_role_scope(&self) -> bool {
         !self.role_clauses.is_empty()
     }

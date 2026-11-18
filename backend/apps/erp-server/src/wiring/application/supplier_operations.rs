@@ -69,24 +69,14 @@ impl SupplierMessageCatalog for CatalogMessages {
 }
 
 impl Application {
-    /// 装配复用原执行器的付款请求任务同步提供者。
-    /// # 参数
-    /// 无；数据库来自当前应用。
-    /// # 返回
-    /// 返回订单编排消费的共享付款任务 Port。
-    /// # 错误
-    /// 构造时不执行 I/O，不返回错误。
+    // 装配复用原执行器的付款请求任务同步提供者。
+    // 返回订单编排消费的共享付款任务 Port。
     pub(crate) fn supplier_payment_tasks(&self) -> Arc<dyn OrdersPaymentTasks> {
         Arc::new(PaymentTasks(self.db()))
     }
 
-    /// 装配消息补查后的目录写入提供者。
-    /// # 参数
-    /// 无；沿用当前目录服务接线。
-    /// # 返回
-    /// 返回消息接收方消费的目录 Port。
-    /// # 错误
-    /// 构造时不执行 I/O，不返回错误。
+    // 装配消息补查后的目录写入提供者。
+    // 返回消息接收方消费的目录 Port。
     pub(super) fn supplier_message_catalog(&self) -> Arc<dyn SupplierMessageCatalog> {
         Arc::new(CatalogMessages(CatalogMessageWriter::new(
             self.db(),

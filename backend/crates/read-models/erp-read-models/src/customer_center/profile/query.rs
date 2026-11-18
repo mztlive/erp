@@ -27,7 +27,7 @@ use super::display::{self, ProfileDisplay};
 use crate::{Error, Result};
 
 impl CustomerProfileReadService {
-    /// 查询客户资料对象中心的当前事实、历史版本与敏感字段揭示入口。
+    /// 处理客户资料详情时，查询客户资料对象中心的当前事实、历史版本与敏感字段揭示入口。
     ///
     /// # 参数
     /// * `customer_id` - 客户角色主键。
@@ -50,7 +50,7 @@ impl CustomerProfileReadService {
             .await
     }
 
-    /// 完整客户过滤、资料水合和交付检查使用同一事务快照。
+    // 处理客户资料详情时，完整客户过滤、资料水合和交付检查使用同一事务快照。
     async fn detail_snapshot(
         &self,
         customer_id: &str,
@@ -104,7 +104,7 @@ impl CustomerProfileReadService {
         Ok(detail)
     }
 
-    /// 字段资格、当前事实及可揭示令牌留在根查询的同一读取阶段。
+    // 处理客户资料详情时，字段资格、当前事实及可揭示令牌留在根查询的同一读取阶段。
     async fn visible_facts(
         &self,
         customer_id: &str,
@@ -160,7 +160,7 @@ struct ProfileDetailParts {
     sensitive_fields: Vec<CustomerSensitiveFieldView>,
 }
 
-/// 构造客户资料完整详情视图。
+// 装配客户资料详情视图时，生成客户资料完整详情视图。
 fn build_detail(parts: ProfileDetailParts, names: &HashMap<String, String>) -> CustomerProfileDetailView {
     let ProfileDetailParts {
         account,
@@ -208,7 +208,7 @@ fn build_detail(parts: ProfileDetailParts, names: &HashMap<String, String>) -> C
     }
 }
 
-/// 所有当前负责销售与单负责人兼容字段共享同一有效期口径。
+// 处理客户资料详情时，所有当前负责销售与单负责人兼容字段共享同一有效期口径。
 fn populate_owners(
     customer: &mut CustomerView,
     assignments: &[CustomerAssignment],
@@ -230,16 +230,12 @@ fn populate_owners(
         active.iter().filter(|item| item.assignment_role == AssignmentRole::Collaborator).count() as u32;
 }
 
-/// 返回客户状态产生的业务动作阻断原因。
-///
-/// # 参数
-/// * `status` - 客户角色状态。
-///
-/// # 返回
-/// 客户有效时返回空列表；已停用时返回上传合同和创建销售单两条阻断。
-///
-/// # 错误
-/// 不返回错误。
+// 处理客户资料详情时，给出客户状态产生的业务动作阻断原因。
+//
+// 调用参数：
+// * `status` - 客户角色状态。
+//
+// 客户有效时返回空列表；已停用时返回上传合同和创建销售单两条阻断。
 pub(super) fn customer_status_blockers(status: CustomerAccountStatus) -> Vec<CustomerActionBlockerView> {
     if status.is_active() {
         return Vec::new();

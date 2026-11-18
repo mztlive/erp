@@ -40,19 +40,10 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 use crate::wiring::purchase_ports;
 
-/// 构造已注入采购范围 Port 的只读服务。
-///
-/// # 参数
-/// * `state` - 应用状态
-///
-/// # 返回
-/// 返回可解析采购范围的读服务。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// HTTP 列表、详情、候选、导出和变更单必须经此入口，不得回退失败关闭 Port。
+// 构造已注入采购范围 Port 的只读服务。
+// 返回可解析采购范围的读服务。
+//
+// HTTP 列表、详情、候选、导出和变更单必须经此入口，不得回退失败关闭 Port。
 fn purchase_reads(state: &HttpState) -> PurchaseOrderReadService {
     PurchaseOrderReadService::new(
         state.application().db(),
@@ -61,22 +52,8 @@ fn purchase_reads(state: &HttpState) -> PurchaseOrderReadService {
     )
 }
 
-/// 查询采购单列表。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已认证操作人
-/// * `query` - 分页与筛选参数（扁平传递，含跨页 `scope_version`）
-///
-/// # 返回
-/// 返回带范围版本与空集原因的分页视图，不附带负责人候选。
-///
-/// # 错误
-/// 无动作权限、范围变化、筛选非法或仓储失败时拒绝。
-///
-/// # 关键业务约束
-/// 缺动作返回 403；缺范围返回空集并标记 `no_scope`，不得补公司范围。
-/// 负责人筛选只收窄采购单，不由此接口产生候选。
+/// 用认证账号和筛选条件分页读取采购单；跨页携带 `scope_version`，范围变化时拒绝。缺动作权限返回 403，缺范围返回 `no_scope` 空集；
+/// 负责人筛选只收窄，不产生候选或补公司范围。
 pub async fn purchase_order_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -87,21 +64,7 @@ pub async fn purchase_order_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-/// 查询采购单对象中心。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已认证操作人
-/// * `id` - 采购单 ID
-///
-/// # 返回
-/// 返回对象中心视图。
-///
-/// # 错误
-/// 无动作权限、不可见或不存在时拒绝；组装过程中范围变化返回冲突。
-///
-/// # 关键业务约束
-/// 列表已授权不能作为详情凭证；不可见对象不泄露存在性。
+/// 打开采购对象中心时独立核验详情权限及对象可见性，不复用列表授权作凭证。不可见时隐藏对象是否存在，组装期间范围变化返回冲突。
 pub async fn purchase_order_detail(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -113,15 +76,7 @@ pub async fn purchase_order_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 依据采购确认创建采购单并提交审批（幂等：同拆单维度结果复用）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 创建请求（`{ basis_id, purchase_type, payment_term_code, idempotency_key }`）
-///
-/// # 返回
-/// 返回新建（或复用）采购单结果。
+/// 采购确认后按建单依据、采购类型、付款条件和幂等键创建采购单并启动审批；同一拆单维度复用已有结果。
 pub async fn purchase_order_create(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -142,15 +97,7 @@ pub async fn purchase_order_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 一次确认库存与采购供给分配（幂等：同键同载荷回放原结果）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 供给分配请求（销售单、任务、逐行库存或采购依据、数量、幂等键）
-///
-/// # 返回
-/// 返回本次建立或回放的库存预占与采购单。
+/// 完成销售供给分配时，按逐行库存或采购依据和数量一次确认预占与采购。以原任务和幂等键重试，同键同载荷回放原结果。
 pub async fn purchase_order_create_from_sourcing(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -171,16 +118,7 @@ pub async fn purchase_order_create_from_sourcing(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 保存采购草稿（乐观锁：请求携带期望版本，冲突返回 409）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 采购单 ID
-/// * `req` - 保存请求（表头 + 完整行）
-///
-/// # 返回
-/// 返回新乐观锁版本与表头汇总。
+/// 办理中的采购草稿保存整份表头和明细，并返回新版本及汇总；期望版本冲突返回 409，防止覆盖并发修改。
 pub async fn purchase_order_save_draft(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -202,16 +140,7 @@ pub async fn purchase_order_save_draft(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 作废采购草稿并释放对应销售采购覆盖。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 采购单 ID
-/// * `req` - 期望版本、原因和幂等键
-///
-/// # 返回
-/// 返回作废后的状态与乐观锁版本。
+/// 取消未继续办理的采购草稿时，按版本、原因和幂等键作废，同时释放原销售采购覆盖；返回更新后的状态及版本。
 pub async fn purchase_order_void(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -233,16 +162,7 @@ pub async fn purchase_order_void(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 提交采购单并启动统一审批。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 采购单 ID
-/// * `req` - 提交请求（期望版本 + 幂等键）
-///
-/// # 返回
-/// 返回提交结果（提交 ID、序号与审核待办）。
+/// 草稿就绪时，以期望版本和幂等键提交采购单至统一审批，返回提交标识、序号及审核待办。
 pub async fn purchase_order_submit(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -265,14 +185,7 @@ pub async fn purchase_order_submit(
 }
 
 /// 销售变更影响采购但无法调整时，登记维持原采购。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 采购单 ID
-/// * `req` - 记录期望版本与原因
-///
-/// # 返回
+/// `req` 为记录期望版本与原因。
 /// 登记成功返回空数据。
 pub async fn purchase_order_maintain_source(
     State(state): State<HttpState>,
@@ -294,16 +207,7 @@ pub async fn purchase_order_maintain_source(
     Ok(ApiResponse::ok())
 }
 
-/// 撤回尚未最终通过的采购单审批。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 采购单 ID
-/// * `req` - 撤回请求（原因必填）
-///
-/// # 返回
-/// 撤回成功返回空数据。
+/// 在采购审批尚未最终通过时，按请求中的必填原因发起撤回；成功响应不带业务数据。
 pub async fn purchase_order_cancel_approval(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -326,13 +230,7 @@ pub async fn purchase_order_cancel_approval(
 }
 
 /// 查询当前账号开放任务范围内的库存与采购供给依据。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 当前已认证账号
-/// * `params` - 可选销售单和供给分配任务筛选
-///
-/// # 返回
+/// `params` 为可选销售单和供给分配任务筛选。
 /// 返回当前账号可处理的精确库存与采购供给依据。
 pub async fn purchase_creation_basis_list(
     State(state): State<HttpState>,
@@ -345,14 +243,6 @@ pub async fn purchase_creation_basis_list(
 }
 
 /// 发起采购变更（基于当前生效版本创建变更单）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 采购单 ID
-/// * `req` - 发起请求
-///
-/// # 返回
 /// 返回变更单结果。
 pub async fn purchase_change_create(
     State(state): State<HttpState>,
@@ -375,16 +265,7 @@ pub async fn purchase_change_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 提交采购变更并启动统一审批。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 变更单 ID
-/// * `req` - 提交请求
-///
-/// # 返回
-/// 返回变更提交结果。
+/// 采购变更草稿确认后，按路径变更单和当前身份提交统一审批；该命令不等于直接将变更生效。
 pub async fn purchase_change_submit(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -406,16 +287,7 @@ pub async fn purchase_change_submit(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 客户端直接生效失败关闭。最终动作仅由审批运行时 `on_final_approve` 调用。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 变更单 ID
-/// * `req` - 生效请求（客户端不得据此改写采购单）
-///
-/// # 返回
-/// 恒返回冲突。
+/// 保留旧采购变更直接生效入口，但恒返回冲突，不改写采购单。只有审批运行时的 `on_final_approve` 可以触发最终动作。
 pub async fn purchase_change_effect(
     State(_state): State<HttpState>,
     Extension(_actor): Extension<AuditActor>,
@@ -429,14 +301,7 @@ pub async fn purchase_change_effect(
 }
 
 /// 撤回尚未最终通过的采购变更审批。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 变更单 ID
-/// * `req` - 撤回请求（原因必填）
-///
-/// # 返回
+/// `req` 为撤回请求（原因必填）。
 /// 撤回成功返回空数据。
 pub async fn purchase_change_cancel_approval(
     State(state): State<HttpState>,
@@ -459,20 +324,11 @@ pub async fn purchase_change_cancel_approval(
     Ok(ApiResponse::ok())
 }
 
-/// 查询采购变更单列表。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已认证操作人
-/// * `query` - 分页与筛选参数（扁平传递，含跨页 `scope_version`）
-///
-/// # 返回
+/// 按请求条件查询采购变更单列表。
+/// `query` 为分页与筛选参数（扁平传递，含跨页 `scope_version`）。
 /// 返回带范围版本的分页视图。
-///
-/// # 错误
 /// 无动作权限、范围变化、筛选非法或仓储失败时拒绝。
 ///
-/// # 关键业务约束
 /// 沿来源采购单责任接入；缺范围返回空集并标记 `no_scope`。
 pub async fn purchase_change_list(
     State(state): State<HttpState>,
@@ -485,19 +341,9 @@ pub async fn purchase_change_list(
 }
 
 /// 查询采购变更单详情。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已认证操作人
-/// * `id` - 变更单 ID
-///
-/// # 返回
 /// 返回变更单视图。
-///
-/// # 错误
 /// 无动作权限、不可见或不存在时拒绝。
 ///
-/// # 关键业务约束
 /// 列表已授权不能作为详情凭证；沿来源采购单 detail 动作重验。
 pub async fn purchase_change_detail(
     State(state): State<HttpState>,
@@ -516,19 +362,9 @@ mod scope_query_tests {
 
     use crate::http::extractor::Query;
 
-    /// 跨页必须能解码范围版本，且不得把组织筛选静默当成全量。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 无。
-    ///
-    /// # 错误
-    /// 断言失败时测试失败。
-    ///
-    /// # 关键业务约束
-    /// 未接入的 `org_unit_ids` 必须拒绝，不得忽略后查全量。
+    // 跨页必须能解码范围版本，且不得把组织筛选静默当成全量。
+    //
+    // 未接入的 `org_unit_ids` 必须拒绝，不得忽略后查全量。
     #[test]
     fn purchase_scope_version_is_consumed_and_org_filter_stays_unsupported() {
         let uri: Uri = "/?page=2&page_size=25&scope_version=v1&owner_user_ids=a,b".parse().unwrap();

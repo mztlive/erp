@@ -36,16 +36,7 @@ pub enum PaymentReversalStatus {
 }
 
 impl PaymentReversalStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回付款冲正单状态的中文名称，供业务界面展示，不作为持久化代码。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Draft => "草稿",
@@ -56,16 +47,7 @@ impl PaymentReversalStatus {
         }
     }
 
-    /// 返回状态的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回付款冲正单状态的稳定代码，供持久化与查询匹配使用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Draft => "draft",
@@ -78,20 +60,9 @@ impl PaymentReversalStatus {
 }
 
 impl DocumentState for PaymentReversalStatus {
-    /// 返回全部合法后继状态（合同 §4.4.1 / §4.4.2）。
-    ///
-    /// 复核态唯一为 `IN_APPROVAL`；草稿不得直接过账；审批中可过账或受控
-    /// 撤回回草稿；`REVERSED` 是终态。驳回进入 `REJECTED`，重提创建新的审批实例。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// `Draft` 的后继只有 `InApproval`；`InApproval` 的后继是 `Posted` 与 `Draft`；
-    /// `Posted` 的后继只有 `Reversed`；`Reversed` 没有后继。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 返回全部合法后继状态（合同 §4.4.1 / §4.4.2）。
+    // 复核态唯一为 `IN_APPROVAL`；草稿不得直接过账；审批中可过账或受控撤回回草稿；`REVERSED` 是终态。驳回进入 `REJECTED`，重提创建新的审批实例。
+    // `Draft` 的后继只有 `InApproval`；`InApproval` 的后继是 `Posted` 与 `Draft`；`Posted` 的后继只有 `Reversed`；`Reversed` 没有后继。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Draft => &[Self::InApproval],
@@ -178,28 +149,14 @@ pub struct PaymentReversal {
 
 impl PaymentReversal {
     /// 校验经办复核岗位分离，不限制当前单据状态。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 经办人与复核人不同时返回成功。
-    ///
-    /// # 错误
     /// 岗位未分离时返回权限错误。
     pub fn ensure_separation(&self) -> DraftEditResult<()> {
         FinancialDraftEditPolicy::ensure_separation(&self.handled_by, &self.reviewed_by)
     }
 
     /// 校验原单的经办复核分离与可编辑状态。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 经办人与复核岗位分离且单据为草稿或已驳回时返回成功。
-    ///
-    /// # 错误
     /// 岗位未分离返回权限错误，不可编辑状态返回状态冲突。
     pub fn ensure_draft_editable(&self) -> DraftEditResult<()> {
         FinancialDraftEditPolicy::ensure(
@@ -210,19 +167,9 @@ impl PaymentReversal {
     }
 
     /// 创建付款冲正（初始状态为草稿）。
-    ///
-    /// 完成编号/原因/经办复核人的 trim/非空/长度校验、金额正数校验与经办人
-    /// 复核人分离校验。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::PaymentReversalId`）
-    /// * `data` - 创建数据
-    /// * `created_by` - 已认证创建人；创建后不得由更新命令覆盖
-    ///
-    /// # 返回
+    /// 完成编号/原因/经办复核人的 trim/非空/长度校验、金额正数校验与经办人复核人分离校验。
     /// 返回新建的冲正实体。
-    ///
-    /// # 错误
+    /// `id` 为实体主键（`erp_core::ids::PaymentReversalId`）；`created_by` 为已认证创建人；创建后不得由更新命令覆盖。
     /// 当编号/原因/经办复核人/创建人为空或超长、金额非正、经办与复核人相同时返回错误。
     pub fn new(
         id: PaymentReversalId,
@@ -265,14 +212,7 @@ impl PaymentReversal {
     }
 
     /// 校验付款冲正仍是从未提交审批的初始草稿。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 仍是初始草稿时返回成功。
-    ///
-    /// # 错误
     /// 非草稿或审批主题版本已经递增时返回 `LogicError`。
     pub fn ensure_initial_approval_state(&self) -> Result<()> {
         ensure_initial_approval(
@@ -283,17 +223,7 @@ impl PaymentReversal {
     }
 
     /// 更新付款冲正草稿。
-    ///
-    /// 复用 `new` 的校验规则；`POSTED` 后内容不可编辑（§7.5）；冲正单号与
-    /// 原付款引用是固定字段不允许修改。
-    ///
-    /// # 参数
-    /// * `update` - 更新数据
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// 复用 `new` 的校验规则；`POSTED` 后内容不可编辑（§7.5）；冲正单号与原付款引用是固定字段不允许修改。
     /// 当状态不可编辑或更新字段校验失败时返回错误。
     pub fn update(&mut self, update: PaymentReversalUpdate) -> Result<()> {
         if !matches!(self.status, PaymentReversalStatus::Draft | PaymentReversalStatus::Rejected) {
@@ -322,16 +252,8 @@ impl PaymentReversal {
     }
 
     /// 迁移冲正状态。
-    ///
     /// 按 §7.5 固定邻接矩阵校验并应用状态迁移。
-    ///
-    /// # 参数
-    /// * `to` - 目标状态
-    ///
-    /// # 返回
-    /// 迁移成功返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// `to` 为目标状态。
     /// 目标状态不在邻接矩阵中时返回 [`Error::InvalidStateTransition`]。
     pub fn transition(&mut self, to: PaymentReversalStatus) -> Result<()> {
         ensure_transition(self.status, to)?;
@@ -340,16 +262,8 @@ impl PaymentReversal {
     }
 
     /// 提交并启动审批：递增 `approval_subject_version` 并进入 `IN_APPROVAL`。
-    ///
     /// 版本使用 checked add，成功后不回退。不得改写 `BaseModel.version`。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回冻结后的提交版本。
-    ///
-    /// # 错误
     /// 状态不可提交或审批版本溢出时返回 `LogicError`。
     pub fn start_approval(&mut self) -> Result<u32> {
         if !matches!(self.status, PaymentReversalStatus::Draft | PaymentReversalStatus::Rejected) {
@@ -362,12 +276,8 @@ impl PaymentReversal {
     }
 
     /// 结束本次审批并保留已驳回状态与原单内容。
-    ///
-    /// # 参数
-    /// * `expected_subject_version` - 被驳回实例冻结的审批主题版本。
-    /// # 返回
     /// 成功时进入已驳回；审批版本保持不变。
-    /// # 错误
+    /// `expected_subject_version` 为被驳回实例冻结的审批主题版本。
     /// 非审批中时拒绝，禁止重复驳回或更改已过账事实。
     pub fn reject_approval(&mut self, expected_subject_version: u32) -> Result<()> {
         if self.approval_subject_version != expected_subject_version {
@@ -382,14 +292,7 @@ impl PaymentReversal {
     }
 
     /// 撤回审批：回到草稿，且 `approval_subject_version` 不回退。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 成功时单据回到草稿，审批版本不回退。
-    ///
-    /// # 错误
     /// 非审批中时返回 `LogicError`。
     pub fn cancel_approval(&mut self) -> Result<()> {
         if self.status != PaymentReversalStatus::InApproval {
@@ -400,14 +303,7 @@ impl PaymentReversal {
     }
 
     /// 最终通过过账：仅 `IN_APPROVAL` 可进入 `POSTED`。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 成功时状态变为 `Posted`。
-    ///
-    /// # 错误
     /// 状态不是审批中时返回 `LogicError`。
     pub fn mark_posted(&mut self) -> Result<()> {
         if self.status != PaymentReversalStatus::InApproval {
@@ -418,31 +314,13 @@ impl PaymentReversal {
     }
 
     /// 判断冲正是否已过账。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 状态为 `Posted` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn is_posted(&self) -> bool {
         self.status == PaymentReversalStatus::Posted
     }
 
     /// 判断乐观锁版本是否与调用方期望一致。
-    ///
-    /// # 参数
-    /// * `expected` - 调用方读取后携带的期望版本
-    ///
-    /// # 返回
-    /// 当前版本等于期望版本时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    ///
-    /// # 约束
+    /// `expected` 为调用方读取后携带的期望版本。
     /// 只比较 `base.version`；不读取时钟、不产生 Service Error。
     pub fn matches_version(&self, expected: u64) -> bool {
         self.base.version == expected
@@ -458,7 +336,7 @@ pub(crate) mod tests {
     use super::*;
     use crate::Error as DraftEditError;
 
-    /// 已提交回放保留职责守卫，不要求再次进入草稿。
+    // 验证已提交回放保留职责守卫，不要求再次进入草稿。
     #[test]
     fn separation_is_independent_of_reversal_state() {
         let mut record = PaymentReversal::new(PaymentReversalId::new("pr-1"), data(), "creator-1").unwrap();
@@ -632,7 +510,7 @@ pub(crate) mod tests {
         assert!(reversal.mark_posted().is_err());
     }
 
-    /// 撤回驳回单据后编辑原单并重提；原编号、来源和岗位保持一致。
+    // 验证撤回驳回单据后编辑原单并重提；原编号、来源和岗位保持一致。
     #[test]
     fn cancelled_draft_can_be_edited_and_resubmitted() {
         let mut record =
@@ -679,7 +557,7 @@ pub(crate) mod tests {
 
         assert_eq!(record.start_approval().unwrap(), 2);
     }
-    /// 驳回保留原单，编辑不清除结果，重新提交递增版本且禁止终态过账。
+    // 验证驳回保留原单，编辑不清除结果，重新提交递增版本且禁止终态过账。
     #[test]
     fn rejection_preserves_content_and_supports_new_submission() {
         let mut record =

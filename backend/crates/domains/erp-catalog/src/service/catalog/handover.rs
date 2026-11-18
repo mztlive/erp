@@ -14,19 +14,8 @@ use crate::error::{Error, Result};
 use crate::repository::CatalogExt;
 
 impl CatalogService {
-    /// 在调用方事务内交接；供组合层与幂等收据共用执行器。
-    ///
-    /// # 参数
-    /// * `id` - 商品稳定 ID
-    /// * `req` - 已校验交接请求
-    /// * `actor` - 已认证操作人
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 返回交接前实体与交接后视图，供调用方记录审计事实。
-    ///
-    /// # 错误
-    /// 版本、范围或目标非法时拒绝。
+    /// 组合层交接商品责任时，复用用于幂等回执的事务更新维护人，并返回交接前实体与交接后视图供审计。
+    /// 原对象权限、目标归属、乐观锁版本不满足时拒绝。
     pub async fn apply_product_handover(
         &self,
         id: &str,
@@ -38,21 +27,8 @@ impl CatalogService {
     }
 }
 
-/// 在调用方事务内重验范围、CAS 并写入维护人。
-///
-/// # 参数
-/// * `db` - 商品数据库
-/// * `access` - 商品范围访问器
-/// * `id` - 商品 ID
-/// * `req` - 已校验交接请求
-/// * `actor` - 操作人
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回交接前实体与交接后视图，供调用方记录审计事实。
-///
-/// # 错误
-/// 版本、范围或目标非法时整事务回滚。
+// 在原写事务中先授权当前商品、核对期望版本，再授权拟写入的责任归属并执行 CAS。
+// 返回修改前实体及修改后视图，供同一用例记录审计；不另开事务。
 async fn persist_handover(
     db: &Database,
     access: &CatalogAccess,
@@ -93,7 +69,7 @@ async fn persist_handover(
     Ok((before, handover_view(&product)))
 }
 
-/// 构造交接响应。
+// 交接写入成功后，从更新后的商品提取维护人、业务组织与乐观锁版本，供响应和回执投影。
 fn handover_view(product: &Product) -> HandoverProductView {
     HandoverProductView {
         product_id: product.base.id.clone(),

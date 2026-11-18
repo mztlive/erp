@@ -55,12 +55,15 @@ pub struct DepositAccountDetail {
     pub payee_bank_accounts: Vec<DepositPayeeBankAccount>,
 }
 
-/// 为已获得账户范围权限的记录装配业务名称，不输出技术账号明文。
+/// 为已获得账户范围权限的记录组装业务名称，不输出技术账号明文。
+///
 /// # 参数
 /// * `db` / `executor` - 原授权查询执行器。
 /// * `account` - 服务端已验证范围的账户。
+///
 /// # 返回
 /// 返回主体、供应商名称及安全账户说明。
+///
 /// # 错误
 /// 归属主体或当前名称版本缺失时拒绝。
 pub async fn account_row(
@@ -79,13 +82,16 @@ pub async fn account_row(
     Ok(DepositAccountRow { account, payer_party_name, supplier_name, external_account_label })
 }
 
-/// 返回当前账户近期业务证据及所有待处理占用和对账差异。
+/// 处理供应商预存款时，给出当前账户近期业务证据及所有待处理占用和对账差异。
+///
 /// # 参数
 /// * `db` / `executor` - 已授权的同一查询执行器。
 /// * `account` - 已完成主体/供应商范围核验的资金账户。
+///
 /// # 返回
 /// 各类返回最近一百项；占用和对账额外包含全部未处理项，最多各一千项。
 /// 同时返回明确的资金分类和供应商脱敏银行账户候选。
+///
 /// # 错误
 /// 缺失归属、待处理项超限或查询失败时拒绝，不能静默遗漏历史资金。
 pub async fn account_detail(

@@ -27,16 +27,16 @@ struct PortalDisplayContext {
 }
 
 impl WorkbenchReadService {
-    /// 为授权页补齐每次申请原稿的业务类型、原因、价格或新品规格摘要。
-    ///
-    /// # 参数
-    /// * `keys` - 当前页任务精确对象键。
-    /// * `facts` - 已读申请归属及冻结版本。
-    /// * `executor` - 原页面读取执行器。
-    /// # 返回
-    /// 原地补齐冻结提交简报，历史不会采用编辑后的草稿。
-    /// # 错误
-    /// 本域仓储、供应商名称或申请人姓名读取失败时返回错误。
+    // 读取供应商申请简报时，为授权页补齐每次申请原稿的业务类型、原因、价格或新品规格摘要。
+    //
+    // 调用参数：
+    // * `keys` - 当前页任务精确对象键。
+    // * `facts` - 已读申请归属及冻结版本。
+    // * `executor` - 原页面读取执行器。
+    //
+    // 原地补齐冻结提交简报，历史不会采用编辑后的草稿。
+    //
+    // 本域仓储、供应商名称或申请人姓名读取失败时返回错误。
     pub(super) async fn load_supplier_portal_briefs(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -65,7 +65,7 @@ impl WorkbenchReadService {
         Ok(())
     }
 
-    /// 按有限对象键装载展示姓名；只向任务投影写入 display_name。
+    // 依据有限对象键装载展示姓名；只向任务投影写入 display_name。
     async fn portal_display_context(
         &self,
         supplier_ids: &[String],
@@ -78,7 +78,7 @@ impl WorkbenchReadService {
     }
 }
 
-/// 三类申请统一解析往来方名称，不扩大授权对象集合。
+// 定位供应商申请简报关联时，三类申请统一解析往来方名称，不扩大授权对象集合。
 fn supplier_ids(
     offerings: &[OfferingApplication],
     products: &[NewProductDraft],
@@ -92,7 +92,7 @@ fn supplier_ids(
         .collect()
 }
 
-/// 每次冻结提交的申请人独立解析，编辑草稿不替换历史提交人。
+// 定位供应商申请简报关联时，每次冻结提交的申请人独立解析，编辑草稿不替换历史提交人。
 fn applicant_ids(
     offerings: &[OfferingApplication],
     products: &[NewProductDraft],
@@ -108,7 +108,7 @@ fn applicant_ids(
         .collect()
 }
 
-/// 供给报价及变更按提交编号写入冻结简报。
+// 组装供应商申请简报时，供给报价及变更按提交编号写入冻结简报。
 fn apply_offerings(
     facts: &mut WorkbenchObjectFactMap,
     requests: &[OfferingApplication],
@@ -129,7 +129,7 @@ fn apply_offerings(
     }
 }
 
-/// 新品原稿及规格按不可变提交标识写入简报。
+// 组装供应商申请简报时，新品原稿及规格按不可变提交标识写入简报。
 fn apply_products(
     facts: &mut WorkbenchObjectFactMap,
     requests: &[NewProductDraft],
@@ -150,7 +150,7 @@ fn apply_products(
     }
 }
 
-/// 合作条款只展示对应冻结商务申请。
+// 组装供应商申请简报时，合作条款只展示对应冻结商务申请。
 fn apply_cooperation(
     facts: &mut WorkbenchObjectFactMap,
     requests: &[CooperationApplication],
@@ -171,7 +171,7 @@ fn apply_cooperation(
     }
 }
 
-/// 将姓名及对应冻结简报写入独立 subject display；不更新权威事实。
+// 组装供应商申请简报时，将姓名及对应冻结简报写入独立 subject display；不更新权威事实。
 fn apply(
     facts: &mut WorkbenchObjectFactMap,
     id: &str,
@@ -200,7 +200,7 @@ fn apply(
     );
 }
 
-/// 基础简报仅使用本次冻结提交事实。
+// 处理供应商申请简报时，基础简报仅使用本次冻结提交事实。
 fn source(kind: &str, reason: &str, submitted_at: Option<Instant>) -> ObjectBriefSource {
     let mut result = ObjectBriefSource::default();
     push_section(&mut result.extra_sections, "申请类型", Some(kind), false);
@@ -211,7 +211,7 @@ fn source(kind: &str, reason: &str, submitted_at: Option<Instant>) -> ObjectBrie
     result
 }
 
-/// 报价只展示提交的拟生效值；不会被描述为当前正式价格。
+// 处理供应商申请简报时，报价只展示提交的拟生效值；不会被描述为当前正式价格。
 fn offering_source(submission: &FrozenOfferingSubmission) -> ObjectBriefSource {
     let mut result = source(
         offering_kind_label(submission.snapshot.kind()),
@@ -265,7 +265,7 @@ fn offering_source(submission: &FrozenOfferingSubmission) -> ObjectBriefSource {
     result
 }
 
-/// 初始供给填报只取提交原稿中的实际状态、可选数量与填报时间。
+// 组装供应商申请简报时，初始供给填报只取提交原稿中的实际状态、可选数量与填报时间。
 fn append_initial_availability(
     result: &mut ObjectBriefSource,
     status: PortalAvailabilityStatus,
@@ -286,7 +286,7 @@ fn append_initial_availability(
     );
 }
 
-/// 新品简报保留供应商名称、原始字典和可供填报，规格行数有界。
+// 处理供应商申请简报时，新品简报保留供应商名称、原始字典和可供填报，规格行数有界。
 fn product_source(submission: &DraftSubmission) -> ObjectBriefSource {
     let mut result = source("新品提报", "新品资料与首次供给待采购确认", Some(submission.submitted_at));
     push_section(&mut result.extra_sections, "商品名称", Some(&submission.input.name), false);
@@ -324,7 +324,7 @@ fn product_source(submission: &DraftSubmission) -> ObjectBriefSource {
     result
 }
 
-/// 合作条款属于供应商商务档案，独立展示后续采购影响。
+// 处理供应商申请简报时，合作条款属于供应商商务档案，独立展示后续采购影响。
 fn cooperation_source(submission: &FrozenSubmission) -> ObjectBriefSource {
     let at =
         i64::try_from(submission.submitted_at).ok().and_then(|value| Instant::try_from_unix_secs(value).ok());
@@ -365,7 +365,7 @@ mod tests {
     use super::super::authority::supplier_portal::new_product_request_fact;
     use super::*;
 
-    /// 构造可比较的供应商原稿，四个不同规格保留零值与未知数量。
+    // 处理供应商申请简报时，生成可比较的供应商原稿，四个不同规格保留零值与未知数量。
     fn submission() -> DraftSubmission {
         let input: NewProductInput = serde_json::from_value(json!({
             "name": "供应商原稿饮料", "product_kind": "PHYSICAL",

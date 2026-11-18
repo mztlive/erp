@@ -8,13 +8,13 @@ use persistence_core::Executor;
 use super::CustomerProfileProcess;
 use crate::Result;
 
-/// 从请求中的实际字段变更确定既有从属资源操作。
-/// # 参数
-/// req 为已校验请求，operation 为当前根命令类型。
-/// # 返回
-/// 缺省集合不产生写入资格；空集合仍保留该集合的修改资格。
-/// # 错误
-/// 不执行 I/O。
+// 从请求中的实际字段变更确定既有从属资源操作。
+//
+// req 为已校验请求，operation 为当前根命令类型。
+//
+// 缺省集合不产生写入资格；空集合仍保留该集合的修改资格。
+//
+// 不执行 I/O。
 pub(super) fn permissions(
     req: &SaveCustomerProfileRequest,
     operation: CustomerProfileOperation,
@@ -40,13 +40,13 @@ pub(super) fn permissions(
     permissions
 }
 impl CustomerProfileProcess {
-    /// 每个实际被修改的从属资源在原事务单独完成授权。
-    /// # 参数
-    /// actor 为当前账号，permissions 为服务端按字段变更确定的权限，executor 为原事务。
-    /// # 返回
-    /// 全部独立操作资格成立时成功。
-    /// # 错误
-    /// 任一资格缺失或身份设施失败时拒绝。
+    // 每个实际被修改的从属资源在原事务单独完成授权。
+    //
+    // actor 为当前账号，permissions 为服务端按字段变更确定的权限，executor 为原事务。
+    //
+    // 全部独立操作资格成立时成功。
+    //
+    // 任一资格缺失或身份设施失败时拒绝。
     pub(super) async fn require_fields(
         &self,
         actor: &AuditActor,

@@ -21,16 +21,17 @@ pub struct ContractIdentityCandidate {
     pub legal_name: Option<String>,
 }
 
-/// 查找名称或信用代码命中的企业主体，包括停用、软删除及我方角色。
+/// 按名称或统一社会信用代码查找合同关联的企业主体。纳入停用、软删除和我方角色记录，以识别历史身份冲突。
 ///
 /// 两条索引查询沿同一执行器读取；保留冲突候选，不以可用性过滤冒充不存在。
+///
 /// # 参数
 /// * `db` / `name` - 主体数据库及已规范化的法定全称。
 /// * `credit` - 已去首尾空白并转大写的非空信用代码；缺失时只匹配名称。
 /// * `executor` - 调用方执行器，确认导入时应使用写事务的同一执行器。
-/// # 返回
+///
 /// 最多三个不同的企业主体；只有零候选才能按不存在处理。
-/// # 错误
+///
 /// 任一查询、游标读取或必要身份反序列化失败时返回错误。
 pub async fn contract_identity_candidates(
     db: &Database,
@@ -47,7 +48,7 @@ pub async fn contract_identity_candidates(
     Ok(merge_candidates(result, direct))
 }
 
-/// 同一主体名称、信用代码双重命中只计一次，保留不同主体形成的歧义。
+// 同一主体名称、信用代码双重命中只计一次，保留不同主体形成的歧义。
 fn merge_candidates(
     named: Vec<ContractIdentityCandidate>,
     direct: Vec<ContractIdentityCandidate>,
@@ -65,7 +66,7 @@ fn merge_candidates(
     result
 }
 
-/// 当前法定名称从修订名称索引进入，只保留当前指针及真实主体归属。
+// 当前法定名称从修订名称索引进入，只保留当前指针及真实主体归属。
 fn current_name_pipeline(name: &str) -> Vec<Document> {
     vec![
         doc! { "$match": { "legal_name": name } },
@@ -80,7 +81,7 @@ fn current_name_pipeline(name: &str) -> Vec<Document> {
     ]
 }
 
-/// 我方名称或信用代码从稳定身份索引进入，再按主体归属读取当前修订。
+// 我方名称或信用代码从稳定身份索引进入，再按主体归属读取当前修订。
 fn stable_identity_pipeline(name: &str, credit: Option<&str>) -> Vec<Document> {
     vec![
         doc! { "$match": stable_identity_filter(name, credit) },
@@ -101,7 +102,7 @@ fn stable_identity_pipeline(name: &str, credit: Option<&str>) -> Vec<Document> {
     ]
 }
 
-/// 信用代码与名称采用或条件，保留同名异码和同码异名冲突。
+// 信用代码与名称采用或条件，保留同名异码和同码异名冲突。
 fn stable_identity_filter(name: &str, credit: Option<&str>) -> Document {
     let mut identities = vec![doc! { "company_profile.legal_name": name }];
     if let Some(code) = credit {
@@ -110,7 +111,7 @@ fn stable_identity_filter(name: &str, credit: Option<&str>) -> Document {
     doc! { "party_kind": "enterprise", "$or": identities }
 }
 
-/// 显式使用调用方执行器，禁止在有事务的导入中另行读取主体。
+// 显式使用调用方执行器，禁止在有事务的导入中另行读取主体。
 async fn candidate_rows(
     collection: &Collection<Document>,
     pipeline: Vec<Document>,
@@ -121,11 +122,12 @@ async fn candidate_rows(
 }
 
 /// 精确查询启用的当前法定名称，最多返回两个候选以检测歧义。
+///
 /// # 参数
 /// * `db` / `name` / `company` / `executor` - 数据库、法定全称、我方角色及事务。
-/// # 返回
+///
 /// 零至两个当前有效主体。
-/// # 错误
+///
 /// 数据库读取或反序列化失败。
 pub async fn exact_parties(
     db: &Database,

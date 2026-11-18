@@ -3,12 +3,8 @@ use super::*;
 
 impl SupplierCredential {
     /// 首次授权前建立无令牌占位，唯一索引必须先于本记录持久化。
-    /// # 参数
-    /// 固定引用、部署绑定及含候选账号HMAC的首次领取命令。
-    /// # 返回
-    /// 版本1的授权领取记录；只允许新引用且未声明重新授权。
-    /// # 错误
-    /// 身份、核验依据、版本、租期或时间无效时拒绝。
+    ///
+    /// 版本1的授权领取记录；只允许新引用且未声明重新授权。身份、核验依据、版本、租期或时间无效时拒绝。
     pub fn reserve_authorization(
         id: String,
         binding: SupplierCredentialBinding,
@@ -52,12 +48,10 @@ impl SupplierCredential {
     }
 
     /// 同一凭据上领取一次授权；任何历史同操作重放均为零写且不能再次发送。
-    /// # 参数
+    ///
+    /// 新领取返回真；同操作同依据只读重放返回假。未确认账号、跨账号、活跃刷新、未知期限未过或版本冲突时拒绝。
+    ///
     /// 原版本、候选账号HMAC、唯一操作及明确重新授权依据。
-    /// # 返回
-    /// 新领取返回真；同操作同依据只读重放返回假。
-    /// # 错误
-    /// 未确认账号、跨账号、活跃刷新、未知期限未过或版本冲突时拒绝。
     pub fn claim_authorization(&mut self, request: &SupplierCredentialAuthorizationRequest) -> Result<bool> {
         let lease_until = request.deadline()?;
         if let Some(event) =
@@ -94,13 +88,8 @@ impl SupplierCredential {
         Ok(true)
     }
 
-    /// 在authorizeForVOP之前登记可能已发送，失败和崩溃不能自动再次发送。
-    /// # 参数
-    /// `now`为实际发送前的服务器时刻。
-    /// # 返回
-    /// 保留候选身份、操作和所有者的授权发送未知状态。
-    /// # 错误
-    /// 非原领取、租期已过或历史不完整时拒绝。
+    /// 调用 `authorizeForVOP` 前，将当前领取推进为授权发送结果未知，并保留候选身份、操作和所有者。
+    /// 非原领取、租期已过或历史缺失时拒绝；发送失败或崩溃不能触发自动重发。
     pub fn mark_authorization_sent(&mut self, now: Instant) -> Result<()> {
         let SupplierCredentialRefreshState::AuthorizationClaimed { owner_id, operation_id, lease_until } =
             &self.refresh
@@ -126,13 +115,8 @@ impl SupplierCredential {
         Ok(())
     }
 
-    /// 在授权码兑换令牌之前记录第二个发送边界，之后不得按账号密码拒绝释放身份。
-    /// # 参数
-    /// `now`为GET access_token前的服务器时刻。
-    /// # 返回
-    /// 同原操作的兑换发送未知阶段。
-    /// # 错误
-    /// 已经兑换、租期已过或原状态不符时拒绝。
+    /// 发送授权码换令牌的 GET 前，记录同一授权操作的第二个发送边界。
+    /// 已兑换、租期已过或阶段不符时拒绝；进入此阶段后不能以账号密码拒绝为由释放候选身份。
     pub fn mark_authorization_exchange_sent(&mut self, now: Instant) -> Result<()> {
         let SupplierCredentialRefreshState::AuthorizationSentUnknown {
             owner_id,
@@ -162,12 +146,8 @@ impl SupplierCredential {
     }
 
     /// 仅记录authorizeForVOP明确拒绝，首次未确认账号可在新操作中纠正。
-    /// # 参数
-    /// `now`为协议层核实原authorizeForVOP拒绝的时刻。
-    /// # 返回
-    /// 保留拒绝回执；无既有令牌的首次候选身份解除锁定。
-    /// # 错误
-    /// 已开始兑换、原发送身份缺失或版本边界无效时拒绝。
+    ///
+    /// 保留拒绝回执；无既有令牌的首次候选身份解除锁定。已开始兑换、原发送身份缺失或版本边界无效时拒绝。
     pub fn reject_authorization(&mut self, now: Instant) -> Result<()> {
         let SupplierCredentialRefreshState::AuthorizationSentUnknown {
             owner_id,
@@ -193,12 +173,8 @@ impl SupplierCredential {
     }
 
     /// 保存原兑换结果并确认账号及可选UID身份，旧响应不能覆盖新授权。
-    /// # 参数
-    /// 受控新密文、协议层核实的UID HMAC及服务器保存时刻。
-    /// # 返回
-    /// 新令牌、确认身份和原授权完成回执同时更新为Ready。
-    /// # 错误
-    /// 未登记兑换、身份变化、令牌无效或历史缺失时拒绝。
+    ///
+    /// 新令牌、确认身份和原授权完成回执同时更新为Ready。未登记兑换、身份变化、令牌无效或历史缺失时拒绝。
     pub fn complete_authorization(
         &mut self,
         payload: SupplierCredentialPayload,

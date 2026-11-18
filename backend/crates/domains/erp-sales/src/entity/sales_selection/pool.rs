@@ -58,15 +58,11 @@ pub struct PoolFilterSnapshot {
 
 impl PoolFilterSnapshot {
     /// 规范化筛选条件。
-    ///
-    /// # 参数
-    /// * `self` - 原始筛选
-    ///
-    /// # 返回
-    /// 空白字段变为 `None`；分页参数不得进入本结构。
-    ///
-    /// # 错误
+    /// 结果：空白字段变为 `None`；分页参数不得进入本结构。
     /// 售价为负、下限大于上限或配送地区代码不存在时拒绝。
+    ///
+    /// 输入约定：
+    /// - `self`：原始筛选
     pub fn normalize(self) -> Result<Self> {
         if self.sales_price_min.is_some_and(|value| value < Amount::zero())
             || self.sales_price_max.is_some_and(|value| value < Amount::zero())
@@ -100,14 +96,7 @@ impl PoolFilterSnapshot {
     }
 
     /// 转为配送地区筛选条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 未选配送地区时返回 `None`；范围默认全部可送。
-    ///
-    /// # 错误
+    /// 结果：未选配送地区时返回 `None`；范围默认全部可送。
     /// 冻结的地区代码已不在内置区划中时拒绝。
     pub fn delivery_query(&self) -> Result<Option<DeliveryCoverageQuery>> {
         let Some(code) = self.delivery_region_code.as_deref() else {
@@ -134,18 +123,14 @@ pub struct PoolSource {
 
 impl PoolSource {
     /// 构造并校验商品池来源。
-    ///
-    /// # 参数
-    /// * `kind` - 来源类型
-    /// * `filter` - 筛选条件
-    /// * `sku_ids` - 勾选身份
-    ///
-    /// # 返回
     /// 返回与类型匹配的来源。
-    ///
-    /// # 错误
     /// 筛选条件的售价下限大于上限，或勾选身份为空、超过 500、含空白时拒绝。
     /// 与来源类型不匹配的另一侧载荷直接丢弃，不因此失败。
+    ///
+    /// 输入约定：
+    /// - `kind`：来源类型
+    /// - `filter`：筛选条件
+    /// - `sku_ids`：勾选身份
     pub fn new(
         kind: PoolSourceKind,
         filter: Option<PoolFilterSnapshot>,
@@ -165,15 +150,11 @@ impl PoolSource {
 }
 
 /// 去重、升序并校验勾选身份。
-///
-/// # 参数
-/// * `sku_ids` - 原始勾选
-///
-/// # 返回
 /// 返回稳定升序、无重复的身份。
-///
-/// # 错误
 /// 为空、超限或含空白身份时拒绝。
+///
+/// 输入约定：
+/// - `sku_ids`：原始勾选
 pub fn normalize_selected_sku_ids(sku_ids: Vec<SkuId>) -> Result<Vec<SkuId>> {
     let mut unique = std::collections::BTreeSet::new();
     for sku_id in sku_ids {
@@ -190,16 +171,11 @@ pub fn normalize_selected_sku_ids(sku_ids: Vec<SkuId>) -> Result<Vec<SkuId>> {
     Ok(unique.into_iter().map(SkuId::new).collect())
 }
 
-/// 空白字符串视为未筛选。
-///
-/// # 参数
-/// * `value` - 可选文本
-///
-/// # 返回
-/// 去空白后为空则 `None`。
-///
-/// # 错误
-/// 无。
+// 空白字符串视为未筛选。
+// 结果：去空白后为空则 `None`。
+//
+// 输入约定：
+// - `value`：可选文本
 fn blank_to_none(value: Option<String>) -> Option<String> {
     value.map(|item| item.trim().to_string()).filter(|item| !item.is_empty())
 }

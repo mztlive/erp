@@ -41,13 +41,9 @@ pub(crate) struct Workers {
 }
 
 impl Workers {
-    /// 先完成所有可失败装配，再启动任何循环。
-    /// # 参数
-    /// state 为已装配的应用组合根。
-    /// # 返回
-    /// 进程唯一的常驻执行器集合。
-    /// # 错误
-    /// 依赖装配或旧调度回执恢复失败时拒绝启动。
+    // 先完成所有可失败装配，再启动任何循环。
+    // 进程唯一的常驻执行器集合。
+    // 依赖装配或旧调度回执恢复失败时拒绝启动。
     pub(crate) async fn start(state: Application) -> Result<Self> {
         let config = state.config_snapshot().xxl_job.ok_or("Worker 必须配置 [xxl_job]")?;
         let catalog = CatalogTaskControl::default();
@@ -87,23 +83,18 @@ impl Workers {
         Ok(Self { stop, tasks, catalog, orders, outbox, xxl })
     }
 
-    /// 独立 Worker 必备的 XXL 协议路由。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 执行器协议路由。
-    /// # 错误
-    /// 无。
+    // 独立 Worker 必备的 XXL 协议路由。
+    // 执行器协议路由。
     pub(crate) fn scheduler_routes(&self) -> Router {
         self.xxl.router()
     }
 
-    /// 等待任一常驻循环意外退出；正常业务错误仍由各循环处理。
+    // 把意外结束的常驻任务作为进程退出信号；轮次业务错误留给各循环处理，不触发此分支。
     pub(crate) async fn failed(&self) {
         wait_for_failure(&self.tasks, || self.orders.is_finished() || self.outbox.is_finished()).await;
     }
 
-    /// 同时停止所有入口，防止串行排空期间其他循环继续领取。
+    // 进入停机时同时关闭所有认领或受理入口，以免等待第一项任务时其他循环继续领新活。
     pub(crate) fn request_stop(&self) {
         self.xxl.request_stop();
         self.stop.send_replace(true);
@@ -112,7 +103,7 @@ impl Workers {
         self.outbox.request_stop();
     }
 
-    /// 排空已开始的工作；总超时由进程统一控制。
+    // 关停入口后等待各 Worker 完成已开始的轮次；时间上限由进程统一排空预算控制。
     pub(crate) async fn drain(self) {
         let joins = async {
             for task in self.tasks {
@@ -125,7 +116,7 @@ impl Workers {
     }
 }
 
-/// 装配同步和异步适配器，不改变原有业务认领顺序。
+// Worker 启动时按既有认领顺序注册导入、供应商目录采纳、选品及投影刷新适配器；目录流程装配失败时不启动消费循环。
 fn build_runner(state: &Application) -> Result<BackgroundRunner> {
     Ok(BackgroundRunner::new(Duration::from_secs(2))
         .register(state.product_import_process())
@@ -145,7 +136,7 @@ fn build_runner(state: &Application) -> Result<BackgroundRunner> {
         .register(SellableProjectionRefreshAdapter::new(SellableProjectionRefresher::new(state.db()))))
 }
 
-/// 检测后台句柄退出，包括 panic；业务轮次返回错误不会结束其循环。
+// 监督长驻句柄何时结束，包括 panic；正常轮次错误由循环记录，不作为退出信号。
 async fn wait_for_failure(tasks: &[JoinHandle<()>], other_finished: impl Fn() -> bool) {
     loop {
         if tasks.iter().any(JoinHandle::is_finished) || other_finished() {

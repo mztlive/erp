@@ -35,14 +35,9 @@ pub struct ContractTemplateService {
 
 impl ContractTemplateService {
     /// 装配模板服务。
-    /// # 参数
-    /// * `db` - 合同领域数据库。
-    /// * `audit` - 审计写入 Port。
-    /// * `companies` - 公司主体事实 Port。
-    /// # 返回
     /// 服务实例。
-    /// # 错误
-    /// 无。
+    /// `db` 为合同领域数据库；`audit` 为审计写入 Port。
+    /// `companies` 为公司主体事实 Port。
     pub fn new(
         db: Database,
         audit: Arc<dyn ContractAuditPort>,
@@ -53,12 +48,8 @@ impl ContractTemplateService {
     }
 
     /// 校验模板字段并生成不可覆盖的存储身份，尚未写入数据库。
-    /// # 参数
-    /// * `request` - 名称、主体及编号组。
-    /// * `file_name` - 已验证为 DOCX 的展示文件名。
-    /// # 返回
     /// 待持久化模板。
-    /// # 错误
+    /// `request` 为名称、主体及编号组；`file_name` 为已验证为 DOCX 的展示文件名。
     /// 非启用公司或输入非法时拒绝。
     pub async fn prepare(
         &self,
@@ -95,12 +86,8 @@ impl ContractTemplateService {
     }
 
     /// 文件写入完成后，原子登记主体编号组、模板及审计。
-    /// # 参数
-    /// * `template` - 本服务规划的模板。
-    /// * `actor` - 当前已认证管理员。
-    /// # 返回
     /// 模板公开视图。
-    /// # 错误
+    /// `template` 为本服务规划的模板；`actor` 为当前已认证管理员。
     /// 主体停用、编号组冲突或事务失败；提交未知时调用方不得删除对象。
     pub async fn create(&self, template: ContractTemplate, actor: &AuditActor) -> Result<TemplateView> {
         let actor = actor.clone();
@@ -152,13 +139,8 @@ impl ContractTemplateService {
     }
 
     /// 启停模板；文件与主体禁止覆盖，历史申请仍可下载。
-    /// # 参数
-    /// * `id` - 模板 ID。
-    /// * `request` - 期望版本及启停状态。
-    /// * `actor` - 管理员。
-    /// # 返回
     /// 更新后的模板。
-    /// # 错误
+    /// `id` 为模板 ID，`request` 为期望版本及启停状态，`actor` 为管理员。
     /// 版本不一致或模板不存在时拒绝。
     pub async fn set_status(
         &self,
@@ -200,12 +182,8 @@ impl ContractTemplateService {
     }
 
     /// 在阻塞线程处理 DOCX，不阻塞异步 HTTP 线程。
-    /// # 参数
-    /// * `bytes` - 原始模板。
-    /// * `number` - 合同号或明确标识的样张编号。
-    /// # 返回
     /// 已填写合同号的 Word 文件。
-    /// # 错误
+    /// `bytes` 为原始模板；`number` 为合同号或明确标识的样张编号。
     /// 模板校验或 Word 处理失败。
     pub async fn render(bytes: Vec<u8>, number: String) -> Result<Vec<u8>> {
         let permit =

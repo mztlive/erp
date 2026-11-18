@@ -13,11 +13,11 @@ use crate::{Error, Result};
 
 impl SupplierPortalProcess {
     /// 按拥有领域修改当前供应商可编辑申请。
-    /// # 参数
+    ///
     /// 精确申请、对应草稿DTO与真实门户身份。
-    /// # 返回
+    ///
     /// 返回持久化领域结果，协议层须作外部允许列表投影。
-    /// # 错误
+    ///
     /// 不存在、字段非法、范围或版本失效时拒绝。
     pub async fn application_update(&self, id: &str, input: Value, actor: &PortalActor) -> Result<Value> {
         match self.request_kind_for(id, actor).await? {
@@ -30,11 +30,11 @@ impl SupplierPortalProcess {
     }
 
     /// 冻结统一入口申请并建立对应采购确认任务。
-    /// # 参数
+    ///
     /// 精确申请、原版本命令与门户身份。
-    /// # 返回
+    ///
     /// 返回实际提交结果。
-    /// # 错误
+    ///
     /// 领域类型、归属、输入或处理资格不符时拒绝。
     pub async fn submit(&self, id: &str, input: &PortalTransition, actor: &PortalActor) -> Result<Value> {
         match self.request_kind_for(id, actor).await? {
@@ -47,11 +47,11 @@ impl SupplierPortalProcess {
     }
 
     /// 撤回统一入口的当前待确认申请及任务。
-    /// # 参数
+    ///
     /// 精确申请、版本命令及门户身份。
-    /// # 返回
+    ///
     /// 返回保留冻结历史的撤回结果。
-    /// # 错误
+    ///
     /// 越界、已完成或并发变更时拒绝。
     pub async fn withdraw(&self, id: &str, input: &PortalTransition, actor: &PortalActor) -> Result<Value> {
         match self.request_kind_for(id, actor).await? {
@@ -64,11 +64,11 @@ impl SupplierPortalProcess {
     }
 
     /// 由当前具体内部采购人作领域对应的原子决定。
-    /// # 参数
+    ///
     /// 申请、任务版本、明确映射和内部身份。
-    /// # 返回
+    ///
     /// 返回正式结果或退回意见。
-    /// # 错误
+    ///
     /// 任一对象或处理资格失效时拒绝。
     pub async fn review(&self, id: &str, input: &PortalReview, actor: &AuditActor) -> Result<Value> {
         match self.review_kind(id, &input.work_item_id, actor).await? {
@@ -80,7 +80,7 @@ impl SupplierPortalProcess {
         }
     }
 
-    /// 分派预检只交付类型；真实任务完整资格与类型读取使用同一快照。
+    // 分派预检只交付类型；真实任务完整资格与类型读取使用同一快照。
     async fn review_kind(&self, id: &str, task_id: &str, actor: &AuditActor) -> Result<RequestKind> {
         let (this, id, task_id, actor) = (self.clone(), id.to_owned(), task_id.to_owned(), actor.clone());
         self.db

@@ -12,7 +12,7 @@ LAYERS = {"domains", "orchestration", "read-models", "adapters", "foundation", "
 
 @functools.lru_cache(maxsize=1)
 def load_registry() -> dict[str, dict[str, Any]]:
-    """Read the reviewed package/layer/path and orchestration dependency registry."""
+    """读取并校验已审查的 crate 层次、路径和编排依赖登记，为工作区成员定位与依赖门禁提供统一依据。"""
     payload = json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
     if payload.get("schema_version") != 1 or not isinstance(payload.get("packages"), dict):
         raise ValueError(f"非法 crate 层次登记: {REGISTRY_PATH}")
@@ -38,7 +38,7 @@ def _resolve_dir(path: Path) -> Path:
 
 
 def member_directories(backend: Path, metadata: Mapping[str, Any]) -> tuple[dict[str, Path], list[str]]:
-    """Locate every active crate from metadata, failing on unknown or missing source paths."""
+    """从 Cargo metadata 定位活动 crate 并报告未登记、路径不符或缺失源码的成员，供领域门禁确定可扫描的源码目录。"""
     registry = load_registry()
     backend_resolved = _resolve_dir(backend)
     members = set(metadata.get("workspace_members") or [])
@@ -67,7 +67,7 @@ def member_directories(backend: Path, metadata: Mapping[str, Any]) -> tuple[dict
 
 
 def dependency_errors(edges: Any) -> list[str]:
-    """Check normal/build/dev edges against layers and explicit orchestration dependencies."""
+    """按 crate 层次和编排直接依赖登记检查 normal/build/dev 边，供领域门禁报告违反分层的依赖。"""
     registry = load_registry()
     errors: list[str] = []
     upper_layers = {"domains", "orchestration", "read-models", "adapters", "apps"}

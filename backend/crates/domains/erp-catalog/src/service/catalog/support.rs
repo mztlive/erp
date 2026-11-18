@@ -11,18 +11,13 @@ use crate::error::{Error, Result};
 use crate::repository::CatalogExt;
 
 impl CatalogService {
-    /// 解析创建维护人及其主属组织，并校验写范围。
-    ///
-    /// # 参数
-    /// * `executor` - 原授权事务或读取阶段的执行器。
-    /// * `requested` - 请求维护人；空则使用操作人
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 返回维护人 ID 与业务组织。
-    ///
-    /// # 错误
-    /// 缺主属组织或当前范围不允许创建时拒绝。
+    // 解析创建维护人及其主属组织，并校验写范围。
+    //
+    // 返回维护人 ID 与业务组织。缺主属组织或当前范围不允许创建时拒绝。
+    //
+    // 沿用调用方的执行器，不另开事务。
+    //
+    // `requested` 为请求维护人；空则使用操作人。
     pub(super) async fn bind_create_maintainer(
         &self,
         requested: Option<&str>,
@@ -36,17 +31,9 @@ impl CatalogService {
 
     // ---------- 私有加载与写入辅助 ----------
 
-    /// 按 ID 加载未删除分类。
-    ///
-    /// # 参数
-    /// * `executor` - 原授权事务或读取阶段的执行器。
-    /// * `id` - 分类 ID
-    ///
-    /// # 返回
-    /// 返回分类实体。
-    ///
-    /// # 错误
-    /// 分类不存在时返回 `NotFound`。
+    // 按 ID 加载未删除分类。分类不存在时返回 `NotFound`。
+    //
+    // 沿用调用方的执行器，不另开事务。
     pub(super) async fn load_category(
         &self,
         id: &str,
@@ -59,17 +46,9 @@ impl CatalogService {
             .ok_or_else(|| Error::NotFound("商品分类不存在".to_string()))
     }
 
-    /// 按 ID 加载未删除品牌。
-    ///
-    /// # 参数
-    /// * `executor` - 原授权事务或读取阶段的执行器。
-    /// * `id` - 品牌 ID
-    ///
-    /// # 返回
-    /// 返回品牌实体。
-    ///
-    /// # 错误
-    /// 品牌不存在时返回 `NotFound`。
+    // 按 ID 加载未删除品牌。品牌不存在时返回 `NotFound`。
+    //
+    // 沿用调用方的执行器，不另开事务。
     pub(super) async fn load_brand(&self, id: &str, executor: &mut dyn Executor) -> Result<ProductBrand> {
         self.db
             .product_brands()
@@ -78,17 +57,9 @@ impl CatalogService {
             .ok_or_else(|| Error::NotFound("商品品牌不存在".to_string()))
     }
 
-    /// 按 ID 加载未删除计量单位。
-    ///
-    /// # 参数
-    /// * `executor` - 原授权事务或读取阶段的执行器。
-    /// * `id` - 单位 ID
-    ///
-    /// # 返回
-    /// 返回单位实体。
-    ///
-    /// # 错误
-    /// 单位不存在时返回 `NotFound`。
+    // 按 ID 加载未删除计量单位。单位不存在时返回 `NotFound`。
+    //
+    // 沿用调用方的执行器，不另开事务。
     pub(super) async fn load_unit(&self, id: &str, executor: &mut dyn Executor) -> Result<UnitOfMeasure> {
         self.db
             .unit_of_measures()
@@ -97,17 +68,9 @@ impl CatalogService {
             .ok_or_else(|| Error::NotFound("计量单位不存在".to_string()))
     }
 
-    /// 按 ID 加载未删除商品。
-    ///
-    /// # 参数
-    /// * `executor` - 原授权事务或读取阶段的执行器。
-    /// * `id` - 商品 ID
-    ///
-    /// # 返回
-    /// 返回商品实体。
-    ///
-    /// # 错误
-    /// 商品不存在时返回 `NotFound`。
+    // 按 ID 加载未删除商品。商品不存在时返回 `NotFound`。
+    //
+    // 沿用调用方的执行器，不另开事务。
     pub(super) async fn load_product(&self, id: &str, executor: &mut dyn Executor) -> Result<Product> {
         self.db
             .products()
@@ -116,19 +79,9 @@ impl CatalogService {
             .ok_or_else(|| Error::NotFound("商品不存在".to_string()))
     }
 
-    /// 校验品牌存在、每个基础单位存在且启用（不要求分类已落库，供卡券类目
-    /// 原子创建复用——此时分类可能是本次事务内才新建的草稿）。
-    ///
-    /// # 参数
-    /// * `executor` - 原授权事务或读取阶段的执行器。
-    /// * `brand_id` - ERP 品牌
-    /// * `base_unit_ids` - 待校验的基础单位 ID 集合
-    ///
-    /// # 返回
-    /// 合法时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 品牌/单位不存在或单位已停用时返回错误。
+    // 校验品牌存在、每个基础单位存在且启用（不要求分类已落库，供卡券类目原子创建复用——此时分类可能是本次事务内才新建的草稿）。
+    //
+    // 合法时返回 `Ok(())`。品牌/单位不存在或单位已停用时返回错误。
     pub(super) async fn ensure_brand_and_unit_ok<'a>(
         &self,
         brand_id: &ProductBrandId,
@@ -146,17 +99,9 @@ impl CatalogService {
     }
 }
 
-/// 校验期望版本与当前版本一致（乐观锁语义）。
-///
-/// # 参数
-/// * `current` - 当前版本
-/// * `expected` - 期望版本
-///
-/// # 返回
-/// 一致时返回 `Ok(())`。
-///
-/// # 错误
-/// 不一致时返回 `ConflictError`（HTTP 409）。
+// 校验期望版本与当前版本一致（乐观锁语义）。
+//
+// 一致时返回 `Ok(())`。不一致时返回 `ConflictError`（HTTP 409）。
 pub(super) fn ensure_version(current: u64, expected: u64) -> Result<()> {
     if current != expected {
         return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));

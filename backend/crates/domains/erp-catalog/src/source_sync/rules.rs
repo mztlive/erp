@@ -6,13 +6,7 @@ use super::*;
 use crate::{Error, Result};
 
 impl SourceField {
-    /// 返回界面字段名。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 固定中文名称。
-    /// # 错误
-    /// 无。
+    /// 返回界面字段名。固定中文名称。
     pub fn label(self) -> &'static str {
         match self {
             Self::Name => "商品名称",
@@ -34,12 +28,8 @@ impl SourceValue {
     }
 
     /// 规范化文本边界空白，使来源基线与公司修订遵守相同规则。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 规范文本；空介绍归为未填写，图片顺序和身份保持原样。
-    /// # 错误
-    /// 无；名称非空在字段校验执行。
+    ///
+    /// 规范文本；空介绍归为未填写，图片顺序和身份保持原样。名称非空在字段校验执行。
     pub fn normalized(&self) -> Self {
         match self {
             Self::Text(value) => {
@@ -49,13 +39,7 @@ impl SourceValue {
         }
     }
 
-    /// 比较展示内容身份；同一归档资产无需因预览URL变化形成冲突。
-    /// # 参数
-    /// `other` 为待比较的已知值。
-    /// # 返回
-    /// 具有相同可核验身份或相同文本时为 true。
-    /// # 错误
-    /// 无。
+    /// 比较展示内容身份；同一归档资产无需因预览URL变化形成冲突。具有相同可核验身份或相同文本时为 true。
     pub fn equivalent(&self, other: &Self) -> bool {
         match (self,other) {
             (Self::Text(a),Self::Text(b))=>a==b,
@@ -66,13 +50,7 @@ impl SourceValue {
             _=>false
         }
     }
-    /// 返回来源无法直接覆盖公司字段的明确原因。
-    /// # 参数
-    /// 目标展示字段。
-    /// # 返回
-    /// 容量超界或素材未核验的原因；可直接应用返回None。
-    /// # 错误
-    /// 无。
+    /// 返回来源无法直接覆盖公司字段的明确原因。容量超界或素材未核验的原因；可直接应用返回None。
     pub fn application_blocker(&self, field: SourceField) -> Option<String> {
         self.company_capacity_blocker(field).or_else(|| {
             self.verification_required()
@@ -96,13 +74,7 @@ impl SourceValue {
         })
     }
 
-    /// 判断图片来源是否缺少可核验内容或真实资产。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 未具备采用条件时为 true。
-    /// # 错误
-    /// 无。
+    /// 判断图片来源是否缺少可核验内容或真实资产。未具备采用条件时为 true。
     pub fn verification_required(&self) -> bool {
         match self {
             Self::Text(_) => false,
@@ -114,12 +86,8 @@ impl SourceValue {
     }
 
     /// 校验字段和值类型，防止将图片写入名称或清空名称。
-    /// # 参数
-    /// `field` 为目标字段。
-    /// # 返回
-    /// 合法时无返回值。
-    /// # 错误
-    /// 类型不符、空名称或过量图片时拒绝。
+    ///
+    /// 合法时无返回值。类型不符、空名称或过量图片时拒绝。
     pub fn validate(&self, field: SourceField) -> Result<()> {
         match (field, self) {
             (SourceField::Name | SourceField::SkuName, Self::Text(Some(v))) if !v.trim().is_empty() => Ok(()),
@@ -135,12 +103,10 @@ impl SourceValue {
 
 impl ProductSource {
     /// 初始化唯一资料来源；公司已有不同内容时保留并承担人工责任。
-    /// # 参数
+    ///
+    /// 未持久化的资料基线。来源值不合法时拒绝。
+    ///
     /// 商品与来源身份、当前公司内容及明确提供的观察字段。
-    /// # 返回
-    /// 未持久化的资料基线。
-    /// # 错误
-    /// 来源值不合法时拒绝。
     pub fn new(
         product: &str,
         supplier: &str,
@@ -193,13 +159,8 @@ impl ProductSource {
         Ok(source)
     }
 
-    /// 在人工编辑入口登记全部字段责任，包括来源尚未提供的字段。
-    /// # 参数
-    /// 本次实际保存的完整公司展示资料。
-    /// # 返回
-    /// 新增字段和改变字段记为人工维护；空值编辑同样保留责任。
-    /// # 错误
-    /// 无。
+    /// 商品人工保存后，用实际已写入的完整内容标记人工维护字段，包括来源尚未提供的字段。
+    /// 人工清空同样记录责任；后续来源观察不得把它当作未维护。
     pub fn record_manual_edit(&mut self, current: &[(SourceField, Option<String>, SourceValue)]) {
         Self::register_missing_fields(&mut self.fields, current, true);
         self.record_company_edit(current);
@@ -226,13 +187,9 @@ impl ProductSource {
         }
     }
 
-    /// 将真实人工编辑同步到字段责任，未变字段不受影响。
-    /// # 参数
+    /// 将真实人工编辑同步到字段责任，未变字段不受影响。更新字段缓存、责任与待确认摘要。
+    ///
     /// `current` 为本次真实写入的公司资料。
-    /// # 返回
-    /// 更新字段缓存、责任与待确认摘要。
-    /// # 错误
-    /// 无。
     pub fn record_company_edit(&mut self, current: &[(SourceField, Option<String>, SourceValue)]) {
         for state in &mut self.fields {
             if let Some((_, _, value)) =
@@ -252,13 +209,9 @@ impl ProductSource {
         self.refresh_pending();
     }
 
-    /// 按字段应用来源更新，返回允许自动修改公司的字段。
-    /// # 参数
-    /// `current` 为真实公司资料，`observation` 为明确提供的来源字段。
-    /// # 返回
-    /// 应写入新商品修订的字段集合。
-    /// # 错误
-    /// 来源字段非法时拒绝。
+    /// 先按真实公司资料更新人工维护责任，再逐字段接收来源观察并刷新待确认摘要。
+    /// 公司值与来源一致或来源回到已确认基线时不产生覆盖；人工维护或素材尚不可采用的变化留待确认。
+    /// 只返回允许写入新修订的字段；非法来源值拒绝。
     pub fn observe(
         &mut self,
         current: &[(SourceField, Option<String>, SourceValue)],
@@ -321,13 +274,8 @@ impl ProductSource {
         changed
     }
 
-    /// 验证全部选择后处理差异，失败不产生部分规则变化。
-    /// # 参数
-    /// 已核对来源和公司版本的字段选择。
-    /// # 返回
-    /// 公司资料需要改变的字段。
-    /// # 错误
-    /// 字段重复、不在待处理范围、图片未核验或值非法时拒绝。
+    /// 商品、来源及相关 SKU 版本核对后，一次验证全部待确认字段的选择，再应用保留、采用或编辑决定。
+    /// 更新各字段确认基线和维护责任，只返回真正改变公司资料的字段；重复字段、过期选择、未核验素材或非法值拒绝。
     pub fn resolve(
         &mut self,
         decisions: &[SourceDecision],
@@ -413,7 +361,7 @@ impl ProductSource {
         Ok(())
     }
 
-    /// 将编辑图片限制为本商品当前图片或已核验来源图片，并丢弃客户端伪造元数据。
+    // 确认差异时只允许采用本商品当前图片或已核验的来源图片，以服务端资料生成规范值，不保留客户端伪造的元数据。
     fn canonical_edit_value(&self, value: &SourceValue) -> Result<SourceValue> {
         let SourceValue::Images(images) = value else { return Ok(value.normalized()) };
 
@@ -453,13 +401,9 @@ impl ProductSource {
         self.pending_count = u32::try_from(self.pending_fields.len()).expect("字段数受来源规格上限约束");
     }
 
-    /// 生成只含待确认字段的读取快照。
-    /// # 参数
+    /// 生成只含待确认字段的读取快照。无成本资料的差异视图。
+    ///
     /// 当前公司商品版本。
-    /// # 返回
-    /// 无成本资料的差异视图。
-    /// # 错误
-    /// 无。
     pub fn view(&self, product_version: u64) -> ProductSourceDiffView {
         ProductSourceDiffView {
             product_id: self.product_id.clone(),
@@ -499,7 +443,8 @@ impl ProductSource {
 }
 
 impl SourceFieldState {
-    /// 应用已规范化并校验的来源值，返回允许写入公司的新内容。
+    // 待确认来源值变化时，用公司值、已确认基线和新来源值判断单个字段是否可自动应用。
+    // 来源回到基线、与公司值一致或未变化时不改公司字段；人工维护或素材不合格的差异留待人工确认。
     fn observe(&mut self, value: SourceValue) -> Option<SourceValue> {
         if self.latest.equivalent(&value) {
             return None;

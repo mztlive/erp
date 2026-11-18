@@ -26,20 +26,15 @@ use super::{ObjectKind, WorkbenchFactsReader, WorkbenchObjectFact, WorkbenchObje
 use crate::errors::Result;
 
 impl WorkbenchFactsReader<'_> {
-    /// 读取销售单身份，并按当前审核中提交写入客户、金额、付款条件和明细简报。
-    ///
-    /// 没有提交时仍保留最小标题，避免任务因对象事实缺失被授权过滤丢弃。
-    ///
-    /// # 参数
-    /// * `keys` - 本批任务引用的对象键
-    /// * `facts` - 输出的对象事实表
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 成功时写入销售单号和简报。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
+    // 为销售审批简报取数时，读取销售单身份，并按当前审核中提交写入客户、金额、付款条件和明细简报。
+    //
+    // 没有提交时仍保留最小标题，避免任务因对象事实缺失被授权过滤丢弃。
+    //
+    // 调用参数：
+    // * `keys` - 本批任务引用的对象键
+    // * `facts` - 输出的对象事实表
+    //
+    // 成功时写入销售单号和简报。
     pub(super) async fn load_sales_order_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -62,17 +57,12 @@ impl WorkbenchFactsReader<'_> {
         Ok(())
     }
 
-    /// 读取本批销售提交行并转成按提交分组的简报行。
-    ///
-    /// # 参数
-    /// * `submissions` - 本批销售提交
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回提交 ID 到已按行号排序的简报行。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
+    // 处理销售审批简报的版本事实时，读取本批销售提交行并转成按提交分组的简报行。
+    //
+    // 调用参数：
+    // * `submissions` - 本批销售提交
+    //
+    // 返回提交 ID 到已按行号排序的简报行。
     async fn sales_submission_brief_lines(
         &self,
         submissions: &[SalesOrderSubmission],
@@ -106,19 +96,13 @@ impl WorkbenchFactsReader<'_> {
     }
 }
 
-/// 把销售单事实和按提交准备好的简报写入对象事实表。
-///
-/// # 参数
-/// * `facts` - 输出的对象事实表
-/// * `orders` - 本批销售单
-/// * `submissions` - 本批销售提交
-/// * `lines_by_submission` - 提交 ID 到简报行
-///
-/// # 返回
-/// 无。
-///
-/// # 错误
-/// 无。
+// 组装销售审批简报时，把销售单事实和按提交准备好的简报写入对象事实表。
+//
+// 调用参数：
+// * `facts` - 输出的对象事实表
+// * `orders` - 本批销售单
+// * `submissions` - 本批销售提交
+// * `lines_by_submission` - 提交 ID 到简报行
 fn insert_sales_order_facts(
     facts: &mut WorkbenchObjectFactMap,
     orders: &[SalesOrder],
@@ -133,18 +117,14 @@ fn insert_sales_order_facts(
     }
 }
 
-/// 为单张销售单生成对象事实，优先挂上当前审核中提交的简报。
-///
-/// # 参数
-/// * `order` - 销售单
-/// * `submissions` - 本批销售提交
-/// * `lines_by_submission` - 提交 ID 到简报行
-///
-/// # 返回
-/// 返回带标题和提交级简报的对象事实。
-///
-/// # 错误
-/// 无。
+// 处理销售审批简报时，为单张销售单生成对象事实，优先挂上当前审核中提交的简报。
+//
+// 调用参数：
+// * `order` - 销售单
+// * `submissions` - 本批销售提交
+// * `lines_by_submission` - 提交 ID 到简报行
+//
+// 返回带标题和提交级简报的对象事实。
 fn sales_order_fact(
     order: &SalesOrder,
     submissions: &[SalesOrderSubmission],
@@ -172,17 +152,13 @@ fn sales_order_fact(
     fact
 }
 
-/// 组装销售单事项简报键值和列表一行摘要。
-///
-/// # 参数
-/// * `submission` - 当前展示的销售提交
-/// * `lines` - 已按行号排好的简报行
-///
-/// # 返回
-/// 返回可上屏的对象简报源。
-///
-/// # 错误
-/// 无。
+// 销售审批工作项需要展示时，从本次销售提交组装详情键值段及列表一行摘要。
+//
+// 调用参数：
+// * `submission` - 当前展示的销售提交
+// * `lines` - 已按行号排好的简报行
+//
+// 返回可上屏的对象简报源。
 fn sales_order_brief_source(submission: &SalesOrderSubmission, lines: Vec<BriefLine>) -> ObjectBriefSource {
     let more_count = lines.len().saturating_sub(BRIEF_LINE_LIMIT) as u32;
     let mut visible = lines;
@@ -206,16 +182,12 @@ fn sales_order_brief_source(submission: &SalesOrderSubmission, lines: Vec<BriefL
     }
 }
 
-/// 生成销售单简报键值，空值不上屏。
-///
-/// # 参数
-/// * `submission` - 销售提交
-///
-/// # 返回
-/// 返回业务性质、结算主体、合同、金额和付款条件等段。
-///
-/// # 错误
-/// 无。
+// 处理销售审批简报时，生成销售单简报键值，空值不上屏。
+//
+// 调用参数：
+// * `submission` - 销售提交
+//
+// 返回业务性质、结算主体、合同、金额和付款条件等段。
 fn sales_order_sections(submission: &SalesOrderSubmission) -> Vec<BriefSection> {
     let mut sections = Vec::new();
     push_section(&mut sections, "业务性质", Some(submission.business_type.label()), false);
@@ -248,21 +220,17 @@ fn sales_order_sections(submission: &SalesOrderSubmission) -> Vec<BriefSection> 
     sections
 }
 
-/// 生成销售单队列一行摘要。
-///
-/// # 参数
-/// * `customer` - 客户名称
-/// * `gross` - 含税金额
-/// * `tax` - 税额
-/// * `payment` - 付款条件
-/// * `lines` - 已截断的简报行
-/// * `more_count` - 未展开行数
-///
-/// # 返回
-/// 返回客户、金额、付款条件和首行货品组成的摘要。
-///
-/// # 错误
-/// 无。
+// 装配销售审批简报视图时，生成销售单队列一行摘要。
+//
+// 调用参数：
+// * `customer` - 客户名称
+// * `gross` - 含税金额
+// * `tax` - 税额
+// * `payment` - 付款条件
+// * `lines` - 已截断的简报行
+// * `more_count` - 未展开行数
+//
+// 返回客户、金额、付款条件和首行货品组成的摘要。
 fn sales_order_list_summary(
     customer: Option<&str>,
     gross: &Amount,
@@ -290,16 +258,12 @@ fn sales_order_list_summary(
     ])
 }
 
-/// 把单条销售提交行转成简报行。
-///
-/// # 参数
-/// * `line` - 销售提交行
-///
-/// # 返回
-/// 商品行展示品名、数量和交期；卡券行展示张数和含税金额。
-///
-/// # 错误
-/// 无。
+// 组装销售审批简报时，把单条销售提交行转成简报行。
+//
+// 调用参数：
+// * `line` - 销售提交行
+//
+// 商品行展示品名、数量和交期；卡券行展示张数和含税金额。
 fn sales_brief_line(line: &SalesOrderSubmissionLine) -> BriefLine {
     BriefLine {
         title: line_title(&line.item_name_snapshot, line.spec_snapshot.as_deref()),
@@ -308,16 +272,12 @@ fn sales_brief_line(line: &SalesOrderSubmissionLine) -> BriefLine {
     }
 }
 
-/// 销售行数量带上含税小计。
-///
-/// # 参数
-/// * `line` - 销售提交行
-///
-/// # 返回
-/// 卡券返回 `10 张 · ¥1,000`；实物返回 `20 件 · ¥1,600`；否则只返回金额。
-///
-/// # 错误
-/// 无。
+// 处理销售审批简报时，销售行数量带上含税小计。
+//
+// 调用参数：
+// * `line` - 销售提交行
+//
+// 卡券返回 `10 张 · ¥1,000`；实物返回 `20 件 · ¥1,600`；否则只返回金额。
 fn sales_line_quantity(line: &SalesOrderSubmissionLine) -> Option<String> {
     let amount = format_yuan(&line.gross_amount);
     if let Some(count) = line.card_count.filter(|count| *count > 0) {
@@ -332,19 +292,15 @@ fn sales_line_quantity(line: &SalesOrderSubmissionLine) -> Option<String> {
     }
 }
 
-/// 仅测试使用：数量格式化入口，避免测试构造完整提交行。
-///
-/// # 参数
-/// * `quantity` - 基础单位数量
-/// * `unit` - 单位
-/// * `gross` - 行含税金额
-/// * `card_count` - 卡张数
-///
-/// # 返回
-/// 与 `sales_line_quantity` 相同规则的展示串。
-///
-/// # 错误
-/// 无。
+// 处理销售审批简报时，仅测试使用：数量格式化入口，避免测试构造完整提交行。
+//
+// 调用参数：
+// * `quantity` - 基础单位数量
+// * `unit` - 单位
+// * `gross` - 行含税金额
+// * `card_count` - 卡张数
+//
+// 与 `sales_line_quantity` 相同规则的展示串。
 #[cfg(test)]
 fn sales_line_quantity_parts(
     quantity: Option<&Quantity>,

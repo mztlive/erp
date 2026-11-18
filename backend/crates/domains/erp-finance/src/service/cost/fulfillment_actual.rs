@@ -40,15 +40,11 @@ pub struct FulfillmentCostFact {
 }
 
 /// 按冻结分配金额准备实际供货成本；不重算税额、不写入数据库。
-///
-/// # 参数
-/// * `fact` - 已校验外域关联的首次整笔履约事实
-///
-/// # 返回
 /// 返回实际供货成本及唯一的销售明细分配；部分数量或零不含税成本返回 `None`。
-///
-/// # 错误
 /// 履约数量超出冻结分配或成本金额非法时返回错误。
+///
+/// 输入约定：
+/// - `fact`：已校验外域关联的首次整笔履约事实
 pub fn prepare(fact: FulfillmentCostFact) -> Result<Option<PreparedCostEntry>> {
     if incomplete_or_zero_cost(&fact)? {
         return Ok(None);
@@ -89,7 +85,7 @@ pub fn prepare(fact: FulfillmentCostFact) -> Result<Option<PreparedCostEntry>> {
     Ok(Some(prepared))
 }
 
-/// 部分履约与零不含税金额不能生成整笔成本，保留履约事实并保持成本未覆盖。
+// 覆盖实际供货成本未形成的两种情况：部分履约或不含税成本为零仍可保留履约事实，但不计整笔成本覆盖。
 fn incomplete_or_zero_cost(fact: &FulfillmentCostFact) -> Result<bool> {
     if fact.fulfilled_quantity > fact.allocated_quantity {
         return Err(Error::BusinessLogicError("履约数量不得超出冻结采购销售分配数量".into()));
@@ -111,7 +107,7 @@ mod tests {
     use super::{FulfillmentCostFact, prepare};
     use crate::entity::cost::{CostStage, CostType};
 
-    /// 构造有尾差的冻结成本；准备过程必须逐分保持原分配金额。
+    // 组装有尾差的冻结成本；准备过程必须逐分保持原分配金额。
     fn fact() -> FulfillmentCostFact {
         FulfillmentCostFact {
             purchase_order_id: "po-1".into(),
@@ -130,7 +126,7 @@ mod tests {
         }
     }
 
-    /// 实际成本采用冻结分配，不按最新报价或税率重新计算。
+    // 回归检查：实际成本采用冻结分配，不按最新报价或税率重新计算。
     #[test]
     fn exact_frozen_cost_and_sales_line_are_preserved() {
         let prepared = prepare(fact()).unwrap().unwrap();
@@ -147,7 +143,7 @@ mod tests {
         assert_eq!(prepared.allocations[0].sales_order_line_id.as_ref().unwrap().as_ref(), "line-1");
     }
 
-    /// 首次确认不能把部分履约伪装成整笔成本，也不能产生负税额成本。
+    // 回归检查：首次确认不能把部分履约伪装成整笔成本，也不能产生负税额成本。
     #[test]
     fn inconsistent_quantity_and_amounts_are_rejected() {
         let mut partial = fact();
@@ -163,7 +159,7 @@ mod tests {
         assert!(prepare(invalid).is_err());
     }
 
-    /// 没有实际金额时不创建非法的零金额成本分配。
+    // 回归检查：没有实际金额时不创建非法的零金额成本分配。
     #[test]
     fn zero_cost_does_not_fail_fulfillment_confirmation() {
         let mut zero = fact();

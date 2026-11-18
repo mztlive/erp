@@ -20,11 +20,11 @@ use crate::{Error, Result};
 
 impl SupplierCatalogAdoptionProcess {
     /// 读取完整批次；每次重验当前权限及供应商数据范围。
-    /// # 参数
+    ///
     /// 来源连接、批次身份和当前认证用户。
-    /// # 返回
+    ///
     /// 已保存草稿、最后预览和真实后台结果。
-    /// # 错误
+    ///
     /// 越权、批次不存在或查询失败时拒绝。
     pub async fn batch(&self, connection: &str, id: &str, actor: &AuditActor) -> Result<BatchView> {
         let (connection, id, actor) = (connection.to_owned(), id.to_owned(), actor.clone());
@@ -43,11 +43,11 @@ impl SupplierCatalogAdoptionProcess {
     }
 
     /// 列出当前供应商可访问的最近批次，以便离开页面后重新打开。
-    /// # 参数
+    ///
     /// 来源连接和当前用户。
-    /// # 返回
+    ///
     /// 最多二十个最近批次及当前成员状态摘要，受当前供应商范围约束。
-    /// # 错误
+    ///
     /// 权限或数据范围不足及查询失败时拒绝。
     pub async fn batches(&self, connection: &str, actor: &AuditActor) -> Result<Vec<BatchHistoryEntry>> {
         let (connection, actor) = (connection.to_owned(), actor.clone());
@@ -150,13 +150,11 @@ impl SupplierCatalogAdoptionProcess {
     }
 }
 
-/// 根据当前来源资料初始化一项草稿，不产生商品或供给事实。
-/// # 参数
-/// 已登记批次与属于其固定成员的来源资料。
-/// # 返回
-/// 尚未核对的草稿，保留已采纳及排除状态。
-/// # 错误
-/// 不返回错误。
+// 根据当前来源资料初始化一项草稿，不产生商品或供给事实。
+//
+// 已登记批次与属于其固定成员的来源资料。
+//
+// 尚未核对的草稿，保留已采纳及排除状态。
 pub(super) fn new_batch_item(
     batch: &CatalogAdoptionBatch,
     source: SupplierCatalogItem,
@@ -231,13 +229,11 @@ pub(super) fn batch_view(batch: CatalogAdoptionBatch, rows: Vec<CatalogAdoptionB
     }
 }
 
-/// 返回只含批次头的受理/进度回执，客户端须保留已有明细或等待完成后读取。
-/// # 参数
-/// 已授权批次。
-/// # 返回
-/// 明确标注明细不完整的响应。
-/// # 错误
-/// 不返回错误。
+// 返回只含批次头的受理/进度回执，客户端须保留已有明细或等待完成后读取。
+//
+// 已授权批次。
+//
+// 明确标注明细不完整的响应。
 pub(super) fn batch_summary(batch: CatalogAdoptionBatch) -> BatchView {
     let mut view = batch_view(batch, vec![]);
     view.rows_complete = false;

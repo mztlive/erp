@@ -59,13 +59,11 @@ impl CandidateAccess for PlannedAccess<'_, '_> {
     }
 }
 
-/// 在原事务内先验证完整拆单批次的采购候选，不分配任何业务单号。
-/// # 参数
-/// db、ports、input 为原命令设施及身份；order、plan 为 guard 后计划；executor 为原事务。
-/// # 返回
-/// 全部采购候选的创建和提交范围均成立时成功。
-/// # 错误
-/// 任一候选构造、主属组织或发起人对象授权失败时终止批次。
+// 在原事务内先验证完整拆单批次的采购候选，不分配任何业务单号。
+//
+// db、ports、input 为原命令设施及身份；order、plan 为 guard 后计划；executor 为原事务。全部采购候选的创建和提交范围均成立时成功。
+//
+// 任一候选构造、主属组织或发起人对象授权失败时终止批次。
 pub(super) async fn authorize_planned_orders(
     db: &Database,
     ports: &PurchaseOrderPorts,

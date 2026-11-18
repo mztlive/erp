@@ -8,21 +8,13 @@ pub struct NacosConfigWatcher {
 }
 
 impl NacosConfigWatcher {
-    /// 创建 NacosConfigWatcher 实例。
-    ///
-    /// # 参数
-    /// * `config` - 配置数据
-    /// * `nacos_client` - Nacos 客户端
-    ///
-    /// # 返回
-    /// 返回创建的实例。
+    /// 首次 Nacos 配置校验成功后，把当前快照和读取它的远端客户端交给刷新任务；构造时不启动轮询。
     pub fn new(config: SafeConfig, nacos_client: NacosConfigClient) -> Self {
         Self { config, nacos_client }
     }
 
-    /// 启动配置监听。
-    ///
-    /// 监听任务会持续到运行时关闭。
+    /// 启动 Nacos 后台轮询，每次刷新尝试结束后等待 10 秒，直到 Tokio 运行时关闭。
+    /// 读取或校验失败只记录错误，已有快照继续有效。
     pub fn start(self) {
         let config = self.config;
         let nacos_client = self.nacos_client;

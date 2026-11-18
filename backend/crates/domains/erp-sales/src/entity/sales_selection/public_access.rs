@@ -24,18 +24,14 @@ pub struct SelectionGrant {
 
 impl SelectionGrant {
     /// 在已通过密码验证后签发个人访问凭证。
-    ///
-    /// # 参数
-    /// * `book` - 当前有效册
-    /// * `session` - 经提货码确认的个人会话或共享会话
-    /// * `now` - 服务端时间
-    /// * `crypto` - 应用密钥派生的编解码器
-    ///
-    /// # 返回
     /// 返回不可篡改的密文访问凭证。
-    ///
-    /// # 错误
     /// 未设置密码、会话不属于本册或加密失败时拒绝。
+    ///
+    /// 输入约定：
+    /// - `book`：当前有效册
+    /// - `session`：经提货码确认的个人会话或共享会话
+    /// - `now`：服务端时间
+    /// - `crypto`：应用密钥派生的编解码器
     pub fn issue(
         book: &SalesSelectionBooklet,
         session: &SalesSelectionSession,
@@ -63,16 +59,12 @@ impl SelectionGrant {
     }
 
     /// 解码访问凭证；随后必须按当前册重验。
-    ///
-    /// # 参数
-    /// * `encoded` - 密文凭证
-    /// * `crypto` - 应用编解码器
-    ///
-    /// # 返回
     /// 返回授权事实。
-    ///
-    /// # 错误
     /// 凭证损坏、过长或密钥不匹配时拒绝。
+    ///
+    /// 输入约定：
+    /// - `encoded`：密文凭证
+    /// - `crypto`：应用编解码器
     pub fn decode(encoded: &str, crypto: &LinkTokenCrypto) -> Result<Self> {
         if encoded.len() > 4096 {
             return Err(Error::from("选品授权无效"));
@@ -82,17 +74,13 @@ impl SelectionGrant {
     }
 
     /// 以数据库当前事实重验凭证。
-    ///
-    /// # 参数
-    /// * `book` - 当前册
-    /// * `session` - 当前会话
-    /// * `now` - 服务端时间
-    ///
-    /// # 返回
-    /// 所有绑定仍有效时成功。
-    ///
-    /// # 错误
+    /// 结果：所有绑定仍有效时成功。
     /// 换链、改密、跨册、跨会话或到期时拒绝。
+    ///
+    /// 输入约定：
+    /// - `book`：当前册
+    /// - `session`：当前会话
+    /// - `now`：服务端时间
     pub fn ensure_current(
         &self,
         book: &SalesSelectionBooklet,
@@ -114,15 +102,11 @@ impl SelectionGrant {
 }
 
 /// 使用 Argon2id 为访问密码生成慢哈希。
-///
-/// # 参数
-/// * `password` - 8 至 64 字符的原始密码
-///
-/// # 返回
 /// 返回带盐哈希；调用方必须放在阻塞任务中执行。
-///
-/// # 错误
 /// 长度非法或哈希失败时拒绝。
+///
+/// 输入约定：
+/// - `password`：8 至 64 字符的原始密码
 pub fn hash_selection_password(password: &str) -> Result<String> {
     if !(8..=64).contains(&password.chars().count()) {
         return Err(Error::from("访问密码须为8至64个字符"));
@@ -134,16 +118,12 @@ pub fn hash_selection_password(password: &str) -> Result<String> {
 }
 
 /// 验证访问密码，损坏哈希失败关闭。
+/// 结果：匹配返回真；调用方必须放在阻塞任务中执行。
+/// 失败条件：无，非法输入和损坏哈希返回假。
 ///
-/// # 参数
-/// * `password` - 输入密码
-/// * `hash` - 数据库密码哈希
-///
-/// # 返回
-/// 匹配返回真；调用方必须放在阻塞任务中执行。
-///
-/// # 错误
-/// 无，非法输入和损坏哈希返回假。
+/// 输入约定：
+/// - `password`：输入密码
+/// - `hash`：数据库密码哈希
 pub fn verify_selection_password(password: &str, hash: &str) -> bool {
     if !(8..=64).contains(&password.chars().count()) {
         return false;

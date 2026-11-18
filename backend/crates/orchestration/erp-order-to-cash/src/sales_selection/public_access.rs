@@ -27,14 +27,7 @@ static PASSWORD_WORK: Semaphore = Semaphore::const_new(8);
 impl SalesSelectionProcess {
     /// 读取个人公开页，缺少或失效授权时返回锁定视图。
     ///
-    /// # 参数
-    /// `token` 为链接，`access` 为密文授权，`ip` 为来源。
-    ///
-    /// # 返回
-    /// 返回隔离后的个人页面。
-    ///
-    /// # 错误
-    /// 无效链接、限流或读取失败时拒绝。
+    /// `token` 为链接，`access` 为密文授权，`ip` 为来源。返回隔离后的个人页面。无效链接、限流或读取失败时拒绝。
     pub async fn public_page(
         &self,
         token: &str,
@@ -52,16 +45,8 @@ impl SalesSelectionProcess {
             .await?)
     }
 
-    /// 使用访问密码与个人提货码解锁，密码验证不占用事务。
-    ///
-    /// # 参数
-    /// `token` 为链接，`req` 为密码及提货码，`ip` 为来源。
-    ///
-    /// # 返回
-    /// 返回个人授权与页面。
-    ///
-    /// # 错误
-    /// 错误密码、错误提货码、历史未设置密码或限流时拒绝。
+    /// 公开选品访客提交访问密码和个人提货码时，先限流，再在事务外校验密码，成功后返回个人授权和隔离页面。
+    /// 密码或提货码错误、历史选品册未设密码、超限时拒绝。
     pub async fn public_unlock(
         &self,
         token: String,
@@ -103,16 +88,8 @@ impl SalesSelectionProcess {
             .await?)
     }
 
-    /// 在事务内重验个人授权并保存选择。
-    ///
-    /// # 参数
-    /// `token` 为链接，`access` 为授权，`req` 为选择，`ip` 为来源。
-    ///
-    /// # 返回
-    /// 返回当前个人页面。
-    ///
-    /// # 错误
-    /// 授权失效、额度或版本冲突时拒绝。
+    /// 访客暂存个人选择时，校验链接和密文授权、按来源和会话限流，再在保存事务内重验个人资格。
+    /// 成功返回更新后的个人页面；授权失效、额度不符或版本冲突时拒绝。
     pub async fn public_save(
         &self,
         token: String,
@@ -150,16 +127,8 @@ impl SalesSelectionProcess {
         .await
     }
 
-    /// 原子提交个人选择、地址与个人方案。
-    ///
-    /// # 参数
-    /// `token` 为链接，`access` 为授权，`req` 为最终确认，`ip` 为来源。
-    ///
-    /// # 返回
-    /// 返回个人回执。
-    ///
-    /// # 错误
-    /// 授权失效、额度、地址或版本冲突时拒绝。
+    /// 访客最终确认个人方案时，校验链接和个人授权并限流，在同一事务提交选择、地址和个人方案，返回个人回执。
+    /// 授权失效、额度或地址不符、版本冲突时不完成提交。
     pub async fn public_submit(
         &self,
         token: String,
@@ -199,14 +168,7 @@ impl SalesSelectionProcess {
 
     /// 校验个人授权后返回图片键。
     ///
-    /// # 参数
-    /// `token` 为链接，`asset_id` 为图片，`access` 为授权，`ip` 为来源。
-    ///
-    /// # 返回
-    /// 返回本册快照图片键。
-    ///
-    /// # 错误
-    /// 授权失效、图片越权或限流时拒绝。
+    /// `token` 为链接，`asset_id` 为图片，`access` 为授权，`ip` 为来源。返回本册快照图片键。授权失效、图片越权或限流时拒绝。
     pub async fn public_image_key(
         &self,
         token: &str,
@@ -224,14 +186,7 @@ impl SalesSelectionProcess {
 
     /// 在同一授权事务内修改册访问密码。
     ///
-    /// # 参数
-    /// `id` 为册，`req` 为密码命令，`actor` 为管理操作人。
-    ///
-    /// # 返回
-    /// 返回新册详情，旧公开凭证失效。
-    ///
-    /// # 错误
-    /// 权限、范围、版本或密码非法时拒绝。
+    /// `id` 为册，`req` 为密码命令，`actor` 为管理操作人。返回新册详情，旧公开凭证失效。权限、范围、版本或密码非法时拒绝。
     pub async fn set_access_password(
         &self,
         id: String,
@@ -247,14 +202,7 @@ impl SalesSelectionProcess {
 
     /// 按复制链接范围读取个人提货码。
     ///
-    /// # 参数
-    /// `id` 为册，`actor` 为管理操作人。
-    ///
-    /// # 返回
-    /// 返回可发放提货码及提交状态。
-    ///
-    /// # 错误
-    /// 权限或范围不足时拒绝。
+    /// `id` 为册，`actor` 为管理操作人。返回可发放提货码及提交状态。权限或范围不足时拒绝。
     pub async fn vouchers(&self, id: &str, actor: &AuditActor) -> Result<Vec<SelectionVoucherView>> {
         let db = self.db.clone();
         let access = self.services.selections.clone();
@@ -283,14 +231,7 @@ impl SalesSelectionProcess {
 
     /// 按册详情范围读取全部个人选择与地址供导出。
     ///
-    /// # 参数
-    /// `id` 为册，`actor` 为管理操作人。
-    ///
-    /// # 返回
-    /// 返回全部提交行与收件资料。
-    ///
-    /// # 错误
-    /// 权限或范围不足时拒绝。
+    /// `id` 为册，`actor` 为管理操作人。返回全部提交行与收件资料。权限或范围不足时拒绝。
     pub async fn selection_details(&self, id: &str, actor: &AuditActor) -> Result<Vec<SelectionDetailView>> {
         let db = self.db.clone();
         let access = self.services.selections.clone();

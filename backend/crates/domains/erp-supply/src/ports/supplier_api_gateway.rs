@@ -44,33 +44,21 @@ pub struct ClassifiedError {
 /// 由 Process 保存分页目录，不允许协议客户端直接修改 ERP 数据。
 pub trait SupplierApiGateway: Send + Sync {
     /// 读取本连接当前完整授权商品池，供分批缺项核对前再次检查。
-    /// # 参数
-    /// `connection` 为服务端加载的当前连接。
-    /// # 返回
     /// 完整账号范围或 None；None 禁止按目录缺项作撤回。
-    /// # 错误
     /// 授权、范围或读取失败时返回分类错误。
     fn catalog_scope<'a>(&'a self, _connection: &'a SupplierApiConnection) -> CatalogScopeRead<'a> {
         Box::pin(async { Ok(None) })
     }
 
     /// 返回已登记、可供调度器检查的协议类型。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 候选类型；每条连接仍须核对目录策略、业务授权和部署绑定。
-    /// # 错误
-    /// 不返回错误；未注册实现返回空集合。
+    /// 未注册实现返回空集合。
     fn catalog_connector_types(&self) -> Vec<SupplierConnectorType> {
         Vec::new()
     }
 
     /// 读取当前连接的协议策略；无目录能力时明确返回 None。
-    /// # 参数
-    /// `connection` 为待核验的业务连接。
-    /// # 返回
     /// 适配器声明的版本、调度周期、页长及增量语义。
-    /// # 错误
     /// 部署或连接绑定无效时返回分类错误。
     fn catalog_policy(
         &self,
@@ -80,22 +68,14 @@ pub trait SupplierApiGateway: Send + Sync {
     }
 
     /// 返回部署已核实的可供观察有效期。
-    /// # 参数
-    /// 当前连接。
-    /// # 返回
     /// 秒数；未配置保持未知，不能伪造持续有效。
-    /// # 错误
-    /// 不返回错误；技术绑定仍由实际读取核验。
+    /// 技术绑定仍由实际读取核验。
     fn catalog_availability_validity(&self, _connection: &SupplierApiConnection) -> Option<u64> {
         None
     }
 
     /// 读取一页供应商商品；数据库写入由 Process 执行。
-    /// # 参数
-    /// `connection` 为当前连接，`scan` 为持久化游标和固定页大小。
-    /// # 返回
     /// 标准化来源记录及下一页游标。
-    /// # 错误
     /// 未实现或供应商调用失败时返回明确错误。
     fn catalog_page<'a>(
         &'a self,
@@ -112,16 +92,9 @@ pub trait SupplierApiGateway: Send + Sync {
     }
 
     /// 执行一次连接健康检查（生产检查不创建业务订单，phase-2 §14.1）。
-    ///
-    /// # 参数
-    /// * `connection` - 目标连接（提供端点引用与限流策略上下文）
-    /// * `check_type` - 本次启动运行冻结的检查种类；不可用其他种类的成功替代。
-    ///
-    /// # 返回
     /// 检查成功返回 `Ok(())`；失败返回分类错误（可自动重试或转人工）。
-    ///
-    /// # 错误
     /// 检查失败时返回 `ClassifiedError`，由 `class` 区分可自动重试或转人工。
+    /// `check_type`：不可用其他种类的成功替代。
     fn health_check<'a>(
         &'a self,
         connection: &'a SupplierApiConnection,

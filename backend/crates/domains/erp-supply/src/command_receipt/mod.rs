@@ -34,16 +34,9 @@ pub struct SupplyCommandReceipt {
 
 impl SupplyCommandReceipt {
     /// 由共享规范化命令构造供应链领域的原结果回执。
-    ///
-    /// # 参数
-    /// * `command` - 已规范化的稳定命令身份及原载荷。
-    /// * `resource_id` - 本次命令的已提交结果对象。
-    /// * `result` - 拥有领域声明的强类型结果。
-    /// * `audit_event_id` - 同事务保存的单次业务事件。
-    /// # 返回
     /// 返回已校验的独立领域回执。
-    /// # 错误
     /// 身份、结果或指纹不合法时返回错误。
+    /// `audit_event_id`：同事务保存的单次业务事件。
     pub fn from_command(
         command: &CommandReceipt,
         resource_id: String,
@@ -69,12 +62,7 @@ impl SupplyCommandReceipt {
     }
 
     /// 验证共享命令的完整身份及原载荷，恢复结果定位。
-    ///
-    /// # 参数
-    /// * `command` - 已认证调用方的原请求身份。
-    /// # 返回
     /// 返回原结果对象编号。
-    /// # 错误
     /// 异载荷返回原通用冲突，身份损坏失败关闭。
     pub fn committed_resource_id(&self, command: &CommandReceipt) -> Result<String> {
         self.validate()?;
@@ -93,12 +81,7 @@ impl SupplyCommandReceipt {
     }
 
     /// 校验持久化回执，未知版本或不匹配的结果必须明确失败。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 合法时返回空结果。
-    /// # 错误
     /// 身份缺失、schema非法、指纹损坏或结果与动作不匹配时返回内部错误。
     pub fn validate(&self) -> Result<()> {
         if self.schema_version != 1
@@ -128,16 +111,8 @@ impl SupplyCommandReceipt {
         self.validate_result()
     }
 
-    /// 比对原载荷及结果定位，保持展示日志完全不参与恢复。
-    ///
-    /// # 参数
-    /// * `fingerprint` - 原入口规范化指纹。
-    /// * `resource_id` - 当前入口的目标对象。
-    /// * `conflict_message` - 原入口的异载荷冲突文案。
-    /// # 返回
-    /// 相同载荷、相同定位时返回空结果。
-    /// # 错误
-    /// 损坏返回内部错误，异载荷或对象不一致返回冲突。
+    /// 恢复正式结果前先校验回执结构，再比对请求指纹及已知目标对象；同键异载荷或异目标返回冲突，损坏回执
+    /// 为内部错误。审计展示不参与恢复。
     pub fn verify(&self, fingerprint: &str, resource_id: Option<&str>, conflict_message: &str) -> Result<()> {
         self.validate()?;
         if resource_id.is_some_and(|id| self.resource_id != id) {
@@ -150,17 +125,9 @@ impl SupplyCommandReceipt {
     }
 
     /// 校验本次请求身份，不允许损坏元数据恢复成功结果。
-    ///
-    /// # 参数
-    /// * `command_id` - 当前稳定命令编号。
-    /// * `actor_id` - 当前已认证操作人。
-    /// * `action` - 当前命令动作。
-    /// * `scope_id` - 原入口定位的对象或任务。
-    /// * `key_hash` - 按原算法计算的规范化幂等键摘要。
-    /// # 返回
     /// 完整身份一致时返回空结果。
-    /// # 错误
     /// 任一身份不一致时返回内部错误，禁止退回未执行分支。
+    /// `key_hash`：按原算法计算的规范化幂等键摘要。
     pub fn verify_identity(
         &self,
         command_id: &str,
@@ -181,7 +148,7 @@ impl SupplyCommandReceipt {
         Ok(())
     }
 
-    /// 校验动作目录、结果引用及关键版本。
+    // 核验动作目录、结果引用及关键版本。
     fn validate_result(&self) -> Result<()> {
         if self.result.matches_action(&self.action, &self.resource_type)
             && self.result.valid_payload(&self.resource_id, &self.action)
@@ -196,21 +163,13 @@ impl SupplyCommandReceipt {
     }
 }
 
-/// 指纹只接受固定长度的十六进制摘要。
-///
-/// # 参数
-/// * `value` - 待检查的指纹文本。
-///
-/// # 返回
-/// 长度为 64 且全部为 ASCII 十六进制字符时返回 `true`，否则返回 `false`。
-///
-/// # 错误
-/// 不返回错误。
+// 指纹只接受固定长度的十六进制摘要。
+// 长度为 64 且全部为 ASCII 十六进制字符时返回 `true`，否则返回 `false`。
 pub(super) fn digest_is_valid(value: &str) -> bool {
     value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
-/// 损坏回执禁止退回展示审计恢复。
+// 损坏回执禁止退回展示审计恢复。
 fn corrupted() -> Error {
     Error::Internal("供应链命令收据格式无效".to_string())
 }

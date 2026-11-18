@@ -30,23 +30,15 @@ pub struct DirectFact {
     pub verified_evidence: Vec<ControlledEvidenceRef>,
 }
 
-/// 经领域追加工厂形成决定记录（序号递增与状态派生归领域，时间与身份由调用方注入）。
-///
-/// # 参数
-/// * `difference` - 所属对账差异
-/// * `latest` - 当前最新决定；`None` 表示首条追加
-/// * `fact` - 已验证的决定事实（动作与证据引用）
-/// * `record_id` - 记录主键（调用方收据 ID）
-/// * `actor_id` - 决定人
-///
-/// # 返回
-/// 返回新建的不可变追加式决定记录。
-///
-/// # 错误
-/// 序号已达上限时返回 `ConflictError`，其余领域约束失败保持领域逻辑错误。
-///
-/// # 约束
-/// 序号上限文案由领域拥有，此处只做错误类别映射，不维护第二份上限规则。
+// 经领域追加工厂形成决定记录（序号递增与状态派生归领域，时间与身份由调用方注入）。
+//
+// 序号上限文案由领域拥有，此处只做错误类别映射，不维护第二份上限规则。
+//
+// 序号已达上限时返回 `ConflictError`，其余领域约束失败保持领域逻辑错误。
+//
+// - `latest`：当前最新决定；`None` 表示首条追加。
+// - `fact`：已验证的决定事实（动作与证据引用）。
+// - `record_id`：记录主键（调用方收据 ID）。
 fn append_resolution(
     difference: &ReconciliationDifference,
     latest: Option<&ReconciliationDifferenceResolution>,
@@ -72,25 +64,15 @@ fn append_resolution(
     })
 }
 
-/// 追加决定记录并沿调用方执行器持久化（非终结动作与直接决定共用）。
-///
-/// 先经 [`append_resolution`] 形成不可变记录，再写入解决记录集合；
-/// 返回记录的决定序号字符串（即下一主题版本）。
-///
-/// # 参数
-/// * `db` - 数据库句柄
-/// * `difference` - 所属对账差异
-/// * `latest` - 当前最新决定
-/// * `fact` - 已验证的决定事实
-/// * `record_id` - 记录主键（调用方收据 ID）
-/// * `actor_id` - 决定人
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回新决定序号的十进制字符串，即下一主题版本。
-///
-/// # 错误
-/// 序号溢出时返回 `ConflictError`；其他领域约束失败返回 `Logic`；仓储写入失败时返回对应错误。
+// 追加决定记录并沿调用方执行器持久化（非终结动作与直接决定共用）。
+//
+// 先经 [`append_resolution`] 形成不可变记录，再写入解决记录集合；返回记录的决定序号字符串（即下一主题版本）。
+//
+// 返回新决定序号的十进制字符串，即下一主题版本。序号溢出时返回 `ConflictError`；其他领域约束失败返回 `Logic`；仓储写入失败时返回对应错误。
+//
+// - `latest`：当前最新决定。
+// - `fact`：已验证的决定事实。
+// - `record_id`：记录主键（调用方收据 ID）。
 pub(super) async fn persist_appended_resolution(
     db: &mongodb::Database,
     difference: &ReconciliationDifference,

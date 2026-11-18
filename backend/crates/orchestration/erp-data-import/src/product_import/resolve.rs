@@ -29,16 +29,11 @@ pub struct ImportDictionaryCache {
 }
 
 impl ProductImportProcess {
-    /// 解析基础单位「件」，缺失时拒绝本批导入行。
-    ///
-    /// # 参数
-    /// * `cache` - 字典缓存
-    ///
-    /// # 返回
-    /// 返回启用中的「件」单位 ID。
-    ///
-    /// # 错误
-    /// 单位未维护时返回业务错误。
+    // 解析基础单位「件」，缺失时拒绝本批导入行。
+    //
+    // 返回启用中的「件」单位 ID。
+    //
+    // 单位未维护时返回业务错误。
     pub(super) async fn resolve_unit(&self, cache: &mut ImportDictionaryCache) -> Result<UnitOfMeasureId> {
         if let Some(unit_id) = cache.unit_id.clone() {
             return Ok(unit_id);
@@ -62,18 +57,13 @@ impl ProductImportProcess {
         Ok(unit_id)
     }
 
-    /// 按名称匹配或创建品牌。
-    ///
-    /// # 参数
-    /// * `name` - 规范化品牌名称
-    /// * `actor` - 审计操作人
-    /// * `cache` - 字典缓存
-    ///
-    /// # 返回
-    /// 返回品牌 ID。
-    ///
-    /// # 错误
-    /// 创建失败且回读不到既有品牌时返回错误。
+    // 按名称匹配或创建品牌。
+    //
+    // `name`：规范化品牌名称。
+    //
+    // 返回品牌 ID。
+    //
+    // 创建失败且回读不到既有品牌时返回错误。
     pub(super) async fn resolve_brand(
         &self,
         name: &str,
@@ -117,18 +107,13 @@ impl ProductImportProcess {
         Ok(id)
     }
 
-    /// 按名称匹配或创建实物分类。
-    ///
-    /// # 参数
-    /// * `name` - 规范化分类名称
-    /// * `actor` - 审计操作人
-    /// * `cache` - 字典缓存
-    ///
-    /// # 返回
-    /// 返回分类 ID。
-    ///
-    /// # 错误
-    /// 已有分类不允许实物类型，或创建失败时返回错误。
+    // 按名称匹配或创建实物分类。
+    //
+    // `name`：规范化分类名称。
+    //
+    // 返回分类 ID。
+    //
+    // 已有分类不允许实物类型，或创建失败时返回错误。
     pub(super) async fn resolve_category(
         &self,
         name: &str,

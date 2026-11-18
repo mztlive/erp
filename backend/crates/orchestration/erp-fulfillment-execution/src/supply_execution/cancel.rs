@@ -40,21 +40,11 @@ enum AfterSalesSubmission {
 impl SupplierFulfillmentProcess {
     /// 提交供应商取消（幂等键：「订单号 + CANCEL」，§6.19）。
     ///
-    /// 同事务创建 `CANCEL` 动作头/行并把 `cancel_status` 推进到 `CANCEL_PENDING`；
-    /// 事务外派发供应商 API。重复提交（同一幂等键）返回原动作结果，不再次调用。
+    /// 同事务创建 `CANCEL` 动作头/行并把 `cancel_status` 推进到 `CANCEL_PENDING`；事务外派发供应商 API。重复提交（同一幂等键）返回原动作结果，不再次调用。
     ///
-    /// # 参数
-    /// * `id` - 供应商子订单 ID
-    /// * `req` - 取消动作提交请求
-    /// * `actor` - 已通过鉴权的审计操作人
+    /// `id` 为供应商子订单 ID；`req` 为取消动作提交请求。返回动作与动作后订单视图。`NotFound`：订单不存在。
     ///
-    /// # 返回
-    /// 返回动作与动作后订单视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 订单不存在
-    /// * `BusinessLogicError` - 动作范围非法或连接缺少取消能力
-    /// * `ConflictError` - 唯一键冲突（并发重复提交）
+    /// `BusinessLogicError`：动作范围非法或连接缺少取消能力。`ConflictError`：唯一键冲突（并发重复提交）。
     pub async fn submit_cancel(
         &self,
         id: &str,
@@ -66,21 +56,11 @@ impl SupplierFulfillmentProcess {
 
     /// 提交供应商退款（幂等键：「订单号 + REFUND」，§6.19）。
     ///
-    /// 同事务创建 `REFUND` 动作头/行并把 `refund_status` 推进到 `REFUND_PENDING`；
-    /// 事务外派发供应商 API。重复提交（同一幂等键）返回原动作结果，不再次调用。
+    /// 同事务创建 `REFUND` 动作头/行并把 `refund_status` 推进到 `REFUND_PENDING`；事务外派发供应商 API。重复提交（同一幂等键）返回原动作结果，不再次调用。
     ///
-    /// # 参数
-    /// * `id` - 供应商子订单 ID
-    /// * `req` - 退款动作提交请求
-    /// * `actor` - 已通过鉴权的审计操作人
+    /// `id` 为供应商子订单 ID；`req` 为退款动作提交请求。返回动作与动作后订单视图。`NotFound`：订单不存在。
     ///
-    /// # 返回
-    /// 返回动作与动作后订单视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 订单不存在
-    /// * `BusinessLogicError` - 动作范围非法或连接缺少退款能力
-    /// * `ConflictError` - 唯一键冲突（并发重复提交）
+    /// `BusinessLogicError`：动作范围非法或连接缺少退款能力。`ConflictError`：唯一键冲突（并发重复提交）。
     pub async fn submit_refund(
         &self,
         id: &str,
@@ -90,22 +70,13 @@ impl SupplierFulfillmentProcess {
         self.submit_after_sales_action(id, req, SupplierOrderActionType::Refund, actor).await
     }
 
-    /// 提交供应商取消/退款动作的公共编排。
-    ///
-    /// 完成幂等命中、售后申请存在性、连接能力、动作行净余额校验后，同事务写入
-    /// 动作头/行与订单状态推进，事务外派发供应商 API。
-    ///
-    /// # 参数
-    /// * `id` - 供应商子订单 ID
-    /// * `req` - 动作提交请求
-    /// * `action_type` - 动作类型（`Cancel` 或 `Refund`）
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回动作与动作后订单视图。
-    ///
-    /// # 错误
-    /// 同 [`Self::submit_cancel`]。
+    // 提交供应商取消/退款动作的公共编排。
+    //
+    // 完成幂等命中、售后申请存在性、连接能力、动作行净余额校验后，同事务写入动作头/行与订单状态推进，事务外派发供应商 API。
+    //
+    // `id` 为供应商子订单 ID；`req` 为动作提交请求；`action_type` 为动作类型（`Cancel` 或 `Refund`）。返回动作与动作后订单视图。
+    //
+    // 同 [`Self::submit_cancel`]。
     async fn submit_after_sales_action(
         &self,
         id: &str,

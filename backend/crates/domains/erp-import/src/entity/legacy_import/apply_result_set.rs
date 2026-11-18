@@ -88,16 +88,7 @@ pub enum ApplyResultItem {
 }
 
 impl ApplyResultItem {
-    /// 返回该结果对应的导入行 ID。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回行 ID 借用。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 提供结果关联的导入行 ID，便于在批次内定位待写回的行。
     pub fn row_id(&self) -> &LegacyImportRowId {
         match self {
             Self::Imported { row_id, .. } | Self::Failed { row_id, .. } | Self::Skipped { row_id, .. } => {
@@ -106,16 +97,7 @@ impl ApplyResultItem {
         }
     }
 
-    /// 返回来源稳定身份。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 三种结果都可能携带身份；未提供时返回 `None`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 提供成功、失败或跳过结果携带的来源映射 ID，供追溯原对象；未提供则返回 `None`。
     pub fn external_identity_map_id(&self) -> Option<&ExternalIdentityMapId> {
         match self {
             Self::Imported { external_identity_map_id, .. }
@@ -132,22 +114,7 @@ pub struct ApplyResultSet {
 }
 
 impl ApplyResultSet {
-    /// 从行级草稿构造结果集。
-    ///
-    /// 先拒绝空集、超长集合与重复行 ID（含同 ID 冲突 outcome），再按
-    /// `imported` / `failed` / `skipped` 精确字段形状收紧每一行。
-    ///
-    /// # 参数
-    /// * `drafts` - 请求中的行级结果（顺序保留）
-    ///
-    /// # 返回
-    /// 返回行 ID 互异且字段形状合法的结果集。重复 ID 不会被删掉，而是失败。
-    ///
-    /// # 错误
-    /// 数量越界、行 ID 重复、必填字段缺失、禁止字段出现或文本超长时返回 [`Error::LogicError`]。
-    ///
-    /// # 约束
-    /// 纯内存确定性校验；不查询批次归属，不访问数据库。
+    /// 将行级草稿按请求顺序收敛为可应用的结果集。先拒绝空集、超量或重复行 ID（包括同 ID 不同结果），再校验 `imported`、`failed`、`skipped` 各自字段；缺必填项、传入禁用字段或文本超长均返回 [`Error::LogicError`]。这里只做确定性校验，不访问数据库或核对行归属。
     pub fn try_from_drafts(drafts: Vec<ApplyResultDraft>) -> Result<Self> {
         if drafts.is_empty() || drafts.len() > APPLY_RESULT_MAX_LEN {
             return Err(Error::from("行结果数量必须在1-1000之间"));
@@ -161,46 +128,19 @@ impl ApplyResultSet {
         Ok(Self { items })
     }
 
-    /// 返回已校验的行结果切片。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回按请求顺序排列的结果项。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 按请求原顺序借用已校验行结果，供应用步骤逐行处理。
     pub fn items(&self) -> &[ApplyResultItem] {
         &self.items
     }
 
-    /// 返回按请求顺序排列的行 ID。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回与结果项一一对应的行 ID 列表，供仓储按 ID 且受批次约束读取。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 按请求顺序取出与结果一一对应的行 ID，供仓储在目标批次内定位待应用行。
     pub fn row_ids(&self) -> Vec<LegacyImportRowId> {
         self.items.iter().map(|item| item.row_id().clone()).collect()
     }
 }
 
 impl ApplyResultItem {
-    /// 按 outcome 收紧单行字段形状。
-    ///
-    /// # 参数
-    /// * `draft` - 尚未按 outcome 校验的行结果
-    ///
-    /// # 返回
-    /// 返回精确字段形状的结果项。
-    ///
-    /// # 错误
-    /// 必填字段缺失、禁止字段出现或文本非法时返回错误。
+    // 按结果区分单行字段：成功必须有目标单据且不能带错误，失败或跳过必须有原因代码且不能带目标。缺项、多传或文本非法均拒绝。
     fn try_from_draft(draft: ApplyResultDraft) -> Result<Self> {
         let ApplyResultDraft {
             row_id,
@@ -256,13 +196,7 @@ impl ApplyResultItem {
     }
 }
 
-/// 拒绝重复行 ID（含同 ID 冲突 outcome）。
-///
-/// # 参数
-/// * `drafts` - 请求中的行级结果
-///
-/// # 错误
-/// 任一行 ID 出现两次及以上时返回错误。
+// 按原值检查行 ID；同一行出现两次即失败，不能通过去重掩盖重复或矛盾结果。
 fn ensure_unique_row_ids(drafts: &[ApplyResultDraft]) -> Result<()> {
     if let Some(duplicate) = first_duplicate_key(drafts, |draft| draft.row_id.as_ref()) {
         return Err(Error::from(format!("行结果 ID 重复: {duplicate}")));
@@ -270,7 +204,7 @@ fn ensure_unique_row_ids(drafts: &[ApplyResultDraft]) -> Result<()> {
     Ok(())
 }
 
-/// 禁止字段不得有非空白内容。
+// 校验该结果禁止出现的字段，空白等同未提供，含实际内容则拒绝。
 fn ensure_absent(value: Option<&str>, message: &str) -> Result<()> {
     if value.is_some_and(|text| !text.trim().is_empty()) {
         return Err(Error::from(message));
@@ -278,25 +212,12 @@ fn ensure_absent(value: Option<&str>, message: &str) -> Result<()> {
     Ok(())
 }
 
-/// 规范化必填错误码。
-///
-/// # 参数
-/// * `value` - 原始错误码
-/// * `empty_message` - 缺失时的错误文案
-///
-/// # 错误
-/// 缺失或超长时返回错误。
+// 清理失败或跳过的原因代码，保证诊断可分类；缺失或超长时返回错误。
 fn required_error_code(value: Option<String>, empty_message: &str) -> Result<String> {
     normalize_required_text(value.unwrap_or_default(), empty_message, ERROR_CODE_MAX_LEN, "错误码过长")
 }
 
-/// 规范化可选错误明细。
-///
-/// # 参数
-/// * `value` - 原始明细
-///
-/// # 错误
-/// 超长时返回错误。
+// 清理可选的行级诊断文本，空白视为无明细，超长则拒绝。
 fn optional_error_detail(value: Option<String>) -> Result<Option<String>> {
     normalize_optional_text(value, "错误明细", ERROR_DETAIL_MAX_LEN)
 }

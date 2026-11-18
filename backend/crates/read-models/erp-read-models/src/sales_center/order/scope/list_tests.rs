@@ -26,13 +26,13 @@ struct ListReader {
 }
 
 impl ListReader {
-    /// 记录实际传入的执行器身份，不自行构造执行器。
+    // 生成销售单列表展示时，记录实际传入的执行器身份，不自行构造执行器。
     fn record(&self, stage: &'static str, executor: &mut dyn Executor) {
         let id = executor as *mut dyn Executor as *mut () as usize;
         self.calls.lock().unwrap().push((stage, id));
     }
 
-    /// 读取已完成阶段，供断言原执行器及失败停止顺序。
+    // 处理销售单列表时，读取已完成阶段，供断言原执行器及失败停止顺序。
     fn stages(&self) -> Vec<&'static str> {
         self.calls.lock().unwrap().iter().map(|(stage, _)| *stage).collect()
     }
@@ -42,7 +42,7 @@ impl ListReader {
 impl SalesListRead for ListReader {
     type Context = ExecutionBoundary;
 
-    /// 返回分页元数据和设施签发的原阶段；不模拟数据库查询。
+    // 读取销售单列表时，给出分页元数据和设施签发的原阶段；不模拟数据库查询。
     async fn load(
         &self,
         params: &SalesListParams,
@@ -61,7 +61,7 @@ impl SalesListRead for ListReader {
         })
     }
 
-    /// 提供已补齐展示的页面，刻意等待一次以验证交付检查的先后顺序。
+    // 处理销售单列表时，提供已补齐展示的页面，刻意等待一次以验证交付检查的先后顺序。
     async fn present(
         &self,
         page: PageView<SalesOrderRow>,
@@ -84,7 +84,7 @@ impl SalesListRead for ListReader {
         })
     }
 
-    /// 使用真实边界检查原阶段，模拟最终交付失败并结束成功阶段。
+    // 校验销售单列表时，使用真实边界检查原阶段，模拟最终交付失败并结束成功阶段。
     async fn validate(&self, context: &Self::Context, executor: &mut dyn Executor) -> Result<()> {
         self.record("validate", executor);
         if self.fail_delivery || !context.is_current(executor) {
@@ -95,7 +95,7 @@ impl SalesListRead for ListReader {
     }
 }
 
-/// 构造当前页已完成金额、任务及客户补齐的替身数据。
+// 装配销售单列表视图时，生成当前页已完成金额、任务及客户补齐的替身数据。
 pub(super) fn presented_row() -> SalesOrderView {
     SalesOrderView {
         id: "sale".into(),
@@ -133,17 +133,17 @@ pub(super) fn presented_row() -> SalesOrderView {
     }
 }
 
-/// 跨页使用生产版本组合函数，固定授权及匹配销售版本。
+// 处理销售单列表时，跨页使用生产版本组合函数，固定授权及匹配销售版本。
 fn version() -> String {
     list_scope_version("scope", &[SalesVersion { id: "sale".into(), version: 3 }])
 }
 
-/// 选择第二页，验证原页码及完整匹配总数不会被补齐步骤重算。
+// 处理销售单列表时，选择第二页，验证原页码及完整匹配总数不会被补齐步骤重算。
 fn params(expected: Option<&str>) -> SalesListParams {
     serde_json::from_value(serde_json::json!({"page": 2, "scope_version": expected})).unwrap()
 }
 
-/// 构造真实类型的当前操作人。
+// 处理销售单列表时，生成真实类型的当前操作人。
 fn actor() -> AuditActor {
     AuditActor::new("actor".into(), "操作人".into(), AccountKind::Admin)
 }

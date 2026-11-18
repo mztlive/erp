@@ -49,26 +49,14 @@ pub struct CustomerRefundAdapter {
     pub read_scope: AdapterReadScope,
 }
 
-/// 返回客户退款单的完整适配器登记。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回已校验完整性的规格与显式字段声明。
-///
-/// # 错误
-/// 政策缺失或三类动作不互异时返回部署不变量错误。
+/// 装配客户退款单的审批适配器，启动、通过和撤回时按已登记的动作分派。政策缺失或动作重复时拒绝装配。
 pub fn customer_refund_adapter() -> Result<CustomerRefundAdapter> {
     let spec = adapter_spec_of(DocumentType::CustomerRefund)?;
     ensure_adapter_spec_complete(&spec)?;
     adapter_from_spec(spec)
 }
 
-/// 由政策规格填充显式 Adapter 字段。
-///
-/// # 错误
-/// 字段与合同签署值不一致时返回错误。
+// 由政策规格填充显式 Adapter 字段。字段与合同签署值不一致时返回错误。
 fn adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<CustomerRefundAdapter> {
     ensure_reverse_adapter_spec(
         &spec,
@@ -99,14 +87,7 @@ fn adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<CustomerRefundAdapter>
 
 /// 为客户退款单构造唯一 `bpm::SubjectRef`。
 ///
-/// # 参数
-/// * `business_object_id` - 退款单主键
-///
-/// # 返回
-/// 返回该退款单的 `SubjectRef`。
-///
-/// # 错误
-/// 主键为空或超长时返回校验错误。
+/// `business_object_id` 为退款单主键。返回该退款单的 `SubjectRef`。主键为空或超长时返回校验错误。
 pub fn customer_refund_subject_ref(business_object_id: &str) -> Result<SubjectRef> {
     erp_workflow::entity::approval_integration::subject_ref_for(
         DocumentType::CustomerRefund,
@@ -117,14 +98,7 @@ pub fn customer_refund_subject_ref(business_object_id: &str) -> Result<SubjectRe
 
 /// 无已绑定定义的必须审批单据不得提交。
 ///
-/// # 参数
-/// * `binding` - 已保存的定义绑定；缺失表示尚未冻结。
-///
-/// # 返回
-/// 绑定存在时返回该绑定。
-///
-/// # 错误
-/// 绑定缺失时返回冲突。
+/// `binding` 为已保存的定义绑定；缺失表示尚未冻结。绑定存在时返回该绑定。绑定缺失时返回冲突。
 pub fn require_frozen_binding(
     binding: Option<&ApprovalDefinitionBinding>,
 ) -> Result<&ApprovalDefinitionBinding> {
@@ -133,15 +107,7 @@ pub fn require_frozen_binding(
 
 /// 执行签署的客户退款单领域动作。
 ///
-/// # 参数
-/// * `refund` - 业务实体
-/// * `action` - 合同强类型动作
-///
-/// # 返回
-/// 成功时无返回值。过账或撤回动作已作用到 `refund`。
-///
-/// # 错误
-/// 动作不属于本类型或状态不允许时返回错误。
+/// `refund` 为业务实体；`action` 为合同强类型动作。成功时无返回值。过账或撤回动作已作用到 `refund`。动作不属于本类型或状态不允许时返回错误。
 pub fn execute_customer_refund_domain_action(
     refund: &mut CustomerRefund,
     action: ApprovalDomainAction,
@@ -159,29 +125,14 @@ pub fn execute_customer_refund_domain_action(
 ///
 /// 未提供组织或审批人时失败关闭，不得默认放行。
 ///
-/// # 参数
-/// * `organization_id` - 单据责任组织（客户往来主体）
-/// * `assignee_user_id` - 指定审批人
-///
-/// # 返回
-/// 组织与审批人均非空时允许读取。
-///
-/// # 错误
-/// 组织或审批人为空时返回校验错误。
+/// `organization_id` 为单据责任组织（客户往来主体）。组织与审批人均非空时允许读取。组织或审批人为空时返回校验错误。
 pub fn customer_refund_object_readable(organization_id: &str, assignee_user_id: &str) -> Result<bool> {
     document_object_readable(organization_id, assignee_user_id).map_err(Into::into)
 }
 
 /// 责任组织取往来主体，不得用空串或当前登录人组织补位。
 ///
-/// # 参数
-/// * `organization_id` - 客户往来主体
-///
-/// # 返回
-/// 返回非空责任组织。
-///
-/// # 错误
-/// 往来主体为空时返回校验错误。
+/// `organization_id` 为客户往来主体。返回非空责任组织。往来主体为空时返回校验错误。
 pub fn customer_refund_responsible_org_id(organization_id: &str) -> Result<String> {
     if organization_id.trim().is_empty() {
         return Err(Error::ValidationError("客户退款单缺少往来主体，无法冻结责任组织".to_string()));
@@ -191,20 +142,9 @@ pub fn customer_refund_responsible_org_id(organization_id: &str) -> Result<Strin
 
 /// 按合同 §4.4.5 冻结客户退款快照。
 ///
-/// 对手方为客户；金额合计必填。`document_no` 取退款单号。
-/// `responsible_org_id` 必须是客户往来主体，不得用登录人组织补位。
+/// 对手方为客户；金额合计必填。`document_no` 取退款单号。 `responsible_org_id` 必须是客户往来主体，不得用登录人组织补位。
 ///
-/// # 参数
-/// * `refund` - 已冻结提交版本的退款单
-/// * `responsible_org_id` - 客户往来主体
-/// * `submitted_by` - 提交人
-/// * `submitted_at` - 提交时间
-///
-/// # 返回
-/// 返回已冻结的审批主体快照。
-///
-/// # 错误
-/// 组织为空时返回校验错误。
+/// `refund` 为已冻结提交版本的退款单；`responsible_org_id` 为客户往来主体。返回已冻结的审批主体快照。组织为空时返回校验错误。
 pub fn build_customer_refund_snapshot(
     refund: &CustomerRefund,
     responsible_org_id: &str,
@@ -256,7 +196,7 @@ mod tests {
         .expect("草稿必须可构造")
     }
 
-    /// 适配器必须显式声明合同要求的全部字段。
+    // 验证客户退款审批适配器逐项声明合同规定的字段。
     #[test]
     fn adapter_declares_all_required_fields() {
         let adapter = customer_refund_adapter().expect("客户退款单必须可登记");
@@ -289,7 +229,7 @@ mod tests {
         assert_ne!(adapter.on_approval_start, adapter.cancel_action);
     }
 
-    /// 提交进入审批中；撤回不回退版本。
+    // 验证客户退款提交后进入审批中，撤回恢复草稿但保留已推进的提交版本。
     #[test]
     fn submit_enters_in_approval_and_cancel_returns_draft() {
         let mut refund = draft_refund();
@@ -306,7 +246,7 @@ mod tests {
         assert_eq!(refund.approval_subject_version, 1);
     }
 
-    /// 非草稿不得提交；非审批中不得撤回或过账。
+    // 对照客户退款的非法状态：非草稿不能提交，非审批中不能撤回或过账。
     #[test]
     fn illegal_status_transitions_fail_closed() {
         let mut posted = draft_refund();
@@ -317,7 +257,7 @@ mod tests {
         assert!(ensure_final_approve_posting(&posted).is_err());
     }
 
-    /// 过账只允许审批中，草稿不得直接过账。
+    // 验证客户退款只有审批中允许过账，草稿不能跳过审批。
     #[test]
     fn post_only_accepts_in_approval() {
         let mut refund = draft_refund();
@@ -326,13 +266,13 @@ mod tests {
         assert!(ensure_final_approve_posting(&refund).is_ok());
     }
 
-    /// 缺少冻结审批定义时拒绝提交。
+    // 验证客户退款缺少冻结审批定义时不能提交。
     #[test]
     fn missing_frozen_binding_is_rejected() {
         assert!(require_frozen_binding(None).is_err());
     }
 
-    /// 快照冻结客户对手方、退款单号与金额合计。
+    // 快照冻结客户对手方、退款单号与金额合计。
     #[test]
     fn snapshot_freezes_customer_and_amount() {
         let mut refund = draft_refund();
@@ -351,7 +291,7 @@ mod tests {
         assert!(build_customer_refund_snapshot(&refund, " ", "user-1", Instant::from_unix_secs(10)).is_err());
     }
 
-    /// 对象读取权空组织或空审批人失败关闭。
+    // 验证客户退款审批读取缺少责任组织或办理人时不放行。
     #[test]
     fn object_read_fails_closed_on_empty_identity() {
         assert!(customer_refund_object_readable("party-1", "u1").unwrap());
@@ -359,7 +299,7 @@ mod tests {
         assert!(customer_refund_object_readable("party-1", "").is_err());
     }
 
-    /// 领域动作分派只接受签署的撤回与过账动作。
+    // 验证客户退款的领域分派只接受已登记的撤回和过账动作，拒绝其他单据动作。
     #[test]
     fn domain_action_dispatch_rejects_foreign_actions() {
         let mut refund = draft_refund();

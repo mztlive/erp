@@ -34,115 +34,25 @@ pub trait SalesSelectionExt {
     /// 公开限流窗口集合。
     const SALES_SELECTION_RATE_WINDOWS: &'static str = "sales_selection_rate_windows";
 
-    /// 选品册仓储。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回选品册仓储。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 从当前数据库取得选品册仓储，供相关用例复用调用方执行器。
     fn sales_selection_booklets(&self) -> SalesSelectionBookletRepository<'_>;
-    /// 陈列项仓储。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回陈列项仓储。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 从当前数据库取得陈列项仓储，供相关用例复用调用方执行器。
     fn sales_selection_display_items(&self) -> SalesSelectionDisplayItemRepository<'_>;
-    /// 商品池成员仓储。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回商品池成员仓储。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 从当前数据库取得商品池成员仓储，供相关用例复用调用方执行器。
     fn sales_selection_pool_members(&self) -> SalesSelectionPoolMemberRepository<'_>;
-    /// 准备任务仓储。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回准备任务仓储。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 从当前数据库取得准备任务仓储，供相关用例复用调用方执行器。
     fn sales_selection_prepare_tasks(&self) -> SalesSelectionPrepareTaskRepository<'_>;
-    /// 会话仓储。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回会话仓储。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 从当前数据库取得会话仓储，供相关用例复用调用方执行器。
     fn sales_selection_sessions(&self) -> SalesSelectionSessionRepository<'_>;
-    /// 方案仓储。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回方案仓储。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 从当前数据库取得方案仓储，供相关用例复用调用方执行器。
     fn sales_selection_proposals(&self) -> SalesSelectionProposalRepository<'_>;
-    /// 方案陈列行仓储。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回方案陈列行仓储。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 从当前数据库取得方案陈列行仓储，供相关用例复用调用方执行器。
     fn sales_selection_proposal_display_lines(&self) -> SalesSelectionProposalDisplayLineRepository<'_>;
-    /// 方案 SKU 行仓储。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回方案 SKU 行仓储。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 从当前数据库取得方案 SKU 行仓储，供相关用例复用调用方执行器。
     fn sales_selection_proposal_sku_lines(&self) -> SalesSelectionProposalSkuLineRepository<'_>;
-    /// 幂等仓储。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回幂等仓储。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 从当前数据库取得幂等仓储，供相关用例复用调用方执行器。
     fn sales_selection_idempotency(&self) -> SalesSelectionIdempotencyRepository<'_>;
-    /// 公开限流仓储。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回限流仓储。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 从当前数据库取得公开限流仓储，供相关用例复用调用方执行器。
     fn sales_selection_rate(&self) -> SalesSelectionRateRepository<'_>;
 }
 

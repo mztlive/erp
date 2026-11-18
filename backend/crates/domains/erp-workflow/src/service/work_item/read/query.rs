@@ -44,17 +44,7 @@ pub struct WorkItemReadService {
 }
 
 impl WorkItemReadService {
-    /// 构造任务查询服务。
-    ///
-    /// # 参数
-    /// * `db` - MongoDB 数据库
-    /// * `rbac` - identity 的共享 RBAC 服务
-    ///
-    /// # 返回
-    /// 返回绑定当前授权源的任务查询服务。
-    ///
-    /// # 错误
-    /// 无。
+    /// 在应用装配时将任务库与共享 `AuthorizationService` 接到固定的工作项读取授权，用于队列、详情和统计。
     pub fn new(db: mongodb::Database, service: Arc<AuthorizationService>) -> Self {
         let authorization = WorkItemAuthorization::new(db.clone(), service);
         Self { db, authorization }
@@ -62,16 +52,8 @@ impl WorkItemReadService {
 }
 
 impl WorkItemReadService {
-    /// 在供给影响读取中复用当前任务详情阅读资格，不另建事务。
-    ///
-    /// # 参数
-    /// * `actor` - 当前真实内部账号。
-    /// * `id` - 已读取的精确履约任务身份。
-    /// * `executor` - 影响读取沿用的执行器。
-    /// # 返回
-    /// 任务详情授权成立时返回 `true`。任务不存在或禁止访问时返回 `false`，不返回任务或业务显示内容。
-    /// # 错误
-    /// 除不存在和禁止访问外，授权配置及对象读取故障继续传播。
+    /// 供给影响读取引用具体履约任务时，沿原执行器执行该任务的详情授权，不开启新事务或返回展示内容。
+    /// 不存在或禁止访问返回 `false`；授权接入和事实读取故障原样传播。
     #[inline(never)]
     pub fn work_item_readable_with_executor<'a>(
         &'a self,
@@ -89,17 +71,7 @@ impl WorkItemReadService {
         })
     }
 
-    /// 查询服务端授权过滤后的责任队列。
-    ///
-    /// # 参数
-    /// * `params` - 固定 scope 与业务筛选
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 返回带稳定队列上下文、任务版本和允许动作的分页投影。
-    ///
-    /// # 错误
-    /// 查询参数非法、managed 未授权或授权事实无法读取时返回错误。
+    /// 从普通责任队列入口查询已授权任务。分页结果带稳定队列上下文、任务版本与动作提示；非法条件、管理范围不足或取证失败时拒绝。
     pub fn work_item_list(
         &self,
         params: WorkItemListParams,
@@ -108,13 +80,7 @@ impl WorkItemReadService {
         self.work_item_search(WorkItemSearchParams { base: params, filters: None }, actor)
     }
 
-    /// 查询带结构化条件的授权任务队列。
-    /// # 参数
-    /// `params` 为责任范围与筛选，`actor` 为当前账号。
-    /// # 返回
-    /// 返回服务端筛选计数、分页及候选项。
-    /// # 错误
-    /// 非法条件、授权或查询失败时返回错误。
+    /// 结构化搜索先规范化责任范围、日期和业务条件，再沿同一快照取得完整授权筛选、总量、分页和候选项。非法条件、授权失败或取证错误不返回结果。
     #[inline(never)]
     pub fn work_item_search(
         &self,
@@ -143,7 +109,7 @@ impl WorkItemReadService {
         })
     }
 
-    /// 范围、对象事实、完整计数和分页共享原事务快照。
+    // 以同一快照计算队列授权、对象事实、完整计数和当前页，同时核对队列上下文与范围版本，避免复用范围已经变化的分页请求。
     async fn queue_page(
         &self,
         query: dto::WorkItemListQuery,
@@ -188,10 +154,7 @@ impl WorkItemReadService {
         })
     }
 
-    /// 在完整授权过滤内把焦点任务移到当前页首。
-    ///
-    /// 焦点不在当前页时使用同一个 Repository filter 查找；不存在或
-    /// 不可见都返回 NotFound，绝不退回无过滤 ID 查询。
+    // 在既有授权结果内定位焦点任务，并移至当前页首；不因请求焦点 ID 扩大对象访问范围。
     async fn focused_fields(
         &self,
         mut fields: Vec<dto::WorkItemFields>,
@@ -239,14 +202,12 @@ impl WorkItemReadService {
         Ok(fields)
     }
 
-    /// 打开一次候选游标，排序和完整授权计数仍沿用队列合同。
-    ///
-    /// # 参数
-    /// `filter` 为候选筛选；`executor` 在整个扫描及授权过程中保持不变。
-    /// # 返回
-    /// 返回可逐批消费的排序游标，授权、计数和分页由调用方执行。
-    /// # 错误
-    /// 仓储查询失败时返回原领域错误。
+    // 打开一次候选游标，排序和完整授权计数仍沿用队列合同。
+    // 返回可逐批消费的排序游标，授权、计数和分页由调用方执行。
+    //
+    // 仓储查询失败时返回原领域错误。
+    //
+    // `filter` 为候选筛选；`executor` 在整个扫描及授权过程中保持不变。
     pub(super) async fn candidate_scan(
         &self,
         filter: &WorkItemFilter,
@@ -259,21 +220,13 @@ impl WorkItemReadService {
             .map_err(Error::from)
     }
 
-    /// 为已授权任务逐条计算审批阻断与允许动作。
-    ///
-    /// # 参数
-    /// * `fields` - 已授权任务字段
-    /// * `scope` - 责任范围
-    /// * `actor` - 已认证操作人
-    /// * `actor_access` - 操作人访问事实
-    /// * `queue_context_id` - 当前队列上下文
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 返回补齐姓名、审批上下文和负责人资格后的任务投影。
-    ///
-    /// # 错误
-    /// 供给预警、视图访问、路由投影、姓名、审批上下文或负责人资格读取失败时返回对应错误。
+    // 为已授权任务逐条计算审批阻断与允许动作。
+    // 返回补齐姓名、审批上下文和负责人资格后的任务投影。
+    //
+    // 供给预警、视图访问、路由投影、姓名、审批上下文或负责人资格读取失败时返回对应错误。
+    //
+    // `fields`：已授权任务字段；`scope`：责任范围。
+    // `queue_context_id`：当前队列上下文。
     pub(super) async fn project_fields(
         &self,
         fields: Vec<dto::WorkItemFields>,
@@ -299,20 +252,14 @@ impl WorkItemReadService {
         Ok(items)
     }
 
-    /// 批量补齐审批任务的当前节点和最近驳回事实。
-    ///
-    /// # 参数
-    /// * `items` - 已通过工作项和业务对象授权的安全投影
-    /// * `executor` - 审批节点与实例读取沿用的执行器
-    ///
-    /// # 返回
-    /// 无审批节点的任务保持不变；审批任务获得与节点执行严格绑定的运行上下文。
-    ///
-    /// # 错误
-    /// BPM 节点执行或实例有界投影查询失败时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 列表固定执行两次批量查询，不得逐任务读取审批历史；最近驳回只取实例有界投影。
+    // 批量补齐审批任务的当前节点和最近驳回事实。
+    // 列表固定执行两次批量查询，不得逐任务读取审批历史；最近驳回只取实例有界投影。
+    //
+    // 无审批节点的任务保持不变；审批任务获得与节点执行严格绑定的运行上下文。
+    //
+    // BPM 节点执行或实例有界投影查询失败时返回错误。
+    //
+    // `items`：已通过工作项和业务对象授权的安全投影；`executor`：审批节点与实例读取沿用的执行器。
     pub(super) async fn apply_approval_contexts(
         &self,
         items: &mut [WorkItemView],
@@ -356,17 +303,7 @@ impl WorkItemReadService {
         Ok(())
     }
 
-    /// 查询当前用户有权查看的单条任务。
-    ///
-    /// # 参数
-    /// * `id` - 工作项稳定 ID
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 返回同一事务内重验授权后的单条任务投影。
-    ///
-    /// # 错误
-    /// 任务不存在、不在安全责任范围、业务对象不可见，或授权与展示读取失败时返回错误。
+    /// 按稳定任务 ID 查询当前账号有权查看的详情。沿同一事务检查对象可见性并补齐展示事实；不存在、不可见、业务来源不允许或取证失败时拒绝。
     #[inline(never)]
     pub fn work_item_detail(self, id: String, actor: AuditActor) -> BoxFuture<'static, Result<WorkItemView>> {
         Box::pin(async move {
@@ -381,13 +318,7 @@ impl WorkItemReadService {
         })
     }
 
-    /// 使用 manage 的数据范围返回操作结果，不追加 detail 权限要求。
-    /// # 参数
-    /// `id` 为操作后的任务，`actor` 为真实操作人。
-    /// # 返回
-    /// 当前管理范围内的任务身份和状态。
-    /// # 错误
-    /// 范围撤销、任务不存在或读取失败时拒绝。
+    /// 命令完成后按当前 `manage` 对象范围返回任务身份和状态，不要求另一份 `detail` 权限。任务缺失、管理范围撤销或读取失败时拒绝。
     pub fn work_item_action_view(
         self,
         id: String,
@@ -407,21 +338,7 @@ impl WorkItemReadService {
         })
     }
 
-    /// 在同一事务快照内重验详情授权、对象事实与展示补齐。
-    ///
-    /// # 参数
-    /// * `id` - 工作项稳定 ID
-    /// * `actor` - 已认证操作人
-    /// * `executor` - 调用方事务执行器
-    ///
-    /// # 返回
-    /// 返回已授权的单条任务投影。
-    ///
-    /// # 错误
-    /// 任务不存在、不可见或授权事实读取失败时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 授权快照、对象事实与展示读取共用同一执行器，不得换成 `NoTransaction`。
+    /// 在原快照内校验精确任务详情授权、读取对象事实并补齐展示字段。缺失、不可见或取证失败时拒绝；整个读取阶段不得换成 `NoTransaction`。
     #[inline(never)]
     pub fn detail_page<'a>(
         &'a self,
@@ -432,7 +349,7 @@ impl WorkItemReadService {
         self.detail_page_for(id, actor, &work_item::DETAIL, executor)
     }
 
-    /// 详情与操作结果使用各自动作的数据范围，材料不进入结果。
+    // 任务详情与命令结果按各自固定动作进行对象授权与投影，不返回业务材料正文。
     fn detail_page_for<'a>(
         &'a self,
         id: &'a str,
@@ -489,7 +406,7 @@ fn approval_context_view(
     }
 }
 
-/// 审批运行上下文缺失时移除决定动作并追加稳定阻断信息。
+// 审批任务缺少精确运行上下文时移除可提交决定动作，并投影稳定阻断信息，不展示可办理状态。
 fn fail_closed_missing_approval_context(item: &mut WorkItemView) {
     if !remove_approval_decision_actions(&mut item.allowed_actions) {
         return;
@@ -500,16 +417,10 @@ fn fail_closed_missing_approval_context(item: &mut WorkItemView) {
     });
 }
 
-/// 从动作集合中移除审批决定并返回是否发生移除。
-///
-/// # 参数
-/// * `actions` - 待就地过滤的允许动作
-///
-/// # 返回
-/// 移除了 `Approve` 或 `Reject` 时返回 `true`。
-///
-/// # 错误
-/// 不返回错误。
+// 从动作集合中移除审批决定并返回是否发生移除。
+// 移除了 `Approve` 或 `Reject` 时返回 `true`。
+//
+// `actions`：待就地过滤的允许动作。
 pub(super) fn remove_approval_decision_actions(actions: &mut Vec<WorkItemAllowedAction>) -> bool {
     let before = actions.len();
     actions
@@ -517,7 +428,7 @@ pub(super) fn remove_approval_decision_actions(actions: &mut Vec<WorkItemAllowed
     actions.len() != before
 }
 
-/// 返回去除首尾空白后的非空展示文本。
+// 生成任务展示文本时先去首尾空白；无内容的字段按缺失处理。
 fn non_empty_text(value: &str) -> Option<String> {
     let value = value.trim();
     (!value.is_empty()).then(|| value.to_string())
@@ -528,17 +439,10 @@ pub(super) fn matches_keyword(fields: &dto::WorkItemFields, q: Option<&str>) -> 
     super::search::task_document(fields).matches(q).is_some()
 }
 
-/// 当前处理人筛选只收窄授权结果；空集表示不过滤。
-///
-/// # 参数
-/// * `fields` - 已授权任务字段
-/// * `handler_ids` - 处理人稳定 ID；空切片表示不筛选
-///
-/// # 返回
-/// 不筛选，或 `owner_user_id` 落在 `handler_ids` 中时返回 `true`。
-///
-/// # 错误
-/// 不返回错误。
+// 当前处理人筛选只收窄授权结果；空集表示不过滤。
+// 不筛选，或 `owner_user_id` 落在 `handler_ids` 中时返回 `true`。
+//
+// `fields`：已授权任务字段；`handler_ids`：处理人稳定 ID；空切片表示不筛选。
 pub(super) fn matches_handler(fields: &dto::WorkItemFields, handler_ids: &[String]) -> bool {
     if handler_ids.is_empty() {
         return true;

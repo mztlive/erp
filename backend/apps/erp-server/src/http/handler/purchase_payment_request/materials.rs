@@ -30,11 +30,7 @@ pub struct PaymentRequestMaterialQuery {
 }
 
 /// 按完整历史来源资格读取该轮不可变提交依据。
-/// # 参数
-/// 当前账号、申请身份与提交版本。
-/// # 返回
 /// 原提交金额、主体、账户与完整采购销售预览。
-/// # 错误
 /// 历史不存在、来源范围不符或冻结身份不一致时拒绝。
 pub async fn submission(
     State(state): State<HttpState>,
@@ -45,11 +41,7 @@ pub async fn submission(
 }
 
 /// 当前审批人或出纳凭本任务读取全部冻结采购和销售资料。
-/// # 参数
-/// 当前账号与正式任务身份。
-/// # 返回
 /// 本申请完整材料与当前进度。
-/// # 错误
 /// 任务失效、跨单或无责任资格时拒绝。
 pub async fn task_context(
     State(state): State<HttpState>,
@@ -64,11 +56,7 @@ pub async fn task_context(
 }
 
 /// 下载本申请允许材料，在存储读取前后复验完整来源及治理状态。
-/// # 参数
-/// 当前账号、申请和文件身份；可附当前正式任务身份。
-/// # 返回
 /// 禁止缓存的私有文件字节。
-/// # 错误
 /// 关系不符、资格失效或文件变化时拒绝。
 pub async fn material_download(
     State(state): State<HttpState>,
@@ -80,11 +68,7 @@ pub async fn material_download(
 }
 
 /// 预览允许清单中的同版本图片或 PDF。
-/// # 参数
-/// 当前账号、申请和文件身份；可附当前正式任务身份。
-/// # 返回
 /// 禁止缓存和类型嗅探的内联文件。
-/// # 错误
 /// 文件非安全预览类型、来源不符或资格失效时拒绝。
 pub async fn material_preview(
     State(state): State<HttpState>,

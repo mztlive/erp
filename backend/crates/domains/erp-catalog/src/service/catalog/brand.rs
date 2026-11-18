@@ -24,15 +24,9 @@ use crate::repository::{CatalogExt, ProductBrandFilter};
 
 impl CatalogService {
     /// 分页查询商品品牌列表。
-    ///
-    /// # 参数
-    /// * `params` - 查询参数（`brand_code`/`name`/`status` 扁平筛选）
-    ///
-    /// # 返回
-    /// 返回契约形状的分页视图。
-    ///
-    /// # 错误
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
+    ///
+    /// `params` 为查询参数（`brand_code`/`name`/`status` 扁平筛选）。
     pub async fn product_brand_list(
         &self,
         actor: &AuditActor,
@@ -50,7 +44,7 @@ impl CatalogService {
             .await
     }
 
-    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    // 分页查询商品品牌，沿用公开入口提供的授权快照完成查询。
     async fn product_brand_list_snapshot(
         &self,
         actor: &AuditActor,
@@ -82,14 +76,7 @@ impl CatalogService {
 
     /// 创建商品品牌（品牌、文件元数据与审计日志在同一事务内提交）。
     ///
-    /// # 参数
-    /// * `req` - 创建请求
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回新建品牌的响应视图。
-    ///
-    /// # 错误
+    /// 失败情形如下：
     /// * `ValidationError` - 请求体校验失败
     /// * `ConflictError` - brand_code 重复（唯一索引透出）
     pub async fn product_brand_create(
@@ -100,18 +87,9 @@ impl CatalogService {
         self.product_brand_create_with_assets(req, Arc::new(EmptyPendingAttachments), actor).await
     }
 
-    /// 创建品牌，并把同一次 multipart 命令携带的 Logo 文件资产原子登记。
+    /// 创建品牌，并把同一次 multipart 命令携带的 Logo 文件资产原子登记。Logo 引用无效、品牌代码冲突或事务写入失败时返回错误。
     ///
-    /// # 参数
-    /// * `req` - 品牌创建请求
-    /// * `asset_requests` - 已写入对象存储、尚未登记的文件资产
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回新建品牌视图。
-    ///
-    /// # 错误
-    /// Logo 引用无效、品牌代码冲突或事务写入失败时返回错误。
+    /// `asset_requests` 为已写入对象存储、尚未登记的文件资产。
     pub async fn product_brand_create_with_assets(
         &self,
         req: CreateProductBrandRequest,
@@ -132,7 +110,7 @@ impl CatalogService {
             .await
     }
 
-    /// 在原授权快照内读取版本与关联事实，完成修改和审计。
+    // 在原授权快照内读取版本与关联事实，完成修改和审计。
     async fn product_brand_create_with_assets_stage(
         &self,
         mut req: CreateProductBrandRequest,
@@ -180,7 +158,7 @@ impl CatalogService {
         Ok(brand.into())
     }
 
-    /// 沿已有编号规则解析显式编号或分配新编号。
+    // 沿已有编号规则解析显式编号或分配新编号。
     async fn brand_code(&self, requested: String, executor: &mut dyn Executor) -> Result<String> {
         if !requested.trim().is_empty() {
             return Ok(requested);
@@ -193,17 +171,11 @@ impl CatalogService {
 
     /// 更新商品品牌（乐观锁语义）。
     ///
-    /// # 参数
-    /// * `id` - 品牌 ID
-    /// * `req` - 更新请求（含期望版本）
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回更新后品牌的响应视图。
-    ///
-    /// # 错误
+    /// 失败情形如下：
     /// * `NotFound` - 品牌不存在
     /// * `ConflictError` - 期望版本与当前版本不一致
+    ///
+    /// `req` 为更新请求（含期望版本）。
     pub async fn product_brand_update(
         &self,
         id: &str,
@@ -213,19 +185,9 @@ impl CatalogService {
         self.product_brand_update_with_assets(id, req, Arc::new(EmptyPendingAttachments), actor).await
     }
 
-    /// 更新品牌，并把同一次 multipart 命令携带的 Logo 文件资产原子登记。
+    /// 更新品牌，并把同一次 multipart 命令携带的 Logo 文件资产原子登记。Logo 引用无效、版本冲突或事务写入失败时返回错误。
     ///
-    /// # 参数
-    /// * `id` - 品牌 ID
-    /// * `req` - 品牌更新请求
-    /// * `asset_requests` - 已写入对象存储、尚未登记的文件资产
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回更新后的品牌视图。
-    ///
-    /// # 错误
-    /// Logo 引用无效、版本冲突或事务写入失败时返回错误。
+    /// `asset_requests` 为已写入对象存储、尚未登记的文件资产。
     pub async fn product_brand_update_with_assets(
         &self,
         id: &str,
@@ -248,7 +210,7 @@ impl CatalogService {
             .await
     }
 
-    /// 在原授权快照内读取版本与关联事实，完成修改和审计。
+    // 在原授权快照内读取版本与关联事实，完成修改和审计。
     async fn product_brand_update_with_assets_stage(
         &self,
         id: &str,
@@ -298,7 +260,7 @@ impl CatalogService {
         Ok(brand.into())
     }
 
-    /// 校验既有 Logo 文件资产存在；本次待登记资产由调用方事务负责。
+    // 校验既有 Logo 文件资产存在；本次待登记资产由调用方事务负责。
     async fn ensure_brand_logo_exists(
         &self,
         asset_id: Option<&erp_core::ids::FileAssetId>,
@@ -319,14 +281,7 @@ impl CatalogService {
 
     /// 删除商品品牌（软删除，乐观锁语义）。
     ///
-    /// # 参数
-    /// * `id` - 品牌 ID
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回删除结果。
-    ///
-    /// # 错误
+    /// 失败情形如下：
     /// * `NotFound` - 品牌不存在
     /// * `ConflictError` - 并发修改（CAS 冲突）
     pub async fn product_brand_delete(&self, id: &str, actor: &AuditActor) -> Result<()> {
@@ -341,7 +296,7 @@ impl CatalogService {
             .await
     }
 
-    /// 在原授权快照内读取版本与关联事实，完成修改和审计。
+    // 删除商品品牌，在原事务内完成授权、关联事实核对和写入与审计。
     async fn product_brand_delete_stage(
         &self,
         id: &str,

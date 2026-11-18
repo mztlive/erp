@@ -31,12 +31,11 @@ struct CloseCommand {
 
 impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     /// 在同一事务授权并关闭重复、误派或已有有效替代任务。
-    /// # 参数
-    /// id 为真实任务，req 为关闭原因、预期版本和幂等键，actor 为当前操作人。
-    /// # 返回
     /// 成功或同载荷回放返回已应用结果；版本变化返回冲突结果。
-    /// # 错误
+    ///
     /// 无管理资格、任务不支持通用关闭、替代任务非法或持久化失败时拒绝。
+    ///
+    /// id 为真实任务，req 为关闭原因、预期版本和幂等键，actor 为当前操作人。
     pub async fn close(
         self,
         id: String,
@@ -56,7 +55,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         self.finish_command(&command.receipt, &command.actor, &command.audit, result).await
     }
 
-    /// 只规范化输入和审计；决定关闭的读取全部留在原事务。
+    // 关闭事务之前仅规范化原因、替代引用、版本、幂等身份与安全审计，不读取决定能否关闭的业务事实。
     fn close_command(
         &self,
         id: String,
@@ -79,7 +78,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         Ok(CloseCommand { id, actor, expected_version, decision, receipt, audit })
     }
 
-    /// 首次执行和回放都从原快照中的真实任务取证。
+    // 在原写事务中按真实任务重验管理权限，之后才尝试幂等回放或按版本及 W29 状态检查应用关闭。
     async fn apply_close(
         &self,
         command: &CloseCommand,
@@ -104,7 +103,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         Ok(WorkItemWriteOutcome::Updated(Box::new(item)))
     }
 
-    /// 替代任务必须来自同一快照、仍开放、同类并处于当前管理范围。
+    // 以原关闭快照核验替代任务：不能引用自身，必须是同一正式 W29 对象类别的开放任务，且当前操作人有管理范围。
     async fn ensure_w29_replacement(
         &self,
         current: &WorkItem,
@@ -122,7 +121,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         Ok(())
     }
 
-    /// 沿原执行器原子保存领域证据、任务终态、审计与强类型回执。
+    // 正式关闭决定获准后，沿同一执行器保存领域证据、任务终态、成功审计和强类型回执，供后续精确回放。
     async fn close_with_domain_evidence(
         &self,
         mut item: WorkItem,
@@ -156,7 +155,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         Ok(item)
     }
 
-    /// 写入前冻结并校验关闭事件的安全上下文。
+    // 在任务关闭写入前，以精确任务和命令身份准备受控关闭审计并验证安全上下文。
     fn prepare_close_audit(
         &self,
         actor: &AuditActor,
@@ -176,17 +175,13 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     }
 }
 
-/// 由已校验关闭输入构造原指纹与稳定命令身份。
-/// # 参数
-/// * `id` - 原任务编号。
-/// * `actor` - 命令操作人。
-/// * `idempotency_key` - 已校验幂等键。
-/// * `expected_task_version` - 原请求任务版本。
-/// * `decision` - 已规范化的正式关闭决定。
-/// # 返回
-/// 返回保留原字段次序与规范化规则的命令身份。
-/// # 错误
-/// 命令身份或指纹输入非法时返回原错误。
+// 由已校验关闭输入构造原指纹与稳定命令身份。
+// 返回保留原字段次序与规范化规则的命令身份。
+//
+// 命令身份或指纹输入非法时返回原错误。
+//
+// `id`：原任务编号；`idempotency_key`：已校验幂等键。
+// `expected_task_version`：原请求任务版本；`decision`：已规范化的正式关闭决定。
 fn close_command_receipt(
     id: &str,
     actor: &AuditActor,
@@ -209,18 +204,14 @@ fn close_command_receipt(
     )?)
 }
 
-/// 在原关闭事务内保存正式终态对应的强类型结果。
-/// # 参数
-/// * `db` - 原事务使用的数据库。
-/// * `receipt` - 已规范化的命令身份。
-/// * `item` - 已写入关闭终态的任务。
-/// * `evidence_reference` - 原领域证据引用。
-/// * `audit_id` - 同事务关闭事件编号。
-/// * `executor` - 原调用方事务执行器。
-/// # 返回
-/// 成功保存唯一命令结果时返回 `Ok(())`。
-/// # 错误
-/// 结果校验或仓储写入失败时返回原错误。
+// 在原关闭事务内保存正式终态对应的强类型结果。
+// 成功保存唯一命令结果时返回 `Ok(())`。
+//
+// 结果校验或仓储写入失败时返回原错误。
+//
+// `db`：原事务使用的数据库；`receipt`：已规范化的命令身份。
+// `item`：已写入关闭终态的任务；`evidence_reference`：原领域证据引用。
+// `audit_id`：同事务关闭事件编号；`executor`：原调用方事务执行器。
 async fn persist_close_receipt(
     db: &Database,
     receipt: &CommandReceipt,

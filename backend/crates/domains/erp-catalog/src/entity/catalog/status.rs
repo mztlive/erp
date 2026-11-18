@@ -20,16 +20,7 @@ pub enum EnableStatus {
 }
 
 impl EnableStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将启停状态映射为中文标签，供界面显示。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Active => "启用",
@@ -37,16 +28,7 @@ impl EnableStatus {
         }
     }
 
-    /// 返回状态的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将启停状态编码为稳定字符串，供持久化和精确查询复用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Active => "active",
@@ -54,32 +36,16 @@ impl EnableStatus {
         }
     }
 
-    /// 判断是否处于启用状态。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 处于 `Active` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 读取启停状态的启用标记，供调用方过滤停用记录。
     pub fn is_active(&self) -> bool {
         matches!(self, Self::Active)
     }
 }
 
 impl DocumentState for EnableStatus {
-    /// 返回合法后继状态：启用 ↔ 停用 双向可迁移。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// `Active` 返回只含 `Disabled` 的切片；`Disabled` 返回只含 `Active` 的切片。不含自身。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 返回合法后继状态：启用 ↔ 停用 双向可迁移。
+    //
+    // `Active` 返回只含 `Disabled` 的切片；`Disabled` 返回只含 `Active` 的切片。不含自身。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Active => &[Self::Disabled],
@@ -102,16 +68,7 @@ pub enum ListingStatus {
 }
 
 impl ListingStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的上架状态标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将SKU 上架状态映射为中文标签，供界面显示。返回面向用户的上架状态标签。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Listed => "已上架",
@@ -119,16 +76,7 @@ impl ListingStatus {
         }
     }
 
-    /// 返回状态的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将SKU 上架状态编码为稳定字符串，供持久化和精确查询复用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Listed => "listed",
@@ -136,16 +84,7 @@ impl ListingStatus {
         }
     }
 
-    /// 判断是否已上架。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 状态为 `Listed` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 判断是否已上架。状态为 `Listed` 时返回 `true`。
     pub fn is_listed(&self) -> bool {
         matches!(self, Self::Listed)
     }
@@ -167,17 +106,9 @@ pub enum ProductListingStatus {
 }
 
 impl ProductListingStatus {
-    /// 按已上架数量与当前启用 SKU 总数计算 SPU 继承状态。
+    /// 按已上架数量与当前启用 SKU 总数计算 SPU 继承状态。返回全上架、部分上架或全下架状态。
     ///
-    /// # 参数
-    /// * `listed_sku_count` - 当前已上架 SKU 数
-    /// * `sku_count` - 当前启用 SKU 总数
-    ///
-    /// # 返回
-    /// 返回全上架、部分上架或全下架状态。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// `listed_sku_count` 为当前已上架 SKU 数。
     pub fn inherited(listed_sku_count: u32, sku_count: u32) -> Self {
         if sku_count > 0 && listed_sku_count == sku_count {
             return Self::Listed;
@@ -188,16 +119,9 @@ impl ProductListingStatus {
         Self::Unlisted
     }
 
-    /// 返回用于查询与传输的稳定代码。
+    /// 将用于查询与传输编码为稳定字符串，供持久化和精确查询复用。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回 `listed`、`partially_listed` 或 `unlisted`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Listed => "listed",
@@ -223,17 +147,7 @@ pub enum SkuCoverageStatus {
 }
 
 impl SkuCoverageStatus {
-    /// 按已覆盖数量与当前启用 SKU 总数计算覆盖状态。
-    ///
-    /// # 参数
-    /// * `covered_sku_count` - 已具备目标资料的 SKU 数
-    /// * `sku_count` - 当前启用 SKU 总数
-    ///
-    /// # 返回
-    /// 返回完整、部分或无覆盖状态。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 按已覆盖数量与当前启用 SKU 总数计算覆盖状态。返回完整、部分或无覆盖状态。
     pub fn inherited(covered_sku_count: u32, sku_count: u32) -> Self {
         if sku_count > 0 && covered_sku_count == sku_count {
             return Self::Complete;
@@ -244,16 +158,7 @@ impl SkuCoverageStatus {
         Self::None
     }
 
-    /// 返回用于查询与传输的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `complete`、`partial` 或 `none`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将用于查询与传输编码为稳定字符串，供持久化和精确查询复用。返回 `complete`、`partial` 或 `none`。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Complete => "complete",
@@ -269,7 +174,7 @@ mod tests {
 
     use super::*;
 
-    /// 启用/停用双向迁移与幂等迁移合法，邻接矩阵对称闭合。
+    // 启用/停用双向迁移与幂等迁移合法，邻接矩阵对称闭合。
     #[test]
     fn enable_status_adjacency_is_closed() {
         assert_adjacency_closed(&[EnableStatus::Active, EnableStatus::Disabled]);
@@ -279,7 +184,7 @@ mod tests {
         assert!(ensure_transition(EnableStatus::Active, EnableStatus::Active).is_ok());
     }
 
-    /// 状态代码与中文标签。
+    // 状态代码与中文标签。
     #[test]
     fn enable_status_exposes_labels_and_codes() {
         assert_eq!(EnableStatus::Active.label(), "启用");
@@ -290,7 +195,7 @@ mod tests {
         assert!(!EnableStatus::Disabled.is_active());
     }
 
-    /// SKU 上架代码稳定，缺省状态为下架。
+    // SKU 上架代码稳定，缺省状态为下架。
     #[test]
     fn listing_status_defaults_to_unlisted() {
         assert_eq!(ListingStatus::default(), ListingStatus::Unlisted);
@@ -299,7 +204,7 @@ mod tests {
         assert!(ListingStatus::Listed.is_listed());
     }
 
-    /// SPU 上架状态完全由当前启用 SKU 的上架数量继承。
+    // SPU 上架状态完全由当前启用 SKU 的上架数量继承。
     #[test]
     fn product_listing_status_is_inherited_from_sku_counts() {
         assert_eq!(ProductListingStatus::inherited(2, 2), ProductListingStatus::Listed);
@@ -309,7 +214,7 @@ mod tests {
         assert_eq!(ProductListingStatus::PartiallyListed.as_str(), "partially_listed");
     }
 
-    /// SKU 资料覆盖状态必须区分完整、部分与无覆盖，空集合不能视为完整。
+    // SKU 资料覆盖状态必须区分完整、部分与无覆盖，空集合不能视为完整。
     #[test]
     fn sku_coverage_status_is_inherited_from_counts() {
         assert_eq!(SkuCoverageStatus::inherited(2, 2), SkuCoverageStatus::Complete);

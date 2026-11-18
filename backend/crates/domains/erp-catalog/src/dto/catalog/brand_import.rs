@@ -17,12 +17,8 @@ pub struct BrandImportJobRequest {
 
 impl BrandImportJobRequest {
     /// 校验批次边界并解析稳定提交身份。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 已验证的提交身份。
-    /// # 错误
-    /// 批次为空、超量、行号重复或提交身份非法。
+    ///
+    /// 已验证的提交身份。批次为空、超量、行号重复或提交身份非法。
     pub fn key(&self) -> Result<BrandImportKey> {
         let key = BrandImportKey::new(&self.request_id)?;
         if self.file_name.len() > 255 || !self.file_name.to_ascii_lowercase().ends_with(".xlsx") {
@@ -81,27 +77,14 @@ pub enum BrandImportStatus {
 }
 
 impl BrandImportResult {
-    /// 构造确定失败的行结果。
-    /// # 参数
-    /// * `row_number` - 原 Excel 行号
-    /// * `message` - 可向用户展示的原因
-    /// # 返回
-    /// 无写入结果引用的失败行。
-    /// # 错误
-    /// 无。
+    /// 构造确定失败的行结果。无写入结果引用的失败行。
     pub fn failed(row_number: u32, message: String) -> Self {
         Self { row_number, status: BrandImportStatus::Failed, message, brand_code: None, brand_id: None }
     }
 
-    /// 从已新建或已存在品牌构造导入结果。
-    /// # 参数
-    /// * `row_number` - 原始行号
-    /// * `status` - 新建或跳过状态
-    /// * `brand` - 本行品牌
-    /// # 返回
-    /// 带品牌引用的结果。
-    /// # 错误
-    /// 无。
+    // 从已新建或已存在品牌构造导入结果。带品牌引用的结果。
+    //
+    // `row_number` 为原始行号。
     pub(crate) fn from_brand(row_number: u32, status: BrandImportStatus, brand: ProductBrand) -> Self {
         let message =
             if status == BrandImportStatus::Created { "已新建" } else { "已存在，保留原资料" };

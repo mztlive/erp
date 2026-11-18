@@ -46,15 +46,7 @@ pub struct SimulatedSupplierGateway;
 
 impl SimulatedSupplierGateway {
     /// 构造模拟网关。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回无状态模拟网关实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new() -> Self {
         Self
     }
@@ -80,15 +72,8 @@ impl SupplierGateway for SimulatedSupplierGateway {
     }
 }
 
-/// 按连接地址配置模拟动作结果。
-///
-/// # 参数
-/// * `action` - 待发送的动作
-/// * `order` - 所属供应商子订单
-/// * `connection` - 供应商 API 连接
-///
-/// # 返回
-/// 返回模拟分类结果。
+// 按连接地址配置模拟动作结果。
+// 返回模拟分类结果。
 fn simulate_outcome(
     action: &SupplierOrderAction,
     order: &SupplierFulfillmentOrder,
@@ -126,10 +111,7 @@ fn simulate_outcome(
     }
 }
 
-/// 按连接地址模拟对原动作的只读结果查询。
-///
-/// 默认值必须保持结果未知；仅显式 `sim://query-no-result` 返回“明确无结果”，
-/// 防止把普通连接或一次成功 HTTP 查询误判为可安全重放。
+// 模拟网关只读调查旧动作时默认返回结果未知。仅明确配置 `sim://query-no-result` 才能模拟确定无结果，不能把连接可用或请求成功当作可安全重放的证据。
 fn simulate_investigation(
     _target_action: &SupplierOrderAction,
     _order: &SupplierFulfillmentOrder,

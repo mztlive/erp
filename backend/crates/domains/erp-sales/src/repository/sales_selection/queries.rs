@@ -12,16 +12,11 @@ use crate::entity::sales_selection::{
 #[allow(async_fn_in_trait)]
 pub trait SalesSelectionBookletRepositoryExt {
     /// 按令牌哈希查找选品册。
-    ///
-    /// # 参数
-    /// * `token_hash` - 令牌哈希
-    /// * `executor` - 执行器
-    ///
-    /// # 返回
-    /// 存在时返回选品册。
-    ///
-    /// # 错误
+    /// 结果：存在时返回选品册。
     /// 查询失败。
+    ///
+    /// 输入约定：
+    /// - `token_hash`：令牌哈希
     async fn find_by_token_hash(
         &self,
         token_hash: &str,
@@ -29,19 +24,14 @@ pub trait SalesSelectionBookletRepositoryExt {
     ) -> persistence_core::Result<Option<SalesSelectionBooklet>>;
 
     /// 按客户、形态、状态、提交方式列表查询。
-    ///
-    /// # 参数
-    /// * `customer_id` - 客户
-    /// * `form` - 形态代码
-    /// * `status` - 状态代码
-    /// * `submit_mode` - 提交方式代码
-    /// * `executor` - 执行器
-    ///
-    /// # 返回
     /// 返回匹配选品册。
-    ///
-    /// # 错误
     /// 查询失败。
+    ///
+    /// 输入约定：
+    /// - `customer_id`：客户
+    /// - `form`：形态代码
+    /// - `status`：状态代码
+    /// - `submit_mode`：提交方式代码
     async fn list_filtered(
         &self,
         customer_id: Option<&str>,
@@ -90,12 +80,10 @@ impl SalesSelectionBookletRepositoryExt for Repository<'_, SalesSelectionBooklet
 #[allow(async_fn_in_trait)]
 pub trait SalesSelectionDisplayItemRepositoryExt {
     /// 读取本册历史陈列，供已经过客户权限检查的图片查询使用。
-    /// # 参数
-    /// booklet_id 为所属册，executor 为当前读取边界。
-    /// # 返回
     /// 返回该册历史陈列；不包含其他册资产。
-    /// # 错误
     /// 查询失败时返回仓储错误。
+    ///
+    /// 输入约定：booklet_id 为所属册，executor 为当前读取边界。
     async fn list_by_booklet(
         &self,
         booklet_id: &str,
@@ -103,17 +91,12 @@ pub trait SalesSelectionDisplayItemRepositoryExt {
     ) -> persistence_core::Result<Vec<SalesSelectionDisplayItem>>;
 
     /// 读取一册一批次陈列。
-    ///
-    /// # 参数
-    /// * `booklet_id` - 选品册
-    /// * `batch_id` - 批次
-    /// * `executor` - 执行器
-    ///
-    /// # 返回
     /// 返回陈列项。
-    ///
-    /// # 错误
     /// 查询失败。
+    ///
+    /// 输入约定：
+    /// - `booklet_id`：选品册
+    /// - `batch_id`：批次
     async fn list_by_batch(
         &self,
         booklet_id: &str,
@@ -145,17 +128,12 @@ impl SalesSelectionDisplayItemRepositoryExt for Repository<'_, SalesSelectionDis
 #[allow(async_fn_in_trait)]
 pub trait SalesSelectionPoolMemberRepositoryExt {
     /// 读取批次商品池。
-    ///
-    /// # 参数
-    /// * `booklet_id` - 选品册
-    /// * `batch_id` - 批次
-    /// * `executor` - 执行器
-    ///
-    /// # 返回
     /// 返回成员。
-    ///
-    /// # 错误
     /// 查询失败。
+    ///
+    /// 输入约定：
+    /// - `booklet_id`：选品册
+    /// - `batch_id`：批次
     async fn list_by_batch(
         &self,
         booklet_id: &str,
@@ -179,12 +157,10 @@ impl SalesSelectionPoolMemberRepositoryExt for Repository<'_, SalesSelectionPool
 #[allow(async_fn_in_trait)]
 pub trait SalesSelectionPrepareTaskRepositoryExt {
     /// 按成功批次读取报告，未成功的任务不混入有效结果。
-    /// # 参数
-    /// booklet_id 和 batch_id 为所属册与结果批次，executor 为读取边界。
-    /// # 返回
     /// 返回匹配任务，排序和逐档报告合并由服务完成。
-    /// # 错误
     /// 查询失败时返回仓储错误。
+    ///
+    /// 输入约定：booklet_id 和 batch_id 为所属册与结果批次，executor 为读取边界。
     async fn list_by_result_batch(
         &self,
         booklet_id: &str,
@@ -193,16 +169,11 @@ pub trait SalesSelectionPrepareTaskRepositoryExt {
     ) -> persistence_core::Result<Vec<SalesSelectionPrepareTask>>;
 
     /// 按身份读取任务。
-    ///
-    /// # 参数
-    /// * `id` - 任务身份
-    /// * `executor` - 执行器
-    ///
-    /// # 返回
-    /// 存在时返回任务。
-    ///
-    /// # 错误
+    /// 结果：存在时返回任务。
     /// 查询失败。
+    ///
+    /// 输入约定：
+    /// - `id`：任务身份
     async fn find_task(
         &self,
         id: &str,
@@ -210,14 +181,7 @@ pub trait SalesSelectionPrepareTaskRepositoryExt {
     ) -> persistence_core::Result<Option<SalesSelectionPrepareTask>>;
 
     /// 读取可领取或已到期的活动任务。
-    ///
-    /// # 参数
-    /// * `executor` - 执行器
-    ///
-    /// # 返回
     /// 返回排队或运行中的任务。
-    ///
-    /// # 错误
     /// 查询失败。
     async fn list_active(
         &self,
@@ -259,16 +223,11 @@ impl SalesSelectionPrepareTaskRepositoryExt for Repository<'_, SalesSelectionPre
 #[allow(async_fn_in_trait)]
 pub trait SalesSelectionSessionRepositoryExt {
     /// 按选品册读取会话。
-    ///
-    /// # 参数
-    /// * `booklet_id` - 选品册
-    /// * `executor` - 执行器
-    ///
-    /// # 返回
-    /// 存在时返回会话。
-    ///
-    /// # 错误
+    /// 结果：存在时返回会话。
     /// 查询失败。
+    ///
+    /// 输入约定：
+    /// - `booklet_id`：选品册
     async fn find_by_booklet(
         &self,
         booklet_id: &str,
@@ -294,13 +253,11 @@ impl SalesSelectionSessionRepositoryExt for Repository<'_, SalesSelectionSession
 #[allow(async_fn_in_trait)]
 pub trait SalesSelectionProposalRepositoryExt {
     /// 客户授权与显式筛选取交集，禁止用客户筛选覆盖授权范围。
-    /// # 参数
-    /// authorized 为服务端解析的客户范围；空集合代表无任何客户权限。
-    /// customer_id 与 booklet_id 为可选筛选，executor 为读取边界。
-    /// # 返回
     /// 返回范围内的方案，服务层随后分页。
-    /// # 错误
     /// 查询失败时返回仓储错误。
+    ///
+    /// 输入约定：authorized 为服务端解析的客户范围；空集合代表无任何客户权限。
+    /// customer_id 与 booklet_id 为可选筛选，executor 为读取边界。
     async fn list_authorized(
         &self,
         customer_id: Option<&str>,
@@ -310,16 +267,11 @@ pub trait SalesSelectionProposalRepositoryExt {
     ) -> persistence_core::Result<Vec<SalesSelectionProposal>>;
 
     /// 按选品册读取方案。
-    ///
-    /// # 参数
-    /// * `booklet_id` - 选品册
-    /// * `executor` - 执行器
-    ///
-    /// # 返回
-    /// 存在时返回方案。
-    ///
-    /// # 错误
+    /// 结果：存在时返回方案。
     /// 查询失败。
+    ///
+    /// 输入约定：
+    /// - `booklet_id`：选品册
     async fn find_by_booklet(
         &self,
         booklet_id: &str,
@@ -327,16 +279,11 @@ pub trait SalesSelectionProposalRepositoryExt {
     ) -> persistence_core::Result<Option<SalesSelectionProposal>>;
 
     /// 按客户列出方案。
-    ///
-    /// # 参数
-    /// * `customer_id` - 客户
-    /// * `executor` - 执行器
-    ///
-    /// # 返回
     /// 返回方案。
-    ///
-    /// # 错误
     /// 查询失败。
+    ///
+    /// 输入约定：
+    /// - `customer_id`：客户
     async fn list_by_customer(
         &self,
         customer_id: Option<&str>,
@@ -394,16 +341,11 @@ impl SalesSelectionProposalRepositoryExt for Repository<'_, SalesSelectionPropos
 #[allow(async_fn_in_trait)]
 pub trait SalesSelectionProposalDisplayLineRepositoryExt {
     /// 读取方案陈列行。
-    ///
-    /// # 参数
-    /// * `proposal_id` - 方案
-    /// * `executor` - 执行器
-    ///
-    /// # 返回
     /// 返回陈列行。
-    ///
-    /// # 错误
     /// 查询失败。
+    ///
+    /// 输入约定：
+    /// - `proposal_id`：方案
     async fn list_by_proposal(
         &self,
         proposal_id: &str,
@@ -425,16 +367,11 @@ impl SalesSelectionProposalDisplayLineRepositoryExt for Repository<'_, SalesSele
 #[allow(async_fn_in_trait)]
 pub trait SalesSelectionProposalSkuLineRepositoryExt {
     /// 读取方案 SKU 行。
-    ///
-    /// # 参数
-    /// * `proposal_id` - 方案
-    /// * `executor` - 执行器
-    ///
-    /// # 返回
     /// 返回 SKU 行。
-    ///
-    /// # 错误
     /// 查询失败。
+    ///
+    /// 输入约定：
+    /// - `proposal_id`：方案
     async fn list_by_proposal(
         &self,
         proposal_id: &str,
@@ -456,18 +393,13 @@ impl SalesSelectionProposalSkuLineRepositoryExt for Repository<'_, SalesSelectio
 #[allow(async_fn_in_trait)]
 pub trait SalesSelectionIdempotencyRepositoryExt {
     /// 按操作、作用域和键读取幂等记录。
-    ///
-    /// # 参数
-    /// * `operation` - 操作代码
-    /// * `scope_id` - 作用域
-    /// * `key` - 幂等键
-    /// * `executor` - 执行器
-    ///
-    /// # 返回
-    /// 存在时返回记录。
-    ///
-    /// # 错误
+    /// 结果：存在时返回记录。
     /// 查询失败。
+    ///
+    /// 输入约定：
+    /// - `operation`：操作代码
+    /// - `scope_id`：作用域
+    /// - `key`：幂等键
     async fn find_by_key(
         &self,
         operation: &str,

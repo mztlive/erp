@@ -38,14 +38,11 @@ pub struct SupplierPortalReviewIdentity<'a> {
 
 impl WorkItem {
     /// 构造指定到人的供应商申请确认任务。
-    ///
-    /// # 参数
-    /// * `id` - 稳定任务 ID。
-    /// * `data` - 已由提交过程解析的申请与责任事实。
-    /// # 返回
     /// 返回冻结申请身份和责任键的开放任务。
-    /// # 错误
+    ///
     /// 必填字段为空、过长或任务基础数据非法时返回错误。
+    ///
+    /// `data`：已由提交过程解析的申请与责任事实。
     pub fn new_supplier_portal_review(id: WorkItemId, data: SupplierPortalReviewTaskData) -> Result<Self> {
         let request_id = data.request_id.trim().to_string();
         let responsibility_key = format!("supplier_portal_request:{request_id}");
@@ -70,13 +67,11 @@ impl WorkItem {
     }
 
     /// 校验任务身份、申请身份、冻结提交及任务版本完全一致。
-    ///
-    /// # 参数
-    /// * `identity` - 调用方锁定的确认身份。
-    /// # 返回
     /// 完全一致时返回 `true`。
-    /// # 错误
-    /// 无；未知类型、审批引用或空版本失败关闭。
+    ///
+    /// 未知类型、审批引用或空版本失败关闭。
+    ///
+    /// `identity`：调用方锁定的确认身份。
     pub fn matches_supplier_portal_review(&self, identity: SupplierPortalReviewIdentity<'_>) -> bool {
         self.work_item_type == WorkItemType::SupplierPortalReview
             && self.approval_node_execution_id.is_none()
@@ -91,13 +86,8 @@ impl WorkItem {
     }
 
     /// 随申请正式通过或退回决定完成确认任务。
-    ///
-    /// # 参数
-    /// * `actor_id` - 本次内部决定人。
-    /// * `at` - 本次决定时间。
-    /// # 返回
     /// 完成后返回 `Ok(())`，保留全部责任历史。
-    /// # 错误
+    ///
     /// 类型错误、任务非开放或执行人无效时返回错误；分配资格由调用方通过 identity 核验。
     pub fn complete_supplier_portal_review(&mut self, actor_id: &str, at: Instant) -> Result<()> {
         self.ensure_supplier_portal_review()?;
@@ -107,15 +97,11 @@ impl WorkItem {
     }
 
     /// 随供应商撤回申请关闭确认任务。
-    ///
-    /// # 参数
-    /// * `actor_id` - 已由申请过程校验的供应商申请人。
-    /// * `reason` - 申请撤回原因。
-    /// * `at` - 撤回时间。
-    /// # 返回
     /// 返回不可逆的关闭任务；不形成内部采购确认结果。
-    /// # 错误
+    ///
     /// 类型错误、任务非开放或关闭事实非法时返回错误。
+    ///
+    /// `actor_id`：已由申请过程校验的供应商申请人；`reason`：申请撤回原因。
     pub fn withdraw_supplier_portal_review(
         &mut self,
         actor_id: &str,
@@ -126,7 +112,7 @@ impl WorkItem {
         self.close_open(actor_id.to_string(), WorkItemCloseData { close_reason: reason.into() }, at)
     }
 
-    /// 限定专用生命周期命令只能作用于供应商申请确认任务。
+    // 供应商申请确认命令先校验任务属于专用类型，不允许使用相同生命周期步骤处理其他工作项。
     fn ensure_supplier_portal_review(&self) -> Result<()> {
         if self.work_item_type != WorkItemType::SupplierPortalReview
             || self.business_object_type != "supplier_portal_request"
@@ -144,7 +130,7 @@ mod tests {
     use super::*;
     use crate::entity::work_item::WorkItemStatus;
 
-    /// 构造一份冻结版本的单人确认任务。
+    // 准备绑定冻结版本且只有一名确认人的供应商申请任务，供确认状态校验使用。
     fn task() -> WorkItem {
         WorkItem::new_supplier_portal_review(
             WorkItemId::new("task"),
@@ -160,7 +146,7 @@ mod tests {
         .unwrap()
     }
 
-    /// 返回与测试任务精确匹配的命令身份。
+    // 提供与测试任务精确匹配的命令身份。
     fn identity() -> SupplierPortalReviewIdentity<'static> {
         SupplierPortalReviewIdentity {
             task_id: "task",

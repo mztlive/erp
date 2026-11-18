@@ -25,13 +25,8 @@ pub(super) struct LogisticsObservation {
 }
 
 impl JdVopConnector {
-    /// 查询当前子单的配送单与物流轨迹，保持来源证据与商品数量相互独立。
-    /// # 参数
-    /// `order` 为服务器已经核验归属的原订单节点。
-    /// # 返回
-    /// 合并后的运单、订单级轨迹及可加密归档的原始类型化观察。
-    /// # 错误
-    /// 账号资料缺失、来源归属变化、冲突运单或远端查询失败时拒绝应用。
+    // 跟踪已核对归属的子单时，按原单号读取配送单与轨迹，合并运单和订单级事件，并保留可加密归档的来源资料。
+    // 不从运单推算商品数量；账号资料缺失、归属变化、运单冲突或查询失败时不交付观察结果。
     pub(super) async fn logistics(&self, order: &JdOrder) -> ConnectorResult<LogisticsObservation> {
         let reader = self.reader.as_ref().ok_or_else(protocol_required)?;
         let profile = self.profile.as_ref().ok_or_else(protocol_required)?;

@@ -6,13 +6,12 @@ use erp_workflow::service::work_item::read::search::{SearchDocument, approval_la
 pub use erp_workflow::service::work_item::read::search::{SearchOption, SearchOptions, WorkspaceFilters};
 
 use super::brief::BriefSection;
-/// 从已授权业务键值构造文本及筛选维度。
-/// # 参数
-/// 参数只接受已授权事项的可读业务字段。
-/// # 返回
-/// 更新当前检索资料，匹配方法返回命中说明或空结果。
-/// # 错误
-/// 无。
+// 组装审批业务检索时，从已授权业务键值构造文本及筛选维度。
+//
+// 调用参数：
+// 参数只接受已授权事项的可读业务字段。
+//
+// 更新当前检索资料，匹配方法返回命中说明或空结果。
 fn append_sections(document: &mut SearchDocument, sections: &[BriefSection]) {
     for section in sections {
         if ["提交人", "责任人"].contains(&section.label.as_str()) {

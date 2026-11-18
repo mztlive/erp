@@ -28,16 +28,9 @@ pub struct ActualServiceLocation(String);
 
 impl ActualServiceLocation {
     /// 解析并规范化实际服务地点。
-    ///
-    /// # 参数
-    /// * `raw` - 确认命令中的原始服务地点
-    ///
-    /// # 返回
     /// 返回去除首尾空白且非占位值的实际地点。
-    ///
-    /// # 错误
-    /// 空白或仍为「待填写」占位值时返回 `LogicError`；错误文案不包含输入
-    /// 明文，避免地点敏感值进入日志。
+    /// `raw` 为确认命令中的原始服务地点。
+    /// 空白或仍为「待填写」占位值时返回 `LogicError`；错误文案不包含输入明文，避免地点敏感值进入日志。
     pub fn parse(raw: &str) -> Result<Self> {
         let service_location = raw.trim();
         if service_location.is_empty() {
@@ -50,15 +43,7 @@ impl ActualServiceLocation {
     }
 
     /// 返回规范化后的地点明文引用。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回去除首尾空白的服务地点字符串引用。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -74,19 +59,10 @@ pub struct ServiceEvidencePolicy;
 
 impl ServiceEvidencePolicy {
     /// 校验现场图片凭证元数据。
-    ///
-    /// # 参数
-    /// * `content_type` - 文件 MIME 类型
-    /// * `sensitivity` - 敏感级别
-    /// * `retention` - 保留策略
-    /// * `destroyed` - 是否已销毁
-    ///
-    /// # 返回
     /// 元数据合法时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 非图片、非敏感、非长期保留或已销毁时返回 `LogicError`；错误文案为
-    /// 固定提示，不包含文件敏感元数据。
+    /// `content_type` 为文件 MIME 类型；`sensitivity` 为敏感级别。
+    /// `retention` 为保留策略；`destroyed` 为是否已销毁。
+    /// 非图片、非敏感、非长期保留或已销毁时返回 `LogicError`；错误文案为固定提示，不包含文件敏感元数据。
     pub fn validate(
         content_type: &str,
         sensitivity: SensitivityClass,
@@ -116,7 +92,7 @@ mod tests {
         EvidenceRetention as RetentionClass, EvidenceSensitivity as SensitivityClass,
     };
 
-    /// 合法地点去除首尾空白并稳定保留内部字符。
+    // 验证合法地点去除首尾空白并稳定保留内部字符。
     #[test]
     fn actual_service_location_trims_and_keeps_value() {
         assert_eq!(ActualServiceLocation::parse(" 客户现场 ").unwrap().as_str(), "客户现场");
@@ -124,7 +100,7 @@ mod tests {
         assert_eq!(ActualServiceLocation::parse("客户现场").unwrap().as_str(), "客户现场");
     }
 
-    /// 空白与采购审核占位值（含带空白变体）必须拒绝，且错误不携带明文。
+    // 验证空白与采购审核占位值（含带空白变体）必须拒绝，且错误不携带明文。
     #[test]
     fn actual_service_location_rejects_blank_and_placeholder() {
         for raw in ["", "   ", "\t\n"] {
@@ -139,7 +115,7 @@ mod tests {
         }
     }
 
-    /// 策略接受白名单图片与敏感/高敏感、长期保留、未销毁组合。
+    // 验证策略接受白名单图片与敏感/高敏感、长期保留、未销毁组合。
     #[test]
     fn policy_accepts_supported_image_metadata() {
         for content_type in ["image/jpeg", "image/png", "image/webp"] {
@@ -158,7 +134,7 @@ mod tests {
         }
     }
 
-    /// 白名单之外的 MIME 一律拒绝（含空串与近似变体）。
+    // 验证白名单之外的 MIME 一律拒绝（含空串与近似变体）。
     #[test]
     fn policy_rejects_non_image_mime() {
         for content_type in ["application/pdf", "image/gif", "image/jpg", "text/plain", ""] {
@@ -173,7 +149,7 @@ mod tests {
         }
     }
 
-    /// General 敏感级别拒绝，Sensitive/HighlySensitive 通过。
+    // 验证General 敏感级别拒绝，Sensitive/HighlySensitive 通过。
     #[test]
     fn policy_rejects_general_sensitivity() {
         let error = ServiceEvidencePolicy::validate(
@@ -205,7 +181,7 @@ mod tests {
         );
     }
 
-    /// 非长期保留策略拒绝（30 天、7 天均失败关闭）。
+    // 验证非长期保留策略拒绝（30 天、7 天均失败关闭）。
     #[test]
     fn policy_rejects_non_long_term_retention() {
         // 两种提供方短期策略均由适配器投影为 Other；本域只解释保留资格。
@@ -219,7 +195,7 @@ mod tests {
         assert_eq!(error.to_string(), "现场图片凭证必须长期保留");
     }
 
-    /// 已销毁凭证拒绝。
+    // 验证已销毁凭证拒绝。
     #[test]
     fn policy_rejects_destroyed() {
         let error = ServiceEvidencePolicy::validate(

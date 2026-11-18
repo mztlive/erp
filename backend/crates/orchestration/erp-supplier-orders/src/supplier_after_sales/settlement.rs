@@ -118,11 +118,9 @@ impl SettlementStore for MongoSettlementStore<'_> {
 
 impl SupplierAfterSalesProcess {
     /// 有界扫描连接并读取每个账号一页；不支持时记录明确状态。
-    /// # 参数
-    /// 无。
-    /// # 返回
+    ///
     /// 本轮新接收的来源流水数，不是财务核销数。
-    /// # 错误
+    ///
     /// 连接分页查询失败；单连接异常不影响其他连接。
     pub async fn run_settlements_once(&self) -> Result<usize> {
         let mut cursor = self.cursor.lock().await;

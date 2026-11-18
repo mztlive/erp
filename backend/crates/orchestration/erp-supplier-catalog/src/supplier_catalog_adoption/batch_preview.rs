@@ -26,12 +26,12 @@ use crate::source_media::PreparedSourceMedia;
 use crate::{Error, Result};
 
 impl SupplierCatalogAdoptionProcess {
-    /// 重验当前来源和公司目标并计算权威售价；逐项短事务保存后才发布预览。
-    /// # 参数
+    /// 提交批量选品前，登记来源和公司目标的重验任务，并重新计算权威售价；全部行与全批检查完成后才发布新预览。
+    ///
     /// 来源连接、批次、页面已读版本、可选重新核对集合和当前认证用户。
-    /// # 返回
+    ///
     /// 已受理的核对任务摘要；全部完成后才能读取新预览版本。
-    /// # 错误
+    ///
     /// 批次越权、版本过期、范围无效或存储失败时拒绝；失败不发布部分预览。
     pub async fn preview_batch(
         &self,
@@ -43,7 +43,7 @@ impl SupplierCatalogAdoptionProcess {
         self.enqueue_batch_work(connection, id, WorkPayload::Review(request), actor).await
     }
 
-    /// 沿原任务游标继续核对，全部一致性检查完成后才发布结果。
+    // 沿原任务游标继续核对，全部一致性检查完成后才发布结果。
     pub(super) async fn preview_batch_members(
         &self,
         batch: &CatalogAdoptionBatch,
@@ -141,7 +141,7 @@ impl SupplierCatalogAdoptionProcess {
             .await
     }
 
-    /// 保存跳过项的进度并进入全批一致性校验，尚不发布可提交结果。
+    // 保存跳过项的进度并进入全批一致性校验，尚不发布可提交结果。
     async fn finish_review_scan(
         &self,
         batch: &CatalogAdoptionBatch,
@@ -399,13 +399,13 @@ impl SupplierCatalogAdoptionProcess {
         }))
     }
 
-    /// 核验只读采购报价、供给条款与配送模板归属，不创建业务事实。
-    /// # 参数
-    /// `item` 为已核验来源，`row` 为服务端冻结载荷，`executor` 为当前短事务执行器。
-    /// # 返回
-    /// 条款与模板均满足现行供给规则时成功。
-    /// # 错误
-    /// 报价不符、条款无效、模板缺失或跨供应商引用时拒绝。
+    // 批量选品冻结预览时，用当前短事务核对来源报价、供给条款及配送模板归属；此处不创建商品或供给。
+    //
+    // `item` 为已核验来源，`row` 为服务端冻结载荷，`executor` 为当前短事务执行器。
+    //
+    // 条款与模板均满足现行供给规则时成功。
+    //
+    // 报价不符、条款无效、模板缺失或跨供应商引用时拒绝。
     pub(super) async fn validate_batch_offering(
         &self,
         item: &SupplierCatalogItem,
@@ -432,13 +432,13 @@ impl SupplierCatalogAdoptionProcess {
     }
 }
 
-/// 将批次行还原为现行逐项确认所需的冻结来源视图。
-/// # 参数
-/// `batch` 为已授权批次，`row` 为保留原确认人和来源内容的批次行。
-/// # 返回
-/// 使用原确认人及固定来源的内部预览，不改变浏览器确认范围。
-/// # 错误
-/// 不返回错误；原操作载荷与来源版本由实际确认流程重新检查。
+// 将批次行还原为现行逐项确认所需的冻结来源视图。
+//
+// `batch` 为已授权批次，`row` 为保留原确认人和来源内容的批次行。
+//
+// 使用原确认人及固定来源的内部预览，不改变浏览器确认范围。
+//
+// 原操作载荷与来源版本由实际确认流程重新检查。
 pub(super) fn batch_preview(
     batch: &CatalogAdoptionBatch,
     row: &CatalogAdoptionBatchItem,
@@ -453,7 +453,7 @@ pub(super) fn batch_preview(
     }
 }
 
-/// 在后台匹配前验证显式核对集合，保留原请求的选择边界。
+// 在后台匹配前验证显式核对集合，保留原请求的选择边界。
 pub(super) fn review_selection<'a>(
     rows: &[CatalogAdoptionBatchItem],
     item_ids: Option<&'a [String]>,

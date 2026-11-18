@@ -13,18 +13,9 @@ use crate::http::state::HttpState;
 use crate::wiring::organization_service;
 
 /// 查询组织管理范围内的组织和关系。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已认证操作人
-///
-/// # 返回
 /// 配置边界内的组织事实，以及范围版本、空集原因和人员/角色标签。
-///
-/// # 错误
 /// 无权限及状态读取错误沿用统一响应。
 ///
-/// # 关键业务约束
 /// 缺范围返回空集并标记 `no_scope`；组织配置权不授予业务执行权。
 pub async fn list(
     State(state): State<HttpState>,
@@ -42,19 +33,10 @@ pub async fn list(
 }
 
 /// 预览组织变更影响，提交前不写入任何关系。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已认证操作人
-/// * `request` - 含 `expected_version`、幂等键、原因和固定 `change` 命令
-///
-/// # 返回
+/// `request` 为含 `expected_version`、幂等键、原因和固定 `change` 命令。
 /// 变更前后组织事实；不写入关系、不改派任务。
-///
-/// # 错误
 /// 版本、边界或业务约束失败时返回统一错误。
 ///
-/// # 关键业务约束
 /// 组织配置权不授予业务执行权；所属部门不代替 `org_unit:manage`。
 pub async fn preview(
     State(state): State<HttpState>,
@@ -73,19 +55,10 @@ pub async fn preview(
 }
 
 /// 提交已预览的组织变更，事务内独立重验版本和权限。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已认证操作人
-/// * `request` - 与预览相同的命令，必须重验 `expected_version`
-///
-/// # 返回
+/// `request` 为与预览相同的命令，必须重验 `expected_version`。
 /// 写入后的变更回执。
-///
-/// # 错误
 /// 冲突及越权不产生部分变更。
 ///
-/// # 关键业务约束
 /// 事务内重验授权、版本和成员资格；不自动改派任务。
 pub async fn change(
     State(state): State<HttpState>,

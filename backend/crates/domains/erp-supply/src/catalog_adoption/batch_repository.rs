@@ -16,21 +16,11 @@ const ITEMS: &str = "supplier_catalog_adoption_batch_items";
 /// 作业批次仓储；更新统一使用 Repository 的实体版本 CAS。
 pub trait BatchAdoptionExt {
     /// 取得批次仓储。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 当前数据库的批次仓储。
-    /// # 错误
-    /// 不返回错误。
     fn catalog_adoption_batches(&self) -> Repository<'_, CatalogAdoptionBatch>;
 
     /// 取得逐项草稿及冻结执行记录仓储。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 当前数据库的批次行仓储。
-    /// # 错误
-    /// 不返回错误。
     fn catalog_adoption_batch_items(&self) -> Repository<'_, CatalogAdoptionBatchItem>;
 }
 
@@ -45,12 +35,9 @@ impl BatchAdoptionExt for Database {
 }
 
 /// 按稳定游标读取同一批次冻结成员，不截断或混入其他批次。
-/// # 参数
-/// `batch` 为已授权批次，`after` 为上一页最后行主键，`limit` 为页大小。
-/// # 返回
 /// 按主键升序的至多一千行；调用方继续读取直到空页。
-/// # 错误
-/// 数据库读取失败时返回错误。
+/// 数据库读取失败时向上传播错误。
+/// `batch` 为已授权批次，`after` 为上一页最后行主键，`limit` 为页大小。
 pub async fn batch_items(
     db: &Database,
     batch: &str,
@@ -68,12 +55,9 @@ pub async fn batch_items(
 }
 
 /// 按当前已授权连接读取可重开的批次摘要。
-/// # 参数
-/// `connection` 必须由流程重新验证权限和数据范围，`before` 为稳定主键游标。
-/// # 返回
 /// 最近二十个批次，不包含其他连接。
-/// # 错误
-/// 数据库查询失败时返回错误。
+/// 数据库查询失败时向上传播错误。
+/// `connection` 必须由流程重新验证权限和数据范围，`before` 为稳定主键游标。
 pub async fn recent_batches(
     db: &Database,
     connection: &str,
@@ -94,12 +78,8 @@ pub async fn recent_batches(
 }
 
 /// 有界读取需要准备草稿或执行已确认入库的批次。
-/// # 参数
-/// `after` 为上轮最后处理批次的主键，空串从头读取。
-/// # 返回
 /// 稳定顺序的最多二十个准备任务或已确认执行任务。
-/// # 错误
-/// 数据库查询失败时返回错误。
+/// 数据库查询失败时向上传播错误。
 pub async fn runnable_batches(
     db: &Database,
     after: &str,
@@ -115,12 +95,9 @@ pub async fn runnable_batches(
 }
 
 /// 取得本批已明确确认且尚未领取的行。
-/// # 参数
-/// `batch` 为调度流程已读取的批次；读取不代表领取成功。
-/// # 返回
 /// 最多五十项；执行前须调用实体 begin 并 CAS 保存。
-/// # 错误
-/// 数据库查询失败时返回错误。
+/// 数据库查询失败时向上传播错误。
+/// `batch` 为调度流程已读取的批次；读取不代表领取成功。
 pub async fn due_batch_items(
     db: &Database,
     batch: &str,
@@ -136,12 +113,9 @@ pub async fn due_batch_items(
 }
 
 /// 判断本批是否存在正在执行或已经明确排队的行。
-/// # 参数
-/// `batch` 为已授权批次，`executor` 沿用草稿操作的短事务。
-/// # 返回
 /// 命中处理中或带有效原操作号的就绪行时返回真；未知结果不计入。
-/// # 错误
-/// 数据库查询失败时返回错误。
+/// 数据库查询失败时向上传播错误。
+/// `batch` 为已授权批次，`executor` 沿用草稿操作的短事务。
 pub async fn has_inflight_batch_items(
     db: &Database,
     batch: &str,
@@ -156,12 +130,9 @@ pub async fn has_inflight_batch_items(
 }
 
 /// 读取需要查证原结果的行，禁止将中断操作重新当作待执行行。
-/// # 参数
-/// `stale_before` 为超过允许处理时间的服务器时间，`batch` 为已授权批次，`after` 为上页最后行主键。
-/// # 返回
 /// 最多五十项未知结果或处理超时的原操作。
-/// # 错误
-/// 数据库查询失败时返回错误。
+/// 数据库查询失败时向上传播错误。
+/// `stale_before` 为超过允许处理时间的服务器时间，`batch` 为已授权批次，`after` 为上页最后行主键。
 pub async fn uncertain_batch_items(
     db: &Database,
     batch: &str,
@@ -179,11 +150,7 @@ pub async fn uncertain_batch_items(
 }
 
 /// 登记独立批次、来源成员身份及后台任务扫描索引。
-/// # 参数
-/// `db` 为应用数据库。
-/// # 返回
 /// 全部增量索引创建成功。
-/// # 错误
 /// 存量唯一冲突或数据库失败时返回错误。
 pub async fn ensure_batch_indexes(db: &Database) -> Result<()> {
     db.collection::<Document>(BATCHES)
@@ -221,12 +188,9 @@ pub async fn ensure_batch_indexes(db: &Database) -> Result<()> {
 }
 
 /// 在已授权批次中读取唯一来源 SKU 的草稿与冻结载荷。
-/// # 参数
-/// `batch` 为流程已授权的批次，`source_item` 为冻结来源身份，`executor` 为当前事务。
-/// # 返回
 /// 返回该批次唯一来源行；不存在时为空。
-/// # 错误
-/// 数据库读取失败时返回错误。
+/// 数据库读取失败时向上传播错误。
+/// `batch` 为流程已授权的批次，`source_item` 为冻结来源身份，`executor` 为当前事务。
 pub async fn batch_item_by_source(
     db: &Database,
     batch: &str,

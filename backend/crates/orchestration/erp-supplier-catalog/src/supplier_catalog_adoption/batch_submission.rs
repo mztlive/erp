@@ -10,13 +10,8 @@ use super::{BatchSubmissionView, SubmitBatchRequest, SupplierCatalogAdoptionProc
 use crate::{Error, Result};
 
 impl SupplierCatalogAdoptionProcess {
-    /// 查证原确认是否受理，未受理时原子封存操作号；不执行商品入库。
-    /// # 参数
-    /// 连接、批次、浏览器保留的完整原确认及当前认证用户。
-    /// # 返回
-    /// 已受理或已封存未受理的确定结果，以及当前批次内容。
-    /// # 错误
-    /// 越权、身份不一致、并发冲突或提交结果未知时保持待核实并返回错误。
+    /// 浏览器不能确认入库是否受理时，提交完整原请求，按原操作号查证；未受理时原子封存该号，不执行入库。
+    /// 返回已受理或已封存未受理的结论和当前批次。越权、身份不一致、并发冲突或提交未知时仍待核实。
     pub async fn query_batch_submission(
         &self,
         connection: &str,

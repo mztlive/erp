@@ -58,7 +58,7 @@ pub enum Error {
 impl_domain_error_class!(Error);
 
 impl From<erp_identity::Error> for Error {
-    /// 保留身份授权的错误类别与原始载荷。
+    // 保留身份授权的错误类别与原始载荷。
     fn from(error: erp_identity::Error) -> Self {
         match error {
             erp_identity::Error::Internal(v) | erp_identity::Error::Rbac(v) => Self::Internal(v),
@@ -83,15 +83,15 @@ impl_repository_error!(
     duplicate = |error| { Error::ConflictError(duplicate_key_conflict_message(&error)) }
 );
 
-/// 将唯一键冲突映射为面向用户的冲突提示。
+// 将唯一键冲突映射为面向用户的冲突提示。
 fn duplicate_key_conflict_message(error: &persistence_core::Error) -> String {
     duplicate_index_conflict_message(error.duplicate_index_name())
 }
 
-/// 将退货逆向域唯一索引名称映射为面向用户的冲突提示。
-///
-/// 退货逆向单号与明细唯一索引保持原通用冲突文案；用户文案不泄漏键细节，
-/// 索引名只进 tracing 日志上下文。
+// 将退货逆向域唯一索引名称映射为面向用户的冲突提示。
+//
+// 退货逆向单号与明细唯一索引保持原通用冲突文案；用户文案不泄漏键细节，
+// 索引名只进 tracing 日志上下文。
 fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
     debug!(index_name = ?index_name, "唯一冲突保持通用用户文案");
     "数据已存在，请勿重复提交".to_string()
@@ -131,7 +131,7 @@ mod tests {
         assert_eq!(error.to_string(), "数据冲突: 数据已被其他请求修改，请刷新后重试");
     }
 
-    /// 错误分类对照表：唯一冲突/乐观锁/瞬态事务恒为 Conflict，业务类恒为 BusinessRule。
+    // 验证错误分类对照表：唯一冲突/乐观锁/瞬态事务恒为 Conflict，业务类恒为 BusinessRule。
     #[test]
     fn error_class_truth_table() {
         use persistence_core::Error as StoreError;

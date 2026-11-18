@@ -36,7 +36,7 @@ pub(crate) enum AccessRule {
 }
 
 impl AccessRule {
-    /// 归一化交集；空规则拒绝，显式 Allow 才表示无限制。
+    // 构造条件交集时归一化分支。空交集不授予访问；只有显式 `Allow` 表示不限制。
     pub(crate) fn all(rules: Vec<Self>) -> Self {
         if rules.is_empty() || (rules.contains(&Self::Deny) && !rules.iter().any(Self::has_requirements)) {
             return Self::Deny;
@@ -49,7 +49,7 @@ impl AccessRule {
         }
     }
 
-    /// 归一化并集；空集合保持拒绝。
+    // 构造条件并集时归一化分支；没有任何分支时仍拒绝，不默认放行。
     pub(crate) fn any(rules: Vec<Self>) -> Self {
         if rules.contains(&Self::Allow) && !rules.iter().any(Self::has_requirements) {
             return Self::Allow;
@@ -62,7 +62,7 @@ impl AccessRule {
         }
     }
 
-    /// 显式必需事实不能被无条件放行的并集分支删除。
+    // 归一化规则之前识别显式必需事实，防止并集中的无限制分支吞掉独立完整性检查。
     fn has_requirements(&self) -> bool {
         match self {
             Self::Required { facts, rule } => !facts.is_empty() || rule.has_requirements(),
@@ -73,12 +73,12 @@ impl AccessRule {
         }
     }
 
-    /// 附加完整性检查，空声明不增加节点。
+    // 给数据规则附加必须先核验的事实维度；空要求保持原规则不变。
     pub(crate) fn requiring(self, facts: &BTreeSet<FactKind>) -> Self {
         if facts.is_empty() { self } else { Self::Required { facts: facts.clone(), rule: Box::new(self) } }
     }
 
-    /// 保留历史参与与个人上限的位置，不把上限当作正向授权。
+    // 将解析范围变成对象和查询共用的规则，按原语义保留历史参与与个人上限；上限只收窄，不单独授予访问。
     pub(crate) fn scope(scope: &ResolvedScope, allow_history: bool) -> Self {
         let granted = if scope.user_limit.is_none() && scope.role_clauses.iter().any(|clause| clause.company)
         {
@@ -97,7 +97,7 @@ impl AccessRule {
         }
     }
 
-    /// 条款内归属维度取并集，各独立维度取交集。
+    // 编译单条范围时，将同类归属条件取并集，再与其他独立维度求交，保留该条款的组合语义。
     pub(crate) fn clause(clause: &ScopeClause) -> Self {
         if clause.company {
             return Self::Allow;
@@ -127,12 +127,12 @@ impl AccessRule {
         Self::all(dimensions)
     }
 
-    /// 对象事实已经由拥有领域按授权账号与时点准备。
+    // 以拥有领域按本次账号及时点准备的对象事实运行范围规则，不另行取证。
     pub(crate) fn allows_scope(&self, object: &ScopedObject<'_>) -> bool {
         self.evaluate(object, &|_| false)
     }
 
-    /// 只有经过有效来源校验的读取资格可以满足记录授权节点。
+    // 递归判断完整范围规则；记录授权节点只有经有效来源校验的读取资格才能命中。
     pub(crate) fn evaluate(
         &self,
         object: &ScopedObject<'_>,
@@ -152,7 +152,7 @@ impl AccessRule {
 }
 
 impl AccessFact {
-    /// 只判断本事实，不改变上层授权组合。
+    // 只匹配当前范围事实，供上层规则按原逻辑组合；不在此扩大与或条件。
     fn matches_scope(&self, object: &ScopedObject<'_>) -> bool {
         match self {
             Self::Owned => object.owned,

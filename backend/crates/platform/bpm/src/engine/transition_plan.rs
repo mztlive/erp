@@ -57,16 +57,7 @@ pub enum TaskCloseReason {
 }
 
 impl TaskCloseReason {
-    /// 返回稳定关闭原因代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回合同固定关闭原因。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回稳定的任务关闭原因码，供任务适配层区分取消与流程运行受阻。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::ApprovalRuntimeBlocked => "APPROVAL_RUNTIME_BLOCKED",
@@ -96,17 +87,7 @@ pub struct TransitionPlan {
 }
 
 impl TransitionPlan {
-    /// 以更新后的实例构造空写入计划。
-    ///
-    /// # 参数
-    /// * `instance` - 已按本命令推进的实例快照
-    /// * `commit` - 提交类别
-    ///
-    /// # 返回
-    /// 返回不含执行或任务意图的计划骨架。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 引擎确定目标实例快照和提交类别后，以此创建计划骨架，再填入需要一起提交的执行、绑定、任务和事件。
     pub fn for_instance(instance: ApprovalProcessInstance, commit: CommitRequired) -> Self {
         Self {
             instance,
@@ -119,20 +100,8 @@ impl TransitionPlan {
         }
     }
 
-    /// 追加另一份进入节点计划的执行、任务与事件，并采用其实例快照。
-    ///
-    /// 已接受决定后的下一节点受阻不得改写为 `CommitRequired::Blocked`，
-    /// 因此通过/驳回路径使用 [`Self::merge_enter_keep_commit`]。
-    ///
-    /// # 参数
-    /// * `enter` - `plan_enter_node` 的结果
-    /// * `keep_commit` - 为真时保留当前提交类别
-    ///
-    /// # 返回
-    /// 无返回值。就地并入进入计划的实例、执行、任务与事件；`keep_commit` 为假时改用进入计划的提交类别。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 把进入节点的实例快照和全部变更追加到已有计划，用于把旧执行结束与新执行进入组成一次提交。
+    /// 开启 `keep_commit` 时保留原动作的提交类别；决定已接受但后继受阻时使用 [`Self::merge_enter_keep_commit`]。
     pub fn merge_enter(&mut self, enter: TransitionPlan, keep_commit: bool) {
         self.instance = enter.instance;
         self.created_executions.extend(enter.created_executions);
@@ -145,32 +114,12 @@ impl TransitionPlan {
         }
     }
 
-    /// 追加另一份进入节点计划并保留当前提交类别。
-    ///
-    /// 已接受决定后的下一节点受阻不得改写为 `CommitRequired::Blocked`。
-    ///
-    /// # 参数
-    /// * `enter` - `plan_enter_node` 的结果
-    ///
-    /// # 返回
-    /// 无返回值。就地并入进入计划，并保留当前提交类别。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 当前决定已接受后合并后继进入计划，让下一节点的阻塞仍被记录，而不把本次决定改判为未接受。
     pub fn merge_enter_keep_commit(&mut self, enter: TransitionPlan) {
         self.merge_enter(enter, true);
     }
 
-    /// 追加另一份进入节点计划并采用其提交类别。
-    ///
-    /// # 参数
-    /// * `enter` - `plan_enter_node` 的结果
-    ///
-    /// # 返回
-    /// 无返回值。就地并入进入计划，并改用其提交类别。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 恢复等场景合并进入计划时，以实际进入结果作为整体提交类别，同时保留之前积累的执行变更和事件。
     pub fn merge_enter_adopt_commit(&mut self, enter: TransitionPlan) {
         self.merge_enter(enter, false);
     }

@@ -29,17 +29,12 @@ pub struct SupplierRefundPostingFact {
 }
 
 /// 在原退款累计限额校验之前读取并确认财务付款已过账。
-///
-/// # 参数
-/// * `db` - 财务领域数据库。
-/// * `payment_id` - 原付款单主键。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
 /// 返回状态为 `Posted` 的付款单。
+/// 失败条件：付款不存在时返回 `NotFound`；状态不是已过账时返回 `BusinessLogicError`；仓储读取失败时返回对应错误。
 ///
-/// # 错误
-/// 付款不存在时返回 `NotFound`；状态不是已过账时返回 `BusinessLogicError`；仓储读取失败时返回对应错误。
+/// 输入约定：
+/// - `db`：财务领域数据库。
+/// - `payment_id`：原付款单主键。
 pub async fn load_posted_payment_for_refund(
     db: &Database,
     payment_id: &SupplierPaymentId,
@@ -57,19 +52,14 @@ pub async fn load_posted_payment_for_refund(
 }
 
 /// 写入反向核销分配并回冲已付进度，不修改应付总额。
+/// 结果：反向分配和进度写入完成时无返回值；采购应付差额由原采购改单负责。
+/// 失败条件：分录或账户缺失、跨供应商、超额冲减、实体构造失败或仓储失败时返回对应错误。
 ///
-/// # 参数
-/// * `db` - 财务领域数据库。
-/// * `refund` - 退款稳定身份、金额与原发生时点。
-/// * `payment` - 已过账的原付款。
-/// * `actor_id` - 执行人。
-/// * `session` - 调用方事务执行器。
-///
-/// # 返回
-/// 反向分配和进度写入完成时无返回值；采购应付差额由原采购改单负责。
-///
-/// # 错误
-/// 分录或账户缺失、跨供应商、超额冲减、实体构造失败或仓储失败时返回对应错误。
+/// 输入约定：
+/// - `db`：财务领域数据库。
+/// - `refund`：退款稳定身份、金额与原发生时点。
+/// - `payment`：已过账的原付款。
+/// - `session`：调用方事务执行器。
 pub async fn persist_refund_offsets_and_reversals(
     db: &Database,
     refund: &SupplierRefundPostingFact,
@@ -135,10 +125,8 @@ async fn target_allocations<P: RefundPostingPort>(
         .collect())
 }
 
-/// 按实际反向核销块回冲已付进度，校验原供应商和来源账户。
-///
-/// # 错误
-/// 分录缺失、跨供应商或超额冲减时返回错误。
+// 按实际反向核销块回冲已付进度，校验原供应商和来源账户。
+// 分录缺失、跨供应商或超额冲减时返回错误。
 async fn revert_settlements<P: RefundPostingPort>(
     port: &P,
     payment: &crate::entity::payable::SupplierPayment,
@@ -166,10 +154,8 @@ async fn revert_settlements<P: RefundPostingPort>(
     Ok(())
 }
 
-/// 原子回冲应付子账已核销进度。
-///
-/// # 错误
-/// 超额冲减或仓储失败时返回错误。
+// 原子回冲应付子账已核销进度。
+// 超额冲减或仓储失败时返回错误。
 async fn revert_supplier_refund_settlement<P: RefundPostingPort>(
     port: &P,
     entry: &PayableEntry,

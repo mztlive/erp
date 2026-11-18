@@ -43,7 +43,7 @@ impl BackgroundTaskAdapter for SupplierImportProcess {
 }
 
 impl SupplierImportProcess {
-    /// 通过版本竞争认领任务，执行前加载密文；读取失败终止任务并提示重新提交。
+    // 通过版本竞争认领任务，执行前加载密文；读取失败终止任务并提示重新提交。
     async fn execute(&self, job: &mut BackgroundJob) -> Result<()> {
         if !claimable(job, Instant::now()) {
             return Ok(());
@@ -71,7 +71,7 @@ impl SupplierImportProcess {
         result
     }
 
-    /// 仅缓存已完成解密、指纹与任务绑定校验的输入，读取超时仍按原合同失败。
+    // 仅缓存已完成解密、指纹与任务绑定校验的输入，读取超时仍按原合同失败。
     async fn execution_source(&self, job: &BackgroundJob) -> Result<Arc<SupplierImportJobRequest>> {
         self.sources
             .get_or_load(job, || async {
@@ -86,7 +86,7 @@ impl SupplierImportProcess {
             .await
     }
 
-    /// 每行最多执行一分钟；异常结果单独标识为待核对，其余行继续处理。
+    // 每行最多执行一分钟；异常结果单独标识为待核对，其余行继续处理。
     async fn execute_rows(&self, job: &mut BackgroundJob, request: &SupplierImportJobRequest) -> Result<()> {
         let items = self
             .db
@@ -99,7 +99,7 @@ impl SupplierImportProcess {
         execute_rows(&mut execution, job, items, import_budget()).await
     }
 
-    /// 逐行开始前重验任务版本和取消状态，再续期认领。
+    // 逐行开始前重验任务版本和取消状态，再续期认领。
     async fn renew(&self, job: &mut BackgroundJob) -> Result<bool> {
         let current = self
             .db
@@ -116,7 +116,7 @@ impl SupplierImportProcess {
         Ok(true)
     }
 
-    /// 有界执行单行；超时或未知响应返回待确认，不推断是否已经写入。
+    // 有界执行单行；超时或未知响应返回待确认，不推断是否已经写入。
     async fn import_item(
         &self,
         service: &SupplierProfileProcess,
@@ -135,7 +135,7 @@ impl SupplierImportProcess {
         .and_then(|rows| rows.into_iter().next())
     }
 
-    /// 进度与行结果同时提交；取消或另一执行器更新任务后版本冲突会回滚本次进度。
+    // 进度与行结果同时提交；取消或另一执行器更新任务后版本冲突会回滚本次进度。
     async fn persist_progress(&self, job: &mut BackgroundJob, mut item: BackgroundJobItem) -> Result<()> {
         let db = self.db.clone();
         let mut copy = job.clone();
@@ -154,16 +154,13 @@ impl SupplierImportProcess {
         Ok(())
     }
 
-    /// 读取并解密任务源内容，只供执行器和已校验归属的失败下载调用。解密失败不返回源字节。
-    ///
-    /// # 参数
-    /// * `job` - 已登记的供应商导入任务。
-    ///
-    /// # 返回
-    /// 返回校验通过且指纹属于该任务的导入请求。
-    ///
-    /// # 错误
-    /// 源路径非法、读取或解密失败、内容损坏、校验失败、指纹不属于该任务，或与任务登记不一致时返回错误。
+    // 读取并解密任务源内容，只供执行器和已校验归属的失败下载调用。解密失败不返回源字节。
+    //
+    // `job`：已登记的供应商导入任务。
+    //
+    // 返回校验通过且指纹属于该任务的导入请求。
+    //
+    // 源路径非法、读取或解密失败、内容损坏、校验失败、指纹不属于该任务，或与任务登记不一致时返回错误。
     pub(super) async fn source(&self, job: &BackgroundJob) -> Result<SupplierImportJobRequest> {
         let source = job
             .domain_job_id
@@ -219,7 +216,7 @@ impl SupplierRowExecution for SupplierRows<'_> {
     }
 }
 
-/// 最近仍在推进的任务不得抢占；终态包括已经完成的部分成功。
+// 最近仍在推进的任务不得抢占；终态包括已经完成的部分成功。
 fn claimable(job: &BackgroundJob, now: Instant) -> bool {
     if job.finished_at.is_some() {
         return false;
@@ -229,7 +226,7 @@ fn claimable(job: &BackgroundJob, now: Instant) -> bool {
             && job.last_progress_at.is_none_or(|last| now.unix_secs() - last.unix_secs() >= 120))
 }
 
-/// 未知结果使用专属原因码，不声明回滚；失败项可由原文件重导核对。
+// 未知结果使用专属原因码，不声明回滚；失败项可由原文件重导核对。
 fn record(item: &mut BackgroundJobItem, outcome: Option<SupplierImportResult>) -> Result<()> {
     let Some(result) = outcome.filter(|row| row.status != "uncertain") else {
         return Ok(item.record_result(

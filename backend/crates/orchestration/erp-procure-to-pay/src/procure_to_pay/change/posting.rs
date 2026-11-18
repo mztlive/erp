@@ -53,30 +53,30 @@ trait EffectSteps: Send {
     type Allocations: Send;
     type Payable: Send;
 
-    /// 只有旧 API 执行已经按未发单规则停止，才重新建立执行责任。
+    // 只有旧 API 执行已经按未发单规则停止，才重新建立执行责任。
     fn reschedule_api(&self) -> bool;
 
-    /// 取出可选应付计划，由编排层唯一决定是否执行差额写入。
+    // 取出可选应付计划，由编排层唯一决定是否执行差额写入。
     fn take_payable(&mut self) -> Option<Self::Payable>;
 
-    /// 在来源销售校验后生成本次分配，交给后续持久化步骤。
+    // 在来源销售校验后生成本次分配，交给后续持久化步骤。
     async fn prepare_allocations(&mut self, executor: &mut dyn Executor) -> Result<Self::Allocations>;
 
-    /// 写入本次已准备的分配，不依赖适配器内部中间状态。
+    // 写入本次已准备的分配，不依赖适配器内部中间状态。
     async fn persist_allocations(
         &mut self,
         allocations: Self::Allocations,
         executor: &mut dyn Executor,
     ) -> Result<()>;
 
-    /// 写入已有的应付差额计划。
+    // 采购变更生效时，在原执行器写入已经准备好的应付差额计划。
     async fn persist_payable(&mut self, payable: Self::Payable, executor: &mut dyn Executor) -> Result<()>;
 
-    /// 执行单步并直接传播原错误，执行器必须保持调用方的同一借用。
+    // 执行单步并直接传播原错误，执行器必须保持调用方的同一借用。
     async fn apply(&mut self, step: EffectStep, executor: &mut dyn Executor) -> Result<()>;
 }
 
-/// 逐步执行原持久化次序；每一步完成后才进入下一步。
+// 逐步执行原持久化次序；每一步完成后才进入下一步。
 async fn execute(steps: &mut impl EffectSteps, executor: &mut dyn Executor) -> Result<()> {
     use EffectStep::*;
     for step in [QuantityGuard, SalesGuard] {
@@ -193,7 +193,7 @@ impl EffectSteps for MongoEffect<'_> {
     }
 }
 
-/// 只有旧未发 API 意图被安全停止后，才为正式新版本建立新执行和对应直发草稿。
+// 只有旧未发 API 意图被安全停止后，才为正式新版本建立新执行和对应直发草稿。
 async fn reschedule_api_fulfillment(
     db: &Database,
     ports: &PurchaseOrderPorts,
@@ -208,7 +208,7 @@ async fn reschedule_api_fulfillment(
     Ok(())
 }
 
-/// 复核结算主体并串行化来源销售，保证后续分配基于同一销售版本。
+// 复核结算主体并串行化来源销售，保证后续分配基于同一销售版本。
 async fn guard_sales(
     db: &Database,
     purchase: &mut EffectiveChangeWrite,
@@ -221,7 +221,7 @@ async fn guard_sales(
     advance_source_sales_procurement_guard(db, &purchase.order, actor_id, executor).await
 }
 
-/// 按当时事实复核改后数量与交付安排，仓库履约采购同步重算入库进度。
+// 按当时事实复核改后数量与交付安排，仓库履约采购同步重算入库进度。
 async fn guard_quantities(
     db: &Database,
     purchase: &mut EffectiveChangeWrite,
@@ -244,7 +244,7 @@ async fn guard_quantities(
     Ok(())
 }
 
-/// 正式采购版本切换与应付主体同步共用调用方执行器，零金额变更也必须推进依据。
+// 正式采购版本切换与应付主体同步共用调用方执行器，零金额变更也必须推进依据。
 async fn persist_current_purchase(
     db: &Database,
     purchase: &mut EffectiveChangeWrite,
@@ -264,23 +264,13 @@ async fn persist_current_purchase(
     Ok(())
 }
 
-/// 事务内写入生效修订、指针、差额与变更单。
-///
-/// 先按当时事实复核改后数量与交付安排，再推进来源销售 guard，按当前销售版本
-/// 重建 allocation，最后切换采购当前版本并同步任务。
-///
-/// # 参数
-/// * `db` - 采购、销售与财务所在数据库。
-/// * `write` - 已准备的生效过账计划。
-/// * `audit` - 成功路径上的审计日志。
-/// * `actor_id` - 推进来源销售 guard 的操作人。
-/// * `executor` - 调用方事务执行器。
-///
-/// # 返回
-/// 返回仓储写入后采购单最新乐观锁版本。
-///
-/// # 错误
-/// 来源销售缺失、任何 CAS 或仓储写入失败时停止后续步骤并返回原错误。
+// 事务内写入生效修订、指针、差额与变更单。
+//
+// 先按当时事实复核改后数量与交付安排，再推进来源销售 guard，按当前销售版本重建 allocation，最后切换采购当前版本并同步任务。
+//
+// `db` 为采购、销售与财务所在数据库；`write` 为已准备的生效过账计划；`audit` 为成功路径上的审计日志；`actor_id` 为推进来源销售 guard 的操作人；沿用原事务的执行器。
+//
+// 返回仓储写入后采购单最新乐观锁版本。来源销售缺失、任何 CAS 或仓储写入失败时停止后续步骤并返回原错误。
 pub(super) async fn persist_effective_writes(
     db: &Database,
     ports: &PurchaseOrderPorts,
@@ -317,13 +307,11 @@ pub(super) async fn persist_effective_writes(
     Ok(steps.write.purchase.order.base.version)
 }
 
-/// 在采购变更生效事务内推进来源销售单的采购串行化 guard。
-///
-/// 必须先通过销售单 `id + version` CAS 推进 `procurement_guard_version`，
-/// 后续才能重算采购覆盖，不得在事务外预读后仅写采购版本。
-///
-/// # 错误
-/// 来源销售单不存在、guard 溢出、乐观锁或瞬态事务冲突时返回原错误。
+// 在采购变更生效事务内推进来源销售单的采购串行化 guard。
+//
+// 必须先通过销售单 `id + version` CAS 推进 `procurement_guard_version`，后续才能重算采购覆盖，不得在事务外预读后仅写采购版本。
+//
+// 来源销售单不存在、guard 溢出、乐观锁或瞬态事务冲突时返回原错误。
 async fn advance_source_sales_procurement_guard(
     db: &Database,
     order: &PurchaseOrder,
@@ -464,7 +452,7 @@ mod tests {
         }
     }
 
-    /// 零差额生效只跳过差额分录，正式版本及主体依据继续同步。
+    // 零差额生效只跳过差额分录，正式版本及主体依据继续同步。
     #[tokio::test]
     async fn zero_delta_skips_delta_without_skipping_current_subject_effects() {
         let mut executor = TestExecutor::default();

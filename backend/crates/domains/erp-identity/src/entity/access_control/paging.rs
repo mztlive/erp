@@ -20,19 +20,18 @@ pub struct PageParams {
     pub(crate) sort_dir: SortDir,
 }
 impl Default for PageParams {
-    /// 默认首页、20 条、创建时间降序。
+    // 未指定列表分页时使用第 1 页、每页 20 条，按创建时间倒序。
     fn default() -> Self {
         Self { page: 1, page_size: 20, sort_by: TimeSort::CreatedAt, sort_dir: SortDir::Desc }
     }
 }
 impl PageParams {
     /// 解析分页与固定时间排序。
-    /// # 参数
-    /// sort_by、sort_dir 为请求排序，page、page_size 为可选分页。
-    /// # 返回
     /// 已验证参数；缺省使用首页、20 条、创建时间降序。
-    /// # 错误
+    ///
     /// 非法页码、页大小、排序字段或方向拒绝。
+    ///
+    /// sort_by、sort_dir 为请求排序，page、page_size 为可选分页。
     pub fn parse(
         sort_by: &Option<String>,
         sort_dir: &Option<String>,

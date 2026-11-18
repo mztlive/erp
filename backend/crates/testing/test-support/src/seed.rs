@@ -36,21 +36,9 @@ const SUBJECT_PREFIX: &str = "user:admin:";
 /// 种子管理员角色拥有的 `list` 类权限键 `(resource, action)`。
 const SEED_PERMISSIONS: &[(&str, &str)] = &[("role", "list"), ("admin", "list"), ("audit_log", "list")];
 
-/// 种子一个后台管理员账号及其角色与 Casbin 权限策略。
+/// 写入后台测试账号、角色及 Casbin 授权规则，让请求可通过认证和指定列表权限的检查。返回账号 ID，供 `mint_jwt` 按相同身份规则签发测试令牌。
 ///
-/// 在 `accounts` / `roles` / `casbin_rules` 三个集合分别插入最小记录，
-/// 使该账号对 `SEED_PERMISSIONS` 中的 `list` 类权限可被
-/// `authenticate` + `with_permission` 中间件放行。账号登录名、类型与版本
-/// 由 `seed_login` 派生规则固定，`mint_jwt` 按同一规则签发可用 JWT。
-///
-/// # 参数
-/// * `db` - 目标数据库
-///
-/// # 返回
-/// 返回新生成的账号 ID（用于 `mint_jwt` 签发凭据）。
-///
-/// # 错误
-/// 集合写入失败时返回 MongoDB 错误；`Role::new` 校验失败时返回 `Error::Entity`。
+/// 写入集合失败时返回 MongoDB 错误；构造角色失败时返回实体校验错误。
 pub async fn seed_admin_account(db: &Database) -> Result<String> {
     let account_id = format!("acc-{}", uuid_hex_n(UUID_ACCOUNT_SUFFIX_LEN));
     let login = seed_login(&account_id);
@@ -59,10 +47,7 @@ pub async fn seed_admin_account(db: &Database) -> Result<String> {
     Ok(account_id)
 }
 
-/// 构造并插入种子账号文档。
-///
-/// 账号 `version` 固定为 `ACCOUNT_VERSION`、`deleted_at` 为 0，满足
-/// `BackofficeAuthService::validate_session` 的校验条件。
+// 写入启用且未删除的管理员测试账号，为会话校验提供固定版本和可识别的登录身份。
 async fn insert_account(db: &Database, account_id: &str, login: &str) -> Result<()> {
     let now = Utc::now().timestamp();
     let account = doc! {
@@ -82,11 +67,7 @@ async fn insert_account(db: &Database, account_id: &str, login: &str) -> Result<
     Ok(())
 }
 
-/// 构造并插入种子角色与 Casbin 权限/绑定规则。
-///
-/// 按 `SEED_PERMISSIONS` 写入 N 条 `p` 权限规则 + 1 条 `g` 角色绑定规则
-///（当前共 4 条，见 smoke 测试断言）；不写入 `casbin_policy_state`
-/// 版本文档，首次加载的 Enforcer 快照即包含这些规则。
+// 为测试账号创建角色，并写入 `SEED_PERMISSIONS` 对应的权限规则和账号绑定，使权限加载器首次读取时可直接解析。无需单独种入策略版本文档。
 async fn insert_role_and_policies(db: &Database, account_id: &str) -> Result<()> {
     let role_id = format!("p0-test-{}", uuid_hex_n(UUID_ROLE_SUFFIX_LEN));
     let role_key = format!("{ROLE_PREFIX}{role_id}");
@@ -103,26 +84,14 @@ async fn insert_role_and_policies(db: &Database, account_id: &str) -> Result<()>
     Ok(())
 }
 
-/// 种子的 `p`/`g` 规则各用同一个值作为 Casbin 的区段和类型。
+// 按 Casbin 的入库结构生成种子规则，`p` 和 `g` 分别用同一个值填充区段和类型，规则 ID 由类型及字段组合确定。
 fn casbin_rule(kind: &str, values: &[&str]) -> Document {
     let values = values.iter().map(|value| value.to_string()).collect::<Vec<String>>();
     let id = format!("{kind}\u{1f}{kind}\u{1f}{}", values.join("\u{1f}"));
     doc! { "_id": id, "sec": kind, "ptype": kind, "values": values }
 }
 
-/// 按种子派生规则生成登录账号。
-///
-/// 账号长度落在 `LoginAccount` 的 3..=64 字符区间；`mint_jwt` 必须复用
-/// 同一规则，否则 `validate_session` 会拒绝签发身份。
-///
-/// # 参数
-/// * `account_id` - 种子账号 ID。
-///
-/// # 返回
-/// 返回与账号 ID 一一对应的登录账号。
-///
-/// # 错误
-/// 不返回错误。
+// 用账号 ID 派生稳定的测试登录名；账号种入和 JWT 签发共用该规则，确保会话校验看到同一个身份。
 pub(crate) fn seed_login(account_id: &str) -> String {
     format!("test_admin_{account_id}")
 }

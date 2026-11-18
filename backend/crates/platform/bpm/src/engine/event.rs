@@ -35,16 +35,7 @@ pub enum BpmEventKind {
 }
 
 impl BpmEventKind {
-    /// 返回稳定事件代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回大写下划线代码。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将事件种类映射成稳定的大写下划线代码，供调用方识别事件，不依赖 Rust 变体名。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::InstanceStarted => "INSTANCE_STARTED",
@@ -84,18 +75,7 @@ pub struct BpmEvent {
 }
 
 impl BpmEvent {
-    /// 构造中性领域事件。
-    ///
-    /// # 参数
-    /// * `kind` - 事件种类
-    /// * `instance_id` - 所属实例
-    /// * `round_no` - 相关轮次
-    ///
-    /// # 返回
-    /// 返回其余字段为空的事件。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 引擎组装迁移计划时，以种类、实例和轮次建立中性事件；只为该事件确有的执行、原因等信息填充可选字段。
     pub fn new(kind: BpmEventKind, instance_id: ApprovalProcessInstanceId, round_no: u32) -> Self {
         Self {
             kind,
@@ -109,76 +89,31 @@ impl BpmEvent {
         }
     }
 
-    /// 绑定相关执行。
-    ///
-    /// # 参数
-    /// * `execution_id` - 执行主键
-    ///
-    /// # 返回
-    /// 返回写入 `execution_id` 后的事件。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为节点进入、决定或执行替换等事件写入执行 ID，便于消费者定位本轮中的具体执行记录。
     pub fn with_execution(mut self, execution_id: ApprovalNodeExecutionId) -> Self {
         self.execution_id = Some(execution_id);
         self
     }
 
-    /// 绑定节点键。
-    ///
-    /// # 参数
-    /// * `node_key` - 节点键
-    ///
-    /// # 返回
-    /// 返回写入 `node_key` 后的事件。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为节点相关事件附上定义内的稳定键，便于定位审批步骤而不依赖展示名称。
     pub fn with_node_key(mut self, node_key: impl Into<String>) -> Self {
         self.node_key = Some(node_key.into());
         self
     }
 
-    /// 绑定动作发起人。
-    ///
-    /// # 参数
-    /// * `actor` - 处理人
-    ///
-    /// # 返回
-    /// 返回写入 `actor` 后的事件。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 事件涉及明确的启动人、决定人或取消人时，记录引擎收到的参与人身份。
     pub fn with_actor(mut self, actor: ParticipantId) -> Self {
         self.actor = Some(actor);
         self
     }
 
-    /// 绑定原因摘要。
-    ///
-    /// # 参数
-    /// * `reason` - 原因摘要，原样写入，本方法不 trim
-    ///
-    /// # 返回
-    /// 返回写入 `reason` 后的事件。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取消等动作需要携带事由时附上摘要；原样写入，由调用方完成规范化。
     pub fn with_reason(mut self, reason: impl Into<String>) -> Self {
         self.reason = Some(reason.into());
         self
     }
 
-    /// 绑定结构化阻塞码。
-    ///
-    /// # 参数
-    /// * `code` - 阻塞码
-    ///
-    /// # 返回
-    /// 返回写入 `blocker_code` 后的事件。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为受阻或取消事件附上结构化阻塞码，使消费方能够分类处理而不必解析事由文本。
     pub fn with_blocker(mut self, code: ApprovalBlockerCode) -> Self {
         self.blocker_code = Some(code);
         self

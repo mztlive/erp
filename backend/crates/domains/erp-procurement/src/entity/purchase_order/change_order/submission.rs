@@ -101,18 +101,11 @@ pub struct PurchaseChangeSubmission {
 impl PurchaseChangeSubmission {
     /// 创建采购变更提交。
     ///
-    /// 完成 `submission_no` 校验与规范化，并强制表头金额守恒
-    /// （`gross = net + tax`，§4.2 铁律 4）。
+    /// 完成 `submission_no` 校验与规范化，并强制表头金额守恒（`gross = net + tax`，§4.2 铁律 4）。
     ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::PurchaseChangeSubmissionId`）
-    /// * `data` - 创建数据
+    /// 返回新建的提交实体（初始状态 `Draft`）。提交序号为空/超长，或表头金额三元组不守恒时返回错误。
     ///
-    /// # 返回
-    /// 返回新建的提交实体（初始状态 `Draft`）。
-    ///
-    /// # 错误
-    /// 提交序号为空/超长，或表头金额三元组不守恒时返回错误。
+    /// `id` 为实体主键（`erp_core::ids::PurchaseChangeSubmissionId`）。
     pub fn new(id: PurchaseChangeSubmissionId, data: PurchaseChangeSubmissionData) -> Result<Self> {
         let submission_no = normalize_submission_no(data.submission_no)?;
         ensure_header_triple(data.gross_amount, data.net_amount, data.tax_amount, || {
@@ -141,17 +134,11 @@ impl PurchaseChangeSubmission {
 
     /// 计算同一变更单的下一个提交序号。
     ///
-    /// 仅识别 `CS-{n}` 形态的历史提交，忽略草稿或旧格式编号；新编号固定为
-    /// 六位十进制序号。
+    /// 仅识别 `CS-{n}` 形态的历史提交，忽略草稿或旧格式编号；新编号固定为六位十进制序号。
     ///
-    /// # 参数
-    /// * `existing` - 同一采购变更单的既有提交
+    /// 返回下一个 `CS-000001` 形态的提交序号。最大合法序号已经达到 `u32::MAX` 时返回领域错误。
     ///
-    /// # 返回
-    /// 返回下一个 `CS-000001` 形态的提交序号。
-    ///
-    /// # 错误
-    /// 最大合法序号已经达到 `u32::MAX` 时返回领域错误。
+    /// `existing` 为同一采购变更单的既有提交。
     pub fn next_submission_no(existing: &[Self]) -> Result<String> {
         let max_no = existing
             .iter()
@@ -164,14 +151,7 @@ impl PurchaseChangeSubmission {
 
     /// 校验变更提交仍处于待处理状态。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 待审核状态返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 提交已经处理、失效或仍是草稿时返回领域错误。
+    /// 待审核状态返回 `Ok(())`。提交已经处理、失效或仍是草稿时返回领域错误。
     pub fn ensure_pending(&self) -> Result<()> {
         if self.status != SubmissionStatus::Pending {
             return Err(Error::from("变更提交已处理，请勿重复生效"));
@@ -181,14 +161,7 @@ impl PurchaseChangeSubmission {
 
     /// 记录采购变更最终通过结论。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 待审核提交成功改为已通过时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 提交不是待审核状态时返回领域错误。
+    /// 待审核提交成功改为已通过时返回 `Ok(())`。提交不是待审核状态时返回领域错误。
     pub fn approve(&mut self) -> Result<()> {
         self.ensure_pending()?;
         self.status = SubmissionStatus::Approved;
@@ -199,14 +172,6 @@ impl PurchaseChangeSubmission {
     ///
     /// 从草稿进入待审核并写入提交审计；提交后头行冻结。
     ///
-    /// # 参数
-    /// * `submitted_at` - 提交时间
-    /// * `submitted_by` - 提交人
-    ///
-    /// # 返回
-    /// 提交成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 状态不是草稿，或提交人为空、超长时返回错误。
     pub fn submit(&mut self, submitted_at: Instant, submitted_by: impl Into<String>) -> Result<()> {
         if self.status != SubmissionStatus::Draft {
@@ -224,28 +189,16 @@ impl PurchaseChangeSubmission {
     }
 }
 
-/// 解析带固定前缀的十进制序号。
-///
-/// # 参数
-/// * `value` - 完整编号
-/// * `prefix` - 固定编号前缀
-///
-/// # 返回
-/// 编号匹配前缀且后缀可解析为 `u32` 时返回序号，否则返回 `None`。
+// 解析带固定前缀的十进制序号。编号匹配前缀且后缀可解析为 `u32` 时返回序号，否则返回 `None`。
 fn parse_sequence(value: &str, prefix: &str) -> Option<u32> {
     value.strip_prefix(prefix)?.parse().ok()
 }
 
-/// 规范化提交序号。
-///
-/// # 参数
-/// * `submission_no` - 原始提交序号
-///
-/// # 返回
-/// 返回去空白后的提交序号。
-///
-/// # 错误
-/// 序号为空或超长时返回错误。
+// 规范化提交序号。
+//
+// 返回去空白后的提交序号。序号为空或超长时返回错误。
+//
+// `submission_no` 为原始提交序号。
 fn normalize_submission_no(submission_no: String) -> Result<String> {
     normalize_required_text(submission_no, "提交序号不能为空", SUBMISSION_NO_MAX_LEN, "提交序号过长")
 }
@@ -308,7 +261,7 @@ mod tests {
         }
     }
 
-    /// 独立保存保留驳回状态、旧审批版本和历史提交，正式序号仅重提时推进。
+    // 独立保存保留驳回状态、旧审批版本和历史提交，正式序号仅重提时推进。
     #[test]
     fn save_rejected_target_preserves_history_and_approval_version() {
         use super::super::line::tests::change_line_data;
@@ -361,7 +314,7 @@ mod tests {
         assert!(change.save_draft_target(&draft, &lines, None, "invalid".into(), "buyer").is_err());
     }
 
-    /// 当前审批提交必须同时满足当前指针、所属变更单、基准版本和待处理状态。
+    // 当前审批提交必须同时满足当前指针、所属变更单、基准版本和待处理状态。
     #[test]
     fn current_approval_submission_refuses_history_and_foreign_identity() {
         let mut change = PurchaseChangeOrder::new(

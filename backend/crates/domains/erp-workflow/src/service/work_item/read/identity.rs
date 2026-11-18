@@ -8,12 +8,11 @@ use crate::{Result, WorkItemExt};
 
 impl WorkItemReadService {
     /// 复验本次任务读取及管理动作的完整依赖。
-    /// # 参数
-    /// access 为本服务生成的访问上下文；executor 为原执行器。
-    /// # 返回
     /// 所有已使用的权限和映射仍有效时成功。
-    /// # 错误
+    ///
     /// 撤权或版本变化返回 DATA_SCOPE_CHANGED，其他错误保留原类别。
+    ///
+    /// access 为本服务生成的访问上下文；executor 为原执行器。
     pub async fn validate_access(
         &self,
         access: &super::access::QueueAccess,
@@ -25,7 +24,7 @@ impl WorkItemReadService {
 }
 
 impl WorkItemReadService {
-    /// 只查询当前展示批次的管理资格，不装载全部可管理任务。
+    // 只为当前已授权展示批次取精确任务 ID 的管理资格，不加载所有可管理任务，也不签发命令资格。
     pub(super) async fn projected_access(
         &self,
         access: &super::access::QueueAccess,

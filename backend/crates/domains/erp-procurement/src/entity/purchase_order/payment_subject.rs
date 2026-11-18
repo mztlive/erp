@@ -21,17 +21,9 @@ pub struct PaymentSubjectSnapshot {
 impl PaymentSubjectSnapshot {
     /// 从正式销售版本的已冻结身份和名称构造采购付款主体。
     ///
-    /// # 参数
-    /// * `settlement_party_id` - 正式销售版本的我方主体身份。
-    /// * `settlement_party_name` - 同一正式版本冻结的主体名称。
-    /// * `sales_order_id` - 来源销售单身份。
-    /// * `sales_order_revision_id` - 来源正式销售版本身份。
+    /// 返回完整、可追溯且名称已规范化的主体快照。任一身份为空，或名称为空、超长时拒绝构造。
     ///
-    /// # 返回
-    /// 返回完整、可追溯且名称已规范化的主体快照。
-    ///
-    /// # 错误
-    /// 任一身份为空，或名称为空、超长时拒绝构造。
+    /// `settlement_party_name` 为同一正式版本冻结的主体名称。
     pub fn new(
         settlement_party_id: PartyId,
         settlement_party_name: String,

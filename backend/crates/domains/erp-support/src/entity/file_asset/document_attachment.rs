@@ -61,17 +61,9 @@ pub struct DocumentAttachment {
 
 impl DocumentAttachment {
     /// 创建附件关联。
-    ///
     /// 完成 created_by 的校验与规范化（trim、非空、长度上限）。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::DocumentAttachmentId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
     /// 返回新建的附件关联。
-    ///
-    /// # 错误
+    /// `id` 为实体主键（`erp_core::ids::DocumentAttachmentId`）。
     /// 当记录人为空或超长时返回错误。
     pub fn new(id: DocumentAttachmentId, data: DocumentAttachmentData) -> Result<Self> {
         let created_by =
@@ -101,7 +93,7 @@ mod tests {
         }
     }
 
-    /// happy path：记录人 trim，关联 ID 与用途落库。
+    // 验证记录人 trim，关联 ID 与用途落库。
     #[test]
     fn new_trims_creator_and_keeps_links() {
         let attachment = DocumentAttachment::new(DocumentAttachmentId::new("da-1"), data()).unwrap();
@@ -111,21 +103,21 @@ mod tests {
         assert_eq!(attachment.usage, AttachmentUsage::Attachment);
     }
 
-    /// 失败路径：必填为空被拒。
+    // 验证创建时拒绝空白操作人，不保存没有责任人身份的记录。
     #[test]
     fn new_rejects_empty_creator() {
         let payload = DocumentAttachmentData { created_by: "  ".to_string(), ..data() };
         assert!(DocumentAttachment::new(DocumentAttachmentId::new("da-1"), payload).is_err());
     }
 
-    /// 失败路径：超长记录人被拒。
+    // 验证超长记录人被拒。
     #[test]
     fn new_rejects_overlong_creator() {
         let payload = DocumentAttachmentData { created_by: "x".repeat(129), ..data() };
         assert!(DocumentAttachment::new(DocumentAttachmentId::new("da-1"), payload).is_err());
     }
 
-    /// 枚举序列化与标签稳定。
+    // 验证附件用途的枚举序列化代码和中文标签不随实现变化。
     #[test]
     fn usage_codes_and_labels_are_stable() {
         assert_eq!(serde_json::to_string(&AttachmentUsage::Manifest).unwrap(), "\"manifest\"");

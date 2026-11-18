@@ -63,7 +63,7 @@ pub struct Product {
 }
 
 impl PartialEq for Product {
-    /// 全字段语义相等。
+    // 逐字段比较商品，仅持有相同标识不视为内容相等。
     fn eq(&self, other: &Self) -> bool {
         self.base == other.base
             && self.stable.status == other.stable.status
@@ -82,20 +82,13 @@ impl Eq for Product {}
 impl Product {
     /// 创建商品 SPU。
     ///
-    /// 完成 product_no 的校验与规范化（去首尾空白、非空、长度上限）；
-    /// `product_kind` 必须显式提交并永久保持不变（数据模型 §6.3）。
+    /// 完成 product_no 的校验与规范化（去首尾空白、非空、长度上限）；`product_kind` 必须显式提交并永久保持不变（数据模型 §6.3）。
     /// 维护人与主属组织创建必填，禁止用 `created_by` 回填。
     ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::ProductId`）
-    /// * `data` - 创建数据
-    /// * `created_by` - 创建人（账号或系统身份）
-    ///
-    /// # 返回
-    /// 返回新建的商品实体。
-    ///
-    /// # 错误
     /// 当 product_no、维护人或业务组织为空或超长时返回错误。
+    ///
+    /// - `id`：实体主键（`erp_core::ids::ProductId`）。
+    /// - `created_by`：创建人（账号或系统身份）。
     pub fn new(id: ProductId, data: ProductData, created_by: impl Into<String>) -> Result<Self> {
         let product_no =
             normalize_required_text(data.product_no, "商品编号不能为空", PRODUCT_NO_MAX_LEN, "商品编号过长")?;
@@ -120,18 +113,7 @@ impl Product {
 
     /// 更新商品。
     ///
-    /// `product_no` 与 `product_kind` 是创建后不可变的稳定身份，
-    /// 通用更新只允许修改启停状态。
-    ///
-    /// # 参数
-    /// * `update` - 更新数据
-    /// * `updated_by` - 本次更新执行人
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 函数体不产生失败，始终返回 `Ok(())`。
+    /// `product_no` 与 `product_kind` 是创建后不可变的稳定身份，通用更新只允许修改启停状态。
     pub fn update(&mut self, update: ProductUpdate, updated_by: impl Into<String>) -> Result<()> {
         if let Some(status) = update.status {
             self.stable.status = status;
@@ -140,59 +122,28 @@ impl Product {
         Ok(())
     }
 
-    /// 判断商品是否处于启用状态。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 状态为 `Active` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 读取商品的启用标记，供调用方过滤停用记录。
     pub fn is_active(&self) -> bool {
         self.stable.status().is_active()
     }
 
-    /// 返回商品的业务类型。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回创建时固定的 `ProductKind`。
-    ///
-    /// # 错误
-    /// 无。
+    /// 读取建档时确定的商品业务类型，供调用方选择实物、服务或卡券规则。
     pub fn product_kind(&self) -> ProductKind {
         self.product_kind
     }
 
     /// 判断当前乐观锁版本是否与客户端期望一致。
     ///
-    /// # 参数
-    /// * `expected` - 客户端读取商品时看到的版本
-    ///
-    /// # 返回
-    /// 当前版本与期望版本完全一致时返回 `true`。
-    ///
-    /// # 错误
-    /// 无；Service 根据 `false` 映射为稳定的并发冲突语义。
+    /// 当前版本与期望版本完全一致时返回 `true`。Service 根据 `false` 映射为稳定的并发冲突语义。
     pub fn has_version(&self, expected: u64) -> bool {
         self.base.version == expected
     }
 
     /// 关联一份属于本商品的新当前修订。
     ///
-    /// # 参数
-    /// * `revision` - 待设为当前版本的不可变商品修订
-    /// * `updated_by` - 本次关联操作人
+    /// 关联成功返回 `Ok(())`，并同步商品状态与当前修订指针。修订属于其他商品时返回领域错误，阻止跨商品挂接修订。
     ///
-    /// # 返回
-    /// 关联成功返回 `Ok(())`，并同步商品状态与当前修订指针。
-    ///
-    /// # 错误
-    /// 修订属于其他商品时返回领域错误，阻止跨商品挂接修订。
+    /// `revision` 为待设为当前版本的不可变商品修订。
     pub fn attach_revision(
         &mut self,
         revision: &ProductRevision,
@@ -209,14 +160,7 @@ impl Product {
 
     /// 停用当前处于启用状态的商品。
     ///
-    /// # 参数
-    /// * `updated_by` - 本次停用操作人
-    ///
-    /// # 返回
-    /// 状态由启用切换为停用时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 商品已经停用时返回领域错误，避免重复生成停用修订。
+    /// 状态由启用切换为停用时返回 `Ok(())`。商品已经停用时返回领域错误，避免重复生成停用修订。
     pub fn disable(&mut self, updated_by: impl Into<String>) -> Result<()> {
         if !self.is_active() {
             return Err("商品已经停用".into());
@@ -226,34 +170,18 @@ impl Product {
 
     /// 判断商品是否已具备可查询、可交接的维护责任事实。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 维护人与业务组织均非空时返回 `true`。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
     /// 空维护人不得用创建人顶替；写命令须在交接前阻断。
+    ///
+    /// 维护人与业务组织均非空时返回 `true`。
     pub fn has_responsibility(&self) -> bool {
         !self.maintainer_user_id.trim().is_empty() && !self.business_org_unit_id.trim().is_empty()
     }
 
     /// 维护人缺失时阻断写命令（erp-catalog-014）。
     ///
-    /// 四处命令入口（`product_workflow`、`listing` ×2、`product_disable`）的
-    /// 同一守卫收敛至此；文案与判定保持不变。
+    /// 四处命令入口（`product_workflow`、`listing` ×2、`product_disable`）的同一守卫收敛至此；文案与判定保持不变。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 具备维护责任时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 缺少维护人或主属组织时返回业务逻辑错误。
+    /// 具备维护责任时返回 `Ok(())`。缺少维护人或主属组织时返回业务逻辑错误。
     pub fn ensure_has_responsibility(&self) -> crate::error::Result<()> {
         if !self.has_responsibility() {
             return Err(crate::error::Error::BusinessLogicError("商品缺少维护人或主属组织，请先交接".into()));
@@ -265,20 +193,11 @@ impl Product {
     ///
     /// 业务组织不随接收人部门隐式变化；`None` 表示保留原组织。
     ///
-    /// # 参数
-    /// * `target_user_id` - 目标维护人
-    /// * `target_org_unit_id` - 显式目标组织；`None` 保留原组织
-    /// * `updated_by` - 本次交接执行人
-    ///
-    /// # 返回
-    /// 责任确有变化时返回 `true`。
-    ///
-    /// # 错误
-    /// 目标维护人或显式目标组织为空或超长、保留原组织但原组织为空，
-    /// 或维护人与组织均未变化时返回错误。
-    ///
-    /// # 关键业务约束
     /// 只改维护人与业务组织，不改创建人、SKU 或审批任务。
+    ///
+    /// 责任确有变化时返回 `true`。目标维护人或显式目标组织为空或超长、保留原组织但原组织为空，或维护人与组织均未变化时返回错误。
+    ///
+    /// `target_org_unit_id` 为显式目标组织；`None` 保留原组织。
     pub fn handover(
         &mut self,
         target_user_id: String,
@@ -322,7 +241,7 @@ mod tests {
         }
     }
 
-    /// happy path：编号 trim 规范化，商品类型与状态落位。
+    // 编号 去除首尾空白，商品类型与状态按请求保存。
     #[test]
     fn new_trims_and_normalizes_fields() {
         let product = Product::new(ProductId::new("prod-1"), data(), "admin-1").unwrap();
@@ -336,7 +255,7 @@ mod tests {
         assert!(product.has_responsibility());
     }
 
-    /// 失败路径：必填空与超长各一条。
+    // 商品的必填字段为空或超长时均应拒绝创建。
     #[test]
     fn new_rejects_empty_and_overlong_product_no() {
         let empty = ProductData { product_no: "  ".to_string(), ..data() };
@@ -346,7 +265,7 @@ mod tests {
         assert!(Product::new(ProductId::new("prod-1"), overlong, "admin-1").is_err());
     }
 
-    /// 创建缺维护人或主属组织必须阻断，不得用创建人兜底。
+    // 创建缺维护人或主属组织必须阻断，不得用创建人兜底。
     #[test]
     fn new_rejects_missing_maintainer_and_org() {
         let missing_owner = ProductData { maintainer_user_id: "  ".to_string(), ..data() };
@@ -355,7 +274,7 @@ mod tests {
         assert!(Product::new(ProductId::new("prod-1"), missing_org, "admin-1").is_err());
     }
 
-    /// 历史空维护人不得用创建人顶替，须通过显式交接补齐责任。
+    // 历史空维护人不得用创建人顶替，须通过显式交接补齐责任。
     #[test]
     fn handover_repairs_empty_responsibility_without_created_by() {
         let mut product: Product = serde_json::from_value(serde_json::json!({
@@ -385,7 +304,7 @@ mod tests {
         assert!(product.has_responsibility());
     }
 
-    /// 交接推进维护人；省略组织时保留原业务组织，同人同组织拒绝。
+    // 交接推进维护人；省略组织时保留原业务组织，同人同组织拒绝。
     #[test]
     fn handover_updates_maintainer_and_optional_org() {
         let mut product = Product::new(ProductId::new("prod-1"), data(), "admin-1").unwrap();
@@ -401,7 +320,7 @@ mod tests {
         assert!(product.handover("user-3".into(), Some("  ".into()), "admin-5").is_err());
     }
 
-    /// update 只允许改状态：编号与商品类型保持不变。
+    // 更新时只允许改状态：编号与商品类型保持不变。
     #[test]
     fn update_only_changes_status_and_preserves_identity() {
         let mut product = Product::new(ProductId::new("prod-1"), data(), "admin-1").unwrap();
@@ -414,7 +333,7 @@ mod tests {
         assert_eq!(product.stable.updated_by, "admin-2");
     }
 
-    /// 当前版本匹配、修订挂接和停用均由商品实体保护。
+    // 当前版本匹配、修订挂接和停用均由商品实体保护。
     #[test]
     fn version_revision_and_disable_rules_are_enforced() {
         let mut product = Product::new(ProductId::new("prod-1"), data(), "admin-1").unwrap();
@@ -446,7 +365,7 @@ mod tests {
         assert!(product.disable("admin-4").is_err());
     }
 
-    /// 商品拒绝挂接属于其他稳定身份的修订。
+    // 商品拒绝挂接属于其他稳定身份的修订。
     #[test]
     fn attach_revision_rejects_foreign_product_revision() {
         let mut product = Product::new(ProductId::new("prod-1"), data(), "admin-1").unwrap();
@@ -470,7 +389,7 @@ mod tests {
         assert!(product.attach_revision(&revision, "admin-2").is_err());
     }
 
-    /// 状态机：合法迁移通过，邻接矩阵对称闭合。
+    // 锁定商品启停的正向、反向与幂等迁移，防止状态表缺边。
     #[test]
     fn status_transitions_follow_document_state() {
         assert!(ensure_transition(EnableStatus::Active, EnableStatus::Disabled).is_ok());

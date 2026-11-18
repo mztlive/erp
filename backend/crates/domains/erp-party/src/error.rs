@@ -59,24 +59,22 @@ impl_repository_error!(
     duplicate = |error| { Error::ConflictError(duplicate_key_conflict_message(&error)) }
 );
 
-/// 将唯一键冲突映射为面向用户的冲突提示。
-///
-/// # 参数
-/// * `error` - 已归类为 `DuplicateKey` 的仓储错误
-///
-/// # 返回
-/// 已知索引返回字段级中文提示；无法识别时返回通用冲突提示。
+// 将唯一键冲突映射为面向用户的冲突提示。
+//
+// # 参数
+// * `error` - 已归类为 `DuplicateKey` 的仓储错误
+//
+// 已知索引返回字段级中文提示；无法识别时返回通用冲突提示。
 fn duplicate_key_conflict_message(error: &persistence_core::Error) -> String {
     duplicate_index_conflict_message(error.duplicate_index_name())
 }
 
-/// 将唯一索引名称映射为面向用户的冲突提示。
-///
-/// # 参数
-/// * `index_name` - MongoDB 唯一索引名称；无法识别或缺失时使用通用提示
-///
-/// # 返回
-/// 已知索引返回字段级中文提示；未知索引返回通用冲突提示。
+// 将唯一索引名称映射为面向用户的冲突提示。
+//
+// # 参数
+// * `index_name` - MongoDB 唯一索引名称；无法识别或缺失时使用通用提示
+//
+// 已知索引返回字段级中文提示；未知索引返回通用冲突提示。
 fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
     index_name.and_then(known_duplicate_index_message).unwrap_or("数据已存在，请勿重复提交").to_string()
 }
@@ -86,13 +84,8 @@ fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
 /// # 参数
 /// * `index_name` - 已由 persistence-core 提取的 MongoDB 索引名称
 ///
-/// # 返回
 /// 精确命中本域注册索引时返回原提示；未知名称返回 `None`，由调用边界选择通用提示。
 ///
-/// # 错误
-/// 不返回错误。
-///
-/// # 约束
 /// 不匹配子串或前后缀、不规范化索引名称，不拥有其他领域或 HTTP 历史索引的提示。
 pub fn known_duplicate_index_message(index_name: &str) -> Option<&'static str> {
     match index_name {

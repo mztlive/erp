@@ -37,16 +37,7 @@ pub enum SupplierPaymentStatus {
 }
 
 impl SupplierPaymentStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为界面或响应展示提供供应商付款状态的中文名称；机器筛选和存储不使用该名称。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Draft => "草稿",
@@ -55,16 +46,7 @@ impl SupplierPaymentStatus {
         }
     }
 
-    /// 返回状态的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将供应商付款状态转成用于持久化和查询的稳定代码，与中文展示文案分开。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Draft => "draft",
@@ -75,18 +57,10 @@ impl SupplierPaymentStatus {
 }
 
 impl DocumentState for SupplierPaymentStatus {
-    /// 返回全部合法后继状态。
-    ///
-    /// 正常付款从草稿直接过账；`REVERSED` 是终态。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// `Draft` 只返回 `Posted`；`Posted` 只返回 `Reversed`；`Reversed` 返回空切片。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 校验供应商付款状态迁移时查本状态可直接到达的后继状态；无后继即不能再迁移。
+    //
+    // 正常付款从草稿直接过账；`REVERSED` 是终态。
+    // 结果：`Draft` 只返回 `Posted`；`Posted` 只返回 `Reversed`；`Reversed` 返回空切片。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Draft => &[Self::Posted],
@@ -106,17 +80,13 @@ pub struct PendingPaymentAllocation {
 }
 
 impl PendingPaymentAllocation {
-    /// 构造待过账核销行。
-    ///
-    /// # 参数
-    /// * `payable_entry_id` - 被核销应付分录
-    /// * `allocated_amount` - 核销金额
-    ///
-    /// # 返回
-    /// 金额为正时返回待过账核销行。
-    ///
-    /// # 错误
+    /// 核销供应商付款之前把请求金额绑定到目标应付分录，先拒绝非正金额。
+    /// 结果：金额为正时返回待过账核销行。
     /// 金额非正时返回错误。
+    ///
+    /// 输入约定：
+    /// - `payable_entry_id`：被核销应付分录
+    /// - `allocated_amount`：核销金额
     pub fn new(payable_entry_id: PayableEntryId, allocated_amount: Amount) -> Result<Self> {
         ensure_positive_amount(&allocated_amount)?;
         Ok(Self { payable_entry_id, allocated_amount })
@@ -215,20 +185,15 @@ pub struct SupplierPayment {
 }
 
 impl SupplierPayment {
-    /// 创建供应商付款单（初始状态为草稿）。
+    /// 为后续编辑建立供应商付款单（初始状态为草稿），构造阶段校验输入后再交给调用方保存。
     ///
     /// 完成付款单号与银行流水号的 trim/非空/长度校验和金额正数校验。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::SupplierPaymentId`）
-    /// * `data` - 创建数据
-    /// * `created_by` - 已认证命令操作人，禁止使用可变的付款执行人替代
-    ///
-    /// # 返回
     /// 返回新建的付款单实体。
-    ///
-    /// # 错误
     /// 当付款单号或创建人为空/超长、银行流水号超长或金额非正时返回错误。
+    ///
+    /// 输入约定：
+    /// - `id`：实体主键（`erp_core::ids::SupplierPaymentId`）
+    /// - `created_by`：已认证命令操作人，禁止使用可变的付款执行人替代
     pub fn new(
         id: SupplierPaymentId,
         data: SupplierPaymentData,
@@ -271,32 +236,20 @@ impl SupplierPayment {
     }
 
     /// 返回付款执行所需的银行回单图片资产。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回已保存的银行回单图片资产标识。
-    ///
-    /// # 错误
     /// `bank_receipt_asset_id` 为空时返回错误。
     pub fn require_bank_receipt(&self) -> Result<&FileAssetId> {
         self.bank_receipt_asset_id.as_ref().ok_or_else(|| Error::from("请先上传银行回单图片"))
     }
 
-    /// 迁移付款单状态。
+    /// 处理供应商付款单生命周期动作时，先按固定迁移规则校验目标，再更新状态。
     ///
     /// 按合同 §4.4 固定邻接矩阵校验并应用状态迁移。
-    ///
-    /// # 参数
-    /// * `to` - 目标状态
-    ///
-    /// # 返回
-    /// 迁移成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 目标状态不在邻接矩阵中时返回 [`Error::InvalidStateTransition`]；
+    /// 失败条件：目标状态不在邻接矩阵中时返回 [`Error::InvalidStateTransition`]；
     /// 草稿过账必须通过付款执行入口，禁止跳过执行身份事实。
+    ///
+    /// 输入约定：
+    /// - `to`：目标状态
     pub fn transition(&mut self, to: SupplierPaymentStatus) -> Result<()> {
         ensure_transition(self.status, to)?;
         if self.status == SupplierPaymentStatus::Draft && to == SupplierPaymentStatus::Posted {
@@ -310,24 +263,14 @@ impl SupplierPayment {
     }
 
     /// 返回原付款扣除正式冲正后的有效金额。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 返回仍有效的实际付款金额，原付款金额不变。
-    /// # 错误
-    /// 不返回错误，冲正规则保持累计金额不超额。
+    /// 冲正规则保持累计金额不超额。
     pub fn effective_amount(&self) -> Amount {
         self.amount.checked_sub(self.reversed_amount).checked_sub(self.cash_refunded_amount)
     }
 
     /// 证明付款保留完整的原申请、我方主体和逐采购付款依据。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 返回非空原付款申请身份；分配合计始终按原实际付款金额验证。
-    /// # 错误
     /// 身份或主体缺失、分配为空、重复、非正、溢出或金额不一致时拒绝。
     pub fn require_payment_request_basis(&self) -> Result<&str> {
         if self.purpose != SupplierPaymentPurpose::Purchase {
@@ -367,12 +310,11 @@ impl SupplierPayment {
     }
 
     /// 记录供应商实际现金退回，不把留抵当作银行退款。
-    /// # 参数
-    /// * `amount` - 已审批实际到账金额。
-    /// # 返回
-    /// 原付款金额保留，有效资金余额相应减少。
-    /// # 错误
+    /// 结果：原付款金额保留，有效资金余额相应减少。
     /// 非已过账付款、非正数或超过剩余有效资金时拒绝。
+    ///
+    /// 输入约定：
+    /// - `amount`：已审批实际到账金额。
     pub fn record_cash_refund(&mut self, amount: Amount) -> Result<()> {
         if self.status != SupplierPaymentStatus::Posted
             || amount <= Amount::zero()
@@ -385,13 +327,11 @@ impl SupplierPayment {
     }
 
     /// 记录一笔正式冲正，部分冲正后仍允许处理剩余有效付款。
-    ///
-    /// # 参数
-    /// * `amount` - 本次正式冲正金额。
-    /// # 返回
     /// 成功时增加累计冲正；仅在原付款全部失效时变为已冲正。
-    /// # 错误
-    /// 原付款未过账、非正金额或超过有效付款余额时返回错误且不修改实体。
+    /// 失败条件：原付款未过账、非正金额或超过有效付款余额时返回错误且不修改实体。
+    ///
+    /// 输入约定：
+    /// - `amount`：本次正式冲正金额。
     pub fn record_reversal(&mut self, amount: Amount) -> Result<()> {
         if self.status != SupplierPaymentStatus::Posted {
             return Err(Error::from("只有仍有有效金额的已过账付款可以冲正"));
@@ -409,17 +349,13 @@ impl SupplierPayment {
     }
 
     /// 由付款执行任务直接过账。
-    ///
-    /// # 参数
-    /// * `allocations` - 本次原子写入的付款核销分配
-    /// * `actor_id` - 本次已认证的付款执行人，与创建人各自保留语义
-    /// * `posted_at` - 本次实际过账发生时间
-    ///
-    /// # 返回
     /// 返回带不可变执行身份与时间的已过账付款单。
+    /// 失败条件：非草稿、分配非法、执行人无效或已有过账事实时返回错误，不改写原事实。
     ///
-    /// # 错误
-    /// 非草稿、分配非法、执行人无效或已有过账事实时返回错误，不改写原事实。
+    /// 输入约定：
+    /// - `allocations`：本次原子写入的付款核销分配
+    /// - `actor_id`：本次已认证的付款执行人，与创建人各自保留语义
+    /// - `posted_at`：本次实际过账发生时间
     pub fn post_from_execution(
         &mut self,
         allocations: &[PendingPaymentAllocation],
@@ -450,28 +386,19 @@ impl SupplierPayment {
     }
 
     /// 判断付款单是否已过账。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 状态为 `Posted` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 结果：状态为 `Posted` 时返回 `true`。
     pub fn is_posted(&self) -> bool {
         self.status == SupplierPaymentStatus::Posted
     }
 
     /// 将草稿按明确的充值用途记录为真实银行付款，不核销采购应付。
-    /// # 参数
-    /// * `purpose` - 经批准的充值申请、目标账户及批准依据。
-    /// * `payer` / `payer_name` - 已核验付款主体。
-    /// * `actor` / `at` - 实际付款执行身份及记录时间。
-    /// # 返回
-    /// 保存真实银行付款一次，采购付款申请身份保持空。
-    /// # 错误
+    /// 结果：保存真实银行付款一次，采购付款申请身份保持空。
     /// 非草稿、已有采购分配、缺证据或用途不合法时拒绝。
+    ///
+    /// 输入约定：
+    /// - `purpose`：经批准的充值申请、目标账户及批准依据。
+    /// - `payer` / `payer_name`：已核验付款主体。
+    /// - `actor` / `at`：实际付款执行身份及记录时间。
     pub fn post_deposit_recharge(
         &mut self,
         purpose: SupplierPaymentPurpose,
@@ -533,7 +460,7 @@ impl SupplierPayment {
     }
 }
 
-/// 接受草稿显式空身份，但禁止缺字段旧文档隐式补为 None。
+// 读取付款草稿时允许显式 `null`，但要求身份字段实际存在，避免把不兼容的旧文档当有效草稿。
 fn present_identity<'de, D>(deserializer: D) -> std::result::Result<Option<String>, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -541,10 +468,8 @@ where
     Option::<String>::deserialize(deserializer)
 }
 
-/// 校验金额为正数。
-///
-/// # 错误
-/// 零或负数时返回错误。
+// 校验金额为正数。
+// 零或负数时返回错误。
 fn ensure_positive_amount(amount: &Amount) -> Result<()> {
     if amount.to_decimal().is_sign_negative() || amount.to_decimal().is_zero() {
         return Err(Error::from("付款金额必须为正数"));
@@ -552,10 +477,8 @@ fn ensure_positive_amount(amount: &Amount) -> Result<()> {
     Ok(())
 }
 
-/// 校验付款任务核销分配合计等于实际付款金额。
-///
-/// # 错误
-/// 无分配行或分配合计不等于付款金额时返回错误。
+// 校验付款任务核销分配合计等于实际付款金额。
+// 无分配行或分配合计不等于付款金额时返回错误。
 fn ensure_execution_allocations(amount: &Amount, allocations: &[PendingPaymentAllocation]) -> Result<()> {
     if allocations.is_empty() {
         return Err(Error::from("登记付款至少提供一条核销分配"));

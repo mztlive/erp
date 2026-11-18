@@ -10,25 +10,20 @@ use crate::entity::payable::PayableAccount;
 
 #[allow(async_fn_in_trait)]
 pub trait PayableAccountSettlementExt {
-    /// 条件核销：增加已核销进度（不超额核销）。
+    /// 供应商付款核销时条件增加子账已核销金额，在同一次写入内重算开放余额并拒绝超额。
     ///
     /// 原子写入口（P2 计划 §5）：以写条件而非读后判断保证
     /// `settled_total + 本次核销 <= gross_total`，不满足时**整个更新不生效**
     /// （matched 为 0），返回 `false` 且金额与状态均不变。核销进度同时重算
     /// `open_total` 与派生状态，全部在同一条件更新内完成，不会产生负开放余额。
     /// 单文档更新本身原子，可在 Service 的过账事务内参与回滚。
+    /// 结果：核销在额度内并已生效时返回 `true`；超过剩余开放余额被拒绝时返回 `false`。
+    /// 传播数据库更新失败。
     ///
-    /// # 参数
-    /// * `id` - 应付往来子账 ID
-    /// * `amount` - 本次核销含税金额（正数）
-    /// * `updated_by` - 本次更新执行人
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 核销在额度内并已生效时返回 `true`；超过剩余开放余额被拒绝时返回 `false`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 更新失败时返回错误。
+    /// 输入约定：
+    /// - `id`：应付往来子账 ID
+    /// - `amount`：本次核销含税金额（正数）
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn apply_settlement(
         &self,
         id: &str,
@@ -37,28 +32,21 @@ pub trait PayableAccountSettlementExt {
         executor: &mut dyn Executor,
     ) -> Result<bool>;
 
-    /// 批量条件核销：按账户聚合增量逐个执行不超额核销。
+    /// 一笔付款分配到多子账时，按账户聚合后逐一条件核销；调用方必须在同一事务处理全部结果。
     ///
     /// 对每个 `(账户, 增量)` 复用与 [`Self::apply_settlement`] 相同的写条件
     /// （`settled_total + 增量 <= gross_total`），每个账户一次原子条件更新，
     /// 返回逐账户命中结果：`applied` 为已生效账户，`rejected` 为超过剩余
     /// 开放余额被拒绝的账户，金额与状态均未变化。调用方（Service）负责把
     /// 全部更新放入同一事务，任一账户被拒绝即整体回滚，不产生半写入。
-    ///
-    /// # 参数
-    /// * `deltas` - 按账户聚合的本次核销增量（同一账户只出现一次）
-    /// * `updated_by` - 本次更新执行人
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回逐账户的命中结果；空输入不访问数据库并返回空结果。
-    ///
-    /// # 错误
-    /// 当 MongoDB 更新失败时返回错误。
-    ///
-    /// # 约束
-    /// 聚合口径（同一账户增量求和、同一账户只更新一次）由 Service 经领域
+    /// 传播数据库更新失败。
+    /// 调用边界：聚合口径（同一账户增量求和、同一账户只更新一次）由 Service 经领域
     /// 计划保证；本方法不自行开启事务、不决定跨账户业务结论。
+    ///
+    /// 输入约定：
+    /// - `deltas`：按账户聚合的本次核销增量（同一账户只出现一次）
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn apply_settlements_many(
         &self,
         deltas: &[(PayableAccountId, Amount)],
@@ -66,23 +54,18 @@ pub trait PayableAccountSettlementExt {
         executor: &mut dyn Executor,
     ) -> Result<SettlementBatchResult>;
 
-    /// 条件核销冲减：减少已核销进度（不产生负已核销）。
+    /// 付款冲正或退款写反向分配时条件扣减应付已核销额，防止回冲后已核销为负。
     ///
     /// 反向核销（`REVERSE` 分配）的原子写入口：以写条件保证
     /// `本次冲减 <= settled_total`，不满足时整个更新不生效，返回 `false`。
     /// 用于冲正/退款时追加反向核销，防止冲减超过已核销金额。
+    /// 结果：冲减在已核销额度内并已生效时返回 `true`；超过已核销金额被拒绝时返回 `false`。
+    /// 传播数据库更新失败。
     ///
-    /// # 参数
-    /// * `id` - 应付往来子账 ID
-    /// * `amount` - 本次冲减含税金额（正数）
-    /// * `updated_by` - 本次更新执行人
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 冲减在已核销额度内并已生效时返回 `true`；超过已核销金额被拒绝时返回 `false`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 更新失败时返回错误。
+    /// 输入约定：
+    /// - `id`：应付往来子账 ID
+    /// - `amount`：本次冲减含税金额（正数）
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn revert_settlement(
         &self,
         id: &str,
@@ -162,20 +145,15 @@ impl PayableAccountSettlementExt for persistence_core::Repository<'_, PayableAcc
     }
 }
 
-/// 构造条件核销的写前置条件（不超额核销）。
-///
-/// 以写条件而非读后判断保证 `settled_total + 本次核销 <= gross_total`，
-/// 不满足时整个更新不生效（matched 为 0）。
-///
-/// # 参数
-/// * `id` - 应付往来子账 ID
-/// * `amount` - 本次核销含税金额（已转为 Decimal128 形态）
-///
-/// # 返回
-/// 返回未删除账户的核销额度守卫文档。
-///
-/// # 错误
-/// 不返回错误。
+// 为应付核销生成数据库写入守卫，以当前余额而不是调用方之前读取的余额限制金额。
+//
+// 以写条件而非读后判断保证 `settled_total + 本次核销 <= gross_total`，
+// 不满足时整个更新不生效（matched 为 0）。
+// 返回未删除账户的核销额度守卫文档。
+//
+// 输入约定：
+// - `id`：应付往来子账 ID
+// - `amount`：本次核销含税金额（已转为 Decimal128 形态）
 pub(super) fn settlement_guard(id: &str, amount: &Bson) -> Document {
     doc! {
         "id": id,

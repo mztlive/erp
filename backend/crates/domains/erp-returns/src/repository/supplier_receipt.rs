@@ -8,11 +8,8 @@ use crate::Result;
 use crate::repository::ReturnsExt;
 
 /// 判断原采购是否已有实际退货或退货完成事实。
-/// # 参数
-/// 服务端原采购身份及当前收货核验事务。
-/// # 返回
 /// 有任何实际退货时返回真；首期不猜测其在供应商叶子之间的数量归属。
-/// # 错误
+/// 服务端原采购身份及当前收货核验事务。
 /// 读取失败时拒绝新增收货通知。
 pub async fn has_actual_return(db: &Database, purchase: &str, executor: &mut dyn Executor) -> Result<bool> {
     Ok(db

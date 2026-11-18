@@ -6,12 +6,8 @@ use crate::{Error, Result};
 
 impl CatalogAdoptionPreview {
     /// 列出当前来源图片尚不能冻结预览的原因，无图片不产生阻断。
-    /// # 参数
-    /// `item` 为已同步的目录观察，不执行网络读取。
-    /// # 返回
     /// 未核验的图片组说明；空集合表示可确认。
-    /// # 错误
-    /// 不返回错误。
+    /// `item` 为已同步的目录观察，不执行网络读取。
     pub fn media_blockers(item: &SupplierCatalogItem) -> Vec<String> {
         [(&item.images, "轮播图"), (&item.detail_images, "详情图")]
             .into_iter()
@@ -27,11 +23,7 @@ impl CatalogAdoptionPreview {
     }
 
     /// 验证本次图片已经具备可展示的冻结内容证明。
-    /// # 参数
-    /// `item_id` 为本次冻结范围内的来源规格。
-    /// # 返回
     /// 来源未提供图片或所有图片均已核验时返回空结果。
-    /// # 错误
     /// 未冻结行或图片无可靠内容证明时拒绝。
     pub fn ensure_item_media_verified(&self, item_id: &str) -> Result<()> {
         let item = self
@@ -47,11 +39,7 @@ impl CatalogAdoptionPreview {
     }
 
     /// 核对确认时实际读取的图片是否仍为采购在预览中看过的内容。
-    /// # 参数
-    /// `prepared` 带本次真实下载得到的内容摘要及待提交资产。
-    /// # 返回
     /// 按内容和顺序一致时返回空结果；同内容的新归档身份不算变化。
-    /// # 错误
     /// 未核验、内容或顺序变化时拒绝，不覆盖公司资料。
     pub fn ensure_prepared_media(&self, prepared: &SupplierCatalogItem) -> Result<()> {
         self.ensure_item_media_verified(&prepared.base.id)?;

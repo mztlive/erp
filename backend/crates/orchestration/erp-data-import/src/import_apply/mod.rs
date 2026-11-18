@@ -43,16 +43,11 @@ pub struct ImportApplyProcess {
 impl ImportApplyProcess {
     /// 创建绑定到 `db` 的导入应用流程。
     ///
-    /// # 参数
-    /// * `db` - 各领域仓储共用的 MongoDB 数据库。
-    /// * `work_items` - 使用应用实时身份、事实和审计提供者的工作项授权能力。
-    /// * `authorization` - 应用唯一共享授权服务。
+    /// - `db`：各领域仓储共用的 MongoDB 数据库。
+    /// - `work_items`：使用应用实时身份、事实和审计提供者的工作项授权能力。
+    /// - `authorization`：应用唯一共享授权服务。
     ///
-    /// # 返回
     /// 返回流程服务。单条命令复用同一个执行器。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(
         db: Database,
         work_items: Arc<dyn ImportWorkItems>,
@@ -64,14 +59,7 @@ impl ImportApplyProcess {
 
 /// 返回流程模块名。
 ///
-/// # 参数
-/// 无。
-///
-/// # 返回
 /// 返回稳定模块名 `import_apply`。
-///
-/// # 错误
-/// 不返回错误。
 pub fn process_name() -> &'static str {
     "import_apply"
 }

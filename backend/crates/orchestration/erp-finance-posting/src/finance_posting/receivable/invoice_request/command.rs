@@ -33,13 +33,9 @@ pub(super) const CANCEL: AuditAction = AuditAction {
     allowed_fields: FIELDS,
 };
 
-/// 只投影申请编号与金额，不记录请求体、原因原文或命令机器协议。
-/// # 参数
-/// 当前操作人、已执行的申请事实、明确动作目录及可选稳定命令身份。
-/// # 返回
-/// 返回一次结构化中文业务事件。
-/// # 错误
-/// 动作、身份或安全投影不合法时返回错误。
+// 只投影申请编号与金额，不记录请求体、原因原文或命令机器协议。
+//
+// 当前操作人、已执行的申请事实、明确动作目录及可选稳定命令身份。返回一次结构化中文业务事件。动作、身份或安全投影不合法时返回错误。
 pub(super) fn event(
     actor: &AuditActor,
     request: &SalesInvoiceRequest,
@@ -61,14 +57,9 @@ pub(super) fn event(
 }
 
 impl ReceivableProcess {
-    /// 错误恢复只查证原命令；无法读回原对象时保持首次未知提交错误。
-    /// # 参数
-    /// * `result` - 首次事务结果。
-    /// * `command` - 本次请求的精确命令身份。
-    /// # 返回
-    /// 返回首次结果对象当前视图。
-    /// # 错误
-    /// 未保存回执时保留原错误；未知提交恢复失败时保留原未知错误。
+    // 错误恢复只查证原命令；无法读回原对象时保持首次未知提交错误。
+    //
+    // `result` 为首次事务结果；`command` 为本次请求的精确命令身份。返回首次结果对象当前视图。未保存回执时保留原错误；未知提交恢复失败时保留原未知错误。
     pub(super) async fn finish_invoice_request_command(
         &self,
         result: Result<String>,
@@ -84,7 +75,7 @@ impl ReceivableProcess {
         }
     }
 
-    /// 首次命中与未知提交查证共用当前权限及同快照详情读取，保持零业务写入。
+    // 首次命中与未知提交查证共用当前权限及同快照详情读取，保持零业务写入。
     pub(super) async fn replay_invoice_request_command(
         &self,
         command: &CommandReceipt,
@@ -114,7 +105,7 @@ impl ReceivableProcess {
         Ok(view)
     }
 
-    /// 已完成命令的响应仍须证明当前操作人、动作资格和完整来源读取权。
+    // 已完成命令的响应仍须证明当前操作人、动作资格和完整来源读取权。
     pub(super) async fn authorized_invoice_request_result(
         &self,
         id: &str,
@@ -140,7 +131,7 @@ impl ReceivableProcess {
     }
 }
 
-/// 已命中原命令的写事务必须回滚，并把已提交证据带入独立授权回读。
+// 已命中原命令的写事务必须回滚，并把已提交证据带入独立授权回读。
 pub(super) fn replay_requires_readback() -> Error {
     Error::CommittedResultUnavailable("开票申请命令已提交，请恢复原结果".into())
 }
@@ -150,32 +141,24 @@ pub(super) fn replay_requires_readback() -> Error {
 pub(super) struct ReplayEvidence(Arc<AtomicBool>);
 
 impl ReplayEvidence {
-    /// 只记录实际授权回放命中的回执，不把未命中或初始化失败视为已提交。
-    /// # 参数
-    /// `view` 为同一事务内授权回放的实际结果。
-    /// # 返回
-    /// 命中时保存已提交证据，不修改业务状态。
-    /// # 错误
-    /// 不返回错误。
+    // 只记录实际授权回放命中的回执，不把未命中或初始化失败视为已提交。
+    //
+    // `view` 为同一事务内授权回放的实际结果。命中时保存已提交证据，不修改业务状态。
     pub(super) fn observe<T>(&self, view: &Option<T>) {
         if view.is_some() {
             self.0.store(true, Ordering::Release);
         }
     }
 
-    /// 原业务命令已提交时，只读事务自身失败不能降级为业务未执行。
-    /// # 参数
-    /// `result` 为承载回放或首次写入的事务实际结果。
-    /// # 返回
-    /// 成功时返回原结果；已观察命令回执时保留已提交语义。
-    /// # 错误
-    /// 仅回放命中后将事务结束失败标为结果不可读，其他错误保持原分类。
+    // 原业务命令已提交时，只读事务自身失败不能降级为业务未执行。
+    //
+    // `result` 为承载回放或首次写入的事务实际结果。成功时返回原结果；已观察命令回执时保留已提交语义。仅回放命中后将事务结束失败标为结果不可读，其他错误保持原分类。
     pub(super) fn finish<T>(&self, result: Result<T>) -> Result<T> {
         if self.0.load(Ordering::Acquire) { committed_result(result) } else { result }
     }
 }
 
-/// 已确定提交后的响应失败必须保留原操作号；不把结果不可读伪装为事务未知。
+// 已确定提交后的响应失败必须保留原操作号；不把结果不可读伪装为事务未知。
 pub(super) fn committed_result<T>(result: Result<T>) -> Result<T> {
     result.map_err(|error| match error {
         Error::CommittedResultUnavailable(_) => error,
@@ -183,7 +166,7 @@ pub(super) fn committed_result<T>(result: Result<T>) -> Result<T> {
     })
 }
 
-/// 授权回读失败不得把首次未知提交改写为确定未成功，也不得返回无授权视图。
+// 授权回读失败不得把首次未知提交改写为确定未成功，也不得返回无授权视图。
 fn recover_replay<T>(original: Error, replay: Result<Option<T>>) -> Result<T> {
     match replay {
         Ok(Some(view)) => Ok(view),

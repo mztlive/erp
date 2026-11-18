@@ -108,17 +108,12 @@ pub struct CustomerRefundPosting {
     pub occurred_at: Instant,
 }
 /// 在调用方指定执行器中读取退款来源；预读不增加Posted守卫。
-///
-/// # 参数
-/// * `db` - 财务领域数据库。
-/// * `id` - 原客户回款主键。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
 /// 返回已存在的客户回款，不检查是否已过账。
+/// 失败条件：回款不存在时返回 `NotFound`；仓储读取失败时返回对应错误。
 ///
-/// # 错误
-/// 回款不存在时返回 `NotFound`；仓储读取失败时返回对应错误。
+/// 输入约定：
+/// - `db`：财务领域数据库。
+/// - `id`：原客户回款主键。
 pub async fn load_customer_refund_source(
     db: &Database,
     id: &str,
@@ -130,17 +125,12 @@ pub async fn load_customer_refund_source(
         .ok_or_else(|| Error::NotFound("原客户回款不存在".to_string()))
 }
 /// 最终退款在原存在性、Posted顺序读取来源；不复用冲正的不同错误文案。
-///
-/// # 参数
-/// * `db` - 财务领域数据库。
-/// * `id` - 原回款主键。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
 /// 返回状态为 `Posted` 的客户回款。
+/// 失败条件：回款不存在时返回 `NotFound`；状态不是已过账时返回 `BusinessLogicError`；仓储读取失败时返回对应错误。
 ///
-/// # 错误
-/// 回款不存在时返回 `NotFound`；状态不是已过账时返回 `BusinessLogicError`；仓储读取失败时返回对应错误。
+/// 输入约定：
+/// - `db`：财务领域数据库。
+/// - `id`：原回款主键。
 pub async fn load_posted_refund_receipt(
     db: &Database,
     id: &CustomerReceiptId,
@@ -157,19 +147,14 @@ pub async fn load_posted_refund_receipt(
     Ok(receipt)
 }
 /// 写入反向核销分配、冲减进度与减少分录。
+/// 结果：反向分配、冲减进度与减少分录写入完成时无返回值。
+/// 失败条件：分录或账户缺失、跨主体、超额冲减、实体构造失败或仓储失败时返回对应错误。
 ///
-/// # 参数
-/// * `db` - 财务领域数据库。
-/// * `refund` - 客户退款过账事实。
-/// * `receipt` - 已过账的原回款；本函数不改其状态。
-/// * `actor_id` - 执行人。
-/// * `session` - 调用方事务执行器。
-///
-/// # 返回
-/// 反向分配、冲减进度与减少分录写入完成时无返回值。
-///
-/// # 错误
-/// 分录或账户缺失、跨主体、超额冲减、实体构造失败或仓储失败时返回对应错误。
+/// 输入约定：
+/// - `db`：财务领域数据库。
+/// - `refund`：客户退款过账事实。
+/// - `receipt`：已过账的原回款；本函数不改其状态。
+/// - `session`：调用方事务执行器。
 pub async fn persist_refund_offsets_and_reversals(
     db: &Database,
     refund: &CustomerRefundPosting,
@@ -179,7 +164,7 @@ pub async fn persist_refund_offsets_and_reversals(
 ) -> Result<()> {
     post_with_store(&mut MongoRefundStore(db), refund, receipt, actor_id, session).await
 }
-/// 生产仓储及替身共同执行的客户退款逆向算法。
+// 过账客户退款时依次编排应收抵销、减少分录和反向核销；生产仓储与测试替身共用该次序。
 async fn post_with_store(
     store: &mut impl RefundStore,
     refund: &CustomerRefundPosting,
@@ -213,10 +198,8 @@ async fn post_with_store(
     }
     Ok(())
 }
-/// 按冲减块写减少分录抵销并回冲已核销进度。
-///
-/// # 错误
-/// 分录缺失、跨主体或超额冲减时返回错误。
+// 按冲减块写减少分录抵销并回冲已核销进度。
+// 分录缺失、跨主体或超额冲减时返回错误。
 async fn create_decrease_offsets(
     store: &mut impl RefundStore,
     refund: &CustomerRefundPosting,
@@ -249,10 +232,8 @@ async fn create_decrease_offsets(
     }
     Ok(decrease_entry)
 }
-/// 原子回冲应收子账已核销进度。
-///
-/// # 错误
-/// 超额冲减或仓储失败时返回错误。
+// 原子回冲应收子账已核销进度。
+// 超额冲减或仓储失败时返回错误。
 async fn revert_customer_refund_settlement(
     store: &mut impl RefundStore,
     entry: &ReceivableEntry,
@@ -266,10 +247,8 @@ async fn revert_customer_refund_settlement(
     }
     Ok(())
 }
-/// 构造客户退款减少应收分录。
-///
-/// # 错误
-/// 分录字段校验失败时返回错误。
+// 构造客户退款减少应收分录。
+// 分录字段校验失败时返回错误。
 fn build_customer_refund_decrease_entry(
     refund: &CustomerRefundPosting,
     entry: &ReceivableEntry,
@@ -290,10 +269,8 @@ fn build_customer_refund_decrease_entry(
         },
     )?)
 }
-/// 写入一条客户退款减少分录抵销。
-///
-/// # 错误
-/// 减少分录缺失或仓储失败时返回错误。
+// 写入一条客户退款减少分录抵销。
+// 减少分录缺失或仓储失败时返回错误。
 async fn persist_customer_refund_decrease_offset(
     store: &mut impl RefundStore,
     decrease_entry: Option<&ReceivableEntry>,

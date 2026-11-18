@@ -25,11 +25,14 @@ use crate::Result;
 use crate::sales_center::repository::authorization::SalesFacts;
 
 impl FundsAccess {
-    /// 使用真实审批实例或任务身份执行固定管理入口。
+    /// 确定资金管理授权事实的适用条件时，使用真实审批实例或任务身份执行固定管理入口。
+    ///
     /// # 参数
     /// actor 为已认证账号，id 必须是 entry 对应的真实对象身份，executor 为原执行器。
+    ///
     /// # 返回
     /// 固定入口的全部基础及来源要求满足时成功。
+    ///
     /// # 错误
     /// 对象、资格或完整来源不满足时拒绝。
     pub async fn require_source_operation(
@@ -50,11 +53,14 @@ pub struct FinancialFacts {
     resource: String,
 }
 impl FinancialFacts {
-    /// 绑定固定资源，不接收请求中的事实。
+    /// 装配资金管理授权事实时，绑定固定资源，不接收请求中的事实。
+    ///
     /// # 参数
     /// db 为共享数据库，resource 为已接入资源。
+    ///
     /// # 返回
     /// 读取真实根及完整来源的端口。
+    ///
     /// # 错误
     /// 无；不支持资源在读取时拒绝。
     pub fn new(db: Database, resource: &str) -> Self {
@@ -108,7 +114,7 @@ impl AccessFactsPort for FinancialFacts {
     }
 }
 
-/// 已登记回执的状态只取持久化实体，不以调用方事实或未知字符串推断。
+// 投影资金管理授权事实字段时，已登记回执的状态只取持久化实体，不以调用方事实或未知字符串推断。
 fn invoice_result_state(permission: &Permission, row: &Document) -> IdentityResult<()> {
     if permission != &internal::INVOICE_POSTED_RESULT_READ {
         return Ok(());
@@ -222,7 +228,7 @@ struct ReversalSourceFacts {
     ids: BTreeSet<String>,
 }
 
-/// 冲正归属和来源只取当前真实记录，缺少原款单身份时拒绝。
+// 处理资金管理授权事实时，冲正归属和来源只取当前真实记录，缺少原款单身份时拒绝。
 fn reversal_facts(resource: &str, row: &Document) -> IdentityResult<ReversalSourceFacts> {
     let (source_resource, relation, field) = match resource {
         "receipt_reversal" => ("customer_receipt", "receipt_source", "original_customer_receipt_id"),

@@ -23,13 +23,13 @@ pub struct DocumentApprovalNodeView {
 }
 
 impl DocumentApprovalNodeView {
-    /// 按定义或运行图投影来源和完整人员显示名。
+    /// 依据定义或运行图投影来源和完整人员显示名。
+    ///
     /// # 参数
     /// 已授权节点。
+    ///
     /// # 返回
     /// 可读节点摘要；未解析来源显示配置标签。
-    /// # 错误
-    /// 无。
     pub fn from_node(node: &ApprovalNodeDefinition) -> Self {
         Self {
             key: node.node_key.clone(),
@@ -44,11 +44,14 @@ impl DocumentApprovalNodeView {
     }
 }
 
-/// 加载单据绑定的精确版本及来源规则；调用方先完成单据读取授权。
+/// 处理审批绑定路线时，读取单据绑定的精确版本及来源规则；调用方先完成单据读取授权。
+///
 /// # 参数
 /// 数据库、单据绑定及原执行器。
+///
 /// # 返回
 /// 流程名称及按顺序排列的节点。
+///
 /// # 错误
 /// 版本漂移、定义缺失或数据库错误时拒绝，不补空路线。
 pub async fn binding_route(

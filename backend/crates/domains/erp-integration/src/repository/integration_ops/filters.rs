@@ -84,16 +84,7 @@ impl Default for InboxMessageFilter {
 }
 
 impl QueryFilter for InboxMessageFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 将入站消息筛选条件编译为 MongoDB 查询，排除软删除记录。
     fn to_doc(&self) -> Document {
         let mut filter = undeleted_base();
         if let Some(source_system_id) = &self.source_system_id {
@@ -115,16 +106,7 @@ impl QueryFilter for InboxMessageFilter {
 macro_rules! filter_pagination {
     ($filter:ty) => {
         impl Pagination for $filter {
-            /// 返回页码与单页条数。
-            ///
-            /// # 参数
-            /// 无。
-            ///
-            /// # 返回
-            /// 返回 `(page, page_size)` 元组。
-            ///
-            /// # 错误
-            /// 不返回错误。
+            // 读取页码与单页条数。返回 `(page, page_size)` 元组。
             fn page_and_size(&self) -> (u64, u64) {
                 (self.page, u64::from(self.page_size))
             }
@@ -226,16 +208,7 @@ impl Default for IntegrationErrorTaskFilter {
 }
 
 impl QueryFilter for IntegrationErrorTaskFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 将集成错误任务筛选条件编译为 MongoDB 查询，排除软删除记录。
     fn to_doc(&self) -> Document {
         let mut filter = undeleted_base();
         if let Some(message_id) = &self.message_id {
@@ -345,16 +318,7 @@ impl Default for ReconciliationDifferenceFilter {
 }
 
 impl QueryFilter for ReconciliationDifferenceFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 将对账差异筛选条件编译为 MongoDB 查询，排除软删除记录。
     fn to_doc(&self) -> Document {
         let mut filter = undeleted_base();
         if let Some(business_object_type) = &self.business_object_type {
@@ -412,34 +376,17 @@ pub struct ResolutionHistoryRow {
     pub handled_at: Instant,
 }
 
-/// 未删除基底文档（三类列表过滤与批量查询共用；修订表外全部列表查询自动追加）。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回仅含 `deleted_at` 未删除标记的查询文档。
-///
-/// # 错误
-/// 不返回错误。
+// 未删除基底文档（三类列表过滤与批量查询共用；修订表外全部列表查询自动追加）。返回仅含 `deleted_at` 未删除标记的查询文档。
 pub(crate) fn undeleted_base() -> Document {
     doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON }
 }
 
-/// 向查询条件追加秒级时间戳闭区间范围（BSON Int64 形态，与 `Instant`/`created_at`
-/// 持久化形态一致；区间两端可选，任一端缺失表示不设界）。
-///
-/// # 参数
-/// * `filter` - 待追加的查询条件
-/// * `field` - 时间字段名
-/// * `from` - 下界（含）；`None` 表示不设下界
-/// * `to` - 上界（含）；`None` 表示不设上界
-///
-/// # 返回
-/// 无返回值；直接修改传入的查询文档。
-///
-/// # 错误
-/// 不返回错误。
+// 向查询条件追加秒级时间戳闭区间范围（BSON Int64 形态，与 `Instant`/`created_at`持久化形态一致；区间两端可选，任一端缺失表示不设界）。
+//
+// 无返回值；直接修改传入的查询文档。
+//
+// - `from`：下界（含）；`None` 表示不设下界。
+// - `to`：上界（含）；`None` 表示不设上界。
 pub(crate) fn insert_time_range(filter: &mut Document, field: &str, from: Option<i64>, to: Option<i64>) {
     let mut range = Document::new();
     if let Some(from) = from {
@@ -452,36 +399,18 @@ pub(crate) fn insert_time_range(filter: &mut Document, field: &str, from: Option
         filter.insert(field, range);
     }
 }
-/// 向查询条件追加精确 ID 列表 `$in` 条件（空集合不加条件，避免误伤）。
-///
-/// # 参数
-/// * `filter` - 待追加的查询条件
-/// * `field` - ID 字段名
-/// * `ids` - 精确 ID 列表；空表示不收窄
-///
-/// # 返回
-/// 无返回值；直接修改传入的查询文档。
-///
-/// # 错误
-/// 不返回错误。
+// 向查询条件追加精确 ID 列表 `$in` 条件（空集合不加条件，避免误伤）。无返回值；直接修改传入的查询文档。
+//
+// `ids` 为精确 ID 列表；空表示不收窄。
 pub(crate) fn insert_id_in(filter: &mut Document, field: &str, ids: &[String]) {
     if !ids.is_empty() {
         filter.insert(field, doc! { "$in": ids });
     }
 }
 
-/// 向查询条件追加字面量多字段 OR 匹配（结构化范围保留为 AND 条件）。
-///
-/// # 参数
-/// * `filter` - 待追加的查询条件
-/// * `q` - 字面量关键词；`None` 表示不筛选
-/// * `fields` - 待匹配字段列表
-///
-/// # 返回
-/// 无返回值；直接修改传入的查询文档。
-///
-/// # 错误
-/// 不返回错误。
+// 向查询条件追加字面量多字段 OR 匹配（结构化范围保留为 AND 条件）。无返回值；直接修改传入的查询文档。
+//
+// `q` 为字面量关键词；`None` 表示不筛选。
 pub(crate) fn keyword_filter(filter: &mut Document, q: Option<&str>, fields: &[&str]) {
     let Some(q) = q else {
         return;
@@ -497,7 +426,7 @@ pub(crate) fn keyword_filter(filter: &mut Document, q: Option<&str>, fields: &[&
     filter.insert("$or", clauses);
 }
 
-/// 保留队列现有中文错误类别搜索，别名仅扩展类别 OR 分支。
+// 保留队列现有中文错误类别搜索，别名仅扩展类别 OR 分支。
 fn error_label_filter(filter: &mut Document, q: Option<&str>) {
     let Some(q) = q else {
         return;
@@ -619,7 +548,7 @@ mod tests {
 mod keyword_tests {
     use super::*;
 
-    /// 关键词按字面量 OR 匹配且不覆盖状态、归属与软删除条件。
+    // 关键词按字面量 OR 匹配且不覆盖状态、归属与软删除条件。
     #[test]
     fn literal_keyword_keeps_structured_constraints() {
         let filter = IntegrationErrorTaskFilter {

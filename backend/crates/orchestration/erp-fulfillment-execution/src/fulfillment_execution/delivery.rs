@@ -30,21 +30,12 @@ use crate::{Error, Result};
 impl FulfillmentProcess {
     /// 创建发货单（草稿，跨集合：表头 + 行 + 审计）。
     ///
-    /// 同一事务注册 `BusinessDocument` 并调用统一绑定端口。发货为
-    /// `NO_APPROVAL`：返回空绑定，不查询已发布定义，不启动审批实例，
-    /// 不创建审批任务。仓发/直发的表头与行归属由实体按发货类型校验。
+    /// 同一事务注册 `BusinessDocument` 并调用统一绑定端口。发货为 `NO_APPROVAL`：返回空绑定，不查询已发布定义，不启动审批实例，不创建审批任务。
+    /// 仓发/直发的表头与行归属由实体按发货类型校验。
     ///
-    /// # 参数
-    /// * `req` - 创建请求（表头 + 行）
-    /// * `actor` - 已通过鉴权的审计操作人
+    /// `req` 为创建请求（表头 + 行）。返回新建发货单的响应视图。`ValidationError`：请求体校验失败。
     ///
-    /// # 返回
-    /// 返回新建发货单的响应视图。
-    ///
-    /// # 错误
-    /// * `ValidationError` - 请求体校验失败
-    /// * `ConflictError` - 单号重复（唯一索引透出）
-    /// * `RepositoryError` - 数据库写入失败
+    /// `ConflictError`：单号重复（唯一索引透出）。`RepositoryError`：数据库写入失败。
     #[tracing::instrument(
         name = "fulfillment.delivery_create",
         skip_all,
@@ -70,17 +61,9 @@ impl FulfillmentProcess {
 
     /// 更新发货单（仅草稿；乐观锁语义）。
     ///
-    /// # 参数
-    /// * `id` - 发货单主键
-    /// * `req` - 更新请求（含期望版本）
-    /// * `actor` - 已通过鉴权的审计操作人
+    /// `id` 为发货单主键；`req` 为更新请求（含期望版本）。返回更新后发货单的响应视图。`NotFound`：发货单不存在。
     ///
-    /// # 返回
-    /// 返回更新后发货单的响应视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 发货单不存在
-    /// * `ConflictError` - 期望版本与当前版本不一致
+    /// `ConflictError`：期望版本与当前版本不一致。
     #[tracing::instrument(
         name = "fulfillment.delivery_update",
         skip_all,
@@ -121,7 +104,7 @@ impl FulfillmentProcess {
     }
 }
 
-/// 同一事务先授权，再读取、保存草稿并同步任务版本。
+// 同一事务先授权，再读取、保存草稿并同步任务版本。
 async fn apply_delivery_update(
     db: &Database,
     task_identity: &Arc<AuthorizationService>,
@@ -153,13 +136,7 @@ async fn apply_delivery_update(
     Ok(delivery)
 }
 
-/// 发货创建必须跳过绑定：政策只能是 `NO_APPROVAL`。
-///
-/// # 返回
-/// 返回 `SkipNoApproval`。
-///
-/// # 错误
-/// 政策缺失或误登记为必须审批时返回部署不变量错误。
+// 发货创建必须跳过绑定：政策只能是 `NO_APPROVAL`。返回 `SkipNoApproval`。政策缺失或误登记为必须审批时返回部署不变量错误。
 fn delivery_create_binding_decision() -> Result<BindingDecision> {
     let policy = policy_of(DocumentType::Delivery)?;
     match &policy {
@@ -175,10 +152,7 @@ fn delivery_create_binding_decision() -> Result<BindingDecision> {
     }
 }
 
-/// 确认发货创建路径不得查询发布定义。
-///
-/// # 错误
-/// 绑定决定不是跳过时返回错误。
+// 确认发货创建路径不得查询发布定义。绑定决定不是跳过时返回错误。
 fn ensure_delivery_skips_approval_binding() -> Result<BindingDecision> {
     let decision = delivery_create_binding_decision()?;
     if decision != BindingDecision::SkipNoApproval {
@@ -187,10 +161,7 @@ fn ensure_delivery_skips_approval_binding() -> Result<BindingDecision> {
     Ok(decision)
 }
 
-/// 发货不得注册空审批适配器。
-///
-/// # 错误
-/// 适配器登记存在时返回部署不变量错误。
+// 发货不得注册空审批适配器。适配器登记存在时返回部署不变量错误。
 fn ensure_delivery_has_no_adapter() -> Result<()> {
     if adapter_spec_of(DocumentType::Delivery).is_ok() {
         return Err(Error::Internal("发货不得注册审批适配器".to_string()));
@@ -198,14 +169,9 @@ fn ensure_delivery_has_no_adapter() -> Result<()> {
     Ok(())
 }
 
-/// 构造发货创建绑定命令。客户端不得提交定义 ID。
-///
-/// # 参数
-/// * `delivery` - 待登记发货单
-/// * `creator_id` - 创建人
-///
-/// # 错误
-/// 销售单为空时返回校验错误。
+// 构造发货创建绑定命令。客户端不得提交定义 ID。
+//
+// `delivery` 为待登记发货单。销售单为空时返回校验错误。
 fn delivery_bind_command(delivery: &Delivery, creator_id: &str) -> Result<BindPublishedDefinitionCommand> {
     Ok(BindPublishedDefinitionCommand {
         document_type: DocumentType::Delivery,
@@ -221,12 +187,9 @@ fn delivery_bind_command(delivery: &Delivery, creator_id: &str) -> Result<BindPu
     })
 }
 
-/// 在调用方事务内登记发货单据并证明空绑定。
-///
-/// 必须先确认政策跳过，再调用统一绑定端口；不得查询发布定义后假装成功。
-///
-/// # 错误
-/// 政策非无审批、端口返回绑定或写入失败时返回错误。
+// 在调用方事务内登记发货单据并证明空绑定。
+//
+// 必须先确认政策跳过，再调用统一绑定端口；不得查询发布定义后假装成功。政策非无审批、端口返回绑定或写入失败时返回错误。
 async fn persist_unbound_delivery_document(
     db: &Database,
     workflow: &dyn FulfillmentWorkflow,
@@ -245,10 +208,7 @@ async fn persist_unbound_delivery_document(
     Ok(())
 }
 
-/// 为已构造发货登记 `BusinessDocument` 并调用统一绑定端口。
-///
-/// # 错误
-/// 绑定端口或注册写入失败时返回错误。
+// 为已构造发货登记 `BusinessDocument` 并调用统一绑定端口。绑定端口或注册写入失败时返回错误。
 async fn register_created_delivery_document(
     db: &Database,
     workflow: &dyn FulfillmentWorkflow,
@@ -263,10 +223,7 @@ async fn register_created_delivery_document(
     persist_unbound_delivery_document(db, workflow, document, &bind_command, actor, executor).await
 }
 
-/// 在创建事务内写入发货草稿并登记无绑定单据。
-///
-/// # 错误
-/// 绑定、注册或发货单写入失败时返回错误，调用方必须视作整体回滚。
+// 在创建事务内写入发货草稿并登记无绑定单据。绑定、注册或发货单写入失败时返回错误，调用方必须视作整体回滚。
 async fn persist_created_delivery(
     db: &Database,
     workflow: Arc<dyn FulfillmentWorkflow>,
@@ -347,7 +304,7 @@ mod delivery_no_approval_tests {
         .expect("草稿必须可构造")
     }
 
-    /// 政策仅含 document_type、approval_requirement、process_kind，不得注册空 Adapter。
+    // 验证发货单只登记 `document_type`、`approval_requirement`、`process_kind`，不为无审批单据注册空适配器。
     #[test]
     fn delivery_policy_is_no_approval_identity_only() {
         let policy = policy_of(DocumentType::Delivery).expect("发货政策必须存在");
@@ -364,7 +321,7 @@ mod delivery_no_approval_tests {
         ensure_delivery_has_no_adapter().expect("不得注册空适配器");
     }
 
-    /// 创建必须注册 BusinessDocument，绑定端口返回空，禁止写入绑定。
+    // 验证创建发货单仍注册 `BusinessDocument`；统一端口只能返回空绑定，注册行保持未绑定。
     #[test]
     fn create_registers_document_and_returns_empty_binding() {
         let delivery = draft_delivery();

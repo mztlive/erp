@@ -55,7 +55,7 @@ pub struct NormalizedImportRow {
 }
 
 impl NormalizedImportRow {
-    /// 规格和条码同时定位到不同 SKU 时拒绝，防止将供给关联到错误规格。
+    // 规格和条码同时定位到不同 SKU 时拒绝，防止将供给关联到错误规格。
     pub(super) fn matching_sku<'a>(
         &self,
         skus: &'a [Sku],
@@ -79,14 +79,10 @@ impl NormalizedImportRow {
 
 /// 把模板单元格映射为建品输入。
 ///
-/// # 参数
-/// * `row_number` - Excel 行号
-/// * `cells` - 已由模板解析校验的单元格
+/// `cells`：已由模板解析校验的单元格。
 ///
-/// # 返回
 /// 返回规范化后的导入行。
 ///
-/// # 错误
 /// 名称为空、分类为空或价格无法解析时返回校验错误。
 pub fn normalize_import_row(row_number: u32, cells: &[String]) -> Result<NormalizedImportRow> {
     let cell = |index: usize| cells.get(index).map(String::as_str).unwrap_or("");
@@ -138,7 +134,7 @@ pub fn normalize_import_row(row_number: u32, cells: &[String]) -> Result<Normali
     })
 }
 
-/// 有产品编码时冻结用于同一 SPU 区分 SKU 的规格维度。
+// 有产品编码时冻结用于同一 SPU 区分 SKU 的规格维度。
 fn import_spec_entries(
     coded_spu: bool,
     specification: Option<&str>,
@@ -156,14 +152,9 @@ fn import_spec_entries(
 
 /// 读取模板「产品编码」；空白或占位视为未提供。
 ///
-/// # 参数
-/// * `raw` - 产品编码单元格
+/// `raw`：产品编码单元格。
 ///
-/// # 返回
 /// 有编码时返回规范化编号。
-///
-/// # 错误
-/// 无。
 pub fn explicit_product_code(raw: &str) -> Option<String> {
     let trimmed = collapse_import_text(raw);
     if is_import_blank(&trimmed) { None } else { Some(truncate_import_text(&trimmed.replace(' ', "-"), 64)) }
@@ -171,16 +162,9 @@ pub fn explicit_product_code(raw: &str) -> Option<String> {
 
 /// 同一产品编码下用于区分 SKU 的规格值。
 ///
-/// # 参数
-/// * `spec` - 产品规格
-/// * `barcode` - 条码
-/// * `name` - 商品名称
+/// `spec`：产品规格；`barcode`：条码；`name`：商品名称。
 ///
-/// # 返回
 /// 优先规格，其次条码，最后名称。
-///
-/// # 错误
-/// 无。
 pub fn sku_spec_value(spec: Option<&str>, barcode: Option<&str>, name: &str) -> String {
     if let Some(spec) = spec.filter(|value| !is_import_blank(value)) {
         return truncate_import_text(spec, SKU_SPEC_VALUE_MAX_CHARS);
@@ -193,15 +177,9 @@ pub fn sku_spec_value(spec: Option<&str>, barcode: Option<&str>, name: &str) -> 
 
 /// 生成稳定导入代码。
 ///
-/// # 参数
-/// * `prefix` - 代码前缀
-/// * `parts` - 参与哈希的文本
+/// `prefix`：代码前缀；`parts`：参与哈希的文本。
 ///
-/// # 返回
 /// 返回 `PREFIX-` 加 12 位十六进制摘要。
-///
-/// # 错误
-/// 无。
 pub fn stable_code(prefix: &str, parts: &[&str]) -> String {
     let mut hasher = Sha256::new();
     for part in parts {
@@ -212,7 +190,7 @@ pub fn stable_code(prefix: &str, parts: &[&str]) -> String {
     format!("{prefix}-{}", hex::encode(&digest[..6])).to_uppercase()
 }
 
-/// 解析可空公司参考价；供应商成本列不进入本入口。
+// 解析可空公司参考价；供应商成本列不进入本入口。
 fn parse_optional_amount(value: &str, column: &str) -> Result<Option<Amount>> {
     if is_import_blank(value) {
         return Ok(None);
@@ -221,7 +199,7 @@ fn parse_optional_amount(value: &str, column: &str) -> Result<Option<Amount>> {
     text.parse::<Amount>().map(Some).map_err(|_| Error::ValidationError(format!("「{column}」不是有效金额")))
 }
 
-/// 解析可空集采起订量；显式零值或负值必须拒绝，不能降级成未维护。
+// 解析可空集采起订量；显式零值或负值必须拒绝，不能降级成未维护。
 fn parse_optional_quantity(value: &str, column: &str) -> Result<Option<Quantity>> {
     if is_import_blank(value) {
         return Ok(None);
@@ -243,7 +221,7 @@ mod tests {
     use crate::Error;
     use crate::product_import::legacy::COMPACT_HEADERS as PRODUCT_IMPORT_HEADERS;
 
-    /// 公司售价读取新列，供应商条款不得代填；可空字段保留未维护状态。
+    // 验证：公司售价读取新列，供应商条款不得代填；可空字段保留未维护状态。
     #[test]
     fn joint_template_prices_are_optional_and_independent() {
         let mut cells = vec![String::new(); JOINT_HEADERS.len()];
@@ -316,7 +294,7 @@ mod tests {
         assert_eq!(right.spec_entries[0].attribute_value_code, "10kg");
     }
 
-    /// 精简模板分别读取公司代发价、集采价、起订量与市场价。
+    // 验证：精简模板分别读取公司代发价、集采价、起订量与市场价。
     #[test]
     fn compact_template_prices_and_minimum_are_independent() {
         let mut cells = vec![String::new(); PRODUCT_IMPORT_HEADERS.len()];
@@ -339,7 +317,7 @@ mod tests {
         assert!(unmaintained.bulk_min_quantity.is_none());
     }
 
-    /// 起订量保留未维护与非法值的差异；任意非正数不得启用集采参考价。
+    // 验证：起订量保留未维护与非法值的差异；任意非正数不得启用集采参考价。
     #[test]
     fn bulk_minimum_rejects_invalid_and_non_positive_quantities() {
         let mut cells = vec![String::new(); PRODUCT_IMPORT_HEADERS.len()];

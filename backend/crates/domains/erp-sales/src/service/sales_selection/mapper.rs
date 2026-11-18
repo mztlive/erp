@@ -38,7 +38,7 @@ struct BookletHead {
     status: BookletStatus,
 }
 
-/// 一次搬运两处视图共用的选品册表头（含新旧兼容双字段）。
+// 抽取选品册列表及详情共用的表头，保持新旧响应字段使用同一领域值。
 fn booklet_head(booklet: &SalesSelectionBooklet) -> BookletHead {
     BookletHead {
         id: booklet.base.id.clone(),
@@ -53,9 +53,9 @@ fn booklet_head(booklet: &SalesSelectionBooklet) -> BookletHead {
     }
 }
 
-/// 单遍统计陈列计数（可展示数、已删数、缺图数）。
-///
-/// 一次遍历同时累加三个计数；缺图仅统计可展示且无封面资产的行。
+// 为管理端详情统计有效、已删与缺图陈列数量，在同一次遍历内计算三个计数。
+//
+// 一次遍历同时累加三个计数；缺图仅统计可展示且无封面资产的行。
 fn booklet_item_counts(items: &[SalesSelectionDisplayItem]) -> (u32, u32, u32) {
     items.iter().fold((0, 0, 0), |(display, removed, missing_image), item| {
         let publishable = item.is_publishable();
@@ -68,16 +68,10 @@ fn booklet_item_counts(items: &[SalesSelectionDisplayItem]) -> (u32, u32, u32) {
 }
 
 impl SalesSelectionService {
-    /// 映射列表行。
+    /// 组装选品册管理列表的基础行，供列表读取再补齐陈列数与方案编号。
     ///
-    /// # 参数
-    /// * `booklet` - 选品册
-    ///
-    /// # 返回
-    /// 返回列表视图。
-    ///
-    /// # 错误
-    /// 无。
+    /// 输入约定：
+    /// - `booklet`：选品册
     pub fn booklet_list_item(booklet: &SalesSelectionBooklet) -> SalesSelectionBookletListItemView {
         let head = booklet_head(booklet);
         SalesSelectionBookletListItemView {
@@ -102,19 +96,14 @@ impl SalesSelectionService {
         }
     }
 
-    /// 映射详情。
-    ///
-    /// # 参数
-    /// * `booklet` - 选品册
-    /// * `items` - 陈列
-    /// * `task` - 活动或最近任务
-    /// * `public_path` - 可复制路径
-    ///
-    /// # 返回
+    /// 组装管理端册详情，把冻结陈列计数、准备阶段及调用方提供的公开路径合成一个响应，不自行解密令牌。
     /// 返回管理端详情，不含令牌明文。
     ///
-    /// # 错误
-    /// 无。
+    /// 输入约定：
+    /// - `booklet`：选品册
+    /// - `items`：陈列
+    /// - `task`：活动或最近任务
+    /// - `public_path`：可复制路径
     pub fn booklet_view(
         booklet: &SalesSelectionBooklet,
         items: &[SalesSelectionDisplayItem],
@@ -168,18 +157,13 @@ impl SalesSelectionService {
         }
     }
 
-    /// 映射方案详情。
-    ///
-    /// # 参数
-    /// * `proposal` - 表头
-    /// * `display_lines` - 陈列行
-    /// * `sku_lines` - SKU 行
-    ///
-    /// # 返回
+    /// 查看已提交方案时投影其表头、冻结陈列与 SKU 明细，不把链接令牌或成本带入响应。
     /// 返回内部方案视图，不含令牌与成本。
     ///
-    /// # 错误
-    /// 无。
+    /// 输入约定：
+    /// - `proposal`：表头
+    /// - `display_lines`：陈列行
+    /// - `sku_lines`：SKU 行
     pub fn proposal_view(
         proposal: &SalesSelectionProposal,
         display_lines: &[SalesSelectionProposalDisplayLine],
@@ -205,16 +189,11 @@ impl SalesSelectionService {
         }
     }
 
-    /// 映射方案列表行。
-    ///
-    /// # 参数
-    /// * `proposal` - 表头
-    ///
-    /// # 返回
+    /// 方案列表仅装配表头和汇总字段，不提供详细个人收件信息。
     /// 返回不含个人收件信息的列表行。
     ///
-    /// # 错误
-    /// 无。
+    /// 输入约定：
+    /// - `proposal`：表头
     pub fn proposal_list_item(proposal: &SalesSelectionProposal) -> SalesSelectionProposalListItemView {
         SalesSelectionProposalListItemView {
             id: proposal.base.id.clone(),
@@ -230,20 +209,15 @@ impl SalesSelectionService {
         }
     }
 
-    /// 映射公开页。
-    ///
-    /// # 参数
-    /// * `kind` - 页面种类
-    /// * `booklet` - 选品册
-    /// * `items` - 可展示陈列
-    /// * `session` - 会话
-    /// * `receipt` - 回执
-    ///
-    /// # 返回
+    /// 按公开页状态组装客户可见内容，结束或锁定时不展开个人选择与收件信息。
     /// 返回不含内部字段的公开视图。
     ///
-    /// # 错误
-    /// 无。
+    /// 输入约定：
+    /// - `kind`：页面种类
+    /// - `booklet`：选品册
+    /// - `items`：可展示陈列
+    /// - `session`：会话
+    /// - `receipt`：回执
     pub fn public_page(
         kind: PublicSelectionPageKind,
         booklet: &SalesSelectionBooklet,
@@ -299,16 +273,10 @@ impl SalesSelectionService {
     }
 }
 
-/// 映射方案陈列行。
-///
-/// # 参数
-/// * `line` - 方案陈列行
-///
-/// # 返回
-/// 返回行视图。
-///
-/// # 错误
-/// 无。
+// 展示已提交方案时从冻结陈列行读取数量和金额，不按当前册价格重算。
+//
+// 输入约定：
+// - `line`：方案陈列行
 fn proposal_display_line_view(line: &SalesSelectionProposalDisplayLine) -> ProposalDisplayLineView {
     ProposalDisplayLineView {
         display_item_id: line.display_item_id.to_string(),
@@ -320,16 +288,10 @@ fn proposal_display_line_view(line: &SalesSelectionProposalDisplayLine) -> Propo
     }
 }
 
-/// 映射方案 SKU 行。
-///
-/// # 参数
-/// * `line` - 方案 SKU 行
-///
-/// # 返回
-/// 返回行视图。
-///
-/// # 错误
-/// 无。
+// 展示方案商品明细时沿用提交时的名称、规格、单价和行金额。
+//
+// 输入约定：
+// - `line`：方案 SKU 行
 fn proposal_sku_line_view(line: &SalesSelectionProposalSkuLine) -> ProposalSkuLineView {
     ProposalSkuLineView {
         display_item_id: line.display_item_id.to_string(),
@@ -342,16 +304,10 @@ fn proposal_sku_line_view(line: &SalesSelectionProposalSkuLine) -> ProposalSkuLi
     }
 }
 
-/// 映射档位报告。
-///
-/// # 参数
-/// * `report` - 搜索报告
-///
-/// # 返回
-/// 返回视图。
-///
-/// # 错误
-/// 无。
+// 向管理端展示档位搜索产生的目标数、实际数和停止原因，供判断准备结果。
+//
+// 输入约定：
+// - `report`：搜索报告
 fn tier_report_view(report: &TierSearchReport) -> TierReportView {
     TierReportView {
         tier_id: report.tier_id.clone(),
@@ -363,17 +319,12 @@ fn tier_report_view(report: &TierSearchReport) -> TierReportView {
     }
 }
 
-/// 映射管理端陈列卡片。
-///
-/// # 参数
-/// * `item` - 陈列项
-/// * `booklet` - 选品册
-///
-/// # 返回
-/// 返回卡片。
-///
-/// # 错误
-/// 无。
+// 为管理端详情投影陈列卡片，装配册当前展示的价格及成员信息。
+// 返回卡片。
+//
+// 输入约定：
+// - `item`：陈列项
+// - `booklet`：选品册
 fn display_item_view(item: &SalesSelectionDisplayItem, booklet: &SalesSelectionBooklet) -> DisplayItemView {
     let (name, specification, members, tier_id) = match &item.kind {
         DisplayKind::SingleSku { sku } => {
@@ -440,16 +391,11 @@ fn specification_label(specification: &[SpecificationAttributeSnapshot]) -> Stri
     specification.iter().map(|attr| format!("{}：{}", attr.name, attr.value)).collect::<Vec<_>>().join(" / ")
 }
 
-/// 映射成员。
-///
-/// # 参数
-/// * `sku` - 成员快照
-///
-/// # 返回
-/// 返回成员视图。
-///
-/// # 错误
-/// 无。
+// 为管理端陈列卡片投影成员 SKU 的冻结商品快照。
+// 返回成员视图。
+//
+// 输入约定：
+// - `sku`：成员快照
 fn member_view(sku: &SkuSnapshot) -> DisplayMemberView {
     DisplayMemberView {
         reference_prices: sku.reference_prices.clone(),
@@ -462,17 +408,12 @@ fn member_view(sku: &SkuSnapshot) -> DisplayMemberView {
     }
 }
 
-/// 映射公开卡片。
-///
-/// # 参数
-/// * `item` - 陈列
-/// * `booklet` - 选品册
-///
-/// # 返回
-/// 返回公开卡片。
-///
-/// # 错误
-/// 无。
+// 组装公开选品卡片时只取客户可见的陈列与价格字段，不传内部 SKU 身份。
+// 返回公开卡片。
+//
+// 输入约定：
+// - `item`：陈列
+// - `booklet`：选品册
 fn public_item(item: &SalesSelectionDisplayItem, booklet: &SalesSelectionBooklet) -> PublicDisplayItemView {
     let view = display_item_view(item, booklet);
     PublicDisplayItemView {
@@ -497,17 +438,11 @@ fn public_item(item: &SalesSelectionDisplayItem, booklet: &SalesSelectionBooklet
     }
 }
 
-/// 映射公开回执。
+/// 提交成功后从冻结方案生成公开回执，使用已保存的数量、金额和方案编号。
 ///
-/// # 参数
-/// * `proposal` - 方案
-/// * `display_lines` - 陈列行
-///
-/// # 返回
-/// 返回回执。
-///
-/// # 错误
-/// 无。
+/// 输入约定：
+/// - `proposal`：方案
+/// - `display_lines`：陈列行
 pub fn public_receipt(
     proposal: &SalesSelectionProposal,
     display_lines: &[SalesSelectionProposalDisplayLine],
@@ -528,17 +463,11 @@ pub fn public_receipt(
     }
 }
 
-/// 公开页种类。
+/// 按选品册业务状态、链接撤销和截止时间决定公开页显示选择、回执还是结束态。
 ///
-/// # 参数
-/// * `booklet` - 选品册
-/// * `now` - 服务端时间
-///
-/// # 返回
-/// 返回页面种类。
-///
-/// # 错误
-/// 无。
+/// 输入约定：
+/// - `booklet`：选品册
+/// - `now`：服务端时间
 pub fn public_kind(
     booklet: &SalesSelectionBooklet,
     now: erp_core::common::time::Instant,

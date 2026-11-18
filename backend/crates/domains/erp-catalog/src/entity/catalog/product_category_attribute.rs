@@ -49,18 +49,11 @@ pub struct ProductCategoryAttribute {
 impl ProductCategoryAttribute {
     /// 创建分类-属性适用关系。
     ///
-    /// 完成 `sort_order` 非负校验；`category_id`/`attribute_id` 作为关系身份
-    /// 创建后不可修改（组合唯一由 P3/索引校验）。
+    /// 完成 `sort_order` 非负校验；`category_id`/`attribute_id` 作为关系身份创建后不可修改（组合唯一由 P3/索引校验）。
     ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::ProductCategoryAttributeId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
-    /// 返回新建的适用关系实体。
-    ///
-    /// # 错误
     /// 当 sort_order 为负数时返回错误。
+    ///
+    /// `id` 为实体主键（`erp_core::ids::ProductCategoryAttributeId`）。
     pub fn new(id: ProductCategoryAttributeId, data: ProductCategoryAttributeData) -> Result<Self> {
         ensure_non_negative_sort_order(data.sort_order)?;
 
@@ -75,16 +68,8 @@ impl ProductCategoryAttribute {
 
     /// 更新分类-属性适用关系。
     ///
-    /// 复用 `new` 的校验规则；`category_id`/`attribute_id` 是关系身份，
-    /// 不允许在通用更新中修改。
+    /// 复用 `new` 的校验规则；`category_id`/`attribute_id` 是关系身份，不允许在通用更新中修改。
     ///
-    /// # 参数
-    /// * `update` - 更新数据
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 当 sort_order 为负数时返回错误。
     pub fn update(&mut self, update: ProductCategoryAttributeUpdate) -> Result<()> {
         if let Some(required_flag) = update.required_flag {
@@ -98,16 +83,9 @@ impl ProductCategoryAttribute {
     }
 }
 
-/// 校验展示排序为非负整数。
-///
-/// # 参数
-/// * `sort_order` - 展示排序
-///
-/// # 返回
-/// 非负时返回 `Ok(())`。
-///
-/// # 错误
-/// 为负数时返回错误。
+// 校验展示排序为非负整数。
+//
+// 非负时返回 `Ok(())`。为负数时返回错误。
 fn ensure_non_negative_sort_order(sort_order: i32) -> Result<()> {
     if sort_order < 0 {
         return Err(Error::from("展示排序不能为负数"));
@@ -130,7 +108,7 @@ mod tests {
         }
     }
 
-    /// happy path：关系落位。
+    // 关系按请求保存。
     #[test]
     fn new_normalizes_relation() {
         let relation =
@@ -142,14 +120,14 @@ mod tests {
         assert_eq!(relation.sort_order, 1);
     }
 
-    /// 失败路径：越界（负排序）被拒绝。
+    // 越界（负排序）被拒绝。
     #[test]
     fn new_rejects_negative_sort_order() {
         let negative = ProductCategoryAttributeData { sort_order: -1, ..data() };
         assert!(ProductCategoryAttribute::new(ProductCategoryAttributeId::new("rel-1"), negative).is_err());
     }
 
-    /// update 修改必填标记与排序，身份字段保持不变。
+    // 更新时修改必填标记与排序，身份字段保持不变。
     #[test]
     fn update_applies_fields_and_preserves_identity() {
         let mut relation =

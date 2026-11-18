@@ -77,19 +77,9 @@ pub(crate) struct StockBalanceListQuery {
 }
 
 impl StockBalanceListParams {
-    /// 归一化库存余额列表查询参数。
-    ///
-    /// 分页取默认值、排序字段过白名单校验。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
-    /// `scope_version` 超长时同样返回 `ValidationError`。
+    // 查询库存余额列表前校验并规范化筛选和分页输入，返回独立于仓储的查询参数。
+    // 分页取默认值、排序字段过白名单校验。
+    // 排序字段不在白名单或排序方向非法时返回 `ValidationError`。`scope_version` 超长时同样返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<StockBalanceListQuery> {
         Ok(StockBalanceListQuery {
             q: application_core::normalized_text(self.q.as_deref()),
@@ -172,19 +162,9 @@ pub(crate) struct StockMovementListQuery {
 }
 
 impl StockMovementListParams {
-    /// 归一化库存流水列表查询参数。
-    ///
-    /// 时间区间校验（下界不晚于上界）、分页取默认值、排序字段过白名单校验。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 时间区间倒挂、排序字段不在白名单或排序方向非法时返回 `ValidationError`。
-    /// 经办人筛选含 `me`，或 `scope_version` 超长时，同样返回 `ValidationError`。
+    // 查询库存流水列表前校验并规范化筛选和分页输入，返回独立于仓储的查询参数。
+    // 时间区间校验（下界不晚于上界）、分页取默认值、排序字段过白名单校验。
+    // 时间区间倒挂、排序字段不在白名单或排序方向非法时返回 `ValidationError`。经办人筛选含 `me`，或 `scope_version` 超长时，同样返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<StockMovementListQuery> {
         if let (Some(from), Some(to)) = (self.occurred_from, self.occurred_to)
             && from > to
@@ -260,18 +240,9 @@ pub(crate) struct StockReservationListQuery {
 }
 
 impl StockReservationListParams {
-    /// 归一化库存预占列表查询参数。
-    ///
-    /// 分页取默认值、排序字段过白名单校验。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    // 查询库存预占列表前校验并规范化筛选和分页输入，返回独立于仓储的查询参数。
+    // 分页取默认值、排序字段过白名单校验。
+    // 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<StockReservationListQuery> {
         Ok(StockReservationListQuery {
             q: application_core::normalized_text(self.q.as_deref()),
@@ -353,19 +324,9 @@ pub(crate) struct StockAdjustmentListQuery {
 }
 
 impl StockAdjustmentListParams {
-    /// 归一化库存调整单列表查询参数。
-    ///
-    /// 分页取默认值、排序字段过白名单校验。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
-    /// 人员筛选含 `me`，或 `scope_version` 超长时，同样返回 `ValidationError`。
+    // 查询库存调整单列表前校验并规范化筛选和分页输入，返回独立于仓储的查询参数。
+    // 分页取默认值、排序字段过白名单校验。
+    // 排序字段不在白名单或排序方向非法时返回 `ValidationError`。人员筛选含 `me`，或 `scope_version` 超长时，同样返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<StockAdjustmentListQuery> {
         Ok(StockAdjustmentListQuery {
             q: application_core::normalized_text(self.q.as_deref()),

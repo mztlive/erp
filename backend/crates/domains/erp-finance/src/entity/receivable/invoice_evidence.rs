@@ -12,12 +12,10 @@ use super::{
 
 impl Invoice {
     /// 按批准额度创建附件登记记录。
-    /// # 参数
-    /// 身份、批准申请主体、剩余批准金额和登记人。
-    /// # 返回
-    /// 票面字段为空的销项蓝票草稿；规范化键仅用于内部唯一性。
-    /// # 错误
+    /// 结果：票面字段为空的销项蓝票草稿；规范化键仅用于内部唯一性。
     /// 金额非正时拒绝。
+    ///
+    /// 输入约定：身份、批准申请主体、剩余批准金额和登记人。
     pub fn from_evidence(id: InvoiceId, party_id: PartyId, amount: Amount, actor: &str) -> Result<Self> {
         if amount <= Amount::zero() {
             return Err(Error::from("本次申请没有剩余可开票金额"));
@@ -45,12 +43,10 @@ impl Invoice {
     }
 
     /// 读取真实票面税额拆分，禁止将附件登记的未知税额当成零。
-    /// # 参数
-    /// 当前发票。
-    /// # 返回
-    /// 已采集的不含税金额及税额。
-    /// # 错误
-    /// 附件登记缺少税额时拒绝需要票面税额的操作。
+    /// 结果：已采集的不含税金额及税额。
+    /// 失败条件：附件登记缺少税额时拒绝需要票面税额的操作。
+    ///
+    /// 输入约定：当前发票。
     pub fn tax_breakdown(&self) -> Result<(Amount, Amount)> {
         self.net_amount
             .zip(self.tax_amount)
@@ -58,12 +54,10 @@ impl Invoice {
     }
 
     /// 创建只包含批准含税金额的应收分配。
-    /// # 参数
-    /// 新分配身份和申请绑定的应收。
-    /// # 返回
-    /// 单笔完整额度分配；不含税金额及税额留空。
-    /// # 错误
+    /// 结果：单笔完整额度分配；不含税金额及税额留空。
     /// 非附件销项蓝票或金额非正时拒绝。
+    ///
+    /// 输入约定：新分配身份和申请绑定的应收。
     pub fn evidence_allocation(
         &self,
         id: SalesInvoiceAllocationId,

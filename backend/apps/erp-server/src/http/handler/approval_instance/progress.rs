@@ -13,11 +13,7 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
 /// 返回本人发起审批的未读进展数量。
-/// # 参数
-/// 应用状态、登录账号与请求头。
-/// # 返回
 /// 按审批单计数的未读数量。
-/// # 错误
 /// 没有读取权限、账号失效或存储失败时返回对应 HTTP 错误。
 pub async fn count(
     State(state): State<HttpState>,
@@ -32,11 +28,7 @@ pub async fn count(
 }
 
 /// 确认当前用户已经展示的审批进展。
-/// # 参数
-/// 应用状态、登录账号、实例 ID、请求头与展示版本。
-/// # 返回
 /// 成功返回空；旧版本确认不清除更新的进展。
-/// # 错误
 /// 非法版本返回 400，无权或实例缺失返回 404，存储错误按统一目录映射。
 pub async fn mark_read(
     State(state): State<HttpState>,

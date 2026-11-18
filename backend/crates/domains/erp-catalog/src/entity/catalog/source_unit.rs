@@ -6,12 +6,8 @@ use crate::{Error, Result};
 
 impl UnitOfMeasure {
     /// 从精确匹配候选中选择单位，缺项时构造稳定身份的待创建单位。
-    /// # 参数
-    /// `name` 为来源单位，`candidates` 包括停用和删除记录，`actor` 为操作人。
-    /// # 返回
-    /// 唯一启用单位或尚未保存的新单位；新单位按整项订购，数量精度为零。
-    /// # 错误
-    /// 单位非法、多候选、停用或删除时拒绝。
+    ///
+    /// 唯一启用单位或尚未保存的新单位；新单位按整项订购，数量精度为零。单位非法、多候选、停用或删除时拒绝。
     pub fn from_source(name: &str, mut candidates: Vec<Self>, actor: &str) -> Result<Self> {
         let name = name.trim();
         match candidates.len() {

@@ -48,13 +48,13 @@ pub(crate) fn parse(bytes: &[u8]) -> Result<Workbook> {
     Ok(workbook)
 }
 
-/// 有界读取供应商报价工作簿，复用 XML 和 ZIP 安全边界。
-/// # 参数
-/// 不超过 20 MiB 的工作簿原文。
-/// # 返回
-/// 固定报价工作表的行列值。
-/// # 错误
-/// 宏、外部链接、公式、重复路径及超限展开内容均拒绝。
+// 有界读取供应商报价工作簿，复用 XML 和 ZIP 安全边界。
+//
+// 不超过 20 MiB 的工作簿原文。
+//
+// 固定报价工作表的行列值。
+//
+// 宏、外部链接、公式、重复路径及超限展开内容均拒绝。
 pub(crate) fn quote_sheets(bytes: &[u8]) -> Result<HashMap<String, Vec<Row>>> {
     if bytes.is_empty() || bytes.len() > 20 * 1024 * 1024 {
         return Err(invalid("报价表须为 1 至 20 MiB 的 XLSX 文件"));

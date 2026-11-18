@@ -42,7 +42,7 @@ pub(super) struct SourceEvidence {
 }
 
 impl SourceEvidence {
-    /// 合并同一读取阶段的来源，不能丢弃只用于对象复验的事实。
+    // 合并同一授权阶段的附加来源证明及事实；对象复验专用的事实也要保留。
     pub(super) fn extend(&mut self, other: Self) {
         self.proofs.extend(other.proofs);
         self.facts.extend(other.facts);
@@ -50,7 +50,7 @@ impl SourceEvidence {
 }
 
 impl TargetFacts {
-    /// 使用原执行器读取完整目标；创建候选不读取尚未存在的根记录。
+    // 授权时用原执行器取得完整目标及来源；候选创建对象尚未存在，不查根记录，但现存来源仍须真实取证。
     pub(super) async fn load(
         bindings: &FactsBindings,
         context: &AccessContext,
@@ -106,7 +106,7 @@ impl TargetFacts {
         Ok(result)
     }
 
-    /// 所有根对象与新归属同时通过；任务条件与查询共用固定数据规则。
+    // 对本次根对象逐一应用固定数据条件；归属变更还须核验新归属。精确任务同查询共用数据规则，不允许部分通过。
     pub(super) fn require(
         &self,
         context: &AccessContext,
@@ -127,12 +127,12 @@ impl TargetFacts {
         self.ensure_current()
     }
 
-    /// 仅暴露本次可信根对象；审批管理从冻结事实确定类型及真实来源。
+    // 借出已经核验的根对象，审批管理以其中冻结事实识别真实类型和来源，不能信任调用方声明。
     pub(super) fn roots(&self) -> impl Iterator<Item = &ObjectFacts> {
         self.objects.iter().chain(self.candidate.iter())
     }
 
-    /// 有界展开复用同一个总量计数；异步检查结束后再次核对全部到期边界。
+    // 使用统一总量预算有界展开根目标及来源；异步取证结束还须校验已经收集的全部到期边界。
     pub(super) fn flattened(&self) -> Result<Vec<&ObjectFacts>> {
         let mut flattened = Vec::new();
         for object in &self.objects {
@@ -155,7 +155,7 @@ impl TargetFacts {
         self.flattened().map(|_| ())
     }
 
-    /// 非事务读取核对完整根及来源事实；快照事务不重读同一批对象。
+    // 交付对象检查时，非事务路径重读并比较完整根与来源事实；原快照不重复读同一批对象。
     pub(super) async fn revalidate(
         &self,
         bindings: &FactsBindings,
@@ -176,7 +176,7 @@ impl TargetFacts {
     }
 }
 
-/// 精确任务从固定任务资源读取；其事实仍按原入口解释，调用方不能切换提供者。
+// 精确任务只从固定任务事实端口获取真实目标，按原入口权限解释，不允许调用方替换事实提供者。
 async fn load_target_records(
     bindings: &FactsBindings,
     context: &AccessContext,
@@ -195,7 +195,7 @@ async fn load_target_records(
     Ok(objects)
 }
 
-/// 完整根集合必须一次核对，不能将根记录缺失解释为已知空。
+// 批量检查必须一次核对返回的完整根集合；未找到记录不能当成读到了空事实。
 async fn load_records(
     bindings: &FactsBindings,
     context: &AccessContext,
@@ -214,7 +214,7 @@ async fn load_records(
     Ok(objects)
 }
 
-/// 候选仅提供真实引用；现存来源必须通过拥有领域按原执行器重新读取。
+// 候选只提供已核对身份和真实引用；关联的已有记录沿原执行器由拥有领域重新读取。
 async fn load_candidate(
     bindings: &FactsBindings,
     context: &AccessContext,
@@ -263,7 +263,7 @@ async fn load_candidate(
     Ok(candidate)
 }
 
-/// 只收集当前根的来源声明，不把来源自己的关系当作根关系。
+// 只为根层记录收集固定来源关系的资源声明，不把嵌套来源关系提升为直接根关系。
 fn source_resources(rule: &AccessRule, resources: &mut BTreeMap<RelationKey, String>) -> Result<()> {
     match rule {
         AccessRule::Related { relation, resource, .. } => {
@@ -284,7 +284,7 @@ fn source_resources(rule: &AccessRule, resources: &mut BTreeMap<RelationKey, Str
     Ok(())
 }
 
-/// 部分来源的存在性和份额结果不能用来放行完整对象。
+// 完整对象授权必须从完整覆盖条件取证，不能用部分来源存在性或份额匹配放行整个对象。
 fn ensure_whole_object(rule: &AccessRule) -> Result<()> {
     match rule {
         AccessRule::Related { mode: RelationMatch::Any, .. } => {
@@ -304,7 +304,7 @@ fn ensure_whole_object(rule: &AccessRule) -> Result<()> {
 }
 
 impl ObjectFacts {
-    /// 候选没有已有记录版本，不能用于替换当前持久化事实。
+    // 检查新建或变更的候选事实没有冒充持久化记录版本；已有对象权限必须重新读取当前记录。
     fn ensure_candidate(&self, resource: &str) -> Result<()> {
         if self.resource != resource || !self.version.is_empty() {
             return Err(Error::ValidationError("创建或变更候选不能替代已有记录事实".into()));
@@ -546,7 +546,7 @@ mod tests {
         }
     }
 
-    /// 复用列表权限的任务办理仍必须在快照事务中执行。
+    // 验证：复用列表权限的任务办理仍必须在快照事务中执行。
     #[tokio::test]
     async fn task_with_read_permission_rejects_nontransaction_executor() {
         let context = context(&fulfillment::DELIVERY_DELIVERY_LIST);

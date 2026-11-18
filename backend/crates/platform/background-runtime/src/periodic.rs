@@ -8,13 +8,9 @@ pub(super) fn should_stop(stop: &watch::Receiver<bool>) -> bool {
     *stop.borrow() || stop.has_changed().is_err()
 }
 
-/// 周期执行工作；发送停止信号或释放所有发送端后结束。
-/// # 参数
-/// `stop` 为停止通知，`period` 为轮次间等待时间，`run` 为一个有界业务轮次。
-/// # 返回
-/// 已停止领取且当前轮次执行完毕。
-/// # 错误
-/// 不处理业务错误，由 `run` 自行记录；panic 交由进程监督器处理。
+/// 用于应用中独立运行的周期任务：串行执行有界的 `run`，每轮完成后等待 `period` 再开始下一轮。
+/// 收到停止信号或所有发送端关闭时，不再开始新一轮，但不取消已开始的工作。
+/// 业务错误由 `run` 自行记录，panic 留给进程监督器处理。
 pub async fn periodic<F, Fut>(mut stop: watch::Receiver<bool>, period: Duration, mut run: F)
 where
     F: FnMut() -> Fut,

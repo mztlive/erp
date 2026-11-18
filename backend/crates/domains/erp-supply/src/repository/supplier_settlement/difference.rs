@@ -73,18 +73,9 @@ impl Default for SupplierSettlementDifferenceFilter {
 }
 
 impl QueryFilter for SupplierSettlementDifferenceFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// `statement_item_id` 与 `status` 为 `None` 时不写入对应字段；给出时分别按字符串主键和状态码等值匹配。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 将结算差异筛选条件转换为 MongoDB 谓词，供仓储取数使用。
+    // 查询仅包含未删除记录。
+    // `statement_item_id` 与 `status` 为 `None` 时不写入对应字段；给出时分别按字符串主键和状态码等值匹配。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(statement_item_id) = &self.statement_item_id {
@@ -98,16 +89,8 @@ impl QueryFilter for SupplierSettlementDifferenceFilter {
 }
 
 impl Pagination for SupplierSettlementDifferenceFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。`page_size` 由 `u32` 转为 `u64`，页码不在此方法内归一。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 向通用仓储提供结算差异查询的页码和页长；不在此处改写页码。
+    // `page_size` 由 `u32` 转为 `u64`。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -117,15 +100,7 @@ impl Pagination for SupplierSettlementDifferenceFilter {
 #[allow(async_fn_in_trait)]
 pub trait SupplierSettlementDifferenceEvidenceRepositoryExt {
     /// 按稳定请求 ID 查找不可变差异补证。
-    ///
-    /// # 参数
-    /// * `request_id` - 稳定请求 ID
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回匹配补证；不存在时返回 `None`。
-    ///
-    /// # 错误
     /// 查询失败时返回对应错误。
     async fn find_by_request_id(
         &self,
@@ -134,18 +109,8 @@ pub trait SupplierSettlementDifferenceEvidenceRepositoryExt {
     ) -> Result<Option<SupplierSettlementDifferenceEvidence>>;
 
     /// 批量读取差异对应的全部补证，避免详情 N+1。
-    ///
-    /// 空输入直接返回空集合，不发查询。否则按 `difference_id` 一次 `$in`，
-    /// 再按 `provided_at`、`id` 升序。
-    ///
-    /// # 参数
-    /// * `difference_ids` - 差异主键集合
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
+    /// 空输入直接返回空集合，不发查询。否则按 `difference_id` 一次 `$in`，再按 `provided_at`、`id` 升序。
     /// 返回匹配补证；空输入返回空集合。
-    ///
-    /// # 错误
     /// 查询失败时返回对应错误。
     async fn find_by_difference_ids(
         &self,
@@ -186,15 +151,7 @@ impl SupplierSettlementDifferenceEvidenceRepositoryExt
 #[allow(async_fn_in_trait)]
 pub trait SupplierSettlementDifferenceRepositoryExt {
     /// 按结算明细批量读取差异，按创建时间和主键升序排列。
-    ///
-    /// # 参数
-    /// * `statement_item_ids` - 结算明细主键集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回关联这些结算明细的全部未删除差异。
-    ///
-    /// # 错误
     /// MongoDB 查询或游标读取失败时返回错误。
     async fn list_by_statement_item_ids(
         &self,
@@ -203,18 +160,9 @@ pub trait SupplierSettlementDifferenceRepositoryExt {
     ) -> Result<Vec<SupplierSettlementDifference>>;
 
     /// 分页检索供应商结算差异列表（投影查询）。
-    ///
-    /// 只返回 [`SupplierSettlementDifferenceRow`] 所需的列表字段，不加载整文档；
-    /// 排序字段走白名单映射（`DIFFERENCE_SORT_FIELDS`），白名单外一律回退 `created_at`。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
+    /// 只返回 [`SupplierSettlementDifferenceRow`] 所需的列表字段，不加载整文档；排序字段走白名单映射
+    /// （`DIFFERENCE_SORT_FIELDS`），白名单外一律回退 `created_at`。
     /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
     async fn search_supplier_settlement_differences(
         &self,

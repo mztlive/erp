@@ -57,7 +57,7 @@ impl PayableReadService {
     }
 }
 
-/// 收集付款视图主键并保持去重，空列表不触发仓储查询。
+// 定位供应商往来展示关联时，收集付款视图主键并保持去重，空列表不触发仓储查询。
 fn supplier_payment_ids(views: &[SupplierPaymentView]) -> Vec<SupplierPaymentId> {
     let mut seen = HashSet::new();
     views
@@ -67,7 +67,7 @@ fn supplier_payment_ids(views: &[SupplierPaymentView]) -> Vec<SupplierPaymentId>
         .collect()
 }
 
-/// 把冲正实体按原付款分组，并形成稳定的最近优先展示顺序。
+// 汇总供应商往来展示时，把冲正实体按原付款分组，并形成稳定的最近优先展示顺序。
 fn group_payment_reversals(
     reversals: Vec<PaymentReversal>,
 ) -> HashMap<String, Vec<SupplierPaymentReversalView>> {
@@ -85,7 +85,7 @@ fn group_payment_reversals(
     grouped
 }
 
-/// 把付款冲正实体裁剪成付款列表允许公开的摘要字段。
+// 生成供应商往来展示视图时，把付款冲正实体裁剪成付款列表允许公开的摘要字段。
 fn payment_reversal_view(reversal: PaymentReversal) -> SupplierPaymentReversalView {
     SupplierPaymentReversalView {
         id: reversal.base.id,
@@ -135,17 +135,12 @@ pub(super) async fn enrich_payment_allocation_views_batched_with_executor(
     Ok(batched)
 }
 
-/// 为付款核销分配补全应付子账与来源业务单号。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `views` - 仅含分录主键的分配视图
-///
-/// # 返回
-/// 返回补全后的分配视图；找不到对应分录或子账的行保持展示字段为空。
-///
-/// # 错误
-/// 仓储读取失败时返回错误。
+// 组装供应商往来展示时，为付款核销分配补全应付子账与来源业务单号。
+//
+// 调用参数：
+// * `views` - 仅含分录主键的分配视图
+//
+// 返回补全后的分配视图；找不到对应分录或子账的行保持展示字段为空。
 async fn enrich_payment_allocation_views(
     db: &Database,
     views: Vec<PaymentAllocationView>,
@@ -163,17 +158,11 @@ async fn enrich_payment_allocation_views(
         .collect())
 }
 
-/// 把已解析的来源展示字段写入分配视图。
-///
-/// # 参数
-/// * `view` - 待写入的分配视图
-/// * `source` - 分录对应的应付来源；缺失时不清空既有空值
-///
-/// # 返回
-/// 无。
-///
-/// # 错误
-/// 无。
+// 组装供应商往来展示时，把已解析的来源展示字段写入分配视图。
+//
+// 调用参数：
+// * `view` - 待写入的分配视图
+// * `source` - 分录对应的应付来源；缺失时不清空既有空值
 fn apply_allocation_source(view: &mut PaymentAllocationView, source: Option<&AllocationSource>) {
     let Some(source) = source else {
         return;
@@ -184,17 +173,12 @@ fn apply_allocation_source(view: &mut PaymentAllocationView, source: Option<&All
     view.source_document_no = source.source_document_no.clone();
 }
 
-/// 按分配行批量加载应付分录与子账来源。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `views` - 付款核销分配视图
-///
-/// # 返回
-/// 返回以应付分录 ID 为键的来源映射。
-///
-/// # 错误
-/// 仓储读取失败时返回错误。
+// 读取供应商往来展示时，按分配行批量加载应付分录与子账来源。
+//
+// 调用参数：
+// * `views` - 付款核销分配视图
+//
+// 返回以应付分录 ID 为键的来源映射。
 async fn load_allocation_sources(
     db: &Database,
     views: &[PaymentAllocationView],
@@ -210,16 +194,12 @@ async fn load_allocation_sources(
     Ok(map_allocation_sources(&entries, &accounts, &document_nos))
 }
 
-/// 收集分配视图中的应付分录主键。
-///
-/// # 参数
-/// * `views` - 付款核销分配视图
-///
-/// # 返回
-/// 返回去重后的分录 ID 列表。
-///
-/// # 错误
-/// 无。
+// 定位供应商往来展示关联时，收集分配视图中的应付分录主键。
+//
+// 调用参数：
+// * `views` - 付款核销分配视图
+//
+// 返回去重后的分录 ID 列表。
 fn allocation_entry_ids(views: &[PaymentAllocationView]) -> Vec<PayableEntryId> {
     let mut seen = HashSet::new();
     let mut ids = Vec::new();
@@ -233,17 +213,12 @@ fn allocation_entry_ids(views: &[PaymentAllocationView]) -> Vec<PayableEntryId> 
     ids
 }
 
-/// 按分录批量加载应付子账。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `entries` - 已加载的应付分录
-///
-/// # 返回
-/// 返回以子账 ID 为键的子账映射。
-///
-/// # 错误
-/// 仓储读取失败时返回错误。
+// 读取供应商往来展示时，按分录批量加载应付子账。
+//
+// 调用参数：
+// * `entries` - 已加载的应付分录
+//
+// 返回以子账 ID 为键的子账映射。
 async fn load_accounts_for_entries(
     db: &Database,
     entries: &[PayableEntry],
@@ -262,22 +237,15 @@ async fn load_accounts_for_entries(
     Ok(accounts.into_iter().map(|account| (account.base.id.clone(), account)).collect())
 }
 
-/// 按来源类型分组一次批量解析子账来源业务单号并写入缓存（FIN-R03）。
-///
-/// 采购单来源与结算单来源各至多一次仓储查询；重复来源 ID 去重；来源缺失或
-/// 业务单号为空时保持 `None`，禁止回退泄漏内部 ID。展示合并由
-/// `merge_source_document_nos` 承担，本函数只负责分组批量装载。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `accounts` - 待解析的应付子账
-/// * `document_nos` - 以子账 ID 为键的单号缓存
-///
-/// # 返回
-/// 无。
-///
-/// # 错误
-/// 仓储读取失败时返回错误。
+// 依据来源类型分组一次批量解析子账来源业务单号并写入缓存（FIN-R03）。
+//
+// 采购单来源与结算单来源各至多一次仓储查询；重复来源 ID 去重；来源缺失或
+// 业务单号为空时保持 `None`，禁止回退泄漏内部 ID。展示合并由
+// `merge_source_document_nos` 承担，本函数只负责分组批量装载。
+//
+// 调用参数：
+// * `accounts` - 待解析的应付子账
+// * `document_nos` - 以子账 ID 为键的单号缓存
 async fn collect_source_document_nos<'a, I>(
     db: &Database,
     accounts: I,
@@ -312,15 +280,14 @@ where
     Ok(())
 }
 
-/// 合并已批量装载的来源单号映射为子账展示缓存（FIN-R03 纯合并）。
-///
-/// # 参数
-/// * `accounts` - 待合并的应付子账
-/// * `purchase_map` - 采购单 ID 到业务单号的事实映射
-/// * `statement_map` - 结算单 ID 到业务单号的事实映射
-///
-/// # 返回
-/// 返回以子账 ID 为键的展示单号；缺失来源保持 `None`，不回退内部 ID。
+// 定位供应商往来展示关联时，合并已批量装载的来源单号映射为子账展示缓存（FIN-R03 纯合并）。
+//
+// 调用参数：
+// * `accounts` - 待合并的应付子账
+// * `purchase_map` - 采购单 ID 到业务单号的事实映射
+// * `statement_map` - 结算单 ID 到业务单号的事实映射
+//
+// 返回以子账 ID 为键的展示单号；缺失来源保持 `None`，不回退内部 ID。
 fn merge_source_document_nos(
     accounts: &[&PayableAccount],
     purchase_map: &HashMap<String, String>,
@@ -337,18 +304,14 @@ fn merge_source_document_nos(
     merged
 }
 
-/// 把分录、子账与业务单号装配为核销来源映射。
-///
-/// # 参数
-/// * `entries` - 应付分录
-/// * `accounts` - 应付子账
-/// * `document_nos` - 子账来源业务单号
-///
-/// # 返回
-/// 返回以分录 ID 为键的来源映射；找不到子账的分录被跳过。
-///
-/// # 错误
-/// 无。
+// 生成供应商往来展示视图时，把分录、子账与业务单号装配为核销来源映射。
+//
+// 调用参数：
+// * `entries` - 应付分录
+// * `accounts` - 应付子账
+// * `document_nos` - 子账来源业务单号
+//
+// 返回以分录 ID 为键的来源映射；找不到子账的分录被跳过。
 fn map_allocation_sources(
     entries: &[PayableEntry],
     accounts: &HashMap<String, PayableAccount>,
@@ -373,21 +336,18 @@ fn map_allocation_sources(
     sources
 }
 
-/// 解析供应商展示信息（编号 + 名称）。
-///
-/// 供应商编号取自 `supplier_accounts`；名称取共用主体当前修订的法定名称
-/// （与 supplier_offering 的解析路径一致）。主数据缺失时返回 `None`，不阻断列表。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `supplier_id` - 供应商账号 ID。
-/// * `executor` - 调用方原事务执行器。
-///
-/// # 返回
-/// 返回 `(供应商编号, 供应商名称)`。
-///
-/// # 错误
-/// 供应商、主体或主体修订读取失败时返回错误。
+// 确定供应商往来展示的适用条件时，解析供应商展示信息（编号 + 名称）。
+//
+// 供应商编号取自 `supplier_accounts`；名称取共用主体当前修订的法定名称
+// （与 supplier_offering 的解析路径一致）。主数据缺失时返回 `None`，不阻断列表。
+//
+// 调用参数：
+// * `supplier_id` - 供应商账号 ID。
+// * `executor` - 调用方原事务执行器。
+//
+// 返回 `(供应商编号, 供应商名称)`。
+//
+// 供应商、主体或主体修订读取失败时返回错误。
 pub(super) async fn resolve_supplier_display(
     db: &mongodb::Database,
     supplier_id: &str,
@@ -411,20 +371,15 @@ pub(super) async fn resolve_supplier_display(
     Ok((supplier_no, revision.map(|value| value.legal_name)))
 }
 
-/// 解析应付子账来源单据的业务单号。
-///
-/// 采购单来源取采购单号；供应商结算来源取结算单号。空单号视为缺失。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `account` - 应付子账。
-/// * `executor` - 调用方原事务执行器。
-///
-/// # 返回
-/// 返回业务单号；未知来源或单据缺失时返回 `None`，不得回退内部 ID。
-///
-/// # 错误
-/// 仓储读取失败时返回错误。
+// 确定供应商往来展示的适用条件时，解析应付子账来源单据的业务单号。
+//
+// 采购单来源取采购单号；供应商结算来源取结算单号。空单号视为缺失。
+//
+// 调用参数：
+// * `account` - 应付子账。
+// * `executor` - 调用方原事务执行器。
+//
+// 返回业务单号；未知来源或单据缺失时返回 `None`，不得回退内部 ID。
 pub(super) async fn resolve_source_document_no(
     db: &mongodb::Database,
     account: &PayableAccount,
@@ -456,7 +411,7 @@ mod tests {
 
     use super::{group_payment_reversals, merge_source_document_nos};
 
-    /// 关联冲正按原付款分组，并稳定展示最近创建记录。
+    // 验证供应商往来展示：关联冲正按原付款分组，并稳定展示最近创建记录。
     #[test]
     fn payment_reversals_group_by_original_payment_and_sort_recent_first() {
         let older = reversal("reversal-1", "PCZ-1", "payment-1", 10);
@@ -470,7 +425,7 @@ mod tests {
         assert_eq!(grouped["payment-2"][0].reversal_no, "PCZ-3");
     }
 
-    /// 构造最小付款冲正事实供只读投影测试使用。
+    // 处理供应商往来展示时，生成最小付款冲正事实供只读投影测试使用。
     fn reversal(id: &str, reversal_no: &str, payment_id: &str, created_at: u64) -> PaymentReversal {
         let mut reversal = PaymentReversal::new(
             PaymentReversalId::new(id),
@@ -521,7 +476,7 @@ mod tests {
         .expect("子账事实合法")
     }
 
-    /// 混合来源按类型合并，缺失来源保持空且不回退内部 ID。
+    // 验证供应商往来展示：混合来源按类型合并，缺失来源保持空且不回退内部 ID。
     #[test]
     fn source_document_nos_merge_mixed_sources() {
         use std::collections::{HashMap, HashSet};
@@ -541,7 +496,7 @@ mod tests {
         assert!(!leaked.contains("st-1"));
     }
 
-    /// 空集合合并为空，不触发仓储查询。
+    // 验证供应商往来展示：空集合合并为空，不触发仓储查询。
     #[test]
     fn source_document_nos_merge_empty() {
         use std::collections::HashMap;
@@ -549,7 +504,7 @@ mod tests {
         assert!(merged.is_empty());
     }
 
-    /// 部分缺失保持空，不回退内部 ID。
+    // 验证供应商往来展示：部分缺失保持空，不回退内部 ID。
     #[test]
     fn source_document_nos_merge_partial_missing() {
         use std::collections::HashMap;

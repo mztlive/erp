@@ -55,18 +55,11 @@ pub enum Error {
 impl Error {
     /// 返回 HTTP 映射使用的稳定错误分类；调用方不得解析展示文案。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// `Internal` 与 `Logic` 为 `ErrorClass::Internal`；`ConflictError` 为 `ErrorClass::Conflict`；
-    /// `BusinessLogicError`、`ValidationError` 与 `NotFound` 为 `ErrorClass::BusinessRule`；
-    /// `Forbidden` 与 `Unauthenticated` 为 `ErrorClass::Forbidden`；
-    /// `RepositoryError`、`ReceiptDuplicate`、`TransientTransaction` 与 `OutcomeUnknown`
-    /// 按其内嵌仓储错误分类。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// `Internal` 与 `Logic` 为 `ErrorClass::Internal`；`ConflictError` 为
+    /// `ErrorClass::Conflict`；`BusinessLogicError`、`ValidationError` 与 `NotFound` 为
+    /// `ErrorClass::BusinessRule`；`Forbidden` 与 `Unauthenticated` 为
+    /// `ErrorClass::Forbidden`；`RepositoryError`、`ReceiptDuplicate`、
+    /// `TransientTransaction` 与 `OutcomeUnknown`按其内嵌仓储错误分类。
     pub fn class(&self) -> ErrorClass {
         match self {
             Self::Internal(_) | Self::Logic(_) => ErrorClass::Internal,
@@ -84,44 +77,17 @@ impl Error {
         }
     }
 
-    /// 采购类型与创建依据不一致。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回依据不一致校验错误（文案与历史调用点一致）。
-    ///
-    /// # 错误
-    /// 本身即为错误值，不再失败。
+    /// 采购类型与创建依据不一致。返回依据不一致校验错误（文案与历史调用点一致）。
     pub fn basis_purchase_type_mismatch() -> Self {
         Self::ValidationError("采购类型与创建依据不一致".to_string())
     }
 
-    /// 付款条件与创建依据不一致。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回依据不一致校验错误（文案与历史调用点一致）。
-    ///
-    /// # 错误
-    /// 本身即为错误值，不再失败。
+    /// 付款条件与创建依据不一致。返回依据不一致校验错误（文案与历史调用点一致）。
     pub fn basis_payment_term_mismatch() -> Self {
         Self::ValidationError("付款条件与创建依据不一致".to_string())
     }
 
-    /// 采购预计交付日晚于销售承诺期限。
-    ///
-    /// # 参数
-    /// * `sales_due` - 销售对客户承诺的最晚交付日
-    ///
-    /// # 返回
-    /// 返回交付日越界校验错误（文案与历史调用点一致）。
-    ///
-    /// # 错误
-    /// 本身即为错误值，不再失败。
+    /// 采购预计交付日晚于销售承诺期限。返回交付日越界校验错误（文案与历史调用点一致）。
     pub fn delivery_beyond_sales_due(sales_due: impl std::fmt::Display) -> Self {
         Self::ValidationError(format!("预计交付日不能晚于销售承诺期限 {sales_due}"))
     }
@@ -132,13 +98,11 @@ impl_repository_error!(
     duplicate = |error| { Error::ConflictError(duplicate_key_conflict_message(&error)) }
 );
 
-/// 将持久化源错误映射为稳定错误分类（唯一分类入口）。
-///
-/// 唯一键冲突、乐观锁与瞬态事务冲突为可重试/冲突语义；未知提交结果与其它
-/// 仓储失败为内部错误。`Logic(erp_core::Error)` 不经过本函数：领域基元错误
-/// 无稳定分类（字符串负载或状态迁移），保持 `Internal`。
-/// 不新增错误变体：`web-api` 的 `boundary_error!` 按变体穷举映射，
-/// 新增变体会破坏其穷举性（该 crate 不在本组可改范围）。
+// 将持久化源错误映射为稳定错误分类（唯一分类入口）。
+//
+// 唯一键冲突、乐观锁与瞬态事务冲突为可重试/冲突语义；未知提交结果与其它仓储失败为内部错误。`Logic(erp_core::Error)`
+// 不经过本函数：领域基元错误无稳定分类（字符串负载或状态迁移），保持 `Internal`。不新增错误变体：`web-api` 的 `boundary_error!`
+// 按变体穷举映射，新增变体会破坏其穷举性（该 crate 不在本组可改范围）。
 fn persistence_error_class(error: &persistence_core::Error) -> ErrorClass {
     match error {
         persistence_core::Error::DuplicateKey(_)
@@ -148,31 +112,23 @@ fn persistence_error_class(error: &persistence_core::Error) -> ErrorClass {
     }
 }
 
-/// 将唯一键冲突映射为面向用户的冲突提示。
+// 将唯一键冲突映射为面向用户的冲突提示。
 fn duplicate_key_conflict_message(error: &persistence_core::Error) -> String {
     duplicate_index_conflict_message(error.duplicate_index_name())
 }
 
-/// 将采购域唯一索引名称映射为面向用户的冲突提示。
-///
-/// 创建依据和责任选择器保留原专用文案，其余唯一索引使用原通用文案。
+// 将采购域唯一索引名称映射为面向用户的冲突提示。
+//
+// 创建依据和责任选择器保留原专用文案，其余唯一索引使用原通用文案。
 fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
     index_name.and_then(known_duplicate_index_message).unwrap_or("数据已存在，请勿重复提交").to_string()
 }
 
 /// 返回本域已知唯一索引的固定冲突提示。
 ///
-/// # 参数
-/// * `index_name` - 已由 persistence-core 提取的 MongoDB 索引名称
-///
-/// # 返回
-/// 精确命中本域注册索引时返回原提示；未知名称返回 `None`，由调用边界选择通用提示。
-///
-/// # 错误
-/// 不返回错误。
-///
-/// # 约束
 /// 不匹配子串或前后缀、不规范化索引名称，不拥有其他领域或 HTTP 历史索引的提示。
+///
+/// 精确命中本域注册索引时返回原提示；未知名称返回 `None`，由调用边界选择通用提示。
 pub fn known_duplicate_index_message(index_name: &str) -> Option<&'static str> {
     match index_name {
         "uk_purchase_orders_creation_basis" => Some("该采购创建依据已生成采购单"),

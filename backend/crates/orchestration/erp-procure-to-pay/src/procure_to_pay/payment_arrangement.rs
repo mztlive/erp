@@ -13,11 +13,9 @@ use persistence_core::Executor;
 use crate::{Error, Result};
 
 /// 按余额同步付款安排；原申请释放时取消旧跟进日期，重新提醒。
-/// # 参数
-/// 数据库、采购单、是否由申请释放触发、调用方唯一事务执行器。
-/// # 返回
-/// 创建、刷新或完成开放任务；重复同步不重复开立。
-/// # 错误
+///
+/// 数据库、采购单、是否由申请释放触发、调用方唯一事务执行器。创建、刷新或完成开放任务；重复同步不重复开立。
+///
 /// 采购负责人缺失、任务合同或仓储写入失败时返回错误，交由原事务回滚。
 pub async fn sync_payment_arrangement(
     db: &Database,
@@ -59,7 +57,7 @@ pub async fn sync_payment_arrangement(
     }
     Ok(())
 }
-/// 余额与阻断摘要不包含其他采购或内部机制信息。
+// 余额与阻断摘要不包含其他采购或内部机制信息。
 fn arrangement_summary(facts: &PaymentArrangementFacts) -> String {
     let suffix = if facts.state == PaymentArrangementState::Blocked {
         "销售变更影响尚未处理，暂停申请和付款；请先处理采购依据"
@@ -73,7 +71,7 @@ fn arrangement_summary(facts: &PaymentArrangementFacts) -> String {
         .unwrap_or_else(Amount::zero);
     format!("{}：可申请 {} 元；{}", facts.order.purchase_no, available, suffix)
 }
-/// 任务归属采购经办人，不归属最终审批人。
+// 任务归属采购经办人，不归属最终审批人。
 fn arrangement_task(facts: &PaymentArrangementFacts, summary: String) -> Result<WorkItem> {
     let order = &facts.order;
     let owner = order

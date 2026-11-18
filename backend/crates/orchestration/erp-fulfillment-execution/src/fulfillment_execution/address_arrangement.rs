@@ -55,13 +55,8 @@ pub struct SaveAddressArrangement {
     pub reset_packages: bool,
 }
 impl FulfillmentProcess {
-    /// 查询销售单独立收货安排。
-    /// # 参数
-    /// 销售单身份及认证操作人。
-    /// # 返回
-    /// 可编辑商品、地址与版本。
-    /// # 错误
-    /// 无范围权限、无生效销售版本或来源异常时拒绝。
+    /// 销售单编辑收货安排之前，在同一快照检查当前账号的销售范围，再返回可编辑商品、地址和并发版本。
+    /// 范围不足、缺少生效销售版本或来源异常时不交付安排。
     pub async fn sales_address_arrangement(
         &self,
         id: &str,
@@ -80,12 +75,7 @@ impl FulfillmentProcess {
             })
             .await
     }
-    /// 查询当前发货任务收货安排，限定当前任务商品与数量。
-    /// # 参数
-    /// 发货身份及认证操作人。
-    /// # 返回
-    /// 当前任务可补充地址的商品。
-    /// # 错误
+    /// 当前发货任务补充地址时，只读取该任务的商品、数量和可编辑安排，不授予其他任务的访问权。
     /// 非当前处理人、已发货或供应商接口子单时拒绝。
     pub async fn delivery_address_arrangement(
         &self,
@@ -108,7 +98,7 @@ impl FulfillmentProcess {
             .await
     }
 
-    /// 在原授权快照中读取销售需求、地址及发货资料，事务成功后才交付视图。
+    // 在原授权快照中读取销售需求、地址及发货资料，事务成功后才交付视图。
     async fn address_arrangement_snapshot(
         &self,
         sales_id: &str,

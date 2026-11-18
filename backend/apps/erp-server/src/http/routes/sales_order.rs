@@ -12,16 +12,7 @@ use crate::http::handler::sales_order;
 use crate::http::routes::permission_route;
 use crate::http::state::HttpState;
 
-/// 返回本域管理端路由集合。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回声明公共权限目录信息的路由集合。
-///
-/// # 错误
-/// 不执行 I/O，不返回错误。
+/// 为管理端挂载销售单与销售凭证接口，按操作登记公共权限目录信息。
 pub fn routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -37,7 +28,7 @@ pub fn routes() -> Router<HttpState> {
         .merge(lifecycle_routes())
 }
 
-/// 查询、方案预填与创建入口，各自保留资源动作权限。
+// 挂载销售单查询、方案预填和建单入口，各自关联原有的资源动作权限。
 fn read_create_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -62,7 +53,7 @@ fn read_create_routes() -> Router<HttpState> {
         )
 }
 
-/// 已有销售单的编辑、提交、撤回、作废和交接入口。
+// 为父路由挂载已有销售单的编辑、提交、撤回、作废和交接入口。
 fn lifecycle_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -100,14 +91,7 @@ fn lifecycle_routes() -> Router<HttpState> {
         )
 }
 
-/// 销售凭证下载和补签合同路由。
-///
-/// # 参数
-/// 无。
-/// # 返回
-/// 返回逐操作声明权限目录信息并保留上传限制的路由集合。
-/// # 错误
-/// 无；业务错误由各处理器返回。
+// 为父路由挂载销售凭证下载和补签合同路由。
 fn evidence_contract_routes() -> Router<HttpState> {
     Router::new()
         .route(

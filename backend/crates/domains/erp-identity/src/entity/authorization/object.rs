@@ -9,7 +9,7 @@ use crate::{Error, Result};
 type Grants = BTreeSet<(ResourceKind, String)>;
 
 impl AccessRule {
-    /// 对象与查询共用数据条件，读取授权集合只包含本次目标。
+    // 以和查询编译一致的条件判断精确对象；记录读取补充只从本次目标取得，不接受账号历史授权全集。
     pub(crate) fn allows_object(&self, actor: &str, object: &ObjectFacts, grants: &Grants) -> Result<bool> {
         match self {
             Self::Allow => Ok(true),
@@ -53,7 +53,7 @@ impl AccessRule {
         }
     }
 
-    /// 校验完整引用与实际来源身份，再按登记模式判断来源覆盖。
+    // 在判断来源覆盖前核对完整引用与已读对象身份，确保缺失或无权来源不能在匹配前被丢弃。
     fn allows_related(
         &self,
         actor: &str,
@@ -83,7 +83,7 @@ impl AccessRule {
         })
     }
 
-    /// 只查询规则实际使用的读取授权资源。
+    // 收集当前规则实际使用的记录授权资源，供对象取证定向查询，不读取未使用的补充授权。
     pub(crate) fn grant_resources(&self, resources: &mut BTreeSet<ResourceKind>) {
         match self {
             Self::RecordReadGrant(resource) => {
@@ -103,7 +103,7 @@ impl AccessRule {
 }
 
 impl AccessFact {
-    /// 归属和参与事实均相对于已冻结账号解释。
+    // 以本次冻结的账号解释对象归属和参与事实，供上层组合规则逐项判定。
     fn matches_object(&self, actor: &str, object: &ObjectFacts) -> Result<bool> {
         Ok(match self {
             Self::Owned => object.owner_id.any(&object.owner_ids, |id| id == actor)?,
@@ -124,7 +124,7 @@ impl AccessFact {
 }
 
 impl ObjectFacts {
-    /// 先校验完整事实及展开上限，再按资源和身份固定根与嵌套来源的顺序。
+    // 为对象复验整理可比较的事实集合：先核对完整性及展开上限，再按资源和身份稳定排序根对象和嵌套来源。
     pub(crate) fn canonicalize(objects: &mut [Self]) -> Result<()> {
         let mut flattened = Vec::new();
         for object in objects.iter() {
@@ -135,7 +135,7 @@ impl ObjectFacts {
         Ok(())
     }
 
-    /// 仅重排已校验的集合，不去重或丢弃来源引用。
+    // 为对象复验统一已校验事实的排列；只重排成员，不去重或改写实际来源引用。
     fn sort(objects: &mut [Self]) {
         objects.sort_unstable_by(|a, b| (&a.resource, &a.id).cmp(&(&b.resource, &b.id)));
         for object in objects {
@@ -145,7 +145,7 @@ impl ObjectFacts {
         }
     }
 
-    /// 有界展开事实，防止递归关系或遗漏身份造成错误授权。
+    // 为定向读取记录授权有界展开根对象及来源；超限或身份不完整时不能截断后继续放行。
     pub(crate) fn flatten<'a>(&'a self, output: &mut Vec<&'a Self>, depth: usize) -> Result<()> {
         if depth > 8 || output.len() >= 1000 || self.resource.is_empty() || self.version.is_empty() {
             return Err(Error::ValidationError("授权对象事实缺失或规模超限".into()));
@@ -167,7 +167,7 @@ impl ObjectFacts {
 }
 
 impl RelatedObjects {
-    /// 检查原始引用和已读取记录的身份，缺失引用保留给覆盖规则拒绝。
+    // 对照实际来源对象核验原始引用身份，供覆盖规则据完整集合作判定。未读取到的引用须保留，不能当作不存在关系。
     pub(crate) fn validate(&self) -> Result<()> {
         let ids = self.expected_ids.iter().map(String::as_str).collect::<Vec<_>>();
         ResourceTargets::new(&ids)?;

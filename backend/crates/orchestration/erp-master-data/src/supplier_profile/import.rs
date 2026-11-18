@@ -11,16 +11,10 @@ use super::SupplierProfileProcess;
 use crate::{Error, Result};
 
 impl SupplierProfileProcess {
-    /// 执行有界导入并返回每一行结果；不持久化上传中的明文敏感资料。
+    /// 批量供应商建档时按输入顺序逐行执行，隔离单行失败，不持久化上传中的敏感明文。
     ///
-    /// # 参数
-    /// * `request` - 导入批次。
-    /// * `actor` - 当前操作人。
-    ///
-    /// # 返回
     /// 与输入行对应的导入结果。单行失败写入该行结果，不中断后续行。
     ///
-    /// # 错误
     /// 批次为空或超过 500 行时拒绝整个请求；业务行错误在结果中返回。
     pub async fn import(
         &self,
@@ -42,7 +36,7 @@ impl SupplierProfileProcess {
         Ok(results)
     }
 
-    /// 首先回读去重记录，随后完成引用解析和根命令事务。
+    // 首先回读去重记录，随后完成引用解析和根命令事务。
     async fn import_row(&self, row: &SupplierImportRow, actor: &AuditActor) -> Result<SupplierImportResult> {
         row.validate()?;
         if let Some(done) = self.imported_result(&row.command_key(), actor).await? {
@@ -93,7 +87,7 @@ impl SupplierProfileProcess {
         self.submit_import_row(row, command, actor).await
     }
 
-    /// 复用逐行根命令；失败后回读原命令以核对可能已成功的提交。
+    // 调用供应商根命令写入本行；写入失败后以原逐行幂等键查询回执，不按新命令重建供应商。
     async fn submit_import_row(
         &self,
         row: &SupplierImportRow,
@@ -123,7 +117,7 @@ impl SupplierProfileProcess {
         }
     }
 
-    /// 公司名称或别名只允许精确匹配已启用的我方公司。
+    // 公司名称或别名只允许精确匹配已启用的我方公司。
     async fn import_company(
         &self,
         name: &str,
@@ -138,7 +132,7 @@ impl SupplierProfileProcess {
         Ok(erp_core::ids::PartyId::new(company.base.id))
     }
 
-    /// 精确匹配当前法定名称，不将其他企业主体自动转换成供应商。
+    // 精确匹配当前法定名称，不将其他企业主体自动转换成供应商。
     async fn existing_import_supplier(
         &self,
         name: &str,
@@ -154,7 +148,7 @@ impl SupplierProfileProcess {
     }
 }
 
-/// 结果响应只含业务定位与结果，拒绝返回原始请求。
+// 结果响应只含业务定位与结果，拒绝返回原始请求。
 fn row_result(
     row: &SupplierImportRow,
     status: &str,
@@ -172,7 +166,7 @@ fn row_result(
     }
 }
 
-/// 对无法确认的提交保留独立状态，禁止误报为已回滚失败。
+// 对无法确认的提交保留独立状态，禁止误报为已回滚失败。
 fn failed_row(row: &SupplierImportRow, error: Error) -> SupplierImportResult {
     let (status, message) = match error {
         Error::ValidationError(message)

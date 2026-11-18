@@ -6,19 +6,15 @@ use super::mapping::{purchase_change_brief_source, sales_change_brief_source};
 use super::*;
 use crate::workbench::WorkbenchSubjectDisplay;
 
-/// 保存每次销售变更的冻结字段和行差异。
-///
-/// # 参数
-/// * `fact` - 待补充展示的对象事实。
-/// * `change` - 销售变更单。
-/// * `number` - 来源销售单号。
-/// * `context` - 批量读取的基准修订、提交与行状态。
-///
-/// # 返回
-/// 无返回值。按提交编号和提交 ID 写入展示，不修改权限。非当前提交不保留原因和变更类型。
-///
-/// # 错误
-/// 不返回错误。
+// 处理销售与采购变更简报时，保存每次销售变更的冻结字段和行差异。
+//
+// 调用参数：
+// * `fact` - 待补充展示的对象事实。
+// * `change` - 销售变更单。
+// * `number` - 来源销售单号。
+// * `context` - 批量读取的基准修订、提交与行状态。
+//
+// 按提交编号和提交 ID 写入展示，不修改权限。非当前提交不保留原因和变更类型。
 pub(super) fn sales(
     fact: &mut WorkbenchObjectFact,
     change: &SalesChangeOrder,
@@ -44,7 +40,7 @@ pub(super) fn sales(
     }
 }
 
-/// 原因和变更类型没有提交快照；只有仍冻结的当前提交可使用实体头。
+// 处理销售与采购变更简报时，原因和变更类型没有提交快照；只有仍冻结的当前提交可使用实体头。
 fn sales_source(
     change: &SalesChangeOrder,
     number: Option<&str>,
@@ -67,19 +63,15 @@ fn sales_source(
     source
 }
 
-/// 保存采购变更的冻结字段；仅完整且与审批计数一致的 CS 序列可作为历史版本。
-///
-/// # 参数
-/// * `fact` - 待补充展示的对象事实。
-/// * `change` - 采购变更单。
-/// * `number` - 来源采购单号。
-/// * `context` - 批量读取的基准修订、提交与行状态。
-///
-/// # 返回
-/// 无返回值。当前正式提交写入审批版本；排除编辑副本后序列对齐时历史提交写入 CS 序号；全部目标另按 ID 写一份，编辑副本不得取得审批版本键。不修改权限。
-///
-/// # 错误
-/// 不返回错误。
+// 处理销售与采购变更简报时，保存采购变更的冻结字段；仅完整且与审批计数一致的 CS 序列可作为历史版本。
+//
+// 调用参数：
+// * `fact` - 待补充展示的对象事实。
+// * `change` - 采购变更单。
+// * `number` - 来源采购单号。
+// * `context` - 批量读取的基准修订、提交与行状态。
+//
+// 当前正式提交写入审批版本；排除编辑副本后序列对齐时历史提交写入 CS 序号；全部目标另按 ID 写一份，编辑副本不得取得审批版本键。不修改权限。
 pub(super) fn purchase(
     fact: &mut WorkbenchObjectFact,
     change: &PurchaseChangeOrder,
@@ -120,12 +112,12 @@ pub(super) fn purchase(
     }
 }
 
-/// 仅接受标准正整数 CS 编号，旧格式不得推测审批版本。
+// 处理销售与采购变更简报时，仅接受标准正整数 CS 编号，旧格式不得推测审批版本。
 fn purchase_sequence(submission: &PurchaseChangeSubmission) -> Option<u32> {
     submission.submission_no.strip_prefix("CS-")?.parse().ok().filter(|version| *version > 0)
 }
 
-/// 排除编辑副本后验证完整正式序列；当前草稿指针不改变旧审批计数及历史绑定。
+// 处理销售与采购变更简报的版本事实时，排除编辑副本后验证完整正式序列；当前草稿指针不改变旧审批计数及历史绑定。
 fn purchase_versions_aligned(change: &PurchaseChangeOrder, context: &PurchaseChangeBriefContext) -> bool {
     let rows = context
         .submissions
@@ -154,7 +146,7 @@ fn purchase_versions_aligned(change: &PurchaseChangeOrder, context: &PurchaseCha
     versions.len() == rows.len() && versions.iter().copied().eq(1..=change.approval_subject_version)
 }
 
-/// 不把可修改的采购变更原因冒充历史原因。
+// 处理销售与采购变更简报时，不把可修改的采购变更原因冒充历史原因。
 fn purchase_source(
     change: &PurchaseChangeOrder,
     number: Option<&str>,
@@ -180,7 +172,7 @@ fn purchase_source(
     source
 }
 
-/// 使用同一差异规则和简报行数上限。
+// 组装销售与采购变更简报时，使用同一差异规则和简报行数上限。
 fn lines(base: Option<&LineStateMap>, target: Option<&LineStateMap>) -> (Vec<BriefLine>, u32) {
     let mut rows = change_diff_lines(base, target);
     let more = rows.len().saturating_sub(BRIEF_LINE_LIMIT) as u32;

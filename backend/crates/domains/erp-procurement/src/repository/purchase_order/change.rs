@@ -37,15 +37,11 @@ pub struct PurchaseChangeSearch<'a> {
 impl<'a> PurchaseOrderDomainRepository<'a> {
     /// 分页查询采购变更单，并按创建时间稳定排序。
     ///
-    /// # 参数
-    /// * `search` - 已归一化的来源单、状态、统一授权凭证及分页排序条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回当前页采购变更单与满足条件的总数。当 MongoDB 查询、计数或游标读取失败时返回错误。
     ///
-    /// # 返回
-    /// 返回当前页采购变更单与满足条件的总数。
+    /// 沿用调用方的执行器，不另开事务。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询、计数或游标读取失败时返回错误。
+    /// `search` 为已归一化的来源单、状态、统一授权凭证及分页排序条件。
     pub async fn search_change_orders(
         &self,
         search: PurchaseChangeSearch<'_>,
@@ -77,15 +73,9 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
 
     /// 判断采购单是否存在草稿或审批中的变更单。
     ///
-    /// # 参数
-    /// * `purchase_order_id` - 原采购单稳定身份
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 存在未结束变更时返回 `true`。当 MongoDB 查询失败时返回错误。
     ///
-    /// # 返回
-    /// 存在未结束变更时返回 `true`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
+    /// 沿用调用方的执行器，不另开事务。
     pub async fn has_in_progress_change(
         &self,
         purchase_order_id: &PurchaseOrderId,
@@ -111,15 +101,9 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
 
     /// 按原采购单读取全部变更单，并按创建时间升序返回。
     ///
-    /// # 参数
-    /// * `purchase_order_id` - 原采购单稳定身份
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回匹配的采购变更单。当 MongoDB 查询或游标读取失败时返回错误。
     ///
-    /// # 返回
-    /// 返回匹配的采购变更单。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 沿用调用方的执行器，不另开事务。
     pub async fn list_changes_by_order(
         &self,
         purchase_order_id: &PurchaseOrderId,
@@ -137,20 +121,13 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
 
     /// 装载变更单查询的有界身份与版本集合，用于跨页一致性校验。
     ///
-    /// # 参数
-    /// * `purchase_order_id` - 可选原采购单筛选
-    /// * `status` - 可选状态代码筛选
-    /// * `scope` - 当前读取阶段的统一采购授权
-    /// * `executor` - 调用方执行器
+    /// 版本集合必须与列表同一授权条件和筛选快照。
     ///
-    /// # 返回
     /// 最多 10001 行；调用方必须整体拒绝超限。
     ///
-    /// # 错误
-    /// 数据库读取失败时返回仓储错误。
-    ///
-    /// # 关键业务约束
-    /// 版本集合必须与列表同一授权条件和筛选快照。
+    /// - `purchase_order_id`：可选原采购单筛选。
+    /// - `status`：可选状态代码筛选。
+    /// - `scope`：当前读取阶段的统一采购授权。
     pub async fn query_change_versions(
         &self,
         purchase_order_id: Option<&str>,
@@ -180,15 +157,11 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
 
     /// 按变更单读取全部提交，并按提交序号升序返回。
     ///
-    /// # 参数
-    /// * `change_order_id` - 采购变更单稳定身份
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回匹配的变更提交。当 MongoDB 查询或游标读取失败时返回错误。
     ///
-    /// # 返回
-    /// 返回匹配的变更提交。
+    /// 沿用调用方的执行器，不另开事务。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// `change_order_id` 为采购变更单稳定身份。
     pub async fn list_change_submissions_by_order(
         &self,
         change_order_id: &PurchaseChangeOrderId,
@@ -206,15 +179,11 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
 
     /// 按变更提交读取全部明细，并按行号升序返回。
     ///
-    /// # 参数
-    /// * `submission_id` - 采购变更提交稳定身份
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回匹配的变更提交行。当 MongoDB 查询或游标读取失败时返回错误。
     ///
-    /// # 返回
-    /// 返回匹配的变更提交行。
+    /// 沿用调用方的执行器，不另开事务。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// `submission_id` 为采购变更提交稳定身份。
     pub async fn list_change_submission_lines(
         &self,
         submission_id: &PurchaseChangeSubmissionId,
@@ -236,12 +205,7 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
 pub trait PurchaseChangeSubmissionRepositoryExt {
     /// 批量读取指定变更单的全部有效提交，供审批历史摘要使用。
     ///
-    /// # 参数
-    /// `change_order_ids` 为父变更单身份集合；`executor` 决定事务上下文。
-    /// # 返回
-    /// 返回全部未删除提交；空集合返回空结果，不扫描全表。
-    /// # 错误
-    /// MongoDB 查询失败时返回仓储错误。
+    /// 返回全部未删除提交；空集合返回空结果，不扫描全表。MongoDB 查询失败时返回仓储错误。
     async fn list_by_change_orders(
         &self,
         change_order_ids: &[PurchaseChangeOrderId],
@@ -252,16 +216,9 @@ pub trait PurchaseChangeSubmissionRepositoryExt {
     ///
     /// 唯一性由 `uk_purchase_change_submissions_order_no` 唯一索引保证。
     ///
-    /// # 参数
-    /// * `purchase_change_order_id` - 所属采购变更单
-    /// * `submission_no` - 提交序号
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回匹配的变更提交；无匹配时返回 `None`。当 MongoDB 查询失败时返回错误。
     ///
-    /// # 返回
-    /// 返回匹配的变更提交；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
+    /// 沿用调用方传入的执行器。
     async fn find_by_order_and_submission_no(
         &self,
         purchase_change_order_id: &PurchaseChangeOrderId,
@@ -304,7 +261,7 @@ impl PurchaseChangeSubmissionRepositoryExt for persistence_core::Repository<'_, 
     }
 }
 
-/// 业务筛选只收窄来源授权查询，不包含人员范围推断。
+// 业务筛选只收窄来源授权查询，不包含人员范围推断。
 fn change_order_filter(purchase_order_id: Option<&str>, status: Option<&str>) -> Document {
     let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
     if let Some(status) = status {
@@ -323,15 +280,9 @@ pub trait PurchaseChangeSubmissionLineRepositoryExt {
     ///
     /// 用于变更提交详情页一次取回行集合；空集合直接返回空结果。
     ///
-    /// # 参数
-    /// * `submission_ids` - 变更提交 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回全部匹配的变更提交明细。当 MongoDB 查询或游标读取失败时返回错误。
     ///
-    /// # 返回
-    /// 返回全部匹配的变更提交明细。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 沿用调用方传入的执行器。
     async fn find_lines_by_submission_ids(
         &self,
         submission_ids: &[PurchaseChangeSubmissionId],

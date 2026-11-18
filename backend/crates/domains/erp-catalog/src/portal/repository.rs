@@ -36,22 +36,10 @@ pub trait CatalogPortalExt {
     const NEW_PRODUCT_DRAFTS: &'static str = "supplier_new_product_drafts";
     const SUPPLIER_CATEGORY_MAPPINGS: &'static str = "supplier_category_mappings";
 
-    /// 通过标准乐观锁仓储访问提报。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 当前数据库的提报仓储。
-    /// # 错误
-    /// 无。
+    /// 通过标准乐观锁仓储访问提报。当前数据库的提报仓储。
     fn new_product_drafts(&self) -> Repository<'_, NewProductDraft>;
 
-    /// 读取商品域拥有的供应商分类映射仓储。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 标准乐观锁映射仓储。
-    /// # 错误
-    /// 无。
+    /// 读取商品域拥有的供应商分类映射仓储。标准乐观锁映射仓储。
     fn supplier_category_mappings(&self) -> Repository<'_, SupplierCategoryMapping>;
 }
 
@@ -65,13 +53,11 @@ impl CatalogPortalExt for Database {
     }
 }
 
-/// 精确读取一个供应商、完整原始路径及商品类型下的独立映射。
-/// # 参数
-/// 服务端供应商归属、去首尾空白的原始完整路径和商品类型。
-/// # 返回
-/// 三个精确等值条件组成的仓储查询。
-/// # 错误
-/// 无；输入由服务校验。
+// 精确读取一个供应商、完整原始路径及商品类型下的独立映射。
+//
+// 三个精确等值条件组成的仓储查询。输入由服务校验。
+//
+// 服务端供应商归属、去首尾空白的原始完整路径和商品类型。
 pub(super) fn category_mapping_filter(
     supplier_id: &str,
     original_category_path: &str,

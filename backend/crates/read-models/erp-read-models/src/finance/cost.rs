@@ -37,26 +37,21 @@ pub struct CostReadModel {
     rbac: Arc<AuthorizationService>,
 }
 impl CostReadModel {
-    /// 绑定应用数据库及身份服务，不保存授权缓存。
+    /// 装配成本列表时，绑定应用数据库及身份服务，不保存授权缓存。
     ///
     /// # 参数
-    /// * `db` - 应用数据库。
     /// * `rbac` - 身份服务；不在此缓存授权。
     ///
     /// # 返回
     /// 返回成本读取服务；构造不执行 I/O。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: Database, rbac: Arc<AuthorizationService>) -> Self {
         Self { db, rbac }
     }
 
-    /// 以同一份授权分配生成列表、总数及稳定分页。
+    /// 读取成本列表时，以同一份授权分配生成列表、总数及稳定分页。
     ///
     /// # 参数
     /// * `params` - 成本列表筛选。
-    /// * `actor` - 认证用户。
     ///
     /// # 返回
     /// 返回带范围版本的成本分页。
@@ -85,11 +80,10 @@ impl CostReadModel {
         Ok(snapshot.result(paging::costs(rows, query.paging)))
     }
 
-    /// 独立详情重新解析成本详情动作及销售对象读取范围。
+    /// 处理成本列表时，独立详情重新解析成本详情动作及销售对象读取范围。
     ///
     /// # 参数
     /// * `id` - 成本身份。
-    /// * `actor` - 认证用户。
     ///
     /// # 返回
     /// 返回单条授权成本及范围元信息。
@@ -103,11 +97,10 @@ impl CostReadModel {
         let row = snapshot.rows.pop().ok_or_else(|| Error::NotFound("成本不存在或无权查看".into()))?;
         Ok(snapshot.result(row))
     }
-    /// 分配列表使用自己的读取权限，只输出当前授权且匹配业务条件的行。
+    /// 处理成本列表时，分配列表使用自己的读取权限，只输出当前授权且匹配业务条件的行。
     ///
     /// # 参数
     /// * `params` - 分配列表筛选。
-    /// * `actor` - 认证用户。
     ///
     /// # 返回
     /// 返回当前授权且匹配条件的分配分页。
@@ -140,15 +133,15 @@ impl CostReadModel {
         Ok(snapshot.result(page))
     }
 }
-/// 首页面后必须携带同一范围版本，禁止不同授权页拼接。
+// 核对成本列表边界时，首页面后必须携带同一范围版本，禁止不同授权页拼接。
 fn ensure_page(page: u64, version: Option<&str>) -> Result<()> {
     crate::support::ensure_deep_page(page, version)
 }
-/// 使用饱和乘法避免非法大页码溢出。
+// 组装成本列表时，使用饱和乘法避免非法大页码溢出。
 fn page_offset(page: u64, size: u32) -> usize {
     usize::try_from(page.saturating_sub(1).saturating_mul(u64::from(size))).unwrap_or(usize::MAX)
 }
-/// 构造仅依赖来源授权的成本筛选，分配条件单独前置到分配仓储。
+// 处理成本列表时，生成仅依赖来源授权的成本筛选，分配条件单独前置到分配仓储。
 fn empty_query() -> CostEntryListParams {
     CostEntryListParams {
         scope_version: None,

@@ -13,21 +13,12 @@ use crate::http::routes::permission_route;
 use crate::http::state::HttpState;
 use crate::http::upload;
 
-/// 返回本域管理端路由集合。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回声明公共权限目录信息的路由集合。
-///
-/// # 错误
-/// 不执行 I/O，不返回错误。
+/// 为管理端挂载应付子账、付款和进项发票接口，按操作登记公共权限目录信息；文件入口保留对应的上传限制。
 pub fn routes() -> Router<HttpState> {
     account_routes().merge(payment_routes()).merge(invoice_routes())
 }
 
-/// 应付子账读取、建立与收款账户查看。
+// 挂载应付子账读取、建立与收款账户查看。
 fn account_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -51,7 +42,7 @@ fn account_routes() -> Router<HttpState> {
         )
 }
 
-/// 供应商付款读取、回单与提交。
+// 挂载供应商付款读取、回单与提交。
 fn payment_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -94,7 +85,7 @@ fn payment_routes() -> Router<HttpState> {
         )
 }
 
-/// 进项发票分配列表与含文件登记。
+// 挂载进项发票分配列表与含文件登记。
 fn invoice_routes() -> Router<HttpState> {
     Router::new()
         .route(

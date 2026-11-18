@@ -30,7 +30,7 @@ pub struct InvoiceSalesBasis {
     files: Vec<ApprovalMaterialFile>,
 }
 
-/// 请求必须命中页面所见版本的精确文件允许清单。
+// 处理开票核对时，请求必须命中页面所见版本的精确文件允许清单。
 fn reference(
     source_revision: &str,
     files: &[ApprovalMaterialFile],
@@ -47,13 +47,15 @@ fn reference(
         .ok_or_else(|| Error::NotFound("当前销售版本未关联此附件".into()))
 }
 
-/// 在冻结提交资料之外补充当前销售依据，业务不可用不影响原资料。
-/// # 参数
-/// 数据库、已授权实例资料及原快照执行器。
-/// # 返回
-/// 当前开票来源或单独的不可用提示；其他审批类型均为空。
-/// # 错误
-/// 数据库等基础设施错误继续传播。
+// 读取开票核对时，在冻结提交资料之外补充当前销售依据，业务不可用不影响原资料。
+//
+// 调用参数：
+// 数据库、已授权实例资料及原快照执行器。
+//
+// 当前开票来源或单独的不可用提示；其他审批类型均为空。
+//
+// 失败边界：
+// 数据库等基础设施错误继续传播。
 pub(crate) async fn optional_sales_basis(
     db: &Database,
     materials: &ApprovalMaterialsView,
@@ -71,13 +73,14 @@ pub(crate) async fn optional_sales_basis(
     }
 }
 
-/// 读取已授权开票实例的唯一销售来源。
-/// # 参数
-/// 数据库、经过运行时实例授权的提交资料及原快照执行器。
-/// # 返回
-/// 同一事务中的销售版本、完整明细与合同凭证目录。
-/// # 错误
-/// 类型、申请版本、应收或销售来源不一致时拒绝。
+// 处理开票核对时，读取已授权开票实例的唯一销售来源。
+//
+// 调用参数：
+// 数据库、经过运行时实例授权的提交资料及原快照执行器。
+//
+// 同一事务中的销售版本、完整明细与合同凭证目录。
+//
+// 类型、申请版本、应收或销售来源不一致时拒绝。
 pub(crate) async fn sales_basis(
     db: &Database,
     materials: &ApprovalMaterialsView,
@@ -120,11 +123,14 @@ pub(crate) async fn sales_basis(
     })
 }
 
-/// 以审批资格重新证明当前销售版本及其精确文件允许清单。
+/// 组装开票核对时，以审批资格重新证明当前销售版本及其精确文件允许清单。
+///
 /// # 参数
 /// 数据库、审批运行服务、读者、实例、页面显示的销售版本与文件 ID。
+///
 /// # 返回
 /// 仅供服务端比对的文件版本及内容指纹。
+///
 /// # 错误
 /// 未授权、来源变更、非开票审批或文件不在来源清单时拒绝。
 pub async fn invoice_sales_reference<A: WorkflowAuthorizationPort>(

@@ -48,12 +48,8 @@ pub struct CatalogMaterializeCommand {
 
 impl CatalogPortalService {
     /// 缺少商品身份时新建，已给出版本的身份则原样复用。
-    /// # 参数
-    /// `command` 为内部核对结果，`executor` 为商品、供给、任务共同使用的事务。
-    /// # 返回
-    /// 精确商品和逐SKU结果；新建SKU始终未上架且没有销售价。
-    /// # 错误
-    /// 申请或字典变化、实质内容改动、对象越界、规格或条码冲突。
+    ///
+    /// 精确商品和逐SKU结果；新建SKU始终未上架且没有销售价。申请或字典变化、实质内容改动、对象越界、规格或条码冲突。
     pub async fn materialize(
         &self,
         command: &CatalogMaterializeCommand,

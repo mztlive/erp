@@ -17,16 +17,7 @@ pub enum WorkingPurpose {
 }
 
 impl WorkingPurpose {
-    /// 返回编辑目的的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为界面或响应展示提供销售工作副本编辑目的的中文名称；机器筛选和存储不使用该名称。
     pub fn label(&self) -> &'static str {
         match self {
             Self::FirstSubmission => "首次提交",
@@ -34,16 +25,7 @@ impl WorkingPurpose {
         }
     }
 
-    /// 返回编辑目的的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将销售工作副本编辑目的转成用于持久化和查询的稳定代码，与中文展示文案分开。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::FirstSubmission => "FIRST_SUBMISSION",
@@ -67,16 +49,7 @@ pub enum WorkingCopyStatus {
 }
 
 impl WorkingCopyStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为界面或响应展示提供销售工作副本状态的中文名称；机器筛选和存储不使用该名称。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Editing => "编辑中",
@@ -86,16 +59,7 @@ impl WorkingCopyStatus {
         }
     }
 
-    /// 返回状态的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将销售工作副本状态转成用于持久化和查询的稳定代码，与中文展示文案分开。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Editing => "EDITING",
@@ -107,18 +71,12 @@ impl WorkingCopyStatus {
 }
 
 impl DocumentState for WorkingCopyStatus {
-    /// 编辑中可提交/放弃/标记冲突；冲突解决后回到编辑中；已提交/已放弃为终态
-    /// （驳回后以原提交复制出新的工作副本，旧副本不复用，§6.5）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// `Editing` 的后继为 `Submitted`、`Abandoned`、`Conflict`；`Conflict` 的后继为 `Editing`。
-    /// `Submitted`、`Abandoned` 返回空切片。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 校验销售工作副本状态迁移时查本状态可直接到达的后继状态；无后继即不能再迁移。
+    //
+    // 编辑中可提交/放弃/标记冲突；冲突解决后回到编辑中；已提交/已放弃为终态
+    // （驳回后以原提交复制出新的工作副本，旧副本不复用，§6.5）。
+    // 结果：`Editing` 的后继为 `Submitted`、`Abandoned`、`Conflict`；`Conflict` 的后继为 `Editing`。
+    // `Submitted`、`Abandoned` 返回空切片。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Editing => &[Self::Submitted, Self::Abandoned, Self::Conflict],

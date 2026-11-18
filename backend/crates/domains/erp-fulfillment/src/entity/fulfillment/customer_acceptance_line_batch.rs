@@ -34,18 +34,9 @@ pub struct CustomerAcceptanceLineBatch;
 
 impl CustomerAcceptanceLineBatch {
     /// 按输入顺序从 1 连续编号批量构造验收行。
-    ///
-    /// # 参数
-    /// * `acceptance_id` - 所属验收单主键
-    /// * `specs` - 与输入顺序一致的行规格（含 Service 注入的行 ID）
-    ///
-    /// # 返回
     /// 返回与输入顺序一致的行实体集合（凭证统一为 `None`）。
-    ///
-    /// # 错误
+    /// `acceptance_id` 为所属验收单主键；`specs` 为与输入顺序一致的行规格（含 Service 注入的行 ID）。
     /// 空输入、超过 200 行或行级数量/说明违规时返回错误。
-    ///
-    /// # 约束
     /// 无 I/O、无时钟、无 ID 生成；空行在此失败，调用方不得先建表头。
     pub fn build(
         acceptance_id: CustomerAcceptanceId,
@@ -96,7 +87,7 @@ mod tests {
         }
     }
 
-    /// 正常路径：输入顺序与行号一一对应，凭证默认为空。
+    // 验证正常路径：输入顺序与行号一一对应，凭证默认为空。
     #[test]
     fn build_preserves_order_and_defaults_no_evidence() {
         let lines = CustomerAcceptanceLineBatch::build(
@@ -109,7 +100,7 @@ mod tests {
         assert!(lines[0].evidence_attachment_id.is_none());
     }
 
-    /// 最大合法批次完整保留输入顺序及 1 到 200 的连续行号。
+    // 验证最大合法批次完整保留输入顺序及 1 到 200 的连续行号。
     #[test]
     fn maximum_batch_numbers_every_input_line() {
         let specs = (1..=ACCEPTANCE_LINE_BATCH_MAX).map(|index| spec(&format!("line-{index}"))).collect();
@@ -120,7 +111,7 @@ mod tests {
         assert_eq!(lines[199].base.id, "line-200");
     }
 
-    /// 数量约束由实体直接覆盖：负数量失败。
+    // 验证数量约束由实体直接覆盖：负数量失败。
     #[test]
     fn quantity_violations_fail() {
         assert!(
@@ -135,7 +126,7 @@ mod tests {
         );
     }
 
-    /// 原因超长失败。
+    // 验证原因超长失败。
     #[test]
     fn overlong_reason_fails() {
         assert!(
@@ -147,7 +138,7 @@ mod tests {
         );
     }
 
-    /// 空行失败（调用方不得先建表头）；超 200 行失败。
+    // 验证空行失败（调用方不得先建表头）；超 200 行失败。
     #[test]
     fn empty_and_oversized_batches_fail() {
         assert!(CustomerAcceptanceLineBatch::build(CustomerAcceptanceId::new("a-1"), vec![]).is_err());

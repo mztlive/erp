@@ -2,12 +2,12 @@
 
 use crate::{AuditAction, AuditCode, AuditField, AuditFieldKind, Error, Result};
 
-/// 普通动作不开放字段投影，版本固定为 1。
+// 定义不携带字段投影的普通审计动作，目录版本固定为 `1`。
 const fn action(code: &'static str, resource_type: &'static str, label: &'static str) -> AuditAction {
     AuditAction { code, resource_type, label, version: 1, allowed_fields: &[] }
 }
 
-/// 门户动作共用同一资源类型，白名单之外的字段不能进入投影。
+// 按门户的统一资源类型登记动作，只有白名单字段才可进入审计投影。
 const fn portal_action(code: &'static str, label: &'static str) -> AuditAction {
     AuditAction {
         code,
@@ -473,17 +473,7 @@ const REGISTERED_ACTIONS: &[AuditAction] = &[
     action("workflow_action.append", "workflow_action", "登记工作流操作"),
 ];
 
-/// 根据明确的动作和资源配对获取中文业务事件元数据。
-///
-/// # 参数
-/// * `action` - 业务边界提供的稳定动作代码。
-/// * `resource_type` - 目标资源的稳定类型代码。
-///
-/// # 返回
-/// 返回已登记、已校验的动作元数据，默认不允许附加业务字段。
-///
-/// # 错误
-/// 动作未登记、资源类型不匹配或登记元数据无效时返回校验错误。
+/// 按稳定动作码和资源类型取回中文审计配置，供写入前核对动作是否适用于该对象。配对未登记或配置非法时返回校验错误；普通动作默认不允许附加业务字段。
 pub fn registered_action(action: &str, resource_type: &str) -> Result<AuditAction> {
     let action = REGISTERED_ACTIONS
         .iter()
@@ -493,16 +483,7 @@ pub fn registered_action(action: &str, resource_type: &str) -> Result<AuditActio
     Ok(*action)
 }
 
-/// 返回已登记的业务动作及资源配对，供注册覆盖和中文展示使用。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回静态业务动作目录；身份治理目录继续由身份领域维护。
-///
-/// # 错误
-/// 不返回错误。
+/// 提供静态动作目录，供覆盖检查与中文展示使用；身份治理动作仍由身份领域维护。
 pub fn registered_actions() -> &'static [AuditAction] {
     REGISTERED_ACTIONS
 }
@@ -666,7 +647,7 @@ mod tests {
         }
     }
 
-    /// 使用生产资源日志入口及持久化前解析，防止领域驳回成功后因审计目录缺失回滚。
+    // 用生产日志构造和持久化前校验覆盖驳回、返工动作，防止业务已完成却因漏登记审计而回滚。
     #[test]
     fn terminal_rejection_and_rework_actions_create_persistable_runtime_logs() {
         for (code, resource) in [

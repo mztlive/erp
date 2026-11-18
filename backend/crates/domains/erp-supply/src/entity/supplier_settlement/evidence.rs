@@ -48,15 +48,7 @@ pub struct SupplierSettlementDifferenceEvidence {
 
 impl SupplierSettlementDifferenceEvidence {
     /// 创建一条不可变补证记录。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键
-    /// * `data` - 补证创建数据
-    ///
-    /// # 返回
     /// 返回字段已规范化的不可变补证记录。
-    ///
-    /// # 错误
     /// 请求身份、证据引用、意见、记录人或命令摘要非法时返回错误。
     pub fn new(id: impl Into<String>, data: SupplierSettlementDifferenceEvidenceData) -> Result<Self> {
         let request_id = normalize_required_text(

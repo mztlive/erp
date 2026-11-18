@@ -13,11 +13,7 @@ use crate::{Error, Result};
 
 impl PortalOfferingService {
     /// 读取精确供应商与SKU的报价开放事实。
-    /// # 参数
-    /// 供应商、SKU及当前执行器。
-    /// # 返回
     /// 返回现有资格记录，缺失为空。
-    /// # 错误
     /// 持久化读取失败时返回错误。
     pub async fn quote_access(
         &self,
@@ -29,12 +25,9 @@ impl PortalOfferingService {
     }
 
     /// 列出精确供应商的定向报价资格及历史。
-    /// # 参数
-    /// 供应商及当前执行器；对象授权由调用方在相同执行器完成。
-    /// # 返回
     /// 返回该供应商全部资格记录。
-    /// # 错误
     /// 持久化读取失败时返回错误。
+    /// 供应商及当前执行器；对象授权由调用方在相同执行器完成。
     pub async fn quote_access_list(
         &self,
         supplier_id: &str,
@@ -44,11 +37,7 @@ impl PortalOfferingService {
     }
 
     /// 按原版本更新定向报价资格并追加变更历史。
-    /// # 参数
-    /// 精确供应商/SKU、新状态、预期版本、真实内部身份和调用方执行器。
-    /// # 返回
     /// 返回已保存资格的新版本。
-    /// # 错误
     /// 版本冲突、外部身份或持久化失败时拒绝。
     pub async fn quote_access_update(
         &self,

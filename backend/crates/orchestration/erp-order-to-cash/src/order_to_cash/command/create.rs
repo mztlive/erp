@@ -54,18 +54,10 @@ impl CreationIdentity {
 impl SalesOrderCommandProcess {
     /// 解析销售命令所选合同的客户身份，供 HTTP 层执行客户数据范围校验。
     ///
-    /// # 参数
-    /// * `actor` - 已认证操作人
-    /// * `contract_id` - 前端选择的合同稳定身份
-    /// * `customer_id` - 无合同时前端选择的客户身份
+    /// `contract_id` 为前端选择的合同稳定身份；`customer_id` 为无合同时前端选择的客户身份。返回所选合同所属客户或无合同命令所选客户的稳定身份。
     ///
-    /// # 返回
-    /// 返回所选合同所属客户或无合同命令所选客户的稳定身份。
-    ///
-    /// # 错误
     /// 合同或客户不存在、不可见时返回 `NotFound`；无合同且未选择客户时返回校验错误。
     ///
-    /// # 关键业务约束
     /// 本入口只做事前检查；写入事务仍须 `related` 重验，不得当作唯一凭证。
     #[tracing::instrument(
         name = "sales_order.resolve_customer_scope",
@@ -91,23 +83,14 @@ impl SalesOrderCommandProcess {
             .await
     }
 
-    /// 按当前有效合同修订补齐不可由客户端声明的销售草稿快照。
-    ///
-    /// # 参数
-    /// * `access` - 已构造的命令检查器，用于合同／客户 detail 重验
-    /// * `contract_id` - 合同稳定身份
-    /// * `customer_id` - 客户端已选择的客户；提供时必须与合同一致
-    /// * `editable` - 客户端可编辑字段与行
-    /// * `executor` - 调用方读取或写入事务执行器；预装载不得代替写入事务重验
-    ///
-    /// # 返回
-    /// 返回合同所属客户、结算主体与完整内部草稿。
-    ///
-    /// # 错误
-    /// 合同或客户不可见、合同或修订不存在、合同非生效态、所选修订已过期时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 禁止以无范围 `find_by_id` 作为授权读取；写入事务必须再次 `related`。
+    // 按当前有效合同修订补齐不可由客户端声明的销售草稿快照。
+    //
+    // `access` 为已构造的命令检查器，用于合同／客户 detail 重验；`contract_id` 为合同稳定身份；`customer_id` 为客户端已选择的客户；提供时必须与合同一致；
+    // `editable` 为客户端可编辑字段与行；`executor` 为调用方读取或写入事务执行器；预装载不得代替写入事务重验。返回合同所属客户、结算主体与完整内部草稿。
+    //
+    // 合同或客户不可见、合同或修订不存在、合同非生效态、所选修订已过期时返回错误。
+    //
+    // 禁止以无范围 `find_by_id` 作为授权读取；写入事务必须再次 `related`。
     pub(super) async fn resolve_contract_sales_draft(
         &self,
         access: &SalesCommandAccess,
@@ -156,7 +139,7 @@ impl SalesOrderCommandProcess {
         Ok((contract.customer_id, settlement_id, draft))
     }
 
-    /// 在同一执行器内验证并读取合同当前有效修订。
+    // 在同一执行器内验证并读取合同当前有效修订。
     async fn contract_sales_revision(
         &self,
         contract: &Contract,
@@ -185,31 +168,13 @@ impl SalesOrderCommandProcess {
         Ok(revision)
     }
 
-    /// 原子创建销售单、稳定明细及首次工作副本；`intent=SUBMIT` 时在同一写入事务
-    /// 冻结首次提交、审批绑定、运行事实及成功事件。
+    /// 销售建单时原子写入销售单、稳定明细和首次工作副本；选择 `intent=SUBMIT` 时，同一写事务还冻结首次提交、
+    /// 审批绑定、运行事实和成功事件。表头金额由服务端按 §4.2 铁律 2 汇总已舍入的行金额，不由客户端指定。
+    /// 决定写入的创建资格、客户（D08）、合同（D12）及可售引用均在写入执行器上重验。
     ///
-    /// 表头金额三元组由服务端按 §4.2 铁律 2 汇总**已舍入**的行金额，客户端不可
-    /// 指定；跨域校验客户（D08）与合同（D12）存在性。同一操作人使用同一幂等键
-    /// 和完整载荷重试时返回原销售单；同一幂等键绑定不同载荷时返回 409。
-    ///
-    /// # 参数
-    /// * `req` - 创建请求
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回销售单详情视图。
-    ///
-    /// # 错误
-    /// * `ValidationError` - 请求体校验失败或行字段组缺失
-    /// * `NotFound` - 客户/合同不存在
-    /// * `BusinessLogicError` - 客户已停用
-    /// * `ConflictError` - 单号重复或同一幂等键绑定不同载荷
-    /// * `Forbidden` - 当前命令、关联对象或数据范围不允许访问
-    /// * `OutcomeUnknown` - 提交结果未知且原命令结果暂无法查证
-    ///
-    /// # 关键业务约束
-    /// 所有决定写入的关联、创建资格和可售引用在同一执行器中重验。重放只读返回
-    /// 原单据；提交结果未知时只查证原回执，不自动重新执行创建。
+    /// 同一操作人按原幂等键及完整载荷重试时，只读返回原销售详情；复用键但更换载荷返回 `ConflictError`（409），单号重复同样冲突。
+    /// 请求或成组行字段非法返回 `ValidationError`；客户或合同缺失返回 `NotFound`；客户停用返回 `BusinessLogicError`；
+    /// 命令、关联对象或范围不允许访问返回 `Forbidden`。提交未知时仅查证原回执，查不到仍返回 `OutcomeUnknown`，不自动重新建单。
     #[tracing::instrument(
         name = "sales_order.create",
         skip_all,
@@ -267,7 +232,7 @@ impl SalesOrderCommandProcess {
         self.command_result(&detail_id, actor, &internal::SALES_CREATED_RESULT_READ).await
     }
 
-    /// 只读查证失败结果，不因未知提交重新执行创建。
+    // 只读查证失败结果，不因未知提交重新执行创建。
     async fn creation_result(
         &self,
         result: Result<Option<String>>,
@@ -291,7 +256,8 @@ impl SalesOrderCommandProcess {
         }
     }
 
-    /// 查证失败建单的原命令结果；未知提交查证失败时保留首次错误来源。
+    // 建单写事务失败后，用该操作人的原命令身份、幂等键摘要和载荷指纹查销售回执，不重复落单。
+    // 查证未能确认未知提交时，保留首次错误来源。
     async fn recover_creation(
         &self,
         error: Error,
@@ -305,7 +271,7 @@ impl SalesOrderCommandProcess {
         )
     }
 
-    /// 用独立销售回执及当前访问资格回读原销售单，不执行建单。
+    // 用独立销售回执及当前访问资格回读原销售单，不执行建单。
     async fn replay_sales_order_creation(
         &self,
         audit_id: &str,
@@ -339,7 +305,7 @@ impl SalesOrderCommandProcess {
     }
 }
 
-/// 在同一读取事务内核验所选关系，并解析目标客户身份。
+// 在同一读取事务内核验所选关系，并解析目标客户身份。
 async fn command_customer_id(
     access: &SalesCommandAccess,
     contract_id: Option<ContractId>,
@@ -356,7 +322,7 @@ async fn command_customer_id(
     Ok(CustomerAccountId::new(customer.base.id))
 }
 
-/// 从已构造的创建事件读取原命令身份，同执行器查证原结果。
+// 从已构造的创建事件读取原命令身份，同执行器查证原结果。
 async fn replay_creation_event(
     db: &Database,
     event: &SalesCommandEvent,
@@ -375,7 +341,7 @@ async fn replay_creation_event(
     .await
 }
 
-/// 用同一执行器查证完整创建身份、原销售单及创建人，然后重验当前访问。
+// 用同一执行器查证完整创建身份、原销售单及创建人，然后重验当前访问。
 async fn replay_creation_with_executor(
     db: &Database,
     command_id: &str,
@@ -404,7 +370,7 @@ async fn replay_creation_with_executor(
     Ok(Some(sales_order_id.to_string()))
 }
 
-/// 原创建结果与持久化对象 ID、不可变创建人必须同时一致。
+// 原创建结果与持久化对象 ID、不可变创建人必须同时一致。
 fn validate_creation_fact(
     expected_id: &str,
     persisted_id: &str,
@@ -446,7 +412,7 @@ mod tests {
         assert!(matches!(CreationIdentity::new(&mut request, &actor), Err(Error::ValidationError(_))));
     }
 
-    /// 生产交叉验证拒绝错销售单或被责任交接替换的创建人。
+    // 生产交叉验证拒绝错销售单或被责任交接替换的创建人。
     #[test]
     fn creation_replay_preserves_original_order_and_immutable_creator() {
         validate_creation_fact("order", "order", "creator", "creator").unwrap();

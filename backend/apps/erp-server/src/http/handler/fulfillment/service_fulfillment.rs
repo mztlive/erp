@@ -22,16 +22,7 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
 /// 查询线下服务履约记录列表（W01 履约任务聚合视图）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `query` - 分页与筛选参数（`sales_order_line_id`/`status` 扁平传递）
-///
-/// # 返回
-/// 返回契约形状的分页视图。
-///
-/// # 错误
-/// 业务处理或数据读取失败时返回对应错误。
+/// `query` 为分页与筛选参数（`sales_order_line_id`/`status` 扁平传递）。
 pub async fn service_fulfillment_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -43,16 +34,7 @@ pub async fn service_fulfillment_list(
 }
 
 /// 按主键查询线下服务履约记录。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `id` - 服务履约记录主键
-///
-/// # 返回
 /// 返回服务履约记录视图。
-///
-/// # 错误
-/// 业务处理或数据读取失败时返回对应错误。
 pub async fn service_fulfillment_detail(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -64,17 +46,6 @@ pub async fn service_fulfillment_detail(
 }
 
 /// 创建线下服务履约记录（草稿；服务地点与交付对象快照由边界传入）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 创建请求
-///
-/// # 返回
-/// 返回新建记录的响应视图。
-///
-/// # 错误
-/// 业务处理或数据读取失败时返回对应错误。
 pub async fn service_fulfillment_create(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -89,18 +60,6 @@ pub async fn service_fulfillment_create(
 ///
 /// 命令与现场图片一次 multipart 提交：`command` 为 JSON，图片字段名必须与
 /// `evidence_attachment_id` 的 `pending-file:` 临时引用一致。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 记录主键
-/// * `multipart` - 确认命令与现场图片
-///
-/// # 返回
-/// 返回确认后的记录视图。
-///
-/// # 错误
-/// 业务处理或数据读取失败时返回对应错误。
 pub async fn service_fulfillment_confirm(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,

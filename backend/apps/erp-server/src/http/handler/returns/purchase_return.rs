@@ -17,20 +17,11 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 use crate::wiring::{local_reverse_flow_ports, reverse_flow_ports};
 
-/// 查询采购退货单列表。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已认证操作人
-/// * `query` - 分页与筛选参数（扁平传递，含跨页 `scope_version`）
-///
-/// # 返回
+/// 按请求条件查询采购退货单列表。
+/// `query` 为分页与筛选参数（扁平传递，含跨页 `scope_version`）。
 /// 返回带范围版本的分页视图。
-///
-/// # 错误
 /// 无动作权限、范围变化、筛选非法或仓储失败时拒绝。
 ///
-/// # 关键业务约束
 /// 沿来源采购单责任接入；缺范围返回空集并标记 `no_scope`。
 pub async fn purchase_return_order_list(
     State(state): State<HttpState>,
@@ -49,19 +40,9 @@ pub async fn purchase_return_order_list(
 }
 
 /// 查询采购退货单详情（退货单 + 明细行）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已认证操作人
-/// * `id` - 退货单 ID
-///
-/// # 返回
 /// 返回完整退货单视图。
-///
-/// # 错误
 /// 无动作权限、不可见或不存在时拒绝。
 ///
-/// # 关键业务约束
 /// 列表已授权不能作为详情凭证；沿来源采购单 detail 动作重验。
 pub async fn purchase_return_order_detail(
     State(state): State<HttpState>,
@@ -80,17 +61,7 @@ pub async fn purchase_return_order_detail(
 }
 
 /// 建立采购退货单与明细行（跨集合事务）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 创建请求
-///
-/// # 返回
 /// 返回新建退货单视图。
-///
-/// # 错误
-/// 业务处理或数据读取失败时返回对应错误。
 pub async fn purchase_return_order_create(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -107,14 +78,7 @@ pub async fn purchase_return_order_create(
 }
 
 /// 登记已核实的客户直退，保留原采购和发货记录。
-/// # 参数
-/// * `state` - 应用状态。
-/// * `actor` - 已认证采购经办人。
-/// * `id` - 来源采购身份。
-/// * `req` - 实际退回凭据和同键请求。
-/// # 返回
 /// 采购退货单身份。
-/// # 错误
 /// 权限、版本、数量或凭据不满足时拒绝。
 pub async fn purchase_direct_return_confirm(
     State(state): State<HttpState>,
@@ -136,13 +100,7 @@ pub async fn purchase_direct_return_confirm(
 }
 
 /// 同步已有直退的财务责任交接。
-/// # 参数
-/// * `state` - 应用状态。
-/// * `actor` - 已认证经办人。
-/// * `id` - 来源采购身份。
-/// # 返回
 /// 同步成功。
-/// # 错误
 /// 无权处理采购或责任配置缺失时拒绝。
 pub async fn purchase_return_finance_sync(
     State(state): State<HttpState>,

@@ -41,16 +41,8 @@ pub(crate) const CUSTOMER_ACCEPTANCE_LINES: &str =
 pub(crate) const ACCEPTANCE_FULFILLMENT_ALLOCATIONS: &str =
     <mongodb::Database as FulfillmentExt>::ACCEPTANCE_FULFILLMENT_ALLOCATIONS;
 
-/// 创建本域集合的幂等命名索引。
-///
-/// # 参数
-/// * `db` - 目标 MongoDB 数据库
-///
-/// # 返回
-/// 成功时无返回值。
-///
-/// # 错误
-/// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
+// 启动时注册该集合的命名索引，多次调用沿用同名索引。
+// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub(crate) async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, PURCHASE_RECEIPTS, purchase_receipt_indexes()).await?;
     create_indexes(db, PURCHASE_RECEIPT_LINES, purchase_receipt_line_indexes()).await?;
@@ -64,13 +56,13 @@ pub(crate) async fn ensure(db: &Database) -> Result<()> {
     Ok(())
 }
 
-/// 为单个集合创建一组幂等命名索引。
+// 为单个集合创建一组幂等命名索引。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
     db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
-/// 返回 `purchase_receipt` 的身份约束和采购维度查询索引（§6.7）。
+// 返回 `purchase_receipt` 的身份约束和采购维度查询索引（§6.7）。
 fn purchase_receipt_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_purchase_receipts_id", doc! { "id": 1 }),
@@ -82,7 +74,7 @@ fn purchase_receipt_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `purchase_receipt_line` 的行级唯一约束（§6.7）。
+// 返回 `purchase_receipt_line` 的行级唯一约束（§6.7）。
 fn purchase_receipt_line_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_purchase_receipt_lines_id", doc! { "id": 1 }),
@@ -93,7 +85,7 @@ fn purchase_receipt_line_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `delivery` 的身份约束和销售维度/物流查询索引（§6.7）。
+// 返回 `delivery` 的身份约束和销售维度/物流查询索引（§6.7）。
 fn delivery_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_deliveries_id", doc! { "id": 1 }),
@@ -103,7 +95,7 @@ fn delivery_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `delivery_line` 的行级唯一约束（§6.7）。
+// 返回 `delivery_line` 的行级唯一约束（§6.7）。
 fn delivery_line_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_delivery_lines_id", doc! { "id": 1 }),
@@ -111,7 +103,7 @@ fn delivery_line_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `electronic_delivery` 的身份约束和明细履约查询索引（§6.7）。
+// 返回 `electronic_delivery` 的身份约束和明细履约查询索引（§6.7）。
 fn electronic_delivery_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_electronic_deliveries_id", doc! { "id": 1 }),
@@ -123,7 +115,7 @@ fn electronic_delivery_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `service_fulfillment` 的身份约束和明细履约查询索引（§6.7）。
+// 返回 `service_fulfillment` 的身份约束和明细履约查询索引（§6.7）。
 fn service_fulfillment_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_service_fulfillments_id", doc! { "id": 1 }),
@@ -135,7 +127,7 @@ fn service_fulfillment_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `customer_acceptance` 的身份约束和销售维度查询索引（§6.7）。
+// 返回 `customer_acceptance` 的身份约束和销售维度查询索引（§6.7）。
 fn customer_acceptance_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_customer_acceptances_id", doc! { "id": 1 }),
@@ -147,7 +139,7 @@ fn customer_acceptance_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `customer_acceptance_line` 的行级唯一约束（§6.7）。
+// 返回 `customer_acceptance_line` 的行级唯一约束（§6.7）。
 fn customer_acceptance_line_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_customer_acceptance_lines_id", doc! { "id": 1 }),
@@ -158,10 +150,10 @@ fn customer_acceptance_line_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `acceptance_fulfillment_allocation` 的净验收分配查询索引（§6.7）。
-///
-/// 关单只使用有效履约事实和净 `APPLY - REVERSE` 验收分配（§6.7）：按验收行
-/// 与按履约事实（类型 + 事实行）双向取数。
+// 返回 `acceptance_fulfillment_allocation` 的净验收分配查询索引（§6.7）。
+//
+// 关单只使用有效履约事实和净 `APPLY - REVERSE` 验收分配（§6.7）：按验收行
+// 与按履约事实（类型 + 事实行）双向取数。
 fn allocation_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_acceptance_fulfillment_allocations_id", doc! { "id": 1 }),
@@ -178,7 +170,7 @@ fn allocation_indexes() -> Vec<IndexModel> {
 
 #[cfg(test)]
 mod tests {
-    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    // 验证按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
     #[test]
     fn collections_look_up_by_unique_stable_id() {
         for indexes in [

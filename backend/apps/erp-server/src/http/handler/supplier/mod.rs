@@ -31,7 +31,7 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 use crate::wiring::supplier_access;
 
-/// 原子创建完整供应商资料。
+/// 接收完整供应商建档命令，交给主数据 Process 原子建立资料；带资质附件时使用专门的 multipart 入口。
 pub async fn supplier_profile_create(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -42,16 +42,7 @@ pub async fn supplier_profile_create(
 }
 
 /// 一次接收供应商根命令与资质文件，并原子登记文件元数据和完整供应商资料。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 当前认证账号
-/// * `multipart` - 供应商 JSON 命令和具名资质文件
-///
-/// # 返回
 /// 返回新建供应商资料；幂等重放返回原结果并清理本次未消费文件。
-///
-/// # 错误
 /// 文件、业务校验或事务失败时返回原错误；提交结果未知时保留对象。
 pub async fn supplier_profile_create_with_assets(
     State(state): State<HttpState>,
@@ -72,7 +63,7 @@ pub async fn supplier_profile_create_with_assets(
     Ok(ApiResponse::ok_with_data(result.view))
 }
 
-/// 原子修订完整供应商资料。
+/// 为路径指定的供应商保存完整资料修订，由主数据 Process 原子提交；有新资质文件时走附件入口。
 pub async fn supplier_profile_update(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -84,17 +75,7 @@ pub async fn supplier_profile_update(
 }
 
 /// 一次接收供应商修订根命令与资质文件，并原子登记文件元数据和全部资料变化。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 当前认证账号
-/// * `id` - 供应商 ID
-/// * `multipart` - 供应商修订 JSON 命令和具名资质文件
-///
-/// # 返回
 /// 返回修订后的供应商资料；幂等重放返回原结果并清理本次未消费文件。
-///
-/// # 错误
 /// 文件、版本或事务失败时返回原错误；提交结果未知时保留对象。
 pub async fn supplier_profile_update_with_assets(
     State(state): State<HttpState>,
@@ -117,7 +98,7 @@ pub async fn supplier_profile_update_with_assets(
     Ok(ApiResponse::ok_with_data(result.view))
 }
 
-/// 从受控临时引用派生供应商资质文件的最低敏感级别。
+// 存储供应商资质文件前从受控引用选取最低敏感级别，法人身份资料使用更高保护级别。
 fn supplier_asset_sensitivity(reference: &str) -> SensitivityClass {
     if reference.contains(":legal_person_id:") {
         SensitivityClass::HighlySensitive
@@ -126,7 +107,7 @@ fn supplier_asset_sensitivity(reference: &str) -> SensitivityClass {
     }
 }
 
-/// 按幂等键查询已成功的供应商资料命令结果。
+/// 供应商资料提交结果待确认时，凭原幂等键读取成功回执，不重新执行建档或修订命令。
 pub async fn supplier_profile_command_detail(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -137,7 +118,7 @@ pub async fn supplier_profile_command_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 按详情接口签发的短时令牌揭示单个敏感字段。
+/// 按供应商详情提供的短时令牌请求单个敏感字段原值；普通资料读取不走揭示入口。
 pub async fn supplier_sensitive_reveal(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -147,14 +128,7 @@ pub async fn supplier_sensitive_reveal(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 查询供应商列表。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已认证操作人
-/// * `query` - 分页与筛选参数
-///
-/// # 返回
+/// 按请求条件查询供应商列表。
 /// 返回分页视图及范围元信息。
 pub async fn supplier_list(
     State(state): State<HttpState>,
@@ -166,12 +140,6 @@ pub async fn supplier_list(
 }
 
 /// 查询供应商详情（供应商 + 当前商务结算版本 + 主体编号）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `id` - 供应商角色 ID
-///
-/// # 返回
 /// 返回供应商详情视图。
 pub async fn supplier_detail(
     State(state): State<HttpState>,
@@ -183,14 +151,6 @@ pub async fn supplier_detail(
 }
 
 /// 软删除供应商角色。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 供应商角色 ID
-///
-/// # 返回
-/// 返回统一成功信封。
 pub async fn supplier_delete(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -207,17 +167,7 @@ pub async fn supplier_delete(
 }
 
 /// 显式交接供应商整体维护人。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已认证操作人
-/// * `id` - 供应商 ID
-/// * `req` - 交接请求
-///
-/// # 返回
 /// 返回交接后的维护人与业务组织。
-///
-/// # 错误
 /// 版本冲突、目标不合格或范围不足时拒绝。
 pub async fn supplier_handover(
     State(state): State<HttpState>,
@@ -230,16 +180,7 @@ pub async fn supplier_handover(
 }
 
 /// 查询合格有效的维护人交接待选。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已认证操作人
-/// * `id` - 供应商 ID
-///
-/// # 返回
 /// 返回合格有效人员。
-///
-/// # 错误
 /// 供应商不存在或范围不足时拒绝。
 pub async fn supplier_handover_candidates(
     State(state): State<HttpState>,
@@ -251,18 +192,7 @@ pub async fn supplier_handover_candidates(
 }
 
 /// 显式交接供给能力负责人。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已认证操作人
-/// * `id` - 供应商 ID
-/// * `capability_id` - 供给能力 ID
-/// * `req` - 交接请求
-///
-/// # 返回
 /// 返回交接后的能力负责人。
-///
-/// # 错误
 /// 版本冲突、目标不合格或范围不足时拒绝。
 pub async fn supplier_capability_handover(
     State(state): State<HttpState>,

@@ -197,13 +197,8 @@ impl Cancellations for JdVopConnector {
 }
 
 impl JdVopConnector {
-    /// 校验原引用后按外部单号读取，目标资格仍由各动作核验。
-    /// # 参数
-    /// `reference` 为原第三方单号及供应商订单号。
-    /// # 返回
-    /// 同次查询的来源订单列表。
-    /// # 错误
-    /// 保持第三方单号、供应商编号、读取能力和远端读取的失败优先级。
+    // 取消或确认收货前，依次校验持久化的第三方订单号、京东单号与读取能力，再按京东单号查询并保留完整返回列表。
+    // 该查询只取得候选订单，各动作仍须核验目标归属、拆单关系及操作资格。
     pub(super) async fn read_referenced_orders(
         &self,
         reference: &OrderReference,

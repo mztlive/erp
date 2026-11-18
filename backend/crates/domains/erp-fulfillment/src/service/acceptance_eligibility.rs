@@ -31,24 +31,11 @@ pub struct EligibilitySources<'a> {
     pub service_allocations: &'a [AcceptanceFulfillmentAllocation],
 }
 /// 构建销售行验收资格投影（按销售稳定明细组织三类履约事实）。
-///
-/// # 用途
-/// 按销售稳定明细汇总可验收事实；数量规则全部由领域投影 VO
-/// （`AcceptanceFactEligibility`/`AcceptanceLineEligibility`）执行，本函数只做
-/// 事实与分配的按行组织。
-///
-/// # 参数
-/// * `sources` - 版本行、履约集合与分配
-///
-/// # 返回
-/// 返回按销售稳定明细组织的行级资格投影（保持版本行顺序；同一稳定明细出现
-/// 多行时后行覆盖应履约数量，与历史分组语义一致）。
-///
-/// # 错误
-/// 既有净验收超过成功履约数量，或数量汇总溢出/超出统一精度时返回错误
-/// （禁止静默回退为零）。
-///
-/// # 关键业务约束
+/// 返回按销售稳定明细组织的行级资格投影（保持版本行顺序；同一稳定明细出现多行时后行覆盖应履约数量，与历史分组语义一致）。
+/// `sources` 为版本行、履约集合与分配。
+/// 按销售稳定明细汇总可验收事实；数量规则全部由领域投影 VO （`AcceptanceFactEligibility`/`AcceptanceLineEligibility`）执行，
+/// 本函数只做事实与分配的按行组织。
+/// 既有净验收超过成功履约数量，或数量汇总溢出/超出统一精度时返回错误（禁止静默回退为零）。
 /// 事实/分配入参由数据模型 §6.7 固定为三类来源，字段不可压缩。
 pub fn build_line_eligibilities(sources: &EligibilitySources<'_>) -> Result<Vec<AcceptanceLineEligibility>> {
     let mut facts_by_line = group_facts_by_line(sources)?;
@@ -62,16 +49,10 @@ pub fn build_line_eligibilities(sources: &EligibilitySources<'_>) -> Result<Vec<
     Ok(lines)
 }
 
-/// 按销售稳定明细组织三类履约事实（发货/电子/服务）。
-///
-/// # 参数
-/// * `sources` - 版本行、履约集合与分配
-///
-/// # 返回
-/// 返回按销售稳定明细索引的事实集合。
-///
-/// # 错误
-/// 分配汇总溢出/超出统一精度时返回错误（禁止静默回退为零）。
+// 按销售稳定明细组织三类履约事实（发货/电子/服务）。
+// 返回按销售稳定明细索引的事实集合。
+// `sources` 为版本行、履约集合与分配。
+// 分配汇总溢出/超出统一精度时返回错误（禁止静默回退为零）。
 fn group_facts_by_line(
     sources: &EligibilitySources<'_>,
 ) -> Result<HashMap<String, Vec<AcceptanceFactEligibility>>> {
@@ -108,18 +89,13 @@ fn group_facts_by_line(
     Ok(facts_by_line)
 }
 
-/// 按版本行顺序组装稳定明细的应履约数量（同一稳定明细后行覆盖数量）。
-///
-/// 预建版本行主键索引，消除内层线性查找。
-///
-/// # 参数
-/// * `sources` - 版本行与数量快照
-///
-/// # 返回
-/// 返回按首次出现顺序的（稳定明细、应履约数量）二元组。
-///
-/// # Panics
-/// `Quantity::from_str("0")` 对字面量 `0` 必然合法；解析失败时 panic，避免把非法零数量传入资格计算。
+// 按版本行顺序组装稳定明细的应履约数量（同一稳定明细后行覆盖数量）。
+// 预建版本行主键索引，消除内层线性查找。
+// 返回按首次出现顺序的（稳定明细、应履约数量）二元组。
+// `sources` 为版本行与数量快照。
+//
+// # Panics
+// `Quantity::from_str("0")` 对字面量 `0` 必然合法；解析失败时 panic，避免把非法零数量传入资格计算。
 fn group_revision_quantities(sources: &EligibilitySources<'_>) -> Vec<(String, Quantity)> {
     let quantity_by_revision: HashMap<&str, Quantity> = sources
         .goods_service_lines
@@ -167,7 +143,7 @@ mod tests {
         ElectronicDeliveryState, FulfillmentFactType, ServiceFulfillment,
     };
 
-    /// 构造只有销售数量快照的资格输入。
+    // 构造只有销售数量快照的资格输入。
     fn sources<'a>(
         lines: &'a [AcceptanceSalesLineFact],
         quantities: &'a [AcceptanceSalesQuantityFact],
@@ -183,7 +159,7 @@ mod tests {
             service_allocations: &[],
         }
     }
-    /// 重复稳定行后版本覆盖数量，领域顺序仍按首次出现；无数量版本保持零。
+    // 验证重复稳定行后版本覆盖数量，领域顺序仍按首次出现；无数量版本保持零。
     #[test]
     fn duplicate_stable_line_replaces_quantity_without_reordering_first_occurrence() {
         let lines = vec![
@@ -220,7 +196,7 @@ mod tests {
             ]
         );
     }
-    /// 无销售行事实必须维持 None，让生产完成步骤跳过销售资金刷新。
+    // 验证无销售行事实必须维持 None，让生产完成步骤跳过销售资金刷新。
     #[test]
     fn absent_sales_lines_have_no_acceptance_projection() {
         let lines = build_line_eligibilities(&sources(&[], &[])).unwrap();
@@ -228,7 +204,7 @@ mod tests {
         assert!(AcceptanceProgress::derive(&lines).is_none());
     }
 
-    /// 构造数量为二的已筛选仓发明细。
+    // 构造数量为二的已筛选仓发明细。
     fn delivery(id: &str, sales_line: &str) -> DeliveryLine {
         DeliveryLine::new(
             DeliveryLineId::new(id),
@@ -245,7 +221,7 @@ mod tests {
         .unwrap()
     }
 
-    /// 构造关联指定发货事实的正向验收分配。
+    // 构造关联指定发货事实的正向验收分配。
     fn allocation(id: &str, quantity: &str) -> AcceptanceFulfillmentAllocation {
         AcceptanceFulfillmentAllocation::new(
             AcceptanceFulfillmentAllocationId::new(format!("allocation-{id}")),
@@ -261,7 +237,7 @@ mod tests {
         .unwrap()
     }
 
-    /// 大批资格计算保持销售行顺序，并逐事实计算净验收与剩余数量。
+    // 验证大批资格计算保持销售行顺序，并逐事实计算净验收与剩余数量。
     #[test]
     fn large_eligibility_projection_sample() {
         let lines = (0..1000)
@@ -294,7 +270,7 @@ mod tests {
         eprintln!("fulfillment_1000_line_projections_10_runs={:?}", started.elapsed());
     }
 
-    /// 未消费事实的错误分配不提前报错；重复事实与原输入顺序均保留。
+    // 验证未消费事实的错误分配不提前报错；重复事实与原输入顺序均保留。
     #[test]
     fn grouping_only_validates_consumed_facts_and_preserves_duplicates() {
         let lines =
@@ -324,7 +300,7 @@ mod tests {
         assert_eq!(result[0].remaining_eligible_quantity, Quantity::from_str("3").unwrap());
     }
 
-    /// 多条事实出错时按原事实处理顺序报告，索引不提前汇总其他组。
+    // 验证多条事实出错时按原事实处理顺序报告，索引不提前汇总其他组。
     #[test]
     fn grouping_preserves_first_fact_error() {
         let lines =
@@ -351,7 +327,7 @@ mod tests {
         }
     }
 
-    /// 三类事实同 ID 仍独立消费各自分配；无效电子交付不触发其分配错误。
+    // 验证三类事实同 ID 仍独立消费各自分配；无效电子交付不触发其分配错误。
     #[test]
     fn grouping_keeps_fact_types_separate_and_skips_invalid_electronic_records() {
         let lines = [AcceptanceSalesLineFact {

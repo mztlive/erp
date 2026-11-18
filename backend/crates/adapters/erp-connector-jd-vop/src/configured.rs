@@ -18,13 +18,8 @@ use super::{
 };
 
 impl JdVopRuntime {
-    /// 正式装配读取、独立消息以及已核实的订单执行能力。
-    /// # 参数
-    /// settings 来自 SafeConfig；传输与密文编解码器由组合根提供。
-    /// # 返回
-    /// 缺省只读；只提供消息配置时不提供订单写能力。
-    /// # 错误
-    /// 账号绑定、执行资料、资金资料或配置无效时拒绝启动，不降级吞掉错误。
+    /// 应用组合根用 SafeConfig、受信传输与证据密文编解码器装配运行时。默认只读；只有已核实的执行资料才能提供订单写能力，消息通道单独装配。
+    /// 账号绑定、订单执行或资金资料无效时返回错误，不降级为只读掩盖配置缺陷。
     pub fn from_configured_transport(
         settings: JdVopConfig,
         read: Arc<dyn JdVopReadTransport>,

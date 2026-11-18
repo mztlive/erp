@@ -87,14 +87,11 @@ impl TaskCreationPort for MongoTaskCreation<'_> {
     }
 }
 
-/// 在调用方事务中幂等建立履约执行任务。
-/// # 参数
-/// `db`、`executor` 为调用方数据库与事务；`authorization` 为进程共享授权服务；
-/// `object` 为已经形成的履约草稿。
-/// # 返回
-/// 原任务身份核验通过或新任务保存成功后返回。
-/// # 错误
-/// 任务重复、责任解析、授权、领域校验或写入失败时保留原错误。
+// 在调用方事务中幂等建立履约执行任务。
+//
+// `db`、`executor` 为调用方数据库与事务；`authorization` 为进程共享授权服务； `object` 为已经形成的履约草稿。
+//
+// 原任务身份核验通过或新任务保存成功后返回。任务重复、责任解析、授权、领域校验或写入失败时保留原错误。
 pub(super) async fn ensure(
     db: &Database,
     authorization: &Arc<AuthorizationService>,

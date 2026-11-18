@@ -16,13 +16,12 @@ pub struct PolicyReceipt {
 }
 
 impl PolicyReceipt {
-    /// 构造与授权变更同事务持久化的结果。
-    /// # 参数
-    /// command 为稳定命令身份，result 为本次提交结果。
-    /// # 返回
-    /// 可由原执行器保存的独立回执。
-    /// # 错误
-    /// 命令身份无法构造结构化回执时拒绝。
+    // 构造与授权变更同事务持久化的结果。
+    // 可由原执行器保存的独立回执。
+    //
+    // 命令身份无法构造结构化回执时拒绝。
+    //
+    // command 为稳定命令身份，result 为本次提交结果。
     pub(crate) fn new(command: &CommandReceipt, result: PolicyApplyResult) -> Result<Self> {
         Ok(Self {
             base: BaseModel::new(command.id().to_owned()),
@@ -31,13 +30,12 @@ impl PolicyReceipt {
         })
     }
 
-    /// 仅同操作人、同键和同载荷允许返回原结果。
-    /// # 参数
-    /// command 为当前请求重新计算的稳定命令身份。
-    /// # 返回
-    /// 标记为重放的原结果。
-    /// # 错误
-    /// 身份、载荷或结果关联不匹配时返回冲突。
+    // 仅同操作人、同键和同载荷允许返回原结果。
+    // 标记为重放的原结果。
+    //
+    // 身份、载荷或结果关联不匹配时返回冲突。
+    //
+    // command 为当前请求重新计算的稳定命令身份。
     pub(crate) fn replay(&self, command: &CommandReceipt) -> Result<PolicyApplyResult> {
         if command.match_structured(&self.command) != StructuredReceiptMatch::SamePayload
             || self.base.id != command.id()

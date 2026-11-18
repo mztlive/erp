@@ -44,13 +44,7 @@ impl PaymentRequestExecutionMethod {
         Ok(())
     }
 
-    /// 返回面向业务的付款方式名称。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 返回中文方式名称。
-    /// # 错误
-    /// 无。
+    /// 为界面或响应展示提供申请批准的付款方式的中文名称；机器筛选和存储不使用该名称。
     pub fn label(&self) -> &'static str {
         match self {
             Self::BankTransfer => "银行付款",
@@ -61,12 +55,11 @@ impl PaymentRequestExecutionMethod {
 
 impl PurchasePaymentRequest {
     /// 核对原审批选择的预存款账户，不允许银行方式临时改走余额。
-    /// # 参数
-    /// * `account_id` - 本次实际使用的账户。
-    /// # 返回
     /// 返回冻结账户归属。
-    /// # 错误
     /// 方式、账户或原付款主体供应商不一致时拒绝。
+    ///
+    /// 输入约定：
+    /// - `account_id`：本次实际使用的账户。
     pub fn require_deposit_account(&self, account_id: &str) -> Result<&PaymentRequestDepositAccountSnapshot> {
         let PaymentRequestExecutionMethod::SupplierDeposit { account_id: selected } =
             &self.data.execution_method
@@ -88,11 +81,7 @@ impl PurchasePaymentRequest {
     }
 
     /// 禁止银行付款或留抵命令消费已选择预存款的批准额度。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 原批准为银行方式时成功。
-    /// # 错误
+    /// 结果：原批准为银行方式时成功。
     /// 原批准为预存款方式时拒绝。
     pub fn require_bank_execution(&self) -> Result<()> {
         if self.data.execution_method != PaymentRequestExecutionMethod::BankTransfer

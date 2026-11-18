@@ -14,16 +14,7 @@ use crate::http::routes::permission_route;
 use crate::http::state::HttpState;
 use crate::http::upload;
 
-/// 返回本域管理端路由集合。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回声明公共权限目录信息的路由集合。
-///
-/// # 错误
-/// 无；业务错误由各处理器返回。
+/// 为管理端挂载交付、发货、入库和验收接口，按操作登记公共权限目录信息；文件入口保留对应的上传限制。
 pub fn routes() -> Router<HttpState> {
     Router::new()
         .merge(address_arrangement_routes())
@@ -256,14 +247,7 @@ fn acceptance_command_routes() -> Router<HttpState> {
         )
 }
 
-/// 客户签收凭证读取路由。
-///
-/// # 参数
-/// 无。
-/// # 返回
-/// 返回逐操作声明权限目录信息并保留上传限制的路由集合。
-/// # 错误
-/// 无；业务错误由各处理器返回。
+// 为父路由挂载客户签收凭证读取路由。
 fn acceptance_evidence_routes() -> Router<HttpState> {
     Router::new().route(
         "/customer-acceptances/{id}/evidence",

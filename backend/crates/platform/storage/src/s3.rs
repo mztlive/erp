@@ -46,20 +46,8 @@ pub struct S3StorageConfig {
 }
 
 impl S3StorageConfig {
-    /// 由必填 bucket、签名与访问参数构造 S3 启动配置。
-    ///
-    /// # 参数
-    /// * `bucket` - 存放对象的 bucket
-    /// * `region` - 签名 region
-    /// * `access_key_id` - 访问密钥 ID
-    /// * `secret_access_key` - 访问密钥
-    /// * `public_base_url` - 对外返回的公开访问基础 URL
-    ///
-    /// # 返回
-    /// 返回 `endpoint`、`session_token` 与 `key_prefix` 均为空，且 `force_path_style` 为 `false` 的启动配置。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 用 bucket、签名 region、访问密钥和公开访问基址组装基本配置，供应用启动时创建共享客户端。
+    /// 默认使用 SDK 的端点与寻址方式，不设 session token 或对象键前缀；连接参数由部署按需补充。
     pub fn new(
         bucket: impl Into<String>,
         region: impl Into<String>,
@@ -80,46 +68,19 @@ impl S3StorageConfig {
         }
     }
 
-    /// 设置自定义 endpoint。
-    ///
-    /// # 参数
-    /// * `endpoint` - 自定义 endpoint
-    ///
-    /// # 返回
-    /// 返回更新后的启动配置。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 连接 MinIO 等 S3 兼容服务时指定其 HTTP(S) API 端点；对外访问地址仍由 `public_base_url` 决定。
     pub fn with_endpoint(mut self, endpoint: impl Into<String>) -> Self {
         self.endpoint = Some(endpoint.into());
         self
     }
 
-    /// 设置对象键前缀。
-    ///
-    /// # 参数
-    /// * `key_prefix` - 对象键前缀
-    ///
-    /// # 返回
-    /// 返回更新后的启动配置。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 在同一 bucket 内隔离不同部署的文件时设置统一的对象键前缀，读写和公开 URL 都将使用它。
     pub fn with_key_prefix(mut self, key_prefix: impl Into<String>) -> Self {
         self.key_prefix = Some(key_prefix.into());
         self
     }
 
-    /// 设置是否强制 path-style URL。
-    ///
-    /// # 参数
-    /// * `force_path_style` - 是否强制 path-style URL
-    ///
-    /// # 返回
-    /// 返回更新后的启动配置。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 兼容服务要求在路径中而非子域名中传 bucket 时启用 path-style 寻址。
     pub fn with_force_path_style(mut self, force_path_style: bool) -> Self {
         self.force_path_style = force_path_style;
         self
@@ -146,12 +107,12 @@ pub struct UploadedPart {
 }
 
 impl UploadedPart {
-    // S3 返回的 ETag 可能带引号，合并与校验统一去引号后使用。
+    // 校验和提交分片列表共用去引号后的 ETag，兼容浏览器从分片 PUT 响应头读到的带引号值。
     fn normalized_etag(&self) -> &str {
         self.etag.trim_matches('"')
     }
 
-    // 分片序号须在 1–10000，且 ETag 去引号后不能为空白。
+    // 合并前拒绝超出 1～10000 的分片号和去引号后为空白的 ETag，避免把无效分片清单发给 S3。
     fn validate(&self) -> Result<()> {
         validate_part_number(self.part_number)?;
         if self.normalized_etag().trim().is_empty() {
@@ -162,19 +123,12 @@ impl UploadedPart {
 }
 
 impl S3Storage {
-    /// 根据显式凭证和 endpoint 配置创建 S3 存储。
+    /// 应用启动时用部署配置创建 S3 客户端并复用，避免为每次请求重复建立客户端和连接池。
     ///
-    /// # 参数
-    /// * `config` - bucket、region、凭证、endpoint 和对象键前缀。
-    ///
-    /// # 返回
-    /// 返回可复用的 S3 存储客户端。
-    ///
-    /// # 错误
-    /// 返回 `Error::InvalidConfig`：`bucket`、`region`、`access_key_id` 或 `secret_access_key` 为空或含首尾空白；
-    /// `session_token` 为 `Some` 但为空或含首尾空白；提供的 `endpoint` 不是带非空主机的 `http`/`https` 绝对地址；
-    /// `public_base_url` 无法解析、缺少主机、不是 HTTP(S)，或含 query/fragment；
-    /// `key_prefix` 为空白、含首尾空白、以 `/` 开头或结尾、含 `\`、空段、`.` 或 `..`。
+    /// # Errors
+    /// 必填的 bucket、region、访问密钥或已提供的 session token 为空或含首尾空白时，返回
+    /// [`Error::InvalidConfig`]。自定义端点须是带主机的 HTTP(S) 绝对地址，公开基址还不得带查询或片段。
+    /// 对象键前缀不得为空白、包含首尾空白或斜杠、反斜杠、空段、`.` 或 `..`。
     pub fn new(config: S3StorageConfig) -> Result<Self> {
         let public_base_url = validate_config(&config)?;
         let key_prefix = normalize_prefix(config.key_prefix)?;
@@ -204,20 +158,9 @@ impl S3Storage {
         })
     }
 
-    /// 将文件与已校验的 MIME 类型保存到 S3 对象键。
-    ///
-    /// 大文件改走分片上传路径（见 `create_multipart_upload`），避免全量常驻内存。
-    ///
-    /// # 参数
-    /// * `path` - 相对存储路径。
-    /// * `content` - 对象内容。
-    /// * `content_type` - 可选的 HTTP Content-Type。
-    ///
-    /// # 返回
-    /// 无返回值。对象已写入，并清除该键内容缓存；缓存锁中毒时清除会被跳过。
-    ///
-    /// # 错误
-    /// 路径无效时返回 `Error::PathError`，缓存不变。`PutObject` 失败时返回 `Error::S3`，且已尝试清除该键缓存。
+    /// 调用方只有借用的缓冲区时，将小文件及可选的已校验 MIME 类型写入相对对象路径。
+    /// 本入口会复制整个缓冲区；持有 `Vec<u8>` 时用 [`Self::save_owned_with_content_type`]，
+    /// 大文件走 [`Self::create_multipart_upload`] 开始的直传流程。错误与缓存失效规则同持有所有权的入口。
     pub async fn save_with_content_type<P: AsRef<Path>>(
         &self,
         path: P,
@@ -227,19 +170,12 @@ impl S3Storage {
         self.save_owned_with_content_type(path, content.to_vec(), content_type).await
     }
 
-    /// 转移已缓冲上传文件的所有权，避免 SDK 请求体再复制完整文件。
+    /// 将已缓冲文件的 `Vec<u8>` 转给 SDK 构造上传请求，避免再复制整份文件。
+    /// 调用前应先完成类型校验、大小记录和指纹计算。对象键校验通过后，发起 PUT 前后均尝试使同键缓存失效；
+    /// 即使 PUT 失败也不保留旧缓存，缓存锁中毒时跳过失效。取消调用时遵循 SDK 上传语义。
     ///
-    /// # 参数
-    /// * `path` - 安全相对对象路径。
-    /// * `content` - 已完成类型、大小与内容指纹校验的文件字节。
-    /// * `content_type` - 可选 MIME。
-    ///
-    /// # 返回
-    /// 无返回值。对象已写入，并清除该键内容缓存；缓存锁中毒时清除会被跳过。
-    ///
-    /// # 错误
-    /// 路径非法时返回 `Error::PathError`，缓存不变。`PutObject` 失败时返回 `Error::S3`，且已尝试清除该键缓存。
-    /// 调用取消时遵循 SDK 上传语义。
+    /// # Errors
+    /// 相对路径非法时返回 [`Error::PathError`]，不影响缓存；上传失败返回 [`Error::S3`]。
     pub async fn save_owned_with_content_type<P: AsRef<Path>>(
         &self,
         path: P,
@@ -263,17 +199,8 @@ impl S3Storage {
         Ok(())
     }
 
-    /// 在启动时预建共享存储连接；不读文件、不写对象。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 无返回值。`HeadBucket` 成功即完成预热。
-    ///
-    /// # 错误
-    /// `HeadBucket` 失败时返回 `Error::S3`。即使权限拒绝也可能已完成 TLS 连接复用；
-    /// 调用方可限时并忽略预热失败，不改变服务启动资格。
+    /// 应用可在启动时限时发送 `HeadBucket`，为共享客户端预建连接，不读写任何对象。
+    /// 请求失败返回 [`Error::S3`]；即使被拒绝也可能已建立可复用的 TLS 连接，预热结果不应决定启动资格。
     pub async fn warm_connection(&self) -> Result<()> {
         let started = Instant::now();
         let result = self.client.head_bucket().bucket(&self.bucket).send().await.map_err(s3_error);
@@ -282,16 +209,11 @@ impl S3Storage {
         Ok(())
     }
 
-    /// 生成与实际 bucket 及键前缀一致的公开访问 URL。
+    /// 为需要公开分发的对象生成 CDN 或 bucket URL，按路径段编码并保留公开基址和配置的键前缀。
+    /// 传入与存储读写相同的相对路径，无需自行拼接或编码；不检查对象是否存在，也不改变访问权限。
     ///
-    /// # 参数
-    /// * `path` - 传入 `save_with_content_type` 的相对存储路径。
-    ///
-    /// # 返回
-    /// 返回 `public_base_url` 与完整对象键拼接后的 URL。
-    ///
-    /// # 错误
-    /// 对象路径无效时返回 `Error::PathError`；`public_base_url` 不能作为分层 URL 时返回 `Error::InvalidConfig`。
+    /// # Errors
+    /// 对象路径非法时返回 [`Error::PathError`]；基址不可用于追加路径段时返回 [`Error::InvalidConfig`]。
     pub fn public_url<P: AsRef<Path>>(&self, path: P) -> Result<String> {
         let key = self.object_key(path.as_ref())?;
 
@@ -307,19 +229,11 @@ impl S3Storage {
         Ok(url.to_string())
     }
 
-    /// 读取 S3 对象的完整内容。
+    /// 将 S3 对象完整读入内存，不使用不可变字节缓存；适用于小对象，尤其是可能更新的内容。
+    /// 处理大对象时改用 [`Self::read_stream`]，避免整份数据常驻内存。
     ///
-    /// 大对象改用 `read_stream` 边下边处理，避免全量常驻内存。
-    ///
-    /// # 参数
-    /// * `path` - 相对存储路径。
-    ///
-    /// # 返回
-    /// 返回对象的完整字节内容。
-    ///
-    /// # 错误
-    /// 对象不存在时返回 `Error::NotFound`。路径无效时返回 `Error::PathError`；
-    /// `GetObject` 或响应体读取失败时返回 `Error::S3`。
+    /// # Errors
+    /// 路径非法返回 [`Error::PathError`]，对象不存在返回 [`Error::NotFound`]，其余 GET 或正文读取失败返回 [`Error::S3`]。
     pub async fn read<P: AsRef<Path>>(&self, path: P) -> Result<Vec<u8>> {
         let key = self.object_key(path.as_ref())?;
         self.read_key(key).await
@@ -335,22 +249,13 @@ impl S3Storage {
         Ok(body.into_bytes().to_vec())
     }
 
-    /// 在每次当前业务授权与文件治理校验之后复用不可变对象字节。
+    /// 按相对对象路径和已登记指纹复用不可变对象的完整字节，减少对重复下载的 GET 请求。
+    /// 仅用于新键保存、内容不可覆盖的受控对象；每次调用仍须做当前业务授权、文件治理校验及敏感读取审计，
+    /// 交付前重验权限、文件状态和版本。缓存不保存授权、审计结果或 HTTP 响应。
     ///
-    /// 缓存只保存成功 GET 的内容，绝对期限 30 秒，单对象最多 512 KiB，
-    /// 总字节最多 8 MiB、最多 256 项；不缓存 HTTP 响应、授权或审计。
-    /// 调用方须确保内容只读且变更伴随指纹变化；存储写入和删除主动失效。
-    /// 外部绕过本服务的同键覆盖或删除可能在期限内不可见，此入口不适用于可变对象。
-    ///
-    /// # 参数
-    /// * `path` - 安全相对对象路径。
-    /// * `fingerprint` - 当前元数据确认的不可变内容身份。
-    ///
-    /// # 返回
-    /// 返回完整内容；调用方仍须执行响应前的当前文件状态及版本重验。
-    ///
-    /// # 错误
-    /// 路径、对象读取与响应体错误沿用 `read`；缓存锁中毒时不返回错误，只退回直接读取。
+    /// 只缓存成功 GET 的正文，绝对期限 30 秒，单对象最多 512 KiB、总量 8 MiB、最多 256 项。
+    /// 指纹变化或经本客户端写入、删除时失效；外部或跨进程同键变更可能在期限内不可见，也不保证同键读写线性化。
+    /// 可变对象继续用 [`Self::read`]；缓存锁中毒只退回直接读取，路径及读取错误与该方法相同。
     pub async fn read_immutable<P: AsRef<Path>>(&self, path: P, fingerprint: &str) -> Result<Vec<u8>> {
         let key = self.object_key(path.as_ref())?;
         let generation = self.content_cache.lock().ok().and_then(|cache| cache.generation());
@@ -374,16 +279,10 @@ impl S3Storage {
         Ok(bytes)
     }
 
-    /// 以流式读取 S3 对象，供大对象边下边处理。
+    /// 为大文件下载或逐块处理打开 S3 字节流，避免先把完整对象读入内存。
     ///
-    /// # 参数
-    /// * `path` - 相对存储路径。
-    ///
-    /// # 返回
-    /// 返回可消费的字节流。
-    ///
-    /// # 错误
-    /// 对象不存在时返回 `Error::NotFound`。路径无效时返回 `Error::PathError`；`GetObject` 失败时返回 `Error::S3`。
+    /// # Errors
+    /// 路径非法返回 [`Error::PathError`]，对象不存在返回 [`Error::NotFound`]，其他 GET 失败返回 [`Error::S3`]。
     pub async fn read_stream<P: AsRef<Path>>(&self, path: P) -> Result<ByteStream> {
         let key = self.object_key(path.as_ref())?;
         self.read_key_stream(key).await
@@ -411,20 +310,11 @@ impl S3Storage {
         Ok(response.body)
     }
 
-    /// 为浏览器直传初始化 S3 分片上传。
+    /// 在浏览器开始直传大文件前，为相对对象路径创建上传会话，可指定最终对象的 MIME 类型。
+    /// 返回的上传 ID 用来签发分片 PUT 地址、完成上传或取消；文件字节由浏览器直接传给对象存储。
     ///
-    /// 大文件不再经过应用服务器内存：调用方把返回的分片地址直接交给浏览器，
-    /// 浏览器逐片 PUT 到对象存储，最后由服务端合并。
-    ///
-    /// # 参数
-    /// * `path` - 相对存储路径。
-    /// * `content_type` - 合并后对象的 HTTP Content-Type。
-    ///
-    /// # 返回
-    /// 返回 S3 分片上传标识。
-    ///
-    /// # 错误
-    /// 路径无效时返回 `Error::PathError`；`CreateMultipartUpload` 失败，或响应没有上传标识时，返回 `Error::S3`。
+    /// # Errors
+    /// 路径非法返回 [`Error::PathError`]；初始化请求失败或响应缺少上传 ID 时返回 [`Error::S3`]。
     pub async fn create_multipart_upload<P: AsRef<Path>>(
         &self,
         path: P,
@@ -443,22 +333,11 @@ impl S3Storage {
             .ok_or_else(|| Error::S3("对象存储未返回分片上传标识".to_string()))
     }
 
-    /// 为单个分片签发浏览器可直接 PUT 的预签名地址。
+    /// 上传会话建立后，为指定分片签发有时限的 PUT 地址；浏览器应直接上传，不附加应用鉴权头。
+    /// 对象存储桶的跨域策略须暴露响应 `ETag`，浏览器才能将分片凭据交回服务端用于合并。
     ///
-    /// 地址内已包含签名，浏览器请求时不得再附加应用鉴权头；
-    /// 读取分片响应 `ETag` 头需要对象存储桶跨域配置暴露该头。
-    ///
-    /// # 参数
-    /// * `path` - 相对存储路径。
-    /// * `upload_id` - 分片上传标识。
-    /// * `part_number` - 分片序号（1 起）。
-    /// * `expires_in` - 地址有效期。
-    ///
-    /// # 返回
-    /// 返回预签名 PUT 地址。
-    ///
-    /// # 错误
-    /// 路径无效时返回 `Error::PathError`。分片序号不在 1–10000、有效期不被预签名配置接受，或签名失败时返回 `Error::S3`。
+    /// # Errors
+    /// 路径非法返回 [`Error::PathError`]；序号不在 1～10000、有效期不被 SDK 接受或签名失败时返回 [`Error::S3`]。
     pub async fn presign_upload_part<P: AsRef<Path>>(
         &self,
         path: P,
@@ -486,22 +365,13 @@ impl S3Storage {
         Ok(presigned.uri().to_string())
     }
 
-    /// 合并浏览器已直传的分片为完整对象。
+    /// 浏览器上传全部分片后，使用上传 ID 和各分片的 ETag 将它们合并为最终对象。
+    /// 调用方须按序号升序提供分片；此处去除 ETag 引号，不排序也不去重。
+    /// 请求发送前后均尝试使同键缓存失效，不因合并失败保留旧缓存；缓存锁中毒时跳过失效。
     ///
-    /// 调用方须按序号升序提供分片，本方法不做排序与去重，原序透传。
-    ///
-    /// # 参数
-    /// * `path` - 相对存储路径。
-    /// * `upload_id` - 分片上传标识。
-    /// * `parts` - 分片序号与 ETag 列表。
-    ///
-    /// # 返回
-    /// 无返回值。分片已合并为对象，并清除该键内容缓存；缓存锁中毒时清除会被跳过。
-    ///
-    /// # 错误
-    /// 路径无效时返回 `Error::PathError`，缓存不变。`upload_id` 经 `trim` 后为空、分片列表为空、
-    /// 分片序号不在 1–10000，或 ETag 去引号后为空白时返回 `Error::S3`，缓存不变。
-    /// `CompleteMultipartUpload` 失败时返回 `Error::S3`，且已尝试清除该键缓存。
+    /// # Errors
+    /// 空白上传 ID、空分片列表、序号不在 1～10000 或去引号后为空白的 ETag 返回 [`Error::S3`]，缓存不变。
+    /// 路径非法返回 [`Error::PathError`]，缓存不变；合并请求失败也返回 [`Error::S3`]。
     pub async fn complete_multipart_upload<P: AsRef<Path>>(
         &self,
         path: P,
@@ -538,17 +408,8 @@ impl S3Storage {
         Ok(())
     }
 
-    /// 取消分片上传并清理对象存储侧已上传的分片。
-    ///
-    /// # 参数
-    /// * `path` - 相对存储路径。
-    /// * `upload_id` - 分片上传标识。
-    ///
-    /// # 返回
-    /// 无返回值。对应分片上传已取消。
-    ///
-    /// # 错误
-    /// 路径无效时返回 `Error::PathError`；`AbortMultipartUpload` 失败时返回 `Error::S3`。
+    /// 直传流程放弃或无法继续时按相对路径和上传 ID 取消会话，清理存储侧已上传但未合并的分片。
+    /// 路径非法返回 [`Error::PathError`]，取消请求失败返回 [`Error::S3`]。
     pub async fn abort_multipart_upload<P: AsRef<Path>>(&self, path: P, upload_id: &str) -> Result<()> {
         let key = self.object_key(path.as_ref())?;
         self.client
@@ -562,17 +423,11 @@ impl S3Storage {
         Ok(())
     }
 
-    /// 删除 S3 对象。
+    /// 在业务流程确定不再保留文件后，按相对路径删除存储对象，先用 `HeadObject` 确认对象存在。
+    /// 对象键校验通过便尝试使同键缓存失效，不因后续检查或删除失败保留旧缓存；缓存锁中毒时跳过失效。
     ///
-    /// # 参数
-    /// * `path` - 相对存储路径。
-    ///
-    /// # 返回
-    /// 无返回值。对象已删除，并清除该键内容缓存；缓存锁中毒时清除会被跳过。
-    ///
-    /// # 错误
-    /// 路径无效时返回 `Error::PathError`，缓存不变。
-    /// 键解析成功后会尝试清除缓存；对象不存在时返回 `Error::NotFound`，存在性检查或删除请求失败时返回 `Error::S3`。
+    /// # Errors
+    /// 路径非法返回 [`Error::PathError`]，缓存不变；对象已不存在返回 [`Error::NotFound`]，检查或删除失败返回 [`Error::S3`]。
     pub async fn delete<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         let key = self.object_key(path.as_ref())?;
         self.invalidate_content(&key);
@@ -593,14 +448,14 @@ impl S3Storage {
         Ok(())
     }
 
-    /// 对象变更时使该键字节缓存失效，且不跨 `await` 持有同步锁。锁中毒时跳过失效。
+    // 对象变更前后同步推进缓存代次并移除同键字节，不跨网络 await 持锁；锁中毒时跳过缓存操作。
     fn invalidate_content(&self, key: &str) {
         if let Ok(mut cache) = self.content_cache.lock() {
             cache.invalidate(key);
         }
     }
 
-    /// 返回加上可选前缀的规范 S3 对象键。
+    // 读写或构造公开 URL 前统一校验相对路径并加上配置前缀，确保指向同一个 S3 对象。
     fn object_key(&self, path: &Path) -> Result<String> {
         let path = object_key_path(path)?;
         Ok(self.key_prefix.as_ref().map(|prefix| format!("{prefix}/{path}")).unwrap_or(path))
@@ -624,7 +479,7 @@ impl S3Storage {
     }
 }
 
-/// 记录外部操作完整等待，日志不得包含对象内容、路径、签名或凭证。
+// S3 请求或正文读取结束后记录该阶段的耗时和成功状态，不记录内容、对象键、签名或凭证。
 fn record_operation(operation: &str, started: Instant, success: bool) {
     tracing::info!(
         operation,
@@ -634,16 +489,8 @@ fn record_operation(operation: &str, started: Instant, success: bool) {
     );
 }
 
-/// 校验建立 S3 签名客户端必需的配置，并返回规范化结果。
-///
-/// # 参数
-/// * `config` - 待校验的启动配置
-///
-/// # 返回
-/// 返回规范化后的公开基础 URL。
-///
-/// # 错误
-/// 配置非法时返回 `InvalidConfig`。
+// 创建 SDK 客户端前检查 bucket、签名参数、显式端点和公开基址，避免将配置错误拖到首次请求才发现。
+// 解析出的公开基址供后续拼接对象 URL；配置不合法返回 InvalidConfig。
 fn validate_config(config: &S3StorageConfig) -> Result<Url> {
     for (name, value) in [
         ("bucket", config.bucket.as_str()),
@@ -666,7 +513,7 @@ fn validate_config(config: &S3StorageConfig) -> Result<Url> {
     public_base_url(&config.public_base_url)
 }
 
-/// 校验合并前的上传标识、非空分片列表，以及各分片序号与 ETag。
+// 发合并请求前检查上传 ID 及每个分片的序号和 ETag，拒绝空清单；不负责排序或去重。
 fn validate_complete_parts(upload_id: &str, parts: &[UploadedPart]) -> Result<()> {
     if upload_id.trim().is_empty() {
         return Err(Error::S3("分片上传标识不能为空".to_string()));
@@ -680,7 +527,7 @@ fn validate_complete_parts(upload_id: &str, parts: &[UploadedPart]) -> Result<()
     Ok(())
 }
 
-// 分片序号的纯规则校验，预签名与合并共用同口径。
+// 预签名和合并使用同一 S3 分片号范围（1～10000），避免签出无法合并的分片。
 fn validate_part_number(part_number: i32) -> Result<()> {
     if !(MIN_PART_NUMBER..=MAX_PART_NUMBER).contains(&part_number) {
         return Err(Error::S3("分片序号必须在 1-10000 之间".to_string()));
@@ -688,12 +535,13 @@ fn validate_part_number(part_number: i32) -> Result<()> {
     Ok(())
 }
 
-// 公开 URL 与 endpoint 共用 HTTP(S) 判定，主机校验各保持原口径。
+// 自定义 API 端点和公开基址共用协议检查；主机及查询参数等限制由各自入口判断。
 fn is_http_scheme(url: &Url) -> bool {
     matches!(url.scheme(), "http" | "https")
 }
 
-/// 解析并规范公开访问基础 URL，禁止查询与 fragment 污染对象 URL。
+// 在装配客户端时解析公开基址，去掉路径末尾斜杠供对象键拼接；拒绝带查询或片段的基址，
+// 避免把基址参数或锚点错误地传给每个公开对象 URL。
 fn public_base_url(value: &str) -> Result<Url> {
     let mut url = Url::parse(value)
         .map_err(|_| Error::InvalidConfig("S3 public_base_url 必须是合法 URL".to_string()))?;
@@ -709,7 +557,7 @@ fn public_base_url(value: &str) -> Result<Url> {
     Ok(url)
 }
 
-/// 判断 endpoint 是否为带主机部分的 HTTP(S) 绝对地址，与公开 URL 同口径。
+// 创建 SDK 客户端前确认自定义端点有可连接的主机以及 HTTP(S) 协议；不套用公开基址额外的限制。
 fn is_valid_endpoint(endpoint: &str) -> bool {
     let Ok(url) = Url::parse(endpoint) else {
         return false;
@@ -717,12 +565,12 @@ fn is_valid_endpoint(endpoint: &str) -> bool {
     is_http_scheme(&url) && url.host_str().is_some_and(|host| !host.is_empty())
 }
 
-/// 将 S3 SDK 错误统一转换为存储错误。
+// 将 SDK 请求和正文读取的通用失败归到存储错误，调用方无需依赖底层 SDK 错误类型。
 fn s3_error(error: impl std::fmt::Display) -> Error {
     Error::S3(error.to_string())
 }
 
-/// 将 `GetObject` 的不存在语义映射到统一存储错误。
+// 读取对象时单独识别 GetObject 的 NoSuchKey，让业务方区分对象缺失和其他 S3 故障。
 fn get_error<R>(error: SdkError<GetObjectError, R>) -> Error {
     if error.as_service_error().is_some_and(GetObjectError::is_no_such_key) {
         return Error::NotFound;
@@ -771,7 +619,7 @@ mod tests {
         test_storage(TEST_BUCKET, None, "https://cdn.example.com")
     }
 
-    /// S3 保存必须使用 bucket、键前缀和跨平台对象键发出 `PutObject`。
+    // 捕获真实 SDK 生成的 PUT，验证 bucket 和前缀正确，并确保上传正文与已校验 MIME 原样送出。
     #[tokio::test]
     async fn saves_object_with_configured_prefix() -> Result<()> {
         let (storage, request_receiver) = test_storage_with_prefix();
@@ -789,7 +637,7 @@ mod tests {
         Ok(())
     }
 
-    /// S3 读取必须从同一 bucket 和键前缀发出 `GetObject`。
+    // 以捕获的 GET 确认读取沿用保存时的 bucket 和键前缀，不会查到另一个对象。
     #[tokio::test]
     async fn reads_object_with_configured_prefix() -> Result<()> {
         let (storage, request_receiver) = test_storage_with_prefix();
@@ -806,7 +654,7 @@ mod tests {
         Ok(())
     }
 
-    /// COS 原图参数必须进入真实 SDK 请求，并在请求发送前完成签名。
+    // 验证真实 SDK 生成的 COS GET 同时带授权头和原图参数，且保留对象路径的百分号编码。
     #[tokio::test]
     async fn reads_cos_original_image_with_signed_query() -> Result<()> {
         let (http_client, receiver) = capture_request(None);
@@ -837,7 +685,7 @@ mod tests {
         Ok(())
     }
 
-    /// 只读内容缓存只消除重复 GET；对象路径仍经过统一前缀校验。
+    // 先确认成功读取发出 GET，再用同一指纹重读，并检查缓存入口仍拒绝含父目录的路径。
     #[tokio::test]
     async fn immutable_content_reuses_only_a_successful_get() -> Result<()> {
         let (storage, request_receiver) = test_storage_with_prefix();
@@ -851,7 +699,7 @@ mod tests {
         Ok(())
     }
 
-    /// 上传转移原请求体，并在任何对象写入之前使同键缓存失效。
+    // 预填同键旧字节，验证转移所有权的上传发送新正文，并在请求结束后不再命中旧缓存。
     #[tokio::test]
     async fn owned_upload_invalidates_previous_content() -> Result<()> {
         let (storage, request_receiver) = test_storage_with_prefix();
@@ -869,7 +717,7 @@ mod tests {
         Ok(())
     }
 
-    /// 公开 URL 必须包含基础路径、键前缀与经编码的对象路径。
+    // 验证公开 CDN 地址保留基址路径和对象键前缀，并按路径段编码中文和空格。
     #[test]
     fn builds_public_url_from_complete_object_key() -> Result<()> {
         let (storage, _) = test_storage(TEST_BUCKET, Some(TEST_PREFIX), "https://cdn.example.com/assets/");
@@ -879,7 +727,7 @@ mod tests {
         Ok(())
     }
 
-    /// S3 对象键不得使用父目录分量越过配置前缀。
+    // 验证上传入口拒绝含父目录的路径，防止绕过对象键的相对路径约定。
     #[tokio::test]
     async fn rejects_parent_directory_object_key() -> Result<()> {
         let (storage, _) = test_storage_without_prefix();
@@ -888,7 +736,7 @@ mod tests {
         Ok(())
     }
 
-    /// S3 启动配置必须提供非空 bucket、region 和签名凭证。
+    // 用空 bucket 验证启动时即拒绝不完整配置，不把错误留到首个 S3 请求。
     #[test]
     fn rejects_incomplete_s3_config() {
         let result = S3Storage::new(S3StorageConfig::new(
@@ -902,7 +750,7 @@ mod tests {
         assert!(matches!(result, Err(Error::InvalidConfig(_))));
     }
 
-    /// S3 启动构造器默认关闭可选端点与前缀。
+    // 确认基本配置可叠加兼容端点、键前缀和 path-style 设置，且未提供的 session token 保持空缺。
     #[test]
     fn storage_config_constructor_sets_required_fields() {
         let config = S3StorageConfig::new(
@@ -923,7 +771,7 @@ mod tests {
         assert!(config.session_token.is_none());
     }
 
-    /// 分片上传初始化必须向同一 bucket 和键前缀发出 `CreateMultipartUpload`。
+    // 捕获分片初始化的 POST，确认直传会话与普通上传使用相同的对象键前缀。
     #[tokio::test]
     async fn creates_multipart_upload_with_configured_prefix() -> Result<()> {
         let (storage, request_receiver) = test_storage_with_prefix();
@@ -937,7 +785,7 @@ mod tests {
         Ok(())
     }
 
-    /// 合并分片必须发出 `CompleteMultipartUpload` 并去除 ETag 引号。
+    // 捕获合并分片的 POST 正文，确认浏览器返回的带引号 ETag 不会以引号写入合并 XML。
     #[tokio::test]
     async fn completes_multipart_upload_without_etag_quotes() -> Result<()> {
         let (storage, request_receiver) = test_storage_with_prefix();
@@ -964,7 +812,7 @@ mod tests {
         Ok(())
     }
 
-    /// 取消分片上传必须发出 `AbortMultipartUpload`。
+    // 捕获取消会话的 DELETE，确认清理的是带配置前缀的目标对象所对应的分片。
     #[tokio::test]
     async fn aborts_multipart_upload() -> Result<()> {
         let (storage, request_receiver) = test_storage_with_prefix();
@@ -977,7 +825,7 @@ mod tests {
         Ok(())
     }
 
-    /// 分片预签名地址必须携带上传标识与分片序号且无需网络请求。
+    // 在没有真实网络的 SDK 客户端上验证预签名地址绑定上传 ID 和分片号。
     #[tokio::test]
     async fn presigns_upload_part_without_network() -> Result<()> {
         let (storage, _) =
@@ -992,7 +840,7 @@ mod tests {
         Ok(())
     }
 
-    /// 空分片列表合并必须在请求发出前失败。
+    // 验证没有任何分片可提交的会话会在合并前被拒绝。
     #[tokio::test]
     async fn rejects_complete_with_empty_parts() -> Result<()> {
         let (storage, _) = test_storage_without_prefix();
@@ -1001,7 +849,7 @@ mod tests {
         Ok(())
     }
 
-    /// 非法分片序号预签名必须在请求发出前失败。
+    // 用序号 0 验证预签名不会为超出 S3 序号范围的分片生成 PUT 地址。
     #[tokio::test]
     async fn rejects_presign_with_invalid_part_number() -> Result<()> {
         let (storage, _) = test_storage_without_prefix();
@@ -1011,7 +859,7 @@ mod tests {
         Ok(())
     }
 
-    /// 合并分片必须校验上传标识、序号范围与 ETag 非空。
+    // 分别传入空白上传 ID、非法序号和空白 ETag，确认合并在本地拒绝，SDK 不发送任何请求。
     #[tokio::test]
     async fn rejects_complete_with_invalid_upload_id_or_parts() -> Result<()> {
         let (storage, request_receiver) = test_storage_without_prefix();

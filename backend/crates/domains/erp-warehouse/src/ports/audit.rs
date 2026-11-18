@@ -53,26 +53,7 @@ pub struct PreparedWarehouseAudit {
 impl_audit_context!(PreparedWarehouseAudit);
 
 impl PreparedWarehouseAudit {
-    /// 从已校验的审计实体快照抄录仓库侧字段。
-    ///
-    /// 操作人名称、请求编号不在参数中，结果里保持 `None`；事件序号为 `1`。
-    ///
-    /// # 参数
-    /// * `base` - 已构造审计的持久化元数据。
-    /// * `actor_id` - 操作人 ID。
-    /// * `actor_account` - 操作人登录账号。
-    /// * `actor_type` - 操作人类型。
-    /// * `action` - 业务动作名。
-    /// * `resource_type` - 资源类型。
-    /// * `resource_id` - 资源 ID。
-    /// * `success` - 成功标记。
-    /// * `message` - 可选业务消息。
-    ///
-    /// # 返回
-    /// 返回稍后持久化的审计事实。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 从已验证日志复制持久化元数据与业务身份，形成稍后写入的仓库审计事实；名称、请求号保持 `None`，事件序号固定为 `1`。
     #[allow(clippy::too_many_arguments)]
     pub fn from_validated(
         base: &BaseModel,
@@ -98,18 +79,7 @@ impl PreparedWarehouseAudit {
         })
     }
 
-    /// 从审计事实结构体抄录仓库侧字段。
-    ///
-    /// 操作人名称与请求编号记为 `None`，事件序号记为 `1`。
-    ///
-    /// # 参数
-    /// * `facts` - 审计事实参数结构体。
-    ///
-    /// # 返回
-    /// 返回稍后持久化的审计事实。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将事实参数转换成待持久化审计，供组合层传递已准备字段；不补操作人名称和请求号，事件序号从 `1` 开始。
     pub fn from_facts(facts: &WarehouseAuditFacts) -> Self {
         Self {
             id: facts.base.id.clone(),
@@ -131,19 +101,7 @@ impl PreparedWarehouseAudit {
         }
     }
 
-    /// 由已认证操作人构造一条成功的资源审计。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证操作人。
-    /// * `action` - 业务动作名。
-    /// * `resource_type` - 资源类型。
-    /// * `resource_id` - 资源 ID。
-    ///
-    /// # 返回
-    /// 返回成功标记为 `true` 的审计事实，并带上操作人名称快照与请求编号。
-    ///
-    /// # 错误
-    /// `resource_id` 去首尾空白后为空时返回 `ValidationError`。
+    /// 用当前认证操作人和目标资源构造无附加说明的成功审计，保留名称快照及请求号以供追溯；资源 ID 去空白后为空时返回 `ValidationError`。
     pub fn resource(
         actor: AuditActor,
         action: &str,
@@ -153,20 +111,7 @@ impl PreparedWarehouseAudit {
         Self::resource_with_message(actor, action, resource_type, resource_id, None)
     }
 
-    /// 由已认证操作人构造一条带可选业务消息的成功资源审计。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证操作人。
-    /// * `action` - 业务动作名。
-    /// * `resource_type` - 资源类型。
-    /// * `resource_id` - 资源 ID。
-    /// * `message` - 可选业务消息；`None` 表示不附带消息。
-    ///
-    /// # 返回
-    /// 返回成功标记为 `true` 的审计事实，并带上操作人名称快照与请求编号。
-    ///
-    /// # 错误
-    /// `resource_id` 去首尾空白后为空时返回 `ValidationError`。
+    /// 为成功资源操作准备带可选业务说明的审计，沿用当前操作人名称和请求号；`None` 表示不附说明，资源 ID 去空白后为空则返回 `ValidationError`。
     pub fn resource_with_message(
         actor: AuditActor,
         action: &str,
@@ -223,19 +168,7 @@ pub struct WarehouseAuditFacts {
 /// Port warehouse uses to prepare and persist resource audits on a caller executor.
 #[async_trait]
 pub trait WarehouseAuditPort: Send + Sync {
-    /// 在事务开始前校验并准备一条成功的资源审计。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证操作人。
-    /// * `action` - 业务动作名。
-    /// * `resource_type` - 资源类型。
-    /// * `resource_id` - 资源 ID。
-    ///
-    /// # 返回
-    /// 返回可在调用方执行器上持久化的审计事实。
-    ///
-    /// # 错误
-    /// 校验失败或无法准备审计时返回错误。
+    /// 在持久化前准备已认证操作人、动作与资源的成功审计，供原业务执行器保存；输入校验或审计准备失败时返回错误。
     fn resource_log(
         &self,
         actor: AuditActor,
@@ -244,20 +177,7 @@ pub trait WarehouseAuditPort: Send + Sync {
         resource_id: String,
     ) -> Result<PreparedWarehouseAudit>;
 
-    /// 在事务开始前校验并准备一条带业务消息的成功资源审计。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证操作人。
-    /// * `action` - 业务动作名。
-    /// * `resource_type` - 资源类型。
-    /// * `resource_id` - 资源 ID。
-    /// * `message` - 可选业务消息。
-    ///
-    /// # 返回
-    /// 返回可在调用方执行器上持久化的审计事实。
-    ///
-    /// # 错误
-    /// 校验失败或无法准备审计时返回错误。
+    /// 校验并准备带可选说明的成功审计，供业务与审计在同一事务写入；无法校验或构造时返回错误。
     fn resource_log_with_message(
         &self,
         actor: AuditActor,
@@ -267,17 +187,7 @@ pub trait WarehouseAuditPort: Send + Sync {
         message: Option<String>,
     ) -> Result<PreparedWarehouseAudit>;
 
-    /// 在调用方选定的执行器上持久化已准备的审计。
-    ///
-    /// # 参数
-    /// * `audit` - 已准备的审计事实。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 无返回值。持久化完成。
-    ///
-    /// # 错误
-    /// 持久化失败时返回错误。
+    /// 用调用方的业务执行器保存已准备的审计，使业务写入和留痕一起提交；持久化失败直接返回错误。
     async fn persist(&self, audit: &PreparedWarehouseAudit, executor: &mut dyn Executor) -> Result<()>;
 }
 

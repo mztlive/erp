@@ -40,17 +40,13 @@ pub struct InitialReceivableInput {
 /// 只应由首次生效（最终审批通过）路径调用：子账 `account_seq = 1`，分录类型
 /// 为原始应收（增加方向，金额 = 版本含税合计）；后续销售变更差额由独立接口写入。
 /// 本接口复用调用方 Executor，不开启事务；重复生效由外层提交状态守卫拦截。
-///
-/// # 参数
-/// * `db` - 财务领域数据库。
-/// * `input` - 销售单生效时冻结的应收事实。
-/// * `executor` - 调用方执行器；本函数不开启事务。
-///
-/// # 返回
 /// 返回已与原始分录一并持久化的子账，供组合层按原顺序推进财务任务。
+/// 失败条件：实体不变量失败保持 `Logic`，仓储失败保留原唯一键、并发与基础设施错误类别。
 ///
-/// # 错误
-/// 实体不变量失败保持 `Logic`，仓储失败保留原唯一键、并发与基础设施错误类别。
+/// 输入约定：
+/// - `db`：财务领域数据库。
+/// - `input`：销售单生效时冻结的应收事实。
+/// - `executor`：调用方执行器；本函数不开启事务。
 pub async fn create_initial_receivable(
     db: &Database,
     input: InitialReceivableInput,
@@ -63,8 +59,8 @@ pub async fn create_initial_receivable(
     Ok(account)
 }
 
-/// 先构造账户，再读取到期业务日并构造分录；保持原校验和取时顺序。
-/// 日期提供器使纯内联测试固定业务日，生产仍在原位置调用 `BusinessDate::today`。
+// 销售单生效生成初始应收时，先校验并构造子账，再读取到期业务日并创建原始分录。
+// 日期提供器使纯内联测试固定业务日，生产仍在原位置调用 `BusinessDate::today`。
 fn build_initial_receivable(
     input: InitialReceivableInput,
     account_id: ReceivableAccountId,

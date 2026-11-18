@@ -37,19 +37,11 @@ pub(crate) const SUPPLIER_REFUND_ALLOCATIONS: &str =
     <mongodb::Database as SupplierFulfillmentExt>::SUPPLIER_REFUND_ALLOCATIONS;
 
 /// 创建本域集合的幂等命名索引。
-///
-/// 逐条落地数据模型 §6.19「必需约束与索引」。身份类字段（订单号、商城明细归属、
-/// 动作幂等键、回调/退款幂等键）使用**全局唯一索引**（与 accounts 的 code 处理一致）：
-/// 软删除后仍保留身份，避免复用破坏恢复与幂等追溯语义；可空身份字段使用
-/// **部分唯一索引**（非空时才参与唯一约束），保证 `NULL` 不阻塞多条未填写记录的写入。
-///
-/// # 参数
-/// * `db` - 目标 MongoDB 数据库
-///
-/// # 返回
+/// 逐条落地数据模型 §6.19「必需约束与索引」。身份类字段（订单号、商城明细归属、动作幂等键、回调/退款幂等
+/// 键）使用**全局唯一索引**（与 accounts 的 code 处理一致）：软删除后仍保留身份，避免复用破坏恢复与幂等
+/// 追溯语义；可空身份字段使用**部分唯一索引**（非空时才参与唯一约束），保证 `NULL` 不阻塞多条未填写记录
+/// 的写入。
 /// 履约订单、明细、动作、动作行、状态历史、退款事实和退款分配索引都登记成功时返回 `Ok(())`。
-///
-/// # 错误
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, SUPPLIER_FULFILLMENT_ORDERS, supplier_fulfillment_order_indexes()).await?;
@@ -62,13 +54,13 @@ pub async fn ensure(db: &Database) -> Result<()> {
     Ok(())
 }
 
-/// 为单个集合创建一组幂等命名索引。
+// 为单个集合创建一组幂等命名索引。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
     db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
-/// 返回 `supplier_fulfillment_order` 的身份约束和查询索引（§6.19）。
+// 提供 `supplier_fulfillment_order` 的身份约束和查询索引（§6.19）。
 fn supplier_fulfillment_order_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_supplier_fulfillment_orders_id", doc! { "id": 1 }),
@@ -103,7 +95,7 @@ fn supplier_fulfillment_order_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `supplier_fulfillment_item` 的身份约束和明细查询索引（§6.19）。
+// 提供 `supplier_fulfillment_item` 的身份约束和明细查询索引（§6.19）。
 fn supplier_fulfillment_item_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_supplier_fulfillment_items_id", doc! { "id": 1 }),
@@ -111,7 +103,7 @@ fn supplier_fulfillment_item_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `supplier_order_action` 的身份约束与查询索引（§6.19）。
+// 提供 `supplier_order_action` 的身份约束与查询索引（§6.19）。
 fn supplier_order_action_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_supplier_order_actions_id", doc! { "id": 1 }),
@@ -120,7 +112,7 @@ fn supplier_order_action_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `supplier_order_action_line` 的身份约束索引（§6.19）。
+// 提供 `supplier_order_action_line` 的身份约束索引（§6.19）。
 fn supplier_order_action_line_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_supplier_order_action_lines_id", doc! { "id": 1 }),
@@ -131,7 +123,7 @@ fn supplier_order_action_line_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `supplier_order_status_history` 的回调幂等唯一索引（§6.19）。
+// 提供 `supplier_order_status_history` 的回调幂等唯一索引（§6.19）。
 fn supplier_order_status_history_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_supplier_order_status_histories_id", doc! { "id": 1 }),
@@ -142,7 +134,7 @@ fn supplier_order_status_history_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `supplier_refund_fact` 的身份约束和订单查询索引（§6.19）。
+// 提供 `supplier_refund_fact` 的身份约束和订单查询索引（§6.19）。
 fn supplier_refund_fact_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_supplier_refund_facts_id", doc! { "id": 1 }),
@@ -166,7 +158,7 @@ fn supplier_refund_fact_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `supplier_refund_allocation` 的身份约束索引（§6.19）。
+// 提供 `supplier_refund_allocation` 的身份约束索引（§6.19）。
 fn supplier_refund_allocation_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_supplier_refund_allocations_id", doc! { "id": 1 }),
@@ -185,7 +177,7 @@ fn supplier_refund_allocation_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 构建命名部分唯一索引（仅匹配部分筛选表达式的文档参与唯一约束）。
+// 构建命名部分唯一索引（仅匹配部分筛选表达式的文档参与唯一约束）。
 fn partial_unique_index(name: impl Into<String>, keys: Document, filter: Document) -> IndexModel {
     IndexModel::builder()
         .keys(keys)
@@ -197,7 +189,7 @@ fn partial_unique_index(name: impl Into<String>, keys: Document, filter: Documen
 
 #[cfg(test)]
 mod tests {
-    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    // 验证按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
     #[test]
     fn collections_look_up_by_unique_stable_id() {
         for indexes in [

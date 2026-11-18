@@ -36,12 +36,10 @@ pub(super) struct PurchaseInvoiceLink {
 }
 
 impl FundsAccess {
-    /// 销售与采购双关联同时证明；发票双方向查询使用，单方向复用 resolve 即可。
+    /// 确定进项发票分配的适用条件时，销售与采购双关联同时证明；发票双方向查询使用，单方向复用 resolve 即可。
     ///
     /// # 参数
-    /// * `actor` - 已认证操作人。
     /// * `permission` - 目标资金入口的公共权限常量。
-    /// * `executor` - 调用方执行器。
     ///
     /// # 返回
     /// 销售、采购及结算双方向已解析授权。
@@ -57,17 +55,14 @@ impl FundsAccess {
         self.resolve_sources(actor, permission, true, true, executor).await
     }
 
-    /// 进项发票分配按应付子账反查采购单；结算来源保留自身责任边界。
-    ///
-    /// # 参数
-    /// * `invoice_ids` - 发票主键。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 保持原分配流、实际采购或结算来源类型的关联集合。
-    ///
-    /// # 错误
-    /// 分配或子账读取失败时返回错误。
+    // 应用进项发票分配筛选时，进项发票分配按应付子账反查采购单；结算来源保留自身责任边界。
+    //
+    // 调用参数：
+    // * `invoice_ids` - 发票主键。
+    //
+    // 保持原分配流、实际采购或结算来源类型的关联集合。
+    //
+    // 分配或子账读取失败时返回错误。
     pub(super) async fn purchase_invoice_matched_links(
         &self,
         invoice_ids: &[String],
@@ -116,11 +111,10 @@ impl FundsAccess {
     }
 }
 impl FundsAccess {
-    /// 分页查询进项发票分配范围行：采购负责人与收票经办人分别查询（仅列表）。
+    /// 调用此入口时，分页查询进项发票分配范围行：采购负责人与收票经办人分别查询（仅列表）。
     ///
     /// # 参数
     /// * `params` - 进项分配列表请求。
-    /// * `actor` - 已认证操作人。
     ///
     /// # 返回
     /// 最终授权进项分配页面与同口径汇总。
@@ -142,19 +136,14 @@ impl FundsAccess {
         Ok(snapshot)
     }
 
-    /// 返回前重读授权及候选事实版本；变化时拒绝交付原结果。
-    ///
-    /// # 参数
-    /// * `params` - 原始列表请求。
-    /// * `query` - 已规范化的列表查询。
-    /// * `actor` - 已认证操作人。
-    /// * `expected` - 调用方回传的范围版本；首页可为 `None`。
-    ///
-    /// # 返回
-    /// 独立轻量完整复核通过后的首拍分配页面。
-    ///
-    /// # 错误
-    /// 首拍预期版本或二拍完整范围版本不一致时拒绝；授权或读取失败时返回对应错误。
+    // 交付进项发票分配前重新读取授权及完整候选事实版本；比对发现变化时拒绝原结果。
+    //
+    // 调用参数：
+    // * `expected` - 调用方回传的范围版本；首页可为 `None`。
+    //
+    // 独立轻量完整复核通过后的首拍分配页面。
+    //
+    // 首拍预期版本或二拍完整范围版本不一致时拒绝；授权或读取失败时返回对应错误。
     pub(super) async fn checked_purchase_invoice_allocations(
         &self,
         params: &PurchaseInvoiceAllocationListParams,
@@ -170,18 +159,11 @@ impl FundsAccess {
         .await
     }
 
-    /// 身份和业务事实均使用调用方同一事务，不缓存权限解析结果。
-    ///
-    /// # 参数
-    /// * `params` - 原始列表请求。
-    /// * `query` - 已规范化的列表查询。
-    /// * `actor` - 已认证操作人。
-    ///
-    /// # 返回
-    /// 同事务形成的最终授权进项分配页面。
-    ///
-    /// # 错误
-    /// 授权解析或持久化读取失败时拒绝。
+    // 读取进项发票分配事实时，将身份解析与业务查询放在调用方同一事务中，不复用缓存的授权结论。
+    //
+    // 同事务形成的最终授权进项分配页面。
+    //
+    // 授权解析或持久化读取失败时拒绝。
     pub(super) async fn snapshot_purchase_invoice_allocations(
         &self,
         params: &PurchaseInvoiceAllocationListParams,
@@ -203,19 +185,14 @@ impl FundsAccess {
             .await
     }
 
-    /// 最终授权与人员条件先于数据库分页，总数、金额和指纹采用同一集合。
-    ///
-    /// # 参数
-    /// * `params` - 原始列表请求，用于比对范围版本。
-    /// * `query` - 已规范化的列表查询。
-    /// * `actor` - 已认证操作人。
-    /// * `executor` - 调用方事务。
-    ///
-    /// # 返回
-    /// 数据库分页、同口径计数及完整份额汇总；无可见范围时返回空页。
-    ///
-    /// # 错误
-    /// 读取、范围版本或查询上限检查失败时拒绝。
+    // 读取进项发票分配时，最终授权与人员条件先于数据库分页，总数、金额和指纹采用同一集合。
+    //
+    // 调用参数：
+    // * `params` - 原始列表请求，用于比对范围版本。
+    //
+    // 数据库分页、同口径计数及完整份额汇总；无可见范围时返回空页。
+    //
+    // 读取、范围版本或查询上限检查失败时拒绝。
     pub(super) async fn load_purchase_invoice_allocations(
         &self,
         params: &PurchaseInvoiceAllocationListParams,
@@ -245,7 +222,7 @@ impl FundsAccess {
         })
     }
 
-    /// 每拍独立解析真实来源授权与组织筛选，只读取本拍必要的聚合分支。
+    // 组装进项发票分配的聚合管道时，每拍独立解析真实来源授权与组织筛选，只读取本拍必要的聚合分支。
     async fn allocation_projection(
         &self,
         query: &PurchaseInvoiceAllocationListQuery,
@@ -262,7 +239,7 @@ impl FundsAccess {
         Ok((authorization, snapshot))
     }
 
-    /// 返回前独立事务只重验完整匹配身份及来源版本，不重建当前页与金额汇总。
+    // 为进项发票分配绑定范围版本时，给出前独立事务只重验完整匹配身份及来源版本，不重建当前页与金额汇总。
     async fn allocation_fingerprint_snapshot(
         &self,
         query: &PurchaseInvoiceAllocationListQuery,
@@ -285,17 +262,14 @@ impl FundsAccess {
             .await
     }
 
-    /// 收票分配关联筛选条件：采购负责人、收票经办人与组织分别精确匹配。
-    ///
-    /// # 参数
-    /// * `query` - 已规范化的进项分配查询。
-    /// * `executor` - 调用方事务。
-    ///
-    /// # 返回
-    /// 采购或结算负责人、经办人与展开组织的精确条件。
-    ///
-    /// # 错误
-    /// 组织展开读取失败时返回错误。
+    // 应用进项发票分配筛选时，收票分配关联筛选条件：采购负责人、收票经办人与组织分别精确匹配。
+    //
+    // 调用参数：
+    // * `query` - 已规范化的进项分配查询。
+    //
+    // 采购或结算负责人、经办人与展开组织的精确条件。
+    //
+    // 组织展开读取失败时返回错误。
     pub(super) async fn purchase_invoice_condition(
         &self,
         query: &PurchaseInvoiceAllocationListQuery,
@@ -317,7 +291,7 @@ impl FundsAccess {
     }
 }
 
-/// 分配与来源版本按原完整匹配顺序形成跨页凭据。
+// 为进项发票分配绑定范围版本时，分配与来源版本按原完整匹配顺序形成跨页凭据。
 fn allocation_scope_version(authorization: &FundsAuthorization, versions: &[AllocationVersion]) -> String {
     let mut fingerprint = DefaultHasher::new();
     authorization.context.scope_version.hash(&mut fingerprint);
@@ -327,7 +301,7 @@ fn allocation_scope_version(authorization: &FundsAuthorization, versions: &[Allo
     format!("{:x}", fingerprint.finish())
 }
 
-/// 当前页由来源范围完整授权的分配，沿正反动作返回方向金额。
+// 生成进项发票分配视图时，当前页由来源范围完整授权的分配，沿正反动作返回方向金额。
 fn allocation_page_row(row: &AllocationPageRow) -> ScopedPurchaseInvoiceAllocationRow {
     let item = &row.item;
     let signed = match item.allocation_action {
@@ -378,7 +352,7 @@ mod tests {
         }
     }
 
-    /// 实际页面映射保留冲正方向、缺失票号与真实来源单号。
+    // 验证进项发票分配：实际页面映射保留冲正方向、缺失票号与真实来源单号。
     #[test]
     fn allocation_page_preserves_reverse_direction_and_missing_invoice_number() {
         let row = allocation_page();
@@ -391,7 +365,7 @@ mod tests {
         assert_eq!(item.source_document_no.as_deref(), Some("PO-20261009-001"));
     }
 
-    /// 来源单号缺失或全空白时保持空名称，不把应付子账内部主键作为名称返回。
+    // 验证进项发票分配：来源单号缺失或全空白时保持空名称，不把应付子账内部主键作为名称返回。
     #[test]
     fn allocation_page_omits_missing_source_number() {
         for source_document_no in [None, Some(" \t\n ".into())] {

@@ -16,15 +16,12 @@ use crate::repository::prelude::ProductBrandRepositoryImportLookupExt;
 
 impl CatalogService {
     /// 在调用方事务内创建一个品牌，行内错误作为确定失败返回。
-    /// # 参数
-    /// * `key` - 已验证的稳定导入身份
-    /// * `row` - 原始行内容
-    /// * `actor` - 已在当前事务重验权限的提交人
-    /// * `executor` - 同时持久化任务进度的事务执行器
-    /// # 返回
-    /// 新建、跳过或行内校验失败；不自行提交事务。
-    /// # 错误
-    /// 数据库、取号或审计失败时返回错误，调用方须回滚整行事务。
+    ///
+    /// 新建、跳过或行内校验失败；不自行提交事务。数据库、取号或审计失败时返回错误，调用方须回滚整行事务。
+    ///
+    /// - `key`：已验证的稳定导入身份。
+    /// - `row`：原始行内容。
+    /// - `actor`：已在当前事务重验权限的提交人。
     pub async fn product_brand_import_row(
         &self,
         key: &BrandImportKey,
@@ -64,7 +61,7 @@ impl CatalogService {
         Ok(BrandImportResult::from_brand(number, BrandImportStatus::Created, brand))
     }
 
-    /// 品牌和审计沿同一外部执行器写入，数据库冲突不吞成行内校验失败。
+    // 品牌和审计沿同一外部执行器写入，数据库冲突不吞成行内校验失败。
     async fn create_import_brand(
         &self,
         mut prepared: PreparedBrandImport,

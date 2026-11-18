@@ -42,15 +42,7 @@ pub enum SupplierHealthCheckStatus {
 
 impl SupplierHealthCheckStatus {
     /// 判断检查是否已经形成不可再推进的终态。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// `SUCCEEDED`、`FAILED` 或 `UNKNOWN` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn is_terminal(self) -> bool {
         matches!(self, Self::Succeeded | Self::Failed | Self::Unknown)
     }
@@ -99,12 +91,9 @@ pub struct SupplierHealthCheckRun {
 
 impl SupplierHealthCheckRun {
     /// 验证当前连接在指定失败之后已通过同一技术配置的鉴权检查。
-    /// # 参数
-    /// `connection` 为当前连接；`failed_at` 为待处理失败的登记时间（Unix 秒）。
-    /// # 返回
     /// 仅同连接、同配置、失败后启动且成功完成的鉴权检查返回 true；当前连接必须健康。
-    /// # 错误
-    /// 无；时间缺失、倒置、检查类型不符或配置变化均返回 false。
+    /// 时间缺失、倒置、检查类型不符或配置变化均返回 false。
+    /// `connection` 为当前连接；`failed_at` 为待处理失败的登记时间（Unix 秒）。
     pub fn verifies_authentication_after(&self, connection: &SupplierApiConnection, failed_at: u64) -> bool {
         self.connection_id.as_ref() == connection.base.id
             && self.technical_config_version == connection.technical_config_version
@@ -119,15 +108,7 @@ impl SupplierHealthCheckRun {
     }
 
     /// 创建等待执行的健康检查记录。
-    ///
-    /// # 参数
-    /// * `id` - 运行记录主键
-    /// * `data` - 健康检查创建数据
-    ///
-    /// # 返回
     /// 返回状态为 `PENDING` 的健康检查记录。
-    ///
-    /// # 错误
     /// 后台任务、发起人、幂等摘要或请求摘要为空或超长，或技术配置版本、能力版本为零时返回错误。
     pub fn new(id: impl Into<String>, data: SupplierHealthCheckRunData) -> Result<Self> {
         if data.technical_config_version == 0 {
@@ -157,14 +138,7 @@ impl SupplierHealthCheckRun {
     }
 
     /// 标记后台任务开始执行。
-    ///
-    /// # 参数
-    /// * `at` - 开始时间
-    ///
-    /// # 返回
     /// 进入执行中并记下开始时间时返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 非等待状态不允许重复开始。
     pub fn start(&mut self, at: Instant) -> Result<()> {
         if self.status != SupplierHealthCheckStatus::Pending {
@@ -176,32 +150,14 @@ impl SupplierHealthCheckRun {
     }
 
     /// 形成成功技术健康证据。
-    ///
-    /// # 参数
-    /// * `at` - 完成时间
-    /// * `latency_ms` - 执行耗时毫秒数
-    ///
-    /// # 返回
     /// 形成成功证据时返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 非执行中状态不允许形成成功结果。
     pub fn succeed(&mut self, at: Instant, latency_ms: u64) -> Result<()> {
         self.finish(SupplierHealthCheckStatus::Succeeded, at, latency_ms, None, None)
     }
 
     /// 形成明确失败技术健康证据。
-    ///
-    /// # 参数
-    /// * `at` - 完成时间
-    /// * `latency_ms` - 执行耗时毫秒数
-    /// * `error_code` - 稳定错误代码
-    /// * `error_summary` - 错误摘要
-    ///
-    /// # 返回
     /// 形成失败证据时返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 非执行中状态或错误字段非法时返回错误。
     pub fn fail(
         &mut self,
@@ -214,17 +170,7 @@ impl SupplierHealthCheckRun {
     }
 
     /// 形成结果未知证据；调用方不得把它视为成功或自动重试依据。
-    ///
-    /// # 参数
-    /// * `at` - 完成时间
-    /// * `latency_ms` - 执行耗时毫秒数
-    /// * `error_code` - 稳定错误代码
-    /// * `error_summary` - 错误摘要
-    ///
-    /// # 返回
     /// 形成结果未知证据时返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 非执行中状态或错误字段非法时返回错误。
     pub fn mark_unknown(
         &mut self,
@@ -237,15 +183,7 @@ impl SupplierHealthCheckRun {
     }
 
     /// 判断成功运行是否验证了当前能力版本。
-    ///
-    /// # 参数
-    /// * `capability` - 当前连接能力实体
-    ///
-    /// # 返回
     /// 运行成功且冻结快照包含完全一致的能力代码和版本时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn verifies(&self, capability: &SupplierApiCapability) -> bool {
         self.status == SupplierHealthCheckStatus::Succeeded
             && self.capability_versions.iter().any(|snapshot| {
@@ -254,20 +192,11 @@ impl SupplierHealthCheckRun {
             })
     }
 
-    /// 将执行中的健康检查收敛到指定终态。
-    ///
-    /// # 参数
-    /// * `status` - 成功、失败或结果未知终态
-    /// * `at` - 完成时间
-    /// * `latency_ms` - 执行耗时毫秒数
-    /// * `error_code` - 可选稳定错误代码
-    /// * `error_summary` - 可选错误摘要
-    ///
-    /// # 返回
-    /// 状态和错误字段合法时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 当前记录非执行中、目标非终态或错误字段非法时返回错误。
+    // 将执行中的健康检查收敛到指定终态。
+    // 状态和错误字段合法时返回 `Ok(())`。
+    // 当前记录非执行中、目标非终态或错误字段非法时返回错误。
+    // `error_code`：可选稳定错误代码。
+    // `error_summary`：可选错误摘要。
     fn finish(
         &mut self,
         status: SupplierHealthCheckStatus,

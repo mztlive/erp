@@ -43,11 +43,8 @@ pub struct CopyReadRequest {
 }
 impl CopyReadRequest {
     /// 校验并去重有限的勾选记录。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 去重后的 ID。
-    /// # 错误
+    ///
     /// 空集合、空 ID 或超限时拒绝。
     pub fn prepare(mut self) -> Result<Vec<String>> {
         if self.ids.is_empty()
@@ -64,12 +61,11 @@ impl CopyReadRequest {
 
 impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     /// 按当前账号读取收件箱及未读数。
-    /// # 参数
-    /// 认证账号和筛选。
-    /// # 返回
     /// 服务端分页与完整统计。
-    /// # 错误
+    ///
     /// 非法筛选或无权限时拒绝。
+    ///
+    /// 认证账号和筛选。
     pub async fn copies(&self, actor: &AuditActor, mut query: CopyListQuery) -> Result<CopyPage> {
         if query.page.is_some_and(|p| p == 0 || p > 100_000)
             || query.query.as_ref().is_some_and(|q| q.len() > 128)
@@ -97,12 +93,11 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     }
 
     /// 返回精确抄送的提交资料及有界历史。
-    /// # 参数
-    /// 认证账号、抄送 ID、可选历史游标。
-    /// # 返回
     /// 只读详情，不标记已读。
-    /// # 错误
+    ///
     /// 越界、快照不匹配或资料缺失时拒绝。
+    ///
+    /// 认证账号、抄送 ID、可选历史游标。
     pub async fn copy_detail(&self, actor: &AuditActor, id: &str, after: Option<u32>) -> Result<CopyDetail> {
         let service = self.clone();
         let actor = actor.clone();
@@ -120,12 +115,11 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     }
 
     /// 在原快照中授权并读取抄送资料，保留完整补齐后的交付凭证。
-    /// # 参数
-    /// actor、id、after 为当前账号、精确抄送及历史游标，executor 为完整读取用例的活动快照事务。
-    /// # 返回
     /// 详情与原查询凭证；调用方补齐全部展示资料后必须调用 validate_copy_read。
-    /// # 错误
+    ///
     /// 非快照执行器、收件无权、冻结关系错配或读取失败时拒绝。
+    ///
+    /// actor、id、after 为当前账号、精确抄送及历史游标，executor 为完整读取用例的活动快照事务。
     pub async fn copy_read(
         &self,
         actor: &AuditActor,
@@ -175,12 +169,11 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     }
 
     /// 在抄送资料及全部展示补齐结束后验证原读取凭证。
-    /// # 参数
-    /// access 为 copy_read 返回的原凭证，executor 为同一事务与读取阶段。
-    /// # 返回
     /// 原服务、事务、阶段及有效期仍成立时成功，并结束当前读取阶段。
-    /// # 错误
+    ///
     /// 权限不匹配、跨服务、跨阶段、跨事务或到期时拒绝交付。
+    ///
+    /// access 为 copy_read 返回的原凭证，executor 为同一事务与读取阶段。
     pub async fn validate_copy_read(
         &self,
         access: &CompiledAccess,
@@ -193,12 +186,11 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     }
 
     /// 文件读取前后用同一收件关系和冻结允许清单授权。
-    /// # 参数
-    /// 当前账号、抄送 ID、文件 ID。
-    /// # 返回
     /// 内部冻结文件引用。
-    /// # 错误
+    ///
     /// 文件不属于本次提交或当前无权时拒绝。
+    ///
+    /// 当前账号、抄送 ID、文件 ID。
     pub async fn copy_material_reference(
         &self,
         actor: &AuditActor,
@@ -227,12 +219,11 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     }
 
     /// 已有实例读者查看抄送历史；不赋予额外业务读取权。
-    /// # 参数
-    /// 当前账号、审批实例、分页游标。
-    /// # 返回
     /// 接收人、抄送原因与阅读状态。
-    /// # 错误
+    ///
     /// 实例不可读或游标非法时拒绝。
+    ///
+    /// 当前账号、审批实例、分页游标。
     pub async fn copy_history(
         &self,
         actor: &AuditActor,
@@ -263,12 +254,11 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     }
 
     /// 原子标记本人勾选的抄送已读。
-    /// # 参数
-    /// 当前账号和明确记录集合。
-    /// # 返回
     /// 本次改变的条数。
-    /// # 错误
+    ///
     /// 任一记录越界时整批拒绝。
+    ///
+    /// 当前账号和明确记录集合。
     pub async fn read_copies(&self, actor: &AuditActor, request: CopyReadRequest) -> Result<u64> {
         let ids = request.prepare()?;
         let service = self.clone();
@@ -300,7 +290,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             .await
     }
 
-    /// 以详情查询取得当前收件记录及原交付凭证，后续步骤不得开启新授权阶段。
+    // 用抄送详情查询取得当前收件记录和原交付凭证；随后加载主体仍须沿原授权阶段，不能重新取证切换边界。
     async fn copy_subject(
         &self,
         actor: &AuditActor,
@@ -325,7 +315,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         Ok((receipt, snapshot, instance, access))
     }
 
-    /// 在同一授权阶段读取冻结资料、实例和收件记录，核对业务关联。
+    // 在收件详情的同一读取阶段加载冻结资料、审批实例与收件记录，核对三者指向同一业务提交。
     async fn copy_subject_facts(
         &self,
         id: &str,
@@ -335,7 +325,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         self.copy_subject_from_receipt(receipt, ex).await
     }
 
-    /// 从原快照中的收件记录装载并核对冻结主体关系。
+    // 从原读取快照的收件记录定位冻结审批主体，并核对实例与提交事实确属该收件记录。
     async fn copy_subject_from_receipt(
         &self,
         receipt: ApprovalCopyReceipt,

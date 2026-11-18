@@ -51,31 +51,15 @@ impl SellableSkuProjectionState {
     /// 刷新进度的固定主键。
     pub const ID: &'static str = "refresh";
 
-    /// 判断是否需要全量重建：首次运行或口径版本低于当前版本。
-    ///
-    /// # 参数
-    /// * `state` - 已保存的进度
-    ///
-    /// # 返回
-    /// 需要重建时为真；较新版本写入的进度不触发重建。
-    ///
-    /// # 错误
-    /// 无。
+    /// 判断是否需要全量重建：首次运行或口径版本低于当前版本。需要重建时为真；较新版本写入的进度不触发重建。
     pub fn needs_rebuild(state: Option<&Self>) -> bool {
         state.is_none_or(|state| state.version < SELLABLE_SKU_PROJECTION_VERSION)
     }
 
-    /// 全量重建开始时的进度：尚未就绪，记为当天已全量标记。
+    /// 全量重建开始时的进度：尚未就绪，记为当天已全量标记。返回当前口径版本的进度。
     ///
-    /// # 参数
-    /// * `now` - 当前时间（Unix 秒）
-    /// * `today` - 当前业务日
-    ///
-    /// # 返回
-    /// 返回当前口径版本的进度。
-    ///
-    /// # 错误
-    /// 无。
+    /// - `now`：当前时间（Unix 秒）。
+    /// - `today`：当前业务日。
     pub fn rebuilt(now: i64, today: BusinessDate) -> Self {
         Self {
             id: Self::ID.to_string(),
@@ -86,30 +70,14 @@ impl SellableSkuProjectionState {
         }
     }
 
-    /// 判断是否换日后尚未全量标记。
+    /// 判断是否换日后尚未全量标记。最近全量标记早于今天时为真。
     ///
-    /// # 参数
-    /// * `today` - 当前业务日
-    ///
-    /// # 返回
-    /// 最近全量标记早于今天时为真。
-    ///
-    /// # 错误
-    /// 无。
+    /// `today` 为当前业务日。
     pub fn needs_daily_refresh(&self, today: BusinessDate) -> bool {
         self.refreshed_on.is_none_or(|date| date < today)
     }
 
-    /// 判断列表能否按投影查询。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 当前口径版本已完成全量构建时为真。
-    ///
-    /// # 错误
-    /// 无。
+    /// 判断列表能否按投影查询。当前口径版本已完成全量构建时为真。
     pub fn serves_list(&self) -> bool {
         self.ready && self.version == SELLABLE_SKU_PROJECTION_VERSION
     }
@@ -141,16 +109,7 @@ pub struct SellableSkuProjectionStore<'a> {
 }
 
 impl<'a> SellableSkuProjectionStore<'a> {
-    /// 绑定数据库。
-    ///
-    /// # 参数
-    /// * `db` - 目标数据库
-    ///
-    /// # 返回
-    /// 返回未执行 I/O 的访问器。
-    ///
-    /// # 错误
-    /// 无。
+    /// 绑定数据库。返回未执行 I/O 的访问器。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
@@ -159,79 +118,51 @@ impl<'a> SellableSkuProjectionStore<'a> {
         self.db.collection(PROJECTIONS)
     }
 
-    /// 标记 SKU 待重算；尚无投影的 SKU 插入不可售占位。
+    /// 标记 SKU 待重算；尚无投影的 SKU 插入不可售占位。标记完成时无返回值。
     ///
-    /// # 参数
-    /// * `sku_ids` - 公司 SKU，允许重复
-    /// * `executor` - 数据访问执行器
+    /// 沿用调用方的执行器，不另开事务。
     ///
-    /// # 返回
-    /// 标记完成时无返回值。
-    ///
-    /// # 错误
-    /// MongoDB 读写失败时返回错误。
+    /// `sku_ids` 为公司 SKU，允许重复。
     pub async fn mark_skus(&self, sku_ids: &[String], executor: &mut dyn Executor) -> Result<()> {
         let pending = doc! { "row": Bson::Null, "computed_at": 0_i64 };
         dirty_marks::mark_ids(&self.documents(), sku_ids, |_| pending.clone(), executor).await
     }
 
-    /// 标记全部投影待重算，用于换日。
+    /// 标记全部投影待重算，用于换日。返回被标记的记录数。
     ///
-    /// # 参数
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回被标记的记录数。
-    ///
-    /// # 错误
-    /// MongoDB 写入失败时返回错误。
+    /// 沿用调用方的执行器，不另开事务。
     pub async fn mark_all(&self, executor: &mut dyn Executor) -> Result<u64> {
         dirty_marks::mark_matching(&self.documents(), doc! {}, executor).await
     }
 
     /// 读取一批待重算的 SKU。
     ///
-    /// # 参数
-    /// * `limit` - 本批上限
-    /// * `executor` - 数据访问执行器
+    /// 返回 SKU 与读取时的标记序号。MongoDB 查询失败时返回错误。
     ///
-    /// # 返回
-    /// 返回 SKU 与读取时的标记序号。
+    /// 沿用调用方的执行器，不另开事务。
     ///
-    /// # 错误
-    /// MongoDB 查询失败时返回错误。
+    /// `limit` 为本批上限。
     pub async fn dirty_batch(&self, limit: i64, executor: &mut dyn Executor) -> Result<Vec<DirtyMark>> {
         dirty_marks::dirty_batch(&self.documents(), limit, executor).await
     }
 
     /// 统计待重算的 SKU。
     ///
-    /// # 参数
-    /// * `executor` - 数据访问执行器
+    /// 返回待重算数量。MongoDB 查询失败时返回错误。
     ///
-    /// # 返回
-    /// 返回待重算数量。
-    ///
-    /// # 错误
-    /// MongoDB 查询失败时返回错误。
+    /// 沿用调用方的执行器，不另开事务。
     pub async fn dirty_count(&self, executor: &mut dyn Executor) -> Result<u64> {
         dirty_marks::dirty_count(&self.documents(), executor).await
     }
 
     /// 保存一个 SKU 的计算结果。
     ///
-    /// # 参数
-    /// * `sku_id` - 公司 SKU
-    /// * `dirty_token` - 开始计算前读取的标记序号
-    /// * `row` - 当天可售行；不可售为 `None`
-    /// * `computed_at` - 计算时间（Unix 秒）
-    /// * `executor` - 数据访问执行器
+    /// 已保存时为真；计算期间又被标记时为假。序列化或 MongoDB 写入失败时返回错误。
     ///
-    /// # 返回
-    /// 已保存时为真；计算期间又被标记时为假。
+    /// 沿用调用方的执行器，不另开事务。
     ///
-    /// # 错误
-    /// 序列化或 MongoDB 写入失败时返回错误。
+    /// - `row`：当天可售行；不可售为 `None`。
+    /// - `computed_at`：计算时间（Unix 秒）。
     pub async fn save(
         &self,
         sku_id: &str,
@@ -247,30 +178,17 @@ impl<'a> SellableSkuProjectionStore<'a> {
 
     /// 读取刷新进度。
     ///
-    /// # 参数
-    /// * `executor` - 数据访问执行器
+    /// 尚未初始化时返回 `None`。MongoDB 查询或反序列化失败时返回错误。
     ///
-    /// # 返回
-    /// 尚未初始化时返回 `None`。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
+    /// 沿用调用方的执行器，不另开事务。
     pub async fn state(&self, executor: &mut dyn Executor) -> Result<Option<SellableSkuProjectionState>> {
         let collection = self.db.collection::<SellableSkuProjectionState>(STATE);
         mongo_ops::find_one(&collection, doc! { "_id": SellableSkuProjectionState::ID }, executor).await
     }
 
-    /// 写入全量重建开始时的进度，覆盖旧版本的就绪标记。
+    /// 写入全量重建开始时的进度，覆盖旧版本的就绪标记。序列化或 MongoDB 写入失败时返回错误。
     ///
-    /// # 参数
-    /// * `state` - 重建进度
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 写入成功时无返回值。
-    ///
-    /// # 错误
-    /// 序列化或 MongoDB 写入失败时返回错误。
+    /// 沿用调用方的执行器，不另开事务。
     pub async fn begin_rebuild(
         &self,
         state: &SellableSkuProjectionState,
@@ -287,16 +205,7 @@ impl<'a> SellableSkuProjectionStore<'a> {
 
     /// 推进扫描进度并记录换日全量标记；只前进不后退。
     ///
-    /// # 参数
-    /// * `watermarks` - 新扫描进度
-    /// * `refreshed_on` - 已全量标记的业务日
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 写入成功时无返回值。
-    ///
-    /// # 错误
-    /// MongoDB 写入失败时返回错误。
+    /// 沿用调用方的执行器，不另开事务。
     pub async fn advance(
         &self,
         watermarks: ChangeWatermarks,
@@ -319,15 +228,7 @@ impl<'a> SellableSkuProjectionStore<'a> {
 
     /// 全量构建完成后标记就绪；口径版本已被更新时不标记。
     ///
-    /// # 参数
-    /// * `version` - 完成构建的口径版本
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 写入成功时无返回值。
-    ///
-    /// # 错误
-    /// MongoDB 写入失败时返回错误。
+    /// 沿用调用方的执行器，不另开事务。
     pub async fn mark_ready(&self, version: i32, executor: &mut dyn Executor) -> Result<()> {
         let collection = self.db.collection::<Document>(STATE);
         let filter = doc! { "_id": SellableSkuProjectionState::ID, "version": version };
@@ -338,15 +239,9 @@ impl<'a> SellableSkuProjectionStore<'a> {
 
     /// 返回时间窗内 SKU、SKU 修订、商品或商品修订有变化的 SKU，含已删除记录。
     ///
-    /// # 参数
-    /// * `window` - 变更时间窗
-    /// * `executor` - 数据访问执行器
+    /// 返回去重后的 SKU。MongoDB 查询失败时返回错误。
     ///
-    /// # 返回
-    /// 返回去重后的 SKU。
-    ///
-    /// # 错误
-    /// MongoDB 查询失败时返回错误。
+    /// 沿用调用方的执行器，不另开事务。
     pub async fn changed_sku_ids(
         &self,
         window: ChangeWindow,
@@ -374,14 +269,9 @@ impl<'a> SellableSkuProjectionStore<'a> {
 
     /// 返回全部未删除 SKU，供全量重建。
     ///
-    /// # 参数
-    /// * `executor` - 数据访问执行器
+    /// 返回去重后的 SKU。MongoDB 查询失败时返回错误。
     ///
-    /// # 返回
-    /// 返回去重后的 SKU。
-    ///
-    /// # 错误
-    /// MongoDB 查询失败时返回错误。
+    /// 沿用调用方的执行器，不另开事务。
     pub async fn all_sku_ids(&self, executor: &mut dyn Executor) -> Result<Vec<String>> {
         let ids = self.db.collection::<StableIdRow>(SKUS);
         let filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
@@ -390,16 +280,12 @@ impl<'a> SellableSkuProjectionStore<'a> {
 
     /// 按投影查询公司商品池分页。
     ///
-    /// # 参数
-    /// * `filter` - 业务筛选、排序与分页
-    /// * `restrict` - 只在这些 SKU 中查询（配送地区命中与勾选的交集）；`None` 表示不限
-    /// * `executor` - 数据访问执行器
+    /// 返回当前页可售行与总数。MongoDB 查询或反序列化失败时返回错误。
     ///
-    /// # 返回
-    /// 返回当前页可售行与总数。
+    /// 沿用调用方的执行器，不另开事务。
     ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
+    /// - `filter`：业务筛选、排序与分页。
+    /// - `restrict`：只在这些 SKU 中查询（配送地区命中与勾选的交集）；`None` 表示不限。
     pub async fn search(
         &self,
         filter: &SellableSkuFilter,
@@ -421,7 +307,7 @@ impl<'a> SellableSkuProjectionStore<'a> {
     }
 }
 
-/// 读取一列并去重。
+// 读取一列并去重。
 async fn find_values<T: serde::de::DeserializeOwned + Send + Sync>(
     collection: &Collection<T>,
     filter: Document,
@@ -437,7 +323,7 @@ fn window_filter(window: ChangeWindow) -> Document {
     doc! { "updated_at": { "$gte": window.from, "$lt": window.to } }
 }
 
-/// 价格筛选口径对应的行字段。
+// 价格筛选口径对应的行字段。
 fn price_field(kind: SellablePriceKind) -> &'static str {
     match kind {
         SellablePriceKind::Dropship => "row.sales_visible_price_gross",
@@ -446,7 +332,7 @@ fn price_field(kind: SellablePriceKind) -> &'static str {
     }
 }
 
-/// 投影筛选条件：只取可售行，业务条件与实时聚合一致。
+// 投影筛选条件：只取可售行，业务条件与实时聚合一致。
 fn projection_filter(filter: &SellableSkuFilter, restrict: Option<&[String]>) -> Document {
     let mut query = doc! { "row": { "$type": "object" } };
     if let Some(ids) = restrict {
@@ -485,7 +371,7 @@ fn insert_price_range(query: &mut Document, filter: &SellableSkuFilter) {
     query.insert(price_field(filter.price_kind), range);
 }
 
-/// 金额转为与库内价格一致的 Decimal128。
+// 金额转为与库内价格一致的 Decimal128。
 fn decimal(amount: Amount) -> Bson {
     Bson::Decimal128(amount.to_string().parse().expect("合法 Amount 必须可转换为 MongoDB Decimal128"))
 }
@@ -504,7 +390,7 @@ fn insert_keyword(query: &mut Document, keyword: Option<&str>) {
     query.insert("$or", clauses);
 }
 
-/// 排序：所选字段后按 SKU 编号与 SKU 稳定排序。
+// 排序：所选字段后按 SKU 编号与 SKU 稳定排序。
 fn projection_sort(sort: SellableSort) -> Document {
     let direction = if sort.descending { -1 } else { 1 };
     let mut keys = doc! { (format!("row.{}", sort.field.row_field())): direction };
@@ -610,7 +496,7 @@ mod tests {
         );
     }
 
-    /// 投影行必须保留 Decimal128 价格，否则价格区间与排序会按字符串比较。
+    // 投影行必须保留 Decimal128 价格，否则价格区间与排序会按字符串比较。
     #[test]
     fn stored_row_keeps_native_decimal_prices() {
         let row: crate::repository::catalog::SellableSkuRow = serde_json::from_value(serde_json::json!({

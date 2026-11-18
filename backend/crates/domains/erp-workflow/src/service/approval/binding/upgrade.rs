@@ -41,25 +41,16 @@ use crate::repository::{BpmExt, DocumentRegistryExt};
 /// 目标固定为当前唯一 `PUBLISHED` 定义，禁止客户端提交定义 ID。
 /// 本端口不开事务；运行层必须传入同一外层事务执行器。
 ///
-/// # 参数
-/// * `authorization` - 应用共享授权服务。
-/// * `identity_service` - 定义绑定使用的身份目录服务。
-/// * `db` - MongoDB 数据库
-/// * `rbac` - 共享 RBAC 服务
-/// * `upgrade` - 升级主体端口
-/// * `audit` - 审计写入端口
-/// * `command` - 精确对象、强版本、绑定 CAS、原因和预构造幂等身份
-/// * `actor` - 已认证操作人；仍需在事务内重验账号与授权
-/// * `executor` - 调用方事务执行器
-///
-/// # 返回
 /// Fresh 返回从新动作投影的 `Applied`；同载荷收据返回从原动作
 /// 严格重建的 `Replay`。
 ///
-/// # 错误
 /// 身份、授权、收据、动作、强实体、注册行、定义图或人员重验失败时
 /// 返回错误。任何收据冲突之外的 duplicate 不得进入恢复。
-// 升级入口参数由固定 Port 和命令组成：db/各 Port/命令/操作人/执行器由组合根固定装配，顺序由调用点锚定；告警逐项压制。
+/// 升级入口参数由固定 Port 和命令组成：db/各 Port/命令/操作人/执行器由组合根固定装配，顺序由调用点锚定；告警逐项压制。
+///
+/// `identity_service`：定义绑定使用的身份目录服务；`rbac`：共享 RBAC 服务。
+/// `command`：精确对象、强版本、绑定 CAS、原因和预构造幂等身份；`actor`：已认证操作人；仍需在事务内重验账号与授权。
+/// `executor`：调用方事务执行器。
 #[allow(clippy::too_many_arguments)]
 pub async fn upgrade_unsubmitted_document_definition(
     authorization: &AuthorizationService,
@@ -110,25 +101,16 @@ pub async fn upgrade_unsubmitted_document_definition(
 
 /// 在 unknown/duplicate 恢复的新事务中只执行授权回读。
 ///
-/// # 参数
-/// * `authorization` - 应用共享授权服务。
-/// * `db` - 数据库
-/// * `upgrade` - 升级主体端口
-/// * `command` - 未提交定义升级命令
-/// * `actor` - 已认证操作人
-/// * `executor` - 本次恢复使用的新事务执行器
+/// 本端口绝不调用 Fresh 门禁与任何写入；运行层必须为每次恢复尝试传入可用的
+/// 新事务执行器。
 ///
-/// # 返回
 /// 同载荷 V3 收据及其不可变动作完整时返回 `Some(Replay)`；收据尚不存在
 /// 返回 `None`。
 ///
-/// # 错误
 /// 强业务身份、当前账号、完整管理授权、收据载荷或动作证明
 /// 任一失败时返回错误。
 ///
-/// # 关键业务约束
-/// 本端口绝不调用 Fresh 门禁与任何写入；运行层必须为每次恢复尝试传入可用的
-/// 新事务执行器。
+/// `executor`：本次恢复使用的新事务执行器。
 pub async fn replay_unsubmitted_document_definition_upgrade(
     authorization: &AuthorizationService,
     db: &Database,
@@ -153,7 +135,7 @@ pub async fn replay_unsubmitted_document_definition_upgrade(
     }
 }
 
-/// 得到命令签署与不可变动作共用的规范化原因。
+// 在处理升级前规范化变更原因，命令签署及不可变动作必须使用同一个值。
 fn normalized_upgrade_reason(command: &UpgradeUnsubmittedDefinitionCommand) -> Result<&str> {
     let reason = command.reason.trim();
     if reason.is_empty() {
@@ -165,7 +147,7 @@ fn normalized_upgrade_reason(command: &UpgradeUnsubmittedDefinitionCommand) -> R
     Ok(reason)
 }
 
-/// 先加载精确强事实，再重验账号与当前三重授权。
+// 准备绑定升级时先读精确单据、当前绑定及强业务事实，再核对账号和当前三重授权。
 async fn load_authorized_upgrade_context(
     authorization: &AuthorizationService,
     upgrade: &dyn crate::ports::UpgradeSubjectPort,
@@ -182,7 +164,7 @@ async fn load_authorized_upgrade_context(
     Ok(AuthorizedUpgradeContext { facts, policy, actor_role: authorization.actor_role })
 }
 
-/// 证明运行层传入的身份精确签署了本命令。
+// 消费运行层准备的升级命令身份前，重算并校验本命令的签署内容完全匹配。
 fn ensure_prepared_upgrade_identity(
     command: &UpgradeUnsubmittedDefinitionCommand,
     actor: &AuditActor,
@@ -207,7 +189,7 @@ fn ensure_prepared_upgrade_identity(
     Ok(())
 }
 
-/// 只按预构造 V3 身份查找绑定升级收据。
+// 重试升级时按已准备的 V3 命令身份精确定位收据，不混用其他版本的候选。
 async fn find_upgrade_receipt(
     db: &Database,
     identity: &PreparedCommandIdentity,
@@ -224,7 +206,7 @@ async fn find_upgrade_receipt(
         .map_err(Into::into)
 }
 
-/// 同载荷收据只能回读并严格证明其不可变动作。
+// 升级命令同载荷命中收据时，只从对应不可变动作重建结果，并核对动作与升级事实，不按现绑定猜测旧响应。
 async fn replay_upgrade_result(
     db: &Database,
     command: &UpgradeUnsubmittedDefinitionCommand,
@@ -272,26 +254,17 @@ struct ApplyFreshUpgradeInput<'a> {
     actor_role: &'a str,
 }
 
-/// Fresh 分支完成全部读取与预构造后，以收据作为第一物理写。
-///
-/// # 用途
-/// 在唯一事务内校验并写入绑定升级收据、单据、动作与审计。
-///
-/// # 参数
-/// * `identity` - 同一应用注入的共享身份与权限服务。
-/// * `db` - 数据库
-/// * `rbac` - 共享 RBAC 服务
-/// * `input` - 命令、主体事实与操作人
-/// * `executor` - 调用方事务执行器
-///
-/// # 返回
-/// 升级成功后的绑定结果视图。
-///
-/// # 错误
-/// 主体不匹配、定义未变更、CAS 冲突或写入失败时返回错误。
-///
-/// # 关键业务约束
-/// 收据必须作为第一物理写；后续失败随事务整体回滚。
+// Fresh 分支完成全部读取与预构造后，以收据作为第一物理写。
+// 收据必须作为第一物理写；后续失败随事务整体回滚。
+//
+// 在唯一事务内校验并写入绑定升级收据、单据、动作与审计。
+//
+// 升级成功后的绑定结果视图。
+//
+// 主体不匹配、定义未变更、CAS 冲突或写入失败时返回错误。
+//
+// `identity`：同一应用注入的共享身份与权限服务；`rbac`：共享 RBAC 服务。
+// `input`：命令、主体事实与操作人；`executor`：调用方事务执行器。
 async fn apply_fresh_upgrade(
     authorization: &AuthorizationService,
     identity: &SharedRbacService,
@@ -348,7 +321,7 @@ async fn apply_fresh_upgrade(
     Ok(view)
 }
 
-/// 在首笔写入前构造完整收据、审计和可交付结果，任一失败都不执行写入。
+// 升级实际写入前先形成完整收据、安全审计与可交付结果，任何构造失败都不能留下部分写入。
 fn prepare_upgrade_result(
     input: &ApplyFreshUpgradeInput<'_>,
     previous: &ApprovalDefinitionBinding,
@@ -369,7 +342,7 @@ fn prepare_upgrade_result(
     Ok((receipt, audit, view))
 }
 
-/// 由已校验的旧绑定、发布定义和强业务事实构造唯一不可变动作。
+// 根据已验旧绑定、目标发布定义及强单据事实形成不可变动作，供写入及原结果回放使用。
 fn upgrade_binding_action(
     input: &ApplyFreshUpgradeInput<'_>,
     previous: &ApprovalDefinitionBinding,
@@ -404,17 +377,12 @@ fn upgrade_binding_action(
     )?)
 }
 
-/// 注册投影必须与同一事务已读取的强业务事实精确一致。
-///
-/// # 参数
-/// * `document` - 已注册的业务单据
-/// * `facts` - 同一事务读到的强业务事实
-///
-/// # 返回
-/// 主键、类型一致，且两端都有单号时单号也一致，则无返回值。
-///
-/// # 错误
-/// 主键、类型不一致，或两端单号都非空且不相等时返回冲突。
+// 注册投影必须与同一事务已读取的强业务事实精确一致。
+// 主键、类型一致，且两端都有单号时单号也一致，则无返回值。
+//
+// 主键、类型不一致，或两端单号都非空且不相等时返回冲突。
+//
+// `document`：已注册的业务单据；`facts`：同一事务读到的强业务事实。
 pub(super) fn ensure_registered_upgrade_subject(
     document: &BusinessDocument,
     facts: &ApprovalUpgradeSubjectFacts,
@@ -431,7 +399,7 @@ pub(super) fn ensure_registered_upgrade_subject(
     Ok(())
 }
 
-/// 升级目标必须是不同且更高的发布定义。
+// 已有绑定升级时要求目标是不同 ID 且版本更高的发布定义，不能复用现版本或降级。
 fn ensure_upgrade_changes_definition(
     previous: &ApprovalDefinitionBinding,
     published: &DefinitionGraph,
@@ -444,14 +412,14 @@ fn ensure_upgrade_changes_definition(
     Ok(())
 }
 
-/// 将不可变动作创建时间转为绑定与收据共用时间。
+// 将不可变动作创建时间解释为绑定与收据使用的同一时点，避免重放重新取当前时间。
 fn action_timestamp(action: &WorkflowAction) -> Result<Instant> {
     let secs = i64::try_from(action.base.created_at)
         .map_err(|_| Error::Internal("工作流动作时间无法转换为绑定时间".to_string()))?;
     Ok(Instant::from_unix_secs(secs))
 }
 
-/// 写入前证明内存中的注册绑定与不可变动作完全一致。
+// 持久化前对照不可变升级动作与内存注册绑定，确保新定义身份、版本和绑定事实正好是本次动作。
 fn ensure_action_matches_upgraded_document(
     action: &WorkflowAction,
     document: &BusinessDocument,
@@ -472,7 +440,7 @@ fn ensure_action_matches_upgraded_document(
     Ok(())
 }
 
-/// 在首笔写入前构造升级审计。
+// 升级实际写入前准备并校验安全审计，审计构造失败不开始持久化。
 fn upgraded_binding_audit(
     actor: &AuditActor,
     facts: &ApprovalUpgradeSubjectFacts,
@@ -502,21 +470,12 @@ fn upgraded_binding_audit(
     )
 }
 
-/// 从收据指向的动作严格证明并重建绑定升级结果。
-///
-/// # 参数
-/// * `command` - 未提交定义升级命令
-/// * `actor` - 已认证操作人
-/// * `reason` - 已规范化的升级原因
-/// * `receipt` - 命令收据
-/// * `action` - 收据指向的工作流动作
-/// * `outcome` - 本次结果类别
-///
-/// # 返回
-/// 收据、动作与上下文全部吻合时返回升级结果视图。
-///
-/// # 错误
-/// 载荷、版本、动作身份或时间无法证明时返回幂等载荷冲突。
+// 从收据指向的动作严格证明并重建绑定升级结果。
+// 收据、动作与上下文全部吻合时返回升级结果视图。
+//
+// 载荷、版本、动作身份或时间无法证明时返回幂等载荷冲突。
+//
+// `reason`：已规范化的升级原因；`action`：收据指向的工作流动作。
 pub(super) fn upgrade_result_from_action(
     command: &UpgradeUnsubmittedDefinitionCommand,
     actor: &AuditActor,
@@ -575,7 +534,7 @@ pub(super) fn upgrade_result_from_action(
     })
 }
 
-/// 只有同一首版不可变动作和收据才能重建原升级结果。
+// 回放绑定升级时必须同时证明同一首版不可变动作和对应收据，才可重建原结果。
 fn immutable_upgrade_metadata(receipt: &ApprovalCommandReceipt, action: &WorkflowAction) -> bool {
     action.base.version == 1
         && action.base.deleted_at == 0
@@ -586,19 +545,14 @@ fn immutable_upgrade_metadata(receipt: &ApprovalCommandReceipt, action: &Workflo
         && receipt.base.created_at == action.base.created_at
 }
 
-/// 将 ERP 单据绑定升级错误映射为稳定的 Service 错误语义。
-///
-/// # 参数
-/// * `error` - 实体层返回的升级失败原因
-///
-/// # 返回
-/// 返回保持验证错误、冲突错误与实体不变量分类的 Service 错误。
-///
-/// # 错误
-/// 无；本方法只执行错误分类转换。
-///
-/// # 关键业务约束
-/// 已提交、已启动与双 CAS 失败必须保持冲突语义，缺失绑定和空原因保持校验语义。
+// 将 ERP 单据绑定升级错误映射为稳定的 Service 错误语义。
+// 已提交、已启动与双 CAS 失败必须保持冲突语义，缺失绑定和空原因保持校验语义。
+//
+// 返回保持验证错误、冲突错误与实体不变量分类的 Service 错误。
+//
+// 本方法只执行错误分类转换。
+//
+// `error`：实体层返回的升级失败原因。
 fn map_binding_upgrade_error(error: ApprovalBindingUpgradeError) -> Error {
     match error {
         ApprovalBindingUpgradeError::MissingBinding => Error::ValidationError("尚未绑定审批定义".to_string()),
@@ -614,16 +568,8 @@ fn map_binding_upgrade_error(error: ApprovalBindingUpgradeError) -> Error {
     }
 }
 
-/// 映射 BPM 模型错误。
-///
-/// # 参数
-/// * `error` - BPM 模型错误
-///
-/// # 返回
-/// 字段或迁移非法时保留原文；其余变体也转为校验错误。
-///
-/// # 错误
-/// 不返回错误。
+// 映射 BPM 模型错误。
+// 字段或迁移非法时保留原文；其余变体也转为校验错误。
 pub(super) fn map_model_error(error: ModelError) -> Error {
     match error {
         ModelError::InvalidField(message) | ModelError::InvalidTransition(message) => {

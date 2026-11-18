@@ -60,19 +60,15 @@ pub(super) struct HistorySnapshot {
     pub org_names: BTreeMap<String, String>,
 }
 
-/// 按明确客户集合批量读取现任归属，并附带订单金额与展示名。
-///
-/// # 参数
-/// * `db` - 应用数据库
-/// * `customer_ids` - 要读取的客户身份；空集合不访问客户库
-/// * `orders` - 用于附带版本金额的期间订单
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回现任客户事实、期间订单、版本含税金额和组织与账号展示名。
-///
-/// # 错误
-/// 客户数超过 `QUALITY_ORDER_LIMIT` 时返回 `ValidationError`；客户、主体、归属或名称读取失败时返回对应错误。
+// 依据明确客户集合批量读取现任归属，并附带订单金额与展示名。
+//
+// 调用参数：
+// * `customer_ids` - 要读取的客户身份；空集合不访问客户库
+// * `orders` - 用于附带版本金额的期间订单
+//
+// 返回现任客户事实、期间订单、版本含税金额和组织与账号展示名。
+//
+// 客户数超过 `QUALITY_ORDER_LIMIT` 时返回 `ValidationError`；客户、主体、归属或名称读取失败时返回对应错误。
 pub(super) async fn load_current_snapshot(
     db: &Database,
     customer_ids: Vec<String>,
@@ -87,12 +83,10 @@ pub(super) async fn load_current_snapshot(
 
 /// 历史快照装载器。
 impl HistorySnapshot {
-    /// 装载授权销售单与客户展示名；客户展示只用于标签，不构成授权。
+    /// 为客户经营质量来源快照取数时，读取授权销售单与客户展示名；客户展示只用于标签，不构成授权。
     ///
     /// # 参数
-    /// * `db` - 应用数据库
     /// * `order_filter` - 期间、客户与销售范围条件
-    /// * `executor` - 调用方执行器
     ///
     /// # 返回
     /// 返回订单、版本含税金额，以及客户、账号和组织展示名。
@@ -144,7 +138,7 @@ pub(super) struct CustomerFact {
     pub owner_org_unit_id: Option<String>,
 }
 
-/// 按明确客户集合批量读取现任归属与法定名称；空集合不访问数据库。
+// 依据明确客户集合批量读取现任归属与法定名称；空集合不访问数据库。
 async fn load_customer_facts(
     db: &Database,
     mut ids: Vec<String>,
@@ -198,7 +192,7 @@ async fn load_customer_facts(
         .collect())
 }
 
-/// 按客户 ID 批量读取当前法定名称；缺失主体不补行。
+// 依据客户 ID 批量读取当前法定名称；缺失主体不补行。
 async fn load_customer_names(
     db: &Database,
     customer_ids: &[String],
@@ -227,7 +221,7 @@ async fn load_customer_names(
         .collect())
 }
 
-/// 当前口径展示所需的组织与人员名称；缺失不补行。
+// 补齐客户经营质量来源快照的展示名称时，当前口径展示所需的组织与人员名称；缺失不补行。
 async fn names_for_current(
     db: &Database,
     customers: &[CustomerFact],
@@ -262,7 +256,7 @@ async fn names_for_current(
     Ok((org_names, account_names))
 }
 
-/// 批量读取账号展示名。
+// 补齐客户经营质量来源快照的展示名称时，批量读取账号展示名。
 async fn names_by_ids(
     db: &Database,
     ids: &[String],
@@ -274,7 +268,7 @@ async fn names_by_ids(
     Ok(db.accounts().names_by_ids(ids, executor).await?.into_iter().collect())
 }
 
-/// 按组织 ID 批量读取启用组织名称；停用或缺失不补行。
+// 依据组织 ID 批量读取启用组织名称；停用或缺失不补行。
 async fn org_names_by_ids(
     db: &Database,
     ids: &[String],
@@ -292,7 +286,7 @@ async fn org_names_by_ids(
         .collect())
 }
 
-/// 批量读取账号在当前组织快照中的主属组织；账号缺主属组织时该客户归未知组织。
+// 处理客户经营质量来源快照时，批量读取账号在当前组织快照中的主属组织；账号缺主属组织时该客户归未知组织。
 async fn owner_orgs(
     db: &Database,
     users: Vec<String>,
@@ -310,7 +304,7 @@ async fn owner_orgs(
     Ok(result)
 }
 
-/// 有界装载期间正式销售单；超过 `QUALITY_ORDER_LIMIT` 时整体拒绝，不截断也不交给调用方。
+// 读取客户经营质量来源快照时，有界装载期间正式销售单；超过 `QUALITY_ORDER_LIMIT` 时整体拒绝，不截断也不交给调用方。
 pub(super) async fn load_orders(
     db: &Database,
     filter: QualityOrderFilter,
@@ -341,7 +335,7 @@ fn quality_orders(rows: Vec<SalesOrder>) -> Result<Vec<QualityOrder>> {
         .collect())
 }
 
-/// 以批次读取当前正式版本含税金额；缺失版本在汇总时单列，不写作零。
+// 读取客户经营质量来源快照时，以批次读取当前正式版本含税金额；缺失版本在汇总时单列，不写作零。
 async fn load_revision_gross(
     db: &Database,
     orders: &[QualityOrder],
@@ -358,19 +352,15 @@ async fn load_revision_gross(
     Ok(gross)
 }
 
-/// 两口径共用的订单过滤条件：生效正式非删除单 + 销售范围 + 客户交集。
-/// 条件编译在销售域仓储内完成；读模型只传递明确的授权与业务筛选。
-///
-/// # 参数
-/// * `bounds` - 已校验的期间边界
-/// * `customer_ids` - 客户交集；原样写入，由销售域解释 `None` 与空集
-/// * `scope` - 销售读取范围
-///
-/// # 返回
-/// 返回交给销售域仓储的过滤条件，不在此处执行查询。
-///
-/// # 错误
-/// 不返回错误。
+// 应用客户经营质量来源快照筛选时，两口径共用的订单过滤条件：生效正式非删除单 + 销售范围 + 客户交集。
+// 条件编译在销售域仓储内完成；读模型只传递明确的授权与业务筛选。
+//
+// 调用参数：
+// * `bounds` - 已校验的期间边界
+// * `customer_ids` - 客户交集；原样写入，由销售域解释 `None` 与空集
+// * `scope` - 销售读取范围
+//
+// 返回交给销售域仓储的过滤条件，不在此处执行查询。
 pub(super) fn quality_order_filter(
     bounds: &super::query::PeriodBounds,
     customer_ids: Option<Vec<String>>,
@@ -378,17 +368,13 @@ pub(super) fn quality_order_filter(
     QualityOrderFilter { from: bounds.from, until: bounds.until, customer_ids }
 }
 
-/// 查询版本包含完整订单集合及责任版本，不返回订单身份集合。
-///
-/// # 参数
-/// * `scope_version` - 授权范围版本
-/// * `orders` - 参与指纹的订单；只用 `id` 与 `version`
-///
-/// # 返回
-/// 返回 `scope_version` 与订单身份、版本哈希组成的指纹。
-///
-/// # 错误
-/// 不返回错误。
+// 处理客户经营质量来源快照时，查询版本包含完整订单集合及责任版本，不返回订单身份集合。
+//
+// 调用参数：
+// * `scope_version` - 授权范围版本
+// * `orders` - 参与指纹的订单；只用 `id` 与 `version`
+//
+// 返回 `scope_version` 与订单身份、版本哈希组成的指纹。
 pub(super) fn version(scope_version: &str, orders: &[QualityOrder]) -> String {
     use std::hash::{Hash, Hasher};
     let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
@@ -397,22 +383,18 @@ pub(super) fn version(scope_version: &str, orders: &[QualityOrder]) -> String {
     format!("{scope_version}:{:x}", fingerprint.finish())
 }
 
-/// 组织快照的当日自然日；现任归属展示使用当日有效窗口。
+// 处理客户经营质量来源快照时，组织快照的当日自然日；现任归属展示使用当日有效窗口。
 fn today_shanghai() -> erp_core::common::time::BusinessDate {
     let now = Utc::now() + chrono::Duration::hours(8);
     now.format("%Y-%m-%d").to_string().parse().expect("合法业务日期")
 }
 
-/// 生效秒级时点转上海日期展示；缺失时点不伪造日期。
-///
-/// # 参数
-/// * `value` - UTC 秒；`None` 表示没有生效时点
-///
-/// # 返回
-/// `None` 表示缺失时点；`Some` 为上海自然日 `YYYY-MM-DD`。
-///
-/// # 错误
-/// 不返回错误。
+// 生成客户经营质量来源快照视图时，生效秒级时点转上海日期展示；缺失时点不伪造日期。
+//
+// 调用参数：
+// * `value` - UTC 秒；`None` 表示没有生效时点
+//
+// `None` 表示缺失时点；`Some` 为上海自然日 `YYYY-MM-DD`。
 pub(super) fn effective_label(value: Option<i64>) -> Option<String> {
     value.map(|secs| {
         (Utc.timestamp_opt(secs, 0).single().unwrap_or_default() + chrono::Duration::hours(8))

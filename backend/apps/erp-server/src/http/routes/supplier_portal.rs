@@ -13,13 +13,7 @@ use crate::http::state::HttpState;
 use crate::http::upload;
 
 /// 装配公开登录及逐请求重验身份的门户业务接口。
-///
-/// # 参数
-/// * `state` - 认证和业务组合根。
-/// # 返回
 /// 返回挂载于 `/supplier-portal` 的独立门户路由。
-/// # 错误
-/// 路由构建不执行外部读取；请求错误由认证及处理器返回。
 pub fn routes(state: HttpState) -> Router<HttpState> {
     let login = Router::new()
         .route("/login", post(auth::login))
@@ -43,7 +37,7 @@ pub fn routes(state: HttpState) -> Router<HttpState> {
     Router::new().merge(login).merge(authenticated).with_state(state)
 }
 
-/// 只提供本供应商对象和定向开放目录的外部读取接口。
+// 为外部供应商挂载只读入口，范围仅限本供应商数据及定向开放的目录。
 fn read_routes() -> Router<HttpState> {
     Router::new()
         .route("/session", get(read::session))
@@ -58,7 +52,7 @@ fn read_routes() -> Router<HttpState> {
         .route("/cooperation", get(read::cooperation))
 }
 
-/// 写请求由 Process 重验角色、来源、版本和操作号。
+// 挂载供应商门户写请求；认证仅确定当前身份，Process 仍复验角色、来源、版本和操作号。
 fn write_routes() -> Router<HttpState> {
     Router::new()
         .route("/offerings/{id}/availability", post(write::availability))
@@ -71,7 +65,7 @@ fn write_routes() -> Router<HttpState> {
         .route("/batch", post(write::batch).layer(DefaultBodyLimit::max(upload::MAX_UPLOAD_FILE_BYTES)))
 }
 
-/// 门户上传在认证后执行准入，文件解析与整请求上限分别约束。
+// 先认证门户上传请求再执行准入，分别约束整个正文和文件解析大小。
 fn asset_routes() -> Router<HttpState> {
     let upload = upload::multipart_route(post(assets::upload), upload::MAX_MULTIPART_REQUEST_BYTES);
     Router::new()
@@ -80,13 +74,7 @@ fn asset_routes() -> Router<HttpState> {
 }
 
 /// 装配后台专项接口；统一后台认证由父级 `/admin` 路由执行。
-///
-/// # 参数
-/// 无。
-/// # 返回
-/// 返回逐接口绑定专项权限的 `/supplier-portal` 子路由。
-/// # 错误
-/// 构建不执行授权读取；请求错误由权限层及处理器返回。
+/// 按接口登记专项权限的 `/supplier-portal` 子路由。
 pub fn admin_routes() -> Router<HttpState> {
     Router::new().nest(
         "/supplier-portal",
@@ -94,7 +82,7 @@ pub fn admin_routes() -> Router<HttpState> {
     )
 }
 
-/// 账号管理入口不授予内部角色或组织身份。
+// 为后台挂载门户账号维护接口；门户身份不会因此获得内部角色或组织身份。
 fn account_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -120,7 +108,7 @@ fn account_routes() -> Router<HttpState> {
         )
 }
 
-/// 定向目录开放使用独立目录权限。
+// 挂载后台定向开放门户目录的接口，继续使用独立目录权限。
 fn catalog_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -139,7 +127,7 @@ fn catalog_routes() -> Router<HttpState> {
         )
 }
 
-/// 申请列表、原稿读取和决定各自绑定对应专项权限。
+// 挂载管理端门户申请查询、原稿读取与决定，目录按读写动作分别登记专项权限。
 fn application_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -165,7 +153,7 @@ fn application_routes() -> Router<HttpState> {
         )
 }
 
-/// 审核辅助字典与重复候选仍受专项读取权限及领域范围约束。
+// 为门户申请审核挂载字典及重复候选辅助读取，保留对应专项资格和领域范围约束。
 fn review_routes() -> Router<HttpState> {
     Router::new()
         .route(

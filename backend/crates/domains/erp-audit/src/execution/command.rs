@@ -26,16 +26,7 @@ pub trait AuditedCommand: Send + Sync {
     type Output: Send;
     type Error: From<Error> + Send;
 
-    /// 在已有执行器中执行业务规则、写入和结果恢复。
-    ///
-    /// # 参数
-    /// * `executor` - 调用方传入的同一事务执行器。
-    ///
-    /// # 返回
-    /// 首次执行返回安全事件投影；回放返回原业务结果。
-    ///
-    /// # 错误
-    /// 沿用领域校验、授权、版本及持久化错误，不重试失败的业务写入。
+    /// 在调用方的同一事务执行器内完成领域校验、写入或回执恢复。首次成功携带安全事件投影，回放只返回原结果；授权、校验、版本和仓储错误沿用原分类，不重试写入。
     async fn execute(
         &self,
         executor: &mut dyn Executor,
@@ -46,17 +37,7 @@ pub trait AuditedCommand: Send + Sync {
 #[async_trait]
 pub trait AuditEventSink: Send + Sync {
     type Error: Send;
-    /// 持久化已经完成静态和结果校验的审计记录。
-    ///
-    /// # 参数
-    /// * `log` - 已验证的结构化业务审计记录。
-    /// * `executor` - 正式业务写入使用的同一执行器。
-    ///
-    /// # 返回
-    /// 成功写入时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 审计写入失败时返回原错误，调用方事务不得提交。
+    /// 用业务写入的原执行器保存已通过静态与结果校验的事件，确保正式结果和审计同事务提交。写入失败返回原错误，调用方不得提交事务。
     async fn persist(
         &self,
         log: &AuditLog,
@@ -70,16 +51,7 @@ pub struct MongoAuditEventSink<'a> {
 }
 
 impl<'a> MongoAuditEventSink<'a> {
-    /// 绑定当前命令使用的数据库。
-    ///
-    /// # 参数
-    /// * `db` - 当前业务用例数据库。
-    ///
-    /// # 返回
-    /// 返回复用调用方执行器的审计写入适配器。
-    ///
-    /// # 错误
-    /// 无。
+    /// 绑定当前业务数据库，把成功事件端口接到审计仓储；写入时复用调用方传入的执行器。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
@@ -93,16 +65,7 @@ impl AuditEventSink for MongoAuditEventSink<'_> {
     }
 }
 
-/// 在原执行器内执行普通已登记写入，业务成功后统一保存安全事件。
-/// # 参数
-/// * `audit` - 事务开始前已准备的登记元数据。
-/// * `sink` - 原事务中的统一审计写入端口。
-/// * `executor` - 原正式业务执行器。
-/// * `write` - 实际业务闭包，不包含外部I/O。
-/// # 返回
-/// 返回业务结果，审计成功后才能提交。
-/// # 错误
-/// 元数据先校验；业务或审计首错停止并保持原错误，不重执行。
+/// 先验证已准备的审计记录及成功标记，再在原执行器调用不含外部 I/O 的业务闭包，最后以同一执行器保存审计。只有两次写入均成功才返回业务结果；遇到首个错误即停止，不重执行。
 pub async fn execute_prepared<R, E, S, F>(
     audit: &AuditLog,
     sink: &S,
@@ -126,52 +89,22 @@ where
     Ok(result)
 }
 
-/// 普通写入的唯一审计持久化入口，不建立事务或追加重试。
-/// # 参数
-/// * `db` - 当前业务事务数据库。
-/// * `log` - 已登记静态元数据及明确白名单投影。
-/// * `executor` - 原正式业务执行器。
-/// # 返回
-/// 返回审计写入结果。
-/// # 错误
-/// 未登记动作、身份投影无效或持久化失败时返回原错误并阻止提交。
+/// 验证登记动作和身份后，用正式业务的原执行器写入普通审计，不另开事务或重试。登记、身份或仓储错误原样返回，调用方不得提交。
 pub async fn persist_log(db: &Database, log: &AuditLog, executor: &mut dyn Executor) -> Result<()> {
     let prepared = prepare_business_log(log)?;
     db.audit_logs().create(&prepared, executor).await?;
     Ok(())
 }
 
-/// 有序批量保存普通事件，任何静态元数据无效时整个审计批次停止。
-/// # 参数
-/// * `db` - 当前业务事务数据库。
-/// * `logs` - 调用方原顺序的事件集合。
-/// * `executor` - 先前业务批次使用的原执行器。
-/// # 返回
-/// 返回原有有序批量写入结果。
-/// # 错误
-/// 任一事件未登记、身份无效或批量持久化失败时返回原错误。
+/// 先逐条验证整批日志，再以原业务执行器按原顺序写入；任一动作没有登记、身份无效或批量入库失败时返回原错误。
 pub async fn persist_logs(db: &Database, logs: &[AuditLog], executor: &mut dyn Executor) -> Result<()> {
     let prepared = logs.iter().map(prepare_business_log).collect::<Result<Vec<_>>>()?;
     db.audit_logs().create_many_ordered(&prepared, executor).await?;
     Ok(())
 }
 
-/// 在调用方事务中执行命令并记录一次结构化成功事件。
-///
-/// 静态身份和动作由 `BusinessEventContext::new` 在写入前验证；执行后投影在
-/// 写审计前验证。本入口不启动事务、重试命令或写独立失败尝试记录。
-///
-/// # 参数
-/// * `context` - 写入前已验证的动作、身份及关联快照。
-/// * `sink` - 使用相同执行器保存事件的窄端口。
-/// * `executor` - 调用方已建立的执行器。
-/// * `command` - 拥有领域或命名 Process 的实际命令。
-///
-/// # 返回
-/// 返回业务结果；领域明确的回放分支不追加业务事件。
-///
-/// # 错误
-/// 业务失败、结果投影无效或审计写入失败时停止并返回原错误。
+/// 在调用方现有事务中使用提前校验过身份和动作的上下文执行类型化命令；首次成功时验证投影并写一次审计，回放则只返回原结果。
+/// 业务、投影或入库失败时直接返回错误；本入口不开事务、不重试，也不写独立失败尝试。
 pub async fn execute_audited<C: AuditedCommand, S: AuditEventSink>(
     context: &BusinessEventContext,
     sink: &S,

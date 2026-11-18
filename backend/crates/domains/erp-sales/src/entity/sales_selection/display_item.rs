@@ -53,18 +53,14 @@ pub struct SalesSelectionDisplayItem {
 
 impl SalesSelectionDisplayItem {
     /// 创建单品陈列项。
-    ///
-    /// # 参数
-    /// * `id` - 项身份
-    /// * `booklet_id` - 选品册
-    /// * `batch_id` - 批次
-    /// * `sku` - SKU 快照
-    ///
-    /// # 返回
     /// 返回有效且未删除的单品陈列。
-    ///
-    /// # 错误
     /// SKU 快照非法时拒绝。
+    ///
+    /// 输入约定：
+    /// - `id`：项身份
+    /// - `booklet_id`：选品册
+    /// - `batch_id`：批次
+    /// - `sku`：SKU 快照
     pub fn single_sku(
         id: SalesSelectionDisplayItemId,
         booklet_id: SalesSelectionBookletId,
@@ -84,20 +80,16 @@ impl SalesSelectionDisplayItem {
     }
 
     /// 创建套餐陈列项。
-    ///
-    /// # 参数
-    /// * `id` - 项身份
-    /// * `booklet_id` - 选品册
-    /// * `batch_id` - 批次
-    /// * `tier_id` - 档位
-    /// * `members` - 成员
-    /// * `cover` - 套餐主图
-    ///
-    /// # 返回
     /// 返回售价由后端加总的套餐陈列。
+    /// 失败条件：成员快照非法、SKU 重复、没有成员或售价合计溢出时拒绝。本方法不校验封面。
     ///
-    /// # 错误
-    /// 成员快照非法、SKU 重复、没有成员或售价合计溢出时拒绝。本方法不校验封面。
+    /// 输入约定：
+    /// - `id`：项身份
+    /// - `booklet_id`：选品册
+    /// - `batch_id`：批次
+    /// - `tier_id`：档位
+    /// - `members`：成员
+    /// - `cover`：套餐主图
     pub fn package(
         id: SalesSelectionDisplayItemId,
         booklet_id: SalesSelectionBookletId,
@@ -120,14 +112,7 @@ impl SalesSelectionDisplayItem {
     }
 
     /// 待发布删除陈列项。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 标记 `removed`。
-    ///
-    /// # 错误
+    /// 结果：标记 `removed`。
     /// 已经删除时拒绝。
     pub fn remove(&mut self) -> Result<()> {
         if self.removed {
@@ -138,15 +123,7 @@ impl SalesSelectionDisplayItem {
     }
 
     /// 返回陈列售价。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 单品为 SKU 销售可见价；套餐为成员之和。
-    ///
-    /// # 错误
-    /// 无。
+    /// 结果：单品为 SKU 销售可见价；套餐为成员之和。
     pub fn price(&self) -> Amount {
         match &self.kind {
             DisplayKind::SingleSku { sku } => sku.sales_visible_price_gross,
@@ -155,15 +132,7 @@ impl SalesSelectionDisplayItem {
     }
 
     /// 返回封面资产身份。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 单品无图时返回 `None`，有图时返回资产身份。套餐始终返回主图资产身份。
-    ///
-    /// # 错误
-    /// 无。
+    /// 结果：单品无图时返回 `None`，有图时返回资产身份。套餐始终返回主图资产身份。
     pub fn cover_asset_id(&self) -> Option<&str> {
         match &self.kind {
             DisplayKind::SingleSku { sku } => sku.image.as_ref().map(|image| image.file_asset_id.as_str()),
@@ -172,15 +141,7 @@ impl SalesSelectionDisplayItem {
     }
 
     /// 发布复核用的精确 SKU 修订引用。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回 `(sku_id, sku_revision_id)`。
-    ///
-    /// # 错误
-    /// 无。
     pub fn sellable_refs(&self) -> Vec<(String, String)> {
         match &self.kind {
             DisplayKind::SingleSku { sku } => {
@@ -193,30 +154,18 @@ impl SalesSelectionDisplayItem {
     }
 
     /// 判断是否为可发布陈列。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 有效且未删除返回 `true`。
-    ///
-    /// # 错误
-    /// 无。
+    /// 结果：有效且未删除返回 `true`。
     pub fn is_publishable(&self) -> bool {
         self.effective && !self.removed
     }
 }
 
-/// 规范化套餐成员：互异、每成员一件、按 sku_id 升序。
-///
-/// # 参数
-/// * `members` - 原始成员
-///
-/// # 返回
-/// 返回规范化成员。
-///
-/// # 错误
-/// 重复 SKU 或成员非法时拒绝。
+// 规范化套餐成员：互异、每成员一件、按 sku_id 升序。
+// 返回规范化成员。
+// 重复 SKU 或成员非法时拒绝。
+//
+// 输入约定：
+// - `members`：原始成员
 fn normalize_package_members(members: Vec<SkuSnapshot>) -> Result<Vec<SkuSnapshot>> {
     let mut normalized = Vec::with_capacity(members.len());
     let mut seen = std::collections::BTreeSet::new();
@@ -233,17 +182,13 @@ fn normalize_package_members(members: Vec<SkuSnapshot>) -> Result<Vec<SkuSnapsho
 }
 
 /// 发布前校验陈列非空且套餐每档至少一套。
-///
-/// # 参数
-/// * `form_is_package` - 是否套餐形态
-/// * `tier_ids` - 档位身份
-/// * `items` - 当前有效陈列
-///
-/// # 返回
-/// 通过时返回可发布项。
-///
-/// # 错误
+/// 结果：通过时返回可发布项。
 /// 单品不足 1 个或任一套餐档为 0 时拒绝。
+///
+/// 输入约定：
+/// - `form_is_package`：是否套餐形态
+/// - `tier_ids`：档位身份
+/// - `items`：当前有效陈列
 pub fn ensure_publishable_display<'a>(
     form_is_package: bool,
     tier_ids: &[String],

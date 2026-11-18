@@ -3,17 +3,13 @@
 use super::calculation::OrderResult;
 use super::dto::ProfitLossQuery;
 
-/// 同字段按 OR、人员与历史组织路径按 AND；组织移动不改变冻结路径。
-///
-/// # 参数
-/// * `order` - 已归集的订单结果。
-/// * `query` - 盈亏筛选。
-///
-/// # 返回
-/// 分组、人员与历史组织路径同时满足时返回 `true`；任一条件不命中返回 `false`。
-///
-/// # 错误
-/// 不返回错误。
+// 筛选实际盈亏报表的历史归属时，同字段按 OR、人员与历史组织路径按 AND；组织移动不改变冻结路径。
+//
+// 调用参数：
+// * `order` - 已归集的订单结果。
+// * `query` - 盈亏筛选。
+//
+// 分组、人员与历史组织路径同时满足时返回 `true`；任一条件不命中返回 `false`。
 pub(super) fn matches(order: &OrderResult, query: &ProfitLossQuery) -> bool {
     matches_group(order, query.attribution_group.as_deref())
         && query.attribution_user_ids.as_ref().is_none_or(|ids| {
@@ -25,7 +21,7 @@ pub(super) fn matches(order: &OrderResult, query: &ProfitLossQuery) -> bool {
             .is_none_or(|ids| order.attribution_path.iter().any(|node| ids.as_slice().contains(&node.id)))
 }
 
-/// 分组下钻匹配冻结的直接归属，不能用祖先路径条件扩大原分组；空身份仅匹配未知归属。
+// 应用实际盈亏报表筛选时，分组下钻匹配冻结的直接归属，不能用祖先路径条件扩大原分组；空身份仅匹配未知归属。
 fn matches_group(order: &OrderResult, group: Option<&str>) -> bool {
     let Some(group) = group else {
         return true;

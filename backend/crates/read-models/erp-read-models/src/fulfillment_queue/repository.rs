@@ -50,16 +50,13 @@ pub struct FulfillmentQueueFilter {
 }
 
 impl FulfillmentQueueFilter {
-    /// 构造履约责任队列仓储筛选。
+    /// 装配履约责任队列时绑定业务数据库，供后续读取工作项、草稿和付款门槛事实。
     ///
     /// # 参数
     /// * `owner_user_id` - 当前已认证个人责任人
     ///
     /// # 返回
     /// 返回作业类型、分页全空的筛选。
-    ///
-    /// # 错误
-    /// 无。
     pub fn new(owner_user_id: String) -> Self {
         Self {
             authorization: None,
@@ -78,34 +75,22 @@ impl FulfillmentQueueFilter {
         }
     }
 
-    /// 设置作业类型。
+    /// 组装履约责任队列时填入服务端允许且调用方请求的作业类型稳定代码。
     ///
     /// # 参数
     /// * `operation_types` - 服务端允许且调用方请求的作业类型稳定代码
-    ///
-    /// # 返回
-    /// 返回更新后的筛选。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_operation_types(mut self, operation_types: Vec<String>) -> Self {
         self.operation_types = operation_types;
         self
     }
 
-    /// 设置精确履约对象与来源单据。
+    /// 组装履约责任队列时补充精确履约对象与来源单据。
     ///
     /// # 参数
     /// * `operation_id` - 精确履约对象
     /// * `sales_order_id` - 来源销售单
     /// * `purchase_order_id` - 来源采购单
     /// * `warehouse_id` - 履约仓库
-    ///
-    /// # 返回
-    /// 返回更新后的筛选。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_scope(
         mut self,
         operation_id: Option<String>,
@@ -120,19 +105,13 @@ impl FulfillmentQueueFilter {
         self
     }
 
-    /// 设置检索与先决条件。
+    /// 组装履约责任队列时补充检索与先决条件。
     ///
     /// # 参数
     /// * `query` - 单号/摘要字面量检索
     /// * `due_from` - 作业日期下界
     /// * `due_before` - 作业日期上界
     /// * `gate` - 先决条件筛选
-    ///
-    /// # 返回
-    /// 返回更新后的筛选。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_conditions(
         mut self,
         query: Option<String>,
@@ -147,17 +126,11 @@ impl FulfillmentQueueFilter {
         self
     }
 
-    /// 设置分页。
+    /// 组装履约责任队列时补充分页。
     ///
     /// # 参数
     /// * `offset` - 已检查的分页偏移
     /// * `page_size` - 单页条数
-    ///
-    /// # 返回
-    /// 返回更新后的筛选。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_paging(mut self, offset: u64, page_size: u32) -> Self {
         self.offset = offset;
         self.page_size = page_size;
@@ -236,36 +209,25 @@ pub struct FulfillmentQueueRepository<'a> {
 }
 
 impl<'a> FulfillmentQueueRepository<'a> {
-    /// Bind the repository to a database.
-    ///
-    /// # 参数
-    /// * `db` - MongoDB 数据库
+    /// 装配履约责任队列时绑定业务数据库，供后续读取工作项、草稿和付款门槛事实。
     ///
     /// # 返回
     /// 返回履约队列只读仓储。
-    ///
-    /// # 错误
-    /// 无。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
 
-    /// 工作项集合。
-    ///
-    /// # 返回
-    /// 返回工作项 Mongo 集合。
-    ///
-    /// # 错误
-    /// 无。
+    // 构建履约责任队列时从工作项集合开始聚合，后续再联查相应履约草稿。
+    //
+    // 返回工作项 Mongo 集合。
     fn collection(&self) -> mongodb::Collection<erp_workflow::entity::work_item::WorkItem> {
         self.db.collection(<Database as WorkItemExt>::WORK_ITEMS)
     }
 
-    /// 查询当前个人责任范围内的履约页面投影。
+    /// 处理履约责任队列时，查询当前个人责任范围内的履约页面投影。
     ///
     /// # 参数
     /// * `filter` - 已由 Service 校验的筛选和分页
-    /// * `executor` - 数据访问执行器
     ///
     /// # 返回
     /// 返回当前页、跨页总数、类型指标和仓库选项。

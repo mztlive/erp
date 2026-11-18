@@ -30,14 +30,10 @@ const DIRECT_OBJECT_KEY_PREFIX: &str = "product-import-direct";
 impl ProductImportProcess {
     /// 初始化浏览器直传：在对象存储创建分片上传并返回分片口径。
     ///
-    /// # 参数
-    /// * `req` - 文件名、总字节数与幂等请求身份
-    /// * `actor` - 已认证操作人，按当前商品创建功能资格检查。
+    /// `req`：文件名、总字节数与幂等请求身份；`actor`：已认证操作人，按当前商品创建功能资格检查。
     ///
-    /// # 返回
     /// 返回分片上传标识、对象键与分片口径；分片地址由调用方按需获取。
     ///
-    /// # 错误
     /// 当前账号无商品创建资格、文件名不是 `.xlsx`、大小越限或对象存储失败时返回错误。
     pub async fn init_direct_upload(
         &self,
@@ -67,17 +63,13 @@ impl ProductImportProcess {
 
     /// 为单个分片签发浏览器可直接 PUT 的预签名地址。
     ///
-    /// # 参数
-    /// * `object_key` - 初始化接口返回的相对对象键
-    /// * `upload_id` - 分片上传标识
-    /// * `part_number` - 分片序号（1 起）
-    /// * `request_id` - 幂等请求身份（须与对象键绑定）
-    /// * `actor` - 已认证操作人，按当前商品创建功能资格检查。
+    /// - `object_key`：初始化接口返回的相对对象键
+    /// - `part_number`：分片序号（1 起）
+    /// - `request_id`：幂等请求身份（须与对象键绑定）
+    /// - `actor`：已认证操作人，按当前商品创建功能资格检查。
     ///
-    /// # 返回
     /// 返回预签名 PUT 地址。
     ///
-    /// # 错误
     /// 当前账号无商品创建资格、对象键与请求身份不一致、分片序号非法或签名失败时返回错误。
     pub async fn direct_upload_part_url(
         &self,
@@ -105,15 +97,10 @@ impl ProductImportProcess {
 
     /// 合并浏览器已直传的分片并登记导入任务。
     ///
-    /// # 参数
-    /// * `upload_id` - 分片上传标识
-    /// * `req` - 对象键、文件名、总字节数、请求身份与已上传分片
-    /// * `actor` - 审计操作人
+    /// `req`：对象键、文件名、总字节数、请求身份与已上传分片。
     ///
-    /// # 返回
     /// 返回新建或幂等回放的导入任务。
     ///
-    /// # 错误
     /// 当前账号无商品创建资格、对象键与请求身份不一致、对象缺失或损坏、解析失败时返回错误；
     /// 结果未知以外失败会尽力删除已合并对象，避免残留孤儿文件。
     pub async fn submit_direct_upload(
@@ -152,16 +139,12 @@ impl ProductImportProcess {
 
     /// 取消分片上传并清理对象存储侧已上传的分片。
     ///
-    /// # 参数
-    /// * `object_key` - 初始化接口返回的相对对象键
-    /// * `upload_id` - 分片上传标识
-    /// * `request_id` - 幂等请求身份（须与对象键绑定）
-    /// * `actor` - 已认证操作人，按当前商品创建功能资格检查。
+    /// - `object_key`：初始化接口返回的相对对象键
+    /// - `request_id`：幂等请求身份（须与对象键绑定）
+    /// - `actor`：已认证操作人，按当前商品创建功能资格检查。
     ///
-    /// # 返回
     /// 分片上传已取消；上传已不存在也视为成功。
     ///
-    /// # 错误
     /// 当前账号无商品创建资格、对象键与请求身份不一致或取消失败时返回错误。
     pub async fn abort_direct_upload(
         &self,
@@ -179,7 +162,7 @@ impl ProductImportProcess {
         }
     }
 
-    /// 读取合并对象并沿用共享源字节完成解析、媒体预提与任务登记。
+    // 读取合并对象并沿用共享源字节完成解析、媒体预提与任务登记。
     async fn register_merged_object(
         &self,
         req: &ProductImportDirectUploadCompleteRequest,
@@ -212,7 +195,7 @@ impl ProductImportProcess {
         .await
     }
 
-    /// 校验合并对象的大小与 ZIP 标记，共享源字节且不复制工作簿。
+    // 校验合并对象的大小与 ZIP 标记，共享源字节且不复制工作簿。
     async fn read_merged_workbook(
         &self,
         req: &ProductImportDirectUploadCompleteRequest,
@@ -240,7 +223,7 @@ impl ProductImportProcess {
         Ok(Arc::new(bytes))
     }
 
-    /// 将模板解析与源文件摘要放在同一阻塞任务，保留解析失败清理合同。
+    // 将模板解析与源文件摘要放在同一阻塞任务，保留解析失败清理合同。
     async fn parse_merged_workbook(
         &self,
         req: &ProductImportDirectUploadCompleteRequest,
@@ -265,7 +248,7 @@ impl ProductImportProcess {
     }
 }
 
-/// 由请求身份推导直传对象键；请求身份限定为 URL 安全字符。
+// 由请求身份推导直传对象键；请求身份限定为 URL 安全字符。
 fn direct_object_key(request_id: &str) -> Result<String> {
     if request_id.is_empty()
         || request_id.len() > 64
@@ -276,7 +259,7 @@ fn direct_object_key(request_id: &str) -> Result<String> {
     Ok(format!("{DIRECT_OBJECT_KEY_PREFIX}/{request_id}.xlsx"))
 }
 
-/// 校验对象键确由请求身份推导，防止操作他人直传对象。
+// 校验对象键确由请求身份推导，防止操作他人直传对象。
 fn require_bound_object_key(object_key: &str, request_id: &str) -> Result<()> {
     if object_key != direct_object_key(request_id)? {
         return Err(Error::ValidationError("当前文件不属于本次导入，请重新上传商品报价表".to_string()));
@@ -284,7 +267,7 @@ fn require_bound_object_key(object_key: &str, request_id: &str) -> Result<()> {
     Ok(())
 }
 
-/// 校验文件名为 `.xlsx`。
+// 创建商品直传前校验文件名：拒绝空名、超长名称或非 `.xlsx` 扩展名。
 fn validate_xlsx_file_name(file_name: &str) -> Result<()> {
     let name = file_name.trim();
     if name.is_empty() || name.len() > 256 {
@@ -297,7 +280,7 @@ fn validate_xlsx_file_name(file_name: &str) -> Result<()> {
     Ok(())
 }
 
-/// 校验申报大小在导入上限内。
+// 初始化商品报价表直传前拒绝申报为空或超过导入上限的文件，不为其分配上传。
 fn validate_byte_size(byte_size: u64) -> Result<()> {
     if byte_size == 0 || byte_size > MAX_PRODUCT_IMPORT_FILE_BYTES {
         return Err(Error::ValidationError("导入文件不能超过 700 MB".to_string()));

@@ -25,13 +25,11 @@ pub struct CreateBatchRequest {
 }
 
 impl CreateBatchRequest {
-    /// 验证选择结构并生成稳定的原请求摘要。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 不含操作号的请求摘要。
-    /// # 错误
-    /// 空操作号、重复身份、非法筛选或混用两种范围时拒绝。
+    // 验证选择结构并生成稳定的原请求摘要。
+    //
+    // 不含操作号的请求摘要。
+    //
+    // 空操作号、重复身份、非法筛选或混用两种范围时拒绝。
     pub(super) fn fingerprint(&self) -> Result<String> {
         if self.idempotency_key.trim().is_empty() || self.idempotency_key.len() > 128 {
             return Err(Error::ValidationError("选择操作号无效".into()));
@@ -70,13 +68,7 @@ pub struct BatchItemEdit {
 }
 
 impl BatchItemEdit {
-    /// 区分会改变已核对载荷的编辑与单纯确认价格提示。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 改价、资料、配送或恢复规则时返回真。
-    /// # 错误
-    /// 不返回错误。
+    // 区分会改变已核对载荷的编辑与单纯确认价格提示。改价、资料、配送或恢复规则时返回真。
     pub(super) fn changes_content(&self) -> bool {
         self.mapping.is_some()
             || self.terms.is_some()
@@ -122,13 +114,13 @@ pub struct SubmitBatchRequest {
 }
 
 impl SubmitBatchRequest {
-    /// 生成原确认未受理时的终止标记，阻止同操作号的迟到请求再次执行。
-    /// # 参数
-    /// `batch` 为当前已授权批次。
-    /// # 返回
-    /// 与正常确认摘要区分的稳定标记，不依赖之后可能修改的逐项草稿。
-    /// # 错误
-    /// 操作号或确认范围无效时拒绝。
+    // 生成原确认未受理时的终止标记，阻止同操作号的迟到请求再次执行。
+    //
+    // `batch` 为当前已授权批次。
+    //
+    // 与正常确认摘要区分的稳定标记，不依赖之后可能修改的逐项草稿。
+    //
+    // 操作号或确认范围无效时拒绝。
     pub(super) fn unaccepted_fingerprint(&self, batch: &str) -> Result<String> {
         let unique: HashSet<_> = self.item_ids.iter().collect();
         if self.idempotency_key.trim().is_empty()
@@ -145,13 +137,13 @@ impl SubmitBatchRequest {
         Ok(format!("NOT_ACCEPTED:{}", adoption_identity(&[&payload])))
     }
 
-    /// 核验查证请求精确对应原确认人、预览与成员范围。
-    /// # 参数
-    /// `confirmation` 为永久确认记录，`actor` 为当前认证账号。
-    /// # 返回
-    /// 原请求与记录一致时成功。
-    /// # 错误
-    /// 操作身份或确认范围不一致时拒绝，不能拿其他操作解除待核实。
+    // 核验查证请求精确对应原确认人、预览与成员范围。
+    //
+    // `confirmation` 为永久确认记录，`actor` 为当前认证账号。
+    //
+    // 原请求与记录一致时成功。
+    //
+    // 操作身份或确认范围不一致时拒绝，不能拿其他操作解除待核实。
     pub(super) fn ensure_confirmation(&self, confirmation: &BatchConfirmation, actor: &str) -> Result<()> {
         if confirmation.actor_id != actor
             || confirmation.preview_version != self.preview_version
@@ -190,7 +182,7 @@ pub struct BatchView {
     pub manual_count: usize,
 }
 
-/// 在响应边界附带与自动匹配一致的单位建议，不改写持久化来源快照。
+// 在响应边界附带与自动匹配一致的单位建议，不改写持久化来源快照。
 fn serialize_batch_rows<S: serde::Serializer>(
     rows: &[CatalogAdoptionBatchItem],
     serializer: S,

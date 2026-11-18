@@ -59,7 +59,7 @@ impl TimelineDocument {
         }
     }
 
-    /// 仅沿当前单据的采购外键补齐销售来源，不覆盖已有直接销售外键。
+    // 确定销售动态来源的适用条件时，仅沿当前单据的采购外键补齐销售来源，不覆盖已有直接销售外键。
     pub(super) fn resolve_purchase_source(&mut self, purchase_id: &str, sales_id: &str) {
         if self.sales_order_id.is_none() && self.purchase_order_id.as_deref() == Some(purchase_id) {
             self.sales_order_id = Some(sales_id.into());

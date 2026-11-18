@@ -91,7 +91,7 @@ mod tests {
         assert_eq!(query.paging.page_size, 25);
     }
 
-    /// 分配实体转视图时来源展示字段为空，由展示装配补全，避免把分录 ID 当单号。
+    // 回归检查：分配实体转视图时来源展示字段为空，由展示装配补全，避免把分录 ID 当单号。
     #[test]
     fn payment_allocation_view_leaves_source_blank_before_enrichment() {
         use std::str::FromStr;
@@ -124,7 +124,7 @@ mod tests {
         assert!(view.source_document_id.is_none());
     }
 
-    /// 付款提交必须携带页面已核对的收款账户身份与版本。
+    // 回归检查：付款提交必须携带页面已核对的收款账户身份与版本。
     #[test]
     fn payment_commit_requires_expected_recipient_account() {
         use super::payment::CommitSupplierPaymentRequest;
@@ -188,7 +188,7 @@ mod tests {
         assert!(serde_json::from_value::<CommitSupplierPaymentRequest>(missing_version).is_err());
     }
 
-    /// 附加付款任务缺省为空，申请授权的单次付款只执行当前任务。
+    // 回归检查：附加付款任务缺省为空，申请授权的单次付款只执行当前任务。
     #[test]
     fn payment_commit_defaults_additional_work_items_to_empty() {
         use super::payment::CommitSupplierPaymentRequest;
@@ -223,7 +223,7 @@ mod tests {
         assert!(params.validate().is_err());
     }
 
-    /// 请求分配行转换为领域 pending 时保持输入顺序，且正数校验由实体承担。
+    // 回归检查：请求分配行转换为领域 pending 时保持输入顺序，且正数校验由实体承担。
     #[test]
     fn payment_allocation_line_converts_to_pending_in_input_order() {
         use std::str::FromStr;
@@ -256,7 +256,7 @@ mod tests {
         assert_eq!(pending[1].allocated_amount, Amount::from_str("10.00").unwrap());
     }
 
-    /// 零/负金额不得通过请求行转换，错误文案保持实体合同。
+    // 回归检查：零/负金额不得通过请求行转换，错误文案保持实体合同。
     #[test]
     fn payment_allocation_line_rejects_zero_or_negative_amount() {
         use std::str::FromStr;
@@ -286,7 +286,7 @@ mod tests {
 mod reversal_status_wire_tests {
     use super::account::PaymentReversalStatus;
 
-    /// 财务消费方状态映射必须保持审批态的特殊大写 HTTP 编码。
+    // 回归检查：财务消费方状态映射必须保持审批态的特殊大写 HTTP 编码。
     #[test]
     fn reversal_status_preserves_existing_wire_values() {
         for (status, value) in [

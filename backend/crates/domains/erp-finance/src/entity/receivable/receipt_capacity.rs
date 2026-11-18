@@ -42,19 +42,15 @@ pub struct ReceiptCapacity {
 
 impl ReceiptCapacity {
     /// 从实际核销、冲减和其他审批中占用构造额度。
-    ///
-    /// # 参数
-    /// * `accounts` - 完整子账当前未收余额。
-    /// * `entries` - 上述子账的全部分录。
-    /// * `allocations` - 全部分录的实际正反核销。
-    /// * `offsets` - 全部冲减关系。
-    /// * `reserved` - 按分录汇总的其他审批中拟核销金额。
-    ///
-    /// # 返回
     /// 返回统一额度；负余额按零展示。
-    ///
-    /// # 错误
     /// 金额运算溢出或分录缺少所属子账时返回错误。
+    ///
+    /// 输入约定：
+    /// - `accounts`：完整子账当前未收余额。
+    /// - `entries`：上述子账的全部分录。
+    /// - `allocations`：全部分录的实际正反核销。
+    /// - `offsets`：全部冲减关系。
+    /// - `reserved`：按分录汇总的其他审批中拟核销金额。
     pub fn new(
         accounts: Vec<ReceiptAccountCapacity>,
         entries: &[ReceivableEntry],
@@ -121,15 +117,10 @@ impl ReceiptCapacity {
     }
 
     /// 查询单个项目当前可分配额度，同时受子账可用余额限制。
-    ///
-    /// # 参数
-    /// * `entry_id` - 应收项目身份。
-    ///
-    /// # 返回
     /// 返回可用额和组成金额；未知分录返回 `None`。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// 输入约定：
+    /// - `entry_id`：应收项目身份。
     pub fn entry(&self, entry_id: &str) -> Option<ReceiptEntryCapacity> {
         let (account_id, capacity) = self.entries.get(entry_id)?;
         let mut capacity = *capacity;
@@ -138,15 +129,11 @@ impl ReceiptCapacity {
     }
 
     /// 校验本次回款全部分配，不允许重复项目或跨主体，并合计检查子账余额。
-    ///
-    /// # 参数
-    /// * `receipt` - 本次拟提交或最终核销的回款；额度已排除其自身占用。
-    ///
-    /// # 返回
-    /// 每项及合计均在真实可用额度内时成功。
-    ///
-    /// # 错误
+    /// 结果：每项及合计均在真实可用额度内时成功。
     /// 缺失来源、跨主体、重复项目、非正金额、超额或溢出时返回错误。
+    ///
+    /// 输入约定：
+    /// - `receipt`：本次拟提交或最终核销的回款；额度已排除其自身占用。
     pub fn validate(&self, receipt: &CustomerReceipt) -> Result<()> {
         let mut seen = HashSet::new();
         let mut totals = HashMap::new();

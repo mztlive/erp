@@ -43,11 +43,11 @@ pub struct DownloadedSourceImage {
 #[async_trait]
 pub trait SourceImageTransport: Send + Sync {
     /// 按供应商提供的链接读取图片。
-    /// # 参数
+    ///
     /// `url` 为供应商响应中的 HTTP/HTTPS 图片地址。
-    /// # 返回
+    ///
     /// 有界图片字节和内容类型。
-    /// # 错误
+    ///
     /// 无效地址、网络错误及超限时返回明确错误。
     async fn download(&self, url: &str) -> Result<DownloadedSourceImage>;
 }
@@ -56,19 +56,19 @@ pub trait SourceImageTransport: Send + Sync {
 #[async_trait]
 pub trait SourceImageStore: Send + Sync {
     /// 保存已经完整核验的图片字节。
-    /// # 参数
+    ///
     /// 安全相对对象键、真实图片字节及检测得到的 MIME。
-    /// # 返回
+    ///
     /// 对象已写入。
-    /// # 错误
+    ///
     /// 存储写入失败时返回错误，不登记资产。
     async fn save(&self, key: &str, bytes: &[u8], content_type: &str) -> Result<()>;
     /// 删除本次上传且已证明未被提交引用的对象。
-    /// # 参数
+    ///
     /// `key` 仅来自本次准备过程生成的安全对象键。
-    /// # 返回
+    ///
     /// 对象已删除或不存在。
-    /// # 错误
+    ///
     /// 存储删除失败时返回错误。
     async fn delete(&self, key: &str) -> Result<()>;
 }
@@ -101,13 +101,7 @@ pub struct PreparedSourceMedia {
 }
 
 impl PreparedSourceMedia {
-    /// 构造无需外部请求的空媒体结果。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 未提供图片组及空资产批次。
-    /// # 错误
-    /// 不返回错误。
+    /// 构造无需外部请求的空媒体结果。未提供图片组及空资产批次。
     pub fn empty() -> Self {
         Self {
             pending_assets: Arc::new(EmptyPendingAttachments),
@@ -121,12 +115,10 @@ impl PreparedSourceMedia {
     }
 
     /// 使用预览时已归档的图片，未完成的图片留待后台处理。
-    /// # 参数
+    ///
     /// `item` 为冻结的供应商商品资料。
-    /// # 返回
+    ///
     /// 已核验商品媒体及来源图片，不发起网络请求。
-    /// # 错误
-    /// 不返回错误。
     pub fn from_archived(item: &SupplierCatalogItem) -> Self {
         let mut media = Self::empty();
         media.images = item.images.clone();
@@ -137,11 +129,11 @@ impl PreparedSourceMedia {
     }
 
     /// 把已核验图片写入来源观察，保留未提供与明确清空的区别。
-    /// # 参数
+    ///
     /// `item` 为本次准备对应的目录观察。
-    /// # 返回
+    ///
     /// 更新来源媒体和内容摘要，不修改商品匹配或采购资料。
-    /// # 错误
+    ///
     /// 来源摘要无法序列化时返回错误。
     pub fn apply_to(&self, item: &mut SupplierCatalogItem) -> Result<()> {
         item.images = self.images.clone();
@@ -150,13 +142,7 @@ impl PreparedSourceMedia {
         Ok(())
     }
 
-    /// 保留跨事务移动前的本次新对象补偿清单。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 仅包含本次上传、不包含复用资产的补偿句柄。
-    /// # 错误
-    /// 不返回错误。
+    /// 保留跨事务移动前的本次新对象补偿清单。仅包含本次上传、不包含复用资产的补偿句柄。
     pub fn cleanup_handle(&self) -> SourceMediaCleanup {
         self.cleanup.clone()
     }
@@ -238,22 +224,22 @@ struct MediaPreparation<'a> {
 
 impl SourceMediaPreparer {
     /// 使用 HTTP 客户端与现有对象存储装配来源图片准备器。
-    /// # 参数
+    ///
     /// 对象存储及内容 HMAC 密钥。
-    /// # 返回
+    ///
     /// 来源图片准备器，不执行网络请求。
-    /// # 错误
+    ///
     /// 空密钥或 HTTP 客户端初始化失败时返回错误。
     pub fn new(storage: S3Storage, secret: Vec<u8>) -> Result<Self> {
         Self::with_ports(Arc::new(HttpSourceImages::new()?), Arc::new(S3SourceImages(storage)), secret)
     }
 
     /// 从已验证的读取与存储边界构造准备器。
-    /// # 参数
+    ///
     /// 来源传输、对象存储及内容 HMAC 密钥。
-    /// # 返回
+    ///
     /// 可注入替身的完整生产编排。
-    /// # 错误
+    ///
     /// 空密钥时拒绝。
     pub fn with_ports(
         transport: Arc<dyn SourceImageTransport>,
@@ -267,11 +253,11 @@ impl SourceMediaPreparer {
     }
 
     /// 下载并准备一条来源目录的两组图片。
-    /// # 参数
+    ///
     /// `item` 是受授权目录观察，`actor` 用于资产审计；调用方须在事务外执行。
-    /// # 返回
+    ///
     /// 临时商品媒体、真实来源资产身份、内容摘要及事务内待提交批次。
-    /// # 错误
+    ///
     /// 超过一百张、任一下载/核验/上传失败或资产准备失败时拒绝，不清空原图片。
     pub async fn prepare_source_media(
         &self,
@@ -282,11 +268,11 @@ impl SourceMediaPreparer {
     }
 
     /// 核验持续同步图片；单图失败保留未核验来源，其他文字及图片仍可更新。
-    /// # 参数
+    ///
     /// 新观察、此前已归档目录及审计操作人；此前资料只用于按真实内容复用资产。
-    /// # 返回
+    ///
     /// 带待核验说明的准备结果；失败图片不携带资产或内容证明。
-    /// # 错误
+    ///
     /// 超出图片数量上限或文件批次无法准备时返回错误。
     pub async fn prepare_observation_media(
         &self,
@@ -298,11 +284,11 @@ impl SourceMediaPreparer {
     }
 
     /// 仅处理尚未归档的图片，避免重试时重复下载已成功的图片。
-    /// # 参数
+    ///
     /// 当前目录观察及其已核验图片和原同步操作人。
-    /// # 返回
+    ///
     /// 图片准备结果及未完成项说明。
-    /// # 错误
+    ///
     /// 图片数量超限或资产准备失败时返回错误。
     pub async fn prepare_pending_media(
         &self,

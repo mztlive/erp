@@ -33,13 +33,13 @@ pub(super) async fn account_access(
 }
 
 /// 为原业务详情证明资金账号的主体及组织读取资格。
-/// # 参数
-/// * `db` / `authorization` - 应用数据及权限服务。
-/// * `account_id` / `actor` - 服务端资金账号及当前认证人员。
-/// * `executor` - 原读取事务执行器，不另开事务。
-/// # 返回
+///
+/// - `db` / `authorization`：应用数据及权限服务。
+/// - `account_id` / `actor`：服务端资金账号及当前认证人员。
+/// - `executor`：原读取事务执行器，不另开事务。
+///
 /// 返回已获同角色主体和组织范围许可的资金账号。
-/// # 错误
+///
 /// 越主体、组织或缺资金明细权限时拒绝且不交付金额。
 pub async fn authorize_deposit_account(
     db: &Database,

@@ -81,16 +81,11 @@ pub struct SalesSelectionPrepareTask {
 
 impl SalesSelectionPrepareTask {
     /// 创建排队中的准备任务。
-    ///
-    /// # 参数
-    /// * `id` - 任务身份
-    /// * `data` - 创建字段
-    ///
-    /// # 返回
     /// 返回排队任务，期限 180 秒。
     ///
-    /// # 错误
-    /// 无。
+    /// 输入约定：
+    /// - `id`：任务身份
+    /// - `data`：创建字段
     pub fn queued(id: SalesSelectionPrepareTaskId, data: SalesSelectionPrepareTaskData) -> Self {
         Self {
             request_json: String::new(),
@@ -119,16 +114,11 @@ impl SalesSelectionPrepareTask {
     }
 
     /// 判断结果是否仍可写入。
+    /// 结果：仍在运行、未到期且代数匹配时通过。
+    /// 失败条件：已结束、到期或代数不匹配时拒绝，调用方不得覆盖有效结果。
     ///
-    /// # 参数
-    /// * `expected_run` - 工作进程持有的运行代数
-    /// * `now` - 当前时间
-    ///
-    /// # 返回
-    /// 仍在运行、未到期且代数匹配时通过。
-    ///
-    /// # 错误
-    /// 已结束、到期或代数不匹配时拒绝，调用方不得覆盖有效结果。
+    /// 输入约定：
+    /// - `expected_run`：工作进程持有的运行代数
     pub fn ensure_writable_run(&self, expected_run: u64, now: Instant) -> Result<()> {
         if self.status != PrepareTaskStatus::Running {
             return Err(Error::from("准备任务已结束，不能写入结果"));
@@ -143,15 +133,11 @@ impl SalesSelectionPrepareTask {
     }
 
     /// 领取任务进入运行。
-    ///
-    /// # 参数
-    /// * `now` - 领取时间
-    ///
-    /// # 返回
-    /// 运行代数不变（首次）或由仓储在恢复时递增。
-    ///
-    /// # 错误
+    /// 结果：运行代数不变（首次）或由仓储在恢复时递增。
     /// 已结束时拒绝。
+    ///
+    /// 输入约定：
+    /// - `now`：领取时间
     pub fn mark_running(&mut self, now: Instant) -> Result<()> {
         if !self.status.is_active() {
             return Err(Error::from("准备任务已结束"));
@@ -164,16 +150,10 @@ impl SalesSelectionPrepareTask {
 
     /// 更新阶段与心跳。
     ///
-    /// # 参数
-    /// * `stage` - 新阶段
-    /// * `completed_tier_count` - 已完成档位数
-    /// * `now` - 心跳时间
-    ///
-    /// # 返回
-    /// 无。
-    ///
-    /// # 错误
-    /// 无。
+    /// 输入约定：
+    /// - `stage`：新阶段
+    /// - `completed_tier_count`：已完成档位数
+    /// - `now`：心跳时间
     pub fn heartbeat(&mut self, stage: PrepareStage, completed_tier_count: u32, now: Instant) {
         self.stage = stage;
         self.completed_tier_count = completed_tier_count;
@@ -182,16 +162,10 @@ impl SalesSelectionPrepareTask {
 
     /// 标记成功。
     ///
-    /// # 参数
-    /// * `batch_id` - 结果批次
-    /// * `reports` - 逐档报告
-    /// * `now` - 完成时间
-    ///
-    /// # 返回
-    /// 无。
-    ///
-    /// # 错误
-    /// 无。
+    /// 输入约定：
+    /// - `batch_id`：结果批次
+    /// - `reports`：逐档报告
+    /// - `now`：完成时间
     pub fn mark_succeeded(&mut self, batch_id: String, reports: Vec<TierSearchReport>, now: Instant) {
         self.status = PrepareTaskStatus::Succeeded;
         self.stage = PrepareStage::Write;
@@ -203,16 +177,10 @@ impl SalesSelectionPrepareTask {
 
     /// 标记失败。
     ///
-    /// # 参数
-    /// * `reason` - 失败原因
-    /// * `reports` - 已有报告
-    /// * `now` - 完成时间
-    ///
-    /// # 返回
-    /// 无。
-    ///
-    /// # 错误
-    /// 无。
+    /// 输入约定：
+    /// - `reason`：失败原因
+    /// - `reports`：已有报告
+    /// - `now`：完成时间
     pub fn mark_failed(&mut self, reason: String, reports: Vec<TierSearchReport>, now: Instant) {
         self.status = PrepareTaskStatus::Failed;
         self.failure_reason = Some(reason);
@@ -222,15 +190,7 @@ impl SalesSelectionPrepareTask {
     }
 
     /// 判断是否已到期。
-    ///
-    /// # 参数
-    /// * `now` - 当前时间
-    ///
-    /// # 返回
-    /// 已到截止时间返回 `true`。
-    ///
-    /// # 错误
-    /// 无。
+    /// 结果：已到截止时间返回 `true`。
     pub fn is_deadline_passed(&self, now: Instant) -> bool {
         now >= self.deadline_at
     }
@@ -240,7 +200,7 @@ impl SalesSelectionPrepareTask {
 mod tests {
     use super::*;
 
-    /// 在固定时钟创建排队任务，覆盖重启后的截止判断。
+    // 用固定时钟构造排队任务，供单测模拟重启及超过截止时间。
     fn task() -> SalesSelectionPrepareTask {
         SalesSelectionPrepareTask::queued(
             SalesSelectionPrepareTaskId::new("task"),

@@ -38,30 +38,14 @@ pub struct SpecificationSignatureSet {
 }
 
 impl SpecificationSignatureSet {
-    /// 创建空的规格签名集合。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不包含任何签名的集合。
-    ///
-    /// # 错误
-    /// 无。
+    /// 创建空的规格签名集合。返回不包含任何签名的集合。
     pub fn new() -> Self {
         Self::default()
     }
 
     /// 规范化一组规格名值并登记其唯一签名。
     ///
-    /// # 参数
-    /// * `entries` - 一个 SKU 的全部 SPU 局部规格名和值
-    ///
-    /// # 返回
-    /// 返回规范化签名，供 SKU 稳定身份和后续关系匹配使用。
-    ///
-    /// # 错误
-    /// 规格名值非法或同一商品编辑中已登记相同签名时返回领域错误。
+    /// 返回规范化签名，供 SKU 稳定身份和后续关系匹配使用。规格名值非法或同一商品编辑中已登记相同签名时返回领域错误。
     pub fn register(&mut self, entries: &[SpecSignatureEntry]) -> Result<String> {
         let signature = compute_specification_signature(entries)?;
         self.register_signature(signature.clone())?;
@@ -70,14 +54,7 @@ impl SpecificationSignatureSet {
 
     /// 登记一个已规范化的规格签名。
     ///
-    /// # 参数
-    /// * `signature` - 已由规格值对象计算出的规范化签名
-    ///
-    /// # 返回
-    /// 首次登记时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 同一商品编辑中已存在相同签名时返回领域错误。
+    /// 首次登记时返回 `Ok(())`。同一商品编辑中已存在相同签名时返回领域错误。
     pub fn register_signature(&mut self, signature: String) -> Result<()> {
         if !self.signatures.insert(signature) {
             return Err(Error::from("规格集合中存在重复签名"));
@@ -85,35 +62,14 @@ impl SpecificationSignatureSet {
         Ok(())
     }
 
-    /// 判断集合是否已登记给定规范化签名。
-    ///
-    /// # 参数
-    /// * `signature` - 待查询的规范化签名
-    ///
-    /// # 返回
-    /// 已登记时返回 `true`。
-    ///
-    /// # 错误
-    /// 无。
+    /// 判断集合是否已登记给定规范化签名。已登记时返回 `true`。
     pub fn contains(&self, signature: &str) -> bool {
         self.signatures.contains(signature)
     }
 }
 
-/// 计算规范化规格签名。
-///
-/// 规则（数据模型 §6.3）：空列表返回 [`EMPTY_SPEC_SIGNATURE`]；否则把每条
-/// `规格名=规格值` 按 `(规格名, 规格值)` 字典序排序后以 `|`
-/// 连接。同一属性出现两次视为规格数据不一致，直接拒绝。
-///
-/// # 参数
-/// * `entries` - 该 SKU 的全部规格属性-值对（无序即可）
-///
-/// # 返回
-/// 返回规范化后的签名（空规格为 [`EMPTY_SPEC_SIGNATURE`]）。
-///
-/// # 错误
-/// 规格名/值为空或超长，或同一规格名出现多次时返回错误。
+/// 建立或匹配 SKU 稳定身份时，将 SPU 局部规格名和值去除首尾空白，按二者的字典序排序，再以 `规格名=规格值` 和 `|` 编码。
+/// 无规格使用固定空签名；空值、超长字段或签名以及重复规格名都拒绝，展示顺序不参与身份。
 pub fn compute_specification_signature(entries: &[SpecSignatureEntry]) -> Result<String> {
     if entries.is_empty() {
         return Ok(EMPTY_SPEC_SIGNATURE.to_string());
@@ -163,16 +119,8 @@ pub enum SpecificationSignatureRead {
     LegacyNonCanonical,
 }
 
-/// 读取已持久化规格签名；非法历史行标为兼容形态而不是抛出领域错误。
-///
-/// # 参数
-/// * `signature` - 已持久化的规格签名
-///
-/// # 返回
-/// 规范签名返回条目；非法签名返回 [`SpecificationSignatureRead::LegacyNonCanonical`]。
-///
-/// # 错误
-/// 无。严格失败关闭请调用 [`parse_specification_signature`]。
+/// 公司商品池读取已存 SKU 签名时，规范签名返回实际条目，非法历史值标记为 `LegacyNonCanonical`，避免整页失败。
+/// 需严格拒绝非规范数据时，改用 [`parse_specification_signature`]。
 pub fn read_specification_signature(signature: &str) -> SpecificationSignatureRead {
     match parse_specification_signature(signature) {
         Ok(entries) => SpecificationSignatureRead::Canonical(entries),
@@ -180,21 +128,8 @@ pub fn read_specification_signature(signature: &str) -> SpecificationSignatureRe
     }
 }
 
-/// 解析已持久化的规范化规格签名。
-///
-/// 与 [`compute_specification_signature`] 共用 `规格名=规格值` 并以 `|` 连接的
-/// 格式合同：空签名返回空列表；非空签名必须等于对其条目再编码的规范结果。
-/// 写入路径已保证规范形态。历史非法签名由 [`read_specification_signature`]
-/// 标记为兼容读取，审计清零前不得在列表接口失败关闭整页。
-///
-/// # 参数
-/// * `signature` - 已持久化的规格签名
-///
-/// # 返回
-/// 返回按签名既有顺序排列的规格名-值对；空签名返回空集合。
-///
-/// # 错误
-/// 缺失 `=`、空名称、空值、重复属性、超长或非规范形态时返回领域错误。
+/// 需要严格校验存量 SKU 签名时，按 `规格名=规格值` 及 `|` 解码，并核对重新编码后的内容完全一致。
+/// 固定空签名返回空集合；缺分隔、空值、重复属性、超长和非规范形态均拒绝。列表兼容读取用 [`read_specification_signature`]。
 pub fn parse_specification_signature(signature: &str) -> Result<Vec<SpecSignatureEntry>> {
     if signature == EMPTY_SPEC_SIGNATURE {
         return Ok(Vec::new());
@@ -217,17 +152,9 @@ pub fn parse_specification_signature(signature: &str) -> Result<Vec<SpecSignatur
 
 /// 校验规格签名是否可写入 `sku`。
 ///
-/// 规则（数据模型 §6.3）：空签名只允许使用固定空规格签名
-/// [`EMPTY_SPEC_SIGNATURE`]；非空签名不得全空白且不得超过长度上限。
+/// 规则（数据模型 §6.3）：空签名只允许使用固定空规格签名[`EMPTY_SPEC_SIGNATURE`]；非空签名不得全空白且不得超过长度上限。
 ///
-/// # 参数
-/// * `signature` - 待写入的规范化签名
-///
-/// # 返回
-/// 校验通过返回 `Ok(())`。
-///
-/// # 错误
-/// 签名超长，或空签名不是规范空值形态时返回错误。
+/// 校验通过返回 `Ok(())`。签名超长，或空签名不是规范空值形态时返回错误。
 pub fn validate_specification_signature(signature: &str) -> Result<()> {
     let trimmed = signature.trim();
     if trimmed.is_empty() {
@@ -244,17 +171,12 @@ pub fn validate_specification_signature(signature: &str) -> Result<()> {
 
 /// 校验一组身份排序位是否构成 `0..len` 的完整排列。
 ///
-/// 数据模型 §6.3 要求 `identity_position` 是规范化排序位置：n 条规格关系的位置
-/// 必须恰好是 `0..n` 各一次（无重复、无越界），否则规格集合不一致。
+/// 数据模型 §6.3 要求 `identity_position` 是规范化排序位置：n 条规格关系的位置必须恰好是 `0..n` 各一次（无重复、无越界），
+/// 否则规格集合不一致。
 ///
-/// # 参数
-/// * `positions` - 同一 SKU 修订的全部身份排序位
+/// 构成完整排列时返回 `Ok(())`。位置重复或越界时返回错误。
 ///
-/// # 返回
-/// 构成完整排列时返回 `Ok(())`。
-///
-/// # 错误
-/// 位置重复或越界时返回错误。
+/// `positions` 为同一 SKU 修订的全部身份排序位。
 pub fn validate_identity_positions(positions: &[u32]) -> Result<()> {
     let mut seen = vec![false; positions.len()];
     for &position in positions {
@@ -270,7 +192,7 @@ pub fn validate_identity_positions(positions: &[u32]) -> Result<()> {
 
 /// 签名与排序位置的内部展示（调试用，不参与持久化）。
 impl fmt::Display for SpecSignatureEntry {
-    /// 以 `规格名=规格值` 形式展示。
+    // 以 `规格名=规格值` 形式展示。
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(formatter, "{}={}", self.attribute_code, self.value_code)
     }
@@ -284,7 +206,7 @@ mod tests {
         SpecSignatureEntry { attribute_code: attribute_code.to_string(), value_code: value_code.to_string() }
     }
 
-    /// 签名按规格名、规格值排序，且与输入顺序无关；空规格返回固定空签名。
+    // 签名按规格名、规格值排序，且与输入顺序无关；空规格返回固定空签名。
     #[test]
     fn compute_signature_is_canonical_and_order_independent() {
         let unsorted = vec![entry(" color ", " 白色 "), entry("size", "S"), entry("material", "棉")];
@@ -298,7 +220,7 @@ mod tests {
         assert_eq!(compute_specification_signature(&[]).unwrap(), EMPTY_SPEC_SIGNATURE);
     }
 
-    /// 中文自由规格不依赖预建字典即可形成稳定签名。
+    // 中文自由规格不依赖预建字典即可形成稳定签名。
     #[test]
     fn compute_signature_accepts_spu_local_names_and_values() {
         let entries = vec![entry(" 尺码 ", " L "), entry("颜色", " 红色 ")];
@@ -306,7 +228,7 @@ mod tests {
         assert_eq!(compute_specification_signature(&entries).unwrap(), "尺码=L|颜色=红色");
     }
 
-    /// 编辑签名集合登记规范化结果并拒绝重复规格组合。
+    // 编辑签名集合登记规范化结果并拒绝重复规格组合。
     #[test]
     fn signature_set_rejects_duplicate_combinations() {
         let mut signatures = SpecificationSignatureSet::new();
@@ -316,14 +238,14 @@ mod tests {
         assert!(signatures.register(&[entry("尺码", "L"), entry("颜色", "红色")]).is_err());
     }
 
-    /// 同一属性出现两次（值不同）属于规格数据不一致，拒绝计算。
+    // 同一属性出现两次（值不同）属于规格数据不一致，拒绝计算。
     #[test]
     fn compute_signature_rejects_duplicate_attribute() {
         let duplicated = vec![entry("size", "S"), entry("size", "L")];
         assert!(compute_specification_signature(&duplicated).is_err());
     }
 
-    /// 签名校验：固定空签名合法，其余空白/超长拒绝。
+    // 签名校验：固定空签名合法，其余空白/超长拒绝。
     #[test]
     fn validate_signature_accepts_only_canonical_shapes() {
         assert!(validate_specification_signature(EMPTY_SPEC_SIGNATURE).is_ok());
@@ -332,7 +254,7 @@ mod tests {
         assert!(validate_specification_signature(&"a=b|".repeat(200)).is_err());
     }
 
-    /// 身份排序位必须构成 0..n 完整排列：重复与越界被拒绝，完整排列通过。
+    // 身份排序位必须构成 0..n 完整排列：重复与越界被拒绝，完整排列通过。
     #[test]
     fn identity_positions_must_form_complete_permutation() {
         assert!(validate_identity_positions(&[]).is_ok());
@@ -344,7 +266,7 @@ mod tests {
         assert!(validate_identity_positions(&[0, 1, 3]).is_err());
     }
 
-    /// 签名中的规格名和值去首尾空白并拒绝超长。
+    // 签名中的规格名和值去首尾空白并拒绝超长。
     #[test]
     fn compute_signature_trims_codes_and_rejects_overlong() {
         let padded = vec![entry("  size  ", "  L  ")];
@@ -354,7 +276,7 @@ mod tests {
         assert!(compute_specification_signature(&overlong_code).is_err());
     }
 
-    /// 空签名解析为空集合；合法多项保持规范顺序。
+    // 空签名解析为空集合；合法多项保持规范顺序。
     #[test]
     fn parse_signature_accepts_empty_and_canonical_entries() {
         assert!(parse_specification_signature(EMPTY_SPEC_SIGNATURE).unwrap().is_empty());
@@ -366,7 +288,7 @@ mod tests {
         assert_eq!(entries[1].value_code, "红色");
     }
 
-    /// 编码后再解析必须得到规范内容，且与输入顺序无关的编码结果稳定。
+    // 编码后再解析必须得到规范内容，且与输入顺序无关的编码结果稳定。
     #[test]
     fn parse_signature_round_trips_canonical_encoding() {
         let encoded = compute_specification_signature(&[entry("颜色", "红色"), entry("尺码", "L")]).unwrap();
@@ -376,7 +298,7 @@ mod tests {
         assert_eq!(parsed, vec![entry("尺码", "L"), entry("颜色", "红色")]);
     }
 
-    /// 缺失 `=`、空名称、空值、重复属性和超长签名均失败关闭。
+    // 缺失 `=`、空名称、空值、重复属性和超长签名均失败关闭。
     #[test]
     fn parse_signature_rejects_illegal_persisted_shapes() {
         assert!(parse_specification_signature("尺码L").is_err());
@@ -387,7 +309,7 @@ mod tests {
         assert!(parse_specification_signature("颜色=红色|尺码=L").is_err());
     }
 
-    /// 列表读取把非法历史签名标为兼容形态，不把整页变成解析错误。
+    // 列表读取把非法历史签名标为兼容形态，不把整页变成解析错误。
     #[test]
     fn read_signature_versions_illegal_history_as_legacy() {
         assert!(matches!(
@@ -408,7 +330,7 @@ mod tests {
         ));
     }
 
-    /// JSON 形态保持规格名/值字符串，不以浮点或对象改写签名。
+    // JSON 形态保持规格名/值字符串，不以浮点或对象改写签名。
     #[test]
     fn specification_signature_json_and_empty_contract() {
         let encoded = compute_specification_signature(&[entry("颜色", "红色"), entry("尺码", "L")]).unwrap();

@@ -20,14 +20,14 @@ pub(crate) struct IntegrationTaskLabels {
     pub(crate) message_label: Option<String>,
 }
 
-/// 批量解析已授权任务的关联消息与精确供应商履约单号。
-///
-/// # 参数
-/// `db` 为领域仓储入口，`tasks` 为当前授权页，`executor` 沿用调用方读取快照。
-/// # 返回
-/// 返回按任务身份索引的展示；未知 payload、错配来源或缺失对象没有业务名称。
-/// # 错误
-/// 关联仓储读取失败时返回错误。
+// 补齐集成异常标识的展示名称时，批量解析已授权任务的关联消息与精确供应商履约单号。
+//
+// 调用参数：
+// `db` 为领域仓储入口，`tasks` 为当前授权页，`executor` 沿用调用方读取快照。
+//
+// 返回按任务身份索引的展示；未知 payload、错配来源或缺失对象没有业务名称。
+//
+// 关联仓储读取失败时返回错误。
 pub(crate) async fn integration_error_labels(
     db: &Database,
     tasks: &[ErrorTaskView],
@@ -66,7 +66,7 @@ pub(crate) async fn integration_error_labels(
     Ok(labels)
 }
 
-/// W20 健康检查生产者以固定任务身份关联供应商连接，普通无类型任务不走此读取。
+// 补齐集成异常标识的展示名称时，W20 健康检查生产者以固定任务身份关联供应商连接，普通无类型任务不走此读取。
 async fn connection_task_labels(
     db: &Database,
     tasks: &[ErrorTaskView],

@@ -28,13 +28,7 @@ struct TimelineAccess {
 }
 
 /// 装配销售时间线的跨域授权来源。
-///
-/// # 参数
-/// db、rbac 为数据库与身份设施，authorization 为进程共享统一授权服务。
-/// # 返回
 /// 返回统一的时间线读取服务。
-/// # 错误
-/// 构造不执行 I/O。
 pub fn sales_timeline_service(
     db: Database,
     rbac: SharedRbacService,

@@ -34,13 +34,6 @@ pub const WORKFLOW_ACTIONS: &str = <mongodb::Database as DocumentRegistryExt>::W
 /// - `document_participant`：追加式参与记录（§4.6 只追加不删除）无自然业务唯一键，
 ///   用 `id` 唯一索引防止重复身份静默写入。
 ///
-/// # 参数
-/// * `db` - 目标 MongoDB 数据库
-///
-/// # 返回
-/// 无返回值。
-///
-/// # 错误
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, BUSINESS_DOCUMENTS, business_document_indexes()).await?;
@@ -50,13 +43,13 @@ pub async fn ensure(db: &Database) -> Result<()> {
     Ok(())
 }
 
-/// 为单个集合创建一组幂等命名索引。
+// 为指定集合注册命名索引；使用相同定义重复注册时沿用已有索引。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
     db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
-/// 返回 `business_document` 的稳定 `id`、非空编号身份约束与搜索索引。
+// 定义 `business_document` 的稳定 `id`、非空编号身份约束与搜索索引。
 fn business_document_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_business_documents_id", doc! { "id": 1 }),
@@ -73,12 +66,12 @@ fn business_document_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 非空 `document_no` 部分过滤；空字符串草稿不进入唯一或搜索索引。
+// 编号索引仅覆盖非空 `document_no`；尚未分配编号的空字符串草稿不参与唯一性或编号检索。
 fn non_empty_document_no_filter() -> Document {
     doc! { "document_no": { "$gt": "" } }
 }
 
-/// 返回 `document_relation` 的关系唯一约束与反向查询索引。
+// 定义 `document_relation` 的关系唯一约束与反向查询索引。
 fn document_relation_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_document_relations_id", doc! { "id": 1 }),
@@ -94,7 +87,7 @@ fn document_relation_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `document_participant` 的参与人查询索引。
+// 定义 `document_participant` 的参与人查询索引。
 fn document_participant_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_document_participants_id", doc! { "id": 1 }),
@@ -106,7 +99,7 @@ fn document_participant_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `workflow_action` 的身份约束、单据历史与操作者审计索引。
+// 定义 `workflow_action` 的身份约束、单据历史与操作者审计索引。
 fn workflow_action_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_workflow_actions_id", doc! { "id": 1 }),
@@ -119,7 +112,7 @@ fn workflow_action_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 构建命名部分普通索引。
+// 生成命名非唯一部分索引，供只覆盖已编号单据的查询使用。
 fn named_partial_index(name: impl Into<String>, keys: Document, filter: Document) -> IndexModel {
     IndexModel::builder()
         .keys(keys)
@@ -129,7 +122,7 @@ fn named_partial_index(name: impl Into<String>, keys: Document, filter: Document
 
 #[cfg(test)]
 mod tests {
-    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    // 验证按稳定主键读取或乐观锁更新的集合均声明 `id` 唯一索引，避免退化为集合扫描。
     #[test]
     fn collections_look_up_by_unique_stable_id() {
         let indexes = super::document_relation_indexes();

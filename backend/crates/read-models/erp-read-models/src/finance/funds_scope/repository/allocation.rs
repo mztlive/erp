@@ -56,16 +56,13 @@ pub(in crate::finance::funds_scope) struct AllocationVersion {
 }
 
 impl AllocationVersion {
-    /// 保留原分配主键、分配版本、带类型来源关联键及来源版本哈希。
+    /// 组装进项发票分配时，保留原分配主键、分配版本、带类型来源关联键及来源版本哈希。
     ///
     /// # 参数
     /// * `fingerprint` - 调用方持有的指纹 hasher。
     ///
     /// # 返回
     /// 按既有协议把分配主键、版本、来源键和来源版本写入 `fingerprint`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn hash_into(&self, fingerprint: &mut impl Hasher) {
         self.id.hash(fingerprint);
         self.version.hash(fingerprint);
@@ -75,10 +72,7 @@ impl AllocationVersion {
 }
 
 impl AllocationSnapshot {
-    /// 最终已授权匹配超过原 9999 条保护时整体拒绝，禁止截断。
-    ///
-    /// # 参数
-    /// 无。
+    /// 核对进项发票分配边界时，最终已授权匹配超过原 9999 条保护时整体拒绝，禁止截断。
     ///
     /// # 返回
     /// 版本条数少于 10000 时成功。
@@ -92,30 +86,21 @@ impl AllocationSnapshot {
         Ok(())
     }
 
-    /// 读取同一最终条件的数据库总数，空集合为零。
-    ///
-    /// # 参数
-    /// 无。
+    /// 计算进项发票分配金额时，读取同一最终条件的数据库总数，空集合为零。
     ///
     /// # 返回
     /// 数据库最终授权条件的计数；计数分支为空时为零。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn total(&self) -> u64 {
         self.total.first().map_or(0, |row| row.count)
     }
 
-    /// 全部已授权分配沿原正反事实归并，结算来源无负责人时进入未分配分区。
+    /// 汇总进项发票分配时，全部已授权分配沿原正反事实归并，结算来源无负责人时进入未分配分区。
     ///
     /// # 参数
     /// * `version` - 本次范围版本，写入汇总视图。
     ///
     /// # 返回
     /// 按原份额顺序归并的授权份额；结算来源没有负责人时进入未分配。整单金额为份额方向金额之和。
-    ///
-    /// # 错误
-    /// 不返回错误。本函数没有失败分支。
     pub fn summary(&self, version: &str) -> Result<FundsSummaryView> {
         let mut triples = Vec::new();
         let mut owners = HashMap::new();
@@ -134,21 +119,18 @@ impl AllocationSnapshot {
     }
 }
 
-/// 来源授权与人员筛选在页面、完整版本与汇总分支之前完成。
-///
-/// # 参数
-/// * `db` - 进项分配集合所在数据库。
-/// * `query` - 已规范化的进项分配查询。
-/// * `authorization` - 已解析授权。
-/// * `condition` - 负责人、经办人与组织条件。
-/// * `materialize` - 为 true 时同时读取当前页和金额流。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
-/// 最终授权分配页、计数和完整版本；`materialize` 为 false 时页与金额流为空。
-///
-/// # 错误
-/// 聚合、解码失败，分页投影缺失，或版本达到 10000 条时拒绝。
+// 处理进项发票分配时，来源授权与人员筛选在页面、完整版本与汇总分支之前完成。
+//
+// 调用参数：
+// * `db` - 进项分配集合所在数据库。
+// * `query` - 已规范化的进项分配查询。
+// * `authorization` - 已解析授权。
+// * `condition` - 负责人、经办人与组织条件。
+// * `materialize` - 为 true 时同时读取当前页和金额流。
+//
+// 最终授权分配页、计数和完整版本；`materialize` 为 false 时页与金额流为空。
+//
+// 聚合、解码失败，分页投影缺失，或版本达到 10000 条时拒绝。
 pub(in crate::finance::funds_scope) async fn allocation_snapshot(
     db: &Database,
     query: &PurchaseInvoiceAllocationListQuery,
@@ -196,7 +178,7 @@ pub(in crate::finance::funds_scope) async fn allocation_snapshot(
     Ok(result)
 }
 
-/// 最终授权后的页面和计数共用一个分支，完整版本与金额独立游标读取。
+// 处理进项发票分配时，最终授权后的页面和计数共用一个分支，完整版本与金额独立游标读取。
 async fn allocation_page(
     db: &Database,
     mut pipeline: Vec<Document>,
@@ -214,7 +196,7 @@ async fn allocation_page(
     result.pop().ok_or_else(|| Error::Internal("进项分配分页投影缺失".into()))
 }
 
-/// 先定位子账再核对来源存在与实际范围，登记人仅是额外业务筛选。
+// 组装进项发票分配的聚合管道时，先定位子账再核对来源存在与实际范围，登记人仅是额外业务筛选。
 fn allocation_pipeline(
     query: &PurchaseInvoiceAllocationListQuery,
     authorization: &FundsAuthorization,
@@ -244,7 +226,7 @@ fn allocation_pipeline(
     pipeline
 }
 
-/// 票号与收票经办人取当前登记发票，缺失发票保留原空票号语义。
+// 组装进项发票分配的聚合管道时，票号与收票经办人取当前登记发票，缺失发票保留原空票号语义。
 fn invoice_header_stages() -> Vec<Document> {
     vec![
         doc! { "$lookup": { "from": <Database as ReceivableExt>::INVOICES,
@@ -257,7 +239,7 @@ fn invoice_header_stages() -> Vec<Document> {
     ]
 }
 
-/// 页面只携带当前分配实体、票号与已授权来源单号，保留原解码校验。
+// 组装进项发票分配的聚合管道时，页面只携带当前分配实体、票号与已授权来源单号，保留原解码校验。
 fn page_projection() -> Document {
     doc! { "_id": 0, "invoice_no": { "$ifNull": ["$_invoice.invoice_no", null] },
     "source_document_no": { "$ifNull": ["$_source.document_no", null] }, "item": {
@@ -269,7 +251,7 @@ fn page_projection() -> Document {
     } }
 }
 
-/// 完整金额流只保留原求和必须字段，不传输全量分配实体。
+// 汇总进项发票分配时，完整金额流只保留原求和必须字段，不传输全量分配实体。
 fn summary_projection() -> Document {
     doc! { "_id": 0, "id": 1, "order": 1, "owner": { "$ifNull": ["$_source.owner_user_id", null] },
     "allocated_gross_amount": 1, "allocation_action": 1, "source_type": "$_account.source_type" }
@@ -284,7 +266,7 @@ mod tests {
     use super::super::tests::authorization;
     use super::*;
 
-    /// 指定收票经办人时先筛当前票头再查来源，无筛选仍保持缺失发票可返回空票号。
+    // 验证进项发票分配：指定收票经办人时先筛当前票头再查来源，无筛选仍保持缺失发票可返回空票号。
     #[test]
     fn allocation_operator_filter_precedes_source_lookup_only_when_requested() {
         let query = PurchaseInvoiceAllocationListParams::default().normalized().unwrap();
@@ -319,7 +301,7 @@ mod tests {
         }));
     }
 
-    /// 轻量材料保留旧 Option 来源键的哈希形态，并能检测非当前页责任交接。
+    // 验证进项发票分配：轻量材料保留旧 Option 来源键的哈希形态，并能检测非当前页责任交接。
     #[test]
     fn allocation_versions_keep_typed_source_and_detect_changes() {
         let mut row = AllocationVersion {
@@ -344,7 +326,7 @@ mod tests {
         assert_ne!(changed.finish(), actual.finish());
     }
 
-    /// 空页面仍保留数据库总数和完整金额流，尾页不能把汇总归零。
+    // 验证进项发票分配：空页面仍保留数据库总数和完整金额流，尾页不能把汇总归零。
     #[test]
     fn empty_page_retains_total_and_signed_summary() {
         let snapshot: AllocationSnapshot = serde_json::from_value(serde_json::json!({

@@ -23,16 +23,7 @@ pub struct FollowUpAssignment {
 
 /// 从供应商 API 能力负责人或整体维护人解析唯一内部跟进人。
 ///
-/// # 参数
-/// * `db` - 供应商与身份集合
-/// * `supplier_id` - 固定供应商
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回跟进人及其主属组织。
-///
-/// # 错误
-/// 缺映射、账号无效或组织为公司根时拒绝。
+/// `db` 为供应商与身份集合；`supplier_id` 为固定供应商；沿用调用方的执行器。返回跟进人及其主属组织。缺映射、账号无效或组织为公司根时拒绝。
 pub async fn resolve_follow_up(
     db: &Database,
     supplier_id: &SupplierAccountId,
@@ -59,14 +50,8 @@ pub async fn resolve_follow_up(
 
 /// 在能力负责人与供应商维护人中取唯一内部跟进人。
 ///
-/// # 参数
-/// * `capability_owner` - API 能力负责人；去空白后非空时优先采用。
-/// * `maintainer` - 供应商维护人；仅当前者为空时采用。
+/// `capability_owner` 为API 能力负责人；去空白后非空时优先采用；`maintainer` 为供应商维护人；仅当前者为空时采用。返回选中的用户 ID。
 ///
-/// # 返回
-/// 返回选中的用户 ID。
-///
-/// # 错误
 /// 两者都缺失或只有空白时返回 `ValidationError`。
 pub fn pick_follow_up_user(capability_owner: Option<&str>, maintainer: Option<&str>) -> Result<String> {
     let capability = capability_owner.map(str::trim).filter(|value| !value.is_empty());
@@ -80,16 +65,7 @@ pub fn pick_follow_up_user(capability_owner: Option<&str>, maintainer: Option<&s
     }
 }
 
-/// 拒绝公司根作为内部组织。
-///
-/// # 参数
-/// * `org` - 待写入的组织 ID。
-///
-/// # 返回
-/// 组织非空且不是 `company` 时无返回值。
-///
-/// # 错误
-/// 组织为空或等于 `company`（忽略大小写）时返回 `ValidationError`。
+/// 登记供应商订单跟进责任或创建 W26 前，要求责任人属于具体内部组织；组织为空或等于 `company`（不区分大小写）返回 `ValidationError`。
 pub fn reject_company_org(org: &str) -> Result<()> {
     if org.trim().is_empty() || org.eq_ignore_ascii_case("company") {
         return Err(Error::ValidationError(

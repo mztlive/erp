@@ -52,12 +52,9 @@ pub struct CatalogFilter {
 
 impl CatalogFilter {
     /// 验证可复用筛选边界。
-    /// # 参数
-    /// 无；读取当前筛选条件。
-    /// # 返回
     /// 金额闭区间及文本长度合法时返回成功。
-    /// # 错误
     /// 负金额、倒置区间或过长文本时拒绝。
+    /// 读取当前筛选条件。
     pub fn validate(&self) -> Result<()> {
         for value in [&self.keyword, &self.category_id, &self.brand_id]
             .into_iter()
@@ -90,34 +87,25 @@ impl CatalogFilter {
     }
 
     /// 合并单值兼容参数和多选来源分类，不按名称推断层级。
-    /// # 参数
-    /// 无；读取本筛选的来源分类编号。
-    /// # 返回
     /// 去空、去重并稳定排序的分类编号。
-    /// # 错误
-    /// 不返回错误；边界约束由 `validate` 执行。
+    /// 边界约束由 `validate` 执行。
+    /// 读取本筛选的来源分类编号。
     pub fn categories(&self) -> Vec<&str> {
         ids(self.category_id.as_deref(), &self.category_ids)
     }
 
     /// 合并单值兼容参数和多选来源品牌。
-    /// # 参数
-    /// 无；读取本筛选的来源品牌编号。
-    /// # 返回
     /// 去空、去重并稳定排序的品牌编号。
-    /// # 错误
-    /// 不返回错误；边界约束由 `validate` 执行。
+    /// 边界约束由 `validate` 执行。
+    /// 读取本筛选的来源品牌编号。
     pub fn brands(&self) -> Vec<&str> {
         ids(self.brand_id.as_deref(), &self.brand_ids)
     }
 
     /// 检查依赖采购报价的查询资格，防止通过区间结果推算隐藏成本。
-    /// # 参数
-    /// `can_read_cost` 为当前服务端成本权限判定。
-    /// # 返回
     /// 具备成本权限或未使用成本条件时成功。
-    /// # 错误
     /// 无成本权限且设置报价边界时拒绝。
+    /// `can_read_cost` 为当前服务端成本权限判定。
     pub fn ensure_cost_access(&self, can_read_cost: bool) -> Result<()> {
         if !can_read_cost && (self.price_min.is_some() || self.price_max.is_some()) {
             return Err(Error::Forbidden("当前账号不能按采购报价筛选供应商商品".into()));
@@ -187,11 +175,7 @@ pub struct CatalogIdentityReviewView {
 
 impl CatalogIdentityReviewView {
     /// 核对人工看到的公司版本与单位仍对应当前资料。
-    /// # 参数
-    /// 已明确填写的人工核对请求。
-    /// # 返回
     /// 版本及公司基础单位相同则成功。
-    /// # 错误
     /// 版本变化或试图更换单位时拒绝。
     pub fn ensure_current(&self, request: &ReviewCatalogIdentityRequest) -> Result<()> {
         if self.sku_revision_id != request.expected_sku_revision_id

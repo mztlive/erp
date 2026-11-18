@@ -26,29 +26,12 @@ pub struct MongoFundsDataScope {
 
 impl MongoFundsDataScope {
     /// 绑定组织事实所用数据库。
-    ///
-    /// # 参数
-    /// * `db` - 组织集合所在数据库。
-    ///
-    /// # 返回
-    /// 返回未执行 I/O 的 adapter。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
     /// 包装为资金域可注入的共享 Port。
-    ///
-    /// # 参数
-    /// * `db` - 组织集合所在数据库。
-    ///
-    /// # 返回
     /// 返回只读取组织事实的 Port。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn shared(db: Database) -> Arc<dyn FundsDataScopePort> {
         Arc::new(Self::new(db))
     }
@@ -75,16 +58,7 @@ impl FundsDataScopePort for MongoFundsDataScope {
 }
 
 /// 构造复用统一授权服务和真实开票授权状态的资金访问器。
-///
-/// # 参数
-/// * `db` - 资金与身份集合所在数据库。
-/// * `authorization` - 进程共享统一授权服务。
-///
-/// # 返回
 /// 返回已注入本 adapter 的资金访问器。
-///
-/// # 错误
-/// 不返回错误。
 pub fn funds_access(db: Database, authorization: Arc<AuthorizationService>) -> FundsAccess {
     let scope = MongoFundsDataScope::shared(db.clone());
     FundsAccess::new(db.clone(), authorization.clone(), scope)

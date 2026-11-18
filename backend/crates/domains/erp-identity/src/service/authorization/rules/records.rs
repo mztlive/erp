@@ -212,7 +212,7 @@ pub(crate) fn independent(permission: &Permission) -> Vec<Permission> {
     portal_material_permissions(permission)
 }
 
-/// 门户材料按其固定用途取得独立业务资格，不改变其他对象入口。
+// 按门户材料登记用途取得独立业务功能资格，不把这些资格应用到无关对象入口。
 fn portal_material_permissions(permission: &Permission) -> Vec<Permission> {
     if permission.resource() != "supplier_portal_material" {
         return vec![];
@@ -230,7 +230,7 @@ fn portal_material_permissions(permission: &Permission) -> Vec<Permission> {
     }
 }
 
-/// 命令派生入口保留与根修改资格相互独立的附加功能资格。
+// 为派生命令保留独立的补充功能权限，不能把根对象的修改资格当成同一证明。
 fn independent_command(permission: &Permission) -> Option<Permission> {
     [
         (internal::CONTRACT_SALES_ACCESS, customer::ASSIGNMENT_APPLY),
@@ -242,7 +242,7 @@ fn independent_command(permission: &Permission) -> Option<Permission> {
     .find_map(|(entry, required)| (&entry == permission).then_some(required))
 }
 
-/// 采购来源检查保留独立业务入口资格，不要求其与采购范围资格来自同一角色。
+// 验证采购来源时仍须独立证明其业务入口资格；可由不同启用角色提供入口权限和采购范围资格。
 fn purchase_entry(permission: &Permission) -> Option<Permission> {
     [
         (internal::PURCHASE_CHANGE_SOURCE, purchase_order::PURCHASE_CHANGE_SUBMIT),
@@ -260,13 +260,12 @@ pub(crate) fn qualified(permission: &Permission, qualified: &QualifiedPermission
     permission != &bulk_job::BACKGROUND_JOB_CANCEL_ALL || administrator(qualified)
 }
 
-/// 返回固定对象入口的数据条件。
-/// # 参数
-/// permission 为已登记的对象入口；无正式任务的差异决定按当前处理人判断。
-/// # 返回
-/// 已登记对象入口返回完整条件，其他入口返回 None。
-/// # 错误
-/// 不执行 I/O；缺失事实由条件执行阶段拒绝。
+// 返回固定对象入口的数据条件。
+// 已登记对象入口返回完整条件，其他入口返回 None。
+//
+// 不执行 I/O；缺失事实由条件执行阶段拒绝。
+//
+// permission 为已登记的对象入口；无正式任务的差异决定按当前处理人判断。
 pub(crate) fn condition(permission: &Permission) -> Option<AccessRule> {
     if permission == &integration_ops::DIFFERENCE_DECISION {
         return Some(
@@ -330,12 +329,12 @@ fn administrator(qualified: &QualifiedPermissions) -> bool {
     qualified.roles.iter().any(|role| matches!(role.base.id.as_str(), "role-root" | "role-sysadmin"))
 }
 
-/// 可选读取资格只影响固定分支，不成为全部入口的必需资格。
+// 只在固定可选读取分支使用该功能资格，不将其提升为其他对象入口的共同前置条件。
 pub(crate) fn optional(permission: &Permission) -> Vec<Permission> {
     super::management_permission(permission).into_iter().collect()
 }
 
-/// 结算责任条件与入口范围组合，业务调用方不再追加行级政策。
+// 将结算责任条件与该入口的数据范围组合成统一规则，不要求业务端另外拼接行级权限。
 pub(crate) fn scoped(permission: &Permission, scope: AccessRule) -> AccessRule {
     let responsibility = if [
         internal::SETTLEMENT_REFRESH_PREPARED,

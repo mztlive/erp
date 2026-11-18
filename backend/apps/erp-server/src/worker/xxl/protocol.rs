@@ -12,22 +12,14 @@ pub(crate) struct Reply {
 }
 impl Reply {
     /// 构造成功回执。
-    /// # 参数
     /// content 为可选协议响应。
-    /// # 返回
     /// code=200 的 ReturnT。
-    /// # 错误
-    /// 无。
     pub fn ok(content: Option<Value>) -> Self {
         Self { code: 200, msg: None, content }
     }
     /// 构造失败回执。
-    /// # 参数
     /// message 为固定脱敏摘要。
-    /// # 返回
     /// code=500 的 ReturnT。
-    /// # 错误
-    /// 无。
     pub fn fail(message: &str) -> Self {
         Self { code: 500, msg: Some(message.into()), content: None }
     }
@@ -52,11 +44,8 @@ pub(crate) struct Trigger {
 }
 impl Trigger {
     /// 验证有限协议子集；不支持的运行模式必须拒绝。
-    /// # 参数
     /// app 为执行器固定应用名。
-    /// # 返回
     /// 可信的调度身份。
-    /// # 错误
     /// 身份不匹配或运行方式不受支持时拒绝。
     pub fn request(self, app: &str) -> Result<ScheduledRequest, &'static str> {
         if self.glue_type != "BEAN"

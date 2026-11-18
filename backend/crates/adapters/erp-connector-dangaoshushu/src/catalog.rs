@@ -25,14 +25,8 @@ use super::{DangaoshushuConnector, DangaoshushuOffer, error};
 type Parameters = Vec<(String, String)>;
 
 impl DangaoshushuConnector {
-    /// 查询新版品牌及开通城市，保留字符串品牌 ID 与供应商原始事实。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 供应商完整品牌列表；不修改公司品牌主档。
-    /// # 错误
-    /// 外部调用失败或响应非数组时返回分类错误。
+    /// 查询蛋糕叔叔的品牌与开通城市，供后台查看原始目录或进行连接连通性检查。
+    /// 原样保留字符串品牌 ID，不更新公司品牌主档；调用失败或响应不是数组时返回分类错误。
     pub async fn brands(&self) -> ConnectorResult<Value> {
         let value = self
             .transport
@@ -44,14 +38,8 @@ impl DangaoshushuConnector {
         Ok(value)
     }
 
-    /// 查询新版门店资料，供冻结自提门店选项。
-    ///
-    /// # 参数
-    /// `brand_id` 为本连接的品牌号；`city_id` 为供应商城市号。
-    /// # 返回
-    /// 原始门店事实，不作为公司地区字典。
-    /// # 错误
-    /// 身份非法或查询失败时返回分类错误。
+    /// 按供应商品牌号和城市号读取原始门店资料，供配送流程冻结自提选项，也可用于后台诊断。
+    /// 门店记录不作为公司地区字典；标识无效或远端查询失败时返回分类错误。
     pub async fn shops(&self, brand_id: &str, city_id: &str) -> ConnectorResult<Value> {
         valid_id(brand_id)?;
         valid_id(city_id)?;
@@ -97,13 +85,8 @@ impl DangaoshushuConnector {
     }
 }
 
-/// 构造冻结窗口及有界分页参数。
-/// # 参数
-/// `scan` 为扫描窗口、游标及页大小。
-/// # 返回
-/// 当前页码和供应商请求参数。
-/// # 错误
-/// 非法页码、页大小或时间窗口返回映射错误。
+// 目录扫描发请求前，将冻结窗口和页游标换成供应商日期及页码参数。
+// 从第 1 页起读、每页最多 50 项；游标、页大小或时间窗口无效时返回映射错误。
 pub(super) fn scan_parameters(scan: &Scan) -> ConnectorResult<(u32, Parameters)> {
     if scan.limit.get() > 50 {
         return Err(mapping());
@@ -137,13 +120,8 @@ pub(super) fn scan_parameters(scan: &Scan) -> ConnectorResult<(u32, Parameters)>
     Ok((page, parameters))
 }
 
-/// 按原始商品数计算下一页，不受规格映射或跳过数量影响。
-/// # 参数
-/// `page` 为当前页码，`products` 为原始商品数，`limit` 为请求页大小。
-/// # 返回
-/// 满页继续读取，否则结束扫描。
-/// # 错误
-/// 页大小转换或下一页页码溢出时返回映射错误。
+// 目录扫描按供应商返回的原始商品数决定是否续页，避免某页跳过无效规格后提前结束。
+// 满页才递增页码；页大小转换失败或页码溢出时返回映射错误。
 pub(super) fn next_page(page: u32, products: usize, limit: NonZeroU32) -> ConnectorResult<Option<String>> {
     if products >= usize::try_from(limit.get()).map_err(|_| mapping())? {
         Ok(Some(page.checked_add(1).ok_or_else(mapping)?.to_string()))
@@ -152,14 +130,8 @@ pub(super) fn next_page(page: u32, products: usize, limit: NonZeroU32) -> Connec
     }
 }
 
-/// 定位商品响应中的请求规格，异常身份不得当作正常缺项。
-///
-/// # 参数
-/// `product` 为已验证商品响应；`sku` 为请求规格。
-/// # 返回
-/// 当前可见规格或明确的缺项。
-/// # 错误
-/// 规格集合或身份无法解析时返回映射错误。
+// 单规格报价、查库存和目录补查都用它在已核对的商品详情中定位规格。
+// 只有确实未出现才返回缺项；规格列表、编号或归属异常按映射错误处理。
 pub(super) fn spec_value<'a>(product: &'a Value, sku: &SupplierSku) -> ConnectorResult<Option<&'a Value>> {
     let mut found = None;
     for spec in
@@ -182,13 +154,8 @@ pub(super) fn spec_value<'a>(product: &'a Value, sku: &SupplierSku) -> Connector
     Ok(found)
 }
 
-/// 结合上级状态、规格可购与库存判定可供性；忽略供应商 `is_up` 字段。
-/// # 参数
-/// `product` 为详情响应，`spec` 为目标规格，`quantity` 为已解析库存。
-/// # 返回
-/// 可供状态及明确的阻断原因。
-/// # 错误
-/// 必需状态字段缺失或取值非法时返回映射错误。
+// 查库存和转换完整目录详情时，结合品牌、商品、规格状态与已知零库存列出不可购原因。
+// 不采用 is_up；参与判定的状态缺失或无法识别时返回映射错误。
 pub(super) fn availability_state(
     product: &Value,
     spec: &Value,

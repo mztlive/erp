@@ -6,16 +6,12 @@ use super::RuntimeInstanceListItem;
 use crate::error::Result;
 
 impl RuntimeInstanceListItem {
-    /// 从已授权主体与精确提交快照构造独立详情。
-    ///
-    /// # 参数
-    /// * `subject` - 已完成实例读取授权的主体、执行及冻结快照。
-    ///
-    /// # 返回
-    /// 返回可独立展示的单据身份、版本、金额、当前责任和运行状态。
-    ///
-    /// # 错误
-    /// 快照或当前执行与实例身份不一致时隐藏为不存在。
+    // 从已授权主体与精确提交快照构造独立详情。
+    // 返回可独立展示的单据身份、版本、金额、当前责任和运行状态。
+    //
+    // 快照或当前执行与实例身份不一致时隐藏为不存在。
+    //
+    // `subject`：已完成实例读取授权的主体、执行及冻结快照。
     pub(in super::super) fn from_read_subject(subject: &RuntimeReadSubject) -> Result<Self> {
         let instance = &subject.instance;
         let snapshot = &subject.snapshot;

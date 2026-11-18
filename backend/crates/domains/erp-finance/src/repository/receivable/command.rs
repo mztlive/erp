@@ -29,15 +29,7 @@ pub struct ReceivableListScope {
 
 impl ReceivableListScope {
     /// 无作用域时返回 `true`（不得触发关联扫描）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// `sales_order_id` 与 `receivable_account_id` 都为 `None` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 结果：`sales_order_id` 与 `receivable_account_id` 都为 `None` 时返回 `true`。
     pub fn is_empty(&self) -> bool {
         self.sales_order_id.is_none() && self.receivable_account_id.is_none()
     }
@@ -69,16 +61,7 @@ pub struct ScopedCustomerReceiptQuery {
 }
 
 impl Default for ScopedCustomerReceiptQuery {
-    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回第 1 页、每页 20 条的空筛选条件。
-    ///
-    /// # 错误
-    /// 无。
+    // 未提供列表条件时，从第 1 页读取，每页 20 条，不预设可选业务筛选。
     fn default() -> Self {
         Self {
             keyword_ids: None,
@@ -124,16 +107,7 @@ pub struct ScopedInvoiceQuery {
 }
 
 impl Default for ScopedInvoiceQuery {
-    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回第 1 页、每页 20 条的空筛选条件。
-    ///
-    /// # 错误
-    /// 无。
+    // 未提供列表条件时，从第 1 页读取，每页 20 条，不预设可选业务筛选。
     fn default() -> Self {
         Self {
             keyword_ids: None,
@@ -159,18 +133,14 @@ impl<'a> ReceivableRepository<'a> {
     /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction` 时
     /// 两笔写入各自自动提交，第二笔失败会留下只有子账没有分录的半成品；
     /// Service 必须通过 `persistence_core::Transactional::with_transaction` 传入事务会话。
-    ///
-    /// # 参数
-    /// * `account` - 待写入的应收往来子账
-    /// * `entry` - 待写入的原始应收分录
-    /// * `executor` - 数据访问执行器，必须位于事务中
-    ///
-    /// # 返回
-    /// 子账与原始分录都写入成功时返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// 结果：子账与原始分录都写入成功时返回 `Ok(())`。
     /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射
     /// 为冲突语义）或 MongoDB 写入失败时返回错误。
+    ///
+    /// 输入约定：
+    /// - `account`：待写入的应收往来子账
+    /// - `entry`：待写入的原始应收分录
+    /// - `executor`：数据访问执行器，必须位于事务中
     pub async fn create_receivable_with_entry(
         &self,
         account: &ReceivableAccount,
@@ -195,17 +165,13 @@ impl<'a> ReceivableRepository<'a> {
     /// 唯一键冲突，由 Service 转译并整体回滚。
     /// **必须收到事务执行器**：本方法不构成原子边界，Service 必须通过
     /// `persistence_core::Transactional::with_transaction` 传入事务会话。
-    ///
-    /// # 参数
-    /// * `allocations` - 待持久化的销项发票分配
-    /// * `executor` - 数据访问执行器，必须位于事务中
-    ///
-    /// # 返回
-    /// 全部写入成功返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// 结果：全部写入成功返回 `Ok(())`。
     /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射
     /// 为冲突语义）或 MongoDB 写入失败时返回错误。
+    ///
+    /// 输入约定：
+    /// - `allocations`：待持久化的销项发票分配
+    /// - `executor`：数据访问执行器，必须位于事务中
     pub async fn create_sales_invoice_allocations_many(
         &self,
         allocations: &[SalesInvoiceAllocation],
@@ -228,22 +194,16 @@ impl<'a> ReceivableRepository<'a> {
     /// 关联扫描；有 scope 时中间 ID 只在仓储内流转，空集短路不再发起后续
     /// `$in` 查询。排序/投影/total 口径与 `search_customer_receipts` 一致，
     /// Service 只做 view 映射。
-    ///
-    /// # 参数
-    /// * `query` - 基础筛选、作用域与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回当前页投影行与满足筛选条件的总数；作用域交集为空时返回空页。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    ///
-    /// # 约束
-    /// 只做事实读取与确定性归组，不开事务、不做跨聚合决定、不返回 services
+    /// 传播数据库查询、游标读取或计数失败。
+    /// 调用边界：只做事实读取与确定性归组，不开事务、不做跨聚合决定、不返回 services
     /// View；软删除过滤与稳定排序保持不变。外键索引：`uk_receivable_accounts_sales_order`
-    ///（销售单前缀）、`idx_receivable_entries_account_due`（账户前缀）、
+    /// （销售单前缀）、`idx_receivable_entries_account_due`（账户前缀）、
     /// `idx_receipt_allocations_entry_time`（分录前缀）覆盖三段关联。
+    ///
+    /// 输入约定：
+    /// - `query`：基础筛选、作用域与分页条件
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     pub async fn search_customer_receipts_in_account_scope(
         &self,
         query: &ScopedCustomerReceiptQuery,
@@ -281,16 +241,12 @@ impl<'a> ReceivableRepository<'a> {
     /// 排序/投影/total 口径与 `search_invoices` 一致。外键索引：
     /// `uk_receivable_accounts_sales_order`（销售单前缀）、
     /// `idx_sales_invoice_allocations_account`（账户）覆盖两段关联。
-    ///
-    /// # 参数
-    /// * `query` - 基础筛选、作用域与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回当前页投影行与满足筛选条件的总数；作用域交集为空时返回空页。
+    /// 传播数据库查询、游标读取或计数失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// 输入约定：
+    /// - `query`：基础筛选、作用域与分页条件
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     pub async fn search_invoices_in_account_scope(
         &self,
         query: &ScopedInvoiceQuery,
@@ -320,10 +276,10 @@ impl<'a> ReceivableRepository<'a> {
             .await
     }
 
-    /// 解析已核销回款主键及本单分录，供分页查询并集匹配待审批分配。
-    ///
-    /// 应收范围或分录为空时返回空集合，不发起后续核销查询；
-    /// 无已过账核销时仍保留分录身份以匹配待审批分配。结果排序去重。
+    // 按应收范围求出已核销回款和本单分录的身份，供分页同时匹配正式与待审批分配。
+    //
+    // 应收范围或分录为空时返回空集合，不发起后续核销查询；
+    // 无已过账核销时仍保留分录身份以匹配待审批分配。结果排序去重。
     async fn receipt_ids_for_scope(
         &self,
         scope: &ReceivableListScope,
@@ -350,9 +306,9 @@ impl<'a> ReceivableRepository<'a> {
         Ok((receipt_ids, entry_ids))
     }
 
-    /// 读取作用域内的应收分录身份；空账户范围直接返回，不扩大查询。
-    ///
-    /// 返回去重后的分录主键；账户或分录读取失败时透传仓储错误。
+    // 加载作用域内的应收分录身份；空账户范围直接返回，不扩大查询。
+    //
+    // 返回去重后的分录主键；账户或分录读取失败时透传仓储错误。
     async fn scoped_entry_ids(
         &self,
         scope: &ReceivableListScope,
@@ -377,9 +333,9 @@ impl<'a> ReceivableRepository<'a> {
         Ok(entry_ids)
     }
 
-    /// 解析作用域内出现过分配的销项发票主键（仓储内中间事实，不外泄）。
-    ///
-    /// 两段批量关联，任一段为空直接返回空集合；结果排序去重，保持确定性。
+    // 按当前应收范围定位曾分配到该范围的销项发票，仅将发票身份用于内部筛选。
+    //
+    // 两段批量关联，任一段为空直接返回空集合；结果排序去重，保持确定性。
     async fn invoice_ids_for_scope(
         &self,
         scope: &ReceivableListScope,
@@ -404,10 +360,10 @@ impl<'a> ReceivableRepository<'a> {
         Ok(invoice_ids)
     }
 
-    /// 解析列表关联作用域的账户主键（销售单/子账交集，仓储内中间事实）。
-    ///
-    /// 未指定范围时返回空集合；子账不存在、已软删除或与销售单不一致时返回
-    /// 空集合（交集语义），调用方据此返回空页而不触发后续关联扫描。
+    // 为关联列表求销售单与子账条件的交集，只将命中的账户身份传给后续查询。
+    //
+    // 未指定范围时返回空集合；子账不存在、已软删除或与销售单不一致时返回
+    // 空集合（交集语义），调用方据此返回空页而不触发后续关联扫描。
     async fn scoped_account_ids(
         &self,
         scope: &ReceivableListScope,

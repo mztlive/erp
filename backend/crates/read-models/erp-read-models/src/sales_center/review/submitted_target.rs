@@ -6,18 +6,16 @@ use persistence_core::Executor;
 
 use crate::{Error, Result};
 
-/// 在同一授权执行器内读取当前提交来源的内容身份。
-///
-/// # 参数
-/// * `db` - 销售集合数据库
-/// * `change` - 已沿来源销售单授权的变更单
-/// * `executor` - 详情授权事务执行器
-///
-/// # 返回
-/// 未提交返回空；已有提交时返回被冻结工作副本的内容身份。
-///
-/// # 错误
-/// 提交、工作副本、原单或冻结版本不匹配时返回 `ConflictError`。仓储读取失败会返回对应错误。
+// 读取销售变更已提交目标时，在同一授权执行器内读取当前提交来源的内容身份。
+//
+// 调用参数：
+// * `db` - 销售集合数据库
+// * `change` - 已沿来源销售单授权的变更单
+// * `executor` - 详情授权事务执行器
+//
+// 未提交返回空；已有提交时返回被冻结工作副本的内容身份。
+//
+// 提交、工作副本、原单或冻结版本不匹配时返回 `ConflictError`。仓储读取失败会返回对应错误。
 pub(super) async fn submitted_content_hash(
     db: &mongodb::Database,
     change: &SalesChangeOrder,

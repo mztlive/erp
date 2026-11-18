@@ -26,40 +26,13 @@ pub trait CostExt {
     /// 成本分配列表筛选条件类型（定义见 `repository::cost`）。
     type CostAllocationFilter;
 
-    /// 获取 `cost_entry` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `CostEntryRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 从当前数据库取得 `cost_entry` 集合的类型化仓储，供调用方按自身执行器访问。
     fn cost_entries(&self) -> CostEntryRepository<'_>;
 
-    /// 获取 `cost_allocation` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `CostAllocationRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 从当前数据库取得 `cost_allocation` 集合的类型化仓储，供调用方按自身执行器访问。
     fn cost_allocations(&self) -> CostAllocationRepository<'_>;
 
-    /// 获取承载跨集合事务写入的域专用仓储。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `CostRepository` 实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得成本仓储，供成本分录和分配明细在调用方事务中一起写入。
     fn cost(&self) -> CostRepository<'_>;
 }
 

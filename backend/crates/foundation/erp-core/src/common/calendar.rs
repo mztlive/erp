@@ -18,23 +18,15 @@ pub enum CalendarPeriod {
 }
 
 impl CalendarPeriod {
-    /// 计算日期所属自然周期的最后一天。
-    ///
-    /// # 参数
-    /// * `date` - 周期内的业务日期。
-    ///
-    /// # 返回
-    /// 返回该自然周期的最后一天。周从周一开始；月、季度、半年和年按自然历，季度与半年从 1 月起算。
-    ///
-    /// # 错误
-    /// 日期运算超出 `NaiveDate` 可表示范围时返回 `Error::LogicError`，文案为「自然周期日期超出支持范围」。
+    /// 从周期内的业务日期求自然周期最后一天，供需要日历边界的领域计算使用，不引入付款政策。
+    /// 周从周一算起，季度和半年从 1 月分段；日期运算越界返回业务值错误。
     pub fn end(self, date: BusinessDate) -> Result<BusinessDate> {
         let date = date.as_naive_date();
         let end = self.end_date(date).ok_or("自然周期日期超出支持范围")?;
         Ok(BusinessDate::from_naive_date(end))
     }
 
-    /// 所属自然周期的最后一天；日历运算溢出时返回 `None`。
+    // 在封装业务日期前按周期计算终日；自然周求周日，其他周期用月边界，溢出时留给上层统一报错。
     fn end_date(self, date: NaiveDate) -> Option<NaiveDate> {
         match self {
             Self::Week => {
@@ -48,7 +40,7 @@ impl CalendarPeriod {
     }
 }
 
-/// 通过下个周期首日减一天计算月度周期，自动处理闰年。
+// 按每周期月数找到下一周期首日，再退一天，避免为月长和闰年另列规则。
 fn month_end(date: NaiveDate, months: u32) -> Option<NaiveDate> {
     let next_month = (date.month0() / months + 1) * months;
     let year = date.year().checked_add((next_month / 12) as i32)?;

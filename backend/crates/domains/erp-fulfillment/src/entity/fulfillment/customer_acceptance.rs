@@ -39,16 +39,7 @@ pub enum CustomerAcceptanceState {
 }
 
 impl CustomerAcceptanceState {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回客户验收单状态的中文名称，供业务界面展示，不作为持久化代码。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Draft => "草稿",
@@ -57,16 +48,7 @@ impl CustomerAcceptanceState {
         }
     }
 
-    /// 返回状态的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回客户验收单状态的稳定代码，供持久化与查询匹配使用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Draft => "DRAFT",
@@ -75,33 +57,15 @@ impl CustomerAcceptanceState {
         }
     }
 
-    /// 判断是否可编辑（仅草稿）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 草稿状态返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 编辑入口据此判断是否能继续修改当前记录；仅草稿状态允许。
     pub fn is_editable(&self) -> bool {
         matches!(self, Self::Draft)
     }
 }
 
 impl DocumentState for CustomerAcceptanceState {
-    /// 固定邻接矩阵（§7.5 定向链，`REVERSED` 为不可逆终态）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// `Draft` 只允许进入 `Posted`；`Posted` 只允许进入 `Reversed`；
-    /// `Reversed` 没有后继。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 固定邻接矩阵（§7.5 定向链，`REVERSED` 为不可逆终态）。
+    // `Draft` 只允许进入 `Posted`；`Posted` 只允许进入 `Reversed`；`Reversed` 没有后继。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Draft => &[Self::Posted],
@@ -126,16 +90,7 @@ pub enum AcceptanceResult {
 }
 
 impl AcceptanceResult {
-    /// 返回结果的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回客户验收结果的中文名称，供业务界面展示，不作为持久化代码。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Passed => "通过",
@@ -145,16 +100,7 @@ impl AcceptanceResult {
         }
     }
 
-    /// 返回结果的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回客户验收结果的稳定代码，供持久化与查询匹配使用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Passed => "PASSED",
@@ -219,17 +165,9 @@ pub struct CustomerAcceptance {
 
 impl CustomerAcceptance {
     /// 创建客户验收单（初始状态为草稿）。
-    ///
     /// 完成验收单号规范化。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::CustomerAcceptanceId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
     /// 返回新建的验收单实体。
-    ///
-    /// # 错误
+    /// `id` 为实体主键（`erp_core::ids::CustomerAcceptanceId`）。
     /// 验收单号为空或超长时返回错误。
     pub fn new(id: CustomerAcceptanceId, data: CustomerAcceptanceData) -> Result<Self> {
         let acceptance_no = normalize_required_text(
@@ -251,16 +189,7 @@ impl CustomerAcceptance {
     }
 
     /// 更新客户验收单（仅草稿）。
-    ///
     /// 已过账验收不可编辑（§6.7），误录时新增反向验收及反向分配。
-    ///
-    /// # 参数
-    /// * `update` - 更新数据
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 状态不可编辑，或签收凭证身份为空白时返回错误。
     pub fn update(&mut self, update: CustomerAcceptanceUpdate) -> Result<()> {
         self.ensure_editable()?;
@@ -280,12 +209,7 @@ impl CustomerAcceptance {
     }
 
     /// 读取新签收必须提供的凭证身份。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 返回非空的签收单文件资产身份。
-    /// # 错误
     /// 缺少凭证或身份为空时拒绝签收。
     pub fn require_evidence(&self) -> Result<&FileAssetId> {
         self.evidence_attachment_id
@@ -295,16 +219,8 @@ impl CustomerAcceptance {
     }
 
     /// 判断既有验收单是否属于同一业务身份。
-    ///
-    /// # 参数
-    /// * `sales_order_id` - 请求声明的销售单
-    /// * `acceptance_no` - 请求可选的验收单号
-    ///
-    /// # 返回
     /// 销售单一致，且提供单号时单号也一致，返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// `sales_order_id` 为请求声明的销售单；`acceptance_no` 为请求可选的验收单号。
     pub fn matches_business_identity(
         &self,
         sales_order_id: &SalesOrderId,
@@ -315,28 +231,14 @@ impl CustomerAcceptance {
     }
 
     /// 判断验收单是否已经过账。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 状态为 `Posted` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn is_posted(&self) -> bool {
         self.status == CustomerAcceptanceState::Posted
     }
 
     /// 校验已有验收草稿可按期望版本完整替换。
-    ///
-    /// # 参数
-    /// * `expected_version` - 调用方提交的乐观锁版本
-    ///
-    /// # 返回
     /// 草稿且版本一致时返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// `expected_version` 为调用方提交的乐观锁版本。
     /// 状态或版本不满足时返回错误。
     pub fn ensure_draft_version(&self, expected_version: u64) -> Result<()> {
         if self.status != CustomerAcceptanceState::Draft {
@@ -349,14 +251,7 @@ impl CustomerAcceptance {
     }
 
     /// 校验验收单仍为草稿。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 草稿状态返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 非草稿状态返回错误。
     pub fn ensure_draft(&self) -> Result<()> {
         if self.status != CustomerAcceptanceState::Draft {
@@ -366,14 +261,8 @@ impl CustomerAcceptance {
     }
 
     /// 校验已加载验收行完整且全部归属本单。
-    ///
-    /// # 参数
-    /// * `lines` - 已在事务内加载的验收行
-    ///
-    /// # 返回
     /// 至少一行且全部行归属本单时返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// `lines` 为已在事务内加载的验收行。
     /// 空行或行表头关联不一致时返回错误。
     pub fn ensure_posting_lines(&self, lines: &[CustomerAcceptanceLine]) -> Result<()> {
         if lines.is_empty() {
@@ -386,14 +275,8 @@ impl CustomerAcceptance {
     }
 
     /// 校验验收单可按期望版本冲正。
-    ///
-    /// # 参数
-    /// * `expected_version` - 调用方提交的乐观锁版本
-    ///
-    /// # 返回
     /// 已过账且版本一致时返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// `expected_version` 为调用方提交的乐观锁版本。
     /// 状态或版本不满足时返回错误。
     pub fn ensure_reversible(&self, expected_version: u64) -> Result<()> {
         if self.base.version != expected_version {
@@ -406,17 +289,8 @@ impl CustomerAcceptance {
     }
 
     /// 过账验收（草稿 → 已过账）。
-    ///
-    /// 过账时写 `acceptance_fulfillment_allocation` 的 `APPLY`/`REVERSE` 并重算
-    /// 两侧净数量上限——由 P3 在过账事务中完成（§8.2 第 5 条）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
+    /// 过账时写 `acceptance_fulfillment_allocation` 的 `APPLY`/`REVERSE` 并重算两侧净数量上限——由 P3 在过账事务中完成（§8.2 第 5 条）。
     /// 迁移成功返回 `Ok(())`。已过账再次过账按幂等成功。
-    ///
-    /// # 错误
     /// 已冲正不能过账时返回错误。
     pub fn mark_posted(&mut self) -> Result<()> {
         ensure_transition(self.status, CustomerAcceptanceState::Posted)?;
@@ -425,17 +299,8 @@ impl CustomerAcceptance {
     }
 
     /// 冲正验收（已过账 → 已冲正，终态）。
-    ///
-    /// 误录时新增反向验收及反向分配，不覆盖原行（§6.7）；本方法登记反向
-    /// 验收单引用并迁移状态，反向分配由 P3 形成。
-    ///
-    /// # 参数
-    /// * `reversal_of_acceptance_id` - 反向验收单主键
-    ///
-    /// # 返回
-    /// 迁移成功返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// 误录时新增反向验收及反向分配，不覆盖原行（§6.7）；本方法登记反向验收单引用并迁移状态，反向分配由 P3 形成。
+    /// `reversal_of_acceptance_id` 为反向验收单主键。
     /// 当前状态不允许迁移到已冲正，或反向验收引用与自身相同时返回错误。已冲正再次冲正不因状态失败。
     pub fn reverse(&mut self, reversal_of_acceptance_id: CustomerAcceptanceId) -> Result<()> {
         ensure_transition(self.status, CustomerAcceptanceState::Reversed)?;
@@ -448,27 +313,13 @@ impl CustomerAcceptance {
         Ok(())
     }
 
-    /// 判断当前状态是否可编辑。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 草稿状态返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 编辑入口据此判断是否能继续修改当前记录；仅草稿状态允许。
     pub fn is_editable(&self) -> bool {
         self.status.is_editable()
     }
 
-    /// 校验当前状态可编辑。
-    ///
-    /// # 返回
-    /// 可编辑返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 已过账/已冲正的验收单不可编辑时返回错误。
+    // 校验当前状态可编辑。
+    // 已过账/已冲正的验收单不可编辑时返回错误。
     fn ensure_editable(&self) -> Result<()> {
         if !self.is_editable() {
             return Err(Error::from("已过账或已冲正的客户验收单不可编辑"));
@@ -527,19 +378,9 @@ pub struct CustomerAcceptanceLine {
 
 impl CustomerAcceptanceLine {
     /// 创建客户验收行。
-    ///
-    /// 完成行号、依据说明规范化与数量非负校验。行级约束
-    /// `(customer_acceptance_id, line_no)` 唯一由唯一索引保证；验收单已过账后
-    /// 行不可再变更由 P3 按表头状态把关（§6.7）。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::CustomerAcceptanceLineId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
+    /// 完成行号、依据说明规范化与数量非负校验。行级约束 `(customer_acceptance_id, line_no)` 唯一由唯一索引保证；验收单已过账后行不可再变更由 P3 按表头状态把关（§6.7）。
     /// 返回新建的验收行实体。
-    ///
-    /// # 错误
+    /// `id` 为实体主键（`erp_core::ids::CustomerAcceptanceLineId`）。
     /// 行号小于 1、结果数量为负或依据说明超长时返回错误。
     pub fn new(id: CustomerAcceptanceLineId, data: CustomerAcceptanceLineData) -> Result<Self> {
         let reason = normalize_optional_text(data.reason, "依据说明", REASON_MAX_LEN)?;
@@ -567,14 +408,8 @@ impl CustomerAcceptanceLine {
     }
 
     /// 校验履约分配合计等于本行通过数量。
-    ///
-    /// # 参数
-    /// * `allocated_quantities` - 本行全部拟应用分配数量
-    ///
-    /// # 返回
     /// 分配合计守恒时返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// `allocated_quantities` 为本行全部拟应用分配数量。
     /// 数量求和失败或合计不等于通过数量时返回错误。
     pub fn ensure_allocation_conserved<I>(&self, allocated_quantities: I) -> Result<()>
     where
@@ -592,18 +427,9 @@ impl CustomerAcceptanceLine {
         Ok(())
     }
     /// 校验过账分配与草稿验收行一一对应且每行携带分配（§8.2 第 5 条「锁定验收行」）。
-    ///
-    /// 纯规则：只比较销售明细归属与每行分配条数，不触 I/O；DTO 形态由 Service
-    /// 投影为 `(销售明细, 分配条数)` 对后传入，本方法不依赖 DTO 类型。
-    ///
-    /// # 参数
-    /// * `lines` - 草稿验收行
-    /// * `inputs` - （销售明细，分配条数）对
-    ///
-    /// # 返回
+    /// 纯规则：只比较销售明细归属与每行分配条数，不触 I/O；DTO 形态由 Service 投影为 `(销售明细, 分配条数)` 对后传入，本方法不依赖 DTO 类型。
     /// 一致返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// `lines` 为草稿验收行；`inputs` 为（销售明细，分配条数）对。
     /// 行数不一致、某行缺失或某行分配为空时返回错误。
     pub fn ensure_post_inputs_match(lines: &[Self], inputs: &[(SalesOrderLineId, usize)]) -> Result<()> {
         if lines.len() != inputs.len() {
@@ -693,7 +519,7 @@ pub(crate) mod tests {
         }
     }
 
-    /// happy path：单号规范化、初始草稿、过账与冲正（登记反向验收）全链路。
+    // 验证单号规范化、初始草稿、过账与冲正（登记反向验收）全链路。
     #[test]
     fn new_normalizes_no_and_drives_state_machine() {
         let mut acceptance =
@@ -710,7 +536,7 @@ pub(crate) mod tests {
         assert_eq!(acceptance.reversal_of_acceptance_id.unwrap().as_ref(), "acceptance-2");
     }
 
-    /// 失败路径：必填空（单号空白）、超长、反向验收引用自身。
+    // 验证必填空（单号空白）、超长、反向验收引用自身。
     #[test]
     fn new_rejects_invalid_inputs() {
         let blank_no = CustomerAcceptanceData { acceptance_no: "  ".to_string(), ..data() };
@@ -724,7 +550,7 @@ pub(crate) mod tests {
         assert!(acceptance.reverse(CustomerAcceptanceId::new("other")).is_err(), "草稿不能冲正");
     }
 
-    /// 状态机：合法/非法/终态定向断言（含幂等迁移）。
+    // 验证合法迁移、非法迁移和终态边界（含幂等迁移）。
     #[test]
     fn state_machine_directed_edges() {
         let mut acceptance = CustomerAcceptance::new(CustomerAcceptanceId::new("a5"), data()).unwrap();
@@ -762,7 +588,7 @@ pub(crate) mod tests {
         assert!(ensure_transition(CustomerAcceptanceState::Draft, CustomerAcceptanceState::Draft).is_ok());
     }
 
-    /// happy path：验收行创建成功，说明规范化。
+    // 验证验收行创建成功，说明规范化。
     #[test]
     fn line_new_succeeds() {
         let line = CustomerAcceptanceLine::new(CustomerAcceptanceLineId::new("cl-1"), line_data()).unwrap();
@@ -770,7 +596,7 @@ pub(crate) mod tests {
         assert_eq!(line.accepted_quantity, Quantity::from_str("9").unwrap());
     }
 
-    /// 过账规则校验业务身份、版本、表头行归属、分配守恒与冲正资格。
+    // 验证过账规则校验业务身份、版本、表头行归属、分配守恒与冲正资格。
     #[test]
     fn posting_rules_validate_status_version_association_and_allocation_total() {
         let mut acceptance =
@@ -821,7 +647,7 @@ pub(crate) mod tests {
         assert!(CustomerAcceptanceLine::new(CustomerAcceptanceLineId::new("cl-4"), overlong_reason).is_err());
     }
 
-    /// 过账行匹配纯规则：行数/缺行/空分配失败，正确投影通过。
+    // 验证过账行匹配纯规则：行数/缺行/空分配失败，正确投影通过。
     #[test]
     fn post_inputs_match_covers_count_missing_and_empty() {
         use std::str::FromStr;

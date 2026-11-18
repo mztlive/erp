@@ -31,7 +31,7 @@ enum CommitErrorLabel {
     Definite,
 }
 
-/// 根据 MongoDB 错误标签与已用时间决定提交错误的处理方式。
+// 提交失败后只对结果未知标签使用等待预算；达到时限保留未知状态，其他失败不走该重试分支。
 fn commit_error_action(label: CommitErrorLabel, elapsed: Duration) -> CommitErrorAction {
     if label != CommitErrorLabel::UnknownResult {
         return CommitErrorAction::DefiniteFailure;
@@ -42,10 +42,8 @@ fn commit_error_action(label: CommitErrorLabel, elapsed: Duration) -> CommitErro
     CommitErrorAction::OutcomeUnknown
 }
 
-/// 构建统一业务事务选项：读取同一个 majority-committed 快照，并以 majority 提交。
-///
-/// 不得依赖 MongoDB 默认的 `local` read concern：它不能为分片部署保证跨集合、
-/// 跨分片的一致快照，会破坏 Service 在同一事务内重验业务与授权事实的前提。
+// 统一用 `snapshot` 读取和 `majority` 提交，使业务与授权事实可在同一 majority-committed 快照中重验。
+// 默认 `local` 在分片部署不保证跨集合、跨分片看到同一快照。
 fn transaction_options() -> TransactionOptions {
     TransactionOptions::builder()
         .read_concern(ReadConcern::snapshot())
@@ -53,7 +51,8 @@ fn transaction_options() -> TransactionOptions {
         .build()
 }
 
-/// 在同一会话上重试结果未知的事务提交。
+// 在同一会话上重试带结果未知标签的提交，不重新执行回调。超过重试预算仍未知则保留专用错误，
+// 其他驱动错误按原分类返回。
 async fn commit_with_retry(session: &mut ClientSession) -> Result<()> {
     let started_at = Instant::now();
     loop {
@@ -74,7 +73,7 @@ async fn commit_with_retry(session: &mut ClientSession) -> Result<()> {
     }
 }
 
-/// 启动带因果一致性的会话并开启统一业务事务选项。
+// 开始业务回调前创建因果一致的会话，并用统一快照及提交选项开启事务；初始化失败时不运行回调。
 async fn start_transaction_session(client: &Client) -> Result<ClientSession> {
     let session_options = SessionOptions::builder().causal_consistency(true).build();
     let mut session = client.start_session().with_options(session_options).await?;
@@ -84,7 +83,7 @@ async fn start_transaction_session(client: &Client) -> Result<ClientSession> {
     Ok(session)
 }
 
-/// 静默回滚事务；回滚失败仅记录日志，不覆盖用例原始错误。
+// 回调已失败时尽力回滚；回滚错误只记日志，以免覆盖调用方需要处理的原失败。
 async fn abort_quietly(session: &mut ClientSession) {
     if let Err(abort_error) = session.abort_transaction().await {
         tracing::warn!(error = ?abort_error, "failed to abort MongoDB transaction after callback error");
@@ -94,19 +93,9 @@ async fn abort_quietly(session: &mut ClientSession) {
 /// 在事务上下文中执行操作。
 #[async_trait]
 pub trait Transactional {
-    /// 在同一事务内执行回调，并将持久化错误转换为调用方错误类型。
-    ///
-    /// # 参数
-    ///
-    /// * `f` - 使用同一数据访问执行器的异步回调
-    ///
-    /// # 返回
-    ///
-    /// 返回回调成功提交后的结果。
-    ///
-    /// # 错误
-    /// 返回回调错误，或经 `From` 转换的事务初始化、提交错误。
-    /// 回调失败时尝试回滚，回滚失败只记录日志，不覆盖原错误。
+    /// Service 或 Process 需要原子完成多步读写时，向回调交出同一个受管执行器，
+    /// 由设施启动事务并在提交成功后返回结果。回调失败时尝试回滚，回滚错误仅记录；
+    /// 事务初始化或提交失败转换为调用方错误，提交未知不重跑回调。
     async fn with_transaction<F, R, E>(&self, f: F) -> std::result::Result<R, E>
     where
         F: for<'a> FnOnce(
@@ -121,20 +110,7 @@ pub trait Transactional {
 /// 为 MongoDB 客户端实现事务支持。
 #[async_trait]
 impl Transactional for Client {
-    /// 在事务中执行函数，并允许调用方指定错误类型。
-    ///
-    /// 回调收到 `&mut dyn Executor`，不得再向下传递 `&mut ClientSession`。
-    /// 提交与回滚由本方法完成。
-    ///
-    /// # 参数
-    /// * `f` - 处理函数
-    ///
-    /// # 返回
-    /// 返回执行结果，错误类型由调用方决定。
-    ///
-    /// # 错误
-    /// 返回回调错误，或经 `From` 转换的事务初始化、提交错误。
-    /// 回调失败时尝试回滚，回滚失败只记录日志，不覆盖原错误。
+    // 事务开始后仅让业务回调接触受管 `Executor`，不把原始会话传到仓储。回调成功再提交；失败时回滚且保留原错误。
     async fn with_transaction<F, R, E>(&self, f: F) -> std::result::Result<R, E>
     where
         F: for<'a> FnOnce(

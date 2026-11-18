@@ -13,16 +13,12 @@ pub trait PayableAccountRepositoryExt {
     ///
     /// 只返回 [`PayableAccountRow`] 所需的列表字段，不加载整文档；
     /// 排序字段经白名单映射，未命中回退 `created_at`，方向由 `sort_ascending` 决定（缺省降序）。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回当前页投影行与满足筛选条件的总数。
+    /// 传播数据库查询、游标读取或计数失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// 输入约定：
+    /// - `filter`：筛选与分页条件
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn search_payable_accounts(
         &self,
         filter: &PayableAccountFilter,
@@ -30,16 +26,12 @@ pub trait PayableAccountRepositoryExt {
     ) -> Result<PageResult<PayableAccountRow>>;
 
     /// 按主键集合批量取回应付子账（`$in` 一次取回，禁止 N+1）。
-    ///
-    /// # 参数
-    /// * `account_ids` - 应付往来子账 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回全部匹配子账；空集合直接返回空列表。
+    /// 传播数据库查询或游标读取失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 输入约定：
+    /// - `account_ids`：应付往来子账 ID 集合
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn find_accounts_by_ids(
         &self,
         account_ids: &[PayableAccountId],
@@ -47,19 +39,13 @@ pub trait PayableAccountRepositoryExt {
     ) -> Result<Vec<PayableAccount>>;
 
     /// 按采购单查询其来源的应付往来子账。
-    ///
-    /// # 参数
-    /// * `purchase_order_id` - 采购单稳定身份
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回来源单据为该采购单的应付子账；尚未形成时返回 `None`。
+    /// 传播数据库查询失败。
+    /// 调用边界：未删除过滤由基类 `find_one` 统一追加；来源类型固定为采购单。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    ///
-    /// # 约束
-    /// 未删除过滤由基类 `find_one` 统一追加；来源类型固定为采购单。
+    /// 输入约定：
+    /// - `purchase_order_id`：采购单稳定身份
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn find_by_purchase_order(
         &self,
         purchase_order_id: &PurchaseOrderId,
@@ -67,14 +53,12 @@ pub trait PayableAccountRepositoryExt {
     ) -> Result<Option<PayableAccount>>;
 
     /// 批量读取指定采购单的应付子账，复用来源唯一索引。
-    ///
-    /// # 参数
-    /// * `order_ids` - 已授权的当前页采购单身份。
-    /// * `executor` - 调用方的数据访问执行器。
-    /// # 返回
     /// 返回未删除的采购应付子账；空输入直接返回空集合。
-    /// # 错误
-    /// 数据库查询或反序列化失败时返回错误。
+    /// 传播数据库查询或反序列化失败。
+    ///
+    /// 输入约定：
+    /// - `order_ids`：已授权的当前页采购单身份。
+    /// - `executor`：调用方的数据访问执行器。
     async fn find_by_purchase_orders(
         &self,
         order_ids: &[PurchaseOrderId],
@@ -82,19 +66,13 @@ pub trait PayableAccountRepositoryExt {
     ) -> Result<Vec<PayableAccount>>;
 
     /// 读取指定供应商尚未结清的采购应付子账。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 往来供应商
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回 `open` 或 `partially_settled` 且来源为采购单的子账；没有匹配时返回空列表。
+    /// 传播数据库查询或反序列化失败。
+    /// 调用边界：只返回存储事实，不判断这些子账是否存在开放付款任务。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或反序列化失败时返回错误。
-    ///
-    /// # 约束
-    /// 只返回存储事实，不判断这些子账是否存在开放付款任务。
+    /// 输入约定：
+    /// - `supplier_id`：往来供应商
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn find_unsettled_purchase_accounts_by_supplier(
         &self,
         supplier_id: &SupplierAccountId,
@@ -193,10 +171,8 @@ impl PayableAccountRepositoryExt for persistence_core::Repository<'_, PayableAcc
     }
 }
 
-/// 应付往来子账列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
+// 限定应付往来子账列表查询返回的字段，避免读出列表不需要的完整实体。
+// 返回投影条件文档。
 fn payable_account_projection() -> Document {
     doc! {
         "id": 1,

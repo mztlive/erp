@@ -15,15 +15,10 @@ pub struct SelectionPriceComparison {
 
 impl SelectionPriceComparison {
     /// 对比客户售价和冻结或按精确修订补齐的集采价。
+    /// 结果：集采价及保留两位小数的累计百分比；比例超出可表示范围时保留集采价、比例为空。
+    /// 不修改任何销售价格。
     ///
-    /// # 参数
-    /// `price` 为当前客户售价，`original` 为集采价；缺失或非正集采价不得推算。
-    ///
-    /// # 返回
-    /// 集采价及保留两位小数的累计百分比；比例超出可表示范围时保留集采价、比例为空。
-    ///
-    /// # 错误
-    /// 不返回错误，不修改任何销售价格。
+    /// 输入约定：`price` 为当前客户售价，`original` 为集采价；缺失或非正集采价不得推算。
     pub fn new(price: Amount, original: Option<Amount>) -> Self {
         let original_price = original.filter(|value| *value > Amount::zero());
         let markup_percent = original_price.and_then(|original| {

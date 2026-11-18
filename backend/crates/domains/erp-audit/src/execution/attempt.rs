@@ -12,29 +12,14 @@ use crate::{AuditAttemptResult, Error};
 /// 失败、拒绝及未知尝试的事务外窄持久化端口。
 #[async_trait]
 pub trait AuditAttemptSink: Send + Sync {
-    /// 保存安全尝试快照，不参与原事务且不解释业务回执。
-    /// # 参数
-    /// * `attempt` - 类型化最小上下文，不含错误正文。
-    /// # 返回
-    /// 返回尝试写入结果。
-    /// # 错误
-    /// 尝试记录失败时返回错误；调用方仍须保留原命令错误。
+    /// 在原事务之外保存失败、拒绝或未知的最小安全上下文，不记录错误正文或解释业务回执。保存失败返回错误，但调用方仍须保留原命令错误。
     async fn persist_attempt(&self, attempt: &AuditAttempt) -> Result<()>;
 }
 
 /// 使用独立 NoTransaction 写入尝试集合。
 pub struct MongoAuditAttemptSink<'a>(&'a Database);
 impl<'a> MongoAuditAttemptSink<'a> {
-    /// 绑定原命令数据库，不复用已经结束的事务执行器。
-    ///
-    /// # 参数
-    /// * `db` - 审计领域所在数据库。
-    ///
-    /// # 返回
-    /// 返回独立尝试写入器。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 绑定尝试记录使用的数据库，供原事务结束后单独写入安全留痕。
     pub fn new(db: &'a Database) -> Self {
         Self(db)
     }
@@ -47,15 +32,7 @@ impl AuditAttemptSink for MongoAuditAttemptSink<'_> {
     }
 }
 
-/// 在事务完成后补记尝试；写尝试失败不覆盖首次错误或重执行命令。
-/// # 参数
-/// * `result` - 原业务事务返回值，错误对象按原值保留。
-/// * `context` - 执行前已验证的静态、安全关联上下文。
-/// * `sink` - 与原业务事务分开的尝试持久化端口。
-/// # 返回
-/// 返回原命令结果；成功不追加尝试事件。
-/// # 错误
-/// 仅返回原错误。尝试写入故障记录固定安全诊断，不替换首次错误。
+/// 在原事务结束后补记失败、拒绝或未知尝试，成功时直接返回原结果。补记异常只写固定安全诊断，不覆盖首次错误，也不重新执行业务。
 pub async fn finish_attempt<T, E: AuditFailure, S: AuditAttemptSink>(
     result: std::result::Result<T, E>,
     context: &BusinessEventContext,

@@ -23,16 +23,8 @@ pub enum DraftSource {
 }
 
 impl DraftSource {
-    /// 返回稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
+    /// 取得稳定代码。
     /// 返回 `EMPTY` 或 `CURRENT_PUBLISHED`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Empty => "EMPTY",
@@ -79,16 +71,9 @@ pub struct DefinitionNodeRequest {
 
 impl DefinitionNodeRequest {
     /// 以必填字段构造草稿节点写请求；编辑主键默认为空。
-    ///
-    /// # 参数
-    /// * `node_name` - 节点名称
-    /// * `assignee_user_id` - 指定审批人账号
-    ///
-    /// # 返回
     /// 返回展示顺序为 1 的节点请求。
     ///
-    /// # 错误
-    /// 无。
+    /// `assignee_user_id`：指定审批人账号。
     pub fn new(node_name: String, assignee_user_id: String) -> Self {
         Self {
             node_id: None,
@@ -101,18 +86,13 @@ impl DefinitionNodeRequest {
     }
 
     /// 清洗客户端提交的节点文本，供命令摘要与 BPM 草稿构造共用。
+    /// 本方法只清洗外部文本，不生成节点 ID，也不判断已有节点归属。
     ///
-    /// # 参数
-    /// 无；就地规范化当前请求。
-    ///
-    /// # 返回
     /// 空白节点 ID 视为新建，名称与审批人已去除首尾空白。
     ///
-    /// # 错误
     /// 名称为空/超长或审批人引用非法时返回模型错误。
     ///
-    /// # 关键业务约束
-    /// 本方法只清洗外部文本，不生成节点 ID，也不判断已有节点归属。
+    /// 就地规范化当前请求。
     pub fn prepare(mut self) -> ModelResult<Self> {
         self.node_id = self.node_id.map(|value| value.trim().to_string()).filter(|value| !value.is_empty());
         self.node_name = ApprovalNodeDefinition::normalize_name(self.node_name)?;
@@ -326,7 +306,7 @@ pub struct DefinitionDetailView {
 mod tests {
     use super::*;
 
-    /// 未知字段、连线、角色池、resolver、action、终点和处理器必须被拒绝。
+    // 验证：未知字段、连线、角色池、resolver、action、终点和处理器必须被拒绝。
     #[test]
     fn write_requests_deny_unknown_fields() {
         let draft = serde_json::from_str::<CreateDefinitionDraftRequest>(
@@ -433,7 +413,7 @@ mod tests {
         .is_err());
     }
 
-    /// 编辑已有节点时 `node_id` 可选。
+    // 验证：编辑已有节点时 `node_id` 可选。
     #[test]
     fn node_id_is_optional_for_new_nodes() {
         let node: DefinitionNodeRequest =
@@ -447,7 +427,7 @@ mod tests {
         assert_eq!(existing.node_id.as_deref(), Some("n1"));
     }
 
-    /// DTO prepare 清洗外部文本：空白 ID 视为新建，名称与审批人去空白。
+    // 验证：DTO prepare 清洗外部文本：空白 ID 视为新建，名称与审批人去空白。
     #[test]
     fn node_request_prepare_trims_external_text() {
         let prepared = DefinitionNodeRequest {

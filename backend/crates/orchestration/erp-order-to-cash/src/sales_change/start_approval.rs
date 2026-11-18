@@ -38,17 +38,9 @@ use super::adapter::sales_change_order_object_readable;
 use super::submission_receipt::receipt_write_error;
 use crate::{Error, Result};
 
-/// 加载绑定定义图。缺失时失败关闭，不得用空图启动。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `binding` - 创建时冻结的定义绑定
-///
-/// # 返回
-/// 返回已持久化的定义图。
-///
-/// # 错误
-/// 定义不存在或仓储失败时返回冲突或仓储错误。
+// 加载绑定定义图。缺失时失败关闭，不得用空图启动。
+//
+// `binding` 为创建时冻结的定义绑定。返回已持久化的定义图。定义不存在或仓储失败时返回冲突或仓储错误。
 pub(super) async fn load_bound_definition_graph(
     db: &Database,
     binding: &ApprovalDefinitionBinding,
@@ -59,19 +51,8 @@ pub(super) async fn load_bound_definition_graph(
         .map_err(Error::from)
 }
 
-/// 读取同载荷启动收据；不存在时返回 `None`。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `subject` - 业务对象引用
-/// * `subject_version` - 冻结提交版本
-/// * `idempotency_key` - 调用方幂等键
-///
-/// # 返回
-/// 已提交收据或空。
-///
-/// # 错误
-/// 幂等键非法或仓储失败时返回错误。
+// 销售变更提交时，沿调用方执行器按审批主体、冻结版本和原幂等键查启动回执。
+// 未命中返回 `None`；幂等键非法或仓储失败返回原错误。
 pub(super) async fn load_start_receipt(
     db: &Database,
     subject: &SubjectRef,
@@ -129,24 +110,15 @@ pub(super) struct SalesChangeStartInput<'a> {
     pub now: Instant,
 }
 
-/// 由定义图与单据组织构造启动输入。
-///
-/// 审批人取自已发布节点，不接受客户端选择。对象读取权失败时收敛为 BLOCKED。
-///
-/// # 用途
-/// 把启动参数收敛为引擎 `prepare_start` 输入。
-///
-/// # 参数
-/// * `input` - 定义图、绑定、主体与提交人
-///
-/// # 返回
-/// 返回可交给 `prepare_start` 的输入。
-///
-/// # 错误
-/// 入口缺失、审批人非法、幂等键非法或读取权校验失败时返回错误。
-///
-/// # 关键业务约束
-/// 定义版本必须与冻结绑定一致；对象读取权失败时收敛为 BLOCKED。
+// 由定义图与单据组织构造启动输入。
+//
+// 审批人取自已发布节点，不接受客户端选择。对象读取权失败时收敛为 BLOCKED。
+//
+// 把启动参数收敛为引擎 `prepare_start` 输入。
+//
+// `input` 为定义图、绑定、主体与提交人。返回可交给 `prepare_start` 的输入。入口缺失、审批人非法、幂等键非法或读取权校验失败时返回错误。
+//
+// 定义版本必须与冻结绑定一致；对象读取权失败时收敛为 BLOCKED。
 pub(super) fn build_sales_change_start_input(
     input: SalesChangeStartInput<'_>,
 ) -> Result<StartExecutionInput> {
@@ -188,17 +160,9 @@ pub(super) fn build_sales_change_start_input(
     )?)
 }
 
-/// 为定义全部节点冻结启动绑定，并按单据组织重验对象读取权。
-///
-/// # 参数
-/// * `graph` - 定义图
-/// * `organization_id` - 单据责任组织
-///
-/// # 返回
-/// 返回与节点一一对应的绑定。
-///
-/// # 错误
-/// 节点审批人引用非法或显示名为空时返回校验错误。
+// 为定义全部节点冻结启动绑定，并按单据组织重验对象读取权。
+//
+// `graph` 为定义图；`organization_id` 为单据责任组织。返回与节点一一对应的绑定。节点审批人引用非法或显示名为空时返回校验错误。
 fn start_bindings_from_graph(
     graph: &DefinitionGraph,
     organization_id: &str,
@@ -254,7 +218,7 @@ pub(super) struct SalesChangeStartPersistInput {
 }
 
 impl SalesChangeStartPersistInput {
-    /// 在入口事务中重验来源授权，并依原顺序写收据、业务事实、运行态和审计。
+    // 在入口事务中重验来源授权，并依原顺序写收据、业务事实、运行态和审计。
     pub(super) async fn persist(mut self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
         let PreparedExecution::Apply(writes) = self.prepared else {
             return Err(Error::ConflictError(
@@ -312,10 +276,7 @@ impl SalesChangeStartPersistInput {
     }
 }
 
-/// 将启动计划写入 BPM 集合、不可变快照和入口 WorkItem。
-///
-/// # 错误
-/// 计划缺少入口执行或写入失败时返回错误。
+// 将启动计划写入 BPM 集合、不可变快照和入口 WorkItem。计划缺少入口执行或写入失败时返回错误。
 async fn persist_runtime_writes(
     db: &Database,
     writes: &PlannedWrites,

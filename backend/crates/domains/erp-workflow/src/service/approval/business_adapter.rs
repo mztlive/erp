@@ -68,15 +68,9 @@ impl BindingRevalidationContext {
     /// 按固定业务类型映射授权事实；身份维度不得混用。
     /// 以必填身份构造绑定重验上下文；可选维度默认为空。
     ///
-    /// # 参数
-    /// * `organization_id` - 当前单据责任组织
-    /// * `creator_id` - 单据创建人或提交人
-    ///
-    /// # 返回
     /// 返回可选维度均为 `None` 的上下文。
     ///
-    /// # 错误
-    /// 无。
+    /// `organization_id`：当前单据责任组织。
     pub fn new(organization_id: String, creator_id: String) -> Self {
         Self {
             order_source: None,
@@ -88,57 +82,32 @@ impl BindingRevalidationContext {
     }
 
     /// 设置订单来源。
-    ///
-    /// # 参数
-    /// * `order_source` - 当前或拟创建订单来源
-    ///
-    /// # 返回
-    /// 返回更新后的上下文。
-    ///
-    /// # 错误
-    /// 无。
+    /// `order_source`：当前或拟创建订单来源。
     pub fn with_order_source(mut self, order_source: Option<OrderTaskSource>) -> Self {
         self.order_source = order_source;
         self
     }
 
     /// 设置内部业务部门。
-    ///
-    /// # 参数
-    /// * `business_org_unit_id` - 订单及变更沿当前原单取得的内部业务部门
-    ///
-    /// # 返回
-    /// 返回更新后的上下文。
-    ///
-    /// # 错误
-    /// 无。
+    /// `business_org_unit_id`：订单及变更沿当前原单取得的内部业务部门。
     pub fn with_business_org_unit_id(mut self, business_org_unit_id: Option<String>) -> Self {
         self.business_org_unit_id = business_org_unit_id;
         self
     }
 
     /// 设置当前业务负责人。
-    ///
-    /// # 参数
-    /// * `scope_owner_user_id` - 当前业务负责人
-    ///
-    /// # 返回
-    /// 返回更新后的上下文。
-    ///
-    /// # 错误
-    /// 无。
+    /// `scope_owner_user_id`：当前业务负责人。
     pub fn with_scope_owner_user_id(mut self, scope_owner_user_id: Option<String>) -> Self {
         self.scope_owner_user_id = scope_owner_user_id;
         self
     }
 
     /// 校验订单绑定必需的来源、部门和负责人事实。
-    /// # 参数
-    /// document_type 为当前强业务主体类型。
-    /// # 返回
     /// 非订单类型不增加订单约束，订单事实完整时成功。
-    /// # 错误
+    ///
     /// 订单来源、部门或负责人缺失时拒绝绑定；负责人未覆盖时沿用创建人。
+    ///
+    /// document_type 为当前强业务主体类型。
     pub fn ensure_order_facts(&self, document_type: DocumentType) -> Result<()> {
         if OrderTaskSource::approval_kind(document_type).is_some()
             && (self.business_org_unit_id.as_deref().is_none_or(str::is_empty)
@@ -152,14 +121,8 @@ impl BindingRevalidationContext {
 }
 
 /// 按合同政策构造必须审批类型的适配器规格。
-///
-/// # 参数
-/// * `document_type` - 固定单据类型
-///
-/// # 返回
 /// 返回完整规格。
 ///
-/// # 错误
 /// `NO_APPROVAL` 类型不得注册空适配器。
 pub fn adapter_spec_of(document_type: DocumentType) -> Result<ApprovalAdapterSpec> {
     let policy = require_process_required(document_type)?;
@@ -167,15 +130,11 @@ pub fn adapter_spec_of(document_type: DocumentType) -> Result<ApprovalAdapterSpe
 }
 
 /// 由已校验政策填充适配器规格。
-///
-/// # 参数
-/// * `policy` - 必须审批政策
-///
-/// # 返回
 /// 返回完整的 `ApprovalAdapterSpec`。
 ///
-/// # 错误
 /// 三类动作未注册或相同、快照或角色缺失时返回内部错误或 `ApprovalPolicyNotRegistered`。
+///
+/// `policy`：必须审批政策。
 pub fn spec_from_policy(policy: &ProcessRequiredApprovalPolicy) -> Result<ApprovalAdapterSpec> {
     super::policy::ensure_actions_registered(policy)?;
     if policy.subject_snapshot_fields.is_empty() || policy.work_item_owner_role.as_str().is_empty() {
@@ -197,14 +156,8 @@ pub fn spec_from_policy(policy: &ProcessRequiredApprovalPolicy) -> Result<Approv
 }
 
 /// 证明规格声明了合同要求的全部适配器字段。
-///
-/// # 参数
-/// * `spec` - 待证明的适配器规格
-///
-/// # 返回
 /// 字段完整且三类动作互异时无返回值。
 ///
-/// # 错误
 /// 快照字段或责任角色为空、三类动作不互异，或流程种类与单据类型不一致时返回内部错误。
 pub fn ensure_adapter_spec_complete(spec: &ApprovalAdapterSpec) -> Result<()> {
     if spec.subject_snapshot_fields.is_empty()
@@ -230,14 +183,8 @@ pub fn ensure_adapter_spec_complete(spec: &ApprovalAdapterSpec) -> Result<()> {
 }
 
 /// 确认该单据类型已注册审批政策。
-///
-/// # 参数
-/// * `document_type` - 固定单据类型
-///
-/// # 返回
 /// `NO_APPROVAL` 与 `PROCESS_REQUIRED` 均通过时无返回值。
 ///
-/// # 错误
 /// `policy_of` 构造失败时传播其错误。
 pub fn ensure_runtime_cut_over(document_type: DocumentType) -> Result<()> {
     match policy_of(document_type)? {
@@ -246,16 +193,11 @@ pub fn ensure_runtime_cut_over(document_type: DocumentType) -> Result<()> {
 }
 
 /// 按政策动作进入目标运行时。
-///
-/// # 参数
-/// * `document_type` - 固定单据类型
-/// * `action` - 合同签署的强类型领域动作
-///
-/// # 返回
 /// 不返回成功。动作属于该类型时仍因领域端口未绑定而失败。
 ///
-/// # 错误
 /// 政策或规格构造失败、动作不属于该类型，或领域端口尚未绑定时返回错误。
+///
+/// `action`：合同签署的强类型领域动作。
 pub fn execute_policy_domain_action(document_type: DocumentType, action: ApprovalDomainAction) -> Result<()> {
     ensure_runtime_cut_over(document_type)?;
     let spec = adapter_spec_of(document_type)?;
@@ -270,17 +212,11 @@ pub fn execute_policy_domain_action(document_type: DocumentType, action: Approva
 }
 
 /// 按单据政策校验创建人/提交人与指定审批人的岗位分离。
-///
-/// # 参数
-/// * `policy` - 岗位分离策略
-/// * `creator_id` - 创建人或提交人
-/// * `assignee_ids` - 指定审批人
-///
-/// # 返回
 /// 政策允许重合或创建人不在审批人集合中时无返回值。
 ///
-/// # 错误
 /// 政策禁止重合且创建人出现在审批人集合时返回校验错误。
+///
+/// `assignee_ids`：指定审批人。
 pub fn ensure_separation_of_duties(
     policy: SeparationOfDutiesPolicy,
     creator_id: &str,
@@ -329,7 +265,7 @@ mod tests {
     use super::*;
     use crate::service::approval::policy::{ALL_DOCUMENT_TYPES, policy_of};
 
-    /// 13 个必须审批类型的适配器规格完整，9 个无审批类型不得注册空适配器。
+    // 验证：13 个必须审批类型的适配器规格完整，9 个无审批类型不得注册空适配器。
     #[test]
     fn adapter_registry_is_complete_and_no_approval_has_no_adapter() {
         let mut required = 0;
@@ -354,7 +290,7 @@ mod tests {
         assert_eq!(no_approval, 9);
     }
 
-    /// 全部固定类型均进入目标运行时，未知种类失败关闭。
+    // 验证：全部固定类型均进入目标运行时，未知种类失败关闭。
     #[test]
     fn all_fixed_types_enter_target_runtime() {
         assert!(ensure_runtime_cut_over(DocumentType::StockAdjustment).is_ok());
@@ -376,7 +312,7 @@ mod tests {
         assert!(matches!(pilot, Error::BusinessLogicError(_)));
     }
 
-    /// 提交人不得出现在指定审批人中。
+    // 验证：提交人不得出现在指定审批人中。
     #[test]
     fn separation_of_duties_forbids_submitter_as_approver() {
         let policy = SeparationOfDutiesPolicy::ForbidSubmitterAsApprover;
@@ -384,7 +320,7 @@ mod tests {
         assert!(ensure_separation_of_duties(policy, "u1", &["u1".into()]).is_err());
     }
 
-    /// 销售类单据允许提交人位于单人或或签审批集合；其他审批类型继续拒绝。
+    // 验证：销售类单据允许提交人位于单人或或签审批集合；其他审批类型继续拒绝。
     #[test]
     fn registered_policies_enforce_submitter_separation() {
         for document_type in ALL_DOCUMENT_TYPES {

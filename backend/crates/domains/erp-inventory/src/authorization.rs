@@ -18,13 +18,7 @@ use crate::repository::InventoryExt;
 pub struct InventoryFacts(Database);
 
 impl InventoryFacts {
-    /// 绑定库存拥有领域数据库。
-    /// # 参数
-    /// db 为与业务执行器相同的数据库。
-    /// # 返回
-    /// 不保存请求状态的事实读取器。
-    /// # 错误
-    /// 构造不执行 I/O。
+    /// 装配库存对象事实读取器，使其使用业务执行器对应的数据库；构造不读取数据，也不保存请求级事实或授权。
     pub fn new(db: Database) -> Self {
         Self(db)
     }
@@ -108,13 +102,8 @@ fn submit_fact(adjustment: StockAdjustment) -> ObjectFacts {
     object
 }
 
-/// 构造库存调整创建候选，仅提交真实仓库引用。
-/// # 参数
-/// warehouse 为已经过业务输入校验的目标仓库 ID。
-/// # 返回
-/// 无持久化版本的候选；来源事实由统一服务通过仓库读取器加载。
-/// # 错误
-/// 空或非法仓库身份返回校验错误。
+/// 创建调整单前只用经过业务校验的目标仓库 ID 构造候选，不声明持久化版本或仓库归属结论。
+/// 统一授权从仓库读取器取得实际来源事实；空或非法仓库 ID 返回校验错误。
 pub fn adjustment_candidate(warehouse: &str) -> Result<ObjectFacts> {
     let targets = ResourceTargets::new(&[warehouse])?;
     Ok(ObjectFacts {
@@ -131,13 +120,8 @@ pub fn adjustment_candidate(warehouse: &str) -> Result<ObjectFacts> {
     })
 }
 
-/// 在原事务检查调整单的完整提交资格和实际经办人。
-/// # 参数
-/// authorization 为共享授权服务，actor 为真实提交人，id 为调整单，executor 为原事务。
-/// # 返回
-/// 固定功能资格、仓库范围和实际经办人检查全部通过时成功。
-/// # 错误
-/// 功能、对象、指派或执行边界不满足时拒绝。
+/// 提交库存调整审批前，在原写事务通过共享授权服务检查真实提交人、调整单的固定提交权限、实际仓库范围及经办指派。
+/// 功能、对象、指派或执行边界不满足时拒绝，不把来自不同对象或角色的结论拼成授权。
 pub async fn require_submit(
     authorization: &AuthorizationService,
     actor: &AuditActor,

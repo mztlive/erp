@@ -43,18 +43,10 @@ impl Default for SubmissionFilter {
 }
 
 impl QueryFilter for SubmissionFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// 有销售单时按 `sales_order_id` 等值过滤，有状态时写入 `status` 的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 转换为 MongoDB 查询条件（自动追加未删除过滤）。
+    //
+    // 有销售单时按 `sales_order_id` 等值过滤，有状态时写入 `status` 的稳定代码。
+    // 返回查询条件文档。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(sales_order_id) = &self.sales_order_id {
@@ -68,16 +60,7 @@ impl QueryFilter for SubmissionFilter {
 }
 
 impl Pagination for SubmissionFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 向仓储分页器交付筛选中的页码与每页条数。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -87,16 +70,12 @@ impl Pagination for SubmissionFilter {
 #[allow(async_fn_in_trait)]
 pub trait SalesOrderSubmissionRepositoryExt {
     /// 按工作副本查找已冻结提交。
-    ///
-    /// # 参数
-    /// * `working_copy_id` - 形成提交的工作副本
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回该工作副本形成的提交；尚未提交时返回 `None`。
+    /// 传播数据库查询失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
+    /// 输入约定：
+    /// - `working_copy_id`：形成提交的工作副本
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn find_by_working_copy(
         &self,
         working_copy_id: &SalesOrderWorkingCopyId,
@@ -104,16 +83,12 @@ pub trait SalesOrderSubmissionRepositoryExt {
     ) -> Result<Option<SalesOrderSubmission>>;
 
     /// 列出销售单提交历史，新提交在前。
-    ///
-    /// # 参数
-    /// * `sales_order_id` - 稳定销售单
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回按提交序号倒序排列的全部提交。
+    /// 传播数据库查询或游标读取失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 输入约定：
+    /// - `sales_order_id`：稳定销售单
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn list_by_order_newest_first(
         &self,
         sales_order_id: &SalesOrderId,
@@ -121,16 +96,12 @@ pub trait SalesOrderSubmissionRepositoryExt {
     ) -> Result<Vec<SalesOrderSubmission>>;
 
     /// 读取销售单最新冻结提交。
-    ///
-    /// # 参数
-    /// * `sales_order_id` - 稳定销售单
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回提交序号最大的提交；尚无提交时返回 `None`。
+    /// 传播数据库查询或游标读取失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 输入约定：
+    /// - `sales_order_id`：稳定销售单
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn find_latest_by_order(
         &self,
         sales_order_id: &SalesOrderId,
@@ -141,17 +112,13 @@ pub trait SalesOrderSubmissionRepositoryExt {
     ///
     /// 唯一性由 `uk_sales_order_submissions_order_submission_no` 唯一索引保证；
     /// 提交头、明细形成后不可修改（数据模型 §6.5）。
-    ///
-    /// # 参数
-    /// * `sales_order_id` - 稳定销售单
-    /// * `submission_no` - 提交序号
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回匹配的提交快照；无匹配时返回 `None`。
+    /// 传播数据库查询失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
+    /// 输入约定：
+    /// - `sales_order_id`：稳定销售单
+    /// - `submission_no`：提交序号
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn find_by_order_and_no(
         &self,
         sales_order_id: &SalesOrderId,
@@ -162,19 +129,13 @@ pub trait SalesOrderSubmissionRepositoryExt {
     /// 批量读取销售单关联的全部简报提交。
     ///
     /// 工作项简报 hydration 入口：按销售单 `$in` 一次取回全部提交，禁止 N+1。
-    ///
-    /// # 参数
-    /// * `order_ids` - 销售单稳定 ID 集合；为空时直接返回空集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回销售单命中的全部提交。
+    /// 传播数据库查询或反序列化失败。
+    /// 调用边界：仅查询本仓储拥有的销售提交集合，按所属销售单引用过滤，不访问销售单集合。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或反序列化失败时返回错误。
-    ///
-    /// # 约束
-    /// 仅查询本仓储拥有的销售提交集合，按所属销售单引用过滤，不访问销售单集合。
+    /// 输入约定：
+    /// - `order_ids`：销售单稳定 ID 集合；为空时直接返回空集合
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn list_work_item_brief_submissions_by_orders(
         &self,
         order_ids: &[String],
@@ -255,16 +216,12 @@ impl SalesOrderSubmissionRepositoryExt for Repository<'_, SalesOrderSubmission> 
 #[allow(async_fn_in_trait)]
 pub trait SalesOrderSubmissionLineRepositoryExt {
     /// 按提交 ID 集合批量取回明细（`$in` 一次取回，禁止 N+1）。
-    ///
-    /// # 参数
-    /// * `submission_ids` - 提交快照 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回全部匹配明细（未排序，调用方按需分组）。
+    /// 传播数据库查询或游标读取失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 输入约定：
+    /// - `submission_ids`：提交快照 ID 集合
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn list_lines_by_submissions(
         &self,
         submission_ids: &[SalesOrderSubmissionId],

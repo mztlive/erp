@@ -9,11 +9,11 @@ use crate::Result;
 #[async_trait]
 pub trait OrdersPaymentTasks: Send + Sync {
     /// 使用调用方执行器重算原付款任务。
-    /// # 参数
+    ///
     /// `payment_request` 为原资金占用冻结的申请身份；`executor` 为当前根事务。
-    /// # 返回
+    ///
     /// 原任务完成或保持现有可执行状态。
-    /// # 错误
+    ///
     /// 保留实际校验、冲突、数据库及提交未知分类，调用方沿原规则处理。
     async fn sync(&self, payment_request: &str, executor: &mut dyn Executor) -> Result<()>;
 }

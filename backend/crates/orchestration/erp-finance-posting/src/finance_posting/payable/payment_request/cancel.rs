@@ -21,13 +21,9 @@ use crate::finance_posting::receivable::cancel_approval as runtime_cancel;
 
 impl PurchasePaymentRequestProcess {
     /// 当前经办人按统一授权撤回审批，取消当前任务并释放本次占用。
-    /// # 参数
-    /// * `id` - 付款申请身份。
-    /// * `req` - 精确版本、原因和幂等键。
-    /// * `actor` - 具备撤回和完整来源资格的当前经办人。
-    /// # 返回
-    /// 返回已撤回申请；重提须重新冻结与占用。
-    /// # 错误
+    ///
+    /// `id` 为付款申请身份；`req` 为精确版本、原因和幂等键；`actor` 为具备撤回和完整来源资格的当前经办人。返回已撤回申请；重提须重新冻结与占用。
+    ///
     /// 已批准、操作无权、版本变化或任务终止冲突时拒绝。
     pub async fn withdraw(
         &self,
@@ -54,14 +50,10 @@ impl PurchasePaymentRequestProcess {
     }
 
     /// 显式终止原批准付款授权，释放尚未支付部分并保留实际付款。
-    /// # 参数
-    /// * `id` - 付款申请身份。
-    /// * `req` - 精确版本、原因和幂等键。
-    /// * `actor` - 统一关闭权限及全部真实采购来源授权均通过的操作人。
-    /// # 返回
-    /// 返回已关闭申请；未付金额释放、开放任务终止，已完成任务保留。
-    /// # 错误
-    /// 状态、权限、版本、占用或并发付款发生变化时拒绝。
+    ///
+    /// `id` 为付款申请身份；`req` 为精确版本、原因和幂等键；`actor` 为统一关闭权限及全部真实采购来源授权均通过的操作人。
+    ///
+    /// 返回已关闭申请；未付金额释放、开放任务终止，已完成任务保留。状态、权限、版本、占用或并发付款发生变化时拒绝。
     pub async fn close(
         &self,
         id: &str,
@@ -126,7 +118,7 @@ struct PaymentWithdrawal {
 }
 
 impl PaymentWithdrawal {
-    /// 授权、幂等判断、运行时准备与写入共用调用方执行器。
+    // 授权、幂等判断、运行时准备与写入共用调用方执行器。
     async fn execute(self, executor: &mut dyn Executor) -> Result<PurchasePaymentRequest> {
         let request = authorized_request(
             &self.db,
@@ -215,15 +207,8 @@ fn receipt(
 }
 
 /// 管理员取消审批时释放额度。
-/// # 参数
-/// * `db` - 数据库。
-/// * `id` - 当前申请。
-/// * `actor` - 已授权处理人。
-/// * `executor` - 审批运行时事务。
-/// # 返回
-/// 返回撤回与额度释放成功结果。
-/// # 错误
-/// 状态、占用或仓储失败时返回错误。
+///
+/// `actor` 为已授权处理人；`executor` 为审批运行时事务。返回撤回与额度释放成功结果。状态、占用或仓储失败时返回错误。
 pub async fn cancel_approval(
     db: &Database,
     id: &str,
@@ -234,15 +219,8 @@ pub async fn cancel_approval(
     stop_approval(db, id, actor, reason, false, executor).await
 }
 /// 终态驳回时释放额度且不重启。
-/// # 参数
-/// * `db` - 数据库。
-/// * `id` - 当前申请。
-/// * `actor` - 财务审批人。
-/// * `executor` - 审批运行时事务。
-/// # 返回
-/// 返回驳回与释放成功结果。
-/// # 错误
-/// 状态、占用或仓储失败时返回错误。
+///
+/// `actor` 为财务审批人；`executor` 为审批运行时事务。返回驳回与释放成功结果。状态、占用或仓储失败时返回错误。
 pub async fn reject(
     db: &Database,
     id: &str,

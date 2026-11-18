@@ -97,7 +97,7 @@ impl SupplierCatalogAdoptionProcess {
         })
     }
 
-    /// 在匹配快照外准备新商品草稿及规格输入，既有同源商品保留原映射。
+    // 在匹配快照外准备新商品草稿及规格输入，既有同源商品保留原映射。
     async fn prepare_product_target(
         &self,
         item: &SupplierCatalogItem,

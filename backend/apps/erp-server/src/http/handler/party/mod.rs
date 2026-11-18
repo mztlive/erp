@@ -23,14 +23,8 @@ use crate::http::extractor::{Json, Query};
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
-/// 查询主体列表。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `query` - 分页与筛选参数（`keyword`/`party_kind`/`status` 扁平传递）
-///
-/// # 返回
-/// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
+/// 按请求条件查询主体列表。
+/// `query` 为分页与筛选参数（`keyword`/`party_kind`/`status` 扁平传递）。
 pub async fn party_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -41,13 +35,6 @@ pub async fn party_list(
 }
 
 /// 创建主体（同事务建立主体 + 首版修订）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 创建请求
-///
-/// # 返回
 /// 返回新建主体的响应视图。
 pub async fn party_create(
     State(state): State<HttpState>,
@@ -59,12 +46,6 @@ pub async fn party_create(
 }
 
 /// 查询主体详情（主体 + 当前生效修订快照）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `id` - 主体 ID
-///
-/// # 返回
 /// 返回主体详情视图。
 pub async fn party_detail(
     State(state): State<HttpState>,
@@ -76,14 +57,7 @@ pub async fn party_detail(
 }
 
 /// 更新主体（乐观锁 + 追加修订）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 主体 ID
-/// * `req` - 更新请求（含期望版本与新修订快照）
-///
-/// # 返回
+/// `req` 为更新请求（含期望版本与新修订快照）。
 /// 返回更新后主体的响应视图。
 pub async fn party_update(
     State(state): State<HttpState>,
@@ -96,14 +70,6 @@ pub async fn party_update(
 }
 
 /// 软删除主体。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 主体 ID
-///
-/// # 返回
-/// 返回统一成功信封。
 pub async fn party_delete(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -114,14 +80,6 @@ pub async fn party_delete(
 }
 
 /// 查询主体修订列表（版本链历史）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `id` - 主体 ID
-/// * `query` - 分页与筛选参数
-///
-/// # 返回
-/// 返回契约形状的分页视图。
 pub async fn party_revision_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -133,14 +91,6 @@ pub async fn party_revision_list(
 }
 
 /// 查询联系人列表（敏感字段不进投影）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `id` - 主体 ID
-/// * `query` - 分页与筛选参数
-///
-/// # 返回
-/// 返回契约形状的分页视图。
 pub async fn party_contact_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -152,14 +102,6 @@ pub async fn party_contact_list(
 }
 
 /// 创建联系人（手机号为明文入参，实体只保留指纹与密文）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 主体 ID
-/// * `req` - 创建请求
-///
-/// # 返回
 /// 返回新建联系人的响应视图。
 pub async fn party_contact_create(
     State(state): State<HttpState>,
@@ -172,14 +114,7 @@ pub async fn party_contact_create(
 }
 
 /// 更新联系人（仅生命周期字段）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 联系人 ID
-/// * `req` - 更新请求（含期望版本）
-///
-/// # 返回
+/// `req` 为更新请求（含期望版本）。
 /// 返回更新后联系人的响应视图。
 pub async fn party_contact_update(
     State(state): State<HttpState>,
@@ -192,14 +127,6 @@ pub async fn party_contact_update(
 }
 
 /// 查询地址列表（敏感字段不进投影）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `id` - 主体 ID
-/// * `query` - 分页与筛选参数
-///
-/// # 返回
-/// 返回契约形状的分页视图。
 pub async fn party_address_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -211,14 +138,6 @@ pub async fn party_address_list(
 }
 
 /// 创建地址（地址内容为明文入参，实体只保留指纹与密文）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 主体 ID
-/// * `req` - 创建请求
-///
-/// # 返回
 /// 返回新建地址的响应视图。
 pub async fn party_address_create(
     State(state): State<HttpState>,
@@ -231,14 +150,7 @@ pub async fn party_address_create(
 }
 
 /// 更新地址（仅生命周期字段）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 地址 ID
-/// * `req` - 更新请求（含期望版本）
-///
-/// # 返回
+/// `req` 为更新请求（含期望版本）。
 /// 返回更新后地址的响应视图。
 pub async fn party_address_update(
     State(state): State<HttpState>,
@@ -250,15 +162,7 @@ pub async fn party_address_update(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 查询税务资料列表。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `id` - 主体 ID
-/// * `query` - 分页与筛选参数
-///
-/// # 返回
-/// 返回契约形状的分页视图。
+/// 按请求条件查询税务资料列表。
 pub async fn party_tax_profile_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -271,14 +175,6 @@ pub async fn party_tax_profile_list(
 }
 
 /// 创建税务资料。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 主体 ID
-/// * `req` - 创建请求
-///
-/// # 返回
 /// 返回新建税务资料的响应视图。
 pub async fn party_tax_profile_create(
     State(state): State<HttpState>,
@@ -292,14 +188,7 @@ pub async fn party_tax_profile_create(
 }
 
 /// 更新税务资料（仅生命周期字段）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 税务资料 ID
-/// * `req` - 更新请求（含期望版本）
-///
-/// # 返回
+/// `req` 为更新请求（含期望版本）。
 /// 返回更新后税务资料的响应视图。
 pub async fn party_tax_profile_update(
     State(state): State<HttpState>,
@@ -313,14 +202,6 @@ pub async fn party_tax_profile_update(
 }
 
 /// 查询银行账户列表（敏感字段不进投影）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `id` - 主体 ID
-/// * `query` - 分页与筛选参数
-///
-/// # 返回
-/// 返回契约形状的分页视图。
 pub async fn party_bank_account_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -336,14 +217,6 @@ pub async fn party_bank_account_list(
 }
 
 /// 创建银行账户（账号为明文入参，实体只保留指纹与密文）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 主体 ID
-/// * `req` - 创建请求
-///
-/// # 返回
 /// 返回新建银行账户的响应视图。
 pub async fn party_bank_account_create(
     State(state): State<HttpState>,
@@ -357,14 +230,7 @@ pub async fn party_bank_account_create(
 }
 
 /// 更新银行账户（仅生命周期字段）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 银行账户 ID
-/// * `req` - 更新请求（含期望版本）
-///
-/// # 返回
+/// `req` 为更新请求（含期望版本）。
 /// 返回更新后银行账户的响应视图。
 pub async fn party_bank_account_update(
     State(state): State<HttpState>,

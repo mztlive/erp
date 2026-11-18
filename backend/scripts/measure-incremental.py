@@ -140,11 +140,12 @@ class SourceGuard:
             raise MeasureError(f"恢复后哈希不匹配: {actual} != {self.sha256}")
 
 
+# 返回 ISO 8601 格式的 UTC 时间，供恢复清单、测量锁和环境证据统一记录时间。
 def utc_now() -> str:
-    """Return an ISO-8601 UTC timestamp."""
     return datetime.now(timezone.utc).isoformat()
 
 
+# 为测量预检与环境采集运行外部命令，返回退出码和输出供调用方判断；参数不经过 Shell 解析。
 def run_checked(
     args: Sequence[str],
     *,
@@ -152,7 +153,6 @@ def run_checked(
     env: Mapping[str, str] | None = None,
     timeout: int | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    """Run a subprocess with an argument array; never use shell=True."""
     return subprocess.run(
         list(args),
         cwd=str(cwd),
@@ -164,8 +164,8 @@ def run_checked(
     )
 
 
+# 在指定仓库运行 Git 并返回去除首尾空白的标准输出；失败抛出 `MeasureError`，不把未知仓库状态视为可测。
 def git_output(repo: Path, git_args: Sequence[str]) -> str:
-    """Run git in repo and return stripped stdout, or raise MeasureError."""
     proc = run_checked(["git", *git_args], cwd=repo)
     if proc.returncode != 0:
         raise MeasureError(f"git {' '.join(git_args)} 失败: {proc.stderr.strip()}")
@@ -251,12 +251,11 @@ def cargo_metadata(backend: Path, env: Mapping[str, str]) -> dict[str, Any]:
     return json.loads(proc.stdout)
 
 
+# 从 Cargo package_id 解析 crate 名，供依赖图和编译单元记录按同一包名关联。
+#
+# Cargo 1.77+ 使用 `registry+url#name@version` 和 `path+file:///abs/crate#version`。
+# 路径包的 `#` 后是版本，crate 名取自路径末段。
 def package_name_from_id(package_id: str) -> str:
-    """Extract the crate name from a cargo package_id.
-
-    Cargo 1.77+ uses `registry+url#name@version` and `path+file:///abs/crate#version`.
-    Path packages put the version after `#` and the crate name in the path suffix.
-    """
     raw = package_id.strip()
     if raw.startswith("path+file://"):
         path_part = raw.split("#", 1)[0]
@@ -356,8 +355,8 @@ def package_dirty(units: Mapping[str, Any], package: str) -> list[dict[str, Any]
     return [item for item in units["dirty"] if item["package_name"] == package]
 
 
+# 将目标目录中最新的 Cargo timings HTML 保存到样本目录，避免后续构建覆盖本次耗时证据。
 def copy_timings(target_dir: Path, destination: Path) -> Path | None:
-    """Copy the newest cargo timings HTML into the sample directory."""
     timings_dir = target_dir / "cargo-timings"
     if not timings_dir.is_dir():
         return None
@@ -370,7 +369,7 @@ def copy_timings(target_dir: Path, destination: Path) -> Path | None:
 
 
 def write_json(path: Path, value: Any) -> None:
-    """Write pretty UTF-8 JSON."""
+    """以缩进的 UTF-8 JSON 保存采样、恢复与汇总记录，便于评估器读取和人工核对。"""
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
@@ -467,7 +466,7 @@ def run_cargo(
     env: Mapping[str, str],
     time_it: bool,
 ) -> dict[str, Any]:
-    """Run one cargo check/build, save logs, and optionally record wall time."""
+    """执行一次约定的 Cargo check/build，保存编译证据；仅计时样本将本次墙钟耗时纳入性能比较。"""
     output_dir.mkdir(parents=True, exist_ok=True)
     argv = cargo_command(mode)
     child_env = cargo_env(env, target_dir)
@@ -510,8 +509,8 @@ def run_cargo(
     return {"units": units, "sample": sample, "seconds": elapsed}
 
 
+# 截取 Cargo 指纹日志中与重编相关的条目，供无修改构建出现非 Fresh 单元时排查原因。
 def fingerprint_excerpt(stderr: str, limit: int = 80) -> list[str]:
-    """Return fingerprint log lines that explain unexpected rebuilds."""
     lines = []
     for line in stderr.splitlines():
         lower = line.lower()
@@ -536,7 +535,7 @@ BUILD_ENV_KEYS = {
 
 
 def parse_compiler_units_full(jsonl: str) -> dict[str, Any]:
-    """Retain whole observed messages; never coerce missing/invalid facts into success."""
+    """保留 Cargo 原始编译产物、构建脚本和结束消息，供复核完整证据；缺字段或无效类型不补造为成功。"""
     artifacts: list[dict[str, Any]] = []
     scripts: list[dict[str, Any]] = []
     finished: list[dict[str, Any]] = []
@@ -579,7 +578,7 @@ def parse_compiler_units_full(jsonl: str) -> dict[str, Any]:
 
 
 def allowed_build_environment(env: Mapping[str, str]) -> dict[str, Any]:
-    """Fingerprint allowlisted values from the exact measured child environment."""
+    """对实际传给测量子进程的白名单变量计算值指纹，供比较构建条件而不泄露任意参数或路径。"""
     values = {}
     for key, value in sorted(env.items()):
         if key not in BUILD_ENV_KEYS and not re.fullmatch(
@@ -599,7 +598,7 @@ def allowed_build_environment(env: Mapping[str, str]) -> dict[str, Any]:
 
 
 def write_private_json(path: Path, value: Any) -> dict[str, str]:
-    """Create a new private facts artifact and return its actual byte hash."""
+    """以独占方式创建 `0600` 权限的事实文件并返回实际字节哈希，供证据清单引用且不覆盖旧记录。"""
     raw = (json.dumps(value, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, "wb") as stream:
@@ -608,7 +607,7 @@ def write_private_json(path: Path, value: Any) -> dict[str, str]:
 
 
 def measurement_input(path: Path, repo: Path, selected_by: str) -> dict[str, Any]:
-    """Read the selected real file, including external tools used against old source."""
+    """解析实际选定的测量文件并记录字节哈希，区分仓库内输入与用于旧源码的外部工具。"""
     try:
         actual = path.expanduser().resolve(strict=True)
         if not actual.is_file():
@@ -628,7 +627,7 @@ def write_measurement_facts(
     spec_path: Path, contract_path: Path, contract_explicit: bool,
     metadata: Mapping[str, Any], env: Mapping[str, str],
 ) -> None:
-    """Record actual inputs/full metadata outside all timed Cargo intervals."""
+    """在预热前记录实际脚本、规格、合同、完整 metadata 及子进程环境，为评估器绑定输入且不计入 Cargo 耗时。"""
     inputs = {
         "measurement_script": measurement_input(Path(__file__), repo, "executing __file__"),
         "probe_spec": measurement_input(spec_path, repo, "--spec"),
@@ -656,7 +655,7 @@ class TargetLock:
 
 
 def acquire_target_lock(target_dir: Path) -> TargetLock:
-    """Acquire exclusively; existing live, stale, partial or symlink markers all fail closed."""
+    """独占创建目标目录的测量锁，防止并行组污染缓存；已有标记无论存活、过期、不完整或为符号链接均拒绝复用。"""
     target_dir.mkdir(parents=True, exist_ok=True)
     lock_path = target_dir / "measure-incremental.lock"
     try:
@@ -675,7 +674,7 @@ def acquire_target_lock(target_dir: Path) -> TargetLock:
 
 
 def release_target_lock(lock: TargetLock) -> None:
-    """Release only this open inode; never unlink a replacement marker owned elsewhere."""
+    """仅在路径仍指向本进程持有的 inode 时删除测量锁，避免清理时误删其他进程替换的标记。"""
     try:
         owned = os.fstat(lock.fd)
         try:
@@ -793,7 +792,7 @@ def write_recovery(output: Path, guard: SourceGuard, probe: Probe) -> None:
 
 
 def measure(args: argparse.Namespace) -> dict[str, Any]:
-    """Run one scenario/mode measurement group into an empty output directory."""
+    """为单个场景和模式执行预热、Fresh 核验、计时样本与源码恢复，在空目录留存可重复核验的证据。"""
     repo = Path(args.repo).resolve()
     spec_path = Path(args.spec).resolve()
     target_dir = Path(args.target_dir).resolve()
@@ -1003,7 +1002,7 @@ def measure(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """Construct the compile-measurement command line."""
+    """定义增量编译测量与仅恢复自检的命令行参数，使操作者按同一合同指定探针、目标和证据目录。"""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo", help="专用 git worktree 的仓库根绝对路径")
     parser.add_argument("--revision", choices=REVISIONS)
@@ -1023,7 +1022,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Entry point: optional restore self-test, otherwise one measurement group."""
+    """校验五样本合同，按命令行请求仅验证恢复或执行一组测量，并用退出码与 JSON 摘要交付结果。"""
     parser = build_parser()
     args = parser.parse_args(argv)
     if args.samples != 5:

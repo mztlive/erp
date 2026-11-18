@@ -17,11 +17,7 @@ pub use model::{OrderObservation, OrderShipment, OrderTracking, TrackingSourceLi
 pub use quantities::{AppliedShipment, PendingShipment};
 
 /// 创建订单跟踪集合的唯一身份与有界调度索引。
-/// # 参数
-/// `db` 为当前部署业务库。
-/// # 返回
 /// 所有跟踪索引创建完成。
-/// # 错误
 /// 数据库拒绝索引或已有数据冲突时返回原错误。
 pub async fn ensure_indexes(db: &Database) -> PersistenceResult<()> {
     db.collection::<Document>(Database::SUPPLIER_ORDER_TRACKING)

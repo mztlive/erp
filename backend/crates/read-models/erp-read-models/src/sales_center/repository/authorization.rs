@@ -20,11 +20,14 @@ pub struct SalesMapping {
     model: QueryModel,
 }
 impl SalesMapping {
-    /// 构造固定销售行模型。
+    /// 初始化固定销售行模型，供销售授权事实使用。
+    ///
     /// # 参数
     /// db 为事实数据库，resource 为服务端固定资源，key 为登记模型标识。
+    ///
     /// # 返回
     /// 不执行查询的 Mapping。
+    ///
     /// # 错误
     /// 非法模型标识拒绝。
     pub fn new(_db: Database, resource: &str, key: &str) -> Result<Self> {
@@ -133,13 +136,12 @@ impl AccessFactsPort for SalesFacts {
     }
 }
 
-/// 从业务已校验的完整销售单生成候选归属事实。
-/// # 参数
-/// order 为业务实体，不能直接反序列化为授权凭证。
-/// # 返回
-/// 同对象读取器采用相同归属字段的候选事实。
-/// # 错误
-/// 无。
+// 组装销售授权事实时，从业务已校验的完整销售单生成候选归属事实。
+//
+// 调用参数：
+// order 为业务实体，不能直接反序列化为授权凭证。
+//
+// 同对象读取器采用相同归属字段的候选事实。
 pub(crate) fn sales_facts(order: &SalesOrder) -> ObjectFacts {
     ObjectFacts {
         resource: "sales_order".into(),

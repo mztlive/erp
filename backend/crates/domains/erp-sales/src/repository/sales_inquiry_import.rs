@@ -44,23 +44,19 @@ impl<'a> InquiryImportPreviewRepository<'a> {
     }
 
     /// 保存新的账号及询价专用预览，并写入 TTL 日期。
-    /// # 参数
-    /// `preview` 为领域预览，`executor` 为原用例执行器。
-    /// # 返回
-    /// 保存成功时返回空结果。
-    /// # 错误
-    /// 到期时刻越界、编码或数据库失败时返回存储错误。
+    /// 结果：保存成功时返回空结果。
+    /// 失败条件：到期时刻越界、编码或数据库失败时返回存储错误。
+    ///
+    /// 输入约定：`preview` 为领域预览，`executor` 为原用例执行器。
     pub async fn create(&self, preview: &InquiryImportPreview, executor: &mut dyn Executor) -> Result<()> {
         self.inner.create(&StoredInquiryImportPreview::new(preview)?, executor).await
     }
 
     /// 读取未删除预览，去除存储专用日期字段。
-    /// # 参数
-    /// `id` 为预览身份，`executor` 为原用例执行器。
-    /// # 返回
     /// 返回可选领域实体；业务到期及访问绑定由领域守卫校验。
-    /// # 错误
-    /// 数据库或解码失败时返回存储错误。
+    /// 失败条件：数据库或解码失败时返回存储错误。
+    ///
+    /// 输入约定：`id` 为预览身份，`executor` 为原用例执行器。
     pub async fn find_by_id(
         &self,
         id: &str,
@@ -70,12 +66,10 @@ impl<'a> InquiryImportPreviewRepository<'a> {
     }
 
     /// 按原预览版本写入确认结果及 TTL 日期。
-    /// # 参数
-    /// `preview` 为已经通过领域守卫的实体，`executor` 为原确认事务。
-    /// # 返回
-    /// 写入成功后同步聚合元数据。
-    /// # 错误
-    /// CAS、时刻越界、编码或数据库失败时返回存储错误。
+    /// 结果：写入成功后同步聚合元数据。
+    /// 失败条件：CAS、时刻越界、编码或数据库失败时返回存储错误。
+    ///
+    /// 输入约定：`preview` 为已经通过领域守卫的实体，`executor` 为原确认事务。
     pub async fn update(
         &self,
         preview: &mut InquiryImportPreview,

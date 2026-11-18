@@ -9,21 +9,11 @@ use crate::error::Result;
 use crate::ports::PartyFactsPort;
 use crate::repository::SupplierListSearchInput;
 
-/// 供应商列表业务查询参数的仓储搜索输入组织（保留在 Service）。
-///
-/// DTO→仓储的健康映射经 [`SupplierQualificationHealth::to_repository_filter`]
-/// 单一转换入口（erp-supplier-008），调用处只剩一句转换。
-///
-/// # 参数
-/// * `query` - 已校验的供应商列表业务筛选条件
-/// * `as_of` - 当前业务日字符串
-/// * `keyword_party_ids` - 关键词命中的主体 ID，由 PartyFactsPort 预先解析
-///
-/// # 返回
-/// 返回携带有效授权凭证的仓储列表搜索输入。
-///
-/// # 错误
-/// 不返回错误。
+// 供应商列表业务查询参数的仓储搜索输入组织（保留在 Service）。
+// DTO→仓储的健康映射经 [`SupplierQualificationHealth::to_repository_filter`]单一转换入口
+// （erp-supplier-008），调用处只剩一句转换。
+// 返回携带有效授权凭证的仓储列表搜索输入。
+// `keyword_party_ids`：关键词命中的主体 ID，由 PartyFactsPort 预先解析。
 pub(super) fn supplier_list_search_input(
     query: &SupplierListQuery,
     as_of: String,
@@ -55,18 +45,9 @@ pub(super) fn supplier_list_search_input(
     }
 }
 
-/// 批量读取当前页签约/付款主体的法定名称。
-///
-/// # 参数
-/// * `party` - 主体只读事实端口
-/// * `profiles` - 当前页商务资料
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回主体 ID 到法定名称的映射；无主体引用时不访问端口。
-///
-/// # 错误
-/// 主体查询失败时返回仓储或映射错误。
+// 批量读取当前页签约/付款主体的法定名称。
+// 返回主体 ID 到法定名称的映射；无主体引用时不访问端口。
+// 主体查询失败时返回仓储或映射错误。
 pub(super) async fn load_entity_names(
     party: &dyn PartyFactsPort,
     profiles: &[SupplierCommercialProfileRevision],

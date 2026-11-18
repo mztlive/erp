@@ -19,14 +19,7 @@ pub enum CustomerProfileOperation {
 impl CustomerProfileOperation {
     /// 返回客户资料命令持久化使用的稳定操作代码。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 创建返回 `create`，修订返回 `update`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Create => "create",
@@ -59,10 +52,8 @@ impl CustomerProfileRequestShape {
     /// * `owner_user_id_present` - 请求是否携带负责人字段
     /// * `reuse_existing_party` - 创建时是否明确允许复用已有主体
     ///
-    /// # 返回
     /// 结构合法时返回已校验的值对象。
     ///
-    /// # 错误
     /// 创建携带版本，或修订缺少正版本、携带负责人字段时返回错误。
     pub fn new(
         operation: CustomerProfileOperation,
@@ -84,25 +75,16 @@ impl CustomerProfileRequestShape {
 
     /// 返回根命令操作类型。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回创建或修订操作。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn operation(&self) -> CustomerProfileOperation {
         self.operation
     }
 
-    /// 校验根命令的版本与负责人字段组合。
-    ///
-    /// # 返回
-    /// 字段组合合法时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 字段组合不符合创建或修订约束时返回错误。
+    // 校验根命令的版本与负责人字段组合。
+    //
+    // 字段组合合法时返回 `Ok(())`。
+    //
+    // 字段组合不符合创建或修订约束时返回错误。
     fn validate(&self) -> Result<()> {
         match self.operation {
             CustomerProfileOperation::Create => {
@@ -137,10 +119,9 @@ pub enum CustomerProfileFactKind {
 }
 
 impl CustomerProfileFactKind {
-    /// 返回事实类型的中文名称。
-    ///
-    /// # 返回
-    /// 返回用于领域错误的稳定中文名称。
+    // 返回事实类型的中文名称。
+    //
+    // 返回用于领域错误的稳定中文名称。
     fn label(self) -> &'static str {
         match self {
             Self::Contact => "联系人",
@@ -149,10 +130,9 @@ impl CustomerProfileFactKind {
         }
     }
 
-    /// 返回新事实必填敏感值的中文名称。
-    ///
-    /// # 返回
-    /// 返回手机号、地址或银行账号标签。
+    // 返回新事实必填敏感值的中文名称。
+    //
+    // 返回手机号、地址或银行账号标签。
     fn required_value_label(self) -> &'static str {
         match self {
             Self::Contact => "手机号",
@@ -166,38 +146,17 @@ impl CustomerProfileFactKind {
 pub trait CustomerProfileFactInput {
     /// 返回既有事实 ID；`None` 表示新增事实。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 既有事实返回其 ID；新增事实返回 `None`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     fn existing_id(&self) -> Option<&str>;
 
     /// 返回当前输入是否被标记为默认项。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 被标记为默认项时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     fn is_default(&self) -> bool;
 
     /// 返回新增事实所需的敏感明文；既有事实允许省略。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回敏感明文；未提供时为 `None`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     fn required_value(&self) -> Option<&str>;
 }
 
@@ -218,11 +177,7 @@ where
     /// * `kind` - 联系人、地址或银行账户类型
     /// * `items` - 请求显式提交的事实集合；`None` 表示修订时保留
     ///
-    /// # 返回
     /// 返回待校验的事实集合值对象。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(kind: CustomerProfileFactKind, items: Option<&'a [T]>) -> Self {
         Self { kind, items }
     }
@@ -235,7 +190,6 @@ where
     /// # 参数
     /// * `operation` - 创建或修订操作
     ///
-    /// # 返回
     /// 结构合法时返回 `Ok(())`。
     ///
     /// # 错误
@@ -266,7 +220,7 @@ where
     }
 }
 
-/// 校验修订命令版本存在且大于零。
+// 校验修订命令版本存在且大于零。
 fn ensure_positive_version(value: Option<u64>, label: &str) -> Result<()> {
     if value.is_some_and(|version| version > 0) {
         return Ok(());
@@ -274,7 +228,7 @@ fn ensure_positive_version(value: Option<u64>, label: &str) -> Result<()> {
     Err(Error::from(format!("修订时必须提供{label}版本")))
 }
 
-/// 校验并登记既有事实 ID。
+// 校验并登记既有事实 ID。
 fn validate_existing_id(
     existing_id: &str,
     operation: CustomerProfileOperation,

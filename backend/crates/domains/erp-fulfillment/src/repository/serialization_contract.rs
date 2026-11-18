@@ -1,6 +1,6 @@
 //! 原履约实体 JSON/BSON 数据形态测试；仅在内存运行。
 
-/// BSON 往返断言 helper（六节往返测试共用脚手架）。
+// BSON 往返断言 helper（六节往返测试共用脚手架）。
 #[cfg(test)]
 fn assert_bson_roundtrip<T>(entity: &T)
 where
@@ -17,7 +17,7 @@ mod purchase_receipt {
     use crate::entity::fulfillment::purchase_receipt::tests::receipt_data;
     use crate::entity::fulfillment::*;
 
-    /// 序列化：状态/质量结果枚举输出稳定代码；实体 BSON 往返。
+    // 验证状态/质量结果枚举输出稳定代码；实体 BSON 往返。
     #[test]
     fn serde_shapes_and_bson_roundtrip() {
         assert_eq!(serde_json::to_string(&PurchaseReceiptState::Posted).unwrap(), "\"POSTED\"");
@@ -37,7 +37,7 @@ mod delivery {
     use crate::entity::fulfillment::delivery::tests::delivery_data;
     use crate::entity::fulfillment::*;
 
-    /// 序列化：枚举稳定代码；实体 BSON 往返（含密文与指纹字段）。
+    // 验证枚举稳定代码；实体 BSON 往返（含密文与指纹字段）。
     #[test]
     fn serde_shapes_and_bson_roundtrip() {
         assert_eq!(serde_json::to_string(&DeliveryType::SupplierDirect).unwrap(), "\"SUPPLIER_DIRECT\"");
@@ -55,7 +55,7 @@ mod electronic_delivery {
     use crate::entity::fulfillment::electronic_delivery::tests::data;
     use crate::entity::fulfillment::*;
 
-    /// 序列化：枚举稳定代码；实体 BSON 往返。
+    // 验证枚举稳定代码；实体 BSON 往返。
     #[test]
     fn serde_shapes_and_bson_roundtrip() {
         assert_eq!(serde_json::to_string(&FulfillmentResult::PartialSuccess).unwrap(), "\"PARTIAL_SUCCESS\"");
@@ -72,7 +72,7 @@ mod service_fulfillment {
     use crate::entity::fulfillment::service_fulfillment::tests::data;
     use crate::entity::fulfillment::*;
 
-    /// 序列化：状态枚举稳定代码；实体 BSON 往返。
+    // 验证状态枚举稳定代码；实体 BSON 往返。
     #[test]
     fn serde_shapes_and_bson_roundtrip() {
         assert_eq!(serde_json::to_string(&ServiceFulfillmentState::Confirmed).unwrap(), "\"CONFIRMED\"");
@@ -88,7 +88,7 @@ mod customer_acceptance {
     use crate::entity::fulfillment::customer_acceptance::tests::data;
     use crate::entity::fulfillment::*;
 
-    /// 序列化：结果枚举稳定代码；实体 BSON 往返。
+    // 验证结果枚举稳定代码；实体 BSON 往返。
     #[test]
     fn serde_shapes_and_bson_roundtrip() {
         assert_eq!(serde_json::to_string(&AcceptanceResult::ServiceFailed).unwrap(), "\"SERVICE_FAILED\"");
@@ -106,7 +106,7 @@ mod acceptance_fulfillment_allocation {
     use crate::entity::fulfillment::acceptance_fulfillment_allocation::tests::apply_data;
     use crate::entity::fulfillment::*;
 
-    /// 序列化：枚举稳定代码；实体 BSON 往返。
+    // 验证枚举稳定代码；实体 BSON 往返。
     #[test]
     fn serde_shapes_and_bson_roundtrip() {
         assert_eq!(

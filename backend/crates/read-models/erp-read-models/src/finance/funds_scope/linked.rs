@@ -9,19 +9,18 @@ use persistence_core::Executor;
 use super::rows::{LinkedOrderId, OrderTuple};
 use crate::{Error, Result};
 
-/// 展开已提供的组织条件；未提供时不读取组织事实。
-///
-/// # 参数
-/// * `scope` - 已装配的资金授权端口。
-/// * `ids` - 请求中的组织条件；`None` 表示不附加组织筛选。
-/// * `include_descendants` - 是否包含有效下级；缺省为否。
-/// * `executor` - 本次查询沿用的执行器。
-///
-/// # 返回
-/// 未提供条件时返回 `None`；已提供时返回排序去重后的组织，即使展开结果为空也保留 `Some`。
-///
-/// # 错误
-/// 组织展开失败时保留领域错误分类。
+// 应用财务来源范围筛选时，展开已提供的组织条件；未提供时不读取组织事实。
+//
+// 调用参数：
+// * `scope` - 已装配的资金授权端口。
+// * `ids` - 请求中的组织条件；`None` 表示不附加组织筛选。
+// * `include_descendants` - 是否包含有效下级；缺省为否。
+// * `executor` - 本次查询沿用的执行器。
+//
+// 未提供条件时返回 `None`；已提供时返回排序去重后的组织，即使展开结果为空也保留 `Some`。
+//
+// 失败边界：
+// 组织展开失败时保留领域错误分类。
 pub(super) async fn organization_condition(
     scope: &dyn FundsDataScopePort,
     ids: Option<&QueryIds>,
@@ -38,19 +37,15 @@ pub(super) async fn organization_condition(
     Ok(Some(expanded.into_iter().collect()))
 }
 
-/// 把关联来源按首次出现顺序投影为责任元组。
-///
-/// # 参数
-/// * `document_id` / `version` - 当前资金单据身份与版本。
-/// * `orders` - 按原分配顺序提供的来源身份。
-/// * `facts` - 当前查询取得的来源责任事实。
-/// * `responsibility` - 显式映射来源负责人及组织，保留采购负责人缺失语义。
-///
-/// # 返回
-/// 按来源键去重后的元组；缺失来源事实保留未分配元组。`None` 和空字符串沿用同一去重键。
-///
-/// # 错误
-/// 不返回错误。
+// 组装财务来源范围时，把关联来源按首次出现顺序投影为责任元组。
+//
+// 调用参数：
+// * `document_id` / `version` - 当前资金单据身份与版本。
+// * `orders` - 按原分配顺序提供的来源身份。
+// * `facts` - 当前查询取得的来源责任事实。
+// * `responsibility` - 显式映射来源负责人及组织，保留采购负责人缺失语义。
+//
+// 按来源键去重后的元组；缺失来源事实保留未分配元组。`None` 和空字符串沿用同一去重键。
 pub(super) fn linked_order_tuples<'a, F>(
     document_id: &str,
     version: u64,

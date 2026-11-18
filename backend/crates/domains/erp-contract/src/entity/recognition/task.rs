@@ -129,11 +129,7 @@ impl From<ContractImport> for ImportView {
 
 impl ImportCommand {
     /// 校验稳定请求键和可选上下文，禁止空身份。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 格式合法时成功。
-    /// # 错误
     /// 请求键或目标非法。
     pub fn validate(&self) -> Result<()> {
         if self.request_key.len() < 8
@@ -152,11 +148,8 @@ impl ImportCommand {
 
 impl ContractImport {
     /// 创建待识别任务，初始状态不能用于合同或销售开单。
-    /// # 参数
-    /// * `id` / `owner_id` / `command` / `source` - 服务端身份、认证人、控制命令及源文件。
-    /// # 返回
     /// 只拥有文件且未归档的任务。
-    /// # 错误
+    /// `id` / `owner_id` / `command` / `source` - 服务端身份、认证人、控制命令及源文件。
     /// 非法控制命令。
     pub fn new(id: String, owner_id: String, command: ImportCommand, source: ImportSource) -> Result<Self> {
         command.validate()?;
@@ -178,11 +171,8 @@ impl ContractImport {
     }
 
     /// 开始或恢复过期处理；仓储版本 CAS 防止并发执行。
-    /// # 参数
-    /// * `now` - 当前秒级时间；恢复等待覆盖外部识别及归档确认窗口。
-    /// # 返回
     /// 已完成识别或归档返回 false，其余可开始时返回 true。
-    /// # 错误
+    /// `now` 为当前秒级时间；恢复等待覆盖外部识别及归档确认窗口。
     /// 正在处理且未过期时拒绝。
     pub fn begin(&mut self, now: u64) -> Result<bool> {
         if matches!(self.status, ImportStatus::Succeeded | ImportStatus::Review) {
@@ -204,11 +194,8 @@ impl ContractImport {
     }
 
     /// 推进本轮处理阶段，禁止跳过、倒退或修改已结束任务。
-    /// # 参数
-    /// * `stage` - 即将执行的阶段。
-    /// # 返回
     /// 阶段合法时更新任务。
-    /// # 错误
+    /// `stage` 为即将执行的阶段。
     /// 任务状态或阶段顺序不合法。
     pub fn advance(&mut self, stage: ImportStage) -> Result<()> {
         let next = matches!(
@@ -224,13 +211,7 @@ impl ContractImport {
         Ok(())
     }
 
-    /// 保存识别阶段结果，等待用户确认，不生成合同归档结果。
-    /// # 参数
-    /// * `ocr` / `extraction` - 本次完整 OCR 与部分提取结果。
-    /// # 返回
-    /// 任务进入待确认状态。
-    /// # 错误
-    /// 非处理中的任务不可完成识别。
+    /// OCR 与字段提取结束后，将全文和部分提取结果保存到识别中的任务并进入待确认态，不创建归档合同。非识别中状态返回冲突。
     pub fn finish_recognition(&mut self, ocr: OcrDocument, extraction: ContractExtraction) -> Result<()> {
         if self.status != ImportStatus::Processing {
             return Err(Error::ConflictError("任务未在识别中，请刷新查看结果".into()));
@@ -243,13 +224,8 @@ impl ContractImport {
         Ok(())
     }
 
-    /// 检查确认状态和重放内容。
-    /// # 参数
-    /// * `command` - 用户确认命令。
-    /// # 返回
-    /// 待归档为 true；同内容成功重放为 false。
-    /// # 错误
-    /// 未完成识别、版本变化或异载荷重放。
+    /// 用户确认识别结果时，只有待确认且版本匹配才返回 `true` 进入归档。
+    /// 已成功归档的任务只接受完全相同的确认命令并返回 `false`，避免重复归档；未就绪、版本变化或异载荷均返回冲突。
     pub fn check_confirmation(&self, command: &ConfirmImport) -> Result<bool> {
         if self.status == ImportStatus::Succeeded {
             return if self.confirmation.as_ref() == Some(command) {
@@ -265,13 +241,7 @@ impl ContractImport {
         Ok(true)
     }
 
-    /// 同一请求键只允许重放同一份文件及上下文。
-    /// # 参数
-    /// * `command` / `sha256` - 重试请求及文件摘要。
-    /// # 返回
-    /// 相同时成功。
-    /// # 错误
-    /// 异载荷复用时冲突。
+    /// 同请求键重试识别导入时，要求原命令上下文和源文件 SHA-256 完全一致；任一不同则冲突，不把新文件或上下文并入原任务。
     pub fn replay(&self, command: &ImportCommand, sha256: &str) -> Result<()> {
         if self.command != *command || self.source.sha256 != sha256 {
             return Err(Error::ConflictError("导入请求已用于另一份文件或业务上下文，请重新发起导入".into()));

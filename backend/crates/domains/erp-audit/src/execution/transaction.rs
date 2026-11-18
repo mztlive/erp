@@ -14,19 +14,8 @@ use super::attempt::{MongoAuditAttemptSink, finish_attempt};
 use super::command::{AuditedCommand, MongoAuditEventSink, execute_audited, execute_prepared};
 use crate::{AuditLog, BusinessEventContext, Error, attempt_context, prepare_business_log};
 
-/// 在单个 MongoDB 事务中执行业务写入并追加成功审计。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `audit` - 事务开始前已完成校验的成功审计记录
-/// * `write` - 只执行数据库业务写入的闭包；禁止外部 HTTP 或文件 I/O
-///
-/// # 返回
-/// 返回业务写入闭包的结果。业务写入和审计均成功后才允许事务提交。
-///
-/// # 错误
-/// 业务写入、审计写入或事务提交失败时返回错误并回滚全部写入；提交结果无法
-/// 确认时沿用统一 `OutcomeUnknown` 映射，调用方不得盲目重放。
+/// 为预先准备的成功审计和业务写入开一个 MongoDB 事务，提交成功后才返回业务结果。闭包仅做数据库写入，不得调用外部 HTTP 或文件 I/O。
+/// 写入失败不提交业务或审计；事务结束后补记失败尝试。提交结果无法确认时沿用 `OutcomeUnknown`，调用方不得盲目重放。
 pub async fn run_audited<R, E, F>(db: &Database, audit: AuditLog, write: F) -> std::result::Result<R, E>
 where
     R: Send + 'static,
@@ -55,20 +44,7 @@ where
     .await
 }
 
-/// 为类型化命令建立唯一事务并记录执行后的安全事实。
-///
-/// 已有调用方事务时使用 `execute_audited`，不得再次调用本入口。
-///
-/// # 参数
-/// * `db` - 当前业务用例数据库。
-/// * `context` - 事务开始前已验证的身份、动作及关联快照。
-/// * `command` - 只执行当前数据库业务规则和写入的命令。
-///
-/// # 返回
-/// 返回首次执行或领域恢复的原命令结果。
-///
-/// # 错误
-/// 业务、结果校验、审计或提交失败时沿用原错误，未知提交不得自动重放。
+/// 用已验证的事件上下文为类型化命令建立唯一事务，首次执行将正式写入和安全事件一起提交，回放返回领域恢复的原结果。已有事务应调用 `execute_audited`。业务、结果校验、审计和提交错误保留原分类，未知提交不得自动重放。
 pub async fn run_audited_event<C>(
     db: &Database,
     context: BusinessEventContext,

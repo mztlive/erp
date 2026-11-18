@@ -21,11 +21,9 @@ use crate::{Error, Result};
 
 impl SalesOrderCommandProcess {
     /// 读取当前已接受结果的安全开单依据与可转数量，提交时继续在事务内重验。
-    /// # 参数
-    /// `inquiry_id`、`round` 为明确来源，`actor` 为当前操作人。
-    /// # 返回
-    /// 返回不含供应商和内部报价身份的商品、地址和供给参考价。
-    /// # 错误
+    ///
+    /// `inquiry_id`、`round` 为明确来源，`actor` 为当前操作人。返回不含供应商和内部报价身份的商品、地址和供给参考价。
+    ///
     /// 无转销售权限、已关闭、未接受或无适用可转量时拒绝。
     pub async fn inquiry_sales_basis(
         &self,
@@ -46,7 +44,7 @@ impl SalesOrderCommandProcess {
             .await
     }
 
-    /// 在同一快照中检查转销售资格并生成开单依据。
+    // 在同一快照中检查转销售资格并生成开单依据。
     async fn inquiry_sales_basis_read(
         &self,
         inquiry_id: &str,
@@ -60,13 +58,11 @@ impl SalesOrderCommandProcess {
         Ok(InquirySalesBasis::from_inquiry(&inquiry, round, Instant::now())?)
     }
 
-    /// 在原建单准备阶段复制已接受的需求；正式写入仍须在事务内重验。
-    /// # 参数
-    /// `request` 为完整销售命令，`actor` 为当前销售，`executor` 为准备阶段执行器。
-    /// # 返回
-    /// 普通开单返回原草稿，询价开单返回服务端冻结需求的草稿。
-    /// # 错误
-    /// 无询价转单资格、客户不一致、未接受或来源过期时拒绝。
+    // 在原建单准备阶段复制已接受的需求；正式写入仍须在事务内重验。
+    //
+    // `request` 为完整销售命令，`actor` 为当前销售，`executor` 为准备阶段执行器。普通开单返回原草稿，询价开单返回服务端冻结需求的草稿。
+    //
+    // 无询价转单资格、客户不一致、未接受或来源过期时拒绝。
     pub(super) async fn inquiry_sales_draft(
         &self,
         request: &CreateSalesOrderRequest,
@@ -97,13 +93,11 @@ impl SalesOrderCommandProcess {
     }
 }
 
-/// 在现有建单执行器内重验询价、占用数量并保存稳定销售来源。
-/// # 参数
-/// `db`、`authorization` 为组合根依赖；`request` 为明确来源；`order` 与 `lines` 为服务端销售事实。
-/// # 返回
-/// 数量台账与销售来源已写入同一事务。
-/// # 错误
-/// 权限、已接受结果、客户、版本或剩余数量不匹配时整单拒绝。
+// 在现有建单执行器内重验询价、占用数量并保存稳定销售来源。
+//
+// `db`、`authorization` 为组合根依赖；`request` 为明确来源；`order` 与 `lines` 为服务端销售事实。
+//
+// 数量台账与销售来源已写入同一事务。权限、已接受结果、客户、版本或剩余数量不匹配时整单拒绝。
 pub(super) async fn reserve_inquiry_creation(
     db: &Database,
     authorization: &Arc<AuthorizationService>,

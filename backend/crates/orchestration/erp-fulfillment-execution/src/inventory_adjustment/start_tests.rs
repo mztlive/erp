@@ -60,7 +60,7 @@ fn submit_request() -> SubmitStockAdjustmentRequest {
     }
 }
 
-/// 列表投影必须来自入口执行，不得推断未知审批人。
+// 列表投影必须来自入口执行，不得推断未知审批人。
 #[test]
 fn list_projection_copies_entry_assignee() {
     let projection =
@@ -71,7 +71,7 @@ fn list_projection_copies_entry_assignee() {
     assert_eq!(projection.last_status_changed_at, Some(10));
 }
 
-/// 库存启动摘要锁定为无歧义 JSON tuple 的字面 SHA-256。
+// 库存启动摘要锁定为无歧义 JSON tuple 的字面 SHA-256。
 #[test]
 fn stock_adjustment_start_digest_has_literal_golden() {
     assert_eq!(
@@ -80,7 +80,7 @@ fn stock_adjustment_start_digest_has_literal_golden() {
     );
 }
 
-/// `NULL`、空值、U+001F 与字段边界不得再产生旧拼接格式碰撞。
+// `NULL`、空值、U+001F 与字段边界不得再产生旧拼接格式碰撞。
 #[test]
 fn stock_adjustment_start_digest_is_boundary_safe() {
     let normalized = submit_request();
@@ -113,7 +113,7 @@ fn stock_adjustment_start_digest_is_boundary_safe() {
     );
 }
 
-/// 每个受签署字段漂移都必须改变 V1 摘要。
+// 每个受签署字段漂移都必须改变 V1 摘要。
 #[test]
 fn stock_adjustment_start_digest_covers_all_signed_fields() {
     let baseline = submit_request();
@@ -147,7 +147,7 @@ fn stock_adjustment_start_digest_covers_all_signed_fields() {
     assert_ne!(stock_adjustment_start_digest(&baseline, "other-actor").unwrap(), expected);
 }
 
-/// V3、库存 V1 与旧 generic 仅允许按各自原 scope/digest 成对回放。
+// V3、库存 V1 与旧 generic 仅允许按各自原 scope/digest 成对回放。
 #[test]
 fn stock_start_identity_accepts_only_exact_generation_pairs() {
     let req = submit_request();
@@ -178,7 +178,7 @@ fn stock_start_identity_accepts_only_exact_generation_pairs() {
     assert_eq!(identity.classify(Some(&generic)), ReceiptBranch::PayloadConflict);
 }
 
-/// V3 身份规范化明细数量与顺序，并保持库存余额版本的签署约束。
+// V3 身份规范化明细数量与顺序，并保持库存余额版本的签署约束。
 #[test]
 fn stock_start_identity_normalizes_order_and_signs_balance_version() {
     let req = submit_request();
@@ -204,7 +204,7 @@ fn stock_start_identity_normalizes_order_and_signs_balance_version() {
     assert_eq!(changed.classify(Some(&receipt)), ReceiptBranch::PayloadConflict);
 }
 
-/// 重提说明必须绑定启动身份，并禁止降级匹配未包含说明的历史收据。
+// 重提说明必须绑定启动身份，并禁止降级匹配未包含说明的历史收据。
 #[test]
 fn stock_resubmission_identity_binds_reason_without_legacy_fallback() {
     let mut req = submit_request();
@@ -236,7 +236,7 @@ fn stock_resubmission_identity_binds_reason_without_legacy_fallback() {
     assert_eq!(identity.classify(Some(&legacy)), ReceiptBranch::PayloadConflict);
 }
 
-/// 规范化启动身份时明细数量解析失败必须停止，不能生成可回放身份。
+// 规范化启动身份时明细数量解析失败必须停止，不能生成可回放身份。
 #[test]
 fn stock_start_identity_rejects_invalid_line_quantity() {
     let mut req = submit_request();
@@ -245,7 +245,7 @@ fn stock_start_identity_rejects_invalid_line_quantity() {
     assert!(matches!(result, Err(crate::Error::ValidationError(_))));
 }
 
-/// Unknown-result 查询按作用域只接受对应世代的摘要形状。
+// Unknown-result 查询按作用域只接受对应世代的摘要形状。
 #[test]
 fn submit_result_receipt_digest_shape_is_fail_closed() {
     let digest = "06ca7d6d37aac050a5168f4aa2815e2e40b2c2569530f19ba7e555fd5256683b";
@@ -259,7 +259,7 @@ fn submit_result_receipt_digest_shape_is_fail_closed() {
     assert!(!is_supported_start_receipt_identity("v3-scope", &format!("v3:{}", "G".repeat(64)), &scopes,));
 }
 
-/// 启动计划只允许精确一条 Started 和一条 Entered 通知。
+// 启动计划只允许精确一条 Started 和一条 Entered 通知。
 #[test]
 fn start_notifications_reject_missing_duplicate_or_extra_intents() {
     let valid = vec![

@@ -25,16 +25,8 @@ pub struct WorkItemDueWindow {
 }
 
 impl WorkItemDueFilter {
-    /// 返回稳定筛选代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
+    /// 取得稳定筛选代码。
     /// `Today` 返回 `today`，`Overdue` 返回 `overdue`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Today => "today",
@@ -47,14 +39,11 @@ impl WorkItemDueFilter {
     /// `Overdue` 的上界为 `now`，因此 `due_at == now` 不逾期；`Today` 与
     /// `Overdue` 可在今日已经过去的时段重叠。
     ///
-    /// # 参数
-    /// * `now` - 统计时点。
-    ///
-    /// # 返回
     /// `Today` 返回当日 `[00:00, 次日 00:00)`；`Overdue` 返回上界为 `now`、无下界的窗口。
     ///
-    /// # 错误
     /// 无法形成东八区时区、无法读取统计时点或无法形成业务日边界时返回错误。
+    ///
+    /// `now`：统计时点。
     pub fn window_at(self, now: Instant) -> Result<WorkItemDueWindow> {
         let timezone =
             FixedOffset::east_opt(8 * 60 * 60).ok_or_else(|| Error::from("无法形成 Asia/Shanghai 时区"))?;

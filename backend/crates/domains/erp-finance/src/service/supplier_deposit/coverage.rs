@@ -15,14 +15,13 @@ use crate::{Error, Result};
 
 impl SupplierDepositService {
     /// 核对创建或确认的全额资金保障；调查和取消不调用本门槛。
-    /// # 参数
-    /// * `execution_group_id` / `purchase_order_id` / `purchase_revision_id` - 冻结业务来源。
-    /// * `approved_total` - 本执行组完整批准预算。
-    /// * `now` / `executor` - 当前时间及调用方执行器。
-    /// # 返回
     /// 返回拥有全额有效覆盖的唯一原占用。
-    /// # 错误
     /// 占用缺失、归属/版本/金额变化、授权撤销或资金差异时拒绝。
+    ///
+    /// 输入约定：
+    /// - `execution_group_id` / `purchase_order_id` / `purchase_revision_id`：冻结业务来源。
+    /// - `approved_total`：本执行组完整批准预算。
+    /// - `now` / `executor`：当前时间及调用方执行器。
     pub async fn execution_coverage(
         &self,
         execution_group_id: &str,

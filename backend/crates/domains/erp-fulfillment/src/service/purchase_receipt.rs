@@ -19,17 +19,13 @@ use crate::{Error, Result};
 /// 采购入库单列表筛选条件类型（经 `FulfillmentExt` 关联类型跨 crate 可达）。
 type PurchaseReceiptFilter = <mongodb::Database as FulfillmentExt>::PurchaseReceiptFilter;
 impl FulfillmentService {
-    /// 分页查询采购入库单列表（W01 履约任务作业面）。
-    ///
-    /// # 参数
-    /// * `params` - 查询参数（`purchase_order_id`/`status` 扁平筛选）
-    ///
-    /// # 返回
-    /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
-    ///
-    /// # 错误
-    /// * `ValidationError` - 分页参数非法或排序字段不在白名单
-    /// * `RepositoryError` - 数据库查询失败
+    // 分页查询采购入库单列表（W01 履约任务作业面）。
+    // 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
+    // `params` 为查询参数（`purchase_order_id`/`status` 扁平筛选）。
+    //
+    // 失败条件：
+    // * `ValidationError` - 分页参数非法或排序字段不在白名单
+    // * `RepositoryError` - 数据库查询失败
     #[tracing::instrument(
         name = "fulfillment.purchase_receipt_list",
         skip_all,
@@ -69,21 +65,13 @@ impl FulfillmentService {
         .await
     }
     /// 查询采购入库单详情（表头 + 行）。
-    ///
     /// 调用方必须已完成所属业务授权，并传入原读取阶段执行器。
-    ///
-    /// # 参数
-    /// * `id` - 入库单主键
-    ///
-    /// # 返回
     /// 返回入库单详情视图。
+    /// `id` 为入库单主键。
     ///
-    /// # 错误
+    /// 失败条件：
     /// * `NotFound` - 入库单不存在
     /// * `RepositoryError` - 数据库查询失败
-    ///
-    /// # 关键业务约束
-    /// 调用方必须已完成所属业务授权，并传入原读取阶段执行器。
     #[tracing::instrument(
         name = "fulfillment.purchase_receipt_detail",
         skip_all,
@@ -111,14 +99,8 @@ impl FulfillmentService {
         })
     }
     /// 校验并构造采购入库草稿；身份和行顺序保持请求处理时点。
-    ///
-    /// # 参数
-    /// * `req` - 采购入库创建请求
-    ///
-    /// # 返回
     /// 返回入库表头及其行。
-    ///
-    /// # 错误
+    /// `req` 为采购入库创建请求。
     /// 请求校验失败时返回 `ValidationError`；表头构造失败时返回对应错误；行批量构造失败时返回 `Logic`。
     pub fn prepare_purchase_receipt(
         req: CreatePurchaseReceiptRequest,
@@ -140,18 +122,11 @@ impl FulfillmentService {
         Ok((receipt, lines))
     }
     /// 读取并校验草稿更新；版本守卫先于冻结仓库守卫。
-    ///
-    /// # 参数
-    /// * `id` - 入库单主键
-    /// * `req` - 带期望版本的更新请求
-    /// * `executor` - 调用方授权事务的同一执行器
-    ///
-    /// # 返回
     /// 返回已应用更新、尚未写回的草稿。
-    ///
-    /// # 错误
-    /// 请求校验失败时返回 `ValidationError`；入库单不存在时返回 `NotFound`；版本不一致时返回
-    /// `ConflictError`；请求变更已冻结仓库时返回 `ValidationError`；领域更新失败时返回对应错误。
+    /// `id` 为入库单主键；`req` 为带期望版本的更新请求。
+    /// `executor` 为调用方授权事务的同一执行器。
+    /// 请求校验失败时返回 `ValidationError`；入库单不存在时返回 `NotFound`；版本不一致时返回 `ConflictError`；
+    /// 请求变更已冻结仓库时返回 `ValidationError`；领域更新失败时返回对应错误。
     pub async fn prepare_purchase_receipt_update(
         &self,
         id: &str,
@@ -181,17 +156,10 @@ impl FulfillmentService {
         Ok(receipt)
     }
     /// 在调用方事务内创建采购入库表头及其行。
-    ///
-    /// # 参数
-    /// * `receipt` - 入库表头
-    /// * `lines` - 入库行
-    /// * `executor` - 调用方事务执行器
-    ///
-    /// # 返回
     /// 创建成功时无返回值。
-    ///
-    /// # 错误
-    /// 仓储写入失败时返回对应错误。
+    /// `receipt` 为入库表头；`lines` 为入库行。
+    /// 沿用调用方当前事务的执行器 `executor`。
+    /// 传播仓储写入错误。
     pub async fn persist_created_purchase_receipt(
         &self,
         receipt: &PurchaseReceipt,
@@ -202,15 +170,7 @@ impl FulfillmentService {
         Ok(())
     }
     /// 在调用方事务内按原乐观锁条件写回采购入库单。
-    ///
-    /// # 参数
-    /// * `receipt` - 已完成领域修改的入库单
-    /// * `executor` - 调用方事务执行器
-    ///
-    /// # 返回
-    /// 写回成功时无返回值。
-    ///
-    /// # 错误
+    /// `receipt` 为已完成领域修改的入库单；沿用调用方当前事务的执行器 `executor`。
     /// 版本冲突或仓储写入失败时返回对应错误。
     pub async fn persist_purchase_receipt(
         &self,
@@ -222,7 +182,7 @@ impl FulfillmentService {
     }
 }
 impl From<PurchaseReceipt> for PurchaseReceiptView {
-    /// 从入库单实体构造视图。
+    // 从入库单实体构造视图。
     fn from(receipt: PurchaseReceipt) -> Self {
         Self {
             id: receipt.base.id,
@@ -238,7 +198,7 @@ impl From<PurchaseReceipt> for PurchaseReceiptView {
 }
 
 impl From<PurchaseReceiptLine> for PurchaseReceiptLineView {
-    /// 从入库行实体构造视图。
+    // 从入库行实体构造视图。
     fn from(line: PurchaseReceiptLine) -> Self {
         Self {
             id: line.base.id,

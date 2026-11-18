@@ -41,12 +41,14 @@ pub struct PortalNewProductReviewContext {
 }
 
 impl SupplierPortalReadService {
-    /// 读取本供给已提交待采购确认的条款与停供申请。
+    /// 处理门户新品审核核对时，读取本供给已提交待采购确认的条款与停供申请。
     ///
     /// # 参数
     /// `actor` 为门户身份，`offering_id` 为精确供给，`executor` 为同一读取执行器。
+    ///
     /// # 返回
     /// 只含本供应商该供给的待确认允许列表，至多100项。
+    ///
     /// # 错误
     /// 账号、绑定或供应商失效，供给越界，结果超限或持久化错误时拒绝。
     pub async fn pending_offering_applications(
@@ -78,14 +80,14 @@ impl SupplierPortalReadService {
             .collect()
     }
 
-    /// 读取原冻结目标当前正式事实，供内部审核逐字段比较。
-    ///
-    /// # 参数
-    /// `request_id` 为精确申请，`actor` 为内部账号，`executor` 为本次读取执行器。
-    /// # 返回
-    /// 供给返回当前正式条款和版本，合作返回当前正式付款条件；新品和首次报价为空。
-    /// # 错误
-    /// 申请或供给不可见、目标归属异常、正式版本缺失或持久化错误时拒绝。
+    // 处理门户新品审核核对时，读取原冻结目标当前正式事实，供内部审核逐字段比较。
+    //
+    // 调用参数：
+    // `request_id` 为精确申请，`actor` 为内部账号，`executor` 为本次读取执行器。
+    //
+    // 供给返回当前正式条款和版本，合作返回当前正式付款条件；新品和首次报价为空。
+    //
+    // 申请或供给不可见、目标归属异常、正式版本缺失或持久化错误时拒绝。
     pub(super) async fn current_application_facts(
         &self,
         request_id: &str,
@@ -122,13 +124,15 @@ impl SupplierPortalReadService {
         Err(hidden_target())
     }
 
-    /// 读取新品的公司重复候选和精确既有供给引用。
+    /// 装配门户新品审核核对时，读取新品的公司重复候选和精确既有供给引用。
     ///
     /// # 参数
     /// `request_id` 为精确申请，`q` 为可选搜索，`actor` 为内部账号；
     /// `catalog` 必须装配正式商品范围授权；入口负责覆盖全部读取的快照事务。
+    ///
     /// # 返回
     /// 返回可维护商品候选及本供应商、原订货码下可读的供给版本。
+    ///
     /// # 错误
     /// 申请不可见、授权未装配、候选资料非法或数据库错误时拒绝。
     pub async fn new_product_review_context(
@@ -155,7 +159,7 @@ impl SupplierPortalReadService {
             .await
     }
 
-    /// 查重及所有申请、供给和分类补齐均加入公开入口的原快照。
+    // 读取门户新品审核核对时，查重及所有申请、供给和分类补齐均加入公开入口的原快照。
     async fn read_new_product_context(
         &self,
         request_id: &str,
@@ -190,16 +194,17 @@ impl SupplierPortalReadService {
         Ok(PortalNewProductReviewContext { duplicates, existing_offerings, category_mapping_suggestion })
     }
 
-    /// 为已授权新品详情提供明确的既有供给版本，不猜测其他订货码。
-    ///
-    /// # 参数
-    /// `request_id` 为新品申请，`actor` 为内部账号，`executor` 为本次执行器。
-    /// # 返回
-    /// 返回当前待确认原稿每行的精确同供应商、同订货码候选；其他状态为空。
-    /// # 错误
-    /// 非内部身份或未装配授权时返回 `Forbidden`。申请不存在或越权时返回 `NotFound`。
-    /// 供给当前版本缺失、归属异常或 SKU 资料缺失时返回 `ConflictError`。
-    /// 待确认原稿关联损坏或仓储读取失败时返回对应错误。
+    // 准备门户新品审核核对候选时，为已授权新品详情提供明确的既有供给版本，不猜测其他订货码。
+    //
+    // 调用参数：
+    // `request_id` 为新品申请，`actor` 为内部账号，`executor` 为本次执行器。
+    //
+    // 返回当前待确认原稿每行的精确同供应商、同订货码候选；其他状态为空。
+    //
+    // 失败边界：
+    // 非内部身份或未装配授权时返回 `Forbidden`。申请不存在或越权时返回 `NotFound`。
+    // 供给当前版本缺失、归属异常或 SKU 资料缺失时返回 `ConflictError`。
+    // 待确认原稿关联损坏或仓储读取失败时返回对应错误。
     pub(super) async fn existing_offering_review_candidates(
         &self,
         request_id: &str,
@@ -350,7 +355,7 @@ fn hidden_target() -> Error {
     Error::NotFound("申请不存在或无权访问".into())
 }
 
-/// 原稿、当前事实与核对候选必须来自同一可核验快照。
+// 处理门户新品审核核对时，原稿、当前事实与核对候选必须来自同一可核验快照。
 fn review_snapshot(executor: &mut dyn Executor) -> Result<()> {
     if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
         return Err(Error::ValidationError("暂时无法查看供应商门户管理资料，请刷新页面后重新打开".into()));

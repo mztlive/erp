@@ -14,16 +14,15 @@ use crate::repository::{PurchasePaymentRequestExt, SupplierDepositExt};
 use crate::{Error, Result};
 
 impl SupplierDepositService {
-    /// 原子锁定全额执行组资金与逐单批准额度，重放保留原资金批次。
-    /// # 参数
-    /// * `account_id` / `operation_key` - 资金账户和稳定操作身份。
-    /// * `basis` - 冻结审批、采购修订、预算和财务授权。
-    /// * `actor` / `now` - 执行身份和时间。
-    /// * `executor` - 跨账户、批次、申请和授权共同事务。
-    /// # 返回
+    /// 发起预存款执行前在同一事务锁定执行组全额资金和逐采购批准额度；重放继续引用最初的资金批次。
     /// 返回唯一可恢复的资金占用。
-    /// # 错误
     /// 异载荷、归属、版本、授权、金额、余额或事务失败时拒绝。
+    ///
+    /// 输入约定：
+    /// - `account_id` / `operation_key`：资金账户和稳定操作身份。
+    /// - `basis`：冻结审批、采购修订、预算和财务授权。
+    /// - `actor` / `now`：执行身份和时间。
+    /// - `executor`：跨账户、批次、申请和授权共同事务。
     pub async fn reserve(
         &self,
         account_id: &str,

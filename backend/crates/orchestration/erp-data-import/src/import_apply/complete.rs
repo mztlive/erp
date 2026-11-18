@@ -34,13 +34,12 @@ use super::{
 use crate::{Error, Result};
 
 impl ImportApplyProcess {
-    /// 执行确认完成命令，正式事实、任务、独立回执与成功事件原子提交。
-    /// # 参数
-    /// * `req` - 已认证入口传入的强类型命令。
-    /// * `actor` - 当前操作人。
-    /// # 返回
+    /// 经办人提交旧数据导入确认决定时，将业务事实、任务、独立回执与成功事件原子提交；用原命令身份回读已确认结果。
+    ///
+    /// `req`：已认证入口传入的强类型命令。
+    ///
     /// 返回原确认结果、任务和事件关联号。
-    /// # 错误
+    ///
     /// 沿用任务责任、授权、版本和幂等冲突；损坏回执不可恢复。
     pub async fn complete_import_business_confirmation(
         &self,
@@ -73,7 +72,7 @@ impl ImportApplyProcess {
         }
     }
 
-    /// 用同一事务执行器读取回执、重验当前责任并恢复原结果。
+    // 首次提交和提交失败查证均按原命令身份回读；在同一快照重验确认完成功能和当前任务责任后才交付原结果。
     async fn replay_confirmation_completion(
         &self,
         identity: &StructuredCommandReceipt,
@@ -105,7 +104,7 @@ impl ImportApplyProcess {
             .await
     }
 
-    /// 保持原请求生命周期，在已有事务内执行类型化业务边界。
+    // 未命中既有确认回执时，在原写入事务重新授权，再按类型化的确认步骤写入正式事实和审计。
     async fn commit_confirmation_completion(
         &self,
         identity: &StructuredCommandReceipt,
@@ -192,7 +191,7 @@ struct ConfirmationSource {
     batch: LegacyImportBatch,
 }
 
-/// 原任务、确认和批次版本校验完成后重验当前责任资格。
+// 原任务、确认和批次版本校验完成后重验当前责任资格。
 async fn load_confirmation_source(
     command: &ConfirmationWrite<'_>,
     executor: &mut dyn Executor,
@@ -220,7 +219,7 @@ async fn load_confirmation_source(
     Ok(ConfirmationSource { confirmation, work_item, batch })
 }
 
-/// 按原确认矩阵和状态规则形成内存变更，再统一持久化。
+// 按原确认矩阵和状态规则形成内存变更，再统一持久化。
 async fn apply_confirmation_completion(
     command: &ConfirmationWrite<'_>,
     mut source: ConfirmationSource,
@@ -267,7 +266,7 @@ async fn apply_confirmation_completion(
     persist_confirmation_result(command, source, next_step, executor).await
 }
 
-/// 事实、任务、动作及独立回执使用唯一执行器；成功事件由外层边界写入。
+// 事实、任务、动作及独立回执使用唯一执行器；成功事件由外层边界写入。
 async fn persist_confirmation_result(
     command: &ConfirmationWrite<'_>,
     mut source: ConfirmationSource,
@@ -319,7 +318,7 @@ async fn persist_confirmation_result(
     ))
 }
 
-/// 回放只接受确认事实和正式任务共同证明的原提交结果。
+// 回放只接受确认事实和正式任务共同证明的原提交结果。
 async fn replay_confirmation_step(
     db: &mongodb::Database,
     identity: &StructuredCommandReceipt,
@@ -355,17 +354,17 @@ async fn replay_confirmation_step(
     )))
 }
 
-/// 原决定、责任、任务主体、版本和完成时间必须交叉证明，不能只凭回执恢复。
-/// # 参数
-/// * `outcome` - 回执冻结的原确认结果。
-/// * `confirmation` - 当前正式确认事实。
-/// * `task` - 当前正式任务终态。
-/// * `prepared` - 完整规范化原命令。
-/// * `actor_id` - 当前认证操作人。
-/// # 返回
-/// 所有原提交事实和任务引用一致时返回空值。
-/// # 错误
-/// 缺失或不匹配事实时拒绝恢复。
+// 原决定、责任、任务主体、版本和完成时间必须交叉证明，不能只凭回执恢复。
+//
+// - `outcome`：回执冻结的原确认结果。
+// - `confirmation`：当前正式确认事实。
+// - `task`：当前正式任务终态。
+// - `prepared`：完整规范化原命令。
+// - `actor_id`：当前认证操作人。
+//
+// 所有原提交事实和任务引用一致时返回空值。
+//
+// 缺失或不匹配事实时拒绝恢复。
 pub(super) fn validate_confirmation_replay(
     outcome: &ImportConfirmationOutcome,
     confirmation: &LegacyImportConfirmation,
@@ -382,7 +381,7 @@ pub(super) fn validate_confirmation_replay(
     Ok(())
 }
 
-/// 完成后的任务仍须保留原责任人；开放任务资格不适用于终态重放。
+// 完成后的任务仍须保留原责任人；开放任务资格不适用于终态重放。
 fn confirmation_replay_task_matches(
     outcome: &ImportConfirmationOutcome,
     task: &WorkItem,
@@ -411,19 +410,13 @@ struct ConfirmationCompletionTransactionResult {
     receipt: ConfirmationCompletionReceipt,
 }
 
-/// 校验完成命令锁定的任务、事实、批次和当前责任。
-///
-/// # 参数
-/// * `command` - 已规范化的完成命令。
-/// * `work_item` - 当前确认任务。
-/// * `confirmation` - 当前确认事实。
-/// * `batch` - 确认所属批次。
-///
-/// # 返回
-/// 任务、事实、批次版本与冻结责任身份一致时无返回值。
-///
-/// # 错误
-/// 任务、批次版本或试算快照变化、任务不再开放时返回 `ConflictError`。任务、责任范围或批次不匹配，或范围已不在必要矩阵时返回 `BusinessLogicError`。确认范围未注册时返回 `Logic`；必要范围无法解析时返回对应错误。
+// 校验完成命令锁定的任务、事实、批次和当前责任。
+//
+// `command`：已规范化的完成命令；`work_item`：当前确认任务；`confirmation`：当前确认事实；`batch`：确认所属批次。
+//
+// 任务、事实、批次版本与冻结责任身份一致时无返回值。
+//
+// 任务、批次版本或试算快照变化、任务不再开放时返回 `ConflictError`。任务、责任范围或批次不匹配，或范围已不在必要矩阵时返回 `BusinessLogicError`。确认范围未注册时返回 `Logic`；必要范围无法解析时返回对应错误。
 pub(super) fn validate_confirmation_completion(
     command: &PreparedConfirmationCompletion,
     work_item: &WorkItem,
@@ -475,7 +468,7 @@ pub(super) fn validate_confirmation_completion(
     Ok(())
 }
 
-/// 把事务结果组装为强类型响应信封。
+// 把事务结果组装为强类型响应信封。
 fn completion_result(
     result: ConfirmationCompletionTransactionResult,
     audit_receipt: String,
@@ -490,16 +483,11 @@ fn completion_result(
     }
 }
 
-/// 返回决策对应的稳定结果状态。
-///
-/// # 参数
-/// * `decision` - 确认决策。
-///
-/// # 返回
-/// `ConfirmScope` 返回 `Confirmed`，`ReturnForFix` 返回 `Rejected`。
-///
-/// # 错误
-/// 不返回错误。
+// 返回决策对应的稳定结果状态。
+//
+// `decision`：确认决策。
+//
+// `ConfirmScope` 返回 `Confirmed`，`ReturnForFix` 返回 `Rejected`。
 pub(super) fn confirmation_result_status(
     decision: ConfirmationDecision,
 ) -> ImportBusinessConfirmationResultStatus {
@@ -509,18 +497,11 @@ pub(super) fn confirmation_result_status(
     }
 }
 
-/// 构造导入确认命令的领域幂等身份。
-///
-/// # 参数
-/// * `actor_id` - 当前确认人
-/// * `action` - 稳定命令动作
-/// * `command` - 已解析并规范化的确认命令
-///
-/// # 返回
-/// 返回不暴露原始幂等键的命令 ID 与完整命令指纹。
-///
-/// # 错误
-/// 不返回错误。
+// 构造导入确认命令的领域幂等身份。
+//
+// `actor_id`：当前确认人；`action`：稳定命令动作；`command`：已解析并规范化的确认命令。
+//
+// 返回不暴露原始幂等键的命令 ID 与完整命令指纹。
 pub(super) fn confirmation_command_identity(
     actor_id: &str,
     action: &str,

@@ -35,16 +35,7 @@ pub enum SupplierApiConnectionStatus {
 }
 
 impl SupplierApiConnectionStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为供应商连接状态提供中文展示名；界面展示时使用，不以文案作为稳定标识。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Active => "启用",
@@ -53,16 +44,7 @@ impl SupplierApiConnectionStatus {
         }
     }
 
-    /// 返回状态的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得供应商连接状态的稳定标识，供需要按代码而非展示文案识别取值的调用方使用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Active => "active",
@@ -71,16 +53,7 @@ impl SupplierApiConnectionStatus {
         }
     }
 
-    /// 判断连接是否处于启用状态。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 状态为 `Active` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 检查供应商连接状态是否启用；此处仅检查启停标记，不代表业务资格已经通过。
     pub fn is_active(&self) -> bool {
         matches!(self, Self::Active)
     }
@@ -97,16 +70,7 @@ pub enum HealthCheckResult {
 }
 
 impl HealthCheckResult {
-    /// 返回结果的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为 `HealthCheckResult` 提供中文展示名；界面展示时使用，不以文案作为稳定标识。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Healthy => "正常",
@@ -114,16 +78,7 @@ impl HealthCheckResult {
         }
     }
 
-    /// 返回结果的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得 `HealthCheckResult` 的稳定标识，供需要按代码而非展示文案识别取值的调用方使用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Healthy => "healthy",
@@ -143,15 +98,7 @@ pub struct RateLimitPolicy {
 
 impl RateLimitPolicy {
     /// 构造限流策略。
-    ///
-    /// # 参数
-    /// * `max_requests` - 窗口内最大请求数
-    /// * `window_secs` - 窗口时长（秒）
-    ///
-    /// # 返回
     /// 返回限流策略实例。
-    ///
-    /// # 错误
     /// 当最大请求数或窗口时长为零时返回错误。
     pub fn new(max_requests: u32, window_secs: u32) -> Result<Self> {
         if max_requests == 0 {
@@ -164,29 +111,13 @@ impl RateLimitPolicy {
     }
 
     /// 返回窗口内最大请求数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回最大请求数。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn max_requests(&self) -> u32 {
         self.max_requests
     }
 
     /// 返回窗口时长（秒）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回窗口时长。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn window_secs(&self) -> u32 {
         self.window_secs
     }
@@ -278,7 +209,7 @@ pub struct SupplierApiConnection {
 }
 
 impl PartialEq for SupplierApiConnection {
-    /// 全字段语义相等。
+    // 按全部实体字段比较`SupplierApiConnection`，而非只比较稳定 ID。
     fn eq(&self, other: &Self) -> bool {
         self.base == other.base
             && self.stable.status == other.stable.status
@@ -309,20 +240,11 @@ impl Eq for SupplierApiConnection {}
 
 impl SupplierApiConnection {
     /// 创建供应商 API 连接。
-    ///
-    /// 完成 connection_code/endpoint_reference/credential_reference 的完整校验与
-    /// 规范化（去首尾空白、非空、长度上限）；健康检查字段初始为空。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::SupplierApiConnectionId`）
-    /// * `data` - 创建数据
-    /// * `created_by` - 创建人（账号或系统身份）
-    ///
-    /// # 返回
+    /// 完成 connection_code/endpoint_reference/credential_reference 的完整校验与规范化（去首尾空白、非空、
+    /// 长度上限）；健康检查字段初始为空。
     /// 返回新建的连接实体。
-    ///
-    /// # 错误
-    /// 连接代码为空或超长，或地址配置引用、密钥引用超长时返回错误。空白地址配置引用视为未绑定，不返回错误。
+    /// 连接代码为空或超长，或地址配置引用、密钥引用超长时返回错误。空白地址配置引用视为未绑定，不返回错
+    /// 误。
     pub fn new(
         id: SupplierApiConnectionId,
         data: SupplierApiConnectionData,
@@ -363,12 +285,7 @@ impl SupplierApiConnection {
     }
 
     /// 绑定已核验财务账号；更换资金账号须建立新连接保留历史命名空间。
-    /// # 参数
-    /// * `account_id` / `external_account_ref` - 由组合层核验的资金身份。
-    /// * `actor` - 实际绑定人。
-    /// # 返回
     /// 首次绑定或相同身份重放成功。
-    /// # 错误
     /// 空身份、已有其他账号或配置版本溢出时拒绝。
     pub fn bind_supplier_deposit(
         &mut self,
@@ -402,18 +319,8 @@ impl SupplierApiConnection {
     }
 
     /// 更新供应商 API 连接。
-    ///
-    /// 复用 `new` 的校验规则；`supplier_id`/`connection_code` 是稳定键，不允许在
-    /// 通用更新中修改。健康检查时间与结果必须成对出现。
-    ///
-    /// # 参数
-    /// * `update` - 更新数据
-    /// * `updated_by` - 本次更新执行人
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// 复用 `new` 的校验规则；`supplier_id`/`connection_code` 是稳定键，不允许在通用更新中修改。健康检查
+    /// 时间与结果必须成对出现。
     /// 当更新字段校验失败或健康检查信息不完整时返回错误。
     pub fn update(
         &mut self,
@@ -435,16 +342,8 @@ impl SupplierApiConnection {
     }
 
     /// 绑定已由权威注册表解析的地址引用。
-    ///
-    /// # 参数
-    /// * `reference` - 已由权威注册表解析的地址引用
-    /// * `updated_by` - 本次更新执行人
-    ///
-    /// # 返回
-    /// 绑定成功时返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 引用为空、过长或技术配置版本溢出时返回错误。
+    /// `reference`：已由权威注册表解析的地址引用。
     pub fn bind_endpoint_reference(
         &mut self,
         reference: String,
@@ -458,16 +357,8 @@ impl SupplierApiConnection {
     }
 
     /// 绑定已由权威注册表解析的密钥引用。
-    ///
-    /// # 参数
-    /// * `reference` - 已由权威注册表解析的密钥引用
-    /// * `updated_by` - 本次更新执行人
-    ///
-    /// # 返回
-    /// 绑定成功时返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 引用为空、过长或技术配置版本溢出时返回错误。
+    /// `reference`：已由权威注册表解析的密钥引用。
     pub fn bind_credential_reference(
         &mut self,
         reference: String,
@@ -481,16 +372,8 @@ impl SupplierApiConnection {
     }
 
     /// 绑定业务资料注册表返回的不透明引用。
-    ///
-    /// # 参数
-    /// * `reference` - 不透明业务资料引用
-    /// * `updated_by` - 本次更新执行人
-    ///
-    /// # 返回
-    /// 绑定成功时返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 引用为空或过长时返回错误。
+    /// `reference`：不透明业务资料引用。
     pub fn update_business_profile(
         &mut self,
         reference: String,
@@ -507,28 +390,13 @@ impl SupplierApiConnection {
     }
 
     /// 记录一次业务能力确认触及连接版本，但不修改能力启停状态。
-    ///
-    /// # 参数
-    /// * `updated_by` - 本次业务确认的执行人
-    ///
-    /// # 返回
-    /// 无返回值。只更新 `updated_by`，不修改能力启停状态。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 只更新 `updated_by`，不修改能力启停状态。
     pub fn touch_business_confirmation(&mut self, updated_by: impl Into<String>) {
         self.stable.touch(updated_by);
     }
 
     /// 记录能力配置变更并使旧技术健康证据失效。
-    ///
-    /// # 参数
-    /// * `updated_by` - 本次更新执行人
-    ///
-    /// # 返回
     /// 版本递增并记录更新人后返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 技术配置版本溢出时返回错误。
     pub fn record_capability_configuration(&mut self, updated_by: impl Into<String>) -> Result<()> {
         self.bump_technical_config_version()?;
@@ -537,77 +405,35 @@ impl SupplierApiConnection {
     }
 
     /// 启用连接。
-    ///
-    /// # 参数
-    /// * `updated_by` - 本次更新执行人
-    ///
-    /// # 返回
-    /// 无返回值。状态改为启用并记录更新人。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 状态改为启用并记录更新人。
     pub fn enable(&mut self, updated_by: impl Into<String>) {
         self.stable.status = SupplierApiConnectionStatus::Active;
         self.stable.touch(updated_by);
     }
 
     /// 停用连接；历史连接身份与业务事实保持不变。
-    ///
-    /// # 参数
-    /// * `updated_by` - 本次更新执行人
-    ///
-    /// # 返回
-    /// 无返回值。状态改为停用并记录更新人。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 状态改为停用并记录更新人。
     pub fn disable(&mut self, updated_by: impl Into<String>) {
         self.stable.status = SupplierApiConnectionStatus::Disabled;
         self.stable.touch(updated_by);
     }
 
     /// 判断地址与密钥引用是否都已经由权威注册表绑定。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 地址与密钥引用都已绑定标记为真时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn technical_references_ready(&self) -> bool {
         self.endpoint_reference_bound && self.credential_reference_bound
     }
 
     /// 判断当前技术配置是否已有成功健康证据。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 最近结果为正常，且成功证据对应的技术配置版本等于当前版本时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn current_technical_config_is_healthy(&self) -> bool {
         self.last_health_result == Some(HealthCheckResult::Healthy)
             && self.last_healthy_technical_config_version == Some(self.technical_config_version)
     }
 
     /// 记录一次健康检查结果。
-    ///
     /// 时间与结果成对写入，不产生单独置半边的状态。
-    ///
-    /// # 参数
-    /// * `result` - 健康检查结果
-    /// * `at` - 检查时间
-    ///
-    /// # 返回
-    /// 无返回值。结果与时间成对写入；结果为正常时记录当前技术配置版本。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 结果与时间成对写入；结果为正常时记录当前技术配置版本。
     pub fn record_health(&mut self, result: HealthCheckResult, at: Instant) {
         self.last_health_result = Some(result);
         self.last_health_at = Some(at);
@@ -616,29 +442,13 @@ impl SupplierApiConnection {
         }
     }
 
-    /// 判断连接是否处于启用状态。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 状态为 `Active` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 检查 `SupplierApiConnection` 是否启用；此处仅检查启停标记，不代表业务资格已经通过。
     pub fn is_active(&self) -> bool {
         self.stable.status().is_active()
     }
 
-    /// 校验连接是否允许继续建立供应商供给。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
+    /// 核对连接是否允许继续建立供应商供给。
     /// 启用连接返回成功。
-    ///
-    /// # 错误
     /// 停用或故障时返回对应状态及恢复指引。
     pub fn ensure_active(&self) -> Result<()> {
         match self.stable.status() {
@@ -653,11 +463,7 @@ impl SupplierApiConnection {
     }
 
     /// 校验选品连接；关闭自动下单不影响商品入库。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 连接存在且未标记故障时通过。
-    /// # 错误
     /// 已删除、未选择协议或故障连接拒绝选品。
     pub fn ensure_catalog_available(&self) -> Result<()> {
         if self.base.is_deleted() || self.connector_type.is_none() {
@@ -670,14 +476,7 @@ impl SupplierApiConnection {
     }
 
     /// 校验供给来源连接的供应商归属与可用状态。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 来源商品或供给所属供应商。
-    ///
-    /// # 返回
     /// 归属一致且连接启用时返回成功。
-    ///
-    /// # 错误
     /// 优先返回归属不一致；归属一致时返回具体状态错误。
     pub fn ensure_offering_source(&self, supplier_id: &str) -> Result<()> {
         if self.supplier_id.as_ref() != supplier_id {
@@ -686,13 +485,9 @@ impl SupplierApiConnection {
         self.ensure_catalog_available()
     }
 
-    /// 应用地址配置引用更新。
-    ///
-    /// # 参数
-    /// * `endpoint_reference` - 可选地址配置引用
-    ///
-    /// # 错误
-    /// 当地址配置引用为空或超长时返回错误。
+    // 应用地址配置引用更新。
+    // 当地址配置引用为空或超长时返回错误。
+    // `endpoint_reference`：可选地址配置引用。
     fn apply_endpoint_reference(&mut self, endpoint_reference: Option<String>) -> Result<bool> {
         if let Some(endpoint_reference) = endpoint_reference {
             let endpoint_reference = normalize_required_text(
@@ -709,13 +504,9 @@ impl SupplierApiConnection {
         Ok(false)
     }
 
-    /// 应用密钥管理系统引用更新。
-    ///
-    /// # 参数
-    /// * `credential_reference` - 可选密钥引用
-    ///
-    /// # 错误
-    /// 密钥引用为空或超长时返回错误。
+    // 应用密钥管理系统引用更新。
+    // 密钥引用为空或超长时返回错误。
+    // `credential_reference`：可选密钥引用。
     fn apply_credential_reference(&mut self, credential_reference: Option<String>) -> Result<bool> {
         if let Some(credential_reference) = credential_reference {
             let credential_reference = normalize_optional_text(
@@ -733,24 +524,18 @@ impl SupplierApiConnection {
         Ok(false)
     }
 
-    /// 应用限流策略更新。
-    ///
-    /// # 参数
-    /// * `rate_limit_policy` - 可选限流策略
+    // 应用限流策略更新。
+    // `rate_limit_policy`：可选限流策略。
     fn apply_rate_limit_policy(&mut self, rate_limit_policy: Option<RateLimitPolicy>) {
         if let Some(rate_limit_policy) = rate_limit_policy {
             self.rate_limit_policy = Some(rate_limit_policy);
         }
     }
 
-    /// 应用健康检查信息更新。
-    ///
-    /// # 参数
-    /// * `last_health_at` - 可选健康检查时间
-    /// * `last_health_result` - 可选健康检查结果
-    ///
-    /// # 错误
-    /// 当健康检查时间与结果只有其一出现时返回错误。
+    // 应用健康检查信息更新。
+    // 当健康检查时间与结果只有其一出现时返回错误。
+    // `last_health_at`：可选健康检查时间。
+    // `last_health_result`：可选健康检查结果。
     fn apply_health(
         &mut self,
         last_health_at: Option<Instant>,
@@ -766,17 +551,15 @@ impl SupplierApiConnection {
         Ok(())
     }
 
-    /// 应用启停/故障状态更新。
-    ///
-    /// # 参数
-    /// * `status` - 可选连接状态
+    // 应用启停/故障状态更新。
+    // `status`：可选连接状态。
     fn apply_status(&mut self, status: Option<SupplierApiConnectionStatus>) {
         if let Some(status) = status {
             self.stable.status = status;
         }
     }
 
-    /// 技术配置变更后递增版本并清掉旧的成功健康证据；版本溢出时失败。
+    // 技术配置变更后递增版本并清掉旧的成功健康证据；版本溢出时失败。
     fn bump_technical_config_version(&mut self) -> Result<()> {
         self.technical_config_version =
             self.technical_config_version.checked_add(1).ok_or_else(|| Error::from("技术配置版本溢出"))?;
@@ -863,7 +646,7 @@ mod tests {
         assert!(connection.is_active());
     }
 
-    /// 旧连接的环境字段不再影响读取，新保存内容不再携带该字段。
+    // 验证旧连接的环境字段不再影响读取，新保存内容不再携带该字段。
     #[test]
     fn legacy_environment_is_ignored_without_changing_connection_identity() {
         let connection =
@@ -879,7 +662,7 @@ mod tests {
         }
     }
 
-    /// 旧记录可读取，但缺失协议时不得根据连接代码或供应商自动补齐。
+    // 验证旧记录可读取，但缺失协议时不得根据连接代码或供应商自动补齐。
     #[test]
     fn legacy_connection_keeps_missing_connector_type() {
         let connection =

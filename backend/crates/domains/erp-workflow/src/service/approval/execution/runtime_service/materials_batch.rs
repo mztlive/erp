@@ -19,7 +19,7 @@ pub struct ApprovalMaterialsBatchQuery {
 }
 
 impl ApprovalMaterialsBatchQuery {
-    /// 限制单次请求的读取数量，允许空引用列表。
+    // 在批量加载冻结材料前限制引用数量；空引用批次有效，不强制查询对象。
     fn validate(&self) -> Result<()> {
         if self.references.len() > MAX_REFERENCES {
             return Err(Error::ValidationError(format!("单次最多读取 {MAX_REFERENCES} 份审批资料")));
@@ -68,7 +68,7 @@ struct ApprovalMaterialSourceSummary {
 }
 
 impl ApprovalMaterialsBatchResult {
-    /// 校验授权返回的资料是否与任务绑定的精确提交一致，再生成摘要。
+    // 生成批量材料摘要前验证授权返回的快照仍匹配任务绑定的精确提交，避免显示其他版本材料。
     fn from_read(reference: &ApprovalMaterialsReference, result: Result<ApprovalMaterialsView>) -> Self {
         let materials = match result {
             Ok(materials) => materials,
@@ -113,12 +113,11 @@ impl ApprovalMaterialsBatchResult {
 
 impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     /// 并发读取一页审批资料，每个实例复用单条资料的授权与快照读取。
-    /// # 参数
-    /// 当前认证账号及带原审批实例、单据类型、单据 ID 和提交版本的引用。
-    /// # 返回
     /// 按输入顺序返回摘要、不可查看或读取失败；各条读取失败互不影响。
-    /// # 错误
+    ///
     /// 单批引用超过上限时拒绝整个请求。
+    ///
+    /// 当前认证账号及带原审批实例、单据类型、单据 ID 和提交版本的引用。
     pub async fn batch_materials(
         &self,
         actor: &AuditActor,

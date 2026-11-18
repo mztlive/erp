@@ -3,16 +3,9 @@ use quote::__private::TokenStream as TokenStream2;
 use quote::quote;
 use syn::{Data, DeriveInput, Error, Fields, Ident, Result, parse_macro_input};
 
-/// 派生 Entity 宏实现。
-///
-/// # 参数
-/// * `input` - 输入数据
-///
-/// # 返回
-/// 返回 `TokenStream` 实例。
-///
-/// # 错误
-/// 输入无法解析、不是结构体、不是具名结构体，或缺 `base` 字段时编译失败。
+/// 为嵌入 `base: entity_core::BaseModel` 的业务实体派生 `HasBaseModel`，让仓储统一访问元数据。
+/// 只能用于含 `base` 字段的具名结构体；无法解析或形态不符时在编译阶段报错。
+/// 调用方仍需声明 `entity-core` 依赖并自行配置 `serde(flatten)` 等序列化行为。
 #[proc_macro_derive(Entity)]
 pub fn derive_entity(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -22,16 +15,8 @@ pub fn derive_entity(input: TokenStream) -> TokenStream {
     }
 }
 
-/// 生成 Entity 派生的 `HasBaseModel` 实现。
-///
-/// # 参数
-/// * `input` - 已解析的派生输入
-///
-/// # 返回
-/// 返回生成代码。
-///
-/// # 错误
-/// 输入不是结构体、不是具名结构体，或缺 `base` 字段时返回 `syn::Error`。
+// 派生入口解析后调用；先确认输入是含 base 字段的具名结构体，再保留原泛型和约束生成
+// HasBaseModel 实现。形态不符返回 syn 错误，字段类型由展开后的 Rust 类型检查确认。
 fn expand_derive_entity(input: &DeriveInput) -> Result<TokenStream2> {
     let name = &input.ident;
     let Data::Struct(data) = &input.data else {
@@ -78,36 +63,18 @@ fn expand_derive_entity(input: &DeriveInput) -> Result<TokenStream2> {
     })
 }
 
-/// 生成透明主键 ID newtype。
-///
-/// 输入为单个标识符（如 `SalesOrderId`）。展开结果提供 `new`、`Deref<Target = str>`、
-/// `AsRef<str>`、`From<String>`、`Display` 以及透明字符串的 `Serialize`/`Deserialize`。
-/// ID 值由调用方生成并传入；本宏不生成主键，也不校验格式。
-///
-/// # 参数
-/// * `input` - 要生成的 ID 类型名，必须是单个标识符。
-///
-/// # 返回
-/// 返回类型定义与 impl 的 `TokenStream`。
-///
-/// # 错误
-/// 输入非单个标识符时编译失败。
+/// 用单个类型名（如 `SalesOrderId`）声明独立的字符串 ID 类型，防止不同实体的主键在编译时混用。
+/// 展开结果提供 `new`、`Deref<Target = str>`、`AsRef<str>`、`From<String>`、`Display` 及透明的
+/// 字符串序列化；消费方需启用 serde 派生。调用方负责生成并传入 ID，宏不校验值的格式。
+/// 输入不是单个标识符时在编译阶段报错。
 #[proc_macro]
 pub fn id_type(input: TokenStream) -> TokenStream {
     let name = parse_macro_input!(input as Ident);
     expand_id_type(&name).into()
 }
 
-/// 生成透明字符串 ID newtype 定义。
-///
-/// # 参数
-/// * `name` - 要生成的 ID 类型名
-///
-/// # 返回
-/// 返回类型定义与 impl。
-///
-/// # 错误
-/// 无；本函数不做输入校验，非法输入由宏入口拒绝。
+// id_type! 入口解析出类型名后调用，生成透明字符串包装及常用访问与转换实现，
+// 使不同 ID 在 Rust 类型层面隔离而不改变持久化形态。
 fn expand_id_type(name: &Ident) -> TokenStream2 {
     quote! {
         /// 主键 ID（透明字符串值对象；由调用方生成并传入，不承载业务含义）。

@@ -15,16 +15,7 @@ use crate::http::handler::sales_selection;
 use crate::http::routes::permission_route;
 use crate::http::state::HttpState;
 
-/// 返回选品管理端路由。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回路由。
-///
-/// # 错误
-/// 不执行 I/O，不返回错误。
+/// 为管理端挂载选品册与销售方案接口，按操作登记公共权限目录信息。
 pub fn routes() -> Router<HttpState> {
     Router::new()
         .merge(book_collection_routes())
@@ -54,13 +45,8 @@ pub fn routes() -> Router<HttpState> {
         )
 }
 
-/// 选品册集合路由。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回列表与创建路由。
+// 为父路由挂载选品册集合路由。
+// 返回列表与创建路由。
 fn book_collection_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -87,16 +73,8 @@ fn book_collection_routes() -> Router<HttpState> {
         )
 }
 
-/// 选品册复制路由，复用创建权限；原册读取范围由用例再次校验。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回两条同义复制路径。
-///
-/// # 错误
-/// 无。
+// 选品册复制路由，复用创建权限；原册读取范围由用例再次校验。
+// 返回两条同义复制路径。
 fn book_copy_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -115,16 +93,8 @@ fn book_copy_routes() -> Router<HttpState> {
         )
 }
 
-/// 客户售价维护路由，使用现有选品册维护权限。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回两条同义改价路由。
-///
-/// # 错误
-/// 无。
+// 客户售价维护路由，使用现有选品册维护权限。
+// 返回两条同义改价路由。
 fn book_pricing_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -143,29 +113,20 @@ fn book_pricing_routes() -> Router<HttpState> {
         )
 }
 
-/// 选品册实例路由。
-///
-/// # 参数
-/// * `books` - `true` 使用 `sales-selection-books`，否则使用 `sales-selection-booklets`
-///
-/// # 返回
-/// 返回实例路由。
+// 为父路由挂载选品册实例路由。
+// `books` 为 `true` 使用 `sales-selection-books`，否则使用 `sales-selection-booklets`。
+// 返回实例路由。
 fn book_item_routes(books: bool) -> Router<HttpState> {
     if books { book_item_routes_books() } else { book_item_routes_booklets() }
 }
 
-/// `sales-selection-books` 实例路由。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回实例路由。
+// 为父路由挂载`sales-selection-books` 实例路由。
+// 返回实例路由。
 fn book_item_routes_books() -> Router<HttpState> {
     Router::new().merge(book_content_routes()).merge(book_link_routes()).merge(book_lifecycle_routes())
 }
 
-/// 选品册资料、准备与展示项路由。
+// 为父路由挂载选品册资料、准备与展示项路由。
 fn book_content_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -198,7 +159,7 @@ fn book_content_routes() -> Router<HttpState> {
         )
 }
 
-/// 选品册发布与链接管理路由。
+// 为父路由挂载选品册发布与链接管理路由。
 fn book_link_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -238,7 +199,7 @@ fn book_link_routes() -> Router<HttpState> {
         )
 }
 
-/// 选品册关闭、作废与访问路由。
+// 为父路由挂载选品册关闭、作废与访问路由。
 fn book_lifecycle_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -278,13 +239,8 @@ fn book_lifecycle_routes() -> Router<HttpState> {
         )
 }
 
-/// `sales-selection-booklets` 同义实例路由。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回实例路由。
+// 为父路由挂载`sales-selection-booklets` 同义实例路由。
+// 返回实例路由。
 fn book_item_routes_booklets() -> Router<HttpState> {
     Router::new()
         .merge(booklet_content_routes())
@@ -292,7 +248,7 @@ fn book_item_routes_booklets() -> Router<HttpState> {
         .merge(booklet_lifecycle_routes())
 }
 
-/// 同义选品册资料、准备与展示项路由。
+// 为兼容路径组装选品册资料、准备与展示项路由。
 fn booklet_content_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -325,7 +281,7 @@ fn booklet_content_routes() -> Router<HttpState> {
         )
 }
 
-/// 同义选品册发布与链接管理路由。
+// 为兼容路径组装选品册发布与链接管理路由。
 fn booklet_link_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -365,7 +321,7 @@ fn booklet_link_routes() -> Router<HttpState> {
         )
 }
 
-/// 同义选品册关闭、作废与访问路由。
+// 为兼容路径组装选品册关闭、作废与访问路由。
 fn booklet_lifecycle_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -406,15 +362,7 @@ fn booklet_lifecycle_routes() -> Router<HttpState> {
 }
 
 /// 公开选品路由，与 `/admin` 隔离。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
 /// 返回公开路由。
-///
-/// # 错误
-/// 无。
 pub fn public_routes() -> Router<HttpState> {
     Router::new()
         .route("/public/selection/{token}", get(sales_selection::public_page))

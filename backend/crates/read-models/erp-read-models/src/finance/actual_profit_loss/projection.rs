@@ -23,7 +23,7 @@ struct Summary {
     composition: BTreeMap<String, Decimal>,
 }
 impl Summary {
-    /// 同一订单只累计一次，成本类别筛选不截断单内成本。
+    // 处理实际盈亏报表时，同一订单只累计一次，成本类别筛选不截断单内成本。
     fn push(&mut self, order: &OrderResult) -> Result<()> {
         add(&mut self.revenue, order.revenue)?;
         merge_costs(&mut self.costs, &order.costs)?;
@@ -38,11 +38,11 @@ impl Summary {
         }
         Ok(())
     }
-    /// 空集合没有可依赖的利润结果。
+    // 处理实际盈亏报表时，空集合没有可依赖的利润结果。
     fn profit(&self) -> Option<Decimal> {
         (self.covered_count > 0).then_some(self.profit)
     }
-    /// 全量覆盖结果不依赖当前明细分页。
+    // 处理实际盈亏报表时，全量覆盖结果不依赖当前明细分页。
     fn coverage(&self, count: usize) -> Coverage {
         let complete = count > 0 && self.covered_count == count;
         Coverage {
@@ -68,7 +68,7 @@ impl Summary {
         }
     }
 }
-/// 复用领域阶段累加规则，避免把确认成本带入实际利润。
+// 处理实际盈亏报表时，复用领域阶段累加规则，避免把确认成本带入实际利润。
 fn merge_costs(target: &mut ProfitLossAmounts, source: &ProfitLossAmounts) -> Result<()> {
     for (stage, kind, value) in [
         (CostStage::Actual, CostType::Product, source.procurement),
@@ -83,20 +83,18 @@ fn merge_costs(target: &mut ProfitLossAmounts, source: &ProfitLossAmounts) -> Re
     }
     Ok(())
 }
-/// 覆盖率保留期间订单的完整分母；历史候选由独立目录提供。
-///
-/// # 参数
-/// * `orders` - 已归集的订单结果。
-/// * `query` - 盈亏筛选。
-/// * `as_of` - 投影时点展示文本。
-/// * `export` - 为真时行集合不按当前页截断。
-/// * `scope_label` - 授权范围说明。
-///
-/// # 返回
-/// 返回含全量覆盖率、汇总、趋势和行页的视图；无匹配时 `empty_reason` 为 `filtered_empty` 或 `no_data`。
-///
-/// # 错误
-/// 金额累计、分组或趋势计算超出范围时返回对应错误。
+// 生成实际盈亏报表视图时，覆盖率保留期间订单的完整分母；历史候选由独立目录提供。
+//
+// 调用参数：
+// * `orders` - 已归集的订单结果。
+// * `query` - 盈亏筛选。
+// * `as_of` - 投影时点展示文本。
+// * `export` - 为真时行集合不按当前页截断。
+// * `scope_label` - 授权范围说明。
+//
+// 返回含全量覆盖率、汇总、趋势和行页的视图；无匹配时 `empty_reason` 为 `filtered_empty` 或 `no_data`。
+//
+// 金额累计、分组或趋势计算超出范围时返回对应错误。
 pub(super) fn project(
     orders: Vec<OrderResult>,
     query: &ProfitLossQuery,
@@ -119,7 +117,7 @@ pub(super) fn project(
     }
     Ok(view)
 }
-/// 从同一订单集合计算所有总额。
+// 汇总实际盈亏报表时，从同一订单集合计算所有总额。
 fn summarize(orders: &[OrderResult]) -> Result<Summary> {
     let mut summary = Summary::default();
     for order in orders {
@@ -127,7 +125,7 @@ fn summarize(orders: &[OrderResult]) -> Result<Summary> {
     }
     Ok(summary)
 }
-/// 覆盖筛选只决定所选订单，不改变覆盖率分母。
+// 应用实际盈亏报表筛选时，覆盖筛选只决定所选订单，不改变覆盖率分母。
 fn coverage_matches(order: &OrderResult, coverage: &str) -> bool {
     match coverage {
         "covered" => order.row.coverage_state == "COVERED",
@@ -135,7 +133,7 @@ fn coverage_matches(order: &OrderResult, coverage: &str) -> bool {
         _ => true,
     }
 }
-/// 排序和分页最后执行；导出保留全部匹配分组。
+// 生成实际盈亏报表展示时，排序和分页最后执行；导出保留全部匹配分组。
 fn rows(orders: &[OrderResult], query: &ProfitLossQuery, export: bool) -> Result<Rows> {
     let mut items = group_rows(orders, &query.dimension)?;
     items.sort_by(|a, b| compare_rows(a, b, &query.sort));
@@ -145,7 +143,7 @@ fn rows(orders: &[OrderResult], query: &ProfitLossQuery, export: bool) -> Result
     }
     Ok(Rows { dimension: query.dimension.clone(), items, total })
 }
-/// 搜索为销售单号与正式客户快照的字面量包含；场景及成本类型按整单命中。
+// 应用实际盈亏报表筛选时，搜索为销售单号与正式客户快照的字面量包含；场景及成本类型按整单命中。
 fn matches_query(order: &OrderResult, query: &ProfitLossQuery) -> bool {
     let keyword = query.q.as_deref().unwrap_or("").trim().to_lowercase();
     let text = format!("{} {}", order.row.identity_label, order.row.customer_label.as_deref().unwrap_or(""))
@@ -156,7 +154,7 @@ fn matches_query(order: &OrderResult, query: &ProfitLossQuery) -> bool {
         && (query.cost_codes().is_empty()
             || query.cost_codes().iter().any(|t| order.composition.contains_key(*t)))
 }
-/// 只有销售单和客户身份允许链接；多场景订单作为一个组合分组，不重复收入。
+// 汇总实际盈亏报表时，只有销售单和客户身份允许链接；多场景订单作为一个组合分组，不重复收入。
 fn group_rows(orders: &[OrderResult], dimension: &str) -> Result<Vec<ProfitLossRow>> {
     if dimension == "sales_order" {
         return Ok(orders.iter().map(|o| o.row.clone()).collect());
@@ -169,7 +167,7 @@ fn group_rows(orders: &[OrderResult], dimension: &str) -> Result<Vec<ProfitLossR
 
     groups.into_iter().map(|(key, values)| group_row(&key, &values, dimension)).collect()
 }
-/// 人员和组织使用冻结身份分组；缺失快照单列，不用当前负责人回填。
+// 汇总实际盈亏报表时，人员和组织使用冻结身份分组；缺失快照单列，不用当前负责人回填。
 fn group_key(row: &ProfitLossRow, dimension: &str) -> String {
     match dimension {
         "customer" => row.customer_id.clone().unwrap_or_default(),
@@ -180,7 +178,7 @@ fn group_key(row: &ProfitLossRow, dimension: &str) -> String {
     }
 }
 
-/// 名称只用于展示；同一身份存在不同历史名称时稳定列出，不依赖返回顺序。
+// 汇总实际盈亏报表时，名称只用于展示；同一身份存在不同历史名称时稳定列出，不依赖返回顺序。
 fn group_label(key: &str, values: &[&OrderResult], dimension: &str) -> String {
     if dimension == "scenario" {
         return key.into();
@@ -199,7 +197,7 @@ fn group_label(key: &str, values: &[&OrderResult], dimension: &str) -> String {
     }
     names.into_iter().collect::<Vec<_>>().join("／")
 }
-/// 分组完整性要求组内每单完整；混合组不输出完整利润。
+// 汇总实际盈亏报表时，分组完整性要求组内每单完整；混合组不输出完整利润。
 fn group_row(key: &str, values: &[&OrderResult], dimension: &str) -> Result<ProfitLossRow> {
     let mut summary = Summary::default();
     for order in values {
@@ -225,7 +223,7 @@ fn group_row(key: &str, values: &[&OrderResult], dimension: &str) -> Result<Prof
     group_sources(&mut row, values);
     Ok(row)
 }
-/// 分组中任一订单未覆盖，整组完整利润即不可用。
+// 汇总实际盈亏报表时，分组中任一订单未覆盖，整组完整利润即不可用。
 fn group_totals(row: &mut ProfitLossRow, summary: &Summary, count: usize) {
     let complete = summary.covered_count == count;
     row.totals = totals(summary.revenue, &summary.costs, complete.then_some(summary.profit), summary.revenue);
@@ -246,7 +244,7 @@ fn group_totals(row: &mut ProfitLossRow, summary: &Summary, count: usize) {
         }]
     };
 }
-/// 分组来源去重，最新成本时间取组内最新实际事实。
+// 汇总实际盈亏报表时，分组来源去重，最新成本时间取组内最新实际事实。
 fn group_sources(row: &mut ProfitLossRow, values: &[&OrderResult]) {
     row.cost_entry_ids = values
         .iter()
@@ -262,7 +260,7 @@ fn group_sources(row: &mut ProfitLossRow, values: &[&OrderResult]) {
         .collect();
     row.latest_cost_occurred_at = values.iter().filter_map(|o| o.row.latest_cost_occurred_at.clone()).max();
 }
-/// 趋势遵循同一筛选；横轴为销售单生效月份，金额为查询时点累计结果。
+// 处理实际盈亏报表时，趋势遵循同一筛选；横轴为销售单生效月份，金额为查询时点累计结果。
 fn trend(orders: &[OrderResult]) -> Result<Vec<TrendPoint>> {
     let mut months: BTreeMap<&str, (Summary, usize)> = BTreeMap::new();
     for order in orders {
@@ -284,7 +282,7 @@ fn trend(orders: &[OrderResult]) -> Result<Vec<TrendPoint>> {
         })
         .collect()
 }
-/// 页内顺序与导出一致，空利润在两个方向都排在末尾，同值按稳定键排序。
+// 排列实际盈亏报表结果时，页内顺序与导出一致，空利润在两个方向都排在末尾，同值按稳定键排序。
 fn compare_rows(a: &ProfitLossRow, b: &ProfitLossRow, sort: &str) -> Ordering {
     let (field, direction) = sort.split_once(':').unwrap_or(("actualProfitLossNet", "asc"));
     let mut ordering = match field {
@@ -302,7 +300,7 @@ fn compare_rows(a: &ProfitLossRow, b: &ProfitLossRow, sort: &str) -> Ordering {
     }
     ordering.then_with(|| a.row_id.cmp(&b.row_id))
 }
-/// 字符串金额排序使用 Decimal，禁止按字典序排列负数和大金额。
+// 处理实际盈亏报表时，字符串金额排序使用 Decimal，禁止按字典序排列负数和大金额。
 fn numeric(row: &ProfitLossRow, field: &str) -> Option<Decimal> {
     let t = &row.totals;
     let value = match field {
@@ -315,7 +313,7 @@ fn numeric(row: &ProfitLossRow, field: &str) -> Option<Decimal> {
     }?;
     Decimal::from_str(value.trim_end_matches('%')).ok()
 }
-/// 页面主合同只装配各独立投影，金额与字段来源不在 HTTP 层重算。
+// 生成实际盈亏报表视图时，页面主合同只装配各独立投影，金额与字段来源不在 HTTP 层重算。
 fn assemble(
     q: &ProfitLossQuery,
     as_of: &str,
@@ -353,11 +351,11 @@ fn assemble(
 }
 const FORMULA: &str = "实际经营盈亏 = 不含税销售收入 − 实际采购成本 − 实际履约费用 + 成本冲减。利润和利润率仅汇总成本完整订单；收入、已登记成本同时展示所选订单全量。";
 const EXCLUDED: &str = "卡券不进入本表。按销售单首次生效日选择订单，使用当前正式销售版本及查询时点已发生的累计成本，并非期间现金收支或财务月结。完整覆盖要求履约完成且每条销售明细有实际供货成本；未归属成本、预计与确认成本不代替实际成本。后补费用将改变历史订单结果。";
-/// 当前权限范围不是客户端 scope_id。
+// 处理实际盈亏报表时，当前权限范围不是客户端 scope_id。
 fn scope(label: &str) -> Scope {
     Scope { id: "authorized".into(), label: label.into(), permission_version: "current-rbac".into() }
 }
-/// 自然日与口径同时导出。
+// 处理实际盈亏报表时，自然日与口径同时导出。
 fn period(q: &ProfitLossQuery) -> Period {
     Period {
         from: q.from.clone(),
@@ -367,15 +365,15 @@ fn period(q: &ProfitLossQuery) -> Period {
         timezone: "Asia/Shanghai".into(),
     }
 }
-/// 即时快照没有异步投影延迟；时点由服务端提供。
+// 处理实际盈亏报表时，即时快照没有异步投影延迟；时点由服务端提供。
 fn freshness(as_of: &str) -> Freshness {
     Freshness { projected_at: as_of.into(), source_watermark: as_of.into(), state: "fresh".into() }
 }
-/// 入口必须同时验证销售与成本查询权限后才调用分析。
+// 处理实际盈亏报表时，入口必须同时验证销售与成本查询权限后才调用分析。
 fn permissions() -> FieldPermissions {
     FieldPermissions { can_view_revenue: true, can_view_cost: true, can_view_profit: true, can_export: true }
 }
-/// 费用构成使用分配后金额，并保留全部费用类型选项。
+// 处理实际盈亏报表时，费用构成使用分配后金额，并保留全部费用类型选项。
 fn composition(s: &Summary) -> Result<Vec<CostComposition>> {
     let total = s.costs.net_cost()?;
     Ok(cost_types()
@@ -391,14 +389,14 @@ fn composition(s: &Summary) -> Result<Vec<CostComposition>> {
         })
         .collect())
 }
-/// 两种非实际阶段只提供对照，不计入实际盈亏。
+// 处理实际盈亏报表时，两种非实际阶段只提供对照，不计入实际盈亏。
 fn stages(costs: &ProfitLossAmounts) -> Result<Vec<StageReference>> {
     Ok(vec![
         stage("EXPECTED", "预计", costs.expected_procurement, costs.expected_fulfillment)?,
         stage("CONFIRMED", "确认", costs.confirmed_procurement, costs.confirmed_fulfillment)?,
     ])
 }
-/// 阶段汇总同样执行溢出检查。
+// 处理实际盈亏报表时，阶段汇总同样执行溢出检查。
 fn stage(code: &str, label: &str, procurement: Decimal, fulfillment: Decimal) -> Result<StageReference> {
     let mut total = procurement;
     add(&mut total, fulfillment)?;
@@ -411,7 +409,7 @@ fn stage(code: &str, label: &str, procurement: Decimal, fulfillment: Decimal) ->
         note: "仅展示已分配到所选销售单的阶段成本，不进入实际盈亏".into(),
     })
 }
-/// 导出必须保留所有已应用筛选，内部身份只作为精确筛选追溯值。
+// 应用实际盈亏报表筛选时，导出必须保留所有已应用筛选，内部身份只作为精确筛选追溯值。
 fn filter_summary(q: &ProfitLossQuery) -> String {
     let coverage = match q.coverage.as_str() {
         "covered" => "成本完整",
@@ -442,7 +440,7 @@ fn filter_summary(q: &ProfitLossQuery) -> String {
     parts.join("；")
 }
 
-/// 附加已应用的业务筛选，费用类别匹配整单。
+// 组装实际盈亏报表查询条件时，附加已应用的业务筛选，费用类别匹配整单。
 fn append_filters(parts: &mut Vec<String>, q: &ProfitLossQuery, types: &str) {
     if let Some(value) = &q.q {
         parts.push(format!("搜索：{value}"));

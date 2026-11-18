@@ -40,18 +40,9 @@ pub struct PageParams {
 
 impl PageParams {
     /// 用原始分页输入与已归一化的排序结果组装分页参数。
-    ///
-    /// # 参数
-    /// * `page` - 原始页码输入；`None` 时取默认值
-    /// * `page_size` - 原始单页条数输入；`None` 时取默认值
-    /// * `sort_by` - 已过白名单校验的排序字段
-    /// * `sort_dir` - 已归一化的排序方向
-    ///
-    /// # 返回
     /// 返回归一化后的分页参数。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// `page` 为原始页码输入；`None` 时取默认值；`page_size` 为原始单页条数输入；`None` 时取默认值。
+    /// `sort_by` 为已过白名单校验的排序字段；`sort_dir` 为已归一化的排序方向。
     pub fn normalized(
         page: Option<u64>,
         page_size: Option<u32>,
@@ -62,21 +53,11 @@ impl PageParams {
     }
 
     /// 用原始分页与排序输入直接组装分页参数（各列表 `normalized()` 共用）。
-    ///
-    /// 把“排序白名单校验 + 分页默认值”两步收敛为一次调用；排序语义与
-    /// 逐个调用 `normalize_sort` 后再 `normalized` 完全一致。
-    ///
-    /// # 参数
-    /// * `page` - 原始页码输入；`None` 时取默认值
-    /// * `page_size` - 原始单页条数输入；`None` 时取默认值
-    /// * `sort_by` - 原始排序字段输入（过白名单校验）
-    /// * `sort_dir` - 原始排序方向输入（`asc`/`desc`）
-    /// * `allowed` - 该列表允许的排序字段白名单
-    ///
-    /// # 返回
+    /// 把“排序白名单校验 + 分页默认值”两步收敛为一次调用；排序语义与逐个调用 `normalize_sort` 后再 `normalized` 完全一致。
     /// 返回归一化后的分页参数。
-    ///
-    /// # 错误
+    /// `page` 为原始页码输入；`None` 时取默认值；`page_size` 为原始单页条数输入；`None` 时取默认值。
+    /// `sort_by` 为原始排序字段输入（过白名单校验）；`sort_dir` 为原始排序方向输入（`asc`/`desc`）。
+    /// `allowed` 为该列表允许的排序字段白名单。
     /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub fn resolve(
         page: Option<u64>,
@@ -90,18 +71,8 @@ impl PageParams {
     }
 
     /// 将归一化分页映射为仓储 `Filter` 的分页与排序字段。
-    ///
-    /// 各列表 Service 用本方法填充 `page`/`page_size`/`sort_by`/
-    /// `sort_ascending`，只保留各自的筛选字段组装。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
+    /// 各列表 Service 用本方法填充 `page`/`page_size`/`sort_by`/`sort_ascending`，只保留各自的筛选字段组装。
     /// 返回 `(page, page_size, sort_by, sort_ascending)`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn into_filter_parts(self) -> (u64, u32, Option<String>, bool) {
         let ascending = matches!(self.sort_dir, SortDir::Asc);
         (self.page, self.page_size, Some(self.sort_by.to_string()), ascending)

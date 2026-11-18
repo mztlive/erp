@@ -26,21 +26,14 @@ pub struct PreparedWorkItemTarget {
 }
 
 impl PreparedWorkItemTarget {
-    /// 从已校验字段与解析后的版本构造规范化目标。
-    ///
-    /// # 参数
-    /// * `work_item_id` - 原始正式任务 ID（允许首尾空白）
-    /// * `task_version` - 命令边界校验得到的任务版本
-    /// * `subject_version` - 原始业务主题版本（允许首尾空白）
-    ///
-    /// # 返回
-    /// 返回持有 typed 版本与规范化字段的 `PreparedWorkItemTarget`。
-    ///
-    /// # 错误
-    /// 不返回错误，版本约束由命令边界校验保证。
-    ///
-    /// # 约束
-    /// 仅规范化身份字段，不重复解析已校验版本；wire 仍保持字符串合同。
+    // 从已校验字段与解析后的版本构造规范化目标。
+    //
+    // 仅规范化身份字段，不重复解析已校验版本；wire 仍保持字符串合同。
+    //
+    // 返回持有 typed 版本与规范化字段的 `PreparedWorkItemTarget`。版本约束由命令边界校验保证。
+    //
+    // - `work_item_id`：原始正式任务 ID（允许首尾空白）。
+    // - `subject_version`：原始业务主题版本（允许首尾空白）。
     fn new(work_item_id: &str, task_version: u64, subject_version: &str) -> Self {
         Self {
             work_item_id: work_item_id.trim().to_string(),
@@ -53,19 +46,11 @@ impl PreparedWorkItemTarget {
 impl TryFrom<&IntegrationTaskActionCommand> for PreparedWorkItemTarget {
     type Error = crate::Error;
 
-    /// 从任务动作命令生成规范化目标。
-    ///
-    /// # 参数
-    /// * `command` - 已反序列化的任务动作命令
-    ///
-    /// # 返回
-    /// 返回持有 typed 任务版本与规范化身份的目标。
-    ///
-    /// # 错误
-    /// 命令边界校验失败，或任务版本为 0、非十进制、溢出时返回 `ValidationError`。
-    ///
-    /// # 约束
-    /// 命令边界校验保留解析后的版本；Service 不得二次解析。
+    // 从任务动作命令生成规范化目标。
+    //
+    // 命令边界校验保留解析后的版本；Service 不得二次解析。
+    //
+    // 返回持有 typed 任务版本与规范化身份的目标。命令边界校验失败，或任务版本为 0、非十进制、溢出时返回 `ValidationError`。
     fn try_from(command: &IntegrationTaskActionCommand) -> Result<Self> {
         let version = command.validated_version()?;
         Ok(Self::new(&command.work_item_id, version, &command.expected_subject_version))
@@ -75,19 +60,11 @@ impl TryFrom<&IntegrationTaskActionCommand> for PreparedWorkItemTarget {
 impl TryFrom<&IntegrationTaskCompletionCommand> for PreparedWorkItemTarget {
     type Error = crate::Error;
 
-    /// 从任务完成命令生成规范化目标。
-    ///
-    /// # 参数
-    /// * `command` - 已反序列化的任务完成命令
-    ///
-    /// # 返回
-    /// 返回持有 typed 任务版本与规范化身份的目标。
-    ///
-    /// # 错误
-    /// 命令边界校验失败，或任务版本为 0、非十进制、溢出时返回 `ValidationError`。
-    ///
-    /// # 约束
-    /// 命令边界校验保留解析后的版本；Service 不得二次解析。
+    // 从任务完成命令生成规范化目标。
+    //
+    // 命令边界校验保留解析后的版本；Service 不得二次解析。
+    //
+    // 返回持有 typed 任务版本与规范化身份的目标。命令边界校验失败，或任务版本为 0、非十进制、溢出时返回 `ValidationError`。
     fn try_from(command: &IntegrationTaskCompletionCommand) -> Result<Self> {
         let version = command.validated_version()?;
         Ok(Self::new(&command.work_item_id, version, &command.expected_subject_version))
@@ -109,19 +86,11 @@ pub struct PreparedDirectDecisionTarget {
 impl TryFrom<&DirectReconciliationCommand> for PreparedDirectDecisionTarget {
     type Error = crate::Error;
 
-    /// 从直接对账命令生成规范化目标。
-    ///
-    /// # 参数
-    /// * `command` - 已反序列化的直接对账命令
-    ///
-    /// # 返回
-    /// 返回持有 typed 差异版本与规范化身份的目标。
-    ///
-    /// # 错误
-    /// 命令边界校验失败，或差异版本非十进制、溢出时返回 `ValidationError`。
-    ///
-    /// # 约束
-    /// 命令边界校验保留解析后的版本；Service 不得二次解析。
+    // 从直接对账命令生成规范化目标。
+    //
+    // 命令边界校验保留解析后的版本；Service 不得二次解析。
+    //
+    // 返回持有 typed 差异版本与规范化身份的目标。命令边界校验失败，或差异版本非十进制、溢出时返回 `ValidationError`。
     fn try_from(command: &DirectReconciliationCommand) -> Result<Self> {
         let difference_version = command.validated_version()?;
         Ok(Self { difference_id: command.difference_id.trim().to_string(), difference_version })
@@ -131,18 +100,9 @@ impl TryFrom<&DirectReconciliationCommand> for PreparedDirectDecisionTarget {
 impl IntegrationTaskCompletionCommand {
     /// 将任务完成决定适配为非终结任务动作（用于任务绑定与责任校验）。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回携带完成决定业务身份的 `AddEvidence` 动作；原因码取完成原因，
-    /// 备注与证据引用原样透传。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    ///
-    /// # 约束
     /// 适配形状由 Prepared DTO 拥有，Service 不再维护镜像转换。
+    ///
+    /// 返回携带完成决定业务身份的 `AddEvidence` 动作；原因码取完成原因，备注与证据引用原样透传。
     pub fn as_non_terminal_action(&self) -> IntegrationNonTerminalTaskAction {
         IntegrationNonTerminalTaskAction {
             item_type: self.decision.item_type,
@@ -158,13 +118,7 @@ impl IntegrationTaskCompletionCommand {
 
 /// 从服务 DTO 结论转换领域终态结论（机械映射，动作与状态派生归领域）。
 impl From<DirectReconciliationConclusion> for crate::entity::integration_ops::DirectConclusion {
-    /// 将服务 DTO 结论转换为领域终态结论。
-    ///
-    /// # 参数
-    /// * `conclusion` - 服务 DTO 的直接对账终态结论
-    ///
-    /// # 返回
-    /// 返回一一对应的领域终态结论；wire 代码仍由服务 DTO 拥有。
+    // 将服务 DTO 结论转换为领域终态结论。返回一一对应的领域终态结论；wire 代码仍由服务 DTO 拥有。
     fn from(conclusion: DirectReconciliationConclusion) -> Self {
         match conclusion {
             DirectReconciliationConclusion::ConfirmNoError => Self::ConfirmNoError,

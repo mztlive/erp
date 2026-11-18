@@ -66,13 +66,11 @@ pub struct InquiryDeliveryAllocation {
 
 impl InquiryRequirementData {
     /// 规范化需求并校验稳定身份、单位精度；提交时校验配送数量覆盖需求。
-    /// # 参数
-    /// `submitted` 为真时要求至少一行、实物地址完整且分配合计不少于需求。
-    /// 草稿允许分配不足或超量，保留销售填写的原数量。
-    /// # 返回
-    /// 原位保留规范化资料和服务端地区名称快照。
-    /// # 错误
+    /// 结果：原位保留规范化资料和服务端地区名称快照。
     /// 行数、身份、数量、地址、金额、单位精度非法时拒绝。
+    ///
+    /// 输入约定：`submitted` 为真时要求至少一行、实物地址完整且分配合计不少于需求。
+    /// 草稿允许分配不足或超量，保留销售填写的原数量。
     pub fn normalize(&mut self, submitted: bool) -> Result<()> {
         if self.lines.len() > MAX_INQUIRY_LINES || (submitted && self.lines.is_empty()) {
             return Err(Error::ValidationError("询价须包含 1 至 200 条商品行".into()));
@@ -100,12 +98,10 @@ impl InquiryRequirementData {
 
 impl InquiryRequirementLine {
     /// 校验供给量符合需求商品的基础单位精度。
-    /// # 参数
-    /// `quantity` 为报价起订量、可供量或地址限额；不限制其与本次总需求的大小关系。
-    /// # 返回
-    /// 严格正数且单位精度合法时通过。
-    /// # 错误
+    /// 结果：严格正数且单位精度合法时通过。
     /// 非正数或单位精度不符时拒绝。
+    ///
+    /// 输入约定：`quantity` 为报价起订量、可供量或地址限额；不限制其与本次总需求的大小关系。
     pub fn validate_supply_quantity(&self, quantity: Quantity) -> Result<()> {
         if quantity.to_decimal() <= Decimal::ZERO
             || quantity.to_decimal().normalize().scale() > self.quantity_scale
@@ -116,12 +112,10 @@ impl InquiryRequirementLine {
     }
 
     /// 校验询价专项报价的商品总量与明确配送适用范围。
-    /// # 参数
-    /// `available_quantity` 为专项可供总量；`allocation_ids` 为条款明确覆盖的稳定地址身份。
-    /// # 返回
-    /// 数量符合单位精度、不超过本行需求且配送范围有效时通过。
-    /// # 错误
+    /// 结果：数量符合单位精度、不超过本行需求且配送范围有效时通过。
     /// 超量、实物地址范围为空或引用其他需求地址时拒绝。
+    ///
+    /// 输入约定：`available_quantity` 为专项可供总量；`allocation_ids` 为条款明确覆盖的稳定地址身份。
     pub fn validate_quote_scope(
         &self,
         available_quantity: Quantity,

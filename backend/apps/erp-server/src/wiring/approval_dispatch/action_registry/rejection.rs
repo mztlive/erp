@@ -9,16 +9,10 @@ use super::{
     require_transaction, reverse_flow,
 };
 
-/// 执行已由运行时证明身份和冻结版本的领域驳回动作。
-/// # 参数
-/// * `registry` - 应用依赖。
-/// * `action` / `context` - 注册动作及冻结审批身份。
-/// * `actor` - 已授权审批人。
-/// * `executor` - 当前决定的事务。
-/// # 返回
-/// 领域状态及本次审批占用更新成功时返回。
-/// # 错误
-/// 缺少事务、动作不匹配或领域不变式失败时返回原错误。
+// 执行已由运行时证明身份和冻结版本的领域驳回动作。
+// `action` / `context` 为注册动作及冻结审批身份，`executor` 为当前决定的事务。
+// 领域状态及本次审批占用更新成功时返回。
+// 缺少事务、动作不匹配或领域不变式失败时返回原错误。
 pub(super) async fn dispatch(
     registry: &ApprovalActionRegistry,
     action: ApprovalDomainAction,
@@ -114,7 +108,7 @@ async fn reject_finance_and_inventory(
     }
 }
 
-/// 校验销售冻结提交序号并调用所属领域。
+// 执行销售驳回动作时先核对冻结提交序号，再把原审批事务和身份传给销售领域。
 async fn reject_sales(
     registry: &ApprovalActionRegistry,
     action: ApprovalDomainAction,

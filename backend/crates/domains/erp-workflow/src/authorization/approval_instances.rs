@@ -30,12 +30,11 @@ use crate::service::approval::execution::runtime_service::{
 use crate::{process_kind_of, subject_ref_for};
 
 /// 绑定审批实例唯一事实读取器及实例列表查询映射。
-/// # 参数
-/// db 为审批实例和节点执行所在数据库；subjects 为组合根提供的真实业务来源读取端口。
-/// # 返回
 /// 供完整授权 Builder 消费的资源事实与固定查询入口。
-/// # 错误
+///
 /// 固定模型标识非法时返回接入错误；不读取数据库。
+///
+/// db 为审批实例和节点执行所在数据库；subjects 为组合根提供的真实业务来源读取端口。
 pub fn bindings(
     db: Database,
     subjects: Arc<dyn ApprovalSubjectFactsPort>,
@@ -99,7 +98,7 @@ impl AccessFactsPort for InstanceFacts {
     }
 }
 
-/// 发起人进展操作只要求真实实例及其不可变发起人，不依赖当前执行或来源存续。
+// 为本人发起的审批进展权限提供真实实例及不可变发起人事实，不把当前执行或来源单据是否还存在作为前提。
 fn started_facts(instance: &ApprovalProcessInstance) -> ObjectFacts {
     ObjectFacts {
         resource: "approval_instance".into(),
@@ -111,7 +110,7 @@ fn started_facts(instance: &ApprovalProcessInstance) -> ObjectFacts {
 }
 
 impl InstanceFacts {
-    /// 精确办理目标以真实WorkItem身份取证，不使用关联审批实例身份代替任务。
+    // 精确审批办理取证使用真实工作项的身份，不能用关联审批实例的 ID 代替待办目标。
     async fn decision_tasks(
         &self,
         context: &AccessContext,
@@ -127,7 +126,7 @@ impl InstanceFacts {
         Ok(objects)
     }
 
-    /// 读取一条真实任务及其当前执行、冻结主体和开放责任集合。
+    // 为单条办理授权取出真实任务、当前执行、冻结主体和该执行的全部开放责任。
     async fn decision_task(
         &self,
         context: &AccessContext,
@@ -203,7 +202,7 @@ impl InstanceFacts {
         Ok(snapshot)
     }
 
-    /// 从完整开放任务、执行、实例和冻结快照取当前真实办理关系。
+    // 计算当前办理关系前，将开放任务集合与实例、当前执行和冻结快照闭合；不以某条孤立任务证明责任。
     async fn current_responsibility(
         &self,
         context: &AccessContext,
@@ -243,7 +242,7 @@ impl InstanceFacts {
     }
 }
 
-/// 冻结业务提交人提供普通撤回归属；其他入口保留实例发起人事实。
+// 普通单据撤回使用冻结业务提交人判断本人归属；其他实例入口保留真实实例发起人事实。
 fn subject_facts(permission: &Permission, snapshot: &ApprovalSubjectSnapshot, object: &mut ObjectFacts) {
     object.subject_type = FactValue::Known(snapshot.document_type.as_str().into());
     if permission == &inventory::STOCK_ADJUSTMENT_CANCEL_APPROVAL {
@@ -251,7 +250,7 @@ fn subject_facts(permission: &Permission, snapshot: &ApprovalSubjectSnapshot, ob
     }
 }
 
-/// 身份、版本取真实任务；任务、冻结主体和当前执行不一致时不签发办理事实。
+// 从真实任务取授权对象身份和版本。任务、当前执行或冻结主体不一致时，不提供可成立的办理事实。
 fn decision_task_object(
     actor: &str,
     task: &WorkItem,
@@ -330,7 +329,7 @@ fn instance_facts(
     })
 }
 
-/// 历史参与只取已实际完成决定且属于该执行冻结参与人的账号。
+// 审批历史参与只承认实际完成该决定且属于相同执行冻结参与集合的账号。
 fn historical_decider(execution: &ApprovalNodeExecution) -> Option<&str> {
     let actor = execution.decided_by.as_ref()?.as_str();
     (execution.decided_at.is_some()

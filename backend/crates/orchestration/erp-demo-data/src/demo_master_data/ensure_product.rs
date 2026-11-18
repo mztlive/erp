@@ -18,16 +18,7 @@ use super::{DemoMasterDataProcess, lifecycle, spec};
 use crate::{Error, Result};
 
 impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
-    /// 解析字典引用后创建或恢复商品及 SKU。
-    ///
-    /// # 参数
-    /// `actor` - 操作人；`step` - 种子身份；`records` - 已登记引用；`template` - 商品创建输入。
-    ///
-    /// # 返回
-    /// 返回商品创建、恢复或已存在结果。
-    ///
-    /// # 错误
-    /// 引用无效、编号归属不符或写入失败时返回错误。
+    // 将商品种子的字典引用解析为真实 ID，再走正式创建或恢复流程，使商品及 SKU 可供后续补图、供给和上架复用。引用、编号归属或写入无效时停止。
     pub(super) async fn ensure_product(
         &self,
         actor: &AuditActor,
@@ -53,7 +44,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         Ok(EnsureOutcome::Created)
     }
 
-    /// 校验登记归属，恢复商品与 SKU，并通过正式交接对齐采购维护责任。
+    // 校验已存在商品的登记归属，必要时恢复商品和 SKU，再用正式交接对齐采购维护责任，不认领同编号的非演示商品。
     async fn adopt_product(
         &self,
         actor: &AuditActor,
@@ -76,7 +67,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         Ok(if live { EnsureOutcome::Skipped } else { EnsureOutcome::Restored })
     }
 
-    /// 读取恢复后的最新版本，显式移交维护人和业务组织；失败时停止当前生成请求。
+    // 用恢复后的最新商品版本和有效岗位组织准备交接，仅在责任未对齐时提交；交接失败即停止本次生成。
     async fn align_product_maintainer(
         &self,
         actor: &AuditActor,
@@ -123,7 +114,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         Ok(())
     }
 
-    /// 读取商品当前及历史 SKU 的实际主键。
+    // 读取该商品当前和历史 SKU 的实际主键，供恢复商品关系及登记清单使用。
     async fn sku_ids(&self, product_id: &str) -> Result<Vec<String>> {
         let skus = self
             .db
@@ -138,7 +129,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
     }
 }
 
-/// 只接受仍有效且种类匹配的种子引用。
+// 只将种类正确且未删除的清单记录解析为真实 ID，防止商品引用未准备或已失效的字典。
 fn required_link(records: &HashMap<String, DemoMasterRecord>, key: &str, kind: DemoKind) -> Result<String> {
     let record = records
         .get(key)
@@ -147,7 +138,7 @@ fn required_link(records: &HashMap<String, DemoMasterRecord>, key: &str, kind: D
     Ok(record.entity_id.clone())
 }
 
-/// 解析字典引用并指定采购维护人，保持价格、规格和 SKU 编号不变。
+// 用当前环境的字典 ID 和采购维护人构造商品请求，保持模板价格、规格和 SKU 编号不变。
 fn product_request(
     template: &CreateProductRequest,
     records: &HashMap<String, DemoMasterRecord>,
@@ -166,7 +157,7 @@ fn product_request(
     Ok(request)
 }
 
-/// 已对齐的商品不再写入；其他商品按当前版本构造可重试的正式交接请求。
+// 仅在维护人或业务组织尚未对齐时，按当前版本构造可重试的交接请求，避免覆盖已完成的演示交接。
 fn product_handover_request(
     product: &Product,
     maintainer: &str,

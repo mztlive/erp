@@ -22,26 +22,12 @@ mod intent;
 use intent::PlaceIntent;
 
 impl SupplierFulfillmentProcess {
-    /// 供应商下单（幂等键：`fulfillment_order_no`，§6.19）。
+    /// 供应商下单以 `fulfillment_order_no` 标识原命令（§6.19）。先在一个事务写入子订单、明细、首个 `PLACE` 动作和 `inbox_message`，
+    /// 确认意图已提交后才在事务外派发供应商 API（P3 §7）；结果由 `inbox_message` 和 `integration_error_task` 承接。
+    /// 同订单号重复提交返回原订单当前视图，不重新取号或再次下单。
     ///
-    /// 同事务创建子订单、全部明细、首个 `PLACE` 动作与 `inbox_message`；
-    /// 事务外经网关派发供应商 API（P3 §7），结果经 `inbox_message` +
-    /// `integration_error_task` 承接。重复提交（同一订单号）返回原订单当前视图，
-    /// 不重复下单、不生成新单号。
-    ///
-    /// # 参数
-    /// * `req` - 下单请求
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回下单后订单的响应视图。
-    ///
-    /// # 错误
-    /// * `ValidationError` - 请求体校验失败
-    /// * `NotFound` - 连接/商城订单/明细/供给修订不存在
-    /// * `BusinessLogicError` - 连接未启用或缺少下单能力
-    /// * `ConflictError` - 唯一键冲突（并发重复下单）
-    /// * `OutcomeUnknown` - 提交结果无法确认
+    /// 请求非法返回 `ValidationError`；连接、商城订单、明细或供给修订缺失返回 `NotFound`；连接未启用或不能下单返回 `BusinessLogicError`；
+    /// 并发唯一键冲突返回 `ConflictError`；提交无法确认返回 `OutcomeUnknown`。
     pub async fn submit_place(
         &self,
         req: PlaceFulfillmentOrderRequest,
@@ -74,25 +60,10 @@ impl SupplierFulfillmentProcess {
         .await
     }
 
-    /// 事务外派发供应商动作并承接结果（P3 §7）。
-    ///
-    /// 网关调用不在任何事务闭包内；结果经 `inbox_message` +
-    /// `integration_error_task` 承接后，在同一事务写回订单/动作/消息，并为人工
-    /// 异常创建或复用 W26 正式任务。
-    ///
-    /// # 参数
-    /// * `order` - 供应商子订单（就地更新）
-    /// * `action` - 供应商动作（就地更新）
-    /// * `message` - `inbox_message` 信封（就地更新）
-    /// * `connection` - 供应商连接
-    /// * `actor` - 审计操作人
-    ///
-    /// # 返回
-    /// 派发结果已应用到订单与动作，并在同一事务写回消息；需要人工处理时创建或复用 W26 任务。
-    ///
-    /// # 错误
-    /// 结果无法应用到订单、处理人缺少有效内部组织，或错误任务构造失败时返回对应错误。
-    /// 结果写回失败时返回 `ConflictError`、`RepositoryError` 或 `OutcomeUnknown`。
+    // 已持久化的供应商动作在事务外经网关派发（P3 §7），按响应就地更新子订单、动作及消息，
+    // 再用同一事务保存结果和消息；需人工处理时，由 `integration_error_task` 承接并创建或复用 W26 正式任务。
+    // 结果不适用、处理人缺少有效内部组织、错误任务无法构造时返回原错误。
+    // 结果写回失败保留 `ConflictError`、`RepositoryError` 或 `OutcomeUnknown`。
     pub(super) async fn settle_dispatch(
         &self,
         order: &mut SupplierFulfillmentOrder,
@@ -142,20 +113,8 @@ impl SupplierFulfillmentProcess {
         self.write_dispatch_result(order, action, message, task.as_ref(), actor).await
     }
 
-    /// 构建失败路径错误任务并把消息置为失败（§6.21 错误分类）。
-    ///
-    /// # 参数
-    /// * `message` - `inbox_message` 信封（置为失败）。
-    /// * `order` - 供应商子订单（业务对象引用）。
-    /// * `error_class` - 错误分类。
-    /// * `actor` - 当前处理人，写入任务归属用户。
-    /// * `owner_org_unit_id` - 处理人的有效内部组织。
-    ///
-    /// # 返回
-    /// 返回待落库的错误任务。
-    ///
-    /// # 错误
-    /// 消息更新或错误任务构造失败时返回 `Logic`。
+    // 派发失败时把 `inbox_message` 置为失败，并按 §6.21 为供应商子订单生成待入库的错误任务。
+    // 任务使用当前处理人的账号和有效内部组织；消息更新或任务构造失败返回 `Logic`。
     fn build_error_task(
         &self,
         message: &mut InboxMessage,
@@ -180,17 +139,9 @@ impl SupplierFulfillmentProcess {
         Ok(Some(task))
     }
 
-    /// 在同一事务写回派发结果、错误事实、W26 正式任务与审计。
-    ///
-    /// # 参数
-    /// * `order` - 供应商子订单（就地更新并回读版本）
-    /// * `action` - 供应商动作（就地更新并回读版本）
-    /// * `message` - `inbox_message` 信封（就地更新并回读版本）
-    /// * `task` - 失败路径错误任务；`None` 时消息按已处理写回
-    /// * `actor` - 派发命令的审计操作人
-    ///
-    /// # 错误
-    /// 乐观锁冲突/唯一键冲突透出 `ConflictError`，提交结果未知透出 `OutcomeUnknown`。
+    // 网关派发结束后，在一个事务内写回子订单、动作、入站消息、错误事实、W26 任务和审计。
+    // 无错误任务时按已处理保存消息；确认提交后才用新版本覆盖调用方的订单、动作和消息。
+    // 乐观锁或唯一键冲突返回 `ConflictError`，未知提交返回 `OutcomeUnknown`。
     async fn write_dispatch_result(
         &self,
         order: &mut SupplierFulfillmentOrder,
@@ -238,21 +189,13 @@ impl SupplierFulfillmentProcess {
     }
 }
 
-/// 构建动作 `inbox_message` 信封（P3 §7：事务内落消息，事务外派发）。
-///
-/// 来源身份取「supplier-api:{连接 ID}」，消息/事实键取动作幂等键，
-/// 保证同一动作只产生一条正式记录。
-///
-/// # 参数
-/// * `action` - 供应商动作
-/// * `connection` - 供应商连接
-/// * `status` - 初始消息状态（已接收）
-///
-/// # 返回
-/// 返回消息实体。
-///
-/// # 错误
-/// 实体构造校验失败时返回 `Logic`。
+// 构建动作 `inbox_message` 信封（P3 §7：事务内落消息，事务外派发）。
+//
+// 来源身份取「supplier-api:{连接 ID}」，消息/事实键取动作幂等键，保证同一动作只产生一条正式记录。
+//
+// `action` 为供应商动作；`connection` 为供应商连接；`status` 为初始消息状态（已接收）。返回消息实体。
+//
+// 实体构造校验失败时返回 `Logic`。
 pub(super) fn build_action_message(
     action: &SupplierOrderAction,
     connection: &SupplierApiConnection,
@@ -275,24 +218,16 @@ pub(super) fn build_action_message(
     )?)
 }
 
-/// 构造供应商来源系统 ID（连接派生，`supplier-api:{连接 ID}`）。
-///
-/// # 参数
-/// * `connection` - 供应商连接
-///
-/// # 返回
-/// 返回来源系统 ID。
+// 构造供应商来源系统 ID（连接派生，`supplier-api:{连接 ID}`）。
+//
+// `connection` 为供应商连接。返回来源系统 ID。
 fn supplier_source_system_id(connection: &SupplierApiConnection) -> SourceSystemId {
     SourceSystemId::new(format!("supplier-api:{}", connection.base.id))
 }
 
-/// 返回派发结果的简短标签（结构化日志用）。
-///
-/// # 参数
-/// * `outcome` - 派发结果
-///
-/// # 返回
-/// 返回标签字符串。
+// 返回派发结果的简短标签（结构化日志用）。
+//
+// `outcome` 为派发结果。返回标签字符串。
 fn outcome_label(outcome: &DispatchOutcome) -> &'static str {
     match outcome {
         DispatchOutcome::Succeeded { .. } => "succeeded",

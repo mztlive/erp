@@ -5,13 +5,7 @@ use erp_core::{Error, Result};
 use super::{BackgroundJob, JobStatus, JobType};
 
 impl BackgroundJob {
-    /// 返回当前任务是否允许请求取消。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 未结束且满足领域取消约束时为真。
-    /// # 错误
-    /// 无。
+    /// 判断后台任务能否进入取消流程，仅未结束的等待、运行或部分成功任务可继续检查；数据迁移导入一旦启动便不可取消。
     pub fn cancellation_allowed(&self) -> bool {
         self.finished_at.is_none()
             && matches!(self.status, JobStatus::Pending | JobStatus::Running | JobStatus::PartiallySucceeded)
@@ -28,13 +22,8 @@ impl BackgroundJob {
         Ok(())
     }
 
-    /// 领取等待任务或超过两分钟没有心跳的任务。
-    /// # 参数
-    /// `now` 为服务端时间；必须将返回实体通过版本 CAS 保存后才执行。
-    /// # 返回
-    /// 可领取时更新状态及心跳并返回 true；活动任务或终态返回 false。
-    /// # 错误
-    /// 非法状态迁移时返回错误。
+    /// 执行器在开始处理前领取等待任务，或恢复至少 120 秒未更新心跳的运行中、部分成功任务。
+    /// 领取会更新状态或心跳；只有用原版本 CAS 保存成功后才可处理。仍活动或已结束时返回 `false`，非法迁移返回错误。
     pub fn claim_execution(&mut self, now: Instant) -> Result<bool> {
         if self.finished_at.is_some() {
             return Ok(false);
@@ -52,13 +41,8 @@ impl BackgroundJob {
         Ok(true)
     }
 
-    /// 延长当前执行权；调用方须用自己持有的版本保存，禁止重新读版本后抢写。
-    /// # 参数
-    /// `now` 为服务端当前时间。
-    /// # 返回
-    /// 更新心跳时间，不改变进度计数。
-    /// # 错误
-    /// 任务已结束或执行权已过期时拒绝续期。
+    /// 长任务处理期间用服务端时间续期，只改心跳不改进度。调用方必须以自己持有的版本保存，不能重读版本抢写。
+    /// 任务结束、无心跳或距离上次心跳达到 120 秒时拒绝续期。
     pub fn heartbeat_execution(&mut self, now: Instant) -> Result<()> {
         if !self.can_record_progress()
             || self.last_progress_at.is_none_or(|at| now.unix_secs() - at.unix_secs() >= 120)

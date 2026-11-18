@@ -63,13 +63,7 @@ pub struct SkuAttributeView {
 }
 
 impl From<SkuAttribute> for SkuAttributeView {
-    /// 从实体构造响应视图。
-    ///
-    /// # 参数
-    /// * `attribute` - 规格属性实体
-    ///
-    /// # 返回
-    /// 返回响应视图。
+    // 将SKU 规格属性实体投影为接口视图，不在转换时另查关联资料。
     fn from(attribute: SkuAttribute) -> Self {
         Self {
             id: attribute.base.id,
@@ -84,13 +78,7 @@ impl From<SkuAttribute> for SkuAttributeView {
 }
 
 impl From<SkuAttributeRow> for SkuAttributeView {
-    /// 从投影行构造响应视图，与 `From<SkuAttribute>` 同语义。
-    ///
-    /// # 参数
-    /// * `row` - 规格属性列表投影行
-    ///
-    /// # 返回
-    /// 返回响应视图。
+    // 从投影行构造响应视图，与 `From<SkuAttribute>` 同语义。
     fn from(row: SkuAttributeRow) -> Self {
         Self {
             id: row.id,
@@ -143,18 +131,11 @@ pub(crate) struct SkuAttributeListQuery {
 }
 
 impl SkuAttributeListParams {
-    /// 归一化规格属性列表查询参数。
-    ///
-    /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    // 归一化规格属性列表查询参数。
+    //
+    // 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
+    //
+    // 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<SkuAttributeListQuery> {
         Ok(SkuAttributeListQuery {
             attribute_code: normalized_text(self.attribute_code.as_deref()),
@@ -227,13 +208,7 @@ pub struct SkuAttributeValueView {
 }
 
 impl From<SkuAttributeValue> for SkuAttributeValueView {
-    /// 从实体构造响应视图。
-    ///
-    /// # 参数
-    /// * `value` - 规格属性值实体
-    ///
-    /// # 返回
-    /// 返回响应视图。
+    // 将SKU 规格属性值实体投影为接口视图，不在转换时另查关联资料。
     fn from(value: SkuAttributeValue) -> Self {
         Self {
             id: value.base.id,
@@ -249,13 +224,7 @@ impl From<SkuAttributeValue> for SkuAttributeValueView {
 }
 
 impl From<SkuAttributeValueRow> for SkuAttributeValueView {
-    /// 从投影行构造响应视图，与 `From<SkuAttributeValue>` 同语义。
-    ///
-    /// # 参数
-    /// * `row` - 规格属性值列表投影行
-    ///
-    /// # 返回
-    /// 返回响应视图。
+    // 从投影行构造响应视图，与 `From<SkuAttributeValue>` 同语义。
     fn from(row: SkuAttributeValueRow) -> Self {
         Self {
             id: row.id,
@@ -309,18 +278,11 @@ pub(crate) struct SkuAttributeValueListQuery {
 }
 
 impl SkuAttributeValueListParams {
-    /// 归一化规格属性值列表查询参数。
-    ///
-    /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    // 归一化规格属性值列表查询参数。
+    //
+    // 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
+    //
+    // 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<SkuAttributeValueListQuery> {
         Ok(SkuAttributeValueListQuery {
             attribute_id: self.attribute_id.as_ref().map(|id| id.to_string()),

@@ -42,16 +42,7 @@ pub enum ReconciliationCycle {
 }
 
 impl ReconciliationCycle {
-    /// 返回周期的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为对账周期提供中文展示名；界面展示时使用，不以文案作为稳定标识。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Daily => "日",
@@ -64,16 +55,7 @@ impl ReconciliationCycle {
         }
     }
 
-    /// 返回周期的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得对账周期的稳定标识，供需要按代码而非展示文案识别取值的调用方使用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Daily => "daily",
@@ -100,16 +82,7 @@ pub enum InvoiceType {
 }
 
 impl InvoiceType {
-    /// 返回类型的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为发票类型提供中文展示名；界面展示时使用，不以文案作为稳定标识。
     pub fn label(&self) -> &'static str {
         match self {
             Self::VatSpecial => "增值税专用发票",
@@ -118,16 +91,7 @@ impl InvoiceType {
         }
     }
 
-    /// 返回类型的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得发票类型的稳定标识，供需要按代码而非展示文案识别取值的调用方使用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::VatSpecial => "vat_special",
@@ -202,19 +166,9 @@ pub struct SupplierCommercialProfileRevision {
 
 impl SupplierCommercialProfileRevision {
     /// 创建商务结算版本。
-    ///
-    /// 完成付款条件快照与变更原因的必填校验与规范化（去首尾空白、
-    /// 长度上限）；发票税点必须是 `[0, 1)` 的定点小数（§4.2 税率约定）。
-    /// 历史把经营类目编码进付款条件快照时，在此拆成独立字段。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::SupplierCommercialProfileRevisionId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
+    /// 完成付款条件快照与变更原因的必填校验与规范化（去首尾空白、长度上限）；发票税点必须是 `[0, 1)` 的
+    /// 定点小数（§4.2 税率约定）。历史把经营类目编码进付款条件快照时，在此拆成独立字段。
     /// 返回新建的版本实体。
-    ///
-    /// # 错误
     /// 当付款条件缺少可计算规则、与结算方式不一致，或其他版本字段非法时返回错误。
     pub fn new(
         id: SupplierCommercialProfileRevisionId,
@@ -253,47 +207,23 @@ impl SupplierCommercialProfileRevision {
     }
 
     /// 返回已登记的发票税率，保留明确未登记的空集合。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// `invoice_tax_rates` 为 `Some` 时原样返回，包括空集合；为 `None` 时返回旧单值 `invoice_tax_rate` 组成的零或一个元素。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// `invoice_tax_rates` 为 `Some` 时原样返回，包括空集合；为 `None` 时返回旧单值 `invoice_tax_rate`
+    /// 组成的零或一个元素。
     pub fn tax_rates(&self) -> Vec<Rate> {
         self.invoice_tax_rates.clone().unwrap_or_else(|| self.invoice_tax_rate.into_iter().collect())
     }
 
     /// 返回不含经营类目编码的付款条件代码。
-    ///
-    /// 历史修订可能仍把类目写在快照里；调用方落采购单或展示时必须用本方法，
-    /// 不得直接使用 `payment_term_snapshot`。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
+    /// 历史修订可能仍把类目写在快照里；调用方落采购单或展示时必须用本方法，不得直接使用
+    /// `payment_term_snapshot`。
     /// 去编码后的付款条件；无标记时原样返回去空白快照。
-    ///
-    /// # 错误
-    /// 无。
     pub fn effective_payment_term_code(&self) -> String {
         let code = split_encoded_payment_term_snapshot(&self.payment_term_snapshot).payment_term_code;
         SupplierPaymentTerm::parse(&code).map(|term| term.code().to_string()).unwrap_or(code)
     }
 
     /// 返回经营类目：独立字段优先，否则从历史付款条件快照拆出。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 未登记时返回 `None`。
-    ///
-    /// # 错误
-    /// 无。
     pub fn effective_business_category(&self) -> Option<String> {
         self.business_category
             .as_deref()
@@ -304,19 +234,10 @@ impl SupplierCommercialProfileRevision {
     }
 }
 
-/// 收集商务版本引用的签约与付款主体 ID。
-///
-/// 排序去重后映射为 [`PartyId`]，供列表/详情批量读取法定名称；
-/// Service 与仓储共用本实现，不再各自保留去重逻辑。
-///
-/// # 参数
-/// * `profiles` - 商务资料版本
-///
-/// # 返回
-/// 返回去重后的主体 ID，供批量读取法定名称。
-///
-/// # 错误
-/// 无。
+// 收集商务版本引用的签约与付款主体 ID。
+// 排序去重后映射为 [`PartyId`]，供列表/详情批量读取法定名称；Service 与仓储共用本实现，不再各自保留去重
+// 逻辑。
+// 返回去重后的主体 ID，供批量读取法定名称。
 pub(crate) fn commercial_party_ids(profiles: &[SupplierCommercialProfileRevision]) -> Vec<PartyId> {
     let mut ids: Vec<&PartyId> = profiles
         .iter()
@@ -327,19 +248,11 @@ pub(crate) fn commercial_party_ids(profiles: &[SupplierCommercialProfileRevision
     ids.into_iter().cloned().collect()
 }
 
-/// 把付款条件快照与经营类目规范成两个独立字段。
-///
-/// 显式传入的经营类目优先于快照内历史编码。
-///
-/// # 参数
-/// * `payment_term_snapshot` - 原始付款条件快照
-/// * `business_category` - 显式经营类目
-///
-/// # 返回
-/// 不含类目编码的付款条件快照，以及独立经营类目。
-///
-/// # 错误
-/// 付款条件为空/超长，或经营类目超长时返回错误。
+// 把付款条件快照与经营类目规范成两个独立字段。
+// 显式传入的经营类目优先于快照内历史编码。
+// 不含类目编码的付款条件快照，以及独立经营类目。
+// 付款条件为空/超长，或经营类目超长时返回错误。
+// `payment_term_snapshot`：原始付款条件快照。
 fn split_payment_term_fields(
     payment_term_snapshot: String,
     business_category: Option<String>,
@@ -356,7 +269,7 @@ fn split_payment_term_fields(
     Ok((payment_term_snapshot, explicit.or(encoded)))
 }
 
-/// 付款条件须与结算方式一致；对账频率独立于付款周期。
+// 付款条件须与结算方式一致；对账频率独立于付款周期。
 fn ensure_settlement_rules(term: SupplierPaymentTerm, mode: SettlementMode) -> Result<()> {
     if term.settlement_mode() != mode {
         return Err(Error::from("结算方式与付款条件不一致，请重新选择"));
@@ -364,16 +277,9 @@ fn ensure_settlement_rules(term: SupplierPaymentTerm, mode: SettlementMode) -> R
     Ok(())
 }
 
-/// 校验发票税点是否落在合法区间。
-///
-/// # 参数
-/// * `rate` - 发票税点（如 `0.13`）
-///
-/// # 返回
-/// 税点在 `[0, 1)` 内返回 `Ok(())`。
-///
-/// # 错误
-/// 税点小于 0 或大于等于 1 时返回错误。
+// 核对发票税点是否落在合法区间。
+// 税点在 `[0, 1)` 内返回 `Ok(())`。
+// 税点小于 0 或大于等于 1 时返回错误。
 fn ensure_tax_rate_valid(rate: Rate) -> Result<()> {
     let decimal = rate.to_decimal();
     if decimal < rust_decimal::Decimal::ZERO || decimal >= rust_decimal::Decimal::ONE {
@@ -383,16 +289,10 @@ fn ensure_tax_rate_valid(rate: Rate) -> Result<()> {
 }
 
 /// 校验并去重常用税率；`rates` 为 `Some` 时不回退 `legacy`。
-///
-/// # 参数
-/// * `rates` - 常用进项税率；`None` 沿用旧单值，`Some` 空切片表示明确未登记
-/// * `legacy` - 旧的单一税率
-///
-/// # 返回
 /// 返回按数值排序并去重后的税率。`rates` 与 `legacy` 都缺省时返回空向量。
-///
-/// # 错误
-/// 超过 32 项、任一税率不在 `[0, 1)`，或同时给出 `rates` 与 `legacy` 但去重结果不是只含该 `legacy` 的单元素列表时返回错误。
+/// 超过 32 项、任一税率不在 `[0, 1)`，或同时给出 `rates` 与 `legacy` 但去重结果不是只含该 `legacy` 的单
+/// 元素列表时返回错误。
+/// `rates`：`None` 沿用旧单值，`Some` 空切片表示明确未登记。
 pub fn normalize_invoice_tax_rates(rates: Option<&[Rate]>, legacy: Option<Rate>) -> Result<Vec<Rate>> {
     let mut values = rates.map(<[Rate]>::to_vec).unwrap_or_else(|| legacy.into_iter().collect());
     if values.len() > 32 {
@@ -467,7 +367,7 @@ mod tests {
         assert!(super::commercial_party_ids(&[]).is_empty());
     }
 
-    /// happy path：快照与原因去空白，受控代码与税点落库。
+    // 验证快照与原因去空白，受控代码与税点落库。
     #[test]
     fn new_trims_and_normalizes() {
         let profile = SupplierCommercialProfileRevision::new(
@@ -484,7 +384,7 @@ mod tests {
         assert_eq!(profile.revision.revision_no, 1);
     }
 
-    /// 失败路径：快照/原因为空或超长、付款条件不受控、结算方式不匹配或税点越界。
+    // 验证快照/原因为空或超长、付款条件不受控、结算方式不匹配或税点越界。
     #[test]
     fn new_rejects_invalid_inputs() {
         let blank_snapshot = SupplierCommercialProfileRevisionData {
@@ -546,7 +446,7 @@ mod tests {
         );
     }
 
-    /// 金额三元组：发票税点参与行金额计算时保持 gross = net + tax。
+    // 验证发票税点参与行金额计算时保持 gross = net + tax。
     #[test]
     fn invoice_tax_rate_produces_consistent_line_amounts() {
         let profile = SupplierCommercialProfileRevision::new(
@@ -569,7 +469,7 @@ mod tests {
         assert_eq!(tax.to_decimal(), Amount::from_str("39.00").unwrap().to_decimal());
     }
 
-    /// 历史编码快照在构造时拆成独立经营类目，显式类目优先于快照内编码。
+    // 验证历史编码快照在构造时拆成独立经营类目，显式类目优先于快照内编码。
     #[test]
     fn new_splits_encoded_snapshot_and_prefers_explicit_category() {
         let encoded = SupplierCommercialProfileRevisionData {
@@ -603,7 +503,7 @@ mod tests {
         assert_eq!(profile.business_category.as_deref(), Some("鲜花"));
     }
 
-    /// 缺省 `business_category` 的历史文档仍可反序列化，并从快照拆出类目。
+    // 验证缺省 `business_category` 的历史文档仍可反序列化，并从快照拆出类目。
     #[test]
     fn legacy_document_without_category_field_splits_on_read() {
         let profile = SupplierCommercialProfileRevision::new(
@@ -625,7 +525,8 @@ mod tests {
         assert_eq!(loaded.effective_business_category().as_deref(), Some("礼盒"));
     }
 
-    /// 实体 BSON 往返（含 Rate 与 ID）。
+    // 验证供应商商务结算修订写成 BSON 后能还原成原实体。
+    // 实体 BSON 往返（含 Rate 与 ID）。
     #[test]
     fn bson_roundtrip() {
         let profile = SupplierCommercialProfileRevision::new(
@@ -638,7 +539,7 @@ mod tests {
         assert_eq!(roundtrip, profile);
     }
 
-    /// 受控代码的稳定序列化形态与中文标签。
+    // 验证受控代码的稳定序列化形态与中文标签。
     #[test]
     fn enums_serialize_with_stable_codes() {
         assert_eq!(serde_json::to_string(&SettlementMode::PayAfterUse).unwrap(), "\"pay_after_use\"");

@@ -12,13 +12,14 @@ use validator::Validate;
 
 use crate::{Error, Result};
 
-/// 在同一读取阶段查询完整授权后的验收分页和总数。
-/// # 参数
-/// db 为数据库；params 为业务筛选；scope 为来源销售凭证；executor 为原读取事务。
-/// # 返回
-/// 业务筛选与完整来源授权交集中的分页结果。
-/// # 错误
-/// 参数非法、凭证失效或数据库读取失败时返回错误。
+// 读取客户验收列表时，在同一读取阶段查询完整授权后的验收分页和总数。
+//
+// 调用参数：
+// db 为数据库；params 为业务筛选；scope 为来源销售凭证；executor 为原读取事务。
+//
+// 业务筛选与完整来源授权交集中的分页结果。
+//
+// 参数非法、凭证失效或数据库读取失败时返回错误。
 pub(crate) async fn acceptance_list(
     db: &Database,
     params: &CustomerAcceptanceListParams,
@@ -43,13 +44,14 @@ pub(crate) async fn acceptance_list(
     })
 }
 
-/// 只返回已通过实际销售来源完整授权的验收身份。
-/// # 参数
-/// db 为验收事实数据库；id 为精确验收身份；scope 为原 DETAIL 凭证；executor 为原事务。
-/// # 返回
-/// 来源存在且授权命中时返回验收身份，否则返回 None；不装载验收业务字段。
-/// # 错误
-/// 凭证失效、模型不符或数据库读取失败时拒绝。
+// 处理客户验收列表时，仅给出已通过实际销售来源完整授权的验收身份。
+//
+// 调用参数：
+// db 为验收事实数据库；id 为精确验收身份；scope 为原 DETAIL 凭证；executor 为原事务。
+//
+// 来源存在且授权命中时返回验收身份，否则返回 None；不装载验收业务字段。
+//
+// 凭证失效、模型不符或数据库读取失败时拒绝。
 pub(crate) async fn acceptance_identity(
     db: &Database,
     id: &str,
@@ -73,7 +75,7 @@ struct AcceptanceIdentity {
     id: String,
 }
 
-/// 绑定精确验收身份及真实来源，完整授权先于身份投影。
+// 组装客户验收列表的聚合管道时，绑定精确验收身份及真实来源，完整授权先于身份投影。
 fn acceptance_identity_pipeline(id: &str, scope: &SalesReadScope) -> Vec<Document> {
     let mut pipeline = vec![doc! { "$match": { "id": id, "deleted_at": 0_i64 } }];
     pipeline.extend(scope.related_stages("sales_order_id"));
@@ -151,7 +153,7 @@ mod tests {
     use crate::sales_center::access::SalesAccess;
     use crate::sales_center::repository::authorization::SalesMapping;
 
-    /// 成功编译的详情凭证只连接当前验收的真实销售来源，授权后仅投影身份。
+    // 验证客户验收列表：成功编译的详情凭证只连接当前验收的真实销售来源，授权后仅投影身份。
     #[tokio::test]
     async fn acceptance_identity_applies_complete_detail_authorization_before_projection() {
         let client =

@@ -100,19 +100,8 @@ impl PartialEq for SupplierOffering {
 impl Eq for SupplierOffering {}
 
 impl SupplierOffering {
-    /// 创建供给稳定身份并规范化供应商侧编码。
-    ///
-    /// # 参数
-    /// * `id` - 供给主键
-    /// * `data` - 供给身份数据
-    /// * `created_by` - 创建人
-    ///
-    /// # 返回
-    /// 返回初始为启用状态的供给。
-    ///
-    /// # 错误
-    /// SKU 编码为空/超长，或非 API 来源携带连接时返回错误。
-    /// 维护人与主属组织创建必填，禁止用 `created_by` 回填。
+    /// 登记公司 SKU 对应的供应商供给身份并规范供应商编码，新关系为启用。供应商 SKU 为空或过长、非 API 来
+    /// 源携带连接，或缺显式维护人和主属组织时拒绝；创建人只作审计。
     pub fn new(
         id: SupplierOfferingId,
         data: SupplierOfferingData,
@@ -153,18 +142,9 @@ impl SupplierOffering {
     }
 
     /// 指定配送模板或改回跟随供应商默认模板。
-    ///
     /// 模板必须属于本供给的供应商，归属由 Service 在事务内读取模板后校验。
-    ///
-    /// # 参数
-    /// * `template_id` - 目标模板；`None` 表示跟随供应商默认模板
-    /// * `updated_by` - 操作人
-    ///
-    /// # 返回
     /// 指定有变化时返回 `true`。
-    ///
-    /// # 错误
-    /// 无。
+    /// `template_id`：目标模板；`None` 表示跟随供应商默认模板。
     pub fn assign_delivery_template(
         &mut self,
         template_id: Option<SupplierDeliveryTemplateId>,
@@ -178,17 +158,8 @@ impl SupplierOffering {
         true
     }
 
-    /// 更新供给关系状态。
-    ///
-    /// # 参数
-    /// * `status` - 新状态
-    /// * `updated_by` - 操作人
-    ///
-    /// # 返回
-    /// 状态更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 没有失败路径，总是返回 `Ok(())`。
+    /// 设置供给关系状态并记录更新人；由条款修订等用例在完成资格校验后调用。此处不改实时可供或历史条款，
+    /// 也不另行判断迁移资格。
     pub fn update_status(&mut self, status: OfferingStatus, updated_by: impl Into<String>) -> Result<()> {
         self.stable.status = status;
         self.stable.touch(updated_by);
@@ -196,19 +167,8 @@ impl SupplierOffering {
     }
 
     /// 校验供给可用于指定供应商与供应商连接下单。
-    ///
-    /// API 来源供给必须使用登记时的连接；手工和 Excel 来源不绑定连接，但供应商
-    /// 必须始终一致。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 下单供应商
-    /// * `connection_id` - 本次下单连接
-    ///
-    /// # 返回
+    /// API 来源供给必须使用登记时的连接；手工和 Excel 来源不绑定连接，但供应商必须始终一致。
     /// 关系一致时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn belongs_to_ordering_source(
         &self,
         supplier_id: &SupplierAccountId,
@@ -222,15 +182,7 @@ impl SupplierOffering {
     }
 
     /// 校验当前修订号并计算下一修订号。
-    ///
-    /// # 参数
-    /// * `current_revision_no` - 仓储读取到的当前最大修订号
-    /// * `expected_revision_no` - 调用方持有的期望修订号
-    ///
-    /// # 返回
     /// 版本一致时返回下一修订号。
-    ///
-    /// # 错误
     /// 修订号不一致或已达到 `u32` 上限时返回领域错误。
     pub fn next_revision_no(&self, current_revision_no: u32, expected_revision_no: u32) -> Result<u32> {
         if current_revision_no != expected_revision_no {
@@ -240,26 +192,13 @@ impl SupplierOffering {
     }
 
     /// 返回下一次成功持久化后的实体版本。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回当前乐观锁版本加一。
-    ///
-    /// # 错误
     /// 当前版本已达到 `u64` 上限时返回领域错误。
     pub fn next_persisted_version(&self) -> Result<u64> {
         self.base.version.checked_add(1).ok_or_else(|| Error::from("供给版本已达到上限"))
     }
 
-    /// 校验普通后台操作是否允许改写来源可供事实。
-    /// # 参数
-    /// 无；读取供给登记来源。
-    /// # 返回
-    /// 手工及导入来源可进入既有更新流程。
-    /// # 错误
-    /// API 来源必须由同步流程更新，普通命令拒绝。
+    /// 普通后台可供更新前阻止覆盖 API 观察；手工或导入来源继续更新流程，API 来源只能经同步用例写入。
     pub fn ensure_manual_availability_writable(&self) -> Result<()> {
         if self.source_type == OfferingSourceType::Api {
             return Err(Error::from("API 来源库存和可供状态由供应商同步，请暂停供给以停止业务使用"));
@@ -268,39 +207,18 @@ impl SupplierOffering {
     }
 
     /// 判断供给是否已具备可查询、可交接的维护责任事实。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 维护人与业务组织均非空时返回 `true`。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
     /// 空维护人不得用创建人顶替；写命令须在交接前阻断。
     pub fn has_responsibility(&self) -> bool {
         !self.maintainer_user_id.trim().is_empty() && !self.business_org_unit_id.trim().is_empty()
     }
 
     /// 显式交接供给维护人与可选业务组织。
-    ///
     /// 业务组织不随接收人部门隐式变化；`None` 表示保留原组织。
-    ///
-    /// # 参数
-    /// * `target_user_id` - 目标维护人
-    /// * `target_org_unit_id` - 显式目标组织；`None` 保留原组织
-    /// * `updated_by` - 本次交接执行人
-    ///
-    /// # 返回
     /// 责任确有变化时返回 `true`。
-    ///
-    /// # 错误
     /// 目标为空或与当前完全一致时拒绝。
-    ///
-    /// # 关键业务约束
     /// 只改维护人与业务组织，不改创建人、SKU 或审批任务。
+    /// `target_org_unit_id`：显式目标组织；`None` 保留原组织。
     pub fn handover(
         &mut self,
         target_user_id: String,
@@ -395,20 +313,8 @@ pub struct FromGrossPricesParams {
 
 impl SupplierOfferingRevisionData {
     /// 由含税价格和税率构造完整商业条款数据。
-    ///
-    /// 不含税价格统一按合同规则从含税价格扣除按分舍入的税额，调用方不得重复
-    /// 实现价格换算。
-    ///
-    /// # 参数
-    /// * `params` - 含税价格、税率与商业条款字段
-    ///
-    /// # 返回
+    /// 不含税价格统一按合同规则从含税价格扣除按分舍入的税额，调用方不得重复实现价格换算。
     /// 返回已派生两组不含税价格的商业条款数据。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 约束
     /// 不含税价由本方法唯一派生，调用方不得自行换算后覆盖。
     pub fn from_gross_prices(params: FromGrossPricesParams) -> Self {
         Self {
@@ -465,17 +371,8 @@ pub struct SupplierOfferingRevision {
 }
 
 impl SupplierOfferingRevision {
-    /// 创建并校验不可变商业条款修订。
-    ///
-    /// # 参数
-    /// * `id` - 修订主键
-    /// * `data` - 商业条款
-    ///
-    /// # 返回
-    /// 返回规范化后的修订。
-    ///
-    /// # 错误
-    /// 价格换算、起订量或有效期不合法时返回错误。
+    /// 登记公司 SKU 对应的供应商供给身份并规范供应商编码，新关系为启用。供应商 SKU 为空或过长、非 API 来
+    /// 源携带连接，或缺显式维护人和主属组织时拒绝；创建人只作审计。
     pub fn new(id: SupplierOfferingRevisionId, data: SupplierOfferingRevisionData) -> Result<Self> {
         ensure_revision_no(data.revision_no)?;
         ensure_price_pairs(&data)?;
@@ -504,11 +401,7 @@ impl SupplierOfferingRevision {
     }
 
     /// 保护供应商 API 带入的含税采购价格与集采条件。
-    /// # 参数
-    /// `prior` 为同供给的当前正式条款。
-    /// # 返回
     /// 含税采购价格及集采条件不变时成功，允许维护内部补充的税率和有效期。
-    /// # 错误
     /// 代发价、集采价或起订量变化时拒绝。
     pub fn ensure_api_prices_unchanged(&self, prior: &Self) -> Result<()> {
         if self
@@ -531,18 +424,9 @@ impl SupplierOfferingRevision {
     }
 
     /// 比较上一版商业条款并分类销售安全影响。
-    ///
     /// 关键供给条件优先于成本变化；同一修订同时改变关键条件和成本时返回
     /// [`OfferingRevisionImpact::CriticalSupplyChanged`]。
-    ///
-    /// # 参数
-    /// * `prior` - 上一版商业条款
-    ///
-    /// # 返回
     /// 返回无影响、成本变化或关键供给变化。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn impact_from(&self, prior: &Self) -> OfferingRevisionImpact {
         let critical_changed = prior.bulk_minimum_order_quantity != self.bulk_minimum_order_quantity
             || prior.source_purchase_terms.as_ref().map(SourcePurchaseTerms::version_content)
@@ -563,10 +447,10 @@ impl SupplierOfferingRevision {
     }
 }
 
-/// 按合同规则由含税价派生不含税价。
-///
-/// # Panics
-/// 合法含税价与税率必须得到合法不含税价；构造失败说明金额标度不变量已破坏。
+// 按合同规则由含税价派生不含税价。
+//
+// # Panics
+// 合法含税价与税率必须得到合法不含税价；构造失败说明金额标度不变量已破坏。
 fn net_price(gross: UnitPrice, rate: Rate) -> UnitPrice {
     UnitPrice::try_from(gross.to_decimal() - round_to_cent(gross.to_decimal() * rate.to_decimal()))
         .expect("合法含税价与税率必须生成合法不含税价")

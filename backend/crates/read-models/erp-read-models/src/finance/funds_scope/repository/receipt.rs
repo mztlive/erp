@@ -15,21 +15,18 @@ use super::flow::{self, FlowHeader, FlowPage, FlowVersion, first, lookup};
 use super::{aggregate, linked_condition_document, source_stages};
 use crate::{Error, Result};
 
-/// 同一最终条件取当前页、总数、完整窄版本与份额摘要。
-///
-/// # 参数
-/// * `db` - 回款集合所在数据库。
-/// * `query` - 已规范化的回款列表查询。
-/// * `filter` - 回款主表筛选。
-/// * `authorization` - 已解析来源授权。
-/// * `condition` - 负责人、经办人与组织条件。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
-/// 当前页、计数、完整窄版本和授权份额摘要。聚合没有文档时页与计数为空，计数按零继续读取头信息。
-///
-/// # 错误
-/// 聚合、解码或回款金额流读取失败时返回对应错误。计数达到 10000 时返回校验错误，文案为回款查询超过上限。
+// 读取回款列表时，从最终授权与筛选的同一集合取当前页、总数、完整窄版本和份额汇总。
+//
+// 调用参数：
+// * `db` - 回款集合所在数据库。
+// * `query` - 已规范化的回款列表查询。
+// * `filter` - 回款主表筛选。
+// * `authorization` - 已解析来源授权。
+// * `condition` - 负责人、经办人与组织条件。
+//
+// 当前页、计数、完整窄版本和授权份额摘要。聚合没有文档时页与计数为空，计数按零继续读取头信息。
+//
+// 聚合、解码或回款金额流读取失败时返回对应错误。计数达到 10000 时返回校验错误，文案为回款查询超过上限。
 pub(in crate::finance::funds_scope) async fn page(
     db: &Database,
     query: &CustomerReceiptListQuery,
@@ -69,21 +66,18 @@ pub(in crate::finance::funds_scope) async fn page(
     Ok(result)
 }
 
-/// 二次授权只装载完整匹配责任版本，禁止复算页面金额和分配视图。
-///
-/// # 参数
-/// * `db` - 回款集合所在数据库。
-/// * `query` - 已规范化的回款列表查询，只使用其排序。
-/// * `filter` - 回款主表筛选。
-/// * `authorization` - 已解析来源授权。
-/// * `condition` - 负责人、经办人与组织条件。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
-/// 按原主表排序的全部匹配回款及获授权来源版本。
-///
-/// # 错误
-/// 聚合或投影解码失败时返回对应错误。
+// 回款列表交付前的二次检查只读取完整匹配集合的责任版本，不复算分页金额及分配视图。
+//
+// 调用参数：
+// * `db` - 回款集合所在数据库。
+// * `query` - 已规范化的回款列表查询，只使用其排序。
+// * `filter` - 回款主表筛选。
+// * `authorization` - 已解析来源授权。
+// * `condition` - 负责人、经办人与组织条件。
+//
+// 按原主表排序的全部匹配回款及获授权来源版本。
+//
+// 聚合或投影解码失败时返回对应错误。
 pub(in crate::finance::funds_scope) async fn versions(
     db: &Database,
     query: &CustomerReceiptListQuery,
@@ -105,7 +99,7 @@ pub(in crate::finance::funds_scope) async fn versions(
     Ok(result)
 }
 
-/// 全部业务和来源条件先形成最终集合，再由页面或版本分支消费。
+// 令页面、总数、版本和汇总复用回款的最终匹配条件：先施加主单、来源授权和业务筛选，再执行各读分支。
 fn pipeline(
     query: &CustomerReceiptListQuery,
     filter: &CustomerReceiptFilter,
@@ -133,7 +127,7 @@ fn pipeline(
     stages
 }
 
-/// 核销引用按分录、子账和销售事实解析，缺失引用保持失败关闭。
+// 处理回款核销份额前，沿分录和应收子账确认真实销售来源；无法解析的引用不授予份额资格。
 fn allocation_lookup(
     query: &CustomerReceiptListQuery,
     authorization: &FundsAuthorization,
@@ -183,7 +177,7 @@ fn allocation_lookup(
     doc! { "$lookup": { "from": Database::RECEIPT_ALLOCATIONS, "let": { "receipt": "$id" }, "pipeline": stages, "as": "scope_links" } }
 }
 
-/// 精确销售单与子账条件求交；它只选择单据，不替代份额授权。
+// 筛选回款来源单据时交集匹配精确销售单与应收子账；结果只选择单据，不证明各核销份额可读。
 fn scope_match(query: &CustomerReceiptListQuery, account: &str, order: &str) -> Bson {
     let mut conditions = Vec::<Bson>::new();
     if let Some(id) = &query.sales_order_id {
@@ -195,7 +189,7 @@ fn scope_match(query: &CustomerReceiptListQuery, account: &str, order: &str) -> 
     doc! { "$and": conditions }.into()
 }
 
-/// 拟核销分录使有整账资格的草稿仍可在精确子账查询中命中。
+// 按应收子账搜索回款时联查拟核销分录，使具备整账资格的草稿也能命中，不将拟核销当作过账份额。
 fn pending_lookup(query: &CustomerReceiptListQuery) -> Document {
     let stages = vec![
         doc! { "$match": { "deleted_at": 0_i64, "$expr": { "$in": ["$id", "$$entries"] } } },
@@ -217,7 +211,7 @@ fn pending_lookup(query: &CustomerReceiptListQuery) -> Document {
     "pipeline": stages, "as": "scope_pending" } }
 }
 
-/// 登记人直接来自不可变领域创建人，核销人仍来自已提交审批快照。
+// 筛选回款经办人时区分登记人与核销人：前者取领域实体创建人，后者取已提交的审批快照。
 fn operator_stages(query: &CustomerReceiptListQuery, condition: &FundsLinkedCondition) -> Vec<Document> {
     let Some(operators) = &condition.operator_user_ids else {
         return Vec::new();
@@ -243,13 +237,13 @@ fn operator_stages(query: &CustomerReceiptListQuery, condition: &FundsLinkedCond
     ]
 }
 
-/// 回款页只装载公开行所需主表字段，页外不装配分配视图。
+// 准备回款当前页时仅投影公开行需要的主表字段，不对页外单据装配分配详情。
 fn projection() -> Document {
     doc! { "_id": 0, "id": 1, "status": 1, "receipt_no": 1, "counterparty_party_id": 1, "customer_id": 1,
     "received_at": 1, "amount": 1, "bank_reference": 1, "version": 1, "created_at": 1, "pending_allocations": 1 }
 }
 
-/// 保持领域排序字段和 ID 尾键，客户端已按 DTO 规范化。
+// 排序回款页面和完整匹配版本时沿用规范化的领域字段，并用单据 ID 保持同值排序稳定。
 fn sort(query: &CustomerReceiptListQuery) -> Document {
     flow::sort(query.paging.sort_by, matches!(query.paging.sort_dir, SortDir::Asc))
 }
@@ -261,7 +255,7 @@ mod tests {
     use super::super::tests::authorization;
     use super::*;
 
-    /// 登记使用领域创建人，核销使用提交快照，两类经办身份不互相替代。
+    // 验证客户回款：登记使用领域创建人，核销使用提交快照，两类经办身份不互相替代。
     #[test]
     fn receipt_operator_filters_keep_registration_and_settlement_facts_distinct() {
         let mut query = CustomerReceiptListParams::default().normalized().unwrap();
@@ -292,7 +286,7 @@ mod tests {
         assert_eq!(stages[1], doc! { "$match": { "scope_operators.0": { "$exists": true } } });
     }
 
-    /// 未提供经办条件不加限制，提供经办条件但无动作类型时保持失败关闭。
+    // 验证客户回款：未提供经办条件不加限制，提供经办条件但无动作类型时保持失败关闭。
     #[test]
     fn receipt_operator_filter_requires_explicit_kind() {
         let query = CustomerReceiptListParams::default().normalized().unwrap();
@@ -301,7 +295,7 @@ mod tests {
         assert_eq!(operator_stages(&query, &condition), [doc! { "$match": { "$expr": false } }]);
     }
 
-    /// 经办条件先于核销关联执行，两类经办均保持原来源、可见性与分页共同前置条件。
+    // 验证客户回款：经办条件先于核销关联执行，两类经办均保持原来源、可见性与分页共同前置条件。
     #[test]
     fn receipt_operator_filter_precedes_allocation_sources() {
         let mut query = CustomerReceiptListParams::default().normalized().unwrap();

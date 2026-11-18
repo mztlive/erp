@@ -16,13 +16,14 @@ use super::sources::SubjectKey;
 use crate::{Error, Result};
 
 impl WorkbenchReadService {
-    /// 读取已授权审批的冻结来源版本，追加全部商品名称和规格。
-    /// # 参数
-    /// `keys` 为已授权精确提交身份，`documents` 为检索资料，`executor` 为当前事务。
-    /// # 返回
-    /// 就地追加来源单号、客户和完整商品；没有冻结来源时不回填当前单据。
-    /// # 错误
-    /// 仓储故障或冻结来源身份不一致时拒绝查询。
+    // 处理审批关联商品检索时，读取已授权审批的冻结来源版本，追加全部商品名称和规格。
+    //
+    // 调用参数：
+    // `keys` 为已授权精确提交身份，`documents` 为检索资料，`executor` 为当前事务。
+    //
+    // 就地追加来源单号、客户和完整商品；没有冻结来源时不回填当前单据。
+    //
+    // 仓储故障或冻结来源身份不一致时拒绝查询。
     pub(super) async fn related_sales_search(
         &self,
         keys: &[SubjectKey],

@@ -12,10 +12,9 @@ use persistence_core::{Executor, Result};
 use super::facts::{ProcurementRuleListDisplayFacts, ProcurementRuleListPage, collect_rule_list_ids};
 use super::ids::unique_ids;
 
-/// 批量加载规则行展示所需的最小关联事实.
+/// 读取采购责任规则时，批量加载规则行展示所需的最小关联事实。
 ///
 /// # 参数
-/// * `db` - MongoDB 数据库句柄
 /// * `rules` - 当前页规则实体切片
 /// * `executor` - 数据访问执行器，由 Service 决定事务边界；事务内重验必须复用调用方 executor
 ///
@@ -85,10 +84,9 @@ pub async fn load_procurement_rule_list_facts(
     Ok(facts)
 }
 
-/// 分页查询规则行并批量返回管理列表展示事实.
+/// 读取采购责任规则时，分页查询规则行并批量返回管理列表展示事实。
 ///
 /// # 参数
-/// * `db` - MongoDB 数据库句柄
 /// * `filter` - 规则类型、负责人、状态及分页筛选
 /// * `executor` - 数据访问执行器，由 Service 决定事务边界；事务内重验必须复用调用方 executor
 ///

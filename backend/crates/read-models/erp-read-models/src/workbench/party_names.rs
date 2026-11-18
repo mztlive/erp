@@ -18,15 +18,15 @@ use crate::errors::Result;
 const SUBMITTER_LABEL: &str = "提交人";
 
 impl WorkbenchReadService {
-    /// 审批跟踪复用责任队列的提交人姓名解析；无法解析的账号不展示。
-    ///
-    /// # 参数
-    /// * `items` - 已完成阅读授权的审批列表
-    /// * `executor` - 账号姓名读取沿用的执行器
-    /// # 返回
-    /// 原地将提交人身份替换为姓名。
-    /// # 错误
-    /// 账号批量读取失败时返回仓储错误。
+    // 组装跨域审批人员名称时，审批跟踪复用责任队列的提交人姓名解析；无法解析的账号不展示。
+    //
+    // 调用参数：
+    // * `items` - 已完成阅读授权的审批列表
+    // * `executor` - 账号姓名读取沿用的执行器
+    //
+    // 原地将提交人身份替换为姓名。
+    //
+    // 账号批量读取失败时返回仓储错误。
     pub(super) async fn apply_approval_party_names(
         &self,
         items: &mut [super::ApprovalListItem],
@@ -52,17 +52,14 @@ impl WorkbenchReadService {
 }
 
 impl WorkbenchFactsReader<'_> {
-    /// 按账号 ID 批量读取姓名。
-    ///
-    /// # 参数
-    /// * `owner_ids` - 去重后的账号 ID
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回账号 ID 到姓名的映射。
-    ///
-    /// # 错误
-    /// 账号查询失败时返回仓储错误。
+    // 读取跨域审批人员名称时，按账号 ID 批量读取姓名。
+    //
+    // 调用参数：
+    // * `owner_ids` - 去重后的账号 ID
+    //
+    // 返回账号 ID 到姓名的映射。
+    //
+    // 账号查询失败时返回仓储错误。
     pub(super) async fn load_account_names(
         &self,
         owner_ids: &[String],
@@ -79,31 +76,23 @@ impl WorkbenchFactsReader<'_> {
     }
 }
 
-/// 找到简报里的提交人段。
-///
-/// # 参数
-/// * `sections` - 简报键值段
-///
-/// # 返回
-/// 存在「提交人」段时返回该段。
-///
-/// # 错误
-/// 无。
+// 处理跨域审批人员名称时，找到简报里的提交人段。
+//
+// 调用参数：
+// * `sections` - 简报键值段
+//
+// 存在「提交人」段时返回该段。
 fn submitter_section(sections: &[WorkItemSummarySection]) -> Option<&WorkItemSummarySection> {
     sections.iter().find(|section| section.label == SUBMITTER_LABEL)
 }
 
-/// 把简报提交人 ID 换成姓名；换不出姓名就摘掉该段。
-///
-/// # 参数
-/// * `sections` - 简报键值段
-/// * `names` - 账号 ID 到姓名
-///
-/// # 返回
-/// 无。已经是姓名的段保持原样。
-///
-/// # 错误
-/// 无。
+// 组装跨域审批人员名称时，把简报提交人 ID 换成姓名；换不出姓名就摘掉该段。
+//
+// 调用参数：
+// * `sections` - 简报键值段
+// * `names` - 账号 ID 到姓名
+//
+// 无。已经是姓名的段保持原样。
 fn apply_submitter_name(sections: &mut Vec<WorkItemSummarySection>, names: &HashMap<String, String>) {
     let Some(index) = sections.iter().position(|section| section.label == SUBMITTER_LABEL) else {
         return;
@@ -124,16 +113,12 @@ fn apply_submitter_name(sections: &mut Vec<WorkItemSummarySection>, names: &Hash
     }
 }
 
-/// 判断取值是否为账号稳定 ID：24 位 ObjectId 或本系统 32 位 hex。
-///
-/// # 参数
-/// * `value` - 简报段取值
-///
-/// # 返回
-/// 是账号 ID 时返回 `true`。
-///
-/// # 错误
-/// 无。
+// 确定跨域审批人员名称的适用条件时，判断取值是否为账号稳定 ID：24 位 ObjectId 或本系统 32 位 hex。
+//
+// 调用参数：
+// * `value` - 简报段取值
+//
+// 是账号 ID 时返回 `true`。
 fn is_account_id(value: &str) -> bool {
     let value = value.trim();
     matches!(value.len(), 24 | 32) && value.chars().all(|ch| ch.is_ascii_hexdigit())

@@ -7,7 +7,7 @@ use super::FundsAccess;
 use crate::{Error, Result};
 
 impl FundsAccess {
-    /// 在原事务中校验来源单据完整读取，部分份额不授权整单管理。
+    /// 读取财务来源范围时，在原事务中校验来源单据完整读取，部分份额不授权整单管理。
     ///
     /// # 参数
     /// * `actor` - 已认证调用人。

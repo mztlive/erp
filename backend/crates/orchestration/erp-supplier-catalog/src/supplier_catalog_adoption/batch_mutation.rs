@@ -8,13 +8,13 @@ use super::SupplierCatalogAdoptionProcess;
 use crate::Result;
 
 impl SupplierCatalogAdoptionProcess {
-    /// 在逐项事务中重验本次草稿操作仍持有写入资格。
-    /// # 参数
-    /// 连接、批次、本次标记、认证用户及调用方执行器。
-    /// # 返回
-    /// 当前已授权批次。
-    /// # 错误
-    /// 范围不足或操作已经被接管时拒绝。
+    // 在逐项事务中重验本次草稿操作仍持有写入资格。
+    //
+    // 连接、批次、本次标记、认证用户及调用方执行器。
+    //
+    // 当前已授权批次。
+    //
+    // 范围不足或操作已经被接管时拒绝。
     pub(super) async fn check_batch_draft(
         &self,
         connection: &str,

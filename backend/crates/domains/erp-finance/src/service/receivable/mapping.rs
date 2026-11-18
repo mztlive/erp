@@ -4,16 +4,8 @@ use erp_core::money::Amount;
 
 use crate::dto::receivable::{ReceivableInvoiceFactView, ReceivableReceiptFactView};
 /// 固定零金额与账本共用同一实体层实现（`0.00` 确定性拼写）。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
 /// 返回 `0.00`。
-///
-/// # 错误
-/// 不返回错误。
-///
+/// 失败条件：
 /// 公开包装：`erp-read-models` 的资金作用域投影（`funds_scope` 等）跨 crate 复用本入口，保持与基线一致的
 /// 公开路径 `service::receivable::mapping::zero_amount`；实体层实现保持 crate 内可见。
 pub fn zero_amount() -> Amount {
@@ -24,15 +16,10 @@ use crate::ports::receivable::ReceivableSnapshot;
 use crate::{Error, Result};
 
 /// 装配当前账户关联的正式回款事实投影。
-///
-/// # 参数
-/// * `snapshot` - 当前账户的回款与分配事实。
-///
-/// # 返回
 /// 返回按到账时间再按回款 ID 排序的投影；无分配时已分配额为零。`Reversed` 状态标为已冲正。
 ///
-/// # 错误
-/// 不返回错误。
+/// 输入约定：
+/// - `snapshot`：当前账户的回款与分配事实。
 pub fn receipt_fact_views(snapshot: &ReceivableSnapshot) -> Vec<ReceivableReceiptFactView> {
     let allocations_by_receipt = allocations_by_receipt_id(snapshot);
     let mut receipts = snapshot.receipts.iter().collect::<Vec<_>>();
@@ -65,16 +52,11 @@ pub fn receipt_fact_views(snapshot: &ReceivableSnapshot) -> Vec<ReceivableReceip
 }
 
 /// 装配当前账户关联的正式销项发票事实投影。
-///
-/// # 参数
-/// * `snapshot` - 当前账户的发票与分配事实。
-///
-/// # 返回
 /// 返回按开票日再按发票 ID 排序的投影；无分配时已分配额为零。
 /// `RedInvoiced` 状态标为已冲红，蓝票与红票方向分别为 `BLUE` 与 `RED`。
 ///
-/// # 错误
-/// 不返回错误。
+/// 输入约定：
+/// - `snapshot`：当前账户的发票与分配事实。
 pub fn invoice_fact_views(snapshot: &ReceivableSnapshot) -> Vec<ReceivableInvoiceFactView> {
     let allocations_by_invoice = allocations_by_invoice_id(snapshot);
     let mut invoices = snapshot.invoices.iter().collect::<Vec<_>>();
@@ -112,13 +94,11 @@ pub fn invoice_fact_views(snapshot: &ReceivableSnapshot) -> Vec<ReceivableInvoic
         .collect()
 }
 
-/// 按回款单分组分配集合（一次分组，两视图共用；排序与输出字段不变）。
-///
-/// # 参数
-/// * `snapshot` - 事实快照
-///
-/// # 返回
-/// 返回 `回款单ID → 分配行` 映射（组内保持原集合顺序）。
+// 按回款单分组分配集合（一次分组，两视图共用；排序与输出字段不变）。
+// 返回 `回款单ID → 分配行` 映射（组内保持原集合顺序）。
+//
+// 输入约定：
+// - `snapshot`：事实快照
 fn allocations_by_receipt_id(
     snapshot: &ReceivableSnapshot,
 ) -> std::collections::HashMap<&str, Vec<&crate::entity::receivable::ReceiptAllocation>> {
@@ -130,13 +110,11 @@ fn allocations_by_receipt_id(
     grouped
 }
 
-/// 按发票分组分配集合（一次分组；排序与输出字段不变）。
-///
-/// # 参数
-/// * `snapshot` - 事实快照
-///
-/// # 返回
-/// 返回 `发票ID → 分配行` 映射（组内保持原集合顺序）。
+// 按发票分组分配集合（一次分组；排序与输出字段不变）。
+// 返回 `发票ID → 分配行` 映射（组内保持原集合顺序）。
+//
+// 输入约定：
+// - `snapshot`：事实快照
 fn allocations_by_invoice_id(
     snapshot: &ReceivableSnapshot,
 ) -> std::collections::HashMap<&str, Vec<&crate::entity::receivable::SalesInvoiceAllocation>> {
@@ -149,33 +127,23 @@ fn allocations_by_invoice_id(
 }
 
 /// 将回款账本错误映射为既有业务错误。
-///
-/// # 参数
-/// * `error` - 领域错误
-///
-/// # 返回
 /// 返回 BusinessLogicError，文案与原过账路径一致。
+/// 失败条件：本函数即错误转换。
+/// 调用边界：不得落到透明 Logic。
 ///
-/// # 错误
-/// 本函数即错误转换。
-///
-/// # 约束
-/// 不得落到透明 Logic。
+/// 输入约定：
+/// - `error`：领域错误
 pub fn map_ledger_error(error: erp_core::Error) -> Error {
     Error::BusinessLogicError(error.to_string())
 }
 
 /// 校验乐观锁版本。
+/// 结果：版本一致时无返回值。
+/// 失败条件：不一致时返回 `ConflictError`。
 ///
-/// # 参数
-/// * `actual` - 当前持久化版本。
-/// * `expected` - 调用方期望版本。
-///
-/// # 返回
-/// 版本一致时无返回值。
-///
-/// # 错误
-/// 不一致时返回 `ConflictError`。
+/// 输入约定：
+/// - `actual`：当前持久化版本。
+/// - `expected`：调用方期望版本。
 pub fn ensure_expected_version(actual: u64, expected: u64) -> Result<()> {
     if actual == expected {
         return Ok(());
@@ -190,7 +158,7 @@ mod mapping_error_tests {
     use super::{ensure_expected_version, map_ledger_error};
     use crate::Error;
 
-    /// 账本错误转译保持原过账文案并归为业务规则类（不得落到透明 Logic）。
+    // 回归检查：账本错误转译保持原过账文案并归为业务规则类（不得落到透明 Logic）。
     #[test]
     fn ledger_error_mapping_keeps_message_and_business_rule_class() {
         let mapped = map_ledger_error(erp_core::Error::from("核销合计超过回款金额"));
@@ -199,7 +167,7 @@ mod mapping_error_tests {
         assert_eq!(mapped.to_string(), "业务逻辑错误: 核销合计超过回款金额");
     }
 
-    /// 乐观锁版本一致通过、不一致冲突。
+    // 回归检查：乐观锁版本一致通过、不一致冲突。
     #[test]
     fn expected_version_check_passes_only_on_match() {
         assert!(ensure_expected_version(7, 7).is_ok());
@@ -360,7 +328,7 @@ mod mapping_grouping_equivalence_tests {
         }
     }
 
-    /// 分组装配与逐单据全量扫描的旧算法输出一致，且净额正确。
+    // 回归检查：分组装配与逐单据全量扫描的旧算法输出一致，且净额正确。
     #[test]
     fn grouped_views_match_naive_per_document_scan() {
         let snapshot = snapshot();

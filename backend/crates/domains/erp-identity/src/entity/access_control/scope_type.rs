@@ -28,15 +28,7 @@ pub enum DataScopeType {
 
 impl DataScopeType {
     /// 返回范围类型的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 依次为「公司级」「组织」「团队」「本人负责」「协作参与」。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Company => "公司级",
@@ -47,16 +39,8 @@ impl DataScopeType {
         }
     }
 
-    /// 返回范围类型的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
+    /// 取得范围类型的稳定代码。
     /// 依次为 `company`、`organization`、`team`、`self_owned`、`collaborative`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Company => "company",
@@ -67,32 +51,19 @@ impl DataScopeType {
         }
     }
 
-    /// 判断范围类型是否需要显式范围目标。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
+    /// 当范围类型需要显式范围目标时返回 `true`。
     /// `Organization` 与 `Team` 返回 `true`。公司、本人负责和协作参与返回 `false`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn requires_targets(self) -> bool {
         matches!(self, Self::Organization | Self::Team)
     }
 }
 
-/// 规范化范围目标列表：按范围类型校验携带一致性、数量上限与逐项 trim/去重。
-///
-/// # 参数
-/// * `scope_type` - 范围类型
-/// * `targets` - 原始目标列表
-///
-/// # 返回
-/// 返回去重保序后的目标列表。
-///
-/// # 错误
-/// 当目标数量越界、目标为空/超长或范围类型不允许携带目标时返回错误。
+// 规范化范围目标列表：按范围类型校验携带一致性、数量上限与逐项 trim/去重。
+// 返回去重保序后的目标列表。
+//
+// 当目标数量越界、目标为空/超长或范围类型不允许携带目标时返回错误。
+//
+// `scope_type`：范围类型；`targets`：原始目标列表。
 pub(crate) fn normalize_scope_targets(
     scope_type: DataScopeType,
     targets: Vec<String>,
@@ -128,7 +99,7 @@ pub(crate) fn normalize_scope_targets(
 mod tests {
     use super::{DataScopeType, MAX_TARGETS, TARGET_MAX_LEN, normalize_scope_targets};
 
-    /// 显式身份去空白、去重保序，同时接受数量和长度边界。
+    // 验证：显式身份去空白、去重保序，同时接受数量和长度边界。
     #[test]
     fn explicit_targets_are_normalized_with_stable_order() {
         let targets = vec![" team-1 ".into(), "team-2".into(), "team-1".into()];
@@ -139,7 +110,7 @@ mod tests {
         assert_eq!(normalize_scope_targets(DataScopeType::Team, vec![target.clone()]).unwrap(), [target]);
     }
 
-    /// 目标形态、数量、身份内容和长度非法时不得生成可用范围。
+    // 验证：目标形态、数量、身份内容和长度非法时不得生成可用范围。
     #[test]
     fn explicit_targets_reject_invalid_identity_and_capacity() {
         for targets in [
@@ -154,7 +125,7 @@ mod tests {
         }
     }
 
-    /// 隐式范围不接受静态目标，范围代码保持现有序列化协议。
+    // 验证：隐式范围不接受静态目标，范围代码保持现有序列化协议。
     #[test]
     fn implicit_scopes_reject_targets_and_keep_wire_codes() {
         for (kind, code) in [

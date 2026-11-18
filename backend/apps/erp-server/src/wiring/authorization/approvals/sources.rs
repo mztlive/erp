@@ -22,13 +22,9 @@ pub(super) struct SubjectFacts {
     roots: BTreeMap<String, Arc<dyn AccessFactsPort>>,
 }
 impl SubjectFacts {
-    /// 复用已构造的根事实读取器，不创建请求状态或授权服务。
-    /// # 参数
-    /// db 为共享数据库，roots 为各拥有领域按资源提供的唯一事实实例。
-    /// # 返回
-    /// 按真实业务强外键分发的审批源适配器。
-    /// # 错误
-    /// 不执行 I/O；缺少实际所需根读取器在读取时返回接入错误。
+    // 复用已构造的根事实读取器，不创建请求状态或授权服务。
+    // 按真实业务强外键分发的审批源适配器。
+    // 不执行 I/O；缺少实际所需根读取器在读取时返回接入错误。
     pub(super) fn new(db: Database, roots: &FactsBindings) -> Self {
         Self { db, roots: roots.iter().cloned().collect() }
     }

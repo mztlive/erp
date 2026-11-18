@@ -31,49 +31,20 @@ use uuid::Uuid;
 /// 测试 MongoDB 连接串的环境变量名。
 pub(crate) const TEST_MONGO_URI_ENV: &str = "ERP_TEST_MONGO_URI";
 
-/// 读取测试 MongoDB 连接串。
-///
-/// 未设置或仅空白时与缺失同一口径，供存在性判断与连接复用。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// `ERP_TEST_MONGO_URI` 已设置且去掉空白后非空时返回该连接串；否则返回 `None`。
-///
-/// # 错误
-/// 不返回错误。
+// 从 `ERP_TEST_MONGO_URI` 取得非空连接串，供测试门控和建库复用。未设置或只有空白时返回 `None`；有效值保留原文。
 pub(crate) fn test_mongo_uri() -> Option<String> {
     let uri = std::env::var(TEST_MONGO_URI_ENV).ok()?;
     (!uri.trim().is_empty()).then_some(uri)
 }
 
-/// 生成随机十六进制短串。
-///
-/// # 参数
-/// * `len` - 截取长度；超过 UUID 简单格式的 32 个字符时按 32 截断，避免切片越界 panic。
-///
-/// # 返回
-/// 返回 UUID v4 十六进制前缀，长度为 `len` 与 32 的较小值。
-///
-/// # 错误
-/// 不返回错误。
+// 截取随机 UUID 的十六进制前缀，用于生成短测试标识。最大长度为 32，超出时保留完整前缀。
 pub(crate) fn uuid_hex_n(len: usize) -> String {
     let mut hex = Uuid::new_v4().simple().to_string();
     hex.truncate(len);
     hex
 }
 
-/// 判断是否具备真实 MongoDB（单节点副本集）环境。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// `ERP_TEST_MONGO_URI` 已设置且非空时返回 `true`，否则返回 `false`。
-///
-/// # 错误
-/// 不返回错误。
+/// 根据 `ERP_TEST_MONGO_URI` 是否有非空值判断测试是否配置了外部 MongoDB；实际连通性和副本集由调用方建立连接时确认。
 pub fn mongo_env_present() -> bool {
     test_mongo_uri().is_some()
 }

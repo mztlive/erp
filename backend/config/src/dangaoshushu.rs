@@ -84,14 +84,10 @@ impl fmt::Debug for DangaoshushuConfig {
 }
 
 impl DangaoshushuConfig {
-    /// 校验启用配置；关闭的模板允许保留空凭据。
+    /// 加载蛋糕叔叔技术配置时，检查 HTTPS 源地址、渠道凭据、调用限额与单位和地区映射，
+    /// 并拒绝不合规的已填用户 ID。停用的模板可保留空凭据；校验通过不代表后台业务连接已启用。
     ///
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 配置满足启用边界时返回 Ok。
-    /// # 错误
-    /// 非法地址、身份、凭据、限额或映射返回脱敏配置错误。
+    /// 错误不包含地址、凭据或映射原值。
     pub fn validate(&self) -> Result<()> {
         if !self.enabled {
             return Ok(());

@@ -38,13 +38,8 @@ fn page_size() -> u32 {
 }
 
 impl DangaoshushuConnector {
-    /// 读取新版目录、品牌、门店、可售城市或地图范围的原始来源证据。
-    /// # 参数
-    /// `query` 为已授权连接的固定只读查询。
-    /// # 返回
-    /// 原始供应商数据；不改公司商品或供给。
-    /// # 错误
-    /// 缺失必要标识、非法分页或外部调用失败时返回分类错误。
+    /// 在已绑定的连接上执行白名单内的目录、商品、品牌、门店、可售城市或配送地图查询。
+    /// 供后台诊断查看供应商原始资料，不更新公司商品或供给；标识缺失、分页非法或远端失败时返回分类错误。
     pub async fn read(&self, query: &DangaoshushuReadQuery) -> ConnectorResult<Value> {
         let mut parameters = Vec::new();
         let path = match query.kind {

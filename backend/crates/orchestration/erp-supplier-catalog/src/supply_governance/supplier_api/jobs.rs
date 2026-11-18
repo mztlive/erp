@@ -19,20 +19,16 @@ use super::catalog_recovery::{clear_stalled, next_run};
 use super::receipt::{CommandReceiptWrite, persist_command_receipt};
 use crate::{Error, Result};
 impl SupplierApiGovernanceProcess {
-    /// 在一个事务内登记健康检查后台任务、运行记录和命令回执。
-    ///
-    /// # 参数
-    /// * `id` - 供应连接 ID。
-    /// * `check_type` - 健康检查类型。
-    /// * `expected_version` - 调用方冻结的连接版本。
-    /// * `identity` - 已计算的命令身份。
-    /// * `actor` - 当前操作人。
-    ///
-    /// # 返回
-    /// 结果为处理中的连接命令回执。
-    ///
-    /// # 错误
-    /// 目标版本不匹配、任务或健康检查运行构造失败，或任务、运行与回执写入失败时返回对应错误。
+    // 在一个事务内登记健康检查后台任务、运行记录和命令回执。
+    //
+    // - `id`：供应连接 ID。
+    // - `check_type`：健康检查类型。
+    // - `expected_version`：调用方冻结的连接版本。
+    // - `identity`：已计算的命令身份。
+    //
+    // 结果为处理中的连接命令回执。
+    //
+    // 目标版本不匹配、任务或健康检查运行构造失败，或任务、运行与回执写入失败时返回对应错误。
     pub(super) async fn create_health_job(
         &self,
         id: &str,
@@ -95,19 +91,13 @@ impl SupplierApiGovernanceProcess {
             })
             .await
     }
-    /// 在一个事务内登记目录同步后台任务和命令回执。
-    ///
-    /// # 参数
-    /// * `id` - 供应连接 ID。
-    /// * `expected_version` - 调用方冻结的连接版本。
-    /// * `identity` - 已计算的命令身份。
-    /// * `actor` - 当前操作人。
-    ///
-    /// # 返回
-    /// 结果为处理中的连接命令回执。
-    ///
-    /// # 错误
-    /// 目标版本不匹配、目录同步任务构造失败，或任务与回执写入失败时返回对应错误。
+    // 在一个事务内登记目录同步后台任务和命令回执。
+    //
+    // `id`：供应连接 ID；`expected_version`：调用方冻结的连接版本；`identity`：已计算的命令身份。
+    //
+    // 结果为处理中的连接命令回执。
+    //
+    // 目标版本不匹配、目录同步任务构造失败，或任务与回执写入失败时返回对应错误。
     pub(super) async fn create_catalog_job(
         &self,
         id: &str,
@@ -176,7 +166,7 @@ impl SupplierApiGovernanceProcess {
     }
 }
 
-/// 在创建任何后台任务事实前核对该精确命令对应的固定入口。
+// 在创建任何后台任务事实前核对该精确命令对应的固定入口。
 async fn require_job(
     authorization: &AuthorizationService,
     actor: &AuditActor,
@@ -189,7 +179,7 @@ async fn require_job(
     Ok(())
 }
 
-/// 复用连接任务身份生成，任务和回执由调用方统一保存。
+// 复用连接任务身份生成，任务和回执由调用方统一保存。
 fn background_job(
     id: &str,
     kind: SupplierGovernanceJobKind,
@@ -205,7 +195,7 @@ fn background_job(
     })?)
 }
 
-/// 保存任务受理回执，沿用任务事务并保留命令幂等身份。
+// 保存任务受理回执，沿用任务事务并保留命令幂等身份。
 async fn processing_receipt(
     db: &Database,
     connection: &SupplierApiConnection,

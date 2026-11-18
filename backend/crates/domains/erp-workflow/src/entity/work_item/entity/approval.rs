@@ -75,16 +75,11 @@ impl WorkItem {
     ///
     /// 必须同时提供非空责任人、角色、组织、审批运行时来源和节点执行 ID。
     ///
-    /// # 参数
-    /// * `id` - 任务主键
-    /// * `data` - 审批任务数据
-    /// * `at` - 创建时间
-    ///
-    /// # 返回
     /// 返回指定到人、来源为审批运行时并绑定节点执行的单据审批任务。
     ///
-    /// # 错误
     /// 责任人或其他必填字段为空或超长时返回错误。
+    ///
+    /// `data`：审批任务数据。
     pub fn new_document_approval(
         id: WorkItemId,
         data: DocumentApprovalWorkItemData,
@@ -121,19 +116,13 @@ impl WorkItem {
     }
 
     /// 校验单据审批任务可由当前操作人按给定版本进入决定编排。
+    /// 校验顺序固定为任务类型、当前责任人、开放状态、版本和执行引用，避免 Service 重复状态判断。
     ///
-    /// # 参数
-    /// * `actor_id` - 当前已认证操作人 ID
-    /// * `expected_version` - 调用方期望的任务乐观锁版本
-    ///
-    /// # 返回
     /// 返回任务绑定的审批节点执行 ID。
     ///
-    /// # 错误
     /// 任务类型、责任人、开放状态、版本或执行引用不满足时返回对应错误。
     ///
-    /// # 关键业务约束
-    /// 校验顺序固定为任务类型、当前责任人、开放状态、版本和执行引用，避免 Service 重复状态判断。
+    /// `actor_id`：当前已认证操作人 ID；`expected_version`：调用方期望的任务乐观锁版本。
     pub fn approval_execution_for_decision(
         &self,
         actor_id: &str,
@@ -155,16 +144,11 @@ impl WorkItem {
     }
 
     /// 由审批运行时完成当前开放的单据审批任务。
-    ///
-    /// # 参数
-    /// * `completed_by` - 完成执行人，必须是当前责任人。
-    /// * `at` - 完成时间。
-    ///
-    /// # 返回
     /// 无返回值；状态变为 `COMPLETED`。
     ///
-    /// # 错误
     /// 不是单据审批任务、执行人为空或超长、任务非开放，或执行人不是当前责任人时返回错误。
+    ///
+    /// `completed_by`：完成执行人，必须是当前责任人。
     pub fn complete_by_approval_runtime(
         &mut self,
         completed_by: impl Into<String>,
@@ -177,17 +161,11 @@ impl WorkItem {
     }
 
     /// 由审批运行时关闭当前开放的单据审批任务。
-    ///
-    /// # 参数
-    /// * `closed_by` - 关闭操作人。
-    /// * `data` - 关闭原因。
-    /// * `at` - 关闭时间。
-    ///
-    /// # 返回
     /// 无返回值；状态变为 `CLOSED`。
     ///
-    /// # 错误
     /// 不是单据审批任务、任务非开放，或操作人、关闭原因为空或超长时返回错误。
+    ///
+    /// `data`：关闭原因。
     pub fn close_by_approval_runtime(
         &mut self,
         closed_by: impl Into<String>,
@@ -203,16 +181,11 @@ impl WorkItem {
     /// 只有带节点执行引用的单据审批任务可以使用本入口；返回实体保持原持久化
     /// 版本，供仓储以 `OPEN + version + execution_id` 执行 CAS。
     ///
-    /// # 参数
-    /// * `closed_by` - 撤回审批的操作人
-    /// * `reason` - 不可为空的撤回原因
-    /// * `at` - 取消发生时间
-    ///
-    /// # 返回
     /// 返回已进入 `CLOSED` 的任务快照。
     ///
-    /// # 错误
     /// 任务类型错误、缺少节点执行、任务非开放或关闭字段非法时返回错误。
+    ///
+    /// `closed_by`：撤回审批的操作人；`reason`：不可为空的撤回原因。
     pub fn close_for_approval_cancellation(
         mut self,
         closed_by: impl Into<String>,
@@ -232,17 +205,12 @@ impl WorkItem {
     /// 任一任务不满足关闭规则时整体返回错误，不产生部分持久化结果；空集合用于
     /// 已受阻且没有开放任务的合法取消路径。
     ///
-    /// # 参数
-    /// * `items` - 当前节点执行关联的开放审批任务
-    /// * `closed_by` - 撤回审批的操作人
-    /// * `reason` - 不可为空的撤回原因
-    /// * `at` - 取消发生时间
-    ///
-    /// # 返回
     /// 返回与输入顺序一致的已关闭任务快照。
     ///
-    /// # 错误
     /// 任一任务不满足 [`Self::close_for_approval_cancellation`] 规则时返回错误。
+    ///
+    /// `items`：当前节点执行关联的开放审批任务；`closed_by`：撤回审批的操作人。
+    /// `reason`：不可为空的撤回原因。
     pub fn close_all_for_approval_cancellation(
         items: Vec<Self>,
         closed_by: &str,
@@ -257,18 +225,12 @@ impl WorkItem {
     /// 本方法只形成确定性的实体快照，不执行 I/O。任一任务类型、执行引用、
     /// 当前责任或关闭原因不满足时，整批返回错误，调用方不得持久化部分结果。
     ///
-    /// # 参数
-    /// * `items` - Repository 按 execution 读取的全部开放审批任务
-    /// * `execution_id` - 本次审批运行时已经结束的节点执行
-    /// * `actor_id` - 当前决定人或关闭操作人
-    /// * `ending` - 完成或受控关闭方式
-    /// * `at` - 终结时间
-    ///
-    /// # 返回
     /// 返回与输入顺序一致的终态任务快照。
     ///
-    /// # 错误
     /// 任务不属于指定执行、不是开放单据审批任务、完成责任人不一致或关闭原因非法时返回错误。
+    ///
+    /// `items`：Repository 按 execution 读取的全部开放审批任务；`execution_id`：本次审批运行时已经结束的节点执行。
+    /// `actor_id`：当前决定人或关闭操作人。
     pub fn end_all_for_approval_execution(
         mut items: Vec<Self>,
         execution_id: &ApprovalNodeExecutionId,
@@ -339,9 +301,9 @@ mod tests {
         approval_item, direct_data,
     };
 
-    /// 单据审批任务固定带个人责任与节点执行，且禁止通用改派。
-    ///
-    /// 审批运行时完成后任务进入不可逆终态。
+    // 验证：单据审批任务固定带个人责任与节点执行，且禁止通用改派。
+    //
+    // 审批运行时完成后任务进入不可逆终态。
     #[test]
     fn document_approval_requires_owner_and_execution() {
         let mut item = approval_item("wi-approval");
@@ -352,7 +314,7 @@ mod tests {
         assert!(ensure_transition(WorkItemStatus::Open, WorkItemStatus::Completed).is_ok());
     }
 
-    /// 决定前置规则直接返回执行引用，并区分责任、状态、版本与引用失败。
+    // 验证：决定前置规则直接返回执行引用，并区分责任、状态、版本与引用失败。
     #[test]
     fn approval_decision_preconditions_are_owned_by_work_item() {
         let item = approval_item("wi-decision");
@@ -388,9 +350,9 @@ mod tests {
         );
     }
 
-    /// 审批取消关闭任务时保留 CAS 版本并写入受控关闭事实。
-    ///
-    /// 批量入口保持输入顺序，受阻取消的空任务集合也是合法结果。
+    // 验证：审批取消关闭任务时保留 CAS 版本并写入受控关闭事实。
+    //
+    // 批量入口保持输入顺序，受阻取消的空任务集合也是合法结果。
     #[test]
     fn approval_cancellation_closes_open_tasks_without_advancing_version() {
         let item = approval_item("wi-cancel");
@@ -421,9 +383,9 @@ mod tests {
         );
     }
 
-    /// 审批取消不得关闭独立任务、缺失执行引用或已终态任务。
-    ///
-    /// 任一非法任务都会使批量规则整体失败关闭。
+    // 验证：审批取消不得关闭独立任务、缺失执行引用或已终态任务。
+    //
+    // 任一非法任务都会使批量规则整体失败关闭。
     #[test]
     fn approval_cancellation_rejects_invalid_task_facts() {
         let generic =
@@ -463,7 +425,7 @@ mod tests {
         );
     }
 
-    /// 同一执行的遗留重复开放任务必须按确定性顺序全部完成或关闭。
+    // 验证：同一执行的遗留重复开放任务必须按确定性顺序全部完成或关闭。
     #[test]
     fn approval_runtime_ends_every_open_task_for_execution() {
         let execution_id = ApprovalNodeExecutionId::new("exec-1");
@@ -492,7 +454,7 @@ mod tests {
         }));
     }
 
-    /// 批量终结必须拒绝外来执行和完成责任人漂移。
+    // 验证：批量终结必须拒绝外来执行和完成责任人漂移。
     #[test]
     fn approval_runtime_batch_rejects_foreign_execution_or_owner() {
         assert!(

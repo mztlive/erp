@@ -26,23 +26,25 @@ pub struct CustomerAccess {
     pub(crate) service: Arc<AuthorizationService>,
 }
 impl CustomerAccess {
-    /// 绑定客户仓储、固定资源登记与身份设施。
+    /// 绑定客户授权使用的固定资源模型、仓储和身份服务，让客户入口按同一口径检查资格。
+    ///
     /// # 参数
     /// db 为客户数据库，service 为应用共享授权服务。
-    /// # 返回
+    ///
     /// 不缓存跨请求授权的客户访问器。
-    /// # 错误
-    /// 构造不执行 I/O；完整绑定由共享服务构造时检查。
+    ///
+    /// 失败条件：构造不执行 I/O；完整绑定由共享服务构造时检查。
     pub fn new(db: Database, service: Arc<AuthorizationService>) -> Self {
         Self { db, service }
     }
 
     /// 在创建前按真实负责人及其组织校验候选客户。
+    ///
     /// # 参数
     /// actor 为真实操作人，id 为拟创建客户，executor 为原写入事务。
-    /// # 返回
+    ///
     /// 创建范围覆盖候选归属时成功。
-    /// # 错误
+    ///
     /// 负责人组织缺失、无权限或范围不匹配时拒绝。
     pub async fn require_candidate(
         &self,
@@ -55,7 +57,7 @@ impl CustomerAccess {
         self.authorize_creation(actor, id, organization, valid_until, executor).await
     }
 
-    /// 将真实创建人及其组织事实构造成创建候选，不接受请求提交的负责人或授权事实。
+    // 用真实创建人及其所属组织构造拟建客户的授权对象，供建档前检查；负责人取服务端身份。
     async fn authorize_creation(
         &self,
         actor: &AuditActor,
@@ -83,13 +85,14 @@ impl CustomerAccess {
             .await?)
     }
 
-    /// 同时检查原客户范围与新增负责人的真实归属。
-    /// # 参数
-    /// actor 为当前账号，id 为客户，owner 为已验证的目标负责人，executor 为原写事务。
-    /// # 返回
-    /// 原记录与新负责人归属均在范围内时成功。
-    /// # 错误
-    /// 目标组织缺失、任一范围不匹配或身份取证失败时拒绝。
+    // 同时检查原客户范围与新增负责人的真实归属。
+    //
+    // # 参数
+    // actor 为当前账号，id 为客户，owner 为已验证的目标负责人，executor 为原写事务。
+    //
+    // 原记录与新负责人归属均在范围内时成功。
+    //
+    // 目标组织缺失、任一范围不匹配或身份取证失败时拒绝。
     pub(crate) async fn require_owner_change(
         &self,
         actor: &AuditActor,
@@ -100,13 +103,14 @@ impl CustomerAccess {
         self.require_owner_set_change(actor, id, &[owner.to_owned()].into(), executor).await
     }
 
-    /// 在原事务同时校验原客户及变更后完整负责人的归属。
-    /// # 参数
-    /// actor、id 为当前入口及客户，owners 为生效区间内的真实完整目标负责人，executor 为原写事务。
-    /// # 返回
-    /// 原客户及目标归属均满足更新范围时成功。
-    /// # 错误
-    /// 目标组织缺失、原记录或目标归属越权时拒绝。
+    // 在归属变更事务内同时核验原客户和变更后的完整负责人集合，避免授权只覆盖其中一边。
+    //
+    // # 参数
+    // actor、id 为当前入口及客户，owners 为生效区间内的真实完整目标负责人，executor 为原写事务。
+    //
+    // 原客户及目标归属均满足更新范围时成功。
+    //
+    // 目标组织缺失、原记录或目标归属越权时拒绝。
     pub(crate) async fn require_owner_set_change(
         &self,
         actor: &AuditActor,
@@ -126,7 +130,7 @@ impl CustomerAccess {
             .await?)
     }
 
-    /// 从原事务中的真实负责人关系构造候选，并保留组织关系的最近变化边界。
+    // 从原事务中的真实负责人关系构造候选，并保留组织关系的最近变化边界。
     async fn ownership_candidate(
         &self,
         id: &str,
@@ -158,28 +162,27 @@ impl CustomerAccess {
     }
 
     /// 返回身份域组织目录，用于业务筛选与责任事实。
-    /// # 参数
-    /// 无。
-    /// # 返回
+    ///
     /// 复用当前数据库的组织目录。
-    /// # 错误
-    /// 不执行 I/O。
+    ///
+    /// 失败条件：不执行 I/O。
     pub fn organization(&self) -> OrganizationDirectoryService {
         OrganizationDirectoryService::new(self.db.clone())
     }
 
     /// 复验本次查询凭证的身份、范围与有效期。
+    ///
     /// # 参数
     /// access 为本访问器生成的上下文，executor 为原执行器。
-    /// # 返回
+    ///
     /// 凭证仍有效时成功。
-    /// # 错误
+    ///
     /// 身份、映射、会话或有效期变化时拒绝。
     pub async fn validate(&self, access: &CustomerResolvedScope, executor: &mut dyn Executor) -> Result<()> {
         Ok(self.service.validate(&access.compiled, executor).await?)
     }
 
-    /// 在固定客户目录编译本阶段完整查询条件。
+    // 在固定客户目录编译本阶段完整查询条件。
     pub(super) async fn query_context(
         &self,
         actor: &AuditActor,
@@ -198,12 +201,13 @@ impl CustomerAccess {
         })
     }
 
-    /// 准备查询凭证和业务归属筛选，不预装全量客户主键。
+    /// 为列表读取准备范围凭证，并叠加客户归属筛选；查询端按条件下推，不先取出整个范围的客户 ID。
+    ///
     /// # 参数
     /// actor、permission 为当前入口，executor 为原事务。
-    /// # 返回
+    ///
     /// 当前查询凭证与「我的客户」筛选事实。
-    /// # 错误
+    ///
     /// 身份、授权或业务归属读取失败时拒绝。
     pub async fn query(
         &self,
@@ -226,11 +230,12 @@ impl CustomerAccess {
         Ok((context, CustomerReadScope { owned_customer_ids: owned }))
     }
     /// 在原业务事务使用 identity 检查完整客户及全部负责人事实。
+    ///
     /// # 参数
     /// actor、permission、customer_id 为真实入口和目标，executor 为原事务。
-    /// # 返回
+    ///
     /// 完整对象授权通过时成功，不生成查询凭证。
-    /// # 错误
+    ///
     /// 缺失、无权、版本变化或接入失败时拒绝。
     pub async fn require_with(
         &self,
@@ -250,11 +255,12 @@ impl CustomerAccess {
         )
     }
     /// 通过固定客户选择权限检查当前业务资格。
+    ///
     /// # 参数
     /// actor、customer_id 为真实账号和客户，executor 为原事务。
-    /// # 返回
+    ///
     /// 当前客户资格成立时成功。
-    /// # 错误
+    ///
     /// 仅有历史资格、客户缺失或无权时拒绝。
     pub async fn require_current(
         &self,
@@ -268,11 +274,12 @@ impl CustomerAccess {
             .await?)
     }
     /// 在独立事务检查以当前账号为首条负责人的客户创建候选。
+    ///
     /// # 参数
     /// actor 为当前账号。
-    /// # 返回
+    ///
     /// 当前创建候选同时通过功能资格和归属范围时成功。
-    /// # 错误
+    ///
     /// 身份、负责人组织、创建范围或候选有效期不满足时拒绝。
     pub async fn ensure_create(&self, actor: &AuditActor) -> Result<()> {
         let this = self.clone();
@@ -286,11 +293,12 @@ impl CustomerAccess {
             .await
     }
     /// 在原事务检查服务端创建候选；持久化前仍须带实际客户 ID 复验。
+    ///
     /// # 参数
     /// actor 为固定首条负责人的当前账号，executor 为原写事务；此时尚未分配客户 ID。
-    /// # 返回
+    ///
     /// 创建功能资格及真实负责人归属范围均通过时成功。
-    /// # 错误
+    ///
     /// 账号、负责人组织、创建范围、有效期或快照边界无效时拒绝。
     pub async fn require_create(&self, actor: &AuditActor, executor: &mut dyn Executor) -> Result<()> {
         self.require_candidate(actor, "", executor).await
@@ -301,19 +309,14 @@ pub(crate) fn business_date(at: Instant) -> Result<BusinessDate> {
     Ok(date.format("%Y-%m-%d").to_string().parse()?)
 }
 
-/// 拒绝不可见对象且不泄露存在性差异。
-///
-/// # 参数
-/// * `permission` - 对应的公共客户权限常量。
-///
-/// # 返回
-/// 读取返回 NotFound；写入返回 Forbidden。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 不可读详情不得暴露客户是否存在。
+// 将缺失和无权读取的客户统一处理为拒绝，避免从错误差异推断客户是否存在。
+//
+// # 参数
+// * `permission` - 对应的公共客户权限常量。
+//
+// 读取返回 NotFound；写入返回 Forbidden。
+//
+// 不可读详情不得暴露客户是否存在。
 pub(super) fn deny_object(permission: &Permission) -> Error {
     if permission == &customer::LIST || permission == &customer::DETAIL {
         Error::NotFound("客户不存在或无权查看".into())
@@ -322,22 +325,19 @@ pub(super) fn deny_object(permission: &Permission) -> Error {
     }
 }
 
-/// 拒绝超过查询上限的展开结果。
-///
-/// 列表与组织筛选共用同一上限（`scope` 复用本函数，避免各自硬编码 10000）。
-///
-/// # 参数
-/// * `count` - 已展开数量
-/// * `message` - 超限提示
-///
-/// # 返回
-/// 未超限时返回 `Ok`。
-///
-/// # 错误
-/// 超过 10000 时返回校验错误。
-///
-/// # 关键业务约束
-/// 不得静默截断授权或筛选身份集合。
+// 拒绝超过查询上限的展开结果。
+//
+// 列表与组织筛选共用同一上限（`scope` 复用本函数，避免各自硬编码 10000）。
+//
+// # 参数
+// * `count` - 已展开数量
+// * `message` - 超限提示
+//
+// 未超限时返回 `Ok`。
+//
+// 超过 10000 时返回校验错误。
+//
+// 不得静默截断授权或筛选身份集合。
 pub(super) fn ensure_limit(count: usize, message: &str) -> Result<()> {
     if count > QUERY_LIMIT {
         return Err(Error::ValidationError(format!("{message}，请收窄授权范围")));

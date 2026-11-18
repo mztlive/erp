@@ -18,17 +18,11 @@ pub struct PageParams {
 pub use application_core::PageView;
 /// 校验文本去除首尾空白后非空（validator 的 `length(min=1)` 对纯空白字符串不生效）。
 pub(super) use application_core::non_blank;
-/// 拒绝把 `"me"` 当作人员 ID。
-///
-/// # 参数
-/// * `ids` - 已解析的稳定人员 ID
-/// * `field` - 面向用户的字段名
-///
-/// # 返回
-/// 不含 `me` 时成功。
-///
-/// # 错误
-/// 任一 ID 为 `me` 时返回校验错误。
+// 拒绝把 `"me"` 当作人员 ID。
+//
+// 不含 `me` 时成功。任一 ID 为 `me` 时返回校验错误。
+//
+// `ids` 为已解析的稳定人员 ID。
 pub(crate) fn reject_me_ids(ids: &[String], field: &str) -> crate::Result<()> {
     if ids.iter().any(|id| id.eq_ignore_ascii_case("me")) {
         return Err(crate::Error::ValidationError(format!("{field}不得使用 me 作为人员 ID")));
@@ -50,20 +44,13 @@ pub(crate) fn reject_me_ids(ids: &[String], field: &str) -> crate::Result<()> {
 pub(crate) use application_core::normalize_sort;
 
 impl PageParams {
-    /// 归一化分页与排序参数（白名单校验 + 默认值）。
-    ///
-    /// # 参数
-    /// * `page` - 页码（`None` 取第一页）
-    /// * `page_size` - 单页条数（`None` 取默认并 clamp 到 1–100）
-    /// * `sort_by` - 排序字段；空白视为未提供
-    /// * `sort_dir` - 排序方向；空白视为未提供
-    /// * `allowed_sort` - 排序白名单
-    ///
-    /// # 返回
-    /// 返回归一化后的分页参数。
-    ///
-    /// # 错误
-    /// 字段不在白名单或方向非法时返回 `ValidationError`。
+    // 归一化分页与排序参数（白名单校验 + 默认值）。字段不在白名单或方向非法时返回 `ValidationError`。
+    //
+    // - `page`：页码（`None` 取第一页）。
+    // - `page_size`：单页条数（`None` 取默认并 clamp 到 1–100）。
+    // - `sort_by`：排序字段；空白视为未提供。
+    // - `sort_dir`：排序方向；空白视为未提供。
+    // - `allowed_sort`：排序白名单。
     pub(crate) fn normalized(
         page: Option<u64>,
         page_size: Option<u32>,
@@ -83,18 +70,11 @@ impl PageParams {
     }
 }
 
-/// 校验范围版本长度与下级约束（错误任务与差异列表共用）。
-///
-/// # 参数
-/// * `scope_version` - 跨页范围版本
-/// * `org_unit_ids` - 请求组织筛选
-/// * `include_descendants` - 是否包含有效下级
-///
-/// # 返回
-/// 校验通过返回 `Ok(())`。
-///
-/// # 错误
-/// 范围版本为空/超长，或包含下级却无组织筛选时返回 `ValidationError`。
+// 校验范围版本长度与下级约束（错误任务与差异列表共用）。
+//
+// 校验通过返回 `Ok(())`。范围版本为空/超长，或包含下级却无组织筛选时返回 `ValidationError`。
+//
+// `scope_version` 为跨页范围版本。
 pub(crate) fn check_scoped_version(
     scope_version: &Option<String>,
     org_unit_ids: &Option<application_core::QueryIds>,
@@ -109,17 +89,12 @@ pub(crate) fn check_scoped_version(
     Ok(())
 }
 
-/// 归一化处理人筛选并拒绝 `me` 占位（错误任务与差异列表共用）。
-///
-/// # 参数
-/// * `handler_user_ids` - 当前处理人筛选
-/// * `operator_user_ids` - 历史处理人筛选
-///
-/// # 返回
-/// 返回 `(当前处理人, 历史处理人)`；未提供时对应为空列表。
-///
-/// # 错误
-/// 任一 ID 为 `me` 时返回校验错误。
+// 归一化处理人筛选并拒绝 `me` 占位（错误任务与差异列表共用）。
+//
+// 返回 `(当前处理人, 历史处理人)`；未提供时对应为空列表。任一 ID 为 `me` 时返回校验错误。
+//
+// - `handler_user_ids`：当前处理人筛选。
+// - `operator_user_ids`：历史处理人筛选。
 pub(crate) fn normalize_handler_filters(
     handler_user_ids: &Option<application_core::QueryIds>,
     operator_user_ids: &Option<application_core::QueryIds>,
@@ -133,16 +108,7 @@ pub(crate) fn normalize_handler_filters(
     Ok((handler, operator))
 }
 
-/// 归一化组织筛选（错误任务与差异列表共用）。
-///
-/// # 参数
-/// * `org_unit_ids` - 请求组织筛选
-///
-/// # 返回
-/// 返回组织 ID 列表；未提供时为空（表示不按组织收窄）。
-///
-/// # 错误
-/// 不返回错误。
+// 归一化组织筛选（错误任务与差异列表共用）。返回组织 ID 列表；未提供时为空（表示不按组织收窄）。
 pub(crate) fn normalize_org_filter(org_unit_ids: &Option<application_core::QueryIds>) -> Vec<String> {
     org_unit_ids.as_ref().map(application_core::QueryIds::as_slice).unwrap_or(&[]).to_vec()
 }

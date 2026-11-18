@@ -10,12 +10,7 @@ use crate::http::state::HttpState;
 use crate::http::upload;
 
 /// 装配申请、材料及付款路由。
-/// # 参数
-/// 无。
-/// # 返回
-/// 经 JWT 与逐动作权限保护的路由集合。
-/// # 错误
-/// 不执行 I/O，不返回错误。
+/// 父路由执行 JWT 认证，业务用例校验相应操作权限。
 pub fn routes() -> Router<HttpState> {
     query_routes().merge(candidate_routes()).merge(command_routes()).merge(material_routes())
 }

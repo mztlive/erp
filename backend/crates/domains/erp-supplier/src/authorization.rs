@@ -31,74 +31,40 @@ impl std::fmt::Debug for CompiledScope {
     }
 }
 impl CompiledScope {
-    /// 读取当前凭证的策略版本。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// identity 绑定的策略版本。
-    /// # 错误
-    /// 无。
+    /// 返回签发此查询凭证时使用的权限策略版本，供范围版本比较使用；不重新查询策略。
     pub fn policy_version(&self) -> u64 {
         self.compiled.policy_version()
     }
 
-    /// 读取当前凭证的组织版本。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// identity 绑定的组织版本。
-    /// # 错误
-    /// 无。
+    /// 返回查询凭证绑定的组织版本，供调用方判断组织范围是否已经变化。
     pub fn organization_version(&self) -> u64 {
         self.compiled.organization_version()
     }
 
-    /// 读取本次授权时点。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// identity 绑定的授权时点。
-    /// # 错误
-    /// 无。
+    /// 取身份域编译本次查询时冻结的授权时点；不能把此时点用作后续请求的授权依据。
     pub fn as_of(&self) -> Instant {
         self.compiled.as_of()
     }
 
-    /// 返回身份域编译的完整授权阶段。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 必须在分页、计数与投影前完整执行的聚合阶段。
-    /// # 错误
-    /// 不执行 I/O。
+    /// 交付身份域已经编译的完整 MongoDB 授权阶段。仓储须在投影、分页或计数之前应用，不能只取其中一部分。
     pub fn stages(&self) -> &[Document] {
         self.compiled.stages()
     }
-    /// 核验固定供应商模型、当前事务、读取阶段及有效期。
-    /// # 参数
-    /// executor 为原读取执行器。
-    /// # 返回
-    /// 模型和当前读取边界均匹配时成功，不读取数据库。
-    /// # 错误
-    /// 资源、集合、行身份、输出粒度错配或凭证失效时拒绝。
+    /// 供应商仓储取数前核对固定资源、集合、行身份、对象粒度和原读取边界；模型错配、过期或更换执行器均拒
+    /// 绝，不额外查库。
     pub fn ensure_current(&self, executor: &mut dyn Executor) -> IdentityResult<()> {
         supplier_model(self.compiled.model())?;
         self.compiled.ensure_current(executor)
     }
 
-    /// 复验账号、权限、版本和有效期。
-    /// # 参数
-    /// executor 必须为原执行器。
-    /// # 返回
-    /// 凭证仍有效时成功。
-    /// # 错误
-    /// 未接线、撤权或版本变化拒绝。
+    /// 在查询结果交付前用原执行器请身份域复验账号、权限、事实版本和有效期；凭证失效或授权失败时不得返回
+    /// 旧结果。
     pub async fn validate(&self, executor: &mut dyn Executor) -> erp_identity::Result<()> {
         self.authorization.validate(&self.compiled, executor).await
     }
 }
 
-/// 完整供应商读取只接受本域固定资源、集合、行身份和对象粒度。
+// 完整供应商读取只接受本域固定资源、集合、行身份和对象粒度。
 fn supplier_model(model: &QueryModel) -> IdentityResult<()> {
     if model.resource != "supplier"
         || model.collection != <Database as SupplierExt>::SUPPLIER_ACCOUNTS
@@ -172,7 +138,7 @@ impl AccessFactsPort for Facts {
     }
 }
 
-/// 直接翻译真实维护人与业务组织；历史无值保持已知空，不以创建人回填。
+// 直接翻译真实维护人与业务组织；历史无值保持已知空，不以创建人回填。
 fn object(resource: &str, row: Document) -> erp_identity::Result<ObjectFacts> {
     Ok(ObjectFacts {
         resource: resource.into(),
@@ -189,7 +155,7 @@ fn object(resource: &str, row: Document) -> erp_identity::Result<ObjectFacts> {
         ..Default::default()
     })
 }
-/// 缺值与无有效值均表示已知无归属，损坏类型必须拒绝。
+// 缺值与无有效值均表示已知无归属，损坏类型必须拒绝。
 fn responsibility_text(row: &Document, field: &str) -> erp_identity::Result<Option<String>> {
     match row.get(field) {
         None | Some(Bson::Null) => Ok(None),
@@ -198,13 +164,7 @@ fn responsibility_text(row: &Document, field: &str) -> erp_identity::Result<Opti
     }
 }
 
-/// 构造真实对象事实与静态查询映射，供统一授权装配复用。
-/// # 参数
-/// db 为拥有领域的数据库。
-/// # 返回
-/// 不包含授权政策的事实读取器与映射。
-/// # 错误
-/// 固定查询模型非法时返回错误，构造不执行 I/O。
+/// 为身份域装配供应商对象事实读取器和固定查询映射，令单对象校验和列表谓词都使用实际维护人和业务组织。
 pub fn bindings(db: Database) -> erp_identity::Result<(Arc<dyn AccessFactsPort>, Arc<dyn AccessMapping>)> {
     let facts = Arc::new(Facts { db, resource: "supplier".into(), collection: "supplier_accounts".into() });
     let mapping = Arc::new(Mapping {
@@ -325,7 +285,7 @@ mod tests {
         assert!(mapping.predicate(&AccessFact::HistoryParticipant, &context, None).is_err());
         assert!(mapping.relation(&RelationKey::parse("source").unwrap(), &context, None).is_err());
     }
-    /// 真实维护人与组织在对象及查询两端一致；创建人不能补负责人，历史缺值保持已知空。
+    // 验证真实维护人与组织在对象及查询两端一致；创建人不能补负责人，历史缺值保持已知空。
     #[test]
     fn real_responsibility_and_legacy_empty_values_match_object_and_query_checks() {
         use erp_identity::entity::access_control::{ScopeClause, ScopedObject};

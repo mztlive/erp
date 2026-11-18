@@ -55,16 +55,7 @@ pub enum SubmissionStatus {
 }
 
 impl SubmissionStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为界面或响应展示提供销售单提交状态的中文名称；机器筛选和存储不使用该名称。
     pub fn label(&self) -> &'static str {
         match self {
             Self::InReview => "审核中",
@@ -74,16 +65,7 @@ impl SubmissionStatus {
         }
     }
 
-    /// 返回状态的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将销售单提交状态转成用于持久化和查询的稳定代码，与中文展示文案分开。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::InReview => "IN_REVIEW",
@@ -95,16 +77,8 @@ impl SubmissionStatus {
 }
 
 impl DocumentState for SubmissionStatus {
-    /// 审核中可被通过、驳回或因新提交失效；其余为终态（旧提交不复用，§6.5）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// `InReview` 的后继为 `Approved`、`Rejected`、`Superseded`；`Approved`、`Rejected`、`Superseded` 返回空切片。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 校验销售单提交状态迁移时查本状态可直接到达的后继状态；无后继即不能再迁移。
+    // 结果：`InReview` 的后继为 `Approved`、`Rejected`、`Superseded`；`Approved`、`Rejected`、`Superseded` 返回空切片。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::InReview => &[Self::Approved, Self::Rejected, Self::Superseded],
@@ -217,7 +191,7 @@ pub struct SalesOrderSubmission {
 }
 
 impl PartialEq for SalesOrderSubmission {
-    /// 全字段语义相等。
+    // 比较两份销售提交快照是否完全一致，业务字段和持久化元数据都参与比较。
     fn eq(&self, other: &Self) -> bool {
         self.base == other.base
             && self.stable.status == other.stable.status
@@ -268,21 +242,16 @@ fn validate_submission_lines(
 }
 
 impl SalesOrderSubmission {
-    /// 创建提交（不可变快照）。
+    /// 将调用方提供的业务事实冻结为提交（不可变快照），供后续按原内容追溯。
     ///
     /// 完成全部文本字段的校验与规范化，并强制不变式：卡券类目与履约期限同时
     /// 提供或同时省略、`gross = net + tax` 精确成立、行清单按 [`validate_line_list`]
     /// 去重并断言行类型与业务性质一致（§6.4/§6.5 跨行断言）。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::SalesOrderSubmissionId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
     /// 返回新建的提交实体（`InReview`）。
-    ///
-    /// # 错误
     /// 提交序号或草稿版本为零、必填为空、超长、卡券投影不完整或与业务性质冲突、金额三元组不成立或行清单非法时返回错误。
+    ///
+    /// 输入约定：
+    /// - `id`：实体主键（`erp_core::ids::SalesOrderSubmissionId`）
     pub fn new(id: SalesOrderSubmissionId, data: SalesOrderSubmissionData) -> Result<Self> {
         if data.submission_no == 0 {
             return Err(Error::from("提交序号必须为正整数"));
@@ -337,89 +306,44 @@ impl SalesOrderSubmission {
         })
     }
 
-    /// 更新提交。
-    ///
-    /// 提交头、明细形成后不可修改（数据模型 §6.5）；此方法恒拒绝，保留签名以表达
-    /// 不可变性契约。
-    ///
-    /// # 参数
-    /// * `_data` - 更新数据（被拒绝）
-    ///
-    /// # 返回
-    /// 恒返回 `Err`。
-    ///
-    /// # 错误
-    /// 恒返回「提交快照不可更新」错误。
+    /// 拒绝改写已冻结提交的表头或明细；后续编辑不能覆盖本轮审批依据。
     pub fn update(&mut self, _data: SalesOrderSubmissionData) -> Result<()> {
         Err(Error::from("已提交的销售内容不能直接修改，请返回销售单查看可用操作"))
     }
 
     /// 由当前最大提交序号计算下一次提交序号。
-    ///
-    /// # 参数
-    /// * `current_max` - 当前已冻结提交中的最大序号；尚无提交时为 `0`
-    ///
-    /// # 返回
     /// 返回严格递增的下一提交序号。
-    ///
-    /// # 错误
     /// 当前序号达到 `u32::MAX` 时返回错误。
+    ///
+    /// 输入约定：
+    /// - `current_max`：当前已冻结提交中的最大序号；尚无提交时为 `0`
     pub fn next_submission_no(current_max: u32) -> Result<u32> {
         current_max.checked_add(1).ok_or_else(|| Error::from("销售提交序号溢出"))
     }
 
     /// 判断提交是否匹配幂等收据冻结的业务身份。
+    /// 结果：销售单与提交人均一致时返回 `true`。
     ///
-    /// # 参数
-    /// * `sales_order_id` - 收据关联的销售单
-    /// * `submitted_by` - 收据关联的提交人
-    ///
-    /// # 返回
-    /// 销售单与提交人均一致时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 输入约定：
+    /// - `sales_order_id`：收据关联的销售单
+    /// - `submitted_by`：收据关联的提交人
     pub fn matches_receipt_identity(&self, sales_order_id: &str, submitted_by: &str) -> bool {
         self.sales_order_id.as_ref() == sales_order_id && self.submitted_by == submitted_by
     }
 
     /// 通过提交（`InReview → Approved`）。
-    ///
-    /// # 参数
-    /// * `updated_by` - 操作人
-    ///
-    /// # 返回
-    /// 迁移成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 当前状态不能迁到 `Approved` 时返回 [`Error::InvalidStateTransition`]。已是 `Approved` 时幂等成功。
     pub fn approve(&mut self, updated_by: impl Into<String>) -> Result<()> {
         self.transition(SubmissionStatus::Approved, updated_by)
     }
 
     /// 驳回提交（`InReview → Rejected`）。
-    ///
-    /// # 参数
-    /// * `updated_by` - 操作人
-    ///
-    /// # 返回
-    /// 迁移成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 当前状态不能迁到 `Rejected` 时返回 [`Error::InvalidStateTransition`]。已是 `Rejected` 时幂等成功。
     pub fn reject(&mut self, updated_by: impl Into<String>) -> Result<()> {
         self.transition(SubmissionStatus::Rejected, updated_by)
     }
 
     /// 标记因重新提交失效（`InReview → Superseded`）。
-    ///
-    /// # 参数
-    /// * `updated_by` - 操作人
-    ///
-    /// # 返回
-    /// 迁移成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 当前状态不能迁到 `Superseded` 时返回 [`Error::InvalidStateTransition`]。已是 `Superseded` 时幂等成功。
     pub fn mark_superseded(&mut self, updated_by: impl Into<String>) -> Result<()> {
         self.transition(SubmissionStatus::Superseded, updated_by)
@@ -451,17 +375,12 @@ impl SalesOrderSubmission {
         Ok(())
     }
 
-    /// 执行一次固定状态机迁移。
-    ///
-    /// # 参数
-    /// * `to` - 目标状态
-    /// * `updated_by` - 操作人
-    ///
-    /// # 返回
-    /// 迁移合法时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 迁移非法时返回 [`Error::InvalidStateTransition`]。
+    // 处理销售提交生命周期动作时，先按固定迁移规则校验目标，再更新状态。
+    // 结果：迁移合法时返回 `Ok(())`。
+    // 失败条件：迁移非法时返回 [`Error::InvalidStateTransition`]。
+    //
+    // 输入约定：
+    // - `to`：目标状态
     fn transition(&mut self, to: SubmissionStatus, updated_by: impl Into<String>) -> Result<()> {
         ensure_transition(self.stable.status, to)?;
         self.stable.status = to;
@@ -470,18 +389,8 @@ impl SalesOrderSubmission {
     }
 
     /// 将提交表头快照转为正式版本所需的快照入参。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回与当前提交快照字段一一对应的表头入参。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    ///
-    /// # 关键业务约束
-    /// 只复制已规范化快照，不再次 trim 或改写空合同/结算主体。
+    /// 业务边界：只复制已规范化快照，不再次 trim 或改写空合同/结算主体。
     pub fn header_snapshot_data(&self) -> HeaderSnapshotData {
         HeaderSnapshotData::from_snapshots(
             &self.customer_snapshot,
@@ -586,22 +495,17 @@ pub struct SalesOrderSubmissionLine {
 }
 
 impl SalesOrderSubmissionLine {
-    /// 创建提交行。
+    /// 销售提交时把已编辑明细冻结为本轮提交行，统一计算含税、不含税及税额。
     ///
     /// 完成文本字段校验与规范化，行金额三元组按
     /// [`erp_core::money::line_amounts`] 统一计算（§4.2 逐行舍入）；卡券行按 §6.4
     /// 校验面额小计、成交金额与配赠金额一致性。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::SalesOrderSubmissionLineId`）
-    /// * `submission_id` - 所属提交
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
     /// 返回新建的提交行。
-    ///
-    /// # 错误
     /// 行号为零、必填为空、超长、行类型与字段组不一致或卡券金额不一致时返回错误。
+    ///
+    /// 输入约定：
+    /// - `id`：实体主键（`erp_core::ids::SalesOrderSubmissionLineId`）
+    /// - `submission_id`：所属提交
     pub fn new(
         id: SalesOrderSubmissionLineId,
         submission_id: SalesOrderSubmissionId,
@@ -657,15 +561,11 @@ impl SalesOrderSubmissionLine {
     }
 
     /// 汇总提交快照行已经舍入的金额三元组。
-    ///
-    /// # 参数
-    /// * `lines` - 同一提交快照的明细行
-    ///
-    /// # 返回
     /// 返回 `(含税合计, 不含税合计, 税额合计)`；空集合返回 `0.00`。
+    /// 失败条件：金额值对象负责保持精度和范围。
     ///
-    /// # 错误
-    /// 无；金额值对象负责保持精度和范围。
+    /// 输入约定：
+    /// - `lines`：同一提交快照的明细行
     pub fn amount_totals(lines: &[Self]) -> (Amount, Amount, Amount) {
         sum_line_amounts(lines.iter().map(|line| (line.gross_amount, line.net_amount, line.tax_amount)))
     }
@@ -696,7 +596,7 @@ mod tests {
         UnitPrice::from_str(value).unwrap()
     }
 
-    /// 普通商品和赠品均须填写采购供给价；显式零价允许提交。
+    // 回归检查：普通商品和赠品均须填写采购供给价；显式零价允许提交。
     #[test]
     fn submission_requires_supply_price_including_gifts() {
         for gift in [false, true] {

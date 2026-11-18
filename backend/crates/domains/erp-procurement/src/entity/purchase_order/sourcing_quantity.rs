@@ -3,12 +3,7 @@ use erp_core::money::Quantity;
 
 /// 验证供给数量与基础单位的最小计量粒度一致。
 ///
-/// # 参数
-/// `quantity` 为本次分配数量，`scale` 来自单位主数据，`unit` 用于错误文案。
-/// # 返回
-/// 正数且小数位不超过配置时返回成功。
-/// # 错误
-/// 单位精度缺失或非法、数量非正或粒度不符时返回业务校验错误。
+/// 正数且小数位不超过配置时返回成功。单位精度缺失或非法、数量非正或粒度不符时返回业务校验错误。
 pub fn ensure_sourcing_quantity(quantity: Quantity, scale: Option<u8>, unit: &str) -> crate::Result<()> {
     let scale = scale
         .filter(|value| *value <= 6)
@@ -31,14 +26,14 @@ mod tests {
 
     use super::*;
 
-    /// 整盒拒绝半盒，尾随零不改变单位粒度。
+    // 整盒拒绝半盒，尾随零不改变单位粒度。
     #[test]
     fn whole_units_reject_fractional_allocations() {
         assert!(ensure_sourcing_quantity(Quantity::from_str("0.5").unwrap(), Some(0), "盒").is_err());
         assert!(ensure_sourcing_quantity(Quantity::from_str("1.000000").unwrap(), Some(0), "盒").is_ok());
     }
 
-    /// 可分割单位遵守各自精度，缺失配置不得按通用六位小数放行。
+    // 可分割单位遵守各自精度，缺失配置不得按通用六位小数放行。
     #[test]
     fn fractional_units_obey_configured_scale() {
         assert!(ensure_sourcing_quantity(Quantity::from_str("0.25").unwrap(), Some(2), "千克").is_ok());

@@ -16,16 +16,9 @@ use crate::repository::owned::SupplierProfileCommandRepository;
 #[allow(async_fn_in_trait)]
 pub trait SupplierProfileCommandRepositoryExt {
     /// 按客户端幂等键读取已成功命令结果。
-    ///
-    /// # 参数
-    /// * `idempotency_key` - 客户端幂等键
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 命中时返回命令；不存在时返回 `None`。
-    ///
-    /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
+    /// `idempotency_key`：客户端幂等键。
     async fn find_by_idempotency_key(
         &self,
         idempotency_key: &str,
@@ -45,16 +38,9 @@ impl SupplierProfileCommandRepositoryExt for Repository<'_, SupplierProfileComma
 
 impl<'a> SupplierRepository<'a> {
     /// 按客户端幂等键读取供应商资料命令。
-    ///
-    /// # 参数
-    /// * `idempotency_key` - 客户端幂等键
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回已成功命令；不存在时返回 `None`。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询或反序列化失败时返回错误。
+    /// `idempotency_key`：客户端幂等键。
     pub async fn profile_command(
         &self,
         idempotency_key: &str,
@@ -66,27 +52,16 @@ impl<'a> SupplierRepository<'a> {
     }
 
     /// 创建供应商角色并写入首个商务结算版本（跨集合多步骤写入）。
-    ///
-    /// 依次写入 `supplier_commercial_profile_revisions` 与 `supplier_accounts`，
-    /// 保证「商务版本 + 供应商角色」原子可见（数据模型 §6.2：供应商角色
-    /// 携带 `current_commercial_profile_revision_id` 指向当前版本）。
-    /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction`
-    /// 时两笔写入各自自动提交，中途失败会留下只有版本没有供应商角色的
-    /// 半成品；Service 必须通过 `persistence_core::Transactional::with_transaction`
-    /// 传入事务会话。
-    ///
-    /// # 参数
-    /// * `supplier` - 待写入的供应商角色（`current_commercial_profile_revision_id`
-    ///   必须已指向 `revision`）
-    /// * `revision` - 待写入的首个商务结算版本
-    /// * `executor` - 数据访问执行器，必须位于事务中
-    ///
-    /// # 返回
+    /// 依次写入 `supplier_commercial_profile_revisions` 与 `supplier_accounts`，保证「商务版本 + 供应商
+    /// 角色」原子可见（数据模型 §6.2：供应商角色携带 `current_commercial_profile_revision_id` 指向当前版
+    /// 本）。**必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction`时两笔写入各自自动提交，
+    /// 中途失败会留下只有版本没有供应商角色的半成品；Service 必须通过
+    /// `persistence_core::Transactional::with_transaction`传入事务会话。
     /// 商务版本与供应商角色都写入成功时无返回值。
-    ///
-    /// # 错误
-    /// 当供应商编号或主体归属违反唯一索引（透出 [`persistence_core::Error::DuplicateKey`]）
-    /// 或 MongoDB 写入失败时返回错误。
+    /// 当供应商编号或主体归属违反唯一索引（透出 [`persistence_core::Error::DuplicateKey`]）或 MongoDB 写
+    /// 入失败时返回错误。
+    /// `supplier`：待写入的供应商角色（`current_commercial_profile_revision_id`  必须已指向 `revision`）
+    /// `executor`：数据访问执行器，必须位于事务中。
     pub async fn create_supplier_with_initial_profile(
         &self,
         supplier: &SupplierAccount,
@@ -104,20 +79,12 @@ impl<'a> SupplierRepository<'a> {
     }
 
     /// 在同一事务内整体替换一份资质的适用能力集合。
-    ///
-    /// 调用方必须先校验能力均属于同一供应商，并传入事务执行器。
-    /// 本方法不构成原子边界，也不检查关联是否属于该资质的供应商。
-    ///
-    /// # 参数
-    /// * `qualification_id` - 被替换关联的资质 ID
-    /// * `links` - 替换后的完整关联；空集合会在删除后仍调用批量插入
-    /// * `executor` - 数据访问执行器，由调用方置于事务中
-    ///
-    /// # 返回
+    /// 调用方必须先校验能力均属于同一供应商，并传入事务执行器。本方法不构成原子边界，也不检查关联是否属
+    /// 于该资质的供应商。
     /// 旧关联删除且新关联写入成功时无返回值。
-    ///
-    /// # 错误
     /// 删除旧关联或写入新关联失败时返回错误。
+    /// `links`：空集合会在删除后仍调用批量插入。
+    /// `executor`：数据访问执行器，由调用方置于事务中。
     pub async fn replace_qualification_capabilities(
         &self,
         qualification_id: &SupplierQualificationId,

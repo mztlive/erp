@@ -34,14 +34,7 @@ pub struct CreateProcurementResponsibilityRuleRequest {
 impl CreateProcurementResponsibilityRuleRequest {
     /// 转换为实体创建数据。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回保持选择器语义的实体数据。
-    ///
-    /// # 错误
-    /// 无；选择器形状由实体构造函数校验。
+    /// 返回保持选择器语义的实体数据。选择器形状由实体构造函数校验。
     pub fn into_data(self) -> ProcurementResponsibilityRuleData {
         ProcurementResponsibilityRuleData {
             rule_type: self.rule_type,
@@ -80,16 +73,7 @@ pub struct UpdateProcurementResponsibilityRuleRequest {
 }
 
 impl UpdateProcurementResponsibilityRuleRequest {
-    /// 转换为实体整项更新数据。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回期望版本与实体数据。
-    ///
-    /// # 错误
-    /// 无；选择器形状由实体更新方法校验。
+    /// 转换为实体整项更新数据。选择器形状由实体更新方法校验。
     pub fn into_parts(self) -> (u64, ProcurementResponsibilityRuleData) {
         let version = self.version;
         let data = ProcurementResponsibilityRuleData {
@@ -162,16 +146,9 @@ pub struct ProcurementResponsibilityResolveLineView {
 }
 
 impl ProcurementResponsibilityResolveLineView {
-    /// 由必填行键构造解析行视图。
+    /// 由必填行键构造解析行视图。返回未解析、成功与失败字段为空的行视图。
     ///
-    /// # 参数
-    /// * `line_key` - 调用方行键
-    ///
-    /// # 返回
-    /// 返回未解析、成功与失败字段为空的行视图。
-    ///
-    /// # 错误
-    /// 无。
+    /// `line_key` 为调用方行键。
     pub fn new(line_key: impl Into<String>) -> Self {
         Self {
             line_key: line_key.into(),
@@ -185,15 +162,6 @@ impl ProcurementResponsibilityResolveLineView {
     }
 
     /// 设置是否解析成功。
-    ///
-    /// # 参数
-    /// * `resolved` - 是否解析成功
-    ///
-    /// # 返回
-    /// 返回更新后的行视图。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_resolved(mut self, resolved: bool) -> Self {
         self.resolved = resolved;
         self

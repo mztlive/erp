@@ -12,12 +12,11 @@ use crate::{AccessControlExt, AccessTarget, Error, Result};
 
 impl ResourceGrantService {
     /// 管理员按稳定来源授予指定记录；重放不写库。
-    /// # 参数
-    /// actor 为管理员；update 的 rule 必须为 manual，business_id 为稳定命令号。
-    /// # 返回
     /// 来源当前版本。
-    /// # 错误
+    ///
     /// 管理资格不足、接收账号无效、目标无效、来源终止或版本冲突时拒绝整个事务。
+    ///
+    /// actor 为管理员；update 的 rule 必须为 manual，business_id 为稳定命令号。
     pub async fn grant(&self, actor: &AuditActor, update: SourceUpdate) -> Result<GrantSource> {
         let this = self.clone();
         let actor = actor.clone();
@@ -36,12 +35,11 @@ impl ResourceGrantService {
             .await
     }
     /// 自动处理器发布前强制重验业务触发事实、正式分配及完整结果，不开启嵌套事务。
-    /// # 参数
-    /// update 为规则计算结果；executor 必须属于外层授权事务。
-    /// # 返回
     /// 当前来源及版本。
-    /// # 错误
+    ///
     /// 无事务、人工来源、可信事实校验失败或来源冲突时拒绝。
+    ///
+    /// update 为规则计算结果；executor 必须属于外层授权事务。
     pub async fn apply_source(
         &self,
         update: SourceUpdate,
@@ -55,12 +53,11 @@ impl ResourceGrantService {
         self.apply(update, "resource-grant-worker", executor).await
     }
     /// 永久撤销一个来源；事务提交后所有读取立即排除此来源。
-    /// # 参数
-    /// actor 为管理员；key 为来源身份；expected_version 为读取版本；reason 为撤销原因。
-    /// # 返回
     /// 终止后的来源。
-    /// # 错误
+    ///
     /// 管理资格不足、来源缺失或版本冲突拒绝。
+    ///
+    /// actor 为管理员；key 为来源身份；expected_version 为读取版本；reason 为撤销原因。
     pub async fn revoke(
         &self,
         actor: &AuditActor,
@@ -103,12 +100,11 @@ impl ResourceGrantService {
             .await
     }
     /// 管理员在同一快照查看指定接收账号的来源及终止原因。
-    /// # 参数
-    /// actor 为管理员；recipient 为接收账号；after 为上一页游标。
-    /// # 返回
     /// 最多 100 个来源及下一页游标，包含终止记录。
-    /// # 错误
+    ///
     /// 管理资格不足、读取阶段变化或数据库失败时拒绝。
+    ///
+    /// actor 为管理员；recipient 为接收账号；after 为上一页游标。
     pub async fn sources(
         &self,
         actor: &AuditActor,
@@ -129,7 +125,7 @@ impl ResourceGrantService {
             .await
     }
 
-    /// 来源及终止原因只在完成管理授权的原快照读取，不返回跨阶段结果。
+    // 已通过读取授权管理入口后，沿同一快照分页读取来源及终止原因，不交付跨阶段结果。
     async fn source_page(
         &self,
         actor: &AuditActor,
@@ -148,12 +144,11 @@ impl ResourceGrantService {
     }
 
     /// 校验读取授权的维护资格。
-    /// # 参数
-    /// actor 为当前管理员，executor 为维护事务。
-    /// # 返回
     /// 同角色具备统一范围维护的全部资格和全公司组织范围时成功。
-    /// # 错误
+    ///
     /// 身份失效、资格不足或数据库失败时拒绝。
+    ///
+    /// actor 为当前管理员，executor 为维护事务。
     pub async fn authorize_manager(&self, actor: &AuditActor, executor: &mut dyn Executor) -> Result<()> {
         self.authorization
             .require(actor, &access_control::RESOURCE_GRANT_MANAGE, AccessTarget::Operation, executor)
@@ -212,12 +207,11 @@ fn require_transaction(executor: &mut dyn Executor) -> Result<()> {
 }
 
 /// 在业务原事务追加已提交事实对应的幂等授权事件。
-/// # 参数
-/// db 为身份集合所在数据库；evidence 为正式分配证据；executor 为业务事务。
-/// # 返回
 /// 新事件返回 true，同证据重放返回 false。
-/// # 错误
+///
 /// 无事务、证据非法、幂等冲突或持久化失败拒绝。
+///
+/// db 为身份集合所在数据库；evidence 为正式分配证据；executor 为业务事务。
 pub async fn append_event(
     db: &Database,
     evidence: GrantEventEvidence,

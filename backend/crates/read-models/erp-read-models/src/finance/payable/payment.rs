@@ -28,13 +28,15 @@ impl PayableReadService {
     // 供应商付款单
     // -----------------------------------------------------------------------
 
-    /// 在原权限校验事务内读取实际付款、核销、回单及冲正的完整详情。
+    /// 读取供应商付款时，在原权限校验事务内读取实际付款、核销、回单及冲正的完整详情。
     ///
     /// # 参数
     /// * `id` - 付款事实身份。
     /// * `executor` - 当前资格校验使用的原事务执行器。
+    ///
     /// # 返回
     /// 返回与同一事务事实一致的供应商付款视图。
+    ///
     /// # 错误
     /// 付款不存在、回单缺失或关联事实读取失败时返回错误。
     pub async fn supplier_payment_detail_with_executor(
@@ -195,7 +197,7 @@ impl PayableReadService {
     }
 }
 
-/// 按调用方 ID 次序读取已批量加载的付款；缺失身份依原次序报错。
+// 依据调用方 ID 次序读取已批量加载的付款；缺失身份依原次序报错。
 fn ordered_supplier_payments<'a>(
     payment_ids: &[SupplierPaymentId],
     payments: &'a [SupplierPayment],
@@ -213,7 +215,7 @@ fn ordered_supplier_payments<'a>(
         .collect()
 }
 
-/// 以付款输入次序分组核销，并保持每组序号和身份的稳定排序。
+// 组装供应商付款时，以付款输入次序分组核销，并保持每组序号和身份的稳定排序。
 fn payment_allocation_groups(
     ordered: &[&SupplierPayment],
     allocations: &[PaymentAllocation],
@@ -241,7 +243,7 @@ fn payment_allocation_groups(
     (allocated_totals, grouped_views)
 }
 
-/// 将已经完成错误仲裁的独立投影写入付款响应，保持字段和输入次序。
+// 生成供应商付款视图时，将已经完成错误仲裁的独立投影写入付款响应，保持字段和输入次序。
 fn map_supplier_payment_views(
     ordered: &[&SupplierPayment],
     allocated_totals: Vec<Amount>,
@@ -282,13 +284,12 @@ fn map_supplier_payment_views(
         .collect()
 }
 
-/// 汇总付款核销分配并装配视图。
-///
-/// # 参数
-/// * `allocations` - 付款核销分配集合
-///
-/// # 返回
-/// 返回 `(净已核销合计, 分配视图列表)`。
+// 生成供应商付款视图时，汇总付款核销分配并装配视图。
+//
+// 调用参数：
+// * `allocations` - 付款核销分配集合
+//
+// 返回 `(净已核销合计, 分配视图列表)`。
 fn payment_allocation_view(allocations: &[PaymentAllocation]) -> (Amount, Vec<PaymentAllocationView>) {
     let mut net = zero_amount();
     let views = allocations
@@ -312,7 +313,7 @@ mod tests {
 
     use super::map_supplier_payment_views;
 
-    /// 冲正款不是可再次核销的未分配资金，部分和全额冲正均使用有效金额。
+    // 验证供应商付款：冲正款不是可再次核销的未分配资金，部分和全额冲正均使用有效金额。
     #[test]
     fn unallocated_payment_balance_excludes_formal_reversals() {
         let mut payment = SupplierPayment::new(

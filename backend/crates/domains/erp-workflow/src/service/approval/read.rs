@@ -15,18 +15,12 @@ use crate::entity::document_registry::business_document::ApprovalDefinitionBindi
 use crate::{BpmExt, Error, Result};
 
 /// 按冻结绑定的定义主键读取定义图。
-///
-/// # 参数
-/// * `db` - 审批数据库。
-/// * `binding` - 单据冻结的定义绑定。
-/// * `missing_message` - 原业务入口的定义缺失文案。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
 /// 返回绑定主键对应的定义图；本入口不增加业务版本校验。
 ///
-/// # 错误
 /// 定义缺失时返回指定冲突文案；仓储失败保留工作流错误分类。
+///
+/// `db`：审批数据库；`binding`：单据冻结的定义绑定。
+/// `missing_message`：原业务入口的定义缺失文案。
 pub async fn bound_definition_graph(
     db: &Database,
     binding: &ApprovalDefinitionBinding,
@@ -37,18 +31,12 @@ pub async fn bound_definition_graph(
 }
 
 /// 按冻结绑定的定义主键及业务版本读取定义图。
-///
-/// # 参数
-/// * `db` - 审批数据库。
-/// * `binding` - 单据冻结的定义绑定。
-/// * `missing_message` - 定义缺失或版本不匹配时沿用的冲突文案。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
 /// 返回主键及业务版本均匹配的定义图。
 ///
-/// # 错误
 /// 定义缺失或版本不匹配时返回指定冲突文案；仓储失败保留工作流错误分类。
+///
+/// `db`：审批数据库；`binding`：单据冻结的定义绑定。
+/// `missing_message`：定义缺失或版本不匹配时沿用的冲突文案。
 pub async fn exact_bound_definition_graph(
     db: &Database,
     binding: &ApprovalDefinitionBinding,
@@ -61,20 +49,14 @@ pub async fn exact_bound_definition_graph(
 
 /// 按单据启动身份的当前及历史候选作用域查找首个收据。
 ///
-/// # 参数
-/// * `db` - 审批数据库。
-/// * `document_type` - 入口确定的单据类型。
-/// * `subject` - 冻结业务对象引用。
-/// * `subject_version` - 冻结业务对象版本。
-/// * `idempotency_key` - 尚未规范化的幂等键。
-/// * `executor` - 所有查询共用的调用方执行器。
-///
-/// # 返回
 /// 返回当前作用域优先、历史作用域其次的首个命中收据；均未命中返回空值。
 /// 收据存在不代表载荷及结果已核验，调用方继续执行精确身份和结果核验。
 ///
-/// # 错误
 /// 幂等键或作用域非法、任一仓储读取失败时立即返回错误。
+///
+/// `db`：审批数据库；`document_type`：入口确定的单据类型。
+/// `subject`：冻结业务对象引用；`subject_version`：冻结业务对象版本。
+/// `idempotency_key`：尚未规范化的幂等键；`executor`：所有查询共用的调用方执行器。
 pub async fn start_receipt(
     db: &Database,
     document_type: DocumentType,
@@ -106,18 +88,12 @@ async fn start_receipt_from_store(
 }
 
 /// 按调用方提供的精确候选顺序查找首个启动收据。
-///
-/// # 参数
-/// * `db` - 审批数据库。
-/// * `scopes` - 已由命令身份合同生成的有序候选作用域。
-/// * `key` - 已规范化的幂等键。
-/// * `executor` - 所有查询共用的调用方执行器。
-///
-/// # 返回
 /// 返回首个命中收据；空候选或全部未命中返回空值。不核验收据载荷。
 ///
-/// # 错误
 /// 任一仓储读取失败时立即返回，不继续读取后续候选。
+///
+/// `db`：审批数据库；`scopes`：已由命令身份合同生成的有序候选作用域。
+/// `key`：已规范化的幂等键；`executor`：所有查询共用的调用方执行器。
 pub async fn start_receipt_for_scopes(
     db: &Database,
     scopes: &[String],

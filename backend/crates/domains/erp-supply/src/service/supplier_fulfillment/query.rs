@@ -8,17 +8,8 @@ use crate::repository::prelude::*;
 pub use crate::repository::supplier_fulfillment::SupplierFulfillmentOrderFilter as FulfillmentOrderFilter;
 
 impl SupplierFulfillmentService {
-    /// 按已组装筛选条件分页检索履约订单。
-    ///
-    /// # 参数
-    /// * `filter` - 已含授权与业务筛选的仓储条件
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 返回契约形状的分页视图。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
+    /// 用已含授权范围和业务筛选的条件读履约订单页与总数，再映射为列表视图；沿用调用方执行器，仓储错误不
+    /// 转换为空页。
     pub async fn search_fulfillment_orders(
         &self,
         filter: FulfillmentOrderFilter,
@@ -34,16 +25,8 @@ impl SupplierFulfillmentService {
     }
 }
 
-/// 将规范化查询转换为仓储筛选；授权条件由调用方注入。
-///
-/// # 参数
-/// * `query` - 已规范化的列表查询。
-///
-/// # 返回
-/// 返回 `scope` 为 `None` 的仓储筛选。
-///
-/// # 错误
-/// 不返回错误。
+/// 把规范化的订单、状态、责任人和分页参数转换为仓储筛选。这里不授予访问范围；调用方须注入已编译授权后才
+/// 可取数。
 pub fn fulfillment_order_filter(query: &FulfillmentOrderListQuery) -> FulfillmentOrderFilter {
     FulfillmentOrderFilter {
         q: query.q.clone(),

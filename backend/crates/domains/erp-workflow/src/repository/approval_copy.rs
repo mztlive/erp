@@ -68,44 +68,34 @@ pub struct CopyRepository<'a> {
 }
 impl<'a> CopyRepository<'a> {
     /// 创建仓储。
-    /// # 参数
-    /// 领域数据库。
-    /// # 返回
     /// 抄送仓储。
-    /// # 错误
-    /// 无。
+    ///
+    /// 领域数据库。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
     /// 取得不可变定义对应的配置。
-    /// # 参数
-    /// 定义 ID 和当前执行器。
-    /// # 返回
     /// 未配置时为空。
-    /// # 错误
+    ///
     /// 数据库错误。
+    ///
+    /// 定义 ID 和当前执行器。
     pub async fn config(&self, id: &str, ex: &mut dyn Executor) -> Result<Option<ApprovalCopyConfig>> {
         Repository::new(self.db, CONFIGS).find_by_id(id, ex).await
     }
     /// 在原定义 CAS 事务中整组替换配置。
-    /// # 参数
-    /// 新配置及原事务。
-    /// # 返回
-    /// 无。
-    /// # 错误
     /// 数据库错误须回滚整个事务。
+    ///
+    /// 新配置及原事务。
     pub async fn save_config(&self, config: &ApprovalCopyConfig, ex: &mut dyn Executor) -> Result<()> {
         let col = self.db.collection::<ApprovalCopyConfig>(CONFIGS);
         mongo_ops::delete_many(&col, doc! { "id": &config.base.id }, ex).await?;
         mongo_ops::insert_one(&col, config, ex).await
     }
     /// 追加一批已经去重的个人抄送。
-    /// # 参数
-    /// 同一审批事件批次和事务。
-    /// # 返回
-    /// 无。
-    /// # 错误
     /// 唯一冲突或写入失败。
+    ///
+    /// 同一审批事件批次和事务。
     pub async fn insert(&self, rows: &[ApprovalCopyReceipt], ex: &mut dyn Executor) -> Result<()> {
         if rows.is_empty() {
             return Ok(());
@@ -113,22 +103,20 @@ impl<'a> CopyRepository<'a> {
         mongo_ops::insert_many(&self.db.collection::<ApprovalCopyReceipt>(RECEIPTS), rows, ex).await
     }
     /// 读取未删除的收件原始事实，个人访问资格由 identity 核验。
-    /// # 参数
-    /// 收件 ID 和当前执行器。
-    /// # 返回
     /// 不存在时为空。
-    /// # 错误
+    ///
     /// 数据库错误。
+    ///
+    /// 收件 ID 和当前执行器。
     pub async fn receipt(&self, id: &str, ex: &mut dyn Executor) -> Result<Option<ApprovalCopyReceipt>> {
         Repository::new(self.db, RECEIPTS).find_by_id(id, ex).await
     }
     /// 以完整抄送授权条件读取精确收件记录。
-    /// # 参数
-    /// id 为真实收件身份，access 为原查询凭证，ex 为原读取执行器。
-    /// # 返回
     /// 当前账号可读的未删除、已送达记录；未命中时为空。
-    /// # 错误
+    ///
     /// 模型或执行阶段不匹配、数据库或解码失败时拒绝。
+    ///
+    /// id 为真实收件身份，access 为原查询凭证，ex 为原读取执行器。
     pub async fn authorized_receipt(
         &self,
         id: &str,
@@ -144,12 +132,11 @@ impl<'a> CopyRepository<'a> {
         Ok(rows.pop())
     }
     /// 首次阅读原子写入；重复阅读保留原时间。
-    /// # 参数
-    /// 原事务已由 identity 完整授权的 ID 集合、服务端时间和原执行器。
-    /// # 返回
     /// 实际改变的条数。
-    /// # 错误
+    ///
     /// 数据库错误。
+    ///
+    /// 原事务已由 identity 完整授权的 ID 集合、服务端时间和原执行器。
     pub async fn mark_read(&self, ids: &[String], at: i64, ex: &mut dyn Executor) -> Result<u64> {
         let filter = doc! {
             "id": { "$in": ids },
@@ -166,12 +153,11 @@ impl<'a> CopyRepository<'a> {
         .modified_count)
     }
     /// 按已授权实例分页查询抄送记录，不扩大实例读取权。
-    /// # 参数
-    /// 实例 ID、上页末尾记录 ID 和执行器。
-    /// # 返回
     /// 最多 101 条，调用方截取 100 条。
-    /// # 错误
+    ///
     /// 数据库错误。
+    ///
+    /// 实例 ID、上页末尾记录 ID 和执行器。
     pub async fn history(
         &self,
         instance: &str,
@@ -191,12 +177,11 @@ impl<'a> CopyRepository<'a> {
         .await
     }
     /// 返回本人分页和完整计数，不逐条查询。
-    /// # 参数
-    /// identity 编译的收件约束、已规范化查询和原事务执行器。
-    /// # 返回
     /// 每页 20 条及服务端统计。
-    /// # 错误
+    ///
     /// 数据库或解码错误。
+    ///
+    /// identity 编译的收件约束、已规范化查询和原事务执行器。
     pub async fn page(
         &self,
         access: &CompiledAccess,
@@ -221,7 +206,7 @@ impl<'a> CopyRepository<'a> {
         })
     }
 }
-/// 仓储只接受抄送完整记录模型，防止份额或其他集合凭证被复用。
+// 抄送仓储仅执行绑定收件记录集合的完整对象凭证；不能把份额或其他模型凭证用于收件记录。
 fn ensure_copy_model(model: &QueryModel) -> Result<()> {
     if model.resource != "approval_copy"
         || model.collection != RECEIPTS
@@ -285,12 +270,7 @@ fn list_pipeline(query: &CopyListQuery) -> Vec<Document> {
 /// 工作流领域的抄送仓储访问器。
 pub trait ApprovalCopyExt {
     /// 取得配置和收件仓储。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 当前数据库的抄送仓储。
-    /// # 错误
-    /// 无。
     fn approval_copies(&self) -> CopyRepository<'_>;
 }
 impl ApprovalCopyExt for Database {
@@ -300,12 +280,11 @@ impl ApprovalCopyExt for Database {
 }
 
 /// 声明个人抄送已提交变化，包括批量已读。
-/// # 参数
-/// topic 为消费方刷新主题。
-/// # 返回
 /// 按不可变收件账号投递的来源声明。
-/// # 错误
+///
 /// 不执行 I/O。
+///
+/// topic 为消费方刷新主题。
 pub fn changes<T>(topic: T) -> ChangeSource<T> {
     ChangeSource::personal(RECEIPTS, topic, "recipient_user_id")
 }

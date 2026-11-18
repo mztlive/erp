@@ -23,16 +23,7 @@ pub enum SettlementMode {
 }
 
 impl SettlementMode {
-    /// 返回面向业务用户的中文标签。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回结算方式中文名称。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为结算方式提供中文展示名；界面展示时使用，不以文案作为稳定标识。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Prepayment => "预付款",
@@ -46,16 +37,8 @@ impl SettlementMode {
         }
     }
 
-    /// 返回用于持久化和接口传输的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
+    /// 取得结算方式的稳定标识，供需要按代码而非展示文案识别取值的调用方使用。
     /// 返回 snake_case 结算方式代码。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Prepayment => "prepayment",
@@ -91,17 +74,9 @@ pub enum SupplierPaymentTerm {
 
 impl SupplierPaymentTerm {
     /// 解析并规范化供应商付款条件。
-    ///
-    /// 接受存量 `NET-15`、`NET-30`、`PREPAY-30` 和中文现结/预付款别名；
-    /// 新写入统一使用稳定代码。只有“先用后付”而没有账期时拒绝继续。
-    ///
-    /// # 参数
-    /// * `raw` - 付款条件代码或兼容别名
-    ///
-    /// # 返回
+    /// 接受存量 `NET-15`、`NET-30`、`PREPAY-30` 和中文现结/预付款别名；新写入统一使用稳定代码。只有“先用
+    /// 后付”而没有账期时拒绝继续。
     /// 返回可计算计划付款日的付款条件。
-    ///
-    /// # 错误
     /// 空值、合同自由文本或缺少具体账期的条件返回业务错误。
     pub fn parse(raw: &str) -> Result<Self> {
         let code = raw.trim().to_uppercase();
@@ -120,15 +95,7 @@ impl SupplierPaymentTerm {
     }
 
     /// 返回规范化后的稳定付款条件代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回采购单、提交和供应商商务版本统一使用的代码。周期条件形如 `PERIOD_<周期>_<天数>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn code(self) -> String {
         match self {
             Self::Prepay100 => "PREPAY_100".into(),
@@ -141,16 +108,7 @@ impl SupplierPaymentTerm {
         }
     }
 
-    /// 返回面向采购与财务用户的付款条件名称。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回与计划付款日规则一致的中文标签。周期条件带结算方式名称和期末后天数。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为付款条件提供中文展示名；界面展示时使用，不以文案作为稳定标识。
     pub fn label(self) -> String {
         match self {
             Self::Prepay100 => "先款 100%".into(),
@@ -166,15 +124,7 @@ impl SupplierPaymentTerm {
     }
 
     /// 返回付款条件归属的结算方式。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回必须与供应商商务版本一致的结算方式。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn settlement_mode(self) -> SettlementMode {
         match self {
             Self::Prepay100 | Self::Prepay50 | Self::Prepay30 => SettlementMode::Prepayment,
@@ -191,15 +141,7 @@ impl SupplierPaymentTerm {
     }
 
     /// 返回自然周期与期末后付款天数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// `Periodic` 返回 `(周期, 天数)`；先款、现结和货到后付返回 `None`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn calendar_due(self) -> Option<(CalendarPeriod, u16)> {
         if let Self::Periodic { period, days } = self {
             return Some((period, days));
@@ -207,7 +149,7 @@ impl SupplierPaymentTerm {
         None
     }
 
-    /// 解析可持久化的自然周期规则；限制付款间隔并拒绝不完整代码。
+    // 解读可持久化的自然周期规则；限制付款间隔并拒绝不完整代码。
     fn parse_periodic(code: &str) -> Result<Self> {
         let rest = code.strip_prefix("PERIOD_").ok_or("周期付款条件无效")?;
         let (period, days) = rest.rsplit_once('_').ok_or("周期付款条件缺少付款天数")?;
@@ -228,29 +170,13 @@ impl SupplierPaymentTerm {
     }
 
     /// 判断付款条件是否启用先款后货门禁。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// `Prepay100`、`Prepay50`、`Prepay30` 返回 `true`，其余条件返回 `false`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn prepay_gate(self) -> bool {
         matches!(self, Self::Prepay100 | Self::Prepay50 | Self::Prepay30)
     }
 
     /// 返回受控先款条件的最低付款比例，供采购冻结履约门槛。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// `Prepay100`、`Prepay50`、`Prepay30` 分别返回 100%、50%、30%；其余条件返回 `None`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     ///
     /// # Panics
     /// 先款百分比无法换成 `Rate` 时 panic。100、50、30 均在 `Rate` 精度内，正常路径不会发生。
@@ -268,15 +194,7 @@ impl SupplierPaymentTerm {
     }
 
     /// 返回以最晚预计交付日为基准的账期天数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// `PostpayNet15` 返回 `Some(15)`，`PostpayNet30` 返回 `Some(30)`；先款、现结和周期条件返回 `None`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn days_after_delivery(self) -> Option<u64> {
         match self {
             Self::PostpayNet15 => Some(15),
@@ -286,7 +204,7 @@ impl SupplierPaymentTerm {
     }
 }
 
-/// 自然周期对应付款条件的稳定代码片段。
+// 自然周期对应付款条件的稳定代码片段。
 fn period_code(period: CalendarPeriod) -> &'static str {
     match period {
         CalendarPeriod::Week => "WEEK",

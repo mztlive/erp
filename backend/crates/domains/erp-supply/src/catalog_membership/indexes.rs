@@ -7,11 +7,7 @@ use super::repository::{MEMBERS, SCANS};
 use crate::repository::supplier_catalog::ITEMS;
 
 /// 登记完整范围、账号扫描围栏及逐池成员查询索引，不清除历史证据。
-/// # 参数
-/// `db` 为当前应用数据库。
-/// # 返回
 /// 新增集合和目录规格反查索引全部建立成功。
-/// # 错误
 /// 既有重复身份、重复活动扫描或数据库错误时拒绝启动。
 pub async fn ensure_indexes(db: &Database) -> Result<()> {
     db.collection::<Document>(SCANS).create_indexes(vec![

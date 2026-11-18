@@ -40,24 +40,13 @@ pub(crate) const SUPPLIER_PROFILE_COMMANDS: &str =
     <mongodb::Database as SupplierExt>::SUPPLIER_PROFILE_COMMANDS;
 
 /// 创建本域集合的幂等命名索引。
-///
-/// 逐条落地数据模型 §6.2「必需约束与索引」：一个 `party` 至多一个供应商
-/// 角色；供应商编号唯一；`(supplier_id, revision_no)` 唯一（商务版本）；
-/// `(supplier_id, capability_code, revision_no)` 唯一（能力版本）；
-/// 供应商/资质类型/证书编号组合唯一；资质 `valid_to + status` 到期预警；
-/// 能力 `capability_code + status + valid_to` 选品与到期预警。
-///
-/// 身份类字段使用**全局唯一索引**（与 accounts 的处理一致）：`supplier_account`/
-/// `supplier_capability`/`supplier_qualification` 软删除后仍保留身份，避免
-/// 复用破坏恢复与历史单据追溯语义。
-///
-/// # 参数
-/// * `db` - 目标 MongoDB 数据库
-///
-/// # 返回
+/// 逐条落地数据模型 §6.2「必需约束与索引」：一个 `party` 至多一个供应商角色；供应商编号唯一；
+/// `(supplier_id, revision_no)` 唯一（商务版本）；`(supplier_id, capability_code, revision_no)` 唯一（能
+/// 力版本）；供应商/资质类型/证书编号组合唯一；资质 `valid_to + status` 到期预警；能力
+/// `capability_code + status + valid_to` 选品与到期预警。
+/// 身份类字段使用**全局唯一索引**（与 accounts 的处理一致）：`supplier_account`/`supplier_capability`/
+/// `supplier_qualification` 软删除后仍保留身份，避免复用破坏恢复与历史单据追溯语义。
 /// 九个集合的命名索引都创建成功时返回 `Ok(())`。
-///
-/// # 错误
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub async fn ensure(db: &Database) -> Result<()> {
     // 九集合相互独立，顺序执行保证失败定位稳定（erp-supplier-007）：
@@ -75,24 +64,20 @@ pub async fn ensure(db: &Database) -> Result<()> {
     Ok(())
 }
 
-/// 为单个集合创建一组幂等命名索引。
+// 为单个集合创建一组幂等命名索引。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
     db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
-/// 返回 `supplier_account` 的身份约束和列表查询索引。
-///
-/// `uk_supplier_accounts_id` 覆盖业务主键 `id` 的精确与 `$in` 批量读取
-/// （PROC-R10：`current_legal_names_by_account_ids` 经 `supplier_party_refs`
-/// 的 `active_ids_filter` 按 `id $in` 批量取关联，默认 `_id` 索引不能覆盖
-/// 业务字段 `id`，此前只能集合扫描）。
-/// 迁移：先运行 `SupplierRepository::duplicate_supplier_account_ids` 确认无重复
-/// `id`，再执行幂等 `ensure` 创建索引，最后用 `explain` 验证 `$in` 命中
-/// `uk_supplier_accounts_id` 且无 `COLLSCAN`。
-/// 回滚：删除 `uk_supplier_accounts_id`，批量查询退化为集合扫描，不改变数据。
-/// 失败关闭：存量存在重复 `id` 时 `ensure` 返回唯一冲突错误，部署必须中止，
-/// 先按审计诊断清理重复后再重跑，禁止跳过审计强行建索引。
+// 返回 `supplier_account` 的身份约束和列表查询索引。
+// `uk_supplier_accounts_id` 覆盖业务主键 `id` 的精确与 `$in` 批量读取（PROC-R10：
+// `current_legal_names_by_account_ids` 经 `supplier_party_refs`的 `active_ids_filter` 按 `id $in` 批量取
+// 关联，默认 `_id` 索引不能覆盖业务字段 `id`，此前只能集合扫描）。迁移：先运行
+// `SupplierRepository::duplicate_supplier_account_ids` 确认无重复`id`，再执行幂等 `ensure` 创建索引，最
+// 后用 `explain` 验证 `$in` 命中`uk_supplier_accounts_id` 且无 `COLLSCAN`。回滚：删除
+// `uk_supplier_accounts_id`，批量查询退化为集合扫描，不改变数据。失败关闭：存量存在重复 `id` 时 `ensure`
+// 返回唯一冲突错误，部署必须中止，先按审计诊断清理重复后再重跑，禁止跳过审计强行建索引。
 fn supplier_account_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_supplier_accounts_id", doc! { "id": 1 }),
@@ -110,7 +95,7 @@ fn supplier_account_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `supplier_commercial_profile_revision` 的版本唯一约束索引。
+// 提供 `supplier_commercial_profile_revision` 的版本唯一约束索引。
 fn commercial_profile_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_supplier_commercial_profile_revisions_id", doc! { "id": 1 }),
@@ -121,7 +106,7 @@ fn commercial_profile_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `supplier_capability` 的身份约束与选品/到期预警索引。
+// 提供 `supplier_capability` 的身份约束与选品/到期预警索引。
 fn capability_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_supplier_capabilities_id", doc! { "id": 1 }),
@@ -138,7 +123,7 @@ fn capability_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `supplier_capability_revision` 的版本唯一约束（追加式修订）。
+// 提供 `supplier_capability_revision` 的版本唯一约束（追加式修订）。
 fn capability_revision_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_supplier_capability_revisions_id", doc! { "id": 1 }),
@@ -149,7 +134,7 @@ fn capability_revision_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `supplier_qualification` 的身份约束与到期预警索引。
+// 提供 `supplier_qualification` 的身份约束与到期预警索引。
 fn qualification_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_supplier_qualifications_id", doc! { "id": 1 }),
@@ -169,7 +154,7 @@ fn qualification_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `supplier_qualification_revision` 的版本唯一约束（追加式修订）。
+// 提供 `supplier_qualification_revision` 的版本唯一约束（追加式修订）。
 fn qualification_revision_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_supplier_qualification_revisions_id", doc! { "id": 1 }),
@@ -185,10 +170,8 @@ fn qualification_revision_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `supplier_qualification_capability` 的关联唯一约束。
-///
-/// 资质 ↔ 能力是纯关联行（§6.2 明确适用能力），同一对关联重复写入属于
-/// 事实行重复，由唯一索引兜底拒绝。
+// 返回 `supplier_qualification_capability` 的关联唯一约束。
+// 资质 ↔ 能力是纯关联行（§6.2 明确适用能力），同一对关联重复写入属于事实行重复，由唯一索引兜底拒绝。
 fn qualification_capability_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_supplier_qualification_capabilities_id", doc! { "id": 1 }),
@@ -205,7 +188,7 @@ fn qualification_capability_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `supplier_rating_revision` 的版本唯一约束与历史查询索引。
+// 提供 `supplier_rating_revision` 的版本唯一约束与历史查询索引。
 fn rating_revision_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_supplier_rating_revisions_id", doc! { "id": 1 }),
@@ -220,7 +203,7 @@ fn rating_revision_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回根级保存命令的幂等唯一约束。
+// 提供根级保存命令的幂等唯一约束。
 fn profile_command_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_supplier_profile_commands_id", doc! { "id": 1 }),
@@ -230,7 +213,7 @@ fn profile_command_indexes() -> Vec<IndexModel> {
 
 #[cfg(test)]
 mod tests {
-    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    // 验证按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
     #[test]
     fn collections_look_up_by_unique_stable_id() {
         for indexes in [

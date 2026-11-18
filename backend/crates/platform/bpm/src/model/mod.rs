@@ -132,32 +132,15 @@ impl ProcessKind {
         (Self::PurchaseReturnOrder, "purchase_return_order"),
     ];
 
-    /// 返回已冻结的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回种类表中对应的非空稳定代码，长度不超过 [`Self::MAX_LEN`]。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 查询或传递流程配置时使用种类表中冻结的代码，而不是 Rust 变体名；代码非空且不超过 [`Self::MAX_LEN`] 字节。
     ///
     /// # Panics
-    /// 种类表漏登记当前变体时 panic。表与枚举变体一一对应，漏登记属于编程错误。
+    /// 枚举新增变体却未登记到种类表时 panic，这是定义不完整的编程错误。
     pub fn as_str(self) -> &'static str {
         Self::TABLE.iter().find(|(kind, _)| *kind == self).map(|(_, code)| *code).expect("种类表覆盖全部变体")
     }
 
-    /// 仅接受已冻结的稳定代码。
-    ///
-    /// # 参数
-    /// * `code` - 流程种类稳定代码
-    ///
-    /// # 返回
-    /// 代码属于已冻结集合时返回对应种类。
-    ///
-    /// # 错误
+    /// 从外部流程配置解码已登记的稳定代码，按原值精确匹配，不裁剪、不接受别名。
     /// 空值、超长或未登记代码返回 [`Error::InvalidProcessKind`]。
     pub fn try_from_code(code: &str) -> Result<Self> {
         if code.is_empty() || code.len() > Self::MAX_LEN {
@@ -180,63 +163,27 @@ pub struct SubjectRef {
 }
 
 impl SubjectRef {
-    /// 由调用方提供的稳定 kind/id 构造业务对象引用。
-    ///
-    /// # 参数
-    /// * `subject_kind` - 对象种类
-    /// * `subject_id` - 对象主键
-    ///
-    /// # 返回
-    /// 两个字段均非空且未超长时返回引用。
-    ///
-    /// # 错误
-    /// 空值或超出 [`SUBJECT_REF_FIELD_MAX_LEN`] 时返回 [`Error::InvalidSubjectRef`]。
+    /// 启动审批时用种类和主键绑定业务对象，只保留引用，不加载或保存单据快照。两字段都去除首尾空白；
+    /// 裁剪后为空或超出 [`SUBJECT_REF_FIELD_MAX_LEN`] 个字节时返回 [`Error::InvalidSubjectRef`]。
     pub fn new(subject_kind: impl Into<String>, subject_id: impl Into<String>) -> Result<Self> {
         let subject_kind = normalize_ref_field(subject_kind, "业务对象种类")?;
         let subject_id = normalize_ref_field(subject_id, "业务对象标识")?;
         Ok(Self { subject_kind, subject_id })
     }
 
-    /// 返回对象种类。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回构造时写入的稳定种类。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取冻结的对象种类，以便调用方选择处理该对象引用的业务类型。
     pub fn subject_kind(&self) -> &str {
         &self.subject_kind
     }
 
-    /// 返回对象主键。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回构造时写入的稳定标识。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取冻结的对象主键，供调用方在对应种类下定位单据，不需要从实例内读取业务快照。
     pub fn subject_id(&self) -> &str {
         &self.subject_id
     }
 }
 
 impl<'de> Deserialize<'de> for SubjectRef {
-    /// 反序列化后走 [`SubjectRef::new`]，空值与超长字段不得绕过构造校验。
-    ///
-    /// # 参数
-    /// * `deserializer` - 含 `subject_kind` 与 `subject_id` 的反序列化器
-    ///
-    /// # 返回
-    /// 两个字段经构造校验通过后返回引用。
-    ///
-    /// # 错误
-    /// 缺字段、类型不符，或构造拒绝空值与超长时返回反序列化错误。
+    // 回读实例的对象引用时复用 `SubjectRef::new`，保证持久化数据也遵守空白和长度约束。
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
         #[derive(Deserialize)]
         struct RawSubjectRef {
@@ -254,16 +201,8 @@ impl<'de> Deserialize<'de> for SubjectRef {
 pub struct ParticipantId(String);
 
 impl ParticipantId {
-    /// 由调用方提供的不透明处理人标识构造引用。
-    ///
-    /// # 参数
-    /// * `value` - 处理人标识
-    ///
-    /// # 返回
-    /// 非空且未超长时返回引用。
-    ///
-    /// # 错误
-    /// 空值或超出 [`PARTICIPANT_ID_MAX_LEN`] 时返回 [`Error::InvalidParticipantId`]。
+    /// 适配层把已确定的处理人标识交给 BPM 时保留其原值，不解释标识格式或裁剪。
+    /// 空值或超出 [`PARTICIPANT_ID_MAX_LEN`] 个字节时返回 [`Error::InvalidParticipantId`]。
     pub fn new(value: impl Into<String>) -> Result<Self> {
         let value = value.into();
         if value.is_empty() {
@@ -275,32 +214,14 @@ impl ParticipantId {
         Ok(Self(value))
     }
 
-    /// 返回不透明处理人标识。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回构造时写入的字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 借用 BPM 保存的处理人标识，供任务映射或身份比对使用，不进行显示名或账号解析。
     pub fn as_str(&self) -> &str {
         &self.0
     }
 }
 
 impl<'de> Deserialize<'de> for ParticipantId {
-    /// 反序列化后走 [`ParticipantId::new`]，空值与超长标识不得绕过构造校验。
-    ///
-    /// # 参数
-    /// * `deserializer` - 处理人标识字符串的反序列化器
-    ///
-    /// # 返回
-    /// 标识经构造校验通过后返回引用。
-    ///
-    /// # 错误
-    /// 类型不符，或构造拒绝空值与超长时返回反序列化错误。
+    // 从数据还原处理人引用时复用 `ParticipantId::new`，避免空值或超长身份绕过边界校验。
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
         let value = String::deserialize(deserializer)?;
         Self::new(value).map_err(serde::de::Error::custom)
@@ -312,92 +233,40 @@ impl<'de> Deserialize<'de> for ParticipantId {
 pub struct Timestamp(DateTime<Utc>);
 
 impl Timestamp {
-    /// 由调用方提供的 UTC 时间构造时间戳。
-    ///
-    /// # 参数
-    /// * `value` - 调用方已经取得的 UTC 时间
-    ///
-    /// # 返回
-    /// 返回 BPM 时间值对象。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 调用方已经取得 UTC 命令时间时用它构造 BPM 时间戳，确保状态计算不读取系统时钟。
     pub fn from_utc(value: DateTime<Utc>) -> Self {
         Self(value)
     }
 
-    /// 由调用方提供的 UTC 秒级时间戳构造。
-    ///
-    /// # 参数
-    /// * `unix_secs` - UTC 秒
-    ///
-    /// # 返回
-    /// 时间戳可表示时返回值对象。
-    ///
-    /// # 错误
-    /// 超出 `chrono` 可表示范围时返回 [`Error::InvalidTimestamp`]。
+    /// 从持久化值或调用方提供的 Unix 秒构造 UTC 时间；超出 `chrono` 表示范围时返回 [`Error::InvalidTimestamp`]。
     pub fn from_unix_secs(unix_secs: i64) -> Result<Self> {
         DateTime::<Utc>::from_timestamp(unix_secs, 0)
             .map(Self)
             .ok_or(Error::InvalidTimestamp("超出可表示范围"))
     }
 
-    /// 返回 UTC 秒级时间戳。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回秒级整数。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为序列化或持久化元数据提取 UTC Unix 秒；它可为负数，模型落盘时再检查能否写入非负秒字段。
     pub fn unix_secs(self) -> i64 {
         self.0.timestamp()
     }
 }
 
 impl Serialize for Timestamp {
-    /// 把时间戳写成 UTC 秒。
-    ///
-    /// # 参数
-    /// * `serializer` - 调用方提供的序列化器
-    ///
-    /// # 返回
-    /// 成功时返回序列化器的完成值。
-    ///
-    /// # 错误
-    /// 序列化器拒绝 `i64` 时返回其错误。本方法不再校验时间范围。
+    // 落盘使用有符号 Unix UTC 秒，保持与已存时间格式一致，不写系统本地时区。
     fn serialize<S: Serializer>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> {
         serializer.serialize_i64(self.unix_secs())
     }
 }
 
 impl<'de> Deserialize<'de> for Timestamp {
-    /// 从 UTC 秒还原时间戳，超出可表示范围时失败。
-    ///
-    /// # 参数
-    /// * `deserializer` - UTC 秒的反序列化器
-    ///
-    /// # 返回
-    /// 秒数可表示时返回 [`Timestamp`]。
-    ///
-    /// # 错误
-    /// 类型不符或超出 `chrono` 可表示范围时返回反序列化错误。
+    // 回读存储的 Unix 秒，按 `Timestamp::from_unix_secs` 检查可表示范围。
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
         let unix_secs = i64::deserialize(deserializer)?;
         Self::from_unix_secs(unix_secs).map_err(serde::de::Error::custom)
     }
 }
 
-/// 规范化引用字段：去首尾空白、拒绝空值与超长。
-///
-/// # 参数
-/// * `value` - 原始字段
-/// * `empty_message` - 空值错误说明
-///
-/// # 错误
-/// 空值或超出长度上限时返回 [`Error::InvalidSubjectRef`]。
+// 构造对象引用时统一裁剪种类与主键，并按 UTF-8 字节拒绝空值和过长字段；用 `Error::InvalidSubjectRef` 标明引用无效。
 fn normalize_ref_field(value: impl Into<String>, empty_message: &'static str) -> Result<String> {
     let value = value.into();
     let trimmed = value.trim();
@@ -419,7 +288,7 @@ mod tests {
     };
     use crate::error::Error;
 
-    /// 已冻结种类的稳定代码非空且不超过长度上限。
+    // 逐一核对已登记流程种类的稳定代码与长度，保护配置及查询使用的编码合同。
     #[test]
     fn process_kind_codes_are_stable_and_bounded() {
         let kinds = [
@@ -455,7 +324,7 @@ mod tests {
         }
     }
 
-    /// 未登记代码不得构造流程种类。
+    // 验证未登记或空代码不会被解析成默认流程种类。
     #[test]
     fn process_kind_rejects_unknown_or_empty_code() {
         assert_eq!(ProcessKind::try_from_code(""), Err(Error::InvalidProcessKind));
@@ -466,7 +335,7 @@ mod tests {
         );
     }
 
-    /// 业务对象引用拒绝空字段。
+    // 分别将业务对象种类或主键设为空或纯空白，确保不会生成不完整的引用。
     #[test]
     fn subject_ref_rejects_empty_fields() {
         assert!(SubjectRef::new(" ", "id-1").is_err());
@@ -477,7 +346,7 @@ mod tests {
         assert_eq!(subject.subject_id(), "adj-1");
     }
 
-    /// 业务对象引用拒绝超长字段，含 trim 后仍超长。
+    // 验证对象引用按裁剪后的长度校验，首尾空白不会掩盖仍超限的字段。
     #[test]
     fn subject_ref_rejects_overlong_fields() {
         let max = "k".repeat(SUBJECT_REF_FIELD_MAX_LEN);
@@ -491,7 +360,7 @@ mod tests {
         assert_eq!(trimmed_max.subject_kind(), max);
     }
 
-    /// 业务对象引用反序列化必须走 `new()`，空值与超长不得绕过。
+    // 用序列化输入覆盖裁剪及空值、超长字段，确保回读与直接构造遵循同样规则。
     #[test]
     fn subject_ref_deserialize_uses_constructor() {
         let subject = SubjectRef::new("stock_adjustment", "adj-1").unwrap();
@@ -511,14 +380,14 @@ mod tests {
         assert_eq!(trimmed, subject);
     }
 
-    /// 处理人引用拒绝空值。
+    // 验证缺失身份不会成为可分派审批任务的处理人引用。
     #[test]
     fn participant_id_rejects_empty() {
         assert!(ParticipantId::new("").is_err());
         assert_eq!(ParticipantId::new("user-1").unwrap().as_str(), "user-1");
     }
 
-    /// 处理人引用拒绝超长值，64 字节边界可构造。
+    // 用 64 字节与更长标识检查处理人身份的接受边界。
     #[test]
     fn participant_id_rejects_overlong() {
         let max = "u".repeat(PARTICIPANT_ID_MAX_LEN);
@@ -527,7 +396,7 @@ mod tests {
         assert!(ParticipantId::new(&over).is_err());
     }
 
-    /// 处理人引用反序列化必须走 `new()`，空字符串与超长不得绕过。
+    // 验证合法处理人能往返序列化，空字符串和超长标识仍不能通过持久化回读。
     #[test]
     fn participant_id_deserialize_uses_constructor() {
         let participant = ParticipantId::new("user-1").unwrap();
@@ -541,7 +410,7 @@ mod tests {
         assert!(serde_json::from_str::<ParticipantId>(&format!("\"{over}\"")).is_err());
     }
 
-    /// 时间戳只接受调用方提供的秒值。
+    // 给定固定 Unix 秒，检查 BPM 使用输入时间而非运行时钟。
     #[test]
     fn timestamp_uses_caller_provided_unix_secs() {
         let stamp = Timestamp::from_unix_secs(1_700_000_000).unwrap();
@@ -552,7 +421,7 @@ mod tests {
         assert_eq!(back, stamp);
     }
 
-    /// 超出 chrono 可表示范围的秒值必须失败关闭。
+    // 验证超出可表示范围的秒值明确报错，不产生截断的审批时间。
     #[test]
     fn timestamp_rejects_unrepresentable_unix_secs() {
         assert_eq!(Timestamp::from_unix_secs(i64::MAX), Err(Error::InvalidTimestamp("超出可表示范围")));

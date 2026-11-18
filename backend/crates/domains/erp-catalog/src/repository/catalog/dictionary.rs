@@ -57,16 +57,7 @@ pub struct ProductBrandFilter {
 }
 
 impl Default for ProductBrandFilter {
-    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回第 1 页、每页 20 条的空筛选条件。
-    ///
-    /// # 错误
-    /// 无。
+    // 品牌列表未传筛选时默认第 1 页、每页 20 条，不另加筛选条件。
     fn default() -> Self {
         let (page, page_size, sort_by, sort_ascending) = default_paging();
         Self { q: None, brand_code: None, name: None, status: None, page, page_size, sort_by, sort_ascending }
@@ -74,19 +65,11 @@ impl Default for ProductBrandFilter {
 }
 
 impl QueryFilter for ProductBrandFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。始终写入未删除的 `deleted_at`。`brand_code` 有值时精确匹配；
-    /// `name` 有值时按字面量正则匹配；`status` 有值时按稳定代码精确匹配。
-    /// `q` 为 `Some` 时对 `brand_code` 与 `name` 各写字面量正则，再以 `$or` 并入。
-    /// 分页与排序字段不进入条件。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 将品牌筛选条件编译为 MongoDB 查询，排除软删除记录。
+    //
+    // 始终写入未删除的 `deleted_at`。`brand_code` 有值时精确匹配；`name` 有值时按字面量正则匹配；`status`
+    // 有值时按稳定代码精确匹配。`q` 为 `Some` 时对 `brand_code` 与 `name` 各写字面量正则，再以 `$or` 并入。
+    // 分页与排序字段不进入条件。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(code) = &self.brand_code {
@@ -112,16 +95,7 @@ impl QueryFilter for ProductBrandFilter {
 }
 
 impl Pagination for ProductBrandFilter {
-    /// 返回商品品牌列表的页码与单页条数，不做页码归一或条数钳制。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组：第一项为 `page`，第二项为 `page_size` 转成的 `u64`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 读取商品品牌列表的页码与单页条数，不做页码归一或条数限制。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -132,18 +106,11 @@ impl Pagination for ProductBrandFilter {
 pub trait ProductBrandRepositoryExt {
     /// 分页检索商品品牌列表（投影查询）。
     ///
-    /// 只返回 [`ProductBrandRow`] 所需的列表字段；排序字段白名单化
-    /// （`created_at`/`brand_code`/`name`）。
+    /// 只返回 [`ProductBrandRow`] 所需的列表字段；排序字段白名单化（`created_at`/`brand_code`/`name`）。
     ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回当前页投影行与满足筛选条件的总数。当 MongoDB 查询、游标读取或计数失败时返回错误。
     ///
-    /// # 返回
-    /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// 沿用调用方传入的执行器。
     async fn search_product_brands(
         &self,
         filter: &ProductBrandFilter,
@@ -209,18 +176,10 @@ pub struct UnitOfMeasureFilter {
 }
 
 impl QueryFilter for UnitOfMeasureFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。始终写入未删除的 `deleted_at`。`unit_code` 有值时精确匹配；
-    /// `name` 有值时按字面量正则匹配；`status` 有值时按稳定代码精确匹配。
-    /// 分页与排序字段不进入条件。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 将计量单位筛选条件编译为 MongoDB 查询，排除软删除记录。
+    //
+    // 始终写入未删除的 `deleted_at`。`unit_code` 有值时精确匹配；`name` 有值时按字面量正则匹配；`status`
+    // 有值时按稳定代码精确匹配。分页与排序字段不进入条件。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(code) = &self.unit_code {
@@ -235,16 +194,7 @@ impl QueryFilter for UnitOfMeasureFilter {
 }
 
 impl Pagination for UnitOfMeasureFilter {
-    /// 返回计量单位列表的页码与单页条数，不做页码归一或条数钳制。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组：第一项为 `page`，第二项为 `page_size` 转成的 `u64`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 读取计量单位列表的页码与单页条数，不做页码归一或条数限制。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -255,18 +205,11 @@ impl Pagination for UnitOfMeasureFilter {
 pub trait UnitOfMeasureRepositoryExt {
     /// 分页检索计量单位列表（投影查询）。
     ///
-    /// 只返回 [`UnitOfMeasureRow`] 所需的列表字段；排序字段白名单化
-    /// （`created_at`/`unit_code`/`name`）。
+    /// 只返回 [`UnitOfMeasureRow`] 所需的列表字段；排序字段白名单化（`created_at`/`unit_code`/`name`）。
     ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回当前页投影行与满足筛选条件的总数。当 MongoDB 查询、游标读取或计数失败时返回错误。
     ///
-    /// # 返回
-    /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// 沿用调用方传入的执行器。
     async fn search_unit_of_measures(
         &self,
         filter: &UnitOfMeasureFilter,
@@ -305,17 +248,10 @@ pub struct CatalogReferenceData {
 impl<'a> CatalogRepository<'a> {
     /// 批量读取商品创建或编辑引用的分类、品牌与基础单位。
     ///
-    /// # 参数
-    /// * `category_id` - 可选分类稳定 ID；内联新建分类时传 `None`
-    /// * `brand_id` - 品牌稳定 ID
-    /// * `unit_ids` - SKU 基础单位稳定 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回命中的字典实体快照；缺失项由 Service 映射为业务错误。MongoDB 查询或反序列化失败时返回错误。
     ///
-    /// # 返回
-    /// 返回命中的字典实体快照；缺失项由 Service 映射为业务错误。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
+    /// - `category_id`：可选分类稳定 ID；内联新建分类时传 `None`。
+    /// - `unit_ids`：SKU 基础单位稳定 ID 集合。
     pub async fn catalog_reference_data(
         &self,
         category_id: Option<&ProductCategoryId>,
@@ -343,14 +279,9 @@ impl<'a> CatalogRepository<'a> {
 
     /// 按卡券默认稳定代码读取共用根分类。
     ///
-    /// # 参数
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回代码为 `VOUCHER` 的未删除分类；不存在时返回 `None`。MongoDB 查询或反序列化失败时返回错误。
     ///
-    /// # 返回
-    /// 返回代码为 `VOUCHER` 的未删除分类；不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
+    /// 沿用调用方的执行器，不另开事务。
     pub async fn voucher_root_category(
         &self,
         executor: &mut dyn Executor,
@@ -363,14 +294,9 @@ impl<'a> CatalogRepository<'a> {
 
     /// 按稳定代码或兼容名称读取卡券默认品牌。
     ///
-    /// # 参数
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 优先返回代码 `FSY` 的品牌；无代码命中时兼容返回名称“福尚云”的品牌。MongoDB 查询或反序列化失败时返回错误。
     ///
-    /// # 返回
-    /// 优先返回代码 `FSY` 的品牌；无代码命中时兼容返回名称“福尚云”的品牌。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
+    /// 沿用调用方的执行器，不另开事务。
     pub async fn voucher_default_brand(&self, executor: &mut dyn Executor) -> Result<Option<ProductBrand>> {
         let by_code = self
             .db
@@ -389,14 +315,9 @@ impl<'a> CatalogRepository<'a> {
 
     /// 按稳定代码读取卡券默认基础单位。
     ///
-    /// # 参数
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回代码为“张”的未删除计量单位；不存在时返回 `None`。MongoDB 查询或反序列化失败时返回错误。
     ///
-    /// # 返回
-    /// 返回代码为“张”的未删除计量单位；不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
+    /// 沿用调用方的执行器，不另开事务。
     pub async fn voucher_default_unit(&self, executor: &mut dyn Executor) -> Result<Option<UnitOfMeasure>> {
         self.db
             .unit_of_measures()
@@ -405,17 +326,17 @@ impl<'a> CatalogRepository<'a> {
     }
 }
 
-/// 构建商品品牌排序文档（白名单：`created_at`/`brand_code`/`name`）。
+// 构建商品品牌排序文档（白名单：`created_at`/`brand_code`/`name`）。
 fn product_brand_sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
     sort_doc(whitelisted_sort(sort_by, PRODUCT_BRAND_SORT_FIELDS), sort_ascending)
 }
 
-/// 构建计量单位排序文档（白名单：`created_at`/`unit_code`/`name`）。
+// 构建计量单位排序文档（白名单：`created_at`/`unit_code`/`name`）。
 fn unit_of_measure_sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
     sort_doc(whitelisted_sort(sort_by, UNIT_OF_MEASURE_SORT_FIELDS), sort_ascending)
 }
 
-/// 商品品牌列表投影字段。
+// 商品品牌列表投影字段。
 fn product_brand_projection() -> Document {
     doc! {
         "id": 1,
@@ -428,7 +349,7 @@ fn product_brand_projection() -> Document {
     }
 }
 
-/// 计量单位列表投影字段。
+// 计量单位列表投影字段。
 fn unit_of_measure_projection() -> Document {
     doc! {
         "id": 1,

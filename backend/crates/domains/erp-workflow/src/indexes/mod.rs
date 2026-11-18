@@ -10,14 +10,6 @@ use mongodb::Database;
 use persistence_core::Result;
 
 /// 创建工作流各集合索引。
-///
-/// # 参数
-/// * `db` - 目标 MongoDB 数据库。
-///
-/// # 返回
-/// 无返回值。
-///
-/// # 错误
 /// 任一子模块因唯一约束冲突或 MongoDB 无法创建索引而失败时返回对应错误。
 pub async fn ensure(db: &Database) -> Result<()> {
     approval_integration::ensure(db).await?;

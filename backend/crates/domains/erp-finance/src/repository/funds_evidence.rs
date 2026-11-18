@@ -18,44 +18,19 @@ pub trait FundsEvidenceExt {
     const FUNDS_BALANCE_OBSERVATIONS: &'static str = "supplier_funds_balance_observations";
 
     /// 获取账号调查租约，不删除原金融证据。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 返回账号级唯一租约仓储。
-    /// # 错误
-    /// 无。
     fn funds_scan_leases(&self) -> Repository<'_, FundsScanLease>;
-    /// 获取不可覆盖来源身份的资金证据仓储。
-    /// # 参数
-    /// 无。
-    /// # 返回
+    /// 为不可覆盖来源身份的资金证据读写提供绑定当前数据库的仓储，由调用方控制执行器。
     /// 返回拥有域仓储。
-    /// # 错误
-    /// 无。
     fn funds_evidence_inbox(&self) -> Repository<'_, FundsEvidenceInbox>;
-    /// 获取资金身份冲突的独立证据仓储。
-    /// # 参数
-    /// 无。
-    /// # 返回
+    /// 为资金身份冲突的独立证据读写提供绑定当前数据库的仓储，由调用方控制执行器。
     /// 返回独立冲突证据仓储。
-    /// # 错误
-    /// 无。
     fn funds_evidence_conflicts(&self) -> Repository<'_, FundsEvidenceConflict>;
-    /// 获取固定查询窗口检查点仓储。
-    /// # 参数
-    /// 无。
-    /// # 返回
+    /// 为固定查询窗口检查点读写提供绑定当前数据库的仓储，由调用方控制执行器。
     /// 返回可恢复检查点仓储。
-    /// # 错误
-    /// 无。
     fn funds_scan_checkpoints(&self) -> Repository<'_, FundsScanCheckpoint>;
-    /// 获取只追加的余额观察仓储。
-    /// # 参数
-    /// 无。
-    /// # 返回
+    /// 为只追加的余额观察读写提供绑定当前数据库的仓储，由调用方控制执行器。
     /// 返回余额观察仓储。
-    /// # 错误
-    /// 无。
     fn funds_balance_observations(&self) -> Repository<'_, FundsBalanceObservation>;
 }
 
@@ -78,12 +53,11 @@ impl FundsEvidenceExt for Database {
 }
 
 /// 优先恢复本账户未完成窗口，否则返回最新已完成窗口；不猜测未发生扣款。
-/// # 参数
-/// * `db` / `account` / `executor` - 已授权账户及查询执行器。
-/// # 返回
 /// 返回唯一未完成检查点或最新完成检查点。
-/// # 错误
 /// 数据库或反序列化失败时拒绝。
+///
+/// 输入约定：
+/// - `db` / `account` / `executor`：已授权账户及查询执行器。
 pub async fn funds_scan_checkpoint(
     db: &Database,
     account: &str,
@@ -112,12 +86,11 @@ pub async fn funds_scan_checkpoint(
 }
 
 /// 有界恢复未应用的稳定资金交易，待人工核对线索保留但不作为自动应用候选。
-/// # 参数
-/// * `db` / `account` / `limit` / `executor` - 当前账户和1至1000条上限。
-/// # 返回
 /// 返回按原观察时间和身份排序的待应用证据。
-/// # 错误
 /// 上限非法或读取失败时拒绝。
+///
+/// 输入约定：
+/// - `db` / `account` / `limit` / `executor`：当前账户和1至1000条上限。
 pub async fn pending_funds_evidence(
     db: &Database,
     account: &str,
@@ -140,12 +113,11 @@ pub async fn pending_funds_evidence(
 }
 
 /// 按账户和真实交易稳定身份读取证据。
-/// # 参数
-/// * `db` / `account` / `transaction` / `executor` - 原交易归属。
-/// # 返回
 /// 返回唯一交易证据或缺失。
-/// # 错误
 /// 查询失败时拒绝。
+///
+/// 输入约定：
+/// - `db` / `account` / `transaction` / `executor`：原交易归属。
 pub async fn funds_evidence_by_transaction(
     db: &Database,
     account: &str,
@@ -162,12 +134,11 @@ pub async fn funds_evidence_by_transaction(
 }
 
 /// 按精确来源订单读取资金线索，不把订单状态解释为付款。
-/// # 参数
-/// * `db` / `account` / `order` / `executor` - 已核验来源订单归属。
-/// # 返回
 /// 返回最多1000条订单关联证据。
-/// # 错误
 /// 超限或查询失败时拒绝。
+///
+/// 输入约定：
+/// - `db` / `account` / `order` / `executor`：已核验来源订单归属。
 pub async fn funds_evidence_by_order(
     db: &Database,
     account: &str,

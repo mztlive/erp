@@ -15,15 +15,8 @@ use crate::repository::FulfillmentExt;
 
 impl FulfillmentService {
     /// 在调用方已授权的事务内读取验收详情。
-    ///
-    /// # 参数
-    /// * `id` - 验收单主键
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
     /// 返回表头、行与分配。
-    ///
-    /// # 错误
+    /// `id` 为验收单主键；沿用调用方执行器 `executor`。
     /// 对象不存在或读取失败时返回错误。
     pub async fn load_customer_acceptance(
         &self,
@@ -53,7 +46,7 @@ impl FulfillmentService {
 }
 
 impl From<CustomerAcceptance> for CustomerAcceptanceView {
-    /// 从验收单实体构造视图。
+    // 从验收单实体构造视图。
     fn from(acceptance: CustomerAcceptance) -> Self {
         Self {
             id: acceptance.base.id,
@@ -71,7 +64,7 @@ impl From<CustomerAcceptance> for CustomerAcceptanceView {
 }
 
 impl From<CustomerAcceptanceLine> for CustomerAcceptanceLineView {
-    /// 从验收行实体构造视图。
+    // 从验收行实体构造视图。
     fn from(line: CustomerAcceptanceLine) -> Self {
         Self {
             id: line.base.id,
@@ -86,7 +79,7 @@ impl From<CustomerAcceptanceLine> for CustomerAcceptanceLineView {
 }
 
 impl From<AcceptanceFulfillmentAllocation> for AcceptanceAllocationView {
-    /// 从验收履约分配实体构造视图。
+    // 从验收履约分配实体构造视图。
     fn from(allocation: AcceptanceFulfillmentAllocation) -> Self {
         Self {
             id: allocation.base.id,
@@ -101,16 +94,8 @@ impl From<AcceptanceFulfillmentAllocation> for AcceptanceAllocationView {
 }
 
 /// 按创建入口原顺序构造验收表头及验收行；单号由组合层在原时点取得。
-///
-/// # 参数
-/// * `id` - 验收单主键
-/// * `acceptance_no` - 已取得的验收单号
-/// * `req` - 创建请求
-///
-/// # 返回
 /// 返回验收表头及其行。
-///
-/// # 错误
+/// `id` 为验收单主键；`acceptance_no` 为已取得的验收单号。
 /// 表头构造失败时返回对应领域错误；验收行构造失败时返回 `Logic`。
 pub fn prepare_customer_acceptance_draft(
     id: erp_core::ids::CustomerAcceptanceId,

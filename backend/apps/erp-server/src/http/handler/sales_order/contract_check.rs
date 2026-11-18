@@ -13,13 +13,7 @@ use crate::http::state::HttpState;
 use crate::wiring::sales::sales_services;
 
 /// 返回原单与所选合同的商业条款差异。
-///
-/// # 参数
-/// * `state` / `actor` - 应用状态及当前用户
-/// * `id` / `req` - 原单身份、版本及合同有效修订
-/// # 返回
 /// 返回条款来源和逐项核对结果。
-/// # 错误
 /// 无权修改、版本变化或关联不合法时拒绝。
 pub async fn sales_order_contract_check(
     State(state): State<HttpState>,

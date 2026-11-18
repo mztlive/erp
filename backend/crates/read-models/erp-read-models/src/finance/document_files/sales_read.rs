@@ -16,16 +16,16 @@ use crate::{Error, Result};
 pub(super) trait SalesFilesRead: Sync {
     type Access: Send + Sync;
 
-    /// 在原执行器生成固定销售详情查询。
+    // 读取销售财务文件时，在原执行器生成固定销售详情查询。
     async fn query(&self, actor: &AuditActor, executor: &mut dyn Executor) -> Result<Self::Access>;
-    /// 按原凭证过滤根销售单，并读取其真实财务文件。
+    // 依据原凭证过滤根销售单，并读取其真实财务文件。
     async fn load(
         &self,
         id: &str,
         access: &Self::Access,
         executor: &mut dyn Executor,
     ) -> Result<Vec<FinancialFileView>>;
-    /// 在全部文件补齐后校验同一凭证。
+    // 校验销售财务文件时，在全部文件补齐后校验同一凭证。
     async fn validate(&self, access: &Self::Access, executor: &mut dyn Executor) -> Result<()>;
 }
 
@@ -58,7 +58,7 @@ impl SalesFilesRead for BusinessFinanceFiles {
     }
 }
 
-/// 授权、来源与文件补齐、交付检查必须完整成功，才允许返回文件清单。
+// 读取销售财务文件时，授权、来源与文件补齐、交付检查必须完整成功，才允许返回文件清单。
 pub(super) async fn read(
     port: &impl SalesFilesRead,
     actor: &AuditActor,
@@ -134,7 +134,7 @@ mod tests {
         }
     }
 
-    /// 清单完整补齐后仍在原执行器完成交付检查。
+    // 验证销售财务文件：清单完整补齐后仍在原执行器完成交付检查。
     #[tokio::test]
     async fn file_list_is_delivered_after_original_query_validation() {
         let port = Files { denied: false, expires: false, calls: Mutex::new(vec![]) };
@@ -151,7 +151,7 @@ mod tests {
         );
     }
 
-    /// 无资格不读取文件；读取中到期不能交付已补齐的清单。
+    // 验证销售财务文件：无资格不读取文件；读取中到期不能交付已补齐的清单。
     #[tokio::test]
     async fn denial_stops_file_reads_and_expiry_discards_the_loaded_files() {
         let actor = AuditActor::new("sales".into(), "sales".into(), AccountKind::Admin);

@@ -25,11 +25,7 @@ pub struct DepositRechargeEvidence {
 
 impl DepositRechargeEvidence {
     /// 核验充值证据标识完整；实际审批和付款事实由服务在同一事务重验。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 返回规范化完整证据。
-    /// # 错误
     /// 任一必要证据为空或超长时拒绝。
     pub fn normalize(mut self) -> Result<Self> {
         self.approved_request_id = required(self.approved_request_id, "充值申请")?;
@@ -59,14 +55,13 @@ pub struct SupplierDepositBatch {
 
 impl SupplierDepositBatch {
     /// 创建已到账批次；未到账充值不得调用。
-    /// # 参数
-    /// * `id` / `account_id` - 批次及资金账户身份。
-    /// * `amount` - 已核实到账金额。
-    /// * `evidence` - 三方完整证据。
-    /// # 返回
     /// 返回尚未占用和使用的批次。
-    /// # 错误
     /// 金额或证据非法时拒绝。
+    ///
+    /// 输入约定：
+    /// - `id` / `account_id`：批次及资金账户身份。
+    /// - `amount`：已核实到账金额。
+    /// - `evidence`：三方完整证据。
     pub fn new(
         id: String,
         account_id: String,
@@ -87,11 +82,7 @@ impl SupplierDepositBatch {
     }
 
     /// 返回本来源批次尚可分配额度。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 充值减冲正、净使用和占用。
-    /// # 错误
+    /// 结果：充值减冲正、净使用和占用。
     /// 运算溢出或投影异常时拒绝。
     pub fn available(&self) -> Result<Amount> {
         let result = subtract(
@@ -105,12 +96,11 @@ impl SupplierDepositBatch {
     }
 
     /// 固化本批次专属占用。
-    /// # 参数
-    /// * `amount` - 本批次分配金额。
-    /// # 返回
-    /// 本批次占用增加。
-    /// # 错误
+    /// 结果：本批次占用增加。
     /// 非正或批次不足时拒绝。
+    ///
+    /// 输入约定：
+    /// - `amount`：本批次分配金额。
     pub fn reserve(&mut self, amount: Amount) -> Result<()> {
         positive(amount)?;
         if amount > self.available()? {
@@ -132,12 +122,11 @@ impl SupplierDepositBatch {
     }
 
     /// 消耗原占用并记录实际资金使用。
-    /// # 参数
-    /// * `amount` - 可归属本批次的扣款。
-    /// # 返回
-    /// 使用增加且占用同额减少。
-    /// # 错误
+    /// 结果：使用增加且占用同额减少。
     /// 非正或超过原占用时拒绝。
+    ///
+    /// 输入约定：
+    /// - `amount`：可归属本批次的扣款。
     pub fn consume(&mut self, amount: Amount) -> Result<()> {
         positive(amount)?;
         if amount > self.reserved_amount {
@@ -150,12 +139,11 @@ impl SupplierDepositBatch {
     }
 
     /// 释放无风险占用。
-    /// # 参数
-    /// * `amount` - 原占用的未使用金额。
-    /// # 返回
-    /// 本批次可用额度恢复。
-    /// # 错误
+    /// 结果：本批次可用额度恢复。
     /// 非正或超占用时拒绝。
+    ///
+    /// 输入约定：
+    /// - `amount`：原占用的未使用金额。
     pub fn release(&mut self, amount: Amount) -> Result<()> {
         positive(amount)?;
         if amount > self.reserved_amount {
@@ -166,12 +154,11 @@ impl SupplierDepositBatch {
     }
 
     /// 将实际到账返款归还原资金批次。
-    /// # 参数
-    /// * `amount` - 已核实且引用原使用的返款。
-    /// # 返回
-    /// 可用来源恢复，累计使用保留。
-    /// # 错误
+    /// 结果：可用来源恢复，累计使用保留。
     /// 非正或超过原净使用时拒绝。
+    ///
+    /// 输入约定：
+    /// - `amount`：已核实且引用原使用的返款。
     pub fn record_return(&mut self, amount: Amount) -> Result<()> {
         positive(amount)?;
         let returned = add(self.returned_amount, amount)?;
@@ -184,14 +171,13 @@ impl SupplierDepositBatch {
 }
 
 impl DepositBatchAllocation {
-    /// 按已确定的到账批次顺序分配原执行组预算。
-    /// # 参数
-    /// * `batches` - 仓储按到账时间与稳定身份排序的真实批次。
-    /// * `amount` - 原执行组待占用预算。
-    /// # 返回
-    /// 返回保持来源顺序的非零分配，并增加对应批次占用。
-    /// # 错误
-    /// 损坏历史余额、运算失败或合计不足时保留原错误；调用方须回滚整个事务。
+    // 按已确定的到账批次顺序分配原执行组预算。
+    // 返回保持来源顺序的非零分配，并增加对应批次占用。
+    // 失败条件：损坏历史余额、运算失败或合计不足时保留原错误；调用方须回滚整个事务。
+    //
+    // 输入约定：
+    // - `batches`：仓储按到账时间与稳定身份排序的真实批次。
+    // - `amount`：原执行组待占用预算。
     pub(crate) fn reserve_from(
         batches: &mut [SupplierDepositBatch],
         amount: Amount,

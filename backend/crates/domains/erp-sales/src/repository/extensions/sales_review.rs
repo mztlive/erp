@@ -22,52 +22,16 @@ pub trait SalesReviewExt {
     /// 销售变更单列表筛选条件类型。
     type SalesChangeOrderFilter;
 
-    /// 获取 `sales_change_order` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `SalesChangeOrderRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 从当前数据库取得 `sales_change_order` 集合的类型化仓储，供调用方按自身执行器访问。
     fn sales_change_orders(&self) -> SalesChangeOrderRepository<'_>;
 
-    /// 获取 `sales_change_submission` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `SalesChangeSubmissionRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 从当前数据库取得 `sales_change_submission` 集合的类型化仓储，供调用方按自身执行器访问。
     fn sales_change_submissions(&self) -> SalesChangeSubmissionRepository<'_>;
 
-    /// 获取 `sales_change_submission_line` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `SalesChangeSubmissionLineRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 从当前数据库取得 `sales_change_submission_line` 集合的类型化仓储，供调用方按自身执行器访问。
     fn sales_change_submission_lines(&self) -> SalesChangeSubmissionLineRepository<'_>;
 
-    /// 获取承载跨集合事务写入的域专用仓储。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `SalesReviewRepository` 实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得销售变更仓储，供提交流程在同一事务保存变更单与提交明细。
     fn sales_review(&self) -> SalesReviewRepository<'_>;
 }
 

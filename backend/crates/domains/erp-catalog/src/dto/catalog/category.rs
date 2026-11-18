@@ -86,13 +86,7 @@ pub struct ProductCategoryView {
 }
 
 impl From<ProductCategory> for ProductCategoryView {
-    /// 从实体构造响应视图。
-    ///
-    /// # 参数
-    /// * `category` - 商品分类实体
-    ///
-    /// # 返回
-    /// 返回响应视图。
+    // 将商品分类实体投影为接口视图，不在转换时另查关联资料。
     fn from(category: ProductCategory) -> Self {
         Self {
             id: category.base.id,
@@ -108,13 +102,7 @@ impl From<ProductCategory> for ProductCategoryView {
 }
 
 impl From<ProductCategoryRow> for ProductCategoryView {
-    /// 从投影行构造响应视图，与 `From<ProductCategory>` 同语义。
-    ///
-    /// # 参数
-    /// * `row` - 商品分类列表投影行
-    ///
-    /// # 返回
-    /// 返回响应视图。
+    // 从投影行构造响应视图，与 `From<ProductCategory>` 同语义。
     fn from(row: ProductCategoryRow) -> Self {
         Self {
             id: row.id,
@@ -173,18 +161,11 @@ pub(crate) struct ProductCategoryListQuery {
 }
 
 impl ProductCategoryListParams {
-    /// 归一化商品分类列表查询参数。
-    ///
-    /// 文本筛选去首尾空白、`root` 特判根分类、分页取默认值、排序字段过白名单校验。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    // 归一化商品分类列表查询参数。
+    //
+    // 文本筛选去首尾空白、`root` 特判根分类、分页取默认值、排序字段过白名单校验。
+    //
+    // 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<ProductCategoryListQuery> {
         let parent_category_id =
             match self.parent_category_id.as_deref().map(str::trim).filter(|value| !value.is_empty()) {

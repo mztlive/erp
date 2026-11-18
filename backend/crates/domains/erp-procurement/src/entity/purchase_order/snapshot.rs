@@ -30,14 +30,7 @@ impl SupplierSnapshot {
     ///
     /// 校验并规范化供应商名称（去首尾空白、非空、长度上限）。
     ///
-    /// # 参数
-    /// * `supplier_name` - 供应商名称
-    ///
-    /// # 返回
-    /// 返回快照实例。
-    ///
-    /// # 错误
-    /// 名称为空或超长时返回错误。
+    /// 返回快照实例。名称为空或超长时返回错误。
     pub fn new(supplier_name: String) -> Result<Self> {
         let supplier_name = normalize_required_text(
             supplier_name,
@@ -70,18 +63,11 @@ impl PaymentTermSnapshot {
     ///
     /// 校验并规范化付款条件代码，并拒绝负的金额/比例门槛。
     ///
-    /// # 参数
-    /// * `payment_term_code` - 付款条件代码
-    /// * `prepay_gate` - 是否先款后货
-    /// * `prepay_minimum_amount` - 履约前最低有效付款金额（可空）
-    /// * `prepay_minimum_ratio` - 履约前最低有效付款比例（可空）
-    /// * `resolve_term` - 供应商提供方的历史快照解析回调，在代码规范化后、门禁校验前调用
+    /// 返回快照实例。代码为空、不是可计算的受控付款条件、门禁与条件不一致，或金额/比例门槛为负时返回错误。
     ///
-    /// # 返回
-    /// 返回快照实例。
-    ///
-    /// # 错误
-    /// 代码为空、不是可计算的受控付款条件、门禁与条件不一致，或金额/比例门槛为负时返回错误。
+    /// - `prepay_minimum_amount`：履约前最低有效付款金额（可空）。
+    /// - `prepay_minimum_ratio`：履约前最低有效付款比例（可空）。
+    /// - `resolve_term`：供应商提供方的历史快照解析回调，在代码规范化后、门禁校验前调用。
     pub fn new(
         payment_term_code: String,
         prepay_gate: bool,
@@ -123,14 +109,9 @@ impl PaymentTermSnapshot {
 
     /// 计算当前版本履约前必须达到的累计付款金额。
     ///
-    /// # 参数
-    /// * `gross_amount` - 当前生效采购版本含税总额。
+    /// 非先款条件返回 `None`；同时冻结金额与比例时取较大门槛。先款门槛缺失、负值或比例运算溢出时返回错误。
     ///
-    /// # 返回
-    /// 非先款条件返回 `None`；同时冻结金额与比例时取较大门槛。
-    ///
-    /// # 错误
-    /// 先款门槛缺失、负值或比例运算溢出时返回错误。
+    /// `gross_amount` 为当前生效采购版本含税总额。
     pub fn required_prepayment(&self, gross_amount: Amount) -> Result<Option<Amount>> {
         if !self.prepay_gate {
             return Ok(None);
@@ -162,19 +143,12 @@ impl PaymentTermSnapshot {
 
     /// 计算采购应付的计划付款日。
     ///
-    /// 先款/现结条件以采购最终通过日为付款日；货到 15/30 天条件以提交行中
-    /// 最晚预计交付日为基准。未知付款条件不得静默回退为当天。
+    /// 先款/现结条件以采购最终通过日为付款日；货到 15/30 天条件以提交行中最晚预计交付日为基准。未知付款条件不得静默回退为当天。
     ///
-    /// # 参数
-    /// * `approved_on` - 采购单最终通过的业务日期
-    /// * `expected_delivery_on` - 商品/服务行最晚预计交付日
-    /// * `resolve_term` - 供应商提供方的历史快照解析回调，先于交付日期校验调用
+    /// 返回由冻结付款条件确定的计划付款日。后付条件缺少预计交付日、条件未登记规则或日期溢出时返回错误。
     ///
-    /// # 返回
-    /// 返回由冻结付款条件确定的计划付款日。
-    ///
-    /// # 错误
-    /// 后付条件缺少预计交付日、条件未登记规则或日期溢出时返回错误。
+    /// - `approved_on`：采购单最终通过的业务日期。
+    /// - `resolve_term`：供应商提供方的历史快照解析回调，先于交付日期校验调用。
     pub fn payable_due_date(
         &self,
         approved_on: BusinessDate,

@@ -39,7 +39,7 @@ pub struct UserRoleView {
 }
 
 impl From<UserRole> for UserRoleView {
-    /// 从实体构造响应视图。
+    // 将用户角色绑定映射为管理响应，保留授予、有效期和撤权事实。
     fn from(binding: UserRole) -> Self {
         Self {
             id: binding.base.id,
@@ -87,14 +87,9 @@ impl AssignUserRoleRequest {
     ///
     /// 未提供生效时间时使用当前时刻。
     ///
-    /// # 参数
-    /// * `assigned_by` - 分配人（账号或系统身份）
-    ///
-    /// # 返回
-    /// 返回实体层创建数据。
-    ///
-    /// # 错误
     /// 输入无效或时间戳超出可表示范围时返回校验错误。
+    ///
+    /// `assigned_by`：分配人（账号或系统身份）。
     pub fn into_data(self, assigned_by: &str) -> Result<UserRoleData> {
         self.validate()?;
         Ok(UserRoleData {
@@ -120,15 +115,7 @@ pub struct RevokeUserRoleRequest {
 
 impl RevokeUserRoleRequest {
     /// 转换为实体撤权数据。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回实体层撤权数据；没有原因说明时不写入说明。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn into_revoke_data(self) -> UserRoleRevokeData {
         let data = UserRoleRevokeData::new(self.revoke_reason_code);
         match self.revoke_reason_text {
@@ -138,7 +125,7 @@ impl RevokeUserRoleRequest {
     }
 }
 
-/// 在请求边界拒绝符号溢出和超出日历表示范围的时间戳。
+// 角色绑定请求进入实体前，将时间戳解析为有效时间点；符号溢出或超出日历表示范围时拒绝。
 fn parse_time(seconds: u64) -> Result<Instant> {
     let seconds =
         i64::try_from(seconds).map_err(|_| Error::ValidationError("时间戳超出可表示范围".into()))?;

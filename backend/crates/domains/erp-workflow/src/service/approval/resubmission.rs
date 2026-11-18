@@ -11,18 +11,13 @@ use crate::service::work_item::approval_rework::complete_rework;
 use crate::{Error, Result};
 
 /// 在新提交快照保存前校验重提规则，并关闭前次驳回处理待办。
-///
-/// # 参数
-/// * `db` - 审批数据库。
-/// * `snapshot` - 本次新实例的冻结快照。
-/// * `reason` - 请求中的重新提交说明，必须同时进入入口命令摘要。
-/// * `actor_id` - 已完成业务提交授权的操作人。
-/// * `now` - 本次提交时间。
-/// * `executor` - 创建新提交及实例的同一事务执行器。
-/// # 返回
 /// 快照记录规范化说明，旧实例待办已关闭时返回。
-/// # 错误
+///
 /// 历史未结束、版本未递增、驳回后说明为空、身份冲突或数据库失败时返回错误。
+///
+/// `db`：审批数据库；`snapshot`：本次新实例的冻结快照。
+/// `reason`：请求中的重新提交说明，必须同时进入入口命令摘要；`actor_id`：已完成业务提交授权的操作人。
+/// `executor`：创建新提交及实例的同一事务执行器。
 pub async fn complete_resubmission(
     db: &Database,
     snapshot: &mut ApprovalSubjectSnapshot,

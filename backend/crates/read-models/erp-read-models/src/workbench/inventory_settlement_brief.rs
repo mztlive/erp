@@ -38,7 +38,7 @@ struct SettlementBriefContext {
     source_evidence_by_hash: HashMap<String, SupplierSettlementSourceEvidence>,
 }
 
-/// 从提交事务已保存的调整单与明细捕获审批展示，只补读关联资料标签。
+/// 生成库存调整与结算简报视图时，从提交事务已保存的调整单与明细捕获审批展示，只补读关联资料标签。
 ///
 /// # 参数
 /// * `db` - 当前数据库
@@ -79,18 +79,13 @@ pub async fn capture_stock_adjustment_display(
 }
 
 impl WorkbenchFactsReader<'_> {
-    /// 库存调整审批任务的对象事实。
-    ///
-    /// # 参数
-    /// * `keys` - 本批任务引用的对象键
-    /// * `facts` - 输出的对象事实表
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 成功时写入调整原因、说明和明细方向数量。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
+    // 读取库存调整与结算简报时，库存调整审批任务的对象事实。
+    //
+    // 调用参数：
+    // * `keys` - 本批任务引用的对象键
+    // * `facts` - 输出的对象事实表
+    //
+    // 成功时写入调整原因、说明和明细方向数量。
     pub(super) async fn load_stock_adjustment_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -119,18 +114,13 @@ impl WorkbenchFactsReader<'_> {
         Ok(())
     }
 
-    /// 供应商结算复核任务的对象事实。
-    ///
-    /// # 参数
-    /// * `keys` - 本批任务引用的对象键
-    /// * `facts` - 输出的对象事实表
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 成功时写入结算期间和双方金额。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
+    // 读取库存调整与结算简报时，供应商结算复核任务的对象事实。
+    //
+    // 调用参数：
+    // * `keys` - 本批任务引用的对象键
+    // * `facts` - 输出的对象事实表
+    //
+    // 成功时写入结算期间和双方金额。
     pub(super) async fn load_supplier_settlement_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -152,17 +142,14 @@ impl WorkbenchFactsReader<'_> {
         Ok(())
     }
 
-    /// 批量读取供应商结算的明细、差异、补证和冻结来源证据。
-    ///
-    /// # 参数
-    /// * `statements` - 本批已授权供应商结算单
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回按结算单和差异分组的工作台简报上下文。
-    ///
-    /// # 错误
-    /// 任一仓储批量查询失败时返回错误。
+    // 处理库存调整与结算简报时，批量读取供应商结算的明细、差异、补证和冻结来源证据。
+    //
+    // 调用参数：
+    // * `statements` - 本批已授权供应商结算单
+    //
+    // 返回按结算单和差异分组的工作台简报上下文。
+    //
+    // 任一仓储批量查询失败时返回错误。
     async fn supplier_settlement_brief_context(
         &self,
         statements: &[SupplierSettlementStatement],
@@ -209,17 +196,12 @@ impl WorkbenchFactsReader<'_> {
         })
     }
 
-    /// 读取本批库存调整明细并转成按调整单分组的简报行。
-    ///
-    /// # 参数
-    /// * `adjustment_ids` - 调整单 ID
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回调整单 ID 到简报行。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
+    // 处理库存调整与结算简报时，读取本批库存调整明细并转成按调整单分组的简报行。
+    //
+    // 调用参数：
+    // * `adjustment_ids` - 调整单 ID
+    //
+    // 返回调整单 ID 到简报行。
     async fn stock_adjustment_brief_lines(
         &self,
         adjustment_ids: &[String],
@@ -236,17 +218,15 @@ impl WorkbenchFactsReader<'_> {
         self.stock_adjustment_brief_lines_from_facts(&lines, executor).await
     }
 
-    /// 从本批已持有的明细构造简报行，只查询 SKU 标签。
-    ///
-    /// # 参数
-    /// * `lines` - 本批明细，保持调用方事实顺序
-    /// * `executor` - 同一读取阶段的执行器
-    ///
-    /// # 返回
-    /// 返回按调整单分组的简报行。
-    ///
-    /// # 错误
-    /// SKU 标签读取失败时返回错误。
+    // 从本批已持有的明细组装简报行，只查询 SKU 标签。
+    //
+    // 调用参数：
+    // * `lines` - 本批明细，保持调用方事实顺序
+    // * `executor` - 同一读取阶段的执行器
+    //
+    // 返回按调整单分组的简报行。
+    //
+    // SKU 标签读取失败时返回错误。
     async fn stock_adjustment_brief_lines_from_facts(
         &self,
         lines: &[StockAdjustmentLine],
@@ -264,17 +244,12 @@ impl WorkbenchFactsReader<'_> {
         Ok(grouped)
     }
 
-    /// 批量读取库存调整涉及的仓库名称与业务代码。
-    ///
-    /// # 参数
-    /// * `adjustments` - 本批库存调整单
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回仓库 ID 到可读仓库标签；修订缺失时仅保留仓库业务代码。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
+    // 补齐库存调整与结算简报的展示名称时，批量读取库存调整涉及的仓库名称与业务代码。
+    //
+    // 调用参数：
+    // * `adjustments` - 本批库存调整单
+    //
+    // 返回仓库 ID 到可读仓库标签；修订缺失时仅保留仓库业务代码。
     async fn stock_adjustment_warehouse_labels(
         &self,
         adjustments: &[StockAdjustment],
@@ -310,17 +285,12 @@ impl WorkbenchFactsReader<'_> {
             .collect())
     }
 
-    /// 批量读取库存调整涉及的 SKU 名称、规格和业务编号。
-    ///
-    /// # 参数
-    /// * `lines` - 本批库存调整明细
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回 SKU ID 到可读标签；修订缺失时仅保留 SKU 业务编号。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
+    // 补齐库存调整与结算简报的展示名称时，批量读取库存调整涉及的 SKU 名称、规格和业务编号。
+    //
+    // 调用参数：
+    // * `lines` - 本批库存调整明细
+    //
+    // 返回 SKU ID 到可读标签；修订缺失时仅保留 SKU 业务编号。
     async fn stock_adjustment_sku_labels(
         &self,
         lines: &[StockAdjustmentLine],
@@ -356,7 +326,7 @@ impl WorkbenchFactsReader<'_> {
     }
 }
 
-/// 统一生成结算任务展示，保持权威事实与可读简报的职责分离。
+// 处理库存调整与结算简报时，统一生成结算任务展示，保持权威事实与可读简报的职责分离。
 fn settlement_workbench_fact(
     statement: &SupplierSettlementStatement,
     context: &SettlementBriefContext,
@@ -474,7 +444,7 @@ fn settlement_evidence_sections(
     }
 }
 
-/// 使用唯一构造器投影库存调整的权威字段、简报与审批主题版本。
+// 使用唯一生成器投影库存调整的权威字段、简报与审批主题版本。
 fn stock_adjustment_workbench_fact(
     adjustment: &StockAdjustment,
     warehouse: Option<String>,
@@ -512,7 +482,7 @@ fn stock_adjustment_workbench_fact(
     fact
 }
 
-/// 按差异分组不可变补证。
+// 汇总库存调整与结算简报时，按差异分组不可变补证。
 fn group_settlement_evidence(
     evidence: Vec<SupplierSettlementDifferenceEvidence>,
 ) -> HashMap<String, Vec<SupplierSettlementDifferenceEvidence>> {
@@ -523,7 +493,7 @@ fn group_settlement_evidence(
     grouped
 }
 
-/// 返回供应商账单号和冻结版本。
+// 生成库存调整与结算简报视图时，给出供应商账单号和冻结版本。
 fn external_bill_label(statement: &SupplierSettlementStatement) -> Option<String> {
     let number = statement.external_bill_no.as_deref()?.trim();
     if number.is_empty() {
@@ -536,7 +506,7 @@ fn external_bill_label(statement: &SupplierSettlementStatement) -> Option<String
     })
 }
 
-/// 来源证据以已冻结账单号与版本展示，不暴露原始对象引用。
+// 生成库存调整与结算简报视图时，来源证据以已冻结账单号与版本展示，不暴露原始对象引用。
 fn settlement_bill_evidence_label(source: &SupplierSettlementSourceEvidence) -> Option<String> {
     bill_evidence_name(&source.external_bill_no, &source.external_bill_version)
 }
@@ -550,7 +520,7 @@ fn bill_evidence_name(number: &str, version: &str) -> Option<String> {
     })
 }
 
-/// 返回结算差异总量和待处理量。
+// 生成库存调整与结算简报视图时，给出结算差异总量和待处理量。
 fn settlement_difference_summary(total: usize, pending: usize) -> String {
     if total == 0 {
         "双方金额一致，无差异项".to_string()
@@ -561,7 +531,7 @@ fn settlement_difference_summary(total: usize, pending: usize) -> String {
     }
 }
 
-/// 把差异或无差异明细转成工作台可判断的行级简报。
+// 组装库存调整与结算简报时，把差异或无差异明细转成工作台可判断的行级简报。
 fn settlement_brief_lines(
     items: &[SupplierSettlementItem],
     differences: &[&SupplierSettlementDifference],
@@ -624,17 +594,13 @@ fn settlement_brief_lines(
         .collect()
 }
 
-/// 把库存调整明细转成简报行。
-///
-/// # 参数
-/// * `line` - 调整明细
-/// * `sku_label` - SKU 名称、规格和业务编号
-///
-/// # 返回
-/// 返回 SKU、方向和数量；SKU 资料缺失时使用明确占位，不回退内部 ID。
-///
-/// # 错误
-/// 无。
+// 组装库存调整与结算简报时，把库存调整明细转成简报行。
+//
+// 调用参数：
+// * `line` - 调整明细
+// * `sku_label` - SKU 名称、规格和业务编号
+//
+// 返回 SKU、方向和数量；SKU 资料缺失时使用明确占位，不回退内部 ID。
 fn stock_brief_line(line: &StockAdjustmentLine, sku_label: Option<&str>) -> BriefLine {
     BriefLine {
         title: format!("{} · {}", sku_label.unwrap_or("SKU 名称待补全"), line.direction.label()),
@@ -643,18 +609,14 @@ fn stock_brief_line(line: &StockAdjustmentLine, sku_label: Option<&str>) -> Brie
     }
 }
 
-/// 组装库存简报中的 SKU 可读标题。
-///
-/// # 参数
-/// * `sku_no` - SKU 业务编号
-/// * `name` - 当前修订名称
-/// * `specification` - 当前修订规格
-///
-/// # 返回
-/// 返回“名称 规格 · 编号”；名称缺失时仅返回业务编号。
-///
-/// # 错误
-/// 无。
+// 处理库存调整与结算简报时，组装库存简报中的 SKU 可读标题。
+//
+// 调用参数：
+// * `sku_no` - SKU 业务编号
+// * `name` - 当前修订名称
+// * `specification` - 当前修订规格
+//
+// 返回“名称 规格 · 编号”；名称缺失时仅返回业务编号。
 fn sku_brief_title(sku_no: &str, name: Option<&str>, specification: Option<&str>) -> String {
     let sku_no = sku_no.trim();
     let name = name.map(str::trim).filter(|value| !value.is_empty());
@@ -680,7 +642,7 @@ mod tests {
         value.parse().expect("测试数量必须合法")
     }
 
-    /// 构造审批中调整单以校验实时及冻结简报共用的投影。
+    // 处理库存调整与结算简报时，生成审批中调整单以校验实时及冻结简报共用的投影。
     fn adjustment() -> StockAdjustment {
         let mut adjustment = StockAdjustment::new(
             StockAdjustmentId::new("adjustment"),
@@ -700,7 +662,7 @@ mod tests {
         adjustment
     }
 
-    /// 统一投影保留原明细顺序、完整行数、截断和本次审批主题版本。
+    // 验证库存调整与结算简报：统一投影保留原明细顺序、完整行数、截断和本次审批主题版本。
     #[test]
     fn stock_projection_preserves_brief_contract_and_line_order() {
         let adjustment = adjustment();
@@ -729,7 +691,7 @@ mod tests {
         assert!(source.list_summary.contains("盘点增加"));
     }
 
-    /// 草稿空明细和缺失仓库标签保持缺失；不以内部 ID 补展示。
+    // 验证库存调整与结算简报：草稿空明细和缺失仓库标签保持缺失；不以内部 ID 补展示。
     #[test]
     fn stock_projection_retains_empty_and_missing_label_behavior() {
         let mut adjustment = adjustment();

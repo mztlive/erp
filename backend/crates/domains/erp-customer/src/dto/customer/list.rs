@@ -29,19 +29,15 @@ pub enum CustomerScope {
 }
 
 impl CustomerScope {
-    /// 装配目录范围标签（纯展示规则下沉自 Service）。
-    ///
-    /// # 参数
-    /// * `_assignments` - 同一客户的归属行；协作销售不再生成目录标签，当前未使用
-    /// * `owner_user_id` - 已解析的主负责人
-    /// * `actor_user_id` - 当前账号
-    /// * `requested` - 页面请求的目录范围
-    ///
-    /// # 返回
-    /// 返回命中原因标签，保证包含请求范围。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 装配目录范围标签（纯展示规则下沉自 Service）。
+    //
+    // # 参数
+    // * `_assignments` - 同一客户的归属行；协作销售不再生成目录标签，当前未使用
+    // * `owner_user_id` - 已解析的主负责人
+    // * `actor_user_id` - 当前账号
+    // * `requested` - 页面请求的目录范围
+    //
+    // 返回命中原因标签，保证包含请求范围。
     pub(crate) fn tags_for(
         assignments: &[CustomerAssignment],
         owner_user_id: Option<&str>,
@@ -182,7 +178,7 @@ pub struct CustomerView {
 }
 
 impl From<CustomerAccount> for CustomerView {
-    /// 从实体构造响应视图。
+    // 将客户账户的内部字段转换成外部响应格式，供接口展示。
     fn from(account: CustomerAccount) -> Self {
         Self::from_account_parts(
             account.base.id,
@@ -198,26 +194,22 @@ impl From<CustomerAccount> for CustomerView {
 }
 
 impl CustomerView {
-    /// 从投影行构造响应视图的内核（erp-customer-007）。
-    ///
-    /// 实体路径（字段留空待 hydrate）与行投影路径共用同一内核；
-    /// hydrate 补齐（主体身份、负责人、范围标签）由调用方后续步骤完成。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键
-    /// * `party_id` - 共用企业主体 ID
-    /// * `customer_no` - 客户编号
-    /// * `default_payment_term_id` - 默认付款条件引用
-    /// * `status` - 启停状态
-    /// * `version` - 乐观锁版本
-    /// * `created_at` - 创建时间
-    /// * `updated_at` - 最后更新时间
-    ///
-    /// # 返回
-    /// 返回待 hydrate 的客户视图。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 用客户角色字段及其已补齐的主体和负责人信息组装响应，让账户实体和目录投影共用展示口径。
+    //
+    // 实体路径（字段留空待 hydrate）与行投影路径共用同一内核；
+    // hydrate 补齐（主体身份、负责人、范围标签）由调用方后续步骤完成。
+    //
+    // # 参数
+    // * `id` - 实体主键
+    // * `party_id` - 共用企业主体 ID
+    // * `customer_no` - 客户编号
+    // * `default_payment_term_id` - 默认付款条件引用
+    // * `status` - 启停状态
+    // * `version` - 乐观锁版本
+    // * `created_at` - 创建时间
+    // * `updated_at` - 最后更新时间
+    //
+    // 返回待 hydrate 的客户视图。
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn from_account_parts(
         id: String,
@@ -299,18 +291,13 @@ pub struct CustomerListParams {
 }
 
 impl CustomerListParams {
-    /// 归一化客户角色列表查询参数。
-    ///
-    /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单、排序方向非法，或 `include_descendants` 为真但未提供 `org_unit_ids` 时返回 `ValidationError`。
+    // 统一规范客户角色列表查询参数。
+    //
+    // 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
+    //
+    // 返回不依赖仓储类型的规范化查询参数。
+    //
+    // 排序字段不在白名单、排序方向非法，或 `include_descendants` 为真但未提供 `org_unit_ids` 时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<CustomerListQuery> {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, CUSTOMER_SORT_FIELDS)?;
         if self.include_descendants == Some(true) && self.org_unit_ids.is_none() {

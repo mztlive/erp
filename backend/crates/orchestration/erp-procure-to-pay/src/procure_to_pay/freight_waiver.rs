@@ -19,16 +19,9 @@ use crate::{Error, Result};
 impl PurchaseOrderProcess {
     /// 标记采购单某商品的运费另计由供应商免收。
     ///
-    /// # 参数
-    /// * `purchase_order_id` - 采购单
-    /// * `req` - 销售行与原因
-    /// * `actor` - 已通过 `purchase_order:update` 鉴权的操作人
+    /// `purchase_order_id` 为采购单；`req` 为销售行与原因；`actor` 为已通过 `purchase_order:update` 鉴权的操作人。
     ///
-    /// # 返回
-    /// 返回已标记的采购单与销售行。
-    ///
-    /// # 错误
-    /// 采购单不可见或不可维护、该行不是运费另计、已标记过或原因不合法时返回错误。
+    /// 返回已标记的采购单与销售行。采购单不可见或不可维护、该行不是运费另计、已标记过或原因不合法时返回错误。
     pub async fn waive_freight(
         &self,
         purchase_order_id: &str,

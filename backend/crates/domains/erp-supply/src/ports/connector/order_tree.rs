@@ -57,11 +57,7 @@ pub struct OrderTree {
 
 impl OrderTree {
     /// 核对身份、无环、当前叶子及逐行数量守恒。
-    /// # 参数
-    /// `frozen` 为原执行组批准并冻结的全部采购行。
-    /// # 返回
     /// 完整且可用于确认与事实应用的拓扑。
-    /// # 错误
     /// 缺单、未核实叶子、重复、环路、无归属行或数量不守恒时拒绝。
     pub fn validate(&self, frozen: &[OrderLine]) -> Result<()> {
         let frozen = frozen_map(frozen)?;
@@ -74,33 +70,22 @@ impl OrderTree {
     }
 
     /// 读取当前已经由来源证明的叶子节点。
-    /// # 参数
-    /// 无；调用方须先 validate 后用于资金或履约操作。
-    /// # 返回
     /// 当前 Leaf 集合，不包含历史父单或未核实节点。
-    /// # 错误
-    /// 不返回错误。
+    /// 调用方须先 validate 后用于资金或履约操作。
     pub fn leaves(&self) -> Vec<&OrderNode> {
         self.nodes.iter().filter(|node| node.role == OrderNodeRole::Leaf).collect()
     }
 
     /// 读取当前有明确协议依据的确认及取消目标。
-    /// # 参数
-    /// 无；调用方须先完成完整拓扑及数量校验。
-    /// # 返回
     /// 当前叶子，或尚未拆分的预占根单；历史父单不参与操作。
-    /// # 错误
-    /// 不返回错误；预占根单不能作为实际物流叶子使用。
+    /// 预占根单不能作为实际物流叶子使用。
+    /// 调用方须先完成完整拓扑及数量校验。
     pub fn action_targets(&self) -> Vec<&OrderNode> {
         self.nodes.iter().filter(|node| node.is_action_target()).collect()
     }
 
     /// 合并完整新拓扑，保留根单和历次拆单身份。
-    /// # 参数
-    /// `next` 为完整新观察，`frozen` 为原批准行。
-    /// # 返回
     /// 校验成功的新树；相同版本仅允许完全相同载荷。
-    /// # 错误
     /// 删除历史节点、更换父级、改变数量、父节点复活或版本回退时拒绝。
     pub fn merge(&self, mut next: Self, frozen: &[OrderLine]) -> Result<Self> {
         preserve_unreported_tracks(self, &mut next);
@@ -220,12 +205,9 @@ impl OrderTree {
 
 impl OrderNode {
     /// 判断节点是否具备首次确认或取消的协议身份。
-    /// # 参数
-    /// 无；完整树必须另行通过 validate 校验。
-    /// # 返回
     /// 当前叶子或明确预占根单返回真，历史父节点及未决节点返回假。
-    /// # 错误
-    /// 不返回错误，不证明取消已完成或资金已返还。
+    /// 不证明取消已完成或资金已返还。
+    /// 完整树必须另行通过 validate 校验。
     pub fn is_action_target(&self) -> bool {
         matches!(self.role, OrderNodeRole::Leaf | OrderNodeRole::ReservationRoot)
     }

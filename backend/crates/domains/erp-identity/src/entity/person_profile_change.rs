@@ -35,13 +35,11 @@ pub struct PersonProfileChange {
 
 impl PersonProfileChange {
     /// 校验完整角色集的期望值；旧管理关系不约束角色修改。
-    ///
-    /// # 参数
-    /// * `current` - 当前授权快照的人员角色。
-    /// # 返回
     /// 角色集合与期望版本校验成功。
-    /// # 错误
+    ///
     /// 空角色集、缺失期望值或角色版本冲突时拒绝。
+    ///
+    /// `current`：当前授权快照的人员角色。
     pub fn validate_roles(&self, current: &[RoleId]) -> Result<()> {
         let Some(roles) = &self.role_ids else {
             return Ok(());
@@ -58,12 +56,8 @@ impl PersonProfileChange {
     }
 
     /// 展开单人的所属部门变更，旧管理字段只允许存在于历史审计。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 零个或一个调岗命令。
-    /// # 错误
+    ///
     /// 空人员、空修改及停用的管理关系修改均拒绝。
     pub fn operations(&self) -> Result<Vec<OrganizationOperation>> {
         if self.user_id.trim().is_empty() {
@@ -102,7 +96,7 @@ mod tests {
             add_management: vec![],
         }
     }
-    /// 角色保存不得覆盖过期快照，也不能生成空角色集。
+    // 验证：角色保存不得覆盖过期快照，也不能生成空角色集。
     #[test]
     fn role_change_checks_original_set_and_accepts_role_only_change() {
         let mut value = change();

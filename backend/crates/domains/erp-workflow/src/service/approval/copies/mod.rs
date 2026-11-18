@@ -16,14 +16,13 @@ use crate::error::Result;
 use crate::repository::approval_copy::ApprovalCopyExt;
 
 /// 发布及保存时验证所有接收人均为有效内部账号。
-/// # 参数
-/// * `identity_service` - 同一应用注入的共享身份与权限服务。
+/// 全员有效时成功。
+///
+/// 账号不存在、已停用或不是内部账号时返回校验错误；基础设施错误透传。
+///
+/// `identity_service`：同一应用注入的共享身份与权限服务。
 ///
 /// 身份服务、规则、原执行器。
-/// # 返回
-/// 全员有效时成功。
-/// # 错误
-/// 账号不存在、已停用或不是内部账号时返回校验错误；基础设施错误透传。
 pub async fn validate_recipients(
     identity_service: &SharedRbacService,
     rules: &[ApprovalCopyRule],
@@ -43,14 +42,11 @@ pub async fn validate_recipients(
 }
 
 /// 在草稿图的 CAS 事务中保存完整抄送配置。
-/// # 参数
-/// * `identity_service` - 同一应用注入的共享身份与权限服务。
+/// 校验或数据库错误。
+///
+/// `identity_service`：同一应用注入的共享身份与权限服务。
 ///
 /// 数据库、规则、定义图和事务。
-/// # 返回
-/// 无。
-/// # 错误
-/// 校验或数据库错误。
 pub async fn save_config(
     identity_service: &SharedRbacService,
     db: &Database,

@@ -12,13 +12,10 @@ use persistence_core::Executor;
 
 use crate::wiring::errors::{Error, Result};
 
-/// 实际办理授权被拒绝后，只检查当前精确来源的分配事件是否仍待应用。
-/// # 参数
-/// db、authorization为共享设施，actor、source与instance来自本次真实任务，executor为原事务。
-/// # 返回
-/// 当前没有待应用分配时成功，不产生或替代对象授权结果。
-/// # 错误
-/// 合法分配尚未应用时返回授权未就绪；取证失败保持原错误。
+// 实际办理授权被拒绝后，只检查当前精确来源的分配事件是否仍待应用。
+// db、authorization为共享设施，actor、source与instance来自本次真实任务，executor为原事务。
+// 当前没有待应用分配时成功，不产生或替代对象授权结果。
+// 合法分配尚未应用时返回授权未就绪；取证失败保持原错误。
 pub(super) async fn approval_readiness(
     db: &Database,
     authorization: &Arc<AuthorizationService>,

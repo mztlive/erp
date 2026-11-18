@@ -27,16 +27,9 @@ pub struct LegacyReceiptIdentity {
 
 impl LegacyReceiptIdentity {
     /// 创建一个已知历史 writer 的精确身份候选。
-    ///
-    /// # 参数
-    /// * `scope` - 历史收据 scope。
-    /// * `digest` - 与该 scope 成对保存的摘要。
-    ///
-    /// # 返回
     /// 返回尚未登记到当前命令身份上的候选。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// `scope`：历史收据 scope；`digest`：与该 scope 成对保存的摘要。
     pub fn exact(scope: impl Into<String>, digest: impl Into<String>) -> Self {
         Self { scope: scope.into(), digest: digest.into() }
     }
@@ -50,45 +43,22 @@ pub struct PreparedCommandIdentity {
 }
 
 impl PreparedCommandIdentity {
-    /// 用当前 V3 身份与精确历史候选构造命令身份。
-    ///
-    /// # 参数
-    /// * `current` - 当前 writer 的 V3 身份
-    /// * `legacy` - 已冻结的精确历史候选
-    ///
-    /// # 返回
-    /// 返回可分类收据的命令身份。
-    ///
-    /// # 错误
-    /// 无。
+    // 用当前 V3 身份与精确历史候选构造命令身份。
+    // 返回可分类收据的命令身份。
+    //
+    // `current`：当前 writer 的 V3 身份；`legacy`：已冻结的精确历史候选。
     pub(super) fn new(current: ApprovalCommandIdentity, legacy: Vec<LegacyReceiptIdentity>) -> Self {
         Self { current, legacy }
     }
 
     /// 返回当前 writer 唯一允许写入的 V3 身份。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回构造时冻结的当前身份。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn current(&self) -> &ApprovalCommandIdentity {
         &self.current
     }
 
     /// 返回已规范化幂等键。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回当前 V3 身份上的幂等键。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn idempotency_key(&self) -> &IdempotencyKey {
         self.current.idempotency_key()
     }
@@ -98,14 +68,7 @@ impl PreparedCommandIdentity {
     /// 复杂度上限：候选数 = 1（V3）+ 已登记历史数（构造时去重冻结，通常 ≤ 3）；
     /// 查询时线性扫描上界固定，不随单据量增长。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回当前 scope 在前、未重复历史 scope 在后的查询顺序。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn scope_candidates(&self) -> Vec<&str> {
         let mut scopes = vec![self.current.scope().as_str()];
         for candidate in &self.legacy {
@@ -121,14 +84,9 @@ impl PreparedCommandIdentity {
     /// 仅用于兼容已经持久化的显式版本格式；不得把模糊组合、任意旧摘要或
     /// V3 scope/digest 的交叉组合登记为候选。
     ///
-    /// # 参数
-    /// * `candidate` - 已成对冻结的历史 scope 与 digest。
-    ///
-    /// # 返回
     /// 返回追加后的命令身份；相同候选不重复加入。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// `candidate`：已成对冻结的历史 scope 与 digest。
     pub fn with_legacy(mut self, candidate: LegacyReceiptIdentity) -> Self {
         if !self.legacy.contains(&candidate) {
             self.legacy.push(candidate);
@@ -141,14 +99,9 @@ impl PreparedCommandIdentity {
     /// 当前 V3 scope 只接受当前 V3 digest。历史收据只接受登记时成对保存的
     /// scope 与 digest，禁止 scope/digest 交叉组合或 V3 降级匹配。
     ///
-    /// # 参数
-    /// * `receipt` - 已读到的命令收据；没有收据时传 `None`。
-    ///
-    /// # 返回
     /// 无收据返回 `Fresh`；scope 与 digest 成对匹配返回 `SamePayload`；种类、键、摘要或降级组合不匹配返回 `PayloadConflict`。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// `receipt`：已读到的命令收据；没有收据时传 `None`。
     pub fn classify<'a>(&self, receipt: Option<&'a ApprovalCommandReceipt>) -> ReceiptBranch<'a> {
         let Some(receipt) = receipt else {
             return ReceiptBranch::Fresh;
@@ -180,7 +133,7 @@ impl PreparedCommandIdentity {
     }
 }
 
-/// `v3:` 后恰好 64 位十六进制才视为当前摘要，用于禁止历史候选降级匹配。
+// 回读旧收据候选前识别 `v3:` 加 64 位十六进制的当前摘要；当前摘要不得走历史降级比较。
 fn is_v3_hash(value: &str) -> bool {
     value
         .strip_prefix("v3:")
@@ -188,15 +141,11 @@ fn is_v3_hash(value: &str) -> bool {
 }
 
 /// 在任何仓储查询前形成规范化幂等键。
-///
-/// # 参数
-/// * `raw` - 调用方原始幂等键。
-///
-/// # 返回
 /// 返回 BPM 值对象接受后的幂等键。
 ///
-/// # 错误
 /// 空值、超长值或其他 BPM 值对象约束不满足时返回校验错误。
+///
+/// `raw`：调用方原始幂等键。
 pub fn normalize_idempotency_key(raw: &str) -> Result<IdempotencyKey> {
     IdempotencyKey::parse(raw).map_err(|error| {
         tracing::debug!(%error, "审批提交编号校验失败");
@@ -204,20 +153,13 @@ pub fn normalize_idempotency_key(raw: &str) -> Result<IdempotencyKey> {
     })
 }
 
-/// 构造当前 writer 唯一允许写入的 V3 命令身份。
-///
-/// # 参数
-/// * `kind` - 命令种类
-/// * `domain` - 身份域
-/// * `key` - 已规范化幂等键
-/// * `scope_payload` - 当前 scope 载荷
-/// * `digest_payload` - 当前 digest 载荷
-///
-/// # 返回
-/// 返回 V3 `ApprovalCommandIdentity`。
-///
-/// # 错误
-/// 幂等键或载荷字段非法时返回校验错误。
+// 构造当前 writer 唯一允许写入的 V3 命令身份。
+// 返回 V3 `ApprovalCommandIdentity`。
+//
+// 幂等键或载荷字段非法时返回校验错误。
+//
+// `key`：已规范化幂等键；`scope_payload`：当前 scope 载荷。
+// `digest_payload`：当前 digest 载荷。
 pub(super) fn current_identity(
     kind: ApprovalCommandKind,
     domain: &str,
@@ -230,15 +172,7 @@ pub(super) fn current_identity(
 }
 
 /// 幂等冲突的稳定错误。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
 /// 返回 `ApprovalIdempotencyPayloadConflict`。
-///
-/// # 错误
-/// 不返回错误。
 pub fn payload_conflict_error() -> Error {
     Error::from_approval_code(ErrorCode::ApprovalIdempotencyPayloadConflict)
 }
@@ -248,14 +182,9 @@ pub fn payload_conflict_error() -> Error {
 /// 仅审批命令收据 identity 唯一索引竞争允许退出失败会话后回读；收据主键、
 /// 未知索引或其他业务集合唯一冲突均失败关闭。
 ///
-/// # 参数
-/// * `error` - 第一笔收据写入返回的持久化错误。
-///
-/// # 返回
 /// 命令收据幂等索引冲突返回 `ReceiptDuplicate`；其他冲突或写入失败返回转换后的服务错误。
 ///
-/// # 错误
-/// 不返回错误。
+/// `error`：第一笔收据写入返回的持久化错误。
 pub fn map_receipt_first_write_error(error: persistence_core::Error) -> Error {
     if error.duplicate_index_name()
         == Some(crate::repository::bpm::APPROVAL_COMMAND_RECEIPT_IDEMPOTENCY_INDEX)
@@ -266,30 +195,19 @@ pub fn map_receipt_first_write_error(error: persistence_core::Error) -> Error {
     }
 }
 
-/// 判断命令是否只允许在新会话有限回读原结果。
+/// 当命令只允许在新会话有限回读原结果时返回 `true`。
 ///
-/// # 参数
-/// * `error` - 提交返回的服务错误。
-///
-/// # 返回
 /// `OutcomeUnknown`、`ReceiptDuplicate` 或 `TransientTransaction` 返回 `true`。
 ///
-/// # 错误
-/// 不返回错误。
+/// `error`：提交返回的服务错误。
 pub fn command_may_have_committed(error: &Error) -> bool {
     matches!(error, Error::OutcomeUnknown(_) | Error::ReceiptDuplicate(_) | Error::TransientTransaction(_))
 }
 
 /// 返回命令结果有限回读的指数退避，上限为 160ms。
-///
-/// # 参数
-/// * `attempt` - 从 0 开始的回放轮次。
-///
-/// # 返回
 /// 返回 `5ms` 左移最多 5 位后的等待时间。
 ///
-/// # 错误
-/// 不返回错误。
+/// `attempt`：从 0 开始的回放轮次。
 pub fn command_recovery_delay(attempt: usize) -> Duration {
     let shift = u32::try_from(attempt).unwrap_or(u32::MAX).min(5);
     Duration::from_millis(5_u64 << shift)

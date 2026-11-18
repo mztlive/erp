@@ -12,16 +12,7 @@ use crate::http::routes::permission_route;
 use crate::http::state::HttpState;
 use crate::http::upload;
 
-/// 返回本域管理端路由集合。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回声明公共权限目录信息的路由集合。
-///
-/// # 错误
-/// 不执行 I/O，不返回错误。
+/// 为管理端挂载合同归档与模板接口，按操作登记公共权限目录信息；文件入口保留对应的上传限制。
 pub fn routes() -> Router<HttpState> {
     archived_routes()
         .merge(sales_access_routes())
@@ -72,7 +63,7 @@ fn archived_routes() -> Router<HttpState> {
         )
 }
 
-/// Word 模板及本人申请接口的独立权限边界。
+// 为 Word 模板维护与本人领号申请挂载入口，保留各自不同的授权边界。
 fn template_routes() -> Router<HttpState> {
     Router::new()
         .route(

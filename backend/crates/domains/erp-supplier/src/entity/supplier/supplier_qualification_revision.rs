@@ -69,18 +69,9 @@ pub struct SupplierQualificationRevision {
 
 impl SupplierQualificationRevision {
     /// 创建资质修订。
-    ///
-    /// 完成证书编号必填校验与发证机构的规范化（去首尾空白、长度上限）；
-    /// 日期窗口经 [`QualificationType::ensure_validity_window`]：非合同必须有开始日期，已知结束日期必须晚于开始日期。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::SupplierQualificationRevisionId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
+    /// 完成证书编号必填校验与发证机构的规范化（去首尾空白、长度上限）；日期窗口经
+    /// [`QualificationType::ensure_validity_window`]：非合同必须有开始日期，已知结束日期必须晚于开始日期。
     /// 返回新建的修订实体。
-    ///
-    /// # 错误
     /// 证书编号为空或超长、发证机构超长、非合同缺少开始日期，或结束日期不晚于开始日期时返回错误。
     pub fn new(id: SupplierQualificationRevisionId, data: SupplierQualificationRevisionData) -> Result<Self> {
         let certificate_no = normalize_required_text(
@@ -129,7 +120,7 @@ mod tests {
         }
     }
 
-    /// happy path：快照字段去空白，修订序号与状态快照落库。
+    // 验证快照字段去空白，修订序号与状态快照落库。
     #[test]
     fn new_trims_and_normalizes() {
         let revision = SupplierQualificationRevision::new(
@@ -144,7 +135,7 @@ mod tests {
         assert_eq!(revision.status, QualificationStatus::Active);
     }
 
-    /// 失败路径：编号为空/超长、区间倒挂。
+    // 验证编号为空/超长、区间倒挂。
     #[test]
     fn new_rejects_invalid_inputs() {
         let blank =
@@ -162,7 +153,7 @@ mod tests {
         );
     }
 
-    /// 修订快照自包含：类型/编号/状态以结构化字段保存，不引用资质实体。
+    // 验证修订快照自包含：类型/编号/状态以结构化字段保存，不引用资质实体。
     #[test]
     fn snapshot_is_self_contained() {
         let revision = SupplierQualificationRevision::new(
@@ -174,7 +165,7 @@ mod tests {
         assert_eq!(revision.supplier_id, SupplierAccountId::new("supplier-1"));
     }
 
-    /// 实体 BSON 往返。
+    // 验证供应商资质修订写成 BSON 后能还原成原实体。
     #[test]
     fn bson_roundtrip() {
         let revision = SupplierQualificationRevision::new(

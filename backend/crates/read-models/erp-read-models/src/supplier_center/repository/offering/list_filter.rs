@@ -60,16 +60,9 @@ pub struct SupplierOfferingListQuery {
 }
 
 impl Default for SupplierOfferingListQuery {
-    /// 构造首页默认查询条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回过滤全空、取第一页、每页 20 条的查询条件。
-    ///
-    /// # 错误
-    /// 无。
+    // 装配供应商供给列表时，生成首页默认查询条件。
+    //
+    // 返回过滤全空、取第一页、每页 20 条的查询条件。
     fn default() -> Self {
         Self {
             availability_status: None,
@@ -120,7 +113,7 @@ pub struct SupplierOfferingListBundle {
 }
 
 impl<'a> SupplierOfferingReadRepository<'a> {
-    /// 将高层列表查询解析为分页前生效的持久化过滤。
+    /// 确定供应商供给列表的适用条件时，将高层列表查询解析为分页前生效的持久化过滤。
     ///
     /// # 参数
     /// * `query` - 高层查询条件，关键字与编号应已由 Service 规整
@@ -180,7 +173,7 @@ impl<'a> SupplierOfferingReadRepository<'a> {
         })
     }
 
-    /// 一次装载供给列表页的全部最小展示事实。
+    /// 读取供应商供给列表时，一次装载供给列表页的全部最小展示事实。
     ///
     /// # 参数
     /// * `query` - 高层查询条件
@@ -205,7 +198,7 @@ impl<'a> SupplierOfferingReadRepository<'a> {
         self.load_offering_list_page_by_filter(&filter, executor).await
     }
 
-    /// 装载已经解析关联条件的供给页面，采购筛选复用同一批关键词和状态事实。
+    /// 应用供应商供给列表筛选时，读取已经解析关联条件的供给页面，采购筛选复用同一批关键词和状态事实。
     ///
     /// # 参数
     /// * `filter` - 完整列表条件及最终采购责任命中身份
@@ -369,7 +362,7 @@ mod isolation_tests {
     use persistence_core::{NoTransaction, Transactional};
     use test_support::{TestDb, require_mongo};
 
-    /// 构造最小供给三元组（供给头 + 首版修订 + 可供投影）。
+    // 处理供应商供给列表时，生成最小供给三元组（供给头 + 首版修订 + 可供投影）。
     fn offering_triple(
         id: &str,
         status: AvailabilityStatus,
@@ -426,19 +419,18 @@ mod isolation_tests {
         (offering, revision, availability)
     }
 
-    /// 空库返回空页与空事实束，不发空 `$in` 关联查询。
-    ///
-    /// # 参数
-    /// 无，内部创建隔离库。
-    ///
-    /// # 返回
-    /// 断言总数为零且修订/可供映射全部为空。
-    ///
-    /// # 错误
-    /// MongoDB 连接或列表装载失败时测试失败。
-    ///
-    /// # 约束
-    /// Batch 维度：空集合短路；Page 维度：总数与空页一致。
+    // 验证供应商供给列表：空库返回空页与空事实束，不发空 `$in` 关联查询。
+    //
+    // 调用参数：
+    // 无，内部创建隔离库。
+    //
+    // 断言总数为零且修订/可供映射全部为空。
+    //
+    // 失败边界：
+    // MongoDB 连接或列表装载失败时测试失败。
+    //
+    // 调用约束：
+    // Batch 维度：空集合短路；Page 维度：总数与空页一致。
     #[tokio::test]
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn empty_db_returns_empty_bundle() {
@@ -473,20 +465,20 @@ mod isolation_tests {
         });
     }
 
-    /// 当前修订与可供投影按键归组；不匹配的可供状态在分页前过滤。
-    ///
-    /// # 参数
-    /// 无，内部创建隔离库并写入一组供给三元组。
-    ///
-    /// # 返回
-    /// 断言命中时总数为 1 且修订/可供映射以供给主键为键；`Stale`
-    /// 过滤时总数为 0，证明关联筛选在分页前生效。
-    ///
-    /// # 错误
-    /// MongoDB 连接、夹具写入或列表装载失败时测试失败。
-    ///
-    /// # 约束
-    /// 只沿当前修订指针读取；总数语义与分页查询一致。
+    // 验证当前修订与可供投影按键归组；不匹配的可供状态在分页前过滤。
+    //
+    // 调用参数：
+    // 无，内部创建隔离库并写入一组供给三元组。
+    //
+    // 结果：
+    // 断言命中时总数为 1 且修订/可供映射以供给主键为键；`Stale`
+    // 过滤时总数为 0，证明关联筛选在分页前生效。
+    //
+    // 失败边界：
+    // MongoDB 连接、夹具写入或列表装载失败时测试失败。
+    //
+    // 调用约束：
+    // 只沿当前修订指针读取；总数语义与分页查询一致。
     #[tokio::test]
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn bundle_returns_current_facts_and_prefilters_before_paging() {
@@ -543,19 +535,18 @@ mod isolation_tests {
         });
     }
 
-    /// 事务内写入在同一 session 可见，复用调用方 executor。
-    ///
-    /// # 参数
-    /// 无，内部在事务中创建供给后即时装载。
-    ///
-    /// # 返回
-    /// 断言事务内总数包含未提交供给。
-    ///
-    /// # 错误
-    /// 事务或列表装载失败时测试失败。
-    ///
-    /// # 约束
-    /// Repository 不自行开启事务；事务内重验复用同一 session。
+    // 验证供应商供给列表：事务内写入在同一 session 可见，复用调用方 executor。
+    //
+    // 调用参数：
+    // 无，内部在事务中创建供给后即时装载。
+    //
+    // 断言事务内总数包含未提交供给。
+    //
+    // 失败边界：
+    // 事务或列表装载失败时测试失败。
+    //
+    // 调用约束：
+    // Repository 不自行开启事务；事务内重验复用同一 session。
     #[tokio::test]
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn transaction_reads_own_writes_with_same_session() {

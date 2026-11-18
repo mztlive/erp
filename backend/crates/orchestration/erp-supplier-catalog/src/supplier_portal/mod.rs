@@ -44,14 +44,10 @@ pub struct SupplierPortalProcess {
 
 impl SupplierPortalProcess {
     /// 装配门户命令服务。
-    /// # 参数
-    /// * `db` - 各拥有域共享的数据库。
-    /// * `authorization` - 当前内部权限与范围来源。
-    /// * `services` - 应用已装配的领域服务、对象范围与正式任务操作。
-    /// # 返回
+    ///
+    /// `db`：各拥有域共享的数据库；`authorization`：当前内部权限与范围来源；`services`：应用已装配的领域服务、对象范围与正式任务操作。
+    ///
     /// 返回未执行I/O的过程。
-    /// # 错误
-    /// 无。
     pub fn new(
         db: Database,
         authorization: Arc<AuthorizationService>,

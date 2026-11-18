@@ -19,11 +19,8 @@ use crate::http::state::HttpState;
 use crate::wiring::receivable_posting_ports;
 
 /// 在登记回款草稿时上传文件，复用原登记权限与事务。
-/// # 参数
 /// `state` 为应用状态，`actor` 为认证账号，`multipart` 为命令及其引用文件。
-/// # 返回
 /// 原回款草稿登记视图。
-/// # 错误
 /// 文件、业务或事务失败时拒绝；确定未消费的上传删除，未知提交保留。
 pub async fn customer_receipt_save_with_files(
     State(state): State<HttpState>,
@@ -64,7 +61,7 @@ mod tests {
     use crate::http::errors::Error;
     use crate::http::handler::file_asset::PendingAssetFile;
 
-    /// 通过真实 multipart 提取器构造回款命令与文件请求。
+    // 通过生产 multipart 提取器生成回款命令与文件载荷，覆盖实际 HTTP 表单合同。
     async fn extract(
         file_content: &str,
     ) -> std::result::Result<(SaveCustomerReceiptDraftRequest, Vec<PendingAssetFile>), Error> {

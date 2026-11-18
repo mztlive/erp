@@ -8,16 +8,9 @@ use persistence_core::indexes::{named_index, unique_index, unique_partial_index}
 
 use crate::repository::extensions::SalesSelectionExt;
 
-/// 创建选品集合索引。
-///
-/// # 参数
-/// * `db` - 数据库
-///
-/// # 返回
-/// 成功创建。
-///
-/// # 错误
-/// 唯一约束冲突或 MongoDB 失败。
+// 创建选品集合索引。
+// 结果：成功创建。
+// 唯一约束冲突或 MongoDB 失败。
 pub(crate) async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, <Database as SalesSelectionExt>::SALES_SELECTION_BOOKLETS, booklet_indexes()).await?;
     create_indexes(db, <Database as SalesSelectionExt>::SALES_SELECTION_DISPLAY_ITEMS, display_indexes())
@@ -45,24 +38,19 @@ pub(crate) async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, <Database as SalesSelectionExt>::SALES_SELECTION_RATE_WINDOWS, rate_indexes()).await
 }
 
-/// 为集合创建索引。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `collection` - 集合名
-/// * `indexes` - 索引
-///
-/// # 返回
-/// 成功创建。
-///
-/// # 错误
-/// MongoDB 失败。
+// 为集合创建索引。
+// 结果：成功创建。
+// MongoDB 失败。
+//
+// 输入约定：
+// - `collection`：集合名
+// - `indexes`：索引
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
     db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
-/// 选品册索引：列表筛选、责任范围、令牌查找、一册一方案。
+// 注册选品册的列表、责任范围及令牌检索索引，并限制同一非空方案引用只能绑定到一本册。
 fn booklet_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_sales_selection_booklets_id", doc! { "id": 1 }),
@@ -87,7 +75,7 @@ fn booklet_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 陈列项按册与批次查询。
+// 为列出某册某批次的有效陈列建立索引，同时支持过滤已移除的陈列。
 fn display_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_sales_selection_display_items_id", doc! { "id": 1 }),
@@ -98,7 +86,7 @@ fn display_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 商品池成员按批次查询。
+// 为准备过程按册和批次装载冻结商品池成员建立索引。
 fn pool_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_sales_selection_pool_members_id", doc! { "id": 1 }),
@@ -109,7 +97,7 @@ fn pool_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 准备任务领取与幂等。
+// 为后台按状态和截止时间找准备任务、以及管理端读同册任务历史建立索引，任务身份保持唯一。
 fn task_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_sales_selection_prepare_tasks_id", doc! { "id": 1 }),
@@ -121,7 +109,7 @@ fn task_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 一册每人一份会话，提货券代码全局唯一。
+// 按册及参与人确保独立会话唯一，并为提货码查询维持全局唯一约束。
 fn session_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_sales_selection_sessions_id", doc! { "id": 1 }),
@@ -137,7 +125,7 @@ fn session_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 方案编号、一册一份方案、责任范围与客户查询。
+// 为按客户或责任范围读取提交方案建立索引，并约束方案编号与册内参与人组合唯一。
 fn proposal_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_sales_selection_proposals_id", doc! { "id": 1 }),
@@ -154,7 +142,7 @@ fn proposal_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 方案陈列行。
+// 为读取已提交方案的冻结陈列行建立按方案关联的索引。
 fn proposal_display_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_sales_selection_proposal_display_lines_id", doc! { "id": 1 }),
@@ -162,7 +150,7 @@ fn proposal_display_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 方案 SKU 行。
+// 为读取已提交方案的商品明细建立按方案关联的索引。
 fn proposal_sku_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_sales_selection_proposal_sku_lines_id", doc! { "id": 1 }),
@@ -173,7 +161,7 @@ fn proposal_sku_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 幂等唯一约束。
+// 发布或管理命令查找旧结果时，靠唯一索引阻止同一作用域、动作及键重复建回执。
 fn idempotency_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_sales_selection_idempotency_id", doc! { "id": 1 }),
@@ -184,7 +172,7 @@ fn idempotency_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 公开限流窗口。
+// 为公开访问限流窗口安装到期索引，让 MongoDB 自动清理已过期的计数记录。
 fn rate_indexes() -> Vec<IndexModel> {
     vec![
         IndexModel::builder()
@@ -201,7 +189,7 @@ fn rate_indexes() -> Vec<IndexModel> {
 
 #[cfg(test)]
 mod tests {
-    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    // 检查各集合是否声明稳定 `id` 的唯一索引，防止主键读取和乐观锁写入退化为集合扫描。
     #[test]
     fn collections_look_up_by_unique_stable_id() {
         for indexes in [

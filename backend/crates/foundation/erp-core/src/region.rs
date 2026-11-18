@@ -54,16 +54,7 @@ fn load_regions() -> RegionIndex {
     RegionIndex { nodes, by_code, parents }
 }
 
-/// 返回全部行政区划，按省、市、区县的数据顺序排列。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回内置区划列表。
-///
-/// # 错误
-/// 无。
+/// 为区划选择或配送覆盖树提供完整内置数据，沿用数据中的省、市、区县顺序。
 pub fn all_regions() -> &'static [RegionNode] {
     &REGIONS.nodes
 }
@@ -88,16 +79,8 @@ pub enum RegionLevel {
 pub struct RegionCode(String);
 
 impl RegionCode {
-    /// 解析内置区划中存在的任一级代码。
-    ///
-    /// # 参数
-    /// * `value` - 原始代码，允许首尾空白
-    ///
-    /// # 返回
-    /// 返回区划代码。
-    ///
-    /// # 错误
-    /// 格式非法或内置区划中不存在时返回错误。
+    /// 校验规则配置或筛选输入中的任一级区划。裁剪首尾空白后，须是格式合法且存在于内置区划的代码；
+    /// 仅回读历史数据不必走此入口。
     pub fn parse(value: &str) -> Result<Self> {
         let code = Self::try_from(value.trim().to_string())?;
         if !REGIONS.by_code.contains_key(code.as_str()) {
@@ -106,16 +89,7 @@ impl RegionCode {
         Ok(code)
     }
 
-    /// 解析收货地址使用的最末级代码。
-    ///
-    /// # 参数
-    /// * `value` - 原始代码，允许首尾空白
-    ///
-    /// # 返回
-    /// 返回没有下级的区划代码。
-    ///
-    /// # 错误
-    /// 格式非法、不存在或仍有下级区划时返回错误。
+    /// 保存收货地址前要求代码存在且没有下级。通常须选到区县，没有下级的市或省级地区也允许。
     pub fn parse_leaf(value: &str) -> Result<Self> {
         let code = Self::parse(value)?;
         if REGIONS.parents.contains(code.as_str()) {
@@ -124,30 +98,12 @@ impl RegionCode {
         Ok(code)
     }
 
-    /// 返回代码文本。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 6 位代码。
-    ///
-    /// # 错误
-    /// 无。
+    /// 借用稳定的六位区划代码，供规则比较或持久化索引条件使用，而非显示名称。
     pub fn as_str(&self) -> &str {
         &self.0
     }
 
-    /// 返回按代码数位推导的层级。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// `ab0000` 为省级，`abcd00` 为地级，其余为县级。
-    ///
-    /// # 错误
-    /// 无。
+    /// 按代码数位识别规则的区划层级：`ab0000` 为省级，`abcd00` 为地级，其余为县级。
     pub fn level(&self) -> RegionLevel {
         if self.0.ends_with("0000") {
             RegionLevel::Province
@@ -158,16 +114,7 @@ impl RegionCode {
         }
     }
 
-    /// 返回自身及各级上级代码，由具体到宽泛排列。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 县级返回县、市、省；地级返回市、省；省级只返回自身。
-    ///
-    /// # 错误
-    /// 无。
+    /// 生成配送例外按具体程度匹配的顺序：县级依次给出县、市、省，地级给出市、省，省级只含自身。
     pub fn self_and_ancestors(&self) -> Vec<RegionCode> {
         let mut codes = vec![self.clone()];
         if self.level() == RegionLevel::District {
@@ -179,30 +126,13 @@ impl RegionCode {
         codes
     }
 
-    /// 返回本级名称；内置区划中不存在时返回代码本身。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回区划名称。
-    ///
-    /// # 错误
-    /// 无。
+    /// 为区划下拉或列表展示本级名称；历史代码在现行字典中消失时仍可显示原代码。
     pub fn name(&self) -> String {
         node_of(&self.0).map_or_else(|| self.0.clone(), |node| node.name.to_string())
     }
 
-    /// 返回由省到本级拼接的完整名称，跳过"市辖区"等占位层级。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 例如"广东省深圳市南山区"；内置区划中不存在时返回代码本身。
-    ///
-    /// # 错误
-    /// 无。
+    /// 为地址或规则提示拼接从省到本级的名称，如「广东省深圳市南山区」，跳过「市辖区」等占位层级。
+    /// 现行字典查不到时显示原代码。
     pub fn full_name(&self) -> String {
         let mut names = Vec::new();
         let mut current = node_of(&self.0);

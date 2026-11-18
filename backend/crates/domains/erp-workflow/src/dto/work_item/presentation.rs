@@ -13,16 +13,9 @@ use crate::entity::work_item::WorkItemType;
 pub const UNRESOLVED_OWNER_DISPLAY_NAME: &str = "处理人待确认";
 
 /// 按原因码和任务类型生成「为什么需要处理」。
-///
-/// # 参数
-/// * `reason_code` - 任务写入时的稳定原因码；可为空
-/// * `work_item_type` - 任务类型，用于未知原因码时的类型默认文案
-///
-/// # 返回
 /// 返回中文处理理由。未知或内部形态的原因码不会原样上屏。
 ///
-/// # 错误
-/// 无。
+/// `reason_code`：任务写入时的稳定原因码；可为空；`work_item_type`：任务类型，用于未知原因码时的类型默认文案。
 pub fn reason_label(reason_code: Option<&str>, work_item_type: WorkItemType) -> String {
     let Some(normalized) = reason_code.map(normalize_reason_code).filter(|code| !code.is_empty()) else {
         return default_reason_label(work_item_type).to_string();
@@ -37,16 +30,9 @@ pub fn reason_label(reason_code: Option<&str>, work_item_type: WorkItemType) -> 
 }
 
 /// 选择可上屏的影响摘要；内部模板或机制词回退到类型默认后果。
-///
-/// # 参数
-/// * `stored` - 任务上保存的影响摘要
-/// * `work_item_type` - 任务类型
-///
-/// # 返回
 /// 返回用户可理解的业务影响。
 ///
-/// # 错误
-/// 无。
+/// `stored`：任务上保存的影响摘要。
 pub fn usable_impact_summary(stored: Option<&str>, work_item_type: WorkItemType) -> String {
     if let Some(text) = stored.map(str::trim).filter(|text| !text.is_empty())
         && is_usable_impact(text, work_item_type)
@@ -57,15 +43,7 @@ pub fn usable_impact_summary(stored: Option<&str>, work_item_type: WorkItemType)
 }
 
 /// 返回进入对应页面后用户要做的下一步。
-///
-/// # 参数
-/// * `work_item_type` - 任务类型
-///
-/// # 返回
 /// 返回一句可执行的下一步说明。
-///
-/// # 错误
-/// 无。
 pub fn next_action_hint(work_item_type: WorkItemType) -> String {
     match work_item_type {
         WorkItemType::SalesInquiryProcessing => "核对责任商品的供给、价格和交期，保存结果后统一发布反馈。",
@@ -109,17 +87,10 @@ pub fn next_action_hint(work_item_type: WorkItemType) -> String {
 }
 
 /// 用行数、含税金额和先款门禁生成采购财务审核的业务影响。
-///
-/// # 参数
-/// * `line_count` - 采购提交行数；未知时为 `None`
-/// * `gross_amount` - 提交含税金额；未知时为 `None`
-/// * `prepay_gate` - 是否先款后货
-///
-/// # 返回
 /// 返回「不审核则不能形成应付、不能付款」，有规模或先款时追加说明。
 ///
-/// # 错误
-/// 无。
+/// `line_count`：采购提交行数；未知时为 `None`；`gross_amount`：提交含税金额；未知时为 `None`。
+/// `prepay_gate`：是否先款后货。
 pub fn purchase_review_impact_summary(
     line_count: Option<usize>,
     gross_amount: Option<&Amount>,
@@ -146,16 +117,9 @@ pub fn purchase_review_impact_summary(
 }
 
 /// 按账号姓名表解析处理人展示名。
-///
-/// # 参数
-/// * `owner_id` - 处理人账号 ID
-/// * `names` - 账号 ID 到姓名的映射
-///
-/// # 返回
 /// 返回去空白后的姓名；缺失或空名时返回「处理人待确认」。
 ///
-/// # 错误
-/// 无。
+/// `names`：账号 ID 到姓名的映射。
 pub fn resolve_owner_display_name(owner_id: &str, names: &HashMap<String, String>) -> String {
     names
         .get(owner_id)
@@ -269,17 +233,10 @@ fn is_usable_impact(text: &str, work_item_type: WorkItemType) -> bool {
         && !is_identity_echo_impact(text, work_item_type)
 }
 
-/// 识别只复读任务类型或单号、没有说明后果的影响摘要。
-///
-/// # 参数
-/// * `text` - 任务上保存的影响摘要
-/// * `work_item_type` - 任务类型
-///
-/// # 返回
-/// 复读身份时应丢弃并回退类型默认后果。
-///
-/// # 错误
-/// 无。
+// 识别只复读任务类型或单号、没有说明后果的影响摘要。
+// 复读身份时应丢弃并回退类型默认后果。
+//
+// `text`：任务上保存的影响摘要。
 fn is_identity_echo_impact(text: &str, work_item_type: WorkItemType) -> bool {
     match work_item_type {
         WorkItemType::PurchaseOrderReview => text.contains("待财务审核") && !text.contains("不审核"),
@@ -292,15 +249,7 @@ fn is_user_facing_copy(text: &str) -> bool {
 }
 
 /// 把含税金额格式化为带千分位的人民币文案。
-///
-/// # 参数
-/// * `amount` - 定点金额
-///
-/// # 返回
 /// 返回如 `¥12,800` 的展示串。
-///
-/// # 错误
-/// 无。
 pub fn format_yuan(amount: &Amount) -> String {
     let raw = amount.to_decimal().normalize().to_string();
     let (int_part, frac) = raw.split_once('.').unwrap_or((raw.as_str(), ""));

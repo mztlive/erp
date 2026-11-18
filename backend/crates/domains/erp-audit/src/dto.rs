@@ -21,18 +21,7 @@ pub struct AuditLogListParams {
 }
 
 impl From<&AuditLogListParams> for crate::repository::AuditLogFilter {
-    /// 将查询参数转换为仓储过滤器（erp-audit-003）。
-    ///
-    /// 文本归一化与分页缺省只在此一处实现；新增筛选字段时同步两结构体与本函数。
-    ///
-    /// # 参数
-    /// * `params` - 列表查询参数
-    ///
-    /// # 返回
-    /// 返回仓储层过滤条件。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 将列表输入收敛为仓储筛选：统一清理文本并填入缺省分页，避免各查询入口采用不同口径；增加筛选项时同步维护参数、过滤器与本转换。
     fn from(params: &AuditLogListParams) -> Self {
         Self {
             actor_account: normalized_text(params.actor_account.as_deref()),
@@ -64,16 +53,7 @@ pub struct AuditLogItem {
 }
 
 impl From<AuditLog> for AuditLogItem {
-    /// 将审计日志实体转换为响应结构。
-    ///
-    /// # 参数
-    /// * `log` - 审计日志实体
-    ///
-    /// # 返回
-    /// 返回审计日志响应结构。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 将存储日志转成列表响应，延用事件发生时保存的内容，不为旧记录补造结构化事件。
     fn from(log: AuditLog) -> Self {
         Self {
             id: log.base.id,

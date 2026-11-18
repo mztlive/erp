@@ -43,7 +43,7 @@ pub use self::source::{
 #[cfg(test)]
 use crate::dto::supplier_fulfillment::normalize_sort;
 
-/// 校验需写入幂等收据的操作 ID 不含协议分隔符。
+// 核验需写入幂等收据的操作 ID 不含协议分隔符。
 fn safe_command_id(value: &str) -> std::result::Result<(), validator::ValidationError> {
     if value.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b':')) {
         return Ok(());

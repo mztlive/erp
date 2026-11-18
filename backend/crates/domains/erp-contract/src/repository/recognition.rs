@@ -10,13 +10,7 @@ pub const IMPORTS: &str = "contract_imports";
 
 /// 合同领域拥有导入任务集合。
 pub trait ContractImportExt {
-    /// 获取导入任务仓储。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 合同任务仓储。
-    /// # 错误
-    /// 无。
+    /// 取得合同识别任务集合的仓储，供写入任务状态和按创建人查询；执行器由调用方提供。
     fn contract_imports(&self) -> Repository<'_, ContractImport>;
 }
 impl ContractImportExt for Database {
@@ -25,13 +19,7 @@ impl ContractImportExt for Database {
     }
 }
 
-/// 只读取本人任务，不以任务 ID 授权。
-/// # 参数
-/// * `db` / `owner` / `id` / `executor` - 数据库、身份、任务及执行器。
-/// # 返回
-/// 已授权任务。
-/// # 错误
-/// 不存在或不可见时返回相同错误。
+/// 在任务详情或命令中，用认证创建人和任务 ID 一起查询，不把单独的 ID 当作凭证。不存在与不可见统一返回 `NotFound`。
 pub async fn owned(
     db: &Database,
     owner: &str,
@@ -44,13 +32,7 @@ pub async fn owned(
         .ok_or_else(|| Error::NotFound("导入任务不存在或无权查看".into()))
 }
 
-/// 按本人和请求键查找原任务。
-/// # 参数
-/// * `db` / `owner` / `key` / `executor` - 数据库、身份、请求键及执行器。
-/// # 返回
-/// 原任务或空值。
-/// # 错误
-/// 数据库读取失败。
+/// 同一创建人重试导入请求时，按其身份及原请求键查原任务。无记录返回 `None`，传播数据库读取错误。
 pub async fn replay(
     db: &Database,
     owner: &str,
@@ -63,13 +45,7 @@ pub async fn replay(
         .await?)
 }
 
-/// 本人任务分页，固定每页 20 条。
-/// # 参数
-/// * `db` / `owner` / `number` / `revision_contract_id` / `executor` - 数据库、身份、页码、追加目标及执行器。
-/// # 返回
-/// 倒序任务页。
-/// # 错误
-/// 数据库读取失败。
+/// 按创建人列出识别任务，可用追加归档的目标合同缩小结果。沿用当前执行器倒序分页，页码限制在 1 至 1,000,000，每页 20 条；传播读取错误。
 pub async fn list(
     db: &Database,
     owner: &str,

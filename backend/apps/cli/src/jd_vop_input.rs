@@ -21,13 +21,8 @@ pub enum InputError {
     InvalidJson,
 }
 
-/// 从本地普通文件或标准输入读取受限 JSON。
-/// # 参数
-/// `path` 为本地路径；`-` 表示标准输入，`T` 为拥有协议层的输入 DTO。
-/// # 返回
-/// 成功解析的输入，不打印内容或令牌。
-/// # 错误
-/// 文件无效、读取失败、输入超限或 JSON 无效时返回静态脱敏错误。
+/// 为京东授权导入打开本地普通文件；`-` 表示从标准输入读取。两种来源都走
+/// [`read_json`] 的字节上限和脱敏解析，错误不会带出路径或授权内容。
 pub fn read_input<T: DeserializeOwned>(path: &Path) -> Result<T, InputError> {
     if path == Path::new("-") {
         return read_json(io::stdin().lock());
@@ -42,13 +37,8 @@ pub fn read_input<T: DeserializeOwned>(path: &Path) -> Result<T, InputError> {
     read_json(file)
 }
 
-/// 读取有界字节并解析 JSON，禁止将底层反序列化错误带出输入边界。
-/// # 参数
-/// `reader` 为已选择的本地输入流，`T` 为协议输入类型。
-/// # 返回
-/// 合法且未超限的 JSON 对应值。
-/// # 错误
-/// 读取失败、超限及任何 JSON/字段错误均返回不包含输入的固定错误。
+/// 将选定的授权输入流解析为调用方指定的 JSON 类型。最多接受 65,536 字节（含空白），
+/// 超限时不尝试解析；读取、格式和字段错误只返回固定摘要，不暴露令牌值。
 pub fn read_json<T: DeserializeOwned>(reader: impl Read) -> Result<T, InputError> {
     let mut bytes = Vec::new();
     reader.take(MAX_CREDENTIAL_INPUT_BYTES + 1).read_to_end(&mut bytes).map_err(|_| InputError::Read)?;

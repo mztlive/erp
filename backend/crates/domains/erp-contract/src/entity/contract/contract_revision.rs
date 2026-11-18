@@ -30,16 +30,7 @@ pub enum ArchiveSource {
 }
 
 impl ArchiveSource {
-    /// 返回来源的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回合同归档来源的中文名称，供业务界面展示，不作为持久化代码。
     pub fn label(&self) -> &'static str {
         match self {
             Self::ContractCenter => "合同中心",
@@ -47,16 +38,7 @@ impl ArchiveSource {
         }
     }
 
-    /// 返回来源的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回合同归档来源的稳定代码，供持久化与查询匹配使用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::ContractCenter => "CONTRACT_CENTER",
@@ -133,22 +115,8 @@ pub struct ContractRevision {
 }
 
 impl ContractRevision {
-    /// 创建合同版本（不可变）。
-    ///
-    /// 完成 contract_no 与全部快照字段的校验与规范化，并强制有效期不变式：
-    /// `valid_to` 必须晚于 `valid_from`。版本一经形成不允许更新。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::ContractRevisionId`）
-    /// * `contract_id` - 所属合同主键
-    /// * `revision_no` - 聚合内从 1 递增的版本号
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
-    /// 返回新建的合同版本实体。
-    ///
-    /// # 错误
-    /// 编号/快照为空、超长，或有效期倒挂时返回错误。
+    /// 归档时用合同稳定身份、聚合内递增的修订号和 PDF 文件资产创建不可变版本，冻结客户、结算、付款及开票资料。
+    /// 修订号为零、编号或快照为空/过长，或者到期日不晚于开始日时拒绝。
     pub fn new(
         id: ContractRevisionId,
         contract_id: ContractId,
@@ -184,61 +152,23 @@ impl ContractRevision {
         })
     }
 
-    /// 更新合同版本。
-    ///
-    /// 合同版本是正式归档的不可变修订（数据模型 §4.3），业务字段不允许更新。
-    ///
-    /// # 参数
-    /// * `_data` - 更新数据（被拒绝，保留签名以表达不可变性契约）
-    ///
-    /// # 返回
-    /// 恒返回 `Err`。
-    ///
-    /// # 错误
-    /// 恒返回「不可变版本不支持更新」错误。
+    /// 已归档的合同修订不允许覆盖；此入口始终返回不可变修订错误。业务变更须追加新修订。
     pub fn update(&mut self, _data: ContractRevisionData) -> Result<()> {
         Err(Error::from("合同版本是不可变修订，不支持更新"))
     }
 
-    /// 由当前最大修订序号计算下一合同修订序号。
-    ///
-    /// # 参数
-    /// * `current_max` - 当前合同历史最大修订序号；没有历史时为 `0`
-    ///
-    /// # 返回
-    /// 返回严格递增的下一修订序号。
-    ///
-    /// # 错误
-    /// 当前修订序号达到 `u32::MAX` 时返回错误。
+    /// 首次归档或追加修订时，以历史最大修订号加一；无历史传 `0` 得到 `1`，达到 `u32::MAX` 时返回错误。
     pub fn next_revision_no(current_max: u32) -> Result<u32> {
         current_max.checked_add(1).ok_or_else(|| Error::from("合同版本号溢出"))
     }
 
-    /// 判断本版本是否属于给定合同。
-    ///
-    /// # 参数
-    /// * `contract_id` - 调用方选择的合同稳定身份
-    ///
-    /// # 返回
-    /// 版本所属合同一致时返回 `true`。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 只比较合同身份；不读取当前可用版本或结算主体。
+    /// 解析销售或归档引用时，只比较本修订与所选稳定合同的身份，不查询活动版本或结算主体。
     pub fn belongs_to_contract(&self, contract_id: &ContractId) -> bool {
         &self.contract_id == contract_id
     }
 
-    /// 核对客户对合同不可变版本的引用身份。
-    ///
-    /// # 参数
-    /// `contract` 为本版本所属的稳定合同，`customer_id` 和 `contract_no` 为引用方冻结的身份。
-    /// # 返回
-    /// 客户、合同身份和编号全部一致时成功；结算主体由销售单单独约定。
-    /// # 错误
-    /// 客户、所属合同或编号不一致，以及引用方缺少编号时拒绝。
+    /// 销售引用既有归档修订时，核对实际客户、稳定合同身份、合同编号及引用方冻结的编号一致。
+    /// 任一不匹配或引用方缺少编号均拒绝；结算主体由销售单另行约定。
     pub fn ensure_customer_reference(
         &self,
         contract: &Contract,
@@ -255,19 +185,7 @@ impl ContractRevision {
         Ok(())
     }
 
-    /// 判断本版本结算主体是否与给定主体一致。
-    ///
-    /// # 参数
-    /// * `settlement_party_id` - 合同当前结算主体
-    ///
-    /// # 返回
-    /// 结算主体一致时返回 `true`。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 结算主体漂移由调用方映射为冲突；本方法不做跨聚合读取。
+    /// 核对引用身份时，只比较修订快照的结算主体与调用方给出的合同当前主体；不读取其他聚合，主体漂移由调用方映射为冲突。
     pub fn matches_settlement_party(&self, settlement_party_id: &PartyId) -> bool {
         &self.settlement_party_id == settlement_party_id
     }

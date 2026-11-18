@@ -10,13 +10,13 @@ use super::{PortalReview, SupplierPortalProcess};
 use crate::{Error, Result};
 
 impl SupplierPortalProcess {
-    /// 当前完整办理资格与真实申请关联先于命令回放；不要求旧任务仍开放。
-    /// # 参数
-    /// request_id、task_id 为原命令申请及任务；actor 为当前人，executor 为原事务。
-    /// # 返回
-    /// 当前仍有完整资格并属于原申请时成功。
-    /// # 错误
-    /// 资格撤销、指派改变、任务或关联缺失时拒绝。
+    // 当前完整办理资格与真实申请关联先于命令回放；不要求旧任务仍开放。
+    //
+    // request_id、task_id 为原命令申请及任务；actor 为当前人，executor 为原事务。
+    //
+    // 当前仍有完整资格并属于原申请时成功。
+    //
+    // 资格撤销、指派改变、任务或关联缺失时拒绝。
     pub(super) async fn require_review_result(
         &self,
         request_id: &str,
@@ -43,20 +43,17 @@ impl SupplierPortalProcess {
         Ok(())
     }
 
-    /// 按当前任务版本和申请主题校验门户审核任务仍可由该内部处理人处理。
-    ///
-    /// # 参数
-    /// * `request_id` - 申请 ID。
-    /// * `subject` - 当前任务主题。
-    /// * `input` - 含任务 ID 与期望任务版本的审核输入。
-    /// * `actor` - 当前内部处理人。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 任务身份、版本和处理人匹配时无返回值。
-    ///
-    /// # 错误
-    /// 工作项校验失败时返回对应错误。
+    // 按当前任务版本和申请主题校验门户审核任务仍可由该内部处理人处理。
+    //
+    // - `request_id`：申请 ID。
+    // - `subject`：当前任务主题。
+    // - `input`：含任务 ID 与期望任务版本的审核输入。
+    // - `actor`：当前内部处理人。
+    // - `executor`：调用方执行器。
+    //
+    // 任务身份、版本和处理人匹配时无返回值。
+    //
+    // 工作项校验失败时返回对应错误。
     pub(super) async fn validate_task(
         &self,
         request_id: &str,
@@ -81,20 +78,17 @@ impl SupplierPortalProcess {
         Ok(())
     }
 
-    /// 在调用方事务内完成门户审核任务。
-    ///
-    /// # 参数
-    /// * `request_id` - 申请 ID。
-    /// * `subject` - 当前任务主题。
-    /// * `input` - 含任务 ID 与期望任务版本的审核输入。
-    /// * `actor` - 当前内部处理人。
-    /// * `executor` - 调用方事务执行器。
-    ///
-    /// # 返回
-    /// 任务已完成时无返回值。
-    ///
-    /// # 错误
-    /// 工作项完成失败时返回对应错误。
+    // 在调用方事务内完成门户审核任务。
+    //
+    // - `request_id`：申请 ID。
+    // - `subject`：当前任务主题。
+    // - `input`：含任务 ID 与期望任务版本的审核输入。
+    // - `actor`：当前内部处理人。
+    // - `executor`：调用方事务执行器。
+    //
+    // 任务已完成时无返回值。
+    //
+    // 工作项完成失败时返回对应错误。
     pub(super) async fn complete_task(
         &self,
         request_id: &str,
@@ -119,20 +113,17 @@ impl SupplierPortalProcess {
         Ok(())
     }
 
-    /// 按任务当前版本撤回供应商门户审核任务。
-    ///
-    /// # 参数
-    /// * `request_id` - 申请 ID。
-    /// * `subject` - 当前任务主题。
-    /// * `task_id` - 待撤回的工作项 ID。
-    /// * `actor_id` - 撤回人账号 ID。
-    /// * `executor` - 调用方事务执行器。
-    ///
-    /// # 返回
-    /// 任务已按当前版本撤回时无返回值。
-    ///
-    /// # 错误
-    /// 任务不存在时返回 `ConflictError`。读取或撤回失败时返回对应错误。
+    // 按任务当前版本撤回供应商门户审核任务。
+    //
+    // - `request_id`：申请 ID。
+    // - `subject`：当前任务主题。
+    // - `task_id`：待撤回的工作项 ID。
+    // - `actor_id`：撤回人账号 ID。
+    // - `executor`：调用方事务执行器。
+    //
+    // 任务已按当前版本撤回时无返回值。
+    //
+    // 任务不存在时返回 `ConflictError`。读取或撤回失败时返回对应错误。
     pub(super) async fn withdraw_task(
         &self,
         request_id: &str,

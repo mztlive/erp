@@ -13,14 +13,14 @@ use super::{ObjectKind, WorkbenchFactsReader, WorkbenchObjectFactMap, object_ids
 use crate::errors::Result;
 
 impl WorkbenchFactsReader<'_> {
-    /// 对已授权装载的导入、供应商订单和供给异常补齐公共事实。
-    ///
-    /// # 参数
-    /// `keys` 为本批对象键，`facts` 为已装载事实，`executor` 为查询执行器。
-    /// # 返回
-    /// 原地补充公共字段，不修改授权事实。
-    /// # 错误
-    /// 任一仓储查询失败时返回原错误。
+    // 读取导入及供应异常简报时，对已授权装载的导入、供应商订单和供给异常补齐公共事实。
+    //
+    // 调用参数：
+    // `keys` 为本批对象键，`facts` 为已装载事实，`executor` 为查询执行器。
+    //
+    // 原地补充公共字段，不修改授权事实。
+    //
+    // 任一仓储查询失败时返回原错误。
     pub(super) async fn load_operational_briefs(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -32,7 +32,7 @@ impl WorkbenchFactsReader<'_> {
         self.offering_briefs(keys, facts, executor).await
     }
 
-    /// 导入确认的批次、基准日和成功失败数量对所有可读角色一致。
+    // 处理导入及供应异常简报时，导入确认的批次、基准日和成功失败数量对所有可读角色一致。
     async fn import_briefs(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -59,7 +59,7 @@ impl WorkbenchFactsReader<'_> {
         Ok(())
     }
 
-    /// 供应商履约异常保留供应商名称、订单号与三条独立状态及里程碑。
+    // 用于应商履约异常保留供应商名称、订单号与三条独立状态及里程碑。
     async fn supplier_order_briefs(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -91,7 +91,7 @@ impl WorkbenchFactsReader<'_> {
         Ok(())
     }
 
-    /// 停供异常保留业务订货编码、登记状态；不把内部 SKU 身份当作商品名称。
+    // 处理导入及供应异常简报时，停供异常保留业务订货编码、登记状态；不把内部 SKU 身份当作商品名称。
     async fn offering_briefs(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -139,7 +139,7 @@ impl WorkbenchFactsReader<'_> {
     }
 }
 
-/// 只纳入有值的业务字段；空摘要与不存在的金额不补零。
+// 生成导入及供应异常简报展示时，只纳入有值的业务字段；空摘要与不存在的金额不补零。
 fn sections<const N: usize>(fields: [(&str, Option<String>); N]) -> ObjectBriefSource {
     let mut source = ObjectBriefSource::default();
     for (label, value) in fields {
@@ -148,7 +148,7 @@ fn sections<const N: usize>(fields: [(&str, Option<String>); N]) -> ObjectBriefS
     source
 }
 
-/// 供应商订单事实独立于调查动作，状态轴不得互相替代。
+// 用于应商订单事实独立于调查动作，状态轴不得互相替代。
 fn supplier_order_source(row: SupplierFulfillmentOrder, supplier: Option<String>) -> ObjectBriefSource {
     sections([
         ("供应商", supplier),
@@ -163,7 +163,7 @@ fn supplier_order_source(row: SupplierFulfillmentOrder, supplier: Option<String>
     ])
 }
 
-/// 停供可能来自登记状态或实时可供状态，两者都必须展示。
+// 处理导入及供应异常简报时，停供可能来自登记状态或实时可供状态，两者都必须展示。
 fn offering_source(
     row: &SupplierOffering,
     supplier: Option<String>,

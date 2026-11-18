@@ -19,7 +19,7 @@ const PORTAL: &[(&str, Permission)] = &[
     ("detail_portal_cooperation", internal::PORTAL_MATERIAL_READ),
 ];
 
-/// 每个分区都必须使用唯一完整来源；自引用分区只表达无需额外来源的真实任务。
+// 每类详情分支应以唯一完整来源为准；自引用只用于不需要额外单据来源的真实任务种类。
 fn related(key: &str, resource: &str, rule: AccessRule) -> Result<AccessRule> {
     Ok(AccessRule::Related {
         relation: RelationKey::parse(key)?,
@@ -29,7 +29,7 @@ fn related(key: &str, resource: &str, rule: AccessRule) -> Result<AccessRule> {
     })
 }
 
-/// 启动校验覆盖所有详情分区；运行资格不能掩盖缺失来源 Mapping。
+// 任务详情启动校验必须覆盖全部来源分区，不能因当前账号不合格而跳过缺失的 Mapping。
 pub(super) fn binding_condition(base: AccessRule) -> Result<AccessRule> {
     let mut partitions = vec![related("detail_other", "work_item", AccessRule::Allow)?];
     for (key, source) in [("detail_sales", sales_order::DETAIL), ("detail_purchase", purchase_order::DETAIL)]
@@ -63,7 +63,7 @@ pub(super) fn binding_condition(base: AccessRule) -> Result<AccessRule> {
 }
 
 impl AuthorizationService {
-    /// 详情来源范围与原根共用账号资格、组织期限、授权修订和读取阶段。
+    // 为详情查询将来源数据范围绑定到根任务的同次身份、组织有效期、策略修订和执行阶段。
     pub(super) async fn work_item_query_condition(
         &self,
         context: &AccessContext,
@@ -114,7 +114,7 @@ impl AuthorizationService {
         Ok(AccessRule::all(vec![base, AccessRule::any(partitions)]))
     }
 
-    /// 材料读取按真实申请类型使用既有读取资格，不追加审核资格。
+    // 供应商申请材料按持久化申请类型分别编译已有读取资格，不额外要求能审核该申请。
     async fn portal_partitions(
         &self,
         context: &AccessContext,
@@ -142,7 +142,7 @@ impl AuthorizationService {
         Ok(())
     }
 
-    /// 对象入口沿同一来源范围和资格执行；普通列表不追加详情来源条件。
+    // 精确任务详情必须执行其固定来源权限；普通列表只执行自己的条件，不被详情来源收窄。
     pub(super) async fn work_item_detail_sources(
         &self,
         proof: &AccessProof,
@@ -162,7 +162,7 @@ impl AuthorizationService {
         Ok(sources)
     }
 
-    /// 详情读取只要求材料原有读取资格；完整办理额外审核资格由办理入口执行。
+    // 供应商任务详情以材料原有读取资格判定，完整任务办理另由其固定入口核验审核资格。
     async fn portal_task_read(
         &self,
         proof: &AccessProof,
@@ -191,7 +191,7 @@ impl AuthorizationService {
         Ok(access)
     }
 
-    /// 审批任务负责人按原读取和决定资格；其他读者必须满足真实类型管理及来源范围。
+    // 原审批责任人按已有读取及决定资格核对来源；管理读者则须通过真实类型的管理资格和业务来源数据范围。
     pub(super) async fn approval_task_sources(
         &self,
         proof: &AccessProof,

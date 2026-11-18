@@ -12,16 +12,7 @@ use crate::http::handler::supplier_settlement;
 use crate::http::routes::permission_route;
 use crate::http::state::HttpState;
 
-/// 返回本域管理端路由集合。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回声明公共权限目录信息的路由集合。
-///
-/// # 错误
-/// 不执行 I/O，不返回错误。
+/// 为管理端挂载供应商结算接口，按操作登记公共权限目录信息。
 pub fn routes() -> Router<HttpState> {
     Router::new()
         .merge(statement_routes())
@@ -32,7 +23,7 @@ pub fn routes() -> Router<HttpState> {
         .merge(difference_routes())
 }
 
-/// 供应商结算单读取、创建及审核候选路由。
+// 为父路由挂载供应商结算单读取、创建及审核候选路由。
 fn statement_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -65,7 +56,7 @@ fn statement_routes() -> Router<HttpState> {
         )
 }
 
-/// 供应商结算提交与刷新路由。
+// 为父路由挂载供应商结算提交与刷新路由。
 fn statement_command_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -84,7 +75,7 @@ fn statement_command_routes() -> Router<HttpState> {
         )
 }
 
-/// 供应商结算来源凭据路由。
+// 为父路由挂载供应商结算来源凭据路由。
 fn evidence_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -103,7 +94,7 @@ fn evidence_routes() -> Router<HttpState> {
         )
 }
 
-/// 供应商结算审核与作废路由。
+// 为父路由挂载供应商结算审核与作废路由。
 fn review_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -122,7 +113,7 @@ fn review_routes() -> Router<HttpState> {
         )
 }
 
-/// 供应商结算责任交接路由。
+// 为父路由挂载供应商结算责任交接路由。
 fn handover_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -148,7 +139,7 @@ fn handover_routes() -> Router<HttpState> {
         )
 }
 
-/// 供应商结算项与差异处理路由。
+// 为父路由挂载供应商结算项与差异处理路由。
 fn difference_routes() -> Router<HttpState> {
     Router::new()
         .route(

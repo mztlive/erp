@@ -291,20 +291,9 @@ pub(crate) struct ContractListQuery {
 }
 
 impl ContractListParams {
-    /// 归一化合同列表查询参数。
-    ///
-    /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验；
-    /// 未传 `scope` 时视为 [`ContractListScope::All`]。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单、排序方向非法，或 `include_descendants` 为真但未提供
-    /// `org_unit_ids` 时，返回 `ValidationError`。
+    // 查询合同列表前校验并规范化筛选和分页输入，返回独立于仓储的查询参数。
+    // 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验；未传 `scope` 时视为 [`ContractListScope::All`]。
+    // 排序字段不在白名单、排序方向非法，或 `include_descendants` 为真但未提供 `org_unit_ids` 时，返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<ContractListQuery> {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, CONTRACT_SORT_FIELDS)?;
         if self.include_descendants == Some(true) && self.org_unit_ids.is_none() {
@@ -440,13 +429,8 @@ pub struct ContractDetailView {
 }
 
 impl From<crate::entity::contract::Contract> for ContractView {
-    /// 从合同实体构造列表行视图。
-    ///
-    /// # 参数
-    /// * `contract` - 合同实体
-    ///
-    /// # 返回
-    /// 返回列表行视图。
+    // 从合同实体构造列表行视图。
+    // `contract` 为合同实体。
     fn from(contract: crate::entity::contract::Contract) -> Self {
         Self {
             id: contract.base.id,
@@ -466,13 +450,8 @@ impl From<crate::entity::contract::Contract> for ContractView {
 }
 
 impl From<crate::entity::contract::ContractRevision> for ContractRevisionView {
-    /// 从合同版本实体构造版本视图。
-    ///
-    /// # 参数
-    /// * `revision` - 合同版本实体
-    ///
-    /// # 返回
-    /// 返回版本视图。
+    // 从合同版本实体构造版本视图。
+    // `revision` 为合同版本实体。
     fn from(revision: crate::entity::contract::ContractRevision) -> Self {
         Self {
             recognition: revision.recognition,

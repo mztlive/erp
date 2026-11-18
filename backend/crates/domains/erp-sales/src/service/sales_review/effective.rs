@@ -14,18 +14,14 @@ use crate::service::sales_order::inquiry::ensure_formal_change;
 use crate::{Error, Result};
 
 impl SalesReviewService {
-    /// 校验最终通过状态并准备销售修订；本方法只产生销售本域写入计划。
-    ///
-    /// # 参数
-    /// * `id` - 销售变更单。
-    /// * `actor` - 最终通过操作人。
-    /// * `executor` - 读取变更单的调用方执行器；其余销售读取仍走 `NoTransaction`。
-    ///
-    /// # 返回
+    /// 最终审批通过时校验该变更可生效，并准备本域新销售修订；跨域差额交外层流程。
     /// 返回尚未落库的销售修订写入计划。
+    /// 失败条件：状态、基准版本或正式修订不满足原合同则失败；变更单、提交、销售单或当前版本不存在以及仓储读取失败时返回对应错误。
     ///
-    /// # 错误
-    /// 状态、基准版本或正式修订不满足原合同则失败；变更单、提交、销售单或当前版本不存在以及仓储读取失败时返回对应错误。
+    /// 输入约定：
+    /// - `id`：销售变更单。
+    /// - `actor`：最终通过操作人。
+    /// - `executor`：读取变更单的调用方执行器；其余销售读取仍走 `NoTransaction`。
     pub async fn prepare_effective_change(
         &self,
         id: &str,
@@ -43,10 +39,8 @@ impl SalesReviewService {
     }
 }
 
-/// 读取销售变更来源并完成生效写入计划的领域计算。
-///
-/// # 错误
-/// 基准版本漂移、提交缺失或版本构造失败时返回错误。
+// 开始变更生效前读取销售原单与冻结变更来源，随后在内存计算本域写入计划。
+// 基准版本漂移、提交缺失或版本构造失败时返回错误。
 async fn prepare_effective_change_write(
     db: &mongodb::Database,
     change_order: SalesChangeOrder,
@@ -78,10 +72,8 @@ async fn prepare_effective_change_write(
     prepare_effective_revision_write(db, change_order, order, submission, submission_lines, actor).await
 }
 
-/// 在内存中构造生效修订和待写入的销售单、变更单，不在此处落库。
-///
-/// # 错误
-/// 版本号递增、当前版本读取、修订构造或生效状态迁移失败时返回错误。
+// 以本轮冻结变更生成正式修订并迁移内存中的销售单和变更单，供后续事务落库。
+// 版本号递增、当前版本读取、修订构造或生效状态迁移失败时返回错误。
 async fn prepare_effective_revision_write(
     db: &mongodb::Database,
     change_order: SalesChangeOrder,
@@ -131,57 +123,29 @@ pub struct EffectiveChangeWrite {
 }
 impl EffectiveChangeWrite {
     /// 待最终生效的销售变更单标识。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回变更单稳定身份。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn change_id(&self) -> &str {
         &self.change.base.id
     }
 
     /// 变更所属销售单标识。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回销售单稳定身份。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn sales_order_id(&self) -> &str {
         self.change.sales_order_id.as_ref()
     }
 
     /// 变更所属销售单号。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回销售业务单号。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn sales_order_no(&self) -> &str {
         &self.order.order_no
     }
-    /// 写入正式销售版本；外层流程随后写入差额，再推进变更单。
+    /// 在变更生效事务内先落新销售正式版本；外层流程据此记差额，再推进变更单。
+    /// 结果：销售单和正式版本写入成功时返回 `Ok(())`。不在此处更新变更单。
+    /// 失败条件：仓储或形式化写入失败时返回对应错误。
     ///
-    /// # 参数
-    /// * `db` - 销售集合所在数据库。
-    /// * `session` - 调用方事务执行器。
-    ///
-    /// # 返回
-    /// 销售单和正式版本写入成功时返回 `Ok(())`。不在此处更新变更单。
-    ///
-    /// # 错误
-    /// 仓储或形式化写入失败时返回对应错误。
+    /// 输入约定：
+    /// - `db`：销售集合所在数据库。
+    /// - `session`：调用方事务执行器。
     pub async fn persist_revision(
         &mut self,
         db: &mongodb::Database,
@@ -209,17 +173,13 @@ impl EffectiveChangeWrite {
             .await?;
         Ok(())
     }
-    /// 在差额与工作项成功后写回销售变更状态，不创建新的事务。
+    /// 差额和工作项处理成功后才写回变更状态，继续沿用外层生效事务。
+    /// 结果：变更单更新成功时返回 `Ok(())`。
+    /// 失败条件：仓储更新失败时返回对应错误。
     ///
-    /// # 参数
-    /// * `db` - 销售集合所在数据库。
-    /// * `session` - 调用方事务执行器。
-    ///
-    /// # 返回
-    /// 变更单更新成功时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 仓储更新失败时返回对应错误。
+    /// 输入约定：
+    /// - `db`：销售集合所在数据库。
+    /// - `session`：调用方事务执行器。
     pub async fn persist_change(
         &mut self,
         db: &mongodb::Database,
@@ -229,15 +189,8 @@ impl EffectiveChangeWrite {
         Ok(())
     }
 
-    /// 冻结销售修订的来源与金额，供流程显式映射下游消费方事实。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
+    /// 向下游提供新正式版本中已冻结的来源、主体及金额，由流程显式构造各消费方的输入。
     /// 返回来源销售单、修订、业务类型、变更前后含税金额和入账时间。
-    ///
-    /// # 错误
     /// `revision_gross` 不产生 `Err`，本方法因此不失败。
     pub fn revision_fact(&self) -> Result<crate::ports::sales_review::SalesChangeRevisionFact> {
         Ok(crate::ports::sales_review::SalesChangeRevisionFact {

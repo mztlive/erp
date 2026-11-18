@@ -5,17 +5,7 @@ use std::net::IpAddr;
 
 pub(super) const BACKOFFICE_LOGIN_REALM: &str = "backoffice";
 
-/// 将登录域与 TCP 来源地址组合成限流 key。
-///
-/// # 参数
-/// * `realm` - 登录入口，后台为 `backoffice`
-/// * `peer_ip` - 连接的 TCP 对端地址
-///
-/// # 返回
-/// 返回 `"{realm}|{peer_ip}"`。同一来源上的不同账号共享这一层配额，账号本身不再单独计数。
-///
-/// # 错误
-/// 无。
+// 用登录域和 TCP 对端地址生成限流键；同一来源的不同账号共享这一层配额，不使用客户端提供的转发头或账号作为分桶依据。
 pub(super) fn login_source_key(realm: &str, peer_ip: IpAddr) -> String {
     format!("{realm}|{peer_ip}")
 }

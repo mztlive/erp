@@ -64,13 +64,12 @@ pub struct PolicyExport {
 }
 
 impl ExportPolicyRequest {
-    /// 生成只读选择，限制批次且不隐式选择全公司。
-    /// # 参数
-    /// self 为调用方明确提供的角色及人员集合。
-    /// # 返回
-    /// 仅用于读取事实的规范化选择文件。
-    /// # 错误
-    /// 空选择、超限、重复或非法标识时拒绝。
+    // 生成只读选择，限制批次且不隐式选择全公司。
+    // 仅用于读取事实的规范化选择文件。
+    //
+    // 空选择、超限、重复或非法标识时拒绝。
+    //
+    // self 为调用方明确提供的角色及人员集合。
     pub(crate) fn selection(self) -> Result<PolicyDocument> {
         if self.role_ids.len() > 100
             || self.user_ids.len() > 100

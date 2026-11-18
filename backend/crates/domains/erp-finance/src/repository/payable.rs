@@ -44,16 +44,7 @@ pub struct PayableRepository<'a> {
 }
 
 impl<'a> PayableRepository<'a> {
-    /// 创建域专用仓储。
-    ///
-    /// # 参数
-    /// * `db` - 目标 MongoDB 数据库
-    ///
-    /// # 返回
-    /// 返回仓储实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将本领域的集合访问器绑定到当前 MongoDB 数据库，构造时不读写集合。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }

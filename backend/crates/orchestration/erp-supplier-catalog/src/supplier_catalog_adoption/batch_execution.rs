@@ -16,12 +16,12 @@ use super::{BatchView, SubmitBatchRequest, SupplierCatalogAdoptionProcess};
 use crate::{Error, Result};
 
 impl SupplierCatalogAdoptionProcess {
-    /// 冻结用户明确确认的就绪子集，并持久化后台任务；HTTP不执行入库循环。
-    /// # 参数
+    /// 用户提交批量入库确认时，按页面所见版本和原操作号冻结明确选中的就绪项，并持久化后台任务；HTTP 不逐行入库。
+    ///
     /// 来源连接、批次、当前预览版本、确认集合、原操作号和当前用户。
-    /// # 返回
+    ///
     /// 已排入后台的批次；未就绪项保留原状态。
-    /// # 错误
+    ///
     /// 越权、旧版本、来源或目标变化、异载荷重用操作号时拒绝。
     pub async fn submit_batch(
         &self,
@@ -82,7 +82,7 @@ impl SupplierCatalogAdoptionProcess {
         .await
     }
 
-    /// 在同一读取快照中核对确认范围、逐项访问与原操作号。
+    // 在同一读取快照中核对确认范围、逐项访问与原操作号。
     async fn submission_preflight(
         &self,
         connection: &str,
@@ -292,13 +292,8 @@ impl SupplierCatalogAdoptionProcess {
         Ok(())
     }
 
-    /// 后台处理一批已确认行；每行领取和业务写入均独立提交。
-    /// # 参数
-    /// `id` 为已经持久化的批次身份。
-    /// # 返回
-    /// 本轮实际领取的行数。
-    /// # 错误
-    /// 存储故障返回错误；逐项明确失败或待核实持久化后继续其他项。
+    /// 后台收到待执行选品批次后，先恢复未发布的确认操作并核对原行结果，再领取已发布操作中的确认行。
+    /// 认领与各行业务写入各自提交。返回本轮实际领取数；存储故障中止，单行失败或待核实保存后可继续。
     pub async fn process_batch(&self, id: &str) -> Result<usize> {
         let mut batch = self
             .db
@@ -385,13 +380,13 @@ impl SupplierCatalogAdoptionProcess {
         self.batch_actor(id, &mut NoTransaction).await
     }
 
-    /// 恢复仍有效的后台任务操作人。
-    /// # 参数
-    /// 原操作人身份及当前授权读取执行器。
-    /// # 返回
-    /// 真实有效的后台账号上下文。
-    /// # 错误
-    /// 账号失效或数据库读取失败时拒绝。
+    // 恢复仍有效的后台任务操作人。
+    //
+    // 原操作人身份及当前授权读取执行器。
+    //
+    // 真实有效的后台账号上下文。
+    //
+    // 账号失效或数据库读取失败时拒绝。
     pub(super) async fn batch_actor(&self, id: &str, executor: &mut dyn Executor) -> Result<AuditActor> {
         let account = self
             .db
@@ -404,12 +399,12 @@ impl SupplierCatalogAdoptionProcess {
             .with_actor_name_snapshot(Some(account.name))?)
     }
 
-    /// 仅查询已冻结原操作的永久回执；查不到时维持待核实，禁止重新入库。
-    /// # 参数
+    /// 批次存在结果不明的入库行时，只查证冻结原操作的永久回执；回执缺失仍待核实，不能因此重做入库。
+    ///
     /// 来源连接、批次和当前查询用户。
-    /// # 返回
+    ///
     /// 已查证结果与仍待核实项。
-    /// # 错误
+    ///
     /// 当前用户越权或读取持久化失败时拒绝。
     pub async fn reconcile_batch(&self, connection: &str, id: &str, actor: &AuditActor) -> Result<BatchView> {
         let (source, target, acting) = (connection.to_owned(), id.to_owned(), actor.clone());

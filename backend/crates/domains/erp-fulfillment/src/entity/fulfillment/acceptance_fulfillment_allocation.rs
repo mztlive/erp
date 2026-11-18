@@ -29,16 +29,7 @@ pub enum FulfillmentFactType {
 }
 
 impl FulfillmentFactType {
-    /// 返回类型的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回验收引用的履约事实类型的中文名称，供业务界面展示，不作为持久化代码。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Delivery => "发货",
@@ -47,16 +38,7 @@ impl FulfillmentFactType {
         }
     }
 
-    /// 返回类型的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回验收引用的履约事实类型的稳定代码，供持久化与查询匹配使用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Delivery => "DELIVERY",
@@ -77,16 +59,7 @@ pub enum AllocationAction {
 }
 
 impl AllocationAction {
-    /// 返回动作的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回验收分配动作的中文名称，供业务界面展示，不作为持久化代码。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Apply => "应用",
@@ -94,16 +67,7 @@ impl AllocationAction {
         }
     }
 
-    /// 返回动作的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回验收分配动作的稳定代码，供持久化与查询匹配使用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Apply => "APPLY",
@@ -153,21 +117,9 @@ pub struct AcceptanceFulfillmentAllocation {
 
 impl AcceptanceFulfillmentAllocation {
     /// 创建验收履约分配。
-    ///
-    /// 完成分配数量正数校验与动作-引用一致性校验：`APPLY` 不得携带反向引用，
-    /// `REVERSE` 必须携带被冲销的原分配（§6.7）。`fulfillment_line_id` 按
-    /// `fulfillment_fact_type` 对应发货行/电子交付/服务履约主键；因三类事实
-    /// 没有统一 ID newtype，此处以字符串承载（地基修订候选：公共的
-    /// `FulfillmentLineRef` 值对象），P3 按类型解析并校验存在性。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::AcceptanceFulfillmentAllocationId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
+    /// 完成分配数量正数校验与动作-引用一致性校验：`APPLY` 不得携带反向引用，`REVERSE` 必须携带被冲销的原分配（§6.7）。`fulfillment_line_id` 按 `fulfillment_fact_type` 对应发货行/电子交付/服务履约主键；因三类事实没有统一 ID newtype，此处以字符串承载（地基修订候选：公共的 `FulfillmentLineRef` 值对象），P3 按类型解析并校验存在性。
     /// 返回新建的分配实体。
-    ///
-    /// # 错误
+    /// `id` 为实体主键（`erp_core::ids::AcceptanceFulfillmentAllocationId`）。
     /// 分配数量非正、履约事实引用为空，或动作与反向引用不一致时返回错误。
     pub fn new(
         id: AcceptanceFulfillmentAllocationId,
@@ -200,15 +152,8 @@ impl AcceptanceFulfillmentAllocation {
     }
 
     /// 计算指定履约事实的净验收分配数量。
-    ///
-    /// # 参数
-    /// * `allocations` - 已加载的验收分配集合
-    /// * `fulfillment_line_id` - 履约事实行主键
-    ///
-    /// # 返回
     /// 返回 `APPLY - REVERSE` 的净数量。
-    ///
-    /// # 错误
+    /// `allocations` 已加载的验收分配集合；`fulfillment_line_id` 为履约事实行主键。
     /// 反向分配导致净数量为负，或结果超出统一数量精度范围时返回错误。
     pub fn net_quantity_for_fact(
         allocations: &[AcceptanceFulfillmentAllocation],
@@ -219,16 +164,10 @@ impl AcceptanceFulfillmentAllocation {
         )
     }
 
-    /// 按输入顺序汇总已筛选分配；净数量为负或精度非法时返回原数量错误。
-    ///
-    /// # 参数
-    /// * `allocations` - 当前事实的分配引用，保持原顺序
-    ///
-    /// # 返回
-    /// 返回 `APPLY - REVERSE` 的净数量。
-    ///
-    /// # 错误
-    /// 净数量为负或结果超出数量精度时返回错误。
+    // 按输入顺序汇总已筛选分配；净数量为负或精度非法时返回原数量错误。
+    // 返回 `APPLY - REVERSE` 的净数量。
+    // `allocations` 为当前事实的分配引用，保持原顺序。
+    // 净数量为负或结果超出数量精度时返回错误。
     pub(crate) fn net_quantity<'a>(allocations: impl Iterator<Item = &'a Self>) -> Result<Quantity> {
         let net = allocations.fold(Decimal::ZERO, |net, allocation| match allocation.allocation_action {
             AllocationAction::Apply => net + allocation.allocated_quantity.to_decimal(),
@@ -241,16 +180,9 @@ impl AcceptanceFulfillmentAllocation {
     }
 
     /// 计算履约事实剩余可验收数量。
-    ///
-    /// # 参数
-    /// * `successful_quantity` - 履约事实的净成功数量
-    /// * `allocations` - 已加载的验收分配集合
-    /// * `fulfillment_line_id` - 履约事实行主键
-    ///
-    /// # 返回
     /// 返回成功数量减净验收分配后的剩余数量。
-    ///
-    /// # 错误
+    /// `successful_quantity` 为履约事实的净成功数量；`allocations` 已加载的验收分配集合。
+    /// `fulfillment_line_id` 为履约事实行主键。
     /// 既有净验收已超过成功数量，或结果超出统一数量精度时返回错误。
     pub fn eligible_quantity_for_fact(
         successful_quantity: Quantity,
@@ -261,17 +193,10 @@ impl AcceptanceFulfillmentAllocation {
         Self::eligible_quantity(successful_quantity, net)
     }
 
-    /// 从已计算的净验收数量派生剩余数量；超额或精度非法时返回原数量错误。
-    ///
-    /// # 参数
-    /// * `successful_quantity` - 净成功履约数量
-    /// * `net` - 已校验的净验收数量
-    ///
-    /// # 返回
-    /// 返回成功数量减去净验收数量的剩余数量。
-    ///
-    /// # 错误
-    /// 净验收超额或结果超出数量精度时返回错误。
+    // 从已计算的净验收数量派生剩余数量；超额或精度非法时返回原数量错误。
+    // 返回成功数量减去净验收数量的剩余数量。
+    // `successful_quantity` 为净成功履约数量；`net` 为已校验的净验收数量。
+    // 净验收超额或结果超出数量精度时返回错误。
     pub(crate) fn eligible_quantity(successful_quantity: Quantity, net: Quantity) -> Result<Quantity> {
         if net.to_decimal() > successful_quantity.to_decimal() {
             return Err(Error::from("履约事实的净验收数量超过其净成功履约数量"));
@@ -281,17 +206,9 @@ impl AcceptanceFulfillmentAllocation {
     }
 
     /// 校验追加应用分配不会超过履约事实的净成功数量。
-    ///
-    /// # 参数
-    /// * `successful_quantity` - 履约事实的净成功数量
-    /// * `existing` - 该履约事实的既有分配
-    /// * `fulfillment_line_id` - 履约事实行主键
-    /// * `applying_quantity` - 本次拟追加的应用数量
-    ///
-    /// # 返回
     /// 追加后仍不超上限时返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// `successful_quantity` 为履约事实的净成功数量；`existing` 为该履约事实的既有分配。
+    /// `fulfillment_line_id` 为履约事实行主键；`applying_quantity` 为本次拟追加的应用数量。
     /// 净数量计算失败或追加后超过成功数量时返回错误。
     pub fn ensure_apply_within_successful_quantity(
         successful_quantity: Quantity,
@@ -307,17 +224,9 @@ impl AcceptanceFulfillmentAllocation {
     }
 
     /// 校验一组分配属于可冲正的原始验收事实。
-    ///
-    /// 原始验收只能包含至少一条 `APPLY`；由冲正生成的验收包含 `REVERSE`，
-    /// 不得再次作为冲正目标，否则会形成没有业务数量变化的反向记录。
-    ///
-    /// # 参数
-    /// * `allocations` - 待冲正验收单的全部履约分配
-    ///
-    /// # 返回
+    /// 原始验收只能包含至少一条 `APPLY`；由冲正生成的验收包含 `REVERSE`，不得再次作为冲正目标，否则会形成没有业务数量变化的反向记录。
     /// 全部为原始应用分配时返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// `allocations` 为待冲正验收单的全部履约分配。
     /// 分配为空、包含反向动作或带有反向引用时返回错误。
     pub fn ensure_reversible_source(allocations: &[AcceptanceFulfillmentAllocation]) -> Result<()> {
         if allocations.is_empty() {
@@ -352,7 +261,7 @@ pub(crate) mod tests {
         }
     }
 
-    /// happy path：应用分配创建成功并规范化引用。
+    // 验证应用分配创建成功并规范化引用。
     #[test]
     fn new_apply_succeeds() {
         let allocation = AcceptanceFulfillmentAllocation::new(
@@ -365,7 +274,7 @@ pub(crate) mod tests {
         assert_eq!(allocation.allocation_action, AllocationAction::Apply);
     }
 
-    /// happy path：反向分配创建成功。
+    // 验证反向分配创建成功。
     #[test]
     fn new_reverse_succeeds() {
         let data = AcceptanceFulfillmentAllocationData {
@@ -381,7 +290,7 @@ pub(crate) mod tests {
         assert_eq!(allocation.allocation_action, AllocationAction::Reverse);
     }
 
-    /// 原始应用分配可冲正；空分配和反向分配均必须拒绝。
+    // 验证原始应用分配可冲正；空分配和反向分配均必须拒绝。
     #[test]
     fn reversible_source_rejects_empty_and_reverse_allocations() {
         let apply = AcceptanceFulfillmentAllocation::new(
@@ -407,7 +316,7 @@ pub(crate) mod tests {
         assert!(error.to_string().contains("不能再次冲正"));
     }
 
-    /// 失败路径：数量越界、引用为空、动作与反向引用不一致。
+    // 验证数量越界、引用为空、动作与反向引用不一致。
     #[test]
     fn new_rejects_invalid_inputs() {
         let zero_quantity = AcceptanceFulfillmentAllocationData {
@@ -452,7 +361,7 @@ pub(crate) mod tests {
         );
     }
 
-    /// 净分配与剩余可验收数量按 APPLY - REVERSE 计算。
+    // 验证净分配与剩余可验收数量按 APPLY - REVERSE 计算。
     #[test]
     fn net_and_eligible_quantities_are_conserved() {
         let apply = AcceptanceFulfillmentAllocation::new(

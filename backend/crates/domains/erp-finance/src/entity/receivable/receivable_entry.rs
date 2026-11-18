@@ -33,16 +33,7 @@ pub enum ReceivableEntryType {
 }
 
 impl ReceivableEntryType {
-    /// 返回类型的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为界面或响应展示提供应收分录类型的中文名称；机器筛选和存储不使用该名称。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Original => "原始应收",
@@ -53,16 +44,7 @@ impl ReceivableEntryType {
         }
     }
 
-    /// 返回类型的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将应收分录类型转成用于持久化和查询的稳定代码，与中文展示文案分开。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Original => "original",
@@ -85,16 +67,7 @@ pub enum EntryDirection {
 }
 
 impl EntryDirection {
-    /// 返回方向的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为界面或响应展示提供应收分录方向的中文名称；机器筛选和存储不使用该名称。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Increase => "增加",
@@ -102,16 +75,7 @@ impl EntryDirection {
         }
     }
 
-    /// 返回方向的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将应收分录方向转成用于持久化和查询的稳定代码，与中文展示文案分开。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Increase => "increase",
@@ -179,17 +143,13 @@ pub struct ReceivableEntry {
 
 impl ReceivableEntry {
     /// 计算当前增加分录已逾期且尚未收回的余额。
+    /// 结果：已过期增加分录扣除核销与冲减后的非负余额，其余分录返回零。
+    /// 金额溢出沿用 Amount 的运算约定。
     ///
-    /// # 参数
-    /// * `today` - 中国业务时区的当前日期；到期当日不算逾期。
-    /// * `settled` - 本分录已过账正反核销净额。
-    /// * `offset` - 本分录被冲减的累计金额。
-    ///
-    /// # 返回
-    /// 已过期增加分录扣除核销与冲减后的非负余额，其余分录返回零。
-    ///
-    /// # 错误
-    /// 不返回错误；金额溢出沿用 Amount 的运算约定。
+    /// 输入约定：
+    /// - `today`：中国业务时区的当前日期；到期当日不算逾期。
+    /// - `settled`：本分录已过账正反核销净额。
+    /// - `offset`：本分录被冲减的累计金额。
     pub fn overdue_balance(&self, today: BusinessDate, settled: Amount, offset: Amount) -> Amount {
         if self.direction != EntryDirection::Increase || self.due_date >= today {
             return Amount::zero();
@@ -197,20 +157,15 @@ impl ReceivableEntry {
         self.amount.checked_sub(settled).checked_sub(offset).max(Amount::zero())
     }
 
-    /// 创建应收分录。
+    /// 销售生效或退款、变更引起应收变化时构造分录，记录确定的来源、金额和方向。
     ///
     /// 完成来源文本的 trim/非空/长度校验、金额正数校验与「类型 ↔ 方向」一致性校验
     /// （原始应收必须是增加，冲减类分录必须是减少，销售变更差额双向均可）。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::ReceivableEntryId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
     /// 返回新建的分录实体。
-    ///
-    /// # 错误
     /// 当来源字段为空/超长、金额非正、来源序号为 0 或类型与方向矛盾时返回错误。
+    ///
+    /// 输入约定：
+    /// - `id`：实体主键（`erp_core::ids::ReceivableEntryId`）
     pub fn new(id: ReceivableEntryId, data: ReceivableEntryData) -> Result<Self> {
         let source_fact_type = normalize_required_text(
             data.source_fact_type,
@@ -254,40 +209,23 @@ impl ReceivableEntry {
         })
     }
 
-    /// 更新应收分录。
-    ///
-    /// 正式事实过账后不可更新（数据模型 §4.5、§6.8「不修改原应收」），
-    /// 任何字段的修改都被拒绝，纠错必须追加反向分录。
-    ///
-    /// # 参数
-    /// * `update` - 更新数据（恒被拒绝）
-    /// * `updated_by` - 更新执行人（恒被拒绝）
-    ///
-    /// # 返回
-    /// 恒返回错误。
-    ///
-    /// # 错误
-    /// 任何调用都返回错误：正式事实过账后不可更新，纠错须追加反向分录。
+    /// 拒绝改写正式应收分录；用追加的反向分录纠错而不覆盖客户欠款历史。
     pub fn update(&mut self, update: ReceivableEntryData, updated_by: impl Into<String>) -> Result<()> {
         let _ = (update, updated_by);
         Err(Error::from("正式事实过账后不可更新，纠错请追加反向分录"))
     }
 }
 
-/// 校验分录类型与方向的一致性。
-///
-/// 规则（数据模型 §6.8）：原始应收形成正向增加；作废冲减、退款、冲正是冲减类，
-/// 必须是减少；销售变更差额根据变更方向可增可减。
-///
-/// # 参数
-/// * `entry_type` - 分录类型
-/// * `direction` - 分录方向
-///
-/// # 返回
-/// 一致返回 `Ok(())`。
-///
-/// # 错误
-/// 类型与方向矛盾时返回错误。
+// 校验分录类型与方向的一致性。
+//
+// 规则（数据模型 §6.8）：原始应收形成正向增加；作废冲减、退款、冲正是冲减类，
+// 必须是减少；销售变更差额根据变更方向可增可减。
+// 结果：一致返回 `Ok(())`。
+// 类型与方向矛盾时返回错误。
+//
+// 输入约定：
+// - `entry_type`：分录类型
+// - `direction`：分录方向
 fn validate_direction_consistency(entry_type: ReceivableEntryType, direction: EntryDirection) -> Result<()> {
     let fixed = match entry_type {
         ReceivableEntryType::Original => Some(EntryDirection::Increase),

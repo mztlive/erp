@@ -34,20 +34,11 @@ pub struct RuntimeInstanceListQuery {
 
 impl RuntimeInstanceListQuery {
     /// 由协议输入形成规范化查询。
-    ///
-    /// # 参数
-    /// * `view` - 固定查询视图
-    /// * `document_type` - 可选单据类型稳定码
-    /// * `status` - 可选实例状态
-    /// * `cursor` - HTTP 层已解码的稳定游标
-    /// * `limit` - 可选页大小；省略时使用 20
-    /// * `query` - 可选字面量检索串
-    ///
-    /// # 返回
     /// 返回已规范化并通过完整边界校验的查询。
     ///
-    /// # 错误
     /// view/status、document_type、limit、cursor 或检索串不符合合同时返回校验错误。
+    ///
+    /// `cursor`：HTTP 层已解码的稳定游标；`limit`：可选页大小；省略时使用 20。
     pub fn prepare(
         view: RuntimeInstanceListView,
         document_type: Option<String>,
@@ -69,14 +60,8 @@ impl RuntimeInstanceListQuery {
     }
 
     /// 校验规范化查询的全部纯输入合同。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 所有合同成立时返回 `Ok(())`。
     ///
-    /// # 错误
     /// view/status、document_type、limit、cursor 或检索串不符合合同时返回校验错误。
     pub fn validate(&self) -> Result<()> {
         self.validate_view_status()?;
@@ -92,13 +77,13 @@ impl RuntimeInstanceListQuery {
         self.validate_query()
     }
 
-    /// trim 游标 ID；排序时间的完整 `i64` 定义域保持不变。
+    // 规范化实例列表游标的 ID，排序时间仍接受完整 `i64` 范围，不改变旧游标顺序。
     fn prepare_cursor(mut cursor: RuntimeInstanceListCursor) -> RuntimeInstanceListCursor {
         cursor.id = cursor.id.trim().to_string();
         cursor
     }
 
-    /// 校验固定视图允许的状态集合。
+    // 在发起实例读取前校验请求状态是否适用于固定视图，拒绝不能组合的筛选。
     fn validate_view_status(&self) -> Result<()> {
         match (self.view, self.status) {
             (RuntimeInstanceListView::Mine, None | Some(RuntimeInstanceStatusFilter::Running))
@@ -113,7 +98,7 @@ impl RuntimeInstanceListQuery {
         }
     }
 
-    /// 校验游标 ID 为已 trim 的有界稳定标识。
+    // 在仓储按游标取后页前，拒绝含首尾空白、为空或超过限制的实例 ID。
     fn validate_cursor(&self) -> Result<()> {
         let Some(cursor) = self.cursor.as_ref() else {
             return Ok(());
@@ -128,7 +113,7 @@ impl RuntimeInstanceListQuery {
         Ok(())
     }
 
-    /// 校验字面量检索串已规范化且长度有界。
+    // 实例筛选的字面量检索串必须已规范化且长度受限，未规范化值不能直接交给仓储。
     fn validate_query(&self) -> Result<()> {
         let Some(query) = self.query.as_deref() else {
             return Ok(());
@@ -156,33 +141,20 @@ pub struct RuntimeInstanceListCursor {
 
 impl RuntimeInstanceListCursor {
     /// 以必填实例构造稳定游标；排序时间默认为 0。
-    ///
-    /// # 参数
-    /// * `id` - 并列时的实例主键
-    ///
-    /// # 返回
     /// 返回零排序时间的游标。
-    ///
-    /// # 错误
-    /// 无。
     pub fn new(id: String) -> Self {
         Self { sort_time: 0, id }
     }
 }
 
-/// 解析实例列表筛选中的单据类型稳定码。
-///
-/// # 参数
-/// * `code` - 调用方提供的单据类型稳定代码
-///
-/// # 返回
-/// 精确命中登记代码时返回对应单据类型。
-///
-/// # 错误
-/// 未登记代码返回原有校验错误文本。
-///
-/// # 关键业务约束
-/// Service 不裁剪、不接受别名，也不维护第二份代码注册表。
+// 解析实例列表筛选中的单据类型稳定码。
+// Service 不裁剪、不接受别名，也不维护第二份代码注册表。
+//
+// 精确命中登记代码时返回对应单据类型。
+//
+// 未登记代码返回原有校验错误文本。
+//
+// `code`：调用方提供的单据类型稳定代码。
 pub(crate) fn parse_document_type(code: &str) -> Result<DocumentType> {
     DocumentType::try_from_code(code).map_err(|_| Error::ValidationError(format!("未登记单据类型: {code}")))
 }
@@ -204,7 +176,7 @@ mod runtime_instance_list_query_tests {
         RuntimeInstanceListQuery::prepare(view, None, status, None, None, None)
     }
 
-    /// 四种视图逐一覆盖省略状态及全部固定状态。
+    // 验证：四种视图逐一覆盖省略状态及全部固定状态。
     #[test]
     fn view_status_matrix_is_complete() {
         let views = [
@@ -237,7 +209,7 @@ mod runtime_instance_list_query_tests {
         }
     }
 
-    /// limit 省略、两端点及越界值必须得到唯一结果。
+    // 验证：limit 省略、两端点及越界值必须得到唯一结果。
     #[test]
     fn limit_defaults_and_rejects_outside_closed_range() {
         let default = prepare(RuntimeInstanceListView::Managed, None).expect("默认 limit");
@@ -271,7 +243,7 @@ mod runtime_instance_list_query_tests {
         }
     }
 
-    /// document_type 只接受注册表中的精确稳定码，prepare 与直接 validate 必须同样失败关闭。
+    // 验证：document_type 只接受注册表中的精确稳定码，prepare 与直接 validate 必须同样失败关闭。
     #[test]
     fn document_type_requires_an_exact_registered_code() {
         let registered = DocumentType::SalesOrder.as_str();
@@ -306,7 +278,7 @@ mod runtime_instance_list_query_tests {
         }
     }
 
-    /// cursor 保留完整 i64 时间域，ID 则 trim、非空且最多 128 字符。
+    // 验证：cursor 保留完整 i64 时间域，ID 则 trim、非空且最多 128 字符。
     #[test]
     fn cursor_prepares_id_and_preserves_i64_time_domain() {
         for sort_time in [i64::MIN, i64::MAX] {
@@ -352,7 +324,7 @@ mod runtime_instance_list_query_tests {
         }
     }
 
-    /// q 空白归 None，文本 trim，字符上限不得按字节数误判。
+    // 验证：q 空白归 None，文本 trim，字符上限不得按字节数误判。
     #[test]
     fn query_text_is_trimmed_and_character_bounded() {
         let blank = RuntimeInstanceListQuery::prepare(

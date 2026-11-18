@@ -31,15 +31,10 @@ impl SupplierOfferingProcess {
     ///
     /// 本命令只关闭人工核对责任，不得将“任务完成”解释为恢复供给或恢复发布。
     ///
-    /// # 参数
-    /// * `id` - 路径中的供给 ID，必须与决定中的供给身份一致。
-    /// * `req` - 完成供应停止任务的请求。
-    /// * `actor` - 当前操作人。
+    /// `id`：路径中的供给 ID，必须与决定中的供给身份一致；`req`：完成供应停止任务的请求。
     ///
-    /// # 返回
     /// 本次完成或同载荷重放的结果。
     ///
-    /// # 错误
     /// 请求非法、路径供给与决定不一致、任务 ID 或来源版本为空、任务版本无法解析，或任务、来源对象、冻结版本、当前责任或幂等请求任一不一致时失败关闭。
     pub async fn complete_supply_exception_task(
         &self,
@@ -81,7 +76,7 @@ impl SupplierOfferingProcess {
             Err(error) => Err(error),
         }
     }
-    /// 提交可能成功时，在新快照重新授权并只读回放原命令。
+    // 提交可能成功时，在新快照重新授权并只读回放原命令。
     async fn recover_exception_completion(
         &self,
         error: Error,
@@ -149,7 +144,7 @@ impl ExceptionReplayPort for MongoExceptionReplay<'_> {
     }
 }
 
-/// 本次资格、原回执和真实终态任务必须使用同一执行器。
+// 本次资格、原回执和真实终态任务必须使用同一执行器。
 async fn replay_completion<P: ExceptionReplayPort>(
     port: &mut P,
     actor: &AuditActor,
@@ -170,7 +165,7 @@ async fn replay_completion<P: ExceptionReplayPort>(
     Ok(Some(supply_exception_completion_result(&task, request)))
 }
 
-/// 回放只核对持久化完成结果，不重新要求旧任务仍开放或仍是旧版本。
+// 回放只核对持久化完成结果，不重新要求旧任务仍开放或仍是旧版本。
 fn ensure_committed_exception(
     committed: &SupplyExceptionReceipt,
     task: &WorkItem,
@@ -204,7 +199,7 @@ struct ExceptionCompletionTarget {
 }
 
 impl ExceptionCompletionTarget {
-    /// 固定请求身份和任务版本，首次执行与回放共用同一原命令。
+    // 固定请求身份和任务版本，首次执行与回放共用同一原命令。
     fn new(
         id: &str,
         req: CompleteSupplierSupplyExceptionTaskRequest,
@@ -488,7 +483,7 @@ impl CompletionWritePort for MongoCompletionWrite<'_> {
         })
     }
 }
-/// 原任务CAS、单次业务事件、领域回执顺序；任一失败停止后续步骤。
+// 原任务CAS、单次业务事件、领域回执顺序；任一失败停止后续步骤。
 async fn persist_completion<P: CompletionWritePort>(port: &mut P, executor: &mut dyn Executor) -> Result<()> {
     port.task(executor).await?;
     port.decision(executor).await?;
@@ -556,7 +551,7 @@ struct ExceptionCompletion<'a> {
     offering_id: &'a str,
 }
 
-/// 保持任务、决定事件、命令回执的原写入编排及首个错误。
+// 保持任务、决定事件、命令回执的原写入编排及首个错误。
 async fn commit_exception_completion(
     input: ExceptionCompletion<'_>,
     executor: &mut dyn Executor,

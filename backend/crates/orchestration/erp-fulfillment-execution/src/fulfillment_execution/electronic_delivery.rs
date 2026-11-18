@@ -29,22 +29,10 @@ use crate::{Error, Result};
 impl FulfillmentProcess {
     /// 创建电子交付记录（草稿）。
     ///
-    /// 同一事务注册 `BusinessDocument` 并调用统一绑定端口。电子交付为
-    /// `NO_APPROVAL`：返回空绑定，不查询已发布定义，不启动审批实例，
-    /// 不创建审批任务。交付对象快照以不透明值传入，服务端用指纹密钥
-    /// 计算查询指纹后落库；快照的字段级加密由边界完成。
+    /// 同一事务注册 `BusinessDocument` 并调用统一绑定端口。电子交付为 `NO_APPROVAL`：返回空绑定，不查询已发布定义，不启动审批实例，不创建审批任务。交付对象快照以不透明值传入，
+    /// 服务端用指纹密钥计算查询指纹后落库；快照的字段级加密由边界完成。返回新建记录的响应视图。`ValidationError`：请求体校验失败。
     ///
-    /// # 参数
-    /// * `req` - 创建请求
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回新建记录的响应视图。
-    ///
-    /// # 错误
-    /// * `ValidationError` - 请求体校验失败
-    /// * `ConflictError` - 履约记录号重复（唯一索引透出）
-    /// * `RepositoryError` - 数据库写入失败
+    /// `ConflictError`：履约记录号重复（唯一索引透出）。`RepositoryError`：数据库写入失败。
     #[tracing::instrument(
         name = "fulfillment.electronic_delivery_create",
         skip_all,
@@ -69,13 +57,7 @@ impl FulfillmentProcess {
     }
 }
 
-/// 电子交付创建必须跳过绑定：政策只能是 `NO_APPROVAL`。
-///
-/// # 返回
-/// 返回 `SkipNoApproval`。
-///
-/// # 错误
-/// 政策缺失或误登记为必须审批时返回部署不变量错误。
+// 电子交付创建必须跳过绑定：政策只能是 `NO_APPROVAL`。返回 `SkipNoApproval`。政策缺失或误登记为必须审批时返回部署不变量错误。
 fn electronic_delivery_create_binding_decision() -> Result<BindingDecision> {
     let policy = policy_of(DocumentType::ElectronicDelivery)?;
     match &policy {
@@ -91,10 +73,7 @@ fn electronic_delivery_create_binding_decision() -> Result<BindingDecision> {
     }
 }
 
-/// 确认电子交付创建路径不得查询发布定义。
-///
-/// # 错误
-/// 绑定决定不是跳过时返回错误。
+// 确认电子交付创建路径不得查询发布定义。绑定决定不是跳过时返回错误。
 fn ensure_electronic_delivery_skips_approval_binding() -> Result<BindingDecision> {
     let decision = electronic_delivery_create_binding_decision()?;
     if decision != BindingDecision::SkipNoApproval {
@@ -103,10 +82,7 @@ fn ensure_electronic_delivery_skips_approval_binding() -> Result<BindingDecision
     Ok(decision)
 }
 
-/// 电子交付不得注册空审批适配器。
-///
-/// # 错误
-/// 适配器登记存在时返回部署不变量错误。
+// 电子交付不得注册空审批适配器。适配器登记存在时返回部署不变量错误。
 fn ensure_electronic_delivery_has_no_adapter() -> Result<()> {
     if adapter_spec_of(DocumentType::ElectronicDelivery).is_ok() {
         return Err(Error::Internal("电子交付不得注册审批适配器".to_string()));
@@ -114,14 +90,9 @@ fn ensure_electronic_delivery_has_no_adapter() -> Result<()> {
     Ok(())
 }
 
-/// 构造电子交付创建绑定命令。客户端不得提交定义 ID。
-///
-/// # 参数
-/// * `record` - 待登记电子交付
-/// * `creator_id` - 创建人
-///
-/// # 错误
-/// 销售明细为空时返回校验错误。
+// 构造电子交付创建绑定命令。客户端不得提交定义 ID。
+//
+// `record` 为待登记电子交付。销售明细为空时返回校验错误。
 fn electronic_delivery_bind_command(
     record: &ElectronicDelivery,
     creator_id: &str,
@@ -140,12 +111,9 @@ fn electronic_delivery_bind_command(
     })
 }
 
-/// 在调用方事务内登记电子交付单据并证明空绑定。
-///
-/// 必须先确认政策跳过，再调用统一绑定端口；不得查询发布定义后假装成功。
-///
-/// # 错误
-/// 政策非无审批、端口返回绑定或写入失败时返回错误。
+// 在调用方事务内登记电子交付单据并证明空绑定。
+//
+// 必须先确认政策跳过，再调用统一绑定端口；不得查询发布定义后假装成功。政策非无审批、端口返回绑定或写入失败时返回错误。
 async fn persist_unbound_electronic_delivery_document(
     db: &Database,
     workflow: &dyn FulfillmentWorkflow,
@@ -164,10 +132,7 @@ async fn persist_unbound_electronic_delivery_document(
     Ok(())
 }
 
-/// 为已构造电子交付登记 `BusinessDocument` 并调用统一绑定端口。
-///
-/// # 错误
-/// 绑定端口或注册写入失败时返回错误。
+// 为已构造电子交付登记 `BusinessDocument` 并调用统一绑定端口。绑定端口或注册写入失败时返回错误。
 async fn register_created_electronic_delivery_document(
     db: &Database,
     workflow: &dyn FulfillmentWorkflow,
@@ -185,10 +150,7 @@ async fn register_created_electronic_delivery_document(
     persist_unbound_electronic_delivery_document(db, workflow, document, &bind_command, actor, executor).await
 }
 
-/// 在创建事务内写入电子交付草稿并登记无绑定单据。
-///
-/// # 错误
-/// 绑定、注册或电子交付写入失败时返回错误，调用方必须视作整体回滚。
+// 在创建事务内写入电子交付草稿并登记无绑定单据。绑定、注册或电子交付写入失败时返回错误，调用方必须视作整体回滚。
 async fn persist_created_electronic_delivery(
     db: &Database,
     workflow: Arc<dyn FulfillmentWorkflow>,
@@ -296,7 +258,7 @@ mod electronic_delivery_no_approval_tests {
         .expect("草稿必须可构造")
     }
 
-    /// 政策仅含 document_type、approval_requirement、process_kind，不得注册空 Adapter。
+    // 验证电子交付只登记 `document_type`、`approval_requirement`、`process_kind`，不为无审批单据注册空适配器。
     #[test]
     fn electronic_delivery_policy_is_no_approval_identity_only() {
         let policy = policy_of(DocumentType::ElectronicDelivery).expect("电子交付政策必须存在");
@@ -316,7 +278,7 @@ mod electronic_delivery_no_approval_tests {
         ensure_electronic_delivery_has_no_adapter().expect("不得注册空适配器");
     }
 
-    /// 创建必须注册 BusinessDocument，绑定端口返回空，禁止写入绑定。
+    // 验证创建电子交付仍注册 `BusinessDocument`；统一端口只能返回空绑定，注册行保持未绑定。
     #[test]
     fn create_registers_document_and_returns_empty_binding() {
         let record = draft_electronic_delivery();

@@ -28,15 +28,8 @@ use crate::service::approval::copies::validate_recipients;
 
 impl ApprovalDefinitionService {
     /// 创建定义草稿。
-    ///
-    /// # 参数
-    /// * `request` - 写请求
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
     /// 返回新建草稿或同载荷回放的详情。
     ///
-    /// # 错误
     /// 政策、权限、幂等冲突或已有活动草稿时返回错误。
     pub async fn create_definition_draft(
         &self,
@@ -54,10 +47,8 @@ impl ApprovalDefinitionService {
         self.commit_create_draft(&policy, &name, request, actor, identity).await
     }
 
-    /// 在唯一事务中创建草稿。
-    ///
-    /// # 错误
-    /// 已有活动草稿、缺发布源或写入失败时返回错误。
+    // 在唯一事务中创建草稿。
+    // 已有活动草稿、缺发布源或写入失败时返回错误。
     async fn commit_create_draft(
         &self,
         policy: &ProcessRequiredApprovalPolicy,
@@ -137,25 +128,16 @@ struct CreateDraftTxInput<'a> {
     audit: &'a dyn crate::ports::WorkflowAuditPort,
 }
 
-/// 事务内创建草稿。
-///
-/// # 用途
-/// 回放收据或构造并持久化新草稿。
-///
-/// # 参数
-/// * `identity_service` - 同一应用注入的共享身份与权限服务。
-/// * `db` - 数据库
-/// * `input` - 政策、请求、摘要与操作人
-/// * `executor` - 执行器
-///
-/// # 返回
-/// 返回草稿详情。
-///
-/// # 错误
-/// 已有活动草稿、缺发布源或写入失败时返回错误。
-///
-/// # 关键业务约束
-/// 已有收据必须原样回放，不得重复 persist。
+// 事务内创建草稿。
+// 已有收据必须原样回放，不得重复 persist。
+//
+// 回放收据或构造并持久化新草稿。
+//
+// 返回草稿详情。
+//
+// 已有活动草稿、缺发布源或写入失败时返回错误。
+//
+// `identity_service`：同一应用注入的共享身份与权限服务；`input`：政策、请求、摘要与操作人。
 async fn create_draft_tx(
     authorization: &AuthorizationService,
     identity_service: &SharedRbacService,
@@ -209,7 +191,7 @@ async fn create_draft_tx(
     detail_with_copies(db, &graph, executor).await
 }
 
-/// 构造空草稿或从当前发布复制。
+// 按命令选择空草稿或当前发布图的副本，供创建草稿事务统一保存。
 async fn build_new_draft(
     authorization: &AuthorizationService,
     identity_service: &SharedRbacService,
@@ -226,7 +208,7 @@ async fn build_new_draft(
     }
 }
 
-/// 创建无节点草稿。
+// 从发起新设计的命令创建尚无节点的定义草稿，留待后续配置节点与连线。
 fn empty_draft(
     policy: &ProcessRequiredApprovalPolicy,
     name: &str,
@@ -246,23 +228,15 @@ fn empty_draft(
     Ok(DefinitionGraph { definition, nodes: Vec::new(), transitions: Vec::new() })
 }
 
-/// 从当前发布定义复制节点到新草稿。
-///
-/// # 参数
-/// * `identity_service` - 同一应用注入的共享身份与权限服务。
-/// * `db` - MongoDB 数据库
-/// * `input` - 当前单据政策、已规范化名称及认证操作人
-/// * `version` - 新草稿业务版本
-/// * `session` - 调用方事务执行器
-///
-/// # 返回
-/// 返回 BPM 构造并校验的新草稿图。
-///
-/// # 错误
-/// 缺少发布源、审批人失效或 BPM 构图失败时返回错误。
-///
-/// # 关键业务约束
-/// Service 只生成新 ID 与查询账号，节点复制、用途清理、入口和连线规则全部由 BPM 提供。
+// 从当前发布定义复制节点到新草稿。
+// Service 只生成新 ID 与查询账号，节点复制、用途清理、入口和连线规则全部由 BPM 提供。
+//
+// 返回 BPM 构造并校验的新草稿图。
+//
+// 缺少发布源、审批人失效或 BPM 构图失败时返回错误。
+//
+// `identity_service`：同一应用注入的共享身份与权限服务；`input`：当前单据政策、已规范化名称及认证操作人。
+// `version`：新草稿业务版本；`session`：调用方事务执行器。
 async fn copy_published_draft(
     authorization: &AuthorizationService,
     identity_service: &SharedRbacService,
@@ -297,7 +271,7 @@ async fn copy_published_draft(
     .map_err(map_model_error)
 }
 
-/// 持久化新建草稿及其图。
+// 保存本次创建的草稿及冻结节点和连线；复用创建事务，不能只写定义头。
 async fn persist_new_draft(db: &Database, graph: &DefinitionGraph, session: &mut dyn Executor) -> Result<()> {
     db.approval_process_definitions().create(&graph.definition, session).await?;
     for node in &graph.nodes {
@@ -309,19 +283,10 @@ async fn persist_new_draft(db: &Database, graph: &DefinitionGraph, session: &mut
     Ok(())
 }
 
-/// 为复制节点生成调用方负责的新身份。
-///
-/// # 参数
-/// * `count` - 需要复制的节点数量
-///
-/// # 返回
-/// 返回与源节点一一对应的新节点 ID 与不可预测节点键。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// BPM 禁止自行生成 ID，因此身份生成保留在 Service 编排边界。
+// 为复制节点生成调用方负责的新身份。
+// BPM 禁止自行生成 ID，因此身份生成保留在 Service 编排边界。
+//
+// 返回与源节点一一对应的新节点 ID 与不可预测节点键。
 fn next_copied_node_identities(count: usize) -> Vec<CopiedNodeIdentity> {
     (0..count)
         .map(|_| CopiedNodeIdentity {
@@ -331,21 +296,14 @@ fn next_copied_node_identities(count: usize) -> Vec<CopiedNodeIdentity> {
         .collect()
 }
 
-/// 读取最高持久化版本并计算下一业务版本。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `process_kind` - BPM 流程种类
-/// * `session` - 调用方事务执行器
-///
-/// # 返回
-/// 返回历史最高版本之后的单调递增业务版本。
-///
-/// # 错误
-/// Repository 查询或 BPM 版本溢出校验失败时返回错误。
-///
-/// # 关键业务约束
-/// Repository 只提供最高版本事实；递增、溢出与事务边界仍分别由 BPM 模型和 Service 持有。
+// 读取最高持久化版本并计算下一业务版本。
+// Repository 只提供最高版本事实；递增、溢出与事务边界仍分别由 BPM 模型和 Service 持有。
+//
+// 返回历史最高版本之后的单调递增业务版本。
+//
+// Repository 查询或 BPM 版本溢出校验失败时返回错误。
+//
+// `session`：调用方事务执行器。
 async fn next_definition_version(
     db: &Database,
     process_kind: bpm::ProcessKind,
@@ -355,10 +313,8 @@ async fn next_definition_version(
     ApprovalProcessDefinition::next_version_after(current).map_err(map_model_error)
 }
 
-/// 已有活动草稿则冲突，不得进入 persist_new_draft / write_receipt。
-///
-/// # 错误
-/// 已存在活动草稿时返回冲突。
+// 已有活动草稿则冲突，不得进入 persist_new_draft / write_receipt。
+// 已存在活动草稿时返回冲突。
 fn ensure_no_active_draft<T>(existing_active_draft: Option<T>) -> Result<()> {
     if existing_active_draft.is_some() {
         return Err(second_draft_error());
@@ -366,15 +322,13 @@ fn ensure_no_active_draft<T>(existing_active_draft: Option<T>) -> Result<()> {
     Ok(())
 }
 
-/// `CURRENT_PUBLISHED` 必须命中当前发布定义，缺失则失败关闭。
-///
-/// # 错误
-/// 当前没有已发布定义时返回校验错误。
+// `CURRENT_PUBLISHED` 必须命中当前发布定义，缺失则失败关闭。
+// 当前没有已发布定义时返回校验错误。
 fn require_current_published<T>(published: Option<T>) -> Result<T> {
     published.ok_or_else(|| Error::from_approval_code(ErrorCode::ApprovalDraftSourceNotAvailable))
 }
 
-/// 第二活动草稿错误。
+// 已有活动草稿时返回稳定的定义冲突，提示先处理旧草稿再新建。
 fn second_draft_error() -> Error {
     Error::ConflictError("该单据类型已有活动草稿".to_string())
 }
@@ -383,7 +337,7 @@ fn second_draft_error() -> Error {
 mod tests {
     use super::*;
 
-    /// 已有活动草稿时不得 persist_new_draft / write_receipt。
+    // 验证：已有活动草稿时不得 persist_new_draft / write_receipt。
     #[test]
     fn second_active_draft_is_conflict() {
         assert!(matches!(
@@ -393,7 +347,7 @@ mod tests {
         assert!(matches!(ensure_no_active_draft::<&str>(None), Ok(())));
     }
 
-    /// draft_source=CURRENT_PUBLISHED 缺发布源必须失败关闭。
+    // 验证：draft_source=CURRENT_PUBLISHED 缺发布源必须失败关闭。
     #[test]
     fn current_published_requires_existing_definition() {
         assert!(matches!(

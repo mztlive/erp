@@ -27,12 +27,7 @@ pub enum GrantHistoryEntry {
 }
 impl GrantHistoryEntry {
     /// 取得原始证据游标。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 拥有领域的稳定主键。
-    /// # 错误
-    /// 无。
     pub fn id(&self) -> &str {
         match self {
             Self::Invoice(row) => &row.base.id,
@@ -43,12 +38,11 @@ impl GrantHistoryEntry {
 }
 
 /// 按来源集合的稳定主键读取下一页正式证据。
-/// # 参数
-/// db 为拥有集合的数据库，kind 为证据类型，after 为排他游标，executor 沿用调用事务。
-/// # 返回
 /// 最多 25 条；空页表示当前类型扫描结束。
-/// # 错误
+///
 /// 数据库或反序列化失败时返回错误。
+///
+/// db 为拥有集合的数据库，kind 为证据类型，after 为排他游标，executor 沿用调用事务。
 pub async fn page(
     db: &Database,
     kind: GrantHistoryKind,
@@ -101,12 +95,11 @@ fn history_filter(kind: GrantHistoryKind, after: Option<&str>) -> Document {
 }
 
 /// 核验冻结审批人与实际生成的审批任务一一对应。
-/// # 参数
-/// db 为 workflow 数据库，execution 为节点执行，recipient 为冻结审批人，executor 为当前事务。
-/// # 返回
 /// 已生成未删除正式任务时为 true；受阻占位执行不产生资格。
-/// # 错误
+///
 /// 数据库失败返回错误。
+///
+/// db 为 workflow 数据库，execution 为节点执行，recipient 为冻结审批人，executor 为当前事务。
 pub async fn assigned_to(
     db: &Database,
     execution: &str,

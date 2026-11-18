@@ -27,12 +27,9 @@ use crate::repository::extensions::FulfillmentExt;
 
 impl FulfillmentRepository<'_> {
     /// 按销售单读取全部未删除发货单，稳定排序供地址数量分配。
-    /// # 参数
-    /// `sales_order_id` 为销售单，`executor` 为同一事务执行器。
-    /// # 返回
     /// 返回发货表头。
-    /// # 错误
-    /// 数据库读取失败时返回错误。
+    /// `sales_order_id` 为销售单，`executor` 为同一事务执行器。
+    /// 传播数据库读取错误。
     pub async fn deliveries_for_arrangement(
         &self,
         sales_order_id: &SalesOrderId,
@@ -48,16 +45,9 @@ impl FulfillmentRepository<'_> {
     }
 
     /// 查询销售单下可进入客户验收的发货单。
-    ///
-    /// # 参数
-    /// * `sales_order_id` - 销售单主键
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回状态为已发货或已签收的发货单。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// `sales_order_id` 为销售单主键；沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询或游标读取错误。
     #[tracing::instrument(
         name = "repository.fulfillment.list_acceptance_eligible_deliveries",
         skip_all,
@@ -89,16 +79,9 @@ impl FulfillmentRepository<'_> {
     }
 
     /// 查询销售明细集合下已确认的电子交付事实。
-    ///
-    /// # 参数
-    /// * `sales_order_line_ids` - 销售稳定明细主键集合
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回已确认电子交付记录；空主键集合直接返回空列表。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// `sales_order_line_ids` 为销售稳定明细主键集合；沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询或游标读取错误。
     #[tracing::instrument(
         name = "repository.fulfillment.list_confirmed_electronic_deliveries",
         skip_all,
@@ -127,16 +110,9 @@ impl FulfillmentRepository<'_> {
     }
 
     /// 查询销售明细集合下已确认的服务履约事实。
-    ///
-    /// # 参数
-    /// * `sales_order_line_ids` - 销售稳定明细主键集合
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回已确认服务履约记录；空主键集合直接返回空列表。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// `sales_order_line_ids` 为销售稳定明细主键集合；沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询或游标读取错误。
     #[tracing::instrument(
         name = "repository.fulfillment.list_confirmed_service_fulfillments",
         skip_all,
@@ -165,16 +141,9 @@ impl FulfillmentRepository<'_> {
     }
 
     /// 查询销售单的客户验收历史。
-    ///
-    /// # 参数
-    /// * `sales_order_id` - 销售单主键
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回按验收时间倒序排列的验收单。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// `sales_order_id` 为销售单主键；沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询或游标读取错误。
     #[tracing::instrument(
         name = "repository.fulfillment.list_customer_acceptance_history",
         skip_all,
@@ -205,16 +174,9 @@ impl FulfillmentRepository<'_> {
     }
 
     /// 查询销售单现有仓发草稿。
-    ///
-    /// # 参数
-    /// * `sales_order_id` - 销售单主键
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回任一未删除草稿发货单；不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
+    /// `sales_order_id` 为销售单主键；沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询错误。
     #[tracing::instrument(
         name = "repository.fulfillment.draft_delivery_for_sales_order",
         skip_all,
@@ -243,17 +205,10 @@ impl FulfillmentRepository<'_> {
     }
 
     /// 查询销售单与仓库维度的现有仓发草稿。
-    ///
-    /// # 参数
-    /// * `sales_order_id` - 销售单主键
-    /// * `warehouse_id` - 发货仓库主键
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回匹配的未删除仓发草稿；不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// MongoDB 查询失败时返回错误。
+    /// `sales_order_id` 为销售单主键；`warehouse_id` 为发货仓库主键。
+    /// 沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询错误。
     #[tracing::instrument(
         name = "repository.fulfillment.draft_warehouse_delivery",
         skip_all,
@@ -285,18 +240,10 @@ impl FulfillmentRepository<'_> {
     }
 
     /// 批量读取采购入库行（`$in` 一次取回，按行号升序）。
-    ///
     /// 供单据详情/过账计算一次性加载全部行，禁止按表头逐条查询造成 N+1。
-    ///
-    /// # 参数
-    /// * `receipt_ids` - 入库单主键集合（为空时直接返回空列表）
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回全部匹配行，按 `line_no` 升序。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// `receipt_ids` 为入库单主键集合（为空时直接返回空列表）；沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询或游标读取错误。
     pub async fn receipt_lines_by_receipt_ids(
         &self,
         receipt_ids: &[PurchaseReceiptId],
@@ -315,18 +262,10 @@ impl FulfillmentRepository<'_> {
     }
 
     /// 批量读取发货行（`$in` 一次取回，按行号升序）。
-    ///
     /// 供单据详情/发货过账计算一次性加载全部行，禁止按表头逐条查询造成 N+1。
-    ///
-    /// # 参数
-    /// * `delivery_ids` - 发货单主键集合（为空时直接返回空列表）
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回全部匹配行，按 `line_no` 升序。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// `delivery_ids` 为发货单主键集合（为空时直接返回空列表）；沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询或游标读取错误。
     pub async fn delivery_lines_by_delivery_ids(
         &self,
         delivery_ids: &[DeliveryId],
@@ -345,18 +284,10 @@ impl FulfillmentRepository<'_> {
     }
 
     /// 批量读取客户验收行（`$in` 一次取回，按行号升序）。
-    ///
     /// 供单据详情/验收过账计算一次性加载全部行，禁止按表头逐条查询造成 N+1。
-    ///
-    /// # 参数
-    /// * `acceptance_ids` - 验收单主键集合（为空时直接返回空列表）
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回全部匹配行，按 `line_no` 升序。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// `acceptance_ids` 为验收单主键集合（为空时直接返回空列表）；沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询或游标读取错误。
     pub async fn acceptance_lines_by_acceptance_ids(
         &self,
         acceptance_ids: &[CustomerAcceptanceId],
@@ -377,18 +308,10 @@ impl FulfillmentRepository<'_> {
     }
 
     /// 批量读取验收履约分配（按验收行 `$in` 一次取回）。
-    ///
     /// 供净验收数量（`APPLY - REVERSE`）计算一次性取回全部分配，禁止 N+1。
-    ///
-    /// # 参数
-    /// * `acceptance_line_ids` - 验收行主键集合（为空时直接返回空列表）
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回全部匹配分配。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// `acceptance_line_ids` 为验收行主键集合（为空时直接返回空列表）；沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询或游标读取错误。
     pub async fn allocations_by_acceptance_lines(
         &self,
         acceptance_line_ids: &[CustomerAcceptanceLineId],
@@ -404,19 +327,11 @@ impl FulfillmentRepository<'_> {
     }
 
     /// 批量读取验收履约分配（按履约事实 `$in` 一次取回）。
-    ///
     /// 供关单「每履约事实净验收数量不超过净成功履约数量」校验取数，禁止 N+1。
-    ///
-    /// # 参数
-    /// * `fact_type` - 履约事实类型（发货/电子交付/服务履约）
-    /// * `fulfillment_line_ids` - 履约事实行主键集合（为空时直接返回空列表）
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回全部匹配分配。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// `fact_type` 为履约事实类型（发货/电子交付/服务履约）；`fulfillment_line_ids` 为履约事实行主键集合（为空时直接返回空列表）。
+    /// 沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询或游标读取错误。
     pub async fn allocations_by_fulfillment_fact(
         &self,
         fact_type: FulfillmentFactType,
@@ -442,32 +357,18 @@ impl FulfillmentRepository<'_> {
     }
 }
 
-/// 把 ID newtype 集合转为字符串集合（用于 `$in` 查询）。
-///
-/// # 参数
-/// * `ids` - ID newtype 集合
-///
-/// # 返回
-/// 返回字符串集合。
+// 把 ID newtype 集合转为字符串集合（用于 `$in` 查询）。
+// `ids` 为ID newtype 集合。
 fn ids_to_strings<T: AsRef<str>>(ids: &[T]) -> Vec<String> {
     ids.iter().map(|id| id.as_ref().to_string()).collect()
 }
 
-/// 按给定字段与状态批量读取实体。
-///
-/// # 参数
-/// * `db` - 目标 MongoDB 数据库
-/// * `collection_name` - 业务实体集合名
-/// * `field` - 主键或关联字段名
-/// * `values` - 待匹配的字段值集合
-/// * `status` - 待匹配的稳定状态代码
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回字段值与状态同时匹配且未删除的实体；空值集合直接返回空列表。
-///
-/// # 错误
-/// 当 MongoDB 查询或游标读取失败时返回错误。
+// 按给定字段与状态批量读取实体。
+// 返回字段值与状态同时匹配且未删除的实体；空值集合直接返回空列表。
+// `collection_name` 为业务实体集合名；`field` 为主键或关联字段名。
+// `values` 为待匹配的字段值集合；`status` 为待匹配的稳定状态代码。
+// 沿用调用方执行器 `executor`。
+// 传播 MongoDB 查询或游标读取错误。
 async fn list_by_ids_and_status<T>(
     db: &Database,
     collection_name: &str,

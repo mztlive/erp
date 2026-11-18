@@ -8,12 +8,7 @@ use crate::http::routes::permission_route;
 use crate::http::state::HttpState;
 
 /// 构建财务文件业务访问路由。
-/// # 参数
-/// 无。
-/// # 返回
 /// 绑定现有业务详情权限的路由集合。
-/// # 错误
-/// 无。
 pub fn routes() -> Router<HttpState> {
     invoice_routes()
         .merge(receipt_routes())
@@ -48,7 +43,7 @@ pub fn routes() -> Router<HttpState> {
         )
 }
 
-/// 按整票读取权限挂载发票文件清单与下载。
+// 挂载按整票读取权限挂载发票文件清单与下载。
 fn invoice_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -67,7 +62,7 @@ fn invoice_routes() -> Router<HttpState> {
         )
 }
 
-/// 回款凭证查看与草稿编辑下载。
+// 挂载回款凭证查看与草稿编辑下载。
 fn receipt_routes() -> Router<HttpState> {
     Router::new()
         .route(

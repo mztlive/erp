@@ -38,13 +38,12 @@ pub struct DepositExecutionFundsSummary {
 
 impl DepositExecutionFundsSummary {
     /// 按同一执行组的财务实际记录生成阶段摘要。
-    /// # 参数
-    /// * `execution_group_id` - 当前冻结执行组。
-    /// * `reservation` / `usages` / `account` - 已获权限范围的原资金记录。
-    /// # 返回
     /// 返回占用和实付分离的金额与阶段。
-    /// # 错误
     /// 记录串组、跨账户、数量金额溢出或不守恒时拒绝。
+    ///
+    /// 输入约定：
+    /// - `execution_group_id`：当前冻结执行组。
+    /// - `reservation` / `usages` / `account`：已获权限范围的原资金记录。
     pub fn from_records(
         execution_group_id: &str,
         reservation: Option<&SupplierDepositReservation>,

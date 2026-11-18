@@ -14,7 +14,7 @@ use crate::http::extractor::{Json, Query};
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
-/// 复核协议入口的读取权限，具体数据范围由组合层在事务内解析。
+// 在经营分析请求中确定是否允许成本明细下钻；数据范围仍由读模型在业务事务内解析。
 async fn access(state: &HttpState, actor: &AuditActor) -> std::result::Result<ProfitLossAccess, Error> {
     let can_drill_cost = state
         .application()
@@ -23,7 +23,7 @@ async fn access(state: &HttpState, actor: &AuditActor) -> std::result::Result<Pr
         .await?;
     Ok(ProfitLossAccess { can_drill_cost })
 }
-/// 期间口径元数据不包含经营金额，路由仍要求成本查询权限。
+/// 配置经营分析查询前，用成本查询资格读取可用的期间口径；该响应不包含实际经营金额。
 pub async fn period_basis(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -33,7 +33,7 @@ pub async fn period_basis(
         .await?;
     Ok(ApiResponse::ok_with_data(view))
 }
-/// 返回当前权限下的真实经营分析视图。
+/// 按当前认证账号和查询条件加载实际经营分析视图；成本明细下钻资格作为单独能力传给读模型。
 pub async fn view(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -46,7 +46,7 @@ pub async fn view(
             .await?,
     ))
 }
-/// 全量筛选导出与查询采用相同授权、金额规则和来源快照。
+/// 导出全量筛选结果时调用同一经营分析读模型，沿用列表授权、金额计算规则及来源快照口径。
 pub async fn export(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -60,7 +60,7 @@ pub async fn export(
     ))
 }
 
-/// 独立历史候选；只接受期间与客户上下文，不接受报表结果条件。
+/// 为经营分析的历史人员筛选读取独立候选目录；仅以期间和客户为上下文，不接受报表结果条件。
 pub async fn history_directory(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,

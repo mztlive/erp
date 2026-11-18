@@ -118,12 +118,14 @@ impl PaymentCandidateQuery {
 }
 
 impl PurchasePaymentRequestReadService {
-    /// 查询可申请采购单的当前页及同一条件下的准确总数。
+    /// 处理付款申请采购候选时，查询可申请采购单的当前页及同一条件下的准确总数。
     ///
     /// # 参数
     /// * `actor` / `query` - 当前账号与独立筛选、排序和分页。
+    ///
     /// # 返回
     /// 返回资格、余额和全部条件验证后的当前页。
+    ///
     /// # 错误
     /// 参数、来源资格或候选读取失败时拒绝。
     pub async fn candidate_page(
@@ -135,12 +137,14 @@ impl PurchasePaymentRequestReadService {
         query.page(self.candidates(actor, query.supplier_id.as_deref()).await?)
     }
 
-    /// 返回当前仍可申请且匹配全部条件的应付身份，用于跨页全选与发起前复验。
+    /// 准备付款申请采购候选候选时，给出当前仍可申请且匹配全部条件的应付身份，用于跨页全选与发起前复验。
     ///
     /// # 参数
     /// * `actor` / `query` - 当前账号与独立筛选条件，忽略分页。
+    ///
     /// # 返回
     /// 返回同一资格快照下全部匹配身份，不返回其他页面的采购详情。
+    ///
     /// # 错误
     /// 参数、来源资格或候选读取失败时拒绝。
     pub async fn candidate_ids(

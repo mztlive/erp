@@ -15,19 +15,13 @@ use super::{
 
 impl<'a> BpmWorkflowRepository<'a> {
     /// 按主键读取审批流程实例。
+    /// 本方法只读取实例身份，不放宽状态或主体约束。
     ///
-    /// # 参数
-    /// * `instance_id` - 审批流程实例 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回匹配且未软删除的实例；不存在时返回 `None`。
     ///
-    /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
     ///
-    /// # 关键业务约束
-    /// 本方法只读取实例身份，不放宽状态或主体约束。
+    /// `instance_id`：审批流程实例 ID；`executor`：数据访问执行器，由 Service 决定是否位于事务中。
     pub async fn find_instance_by_id(
         &self,
         instance_id: &ApprovalProcessInstanceId,
@@ -37,19 +31,13 @@ impl<'a> BpmWorkflowRepository<'a> {
     }
 
     /// 按主键批量读取审批流程实例。
+    /// 只解析工作项引用的实例，不附加状态条件或推断当前审批人资格。
     ///
-    /// # 参数
-    /// * `instance_ids` - 已授权工作项引用的审批流程实例 ID
-    /// * `executor` - 调用方提供的数据访问执行器
-    ///
-    /// # 返回
     /// 返回匹配且未软删除的全部实例；缺失 ID 不补行，空输入不访问数据库。
     ///
-    /// # 错误
     /// MongoDB 查询、游标读取或反序列化失败时返回错误。
     ///
-    /// # 关键业务约束
-    /// 只解析工作项引用的实例，不附加状态条件或推断当前审批人资格。
+    /// `instance_ids`：已授权工作项引用的审批流程实例 ID；`executor`：调用方提供的数据访问执行器。
     pub async fn list_instances_by_ids(
         &self,
         instance_ids: &[ApprovalProcessInstanceId],
@@ -62,17 +50,11 @@ impl<'a> BpmWorkflowRepository<'a> {
     }
 
     /// 查询同一主体与提交版本的非终态实例。
-    ///
-    /// # 参数
-    /// * `subject` - 业务对象引用。
-    /// * `subject_version` - 冻结提交版本。
-    /// * `executor` - 数据访问执行器。
-    ///
-    /// # 返回
     /// 返回 `RUNNING|BLOCKED` 实例；没有时返回 `None`。
     ///
-    /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// `subject_version`：冻结提交版本。
     pub async fn find_non_terminal_by_subject(
         &self,
         subject: &SubjectRef,
@@ -87,16 +69,11 @@ impl<'a> BpmWorkflowRepository<'a> {
     /// 本查询按同一主体与提交版本读取最近实例，不预先过滤状态；实例是否可取消以及
     /// 开放任务数量是否一致，统一由 BPM 模型在全部事实加载后判定。
     ///
-    /// # 参数
-    /// * `subject` - 业务对象引用
-    /// * `subject_version` - 冻结提交版本
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回可供取消规则校验的实例候选；没有时返回 `None`。
     ///
-    /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// `subject_version`：冻结提交版本。
     pub async fn cancellation_instance_by_subject(
         &self,
         subject: &SubjectRef,
@@ -111,14 +88,8 @@ impl<'a> BpmWorkflowRepository<'a> {
     /// 命中 `idx_approval_process_instances_subject_history`。撤回命令应使用
     /// `cancellation_instance_by_subject`，不得用本方法替代提交版本与状态校验。
     ///
-    /// # 参数
-    /// * `subject` - 业务对象引用
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
     /// 按 `started_at desc, id desc` 的最新实例；没有时返回 `None`。
     ///
-    /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
     pub async fn find_latest_by_subject(
         &self,
@@ -129,15 +100,12 @@ impl<'a> BpmWorkflowRepository<'a> {
     }
 
     /// 读取新提交之外的最近审批实例，含终态。
-    ///
-    /// # 参数
-    /// * `subject` - 同一业务对象。
-    /// * `excluded_id` - 本次事务已创建的新实例。
-    /// * `executor` - 调用方事务执行器。
-    /// # 返回
     /// 返回最近旧实例；没有历史时返回空。
-    /// # 错误
+    ///
     /// 查询或解码失败时返回错误。
+    ///
+    /// `subject`：同一业务对象；`excluded_id`：本次事务已创建的新实例。
+    /// `executor`：调用方事务执行器。
     pub async fn previous_instance_by_subject(
         &self,
         subject: &SubjectRef,
@@ -166,19 +134,13 @@ impl<'a> BpmWorkflowRepository<'a> {
     }
 
     /// 按实例主键批量读取审批运行的有界列表投影。
+    /// 只允许使用有界实例投影补充工作台判断事实，不得为列表逐实例查询历史。
     ///
-    /// # 参数
-    /// * `instance_ids` - 已由工作项节点执行解析出的审批实例 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回当前节点、当前审批人、最近驳回摘要和实例状态；不扫描执行历史。
     ///
-    /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
     ///
-    /// # 关键业务约束
-    /// 只允许使用有界实例投影补充工作台判断事实，不得为列表逐实例查询历史。
+    /// `instance_ids`：已由工作项节点执行解析出的审批实例 ID；`executor`：数据访问执行器，由 Service 决定是否位于事务中。
     pub async fn list_instance_summaries_by_ids(
         &self,
         instance_ids: &[ApprovalProcessInstanceId],
@@ -202,17 +164,10 @@ impl<'a> BpmWorkflowRepository<'a> {
     }
 }
 
-/// 构造取消候选的主体与提交版本过滤条件，不预先判断实例状态。
-///
-/// # 参数
-/// * `subject` - 业务对象引用
-/// * `subject_version` - 冻结提交版本
-///
-/// # 返回
-/// 返回主体、提交版本和软删除约束，供 BPM 模型统一判定是否可取消。
-///
-/// # 错误
-/// 无。
+// 构造取消候选的主体与提交版本过滤条件，不预先判断实例状态。
+// 返回主体、提交版本和软删除约束，供 BPM 模型统一判定是否可取消。
+//
+// `subject_version`：冻结提交版本。
 pub(super) fn cancellation_subject_filter(subject: &SubjectRef, subject_version: u32) -> Document {
     doc! {
         "subject.subject_kind": subject.subject_kind(),
@@ -222,17 +177,10 @@ pub(super) fn cancellation_subject_filter(subject: &SubjectRef, subject_version:
     }
 }
 
-/// 构造同一主体与提交版本的非终态过滤；软删除由 `find_one` 追加。
-///
-/// # 参数
-/// * `subject` - 业务对象引用。
-/// * `subject_version` - 冻结提交版本。
-///
-/// # 返回
-/// 返回含主体键、提交版本和 `RUNNING|BLOCKED` 状态的查询文档。
-///
-/// # 错误
-/// 不返回错误。
+// 构造同一主体与提交版本的非终态过滤；软删除由 `find_one` 追加。
+// 返回含主体键、提交版本和 `RUNNING|BLOCKED` 状态的查询文档。
+//
+// `subject_version`：冻结提交版本。
 pub(super) fn non_terminal_subject_filter(subject: &SubjectRef, subject_version: u32) -> Document {
     doc! {
         "subject.subject_kind": subject.subject_kind(),
@@ -247,16 +195,8 @@ pub(super) fn non_terminal_subject_filter(subject: &SubjectRef, subject_version:
     }
 }
 
-/// 构造按主体读取历史实例的过滤条件，不含状态限制。
-///
-/// # 参数
-/// * `subject` - 业务对象引用
-///
-/// # 返回
-/// 返回含主体键与软删除约束的查询文档。
-///
-/// # 错误
-/// 无。
+// 构造按主体读取历史实例的过滤条件，不含状态限制。
+// 返回含主体键与软删除约束的查询文档。
 pub(super) fn latest_subject_filter(subject: &SubjectRef) -> Document {
     doc! {
         "subject.subject_kind": subject.subject_kind(),
@@ -265,16 +205,8 @@ pub(super) fn latest_subject_filter(subject: &SubjectRef) -> Document {
     }
 }
 
-/// 判断列表范围是否应在访问数据库前失败关闭为空结果。
-///
-/// # 参数
-/// * `filter` - 实例列表过滤条件。
-///
-/// # 返回
-/// `subject_ids` 为显式空集合，或 `Started` 视图没有非空 `started_by` 时返回 `true`。
-///
-/// # 错误
-/// 不返回错误。
+// 当列表范围应在访问数据库前失败关闭为空结果时返回 `true`。
+// `subject_ids` 为显式空集合，或 `Started` 视图没有非空 `started_by` 时返回 `true`。
 pub(crate) fn instance_list_scope_empty(filter: &ApprovalInstanceListFilter) -> bool {
     if filter.subject_ids.as_ref().is_some_and(Vec::is_empty) {
         return true;
@@ -282,30 +214,18 @@ pub(crate) fn instance_list_scope_empty(filter: &ApprovalInstanceListFilter) -> 
     filter.view == ApprovalInstanceListView::Started && !started_by_present(filter)
 }
 
-/// 判断 `Started` 视图是否带有非空发起人前缀。
-///
-/// # 参数
-/// * `filter` - 实例列表过滤条件
-///
-/// # 返回
-/// `started_by` 为非空字符串时返回 `true`。
+// 当 `Started` 视图带有非空发起人前缀时返回 `true`。
+// `started_by` 为非空字符串时返回 `true`。
 fn started_by_present(filter: &ApprovalInstanceListFilter) -> bool {
     filter.started_by.as_ref().is_some_and(|started_by| !started_by.is_empty())
 }
 
-/// 把列表过滤条件编译为 MongoDB 文档。
-///
-/// # 参数
-/// * `filter` - Service 已计算的视图、启动人、对象范围、游标与字面量检索
-///
-/// # 返回
-/// 返回可直接交给 `find` / `count_documents` 的过滤文档。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 字面量检索与游标都使用 `$or` 时必须用 `$and` 组合，不得互相覆盖。
+// 把列表过滤条件编译为 MongoDB 文档。
+// 字面量检索与游标都使用 `$or` 时必须用 `$and` 组合，不得互相覆盖。
+//
+// 返回可直接交给 `find` / `count_documents` 的过滤文档。
+//
+// `filter`：Service 已计算的视图、启动人、对象范围、游标与字面量检索。
 pub(crate) fn instance_list_filter_doc(filter: &ApprovalInstanceListFilter) -> Document {
     let mut document = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
     if let Some(process_kind) = filter.process_kind {
@@ -330,20 +250,12 @@ pub(crate) fn instance_list_filter_doc(filter: &ApprovalInstanceListFilter) -> D
     document
 }
 
-/// 把游标与字面量检索的 `$or` 组合成互不覆盖的过滤条件。
-///
-/// # 参数
-/// * `document` - 已写入等值条件的过滤文档
-/// * `filter` - 列表过滤条件
-///
-/// # 返回
-/// 无；就地写入 `$or` 或 `$and`。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 顶层只能有一个 `$or`。游标与检索同时存在时必须用 `$and` 连接两组 `$or`，不得互相覆盖。
+// 把游标与字面量检索的 `$or` 组合成互不覆盖的过滤条件。
+// 顶层只能有一个 `$or`。游标与检索同时存在时必须用 `$and` 连接两组 `$or`，不得互相覆盖。
+//
+// 无；就地写入 `$or` 或 `$and`。
+//
+// `document`：已写入等值条件的过滤文档。
 fn insert_list_disjunctions(document: &mut Document, filter: &ApprovalInstanceListFilter) {
     let mut groups = Vec::new();
     if let Some(cursor) = &filter.cursor {
@@ -366,20 +278,14 @@ fn insert_list_disjunctions(document: &mut Document, filter: &ApprovalInstanceLi
     }
 }
 
-/// 构造字面量检索的 `$or` 分支。
-///
-/// # 参数
-/// * `text_query` - 已规范化检索串
-///
-/// # 返回
-/// 返回对象 ID、当前节点名和当前审批人的字面量匹配分支。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 检索串按字面量转义，调用方不得传入正则。快照编号只允许由联合快照聚合
-/// 匹配，不得把未经三元组校验的实例 ID 注入本查询。
+// 构造字面量检索的 `$or` 分支。
+//
+// 检索串按字面量转义，调用方不得传入正则。快照编号只允许由联合快照聚合
+// 匹配，不得把未经三元组校验的实例 ID 注入本查询。
+//
+// 返回对象 ID、当前节点名和当前审批人的字面量匹配分支。
+//
+// `text_query`：已规范化检索串。
 pub(super) fn instance_text_query_or(text_query: &ApprovalInstanceTextQuery) -> Vec<Document> {
     let literal = regex::escape(text_query.query.trim());
     let regex = doc! { "$regex": &literal, "$options": "i" };
@@ -390,7 +296,7 @@ pub(super) fn instance_text_query_or(text_query: &ApprovalInstanceTextQuery) -> 
     ]
 }
 
-/// `Blocked` 视图强制写入受阻状态，其它视图仅在调用方给出状态时过滤。
+// 构造实例查询状态条件时，受阻视图固定为受阻，其他视图仅应用显式状态筛选。
 fn insert_instance_status(document: &mut Document, filter: &ApprovalInstanceListFilter) {
     if filter.view == ApprovalInstanceListView::Blocked {
         document.insert("status", ApprovalProcessInstanceStatus::Blocked.as_str());
@@ -401,16 +307,11 @@ fn insert_instance_status(document: &mut Document, filter: &ApprovalInstanceList
     }
 }
 
-/// 按列表视图返回稳定排序；并列时用 `id` 降序断开。
-///
-/// # 参数
-/// * `filter` - 实例列表过滤条件；管理视图是否带状态决定排序字段。
-///
-/// # 返回
-/// `Started` 按 `started_at`，`Blocked` 按 `blocked_at`，带状态的 `Managed` 先按 `status` 再按 `updated_at`，其余 `Managed` 按 `updated_at`。
-///
-/// # 错误
-/// 不返回错误。
+// 按列表视图返回稳定排序；并列时用 `id` 降序断开。
+//
+// `Started` 按 `started_at`，`Blocked` 按 `blocked_at`，带状态的 `Managed` 先按 `status` 再按 `updated_at`，其余 `Managed` 按 `updated_at`。
+//
+// `filter`：实例列表过滤条件；管理视图是否带状态决定排序字段。
 pub(crate) fn instance_list_sort(filter: &ApprovalInstanceListFilter) -> Document {
     match filter.view {
         ApprovalInstanceListView::Started => doc! { "started_at": -1, "id": -1 },
@@ -422,17 +323,10 @@ pub(crate) fn instance_list_sort(filter: &ApprovalInstanceListFilter) -> Documen
     }
 }
 
-/// 构造当前视图排序时间上的稳定游标分支，不使用 `status` 字段。
-///
-/// # 参数
-/// * `view` - 决定比较 `started_at`、`blocked_at` 或 `updated_at`。
-/// * `cursor` - 上一页最后一条的排序时间与实例 ID。
-///
-/// # 返回
-/// 返回排序时间更小，或时间相同且 `id` 更小的两个 `$or` 分支。
-///
-/// # 错误
-/// 不返回错误。
+// 构造当前视图排序时间上的稳定游标分支，不使用 `status` 字段。
+// 返回排序时间更小，或时间相同且 `id` 更小的两个 `$or` 分支。
+//
+// `view`：决定比较 `started_at`、`blocked_at` 或 `updated_at`；`cursor`：上一页最后一条的排序时间与实例 ID。
 pub(crate) fn instance_cursor_or(
     view: ApprovalInstanceListView,
     cursor: &ApprovalInstanceListCursor,
@@ -448,16 +342,8 @@ pub(crate) fn instance_cursor_or(
     ]
 }
 
-/// 返回工作台使用的有界实例投影，不含执行历史。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回当前节点、当前审批人、最近驳回摘要、状态与时间字段的投影文档。
-///
-/// # 错误
-/// 不返回错误。
+// 返回工作台使用的有界实例投影，不含执行历史。
+// 返回当前节点、当前审批人、最近驳回摘要、状态与时间字段的投影文档。
 pub(crate) fn instance_summary_projection() -> Document {
     doc! {
         "id": 1,
@@ -484,21 +370,15 @@ pub(crate) fn instance_summary_projection() -> Document {
     }
 }
 
-/// 返回实例列表统一页大小上限。
-///
-/// # 参数
-/// * `limit` - 调用方请求条数；`0` 按 1 处理。
-///
-/// # 返回
-/// 返回夹紧到 `[1, MAX_INSTANCE_PAGE]` 的整数。
-///
-/// # 错误
-/// 不返回错误。
+// 返回实例列表统一页大小上限。
+// 返回夹紧到 `[1, MAX_INSTANCE_PAGE]` 的整数。
+//
+// `limit`：调用方请求条数；`0` 按 1 处理。
 pub(crate) fn instance_list_limit(limit: u32) -> i64 {
     clamp_limit(limit, MAX_INSTANCE_PAGE)
 }
 
-/// 构造工作项所引用实例的批量过滤条件；空输入阻止数据库查询。
+// 生成工作项所引用实例的批量过滤条件；空输入阻止数据库查询。
 fn instance_ids_filter(instance_ids: &[ApprovalProcessInstanceId]) -> Option<Document> {
     if instance_ids.is_empty() {
         return None;
@@ -515,7 +395,7 @@ mod batch_tests {
 
     use super::instance_ids_filter;
 
-    /// 批量实例过滤保留全部请求身份，且只读取未删除实例。
+    // 验证：批量实例过滤保留全部请求身份，且只读取未删除实例。
     #[test]
     fn instance_ids_filter_keeps_requested_instances_without_status_filter() {
         let ids =
@@ -529,7 +409,7 @@ mod batch_tests {
         );
     }
 
-    /// 空实例集合返回无查询条件，不得退化为无范围查询。
+    // 验证：空实例集合返回无查询条件，不得退化为无范围查询。
     #[test]
     fn instance_ids_filter_skips_empty_input() {
         assert!(instance_ids_filter(&[]).is_none());

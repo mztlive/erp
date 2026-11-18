@@ -27,72 +27,33 @@ pub struct CreatedChangeWrite {
 }
 impl CreatedChangeWrite {
     /// 新变更单标识，供注册审批单据与审计使用。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回新变更单稳定身份。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn change_id(&self) -> &str {
         &self.change_order.base.id
     }
     /// 绑定定义时冻结的变更单版本。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回变更单当前版本号。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn version(&self) -> u64 {
         self.change_order.base.version
     }
     /// 从原销售单冻结的结算主体，供流程映射责任组织。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回工作副本上的结算主体。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn settlement_party_id(&self) -> &erp_core::ids::PartyId {
         &self.working_copy.settlement_party_id
     }
 
     /// 来源销售单主键，供事务内沿原单范围重验。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回原销售单稳定身份。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 变更单不得改写该来源身份。
+    /// 业务边界：变更单不得改写该来源身份。
     pub fn sales_order_id(&self) -> &str {
         self.change_order.sales_order_id.as_ref()
     }
     /// 在绑定登记成功后，按原序写入变更单、工作副本和行，不启动事务。
+    /// 结果：变更单、工作副本和全部行都插入成功时返回 `Ok(())`。
+    /// 失败条件：保留仓储唯一键与 CAS 冲突；错误交由调用方回滚。
     ///
-    /// # 参数
-    /// * `db` - 销售集合所在数据库。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 变更单、工作副本和全部行都插入成功时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 保留仓储唯一键与 CAS 冲突；错误交由调用方回滚。
+    /// 输入约定：
+    /// - `db`：销售集合所在数据库。
     pub async fn persist(&self, db: &mongodb::Database, executor: &mut dyn Executor) -> Result<()> {
         db.sales_change_orders().create(&self.change_order, executor).await?;
         db.sales_order_working_copies().create(&self.working_copy, executor).await?;
@@ -108,20 +69,16 @@ impl SalesReviewService {
     ///
     /// 客户端只提交变更意图；表头、合同和行事实均从冻结版本派生。
     /// 创建幂等键仅按原 DTO 校验，本方法不新增命令回执。
-    ///
-    /// # 参数
-    /// * `req` - 变更意图；表头、合同和行事实不从该请求派生。
-    /// * `actor` - 当前认证建单人。
-    /// * `executor` - 入口授权、准备读取和后续写入共用的事务执行器。
-    ///
-    /// # 返回
     /// 返回尚未持久化的变更单、变更工作副本和行。
-    ///
-    /// # 错误
-    /// 原销售单不可变更、基准版本漂移或已有进行中变更时保持原错误；销售单或当前版本不存在、请求校验失败、工作副本构造失败以及仓储读取失败时返回对应错误。
+    /// 失败条件：原销售单不可变更、基准版本漂移或已有进行中变更时保持原错误；销售单或当前版本不存在、请求校验失败、工作副本构造失败以及仓储读取失败时返回对应错误。
     ///
     /// # Panics
     /// `sales_change_start_blocker` 已通过后仍缺少当前版本时 panic；调用点依赖实体规则保证版本存在。
+    ///
+    /// 输入约定：
+    /// - `req`：变更意图；表头、合同和行事实不从该请求派生。
+    /// - `actor`：当前认证建单人。
+    /// - `executor`：入口授权、准备读取和后续写入共用的事务执行器。
     pub async fn prepare_creation(
         &self,
         req: CreateSalesChangeOrderRequest,
@@ -169,7 +126,7 @@ impl SalesReviewService {
         )?;
         Ok(CreatedChangeWrite { change_order, working_copy, lines })
     }
-    /// 在原执行器中核对来源状态、目标正式版本和进行中变更，不提前读取工作副本行。
+    // 准备销售变更草稿时用原执行器检查来源状态、目标正式版本以及是否已有进行中变更，不提前加载草稿行。
     async fn creation_source(
         &self,
         req: &CreateSalesChangeOrderRequest,
@@ -206,10 +163,8 @@ impl SalesReviewService {
         Ok((order, base_revision))
     }
 
-    /// 同一销售单同一基准版本是否已有进行中变更。
-    ///
-    /// # 错误
-    /// 仓储失败时返回错误。
+    // 同一销售单同一基准版本是否已有进行中变更。
+    // 仓储失败时返回错误。
     async fn has_in_progress_change(
         &self,
         sales_order_id: &SalesOrderId,
@@ -224,7 +179,7 @@ impl SalesReviewService {
     }
 }
 
-/// 将已验证来源的正式快照、原始行和金额组合成新的变更工作副本。
+// 发起变更时以已核验的正式版本表头、明细及合计构造新工作副本，而不是直接采用客户端提交的商业事实。
 fn change_working_copy(
     order: SalesOrder,
     base_revision: SalesOrderRevision,
@@ -276,19 +231,14 @@ fn change_working_copy(
     .map_err(Into::into)
 }
 
-///
-/// 从当前生效销售版本构建变更工作副本行。
-///
-/// # 参数
-/// * `working_copy_id` - 所属工作副本 ID
-/// * `revision_lines` - 当前生效版本的公共行快照
-/// * `goods_lines` - 当前生效版本的实物服务子行快照
-///
-/// # 返回
-/// 返回 `(行创建数据, 行实体清单)`。
-///
-/// # 错误
-/// 版本为空、含非实物服务行或公共行缺少子行时返回错误。
+// 从当前生效销售版本构建变更工作副本行。
+// 返回 `(行创建数据, 行实体清单)`。
+// 版本为空、含非实物服务行或公共行缺少子行时返回错误。
+//
+// 输入约定：
+// - `working_copy_id`：所属工作副本 ID
+// - `revision_lines`：当前生效版本的公共行快照
+// - `goods_lines`：当前生效版本的实物服务子行快照
 fn build_change_working_copy_lines_from_revision(
     working_copy_id: &SalesOrderWorkingCopyId,
     revision_lines: &[crate::entity::sales_order::SalesOrderRevisionLine],

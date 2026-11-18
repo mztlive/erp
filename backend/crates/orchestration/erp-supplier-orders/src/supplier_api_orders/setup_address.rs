@@ -124,11 +124,11 @@ impl AddressTicket {
 
 impl SupplierApiOrderProcess {
     /// 按已授权原执行返回服务器验证并封装的下一层地址候选。
-    /// # 参数
+    ///
     /// `id` 为原订单，`query` 仅携带前一层票据，actor 为当前认证操作人。
-    /// # 返回
+    ///
     /// 当前连接和冻结地址专属的可选择候选，不执行下单。
-    /// # 错误
+    ///
     /// 资料不可编辑、票据失效、父级关系不符或外部读取失败时拒绝。
     pub async fn execution_address_candidates(
         &self,

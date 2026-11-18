@@ -62,11 +62,9 @@ impl ImportInquiryQuotesCommand {
 
 impl SalesInquiryProcess {
     /// 原子保存多份回填报价，复用采购任务权限和原命令恢复。
-    /// # 参数
-    /// `actor` 为采购，`id` 为询价，`request` 为预览后确认的数据。
-    /// # 返回
-    /// 返回安全命令回执，不向销售公开内部成本。
-    /// # 错误
+    ///
+    /// `actor` 为采购，`id` 为询价，`request` 为预览后确认的数据。返回安全命令回执，不向销售公开内部成本。
+    ///
     /// 任一报价、版本或权限失效时拒绝整批，不保存部分成功数据。
     pub async fn import_internal_quotes(
         &self,

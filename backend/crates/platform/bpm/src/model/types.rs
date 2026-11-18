@@ -55,16 +55,7 @@ pub enum ApprovalDefinitionStatus {
 }
 
 impl ApprovalDefinitionStatus {
-    /// 返回稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `DRAFT`、`PUBLISHED` 或 `RETIRED`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 输出定义生命周期的稳定代码，供调用方传递草稿、发布和退役状态，不依赖 Rust 变体名。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Draft => "DRAFT",
@@ -73,33 +64,12 @@ impl ApprovalDefinitionStatus {
         }
     }
 
-    /// 判断定义是否仍可修改草稿字段。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 仅草稿返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 判断定义状态是否允许编辑名称或入口；发布后不能再沿用草稿修改路径。
     pub fn is_draft(self) -> bool {
         matches!(self, Self::Draft)
     }
 
-    /// 判断定义是否为当前可绑定的已发布状态。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 仅已发布返回 `true`；草稿与退役均返回 `false`。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 仓储按状态过滤不能替代本判断；绑定前必须由 BPM 再次确认。
+    /// 绑定前按定义自己的状态确认它仍已发布；仓储按状态筛选不能代替这一步。
     pub fn is_published(self) -> bool {
         matches!(self, Self::Published)
     }
@@ -114,16 +84,7 @@ pub enum ApprovalNodeType {
 }
 
 impl ApprovalNodeType {
-    /// 返回稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `USER_APPROVAL`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为节点类型提供与存储合同一致的 `USER_APPROVAL`，供定义展示或交换使用。
     pub fn as_str(self) -> &'static str {
         "USER_APPROVAL"
     }
@@ -140,16 +101,7 @@ pub enum ApprovalTransitionEvent {
 }
 
 impl ApprovalTransitionEvent {
-    /// 返回稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `APPROVE` 或 `REJECT`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 构造或比较决定连线时使用稳定事件码，以区分 `APPROVE` 与 `REJECT` 两条边。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Approve => "APPROVE",
@@ -169,16 +121,7 @@ pub enum ApprovalTerminalResult {
 }
 
 impl ApprovalTerminalResult {
-    /// 返回稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `APPROVED` 或 `REJECTED`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 在比对冻结图的终态目标时取稳定代码，区分审批实例最终通过与被驳回。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Approved => "APPROVED",
@@ -198,16 +141,7 @@ pub enum ApprovalDecision {
 }
 
 impl ApprovalDecision {
-    /// 返回稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `APPROVE` 或 `REJECT`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 在表示或编码审批决定时使用稳定代码，不依赖 Rust 枚举格式。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Approve => "APPROVE",
@@ -233,16 +167,7 @@ pub enum ApprovalProcessInstanceStatus {
 }
 
 impl ApprovalProcessInstanceStatus {
-    /// 返回稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `RUNNING`、`APPROVED`、`REJECTED`、`CANCELLED` 或 `BLOCKED`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 给实例状态投影提供稳定代码；调用方不必把受阻解释为终态或从显示文案推断状态。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Running => "RUNNING",
@@ -253,16 +178,7 @@ impl ApprovalProcessInstanceStatus {
         }
     }
 
-    /// 判断实例是否已进入不可再推进的终态。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 最终通过、最终驳回或取消时返回 `true`。受阻与运行中返回 `false`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 推进或取消实例前判断流程是否已经收结；通过、驳回和取消为终态，受阻不是。
     pub fn is_terminal(self) -> bool {
         matches!(self, Self::Approved | Self::Rejected | Self::Cancelled)
     }
@@ -287,16 +203,7 @@ pub enum ApprovalNodeExecutionStatus {
 }
 
 impl ApprovalNodeExecutionStatus {
-    /// 返回稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `ACTIVE`、`APPROVED`、`REJECTED`、`CANCELLED`、`BLOCKED` 或 `SUPERSEDED`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为执行历史和待办理状态提供稳定代码，区分已结束、受阻和仍活动等状态。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Active => "ACTIVE",
@@ -308,30 +215,12 @@ impl ApprovalNodeExecutionStatus {
         }
     }
 
-    /// 判断执行是否已结束。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// `ACTIVE` 与 `BLOCKED` 以外的状态返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 修改执行前判断是否已结束，防止覆盖决定或重开旧记录；活动与受阻均尚未结束。
     pub fn is_ended(self) -> bool {
         !matches!(self, Self::Active | Self::Blocked)
     }
 
-    /// 判断执行是否可作为实例当前令牌。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 仅 `ACTIVE` 与 `BLOCKED` 返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 检查执行状态是否允许其作为当前令牌；活动和受阻都可以，令牌是否确属当前实例仍须对照引用。
     pub fn is_current(self) -> bool {
         matches!(self, Self::Active | Self::Blocked)
     }
@@ -346,16 +235,7 @@ pub enum ApprovalAssigneeBindingSource {
 }
 
 impl ApprovalAssigneeBindingSource {
-    /// 返回稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `DEFINITION`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 表示实例审批人绑定的稳定来源码，始终为 `DEFINITION`，不与执行恢复来源混用。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Definition => "DEFINITION",
@@ -374,16 +254,7 @@ pub enum ApprovalExecutionAssignmentSource {
 }
 
 impl ApprovalExecutionAssignmentSource {
-    /// 返回稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `DEFINITION` 或 `ASSIGNEE_RECOVERY`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 展示或记录执行分派来源时使用稳定代码，区分按定义首次进入与原人恢复进入。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Definition => "DEFINITION",
@@ -401,16 +272,7 @@ pub enum ApprovalExecutionEndReason {
 }
 
 impl ApprovalExecutionEndReason {
-    /// 返回稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `ASSIGNEE_RECOVERED`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 记录旧执行被原人恢复替换的固定结束原因，供历史记录消费，无需从事由猜测。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::AssigneeRecovered => "ASSIGNEE_RECOVERED",
@@ -448,16 +310,7 @@ pub enum ApprovalBlockerCode {
 }
 
 impl ApprovalBlockerCode {
-    /// 返回稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回合同第 12.2 节固定 blocker 代码。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 向事件或状态视图提供稳定阻塞码；旧合同如 `APPROVER_OUT_OF_DATA_SCOPE` 不随变体名变化。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::ApproverAccountInactive => "APPROVER_ACCOUNT_INACTIVE",
@@ -474,16 +327,7 @@ impl ApprovalBlockerCode {
         }
     }
 
-    /// 判断是否属于允许恢复原审批人的人员失效类别。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 前六类人员资格阻塞返回 `true`，其余结构或一致性阻塞返回 `false`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为恢复和撤回分类识别可恢复的六类人员失效；定义、链接、任务及其他一致性问题不走原人恢复。
     pub fn allows_assignee_recovery(self) -> bool {
         matches!(
             self,
@@ -535,16 +379,7 @@ impl ApprovalCommandKind {
         Self::CancelBlocked,
     ];
 
-    /// 返回稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回命令种类代码。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 计算命令作用域与摘要、表示收据中的命令种类时使用稳定代码；改码会影响既有身份的回放匹配。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::DefinitionWrite => "DEFINITION_WRITE",
@@ -573,17 +408,7 @@ pub const PURPOSE_MAX_LEN: usize = 64;
 /// 作用域 ID 与幂等键最大字节长度。
 pub const SCOPE_MAX_LEN: usize = 128;
 
-/// 由调用方时间构造持久化元数据，禁止读取系统时钟。
-///
-/// # 参数
-/// * `id` - 调用方已经生成的主键
-/// * `at` - 调用方提供的时间
-///
-/// # 返回
-/// 版本为 1、创建与更新时间均为 `at` 的元数据。
-///
-/// # 错误
-/// 时间为负秒时返回 [`ModelError::InvalidTimestamp`]。
+// 创建流程模型的持久化元数据时使用调用方已生成的 ID 和时间，将版本置为 1，创建与更新时间相同；负秒返回 `ModelError::InvalidTimestamp`。
 pub(crate) fn base_model_at(id: impl Into<String>, at: Timestamp) -> ModelResult<BaseModel> {
     let stamp = persistence_stamp(at)?;
     Ok(BaseModel {
@@ -595,50 +420,19 @@ pub(crate) fn base_model_at(id: impl Into<String>, at: Timestamp) -> ModelResult
     })
 }
 
-/// 用调用方时间推进乐观锁版本与更新时间。
-///
-/// # 参数
-/// * `base` - 持久化元数据
-/// * `at` - 调用方提供的时间
-///
-/// # 返回
-/// 无返回值。成功时把 `updated_at` 写成调用方时间的非负秒，并把 `version` 加一。
-///
-/// # 错误
-/// 时间为负或版本溢出时返回错误。
+// 实体变更时用调用方时间更新持久化元数据并推进 CAS 版本；负时间或版本溢出返回错误。
 pub(crate) fn touch_base(base: &mut BaseModel, at: Timestamp) -> ModelResult<()> {
     base.updated_at = persistence_stamp(at)?;
     base.version = base.version.checked_add(1).ok_or(ModelError::Overflow("乐观锁版本"))?;
     Ok(())
 }
 
-/// 把调用方时间转为非负秒。
-///
-/// # 参数
-/// * `at` - 调用方提供的时间
-///
-/// # 返回
-/// 返回可写入持久化元数据的非负秒。
-///
-/// # 错误
-/// 负秒返回 [`ModelError::InvalidTimestamp`]。
+// 给元数据写入无符号 Unix 秒前检查时间非负；负秒返回 `ModelError::InvalidTimestamp`，不能直接强制转换。
 pub(crate) fn persistence_stamp(at: Timestamp) -> ModelResult<u64> {
     u64::try_from(at.unix_secs()).map_err(|_| ModelError::InvalidTimestamp)
 }
 
-/// 规范化必填短文本。
-///
-/// # 参数
-/// * `value` - 原始文本
-/// * `empty` - 去空白后为空时的错误说明
-/// * `max_len` - UTF-8 字节长度上限
-/// * `too_long` - 超长错误说明
-///
-/// # 返回
-/// 返回去除首尾空白后的文本；原本无首尾空白时复用原字符串。
-///
-/// # 错误
-/// 空值或超长返回 [`ModelError::InvalidField`]。
+// 保存必填名称、节点键或事由时，获取裁剪且符合 UTF-8 字节上限的文本；无需裁剪时复用原字符串，空值或超长返回 `ModelError::InvalidField`。
 pub(crate) fn normalize_required(
     value: impl Into<String>,
     empty: &'static str,
@@ -650,19 +444,7 @@ pub(crate) fn normalize_required(
     if trimmed.len() == value.len() { Ok(value) } else { Ok(trimmed.to_string()) }
 }
 
-/// 借用规范化后的必填短文本并校验字节长度。
-///
-/// # 参数
-/// * `value` - 原始文本
-/// * `empty` - 空文本错误说明
-/// * `max_len` - UTF-8 字节长度上限
-/// * `too_long` - 超长错误说明
-///
-/// # 返回
-/// 返回移除首尾空白后的文本切片。
-///
-/// # 错误
-/// 空值或超长返回 [`ModelError::InvalidField`]。
+// 在键校验或名称快照只需读取时借用裁剪后的文本；用调用方给定的字节上限与错误说明拒绝空值或超长。
 pub(crate) fn trim_required<'a>(
     value: &'a str,
     empty: &'static str,
@@ -679,18 +461,7 @@ pub(crate) fn trim_required<'a>(
     Ok(trimmed)
 }
 
-/// 规范化可选短文本。
-///
-/// # 参数
-/// * `value` - 原始可选文本
-/// * `max_len` - UTF-8 字节长度上限
-/// * `too_long` - 超长错误说明
-///
-/// # 返回
-/// `None` 或去空白后为空时返回 `None`，否则返回去除首尾空白后的文本。
-///
-/// # 错误
-/// 去空白后超长返回 [`ModelError::InvalidField`]。
+// 写入可选用途或意见时将缺省、空串和纯空白统一作 `None`，裁剪后依 UTF-8 字节上限拦截超长输入；无需裁剪时复用原字符串。
 pub(crate) fn normalize_optional(
     value: Option<String>,
     max_len: usize,
@@ -718,7 +489,7 @@ mod tests {
         ApprovalTransitionEvent,
     };
 
-    /// 绑定来源固定为定义，执行来源只增加原审批人恢复。
+    // 锁定绑定、执行和旧执行结束原因各自的编码，确保原人恢复只出现在执行历史中。
     #[test]
     fn assignment_sources_only_allow_definition_and_assignee_recovery() {
         let binding_sources = [ApprovalAssigneeBindingSource::Definition];
@@ -735,7 +506,7 @@ mod tests {
         assert_eq!(ApprovalExecutionEndReason::AssigneeRecovered.as_str(), "ASSIGNEE_RECOVERED");
     }
 
-    /// 开发期硬切换不得为已删除的审批改派枚举保留反序列化别名。
+    // 验证开发期移除的管理员改派代码不再被旧别名反序列化，覆盖绑定、执行、结束原因和命令收据。
     #[test]
     fn removed_reassign_codes_are_rejected() {
         assert!(serde_json::from_str::<ApprovalAssigneeBindingSource>("\"ADMIN_REASSIGN\"").is_err());
@@ -744,7 +515,7 @@ mod tests {
         assert!(serde_json::from_str::<ApprovalCommandKind>("\"REASSIGN_APPROVER\"").is_err());
     }
 
-    /// 命令收据权威集合固定为删除审批改派后的九种稳定代码。
+    // 检查移除改派后的九种命令代码齐全、有序且唯一，保护命令收据和身份计算的编码合同。
     #[test]
     fn command_kind_all_is_complete_and_unique() {
         assert_eq!(ApprovalCommandKind::ALL.len(), 9);
@@ -768,7 +539,7 @@ mod tests {
         assert!(codes.windows(2).all(|pair| pair[0] != pair[1]));
     }
 
-    /// 固定枚举代码与合同取值一致。
+    // 抽查定义、连线、决定和运行状态的稳定编码及分类，防止枚举调整改变既有合同。
     #[test]
     fn fixed_enum_codes_match_contract() {
         assert_eq!(ApprovalDefinitionStatus::Draft.as_str(), "DRAFT");
@@ -790,7 +561,7 @@ mod tests {
         assert_eq!(ApprovalExecutionEndReason::AssigneeRecovered.as_str(), "ASSIGNEE_RECOVERED");
     }
 
-    /// 仅前六类人员阻塞允许恢复原审批人。
+    // 以人员阻塞类别的首尾及各结构性阻塞做对照，确保非人员异常不能走原人恢复。
     #[test]
     fn only_personnel_blockers_allow_assignee_recovery() {
         assert!(ApprovalBlockerCode::ApproverAccountInactive.allows_assignee_recovery());

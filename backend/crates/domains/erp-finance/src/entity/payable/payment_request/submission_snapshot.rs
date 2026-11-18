@@ -19,14 +19,12 @@ pub struct PurchasePaymentRequestSubmissionSnapshot {
 }
 
 impl PurchasePaymentRequestSubmissionSnapshot {
-    /// 复制本轮已提交且已绑定审批实例的完整审核材料。
-    ///
-    /// # 参数
-    /// * `request` - 当前事务已提交并写入审批绑定的申请。
-    /// # 返回
+    /// 申请本轮提交并绑定审批实例后，复制完整冻结材料；快照以申请和提交版本定位，供后续审批精确回看该轮内容。
     /// 返回独立的不可变副本，身份由申请与提交版本确定。
-    /// # 错误
     /// 非审批中、缺少来源、提交版本或审批实例时返回错误。
+    ///
+    /// 输入约定：
+    /// - `request`：当前事务已提交并写入审批绑定的申请。
     pub fn freeze(request: &PurchasePaymentRequest) -> Result<Self> {
         let instance = request
             .approval_instance_id

@@ -132,19 +132,12 @@ pub struct SellableSkuSpecificationAttributeView {
     pub value: String,
 }
 
-/// 将稳定 SKU 规格签名映射为对外的结构化规格属性。
-///
-/// 规范签名由 [`crate::entity::catalog::read_specification_signature`] 解析；历史非法
-/// 签名在审计清零前兼容为空属性，避免列表整页失败。
-///
-/// # 参数
-/// * `signature` - 已持久化的规格签名
-///
-/// # 返回
-/// 返回按规范顺序排列的规格属性视图；非法历史签名返回空集合。
-///
-/// # 错误
-/// 无。
+// 将稳定 SKU 规格签名映射为对外的结构化规格属性。
+//
+// 规范签名由 [`crate::entity::catalog::read_specification_signature`] 解析；历史非法签名在审计清零前兼容为空属性，
+// 避免列表整页失败。
+//
+// 返回按规范顺序排列的规格属性视图；非法历史签名返回空集合。
 fn specification_attribute_views(signature: &str) -> Vec<SellableSkuSpecificationAttributeView> {
     match crate::entity::catalog::read_specification_signature(signature) {
         crate::entity::catalog::SpecificationSignatureRead::Canonical(entries) => entries
@@ -158,16 +151,9 @@ fn specification_attribute_views(signature: &str) -> Vec<SellableSkuSpecificatio
     }
 }
 
-/// 构造销售资格失效错误。
+/// 构造销售资格失效错误。返回可直接向业务调用方暴露的 fail-closed 错误。
 ///
-/// # 参数
-/// * `sku_ids` - 已失效或修订已变化的稳定 SKU ID 集合
-///
-/// # 返回
-/// 返回可直接向业务调用方暴露的 fail-closed 错误。
-///
-/// # 错误
-/// 不返回错误。
+/// `sku_ids` 为已失效或修订已变化的稳定 SKU ID 集合。
 pub fn sellable_sku_invalid_error(sku_ids: &[String]) -> Error {
     Error::BusinessLogicError(format!(
         "所选商品规格已不可售或资料已更新，请刷新公司商品池后重新选择（涉及 {} 项）",
@@ -177,14 +163,8 @@ pub fn sellable_sku_invalid_error(sku_ids: &[String]) -> Error {
 
 /// 校验分页、价格并在原时点解释资格日期。
 ///
-/// # 参数
-/// * `params` - 公司商品池列表筛选
-///
-/// # 返回
-/// 返回规范化筛选；未传 `eligibility_as_of` 时使用 `BusinessDate::today`。
-///
-/// # 错误
-/// 分页、供应商数量上限等请求校验失败，或销售价为负、下限高于上限时返回 `ValidationError`。
+/// 返回规范化筛选；未传 `eligibility_as_of` 时使用 `BusinessDate::today`。分页、供应商数量上限等请求校验失败，或销售价为负、
+/// 下限高于上限时返回 `ValidationError`。
 pub fn prepare_sellable_sku_list(params: &SellableSkuListParams) -> Result<SellableSkuFilter> {
     use application_core::{page_or_default, page_size_or_default};
 
@@ -219,16 +199,9 @@ pub fn prepare_sellable_sku_list(params: &SellableSkuListParams) -> Result<Sella
 /// 一次按 SKU 查询的数量上限，与选品册勾选上限一致。
 const MAX_REQUESTED_SKUS: usize = 500;
 
-/// 解析逗号分隔的 SKU；空白项忽略并去重。
-///
-/// # 参数
-/// * `raw` - 原始参数
-///
-/// # 返回
-/// 未传或全为空白时返回 `None`。
-///
-/// # 错误
-/// 超过 500 个时返回校验错误。
+// 解析逗号分隔的 SKU；空白项忽略并去重。
+//
+// 未传或全为空白时返回 `None`。超过 500 个时返回校验错误。
 fn requested_sku_ids(raw: Option<&str>) -> Result<Option<Vec<String>>> {
     let mut ids: Vec<String> = Vec::new();
     for id in raw.unwrap_or_default().split(',').map(str::trim).filter(|id| !id.is_empty()) {
@@ -242,16 +215,9 @@ fn requested_sku_ids(raw: Option<&str>) -> Result<Option<Vec<String>>> {
     Ok((!ids.is_empty()).then_some(ids))
 }
 
-/// 解析排序方向；默认升序。
-///
-/// # 参数
-/// * `raw` - `asc` 或 `desc`
-///
-/// # 返回
-/// 降序时为真。
-///
-/// # 错误
-/// 其他取值返回校验错误。
+// 解析排序方向；默认升序。
+//
+// 降序时为真。其他取值返回校验错误。
 fn sort_descending(raw: Option<&str>) -> Result<bool> {
     match raw.map(str::trim).filter(|value| !value.is_empty()) {
         None | Some("asc") => Ok(false),
@@ -260,16 +226,9 @@ fn sort_descending(raw: Option<&str>) -> Result<bool> {
     }
 }
 
-/// 解析配送地区筛选；未选地区时范围与运费另计参数不生效。
-///
-/// # 参数
-/// * `params` - 公司商品池查询参数
-///
-/// # 返回
-/// 选了地区时返回筛选条件，范围默认整片可送、默认不含运费另计。
-///
-/// # 错误
-/// 地区代码格式非法或不存在时返回校验错误。
+// 解析配送地区筛选；未选地区时范围与运费另计参数不生效。
+//
+// 选了地区时返回筛选条件，范围默认整片可送、默认不含运费另计。地区代码格式非法或不存在时返回校验错误。
 fn delivery_query(params: &SellableSkuListParams) -> Result<Option<DeliveryCoverageQuery>> {
     let Some(code) = normalized_text(params.delivery_region_code.as_deref()) else {
         return Ok(None);
@@ -282,17 +241,9 @@ fn delivery_query(params: &SellableSkuListParams) -> Result<Option<DeliveryCover
     }))
 }
 
-/// 投影可售行，保留历史非法规格签名为空属性的合同。
+/// 投影可售行，保留历史非法规格签名为空属性的合同。返回可售视图；`supplier_codes` 保持为空，规格属性由签名投影。
 ///
-/// # 参数
-/// * `rows` - 已读取的可售 SKU 分页行
-/// * `filter` - 提供页码、单页条数和资格日期的筛选
-///
-/// # 返回
-/// 返回可售视图；`supplier_codes` 保持为空，规格属性由签名投影。
-///
-/// # 错误
-/// 不产生失败，始终返回 `Ok`。
+/// `filter` 为提供页码、单页条数和资格日期的筛选。
 pub fn sellable_sku_page_view(
     rows: persistence_core::PageResult<crate::repository::SellableSkuRow>,
     filter: &SellableSkuFilter,
@@ -348,7 +299,7 @@ mod tests {
     use super::{SellableSkuListParams, sellable_sku_page_view, specification_attribute_views};
     use crate::repository::{SellableSkuFilter, SellableSkuRow};
 
-    /// 商品池投影保留三种独立参考价与起订量，供应商内部身份不对外序列化。
+    // 商品池投影保留三种独立参考价与起订量，供应商内部身份不对外序列化。
     #[test]
     fn sellable_view_preserves_reference_prices_without_internal_supplier_ids() {
         let row: SellableSkuRow = serde_json::from_value(json!({
@@ -499,14 +450,14 @@ mod tests {
         );
     }
 
-    /// 公司商品池分页上限固定为一百，阻止无界销售查询。
+    // 公司商品池分页上限固定为一百，阻止无界销售查询。
     #[test]
     fn sellable_sku_page_size_is_bounded() {
         let params = SellableSkuListParams { page: Some(1), page_size: Some(101), ..Default::default() };
         assert!(params.validate().is_err());
     }
 
-    /// 供应商数量上限必须为正整数，避免把无供给 SKU 误当成筛选条件。
+    // 供应商数量上限必须为正整数，避免把无供给 SKU 误当成筛选条件。
     #[test]
     fn sellable_sku_max_supplier_count_rejects_zero() {
         let params = SellableSkuListParams {
@@ -519,7 +470,7 @@ mod tests {
         assert!(params.validate().is_err());
     }
 
-    /// 公司商品池只映射规范签名；无规格 SKU 返回空集合。
+    // 公司商品池只映射规范签名；无规格 SKU 返回空集合。
     #[test]
     fn sellable_sku_specification_attributes_come_from_stable_identity() {
         let attributes = specification_attribute_views("尺码=L|颜色=红色");

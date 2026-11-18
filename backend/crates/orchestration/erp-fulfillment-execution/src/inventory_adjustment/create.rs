@@ -30,20 +30,11 @@ use crate::{Error, Result};
 impl InventoryAdjustmentProcess {
     /// 创建库存调整单（草稿，跨集合：表头 + 明细 + 绑定 + 审计）。
     ///
-    /// 同一事务内注册 `BusinessDocument` 并调用统一绑定端口。无已发布定义
-    /// 时整体失败关闭，不得留下以后补流程的单据。
+    /// 同一事务内注册 `BusinessDocument` 并调用统一绑定端口。无已发布定义时整体失败关闭，不得留下以后补流程的单据。
     ///
-    /// # 参数
-    /// * `req` - 创建请求（表头 + 明细）
-    /// * `actor` - 已通过鉴权的审计操作人
+    /// `req` 为创建请求（表头 + 明细）。返回新建调整单的完整详情视图。`ValidationError`：请求体校验失败。
     ///
-    /// # 返回
-    /// 返回新建调整单的完整详情视图。
-    ///
-    /// # 错误
-    /// * `ValidationError` - 请求体校验失败
-    /// * `ConflictError` - 调整单号重复或流程未配置
-    /// * `RepositoryError` - 数据库写入失败
+    /// `ConflictError`：调整单号重复或流程未配置。`RepositoryError`：数据库写入失败。
     #[tracing::instrument(
         name = "inventory.stock_adjustment_create",
         skip_all,
@@ -144,25 +135,15 @@ struct CreatedAdjustmentPersist {
     expected_balance_version: u64,
 }
 
-/// 在创建事务内写入调整单、绑定发布定义并登记单据。
-///
-/// 绑定失败必须回滚业务实体，不得留下以后补流程的单据。
-///
-/// # 用途
-/// 在同一事务内写入调整单、绑定与审计。
-///
-/// # 参数
-/// * `db` - 数据库。
-/// * `persist` - 调整单、单据绑定与审计。
-///
-/// # 返回
-/// 写入成功时返回新建调整单的完整详情。
-///
-/// # 错误
-/// 无发布定义、人员重验失败或写入失败时返回错误。
-///
-/// # 关键业务约束
-/// 绑定失败必须整体回滚。
+// 在创建事务内写入调整单、绑定发布定义并登记单据。
+//
+// 绑定失败必须回滚业务实体，不得留下以后补流程的单据。
+//
+// 在同一事务内写入调整单、绑定与审计。
+//
+// `persist` 为调整单、单据绑定与审计。写入成功时返回新建调整单的完整详情。无发布定义、人员重验失败或写入失败时返回错误。
+//
+// 绑定失败必须整体回滚。
 async fn persist_created_adjustment(
     db: &Database,
     persist: CreatedAdjustmentPersist,
@@ -176,7 +157,7 @@ async fn persist_created_adjustment(
         .await
 }
 
-/// 在原创建事务内重验来源余额；授权失败先于仓库和余额读取返回。
+// 在原创建事务内重验来源余额；授权失败先于仓库和余额读取返回。
 async fn validate_creation_source(
     db: &Database,
     persist: &CreatedAdjustmentPersist,
@@ -213,7 +194,7 @@ async fn validate_creation_source(
     Ok(())
 }
 
-/// 单据、绑定和审计沿同一执行器顺序写入，响应使用本事务内的已知事实。
+// 单据、绑定和审计沿同一执行器顺序写入，响应使用本事务内的已知事实。
 async fn apply_created_adjustment(
     db: &Database,
     persist: CreatedAdjustmentPersist,
@@ -246,7 +227,7 @@ async fn apply_created_adjustment(
     created_adjustment_detail(adjustment, lines, binding, can_submit)
 }
 
-/// 使用创建事务已持有的事实构造成功响应，避免提交后再次授权或查询失败。
+// 使用创建事务已持有的事实构造成功响应，避免提交后再次授权或查询失败。
 fn created_adjustment_detail(
     adjustment: StockAdjustment,
     lines: Vec<StockAdjustmentLine>,
@@ -283,10 +264,7 @@ fn created_adjustment_detail(
     })
 }
 
-/// 查询发布定义、写入绑定并持久化注册行。
-///
-/// # 错误
-/// 无发布定义或绑定失败时返回错误，调用方必须回滚。
+// 查询发布定义、写入绑定并持久化注册行。无发布定义或绑定失败时返回错误，调用方必须回滚。
 async fn persist_bound_document(
     db: &Database,
     workflow: &dyn FulfillmentWorkflow,
@@ -302,18 +280,11 @@ async fn persist_bound_document(
     Ok(binding)
 }
 
-/// 构建调整明细实体集合（明细主键逐条生成）。
-///
-/// # 参数
-/// * `adjustment_id` - 调整单主键
-/// * `reason_type` - 调整原因，用于校验明细方向
-/// * `inputs` - 明细输入
-///
-/// # 返回
-/// 返回明细实体集合。
-///
-/// # 错误
-/// 明细数量非正时返回错误（实体构造）。
+// 构建调整明细实体集合（明细主键逐条生成）。
+//
+// `adjustment_id` 为调整单主键；`reason_type` 为调整原因，用于校验明细方向；`inputs` 为明细输入。返回明细实体集合。
+//
+// 明细数量非正时返回错误（实体构造）。
 fn build_adjustment_lines(
     adjustment_id: &StockAdjustmentId,
     reason_type: AdjustmentReasonType,
@@ -353,7 +324,7 @@ mod tests {
     use super::{StockAdjustmentLineInput, build_adjustment_lines, created_adjustment_detail};
     use crate::Error;
 
-    /// 使用固定元数据构造尚未提交的调整单与完整审批绑定。
+    // 使用固定元数据构造尚未提交的调整单与完整审批绑定。
     fn created_draft() -> (StockAdjustment, ApprovalDefinitionBinding) {
         let adjustment = StockAdjustment {
             base: BaseModel::fake(),
@@ -378,7 +349,7 @@ mod tests {
         (adjustment, binding)
     }
 
-    /// 已获提交资格的新草稿立即返回权威版本令牌与提交动作。
+    // 已获提交资格的新草稿立即返回权威版本令牌与提交动作。
     #[test]
     fn created_draft_with_submit_authorization_returns_command() {
         let (mut adjustment, binding) = created_draft();
@@ -392,7 +363,7 @@ mod tests {
         assert!(view.approval.instance.is_none());
     }
 
-    /// 仅有创建资格时保留成功草稿与绑定，不能返回提交令牌。
+    // 仅有创建资格时保留成功草稿与绑定，不能返回提交令牌。
     #[test]
     fn created_draft_without_submit_authorization_has_no_command() {
         let (adjustment, binding) = created_draft();
@@ -403,7 +374,7 @@ mod tests {
         assert!(view.approval.allowed_actions.is_empty());
     }
 
-    /// 主题版本达到上限时返回具体冲突，不能生成回绕的提交令牌。
+    // 主题版本达到上限时返回具体冲突，不能生成回绕的提交令牌。
     #[test]
     fn created_draft_rejects_submit_subject_version_overflow() {
         let (mut adjustment, binding) = created_draft();

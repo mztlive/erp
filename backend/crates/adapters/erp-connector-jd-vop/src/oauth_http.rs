@@ -18,16 +18,8 @@ pub struct OAuthHttp {
 }
 
 impl OAuthHttp {
-    /// 创建只发送一次且不跟随重定向的刷新 HTTP 实现。
-    ///
-    /// # 参数
-    /// `timeout_seconds` 为当前启动快照的超时。
-    ///
-    /// # 返回
-    /// 可注入凭据编排的刷新通信实现。
-    ///
-    /// # 错误
-    /// TLS 客户端无法构造时返回未知分类。
+    /// 凭据编排需要刷新访问令牌时，注入按启动配置限时的 HTTP 实现；每次刷新只发一次，不跟随重定向。
+    /// TLS 客户端构建失败归为 `RefreshFailure::Unknown`，不能据此判定授权已撤销。
     pub fn new(timeout_seconds: u64) -> Result<Self, RefreshFailure> {
         let client = Client::builder()
             .redirect(Policy::none())

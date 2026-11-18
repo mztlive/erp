@@ -40,32 +40,22 @@ pub struct CustomerAssignmentService {
 }
 
 impl CustomerAssignmentService {
-    /// 创建客户归属服务实例。
+    /// 组装客户归属服务，统一接入账号目录、授权和审计。新增或结束负责人关系时，由该服务核验客户更新资格。
     ///
     /// # 参数
-    /// * `db` - 数据库实例
     /// * `audit` - 审计写入端口
     /// * `access` - 客户统一授权访问器
     ///
-    /// # 返回
-    /// 返回服务实例。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 归属变更必须通过注入的访问器 证明 customer:update 范围。
+    /// 归属变更需要通过注入的访问器核验 `customer:update` 的数据范围。
     pub fn new(db: Database, audit: Arc<dyn CustomerAuditPort>, access: CustomerAccess) -> Self {
         Self { accounts: AccountDirectoryService::new(db.clone()), db, audit, access }
     }
 
-    /// 分页查询客户归属列表。
+    /// 查询指定客户的人员归属，供客户详情分页展示。先在同一快照核验查看资格，再应用人员、角色和排序条件。
     ///
     /// # 参数
     /// * `customer_id` - 客户角色 ID
-    /// * `params` - 查询参数
     ///
-    /// # 返回
     /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
     ///
     /// # 错误
@@ -92,7 +82,7 @@ impl CustomerAssignmentService {
             .await
     }
 
-    /// 在同一快照内校验功能资格并读取完整归属分页与计数。
+    // 在列表入口提供的快照里核验查看资格，再按同一筛选口径查询归属行和总数。
     async fn assignment_page(
         &self,
         actor: &AuditActor,
@@ -131,7 +121,7 @@ impl CustomerAssignmentService {
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
-    /// 应用归属变更（跨行事务：维护独立人员关系 + 审计原子写入）。
+    /// 执行客户负责人归属调整：新增一条人员关系，或用版本号提前结束既有关系。每条命令由对应事务同步保存业务变更与审计。
     ///
     /// - `Assign`：增加负责销售，不结束其他人员关系；同人同角色不得重叠。
     /// - `End`：提前结束既有归属的有效期（版本 CAS）。
@@ -139,9 +129,7 @@ impl CustomerAssignmentService {
     /// # 参数
     /// * `customer_id` - 客户角色 ID
     /// * `req` - 归属变更请求
-    /// * `actor` - 已通过鉴权的审计操作人
     ///
-    /// # 返回
     /// 返回本次变更涉及的归属行（新归属或结束后的目标归属）。
     ///
     /// # 错误
@@ -163,17 +151,15 @@ impl CustomerAssignmentService {
         }
     }
 
-    /// 在调用方 Executor 上新增人员关系并校验重复区间。
+    /// 在调用方事务中新增客户人员关系，并检查同一客户、人员和角色的有效期是否重叠。供已完成授权的上层流程复用。
     ///
     /// # 参数
     /// * `customer_id` - 客户角色 ID
     /// * `new_assignment` - 已构造的新归属
     /// * `executor` - 调用方执行器，必须位于事务中
     ///
-    /// # 返回
     /// 返回新建归属。
     ///
-    /// # 错误
     /// 窗口冲突或底层写入失败。
     pub async fn persist_assign(
         &self,
@@ -185,7 +171,7 @@ impl CustomerAssignmentService {
         Ok(vec![new_assignment.clone()])
     }
 
-    /// 建立新归属（拒绝同人重叠区间）。
+    // 为客户增加一条独立人员关系，在写入事务内检查客户范围、销售账号资格和有效期冲突，并记录审计。
     async fn assign(
         &self,
         customer_id: &str,
@@ -231,7 +217,7 @@ impl CustomerAssignmentService {
         Ok(vec![created.into()])
     }
 
-    /// 提前结束既有归属的有效期。
+    // 用请求版本结束指定人员关系，先确认客户和操作资格，再把关系期限修改与审计放在同一事务。
     async fn end(
         &self,
         customer_id: &str,
@@ -277,7 +263,7 @@ impl CustomerAssignmentService {
     }
 }
 
-/// 将已授权快照中的单行归属投影为原响应形状。
+// 把已授权的归属查询行转换为列表响应，并用账号 ID 填充未单独查询的人员名称。
 fn assignment_view(row: CustomerAssignmentRow) -> CustomerAssignmentView {
     CustomerAssignmentView {
         id: row.id,
@@ -293,7 +279,7 @@ fn assignment_view(row: CustomerAssignmentRow) -> CustomerAssignmentView {
     }
 }
 
-/// 在原事务中校验分配入口、原客户以及真实目标负责人。
+// 在写入前复用当前事务，检查人员分配资格、原客户范围和目标负责人的真实账号事实。
 async fn require_assignment(
     accounts: &AccountDirectoryService,
     access: &CustomerAccess,
@@ -317,7 +303,7 @@ async fn require_assignment(
     Ok(())
 }
 
-/// 锁定客户根记录后校验并写入人员关系；必须收到事务执行器。
+// 在同一事务内检查重叠区间、更新客户根记录再插入归属，串行化同一客户的并发调整。
 async fn persist_assign(
     db: &Database,
     customer_id: &str,
@@ -338,7 +324,7 @@ async fn persist_assign(
     Ok(())
 }
 
-/// 在原事务校验目标版本与区间覆盖，串行化同一客户的全部人员调整。
+// 在原事务内核验目标版本、负责人覆盖和变更后的授权范围，再更新客户根记录和归属结束日。
 async fn persist_end(
     db: &Database,
     access: &CustomerAccess,

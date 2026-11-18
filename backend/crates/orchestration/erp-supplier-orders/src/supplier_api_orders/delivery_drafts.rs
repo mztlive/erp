@@ -17,12 +17,12 @@ use persistence_core::Executor;
 use crate::{Error, Result};
 
 /// 按冻结 API 子单创建独立直发草稿，避免一个包裹状态提前过账其它地址。
-/// # 参数
+///
 /// `order` 为同事务正式采购；`allocations` 为同事务真实采购销售分配。
 /// `task_identity` 在每个新任务的责任人核验位置创建独立身份。
-/// # 返回
+///
 /// 已由 API 草稿覆盖的采购版本行身份，调用方只为剩余手工行建通用草稿。
-/// # 错误
+///
 /// 来源销售行、分配、明细或任务写入失败时回滚根事务。
 pub async fn create_api_delivery_drafts(
     db: &Database,

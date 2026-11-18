@@ -22,21 +22,17 @@ use super::super::brief::{
 use super::super::presentation::format_yuan;
 use super::{DiffLineState, LineStateMap};
 
-/// 组装销售变更的结构化简报。
-///
-/// # 参数
-/// * `change` - 销售变更单
-/// * `sales_no` - 来源销售单号
-/// * `base` - 冻结基准版本
-/// * `submission` - 当前目标提交
-/// * `lines` - 已截断的差异行
-/// * `more_count` - 未展开的差异行数
-///
-/// # 返回
-/// 返回可上屏的对象简报源。
-///
-/// # 错误
-/// 无。
+// 销售变更审批任务展示冻结提交时，将其表头对照和实际差异行组装为结构化简报。
+//
+// 调用参数：
+// * `change` - 销售变更单
+// * `sales_no` - 来源销售单号
+// * `base` - 冻结基准版本
+// * `submission` - 当前目标提交
+// * `lines` - 已截断的差异行
+// * `more_count` - 未展开的差异行数
+//
+// 返回可上屏的对象简报源。
 pub(super) fn sales_change_brief_source(
     change: &SalesChangeOrder,
     sales_no: Option<&str>,
@@ -83,21 +79,17 @@ pub(super) fn sales_change_brief_source(
     }
 }
 
-/// 组装采购变更的结构化简报。
-///
-/// # 参数
-/// * `change` - 采购变更单
-/// * `purchase_no` - 来源采购单号
-/// * `base` - 冻结基准版本
-/// * `submission` - 当前目标提交
-/// * `lines` - 已截断的差异行
-/// * `more_count` - 未展开的差异行数
-///
-/// # 返回
-/// 返回可上屏的对象简报源。
-///
-/// # 错误
-/// 无。
+// 采购变更审批任务展示冻结提交时，将基准与目标的表头和行差异组装为结构化简报。
+//
+// 调用参数：
+// * `change` - 采购变更单
+// * `purchase_no` - 来源采购单号
+// * `base` - 冻结基准版本
+// * `submission` - 当前目标提交
+// * `lines` - 已截断的差异行
+// * `more_count` - 未展开的差异行数
+//
+// 返回可上屏的对象简报源。
 pub(super) fn purchase_change_brief_source(
     change: &PurchaseChangeOrder,
     purchase_no: Option<&str>,
@@ -142,7 +134,7 @@ pub(super) fn purchase_change_brief_source(
     }
 }
 
-/// 追加销售变更表头的前后值。
+// 处理销售与采购变更简报时，追加销售变更表头的前后值。
 fn push_sales_header_comparisons(
     sections: &mut Vec<BriefSection>,
     base: Option<&SalesOrderRevision>,
@@ -184,7 +176,7 @@ fn push_sales_header_comparisons(
     push_section(sections, "开票要求（前→后）", invoice.as_deref(), false);
 }
 
-/// 追加采购变更表头的前后值。
+// 处理销售与采购变更简报时，追加采购变更表头的前后值。
 fn push_purchase_header_comparisons(
     sections: &mut Vec<BriefSection>,
     base: Option<&PurchaseOrderRevision>,
@@ -220,7 +212,7 @@ fn push_purchase_header_comparisons(
     push_section(sections, "付款条件（前→后）", payment.as_deref(), false);
 }
 
-/// 追加金额前后值。
+// 计算销售与采购变更简报金额时，追加金额前后值。
 fn push_amount_comparison(
     sections: &mut Vec<BriefSection>,
     label: &str,
@@ -231,12 +223,12 @@ fn push_amount_comparison(
     push_section(sections, label, comparison.as_deref(), true);
 }
 
-/// 返回金额前后值。
+// 计算销售与采购变更简报金额时，给出金额前后值。
 fn amount_comparison(before: Option<&Amount>, after: Option<&Amount>) -> Option<String> {
     text_comparison(before.map(format_yuan).as_deref(), after.map(format_yuan).as_deref())
 }
 
-/// 返回文本前后值；任一侧缺失时使用明确占位。
+// 处理销售与采购变更简报时，给出文本前后值；任一侧缺失时使用明确占位。
 fn text_comparison(before: Option<&str>, after: Option<&str>) -> Option<String> {
     if before.is_none() && after.is_none() {
         return None;
@@ -248,7 +240,7 @@ fn text_comparison(before: Option<&str>, after: Option<&str>) -> Option<String> 
     ))
 }
 
-/// 追加行级差异数量或明确无差异结论。
+// 生成销售与采购变更简报视图时，追加行级差异数量或明确无差异结论。
 fn push_line_difference_summary(
     sections: &mut Vec<BriefSection>,
     has_both_sides: bool,
@@ -266,7 +258,7 @@ fn push_line_difference_summary(
     }
 }
 
-/// 将采购付款条件快照转成可读标签。
+// 生成销售与采购变更简报视图时，将采购付款条件快照转成可读标签。
 fn purchase_payment_label(snapshot: &PaymentTermSnapshot) -> String {
     let label = SupplierPaymentTerm::parse(&snapshot.payment_term_code)
         .map(SupplierPaymentTerm::label)
@@ -274,18 +266,14 @@ fn purchase_payment_label(snapshot: &PaymentTermSnapshot) -> String {
     if snapshot.prepay_gate { format!("{label}（先款后货）") } else { label.to_string() }
 }
 
-/// 把销售基准版本行转成按稳定销售行分组的比较状态。
-///
-/// # 参数
-/// * `lines` - 销售修订行。
-/// * `goods_lines` - 实物或服务行修订，按修订行 ID 对齐。
-/// * `voucher_lines` - 卡券行修订，按修订行 ID 对齐。
-///
-/// # 返回
-/// 返回修订 ID 到稳定销售行比较状态。数量优先实物行，否则用卡券张数。
-///
-/// # 错误
-/// 不返回错误。
+// 组装销售与采购变更简报时，把销售基准版本行转成按稳定销售行分组的比较状态。
+//
+// 调用参数：
+// * `lines` - 销售修订行。
+// * `goods_lines` - 实物或服务行修订，按修订行 ID 对齐。
+// * `voucher_lines` - 卡券行修订，按修订行 ID 对齐。
+//
+// 返回修订 ID 到稳定销售行比较状态。数量优先实物行，否则用卡券张数。
 pub(super) fn sales_base_line_states(
     lines: &[SalesOrderRevisionLine],
     goods_lines: &[SalesOrderGoodsServiceLineRevision],
@@ -330,16 +318,12 @@ pub(super) fn sales_base_line_states(
     grouped
 }
 
-/// 把销售变更目标提交行转成按稳定销售行分组的比较状态。
-///
-/// # 参数
-/// * `lines` - 销售变更提交行。
-///
-/// # 返回
-/// 返回提交 ID 到稳定销售行比较状态。数量优先数量字段，否则用卡券张数。
-///
-/// # 错误
-/// 不返回错误。
+// 组装销售与采购变更简报时，把销售变更目标提交行转成按稳定销售行分组的比较状态。
+//
+// 调用参数：
+// * `lines` - 销售变更提交行。
+//
+// 返回提交 ID 到稳定销售行比较状态。数量优先数量字段，否则用卡券张数。
 pub(super) fn sales_target_line_states(lines: &[SalesChangeSubmissionLine]) -> HashMap<String, LineStateMap> {
     let mut grouped: HashMap<String, LineStateMap> = HashMap::new();
     for line in lines {
@@ -368,16 +352,12 @@ pub(super) fn sales_target_line_states(lines: &[SalesChangeSubmissionLine]) -> H
     grouped
 }
 
-/// 把采购基准版本行转成按稳定来源行分组的比较状态。
-///
-/// # 参数
-/// * `lines` - 采购修订行。
-///
-/// # 返回
-/// 返回修订 ID 到稳定来源行比较状态。行键优先采购确认行，其次销售行，再次 SKU 与行号，最后行号。
-///
-/// # 错误
-/// 不返回错误。
+// 组装销售与采购变更简报时，把采购基准版本行转成按稳定来源行分组的比较状态。
+//
+// 调用参数：
+// * `lines` - 采购修订行。
+//
+// 返回修订 ID 到稳定来源行比较状态。行键优先采购确认行，其次销售行，再次 SKU 与行号，最后行号。
 pub(super) fn purchase_base_line_states(
     lines: &[PurchaseOrderRevisionLine],
 ) -> HashMap<String, LineStateMap> {
@@ -396,16 +376,12 @@ pub(super) fn purchase_base_line_states(
     grouped
 }
 
-/// 把采购变更目标提交行转成按稳定来源行分组的比较状态。
-///
-/// # 参数
-/// * `lines` - 采购变更提交行。
-///
-/// # 返回
-/// 返回提交 ID 到稳定来源行比较状态。行键规则与基准修订行相同。
-///
-/// # 错误
-/// 不返回错误。
+// 组装销售与采购变更简报时，把采购变更目标提交行转成按稳定来源行分组的比较状态。
+//
+// 调用参数：
+// * `lines` - 采购变更提交行。
+//
+// 返回提交 ID 到稳定来源行比较状态。行键规则与基准修订行相同。
 pub(super) fn purchase_target_line_states(
     lines: &[PurchaseChangeSubmissionLine],
 ) -> HashMap<String, LineStateMap> {
@@ -424,16 +400,12 @@ pub(super) fn purchase_target_line_states(
     grouped
 }
 
-/// 把采购单不可变提交行转成按稳定来源行分组的比较状态。
-///
-/// # 参数
-/// * `lines` - 采购单提交行
-///
-/// # 返回
-/// 返回按提交 ID 分组的行比较状态。
-///
-/// # 错误
-/// 无。
+// 处理销售与采购变更简报的版本事实时，把采购单不可变提交行转成按稳定来源行分组的比较状态。
+//
+// 调用参数：
+// * `lines` - 采购单提交行
+//
+// 返回按提交 ID 分组的行比较状态。
 pub(in super::super) fn purchase_order_submission_line_states(
     lines: &[PurchaseOrderSubmissionLine],
 ) -> HashMap<String, LineStateMap> {
@@ -464,11 +436,11 @@ pub(in super::super) fn purchase_order_submission_line_states(
     grouped
 }
 
-/// 返回采购变更两侧可复用的稳定行键。
-///
-/// 正式商品行优先使用采购确认行或销售稳定行；只有旧数据缺少来源身份时才把
-/// SKU 与行号组合，物流费等无商品身份的行最后回退行号。该键仅用于服务端匹配，
-/// 不得上屏。
+// 定位销售与采购变更简报关联时，给出采购变更两侧可复用的稳定行键。
+//
+// 正式商品行优先使用采购确认行或销售稳定行；只有旧数据缺少来源身份时才把
+// SKU 与行号组合，物流费等无商品身份的行最后回退行号。该键仅用于服务端匹配，
+// 不得上屏。
 fn purchase_line_key(
     procurement_confirmation_line_id: Option<&str>,
     sales_order_line_id: Option<&str>,
@@ -487,7 +459,7 @@ fn purchase_line_key(
     format!("line:{line_no}")
 }
 
-/// 组装采购基准版本行的比较状态。
+// 处理销售与采购变更简报的版本事实时，组装采购基准版本行的比较状态。
 fn purchase_revision_line_state(line: &PurchaseOrderRevisionLine) -> DiffLineState {
     DiffLineState::new(
         line_title(
@@ -504,7 +476,7 @@ fn purchase_revision_line_state(line: &PurchaseOrderRevisionLine) -> DiffLineSta
     )
 }
 
-/// 组装采购目标提交行的比较状态。
+// 处理销售与采购变更简报的版本事实时，组装采购目标提交行的比较状态。
 fn purchase_submission_line_state(line: &PurchaseChangeSubmissionLine) -> DiffLineState {
     DiffLineState::new(
         line_title(
@@ -521,22 +493,18 @@ fn purchase_submission_line_state(line: &PurchaseChangeSubmissionLine) -> DiffLi
     )
 }
 
-/// 把单位价格格式化为人民币展示。
+// 展示销售与采购变更简报时，把单位价格格式化为人民币展示。
 fn format_unit_price(value: Decimal) -> String {
     format!("¥{}", value.normalize())
 }
 
-/// 计算两侧行状态中的实际变更行。
-///
-/// # 参数
-/// * `before` - 变更前行状态
-/// * `after` - 变更后行状态
-///
-/// # 返回
-/// 返回按行号排序的差异简报行；完全一致的行不上屏。
-///
-/// # 错误
-/// 无。
+// 处理销售与采购变更简报时，计算两侧行状态中的实际变更行。
+//
+// 调用参数：
+// * `before` - 变更前行状态
+// * `after` - 变更后行状态
+//
+// 返回按行号排序的差异简报行；完全一致的行不上屏。
 pub(in super::super) fn change_diff_lines(
     before: Option<&LineStateMap>,
     after: Option<&LineStateMap>,
@@ -556,7 +524,7 @@ pub(in super::super) fn change_diff_lines(
         .collect()
 }
 
-/// 把单行前后状态转成变更简报行；完全一致时不上屏。
+// 生成销售与采购变更简报视图时，把单行前后状态转成变更简报行；完全一致时不上屏。
 fn changed_line_brief(before: Option<&DiffLineState>, after: Option<&DiffLineState>) -> Option<BriefLine> {
     if before == after {
         return None;
@@ -613,18 +581,14 @@ fn changed_line_brief(before: Option<&DiffLineState>, after: Option<&DiffLineSta
     })
 }
 
-/// 字段前后不同时追加一条对照说明。
-///
-/// # 参数
-/// * `parts` - 已收集的对照说明
-/// * `label` - 字段名称
-/// * `values` - 变更前、变更后的展示值
-///
-/// # 返回
-/// 两侧均缺失却不相等时返回 `None`，其余返回 `Some(())`。
-///
-/// # 错误
-/// 无。
+// 处理销售与采购变更简报时，字段前后不同时追加一条对照说明。
+//
+// 调用参数：
+// * `parts` - 已收集的对照说明
+// * `label` - 字段名称
+// * `values` - 变更前、变更后的展示值
+//
+// 两侧均缺失却不相等时返回 `None`，其余返回 `Some(())`。
 fn push_detail_change(
     parts: &mut Vec<String>,
     label: &str,
@@ -674,7 +638,7 @@ mod tests {
         assert_eq!(line.due_label.as_deref(), Some("交期 2026-09-01 → 2026-09-03"));
     }
 
-    /// 采购供给价单独变化也上屏；未填写一侧显示为未记录。
+    // 验证销售与采购变更简报：采购供给价单独变化也上屏；未填写一侧显示为未记录。
     #[test]
     fn changed_line_exposes_procurement_supply_price() {
         let before = state("办公纸 A4", "¥1,000", Some("10 箱"), Some("¥100"), Some("2026-09-01"));

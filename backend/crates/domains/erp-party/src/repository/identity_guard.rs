@@ -8,14 +8,14 @@ use super::PartyExt;
 use super::exact_identity::{ContractIdentityCandidate, contract_identity_candidates};
 use crate::{Error, Result};
 
-/// 在原事务中锁定名称，再读取当前主体候选。
+/// 在读取企业名称候选前获取同事务的名称锁，避免并发建档或更名同时认领同一个名称。
 ///
 /// # 参数
 /// * `db` / `name` / `credit` - 数据库、已规范化法定名称与信用代码。
 /// * `executor` - 创建或修订用例的事务执行器。
-/// # 返回
+///
 /// 返回同一事务快照下的候选；不自动创建或授予业务权限。
-/// # 错误
+///
 /// 非事务调用、并发占用、唯一冲突或数据库失败时拒绝。
 pub async fn guarded_candidates(
     db: &Database,
@@ -31,9 +31,9 @@ pub async fn guarded_candidates(
 ///
 /// # 参数
 /// * `db` / `name` / `executor` - 数据库、法定名称及原写入事务。
-/// # 返回
+///
 /// 成功时该事务已写入名称互斥记录。
-/// # 错误
+///
 /// 缺事务、空名称、并发写冲突或数据库失败时拒绝；不自动重放。
 pub async fn lock_name(db: &Database, name: &str, executor: &mut dyn Executor) -> Result<()> {
     let name = name.trim();
@@ -62,7 +62,7 @@ mod tests {
 
     use super::*;
 
-    /// 在任何数据库操作前拒绝缺少事务的调用。
+    // 在任何数据库操作前拒绝缺少事务的调用。
     #[tokio::test]
     async fn identity_guard_rejects_nontransactional_writers() {
         let db = Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("unit_test");

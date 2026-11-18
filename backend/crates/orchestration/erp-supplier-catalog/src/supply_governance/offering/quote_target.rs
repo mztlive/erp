@@ -64,7 +64,7 @@ impl PortalQuoteQualificationPort for MongoOfferingQualification {
     }
 }
 
-/// 核对目标启用状态与正式指针，不以其他修订补齐缺失引用。
+// 核对目标启用状态与正式指针，不以其他修订补齐缺失引用。
 fn target_revision_ids<'a>(sku: &'a Sku, product: &'a Product) -> Result<(&'a str, &'a str)> {
     if !sku.is_active() || !product.is_active() || sku.product_id.as_ref() != product.base.id {
         return Err(Error::BusinessLogicError("公司SKU或所属商品未启用或引用无效".into()));

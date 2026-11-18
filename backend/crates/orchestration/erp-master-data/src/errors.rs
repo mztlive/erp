@@ -54,7 +54,7 @@ pub enum Error {
 }
 
 impl From<application_core::Error> for Error {
-    /// 将应用合同错误映射为应用错误。
+    // 将应用合同错误映射为应用错误。
     fn from(error: application_core::Error) -> Self {
         match error {
             application_core::Error::Internal(message) => Self::Internal(message),
@@ -102,7 +102,7 @@ from_domain!(erp_warehouse);
 from_domain!(erp_contract);
 from_domain!(erp_supply);
 impl From<persistence_core::Error> for Error {
-    /// 保留持久化分类和原错误；仅归档索引交 HTTP 的兼容分支最终形成文案。
+    // 保留持久化分类和原错误；仅归档索引交 HTTP 的兼容分支最终形成文案。
     fn from(error: persistence_core::Error) -> Self {
         match error {
             error @ persistence_core::Error::DuplicateKey(_) => {
@@ -125,7 +125,7 @@ impl From<persistence_core::Error> for Error {
     }
 }
 
-/// 仅识别 HTTP 持有的三个历史索引；不拥有其提示文案，也不增加命令恢复范围。
+// 仅识别 HTTP 持有的三个历史索引；不拥有其提示文案，也不增加命令恢复范围。
 fn historical_http_index(index_name: Option<&str>) -> bool {
     matches!(
         index_name,
@@ -139,7 +139,7 @@ fn duplicate_key_conflict_message(error: &persistence_core::Error) -> String {
     duplicate_index_conflict_message(error.duplicate_index_name())
 }
 
-/// 已知提示只由实际拥有域提供。无名/未知索引保持原通用冲突提示。
+// 已知提示只由实际拥有域提供。无名/未知索引保持原通用冲突提示。
 fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
     index_name
         .and_then(|name| {
@@ -154,13 +154,7 @@ fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
 }
 
 impl From<validator::ValidationErrors> for Error {
-    /// 从给定值构建实例。
-    ///
-    /// # 参数
-    /// * `err` - 错误对象
-    ///
-    /// # 返回
-    /// 返回创建的实例。
+    // 将请求字段校验失败转换为 `InvalidInput`，保留结构化校验信息供调用方区分无效输入。
     fn from(err: validator::ValidationErrors) -> Self {
         Error::InvalidInput(err.into())
     }
@@ -169,14 +163,7 @@ impl From<validator::ValidationErrors> for Error {
 impl Error {
     /// 判断失败后服务端是否仍可能已经提交。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// `OutcomeUnknown`、`ReceiptDuplicate` 或 `TransientTransaction` 时返回 `true`，其余返回 `false`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn command_may_have_committed(&self) -> bool {
         matches!(self, Self::OutcomeUnknown(_) | Self::ReceiptDuplicate(_) | Self::TransientTransaction(_))
     }

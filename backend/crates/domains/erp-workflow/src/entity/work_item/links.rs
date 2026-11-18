@@ -31,12 +31,11 @@ impl TryFrom<LinkData> for WorkItemLink {
 
 impl WorkItemLink {
     /// 构造经过规范化的对象引用。
-    /// # 参数
-    /// `object_type` 为稳定对象类型，`object_id` 为该类型下的稳定 ID。
-    /// # 返回
     /// 返回可排序、去重的类型化引用。
-    /// # 错误
+    ///
     /// 类型或 ID 为空、超长时拒绝。
+    ///
+    /// `object_type` 为稳定对象类型，`object_id` 为该类型下的稳定 ID。
     pub fn new(object_type: impl Into<String>, object_id: impl Into<String>) -> Result<Self> {
         Ok(Self {
             object_type: normalize_required_text(
@@ -55,23 +54,13 @@ impl WorkItemLink {
     }
 
     /// 返回关联对象类型。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 返回稳定类型代码。
-    /// # 错误
-    /// 无。
     pub fn object_type(&self) -> &str {
         &self.object_type
     }
 
     /// 返回关联对象身份。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 返回该类型下的稳定 ID。
-    /// # 错误
-    /// 无。
     pub fn object_id(&self) -> &str {
         &self.object_id
     }
@@ -79,23 +68,17 @@ impl WorkItemLink {
 
 impl WorkItem {
     /// 返回任务对应业务版本的全部关联引用。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 返回直接对象及已写入的上级链路；旧数据未回填时为空。
-    /// # 错误
-    /// 无。
     pub fn links(&self) -> &[WorkItemLink] {
         &self.links
     }
 
     /// 在任务创建或开放任务业务关系变更时更新完整链路。
-    /// # 参数
-    /// `links` 为同一业务版本已确认的上级引用；直接对象由实体补齐。
-    /// # 返回
     /// 原地保存排序、去重后的完整链路。
-    /// # 错误
+    ///
     /// 终态任务不能改写历史链路；引用超过 1000 个时拒绝。
+    ///
+    /// `links` 为同一业务版本已确认的上级引用；直接对象由实体补齐。
     pub fn set_links(&mut self, mut links: Vec<WorkItemLink>) -> Result<()> {
         if self.status != super::WorkItemStatus::Open {
             return Err(Error::from("终态任务不能修改关联链路"));
@@ -113,12 +96,11 @@ impl WorkItem {
     }
 
     /// 继承与任务对象和提交版本一致的不可变审批链路。
-    /// # 参数
-    /// `snapshot` 为任务所属审批实例的冻结业务快照。
-    /// # 返回
     /// 写入冻结链路，同时补齐任务直接对象。
-    /// # 错误
+    ///
     /// 对象类型、对象 ID、提交版本不一致或任务已结束时拒绝。
+    ///
+    /// `snapshot` 为任务所属审批实例的冻结业务快照。
     pub fn inherit_approval_links(&mut self, snapshot: &ApprovalSubjectSnapshot) -> Result<()> {
         if !self.matches_business_object(snapshot.document_type.as_str(), &snapshot.business_object_id)
             || self.subject_version != snapshot.subject_version.to_string()
@@ -129,12 +111,11 @@ impl WorkItem {
     }
 
     /// 为尚未持久化的任务追加一个已确认的上级对象。
-    /// # 参数
-    /// `object_type` 和 `object_id` 为同一业务版本的上级引用。
-    /// # 返回
     /// 返回追加并去重后的任务。
-    /// # 错误
+    ///
     /// 引用无效、任务终态或链路超限时拒绝。
+    ///
+    /// `object_type` 和 `object_id` 为同一业务版本的上级引用。
     pub fn with_link(mut self, object_type: &str, object_id: impl Into<String>) -> Result<Self> {
         let mut links = self.links.clone();
         links.push(WorkItemLink::new(object_type, object_id)?);

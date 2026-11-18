@@ -49,17 +49,8 @@ struct SupplierSnapshot {
 }
 
 impl SupplierService {
-    /// 分页查询授权范围内的供应商列表。
-    ///
-    /// # 参数
-    /// * `params` - 原始查询
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 返回带范围版本的列表。
-    ///
-    /// # 错误
-    /// 缺范围版本的后续页、范围变化、筛选非法或仓储失败时拒绝。
+    /// 在快照事务内执行供应商列表授权、筛选、分页和事实装配。后续页须携带当前范围版本；交付前重读版本并
+    /// 复验凭证，范围变化、筛选非法或读库失败时不返回列表。
     pub async fn supplier_list(
         &self,
         params: &SupplierListParams,
@@ -82,7 +73,8 @@ impl SupplierService {
             .await
     }
 
-    /// 在一个快照中读取分页并复核客户端及交付版本。
+    // 用同一快照执行供应商分页。先读取并核对客户端版本，再不装配地重读范围，防止用已经变化的授权或业务范
+    // 围交付结果；非快照执行器拒绝。
     async fn list_stage(
         &self,
         query: &SupplierListQuery,
@@ -102,7 +94,8 @@ impl SupplierService {
         Ok(to_list_view(snapshot))
     }
 
-    /// 在原快照中复用授权、筛选和版本指纹；`hydrate` 控制分页水合。
+    // 在当前执行器编译列表权限、解析筛选并计算范围指纹。首次调用读取并装配分页；只为复验调用时不读取页内
+    // 容，仅验证凭证。
     async fn run_list_snapshot(
         &self,
         query: &SupplierListQuery,
@@ -140,65 +133,35 @@ impl SupplierService {
     }
 }
 
-/// 构造可被 HTTP 边界识别的范围变化冲突。
-///
-/// # 参数
-/// * `detail` - 拼在 `DATA_SCOPE_CHANGED：` 后的说明
-///
-/// # 返回
-/// 返回 `ConflictError`。
-///
-/// # 错误
-/// 不返回错误。
+// 构造可被 HTTP 边界识别的范围变化冲突。
+// 返回 `ConflictError`。
 pub(super) fn data_scope_changed(detail: &str) -> Error {
     Error::ConflictError(format!("DATA_SCOPE_CHANGED：{detail}"))
 }
 
-/// 后续页必须携带当前范围版本。
-///
-/// # 参数
-/// * `page` - 页码
-/// * `version` - 客户端回传的范围版本
-///
-/// # 返回
-/// 第一页，或后续页带有非空版本时返回 `Ok(())`。
-///
-/// # 错误
-/// `page` 大于 1 且版本缺失或为空字符串时返回范围变化冲突。
+// 后续页必须携带当前范围版本。
+// 第一页，或后续页带有非空版本时返回 `Ok(())`。
+// `page` 大于 1 且版本缺失或为空字符串时返回范围变化冲突。
 pub(super) fn ensure_page(page: u64, version: Option<&str>) -> Result<()> {
     ScopeVersion::new(version, EmptyScopeVersion::Missing)
         .require_for_page(page)
         .map_err(|error| data_scope_changed(error.detail()))
 }
 
-/// 客户端回传的范围版本必须与当前快照一致。
-///
-/// # 参数
-/// * `expected` - 客户端版本；`None` 表示未回传
-/// * `actual` - 当前快照版本
-///
-/// # 返回
-/// 未回传或与 `actual` 相同时返回 `Ok(())`。
-///
-/// # 错误
-/// 回传值与 `actual` 不同时返回范围变化冲突。
+// 客户端回传的范围版本必须与当前快照一致。
+// 未回传或与 `actual` 相同时返回 `Ok(())`。
+// 回传值与 `actual` 不同时返回范围变化冲突。
+// `expected`：客户端版本；`None` 表示未回传。
+// `actual`：当前快照版本。
 pub(super) fn ensure_scope_version(expected: Option<&str>, actual: &str) -> Result<()> {
     ScopeVersion::new(expected, EmptyScopeVersion::Provided)
         .verify(actual)
         .map_err(|error| data_scope_changed(error.detail()))
 }
 
-/// 同一快照内两次读取的范围版本必须一致。
-///
-/// # 参数
-/// * `first` - 分页读取版本
-/// * `second` - 交付复核版本
-///
-/// # 返回
-/// 两次版本相同时返回 `Ok(())`。
-///
-/// # 错误
-/// 版本不同时返回范围变化冲突。
+// 同一快照内两次读取的范围版本必须一致。
+// 两次版本相同时返回 `Ok(())`。
+// 版本不同时返回范围变化冲突。
 pub(super) fn ensure_stable_snapshot(first: &str, second: &str) -> Result<()> {
     ScopeVersion::new(Some(first), EmptyScopeVersion::Provided)
         .verify(second)
@@ -226,7 +189,7 @@ fn to_list_view(snapshot: SupplierSnapshot) -> SupplierListView {
     }
 }
 
-/// 按名称关键词解析主体；业务日取当天。
+// 依据名称关键词解析主体；业务日取当天。
 async fn build_list_input(
     query: &SupplierListQuery,
     scope: &SupplierReadScope,
@@ -245,7 +208,7 @@ async fn build_list_input(
     ))
 }
 
-/// 用当前筛选下的身份版本重算范围指纹；超过一万条时拒绝。
+// 用当前筛选下的身份版本重算范围指纹；超过一万条时拒绝。
 async fn fingerprint_scope(
     db: &mongodb::Database,
     context: &mut SupplierResolvedScope,
@@ -260,17 +223,10 @@ async fn fingerprint_scope(
     Ok(())
 }
 
-/// 用确定性哈希计算供应商身份版本指纹并拼接到基线版本。
-///
-/// `DefaultHasher` 跨进程不保证稳定（与 erp-customer-004 同类问题）；
-/// 本函数使用 FNV-1a 64 位并固化字段顺序，`query_versions` 已按 `id` 排序。
-///
-/// # 参数
-/// * `base` - 基线范围版本
-/// * `versions` - 供应商身份与版本集合
-///
-/// # 返回
-/// 返回 `{base}:{hex指纹}` 格式的范围版本。
+// 用确定性哈希计算供应商身份版本指纹并拼接到基线版本。
+// `DefaultHasher` 跨进程不保证稳定（与 erp-customer-004 同类问题）；本函数使用 FNV-1a 64 位并固化字段顺
+// 序，`query_versions` 已按 `id` 排序。
+// 返回 `{base}:{hex指纹}` 格式的范围版本。
 fn fingerprint_versions(base: &str, versions: &[crate::repository::SupplierVersion]) -> String {
     const FNV_OFFSET: u64 = 0xcbf29ce484222325;
     const FNV_PRIME: u64 = 0x100000001b3;
@@ -313,7 +269,7 @@ struct HydrateArgs<'a> {
     executor: &'a mut dyn persistence_core::Executor,
 }
 
-/// 在同一执行器内水合主体、维护人名称与能力资质，再装配当前页。
+// 在同一执行器内水合主体、维护人名称与能力资质，再装配当前页。
 async fn hydrate_snapshot(args: HydrateArgs<'_>) -> Result<SupplierSnapshot> {
     let HydrateArgs { bundle, party, accounts, context, page, page_size, executor } = args;
     let total = bundle.page.total;

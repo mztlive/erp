@@ -12,13 +12,11 @@ use super::start_approval::{ensure_return_start_replay_authorized, submit_permis
 use crate::{Error, Result};
 
 impl ReturnsProcess {
-    /// 原事务核验创建提交资格和真实资金来源，不信任客户端提供经办人或来源事实。
-    /// # 参数
-    /// actor 为真实经办人，kind 和 source_id 为已校验命令的完整来源；executor 为原事务。
-    /// # 返回
-    /// 固定提交资格和真实来源全部通过时成功。
-    /// # 错误
-    /// 缺少资格、来源缺失或无权、执行边界错误时拒绝。
+    // 原事务核验创建提交资格和真实资金来源，不信任客户端提供经办人或来源事实。
+    //
+    // actor 为真实经办人，kind 和 source_id 为已校验命令的完整来源；executor 为原事务。固定提交资格和真实来源全部通过时成功。
+    //
+    // 缺少资格、来源缺失或无权、执行边界错误时拒绝。
     pub(super) async fn require_commit_source(
         &self,
         actor: &AuditActor,
@@ -62,13 +60,8 @@ impl ReturnsProcess {
         Ok(())
     }
 
-    /// 只读恢复命令；命中后按真实结果类型在原事务重验完整提交规则。
-    /// # 参数
-    /// receipt 为原请求身份，actor 和 kind 为实际命令上下文，executor 为原事务。
-    /// # 返回
-    /// 已提交且通过当前授权的结果身份，未命中返回 None。
-    /// # 错误
-    /// 收据不符、授权失败、岗位分离不满足或取证故障时拒绝。
+    // 逆向提交命令按原身份读取回执。命中时，在同一执行器按真实结果类型重验当前完整提交规则，成功才返回结果 ID。
+    // 未命中返回 `None`；回执不符、授权失败、岗位分离不满足或读取故障时拒绝。
     pub(super) async fn committed_return_command(
         &self,
         receipt: &CommandReceipt,
@@ -85,13 +78,8 @@ impl ReturnsProcess {
         Ok(result)
     }
 
-    /// 只有可能提交的错误允许新快照只读查证；授权失败不能被旧结果覆盖。
-    /// # 参数
-    /// error 为原事务结果，其余参数为同一次请求的精确身份、来源和操作人。
-    /// # 返回
-    /// 新快照只读确认的原结果身份。
-    /// # 错误
-    /// 不能确认提交时保留原错误；确定失败不执行恢复读取。
+    // 写事务失败后，只对可能已提交的错误打开新快照，使用原操作人、来源和幂等身份重验授权并查证原回执。
+    // 不重跑资金或审批步骤；未确认时保留原错误，确定失败不查询，旧回执不得覆盖授权失败。
     pub(super) async fn recover_return_commit(
         &self,
         error: Error,

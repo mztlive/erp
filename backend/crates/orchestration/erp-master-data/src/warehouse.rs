@@ -21,16 +21,10 @@ use crate::{Error, Result};
 
 /// 创建仓库 SKU 策略，并在同一事务中写入成功审计。
 ///
-/// # 参数
-/// * `db` - 仓库、SKU 与策略所在数据库。
-/// * `authorization` - 应用共享授权服务。
-/// * `req` - 仓库 SKU 策略创建请求。
-/// * `actor` - 已认证的审计操作人。
+/// `db`：仓库、SKU 与策略所在数据库；`req`：仓库 SKU 策略创建请求。
 ///
-/// # 返回
 /// 返回创建后的策略视图。
 ///
-/// # 错误
 /// 请求校验失败、仓库或 SKU 不存在、策略构造失败、有效期重叠，或写入与审计事务失败时返回错误。
 pub async fn create_warehouse_sku_policy(
     db: Database,
@@ -63,7 +57,7 @@ pub async fn create_warehouse_sku_policy(
     Ok(policy.into())
 }
 
-/// 创建资格、维度存在性和区间重叠检查全部使用原写入事务。
+// 创建资格、维度存在性和区间重叠检查全部使用原写入事务。
 async fn persist_policy(
     db: &Database,
     authorization: &AuthorizationService,

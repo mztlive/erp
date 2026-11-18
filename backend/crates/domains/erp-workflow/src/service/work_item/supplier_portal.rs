@@ -16,15 +16,12 @@ use crate::repository::prelude::*;
 
 impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     /// 在申请提交事务内创建指定采购负责人的单人确认任务。
-    ///
-    /// # 参数
-    /// * `task_id` - 提交过程冻结的稳定任务 ID。
-    /// * `data` - 申请提交身份及具体采购责任。
-    /// * `executor` - 保存申请快照的同一事务执行器。
-    /// # 返回
     /// 返回已验证读取范围及商品/供给业务确认资格并持久化的开放任务。
-    /// # 错误
+    ///
     /// 账号、权限、对象范围、申请版本或唯一性不满足时返回错误。
+    ///
+    /// `task_id`：提交过程冻结的稳定任务 ID；`data`：申请提交身份及具体采购责任。
+    /// `executor`：保存申请快照的同一事务执行器。
     pub async fn create_supplier_portal_review(
         &self,
         task_id: WorkItemId,
@@ -40,15 +37,12 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     }
 
     /// 在决定事务内重读任务并验证申请、任务及当前处理资格。
-    ///
-    /// # 参数
-    /// * `identity` - 请求冻结的申请提交及任务版本。
-    /// * `actor` - 本次内部采购确认人。
-    /// * `executor` - 决定写入的事务执行器。
-    /// # 返回
     /// 返回仍开放、身份匹配且当前操作人具备业务确认资格的任务。
-    /// # 错误
+    ///
     /// 任务或申请版本变化、账号失效、非当前负责人或对象越界时拒绝。
+    ///
+    /// `identity`：请求冻结的申请提交及任务版本；`actor`：本次内部采购确认人。
+    /// `executor`：决定写入的事务执行器。
     pub async fn validate_supplier_portal_review(
         &self,
         identity: SupplierPortalReviewIdentity<'_>,
@@ -65,15 +59,11 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     }
 
     /// 随正式申请通过或退回结果完成确认任务。
-    ///
-    /// # 参数
-    /// * `identity` - 已冻结的申请与任务版本。
-    /// * `actor` - 本次内部确认人。
-    /// * `executor` - 正式事实、申请结果与审计的同一事务执行器。
-    /// # 返回
     /// 返回完成并持久化后的任务及其新版本。
-    /// # 错误
+    ///
     /// 处理资格、版本重验或 CAS 写入失败时返回错误并由调用方回滚。
+    ///
+    /// `identity`：已冻结的申请与任务版本；`executor`：正式事实、申请结果与审计的同一事务执行器。
     pub async fn complete_supplier_portal_review(
         &self,
         identity: SupplierPortalReviewIdentity<'_>,
@@ -87,16 +77,12 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     }
 
     /// 随已授权的供应商撤回申请关闭确认任务。
-    ///
-    /// # 参数
-    /// * `identity` - 当前申请提交与任务版本。
-    /// * `actor_id` - 申请过程已验证归属和撤回资格的供应商账号。
-    /// * `reason` - 供应商可追溯的撤回说明。
-    /// * `executor` - 申请撤回、任务与审计的同一事务执行器。
-    /// # 返回
     /// 返回关闭后的任务及其新版本，不形成采购通过结果。
-    /// # 错误
+    ///
     /// 任务已完成、版本不一致、关闭字段非法或 CAS 写入失败时返回错误。
+    ///
+    /// `identity`：当前申请提交与任务版本；`actor_id`：申请过程已验证归属和撤回资格的供应商账号。
+    /// `reason`：供应商可追溯的撤回说明；`executor`：申请撤回、任务与审计的同一事务执行器。
     pub async fn withdraw_supplier_portal_review(
         &self,
         identity: SupplierPortalReviewIdentity<'_>,
@@ -110,7 +96,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         Ok(task)
     }
 
-    /// 沿调用方执行器重读并限定任务身份与开放状态。
+    // 办理供应商确认时沿调用方事务重新读取任务，要求固定对象身份和开放状态仍然成立。
     async fn load_supplier_portal_review(
         &self,
         identity: SupplierPortalReviewIdentity<'_>,
@@ -128,7 +114,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         Ok(task)
     }
 
-    /// 解析当前仍启用的内部确认人，禁止外部账号持有采购责任。
+    // 供应商申请进入确认任务前解析仍启用的内部经办人，不允许外部供应商账号承担采购责任。
     async fn supplier_portal_reviewer(
         &self,
         actor_id: &str,

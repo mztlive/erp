@@ -8,13 +8,7 @@ use crate::http::handler::supplier_api;
 use crate::http::routes::permission_route;
 use crate::http::state::HttpState;
 
-/// 返回本域管理端路由集合。
-///
-/// # 参数
-/// 无。
-///
-/// # 错误
-/// 不执行 I/O，不返回错误。
+/// 为管理端挂载供应商连接及目录采纳接口，按操作登记公共权限目录信息。
 pub fn routes() -> Router<HttpState> {
     connection_routes()
         .merge(governance_routes())
@@ -51,7 +45,7 @@ fn adoption_batch_routes() -> Router<HttpState> {
     adoption_batch_query_routes().merge(adoption_batch_command_routes()).merge(adoption_preparation_routes())
 }
 
-/// 注册准备摘要、轻量选择及任务控制入口。
+// 为目录采纳准备过程挂载摘要查询、轻量选择及任务控制接口。
 fn adoption_preparation_routes() -> Router<HttpState> {
     Router::new()
         .route(

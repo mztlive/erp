@@ -11,15 +11,7 @@ use crate::http::routes::permission_route;
 use crate::http::state::HttpState;
 
 /// 返回只暴露稳定责任接口的管理端路由。
-///
-/// # 返回
 /// 返回列表、统计、详情、转交和关闭路由；仅支持指定责任人的任务合同。
-///
-/// # 参数
-/// 无。
-///
-/// # 错误
-/// 不执行 I/O，不返回错误。
 pub fn routes() -> Router<HttpState> {
     Router::new()
         .route(

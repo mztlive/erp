@@ -30,16 +30,7 @@ pub enum ProcurementResponsibilityRuleType {
 }
 
 impl ProcurementResponsibilityRuleType {
-    /// 返回稳定持久化代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `SCREAMING_SNAKE_CASE` 规则类型代码。
-    ///
-    /// # 错误
-    /// 无。
+    /// 为采购责任规则提供与持久化一致的大写下划线类型代码，供识别规则类别。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Inquiry => "INQUIRY",
@@ -50,16 +41,7 @@ impl ProcurementResponsibilityRuleType {
         }
     }
 
-    /// 返回面向管理端的优先级序号。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 0 至 4；询价规则仅在询价场景以最高优先级匹配。
-    ///
-    /// # 错误
-    /// 无。
+    /// 提供管理端排序使用的 0 至 4 级规则优先级；询价规则只在询价场景最高优先匹配。
     pub fn priority(self) -> u8 {
         match self {
             Self::Inquiry => 0,
@@ -104,14 +86,7 @@ pub enum ProcurementResponsibilitySelectorReference<'a> {
 impl ProcurementResponsibilityRuleData {
     /// 返回当前规则选择器需要校验的目录引用。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// SKU 规则返回 SKU，分类规则返回分类，其余规则返回 `None`。
-    ///
-    /// # 错误
-    /// 规则类型与选择器字段形状不一致时返回错误。
+    /// SKU 规则返回 SKU，分类规则返回分类，其余规则返回 `None`。规则类型与选择器字段形状不一致时返回错误。
     pub fn selector_reference(&self) -> Result<ProcurementResponsibilitySelectorReference<'_>> {
         Ok(RuleSelector::try_from(self)?.reference())
     }
@@ -147,16 +122,9 @@ pub struct ProcurementResponsibilityRule {
 impl ProcurementResponsibilityRule {
     /// 创建采购责任规则。
     ///
-    /// # 参数
-    /// * `id` - 规则主键
-    /// * `data` - 类型、选择器、具体负责人和状态
-    /// * `created_by` - 已认证创建人
+    /// 返回选择器已规范化且形状合法的新规则。选择器与规则类型不一致、账号为空或过长时返回错误。
     ///
-    /// # 返回
-    /// 返回选择器已规范化且形状合法的新规则。
-    ///
-    /// # 错误
-    /// 选择器与规则类型不一致、账号为空或过长时返回错误。
+    /// `data` 为类型、选择器、具体负责人和状态。
     pub fn new(
         id: ProcurementResponsibilityRuleId,
         data: ProcurementResponsibilityRuleData,
@@ -179,17 +147,9 @@ impl ProcurementResponsibilityRule {
         })
     }
 
-    /// 整项更新采购责任规则。
+    /// 整项更新采购责任规则。选择器形状、负责人或操作人不合法时返回错误。
     ///
-    /// # 参数
-    /// * `data` - 新的类型、选择器、具体负责人和状态
-    /// * `updated_by` - 已认证更新人
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 选择器形状、负责人或操作人不合法时返回错误。
+    /// `data` 为新的类型、选择器、具体负责人和状态。
     pub fn update(
         &mut self,
         data: ProcurementResponsibilityRuleData,
@@ -210,16 +170,7 @@ impl ProcurementResponsibilityRule {
         Ok(())
     }
 
-    /// 判断规则当前是否参与责任解析。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 启用规则返回 `true`。
-    ///
-    /// # 错误
-    /// 无。
+    /// 判断规则当前是否参与责任解析。启用规则返回 `true`。
     pub fn is_active(&self) -> bool {
         self.status.is_active()
     }
@@ -240,16 +191,9 @@ struct NormalizedRuleData {
 impl TryFrom<ProcurementResponsibilityRuleData> for NormalizedRuleData {
     type Error = Error;
 
-    /// 校验并规范化规则输入。
-    ///
-    /// # 参数
-    /// * `data` - 未规范化规则数据
-    ///
-    /// # 返回
-    /// 返回带稳定选择器键的合法数据。
-    ///
-    /// # 错误
-    /// 选择器字段组合与规则类型不一致时返回错误。
+    // 校验并规范化规则输入。
+    //
+    // 返回带稳定选择器键的合法数据。选择器字段组合与规则类型不一致时返回错误。
     fn try_from(data: ProcurementResponsibilityRuleData) -> Result<Self> {
         let selector_key = RuleSelector::try_from(&data)?.key();
         let owner_user_ids = normalize_pool(data.owner_user_ids)?;
@@ -316,16 +260,11 @@ impl<'a> RuleSelector<'a> {
     }
 }
 
-/// 规范化维护操作人身份。
-///
-/// # 参数
-/// * `value` - 已认证操作人账号 ID
-///
-/// # 返回
-/// 返回去除首尾空白的非空账号 ID。
-///
-/// # 错误
-/// 操作人为空或超过长度上限时返回错误。
+// 规范化维护操作人身份。
+//
+// 返回去除首尾空白的非空账号 ID。操作人为空或超过长度上限时返回错误。
+//
+// `value` 为已认证操作人账号 ID。
 fn normalize_actor(value: String) -> Result<String> {
     normalize_required_text(value, "操作人不能为空", ACTOR_MAX_LEN, "操作人过长")
 }

@@ -90,48 +90,25 @@ pub enum WorkItemActionError {
 }
 
 impl From<WorkflowError> for WorkItemActionError {
-    /// 沿用流程命令的 HTTP 错误分类。
-    ///
-    /// # 参数
-    /// * `error` - 流程领域错误
-    ///
-    /// # 返回
-    /// 返回责任命令错误。
-    ///
-    /// # 错误
-    /// 转换本身不失败。
+    // 沿用流程命令的 HTTP 错误分类。
+    // 返回责任命令错误。
     fn from(error: WorkflowError) -> Self {
         ProcessError::from(error).into()
     }
 }
 
 impl From<ReadModelError> for WorkItemActionError {
-    /// 沿用查询错误的统一 HTTP 分类。
-    ///
-    /// # 参数
-    /// * `error` - 已授权任务查询的错误
-    ///
-    /// # 返回
-    /// 返回责任命令错误。
-    ///
-    /// # 错误
-    /// 转换本身不失败。
+    // 沿用查询错误的统一 HTTP 分类。
+    // 返回责任命令错误。
     fn from(error: ReadModelError) -> Self {
         ProcessError::from(error).into()
     }
 }
 
 impl From<ProcessError> for WorkItemActionError {
-    /// 将服务错误映射为责任命令错误。
-    ///
-    /// # 参数
-    /// * `error` - 服务层错误
-    ///
-    /// # 返回
-    /// 审批任务保护使用稳定码，其余沿用统一映射。
-    ///
-    /// # 错误
-    /// 转换本身不失败，保留原服务错误分类。
+    // 将服务错误映射为责任命令错误。
+    // 审批任务保护使用稳定码，其余沿用统一映射。
+    // 转换本身不失败，保留原服务错误分类。
     fn from(error: ProcessError) -> Self {
         if error.code() == Some(ErrorCode::ApprovalGenericWorkItemMutationForbidden) {
             return Self::ApprovalProtected(ApprovalHttpError::coded(
@@ -145,16 +122,9 @@ impl From<ProcessError> for WorkItemActionError {
 }
 
 impl IntoResponse for WorkItemActionError {
-    /// 将责任命令错误转换为真实 HTTP 状态与稳定 JSON 信封。
-    ///
-    /// # 参数
-    /// * `self` - 已分类的责任命令错误
-    ///
-    /// # 返回
-    /// 冲突返回 409 和权限安全的最新任务摘要；审批保护返回稳定码。
-    ///
-    /// # 错误
-    /// 响应构造不失败。
+    // 将责任命令错误转换为真实 HTTP 状态与稳定 JSON 信封。
+    // 冲突返回 409 和权限安全的最新任务摘要；审批保护返回稳定码。
+    // 响应构造不失败。
     fn into_response(self) -> Response {
         match self {
             Self::Conflict(conflict) => {
@@ -181,15 +151,7 @@ impl IntoResponse for WorkItemActionError {
 pub type WorkItemActionResult = StdResult<ApiResponse<WorkItemCommandView>, WorkItemActionError>;
 
 /// 由任务类型计算责任类型。
-///
-/// # 参数
-/// * `work_item_type` - 服务层任务类型
-///
-/// # 返回
 /// `DocumentApproval` 对应 `PERSONAL_APPROVAL`。
-///
-/// # 错误
-/// 无。
 pub fn responsibility_kind_of(work_item_type: WorkItemType) -> ResponsibilityKind {
     if work_item_type == WorkItemType::DocumentApproval {
         ResponsibilityKind::PersonalApproval
@@ -199,29 +161,16 @@ pub fn responsibility_kind_of(work_item_type: WorkItemType) -> ResponsibilityKin
 }
 
 impl From<WorkItemView> for WorkItemHttpView {
-    /// 保持服务层安全字段的平铺形状，并追加 HTTP 责任类型。
-    ///
-    /// # 参数
-    /// * `inner` - 已授权的强类型任务投影
-    ///
-    /// # 返回
-    /// 返回包含原投影全部字段和责任类型的 HTTP 投影。
-    ///
-    /// # 错误
-    /// 无。
+    // 保持服务层安全字段的平铺形状，并追加 HTTP 责任类型。
+    // 返回包含原投影全部字段和责任类型的 HTTP 投影。
     fn from(inner: WorkItemView) -> Self {
         let responsibility_kind = responsibility_kind_of(inner.work_item_type);
         Self { inner, responsibility_kind }
     }
 }
 
-/// 包装分页投影。
-///
-/// # 参数
-/// * `page` - 服务层分页
-///
-/// # 返回
-/// 返回带责任类型的分页。
+// 包装分页投影。
+// 返回带责任类型的分页。
 fn wrap_page(page: WorkItemPageView) -> WorkItemHttpPageView {
     WorkItemHttpPageView {
         filter_options: page.filter_options,
@@ -279,16 +228,7 @@ impl HttpWorkItemConflict {
 }
 
 /// 查询服务端责任过滤后的待办队列。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 当前认证账号
-/// * `params` - 责任范围、过滤与分页参数
-///
-/// # 返回
 /// 返回携带 `responsibility_kind` 的分页投影。
-///
-/// # 错误
 /// 查询参数无效、授权版本变化或查询失败时返回错误。
 pub async fn work_item_list(
     State(state): State<HttpState>,
@@ -303,16 +243,7 @@ pub async fn work_item_list(
 }
 
 /// 查询 W09 服务端分页履约责任读模型。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 当前认证账号
-/// * `params` - 履约责任过滤与分页参数
-///
-/// # 返回
 /// 返回当前账号开放履约责任的分页、指标和仓库筛选项。
-///
-/// # 错误
 /// 查询参数无效、授权版本变化或查询失败时返回错误。
 pub async fn fulfillment_queue_list(
     State(state): State<HttpState>,
@@ -329,17 +260,8 @@ pub async fn fulfillment_queue_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-/// 查询与正式待办列表复用授权快照的统计。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 当前认证账号
-/// * `params` - 责任范围和统计过滤参数
-///
-/// # 返回
+/// 按请求条件查询与正式待办列表复用授权快照的统计。
 /// 返回个人、到期、超期、异常、任务族计数及服务端统计时点。
-///
-/// # 错误
 /// 查询参数无效或授权统计失败时返回错误。
 pub async fn work_item_stats(
     State(state): State<HttpState>,
@@ -352,17 +274,8 @@ pub async fn work_item_stats(
     Ok(ApiResponse::ok_with_data(stats))
 }
 
-/// 查询单条任务的安全详情。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 当前认证账号
-/// * `id` - 任务 ID
-///
-/// # 返回
+/// 查询单条任务的安全详情，将认证操作人与路径对象交给读模型校验。
 /// 返回带 `responsibility_kind` 的任务投影。
-///
-/// # 错误
 /// 任务不存在、当前账号不可见或查询失败时返回错误。
 pub async fn work_item_detail(
     State(state): State<HttpState>,
@@ -376,16 +289,7 @@ pub async fn work_item_detail(
 }
 
 /// 查询开放非审批任务当前合格的转交候选人。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 当前认证账号
-/// * `id` - 任务 ID
-///
-/// # 返回
 /// 返回经账号状态、完整操作权限、管理范围和采购级联约束过滤后的具体账号。
-///
-/// # 错误
 /// 任务不可见、不允许转交或候选查询失败时返回错误。
 pub async fn work_item_reassign_candidates(
     State(state): State<HttpState>,
@@ -405,17 +309,7 @@ pub async fn work_item_reassign_candidates(
 /// 转交开放非审批任务给重新校验合格的用户。
 ///
 /// 审批任务必须失败关闭。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 当前操作人
-/// * `id` - 任务 ID
-/// * `req` - 责任动作请求
-///
-/// # 返回
 /// 返回任务 ID 与更新后的任务版本。
-///
-/// # 错误
 /// 授权不足、目标资格不符、版本冲突或任务转交失败时返回错误。
 pub async fn work_item_reassign(
     State(state): State<HttpState>,
@@ -436,17 +330,7 @@ pub async fn work_item_reassign(
 /// 受控关闭允许人工关闭的无效非审批任务。
 ///
 /// 审批任务必须失败关闭。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 当前操作人
-/// * `id` - 任务 ID
-/// * `req` - 责任动作请求
-///
-/// # 返回
 /// 返回已关闭任务 ID 与新版本。
-///
-/// # 错误
 /// 授权不足、任务不允许关闭、版本冲突或任务关闭失败时返回错误。
 pub async fn work_item_close(
     State(state): State<HttpState>,
@@ -465,17 +349,8 @@ pub async fn work_item_close(
 }
 
 /// 放弃本次驳回处理责任，保留原单据及审批历史。
-///
-/// # 参数
-/// * `state` - 应用状态。
-/// * `actor` - 当前认证原提交人。
-/// * `id` - 驳回处理任务。
-/// * `req` - 版本、幂等键及放弃原因。
-///
-/// # 返回
+/// `req` 为版本、幂等键及放弃原因。
 /// 返回已关闭任务 ID 与新版本。
-///
-/// # 错误
 /// 责任、身份、类型或版本失效时拒绝；持久化错误保留原分类。
 pub async fn abandon_rework(
     State(state): State<HttpState>,

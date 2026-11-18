@@ -15,7 +15,7 @@ use erp_procurement::entity::purchase_order::{
 
 use super::*;
 
-/// 缺少固定授权绑定必须在任何销售或费用数据库读取之前停止。
+// 验证销售附加费用：缺少固定授权绑定必须在任何销售或费用数据库读取之前停止。
 #[tokio::test]
 async fn list_rejects_unavailable_authorization_before_reading_sales_or_expenses() {
     use erp_core::AccountKind;

@@ -8,13 +8,10 @@ use crate::{Error, Result};
 
 impl SalesInquiry {
     /// 核对已接受费用与来源销售已办理商品的归属关系。
+    /// 结果：销售存在已办理商品，且至少一项落在费用商品范围内时通过；费用无指定行时适用全部商品。
+    /// 失败条件：先拒绝未接受反馈或不存在的费用，再拒绝缺少匹配已办理商品的销售。
     ///
-    /// # 参数
-    /// `round`、`fee_id` 为已接受反馈费用；`sales_order_id` 为待分摊销售，`now` 为业务时刻。
-    /// # 返回
-    /// 销售存在已办理商品，且至少一项落在费用商品范围内时通过；费用无指定行时适用全部商品。
-    /// # 错误
-    /// 先拒绝未接受反馈或不存在的费用，再拒绝缺少匹配已办理商品的销售。
+    /// 输入约定：`round`、`fee_id` 为已接受反馈费用；`sales_order_id` 为待分摊销售，`now` 为业务时刻。
     pub fn ensure_fee_sales_attribution(
         &self,
         round: u32,
@@ -45,13 +42,10 @@ impl SalesInquiry {
     }
 
     /// 取得明确反馈轮次的冻结快照。
-    ///
-    /// # 参数
-    /// `round` 为办理单据声明的原反馈轮次。
-    /// # 返回
     /// 返回对应快照；不推断其是否为当前已接受办理依据。
-    /// # 错误
     /// 反馈轮次不存在时拒绝。
+    ///
+    /// 输入约定：`round` 为办理单据声明的原反馈轮次。
     pub fn feedback_snapshot(&self, round: u32) -> Result<&InquiryFeedbackSnapshot> {
         self.feedbacks
             .iter()
@@ -60,13 +54,10 @@ impl SalesInquiry {
     }
 
     /// 核对费用办理金额和税率与指定反馈一致。
-    ///
-    /// # 参数
-    /// `round`、`fee_id` 指定稳定反馈费用；`amount`、`rate` 为办理条件。
-    /// # 返回
     /// 返回已核对费用。当前接受、正金额及可用额度仍由占用或调整步骤校验。
-    /// # 错误
     /// 轮次、费用不存在，税率不一致或金额超过反馈额时拒绝。
+    ///
+    /// 输入约定：`round`、`fee_id` 指定稳定反馈费用；`amount`、`rate` 为办理条件。
     pub fn fee_for_terms(
         &self,
         round: u32,

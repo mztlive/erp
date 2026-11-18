@@ -4,17 +4,15 @@ use crate::dto::company::{CompanyListParams, CompanyView, SaveCompanyRequest};
 use crate::repository::prelude::*;
 
 impl PartyService {
-    /// 分页查询我方公司，直接返回可选择的完整名称。
+    /// 分页返回我方公司及其完整名称，供业务表单选择公司。
     ///
     /// 响应中的页码与每页条数按请求值钳制：页码缺省 1 且不超过 `1_000_000`，每页缺省 30 且不超过 100。
     ///
     /// # 参数
     /// * `params` - 关键词、状态与分页条件。
     ///
-    /// # 返回
     /// 返回公司视图分页。
     ///
-    /// # 错误
     /// 仓储查询失败时返回对应错误。主体缺少 `company_profile` 时，`TryFrom` 返回 `NotFound`。
     pub async fn company_list(
         &self,
@@ -33,7 +31,7 @@ impl PartyService {
             .await
     }
 
-    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    // 在同一授权快照读取业务数据；执行器由公开入口提供。
     async fn company_list_snapshot(
         &self,
         actor: &AuditActor,
@@ -53,15 +51,13 @@ impl PartyService {
         })
     }
 
-    /// 回读公司，包括停用公司供历史资料回显。
+    /// 按公司 ID 回读我方公司名录资料，保留停用公司的详情以回显历史单据。
     ///
     /// # 参数
     /// * `id` - 主体 ID。
     ///
-    /// # 返回
     /// 返回公司视图。
     ///
-    /// # 错误
     /// 主体不存在时返回 `NotFound`；主体没有 `company_profile` 时 `TryFrom` 返回 `NotFound`；查询失败时返回仓储错误。
     pub async fn company_detail(&self, actor: &AuditActor, id: &str) -> Result<CompanyView> {
         let service = self.clone();
@@ -76,7 +72,7 @@ impl PartyService {
             .await
     }
 
-    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    // 在同一授权快照读取业务数据；执行器由公开入口提供。
     async fn company_detail_snapshot(
         &self,
         actor: &AuditActor,
@@ -94,7 +90,7 @@ impl PartyService {
             .try_into()
     }
 
-    /// 创建公司；稳定编号支持结果未知后的同内容回读。
+    /// 创建或回读按稳定编号标识的我方公司。提交结果不明时可用相同编号和内容重试。
     ///
     /// 编号已存在、未删除，且公司资料、统一社会信用代码与状态都相同时，直接返回既有公司。
     ///
@@ -102,7 +98,6 @@ impl PartyService {
     /// * `req` - 公司资料；`party_no` 创建后不可复用为另一份内容。
     /// * `actor` - 已鉴权操作人。
     ///
-    /// # 返回
     /// 返回新建或可安全回读的公司视图。
     ///
     /// # 错误
@@ -119,7 +114,7 @@ impl PartyService {
             .await
     }
 
-    /// 使用入口事务完成公司编号回放、主体写入与最终回读。
+    // 在入口事务中先按公司编号核对可重放结果，再写主体并回读完整公司资料。
     async fn create_company_record(
         &self,
         req: SaveCompanyRequest,
@@ -163,7 +158,7 @@ impl PartyService {
         self.company_result(actor, &party::COMPANY_COMPANY_CREATE, &result.id, executor).await
     }
 
-    /// 更新公司资料或启停状态，旧引用继续保留同一主体身份。
+    /// 更新我方公司资料或启停状态，沿用稳定主体 ID，使历史单据仍能解析原有公司引用。
     ///
     /// 期望版本低于当前版本，且名称、别名、统一社会信用代码与状态都未变化时，直接返回当前公司，不再写入。
     ///
@@ -172,7 +167,6 @@ impl PartyService {
     /// * `req` - 整份公司资料；更新必须携带 `version`。
     /// * `actor` - 已鉴权操作人。
     ///
-    /// # 返回
     /// 返回更新后或可安全回读的公司视图。
     ///
     /// # 错误
@@ -195,7 +189,7 @@ impl PartyService {
             .await
     }
 
-    /// 使用入口事务完成公司版本回放、名称修订与最终回读。
+    // 在原事务中核对请求版本和已提交结果，再写入必要的公司名称修订并回读。
     async fn update_company_record(
         &self,
         id: &str,
@@ -238,7 +232,7 @@ impl PartyService {
 }
 
 impl PartyService {
-    /// 以原写入口的资格读取完整公司回包，不额外要求详情权限。
+    // 写入成功后沿用写入口的资格回读完整公司资料，使操作回包可展示结果。
     async fn company_result(
         &self,
         actor: &AuditActor,
@@ -252,7 +246,7 @@ impl PartyService {
             .try_into()
     }
 
-    /// 在公开入口提供的原快照内检查资格，再读取完整公司。
+    // 在公开入口提供的原快照内检查资格，再读取完整公司。
     async fn company_lookup(
         &self,
         actor: &AuditActor,
@@ -290,7 +284,7 @@ mod tests {
     use super::*;
     use crate::ports::{FailClosedAuditPort, FailClosedSupplierRolePort};
 
-    /// 只构造惰性数据库句柄，授权失败不得尝试公司读取。
+    // 只构造惰性数据库句柄，授权失败不得尝试公司读取。
     async fn service() -> PartyService {
         let db = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
             .await

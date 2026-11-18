@@ -14,20 +14,9 @@ pub struct UploadResponse {
     pub url: String,
 }
 
-/// 处理已认证后台身份发起的图片上传。
-///
-/// # 参数
-///
-/// * `state` - 应用状态
-/// * `multipart` - Multipart 表单数据
-///
-/// # 返回
-///
-/// 返回上传后的文件 URL，响应合同保持为 `{ url }`。
-///
-/// # 错误
-///
-/// Multipart 无文件、图片超过 5 MiB、文件类型不受支持或 S3 存储失败时返回错误。
+// 处理已认证后台身份发起的图片上传。
+// 返回上传后的文件 URL，响应合同保持为 `{ url }`。
+// Multipart 无文件、图片超过 5 MiB、文件类型不受支持或 S3 存储失败时返回错误。
 pub(crate) async fn upload_file(
     State(state): State<HttpState>,
     mut multipart: Multipart,

@@ -65,19 +65,7 @@ pub struct CatalogService {
 }
 
 impl CatalogService {
-    /// 创建商品域服务实例。
-    ///
-    /// # 参数
-    /// * `db` - 数据库实例
-    /// * `audit` - 审计写入端口
-    /// * `file_assets` - 媒体/Logo 文件存在性端口
-    /// * `data_scope` - 已装配的商品授权能力
-    ///
-    /// # 返回
-    /// 返回已装配授权能力的服务实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 创建商品域服务实例。返回已装配授权能力的服务实例。
     pub fn new(
         db: Database,
         audit: Arc<dyn CatalogAuditPort>,
@@ -87,16 +75,7 @@ impl CatalogService {
         Self { data_scope, db, audit, file_assets }
     }
 
-    /// 构造本域范围访问器。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回绑定当前数据库与授权能力 的访问器。
-    ///
-    /// # 错误
-    /// 无。
+    // 构造本域范围访问器。返回绑定当前数据库与授权能力 的访问器。
     pub(crate) fn access(&self) -> CatalogAccess {
         self.data_scope.clone()
     }

@@ -25,21 +25,10 @@ use super::{SupplierSettlementProcess, command_audit_id, dto, ensure_same_id};
 use crate::{Error, Result};
 
 impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
-    /// 登记财务经办的强类型差异结论。
+    /// 登记财务经办人的正式差异结论，供结算继续推进。
+    /// 服务端生成处理人和时间、规范化原因及证据，并用版本校验同时更新差异和结算主题、登记幂等审计。
     ///
-    /// 命令同时 CAS 结算单与差异版本，规范化受控原因/证据，推进主题摘要并写
-    /// 幂等审计。客户端不能提交处理人、处理时间或任意持久化状态。
-    ///
-    /// # 参数
-    /// * `id` - 路径中的差异 ID。
-    /// * `req` - 差异结论命令。
-    /// * `actor` - 当前财务经办人。
-    ///
-    /// # 返回
-    /// 返回已登记的差异结论；同一命令重放返回原结果。
-    ///
-    /// # 错误
-    /// 路径身份、归属、版本、经办责任或证据规则不一致时失败关闭。请求校验或事务写入失败时返回对应错误。
+    /// 同一命令返回原结果；路径身份、归属、版本、经办权限或证据不符时拒绝，事务失败不登记部分结论。
     pub async fn decide_difference(
         &self,
         id: &str,
@@ -76,7 +65,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         recover_command(error, recovered)
     }
 
-    /// 在独立读取事务内重新授权并恢复已提交的差异决定回执。
+    // 写入失败后在独立事务重验差异决定资格，查证原命令结果，不重新登记结论。
     async fn recover_difference_decision(
         &self,
         id: &str,
@@ -98,7 +87,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         .await
     }
 
-    /// 在入口事务内完成授权、准备、重放与持久化。
+    // 在原事务先核验权限和原回执，再校验本单及差异版本，登记正式结论并更新主题，防止按过期差异继续结算。
     async fn decide_difference_apply(
         &self,
         id: &str,
@@ -162,7 +151,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         })
     }
 
-    /// 首次执行与重放均先证明真实处理人及功能资格，再恢复同一业务结果。
+    // 先核验实际账号的差异操作权限及结算单范围，再按原命令身份和摘要恢复结果，避免回执跨人或跨单使用。
     async fn replay_difference_decision(
         &self,
         audit_id: &str,
@@ -214,7 +203,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         }))
     }
 
-    /// 回执只能恢复同一结算归属且仍为原版本的正式差异。
+    // 从回执指向的差异追溯结算明细，核对原版本和归属后才交付结果，避免返回后来改动的差异。
     async fn load_replayed_difference(
         &self,
         difference_id: &str,
@@ -244,7 +233,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
     }
 }
 
-/// 原回执必须属于本次真实操作人已获授权的结算单。
+// 核对回执所属结算单与本次已授权的结算单相同，防止通过回执读取他单差异。
 fn ensure_difference_statement(receipt: &DifferenceDecisionReceipt, statement_id: &str) -> Result<()> {
     if receipt.statement_id != statement_id {
         return Err(Error::ConflictError("原差异处理记录不属于这张结算单，请核对结算单详情".into()));
@@ -252,7 +241,7 @@ fn ensure_difference_statement(receipt: &DifferenceDecisionReceipt, statement_id
     Ok(())
 }
 
-/// 差异收据只恢复同一已解决差异和同一结算归属。
+// 确认当前差异仍是回执记录的已解决版本，并且对应明细属于同一结算单，才允许回放。
 fn ensure_difference_replay(
     receipt: &DifferenceDecisionReceipt,
     statement_id: &str,
@@ -264,7 +253,7 @@ fn ensure_difference_replay(
     }
     Ok(())
 }
-/// 结算单可继续推进；响应仍由原收据的版本构造。
+// 回放允许结算单在差异处理后继续推进，但不得早于回执版本；响应仍报告原处理时的版本。
 fn ensure_difference_statement_version(
     receipt: &DifferenceDecisionReceipt,
     current_version: u64,
@@ -286,7 +275,7 @@ struct DifferenceWrite<'a> {
     request: &'a SettlementDifferenceDecisionRequest,
 }
 
-/// 按原先的结果、回执、事件顺序保存差异决定。
+// 差异与结算主题写入后，用同一事务依次保存独立回执和审计，让重试能恢复原处理版本。
 async fn persist_difference_result(input: DifferenceWrite<'_>, executor: &mut dyn Executor) -> Result<()> {
     let receipt = DifferenceDecisionReceipt {
         operation_id: input.request.operation_id.clone(),
@@ -321,7 +310,7 @@ async fn persist_difference_result(input: DifferenceWrite<'_>, executor: &mut dy
     Ok(())
 }
 
-/// 按命令中受控原因与证据构造领域结论，保持原验证错误。
+// 用命令中的受控原因和证据创建领域差异结论，保留原校验错误，不让无效输入进入结算写入。
 fn parse_difference_conclusion(
     req: &SettlementDifferenceDecisionRequest,
 ) -> Result<SettlementDifferenceConclusion> {

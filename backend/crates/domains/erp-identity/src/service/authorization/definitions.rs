@@ -9,7 +9,7 @@ use super::rules::TargetForm;
 use crate::entity::authorization::{AccessTarget, ObjectFacts};
 use crate::{Error, Permission, QualifiedPermissions, Result};
 
-/// 审批定义入口的目标形态由固定动作确定，写操作不能省略真实类型。
+// 审批定义用例按固定入口确定目标形态；对定义写入必须带实际单据类型，不能仅证菜单权限。
 pub(super) fn target(permission: &Permission, form: TargetForm) -> Option<bool> {
     entry(permission).map(|_| {
         form == TargetForm::Candidate
@@ -17,7 +17,7 @@ pub(super) fn target(permission: &Permission, form: TargetForm) -> Option<bool> 
     })
 }
 
-/// 内部候选人查询复用既有读取资格，不要求授予内部编码。
+// 解析审批定义固定入口。内部候选人查询沿用已有读取资格，不要求额外授予内部权限码。
 pub(super) fn entry(permission: &Permission) -> Option<Permission> {
     if permission == &internal::APPROVAL_DEFINITION_ASSIGNEES {
         return Some(approval_process::DEFINITION_DETAIL);
@@ -51,13 +51,12 @@ fn allows(permission: &Permission, object: &ObjectFacts, qualified: &QualifiedPe
 }
 
 impl AuthorizationService {
-    /// 固定操作和类型管理资格分别取证，保留既有跨角色独立资格语义。
-    /// # 参数
-    /// actor、permission 为真实身份及定义动作；target 为服务端类型候选；executor 为原快照执行器。
-    /// # 返回
-    /// 资格满足且候选、原快照阶段仍有效时成功。
-    /// # 错误
-    /// 非快照、目标无效或资格不足时拒绝；候选到期或执行阶段失效返回 DATA_SCOPE_CHANGED。
+    // 固定操作和类型管理资格分别取证，保留既有跨角色独立资格语义。
+    // 资格满足且候选、原快照阶段仍有效时成功。
+    //
+    // 非快照、目标无效或资格不足时拒绝；候选到期或执行阶段失效返回 DATA_SCOPE_CHANGED。
+    //
+    // actor、permission 为真实身份及定义动作；target 为服务端类型候选；executor 为原快照执行器。
     pub(super) async fn require_definition(
         &self,
         actor: &AuditActor,

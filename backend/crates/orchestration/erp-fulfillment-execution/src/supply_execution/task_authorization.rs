@@ -11,13 +11,9 @@ use persistence_core::Executor;
 
 use crate::Result;
 
-/// 检查供应商履约任务的固定执行资格、精确版本及当前指派。
-/// # 参数
-/// db为原数据库，identity为共享服务；actor、task、executor为原办理上下文。
-/// # 返回
-/// 完整资格与任务指派成立时成功。
-/// # 错误
-/// 账号、任务版本或指派失效时拒绝。
+// 检查供应商履约任务的固定执行资格、精确版本及当前指派。
+//
+// db为原数据库，identity为共享服务；actor、task、executor为原办理上下文。完整资格与任务指派成立时成功。账号、任务版本或指派失效时拒绝。
 pub(crate) async fn require_assignee(
     _db: &Database,
     identity: &Arc<AuthorizationService>,
@@ -28,13 +24,11 @@ pub(crate) async fn require_assignee(
     require_target(identity, actor, &task.base.id, task.base.version, executor).await
 }
 
-/// 在业务任务和版本读取前，用命令中的精确任务目标执行统一授权。
-/// # 参数
-/// identity 为共享授权服务，actor、id、version 为当前命令身份及预期任务版本。
-/// # 返回
-/// 当前完整资格和精确任务目标成立时成功。
-/// # 错误
-/// 身份、指派、任务版本、来源或执行边界无效时拒绝。
+// 在业务任务和版本读取前，用命令中的精确任务目标执行统一授权。
+//
+// identity 为共享授权服务，actor、id、version 为当前命令身份及预期任务版本。当前完整资格和精确任务目标成立时成功。
+//
+// 身份、指派、任务版本、来源或执行边界无效时拒绝。
 pub(super) async fn require_target(
     identity: &AuthorizationService,
     actor: &AuditActor,

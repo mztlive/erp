@@ -12,7 +12,7 @@ pub struct WorkItemSummarySection {
 }
 
 impl WorkItemSummarySection {
-    /// 构造事项简报中的只读键值。
+    /// 初始化事项简报中的只读键值。
     ///
     /// # 参数
     /// * `label` - 展示标签
@@ -20,38 +20,29 @@ impl WorkItemSummarySection {
     ///
     /// # 返回
     /// 返回非数值、无跳转的键值。
-    ///
-    /// # 错误
-    /// 无。
     pub fn new(label: String, value: String) -> Self {
         Self { label, value, numeric: None, object_id: None }
     }
 
-    /// 设置数值标志。
+    /// 组装事项简报时填入是否为数值。
     ///
     /// # 参数
     /// * `numeric` - 是否为数值
     ///
     /// # 返回
     /// 返回更新后的键值。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_numeric(mut self, numeric: Option<bool>) -> Self {
         self.numeric = numeric;
         self
     }
 
-    /// 设置可跳转关联单据。
+    /// 组装事项简报时填入关联单据稳定身份。
     ///
     /// # 参数
     /// * `object_id` - 关联单据稳定身份
     ///
     /// # 返回
     /// 返回更新后的键值。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_object_id(mut self, object_id: Option<String>) -> Self {
         self.object_id = object_id;
         self

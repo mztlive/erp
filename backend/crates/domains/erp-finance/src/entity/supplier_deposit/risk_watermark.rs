@@ -7,12 +7,10 @@ use super::SupplierDepositAccount;
 
 impl SupplierDepositAccount {
     /// 为既有受限账户保守继承旧更新时间，普通核对不得冲淡缺失的风险证据。
-    /// # 参数
-    /// 无；仅消费当前账户原有持久化状态。
-    /// # 返回
-    /// 旧受限记录缺风险水位时以原更新时间建立水位，其余记录保持不变。
-    /// # 错误
-    /// 原更新时间越界时拒绝，不猜测风险时刻。
+    /// 结果：旧受限记录缺风险水位时以原更新时间建立水位，其余记录保持不变。
+    /// 失败条件：原更新时间越界时拒绝，不猜测风险时刻。
+    ///
+    /// 输入约定：无；仅消费当前账户原有持久化状态。
     pub fn retain_legacy_reconciliation_risk(&mut self) -> Result<()> {
         if self.reconciliation_required && self.last_reconciliation_risk_at.is_none() {
             let seconds =
@@ -23,12 +21,10 @@ impl SupplierDepositAccount {
     }
 
     /// 登记新增资金或付款执行风险，持续受限期间发生的新风险也推进水位。
-    /// # 参数
-    /// `now` 为服务器确认本次风险的时刻，不能使用旧交易日期替代。
-    /// # 返回
-    /// 账户保持受限，最新风险时刻单调推进。
-    /// # 错误
-    /// 旧账户风险时刻无法读取时拒绝，不丢弃原水位。
+    /// 结果：账户保持受限，最新风险时刻单调推进。
+    /// 失败条件：旧账户风险时刻无法读取时拒绝，不丢弃原水位。
+    ///
+    /// 输入约定：`now` 为服务器确认本次风险的时刻，不能使用旧交易日期替代。
     pub fn flag_reconciliation_risk(&mut self, now: Instant) -> Result<()> {
         self.retain_legacy_reconciliation_risk()?;
         self.last_reconciliation_risk_at =
@@ -38,12 +34,10 @@ impl SupplierDepositAccount {
     }
 
     /// 核对平衡观察已经覆盖最后新增风险，普通账户更新不构成新的风险。
-    /// # 参数
-    /// `observed_at` 为已持久化平衡核对的真实观察时刻。
-    /// # 返回
-    /// 平衡依据不早于风险水位时成功。
-    /// # 错误
+    /// 结果：平衡依据不早于风险水位时成功。
     /// 旧平衡或尚未保留旧风险水位的历史受限记录时拒绝。
+    ///
+    /// 输入约定：`observed_at` 为已持久化平衡核对的真实观察时刻。
     pub fn ensure_reconciliation_risk_observed(&self, observed_at: Instant) -> Result<()> {
         let mut original = self.clone();
         original.retain_legacy_reconciliation_risk()?;

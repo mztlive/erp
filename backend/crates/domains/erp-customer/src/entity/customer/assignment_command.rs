@@ -51,10 +51,8 @@ impl AssignCustomerAssignment {
     /// * `valid_to` - 可选生效结束日期
     /// * `change_reason` - 调整原因
     ///
-    /// # 返回
     /// 返回已去除首尾空白、窗口合法的建立命令。
     ///
-    /// # 错误
     /// 销售人员或原因为空/超长、结束日期不晚于开始日期，或角色为协作销售时返回领域逻辑错误。
     ///
     /// # 关键业务约束
@@ -78,70 +76,35 @@ impl AssignCustomerAssignment {
 
     /// 返回已规范化的销售人员 ID。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回去空白后的账号 ID。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn user_id(&self) -> &str {
         &self.user_id
     }
 
     /// 返回归属角色。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回 `Owner` 或 `Collaborator`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn assignment_role(&self) -> AssignmentRole {
         self.assignment_role
     }
 
     /// 返回生效开始日期。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回业务日期。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn valid_from(&self) -> BusinessDate {
         self.valid_from
     }
 
     /// 返回可选生效结束日期。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 未指定结束日时返回 `None`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn valid_to(&self) -> Option<BusinessDate> {
         self.valid_to
     }
 
     /// 返回已规范化的调整原因。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回去空白后的原因文本。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn change_reason(&self) -> &str {
         &self.change_reason
     }
@@ -154,10 +117,8 @@ impl AssignCustomerAssignment {
     /// * `id` - 新归属主键
     /// * `customer_id` - 目标客户角色 ID
     ///
-    /// # 返回
     /// 返回新建的归属实体。
     ///
-    /// # 错误
     /// 窗口或文本不变量被破坏时返回领域逻辑错误。
     pub fn into_assignment(
         self,
@@ -187,10 +148,8 @@ impl EndCustomerAssignment {
     /// * `version` - 客户端期望的乐观锁版本
     /// * `change_reason` - 调整原因
     ///
-    /// # 返回
     /// 返回已去除首尾空白且版本合法的结束命令。
     ///
-    /// # 错误
     /// 归属 ID 或原因为空/超长，或版本小于 1 时返回领域逻辑错误。
     ///
     /// # 关键业务约束
@@ -212,56 +171,28 @@ impl EndCustomerAssignment {
 
     /// 返回已规范化的目标归属 ID。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回去空白后的归属主键。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn assignment_id(&self) -> &str {
         &self.assignment_id
     }
 
     /// 返回结束日期。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回业务日期。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn valid_to(&self) -> BusinessDate {
         self.valid_to
     }
 
     /// 返回乐观锁期望版本。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回大于 0 的版本号。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn version(&self) -> u64 {
         self.version
     }
 
     /// 返回已规范化的调整原因。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回去空白后的原因文本。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn change_reason(&self) -> &str {
         &self.change_reason
     }

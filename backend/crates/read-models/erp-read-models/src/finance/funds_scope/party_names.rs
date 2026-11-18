@@ -13,17 +13,12 @@ use super::authorization::FundsAccess;
 use crate::{Error, Result};
 
 impl FundsAccess {
-    /// 按主体当前修订解析法定名称。
-    ///
-    /// # 参数
-    /// * `party_ids` - 主体主键；空集合不访问数据库
-    /// * `executor` - 调用方事务
-    ///
-    /// # 返回
-    /// 主体 id 到非空法定名称。没有当前修订的主体不进入映射。
-    ///
-    /// # 错误
-    /// 仓储读取失败时返回错误。
+    // 补齐财务来源范围的展示名称时，按主体当前修订解析法定名称。
+    //
+    // 调用参数：
+    // * `party_ids` - 主体主键；空集合不访问数据库
+    //
+    // 主体 id 到非空法定名称。没有当前修订的主体不进入映射。
     pub(super) async fn party_legal_names(
         &self,
         party_ids: &[String],
@@ -66,17 +61,12 @@ impl FundsAccess {
         Ok(names)
     }
 
-    /// 按供应商账号解析当前主体法定名称。
-    ///
-    /// # 参数
-    /// * `supplier_ids` - 供应商账号主键
-    /// * `executor` - 调用方事务
-    ///
-    /// # 返回
-    /// 供应商 id 到非空法定名称。账号或主体缺失时不进入映射。
-    ///
-    /// # 错误
-    /// 仓储读取失败时返回错误。
+    // 补齐财务来源范围的展示名称时，按供应商账号解析当前主体法定名称。
+    //
+    // 调用参数：
+    // * `supplier_ids` - 供应商账号主键
+    //
+    // 供应商 id 到非空法定名称。账号或主体缺失时不进入映射。
     pub(super) async fn supplier_legal_names(
         &self,
         supplier_ids: &[String],
@@ -102,17 +92,12 @@ impl FundsAccess {
         Ok(names)
     }
 
-    /// 解析单个供应商的法定名称。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 供应商账号主键
-    /// * `executor` - 调用方事务
-    ///
-    /// # 返回
-    /// 非空法定名称；账号或主体缺失时返回 `None`。
-    ///
-    /// # 错误
-    /// 仓储读取失败时返回错误。
+    // 补齐财务来源范围的展示名称时，解析单个供应商的法定名称。
+    //
+    // 调用参数：
+    // * `supplier_id` - 供应商账号主键
+    //
+    // 非空法定名称；账号或主体缺失时返回 `None`。
     pub(super) async fn supplier_name_of(
         &self,
         supplier_id: &impl ToString,

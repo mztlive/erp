@@ -4,17 +4,13 @@ use mongodb::bson::{Document, doc};
 
 use super::{FulfillmentQueueFilter, prepayment};
 
-/// 当前页切片、跨页计数、作业类型指标。
-///
-/// # 参数
-/// * `offset` - 已检查的分页偏移
-/// * `page_size` - 单页条数
-///
-/// # 返回
-/// 返回 `$facet` 阶段。
-///
-/// # 错误
-/// 无。
+// 生成履约责任队列分页时，当前页切片、跨页计数、作业类型指标。
+//
+// 调用参数：
+// * `offset` - 已检查的分页偏移
+// * `page_size` - 单页条数
+//
+// 返回 `$facet` 阶段。
 pub(super) fn page_facet(offset: i64, page_size: i64) -> Document {
     doc! {
         "$facet": {
@@ -34,17 +30,13 @@ pub(super) fn page_facet(offset: i64, page_size: i64) -> Document {
     }
 }
 
-/// 追加来源单据、仓库、作业日期、先款门槛和字面量检索。
-///
-/// # 参数
-/// * `pipeline` - 已关联来源单据的聚合管道
-/// * `filter` - 已由 Service 校验的筛选
-///
-/// # 返回
-/// 无。按调用方提供的条件追加 `$match`。
-///
-/// # 错误
-/// 无。
+// 组装履约责任队列查询条件时，追加来源单据、仓库、作业日期、先款门槛和字面量检索。
+//
+// 调用参数：
+// * `pipeline` - 已关联来源单据的聚合管道
+// * `filter` - 已由 Service 校验的筛选
+//
+// 无。按调用方提供的条件追加 `$match`。
 pub(super) fn append_optional_filters(pipeline: &mut Vec<Document>, filter: &FulfillmentQueueFilter) {
     let mut matched = Document::new();
     if let Some(sales_order_id) = &filter.sales_order_id {

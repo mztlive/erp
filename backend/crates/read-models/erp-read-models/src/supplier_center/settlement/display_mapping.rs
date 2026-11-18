@@ -18,14 +18,15 @@ pub(super) struct StatementDisplayFacts {
 }
 
 impl StatementDisplayFacts {
-    /// 将结算单身份解析为当前名称。
-    ///
-    /// # 参数
-    /// * `statement` - 已授权结算单事实。
-    /// # 返回
-    /// 返回保留原身份的名称视图。
-    /// # 错误
-    /// 无；缺失名称保持为空。
+    // 组装供应商结算时，将结算单身份解析为当前名称。
+    //
+    // 调用参数：
+    // * `statement` - 已授权结算单事实。
+    //
+    // 返回保留原身份的名称视图。
+    //
+    // 失败边界：
+    // 无；缺失名称保持为空。
     pub(super) fn statement(
         &self,
         statement: SupplierSettlementStatementView,
@@ -47,14 +48,15 @@ impl StatementDisplayFacts {
         }
     }
 
-    /// 补齐记录人姓名并按引用顺序标注材料。
-    ///
-    /// # 参数
-    /// * `evidence` - 原不可变补证事实。
-    /// # 返回
-    /// 返回补证名称视图。
-    /// # 错误
-    /// 无；缺失记录人名称保持为空。
+    // 处理供应商结算时，补充记录人姓名并按引用顺序标注材料。
+    //
+    // 调用参数：
+    // * `evidence` - 原不可变补证事实。
+    //
+    // 返回补证名称视图。
+    //
+    // 失败边界：
+    // 无；缺失记录人名称保持为空。
     pub(super) fn evidence(
         &self,
         evidence: SettlementDifferenceEvidenceView,
@@ -65,14 +67,12 @@ impl StatementDisplayFacts {
         SettlementEvidenceDisplayView { evidence, provided_by_name, evidence_reference_labels }
     }
 
-    /// 为差异所属补证补齐名称。
-    ///
-    /// # 参数
-    /// * `difference` - 原正式差异投影。
-    /// # 返回
-    /// 返回原差异和补证名称视图。
-    /// # 错误
-    /// 无。
+    // 处理供应商结算时，为差异所属补证补齐名称。
+    //
+    // 调用参数：
+    // * `difference` - 原正式差异投影。
+    //
+    // 返回原差异和补证名称视图。
     pub(super) fn difference(
         &self,
         difference: SupplierSettlementDifferenceView,
@@ -93,28 +93,24 @@ impl StatementDisplayFacts {
     }
 }
 
-/// 从精确身份映射中取可读名称。
-///
-/// # 参数
-/// * `names` - 当前授权结果关联的稀疏名称映射。
-/// * `id` - 关联身份。
-/// # 返回
-/// 返回非空且不同于内部身份的名称。
-/// # 错误
-/// 无。
+// 补齐供应商结算的展示名称时，从精确身份映射中取可读名称。
+//
+// 调用参数：
+// * `names` - 当前授权结果关联的稀疏名称映射。
+// * `id` - 关联身份。
+//
+// 返回非空且不同于内部身份的名称。
 pub(super) fn readable_name(names: &HashMap<String, String>, id: &str) -> Option<String> {
     names.get(id).and_then(|value| readable_value(value, id))
 }
 
-/// 拒绝空白或与内部身份相同的展示值。
-///
-/// # 参数
-/// * `value` - 拥有领域返回的名称或业务单号。
-/// * `id` - 该对象内部身份。
-/// # 返回
-/// 返回规范化的可读值，缺失时为空。
-/// # 错误
-/// 无。
+// 处理供应商结算时，拒绝空白或与内部身份相同的展示值。
+//
+// 调用参数：
+// * `value` - 拥有领域返回的名称或业务单号。
+// * `id` - 该对象内部身份。
+//
+// 返回规范化的可读值，缺失时为空。
 pub(super) fn readable_value(value: &str, id: &str) -> Option<String> {
     let value = value.trim();
     (!value.is_empty() && value != id.trim()).then(|| value.to_string())
@@ -133,14 +129,15 @@ pub(super) struct ItemDisplayFacts {
 }
 
 impl ItemDisplayFacts {
-    /// 为结算明细补齐业务单号与所属商品名称。
-    ///
-    /// # 参数
-    /// * `item` - 原结算明细事实。
-    /// # 返回
-    /// 返回保留内部关联身份的名称视图。
-    /// # 错误
-    /// 无；缺失或错链商品名称保持为空。
+    // 生成供应商结算展示时，为结算明细补齐业务单号与所属商品名称。
+    //
+    // 调用参数：
+    // * `item` - 原结算明细事实。
+    //
+    // 返回保留内部关联身份的名称视图。
+    //
+    // 失败边界：
+    // 无；缺失或错链商品名称保持为空。
     pub(super) fn item(&self, item: SupplierSettlementItemView) -> SettlementItemDisplayView {
         let order = self.orders.get(&item.supplier_fulfillment_order_id);
         let supplier_order_no = order.and_then(|labels| labels.supplier_order_no.clone());

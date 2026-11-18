@@ -12,13 +12,10 @@ use crate::{CatalogExt, Error, ProductKind, Result};
 
 impl CatalogPortalService {
     /// 查询当前供应商原始完整分类路径的历史核对建议，绝不自动应用。
-    /// # 参数
+    ///
+    /// 无独立映射时为空；存在时返回历史路径与当前有效候选，始终要求人工确认。空路径、映射事实损坏或数据库错误时拒绝。
+    ///
     /// `supplier_id` 必须来自当前门户身份或已授权申请归属；路径和类型为当前原始输入。
-    /// `executor` 为本次读取执行器。
-    /// # 返回
-    /// 无独立映射时为空；存在时返回历史路径与当前有效候选，始终要求人工确认。
-    /// # 错误
-    /// 空路径、映射事实损坏或数据库错误时拒绝。
     pub async fn category_mapping_suggestion(
         &self,
         supplier_id: &str,
@@ -46,13 +43,11 @@ impl CatalogPortalService {
         Ok(Some(mapping.suggestion(current)?))
     }
 
-    /// 内部生效决定与分类映射共用调用方事务，冻结原始资料保持不变。
-    /// # 参数
-    /// `draft` 为已通过纯规则核对的本次生效决定；`executor` 为Process事务。
-    /// # 返回
-    /// 分类核对记录已建立或追加。
-    /// # 错误
-    /// 冻结资料或决定缺失、字典失效、映射并发冲突或数据库错误时拒绝。
+    // 内部生效决定与分类映射共用调用方事务，冻结原始资料保持不变。
+    //
+    // 分类核对记录已建立或追加。冻结资料或决定缺失、字典失效、映射并发冲突或数据库错误时拒绝。
+    //
+    // `draft` 为已通过纯规则核对的本次生效决定；`executor` 为Process事务。
     pub(super) async fn record_category_mapping(
         &self,
         draft: &NewProductDraft,
@@ -87,7 +82,7 @@ impl CatalogPortalService {
         Ok(())
     }
 
-    /// 从本次真实生效决定构建分类匹配事实，复验当前完整字典资格。
+    // 从本次真实生效决定构建分类匹配事实，复验当前完整字典资格。
     async fn category_confirmation(
         &self,
         draft: &NewProductDraft,
@@ -132,7 +127,7 @@ impl CatalogPortalService {
         })
     }
 
-    /// 仅投影当前仍有完整有效层级且商品类型一致的公司分类。
+    // 仅投影当前仍有完整有效层级且商品类型一致的公司分类。
     async fn current_mapping_category(
         &self,
         category_id: &str,

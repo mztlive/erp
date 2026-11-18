@@ -8,11 +8,14 @@ use crate::Result;
 use crate::historical_directory::{HistoricalDirectoryQuery, HistoricalDirectoryView};
 
 impl CustomerQualityReadModel {
-    /// 独立读取历史贡献候选，返回前重验授权与来源版本。
+    /// 准备客户质量历史归属目录候选时，独立读取历史贡献候选，返回前重验授权与来源版本。
+    ///
     /// # 参数
     /// `input` 只含期间和客户上下文；`actor` 为认证人。
+    ///
     /// # 返回
     /// 完整冻结身份目录及独立范围版本。
+    ///
     /// # 错误
     /// 非法期间、无动作、超限、撤权或版本变化时拒绝。
     pub async fn history_directory(

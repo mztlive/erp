@@ -20,12 +20,10 @@ pub struct InquiryQuoteSourceView {
 }
 impl InquiryQuoteSourceView {
     /// 只投影采购行已经冻结的真实采用身份和数量。
-    /// # 参数
+    ///
+    /// 返回采购追溯白名单；单号由授权读模型沿稳定销售来源补齐。不读取最新商品或报价主数据覆盖历史。
+    ///
     /// `source`为正式采用快照，`quantity`为当前展示的采购提交或版本行数量。
-    /// # 返回
-    /// 返回采购追溯白名单；单号由授权读模型沿稳定销售来源补齐。
-    /// # 错误
-    /// 无；不读取最新商品或报价主数据覆盖历史。
     pub fn from_source(source: &PurchaseInquiryQuoteSource, quantity: Option<Quantity>) -> Self {
         Self {
             inquiry_id: source.inquiry_id.clone(),

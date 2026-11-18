@@ -13,13 +13,8 @@ use crate::wiring::{
 };
 
 impl Application {
-    /// 装配演示入口实际使用的领域合同，不执行业务读写。
-    /// # 参数
-    /// 无；复用当前数据库、配置与授权源。
-    /// # 返回
-    /// 只供演示数据 Process 消费的服务集合。
-    /// # 错误
-    /// 不返回错误。
+    // 装配演示入口实际使用的领域合同，不执行业务读写。
+    // 只供演示数据 Process 消费的服务集合。
     pub(super) fn demo_runtime_ports(&self) -> DemoRuntimePorts<WorkflowAuth> {
         DemoRuntimePorts {
             party: self.party_service(),

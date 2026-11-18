@@ -13,22 +13,12 @@ use crate::repository::owned::{SupplierOfferingRepository, SupplierOfferingRevis
 #[allow(async_fn_in_trait)]
 pub trait SupplierOfferingRepositoryQueryExt {
     /// 按稳定 ID 读取未删除的供给身份。
-    ///
-    /// 发布与安全暂停流程通过供给稳定 ID 引用供给身份，本方法提供该跨域只读
-    /// 事实的数据访问能力，不承载业务规则判断。
-    ///
-    /// # 参数
-    /// * `id` - 供给稳定 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定事务边界
-    ///
-    /// # 返回
+    /// 发布与安全暂停流程通过供给稳定 ID 引用供给身份，本方法提供该跨域只读事实的数据访问能力，不承载业
+    /// 务规则判断。
     /// 返回未删除供给；不存在时返回 `None`。
-    ///
-    /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
-    ///
-    /// # 约束
     /// 只查询本聚合 `supplier_offerings` 集合，不触碰其他集合。
+    /// `executor`：数据访问执行器，由 Service 决定事务边界。
     async fn find_publication_supplier_offering(
         &self,
         id: &SupplierOfferingId,
@@ -50,22 +40,12 @@ impl SupplierOfferingRepositoryQueryExt for SupplierOfferingRepository<'_> {
 #[allow(async_fn_in_trait)]
 pub trait SupplierOfferingRevisionRepositoryQueryExt {
     /// 按稳定 ID 读取未删除的供给商业条款修订。
-    ///
-    /// 发布修订通过供给修订稳定 ID 引用不可变商业条款，本方法提供该跨域只读
-    /// 事实的数据访问能力，不承载业务规则判断。
-    ///
-    /// # 参数
-    /// * `id` - 供给修订 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定事务边界
-    ///
-    /// # 返回
+    /// 发布修订通过供给修订稳定 ID 引用不可变商业条款，本方法提供该跨域只读事实的数据访问能力，不承载业
+    /// 务规则判断。
     /// 返回未删除供给修订；不存在时返回 `None`。
-    ///
-    /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
-    ///
-    /// # 约束
     /// 只查询本聚合 `supplier_offering_revisions` 集合，不触碰其他集合。
+    /// `executor`：数据访问执行器，由 Service 决定事务边界。
     async fn find_publication_offering_revision(
         &self,
         id: &SupplierOfferingRevisionId,
@@ -73,23 +53,13 @@ pub trait SupplierOfferingRevisionRepositoryQueryExt {
     ) -> Result<Option<SupplierOfferingRevision>>;
 
     /// 列出稳定供给的全部未删除不可变商业条款修订。
-    ///
-    /// 安全暂停流程需要加载来源供给的全部修订以解析在售发布影响集，本方法
-    /// 提供该集合查询能力，不承载业务规则判断。
-    ///
-    /// # 参数
-    /// * `offering_id` - 供应商供给稳定 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定事务边界
-    ///
-    /// # 返回
+    /// 安全暂停流程需要加载来源供给的全部修订以解析在售发布影响集，本方法提供该集合查询能力，不承载业务
+    /// 规则判断。
     /// 返回全部匹配且未删除的供给修订。
-    ///
-    /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
-    ///
-    /// # 约束
-    /// 只查询本聚合 `supplier_offering_revisions` 集合，按 `supplier_offering_id`
-    /// 精确过滤，不触碰其他集合。
+    /// 只查询本聚合 `supplier_offering_revisions` 集合，按 `supplier_offering_id`精确过滤，不触碰其他集
+    /// 合。
+    /// `executor`：数据访问执行器，由 Service 决定事务边界。
     async fn list_publication_offering_revisions(
         &self,
         offering_id: &SupplierOfferingId,

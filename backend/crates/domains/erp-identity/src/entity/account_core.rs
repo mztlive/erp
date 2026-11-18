@@ -31,17 +31,10 @@ pub(crate) enum ExistingSuperAdminState {
 }
 
 impl ExistingSuperAdminState {
-    /// 根据软删除与登录状态确定恢复语义。
-    ///
-    /// # 参数
-    /// * `is_deleted` - 账号是否已软删除
-    /// * `is_active` - 账号状态是否允许登录
-    ///
-    /// # 返回
-    /// 已软删除时返回 `Deleted`；否则可登录返回 `Active`，不可登录返回 `Inactive`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 根据软删除与登录状态确定恢复语义。
+    // 已软删除时返回 `Deleted`；否则可登录返回 `Active`，不可登录返回 `Inactive`。
+    //
+    // `is_deleted`：账号是否已软删除；`is_active`：账号状态是否允许登录。
     pub(crate) fn from_state(is_deleted: bool, is_active: bool) -> Self {
         if is_deleted {
             return Self::Deleted;
@@ -49,32 +42,16 @@ impl ExistingSuperAdminState {
         if is_active { Self::Active } else { Self::Inactive }
     }
 
-    /// 返回初始化是否恢复了不可登录或已删除账号。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 非 `Active` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 返回初始化是否恢复了不可登录或已删除账号。
+    // 非 `Active` 时返回 `true`。
     pub(crate) fn reactivates(self) -> bool {
         !matches!(self, Self::Active)
     }
 }
 
 impl AccountStatus {
-    /// 判断状态是否可登录。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
+    /// 当状态可登录时返回 `true`。
     /// 处于 `Active` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn is_active(&self) -> bool {
         matches!(self, Self::Active)
     }
@@ -91,23 +68,21 @@ pub struct AccountCoreData {
 
 impl AccountCoreData {
     /// 构造初始启用的后台管理员数据。
-    /// # 参数
-    /// secret 为已处理凭证，name 为待规范化名称。
-    /// # 返回
     /// 类型固定为管理员、状态为 Active 的创建数据。
-    /// # 错误
+    ///
     /// 不返回错误；名称由账号实体校验。
+    ///
+    /// secret 为已处理凭证，name 为待规范化名称。
     pub fn admin(secret: Secret, name: String) -> Self {
         Self { secret, name, kind: AccountKind::Admin, status: AccountStatus::Active }
     }
 
     /// 构造初始启用的供应商账号数据。
-    /// # 参数
-    /// secret 为已处理凭证，name 为待规范化名称。
-    /// # 返回
     /// 类型固定为供应商、状态为 Active 的创建数据。
-    /// # 错误
+    ///
     /// 不返回错误；名称由账号实体校验。
+    ///
+    /// secret 为已处理凭证，name 为待规范化名称。
     pub fn supplier(secret: Secret, name: String) -> Self {
         Self { secret, name, kind: AccountKind::Supplier, status: AccountStatus::Active }
     }
@@ -142,15 +117,8 @@ pub struct AccountCore {
 
 impl AccountCore {
     /// 创建统一账号，并把登录账号再按后台长度上限校验。
-    ///
-    /// # 参数
-    /// * `id` - 账号ID
-    /// * `data` - 账号创建数据
-    ///
-    /// # 返回
     /// 返回名称已规范化、联系方式和头像为空的新账号。
     ///
-    /// # 错误
     /// 名称不合法或登录账号超出后台长度时返回错误。
     pub fn new(id: String, data: AccountCoreData) -> Result<Self> {
         let mut secret = data.secret;
@@ -171,14 +139,8 @@ impl AccountCore {
     }
 
     /// 更新统一账号。
-    ///
-    /// # 参数
-    /// * `update` - 更新数据
-    ///
-    /// # 返回
     /// 校验通过后就地更新；未提供的字段保持不变。
     ///
-    /// # 错误
     /// 名称或密码不合法时返回错误。状态本身不产生错误。
     pub fn update(&mut self, update: AccountCoreUpdate) -> Result<()> {
         self.apply_name(update.name)?;
@@ -187,64 +149,36 @@ impl AccountCore {
         Ok(())
     }
 
-    /// 判断账号是否可登录。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
+    /// 当账号可登录时返回 `true`。
     /// 仅当 `status` 为 `Active` 时返回 `true`，不检查软删除。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn can_login(&self) -> bool {
         self.status.is_active()
     }
 
     /// 返回仅供后台认证边界使用的当前凭证。
     ///
-    /// # 参数
-    /// * `expected_kind` - 本次认证入口要求的账号类型
-    ///
-    /// # 返回
-    /// 账号类型匹配且状态允许登录时返回凭证借用，否则返回 `None`。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    ///
-    /// # 安全约束
     /// 本方法不验证密码、不选择哈希算法，也不改变错误文案；认证 Service 必须
     /// 继续负责等成本校验和对外失败脱敏。
+    ///
+    /// 账号类型匹配且状态允许登录时返回凭证借用，否则返回 `None`。
+    ///
+    /// `expected_kind`：本次认证入口要求的账号类型。
     pub fn authentication_secret_for(&self, expected_kind: AccountKind) -> Option<&Secret> {
         (self.kind == expected_kind && self.can_login()).then_some(&self.secret)
     }
 
-    /// 判断持久化账号是否仍与已签发的会话身份完全一致。
-    ///
-    /// # 参数
-    /// * `account` - 会话中的登录账号
-    /// * `kind` - 会话中的账号类型
-    /// * `version` - 会话签发时的账号版本
-    ///
-    /// # 返回
+    /// 当持久化账号仍与已签发的会话身份完全一致时返回 `true`。
     /// 账号仍可登录，且账号、类型与版本全部一致时返回 `true`。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// `version`：会话签发时的账号版本。
     pub fn matches_session_identity(&self, account: &str, kind: AccountKind, version: u64) -> bool {
         self.authentication_secret_for(kind)
             .is_some_and(|secret| secret.account() == account && self.base.version == version)
     }
 
     /// 校验账号当前允许登录并参与业务操作。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 账号处于 `Active` 时返回 `Ok(())`。
     ///
-    /// # 错误
     /// 账号被冻结或归档时返回错误。
     pub fn ensure_can_login(&self) -> Result<()> {
         if self.can_login() {
@@ -253,55 +187,32 @@ impl AccountCore {
         Err(Error::from("账号已停用，不能参与需要可登录身份的业务操作"))
     }
 
-    /// 判断账号类型是否匹配期望值。
-    ///
-    /// # 参数
-    /// * `expected` - 期望账号类型
-    ///
-    /// # 返回
+    /// 当账号类型匹配期望值时返回 `true`。
     /// 类型匹配时返回 `true`。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// `expected`：期望账号类型。
     pub fn is_kind(&self, expected: AccountKind) -> bool {
         self.kind == expected
     }
 
-    /// 判断账号是否为当前可承担后台责任的有效账号。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 账号类型为后台管理员且状态允许登录时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    ///
-    /// # 关键业务约束
+    /// 当账号为当前可承担后台责任的有效账号时返回 `true`。
     /// 审批责任人等后台职责必须同时满足身份类型与账号状态，不得只判断其中一项。
+    ///
+    /// 账号类型为后台管理员且状态允许登录时返回 `true`。
     pub fn is_active_backoffice(&self) -> bool {
         self.is_kind(AccountKind::Admin) && self.can_login()
     }
 
-    /// 检查本次授权身份是否为当前有效后台账号。
-    /// # 参数
-    /// kind 为已认证操作人的账号类型。
-    /// # 返回
+    /// 当本次授权身份为当前有效后台账号时返回 `true`。
     /// 账号可用且类型一致时为 true。
-    /// # 错误
-    /// 不返回错误。
+    ///
+    /// kind 为已认证操作人的账号类型。
     pub fn is_authorization_actor(&self, kind: AccountKind) -> bool {
         !self.base.is_deleted() && self.is_active_backoffice() && self.kind == kind
     }
 
-    /// 应用名称更新。
-    ///
-    /// # 参数
-    /// * `name` - 可选名称
-    ///
-    /// # 错误
-    /// 当名称不合法时返回错误。
+    // 应用名称更新。
+    // 当名称不合法时返回错误。
     fn apply_name(&mut self, name: Option<String>) -> Result<()> {
         if let Some(name) = name {
             self.name = normalize_required_text(name, "账号名称不能为空", NAME_MAX_LEN, "账号名称过长")?;
@@ -309,13 +220,8 @@ impl AccountCore {
         Ok(())
     }
 
-    /// 应用密码更新。
-    ///
-    /// # 参数
-    /// * `password` - 可选密码
-    ///
-    /// # 错误
-    /// 当密码为空或密码哈希失败时返回错误。
+    // 应用密码更新。
+    // 当密码为空或密码哈希失败时返回错误。
     fn apply_password(&mut self, password: Option<String>) -> Result<()> {
         if let Some(password) = password {
             self.secret.change_password(password)?;
@@ -323,10 +229,7 @@ impl AccountCore {
         Ok(())
     }
 
-    /// 应用状态更新。
-    ///
-    /// # 参数
-    /// * `status` - 可选状态
+    // 应用状态更新。
     fn apply_status(&mut self, status: Option<AccountStatus>) {
         if let Some(status) = status {
             self.status = status;
@@ -334,10 +237,7 @@ impl AccountCore {
     }
 }
 
-/// 构造符合后台账号长度约束的规范化登录账号。
-///
-/// 以 [`LoginAccount`] 为唯一账号形状来源；后台账号在通用 3..64 区间上
-/// 进一步收敛到 ≤32，不改匹配语义（仅 trim、不改大小写）与错误文案。
+// 规范化后台账号名，并应用后台账号专属的长度约束，供账号创建与登录相关实体使用。
 fn backoffice_login_account(account: impl Into<String>) -> Result<LoginAccount> {
     let account = LoginAccount::new(account)?;
     if account.as_str().chars().count() > LoginAccount::BACKOFFICE_MAX_LEN {
@@ -402,7 +302,7 @@ mod tests {
         assert!(account.is_kind(AccountKind::Admin));
     }
 
-    /// 有效后台责任账号必须同时满足后台身份与可登录状态。
+    // 验证：有效后台责任账号必须同时满足后台身份与可登录状态。
     #[test]
     fn active_backoffice_requires_login_eligibility() {
         let active = sample_account(AccountKind::Admin, AccountStatus::Active);

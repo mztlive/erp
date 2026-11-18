@@ -9,13 +9,8 @@ use crate::FinancePostingPorts;
 
 impl PurchasePaymentRequestProcess {
     /// 原子创建并提交独立付款申请，并按原命令恢复重复请求。
-    /// # 参数
-    /// * `req` - 完整批次及稳定操作号。
-    /// * `actor` - 当前采购申请人。
-    /// # 返回
-    /// 按请求顺序返回全部审批中申请。
-    /// # 错误
-    /// 任一来源、账户、金额或授权失效时整批拒绝；同号异载荷冲突。
+    ///
+    /// `req` 为完整批次及稳定操作号；`actor` 为当前采购申请人。按请求顺序返回全部审批中申请。任一来源、账户、金额或授权失效时整批拒绝；同号异载荷冲突。
     pub async fn create_batch(
         &self,
         req: CreatePaymentRequestBatch,

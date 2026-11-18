@@ -24,7 +24,7 @@ pub(super) enum ReplayTarget {
 }
 
 impl IntegrationResolutionProcess {
-    /// 原命令资格、真实目标及回执必须共用同一事务快照。
+    // 原命令资格、真实目标及回执必须共用同一事务快照。
     pub(super) async fn replay_receipt<T: IntegrationReceiptPayload + 'static>(
         &self,
         receipt: &IntegrationCommandIdentity,
@@ -53,7 +53,7 @@ trait ReplayPort: Sync {
     async fn receipt(&self, executor: &mut dyn Executor) -> Result<Option<Self::Payload>>;
 }
 
-/// 未授权、无快照或当前责任变化时，禁止读取收据并返回旧结果。
+// 未授权、无快照或当前责任变化时，禁止读取收据并返回旧结果。
 async fn replay<P: ReplayPort>(port: &P, executor: &mut dyn Executor) -> Result<Option<P::Payload>> {
     if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
         return Err(Error::ValidationError("命令回放必须使用快照事务".into()));
@@ -71,7 +71,7 @@ struct MongoReplay<T> {
 }
 
 impl<T> MongoReplay<T> {
-    /// 已完成结果沿用完整执行资格及当前责任，不套用原开放状态和冻结业务版本。
+    // 回读已完成的集成处置任务时，重验原执行资格和当前责任；不要求任务仍开放，也不按原冻结版本重执行。
     async fn authorize_task(
         &self,
         action: &IntegrationNonTerminalTaskAction,

@@ -27,30 +27,14 @@ impl From<String> for Error {
 }
 
 impl From<ParsePermissionError> for Error {
-    /// 将公共权限解析错误映射为既有业务值校验错误。
-    /// # 参数
-    /// error 为权限格式或规范化错误。
-    /// # 返回
-    /// 保留原校验文案的业务错误。
-    /// # 错误
-    /// 不返回错误。
+    // 公共权限解析失败进入 ERP 共享错误时，保留原文案以兼容业务值校验的错误处理。
     fn from(error: ParsePermissionError) -> Self {
         Self::LogicError(error.to_string())
     }
 }
 
 impl Error {
-    /// 构造字段校验错误。
-    ///
-    /// # 参数
-    /// * `field` - 字段名
-    /// * `message` - 校验说明
-    ///
-    /// # 返回
-    /// 返回结构化校验错误。
-    ///
-    /// # 错误
-    /// 本身不返回错误，仅构造错误值。
+    /// 字段规则失败时构造带字段名及说明的错误，便于上层保留结构而非拼成单一文案。
     pub fn validation(field: impl Into<String>, message: impl Into<String>) -> Self {
         Self::Validation { field: field.into(), message: message.into() }
     }

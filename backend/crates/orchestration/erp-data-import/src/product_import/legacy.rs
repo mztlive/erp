@@ -48,7 +48,7 @@ pub(super) const HEADERS: &[&str] = &[
     "商品税率",
 ];
 
-/// 只保留实际建品字段；供应商成本、库存和税率等旧列不得进入建品输入。
+// 只保留实际建品字段；供应商成本、库存和税率等旧列不得进入建品输入。
 pub(super) fn compact_cells(cells: &[String]) -> Vec<String> {
     [0, 1, 2, 3, 4, 5, 6, 8, 9, 12, 13, 14, 16]
         .into_iter()

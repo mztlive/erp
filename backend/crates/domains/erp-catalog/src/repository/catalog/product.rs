@@ -72,16 +72,7 @@ pub struct ProductFilter {
 }
 
 impl Default for ProductFilter {
-    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回第 1 页、每页 20 条的空筛选条件。
-    ///
-    /// # 错误
-    /// 无。
+    // 商品列表未传筛选时默认第 1 页、每页 20 条，不另加筛选条件。
     fn default() -> Self {
         let (page, page_size, sort_by, sort_ascending) = default_paging();
         Self {
@@ -110,21 +101,13 @@ impl Default for ProductFilter {
 }
 
 impl QueryFilter for ProductFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。始终写入未删除的 `deleted_at`。`ids`、`maintainer_user_ids` 与
-    /// `business_org_unit_ids` 为 `Some` 时，分别写入 `id`、`maintainer_user_id`、
-    /// `business_org_unit_id` 的 `$in`。`product_no` 有值时按字面量正则匹配；`product_kind` 与
-    /// `status` 有值时按稳定代码精确匹配。授权阶段由查询仓储独立完整执行。`keyword`、`category_id`、
-    /// `brand_id`、`supplier_id`、`listing_status`、`supply_coverage`、销售价上下限以及分页排序
-    /// 不进入本条件。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 将商品筛选条件编译为 MongoDB 查询，排除软删除记录。
+    //
+    // 始终写入未删除的 `deleted_at`。`ids`、`maintainer_user_ids` 与`business_org_unit_ids` 为
+    // `Some` 时，分别写入 `id`、`maintainer_user_id`、`business_org_unit_id` 的 `$in`。
+    // `product_no` 有值时按字面量正则匹配；`product_kind` 与`status` 有值时按稳定代码精确匹配。授权阶段由查询仓储独立完整执行。
+    // `keyword`、`category_id`、`brand_id`、`supplier_id`、`listing_status`、
+    // `supply_coverage`、销售价上下限以及分页排序不进入本条件。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(ids) = &self.ids {
@@ -148,16 +131,7 @@ impl QueryFilter for ProductFilter {
 }
 
 impl Pagination for ProductFilter {
-    /// 返回商品列表的页码与单页条数，不做页码归一或条数钳制。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组：第一项为 `page`，第二项为 `page_size` 转成的 `u64`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 读取商品列表的页码与单页条数，不做页码归一或条数限制。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -166,33 +140,22 @@ impl Pagination for ProductFilter {
 /// 商品集合上的域查询。
 #[allow(async_fn_in_trait)]
 pub trait ProductRepositoryExt {
-    /// 按稳定主键批量查询商品。
+    /// 按稳定主键批量查询商品。MongoDB 查询或反序列化失败时返回错误。
     ///
-    /// # 参数
-    /// * `ids` - 商品稳定 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定事务边界
+    /// 沿用调用方传入的执行器。
     ///
-    /// # 返回
-    /// 返回匹配的未删除商品实体。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
+    /// `ids` 为商品稳定 ID 集合。
     async fn find_by_ids(&self, ids: &[ProductId], executor: &mut dyn Executor) -> Result<Vec<Product>>;
 
     /// 列出当前范围内的商品主键，供采购负责人批量解析。
     ///
-    /// # 参数
-    /// * `scope` - 已证明的对象范围
-    /// * `executor` - 调用方执行器
+    /// 仓储不得按登录用户自行推断权限；公司范围应由调用方跳过本方法。
     ///
-    /// # 返回
     /// 最多 10001 个主键；调用方必须整体拒绝超限。
     ///
-    /// # 错误
-    /// 数据库读取失败时返回仓储错误。
+    /// 沿用调用方传入的执行器。
     ///
-    /// # 关键业务约束
-    /// 仓储不得按登录用户自行推断权限；公司范围应由调用方跳过本方法。
+    /// `scope` 为已证明的对象范围。
     async fn list_authorized_ids(
         &self,
         scope: &super::CatalogReadScope,
@@ -201,17 +164,11 @@ pub trait ProductRepositoryExt {
 
     /// 列出未删除商品主键，供公司范围采购负责人筛选。
     ///
-    /// # 参数
-    /// * `executor` - 调用方执行器
+    /// 仅用于已证明的公司范围；不得替代授权条件。
     ///
-    /// # 返回
     /// 最多 10001 个主键；调用方必须整体拒绝超限。
     ///
-    /// # 错误
-    /// 数据库读取失败时返回仓储错误。
-    ///
-    /// # 关键业务约束
-    /// 仅用于已证明的公司范围；不得替代授权条件。
+    /// 沿用调用方传入的执行器。
     async fn list_ids(&self, executor: &mut dyn Executor) -> Result<Vec<String>>;
 }
 
@@ -328,17 +285,9 @@ pub struct ProductRevisionFilter {
 }
 
 impl QueryFilter for ProductRevisionFilter {
-    /// 转换为 MongoDB 查询条件，并追加未删除的 `deleted_at` 条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。`product_id` 有值时精确匹配；`status` 有值时按稳定代码精确匹配。
-    /// 分页与排序字段不进入条件。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 将商品修订筛选条件编译为 MongoDB 查询，排除软删除记录。
+    //
+    // `product_id` 有值时精确匹配；`status` 有值时按稳定代码精确匹配。分页与排序字段不进入条件。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(product_id) = &self.product_id {
@@ -352,16 +301,7 @@ impl QueryFilter for ProductRevisionFilter {
 }
 
 impl Pagination for ProductRevisionFilter {
-    /// 返回商品修订列表的页码与单页条数，不做页码归一或条数钳制。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组：第一项为 `page`，第二项为 `page_size` 转成的 `u64`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 读取商品修订列表的页码与单页条数，不做页码归一或条数限制。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -372,18 +312,11 @@ impl Pagination for ProductRevisionFilter {
 pub trait ProductRevisionRepositoryExt {
     /// 分页检索商品修订列表（投影查询）。
     ///
-    /// 只返回 [`ProductRevisionRow`] 所需的列表字段；排序字段白名单化
-    /// （`created_at`/`revision_no`）。
+    /// 只返回 [`ProductRevisionRow`] 所需的列表字段；排序字段白名单化（`created_at`/`revision_no`）。
     ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回当前页投影行与满足筛选条件的总数。当 MongoDB 查询、游标读取或计数失败时返回错误。
     ///
-    /// # 返回
-    /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// 沿用调用方传入的执行器。
     async fn search_product_revisions(
         &self,
         filter: &ProductRevisionFilter,
@@ -392,15 +325,11 @@ pub trait ProductRevisionRepositoryExt {
 
     /// 按稳定主键批量查询商品修订。
     ///
-    /// # 参数
-    /// * `ids` - 商品修订稳定 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定事务边界
+    /// 返回匹配的未删除商品修订实体；输入为空时返回空集合。MongoDB 查询或反序列化失败时返回错误。
     ///
-    /// # 返回
-    /// 返回匹配的未删除商品修订实体；输入为空时返回空集合。
+    /// 沿用调用方传入的执行器。
     ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
+    /// `ids` 为商品修订稳定 ID 集合。
     async fn find_by_ids(
         &self,
         ids: &[ProductRevisionId],
@@ -411,15 +340,9 @@ pub trait ProductRevisionRepositoryExt {
     ///
     /// 用于按 SKU 所属商品聚合修订明细，避免逐商品 N+1。
     ///
-    /// # 参数
-    /// * `product_ids` - 商品 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回匹配的修订实体集合。当 MongoDB 查询或游标读取失败时返回错误。
     ///
-    /// # 返回
-    /// 返回匹配的修订实体集合。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 沿用调用方传入的执行器。
     async fn find_by_product_ids(
         &self,
         product_ids: &[ProductId],
@@ -471,15 +394,9 @@ impl ProductRevisionRepositoryExt for persistence_core::Repository<'_, ProductRe
 pub trait ProductRevisionMediaRepositoryExt {
     /// 按商品修订 ID 批量读取媒体行。
     ///
-    /// # 参数
-    /// * `revision_ids` - 商品修订 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回全部匹配的媒体行。当 MongoDB 查询或游标读取失败时返回错误。
     ///
-    /// # 返回
-    /// 返回全部匹配的媒体行。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 沿用调用方传入的执行器。
     async fn find_media_by_revision_ids(
         &self,
         revision_ids: &[ProductRevisionId],
@@ -503,15 +420,11 @@ impl ProductRevisionMediaRepositoryExt for persistence_core::Repository<'_, Prod
 impl<'a> CatalogRepository<'a> {
     /// 分页查询商品修订并批量装配关联媒体。
     ///
-    /// # 参数
-    /// * `filter` - 商品修订、状态、分页与排序条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回已带关联媒体行的商品修订分页投影。MongoDB 查询、计数或关联媒体批量读取失败时返回错误。
     ///
-    /// # 返回
-    /// 返回已带关联媒体行的商品修订分页投影。
+    /// 沿用调用方的执行器，不另开事务。
     ///
-    /// # 错误
-    /// MongoDB 查询、计数或关联媒体批量读取失败时返回错误。
+    /// `filter` 为商品修订、状态、分页与排序条件。
     pub async fn product_revision_page(
         &self,
         filter: &ProductRevisionFilter,
@@ -524,15 +437,9 @@ impl<'a> CatalogRepository<'a> {
 
     /// 读取指定商品的历史最大修订序号。
     ///
-    /// # 参数
-    /// * `product_id` - 商品稳定 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回历史最大修订号；无修订时返回 `None`。MongoDB 查询或反序列化失败时返回错误。
     ///
-    /// # 返回
-    /// 返回历史最大修订号；无修订时返回 `None`。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
+    /// 沿用调用方的执行器，不另开事务。
     pub async fn latest_product_revision_no(
         &self,
         product_id: &ProductId,
@@ -548,15 +455,10 @@ impl<'a> CatalogRepository<'a> {
 
     /// 读取商品停用事务所需的关系快照。
     ///
-    /// # 参数
-    /// * `product_id` - 待停用商品稳定 ID
-    /// * `executor` - 数据访问执行器；停用流程必须传入事务会话
+    /// 商品不存在时返回 `None`；存在时返回商品、当前修订、媒体与历史最大修订号。MongoDB 查询、关系解析或反序列化失败时返回错误。
     ///
-    /// # 返回
-    /// 商品不存在时返回 `None`；存在时返回商品、当前修订、媒体与历史最大修订号。
-    ///
-    /// # 错误
-    /// MongoDB 查询、关系解析或反序列化失败时返回错误。
+    /// - `product_id`：待停用商品稳定 ID。
+    /// - `executor`：数据访问执行器；停用流程必须传入事务会话。
     pub async fn product_disable_snapshot(
         &self,
         product_id: &str,
@@ -578,15 +480,11 @@ impl<'a> CatalogRepository<'a> {
     ///
     /// 优先使用稳定主表的当前修订指针；指针缺失或失效时回退到该商品最大修订号。
     ///
-    /// # 参数
-    /// * `products` - 待解析的商品稳定实体
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回 `product_id -> 当前商品修订` 映射；没有任何修订的商品不出现在映射中。MongoDB 批量查询或反序列化失败时返回错误。
     ///
-    /// # 返回
-    /// 返回 `product_id -> 当前商品修订` 映射；没有任何修订的商品不出现在映射中。
+    /// 沿用调用方的执行器，不另开事务。
     ///
-    /// # 错误
-    /// MongoDB 批量查询或反序列化失败时返回错误。
+    /// `products` 为待解析的商品稳定实体。
     pub async fn current_product_revisions(
         &self,
         products: &[Product],
@@ -600,15 +498,11 @@ impl<'a> CatalogRepository<'a> {
 
     /// 解析单个商品的当前修订。
     ///
-    /// # 参数
-    /// * `product` - 已加载的商品稳定实体
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回当前指针命中或最大修订号对应的修订；无修订时返回 `None`。MongoDB 查询或反序列化失败时返回错误。
     ///
-    /// # 返回
-    /// 返回当前指针命中或最大修订号对应的修订；无修订时返回 `None`。
+    /// 沿用调用方的执行器，不另开事务。
     ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
+    /// `product` 为已加载的商品稳定实体。
     pub async fn current_product_revision(
         &self,
         product: &Product,
@@ -620,17 +514,13 @@ impl<'a> CatalogRepository<'a> {
             .remove(&product.base.id))
     }
 
-    /// 批量装配商品修订投影的媒体关系。
-    ///
-    /// # 参数
-    /// * `rows` - 当前页商品修订投影
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 成功时原位填充每行 `media` 字段。
-    ///
-    /// # 错误
-    /// MongoDB 批量查询或反序列化失败时返回错误。
+    // 批量装配商品修订投影的媒体关系。
+    //
+    // 成功时原位填充每行 `media` 字段。MongoDB 批量查询或反序列化失败时返回错误。
+    //
+    // 沿用调用方的执行器，不另开事务。
+    //
+    // `rows` 为当前页商品修订投影。
     async fn attach_product_revision_media(
         &self,
         rows: &mut [ProductRevisionRow],
@@ -646,17 +536,13 @@ impl<'a> CatalogRepository<'a> {
         Ok(())
     }
 
-    /// 读取可选当前商品修订的关联媒体。
-    ///
-    /// # 参数
-    /// * `revision` - 已解析出的可选当前商品修订
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 无当前修订时返回空集合，否则返回该修订全部媒体行。
-    ///
-    /// # 错误
-    /// MongoDB 批量查询或反序列化失败时返回错误。
+    // 读取可选当前商品修订的关联媒体。
+    //
+    // 无当前修订时返回空集合，否则返回该修订全部媒体行。MongoDB 批量查询或反序列化失败时返回错误。
+    //
+    // 沿用调用方的执行器，不另开事务。
+    //
+    // `revision` 为已解析出的可选当前商品修订。
     async fn media_for_current_product_revision(
         &self,
         revision: Option<&ProductRevision>,
@@ -678,17 +564,10 @@ impl<'a> CatalogRepository<'a> {
     /// **必须收到事务执行器**：传入 `NoTransaction` 时两笔写入各自自动提交，
     /// 中途失败会留下没有媒体行的修订；Service 必须通过事务会话调用。
     ///
-    /// # 参数
-    /// * `revision` - 待写入的商品修订
-    /// * `medias` - 待写入的修订媒体行
-    /// * `executor` - 数据访问执行器，必须位于事务中
+    /// 修订与媒体行都写入成功时返回 `Ok(())`；`medias` 为空时不插入媒体行。当唯一索引冲突（透出
+    /// [`persistence_core::Error::DuplicateKey`]）或 MongoDB 写入失败时返回错误。
     ///
-    /// # 返回
-    /// 修订与媒体行都写入成功时返回 `Ok(())`；`medias` 为空时不插入媒体行。
-    ///
-    /// # 错误
-    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）或 MongoDB 写入
-    /// 失败时返回错误。
+    /// 使用数据访问执行器，必须位于事务中。
     pub async fn create_product_revision_with_media(
         &self,
         revision: &ProductRevision,
@@ -709,7 +588,7 @@ impl<'a> CatalogRepository<'a> {
     }
 }
 
-/// 优先当前修订指针，否则最大修订号。
+// 优先当前修订指针，否则最大修订号。
 fn select_current_product_revision<'a>(
     product: &Product,
     revisions: &'a [ProductRevision],
@@ -722,7 +601,7 @@ fn select_current_product_revision<'a>(
     )
 }
 
-/// 批量解析 `product_id -> 当前修订` 映射。
+// 批量解析 `product_id -> 当前修订` 映射。
 fn select_current_product_revisions(
     products: &[Product],
     revisions: Vec<ProductRevision>,
@@ -742,7 +621,7 @@ fn select_current_product_revisions(
         .collect()
 }
 
-/// 按商品修订 ID 分组媒体行并按展示顺序排序。
+// 按商品修订 ID 分组媒体行并按展示顺序排序。
 fn group_product_revision_media(
     rows: Vec<ProductRevisionMedia>,
 ) -> HashMap<String, Vec<ProductRevisionMedia>> {
@@ -756,12 +635,12 @@ fn group_product_revision_media(
     grouped
 }
 
-/// 构建商品修订排序文档（白名单：`created_at`/`revision_no`）。
+// 构建商品修订排序文档（白名单：`created_at`/`revision_no`）。
 fn product_revision_sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
     sort_doc(whitelisted_sort(sort_by, PRODUCT_REVISION_SORT_FIELDS), sort_ascending)
 }
 
-/// 商品修订列表投影字段。
+// 商品修订列表投影字段。
 fn product_revision_projection() -> Document {
     doc! {
         "id": 1,

@@ -41,11 +41,11 @@ pub struct JdVopCredentialProcess {
 
 impl JdVopCredentialProcess {
     /// 装配加密导入用例，不读取数据库或发送 HTTP。
-    /// # 参数
+    ///
     /// `db` 为应用数据库；`settings` 提供固定身份和独立凭据加密密钥。
-    /// # 返回
+    ///
     /// 受控预览、导入及脱敏状态入口。
-    /// # 错误
+    ///
     /// 凭据配置无效时返回不含密钥或输入正文的错误。
     pub fn new(db: Database, settings: &JdVopConfig) -> ConnectorResult<Self> {
         let crypto = CredentialCrypto::new(settings)?;
@@ -54,11 +54,11 @@ impl JdVopCredentialProcess {
     }
 
     /// 只读预检导入版本及身份，执行与正式写入相同的领域规则。
-    /// # 参数
+    ///
     /// `input` 为受控 JSON；`expected_version` 更新时必需；`reauthorization_evidence` 为显式新授权依据。
-    /// # 返回
+    ///
     /// 当前版本和阶段及待导入有效期；首次创建版本显示0。
-    /// # 错误
+    ///
     /// 身份、令牌、版本、授权恢复期限或存储读取无效时返回脱敏错误。
     pub async fn preview(
         &self,
@@ -84,11 +84,11 @@ impl JdVopCredentialProcess {
     }
 
     /// 将首次授权或明确版本的更新以密文及同事务审计原子保存。
-    /// # 参数
+    ///
     /// `input/expected_version` 为预检同一导入；恢复未知刷新必须给新授权 `reauthorization_evidence`；`actor` 为受信操作人。
-    /// # 返回
+    ///
     /// 保存后的脱敏版本及阶段。
-    /// # 错误
+    ///
     /// 身份、授权、版本或审计保存失败时拒绝；结果未知不得自动重放。
     pub async fn import(
         &self,
@@ -107,11 +107,9 @@ impl JdVopCredentialProcess {
     }
 
     /// 读取固定凭据身份的脱敏状态，不解密或刷新令牌。
-    /// # 参数
-    /// 无。
-    /// # 返回
+    ///
     /// 当前版本、有效期、刷新阶段和恢复期限。
-    /// # 错误
+    ///
     /// 记录不存在、绑定变化或读取失败时返回脱敏错误。
     pub async fn status(&self) -> ConnectorResult<JdVopCredentialStatus> {
         let record = self.store.load().await?.ok_or_else(token_error)?;

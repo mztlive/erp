@@ -16,29 +16,13 @@ pub struct MongoBusinessDocument {
 
 impl MongoBusinessDocument {
     /// 绑定单据注册表所在数据库，构造时不读取。
-    ///
-    /// # 参数
-    /// * `db` - 读取单据注册表的数据库。
-    ///
-    /// # 返回
     /// 返回未执行 I/O 的 adapter，而不是共享 Port。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
     /// 包装为支持域可注入的业务单据 Port。
-    ///
-    /// # 参数
-    /// * `db` - 读取单据注册表的数据库。
-    ///
-    /// # 返回
     /// 返回实现 `BusinessDocumentPort` 的共享 Port。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn shared(db: Database) -> Arc<dyn BusinessDocumentPort> {
         Arc::new(Self::new(db))
     }

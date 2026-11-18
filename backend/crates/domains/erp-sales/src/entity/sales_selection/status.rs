@@ -24,16 +24,7 @@ pub enum BookletStatus {
 }
 
 impl BookletStatus {
-    /// 返回稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回持久化代码。
-    ///
-    /// # 错误
-    /// 无。
+    /// 将选品册状态转成用于持久化和查询的稳定代码，与中文展示文案分开。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Draft => "DRAFT",
@@ -46,16 +37,7 @@ impl BookletStatus {
         }
     }
 
-    /// 返回面向销售的名称。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回中文状态名。
-    ///
-    /// # 错误
-    /// 无。
+    /// 为界面或响应展示提供选品册状态的中文名称；机器筛选和存储不使用该名称。
     pub fn label(self) -> &'static str {
         match self {
             Self::Draft => "草稿",
@@ -69,114 +51,53 @@ impl BookletStatus {
     }
 
     /// 判断是否为业务终态。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 已提交、已关闭、已作废返回 `true`。
-    ///
-    /// # 错误
-    /// 无。
+    /// 结果：已提交、已关闭、已作废返回 `true`。
     pub fn is_terminal(self) -> bool {
         matches!(self, Self::Submitted | Self::Closed | Self::Voided)
     }
 
     /// 判断是否允许编辑草稿规则或商品池来源内容。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 仅草稿允许改筛选、勾选或档位规则。
-    ///
-    /// # 错误
-    /// 无。
+    /// 结果：仅草稿允许改筛选、勾选或档位规则。
     pub fn allows_draft_edit(self) -> bool {
         matches!(self, Self::Draft)
     }
 
     /// 判断是否允许启动准备任务。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 草稿或待发布返回 `true`。准备中禁止再次启动。
-    ///
-    /// # 错误
-    /// 无。
+    /// 结果：草稿或待发布返回 `true`。准备中禁止再次启动。
     pub fn allows_prepare(self) -> bool {
         matches!(self, Self::Draft | Self::PendingPublish)
     }
 
     /// 判断是否允许删除陈列项。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 仅待发布允许删除陈列。
-    ///
-    /// # 错误
-    /// 无。
+    /// 结果：仅待发布允许删除陈列。
     pub fn allows_delete_display(self) -> bool {
         matches!(self, Self::PendingPublish)
     }
 
     /// 判断是否允许发布。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 仅待发布允许发布。
-    ///
-    /// # 错误
-    /// 无。
+    /// 结果：仅待发布允许发布。
     pub fn allows_publish(self) -> bool {
         matches!(self, Self::PendingPublish)
     }
 
     /// 判断是否允许作废。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 草稿或待发布允许作废。
-    ///
-    /// # 错误
-    /// 无。
+    /// 结果：草稿或待发布允许作废。
     pub fn allows_void(self) -> bool {
         matches!(self, Self::Draft | Self::PendingPublish)
     }
 
     /// 判断是否允许客户改会话或提交。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 仅已发布允许写入会话。
-    ///
-    /// # 错误
-    /// 无。
+    /// 结果：仅已发布允许写入会话。
     pub fn allows_session_write(self) -> bool {
         matches!(self, Self::Published)
     }
 
     /// 判断公开页是否只展示结束态。
+    /// 结果：已关闭、已作废、已撤销或已到期时返回 `true`。已提交且链接仍有效时不是结束态。
     ///
-    /// # 参数
-    /// * `link_revoked` - 链接访问是否已撤销
-    /// * `expired` - 服务端是否已到期
-    ///
-    /// # 返回
-    /// 已关闭、已作废、已撤销或已到期时返回 `true`。已提交且链接仍有效时不是结束态。
-    ///
-    /// # 错误
-    /// 无。
+    /// 输入约定：
+    /// - `link_revoked`：链接访问是否已撤销
+    /// - `expired`：服务端是否已到期
     pub fn public_is_ended(self, link_revoked: bool, expired: bool) -> bool {
         if link_revoked || expired {
             return true;
@@ -185,34 +106,21 @@ impl BookletStatus {
     }
 
     /// 判断公开页是否只读回执。
+    /// 结果：已提交且链接未撤销、未到期时返回 `true`。
     ///
-    /// # 参数
-    /// * `link_revoked` - 链接访问是否已撤销
-    /// * `expired` - 服务端是否已到期
-    ///
-    /// # 返回
-    /// 已提交且链接未撤销、未到期时返回 `true`。
-    ///
-    /// # 错误
-    /// 无。
+    /// 输入约定：
+    /// - `link_revoked`：链接访问是否已撤销
+    /// - `expired`：服务端是否已到期
     pub fn public_is_receipt(self, link_revoked: bool, expired: bool) -> bool {
         matches!(self, Self::Submitted) && !link_revoked && !expired
     }
 }
 
 impl DocumentState for BookletStatus {
-    /// 返回合法后继。准备失败恢复走 `Draft` 或 `PendingPublish`。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// `Draft` 的后继为 `Preparing`、`Voided`；`Preparing` 的后继为 `PendingPublish`、`Draft`；
-    /// `PendingPublish` 的后继为 `Preparing`、`Published`、`Voided`；`Published` 的后继为 `Submitted`、`Closed`。
-    /// `Submitted`、`Closed`、`Voided` 返回空切片。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 校验选品册状态迁移时查本状态可直接到达的后继状态；无后继即不能再迁移。
+    // 结果：`Draft` 的后继为 `Preparing`、`Voided`；`Preparing` 的后继为 `PendingPublish`、`Draft`；
+    // `PendingPublish` 的后继为 `Preparing`、`Published`、`Voided`；`Published` 的后继为 `Submitted`、`Closed`。
+    // `Submitted`、`Closed`、`Voided` 返回空切片。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Draft => &[Self::Preparing, Self::Voided],

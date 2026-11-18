@@ -7,18 +7,17 @@ use super::dto::{
     DocumentApprovalInstanceView, DocumentApprovalView,
 };
 pub(super) const RECENT_HISTORY_LIMIT: usize = 8;
-/// 由绑定与可选实例事实构造只读审批结构。
-///
-/// 创建后未提交只返回绑定定义；运行时不得按采购确认用途分支。
-///
-/// # 参数
-/// * `binding` - 创建时冻结的定义绑定
-/// * `instance` - 已启动时的实例摘要
-/// * `commercial` - 当前商业主状态
-/// * `review` - 当前审核轨
-///
-/// # 返回
-/// 返回有界只读审批结构，历史为空。
+// 为销售审批详情组装审批视图时，只使用冻结的定义绑定与实际读到的可选实例。
+//
+// 创建后未提交只返回绑定定义；运行时不得按采购确认用途分支。
+//
+// 调用参数：
+// * `binding` - 创建时冻结的定义绑定
+// * `instance` - 已启动时的实例摘要
+// * `commercial` - 当前商业主状态
+// * `review` - 当前审核轨
+//
+// 返回有界只读审批结构，历史为空。
 #[cfg(test)]
 fn document_approval_view(
     binding: Option<&ApprovalDefinitionBinding>,
@@ -36,24 +35,20 @@ fn document_approval_view(
     )
 }
 
-/// 由绑定、运行实例与有界历史构造只读审批结构。
-///
-/// # 参数
-/// * `binding` - 创建时冻结的定义绑定
-/// * `instance` - 已启动时的实例摘要
-/// * `recent_history` - 有界最近历史，调用方负责截断
-/// * `history_page` - 完整历史分页游标
-/// * `commercial` - 当前商业主状态
-/// * `review` - 当前审核轨
-///
-/// # 返回
-/// 返回有界只读审批结构。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// `recent_history` 不得超过 [`RECENT_HISTORY_LIMIT`]；超出部分走分页端点。
+// 由绑定、运行实例与有界历史生成只读审批结构。
+//
+// 调用参数：
+// * `binding` - 创建时冻结的定义绑定
+// * `instance` - 已启动时的实例摘要
+// * `recent_history` - 有界最近历史，调用方负责截断
+// * `history_page` - 完整历史分页游标
+// * `commercial` - 当前商业主状态
+// * `review` - 当前审核轨
+//
+// 返回有界只读审批结构。
+//
+// 业务边界：
+// `recent_history` 不得超过 [`RECENT_HISTORY_LIMIT`]；超出部分走分页端点。
 pub(super) fn document_approval_view_with_history(
     binding: Option<&ApprovalDefinitionBinding>,
     instance: Option<DocumentApprovalInstanceView>,
@@ -72,7 +67,7 @@ pub(super) fn document_approval_view_with_history(
     }
 }
 
-/// 单据详情允许的审批相关动作。不含选择定义或审批人。
+// 为销售审批详情计算详情可展示的审批动作，不允许借此选择流程定义或审批人。
 fn allowed_document_actions(commercial: CommercialStatus, review: ReviewStatus) -> Vec<String> {
     match (commercial, review) {
         (CommercialStatus::Draft, ReviewStatus::NotSubmitted | ReviewStatus::Rejected) => {

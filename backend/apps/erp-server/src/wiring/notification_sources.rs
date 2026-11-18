@@ -12,13 +12,8 @@ use persistence_core::change_feed::ChangeSource;
 
 use super::Application;
 
-/// 返回所有导航徽标与单据分区的变更来源。
-/// # 参数
-/// app 为共享业务装配。
-/// # 返回
-/// 来源白名单；任何对象标识和正文均不进入刷新载荷。
-/// # 错误
-/// 不执行 I/O。
+// 返回所有导航徽标与单据分区的变更来源。
+// 来源白名单；任何对象标识和正文均不进入刷新载荷。
 pub(crate) fn sources(app: &Application) -> Vec<ChangeSource<RefreshTopic>> {
     use RefreshTopic::*;
     let db = app.db();

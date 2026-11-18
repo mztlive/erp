@@ -25,33 +25,18 @@ pub struct InitializeSuperAdminParams {
 
 impl InitializeSuperAdminParams {
     /// 由必填账号、密码与名称构造超级管理员初始化参数。
-    ///
-    /// # 参数
-    /// * `account` - 超级管理员账号
-    /// * `password` - 明文密码
-    /// * `name` - 管理员名称
-    ///
-    /// # 返回
     /// 返回待校验的初始化参数。
-    ///
-    /// # 错误
-    /// 无。
     pub fn new(account: impl Into<String>, password: impl Into<String>, name: impl Into<String>) -> Self {
         Self { account: account.into(), password: password.into(), name: name.into() }
     }
 
-    /// 校验并规范化超级管理员初始化参数。
-    ///
-    /// 账号与名称会按各自领域规则去除首尾空白，密码保持原值。
-    ///
-    /// # 参数
-    /// 消耗 `self`。
-    ///
-    /// # 返回
-    /// 返回规范化后的登录账号、密码与管理员名称。
-    ///
-    /// # 错误
-    /// 当账号不合法、密码长度不在 6-32 个字符内或名称为空时返回校验错误。
+    // 校验并规范化超级管理员初始化参数。
+    //
+    // 账号与名称会按各自领域规则去除首尾空白，密码保持原值。
+    //
+    // 返回规范化后的登录账号、密码与管理员名称。
+    //
+    // 当账号不合法、密码长度不在 6-32 个字符内或名称为空时返回校验错误。
     pub(super) fn into_validated_parts(self) -> Result<(LoginAccount, String, String)> {
         let Self { account, password, name } = self;
         let account =
@@ -75,32 +60,18 @@ pub struct ResetAdminPasswordParams {
 
 impl ResetAdminPasswordParams {
     /// 由必填账号与密码构造管理员密码重置参数。
-    ///
-    /// # 参数
-    /// * `account` - 管理员账号
-    /// * `password` - 明文密码
-    ///
-    /// # 返回
     /// 返回待校验的密码重置参数。
-    ///
-    /// # 错误
-    /// 无。
     pub fn new(account: impl Into<String>, password: impl Into<String>) -> Self {
         Self { account: account.into(), password: password.into() }
     }
 
-    /// 校验并规范化管理员密码重置参数。
-    ///
-    /// 账号按登录账号规则去除首尾空白，密码保持原值。
-    ///
-    /// # 参数
-    /// 消耗 `self`。
-    ///
-    /// # 返回
-    /// 返回规范化后的登录账号与明文密码。
-    ///
-    /// # 错误
-    /// 当账号不合法或密码长度不在 6-32 个字符内时返回校验错误。
+    // 校验并规范化管理员密码重置参数。
+    //
+    // 账号按登录账号规则去除首尾空白，密码保持原值。
+    //
+    // 返回规范化后的登录账号与明文密码。
+    //
+    // 当账号不合法或密码长度不在 6-32 个字符内时返回校验错误。
     pub(super) fn into_validated_parts(self) -> Result<(LoginAccount, String)> {
         let account =
             LoginAccount::new(self.account).map_err(|_| Error::ValidationError("管理员账号不合法".into()))?;
@@ -109,17 +80,12 @@ impl ResetAdminPasswordParams {
     }
 }
 
-/// 校验管理员密码长度。
-///
-/// # 参数
-/// * `password` - 待校验明文密码
-/// * `label` - 错误提示中的主体名称
-///
-/// # 返回值
-/// 长度合法时返回 `Ok(())`。
-///
-/// # 错误
-/// 密码字符数不在 6-32 时返回校验错误。
+// 校验管理员密码长度。
+// 长度合法时返回 `Ok(())`。
+//
+// 密码字符数不在 6-32 时返回校验错误。
+//
+// `label`：错误提示中的主体名称。
 fn ensure_admin_password_length(password: &str, label: &str) -> Result<()> {
     validate_admin_password(password)
         .map_err(|_| Error::ValidationError(format!("{label}密码长度必须在6-32个字符之间")))
@@ -140,29 +106,12 @@ pub struct UpdateAdminParams {
 
 impl UpdateAdminParams {
     /// 由必填管理员 ID 构造更新参数。
-    ///
-    /// # 参数
-    /// * `id` - 管理员 ID
-    ///
-    /// # 返回
     /// 返回字段均为空的更新参数。
-    ///
-    /// # 错误
-    /// 无。
     pub fn new(id: impl Into<String>) -> Self {
         Self { id: id.into(), name: None, password: None, role_ids: None, status: None }
     }
 
     /// 设置角色 ID 集合。
-    ///
-    /// # 参数
-    /// * `role_ids` - 角色 ID 集合
-    ///
-    /// # 返回
-    /// 返回更新后的参数。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_role_ids(mut self, role_ids: Vec<String>) -> Self {
         self.role_ids = Some(role_ids);
         self
@@ -179,29 +128,12 @@ pub struct UpdateAdminRoleParams {
 
 impl UpdateAdminRoleParams {
     /// 由必填管理员 ID 构造角色更新参数。
-    ///
-    /// # 参数
-    /// * `id` - 管理员 ID
-    ///
-    /// # 返回
     /// 返回角色为空的更新参数。
-    ///
-    /// # 错误
-    /// 无。
     pub fn new(id: impl Into<String>) -> Self {
         Self { id: id.into(), role_ids: Vec::new() }
     }
 
     /// 设置角色 ID 集合。
-    ///
-    /// # 参数
-    /// * `role_ids` - 角色 ID 集合
-    ///
-    /// # 返回
-    /// 返回更新后的参数。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_role_ids(mut self, role_ids: Vec<String>) -> Self {
         self.role_ids = role_ids;
         self
@@ -220,17 +152,8 @@ pub struct AdminItem {
 }
 
 impl AdminItem {
-    /// 通过统一账号实体和角色构建管理员响应。
-    ///
-    /// # 参数
-    /// * `account` - 管理员统一账号实体
-    /// * `role_ids` - 管理员角色ID集合
-    ///
-    /// # 返回
-    /// 返回管理员响应结构。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 通过统一账号实体和角色构建管理员响应。
+    // 返回管理员响应结构。
     pub(super) fn from_account(account: AccountCore, role_ids: Vec<String>) -> Self {
         Self {
             id: account.base.id,

@@ -14,7 +14,7 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 use crate::wiring::workflow::work_item_service;
 
-/// 查询财务责任规则。
+/// 为财务责任分配配置读取现有规则，使用当前认证人及请求筛选条件。
 pub async fn finance_responsibility_rule_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -30,16 +30,7 @@ pub async fn finance_responsibility_rule_list(
 }
 
 /// 创建财务责任规则。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 当前操作人
-/// * `request` - 规则匹配范围与负责人
-///
-/// # 返回
 /// 返回新规则视图。
-///
-/// # 错误
 /// 请求非法、资格校验或规则创建失败时返回错误。
 pub async fn finance_responsibility_rule_create(
     State(state): State<HttpState>,
@@ -58,17 +49,7 @@ pub async fn finance_responsibility_rule_create(
 }
 
 /// 整项更新财务责任规则。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 当前操作人
-/// * `id` - 规则 ID
-/// * `request` - 预期版本与完整规则配置
-///
-/// # 返回
 /// 返回更新后的规则视图。
-///
-/// # 错误
 /// 请求非法、版本冲突、资格校验或规则更新失败时返回错误。
 pub async fn finance_responsibility_rule_update(
     State(state): State<HttpState>,
@@ -87,7 +68,7 @@ pub async fn finance_responsibility_rule_update(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 查询付款与销项开票的负责人候选。
+/// 需要为付款或销项开票指定责任人时读取各自符合条件的负责人候选。
 pub async fn finance_responsibility_owner_options(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,

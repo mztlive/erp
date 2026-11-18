@@ -26,13 +26,13 @@ pub(crate) struct Archive<'a> {
 }
 
 impl<'a> Archive<'a> {
-    /// 校验 ZIP 条目与展开边界后创建读取器。
-    /// # 参数
-    /// `bytes` 为工作簿字节，`limits` 为调用场景的展开限制。
-    /// # 返回
-    /// 可按安全路径读取 XML 的工作簿。
-    /// # 错误
-    /// ZIP 损坏、路径不安全、宏、外部链接或展开超限时拒绝。
+    // 校验 ZIP 条目与展开边界后创建读取器。
+    //
+    // `bytes` 为工作簿字节，`limits` 为调用场景的展开限制。
+    //
+    // 可按安全路径读取 XML 的工作簿。
+    //
+    // ZIP 损坏、路径不安全、宏、外部链接或展开超限时拒绝。
     pub(crate) fn open(bytes: &'a [u8], limits: ArchiveLimits) -> Result<Self> {
         let mut archive =
             ZipArchive::new(Cursor::new(bytes)).map_err(|_| invalid("请上传有效 .xlsx 工作簿"))?;
@@ -40,13 +40,13 @@ impl<'a> Archive<'a> {
         Ok(Self { archive })
     }
 
-    /// 有界读取必要 XML，读取错误不得降级为空内容。
-    /// # 参数
-    /// `name` 为包内路径。
-    /// # 返回
-    /// UTF-8 XML 原文。
-    /// # 错误
-    /// 缺项、CRC/解压失败、编码错误或超过 16 MiB 时拒绝。
+    // 有界读取必要 XML，读取错误不得降级为空内容。
+    //
+    // `name` 为包内路径。
+    //
+    // UTF-8 XML 原文。
+    //
+    // 缺项、CRC/解压失败、编码错误或超过 16 MiB 时拒绝。
     pub(crate) fn xml(&mut self, name: &str) -> Result<String> {
         let file = self
             .archive
@@ -63,24 +63,22 @@ impl<'a> Archive<'a> {
         String::from_utf8(bytes).map_err(|_| invalid("工作簿无法读取，请用表格软件重新另存为 .xlsx 后上传"))
     }
 
-    /// 检查包内条目是否存在，不读取内容。
-    /// # 参数
-    /// `name` 为经过解析的包内路径。
-    /// # 返回
-    /// 条目存在时为真。
-    /// # 错误
-    /// 无。
+    // 检查包内条目是否存在，不读取内容。
+    //
+    // `name` 为经过解析的包内路径。
+    //
+    // 条目存在时为真。
     pub(crate) fn contains(&self, name: &str) -> bool {
         self.archive.index_for_name(name).is_some()
     }
 
-    /// 仅将条目不存在视为可选内容缺失。
-    /// # 参数
-    /// `name` 为包内路径。
-    /// # 返回
-    /// 存在时返回 XML，不存在时返回 `None`。
-    /// # 错误
-    /// 条目存在但读取失败时返回原读取错误。
+    // 仅将条目不存在视为可选内容缺失。
+    //
+    // `name` 为包内路径。
+    //
+    // 存在时返回 XML，不存在时返回 `None`。
+    //
+    // 条目存在但读取失败时返回原读取错误。
     pub(crate) fn optional_xml(&mut self, name: &str) -> Result<Option<String>> {
         if !self.contains(name) {
             return Ok(None);
@@ -88,13 +86,13 @@ impl<'a> Archive<'a> {
         self.xml(name).map(Some)
     }
 
-    /// 读取字符串表并对 XML 实体执行一次解码。
-    /// # 参数
-    /// 使用当前工作簿。
-    /// # 返回
-    /// 按索引排列的文本；字符串表不存在时为空。
-    /// # 错误
-    /// 已存在的字符串表读取失败、结构损坏或 XML 非法时拒绝。
+    // 读取字符串表并对 XML 实体执行一次解码。
+    //
+    // 使用当前工作簿。
+    //
+    // 按索引排列的文本；字符串表不存在时为空。
+    //
+    // 已存在的字符串表读取失败、结构损坏或 XML 非法时拒绝。
     pub(crate) fn shared_strings(&mut self) -> Result<Vec<String>> {
         let Some(xml) = self.optional_xml("xl/sharedStrings.xml")? else {
             return Ok(Vec::new());

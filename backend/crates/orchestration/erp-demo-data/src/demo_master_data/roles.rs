@@ -23,24 +23,12 @@ pub(super) struct DemoRole {
 }
 
 impl DemoRole {
-    /// 同时绑定内建岗位身份和专用演示权限，保留人员目录资格授予来源。
-    /// # 参数
-    /// `account` 为当前岗位规格。
-    /// # 返回
-    /// 内建岗位与专用演示角色 ID。
-    /// # 错误
-    /// 无；角色输入已由构造过程校验。
+    // 为演示账号同时选出内建岗位和专用演示角色，使它既保留人员目录授予来源，又拥有本场景的业务动作权限。
     pub(super) fn account_role_ids(&self, account: &AccountSpec) -> Vec<String> {
         vec![account.role_id.clone(), self.id.clone()]
     }
 
-    /// 合并当前岗位推荐权限和演示必要动作，审批人同时取得读取与决定资格。
-    /// # 参数
-    /// `foundation` 为基础规格，`account` 为其中一个岗位。
-    /// # 返回
-    /// 固定身份的专用演示角色请求。
-    /// # 错误
-    /// 未登记岗位或必要权限声明缺失时拒绝。
+    // 合并岗位模板和演示必要权限，确保审批人由同一角色取得读取与决定资格。未登记岗位或缺少必要权限声明时不生成角色请求。
     pub(super) fn for_account(foundation: &FoundationFile, account: &AccountSpec) -> Result<Self> {
         let mut permissions = builtin_role_templates()?
             .into_iter()
@@ -72,13 +60,7 @@ impl DemoRole {
 }
 
 impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
-    /// 以当前管理员授权准备缺失岗位角色和演示角色，由账号步骤绑定并继续复验资格。
-    /// # 参数
-    /// `actor` 为请求发起人；`report` 接收变更说明。
-    /// # 返回
-    /// 所有演示岗位角色均已准备，账号创建步骤负责绑定。
-    /// # 错误
-    /// 身份冲突、角色失效、越权或策略写入失败时停止，已完成步骤可重试。
+    // 用当前管理员权限准备缺失岗位及演示专用角色，供账号步骤绑定并复验。身份冲突、角色失效、越权或写入失败时停止，已完成步骤可重试。
     pub(super) async fn ensure_demo_roles(
         &self,
         actor: &AuditActor,
@@ -134,7 +116,7 @@ mod tests {
 
     use super::*;
 
-    /// 部署模板覆盖演示岗位明确要求的业务动作。
+    // 验证部署使用的岗位模板已授予演示与财务执行所需动作，防止模板变更后演示流程失去资格。
     #[test]
     fn builtin_templates_cover_demo_and_finance_execution_contracts() {
         let catalog = builtin_role_templates().unwrap();
@@ -152,7 +134,7 @@ mod tests {
         }
     }
 
-    /// 运行真实岗位输入构造，覆盖新目录权限、整账及同角色审批权限。
+    // 用正式角色请求构造验证全部演示岗位覆盖目录、对账和同角色审批权限，避免靠测试专用权限通过。
     #[test]
     fn all_demo_roles_cover_current_templates_and_required_actions() {
         let foundation = spec::foundation_spec();
@@ -198,7 +180,7 @@ mod tests {
         );
     }
 
-    /// 演示授权使用与脚本种子相同的细分模板，不能重新合并财审、付款与开票写权限。
+    // 验证演示角色沿用部署的细分财务模板，不能把财务复核、付款和开票写权限合并给同一岗位。
     #[test]
     fn demo_finance_positions_keep_approval_and_execution_separate() {
         let foundation = spec::foundation_spec();
@@ -220,7 +202,7 @@ mod tests {
         assert!(!invoice.covers_one(&approve));
     }
 
-    /// 未登记岗位及缺失声明在任何角色写入前拒绝。
+    // 验证岗位未登记或缺少声明权限时，角色请求在任何写入前就被拒绝。
     #[test]
     fn unknown_template_and_missing_permissions_are_rejected() {
         let mut foundation: FoundationFile =

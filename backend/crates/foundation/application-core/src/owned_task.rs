@@ -2,32 +2,13 @@ use std::future::Future;
 
 use crate::Error;
 
-/// 将 Tokio JoinError 映射为内部错误，保留任务名便于诊断。
-///
-/// # 参数
-/// * `name` - 用于 JoinError 诊断的任务名称
-/// * `error` - 任务 join 失败原因（panic 或取消）
-///
-/// # 返回值
-/// 统一的 `Error::Internal`。
-///
-/// # 错误
-/// 无；本函数本身只做错误转换。
+// 将关键后台任务的 panic 或取消归为内部错误，并保留任务名供排查。
 fn map_owned_join_error(name: &'static str, error: tokio::task::JoinError) -> Error {
     Error::Internal(format!("{name}后台任务异常终止: {error}"))
 }
 
-/// 在独立 Tokio 任务中运行关键操作，使调用方取消不会终止收尾流程。
-///
-/// # 参数
-/// * `name` - 用于 JoinError 诊断的任务名称
-/// * `operation` - 需要独立持有的异步操作
-///
-/// # 返回
-/// 返回异步操作的原始结果。
-///
-/// # 错误
-/// 当异步操作失败或任务 panic/被终止时返回错误。
+/// 把关键操作交给独立 Tokio 任务。任务启动后，即使等待方取消，操作仍能完成提交或收尾。
+/// 业务错误原样返回并在任务内记录；任务 panic 或被终止则转换为内部错误。
 pub async fn await_owned<T, E, F>(name: &'static str, operation: F) -> std::result::Result<T, E>
 where
     T: Send + 'static,

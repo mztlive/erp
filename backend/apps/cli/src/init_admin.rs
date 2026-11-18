@@ -7,17 +7,8 @@ use crate::error::Result;
 use crate::password::resolve_password;
 use crate::runtime::AdminRuntime;
 
-/// 执行超级管理员初始化。
-///
-/// # 参数
-/// * `source` - 文件或 Nacos 配置来源
-/// * `args` - 账号、名称与可选密码
-///
-/// # 返回值
-/// 初始化成功返回 `Ok(())`。
-///
-/// # 错误
-/// 配置、数据库、密码输入或服务编排失败时返回错误。
+/// 处理 `init-admin`：通过身份域用例创建超级管理员，或更新已有管理员的显示名称和密码、
+/// 恢复启用并补绑 `role-root`。恢复管理员权限时用此命令；只改密码则用 `reset-password`。
 pub async fn run(source: &ConfigArgs, args: InitAdminArgs) -> Result<()> {
     let password = resolve_password(args.password)?;
     let runtime = AdminRuntime::connect(source).await?;
@@ -33,16 +24,7 @@ pub async fn run(source: &ConfigArgs, args: InitAdminArgs) -> Result<()> {
     Ok(())
 }
 
-/// 向标准输出打印初始化结果，不包含密码。
-///
-/// # 参数
-/// * `result` - 超级管理员初始化结果
-///
-/// # 返回值
-/// 无。
-///
-/// # 错误
-/// 无。
+// 初始化成功后向运维人员汇报账号是新建还是修复，以及是否恢复启用、补绑 root；不输出密码。
 fn print_result(result: &InitializeSuperAdminResult) {
     let action = if result.created { "已创建" } else { "已更新" };
     info!(account = %result.account, admin_id = %result.admin_id, created = result.created, "超级管理员初始化完成");

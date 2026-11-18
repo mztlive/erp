@@ -21,11 +21,9 @@ pub struct MongoSupplierMessageStore {
 
 impl MongoSupplierMessageStore {
     /// 在本轮全部外部调用已经返回后释放消费租期，允许下一轮及时接收。
-    /// # 参数
-    /// 无。
-    /// # 返回
+    ///
     /// 原围栏仍有效时释放，不修改消息处理及未知结果。
-    /// # 错误
+    ///
     /// 数据库失败或已被替换时拒绝释放其他消费者租期。
     pub async fn release(&self) -> Result<()> {
         if !self
@@ -40,12 +38,12 @@ impl MongoSupplierMessageStore {
     }
 
     /// 建立不可转移的消费连接绑定，并原子领取有界账号租期。
-    /// # 参数
+    ///
     /// `account` 必须来自绑定适配器配置；`connection` 为已授权连接；`owner` 为本轮唯一消费者。
     /// `lease_seconds` 范围1—300，调用方必须在到期前停止新外部动作。
-    /// # 返回
+    ///
     /// 成功领取返回当前适配器；其他消费者仍占用时返回 None。
-    /// # 错误
+    ///
     /// 账号已被另一连接绑定、身份无效或数据库失败时拒绝。
     pub async fn claim(
         db: Database,

@@ -38,7 +38,7 @@ impl Expected {
     }
 }
 
-/// 核对实际 HTTP status、完整 JSON 信封和响应头，不复用被测分类/消息函数。
+// 按独立期望值断言实际状态、完整 JSON 信封及响应头，避免用同一映射函数同时生成预期和实际结果。
 async fn assert_response(label: &str, error: Error, expected: Expected) {
     let response = error.into_response();
     assert_eq!(response.status().as_u16(), expected.status, "{label}: HTTP status");

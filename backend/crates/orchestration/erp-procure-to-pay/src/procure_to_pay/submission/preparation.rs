@@ -70,16 +70,11 @@ pub(super) struct PreparedPurchaseSubmit {
 }
 
 impl PurchaseOrderProcess {
-    /// 按既有读取顺序准备领域冻结事实、审批计划和命令回执。
-    ///
-    /// # 参数
-    /// * `command` - 已校验请求及当前调用人的同一次提交身份。
-    ///
-    /// # 返回
-    /// 返回由提交入口事务统一应用的持久化输入和冻结结果身份。
-    ///
-    /// # 错误
-    /// 传播范围、版本、草稿、来源、绑定和审批计划的原始错误。
+    // 按既有读取顺序准备领域冻结事实、审批计划和命令回执。
+    //
+    // `command` 为已校验请求及当前调用人的同一次提交身份。返回由提交入口事务统一应用的持久化输入和冻结结果身份。
+    //
+    // 传播范围、版本、草稿、来源、绑定和审批计划的原始错误。
     pub(super) async fn prepare_purchase_submit(
         &self,
         command: &PurchaseSubmitCommand<'_>,
@@ -98,7 +93,7 @@ impl PurchaseOrderProcess {
         self.prepare_submit_persistence(context, approval, command)
     }
 
-    /// 读取当前有提交资格的采购单、冻结绑定和仍可编辑的草稿。
+    // 读取当前有提交资格的采购单、冻结绑定和仍可编辑的草稿。
     async fn load_submit_draft(
         &self,
         command: &PurchaseSubmitCommand<'_>,
@@ -133,7 +128,7 @@ impl PurchaseOrderProcess {
         Ok(PurchaseSubmitDraft { order, binding, submission, lines })
     }
 
-    /// 核对来源责任组织，准备正式号和旧草稿失效事实；此处不写库。
+    // 核对来源责任组织，准备正式号和旧草稿失效事实；此处不写库。
     async fn prepare_submit_source(
         &self,
         mut draft: PurchaseSubmitDraft,
@@ -171,7 +166,7 @@ impl PurchaseOrderProcess {
         })
     }
 
-    /// 补丁合并和冻结仍委托采购领域；覆盖 guard 留给同一启动写事务重验。
+    // 补丁合并和冻结仍委托采购领域；覆盖 guard 留给同一启动写事务重验。
     async fn freeze_submit_draft(
         &self,
         context: &mut PurchaseSubmitContext,
@@ -213,7 +208,7 @@ impl PurchaseOrderProcess {
         Ok(())
     }
 
-    /// 领域动作推进后，依据同一冻结版本读取定义、收据并准备审批计划。
+    // 领域动作推进后，依据同一冻结版本读取定义、收据并准备审批计划。
     async fn prepare_submit_approval(
         &self,
         context: &mut PurchaseSubmitContext,
@@ -274,7 +269,7 @@ impl PurchaseOrderProcess {
         Ok(PurchaseSubmitApproval { prepared: prepare_start(input)?, snapshot, owner_role })
     }
 
-    /// 构造同一启动事务的审计、回执及对象授权重验输入。
+    // 构造同一启动事务的审计、回执及对象授权重验输入。
     fn prepare_submit_persistence(
         &self,
         context: PurchaseSubmitContext,

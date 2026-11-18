@@ -49,13 +49,8 @@ pub struct BackfillProblem {
 }
 
 impl ResourceGrantProcess {
-    /// 按正式证据预览或执行一页存量回填。
-    /// # 参数
-    /// actor 为管理员，request 固定证据类型、排他游标及 dry_run。
-    /// # 返回
-    /// 返回新增、已有、永久终止和无效证据明细；空页结束本类型扫描。
-    /// # 错误
-    /// 权限或基础设施错误中止整页；未知提交结果不自动重试。
+    /// 校验管理员权限后，按指定证据类型和排他游标处理一页历史记录。预览只统计，执行只追加授权事件，不重放已有审批、转派或财务命令。
+    /// 报告区分新增、已有、永久终止和无效证据，空页代表本类扫描结束。权限或基础设施错误中止整页，提交结果未知时不自动重试。
     pub async fn backfill(&self, actor: &AuditActor, request: BackfillRequest) -> Result<BackfillReport> {
         validate_cursor(request.after.as_deref())?;
 

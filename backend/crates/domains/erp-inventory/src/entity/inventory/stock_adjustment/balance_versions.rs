@@ -12,32 +12,13 @@ pub struct StockAdjustmentBalanceVersions<'a> {
 }
 
 impl<'a> StockAdjustmentBalanceVersions<'a> {
-    /// 建立本次读取的余额索引，不产生授权或查询。
-    ///
-    /// # 参数
-    /// * `balances` - 同一执行器读取的未删除余额
-    ///
-    /// # 返回
-    /// 返回按余额主键索引的事实。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将同一执行器已读到的未删除库存余额按主键索引，供本次调整逐项核对；不再次查询或执行授权。
     pub fn new(balances: &'a [StockBalance]) -> Self {
         Self { balances: balances.iter().map(|balance| (balance.base.id.as_str(), balance)).collect() }
     }
 
-    /// 逐输入行校验重复、存在、版本及维度，再确认覆盖全部调整 SKU。
-    ///
-    /// # 参数
-    /// * `adjustment` - 待提交的调整单。
-    /// * `lines` - 最终明细。
-    /// * `expected` - 按原命令顺序排列的余额主键与期望版本。
-    ///
-    /// # 返回
-    /// 所有版本有效且完整覆盖调整维度时成功。
-    ///
-    /// # 错误
-    /// 返回原输入次序的首个重复、缺失、版本冲突或维度错误。
+    /// 提交调整前按原命令顺序核对余额主键是否重复、记录是否存在、版本是否相等及仓库/SKU 是否匹配，再检查是否覆盖全部调整 SKU。
+    /// 按该顺序返回首个输入错误，不让后续重复遮盖较早的缺失或版本冲突。
     pub fn validate(
         &self,
         adjustment: &StockAdjustment,
@@ -71,18 +52,8 @@ impl<'a> StockAdjustmentBalanceVersions<'a> {
         Ok(())
     }
 
-    /// 判断历史弱收据的余额版本是否仍精确匹配且一一覆盖调整 SKU。
-    ///
-    /// # 参数
-    /// * `adjustment` - 当前调整单。
-    /// * `lines` - 已保存的明细。
-    /// * `expected` - 原提交命令的余额主键与期望版本。
-    ///
-    /// # 返回
-    /// 版本与维度全部匹配且每个 SKU 恰有一条余额要求时为 `true`。
-    ///
-    /// # 错误
-    /// 无；任何版本或维度校验失败均返回 `false`。
+    /// 恢复历史弱回执时，除使用原提交的余额主键和版本核对最终保存的明细，还要求每个调整 SKU 恰有一条余额要求。
+    /// 缺失、重复、维度或版本不符均返回 `false`。
     pub fn matches_legacy_result(
         &self,
         adjustment: &StockAdjustment,
@@ -104,7 +75,7 @@ mod tests {
         StockBalanceData,
     };
 
-    /// 构造具有一个 SKU 明细的合法调整单。
+    // 构造具有一个 SKU 明细的合法调整单。
     fn adjustment() -> (StockAdjustment, Vec<StockAdjustmentLine>) {
         let adjustment = StockAdjustment::new(
             StockAdjustmentId::new("adjustment"),
@@ -133,7 +104,7 @@ mod tests {
         (adjustment, vec![line])
     }
 
-    /// 构造固定版本的合法余额事实。
+    // 构造固定版本的合法余额事实。
     fn balance(id: &str) -> StockBalance {
         let mut balance = StockBalance::new(
             StockBalanceId::new(id),
@@ -151,7 +122,7 @@ mod tests {
         balance
     }
 
-    /// 完整匹配成立；空要求只能覆盖空明细。
+    // 验证完整匹配成立；空要求只能覆盖空明细。
     #[test]
     fn validates_complete_versions_and_empty_boundaries() {
         let (adjustment, lines) = adjustment();
@@ -165,7 +136,7 @@ mod tests {
         );
     }
 
-    /// 后续重复不能盖过前一行缺失或版本冲突。
+    // 验证后续重复不能盖过前一行缺失或版本冲突。
     #[test]
     fn retains_first_input_failure_before_later_duplicate() {
         let (adjustment, lines) = adjustment();
@@ -182,7 +153,7 @@ mod tests {
         );
     }
 
-    /// 同一行先检查版本再检查维度；错误维度仍拒绝。
+    // 验证同一行先检查版本再检查维度；错误维度仍拒绝。
     #[test]
     fn retains_version_before_dimension_failure() {
         let (adjustment, lines) = adjustment();
@@ -200,7 +171,7 @@ mod tests {
         assert!(!facts.matches_legacy_result(&adjustment, &lines, &[("balance", 3)]));
     }
 
-    /// 正式提交覆盖维度即可，历史弱收据还要求每个 SKU 恰有一行余额。
+    // 验证正式提交覆盖维度即可，历史弱收据还要求每个 SKU 恰有一行余额。
     #[test]
     fn legacy_result_retains_one_to_one_sku_requirement() {
         let (adjustment, lines) = adjustment();

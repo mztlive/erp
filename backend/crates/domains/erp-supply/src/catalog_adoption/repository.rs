@@ -13,36 +13,12 @@ const COMMANDS: &str = "supplier_catalog_adoption_commands";
 /// 选品冻结、原结果与来源商品映射的领域仓储。
 pub trait CatalogAdoptionExt {
     /// 取得批次操作号原始载荷仓储。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 当前数据库仓储。
-    /// # 错误
-    /// 不返回错误。
     fn catalog_adoption_commands(&self) -> Repository<'_, CatalogAdoptionCommand>;
     /// 取得冻结预览仓储。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 当前数据库仓储。
-    /// # 错误
-    /// 不返回错误。
     fn catalog_adoption_previews(&self) -> Repository<'_, CatalogAdoptionPreview>;
     /// 取得永久选品回执仓储。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 当前数据库仓储。
-    /// # 错误
-    /// 不返回错误。
     fn catalog_adoption_receipts(&self) -> Repository<'_, CatalogAdoptionReceipt>;
     /// 取得来源商品与公司商品的唯一关系仓储。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 当前数据库仓储。
-    /// # 错误
-    /// 不返回错误。
     fn catalog_adoption_products(&self) -> Repository<'_, CatalogAdoptionProduct>;
 }
 
@@ -62,11 +38,7 @@ impl CatalogAdoptionExt for Database {
 }
 
 /// 查询指定操作号是否已有该公司商品的成功选品回执。
-/// # 参数
-/// `db` 为当前数据库，`command` 为操作号，`product` 为公司商品身份，`executor` 为调用方执行器。
-/// # 返回
 /// 存在匹配回执时返回 true。
-/// # 错误
 /// 数据库查询失败时透传错误。
 pub async fn has_product_receipt(
     db: &Database,
@@ -80,11 +52,7 @@ pub async fn has_product_receipt(
 }
 
 /// 增量创建选品唯一身份及预览归属查询索引。
-/// # 参数
-/// `db` 为目标数据库。
-/// # 返回
 /// 所有命名索引建立成功。
-/// # 错误
 /// 唯一冲突或数据库失败时拒绝。
 pub async fn ensure_indexes(db: &Database) -> Result<()> {
     db.collection::<CatalogAdoptionCommand>(COMMANDS)

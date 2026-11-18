@@ -3,13 +3,12 @@ use super::plan::{PolicyRoleState, PolicyUserState};
 use crate::{Error, Permission, Result, Role, RoleIdSet};
 
 impl PolicyRoleState {
-    /// 校验已读取的角色事实，禁止新建分支接回遗留继承权限。
-    /// # 参数
-    /// role 为可缺失实体，permissions、parents、subjects 为同一事务读取的 Casbin 事实。
-    /// # 返回
-    /// 完整普通角色事实；完全不存在的身份返回空。
-    /// # 错误
-    /// 继承、孤立授权、非后台主体或影响规模超限时拒绝。
+    // 校验已读取的角色事实，禁止新建分支接回遗留继承权限。
+    // 完整普通角色事实；完全不存在的身份返回空。
+    //
+    // 继承、孤立授权、非后台主体或影响规模超限时拒绝。
+    //
+    // role 为可缺失实体，permissions、parents、subjects 为同一事务读取的 Casbin 事实。
     pub(crate) fn from_parts(
         role: Option<Role>,
         permissions: Vec<Permission>,
@@ -49,13 +48,12 @@ impl PolicyRoleState {
 }
 
 impl PolicyUserState {
-    /// 只接受实际角色键，不能静默丢弃文件无法表达的主体继承。
-    /// # 参数
-    /// version 为账号版本，keys 为持久化直接分组键。
-    /// # 返回
-    /// 稳定排序的人员角色事实。
-    /// # 错误
-    /// 存在非角色分组或非法角色标识时拒绝。
+    // 只接受实际角色键，不能静默丢弃文件无法表达的主体继承。
+    // 稳定排序的人员角色事实。
+    //
+    // 存在非角色分组或非法角色标识时拒绝。
+    //
+    // version 为账号版本，keys 为持久化直接分组键。
     pub(crate) fn from_role_keys(version: u64, keys: Vec<String>) -> Result<Self> {
         if keys.iter().any(|key| !key.starts_with("role:")) {
             return Err(Error::ValidationError("人员绑定包含非角色分组，不能用1.0文件管理".into()));

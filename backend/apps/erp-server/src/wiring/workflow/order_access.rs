@@ -15,21 +15,10 @@ use persistence_core::Executor;
 use super::map_service;
 use crate::wiring::errors::Error;
 
-/// 审批沿强实体外键取得当前订单，展示根节点不提供读取权。
-///
-/// # 参数
-/// * `db` - 订单事实所在数据库。
-/// * `authorization` - 启动时完整绑定的共享授权服务。
-/// * `actor` - 当前操作人。
-/// * `document_type` - 审批单据类型。
-/// * `document_id` - 单据编号。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
-/// 当前订单来源在详情范围内时返回 `true`；没有事实时返回 `false`。
-///
-/// # 错误
-/// 单据类型未接入订单审批、来源事实与类型不符，或读模型查询失败时返回错误。
+// 审批沿强实体外键取得当前订单，展示根节点不提供读取权。
+// `authorization` 为启动时完整绑定的共享授权服务，`executor` 为调用方执行器。
+// 当前订单来源在详情范围内时返回 `true`；没有事实时返回 `false`。
+// 单据类型未接入订单审批、来源事实与类型不符，或读模型查询失败时返回错误。
 pub(super) async fn approval_readable(
     db: &Database,
     authorization: &AuthorizationService,

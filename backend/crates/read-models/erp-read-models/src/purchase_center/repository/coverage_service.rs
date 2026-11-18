@@ -24,12 +24,10 @@ impl ProcurementCoveragePort for DatabaseCoverageSource<'_> {
             .map_err(Into::into)
     }
 }
-/// 加载销售当前修订采购覆盖，保留原当前指针错误与同一执行器。
+/// 为采购覆盖进度取数时，读取销售当前修订采购覆盖，保留原当前指针错误与同一执行器。
 ///
 /// # 参数
-/// * `db` - 目标数据库。
 /// * `order` - 销售单。
-/// * `executor` - 调用方执行器。
 ///
 /// # 返回
 /// 返回销售当前修订的采购覆盖。

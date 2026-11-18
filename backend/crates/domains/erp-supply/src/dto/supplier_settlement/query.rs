@@ -95,18 +95,11 @@ pub(crate) struct StatementListQuery {
 }
 
 impl SupplierSettlementStatementListParams {
-    /// 归一化结算单列表查询参数。
-    ///
-    /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法、期间日期非法、期间开始晚于结束，或人员筛选包含 `me` 时返回 `ValidationError`。
+    // 将客户端输入规整为可用于筛选的结算单列表查询参数。
+    // 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
+    // 返回不依赖仓储类型的规范化查询参数。
+    // 排序字段不在白名单或排序方向非法、期间日期非法、期间开始晚于结束，或人员筛选包含 `me` 时返回
+    // `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<StatementListQuery> {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, STATEMENT_SORT_FIELDS)?;
 
@@ -142,7 +135,7 @@ impl SupplierSettlementStatementListParams {
     }
 }
 
-/// 人员筛选出现忽略大小写的 `me` 时拒绝。
+// 人员筛选出现忽略大小写的 `me` 时拒绝。
 fn reject_me_ids(ids: Option<&application_core::QueryIds>) -> Result<()> {
     if ids.is_some_and(|ids| ids.as_slice().iter().any(|id| id.eq_ignore_ascii_case("me"))) {
         return Err(crate::Error::ValidationError("人员筛选必须为稳定 ID，不能使用 me".into()));
@@ -150,7 +143,7 @@ fn reject_me_ids(ids: Option<&application_core::QueryIds>) -> Result<()> {
     Ok(())
 }
 
-/// 空白期间视为未填；其余文本必须能解析为业务日期。
+// 空白期间视为未填；其余文本必须能解析为业务日期。
 fn optional_business_date(value: Option<&str>, field: &str) -> Result<Option<BusinessDate>> {
     value
         .map(str::trim)
@@ -232,13 +225,7 @@ pub struct SupplierSettlementStatementView {
 }
 
 impl From<SupplierSettlementStatement> for SupplierSettlementStatementView {
-    /// 从实体构造响应视图。
-    ///
-    /// # 参数
-    /// * `statement` - 结算单实体
-    ///
-    /// # 返回
-    /// 返回响应视图。
+    // 将 `SupplierSettlementStatement` 转换为 API 响应字段，调用方可直接使用投影而不必序列化整个实体。
     fn from(statement: SupplierSettlementStatement) -> Self {
         let difference_handler_user_id = statement.difference_handler().to_string();
         Self {
@@ -305,18 +292,10 @@ pub(crate) struct SettlementItemListQuery {
 }
 
 impl SupplierSettlementItemListParams {
-    /// 归一化结算明细列表查询参数。
-    ///
-    /// 分页取默认值、排序字段过白名单校验。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    // 将客户端输入规整为可用于筛选的结算明细列表查询参数。
+    // 分页取默认值、排序字段过白名单校验。
+    // 返回不依赖仓储类型的规范化查询参数。
+    // 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<SettlementItemListQuery> {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, ITEM_SORT_FIELDS)?;
         Ok(SettlementItemListQuery {
@@ -399,18 +378,10 @@ pub(crate) struct SettlementDifferenceListQuery {
 }
 
 impl SupplierSettlementDifferenceListParams {
-    /// 归一化结算差异列表查询参数。
-    ///
-    /// 分页取默认值、排序字段过白名单校验。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    // 将客户端输入规整为可用于筛选的结算差异列表查询参数。
+    // 分页取默认值、排序字段过白名单校验。
+    // 返回不依赖仓储类型的规范化查询参数。
+    // 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<SettlementDifferenceListQuery> {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, DIFFERENCE_SORT_FIELDS)?;
         Ok(SettlementDifferenceListQuery {

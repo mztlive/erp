@@ -58,18 +58,12 @@ pub struct ProductImportProcess {
 impl ProductImportProcess {
     /// 创建导入流程。
     ///
-    /// # 参数
-    /// * `db` - MongoDB 数据库。
-    /// * `services` - 应用装配的目录、供给与数据范围服务。
-    /// * `authorization` - 实时身份与权限服务。
-    /// * `storage` - 对象存储。
-    /// * `secret` - 文件内容指纹密钥。
+    /// - `db`：MongoDB 数据库。
+    /// - `services`：应用装配的目录、供给与数据范围服务。
+    /// - `authorization`：实时身份与权限服务。
+    /// - `secret`：文件内容指纹密钥。
     ///
-    /// # 返回
     /// 返回流程实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(
         db: Database,
         services: ProductImportServices,

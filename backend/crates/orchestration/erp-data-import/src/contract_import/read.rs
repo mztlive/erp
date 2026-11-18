@@ -11,17 +11,17 @@ use crate::Result;
 
 impl ContractImportProcess {
     /// 查询本人任务并在同一快照核验合同创建资格。
-    /// # 参数
+    ///
     /// id 为任务，actor 为当前账号。
-    /// # 返回
+    ///
     /// 不含全文和存储键的任务视图。
-    /// # 错误
+    ///
     /// 账号无效、资格不足、任务不归属当前人或读取失败时拒绝。
     pub async fn detail(&self, id: &str, actor: &AuditActor) -> Result<ImportView> {
         Ok(self.task(id, actor).await?.into())
     }
 
-    /// 在独立读取快照中取得本人任务，后续写入仍须在原写事务重验。
+    // 在独立读取快照中取得本人任务，后续写入仍须在原写事务重验。
     pub(super) async fn task(&self, id: &str, actor: &AuditActor) -> Result<ContractImport> {
         let process = self.clone();
         let id = id.to_owned();
@@ -34,7 +34,7 @@ impl ContractImportProcess {
             .await
     }
 
-    /// 在原快照完成资格和任务归属读取。
+    // 在原快照完成资格和任务归属读取。
     pub(super) async fn task_stage(
         &self,
         id: &str,
@@ -46,11 +46,11 @@ impl ContractImportProcess {
     }
 
     /// 查询本人识别历史，功能资格、分页和计数使用同一快照。
-    /// # 参数
+    ///
     /// page 为页码，revision_contract_id 为可选追加目标，actor 为当前账号。
-    /// # 返回
+    ///
     /// 每页二十条的任务视图。
-    /// # 错误
+    ///
     /// 账号或资格无效、事务或读取失败时拒绝。
     pub async fn list(
         &self,
@@ -80,11 +80,11 @@ impl ContractImportProcess {
     }
 
     /// 获取本人任务的可用原文件，授权与读取使用原事务。
-    /// # 参数
+    ///
     /// id 为任务身份，actor 为当前账号。
-    /// # 返回
+    ///
     /// 仅供受控读取的文件资产。
-    /// # 错误
+    ///
     /// 无资格、非本人任务、文件不可用或事务失败时拒绝。
     pub async fn source(&self, id: &str, actor: &AuditActor) -> Result<FileAsset> {
         let process = self.clone();

@@ -22,13 +22,13 @@ pub(super) struct CreationIdentity {
 }
 
 impl CustomerProfileProcess {
-    /// 在写事务内锁定名称、查重并解析创建身份。
-    /// # 参数
-    /// * `req` / `actor` / `executor` - 创建请求、操作人及原事务执行器。
-    /// # 返回
-    /// 返回新主体，或经用户确认且尚无客户角色的现有主体。
-    /// # 错误
-    /// 身份歧义、已建客户、未确认复用、主体不可用或数据库失败时拒绝。
+    // 在写事务内锁定名称、查重并解析创建身份。
+    //
+    // `req` / `actor` / `executor`：创建请求、操作人及原事务执行器。
+    //
+    // 返回新主体，或经用户确认且尚无客户角色的现有主体。
+    //
+    // 身份歧义、已建客户、未确认复用、主体不可用或数据库失败时拒绝。
     pub(super) async fn creation_identity(
         &self,
         req: &SaveCustomerProfileRequest,
@@ -60,7 +60,7 @@ impl CustomerProfileProcess {
         .await
     }
 
-    /// 复用必须保留已有主体资料，并且不能隐式加入已有客户的销售范围。
+    // 复用必须保留已有主体资料，并且不能隐式加入已有客户的销售范围。
     async fn reuse_identity(
         &self,
         party: Party,

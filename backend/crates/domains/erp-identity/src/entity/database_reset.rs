@@ -6,18 +6,13 @@ use erp_core::AccountKind;
 use super::{AccountCore, ROOT_ROLE_ID, Role};
 use crate::{Error, Result};
 
-/// 仅允许有效 admin 本人以有效内建超级管理员身份执行全库重置。
-///
-/// # 参数
-/// * `actor` - 当前操作人，必须是 `account` 本人且类型为后台管理员。
-/// * `account` - 被核对的账号；登录名必须是 `admin`，且当前可承担后台责任。
-/// * `role` - 被核对的角色；必须是未删除、未停用的内建 `ROOT_ROLE_ID`。
-///
-/// # 返回
-/// 身份全部符合时无返回值。
-///
-/// # 错误
-/// 任一条件不满足时返回 `Error::Forbidden`。
+// 仅允许有效 admin 本人以有效内建超级管理员身份执行全库重置。
+// 身份全部符合时无返回值。
+//
+// 任一条件不满足时返回 `Error::Forbidden`。
+//
+// `actor`：当前操作人，必须是 `account` 本人且类型为后台管理员；`account`：被核对的账号；登录名必须是 `admin`，且当前可承担后台责任。
+// `role`：被核对的角色；必须是未删除、未停用的内建 `ROOT_ROLE_ID`。
 pub(crate) fn ensure_reset_admin(actor: &AuditActor, account: &AccountCore, role: &Role) -> Result<()> {
     if actor.kind() != AccountKind::Admin
         || actor.id() != account.base.id

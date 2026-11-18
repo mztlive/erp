@@ -58,17 +58,11 @@ struct ExpenseCommand {
 impl PurchaseOrderProcess {
     /// 从已生效的实物与服务销售单追加一张费用采购单，并立即提交审批。
     ///
-    /// # 参数
-    /// * `sales_order_id` - 来源销售单
-    /// * `req` - 收款供应商、付款条件、费用行与幂等键
-    /// * `actor` - 已通过 `purchase_order:create` 鉴权的操作人
+    /// `sales_order_id` 为来源销售单；`req` 为收款供应商、付款条件、费用行与幂等键；`actor` 为已通过 `purchase_order:create` 鉴权的操作人。
     ///
-    /// # 返回
     /// 返回已提交审批的采购单；同一幂等键同一载荷重复提交时返回原结果。
     ///
-    /// # 错误
-    /// 输入非法、销售单不可见或不可追加费用、归属明细无效、供应商不存在或缺少商务结算版本、
-    /// 付款条件非法、幂等键载荷冲突、审批绑定或写入失败时返回错误。
+    /// 输入非法、销售单不可见或不可追加费用、归属明细无效、供应商不存在或缺少商务结算版本、付款条件非法、幂等键载荷冲突、审批绑定或写入失败时返回错误。
     pub async fn create_expense_purchase(
         &self,
         sales_order_id: &str,
@@ -101,7 +95,7 @@ impl PurchaseOrderProcess {
         }
     }
 
-    /// 在原业务事务内重验授权并执行建单与提交。
+    // 在原业务事务内重验授权并执行建单与提交。
     async fn expense_transaction(
         &self,
         command: ExpenseCommand,
@@ -123,7 +117,7 @@ impl PurchaseOrderProcess {
     }
 }
 
-/// 事务内重放检查、资格校验、建单、提交与回执。
+// 事务内重放检查、资格校验、建单、提交与回执。
 async fn apply_expense_create(
     db: &Database,
     ports: &PurchaseOrderPorts,
@@ -184,7 +178,7 @@ async fn apply_expense_create(
     write_expense_receipt(db, command, receipt, executor).await
 }
 
-/// 读取操作人可见、已生效的实物与服务销售单，并校验每条归属明细。
+// 读取操作人可见、已生效的实物与服务销售单，并校验每条归属明细。
 async fn load_expense_source(
     db: &Database,
     rbac: &Arc<AuthorizationService>,
@@ -201,7 +195,7 @@ async fn load_expense_source(
     Ok(order)
 }
 
-/// 构造费用采购单主表、草稿提交与费用行，并证明对象范围。
+// 构造费用采购单主表、草稿提交与费用行，并证明对象范围。
 async fn prepare_expense_draft(
     db: &Database,
     ports: &PurchaseOrderPorts,
@@ -246,7 +240,7 @@ async fn prepare_expense_draft(
     Ok((order, submission, lines))
 }
 
-/// 按操作人主属组织构造费用采购单主表。
+// 按操作人主属组织构造费用采购单主表。
 async fn new_expense_order(
     db: &Database,
     sales_order: &SalesOrder,
@@ -280,7 +274,7 @@ async fn new_expense_order(
     .map_err(Into::into)
 }
 
-/// 读取收款供应商当前法定名称作为快照。
+// 读取收款供应商当前法定名称作为快照。
 async fn supplier_name(
     db: &Database,
     req: &CreateExpensePurchaseRequest,
@@ -294,7 +288,7 @@ async fn supplier_name(
         .ok_or_else(|| Error::ValidationError("收款供应商不存在，请先建立供应商档案".into()))
 }
 
-/// 写入可回放的建单回执与创建审计。
+// 写入可回放的建单回执与创建审计。
 async fn write_expense_receipt(
     db: &Database,
     command: &ExpenseCommand,

@@ -36,13 +36,8 @@ pub enum Command {
 }
 
 impl Cli {
-    /// 解析实际命令参数，并隐藏失败参数，避免错误回显误传的凭据。
-    /// # 参数
-    /// `arguments` 为进程参数或单测参数，包含程序名。
-    /// # 返回
-    /// 合法命令；帮助和版本输出保留 Clap 标准结果。
-    /// # 错误
-    /// 用法失败返回固定摘要，不保留原始参数、值或底层解析错误正文。
+    /// 解析带程序名的完整 CLI 参数。帮助和版本保留 Clap 的标准输出；用法错误只保留类别
+    /// 和固定提示，避免把误传的令牌或密码回显到终端。
     pub fn try_parse_safe_from<I, T>(arguments: I) -> Result<Self, clap::Error>
     where
         I: IntoIterator<Item = T>,
@@ -79,13 +74,7 @@ pub struct JdVopCredentialImportArgs {
 }
 
 impl fmt::Debug for JdVopCredentialImportArgs {
-    /// 只输出非敏感操作模式；输入路径及授权依据隐藏。
-    /// # 参数
-    /// `formatter` 为调试格式化器。
-    /// # 返回
-    /// 脱敏调试输出。
-    /// # 错误
-    /// 仅格式化器写入失败时返回错误。
+    // 调试导入命令时保留版本和操作模式，隐藏本地输入路径及重新授权依据。
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("JdVopCredentialImportArgs")
@@ -124,16 +113,7 @@ pub struct ResetPasswordArgs {
 }
 
 impl fmt::Debug for InitAdminArgs {
-    /// 输出不含明文密码的调试信息。
-    ///
-    /// # 参数
-    /// * `formatter` - 调试格式化器
-    ///
-    /// # 返回值
-    /// 格式化成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 写入格式化器失败时返回底层格式化错误。
+    // 诊断初始化参数时保留目标账号和显示名称，密码只显示是否提供。
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("InitAdminArgs")
@@ -145,16 +125,7 @@ impl fmt::Debug for InitAdminArgs {
 }
 
 impl fmt::Debug for ResetPasswordArgs {
-    /// 输出不含明文密码的调试信息。
-    ///
-    /// # 参数
-    /// * `formatter` - 调试格式化器
-    ///
-    /// # 返回值
-    /// 格式化成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 写入格式化器失败时返回底层格式化错误。
+    // 诊断密码重置参数时保留目标账号，不让已传入的密码进入调试输出。
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("ResetPasswordArgs")
@@ -164,16 +135,7 @@ impl fmt::Debug for ResetPasswordArgs {
     }
 }
 
-/// 将可选密码替换为脱敏标记。
-///
-/// # 参数
-/// * `password` - 命令行中的可选明文密码
-///
-/// # 返回值
-/// 未提供时返回 `None`，已提供时返回脱敏标记。
-///
-/// # 错误
-/// 无。
+// 供两个管理员命令的调试输出使用：已提供的密码统一显示为遮罩，未提供的仍显示为缺省。
 fn redacted_password(password: &Option<String>) -> Option<&'static str> {
     password.as_ref().map(|_| "[REDACTED]")
 }

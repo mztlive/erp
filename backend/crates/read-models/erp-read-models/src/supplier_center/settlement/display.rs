@@ -16,12 +16,14 @@ use super::{SettlementStatementResult, SupplierSettlementReadService};
 use crate::Result;
 
 impl SupplierSettlementReadService {
-    /// 为已执行的正式结果补齐结算单名称。
+    /// 处理供应商结算时，为已执行的正式结果补齐结算单名称。
     ///
     /// # 参数
     /// * `result` - 已通过原授权和命令规则的结果。
+    ///
     /// # 返回
     /// 返回同一正式结果及可读结算单名称。
+    ///
     /// # 错误
     /// 名称缺失或附加读取失败时保持正式结果，名称为空。
     pub async fn statement_result<T: SettlementStatementResult>(&self, result: T) -> Result<T::Display> {
@@ -30,12 +32,14 @@ impl SupplierSettlementReadService {
         Ok(result.with_statement(statement))
     }
 
-    /// 为当前授权列表页批量补齐名称，保留全部范围版本和统计。
+    /// 为当前授权列表页批量补齐名称，沿用全部范围版本和统计。
     ///
     /// # 参数
     /// * `page` - 原授权流程返回的列表页。
+    ///
     /// # 返回
     /// 返回同一分页和统计口径的名称视图。
+    ///
     /// # 错误
     /// 名称读取失败时返回对应仓储错误。
     pub async fn statement_list_view(
@@ -61,12 +65,14 @@ impl SupplierSettlementReadService {
         })
     }
 
-    /// 为当前结算明细页批量补齐订单业务单号和商品名称。
+    /// 生成供应商结算展示时，为当前结算明细页批量补齐订单业务单号和商品名称。
     ///
     /// # 参数
     /// * `page` - 原结算明细查询结果。
+    ///
     /// # 返回
     /// 返回同一分页口径的可读视图。
+    ///
     /// # 错误
     /// 关联事实读取失败时返回仓储错误。
     pub async fn item_page_view(
@@ -81,12 +87,14 @@ impl SupplierSettlementReadService {
         })
     }
 
-    /// 为当前差异页批量补齐补证记录人姓名。
+    /// 生成供应商结算视图时，为当前差异页批量补齐补证记录人姓名。
     ///
     /// # 参数
     /// * `page` - 原结算差异查询结果。
+    ///
     /// # 返回
     /// 返回同一差异集合和分页口径。
+    ///
     /// # 错误
     /// 姓名读取失败时返回仓储错误。
     pub async fn difference_page_view(
@@ -103,12 +111,14 @@ impl SupplierSettlementReadService {
         })
     }
 
-    /// 为已登记的正式补证结果补齐记录人姓名与材料标签。
+    /// 生成供应商结算视图时，为已登记的正式补证结果补齐记录人姓名与材料标签。
     ///
     /// # 参数
     /// * `result` - 正式补证命令结果。
+    ///
     /// # 返回
     /// 返回原结果及补证名称。
+    ///
     /// # 错误
     /// 名称缺失或附加读取失败时保持正式结果，名称为空。
     pub async fn evidence_result_view(
@@ -126,12 +136,14 @@ impl SupplierSettlementReadService {
         })
     }
 
-    /// 为已登记的正式差异决定补齐补证名称。
+    /// 生成供应商结算视图时，为已登记的正式差异决定补齐补证名称。
     ///
     /// # 参数
     /// * `result` - 正式差异决定结果。
+    ///
     /// # 返回
     /// 返回同一决定和差异事实的名称视图。
+    ///
     /// # 错误
     /// 名称缺失或附加读取失败时保持正式结果，名称为空。
     pub async fn difference_result_view(
@@ -152,15 +164,15 @@ impl SupplierSettlementReadService {
         })
     }
 
-    /// 为已授权详情批量补齐名称并保留动作投影。
-    ///
-    /// # 参数
-    /// * `detail` - 原结算、差异及当前正式任务详情。
-    /// * `executor` - 详情授权、主数据和关联名称共用的事务执行器。
-    /// # 返回
-    /// 返回同一详情的名称视图。
-    /// # 错误
-    /// 关联事实读取失败时返回仓储错误。
+    // 为已授权详情批量补齐名称并沿用动作投影。
+    //
+    // 调用参数：
+    // * `detail` - 原结算、差异及当前正式任务详情。
+    // * `executor` - 详情授权、主数据和关联名称共用的事务执行器。
+    //
+    // 返回同一详情的名称视图。
+    //
+    // 关联事实读取失败时返回仓储错误。
     pub(super) async fn detail_display_view(
         &self,
         mut detail: SupplierSettlementStatementDetailView,

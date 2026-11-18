@@ -25,12 +25,12 @@ use crate::supplier_api_orders::execution_budget;
 use crate::{Error, Result};
 
 impl SupplierDepositManagementProcess {
-    /// 按真实冻结执行组预算占用，不接受客户端指定金额或资金归属。
-    /// # 参数
-    /// * `account` / `command` / `actor` - 原账户、冻结来源和财务操作人。
-    /// # 返回
+    /// 为正式采购执行组占用资金时，以服务端冻结预算确定金额和归属，不采信客户端金额。
+    ///
+    /// `account` / `command` / `actor`：原账户、冻结来源和财务操作人。
+    ///
     /// 返回带原批次和审批依据的专属资金占用。
-    /// # 错误
+    ///
     /// 采购、连接、账号、预算、审批或授权不符时拒绝。
     pub async fn reserve(
         &self,
@@ -49,12 +49,12 @@ impl SupplierDepositManagementProcess {
             .await
     }
 
-    /// 单独保存已核实实际扣款，正式核销错误不能回滚本资金证据。
-    /// # 参数
-    /// * `account` / `command` / `actor` - 原账户、稳定扣款证据和核验人。
-    /// # 返回
+    /// 查到稳定的供应商实际扣款证据后先独立登记；这样后续正式核销失败也不会撤销原资金证据。
+    ///
+    /// `account` / `command` / `actor`：原账户、稳定扣款证据和核验人。
+    ///
     /// 返回扣款已登记但尚未核销的真实使用。
-    /// # 错误
+    ///
     /// 越范围、跨账户、原交易无稳定身份或写入失败时拒绝。
     pub async fn record_debit(
         &self,
@@ -73,12 +73,12 @@ impl SupplierDepositManagementProcess {
             .await
     }
 
-    /// 将已保存扣款核销到原批准采购，错误保留原资金待处理。
-    /// # 参数
-    /// * `account` / `usage` / `command` / `actor` - 原账户、使用和本次核销分配。
-    /// # 返回
+    /// 扣款已经可靠保存后，把这笔使用核销到原批准采购；核销失败不撤销扣款，留待处理。
+    ///
+    /// `account` / `usage` / `command` / `actor`：原账户、使用和本次核销分配。
+    ///
     /// 返回正式核销后的使用记录。
-    /// # 错误
+    ///
     /// 超批准、超实际使用、越范围或应付变化时拒绝且保留原扣款。
     pub async fn settle_usage(
         &self,
@@ -100,11 +100,11 @@ impl SupplierDepositManagementProcess {
     }
 
     /// 按稳定交易核实实际账户返款，并冲回原核销。
-    /// # 参数
-    /// * `account` / `command` / `actor` - 原账户、原使用和到账证据。
-    /// # 返回
+    ///
+    /// `account` / `command` / `actor`：原账户、原使用和到账证据。
+    ///
     /// 返回保留原来源的返款及冲回结果。
-    /// # 错误
+    ///
     /// 越范围、重复超返或证据不完整时拒绝；不依据取消消息生成到账。
     pub async fn return_usage(
         &self,
@@ -124,11 +124,11 @@ impl SupplierDepositManagementProcess {
     }
 
     /// 绑定同供应商资金账号，部署运行时仍须核验G0资金账号证据。
-    /// # 参数
-    /// * `account` / `command` / `actor` - 已核验账户及服务器连接身份。
-    /// # 返回
+    ///
+    /// `account` / `command` / `actor`：已核验账户及服务器连接身份。
+    ///
     /// 绑定成功，不启用新增下单或自动授权。
-    /// # 错误
+    ///
     /// 跨供应商、已有其他账号或越范围时拒绝。
     pub async fn bind_connection(
         &self,

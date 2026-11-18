@@ -39,25 +39,18 @@ enum Kind {
 
 impl<'a> InvoiceSummaryRepository<'a> {
     /// 绑定财务数据库。
+    /// 结果：只读金额事实仓储。
     ///
-    /// # 参数
-    /// 财务集合所在数据库。
-    /// # 返回
-    /// 只读金额事实仓储。
-    /// # 错误
-    /// 无。
+    /// 输入约定：财务集合所在数据库。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
 
     /// 按原最终发票集合一次读取销项分配的必要事实。
-    ///
-    /// # 参数
-    /// 最终发票 ID 集合和调用方快照执行器。
-    /// # 返回
-    /// 保持原无排序 find 返回顺序的金额事实。
-    /// # 错误
+    /// 结果：保持原无排序 find 返回顺序的金额事实。
     /// 查询或类型化解码失败时拒绝。
+    ///
+    /// 输入约定：最终发票 ID 集合和调用方快照执行器。
     pub async fn sales_links(
         &self,
         ids: &[String],
@@ -67,13 +60,10 @@ impl<'a> InvoiceSummaryRepository<'a> {
     }
 
     /// 按原最终发票集合一次读取进项分配的必要事实。
-    ///
-    /// # 参数
-    /// 最终发票 ID 集合和调用方快照执行器。
-    /// # 返回
-    /// 原返回流的金额及实际采购或结算来源引用。
-    /// # 错误
+    /// 结果：原返回流的金额及实际采购或结算来源引用。
     /// 查询或必要字段解码失败时拒绝。
+    ///
+    /// 输入约定：最终发票 ID 集合和调用方快照执行器。
     pub async fn purchase_links(
         &self,
         ids: &[String],
@@ -82,7 +72,7 @@ impl<'a> InvoiceSummaryRepository<'a> {
         self.links(Kind::Purchase, ids, executor).await
     }
 
-    /// 分配主查询与原仓储保持相同父 ID 条件和无排序，仅减少传输字段。
+    // 按与原发票分配读取相同的父单范围取金额及关联字段，不增加排序或加载无关数据。
     async fn links(
         &self,
         kind: Kind,
@@ -112,7 +102,7 @@ impl<'a> InvoiceSummaryRepository<'a> {
         Ok(assemble_links(kind, rows, &accounts))
     }
 
-    /// 子账映射只定位真实来源，读取批次不会重排分配金额流。
+    // 为发票分配加载实际应收或应付来源；不按批量子账查询的顺序重排分配明细。
     async fn accounts(
         &self,
         kind: Kind,
@@ -160,7 +150,7 @@ struct AmountRow {
 }
 
 impl AmountRow {
-    /// 返回当前方向真实子账引用。
+    // 取得当前方向真实子账引用。
     fn account(&self, kind: Kind) -> Option<&String> {
         match kind {
             Kind::Sales => self.receivable_account_id.as_ref(),
@@ -178,7 +168,7 @@ struct AccountRow {
     source_type: Option<PayableSourceType>,
 }
 
-/// 一对一映射保持分配主流；缺失子账保留 None 交由消费方拒绝。
+// 逐笔关联发票分配和实际子账；查不到的子账保留 `None`，由消费方拒绝该来源。
 fn assemble_links(
     kind: Kind,
     rows: Vec<AmountRow>,
@@ -210,7 +200,7 @@ fn assemble_links(
 mod tests {
     use super::*;
 
-    /// 生产映射保留交错正反流及缺失引用，不按父单或动作重排。
+    // 回归检查：生产映射保留交错正反流及缺失引用，不按父单或动作重排。
     #[test]
     fn links_preserve_interleaved_parent_flow_and_missing_accounts() {
         let rows = serde_json::from_value(serde_json::json!([

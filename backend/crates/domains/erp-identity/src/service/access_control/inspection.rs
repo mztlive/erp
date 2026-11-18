@@ -27,26 +27,19 @@ pub struct AccessInspectionService {
 
 impl AccessInspectionService {
     /// 绑定身份数据与权限服务。
-    /// # 参数
-    /// * `db` - 身份数据库。
-    /// * `authorization` - 应用注入的共享授权服务。
-    /// # 返回
     /// 无 I/O 的检查服务。
-    /// # 错误
-    /// 无。
+    ///
+    /// `authorization`：应用注入的共享授权服务。
     pub fn new(db: Database, authorization: Arc<AuthorizationService>) -> Self {
         Self { db, authorization }
     }
 
     /// 在调用方读取事务内检查账号和操作范围。
-    /// # 参数
-    /// * `operator` - 发起检查的管理员。
-    /// * `request` - 目标账号与业务动作。
-    /// * `executor` - 当前读取事务。
-    /// # 返回
     /// 服务端解析结果或明确的账号／操作拒绝原因。
-    /// # 错误
+    ///
     /// 检查人越权、参数错误、数据库或配置错误继续向上传递。
+    ///
+    /// `request`：目标账号与业务动作；`executor`：当前读取事务。
     pub async fn inspect(
         &self,
         operator: &AuditActor,
@@ -85,7 +78,7 @@ impl AccessInspectionService {
         }
     }
 
-    /// 读取本操作的合格角色规则，为缺失部门关系提供可操作原因。
+    // 检查报告需要解释缺少部门关系时，读取只满足本操作的合格角色范围，给出可处理的原因。
     async fn explain_relations(
         &self,
         actor: &AuditActor,
@@ -128,7 +121,7 @@ impl AccessInspectionService {
     }
 }
 
-/// 配置检查只说明已核验范围；具体对象资格必须由业务检查继续完成。
+// 报告已核对的配置和范围，不把没有具体对象事实的检查标成对象授权通过。
 fn inspected(
     actor: AuditActor,
     request: &AccessInspectionRequest,
@@ -148,7 +141,7 @@ fn inspected(
     Ok(InspectedAccess { actor: access.and(request.object_id.as_ref()).map(|_| actor), view })
 }
 
-/// 拒绝时不生成可供对象读取使用的目标身份。
+// 检查未通过时生成解释结果，不返回可供后续读取使用的目标身份。
 fn denied(layer: &str, message: &str) -> InspectedAccess {
     let mut view = AccessInspectionView::default();
     view.push(layer, "blocked", message);
@@ -165,7 +158,7 @@ mod tests {
     use crate::entity::organization_change::OrganizationState;
     use crate::service::access_control::resolve::DataScopeFacts;
 
-    /// 已解析范围仅用于说明配置，没有具体对象时不能给出对象授权通过。
+    // 验证：已解析范围仅用于说明配置，没有具体对象时不能给出对象授权通过。
     #[test]
     fn scoped_configuration_preserves_review_until_object_is_checked() {
         let actor = AuditActor::new("user".into(), "login".into(), AccountKind::Admin);
@@ -197,7 +190,7 @@ mod tests {
         assert!(result.view.steps.iter().all(|step| step.layer != "具体单据范围"));
     }
 
-    /// 来源与任务检查只返回已合格动作和待取得上下文，不产生对象检查身份。
+    // 验证：来源与任务检查只返回已合格动作和待取得上下文，不产生对象检查身份。
     #[test]
     fn contextual_configuration_requires_object_and_task_facts() {
         let actor = AuditActor::new("user".into(), "login".into(), AccountKind::Admin);

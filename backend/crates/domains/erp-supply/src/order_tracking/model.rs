@@ -79,11 +79,7 @@ pub struct OrderTracking {
 
 impl OrderTracking {
     /// 核对当前待应用观察及各来源轨道，禁止旧观察覆盖新查询。
-    /// # 参数
-    /// `observation` 为已持久化的来源观察。
-    /// # 返回
     /// 身份及最新观察匹配时允许后续应用；取消结果另行核对已发货和退款冲突。
-    /// # 错误
     /// 身份或版本不符、独立退款缺少正式依据时拒绝。
     pub fn ensure_current_observation(&self, observation: &OrderObservation) -> Result<()> {
         if observation.order_id != self.base.id
@@ -107,11 +103,7 @@ impl OrderTracking {
     }
 
     /// 完成当前观察的业务应用，不改动供应商来源或生成交付事实。
-    /// # 参数
-    /// 已应用的来源观察、是否结束常规轮询及 ERP 处理时刻。
-    /// # 返回
     /// 更新 applied 身份、清理错误和查询权，保留最新来源证据。
-    /// # 错误
     /// 观察已变化时拒绝完成旧检查点。
     pub fn record_applied(
         &mut self,
@@ -131,23 +123,15 @@ impl OrderTracking {
     }
 
     /// 判断回调是否可唤醒该订单，已被采购变更替代的执行永不重新调度。
-    /// # 参数
-    /// `superseded` 为同一事务读取的执行退役事实；`now` 为调度时刻。
-    /// # 返回
     /// 未退役且没有活跃查询权时返回 true；正常完成订单仍可接收新的来源变化。
-    /// # 错误
-    /// 无。
+    /// `superseded` 为同一事务读取的执行退役事实；`now` 为调度时刻。
     pub fn can_refresh(&self, superseded: bool, now: Instant) -> bool {
         !superseded && self.lease_until.is_none_or(|until| until <= now)
     }
 
     /// 结束被采购变更替代的旧执行跟踪，不改写已有来源或履约证据。
-    /// # 参数
-    /// 无；调用方须在同一事务证明执行已经退役。
-    /// # 返回
     /// 清理查询权并标记完成，保留原始观察与应用身份。
-    /// # 错误
-    /// 无。
+    /// 调用方须在同一事务证明执行已经退役。
     pub fn stop_for_purchase_change(&mut self) {
         self.state = TrackingState::Complete;
         self.lease_id = None;
@@ -156,12 +140,9 @@ impl OrderTracking {
     }
 
     /// 取得本子单明确冻结的直发单身份集合。
-    /// # 参数
-    /// 无；调用方须已经证明采购履约责任为供应商直发。
-    /// # 返回
     /// 去重且稳定排序的发货单身份。
-    /// # 错误
     /// 任一来源行未绑定发货单时拒绝推断。
+    /// 调用方须已经证明采购履约责任为供应商直发。
     pub fn direct_delivery_ids(&self) -> Result<Vec<String>> {
         self.source_lines
             .iter()
@@ -175,11 +156,7 @@ impl OrderTracking {
     }
 
     /// 为同一事务中已创建的正式供应商订单登记跟踪关联。
-    /// # 参数
-    /// 订单、连接、采购身份及与真实发单完全一致的来源行。
-    /// # 返回
     /// 可立即调度的跟踪记录。
-    /// # 错误
     /// 身份为空、行为空/超过 200、重复来源行或数量非正时拒绝。
     pub fn new(
         order_id: String,
@@ -247,12 +224,9 @@ pub struct OrderObservation {
 
 impl OrderObservation {
     /// 核对已正式应用的供应商取消及未发货、退款已解决条件。
-    /// # 参数
-    /// `order` 为同一事务内读取的正式供应商订单。
-    /// # 返回
     /// 明确取消且不存在已知发货或未决退款时允许仅完成跟踪检查点。
-    /// # 错误
     /// 身份、取消、发货或退款证据不一致时拒绝，不生成取消或资金事实。
+    /// `order` 为同一事务内读取的正式供应商订单。
     pub fn ensure_safe_cancellation(&self, order: &SupplierFulfillmentOrder) -> Result<()> {
         self.ensure_leaf_cancellations()?;
         let before_dispatch = |status| {
@@ -288,11 +262,7 @@ impl OrderObservation {
     }
 
     /// 将查询快照转换为不含个人资料的来源证据。
-    /// # 参数
-    /// 本地观察号、已绑定订单/连接，以及刚完成的真实查询结果。
-    /// # 返回
     /// 保留缺失业务时间、独立轨道与包裹行关联的观察。
-    /// # 错误
     /// 身份、包裹数量、字段长度或已冻结来源行不一致时拒绝。
     pub fn from_snapshot(
         id: String,
@@ -335,23 +305,13 @@ impl OrderObservation {
     }
 
     /// 判定该查询是否证明整个供应商子单已进入发货或完成阶段。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 仅显式已发货或已完成返回 true，单有物流号不扩大成全单已发货。
-    /// # 错误
-    /// 无。
     pub fn proves_dispatch(&self) -> bool {
         matches!(self.fulfillment, Some(FulfillmentStatus::Shipped | FulfillmentStatus::Completed))
     }
 
     /// 判断适配器是否明确证明整个冻结明细已覆盖。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 整单证明或全部包裹的显式证明成立时返回 true；默认缺失不推断。
-    /// # 错误
-    /// 无。
     pub fn proves_complete_coverage(&self) -> bool {
         self.complete_line_coverage
             || self.shipments.as_ref().is_some_and(|shipments| {
@@ -360,12 +320,7 @@ impl OrderObservation {
     }
 
     /// 比较业务内容，重复查询不追加相同证据。
-    /// # 参数
-    /// `previous` 为同一订单的前一份观察。
-    /// # 返回
     /// 身份、来源版本及全部已取得字段相同返回 true。
-    /// # 错误
-    /// 无。
     pub fn same_content(&self, previous: &Self) -> bool {
         self.order_id == previous.order_id
             && self.connection_id == previous.connection_id

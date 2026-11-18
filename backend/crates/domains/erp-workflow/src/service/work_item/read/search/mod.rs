@@ -30,12 +30,9 @@ pub struct SearchDocument {
 }
 impl SearchDocument {
     /// 合并同一授权事项的额外检索资料。
-    /// # 参数
-    /// 参数只接受已授权事项的可读业务字段。
-    /// # 返回
     /// 更新当前检索资料，匹配方法返回命中说明或空结果。
-    /// # 错误
-    /// 无。
+    ///
+    /// 参数只接受已授权事项的可读业务字段。
     pub fn merge(&mut self, source: &Self) {
         self.texts.extend(source.texts.clone());
         for (key, values) in &source.values {
@@ -46,12 +43,9 @@ impl SearchDocument {
     }
 
     /// 登记有值且不重复的筛选候选。
-    /// # 参数
-    /// 参数只接受已授权事项的可读业务字段。
-    /// # 返回
     /// 更新当前检索资料，匹配方法返回命中说明或空结果。
-    /// # 错误
-    /// 无。
+    ///
+    /// 参数只接受已授权事项的可读业务字段。
     pub fn facet(&mut self, key: &str, value: &str, label: &str) {
         if value.trim().is_empty() || label.trim().is_empty() {
             return;
@@ -63,24 +57,18 @@ impl SearchDocument {
         }
     }
     /// 登记非空的可读检索字段。
-    /// # 参数
-    /// 参数只接受已授权事项的可读业务字段。
-    /// # 返回
     /// 更新当前检索资料，匹配方法返回命中说明或空结果。
-    /// # 错误
-    /// 无。
+    ///
+    /// 参数只接受已授权事项的可读业务字段。
     pub fn text(&mut self, label: &str, value: &str) {
         if !value.trim().is_empty() {
             self.texts.push(SearchOption { value: value.to_owned(), label: label.to_owned() });
         }
     }
     /// 按字面量忽略大小写匹配，并返回最多三条命中说明。
-    /// # 参数
-    /// 参数只接受已授权事项的可读业务字段。
-    /// # 返回
     /// 更新当前检索资料，匹配方法返回命中说明或空结果。
-    /// # 错误
-    /// 无。
+    ///
+    /// 参数只接受已授权事项的可读业务字段。
     pub fn matches(&self, query: Option<&str>) -> Option<Vec<String>> {
         let needle = query.unwrap_or_default().trim().to_lowercase();
         if needle.is_empty() {
@@ -102,7 +90,7 @@ impl SearchDocument {
     }
 }
 
-/// 合并完整授权候选的选项，搜索在服务端执行；不从当前页推算候选。
+/// 从完整已授权候选而非当页结果聚合筛选选项。请求启用选项时在服务端按文字筛选，并保留已选值，避免当前条件把可取消的选项隐藏。
 pub fn collect_options(options: &mut SearchOptions, document: &SearchDocument, filter: &WorkspaceFilters) {
     if !filter.include_options {
         return;
@@ -121,13 +109,10 @@ pub fn collect_options(options: &mut SearchOptions, document: &SearchDocument, f
     }
 }
 
-/// 将任务已授权字段转换为检索文档。
-/// # 参数
-/// `field` 为已授权任务；姓名不参与关键词匹配。
-/// # 返回
-/// 返回日期、筛选维度和可读检索文本。
-/// # 错误
-/// 无。
+// 将任务已授权字段转换为检索文档。
+// 返回日期、筛选维度和可读检索文本。
+//
+// `field` 为已授权任务；姓名不参与关键词匹配。
 pub(super) fn task_document(field: &WorkItemFields) -> SearchDocument {
     let mut doc = SearchDocument {
         created_at: i64::try_from(field.created_at).ok(),
@@ -183,12 +168,9 @@ fn task_facets(doc: &mut SearchDocument, field: &WorkItemFields) {
 }
 
 /// 将审批类型翻译成明确的事项名称。
-/// # 参数
-/// `kind` 为已登记单据类型。
-/// # 返回
 /// 中文审批名称；未登记类型显示通用名称。
-/// # 错误
-/// 无。
+///
+/// `kind` 为已登记单据类型。
 pub fn approval_label(kind: &str) -> String {
     DocumentType::ALL
         .iter()

@@ -9,12 +9,10 @@ use crate::repository::CatalogExt;
 
 impl CatalogRepository<'_> {
     /// 按编码精确读取未删除 SKU；不执行名称猜测或模糊匹配。
-    /// # 参数
+    ///
+    /// 返回精确命中的稳定 SKU，空输入返回空结果；可售资格仍由消费用例重验。数据库或反序列化失败时返回存储错误。
+    ///
     /// `codes` 为调用方已经限制数量的公司 SKU 编码，`executor` 为原读取或写事务。
-    /// # 返回
-    /// 返回精确命中的稳定 SKU，空输入返回空结果；可售资格仍由消费用例重验。
-    /// # 错误
-    /// 数据库或反序列化失败时返回存储错误。
     pub async fn skus_by_exact_codes(
         &self,
         codes: &[String],

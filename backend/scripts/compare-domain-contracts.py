@@ -46,8 +46,8 @@ class Token:
     line: int
 
 
+# 将 Rust 源码切分为保留字面量和行号的记号，跳过注释，供合同比较提取可定位的源码事实。
 def lex(text: str) -> list[Token]:
-    """Tokenize balanced punctuation while preserving literals and dropping comments."""
     out, i, line = [], 0, 1
     while i < len(text):
         start, start_line = i, line
@@ -135,8 +135,8 @@ def split_top(tokens, delimiter=",", angle=False):
     return output
 
 
+# 在采集生产合同事实前剔除显式 `cfg(test)` 模块及带测试标记的函数，避免测试定义混入对照结果。
 def production(tokens):
-    """Exclude entire explicit cfg(test) modules and annotated test functions."""
     result, i = [], 0
     while i < len(tokens):
         if values(tokens[i:i + 2]) == ["#", "["]:
@@ -153,8 +153,8 @@ def production(tokens):
     return result
 
 
+# 收集声明前的属性，允许中间出现可见性和修饰符，以便合同采集识别序列化等约束。
 def attrs_before(tokens, item: int):
-    """Collect attributes immediately preceding an item, allowing visibility/modifiers."""
     start = item - 1
     while start >= 0 and tokens[start].value not in {";", "{", "}"}:
         start -= 1
@@ -169,8 +169,8 @@ def attrs_before(tokens, item: int):
     return attrs
 
 
+# 产出具名声明的头部、正文、属性与位置，供合同采集定位源码事实；不展开宏。
 def declarations(tokens, kind):
-    """Yield named item headers/bodies and ranges, without expanding macros."""
     for i, token in enumerate(tokens):
         if token.value != kind or i + 1 >= len(tokens):
             continue
@@ -224,8 +224,8 @@ def issue(out, category, message, origin=None):
     out.append({"status": "needs_review", "category": category, "message": message, "source": origin})
 
 
+# 从活动成员清单定位合同采集所需的 Rust 源码；不调用 Cargo，也不改写锁文件。
 def workspace_sources(repo: Path, reviews):
-    """Read active member manifests only; never invoke Cargo or mutate lockfiles."""
     backend = repo / "backend" if (repo / "backend/Cargo.toml").exists() else repo
     manifest = backend / "Cargo.toml"
     config = tomllib.loads(manifest.read_text())

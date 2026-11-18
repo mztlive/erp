@@ -29,7 +29,7 @@ pub struct PurchaseCommandFingerprint {
     pub digest: String,
 }
 impl PurchaseCommandFingerprint {
-    /// 为原算法摘要附加显式版本；非法摘要拒绝持久化。
+    // 为原算法摘要附加显式版本；非法摘要拒绝持久化。
     fn new(digest: &str) -> Result<Self> {
         let value =
             Self { schema_version: 1, algorithm: "sha256-length-prefixed-v1".into(), digest: digest.into() };
@@ -38,7 +38,7 @@ impl PurchaseCommandFingerprint {
         }
         Ok(value)
     }
-    /// 验证持久化版本、算法与规范摘要。
+    // 验证持久化版本、算法与规范摘要。
     fn valid(&self) -> bool {
         self.schema_version == 1
             && self.algorithm == "sha256-length-prefixed-v1"
@@ -66,18 +66,11 @@ pub struct PurchaseCommandReceiptIdentity {
     pub idempotency_key_digest: PurchaseCommandFingerprint,
 }
 impl PurchaseCommandReceiptIdentity {
-    /// 返回本命令唯一持久化 ID。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 返回原稳定命令 ID。
-    /// # 错误
-    /// 无。
+    /// 借用原命令的稳定持久化 ID，供查找或关联该采购命令的回执。
     pub fn receipt_id(&self) -> &str {
         &self.command_id
     }
-    /// 验证身份形态；未知 schema 或空身份阻断恢复。
+    // 验证身份形态；未知 schema 或空身份阻断恢复。
     fn valid(&self) -> bool {
         self.schema_version == 1
             && self.resource_type
@@ -110,12 +103,7 @@ pub enum PurchaseCommandReceiptError {
 pub trait PurchaseReceiptResult: sealed::Sealed + Serialize + DeserializeOwned + Clone + Send + Sync {
     /// 验证动作目录与结果资源对应关系。
     ///
-    /// # 参数
-    /// * `identity` - 当前命令身份。
-    /// # 返回
-    /// 返回结果是否符合持久化合同。
-    /// # 错误
-    /// 无；非法结果返回 `false`。
+    /// 返回结果是否符合持久化合同。非法结果返回 `false`。
     fn valid_result(&self, identity: &PurchaseCommandReceiptIdentity) -> bool;
 }
 
@@ -150,16 +138,9 @@ pub struct PurchaseCommandReceipt<T> {
 impl<T> PurchaseCommandReceipt<T> {
     /// 依据原算法生成稳定身份，原幂等键只参与摘要。
     ///
-    /// # 参数
-    /// * `prefix` - 命令 ID 前缀。
-    /// * `actor_id` - 已认证操作人。
-    /// * `action` - 固定命令动作。
-    /// * `target_id` - 命令目标；创建命令为空。
-    /// * `idempotency_key` - 原幂等键。
-    /// # 返回
-    /// 返回本命令唯一完整身份。
-    /// # 错误
-    /// 必填身份为空时返回错误。
+    /// 返回本命令唯一完整身份。必填身份为空时返回错误。
+    ///
+    /// `target_id` 为命令目标；创建命令为空。
     pub fn identity(
         prefix: &str,
         actor_id: &str,
@@ -193,25 +174,11 @@ impl<T> PurchaseCommandReceipt<T> {
             idempotency_key_digest: PurchaseCommandFingerprint::new(&digest_parts([idempotency_key]))?,
         })
     }
-    /// 读取首次结果引用。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 返回首次提交结果引用。
-    /// # 错误
-    /// 无。
+    /// 读取首次结果引用。返回首次提交结果引用。
     pub fn payload(&self) -> &T {
         &self.result
     }
     /// 取得首次成功结果。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 返回首次提交结果。
-    /// # 错误
-    /// 无。
     pub fn into_payload(self) -> T {
         self.result
     }
@@ -219,15 +186,9 @@ impl<T> PurchaseCommandReceipt<T> {
 impl<T: PurchaseReceiptResult> PurchaseCommandReceipt<T> {
     /// 构造与正式事实同事务提交的独立回执。
     ///
-    /// # 参数
-    /// * `identity` - 当前完整命令身份。
-    /// * `fingerprint` - 原规范化请求摘要。
-    /// * `result` - 首次成功强类型结果。
-    /// * `audit_event_id` - 同事务关联审计事件。
-    /// # 返回
-    /// 返回合法回执。
-    /// # 错误
-    /// 身份、指纹或结果无效时返回错误。
+    /// 返回合法回执。身份、指纹或结果无效时返回错误。
+    ///
+    /// `identity` 为当前完整命令身份。
     pub fn new(
         identity: &PurchaseCommandReceiptIdentity,
         fingerprint: &str,
@@ -250,14 +211,9 @@ impl<T: PurchaseReceiptResult> PurchaseCommandReceipt<T> {
     }
     /// 校验真实仓储反序列化后的独立回执。
     ///
-    /// # 参数
-    /// * `record` - 独立领域回执。
-    /// * `identity` - 本次请求完整身份。
-    /// * `fingerprint` - 当前规范化请求摘要。
-    /// # 返回
-    /// 同身份同载荷返回原结果回执。
-    /// # 错误
-    /// 身份、载荷不一致或持久化记录损坏时返回对应分类。
+    /// 同身份同载荷返回原结果回执。身份、载荷不一致或持久化记录损坏时返回对应分类。
+    ///
+    /// `fingerprint` 为当前规范化请求摘要。
     pub fn decode(
         record: Self,
         identity: &PurchaseCommandReceiptIdentity,
@@ -274,7 +230,7 @@ impl<T: PurchaseReceiptResult> PurchaseCommandReceipt<T> {
         }
         Ok(record)
     }
-    /// 校验不可变记录；删除或未知 schema 必须阻断恢复。
+    // 校验不可变记录；删除或未知 schema 必须阻断恢复。
     fn valid(&self) -> bool {
         self.command.valid()
             && self.fingerprint.valid()
@@ -286,16 +242,10 @@ impl<T: PurchaseReceiptResult> PurchaseCommandReceipt<T> {
     }
 }
 impl PurchaseReceiptResult for CreationReceipt {
-    /// 校验创建回执的动作与采购单身份。
-    ///
-    /// # 参数
-    /// * `id` - 当前命令身份。
-    ///
-    /// # 返回
-    /// 动作为 `CREATE_ACTION`、`CREATE_SOURCING_ACTION` 或 `CREATE_EXPENSE_ACTION`，采购单 ID 与单号非空白，且 `lock_version` 大于 0 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误；任一条件不满足时返回 `false`。
+    // 校验创建回执的动作与采购单身份。
+    //
+    // 动作为 `CREATE_ACTION`、`CREATE_SOURCING_ACTION` 或 `CREATE_EXPENSE_ACTION`，采购单 ID
+    // 与单号非空白，且 `lock_version` 大于 0 时返回 `true`。任一条件不满足时返回 `false`。
     fn valid_result(&self, id: &PurchaseCommandReceiptIdentity) -> bool {
         [CREATE_ACTION, CREATE_SOURCING_ACTION, CREATE_EXPENSE_ACTION].contains(&id.action.as_str())
             && !self.purchase_order_id.trim().is_empty()
@@ -304,16 +254,10 @@ impl PurchaseReceiptResult for CreationReceipt {
     }
 }
 impl PurchaseReceiptResult for SaveDraftReceipt {
-    /// 校验保存草稿回执的动作、范围、版本与金额守恒。
-    ///
-    /// # 参数
-    /// * `id` - 当前命令身份。
-    ///
-    /// # 返回
-    /// `lock_version` 大于 0，动作为 `SAVE_ACTION`，`scope_id` 等于采购单 ID，采购单 ID、含税、不含税、税额和业务引用都非空白，且三项金额可解析、非负并满足含税等于不含税加税额时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误；任一条件不满足时返回 `false`。
+    // 校验保存草稿回执的动作、范围、版本与金额守恒。
+    //
+    // `lock_version` 大于 0，动作为 `SAVE_ACTION`，`scope_id` 等于采购单 ID，采购单 ID、含税、不含税、
+    // 税额和业务引用都非空白，且三项金额可解析、非负并满足含税等于不含税加税额时返回 `true`。任一条件不满足时返回 `false`。
     fn valid_result(&self, id: &PurchaseCommandReceiptIdentity) -> bool {
         self.lock_version > 0
             && valid_saved_totals(self)
@@ -325,16 +269,10 @@ impl PurchaseReceiptResult for SaveDraftReceipt {
     }
 }
 impl PurchaseReceiptResult for VoidDraftReceipt {
-    /// 校验作废草稿回执的动作、范围与作废状态。
-    ///
-    /// # 参数
-    /// * `id` - 当前命令身份。
-    ///
-    /// # 返回
-    /// `lock_version` 大于 0，原因与业务引用非空白，动作为 `VOID_ACTION`，`scope_id` 等于采购单 ID，且 `status` 为 `VOIDED` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误；任一条件不满足时返回 `false`。
+    // 校验作废草稿回执的动作、范围与作废状态。
+    //
+    // `lock_version` 大于 0，原因与业务引用非空白，动作为 `VOID_ACTION`，`scope_id` 等于采购单 ID，且 `status` 为
+    // `VOIDED` 时返回 `true`。任一条件不满足时返回 `false`。
     fn valid_result(&self, id: &PurchaseCommandReceiptIdentity) -> bool {
         self.lock_version > 0
             && !self.reason.trim().is_empty()
@@ -345,16 +283,10 @@ impl PurchaseReceiptResult for VoidDraftReceipt {
     }
 }
 impl PurchaseReceiptResult for SourcingReceipt {
-    /// 校验选源回执的动作、采购单行和库存预占数量。
-    ///
-    /// # 参数
-    /// * `id` - 当前命令身份。
-    ///
-    /// # 返回
-    /// 动作为 `CREATE_SOURCING_ACTION` 且 `scope_id` 有值，每张采购单 ID 与单号非空白且 `lock_version` 大于 0，每条预占数量可解析且大于 0、相关身份非空白时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误；任一条件不满足时返回 `false`。
+    // 校验选源回执的动作、采购单行和库存预占数量。
+    //
+    // 动作为 `CREATE_SOURCING_ACTION` 且 `scope_id` 有值，每张采购单 ID 与单号非空白且 `lock_version` 大于 0，
+    // 每条预占数量可解析且大于 0、相关身份非空白时返回 `true`。任一条件不满足时返回 `false`。
     fn valid_result(&self, id: &PurchaseCommandReceiptIdentity) -> bool {
         id.action == CREATE_SOURCING_ACTION
             && id.scope_id.is_some()
@@ -378,16 +310,12 @@ impl PurchaseReceiptResult for SourcingReceipt {
     }
 }
 impl PurchaseReceiptResult for PurchaseSubmitReceipt {
-    /// 校验采购提交回执的动作、提交版本与任务占位。
-    ///
-    /// # 参数
-    /// * `id` - 当前命令身份。
-    ///
-    /// # 返回
-    /// `lock_version` 大于 0，`subject_version` 可解析为大于 0 的 `u32`，动作为 `PURCHASE_SUBMIT_ACTION` 且 `scope_id` 有值，单号、提交 ID、提交序号和提交版本非空白，待办 ID 为空且 `task_version` 为 0，或待办 ID 去掉空白后仍非空且 `task_version` 不为 0 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误；任一条件不满足时返回 `false`。
+    // 校验采购提交回执的动作、提交版本与任务占位。
+    //
+    // `lock_version` 大于 0，`subject_version` 可解析为大于 0 的 `u32`，动作为
+    // `PURCHASE_SUBMIT_ACTION` 且 `scope_id` 有值，单号、提交 ID、提交序号和提交版本非空白，待办 ID 为空且
+    // `task_version` 为 0，或待办 ID 去掉空白后仍非空且 `task_version` 不为 0 时返回 `true`。任一条件不满足时返回
+    // `false`。
     fn valid_result(&self, id: &PurchaseCommandReceiptIdentity) -> bool {
         self.lock_version > 0
             && self.subject_version.parse::<u32>().is_ok_and(|v| v > 0)
@@ -402,13 +330,9 @@ impl PurchaseReceiptResult for PurchaseSubmitReceipt {
 }
 
 impl PurchaseReceiptResult for PurchaseChangeSubmitResult {
-    /// 校验采购变更提交首次结果与命令目标一致。
-    /// # 参数
-    /// * `identity` - 当前提交命令身份。
-    /// # 返回
-    /// 返回结果是否具有完整冻结提交引用。
-    /// # 错误
-    /// 无；损坏结果返回 false。
+    // 校验采购变更提交首次结果与命令目标一致。
+    //
+    // 返回结果是否具有完整冻结提交引用。损坏结果返回 false。
     fn valid_result(&self, identity: &PurchaseCommandReceiptIdentity) -> bool {
         identity.action == PURCHASE_CHANGE_SUBMIT_ACTION
             && identity.scope_id.as_deref() == Some(self.change_id.as_str())
@@ -421,13 +345,9 @@ impl PurchaseReceiptResult for PurchaseChangeSubmitResult {
 }
 
 impl PurchaseReceiptResult for PurchaseChangeDraftView {
-    /// 校验保存回执具有完整目标和新乐观锁版本。
-    /// # 参数
-    /// * `identity` - 独立保存命令身份。
-    /// # 返回
-    /// 合法首次结果返回 true。
-    /// # 错误
-    /// 无；损坏结果返回 false。
+    // 校验保存回执具有完整目标和新乐观锁版本。
+    //
+    // 合法首次结果返回 true。损坏结果返回 false。
     fn valid_result(&self, identity: &PurchaseCommandReceiptIdentity) -> bool {
         identity.action == PURCHASE_CHANGE_SAVE_ACTION
             && identity.scope_id.is_some()
@@ -438,7 +358,7 @@ impl PurchaseReceiptResult for PurchaseChangeDraftView {
     }
 }
 
-/// 损坏金额不得以非空字符串冒充首次保存事实。
+// 损坏金额不得以非空字符串冒充首次保存事实。
 fn valid_saved_totals(value: &SaveDraftReceipt) -> bool {
     let (Ok(gross), Ok(net), Ok(tax)) =
         (Amount::from_str(&value.gross), Amount::from_str(&value.net), Amount::from_str(&value.tax))
@@ -449,14 +369,7 @@ fn valid_saved_totals(value: &SaveDraftReceipt) -> bool {
         && net.to_decimal().checked_add(tax.to_decimal()) == Some(gross.to_decimal())
 }
 
-/// 对原顺序文本片段计算长度前缀 SHA-256，保持原采购算法。
-///
-/// # 参数
-/// * `parts` - 原业务顺序的文本片段。
-/// # 返回
-/// 返回64位规范摘要。
-/// # 错误
-/// 无。
+/// 对原顺序文本片段计算长度前缀 SHA-256，保持原采购算法。返回64位规范摘要。
 pub fn digest_parts<I, S>(parts: I) -> String
 where
     I: IntoIterator<Item = S>,
@@ -471,16 +384,7 @@ where
     hex::encode(hasher.finalize())
 }
 
-/// 保留原采购请求的固定动作、目标与规范 JSON 摘要。
-///
-/// # 参数
-/// * `action` - 原动作。
-/// * `target_id` - 原目标。
-/// * `payload` - 已排除幂等键的规范化请求。
-/// # 返回
-/// 返回原算法摘要。
-/// # 错误
-/// 序列化失败时返回错误。
+/// 保留原采购请求的固定动作、目标与规范 JSON 摘要。返回原算法摘要。
 pub fn payload_fingerprint<T: Serialize>(action: &str, target_id: &str, payload: &T) -> Result<String> {
     let payload = serde_json::to_string(payload).map_err(|error| {
         tracing::warn!(%action, %target_id, %error, "采购命令请求指纹序列化失败");
@@ -493,7 +397,7 @@ pub fn payload_fingerprint<T: Serialize>(action: &str, target_id: &str, payload:
 mod tests {
     use super::*;
     use crate::entity::purchase_order::{SourcingOrderReceipt, SourcingTaskStatus};
-    /// 真实字段反序列化后调用生产 decoder，验证首结果及冲突分类。
+    // 真实字段反序列化后调用生产 decoder，验证首结果及冲突分类。
     fn round_trip<T: PurchaseReceiptResult + std::fmt::Debug + PartialEq>(
         action: &str,
         scope: Option<&str>,
@@ -629,7 +533,7 @@ mod tests {
         assert_ne!(digest_parts(["ab", "c"]), digest_parts(["a", "bc"]));
     }
 
-    /// 原命令 ID 保留固定黄金值，库存来源不会随独立审计事件 ID 改变。
+    // 原命令 ID 保留固定黄金值，库存来源不会随独立审计事件 ID 改变。
     #[test]
     fn stable_identity_retains_original_length_prefixed_algorithm() {
         let identity = PurchaseCommandReceipt::<PurchaseSubmitReceipt>::identity(
@@ -646,7 +550,7 @@ mod tests {
         );
     }
 
-    /// 删除、错资源、非法金额或缺审计关联均不得以无回执分支重执行。
+    // 删除、错资源、非法金额或缺审计关联均不得以无回执分支重执行。
     #[test]
     fn corrupted_identity_or_saved_snapshot_blocks_replay() {
         let identity = PurchaseCommandReceipt::<SaveDraftReceipt>::identity(

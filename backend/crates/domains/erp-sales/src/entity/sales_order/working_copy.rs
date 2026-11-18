@@ -178,7 +178,7 @@ pub struct SalesOrderWorkingCopy {
 }
 
 impl PartialEq for SalesOrderWorkingCopy {
-    /// 全字段语义相等。
+    // 比较两份销售工作副本是否完全一致，业务字段和持久化元数据都参与比较。
     fn eq(&self, other: &Self) -> bool {
         self.base == other.base
             && self.stable.status == other.stable.status
@@ -216,7 +216,7 @@ impl PartialEq for SalesOrderWorkingCopy {
 impl Eq for SalesOrderWorkingCopy {}
 
 impl SalesOrderWorkingCopy {
-    /// 创建工作副本。
+    /// 为后续编辑建立工作副本，构造阶段校验输入后再交给调用方保存。
     ///
     /// 完成全部表头文本字段的校验与规范化（trim、非空、长度上限），并强制两条
     /// 关联一致性不变式：
@@ -224,18 +224,13 @@ impl SalesOrderWorkingCopy {
     /// - 卡券类目与履约期限必须同时提供或同时省略（§6.4 卡券单必填规则）；
     /// - `gross = net + tax` 精确成立；
     /// - 行清单按 [`validate_line_list`] 去重并断言行类型与业务性质一致。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::SalesOrderWorkingCopyId`）
-    /// * `data` - 创建数据
-    /// * `created_by` - 创建人
-    ///
-    /// # 返回
     /// 返回新建的工作副本实体（`Editing`）。
-    ///
-    /// # 错误
-    /// 草稿版本为零、必填为空、超长、编辑目的与变更单不匹配、卡券类目与履约期限只提供其一、
+    /// 失败条件：草稿版本为零、必填为空、超长、编辑目的与变更单不匹配、卡券类目与履约期限只提供其一、
     /// 合同与合同版本只提供其一、金额三元组不成立或行清单非法时返回错误。
+    ///
+    /// 输入约定：
+    /// - `id`：实体主键（`erp_core::ids::SalesOrderWorkingCopyId`）
+    /// - `created_by`：创建人
     pub fn new(
         id: SalesOrderWorkingCopyId,
         data: SalesOrderWorkingCopyData,
@@ -317,15 +312,6 @@ impl SalesOrderWorkingCopy {
     /// 复用 `new` 的规范化与关联一致性校验；`sales_order_id`/`working_purpose`/
     /// `sales_change_order_id`/`base_revision_id`/`business_type` 是身份与基准字段，
     /// 不允许在通用更新中修改。
-    ///
-    /// # 参数
-    /// * `update` - 更新数据
-    /// * `updated_by` - 本次更新执行人
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 当前状态不能迁到 `Editing`（已提交或已放弃）时返回 [`Error::InvalidStateTransition`]；
     /// `Editing` 与 `Conflict` 可通过该检查。必填为空、超长、合同与合同版本只提供其一、
     /// 卡券类目与履约期限只提供其一，或金额三元组不成立时返回错误。
@@ -411,32 +397,22 @@ impl SalesOrderWorkingCopy {
         Ok(())
     }
 
-    /// 判断乐观锁版本是否与调用方期望一致。
+    /// 写入前核对实体版本是否仍等于调用方读到的版本，用于识别过期修改。
+    /// 结果：当前版本与期望版本一致时返回 `true`。
     ///
-    /// # 参数
-    /// * `expected_version` - 调用方读取到的实体版本
-    ///
-    /// # 返回
-    /// 当前版本与期望版本一致时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 输入约定：
+    /// - `expected_version`：调用方读取到的实体版本
     pub fn matches_version(&self, expected_version: u64) -> bool {
         self.base.version == expected_version
     }
 
     /// 判断工作副本是否仍属于给定销售关系上下文。
+    /// 结果：三项关系与工作副本冻结关系完全一致时返回 `true`。
     ///
-    /// # 参数
-    /// * `contract_id` - 当前命令选择的合同
-    /// * `customer_id` - 合同解析出的客户
-    /// * `settlement_party_id` - 销售命令明确选择的结算主体
-    ///
-    /// # 返回
-    /// 三项关系与工作副本冻结关系完全一致时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 输入约定：
+    /// - `contract_id`：当前命令选择的合同
+    /// - `customer_id`：合同解析出的客户
+    /// - `settlement_party_id`：销售命令明确选择的结算主体
     pub fn matches_contract_context(
         &self,
         contract_id: &ContractId,
@@ -449,15 +425,11 @@ impl SalesOrderWorkingCopy {
     }
 
     /// 返回卡券提交所需的卡券类目。
-    ///
-    /// # 参数
-    /// * `today` - 服务端提交业务日
-    ///
-    /// # 返回
-    /// 非卡券工作副本返回 `None`；卡券字段完整且到期日合法时返回类目引用。
-    ///
-    /// # 错误
+    /// 结果：非卡券工作副本返回 `None`；卡券字段完整且到期日合法时返回类目引用。
     /// 卡券缺应收到期日、卡券类目，或应收到期日早于提交日时返回错误。
+    ///
+    /// 输入约定：
+    /// - `today`：服务端提交业务日
     pub fn voucher_submission_identity_refs(&self, today: BusinessDate) -> Result<Option<&SkuId>> {
         if !self.business_type.is_voucher() {
             return Ok(None);
@@ -475,29 +447,14 @@ impl SalesOrderWorkingCopy {
     }
 
     /// 判断工作副本是否已经提交锁定。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 状态为 `Submitted` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 结果：状态为 `Submitted` 时返回 `true`。
     pub fn is_submitted(&self) -> bool {
         self.stable.status == WorkingCopyStatus::Submitted
     }
 
     /// 为提交锁定工作副本，已提交副本保持不变。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 本次从编辑态迁移到已提交时返回 `true`；原本已提交时返回 `false`。
-    ///
-    /// # 错误
-    /// 冲突或已放弃副本不能提交时返回 [`Error::InvalidStateTransition`]。
+    /// 结果：本次从编辑态迁移到已提交时返回 `true`；原本已提交时返回 `false`。
+    /// 失败条件：冲突或已放弃副本不能提交时返回 [`Error::InvalidStateTransition`]。
     pub fn lock_for_submission_if_needed(&mut self) -> Result<bool> {
         if self.is_submitted() {
             return Ok(false);
@@ -507,17 +464,12 @@ impl SalesOrderWorkingCopy {
     }
 
     /// 保存草稿：递增 `draft_version` 并更新内容指纹（自动保存条件更新基础）。
-    ///
-    /// # 参数
-    /// * `content_hash` - 新内容指纹
-    /// * `editor_user_id` - 责任人
-    ///
-    /// # 返回
-    /// 保存成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 当前状态不能迁到 `Editing`（已提交或已放弃）时返回 [`Error::InvalidStateTransition`]；
     /// `Editing` 与 `Conflict` 可通过该检查。指纹或编辑人为空、超长时返回错误。
+    ///
+    /// 输入约定：
+    /// - `content_hash`：新内容指纹
+    /// - `editor_user_id`：责任人
     pub fn save_draft(
         &mut self,
         content_hash: impl Into<String>,
@@ -540,14 +492,6 @@ impl SalesOrderWorkingCopy {
     }
 
     /// 提交草稿（`Editing → Submitted`，提交事务锁定草稿后标记）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 迁移成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 当前状态不能迁到 `Submitted` 时返回 [`Error::InvalidStateTransition`]。已是 `Submitted` 时幂等成功。
     pub fn submit(&mut self) -> Result<()> {
         ensure_transition(self.stable.status, WorkingCopyStatus::Submitted)?;
@@ -556,14 +500,6 @@ impl SalesOrderWorkingCopy {
     }
 
     /// 放弃草稿（`Editing → Abandoned`）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 迁移成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 当前状态不能迁到 `Abandoned` 时返回 [`Error::InvalidStateTransition`]。已是 `Abandoned` 时幂等成功。
     pub fn abandon(&mut self) -> Result<()> {
         ensure_transition(self.stable.status, WorkingCopyStatus::Abandoned)?;
@@ -572,14 +508,6 @@ impl SalesOrderWorkingCopy {
     }
 
     /// 标记冲突（`Editing → Conflict`；基础资料变化不静默改写已保存草稿，§6.5）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 迁移成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 当前状态不能迁到 `Conflict` 时返回 [`Error::InvalidStateTransition`]。已是 `Conflict` 时幂等成功。
     pub fn mark_conflict(&mut self) -> Result<()> {
         ensure_transition(self.stable.status, WorkingCopyStatus::Conflict)?;
@@ -588,14 +516,6 @@ impl SalesOrderWorkingCopy {
     }
 
     /// 解决冲突回到编辑中（`Conflict → Editing`）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 迁移成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 当前状态不能迁到 `Editing` 时返回 [`Error::InvalidStateTransition`]。已是 `Editing` 时幂等成功。
     pub fn resolve_conflict(&mut self) -> Result<()> {
         ensure_transition(self.stable.status, WorkingCopyStatus::Editing)?;
@@ -603,21 +523,17 @@ impl SalesOrderWorkingCopy {
         Ok(())
     }
 
-    /// 校验编辑目的、卡券表头字段的关联一致性。
-    ///
-    /// # 参数
-    /// * `working_purpose` - 编辑目的
-    /// * `sales_change_order_id` - 销售变更单
-    /// * `voucher_category_sku_id` - 卡券类目 SKU
-    /// * `voucher_expiry_at` - 卡券履约期限
-    /// * `receivable_due_date` - 卡券应收到期日
-    ///
-    /// # 返回
-    /// 一致时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 变更目的缺变更单、首次提交携带变更单，或卡券类目与履约期限不同时出现时
-    /// 返回错误。
+    // 校验编辑目的、卡券表头字段的关联一致性。
+    // 结果：一致时返回 `Ok(())`。
+    // 失败条件：变更目的缺变更单、首次提交携带变更单，或卡券类目与履约期限不同时出现时
+    // 返回错误。
+    //
+    // 输入约定：
+    // - `working_purpose`：编辑目的
+    // - `sales_change_order_id`：销售变更单
+    // - `voucher_category_sku_id`：卡券类目 SKU
+    // - `voucher_expiry_at`：卡券履约期限
+    // - `receivable_due_date`：卡券应收到期日
     fn validate_associations(
         working_purpose: WorkingPurpose,
         sales_change_order_id: Option<&SalesChangeOrderId>,

@@ -18,72 +18,48 @@ pub struct QualifiedPermissions {
 }
 
 impl QualifiedPermissions {
-    /// 统一授权的范围只使用完整资格对应的角色。
+    // 统一授权解析范围时仅使用同次取证中覆盖完整动作组合的角色，不能混入只授予部分权限的角色。
     pub(crate) fn roles_for_all(&self, required: &[Permission]) -> Vec<RoleId> {
         self.snapshot.granting_role_ids_for_all(required)
     }
     /// 返回本次资格检查读取的无凭证账号摘要。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 与权限及身份版本来自同次取证的账号资料，供调用方冻结显示名。
-    /// # 错误
-    /// 无；仅有效内部账号能形成资格结果。
+    ///
+    /// 仅有效内部账号能形成资格结果。
     pub fn account(&self) -> &AccountSummary {
         &self.account
     }
 
     /// 取得单项权限的有效授权角色。
-    /// # 参数
-    /// permission 为本批取证的具体权限。
-    /// # 返回
     /// 未请求、未授权或角色停用时返回空集合。
-    /// # 错误
-    /// 无。
+    ///
+    /// permission 为本批取证的具体权限。
     pub fn roles(&self, permission: &Permission) -> Vec<RoleId> {
         self.snapshot.granting_role_ids(permission)
     }
 
-    /// 检查全部权限是否由同一有效角色授予。
-    /// # 参数
-    /// permissions 为必须同角色覆盖的权限。
-    /// # 返回
+    /// 当全部权限由同一有效角色授予时返回 `true`。
     /// 空要求或没有共同角色时返回 false。
-    /// # 错误
-    /// 无。
+    ///
+    /// permissions 为必须同角色覆盖的权限。
     pub fn same_role(&self, permissions: &[Permission]) -> bool {
         !self.snapshot.granting_role_ids_for_all(permissions).is_empty()
     }
 
     /// 返回逐项独立成立的权限集合，允许不同权限来自不同角色。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 只包含本批请求且由启用角色授予的具体权限。
-    /// # 错误
-    /// 无。
     pub fn permissions(&self) -> PermissionSet {
         PermissionSet::new(self.snapshot.grants.values().flatten().cloned())
     }
 
     /// 返回本批取证的策略修订号。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 供原事务继续校验或策略写入使用的修订号。
-    /// # 错误
-    /// 无。
     pub fn policy_revision(&self) -> u64 {
         self.snapshot.policy_revision()
     }
 
     /// 返回绑定账号、策略及有效角色版本的身份版本。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 用于授权凭证的完整身份依赖。
-    /// # 错误
-    /// 无。
     pub fn version(&self) -> &str {
         &self.version
     }
@@ -91,23 +67,17 @@ impl QualifiedPermissions {
 
 impl RbacService {
     /// 取得同一身份数据库的账号目录。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 不查询、不缓存的身份目录服务。
-    /// # 错误
-    /// 无。
     pub fn directory(&self) -> AccountDirectoryService {
         AccountDirectoryService::new(self.db.clone())
     }
 
     /// 一次读取账号、权限快照及启用角色，分别证明本批具体权限。
-    /// # 参数
-    /// actor 为真实账号，permissions 为具体功能权限，executor 沿用业务事务。
-    /// # 返回
     /// 账号失效时返回 None；有效账号返回逐项资格，允许零项授权。
-    /// # 错误
+    ///
     /// 通配查询、基础设施或策略版本错误保持失败；不降级为空权限。
+    ///
+    /// actor 为真实账号，permissions 为具体功能权限，executor 沿用业务事务。
     pub async fn qualified_permissions(
         &self,
         actor: &AuditActor,
@@ -137,7 +107,7 @@ impl RbacService {
 
 #[cfg(any(test, feature = "test-support"))]
 impl QualifiedPermissions {
-    /// 用一次快照构造资格，供规则测试复用同角色证明。
+    // 在同一身份快照准备角色授权，用于测试固定规则是否真正要求权限来自同一角色。
     #[cfg(test)]
     pub(crate) fn test_grants(grants: &[(&str, &[Permission])]) -> Self {
         use erp_core::AccountKind;
@@ -146,13 +116,12 @@ impl QualifiedPermissions {
         Self::test_grants_for(&actor, grants)
     }
 
-    /// 用固定启用角色为指定测试账号构造资格。
-    /// # 参数
-    /// actor 为待核验账号；grants 为固定启用角色及其具体权限。
-    /// # 返回
-    /// 与生产共用资格构造和版本计算的内存取证结果。
-    /// # 错误
-    /// 无。固定角色编号或名称无效时触发测试断言。
+    // 用固定启用角色为指定测试账号构造资格。
+    // 与生产共用资格构造和版本计算的内存取证结果。
+    //
+    // 无。固定角色编号或名称无效时触发测试断言。
+    //
+    // actor 为待核验账号；grants 为固定启用角色及其具体权限。
     pub(crate) fn test_grants_for(actor: &AuditActor, grants: &[(&str, &[Permission])]) -> Self {
         use std::collections::{HashMap, HashSet};
 
@@ -175,7 +144,7 @@ impl QualifiedPermissions {
     }
 }
 
-/// 只保留启用角色的授权，身份版本包含所有参与取证角色。
+// 用启用角色的授予生成有效资格，身份版本仍绑定本次参与取证的全部角色事实。
 fn qualified(
     mut snapshot: RolePermissionSnapshot,
     roles: &[Role],

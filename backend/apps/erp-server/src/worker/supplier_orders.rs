@@ -15,34 +15,21 @@ pub struct SupplierOrderWorker {
 }
 
 impl SupplierOrderWorker {
-    /// 查询常驻循环是否意外结束。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 后台句柄已经完成时为 true。
-    /// # 错误
-    /// 不返回错误。
+    // 查询常驻循环是否意外结束。
+    // 后台句柄已经完成时为 true。
     pub(crate) fn is_finished(&self) -> bool {
         self.join.is_finished()
     }
 
-    /// 通知停止领取；已运行轮次由 stop 等待。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 已发送停止状态。
-    /// # 错误
-    /// 接收端已退出时无需再次通知。
+    // 通知停止领取；已运行轮次由 stop 等待。
+    // 已发送停止状态。
+    // 接收端已退出时无需再次通知。
     pub(crate) fn request_stop(&self) {
         let _ = self.stop.send(true);
     }
 
     /// 停止调度并等待当前有界协议请求结束。
-    /// # 参数
-    /// 无；消耗本worker句柄。
-    /// # 返回
     /// 调度任务已退出。
-    /// # 错误
     /// 任务取消只记入运行日志，不掩盖进程退出。
     pub async fn stop(self) {
         let _ = self.stop.send(true);
@@ -53,11 +40,8 @@ impl SupplierOrderWorker {
 }
 
 /// 启动正式订单发单与只读跟踪；未配置适配器的部署不执行外部请求。
-/// # 参数
 /// `state` 为已装配真实协议客户端和加密器的应用状态。
-/// # 返回
 /// 可用于优雅退出的任务句柄。
-/// # 错误
 /// 不返回错误；单轮失败记录日志并继续后续调度。
 pub fn spawn(state: Application) -> SupplierOrderWorker {
     let (stop, receiver) = watch::channel(false);

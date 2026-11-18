@@ -23,11 +23,10 @@ use super::customer_refund_list::{
 impl ReturnsReadService {
     // -----------------------------------------------------------------------
 
-    /// 分页查询客户退款列表。
+    /// 调用此入口时，分页查询客户退款列表。
     ///
     /// # 参数
     /// * `actor` - 本次已认证账号，按固定列表入口检查功能资格。
-    /// * `params` - 查询参数
     ///
     /// # 返回
     /// 返回契约形状的分页视图。
@@ -50,7 +49,7 @@ impl ReturnsReadService {
             .await
     }
 
-    /// 授权、完整过滤及结果投影共用调用方快照。
+    // 处理客户退款时，授权、完整过滤及结果投影共用调用方快照。
     async fn customer_refund_list_snapshot(
         &self,
         actor: &AuditActor,
@@ -84,7 +83,7 @@ impl ReturnsReadService {
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
-    /// 查询客户退款详情。
+    /// 读取客户退款详情。
     ///
     /// # 参数
     /// * `actor` - 本次已认证账号，按固定详情入口检查功能资格。
@@ -126,7 +125,7 @@ impl ReturnsReadService {
     // 私有视图装配
     // -----------------------------------------------------------------------
 
-    /// 调用方必须先完成所属命令授权，并传入原执行器。
+    /// 读取客户退款时，调用方必须先完成所属命令授权，并传入原执行器。
     /// 装配客户退款单视图。
     ///
     /// # 参数

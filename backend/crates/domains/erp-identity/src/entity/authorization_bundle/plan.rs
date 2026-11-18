@@ -58,13 +58,12 @@ pub(crate) struct PolicyPlan {
 }
 
 impl PolicyPlan {
-    /// 从同一快照编译最终授权；操作人权限始终取批次开始前的事实。
-    /// # 参数
-    /// document 为规范化文件，facts 为目标事实，其余参数为冻结的操作人及版本。
-    /// # 返回
-    /// 可审核差异及服务端使用的写入计划。
-    /// # 错误
-    /// 越权、无效引用、范围不合规或摘要生成失败时拒绝。
+    // 从同一快照编译最终授权；操作人权限始终取批次开始前的事实。
+    // 可审核差异及服务端使用的写入计划。
+    //
+    // 越权、无效引用、范围不合规或摘要生成失败时拒绝。
+    //
+    // document 为规范化文件，facts 为目标事实，其余参数为冻结的操作人及版本。
     pub(crate) fn build(
         document: PolicyDocument,
         facts: &PolicyFacts,
@@ -120,7 +119,7 @@ impl PolicyPlan {
         Ok(plan)
     }
 
-    /// 角色创建或更新必须同时满足现有及目标权限上限。
+    // 规划角色新建或更新时同时检查目标原权限与计划权限，不允许操作人管理超出自身资格的角色。
     fn role(&mut self, requested: &PolicyRole, facts: &PolicyFacts, actor: &PermissionSet) -> Result<()> {
         let current = facts.roles.get(requested.id.as_str());
         if let Some(current) = current {
@@ -156,7 +155,7 @@ impl PolicyPlan {
         Ok(())
     }
 
-    /// 绑定按最终角色事实计算，不能通过先收窄高权限目标绕过管理上限。
+    // 按本批结束时的角色权限计算绑定变更；仍检查目标原有权限上限，不能先缩权再绕过管理检查。
     fn bindings(
         &mut self,
         document: &PolicyDocument,
@@ -195,7 +194,7 @@ impl PolicyPlan {
         Ok(())
     }
 
-    /// 按本批角色及绑定的最终状态验证每个动作，再替换选定范围。
+    // 为选定动作规划范围替换之前，按该批次最终角色及绑定验证完整动作资格。
     fn scope(&mut self, scope: &PolicyScope, facts: &PolicyFacts) -> Result<()> {
         let user = facts.users.get(&scope.user_id).ok_or_else(|| Error::NotFound("人员不存在".into()))?;
         let role_ids = self
@@ -251,7 +250,7 @@ impl PolicyPlan {
         Ok(())
     }
 
-    /// 取得最终权限；所有引用均须有当前角色或同批新建角色。
+    // 解析规划后的直接角色权限；角色必须已存在或确在本批创建，未解析引用不能继续生成计划。
     fn role_permissions<'a>(&'a self, id: &str, facts: &'a PolicyFacts) -> Result<&'a [Permission]> {
         if let Some(role) = self.roles.iter().find(|r| r.declaration.id.as_str() == id) {
             return Ok(&role.permissions);
@@ -262,7 +261,7 @@ impl PolicyPlan {
     }
 }
 
-/// 将隐含基础范围与岗位目录初始化明确列入审核结果。
+// 生成文件预览说明时列出隐含本人基础和岗位目录初始化需求，便于管理员审查并非文件显式写入的事项。
 fn policy_notes(document: &PolicyDocument) -> Result<Vec<String>> {
     let mut notes = vec![
         "文件未列对象保持原配置；replace 仅替换条目明确指定的集合。".into(),
@@ -282,7 +281,7 @@ fn policy_notes(document: &PolicyDocument) -> Result<Vec<String>> {
     Ok(notes)
 }
 
-/// 合并模式只增补，替换模式采用完整显式集合。
+// 按文件模式组合当前值与导入值；合并只增加，替换使用文件中完整的显式集合。
 fn merge<T: Clone + Ord>(mode: PolicyMode, current: &[T], requested: &[T]) -> Vec<T> {
     let mut values = if mode == PolicyMode::Merge { current.to_vec() } else { vec![] };
     values.extend_from_slice(requested);
@@ -291,13 +290,12 @@ fn merge<T: Clone + Ord>(mode: PolicyMode, current: &[T], requested: &[T]) -> Ve
     values
 }
 
-/// 文件入口不得恢复或认领系统及失效角色。
-/// # 参数
-/// role 为持久化角色事实。
-/// # 返回
-/// 角色为有效普通角色时成功。
-/// # 错误
-/// 系统、停用或删除角色返回禁止访问。
+// 文件入口不得恢复或认领系统及失效角色。
+// 角色为有效普通角色时成功。
+//
+// 系统、停用或删除角色返回禁止访问。
+//
+// role 为持久化角色事实。
 pub(crate) fn ensure_role(role: &Role) -> Result<()> {
     if role.base.id == ROOT_ROLE_ID || role.system || role.disabled || role.base.is_deleted() {
         return Err(Error::Forbidden("策略文件不能管理系统、停用或已删除角色".into()));
@@ -305,7 +303,7 @@ pub(crate) fn ensure_role(role: &Role) -> Result<()> {
     Ok(())
 }
 
-/// 复用 PermissionSet 的真实覆盖规则。
+// 审核计划写入的权限集合是否受授予上限覆盖，使用 `PermissionSet` 已有的权限覆盖语义。
 fn ensure_subset(actor: &PermissionSet, required: &[Permission]) -> Result<()> {
     if !required.iter().all(|permission| actor.covers_one(permission)) {
         return Err(Error::Forbidden("不能管理或授予超出自身权限的角色".into()));
@@ -322,7 +320,7 @@ mod tests {
     use crate::entity::authorization_bundle::PolicyVersion;
     use crate::{RoleData, RoleId};
 
-    /// 测试使用固定元数据，避免时间影响审核摘要。
+    // 以固定元数据创建测试角色，使审核摘要断言不随测试时钟变化。
     fn role(id: &str, permissions: &[&str]) -> PolicyRoleState {
         let mut role = Role::new(RoleId::parse(id).unwrap(), RoleData::new("只读岗位")).unwrap();
         role.base = BaseModel::fake();

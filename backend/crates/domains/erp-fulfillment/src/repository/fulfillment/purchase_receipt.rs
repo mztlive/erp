@@ -51,16 +51,7 @@ pub struct PurchaseReceiptFilter {
 }
 
 impl Default for PurchaseReceiptFilter {
-    /// 返回首页空筛选（`page: 1`，`page_size: 20`）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回筛选为空、降序的首页过滤条件。
-    ///
-    /// # 错误
-    /// 无。
+    // 初始化采购收货单筛选：第一页、每页 20 条，业务筛选默认留空，默认降序排序。
     fn default() -> Self {
         Self {
             purchase_order_id: None,
@@ -74,18 +65,8 @@ impl Default for PurchaseReceiptFilter {
 }
 
 impl QueryFilter for PurchaseReceiptFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// 有值时写入 `purchase_order_id` 与 `status`；二者皆空时只保留未删除条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 转换为 MongoDB 查询条件（自动追加未删除过滤）。
+    // 有值时写入 `purchase_order_id` 与 `status`；二者皆空时只保留未删除条件。
     fn to_doc(&self) -> Document {
         let mut filter = super::active_filter();
         if let Some(purchase_order_id) = &self.purchase_order_id {
@@ -99,16 +80,7 @@ impl QueryFilter for PurchaseReceiptFilter {
 }
 
 impl Pagination for PurchaseReceiptFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组；`page_size` 由 `u32` 加宽为 `u64`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 向仓储分页传递页码与单页条数。
     fn page_and_size(&self) -> (u64, u64) {
         super::page_and_size(self.page, self.page_size)
     }
@@ -118,19 +90,10 @@ impl Pagination for PurchaseReceiptFilter {
 #[allow(async_fn_in_trait)]
 pub trait PurchaseReceiptRepositoryExt {
     /// 分页检索采购入库单列表（投影查询）。
-    ///
-    /// 只返回 [`PurchaseReceiptRow`] 所需的列表字段，不加载整文档；排序字段
-    /// 走白名单映射（`created_at`/`posted_at`），白名单外的字段名回落默认值。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
+    /// 只返回 [`PurchaseReceiptRow`] 所需的列表字段，不加载整文档；排序字段走白名单映射（`created_at`/`posted_at`），白名单外的字段名回落默认值。
     /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// 沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询、游标读取或计数错误。
     async fn search_purchase_receipts(
         &self,
         filter: &PurchaseReceiptFilter,
@@ -138,16 +101,9 @@ pub trait PurchaseReceiptRepositoryExt {
     ) -> Result<PageResult<PurchaseReceiptRow>>;
 
     /// 按采购入库单号查找入库单（唯一单号，详情查询）。
-    ///
-    /// # 参数
-    /// * `receipt_no` - 采购入库单号
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回匹配的未删除入库单；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
+    /// `receipt_no` 为采购入库单号；沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询错误。
     async fn find_by_receipt_no(
         &self,
         receipt_no: &str,
@@ -193,10 +149,7 @@ impl PurchaseReceiptRepositoryExt for persistence_core::Repository<'_, PurchaseR
     }
 }
 
-/// 采购入库单列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
+// 采购入库单列表投影字段。
 fn purchase_receipt_projection() -> Document {
     doc! {
         "id": 1,

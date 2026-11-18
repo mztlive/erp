@@ -22,16 +22,9 @@ use super::types::PurchaseLineType;
 use crate::entity::facts::{SalesGoodsLineFact, SalesRevisionLineFact};
 
 impl ProcurementCoverageFacts {
-    /// 读取销售当前版本中指定稳定行的公共行与商品子类型行。
+    /// 读取销售当前版本中指定稳定行的公共行与商品子类型行。当前版本仍有该商品行时返回公共行与子类型行；否则返回 `None`。
     ///
-    /// # 参数
-    /// * `sales_order_line_id` - 销售稳定行
-    ///
-    /// # 返回
-    /// 当前版本仍有该商品行时返回公共行与子类型行；否则返回 `None`。
-    ///
-    /// # 错误
-    /// 无。
+    /// `sales_order_line_id` 为销售稳定行。
     pub fn current_goods_line(
         &self,
         sales_order_line_id: &str,
@@ -44,17 +37,7 @@ impl ProcurementCoverageFacts {
         Some((line, goods))
     }
 
-    /// 汇总本采购之外其他有效采购在指定销售稳定行上承担的收件分配。
-    ///
-    /// # 参数
-    /// * `order` - 正在调整的采购单
-    /// * `sales_order_line_id` - 销售稳定行
-    ///
-    /// # 返回
-    /// 返回其他采购当前提交与当前版本中该行的交付安排。
-    ///
-    /// # 错误
-    /// 无。
+    /// 汇总本采购之外其他有效采购在指定销售稳定行上承担的收件分配。返回其他采购当前提交与当前版本中该行的交付安排。
     pub fn other_delivery_allocations(
         &self,
         order: &PurchaseOrder,
@@ -87,15 +70,9 @@ impl ProcurementCoverageFacts {
 
 /// 计算销售收件地址扣除已承担数量后的剩余可分配量。
 ///
-/// # 参数
-/// * `source` - 销售当前版本的收件要求
-/// * `assigned` - 其他采购已承担的交付安排
+/// 按销售顺序返回每个地址的剩余数量；同一地址合并，承担超过要求时剩余为零。数量合计溢出或精度非法时返回错误。
 ///
-/// # 返回
-/// 按销售顺序返回每个地址的剩余数量；同一地址合并，承担超过要求时剩余为零。
-///
-/// # 错误
-/// 数量合计溢出或精度非法时返回错误。
+/// `source` 为销售当前版本的收件要求。
 pub fn remaining_delivery_capacity(
     source: &[PurchaseDeliveryAllocation],
     assigned: &[PurchaseDeliveryAllocation],
@@ -137,16 +114,7 @@ pub struct DeliveryFields<'a> {
 }
 
 impl<'a> DeliveryFields<'a> {
-    /// 读取采购提交行的交付字段。
-    ///
-    /// # 参数
-    /// * `line` - 采购提交行
-    ///
-    /// # 返回
-    /// 商品行且有销售来源与数量时返回字段；否则返回 `None`。
-    ///
-    /// # 错误
-    /// 无。
+    /// 读取采购提交行的交付字段。商品行且有销售来源与数量时返回字段；否则返回 `None`。
     pub fn of_submission(line: &'a PurchaseOrderSubmissionLine) -> Option<Self> {
         (line.line_type == PurchaseLineType::ItemService).then_some(())?;
         Some(Self {
@@ -157,16 +125,7 @@ impl<'a> DeliveryFields<'a> {
         })
     }
 
-    /// 读取采购版本行的交付字段。
-    ///
-    /// # 参数
-    /// * `line` - 采购版本行
-    ///
-    /// # 返回
-    /// 商品行且有销售来源与数量时返回字段；否则返回 `None`。
-    ///
-    /// # 错误
-    /// 无。
+    /// 读取采购版本行的交付字段。商品行且有销售来源与数量时返回字段；否则返回 `None`。
     pub fn of_revision(line: &'a PurchaseOrderRevisionLine) -> Option<Self> {
         (line.line_type == PurchaseLineType::ItemService).then_some(())?;
         Some(Self {
@@ -177,16 +136,7 @@ impl<'a> DeliveryFields<'a> {
         })
     }
 
-    /// 读取采购行输入的交付字段。
-    ///
-    /// # 参数
-    /// * `line` - 采购行输入
-    ///
-    /// # 返回
-    /// 商品行且有销售来源与数量时返回字段；否则返回 `None`。
-    ///
-    /// # 错误
-    /// 无。
+    /// 读取采购行输入的交付字段。商品行且有销售来源与数量时返回字段；否则返回 `None`。
     pub fn of_input(line: &'a PurchaseLineInput) -> Option<Self> {
         (line.line_type == PurchaseLineType::ItemService).then_some(())?;
         Some(Self {
@@ -222,17 +172,10 @@ pub struct DeliveryEdit<'a> {
 
 /// 相对原行找出需复验的交付调整。
 ///
-/// # 参数
-/// * `lines` - 待写入的采购行
-/// * `previous` - 原行；按销售稳定行对应
-/// * `rows` - 收件分配的复验范围
+/// 返回调整了预计交付日或需复验收件分配的行；未改动的预计交付日不复验，已登记维持的旧交期不阻断其他调整。
 ///
-/// # 返回
-/// 返回调整了预计交付日或需复验收件分配的行；未改动的预计交付日不复验，已登记维持
-/// 的旧交期不阻断其他调整。
-///
-/// # 错误
-/// 无。
+/// - `previous`：原行；按销售稳定行对应。
+/// - `rows`：收件分配的复验范围。
 pub fn delivery_edits<'a>(
     lines: &[DeliveryFields<'a>],
     previous: &[DeliveryFields<'_>],
@@ -266,16 +209,10 @@ pub fn delivery_edits<'a>(
 impl ProcurementCoverageFacts {
     /// 按销售当前版本复验交付调整。
     ///
-    /// # 参数
-    /// * `order` - 正在调整的采购单；其当前提交与版本不计入其他采购承担量
-    /// * `edits` - 待复验的交付调整
+    /// 预计交付日不晚于销售履约期限、收件分配属于销售当前收件资料且不超过地址剩余量时返回 `Ok(())`。已移出销售当前版本的行不在此复验。预计交付日晚于履约期限、
+    /// 地址不一致、超量、精度非法或期限无法换算时返回错误。
     ///
-    /// # 返回
-    /// 预计交付日不晚于销售履约期限、收件分配属于销售当前收件资料且不超过地址剩余量时
-    /// 返回 `Ok(())`。已移出销售当前版本的行不在此复验。
-    ///
-    /// # 错误
-    /// 预计交付日晚于履约期限、地址不一致、超量、精度非法或期限无法换算时返回错误。
+    /// `order` 为正在调整的采购单；其当前提交与版本不计入其他采购承担量。
     pub fn validate_delivery_edits(&self, order: &PurchaseOrder, edits: &[DeliveryEdit<'_>]) -> Result<()> {
         for edit in edits {
             let Some((line, goods)) = self.current_goods_line(edit.sales_order_line_id) else {
@@ -407,7 +344,7 @@ mod tests {
         }
     }
 
-    /// 扣除其他采购后按销售顺序给出剩余量，超额承担时剩余为零。
+    // 扣除其他采购后按销售顺序给出剩余量，超额承担时剩余为零。
     #[test]
     fn remaining_capacity_subtracts_other_purchases() {
         let remaining = remaining_delivery_capacity(
@@ -421,14 +358,14 @@ mod tests {
         assert_eq!((remaining[1].address.as_str(), remaining[1].quantity), ("地址B", qty("0")));
     }
 
-    /// 没有其他采购时剩余量等于销售要求；没有销售要求时为空。
+    // 没有其他采购时剩余量等于销售要求；没有销售要求时为空。
     #[test]
     fn remaining_capacity_without_assignments() {
         assert_eq!(remaining_delivery_capacity(&[row("地址A", "2")], &[]).unwrap(), vec![row("地址A", "2")]);
         assert!(remaining_delivery_capacity(&[], &[row("地址A", "2")]).unwrap().is_empty());
     }
 
-    /// 只复验改动的交付日与收件分配；全部复验时收件分配始终进入复验。
+    // 只复验改动的交付日与收件分配；全部复验时收件分配始终进入复验。
     #[test]
     fn edits_cover_only_changed_delivery_fields() {
         let old_rows = [row("地址A", "4")];
@@ -448,7 +385,7 @@ mod tests {
         assert_eq!(all[0].delivery_allocations, Some(&old_rows[..]));
     }
 
-    /// 改单移除的零数量行不再复验交付日与收件分配。
+    // 改单移除的零数量行不再复验交付日与收件分配。
     #[test]
     fn zero_quantity_lines_are_not_checked() {
         let edits = delivery_edits(&[fields("0", Some("2099-01-01"), &[])], &[], RowCheck::All);
@@ -456,7 +393,7 @@ mod tests {
         assert!(edits.is_empty());
     }
 
-    /// 改动的交付日不得晚于履约期限；收件分配须属于销售要求且不超过剩余量。
+    // 改动的交付日不得晚于履约期限；收件分配须属于销售要求且不超过剩余量。
     #[test]
     fn validate_edits_checks_due_and_address_capacity() {
         let mut facts = facts();

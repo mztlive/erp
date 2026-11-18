@@ -28,13 +28,10 @@ pub struct SupplierDepositManagementProcess {
 
 impl SupplierDepositManagementProcess {
     /// 绑定应用拥有的数据、账号身份和预算解码能力。
-    /// # 参数
-    /// * `db` - 应用数据库。
-    /// * `codec` - 组合根共享的敏感资料编解码器。
-    /// # 返回
+    ///
+    /// `codec`：组合根共享的敏感资料编解码器。
+    ///
     /// 返回受权管理流程。
-    /// # 错误
-    /// 无。
     pub fn new(
         db: Database,
         codec: SensitiveDataCodec,

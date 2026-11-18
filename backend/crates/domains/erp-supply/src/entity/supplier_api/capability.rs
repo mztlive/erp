@@ -53,16 +53,7 @@ pub enum SupplierApiCapabilityCode {
 }
 
 impl SupplierApiCapabilityCode {
-    /// 返回能力代码的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为供应商接口能力提供中文展示名；界面展示时使用，不以文案作为稳定标识。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Product => "商品",
@@ -84,16 +75,7 @@ impl SupplierApiCapabilityCode {
         }
     }
 
-    /// 返回能力代码的稳定字符串。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得供应商接口能力的稳定标识，供需要按代码而非展示文案识别取值的调用方使用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Product => "product",
@@ -128,16 +110,7 @@ pub enum SupplierApiCapabilityStatus {
 }
 
 impl SupplierApiCapabilityStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为接口能力状态提供中文展示名；界面展示时使用，不以文案作为稳定标识。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Active => "启用",
@@ -145,16 +118,7 @@ impl SupplierApiCapabilityStatus {
         }
     }
 
-    /// 返回状态的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得接口能力状态的稳定标识，供需要按代码而非展示文案识别取值的调用方使用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Active => "active",
@@ -162,16 +126,7 @@ impl SupplierApiCapabilityStatus {
         }
     }
 
-    /// 判断能力是否处于启用状态。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 状态为 `Active` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 检查接口能力状态是否启用；此处仅检查启停标记，不代表业务资格已经通过。
     pub fn is_active(&self) -> bool {
         matches!(self, Self::Active)
     }
@@ -220,17 +175,8 @@ pub struct SupplierApiCapability {
 
 impl SupplierApiCapability {
     /// 创建连接能力声明。
-    ///
     /// 完成 constraint_snapshot 的校验与规范化（去首尾空白、长度上限）。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::SupplierApiCapabilityId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
     /// 返回新建的能力声明实体。
-    ///
-    /// # 错误
     /// 当能力约束快照超长时返回错误。
     pub fn new(id: SupplierApiCapabilityId, data: SupplierApiCapabilityData) -> Result<Self> {
         let constraint_snapshot =
@@ -246,54 +192,29 @@ impl SupplierApiCapability {
     }
 
     /// 更新连接能力声明。
-    ///
-    /// 复用 `new` 的校验规则；`connection_id`/`capability_code` 是稳定键，
-    /// 不允许在通用更新中修改。
-    ///
-    /// # 参数
-    /// * `update` - 更新数据
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// 复用 `new` 的校验规则；`connection_id`/`capability_code` 是稳定键，不允许在通用更新中修改。
     /// 当能力约束快照超长时返回错误。
     pub fn update(&mut self, update: SupplierApiCapabilityUpdate) -> Result<()> {
         self.apply_status(update.status);
         self.apply_constraint_snapshot(update.constraint_snapshot)
     }
 
-    /// 判断能力是否处于启用状态。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 状态为 `Active` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 检查供应能力是否启用；此处仅检查启停标记，不代表业务资格已经通过。
     pub fn is_active(&self) -> bool {
         self.status.is_active()
     }
 
-    /// 应用启停状态更新。
-    ///
-    /// # 参数
-    /// * `status` - 可选启停状态
+    // 应用启停状态更新。
+    // `status`：可选启停状态。
     fn apply_status(&mut self, status: Option<SupplierApiCapabilityStatus>) {
         if let Some(status) = status {
             self.status = status;
         }
     }
 
-    /// 应用能力约束快照更新。
-    ///
-    /// # 参数
-    /// * `constraint_snapshot` - 可选约束快照
-    ///
-    /// # 错误
-    /// 当约束快照超长时返回错误。
+    // 应用能力约束快照更新。
+    // 当约束快照超长时返回错误。
+    // `constraint_snapshot`：可选约束快照。
     fn apply_constraint_snapshot(&mut self, constraint_snapshot: Option<String>) -> Result<()> {
         if let Some(constraint_snapshot) = constraint_snapshot {
             self.constraint_snapshot = normalize_optional_text(

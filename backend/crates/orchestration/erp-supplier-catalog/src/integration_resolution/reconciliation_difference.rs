@@ -22,14 +22,10 @@ use crate::Result;
 impl IntegrationResolutionProcess {
     /// 登记不可变对账差异事实。
     ///
-    /// # 参数
-    /// * `req` - 差异登记请求。
-    /// * `actor` - 已通过鉴权的审计操作人。
+    /// `req`：差异登记请求。
     ///
-    /// # 返回
     /// 新建差异事实的视图。
     ///
-    /// # 错误
     /// 请求非法、责任组织无法解析、两侧证据均缺失、差异或正式责任构造失败、唯一性冲突或事务写入失败时返回对应错误。
     pub async fn create_difference(
         &self,
@@ -44,7 +40,7 @@ impl IntegrationResolutionProcess {
         .await
     }
 
-    /// 原事务内先授权，再读取责任及来源并原子登记事实和工作项。
+    // 原事务内先授权，再读取责任及来源并原子登记事实和工作项。
     async fn create_difference_stage(
         &self,
         req: CreateDifferenceRequest,

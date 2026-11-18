@@ -58,23 +58,7 @@ pub struct ContractService {
 }
 
 impl ContractService {
-    /// 创建合同服务实例。
-    ///
-    /// # 参数
-    /// * `db` - 数据库实例
-    /// * `audit` - 审计写入端口
-    /// * `customers` - 客户存在性与编号事实
-    /// * `companies` - 我方公司身份及启停事实
-    /// * `authorization` - 组合层装配固定责任模型和真实客户来源的授权能力
-    ///
-    /// # 返回
-    /// 返回服务实例。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 授权使用组合根的固定责任模型；未接线时拒绝访问。
+    /// 装配归档、终止和查询服务，接入本域数据库、审计及客户/签约主体事实。权限使用组合根注入的固定责任模型；未接线时不放行。
     pub fn new(
         db: Database,
         audit: Arc<dyn ContractAuditPort>,
@@ -92,25 +76,9 @@ impl ContractService {
         }
     }
 
-    /// 首次归档合同（合同身份 + 首个不可变版本 + PDF 关联原子形成，数据模型 §6.4）。
-    ///
-    /// 跨集合事务写入 `contract`、`contract_revision` 与审计日志；客户存在性
-    /// 经客户事实 Port 校验；contract_no 唯一性由唯一索引兜底（重复提交映射 409）。
-    ///
-    /// 客户来源授权、合同写入和审计落盘共用同一事务。
-    ///
-    /// # 参数
-    /// * `req` - 创建请求（含 PDF 文件资产 ID 与版本快照）
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回新建合同的响应视图。
-    ///
-    /// # 错误
-    /// * `ValidationError` - 请求体校验失败
-    /// * `NotFound` - 客户不存在
-    /// * `BusinessLogicError` - 客户已停用
-    /// * `ConflictError` - contract_no 与既有合同重复
+    /// 已有 PDF 文件资产时首次归档合同：依请求快照创建稳定身份和首个不可变修订，把 PDF 引用写在该修订上。
+    /// 在同一事务核验客户来源资格、客户及签约主体资格，写表头、修订与审计并返回新合同视图。
+    /// 非法请求返回 `ValidationError`，客户缺失或停用分别返回 `NotFound` 或业务规则错误；稳定合同编号重复映射 `ConflictError`。
     pub async fn create_contract(
         &self,
         req: CreateContractRequest,
@@ -143,20 +111,8 @@ impl ContractService {
             .await
     }
 
-    /// 按已登记文件资产规划合同首次归档，不读取数据库、不写附件。
-    ///
-    /// 对象存储写入与文件资产登记由所属编排入口组织。
-    ///
-    /// # 参数
-    /// * `req` - 合同业务字段
-    /// * `file_asset_id` - 已分配的文件资产 ID
-    /// * `actor_id` - 创建人
-    ///
-    /// # 返回
-    /// 返回待写入的合同与首修订。
-    ///
-    /// # 错误
-    /// 字段非法时返回错误；客户及公司资格在原写事务由 apply_create 核验。
+    /// 上传归档在跨域事务写入前，用调用方分配的文件资产 ID 和必填签约主体规划合同与首修订；只校验输入，不访问数据库、附件或对象存储。
+    /// 字段非法时返回错误；客户及主体资格留给原写事务的 `apply_create` 核验。
     pub fn plan_upload(
         &self,
         req: UploadContractRequest,
@@ -168,20 +124,8 @@ impl ContractService {
         plan_upload_archive(req, file_asset_id, settlement_party_id, actor_id)
     }
 
-    /// 在调用方 Executor 上写入合同身份与不可变修订。
-    ///
-    /// 组合层持有根事务时必须调用本方法，不得再开事务。
-    ///
-    /// # 参数
-    /// * `contract` - 待写入合同（成功后内存中绑定版本指针）
-    /// * `revision` - 不可变修订
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 无返回值。合同身份与不可变修订已写入调用方执行器。
-    ///
-    /// # 错误
-    /// 唯一索引冲突、乐观锁冲突或底层写入失败。
+    /// 跨域首次归档已持有根事务时，沿用同一执行器核对当前客户和签约主体资格，再写合同身份及不可变修订，并绑定内存中的当前修订指针。
+    /// 不另开事务；唯一索引、乐观锁或数据库写入失败返回对应错误。
     pub async fn apply_create(
         &self,
         contract: &mut Contract,
@@ -196,19 +140,12 @@ impl ContractService {
     }
 
     /// 查询合同详情（合同 + 全部不可变版本时间线）。
-    ///
-    /// # 参数
-    /// * `id` - 合同 ID
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
     /// 返回详情视图（版本按序号倒序）。
+    /// `id` 为合同 ID。
     ///
-    /// # 错误
+    /// 失败条件：
     /// * `NotFound` - 合同不存在或不在读取范围内
     /// * `ConflictError` - 查询过程中范围变化
-    ///
-    /// # 关键业务约束
     /// 详情经固定授权条件读取，完整补齐后检查原凭证；历史参与只补充读取。
     pub async fn contract_detail(&self, id: &str, actor: &AuditActor) -> Result<ContractDetailView> {
         let service = self.clone();
@@ -223,21 +160,12 @@ impl ContractService {
             .await
     }
 
-    /// 装载详情展示字段，不解释数据范围。
-    ///
-    /// # 参数
-    /// * `id` - 合同 ID
-    /// * `scope` - 当前读取阶段的完整合同详情查询凭证
-    /// * `executor` - 原授权读取事务
-    ///
-    /// # 返回
-    /// 返回详情视图。
-    ///
-    /// # 错误
-    /// 合同不存在时返回 NotFound。
-    ///
-    /// # 关键业务约束
-    /// 本方法不解释权限；HTTP 详情入口必须先调用 `contract_detail`。
+    // 装载详情展示字段，不解释数据范围。
+    // 返回详情视图。
+    // `id` 为合同 ID；`scope` 为当前读取阶段的完整合同详情查询凭证。
+    // `executor` 为原授权读取事务。
+    // 合同不存在时返回 NotFound。
+    // 本方法不解释权限；HTTP 详情入口必须先调用 `contract_detail`。
     async fn load_contract_detail(
         &self,
         id: &str,
@@ -253,7 +181,7 @@ impl ContractService {
         self.detail_view(contract, executor).await
     }
 
-    /// 从已授权的原对象或命令结果补齐修订与姓名，不增加详情菜单资格。
+    // 从已授权的原对象或命令结果补齐修订与姓名，不增加详情菜单资格。
     async fn detail_view(
         &self,
         contract: Contract,
@@ -286,19 +214,9 @@ impl ContractService {
     }
 
     /// 在调用方事务内证明按指定客户创建合同的资格。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证操作人
-    /// * `customer_id` - 拟归档合同的客户
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
     /// 创建范围覆盖该客户时成功。
-    ///
-    /// # 错误
+    /// `customer_id` 为拟归档合同的客户；沿用调用方执行器 `executor`。
     /// 无创建动作或客户不在授权内时拒绝。
-    ///
-    /// # 关键业务约束
     /// 组合层持有根事务时必须调用本方法，不得只依赖入口事前检查。
     pub async fn require_create(
         &self,
@@ -310,15 +228,8 @@ impl ContractService {
     }
 
     /// 校验客户存在且未停用。
-    ///
-    /// # 参数
-    /// * `customer_id` - 客户角色 ID
-    /// * `executor` - 原授权写事务的执行器。
-    ///
-    /// # 返回
     /// 返回客户最小事实。
-    ///
-    /// # 错误
+    /// `customer_id` 为客户角色 ID；`executor` 为原授权写事务的执行器。
     /// 客户不存在或已停用。
     pub async fn ensure_active_customer(
         &self,

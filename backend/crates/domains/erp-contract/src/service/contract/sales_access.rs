@@ -13,14 +13,9 @@ use crate::repository::ContractExt;
 
 impl ContractService {
     /// 在合同更新范围内维护明确共享销售。
-    ///
-    /// # 参数
-    /// * `id` - 合同身份
-    /// * `request` - 期望版本、共享人员和原因
-    /// * `actor` - 已证明合同更新及客户分配功能权限的操作人
-    /// # 返回
     /// 返回更新后的合同详情。
-    /// # 错误
+    /// `id` 为合同身份；`request` 为期望版本、共享人员和原因。
+    /// `actor` 为已证明合同更新及客户分配功能权限的操作人。
     /// 权限失效、版本冲突、人员无效或事务失败时拒绝。
     pub async fn set_sales_access(
         &self,
@@ -43,7 +38,7 @@ impl ContractService {
             .await
     }
 
-    /// 在原快照执行固定共享授权，再读取版本、修改共享关系并生成命令回包。
+    // 在原快照执行固定共享授权，再读取版本、修改共享关系并生成命令回包。
     async fn sales_access_stage(
         &self,
         id: &str,
@@ -79,7 +74,7 @@ impl ContractService {
     }
 }
 
-/// 共享关系只接受当前可登录的真实账号。
+// 共享关系只接受当前可登录的真实账号。
 async fn require_active_sales(
     accounts: &AccountDirectoryService,
     ids: &[String],

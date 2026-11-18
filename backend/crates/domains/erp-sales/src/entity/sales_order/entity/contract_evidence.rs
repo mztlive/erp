@@ -10,13 +10,11 @@ use crate::entity::sales_order::contract_terms::ensure_contract_customer;
 
 impl SalesOrder {
     /// 检验建单凭证的内容类型、对应扩展名与有效状态。
-    ///
-    /// # 参数
-    /// * `mime` / `name` / `unavailable` / `byte_size` - 服务端读取的资产治理与大小元数据
-    /// # 返回
-    /// PDF、JPG、PNG 或 WebP 且有效时成功。
-    /// # 错误
+    /// 结果：PDF、JPG、PNG 或 WebP 且有效时成功。
     /// 类型不在 PDF、JPG、PNG、WebP 内，扩展名与类型不匹配，资产不可用，或大小为 0、超过类型上限时拒绝。
+    ///
+    /// 输入约定：
+    /// - `mime` / `name` / `unavailable` / `byte_size`：服务端读取的资产治理与大小元数据
     pub fn validate_creation_evidence_file(
         mime: &str,
         name: &str,
@@ -39,13 +37,11 @@ impl SalesOrder {
     }
 
     /// 设置首次建单凭证；无合同 ERP 单必须提供凭证。
-    ///
-    /// # 参数
-    /// * `ids` - 已登记并待跨域校验的文件资产身份
-    /// # 返回
-    /// 规范化后写入稳定对象。
-    /// # 错误
+    /// 结果：规范化后写入稳定对象。
     /// 无合同缺凭证、空身份、重复身份或超过 20 份时拒绝。
+    ///
+    /// 输入约定：
+    /// - `ids`：已登记并待跨域校验的文件资产身份
     pub fn set_creation_evidence(&mut self, ids: Vec<FileAssetId>) -> Result<()> {
         if self.contract_id.is_none() && ids.is_empty() {
             return Err(Error::from("无合同创建销售单必须上传 PDF 或图片凭证"));
@@ -63,14 +59,12 @@ impl SalesOrder {
     }
 
     /// 接纳销售编辑命令的合同上下文；无合同原单可首次补录。
-    ///
-    /// # 参数
-    /// * `contract_id` / `customer_id` / `settlement_party_id` - 服务端解析的命令关系
-    /// * `actor_id` - 当前编辑人
-    /// # 返回
-    /// 客户及合同关系一致时接纳草稿结算主体；首次绑定时更新稳定合同。
-    /// # 错误
+    /// 结果：客户及合同关系一致时接纳草稿结算主体；首次绑定时更新稳定合同。
     /// 客户或已有合同不一致、已作废销售单首次补合同，或非可编辑草稿更改结算主体时拒绝。
+    ///
+    /// 输入约定：
+    /// - `contract_id` / `customer_id` / `settlement_party_id`：服务端解析的命令关系
+    /// - `actor_id`：当前编辑人
     pub fn apply_command_contract_context(
         &mut self,
         contract_id: &Option<ContractId>,
@@ -99,15 +93,13 @@ impl SalesOrder {
     }
 
     /// 首次绑定合同，保留客户、结算主体及全部商业内容。
-    ///
-    /// # 参数
-    /// * `contract_id` - 已验证当前有效修订的合同
-    /// * `customer_id` - 合同权威客户；销售单已选择的结算主体保持不变
-    /// * `actor_id` - 已认证修改人
-    /// # 返回
-    /// 更新稳定合同关系和修改人。
-    /// # 错误
+    /// 结果：更新稳定合同关系和修改人。
     /// 原单作废、已有合同或合同归属不一致时拒绝。
+    ///
+    /// 输入约定：
+    /// - `contract_id`：已验证当前有效修订的合同
+    /// - `customer_id`：合同权威客户；销售单已选择的结算主体保持不变
+    /// - `actor_id`：已认证修改人
     pub fn bind_contract(
         &mut self,
         contract_id: ContractId,

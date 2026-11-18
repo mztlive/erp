@@ -13,28 +13,16 @@ use crate::repository::owned::SupplierApiCapabilityRepository;
 
 impl<'a> SupplierApiRepository<'a> {
     /// 批量持久化已验证的能力变更（INT-R32）。
-    ///
-    /// 已更新实体按调用方给定顺序逐个 CAS 写回（`id + version` 命中，未命中报
-    /// 乐观锁冲突并推进内存版本）；新增实体按给定顺序一次有序批量插入。
-    /// 两组输入同时为空时直接返回成功且不访问数据库。必须收到事务执行器；
-    /// 本方法不构成原子边界，`NoTransaction` 下各笔各自提交，Service 必须通过
+    /// 已更新实体按调用方给定顺序逐个 CAS 写回（`id + version` 命中，未命中报乐观锁冲突并推进内存版本）；
+    /// 新增实体按给定顺序一次有序批量插入。两组输入同时为空时直接返回成功且不访问数据库。必须收到事务执
+    /// 行器；本方法不构成原子边界，`NoTransaction` 下各笔各自提交，Service 必须通过
     /// `persistence_core::Transactional::with_transaction` 传入事务会话，任一失败整体回滚。
-    ///
-    /// # 参数
-    /// * `updates` - 待写回的已更新能力实体（顺序即写入顺序；内存版本随写回推进）
-    /// * `creates` - 待插入的新增能力实体（顺序即写入顺序）
-    /// * `executor` - 数据访问执行器，必须位于写入事务中
-    ///
-    /// # 返回
     /// 持久化成功返回 `Ok(())`；两组输入同时为空亦返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 当乐观锁冲突、唯一索引冲突或 MongoDB 读写失败时返回错误；失败时是否部分
-    /// 可见由调用方事务决定。
-    ///
-    /// # 约束
-    /// 不开启或提交事务；更新保持逐文档 CAS（批量语义不得替代乐观锁）；
-    /// 不返回 services DTO、HTTP View 或授权结论。
+    /// 当乐观锁冲突、唯一索引冲突或 MongoDB 读写失败时返回错误；失败时是否部分可见由调用方事务决定。
+    /// 不开启或提交事务；更新保持逐文档 CAS（批量语义不得替代乐观锁）；不返回 services DTO、HTTP View 或
+    /// 授权结论。
+    /// `updates`：待写回的已更新能力实体（顺序即写入顺序；内存版本随写回推进）
+    /// `executor`：数据访问执行器，必须位于写入事务中。
     pub async fn persist_capability_changes(
         &self,
         updates: &mut [SupplierApiCapability],
@@ -63,11 +51,9 @@ mod tests {
 
     use super::SupplierApiRepository;
 
-    /// 空输入直接成功且不访问数据库（INT-R32）。
-    ///
-    /// 测试使用不可达 Mongo 地址构造仓储句柄：空集合在任何 I/O 前短路，
-    /// 因此不断开连接；非空路径更新保持逐文档 CAS、新增保持单次有序批量，
-    /// 任一失败整体回滚由调用方事务保证（见方法约束）。
+    // 验证空输入直接成功且不访问数据库（INT-R32）。
+    // 测试使用不可达 Mongo 地址构造仓储句柄：空集合在任何 I/O 前短路，因此不断开连接；非空路径更新保持逐
+    // 文档 CAS、新增保持单次有序批量，任一失败整体回滚由调用方事务保证（见方法约束）。
     #[tokio::test]
     async fn empty_capability_changes_succeed_without_touching_database() {
         let client = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap();

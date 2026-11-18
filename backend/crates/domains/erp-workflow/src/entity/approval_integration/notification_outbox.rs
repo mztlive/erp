@@ -46,16 +46,8 @@ pub enum ApprovalNotificationEventKind {
 }
 
 impl ApprovalNotificationEventKind {
-    /// 返回稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
+    /// 取得稳定代码。
     /// 返回合同第 16.5 节事件代码。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Started => "STARTED",
@@ -86,16 +78,8 @@ pub enum ApprovalNotificationDeliveryStatus {
 }
 
 impl ApprovalNotificationDeliveryStatus {
-    /// 返回稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
+    /// 取得稳定代码。
     /// 返回投递状态代码。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Pending => "PENDING",
@@ -124,18 +108,9 @@ pub struct ApprovalNotificationTemplateParams {
 }
 impl ApprovalNotificationTemplateParams {
     /// 以必填展示字段构造模板参数；驳回摘要默认为空。
-    ///
-    /// # 参数
-    /// * `document_type_label` - 单据类型中文名
-    /// * `document_no` - 单据业务编号
-    /// * `current_node_name` - 当前节点名称
-    /// * `current_approver_display_name` - 当前审批人显示名
-    ///
-    /// # 返回
     /// 返回首轮的模板参数。
     ///
-    /// # 错误
-    /// 无。
+    /// `current_node_name`：当前节点名称；`current_approver_display_name`：当前审批人显示名。
     pub fn new(
         document_type_label: String,
         document_no: String,
@@ -153,15 +128,6 @@ impl ApprovalNotificationTemplateParams {
     }
 
     /// 设置轮次号。
-    ///
-    /// # 参数
-    /// * `round_no` - 轮次号
-    ///
-    /// # 返回
-    /// 返回更新后的参数。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_round_no(mut self, round_no: u32) -> Self {
         self.round_no = round_no;
         self
@@ -199,19 +165,8 @@ pub struct ApprovalNotificationOutbox {
 
 impl ApprovalNotificationOutbox {
     /// 追加一条待投递通知。
-    ///
-    /// # 参数
-    /// * `id` - outbox 主键
-    /// * `dedup_key` - 业务事件去重键
-    /// * `event_kind` - 事件种类
-    /// * `recipient_user_ids` - 收件人
-    /// * `template_params` - 有界模板参数
-    /// * `at` - 入队时间
-    ///
-    /// # 返回
     /// 返回状态为待投递、尝试次数为 0 的 outbox 记录。
     ///
-    /// # 错误
     /// 去重键、收件人或模板字段非法时返回错误。
     pub fn enqueue(
         id: ApprovalNotificationOutboxId,
@@ -243,17 +198,11 @@ impl ApprovalNotificationOutbox {
     }
 
     /// 以原子租约条件取得投递权。
-    ///
-    /// # 参数
-    /// * `worker_id` - 租约持有者
-    /// * `now` - 当前时间
-    /// * `lease_until` - 租约截止
-    ///
-    /// # 返回
     /// 无返回值；状态变为投递中并写入租约。
     ///
-    /// # 错误
     /// 已投递、已死信、尚未到下次尝试时间、租约未到期、租约截止不晚于当前时间，或持有者为空、过长时返回错误。
+    ///
+    /// `now`：当前时间。
     pub fn acquire_lease(
         &mut self,
         worker_id: impl Into<String>,
@@ -277,14 +226,8 @@ impl ApprovalNotificationOutbox {
     }
 
     /// 标记投递成功。成功后不得再次取得该消息。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 无返回值；状态变为已投递并清除租约。
     ///
-    /// # 错误
     /// 当前不是投递中时返回错误。
     pub fn mark_delivered(&mut self) -> Result<()> {
         if self.delivery_status != ApprovalNotificationDeliveryStatus::InFlight {
@@ -297,15 +240,8 @@ impl ApprovalNotificationOutbox {
     }
 
     /// 记录一次失败。未达上限则按固定退避安排下次尝试，否则进入死信。
-    ///
-    /// # 参数
-    /// * `error_class` - 错误分类
-    /// * `failed_at` - 失败时间
-    ///
-    /// # 返回
     /// 无返回值；未达尝试上限时回到待投递并安排下次时间，否则进入死信。
     ///
-    /// # 错误
     /// 当前不是投递中、错误分类为空或过长，或尝试次数溢出时返回错误。
     pub fn mark_failure(&mut self, error_class: impl Into<String>, failed_at: Instant) -> Result<()> {
         if self.delivery_status != ApprovalNotificationDeliveryStatus::InFlight {
@@ -336,15 +272,8 @@ impl ApprovalNotificationOutbox {
     }
 
     /// 记录不可重试的投递失败并立即转入死信。
-    ///
-    /// # 参数
-    /// * `error_class` - 失败分类。
-    /// * `failed_at` - 实际失败时间。
-    ///
-    /// # 返回
     /// 尝试次数加一，清除租约并记录死信时间。
     ///
-    /// # 错误
     /// 消息未持有租约、失败分类非法或尝试次数溢出时返回错误。
     pub fn mark_fatal_failure(&mut self, error_class: impl Into<String>, failed_at: Instant) -> Result<()> {
         self.mark_failure(error_class, failed_at)?;
@@ -354,10 +283,8 @@ impl ApprovalNotificationOutbox {
     }
 }
 
-/// 规范化收件人列表。
-///
-/// # 错误
-/// 列表为空或任一收件人非法时返回错误。
+// 规范化收件人列表。
+// 列表为空或任一收件人非法时返回错误。
 fn normalize_recipients(recipient_user_ids: Vec<String>) -> Result<Vec<String>> {
     if recipient_user_ids.is_empty() {
         return Err(Error::from("收件人不能为空"));
@@ -374,10 +301,8 @@ fn normalize_recipients(recipient_user_ids: Vec<String>) -> Result<Vec<String>> 
     Ok(normalized)
 }
 
-/// 规范化模板参数，拒绝超长敏感字段形态。
-///
-/// # 错误
-/// 必填展示字段为空或超长时返回错误。
+// 规范化模板参数，拒绝超长敏感字段形态。
+// 必填展示字段为空或超长时返回错误。
 fn normalize_template_params(
     params: ApprovalNotificationTemplateParams,
 ) -> Result<ApprovalNotificationTemplateParams> {
@@ -415,10 +340,8 @@ fn normalize_template_params(
     })
 }
 
-/// 按失败次数计算下次尝试时间。
-///
-/// # 错误
-/// 失败次数超出退避表时返回错误。
+// 按失败次数计算下次尝试时间。
+// 失败次数超出退避表时返回错误。
 fn next_attempt_at(attempt_count: u32, failed_at: Instant) -> Result<Instant> {
     let index = usize::try_from(attempt_count.saturating_sub(1)).unwrap_or(usize::MAX);
     let Some(delay) = RETRY_BACKOFF_SECS.get(index).copied() else {
@@ -429,7 +352,7 @@ fn next_attempt_at(attempt_count: u32, failed_at: Instant) -> Result<Instant> {
 
 /// 当前消息是否允许被领取。
 impl ApprovalNotificationOutbox {
-    /// 仅待投递且已到点，或投递中且租约已到期的消息可以再次取得。
+    // 领取前检查消息已到投递时点，或仍在投递中但租约过期；其他状态或未来到期消息不可再次取得。
     fn ensure_retryable(&self, now: Instant) -> Result<()> {
         match self.delivery_status {
             ApprovalNotificationDeliveryStatus::Delivered => Err(Error::from("已投递消息不得再次取得")),
@@ -479,7 +402,7 @@ mod tests {
         .unwrap()
     }
 
-    /// 入队去重收件人，初始待投递。
+    // 验证：入队去重收件人，初始待投递。
     #[test]
     fn enqueue_deduplicates_recipients() {
         let item = pending();
@@ -488,13 +411,13 @@ mod tests {
         assert_eq!(item.attempt_count, 0);
     }
 
-    /// 开发期硬切换不得接受已删除的审批改派通知种类。
+    // 验证：开发期硬切换不得接受已删除的审批改派通知种类。
     #[test]
     fn removed_reassigned_event_is_rejected() {
         assert!(serde_json::from_str::<ApprovalNotificationEventKind>("\"REASSIGNED\"").is_err());
     }
 
-    /// 成功后不得再取租约。
+    // 验证：成功后不得再取租约。
     #[test]
     fn delivered_message_cannot_be_leased() {
         let mut item = pending();
@@ -508,7 +431,7 @@ mod tests {
         );
     }
 
-    /// 第 6 次失败进入死信；此前按固定退避。
+    // 验证：第 6 次失败进入死信；此前按固定退避。
     #[test]
     fn sixth_failure_dead_letters() {
         let mut item = pending();
@@ -537,7 +460,7 @@ mod tests {
         );
     }
 
-    /// BSON 往返保持投递字段。
+    // 验证 BSON 序列化与反序列化保持投递字段。
     #[test]
     fn outbox_roundtrips_through_bson() {
         let item = pending();

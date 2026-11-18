@@ -28,20 +28,7 @@ use crate::{Error, Result};
 const RULE_PAGE_SIZE: u32 = 100;
 
 impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
-    /// 补齐默认采购调度人和财务付款、开票负责人。
-    ///
-    /// 已有启用的同层默认规则时保留现有负责人。
-    ///
-    /// # 参数
-    /// * `actor` - 当前操作人。
-    /// * `accounts` - 已准备的岗位账号。
-    /// * `report` - 累计责任规则提示。
-    ///
-    /// # 返回
-    /// 规格中的默认规则已存在或已创建时无返回值。
-    ///
-    /// # 错误
-    /// 规格负责人不在已准备账号中，或规则查询与创建失败时返回对应错误。
+    // 补齐演示业务所需的默认采购调度、付款和开票责任规则。存在同层启用规则时保留并复验原负责人；岗位无法解析、查询或创建失败时停止。
     pub(super) async fn ensure_responsibilities(
         &self,
         actor: &AuditActor,
@@ -90,7 +77,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         Ok(())
     }
 
-    /// 分页读取默认规则，并使用正式采购资格核验保留的启用负责人。
+    // 分页查询采购默认规则，核验启用负责人仍具备正式采购资格，再决定保留还是补建。
     async fn procurement_default_flags(&self) -> Result<Vec<bool>> {
         let mut page = 1_u64;
         let mut flags = Vec::new();
@@ -122,7 +109,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         }
     }
 
-    /// 保留既有负责人前复用工作项服务的完整执行资格，失效规则阻断准备。
+    // 按财务操作读取默认责任，并通过工作项正式资格核验既有负责人；启用规则已失效时阻断准备，不自动换人。
     async fn finance_default_flags(
         &self,
         actor: &AuditActor,
@@ -193,7 +180,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
     }
 }
 
-/// 根据正式候选资格核验已启用默认规则，不替换人工选定的负责人。
+// 用正式候选范围核对启用规则里的财务责任人，只确认其是否可办理当前操作，不替换人工选择。
 fn ensure_finance_owner(
     operation: FinanceResponsibilityOperation,
     owner_user_id: &str,
@@ -220,7 +207,7 @@ fn account_id(accounts: &PreparedAccounts, key: &str) -> Result<String> {
     accounts.by_key.get(key).cloned().ok_or_else(|| Error::NotFound(format!("责任人 {key} 尚未建号")))
 }
 
-/// 没有启用的同层默认规则时才创建。停用规则不参与解析，因此不阻止新建。
+// 仅在同层没有启用默认规则时补建；停用规则不参与责任解析，不能作为跳过补建的理由。
 fn should_create_responsibility(active: &[bool]) -> bool {
     !active.contains(&true)
 }
@@ -251,7 +238,7 @@ mod tests {
         assert!(!should_create_responsibility(&[false, true]));
     }
 
-    /// 正式候选允许自定义负责人，不要求负责人等于种子账号。
+    // 验证合格的人工财务负责人能保留，即使并非固定演示账号也不重置规则。
     #[test]
     fn finance_default_keeps_qualified_custom_owner() {
         let options = vec![FinanceResponsibilityOwnerOptionView {
@@ -266,7 +253,7 @@ mod tests {
         assert!(!should_create_responsibility(&[true]));
     }
 
-    /// 停用、删除或缺权人员不在正式候选中；另一财务操作资格不能替代所需操作。
+    // 验证停用、删除或缺权人员不能作为现行默认负责人，具备另一财务操作权限也不能替代本操作资格。
     #[test]
     fn finance_default_rejects_missing_owner_and_wrong_operation() {
         let options = vec![FinanceResponsibilityOwnerOptionView {

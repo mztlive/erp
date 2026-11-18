@@ -15,21 +15,12 @@ use crate::http::handler::legacy_import;
 use crate::http::routes::permission_route;
 use crate::http::state::HttpState;
 
-/// 返回本域管理端路由集合。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回声明公共权限目录信息的路由集合。
-///
-/// # 错误
-/// 不执行 I/O，不返回错误。
+/// 为管理端挂载历史数据导入接口，按操作登记公共权限目录信息。
 pub fn routes() -> Router<HttpState> {
     Router::new().merge(batch_routes()).merge(confirmation_routes())
 }
 
-/// 历史数据导入批次路由。
+// 为父路由挂载历史数据导入批次路由。
 fn batch_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -76,7 +67,7 @@ fn batch_routes() -> Router<HttpState> {
         )
 }
 
-/// 历史数据导入确认路由。
+// 为父路由挂载历史数据导入确认路由。
 fn confirmation_routes() -> Router<HttpState> {
     Router::new()
         .route(

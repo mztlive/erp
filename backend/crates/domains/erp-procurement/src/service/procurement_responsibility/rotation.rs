@@ -11,12 +11,10 @@ use crate::{Error, Result};
 
 impl ProcurementResponsibilityService {
     /// 为本单所有命中的规则池各占用一次轮次。
-    /// # 参数
+    ///
+    /// 同规则多商品只推进一次，不同规则独立推进。同池出现多个负责人、规则停用、成员或轮次变化时回滚。
+    ///
     /// `candidates` 为完整候选；`executor` 必须为创建任务的原事务。
-    /// # 返回
-    /// 同规则多商品只推进一次，不同规则独立推进。
-    /// # 错误
-    /// 同池出现多个负责人、规则停用、成员或轮次变化时回滚。
     pub async fn claim_pools(
         &self,
         candidates: &[CandidateResolution],
@@ -46,20 +44,16 @@ impl ProcurementResponsibilityService {
         Ok(())
     }
 
-    /// 配置维护与当前池的分派串行化，保留最近负责人。
-    /// # 参数
-    /// `rule_id` 为池所属规则，`executor` 为维护事务。
-    /// # 返回
-    /// 仅更新并发版本，不占分派轮次。
-    /// # 错误
-    /// 缺少事务或写冲突时拒绝。
+    // 配置维护与当前池的分派串行化，保留最近负责人。
+    //
+    // 仅更新并发版本，不占分派轮次。缺少事务或写冲突时拒绝。
     pub(super) async fn guard_rotation(&self, rule_id: &str, executor: &mut dyn Executor) -> Result<()> {
         let current = rotation(&self.db, rule_id, executor).await?;
         advance(&self.db, rule_id, &current, current.last_owner_user_id.as_deref(), executor).await
     }
 }
 
-/// 按规则聚合整单选择，拒绝同一池被拆给不同人员。
+// 按规则聚合整单选择，拒绝同一池被拆给不同人员。
 fn pool_choices(candidates: &[CandidateResolution]) -> Result<BTreeMap<&str, &str>> {
     let mut choices = BTreeMap::new();
     for candidate in candidates {

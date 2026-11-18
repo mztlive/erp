@@ -35,12 +35,7 @@ use crate::http::state::HttpState;
 /// 审批实例 Handler 结果。
 type ApprovalResult<T> = std::result::Result<ApiResponse<T>, ApprovalHttpError>;
 
-/// 对当前开放审批任务通过或驳回。
-///
-/// actor 只从认证上下文注入。`DecisionOutcome::Blocked` 必须映射为 409。
-///
-/// # 错误
-/// 协议非法或运行端口未接入时返回稳定错误。
+/// 接收当前开放审批任务的通过或驳回命令，将认证账号、任务版本和幂等键交给审批运行时。受阻结果映射为 409；请求不接受客户端自报身份。
 pub async fn submit_decision(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -62,10 +57,7 @@ pub async fn submit_decision(
     ok_json(view)
 }
 
-/// 按 `mine|started|managed|blocked` 查询实例摘要。
-///
-/// # 错误
-/// view/status 组合非法时返回 422，不得返回伪空列表。
+/// 为审批工作台列出 `mine|started|managed|blocked` 的实例摘要、统计及续页游标；视图与状态搭配非法时返回 422，而不是假空列表。
 pub async fn instance_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -95,12 +87,7 @@ pub async fn instance_list(
     }))
 }
 
-/// 返回实例、当前责任和最近受控条数历史。
-///
-/// 详情最多 20 条执行摘要并携带 `history_next_cursor`。
-///
-/// # 错误
-/// 无权时不泄露存在性。
+/// 打开审批实例时读取当前责任和最近最多 20 条执行摘要；完整执行记录使用 `history_next_cursor` 续读。无权者看不到实例是否存在。
 pub async fn instance_detail(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -115,10 +102,7 @@ pub async fn instance_detail(
     ok_json(view)
 }
 
-/// 按执行序号稳定分页读取完整历史；未指定方向时保持升序。
-///
-/// # 错误
-/// 页大小非法时返回 422。
+/// 展开完整审批轨迹时按执行序号分页，默认升序；页大小或游标非法时返回 422。
 pub async fn instance_history(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -137,12 +121,7 @@ pub async fn instance_history(
     ok_json(page)
 }
 
-/// 返回当前 blocker 的唯一合法恢复方式。
-///
-/// 只对通过运行管理权与 DataScope 的 actor 返回结果。
-///
-/// # 错误
-/// 无权时不泄露实例存在性。
+/// 为受阻实例查询当前唯一合法恢复方式。运行时同时核验管理动作权限与实例范围，不向越权请求透露实例是否存在。
 pub async fn recovery_options(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -156,12 +135,7 @@ pub async fn recovery_options(
     ok_json(view)
 }
 
-/// 恢复当前审批人并创建新执行和新任务。
-///
-/// 不接受目标用户、决定、节点或恢复动作枚举。
-///
-/// # 错误
-/// 版本非法或端口未接入时返回稳定错误。
+/// 恢复当前审批人时在原实例上新建执行与待办；目标人、决定、节点及恢复类型由运行时控制，不接受客户端指定。版本或依赖无效时拒绝。
 pub async fn resume_current_approver(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -177,12 +151,7 @@ pub async fn resume_current_approver(
     ok_json(view)
 }
 
-/// 取消非人员一致性 blocker。
-///
-/// 不得接受新定义、修复值、下一节点或目标用户。
-///
-/// # 错误
-/// 人员失效 blocker 必须拒绝。
+/// 取消非人员一致性原因的受阻实例；人员失效时拒绝取消。不能借此提交新定义、修复值、下一节点或目标人。
 pub async fn cancel_blocked(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -198,12 +167,7 @@ pub async fn cancel_blocked(
     ok_json(view)
 }
 
-/// 升级未提交单据绑定到当前发布版本。
-///
-/// 目标定义不得由客户端提交。
-///
-/// # 错误
-/// 请求夹带 definition ID 时在反序列化阶段拒绝。
+/// 未提交单据需要换绑时，令审批运行时选择当前已发布定义；带自选定义 ID 的请求在反序列化阶段拒绝。
 pub async fn upgrade_binding(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -232,14 +196,14 @@ pub async fn upgrade_binding(
     ok_json(view)
 }
 
-/// 构造运行服务。
+// 从组合根取出共享审批运行时，供 Handler 执行实例查询与审批命令，不在 HTTP 层重建审批行为。
 fn runtime_service(
     state: &HttpState,
 ) -> std::sync::Arc<ApprovalRuntimeService<crate::wiring::workflow::WorkflowAuth>> {
     state.application().approval_runtime_service()
 }
 
-/// 将服务视图序列化为 JSON 响应。
+// 在审批 Handler 成功返回视图时序列化为统一 JSON 信封，序列化失败走审批错误边界。
 fn ok_json<T: serde::Serialize>(data: T) -> ApprovalResult<serde_json::Value> {
     serde_json::to_value(data)
         .map(ApiResponse::ok_with_data)
@@ -257,10 +221,8 @@ struct ValidatedDecision {
     actor_id: String,
 }
 
-/// 把决定 HTTP 请求转为协议命令并注入 actor。
-///
-/// # 错误
-/// 版本非法或驳回原因为空时返回稳定错误。
+// 把决定 HTTP 请求转为协议命令并注入 actor。
+// 版本非法或驳回原因为空时返回稳定错误。
 fn decision_command(
     request: SubmitDecisionHttpRequest,
     actor_id: &str,
@@ -285,10 +247,8 @@ fn decision_command(
     })
 }
 
-/// 把恢复请求转为协议命令。
-///
-/// # 错误
-/// 版本非法时返回 400。
+// 把恢复请求转为协议命令。
+// 版本非法时返回 400。
 fn resume_command(
     instance_id: String,
     request: ResumeApproverHttpRequest,
@@ -314,12 +274,10 @@ fn resume_command(
     })
 }
 
-/// 把受阻取消请求转为协议命令。
-///
-/// blocker 由服务端从当前实例推导，请求体不得携带。
-///
-/// # 错误
-/// 原因为空或版本非法时返回协议错误。
+// 把受阻取消请求转为协议命令。
+//
+// blocker 由服务端从当前实例推导，请求体不得携带。
+// 原因为空或版本非法时返回协议错误。
 fn cancel_blocked_command(
     instance_id: String,
     request: CancelBlockedHttpRequest,
@@ -342,10 +300,8 @@ fn cancel_blocked_command(
     })
 }
 
-/// 要求非空原因。
-///
-/// # 错误
-/// 空白原因返回 422。
+// 要求非空原因。
+// 空白原因返回 422。
 fn ensure_non_empty_reason(reason: &str, headers: &HeaderMap) -> Result<(), ApprovalHttpError> {
     if reason.trim().is_empty() {
         return Err(ApprovalHttpError::unprocessable("请填写原因后再提交", headers));
@@ -382,7 +338,7 @@ mod tests {
         instance_list_query_response(uri).await.status()
     }
 
-    /// 生产 Handler 使用的查询提取器必须把反序列化与查询合同错误统一为 422。
+    // 使用实际审批查询提取器覆盖解码失败和查询合同非法，确认两者都返回 422。
     #[tokio::test]
     async fn instance_list_query_extractor_returns_422_for_all_invalid_boundaries() {
         let long_query = "a".repeat(129);
@@ -413,7 +369,7 @@ mod tests {
         }
     }
 
-    /// 查询提取失败必须沿用审批 API 的稳定 JSON 错误信封，而不是 Axum 文本拒绝。
+    // 核对审批查询拒绝是带稳定码的 JSON 信封，而不是 Axum 默认的纯文本响应。
     #[tokio::test]
     async fn instance_list_query_extractor_keeps_stable_error_envelope() {
         let response = instance_list_query_response("/?view=unknown").await;
@@ -428,7 +384,7 @@ mod tests {
         assert!(payload["errorMessage"].as_str().is_some_and(|message| !message.is_empty()));
     }
 
-    /// 合法查询必须通过同一生产提取器，且 Managed cursor 保留完整 i64 时间域。
+    // 经生产提取器验证合法审批查询，并确认管理视图游标保留整个 `i64` 排序时间范围。
     #[tokio::test]
     async fn instance_list_query_extractor_accepts_valid_values() {
         for uri in [

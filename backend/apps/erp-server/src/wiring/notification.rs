@@ -70,11 +70,7 @@ fn event_label(event: ApprovalNotificationEventKind) -> &'static str {
 }
 
 /// 以正式任务列表相同的授权查询计算待办徽标。
-/// # 参数
-/// app 为业务装配，actor 为会话身份。
-/// # 返回
 /// 无列表权限返回 None；有权限时返回本人开放队列总数。
-/// # 错误
 /// 授权或查询失败原样返回，不回退为零。
 pub async fn todo_count(app: &Application, actor: &AuditActor) -> ApplicationResult<Option<i64>> {
     let allowed =

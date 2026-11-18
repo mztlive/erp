@@ -13,13 +13,14 @@ use serde::Deserialize;
 
 use crate::Result;
 
-/// 页行、总数都先沿当前退货单的实际采购来源执行授权。
-/// # 参数
-/// db 是事实数据库；filter 是业务筛选；scope 是当前采购授权；executor 是原事务。
-/// # 返回
-/// 与完整授权条件一致的当前页及总数。
-/// # 错误
-/// 授权失效或数据库读取失败时拒绝。
+// 处理采购退货时，页行、总数都先沿当前退货单的实际采购来源执行授权。
+//
+// 调用参数：
+// db 是事实数据库；filter 是业务筛选；scope 是当前采购授权；executor 是原事务。
+//
+// 与完整授权条件一致的当前页及总数。
+//
+// 授权失效或数据库读取失败时拒绝。
 pub(in crate::returns_center) async fn search(
     db: &Database,
     filter: &PurchaseReturnOrderFilter,
@@ -40,13 +41,14 @@ pub(in crate::returns_center) async fn search(
     Ok(PageResult { items, total })
 }
 
-/// 仅对业务筛选与来源授权的交集应用退货版本数量上限。
-/// # 参数
-/// db 是事实数据库；filter 与列表一致；scope 是当前采购授权；executor 是原事务。
-/// # 返回
-/// 稳定 ID 顺序的最多 10001 个退货版本。
-/// # 错误
-/// 授权失效或数据库读取失败时拒绝。
+// 处理采购退货时，仅对业务筛选与来源授权的交集应用退货版本数量上限。
+//
+// 调用参数：
+// db 是事实数据库；filter 与列表一致；scope 是当前采购授权；executor 是原事务。
+//
+// 稳定 ID 顺序的最多 10001 个退货版本。
+//
+// 授权失效或数据库读取失败时拒绝。
 pub(in crate::returns_center) async fn versions(
     db: &Database,
     filter: &PurchaseReturnOrderFilter,
@@ -70,13 +72,14 @@ pub(in crate::returns_center) async fn versions(
     Ok(rows)
 }
 
-/// 只返回已通过实际采购来源完整授权的退货身份及来源身份。
-/// # 参数
-/// db 为退货事实数据库；id 为精确退货身份；scope 为原 DETAIL 凭证；executor 为原事务。
-/// # 返回
-/// 来源存在且授权命中时返回退货身份与采购来源身份，否则返回 None。
-/// # 错误
-/// 凭证失效、模型不符或数据库读取失败时拒绝。
+// 处理采购退货时，仅给出已通过实际采购来源完整授权的退货身份及来源身份。
+//
+// 调用参数：
+// db 为退货事实数据库；id 为精确退货身份；scope 为原 DETAIL 凭证；executor 为原事务。
+//
+// 来源存在且授权命中时返回退货身份与采购来源身份，否则返回 None。
+//
+// 凭证失效、模型不符或数据库读取失败时拒绝。
 pub(in crate::returns_center) async fn identity(
     db: &Database,
     id: &str,
@@ -101,7 +104,7 @@ struct PurchaseReturnSource {
     purchase_order_id: String,
 }
 
-/// 业务详情读取前只读取已命中完整来源授权的退货身份与来源身份。
+// 组装采购退货的聚合管道时，业务详情读取前只读取已命中完整来源授权的退货身份与来源身份。
 fn purchase_return_identity_pipeline(id: &str, scope: &PurchaseReadScope) -> Vec<Document> {
     let mut pipeline = scope.related_stages(doc! { "id": id, "deleted_at": 0_i64 }, "$purchase_order_id");
     pipeline
@@ -109,7 +112,7 @@ fn purchase_return_identity_pipeline(id: &str, scope: &PurchaseReadScope) -> Vec
     pipeline
 }
 
-/// 保持退货列表既有字段投影、排序白名单及稳定次键。
+// 处理采购退货时，保持退货列表既有字段投影、排序白名单及稳定次键。
 fn page_options(filter: &PurchaseReturnOrderFilter) -> FindOptions {
     let direction = if filter.sort_ascending { 1 } else { -1 };
     let field = filter
@@ -150,7 +153,7 @@ mod tests {
     use super::*;
     use crate::purchase_center::access::PurchaseAccess;
 
-    /// 成功编译的详情凭证必须绑定实际来源，授权完成后只交付身份投影。
+    // 验证采购退货：成功编译的详情凭证必须绑定实际来源，授权完成后只交付身份投影。
     #[tokio::test]
     async fn purchase_return_identity_applies_complete_source_authorization_before_projection() {
         let client =

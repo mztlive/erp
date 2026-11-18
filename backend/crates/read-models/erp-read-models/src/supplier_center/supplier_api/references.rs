@@ -13,11 +13,14 @@ use super::SupplierApiReadService;
 use crate::{Error, Result};
 
 impl SupplierApiReadService {
-    /// 按当前连接记录签发配置选择项；只返回安全别名和短时票据。
+    /// 依据当前连接记录签发配置选择项；只返回安全别名和短时票据。
+    ///
     /// # 参数
     /// `id` 为后台连接 ID，`kind` 为配置种类，`actor` 为已认证操作人。
+    ///
     /// # 返回
     /// 适用于连接环境的配置选项，未登记配置时为空。
+    ///
     /// # 错误
     /// 无绑定权限、连接不存在、种类不支持或注册表失败时返回错误。
     pub async fn reference_options_for_actor(
@@ -37,13 +40,14 @@ impl SupplierApiReadService {
             .await
     }
 
-    /// 在同一资格快照中读取连接并生成进程内配置选项。
-    /// # 参数
-    /// id、kind 为真实连接与配置种类，actor 为当前账号，executor 为原事务。
-    /// # 返回
-    /// 返回相应绑定资格允许的安全配置别名和短时票据。
-    /// # 错误
-    /// 资格不足、连接缺失或进程内注册表失败时拒绝。
+    // 读取供应连接时，在同一资格快照中读取连接并生成进程内配置选项。
+    //
+    // 调用参数：
+    // id、kind 为真实连接与配置种类，actor 为当前账号，executor 为原事务。
+    //
+    // 返回相应绑定资格允许的安全配置别名和短时票据。
+    //
+    // 资格不足、连接缺失或进程内注册表失败时拒绝。
     pub(super) async fn reference_options_snapshot(
         &self,
         id: &str,

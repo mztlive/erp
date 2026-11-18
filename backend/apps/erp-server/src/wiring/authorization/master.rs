@@ -22,13 +22,8 @@ pub(super) struct MasterBindings {
     pub warehouse_mapping: Arc<dyn AccessMapping>,
 }
 
-/// 构造合同访问器，绑定共享统一授权服务及客户事实端口。
-/// # 参数
-/// db 为业务库，authorization 为进程共享的完整授权服务。
-/// # 返回
-/// 使用真实客户事实的合同访问器。
-/// # 错误
-/// 构造不执行 I/O。
+// 构造合同访问器，绑定共享统一授权服务及客户事实端口。
+// 使用真实客户事实的合同访问器。
 pub(crate) fn contract_access_with_db(
     db: Database,
     authorization: Arc<AuthorizationService>,
@@ -37,13 +32,9 @@ pub(crate) fn contract_access_with_db(
     contract_access(db, authorization, customer_facts)
 }
 
-/// 构造拥有领域的真实实现并连接对应查询入口。
-/// # 参数
-/// db 为拥有领域共用的数据库。
-/// # 返回
-/// 完整根绑定与供跨域来源复用的同一事实、映射实例。
-/// # 错误
-/// 固定模型不满足 identity 合同时返回错误。
+// 构造拥有领域的真实实现并连接对应查询入口。
+// 完整根绑定与供跨域来源复用的同一事实、映射实例。
+// 固定模型不满足 identity 合同时返回错误。
 pub(super) fn bindings(db: Database) -> Result<MasterBindings> {
     let customer_facts = CustomerFacts::shared(db.clone());
     let customer_mapping = CustomerMapping::shared(db.clone());
@@ -92,13 +83,8 @@ pub(super) fn bindings(db: Database) -> Result<MasterBindings> {
     })
 }
 
-/// 将共享服务及同一客户事实实例注入合同访问器。
-/// # 参数
-/// db 为数据库，authorization 为共享服务，customer_facts 为相同客户事实实例。
-/// # 返回
-/// 不自行构造授权政策的合同访问器。
-/// # 错误
-/// 构造不执行 I/O。
+// 将共享服务及同一客户事实实例注入合同访问器。
+// 不自行构造授权政策的合同访问器。
 pub(crate) fn contract_access(
     db: Database,
     authorization: Arc<AuthorizationService>,

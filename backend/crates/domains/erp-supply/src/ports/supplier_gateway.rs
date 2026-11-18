@@ -70,17 +70,10 @@ pub enum InvestigationOutcome {
 /// 切换到 connector 合同时须先补齐独立步骤持久化，不能用本接口隐藏多步执行。
 pub trait SupplierGateway: Send + Sync {
     /// 向供应商发起一次动作请求。
-    ///
-    /// # 参数
-    /// * `action` - 待发送的动作（含幂等键与摘要）
-    /// * `order` - 所属供应商子订单
-    /// * `connection` - 供应商 API 连接（地址/密钥引用等配置）
-    ///
-    /// # 返回
     /// 返回单次调用的分类结果；可能已送达的超时必须为 ResultUnknown，不内部重发。
-    ///
-    /// # 错误
-    /// 不返回错误。传输或业务失败只体现在 `DispatchOutcome`。
+    /// 传输或业务失败只体现在 `DispatchOutcome`。
+    /// `action`：待发送的动作（含幂等键与摘要）
+    /// `connection`：供应商 API 连接（地址/密钥引用等配置）
     fn dispatch<'a>(
         &'a self,
         action: &'a SupplierOrderAction,
@@ -89,20 +82,10 @@ pub trait SupplierGateway: Send + Sync {
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = DispatchOutcome> + Send + 'a>>;
 
     /// 查询原供应商动作结果，不把传输成功误判成业务成功。
-    ///
-    /// 实现必须使用原动作身份查询，不得创建新订单或改用新供应商幂等键。只有
-    /// 外部系统明确返回“原请求未形成结果”时才能开放安全重放。
-    ///
-    /// # 参数
-    /// * `target_action` - 被调查的原供应商动作。
-    /// * `order` - 所属供应商子订单。
-    /// * `connection` - 供应商 API 连接。
-    ///
-    /// # 返回
-    /// 返回 `InvestigationOutcome`。只有外部系统明确证明原请求未形成结果时才应为 `VerifiedNoResult`，否则为 `ResultUnknown`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 实现必须使用原动作身份查询，不得创建新订单或改用新供应商幂等键。只有外部系统明确返回“原请求未形成
+    /// 结果”时才能开放安全重放。
+    /// 返回 `InvestigationOutcome`。只有外部系统明确证明原请求未形成结果时才应为 `VerifiedNoResult`，否
+    /// 则为 `ResultUnknown`。
     fn investigate<'a>(
         &'a self,
         target_action: &'a SupplierOrderAction,

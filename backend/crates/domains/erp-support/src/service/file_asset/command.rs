@@ -16,13 +16,8 @@ use crate::repository::FileAssetExt;
 use crate::{Error, Result};
 
 impl FileAssetService {
-    /// 登记文件管理元数据，资格与持久化同一事务。
-    /// # 参数
-    /// req为已保存对象元数据，actor为当前账号。
-    /// # 返回
-    /// 新文件视图。
-    /// # 错误
-    /// 无登记资格、输入非法、唯一冲突或审计失败时拒绝。
+    /// 登记已保存对象的文件管理元数据；在写事务检查当前账号上传权限并将资产与登记审计一同写入。
+    /// 输入非法、无登记资格、唯一键冲突或者资产、审计写入失败时拒绝。
     pub async fn register_file_asset(
         &self,
         req: RegisterFileAssetRequest,
@@ -30,13 +25,8 @@ impl FileAssetService {
     ) -> Result<FileAssetView> {
         self.register_file_asset_command(req, None, AssetRegistrationOrigin::Metadata, actor).await
     }
-    /// 登记已经过真实大小、MIME及内容检查的受控上传。
-    /// # 参数
-    /// req为服务器检查后的元数据，actor为真实上传账号。
-    /// # 返回
-    /// 基础内容已检查的文件；不伪造病毒扫描通过。
-    /// # 错误
-    /// 无上传资格、输入非法、唯一冲突或审计失败时拒绝。
+    /// 上传边界已检查实际大小、MIME 和内容后，按真实上传账号登记受控文件。只标记基础内容已检查，不伪造病毒扫描通过。
+    /// 在写事务验权并写资产和审计；无资格、输入非法、唯一键冲突或写入失败时拒绝。
     pub async fn register_content_checked_file_asset(
         &self,
         req: RegisterFileAssetRequest,
@@ -45,13 +35,8 @@ impl FileAssetService {
         self.register_file_asset_command(req, None, AssetRegistrationOrigin::ContentCheckedUpload, actor)
             .await
     }
-    /// 原子保存已检查上传、指定单据关联与审计。
-    /// # 参数
-    /// req为服务器内容检查结果，document_id、usage为已授权业务关系，actor为真实上传账号。
-    /// # 返回
-    /// 新文件视图。
-    /// # 错误
-    /// 无上传资格、单据缺失、唯一冲突或审计失败时拒绝。
+    /// 已检查上传用于已授权单据时，用真实上传账号登记资产，并在同一写事务核对实际单据、保存附件用途及两条审计。
+    /// 无上传资格、单据缺失、输入非法、唯一键冲突或写入失败时不完成登记。
     pub async fn register_content_checked_file_asset_with_attachment(
         &self,
         req: RegisterFileAssetRequest,
@@ -67,7 +52,7 @@ impl FileAssetService {
         )
         .await
     }
-    /// 登记文件前完成固定资格、实际单据存在性及原事务内写入。
+    // 两个登记来源共用的写入阶段：以服务端来源构造资产、准备可选附件和审计；在同一事务验上传权限、核对目标单据并写入。
     async fn register_file_asset_command(
         &self,
         req: RegisterFileAssetRequest,
@@ -108,7 +93,7 @@ impl FileAssetService {
             })
             .await
     }
-    /// 组装附件及审计；实际单据存在性在原写事务核对。
+    // 登记命令指定业务单据时，预先按资产 ID、单据 ID 和附件用途构造关联及其审计；实际单据存在性留到写事务核对。
     fn prepare_attachment(
         &self,
         asset_id: &str,
@@ -131,13 +116,8 @@ impl FileAssetService {
         )?;
         Ok(Some((attachment, audit)))
     }
-    /// 以真实上传人构造资产，保留受控检查来源语义。
-    /// # 参数
-    /// req为检查后的元数据，actor_id为真实上传人，origin为服务端固定登记来源。
-    /// # 返回
-    /// 保留原检查状态及上传人的新资产。
-    /// # 错误
-    /// 输入非法或内容状态转换失败时拒绝。
+    // 按真实上传人和服务端固定来源生成资产；只有受控上传才将扫描状态转为基础内容已检查。
+    // 元数据非法或状态转换失败时拒绝，不登记资产。
     pub(super) fn registration_asset(
         req: RegisterFileAssetRequest,
         actor_id: &str,
@@ -150,13 +130,8 @@ impl FileAssetService {
         }
         Ok(asset)
     }
-    /// 在同一写事务检查附件管理资格、单据和资产存在性后关联。
-    /// # 参数
-    /// req为精确关联，actor为当前账号。
-    /// # 返回
-    /// 新附件关系视图。
-    /// # 错误
-    /// 无资格、单据或资产缺失、重复关系及审计失败时拒绝。
+    /// 把现存文件按确切用途关联到业务单据。在同一写事务核验附件创建权限、实际单据和未删除资产，再持久化关系与审计。
+    /// 无资格、目标缺失、重复关系或写入失败时不返回新附件视图。
     pub async fn attach_to_document(
         &self,
         req: AttachToDocumentRequest,
@@ -190,13 +165,7 @@ impl FileAssetService {
             })
             .await
     }
-    /// 读取决定写入的实际资产，保持原事务。
-    /// # 参数
-    /// id为实际资产身份，executor为原写执行器。
-    /// # 返回
-    /// 当前未删除资产。
-    /// # 错误
-    /// 不存在或数据库读取失败时拒绝。
+    // 命令使用原写事务读取实际未删除资产；缺失映射 `NotFound`，传播读取错误，不以请求元数据代替已登记记录。
     pub(super) async fn require_asset(&self, id: &str, executor: &mut dyn Executor) -> Result<FileAsset> {
         self.db
             .file_assets()

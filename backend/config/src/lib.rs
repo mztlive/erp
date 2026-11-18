@@ -131,10 +131,7 @@ pub struct DemoConfig {
 }
 
 impl DemoConfig {
-    /// 返回当前环境是否允许操作演示主数据。
-    ///
-    /// # 返回
-    /// 配置显式打开时返回 `true`。
+    /// 装配演示主数据用例时读取当前环境的写入开关。只有显式启用，才允许生成或删除演示主数据。
     pub fn master_data_enabled(&self) -> bool {
         self.master_data
     }
@@ -201,19 +198,8 @@ pub struct S3Config {
 }
 
 impl S3Config {
-    /// 由必填 bucket、签名与访问参数构造 S3 启动配置。
-    ///
-    /// # 参数
-    ///
-    /// * `bucket` - 存放上传对象的 bucket
-    /// * `region` - 签名 region
-    /// * `access_key_id` - S3 访问密钥 ID
-    /// * `secret_access_key` - S3 访问密钥
-    /// * `public_base_url` - 对外返回的公开访问基础 URL
-    ///
-    /// # 返回
-    ///
-    /// * `S3Config` - 端点、前缀与 path-style 均为空/关闭的启动配置
+    /// 为调用方直接构造对象存储启动配置，包含存储桶、签名参数、访问凭据和对外访问根地址。
+    /// 默认不设置自定义端点、临时令牌或对象键前缀，也不启用 path-style；构造时不做校验。
     pub fn new(
         bucket: impl Into<String>,
         region: impl Into<String>,
@@ -234,43 +220,19 @@ impl S3Config {
         }
     }
 
-    /// 设置自定义 endpoint。
-    ///
-    /// # 参数
-    ///
-    /// * `endpoint` - 自定义 endpoint
-    ///
-    /// # 返回
-    ///
-    /// * `S3Config` - 更新后的启动配置
+    /// 接入 S3 兼容服务或专用存储地址时，指定客户端实际访问的端点，不改变上传后返回的公开根地址。
     pub fn with_endpoint(mut self, endpoint: impl Into<String>) -> Self {
         self.endpoint = Some(endpoint.into());
         self
     }
 
-    /// 设置对象键前缀。
-    ///
-    /// # 参数
-    ///
-    /// * `key_prefix` - 对象键前缀
-    ///
-    /// # 返回
-    ///
-    /// * `S3Config` - 更新后的启动配置
+    /// 多个应用共用存储桶时，用相对前缀为本应用划分对象键；上传后返回的公开地址也包含这段前缀。
     pub fn with_key_prefix(mut self, key_prefix: impl Into<String>) -> Self {
         self.key_prefix = Some(key_prefix.into());
         self
     }
 
-    /// 设置是否强制 path-style URL。
-    ///
-    /// # 参数
-    ///
-    /// * `force_path_style` - 是否强制 path-style URL
-    ///
-    /// # 返回
-    ///
-    /// * `S3Config` - 更新后的启动配置
+    /// 连接 MinIO 等不使用桶名子域的服务时可启用 path-style，让客户端在请求路径中携带桶名。
     pub fn with_force_path_style(mut self, force_path_style: bool) -> Self {
         self.force_path_style = force_path_style;
         self
@@ -278,17 +240,15 @@ impl S3Config {
 }
 
 impl BootstrapConfig {
-    /// 返回可用于首次创建超级管理员的明文密码。
-    ///
-    /// # 返回
-    /// 配置了非空密码时返回其借用，未配置或空字符串时返回 `None`。
+    /// 供服务启动时首次创建 `admin` 账号时读取明文密码。缺省或空字符串返回 `None`；
+    /// 已有账号时启动流程不使用此密码更新账号。
     pub fn initial_admin_password(&self) -> Option<&str> {
         self.initial_admin_password.as_deref().filter(|password| !password.is_empty())
     }
 }
 
 impl fmt::Debug for BootstrapConfig {
-    /// 输出不包含初始密码正文的调试信息。
+    // 调试初始化配置时只保留密码字段是否已填写，不输出明文。
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("BootstrapConfig")
@@ -298,7 +258,7 @@ impl fmt::Debug for BootstrapConfig {
 }
 
 impl fmt::Debug for S3Config {
-    /// 输出不包含密钥正文的调试信息。
+    // 诊断存储连接时保留存储桶、端点等路由信息，但隐藏访问密钥 ID、密钥和临时令牌。
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("S3Config")
@@ -316,39 +276,23 @@ impl fmt::Debug for S3Config {
 }
 
 impl Config {
-    /// 从指定路径加载 TOML 文件配置。
-    ///
-    /// # 参数
-    ///
-    /// * `path` - TOML 配置文件的路径
-    ///
-    /// # 返回
-    ///
-    /// * `Result<Self>` - 解析后的配置或错误
+    /// 本地配置模式下异步读取指定 TOML 文件，并使用与 Nacos 相同的应用校验。
+    /// 文件不可读、内容无法解析或配置无效时返回错误，不切换配置来源。
     pub async fn from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
         let content = tokio::fs::read_to_string(path).await?;
         Self::from_toml_str(&content)
     }
 
-    /// 从 TOML 字符串解析配置。
-    ///
-    /// # 参数
-    ///
-    /// * `content` - TOML 格式的配置字符串
-    ///
-    /// # 返回
-    ///
-    /// * `Result<Self>` - 解析后的配置或错误
+    /// 把文件或 Nacos 提供的完整 TOML 解析并校验为配置，供启动和刷新共用。
+    /// 解析失败只报告字节范围，不回显可能含密钥的原文。
     pub fn from_toml_str(content: &str) -> Result<Self> {
         let config: Config = toml::from_str(content)?;
         config.validate()?;
         Ok(config)
     }
 
-    /// 校验会影响运行时安全和可用性的配置不变式。
-    ///
-    /// # 错误
-    /// JWT 密钥或 S3 启动参数无效时返回错误。
+    // 反序列化后、应用使用或发布快照前，检查 JWT 密钥、S3、初始管理员密码及已配置的外部集成。
+    // API 可省略调度配置，但只要提供就必须通过校验。
     fn validate(&self) -> Result<()> {
         let secret = self.app.secret.as_bytes();
         if secret.len() < MIN_JWT_SECRET_BYTES || JWT_SECRET_PLACEHOLDERS.contains(&self.app.secret.as_str())
@@ -382,9 +326,8 @@ impl Config {
     }
 }
 
-/// 校验可选的超级管理员初始密码。
-///
-/// 未配置时通过。已配置时长度必须与管理员密码规则一致，且不能使用示例占位值。
+// 加载启动配置时拒绝示例密码或长度不符合管理员规则的密码（6 到 32 个字符）。
+// 未配置初始密码不影响启动，也不会触发自动创建。
 fn validate_bootstrap_password(password: Option<&str>) -> Result<()> {
     let Some(password) = password else {
         return Ok(());
@@ -401,7 +344,8 @@ fn validate_bootstrap_password(password: Option<&str>) -> Result<()> {
     Ok(())
 }
 
-/// 校验 S3 签名参数、endpoint 与对象键前缀。
+// 构建对象存储客户端前检查存储桶、签名区域和凭据，并校验端点、公开地址及键前缀，
+// 避免不合规的参数被用于签名请求或拼接上传后的访问地址。
 fn validate_s3_config(config: &S3Config) -> Result<()> {
     for (name, value) in [
         ("bucket", config.bucket.as_str()),
@@ -434,7 +378,8 @@ fn validate_s3_config(config: &S3Config) -> Result<()> {
     Ok(())
 }
 
-/// 校验 S3 endpoint 或公开基础 URL 为不含 query/fragment 的 HTTP(S) URL。
+// 读取存储端点或公开根地址时只接受有主机的 HTTP(S) 绝对地址，拒绝查询参数和片段，
+// 确保它们能用作请求或拼接对象路径的基址。
 fn validate_s3_url(name: &str, value: &str) -> Result<()> {
     let url = Url::parse(value).map_err(|_| Error::Invalid(format!("s3.{name} must be a valid URL")))?;
     if !matches!(url.scheme(), "http" | "https")
@@ -447,7 +392,7 @@ fn validate_s3_url(name: &str, value: &str) -> Result<()> {
     Ok(())
 }
 
-/// 判断 S3 对象键前缀是否可在存储根内安全拼接。
+// 在把前缀用于对象键和公开地址前，拒绝绝对路径、反斜杠和空分段，也不允许 `.` 或 `..`。
 fn is_safe_s3_prefix(prefix: &str) -> bool {
     if prefix.is_empty()
         || prefix.trim() != prefix
@@ -463,13 +408,8 @@ fn is_safe_s3_prefix(prefix: &str) -> bool {
 impl std::str::FromStr for Config {
     type Err = Error;
 
-    /// 从 TOML 字符串解析配置。
-    ///
-    /// # 参数
-    /// * `content` - TOML 格式的配置字符串
-    ///
-    /// # 返回
-    /// 返回解析后的配置或错误
+    /// 支持通过 `text.parse::<Config>()` 从内存中的 TOML 加载配置；与 [`Config::from_toml_str`]
+    /// 使用同一套应用校验和脱敏解析错误，不会绕过文件或 Nacos 加载时的约束。
     fn from_str(content: &str) -> std::result::Result<Self, Self::Err> {
         Config::from_toml_str(content)
     }
@@ -484,35 +424,15 @@ pub struct SafeConfig {
 }
 
 impl SafeConfig {
-    /// 使用给定配置创建新的 SafeConfig 实例。
-    ///
-    /// # 参数
-    /// * `config` - 初始化配置
-    ///
-    /// # 返回
-    /// 返回创建的实例。
-    ///
-    /// # 说明
-    /// 原为私有构造（仅 `from_args` 可用）；P0-5 垂直样板的 web-api HTTP
-    /// 集成测试需要在无 CLI 参数的环境构造最小 `AppState`，故放宽为 `pub`。
-    /// 本改动为纯可见性放宽，不改变任何行为；建议随「地基修订 PR」正式合入。
+    /// 将调用方提供的配置封装为可读取、可订阅的快照，适用于已提前加载配置的入口或注入配置的测试。
+    /// 此方法不会再次校验配置，也不会启动刷新任务。
     pub fn new(config: Config) -> Self {
         let (sender, _) = watch::channel(config);
         Self { sender }
     }
 
-    /// 从命令行参数创建新的 SafeConfig 实例。
-    ///
-    /// 本方法依赖 command 模块中定义的 ConfigArgs 结构体来解析命令行参数。
-    /// ConfigArgs 结构体通过 clap 实现命令行参数的解析，定义在 `command.rs` 文件中。
-    ///
-    /// ConfigArgs 结构体包含以下字段:
-    /// * `config_path`: 配置文件路径
-    /// * `enable_nacos`: 是否启用 Nacos 配置中心
-    /// * `nacos_addr`: Nacos 服务器地址
-    /// * `nacos_namespace`: Nacos 命名空间
-    /// * `nacos_group`: Nacos 配置组
-    /// * `nacos_data_id`: Nacos 配置ID
+    /// 为常驻进程按启动参数加载配置。文件模式只读一次；Nacos 模式必须先成功读取并校验，
+    /// 再启动后台刷新，首次读取失败不会回退到文件。单次运维命令应使用 [`ConfigArgs::load`]。
     ///
     /// # 示例
     ///
@@ -527,10 +447,6 @@ impl SafeConfig {
     ///           --nacos-group="DEFAULT_GROUP" \
     ///           --nacos-data-id="erp"
     /// ```
-    ///
-    /// # 返回
-    ///
-    /// * `Result<Self>` - 初始化的 SafeConfig 实例或错误
     pub async fn from_args() -> Result<Self> {
         let args = ConfigArgs::parse();
 
@@ -542,32 +458,18 @@ impl SafeConfig {
         Ok(Self::new(config))
     }
 
-    /// 获取当前配置快照。
-    ///
-    /// # 返回
-    ///
-    /// * `Config` - 当前配置快照
+    /// 复制当前整份配置，供一次请求或装配过程使用同一版本，避免读到来自不同刷新批次的字段。
     pub fn snapshot(&self) -> Config {
         self.sender.borrow().clone()
     }
 
-    /// 订阅配置变更通知。
-    ///
-    /// # 返回
-    /// 返回配置变更的接收器。
+    /// 为需要响应热更新的常驻组件提供配置接收器。接收器可读取当前值，并在新快照发布后应用
+    /// 运行时支持更新的字段；固定在启动期的资源不会因此自动重建。
     pub fn subscribe(&self) -> watch::Receiver<Config> {
         self.sender.subscribe()
     }
 
-    /// 从 Nacos 初始化配置并设置配置观察器。
-    ///
-    /// # 参数
-    ///
-    /// * `args` - Nacos 配置参数
-    ///
-    /// # 返回
-    ///
-    /// * `Result<Self>` - 初始化的 SafeConfig 实例或错误
+    // 常驻进程选择 Nacos 时，先取得并校验首份配置，再启动后台轮询；启动失败不发布快照。
     async fn from_nacos_with_watcher(args: NacosConfig) -> Result<Self> {
         let nacos_client = NacosConfigClient::from_config(args).await?;
 
@@ -581,15 +483,7 @@ impl SafeConfig {
         Ok(safe_config)
     }
 
-    /// 从 Nacos 重新加载配置。
-    ///
-    /// # 参数
-    ///
-    /// * `nacos_client` - Nacos 客户端的引用
-    ///
-    /// # 返回
-    ///
-    /// * `Result<()>` - 成功或错误指示
+    // 后台轮询时重新拉取完整 TOML，只有解析和应用校验通过才替换当前快照；失败时保留上一份。
     async fn reload_from_nacos(&self, nacos_client: &NacosConfigClient) -> Result<()> {
         let content = nacos_client.fetch().await?;
         self.replace_from_toml(&content)?;

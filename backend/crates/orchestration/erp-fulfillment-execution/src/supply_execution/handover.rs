@@ -31,15 +31,8 @@ use crate::{Error, Result};
 impl SupplierFulfillmentProcess {
     /// 显式交接内部跟进人；是否转交开放 W26 任务由命令声明，默认不改派。
     ///
-    /// # 参数
-    /// * `id` - 供应商履约订单 ID。
-    /// * `req` - 交接命令。
-    /// * `actor` - 当前操作人。
+    /// `id` 为供应商履约订单 ID；`req` 为交接命令。返回交接后的订单视图；同一命令重放返回原跟进人与组织，不重复列出已转交任务。
     ///
-    /// # 返回
-    /// 返回交接后的订单视图；同一命令重放返回原跟进人与组织，不重复列出已转交任务。
-    ///
-    /// # 错误
     /// 请求校验失败、幂等键为空、目标组织为公司根或未启用、目标账号不合格、同一幂等键载荷不同，或交接写入失败时返回对应错误。
     pub async fn handover_fulfillment_order(
         &self,
@@ -84,14 +77,8 @@ impl SupplierFulfillmentProcess {
 
     /// 查询当前订单可交接的合格目标候选。
     ///
-    /// # 参数
-    /// * `id` - 供应商履约订单 ID。
-    /// * `actor` - 当前操作人。
+    /// `id` 为供应商履约订单 ID。返回按姓名、账号和用户 ID 排序的后台候选。当前跟进人以及停用或无交接权限的账号被排除。
     ///
-    /// # 返回
-    /// 返回按姓名、账号和用户 ID 排序的后台候选。当前跟进人以及停用或无交接权限的账号被排除。
-    ///
-    /// # 错误
     /// 订单不在交接范围内，或账号、权限查询失败时返回对应错误。
     pub async fn handover_candidates(
         &self,
@@ -158,7 +145,7 @@ struct HandoverWrite {
 }
 
 impl HandoverWrite {
-    /// 在入口事务内按原顺序持久化责任交接、开放任务、回执及审计。
+    // 在入口事务内按原顺序持久化责任交接、开放任务、回执及审计。
     async fn apply(self, db: &Database, executor: &mut dyn Executor) -> Result<HandoverFulfillmentOrderView> {
         persist_handover(
             db,

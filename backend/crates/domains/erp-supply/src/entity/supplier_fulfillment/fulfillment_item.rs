@@ -39,26 +39,11 @@ pub struct SupplierFulfillmentItemData {
 
 impl SupplierFulfillmentItemData {
     /// 由单位成本与数量构造含税成本快照数据。
-    ///
     /// 明细含税总成本统一按分舍入，调用方不得自行重复计算。
-    ///
-    /// # 参数
-    /// * `supplier_fulfillment_order_id` - 所属供应商子订单
-    /// * `supplier_offering_revision_id` - 下单时固定供给修订
-    /// * `supplier_sku_code_snapshot` - 供应商 SKU 编码快照
-    /// * `supplier_product_code_snapshot` - 供应商商品编码快照
-    /// * `quantity` - 下单数量
-    /// * `unit_cost_snapshot_gross` - 含税单位成本
-    /// * `input_tax_rate` - 进项税率
-    ///
-    /// # 返回
     /// 返回已派生含税总成本的创建数据。
-    ///
-    /// # 错误
     /// 含税总成本无法转为合法金额时返回错误。
-    ///
-    /// # 约束
-    /// 无。
+    /// `supplier_sku_code_snapshot`：供应商 SKU 编码快照。
+    /// `supplier_product_code_snapshot`：供应商商品编码快照。
     pub fn from_unit_cost(
         supplier_fulfillment_order_id: SupplierFulfillmentOrderId,
         supplier_offering_revision_id: SupplierOfferingRevisionId,
@@ -111,18 +96,8 @@ pub struct SupplierFulfillmentItem {
 
 impl SupplierFulfillmentItem {
     /// 创建供应商履约明细。
-    ///
-    /// 校验数量大于零，并强制成本快照恒等（§4.2：明细含税成本必须等于
-    /// 单位成本 × 数量后按分舍入）。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::SupplierFulfillmentItemId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
+    /// 校验数量大于零，并强制成本快照恒等（§4.2：明细含税成本必须等于单位成本 × 数量后按分舍入）。
     /// 返回新建的明细实体。
-    ///
-    /// # 错误
     /// 数量非正、成本快照与单价数量不一致或金额精度非法时返回错误。
     pub fn new(id: SupplierFulfillmentItemId, data: SupplierFulfillmentItemData) -> Result<Self> {
         ensure_positive_quantity(data.quantity, "明细数量必须大于零")?;
@@ -158,28 +133,14 @@ impl SupplierFulfillmentItem {
     }
 
     /// 判断明细是否属于指定供应商履约订单。
-    ///
-    /// # 参数
-    /// * `order_id` - 供应商履约订单主键
-    ///
-    /// # 返回
     /// 归属一致时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn belongs_to_order(&self, order_id: &SupplierFulfillmentOrderId) -> bool {
         self.supplier_fulfillment_order_id == *order_id
     }
 }
 
-/// 校验数量大于零。
-///
-/// # 参数
-/// * `value` - 数量
-/// * `message` - 失败时的错误信息
-///
-/// # 错误
-/// 数量小于等于零时返回错误。
+// 核对数量大于零。
+// 数量小于等于零时返回错误。
 fn ensure_positive_quantity(value: Quantity, message: &str) -> Result<()> {
     if value.to_decimal() <= Decimal::ZERO {
         return Err(Error::from(message));
@@ -187,15 +148,8 @@ fn ensure_positive_quantity(value: Quantity, message: &str) -> Result<()> {
     Ok(())
 }
 
-/// 校验明细成本快照恒等：`round_to_cent(单位成本 × 数量) == 明细成本`（§4.2 铁律 1）。
-///
-/// # 参数
-/// * `quantity` - 数量
-/// * `unit_cost` - 含税单位成本
-/// * `total_gross` - 明细含税成本
-///
-/// # 错误
-/// 恒等式不成立或舍入结果无法表示为 `Amount` 时返回错误。
+// 校验明细成本快照恒等：`round_to_cent(单位成本 × 数量) == 明细成本`（§4.2 铁律 1）。
+// 恒等式不成立或舍入结果无法表示为 `Amount` 时返回错误。
 fn ensure_snapshot_consistent(quantity: Quantity, unit_cost: UnitPrice, total_gross: Amount) -> Result<()> {
     let expected = Amount::try_from(round_to_cent(unit_cost.to_decimal() * quantity.to_decimal()))
         .map_err(|_| Error::from("供应商履约明细的成本金额无效，请核对下单单价和数量"))?;

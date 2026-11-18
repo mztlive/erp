@@ -12,20 +12,16 @@ use super::dto::{
 #[cfg(test)]
 const RECENT_HISTORY_LIMIT: usize = 8;
 
-/// 由绑定与可选实例事实构造只读审批结构。
-///
-/// 创建后未提交只返回绑定定义；客户端不得据此选择定义或审批人。
-///
-/// # 参数
-/// * `binding` - 创建时冻结的定义绑定
-/// * `instance` - 已启动时的实例摘要
-/// * `status` - 当前业务状态
-///
-/// # 返回
-/// 返回有界只读审批结构。
-///
-/// # 错误
-/// 不返回错误。
+// 为销售变更组装审批视图时，只使用冻结的定义绑定与实际读到的可选实例。
+//
+// 创建后未提交只返回绑定定义；客户端不得据此选择定义或审批人。
+//
+// 调用参数：
+// * `binding` - 创建时冻结的定义绑定
+// * `instance` - 已启动时的实例摘要
+// * `status` - 当前业务状态
+//
+// 返回有界只读审批结构。
 pub(super) fn document_approval_view(
     binding: Option<&ApprovalDefinitionBinding>,
     instance: Option<DocumentApprovalInstanceView>,
@@ -41,7 +37,7 @@ pub(super) fn document_approval_view(
     }
 }
 
-/// 单据详情允许的审批相关动作。不含选择定义或审批人。
+// 为销售变更计算详情可展示的审批动作，不允许借此选择流程定义或审批人。
 fn allowed_document_actions(status: SalesChangeOrderStatus) -> Vec<String> {
     match status {
         SalesChangeOrderStatus::Draft | SalesChangeOrderStatus::Rejected => vec!["SUBMIT".to_string()],
@@ -60,7 +56,7 @@ mod tests {
     use erp_workflow::service::approval::binding::binding_from_published;
 
     use super::*;
-    /// 详情只读审批结构；允许动作不含选择定义或审批人。
+    // 验证销售变更：详情只读审批结构；允许动作不含选择定义或审批人。
     #[test]
     fn detail_approval_is_read_only_and_has_history_cap() {
         let binding =

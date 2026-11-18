@@ -50,18 +50,13 @@ mod serialization_contract;
 pub mod keyword;
 pub mod supplier_deposit_resolution;
 
-/// 构建带 `id` 稳定次序的排序文档：字段名经白名单映射，未命中回退 `created_at`。
-///
-/// # 参数
-/// * `sort_by` - 排序字段（白名单内有效）
-/// * `sort_ascending` - 升序为 `true`，降序为 `false`
-/// * `allowed` - 允许的排序字段名集合（防止透传任意字段名）
-///
-/// # 返回
-/// 返回排序条件文档。
-///
-/// # 错误
-/// 不返回错误。
+// 构建带 `id` 稳定次序的排序文档：字段名经白名单映射，未命中回退 `created_at`。
+// 返回排序条件文档。
+//
+// 输入约定：
+// - `sort_by`：排序字段（白名单内有效）
+// - `sort_ascending`：升序为 `true`，降序为 `false`
+// - `allowed`：允许的排序字段名集合（防止透传任意字段名）
 pub(super) fn sort_doc_with_id(sort_by: Option<&str>, sort_ascending: bool, allowed: &[&str]) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
     let field = sort_by.filter(|name| allowed.contains(name)).unwrap_or("created_at");

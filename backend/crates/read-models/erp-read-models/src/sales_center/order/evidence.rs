@@ -11,13 +11,15 @@ use crate::sales_center::access::SalesAccess;
 use crate::{Error, Result};
 
 impl SalesOrderReadService {
-    /// 在同一事务中证明销售详情资格与精确建单凭证关联。
+    /// 确定销售凭证的适用条件时，在同一事务中证明销售详情资格与精确建单凭证关联。
     ///
     /// # 参数
     /// * `actor` - 当前已认证用户
     /// * `order_id` / `asset_id` - 来源销售单与其中一份建单凭证
+    ///
     /// # 返回
     /// 返回当前销售单版本，供读取文件后的来源一致性复验。
+    ///
     /// # 错误
     /// 账号、范围或精确关系无效时拒绝。凭证不在销售单或附件中时返回 `NotFound`。
     /// 未注入授权源时返回 `Internal`。仓储或事务失败会返回对应错误。

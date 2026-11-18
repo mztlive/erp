@@ -28,12 +28,9 @@ pub struct PortalCommandReceipt {
 }
 impl PortalCommandReceipt {
     /// 保存规范命令身份和原结果。
-    /// # 参数
-    /// `command` 来自认证操作人和原载荷；`supplier_id` 来自有效绑定。
-    /// # 返回
     /// 不可变成功回执。
-    /// # 错误
     /// 身份、结果或指纹非法时拒绝。
+    /// `command` 来自认证操作人和原载荷；`supplier_id` 来自有效绑定。
     pub fn new(command: &CommandReceipt, supplier_id: &str, result: &Value) -> Result<Self> {
         let value = Self {
             base: BaseModel::new(command.id().to_string()),
@@ -52,11 +49,7 @@ impl PortalCommandReceipt {
         Ok(value)
     }
     /// 验证回执持久化合同，禁止未知或软删除回执作为未执行重跑。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 合法回执成功。
-    /// # 错误
     /// 损坏或未知schema失败关闭。
     pub fn validate(&self) -> Result<()> {
         CommandFingerprint::parse(self.fingerprint.clone())
@@ -81,12 +74,9 @@ impl PortalCommandReceipt {
         Ok(())
     }
     /// 按完整命令身份恢复结果。
-    /// # 参数
-    /// `command` 必须使用原操作号和载荷。
-    /// # 返回
     /// 原成功结果。
-    /// # 错误
     /// 异载荷冲突，身份损坏失败关闭。
+    /// `command` 必须使用原操作号和载荷。
     pub fn replay(&self, command: &CommandReceipt) -> Result<Value> {
         self.validate()?;
 
@@ -115,28 +105,13 @@ pub trait PortalSupplyExt {
     /// 命令成功回执集合。
     const PORTAL_COMMAND_RECEIPTS: &'static str = "supplier_portal_command_receipts";
     /// 取得申请仓储。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 调用方执行器驱动的CAS仓储。
-    /// # 错误
-    /// 无。
     fn portal_applications(&self) -> Repository<'_, OfferingApplication>;
     /// 取得定向开放仓储。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 授权记录仓储。
-    /// # 错误
-    /// 无。
     fn portal_quote_grants(&self) -> Repository<'_, QuoteAccessGrant>;
     /// 取得独立回执仓储。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 成功回执仓储。
-    /// # 错误
-    /// 无。
     fn portal_command_receipts(&self) -> Repository<'_, PortalCommandReceipt>;
 }
 impl PortalSupplyExt for Database {

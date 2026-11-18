@@ -13,11 +13,11 @@ use crate::{Error, Result};
 
 impl SupplierApiOrderProcess {
     /// 在当前账号的订单读取范围内返回真实执行资料。
-    /// # 参数
+    ///
     /// id 为订单身份，actor 为当前认证操作人。
-    /// # 返回
+    ///
     /// 同一快照内读取和补齐的执行阶段、配送选项及按资格显示的费用。
-    /// # 错误
+    ///
     /// 无权、非自动执行订单、资料不可解密或读取失败时拒绝。
     pub async fn execution_setup(&self, id: &str, actor: &AuditActor) -> Result<ExecutionSetupView> {
         self.setup_result(id, actor, &supplier_fulfillment::ORDER_DETAIL).await

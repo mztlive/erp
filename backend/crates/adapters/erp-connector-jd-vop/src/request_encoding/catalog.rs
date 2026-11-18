@@ -4,13 +4,8 @@ use rust_decimal::prelude::ToPrimitive;
 
 use super::*;
 
-/// 编码商品和地址接口的官方业务载荷。
-/// # 参数
-/// 类型化读取请求及受信账号上下文。
-/// # 返回
-/// 符合各方法参数层级的业务 JSON。
-/// # 错误
-/// 非法标识、数量或未支持方法时拒绝。
+// 商品或地址查询发出前，按受信渠道把类型化请求编码为业务 JSON：商品池列表用请求对象，其余方法用顶层字段。
+// 非法标识、数量或不属于这组的请求在签名前拒绝。
 pub(super) fn read(
     request: &JdVopReadRequest,
     context: &JdVopRequestContext,

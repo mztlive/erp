@@ -30,16 +30,11 @@ pub(in crate::reverse_flow) struct ReversalSubmitReplayInput {
 }
 
 impl ReturnsProcess {
-    /// 在状态及版本检查前，用 fresh 事务恢复同载荷提交结果。
-    ///
-    /// # 参数
-    /// * `input` - 冲正提交的命令身份与授权上下文。
-    ///
-    /// # 返回
-    /// 命中同载荷已提交收据时返回资源 ID；无收据时返回 `None`。
-    ///
-    /// # 错误
-    /// 授权失败、收据资源与原单不一致或仓储读取失败时返回对应错误。
+    // 在状态及版本检查前，用 fresh 事务恢复同载荷提交结果。
+    //
+    // `input` 为冲正提交的命令身份与授权上下文。命中同载荷已提交收据时返回资源 ID；无收据时返回 `None`。
+    //
+    // 授权失败、收据资源与原单不一致或仓储读取失败时返回对应错误。
     pub(in crate::reverse_flow) async fn replay_reversal_submit(
         &self,
         input: &ReversalSubmitReplayInput,
@@ -54,13 +49,9 @@ impl ReturnsProcess {
             .await
     }
 
-    /// 在原提交事务先重验完整资格和真实来源，再匹配精确请求收据。
-    /// # 参数
-    /// input 为原命令身份与操作人，executor 为本次提交事务。
-    /// # 返回
-    /// 已提交同载荷命令返回真实结果 ID；未提交返回 None。
-    /// # 错误
-    /// 资格、来源、收据不符或数据库故障时拒绝。
+    // 在原提交事务先重验完整资格和真实来源，再匹配精确请求收据。
+    //
+    // input 为原命令身份与操作人，executor 为本次提交事务。已提交同载荷命令返回真实结果 ID；未提交返回 None。资格、来源、收据不符或数据库故障时拒绝。
     pub(in crate::reverse_flow) async fn replay_reversal_submit_stage(
         &self,
         input: &ReversalSubmitReplayInput,
@@ -89,18 +80,11 @@ impl ReturnsProcess {
         committed_reversal_submit(&self.db, &input.id, &input.command_receipt, executor).await
     }
 
-    /// 结果未知或收据竞争后只回读已提交命令，不自动执行第二次写事务。
-    ///
-    /// # 参数
-    /// * `input` - 冲正提交的命令身份与授权上下文。
-    /// * `result` - 写事务的结果。
-    ///
-    /// # 返回
-    /// 原结果成功，或有界回读确认已提交时，无返回值。
-    ///
-    /// # 错误
-    /// 命令不可能已提交时返回原错误。回读仍无法确认时返回原错误。
-    /// 原错误为 `OutcomeUnknown` 且回读得到确定性失败时仍返回原错误；否则返回该回读错误。
+    // 结果未知或收据竞争后只回读已提交命令，不自动执行第二次写事务。
+    //
+    // `input` 为冲正提交的命令身份与授权上下文；`result` 为写事务的结果。原结果成功，或有界回读确认已提交时，无返回值。
+    //
+    // 命令不可能已提交时返回原错误。回读仍无法确认时返回原错误。原错误为 `OutcomeUnknown` 且回读得到确定性失败时仍返回原错误；否则返回该回读错误。
     pub(in crate::reverse_flow) async fn finish_reversal_submit(
         &self,
         input: &ReversalSubmitReplayInput,
@@ -131,19 +115,11 @@ impl ReturnsProcess {
     }
 }
 
-/// 在已有执行器内匹配精确请求收据，BPM 收据不能替代原请求版本指纹。
-///
-/// # 参数
-/// * `db` - 数据库。
-/// * `id` - 冲正单主键。
-/// * `command_receipt` - 原请求命令收据。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
-/// 收据命中且资源 ID 与 `id` 一致时返回该 ID；无收据时返回 `None`。
-///
-/// # 错误
-/// 收据资源 ID 与 `id` 不一致时返回冲突。收据读取失败时返回对应错误。
+// 在已有执行器内匹配精确请求收据，BPM 收据不能替代原请求版本指纹。
+//
+// `id` 为冲正单主键；`command_receipt` 为原请求命令收据；沿用调用方的执行器。
+//
+// 收据命中且资源 ID 与 `id` 一致时返回该 ID；无收据时返回 `None`。收据资源 ID 与 `id` 不一致时返回冲突。收据读取失败时返回对应错误。
 pub(super) async fn committed_reversal_submit(
     db: &Database,
     id: &str,
@@ -159,7 +135,7 @@ pub(super) async fn committed_reversal_submit(
     Ok(replayed)
 }
 
-/// 先插入审批命令收据，再以注册单据守卫启动审批；任一步失败由原事务回滚。
+// 先插入审批命令收据，再以注册单据守卫启动审批；任一步失败由原事务回滚。
 pub(super) async fn persist_start_guard(
     db: &Database,
     kind: DocumentType,
@@ -192,30 +168,20 @@ pub(super) async fn persist_start_guard(
     Ok(())
 }
 
-/// 启动已经提交后读取响应失败，必须保留同操作号核对的未知结果语义。
-///
-/// # 参数
-/// * `error` - 已提交后的读模型失败。
-///
-/// # 返回
-/// 返回 `OutcomeUnknown`。
-///
-/// # 错误
-/// 不返回错误。
+// 启动已经提交后读取响应失败，必须保留同操作号核对的未知结果语义。
+//
+// `error` 为已提交后的读模型失败。返回 `OutcomeUnknown`。
 pub(in crate::reverse_flow) fn reversal_result_read_error(error: Error) -> Error {
     Error::OutcomeUnknown(PersistenceError::CommitOutcomeUnknown(MongoError::custom(format!(
         "退款或冲正已提交但结果读取失败: {error}"
     ))))
 }
 
-/// 在原事务内保存业务审计和精确请求提交收据。
-/// # 参数
-/// * `db` / `command_receipt` / `id` - 数据库、原请求身份及单据主键。
-/// * `audit` / `executor` - 业务审计及同一事务执行器。
-/// # 返回
-/// 保存成功后无返回值。
-/// # 错误
-/// 收据目录无效、唯一冲突或持久化失败时返回错误。
+// 在原事务内保存业务审计和精确请求提交收据。
+//
+// `db` / `command_receipt` / `id` 为数据库、原请求身份及单据主键；`audit` / `executor` 为业务审计及同一事务执行器。
+//
+// 保存成功后无返回值。收据目录无效、唯一冲突或持久化失败时返回错误。
 pub(super) async fn persist_submit_receipt(
     db: &Database,
     command_receipt: &CommandReceipt,

@@ -78,31 +78,17 @@ pub struct PurchaseOrderDomainRepository<'a> {
 }
 
 impl<'a> PurchaseOrderDomainRepository<'a> {
-    /// 创建域专用仓储。
-    ///
-    /// # 参数
-    /// * `db` - 目标 MongoDB 数据库
-    ///
-    /// # 返回
-    /// 返回仓储实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 创建域专用仓储。返回仓储实例。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
 
     /// 按输入顺序批量写入已构造的采购草稿提交行。
     ///
-    /// # 参数
-    /// * `lines` - 已校验的提交明细；空切片不执行写入
-    /// * `executor` - 调用方执行器，采购聚合创建时必须沿用根事务
+    /// 全部写入成功或输入为空时返回 `Ok(())`。有序插入在首个写入错误处停止，唯一键冲突与数据库错误保持通用仓储分类。
     ///
-    /// # 返回
-    /// 全部写入成功或输入为空时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 有序插入在首个写入错误处停止，唯一键冲突与数据库错误保持通用仓储分类。
+    /// - `lines`：已校验的提交明细；空切片不执行写入。
+    /// - `executor`：调用方执行器，采购聚合创建时必须沿用根事务。
     pub async fn create_draft_submission_lines(
         &self,
         lines: &[PurchaseOrderSubmissionLine],
@@ -119,23 +105,15 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
     /// 提交采购草稿并形成不可变提交（跨集合多步骤写入）。
     ///
     /// 依次插入 `purchase_order_submission`、`purchase_order_submission_line`，
-    /// 再乐观锁更新调用方已经改好的采购主表。本方法不改状态、不调用
-    /// `submit_for_review`，也不构成原子边界。传入 `NoTransaction` 时各笔写入各自提交，
-    /// 主表 CAS 失败会留下只有提交没有指针的半成品；调用方必须通过
-    /// `persistence_core::Transactional::with_transaction` 传入事务会话。
+    /// 再乐观锁更新调用方已经改好的采购主表。本方法不改状态、不调用`submit_for_review`，也不构成原子边界。传入 `NoTransaction`
+    /// 时各笔写入各自提交，主表 CAS 失败会留下只有提交没有指针的半成品；调用方必须通过`persistence_core::Transactional::with_transaction`
+    /// 传入事务会话。
     ///
-    /// # 参数
-    /// * `order` - 已带期望版本、待一并更新的采购主表
-    /// * `submission` - 待写入的不可变提交
-    /// * `lines` - 待写入的提交明细
-    /// * `executor` - 数据访问执行器，必须位于事务中
+    /// 当提交序号唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）、
+    /// 主表版本冲突（[`persistence_core::Error::OptimisticLockingError`]）或 MongoDB 写入失败时返回错误。
     ///
-    /// # 返回
-    /// 三笔写入都成功时无返回值。
-    ///
-    /// # 错误
-    /// 当提交序号唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）、主表版本
-    /// 冲突（[`persistence_core::Error::OptimisticLockingError`]）或 MongoDB 写入失败时返回错误。
+    /// - `order`：已带期望版本、待一并更新的采购主表。
+    /// - `executor`：数据访问执行器，必须位于事务中。
     pub async fn create_purchase_submission(
         &self,
         order: &mut PurchaseOrder,
@@ -167,17 +145,9 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
     /// **必须收到事务执行器**：传入 `NoTransaction` 时两笔写入各自自动提交，
     /// 中途失败会留下只有版本没有明细的半成品。
     ///
-    /// # 参数
-    /// * `revision` - 待写入的生效版本
-    /// * `lines` - 待写入的版本明细
-    /// * `executor` - 数据访问执行器，必须位于事务中
+    /// 当版本号唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）或 MongoDB写入失败时返回错误。
     ///
-    /// # 返回
-    /// 两笔写入都成功时无返回值。
-    ///
-    /// # 错误
-    /// 当版本号唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）或 MongoDB
-    /// 写入失败时返回错误。
+    /// 使用数据访问执行器，必须位于事务中。
     pub async fn create_effective_revision(
         &self,
         revision: &PurchaseOrderRevision,
@@ -207,19 +177,11 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
     /// **必须收到事务执行器**：传入 `NoTransaction` 时各笔写入各自自动提交，
     /// 主表 CAS 失败会留下只有提交没有指针的半成品。
     ///
-    /// # 参数
-    /// * `change_order` - 已执行内容更新的采购变更单（带期望版本）
-    /// * `submission` - 待写入的变更提交
-    /// * `lines` - 待写入的变更提交明细
-    /// * `executor` - 数据访问执行器，必须位于事务中
+    /// 当提交序号唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）、
+    /// 变更单版本冲突（[`persistence_core::Error::OptimisticLockingError`]）或 MongoDB 写入失败时返回错误。
     ///
-    /// # 返回
-    /// 三笔写入都成功时无返回值。
-    ///
-    /// # 错误
-    /// 当提交序号唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）、变更单
-    /// 版本冲突（[`persistence_core::Error::OptimisticLockingError`]）或 MongoDB 写入失败时
-    /// 返回错误。
+    /// - `change_order`：已执行内容更新的采购变更单（带期望版本）。
+    /// - `executor`：数据访问执行器，必须位于事务中。
     pub async fn create_change_submission(
         &self,
         change_order: &mut PurchaseChangeOrder,
@@ -247,13 +209,9 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
     }
 }
 
-/// 构造不访问数据库的采购单元测试句柄。
-/// # 参数
-/// name 为测试内独立数据库名。
-/// # 返回
-/// 只供替身执行路径使用的数据库句柄。
-/// # 错误
-/// 固定客户端选项非法时测试失败；不访问 MongoDB。
+// 构造不访问数据库的采购单元测试句柄。
+//
+// 只供替身执行路径使用的数据库句柄。固定客户端选项非法时测试失败；不访问 MongoDB。
 #[cfg(test)]
 pub(crate) fn test_database(name: &str) -> Database {
     use mongodb::Client;
@@ -275,7 +233,7 @@ mod draft_line_tests {
 
     use super::*;
 
-    /// 领域批量入口的空输入直接成功，不执行数据库操作。
+    // 领域批量入口的空输入直接成功，不执行数据库操作。
     #[tokio::test]
     async fn draft_submission_lines_empty_input_performs_no_write() {
         let db = test_database("unit_test");
@@ -295,7 +253,7 @@ mod draft_line_tests {
         ErrorKind::InsertMany(error).into()
     }
 
-    /// 批量唯一键冲突保持通用仓储分类与原索引名。
+    // 批量唯一键冲突保持通用仓储分类与原索引名。
     #[test]
     fn draft_submission_lines_duplicate_error_keeps_index_classification() {
         let error = RepositoryError::from(ordered_insert_failure(
@@ -306,7 +264,7 @@ mod draft_line_tests {
         assert_eq!(error.duplicate_index_name(), Some("uk_purchase_submission_line_no"));
     }
 
-    /// 非唯一键的首个插入错误继续归数据库错误。
+    // 非唯一键的首个插入错误继续归数据库错误。
     #[test]
     fn draft_submission_lines_other_write_error_remains_database_error() {
         let error = RepositoryError::from(ordered_insert_failure(121, "document validation failed"));

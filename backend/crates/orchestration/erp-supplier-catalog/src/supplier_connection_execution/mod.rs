@@ -45,17 +45,9 @@ pub struct SupplierConnectionExecutionProcess {
 impl SupplierConnectionExecutionProcess {
     /// 复用应用数据库与已注入网关，不另建外部连接器或读取凭据。
     ///
-    /// # 参数
-    /// * `db` - 应用数据库。
-    /// * `gateway` - 组合根注入的供应商网关。
-    /// * `catalog` - 已装配审计与文件资产 Port 的商品服务。
-    /// * `authorization` - 应用共享的统一授权服务。
+    /// `gateway`：组合根注入的供应商网关；`catalog`：已装配审计与文件资产 Port 的商品服务；`authorization`：应用共享的统一授权服务。
     ///
-    /// # 返回
     /// 返回连接任务执行流程。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(
         db: Database,
         gateway: Arc<dyn SupplierApiGateway>,
@@ -73,23 +65,21 @@ impl SupplierConnectionExecutionProcess {
     }
 
     /// 绑定应用退出时使用的目录任务控制器。
-    /// # 参数
+    ///
     /// `control` 为同进程调度器与关闭流程共享的控制器。
-    /// # 返回
+    ///
     /// 使用共享停止状态的执行流程。
-    /// # 错误
-    /// 不返回错误。
     pub fn with_control(mut self, control: CatalogTaskControl) -> Self {
         self.control = control;
         self
     }
 
-    /// 读取已登记的目录候选协议。
+    // 目录调度扫描候选连接前，从网关注册表取得支持目录采集的候选协议类型。
     pub(crate) fn catalog_connector_types(&self) -> Vec<SupplierConnectorType> {
         self.gateway.catalog_connector_types()
     }
 
-    /// 从适配器取得当前连接策略，缺少目录能力时拒绝执行。
+    // 从适配器取得当前连接策略，缺少目录能力时拒绝执行。
     pub(crate) fn catalog_policy(
         &self,
         connection: &SupplierApiConnection,
@@ -101,7 +91,7 @@ impl SupplierConnectionExecutionProcess {
         })
     }
 
-    /// 读取调度策略；无目录能力的候选连接可被跳过。
+    // 周期调度检查候选连接时读取目录策略；没有目录能力时返回空，供调度器跳过。
     pub(crate) fn scheduled_policy(
         &self,
         connection: &SupplierApiConnection,
@@ -110,12 +100,10 @@ impl SupplierConnectionExecutionProcess {
     }
 
     /// 注入事务外来源图片准备器，不改变网关或业务启用状态。
-    /// # 参数
+    ///
     /// `source_media` 使用部署登记的受信图片主机、对象存储及内容密钥。
-    /// # 返回
+    ///
     /// 带媒体准备能力的连接执行流程。
-    /// # 错误
-    /// 不返回错误。
     pub fn with_source_media(mut self, source_media: Option<Arc<SourceMediaPreparer>>) -> Self {
         self.source_media = source_media;
         self
@@ -125,14 +113,10 @@ impl SupplierConnectionExecutionProcess {
     ///
     /// 供后台调度器调用，不得在创建任务的 HTTP 请求内等待。
     ///
-    /// # 参数
-    /// * `job_id` - 后台任务主键。
-    /// * `actor` - 结果事务使用的审计操作人。
+    /// `job_id`：后台任务主键；`actor`：结果事务使用的审计操作人。
     ///
-    /// # 返回
     /// 任务已终态，或健康检查、目录同步执行完成时返回。
     ///
-    /// # 错误
     /// 任务不存在、任务类型不属于连接治理，或对应执行的启动与结果事务失败时返回错误。
     pub async fn process_connection_job(&self, job_id: &str, actor: &AuditActor) -> Result<()> {
         let job = self

@@ -23,24 +23,14 @@ impl<T> Default for BatchValue<T> {
 
 impl<T: Clone> BatchValue<T> {
     /// 建立来源预填值，缺失时保持未设置。
-    /// # 参数
-    /// `value` 为经过核验的来源值。
-    /// # 返回
     /// 来源值及明确的值来源。
-    /// # 错误
-    /// 不返回错误。
     pub fn initial(value: Option<T>) -> Self {
         let origin = if value.is_some() { ValueOrigin::Source } else { ValueOrigin::Unset };
         Self { value, origin }
     }
 
     /// 按覆盖策略合并批量值；空规则不清空已存内容。
-    /// # 参数
-    /// `value` 为本次批量结果，`policy` 为用户明确选择的填值范围。
-    /// # 返回
     /// 返回合并后的字段；人工值与明确清空按策略保护。
-    /// # 错误
-    /// 不返回错误。
     pub fn apply(&self, value: Option<T>, policy: FillPolicy) -> Self {
         match value {
             Some(value) if policy.allows(self.origin) => {
@@ -51,12 +41,9 @@ impl<T: Clone> BatchValue<T> {
     }
 
     /// 应用单项显式补丁，值来源由服务端生成。
-    /// # 参数
-    /// `patch` 区分保持、填写和明确清空。
-    /// # 返回
     /// 保持原字段，或标为人工填写、明确清空。
-    /// # 错误
-    /// 不返回错误；字段业务约束由所属值对象检查。
+    /// 字段业务约束由所属值对象检查。
+    /// `patch` 区分保持、填写和明确清空。
     pub fn edit(&self, patch: &BatchValuePatch<T>) -> Self {
         match patch {
             BatchValuePatch::Keep => self.clone(),
@@ -111,23 +98,16 @@ pub struct BatchSalesValues {
 
 impl BatchSalesValues {
     /// 建立新规格草稿；仅沿用现行来源市场参考价预填。
-    /// # 参数
-    /// `market_price` 为已核验的来源市场参考价。
-    /// # 返回
     /// 公司销售价及门槛为空、市场参考价带来源标记的草稿。
-    /// # 错误
-    /// 不返回错误；金额合法性在核对时检查。
+    /// 金额合法性在核对时检查。
     pub fn initial(market_price: Option<Amount>) -> Self {
         Self { market_price: BatchValue::initial(market_price), ..Self::default() }
     }
 
     /// 以已有公司 SKU 当前修订建立只读原价展示。
-    /// # 参数
-    /// `prices` 为经当前权限及数据范围核验的公司 SKU 原价格。
-    /// # 返回
     /// 每个字段均标为原值保留的草稿，不建立批量同价联动。
-    /// # 错误
-    /// 不返回错误，不更改已有修订。
+    /// 不更改已有修订。
+    /// `prices` 为经当前权限及数据范围核验的公司 SKU 原价格。
     pub fn existing(prices: AdoptionSalesPrices) -> Self {
         Self {
             dropship: BatchValue { value: prices.sales_visible_price_gross, origin: ValueOrigin::Preserved },
@@ -139,12 +119,8 @@ impl BatchSalesValues {
     }
 
     /// 使旧报价计算出的规则值失效，保留人工、清空、来源及已有 SKU 原值。
-    /// # 参数
-    /// 无；由来源变更核对入口调用，随后必须重新应用当前批量规则。
-    /// # 返回
     /// 旧规则值恢复为未设置的新草稿，不隐式计算或提交价格。
-    /// # 错误
-    /// 不返回错误。
+    /// 由来源变更核对入口调用，随后必须重新应用当前批量规则。
     pub fn reset_rule_values(&self) -> Self {
         Self {
             dropship: self.dropship.reset_rule(),
@@ -156,11 +132,7 @@ impl BatchSalesValues {
     }
 
     /// 只从本次核验报价应用公司售价规则，并保护已有 SKU。
-    /// # 参数
-    /// `pricing`、`policy` 为本批设置，`source` 为接口采购报价，`existing_sku` 表示保留原价。
-    /// # 返回
     /// 全部计算成功后的新草稿；失败不修改原草稿。
-    /// # 错误
     /// 规则非法、所需报价缺失、计算溢出或同价联动缺代发价时拒绝。
     pub fn apply(
         &self,
@@ -222,11 +194,7 @@ impl BatchSalesValues {
     }
 
     /// 应用单项人工调整，同价联动使用最终人工代发价。
-    /// # 参数
-    /// `edit` 为服务端处理的显式字段补丁，`existing_sku` 为已有 SKU 保护标记。
-    /// # 返回
     /// 带人工或清空标记的新草稿；单独编辑集采价将解除该行联动。
-    /// # 错误
     /// 试图修改已有 SKU、金额负数、门槛非正或清空联动代发价时拒绝。
     pub fn edit(&self, edit: &BatchSalesEdit, existing_sku: bool) -> Result<Self> {
         if (existing_sku || self.has_preserved_values()) && edit.has_changes() {
@@ -249,11 +217,7 @@ impl BatchSalesValues {
     }
 
     /// 取消公司销售价及门槛的单项覆盖，按最新核验报价恢复批量规则。
-    /// # 参数
-    /// `pricing` 为当前批量规则，`source` 为最新核验报价，`existing_sku` 保护已有规格。
-    /// # 返回
     /// 市场参考价保持不变，其他销售字段按批量规则重新生成。
-    /// # 错误
     /// 规则无法计算或同价缺少代发价时拒绝。
     pub fn restore(
         &self,
@@ -273,12 +237,8 @@ impl BatchSalesValues {
     }
 
     /// 转为现有采纳命令的公司销售参考价，不产生供应商集采条款。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 只包含公司售价、公司门槛及市场参考价的命令值。
-    /// # 错误
-    /// 不返回错误；调用方必须先执行本行核对。
+    /// 调用方必须先执行本行核对。
     pub fn to_sales_prices(&self) -> AdoptionSalesPrices {
         AdoptionSalesPrices {
             sales_visible_price_gross: self.dropship.value,
@@ -289,12 +249,9 @@ impl BatchSalesValues {
     }
 
     /// 核对报价资格、公司集采配对及需要用户确认的价格提示。
-    /// # 参数
-    /// `source` 为已核验采购报价；`existing_sku` 为原价保留标记。
-    /// # 返回
     /// 本行需要明确确认的提示；已有 SKU 不对原售价产生新提示。
-    /// # 错误
     /// 缺来源报价、负报价、非法售价或公司集采价及门槛不成对时拒绝。
+    /// `source` 为已核验采购报价；`existing_sku` 为原价保留标记。
     pub fn validate(&self, source: Option<UnitPrice>, existing_sku: bool) -> Result<Vec<BatchPriceWarning>> {
         let source = source.ok_or_else(|| {
             Error::ValidationError("供应商尚未提供采购报价，请等待报价补齐后重新核对".into())
@@ -315,12 +272,8 @@ impl BatchSalesValues {
     }
 
     /// 给出当前可见报价与售价之间的提示，不隐式改变任何价格。
-    /// # 参数
-    /// `source` 为当前用户有权读取的采购报价。
-    /// # 返回
     /// 低于采购报价与集采高于代发的互相独立提示。
-    /// # 错误
-    /// 不返回错误；来源报价缺失时仍可提示两种公司售价关系。
+    /// 来源报价缺失时仍可提示两种公司售价关系。
     pub fn warnings(&self, source: Option<UnitPrice>) -> Vec<BatchPriceWarning> {
         let mut warnings = Vec::new();
         if let Some(source) = source {
@@ -348,12 +301,8 @@ impl BatchSalesValues {
     }
 
     /// 判断草稿是否包含已有公司 SKU 的只读价格。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 任意价格或门槛来自已有 SKU 原值时返回真。
-    /// # 错误
-    /// 不返回错误；匹配由已有 SKU 变成新建时，调用方须重新初始化草稿。
+    /// 匹配由已有 SKU 变成新建时，调用方须重新初始化草稿。
     pub fn has_preserved_values(&self) -> bool {
         [self.dropship.origin, self.bulk.origin, self.minimum_quantity.origin, self.market_price.origin]
             .contains(&ValueOrigin::Preserved)
@@ -383,12 +332,7 @@ impl BatchSalesValues {
 
 impl BatchSalesEdit {
     /// 判断本次是否包含实际修改动作。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 任意字段为填写或清空时返回真。
-    /// # 错误
-    /// 不返回错误。
     pub fn has_changes(&self) -> bool {
         !matches!(self.dropship, BatchValuePatch::Keep)
             || !matches!(self.bulk, BatchValuePatch::Keep)
@@ -407,13 +351,8 @@ pub enum BatchPriceWarning {
 }
 
 impl BatchPriceWarning {
-    /// 返回价格提示的用户可见说明。
-    /// # 参数
-    /// 无。
-    /// # 返回
+    /// 为 `BatchPriceWarning` 提供中文展示名；界面展示时使用，不以文案作为稳定标识。
     /// 对应当前售价关系的中文提示。
-    /// # 错误
-    /// 不返回错误。
     pub fn label(self) -> &'static str {
         match self {
             Self::DropshipBelowPurchaseQuote => "公司代发参考价低于接口采购报价，请确认",

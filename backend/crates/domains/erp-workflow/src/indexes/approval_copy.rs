@@ -7,12 +7,9 @@ use persistence_core::Result;
 use crate::repository::approval_copy::{CONFIGS, RECEIPTS};
 
 /// 注册配置、幂等、收件排序与未读索引。
-/// # 参数
-/// 工作流数据库。
-/// # 返回
-/// 无。
-/// # 错误
 /// 索引创建失败。
+///
+/// 工作流数据库。
 pub async fn ensure_indexes(db: &Database) -> Result<()> {
     for (collection, indexes) in [
         (CONFIGS, vec![index("uk_copy_config_id", doc! { "id": 1 }, true)]),

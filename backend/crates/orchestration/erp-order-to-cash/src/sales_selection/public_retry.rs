@@ -41,16 +41,11 @@ impl SelectionAttemptError {
     }
 }
 
-/// 以原始个人请求最多重试三次已回滚的瞬态事务冲突。
-///
-/// # 参数
-/// * `operation` - 每次创建新事务并克隆相同请求的操作；限流与解码必须在外部执行
-///
-/// # 返回
-/// 首次成功结果；初始化、提交、业务和授权失败直接返回。
-///
-/// # 错误
-/// 只有事务体中的 `TransientTransactionConflict` 可重试；结果未知和业务版本冲突绝不重放。
+// 以原始个人请求最多重试三次已回滚的瞬态事务冲突。
+//
+// `operation` 为每次创建新事务并克隆相同请求的操作；限流与解码必须在外部执行。首次成功结果；初始化、提交、业务和授权失败直接返回。
+//
+// 只有事务体中的 `TransientTransactionConflict` 可重试；结果未知和业务版本冲突绝不重放。
 pub(super) async fn retry_public_write<T, F, Fut>(mut operation: F) -> Result<T>
 where
     F: FnMut() -> Fut,

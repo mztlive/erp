@@ -17,12 +17,8 @@ use crate::{Error, Result};
 
 impl SalesInquiryProcess {
     /// 在调用方事务内创建带可信客户及责任范围的草稿。
-    /// # 参数
-    /// `actor` 为当前操作者，`req` 为创建数据，`executor` 为用例事务。
-    /// # 返回
-    /// 返回已持久化的询价草稿。
-    /// # 错误
-    /// 客户、商品或创建权限无效及存储失败时拒绝。
+    ///
+    /// `actor` 为当前操作者，`req` 为创建数据，`executor` 为用例事务。返回已持久化的询价草稿。客户、商品或创建权限无效及存储失败时拒绝。
     pub async fn create_inquiry(
         &self,
         actor: &AuditActor,
@@ -53,12 +49,8 @@ impl SalesInquiryProcess {
     }
 
     /// 读取当前授权且有效的客户名称。
-    /// # 参数
-    /// `actor`、`id` 为访问身份与客户，`executor` 为当前读取边界。
-    /// # 返回
-    /// 返回客户当前主体修订的法定名称。
-    /// # 错误
-    /// 客户越权、停用或缺少有效主体资料时拒绝。
+    ///
+    /// `actor`、`id` 为访问身份与客户，`executor` 为当前读取边界。返回客户当前主体修订的法定名称。客户越权、停用或缺少有效主体资料时拒绝。
     pub async fn require_customer(
         &self,
         actor: &AuditActor,

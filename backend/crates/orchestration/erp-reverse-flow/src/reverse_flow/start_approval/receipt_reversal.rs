@@ -20,20 +20,8 @@ use super::prepare::load_start_receipt_for_document_type;
 use super::reversal_submit::{committed_reversal_submit, persist_start_guard, persist_submit_receipt};
 use crate::{Error, Result, ReverseFlowPorts};
 
-/// 读取回款冲正同载荷启动收据；不存在时返回 `None`。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `subject` - 业务对象引用
-/// * `subject_version` - 冻结提交版本
-/// * `idempotency_key` - 调用方幂等键
-/// * `executor` - 本次提交事务执行器。
-///
-/// # 返回
-/// 已提交收据或空。
-///
-/// # 错误
-/// 幂等键非法或仓储失败时返回错误。
+/// 回款冲正提交时，在原事务按审批主体、冻结提交版本和原幂等键查已提交启动回执。
+/// 没有回执返回 `None`；幂等键非法或仓储查询失败时返回原错误。
 pub async fn load_receipt_reversal_start_receipt(
     db: &Database,
     subject: &SubjectRef,
@@ -56,19 +44,10 @@ pub async fn load_receipt_reversal_start_receipt(
 ///
 /// 审批人取自已发布节点，不接受客户端选择。对象读取权失败时收敛为 BLOCKED。
 ///
-/// # 用途
 /// 把启动参数收敛为引擎 `prepare_start` 输入。
 ///
-/// # 参数
-/// * `input` - 定义图、绑定、主体与提交人
+/// `input` 为定义图、绑定、主体与提交人。返回可交给 `prepare_start` 的输入。入口缺失、审批人非法、幂等键非法或读取权校验失败时返回错误。
 ///
-/// # 返回
-/// 返回可交给 `prepare_start` 的输入。
-///
-/// # 错误
-/// 入口缺失、审批人非法、幂等键非法或读取权校验失败时返回错误。
-///
-/// # 关键业务约束
 /// 定义版本必须与冻结绑定一致；对象读取权失败时收敛为 BLOCKED。
 pub fn build_receipt_reversal_start_input(input: ReverseStartInput<'_>) -> Result<StartExecutionInput> {
     build_reverse_start_input(
@@ -123,21 +102,12 @@ pub struct ReceiptReversalStartPersistInput {
 
 /// 在同一事务中写入回款冲正迁移、快照、BPM 运行事实与入口任务。
 ///
-/// # 用途
 /// 提交启动后原子写入冲正单、快照与运行事实。
 ///
-/// # 参数
-/// * `db` - 数据库
-/// * `input` - 冲正单、快照与启动计划
-/// * `executor` - 用例入口的原事务执行器。
+/// `input` 为冲正单、快照与启动计划；`executor` 为用例入口的原事务执行器。完成启动写入或命中精确提交回执后成功。
 ///
-/// # 返回
-/// 完成启动写入或命中精确提交回执后成功。
-///
-/// # 错误
 /// 仓储写入失败或计划不完整时返回错误，事务回滚。
 ///
-/// # 关键业务约束
 /// Replay 不得重复写运行事实；Apply 必须写入快照与入口任务。
 pub async fn persist_receipt_reversal_start(
     db: &Database,
@@ -193,7 +163,7 @@ pub async fn persist_receipt_reversal_start(
     Ok(())
 }
 
-/// 沿原顺序重验提交来源，再恢复已提交的同一命令结果。
+// 沿原顺序重验提交来源，再恢复已提交的同一命令结果。
 async fn replay_committed_start(
     db: &Database,
     rbac: &ReverseFlowPorts,
@@ -217,7 +187,7 @@ async fn replay_committed_start(
     Ok(None)
 }
 
-/// 引擎回放必须存在精确原版本请求收据，否则不能把历史 BPM 收据当作原提交。
+// 引擎回放必须存在精确原版本请求收据，否则不能把历史 BPM 收据当作原提交。
 async fn replay_persisted_receipt_reversal(
     db: &Database,
     id: &str,
@@ -235,17 +205,8 @@ async fn replay_persisted_receipt_reversal(
 
 /// 将回款冲正启动计划写入 BPM 集合、不可变快照和入口 WorkItem。
 ///
-/// # 参数
-/// * `db` - 数据库。
-/// * `writes` - 已准备的启动写入计划。
-/// * `snapshot_payload` - 冻结的主体快照。
-/// * `context` - 原冲正类型、入口任务责任角色、责任组织及状态变更时间。
-/// * `executor` - 调用方事务执行器。
+/// `writes` 为已准备的启动写入计划；`snapshot_payload` 为冻结的主体快照；`context` 为原冲正类型、入口任务责任角色、责任组织及状态变更时间；沿用原事务的执行器。
 ///
-/// # 返回
-/// 成功时无返回值。
-///
-/// # 错误
 /// 计划缺少入口执行或写入失败时返回错误。
 pub async fn persist_receipt_reversal_runtime(
     resubmission_reason: Option<&str>,

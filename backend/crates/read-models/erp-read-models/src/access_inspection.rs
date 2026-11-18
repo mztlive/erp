@@ -20,24 +20,26 @@ pub struct AccessInspectionReadService {
 }
 
 impl AccessInspectionReadService {
-    /// 绑定现有领域服务。
+    /// 装配跨域访问检查器时复用应用的数据库和共享授权服务；构造本身不读取单据。
+    ///
     /// # 参数
-    /// * `db` - 数据库。
     /// * `authorization` - 应用注入的统一授权服务。
+    ///
     /// # 返回
     /// 只读检查器。
-    /// # 错误
-    /// 无。
     pub fn new(db: Database, authorization: Arc<AuthorizationService>) -> Self {
         Self { db, authorization }
     }
 
-    /// 在同一读取事务内检查配置及可选具体单据。
+    /// 管理员检查目标账号能否执行指定操作时，在同一次读取事务内核对权限配置和可选的单据条件；结果只说明资格，不交付单据内容。
+    ///
     /// # 参数
     /// * `operator` - 发起检查者。
     /// * `request` - 人员、业务、操作及可选单据。
+    ///
     /// # 返回
     /// 分层检查结果，不返回业务单据内容。
+    ///
     /// # 错误
     /// 管理越权、检查人不可读单据及存储故障返回错误。
     pub async fn inspect(
@@ -74,7 +76,7 @@ impl AccessInspectionReadService {
             .await
     }
 
-    /// 使用销售真实对象资格及实体编辑状态规则，先检查检查人的读取权。
+    // 检查销售单的具体操作资格时，先确认检查人可以查看该单，再按销售对象资格和实体编辑状态评估目标账号。
     async fn sales_object(
         &self,
         operator: &AuditActor,

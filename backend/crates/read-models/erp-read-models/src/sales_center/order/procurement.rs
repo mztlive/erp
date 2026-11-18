@@ -42,13 +42,14 @@ struct PendingPurchase<'a> {
 }
 
 impl SalesOrderReadService {
-    /// 展示当前供给覆盖与受影响采购。
-    /// # 参数
-    /// `order` 是已授权销售单；`actor` 为当前账号，内部调用时为空。
-    /// # 返回
-    /// 返回逐行覆盖、受影响与待提交张数；具备采购列表权限时附带采购明细。
-    /// # 错误
-    /// 来源事实不完整、账号或权限查询失败时拒绝。
+    // 处理销售供给覆盖与采购时，展示当前供给覆盖与受影响采购。
+    //
+    // 调用参数：
+    // `order` 是已授权销售单；`actor` 为当前账号，内部调用时为空。
+    //
+    // 返回逐行覆盖、受影响与待提交张数；具备采购列表权限时附带采购明细。
+    //
+    // 来源事实不完整、账号或权限查询失败时拒绝。
     pub(super) async fn sales_procurement_coverage(
         &self,
         order: &SalesOrder,
@@ -74,7 +75,7 @@ impl SalesOrderReadService {
         Ok(coverage_view(&state.coverage, (state.impacts.len(), awaiting), updates))
     }
 
-    /// 批量解析待处理采购的供应商与负责人名称。
+    // 处理销售供给覆盖与采购时，批量解析待处理采购的供应商与负责人名称。
     async fn source_update_views(
         &self,
         pending: &[PendingPurchase<'_>],
@@ -92,17 +93,13 @@ impl SalesOrderReadService {
     }
 }
 
-/// 按事实顺序列出受影响采购与等待重新提交的草稿。
-///
-/// # 参数
-/// * `state` - 同一批事实的覆盖与判定
-/// * `records` - 本销售单的依据更新记录
-///
-/// # 返回
-/// 返回仍受影响的采购，以及开放记录处于等待提交的采购。
-///
-/// # 错误
-/// 无。
+// 依据事实顺序列出受影响采购与等待重新提交的草稿。
+//
+// 调用参数：
+// * `state` - 同一批事实的覆盖与判定
+// * `records` - 本销售单的依据更新记录
+//
+// 返回仍受影响的采购，以及开放记录处于等待提交的采购。
 fn pending_purchases<'a>(
     state: &'a PurchaseSourceState,
     records: &'a [PurchaseSourceUpdate],
@@ -137,7 +134,7 @@ fn pending_purchases<'a>(
         .collect()
 }
 
-/// 由待处理采购构造明细视图。
+// 生成销售供给覆盖与采购视图时，由待处理采购构造明细视图。
 fn source_update_view(
     purchase: &PendingPurchase<'_>,
     suppliers: &HashMap<String, String>,
@@ -157,18 +154,14 @@ fn source_update_view(
     }
 }
 
-/// 由覆盖与受影响采购构造销售详情视图。
-///
-/// # 参数
-/// * `coverage` - 当前覆盖
-/// * `counts` - 受影响张数与等待重新提交张数
-/// * `source_updates` - 可见的采购明细
-///
-/// # 返回
-/// 返回销售详情覆盖视图。
-///
-/// # 错误
-/// 无。
+// 生成销售供给覆盖与采购视图时，由覆盖与受影响采购构造销售详情视图。
+//
+// 调用参数：
+// * `coverage` - 当前覆盖
+// * `counts` - 受影响张数与等待重新提交张数
+// * `source_updates` - 可见的采购明细
+//
+// 返回销售详情覆盖视图。
 fn coverage_view(
     coverage: &SalesProcurementCoverage,
     (affected_count, awaiting_count): (usize, usize),
@@ -202,7 +195,7 @@ fn coverage_view(
     }
 }
 
-/// 销售单尚无当前版本时的空覆盖。
+// 处理销售供给覆盖与采购时，销售单尚无当前版本时的空覆盖。
 fn empty_coverage() -> Result<SalesProcurementCoverageView> {
     let zero = Quantity::try_from(Decimal::ZERO)?;
     Ok(SalesProcurementCoverageView {
@@ -249,7 +242,7 @@ mod tests {
         Quantity::from_str(value).unwrap()
     }
 
-    /// 当前版本 8 件、草稿采购覆盖 10 件的覆盖结果。
+    // 处理销售供给覆盖与采购时，当前版本 8 件、草稿采购覆盖 10 件的覆盖结果。
     fn coverage_with_excess() -> SalesProcurementCoverage {
         let facts = ProcurementCoverageFacts {
             revision: Some(SalesRevisionFact {
@@ -339,7 +332,7 @@ mod tests {
         }
     }
 
-    /// 覆盖超出逐行与整单展示，受影响张数决定依据待更新标记。
+    // 验证销售供给覆盖与采购：超出逐行与整单展示，受影响张数决定依据待更新标记。
     #[test]
     fn coverage_view_reports_excess_and_affected_count() {
         let view = coverage_view(&coverage_with_excess(), (1, 2), Vec::new());
@@ -354,7 +347,7 @@ mod tests {
         assert!(view.source_updates.is_empty());
     }
 
-    /// 没有受影响采购时不标记依据待更新。
+    // 验证销售供给覆盖与采购：没有受影响采购时不标记依据待更新。
     #[test]
     fn coverage_view_without_impacts_is_not_marked() {
         let view = coverage_view(&coverage_with_excess(), (0, 0), Vec::new());
@@ -363,7 +356,7 @@ mod tests {
         assert_eq!(view.affected_purchase_count, 0);
     }
 
-    /// 受影响采购视图使用中文状态、供应商与负责人名称，不暴露账号 ID。
+    // 验证销售供给覆盖与采购：受影响采购视图使用中文状态、供应商与负责人名称，不暴露账号 ID。
     #[test]
     fn source_update_view_resolves_names_and_payment_block() {
         let suppliers = HashMap::from([("sup-1".to_string(), "甲供应商".to_string())]);
@@ -388,7 +381,7 @@ mod tests {
         assert_eq!(view.reasons.len(), 1);
     }
 
-    /// 受影响采购取当前判定；不再受影响的草稿只在开放记录等待提交时列出。
+    // 验证销售供给覆盖与采购：受影响采购取当前判定；不再受影响的草稿只在开放记录等待提交时列出。
     #[test]
     fn pending_purchases_include_affected_and_awaiting_drafts() {
         let affected = purchase(Some("buyer"));
@@ -427,7 +420,7 @@ mod tests {
         assert_eq!(pending[1].reasons.len(), 1);
     }
 
-    /// 负责人缺失或名称不可解析时留空。
+    // 验证销售供给覆盖与采购：负责人缺失或名称不可解析时留空。
     #[test]
     fn source_update_view_leaves_missing_names_empty() {
         let order = purchase(None);

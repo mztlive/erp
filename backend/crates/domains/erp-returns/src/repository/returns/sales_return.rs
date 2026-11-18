@@ -62,16 +62,7 @@ pub struct SalesReturnCaseFilter {
 }
 
 impl Default for SalesReturnCaseFilter {
-    /// 返回首页空筛选（`page: 1`，`page_size: 20`）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回筛选为空、降序的首页过滤条件。
-    ///
-    /// # 错误
-    /// 无。
+    // 初始化销售退货单筛选：第一页、每页 20 条，业务筛选默认留空，默认降序排序。
     fn default() -> Self {
         Self {
             return_no: None,
@@ -86,19 +77,8 @@ impl Default for SalesReturnCaseFilter {
 }
 
 impl QueryFilter for SalesReturnCaseFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// `return_no` 为 `Some` 时做不区分大小写的字面量模糊匹配；`sales_order_id`、
-    /// `status` 为 `Some` 时分别精确匹配对应字段。缺省字段不加入条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 转换为 MongoDB 查询条件（自动追加未删除过滤）。
+    // `return_no` 为 `Some` 时做不区分大小写的字面量模糊匹配；`sales_order_id`、`status` 为 `Some` 时分别精确匹配对应字段。缺省字段不加入条件。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_literal_regex_filter(&mut filter, "return_no", self.return_no.as_deref());
@@ -113,18 +93,8 @@ impl QueryFilter for SalesReturnCaseFilter {
 }
 
 impl Pagination for SalesReturnCaseFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// 不修正 `page`；`page_size` 由 `u32` 转为 `u64`。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 向仓储分页传递页码与单页条数。
+    // 不修正 `page`；`page_size` 由 `u32` 转为 `u64`。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -134,19 +104,10 @@ impl Pagination for SalesReturnCaseFilter {
 #[allow(async_fn_in_trait)]
 pub trait SalesReturnCaseRepositoryExt {
     /// 分页检索销售退货处理单列表（投影查询）。
-    ///
-    /// 只返回 [`SalesReturnCaseRow`] 所需的列表字段；退货处理号支持字面量
-    /// 模糊匹配（复用 `regex_filter`，禁止自拼正则）。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
+    /// 只返回 [`SalesReturnCaseRow`] 所需的列表字段；退货处理号支持字面量模糊匹配（复用 `regex_filter`，禁止自拼正则）。
     /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// 沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询、游标读取或计数错误。
     async fn search_sales_return_cases(
         &self,
         filter: &SalesReturnCaseFilter,
@@ -179,16 +140,9 @@ impl SalesReturnCaseRepositoryExt for Repository<'_, SalesReturnCase> {
 #[allow(async_fn_in_trait)]
 pub trait SalesReturnLineRepositoryExt {
     /// 批量按退货处理单集合取回明细（`$in` 一次取回，禁止 N+1）。
-    ///
-    /// # 参数
-    /// * `case_ids` - 退货处理单 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回全部匹配明细。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// `case_ids` 为退货处理单 ID 集合；沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询或游标读取错误。
     async fn find_lines_by_cases(
         &self,
         case_ids: &[SalesReturnCaseId],
@@ -210,10 +164,7 @@ impl SalesReturnLineRepositoryExt for Repository<'_, SalesReturnLine> {
     }
 }
 
-/// 销售退货处理单列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
+// 销售退货处理单列表投影字段。
 fn sales_return_case_projection() -> Document {
     doc! {
         "id": 1,

@@ -6,7 +6,7 @@ use super::super::dto::{
     DocumentApprovalDefinitionView, DocumentApprovalHistoryPageView, DocumentApprovalInstanceView,
     DocumentApprovalView,
 };
-/// 由绑定与可选实例事实构造只读审批结构。
+/// 为采购变更审批组装审批视图时，只使用冻结的定义绑定与实际读到的可选实例。
 ///
 /// 创建后未提交只返回绑定定义；客户端不得据此选择定义或审批人。
 ///
@@ -17,9 +17,6 @@ use super::super::dto::{
 ///
 /// # 返回
 /// 返回有界只读审批结构。
-///
-/// # 错误
-/// 不返回错误。
 pub fn document_approval_view(
     binding: Option<&ApprovalDefinitionBinding>,
     instance: Option<DocumentApprovalInstanceView>,
@@ -35,7 +32,7 @@ pub fn document_approval_view(
     }
 }
 
-/// 单据详情允许的审批相关动作。不含选择定义或审批人。
+// 为采购变更审批计算详情可展示的审批动作，不允许借此选择流程定义或审批人。
 fn allowed_document_actions(status: PurchaseChangeOrderStatus) -> Vec<String> {
     match status {
         PurchaseChangeOrderStatus::Draft | PurchaseChangeOrderStatus::Rejected => vec!["SUBMIT".to_string()],
@@ -52,7 +49,7 @@ mod tests {
 
     use super::*;
     const RECENT_HISTORY_LIMIT: usize = 8;
-    /// 详情只读审批结构；允许动作不含选择定义或审批人。
+    // 验证采购变更审批：详情只读审批结构；允许动作不含选择定义或审批人。
     #[test]
     fn detail_approval_is_read_only_and_has_history_cap() {
         let binding =

@@ -64,20 +64,14 @@ pub(super) struct PurchaseSnapshot {
 }
 
 impl PurchaseOrderReadService {
-    /// 授权、总数与业务身份版本全部在同一个事务读取。
-    ///
-    /// # 参数
-    /// * `params` - 原始查询
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 返回带范围版本的列表快照，不含负责人候选。
-    ///
-    /// # 错误
-    /// 缺范围版本的后续页、范围变化、筛选非法或仓储失败时拒绝。
-    ///
-    /// # 关键业务约束
-    /// 负责人筛选只收窄授权结果，不生产人员候选，也不授予改派资格。
+    // 读取采购单列表时，授权、总数与业务身份版本全部在同一个事务读取。
+    //
+    // 返回带范围版本的列表快照，不含负责人候选。
+    //
+    // 缺范围版本的后续页、范围变化、筛选非法或仓储失败时拒绝。
+    //
+    // 业务边界：
+    // 负责人筛选只收窄授权结果，不生产人员候选，也不授予改派资格。
     pub(super) async fn list_snapshot(
         &self,
         params: &PurchaseOrderListParams,
@@ -112,20 +106,17 @@ impl PurchaseOrderReadService {
             .await
     }
 
-    /// 在独立快照中重新解析授权和关键词，只读取完整匹配版本。
-    ///
-    /// # 参数
-    /// * `params` - 与首次列表相同的查询参数
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 返回当前授权与全部匹配采购单版本组成的范围版本。
-    ///
-    /// # 错误
-    /// 动作权限、筛选、历史参与或版本集合超限时拒绝；仓储失败向上传播。
-    ///
-    /// # 关键业务约束
-    /// 关键词关联事实必须重新读取；不得复用首拍授权、历史参与或匹配 ID。
+    // 为采购单列表绑定范围版本时，在独立快照中重新解析授权和关键词，只读取完整匹配版本。
+    //
+    // 调用参数：
+    // * `params` - 与首次列表相同的查询参数
+    //
+    // 返回当前授权与全部匹配采购单版本组成的范围版本。
+    //
+    // 动作权限、筛选、历史参与或版本集合超限时拒绝；仓储失败向上传播。
+    //
+    // 业务边界：
+    // 关键词关联事实必须重新读取；不得复用首拍授权、历史参与或匹配 ID。
     pub(super) async fn scope_fingerprint(
         &self,
         params: &PurchaseOrderListParams,
@@ -152,20 +143,17 @@ impl PurchaseOrderReadService {
     }
 }
 
-/// 在同一事务重新解析列表授权、历史参与、关键词与筛选。
-///
-/// # 参数
-/// * `db` - 关联事实所在数据库
-/// * `access` - 采购范围访问器
-/// * `params` - 原始筛选参数
-/// * `actor` - 已认证操作人
-/// * `executor` - 当前快照执行器
-///
-/// # 返回
-/// 返回授权上下文、对象范围与规范化列表筛选。
-///
-/// # 错误
-/// 授权、筛选或关联关键词读取失败时拒绝。
+// 读取采购单列表时，在同一事务重新解析列表授权、历史参与、关键词与筛选。
+//
+// 调用参数：
+// * `db` - 关联事实所在数据库
+// * `access` - 采购范围访问器
+// * `params` - 原始筛选参数
+// * `executor` - 当前快照执行器
+//
+// 返回授权上下文、对象范围与规范化列表筛选。
+//
+// 授权、筛选或关联关键词读取失败时拒绝。
 async fn list_query(
     db: &Database,
     access: &PurchaseAccess,
@@ -197,17 +185,15 @@ async fn list_query(
     Ok((context, scope, filter))
 }
 
-/// 沿用完整身份版本集合的哈希绑定，并整体拒绝超限。
-///
-/// # 参数
-/// * `scope_version` - 本次独立解析的授权版本
-/// * `versions` - 仓储按稳定 ID 排序的全部匹配采购单版本
-///
-/// # 返回
-/// 返回原授权版本与业务指纹组成的版本字符串。
-///
-/// # 错误
-/// 超过 10000 行时返回原有查询上限错误。
+// 沿用完整身份版本集合的哈希绑定，并整体不接受超限。
+//
+// 调用参数：
+// * `scope_version` - 本次独立解析的授权版本
+// * `versions` - 仓储按稳定 ID 排序的全部匹配采购单版本
+//
+// 返回原授权版本与业务指纹组成的版本字符串。
+//
+// 超过 10000 行时返回原有查询上限错误。
 fn list_scope_version(scope_version: &str, versions: &[PurchaseVersion]) -> Result<String> {
     if versions.len() > 10_000 {
         return Err(Error::ValidationError("采购单查询超过上限，请收窄供应商或负责人条件".into()));
@@ -221,7 +207,7 @@ fn list_scope_version(scope_version: &str, versions: &[PurchaseVersion]) -> Resu
 mod tests {
     use super::*;
 
-    /// 指纹保持原先对完整 Vec 哈希的协议，空集合也必须绑定授权版本。
+    // 验证采购单列表：指纹保持原先对完整 Vec 哈希的协议，空集合也必须绑定授权版本。
     #[test]
     fn purchase_fingerprint_preserves_full_version_hash_and_empty_scope() {
         let versions = vec![
@@ -240,7 +226,7 @@ mod tests {
         assert_ne!(empty, list_scope_version("policy:org", &versions).unwrap());
     }
 
-    /// 非当前页的匹配单据版本和身份变化也必须改变跨页指纹。
+    // 验证采购单列表：非当前页的匹配单据版本和身份变化也必须改变跨页指纹。
     #[test]
     fn purchase_fingerprint_detects_business_versions_and_membership_changes() {
         let mut versions = vec![
@@ -256,7 +242,7 @@ mod tests {
         assert_ne!(first, list_scope_version("scope", &versions).unwrap());
     }
 
-    /// 恰好上限允许完整哈希，超限保持原错误并不得截断成功。
+    // 验证采购单列表：恰好上限允许完整哈希，超限保持原错误并不得截断成功。
     #[test]
     fn purchase_fingerprint_rejects_over_limit() {
         let mut versions: Vec<_> =
@@ -279,7 +265,7 @@ mod tests {
         assert!(serde_json::from_value::<PurchaseListParams>(serde_json::json!({"owner": "张三"})).is_err());
     }
 
-    /// 列表响应不携带负责人候选，已授权行仍返回采购负责人姓名。
+    // 验证采购单列表：列表响应不携带负责人候选，已授权行仍返回采购负责人姓名。
     #[test]
     fn purchase_list_omits_owner_candidates_and_keeps_row_owner_name() {
         use erp_procurement::entity::purchase_order::{

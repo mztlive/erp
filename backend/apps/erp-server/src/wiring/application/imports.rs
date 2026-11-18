@@ -8,11 +8,7 @@ use super::{
 
 impl Application {
     /// 装配持久化品牌导入流程。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 供 HTTP 与 worker 共用的流程。
-    /// # 错误
     /// 无；构造不执行 I/O。
     pub fn brand_import_process(&self) -> erp_data_import::BrandImportProcess {
         erp_data_import::BrandImportProcess::new(
@@ -25,15 +21,7 @@ impl Application {
     }
 
     /// 产品报价表异步导入流程。
-    ///
-    /// # 参数
-    /// 无；使用当前应用共享授权和基础设施。
-    ///
-    /// # 返回
     /// 返回绑定当前数据库、对象存储与内容指纹密钥的导入流程。
-    ///
-    /// # 错误
-    /// 无。
     pub fn product_import_process(&self) -> erp_data_import::ProductImportProcess {
         let services = ProductImportServices {
             catalog: self.catalog_service(),
@@ -52,15 +40,7 @@ impl Application {
     }
 
     /// 绑定供应商后台导入所需数据库、授权源、对象存储和密文编解码器。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回导入流程；不执行 I/O。
-    ///
-    /// # 错误
-    /// 无。
     pub fn supplier_import_process(&self) -> erp_data_import::SupplierImportProcess {
         erp_data_import::SupplierImportProcess::new(
             self.db(),
@@ -72,11 +52,7 @@ impl Application {
     }
 
     /// 按当前配置快照装配阿里云 OCR 和 OpenAI 兼容提取端。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 供应商无关导入流程。
-    /// # 错误
     /// 无；配置缺省或识别失败由任务记录，不返回模拟识别结果。
     pub fn contract_import_process(&self) -> ContractImportProcess {
         let mut providers = RecognitionProviders::default();
@@ -103,12 +79,7 @@ impl Application {
     }
 
     /// 装配导入确认查询及每次完成、重放时的当前资格重验。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 返回持有原跨域事务边界的导入流程。
-    /// # 错误
-    /// 不执行 I/O，不返回错误。
     pub fn import_apply_process(&self) -> erp_data_import::ImportApplyProcess {
         erp_data_import::ImportApplyProcess::new(
             self.db(),
@@ -118,12 +89,7 @@ impl Application {
     }
 
     /// 装配询价文件导入，沿用实时身份及精确可售 SKU 查询能力。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 未执行 I/O 的询价文件导入流程。
-    /// # 错误
-    /// 不返回错误。
     pub fn inquiry_import_process(&self) -> SalesInquiryImportProcess {
         SalesInquiryImportProcess::new(
             self.db(),

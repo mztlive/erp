@@ -17,12 +17,11 @@ use crate::repository::BpmExt;
 
 impl ApprovalDefinitionService {
     /// 返回固定单据类型的非敏感目录。
-    /// # 参数
-    /// actor 为当前认证操作人。
-    /// # 返回
     /// 同一授权快照内的类型目录及可执行动作。
-    /// # 错误
+    ///
     /// 缺少读取资格、政策或仓储读取失败时拒绝。
+    ///
+    /// actor 为当前认证操作人。
     pub async fn definition_catalog(&self, actor: &AuditActor) -> Result<Vec<DefinitionCatalogItem>> {
         let service = self.clone();
         let actor = actor.clone();
@@ -71,12 +70,11 @@ impl ApprovalDefinitionService {
     }
 
     /// 列出某单据类型的定义版本。
-    /// # 参数
-    /// document_type 为服务端单据类型，actor 为当前认证操作人。
-    /// # 返回
     /// 同一授权快照内的版本摘要。
-    /// # 错误
+    ///
     /// 缺少入口或类型读取资格、类型无需审批及仓储失败时拒绝。
+    ///
+    /// document_type 为服务端单据类型，actor 为当前认证操作人。
     pub async fn definition_versions(
         &self,
         document_type: DocumentType,
@@ -115,12 +113,11 @@ impl ApprovalDefinitionService {
     }
 
     /// 返回定义详情。
-    /// # 参数
-    /// definition_id 为定义主键，actor 为当前认证操作人。
-    /// # 返回
     /// 同一授权快照中的定义、节点及抄送配置。
-    /// # 错误
+    ///
     /// 缺少入口资格、目标不存在或类型无权、仓储读取失败时拒绝。
+    ///
+    /// definition_id 为定义主键，actor 为当前认证操作人。
     pub async fn definition_detail(
         &self,
         definition_id: &str,
@@ -170,7 +167,7 @@ impl ApprovalDefinitionService {
     }
 }
 
-/// 类型读取拒绝沿用不存在语义，不泄露无权类型的定义身份。
+// 定义真实类型读取权限不足时映射为未找到，不暴露未知或不可访问类型下的定义身份。
 fn detail_access_error(error: Error) -> Error {
     if matches!(error, Error::Forbidden(_)) { definition_not_found() } else { error }
 }
@@ -203,7 +200,7 @@ mod tests {
         }
     }
 
-    /// 类型可见范围与已有定义状态共同决定展示动作。
+    // 验证：类型可见范围与已有定义状态共同决定展示动作。
     #[test]
     fn type_visibility_controls_definition_actions() {
         let visibility = DefinitionManagementVisibility::from_type_permissions(

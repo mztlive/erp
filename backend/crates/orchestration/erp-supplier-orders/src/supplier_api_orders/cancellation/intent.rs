@@ -24,13 +24,13 @@ struct CancellationIntent {
 }
 
 impl SupplierApiOrderProcess {
-    /// 在原订单和接口执行的当前快照中登记取消意图。
-    /// # 参数
-    /// execution/request 为已经核实协议能力的冻结取消，actor/access 为原入口身份与共享授权。
-    /// # 返回
-    /// 原动作及逐行意图全部写入后成功。
-    /// # 错误
-    /// 授权拒绝、执行版本变化、订单状态冲突或数据库失败时拒绝整次写入。
+    // 协议能力已经核实后，在写事务中登记原取消动作及逐行意图；提交成功前不交给后台对外发送。
+    //
+    // execution/request 为已经核实协议能力的冻结取消，actor/access 为原入口身份与共享授权。
+    //
+    // 原动作及逐行意图全部写入后成功。
+    //
+    // 授权拒绝、执行版本变化、订单状态冲突或数据库失败时拒绝整次写入。
     pub(super) async fn persist_cancel_intent(
         &self,
         mut execution: ApiOrderExecution,
@@ -68,7 +68,8 @@ impl SupplierApiOrderProcess {
 }
 
 impl CancellationIntent {
-    /// 同一事务先重验身份、订单和执行版本，再写入原取消动作。
+    // 在取消意图的原事务中重验取消权限和执行版本，确认订单仍可进入或保持 `CancelPending` 后写入动作、行及审计。
+    // 已有明确取消结果时拒绝写入，调用方应查询原结果。
     async fn persist(
         &self,
         db: &Database,

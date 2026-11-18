@@ -12,13 +12,14 @@ use persistence_core::Executor;
 use crate::Result;
 use crate::purchase_center::repository::creation_tasks::{CreationTaskFilter, read_creation_tasks};
 
-/// 在调用方快照中完成任务查询及当前阶段交付检查。
-/// # 参数
-/// db、rbac、actor 为共享设施与当前账号；filter 只收窄目标，executor 为原执行器。
-/// # 返回
-/// 完整授权后的开放任务。
-/// # 错误
-/// 功能资格、阶段、有效期或仓储读取失败时拒绝。
+// 读取采购创建任务授权时，在调用方快照中完成任务查询及当前阶段交付检查。
+//
+// 调用参数：
+// db、rbac、actor 为共享设施与当前账号；filter 只收窄目标，executor 为原执行器。
+//
+// 完整授权后的开放任务。
+//
+// 功能资格、阶段、有效期或仓储读取失败时拒绝。
 pub(crate) async fn query_tasks(
     db: &Database,
     rbac: &Arc<AuthorizationService>,

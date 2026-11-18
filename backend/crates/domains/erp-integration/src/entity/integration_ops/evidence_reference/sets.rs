@@ -14,17 +14,11 @@ pub struct EvidenceReferenceSet {
 impl EvidenceReferenceSet {
     /// 由 canonical 引用构造可持久化终态集合。
     ///
-    /// # 参数
-    /// * `refs` - 已验证的 canonical 引用
-    ///
-    /// # 返回
-    /// 返回排序去重后的集合。
-    ///
-    /// # 错误
-    /// 空集合或编码超过 512 字节时返回领域校验错误。
-    ///
-    /// # 约束
     /// 使用 `;` 连接以兼容存量终态证据字段；成员 ID 不得含 `;`。
+    ///
+    /// 返回排序去重后的集合。空集合或编码超过 512 字节时返回领域校验错误。
+    ///
+    /// `refs` 为已验证的 canonical 引用。
     pub fn try_from_canonical<I>(refs: I) -> Result<Self>
     where
         I: IntoIterator<Item = CanonicalEvidenceReference>,
@@ -40,34 +34,18 @@ impl EvidenceReferenceSet {
 
     /// 返回可持久化编码。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回分号连接的 canonical 文本。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    ///
-    /// # 约束
     /// 编码已在构造时通过长度门禁。
+    ///
+    /// 返回分号连接的 canonical 文本。
     pub fn as_str(&self) -> &str {
         &self.encoded
     }
 
     /// 消费集合并返回可持久化编码。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回所有权字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    ///
-    /// # 约束
     /// 与 [`Self::as_str`] 相同。
+    ///
+    /// 返回所有权字符串。
     pub fn into_wire(self) -> String {
         self.encoded
     }
@@ -82,17 +60,11 @@ pub struct CompactEvidenceSet {
 impl CompactEvidenceSet {
     /// 由证据类型代码与记录 ID 构造紧凑集合。
     ///
-    /// # 参数
-    /// * `members` - `(证据类型代码, 记录 ID)`；记录 ID 必须是 `type:id`
-    ///
-    /// # 返回
-    /// 空输入返回 `Ok(None)`；否则返回排序去重后的集合。
-    ///
-    /// # 错误
-    /// 成员 grammar 非法或编码超过 512 字节时返回领域校验错误。
-    ///
-    /// # 约束
     /// 使用 `,` 连接以保持既有动作摘要形态；成员不得含 `,`。
+    ///
+    /// 空输入返回 `Ok(None)`；否则返回排序去重后的集合。成员 grammar 非法或编码超过 512 字节时返回领域校验错误。
+    ///
+    /// `members` 为`(证据类型代码, 记录 ID)`；记录 ID 必须是 `type:id`。
     pub fn try_from_pairs<'a, I>(members: I) -> Result<Option<Self>>
     where
         I: IntoIterator<Item = (&'a str, &'a str)>,
@@ -111,53 +83,30 @@ impl CompactEvidenceSet {
 
     /// 返回紧凑编码。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回逗号连接的摘要文本。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    ///
-    /// # 约束
     /// 编码已在构造时通过长度门禁。
+    ///
+    /// 返回逗号连接的摘要文本。
     pub fn as_str(&self) -> &str {
         &self.encoded
     }
 
     /// 消费集合并返回紧凑编码。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回所有权字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    ///
-    /// # 约束
     /// 与 [`Self::as_str`] 相同。
+    ///
+    /// 返回所有权字符串。
     pub fn into_wire(self) -> String {
         self.encoded
     }
 }
 
-/// 编码紧凑集合的单个成员。
-///
-/// # 参数
-/// * `kind_code` - 证据类型稳定代码
-/// * `record_id` - 客户端 `type:id`
-///
-/// # 返回
-/// 返回 `KIND:type:id`。
-///
-/// # 错误
-/// 类型代码或记录 ID 非法时返回领域校验错误。
-///
-/// # 约束
-/// 类型代码不得含分隔符，避免与记录 ID 抢段。
+// 编码紧凑集合的单个成员。
+//
+// 类型代码不得含分隔符，避免与记录 ID 抢段。
+//
+// 返回 `KIND:type:id`。类型代码或记录 ID 非法时返回领域校验错误。
+//
+// `kind_code` 为证据类型稳定代码。
 fn encode_compact_member(kind_code: &str, record_id: &str) -> Result<String> {
     let kind_code = parse_kind(kind_code.trim(), "证据记录 ID 必须使用唯一的 type:id 格式")?;
     let record = EvidenceRecordRef::parse(record_id)?;

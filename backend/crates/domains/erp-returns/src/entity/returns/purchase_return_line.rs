@@ -53,17 +53,9 @@ pub struct PurchaseReturnLine {
 
 impl PurchaseReturnLine {
     /// 创建采购退货明细。
-    ///
     /// 完成退货数量正数校验。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::PurchaseReturnLineId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
     /// 返回新建的明细实体。
-    ///
-    /// # 错误
+    /// `id` 为实体主键（`erp_core::ids::PurchaseReturnLineId`）。
     /// 当退货数量非正时返回错误。
     pub fn new(id: PurchaseReturnLineId, data: PurchaseReturnLineData) -> Result<Self> {
         validate_return_quantity(data.return_quantity)?;
@@ -78,16 +70,7 @@ impl PurchaseReturnLine {
     }
 
     /// 更新采购退货明细。
-    ///
     /// 复用 `new` 的校验规则；原采购明细与退货单是固定字段。
-    ///
-    /// # 参数
-    /// * `update` - 更新数据
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 当退货数量非正时返回错误。
     pub fn update(&mut self, update: PurchaseReturnLineUpdate) -> Result<()> {
         if let Some(return_quantity) = update.return_quantity {

@@ -69,18 +69,9 @@ pub struct StockBalance {
 
 impl StockBalance {
     /// 创建库存余额。
-    ///
-    /// 完成非负校验与三元组一致性校验：`available` 必须精确等于
-    /// `on_hand - reserved`（§6.7/§8.2 第 4 条）。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::StockBalanceId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
+    /// 完成非负校验与三元组一致性校验：`available` 必须精确等于 `on_hand - reserved`（§6.7/§8.2 第 4 条）。
     /// 返回新建的余额实体。
-    ///
-    /// # 错误
+    /// `id` 为实体主键（`erp_core::ids::StockBalanceId`）。
     /// 任一数量为负，或 `available` 不等于 `on_hand - reserved` 时返回错误。
     pub fn new(id: StockBalanceId, data: StockBalanceData) -> Result<Self> {
         ensure_non_negative_quantities(
@@ -106,18 +97,7 @@ impl StockBalance {
         })
     }
     /// 更新库存余额。
-    ///
-    /// 复用 `new` 的数量约束；`available_quantity` 由 `on_hand - reserved`
-    /// 重算并校验非负（§8.2 第 4 条）。校验通过后才写入字段，失败不产生
-    /// 部分更新。
-    ///
-    /// # 参数
-    /// * `update` - 更新数据
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// 复用 `new` 的数量约束；`available_quantity` 由 `on_hand - reserved` 重算并校验非负（§8.2 第 4 条）。校验通过后才写入字段，失败不产生部分更新。
     /// 重算后的可用数量超出数量精度，或任一数量为负时返回错误。
     pub fn update(&mut self, update: StockBalanceUpdate) -> Result<()> {
         let on_hand = update.on_hand_quantity.unwrap_or(self.on_hand_quantity);
@@ -141,31 +121,14 @@ impl StockBalance {
         Ok(())
     }
 
-    /// 判断当前乐观锁版本是否与期望版本一致。
-    ///
-    /// # 参数
-    /// * `expected` - 调用方读取后携带的期望版本
-    ///
-    /// # 返回
-    /// 当前版本等于期望版本时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 更新库存余额前比较当前乐观锁版本与调用方读取的版本。
     pub fn matches_version(&self, expected: u64) -> bool {
         self.base.version == expected
     }
 
     /// 判断库存余额与调整单及其明细是否属于同一库存维度。
-    ///
-    /// # 参数
-    /// * `adjustment` - 待创建或提交的调整单
-    /// * `lines` - 调整单全部明细
-    ///
-    /// # 返回
     /// 仓库一致、每条明细都属于该调整单、且明细 SKU 都等于余额 SKU 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// `adjustment` 为待创建或提交的调整单；`lines` 为调整单全部明细。
     pub fn matches_adjustment_dimensions(
         &self,
         adjustment: &StockAdjustment,
@@ -198,7 +161,7 @@ mod tests {
         }
     }
 
-    /// happy path：三元组一致创建成功。
+    // 验证三元组一致创建成功。
     #[test]
     fn new_succeeds_with_consistent_triple() {
         let balance = StockBalance::new(StockBalanceId::new("b-1"), data()).unwrap();
@@ -206,7 +169,7 @@ mod tests {
         assert_eq!(balance.last_movement_id.unwrap().as_ref(), "m-1");
     }
 
-    /// 失败路径：三元组不一致与负数量（关联不一致）。
+    // 验证三元组不一致与负数量（关联不一致）。
     #[test]
     fn new_rejects_inconsistent_or_negative_quantities() {
         let inconsistent =
@@ -228,7 +191,7 @@ mod tests {
         assert!(StockBalance::new(StockBalanceId::new("b-4"), negative_available).is_err());
     }
 
-    /// 更新：重算可用数量；超预占更新被拒。
+    // 验证更新：重算可用数量；超预占更新被拒。
     #[test]
     fn update_recomputes_available_and_guards_non_negative() {
         let mut balance = StockBalance::new(StockBalanceId::new("b-5"), data()).unwrap();
@@ -250,7 +213,7 @@ mod tests {
         assert_eq!(balance.reserved_quantity, Quantity::from_str("30").unwrap(), "失败不改变字段");
     }
 
-    /// 版本与调整维度匹配由余额实体统一判定。
+    // 验证版本与调整维度匹配由余额实体统一判定。
     #[test]
     fn version_and_adjustment_dimensions_are_matched() {
         let mut balance = StockBalance::new(StockBalanceId::new("b-6"), data()).unwrap();
@@ -288,7 +251,7 @@ mod tests {
         assert!(!balance.matches_adjustment_dimensions(&adjustment, &[line]));
     }
 
-    /// 序列化：JSON 稳定代码由仓储 BSON 往返补齐。
+    // 验证JSON 稳定代码由仓储 BSON 往返补齐。
     #[test]
     fn serde_shapes_and_bson_roundtrip() {
         let balance = StockBalance::new(StockBalanceId::new("b-6"), data()).unwrap();

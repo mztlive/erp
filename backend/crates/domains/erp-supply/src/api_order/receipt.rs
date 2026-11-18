@@ -30,12 +30,9 @@ pub struct ReceiptAction {
 
 impl ApiOrderExecution {
     /// 取得尚无原收货动作的当前真实叶子，原目标不能因重启或拆单重复登记。
-    /// # 参数
-    /// 无；调用方须先以当前完整拓扑核验实际收到数量。
-    /// # 返回
     /// 返回下一真实叶子及拓扑版本；所有叶子已有动作时为空。
-    /// # 错误
     /// 当前完整订单关系尚未取得时拒绝。
+    /// 调用方须先以当前完整拓扑核验实际收到数量。
     pub fn next_receipt_target(&self) -> Result<Option<(OrderReference, u64)>> {
         let tree = self
             .order_tree
@@ -57,23 +54,16 @@ impl ApiOrderExecution {
     }
 
     /// 唤醒独立收货核验，原创建和确认步骤保持不变。
-    /// # 参数
-    /// `now` 来自实际验收/入库根事务或已授权的原结果查询。
-    /// # 返回
     /// 持久调度时间及原收货阻断被刷新。
-    /// # 错误
-    /// 不返回错误；真实数量须在发送前重新核验。
+    /// 真实数量须在发送前重新核验。
+    /// `now` 来自实际验收/入库根事务或已授权的原结果查询。
     pub fn wake_receipt_confirmation(&mut self, now: Instant) {
         self.receipt_next_run_at = Some(now);
         self.receipt_blocker = None;
     }
 
     /// 核对本执行的每条冻结来源行均已经真实收到全部数量。
-    /// # 参数
-    /// `received` 只来自当前净有效验收或实际合格入库，不能来自物流或订购数量。
-    /// # 返回
     /// 完整覆盖成功；不将部分实收按 SKU 分配给任何子单。
-    /// # 错误
     /// 缺行、重复、未知来源行、非正或数量不等于原批准数量时拒绝。
     pub fn ensure_receipt_coverage(&self, received: &[ReceiptLine]) -> Result<()> {
         let by_id = received.iter().map(|line| (line.line_id.as_str(), line)).collect::<BTreeMap<_, _>>();
@@ -96,11 +86,7 @@ impl ApiOrderExecution {
     }
 
     /// 在事务内保存原叶子的未知发送边界，同一目标永不重复发送。
-    /// # 参数
-    /// `request` 由真实收货全覆盖及当前完整叶子生成，原动作身份永久保留。
-    /// # 返回
     /// 首次保存返回真；完全相同的原请求重放返回假。
-    /// # 错误
     /// 目标不是当前叶子、拓扑或数量变更、证据缺失或同目标异载荷时拒绝。
     pub fn begin_receipt_confirmation(&mut self, request: &ConfirmReceipt) -> Result<bool> {
         if let Some(previous) = self.receipt_actions.get(&request.order.external_order_no) {
@@ -154,12 +140,9 @@ impl ApiOrderExecution {
     }
 
     /// 只应用供应商原目标的明确收到结果；未查明不授权重发。
-    /// # 参数
-    /// `order`、`version` 为原目标；`state` 来自原单只读查询或一次写响应。
-    /// # 返回
     /// 明确结果永久保留；不会改变 ERP 发货、入库及客户验收数量。
-    /// # 错误
     /// 原目标身份冲突或把已发送未知误判为无需通知时拒绝。
+    /// `order`、`version` 为原目标；`state` 来自原单只读查询或一次写响应。
     pub fn observe_receipt_confirmation(
         &mut self,
         order: &OrderReference,

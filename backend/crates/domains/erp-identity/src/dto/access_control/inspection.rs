@@ -19,11 +19,8 @@ pub struct AccessInspectionRequest {
 
 impl AccessInspectionRequest {
     /// 校验检查目标及已接线的资源动作。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 输入合法时成功。
-    /// # 错误
+    ///
     /// 目标为空、过长或具体对象检查不受支持时拒绝。
     pub fn validate(&self) -> Result<()> {
         if self.user_id.trim().is_empty() || self.user_id.len() > 128 {
@@ -63,12 +60,11 @@ pub struct AccessInspectionView {
 
 impl AccessInspectionView {
     /// 缺少对象或任务上下文时只报告已完成的检查，不给出对象授权通过。
-    /// # 参数
-    /// `resource` 与 `action` 为已接入的动作。
-    /// # 返回
     /// 动作通过、对象条件待检查的只读结果。
-    /// # 错误
+    ///
     /// 动作未接入时返回校验错误。
+    ///
+    /// `resource` 与 `action` 为已接入的动作。
     pub fn without_object(resource: &str, action: &str) -> Result<Self> {
         let description = scope_spec::action_description(resource, action)?;
         let mut view = Self::default();
@@ -96,14 +92,7 @@ impl AccessInspectionView {
     }
 
     /// 追加明确的检查层结果。
-    /// # 参数
-    /// * `layer` - 检查层。
-    /// * `status` - passed、blocked 或 review。
-    /// * `message` - 用户可读的原因与下一步。
-    /// # 返回
-    /// 无。
-    /// # 错误
-    /// 无。
+    /// `status`：passed、blocked 或 review；`message`：用户可读的原因与下一步。
     pub fn push(&mut self, layer: &str, status: &str, message: &str) {
         self.steps.push(AccessInspectionStep {
             layer: layer.into(),
@@ -112,13 +101,10 @@ impl AccessInspectionView {
         });
     }
 
-    /// 从服务端实际解析结果说明配置，不推测业务对象是否可见。
-    /// # 参数
-    /// * `access` - 当前账号的同角色权限及范围解析结果。
-    /// # 返回
-    /// 包含操作权限、范围和个人限制的检查报告。
-    /// # 错误
-    /// 无。
+    // 从服务端实际解析结果说明配置，不推测业务对象是否可见。
+    // 包含操作权限、范围和个人限制的检查报告。
+    //
+    // `access`：当前账号的同角色权限及范围解析结果。
     pub(crate) fn from_access(access: &AuthorizedDataScope) -> Self {
         let mut view = Self {
             scope_version: Some(access.scope_version.clone()),
@@ -188,7 +174,7 @@ mod tests {
         request.user_id.clear();
         assert!(request.validate().is_err());
     }
-    /// 创建无数据库依赖的真实解析上下文。
+    // 为范围检查单测创建真实授权解析上下文，不依赖数据库设施。
     fn access() -> AuthorizedDataScope {
         use erp_core::common::time::Instant;
 

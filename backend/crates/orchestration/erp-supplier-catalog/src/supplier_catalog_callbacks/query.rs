@@ -19,13 +19,7 @@ pub enum CatalogUpdate {
 }
 
 impl CatalogUpdate {
-    /// 读取补查结果对应的稳定目录身份。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 来源目录主键。
-    /// # 错误
-    /// 不返回错误。
+    // 读取补查结果对应的稳定目录身份。来源目录主键。
     pub(super) fn id(&self) -> &str {
         match self {
             Self::Offer(item) => &item.base.id,
@@ -35,13 +29,13 @@ impl CatalogUpdate {
 }
 
 impl SupplierCatalogCallbackProcess {
-    /// 读取当前提示的下一个本连接规格。
-    /// # 参数
-    /// 已领取的接收记录及已提交游标。
-    /// # 返回
-    /// 下一规格或分组已结束。
-    /// # 错误
-    /// 目录读取失败或提示非法时拒绝。
+    // 读取当前提示的下一个本连接规格。
+    //
+    // 已领取的接收记录及已提交游标。
+    //
+    // 下一规格或分组已结束。
+    //
+    // 目录读取失败或提示非法时拒绝。
     pub(super) async fn next_target(&self, receipt: &SupplierCallbackReceipt) -> Result<Option<SupplierSku>> {
         let Some(hint) = receipt.catalog_hint()? else { return Ok(None) };
         let target = match hint.target_kind.as_str() {
@@ -68,13 +62,13 @@ impl SupplierCatalogCallbackProcess {
     }
 }
 
-/// 通过绑定协议补查当前事实，不读取回调正文业务值。
-/// # 参数
-/// 授权上下文、接收记录、目标规格和协议注册表。
-/// # 返回
-/// 待事务应用的商品或地区观察。
-/// # 错误
-/// 来源缺失、身份不符或事实不完整时拒绝。
+// 通过绑定协议补查当前事实，不读取回调正文业务值。
+//
+// 授权上下文、接收记录、目标规格和协议注册表。
+//
+// 待事务应用的商品或地区观察。
+//
+// 来源缺失、身份不符或事实不完整时拒绝。
 pub(super) async fn query(
     context: &Context,
     receipt: &SupplierCallbackReceipt,
@@ -85,12 +79,12 @@ pub(super) async fn query(
 }
 
 /// 使用已绑定协议补查回调目标，不把推送正文当成业务事实。
-/// # 参数
+///
 /// `connection`、`connector` 为调用方已授权并核对绑定的服务端上下文；
 /// `receipt`、`sku` 为原回执和待补查目标；`registry` 提供原可售有效期策略。
-/// # 返回
+///
 /// 返回经来源身份、观察时间和完整性校验的商品或地区观察，不写业务数据。
-/// # 错误
+///
 /// 原回执失效、来源缺失、身份不符或报价及可售事实不完整时返回原错误。
 pub async fn query_current(
     connection: &SupplierApiConnection,

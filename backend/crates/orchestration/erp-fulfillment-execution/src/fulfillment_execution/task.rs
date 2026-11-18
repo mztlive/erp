@@ -95,7 +95,7 @@ impl FulfillmentTaskObject<'_> {
         }
     }
 
-    /// 返回由履约对象冻结的责任角色与责任键，不读取当前配置作为回退。
+    // 返回由履约对象冻结的责任角色与责任键，不读取当前配置作为回退。
     fn frozen_identity(&self) -> Result<FrozenFulfillmentIdentity> {
         let (owner_role, responsibility_key) = match self {
             Self::PurchaseReceipt(receipt) => {
@@ -138,21 +138,11 @@ struct FulfillmentTaskOwner {
 
 /// 为履约草稿建立唯一开放执行任务。
 ///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `authorization` - 进程共享授权服务。
-/// * `object` - 已在当前事务中形成的履约草稿
-/// * `executor` - 调用方事务执行器
+/// `authorization` 为进程共享授权服务；`object` 为已在当前事务中形成的履约草稿；沿用原事务的执行器。
 ///
-/// # 返回
-/// 新任务创建成功或同一对象已存在唯一开放任务时返回成功。
+/// 新任务创建成功或同一对象已存在唯一开放任务时返回成功。采购单、目标仓库或唯一责任人缺失/不可用，开放任务重复，或仓储写入失败时返回错误。
 ///
-/// # 错误
-/// 采购单、目标仓库或唯一责任人缺失/不可用，开放任务重复，或仓储写入失败时返回错误。
-///
-/// # 关键业务约束
-/// 采购履约继承采购单当前责任人；入库与仓发分别取仓库入库、仓发经办人。
-/// 责任配置只影响新任务，已存在任务不得在幂等重入时被配置变化静默改派。
+/// 采购履约继承采购单当前责任人；入库与仓发分别取仓库入库、仓发经办人。责任配置只影响新任务，已存在任务不得在幂等重入时被配置变化静默改派。
 pub async fn ensure_fulfillment_task(
     db: &mongodb::Database,
     authorization: &Arc<AuthorizationService>,
@@ -162,14 +152,11 @@ pub async fn ensure_fulfillment_task(
     creation::ensure(db, authorization, object, executor).await
 }
 
-/// 在写命令读取保护对象前核验当前任务入口。
-/// # 参数
-/// db 为业务数据库，authorization 为共享授权服务，object_type 与 object_id 为原业务对象身份，
-/// actor 为当前认证操作人，executor 为原命令事务执行器。
-/// # 返回
-/// 当前账号仍具备开放任务的完整办理资格时成功。
-/// # 错误
-/// 任务缺失、重复、资格不足或事实读取失败时返回错误。
+// 在写命令读取保护对象前核验当前任务入口。
+//
+// db 为业务数据库，authorization 为共享授权服务，object_type 与 object_id 为原业务对象身份， actor 为当前认证操作人，executor 为原命令事务执行器。
+//
+// 当前账号仍具备开放任务的完整办理资格时成功。任务缺失、重复、资格不足或事实读取失败时返回错误。
 pub(crate) async fn require_fulfillment_entry(
     db: &mongodb::Database,
     authorization: &Arc<AuthorizationService>,
@@ -181,20 +168,11 @@ pub(crate) async fn require_fulfillment_entry(
     command::require_entry(db, authorization, object_type, object_id, actor, executor).await
 }
 
-/// 在领域草稿更新事务内记录当前责任人的处理活动。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `authorization` - 进程共享授权服务。
-/// * `object` - 已更新且冻结责任身份的强类型履约对象
-/// * `actor` - 已认证的真实操作人
-/// * `executor` - 调用方事务执行器
-///
-/// # 返回
-/// 活动与任务版本写入成功时返回成功。
-///
-/// # 错误
-/// 任务缺失、重复、非当前责任人或仓储写入失败时返回错误。
+// 在领域草稿更新事务内记录当前责任人的处理活动。
+//
+// `authorization` 为进程共享授权服务；`object` 为已更新且冻结责任身份的强类型履约对象；`actor` 为已认证的真实操作人；沿用原事务的执行器。
+//
+// 活动与任务版本写入成功时返回成功。任务缺失、重复、非当前责任人或仓储写入失败时返回错误。
 pub(crate) async fn record_fulfillment_activity(
     db: &mongodb::Database,
     authorization: &Arc<AuthorizationService>,
@@ -207,18 +185,9 @@ pub(crate) async fn record_fulfillment_activity(
 
 /// 在强类型履约命令事务内完成对应执行任务。
 ///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `authorization` - 进程共享授权服务。
-/// * `object` - 已形成正式事实且冻结责任身份的强类型履约对象
-/// * `actor` - 已认证的真实操作人
-/// * `executor` - 调用方事务执行器
+/// `authorization` 为进程共享授权服务；`object` 为已形成正式事实且冻结责任身份的强类型履约对象；`actor` 为已认证的真实操作人；沿用原事务的执行器。
 ///
-/// # 返回
-/// 领域事实与任务可以在调用方同一事务提交时返回成功。
-///
-/// # 错误
-/// 任务缺失、重复、非当前责任人或仓储写入失败时返回错误。
+/// 领域事实与任务可以在调用方同一事务提交时返回成功。任务缺失、重复、非当前责任人或仓储写入失败时返回错误。
 pub async fn complete_fulfillment_task(
     db: &mongodb::Database,
     authorization: &Arc<AuthorizationService>,
@@ -229,7 +198,7 @@ pub async fn complete_fulfillment_task(
     command::complete(db, authorization, object, actor, executor).await
 }
 
-/// 校验开放任务与强类型履约对象冻结的责任身份完全一致。
+// 校验开放任务与强类型履约对象冻结的责任身份完全一致。
 pub(super) fn ensure_task_matches_frozen_identity(
     task: &WorkItem,
     object: &FulfillmentTaskObject<'_>,
@@ -245,7 +214,7 @@ pub(super) fn ensure_task_matches_frozen_identity(
     )
 }
 
-/// 校验任务对象、责任角色、责任键与原因码；任一不一致均失败关闭。
+// 校验任务对象、责任角色、责任键与原因码；任一不一致均失败关闭。
 fn ensure_frozen_identity_fields(
     task: &WorkItem,
     business_object_type: &str,
@@ -266,7 +235,7 @@ fn ensure_frozen_identity_fields(
     Err(Error::BusinessLogicError("履约任务责任身份与业务对象不一致，请联系管理员修复后重试".to_string()))
 }
 
-/// 开放履约任务必须恰好一条；缺失或重复都失败关闭。
+// 开放履约任务必须恰好一条；缺失或重复都失败关闭。
 pub(super) async fn load_single_open_task(
     db: &mongodb::Database,
     business_object_type: &str,
@@ -300,7 +269,7 @@ async fn open_fulfillment_tasks(
         .collect())
 }
 
-/// 入库与仓发取仓库经办人；直发、电子交付和服务履约取采购单当前负责人。
+// 入库与仓发取仓库经办人；直发、电子交付和服务履约取采购单当前负责人。
 async fn resolve_task_owner(
     db: &mongodb::Database,
     object: &FulfillmentTaskObject<'_>,
@@ -343,7 +312,7 @@ async fn resolve_task_owner(
     }
 }
 
-/// 仓库缺失或未配置对应经办人时不能形成责任任务。
+// 仓库缺失或未配置对应经办人时不能形成责任任务。
 async fn warehouse_owner(
     db: &mongodb::Database,
     warehouse_id: &erp_core::ids::WarehouseId,
@@ -368,7 +337,7 @@ async fn warehouse_owner(
     })
 }
 
-/// 负责人取采购单当前责任人，责任组织取来源销售单结算主体。
+// 负责人取采购单当前责任人，责任组织取来源销售单结算主体。
 async fn purchase_order_owner(
     db: &mongodb::Database,
     purchase_order_id: &str,
@@ -393,17 +362,9 @@ async fn purchase_order_owner(
 
 /// 校验唯一责任人账号有效并具备指定履约对象的完整执行权限。
 ///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `rbac` - 与调用事务授权版本一致的 RBAC 服务
-/// * `owner_user_id` - 待验证的具体责任账号
-/// * `business_object_type` - 已登记权限合同的履约对象类型
-/// * `executor` - 当前数据访问执行器
+/// `rbac` 为与调用事务授权版本一致的 RBAC 服务；`owner_user_id` 为待验证的具体责任账号；`business_object_type` 为已登记权限合同的履约对象类型；
+/// `executor` 为当前数据访问执行器。账号可登录且当前角色覆盖完整执行权限时返回成功。
 ///
-/// # 返回
-/// 账号可登录且当前角色覆盖完整执行权限时返回成功。
-///
-/// # 错误
 /// 对象权限合同缺失、账号不存在或不可用、权限不足，以及账号或 RBAC 查询失败时返回错误。
 pub async fn ensure_fulfillment_owner_eligible(
     _db: &mongodb::Database,

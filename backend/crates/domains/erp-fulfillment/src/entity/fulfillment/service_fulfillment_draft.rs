@@ -15,7 +15,7 @@ use super::electronic_delivery::FulfillmentResult;
 use super::fingerprint::normalize_precomputed_fingerprint;
 use super::service_fulfillment::{ServiceFulfillment, ServiceFulfillmentData};
 
-/// 空白与超长共用同一文案，避免两种指纹的失败提示在此处分叉。
+// 空白与超长共用同一文案，避免两种指纹的失败提示在此处分叉。
 fn typed_fingerprint(label: &str, hex: String) -> Result<String> {
     normalize_precomputed_fingerprint(label, label, hex)
 }
@@ -26,32 +26,16 @@ pub struct ServiceRecipientFingerprint(String);
 
 impl ServiceRecipientFingerprint {
     /// 包装 Service/crypto port 预计算的交付对象指纹。
-    ///
-    /// # 参数
-    /// * `hex` - 64 位十六进制 HMAC 结果
-    ///
-    /// # 返回
     /// 返回强类型指纹。
-    ///
-    /// # 错误
+    /// `hex` 为64 位十六进制 HMAC 结果。
     /// 非 64 位十六进制时返回错误。
-    ///
-    /// # 约束
     /// 不接收密钥与明文，不计算 HMAC。
     pub fn from_precomputed(hex: impl Into<String>) -> Result<Self> {
         Ok(Self(typed_fingerprint("交付对象查询指纹不能为空", hex.into())?))
     }
 
     /// 返回指纹字符串。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回内部十六进制串的借用。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -63,32 +47,16 @@ pub struct ServiceLocationFingerprint(String);
 
 impl ServiceLocationFingerprint {
     /// 包装 Service/crypto port 预计算的服务地点指纹。
-    ///
-    /// # 参数
-    /// * `hex` - 64 位十六进制 HMAC 结果
-    ///
-    /// # 返回
     /// 返回强类型指纹。
-    ///
-    /// # 错误
+    /// `hex` 为64 位十六进制 HMAC 结果。
     /// 非 64 位十六进制时返回错误。
-    ///
-    /// # 约束
     /// 不接收密钥与明文，不计算 HMAC。
     pub fn from_precomputed(hex: impl Into<String>) -> Result<Self> {
         Ok(Self(typed_fingerprint("服务地点查询指纹不能为空", hex.into())?))
     }
 
     /// 返回指纹字符串。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回内部十六进制串的借用。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -140,18 +108,9 @@ pub struct ServiceFulfillmentDraft;
 
 impl ServiceFulfillmentDraft {
     /// 由草稿输入构造实体（来源默认 `Erp`）。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（Service 注入系统 ID）
-    /// * `data` - 草稿领域输入（含两项预计算指纹与时钟事实）
-    ///
-    /// # 返回
     /// 返回新建草稿实体。
-    ///
-    /// # 错误
+    /// `id` 为实体主键（Service 注入系统 ID）；`data` 为草稿领域输入（含两项预计算指纹与时钟事实）。
     /// 字段违规、时间窗倒挂、数量非正时返回错误。
-    ///
-    /// # 约束
     /// 无 I/O、无时钟、无密钥；来源引用/原因默认空。
     pub fn build(id: ServiceFulfillmentId, data: ServiceFulfillmentDraftData) -> Result<ServiceFulfillment> {
         ServiceFulfillment::new(
@@ -215,7 +174,7 @@ mod tests {
         }
     }
 
-    /// ERP 默认来源，空 reason/source reference 组合正确。
+    // 验证ERP 默认来源，空 reason/source reference 组合正确。
     #[test]
     fn build_defaults_to_erp_source() {
         let entity = ServiceFulfillmentDraft::build(ServiceFulfillmentId::new("sf-1"), data()).unwrap();
@@ -223,7 +182,7 @@ mod tests {
         assert!(entity.fact.source_reference.is_none());
     }
 
-    /// 开始/结束时间、数量与完成说明不变量。
+    // 验证开始/结束时间、数量与完成说明不变量。
     #[test]
     fn window_quantity_and_note_invariants() {
         assert!(
@@ -247,7 +206,7 @@ mod tests {
         );
     }
 
-    /// 两项指纹类型不可混用：构造各自校验，非法格式失败。
+    // 验证两项指纹类型不可混用：构造各自校验，非法格式失败。
     #[test]
     fn fingerprints_are_distinct_typed_values() {
         assert!(ServiceRecipientFingerprint::from_precomputed("zz").is_err());

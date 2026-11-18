@@ -49,23 +49,19 @@ pub struct FundsAuthorization {
 }
 
 impl FundsAuthorization {
-    /// 读取本阶段的固定财务根凭证，供仓储先过滤再分页。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 同次统一查询生成的完整根凭证。
-    /// # 错误
-    /// 没有真实根凭证时拒绝。
+    // 处理财务来源范围时，读取本阶段的固定财务根凭证，供仓储先过滤再分页。
+    //
+    // 同次统一查询生成的完整根凭证。
+    //
+    // 没有真实根凭证时拒绝。
     pub(crate) fn root_access(&self) -> Result<&CompiledAccess> {
         self.access.as_deref().ok_or_else(|| Error::ValidationError("缺少资金根查询凭证".into()))
     }
-    /// 读取本次已登记的销售来源固定投影计划。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 当前读取阶段的身份、版本及责任事实查询；不授予销售完整对象。
-    /// # 错误
-    /// 当前入口未登记销售来源时拒绝。
+    // 处理财务来源范围时，读取本次已登记的销售来源固定投影计划。
+    //
+    // 当前读取阶段的身份、版本及责任事实查询；不授予销售完整对象。
+    //
+    // 当前入口未登记销售来源时拒绝。
     pub(super) fn sales_scope(&self) -> Result<&SourceQuery> {
         self.sales.as_ref().ok_or_else(|| Error::Forbidden("缺少销售来源计划".into()))
     }
@@ -129,19 +125,21 @@ pub struct FundsAccess {
 }
 
 impl FundsAccess {
-    /// 装配独立授权处理状态读取端口。
+    /// 为资金范围读取注入开票额度就绪状态的查询端口，供请求时单独判断，不在装配时访问事实。
+    ///
     /// # 参数
     /// readiness 为组合根提供的可信事实校验器。
+    ///
     /// # 返回
     /// 具备未就绪状态判定的访问服务。
-    /// # 错误
+    ///
     /// 不执行 I/O。
     pub fn with_grant_readiness(mut self, readiness: Arc<dyn InvoiceGrantReadiness>) -> Self {
         self.grant_readiness = Some(readiness);
         self
     }
 
-    /// 绑定资金集合数据库、身份服务与组合层注入的资金范围 Port。
+    /// 装配财务来源范围时，绑定资金集合数据库、身份服务与组合层注入的资金范围 Port。
     ///
     /// # 参数
     /// * `db` - 资金集合所在数据库
@@ -151,21 +149,16 @@ impl FundsAccess {
     /// # 返回
     /// 返回无授权缓存的访问服务，构造不执行 I/O。
     ///
-    /// # 错误
-    /// 无。
-    ///
     /// # 关键业务约束
     /// 不得在构造时补公司范围或读取登录人默认组织；不得直接构造身份域 Service。
     pub fn new(db: Database, rbac: Arc<AuthorizationService>, scope: Arc<dyn FundsDataScopePort>) -> Self {
         Self { db, rbac, scope, grant_readiness: None }
     }
 
-    /// 在调用方事务内证明资金资源动作并映射关联销售范围。
+    /// 确定财务来源范围的适用条件时，在调用方事务内证明资金资源动作并映射关联销售范围。
     ///
     /// # 参数
-    /// * `actor` - 已认证操作人
     /// * `permission` - 本次资金入口的公共权限常量
-    /// * `executor` - 调用方执行器
     ///
     /// # 返回
     /// 返回目标资金动作及来源销售范围；不要求额外销售操作权限。
@@ -184,12 +177,10 @@ impl FundsAccess {
         self.resolve_sources(actor, permission, false, false, executor).await
     }
 
-    /// 证明资金自身动作后，按采购及结算的实际来源边界解析。
+    /// 确定财务来源范围的适用条件时，证明资金自身动作后，按采购及结算的实际来源边界解析。
     ///
     /// # 参数
-    /// * `actor` - 已认证操作人。
     /// * `permission` - 本次资金入口的公共权限常量。
-    /// * `executor` - 调用方执行器。
     ///
     /// # 返回
     /// 返回与实际来源绑定的授权，不读取镜像资金范围。
@@ -205,11 +196,14 @@ impl FundsAccess {
         self.resolve_sources(actor, permission, true, false, executor).await
     }
 
-    /// 按本次真实来源分批读取允许的销售单 ID，不枚举账号全部授权。
+    /// 依据本次真实来源分批读取允许的销售单 ID，不枚举账号全部授权。
+    ///
     /// # 参数
     /// authorization 为当前入口授权；ids 为本次来源；executor 为原事务。
+    ///
     /// # 返回
     /// 仅包含本次可读来源，空集合表示全部不可读。
+    ///
     /// # 错误
     /// 授权查询或数据库失败时拒绝，不截断必要来源。
     pub async fn authorized_sales_targets(
@@ -229,12 +223,11 @@ impl FundsAccess {
         Ok(allowed)
     }
 
-    /// 展开请求中的内部组织及其可选有效下级。
+    /// 资金列表指定内部组织时，按是否包含下级展开有效节点；未知组织不得被忽略为无条件查询。
     ///
     /// # 参数
     /// * `org_unit_ids` - 请求中的组织 ID
     /// * `include_descendants` - 是否包含有效下级
-    /// * `executor` - 调用方执行器
     ///
     /// # 返回
     /// 返回启用节点的组织 ID 集合。
@@ -255,22 +248,16 @@ impl FundsAccess {
 }
 
 impl FundsLinkedFacts {
-    /// 返回关联单据业务版本，用于跨页版本绑定。
-    ///
-    /// # 参数
-    /// 无。
+    /// 为资金列表范围指纹生成单一关联单据的身份和业务版本片段。
     ///
     /// # 返回
     /// `{linked_document_id}:{linked_document_version}`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn version_part(&self) -> String {
         format!("{}:{}", self.linked_document_id, self.linked_document_version)
     }
 }
 
-/// 同字段 OR、不同字段 AND 的关联责任筛选。
+/// 将负责人、经办人与组织筛选应用到资金关联责任事实：同字段取并集，不同字段取交集。
 ///
 /// # 参数
 /// * `facts` - 关联责任事实
@@ -278,9 +265,6 @@ impl FundsLinkedFacts {
 ///
 /// # 返回
 /// 全部已提供条件命中时为 true；未提供的维度不约束。
-///
-/// # 错误
-/// 无。
 pub fn matches_linked_condition(facts: &FundsLinkedFacts, condition: &FundsLinkedCondition) -> bool {
     if let Some(owners) = &condition.owner_user_ids
         && !facts.owner_user_id.as_ref().is_some_and(|owner| owners.iter().any(|id| id == owner))
@@ -305,7 +289,7 @@ pub fn matches_linked_condition(facts: &FundsLinkedFacts, condition: &FundsLinke
     true
 }
 
-/// 同一授权条件下的人员汇总只计算匹配份额；未匹配份额单列。
+/// 汇总财务来源范围时，同一授权条件下的人员汇总只计算匹配份额；未匹配份额单列。
 ///
 /// # 参数
 /// * `allocations` - 已按授权裁剪的分配份额
@@ -314,8 +298,7 @@ pub fn matches_linked_condition(facts: &FundsLinkedFacts, condition: &FundsLinke
 /// # 返回
 /// 返回按负责人分组的份额合计与未分配余额；金额方向保持原事实正反。
 ///
-/// # 错误
-/// 不返回错误。金额相加使用 `Amount::checked_add`。
+/// 金额相加使用 `Amount::checked_add`。
 pub fn summarize_matched_shares(
     allocations: &[(String, Amount, Option<String>)],
     owner_of: impl Fn(&str) -> Option<String>,
@@ -338,7 +321,7 @@ pub fn summarize_matched_shares(
     (grouped, unassigned)
 }
 
-/// 首页面后必须携带同一范围版本，禁止不同授权页拼接。
+/// 在读取资金列表前，要求首页之后的请求携带范围版本，防止拼接不同授权范围的页面。
 ///
 /// # 参数
 /// * `page` - 请求页码，从 1 起。
@@ -353,7 +336,7 @@ pub fn ensure_page(page: u64, version: Option<&str>) -> Result<()> {
     ensure_deep_page(page, version)
 }
 
-/// 版本不一致时返回可识别的范围变化错误并要求从第一页刷新。
+/// 比较资金列表请求携带的范围版本与本次快照版本；失配时提示从第一页刷新。
 ///
 /// # 参数
 /// * `expected` - 调用方回传的范围版本；`None` 表示不比对。
@@ -370,7 +353,7 @@ pub fn ensure_version(expected: Option<&str>, actual: &str) -> Result<()> {
         .map_err(|error| data_scope_changed(error.detail()))
 }
 
-/// 把授权与关联单据版本绑定为跨页凭据；不返回内部授权集合。
+/// 为资金列表计算跨页指纹，把本次授权版本和关联单据版本片段绑定，响应不包含授权对象集合。
 ///
 /// # 参数
 /// * `context` - 已解析的授权上下文，只取其 `scope_version`。
@@ -378,9 +361,6 @@ pub fn ensure_version(expected: Option<&str>, actual: &str) -> Result<()> {
 ///
 /// # 返回
 /// 授权版本与 `parts` 的十六进制哈希。
-///
-/// # 错误
-/// 不返回错误。
 pub fn scope_version(context: &FundsReadContext, parts: &[String]) -> String {
     let mut fingerprint = DefaultHasher::new();
     context.scope_version.hash(&mut fingerprint);
@@ -390,7 +370,7 @@ pub fn scope_version(context: &FundsReadContext, parts: &[String]) -> String {
     format!("{:x}", fingerprint.finish())
 }
 
-/// 整单读取才返回完整金额；部分授权统一返 null，禁止零值掩盖或差额推导。
+/// 生成资金单据视图时只对整单可读者暴露完整金额；部分授权保持空值，不能用零值代替。
 ///
 /// # 参数
 /// * `whole` - 是否具备整单读取资格。
@@ -398,24 +378,19 @@ pub fn scope_version(context: &FundsReadContext, parts: &[String]) -> String {
 ///
 /// # 返回
 /// `whole` 为 true 时返回 `Some(amount)`，否则返回 `None`。
-///
-/// # 错误
-/// 不返回错误。
 pub fn whole_amount(whole: bool, amount: Amount) -> Option<Amount> {
     whole.then_some(amount)
 }
-/// 首次返回页面，第二次只重新解析资格并读取完整匹配集合的版本材料。
-///
-/// # 参数
-/// * `expected` - 调用方回传的范围版本；首页可为 `None`。
-/// * `snapshot` - 产生第一次范围页的闭包，只调用一次。
-/// * `revalidate` - 独立重读范围版本的闭包；首次版本失配时不调用。
-///
-/// # 返回
-/// 两段版本比较都通过时交付第一次页面。
-///
-/// # 错误
-/// 调用方版本失配或第二轮授权/业务版本变化时返回范围变化冲突错误；首次失配不执行重验。
+// 资金列表先读取页面并核对请求版本；比较通过后仅重读完整匹配集合的资格和版本，两次一致才交付第一次的页面。
+//
+// 调用参数：
+// * `expected` - 调用方回传的范围版本；首页可为 `None`。
+// * `snapshot` - 产生第一次范围页的闭包，只调用一次。
+// * `revalidate` - 独立重读范围版本的闭包；首次版本失配时不调用。
+//
+// 两段版本比较都通过时交付第一次页面。
+//
+// 调用方版本失配或第二轮授权/业务版本变化时返回范围变化冲突错误；首次失配不执行重验。
 pub(super) async fn checked_revalidated<T, F, Fut, V, VersionFut>(
     expected: Option<&str>,
     snapshot: F,
@@ -435,16 +410,9 @@ where
     Ok(first)
 }
 
-/// 版本不一致时返回可识别的范围变化错误并要求从第一页刷新。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回说明为「数据范围已变化，请从第一页刷新」的范围变化冲突错误。
-///
-/// # 错误
-/// 不返回错误。
+// 资金范围或匹配版本变化时，构造带统一分类和首页刷新提示的冲突错误。
+//
+// 返回说明为「数据范围已变化，请从第一页刷新」的范围变化冲突错误。
 pub(super) fn changed() -> Error {
     data_scope_changed("数据范围已变化，请从第一页刷新")
 }
@@ -533,7 +501,7 @@ mod tests {
         }
     }
 
-    /// 初次失配立即失败；完整集合重验变化不得返回首次页面。
+    // 验证财务来源范围：初次失配立即失败；完整集合重验变化不得返回首次页面。
     #[tokio::test]
     async fn lightweight_revalidation_preserves_comparison_order_and_first_page() {
         use std::cell::Cell;

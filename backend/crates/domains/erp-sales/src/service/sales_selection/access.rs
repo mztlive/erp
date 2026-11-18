@@ -24,45 +24,29 @@ pub struct SelectionAccess {
 
 impl SelectionAccess {
     /// 绑定选品集合、共享授权服务与客户访问端口。
-    /// # 参数
-    /// db 为选品数据库，authorization 为已经完整绑定客户来源的共享授权服务。
-    /// # 返回
-    /// 不缓存跨请求授权的访问器。
-    /// # 错误
+    /// 结果：不缓存跨请求授权的访问器。
     /// 不执行 I/O，不返回错误。
+    ///
+    /// 输入约定：db 为选品数据库，authorization 为已经完整绑定客户来源的共享授权服务。
     pub fn new(db: Database, authorization: Arc<AuthorizationService>) -> Self {
         Self { db, authorization }
     }
 
     /// 取得同一进程共享授权服务，供选品用例构造使用。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回共享授权服务引用，不包含请求身份或授权结果。
-    ///
-    /// # 错误
     /// 不执行 I/O，不返回错误。
     pub fn authorization(&self) -> Arc<AuthorizationService> {
         self.authorization.clone()
     }
 
     /// 在调用方事务内证明资源动作并映射选品责任条件。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证操作人
-    /// * `permission` - 内置选品册或方案权限
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
     /// 返回本阶段唯一的选品授权凭证。
-    ///
-    /// # 错误
     /// 无动作权限返回 Forbidden；身份设施失败时拒绝。
+    /// 业务边界：责任按显式销售负责人和业务组织解释；提交人不成为负责人。
     ///
-    /// # 关键业务约束
-    /// 责任按显式销售负责人和业务组织解释；提交人不成为负责人。
+    /// 输入约定：
+    /// - `actor`：已认证操作人
+    /// - `permission`：内置选品册或方案权限
     pub async fn resolve(
         &self,
         actor: &AuditActor,
@@ -77,21 +61,14 @@ impl SelectionAccess {
     }
 
     /// 在调用方事务内重验册对象资格。
+    /// 结果：对象在范围内时返回选品册。
+    /// 失败条件：非快照执行器返回参数错误；不可见对象返回 NotFound，不泄露存在性。
+    /// 业务边界：写命令必须在原领域事务内调用；列表授权不替代对象重验。
     ///
-    /// # 参数
-    /// * `actor` - 已认证操作人
-    /// * `permission` - 内置权限
-    /// * `id` - 选品册主键
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 对象在范围内时返回选品册。
-    ///
-    /// # 错误
-    /// 非快照执行器返回参数错误；不可见对象返回 NotFound，不泄露存在性。
-    ///
-    /// # 关键业务约束
-    /// 写命令必须在原领域事务内调用；列表授权不替代对象重验。
+    /// 输入约定：
+    /// - `actor`：已认证操作人
+    /// - `permission`：内置权限
+    /// - `id`：选品册主键
     pub async fn require_booklet(
         &self,
         actor: &AuditActor,
@@ -111,21 +88,14 @@ impl SelectionAccess {
     }
 
     /// 在调用方事务内重验方案对象资格。
+    /// 结果：对象在范围内时返回方案。
+    /// 失败条件：非快照执行器返回参数错误；不可见对象返回 NotFound。
+    /// 业务边界：方案沿所属册责任关联解释，不得以客户提交人兜底。
     ///
-    /// # 参数
-    /// * `actor` - 已认证操作人
-    /// * `permission` - 内置权限
-    /// * `id` - 方案主键
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 对象在范围内时返回方案。
-    ///
-    /// # 错误
-    /// 非快照执行器返回参数错误；不可见对象返回 NotFound。
-    ///
-    /// # 关键业务约束
-    /// 方案沿所属册责任关联解释，不得以客户提交人兜底。
+    /// 输入约定：
+    /// - `actor`：已认证操作人
+    /// - `permission`：内置权限
+    /// - `id`：方案主键
     pub async fn require_proposal(
         &self,
         actor: &AuditActor,
@@ -144,7 +114,7 @@ impl SelectionAccess {
         Ok(proposal)
     }
 
-    /// 同一执行器内证明当前选品动作及读取前提；客户详情保留独立拒绝合同。
+    // 业务读取前用同一执行器检查选品对象的当前权限与读取前提；客户详情继续按独立规则拒绝。
     async fn require_object(
         &self,
         actor: &AuditActor,
@@ -161,17 +131,12 @@ impl SelectionAccess {
     }
 
     /// 展开请求组织及其可选下级，与授权用同一执行器。
-    ///
-    /// # 参数
-    /// * `org_unit_ids` - 请求中的组织 ID
-    /// * `include_descendants` - 是否包含有效下级
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
     /// 返回启用节点的组织 ID 集合。
-    ///
-    /// # 错误
     /// 未知组织或身份设施失败时拒绝。
+    ///
+    /// 输入约定：
+    /// - `org_unit_ids`：请求中的组织 ID
+    /// - `include_descendants`：是否包含有效下级
     pub async fn expand_org_units(
         &self,
         org_unit_ids: &[String],
@@ -185,12 +150,10 @@ impl SelectionAccess {
     }
 
     /// 检查拟创建选品册的责任资格。
-    /// # 参数
-    /// actor 为操作人，customer_id 为实际客户，owner/org 为拟写入责任，executor 为原事务。
-    /// # 返回
-    /// 统一授权通过时成功。
-    /// # 错误
+    /// 结果：统一授权通过时成功。
     /// 角色、范围或事实缺失时拒绝。
+    ///
+    /// 输入约定：actor 为操作人，customer_id 为实际客户，owner/org 为拟写入责任，executor 为原事务。
     pub async fn require_new(
         &self,
         actor: &AuditActor,
@@ -207,7 +170,7 @@ impl SelectionAccess {
     }
 }
 
-/// 完整对象授权后的业务读取必须保留同一快照，不能复用非事务对象检查。
+// 选品对象完整授权后，确认业务读取仍在同一快照内；事务外的对象检查不能代替它。
 fn ensure_snapshot(executor: &mut dyn Executor) -> Result<()> {
     if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
         return Err(Error::ValidationError("选品对象授权与读取必须使用同一快照事务".into()));
@@ -215,7 +178,7 @@ fn ensure_snapshot(executor: &mut dyn Executor) -> Result<()> {
     Ok(())
 }
 
-/// 权限值不能切换拥有领域已经确定的册或方案对象语义。
+// 校验选品动作匹配拥有域确定的册或方案资源类型，不允许通过权限参数改变资源含义。
 fn ensure_resource(permission: &Permission, resource: &str) -> Result<()> {
     if permission.resource() != resource {
         return Err(Error::ValidationError("选品权限与目标资源不符".into()));

@@ -18,22 +18,13 @@ use persistence_core::Executor;
 
 use crate::Result;
 
-/// 按主体加载 RUNNING/BLOCKED 实例、当前执行与开放任务。
-///
-/// `RUNNING` 必须恰有一个开放任务，`BLOCKED` 必须没有开放任务。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `binding` - 创建时冻结的定义绑定
-/// * `subject` - 业务对象引用
-/// * `subject_version` - 冻结提交版本
-/// * `executor` - 授权、取消准备和写入共用的事务执行器
-///
-/// # 返回
-/// 返回定义图、实例、当前执行、任务关闭策略与开放任务快照。
-///
-/// # 错误
-/// 实例或当前执行缺失、状态与开放任务数量不一致或仓储失败时返回错误。
+// 按主体加载 RUNNING/BLOCKED 实例、当前执行与开放任务。
+//
+// `RUNNING` 必须恰有一个开放任务，`BLOCKED` 必须没有开放任务。
+//
+// `binding` 为创建时冻结的定义绑定；`subject_version` 为冻结提交版本；`executor` 为授权、取消准备和写入共用的事务执行器。
+//
+// 返回定义图、实例、当前执行、任务关闭策略与开放任务快照。实例或当前执行缺失、状态与开放任务数量不一致或仓储失败时返回错误。
 pub(super) async fn load_cancel_runtime(
     db: &Database,
     binding: &ApprovalDefinitionBinding,
@@ -49,18 +40,8 @@ pub(super) async fn load_cancel_runtime(
 ///
 /// 人员失效走业务取消；非人员一致性 blocker 必须走受阻取消。
 ///
-/// # 参数
-/// * `runtime` - 已加载运行事实
-/// * `reason` - 已校验的非空原因
-/// * `actor_id` - 撤回人
-/// * `idempotency_key` - 幂等键
-/// * `receipt` - 已存在收据
-/// * `now` - 调用方时间
+/// `runtime` 为已加载运行事实；`reason` 为已校验的非空原因；使用调用方提供的幂等键。返回可交给统一 `prepare_cancel` 的取消编排输入。
 ///
-/// # 返回
-/// 返回可交给统一 `prepare_cancel` 的取消编排输入。
-///
-/// # 错误
 /// 原因/幂等键非法、审批人引用无效或端口与 blocker 不匹配时返回错误。
 pub fn build_sales_order_cancel_input(
     runtime: &LoadedCancelRuntime,
@@ -106,25 +87,15 @@ pub(super) struct SalesOrderCancelPersistInput {
     pub audit: erp_audit::AuditLog,
 }
 
-/// 在同一事务内应用取消计划、关闭任务并写回销售单。
-///
-/// # 用途
-/// 撤回审批后原子写回运行事实与销售单。
-///
-/// # 参数
-/// * `db` - 数据库。
-/// * `approvals` - 原用例装配的审批写入能力。
-/// * `input` - 销售单、取消计划与开放任务。
-/// * `executor` - 已完成对象授权和取消准备的原事务执行器。
-///
-/// # 返回
-/// 成功时无返回值。
-///
-/// # 错误
-/// CAS 冲突或仓储失败时返回错误，事务回滚。
-///
-/// # 关键业务约束
-/// Replay 不得重复关闭任务；Apply 必须关闭开放任务并写回草稿。
+// 在同一事务内应用取消计划、关闭任务并写回销售单。
+//
+// 撤回审批后原子写回运行事实与销售单。
+//
+// `approvals` 为原用例装配的审批写入能力；`input` 为销售单、取消计划与开放任务；`executor` 为已完成对象授权和取消准备的原事务执行器。
+//
+// CAS 冲突或仓储失败时返回错误，事务回滚。
+//
+// Replay 不得重复关闭任务；Apply 必须关闭开放任务并写回草稿。
 pub(super) async fn persist_sales_order_cancel(
     db: &Database,
     approvals: &dyn ApprovalRuntimePort,
@@ -291,9 +262,9 @@ mod tests {
         }
     }
 
-    /// 业务撤回必须构造统一 `CANCEL_APPROVAL` 并调用 `prepare_cancel`。
-    ///
-    /// 收据命令种类和实例终态都来自统一引擎计划。
+    // 业务撤回必须构造统一 `CANCEL_APPROVAL` 并调用 `prepare_cancel`。
+    //
+    // 收据命令种类和实例终态都来自统一引擎计划。
     #[test]
     fn cancel_builds_unified_input_and_prepare_cancel() {
         let loaded = runtime(running_instance());

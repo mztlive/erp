@@ -50,10 +50,8 @@ impl SaveCustomerProfileRequest {
     /// * `customer_id` - 修订目标客户；创建时为 `None`
     /// * `initiated_by` - 当前认证账号 ID
     ///
-    /// # 返回
     /// 返回用于幂等查询、命令构造和事务失败恢复的稳定上下文。
     ///
-    /// # 错误
     /// 请求无法序列化或上下文身份非法时返回错误。
     pub fn replay_context(
         &self,
@@ -79,13 +77,8 @@ impl SaveCustomerProfileRequest {
     /// 只保留 `validator` 注解表达的协议校验；默认项、既有 ID、版本与
     /// 创建/修订结构组合由 entities 值对象校验。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// DTO 协议合法时返回 `Ok(())`。
     ///
-    /// # 错误
     /// 根请求或任一嵌套输入违反 DTO 注解时返回校验错误。
     pub fn validate_protocol(&self) -> Result<()> {
         self.validate()?;
@@ -99,10 +92,8 @@ impl SaveCustomerProfileRequest {
     /// # 参数
     /// * `operation` - 创建或修订操作
     ///
-    /// # 返回
     /// 纯结构规则全部满足时返回 `Ok(())`。
     ///
-    /// # 错误
     /// 版本/负责人组合、默认项、既有 ID 或新增事实必填值非法时返回错误。
     pub fn validate_structure(&self, operation: CustomerProfileOperation) -> Result<()> {
         let shape = CustomerProfileRequestShape::new(

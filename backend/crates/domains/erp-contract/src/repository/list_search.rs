@@ -22,23 +22,11 @@ pub struct ContractCustomer {
 }
 
 impl ContractRow {
-    /// 由行投影与已装配事实确定性组装列表视图（纯规则，无 I/O）。
-    ///
-    /// 同一客户事实供接口显示与搜索使用，防止搜索命中后展示另一套名称。
-    ///
-    /// # 参数
-    /// * `self` - 合同列表投影行
-    /// * `current_revision` - 当前修订摘要
-    /// * `customer` - 客户编号与当前主负责人
-    ///
-    /// # 返回
-    /// 返回列表视图。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    ///
-    /// # 关键业务约束
-    /// `owner_user_id` 只来自合同独立负责销售。
+    // 由行投影与已装配事实确定性组装列表视图（纯规则，无 I/O）。
+    // 同一客户事实供接口显示与搜索使用，防止搜索命中后展示另一套名称。
+    // `self` 为合同列表投影行；`current_revision` 为当前修订摘要。
+    // `customer` 为客户编号与当前主负责人。
+    // `owner_user_id` 只来自合同独立负责销售。
     pub(crate) fn into_view(
         self,
         current_revision: Option<ContractRevisionView>,
@@ -73,7 +61,7 @@ pub struct ContractSearch {
 }
 
 impl ContractSearch {
-    /// 字面量关键词 OR 匹配多个业务字段，结构化条件继续收窄范围。
+    // 字面量关键词 OR 匹配多个业务字段，结构化条件继续收窄范围。
     fn filter(&self) -> Document {
         let mut filter = Document::new();
         if let Some(id) = &self.settlement_party_id {
@@ -105,7 +93,7 @@ impl ContractSearch {
         filter
     }
 
-    /// MongoDB 排序与关键词使用相同当前负责人显示值。
+    // MongoDB 排序与关键词使用相同当前负责人显示值。
     fn owner_expression(&self) -> Document {
         let branches = self.owners.iter().map(|(id, name)| doc! { "case": { "$eq": ["$sales_owner_user_id", { "$literal": id }] }, "then": { "$literal": name } }).collect::<Vec<_>>();
         if branches.is_empty() {
@@ -128,15 +116,7 @@ pub struct ContractSearchResult {
 }
 impl ContractSearchResult {
     /// 空命中聚合计数视为零。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// `totals` 首条的 `total`。没有计数文档时返回 `0`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn total(&self) -> i64 {
         self.totals.first().map(|c| c.total).unwrap_or(0)
     }
@@ -144,15 +124,8 @@ impl ContractSearchResult {
 
 impl ContractDomainRepository<'_> {
     /// 只读取可见合同引用的去重客户 ID，用于批量解析当前负责人。
-    ///
-    /// # 参数
-    /// * `filter` - 可见合同筛选条件。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
     /// 去重后的客户 ID。非字符串值略过。
-    ///
-    /// # 错误
+    /// `filter` 为可见合同筛选条件；沿用调用方执行器 `executor`。
     /// MongoDB 查询失败。
     pub async fn list_customer_ids(
         &self,
@@ -183,14 +156,9 @@ impl ContractDomainRepository<'_> {
     }
 
     /// 读取已授权合同的独立负责销售，用于显示与筛选。
-    ///
-    /// # 参数
-    /// * `filter` - 已与合同责任求交的筛选
-    /// * `executor` - 同一读取执行器
-    /// # 返回
     /// 返回去重负责销售账号。
-    /// # 错误
-    /// 数据库读取失败时返回错误。
+    /// `filter` 为已与合同责任求交的筛选；`executor` 为同一读取执行器。
+    /// 传播数据库读取错误。
     pub async fn list_owner_ids(
         &self,
         filter: &ContractFilter,
@@ -220,16 +188,8 @@ impl ContractDomainRepository<'_> {
     }
 
     /// 在拥有的合同与修订集合内完成分页；元数据基于同一可见范围。
-    ///
-    /// # 参数
-    /// * `filter` - 可见范围筛选。
-    /// * `search` - 列表关键词与指标条件。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
     /// 同一可见范围内的分页结果、筛选总数与范围指标。空命中为默认值。
-    ///
-    /// # 错误
+    /// `filter` 为可见范围筛选，`search` 为列表关键词与指标条件，沿用调用方执行器 `executor`。
     /// MongoDB 聚合或反序列化失败。
     pub async fn search_list(
         &self,
@@ -255,8 +215,8 @@ impl ContractDomainRepository<'_> {
     }
 }
 
-/// 查询流水线：授权及基础条件 → 当前修订 → 派生字段 → 列表与范围指标分面。
-/// 结果行和总数应用 ContractSearch；指标只统计进入分面前的基础范围。
+// 查询流水线：授权及基础条件 → 当前修订 → 派生字段 → 列表与范围指标分面。
+// 结果行和总数应用 ContractSearch；指标只统计进入分面前的基础范围。
 fn list_pipeline(filter: &ContractFilter, search: &ContractSearch, today: BusinessDate) -> Vec<Document> {
     let search_match = doc! { "$match": search.filter() };
     vec![
@@ -272,7 +232,7 @@ fn list_pipeline(filter: &ContractFilter, search: &ContractSearch, today: Busine
     ]
 }
 
-/// 到期口径为业务自然日当天至第 30 天（两端包含）。
+// 到期口径为业务自然日当天至第 30 天（两端包含）。
 fn display_fields(search: &ContractSearch, today: BusinessDate) -> Document {
     let mut end = today.as_naive_date();
     for _ in 0..30 {
@@ -287,7 +247,7 @@ fn display_fields(search: &ContractSearch, today: BusinessDate) -> Document {
     }
 }
 
-/// 后端排序白名单，全部追加唯一 ID；默认到期优先与页面一致。
+// 后端排序白名单，全部追加唯一 ID；默认到期优先与页面一致。
 fn list_sort(filter: &ContractFilter) -> Document {
     let direction = if filter.sort_ascending { 1 } else { -1 };
     let field = match filter.sort_by.as_deref() {
@@ -308,7 +268,7 @@ fn list_sort(filter: &ContractFilter) -> Document {
     sort
 }
 
-/// 状态过滤与指标使用同一持久化字段。
+// 状态过滤与指标使用同一持久化字段。
 fn apply_metric(filter: &mut Document, metric: Option<ContractMetric>) {
     match metric {
         Some(ContractMetric::Effective) => {
@@ -327,7 +287,7 @@ fn apply_metric(filter: &mut Document, metric: Option<ContractMetric>) {
     }
 }
 
-/// 范围统计保留基础条件，不受关键词、快捷指标、负责人、主体和分页影响。
+// 范围统计保留基础条件，不受关键词、快捷指标、负责人、主体和分页影响。
 fn metric_group() -> Document {
     doc! { "_id": null, "all": { "$sum": 1 },
         "effective": { "$sum": { "$cond": [{ "$eq": ["$status", "EFFECTIVE"] }, 1, 0] } },
@@ -341,7 +301,7 @@ fn metric_group() -> Document {
 mod tests {
     use super::*;
 
-    /// 所有搜索分支仍位于权限范围之后，结果页与 total 使用同一条件。
+    // 验证所有搜索分支仍位于权限范围之后，结果页与 total 使用同一条件。
     #[test]
     fn search_precedes_pagination_and_preserves_empty_scope() {
         let filter = ContractFilter {
@@ -385,7 +345,7 @@ mod tests {
         assert_eq!(first.get_str("$options").unwrap(), "i");
     }
 
-    /// 候选项来自完整范围，重复负责人合并，编号命中不会扩大客户范围。
+    // 验证候选项来自完整范围，重复负责人合并，编号命中不会扩大客户范围。
     #[test]
     fn foreign_search_and_owner_options_are_not_page_derived() {
         let search = ContractSearch {
@@ -417,7 +377,7 @@ mod tests {
         assert_eq!(search.filter().get_document("sales_owner_user_id").unwrap(), &doc! { "$in": ["user-1"] });
     }
 
-    /// 到期边界使用业务日并保留空页计数。
+    // 验证到期边界使用业务日并保留空页计数。
     #[test]
     fn expiry_uses_inclusive_business_dates_and_empty_page_count() {
         let search = ContractSearch {

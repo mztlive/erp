@@ -50,18 +50,11 @@ pub struct VoucherCategoryProfileRevision {
 impl VoucherCategoryProfileRevision {
     /// 创建卡券类目扩展修订。
     ///
-    /// 完成 description 的校验与规范化（去首尾空白、非空、长度上限），
-    /// 并校验修订序号从 1 开始。
+    /// 完成 description 的校验与规范化（去首尾空白、非空、长度上限），并校验修订序号从 1 开始。
     ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::VoucherCategoryProfileRevisionId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
-    /// 返回新建的卡券类目扩展修订实体。
-    ///
-    /// # 错误
     /// 当 description 为空/超长或 revision_no 为 0 时返回错误。
+    ///
+    /// `id` 为实体主键（`erp_core::ids::VoucherCategoryProfileRevisionId`）。
     pub fn new(
         id: VoucherCategoryProfileRevisionId,
         data: VoucherCategoryProfileRevisionData,
@@ -87,16 +80,9 @@ impl VoucherCategoryProfileRevision {
     ///
     /// SKU 稳定身份与启停状态保持不变，只替换描述并使用调用方提供的下一序号。
     ///
-    /// # 参数
-    /// * `id` - 新扩展修订主键
-    /// * `revision_no` - 同一卡券类目内的下一修订序号
-    /// * `description` - 新卡券类目描述
+    /// 返回经完整实体校验的新扩展修订。描述或修订序号违反实体不变式时返回错误。
     ///
-    /// # 返回
-    /// 返回经完整实体校验的新扩展修订。
-    ///
-    /// # 错误
-    /// 描述或修订序号违反实体不变式时返回错误。
+    /// `revision_no` 为同一卡券类目内的下一修订序号。
     pub fn content_successor(
         &self,
         id: VoucherCategoryProfileRevisionId,
@@ -114,16 +100,7 @@ impl VoucherCategoryProfileRevision {
         )
     }
 
-    /// 判断修订是否处于启用状态。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 状态为 `Active` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 读取卡券品类资料修订快照的启用标记，不判断生效日期。
     pub fn is_active(&self) -> bool {
         self.status.is_active()
     }
@@ -145,7 +122,7 @@ mod tests {
         }
     }
 
-    /// happy path：描述 trim 规范化，SKU 身份与修订序号落位。
+    // 描述 去除首尾空白，SKU 身份与修订序号按请求保存。
     #[test]
     fn new_trims_and_normalizes_fields() {
         let revision =
@@ -158,7 +135,7 @@ mod tests {
         assert!(revision.is_active());
     }
 
-    /// 失败路径：必填空与越界（修订序号为 0）各一条。
+    // 必填空与越界（修订序号为 0）均应拒绝。
     #[test]
     fn new_rejects_empty_description_and_zero_revision_no() {
         let empty = VoucherCategoryProfileRevisionData { description: "  ".to_string(), ..data() };
@@ -179,7 +156,7 @@ mod tests {
         );
     }
 
-    /// 后继修订只替换描述并保留 SKU 身份与状态。
+    // 后继修订只替换描述并保留 SKU 身份与状态。
     #[test]
     fn content_successor_preserves_identity_and_status() {
         let current =
@@ -195,7 +172,7 @@ mod tests {
         assert_eq!(successor.status, current.status);
     }
 
-    /// 状态机：合法迁移通过，邻接矩阵对称闭合。
+    // 锁定卡券品类资料修订启停的正向、反向与幂等迁移，防止状态表缺边。
     #[test]
     fn status_transitions_follow_document_state() {
         assert!(ensure_transition(EnableStatus::Active, EnableStatus::Disabled).is_ok());

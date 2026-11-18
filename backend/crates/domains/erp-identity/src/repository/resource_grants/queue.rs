@@ -17,18 +17,17 @@ pub struct GrantEventRepository {
 }
 
 impl GrantEventRepository {
-    /// 绑定身份数据库，不启动后台循环。
+    /// 用身份库创建授权事件队列仓储，供事件消费者领取和回写使用；构造不启动后台循环。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
     /// 原子领取到期事件或回收过期租约。
-    /// # 参数
-    /// owner 为每次领取唯一令牌，now 为秒级时间。
-    /// # 返回
     /// 最多一个事件。
-    /// # 错误
+    ///
     /// 数据库失败或令牌为空时拒绝。
+    ///
+    /// owner 为每次领取唯一令牌，now 为秒级时间。
     pub async fn claim_event(&self, owner: &str, now: u64) -> Result<Option<GrantEvent>> {
         if owner.is_empty() {
             return Err(Error::ValidationError("领取令牌不能为空".into()));
@@ -52,13 +51,7 @@ impl GrantEventRepository {
             .return_document(ReturnDocument::After)
             .await?)
     }
-    /// 在发布事务内读取并核验当前领取令牌。
-    /// # 参数
-    /// claim 为已领取事件，executor 为发布事务。
-    /// # 返回
-    /// 最新事件；已经提交的事件允许幂等返回。
-    /// # 错误
-    /// 租约被其他 worker 接管或事件缺失时拒绝。
+    /// 发布授权前，在原写事务读取最新事件并核对领取令牌。允许幂等返回已完成事件；事件缺失或租约已被接管时拒绝。
     pub async fn claimed_event(&self, claim: &GrantEvent, executor: &mut dyn Executor) -> Result<GrantEvent> {
         let current = resource_grants::events(&self.db)
             .find_by_id(&claim.base.id, executor)
@@ -67,13 +60,7 @@ impl GrantEventRepository {
         current.ensure_claim(claim)?;
         Ok(current)
     }
-    /// 同授权结果保存处理完成状态；重放不写入。
-    /// # 参数
-    /// event 为事务内读取的事件，executor 为同一发布事务。
-    /// # 返回
-    /// 成功无返回值。
-    /// # 错误
-    /// 无事务、并发版本冲突或持久化失败时拒绝。
+    /// 在保存授权结果的同一事务内将事件标记为已处理；已完成重放不再写入。无事务、版本冲突或持久化失败时拒绝。
     pub async fn complete_event(&self, mut event: GrantEvent, executor: &mut dyn Executor) -> Result<()> {
         if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
             return Err(Error::Internal("事件完成必须使用事务".into()));
@@ -89,13 +76,7 @@ impl GrantEventRepository {
         resource_grants::events(&self.db).update(&mut event, executor).await?;
         Ok(())
     }
-    /// 仅更新仍由本次领取持有的事件，不覆盖已经提交或被接管的状态。
-    /// # 参数
-    /// event 为领取快照，now 为时间，reason 为稳定故障说明。
-    /// # 返回
-    /// 成功无返回值；丢失领取权不写入。
-    /// # 错误
-    /// 数据库失败时返回错误，过期租约仍可恢复。
+    /// 发布失败后只回写仍由原领取令牌持有的事件。完成或已被接管时不写；数据库失败原样返回，租约到期后仍可被重新领取。
     pub async fn fail_event(&self, event: &GrantEvent, now: u64, reason: &str) -> Result<()> {
         let delay = event.retry_delay();
         let next = i64::try_from(now.saturating_add(delay))
@@ -112,12 +93,11 @@ impl GrantEventRepository {
         Ok(())
     }
     /// 读取单一来源状态，供发布时排除永久终止及旧事件。
-    /// # 参数
-    /// key 为可信事件来源，executor 为发布事务。
-    /// # 返回
     /// 已存在的来源。
-    /// # 错误
+    ///
     /// 身份非法或读取失败时拒绝。
+    ///
+    /// key 为可信事件来源，executor 为发布事务。
     pub async fn source(&self, key: &SourceKey, executor: &mut dyn Executor) -> Result<Option<GrantSource>> {
         Ok(resource_grants::sources(&self.db).find_by_id(&key.id()?, executor).await?)
     }
@@ -133,12 +113,11 @@ pub struct GrantQueueHealth {
 }
 impl GrantEventRepository {
     /// 读取待处理量、最老未完成时长及失败量。
-    /// # 参数
-    /// now 为当前秒级时间。
-    /// # 返回
     /// 当前队列快照。
-    /// # 错误
+    ///
     /// 数据库失败时返回错误。
+    ///
+    /// now 为当前秒级时间。
     pub async fn grant_health(&self, now: u64) -> Result<GrantQueueHealth> {
         let collection = self.db.collection::<GrantEvent>("resource_grant_events");
         let filter = doc! { "status": { "$in": ["pending", "processing", "failed"] }, "deleted_at": 0 };
@@ -161,13 +140,12 @@ impl GrantEventRepository {
             oldest_age_secs: oldest.map_or(0, |e| now.saturating_sub(e.evidence.occurred_at)),
         })
     }
-    /// 对正式事件按主键有界重算，禁止从当前责任人猜测历史授权。
-    /// # 参数
-    /// filter 为类型化选择条件，after 为主键游标，now 为重新可领取时间。
-    /// # 返回
-    /// 本页末尾游标；空页表示一轮结束。每次最多 100 条。
-    /// # 错误
-    /// 查询或更新失败返回错误；已重新排队事件可安全重放。
+    // 对正式事件按主键有界重算，禁止从当前责任人猜测历史授权。
+    // 本页末尾游标；空页表示一轮结束。每次最多 100 条。
+    //
+    // 查询或更新失败返回错误；已重新排队事件可安全重放。
+    //
+    // filter 为类型化选择条件，after 为主键游标，now 为重新可领取时间。
     pub(crate) async fn requeue_with_executor(
         &self,
         filter: &GrantRecompute,
@@ -247,12 +225,11 @@ impl GrantRecompute {
 
 impl GrantEventRepository {
     /// 读取同事务正式事件，校验完整证据。
-    /// # 参数
-    /// expected 为业务侧提供的正式事件，executor 为调用方执行器。
-    /// # 返回
     /// 当前事件状态，缺失返回空值。
-    /// # 错误
+    ///
     /// 同键异载荷或读取失败返回错误。
+    ///
+    /// expected 为业务侧提供的正式事件，executor 为调用方执行器。
     pub async fn event(
         &self,
         expected: &GrantEvent,
@@ -267,7 +244,7 @@ impl GrantEventRepository {
 }
 
 impl GrantEventRepository {
-    /// 按精确来源身份读取正式事件，使用来源索引而不扫描账号事件。
+    /// 发布记录授权需要定位正式业务事件时，按精确来源身份走索引查找，不扫描该账号的事件全集。
     pub async fn source_event(
         &self,
         source: &SourceKey,

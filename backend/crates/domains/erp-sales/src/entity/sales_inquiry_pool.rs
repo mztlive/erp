@@ -75,23 +75,16 @@ impl PoolTemplateVersion {
     pub const CURRENT: Self = Self::V4;
 
     /// 读取模板版本标识。
-    /// # 参数
-    /// `marker` 为填写说明中的原始版本字符串。
-    /// # 返回
-    /// 已发布版本返回其能力类型，未知版本返回空值。
-    /// # 错误
-    /// 无；调用方按模板类型返回既有格式错误。
+    /// 结果：已发布版本返回其能力类型，未知版本返回空值。
+    /// 失败条件：调用方按模板类型返回既有格式错误。
+    ///
+    /// 输入约定：`marker` 为填写说明中的原始版本字符串。
     pub fn from_marker(marker: &str) -> Option<Self> {
         [Self::V1, Self::V2, Self::V3, Self::V4].into_iter().find(|version| version.marker() == marker)
     }
 
     /// 取得文件中的稳定版本标识。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 返回写入文档属性和填写说明的同一字符串。
-    /// # 错误
-    /// 无。
     pub const fn marker(self) -> &'static str {
         match self {
             Self::V1 => "sales-inquiry-pool-v1",
@@ -102,23 +95,13 @@ impl PoolTemplateVersion {
     }
 
     /// 判定是否按选品页重算配送自动列。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// v2 及后续已发布版本返回真，v1 保留原独立配送格式。
-    /// # 错误
-    /// 无。
+    /// 结果：v2 及后续已发布版本返回真，v1 保留原独立配送格式。
     pub const fn automatic_delivery(self) -> bool {
         !matches!(self, Self::V1)
     }
 
     /// 取得该版本要求的辅助核对表头。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// v1/v2 不含辅助列，v3 含四列，v4 含六列。
-    /// # 错误
-    /// 无。
+    /// 结果：v1/v2 不含辅助列，v3 含四列，v4 含六列。
     pub fn check_headers(self) -> &'static [&'static str] {
         match self {
             Self::V1 | Self::V2 => &[],
@@ -136,12 +119,10 @@ pub struct PoolSelectionLayout<'a> {
 
 impl<'a> PoolSelectionLayout<'a> {
     /// 解析可重排、可删除展示列的选品表头。
-    /// # 参数
-    /// `headers` 为表头文本，公式元数据由文件解析边界单独拒绝。
-    /// # 返回
     /// 返回规范列名及固定需求白名单映射，缺失可选展示列映射为空。
-    /// # 错误
-    /// 缺失必填列、未知列或新旧别名同时出现时返回既有表头错误。
+    /// 失败条件：缺失必填列、未知列或新旧别名同时出现时返回既有表头错误。
+    ///
+    /// 输入约定：`headers` 为表头文本，公式元数据由文件解析边界单独拒绝。
     pub fn new(headers: &[&'a str]) -> Result<Self> {
         let headers = headers
             .iter()
@@ -159,35 +140,23 @@ impl<'a> PoolSelectionLayout<'a> {
     }
 
     /// 取得用于单元格错误定位的规范表头。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 返回原列顺序的表头，历史销售价别名已规范化。
-    /// # 错误
-    /// 无。
     pub fn headers(&self) -> &[&str] {
         &self.headers
     }
 
     /// 取得允许进入询价需求的原列索引。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 依次返回 SKU、名称、规格、单位、数量、销售价及备注映射。
-    /// # 错误
-    /// 无。
+    /// 结果：依次返回 SKU、名称、规格、单位、数量、销售价及备注映射。
     pub fn mapping(&self) -> &[Option<usize>; 7] {
         &self.mapping
     }
 }
 
 /// 构造系统允许重算的配送联动公式，供导出与导入精确匹配同一合同。
-/// # 参数
-/// `key` 为选品稳定配送关联，`field` 为调用方确定的来源字段。
-/// # 返回
 /// 返回无前导等号的结构化引用表达式，不执行公式。
-/// # 错误
-/// 无；导入仍须验证完整表达式及关联字段。
+/// 失败条件：导入仍须验证完整表达式及关联字段。
+///
+/// 输入约定：`key` 为选品稳定配送关联，`field` 为调用方确定的来源字段。
 pub fn automatic_delivery_formula(key: &str, field: &str) -> String {
     let lookup =
         |column| format!("INDEX({POOL_TABLE_NAME}[{column}],MATCH(\"{key}\",{POOL_TABLE_NAME}[配送关联],0))");

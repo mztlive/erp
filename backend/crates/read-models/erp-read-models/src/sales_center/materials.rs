@@ -44,14 +44,16 @@ struct SalesApprovalSource {
     base_revision_id: Option<SalesOrderRevisionId>,
 }
 
-/// 读取销售正式修订锁定的合同 PDF 与原销售审批冻结的附件。
+/// 处理采购来源销售材料时，读取销售正式修订锁定的合同 PDF 与原销售审批冻结的附件。
 ///
 /// # 参数
 /// * `db` - 销售与文件事实所在数据库。
 /// * `revision` - 已授权采购来源读取阶段锁定的销售修订。
 /// * `executor` - 同一读取阶段的执行器。
+///
 /// # 返回
 /// 返回精确合同修订和已验证的冻结材料，旧审批未保存的附件保持缺失。
+///
 /// # 错误
 /// 来源提交不一致、文件变化、删除或安全隔离时拒绝，不补读当前销售附件。
 /// 仓储读取失败会返回对应错误。
@@ -90,14 +92,15 @@ pub async fn revision_materials(
     Ok(RevisionMaterials { files, contract })
 }
 
-/// 重新核对冻结文件版本、内容标识及当前治理状态。
+/// 校验采购来源销售材料时，重新核对冻结文件版本、内容标识及当前治理状态。
 ///
 /// # 参数
 /// * `db` - 文件事实所在数据库。
 /// * `files` - 已经由销售或采购来源链证明的精确允许清单。
-/// * `executor` - 调用方执行器。
+///
 /// # 返回
 /// 全部文件仍匹配冻结内容且可供读取时成功。
+///
 /// # 错误
 /// 缺失、软删除、文件变化、销毁或隔离时拒绝整个材料包。仓储读取失败会返回对应错误。
 pub async fn validate_materials(
@@ -121,12 +124,14 @@ pub async fn validate_materials(
     Ok(())
 }
 
-/// 从真实文件实体捕获同版本审批材料；调用方仍须证明其业务来源。
+/// 组装采购来源销售材料时，从真实文件实体捕获同版本审批材料；调用方仍须证明其业务来源。
 ///
 /// # 参数
 /// `asset` 为当前事务读取的文件事实。
+///
 /// # 返回
 /// 返回包含资产版本和内容标识的冻结引用。
+///
 /// # 错误
 /// 无；读取前必须通过 `validate_materials` 校验。
 pub fn material_from_asset(asset: &FileAsset) -> ApprovalMaterialFile {
@@ -140,11 +145,14 @@ pub fn material_from_asset(asset: &FileAsset) -> ApprovalMaterialFile {
     }
 }
 
-/// 合同正文必须为归档 PDF，不能将错挂的活动内容当作合同转授。
+/// 确定采购来源销售材料的适用条件时，合同正文必须为归档 PDF，不能将错挂的活动内容当作合同转授。
+///
 /// # 参数
 /// `asset` 为精确合同修订指向的真实文件。
+///
 /// # 返回
 /// PDF 类型时成功。
+///
 /// # 错误
 /// 类型与合同正文约定不符时拒绝。
 pub fn require_contract_pdf(asset: &FileAsset) -> Result<()> {
@@ -154,7 +162,7 @@ pub fn require_contract_pdf(asset: &FileAsset) -> Result<()> {
     Ok(())
 }
 
-/// 正式修订只读取其不可变合同指针，不读取合同当前修订。
+// 处理采购来源销售材料时，正式修订只读取其不可变合同指针，不读取合同当前修订。
 async fn revision_contract(
     db: &Database,
     revision: &SalesOrderRevision,
@@ -196,14 +204,15 @@ async fn revision_contract(
     Ok(Some(contract))
 }
 
-/// 按本次销售提交锁定的合同版本证明客户与合同关系。
+/// 依据本次销售提交锁定的合同版本证明客户与合同关系。
 ///
 /// # 参数
 /// * `db` - 合同与销售事实所在数据库。
 /// * `submission` - 本次审批精确版本的不可变销售提交。
-/// * `executor` - 调用方执行器。
+///
 /// # 返回
 /// 返回锁定的合同版本；无合同开单返回 `None`。
+///
 /// # 错误
 /// 版本缺失或客户、合同身份、合同编号不匹配时拒绝；销售结算主体允许单独选择。
 /// 仓储读取失败会返回对应错误。
@@ -225,13 +234,16 @@ pub async fn submission_contract(
     .await
 }
 
-/// 读取本次销售变更提交锁定的合同正文关系。
+/// 处理采购来源销售材料的版本事实时，读取本次销售变更提交锁定的合同正文关系。
+///
 /// # 参数
 /// * `db` - 合同与销售事实所在数据库。
 /// * `submission` - 精确变更提交。
 /// * `executor` - 原审批启动事务。
+///
 /// # 返回
 /// 返回经过真实销售单和客户关系证明的合同修订。没有锁定合同修订时返回 `None`。
+///
 /// # 错误
 /// 关系缺失或不匹配时失败关闭，不补录当前合同。仓储读取失败会返回对应错误。
 pub async fn change_submission_contract(
@@ -252,13 +264,16 @@ pub async fn change_submission_contract(
     .await
 }
 
-/// 变更审批沿准确基准修订继承原销售冻结凭证，不继承旧合同正文。
+/// 处理采购来源销售材料时，变更审批沿准确基准修订继承原销售冻结凭证，不继承旧合同正文。
+///
 /// # 参数
 /// * `db` - 销售修订与文件事实所在数据库。
 /// * `submission` - 本次变更审批的精确提交。
 /// * `executor` - 原事务执行器。
+///
 /// # 返回
 /// 仍可读取的原成交冻结材料；旧清单为空时保持为空。
+///
 /// # 错误
 /// 跨销售单、版本链错误或历史文件变化时拒绝材料。仓储读取失败会返回对应错误。
 pub async fn change_evidence(
@@ -281,7 +296,7 @@ pub async fn change_evidence(
     Ok(files)
 }
 
-/// 唯一不可变合同修订必须同时匹配真实销售单、客户和合同编号。
+// 处理采购来源销售材料时，唯一不可变合同修订必须同时匹配真实销售单、客户和合同编号。
 async fn locked_contract(
     db: &Database,
     source: ContractSource<'_>,
@@ -313,7 +328,7 @@ async fn locked_contract(
     Ok(Some(revision))
 }
 
-/// 当前文件必须匹配冻结引用且未被治理禁止读取。
+// 校验采购来源销售材料时，当前文件必须匹配冻结引用且未被治理禁止读取。
 fn validate_asset(file: &ApprovalMaterialFile, asset: &FileAsset) -> Result<()> {
     file.validate()?;
     if !file.matches_current(&material_from_asset(asset)) {
@@ -331,7 +346,7 @@ fn validate_asset(file: &ApprovalMaterialFile, asset: &FileAsset) -> Result<()> 
     Ok(())
 }
 
-/// 正式修订通过持久化内容身份关联精确销售提交与冻结审批材料。
+// 处理采购来源销售材料时，正式修订通过持久化内容身份关联精确销售提交与冻结审批材料。
 async fn revision_frozen_materials(
     db: &Database,
     revision: &SalesOrderRevision,
@@ -371,7 +386,7 @@ async fn revision_frozen_materials(
     Ok(files)
 }
 
-/// 每个继承节点只读取其原审批冻结白名单，空旧清单保持为空。
+// 处理采购来源销售材料时，每个继承节点只读取其原审批冻结白名单，空旧清单保持为空。
 async fn source_materials(
     db: &Database,
     source: &SalesApprovalSource,
@@ -384,7 +399,7 @@ async fn source_materials(
     selected_materials(&snapshots, source.document_type, &source.document_id, source.submission_no)
 }
 
-/// 上一版本的合同正文不作为本版凭证继承；本版合同仍由精确不可变指针独立读取。
+// 处理采购来源销售材料时，上一版本的合同正文不作为本版凭证继承；本版合同仍由精确不可变指针独立读取。
 async fn remove_previous_contract(
     db: &Database,
     revision: &SalesOrderRevision,
@@ -401,7 +416,7 @@ async fn remove_previous_contract(
     Ok(())
 }
 
-/// 继承关系必须指向同单更旧版本，且每个版本只访问一次。
+// 校验采购来源销售材料时，继承关系必须指向同单更旧版本，且每个版本只访问一次。
 fn validate_inheritance(
     child: &SalesOrderRevision,
     base: &SalesOrderRevision,
@@ -419,7 +434,7 @@ fn validate_inheritance(
     Ok(())
 }
 
-/// 导入版本没有销售审批材料；审批版本的提交身份必须与修订精确匹配。
+// 处理采购来源销售材料时，导入版本没有销售审批材料；审批版本的提交身份必须与修订精确匹配。
 async fn revision_source(
     db: &Database,
     revision: &SalesOrderRevision,
@@ -466,7 +481,7 @@ async fn revision_source(
     }))
 }
 
-/// 只挑精确类型、对象和提交版本，旧快照材料为空时保持为空。
+// 处理采购来源销售材料时，只挑精确类型、对象和提交版本，旧快照材料为空时保持为空。
 fn selected_materials(
     snapshots: &[ApprovalSubjectSnapshot],
     kind: DocumentType,

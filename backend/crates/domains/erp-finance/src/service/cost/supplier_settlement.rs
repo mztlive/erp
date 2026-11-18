@@ -15,15 +15,11 @@ pub struct SettlementCostDeltaFact {
     pub tax: Amount,
 }
 /// 仅全零三元组返回空计划，其余保持原业务错误；不得伪造 CostEntry。
+/// 结果：三项均为零时返回空列表。
+/// 失败条件：任一金额非零时返回 `BusinessLogicError`，不构造 `CostEntry`。
 ///
-/// # 参数
-/// * `delta` - 结算成本差额的含税、不含税与税额。
-///
-/// # 返回
-/// 三项均为零时返回空列表。
-///
-/// # 错误
-/// 任一金额非零时返回 `BusinessLogicError`，不构造 `CostEntry`。
+/// 输入约定：
+/// - `delta`：结算成本差额的含税、不含税与税额。
 pub fn build_settlement_cost_delta(delta: &SettlementCostDeltaFact) -> Result<Vec<CostEntry>> {
     if delta.gross == Amount::zero() && delta.net == Amount::zero() && delta.tax == Amount::zero() {
         return Ok(Vec::new());
@@ -34,17 +30,13 @@ pub fn build_settlement_cost_delta(delta: &SettlementCostDeltaFact) -> Result<Ve
 }
 
 /// 逐条复用原成本仓储 entry→allocations 写序；不得另开事务。
+/// 结果：全部写入成功时无返回值。
+/// 失败条件：仓储写入失败时返回对应错误，后续条目不再写入。
 ///
-/// # 参数
-/// * `db` - 财务领域数据库。
-/// * `entries` - 待写入的成本事实；分配为空。
-/// * `executor` - 调用方事务执行器。
-///
-/// # 返回
-/// 全部写入成功时无返回值。
-///
-/// # 错误
-/// 仓储写入失败时返回对应错误，后续条目不再写入。
+/// 输入约定：
+/// - `db`：财务领域数据库。
+/// - `entries`：待写入的成本事实；分配为空。
+/// - `executor`：调用方事务执行器。
 pub async fn persist_settlement_costs(
     db: &Database,
     entries: &[CostEntry],

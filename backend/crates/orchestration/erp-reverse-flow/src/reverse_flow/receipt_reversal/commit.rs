@@ -41,21 +41,11 @@ use crate::reverse_flow::command_recovery::{CommitApproval, commit_audits, save_
 use crate::{Error, Result, ReverseFlowPorts};
 
 impl ReturnsProcess {
-    /// 按原回款一次创建回款冲正并启动审批。
+    /// 发现原客户回款需冲正时，一次创建回款冲正单并启动审批，不在此入口执行资金冲正。
+    /// 原事务校验回款来源并保存单据注册、已发布定义绑定、冲正实体、冻结快照、运行事实、入口任务和审计。
     ///
-    /// 单据注册、定义绑定、冲正实体、审批快照、运行事实、入口任务和审计在同一
-    /// MongoDB 事务内完成。
-    ///
-    /// # 参数
-    /// * `req` - 一次创建并提交的请求。
-    /// * `actor` - 已通过鉴权的审计操作人。
-    ///
-    /// # 返回
-    /// 返回新建冲正单视图；同载荷命令已提交时返回已有冲正单视图。
-    ///
-    /// # 错误
-    /// 请求校验、命令收据、原回款、发布定义、审批启动或仓储写入失败时返回对应错误。
-    /// 提交结果未知时按同一命令回读，未确认则保留原错误。视图读取失败时返回对应错误。
+    /// 按原幂等键及载荷查证已提交命令，仅回读原冲正视图。请求、回执、原回款、发布定义、启动或持久化失败返回对应错误；
+    /// 未知提交未确认时保留原错误，结果视图读取失败按读取错误返回。
     pub async fn commit_receipt_reversal(
         &self,
         req: CommitReceiptReversalRequest,
@@ -108,7 +98,7 @@ impl ReturnsProcess {
         .await
     }
 
-    /// 原事务先授权服务端候选，再读取收据、准备来源并完成全部写入。
+    // 回款冲正的创建并提交事务先授权服务端候选，再查原回执；只有未命中才准备来源并执行新写入。
     async fn commit_receipt_reversal_snapshot(
         &self,
         req: &CommitReceiptReversalRequest,
@@ -130,7 +120,7 @@ impl ReturnsProcess {
         Ok(id)
     }
 
-    /// 按既有顺序准备原资金事实、冻结快照、单据绑定和两条业务审计。
+    // 回款冲正首次提交时依次准备原资金事实、冻结快照、登记及定义绑定所需信息，再生成两条业务审计。
     async fn prepare_receipt_reversal_commit(
         &self,
         req: &CommitReceiptReversalRequest,
@@ -187,7 +177,7 @@ impl ReturnsProcess {
         })
     }
 
-    /// 按原顺序读取原回款及版本，准备一次创建提交所需的冲正事实。
+    // 按原顺序读取原回款及版本，准备一次创建提交所需的冲正事实。
     async fn receipt_reversal_commit_source(
         &self,
         req: &CommitReceiptReversalRequest,
@@ -218,7 +208,7 @@ struct CommitPreparation {
     audits: (AuditLog, AuditLog),
 }
 
-/// 已授权且未命中收据后，在原事务校验来源业务状态并执行写入。
+// 回款冲正候选已授权且没有原回执时，在原事务核验来源状态后进入创建提交写入。
 async fn apply_commit(
     db: &Database,
     rbac: &ReverseFlowPorts,
@@ -231,7 +221,7 @@ async fn apply_commit(
     write_commit(db, rbac, input, command, actor, executor).await
 }
 
-/// 绑定、审批准备、实体、运行事实、审计及回执严格按原顺序写入。
+// 首次创建并提交回款冲正时，依次写入绑定、审批准备后的实体、运行事实、审计和回执。
 async fn write_commit(
     db: &Database,
     rbac: &ReverseFlowPorts,
@@ -282,7 +272,7 @@ async fn write_commit(
     save_commit(db, command, &input.reversal.base.id, (&input.audits.0, &input.audits.1), executor).await
 }
 
-/// 在调用方事务中读取绑定图、重验审批人并准备启动写集合。
+// 生成回款冲正启动计划前，在调用方事务读取冻结绑定的定义图并重验审批人资格。
 async fn prepare_commit_start(
     db: &Database,
     rbac: &ReverseFlowPorts,
@@ -308,9 +298,9 @@ async fn prepare_commit_start(
     })?;
     Ok(prepare_start(start_input)?)
 }
-/// 在创建冲正单的同一事务中重读并校验原客户回款事实。
-///
-/// 原回款必须仍为调用前读取的版本且已经过账，避免为非正式事实创建审批任务。
+// 在创建冲正单的同一事务中重读并校验原客户回款事实。
+//
+// 原回款必须仍为调用前读取的版本且已经过账，避免为非正式事实创建审批任务。
 async fn validate_receipt_reversal_source(
     db: &Database,
     source_fact_id: &CustomerReceiptId,

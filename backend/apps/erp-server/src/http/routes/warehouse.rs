@@ -12,21 +12,12 @@ use crate::http::handler::warehouse;
 use crate::http::routes::permission_route;
 use crate::http::state::HttpState;
 
-/// 返回本域管理端路由集合。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回声明公共权限目录信息的路由集合。
-///
-/// # 错误
-/// 不执行 I/O，不返回错误。
+/// 为管理端挂载仓库档案与 SKU 策略接口，按操作登记公共权限目录信息。
 pub fn routes() -> Router<HttpState> {
     Router::new().merge(warehouse_routes()).merge(fulfillment_routes()).merge(sku_policy_routes())
 }
 
-/// 仓库目录、档案查询与维护路由。
+// 为父路由挂载仓库目录、档案查询与维护路由。
 fn warehouse_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -48,7 +39,7 @@ fn warehouse_routes() -> Router<HttpState> {
         )
 }
 
-/// 仓库履约人选与修订读取路由。
+// 为父路由挂载仓库履约人选与修订读取路由。
 fn fulfillment_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -71,7 +62,7 @@ fn fulfillment_routes() -> Router<HttpState> {
         )
 }
 
-/// 仓库规格政策路由。
+// 为父路由挂载仓库规格政策路由。
 fn sku_policy_routes() -> Router<HttpState> {
     Router::new()
         .route(

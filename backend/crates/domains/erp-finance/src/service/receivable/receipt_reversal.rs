@@ -22,20 +22,13 @@ pub use crate::service::offset_index::{
 use crate::{Error, Result};
 
 /// 批量读取应收分录及其账户，缺任一项失败关闭。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `entry_ids` - 冲减块引用的增加分录 ID；可含重复
-/// * `executor` - 调用方执行器，须与写入共用事务快照
-///
-/// # 返回
 /// 返回按 ID 索引的分录与账户。
+/// 失败条件：缺任一分录或账户时返回 `NotFound`；仓储失败时传播基础设施错误。
+/// 调用边界：固定两次批量读取，次数不随冲减块数量增长；不执行条件更新。
 ///
-/// # 错误
-/// 缺任一分录或账户时返回 `NotFound`；仓储失败时传播基础设施错误。
-///
-/// # 约束
-/// 固定两次批量读取，次数不随冲减块数量增长；不执行条件更新。
+/// 输入约定：
+/// - `entry_ids`：冲减块引用的增加分录 ID；可含重复
+/// - `executor`：调用方执行器，须与写入共用事务快照
 pub async fn load_receivable_offset_facts(
     db: &Database,
     entry_ids: impl IntoIterator<Item = ReceivableEntryId>,
@@ -64,18 +57,13 @@ pub async fn load_receivable_offset_facts(
     Ok(OffsetFacts { entries, accounts })
 }
 
-/// 读取可冲正的正式回款；保留先存在性再状态的错误顺序。
-///
-/// # 参数
-/// * `db` - 财务领域数据库。
-/// * `receipt_id` - 原回款主键。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
+/// 回款冲正前读取原回款并确认已过账；先报告单据不存在，再检查状态。
 /// 返回状态为 `Posted` 的客户回款。
+/// 失败条件：回款不存在时返回 `NotFound`；状态不是已过账时返回 `BusinessLogicError`；仓储读取失败时返回对应错误。
 ///
-/// # 错误
-/// 回款不存在时返回 `NotFound`；状态不是已过账时返回 `BusinessLogicError`；仓储读取失败时返回对应错误。
+/// 输入约定：
+/// - `db`：财务领域数据库。
+/// - `receipt_id`：原回款主键。
 pub async fn load_posted_receipt(
     db: &Database,
     receipt_id: &CustomerReceiptId,
@@ -92,24 +80,19 @@ pub async fn load_posted_receipt(
     Ok(receipt)
 }
 
-/// 写入反向核销分配、冲减进度并把原回款置为已冲正。
+/// 正式回款冲正时按原分配回冲应收已核销额，追加反向分配并将原回款标为已冲正。
 ///
 /// 在退货域累计额度检查成功后逆向核销并更新原回款；始终复用调用方 Executor。
 /// 分配计划、额度写入、逐行 ID 与状态迁移沿原顺序执行。
+/// 结果：反向分配写入且原回款迁到 `Reversed` 后无返回值。
+/// 失败条件：分配计划失败、分录缺失、超额冲减、状态迁移或仓储失败时返回对应错误。
 ///
-/// # 参数
-/// * `db` - 财务领域数据库。
-/// * `receipt` - 已过账的原回款。
-/// * `amount` - 本次冲正金额。
-/// * `occurred_at` - 冲正发生时间。
-/// * `actor_id` - 执行人。
-/// * `session` - 调用方事务执行器。
-///
-/// # 返回
-/// 反向分配写入且原回款迁到 `Reversed` 后无返回值。
-///
-/// # 错误
-/// 分配计划失败、分录缺失、超额冲减、状态迁移或仓储失败时返回对应错误。
+/// 输入约定：
+/// - `db`：财务领域数据库。
+/// - `receipt`：已过账的原回款。
+/// - `amount`：本次冲正金额。
+/// - `occurred_at`：冲正发生时间。
+/// - `session`：调用方事务执行器。
 pub async fn reverse_receipt_allocations(
     db: &Database,
     receipt: CustomerReceipt,
@@ -134,18 +117,14 @@ pub async fn reverse_receipt_allocations(
     Ok(())
 }
 
-/// 必须在冲正状态和成功审计写入后调用，重新读取全部分配后返回排序去重销售标识。
-///
-/// # 参数
-/// * `db` - 财务领域数据库。
-/// * `receipt_id` - 原回款主键。
-/// * `session` - 调用方事务执行器。
-///
-/// # 返回
+/// 冲正状态和成功审计均写入后重新读取全部回款分配，返回稳定排序且去重的销售单 ID 供后续同步。
 /// 返回排序去重后的销售单 ID。
+/// 失败条件：分配、分录或账户读取失败，或缺任一分录、账户时返回对应错误。
 ///
-/// # 错误
-/// 分配、分录或账户读取失败，或缺任一分录、账户时返回对应错误。
+/// 输入约定：
+/// - `db`：财务领域数据库。
+/// - `receipt_id`：原回款主键。
+/// - `session`：调用方事务执行器。
 pub async fn receipt_allocation_sales_order_ids(
     db: &Database,
     receipt_id: &CustomerReceiptId,
@@ -162,10 +141,8 @@ pub async fn receipt_allocation_sales_order_ids(
         .collect())
 }
 
-/// 按冲减块回冲应收子账已核销进度。
-///
-/// # 错误
-/// 分录缺失或超额冲减时返回错误。
+// 按每个回款冲减块回冲所属应收子账的已核销额，不能冲减超过已核销金额。
+// 分录缺失或超额冲减时返回错误。
 async fn revert_receipt_settlements(
     db: &Database,
     chunks: &[ReceiptReverseChunk],
@@ -194,21 +171,14 @@ async fn revert_receipt_settlements(
     Ok(())
 }
 
-/// 由核销分配批量读取分录与账户，收集去重销售单 ID。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `allocations` - 原回款核销分配
-/// * `session` - 调用方事务执行器
-///
-/// # 返回
-/// 返回排序去重后的销售单 ID。
-///
-/// # 错误
-/// 缺任一分录或账户时失败关闭。
-///
-/// # 约束
-/// 固定两次批量读取；进度刷新仍由 Service 逐单编排。
+// 由核销分配批量读取分录与账户，收集去重销售单 ID。
+// 返回排序去重后的销售单 ID。
+// 失败条件：缺任一分录或账户时失败关闭。
+// 调用边界：固定两次批量读取；进度刷新仍由 Service 逐单编排。
+//
+// 输入约定：
+// - `allocations`：原回款核销分配
+// - `session`：调用方事务执行器
 async fn sales_order_ids_for_receipt_allocations(
     db: &Database,
     allocations: &[ReceiptAllocation],
@@ -238,10 +208,8 @@ async fn sales_order_ids_for_receipt_allocations(
     Ok(sales_order_ids)
 }
 
-/// 写入反向核销分配。
-///
-/// # 错误
-/// 仓储失败时返回错误。
+// 写入反向核销分配。
+// 仓储失败时返回错误。
 async fn persist_reverse_allocations(
     db: &Database,
     occurred_at: Instant,

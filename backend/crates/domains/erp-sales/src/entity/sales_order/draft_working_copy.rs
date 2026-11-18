@@ -8,35 +8,16 @@ use super::entity::{CloseStatus, CommercialStatus, SalesOrder};
 
 impl SalesOrder {
     /// 判断当前销售单是否允许保存或补开首次提交工作副本。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 商业状态为草稿且尚未结案时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    ///
-    /// # 关键业务约束
-    /// 审核中、已生效、已作废或已结案均不可再写首次提交草稿；不查询有效副本。
+    /// 结果：商业状态为草稿且尚未结案时返回 `true`。
+    /// 业务边界：审核中、已生效、已作废或已结案均不可再写首次提交草稿；不查询有效副本。
     pub fn allows_first_submission_working_copy(&self) -> bool {
         self.commercial_status == CommercialStatus::Draft && self.close_status != CloseStatus::Closed
     }
 
     /// 校验当前销售单允许编辑首次提交工作副本。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 允许时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 非草稿或已结案时返回领域错误。
-    ///
-    /// # 关键业务约束
-    /// Service 负责把本错误映射为冲突语义；实体不依赖 Service Error。
+    /// 结果：允许时返回 `Ok(())`。
+    /// 失败条件：非草稿或已结案时返回领域错误。
+    /// 业务边界：Service 负责把本错误映射为冲突语义；实体不依赖 Service Error。
     pub fn ensure_first_submission_working_copy_editable(&self) -> Result<()> {
         if self.allows_first_submission_working_copy() {
             Ok(())

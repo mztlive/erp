@@ -10,31 +10,9 @@ use crate::entity::{AuditLog, BusinessEventResult};
 /// 展示查询与同事务写入，不暴露命令或业务身份事实。
 #[allow(async_fn_in_trait)]
 pub trait AuditLogRepositoryExt {
-    /// 按给定顺序写入多条操作事件。
-    ///
-    /// 空切片不访问数据库。调用方持有 `executor`，本函数不提交事务。
-    ///
-    /// # 参数
-    /// * `logs` - 保持业务事件序号顺序的审计日志。
-    /// * `executor` - 调用方传入的执行器。
-    ///
-    /// # 返回
-    /// 写入成功或 `logs` 为空时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// `logs` 非空且仓储写入失败时返回对应错误。
+    /// 用调用方的执行器按业务原顺序批量追加日志，空批次直接成功；非空批次写入失败时透传仓储错误。
     async fn create_many_ordered(&self, logs: &[AuditLog], executor: &mut dyn Executor) -> Result<()>;
-    /// 按结构化条件查询展示日志。
-    ///
-    /// # 参数
-    /// * `filter` - 已授权的展示筛选。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 返回分页日志。排序由仓储检索按创建时间倒序给出。
-    ///
-    /// # 错误
-    /// 仓储查询或计数失败时返回对应错误。
+    /// 在同一执行器上按已授权的条件读取日志分页与总数，列表按创建时间倒序；查询或计数失败时返回仓储错误。
     async fn search_logs(
         &self,
         filter: &AuditLogFilter,
@@ -71,16 +49,7 @@ pub struct AuditLogFilter {
 }
 
 impl Default for AuditLogFilter {
-    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回第 1 页、每页 20 条的空筛选条件。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 为没有指定条件的日志列表提供第 `1` 页、每页 `20` 条的空筛选。
     fn default() -> Self {
         Self {
             actor_account: None,
@@ -96,18 +65,7 @@ impl Default for AuditLogFilter {
 }
 
 impl QueryFilter for AuditLogFilter {
-    /// 转换成未删除审计日志的 MongoDB 查询条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 始终包含未删除条件。`actor_account`、`action` 与业务编号按字面量正则匹配；
-    /// `event_result` 写入 `structured_event.result` 的 `succeeded`、`rejected` 或 `unknown`；
-    /// `resource_type` 与 `success` 为精确匹配。分页字段不进入条件。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 生成未删除日志的 MongoDB 条件：操作人账号、动作和业务编号使用字面量正则，资源类型和成功标记精确匹配。事件结果映射为 `succeeded`、`rejected` 或 `unknown`，分页不进入谓词。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
 
@@ -139,16 +97,7 @@ impl QueryFilter for AuditLogFilter {
 }
 
 impl Pagination for AuditLogFilter {
-    /// 返回调用方保存的页码和分页大小，不把 `0` 归一成第一页。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)`，其中 `page_size` 展成 `u64`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 把调用方保存的页码和条数交给仓储，条数转为 `u64`；此处不把 `0` 改为第一页。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }

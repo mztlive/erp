@@ -13,24 +13,20 @@ use crate::repository::ReceivableExt;
 use crate::repository::prelude::*;
 use crate::{Error, Result};
 
-/// 按分配金额更新可开票进度，登记发票并写入分配事实。
+/// 正式登记销项票时，在调用方事务内按计划占用应收可开票额，再落发票和分配事实。
 ///
 /// 调用方必须传入既有事务执行器。返回受影响账户及其在计划中的原顺序，供后续销售与流程组合。
 /// 账户缺失、跨主体与额度不足保持原错误语义。
-///
-/// # 参数
-/// * `db` - 财务领域数据库。
-/// * `invoice` - 待登记发票；成功时就地标为已登记。
-/// * `plan_lines` - 销项分配行。
-/// * `actor_id` - 登记人。
-/// * `executor` - 调用方事务执行器；本函数不另开事务。
-///
-/// # 返回
 /// 返回已读取的应收子账，以及计划中的账户 ID 原序。
-///
-/// # 错误
-/// 子账不存在时返回 `NotFound`；跨往来主体或剩余可开票额度不足时返回 `BusinessLogicError`；
+/// 失败条件：子账不存在时返回 `NotFound`；跨往来主体或剩余可开票额度不足时返回 `BusinessLogicError`；
 /// 分配计划、状态迁移或仓储失败时返回对应错误。
+///
+/// 输入约定：
+/// - `db`：财务领域数据库。
+/// - `invoice`：待登记发票；成功时就地标为已登记。
+/// - `plan_lines`：销项分配行。
+/// - `actor_id`：登记人。
+/// - `executor`：调用方事务执行器；本函数不另开事务。
 pub async fn persist_sales_invoice_allocations(
     db: &Database,
     invoice: &mut Invoice,
@@ -78,13 +74,11 @@ pub async fn persist_sales_invoice_allocations(
     Ok((accounts, account_id_strs))
 }
 
-/// 将附件登记的批准含税额度计入绑定应收，不生成未知票面税额。
-/// # 参数
-/// 数据库、附件登记记录、申请绑定应收、登记人及调用方事务。
-/// # 返回
-/// 受影响应收及其身份。
-/// # 错误
+/// 仅凭附件登记时，用审批确认的含税额度更新绑定应收子账，不推算缺失的票面税额。
+/// 结果：受影响应收及其身份。
 /// 主体不符、额度不足、非法登记或持久化失败时拒绝。
+///
+/// 输入约定：数据库、附件登记记录、申请绑定应收、登记人及调用方事务。
 pub async fn persist_evidence_allocation(
     db: &Database,
     invoice: &mut Invoice,

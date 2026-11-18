@@ -17,7 +17,7 @@ use crate::{Error, Result};
 
 #[async_trait]
 trait ExportRead: Sync {
-    /// 读取并验证完整销售分页；每次调用都签发自己的原根凭证。
+    // 生成销售单导出分页时，读取并验证完整销售分页；每次调用都签发自己的原根凭证。
     async fn page(
         &self,
         params: &SalesListParams,
@@ -25,7 +25,7 @@ trait ExportRead: Sync {
         executor: &mut dyn Executor,
     ) -> Result<SalesListView>;
 
-    /// 只读取当前页真实引用且具备独立详情资格的合同号。
+    // 处理销售单导出时，仅读取当前页真实引用且具备独立详情资格的合同号。
     async fn contracts(
         &self,
         ids: &BTreeSet<String>,
@@ -35,11 +35,10 @@ trait ExportRead: Sync {
 }
 
 impl SalesOrderReadService {
-    /// 在原销售授权快照内读取导出分页及具备详情资格的合同号。
+    /// 导出销售列表的单页数据时，沿同一快照按原销售筛选读取分页，只为当前页的真实合同引用补充具备详情资格的合同号。
     ///
     /// # 参数
     /// * `params` - 与销售列表相同的筛选和跨页范围版本。
-    /// * `actor` - 当前已认证操作人。
     ///
     /// # 返回
     /// 返回原销售分页 JSON；有合同引用的行追加合同号或既有无权提示。
@@ -105,7 +104,7 @@ impl ExportRead for SalesOrderReadService {
     }
 }
 
-/// 独立合同查询结束后重新授权销售根，并核对全部输出身份和合同绑定。
+// 补齐销售导出页的独立合同资料后，在原快照重新授权并读取销售根；只在最终页与先前的身份、版本和合同引用一致时输出。
 async fn export_page(
     reader: &impl ExportRead,
     params: &SalesListParams,
@@ -142,7 +141,7 @@ async fn export_page(
     Ok(output)
 }
 
-/// 已验证的合同号只允许附加到原销售身份、版本和引用完全一致的最终分页。
+// 附加合同号前比较两次销售读取的范围版本、总数、页码、页大小及行顺序中的身份、版本和合同引用；任一变化都拒绝交付。
 fn ensure_same_page(initial: &SalesListView, final_page: &SalesListView) -> Result<()> {
     let same_rows = initial.data.items.len() == final_page.data.items.len()
         && initial.data.items.iter().zip(&final_page.data.items).all(|(left, right)| {

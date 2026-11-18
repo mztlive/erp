@@ -13,14 +13,11 @@ use super::persistence::{ExpensePersistence, MongoExpensePersistence, confirm_pa
 use super::reservation;
 use crate::Result;
 
-/// 核验收款依据后登记采购费用来源占用。
-///
-/// # 参数
-/// `db`、`executor` 为原建单事务；其余参数为已验证采购与费用行。
-/// # 返回
-/// 来源为空时不写入；存在来源时逐行保存跨轮次占用。
-/// # 错误
-/// 来源失效、销售归属、费用条件、收款依据或额度不符时拒绝；保存失败立即停止。
+// 核验收款依据后登记采购费用来源占用。
+//
+// `db`、`executor` 为原建单事务；其余参数为已验证采购与费用行。来源为空时不写入；存在来源时逐行保存跨轮次占用。
+//
+// 来源失效、销售归属、费用条件、收款依据或额度不符时拒绝；保存失败立即停止。
 pub(crate) async fn reserve_purchase(
     db: &Database,
     order: &PurchaseOrder,

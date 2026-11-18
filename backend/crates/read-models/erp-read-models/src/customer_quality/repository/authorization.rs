@@ -13,11 +13,14 @@ pub struct QualitySalesMapping {
     customer: Arc<dyn AccessMapping>,
 }
 impl QualitySalesMapping {
-    /// 连接共享销售及客户字段映射。
+    /// 装配客户经营质量时，连接共享销售及客户字段映射。
+    ///
     /// # 参数
     /// sales 为完整销售模型，customer 为完整客户模型。
+    ///
     /// # 返回
     /// 供固定现任质量查询入口复用的映射。
+    ///
     /// # 错误
     /// 根或来源资源不匹配时拒绝。
     pub fn new(sales: Arc<dyn AccessMapping>, customer: Arc<dyn AccessMapping>) -> Result<Self> {

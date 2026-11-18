@@ -82,14 +82,9 @@ struct ResolvedVoucherCategoryInput {
 impl CatalogService {
     /// 分页查询卡券类目扩展修订列表。
     ///
-    /// # 参数
-    /// * `params` - SKU、状态、分页与排序筛选参数
+    /// 返回已批量装配 SKU 编号、商品版本和当前名称的分页视图。分页或排序参数非法，以及仓储查询失败时返回错误。
     ///
-    /// # 返回
-    /// 返回已批量装配 SKU 编号、商品版本和当前名称的分页视图。
-    ///
-    /// # 错误
-    /// 分页或排序参数非法，以及仓储查询失败时返回错误。
+    /// `params` 为 SKU、状态、分页与排序筛选参数。
     pub async fn voucher_category_profile_list(
         &self,
         actor: &AuditActor,
@@ -109,7 +104,7 @@ impl CatalogService {
             .await
     }
 
-    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    // 在同一授权快照读取业务数据；执行器由公开入口提供。
     async fn voucher_category_profile_list_snapshot(
         &self,
         actor: &AuditActor,
@@ -148,19 +143,12 @@ impl CatalogService {
 
     /// 更新卡券类目名称与描述。
     ///
-    /// 按 SKU 稳定身份定位所属卡券商品，追加商品、SKU 与扩展修订，并在同一事务
-    /// 更新两个稳定主表的当前修订指针。
+    /// 按 SKU 稳定身份定位所属卡券商品，追加商品、SKU 与扩展修订，并在同一事务更新两个稳定主表的当前修订指针。
     ///
-    /// # 参数
-    /// * `sku_id` - 卡券类目 SKU 稳定 ID
-    /// * `req` - 名称、描述、可选启停状态、生效区间与商品期望版本
-    /// * `actor` - 已通过鉴权的审计操作人
+    /// 返回新扩展修订及其关联展示上下文。请求非法、关系缺失、目标不是卡券商品、版本冲突或事务失败时返回错误。
     ///
-    /// # 返回
-    /// 返回新扩展修订及其关联展示上下文。
-    ///
-    /// # 错误
-    /// 请求非法、关系缺失、目标不是卡券商品、版本冲突或事务失败时返回错误。
+    /// - `sku_id`：卡券类目 SKU 稳定 ID。
+    /// - `req`：名称、描述、可选启停状态、生效区间与商品期望版本。
     pub async fn voucher_category_update(
         &self,
         sku_id: &str,
@@ -180,7 +168,7 @@ impl CatalogService {
             .await
     }
 
-    /// 在原事务完成授权、事实读取、写入与回包。
+    // 更新卡券品类，在原事务内完成授权、关联事实核对和写入。
     async fn voucher_category_update_stage(
         &self,
         sku_id: &str,
@@ -201,18 +189,11 @@ impl CatalogService {
 
     /// 原子创建卡券类目。
     ///
-    /// 一个卡券类目对应一个 `VOUCHER` 商品和唯一 SKU；分类、品牌与基础单位缺省时
-    /// 分别使用共用卡券根分类、“福尚云”和“张”。
+    /// 一个卡券类目对应一个 `VOUCHER` 商品和唯一 SKU；分类、品牌与基础单位缺省时分别使用共用卡券根分类、“福尚云”和“张”。
     ///
-    /// # 参数
-    /// * `req` - 卡券编号、名称、描述、字典引用与唯一 SKU 输入
-    /// * `actor` - 已通过鉴权的审计操作人
+    /// 返回首个卡券类目扩展修订及其关联展示上下文。请求、字典、条码或分类关系非法，以及唯一约束或事务失败时返回错误。
     ///
-    /// # 返回
-    /// 返回首个卡券类目扩展修订及其关联展示上下文。
-    ///
-    /// # 错误
-    /// 请求、字典、条码或分类关系非法，以及唯一约束或事务失败时返回错误。
+    /// `req` 为卡券编号、名称、描述、字典引用与唯一 SKU 输入。
     pub async fn voucher_category_create(
         &self,
         req: CreateVoucherCategoryRequest,
@@ -228,7 +209,7 @@ impl CatalogService {
             .await
     }
 
-    /// 在原事务完成授权、事实读取、写入与回包。
+    // 新建卡券品类，在原事务内完成授权、关联事实核对和写入。
     async fn voucher_category_create_stage(
         &self,
         req: CreateVoucherCategoryRequest,
@@ -246,16 +227,9 @@ impl CatalogService {
         self.voucher_profile_view(&revision, executor).await
     }
 
-    /// 装配单个卡券类目扩展修订的响应视图。
-    ///
-    /// # 参数
-    /// * `revision` - 已写入的卡券类目扩展修订
-    ///
-    /// # 返回
-    /// 返回已补齐 SKU、商品和当前名称关系的响应视图。
-    ///
-    /// # 错误
-    /// 仓储关系查询失败时返回错误。
+    // 装配单个卡券类目扩展修订的响应视图。
+    //
+    // 返回已补齐 SKU、商品和当前名称关系的响应视图。仓储关系查询失败时返回错误。
     async fn voucher_profile_view(
         &self,
         revision: &VoucherCategoryProfileRevision,
@@ -265,17 +239,9 @@ impl CatalogService {
         Ok(row.into())
     }
 
-    /// 构造卡券类目原子创建草稿。
-    ///
-    /// # 参数
-    /// * `req` - 已通过 DTO 校验的创建请求
-    /// * `actor` - 审计操作人
-    ///
-    /// # 返回
-    /// 返回全部 ID 已生成且领域实体已校验的待写入草稿。
-    ///
-    /// # 错误
-    /// 分类选择、字典关系、条码或实体字段违反规则时返回错误。
+    // 构造卡券类目原子创建草稿。
+    //
+    // 返回全部 ID 已生成且领域实体已校验的待写入草稿。分类选择、字典关系、条码或实体字段违反规则时返回错误。
     async fn build_voucher_category_draft(
         &self,
         req: CreateVoucherCategoryRequest,
@@ -333,18 +299,12 @@ impl CatalogService {
         .await
     }
 
-    /// 解析卡券类目创建请求的分类来源。
-    ///
-    /// # 参数
-    /// * `category_id` - 可选已有分类
-    /// * `new_category` - 可选内联新分类
-    /// * `actor` - 新分类创建人
-    ///
-    /// # 返回
-    /// 返回最终分类 ID 与可选待写入新分类实体。
-    ///
-    /// # 错误
-    /// 两种来源同时给出、已有分类不是卡券类型或父链非法时返回错误。
+    // 解析卡券类目创建请求的分类来源。
+    //
+    // 返回最终分类 ID 与可选待写入新分类实体。两种来源同时给出、已有分类不是卡券类型或父链非法时返回错误。
+    //
+    // - `category_id`：可选已有分类。
+    // - `new_category`：可选内联新分类。
     async fn resolve_voucher_category(
         &self,
         category_id: Option<ProductCategoryId>,
@@ -392,17 +352,11 @@ impl CatalogService {
         }
     }
 
-    /// 组装卡券类目创建所需的商品、修订、唯一 SKU 与扩展修订。
-    ///
-    /// # 参数
-    /// * `input` - 已解析字典、缺省值与唯一 SKU 的创建输入
-    /// * `actor` - 创建人
-    ///
-    /// # 返回
-    /// 返回全部实体已通过领域校验的创建草稿。
-    ///
-    /// # 错误
-    /// 条码占用或任一实体不变式校验失败时返回错误。
+    // 组装卡券类目创建所需的商品、修订、唯一 SKU 与扩展修订。
+    //
+    // 返回全部实体已通过领域校验的创建草稿。条码占用或任一实体不变式校验失败时返回错误。
+    //
+    // `input` 为已解析字典、缺省值与唯一 SKU 的创建输入。
     async fn assemble_voucher_category_draft(
         &self,
         input: ResolvedVoucherCategoryInput,
@@ -462,18 +416,9 @@ impl CatalogService {
         Ok(VoucherCategoryDraft { new_category, product, revision, sku_item, voucher_revision })
     }
 
-    /// 创建卡券类目对应的商品稳定身份并绑定维护责任。
-    ///
-    /// # 参数
-    /// * `voucher_no` - 卡券编号，同时作为商品编号
-    /// * `status` - 启停状态
-    /// * `actor` - 创建人
-    ///
-    /// # 返回
-    /// 返回商品 ID 与已绑定维护人的实体。
-    ///
-    /// # 错误
-    /// 维护人缺少主属组织、创建候选无权或执行器不是原快照事务时拒绝。
+    // 创建卡券类目对应的商品稳定身份并绑定维护责任。维护人缺少主属组织、创建候选无权或执行器不是原快照事务时拒绝。
+    //
+    // `voucher_no` 为卡券编号，同时作为商品编号。
     async fn new_voucher_product(
         &self,
         voucher_no: String,
@@ -485,20 +430,13 @@ impl CatalogService {
         self.new_voucher_product_candidate(voucher_no, status, maintainer, actor, executor).await
     }
 
-    /// 用已解析责任关系构造卡券商品，并在原事务检查创建候选。
-    ///
-    /// # 参数
-    /// * `voucher_no` - 卡券编号，同时作为商品编号。
-    /// * `status` - 启停状态。
-    /// * `maintainer` - 服务端在原事务查询到的维护人及其主属组织。
-    /// * `actor` - 已认证创建人。
-    /// * `executor` - 后续商品写入使用的原快照事务执行器。
-    ///
-    /// # 返回
-    /// 返回通过实体校验及完整创建授权的商品 ID 和实体。
-    ///
-    /// # 错误
-    /// 实体字段非法、候选无权或执行器不是原快照事务时拒绝。
+    // 用已解析责任关系构造卡券商品，并在原事务检查创建候选。
+    //
+    // 返回通过实体校验及完整创建授权的商品 ID 和实体。实体字段非法、候选无权或执行器不是原快照事务时拒绝。
+    //
+    // - `voucher_no`：卡券编号，同时作为商品编号。
+    // - `maintainer`：服务端在原事务查询到的维护人及其主属组织。
+    // - `executor`：后续商品写入使用的原快照事务执行器。
     async fn new_voucher_product_candidate(
         &self,
         voucher_no: String,
@@ -525,17 +463,11 @@ impl CatalogService {
         Ok((product_id, product))
     }
 
-    /// 在单个事务内写入卡券类目创建草稿。
-    ///
-    /// # 参数
-    /// * `draft` - 商品、修订、唯一 SKU、扩展修订和可选新分类草稿
-    /// * `actor` - 审计操作人
-    ///
-    /// # 返回
-    /// 返回写入后的卡券类目扩展修订。
-    ///
-    /// # 错误
-    /// 唯一约束、事务写入或审计写入失败时整体回滚并返回错误。
+    // 在单个事务内写入卡券类目创建草稿。
+    //
+    // 返回写入后的卡券类目扩展修订。唯一约束、事务写入或审计写入失败时整体回滚并返回错误。
+    //
+    // `draft` 为商品、修订、唯一 SKU、扩展修订和可选新分类草稿。
     async fn write_voucher_category_draft(
         &self,
         draft: VoucherCategoryDraft,
@@ -566,18 +498,12 @@ impl CatalogService {
         Ok(voucher_revision)
     }
 
-    /// 构造卡券类目更新草稿。
-    ///
-    /// # 参数
-    /// * `sku_id` - 卡券类目 SKU 稳定 ID
-    /// * `req` - 名称、描述、生效区间与商品期望版本
-    /// * `actor` - 审计操作人
-    ///
-    /// # 返回
-    /// 返回已追加三个后继修订并更新稳定指针的事务草稿。
-    ///
-    /// # 错误
-    /// SKU、商品或当前修订缺失，目标不是卡券商品，版本冲突或实体校验失败时返回错误。
+    // 构造卡券类目更新草稿。
+    //
+    // 返回已追加三个后继修订并更新稳定指针的事务草稿。SKU、商品或当前修订缺失，目标不是卡券商品，版本冲突或实体校验失败时返回错误。
+    //
+    // - `sku_id`：卡券类目 SKU 稳定 ID。
+    // - `req`：名称、描述、生效区间与商品期望版本。
     async fn build_voucher_category_update_draft(
         &self,
         sku_id: &str,
@@ -619,18 +545,9 @@ impl CatalogService {
         Ok(VoucherCategoryUpdateDraft { product, product_revision, sku, sku_revision, voucher_revision })
     }
 
-    /// 加载卡券类目更新依赖的三个当前修订：商品、SKU 与类目扩展。
-    ///
-    /// # 参数
-    /// * `sku` - 已加载的卡券类目 SKU
-    /// * `product` - 已加载的所属商品
-    /// * `sku_id` - SKU 稳定 ID
-    ///
-    /// # 返回
-    /// 返回三个当前修订；任一缺失由调用方映射为 `NotFound`。
-    ///
-    /// # 错误
-    /// 任一当前修订缺失或仓储读取失败时返回错误。
+    // 加载卡券类目更新依赖的三个当前修订：商品、SKU 与类目扩展。
+    //
+    // 返回三个当前修订；任一缺失由调用方映射为 `NotFound`。任一当前修订缺失或仓储读取失败时返回错误。
     async fn load_voucher_update_currents(
         &self,
         sku: &Sku,
@@ -660,22 +577,14 @@ impl CatalogService {
         Ok(VoucherUpdateCurrents { product: product_revision, sku: sku_revision, voucher: voucher_revision })
     }
 
-    /// 构造下个商品后继修订并挂到 SPU 当前指针。
-    ///
-    /// 只设置尚未落库的后继修订，历史快照保持不可变。
-    ///
-    /// # 参数
-    /// * `product` - 待更新 SPU（可变，修订挂载更新其状态）
-    /// * `current` - 当前商品修订
-    /// * `req` - 更新请求（名称、描述、状态与有效期来源）
-    /// * `effective_from` - 修订生效开始日
-    /// * `actor` - 审计操作人
-    ///
-    /// # 返回
-    /// 返回新商品后继修订。
-    ///
-    /// # 错误
-    /// 修订号分配或实体校验失败时返回对应错误。
+    // 构造下个商品后继修订并挂到 SPU 当前指针。
+    //
+    // 只设置尚未落库的后继修订，历史快照保持不可变。
+    //
+    // 返回新商品后继修订。修订号分配或实体校验失败时返回对应错误。
+    //
+    // - `product`：待更新 SPU（可变，修订挂载更新其状态）。
+    // - `req`：更新请求（名称、描述、状态与有效期来源）。
     async fn next_voucher_product_revision(
         &self,
         product: &mut Product,
@@ -700,22 +609,15 @@ impl CatalogService {
         Ok(revision)
     }
 
-    /// 构造下个 SKU 后继修订并挂到 SKU 当前指针。
-    ///
-    /// `attach_revision` 统一同步稳定状态，并执行停用即下架的 SKU 约束。
-    ///
-    /// # 参数
-    /// * `sku` - 待更新 SKU（可变，修订挂载更新其状态）
-    /// * `current` - 当前 SKU 修订
-    /// * `req` - 更新请求（名称、描述、状态与有效期来源）
-    /// * `effective_from` - 修订生效开始日
-    /// * `actor` - 审计操作人
-    ///
-    /// # 返回
-    /// 返回新 SKU 后继修订。
-    ///
-    /// # 错误
-    /// 修订号分配或实体校验失败时返回对应错误。
+    // 构造下个 SKU 后继修订并挂到 SKU 当前指针。
+    //
+    // `attach_revision` 统一同步稳定状态，并执行停用即下架的 SKU 约束。
+    //
+    // 返回新 SKU 后继修订。修订号分配或实体校验失败时返回对应错误。
+    //
+    // - `sku`：待更新 SKU（可变，修订挂载更新其状态）。
+    // - `current`：当前 SKU 修订。
+    // - `req`：更新请求（名称、描述、状态与有效期来源）。
     async fn next_voucher_sku_revision(
         &self,
         sku: &mut Sku,
@@ -741,18 +643,13 @@ impl CatalogService {
         Ok(revision)
     }
 
-    /// 构造下个卡券类目扩展后继修订。
-    ///
-    /// # 参数
-    /// * `sku_id` - SKU 稳定 ID（最新修订号查询用）
-    /// * `current` - 当前类目扩展修订
-    /// * `req` - 更新请求（描述与状态来源）
-    ///
-    /// # 返回
-    /// 返回新类目扩展后继修订。
-    ///
-    /// # 错误
-    /// 修订号分配或实体校验失败时返回对应错误。
+    // 构造下个卡券类目扩展后继修订。
+    //
+    // 返回新类目扩展后继修订。修订号分配或实体校验失败时返回对应错误。
+    //
+    // - `sku_id`：SKU 稳定 ID（最新修订号查询用）。
+    // - `current`：当前类目扩展修订。
+    // - `req`：更新请求（描述与状态来源）。
     async fn next_voucher_profile_revision(
         &self,
         sku_id: &SkuId,
@@ -772,17 +669,11 @@ impl CatalogService {
         Ok(revision)
     }
 
-    /// 在事务内写入卡券类目更新草稿。
-    ///
-    /// # 参数
-    /// * `draft` - 已更新稳定指针并生成后继修订的草稿
-    /// * `actor` - 审计操作人
-    ///
-    /// # 返回
-    /// 返回写入后的卡券类目扩展修订。
-    ///
-    /// # 错误
-    /// 乐观锁、唯一约束、事务或审计写入失败时整体回滚并返回错误。
+    // 在事务内写入卡券类目更新草稿。
+    //
+    // 返回写入后的卡券类目扩展修订。乐观锁、唯一约束、事务或审计写入失败时整体回滚并返回错误。
+    //
+    // `draft` 为已更新稳定指针并生成后继修订的草稿。
     async fn write_voucher_category_update_draft(
         &self,
         draft: VoucherCategoryUpdateDraft,
@@ -818,18 +709,9 @@ impl CatalogService {
     }
 }
 
-/// 构造卡券类目首个扩展修订。
-///
-/// # 参数
-/// * `sku_id` - 唯一 SKU
-/// * `description` - 类目描述
-/// * `status` - 启停状态
-///
-/// # 返回
-/// 返回已校验的扩展修订。
-///
-/// # 错误
-/// 实体不变式校验失败时拒绝。
+// 构造卡券类目首个扩展修订。
+//
+// 返回已校验的扩展修订。实体不变式校验失败时拒绝。
 fn new_voucher_profile(
     sku_id: &str,
     description: String,

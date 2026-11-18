@@ -14,16 +14,16 @@ use crate::dto::contract::ContractDetailView;
 pub(super) trait DetailRead: Sync {
     type Scope: Send + Sync;
 
-    /// 在原执行器生成固定合同详情查询。
+    // 在原执行器生成固定合同详情查询。
     async fn query(&self, actor: &AuditActor, executor: &mut dyn Executor) -> Result<Self::Scope>;
-    /// 授权过滤根合同后，补齐完整详情。
+    // 授权过滤根合同后，补齐完整详情。
     async fn load(
         &self,
         id: &str,
         scope: &Self::Scope,
         executor: &mut dyn Executor,
     ) -> Result<ContractDetailView>;
-    /// 在全部异步补齐之后核验原凭证，失败时丢弃详情。
+    // 在全部异步补齐之后核验原凭证，失败时丢弃详情。
     async fn validate(&self, scope: &Self::Scope, executor: &mut dyn Executor) -> Result<()>;
 }
 
@@ -49,7 +49,7 @@ impl DetailRead for ContractService {
     }
 }
 
-/// 业务详情只能在原查询凭证完成交付检查之后返回。
+// 业务详情只能在原查询凭证完成交付检查之后返回。
 pub(super) async fn read(
     port: &impl DetailRead,
     id: &str,
@@ -131,7 +131,7 @@ mod tests {
         }
     }
 
-    /// 允许结果仅在完整补齐后的交付检查成功时返回，三个阶段复用执行器。
+    // 验证允许结果仅在完整补齐后的交付检查成功时返回，三个阶段复用执行器。
     #[tokio::test]
     async fn complete_detail_is_delivered_only_after_original_proof_validation() {
         let port = Reads { denied: false, expires_during_load: false, calls: Mutex::new(vec![]) };
@@ -147,7 +147,7 @@ mod tests {
         );
     }
 
-    /// 首次拒绝不读取业务数据，补齐中到期不交付已经读取的详情。
+    // 验证首次拒绝不读取业务数据，补齐中到期不交付已经读取的详情。
     #[tokio::test]
     async fn denial_stops_loading_and_expiry_discards_the_complete_detail() {
         let actor = AuditActor::new("sales".into(), "sales".into(), AccountKind::Admin);

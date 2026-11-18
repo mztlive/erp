@@ -54,19 +54,11 @@ pub struct PurchaseInvoiceWithAssetsResult {
 impl PayableProcess {
     /// 进项发票登记过账并分配（§8.3-2 事务不变量）。
     ///
-    /// 在同一 Executor 内保存发票、分配、收票额度、独立财务回执及一次业务
-    /// 事件。首次、事务内和异常恢复均只查独立回执，重放只回读原视图。
+    /// 在同一 Executor 内保存发票、分配、收票额度、独立财务回执及一次业务事件。首次、事务内和异常恢复均只查独立回执，重放只回读原视图。
     ///
-    /// # 参数
-    /// * `req` - 进项发票登记请求
-    /// * `actor` - 已通过入口鉴权的审计操作人
+    /// `req` 为进项发票登记请求；`actor` 为已通过入口鉴权的审计操作人。返回首次登记发票的当前登记视图及正式分配行。
     ///
-    /// # 返回
-    /// 返回首次登记发票的当前登记视图及正式分配行。
-    ///
-    /// # 错误
-    /// 请求、供应商、号码、分配及额度校验保持原先顺序；异载荷返回冲突，
-    /// 回执损坏返回内部错误；提交结果未知且查证失败时保留原未知错误。
+    /// 请求、供应商、号码、分配及额度校验保持原先顺序；异载荷返回冲突，回执损坏返回内部错误；提交结果未知且查证失败时保留原未知错误。
     pub async fn register_purchase_invoice(
         &self,
         req: RegisterPurchaseInvoiceRequest,
@@ -76,11 +68,9 @@ impl PayableProcess {
     }
 
     /// 登记进项发票并在同一事务保存文件资产与发票附件关系。
-    /// # 参数
-    /// `req` 为登记命令，`pending` 为已上传文件，`actor` 为认证操作人。
-    /// # 返回
-    /// 登记视图与本次上传是否已提交；重放不消费新上传。
-    /// # 错误
+    ///
+    /// `req` 为登记命令，`pending` 为已上传文件，`actor` 为认证操作人。登记视图与本次上传是否已提交；重放不消费新上传。
+    ///
     /// 校验或事务失败返回错误；提交结果未知时保留原错误。
     pub async fn register_purchase_invoice_with_assets(
         &self,
@@ -115,7 +105,7 @@ impl PayableProcess {
     }
 }
 
-/// 用登记请求和操作人构造进项发票命令回执。
+// 用登记请求和操作人构造进项发票命令回执。
 fn purchase_invoice_receipt(
     req: &RegisterPurchaseInvoiceRequest,
     actor: &AuditActor,
@@ -130,7 +120,7 @@ fn purchase_invoice_receipt(
     )?)
 }
 
-/// 内容摘要参与指纹，重新上传同内容不受随机存储对象键影响。
+// 内容摘要参与指纹，重新上传同内容不受随机存储对象键影响。
 fn purchase_invoice_receipt_with_assets(
     req: &RegisterPurchaseInvoiceRequest,
     actor: &AuditActor,
@@ -164,26 +154,26 @@ struct PurchaseInvoiceRegistration {
 /// 只抽象本命令的编排边界，不为各财务仓储另建接口层。
 #[async_trait]
 trait PurchaseInvoiceCommandPort: Send + Sync {
-    /// 读取已提交回执中的发票 ID；没有回执时返回 `None`。
+    // 读取已提交回执中的发票 ID；没有回执时返回 `None`。
     async fn receipt_invoice_id(
         &self,
         receipt: &CommandReceipt,
         executor: &mut dyn Executor,
     ) -> Result<Option<InvoiceId>>;
-    /// 持久化本次进项发票登记。
+    // 未命中原登记回执时，在发票事务中按本次请求写入进项发票。
     async fn persist_invoice(
         &self,
         registration: &PurchaseInvoiceRegistration,
         executor: &mut dyn Executor,
     ) -> Result<Invoice>;
-    /// 在发票事务内持久化文件资产与关联。
+    // 在发票事务内持久化文件资产与关联。
     async fn persist_attachments(
         &self,
         registration: &PurchaseInvoiceRegistration,
         invoice: &Invoice,
         executor: &mut dyn Executor,
     ) -> Result<()>;
-    /// 保存本命令的发票回执及审计事件关联。
+    // 保存本命令的发票回执及审计事件关联。
     async fn save_receipt(
         &self,
         registration: &PurchaseInvoiceRegistration,
@@ -191,11 +181,11 @@ trait PurchaseInvoiceCommandPort: Send + Sync {
         audit_event_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<()>;
-    /// 按发票 ID 回读登记视图。
+    // 首次登记或回执查证后，按原发票 ID 回读登记视图，不重复过账。
     async fn registered_view(&self, invoice_id: &InvoiceId) -> Result<PurchaseInvoiceRegisteredView>;
 }
 
-/// 查证包含原视图回读；未知提交下任何查证失败均保留首次未知错误。
+// 查证包含原视图回读；未知提交下任何查证失败均保留首次未知错误。
 async fn finish_registration(
     port: &impl PurchaseInvoiceCommandPort,
     result: Result<InvoiceId>,
@@ -240,16 +230,13 @@ impl<P: PurchaseInvoiceCommandPort> AuditedCommand for RegisterPurchaseInvoiceCo
     type Error = Error;
     type Output = InvoiceId;
 
-    /// 已有回执则重放且不再写事件；否则先落发票再保存回执。
-    ///
-    /// # 参数
-    /// * `executor` - 查证与写入共用的执行器。
-    ///
-    /// # 返回
-    /// 回执已指向发票时返回 `AuditedWrite::Replayed`，不再写事件。否则返回 `AuditedWrite::Fresh`，结果为新发票 ID，事件只含含税、不含税和税额。
-    ///
-    /// # 错误
-    /// 回执查询、发票登记或回执保存失败时返回对应错误。
+    // 已有回执则重放且不再写事件；否则先落发票再保存回执。
+    //
+    // `executor` 为查证与写入共用的执行器。
+    //
+    // 回执已指向发票时返回 `AuditedWrite::Replayed`，不再写事件。否则返回 `AuditedWrite::Fresh`，结果为新发票 ID，事件只含含税、不含税和税额。
+    //
+    // 回执查询、发票登记或回执保存失败时返回对应错误。
     async fn execute(&self, executor: &mut dyn Executor) -> Result<AuditedWrite<InvoiceId>> {
         let registration = self.registration;
         if let Some(id) = self.port.receipt_invoice_id(&registration.receipt, executor).await? {
@@ -267,7 +254,7 @@ impl<P: PurchaseInvoiceCommandPort> AuditedCommand for RegisterPurchaseInvoiceCo
     }
 }
 
-/// 登记事件只记录含税、不含税和税额。
+// 登记事件只记录含税、不含税和税额。
 fn registered_event_content(invoice: &Invoice) -> Result<BusinessEventContent> {
     let (net, tax) = invoice.tax_breakdown()?;
     Ok(BusinessEventContent {
@@ -294,7 +281,7 @@ struct MongoPurchaseInvoiceCommand {
 }
 
 impl MongoPurchaseInvoiceCommand {
-    /// 一次快照内执行当前资格、幂等读取、来源读取和全部写入。
+    // 一次快照内执行当前资格、幂等读取、来源读取和全部写入。
     async fn register(
         &self,
         mut req: RegisterPurchaseInvoiceRequest,
@@ -351,17 +338,11 @@ impl PurchaseInvoiceCommandPort for MongoPurchaseInvoiceCommand {
             .await?)
     }
 
-    /// 先按分配顺序查证供应商，再写入进项发票。
-    ///
-    /// # 参数
-    /// * `registration` - 进项发票登记请求、发票草案与操作人。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 返回已持久化的进项发票。
-    ///
-    /// # 错误
-    /// 分配准备或发票写入失败时返回对应错误。供应商不存在时返回 `NotFound`；发票主体与供应商不一致时返回 `BusinessLogicError`。
+    // 先按分配顺序查证供应商，再写入进项发票。
+    //
+    // `registration` 为进项发票登记请求、发票草案与操作人；沿用调用方的执行器。返回已持久化的进项发票。
+    //
+    // 分配准备或发票写入失败时返回对应错误。供应商不存在时返回 `NotFound`；发票主体与供应商不一致时返回 `BusinessLogicError`。
     async fn persist_invoice(
         &self,
         registration: &PurchaseInvoiceRegistration,
@@ -452,7 +433,7 @@ impl PurchaseInvoiceCommandPort for MongoPurchaseInvoiceCommand {
     }
 }
 
-/// 按分配账户的首次出现顺序查证供应商，保持缺账户先于缺供应商的原首错语义。
+// 按分配账户的首次出现顺序查证供应商，保持缺账户先于缺供应商的原首错语义。
 async fn validate_supplier_parties(
     db: &Database,
     accounts: &[PayableAccount],
@@ -483,7 +464,7 @@ async fn validate_supplier_parties(
     Ok(())
 }
 
-/// 按分配计划中的账户顺序取子账；计划引用的子账不在已装载集合中时返回 `NotFound`。
+// 按分配计划中的账户顺序取子账；计划引用的子账不在已装载集合中时返回 `NotFound`。
 fn ordered_allocation_accounts<'a>(
     accounts: &'a [PayableAccount],
     plan: &PurchaseInvoiceAllocationPlan,

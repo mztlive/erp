@@ -13,16 +13,14 @@ use super::{
 };
 
 impl PurchasePaymentRequest {
-    /// 创建不占用额度的申请草稿。
-    ///
-    /// # 参数
-    /// * `id` - 服务端生成的申请身份。
-    /// * `data` - 采购填写的表单。
-    /// * `actor` - 已认证申请人。
-    /// # 返回
+    /// 采购人员新填付款申请时创建可编辑草稿，只校验表单、申请人及金额合计，不冻结来源或占用应付。
     /// 返回未冻结来源且不占用应付的草稿。
-    /// # 错误
     /// 表单或申请人无效、总金额溢出时返回错误。
+    ///
+    /// 输入约定：
+    /// - `id`：服务端生成的申请身份。
+    /// - `data`：采购填写的表单。
+    /// - `actor`：已认证申请人。
     pub fn new(id: String, data: PurchasePaymentRequestData, actor: &str) -> Result<Self> {
         let data = data.normalize()?;
         let total_amount = sum(data.lines.iter().map(|line| line.amount))?;
@@ -49,14 +47,12 @@ impl PurchasePaymentRequest {
         })
     }
 
-    /// 修改草稿、撤回或驳回后的申请资料。
-    ///
-    /// # 参数
-    /// * `data` - 新表单。
-    /// # 返回
+    /// 保存草稿、撤回件或驳回件的新表单；驳回状态及上一轮冻结材料保留，待重新提交时再替换。
     /// 成功时替换表单；已驳回状态保持，保留先前冻结材料至重新提交。
-    /// # 错误
     /// 审批中或已批准申请不可修改，表单非法时返回错误。
+    ///
+    /// 输入约定：
+    /// - `data`：新表单。
     pub fn update(&mut self, data: PurchasePaymentRequestData) -> Result<()> {
         self.ensure_editable()?;
         let data = data.normalize()?;
@@ -71,14 +67,12 @@ impl PurchasePaymentRequest {
         Ok(())
     }
 
-    /// 将已证明的来源和主体展示到草稿，不占用来源余额或启动审批。
-    ///
-    /// # 参数
-    /// * `submission` - 当前表单逐采购核验后的完整来源依据。
-    /// # 返回
+    /// 草稿展示需要核对逐采购来源、付款主体及账户时，保存已证实的依据，但不占用余额、启动审批或递增提交版本。
     /// 成功时替换当前草稿依据，提交版本、审批实例和业务状态保持原值。
-    /// # 错误
     /// 非可编辑状态、金额、来源、主体或账户不一致时返回错误。
+    ///
+    /// 输入约定：
+    /// - `submission`：当前表单逐采购核验后的完整来源依据。
     pub fn set_draft_basis(&mut self, submission: PaymentRequestSubmission) -> Result<()> {
         self.ensure_editable()?;
         validate_submission(self, &submission)?;
@@ -87,14 +81,12 @@ impl PurchasePaymentRequest {
         Ok(())
     }
 
-    /// 冻结本次来源与账户并开启新的审批版本。
-    ///
-    /// # 参数
-    /// * `submission` - 同一事务证明的来源、余额、主体和账户快照。
-    /// # 返回
+    /// 申请提交审批时冻结同一事务核验的逐采购来源、主体及账户，递增提交与审批主题版本，并清除旧审批和执行绑定。
     /// 成功时状态变为审批中，批准与执行绑定清空。
-    /// # 错误
     /// 状态、金额、主体、来源、账户不一致或版本溢出时返回错误。
+    ///
+    /// 输入约定：
+    /// - `submission`：同一事务证明的来源、余额、主体和账户快照。
     pub fn submit(&mut self, submission: PaymentRequestSubmission) -> Result<()> {
         self.ensure_editable()?;
         validate_submission(self, &submission)?;
@@ -111,13 +103,8 @@ impl PurchasePaymentRequest {
         Ok(())
     }
 
-    /// 最终审批通过，只授予已冻结的逐采购额度。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
+    /// 最终审批通过时将申请转为待付款；只授予本轮已冻结的逐采购额度，不改变申请金额。
     /// 成功时状态变为待付款，金额不变。
-    /// # 错误
     /// 非审批中状态返回错误。
     pub fn approve(&mut self) -> Result<()> {
         self.ensure_in_approval()?;
@@ -125,38 +112,32 @@ impl PurchasePaymentRequest {
         Ok(())
     }
 
-    /// 驳回申请，释放全部未付占用，不自动重启审批。
-    ///
-    /// # 参数
-    /// * `reason` - 必填驳回理由。
-    /// # 返回
+    /// 本轮审批驳回时记录必填理由并解除执行绑定；调用方同时释放全部未付占用，不自动开始下一轮。
     /// 成功时变为已驳回，并取消执行绑定。
-    /// # 错误
     /// 非审批中或理由无效返回错误。
+    ///
+    /// 输入约定：
+    /// - `reason`：必填驳回理由。
     pub fn reject(&mut self, reason: &str) -> Result<()> {
         self.stop_approval(PurchasePaymentRequestStatus::Rejected, reason)
     }
 
-    /// 合法撤回审批，释放全部未付占用。
-    ///
-    /// # 参数
-    /// * `reason` - 必填撤回理由。
-    /// # 返回
+    /// 撤回正在进行的审批时记录理由并将申请转为已撤回；调用方释放未付占用，重提须另冻一轮依据。
     /// 成功时变为已撤回；重提仍需冻结新版本。
-    /// # 错误
     /// 非审批中或理由无效返回错误。
+    ///
+    /// 输入约定：
+    /// - `reason`：必填撤回理由。
     pub fn withdraw(&mut self, reason: &str) -> Result<()> {
         self.stop_approval(PurchasePaymentRequestStatus::Withdrawn, reason)
     }
 
-    /// 显式终止原批准付款授权，释放未付额度并保留已付款历史。
-    ///
-    /// # 参数
-    /// * `reason` - 必填关闭理由。
-    /// # 返回
+    /// 经办人终止已批准的付款授权时，保留净已付款和历史，只关闭未付额度供调用方释放占用。尚有预存款占用时先核实执行结果。
     /// 返回需在同一事务释放的逐应付金额；已付清返回空集合。
-    /// # 错误
     /// 非待付款、部分付款或已付清，或理由无效时返回错误。
+    ///
+    /// 输入约定：
+    /// - `reason`：必填关闭理由。
     pub fn close(&mut self, reason: &str) -> Result<Vec<PaymentRequestAllocation>> {
         if !self.deposit_reservations.is_empty() {
             return Err(Error::from("预存款仍有占用或扣款待核销，请先核实原执行结果"));
@@ -175,14 +156,12 @@ impl PurchasePaymentRequest {
         Ok(released)
     }
 
-    /// 登记批准范围内实际付款，不允许跨采购转移额度。
-    ///
-    /// # 参数
-    /// * `allocations` - 本次逐应付付款金额。
-    /// # 返回
+    /// 实际付款过账时按原批准采购逐行累计已付金额，禁止用某一采购的余额支付另一采购。
     /// 成功时增加净已付；付清变为已付清，否则为部分付款。
-    /// # 错误
     /// 未批准、重复应付、非正金额或超过逐行未付额度时返回错误。
+    ///
+    /// 输入约定：
+    /// - `allocations`：本次逐应付付款金额。
     pub fn record_payment(&mut self, allocations: &[PaymentRequestAllocation]) -> Result<()> {
         self.require_bank_execution()?;
         self.record_authorized_payment(allocations)
@@ -212,14 +191,12 @@ impl PurchasePaymentRequest {
         Ok(())
     }
 
-    /// 记录付款冲正；已关闭申请不恢复原批准授权。
-    ///
-    /// # 参数
-    /// * `allocations` - 原申请各采购行的本次冲正金额。
-    /// # 返回
-    /// 未关闭申请恢复逐行未付，已关闭申请增加关闭金额。
-    /// # 错误
+    /// 原付款冲正时扣回各采购的净已付；申请已关闭则不恢复原批准授权。
+    /// 结果：未关闭申请恢复逐行未付，已关闭申请增加关闭金额。
     /// 状态不含实际付款、重复应付或超过净已付金额时返回错误。
+    ///
+    /// 输入约定：
+    /// - `allocations`：原申请各采购行的本次冲正金额。
     pub fn reverse_payment(&mut self, allocations: &[PaymentRequestAllocation]) -> Result<()> {
         if !matches!(
             self.status,
@@ -253,50 +230,30 @@ impl PurchasePaymentRequest {
         Ok(())
     }
 
-    /// 返回申请净已付金额。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
+    /// 汇总逐采购净已付款，供展示和状态判断使用，部分冲正按净额反映。
     /// 返回各采购行净已付合计。
-    /// # 错误
-    /// 不返回错误，逐行受申请总额约束。
+    /// 逐行受申请总额约束。
     pub fn paid_amount(&self) -> Amount {
         self.lines.iter().fold(Amount::zero(), |total, line| total.checked_add(line.paid_amount))
     }
 
-    /// 返回申请已关闭金额。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
+    /// 汇总已关闭的逐采购金额，供付款进度判断时区分关闭尾款与实际已付。
     /// 返回各采购行关闭金额合计。
-    /// # 错误
-    /// 不返回错误。
     pub fn closed_amount(&self) -> Amount {
         self.lines.iter().fold(Amount::zero(), |total, line| total.checked_add(line.closed_amount))
     }
 
-    /// 返回申请尚未支付且未关闭的金额。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
+    /// 汇总逐采购未支付且未关闭的金额，供判断申请还有多少额度待处理。
     /// 返回各采购行未付合计。
-    /// # 错误
-    /// 不返回错误。
     pub fn remaining(&self) -> Amount {
         self.lines.iter().fold(Amount::zero(), |total, line| total.checked_add(line.remaining()))
     }
 
-    /// 返回该申请占用指定应付的未付额度。
+    /// 按源应付查询本申请仍占用的未付金额，供余额校验与释放操作定位对应额度。
+    /// 结果：审批中、待付款和部分付款返回行未付金额；其余状态为零。
     ///
-    /// # 参数
-    /// * `account_id` - 应付身份。
-    /// # 返回
-    /// 审批中、待付款和部分付款返回行未付金额；其余状态为零。
-    /// # 错误
-    /// 不返回错误。
+    /// 输入约定：
+    /// - `account_id`：应付身份。
     pub fn reserved_for(&self, account_id: &str) -> Amount {
         if !self.status.occupies() {
             return Amount::zero();
@@ -308,14 +265,8 @@ impl PurchasePaymentRequest {
             .unwrap_or(Amount::zero())
     }
 
-    /// 返回全部需处理的逐应付未付金额。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
+    /// 列出仍有未付金额的应付来源，供调用方逐来源更新或释放占用。
     /// 返回非零未付采购行，保持提交顺序。
-    /// # 错误
-    /// 不返回错误。
     pub fn remaining_allocations(&self) -> Vec<PaymentRequestAllocation> {
         self.lines
             .iter()

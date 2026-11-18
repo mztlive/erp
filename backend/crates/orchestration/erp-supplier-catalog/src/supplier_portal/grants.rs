@@ -13,11 +13,11 @@ use crate::{Error, Result};
 
 impl SupplierPortalProcess {
     /// 在供应商对象范围内读取定向报价记录。
-    /// # 参数
+    ///
     /// 指定供应商及内部真实身份。
-    /// # 返回
+    ///
     /// 返回精确供应商的开放记录。
-    /// # 错误
+    ///
     /// 无对象范围时拒绝。
     pub async fn quote_access_list(
         &self,
@@ -51,11 +51,11 @@ impl SupplierPortalProcess {
     }
 
     /// 开放或撤销本供应商对指定SKU的首次报价资格。
-    /// # 参数
+    ///
     /// 供应商、精确SKU、原开放版本及内部真实身份。
-    /// # 返回
+    ///
     /// 返回已保存的定向开放版本。
-    /// # 错误
+    ///
     /// 对象范围、商品状态或版本失效时拒绝。
     pub async fn quote_access_update(
         &self,
@@ -105,7 +105,7 @@ impl SupplierPortalProcess {
         .await
     }
 
-    /// 定向报价的商品来源授权在首执行和收据回放前均执行。
+    // 定向报价的商品来源授权在首执行和收据回放前均执行。
     async fn quote_product_access(
         &self,
         input: &PortalGrantInput,

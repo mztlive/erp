@@ -34,12 +34,8 @@ pub(super) struct Context {
 }
 impl Context {
     /// 载入生效销售需求及其履约记录。
-    /// # 参数
-    /// 用例实例、销售身份及当前执行器。
-    /// # 返回
-    /// 返回同一事务中的销售来源上下文。
-    /// # 错误
-    /// 销售未生效、已关闭或加密记录不可读时拒绝。
+    ///
+    /// 用例实例、销售身份及当前执行器。返回同一事务中的销售来源上下文。销售未生效、已关闭或加密记录不可读时拒绝。
     pub async fn load(process: &FulfillmentProcess, id: &str, executor: &mut dyn Executor) -> Result<Self> {
         let db = &process.db;
         let sales = db
@@ -89,12 +85,8 @@ impl Context {
         })
     }
     /// 生成编辑上下文的并发版本。
-    /// # 参数
-    /// 可选的当前发货身份。
-    /// # 返回
-    /// 销售、安排与任务版本组合。
-    /// # 错误
-    /// 不返回错误。
+    ///
+    /// 可选的当前发货身份。销售、安排与任务版本组合。
     pub fn version(&self, delivery: Option<&str>) -> String {
         let task_version = delivery
             .and_then(|id| self.deliveries.iter().find(|row| row.base.id == id))
@@ -109,22 +101,14 @@ impl Context {
         )
     }
     /// 选取当前任务的真实发货行。
-    /// # 参数
-    /// 发货身份。
-    /// # 返回
-    /// 该任务的发货行。
-    /// # 错误
-    /// 不返回错误。
+    ///
+    /// 发货身份。该任务的发货行。
     pub fn task_lines(&self, id: &str) -> Vec<DeliveryLine> {
         self.lines.iter().filter(|row| row.delivery_id.as_ref() == id).cloned().collect()
     }
     /// 载入冻结地址并分配未冻结任务。
-    /// # 参数
-    /// 用例实例及当前执行器。
-    /// # 返回
-    /// 上下文保存地址快照与采购来源。
-    /// # 错误
-    /// 冻结地址无法核对、来源缺失或解密失败时拒绝。
+    ///
+    /// 用例实例及当前执行器。上下文保存地址快照与采购来源。冻结地址无法核对、来源缺失或解密失败时拒绝。
     pub async fn load_snapshots(
         &mut self,
         process: &FulfillmentProcess,
@@ -168,22 +152,14 @@ impl Context {
         Ok(())
     }
     /// 获取任务的销售及采购来源版本。
-    /// # 参数
-    /// 当前发货记录。
-    /// # 返回
-    /// 来源版本组合。
-    /// # 错误
-    /// 采购缺少生效版本或来源未载入时拒绝。
+    ///
+    /// 当前发货记录。来源版本组合。采购缺少生效版本或来源未载入时拒绝。
     pub fn source_version(&self, delivery: &Delivery) -> Result<String> {
         self.sources.as_ref().ok_or_else(|| Error::Internal("收货来源未载入".into()))?.version(self, delivery)
     }
     /// 生成限定编辑范围的收货安排。
-    /// # 参数
-    /// 可选的发货身份。
-    /// # 返回
-    /// 含只读已发地址的编辑上下文。
-    /// # 错误
-    /// 任务来源与销售安排无法核对时拒绝。
+    ///
+    /// 可选的发货身份。含只读已发地址的编辑上下文。任务来源与销售安排无法核对时拒绝。
     pub fn view(&self, target: Option<&str>) -> Result<AddressArrangementView> {
         let (capacities, plan) = if let Some(id) = target {
             self.task_plan(id)?
@@ -249,12 +225,8 @@ impl Context {
         result
     }
     /// 将任务地址映射到真实发货行。
-    /// # 参数
-    /// 发货身份。
-    /// # 返回
-    /// 当前任务数量上限及完整地址。
-    /// # 错误
-    /// 商品或地址无法匹配当前销售需求时拒绝。
+    ///
+    /// 发货身份。当前任务数量上限及完整地址。商品或地址无法匹配当前销售需求时拒绝。
     pub fn task_plan(&self, id: &str) -> Result<(Vec<ArrangementCapacity>, Vec<ArrangementLine>)> {
         let lines = self.task_lines(id);
         let mut capacities = vec![];
@@ -298,13 +270,9 @@ impl Context {
         Ok((capacities, plan))
     }
 }
-/// 校验销售范围及操作权限。
-/// # 参数
-/// 用例实例、销售身份、操作人、写入标志及执行器。
-/// # 返回
-/// 授权通过。
-/// # 错误
-/// 无对象范围或操作权限时拒绝。
+// 校验销售范围及操作权限。
+//
+// 用例实例、销售身份、操作人、写入标志及执行器。授权通过。无对象范围或操作权限时拒绝。
 pub(super) async fn authorize_sales(
     process: &FulfillmentProcess,
     id: &str,
@@ -319,13 +287,9 @@ pub(super) async fn authorize_sales(
         .await?;
     Ok(())
 }
-/// 校验当前履约任务处理权限。
-/// # 参数
-/// 用例实例、发货身份、操作人及执行器。
-/// # 返回
-/// 可编辑的发货记录。
-/// # 错误
-/// 非当前处理人、无执行权限、已发货或接口订单时拒绝。
+// 校验当前履约任务处理权限。
+//
+// 用例实例、发货身份、操作人及执行器。可编辑的发货记录。非当前处理人、无执行权限、已发货或接口订单时拒绝。
 pub(super) async fn authorize_delivery(
     process: &FulfillmentProcess,
     id: &str,
@@ -358,13 +322,9 @@ pub(super) async fn authorize_delivery(
     Ok(delivery)
 }
 
-/// 按独立收货安排扣除冻结任务，再为未冻结任务确定分配。
-/// # 参数
-/// 数据库、密文服务、指纹密钥、当前发货、来源版本及执行器。
-/// # 返回
-/// 独立安排生成的当前任务地址；未配置或版本失效时返回空。
-/// # 错误
-/// 历史地址不可核对、解密失败或已发数量被挪用时拒绝。
+// 按独立收货安排扣除冻结任务，再为未冻结任务确定分配。
+//
+// 数据库、密文服务、指纹密钥、当前发货、来源版本及执行器。独立安排生成的当前任务地址；未配置或版本失效时返回空。历史地址不可核对、解密失败或已发数量被挪用时拒绝。
 pub(in crate::fulfillment_execution) async fn planned_source(
     db: &Database,
     codec: &SensitiveDataCodec,

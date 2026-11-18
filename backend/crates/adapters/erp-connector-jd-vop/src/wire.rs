@@ -52,7 +52,7 @@ struct RpcResult {
     result: Option<Box<RawValue>>,
 }
 
-/// 按官方方法键及该方法的 RPC 键解码，网关错误与业务错误独立处理。
+// 收到 HTTP 正文后，按请求的官方方法键及 RPC 封装键取出业务结果，分别处理网关失败和业务失败，不以 HTTP 成功代替它们。
 pub(super) fn decode<T: DeserializeOwned>(body: &[u8], method: &str, rpc: &str) -> ConnectorResult<T> {
     if body.len() > 8 * 1024 * 1024 {
         return Err(mapping("京东返回的资料过多，无法读取，请缩小查询范围或联系管理员核对"));
@@ -92,7 +92,7 @@ fn validate_gateway_code(fields: &BTreeMap<String, Box<RawValue>>) -> ConnectorR
     Ok(())
 }
 
-/// 先验证业务成功；仅消息查询允许已实测的空队列省略结果字段。
+// 先核对 RPC 业务成功标记及结果码，再反序列化业务数据。只有消息轮询可按已验行为把缺失的结果视为空队列。
 fn decode_result<T: DeserializeOwned>(envelope: RpcResult, method: &str) -> ConnectorResult<T> {
     let success_code = envelope.code.0 == "0000"
         || (method == "jingdong.vop.message.queryTransByVopNormal" && envelope.code.0 == "success");

@@ -38,18 +38,7 @@ pub struct UnitOfMeasureData {
 }
 
 impl UnitOfMeasureData {
-    /// 以稳定单位代码、名称与符号构造创建数据。
-    ///
-    /// # 参数
-    /// * `unit_code` - 稳定单位代码
-    /// * `name` - 单位名称
-    /// * `symbol` - 单位符号
-    ///
-    /// # 返回
-    /// 返回小数位为 0、状态为启用的创建数据。
-    ///
-    /// # 错误
-    /// 无。
+    /// 以稳定单位代码、名称与符号构造创建数据。返回小数位为 0、状态为启用的创建数据。
     pub fn new(unit_code: impl Into<String>, name: impl Into<String>, symbol: impl Into<String>) -> Self {
         Self {
             unit_code: unit_code.into(),
@@ -62,29 +51,13 @@ impl UnitOfMeasureData {
 
     /// 设置允许数量小数位。
     ///
-    /// # 参数
-    /// * `quantity_scale` - 允许数量小数位（`0..=6`）
-    ///
-    /// # 返回
-    /// 返回更新后的创建数据。
-    ///
-    /// # 错误
-    /// 无。
+    /// `quantity_scale` 为允许数量小数位（`0..=6`）。
     pub fn with_quantity_scale(mut self, quantity_scale: u8) -> Self {
         self.quantity_scale = quantity_scale;
         self
     }
 
     /// 设置启停状态。
-    ///
-    /// # 参数
-    /// * `status` - 启停状态
-    ///
-    /// # 返回
-    /// 返回更新后的创建数据。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_status(mut self, status: EnableStatus) -> Self {
         self.status = status;
         self
@@ -125,7 +98,7 @@ pub struct UnitOfMeasure {
 }
 
 impl PartialEq for UnitOfMeasure {
-    /// 全字段语义相等。
+    // 逐字段比较计量单位，仅持有相同标识不视为内容相等。
     fn eq(&self, other: &Self) -> bool {
         self.base == other.base
             && self.stable.status == other.stable.status
@@ -144,19 +117,13 @@ impl Eq for UnitOfMeasure {}
 impl UnitOfMeasure {
     /// 创建计量单位。
     ///
-    /// 完成 unit_code/name/symbol 的校验与规范化（去首尾空白、非空、长度上限），
-    /// 并校验 `quantity_scale` 不超出固定点数量的小数位上限。
+    /// 完成 unit_code/name/symbol 的校验与规范化（去首尾空白、非空、长度上限），并校验 `quantity_scale`
+    /// 不超出固定点数量的小数位上限。
     ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::UnitOfMeasureId`）
-    /// * `data` - 创建数据
-    /// * `created_by` - 创建人（账号或系统身份）
-    ///
-    /// # 返回
-    /// 返回新建的单位实体。
-    ///
-    /// # 错误
     /// 当 unit_code/name/symbol 为空、超长，或 quantity_scale 越界时返回错误。
+    ///
+    /// - `id`：实体主键（`erp_core::ids::UnitOfMeasureId`）。
+    /// - `created_by`：创建人（账号或系统身份）。
     pub fn new(id: UnitOfMeasureId, data: UnitOfMeasureData, created_by: impl Into<String>) -> Result<Self> {
         let unit_code =
             normalize_required_text(data.unit_code, "单位代码不能为空", CODE_MAX_LEN, "单位代码过长")?;
@@ -179,14 +146,6 @@ impl UnitOfMeasure {
     ///
     /// 复用 `new` 的校验规则；`unit_code` 是稳定代码，不允许在通用更新中修改。
     ///
-    /// # 参数
-    /// * `update` - 更新数据
-    /// * `updated_by` - 本次更新执行人
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 当更新字段校验失败时返回错误。
     pub fn update(&mut self, update: UnitOfMeasureUpdate, updated_by: impl Into<String>) -> Result<()> {
         if let Some(name) = update.name {
@@ -207,31 +166,15 @@ impl UnitOfMeasure {
         Ok(())
     }
 
-    /// 判断单位是否处于启用状态。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 状态为 `Active` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 读取计量单位的启用标记，供调用方过滤停用记录。
     pub fn is_active(&self) -> bool {
         self.stable.status().is_active()
     }
 }
 
-/// 校验数量小数位不超出固定点数量上限。
-///
-/// # 参数
-/// * `scale` - 允许数量小数位
-///
-/// # 返回
-/// `0..=6` 内返回 `Ok(())`。
-///
-/// # 错误
-/// 超过 6 位时返回错误。
+// 校验数量小数位不超出固定点数量上限。
+//
+// `0..=6` 内返回 `Ok(())`。超过 6 位时返回错误。
 fn ensure_quantity_scale(scale: u8) -> Result<()> {
     if scale > MAX_QUANTITY_SCALE {
         return Err(Error::from("数量小数位最多 6 位"));
@@ -256,7 +199,7 @@ mod tests {
         }
     }
 
-    /// happy path：字段 trim 规范化，合法小数位通过。
+    // 字段 去除首尾空白，合法小数位通过。
     #[test]
     fn new_trims_and_normalizes_fields() {
         let unit = UnitOfMeasure::new(UnitOfMeasureId::new("uom-1"), data(), "admin-1").unwrap();
@@ -268,7 +211,7 @@ mod tests {
         assert!(unit.is_active());
     }
 
-    /// 失败路径：必填空、越界（小数位 > 6）各一条。
+    // 必填空、越界（小数位 > 6）均应拒绝。
     #[test]
     fn new_rejects_empty_and_out_of_range_scale() {
         let empty_code = UnitOfMeasureData { unit_code: "  ".to_string(), ..data() };
@@ -278,7 +221,7 @@ mod tests {
         assert!(UnitOfMeasure::new(UnitOfMeasureId::new("uom-1"), over_range, "admin-1").is_err());
     }
 
-    /// 边界：0 与 6 位小数均合法。
+    // 0 与 6 位小数均合法。
     #[test]
     fn quantity_scale_boundaries_are_accepted() {
         for scale in [0, 6] {
@@ -292,7 +235,7 @@ mod tests {
         }
     }
 
-    /// update 修改名称/符号/小数位并 touch 审计人；稳定代码不可修改。
+    // 更新时修改名称/符号/小数位并更新审计人；稳定代码不可修改。
     #[test]
     fn update_applies_fields_and_preserves_code() {
         let mut unit = UnitOfMeasure::new(UnitOfMeasureId::new("uom-1"), data(), "admin-1").unwrap();
@@ -318,7 +261,7 @@ mod tests {
         assert!(unit.update(over_range_update, "admin-2").is_err());
     }
 
-    /// 状态机：合法迁移通过，邻接矩阵对称闭合。
+    // 锁定计量单位启停的正向、反向与幂等迁移，防止状态表缺边。
     #[test]
     fn status_transitions_follow_document_state() {
         assert!(ensure_transition(EnableStatus::Active, EnableStatus::Disabled).is_ok());

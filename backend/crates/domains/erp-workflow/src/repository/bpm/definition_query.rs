@@ -24,16 +24,11 @@ struct DefinitionProcessKindProjection {
 
 impl<'a> BpmWorkflowRepository<'a> {
     /// 只读取定义的真实流程种类，供完整图读取前构造授权目标。
-    ///
-    /// # 参数
-    /// * `definition_id` - 精确流程定义 ID。
-    /// * `executor` - 调用方原快照事务执行器。
-    ///
-    /// # 返回
     /// 返回未删除定义的流程种类；定义缺失时返回 `None`。
     ///
-    /// # 错误
     /// 数据库读取或流程种类反序列化失败时返回错误。
+    ///
+    /// `definition_id`：精确流程定义 ID；`executor`：调用方原快照事务执行器。
     pub async fn definition_process_kind(
         &self,
         definition_id: &ApprovalProcessDefinitionId,
@@ -52,15 +47,8 @@ impl<'a> BpmWorkflowRepository<'a> {
     }
 
     /// 查询同一流程种类当前唯一已发布定义。
-    ///
-    /// # 参数
-    /// * `process_kind` - 流程种类。
-    /// * `executor` - 数据访问执行器。
-    ///
-    /// # 返回
     /// 返回当前已发布定义；没有时返回 `None`。
     ///
-    /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
     pub async fn find_published_by_process_kind(
         &self,
@@ -71,19 +59,13 @@ impl<'a> BpmWorkflowRepository<'a> {
     }
 
     /// 读取同一流程种类未删除定义的最高持久化业务版本。
+    /// 查询只投影版本字段并限制一条，不分配或递增版本，且必须保留软删除过滤。
     ///
-    /// # 参数
-    /// * `process_kind` - 需要读取版本事实的流程种类
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回按业务版本倒序命中的首个版本；没有历史定义时返回 `None`。
     ///
-    /// # 错误
     /// MongoDB 查询或投影反序列化失败时返回错误。
     ///
-    /// # 关键业务约束
-    /// 查询只投影版本字段并限制一条，不分配或递增版本，且必须保留软删除过滤。
+    /// `process_kind`：需要读取版本事实的流程种类；`executor`：数据访问执行器，由 Service 决定是否位于事务中。
     pub async fn latest_definition_version(
         &self,
         process_kind: ProcessKind,
@@ -101,15 +83,8 @@ impl<'a> BpmWorkflowRepository<'a> {
     }
 
     /// 列出同一流程种类的历史定义版本，按业务版本倒序且有上限。
-    ///
-    /// # 参数
-    /// * `process_kind` - 流程种类。
-    /// * `executor` - 数据访问执行器。
-    ///
-    /// # 返回
     /// 按业务版本倒序返回至多 `MAX_DEFINITION_VERSIONS` 条未删除定义。
     ///
-    /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
     pub async fn list_definition_versions(
         &self,
@@ -127,15 +102,8 @@ impl<'a> BpmWorkflowRepository<'a> {
     }
 
     /// 查询同一流程种类当前活动草稿。
-    ///
-    /// # 参数
-    /// * `process_kind` - 流程种类。
-    /// * `executor` - 数据访问执行器。
-    ///
-    /// # 返回
     /// 返回当前活动草稿；没有时返回 `None`。
     ///
-    /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
     pub async fn find_active_draft(
         &self,
@@ -146,15 +114,8 @@ impl<'a> BpmWorkflowRepository<'a> {
     }
 
     /// 批量读取定义及其节点、连线，禁止按节点 N+1。
-    ///
-    /// # 参数
-    /// * `definition_id` - 流程定义 ID。
-    /// * `executor` - 数据访问执行器。
-    ///
-    /// # 返回
     /// 定义不存在时返回 `None`；否则返回定义及其有界节点、连线。
     ///
-    /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
     pub async fn load_definition_graph(
         &self,
@@ -171,19 +132,14 @@ impl<'a> BpmWorkflowRepository<'a> {
 
     /// 按流程种类列表一次读取发布与草稿版本目录投影。
     ///
-    /// # 参数
-    /// * `process_kinds` - 调用方已去权后的流程种类；可含重复
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 按去重后的输入顺序返回每种流程的发布/草稿版本；缺失种类两个版本均为空。
-    ///
-    /// # 错误
-    /// 同一流程同一状态出现多条未删除定义，或 MongoDB 查询失败时返回错误。
-    ///
-    /// # 关键业务约束
     /// 查询次数固定为 0（空输入）或 1，不随种类数量线性增长；退役定义不进入投影；
     /// 历史重复发布/草稿状态必须失败关闭，不得取第一条。
+    ///
+    /// 按去重后的输入顺序返回每种流程的发布/草稿版本；缺失种类两个版本均为空。
+    ///
+    /// 同一流程同一状态出现多条未删除定义，或 MongoDB 查询失败时返回错误。
+    ///
+    /// `process_kinds`：调用方已去权后的流程种类；可含重复；`executor`：数据访问执行器，由 Service 决定是否位于事务中。
     pub async fn definition_catalog_facts(
         &self,
         process_kinds: &[ProcessKind],
@@ -207,19 +163,13 @@ impl<'a> BpmWorkflowRepository<'a> {
     }
 
     /// 读取某流程种类当前唯一已发布定义及其节点、连线，定义文档只读一次。
+    /// 草稿与退役不得命中；重复已发布必须失败关闭；本方法不把状态解释为可绑定结论。
     ///
-    /// # 参数
-    /// * `process_kind` - 需要绑定或复制的流程种类
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 存在唯一已发布定义时返回完整图；无发布时返回 `None`。
     ///
-    /// # 错误
     /// 同一流程出现多条已发布定义，或 MongoDB 查询失败时返回错误。
     ///
-    /// # 关键业务约束
-    /// 草稿与退役不得命中；重复已发布必须失败关闭；本方法不把状态解释为可绑定结论。
+    /// `process_kind`：需要绑定或复制的流程种类；`executor`：数据访问执行器，由 Service 决定是否位于事务中。
     pub async fn load_published_definition_graph(
         &self,
         process_kind: ProcessKind,
@@ -244,7 +194,7 @@ impl<'a> BpmWorkflowRepository<'a> {
         Ok(Some(DefinitionGraph { definition, nodes, transitions }))
     }
 
-    /// 按定义 ID 有界读取节点，不超过 `MAX_DEFINITION_GRAPH_DOCS`。
+    // 按定义 ID 取图节点，最多接受 `MAX_DEFINITION_GRAPH_DOCS` 条；维持图加载边界。
     async fn load_definition_nodes(
         &self,
         definition_id: &ApprovalProcessDefinitionId,
@@ -260,7 +210,7 @@ impl<'a> BpmWorkflowRepository<'a> {
         .await
     }
 
-    /// 按定义 ID 有界读取连线，上限为节点上限的两倍。
+    // 按定义 ID 取图连线，采用节点上限的两倍作为读取边界。
     async fn load_definition_transitions(
         &self,
         definition_id: &ApprovalProcessDefinitionId,
@@ -277,7 +227,7 @@ impl<'a> BpmWorkflowRepository<'a> {
     }
 }
 
-/// 已发布种类过滤；软删除由 `Repository::find_one` 追加，本函数不写 `deleted_at`。
+// 查询当前发布定义时按种类和发布状态定位；不手写 `deleted_at`，由 `find_one` 应用软删除条件。
 fn published_kind_filter(process_kind: ProcessKind) -> Document {
     doc! {
         "process_kind": process_kind.as_str(),
@@ -285,26 +235,18 @@ fn published_kind_filter(process_kind: ProcessKind) -> Document {
     }
 }
 
-/// 构造直接 `find_many` 使用的已发布定义过滤，含软删除约束。
-///
-/// # 参数
-/// * `process_kind` - 流程种类
-///
-/// # 返回
-/// 返回 `PUBLISHED`、流程种类与 `deleted_at` 条件。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// `Repository::find_one` 会自行补软删除条件；`mongo_ops::find_many` 必须显式带上。
+// 构造直接 `find_many` 使用的已发布定义过滤，含软删除约束。
+//
+// `Repository::find_one` 会自行补软删除条件；`mongo_ops::find_many` 必须显式带上。
+//
+// 返回 `PUBLISHED`、流程种类与 `deleted_at` 条件。
 pub(super) fn published_kind_docs_filter(process_kind: ProcessKind) -> Document {
     let mut filter = published_kind_filter(process_kind);
     filter.insert("deleted_at", NOT_DELETED_TIMESTAMP_BSON);
     filter
 }
 
-/// 活动草稿过滤；软删除由 `Repository::find_one` 追加。
+// 查询该流程种类的活动草稿；未删除筛选交由 `Repository::find_one` 追加。
 fn active_draft_filter(process_kind: ProcessKind) -> Document {
     doc! {
         "process_kind": process_kind.as_str(),
@@ -312,16 +254,10 @@ fn active_draft_filter(process_kind: ProcessKind) -> Document {
     }
 }
 
-/// 构造节点或连线的定义子文档过滤，并显式带上软删除约束。
-///
-/// # 参数
-/// * `definition_id` - 所属流程定义 ID。
-///
-/// # 返回
-/// 返回含 `process_definition_id` 与 `deleted_at` 的查询文档。
-///
-/// # 错误
-/// 不返回错误。
+// 构造节点或连线的定义子文档过滤，并显式带上软删除约束。
+// 返回含 `process_definition_id` 与 `deleted_at` 的查询文档。
+//
+// `definition_id`：所属流程定义 ID。
 pub(super) fn definition_child_filter(definition_id: &ApprovalProcessDefinitionId) -> Document {
     doc! {
         "process_definition_id": definition_id.as_ref(),
@@ -329,16 +265,8 @@ pub(super) fn definition_child_filter(definition_id: &ApprovalProcessDefinitionI
     }
 }
 
-/// 构造定义历史查询条件，前缀对齐 `idx_approval_process_definitions_history`。
-///
-/// # 参数
-/// * `process_kind` - 流程种类
-///
-/// # 返回
-/// 返回含 `process_kind` 与软删除约束的查询文档。
-///
-/// # 错误
-/// 不返回错误。
+// 构造定义历史查询条件，前缀对齐 `idx_approval_process_definitions_history`。
+// 返回含 `process_kind` 与软删除约束的查询文档。
 pub(super) fn definition_versions_filter(process_kind: ProcessKind) -> Document {
     doc! {
         "process_kind": process_kind.as_str(),
@@ -346,27 +274,16 @@ pub(super) fn definition_versions_filter(process_kind: ProcessKind) -> Document 
     }
 }
 
-/// 返回定义历史固定排序文档。
-///
-/// # 返回
-/// 返回 `{ definition_version: -1 }`。
+// 返回定义历史固定排序文档。
+// 返回 `{ definition_version: -1 }`。
 fn definition_versions_sort() -> Document {
     doc! { "definition_version": -1 }
 }
 
-/// 构建最高定义业务版本查询的限制与最小投影。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回按业务版本降序、限制一条且只读取版本字段的 MongoDB 查询选项。
-///
-/// # 错误
-/// 不返回错误。
-///
-/// # 关键业务约束
-/// 过滤条件由调用点单独提供；本选项不得读取完整定义或分配下一版本。
+// 构建最高定义业务版本查询的限制与最小投影。
+// 过滤条件由调用点单独提供；本选项不得读取完整定义或分配下一版本。
+//
+// 返回按业务版本降序、限制一条且只读取版本字段的 MongoDB 查询选项。
 pub(super) fn latest_definition_version_options() -> FindOptions {
     FindOptions::builder()
         .sort(definition_versions_sort())
@@ -375,38 +292,24 @@ pub(super) fn latest_definition_version_options() -> FindOptions {
         .build()
 }
 
-/// 从已按最高版本查询返回的投影行中读取首个业务版本。
-///
-/// # 参数
-/// * `rows` - MongoDB 按查询选项返回的零或一条版本投影
-///
-/// # 返回
-/// 有结果时返回首条业务版本；无历史定义时返回 `None`。
-///
-/// # 错误
-/// 不返回错误。
-///
-/// # 关键业务约束
-/// 不在内存重新排序或选择最大值，保持 Repository 查询契约单一。
+// 从已按最高版本查询返回的投影行中读取首个业务版本。
+// 不在内存重新排序或选择最大值，保持 Repository 查询契约单一。
+//
+// 有结果时返回首条业务版本；无历史定义时返回 `None`。
+//
+// `rows`：MongoDB 按查询选项返回的零或一条版本投影。
 pub(super) fn latest_definition_version_from_rows(
     rows: Vec<LatestDefinitionVersionProjection>,
 ) -> Option<u32> {
     rows.into_iter().next().map(|row| row.definition_version)
 }
 
-/// 去除重复流程种类并保持首次出现顺序。
-///
-/// # 参数
-/// * `process_kinds` - 调用方提供的流程种类，可为空或含重复
-///
-/// # 返回
-/// 返回去重后的种类列表。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 空输入必须得到空列表，查询次数不得因此变为按种类循环。
+// 去除重复流程种类并保持首次出现顺序。
+// 空输入必须得到空列表，查询次数不得因此变为按种类循环。
+//
+// 返回去重后的种类列表。
+//
+// `process_kinds`：调用方提供的流程种类，可为空或含重复。
 pub(super) fn unique_process_kinds(process_kinds: &[ProcessKind]) -> Vec<ProcessKind> {
     let mut seen = HashSet::new();
     let mut unique = Vec::new();
@@ -418,19 +321,12 @@ pub(super) fn unique_process_kinds(process_kinds: &[ProcessKind]) -> Vec<Process
     unique
 }
 
-/// 构造目录批量查询过滤：指定种类的未删除草稿或已发布定义。
-///
-/// # 参数
-/// * `process_kinds` - 已去重的流程种类
-///
-/// # 返回
-/// 返回含 `$in`、状态集合与软删除约束的查询文档。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 退役定义不得命中；软删除过滤必须保留。
+// 构造目录批量查询过滤：指定种类的未删除草稿或已发布定义。
+// 退役定义不得命中；软删除过滤必须保留。
+//
+// 返回含 `$in`、状态集合与软删除约束的查询文档。
+//
+// `process_kinds`：已去重的流程种类。
 pub(super) fn definition_catalog_filter(process_kinds: &[ProcessKind]) -> Document {
     doc! {
         "process_kind": {
@@ -446,19 +342,12 @@ pub(super) fn definition_catalog_filter(process_kinds: &[ProcessKind]) -> Docume
     }
 }
 
-/// 构造目录批量查询选项：最小投影、稳定排序与固定上限。
-///
-/// # 参数
-/// * `kind_count` - 去重后的种类数
-///
-/// # 返回
-/// 返回只读取种类/状态/版本的查询选项。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 上限必须能发现重复状态，不得用 `limit=种类数` 掩盖脏数据。
+// 构造目录批量查询选项：最小投影、稳定排序与固定上限。
+// 上限必须能发现重复状态，不得用 `limit=种类数` 掩盖脏数据。
+//
+// 返回只读取种类/状态/版本的查询选项。
+//
+// `kind_count`：去重后的种类数。
 pub(super) fn definition_catalog_options(kind_count: usize) -> FindOptions {
     let limit = i64::try_from(kind_count.saturating_mul(4))
         .unwrap_or(MAX_CATALOG_STATUS_ROWS)
@@ -475,20 +364,14 @@ pub(super) fn definition_catalog_options(kind_count: usize) -> FindOptions {
         .build()
 }
 
-/// 把目录投影行归组为每种流程至多一条发布与一条草稿事实。
-///
-/// # 参数
-/// * `process_kinds` - 已去重的请求种类，决定输出顺序
-/// * `rows` - 仓储一次查询返回的草稿/发布投影
-///
-/// # 返回
-/// 返回与请求种类等长的事实列表；缺失种类两个版本均为空。
-///
-/// # 错误
-/// 同一流程同一状态重复，或投影含退役状态时返回元数据越界。
-///
-/// # 关键业务约束
-/// 不得取第一条掩盖重复；退役不得被解释为发布或草稿。
+// 把目录投影行归组为每种流程至多一条发布与一条草稿事实。
+// 不得取第一条掩盖重复；退役不得被解释为发布或草稿。
+//
+// 返回与请求种类等长的事实列表；缺失种类两个版本均为空。
+//
+// 同一流程同一状态重复，或投影含退役状态时返回元数据越界。
+//
+// `process_kinds`：已去重的请求种类，决定输出顺序；`rows`：仓储一次查询返回的草稿/发布投影。
 pub(super) fn group_definition_catalog_rows(
     process_kinds: &[ProcessKind],
     rows: Vec<DefinitionCatalogRow>,
@@ -528,19 +411,14 @@ pub(super) fn group_definition_catalog_rows(
         .collect())
 }
 
-/// 从已发布查询结果取出唯一发布定义。
-///
-/// # 参数
-/// * `rows` - 按发布过滤返回的定义
-///
-/// # 返回
-/// 无命中返回 `None`；恰好一条已发布定义时返回该定义。
-///
-/// # 错误
-/// 命中多于一条时返回元数据越界。
-///
-/// # 关键业务约束
-/// 不得取第一条掩盖历史重复发布。
+// 从已发布查询结果取出唯一发布定义。
+// 不得取第一条掩盖历史重复发布。
+//
+// 无命中返回 `None`；恰好一条已发布定义时返回该定义。
+//
+// 命中多于一条时返回元数据越界。
+//
+// `rows`：按发布过滤返回的定义。
 pub(super) fn unique_published_definition(
     rows: Vec<ApprovalProcessDefinition>,
 ) -> Result<Option<ApprovalProcessDefinition>> {
@@ -551,27 +429,14 @@ pub(super) fn unique_published_definition(
     }
 }
 
-/// 将定义历史请求页大小夹紧到 `[1, MAX_DEFINITION_VERSIONS]`。
-///
-/// # 参数
-/// * `limit` - 调用方请求条数
-///
-/// # 返回
-/// 返回可交给 MongoDB `limit` 的有界整数。
+// 将定义历史请求页大小夹紧到 `[1, MAX_DEFINITION_VERSIONS]`。
+// 返回可交给 MongoDB `limit` 的有界整数。
 fn definition_versions_limit(limit: u32) -> i64 {
     clamp_limit(limit, MAX_DEFINITION_VERSIONS)
 }
 
-/// 返回定义连线一次批量读取上限（节点上限的两倍）。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回 `MAX_DEFINITION_GRAPH_DOCS.saturating_mul(2)`。
-///
-/// # 错误
-/// 不返回错误。
+// 返回定义连线一次批量读取上限（节点上限的两倍）。
+// 返回 `MAX_DEFINITION_GRAPH_DOCS.saturating_mul(2)`。
 pub(super) fn definition_graph_transition_limit() -> i64 {
     MAX_DEFINITION_GRAPH_DOCS.saturating_mul(2)
 }

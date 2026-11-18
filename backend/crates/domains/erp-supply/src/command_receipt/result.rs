@@ -35,28 +35,16 @@ pub struct RefreshReceipt {
 
 impl RefreshReceipt {
     /// 构造刷新命令的原结果并一次登记版本与计数。
-    ///
-    /// # 参数
-    /// * `request_id` - 原请求编号。
-    /// * `source_snapshot_hash` - 不可变来源快照摘要。
-    /// # 返回
     /// 返回待填充版本与计数的结果。
-    /// # 错误
-    /// 无；持久化边界统一校验。
+    /// 持久化边界统一校验。
+    /// `source_snapshot_hash`：不可变来源快照摘要。
     pub fn new(request_id: String, source_snapshot_hash: String) -> Self {
         Self { request_id, statement_version: 1, source_snapshot_hash, item_count: 0, difference_count: 0 }
     }
 
     /// 登记实际结算版本及明细、差异计数。
-    ///
-    /// # 参数
-    /// * `statement_version` - 本次结果版本。
-    /// * `item_count` - 结算项数量。
-    /// * `difference_count` - 差异数量。
-    /// # 返回
     /// 返回完整结果。
-    /// # 错误
-    /// 无；持久化边界统一校验。
+    /// 持久化边界统一校验。
     pub fn with_counts(mut self, statement_version: u64, item_count: usize, difference_count: usize) -> Self {
         self.statement_version = statement_version;
         self.item_count = item_count;
@@ -123,15 +111,9 @@ pub enum SupplyCommandResult {
 }
 
 impl SupplyCommandResult {
-    /// 动作目录显式限定每一种结果及其领域对象类型。
-    ///
-    /// # 参数
-    /// * `action` - 命令动作代码。
-    /// * `resource_type` - 命令目标类型。
-    /// # 返回
-    /// 动作、目标类型与结果目录完全一致时返回真。
-    /// # 错误
-    /// 无；不合法组合返回假。
+    // 动作目录显式限定每一种结果及其领域对象类型。
+    // 动作、目标类型与结果目录完全一致时返回真。
+    // 不合法组合返回假。
     pub(super) fn matches_action(&self, action: &str, resource_type: &str) -> bool {
         let (resource, matched) = match self {
             Self::Investigation(_) => (
@@ -174,15 +156,9 @@ impl SupplyCommandResult {
         matched && resource == resource_type
     }
 
-    /// 原结果引用和版本缺失时失败关闭，不当作未执行命令。
-    ///
-    /// # 参数
-    /// * `resource_id` - 原提交目标编号。
-    /// * `action` - 原命令动作代码。
-    /// # 返回
-    /// 原结果引用、版本及终态合法时返回真。
-    /// # 错误
-    /// 无；不完整结果返回假。
+    // 原结果引用和版本缺失时失败关闭，不当作未执行命令。
+    // 原结果引用、版本及终态合法时返回真。
+    // 不完整结果返回假。
     pub(super) fn valid_payload(&self, resource_id: &str, action: &str) -> bool {
         match self {
             Self::Investigation(value) => {
@@ -224,7 +200,7 @@ impl SupplyCommandResult {
 }
 
 impl ReviewDecisionReceipt {
-    /// 正式复核结果必须与原动作、金额结果和应付引用一致。
+    // 正式复核结果必须与原动作、金额结果和应付引用一致。
     fn valid_for(&self, action: &str) -> bool {
         if !has_text(&self.operation_id)
             || !positive_pair(self.statement_version, self.task_version)
@@ -243,11 +219,11 @@ impl ReviewDecisionReceipt {
     }
 }
 
-/// 结果身份拒绝空白值。
+// 结果身份拒绝空白值。
 fn has_text(value: &str) -> bool {
     !value.trim().is_empty()
 }
-/// 所有持久化原版本必须为正值。
+// 所有持久化原版本必须为正值。
 fn positive_pair(left: u64, right: u64) -> bool {
     left > 0 && right > 0
 }

@@ -11,11 +11,8 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
 /// 解析客户选品工作簿并保存当前询价权限绑定的预览。
-/// # 参数
 /// `state` 为应用，`actor` 为当前销售，`id` 为询价；multipart 包含 file 和 expected_version。
-/// # 返回
 /// 返回逐工作表、逐行校验结果及可确认预览。
-/// # 错误
 /// 文件大小、类型、字段、询价权限或需求版本无效时拒绝。
 pub async fn sales_import_preview(
     State(state): State<HttpState>,
@@ -33,11 +30,8 @@ pub async fn sales_import_preview(
 }
 
 /// 重验商品资格、输入指纹和当前版本后确认导入。
-/// # 参数
 /// `state`、`actor` 为当前应用及账号，`id` 为询价，`request` 为原预览与稳定命令。
-/// # 返回
 /// 返回已写入草稿及版本，同键重试返回原结果。
-/// # 错误
 /// 预览、授权、版本、商品资格或幂等载荷冲突时整体拒绝。
 pub async fn sales_import_confirm(
     State(state): State<HttpState>,

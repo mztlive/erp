@@ -70,16 +70,7 @@ pub struct CustomerRefundFilter {
 }
 
 impl Default for CustomerRefundFilter {
-    /// 返回首页空筛选（`page: 1`，`page_size: 20`）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回筛选为空、降序的首页过滤条件。
-    ///
-    /// # 错误
-    /// 无。
+    // 初始化客户退款单筛选：第一页、每页 20 条，业务筛选默认留空，默认降序排序。
     fn default() -> Self {
         Self {
             refund_no: None,
@@ -94,19 +85,8 @@ impl Default for CustomerRefundFilter {
 }
 
 impl QueryFilter for CustomerRefundFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// `refund_no` 为 `Some` 时做不区分大小写的字面量模糊匹配；`customer_id`、
-    /// `status` 为 `Some` 时分别精确匹配对应字段。缺省字段不加入条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 转换为 MongoDB 查询条件（自动追加未删除过滤）。
+    // `refund_no` 为 `Some` 时做不区分大小写的字面量模糊匹配；`customer_id`、`status` 为 `Some` 时分别精确匹配对应字段。缺省字段不加入条件。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_literal_regex_filter(&mut filter, "refund_no", self.refund_no.as_deref());
@@ -121,18 +101,8 @@ impl QueryFilter for CustomerRefundFilter {
 }
 
 impl Pagination for CustomerRefundFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// 不修正 `page`；`page_size` 由 `u32` 转为 `u64`。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 向仓储分页传递页码与单页条数。
+    // 不修正 `page`；`page_size` 由 `u32` 转为 `u64`。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -142,18 +112,10 @@ impl Pagination for CustomerRefundFilter {
 #[allow(async_fn_in_trait)]
 pub trait CustomerRefundRepositoryExt {
     /// 分页检索客户退款列表（投影查询）。
-    ///
     /// 只返回 [`CustomerRefundRow`] 所需的列表字段；退款单号支持字面量模糊匹配。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// 沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询、游标读取或计数错误。
     async fn search_customer_refunds(
         &self,
         filter: &CustomerRefundFilter,
@@ -161,17 +123,10 @@ pub trait CustomerRefundRepositoryExt {
     ) -> Result<PageResult<CustomerRefundRow>>;
 
     /// 批量按原事实取回客户退款（`$in`，用于累计冲正校验）。
-    ///
-    /// # 参数
-    /// * `receipt_ids` - 原回款 ID 集合（可为空）
-    /// * `entry_ids` - 原应收分录 ID 集合（可为空）
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回全部匹配退款。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// `receipt_ids` 为原回款 ID 集合（可为空）；`entry_ids` 为原应收分录 ID 集合（可为空）。
+    /// 沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询或游标读取错误。
     async fn find_refunds_by_originals(
         &self,
         receipt_ids: &[CustomerReceiptId],
@@ -211,7 +166,7 @@ impl CustomerRefundRepositoryExt for Repository<'_, CustomerRefund> {
     }
 }
 
-/// 保留原事实筛选：两个来源集合都非空时同时匹配，都为空时交给基础仓储查询全部未删除事实。
+// 保留原事实筛选：两个来源集合都非空时同时匹配，都为空时交给基础仓储查询全部未删除事实。
 fn customer_refund_originals_filter(
     receipt_ids: &[CustomerReceiptId],
     entry_ids: &[ReceivableEntryId],
@@ -219,10 +174,7 @@ fn customer_refund_originals_filter(
     originals_filter(receipt_ids, "original_receipt_id", entry_ids, "original_receivable_entry_id")
 }
 
-/// 客户退款列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
+// 客户退款列表投影字段。
 fn customer_refund_projection() -> Document {
     doc! {
         "id": 1,

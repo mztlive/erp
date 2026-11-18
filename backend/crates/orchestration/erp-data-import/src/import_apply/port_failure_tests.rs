@@ -35,9 +35,9 @@ impl ConfirmationWritePort for FailingConfirmationWrite {
     }
 }
 
-/// 先在本地应用领域决定，再经端口持久化。
-///
-/// 端口失败时返回错误，且不产生已完成结果。
+// 先在本地应用领域决定，再经端口持久化。
+//
+// 端口失败时返回错误，且不产生已完成结果。
 async fn complete_through_port(
     mut confirmation: LegacyImportConfirmation,
     port: &dyn ConfirmationWritePort,

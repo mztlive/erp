@@ -32,16 +32,9 @@ impl From<DirectorySelectedQuery> for DirectoryQuery {
 }
 
 impl DirectoryQuery {
-    /// 校验搜索、分页与版本约束，并去掉搜索词与范围版本的首尾空白。
-    ///
-    /// # 参数
-    /// * `self` - 被消费的目录请求。
-    ///
-    /// # 返回
-    /// 成功时返回规范化后的请求。
-    ///
-    /// # 错误
-    /// 返回 `Error::ValidationError`：搜索词超过 200 个字符、`page` 为 0、显式 `page_size` 不在 1 到 100、范围版本超过 256 字节、第 2 页及以后没有范围版本，或 `ids` 与搜索词或非首页同时出现。
+    /// 搜索或回显已选项前，裁剪搜索词和范围版本，空白视为缺失。
+    /// 搜索词最多 200 字符，页码从 1 开始，显式页大小为 1–100；版本最多 256 字节且后续页必填。
+    /// 已选 ID 仅允许在无搜索词的首页回显，违反约束返回校验错误。
     pub fn normalized(mut self) -> Result<Self> {
         self.q = normalized_text(self.q.as_deref());
         self.scope_version = normalized_text(self.scope_version.as_deref());
@@ -102,18 +95,11 @@ pub struct DirectoryPage {
 }
 
 impl DirectoryPage {
-    /// 对有界授权结果稳定分页。版本覆盖授权版本、规范化搜索条件和排序后的目录项。
+    /// 把已经过资格、授权范围和搜索过滤的完整目录按名称及 ID 排序后分页。
+    /// 各页共享由授权版本、规范化搜索词和目录项算出的版本；调用方须比对请求版本后再交付。
     ///
-    /// # 参数
-    /// * `items` - 已完成资格、范围和搜索过滤的完整结果；本方法再按名称与 ID 排序。
-    /// * `query` - 规范化后的目录请求。
-    /// * `scope` - 授权范围与版本；`no_scope` 为真时响应的 `empty_reason` 为 `"no_scope"`。
-    ///
-    /// # 返回
-    /// 返回目录页。空白搜索与未提供搜索的版本相同，同一搜索各页版本相同。已选 `ids` 时页大小固定为 100。超出末页时 `items` 为空，不另报错。调用者必须比较请求版本与响应版本后再交出该页。
-    ///
-    /// # 错误
-    /// `items` 长度超过 `DIRECTORY_LIMIT` 时返回 `Error::ValidationError`。目录项序列化失败，或某一版本字段的长度无法表示为 `u64` 时返回 `Error::Internal`。
+    /// 已选回显固定每页 100 项，越过末页返回空列表，无范围标记为 `no_scope`。超出 [`DIRECTORY_LIMIT`] 整体拒绝；
+    /// 目录项编码失败或摘要段长度无法表示为 `u64` 时返回内部错误。
     pub fn from_snapshot(
         mut items: Vec<DirectoryItem>,
         query: &DirectoryQuery,
@@ -145,9 +131,8 @@ impl DirectoryPage {
     }
 }
 
-/// 内容版本只含域标记、授权版本、规范化搜索词和排序后的目录项。
-/// 每段先写 8 字节大端长度，避免搜索词与授权版本或目录 JSON 粘连。
-/// 页码、页大小、请求中的版本和已选身份不参与计算。
+// 为跨页一致性对域标记、授权版本、裁剪后的搜索词和已排序目录项求摘要。每段加 8 字节大端长度以区分边界；
+// 页码、页大小、请求版本及已选 ID 不单独参与计算。
 fn snapshot_scope_version(scope_version: &str, q: Option<&str>, items: &[DirectoryItem]) -> Result<String> {
     let search = q.unwrap_or_default().trim();
     let encoded_items = serde_json::to_vec(items).map_err(|error| Error::Internal(error.to_string()))?;
@@ -178,13 +163,7 @@ pub struct ScopedPage<T> {
     pub empty_reason: Option<&'static str>,
 }
 impl<T> ScopedPage<T> {
-    /// 将已授权分页与范围元信息组合。
-    /// # 参数
-    /// `page` 为已应用范围条件的结果，`scope` 为同事务授权。
-    /// # 返回
-    /// 带范围元信息的列表。
-    /// # 错误
-    /// 无。
+    /// 将已经应用授权条件的业务列表与同一事务的授权范围元信息组合，供调用方交付列表；目录候选另查。
     pub fn new(page: crate::PageView<T>, scope: DirectoryScope) -> Self {
         Self {
             page,

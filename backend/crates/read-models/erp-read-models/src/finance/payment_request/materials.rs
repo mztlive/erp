@@ -33,12 +33,14 @@ pub struct PaymentRequestMaterialReference {
 }
 
 impl PurchasePaymentRequestReadService {
-    /// 普通详情沿全部来源资格证明本申请材料关系与治理状态。
+    /// 确定采购付款申请的适用条件时，普通详情沿全部来源资格证明本申请材料关系与治理状态。
     ///
     /// # 参数
     /// * `actor` / `id` / `asset_id` - 当前身份、申请与允许文件身份。
+    ///
     /// # 返回
     /// 返回冻结元数据与当前关系版本，用于下载前后复验。
+    ///
     /// # 错误
     /// 任一来源不可读、文件不在清单、文件变更或治理关闭时拒绝。
     pub async fn require_material(
@@ -60,7 +62,7 @@ impl PurchasePaymentRequestReadService {
             .await
     }
 
-    /// 详情资格先于申请和文件读取，全部补齐后验证原查询。
+    // 处理采购付款申请时，详情资格先于申请和文件读取，全部补齐后验证原查询。
     async fn material_read(
         &self,
         actor: &AuditActor,
@@ -79,12 +81,14 @@ impl PurchasePaymentRequestReadService {
         Ok(material)
     }
 
-    /// 当前审批和执行任务只可下载本申请冻结允许材料。
+    /// 确定采购付款申请的适用条件时，当前审批和执行任务只可下载本申请冻结允许材料。
     ///
     /// # 参数
     /// * `actor` / `task_id` / `asset_id` / `auth` - 身份、任务、文件与正式任务授权器。
+    ///
     /// # 返回
     /// 返回与当前任务和申请提交绑定的文件证明。
+    ///
     /// # 错误
     /// 任务失效、关系越界、文件改变或安全隔离时拒绝。
     pub async fn require_task_material(
@@ -114,12 +118,14 @@ impl PurchasePaymentRequestReadService {
             .await
     }
 
-    /// 主动揭示先重验敏感动作、当前任务与申请冻结账户版本。
+    /// 检查采购付款申请资格时，主动揭示先重验敏感动作、当前任务与申请冻结账户版本。
     ///
     /// # 参数
     /// * `actor` / `id` / `input` / `auth` - 当前账号、申请、预期任务账户与任务授权器。
+    ///
     /// # 返回
     /// 返回已证明的银行账户快照；调用方须经主体敏感服务解密并记录审计。
+    ///
     /// # 错误
     /// 缺少敏感权限、任务或账户版本变化、账户失效或归属不符时拒绝。
     pub async fn authorize_reveal(
@@ -149,7 +155,7 @@ impl PurchasePaymentRequestReadService {
             .await
     }
 
-    /// 在原任务读取阶段核对敏感资格、精确任务版本与真实冻结账户。
+    // 读取采购付款申请时，在原任务读取阶段核对敏感资格、精确任务版本与真实冻结账户。
     async fn reveal_snapshot(
         &self,
         actor: &AuditActor,

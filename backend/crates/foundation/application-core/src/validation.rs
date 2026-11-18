@@ -10,38 +10,17 @@ use validator::{ValidationError, ValidationErrors, ValidationErrorsKind};
 pub struct ValidationIssues(BTreeMap<String, String>);
 
 impl ValidationIssues {
-    /// 构造单字段错误。
-    ///
-    /// # 参数
-    /// `path` 为接口字段路径；`message` 为不含用户输入或内部细节的规则说明。
-    /// # 返回
-    /// 包含该字段的错误集合。
-    /// # 错误
-    /// 无。
+    /// 手工校验单个请求字段时记录接口字段路径与可公开的规则说明，不附带原输入或内部细节。
     pub fn field(path: impl Into<String>, message: impl Into<String>) -> Self {
         Self(BTreeMap::from([(path.into(), message.into())]))
     }
 
-    /// 获取字段路径和规则说明。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 字段错误映射；数组下标从零开始。
-    /// # 错误
-    /// 无。
+    /// 为接口提供按路径定位的字段说明，便于界面标记具体表单项；数组下标从零开始。
     pub fn fields(&self) -> &BTreeMap<String, String> {
         &self.0
     }
 
-    /// 为嵌套校验补充所属对象或数组行路径。
-    ///
-    /// # 参数
-    /// `prefix` 为父字段路径，例如 `bank_accounts[1]`。
-    /// # 返回
-    /// 所有字段加上父路径后的错误集合。
-    /// # 错误
-    /// 无。
+    /// 嵌套对象或数组行单独校验后，为每个错误加上父路径（如 `bank_accounts[1]`），使界面能定位到原请求中的字段。
     pub fn at(self, prefix: &str) -> Self {
         Self(self.0.into_iter().map(|(path, message)| (format!("{prefix}.{path}"), message)).collect())
     }

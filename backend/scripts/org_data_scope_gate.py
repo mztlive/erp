@@ -60,8 +60,8 @@ class Finding:
     category: str = "整改项"
 
 
+# 定位配对 Rust 块的结束偏移，供测试模块屏蔽和适配器检查限定范围；块不闭合时拒绝继续判断。
 def block_end(code: str, start: int) -> int:
-    """Return the end of a balanced Rust block, rejecting malformed input."""
     depth = 0
     for pos in range(start, len(code)):
         depth += (code[pos] == "{") - (code[pos] == "}")
@@ -71,10 +71,10 @@ def block_end(code: str, start: int) -> int:
 
 
 def production_code(source: str) -> str:
-    """Mask literals, comments and inline cfg(test) modules without moving lines.
+    """屏蔽字面量、注释与内联 `cfg(test)` 模块，供组织数据范围门禁按原始行号检查生产源码。
 
-Other cfg branches are checked conservatively. This intentionally does not
-expand macros or resolve arbitrary Rust call graphs.
+其他 `cfg` 分支仍保守检查。
+不展开宏，也不解析任意 Rust 调用图。
 """
     code, _ = _code_and_literals(source)
     pattern = r"#\s*\[\s*cfg\s*\(\s*test\s*\)\s*\]\s*(?:#\s*\[[^\]]*\]\s*)*(?:pub\s+)?mod\s+\w+\s*\{"
@@ -86,7 +86,7 @@ expand macros or resolve arbitrary Rust call graphs.
 
 
 def scan_source(path: str, source: str) -> list[Finding]:
-    """Check ownership, raw-rule leakage, adapter execution and admission traps."""
+    """按源码归属检查组织数据范围的所有权、原始条件泄漏、适配器执行器及接入准入，返回具体阻断项。"""
     # Every applicable source rule contains one of these identifiers. Avoid
     # lexing unrelated large files, but keep the fixed resolver checks enabled.
     if path != RESOLVER and not SCAN_HINT.search(source):
@@ -98,8 +98,8 @@ def scan_source(path: str, source: str) -> list[Finding]:
     composition = package in COMPOSITION or path.startswith(("apps/erp-server/src/wiring/", "apps/cli/src/adapters/"))
     findings: list[Finding] = []
 
+    # 每条规则只记录当前文件的第一处命中及其行号，避免同一违规重复占据门禁报告。
     def reject(rule: str, pattern: str, message: str, category: str = "整改项") -> None:
-        """Emit one actionable diagnostic per rule/file, retaining the first line."""
         match = re.search(pattern, code, re.S)
         if match:
             findings.append(Finding(rule, path, code.count("\n", 0, match.start()) + 1, message, category))
@@ -153,7 +153,7 @@ def scan_source(path: str, source: str) -> list[Finding]:
 
 
 def check_required(sources: dict[str, str]) -> list[Finding]:
-    """Prevent deleted/empty sample files and comment-only wiring from passing."""
+    """核对客户接入示例的必需生产结构，避免缺失、空文件或仅有注释被当成已完成范围接入。"""
     requirements = {
         RESOLVER: [r"\bstruct\s+DataScopeService\b", r"\bScopeResolution\s*\{"],
         CUSTOMER_PORT: [r"\btrait\s+CustomerDataScopePort\b", r"\bexecutor\s*:\s*&mut\s+dyn\s+Executor\b"],
@@ -172,8 +172,8 @@ def check_required(sources: dict[str, str]) -> list[Finding]:
     return findings
 
 
+# 先验证组织数据范围规则的正反夹具，防止检测失效时继续给出工作区通过结论。
 def self_tests() -> bool:
-    """Run mandatory positive/negative fixtures before judging any workspace."""
     import test_org_data_scope_gate
 
     suite = unittest.defaultTestLoader.loadTestsFromModule(test_org_data_scope_gate)
@@ -182,8 +182,8 @@ def self_tests() -> bool:
     return unittest.TextTestRunner(stream=sys.stderr, verbosity=1).run(suite).wasSuccessful()
 
 
+# 扫描 Cargo 活动成员的组织数据范围接入，包含客户样例完整性；若 metadata 或源码清单不可用则报工具错误。
 def workspace(backend: Path) -> tuple[list[Finding], int]:
-    """Inspect actual Cargo member sources; fail if inventory or metadata fails."""
     metadata = cargo_metadata(backend)
     sources = {}
     for path in active_source_paths(metadata):
@@ -201,7 +201,7 @@ def workspace(backend: Path) -> tuple[list[Finding], int]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Return 0 for static checks only, 1 for blockers, 2 for tool/input errors."""
+    """供 CI 联合检查组织数据范围与领域边界；静态检查通过返回 `0`，违规返回 `1`，工具或输入错误返回 `2`。"""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--backend", required=True, type=Path)
     parser.add_argument("--self-test-only", action="store_true", help="仅验证门禁夹具，不检查业务代码")

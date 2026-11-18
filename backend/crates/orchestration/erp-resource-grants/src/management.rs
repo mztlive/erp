@@ -16,13 +16,8 @@ pub struct ManualGrantRequest {
     pub reason: String,
 }
 impl ManualGrantRequest {
-    /// 固定人工规则和版本，将稳定操作号转换为来源身份。
-    /// # 参数
-    /// 无；消费已解码请求。
-    /// # 返回
-    /// 首次人工授权的完整目标；同操作号异载荷由来源实体拒绝。
-    /// # 错误
-    /// 非法身份、空原因或目标由领域发布入口拒绝。
+    /// 将操作号和接收人转换为人工授权来源，并固定规则及事实版本，供领域发布入口做幂等判断。
+    /// 同来源重复提交不同载荷时冲突；非法身份、原因或目标由发布入口校验。
     pub fn into_update(self) -> SourceUpdate {
         SourceUpdate {
             key: SourceKey {
@@ -54,13 +49,7 @@ pub struct SourcesQuery {
     pub after: Option<String>,
 }
 impl SourcesQuery {
-    /// 校验来源查询的账号和游标。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 参数满足有界读取合同。
-    /// # 错误
-    /// 空白账号或过长游标时拒绝。
+    /// 校验来源列表查询的接收账号和分页游标，拒绝空白、超长或带首尾空白的账号，以及非法游标。
     pub fn validate(&self) -> Result<()> {
         if normalize_required_text_ref(&self.recipient, "接收账号不能为空", 128, "接收账号过长")?
             != self.recipient
@@ -79,25 +68,13 @@ pub struct RecomputeRequest {
 }
 
 impl RecomputeRequest {
-    /// 校验重算请求的排他游标。
-    /// # 参数
-    /// 无；使用当前请求参数。
-    /// # 返回
-    /// 未指定游标或游标合法时成功。
-    /// # 错误
-    /// 游标为空、带首尾空白或超过 4096 字符时拒绝。
+    /// 进入授权重算前校验排他游标，允许未传游标；空串、有首尾空白或超过 4096 字符的游标拒绝执行。
     pub fn validate(&self) -> Result<()> {
         validate_cursor(self.after.as_deref())
     }
 }
 
-/// 校验维护查询的排他游标，禁止无效页默默变成全量重扫。
-/// # 参数
-/// after 为上一页返回的游标。
-/// # 返回
-/// None 或合法游标时成功。
-/// # 错误
-/// 空白或超过 4096 字符时拒绝。
+// 检查排他游标非空、无首尾空白且不超过 4096 字符，避免将无效续页请求当作全量重扫。
 pub(crate) fn validate_cursor(after: Option<&str>) -> Result<()> {
     if let Some(value) = after
         && normalize_required_text_ref(
@@ -113,13 +90,7 @@ pub(crate) fn validate_cursor(after: Option<&str>) -> Result<()> {
 }
 
 impl ResourceGrantProcess {
-    /// 取得绑定真实目标校验的人工授权服务。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// grant/revoke/sources 均自行校验管理员权限的服务。
-    /// # 错误
-    /// 构造不执行 I/O。
+    /// 组装绑定业务目标校验的授权管理服务，供管理员授予、撤销、查询来源或发起重算。构造不执行 I/O，各管理操作自行校验管理员权限。
     pub fn management(&self) -> ResourceGrantService {
         self.access(None)
     }

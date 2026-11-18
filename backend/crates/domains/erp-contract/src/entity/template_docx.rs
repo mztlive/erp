@@ -22,14 +22,8 @@ fn invalid() -> Error {
     Error::ValidationError("Word 模板无法处理，请重新另存为标准 DOCX 后上传".into())
 }
 
-/// 将合同号写入 Word 文档第一页右上角的独立首页页眉。
-/// # 参数
-/// * `bytes` - 原 DOCX 包。
-/// * `number` - 领域生成的 ASCII 合同号。
-/// # 返回
-/// 可继续编辑及打印的 DOCX；正文、图片和后续页页眉保持原内容。
-/// # 错误
-/// 非标准 DOCX、超限压缩包或无有效分节信息时拒绝。
+/// 模板领号下载时，把领域生成的 ASCII 合同号写入 DOCX 第一页右上角的独立页眉，保留正文、图片和后续页页眉。
+/// 编号格式不合法、非标准 DOCX、包大小超限或缺少有效分节时拒绝，避免生成不可编辑、不可打印的文件。
 pub fn stamp(bytes: &[u8], number: &str) -> Result<Vec<u8>> {
     if number.is_empty()
         || number.len() > 32
@@ -76,7 +70,7 @@ pub fn stamp(bytes: &[u8], number: &str) -> Result<Vec<u8>> {
     pack(package)
 }
 
-/// 每个 ZIP 条目和累计展开体积都有限；禁止重名、路径穿越及宏包。
+// 在处理 Word 内容前限制单个 ZIP 条目与累计展开体积，并拒绝重名、越界路径或宏包。
 fn unpack(bytes: &[u8]) -> Result<Package> {
     if bytes.is_empty() || bytes.len() > MAX_TEMPLATE_BYTES {
         return Err(invalid());
@@ -133,7 +127,7 @@ fn unpack(bytes: &[u8]) -> Result<Package> {
     Ok(package)
 }
 
-/// ZIP 库按名称合并中央目录，须在展开前核对原始条目数量，避免重名与数量限制失效。
+// ZIP 库按名称合并中央目录，须在展开前核对原始条目数量，避免重名与数量限制失效。
 fn require_directory_entries(bytes: &[u8], start: u64, expected: usize) -> Result<()> {
     let mut offset = usize::try_from(start).map_err(|_| invalid())?;
     let mut count = 0;
@@ -229,7 +223,7 @@ fn first_section(source: &str, section: Node<'_, '_>, id: &str) -> Result<String
     Ok(format!("{}<w:titlePg xmlns:w=\"{W}\"/>{}", &result[..offset], &result[offset..]))
 }
 
-/// 保持 sectPr 中全部页眉引用先于全部页脚引用的 schema 顺序。
+// 保持 sectPr 中全部页眉引用先于全部页脚引用的 schema 顺序。
 fn section_references(
     source: &str,
     section: Node<'_, '_>,
@@ -258,7 +252,7 @@ fn section_references(
     Ok(format!("{}{}{}", &result[..offset], footer_reference(footer), &result[offset..]))
 }
 
-/// 只改分节属性片段，不重新序列化正文及其命名空间属性。
+// 只改分节属性片段，不重新序列化正文及其命名空间属性。
 fn edit_section(
     source: &str,
     section: Node<'_, '_>,

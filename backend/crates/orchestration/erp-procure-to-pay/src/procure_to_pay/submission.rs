@@ -61,27 +61,10 @@ struct RecoverPurchaseSubmitStartInput<'a> {
 }
 
 impl PurchaseOrderProcess {
-    /// 提交采购单并调用统一 `start_approval`。
-    ///
-    /// 同一事务内：锁定采购单与 `BusinessDocument`；若尚无正式号则分配不可复用
-    /// `purchase_no` 并一次性写入两者；冻结提交；递增 `approval_subject_version`
-    /// 并启动审批。无绑定或无发布定义时失败关闭。
-    ///
-    /// # 参数
-    /// * `id` - 采购单 ID
-    /// * `req` - 提交请求
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回提交结果（正式号、提交 ID 与冻结版本）。
-    ///
-    /// # 错误
-    /// * `NotFound` - 采购单不存在或无权操作
-    /// * `ConflictError` - 期望版本不一致、无绑定或重复提交
-    /// * `BusinessLogicError` - 状态非草稿或草稿内容缺失
-    ///
-    /// # 关键业务约束
-    /// 提交必须按当前采购对象范围重验，历史参与不授予提交。
+    /// 经办人提交采购草稿时，在原写事务重验当前采购对象范围并锁定采购单和 `BusinessDocument`；历史参与不授予提交资格。
+    /// 首次提交分配不可复用的 `purchase_no` 并同步写入两者，再冻结提交、递增 `approval_subject_version`，调用统一 `start_approval`。
+    /// 返回正式号、提交 ID 和冻结版本。不存在或无权操作返回 `NotFound`；期望版本不符、重复提交或无绑定返回 `ConflictError`；
+    /// 非草稿或草稿内容缺失返回 `BusinessLogicError`；已发布定义缺失时不启动审批。
     pub async fn submit(
         &self,
         id: &str,
@@ -112,7 +95,7 @@ impl PurchaseOrderProcess {
         self.submit_command(&command).await
     }
 
-    /// 首次授权、重放和准备写入共享原命令事务；只在未知提交结果时恢复。
+    // 首次授权、重放和准备写入共享原命令事务；只在未知提交结果时恢复。
     async fn submit_command(&self, command: &PurchaseSubmitCommand<'_>) -> Result<SubmitPurchaseOrderResult> {
         let service = self.clone();
         let id = command.purchase_order_id.to_string();
@@ -160,7 +143,7 @@ impl PurchaseOrderProcess {
         }
     }
 
-    /// 当前资格和回执在同一快照取证，再冻结提交并写入原事务。
+    // 当前资格和回执在同一快照取证，再冻结提交并写入原事务。
     async fn submit_in(
         &self,
         command: &PurchaseSubmitCommand<'_>,
@@ -203,7 +186,7 @@ impl PurchaseOrderProcess {
         })
     }
 
-    /// 仅在恢复时新建只读快照；普通命令重放复用入口写事务。
+    // 仅在恢复时新建只读快照；普通命令重放复用入口写事务。
     async fn replay_purchase_submit(
         &self,
         identity: &PurchaseCommandReceiptIdentity,
@@ -227,7 +210,7 @@ impl PurchaseOrderProcess {
             .await
     }
 
-    /// 重放已提交的采购冻结命令，并拒绝同一键混用不同对象版本。
+    // 重放已提交的采购冻结命令，并拒绝同一键混用不同对象版本。
     async fn replay_purchase_submit_in(
         &self,
         identity: &PurchaseCommandReceiptIdentity,
@@ -279,19 +262,13 @@ impl PurchaseOrderProcess {
         }))
     }
 
-    /// receipt 唯一竞争、瞬态事务或提交结果未知后，以 fresh session 有界回读。
-    ///
-    /// # 参数
-    /// * `input` - 采购提交恢复所需的主题版本、幂等键与收据身份
-    ///
-    /// # 返回
-    /// 回读到已提交结果时返回提交视图；否则返回原始错误。
-    ///
-    /// # 错误
-    /// 有界回读仍无法确认提交结果时返回原始错误，或传播不可恢复的冲突。
-    ///
-    /// # 关键业务约束
-    /// 仅在 `command_may_have_committed` 场景进入；不得在确认未提交时吞掉错误。
+    // receipt 唯一竞争、瞬态事务或提交结果未知后，以 fresh session 有界回读。
+    //
+    // `input` 为采购提交恢复所需的主题版本、幂等键与收据身份。回读到已提交结果时返回提交视图；否则返回原始错误。
+    //
+    // 有界回读仍无法确认提交结果时返回原始错误，或传播不可恢复的冲突。
+    //
+    // 仅在 `command_may_have_committed` 场景进入；不得在确认未提交时吞掉错误。
     async fn recover_purchase_submit_start(
         &self,
         input: RecoverPurchaseSubmitStartInput<'_>,
@@ -325,7 +302,7 @@ impl PurchaseOrderProcess {
         recover_command(input.original_error, Ok(None))
     }
 
-    /// 在原有独立只读事务中核对启动事实；不重新执行采购提交。
+    // 在原有独立只读事务中核对启动事实；不重新执行采购提交。
     async fn check_purchase_start(
         &self,
         input: &RecoverPurchaseSubmitStartInput<'_>,
@@ -368,7 +345,7 @@ impl PurchaseOrderProcess {
     }
 }
 
-/// 保留采购提交领域回执的身份损坏、载荷冲突与损坏结果错误分类。
+// 保留采购提交领域回执的身份损坏、载荷冲突与损坏结果错误分类。
 fn decode_submit_receipt(
     record: PurchaseCommandReceipt<PurchaseSubmitReceipt>,
     identity: &PurchaseCommandReceiptIdentity,

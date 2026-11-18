@@ -52,18 +52,11 @@ pub struct ComputedLine {
 
 /// 计算选中行金额与表头汇总。
 ///
-/// # 参数
-/// * `selected_lines` - 事务内校验通过的本次采购行
-/// * `price_basis` - 依据范围的价格依据
-///
-/// # 返回
-/// 返回逐行已舍入金额及汇总。
-///
-/// # 错误
-/// 选择缺少集采条款的供给时拒绝，不回退另一种采购价。
-///
-/// # 关键业务约束
 /// 表头只汇总逐行舍入后的金额。
+///
+/// 返回逐行已舍入金额及汇总。选择缺少集采条款的供给时拒绝，不回退另一种采购价。
+///
+/// `price_basis` 为依据范围的价格依据。
 pub fn compute_selected_lines(
     selected_lines: &[SelectedLine],
     price_basis: SupplyPriceBasis,
@@ -85,19 +78,9 @@ pub fn compute_selected_lines(
 
 /// 构造单条采购草稿行。
 ///
-/// # 参数
-/// * `submission_id` - 所属采购提交
-/// * `line_no` - 提交内行号
-/// * `line` - 已计算本次采购行
-///
-/// # 返回
-/// 返回带稳定销售行和销售当前版本行的采购提交行。
-///
-/// # 错误
-/// 实体不变式失败时返回错误。
-///
-/// # 关键业务约束
 /// `quantity` 与 `allocated_quantity` 均等于本次事务内校验数量。
+///
+/// 返回带稳定销售行和销售当前版本行的采购提交行。实体不变式失败时返回错误。
 pub fn build_submission_line(
     submission_id: &PurchaseOrderSubmissionId,
     line_no: u32,
@@ -144,20 +127,13 @@ pub fn build_submission_line(
 
 /// 查找客户端选择的精确依据。
 ///
-/// # 参数
-/// * `order` - 销售稳定单
-/// * `groups` - 当前可用依据集合
-/// * `basis_id` - 客户端依据 ID
-/// * `work_item_id` - 当前开放供给分配任务
-///
-/// # 返回
-/// 返回与当前 guard、当前版本及精确范围完全匹配的依据。
-///
-/// # 错误
-/// 依据不存在或已失效时返回统一的剩余数量变化冲突。
-///
-/// # 关键业务约束
 /// 不接受旧 guard 或旧销售版本生成的依据 ID。
+///
+/// 返回与当前 guard、当前版本及精确范围完全匹配的依据。依据不存在或已失效时返回统一的剩余数量变化冲突。
+///
+/// - `order`：销售稳定单。
+/// - `groups`：当前可用依据集合。
+/// - `work_item_id`：当前开放供给分配任务。
 pub fn find_requested_group<'a>(
     order: &SalesOrderBasisFact,
     groups: &'a [BasisGroup],
@@ -172,18 +148,9 @@ pub fn find_requested_group<'a>(
 
 /// 校验请求表头与依据精确范围一致。
 ///
-/// # 参数
-/// * `req` - 创建请求
-/// * `scope` - 依据精确范围
-///
-/// # 返回
-/// 一致时返回 `Ok(())`。
-///
-/// # 错误
-/// 采购类型或付款条件不一致时返回校验错误。
-///
-/// # 关键业务约束
 /// 客户端不能把一个依据改造成另一拆分范围。
+///
+/// 一致时返回 `Ok(())`。采购类型或付款条件不一致时返回校验错误。
 pub fn ensure_request_scope(req: &CreatePurchaseOrderFromBasisRequest, scope: &BasisScope) -> Result<()> {
     if req.purchase_type != scope.purchase_type {
         return Err(Error::basis_purchase_type_mismatch());
@@ -196,19 +163,10 @@ pub fn ensure_request_scope(req: &CreatePurchaseOrderFromBasisRequest, scope: &B
 
 /// 按事务内最新依据校验逐行本次数量。
 ///
-/// # 参数
-/// * `requested` - 已规范化请求行
-/// * `group` - guard 后重算的最新精确依据
-///
-/// # 返回
-/// 返回按请求稳定行排序的已选择采购行。
-///
-/// # 错误
-/// 行不属于依据，或数量超过剩余量/可供上限时返回 `ConflictError`。数量精度不合法，
-/// 或预计交付日晚于销售期限时返回 `ValidationError`。履约期限无法转成上海业务日时返回 `Internal`。
-///
-/// # 关键业务约束
 /// 同时校验 `quantity <= remaining` 与 `quantity <= min(remaining, available)`。
+///
+/// 返回按请求稳定行排序的已选择采购行。行不属于依据，或数量超过剩余量/可供上限时返回 `ConflictError`。数量精度不合法，或预计交付日晚于销售期限时返回
+/// `ValidationError`。履约期限无法转成上海业务日时返回 `Internal`。
 pub fn validate_requested_quantities(
     requested: &[RequestedLine],
     group: &BasisGroup,
@@ -256,20 +214,11 @@ pub fn validate_requested_quantities(
 
 /// 判定本次采购行的配送范围，并校验集采直发起订量。
 ///
-/// # 参数
-/// * `selected` - 事务内校验通过的本次采购行
-/// * `scope` - 依据精确范围
-/// * `warehouse_region` - 集采入仓目标仓库所在地区
-///
-/// # 返回
-/// 返回逐行冻结的配送判定。
-///
-/// # 错误
-/// 收货地址或目标仓库不配送、入仓目标仓库未设置地区，或集采直发数量合计不足
-/// 起订量时返回校验错误。
-///
-/// # 关键业务约束
 /// 判定使用事务内读取的供给生效配送政策，不信任客户端的推荐结果。
+///
+/// 返回逐行冻结的配送判定。收货地址或目标仓库不配送、入仓目标仓库未设置地区，或集采直发数量合计不足起订量时返回校验错误。
+///
+/// `scope` 为依据精确范围。
 pub fn judge_selected_delivery(
     selected: &[SelectedLine],
     scope: &BasisScope,
@@ -317,15 +266,7 @@ pub fn judge_selected_delivery(
 
 /// 校验采购预计交付日不突破销售对客户的承诺期限。
 ///
-/// # 参数
-/// * `expected_delivery_date` - 采购确认的预计交付日
-/// * `sales_due` - 销售对客户承诺的最晚交付日
-///
-/// # 返回
-/// 预计交付日不晚于销售承诺期限时返回 `Ok(())`。
-///
-/// # 错误
-/// 预计交付日晚于销售承诺期限时返回校验错误。
+/// 预计交付日不晚于销售承诺期限时返回 `Ok(())`。预计交付日晚于销售承诺期限时返回校验错误。
 pub fn ensure_expected_delivery_within_sales_due(
     expected_delivery_date: BusinessDate,
     sales_due: BusinessDate,
@@ -338,17 +279,11 @@ pub fn ensure_expected_delivery_within_sales_due(
 
 /// 从依据 ID 提取销售单稳定身份。
 ///
-/// # 参数
-/// * `basis_id` - `{sales_order_id}:{sha256}` 形式的依据 ID
-///
-/// # 返回
-/// 返回销售单 ID。
-///
-/// # 错误
-/// 依据 ID 形态非法时返回 `NotFound`。
-///
-/// # 关键业务约束
 /// 不兼容旧 `{sales_order_id}:{supplier_id}` 依据 ID。
+///
+/// 返回销售单 ID。依据 ID 形态非法时返回 `NotFound`。
+///
+/// `basis_id` 为`{sales_order_id}:{sha256}` 形式的依据 ID。
 pub fn parse_basis_sales_order_id(basis_id: &str) -> Result<SalesOrderId> {
     let (sales_order_id, digest) =
         basis_id.trim().split_once(':').ok_or_else(|| Error::NotFound("采购创建依据不存在".to_string()))?;
@@ -361,16 +296,7 @@ pub fn parse_basis_sales_order_id(basis_id: &str) -> Result<SalesOrderId> {
     Ok(SalesOrderId::new(sales_order_id.to_string()))
 }
 
-/// 返回统一的采购剩余或供给变化冲突。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回 HTTP 409 对应的稳定业务错误。
-///
-/// # 错误
-/// 无。
+/// 将采购剩余量或供给条件变化映射为稳定冲突，供接口以 HTTP 409 提示刷新后重试。
 pub fn procurement_quantity_changed() -> Error {
     Error::ConflictError("可分配供给数量已更新，请刷新后重试".to_string())
 }

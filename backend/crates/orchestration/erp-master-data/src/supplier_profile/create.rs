@@ -40,14 +40,10 @@ use crate::{Error, Result, command_insert_error};
 impl SupplierProfileProcess {
     /// 创建 Party、Supplier 及其当前资料；全部写入与幂等结果原子提交。
     ///
-    /// # 参数
-    /// * `req` - 根资料创建请求。
-    /// * `actor` - 当前操作人。
+    /// `req`：根资料创建请求。
     ///
-    /// # 返回
     /// 创建或同键重放的资料变更视图。
     ///
-    /// # 错误
     /// 输入无效、引用主体停用、附件不存在或敏感级别不匹配、身份重复或事务失败时返回错误。
     pub async fn create(
         &self,
@@ -59,15 +55,11 @@ impl SupplierProfileProcess {
 
     /// 创建完整供应商资料，并把同一次 multipart 命令携带的资质文件原子登记。
     ///
-    /// # 参数
-    /// * `req` - 根资料创建请求。
-    /// * `pending_assets` - 同一次命令待登记的资质文件；没有上传时为空批次。
-    /// * `actor` - 当前操作人。
+    /// - `req`：根资料创建请求。
+    /// - `pending_assets`：同一次命令待登记的资质文件；没有上传时为空批次。
     ///
-    /// # 返回
     /// 业务视图，以及本次上传对象是否已随事务登记。同键重放时 `assets_committed` 为 `false`。
     ///
-    /// # 错误
     /// 输入无效、创建时提交清空意图、同键异参、文件引用或敏感级别不匹配、身份重复或事务失败时返回错误。
     pub async fn create_with_assets(
         &self,
@@ -101,7 +93,7 @@ impl SupplierProfileProcess {
             .await
     }
 
-    /// 候选、幂等回放、引用检查和全部创建共用一个事务。
+    // 首次建档或同键重试共用一个事务：先核验真实候选并查回执；只有没有匹配结果才查引用并创建资料。
     async fn create_snapshot(
         &self,
         mut req: SaveSupplierProfileRequest,
@@ -125,7 +117,7 @@ impl SupplierProfileProcess {
         Ok(SupplierProfileWithAssetsResult { view, assets_committed: true })
     }
 
-    /// 解析附件、主数据引用和维护人主属组织事实，失败即停止后续准备。
+    // 解析附件、主数据引用和维护人主属组织事实，失败即停止后续准备。
     async fn prepare_creation_references(
         &self,
         req: &mut SaveSupplierProfileRequest,
@@ -149,7 +141,7 @@ impl SupplierProfileProcess {
         Ok(CreationReferences { party_no, supplier_no, maintainer, org })
     }
 
-    /// 从已校验创建命令构造全部待写实体。
+    // 供应商创建请求和引用校验通过后，构造主体、供应商资料、受保护的从属事实、幂等回执与审计；此处不写库。
     fn prepare_create(
         &self,
         req: SaveSupplierProfileRequest,
@@ -210,18 +202,13 @@ impl SupplierProfileProcess {
         })
     }
 
-    /// 构造并加密默认联系人。请求没有联系人时不创建。
-    ///
-    /// # 参数
-    /// * `req` - 根资料请求。
-    /// * `party_id` - 新建主体 ID。
-    /// * `actor_id` - 操作人 ID。
-    ///
-    /// # 返回
-    /// 默认联系人；`req.contact` 为空时为 `None`。
-    ///
-    /// # 错误
-    /// 联系人构造或手机号加密失败时返回对应错误。
+    // 构造并加密默认联系人。请求没有联系人时不创建。
+    //
+    // `party_id`：新建主体 ID。
+    //
+    // 默认联系人；`req.contact` 为空时为 `None`。
+    //
+    // 联系人构造或手机号加密失败时返回对应错误。
     pub(super) fn create_contact(
         &self,
         req: &SaveSupplierProfileRequest,
@@ -252,18 +239,13 @@ impl SupplierProfileProcess {
         Ok(Some(contact))
     }
 
-    /// 构造并加密默认经营地址。请求没有地址时不创建。
-    ///
-    /// # 参数
-    /// * `req` - 根资料请求。
-    /// * `party_id` - 新建主体 ID。
-    /// * `actor_id` - 操作人 ID。
-    ///
-    /// # 返回
-    /// 默认经营地址；`req.address` 为空时为 `None`。
-    ///
-    /// # 错误
-    /// 地址构造或地址加密失败时返回对应错误。
+    // 构造并加密默认经营地址。请求没有地址时不创建。
+    //
+    // `party_id`：新建主体 ID。
+    //
+    // 默认经营地址；`req.address` 为空时为 `None`。
+    //
+    // 地址构造或地址加密失败时返回对应错误。
     pub(super) fn create_address(
         &self,
         req: &SaveSupplierProfileRequest,
@@ -292,18 +274,14 @@ impl SupplierProfileProcess {
         Ok(Some(address))
     }
 
-    /// 构造并加密默认银行账户。请求没有账户时不创建。
-    ///
-    /// # 参数
-    /// * `req` - 根资料请求。户名取法定名称。
-    /// * `party_id` - 新建主体 ID。
-    /// * `actor_id` - 操作人 ID。
-    ///
-    /// # 返回
-    /// 默认银行账户；`req.bank_account` 为空时为 `None`。
-    ///
-    /// # 错误
-    /// 账户构造或账号加密失败时返回对应错误。
+    // 构造并加密默认银行账户。请求没有账户时不创建。
+    //
+    // - `req`：根资料请求。户名取法定名称。
+    // - `party_id`：新建主体 ID。
+    //
+    // 默认银行账户；`req.bank_account` 为空时为 `None`。
+    //
+    // 账户构造或账号加密失败时返回对应错误。
     pub(super) fn create_bank_account(
         &self,
         req: &SaveSupplierProfileRequest,
@@ -363,7 +341,7 @@ struct PreparedCreate {
 }
 
 impl PreparedCreate {
-    /// 将完整供应商资料与幂等结果写入同一事务。
+    // 将完整供应商资料与幂等结果写入同一事务。
     async fn persist(self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
         self.pending_assets.persist(db, executor).await?;
 
@@ -414,7 +392,7 @@ impl PreparedCreate {
     }
 }
 
-/// Construct party identity from the supplier-domain seed.
+// 供应商建档时，把领域工厂生成的主体种子构造成尚未持久化的 Party 和首个名称修订。
 fn party_from_seed(seed: &SupplierPartySeed) -> Result<(Party, PartyRevision)> {
     let mut party = Party::new(
         seed.party_id.clone(),
@@ -440,28 +418,23 @@ fn party_from_seed(seed: &SupplierPartySeed) -> Result<(Party, PartyRevision)> {
     Ok((party, revision))
 }
 
-/// 分配根资料创建所需的全部主键并组织领域工厂输入。
-///
-/// Process 负责 ID 生成、审计操作人与 DTO 到领域输入的映射；纯构造与校验
-/// 由 `erp_supplier::creation_plan` 承担。
-///
-/// # 参数
-/// * `req` - 已校验的根资料创建请求
-/// * `party_no` - 已规范化的主体编号
-/// * `supplier_no` - 已规范化的供应商编号
-/// * `party_id` - 已分配的主体主键
-/// * `supplier_id` - 已分配的供应商角色主键
-/// * `profile_id` - 已分配的首版商务资料主键
-/// * `actor_id` - 操作人 ID
-///
-/// # 返回
-/// 返回已分配主键与领域工厂输入。
-///
-/// # 错误
-/// 能力负责人缺失时返回校验错误；实体不变式由领域工厂校验。
-///
-/// # 约束
-/// 本函数可分配 ID、读取 DTO 与操作人；不得实现实体不变式。
+// 分配根资料创建所需的全部主键并组织领域工厂输入。
+//
+// Process 负责 ID 生成、审计操作人与 DTO 到领域输入的映射；纯构造与校验
+// 由 `erp_supplier::creation_plan` 承担。
+//
+// - `req`：已校验的根资料创建请求
+// - `party_no`：已规范化的主体编号
+// - `supplier_no`：已规范化的供应商编号
+// - `party_id`：已分配的主体主键
+// - `supplier_id`：已分配的供应商角色主键
+// - `profile_id`：已分配的首版商务资料主键
+//
+// 返回已分配主键与领域工厂输入。
+//
+// 能力负责人缺失时返回校验错误；实体不变式由领域工厂校验。
+//
+// 本函数可分配 ID、读取 DTO 与操作人；不得实现实体不变式。
 #[allow(clippy::too_many_arguments)]
 fn allocate_creation_plan(
     req: &SaveSupplierProfileRequest,
@@ -524,16 +497,11 @@ fn allocate_creation_plan(
     Ok((ids, inputs))
 }
 
-/// 创建必须显式指定整体维护人。
-///
-/// # 参数
-/// * `req` - 根资料请求。
-///
-/// # 返回
-/// 去掉首尾空白后的维护人 ID。
-///
-/// # 错误
-/// 维护人缺失或只有空白时返回校验错误。
+// 创建必须显式指定整体维护人。
+//
+// 去掉首尾空白后的维护人 ID。
+//
+// 维护人缺失或只有空白时返回校验错误。
 pub(super) fn required_maintainer(req: &SaveSupplierProfileRequest) -> Result<String> {
     req.maintainer_user_id
         .as_deref()
@@ -543,16 +511,11 @@ pub(super) fn required_maintainer(req: &SaveSupplierProfileRequest) -> Result<St
         .ok_or_else(|| Error::ValidationError("请选择供应商维护人".into()))
 }
 
-/// 读取新建能力的显式负责人。每个能力代码都必须有非空负责人。
-///
-/// # 参数
-/// * `req` - 根资料请求。
-///
-/// # 返回
-/// 与 `capability_codes` 顺序一致的能力代码和负责人。
-///
-/// # 错误
-/// 任一能力没有非空负责人时返回校验错误。
+// 读取新建能力的显式负责人。每个能力代码都必须有非空负责人。
+//
+// 与 `capability_codes` 顺序一致的能力代码和负责人。
+//
+// 任一能力没有非空负责人时返回校验错误。
 pub(super) fn capability_owners_of(
     req: &SaveSupplierProfileRequest,
 ) -> Result<Vec<(CapabilityCode, String)>> {
@@ -568,18 +531,14 @@ pub(super) fn capability_owners_of(
     Ok(owners)
 }
 
-/// 创建可选税务事实。税号为空时不创建。
-///
-/// # 参数
-/// * `req` - 根资料请求。生效日取 `effective_from`。
-/// * `party_id` - 新建主体 ID。
-/// * `actor_id` - 操作人 ID。
-///
-/// # 返回
-/// 默认有效税务事实；税号缺失或只有空白时为 `None`。
-///
-/// # 错误
-/// 税务事实构造失败时返回对应错误。
+// 创建可选税务事实。税号为空时不创建。
+//
+// - `req`：根资料请求。生效日取 `effective_from`。
+// - `party_id`：新建主体 ID。
+//
+// 默认有效税务事实；税号缺失或只有空白时为 `None`。
+//
+// 税务事实构造失败时返回对应错误。
 pub(super) fn create_tax_profile(
     req: &SaveSupplierProfileRequest,
     party_id: &PartyId,
@@ -610,7 +569,7 @@ struct CreationReferences {
     org: String,
 }
 
-/// 分配根主键并将创建请求交给供应商领域工厂。
+// 分配根主键并将创建请求交给供应商领域工厂。
 fn creation_plan(
     req: &SaveSupplierProfileRequest,
     references: CreationReferences,
@@ -633,7 +592,7 @@ fn creation_plan(
     plan_supplier_creation(ids, inputs).map_err(|e| Error::ValidationError(e.to_string()))
 }
 
-/// 主键分配顺序保持能力、资质及关联、评级、主体修订不变。
+// 主键分配顺序保持能力、资质及关联、评级、主体修订不变。
 fn allocate_creation_ids(
     req: &SaveSupplierProfileRequest,
     party_id: &PartyId,

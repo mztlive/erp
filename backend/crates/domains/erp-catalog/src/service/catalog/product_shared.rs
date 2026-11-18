@@ -17,20 +17,13 @@ use crate::ports::PendingAttachmentBatch;
 use crate::repository::CatalogExt;
 
 impl CatalogService {
-    /// 校验商品创建/编辑引用的字典（分类/品牌/基础单位）与分类-商品类型兼容性。
-    ///
-    /// # 参数
-    /// * `executor` - 原授权事务或读取阶段的执行器。
-    /// * `category_id` - ERP 分类
-    /// * `brand_id` - ERP 品牌
-    /// * `skus` - SKU 行（校验每个基础单位存在且启用）
-    /// * `product_kind` - 商品业务类型
-    ///
-    /// # 返回
-    /// 合法时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 字典不存在/停用或分类不允许商品类型时返回错误。
+    // 校验商品创建/编辑引用的字典（分类/品牌/基础单位）与分类-商品类型兼容性。
+    //
+    // 合法时返回 `Ok(())`。字典不存在/停用或分类不允许商品类型时返回错误。
+    //
+    // 沿用调用方的执行器，不另开事务。
+    //
+    // `skus` 为 SKU 行（校验每个基础单位存在且启用）。
     pub(super) async fn ensure_product_dictionaries(
         &self,
         category_id: &ProductCategoryId,
@@ -68,7 +61,7 @@ impl CatalogService {
         Ok(())
     }
 
-    /// 按轮播图、详情图的顺序校验引用并构造商品媒体行。
+    // 按轮播图、详情图的顺序校验引用并构造商品媒体行。
     pub(super) async fn build_spu_media(
         &self,
         revision_id: &ProductRevisionId,
@@ -86,19 +79,13 @@ impl CatalogService {
         Ok(carousel.into_iter().chain(detail).collect())
     }
 
-    /// 构造媒体行（校验 `file_asset` 引用存在，媒体角色与顺序落位）。
-    ///
-    /// # 参数
-    /// * `executor` - 原授权事务或读取阶段的执行器。
-    /// * `revision_id` - 所属商品修订
-    /// * `inputs` - 媒体输入
-    /// * `role` - 媒体用途
-    ///
-    /// # 返回
-    /// 返回媒体实体集合。
-    ///
-    /// # 错误
-    /// 媒体文件不存在或同用途顺序重复时返回错误。
+    // 构造媒体行（校验 `file_asset` 引用存在，媒体角色与顺序落位）。
+    //
+    // 返回媒体实体集合。媒体文件不存在或同用途顺序重复时返回错误。
+    //
+    // 沿用调用方的执行器，不另开事务。
+    //
+    // `role` 为媒体用途。
     async fn build_media_rows(
         &self,
         revision_id: &ProductRevisionId,
@@ -137,19 +124,13 @@ impl CatalogService {
     }
 }
 
-/// 解析商品命令中全部临时文件引用，并返回实际被引用的临时键集合。
-///
-/// # 参数
-/// * `carousel_media` - 轮播图输入；临时引用会被就地替换
-/// * `detail_media` - 详情图输入；临时引用会被就地替换
-/// * `skus` - SKU 输入；主图临时引用会被就地替换
-/// * `pending_assets` - 本次命令的待登记附件批次
-///
-/// # 返回
-/// 返回被实际解析到的临时键集合。
-///
-/// # 错误
-/// 临时引用无法解析时，下层错误映射为 `Error::Logic`。
+// 解析商品命令中全部临时文件引用，并返回实际被引用的临时键集合。
+//
+// 返回被实际解析到的临时键集合。临时引用无法解析时，下层错误映射为 `Error::Logic`。
+//
+// - `carousel_media`：轮播图输入；临时引用会被就地替换。
+// - `detail_media`：详情图输入；临时引用会被就地替换。
+// - `skus`：SKU 输入；主图临时引用会被就地替换。
 pub(super) fn resolve_product_file_references(
     carousel_media: &mut [ProductMediaInput],
     detail_media: &mut [ProductMediaInput],
@@ -169,17 +150,9 @@ pub(super) fn resolve_product_file_references(
     Ok(used)
 }
 
-/// 校验批量读取的基础单位完整且全部启用。
-///
-/// # 参数
-/// * `expected_ids` - SKU 输入引用的基础单位 ID
-/// * `units` - Repository 批量读取到的计量单位实体
-///
-/// # 返回
-/// 每个引用均存在且启用时返回 `Ok(())`。
-///
-/// # 错误
-/// 任一单位缺失时返回 `NotFound`，停用时返回业务逻辑错误。
+// 校验批量读取的基础单位完整且全部启用。
+//
+// 每个引用均存在且启用时返回 `Ok(())`。任一单位缺失时返回 `NotFound`，停用时返回业务逻辑错误。
 pub(super) fn ensure_units_available(
     expected_ids: &[UnitOfMeasureId],
     units: &[UnitOfMeasure],

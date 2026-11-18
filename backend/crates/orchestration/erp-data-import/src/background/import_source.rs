@@ -51,27 +51,23 @@ impl SourceKey {
 }
 
 impl<T> ImportSourceCache<T> {
-    /// 创建同时限制任务数和输入字节数的缓存。
-    ///
-    /// # 参数
-    /// * `max_bytes` - 所有常驻输入的合计字节预算。
-    /// # 返回
-    /// 返回空缓存。
-    /// # 错误
-    /// 不返回错误。
+    // 创建同时限制任务数和输入字节数的缓存。
+    //
+    // `max_bytes`：所有常驻输入的合计字节预算。
+    //
+    // 返回空缓存。
     pub(crate) fn new(max_bytes: usize) -> Self {
         Self { entries: Mutex::new(VecDeque::new()), max_bytes }
     }
 
-    /// 命中时共享来源；未命中时串行加载，失败或取消不会留下半成品。
-    ///
-    /// # 参数
-    /// * `job` - 已读取并认领的当前任务，不可变字段参与缓存身份。
-    /// * `load` - 加载、校验输入并返回来源及输入字节数；仅未命中时调用。
-    /// # 返回
-    /// 返回共享输入。超预算输入仅供本切片使用；容量不足时淘汰最近最少使用项。
-    /// # 错误
-    /// 原样传播加载错误，下一切片可重试。锁只覆盖输入准备，不覆盖业务行执行。
+    // 命中时共享来源；未命中时串行加载，失败或取消不会留下半成品。
+    //
+    // - `job`：已读取并认领的当前任务，不可变字段参与缓存身份。
+    // - `load`：加载、校验输入并返回来源及输入字节数；仅未命中时调用。
+    //
+    // 返回共享输入。超预算输入仅供本切片使用；容量不足时淘汰最近最少使用项。
+    //
+    // 原样传播加载错误，下一切片可重试。锁只覆盖输入准备，不覆盖业务行执行。
     pub(crate) async fn get_or_load<F, Fut>(&self, job: &BackgroundJob, load: F) -> Result<Arc<T>>
     where
         F: FnOnce() -> Fut,
@@ -102,7 +98,7 @@ impl<T> ImportSourceCache<T> {
         Ok(value)
     }
 
-    /// 查询本轮候选任务，并释放已不在本轮候选中的缓存来源。
+    // 查询本轮候选任务，并释放已不在本轮候选中的缓存来源。
     pub(crate) async fn poll_jobs(&self, db: &Database, domain_job_type: &str) -> Result<Vec<BackgroundJob>> {
         let jobs = db
             .background_jobs()
@@ -117,14 +113,11 @@ impl<T> ImportSourceCache<T> {
         self.entries.lock().await.retain(|entry| keys.contains(&entry.key));
     }
 
-    /// 单任务完成或不再允许执行时立即释放来源。
-    ///
-    /// # 参数
-    /// * `job_id` - 不再需要缓存的任务身份。
-    /// # 返回
-    /// 无返回值；正在执行的切片仍可使用自己的引用。
-    /// # 错误
-    /// 不返回错误。
+    // 单任务完成或不再允许执行时立即释放来源。
+    //
+    // `job_id`：不再需要缓存的任务身份。
+    //
+    // 正在执行的切片仍可使用自己的引用。
     pub(crate) async fn remove(&self, job_id: &str) {
         self.entries.lock().await.retain(|entry| entry.key.job_id != job_id);
     }

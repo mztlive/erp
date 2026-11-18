@@ -6,18 +6,7 @@ use super::context::ensure_version;
 use crate::entity::supplier_api::*;
 use crate::{Error, Result};
 impl SupplierApiService {
-    /// 读取并校验连接版本。
-    ///
-    /// # 参数
-    /// * `id` - 供应商连接主键。
-    /// * `expected_version` - 调用方持有的连接版本。
-    /// * `executor` - 调用方事务的执行器。
-    ///
-    /// # 返回
-    /// 返回版本匹配的连接。
-    ///
-    /// # 错误
-    /// 连接不存在、版本不一致或治理快照读取失败时返回对应错误。
+    /// 自动下单开关变更前读取目标连接并核对客户端期望版本；连接缺失、读取失败或版本变化时停止。
     pub async fn prepare_status_target(
         &self,
         id: &str,
@@ -28,19 +17,8 @@ impl SupplierApiService {
         ensure_version(connection.base.version, expected_version)?;
         Ok(connection)
     }
-    /// 校验当前配置检查结果并保存自动下单开关。
-    ///
-    /// # 参数
-    /// * `connection` - 待启停的连接。
-    /// * `action` - 启用或停用。
-    /// * `actor_id` - 操作人。
-    /// * `executor` - 调用方事务的执行器。
-    ///
-    /// # 返回
-    /// 无返回值。连接状态已按 CAS 写回。
-    ///
-    /// # 错误
-    /// 首个治理阻塞返回 `BusinessLogicError`；动作不是启用或停用时返回 `Internal`。状态迁移或连接 CAS 失败时返回对应错误。
+    /// 在调用方执行器内检查启停治理条件并 CAS 保存自动下单开关，不采用旧人工能力声明。治理阻塞返回业务错
+    /// 误，非启停动作返回内部错误；状态迁移或 CAS 失败向上传播。
     pub async fn apply_status_change(
         &self,
         connection: &mut SupplierApiConnection,

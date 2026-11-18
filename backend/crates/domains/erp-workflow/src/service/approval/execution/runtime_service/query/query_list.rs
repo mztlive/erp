@@ -32,7 +32,7 @@ use crate::service::approval::process_kind::process_kind_of;
 /// 保持既有授权结果规模上限；数据库在完整过滤后计算总数。
 const MAX_AUTHORIZED_INSTANCES: u64 = 20_000;
 
-/// 保留原有超限拒绝错误，Started 与 Managed 使用相同结果上限。
+// 本人发起与管理实例视图共用固定查询结果上限，超过时维持原有拒绝错误。
 fn ensure_runtime_result_limit(total: u64) -> Result<()> {
     if total > MAX_AUTHORIZED_INSTANCES {
         return Err(Error::ValidationError("审批查询授权结果超过 20000 条，请增加类型或业务筛选".into()));
@@ -41,20 +41,14 @@ fn ensure_runtime_result_limit(total: u64) -> Result<()> {
 }
 
 impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
-    /// 返回由开放审批任务映射的运行实例列表页。
-    ///
-    /// # 参数
-    /// * `actor` - 当前已认证账号
-    /// * `query` - 可选单据类型与页大小
-    ///
-    /// # 返回
-    /// 返回当前账号拥有的开放单据审批任务页。
-    ///
-    /// # 错误
-    /// WorkItem Repository 查询失败时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 任务类型、开放状态、责任人与可选单据类型全部由 Repository 固定查询封装。
+    // 返回由开放审批任务映射的运行实例列表页。
+    // 任务类型、开放状态、责任人与可选单据类型全部由 Repository 固定查询封装。
+    //
+    // 返回当前账号拥有的开放单据审批任务页。
+    //
+    // WorkItem Repository 查询失败时返回错误。
+    //
+    // `actor`：当前已认证账号；`query`：可选单据类型与页大小。
     pub(super) async fn list_mine(
         &self,
         actor: &AuditActor,
@@ -71,7 +65,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             .await
     }
 
-    /// 本人开放任务的中央查询、完整性检查和交付沿同一快照。
+    // 本人开放审批任务使用中央实例查询范围；候选完整性检查、分页及交付复验沿同一快照。
     async fn list_mine_stage(
         &self,
         actor: &AuditActor,
@@ -108,7 +102,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         Ok(RuntimeInstanceListPage { items, total: page.total, next_cursor, document_type_counts: None })
     }
 
-    /// 本人查询的业务条件只收窄中央实例凭证，不另行选择授权规则。
+    // 为本人审批查询追加业务筛选，只收窄中央实例凭证已允许的范围，不另行选择授权规则。
     async fn mine_task_page(
         &self,
         actor: &AuditActor,
@@ -145,8 +139,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             .await
     }
 
-    /// 批量装载 Mine 页的 execution、instance、summary 与 snapshot，并按原任务
-    /// 顺序重建实例行。任一身份链漂移时整页失败关闭，禁止静默丢行后伪造 total。
+    // 为本人审批页批量加载节点执行、实例、摘要及冻结快照，再按原任务顺序组装结果。
+    // 任一责任链与冻结身份不符时拒绝整页，不能丢行后仍返回原总数。
     async fn hydrate_mine_items(
         &self,
         actor: &AuditActor,
@@ -188,12 +182,11 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     }
 
     /// 在调用方快照中读取本人发起审批的一批授权候选。
-    /// # 参数
-    /// `actor` 为当前账号，`query` 仅允许 started，`executor` 为调用方事务。
-    /// # 返回
     /// 返回完整授权后的候选页，用于跨域内容检索。
-    /// # 错误
+    ///
     /// 非 started、无效账号、权限或仓储失败时拒绝。
+    ///
+    /// `actor` 为当前账号，`query` 仅允许 started，`executor` 为调用方事务。
     pub async fn started_instance_page_with(
         &self,
         actor: &AuditActor,
@@ -228,20 +221,14 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         Ok((items, next))
     }
 
-    /// 查询本人发起或管理范围内的审批实例。
-    ///
-    /// # 参数
-    /// * `actor` - 当前已认证账号
-    /// * `query` - 已规范化查询，可含字面量检索
-    ///
-    /// # 返回
-    /// 所有视图均返回数据库在完整授权过滤后计算的分页和总数。
-    ///
-    /// # 错误
-    /// 单据类型未登记或仓储失败时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 检索必须在 MongoDB 内施加。不得先取当前页再内存过滤。
+    // 查询本人发起或管理范围内的审批实例。
+    // 检索必须在 MongoDB 内施加。不得先取当前页再内存过滤。
+    //
+    // 所有视图均返回数据库在完整授权过滤后计算的分页和总数。
+    //
+    // 单据类型未登记或仓储失败时返回错误。
+    //
+    // `actor`：当前已认证账号；`query`：已规范化查询，可含字面量检索。
     pub(super) async fn list_managed_or_started(
         &self,
         actor: &AuditActor,
@@ -259,7 +246,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             .await
     }
 
-    /// 在同一事务中形成类型范围、完整授权总数与稳定页面。
+    // 在一个事务内形成类型范围、完整授权总数与稳定页面。
     async fn list_scoped_instances(
         &self,
         actor: &AuditActor,
@@ -306,7 +293,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         Ok(result)
     }
 
-    /// 所有列表在同一读取阶段编译固定规则，并由数据库先过滤再分页计数。
+    // 在原读取阶段编译该视图的固定权限，数据库先应用完整授权再进行计数及分页。
     async fn scoped_runtime_page(
         &self,
         actor: &AuditActor,
@@ -327,7 +314,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         Ok((page, access))
     }
 
-    /// 返回业务已接入的流程种类；账号资格、同角色要求和来源范围统一由 query 判断。
+    // 为实例列表提供已接入的流程种类候选；当前账号、同角色资格及来源范围仍以中央 `query` 为准。
     fn runtime_read_type_scopes(
         &self,
         query: &RuntimeInstanceListQuery,
@@ -346,7 +333,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     }
 }
 
-/// 返回政策矩阵中必须接入审批运行时的固定单据类型。
+// 从固定政策矩阵枚举必须接入审批运行时的类型，不把无审批类别带入实例查询。
 fn process_required_document_types() -> Result<Vec<DocumentType>> {
     let mut document_types = Vec::new();
     for document_type in ALL_DOCUMENT_TYPES {

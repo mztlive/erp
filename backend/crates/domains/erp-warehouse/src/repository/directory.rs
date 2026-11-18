@@ -17,19 +17,7 @@ use crate::repository::warehouse_projection::warehouse_projection;
 use crate::repository::{WarehouseExt, WarehouseFilter, WarehouseRow};
 use crate::{Error, Result};
 
-/// 查询授权目录快照。
-///
-/// # 参数
-/// * `db` - 本域数据库。
-/// * `scope` - 本域授权范围。
-/// * `query` - 已规范化的目录条件。
-/// * `executor` - 调用方事务执行器。
-///
-/// # 返回
-/// 最多10001项轻量结果；服务层对超限整体拒绝。
-///
-/// # 错误
-/// 数据库读取或反序列化失败时传播原始错误。
+// 用原事务及完整仓库授权查询轻量目录，最多取 `10001` 项，以便服务识别并拒绝超限；数据库读取或反序列化失败保留原错误。
 pub(crate) async fn snapshot(
     db: &Database,
     scope: &WarehouseQuery,
@@ -43,7 +31,7 @@ pub(crate) async fn snapshot(
     Ok(items)
 }
 
-/// 在关联修订前落实对象范围，回显 ID 仅收窄授权集合。
+// 在关联当前修订前执行完整对象范围；已选 ID 只收窄授权集合，不能用作额外授权。
 fn pipeline(authorization: &[Document], query: &DirectoryQuery) -> Vec<Document> {
     let mut filter = doc! { "deleted_at": 0 };
     if let Some(ids) = &query.ids {
@@ -74,13 +62,7 @@ fn pipeline(authorization: &[Document], query: &DirectoryQuery) -> Vec<Document>
     pipeline
 }
 
-/// 分页、计数使用相同业务筛选与完整仓库授权。
-/// # 参数
-/// db、filter 为仓库及规范化业务筛选，scope 为完整凭证，executor 为原事务。
-/// # 返回
-/// 当前授权交集内的列表页与总数。
-/// # 错误
-/// 授权失效、数量越界或数据库读取失败时拒绝。
+// 将同一套仓库筛选和全部授权阶段用于分页与计数，避免结果与范围口径不一致；凭证失效、数量越界或读取失败时拒绝。
 pub(crate) async fn warehouses(
     db: &Database,
     scope: &WarehouseQuery,
@@ -128,13 +110,7 @@ fn warehouse_options(filter: &WarehouseFilter) -> FindOptions {
         .build()
 }
 
-/// 用完整授权查询判断是否存在仓库，只读取一行身份。
-/// # 参数
-/// db 为仓库数据库，access 为完整凭证，executor 为原事务。
-/// # 返回
-/// 完整授权查询存在实际仓库时为真。
-/// # 错误
-/// 模型或当前边界错配时返回校验错误；数据库读取或解码失败时透传。
+// 在验证授权模型和读取边界后执行完整阶段，最多查一行身份判断是否命中真仓库；模型或边界错配返回校验错误，读取或解码失败直接返回。
 pub(crate) async fn authorized_rows_exist(
     db: &Database,
     access: &CompiledAccess,
@@ -149,13 +125,7 @@ pub(crate) async fn authorized_rows_exist(
     Ok(!rows.is_empty())
 }
 
-/// 执行统一授权阶段后返回真实仓库身份。
-/// # 参数
-/// db 为仓库数据库，access 为完整查询凭证，ids 为有界候选，executor 为原事务。
-/// # 返回
-/// 当前候选内的已授权仓库 ID，不截断。
-/// # 错误
-/// 模型或当前边界错配时返回校验错误；数据库或解码失败透传。
+// 在原事务按候选 ID 收窄完整授权查询，只返回命中的真实 ID，不截断。模型或边界错配返回校验错误，数据库或解码失败透传。
 pub(crate) async fn authorized_ids_in(
     db: &Database,
     access: &CompiledAccess,

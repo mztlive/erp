@@ -16,16 +16,11 @@ pub struct PayableService {
     db: Database,
 }
 impl PayableService {
-    /// 创建应付财务服务。
-    ///
-    /// # 参数
-    /// * `db` - 财务领域数据库。
-    ///
-    /// # 返回
+    /// 在组装应付管理用例时绑定本域数据库句柄，实际查询或写入由各用例方法执行。
     /// 返回未开始任何读写的服务实例。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// 输入约定：
+    /// - `db`：财务领域数据库。
     pub fn new(db: Database) -> Self {
         Self { db }
     }

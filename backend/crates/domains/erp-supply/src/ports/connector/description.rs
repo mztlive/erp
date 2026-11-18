@@ -30,12 +30,8 @@ pub struct ConnectorDescription {
 
 impl ConnectorDescription {
     /// 读取已装配接口生成描述，不使用历史能力配置或发起外部调用。
-    /// # 参数
-    /// `connector` 为按当前部署构造的连接器。
-    /// # 返回
     /// 操作、地址、消息与资金能力的实际声明。
-    /// # 错误
-    /// 不返回错误，缺失的接口保持缺失。
+    /// 缺失的接口保持缺失。
     pub fn from_connector<C: SupplierConnector + ?Sized>(connector: &C) -> Self {
         let notification_mode = match (connector.callbacks().is_some(), connector.messages().is_some()) {
             (false, false) => NotificationMode::Unavailable,

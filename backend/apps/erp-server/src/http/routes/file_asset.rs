@@ -13,21 +13,12 @@ use crate::http::routes::permission_route;
 use crate::http::state::HttpState;
 use crate::http::upload;
 
-/// 返回本域管理端路由集合。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回声明公共权限目录信息的路由集合。
-///
-/// # 错误
-/// 不执行 I/O，不返回错误。
+/// 为管理端挂载文件资产接口，按操作登记公共权限目录信息；文件入口保留对应的上传限制。
 pub fn routes() -> Router<HttpState> {
     Router::new().merge(asset_routes()).merge(lifecycle_routes()).merge(attachment_routes())
 }
 
-/// 文件登记、上传与读取路由。
+// 为父路由挂载文件登记、上传与读取路由。
 fn asset_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -58,7 +49,7 @@ fn asset_routes() -> Router<HttpState> {
         )
 }
 
-/// 文件扫描与销毁路由。
+// 为父路由挂载文件扫描与销毁路由。
 fn lifecycle_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -71,7 +62,7 @@ fn lifecycle_routes() -> Router<HttpState> {
         )
 }
 
-/// 单据附件关联路由。
+// 为父路由挂载单据附件关联路由。
 fn attachment_routes() -> Router<HttpState> {
     Router::new()
         .route(

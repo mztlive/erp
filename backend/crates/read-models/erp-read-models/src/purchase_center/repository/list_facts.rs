@@ -47,10 +47,9 @@ pub struct PurchaseOrderListFacts {
     pub revisions: HashMap<String, PurchaseOrderRevision>,
 }
 
-/// 批量加载采购单列表页与关联事实。
+/// 读取采购列表关联事实时，批量加载采购单列表页与关联事实。
 ///
 /// # 参数
-/// * `db` - MongoDB 数据库句柄
 /// * `filter` - 采购单列表筛选与分页条件
 /// * `scope` - 已证明的对象范围，必须与筛选求交
 /// * `executor` - 数据访问执行器，由 Service 决定事务边界；事务内重验必须复用调用方 executor
@@ -128,7 +127,7 @@ pub async fn load_purchase_order_list_page(
     ))
 }
 
-/// 按当前授权页批量读取财务核销状态，查询次数与页大小无关。
+// 依据当前授权页批量读取财务核销状态，查询次数与页大小无关。
 async fn current_payment_statuses(
     db: &Database,
     page: &PageResult<PurchaseOrderRow>,
@@ -144,72 +143,57 @@ async fn current_payment_statuses(
         .collect())
 }
 
-/// 提取列表页去重后的负责人账号 ID。
-///
-/// # 参数
-/// * `page` - 当前页投影行与总数
-///
-/// # 返回
-/// 返回去重、去空白后的负责人账号 ID；空集合表示无需查询。
-///
-/// # 错误
-/// 无。
-///
-/// # 约束
-/// 去重只用于缩小 `$in` 范围，不改变任何业务语义；空白与缺失由 Service 回退。
+// 定位采购列表关联事实关联时，提取列表页去重后的负责人账号 ID。
+//
+// 调用参数：
+// * `page` - 当前页投影行与总数
+//
+// 返回去重、去空白后的负责人账号 ID；空集合表示无需查询。
+//
+// 调用约束：
+// 去重只用于缩小 `$in` 范围，不改变任何业务语义；空白与缺失由 Service 回退。
 fn unique_owner_ids(page: &PageResult<PurchaseOrderRow>) -> Vec<String> {
     crate::support::dedup_trimmed_nonempty(page.items.iter().filter_map(|row| row.owner_user_id.as_deref()))
 }
 
-/// 提取列表页去重后的供应商账号 ID。
-///
-/// # 参数
-/// * `page` - 当前页投影行与总数
-///
-/// # 返回
-/// 返回按首次出现顺序去重后的供应商 ID；空页返回空集合。
-///
-/// # 错误
-/// 无。
-///
-/// # 约束
-/// 去重只用于缩小 `$in` 范围，不改变任何业务语义。
+// 定位采购列表关联事实关联时，提取列表页去重后的供应商账号 ID。
+//
+// 调用参数：
+// * `page` - 当前页投影行与总数
+//
+// 返回按首次出现顺序去重后的供应商 ID；空页返回空集合。
+//
+// 调用约束：
+// 去重只用于缩小 `$in` 范围，不改变任何业务语义。
 fn unique_supplier_ids(page: &PageResult<PurchaseOrderRow>) -> Vec<SupplierAccountId> {
     crate::support::dedup_ordered(page.items.iter().map(|row| row.supplier_id.clone()))
 }
 
-/// 提取列表页去重后的来源销售单 ID。
-///
-/// # 参数
-/// * `page` - 当前页投影行与总数
-///
-/// # 返回
-/// 返回按首次出现顺序去重后的销售单 ID；空页返回空集合。
-///
-/// # 错误
-/// 无。
-///
-/// # 约束
-/// 去重只用于缩小 `$in` 范围，不改变过滤、排序与总数语义。
+// 定位采购列表关联事实关联时，提取列表页去重后的来源销售单 ID。
+//
+// 调用参数：
+// * `page` - 当前页投影行与总数
+//
+// 返回按首次出现顺序去重后的销售单 ID；空页返回空集合。
+//
+// 调用约束：
+// 去重只用于缩小 `$in` 范围，不改变过滤、排序与总数语义。
 fn unique_sales_ids(page: &PageResult<PurchaseOrderRow>) -> Vec<SalesOrderId> {
     crate::support::dedup_ordered(page.items.iter().map(|row| row.sales_order_id.clone()))
 }
 
-/// 按命名空间拆分列表行当前内容指针。
-///
-/// # 参数
-/// * `page` - 当前页投影行与总数
-///
-/// # 返回
-/// 返回 `(提交指针, 版本指针)`：有当前提交的行进入提交集合，否则有当前版本
-/// 的行进入版本集合；两者互斥，同一 ID 不得同时进入两个集合。
-///
-/// # 错误
-/// 无。
-///
-/// # 约束
-/// 提交指针只用于提交集合查询，版本指针只用于版本集合查询，不得交叉；
-/// 历史提交与历史版本不进入集合，缺失指针由 Service 回退零值。
+// 定位采购列表关联事实关联时，按命名空间拆分列表行当前内容指针。
+//
+// 调用参数：
+// * `page` - 当前页投影行与总数
+//
+// 结果：
+// 返回 `(提交指针, 版本指针)`：有当前提交的行进入提交集合，否则有当前版本
+// 的行进入版本集合；两者互斥，同一 ID 不得同时进入两个集合。
+//
+// 调用约束：
+// 提交指针只用于提交集合查询，版本指针只用于版本集合查询，不得交叉；
+// 历史提交与历史版本不进入集合，缺失指针由 Service 回退零值。
 fn split_pointer_ids(page: &PageResult<PurchaseOrderRow>) -> (Vec<String>, Vec<String>) {
     let mut submissions = Vec::new();
     let mut revisions = Vec::new();
@@ -229,18 +213,17 @@ fn split_pointer_ids(page: &PageResult<PurchaseOrderRow>) -> (Vec<String>, Vec<S
     (submissions, revisions)
 }
 
-/// 在采购分页前解析来源销售单号和供应商名称命中的稳定身份。
-///
-/// # 参数
-/// * `db` - 数据库句柄
-/// * `keyword` - 列表查询关键词
-/// * `executor` - 调用方执行器
-/// # 返回
-/// 返回销售单和供应商身份集合；无关键词时不查询。
-/// # 错误
-/// 任一拥有领域查询失败时返回仓储错误。
-/// # 约束
-/// 外域名称只由拥有领域读取，不在采购仓储内查询销售或主体集合。
+// 读取采购列表关联事实时，在采购分页前解析来源销售单号和供应商名称命中的稳定身份。
+//
+// 调用参数：
+// * `keyword` - 列表查询关键词
+//
+// 返回销售单和供应商身份集合；无关键词时不查询。
+//
+// 任一拥有领域查询失败时返回仓储错误。
+//
+// 调用约束：
+// 外域名称只由拥有领域读取，不在采购仓储内查询销售或主体集合。
 pub(crate) async fn keyword_reference_ids(
     db: &Database,
     keyword: Option<&str>,
@@ -268,7 +251,7 @@ mod tests {
 
     use super::{split_pointer_ids, unique_owner_ids, unique_sales_ids, unique_supplier_ids};
 
-    /// 构造最小列表行。
+    // 装配采购列表关联事实展示时，生成最小列表行。
     fn row(
         id: &str,
         sales_order_id: &str,
@@ -300,7 +283,7 @@ mod tests {
         }
     }
 
-    /// 负责人去重忽略空白与重复输入。
+    // 验证采购列表关联事实：负责人去重忽略空白与重复输入。
     #[test]
     fn owner_ids_dedup_and_skip_blank() {
         let page = PageResult {
@@ -315,7 +298,7 @@ mod tests {
         assert_eq!(unique_owner_ids(&page), vec!["buyer-1".to_string()]);
     }
 
-    /// 提交与版本指针按命名空间拆分且各自去重。
+    // 验证采购列表关联事实：提交与版本指针按命名空间拆分且各自去重。
     #[test]
     fn pointer_ids_split_by_kind_and_dedup() {
         let page = PageResult {
@@ -331,7 +314,7 @@ mod tests {
         assert_eq!(split_pointer_ids(&page), (vec!["sub-1".to_string()], vec!["rev-2".to_string()]));
     }
 
-    /// 供应商与销售单 ID 去重保持首次顺序。
+    // 验证采购列表关联事实：供应商与销售单 ID 去重保持首次顺序。
     #[test]
     fn supplier_and_sales_ids_dedup() {
         let page = PageResult {

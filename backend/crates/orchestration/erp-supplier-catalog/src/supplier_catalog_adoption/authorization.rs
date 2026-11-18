@@ -15,13 +15,13 @@ use crate::Result;
 
 const PREVIEW_RESOURCE: &str = "supplier_catalog_adoption_preview";
 impl SupplierCatalogAdoptionProcess {
-    /// 在当前读取或写事务内核验真实冻结预览的创建人。
-    /// # 参数
-    /// actor 为真实账号，id 为持久化预览主键，executor 为原执行器。
-    /// # 返回
-    /// 当前有效账号为实际预览创建人时成功；过期预览仍允许原结果回放。
-    /// # 错误
-    /// 账号无效、对象缺失、非创建人或读取失败时拒绝。
+    // 在当前读取或写事务内核验真实冻结预览的创建人。
+    //
+    // actor 为真实账号，id 为持久化预览主键，executor 为原执行器。
+    //
+    // 当前有效账号为实际预览创建人时成功；过期预览仍允许原结果回放。
+    //
+    // 账号无效、对象缺失、非创建人或读取失败时拒绝。
     pub(super) async fn require_preview_owner(
         &self,
         actor: &AuditActor,
@@ -36,11 +36,11 @@ impl SupplierCatalogAdoptionProcess {
 }
 
 /// 构造冻结预览的持久化事实读取器。
-/// # 参数
+///
 /// db 为预览所在数据库。
-/// # 返回
+///
 /// 不缓存请求目标的资源事实读取器。
-/// # 错误
+///
 /// 不执行读取。
 pub fn preview_facts_port(db: Database) -> Arc<dyn AccessFactsPort> {
     Arc::new(PreviewFacts(db))

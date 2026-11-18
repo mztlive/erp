@@ -20,15 +20,8 @@ pub struct AdjustmentPeopleFact {
 #[async_trait]
 pub trait AdjustmentPeopleFactsPort: Send + Sync {
     /// 按已授权调整单引用的人员标识批量读取当前姓名。
-    ///
-    /// # 参数
-    /// * `ids` - 当前已授权页或详情引用的人员标识。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
     /// 返回以人员标识为键的姓名映射；缺失关联不返回对应键。
-    ///
-    /// # 错误
+    /// `ids` 为当前已授权页或详情引用的人员标识；沿用调用方执行器 `executor`。
     /// 端口未接线或读取失败。
     async fn names_by_ids(
         &self,
@@ -37,15 +30,8 @@ pub trait AdjustmentPeopleFactsPort: Send + Sync {
     ) -> Result<HashMap<String, String>>;
 
     /// 按调整单主键批量读取最新快照申请人与当前开放审批人。
-    ///
-    /// # 参数
-    /// * `ids` - 调整单主键
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
     /// 返回已存在人员事实的映射；缺失键表示该单尚无申请人或开放审批人。
-    ///
-    /// # 错误
+    /// `ids` 为调整单主键；沿用调用方执行器 `executor`。
     /// 端口未接线或读取失败。
     async fn people_by_adjustment_ids(
         &self,
@@ -54,15 +40,8 @@ pub trait AdjustmentPeopleFactsPort: Send + Sync {
     ) -> Result<HashMap<String, AdjustmentPeopleFact>>;
 
     /// 最新审批快照申请人落在 `applicant_ids` 的调整单主键。
-    ///
-    /// # 参数
-    /// * `applicant_ids` - 已规范化申请人 ID
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
     /// 返回匹配主键；无命中返回空集合。
-    ///
-    /// # 错误
+    /// `applicant_ids` 为已规范化申请人 ID；沿用调用方执行器 `executor`。
     /// 端口未接线、超限或读取失败。
     async fn adjustment_ids_submitted_by(
         &self,
@@ -71,15 +50,8 @@ pub trait AdjustmentPeopleFactsPort: Send + Sync {
     ) -> Result<Vec<String>>;
 
     /// 当前开放审批人落在 `handler_ids` 的调整单主键。
-    ///
-    /// # 参数
-    /// * `handler_ids` - 已规范化当前审批人 ID
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
     /// 返回匹配主键；无命中返回空集合。
-    ///
-    /// # 错误
+    /// `handler_ids` 为已规范化当前审批人 ID；沿用调用方执行器 `executor`。
     /// 端口未接线、超限或读取失败。
     async fn adjustment_ids_assigned_to(
         &self,
@@ -128,15 +100,8 @@ impl AdjustmentPeopleFactsPort for FailClosedAdjustmentPeopleFactsPort {
 }
 
 /// 同一对象只保留最高快照版本的申请人，禁止用创建人顶替。
-///
-/// # 参数
-/// * `rows` - `(调整单 ID, 快照版本, submitted_by)`
-///
-/// # 返回
 /// 返回每个调整单的最新 `submitted_by`。空白申请人被跳过；同一单版本相同或更低时被后出现的行替换。
-///
-/// # 错误
-/// 不返回错误。
+/// `rows` 为`(调整单 ID, 快照版本, submitted_by)`。
 pub fn latest_snapshot_submitters(
     rows: impl IntoIterator<Item = (String, u32, String)>,
 ) -> HashMap<String, String> {
@@ -157,16 +122,8 @@ pub fn latest_snapshot_submitters(
 }
 
 /// 仅当最新快照申请人命中筛选时保留对象；历史快照与 `created_by` 不贡献命中。
-///
-/// # 参数
-/// * `latest` - 最新快照申请人
-/// * `wanted` - 申请人筛选
-///
-/// # 返回
 /// 返回命中的调整单 ID，并按标识排序。
-///
-/// # 错误
-/// 不返回错误。
+/// `latest` 为最新快照申请人；`wanted` 为申请人筛选。
 pub fn applicant_object_ids(latest: &HashMap<String, String>, wanted: &[String]) -> Vec<String> {
     let wanted = wanted.iter().collect::<BTreeSet<_>>();
     let mut ids = latest
@@ -179,16 +136,8 @@ pub fn applicant_object_ids(latest: &HashMap<String, String>, wanted: &[String])
 }
 
 /// 合并申请人与当前审批人；缺快照时申请人保持空，不得填入创建人。
-///
-/// # 参数
-/// * `submitted` - 最新快照申请人
-/// * `assignees` - 开放审批当前处理人
-///
-/// # 返回
 /// 返回按调整单合并后的人员事实。
-///
-/// # 错误
-/// 不返回错误。
+/// `submitted` 为最新快照申请人；`assignees` 为开放审批当前处理人。
 pub fn merge_adjustment_people(
     submitted: impl IntoIterator<Item = (String, String)>,
     assignees: impl IntoIterator<Item = (String, String)>,
@@ -205,16 +154,8 @@ pub fn merge_adjustment_people(
 }
 
 /// 不同人员字段按 AND 求交；`None` 表示该字段未筛选。
-///
-/// # 参数
-/// * `left` - 申请人命中集合
-/// * `right` - 当前审批人命中集合
-///
-/// # 返回
 /// 两边都未筛选时返回 `None`；否则返回交集，空集合表示无命中。
-///
-/// # 错误
-/// 不返回错误。
+/// `left` 为申请人命中集合；`right` 为当前审批人命中集合。
 pub fn intersect_object_ids(left: Option<Vec<String>>, right: Option<Vec<String>>) -> Option<Vec<String>> {
     match (left, right) {
         (None, None) => None,

@@ -34,17 +34,12 @@ pub struct RuntimeApprovalRouteNode {
 
 impl RuntimeApprovalRoute {
     /// 从已授权实例、冻结运行图和本轮节点执行构造完整链条。
-    ///
-    /// # 参数
-    /// * `instance` - 精确审批实例。
-    /// * `graph` - 已恢复实例冻结审批人的运行图。
-    /// * `executions` - 本轮各节点的最近执行。
-    ///
-    /// # 返回
     /// 按定义顺序返回全部节点及服务端确定的状态。
     ///
-    /// # 错误
     /// 定义版本、流程种类、执行身份或节点顺序不一致时返回冲突。
+    ///
+    /// `instance`：精确审批实例；`graph`：已恢复实例冻结审批人的运行图。
+    /// `executions`：本轮各节点的最近执行。
     pub fn from_runtime(
         instance: &ApprovalProcessInstance,
         graph: &DefinitionGraph,
@@ -76,7 +71,7 @@ impl RuntimeApprovalRoute {
 }
 
 impl RuntimeApprovalRouteNode {
-    /// 按冻结节点与最近执行构造展示项，未进入节点的状态取实例是否仍开放。
+    // 用冻结节点和其最近一次执行生成路线展示。尚未进入的节点根据当前审批实例是否仍开放确定显示状态。
     fn from_node(node: &ApprovalNodeDefinition, executions: &[ApprovalNodeExecution], pending: bool) -> Self {
         let execution = executions
             .iter()

@@ -12,42 +12,29 @@ pub(super) trait ConnectionJobExecutionPort: Sync {
     type Started: Send + Sync;
     type Outcome: Send;
 
-    /// 在独立根事务中启动任务，返回已提交、可供网关使用的事实。
-    ///
-    /// # 参数
-    /// * `job` - 待启动的任务。
-    ///
-    /// # 返回
-    /// 返回实现方定义的已提交启动结果。
-    ///
-    /// # 错误
-    /// 启动事务失败时返回错误，调用方不得继续调用网关。
+    // 待处理连接任务必须先提交独立启动事务，网关只消费该事务已提交的事实。
+    //
+    // `job`：待启动的任务。
+    //
+    // 返回实现方定义的已提交启动结果。
+    //
+    // 启动事务失败时返回错误，调用方不得继续调用网关。
     fn start(&self, job: Self::Job) -> impl Future<Output = Result<Self::Started>> + Send;
 
-    /// 在事务外调用网关。分类失败放进 `Outcome`，不得在这里中断收尾。
-    ///
-    /// # 参数
-    /// * `started` - `start` 返回的已提交事实。
-    ///
-    /// # 返回
-    /// 返回实现方定义的网关结果，包括已分类失败。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 启动成功后在事务之外调用网关；远端失败分类放入 `Outcome`，交给结果事务登记。
+    //
+    // `started`：`start` 返回的已提交事实。
+    //
+    // 返回实现方定义的网关结果，包括已分类失败。
     fn invoke(&self, started: &Self::Started) -> impl Future<Output = Self::Outcome> + Send;
 
-    /// 在独立结果事务中登记网关结果。
-    ///
-    /// # 参数
-    /// * `started` - `start` 返回的已提交事实。
-    /// * `outcome` - `invoke` 返回的网关结果。
-    /// * `actor` - 结果事务使用的审计操作人。
-    ///
-    /// # 返回
-    /// 结果事务提交成功时返回。
-    ///
-    /// # 错误
-    /// 结果落库失败时返回错误。
+    // 网关调用结束后，用独立事务和原审计操作人登记结果，无论网关成功还是失败都走此步骤。
+    //
+    // `started`：`start` 返回的已提交事实；`outcome`：`invoke` 返回的网关结果；`actor`：结果事务使用的审计操作人。
+    //
+    // 结果事务提交成功时返回。
+    //
+    // 结果落库失败时返回错误。
     fn finish(
         &self,
         started: Self::Started,
@@ -56,18 +43,13 @@ pub(super) trait ConnectionJobExecutionPort: Sync {
     ) -> impl Future<Output = Result<()>> + Send;
 }
 
-/// 先启动、再调用网关、最后登记结果；网关失败仍进入 `finish`。
-///
-/// # 参数
-/// * `port` - 启动、调用与收尾实现。
-/// * `job` - 待执行任务。
-/// * `actor` - 结果事务使用的审计操作人。
-///
-/// # 返回
-/// 启动与收尾都成功时返回。
-///
-/// # 错误
-/// `start` 或 `finish` 失败时返回对应错误。`invoke` 的失败不在此处短路。
+// 连接 worker 执行任务时，以启动提交隔开网关调用与结果事务；网关失败也必须进入 `finish`。
+//
+// `port`：启动、调用与收尾实现；`job`：待执行任务；`actor`：结果事务使用的审计操作人。
+//
+// 启动与收尾都成功时返回。
+//
+// `start` 或 `finish` 失败时返回对应错误。`invoke` 的失败不在此处短路。
 pub(super) async fn execute<P: ConnectionJobExecutionPort>(
     port: &P,
     job: P::Job,

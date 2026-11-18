@@ -34,16 +34,9 @@ pub(super) const SERVICE_CONFIRM_ACTION: AuditAction = AuditAction {
     ],
 };
 
-/// 从已确认领域事实中选择唯一允许记录的业务投影。
-///
-/// # 参数
-/// * `record` - 已完成草稿到确认迁移的服务履约事实。
-///
-/// # 返回
-/// 返回业务编号、确认状态、服务结果和精确数量的安全投影。
-///
-/// # 错误
-/// 不执行 I/O；字段和值由统一执行边界在提交前校验。
+// 从已确认领域事实中选择唯一允许记录的业务投影。
+//
+// `record` 为已完成草稿到确认迁移的服务履约事实。返回业务编号、确认状态、服务结果和精确数量的安全投影。不执行 I/O；字段和值由统一执行边界在提交前校验。
 pub(super) fn confirmed_service_content(record: &ServiceFulfillment) -> BusinessEventContent {
     BusinessEventContent {
         target_id: record.base.id.clone(),

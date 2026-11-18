@@ -14,84 +14,37 @@ use crate::entity::authorization::{
 
 /// 业务字段与关系映射。所有组合规则由身份域编译器执行。
 pub trait AccessMapping: Send + Sync {
-    /// 取得固定查询模型。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 根资源、集合和记录身份。
-    /// # 错误
-    /// 不执行 I/O。
+    /// 提供固定的根资源、集合和行身份描述，供启动登记及查询编译使用，不访问数据库。
     fn model(&self) -> &QueryModel;
 
-    /// 描述全部固定来源映射，供启动校验；不读取动态准备数据。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 关系标识及对应的不可变 Mapping；没有来源时为空。
-    /// # 错误
-    /// 无；缺少规则所需关系由 Builder 拒绝。
+    /// 声明完整且不变的来源关系和对应 Mapping，供 Builder 在启动时核对固定规则。不读动态事实；无来源返回空映射，漏登记规则依赖会被拒绝。
     fn relations(&self) -> BTreeMap<RelationKey, Arc<dyn AccessMapping>> {
         BTreeMap::new()
     }
 
-    /// 描述不改变根记录集合的固定关联准备。
-    /// # 参数
-    /// 无；不得依赖请求状态或授权结果。
-    /// # 返回
-    /// 完整关联的 lookup、set 或 addFields 阶段，先于授权过滤执行。
-    /// # 错误
-    /// 非只读阶段、根过滤或展开在启动时拒绝。
+    /// 声明授权过滤之前执行的固定关联准备，例如 `lookup`、`set` 或 `addFields`。
+    /// 阶段不得依赖请求或授权结果，也不得过滤、展开或以其他方式改变根记录集合。
     fn stages(&self) -> Vec<Document> {
         Vec::new()
     }
 
-    /// 返回静态时间解释的到期边界，不读取动态数据。
-    /// # 参数
-    /// context 为本次冻结的身份及时点。
-    /// # 返回
-    /// 例如自然日归属的下一日边界；无到期约束时为 None。
-    /// # 错误
-    /// 无；执行管道拒绝已经到期的边界。
+    /// 按已冻结的授权时点计算静态失效边界，例如自然日归属的下一日边界。无时间约束返回 `None`；此步不加载动态数据。
     fn valid_until(&self, _context: &AccessContext) -> Option<Instant> {
         None
     }
 
-    /// 返回当前记录的资源主键表达式。
-    /// # 参数
-    /// context 为授权上下文，prepared 为同次准备事实。
-    /// # 返回
-    /// MongoDB 标量表达式，支持字段、类型转换及计算主键。
-    /// # 错误
-    /// 无法表达该资源身份时返回接入错误。
+    /// 为记录授权和来源关联提供当前行的 MongoDB 标量主键表达式，可用字段、转换或计算表达式。动态模型只使用本次准备事实；无法表达资源身份时拒绝。
     fn key(&self, context: &AccessContext, prepared: Option<&MappingFacts>) -> Result<Bson>;
 
-    /// 取得查询外动态准备能力；静态映射无需实现。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 静态映射返回 None，不制造空事实或 Mapping 版本。
-    /// # 错误
-    /// 无；动态准备错误由 MappingPreparation 返回。
+    /// 只在条件转换依赖查询外动态数据时提供准备端口。静态 Mapping 返回 `None`，不制造空事实或假版本。
     fn preparation(&self) -> Option<&dyn MappingPreparation> {
         None
     }
 
-    /// 限定模型中实际存在且未删除的记录，根查询与来源关联均应用。
-    /// # 参数
-    /// context 为本次身份与时点；prepared 为同次准备事实。
-    /// # 返回
-    /// 行存在性约束；没有软删除的专用模型可返回空字段条件。
-    /// # 错误
-    /// 无法确定有效记录集合时拒绝，禁止用对象状态替代权限检查。
+    /// 为根查询及来源关联限定实际存在且未删除的记录。无软删除的专用模型可返回空条件；无法确认记录集合时拒绝，不能以业务状态替代对象授权。
     fn records(&self, context: &AccessContext, prepared: Option<&MappingFacts>) -> Result<QueryFragment>;
 
-    /// 翻译一个业务事实，不能改变上层与或关系。
-    /// # 参数
-    /// fact 为待翻译语义；context 和 prepared 为同次准备事实。
-    /// # 返回
-    /// 根条件或存在性查询。
-    /// # 错误
-    /// 未支持的事实必须拒绝。
+    /// 编译授权规则中的单个业务事实，返回根条件或关联存在性条件。用本次身份时点及准备事实解释字段，不重组上层与或规则；不支持的维度须拒绝。
     fn predicate(
         &self,
         fact: &AccessFact,
@@ -99,13 +52,7 @@ pub trait AccessMapping: Send + Sync {
         prepared: Option<&MappingFacts>,
     ) -> Result<QueryFragment>;
 
-    /// 提供完整来源关系，不筛除无权或缺失的引用。
-    /// # 参数
-    /// relation 为登记关系；context 和 prepared 为同次准备事实。
-    /// # 返回
-    /// 实际引用 ID 表达式和来源映射。
-    /// # 错误
-    /// 未登记关系或无法证明完整性时拒绝。
+    /// 给编译器提供已登记关系的完整来源 ID 表达式及对应 Mapping，不先剔除无权或缺失引用。关系未登记或无法证明完整性时拒绝。
     fn relation(
         &self,
         relation: &RelationKey,
@@ -117,26 +64,14 @@ pub trait AccessMapping: Send + Sync {
 /// 只有查询外读取动态数据的映射接入本能力；准备结果属于单次调用。
 #[async_trait]
 pub trait MappingPreparation: Send + Sync {
-    /// 经原执行器读取用于本次条件转换的完整动态数据。
-    /// # 参数
-    /// context 为固定身份和时点；executor 为原读取阶段。
-    /// # 返回
-    /// 数据、覆盖相应写入的真实修订号及最早到期边界。
-    /// # 错误
-    /// 读取失败原样传播；非事务缺少可靠修订号时由执行管道拒绝。
+    /// 查询编译需要外部动态条件时，沿原执行器读取实际使用的事实、可靠修订号及最早到期时点。读取失败原样传播；非事务读取不能在缺少可靠修订号时交付结果。
     async fn prepare(&self, context: &AccessContext, executor: &mut dyn Executor) -> Result<MappingFacts>;
 }
 
 /// 拥有领域提供当前对象事实；不得读取其他领域的集合。
 #[async_trait]
 pub trait AccessFactsPort: Send + Sync {
-    /// 读取本次根目标和完整来源关系。
-    /// # 参数
-    /// context 为身份及解释时点；ids 为完整根集合；executor 为原执行器。
-    /// # 返回
-    /// 实际读取的对象，缺失对象不能用虚构空对象替代。
-    /// # 错误
-    /// 持久化及事实读取错误原样传播。
+    /// 对象授权时沿调用方执行器读取完整根集合及真实来源，并按冻结身份及时点解释事实。缺失根对象不能用虚构对象补齐，读取与持久化错误原样传播。
     async fn load(
         &self,
         context: &AccessContext,

@@ -40,19 +40,11 @@ struct PreparedProduct {
 impl CatalogService {
     /// 创建商品（SPU + 首个商品修订 + 媒体 + 全部 SKU 行，跨集合事务）。
     ///
-    /// 数据模型 §6.3：`product_no`/`sku_no`/`(product_id, specification_signature)`
-    /// 唯一由唯一索引兜底（`DuplicateKey` → 409）；未指定 `product_no` 时自动取号，
-    /// 未填写编号的 SKU 按 `SkuNoSequence` 生成 `SKU` 前缀编号；新签名分配新 `sku_id`；
-    /// 条码冲突阻断；分类必须允许商品类型；规格名和值在所属 SPU 内直接生效。
+    /// 数据模型 §6.3：`product_no`/`sku_no`/`(product_id, specification_signature)`唯一由唯一索引兜底（`DuplicateKey`
+    /// → 409）；未指定 `product_no` 时自动取号，未填写编号的 SKU 按 `SkuNoSequence` 生成 `SKU` 前缀编号；新签名分配新
+    /// `sku_id`；条码冲突阻断；分类必须允许商品类型；规格名和值在所属 SPU 内直接生效。
     ///
-    /// # 参数
-    /// * `req` - 创建请求
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回新建商品的响应视图。
-    ///
-    /// # 错误
+    /// 失败情形如下：
     /// * `ValidationError` - 请求体校验失败
     /// * `NotFound` - 分类/品牌/基础单位/媒体文件不存在
     /// * `BusinessLogicError` - 分类不允许商品类型、规格不适用于分类、条码冲突等
@@ -61,18 +53,10 @@ impl CatalogService {
         self.product_create_with_assets(req, Arc::new(EmptyPendingAttachments), actor).await
     }
 
-    /// 创建商品，并把同一次 multipart 命令携带的文件资产与商品聚合原子登记。
+    /// 创建商品，并把同一次 multipart 命令携带的文件资产与商品聚合原子登记。临时引用无效、业务校验失败或事务写入失败时返回错误。
     ///
-    /// # 参数
-    /// * `req` - 创建请求，文件字段可使用本次请求内临时引用
-    /// * `asset_requests` - 已写入对象存储、尚未登记的文件资产
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回新建商品的响应视图。
-    ///
-    /// # 错误
-    /// 临时引用无效、业务校验失败或事务写入失败时返回错误。
+    /// - `req`：创建请求，文件字段可使用本次请求内临时引用。
+    /// - `asset_requests`：已写入对象存储、尚未登记的文件资产。
     pub async fn product_create_with_assets(
         &self,
         req: CreateProductRequest,
@@ -97,14 +81,7 @@ impl CatalogService {
 
     /// 校验输入和临时附件引用；数据库事实由原写事务读取。
     ///
-    /// # 参数
-    /// * `req` - 商品创建请求。
-    /// * `pending_assets` - 已上传且尚未登记的附件。
-    /// * `actor` - 当前操作人。
-    /// # 返回
-    /// 返回尚未持久化的商品草稿。
-    /// # 错误
-    /// 输入、临时附件引用或未使用附件校验失败时返回错误。
+    /// 返回尚未持久化的商品草稿。输入、临时附件引用或未使用附件校验失败时返回错误。
     pub async fn prepare_product_create(
         &self,
         mut req: CreateProductRequest,
@@ -122,17 +99,9 @@ impl CatalogService {
         Ok(ProductDraft { request: req })
     }
 
-    /// 使用原写事务读取字典、归属及条码，构造待写入实体。
-    ///
-    /// # 参数
-    /// * `req` - 创建请求
-    /// * `actor` - 审计操作人
-    ///
-    /// # 返回
-    /// 返回待写入的草稿。
-    ///
-    /// # 错误
-    /// 字典/媒体/规格校验失败时返回对应错误。
+    // 使用原写事务读取字典、归属及条码，构造待写入实体。
+    //
+    // 返回待写入的草稿。字典/媒体/规格校验失败时返回对应错误。
     async fn build_product_draft(
         &self,
         mut req: CreateProductRequest,
@@ -191,7 +160,7 @@ impl CatalogService {
         Ok(PreparedProduct { change_reason: req.change_reason, product, revision, media, sku_items })
     }
 
-    /// 在原创建快照核验全部字典和图片引用，再构造媒体行。
+    // 在原创建快照核验全部字典和图片引用，再构造媒体行。
     async fn create_media(
         &self,
         revision_id: &ProductRevisionId,
@@ -213,19 +182,14 @@ impl CatalogService {
             .await
     }
 
-    /// 确定新商品编号：请求已指定时沿用，否则按 `SPU` 序列取号。
-    ///
-    /// 授权后取号；计数器独立提交，商品事务回滚时已消费的序号不回收。
-    ///
-    /// # 参数
-    /// * `requested` - 请求显式指定的非空白商品编号
-    /// * `executor` - 当前授权事务执行器；计数器不加入此事务
-    ///
-    /// # 返回
-    /// 返回待写入的商品编号，规范化由实体完成。
-    ///
-    /// # 错误
-    /// 计数器写入失败时返回内部错误。
+    // 确定新商品编号：请求已指定时沿用，否则按 `SPU` 序列取号。
+    //
+    // 授权后取号；计数器独立提交，商品事务回滚时已消费的序号不回收。
+    //
+    // 返回待写入的商品编号，规范化由实体完成。计数器写入失败时返回内部错误。
+    //
+    // - `requested`：请求显式指定的非空白商品编号。
+    // - `executor`：当前授权事务执行器；计数器不加入此事务。
     async fn resolve_product_no(
         &self,
         requested: Option<String>,
@@ -240,19 +204,11 @@ impl CatalogService {
             .map_err(|error| Error::Internal(error.to_string()))
     }
 
-    /// 构造创建草稿中的 SKU 行并登记规格签名。
-    ///
-    /// # 参数
-    /// * `product_id` - 所属商品
-    /// * `effective_from` / `effective_to` - 生效区间
-    /// * `created_by` - 创建人
-    /// * `skus` - SKU 输入行
-    ///
-    /// # 返回
-    /// 返回待写入的 SKU 编辑项。
-    ///
-    /// # 错误
-    /// 规格签名冲突或 SKU 实体校验失败时拒绝。
+    // 构造创建草稿中的 SKU 行并登记规格签名。
+    //
+    // 返回待写入的 SKU 编辑项。规格签名冲突或 SKU 实体校验失败时拒绝。
+    //
+    // * `effective_from` / `effective_to` - 生效区间。
     async fn build_create_sku_items(
         &self,
         product_id: &ProductId,
@@ -281,19 +237,9 @@ impl CatalogService {
 
     /// 使用调用方事务写入商品创建草稿并返回 SPU，不开启嵌套事务。
     ///
-    /// 依次写入 `products`、`product_revisions` + 媒体、每个 SKU 的
-    /// `skus` + `sku_revisions` + 规格属性值，以及审计日志。
+    /// 依次写入 `products`、`product_revisions` + 媒体、每个 SKU 的`skus` + `sku_revisions` + 规格属性值，
+    /// 以及审计日志。
     ///
-    /// # 参数
-    /// * `draft` - 创建草稿
-    /// * `actor` - 审计操作人
-    /// * `pending_assets` - 同事务登记的附件。
-    /// * `executor` - 调用方事务执行器。
-    ///
-    /// # 返回
-    /// 返回写入后的 SPU 实体。
-    ///
-    /// # 错误
     /// 唯一索引冲突（409）或事务失败时返回错误并整体回滚。
     pub async fn write_product_draft(
         &self,

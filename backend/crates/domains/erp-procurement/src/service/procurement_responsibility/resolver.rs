@@ -41,19 +41,10 @@ impl ProcurementResponsibilityService {
     ///
     /// 目录、规则或负责人事实缺失时立即失败，不执行授权或改变规则。
     ///
-    /// # 参数
-    /// * `inputs` - 保持调用方顺序的解析行
-    /// * `port` - 目录与负责人事实端口
-    /// * `executor` - 调用方执行器
+    /// 返回与输入顺序一致的候选负责人。行键不合法、目录映射不完整或规则解析失败时返回 `Logic`；目录端口失败，或构造后仍缺行事实时返回 `Internal`。
+    /// 规则或负责人读取的乐观锁冲突返回`ConflictError`，其他仓储失败返回对应错误。负责人缺失或不可登录时返回`ValidationError`。
     ///
-    /// # 返回
-    /// 返回与输入顺序一致的候选负责人。
-    ///
-    /// # 错误
-    /// 行键不合法、目录映射不完整或规则解析失败时返回 `Logic`；目录端口失败，
-    /// 或构造后仍缺行事实时返回 `Internal`。规则或负责人读取的乐观锁冲突返回
-    /// `ConflictError`，其他仓储失败返回对应错误。负责人缺失或不可登录时返回
-    /// `ValidationError`。
+    /// `inputs` 为保持调用方顺序的解析行。
     pub async fn resolve_candidates(
         &self,
         inputs: &[ResolutionInput],
@@ -70,12 +61,10 @@ impl ProcurementResponsibilityService {
         .await
     }
     /// 按询价场景解析，询价池优先于全部商品规则；不占用轮次。
-    /// # 参数
+    ///
+    /// 每个命中规则池为本单选择唯一成员。规则、池或人员不合格时拒绝。
+    ///
     /// `inputs` 为整单需求；`port` 为目录与账号事实；`executor` 为原事务。
-    /// # 返回
-    /// 每个命中规则池为本单选择唯一成员。
-    /// # 错误
-    /// 规则、池或人员不合格时拒绝。
     pub async fn resolve_inquiry_candidates(
         &self,
         inputs: &[ResolutionInput],
@@ -170,16 +159,7 @@ async fn resolve_candidates(
     attach_owner_accounts(port, selected, executor).await
 }
 
-/// 对解析输入去重并保持首次出现顺序收集 SKU。
-///
-/// # 参数
-/// * `inputs` - 采购责任解析输入
-///
-/// # 返回
-/// 返回去重后的 SKU 集合。
-///
-/// # 错误
-/// 无。
+// 对解析输入去重并保持首次出现顺序收集 SKU。返回去重后的 SKU 集合。
 fn unique_sku_ids(inputs: &[ResolutionInput]) -> Vec<erp_core::ids::SkuId> {
     let mut unique = Vec::new();
     for input in inputs {
@@ -190,16 +170,7 @@ fn unique_sku_ids(inputs: &[ResolutionInput]) -> Vec<erp_core::ids::SkuId> {
     unique
 }
 
-/// 对字符串迭代器去重并稳定排序。
-///
-/// # 参数
-/// * `values` - 待批量查询的字符串引用
-///
-/// # 返回
-/// 返回按字典序排序且无重复项的拥有型字符串。
-///
-/// # 错误
-/// 无。
+// 对字符串迭代器去重并稳定排序。返回按字典序排序且无重复项的拥有型字符串。
 fn unique_strings<'a>(values: impl Iterator<Item = &'a str>) -> Vec<String> {
     let mut values = values.map(ToOwned::to_owned).collect::<Vec<_>>();
     values.sort();
@@ -207,18 +178,12 @@ fn unique_strings<'a>(values: impl Iterator<Item = &'a str>) -> Vec<String> {
     values
 }
 
-/// 校验批量查询完整返回全部请求 ID。
-///
-/// # 参数
-/// * `label` - 缺失事实的业务名称
-/// * `ids` - 调用方请求的稳定 ID
-/// * `map` - 仓储实际返回的 ID 映射
-///
-/// # 返回
-/// 全部 ID 均存在时返回 `Ok(())`。
-///
-/// # 错误
-/// 任一请求 ID 不在 `map` 中时返回 `ValidationError`，文案为「{label}不存在或已删除：{id}」。
+// 校验批量查询完整返回全部请求 ID。
+//
+// 全部 ID 均存在时返回 `Ok(())`。任一请求 ID 不在 `map` 中时返回 `ValidationError`，
+// 文案为「{label}不存在或已删除：{id}」。
+//
+// `ids` 为调用方请求的稳定 ID。
 fn ensure_all_ids_present<T>(label: &str, ids: &[String], map: &HashMap<String, T>) -> Result<()> {
     if let Some(missing) = ids.iter().find(|id| !map.contains_key(id.as_str())) {
         return Err(Error::ValidationError(format!("{label}不存在或已删除：{missing}")));
@@ -226,10 +191,9 @@ fn ensure_all_ids_present<T>(label: &str, ids: &[String], map: &HashMap<String, 
     Ok(())
 }
 
-/// 批量加载并校验候选负责人的账号状态。
-///
-/// # Panics
-/// 完整性校验通过后账号仍不在映射中时 panic。
+// 批量加载并校验候选负责人的账号状态。
+//
+// 完整性校验通过后账号仍不在映射中时 panic。
 async fn attach_owner_accounts(
     port: &dyn ProcurementResponsibilityFactsPort,
     selected: Vec<(String, &ProcurementResponsibilityRule, String)>,
@@ -258,14 +222,9 @@ async fn attach_owner_accounts(
 
 /// 将身份提供方的窄事实验证为可登录后台负责人，展示姓名不参与资格判断。
 ///
-/// # 参数
-/// * `account` - 身份提供方的当前账号事实
+/// 身份域确认账号为启用后台账号时返回负责人值对象。账号不可登录或不是后台管理员时返回 `ValidationError`，文案包含账号 ID。
 ///
-/// # 返回
-/// 身份域确认账号为启用后台账号时返回负责人值对象。
-///
-/// # 错误
-/// 账号不可登录或不是后台管理员时返回 `ValidationError`，文案包含账号 ID。
+/// `account` 为身份提供方的当前账号事实。
 pub fn eligible_owner(account: &AccountSummary) -> Result<EligibleProcurementOwner> {
     EligibleProcurementOwner::from_account(account)
         .map_err(|_| Error::ValidationError(format!("采购负责人 {} 必须为可登录后台账号", account.id)))

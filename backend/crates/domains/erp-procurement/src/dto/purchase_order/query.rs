@@ -84,13 +84,6 @@ impl PurchaseOrderListParams {
     ///
     /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
     /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub fn normalized(&self) -> Result<PurchaseOrderListQuery> {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, PURCHASE_ORDER_SORT_FIELDS)?;
@@ -182,16 +175,7 @@ pub struct ExpenseOccurrenceView {
 }
 
 impl ExpenseOccurrenceView {
-    /// 由确认发生事实生成展示视图。
-    ///
-    /// # 参数
-    /// * `occurrence` - 确认发生事实
-    ///
-    /// # 返回
-    /// 返回日期、确认人、凭证与金额。
-    ///
-    /// # 错误
-    /// 无。
+    /// 由确认发生事实生成展示视图。返回日期、确认人、凭证与金额。
     pub fn from_occurrence(occurrence: &PurchaseExpenseOccurrence) -> Self {
         Self {
             occurred_on: occurrence.occurred_on.to_string(),
@@ -203,17 +187,7 @@ impl ExpenseOccurrenceView {
 }
 
 impl PurchaseOrderLineView {
-    /// 按费用行身份挂接确认发生信息。
-    ///
-    /// # 参数
-    /// * `lines` - 采购行视图
-    /// * `occurrences` - 本采购单的确认发生事实
-    ///
-    /// # 返回
-    /// 无；就地补齐费用行的确认发生信息。
-    ///
-    /// # 错误
-    /// 无。
+    /// 按费用行身份挂接确认发生信息。无；就地补齐费用行的确认发生信息。
     pub fn attach_occurrences(lines: &mut [Self], occurrences: &[PurchaseExpenseOccurrence]) {
         for line in lines {
             let Some(expense) = &line.expense else { continue };

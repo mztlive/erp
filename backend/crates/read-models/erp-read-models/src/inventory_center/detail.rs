@@ -13,7 +13,7 @@ use super::approval::{self, load_approval_binding};
 use crate::{Error, Result};
 
 impl InventoryAdjustmentReadService {
-    /// 查询库存调整单详情（表头 + 明细 + 过账流水）。
+    /// 打开库存调整详情时使用调整单当前审批实例，并在同一快照返回单据、明细、过账流水和当前操作人的处理动作。
     ///
     /// # 参数
     /// * `id` - 调整单主键
@@ -38,7 +38,7 @@ impl InventoryAdjustmentReadService {
         self.stock_adjustment_detail_for_instance(id, actor, None).await
     }
 
-    /// 构造库存调整详情；签署命令结果必须按收据引用的实例精确投影。
+    /// 独立读取库存调整详情时开启读取事务；签署响应指定实例及主题版本时精确投影该实例，未指定才读取当前审批。
     ///
     /// # 参数
     /// * `id` - 调整单主键。
@@ -78,11 +78,10 @@ impl InventoryAdjustmentReadService {
             .await
     }
 
-    /// 在调用方读取快照内组装已授权详情，不开启事务。
+    /// 已有读取快照的调用方用此入口投影库存调整详情；授权、单据、明细、流水、审批和人员身份读取均复用原执行器，不另开事务。
     ///
     /// # 参数
     /// * `id` - 调整单主键。
-    /// * `actor` - 当前认证操作人。
     /// * `approval_instance` - 原命令精确实例与主题版本；空时取当前实例。
     /// * `executor` - 同一授权、业务、审批与人员身份事实读取快照。
     ///
@@ -153,7 +152,7 @@ impl InventoryAdjustmentReadService {
     }
 }
 
-/// 可选展示字段与核心事实使用同一执行器；数据库事务失败仍由原事务向上传播。
+// 库存调整详情的必要事实装配成功后，沿原执行器补充人员姓名与 SKU 名称；展示读取可降级，数据库事务失败不能吞掉。
 async fn enrich_display_names(
     inventory: &InventoryService,
     adjustment: &mut StockAdjustmentView,
@@ -170,7 +169,7 @@ async fn enrich_display_names(
     optional_display_names(inventory.enrich_adjustment_line_names(lines, executor), actor, "sku").await;
 }
 
-/// 纯展示关联不可用时保留缺失名称；正式命令和授权事实不进入该降级路径。
+// 仅在库存调整展示名称读取失败时记录告警并保留空名称；正式命令和授权事实不走这一降级路径。
 async fn optional_display_names(
     read: impl Future<Output = InventoryResult<()>>,
     actor: &AuditActor,

@@ -21,17 +21,12 @@ pub struct ApprovalStartIdentity<'a> {
 }
 
 impl ApprovalStartIdentity<'_> {
-    /// 判断回执指定的精确实例是否保留预期冻结身份。
-    ///
-    /// # 参数
-    /// * `instance` - 按回执结果主键读取的实例。
-    /// * `result_ref` - 回执保存的实例主键。
-    ///
-    /// # 返回
+    /// 当回执指定的精确实例保留预期冻结身份时返回 `true`。
     /// 主键、流程、主题、版本、启动人与定义绑定全部相同时返回 `true`。
     ///
-    /// # 错误
     /// 不返回错误；实例当前状态不参与启动身份判定。
+    ///
+    /// `instance`：按回执结果主键读取的实例；`result_ref`：回执保存的实例主键。
     pub fn matches_instance(&self, instance: &ApprovalProcessInstance, result_ref: &str) -> bool {
         instance.base.id == result_ref
             && instance.process_kind == self.process_kind

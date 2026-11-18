@@ -30,18 +30,8 @@ use crate::{Error, Result};
 impl PurchaseOrderProcess {
     /// 登记维持原采购并关闭依据更新待办。
     ///
-    /// # 参数
-    /// * `id` - 采购单主键
-    /// * `req` - 记录期望版本与无法调整的原因
-    /// * `actor` - 已通过鉴权的审计操作人
+    /// `req` 为记录期望版本与无法调整的原因。登记成功返回 `Ok(())`。无权限或越权、没有待处理的依据更新、记录或销售版本已变化、原因非法时返回错误。
     ///
-    /// # 返回
-    /// 登记成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 无权限或越权、没有待处理的依据更新、记录或销售版本已变化、原因非法时返回错误。
-    ///
-    /// # 关键业务约束
     /// 写入前在同一事务内重验采购对象范围与记录版本。
     pub async fn maintain_source(
         &self,
@@ -66,7 +56,7 @@ impl PurchaseOrderProcess {
     }
 }
 
-/// 在事务内校验并写入维持登记、关闭待办和审计。
+// 在事务内校验并写入维持登记、关闭待办和审计。
 async fn apply_maintenance(
     db: &Database,
     order: &PurchaseOrder,
@@ -108,7 +98,7 @@ async fn apply_maintenance(
     Ok(())
 }
 
-/// 确认记录版本未变且销售单未再次变更。
+// 确认记录版本未变且销售单未再次变更。
 async fn ensure_current(
     db: &Database,
     order: &PurchaseOrder,
@@ -124,7 +114,7 @@ async fn ensure_current(
     ensure_record_current(update, expected_version, sales.current_revision_id())
 }
 
-/// 记录版本与登记时一致，且销售单此后未再次变更。
+// 记录版本与登记时一致，且销售单此后未再次变更。
 fn ensure_record_current(
     update: &PurchaseSourceUpdate,
     expected_version: u64,
@@ -139,7 +129,7 @@ fn ensure_record_current(
     Ok(())
 }
 
-/// 关闭记录关联且仍开放的待办。
+// 登记采购依据更新后关闭记录关联的开放待办；无任务或已关闭时跳过。
 async fn close_work_item(
     db: &Database,
     update: &PurchaseSourceUpdate,
@@ -218,7 +208,7 @@ mod tests {
         )
     }
 
-    /// 记录版本与销售版本均未变化时允许登记。
+    // 记录版本与销售版本均未变化时允许登记。
     #[test]
     fn current_record_and_revision_allow_maintain() {
         let update = record();
@@ -226,7 +216,7 @@ mod tests {
         assert!(ensure_record_current(&update, update.base.version, Some("rev-2")).is_ok());
     }
 
-    /// 记录已刷新或销售单再次变更时拒绝，提示刷新后重新登记。
+    // 记录已刷新或销售单再次变更时拒绝，提示刷新后重新登记。
     #[test]
     fn stale_record_or_changed_sales_is_rejected() {
         let update = record();

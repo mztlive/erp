@@ -35,14 +35,14 @@ pub struct PaymentReviewSettlement {
 }
 
 impl PaymentReviewSettlement {
-    /// 按真实资金来源汇总指定采购分录的正向及冲正核销。
-    ///
-    /// # 参数
-    /// * `allocations` / `entry_ids` - 核销事实与当前授权采购的分录集合。
-    /// # 返回
-    /// 返回按发生时间倒序的采购内净额，空集合返回空记录。
-    /// # 错误
-    /// 金额溢出或冲正超过本采购正向核销时拒绝。
+    // 依据真实资金来源汇总指定采购分录的正向及冲正核销。
+    //
+    // 调用参数：
+    // * `allocations` / `entry_ids` - 核销事实与当前授权采购的分录集合。
+    //
+    // 返回按发生时间倒序的采购内净额，空集合返回空记录。
+    //
+    // 金额溢出或冲正超过本采购正向核销时拒绝。
     pub(super) fn from_allocations(
         allocations: &[PaymentAllocation],
         entry_ids: &BTreeSet<String>,
@@ -98,14 +98,15 @@ pub struct PaymentReviewReservation {
 }
 
 impl PaymentReviewReservation {
-    /// 截取同主体、同供应商、同采购上的进行中占用并排除本申请。
-    ///
-    /// # 参数
-    /// * `other` / `request` / `account_id` - 候选申请、已授权申请与应付身份。
-    /// # 返回
-    /// 仅返回符合范围且占用为正的局部记录。
-    /// # 错误
-    /// 不执行 I/O；不符合范围返回 None。
+    // 生成付款申请审核视图时，截取同主体、同供应商、同采购上的进行中占用并排除本申请。
+    //
+    // 调用参数：
+    // * `other` / `request` / `account_id` - 候选申请、已授权申请与应付身份。
+    //
+    // 仅返回符合范围且占用为正的局部记录。
+    //
+    // 失败边界：
+    // 不执行 I/O；不符合范围返回 None。
     pub(super) fn from_request(
         other: &PurchasePaymentRequest,
         request: &PurchasePaymentRequest,
@@ -139,7 +140,7 @@ impl PaymentReviewReservation {
     }
 }
 
-/// 累加展示金额时显式拒绝十进制溢出。
+// 计算付款申请审核金额时，累加展示金额时显式拒绝十进制溢出。
 fn checked_sum(left: Amount, right: Amount) -> Result<Amount> {
     let sum = left
         .to_decimal()

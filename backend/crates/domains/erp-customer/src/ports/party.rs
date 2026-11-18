@@ -30,10 +30,8 @@ pub trait PartyFactPort: Send + Sync {
     /// * `party_ids` - 待读取的主体 ID。
     /// * `executor` - 客户读取所用的原事务或读取阶段执行器。
     ///
-    /// # 返回
     /// 返回能读到的身份事实；缺失主体不出现在结果中。
     ///
-    /// # 错误
     /// 主体事实读取失败时返回对应错误。
     async fn identities_by_ids(
         &self,
@@ -47,10 +45,8 @@ pub trait PartyFactPort: Send + Sync {
     /// * `keyword` - 名称或统一社会信用代码关键词。
     /// * `executor` - 客户查询所用的原执行器。
     ///
-    /// # 返回
     /// 返回命中的主体 ID；无命中时为空集合。
     ///
-    /// # 错误
     /// 主体检索失败时返回对应错误。
     async fn matching_ids_by_name(&self, keyword: &str, executor: &mut dyn Executor) -> Result<Vec<String>>;
 }

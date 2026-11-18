@@ -17,17 +17,13 @@ pub struct ProfitLossAmounts {
 }
 impl ProfitLossAmounts {
     /// 采用已分配的不含税金额；不接受负数，防止把冲减再反向一次。
-    ///
-    /// # 参数
-    /// * `stage` - 成本阶段；`Reduction` 记入冲减，其余阶段再按类型分列
-    /// * `cost_type` - 成本类型；`Product` 记入采购口径，其余记入履约口径
-    /// * `net` - 已分配不含税金额
-    ///
-    /// # 返回
-    /// 无返回值。成功时把金额累加到对应阶段字段。
-    ///
-    /// # 错误
+    /// 结果：无返回值。成功时把金额累加到对应阶段字段。
     /// `net` 为负或累加超出范围时返回错误。
+    ///
+    /// 输入约定：
+    /// - `stage`：成本阶段；`Reduction` 记入冲减，其余阶段再按类型分列
+    /// - `cost_type`：成本类型；`Product` 记入采购口径，其余记入履约口径
+    /// - `net`：已分配不含税金额
     pub fn add(&mut self, stage: CostStage, cost_type: CostType, net: Decimal) -> Result<()> {
         if net.is_sign_negative() {
             return Err(Error::from("成本分配金额不能为负"));
@@ -46,15 +42,11 @@ impl ProfitLossAmounts {
         Ok(())
     }
     /// 收入减实际成本再加冲减；不完整的成本由调用方禁止输出利润。
-    ///
-    /// # 参数
-    /// * `revenue` - 收入金额
-    ///
-    /// # 返回
     /// 返回 `revenue` 减去采购与履约实际成本、再加上冲减后的金额。
+    /// 失败条件：运算超出范围时返回错误。本方法不检查成本是否完整。
     ///
-    /// # 错误
-    /// 运算超出范围时返回错误。本方法不检查成本是否完整。
+    /// 输入约定：
+    /// - `revenue`：收入金额
     pub fn profit(&self, revenue: Decimal) -> Result<Decimal> {
         revenue
             .checked_sub(self.procurement)
@@ -76,15 +68,11 @@ pub struct CoverageGap {
 }
 impl ProfitLossAmounts {
     /// 非卡券完整性不能只凭一笔费用存在判断；多行要求逐行供货成本。
-    ///
-    /// # 参数
-    /// * `evidence` - 履约是否完成，以及当前销售行和已分配供货行
-    ///
-    /// # 返回
     /// 返回覆盖缺口；冲减超过采购与履约实际成本之和时再追加超额冲减缺口。
-    ///
-    /// # 错误
     /// 采购与履约实际成本相加超出范围时返回错误。
+    ///
+    /// 输入约定：
+    /// - `evidence`：履约是否完成，以及当前销售行和已分配供货行
     pub fn coverage_gaps(&self, evidence: CoverageEvidence<'_>) -> Result<Vec<CoverageGap>> {
         let mut gaps = evidence.gaps();
         let mut actual = self.procurement;
@@ -98,14 +86,7 @@ impl ProfitLossAmounts {
         Ok(gaps)
     }
     /// 实际成本扣除冲减，负数留给完整性校验解释，不取绝对值。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回采购与履约实际成本之和减去冲减，结果可以为负。
-    ///
-    /// # 错误
     /// 运算超出范围时返回错误。
     pub fn net_cost(&self) -> Result<Decimal> {
         self.procurement
@@ -115,7 +96,7 @@ impl ProfitLossAmounts {
     }
 }
 impl CoverageEvidence<'_> {
-    /// 单行允许明确整单成本覆盖；多行禁止猜测各行覆盖范围。
+    // 检查经营盈亏的成本覆盖缺口；只有单明细可以用明确的整单覆盖，多明细不能反推各行已覆盖。
     fn gaps(&self) -> Vec<CoverageGap> {
         let mut gaps = Vec::new();
         if !self.fulfillment_completed {

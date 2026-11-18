@@ -24,13 +24,13 @@ use sha2::{Digest, Sha256};
 use super::delivery::delegated_actor;
 use crate::{Error, Result};
 
-/// 使用同一执行器写入全部包裹、剩余草稿和数量应用凭据。
-/// # 参数
-/// 已核验采购版本的跟踪记录、当前来源观察和根事务执行器。
-/// # 返回
-/// 来源完成且全部冻结数量已真正交付时返回 true。
-/// # 错误
-/// 任何数量、来源、草稿或正式发货门槛失败时回滚本次应用。
+// 使用同一执行器写入全部包裹、剩余草稿和数量应用凭据。
+//
+// 已核验采购版本的跟踪记录、当前来源观察和根事务执行器。
+//
+// 来源完成且全部冻结数量已真正交付时返回 true。
+//
+// 任何数量、来源、草稿或正式发货门槛失败时回滚本次应用。
 pub(super) async fn apply_quantity_deliveries(
     db: &Database,
     task_identity: &Arc<AuthorizationService>,
@@ -137,7 +137,7 @@ fn source_groups<'a>(
 }
 
 impl MongoQuantityDeliveryApplication<'_> {
-    /// 使用当前来源观察上下文分拆并正式过账一份来源包裹。
+    // 使用当前来源观察上下文分拆并正式过账一份来源包裹。
     async fn apply_partition(
         &self,
         draft_id: &str,

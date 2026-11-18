@@ -95,22 +95,12 @@ impl DocumentState for JobStatus {
     }
 }
 
-/// 累加进度计数（成功/跳过/失败三路），溢出时失败关闭。
-///
-/// `record_progress` 与导入批次终态判定共用同一溢出口径；调用方保留各自的
-/// 状态守卫与错误文案，本函数只承担纯算术部分。
-///
-/// # 参数
-/// * `base` - 当前已处理数
-/// * `success` - 本批成功数
-/// * `skipped` - 本批跳过数
-/// * `failed` - 本批失败数
-///
-/// # 返回
-/// 返回累加后的已处理数。
-///
-/// # 错误
-/// 加法溢出时返回错误，不修改调用方状态。
+// 累加进度计数（成功/跳过/失败三路），溢出时失败关闭。
+// `record_progress` 与导入批次终态判定共用同一溢出口径；调用方保留各自的状态守卫与错误文案，本函数只承担纯算术部分。
+// 返回累加后的已处理数。
+// `base` 为当前已处理数；`success` 为本批成功数。
+// `skipped` 为本批跳过数；`failed` 为本批失败数。
+// 加法溢出时返回错误，不修改调用方状态。
 pub(super) fn add_progress_counts(base: u64, success: u64, skipped: u64, failed: u64) -> Result<u64> {
     base.checked_add(success)
         .and_then(|value| value.checked_add(skipped))
@@ -209,13 +199,8 @@ pub struct BackgroundJob {
 
 impl BackgroundJob {
     /// 判断逐行导入任务是否可开始或恢复，终态与仍在推进的任务不可抢占。
-    /// # 参数
-    /// * `at` - 当前时点
-    /// * `stale_seconds` - 未推进多久后允许恢复
-    /// # 返回
     /// 尚未结束且等待执行或认领已过期的导入任务返回 true。
-    /// # 错误
-    /// 无。
+    /// `at` 为当前时点；`stale_seconds` 为未推进多久后允许恢复。
     pub fn can_resume_import(&self, at: Instant, stale_seconds: i64) -> bool {
         stale_seconds > 0
             && self.job_type == JobType::Import
@@ -228,18 +213,9 @@ impl BackgroundJob {
     }
 
     /// 创建后台任务。
-    ///
-    /// 完成 job_no/requested_by/request_id 的校验与规范化（trim、非空、长度
-    /// 上限），初始状态 `PENDING`，计数全零。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::BackgroundJobId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
+    /// 完成 job_no/requested_by/request_id 的校验与规范化（trim、非空、长度上限），初始状态 `PENDING`，计数全零。
     /// 返回新建的任务实体。
-    ///
-    /// # 错误
+    /// `id` 为实体主键（`erp_core::ids::BackgroundJobId`）。
     /// 当编号/发起人/请求身份为空或超长时返回错误。
     pub fn new(id: BackgroundJobId, data: BackgroundJobData) -> Result<Self> {
         let job_no =
@@ -279,14 +255,8 @@ impl BackgroundJob {
     }
 
     /// 在聚合创建阶段附加规范请求指纹。
-    ///
-    /// # 参数
-    /// * `fingerprint` - 由规范化父子字段生成的请求指纹
-    ///
-    /// # 返回
     /// 写入 `request_fingerprint` 后无额外返回值。
-    ///
-    /// # 错误
+    /// `fingerprint` 由规范化父子字段生成的请求指纹。
     /// 指纹已附加、任务不是 `Pending`，或 `processed_count` 已非 0 时返回错误。
     pub fn attach_request_fingerprint(&mut self, fingerprint: CommandFingerprint) -> Result<()> {
         if self.request_fingerprint.is_some()
@@ -300,14 +270,7 @@ impl BackgroundJob {
     }
 
     /// 开始执行。
-    ///
-    /// # 参数
-    /// * `at` - 开始时刻
-    ///
-    /// # 返回
-    /// 无返回值。
-    ///
-    /// # 错误
+    /// `at` 为开始时刻。
     /// 当任务不是 `PENDING` 状态时返回错误。
     pub fn start(&mut self, at: Instant) -> Result<()> {
         ensure_transition(self.status, JobStatus::Running)?;
@@ -318,21 +281,10 @@ impl BackgroundJob {
     }
 
     /// 记录一批逐项执行结果。
-    ///
-    /// 仅 `RUNNING` / `PARTIALLY_SUCCEEDED` 可记录进度；计数按
-    /// `processed = success + skipped + failed` 累加，且不得超过 `total_count`
-    /// （§6.1 普通任务允许逐项提交并显示部分成功）。
-    ///
-    /// # 参数
-    /// * `success` - 本批成功数
-    /// * `skipped` - 本批跳过数
-    /// * `failed` - 本批失败数
-    /// * `at` - 进度时刻
-    ///
-    /// # 返回
-    /// 无返回值。
-    ///
-    /// # 错误
+    /// 仅 `RUNNING` / `PARTIALLY_SUCCEEDED` 可记录进度；计数按 `processed = success + skipped + failed` 累加，
+    /// 且不得超过 `total_count` （§6.1 普通任务允许逐项提交并显示部分成功）。
+    /// `success` 为本批成功数；`skipped` 为本批跳过数。
+    /// `failed` 为本批失败数；`at` 为进度时刻。
     /// 当任务状态不允许记录进度，或累计已处理数超过目标总数时返回错误。
     pub fn record_progress(&mut self, success: u64, skipped: u64, failed: u64, at: Instant) -> Result<()> {
         if !self.can_record_progress() {
@@ -352,16 +304,7 @@ impl BackgroundJob {
     }
 
     /// 标记部分成功。
-    ///
     /// 有成功有失败（且未取消）时使用；之后仍可继续记录进度。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 无返回值。
-    ///
-    /// # 错误
     /// 当任务不是 `RUNNING` 状态时返回错误。
     pub fn mark_partially_succeeded(&mut self) -> Result<()> {
         ensure_transition(self.status, JobStatus::PartiallySucceeded)?;
@@ -370,16 +313,8 @@ impl BackgroundJob {
     }
 
     /// 标记成功完成。
-    ///
     /// 要求全部目标已处理（`processed_count == total_count`，§6.1 完成口径）。
-    ///
-    /// # 参数
-    /// * `at` - 完成时刻
-    ///
-    /// # 返回
-    /// 无返回值。
-    ///
-    /// # 错误
+    /// `at` 为完成时刻。
     /// 当任务状态不允许完成，或仍有目标未处理时返回错误。
     pub fn mark_succeeded(&mut self, at: Instant) -> Result<()> {
         if !self.can_record_progress() {
@@ -396,15 +331,7 @@ impl BackgroundJob {
     }
 
     /// 标记失败。
-    ///
-    /// # 参数
-    /// * `error_summary` - 脱敏任务级错误摘要
-    /// * `at` - 失败时刻
-    ///
-    /// # 返回
-    /// 无返回值。
-    ///
-    /// # 错误
+    /// `error_summary` 为脱敏任务级错误摘要；`at` 为失败时刻。
     /// 当任务状态不允许失败时返回错误。
     pub fn mark_failed(&mut self, error_summary: Option<String>, at: Instant) -> Result<()> {
         if !self.can_record_progress() {
@@ -418,16 +345,8 @@ impl BackgroundJob {
     }
 
     /// 取消任务。
-    ///
     /// 任务取消只停止尚未开始的项目；已经提交的正式事实不回滚、不删除（§6.1）。
-    ///
-    /// # 参数
-    /// * `at` - 取消时刻
-    ///
-    /// # 返回
-    /// 无返回值。
-    ///
-    /// # 错误
+    /// `at` 为取消时刻。
     /// 当任务处于终态时返回错误。
     pub fn cancel(&mut self, at: Instant) -> Result<()> {
         self.ensure_transfer_cancellable()?;
@@ -439,22 +358,10 @@ impl BackgroundJob {
     }
 
     /// 仅将上一轮失败项重新准备为待执行。
-    ///
-    /// 该操作只适用于明确的可重试结果态：失败、部分成功，
-    /// 或“完成但含失败项”的兼容记录。已取消任务不可重新打开。
-    /// 保留已成功与已跳过计数，
-    /// 仅从已处理数中扣除失败项并清零失败计数；未处理项保持未处理。
-    ///
-    /// # 参数
-    /// * `failed_item_count` - 由领域行事实重验得到的失败项数
-    /// * `at` - 重新准备时刻
-    ///
-    /// # 返回
+    /// 该操作只适用于明确的可重试结果态：失败、部分成功，或“完成但含失败项”的兼容记录。已取消任务不可重新打开。保留已成功与已跳过计数，仅从已处理数中扣除失败项并清零失败计数；未处理项保持未处理。
     /// 准备成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 当任务不在可重试结果态、没有失败项，或领域失败项计数
-    /// 与任务计数不一致时返回错误。
+    /// `failed_item_count` 由领域行事实重验得到的失败项数；`at` 为重新准备时刻。
+    /// 当任务不在可重试结果态、没有失败项，或领域失败项计数与任务计数不一致时返回错误。
     pub fn prepare_failed_retry(&mut self, failed_item_count: u64, at: Instant) -> Result<()> {
         let retryable = matches!(self.status, JobStatus::PartiallySucceeded | JobStatus::Failed)
             || (self.status == JobStatus::Succeeded && self.failed_count > 0);
@@ -480,18 +387,7 @@ impl BackgroundJob {
     }
 
     /// 更新结果文件与下载到期时间。
-    ///
-    /// 只覆盖调用方给出的结果文件与下载到期时间，未给出的字段保持不变。
-    /// 编号、类型、发起人、请求身份和目标总数不在本方法中修改，也不再执行创建校验。
-    ///
-    /// # 参数
-    /// * `update` - 更新数据
-    ///
-    /// # 返回
-    /// 无返回值。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 只覆盖调用方给出的结果文件与下载到期时间，未给出的字段保持不变。编号、类型、发起人、请求身份和目标总数不在本方法中修改，也不再执行创建校验。
     pub fn update(&mut self, update: JobUpdate) {
         if let Some(result_file_asset_id) = update.result_file_asset_id {
             self.result_file_asset_id = Some(result_file_asset_id);
@@ -501,36 +397,16 @@ impl BackgroundJob {
         }
     }
 
-    /// 判断任务是否允许记录进度（未结束且处于可执行状态）。
-    ///
-    /// `record_progress` 与导入批次判定共用同一谓词；调用方保留各自的
-    /// 错误文案，本方法只承担纯状态判定。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 未写入 `finished_at` 且状态为 `RUNNING` / `PARTIALLY_SUCCEEDED`
-    /// 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 判断任务是否允许记录进度（未结束且处于可执行状态）。
+    // `record_progress` 与导入批次判定共用同一谓词；调用方保留各自的错误文案，本方法只承担纯状态判定。
+    // 未写入 `finished_at` 且状态为 `RUNNING` / `PARTIALLY_SUCCEEDED` 时返回 `true`。
     pub(super) fn can_record_progress(&self) -> bool {
         self.finished_at.is_none()
             && matches!(self.status, JobStatus::Running | JobStatus::PartiallySucceeded)
     }
 
     /// 判断任务是否已处于终态。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// `SUCCEEDED` / `FAILED` / `CANCELLED`，或已全部结束的混合
-    /// `PARTIALLY_SUCCEEDED`（已写入 `finished_at`）时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// `SUCCEEDED` / `FAILED` / `CANCELLED`，或已全部结束的混合 `PARTIALLY_SUCCEEDED`（已写入 `finished_at`）时返回 `true`。
     pub fn is_terminal(&self) -> bool {
         matches!(self.status, JobStatus::Succeeded | JobStatus::Failed | JobStatus::Cancelled)
             || (self.status == JobStatus::PartiallySucceeded && self.finished_at.is_some())
@@ -560,7 +436,7 @@ mod tests {
         }
     }
 
-    /// happy path：字段 trim、初始 PENDING、计数全零。
+    // 验证字段 trim、初始 PENDING、计数全零。
     #[test]
     fn new_trims_fields_and_starts_pending() {
         let job = BackgroundJob::new(BackgroundJobId::new("job-1"), data()).unwrap();
@@ -572,14 +448,14 @@ mod tests {
         assert!(!job.is_terminal());
     }
 
-    /// 失败路径：必填为空被拒。
+    // 验证必填为空被拒。
     #[test]
     fn new_rejects_empty_request_id() {
         let payload = BackgroundJobData { request_id: "  ".to_string(), ..data() };
         assert!(BackgroundJob::new(BackgroundJobId::new("job-1"), payload).is_err());
     }
 
-    /// 失败路径：超长错误摘要被拒。
+    // 验证超长错误摘要被拒。
     #[test]
     fn mark_failed_rejects_overlong_summary() {
         let mut job = BackgroundJob::new(BackgroundJobId::new("job-1"), data()).unwrap();
@@ -588,7 +464,7 @@ mod tests {
         assert!(error.is_err());
     }
 
-    /// 进度不变量：processed = success + skipped + failed 且不超过 total。
+    // 验证进度不变量：processed = success + skipped + failed 且不超过 total。
     #[test]
     fn record_progress_enforces_count_arithmetic() {
         let mut job = BackgroundJob::new(BackgroundJobId::new("job-1"), data()).unwrap();
@@ -607,14 +483,14 @@ mod tests {
         assert_eq!(job.processed_count, 5);
     }
 
-    /// 失败路径：非 RUNNING 状态不能记录进度。
+    // 验证非 RUNNING 状态不能记录进度。
     #[test]
     fn record_progress_rejects_pending_job() {
         let mut job = BackgroundJob::new(BackgroundJobId::new("job-1"), data()).unwrap();
         assert!(job.record_progress(1, 0, 0, Instant::from_unix_secs(1_700_000_100)).is_err());
     }
 
-    /// 状态机：合法迁移（部分成功 → 成功、取消）。
+    // 验证合法迁移（部分成功 → 成功、取消）。
     #[test]
     fn lifecycle_running_to_terminal() {
         let mut job = BackgroundJob::new(BackgroundJobId::new("job-1"), data()).unwrap();
@@ -681,7 +557,7 @@ mod tests {
         }
     }
 
-    /// 失败项重试仅回退失败计数，保留已成功/跳过结果。
+    // 验证失败项重试仅回退失败计数，保留已成功/跳过结果。
     #[test]
     fn prepare_failed_retry_preserves_committed_results() {
         let mut job = BackgroundJob::new(BackgroundJobId::new("job-retry"), data()).unwrap();
@@ -700,7 +576,7 @@ mod tests {
         assert!(job.finished_at.is_none());
     }
 
-    /// 失败项计数不一致时失败关闭，不修改任务。
+    // 验证失败项计数不一致时失败关闭，不修改任务。
     #[test]
     fn prepare_failed_retry_rejects_mismatched_count() {
         let mut job = BackgroundJob::new(BackgroundJobId::new("job-retry"), data()).unwrap();
@@ -714,7 +590,7 @@ mod tests {
         assert_eq!(job.failed_count, 2);
     }
 
-    /// 已取消任务不得通过失败重试重新打开未执行项。
+    // 验证已取消任务不得通过失败重试重新打开未执行项。
     #[test]
     fn prepare_failed_retry_rejects_cancelled_job() {
         let mut job = BackgroundJob::new(BackgroundJobId::new("job-cancelled"), data()).unwrap();
@@ -728,7 +604,7 @@ mod tests {
         assert_eq!(job.failed_count, 1);
     }
 
-    /// 状态机：非法迁移被拒（终态回退、跳步、未处理完即成功）。
+    // 验证非法迁移被拒（终态回退、跳步、未处理完即成功）。
     #[test]
     fn illegal_transitions_are_rejected() {
         let mut job = BackgroundJob::new(BackgroundJobId::new("job-1"), data()).unwrap();
@@ -745,7 +621,7 @@ mod tests {
         );
     }
 
-    /// 状态机：逐边定向断言（含不可逆终态）。
+    // 验证各状态只能沿允许的方向迁移（含不可逆终态）。
     #[test]
     fn directed_edge_assertions() {
         for &(from, to) in &[
@@ -767,7 +643,7 @@ mod tests {
         assert!(ensure_transition(JobStatus::Cancelled, JobStatus::Running).is_err());
     }
 
-    /// 更新：结果文件与到期时间可更新，关键字段不可改。
+    // 验证更新：结果文件与到期时间可更新，关键字段不可改。
     #[test]
     fn update_applies_result_fields_only() {
         let mut job = BackgroundJob::new(BackgroundJobId::new("job-1"), data()).unwrap();
@@ -780,7 +656,7 @@ mod tests {
         assert_eq!(job.total_count, 5);
     }
 
-    /// 枚举序列化与标签稳定。
+    // 验证后台任务的枚举序列化代码和中文标签不随实现变化。
     #[test]
     fn job_codes_and_labels_are_stable() {
         assert_eq!(serde_json::to_string(&JobType::Export).unwrap(), "\"export\"");

@@ -22,39 +22,14 @@ pub struct PurchaseAccess {
 }
 
 impl PurchaseAccess {
-    /// 绑定采购集合与范围授权 Port。
-    ///
-    /// # 参数
-    /// * `db` - 采购集合所在数据库
-    /// * `scope` - 组合层注入的采购范围 Port
-    ///
-    /// # 返回
-    /// 返回无授权缓存的访问服务，构造不执行 I/O。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 不得在构造时补公司范围或读取登录人默认组织；不得直接构造身份域 Service。
+    /// 由组合层为采购库注入范围授权端口，供查询和命令在运行时解析范围。
+    /// 构造不执行 I/O，不缓存授权、不补公司范围，也不按登录人的默认组织猜测权限。
     pub fn new(db: Database, scope: Arc<dyn PurchaseDataScopePort>) -> Self {
         Self { db, scope }
     }
 
-    /// 在调用方事务内证明资源动作并映射采购责任条件。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证操作人
-    /// * `entry` - 中央登记的采购权限常量
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 返回已解析范围事实和采购授权条件。
-    ///
-    /// # 错误
-    /// 无动作权限返回 Forbidden；未装配或查询超限时拒绝。
-    ///
-    /// # 关键业务约束
-    /// 当前责任按采购负责人和 `business_org_unit_id` 解释；历史参与须由读取入口另行附加。
+    /// 为当前采购动作在调用方事务内解析范围，并编译按采购负责人和 `business_org_unit_id` 限定的查询条件。
+    /// 历史参与范围须由读取入口另行附加；无权限、端口未装配或查询超限时拒绝。
     pub async fn resolve(
         &self,
         actor: &AuditActor,
@@ -67,12 +42,10 @@ impl PurchaseAccess {
     }
 
     /// 按中央登记的固定内部入口读取采购范围。
-    /// # 参数
+    ///
+    /// 固定资格与范围条件下的采购查询凭证。未登记入口、无权或设施失效时拒绝。
+    ///
     /// actor 为已认证身份，entry 为固定权限常量，executor 为原执行器。
-    /// # 返回
-    /// 固定资格与范围条件下的采购查询凭证。
-    /// # 错误
-    /// 未登记入口、无权或设施失效时拒绝。
     pub async fn resolve_entry(
         &self,
         actor: &AuditActor,
@@ -84,22 +57,8 @@ impl PurchaseAccess {
         Ok((access, scope))
     }
 
-    /// 按真实采购对象执行统一授权，不编译列表查询。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证操作人
-    /// * `entry` - 中央登记的采购权限常量
-    /// * `id` - 采购单主键
-    /// * `executor` - 调用方执行器；只读预检可使用非事务执行器
-    ///
-    /// # 返回
-    /// 对象在范围内时返回采购单。
-    ///
-    /// # 错误
-    /// 读取或写动作对不可见对象均返回 NotFound，不泄露存在性。
-    ///
-    /// # 关键业务约束
-    /// 写入前须在原领域事务内重验；历史参与不授予修改。
+    /// 读取或修改实际采购单之前，按固定动作执行完整对象授权；历史参与不授予修改资格。
+    /// 写动作须在原领域事务内复验；只读预检可用非事务执行器。不可见与不存在均返回 `NotFound`。
     pub async fn require_object(
         &self,
         actor: &AuditActor,
@@ -117,12 +76,10 @@ impl PurchaseAccess {
     }
 
     /// 按中央登记的固定内部入口读取真实采购对象。
-    /// # 参数
+    ///
+    /// 完整入口条件覆盖真实对象时返回当前采购单。入口拒绝或对象不存在返回 NotFound，身份与设施错误原样传播。
+    ///
     /// actor 为认证身份，entry 为固定权限常量，id 为真实采购身份，executor 为原事务。
-    /// # 返回
-    /// 完整入口条件覆盖真实对象时返回当前采购单。
-    /// # 错误
-    /// 入口拒绝或对象不存在返回 NotFound，身份与设施错误原样传播。
     pub async fn require_entry(
         &self,
         actor: &AuditActor,
@@ -133,21 +90,8 @@ impl PurchaseAccess {
         self.require_object(actor, entry, id, executor).await
     }
 
-    /// 新单使用即将持久化的显式责任解释创建与提交范围。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证操作人，通常写入为采购负责人
-    /// * `order` - 拟持久化的采购单
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 创建与提交范围同时覆盖责任事实时成功。
-    ///
-    /// # 错误
-    /// 无创建或提交动作、范围为空或责任不在范围内时拒绝。
-    ///
-    /// # 关键业务约束
-    /// 创建并提交必须由同一角色同时提供两个动作；不得由创建人审计字段兜底。
+    /// 创建并立即提交采购单前，按将要写入的显式采购责任检查创建与提交资格。
+    /// 两个动作必须由同一角色授权且同时覆盖新单责任；不以创建人补范围，也不接受空范围。
     pub async fn ensure_create_and_submit(
         &self,
         actor: &AuditActor,
@@ -157,13 +101,7 @@ impl PurchaseAccess {
         self.scope.require_entry(actor, &internal::PURCHASE_CREATE_AND_SUBMIT, order, executor).await
     }
 
-    /// 按固定业务入口检查本次完整来源集合。
-    /// # 参数
-    /// actor、entry 为当前入口，ids 为完整来源集合，executor 为原事务。
-    /// # 返回
-    /// 来源全部有权时成功。
-    /// # 错误
-    /// 未登记或来源无权时拒绝。
+    /// 在原事务中按服务端固定动作核验整组采购来源；入口未登记或任一来源无权时拒绝整个操作。
     pub async fn require_source(
         &self,
         actor: &AuditActor,
@@ -178,7 +116,7 @@ impl PurchaseAccess {
     }
 }
 
-/// 统一服务先核验记录；业务装载只允许在授权成功后沿用原执行器。
+// 统一服务先核验记录；业务装载只允许在授权成功后沿用原执行器。
 async fn authorized_order<F>(
     scope: &dyn PurchaseDataScopePort,
     actor: &AuditActor,

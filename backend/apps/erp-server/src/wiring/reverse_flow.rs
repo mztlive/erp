@@ -11,12 +11,7 @@ use super::finance_responsibility::finance_responsibility;
 use super::identity::shared_rbac_service;
 
 /// 从应用已有提供者装配逆向命令的全部外域能力。
-/// # 参数
-/// db 为当前数据库，rbac 为既有审批设施，authorization 为组合根共享统一授权服务。
-/// # 返回
 /// 返回未执行I/O的本库能力集合；每个业务步骤沿用调用方执行器。
-/// # 错误
-/// 无。
 pub fn reverse_flow_ports(
     db: Database,
     rbac: SharedRbacService,
@@ -30,12 +25,7 @@ pub fn reverse_flow_ports(
 }
 
 /// 沿原退货退款入口装配审批设施并复用共享统一授权服务。
-/// # 参数
-/// db 为当前数据库，authorization 为组合根共享统一授权服务。
-/// # 返回
 /// 返回与采购命令使用相同统一授权服务的逆向能力集合。
-/// # 错误
-/// 无。
 pub fn local_reverse_flow_ports(db: Database, authorization: Arc<AuthorizationService>) -> ReverseFlowPorts {
     reverse_flow_ports(db.clone(), shared_rbac_service(db), authorization)
 }

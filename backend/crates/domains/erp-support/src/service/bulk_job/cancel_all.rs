@@ -10,21 +10,8 @@ use crate::repository::prelude::*;
 use crate::{BackgroundJob, BulkJobExt, CancelBackgroundJobFailure, Error, Result};
 
 impl BulkJobService {
-    /// 停止并取消全部未完成后台任务（仅管理员）。
-    ///
-    /// 逐个按最新版本取消，已进入终态的不再触碰；单个任务失败不阻塞其余任务，
-    /// 调用方可按 `failed_count`/`failures`（任务 id + 错误分类）决定是否重试。
-    ///
-    /// # 参数
-    /// * `req` - 批量取消请求（可选 `job_type` 缩小范围）
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回已取消、跳过与失败的任务数及失败明细。
-    ///
-    /// # 错误
-    /// * `Forbidden` - 非管理员调用
-    /// * `RepositoryError` - 批量查询失败
+    /// 管理员批量取消未完成任务时，可按任务类型收窄候选。先在读取快照验权取候选，再逐个在各自事务中复验权限、读最新版本并取消。
+    /// 终态或领域规则禁止取消的任务计为跳过，单项失败按任务 ID 和错误分类返回，不阻塞其他项。非管理员或候选读取失败时拒绝整次调用。
     pub async fn cancel_all_background_jobs(
         &self,
         req: CancelAllBackgroundJobsRequest,
@@ -53,7 +40,7 @@ impl BulkJobService {
         Ok(result)
     }
 
-    /// 在同一快照检查批量资格并取得当前候选，不把非事务预检当成写入资格。
+    // 在同一快照检查批量资格并取得当前候选，不把非事务预检当成写入资格。
     async fn cancel_candidates(
         &self,
         req: CancelAllBackgroundJobsRequest,
@@ -74,9 +61,8 @@ impl BulkJobService {
             .await
     }
 
-    /// 单个候选任务取消与审计同事务写入；终态或不允许取消时返回跳过。
-    ///
-    /// 审计构造、版本竞争或事务失败返回错误，由批量入口累计失败并继续处理其他任务。
+    // 逐任务在写事务复验管理员资格并读取最新状态；可取消时同事务保存任务和审计，终态或领域拒绝则跳过。
+    // 审计、版本竞争或仓储失败由批量入口累计为该任务的失败。
     async fn cancel_candidate(&self, job: BackgroundJob, actor: &AuditActor) -> Result<bool> {
         let id = job.base.id;
         let db = self.db.clone();

@@ -29,16 +29,10 @@ use crate::{Error, Result};
 
 /// 创建计量单位，并在同一事务中写入成功审计。
 ///
-/// # 参数
-/// * `db` - 计量单位所在数据库。
-/// * `authorization` - 应用共享授权服务。
-/// * `req` - 计量单位创建请求。
-/// * `actor` - 已认证的审计操作人。
+/// `db`：计量单位所在数据库；`req`：计量单位创建请求。
 ///
-/// # 返回
 /// 返回创建后的计量单位视图。
 ///
-/// # 错误
 /// 请求校验失败、单位构造失败、审计构造失败，或写入与审计事务失败时返回错误。
 pub async fn create_unit_of_measure(
     db: Database,
@@ -73,7 +67,7 @@ pub async fn create_unit_of_measure(
     .map(Into::into)
 }
 
-/// 在原审计事务完成创建资格检查和计量单位写入。
+// 在原审计事务完成创建资格检查和计量单位写入。
 async fn persist_unit(
     db: &Database,
     authorization: &AuthorizationService,
@@ -88,17 +82,10 @@ async fn persist_unit(
 
 /// 创建商品分类，并在同一事务中写入成功审计。
 ///
-/// # 参数
-/// * `db` - 商品分类所在数据库。
-/// * `authorization` - 应用共享授权服务。
-/// * `service` - 应用装配的商品领域服务，供原有资格读取使用。
-/// * `req` - 商品分类创建请求。
-/// * `actor` - 已认证的审计操作人。
+/// `db`：商品分类所在数据库；`service`：应用装配的商品领域服务，供原有资格读取使用；`req`：商品分类创建请求。
 ///
-/// # 返回
 /// 返回创建后的商品分类视图。
 ///
-/// # 错误
 /// 请求校验失败、上级分类链校验失败、分类构造失败，或写入与审计事务失败时返回错误。
 pub async fn create_product_category(
     db: Database,
@@ -119,7 +106,7 @@ pub async fn create_product_category(
     .await
 }
 
-/// 创建资格先于取号；父链检查和分类写入沿用原审计事务。
+// 创建资格先于取号；父链检查和分类写入沿用原审计事务。
 async fn persist_category(
     db: &Database,
     authorization: &AuthorizationService,
@@ -157,16 +144,10 @@ async fn persist_category(
 
 /// 创建 SKU 属性，并在同一事务中写入成功审计。
 ///
-/// # 参数
-/// * `db` - SKU 属性所在数据库。
-/// * `authorization` - 应用共享授权服务。
-/// * `req` - SKU 属性创建请求。
-/// * `actor` - 已认证的审计操作人。
+/// `db`：SKU 属性所在数据库；`req`：SKU 属性创建请求。
 ///
-/// # 返回
 /// 返回创建后的 SKU 属性视图。
 ///
-/// # 错误
 /// 请求校验失败、属性构造失败，或写入与审计事务失败时返回错误。
 pub async fn create_sku_attribute(
     db: Database,
@@ -204,17 +185,10 @@ pub async fn create_sku_attribute(
 
 /// 创建 SKU 属性值，并在同一事务中写入成功审计。
 ///
-/// # 参数
-/// * `db` - SKU 属性值所在数据库。
-/// * `authorization` - 应用共享授权服务。
-/// * `service` - 应用装配的商品领域服务，供原有资格读取使用。
-/// * `req` - SKU 属性值创建请求。
-/// * `actor` - 已认证的审计操作人。
+/// `db`：SKU 属性值所在数据库；`service`：应用装配的商品领域服务，供原有资格读取使用；`req`：SKU 属性值创建请求。
 ///
-/// # 返回
 /// 返回创建后的 SKU 属性值视图。
 ///
-/// # 错误
 /// 请求校验失败、所属属性加载失败、属性值构造失败，或写入与审计事务失败时返回错误。
 pub async fn create_sku_attribute_value(
     db: Database,

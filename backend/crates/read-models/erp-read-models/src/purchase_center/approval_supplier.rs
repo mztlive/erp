@@ -24,7 +24,7 @@ pub struct ApprovalSupplierRating {
 }
 
 impl ApprovalSupplierRating {
-    /// 仅从同一供应商历史中提取最新登记版本和首次合作评分。
+    // 生成采购审批供方资料视图时，仅从同一供应商历史中提取最新登记版本和首次合作评分。
     fn from_ratings(supplier_id: &SupplierAccountId, ratings: &[SupplierRatingRevision]) -> Result<Self> {
         if ratings.iter().any(|rating| &rating.supplier_id != supplier_id) {
             return Err(Error::ConflictError("供应商评估与采购提交不一致".into()));
@@ -43,13 +43,14 @@ impl ApprovalSupplierRating {
     }
 }
 
-/// 实例授权后按精确采购提交读取供应商评估，不开放供应商目录。
-/// # 参数
-/// 数据库、已通过实例读取授权的提交资料及原快照执行器。
-/// # 返回
-/// 采购审批返回最新登记评估，其他单据返回空；无评估返回字段为空的对象。
-/// # 错误
-/// 精确提交不存在、根单据或版本不符、供应商关系不符以及仓储失败时拒绝。
+// 处理采购审批供方资料时，实例授权后按精确采购提交读取供应商评估，不开放供应商目录。
+//
+// 调用参数：
+// 数据库、已通过实例读取授权的提交资料及原快照执行器。
+//
+// 采购审批返回最新登记评估，其他单据返回空；无评估返回字段为空的对象。
+//
+// 精确提交不存在、根单据或版本不符、供应商关系不符以及仓储失败时拒绝。
 pub(crate) async fn supplier_rating(
     db: &Database,
     materials: &ApprovalMaterialsView,
@@ -74,7 +75,7 @@ pub(crate) async fn supplier_rating(
     ApprovalSupplierRating::from_ratings(&submission.supplier_id, &ratings).map(Some)
 }
 
-/// 在读取供应商评价前证明精确采购提交属于当前审批。
+// 校验采购审批供方资料时，在读取供应商评价前证明精确采购提交属于当前审批。
 fn validate_source(materials: &ApprovalMaterialsView, order_id: &str, version: Option<u32>) -> Result<()> {
     if materials.document_type != "purchase_order"
         || materials.document_id != order_id

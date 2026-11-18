@@ -8,12 +8,8 @@ use persistence_core::Result;
 use crate::portal::CatalogPortalExt;
 
 /// 登记商品域拥有的提报索引。
-/// # 参数
-/// `db` 为目标数据库。
-/// # 返回
-/// 索引登记成功。
-/// # 错误
-/// 重复稳定身份或数据库错误。
+///
+/// 索引登记成功。重复稳定身份或数据库错误。
 pub async fn ensure(db: &Database) -> Result<()> {
     let indexes = [
         IndexModel::builder()
@@ -45,7 +41,7 @@ pub async fn ensure(db: &Database) -> Result<()> {
     Ok(())
 }
 
-/// 分类映射按供应商、原始完整路径和商品类型保持独立稳定身份。
+// 分类映射按供应商、原始完整路径和商品类型保持独立稳定身份。
 async fn ensure_category_mappings(db: &Database) -> Result<()> {
     let indexes = [
         IndexModel::builder()

@@ -18,25 +18,17 @@ pub enum PaymentAllocationSource {
 
 impl PaymentAllocationSource {
     /// 创建预存款使用来源。
-    ///
-    /// # 参数
-    /// * `id` - 已核实预存款使用的稳定身份。
-    /// # 返回
     /// 返回规范化的来源。
-    /// # 错误
     /// 身份为空或超长时拒绝。
+    ///
+    /// 输入约定：
+    /// - `id`：已核实预存款使用的稳定身份。
     pub fn deposit_usage(id: impl Into<String>) -> Result<Self> {
         Ok(Self::SupplierDepositUsage(identity(id.into())?))
     }
 
     /// 读取普通付款身份，预存款使用不提供银行付款身份。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 普通付款返回原付款身份。
-    /// # 错误
-    /// 不返回错误。
+    /// 结果：普通付款返回原付款身份。
     pub fn supplier_payment_id(&self) -> Option<&SupplierPaymentId> {
         match self {
             Self::SupplierPayment(id) => Some(id),
@@ -45,13 +37,7 @@ impl PaymentAllocationSource {
     }
 
     /// 读取预存款使用身份。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 预存款使用返回原使用身份。
-    /// # 错误
-    /// 不返回错误。
+    /// 结果：预存款使用返回原使用身份。
     pub fn deposit_usage_id(&self) -> Option<&str> {
         match self {
             Self::SupplierPayment(_) => None,
@@ -60,12 +46,7 @@ impl PaymentAllocationSource {
     }
 
     /// 校验直接构造枚举时也未绕过身份约束。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 身份有效时成功。
-    /// # 错误
+    /// 结果：身份有效时成功。
     /// 空白、未规范化或超长身份时拒绝。
     pub fn validate(&self) -> Result<()> {
         let raw = match self {

@@ -55,20 +55,9 @@ pub(super) struct CancelBlockedTerminalFacts {
 }
 
 impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
-    /// 取消不允许原审批人恢复、但允许人工终止的受阻实例。
+    /// 对不允许原审批人恢复但允许人工终止的受阻实例提交取消。必须没有开放任务，且冻结快照的单据类型、对象和提交版本须精确匹配。
     ///
-    /// # 参数
-    /// * `actor` - 当前认证且具备恢复权限的审计主体
-    /// * `command` - 受阻实例、执行和任务期望版本、取消原因及幂等键
-    ///
-    /// # 返回
-    /// 返回取消后的审批命令视图；幂等回放返回已持久化视图。
-    ///
-    /// # 错误
-    /// 原审批人恢复前置不满足、权限不足、版本冲突、快照不一致或事务写入失败时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 仅允许无开放任务的受阻端口取消，冻结快照三项主体引用必须全部精确匹配。
+    /// 以原写事务核对当前恢复权限、取消原因、期望版本和幂等身份。同命令回放返回持久化结果；资格、状态、快照、版本或写入不满足时拒绝。
     pub async fn cancel_blocked(
         &self,
         actor: &AuditActor,
@@ -93,7 +82,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         .await
     }
 
-    /// 在唯一事务内先查/写收据，再执行受阻取消的强类型动作与全部副作用。
+    // 在单一事务仲裁受阻取消的收据及回放。新命令再执行强类型领域动作与全部运行副作用，不单独提前提交收据。
     async fn commit_cancel_blocked(
         &self,
         actor: &AuditActor,
@@ -127,7 +116,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             .await
     }
 
-    /// 并发唯一键或提交结果未知后使用新会话只读胜者收据。
+    // 并发冲突或提交结果未知时，在新快照重验并回读可能已提交的取消收据，不再次执行取消写入。
     async fn recover_cancel_blocked_after_competing_commit(
         &self,
         actor: &AuditActor,
@@ -163,10 +152,10 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     }
 }
 
-/// 受阻取消先按实例终态证明原操作人并重验当前授权，再允许查询和比较收据。
-///
-/// # Panics
-/// 已加载收据被分类为 `Fresh` 时 `unreachable!`，表示分类器与查询结果矛盾。
+// 受阻取消先按实例终态证明原操作人并重验当前授权，再允许查询和比较收据。
+//
+// 触发 panic 的条件：
+// 已加载收据被分类为 `Fresh` 时 `unreachable!`，表示分类器与查询结果矛盾。
 async fn replay_cancel_blocked(
     authorization: &AuthorizationService,
     db: &Database,
@@ -223,7 +212,7 @@ async fn replay_cancel_blocked(
         .map(Some)
 }
 
-/// 当前授权和原 actor 必须先于请求摘要比较；缺事实不能当作未执行。
+// 受阻取消回放必须先证明当前授权和原取消人，才能比较请求摘要。终态事实缺失不是未执行，不准走新写入。
 async fn replay_terminal_facts(
     db: &Database,
     actor: &AuditActor,
@@ -246,7 +235,7 @@ async fn replay_terminal_facts(
     Ok(Some(facts))
 }
 
-/// 加载受阻取消的结构化操作事实并证明回执、执行和任务终态。
+// 回读不可变取消事实，核对持久化收据与精确执行、历史任务均已达到与本次命令匹配的终态。
 async fn load_cancel_blocked_terminal_facts(
     db: &Database,
     instance: &ApprovalProcessInstance,
@@ -299,19 +288,10 @@ async fn load_cancel_blocked_terminal_facts(
     }))
 }
 
-/// 只有原操作人、原因、版本与历史任务事实全部相同时，终态才证明当前取消载荷。
-///
-/// # 参数
-/// * `instance` - 已取消实例。
-/// * `facts` - 已加载的终态事实。
-/// * `command` - 本次受阻取消命令。
-/// * `actor_id` - 当前操作人。
-///
-/// # 返回
-/// 实例版本、执行版本、操作人、原因和任务版本都匹配时返回 `true`；期望版本溢出时返回 `false`。
-///
-/// # 错误
-/// 不返回错误。
+// 只有原操作人、原因、版本与历史任务事实全部相同时，终态才证明当前取消载荷。
+// 实例版本、执行版本、操作人、原因和任务版本都匹配时返回 `true`；期望版本溢出时返回 `false`。
+//
+// `instance`：已取消实例；`facts`：已加载的终态事实。
 pub(super) fn cancel_blocked_terminal_facts_match(
     instance: &ApprovalProcessInstance,
     facts: &CancelBlockedTerminalFacts,
@@ -335,17 +315,12 @@ pub(super) fn cancel_blocked_terminal_facts_match(
         && task_identity_matches
 }
 
-/// 复用 Fresh 受阻取消的实例版本与可恢复状态判定，隐藏收据是否存在。
-///
-/// # 参数
-/// * `instance` - 已加载实例。
-/// * `command` - 受阻取消命令。
-///
-/// # 返回
-/// 版本一致且当前 blocker 只允许受阻取消时无返回值。
-///
-/// # 错误
-/// 实例版本不一致或当前 blocker 不允许受阻取消时返回冲突。
+// 复用 Fresh 受阻取消的实例版本与可恢复状态判定，隐藏收据是否存在。
+// 版本一致且当前 blocker 只允许受阻取消时无返回值。
+//
+// 实例版本不一致或当前 blocker 不允许受阻取消时返回冲突。
+//
+// `instance`：已加载实例。
 pub(super) fn ensure_cancel_blocked_instance_preconditions(
     instance: &ApprovalProcessInstance,
     command: &ApprovalCancelBlockedCommand,
@@ -358,7 +333,7 @@ pub(super) fn ensure_cancel_blocked_instance_preconditions(
     Ok(())
 }
 
-/// 在同一事务内完成受阻取消的收据仲裁、授权、动作、运行时、通知与审计。
+// 在一个事务中完成受阻取消的收据仲裁、授权、动作、运行时、通知与审计。
 // 与回放函数同形以便命令入口统一分派，参数顺序由字段名锚定；告警逐项压制。
 #[allow(clippy::too_many_arguments)]
 async fn cancel_blocked_apply(
@@ -412,7 +387,7 @@ struct CancelOperation {
     audit: PreparedWorkflowAudit,
 }
 
-/// 先重验授权，再验证实例及执行版本，保持原首错顺序。
+// 在取消受阻实例前先重验当前授权，再核对实例和执行期望版本，避免把版本或存在性暴露给未授权调用方。
 async fn load_cancel_source(
     authorization: &AuthorizationService,
     db: &Database,
@@ -432,7 +407,7 @@ async fn load_cancel_source(
     Ok(CancelSource { document_type, snapshot, instance, current, historical_tasks })
 }
 
-/// 当前执行、开放任务数量与请求声明的历史任务版本必须同时成立。
+// 取消计划前沿原事务校验当前执行、开放任务数量及请求中的可选历史任务版本；任一不符不能进入取消。
 async fn load_cancel_execution(
     db: &Database,
     instance: &ApprovalProcessInstance,
@@ -472,7 +447,7 @@ async fn load_cancel_execution(
     Ok((current, tasks))
 }
 
-/// 形成强类型计划和不可变事实，不执行任何业务副作用。
+// 把已核验的受阻运行事实转成引擎计划和不可变取消证明；准备阶段不调用领域写入或通知。
 async fn prepare_blocked_cancel(
     db: &Database,
     source: CancelSource,
@@ -525,7 +500,7 @@ async fn prepare_blocked_cancel(
     Ok(CancelOperation { source, writes: *writes, now, fact, audit })
 }
 
-/// 包装引擎输入，actor 与原版本均来自已授权命令。
+// 取消受阻实例前，将已授权命令中的操作人和原版本传入引擎；不从客户端展示视图重新推断责任或版本。
 fn cancel_input(
     graph: DefinitionGraph,
     source: &CancelSource,
@@ -563,7 +538,7 @@ fn cancel_input(
     })
 }
 
-/// 保持回执首写、领域动作、终态、事实、通知及成功审计的提交顺序。
+// 应用受阻取消时先以收据仲裁，再执行领域动作、写终态与不可变事实，最后在原事务记录通知和成功审计。
 #[allow(clippy::too_many_arguments)]
 async fn persist_cancel_operation(
     identity_service: &SharedRbacService,
@@ -630,7 +605,7 @@ async fn persist_cancel_operation(
     ))
 }
 
-/// 明确领域取消上下文；审计文本不承担此合同。
+// 将已经核验的取消身份和运行事实封装为领域端口输入，不能用自由审计文本代替该合同。
 fn cancel_action_context(
     source: &CancelSource,
     command: &ApprovalCancelBlockedCommand,
@@ -649,7 +624,7 @@ fn cancel_action_context(
     })
 }
 
-/// 事务内重验受阻取消账号、动作权限、类型级运行管理、对象读取与 DataScopeFact。
+// 受阻取消在写事务重新检查当前账号、恢复动作功能、真实类型运行管理和来源对象范围，不用旧展示资格。
 async fn ensure_cancel_blocked_authorized(
     authorization: &AuthorizationService,
     actor: &AuditActor,
@@ -662,7 +637,7 @@ async fn ensure_cancel_blocked_authorized(
     Ok(())
 }
 
-/// 在调用方事务内校验受阻取消携带的可空历史任务版本。
+// 沿取消写事务确认允许为空的历史任务版本是否与原执行的持久化任务相符，不能单凭请求声明无任务。
 async fn validate_cancel_task_version_with_executor(
     db: &Database,
     execution_id: &ApprovalNodeExecutionId,

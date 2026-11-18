@@ -13,11 +13,8 @@ pub enum FactValue<T> {
 
 impl<T> FactValue<T> {
     /// 取得已经读取的事实。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 已知值；值本身可以为 None 或空集合。
-    /// # 错误
+    ///
     /// 未读取事实返回接入错误，不解释为条件不匹配。
     pub fn get(&self) -> Result<&T> {
         match self {
@@ -26,14 +23,14 @@ impl<T> FactValue<T> {
         }
     }
 
-    /// 判断事实是否已读取。
+    // 当事实已读取时返回 `true`。
     fn loaded(&self) -> bool {
         matches!(self, Self::Known(_))
     }
 }
 
 impl FactValue<Option<String>> {
-    /// 单值与多值表示必须二选一，避免不完整事实被另一种表示掩盖。
+    // 判断可单值或多值表达的事实是否完整；必须恰有一种表示，另一种不能掩盖重复或不完整取证。
     fn loaded_with(&self, values: &FactValue<BTreeSet<String>>) -> Result<bool> {
         if self.loaded() && values.loaded() {
             return Err(Error::ValidationError("单值和多值授权事实不能同时提供".into()));
@@ -41,7 +38,7 @@ impl FactValue<Option<String>> {
         Ok(self.loaded() || values.loaded())
     }
 
-    /// 在完整单值或多值事实中判断任一成员是否匹配。
+    // 在已证明的单值或多值对象事实中执行成员判定，供具体范围维度匹配。
     pub(crate) fn any(
         &self,
         values: &FactValue<BTreeSet<String>>,
@@ -72,7 +69,7 @@ pub enum FactKind {
 }
 
 impl AccessFact {
-    /// 返回事实节点要求的维度。
+    // 取得规则节点对应的事实维度，供启动能力校验和对象事实完整性检查使用。
     pub(crate) fn kind(&self) -> FactKind {
         match self {
             Self::Owned => FactKind::Owner,
@@ -89,7 +86,7 @@ impl AccessFact {
 }
 
 impl ObjectFacts {
-    /// 必需事实先于与或判定验证，不能被其他放行分支掩盖。
+    // 执行任何与或授权分支前，先检查必需对象事实已被实际读取。即便其他分支能够放行，未读取事实仍须拒绝。
     pub(crate) fn require_facts(&self, required: &BTreeSet<FactKind>) -> Result<()> {
         for kind in required {
             let loaded = match kind {

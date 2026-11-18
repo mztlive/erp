@@ -80,23 +80,12 @@ struct SourcingTransactionInput<'a> {
 }
 
 impl PurchaseOrderProcess {
-    /// 按供给分配行一次预占现有库存并创建采购缺口单。
+    /// 执行销售供给分配时，按每条供给依据和数量拆分同一销售行：库存份额生成预占和仓发草稿，缺口按精确拆分维度建采购单并立即提交审批。
+    /// 原写事务重验当前账号和采购创建资格，只推进一次销售单供给 guard，不留下未提交的可编辑采购草稿。
     ///
-    /// # 参数
-    /// * `req` - 来源销售单、供给分配任务、逐行供给依据与数量、幂等键
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回本次库存预占和按精确拆分维度创建并已提交审批的采购单；同一幂等键与同一载荷重复提交时返回原结果。
-    ///
-    /// # 错误
-    /// 操作账号不可登录或缺少采购创建权限、供给行重复或依据失效、数量非正或超过
-    /// 事务内最新剩余/可供量、幂等键载荷冲突、并发冲突、审批绑定、启动审批或仓储写入失败时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 同一销售行可按库存与采购精确依据拆分；库存直接形成预占与仓发草稿，采购缺口按拆分维度建单；
-    /// 操作人在原业务事务中重新核验统一授权，事务内只推进一次销售单供给 guard；
-    /// 采购单创建成功即进入审批中，不得留下可编辑草稿。
+    /// 按来源销售单、操作人、原幂等键和规范化载荷查回执，返回本批库存预占和已提交采购单，不重复执行分配。
+    /// 账号不可登录、资格不足、供给行重复或依据失效、数量非正或超过最新剩余量或可供量、同键异载荷、
+    /// 并发冲突、绑定或启动审批失败、仓储写入失败时返回错误。
     pub async fn create_from_sourcing(
         &self,
         req: CreatePurchaseOrdersFromSourcingRequest,
@@ -131,7 +120,7 @@ impl PurchaseOrderProcess {
         }
     }
 
-    /// 在原业务事务中先重验授权，再执行实际业务写入。
+    // 供给分配的事务入口：先重验当前采购授权和原请求身份，再用该执行器判断重放或写入预占、仓发和采购建单结果。
     async fn sourcing_transaction(
         &self,
         input: SourcingTransactionInput<'_>,
@@ -176,7 +165,7 @@ impl PurchaseOrderProcess {
 }
 
 impl PurchaseOrderProcess {
-    /// 仅在原批次可能已提交后，用同一快照授权精确来源并投影原结果。
+    // 仅在原批次可能已提交后，用同一快照授权精确来源并投影原结果。
     async fn replay_sourcing_result(
         &self,
         command: SourcingTransactionInput<'_>,
@@ -224,34 +213,18 @@ struct CreateFromSourcingApplyInput<'a> {
     actor: &'a AuditActor,
 }
 
-/// 查找 guard 后仍有效的库存余额依据。
-///
-/// # 参数
-/// * `groups` - 最新库存余额依据
-/// * `balance_id` - 计划命中的余额主键
-///
-/// # 返回
-/// 命中时返回该余额依据。
-///
-/// # 错误
-/// 余额已失效时返回可刷新冲突。
-///
-/// # 关键业务约束
-/// 余额依据在 guard 推进后可能被作废释放，必须以最新集合查找。
+// 查找 guard 后仍有效的库存余额依据。
+//
+// `groups` 为最新库存余额依据；`balance_id` 为计划命中的余额主键。命中时返回该余额依据。余额已失效时返回可刷新冲突。
+//
+// 余额依据在 guard 推进后可能被作废释放，必须以最新集合查找。
 fn latest_stock_group<'a>(groups: &'a [StockBasisGroup], balance_id: &str) -> Result<&'a StockBasisGroup> {
     groups.iter().find(|group| group.balance.base.id == balance_id).ok_or_else(procurement_quantity_changed)
 }
 
-/// 把选源计划领域错误映射为服务层稳定业务错误。
-///
-/// # 参数
-/// * `error` - 选源计划领域错误
-///
-/// # 返回
-/// 依据失效映射为可刷新冲突，仓库契约违规映射为参数验证错误。
-///
-/// # 错误
-/// 无。
+// 把选源计划领域错误映射为服务层稳定业务错误。
+//
+// `error` 为选源计划领域错误。依据失效映射为可刷新冲突，仓库契约违规映射为参数验证错误。
 fn map_sourcing_plan_error(error: SourcingPlanError) -> Error {
     match error {
         SourcingPlanError::StaleFacts => procurement_quantity_changed(),
@@ -261,7 +234,7 @@ fn map_sourcing_plan_error(error: SourcingPlanError) -> Error {
     }
 }
 
-/// 为现有库存预占创建或补充同仓仓发草稿。
+// 为现有库存预占创建或补充同仓仓发草稿。
 async fn create_stock_delivery_drafts(
     db: &mongodb::Database,
     ports: &PurchaseOrderPorts,
@@ -291,7 +264,7 @@ async fn create_stock_delivery_drafts(
     Ok(())
 }
 
-/// 创建一个仓发草稿，或向同销售单同仓草稿补入新的预占行。
+// 创建一个仓发草稿，或向同销售单同仓草稿补入新的预占行。
 async fn ensure_stock_delivery_for_warehouse(
     db: &mongodb::Database,
     ports: &PurchaseOrderPorts,
@@ -337,7 +310,7 @@ async fn ensure_stock_delivery_for_warehouse(
         .map_err(Error::from)
 }
 
-/// 向现有仓发草稿追加尚未出现的库存预占行。
+// 向现有仓发草稿追加尚未出现的库存预占行。
 async fn append_stock_delivery_lines(
     db: &mongodb::Database,
     delivery: &Delivery,
@@ -365,7 +338,7 @@ async fn append_stock_delivery_lines(
     Ok(())
 }
 
-/// 将库存预占投影为仓发草稿行。
+// 创建或补充同仓仓发草稿时，把已经形成的库存预占投影到发货行。
 fn build_stock_delivery_lines(
     delivery_id: &DeliveryId,
     reservations: &[&StockReservation],
@@ -392,24 +365,12 @@ fn build_stock_delivery_lines(
         .collect()
 }
 
-/// 写入整批选源创建命令收据。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `input` - 当前稳定命令身份、载荷指纹及操作人
-/// * `sales_order` - 原事务读取的来源销售单及真实编号，作为收据资源身份
-/// * `receipt` - 采购单与库存预留的完整命令结果
-/// * `event_sequence` - 业务首写前验证的主事件序号
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 写入成功返回 `Ok(())`。
-///
-/// # 错误
-/// 收据序列化或仓储写入失败时返回错误。
-///
-/// # 关键业务约束
-/// 收据与全部采购单及库存预留必须同事务提交。
+// 写入整批选源创建命令收据。
+//
+// `input` 为当前稳定命令身份、载荷指纹及操作人；`sales_order` 为原事务读取的来源销售单及真实编号，作为收据资源身份；`receipt` 为采购单与库存预留的完整命令结果；
+// `event_sequence` 为业务首写前验证的主事件序号。写入成功返回 `Ok(())`。收据序列化或仓储写入失败时返回错误。
+//
+// 收据与全部采购单及库存预留必须同事务提交。
 async fn write_sourcing_receipt(
     db: &mongodb::Database,
     input: &CreateFromSourcingApplyInput<'_>,
@@ -437,17 +398,10 @@ async fn write_sourcing_receipt(
     Ok(())
 }
 
-/// 投影批次命令的最后主事件，保留发生时销售单编号。
-/// # 参数
-/// * `actor` - 已鉴权操作人。
-/// * `command_id` - 整批稳定命令关联。
-/// * `sales_order_id` - 来源销售单 ID。
-/// * `sales_order_no` - 来源销售单真实编号。
-/// * `event_sequence` - 首次业务写入前验证的主事件序号。
-/// # 返回
-/// 返回保留安全快照和事件顺序的批次日志。
-/// # 错误
-/// 审计身份、动作、编号或序号非法时拒绝。
+// 投影批次命令的最后主事件，保留发生时销售单编号。
+//
+// `actor` 为已鉴权操作人；`command_id` 为整批稳定命令关联；`sales_order_id` 为来源销售单 ID；`sales_order_no` 为来源销售单真实编号；
+// `event_sequence` 为首次业务写入前验证的主事件序号。返回保留安全快照和事件顺序的批次日志。审计身份、动作、编号或序号非法时拒绝。
 pub(super) fn sourcing_audit(
     actor: &AuditActor,
     command_id: &str,
@@ -469,25 +423,12 @@ pub(super) fn sourcing_audit(
         .with_event_sequence(event_sequence)?)
 }
 
-/// 查询并校验选源创建幂等收据。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `receipt_identity` - 稳定收据 ID
-/// * `expected_fingerprint` - 当前命令载荷指纹
-/// * `actor` - 当前操作人
-/// * `sales_order_id` - 来源销售单
-/// * `work_item_id` - 发起该命令的供给分配工作项
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 收据不存在返回 `None`；存在且一致返回原创建结果并标记回放。
-///
-/// # 错误
-/// 同键异载荷、收据身份不一致或收据损坏时返回错误。
-///
-/// # 关键业务约束
-/// 事务前、事务内和事务失败后均复用同一校验逻辑。
+// 查询并校验选源创建幂等收据。
+//
+// `receipt_identity` 为稳定收据 ID；`expected_fingerprint` 为当前命令载荷指纹；`sales_order_id` 为来源销售单；`work_item_id`
+// 为发起该命令的供给分配工作项。收据不存在返回 `None`；存在且一致返回原创建结果并标记回放。同键异载荷、收据身份不一致或收据损坏时返回错误。
+//
+// 事务前、事务内和事务失败后均复用同一校验逻辑。
 async fn replay_sourcing(
     db: &mongodb::Database,
     authorization: &AuthorizationService,
@@ -539,7 +480,7 @@ async fn replay_sourcing(
     Ok(Some(sourcing_result(receipt, sales_order_id.as_ref())))
 }
 
-/// 将已授权的冻结批次回执投影为首次命令结果，不读取当前任务状态。
+// 将已授权的冻结批次回执投影为首次命令结果，不读取当前任务状态。
 fn sourcing_result(receipt: SourcingReceipt, sales_order_id: &str) -> CreatePurchaseOrdersFromSourcingResult {
     let work_item_status = receipt.work_item_status.as_str().to_string();
     CreatePurchaseOrdersFromSourcingResult {
@@ -563,7 +504,7 @@ fn sourcing_result(receipt: SourcingReceipt, sales_order_id: &str) -> CreatePurc
     }
 }
 
-/// 将工作流任务状态显式转换为采购拥有的命令结果状态。
+// 将工作流任务状态显式转换为采购拥有的命令结果状态。
 fn sourcing_work_item_status(status: WorkItemStatus) -> Result<SourcingTaskStatus> {
     match status {
         WorkItemStatus::Open => Ok(SourcingTaskStatus::Open),

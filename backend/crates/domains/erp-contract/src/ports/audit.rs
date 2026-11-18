@@ -54,25 +54,13 @@ impl_audit_context!(PreparedContractAudit);
 
 impl PreparedContractAudit {
     /// 从已校验的审计实体快照摘取合同侧字段。
-    ///
     /// 名称快照与请求编号留空，事件序号为 1；二者由后续方法填入。
-    ///
-    /// # 参数
-    /// * `base` - 已构造审计的持久化元数据。
-    /// * `actor_id` - 操作人 ID。
-    /// * `actor_account` - 登录账号。
-    /// * `actor_type` - 操作人种类。
-    /// * `action` - 动作名。
-    /// * `resource_type` - 资源类型。
-    /// * `resource_id` - 资源 ID。
-    /// * `success` - 是否成功。
-    /// * `message` - 可选说明。
-    ///
-    /// # 返回
     /// 供稍后持久化的审计事实。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// `base` 为已构造审计的持久化元数据；`actor_id` 为操作人 ID。
+    /// `actor_account` 为登录账号；`actor_type` 为操作人种类。
+    /// `action` 为动作名；`resource_type` 为资源类型。
+    /// `resource_id` 为资源 ID；`success` 为是否成功。
+    /// `message` 为可选说明。
     #[allow(clippy::too_many_arguments)]
     pub fn from_validated(
         base: &BaseModel,
@@ -106,17 +94,9 @@ impl PreparedContractAudit {
     }
 
     /// 由已认证操作人构建成功的资源审计。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证操作人；名称快照与请求编号取自该值。
-    /// * `action` - 业务动作名。
-    /// * `resource_type` - 资源类型。
-    /// * `resource_id` - 资源 ID。
-    ///
-    /// # 返回
     /// 成功标志为真、说明为空的待持久化审计事实。事件序号为 1。
-    ///
-    /// # 错误
+    /// `actor` 为已认证操作人；名称快照与请求编号取自该值；`action` 为业务动作名。
+    /// `resource_type` 为资源类型；`resource_id` 为资源 ID。
     /// `resource_id` 去空白后为空时返回 `ValidationError`。
     pub fn resource(
         actor: AuditActor,
@@ -150,17 +130,8 @@ impl PreparedContractAudit {
 #[async_trait]
 pub trait ContractAuditPort: Send + Sync {
     /// 在事务开始前校验并准备一条成功的资源审计。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证操作人。
-    /// * `action` - 业务动作名。
-    /// * `resource_type` - 资源类型。
-    /// * `resource_id` - 资源 ID。
-    ///
-    /// # 返回
     /// 待在同一执行器上持久化的审计事实。
-    ///
-    /// # 错误
+    /// `action` 为业务动作名，`resource_type` 为资源类型，`resource_id` 为资源 ID。
     /// 资源 ID 为空时返回错误。
     fn resource_log(
         &self,
@@ -171,15 +142,8 @@ pub trait ContractAuditPort: Send + Sync {
     ) -> Result<PreparedContractAudit>;
 
     /// 在调用方选定的执行器上持久化先前准备好的审计。
-    ///
-    /// # 参数
-    /// * `audit` - 已准备的审计事实。
-    /// * `executor` - 调用方选定的执行器。
-    ///
-    /// # 返回
     /// 无返回值。持久化完成。
-    ///
-    /// # 错误
+    /// `audit` 为已准备的审计事实；`executor` 为调用方选定的执行器。
     /// 适配器写入失败时返回对应错误。
     async fn persist(&self, audit: &PreparedContractAudit, executor: &mut dyn Executor) -> Result<()>;
 }

@@ -1,13 +1,7 @@
 use super::*;
 
 impl SupplierCredentialRefreshState {
-    /// 返回稳定刷新阶段，状态显示不得格式化完整凭据对象。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 固定阶段代码。
-    /// # 错误
-    /// 不返回错误。
+    /// 返回稳定刷新阶段，状态显示不得格式化完整凭据对象。固定阶段代码。
     pub fn code(&self) -> &'static str {
         match self {
             Self::Ready => "READY",
@@ -20,13 +14,7 @@ impl SupplierCredentialRefreshState {
         }
     }
 
-    /// 返回原刷新发送期限，未知状态不会因该期限到达而自动重发。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 原领取或发送截止时刻；Ready无期限。
-    /// # 错误
-    /// 不返回错误。
+    /// 返回原刷新发送期限，未知状态不会因该期限到达而自动重发。原领取或发送截止时刻；Ready无期限。
     pub fn deadline(&self) -> Option<Instant> {
         match self {
             Self::Ready | Self::AuthorizationRejected { .. } => None,
@@ -53,12 +41,10 @@ impl SupplierCredentialRefreshState {
 
 impl SupplierCredential {
     /// 领取一次未发送刷新；未知发送永不因租期到达而重新领取。
-    /// # 参数
+    ///
+    /// 领取成功返回真，已有活跃领取或发送未知返回假。身份、版本、重复已完成操作或时间边界无效时拒绝。
+    ///
     /// 所见版本、唯一刷新操作与所有者、有界租期和服务器当前时间。
-    /// # 返回
-    /// 领取成功返回真，已有活跃领取或发送未知返回假。
-    /// # 错误
-    /// 身份、版本、重复已完成操作或时间边界无效时拒绝。
     pub fn claim_refresh(&mut self, expected: u64, claim: &SupplierCredentialRefreshClaim) -> Result<bool> {
         self.require_version(expected)?;
         identity(&claim.operation_id, 128)?;
@@ -93,13 +79,8 @@ impl SupplierCredential {
         Ok(true)
     }
 
-    /// 在HTTP之前可靠登记可能已发送；后续失败不能返回Ready后自动再发。
-    /// # 参数
-    /// `now` 为发送前服务器时刻。
-    /// # 返回
-    /// 保留原操作及所有者的发送未知阶段。
-    /// # 错误
-    /// 未领取、领取已到期或版本边界无效时拒绝。
+    /// 发送刷新 HTTP 请求前，将仍有效的领取推进为发送结果未知，保留原操作与所有者。
+    /// 未领取、过期或版本边界无效时拒绝；进入未知阶段后不能退回 `Ready` 自动重发。
     pub fn mark_refresh_sent(&mut self, now: Instant) -> Result<()> {
         let SupplierCredentialRefreshState::Claimed { owner_id, operation_id, lease_until } = &self.refresh
         else {
@@ -122,12 +103,10 @@ impl SupplierCredential {
     }
 
     /// 仅原发送身份保存核实成功的新令牌，允许原响应晚于领取期限返回。
-    /// # 参数
+    ///
+    /// 新令牌及原完成操作身份已经同时更新。原状态不是发送未知、新令牌无效或版本超限时拒绝。
+    ///
     /// `payload` 为本次原刷新成功响应的受控密文，`now` 为保存时间。
-    /// # 返回
-    /// 新令牌及原完成操作身份已经同时更新。
-    /// # 错误
-    /// 原状态不是发送未知、新令牌无效或版本超限时拒绝。
     pub fn complete_refresh(&mut self, payload: SupplierCredentialPayload, now: Instant) -> Result<()> {
         let SupplierCredentialRefreshState::SentUnknown { operation_id, .. } = &self.refresh else {
             return Err(Error::ConflictError("原刷新不允许保存成功结果".into()));
@@ -146,12 +125,10 @@ impl SupplierCredential {
     }
 
     /// 核实InvalidGrant或撤销后保存重新授权要求，禁止回退旧access token。
-    /// # 参数
+    ///
+    /// 保留原发送身份及截止时刻的授权失效状态。非原发送未知阶段或版本边界无效时拒绝。
+    ///
     /// `now` 为协议层核实失败响应的服务器时刻。
-    /// # 返回
-    /// 保留原发送身份及截止时刻的授权失效状态。
-    /// # 错误
-    /// 非原发送未知阶段或版本边界无效时拒绝。
     pub fn invalidate_refresh(&mut self, now: Instant) -> Result<()> {
         let SupplierCredentialRefreshState::SentUnknown { owner_id, operation_id, lease_until, sent_at } =
             &self.refresh
@@ -173,12 +150,10 @@ impl SupplierCredential {
     }
 
     /// 释放本次尚未发送的领取；任何已发送状态不能使用本入口。
-    /// # 参数
+    ///
+    /// 有效未发送领取退回Ready。领取已到期、原状态不符或版本超限时拒绝。
+    ///
     /// `now` 为当前服务器时刻。
-    /// # 返回
-    /// 有效未发送领取退回Ready。
-    /// # 错误
-    /// 领取已到期、原状态不符或版本超限时拒绝。
     pub fn release_claim(&mut self, now: Instant) -> Result<()> {
         if !matches!(self.refresh, SupplierCredentialRefreshState::Claimed { lease_until, .. } if lease_until > now)
         {
@@ -191,12 +166,8 @@ impl SupplierCredential {
     }
 
     /// 以明确新授权恢复同一凭据引用，记录原失效、未知刷新或已过期授权及核验依据。
-    /// # 参数
-    /// 新授权密文、显式恢复命令和服务器时刻。
-    /// # 返回
-    /// 首次恢复返回真；同操作同依据重放返回假。
-    /// # 错误
-    /// 非新授权、发送期限未过、身份版本不符、重复异载荷或历史已满时拒绝。
+    ///
+    /// 首次恢复返回真；同操作同依据重放返回假。非新授权、发送期限未过、身份版本不符、重复异载荷或历史已满时拒绝。
     pub fn reauthorize(
         &mut self,
         payload: SupplierCredentialPayload,

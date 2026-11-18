@@ -19,11 +19,11 @@ use mongodb::bson::{Bson, doc};
 use persistence_core::Executor;
 
 /// 绑定持久化账户事实和固定查询映射。
-/// # 参数
+///
 /// db 为账户及来源数据所在数据库。
-/// # 返回
+///
 /// 可供组合根按资源和查询权限复用的事实与映射。
-/// # 错误
+///
 /// 构造不执行读取。
 pub fn deposit_bindings(db: Database) -> (Arc<dyn AccessFactsPort>, Arc<dyn AccessMapping>) {
     (Arc::new(DepositFacts { db }), Arc::new(DepositMapping::new()))
@@ -192,7 +192,7 @@ impl AccessMapping for DepositMapping {
     }
 }
 
-/// 保留业务事实仓储失败的稳定错误分类。
+// 资金授权读取业务事实失败时，将编排错误转换为身份端口错误；保留仓储失败和提交不明等分类。
 fn identity_error(error: impl Into<crate::Error>) -> IdentityError {
     match error.into() {
         crate::Error::Internal(value) => IdentityError::Internal(value),

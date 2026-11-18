@@ -12,7 +12,7 @@ use super::fixtures::{Facts, Identity, actor, complete, object};
 use crate::entity::authorization::{AccessTarget, FactValue, RelatedObjects, RelationKey};
 use crate::{Error, Permission};
 
-/// 替换测试账号的启用角色资格，不为派生入口授予内部编码。
+// 为用例换入实际启用角色资格，不向派生入口授予内部权限码，用于验证规则复用原资格。
 fn grant(identity: &Identity, roles: &[(&str, &[Permission])]) {
     identity.state.lock().unwrap().grants =
         roles.iter().map(|(role, permissions)| ((*role).into(), permissions.to_vec())).collect();

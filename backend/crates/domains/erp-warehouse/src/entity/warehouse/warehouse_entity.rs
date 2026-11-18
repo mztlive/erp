@@ -44,16 +44,7 @@ pub struct WarehouseData {
 }
 
 impl WarehouseData {
-    /// 由必填仓库代码构造仓库创建数据。
-    ///
-    /// # 参数
-    /// * `warehouse_code` - ERP 仓库稳定代码（唯一）
-    ///
-    /// # 返回
-    /// 返回启用状态、经办人为空的创建数据。
-    ///
-    /// # 错误
-    /// 无。
+    /// 从 ERP 仓库稳定代码准备创建数据，默认启用且不配置经办人；代码唯一性在持久化时约束。
     pub fn new(warehouse_code: impl Into<String>) -> Self {
         Self {
             warehouse_code: warehouse_code.into(),
@@ -63,46 +54,19 @@ impl WarehouseData {
         }
     }
 
-    /// 设置启停状态。
-    ///
-    /// # 参数
-    /// * `status` - 启停状态
-    ///
-    /// # 返回
-    /// 返回更新后的创建数据。
-    ///
-    /// # 错误
-    /// 无。
+    /// 在构造阶段指定启停状态，用于覆盖创建数据的默认启用值。
     pub fn with_status(mut self, status: EnableStatus) -> Self {
         self.status = status;
         self
     }
 
-    /// 设置入库经办人。
-    ///
-    /// # 参数
-    /// * `inbound_handler_user_id` - 入库经办人账号 ID
-    ///
-    /// # 返回
-    /// 返回更新后的创建数据。
-    ///
-    /// # 错误
-    /// 无。
+    /// 在待创建数据中指定入库经办人账号，供实体校验后保存独立的入库职责。
     pub fn with_inbound_handler_user_id(mut self, inbound_handler_user_id: impl Into<String>) -> Self {
         self.inbound_handler_user_id = Some(inbound_handler_user_id.into());
         self
     }
 
-    /// 设置仓发经办人。
-    ///
-    /// # 参数
-    /// * `outbound_handler_user_id` - 仓发经办人账号 ID
-    ///
-    /// # 返回
-    /// 返回更新后的创建数据。
-    ///
-    /// # 错误
-    /// 无。
+    /// 在待创建数据中指定仓发经办人账号，避免与入库职责混用。
     pub fn with_outbound_handler_user_id(mut self, outbound_handler_user_id: impl Into<String>) -> Self {
         self.outbound_handler_user_id = Some(outbound_handler_user_id.into());
         self
@@ -141,7 +105,7 @@ pub struct Warehouse {
 }
 
 impl PartialEq for Warehouse {
-    /// 全字段语义相等。
+    // 比较仓库全部字段，当前修订、经办配置或审计元数据不同都不视为同一份记录。
     fn eq(&self, other: &Self) -> bool {
         self.base == other.base
             && self.stable.status == other.stable.status
@@ -157,20 +121,7 @@ impl PartialEq for Warehouse {
 impl Eq for Warehouse {}
 
 impl Warehouse {
-    /// 创建仓库。
-    ///
-    /// 完成 warehouse_code 的校验与规范化（去首尾空白、非空、长度上限）。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::WarehouseId`）
-    /// * `data` - 创建数据
-    /// * `created_by` - 创建人（账号或系统身份）
-    ///
-    /// # 返回
-    /// 返回新建的仓库实体。
-    ///
-    /// # 错误
-    /// 仓库代码为空或超长，或经办人账号超长时返回错误。空白经办人视为未配置，不报错。
+    /// 建立稳定仓库身份并记录初始状态、创建人和经办配置。仓库代码去首尾空白后不能为空或超长；经办账号超长报错，空白视为未配置。
     pub fn new(id: WarehouseId, data: WarehouseData, created_by: impl Into<String>) -> Result<Self> {
         let warehouse_code = normalize_required_text(
             data.warehouse_code,
@@ -190,20 +141,7 @@ impl Warehouse {
         })
     }
 
-    /// 更新仓库。
-    ///
-    /// `warehouse_code` 是稳定代码，不允许在通用更新中修改；
-    /// 「有库存或有效预占时不得停用」由 P3 服务层校验（数据模型 §6.3）。
-    ///
-    /// # 参数
-    /// * `update` - 更新数据
-    /// * `updated_by` - 本次更新执行人
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 经办人账号超长，或启停迁移被 `ensure_transition` 拒绝时返回错误。
+    /// 更新启停状态和经办配置并记录修改人，不允许改稳定仓库代码；非法状态迁移或经办账号超长时返回错误。有库存或有效预占不得停用是跨域约束，须由用例层核查。
     pub fn update(&mut self, update: WarehouseUpdate, updated_by: impl Into<String>) -> Result<()> {
         if let Some(status) = update.status {
             ensure_transition(self.stable.status, status)?;
@@ -221,16 +159,7 @@ impl Warehouse {
         Ok(())
     }
 
-    /// 链接属于本仓库的当前修订。
-    ///
-    /// # 参数
-    /// * `revision` - 待设为当前版本的仓库修订
-    ///
-    /// # 返回
-    /// 修订归属一致时更新当前修订指针并返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 修订所属仓库与当前仓库不一致时返回错误。
+    /// 只将属于当前仓库的修订 ID 设为当前指针；其它仓库的修订返回错误，不改指针。
     pub fn apply_revision(&mut self, revision: &WarehouseRevision) -> Result<()> {
         if revision.warehouse_id.as_ref() != self.base.id.as_str() {
             return Err(Error::from("仓库修订不属于当前仓库"));
@@ -239,44 +168,17 @@ impl Warehouse {
         Ok(())
     }
 
-    /// 判断当前乐观锁版本是否与期望版本一致。
-    ///
-    /// # 参数
-    /// * `expected` - 调用方读取后携带的期望版本
-    ///
-    /// # 返回
-    /// 当前版本等于期望版本时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 对照调用方读取时的期望版本，为修改前的乐观锁判断提供依据。
     pub fn matches_version(&self, expected: u64) -> bool {
         self.base.version == expected
     }
 
-    /// 判断仓库是否处于启用状态。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 状态为 `Active` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 根据仓库稳定资料的启停状态判断能否使用，只有 `Active` 才返回 `true`。
     pub fn is_active(&self) -> bool {
         self.stable.status().is_active()
     }
 
-    /// 解析指定仓储操作的唯一经办人。
-    ///
-    /// # 参数
-    /// * `operation` - 入库或仓发责任类型
-    ///
-    /// # 返回
-    /// 仓库启用且已配置对应经办人时返回账号 ID。
-    ///
-    /// # 错误
-    /// 仓库停用或对应经办人缺失时返回错误；调用方必须失败关闭，禁止回退创建人或责任池。
+    /// 按入库或仓发职责解析启用仓库上配置的唯一经办人。仓库停用或对应人员缺失时拒绝，调用方不得回退给创建人或责任池。
     pub fn fulfillment_handler(&self, operation: WarehouseFulfillmentOperation) -> Result<&str> {
         if !self.is_active() {
             return Err(Error::from("目标仓库已停用，请先更换仓库"));
@@ -297,7 +199,7 @@ impl Warehouse {
     }
 }
 
-/// 规范化可选仓储经办人账号 ID。
+// 清理可选经办账号，空白视为未配置，超长返回错误，供创建和更新共用。
 fn normalize_handler_user_id(value: Option<String>) -> Result<Option<String>> {
     normalize_optional_text(value, "仓储经办人", HANDLER_USER_ID_MAX_LEN)
 }
@@ -335,7 +237,7 @@ mod tests {
         .unwrap()
     }
 
-    /// happy path：代码 trim 规范化，状态与审计人落位。
+    // 验证仓库代码去首尾空白，配置的初始状态和创建人正确写入实体。
     #[test]
     fn new_trims_and_normalizes_fields() {
         let warehouse = Warehouse::new(WarehouseId::new("wh-1"), data(), "admin-1").unwrap();
@@ -347,7 +249,7 @@ mod tests {
         assert_eq!(warehouse.outbound_handler_user_id.as_deref(), Some("outbound-1"));
     }
 
-    /// 失败路径：必填空与超长各一条。
+    // 验证清理后为空或超过长度上限的仓库代码均不能建立稳定身份。
     #[test]
     fn new_rejects_empty_and_overlong_code() {
         let empty = WarehouseData::new("  ")
@@ -361,7 +263,7 @@ mod tests {
         assert!(Warehouse::new(WarehouseId::new("wh-1"), overlong, "admin-1").is_err());
     }
 
-    /// 创建构造器默认启用且经办人为空。
+    // 验证仅给稳定代码创建时默认启用，且不会预设任何经办人。
     #[test]
     fn warehouse_data_constructor_sets_code_only() {
         let data = WarehouseData::new("WH-BJ-001");
@@ -372,7 +274,7 @@ mod tests {
         assert_eq!(staffed.inbound_handler_user_id.as_deref(), Some("inbound-1"));
     }
 
-    /// 仓储筛选默认首页 20 条。
+    // 验证仓库、修订和 SKU 策略三类仓储筛选均默认首页每页 20 条。
     #[test]
     fn tier_c_warehouse_filters_default_to_first_page_size_20() {
         use crate::repository::{WarehouseFilter, WarehouseRevisionFilter};
@@ -383,7 +285,7 @@ mod tests {
         );
     }
 
-    /// update 修改状态并 touch 审计人；稳定代码不可修改。
+    // 验证资料更新可修改状态和记录修改人，但不改变仓库稳定代码。
     #[test]
     fn update_applies_status_and_preserves_code() {
         let mut warehouse = Warehouse::new(WarehouseId::new("wh-1"), data(), "admin-1").unwrap();
@@ -404,7 +306,7 @@ mod tests {
         assert_eq!(warehouse.stable.updated_by, "admin-2");
     }
 
-    /// 履约责任必须解析到对应具体人员，且入库与仓发允许同人。
+    // 验证入库、仓发各按对应职责取经办人，允许两项配置同一账号，缺失或停用时不得回退。
     #[test]
     fn fulfillment_handlers_are_operation_specific_and_fail_closed() {
         let warehouse = Warehouse::new(WarehouseId::new("wh-1"), data(), "admin-1").unwrap();
@@ -426,7 +328,7 @@ mod tests {
         assert!(missing.fulfillment_handler(WarehouseFulfillmentOperation::Receipt).is_err());
     }
 
-    /// 修订归属与乐观锁版本由仓库实体统一匹配。
+    // 验证外仓修订不能成为当前修订，且修改只能匹配该实体的乐观锁版本。
     #[test]
     fn revision_and_version_matching_are_entity_rules() {
         let mut warehouse = Warehouse::new(WarehouseId::new("wh-1"), data(), "admin-1").unwrap();
@@ -444,7 +346,7 @@ mod tests {
         );
     }
 
-    /// 状态机：合法迁移通过，邻接矩阵对称闭合。
+    // 验证仓库启停迁移遵循实体状态图，允许双向切换及等状态重复操作。
     #[test]
     fn status_transitions_follow_document_state() {
         assert!(ensure_transition(EnableStatus::Active, EnableStatus::Disabled).is_ok());

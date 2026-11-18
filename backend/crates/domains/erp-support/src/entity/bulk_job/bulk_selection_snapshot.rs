@@ -119,20 +119,10 @@ pub struct BulkSelectionSnapshot {
 
 impl BulkSelectionSnapshot {
     /// 创建选择快照。
-    ///
-    /// 完成 created_by 的校验与规范化，并强制 `item_count` 不超过冻结目标数
-    /// 上限（`0 < item_count <= MAX_ITEM_COUNT`）。目标集合与逐项版本由
-    /// `bulk_selection_item` 保存；快照 `item_count` 与实际行数的核对是跨表
-    /// 不变量，由 P3 事务保证（§6.1）。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::BulkSelectionSnapshotId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
+    /// 完成 created_by 的校验与规范化，并强制 `item_count` 不超过冻结目标数上限（`0 < item_count <= MAX_ITEM_COUNT`）。
+    /// 目标集合与逐项版本由 `bulk_selection_item` 保存；快照 `item_count` 与实际行数的核对是跨表不变量，由 P3 事务保证（§6.1）。
     /// 返回新建的快照实体（状态 `PENDING`）。
-    ///
-    /// # 错误
+    /// `id` 为实体主键（`erp_core::ids::BulkSelectionSnapshotId`）。
     /// 当创建人为空/超长、`item_count` 为零或超过上限时返回错误。
     pub fn new(id: BulkSelectionSnapshotId, data: BulkSelectionSnapshotData) -> Result<Self> {
         let created_by =
@@ -156,16 +146,7 @@ impl BulkSelectionSnapshot {
     }
 
     /// 确认快照。
-    ///
     /// 快照确认后目标集合、截止水位和预期版本不可修改（§6.1）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 无返回值。
-    ///
-    /// # 错误
     /// 当快照不是 `PENDING` 状态（如已确认、已失效）时返回错误。
     pub fn confirm(&mut self) -> Result<()> {
         ensure_transition(self.status, SelectionStatus::Confirmed)?;
@@ -174,14 +155,6 @@ impl BulkSelectionSnapshot {
     }
 
     /// 开始执行。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 无返回值。
-    ///
-    /// # 错误
     /// 当快照不是 `CONFIRMED` 状态时返回错误。
     pub fn start_execution(&mut self) -> Result<()> {
         ensure_transition(self.status, SelectionStatus::Executing)?;
@@ -190,14 +163,6 @@ impl BulkSelectionSnapshot {
     }
 
     /// 标记完成。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 无返回值。
-    ///
-    /// # 错误
     /// 当快照不是 `EXECUTING` 状态时返回错误。
     pub fn complete(&mut self) -> Result<()> {
         ensure_transition(self.status, SelectionStatus::Completed)?;
@@ -206,16 +171,7 @@ impl BulkSelectionSnapshot {
     }
 
     /// 标记失效。
-    ///
     /// 仅 `PENDING` / `CONFIRMED` 可失效；执行中的快照只能走向完成。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 无返回值。
-    ///
-    /// # 错误
     /// 当快照不是 `PENDING` / `CONFIRMED` 状态时返回错误。
     pub fn expire(&mut self) -> Result<()> {
         ensure_transition(self.status, SelectionStatus::Expired)?;
@@ -224,29 +180,14 @@ impl BulkSelectionSnapshot {
     }
 
     /// 判断快照是否仍在有效期内。
-    ///
-    /// # 参数
-    /// * `now` - 当前时刻
-    ///
-    /// # 返回
     /// 当前时刻不晚于 `expires_at` 且状态不是终态时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// `now` 为当前时刻。
     pub fn is_valid_at(&self, now: Instant) -> bool {
         !self.is_terminal() && now <= self.expires_at
     }
 
     /// 判断快照是否已处于终态。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// `COMPLETED` / `EXPIRED` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn is_terminal(&self) -> bool {
         matches!(self.status, SelectionStatus::Completed | SelectionStatus::Expired)
     }
@@ -270,7 +211,7 @@ mod tests {
         }
     }
 
-    /// happy path：创建人 trim、初始 PENDING。
+    // 验证创建人 trim、初始 PENDING。
     #[test]
     fn new_trims_creator_and_starts_pending() {
         let snapshot = BulkSelectionSnapshot::new(BulkSelectionSnapshotId::new("snap-1"), data()).unwrap();
@@ -281,14 +222,14 @@ mod tests {
         assert!(!snapshot.is_terminal());
     }
 
-    /// 失败路径：必填为空被拒。
+    // 验证创建时拒绝空白操作人，不保存没有责任人身份的记录。
     #[test]
     fn new_rejects_empty_creator() {
         let payload = BulkSelectionSnapshotData { created_by: "  ".to_string(), ..data() };
         assert!(BulkSelectionSnapshot::new(BulkSelectionSnapshotId::new("snap-1"), payload).is_err());
     }
 
-    /// 失败路径：目标数为零与超上限被拒（列表越界）。
+    // 验证目标数为零与超上限被拒（列表越界）。
     #[test]
     fn new_rejects_out_of_range_item_count() {
         let zero = BulkSelectionSnapshotData { item_count: 0, ..data() };
@@ -298,7 +239,7 @@ mod tests {
         assert!(BulkSelectionSnapshot::new(BulkSelectionSnapshotId::new("snap-1"), over).is_err());
     }
 
-    /// 状态机：合法迁移全链路。
+    // 验证合法迁移全链路。
     #[test]
     fn lifecycle_confirm_execute_complete() {
         let mut snapshot =
@@ -312,7 +253,7 @@ mod tests {
         assert!(snapshot.is_terminal());
     }
 
-    /// 状态机：非法迁移被拒（跳步、终态迁移、执行中失效）。
+    // 验证非法迁移被拒（跳步、终态迁移、执行中失效）。
     #[test]
     fn illegal_transitions_are_rejected() {
         let mut snapshot =
@@ -333,7 +274,7 @@ mod tests {
         assert!(executing.expire().is_err(), "执行中只能走向完成");
     }
 
-    /// 状态机：逐边定向断言（含不可逆终态）。
+    // 验证各状态只能沿允许的方向迁移（含不可逆终态）。
     #[test]
     fn directed_edge_assertions() {
         for &(from, to) in &[
@@ -351,7 +292,7 @@ mod tests {
         assert!(ensure_transition(SelectionStatus::Expired, SelectionStatus::Pending).is_err());
     }
 
-    /// 枚举序列化与标签稳定。
+    // 验证批量选择快照的枚举序列化代码和中文标签不随实现变化。
     #[test]
     fn selection_codes_and_labels_are_stable() {
         assert_eq!(

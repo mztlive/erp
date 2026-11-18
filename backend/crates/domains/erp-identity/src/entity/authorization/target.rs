@@ -13,13 +13,7 @@ macro_rules! access_key {
         #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
         pub struct $name(String);
         impl $name {
-            /// 解析登记标识。
-            /// # 参数
-            /// value 为小写字母、数字和下划线组成的标识。
-            /// # 返回
-            /// 已校验标识。
-            /// # 错误
-            /// 空值、超长或非法字符拒绝。
+            /// 校验并封装服务端的关系或查询模型登记标识。标识须为 1–64 字节，且只能使用 ASCII 小写字母、数字和下划线。
             pub fn parse(value: impl Into<String>) -> Result<Self> {
                 let value = value.into();
                 if value.is_empty()
@@ -30,13 +24,7 @@ macro_rules! access_key {
                 }
                 Ok(Self(value))
             }
-            /// 读取登记值。
-            /// # 参数
-            /// 无。
-            /// # 返回
-            /// 不可变标识。
-            /// # 错误
-            /// 不返回错误。
+            /// 借用已校验的关系或查询模型登记标识，供登记查找和比对。
             pub fn as_str(&self) -> &str {
                 &self.0
             }
@@ -58,12 +46,11 @@ pub enum AccessTarget {
 
 impl AccessTarget {
     /// 构造单条已有记录目标。
-    /// # 参数
-    /// id 为拥有领域的真实记录 ID。
-    /// # 返回
     /// 包含完整单条 ID 集合的目标。
-    /// # 错误
+    ///
     /// 非法或空 ID 返回校验错误。
+    ///
+    /// id 为拥有领域的真实记录 ID。
     pub fn record(id: &str) -> Result<Self> {
         Ok(Self::Records(ResourceTargets::new(&[id])?))
     }
@@ -81,11 +68,8 @@ pub struct AccessContext {
 
 impl AccessContext {
     /// 从本权限的固定规格取得历史事实装载许可，不产生授权结果。
-    /// # 参数
-    /// 无；使用当前上下文绑定的权限。
-    /// # 返回
     /// 范围动作返回其 allows_history；其他已接入动作返回 false。
-    /// # 错误
+    ///
     /// 未接入权限或范围规格缺失时返回校验错误。
     pub fn allows_history(&self) -> Result<bool> {
         match scope_spec::kind(&self.permission)? {

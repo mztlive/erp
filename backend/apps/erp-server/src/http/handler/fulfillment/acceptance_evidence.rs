@@ -10,14 +10,7 @@ use crate::http::handler::file_asset::{asset_download_response, read_asset, reva
 use crate::http::state::HttpState;
 
 /// 下载销售范围内的签收单凭证。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已认证的当前账号
-/// * `id` - 签收单身份
-/// # 返回
 /// 返回图片或 PDF 文件内容。
-/// # 错误
 /// 无来源读取权限、缺少历史凭证、文件销毁或读取失败时拒绝。
 pub async fn customer_acceptance_evidence(
     State(state): State<HttpState>,

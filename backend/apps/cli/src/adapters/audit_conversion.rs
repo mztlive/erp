@@ -10,28 +10,12 @@ use erp_identity::PreparedResourceAudit;
 
 /// 保留原事件身份、元数据与安全关联的领域审计快照转换。
 pub(super) trait PreparedAudit: Sized {
-    /// 从已构造的审计实体复制消费领域需要的快照。
-    ///
-    /// # 参数
-    /// * `log` - 已构造的审计实体，包含原始事件元数据。
-    ///
-    /// # 返回
-    /// 返回领域快照；历史事件缺少序号时使用首个事件序号。
-    ///
-    /// # 错误
-    /// 不返回错误；还原时重新验证快照中的安全字段。
+    // 身份适配器生成资源审计后，把事件身份、原始元数据和关联信息交给身份域暂存。
+    // 历史事件没有序号时按第 1 个事件处理。
     fn from_log(log: &AuditLog) -> Self;
 
-    /// 使用原始元数据还原并校验安全业务审计。
-    ///
-    /// # 参数
-    /// * `self` - 待持久化的消费领域快照。
-    ///
-    /// # 返回
-    /// 返回沿用原始 ID、版本、时间戳及事件关联的审计实体。
-    ///
-    /// # 错误
-    /// 审计字段、操作人名称或请求编号非法时返回审计领域错误。
+    // 写入审计前，从身份域快照还原事件，保留原始 ID、版本、时间戳和关联信息。
+    // 重新校验审计字段、操作人名称与请求编号，不合规的事件不落库。
     fn to_log(&self) -> AuditResult<AuditLog>;
 }
 
@@ -106,16 +90,7 @@ impl_prepared_audit!(PreparedResourceAudit);
 /// 不返回错误；特殊领域映射不得使用本宏。
 macro_rules! map_audit_error {
     ($visibility:vis fn $name:ident -> $domain:ident) => {
-        /// 将审计错误原样映射为消费领域对应变体。
-        ///
-        /// # 参数
-        /// * `error` - 审计领域错误。
-        ///
-        /// # 返回
-        /// 返回保留原始载荷和错误分类的消费领域错误。
-        ///
-        /// # 错误
-        /// 不返回错误。
+        // 审计构造或写入失败时，将错误转换为消费领域的对应变体，保留分类和原始载荷。
         $visibility fn $name(error: erp_audit::Error) -> $domain::Error {
             match error {
                 erp_audit::Error::Internal(payload) => $domain::Error::Internal(payload),

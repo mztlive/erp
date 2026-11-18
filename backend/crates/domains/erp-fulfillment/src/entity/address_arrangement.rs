@@ -48,11 +48,7 @@ impl fmt::Debug for AddressAllocation {
 }
 impl AddressAllocation {
     /// 规范化收件信息并生成地区名称。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 返回完整地址。
-    /// # 错误
     /// 必填信息、地区或数量非法时拒绝。
     pub fn normalize(&mut self) -> Result<()> {
         self.recipient =
@@ -68,12 +64,7 @@ impl AddressAllocation {
         Ok(())
     }
     /// 返回包含地区的收件地址。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 完整地址。
-    /// # 错误
-    /// 不返回错误。
     pub fn full_address(&self) -> String {
         format!("{}{}", self.region_name, self.address)
     }
@@ -96,11 +87,8 @@ pub struct ArrangementCapacity {
 }
 
 /// 校验所有商品的地址分配；未分配数量保留为待补地址。
-/// # 参数
-/// `lines` 是完整输入，`capacities` 是真实来源商品与数量。
-/// # 返回
 /// 规范化地址后成功。
-/// # 错误
+/// `lines` 是完整输入，`capacities` 是真实来源商品与数量。
 /// 非法身份、重复、超量或不完整商品集合时拒绝。
 pub fn validate_arrangement(lines: &mut [ArrangementLine], capacities: &[ArrangementCapacity]) -> Result<()> {
     if lines.len() != capacities.len() || lines.len() > 200 {
@@ -145,11 +133,8 @@ pub fn validate_arrangement(lines: &mut [ArrangementLine], capacities: &[Arrange
 pub struct AddressPool(pub Vec<ArrangementLine>);
 impl AddressPool {
     /// 从地址池扣除已经冻结的数量，保护已发包裹及其他任务。
-    /// # 参数
-    /// `snapshot` 为冻结快照，`lines` 为该单真实行。
-    /// # 返回
     /// 扣减成功。
-    /// # 错误
+    /// `snapshot` 为冻结快照，`lines` 为该单真实行。
     /// 已发地址缺失、被删或数量被减少时拒绝。
     pub fn consume(&mut self, snapshot: &DeliveryAddressSnapshot, lines: &[DeliveryLine]) -> Result<()> {
         for destination in &snapshot.destinations {
@@ -188,11 +173,8 @@ impl AddressPool {
         Ok(())
     }
     /// 按当前任务真实数量分配地址；地址未确定的余量明确归入待补分组。
-    /// # 参数
-    /// `lines` 是任务真实行，`version` 是来源版本，`key` 是地址密钥。
-    /// # 返回
     /// 返回覆盖全部任务商品的可信快照。
-    /// # 错误
+    /// `lines` 是任务真实行，`version` 是来源版本，`key` 是地址密钥。
     /// 数量精度或溢出时拒绝。
     pub fn assign(
         &mut self,
@@ -270,11 +252,8 @@ fn add_destination(
 
 impl AddressPool {
     /// 先保留仍有效的未发地址，再分配待补或已调整部分，避免重排其他供应商任务。
-    /// # 参数
-    /// `tasks` 为所有未发任务的旧快照及真实行；`key` 为地址密钥。
-    /// # 返回
     /// 返回与任务顺序一致的新快照。
-    /// # 错误
+    /// `tasks` 为所有未发任务的旧快照及真实行；`key` 为地址密钥。
     /// 旧数量超过真实任务或新分配非法时拒绝。
     pub fn reconcile(
         &mut self,
@@ -361,11 +340,8 @@ fn merge_destinations(target: &mut DeliveryAddressSnapshot, added: DeliveryAddre
 }
 
 /// 判断是否减少或替换既有地址；仅为未分配数量新增地址不要求修改原因。
-/// # 参数
-/// `previous` 和 `next` 使用同一商品身份范围。
-/// # 返回
 /// 已有地址数量被减少或移除时返回 true。
-/// # 错误
+/// `previous` 和 `next` 使用同一商品身份范围。
 /// 地址数量汇总溢出时拒绝。
 pub fn requires_change_reason(previous: &[ArrangementLine], next: &[ArrangementLine]) -> Result<bool> {
     fn amounts(rows: &[ArrangementLine]) -> Result<BTreeMap<(String, String, String, String), Quantity>> {

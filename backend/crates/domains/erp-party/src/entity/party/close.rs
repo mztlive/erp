@@ -12,7 +12,7 @@ use super::party_bank_account::{PartyBankAccount, PartyBankAccountUpdate};
 use super::party_contact::{PartyContact, PartyContactUpdate};
 use super::status::EffectiveRecordStatus;
 
-/// 计算关闭时的结束日期更新；同日保留原值，倒序日期拒绝。
+// 计算关闭时的结束日期更新；同日保留原值，倒序日期拒绝。
 fn closing_valid_to(valid_from: BusinessDate, close_at: BusinessDate) -> Result<FieldUpdate<BusinessDate>> {
     if close_at < valid_from {
         return Err(Error::from("关闭日期不能早于生效开始日期"));
@@ -30,13 +30,10 @@ impl PartyContact {
     /// * `close_at` - 关闭业务日期
     /// * `updated_by` - 操作人
     ///
-    /// # 返回
     /// 关闭成功返回 `Ok(())`。
     ///
-    /// # 错误
     /// `close_at < valid_from` 或状态迁移非法时返回领域错误。
     ///
-    /// # 关键业务约束
     /// 不得把倒序日期静默当成 `Unchanged` 后继续停用。
     pub fn close_at(&mut self, close_at: BusinessDate, updated_by: impl Into<String>) -> Result<()> {
         let valid_to = closing_valid_to(self.valid_from, close_at)?;
@@ -58,13 +55,10 @@ impl PartyAddress {
     /// * `close_at` - 关闭业务日期
     /// * `updated_by` - 操作人
     ///
-    /// # 返回
     /// 关闭成功返回 `Ok(())`。
     ///
-    /// # 错误
     /// `close_at < valid_from` 或状态迁移非法时返回领域错误。
     ///
-    /// # 关键业务约束
     /// 同日关闭不写零长度 `valid_to`；倒序日期零 mutation。
     pub fn close_at(&mut self, close_at: BusinessDate, updated_by: impl Into<String>) -> Result<()> {
         let valid_to = closing_valid_to(self.valid_from, close_at)?;
@@ -86,13 +80,10 @@ impl PartyBankAccount {
     /// * `close_at` - 关闭业务日期
     /// * `updated_by` - 操作人
     ///
-    /// # 返回
     /// 关闭成功返回 `Ok(())`。
     ///
-    /// # 错误
     /// `close_at < valid_from` 或状态迁移非法时返回领域错误。
     ///
-    /// # 关键业务约束
     /// 同日关闭不写零长度 `valid_to`；倒序日期零 mutation。
     pub fn close_at(&mut self, close_at: BusinessDate, updated_by: impl Into<String>) -> Result<()> {
         let valid_to = closing_valid_to(self.valid_from, close_at)?;

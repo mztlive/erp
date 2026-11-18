@@ -35,15 +35,8 @@ pub struct UpgradeBindingCommand {
 
 impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     /// 升级未提交单据绑定到当前发布定义。
-    ///
-    /// # 参数
-    /// * `actor` - 当前认证操作人。
-    /// * `command` - 绑定升级命令。
-    ///
-    /// # 返回
     /// 返回提交或回放得到的升级结果。
     ///
-    /// # 错误
     /// 原因为空白、幂等键或命令身份不合法、已提交、版本冲突或升级端口失败时返回错误。
     pub async fn upgrade_binding(
         &self,
@@ -83,7 +76,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         .await
     }
 
-    /// 在唯一调用方事务内执行升级；绑定端口不得自行开启嵌套事务。
+    // 审批定义绑定升级复用唯一业务事务；绑定端口须沿调用者执行器读写，不得开启嵌套事务。
     async fn commit_upgrade_binding(
         &self,
         actor: &AuditActor,
@@ -117,7 +110,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             .await
     }
 
-    /// 唯一键竞争或提交结果未知后，以新事务重验授权并只读胜者收据。
+    // 并发冲突或提交结果不确定时，用新事务校验当前升级资格并回读胜者收据，不重新执行升级。
     async fn recover_upgrade_binding(
         &self,
         actor: &AuditActor,

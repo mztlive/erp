@@ -161,7 +161,7 @@ fn revision() -> PurchaseOrderRevision {
     .unwrap()
 }
 
-/// 撤回保留当前冻结目标、历史关联、多行与付款条件供再次提交。
+// 撤回保留当前冻结目标、历史关联、多行与付款条件供再次提交。
 #[test]
 fn withdrawn_draft_restores_last_submission_with_all_lines_and_keys() {
     let mut change = change();
@@ -187,7 +187,7 @@ fn withdrawn_draft_restores_last_submission_with_all_lines_and_keys() {
     assert_eq!(change.approval_subject_version, 2);
 }
 
-/// 首次变更使用完整基准版本且物流行键仍独立稳定。
+// 首次变更使用完整基准版本且物流行键仍独立稳定。
 #[test]
 fn initial_draft_restores_complete_base_and_original_payment_term() {
     let lines = [item(), logistics()]
@@ -210,7 +210,7 @@ fn initial_draft_restores_complete_base_and_original_payment_term() {
     assert_eq!(view.lines[1].gross_amount.as_deref(), Some("7"));
 }
 
-/// 冻结提交缺失、误用历史或跨来源时失败关闭，不能回退基准内容。
+// 冻结提交缺失、误用历史或跨来源时失败关闭，不能回退基准内容。
 #[test]
 fn draft_target_rejects_missing_stale_or_cross_source_facts() {
     let mut change = change();

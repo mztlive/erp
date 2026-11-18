@@ -10,21 +10,12 @@ use crate::repository::prelude::*;
 use crate::repository::supplier_api::SupplierApiConnectionFilter;
 impl SupplierApiService {
     /// 在调用方已授权的事务内分页读取连接列表。
-    ///
     /// 排序字段白名单在 Service 层校验（api-contract §4）。
-    ///
-    /// # 参数
-    /// * `params` - 查询参数
-    ///
-    /// * `keyword_supplier_ids` - 读取模型按关键词解析的完整供应商身份，与精确条件取交集
-    /// * `executor` - 已完成连接列表功能资格检查的原快照事务执行器
-    ///
-    /// # 返回
     /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
-    ///
-    /// # 错误
+    /// 失败条件：
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
     /// * `RepositoryError` - 数据库查询失败
+    /// `executor`：已完成连接列表功能资格检查的原快照事务执行器。
     pub async fn connection_list(
         &self,
         params: &SupplierApiConnectionListParams,

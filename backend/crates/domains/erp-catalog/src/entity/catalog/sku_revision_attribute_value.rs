@@ -51,18 +51,11 @@ pub struct SkuRevisionAttributeValue {
 impl SkuRevisionAttributeValue {
     /// 创建 SKU 修订规格属性值。
     ///
-    /// 完成文本值的可选校验与规范化，并强制「枚举值与文本值只能使用一种」
-    /// （数据模型 §6.3）。
+    /// 完成文本值的可选校验与规范化，并强制「枚举值与文本值只能使用一种」（数据模型 §6.3）。
     ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::SkuRevisionAttributeValueId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
-    /// 返回新建的属性值关系实体。
-    ///
-    /// # 错误
     /// 当枚举值与文本值同时出现或同时缺失、文本值超长时返回错误。
+    ///
+    /// `id` 为实体主键（`erp_core::ids::SkuRevisionAttributeValueId`）。
     pub fn new(id: SkuRevisionAttributeValueId, data: SkuRevisionAttributeValueData) -> Result<Self> {
         let normalized_text_value =
             normalize_optional_text(data.normalized_text_value, "规范文本值", TEXT_VALUE_MAX_LEN)?;
@@ -99,7 +92,7 @@ mod tests {
         }
     }
 
-    /// happy path：枚举值形态落位。
+    // 枚举值形态按请求保存。
     #[test]
     fn new_accepts_enum_value() {
         let row = SkuRevisionAttributeValue::new(SkuRevisionAttributeValueId::new("row-1"), data()).unwrap();
@@ -109,7 +102,7 @@ mod tests {
         assert_eq!(row.identity_position, 0);
     }
 
-    /// happy path：文本值形态 trim 规范化。
+    // 文本值形态 去除首尾空白。
     #[test]
     fn new_accepts_normalized_text_value() {
         let text = SkuRevisionAttributeValueData {
@@ -123,7 +116,7 @@ mod tests {
         assert_eq!(row.normalized_text_value.as_deref(), Some("红色"));
     }
 
-    /// 失败路径：关联不一致——枚举值与文本值同时出现或同时缺失均被拒绝。
+    // 关联不一致——枚举值与文本值同时出现或同时缺失均被拒绝。
     #[test]
     fn new_rejects_both_or_neither_value_kinds() {
         let both = SkuRevisionAttributeValueData {
@@ -141,7 +134,7 @@ mod tests {
         assert!(SkuRevisionAttributeValue::new(SkuRevisionAttributeValueId::new("row-1"), neither).is_err());
     }
 
-    /// 失败路径：文本值超长被拒绝。
+    // 文本值超长被拒绝。
     #[test]
     fn new_rejects_overlong_text_value() {
         let overlong = SkuRevisionAttributeValueData {

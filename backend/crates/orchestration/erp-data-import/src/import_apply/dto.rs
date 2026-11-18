@@ -78,13 +78,11 @@ pub struct LegacyImportConfirmationView {
 }
 
 impl From<LegacyImportConfirmation> for LegacyImportConfirmationView {
-    /// 从实体构造响应视图。
-    ///
-    /// # 参数
-    /// * `confirmation` - 导入确认事实实体
-    ///
-    /// # 返回
-    /// 返回响应视图。
+    // 从实体构造响应视图。
+    //
+    // `confirmation`：导入确认事实实体。
+    //
+    // 返回响应视图。
     fn from(confirmation: LegacyImportConfirmation) -> Self {
         Self {
             id: confirmation.base.id,

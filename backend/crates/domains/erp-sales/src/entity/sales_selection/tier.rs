@@ -28,15 +28,11 @@ pub struct TierRule {
 
 impl TierRule {
     /// 规范化并校验一档规则。
-    ///
-    /// # 参数
-    /// * `self` - 原始档位
-    ///
-    /// # 返回
     /// 返回合法档位。
-    ///
-    /// # 错误
     /// 名称、金额、数量或 SKU 数不合规时拒绝。
+    ///
+    /// 输入约定：
+    /// - `self`：原始档位
     pub fn normalize(self) -> Result<Self> {
         let name = normalize_required_text(self.name, "档位名称不能为空", TIER_NAME_MAX_LEN, "档位名称过长")?;
         let tier_id = self.tier_id.trim();
@@ -71,15 +67,11 @@ impl TierRule {
 }
 
 /// 校验档位列表。
-///
-/// # 参数
-/// * `tiers` - 创建顺序的档位
-///
-/// # 返回
 /// 返回规范化后的档位列表。
-///
-/// # 错误
 /// 数量超限、名称或身份重复，或单档非法时拒绝。
+///
+/// 输入约定：
+/// - `tiers`：创建顺序的档位
 pub fn normalize_tiers(tiers: Vec<TierRule>) -> Result<Vec<TierRule>> {
     if tiers.len() < super::limits::TIER_COUNT_MIN || tiers.len() > super::limits::TIER_COUNT_MAX {
         return Err(Error::from("套餐形态必须填写 1 到 10 个档位"));

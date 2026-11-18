@@ -81,19 +81,9 @@ pub struct BulkSelectionItem {
 
 impl BulkSelectionItem {
     /// 创建选择项。
-    ///
-    /// 完成 object_type/object_id 的校验与规范化（trim、非空、长度上限），
-    /// `expected_version` / `expected_hash` 可选但必须**同时提供或同时省略**
-    /// （预览版本与内容摘要成对出现）。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::BulkSelectionItemId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
+    /// 完成 object_type/object_id 的校验与规范化（trim、非空、长度上限），`expected_version` / `expected_hash` 可选但必须**同时提供或同时省略** （预览版本与内容摘要成对出现）。
     /// 返回新建的选择项实体（未执行）。
-    ///
-    /// # 错误
+    /// `id` 为实体主键（`erp_core::ids::BulkSelectionItemId`）。
     /// 当对象类型/ID 为空/超长，或预期版本与摘要不成对时返回错误。
     pub fn new(id: BulkSelectionItemId, data: BulkSelectionItemData) -> Result<Self> {
         let object_type = normalize_required_text(
@@ -125,18 +115,8 @@ impl BulkSelectionItem {
     }
 
     /// 记录逐项执行结果。
-    ///
-    /// 结果只追加不覆盖：`None → Some(status)`；`result_code` 与 `result_status`
-    /// 关联一致性（失败必须携带原因代码）在本方法校验。
-    ///
-    /// # 参数
-    /// * `status` - 执行结果
-    /// * `result_code` - 原因代码（`Failed` 时必填）
-    ///
-    /// # 返回
-    /// 无返回值。
-    ///
-    /// # 错误
+    /// 结果只追加不覆盖：`None → Some(status)`；`result_code` 与 `result_status` 关联一致性（失败必须携带原因代码）在本方法校验。
+    /// `status` 为执行结果；`result_code` 为原因代码（`Failed` 时必填）。
     /// 当该项已记录结果，或 `Failed` 未携带原因代码时返回错误。
     pub fn record_result(&mut self, status: SelectionItemStatus, result_code: Option<String>) -> Result<()> {
         if self.result_status.is_some() {
@@ -169,7 +149,7 @@ mod tests {
         }
     }
 
-    /// happy path：对象字段 trim，初始未执行。
+    // 验证对象字段 trim，初始未执行。
     #[test]
     fn new_trims_fields_and_starts_unexecuted() {
         let item = BulkSelectionItem::new(BulkSelectionItemId::new("si-1"), data()).unwrap();
@@ -179,28 +159,28 @@ mod tests {
         assert!(item.result_status.is_none());
     }
 
-    /// 失败路径：必填为空被拒。
+    // 验证必填为空被拒。
     #[test]
     fn new_rejects_empty_object_type() {
         let payload = BulkSelectionItemData { object_type: "  ".to_string(), ..data() };
         assert!(BulkSelectionItem::new(BulkSelectionItemId::new("si-1"), payload).is_err());
     }
 
-    /// 失败路径：关联不一致（版本与摘要不成对）被拒。
+    // 验证关联不一致（版本与摘要不成对）被拒。
     #[test]
     fn new_rejects_unpaired_version_and_hash() {
         let payload = BulkSelectionItemData { expected_hash: None, ..data() };
         assert!(BulkSelectionItem::new(BulkSelectionItemId::new("si-1"), payload).is_err());
     }
 
-    /// 失败路径：超长对象 ID 被拒。
+    // 验证超长对象 ID 被拒。
     #[test]
     fn new_rejects_overlong_object_id() {
         let payload = BulkSelectionItemData { object_id: "x".repeat(129), ..data() };
         assert!(BulkSelectionItem::new(BulkSelectionItemId::new("si-1"), payload).is_err());
     }
 
-    /// 执行结果：成功/跳过可无原因，失败必须带原因代码，结果只记录一次。
+    // 验证执行结果：成功/跳过可无原因，失败必须带原因代码，结果只记录一次。
     #[test]
     fn record_result_enforces_failure_reason_and_once_only() {
         let mut item = BulkSelectionItem::new(BulkSelectionItemId::new("si-1"), data()).unwrap();
@@ -213,7 +193,7 @@ mod tests {
         assert_eq!(failed.result_code.as_deref(), Some("VERSION_MISMATCH"));
     }
 
-    /// 枚举序列化与标签稳定。
+    // 验证批量选择项的枚举序列化代码和中文标签不随实现变化。
     #[test]
     fn result_codes_and_labels_are_stable() {
         assert_eq!(serde_json::to_string(&SelectionItemStatus::Skipped).unwrap(), "\"skipped\"");

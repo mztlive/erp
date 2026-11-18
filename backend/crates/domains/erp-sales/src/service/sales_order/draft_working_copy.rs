@@ -25,18 +25,14 @@ pub struct DraftStableLines {
 }
 
 impl DraftStableLines {
-    /// 按请求顺序组装稳定行身份；重复行号复用已有身份，不重复分配 ID。
-    ///
-    /// # 参数
-    /// * `order_id` - 所属销售单
-    /// * `existing` - 已加载的稳定行，保留其顺序与身份
-    /// * `draft_lines` - 本次草稿行请求
-    ///
-    /// # 返回
-    /// 返回全部稳定行及按首次缺失顺序创建的行。
-    ///
-    /// # 错误
-    /// 新建行的行号非法时传递实体构造错误。
+    // 按请求顺序组装稳定行身份；重复行号复用已有身份，不重复分配 ID。
+    // 返回全部稳定行及按首次缺失顺序创建的行。
+    // 失败条件：新建行的行号非法时传递实体构造错误。
+    //
+    // 输入约定：
+    // - `order_id`：所属销售单
+    // - `existing`：已加载的稳定行，保留其顺序与身份
+    // - `draft_lines`：本次草稿行请求
     fn from_draft(
         order_id: &SalesOrderId,
         existing: Vec<SalesOrderLine>,
@@ -63,20 +59,14 @@ impl DraftStableLines {
 
 impl SalesOrderService {
     /// 按草稿行号补齐稳定明细：已有行复用，缺失行号在内存中新建。
-    ///
-    /// # 参数
-    /// * `order_id` - 所属销售单
-    /// * `draft_lines` - 本次保存的草稿行
-    /// * `executor` - 原命令事务执行器。
-    ///
-    /// # 返回
     /// 返回完整稳定明细与尚未落库的新建行。
+    /// 失败条件：数据库读取失败时返回仓储错误；新建行号非法时传递实体错误。
+    /// 调用边界：不在本方法内写库；新建行必须与工作副本写入同一事务。
     ///
-    /// # 错误
-    /// 数据库读取失败时返回仓储错误；新建行号非法时传递实体错误。
-    ///
-    /// # 约束
-    /// 不在本方法内写库；新建行必须与工作副本写入同一事务。
+    /// 输入约定：
+    /// - `order_id`：所属销售单
+    /// - `draft_lines`：本次保存的草稿行
+    /// - `executor`：原命令事务执行器。
     pub async fn collect_stable_lines_for_draft(
         &self,
         order_id: &SalesOrderId,
@@ -88,21 +78,15 @@ impl SalesOrderService {
     }
 
     /// 为已回草稿、但没有有效首次提交工作副本的销售单新开编辑中副本。
-    ///
-    /// # 参数
-    /// * `order` - 已确认处于草稿的销售单
-    /// * `stable_lines` - 行号已对齐的稳定明细
-    /// * `draft` - 本次保存的表头与明细
-    /// * `actor` - 当前编辑人
-    ///
-    /// # 返回
     /// 返回新建的工作副本实体及明细行（尚未落库）。
-    ///
-    /// # 错误
     /// 草稿字段组、金额或行清单校验失败时返回错误。
+    /// 调用边界：旧的 `Submitted` 副本保持历史，不回写；新副本 `working_purpose` 仍是首次提交。
     ///
-    /// # 约束
-    /// 旧的 `Submitted` 副本保持历史，不回写；新副本 `working_purpose` 仍是首次提交。
+    /// 输入约定：
+    /// - `order`：已确认处于草稿的销售单
+    /// - `stable_lines`：行号已对齐的稳定明细
+    /// - `draft`：本次保存的表头与明细
+    /// - `actor`：当前编辑人
     pub fn build_reopened_first_submission_working_copy(
         order: &SalesOrder,
         stable_lines: &[SalesOrderLine],
@@ -122,7 +106,7 @@ mod tests {
     use super::*;
     use crate::entity::sales_order::LineType;
 
-    /// 构造只用于稳定身份对齐的草稿行。
+    // 组装只用于稳定身份对齐的草稿行。
     fn draft_line(line_no: u32) -> SalesOrderDraftLineRequest {
         SalesOrderDraftLineRequest {
             line_no,
@@ -136,7 +120,7 @@ mod tests {
         }
     }
 
-    /// 既有重复行保留；请求复用既有行号，新身份按首次缺失顺序追加。
+    // 回归检查：既有重复行保留；请求复用既有行号，新身份按首次缺失顺序追加。
     #[test]
     fn draft_identities_preserve_existing_rows_and_create_missing_numbers_once() {
         let order_id = SalesOrderId::new("order-1");
@@ -164,7 +148,7 @@ mod tests {
         assert!(empty.created.is_empty());
     }
 
-    /// 非法新行号沿用实体错误，不创建后续行。
+    // 回归检查：非法新行号沿用实体错误，不创建后续行。
     #[test]
     fn draft_identities_reject_invalid_new_line_number() {
         let error = DraftStableLines::from_draft(&SalesOrderId::new("order-1"), vec![], &[draft_line(0)])

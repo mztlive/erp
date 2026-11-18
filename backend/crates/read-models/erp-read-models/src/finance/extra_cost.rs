@@ -41,22 +41,18 @@ pub struct SalesExtraCostReadModel {
 }
 
 impl SalesExtraCostReadModel {
-    /// 绑定数据库与当前授权服务。
+    /// 装配销售附加费用时，绑定数据库与当前授权服务。
     ///
     /// # 参数
-    /// * `db` - 应用数据库
     /// * `rbac` - 当前 RBAC 服务
     ///
     /// # 返回
     /// 返回读取服务，构造不执行 I/O。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: Database, rbac: Arc<AuthorizationService>) -> Self {
         Self { db, rbac }
     }
 
-    /// 列出销售单上的附加费用。
+    /// 读取销售附加费用时，列出销售单上的附加费用。
     ///
     /// # 参数
     /// * `sales_order_id` - 销售单
@@ -80,7 +76,7 @@ impl SalesExtraCostReadModel {
             .await
     }
 
-    /// 以本次快照完成固定入口授权、费用读取和最终结果交付检查。
+    // 读取销售附加费用时，以本次快照完成固定入口授权、费用读取和最终结果交付检查。
     async fn read(
         &self,
         sales_order_id: &str,
@@ -106,12 +102,10 @@ impl SalesExtraCostReadModel {
     }
 }
 
-/// 读取归属销售单的全部成本事实及分配。
+/// 处理销售附加费用时，读取归属销售单的全部成本事实及分配。
 ///
 /// # 参数
-/// * `db` - 数据库
 /// * `sales_order_id` - 销售单
-/// * `executor` - 执行器
 ///
 /// # 返回
 /// 返回成本事实及其分配。
@@ -142,16 +136,10 @@ pub struct PurchaseExpenseFacts {
 }
 
 impl PurchaseExpenseFacts {
-    /// 已生效、金额为正且尚未确认发生的费用行所属销售单。
-    ///
-    /// # 参数
-    /// 无。
+    /// 处理销售附加费用时，已生效、金额为正且尚未确认发生的费用行所属销售单。
     ///
     /// # 返回
     /// 返回存在待发生附加费用的销售单集合。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn sales_orders_with_pending(&self) -> HashSet<String> {
         let occurred = self.occurred_keys();
         let order_of = self.revision_orders();
@@ -182,12 +170,10 @@ impl PurchaseExpenseFacts {
     }
 }
 
-/// 批量读取一组销售单的采购费用行与确认事实。
+/// 处理销售附加费用时，批量读取一组销售单的采购费用行与确认事实。
 ///
 /// # 参数
-/// * `db` - 数据库
 /// * `sales_order_ids` - 销售单
-/// * `executor` - 执行器
 ///
 /// # 返回
 /// 返回已生效采购单当前版本的费用行及确认发生事实。
@@ -224,16 +210,13 @@ pub async fn purchase_expense_facts(
     Ok(facts)
 }
 
-/// 采购费用行映射为附加费用视图：已确认发生的按确认事实，金额为正的其余行为待发生。
+/// 处理销售附加费用时，采购费用行映射为附加费用视图：已确认发生的按确认事实，金额为正的其余行为待发生。
 ///
 /// # 参数
 /// * `facts` - 采购费用行事实
 ///
 /// # 返回
 /// 返回附加费用视图，未排序。
-///
-/// # 错误
-/// 不返回错误。
 pub fn purchase_expense_views(facts: &PurchaseExpenseFacts) -> Vec<SalesExtraCostView> {
     let occurred = facts
         .occurrences
@@ -306,16 +289,13 @@ fn occurred_view(order: &PurchaseOrder, occurrence: &PurchaseExpenseOccurrence) 
     }
 }
 
-/// 采购费用类别映射为成本费用类别（稳定代码一致）。
+/// 处理销售附加费用时，采购费用类别映射为成本费用类别（稳定代码一致）。
 ///
 /// # 参数
 /// * `category` - 采购费用类别
 ///
 /// # 返回
 /// 返回同代码的附加费用类别。
-///
-/// # 错误
-/// 不返回错误。
 pub fn extra_cost_category(category: PurchaseExpenseCategory) -> ExtraCostCategory {
     match category {
         PurchaseExpenseCategory::Logistics => ExtraCostCategory::Logistics,

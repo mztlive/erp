@@ -41,7 +41,7 @@ pub(super) struct PreparedProduct {
 }
 
 impl ProductImportProcess {
-    /// 新模板必须先证明供应商可用，再准备目录计划并原子提交。
+    // 新模板必须先证明供应商可用，再准备目录计划并原子提交。
     pub(super) async fn import_with_supply(
         &self,
         row_number: u32,
@@ -76,7 +76,7 @@ impl ProductImportProcess {
             .await
     }
 
-    /// 按唯一编号读取已有供应商并复用实物供给资格、供给创建权限；事务内再次检查。
+    // 按唯一编号读取已有供应商并复用实物供给资格、供给创建权限；事务内再次检查。
     pub(super) async fn import_supplier(
         &self,
         input: &SupplyImportInput,
@@ -109,7 +109,7 @@ impl ProductImportProcess {
         Ok(id)
     }
 
-    /// 准备新建或复用商品，供应商成本不会进入公司参考售价。
+    // 准备新建或复用商品，供应商成本不会进入公司参考售价。
     async fn prepare_supply_product(
         &self,
         row: &NormalizedImportRow,
@@ -144,7 +144,7 @@ impl ProductImportProcess {
         Ok(PreparedProduct { write: ProductWrite::Create(draft), pending })
     }
 
-    /// 已有规格仍处理供给，新增规格与补图使用目录领域的原编辑计划。
+    // 已有规格仍处理供给，新增规格与补图使用目录领域的原编辑计划。
     async fn prepare_existing_supply_product(
         &self,
         product: Product,

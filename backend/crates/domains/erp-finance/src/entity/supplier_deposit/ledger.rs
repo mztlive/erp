@@ -61,13 +61,12 @@ pub struct SupplierDepositUsage {
 
 impl SupplierDepositUsage {
     /// 记录正式核销，不能超过真实使用金额。
-    /// # 参数
-    /// * `amount` - 本次已批准可核销金额。
-    /// * `allocation_ids` - 同一事务产生的正式核销记录。
-    /// # 返回
-    /// 增加已核销金额并保留来源。
-    /// # 错误
+    /// 结果：增加已核销金额并保留来源。
     /// 非正、缺少核销记录或超使用金额时拒绝。
+    ///
+    /// 输入约定：
+    /// - `amount`：本次已批准可核销金额。
+    /// - `allocation_ids`：同一事务产生的正式核销记录。
     pub fn record_settlement(&mut self, amount: Amount, allocation_ids: Vec<String>) -> Result<()> {
         positive(amount)?;
         let settled = add(self.settled_amount, amount)?;
@@ -84,13 +83,12 @@ impl SupplierDepositUsage {
     }
 
     /// 核实实际账户返款并引用原核销反向记录。
-    /// # 参数
-    /// * `amount` - 实际到账返款。
-    /// * `reversed_settlement` - 已同步冲回的正式核销部分。
-    /// # 返回
-    /// 累计真实返款与核销冲回，二者分别受原事实限制。
-    /// # 错误
+    /// 结果：累计真实返款与核销冲回，二者分别受原事实限制。
     /// 重复超返、超核销或金额非法时拒绝。
+    ///
+    /// 输入约定：
+    /// - `amount`：实际到账返款。
+    /// - `reversed_settlement`：已同步冲回的正式核销部分。
     pub fn record_return(&mut self, amount: Amount, reversed_settlement: Amount) -> Result<()> {
         positive(amount)?;
         let returned = add(self.returned_amount, amount)?;

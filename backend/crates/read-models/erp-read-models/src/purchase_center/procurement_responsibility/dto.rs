@@ -76,13 +76,12 @@ pub struct ProcurementResponsibilityRulePageView {
 }
 
 impl From<ProcurementResponsibilityRule> for ProcurementResponsibilityRuleView {
-    /// 将规则实体转换为管理视图。
-    ///
-    /// # 参数
-    /// * `rule` - 规则实体
-    ///
-    /// # 返回
-    /// 返回不暴露内部唯一键和审计冗余字段的视图。
+    // 生成采购责任规则视图时，将规则实体转换为管理视图。
+    //
+    // 调用参数：
+    // * `rule` - 规则实体
+    //
+    // 返回不暴露内部唯一键和审计冗余字段的视图。
     fn from(rule: ProcurementResponsibilityRule) -> Self {
         Self {
             id: rule.base.id,
@@ -105,12 +104,12 @@ impl From<ProcurementResponsibilityRule> for ProcurementResponsibilityRuleView {
     }
 }
 
-/// 返回默认第一页。
+// 采购责任规则请求未指定页码时从首页开始。
 fn default_page() -> u64 {
     1
 }
 
-/// 返回默认每页条数。
+// 采购责任规则请求未指定页大小时每页取 50 条。
 fn default_page_size() -> u32 {
     50
 }

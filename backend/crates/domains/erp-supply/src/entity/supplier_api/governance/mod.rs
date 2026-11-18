@@ -50,16 +50,7 @@ pub enum SupplierConnectionAction {
 }
 
 impl SupplierConnectionAction {
-    /// 返回稳定动作代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回大写稳定动作代码。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得 `SupplierConnectionAction` 的稳定标识，供需要按代码而非展示文案识别取值的调用方使用。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::UpdateBusinessProfile => "UPDATE_BUSINESS_PROFILE",
@@ -73,15 +64,7 @@ impl SupplierConnectionAction {
     }
 
     /// 返回固定注册表全部动作。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回固定注册表中的七个治理动作，顺序与注册表一致。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub const fn all() -> [Self; 7] {
         [
             Self::UpdateBusinessProfile,
@@ -108,15 +91,7 @@ pub struct SupplierConnectionBusinessImpact {
 
 impl SupplierConnectionBusinessImpact {
     /// 判断是否存在任何必须先处理的活动业务对象。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 任一计数大于零时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn has_blockers(self) -> bool {
         self.active_offerings > 0 || self.open_supplier_orders > 0 || self.active_sync_jobs > 0
     }
@@ -149,17 +124,7 @@ pub struct SupplierConnectionGovernance<'a> {
 
 impl SupplierConnectionGovernance<'_> {
     /// 返回指定治理动作的全部阻塞原因。
-    ///
-    /// # 参数
-    /// * `action` - 待评估动作
-    /// * `impact` - 停用前活动业务影响计数
-    /// * `reference_registry_available` - 权威引用注册表是否可用
-    ///
-    /// # 返回
     /// 返回稳定阻塞原因；空集合表示领域前置条件满足。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn blockers(
         &self,
         action: SupplierConnectionAction,
@@ -190,29 +155,13 @@ impl SupplierConnectionGovernance<'_> {
     }
 
     /// 返回最近一次成功健康检查。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回最新优先历史中的首个成功运行；没有时返回 `None`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn latest_successful_health_run(&self) -> Option<&SupplierHealthCheckRun> {
         self.health_runs.iter().find(|run| run.status == SupplierHealthCheckStatus::Succeeded)
     }
 
     /// 返回指定能力代码最近一次采购确认。
-    ///
-    /// # 参数
-    /// * `capability_code` - 固定能力代码
-    ///
-    /// # 返回
     /// 返回最新优先历史中的首个匹配确认；没有时返回 `None`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn latest_confirmation(
         &self,
         capability_code: SupplierApiCapabilityCode,
@@ -220,14 +169,8 @@ impl SupplierConnectionGovernance<'_> {
         BusinessCapabilityConfirmation::latest_for(self.confirmations, capability_code)
     }
 
-    /// 返回连接引用或业务资料变更的阻塞原因。
-    ///
-    /// # 参数
-    /// * `action` - 待评估的引用变更动作
-    /// * `reference_registry_available` - 权威引用注册表是否可用
-    ///
-    /// # 返回
-    /// 连接仍启用或注册表不可用时返回对应阻塞原因。
+    // 返回连接引用或业务资料变更的阻塞原因。
+    // 连接仍启用或注册表不可用时返回对应阻塞原因。
     fn reference_change_blockers(
         &self,
         action: SupplierConnectionAction,
@@ -248,7 +191,7 @@ impl SupplierConnectionGovernance<'_> {
         blockers
     }
 
-    /// 服务端配置就绪后允许只读检查与目录采集，不改变业务启用资格。
+    // 服务端配置就绪后允许只读检查与目录采集，不改变业务启用资格。
     fn deployment_blockers(
         &self,
         action: SupplierConnectionAction,
@@ -265,14 +208,8 @@ impl SupplierConnectionGovernance<'_> {
         )]
     }
 
-    /// 返回停用连接前的阻塞原因。
-    ///
-    /// # 参数
-    /// * `action` - 停用治理动作
-    /// * `impact` - 当前活动业务影响计数
-    ///
-    /// # 返回
-    /// 已停用或仍有活动业务对象时返回阻塞原因，否则返回空集合。
+    // 返回停用连接前的阻塞原因。
+    // 已停用或仍有活动业务对象时返回阻塞原因，否则返回空集合。
     fn disable_blockers(
         &self,
         action: SupplierConnectionAction,
@@ -284,13 +221,8 @@ impl SupplierConnectionGovernance<'_> {
         Vec::new()
     }
 
-    /// 返回启用连接前的阻塞原因。
-    ///
-    /// # 参数
-    /// * `action` - 启用治理动作
-    ///
-    /// # 返回
-    /// 返回首个稳定阻塞原因；连接、能力、采购确认和技术证据均满足时返回空集合。
+    // 返回启用连接前的阻塞原因。
+    // 返回首个稳定阻塞原因；连接、能力、采购确认和技术证据均满足时返回空集合。
     fn enable_blockers(&self, action: SupplierConnectionAction) -> Vec<SupplierGovernanceBlocker> {
         if self.connection.is_active() {
             return vec![governance_blocker(action, "ALREADY_ENABLED", "连接已经启用", None)];
@@ -316,15 +248,8 @@ impl SupplierConnectionGovernance<'_> {
     }
 }
 
-/// 校验能力代码集合不包含重复项。
-///
-/// # 参数
-/// * `codes` - 待更新的固定能力代码
-///
-/// # 返回
+/// 核对能力代码集合不包含重复项。
 /// 所有代码唯一时返回 `Ok(())`。
-///
-/// # 错误
 /// 任一代码重复时返回业务错误。
 pub fn ensure_unique_capability_codes(
     codes: impl IntoIterator<Item = SupplierApiCapabilityCode>,
@@ -336,16 +261,9 @@ pub fn ensure_unique_capability_codes(
     Ok(())
 }
 
-/// 构造稳定连接治理阻塞原因。
-///
-/// # 参数
-/// * `action` - 被阻塞的治理动作
-/// * `code` - 稳定原因代码
-/// * `message` - 面向用户的阻塞说明
-/// * `destination_workspace_id` - 可选处理工作区
-///
-/// # 返回
-/// 返回完整阻塞原因值对象。
+// 构造稳定连接治理阻塞原因。
+// 返回完整阻塞原因值对象。
+// `destination_workspace_id`：可选处理工作区。
 fn governance_blocker(
     action: SupplierConnectionAction,
     code: &'static str,
@@ -612,7 +530,7 @@ mod tests {
         assert!(!run.verifies(&changed));
     }
 
-    /// 启用连接要求当前业务确认、健康证据及双人职责。
+    // 验证启用连接要求当前业务确认、健康证据及双人职责。
     #[test]
     fn enable_requires_current_health_without_manual_capabilities_or_second_actor() {
         let mut connection = governance_connection(SupplierApiConnectionStatus::Disabled);
@@ -645,7 +563,7 @@ mod tests {
         assert_eq!(blockers(&connection)[0].code, "TECHNICAL_HEALTH_MISSING");
     }
 
-    /// 未指定接口类型的旧连接不得执行技术动作，仍可按原业务约束停用。
+    // 验证未指定接口类型的旧连接不得执行技术动作，仍可按原业务约束停用。
     #[test]
     fn legacy_connection_requires_type_before_technical_actions() {
         let mut connection = governance_connection(SupplierApiConnectionStatus::Active);
@@ -666,7 +584,7 @@ mod tests {
         }
     }
 
-    /// 关闭自动下单不因活动供给或订单阻塞，目录同步仍可使用。
+    // 验证关闭自动下单不因活动供给或订单阻塞，目录同步仍可使用。
     #[test]
     fn disable_and_catalog_governance_use_current_business_facts() {
         let capability = governance_capability(SupplierApiCapabilityCode::Product);
@@ -725,7 +643,7 @@ mod tests {
         assert!(!governance.blockers(SupplierConnectionAction::Enable, Default::default(), true).is_empty());
     }
 
-    /// 重复能力代码在实体边界稳定拒绝。
+    // 验证重复能力代码在实体边界稳定拒绝。
     #[test]
     fn capability_update_codes_must_be_unique() {
         assert!(

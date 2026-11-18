@@ -55,13 +55,7 @@ pub(crate) struct RouteHandler {
     pub(crate) guards: Vec<String>,
 }
 
-/// 只登记管理端路由，补全门户专项路由的嵌套前缀。
-/// # 参数
-/// 路由模块名称和解析出的实际方法、路径及处理器引用。
-/// # 返回
-/// 内部权限目录使用的路由，不包含供应商外部登录和业务入口。
-/// # 错误
-/// 纯路由投影，不执行外部操作。
+// 把实际管理端 HTTP 注册投影到权限目录，并补上门户后台专项的嵌套前缀；外部供应商登录及业务路由不入此目录。
 pub(crate) fn management_routes(module: &str, parsed: Vec<RouteHandler>) -> Vec<RouteHandler> {
     if module != "supplier_portal" {
         return parsed;
@@ -94,7 +88,7 @@ pub(crate) struct PermissionItem {
     pub(crate) action: String,
 }
 
-/// 将领域政策资格加入同一权限目录；该资格没有独立 HTTP 路由。
+// 将没有单独 HTTP 路由的领域政策资格也登记到目录，避免客户端或校验端缺少这些可授予权限。
 pub(crate) fn append_policy_permissions(
     groups: &mut HashMap<String, PermissionGroup>,
     order: &mut Vec<String>,

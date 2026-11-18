@@ -15,14 +15,8 @@
 macro_rules! impl_repository_error {
     ($error:ty, duplicate = $duplicate:expr) => {
         impl From<$crate::Error> for $error {
-            /// 将仓储失败转换为领域错误，保留源错误和事务结果语义。
-            ///
-            /// # 参数
-            /// * `error` - 仓储或事务错误。
-            /// # 返回
-            /// 对应领域错误；唯一键业务提示由领域声明。
-            /// # 错误
-            /// 不返回错误；结果未知保持独立，不能作为自动重放依据。
+            // 将仓储错误交给领域映射：唯一键提示由领域决定，乐观锁要求刷新；
+            // 瞬态冲突与提交未知保留原错误，未知结果不能直接触发业务重放。
             fn from(error: $crate::Error) -> Self {
                 match error {
                     error @ $crate::Error::DuplicateKey(_) => {

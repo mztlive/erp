@@ -21,17 +21,11 @@ pub(super) struct ApprovalOutcome<'a> {
     pub audit_action: &'a str,
 }
 
-/// 按真实单据类型迁移并保存审批结果，沿用调用方事务。
-///
-/// # 参数
-/// * `db` - 数据库。
-/// * `outcome` - 原单身份、领域动作、驳回提交版本与审计名称。
-/// * `actor` - 已授权操作人。
-/// * `executor` - 运行时持有的同一事务。
-/// # 返回
-/// 保存状态迁移与审计。
-/// # 错误
-/// 原单不存在、版本或状态冲突、持久化失败时返回错误。
+// 按真实单据类型迁移并保存审批结果，沿用调用方事务。
+//
+// `outcome` 为原单身份、领域动作、驳回提交版本与审计名称；`actor` 为已授权操作人；`executor` 为运行时持有的同一事务。保存状态迁移与审计。
+//
+// 原单不存在、版本或状态冲突、持久化失败时返回错误。
 pub(super) async fn persist_approval_outcome(
     db: &Database,
     outcome: ApprovalOutcome<'_>,
@@ -65,7 +59,7 @@ pub(super) async fn persist_approval_outcome(
     Ok(())
 }
 
-/// 加载原单并按绑定提交版本迁移，保存时保持原有 CAS 语义。
+// 结算审批终态时读取客户退款原单，按绑定的提交版本迁移状态并保留原 CAS 保存语义。
 async fn persist_customer_refund(
     db: &Database,
     id: &str,
@@ -87,7 +81,7 @@ async fn persist_customer_refund(
     Ok(())
 }
 
-/// 加载原单并按绑定提交版本迁移，保存时保持原有 CAS 语义。
+// 结算审批终态时读取供应商退款原单，按绑定的提交版本迁移状态并保留原 CAS 保存语义。
 async fn persist_supplier_refund(
     db: &Database,
     id: &str,
@@ -109,7 +103,7 @@ async fn persist_supplier_refund(
     Ok(())
 }
 
-/// 加载原单并按绑定提交版本迁移，保存时保持原有 CAS 语义。
+// 结算审批终态时读取回款冲正原单，按绑定的提交版本迁移状态并保留原 CAS 保存语义。
 async fn persist_receipt_reversal(
     db: &Database,
     id: &str,
@@ -131,7 +125,7 @@ async fn persist_receipt_reversal(
     Ok(())
 }
 
-/// 加载原单并按绑定提交版本迁移，保存时保持原有 CAS 语义。
+// 结算审批终态时读取付款冲正原单，按绑定的提交版本迁移状态并保留原 CAS 保存语义。
 async fn persist_payment_reversal(
     db: &Database,
     id: &str,

@@ -11,11 +11,9 @@ use super::{FulfillmentTaskObject, ensure_task_matches_frozen_identity, load_sin
 use crate::Result;
 
 /// 关闭已由采购变更证明应退役的 API 直发草稿任务。
-/// # 参数
-/// `delivery` 必须是当前事务已核对未发货的自动草稿；`actor_id` 是变更审批执行人。
-/// # 返回
-/// 原任务按采购变更原因关闭，保留责任人和全部原处理历史。
-/// # 错误
+///
+/// `delivery` 必须是当前事务已核对未发货的自动草稿；`actor_id` 是变更审批执行人。原任务按采购变更原因关闭，保留责任人和全部原处理历史。
+///
 /// 任务缺失、重复、责任身份不符或乐观锁失败时回滚变更。
 pub async fn close_api_delivery_task(
     db: &Database,

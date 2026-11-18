@@ -34,14 +34,8 @@ pub struct ExpectedReverseAdapterContracts {
 
 /// 校验逆向单据审批适配器登记的共用规格。
 ///
-/// # 参数
-/// * `spec` - 政策登记的适配器规格
-/// * `expected` - 随单据种类变化的期望登记值
+/// `spec` 为政策登记的适配器规格；`expected` 为随单据种类变化的期望登记值。登记完整时返回 `()`。
 ///
-/// # 返回
-/// 登记完整时返回 `()`。
-///
-/// # 错误
 /// 共用字段或期望字段与合同签署值不一致时返回部署不变量错误。
 pub fn ensure_reverse_adapter_spec(
     spec: &ApprovalAdapterSpec,

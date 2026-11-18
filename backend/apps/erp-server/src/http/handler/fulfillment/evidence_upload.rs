@@ -3,17 +3,10 @@
 use crate::http::errors::Error;
 use crate::http::handler::file_asset::PendingAssetFile;
 
-/// 校验现场凭证的临时引用、文件数量及图片类型。
-///
-/// # 参数
-/// * `reference` - 确认命令中的凭证引用
-/// * `files` - 本次解析出的具名文件
-///
-/// # 返回
-/// 凭证引用与上传图片一一对应时成功。
-///
-/// # 错误
-/// 文件数量、临时引用或图片 MIME 不匹配时返回 400。
+// 校验现场凭证的临时引用、文件数量及图片类型。
+// `reference` 为确认命令中的凭证引用。
+// 凭证引用与上传图片一一对应时成功。
+// 文件数量、临时引用或图片 MIME 不匹配时返回 400。
 pub(super) fn validate_evidence_upload(
     reference: &str,
     files: &[PendingAssetFile],

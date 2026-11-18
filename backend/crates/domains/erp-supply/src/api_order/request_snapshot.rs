@@ -38,11 +38,7 @@ pub struct FrozenLinePurchaseTerms {
 }
 
 /// 从完整请求快照读取精确执行组的批准预算。
-/// # 参数
-/// `execution` 为当前原执行记录，`decrypted_snapshot` 为其服务端密文的解密内容。
-/// # 返回
 /// 与执行组、采购修订和快照总额一致的冻结预算。
-/// # 错误
 /// 完整快照损坏、历史预算缺失或版本身份不一致时保持原错误分类。
 pub fn execution_budget(
     execution: &ApiOrderExecution,

@@ -27,19 +27,13 @@ struct SalesOrderAmountSummaryRow {
 #[allow(async_fn_in_trait)]
 pub trait ReceivableAccountSalesOrderSummaryExt {
     /// 按销售单聚合已核销、已开票与含税应收合计。
-    ///
-    /// # 参数
-    /// * `sales_order_id` - 来源销售单
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回强类型三金额摘要；无未删除子账时 `account_count = 0` 且金额为精确零。
+    /// 传播数据库聚合、游标读取或 Decimal128 反序列化失败。
+    /// 业务边界：必须使用 Decimal128 `$sum`，不得加载完整实体后在内存折叠；软删除子账排除。
     ///
-    /// # 错误
-    /// MongoDB 聚合、游标读取或 Decimal128 反序列化失败时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 必须使用 Decimal128 `$sum`，不得加载完整实体后在内存折叠；软删除子账排除。
+    /// 输入约定：
+    /// - `sales_order_id`：来源销售单
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn sales_order_amount_summary(
         &self,
         sales_order_id: &SalesOrderId,
@@ -64,19 +58,12 @@ impl ReceivableAccountSalesOrderSummaryExt for persistence_core::Repository<'_, 
     }
 }
 
-/// 构造销售单应收三金额聚合管道。
-///
-/// # 参数
-/// * `sales_order_id` - 来源销售单
-///
-/// # 返回
-/// 返回 `$match` + `$group` + `$project` 三段管道。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// `$match` 使用 `sales_order_id` 等值与未删除过滤，命中身份索引前缀。
+// 构造销售单应收三金额聚合管道。
+// 返回 `$match` + `$group` + `$project` 三段管道。
+// 业务边界：`$match` 使用 `sales_order_id` 等值与未删除过滤，命中身份索引前缀。
+//
+// 输入约定：
+// - `sales_order_id`：来源销售单
 fn sales_order_amount_summary_pipeline(sales_order_id: &SalesOrderId) -> Vec<Document> {
     vec![
         doc! {
@@ -98,13 +85,11 @@ fn sales_order_amount_summary_pipeline(sales_order_id: &SalesOrderId) -> Vec<Doc
     ]
 }
 
-/// 把聚合行映射为摘要；空结果为精确零且无子账。
-///
-/// # 参数
-/// * `rows` - `$group` 结果，至多一行
-///
-/// # 返回
-/// 返回强类型摘要。
+// 把聚合行映射为摘要；空结果为精确零且无子账。
+// 返回强类型摘要。
+//
+// 输入约定：
+// - `rows`：`$group` 结果，至多一行
 fn summary_from_rows(rows: Vec<SalesOrderAmountSummaryRow>) -> SalesOrderReceivableAmountSummary {
     let Some(row) = rows.into_iter().next() else {
         return SalesOrderReceivableAmountSummary::empty();

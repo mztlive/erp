@@ -15,17 +15,13 @@ use crate::{Error, Result};
 
 impl SalesChangeOrder {
     /// 构造新增商品的稳定行，禁止复用其他单据或历史行身份。
-    ///
-    /// # 参数
-    /// * `original` - 当前草稿已保存明细。
-    /// * `target` - 完整变更目标。
-    /// * `stable` - 原销售单全部历史稳定行。
-    ///
-    /// # 返回
     /// 返回待在同一事务创建的稳定明细。
-    ///
-    /// # 错误
     /// 新行身份不属于本变更、行号复用或不是实物服务时拒绝。
+    ///
+    /// 输入约定：
+    /// - `original`：当前草稿已保存明细。
+    /// - `target`：完整变更目标。
+    /// - `stable`：原销售单全部历史稳定行。
     pub fn new_lines(
         &self,
         original: &[SalesOrderWorkingCopyLine],
@@ -58,17 +54,13 @@ impl SalesChangeOrder {
     }
 
     /// 在原单版本与草稿状态成立时修改原因。
-    ///
-    /// # 参数
-    /// * `expected_version` - 页面读取的变更单版本
-    /// * `reason` - 变更原因
-    /// * `actor_id` - 当前编辑人
-    ///
-    /// # 返回
-    /// 原因通过校验后写回当前草稿，无业务返回值。
-    ///
-    /// # 错误
+    /// 结果：原因通过校验后写回当前草稿，无业务返回值。
     /// 版本变化、未撤回审批或原因非法时拒绝。
+    ///
+    /// 输入约定：
+    /// - `expected_version`：页面读取的变更单版本
+    /// - `reason`：变更原因
+    /// - `actor_id`：当前编辑人
     pub fn edit_draft(&mut self, expected_version: u64, reason: String, actor_id: &str) -> Result<()> {
         if !self.matches_version(expected_version) {
             return Err(Error::ConflictError("销售变更单已变化，请刷新后重试".into()));
@@ -83,18 +75,14 @@ impl SalesChangeOrder {
 
 impl SalesOrderWorkingCopy {
     /// 为同一销售变更准备可编辑副本，已提交副本仅复制为新草稿。
-    ///
-    /// # 参数
-    /// * `change` - 已核验为草稿的原销售变更单
-    /// * `expected_version` - 工作副本版本
-    /// * `new_id` - 已提交副本重新编辑时的新身份
-    /// * `actor_id` - 当前编辑人
-    ///
-    /// # 返回
     /// 返回保留原单与基准身份的可编辑副本。
-    ///
-    /// # 错误
     /// 引用不一致、状态非法、版本冲突时拒绝。
+    ///
+    /// 输入约定：
+    /// - `change`：已核验为草稿的原销售变更单
+    /// - `expected_version`：工作副本版本
+    /// - `new_id`：已提交副本重新编辑时的新身份
+    /// - `actor_id`：当前编辑人
     pub fn editable_change_copy(
         &self,
         change: &SalesChangeOrder,
@@ -116,15 +104,11 @@ impl SalesOrderWorkingCopy {
     }
 
     /// 证明工作副本属于原草稿变更，并且其内容允许重新编辑。
-    ///
-    /// # 参数
-    /// * `change` - 已读取的原销售变更单
-    ///
-    /// # 返回
-    /// 身份、基准及状态均匹配时成功。
-    ///
-    /// # 错误
+    /// 结果：身份、基准及状态均匹配时成功。
     /// 引用不一致、变更不是草稿或副本状态不可编辑时拒绝。
+    ///
+    /// 输入约定：
+    /// - `change`：已读取的原销售变更单
     pub fn ensure_change_editable(&self, change: &SalesChangeOrder) -> Result<()> {
         if !change.is_editable()
             || self.working_purpose != WorkingPurpose::SalesChange
@@ -139,19 +123,15 @@ impl SalesOrderWorkingCopy {
     }
 
     /// 完整保存目标明细并重算金额；保留原行身份，允许追加新商品。
-    ///
-    /// # 参数
-    /// * `change_id` - 原销售变更单身份
-    /// * `original` - 已读取的全部原明细
-    /// * `target` - 完整目标明细
-    /// * `remark` - 业务备注
-    /// * `actor_id` - 当前编辑人
-    ///
-    /// # 返回
     /// 返回经过实体构造校验的目标明细。
-    ///
-    /// # 错误
     /// 明细重复、缺失、金额非法或草稿版本溢出时拒绝。
+    ///
+    /// 输入约定：
+    /// - `change_id`：原销售变更单身份
+    /// - `original`：已读取的全部原明细
+    /// - `target`：完整目标明细
+    /// - `remark`：业务备注
+    /// - `actor_id`：当前编辑人
     pub fn edit_change_lines(
         &mut self,
         change_id: &str,
@@ -195,19 +175,15 @@ impl SalesOrderWorkingCopy {
     }
 }
 
-/// 校验完整目标保留稳定明细身份，并满足业务性质和行号约束。
-///
-/// # 参数
-/// * `business_type` - 原销售单不可变业务性质
-/// * `original` - 原草稿完整明细
-/// * `target` - 本次完整目标明细
-///
-/// # 返回
-/// 明细身份、数量及跨行约束均成立时成功。
-///
-/// # 错误
-/// 原明细缺失、目标重复、行性质或行号非法时拒绝。
-/// 明细是否为赠品。
+// 校验完整目标保留稳定明细身份，并满足业务性质和行号约束。
+// 结果：明细身份、数量及跨行约束均成立时成功。
+// 原明细缺失、目标重复、行性质或行号非法时拒绝。
+// 明细是否为赠品。
+//
+// 输入约定：
+// - `business_type`：原销售单不可变业务性质
+// - `original`：原草稿完整明细
+// - `target`：本次完整目标明细
 fn is_gift(data: &SalesOrderWorkingCopyLineData) -> bool {
     data.goods.as_ref().is_some_and(|goods| goods.pricing_mode.is_gift())
 }
@@ -262,16 +238,12 @@ fn validate_target_lines(
 
 impl SalesChangeSubmission {
     /// 证明当前提交来自原变更被冻结的同一工作副本版本。
-    ///
-    /// # 参数
-    /// * `change` - 原销售变更单
-    /// * `copy` - 当前提交引用的工作副本
-    ///
-    /// # 返回
     /// 返回完整目标的不可变内容身份。
-    ///
-    /// # 错误
     /// 原单、基准、工作副本或冻结版本错配，及副本不是已提交时拒绝。
+    ///
+    /// 输入约定：
+    /// - `change`：原销售变更单
+    /// - `copy`：当前提交引用的工作副本
     pub fn saved_target_content_hash<'a>(
         &self,
         change: &SalesChangeOrder,
@@ -296,15 +268,8 @@ impl SalesChangeSubmission {
 
 impl SalesOrderWorkingCopyLine {
     /// 把完整工作副本行转成原单编辑数据，保留冻结商品身份。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回可再次由实体构造函数校验的完整行。
-    ///
-    /// # 错误
-    /// 行字段不符合其业务性质时返回校验错误。
+    /// 失败条件：行字段不符合其业务性质时返回校验错误。
     pub fn draft_data(&self) -> Result<SalesOrderWorkingCopyLineData> {
         Ok(SalesOrderWorkingCopyLineData {
             sales_order_line_id: self.sales_order_line_id.clone(),

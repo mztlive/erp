@@ -31,29 +31,17 @@ pub struct WorkItemSubjectVersions {
 
 impl WorkItemSubjectVersions {
     /// 创建不限制对象版本的关系。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回接受任意任务对象版本的空约束。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn unrestricted() -> Self {
         Self::default()
     }
 
     /// 创建只接受指定权威版本的关系。
-    ///
-    /// # 参数
-    /// * `values` - 业务对象生产者允许的版本集合
-    ///
-    /// # 返回
     /// 返回已规范化、排序并去重的版本约束。
     ///
-    /// # 错误
     /// 集合为空、任一版本为空或过长时返回错误。
+    ///
+    /// `values`：业务对象生产者允许的版本集合。
     pub fn constrained(values: Vec<String>) -> Result<Self> {
         if values.is_empty() {
             return Err(Error::from("受约束的工作项对象版本不能为空"));
@@ -74,28 +62,20 @@ impl WorkItemSubjectVersions {
         Ok(Self { values: normalized, historical_rework: Vec::new() })
     }
 
-    /// 判断任务对象版本是否被当前关系接受。
-    ///
-    /// # 参数
-    /// * `actual` - 工作项冻结的对象版本
-    ///
-    /// # 返回
+    /// 当任务对象版本被当前关系接受时返回 `true`。
     /// 无约束或命中权威版本集合时返回 `true`，否则返回 `false`。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// `actual`：工作项冻结的对象版本。
     pub fn accepts(&self, actual: &str) -> bool {
         self.values.is_empty() || self.values.iter().any(|expected| expected == actual)
     }
 
     /// 登记当前对象不可变审批快照证明的历史驳回任务版本。
-    ///
-    /// # 参数
-    /// * `instance_id` / `subject_version` - 当前对象持久化快照中的实例及提交版本。
-    /// # 返回
     /// 仅记录该实例唯一驳回任务的精确身份，不扩大当前可执行版本集合。
-    /// # 错误
+    ///
     /// 不返回错误；调用方须从匹配当前对象的不可变快照取得参数。
+    ///
+    /// `instance_id` / `subject_version`：当前对象持久化快照中的实例及提交版本。
     pub fn register_rework_history(
         &mut self,
         instance_id: &bpm::ApprovalProcessInstanceId,
@@ -108,13 +88,11 @@ impl WorkItemSubjectVersions {
     }
 
     /// 校验当前任务版本或有不可变快照证明的已结束驳回责任。
-    ///
-    /// # 参数
-    /// * `kind` / `status` / `task_id` / `actual` - 持久化任务的类型、状态、身份和版本。
-    /// # 返回
     /// 当前版本沿原规则；历史版本只接受精确匹配且已结束的驳回任务。
-    /// # 错误
+    ///
     /// 不返回错误。本方法不替代当前账号、权限、对象范围和责任历史校验。
+    ///
+    /// `kind` / `status` / `task_id` / `actual`：持久化任务的类型、状态、身份和版本。
     pub fn accepts_task(
         &self,
         kind: WorkItemType,
@@ -129,15 +107,7 @@ impl WorkItemSubjectVersions {
     }
 
     /// 返回已规范化的权威版本集合。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 无约束时返回空切片，否则返回排序去重后的版本。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn as_slice(&self) -> &[String] {
         &self.values
     }
@@ -178,15 +148,11 @@ impl WorkItem {
     /// 开放任务必须给出唯一责任人，并立即形成 `assigned_at` 与
     /// `current_assignment_at`。
     ///
-    /// # 参数
-    /// * `id` - 任务主键。
-    /// * `data` - 任务责任与业务对象快照。
-    ///
-    /// # 返回
     /// 返回以当前时间为责任形成时间、且不带责任键和行范围的任务。
     ///
-    /// # 错误
     /// 必填字段为空或超长，或该任务类型不能走不带责任键和行范围的通用构造时返回错误。
+    ///
+    /// `data`：任务责任与业务对象快照。
     pub fn new(id: WorkItemId, data: WorkItemData) -> Result<Self> {
         Self::new_at_with_optional_responsibility(id, data, None, Vec::new(), Instant::now())
     }
@@ -196,16 +162,11 @@ impl WorkItem {
     /// 责任维度在创建时规范化并冻结；后续转交不得修改。
     /// 客户端输入不得直接调用本入口，应用服务只能传入已注册的固定维度。
     ///
-    /// # 参数
-    /// * `id` - 任务主键。
-    /// * `data` - 任务责任与业务对象快照。
-    /// * `responsibility_key` - 服务端责任维度。
-    ///
-    /// # 返回
     /// 返回已冻结责任键、行范围为空的任务。
     ///
-    /// # 错误
     /// 责任维度为空、字段超长，或任务基础数据无效时返回错误。
+    ///
+    /// `data`：任务责任与业务对象快照；`responsibility_key`：服务端责任维度。
     pub fn new_with_responsibility_key(
         id: WorkItemId,
         data: WorkItemData,
@@ -222,18 +183,12 @@ impl WorkItem {
     }
 
     /// 创建带服务端责任维度与稳定业务行范围的任务。
-    ///
-    /// # 参数
-    /// * `id` - 任务主键
-    /// * `data` - 任务责任与业务对象快照
-    /// * `responsibility_key` - 参与开放唯一性的服务端稳定键
-    /// * `scope_ids` - 已由服务端解析、跨版本稳定的业务行 ID
-    ///
-    /// # 返回
     /// 返回责任键和责任行集合均已规范化、排序并冻结的开放任务。
     ///
-    /// # 错误
     /// 责任键或行 ID 为空、字段过长、行数超过上限，或任务基础数据无效时返回错误。
+    ///
+    /// `data`：任务责任与业务对象快照；`responsibility_key`：参与开放唯一性的服务端稳定键。
+    /// `scope_ids`：已由服务端解析、跨版本稳定的业务行 ID。
     pub fn new_with_responsibility_scope(
         id: WorkItemId,
         data: WorkItemData,
@@ -252,35 +207,22 @@ impl WorkItem {
     }
 
     /// 使用确定时间创建任务，供事务编排和确定性测试使用。
-    ///
-    /// # 参数
-    /// * `id` - 任务主键。
-    /// * `data` - 任务责任与业务对象快照。
-    /// * `at` - 责任形成时间。
-    ///
-    /// # 返回
     /// 返回不带责任键和行范围的任务。
     ///
-    /// # 错误
     /// 必填字段为空或超长，或该任务类型不能走不带责任键和行范围的通用构造时返回错误。
+    ///
+    /// `data`：任务责任与业务对象快照；`at`：责任形成时间。
     pub fn new_at(id: WorkItemId, data: WorkItemData, at: Instant) -> Result<Self> {
         Self::new_at_with_optional_responsibility(id, data, None, Vec::new(), at)
     }
 
-    /// 使用已规范化的可选责任键和责任范围创建任务。
-    ///
-    /// # 参数
-    /// * `id` - 任务主键
-    /// * `data` - 任务基础数据
-    /// * `responsibility_key` - 可选服务端责任键
-    /// * `responsibility_scope_ids` - 已规范化的稳定业务行集合
-    /// * `at` - 责任形成时间
-    ///
-    /// # 返回
-    /// 返回初始状态为开放且已指定到人的任务。
-    ///
-    /// # 错误
-    /// 必填字段为空或超长，或任务类型与责任键、行范围不满足固定创建路径时返回错误。
+    // 使用已规范化的可选责任键和责任范围创建任务。
+    // 返回初始状态为开放且已指定到人的任务。
+    //
+    // 必填字段为空或超长，或任务类型与责任键、行范围不满足固定创建路径时返回错误。
+    //
+    // `responsibility_key`：可选服务端责任键；`responsibility_scope_ids`：已规范化的稳定业务行集合。
+    // `at`：责任形成时间。
     pub(super) fn new_at_with_optional_responsibility(
         id: WorkItemId,
         data: WorkItemData,
@@ -325,15 +267,11 @@ impl WorkItem {
     }
 
     /// 更新开放任务的业务影响摘要。
-    ///
-    /// # 参数
-    /// * `impact_summary` - 面向用户的最新业务影响；空白值会规范化为空
-    ///
-    /// # 返回
     /// 更新成功返回 `Ok(())`。
     ///
-    /// # 错误
     /// 任务非开放或摘要超过长度上限时返回错误。
+    ///
+    /// `impact_summary`：面向用户的最新业务影响；空白值会规范化为空。
     pub fn update_impact_summary(&mut self, impact_summary: Option<String>) -> Result<()> {
         self.ensure_open()?;
         self.impact_summary = normalize_optional_text(impact_summary, "影响摘要", IMPACT_SUMMARY_MAX_LEN)?;
@@ -341,20 +279,13 @@ impl WorkItem {
     }
 
     /// 为重新释放的采购需求创建一条新的开放任务。
+    /// 历史终态任务保持不变；重新释放必须形成新任务身份。
     ///
-    /// # 参数
-    /// * `id` - 新任务主键
-    /// * `subject_version` - 重新释放时的销售当前版本
-    /// * `impact_summary` - 重新释放后的剩余数量摘要
-    ///
-    /// # 返回
     /// 返回复制当前责任人、责任来源和冻结行范围的新开放任务。
     ///
-    /// # 错误
     /// 当前任务不是采购建单终态、缺少责任人或冻结责任事实时返回错误。
     ///
-    /// # 关键业务约束
-    /// 历史终态任务保持不变；重新释放必须形成新任务身份。
+    /// `subject_version`：重新释放时的销售当前版本；`impact_summary`：重新释放后的剩余数量摘要。
     pub fn successor_for_released_requirement(
         &self,
         id: WorkItemId,
@@ -395,16 +326,12 @@ impl WorkItem {
     }
 }
 
-/// 规范化参与开放任务唯一性的服务端责任键。
-///
-/// # 参数
-/// * `responsibility_key` - 原始责任键
-///
-/// # 返回
-/// 返回去除首尾空白后的非空责任键。
-///
-/// # 错误
-/// 责任键为空或超过长度上限时返回错误。
+// 规范化参与开放任务唯一性的服务端责任键。
+// 返回去除首尾空白后的非空责任键。
+//
+// 责任键为空或超过长度上限时返回错误。
+//
+// `responsibility_key`：原始责任键。
 fn normalize_responsibility_key(responsibility_key: String) -> Result<String> {
     normalize_required_text(
         responsibility_key,
@@ -414,16 +341,12 @@ fn normalize_responsibility_key(responsibility_key: String) -> Result<String> {
     )
 }
 
-/// 规范化服务端冻结的稳定业务行范围。
-///
-/// # 参数
-/// * `scope_ids` - 原始稳定业务行 ID 集合
-///
-/// # 返回
-/// 返回逐项去空白、排序并去重后的非空集合。
-///
-/// # 错误
-/// 集合为空、超过最大行数，或任一 ID 为空或过长时返回错误。
+// 规范化服务端冻结的稳定业务行范围。
+// 返回逐项去空白、排序并去重后的非空集合。
+//
+// 集合为空、超过最大行数，或任一 ID 为空或过长时返回错误。
+//
+// `scope_ids`：原始稳定业务行 ID 集合。
 fn normalize_responsibility_scope(scope_ids: Vec<String>) -> Result<Vec<String>> {
     if scope_ids.is_empty() || scope_ids.len() > RESPONSIBILITY_SCOPE_MAX_ITEMS {
         return Err(Error::from("责任范围行数必须在1-200之间"));
@@ -455,7 +378,7 @@ struct NormalizedWorkItemData {
 }
 
 impl NormalizedWorkItemData {
-    /// 验证任务类型对应的固定创建路径、责任键和行范围。
+    // 创建任务入库前按真实类型核对固定创建入口、责任键与行范围，不接受错误形状的任务。
     fn ensure_creation_contract(&self, responsibility_key: Option<&str>, scope_ids: &[String]) -> Result<()> {
         if self.work_item_type == WorkItemType::DocumentApproval {
             return Err(Error::from("单据审批任务必须使用专用构造路径"));
@@ -531,27 +454,24 @@ impl NormalizedWorkItemData {
 impl TryFrom<WorkItemData> for NormalizedWorkItemData {
     type Error = Error;
 
-    /// 把 `WorkItemData` 规范成创建任务用的字段快照。
-    ///
-    /// # 参数
-    /// * `data` - 尚未规范化的任务创建数据。
-    ///
-    /// # 返回
-    /// 成功时返回 `NormalizedWorkItemData`。必填文本去掉首尾空白；`reason_code` 与
-    /// `impact_summary` 缺省或去掉空白后为空时为 `None`。`work_item_type`、
-    /// `assignment_source`、`priority` 与 `due_at` 原样保留。
-    ///
-    /// # 错误
-    /// 必填文本去掉空白后为空或超过长度上限时，按字段返回对应文案：
-    /// `business_object_type` 为「业务对象类型不能为空」或「业务对象类型过长」；
-    /// `business_object_id` 为「业务对象ID不能为空」或「业务对象ID过长」；
-    /// `subject_version` 为「对象版本不能为空」或「对象版本过长」；
-    /// `owner_role` 为「责任角色不能为空」或「责任角色过长」；
-    /// `owner_organization_id` 为「责任组织不能为空」或「责任组织过长」；
-    /// `owner_user_id` 为「责任人不能为空」或「责任人过长」。
-    /// `reason_code` 超过 `REASON_CODE_MAX_LEN` 时返回「原因代码长度不符合要求」；
-    /// `impact_summary` 超过 `IMPACT_SUMMARY_MAX_LEN` 时返回「影响摘要长度不符合要求」。
-    /// 这两项缺省或空白不是错误。
+    // 把 `WorkItemData` 规范成创建任务用的字段快照。
+    //
+    // 成功时返回 `NormalizedWorkItemData`。必填文本去掉首尾空白；`reason_code` 与
+    // `impact_summary` 缺省或去掉空白后为空时为 `None`。`work_item_type`、
+    // `assignment_source`、`priority` 与 `due_at` 原样保留。
+    //
+    // 必填文本去掉空白后为空或超过长度上限时，按字段返回对应文案：
+    // `business_object_type` 为「业务对象类型不能为空」或「业务对象类型过长」；
+    // `business_object_id` 为「业务对象ID不能为空」或「业务对象ID过长」；
+    // `subject_version` 为「对象版本不能为空」或「对象版本过长」；
+    // `owner_role` 为「责任角色不能为空」或「责任角色过长」；
+    // `owner_organization_id` 为「责任组织不能为空」或「责任组织过长」；
+    // `owner_user_id` 为「责任人不能为空」或「责任人过长」。
+    // `reason_code` 超过 `REASON_CODE_MAX_LEN` 时返回「原因代码长度不符合要求」；
+    // `impact_summary` 超过 `IMPACT_SUMMARY_MAX_LEN` 时返回「影响摘要长度不符合要求」。
+    // 这两项缺省或空白不是错误。
+    //
+    // `data`：尚未规范化的任务创建数据。
     fn try_from(data: WorkItemData) -> Result<Self> {
         Ok(Self {
             work_item_type: data.work_item_type,
@@ -652,7 +572,7 @@ mod tests {
         );
     }
 
-    /// 采购依据更新任务只接受采购单对象和按采购单冻结的责任键。
+    // 验证：采购依据更新任务只接受采购单对象和按采购单冻结的责任键。
     #[test]
     fn purchase_source_update_requires_purchase_identity_key() {
         let data = WorkItemData {
@@ -695,7 +615,7 @@ mod tests {
         assert!(item.complete_when_source_updated(Instant::from_unix_secs(130)).is_err());
     }
 
-    /// 其他任务类型不能按采购依据处理完成自动完成。
+    // 验证：其他任务类型不能按采购依据处理完成自动完成。
     #[test]
     fn source_update_completion_rejects_other_types() {
         let mut item =

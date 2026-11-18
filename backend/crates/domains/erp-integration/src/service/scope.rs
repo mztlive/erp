@@ -19,16 +19,9 @@ pub struct ScopedIntegrationList {
 }
 
 impl ScopedIntegrationList {
-    /// 由已解析范围构造列表元数据。
+    /// 由已解析范围构造列表元数据。返回不含内部授权证明的范围摘要。
     ///
-    /// # 参数
-    /// * `access` - 当前动作已解析事实
-    ///
-    /// # 返回
-    /// 返回不含内部授权证明的范围摘要。
-    ///
-    /// # 错误
-    /// 无。
+    /// `access` 为当前动作已解析事实。
     pub fn from_access(access: &CompiledAccess) -> Self {
         Self {
             scope_version: access.version(),
@@ -39,31 +32,16 @@ impl ScopedIntegrationList {
     }
 }
 
-/// 构造可被 HTTP 边界识别的范围变化冲突。
-///
-/// # 参数
-/// * `detail` - 面向用户的中文恢复说明
-///
-/// # 返回
-/// 返回带 `DATA_SCOPE_CHANGED` 前缀的冲突错误。
-///
-/// # 错误
-/// 无。
+/// 构造可被 HTTP 边界识别的范围变化冲突。返回带 `DATA_SCOPE_CHANGED` 前缀的冲突错误。
 pub fn data_scope_changed(detail: &str) -> Error {
     Error::ConflictError(format!("DATA_SCOPE_CHANGED：{detail}"))
 }
 
 /// 后续页必须携带当前范围版本，禁止拼接不同授权快照。
 ///
-/// # 参数
-/// * `page` - 请求页码
-/// * `version` - 客户端回传的范围版本
+/// 第一页或版本非空时成功。第二页及之后缺少版本时返回 `DATA_SCOPE_CHANGED`。
 ///
-/// # 返回
-/// 第一页或版本非空时成功。
-///
-/// # 错误
-/// 第二页及之后缺少版本时返回 `DATA_SCOPE_CHANGED`。
+/// `version` 为客户端回传的范围版本。
 pub fn ensure_page(page: u64, version: Option<&str>) -> Result<()> {
     ScopeVersion::new(version, EmptyScopeVersion::Missing)
         .require_for_page(page)
@@ -72,15 +50,10 @@ pub fn ensure_page(page: u64, version: Option<&str>) -> Result<()> {
 
 /// 客户端回传的范围版本必须与当前快照一致。
 ///
-/// # 参数
-/// * `expected` - 后续页携带的范围版本；第一页可为空
-/// * `actual` - 本次查询快照的范围版本
+/// 未携带或完全一致时成功。版本不一致时返回 `DATA_SCOPE_CHANGED`。
 ///
-/// # 返回
-/// 未携带或完全一致时成功。
-///
-/// # 错误
-/// 版本不一致时返回 `DATA_SCOPE_CHANGED`。
+/// - `expected`：后续页携带的范围版本；第一页可为空。
+/// - `actual`：本次查询快照的范围版本。
 pub fn ensure_scope_version(expected: Option<&str>, actual: &str) -> Result<()> {
     ScopeVersion::new(expected, EmptyScopeVersion::Missing)
         .verify(actual)
@@ -102,20 +75,11 @@ pub struct ResolvedListScope {
 ///
 /// 按授权解析、组织展开、元数据和版本校验的顺序执行。
 ///
-/// # 参数
-/// * `access` - 当前列表访问器
-/// * `actor` - 已认证操作人
-/// * `permission` - 两类列表入口的内置权限
-/// * `org_unit_ids` - 请求组织筛选；空表示不按组织收窄
-/// * `include_descendants` - 是否包含有效下级
-/// * `scope_version` - 客户端回传的范围版本；第一页可空
-/// * `executor` - 调用方执行器
+/// 返回已解析事实、仓储条件、展开后的组织 ID 与列表元数据。授权解析或组织展开失败，或回传版本与当前快照不一致时返回对应错误。
 ///
-/// # 返回
-/// 返回已解析事实、仓储条件、展开后的组织 ID 与列表元数据。
-///
-/// # 错误
-/// 授权解析或组织展开失败，或回传版本与当前快照不一致时返回对应错误。
+/// - `access`：当前列表访问器。
+/// - `org_unit_ids`：请求组织筛选；空表示不按组织收窄。
+/// - `scope_version`：客户端回传的范围版本；第一页可空。
 pub async fn resolve_list_scope(
     access: &super::IntegrationAccess,
     actor: &application_core::AuditActor,

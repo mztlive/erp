@@ -32,32 +32,13 @@ pub struct ReceiptReversalProcess {
 }
 
 impl ReceiptReversalProcess {
-    /// 绑定组合根数据库；审批运行时负责最终动作授权。
-    ///
-    /// # 参数
-    /// * `db` - 组合根数据库。
-    ///
-    /// # 返回
-    /// 返回回款冲正最终过账流程。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 绑定组合根数据库；审批运行时负责最终动作授权。返回回款冲正最终过账流程。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
-    /// 复用审批最终通过的会话，禁止创建内层事务或延后销售刷新。
-    ///
-    /// # 参数
-    /// * `id` - 冲正单 ID。
-    /// * `actor` - 已通过鉴权的审计操作人。
-    /// * `executor` - 审批最终通过持有的执行器。
-    ///
-    /// # 返回
-    /// 成功时无返回值。财务冲正、过账、审计和销售刷新都写在该执行器上。
-    ///
-    /// # 错误
-    /// 非审批中、原回款不存在、累计冲正超额或仓储写入失败时返回错误。
+    /// 回款冲正审批最终通过时，在同一执行器校验原回款和累计冲正额度，并写逆向财务事实、过账、审计及销售刷新。
+    /// 不另开事务，也不把销售刷新延迟到提交后。非审批中、原回款缺失、累计超额或仓储失败时返回错误。
     pub async fn post_receipt_reversal_apply(
         &self,
         id: &str,
@@ -68,11 +49,9 @@ impl ReceiptReversalProcess {
     }
 }
 
-/// 在最终通过事务内执行过账副作用并写回冲正单。
-///
-/// # 错误
-/// 非审批中、原回款不存在或仓储失败时返回错误。
-/// 顺序保持原 final_post：冲正状态闸门、原回款闸门、累计额度，然后开始写入。
+// 在最终通过事务内执行过账副作用并写回冲正单。
+//
+// 非审批中、原回款不存在或仓储失败时返回错误。顺序保持原 final_post：冲正状态闸门、原回款闸门、累计额度，然后开始写入。
 async fn apply_receipt_reversal_final_post(
     db: &Database,
     id: &str,
@@ -96,7 +75,7 @@ trait ReceiptReversalPosting: Send {
     async fn refresh_sales(&mut self, executor: &mut dyn Executor) -> Result<()>;
 }
 
-/// 审计之后才重新读取受影响分配，任何错误停止后继写入并向审批事务传播。
+// 审计之后才重新读取受影响分配，任何错误停止后继写入并向审批事务传播。
 async fn post(port: &mut impl ReceiptReversalPosting, executor: &mut dyn Executor) -> Result<()> {
     port.reverse_finance(executor).await?;
     port.post_reversal(executor).await?;

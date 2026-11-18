@@ -29,11 +29,11 @@ use crate::{Error, Result};
 
 impl SupplierDepositManagementProcess {
     /// 登记本账户待批准充值申请。
-    /// # 参数
-    /// * `account` / `command` / `actor` - 当前账户、金额用途及申请人。
-    /// # 返回
+    ///
+    /// `account` / `command` / `actor`：当前账户、金额用途及申请人。
+    ///
     /// 返回不可用的待批准申请。
-    /// # 错误
+    ///
     /// 越范围、金额或操作身份非法时拒绝。
     pub async fn request_recharge(
         &self,
@@ -52,12 +52,12 @@ impl SupplierDepositManagementProcess {
             .await
     }
 
-    /// 财务独立批准充值，批准不直接增加余额。
-    /// # 参数
-    /// * `account` / `request` / `command` / `actor` - 归属、原申请、版本及批准人。
-    /// # 返回
+    /// 充值申请进入审批后，由另一位有资格的财务人员批准原申请；批准不是到账证据，不增加可用余额。
+    ///
+    /// `account` / `request` / `command` / `actor`：归属、原申请、版本及批准人。
+    ///
     /// 返回已批准的原申请。
-    /// # 错误
+    ///
     /// 越主体、自己批准或原状态变化时拒绝。
     pub async fn approve_recharge(
         &self,
@@ -78,12 +78,12 @@ impl SupplierDepositManagementProcess {
             .await
     }
 
-    /// 登记实际银行付款一次，保持到账核对独立。
-    /// # 参数
-    /// * `account` / `request` / `command` / `actor` - 原归属、申请及实际付款证据。
-    /// # 返回
+    /// 充值获批并发生银行付款后，登记实际付款证据；尚未核对供应商到账，不能把银行已付视为资金可用。
+    ///
+    /// `account` / `request` / `command` / `actor`：原归属、申请及实际付款证据。
+    ///
     /// 返回银行已付、供应商未到账的申请。
-    /// # 错误
+    ///
     /// 未批准、银行账户不属于供应商、回单越权或版本变化时拒绝。
     pub async fn pay_recharge(
         &self,
@@ -104,12 +104,12 @@ impl SupplierDepositManagementProcess {
             .await
     }
 
-    /// 用原批准和真实银行付款核对供应商实际到账。
-    /// # 参数
-    /// * `account` / `command` / `actor` - 原账户、稳定外部到账与核验人。
-    /// # 返回
+    /// 取得供应商实际到账证据后，与原批准和银行付款核对；通过后才创建可用到账批次。
+    ///
+    /// `account` / `command` / `actor`：原账户、稳定外部到账与核验人。
+    ///
     /// 返回首次可用的到账批次；重放恢复原批次。
-    /// # 错误
+    ///
     /// 充值未付款、账户归属、重复交易或金额证据不符时拒绝。
     pub async fn receive_recharge(
         &self,

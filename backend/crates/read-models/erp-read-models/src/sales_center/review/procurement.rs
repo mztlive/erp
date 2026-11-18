@@ -35,17 +35,14 @@ struct PurchaseLabel {
 }
 
 impl SalesChangeReadService {
-    /// 读取本变更的采购处理进度；审批中时按提交内容预判。
-    ///
-    /// # 参数
-    /// * `view` - 已授权的销售变更单详情
-    /// * `actor` - 当前账号
-    ///
-    /// # 返回
-    /// 返回张数与完成标记；具备采购列表权限时附带逐张处理情况。
-    ///
-    /// # 错误
-    /// 仓储、预判或授权查询失败时返回错误。
+    // 处理销售变更采购进度时，读取本变更的采购处理进度；审批中时按提交内容预判。
+    //
+    // 调用参数：
+    // * `view` - 已授权的销售变更单详情
+    //
+    // 返回张数与完成标记；具备采购列表权限时附带逐张处理情况。
+    //
+    // 仓储、预判或授权查询失败时返回错误。
     pub(super) async fn change_procurement(
         &self,
         view: &SalesChangeOrderDetailView,
@@ -72,7 +69,7 @@ impl SalesChangeReadService {
         Ok(procurement_view(&updates, Some(&labels)))
     }
 
-    /// 按待审批变更的提交内容预判受影响采购。
+    // 组装销售变更采购进度时，按待审批变更的提交内容预判受影响采购。
     async fn predicted_procurement(
         &self,
         sales_order_id: &str,
@@ -96,16 +93,14 @@ impl SalesChangeReadService {
         Ok(predicted_view(&impacts, Some(&labels)))
     }
 
-    /// 批量解析采购单号、供应商与负责人名称。
-    ///
-    /// # 参数
-    /// * `purchases` - 需展示的采购单
-    ///
-    /// # 返回
-    /// 返回采购单 ID 到展示标签的映射。
-    ///
-    /// # 错误
-    /// 供应商或账号名称读取失败时返回错误。
+    // 补齐销售变更采购进度的展示名称时，批量解析采购单号、供应商与负责人名称。
+    //
+    // 调用参数：
+    // * `purchases` - 需展示的采购单
+    //
+    // 返回采购单 ID 到展示标签的映射。
+    //
+    // 供应商或账号名称读取失败时返回错误。
     async fn purchase_labels(
         &self,
         purchases: &[PurchaseOrder],
@@ -129,17 +124,13 @@ impl SalesChangeReadService {
     }
 }
 
-/// 由预判结果构造进度视图，全部视为待处理。
-///
-/// # 参数
-/// * `impacts` - 预判受影响的采购
-/// * `labels` - 可见时的采购展示标签；不可见时为空
-///
-/// # 返回
-/// 返回预判张数与可选明细。
-///
-/// # 错误
-/// 无。
+// 由预判结果生成进度视图，全部视为待处理。
+//
+// 调用参数：
+// * `impacts` - 预判受影响的采购
+// * `labels` - 可见时的采购展示标签；不可见时为空
+//
+// 返回预判张数与可选明细。
 fn predicted_view(
     impacts: &[PurchaseSourceImpact],
     labels: Option<&HashMap<String, PurchaseLabel>>,
@@ -175,17 +166,13 @@ fn predicted_view(
     }
 }
 
-/// 由记录构造处理进度视图。
-///
-/// # 参数
-/// * `updates` - 本变更触发的记录
-/// * `labels` - 可见时的采购展示标签；不可见时为空
-///
-/// # 返回
-/// 返回张数、未处理数、完成标记与可选明细。
-///
-/// # 错误
-/// 无。
+// 生成销售变更采购进度视图时，由记录构造处理进度视图。
+//
+// 调用参数：
+// * `updates` - 本变更触发的记录
+// * `labels` - 可见时的采购展示标签；不可见时为空
+//
+// 返回张数、未处理数、完成标记与可选明细。
 fn procurement_view(
     updates: &[PurchaseSourceUpdate],
     labels: Option<&HashMap<String, PurchaseLabel>>,
@@ -205,7 +192,7 @@ fn procurement_view(
     }
 }
 
-/// 由一条记录构造逐张处理情况。
+// 生成销售变更采购进度展示时，由一条记录构造逐张处理情况。
 fn record_item(
     update: &PurchaseSourceUpdate,
     label: Option<&PurchaseLabel>,
@@ -288,7 +275,7 @@ mod tests {
         )
     }
 
-    /// 全部处理完成才标记完成；无权限时只给张数。
+    // 验证销售变更采购进度：全部处理完成才标记完成；无权限时只给张数。
     #[test]
     fn completion_counts_open_records_and_hides_items_without_permission() {
         let mut done = record("a");
@@ -316,7 +303,7 @@ mod tests {
         assert_eq!(finished.items[0].resolution_label.as_deref(), Some("已作废"));
     }
 
-    /// 草稿已修改待提交时仍计为未处理，并标记等待提交。
+    // 验证销售变更采购进度：草稿已修改待提交时仍计为未处理，并标记等待提交。
     #[test]
     fn awaiting_submission_is_still_open() {
         let mut awaiting = record("a");
@@ -329,7 +316,7 @@ mod tests {
         assert_eq!(view.items[0].purchase_no, None);
     }
 
-    /// 没有受影响采购时不标记完成。
+    // 验证销售变更采购进度：没有受影响采购时不标记完成。
     #[test]
     fn no_records_is_not_completed() {
         let view = procurement_view(&[], Some(&HashMap::new()));
@@ -338,7 +325,7 @@ mod tests {
         assert_eq!(view.total, 0);
     }
 
-    /// 预判结果全部待处理并标记为预判；无权限时只给张数。
+    // 验证销售变更采购进度：预判结果全部待处理并标记为预判；无权限时只给张数。
     #[test]
     fn predicted_view_marks_all_open() {
         let order = record("a");

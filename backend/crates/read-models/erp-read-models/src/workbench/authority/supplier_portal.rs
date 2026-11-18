@@ -13,16 +13,16 @@ use super::{WorkItemFactsReader, object_ids};
 use crate::{Error, Result};
 
 impl WorkItemFactsReader {
-    /// 有界读取三类申请的权威事实，不读取全库候选或正式商品资料。
-    ///
-    /// # 参数
-    /// * `keys` - 当前任务批次的精确对象键。
-    /// * `facts` - 输出的权威对象事实。
-    /// * `executor` - 任务命令或查询沿用的执行器。
-    /// # 返回
-    /// 仅真实冻结提交进入事实表；草稿无确认任务事实。
-    /// # 错误
-    /// 仓储失败、冻结版本损坏或跨类型身份冲突时拒绝。
+    // 读取供应商申请工作项事实时，有界读取三类申请的权威事实，不读取全库候选或正式商品资料。
+    //
+    // 调用参数：
+    // * `keys` - 当前任务批次的精确对象键。
+    // * `facts` - 输出的权威对象事实。
+    // * `executor` - 任务命令或查询沿用的执行器。
+    //
+    // 仅真实冻结提交进入事实表；草稿无确认任务事实。
+    //
+    // 仓储失败、冻结版本损坏或跨类型身份冲突时拒绝。
     pub(in crate::workbench) async fn load_supplier_portal_request_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -49,7 +49,7 @@ impl WorkItemFactsReader {
     }
 }
 
-/// 同一申请键不得指向两个领域的不同申请。
+// 组装供应商申请工作项事实时，同一申请键不得指向两个领域的不同申请。
 fn insert_request(facts: &mut ObjectFactMap, id: &str, fact: Option<ObjectFact>) -> Result<()> {
     if let Some(fact) = fact
         && facts.insert((ObjectKind::SupplierPortalRequest, id.into()), fact).is_some()
@@ -59,16 +59,12 @@ fn insert_request(facts: &mut ObjectFactMap, id: &str, fact: Option<ObjectFact>)
     Ok(())
 }
 
-/// 返回供给申请的固定展示类型，不采用内部事件名。
-///
-/// # 参数
-/// * `kind` - 供给申请种类。
-///
-/// # 返回
-/// `ExistingQuote`、`TermsChange`、`StopSupply` 分别返回已有商品报价、供给条款变更、停止供给申请。
-///
-/// # 错误
-/// 不返回错误。
+// 生成供应商申请工作项事实视图时，给出供给申请的固定展示类型，不采用内部事件名。
+//
+// 调用参数：
+// * `kind` - 供给申请种类。
+//
+// `ExistingQuote`、`TermsChange`、`StopSupply` 分别返回已有商品报价、供给条款变更、停止供给申请。
 pub(in crate::workbench) fn offering_kind_label(kind: ApplicationKind) -> &'static str {
     match kind {
         ApplicationKind::ExistingQuote => "已有商品报价",
@@ -77,16 +73,14 @@ pub(in crate::workbench) fn offering_kind_label(kind: ApplicationKind) -> &'stat
     }
 }
 
-/// 供给申请仅接受真实提交编号，不把草稿持久化版本当成提交版本。
-///
-/// # 参数
-/// * `request` - 供给申请。
-///
-/// # 返回
-/// 有提交时返回事实，版本键为 `offering:` 加提交编号；没有提交时返回 `Ok(None)`。
-///
-/// # 错误
-/// 版本约束无法构造时返回错误。
+// 组装供给申请的工作项授权事实时，按真实提交编号生成历史版本身份，不使用草稿持久化版本。
+//
+// 调用参数：
+// * `request` - 供给申请。
+//
+// 有提交时返回事实，版本键为 `offering:` 加提交编号；没有提交时返回 `Ok(None)`。
+//
+// 版本约束无法构造时返回错误。
 pub(in crate::workbench) fn offering_request_fact(
     request: &OfferingApplication,
 ) -> Result<Option<ObjectFact>> {
@@ -109,16 +103,14 @@ pub(in crate::workbench) fn offering_request_fact(
     request_fact(&request.base.id, request.created_by.as_str(), "供应商供给申请", subjects)
 }
 
-/// 新品任务所有历史提交分别冻结，重提不使既往任务失去可回看版本。
-///
-/// # 参数
-/// * `request` - 新品草稿申请。
-///
-/// # 返回
-/// 有提交时返回事实，版本键为 `new_product:` 加提交 ID；没有提交时返回 `Ok(None)`。
-///
-/// # 错误
-/// 版本约束无法构造时返回错误。
+// 装配供应商申请工作项事实时，新品任务所有历史提交分别冻结，重提不使既往任务失去可回看版本。
+//
+// 调用参数：
+// * `request` - 新品草稿申请。
+//
+// 有提交时返回事实，版本键为 `new_product:` 加提交 ID；没有提交时返回 `Ok(None)`。
+//
+// 版本约束无法构造时返回错误。
 pub(in crate::workbench) fn new_product_request_fact(
     request: &NewProductDraft,
 ) -> Result<Option<ObjectFact>> {
@@ -142,16 +134,14 @@ pub(in crate::workbench) fn new_product_request_fact(
     request_fact(&request.base.id, request.created_by.as_str(), "供应商新品申请", subjects)
 }
 
-/// 合作条款任务关联冻结商务申请，不能被供给调价任务版本替代。
-///
-/// # 参数
-/// * `request` - 合作条款申请。
-///
-/// # 返回
-/// 有提交时返回事实，版本键为 `cooperation:` 加提交编号；没有提交时返回 `Ok(None)`。
-///
-/// # 错误
-/// 版本约束无法构造时返回错误。
+// 处理供应商申请工作项事实时，合作条款任务关联冻结商务申请，不能被供给调价任务版本替代。
+//
+// 调用参数：
+// * `request` - 合作条款申请。
+//
+// 有提交时返回事实，版本键为 `cooperation:` 加提交编号；没有提交时返回 `Ok(None)`。
+//
+// 版本约束无法构造时返回错误。
 pub(in crate::workbench) fn cooperation_request_fact(
     request: &CooperationApplication,
 ) -> Result<Option<ObjectFact>> {
@@ -171,7 +161,7 @@ pub(in crate::workbench) fn cooperation_request_fact(
     request_fact(&request.base.id, request.created_by.as_str(), "供应商合作条款申请", subjects)
 }
 
-/// 创建人保持真实供应商身份，具体内部任务责任由工作项独立校验。
+// 处理供应商申请工作项事实时，创建人保持真实供应商身份，具体内部任务责任由工作项独立校验。
 fn request_fact(
     id: &str,
     created_by: &str,

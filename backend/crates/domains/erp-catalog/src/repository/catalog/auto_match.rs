@@ -13,12 +13,10 @@ use crate::{Error, Result};
 
 impl CatalogRepository<'_> {
     /// 在商品写入的同一事务中争用名称，防止并发查询无结果后重复建档。
-    /// # 参数
+    ///
+    /// 更新独立的并发控制文档，不授予或改变 SKU 归属。缺少事务或 MongoDB 并发写冲突时失败。
+    ///
     /// `name` 为完整商品名；`executor` 必须持有事务。
-    /// # 返回
-    /// 更新独立的并发控制文档，不授予或改变 SKU 归属。
-    /// # 错误
-    /// 缺少事务或 MongoDB 并发写冲突时失败。
     pub async fn lock_match_name(&self, name: &str, executor: &mut dyn Executor) -> Result<()> {
         if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
             return Err(Error::Internal("商品匹配写入必须使用事务".into()));
@@ -36,12 +34,8 @@ impl CatalogRepository<'_> {
     }
 
     /// 锁定已匹配商品和 SKU，不为新增供给改变业务版本。
-    /// # 参数
-    /// `product`、`sku` 为同事务读取并校验的身份。
-    /// # 返回
-    /// 两个文档的并发计数已递增；同批其它规格仍可使用原业务版本。
-    /// # 错误
-    /// 无事务、版本变化或数据库错误时拒绝。
+    ///
+    /// 两个文档的并发计数已递增；同批其它规格仍可使用原业务版本。无事务、版本变化或数据库错误时拒绝。
     pub async fn lock_match_target(
         &self,
         product: &Product,
@@ -91,12 +85,10 @@ impl CatalogRepository<'_> {
     }
 
     /// SKU 修订或追加前争用所属商品的当前名称。
-    /// # 参数
+    ///
+    /// 与自动匹配共享写入点。商品或当前资料缺失、事务错误时拒绝。
+    ///
     /// `product_id` 为已有商品身份，执行器沿用共同事务。
-    /// # 返回
-    /// 与自动匹配共享写入点。
-    /// # 错误
-    /// 商品或当前资料缺失、事务错误时拒绝。
     pub async fn lock_product_match(&self, product_id: &str, executor: &mut dyn Executor) -> Result<()> {
         let product = self
             .db
@@ -112,12 +104,10 @@ impl CatalogRepository<'_> {
     }
 
     /// 按同名索引查询当前商品候选，保留停用商品用于冲突判断。
-    /// # 参数
+    ///
+    /// 至多 200 个当前商品；不返回历史名称命中的商品。历史资料未回填、候选超限、缺失当前修订或数据库错误时拒绝。
+    ///
     /// `name` 为完整来源名称，执行器沿用调用事务。
-    /// # 返回
-    /// 至多 200 个当前商品；不返回历史名称命中的商品。
-    /// # 错误
-    /// 历史资料未回填、候选超限、缺失当前修订或数据库错误时拒绝。
     pub async fn match_products(&self, name: &str, executor: &mut dyn Executor) -> Result<Vec<Product>> {
         if self.db.product_revisions().exists(doc! {"match_name": null}, executor).await? {
             return Err(Error::ConflictError("商品匹配索引尚未初始化，请先执行商品名称回填后再入库".into()));
@@ -161,12 +151,10 @@ impl CatalogRepository<'_> {
     }
 
     /// 有界读取商品的全部未删除规格，包含停用 SKU。
-    /// # 参数
+    ///
+    /// 至多 500 个 SKU。超限或数据库错误时拒绝，不截断候选。
+    ///
     /// `product_id` 为已经确定的公司商品身份，执行器沿用调用事务。
-    /// # 返回
-    /// 至多 500 个 SKU。
-    /// # 错误
-    /// 超限或数据库错误时拒绝，不截断候选。
     pub async fn match_skus(&self, product_id: &str, executor: &mut dyn Executor) -> Result<Vec<Sku>> {
         let skus = mongo_ops::find_many(
             &self.db.skus().collection(),
@@ -182,12 +170,10 @@ impl CatalogRepository<'_> {
     }
 
     /// 读取条码的历史占用与修订归属，包含停用、过期身份，避免绕过占用新建。
-    /// # 参数
+    ///
+    /// 去重的 SKU 身份，最多两个即可判定歧义。数据库错误或占用记录损坏时拒绝。
+    ///
     /// `barcode` 为原始文本条码；执行器沿用事务。
-    /// # 返回
-    /// 去重的 SKU 身份，最多两个即可判定歧义。
-    /// # 错误
-    /// 数据库错误或占用记录损坏时拒绝。
     pub async fn match_barcode(&self, barcode: &str, executor: &mut dyn Executor) -> Result<Vec<String>> {
         let mut ids = Vec::new();
         if let Some(claim) = self.db.sku_barcode_claims().find_by_id(barcode, executor).await? {

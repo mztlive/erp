@@ -21,7 +21,7 @@ use persistence_core::Executor;
 
 use crate::{Error, Result};
 
-/// 命令内完整投影必须沿用调用方已经完成授权的活动快照。
+// 处理财务读模型时，命令内完整投影必须沿用调用方已经完成授权的活动快照。
 fn command_snapshot(executor: &mut dyn Executor) -> Result<()> {
     if executor.boundary().is_some_and(|boundary| boundary.is_snapshot() && boundary.is_current(executor)) {
         Ok(())

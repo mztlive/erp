@@ -39,18 +39,13 @@ pub struct CostAllocationScopeVersion {
 #[allow(async_fn_in_trait)]
 pub trait CostEntryReadScopeExt {
     /// 装载业务筛选下完整的有界候选成本，不在权限裁剪前分页。
+    /// 结果：最多上限加一条；精确 ID 只用于独立详情。
+    /// 传播数据库读取失败。
     ///
-    /// # 参数
-    /// * `filter` - 已规范化的成本筛选。
-    /// * `id` - 精确成本身份；`None` 表示不按身份收窄。
-    /// * `access` - 本入口固定根授权，数据库在候选上限前执行完整会员过滤。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 最多上限加一条；精确 ID 只用于独立详情。
-    ///
-    /// # 错误
-    /// 数据库读取失败时返回仓储错误。
+    /// 输入约定：
+    /// - `filter`：已规范化的成本筛选。
+    /// - `id`：精确成本身份；`None` 表示不按身份收窄。
+    /// - `access`：本入口固定根授权，数据库在候选上限前执行完整会员过滤。
     async fn scope_candidates(
         &self,
         filter: &CostEntryFilter,
@@ -60,16 +55,14 @@ pub trait CostEntryReadScopeExt {
     ) -> crate::Result<Vec<CostEntryRow>>;
 
     /// 读取完整候选身份和版本；保留新增、删除及非当前页变化检测。
+    /// 结果：最多候选上限加一条，按身份稳定排序。
+    /// 传播数据库读取失败。
     ///
-    /// # 参数
-    /// * `filter` - 已规范化的成本筛选。
-    /// * `id` - 独立成本筛选。
-    /// * `access` - 与候选查询相同的固定根授权。
-    /// * `executor` - 调用方事务执行器。
-    /// # 返回
-    /// 最多候选上限加一条，按身份稳定排序。
-    /// # 错误
-    /// 数据库读取失败时返回仓储错误。
+    /// 输入约定：
+    /// - `filter`：已规范化的成本筛选。
+    /// - `id`：独立成本筛选。
+    /// - `access`：与候选查询相同的固定根授权。
+    /// - `executor`：调用方事务执行器。
     async fn scope_candidate_versions(
         &self,
         filter: &CostEntryFilter,
@@ -79,15 +72,13 @@ pub trait CostEntryReadScopeExt {
     ) -> crate::Result<Vec<CostEntryScopeVersion>>;
 
     /// 只装载匹配分配引用的成本投影，空身份集合直接返回空集。
-    ///
-    /// # 参数
-    /// * `filter` - 已规范化的成本筛选。
-    /// * `ids` - 当前完整候选集合内的成本身份。
-    /// * `executor` - 调用方事务执行器。
-    /// # 返回
     /// 返回匹配成本，按身份稳定排序。
-    /// # 错误
-    /// 数据库读取失败时返回仓储错误。
+    /// 传播数据库读取失败。
+    ///
+    /// 输入约定：
+    /// - `filter`：已规范化的成本筛选。
+    /// - `ids`：当前完整候选集合内的成本身份。
+    /// - `executor`：调用方事务执行器。
     async fn scope_entries_by_ids(
         &self,
         filter: &CostEntryFilter,
@@ -96,12 +87,10 @@ pub trait CostEntryReadScopeExt {
     ) -> Result<Vec<CostEntryRow>>;
 
     /// 在完整真实分配来源投影上执行统一授权阶段，只返回完整金额会员身份。
-    /// # 参数
-    /// ids 为服务端完整候选身份，stages 为 identity 完整视图编译结果，executor 为原事务。
-    /// # 返回
-    /// 当前获准读取整笔成本的身份和版本；空候选直接返回空集。
-    /// # 错误
-    /// 聚合或投影解码失败时保留仓储错误。
+    /// 结果：当前获准读取整笔成本的身份和版本；空候选直接返回空集。
+    /// 失败条件：聚合或投影解码失败时保留仓储错误。
+    ///
+    /// 输入约定：ids 为服务端完整候选身份，stages 为 identity 完整视图编译结果，executor 为原事务。
     async fn scope_whole_ids(
         &self,
         ids: &[String],
@@ -216,7 +205,7 @@ impl CostEntryReadScopeExt for persistence_core::Repository<'_, CostEntry> {
     }
 }
 
-/// 用同一实际成本身份做授权会员关联，保留外根的内部计算投影。
+// 用实际成本身份探测外层记录是否有授权关联，只保留匹配项且不改外层内部计算投影。
 fn authorized_membership(
     access: &CompiledAccess,
     collection: &str,
@@ -232,7 +221,7 @@ fn authorized_membership(
     Ok(membership_stages(collection, access.stages(), whole))
 }
 
-/// 候选只使用固定成本身份会员能力；存在性不能附带完整金额字段。
+// 核对成本候选查询只具备按固定身份验证存在性的能力，不能借候选权限读整笔金额。
 fn ensure_candidate_model(model: &QueryModel, collection: &str) -> crate::Result<()> {
     model.validate()?;
     if model.collection != collection
@@ -268,16 +257,11 @@ fn membership_stages(collection: &str, shares: &[Document], whole: &[Document]) 
 #[allow(async_fn_in_trait)]
 pub trait CostAllocationReadScopeExt {
     /// 批量读取成本对应分配，调用方必须检查上限并跨批次累计。
-    ///
-    /// # 参数
-    /// * `ids` - 成本身份集合。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
     /// 返回最多分配上限加一条；空成本集合返回空集。
+    /// 传播数据库读取失败。
     ///
-    /// # 错误
-    /// 数据库读取失败时返回仓储错误。
+    /// 输入约定：
+    /// - `ids`：成本身份集合。
     async fn scope_allocations(
         &self,
         ids: &[String],
@@ -285,14 +269,12 @@ pub trait CostAllocationReadScopeExt {
     ) -> Result<Vec<CostAllocation>>;
 
     /// 读取成本对应的完整分配版本及销售来源，调用方累计检查上限。
+    /// 结果：最多分配上限加一条；空成本集合返回空集。
+    /// 传播数据库读取失败。
     ///
-    /// # 参数
-    /// * `ids` - 成本身份集合。
-    /// * `executor` - 调用方事务执行器。
-    /// # 返回
-    /// 最多分配上限加一条；空成本集合返回空集。
-    /// # 错误
-    /// 数据库读取失败时返回仓储错误。
+    /// 输入约定：
+    /// - `ids`：成本身份集合。
+    /// - `executor`：调用方事务执行器。
     async fn scope_allocation_versions(
         &self,
         ids: &[String],
@@ -300,16 +282,14 @@ pub trait CostAllocationReadScopeExt {
     ) -> Result<Vec<CostAllocationScopeVersion>>;
 
     /// 联合应用销售单与成本身份筛选，再读取匹配分配的成本引用。
+    /// 结果：最多分配上限加一条，未分页的完整匹配集合。
+    /// 传播数据库读取失败。
     ///
-    /// # 参数
-    /// * `cost_entry_id` - 可选成本身份。
-    /// * `sales_order_id` - 可选销售单身份。
-    /// * `entry_ids` - 同事务中的完整候选成本身份，排除孤立分配。
-    /// * `executor` - 调用方事务执行器。
-    /// # 返回
-    /// 最多分配上限加一条，未分页的完整匹配集合。
-    /// # 错误
-    /// 数据库读取失败时返回仓储错误。
+    /// 输入约定：
+    /// - `cost_entry_id`：可选成本身份。
+    /// - `sales_order_id`：可选销售单身份。
+    /// - `entry_ids`：同事务中的完整候选成本身份，排除孤立分配。
+    /// - `executor`：调用方事务执行器。
     async fn scope_matching_allocations(
         &self,
         cost_entry_id: Option<&str>,
@@ -376,7 +356,7 @@ impl CostAllocationReadScopeExt for persistence_core::Repository<'_, CostAllocat
     }
 }
 
-/// 业务筛选使用交集，软删除条件始终有效。
+// 按成本和销售归属筛选分配时同时应用指定条件，并始终排除软删除的事实。
 fn matching_allocation_filter(cost_entry_id: Option<&str>, sales_order_id: Option<&str>) -> Document {
     let mut filter = doc! { "deleted_at": 0_i64 };
     if let Some(id) = cost_entry_id {
@@ -388,7 +368,7 @@ fn matching_allocation_filter(cost_entry_id: Option<&str>, sales_order_id: Optio
     filter
 }
 
-/// 重验只读取身份、版本、成本引用与真实销售来源。
+// 构造成本分配的交付复验投影，只携带身份、版本、成本引用与真实销售来源。
 fn allocation_version_options() -> FindOptions {
     FindOptions::builder()
         .limit((ALLOCATION_LIMIT + 1) as i64)
@@ -397,7 +377,7 @@ fn allocation_version_options() -> FindOptions {
         .build()
 }
 
-/// 所有实际分配引用均保留；缺失引用不能被过滤后伪装成零来源成本。
+// 判断能否展示整笔成本时保留全部真实分配引用；缺失的来源不能当作没有来源跳过。
 fn whole_source_stages() -> Vec<Document> {
     vec![
         doc! { "$lookup": {

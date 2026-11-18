@@ -84,18 +84,11 @@ pub struct PurchaseOrderRevision {
 impl PurchaseOrderRevision {
     /// 创建采购生效版本。
     ///
-    /// 校验版本号从 1 开始，并强制表头金额守恒（`gross = net + tax`，§4.2 铁律 4）。
-    /// 版本内容不可修改；追加变更走更高版本号的新修订。
+    /// 校验版本号从 1 开始，并强制表头金额守恒（`gross = net + tax`，§4.2 铁律 4）。版本内容不可修改；追加变更走更高版本号的新修订。
     ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::PurchaseOrderRevisionId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
-    /// 返回新建的版本实体。
-    ///
-    /// # 错误
     /// 版本号为零或表头金额三元组不守恒时返回错误。
+    ///
+    /// `id` 为实体主键（`erp_core::ids::PurchaseOrderRevisionId`）。
     pub fn new(id: PurchaseOrderRevisionId, data: PurchaseOrderRevisionData) -> Result<Self> {
         if data.revision_no == 0 {
             return Err(Error::from("版本号必须从 1 开始"));
@@ -121,14 +114,9 @@ impl PurchaseOrderRevision {
 
     /// 计算同一采购单的下一个生效版本号。
     ///
-    /// # 参数
-    /// * `existing` - 同一采购单的既有生效版本
+    /// 返回当前最大版本号加一；没有历史版本时返回 `1`。最大版本号已经达到 `u32::MAX` 时返回领域错误。
     ///
-    /// # 返回
-    /// 返回当前最大版本号加一；没有历史版本时返回 `1`。
-    ///
-    /// # 错误
-    /// 最大版本号已经达到 `u32::MAX` 时返回领域错误。
+    /// `existing` 为同一采购单的既有生效版本。
     pub fn next_revision_no(existing: &[Self]) -> Result<u32> {
         existing
             .iter()
@@ -141,17 +129,10 @@ impl PurchaseOrderRevision {
 
     /// 从采购正式提交派生生效版本头。
     ///
-    /// # 参数
-    /// * `id` - 新生效版本稳定身份
-    /// * `revision_no` - 聚合内下一个版本号
-    /// * `submission` - 已冻结采购提交
-    /// * `effective_at` - 生效时间
+    /// 返回与提交头快照和金额完全一致的新生效版本。提交不是待审核状态、版本号非法或金额不守恒时返回领域错误。
     ///
-    /// # 返回
-    /// 返回与提交头快照和金额完全一致的新生效版本。
-    ///
-    /// # 错误
-    /// 提交不是待审核状态、版本号非法或金额不守恒时返回领域错误。
+    /// - `id`：新生效版本稳定身份。
+    /// - `submission`：已冻结采购提交。
     pub fn from_submission(
         id: PurchaseOrderRevisionId,
         revision_no: u32,
@@ -178,18 +159,10 @@ impl PurchaseOrderRevision {
 
     /// 从采购变更提交派生生效版本头。
     ///
-    /// # 参数
-    /// * `id` - 新生效版本稳定身份
-    /// * `purchase_order_id` - 原采购单稳定身份
-    /// * `revision_no` - 聚合内下一个版本号
-    /// * `submission` - 已冻结采购变更提交
-    /// * `effective_at` - 生效时间
+    /// 返回与变更提交头快照和金额完全一致的新生效版本。变更提交不是待审核状态、版本号非法或金额不守恒时返回领域错误。
     ///
-    /// # 返回
-    /// 返回与变更提交头快照和金额完全一致的新生效版本。
-    ///
-    /// # 错误
-    /// 变更提交不是待审核状态、版本号非法或金额不守恒时返回领域错误。
+    /// - `id`：新生效版本稳定身份。
+    /// - `submission`：已冻结采购变更提交。
     pub fn from_change_submission(
         id: PurchaseOrderRevisionId,
         purchase_order_id: PurchaseOrderId,
@@ -352,16 +325,10 @@ impl PurchaseOrderRevisionLineData {
         Ok(fields)
     }
 
-    /// 按行类型校验版本行的销售分配字段。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 商品行已引用销售稳定行与当前版本行且分配数量不为负（零数量表示已移除），或物流费用行不携带销售稳定行、版本行和分配数量时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 商品行缺少销售行引用、分配数量缺失或为负，或物流费用行携带销售行或分配数量时返回领域错误。
+    // 按行类型校验版本行的销售分配字段。
+    //
+    // 商品行已引用销售稳定行与当前版本行且分配数量不为负（零数量表示已移除），或物流费用行不携带销售稳定行、版本行和分配数量时返回 `Ok(())`。
+    // 商品行缺少销售行引用、分配数量缺失或为负，或物流费用行携带销售行或分配数量时返回领域错误。
     fn ensure_allocation(&self) -> Result<()> {
         match self.line_type {
             PurchaseLineType::ItemService => {
@@ -391,16 +358,9 @@ impl PurchaseOrderRevisionLine {
     ///
     /// 完成快照文本的规范化，并按行类型强制字段归属与金额三元组守恒（§6.6）。
     ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::PurchaseOrderRevisionLineId`）
-    /// * `data` - 创建数据
+    /// 行号为零、字段归属与行类型不符、快照超长、数量/单价/税率越界或金额三元组不守恒时返回错误。
     ///
-    /// # 返回
-    /// 返回新建的版本行实体。
-    ///
-    /// # 错误
-    /// 行号为零、字段归属与行类型不符、快照超长、数量/单价/税率越界或
-    /// 金额三元组不守恒时返回错误。
+    /// `id` 为实体主键（`erp_core::ids::PurchaseOrderRevisionLineId`）。
     pub fn new(id: PurchaseOrderRevisionLineId, mut data: PurchaseOrderRevisionLineData) -> Result<Self> {
         let fields = data.take_validated_fields()?;
         Ok(Self {
@@ -432,16 +392,11 @@ impl PurchaseOrderRevisionLine {
 
     /// 从采购正式提交行派生生效版本行。
     ///
-    /// # 参数
-    /// * `id` - 新版本行稳定身份
-    /// * `revision_id` - 新生效版本稳定身份
-    /// * `submission_line` - 已冻结采购提交行
+    /// 返回业务内容与提交行一致、重新挂接到生效版本的新行。提交行不满足当前采购版本行不变式时返回领域错误。
     ///
-    /// # 返回
-    /// 返回业务内容与提交行一致、重新挂接到生效版本的新行。
-    ///
-    /// # 错误
-    /// 提交行不满足当前采购版本行不变式时返回领域错误。
+    /// - `id`：新版本行稳定身份。
+    /// - `revision_id`：新生效版本稳定身份。
+    /// - `submission_line`：已冻结采购提交行。
     pub fn from_submission_line(
         id: PurchaseOrderRevisionLineId,
         revision_id: PurchaseOrderRevisionId,
@@ -478,16 +433,11 @@ impl PurchaseOrderRevisionLine {
 
     /// 从采购变更提交行派生生效版本行。
     ///
-    /// # 参数
-    /// * `id` - 新版本行稳定身份
-    /// * `revision_id` - 新生效版本稳定身份
-    /// * `submission_line` - 已冻结采购变更提交行
+    /// 返回业务内容与变更提交行一致、重新挂接到生效版本的新行。变更提交行不满足当前采购版本行不变式时返回领域错误。
     ///
-    /// # 返回
-    /// 返回业务内容与变更提交行一致、重新挂接到生效版本的新行。
-    ///
-    /// # 错误
-    /// 变更提交行不满足当前采购版本行不变式时返回领域错误。
+    /// - `id`：新版本行稳定身份。
+    /// - `revision_id`：新生效版本稳定身份。
+    /// - `submission_line`：已冻结采购变更提交行。
     pub fn from_change_submission_line(
         id: PurchaseOrderRevisionLineId,
         revision_id: PurchaseOrderRevisionId,
@@ -840,7 +790,7 @@ mod tests {
         assert_eq!(line.quantity, None);
     }
 
-    /// 改单生效的移除行以零数量和零金额保留原行身份。
+    // 改单生效的移除行以零数量和零金额保留原行身份。
     #[test]
     fn revision_line_allows_zero_quantity_for_removed_item() {
         let zero = Quantity::from_str("0").unwrap();

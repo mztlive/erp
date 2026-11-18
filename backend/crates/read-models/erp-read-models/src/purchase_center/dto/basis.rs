@@ -101,13 +101,13 @@ pub struct CreationBasisLineView {
 }
 
 impl CreationBasisLineView {
-    /// 设置本行授权销售交付要求及已承担数量。
+    /// 组装采购创建依据时补充本行授权销售交付要求及已承担数量。
+    ///
     /// # 参数
     /// `source` 为销售安排，`assigned` 为当前有效采购安排。
+    ///
     /// # 返回
     /// 返回补齐地址资料的依据行。
-    /// # 错误
-    /// 无。
     pub fn with_delivery(
         mut self,
         source: Vec<PurchaseDeliveryAllocation>,
@@ -117,7 +117,7 @@ impl CreationBasisLineView {
         self.assigned_delivery_allocations = assigned;
         self
     }
-    /// 构造采购创建依据行视图。
+    /// 初始化采购创建依据行视图。
     ///
     /// # 参数
     /// * `sales_order_line_id` - 销售稳定行身份
@@ -136,9 +136,6 @@ impl CreationBasisLineView {
     ///
     /// # 返回
     /// 返回行号为零、可选快照全空的行视图。
-    ///
-    /// # 错误
-    /// 无。
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         sales_order_line_id: String,
@@ -181,91 +178,55 @@ impl CreationBasisLineView {
         }
     }
 
-    /// 设置本方案的配送判定。
+    /// 组装采购创建依据时填入模板名称、逐地区与逐仓库判定及起订量。
     ///
     /// # 参数
     /// * `delivery` - 模板名称、逐地区与逐仓库判定及起订量
-    ///
-    /// # 返回
-    /// 返回更新后的行视图。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_delivery_view(mut self, delivery: CreationBasisDeliveryView) -> Self {
         self.delivery = delivery;
         self
     }
 
-    /// 设置基础单位允许数量小数位。
+    /// 组装采购创建依据时填入数量小数位。
     ///
     /// # 参数
     /// * `scale` - 数量小数位
-    ///
-    /// # 返回
-    /// 返回更新后的行视图。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_quantity_scale(mut self, scale: Option<u8>) -> Self {
         self.quantity_scale = scale;
         self
     }
 
-    /// 设置销售当前版本内的业务行号。
+    /// 组装采购创建依据时填入业务行号。
     ///
     /// # 参数
     /// * `line_no` - 业务行号
-    ///
-    /// # 返回
-    /// 返回更新后的行视图。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_sales_line_no(mut self, line_no: u32) -> Self {
         self.sales_line_no = line_no;
         self
     }
 
-    /// 设置商品名称快照。
+    /// 组装采购创建依据时填入商品名称快照。
     ///
     /// # 参数
     /// * `name` - 商品名称快照
-    ///
-    /// # 返回
-    /// 返回更新后的行视图。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_product_name(mut self, name: Option<String>) -> Self {
         self.product_name = name;
         self
     }
 
-    /// 设置规格快照。
+    /// 组装采购创建依据时填入规格快照。
     ///
     /// # 参数
     /// * `specification` - 规格快照
-    ///
-    /// # 返回
-    /// 返回更新后的行视图。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_specification(mut self, specification: Option<String>) -> Self {
         self.specification = specification;
         self
     }
 
-    /// 设置销售单位快照。
+    /// 组装采购创建依据时填入销售单位快照。
     ///
     /// # 参数
     /// * `unit` - 销售单位快照
-    ///
-    /// # 返回
-    /// 返回更新后的行视图。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_unit(mut self, unit: Option<String>) -> Self {
         self.unit = unit;
         self
@@ -340,7 +301,7 @@ pub struct CreationBasisView {
 }
 
 impl CreationBasisView {
-    /// 构造采购创建依据视图。
+    /// 初始化采购创建依据视图。
     ///
     /// # 参数
     /// * `work_item_id` - 冻结本依据责任范围的开放供给分配任务
@@ -358,9 +319,6 @@ impl CreationBasisView {
     ///
     /// # 返回
     /// 返回采购来源、行与快照全空的依据视图。
-    ///
-    /// # 错误
-    /// 无。
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         work_item_id: String,
@@ -405,25 +363,25 @@ impl CreationBasisView {
         }
     }
 
-    /// 标记销售需求是否关联来源询价，供界面提示报价可用性。
+    /// 生成采购创建依据视图时，标记销售需求是否关联来源询价，供界面提示报价可用性。
+    ///
     /// # 参数
     /// `has_source_inquiry`由正式销售来源确定。
+    ///
     /// # 返回
     /// 返回包含销售询价关联标记的依据。
-    /// # 错误
-    /// 无。
     pub fn with_source_inquiry(mut self, has_source_inquiry: bool) -> Self {
         self.has_source_inquiry = has_source_inquiry.then_some(true);
         self
     }
 
-    /// 标记沿用询价的精确专项版本，供采购显式识别并确认条件。
+    /// 生成采购创建依据视图时，标记沿用询价的精确专项版本，供采购显式识别并确认条件。
+    ///
     /// # 参数
     /// `source`为服务器已核验的专项采用链，通用供给为空。
+    ///
     /// # 返回
     /// 返回补齐来源标记的采购依据。
-    /// # 错误
-    /// 无。
     pub fn with_inquiry_source(mut self, source: Option<&PurchaseInquiryQuoteSource>) -> Self {
         self.inquiry_source = source.map(|source| InquiryBasisSourceView {
             inquiry_id: source.inquiry_id.clone(),
@@ -440,79 +398,49 @@ impl CreationBasisView {
         self
     }
 
-    /// 设置价格依据。
+    /// 组装采购创建依据时填入稳定代码。
     ///
     /// # 参数
     /// * `price_basis` - 稳定代码
-    ///
-    /// # 返回
-    /// 返回更新后的依据视图。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_price_basis(mut self, price_basis: &str) -> Self {
         self.price_basis = Some(price_basis.to_string());
         self
     }
 
-    /// 设置供给来源。
+    /// 组装采购创建依据时填入供给来源。
     ///
     /// # 参数
     /// * `source_type` - 供给来源
-    ///
-    /// # 返回
-    /// 返回更新后的依据视图。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_source_type(mut self, source_type: SupplySourceType) -> Self {
         self.source_type = source_type;
         self
     }
 
-    /// 设置合同编号。
+    /// 组装采购创建依据时填入销售当前版本冻结的合同编号。
     ///
     /// # 参数
     /// * `contract_no` - 销售当前版本冻结的合同编号
-    ///
-    /// # 返回
-    /// 返回更新后的依据视图。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_contract_no(mut self, contract_no: Option<String>) -> Self {
         self.contract_no = contract_no;
         self
     }
 
-    /// 设置销售单负责人展示名。
+    /// 组装采购创建依据时填入销售单负责人展示名。
     ///
     /// # 参数
     /// * `name` - 销售单负责人展示名
-    ///
-    /// # 返回
-    /// 返回更新后的依据视图。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_sales_owner_name(mut self, name: Option<String>) -> Self {
         self.sales_owner_name = name;
         self
     }
 
-    /// 设置现有库存来源字段。
+    /// 组装采购创建依据时补充现有库存来源字段。
     ///
     /// # 参数
     /// * `stock_balance_id` - 余额主键
     /// * `warehouse_id` - 仓库主键
     /// * `warehouse_name` - 仓库名称
     /// * `source_available_quantity` - 来源当前总可供量
-    ///
-    /// # 返回
-    /// 返回更新后的依据视图。
-    ///
-    /// # 错误
-    /// 无。
     ///
     /// # 关键业务约束
     /// 现有库存依据的供给来源必须是现有库存。`new` 的默认值是采购，不改的话
@@ -532,31 +460,19 @@ impl CreationBasisView {
         self
     }
 
-    /// 设置供应商经营类目。
+    /// 组装采购创建依据时填入供应商经营类目。
     ///
     /// # 参数
     /// * `category` - 供应商经营类目
-    ///
-    /// # 返回
-    /// 返回更新后的依据视图。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_business_category(mut self, category: Option<String>) -> Self {
         self.business_category = category;
         self
     }
 
-    /// 设置可拆入本单的已确认分行。
+    /// 组装采购创建依据时填入已确认分行。
     ///
     /// # 参数
     /// * `lines` - 已确认分行
-    ///
-    /// # 返回
-    /// 返回更新后的依据视图。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_lines(mut self, lines: Vec<CreationBasisLineView>) -> Self {
         self.lines = lines;
         self

@@ -5,12 +5,11 @@ use crate::Result;
 use crate::entity::role_template::{BuiltinRoleTemplate, FinancePosition};
 
 /// 取得部署岗位模板，包括细分财务岗位及可选综合财务。
-/// # 参数
-/// 无；模板不依赖数据库或演示账号。
-/// # 返回
 /// 服务端版本的完整岗位权限及上岗条件。
-/// # 错误
+///
 /// 静态模板权限非法时返回错误。
+///
+/// 模板不依赖数据库或演示账号。
 pub fn builtin_role_templates() -> Result<Vec<BuiltinRoleTemplate>> {
     let mut templates = Vec::new();
     for role in PREDEFINED_ROLES {
@@ -32,7 +31,7 @@ mod tests {
     use crate::entity::role_template::BuiltinRoleState;
     use crate::entity::{Permission, PermissionSet, Role, RoleData};
 
-    /// 财务任务真实要求的权限齐全，三个岗位的资金、审批和责任配置互相隔离。
+    // 验证：财务任务真实要求的权限齐全，三个岗位的资金、审批和责任配置互相隔离。
     #[test]
     fn finance_positions_cover_execution_and_separate_duties() {
         let catalog = builtin_role_templates().unwrap();
@@ -98,7 +97,7 @@ mod tests {
         }
     }
 
-    /// 模板选择在写入前整批拒绝非法、重复或空选择。
+    // 验证：模板选择在写入前整批拒绝非法、重复或空选择。
     #[test]
     fn selection_is_bounded_and_rejects_unknown_or_duplicate_templates() {
         let catalog = builtin_role_templates().unwrap();
@@ -119,7 +118,7 @@ mod tests {
         }
     }
 
-    /// 管理层不改派或干预审批，技术岗位不自动获得业务审批资格。
+    // 验证：管理层不改派或干预审批，技术岗位不自动获得业务审批资格。
     #[test]
     fn management_and_technical_templates_keep_job_boundaries() {
         let catalog = builtin_role_templates().unwrap();
@@ -143,7 +142,7 @@ mod tests {
         }
     }
 
-    /// 既有角色即使改名、停用或删除也不被模板恢复。
+    // 验证：既有角色即使改名、停用或删除也不被模板恢复。
     #[test]
     fn existing_identity_is_preserved_in_every_state() {
         assert_eq!(BuiltinRoleState::from_role(None), BuiltinRoleState::Missing);

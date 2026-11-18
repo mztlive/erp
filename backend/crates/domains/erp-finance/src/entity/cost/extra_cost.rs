@@ -50,15 +50,7 @@ pub enum ExtraCostCategory {
 
 impl ExtraCostCategory {
     /// 返回该类别计入的成本类型。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回同代码的 [`CostType`]。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn cost_type(self) -> CostType {
         match self {
             Self::Logistics => CostType::Logistics,
@@ -73,15 +65,10 @@ impl ExtraCostCategory {
     }
 
     /// 由成本类型反查附加费用类别。
+    /// 结果：商品成本返回 `None`，其余返回同代码类别。
     ///
-    /// # 参数
-    /// * `cost_type` - 成本事实类型
-    ///
-    /// # 返回
-    /// 商品成本返回 `None`，其余返回同代码类别。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 输入约定：
+    /// - `cost_type`：成本事实类型
     pub fn from_cost_type(cost_type: CostType) -> Option<Self> {
         Some(match cost_type {
             CostType::Product => return None,
@@ -96,16 +83,7 @@ impl ExtraCostCategory {
         })
     }
 
-    /// 返回中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回与成本类型一致的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为界面或响应展示提供附加费用类别的中文名称；机器筛选和存储不使用该名称。
     pub fn label(self) -> &'static str {
         self.cost_type().label()
     }
@@ -140,16 +118,12 @@ pub struct ExtraCostRegistration {
 
 impl ExtraCostRegistration {
     /// 校验登记输入。
-    ///
-    /// # 参数
-    /// * `input` - 原始输入
-    /// * `today` - 业务当日，发生日期不得晚于当日
-    ///
-    /// # 返回
     /// 返回说明已规范化的登记。
-    ///
-    /// # 错误
     /// 说明为空或超长、金额不为正、税率为负或不小于 1、发生日期晚于当日时返回错误。
+    ///
+    /// 输入约定：
+    /// - `input`：原始输入
+    /// - `today`：业务当日，发生日期不得晚于当日
     pub fn new(mut input: ExtraCostInput, today: BusinessDate) -> Result<Self> {
         input.description = normalize_description(input.description)?;
         ensure_positive(input.gross_amount)?;
@@ -159,58 +133,30 @@ impl ExtraCostRegistration {
     }
 
     /// 返回归属销售明细。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回登记时选择的销售明细，未选择时为 `None`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn sales_order_line_id(&self) -> Option<&SalesOrderLineId> {
         self.input.sales_order_line_id.as_ref()
     }
 
     /// 返回收款供应商。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回登记时选择的供应商。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn supplier_id(&self) -> Option<&SupplierAccountId> {
         self.input.supplier_id.as_ref()
     }
 
     /// 返回凭证文件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回登记凭证文件主键。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn evidence_attachment_id(&self) -> &FileAssetId {
         &self.input.evidence_attachment_id
     }
 
     /// 生成实际发生成本事实及其销售单分配。
-    ///
-    /// # 参数
-    /// * `entry_id` - 由命令身份确定的成本事实主键
-    /// * `sales_order_id` - 归属销售单
-    ///
-    /// # 返回
     /// 返回成本事实与唯一一条分配。
-    ///
-    /// # 错误
     /// 成本或分配实体不变式失败时返回错误。
+    ///
+    /// 输入约定：
+    /// - `entry_id`：由命令身份确定的成本事实主键
+    /// - `sales_order_id`：归属销售单
     pub fn into_facts(
         self,
         entry_id: CostEntryId,
@@ -273,16 +219,11 @@ pub struct ReducedAmounts {
 
 impl ReducedAmounts {
     /// 汇总原费用的已有冲减事实。
-    ///
-    /// # 参数
-    /// * `original` - 原附加费用
-    /// * `entries` - 候选成本事实，只统计调整原费用的冲减
-    ///
-    /// # 返回
     /// 返回已冲减笔数及金额。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// 输入约定：
+    /// - `original`：原附加费用
+    /// - `entries`：候选成本事实，只统计调整原费用的冲减
     pub fn of<'a>(original: &CostEntry, entries: impl IntoIterator<Item = &'a CostEntry>) -> Self {
         let mut reduced = Self { count: 0, gross: Amount::zero(), net: Amount::zero() };
         for entry in entries {
@@ -306,16 +247,12 @@ pub struct ExtraCostReduction {
 
 impl ExtraCostReduction {
     /// 校验冲减输入。
-    ///
-    /// # 参数
-    /// * `input` - 原始输入
-    /// * `today` - 业务当日
-    ///
-    /// # 返回
     /// 返回说明已规范化的冲减。
-    ///
-    /// # 错误
     /// 原因为空或超长、金额不为正或日期晚于当日时返回错误。
+    ///
+    /// 输入约定：
+    /// - `input`：原始输入
+    /// - `today`：业务当日
     pub fn new(mut input: ExtraCostReductionInput, today: BusinessDate) -> Result<Self> {
         input.description = normalize_description(input.description)?;
         ensure_positive(input.gross_amount)?;
@@ -324,15 +261,7 @@ impl ExtraCostReduction {
     }
 
     /// 返回凭证文件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回冲减凭证文件主键。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn evidence_attachment_id(&self) -> &FileAssetId {
         &self.input.evidence_attachment_id
     }
@@ -341,18 +270,14 @@ impl ExtraCostReduction {
     ///
     /// 冲减沿用原费用的类别、税率、供应商与归属；全额冲完时不含税金额取原费用剩余值，
     /// 保证原费用与全部冲减精确抵消。来源行按冲减序号编排，并发冲减由唯一索引串行化。
-    ///
-    /// # 参数
-    /// * `entry_id` - 由命令身份确定的冲减事实主键
-    /// * `original` - 原附加费用
-    /// * `allocation` - 原附加费用的唯一分配
-    /// * `reduced` - 原费用已累计冲减金额
-    ///
-    /// # 返回
     /// 返回冲减成本事实与分配。
-    ///
-    /// # 错误
     /// 原事实不是财务登记的实际发生附加费用、冲减金额超过剩余金额或实体不变式失败时返回错误。
+    ///
+    /// 输入约定：
+    /// - `entry_id`：由命令身份确定的冲减事实主键
+    /// - `original`：原附加费用
+    /// - `allocation`：原附加费用的唯一分配
+    /// - `reduced`：原费用已累计冲减金额
     pub fn into_facts(
         self,
         entry_id: CostEntryId,
@@ -440,14 +365,7 @@ impl PurchaseExpenseCostFact {
     /// 生成采购费用行的实际发生成本及销售单分配。
     ///
     /// 来源唯一键为（采购费用、采购单、费用行），同一费用行只能形成一次实际成本。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回实际发生成本与唯一分配。
-    ///
-    /// # 错误
     /// 返点类别（只允许财务登记）或成本、分配实体不变式失败时返回错误。
     pub fn into_facts(self) -> Result<(CostEntry, CostAllocation)> {
         if self.category == ExtraCostCategory::Rebate {
@@ -484,31 +402,20 @@ impl PurchaseExpenseCostFact {
 }
 
 /// 判断成本事实是否为财务登记的附加费用。
+/// 结果：来源为附加费用登记且阶段为实际发生时返回 `true`。
 ///
-/// # 参数
-/// * `entry` - 成本事实
-///
-/// # 返回
-/// 来源为附加费用登记且阶段为实际发生时返回 `true`。
-///
-/// # 错误
-/// 不返回错误。
+/// 输入约定：
+/// - `entry`：成本事实
 pub fn is_registered_extra_cost(entry: &CostEntry) -> bool {
     entry.source_fact_type == SALES_EXTRA_COST_FACT && entry.cost_stage == CostStage::Actual
 }
 
 /// 由操作人、动作和幂等键派生稳定的成本事实主键，重试命中同一事实。
-///
-/// # 参数
-/// * `actor_id` - 操作人
-/// * `action` - 稳定动作名
-/// * `idempotency_key` - 客户端幂等键
-///
-/// # 返回
 /// 返回 `xc-` 前缀的十六进制主键。
 ///
-/// # 错误
-/// 不返回错误。
+/// 输入约定：
+/// - `action`：稳定动作名
+/// - `idempotency_key`：客户端幂等键
 pub fn extra_cost_entry_id(actor_id: &str, action: &str, idempotency_key: &str) -> CostEntryId {
     let mut hasher = Sha256::new();
     for part in [actor_id, action, idempotency_key] {
@@ -519,18 +426,13 @@ pub fn extra_cost_entry_id(actor_id: &str, action: &str, idempotency_key: &str) 
 }
 
 /// 业务日期零点（东八区）对应的时间点。
-///
-/// # 参数
-/// * `date` - 业务日期
-///
-/// # 返回
 /// 返回该日东八区零点。
-///
-/// # 错误
-/// 不返回错误。
 ///
 /// # Panics
 /// 合法日期的零点必然存在；构造失败表示日期库不变式被破坏。
+///
+/// 输入约定：
+/// - `date`：业务日期
 pub fn business_day_start(date: BusinessDate) -> Instant {
     let midnight = date.as_naive_date().and_hms_opt(0, 0, 0).expect("合法日期必有零点");
     Instant::from_unix_secs(midnight.and_utc().timestamp() - i64::from(BUSINESS_TZ_OFFSET_SECS))

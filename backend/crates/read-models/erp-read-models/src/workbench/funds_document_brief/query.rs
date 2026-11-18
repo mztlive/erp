@@ -29,17 +29,14 @@ use crate::errors::Result;
 use crate::workbench::authority::funds::mapping::voucher_revision_ids;
 
 impl WorkbenchFactsReader<'_> {
-    /// 批量读取应付供应商展示名。
-    ///
-    /// # 参数
-    /// * `accounts` - 本批应付子账
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回下层读出的供应商展示名映射。
-    ///
-    /// # 错误
-    /// 资金读取失败时返回对应错误。
+    // 补齐资金审批简报的展示名称时，批量读取应付供应商展示名。
+    //
+    // 调用参数：
+    // * `accounts` - 本批应付子账
+    //
+    // 返回下层读出的供应商展示名映射。
+    //
+    // 资金读取失败时返回对应错误。
     pub(super) async fn payable_supplier_names(
         &self,
         accounts: &[PayableAccount],
@@ -48,17 +45,14 @@ impl WorkbenchFactsReader<'_> {
         self.funds_reader().payable_supplier_names(accounts, executor).await
     }
 
-    /// 批量读取应付来源采购单号。
-    ///
-    /// # 参数
-    /// * `accounts` - 本批应付子账
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回下层读出的来源采购单号映射。
-    ///
-    /// # 错误
-    /// 资金读取失败时返回对应错误。
+    // 定位资金审批简报关联时，批量读取应付来源采购单号。
+    //
+    // 调用参数：
+    // * `accounts` - 本批应付子账
+    //
+    // 返回下层读出的来源采购单号映射。
+    //
+    // 资金读取失败时返回对应错误。
     pub(super) async fn payable_purchase_numbers(
         &self,
         accounts: &[PayableAccount],
@@ -67,17 +61,14 @@ impl WorkbenchFactsReader<'_> {
         self.funds_reader().payable_purchase_numbers(accounts, executor).await
     }
 
-    /// 批量汇总每个应付子账最早分录到期日。
-    ///
-    /// # 参数
-    /// * `accounts` - 本批应付子账
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回应付子账 ID 到该子账最早分录到期日。
-    ///
-    /// # 错误
-    /// 应付分录到期日查询失败时返回仓储错误。
+    // 处理资金审批简报时，批量汇总每个应付子账最早分录到期日。
+    //
+    // 调用参数：
+    // * `accounts` - 本批应付子账
+    //
+    // 返回应付子账 ID 到该子账最早分录到期日。
+    //
+    // 应付分录到期日查询失败时返回仓储错误。
     pub(super) async fn payable_due_dates(
         &self,
         accounts: &[PayableAccount],
@@ -88,17 +79,12 @@ impl WorkbenchFactsReader<'_> {
         self.db.payable_entries().minimum_due_dates_by_accounts(&ids, executor).await.map_err(Into::into)
     }
 
-    /// 按主体 ID 批量读取当前修订法定名称。
-    ///
-    /// # 参数
-    /// * `party_ids` - 主体 ID
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回主体 ID 到法定名称；没有当前修订时该主体不上表。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
+    // 依据主体 ID 批量读取当前修订法定名称。
+    //
+    // 调用参数：
+    // * `party_ids` - 主体 ID
+    //
+    // 返回主体 ID 到法定名称；没有当前修订时该主体不上表。
     pub(super) async fn party_legal_names(
         &self,
         party_ids: &[String],
@@ -107,17 +93,12 @@ impl WorkbenchFactsReader<'_> {
         self.funds_reader().party_legal_names(party_ids, executor).await
     }
 
-    /// 按客户账号批量解析展示名（当前主体法定名称，缺失时回退客户编号）。
-    ///
-    /// # 参数
-    /// * `customer_ids` - 客户账号 ID
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回客户账号 ID 到展示名。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
+    // 依据客户账号批量解析展示名（当前主体法定名称，缺失时回退客户编号）。
+    //
+    // 调用参数：
+    // * `customer_ids` - 客户账号 ID
+    //
+    // 返回客户账号 ID 到展示名。
     pub(super) async fn customer_display_names(
         &self,
         customer_ids: &[String],
@@ -126,17 +107,12 @@ impl WorkbenchFactsReader<'_> {
         self.funds_reader().customer_display_names(customer_ids, executor).await
     }
 
-    /// 按供应商账号批量解析展示名（当前主体法定名称，缺失时回退供应商编号）。
-    ///
-    /// # 参数
-    /// * `supplier_ids` - 供应商账号 ID
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回供应商账号 ID 到展示名。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
+    // 依据供应商账号批量解析展示名（当前主体法定名称，缺失时回退供应商编号）。
+    //
+    // 调用参数：
+    // * `supplier_ids` - 供应商账号 ID
+    //
+    // 返回供应商账号 ID 到展示名。
     pub(crate) async fn supplier_display_names(
         &self,
         supplier_ids: &[String],
@@ -145,17 +121,12 @@ impl WorkbenchFactsReader<'_> {
         self.funds_reader().supplier_display_names(supplier_ids, executor).await
     }
 
-    /// 按销售单 ID 批量读取单号。
-    ///
-    /// # 参数
-    /// * `sales_order_ids` - 销售单 ID
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回销售单 ID 到单号。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
+    // 定位资金审批简报关联时，按销售单 ID 批量读取单号。
+    //
+    // 调用参数：
+    // * `sales_order_ids` - 销售单 ID
+    //
+    // 返回销售单 ID 到单号。
     pub(super) async fn sales_order_numbers(
         &self,
         sales_order_ids: &[String],
@@ -173,17 +144,12 @@ impl WorkbenchFactsReader<'_> {
             .collect())
     }
 
-    /// 批量读取应收子账来源销售版本中的开票要求、卡券面值、张数与有效期。
-    ///
-    /// # 参数
-    /// * `accounts` - 本批应收子账
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回全部销售版本的开票要求，以及卡券销售版本 ID 到专属卡券简报。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
+    // 处理资金审批简报的版本事实时，批量读取应收子账来源销售版本中的开票要求、卡券面值、张数与有效期。
+    //
+    // 调用参数：
+    // * `accounts` - 本批应收子账
+    //
+    // 返回全部销售版本的开票要求，以及卡券销售版本 ID 到专属卡券简报。
     pub(super) async fn receivable_account_revision_briefs(
         &self,
         accounts: &[ReceivableAccount],
@@ -219,15 +185,14 @@ impl WorkbenchFactsReader<'_> {
         })
     }
 
-    /// 纯内存组装开票要求与卡券简报，不触库.
-    ///
-    /// # 参数
-    /// * `revisions` - 已批量加载的销售版本
-    /// * `voucher_lines` - 已按版本行批量加载的卡券行
-    /// * `revision_line_by_id` - 版本行 ID 到版本行的映射
-    ///
-    /// # 返回
-    /// 返回卡券版本 ID、开票要求与卡券简报；组装前后总数口径一致。
+    // 生成资金审批简报视图时，纯内存组装开票要求与卡券简报，不触库。
+    //
+    // 调用参数：
+    // * `revisions` - 已批量加载的销售版本
+    // * `voucher_lines` - 已按版本行批量加载的卡券行
+    // * `revision_line_by_id` - 版本行 ID 到版本行的映射
+    //
+    // 返回卡券版本 ID、开票要求与卡券简报；组装前后总数口径一致。
     fn assemble_revision_briefs(
         revisions: &[SalesOrderRevision],
         voucher_lines: Vec<SalesOrderVoucherLineRevision>,
@@ -265,12 +230,12 @@ impl WorkbenchFactsReader<'_> {
         (command_ids, invoice_requirements, briefs)
     }
 
-    /// 归集卡券行并定稿简报行与面值汇总，纯内存操作.
-    ///
-    /// # 参数
-    /// * `voucher_lines` - 已按版本行批量加载的卡券行
-    /// * `revision_line_by_id` - 版本行 ID 到版本行的映射
-    /// * `briefs` - 待定稿的卡券简报，按版本归集行与面值
+    // 汇总资金审批简报时，归集卡券行并定稿简报行与面值汇总，纯内存操作。
+    //
+    // 调用参数：
+    // * `voucher_lines` - 已按版本行批量加载的卡券行
+    // * `revision_line_by_id` - 版本行 ID 到版本行的映射
+    // * `briefs` - 待定稿的卡券简报，按版本归集行与面值
     fn accumulate_voucher_lines(
         voucher_lines: Vec<SalesOrderVoucherLineRevision>,
         revision_line_by_id: &HashMap<String, &SalesOrderRevisionLine>,
@@ -305,17 +270,12 @@ impl WorkbenchFactsReader<'_> {
         }
     }
 
-    /// 批量读取主体在当前业务日生效的默认优先税号。
-    ///
-    /// # 参数
-    /// * `party_ids` - 本批往来主体 ID
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回主体 ID 到税号；同一主体存在多条有效记录时采用仓储默认优先顺序的首条。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
+    // 定位资金审批简报关联时，批量读取主体在当前业务日生效的默认优先税号。
+    //
+    // 调用参数：
+    // * `party_ids` - 本批往来主体 ID
+    //
+    // 返回主体 ID 到税号；同一主体存在多条有效记录时采用仓储默认优先顺序的首条。
     pub(super) async fn current_tax_profile_nos(
         &self,
         party_ids: &[PartyId],
@@ -337,17 +297,12 @@ impl WorkbenchFactsReader<'_> {
         Ok(tax_nos)
     }
 
-    /// 批量计算应收子账正向分录的最早到期日。
-    ///
-    /// # 参数
-    /// * `accounts` - 本批应收子账
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回子账 ID 到最早正向应收到期日；冲减分录不参与计算。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
+    // 处理资金审批简报时，批量计算应收子账正向分录的最早到期日。
+    //
+    // 调用参数：
+    // * `accounts` - 本批应收子账
+    //
+    // 返回子账 ID 到最早正向应收到期日；冲减分录不参与计算。
     pub(super) async fn receivable_account_due_dates(
         &self,
         accounts: &[ReceivableAccount],
@@ -364,17 +319,12 @@ impl WorkbenchFactsReader<'_> {
             .map_err(Into::into)
     }
 
-    /// 把回款待过账核销转成按回款单分组的简报行。
-    ///
-    /// # 参数
-    /// * `receipts` - 本批回款单
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回回款单 ID 到核销销售单行。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
+    // 组装资金审批简报时，把回款待过账核销转成按回款单分组的简报行。
+    //
+    // 调用参数：
+    // * `receipts` - 本批回款单
+    //
+    // 返回回款单 ID 到核销销售单行。
     pub(super) async fn receipt_allocation_lines(
         &self,
         receipts: &[CustomerReceipt],
@@ -418,17 +368,12 @@ impl WorkbenchFactsReader<'_> {
             .collect())
     }
 
-    /// 批量读取原回款单及其核销对象，供退款和冲正简报复用。
-    ///
-    /// # 参数
-    /// * `receipt_ids` - 原回款单 ID
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回原回款 ID 到业务单号、主体、金额、银行流水和核销行。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
+    // 处理资金审批简报时，批量读取原回款单及其核销对象，供退款和冲正简报复用。
+    //
+    // 调用参数：
+    // * `receipt_ids` - 原回款单 ID
+    //
+    // 返回原回款 ID 到业务单号、主体、金额、银行流水和核销行。
     pub(super) async fn customer_receipt_origins(
         &self,
         receipt_ids: &[String],
@@ -442,17 +387,12 @@ impl WorkbenchFactsReader<'_> {
         Ok(receipt_origins_from_rows(receipts, party_names, lines))
     }
 
-    /// 批量读取原应收分录及其销售单、往来主体。
-    ///
-    /// # 参数
-    /// * `entry_ids` - 原应收分录 ID
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回分录 ID 到可读来源和核销影响上下文。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
+    // 处理资金审批简报时，批量读取原应收分录及其销售单、往来主体。
+    //
+    // 调用参数：
+    // * `entry_ids` - 原应收分录 ID
+    //
+    // 返回分录 ID 到可读来源和核销影响上下文。
     pub(super) async fn receivable_entry_origins(
         &self,
         entry_ids: &[String],
@@ -481,17 +421,12 @@ impl WorkbenchFactsReader<'_> {
         Ok(receivable_origins_from_rows(entries, accounts, party_names, sales_nos))
     }
 
-    /// 批量读取原付款单及其核销对象，供退款和冲正简报复用。
-    ///
-    /// # 参数
-    /// * `payment_ids` - 原付款单 ID
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回原付款 ID 到业务单号、供应商、金额、凭证和核销行。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
+    // 处理资金审批简报时，批量读取原付款单及其核销对象，供退款和冲正简报复用。
+    //
+    // 调用参数：
+    // * `payment_ids` - 原付款单 ID
+    //
+    // 返回原付款 ID 到业务单号、供应商、金额、凭证和核销行。
     pub(super) async fn supplier_payment_origins(
         &self,
         payment_ids: &[String],
@@ -508,17 +443,12 @@ impl WorkbenchFactsReader<'_> {
         Ok(payment_origins_from_rows(payments, supplier_names, lines))
     }
 
-    /// 批量读取原应付分录及其采购单、供应商。
-    ///
-    /// # 参数
-    /// * `entry_ids` - 原应付分录 ID
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回分录 ID 到可读来源和核销影响上下文。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
+    // 处理资金审批简报时，批量读取原应付分录及其采购单、供应商。
+    //
+    // 调用参数：
+    // * `entry_ids` - 原应付分录 ID
+    //
+    // 返回分录 ID 到可读来源和核销影响上下文。
     pub(super) async fn payable_entry_origins(
         &self,
         entry_ids: &[String],
@@ -536,17 +466,12 @@ impl WorkbenchFactsReader<'_> {
         Ok(payable_origins_from_rows(entries, accounts, supplier_names, purchase_nos))
     }
 
-    /// 把已过账付款核销事实转成按付款单分组的采购单简报行。
-    ///
-    /// # 参数
-    /// * `payments` - 本批付款单
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回付款单 ID 到采购单核销行。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
+    // 组装资金审批简报时，把已过账付款核销事实转成按付款单分组的采购单简报行。
+    //
+    // 调用参数：
+    // * `payments` - 本批付款单
+    //
+    // 返回付款单 ID 到采购单核销行。
     pub(super) async fn payment_allocation_lines(
         &self,
         payments: &[SupplierPayment],
@@ -590,16 +515,12 @@ impl WorkbenchFactsReader<'_> {
     }
 }
 
-/// 按付款单分组核销事实，建表一次装配查表，复杂度由 O(P*A) 降为 O(P+A)。
-///
-/// # 参数
-/// * `allocations` - 同批付款单的全部核销事实
-///
-/// # 返回
-/// 返回付款单 ID 到核销事实的映射；同单内保持仓储返回顺序，缺失键由调用方按空行解释。
-///
-/// # 错误
-/// 无。
+// 依据付款单分组核销事实，建表一次装配查表，复杂度由 O(P*A) 降为 O(P+A)。
+//
+// 调用参数：
+// * `allocations` - 同批付款单的全部核销事实
+//
+// 返回付款单 ID 到核销事实的映射；同单内保持仓储返回顺序，缺失键由调用方按空行解释。
 fn group_allocations_by_payment(
     allocations: Vec<PaymentAllocation>,
 ) -> HashMap<String, Vec<PaymentAllocation>> {

@@ -12,15 +12,7 @@ pub enum WorkItemConflictKind {
 
 impl WorkItemConflictKind {
     /// 返回 HTTP 契约使用的稳定错误码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回不依赖展示文案的冲突代码。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn code(self) -> &'static str {
         match self {
             Self::Version => "WORK_ITEM_VERSION_CONFLICT",
@@ -29,15 +21,7 @@ impl WorkItemConflictKind {
     }
 
     /// 返回权限安全的用户提示。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回不包含处理人 ID 或内部版本细节的提示。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn message(self) -> &'static str {
         match self {
             Self::Version => "任务已被其他操作更新，请按最新状态重试",
@@ -59,44 +43,21 @@ pub struct WorkItemConflict {
 
 impl WorkItemConflict {
     /// 创建责任命令冲突数据。
-    ///
-    /// # 参数
-    /// * `kind` - 稳定冲突分类
-    /// * `work_item_id` - 仍存在时的任务 ID；已删除时为空
-    ///
-    /// # 返回
     /// 返回命令层冲突事实。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// `work_item_id`：仍存在时的任务 ID；已删除时为空。
     pub fn new(kind: WorkItemConflictKind, work_item_id: Option<String>) -> Self {
         Self { kind, work_item_id }
     }
 
     /// 返回稳定冲突分类。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回构造时写入的 `WorkItemConflictKind`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn kind(&self) -> WorkItemConflictKind {
         self.kind
     }
 
     /// 返回冲突时仍存在的任务 ID。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 任务仍存在时返回其 ID；已删除时返回 `None`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn work_item_id(&self) -> Option<&str> {
         self.work_item_id.as_deref()
     }

@@ -83,66 +83,27 @@ pub enum RowStatus {
 /// 批量编排所需的窄用例接口。
 #[async_trait]
 pub trait BatchOperation: Send + Sync + 'static {
-    /// 返回批内唯一业务身份。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 本行用于整批去重的业务身份。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 供给批量命令进入整批预检时，用此业务身份识别重复目标。
     fn identity(&self) -> String;
-    /// 取原命令键，用于批内去重与主体隔离。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 可改写的命令键。调用方会把它限定到当前主体。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 提供可改写的原命令键：批内验证去重后，调用方按当前操作人限定命令键。
     fn key(&mut self) -> &mut String;
-    /// 校验权限、资格、版本和字段；已执行时返回持久化结果。
+    /// 逐行校验或执行前，先预检完整供给命令；已有原结果时可直接回放。
     ///
-    /// # 参数
-    /// * `process` - 供给流程。
-    /// * `actor` - 当前操作人。
-    ///
-    /// # 返回
     /// 已有持久化结果时为 `Some`；尚未执行时为 `None`。
     ///
-    /// # 错误
     /// 权限、资格、版本或字段校验失败时返回实现方错误。
     async fn prepare(&self, process: &SupplierOfferingProcess, actor: &AuditActor) -> Result<Option<Value>>;
-    /// 消耗本行并调用拥有原子事务的单条用例。
+    /// 供给行通过预检且未命中原结果时，提交完整单行命令并返回该行结果。
     ///
-    /// # 参数
-    /// * `process` - 供给流程。
-    /// * `actor` - 当前操作人。
-    ///
-    /// # 返回
     /// 单条执行结果的 JSON 值。
     ///
-    /// # 错误
     /// 单条用例失败时返回实现方错误。
     async fn execute(self, process: &SupplierOfferingProcess, actor: &AuditActor) -> Result<Value>;
 }
 
 impl SupplierOfferingProcess {
-    /// 校验整批并按行执行供给操作。
-    ///
-    /// # 参数
-    /// * `request` - 最多 100 行同类条款修订或可供更新
-    /// * `actor` - 当前操作人，命令键按该主体隔离
-    ///
-    /// # 返回
-    /// 返回每行校验、成功、失败或待确认结果。
-    ///
-    /// # 错误
-    /// 空批、超限、重复行/业务身份/命令键时拒绝整批。
+    /// 对最多 100 行同类供给操作先做整批预检，按当前操作人限定命令键；仅非纯校验且全批预检通过时执行未回放的行。
+    /// 返回逐行校验、成功、失败或待确认结果。空批、超限或重复的行、供给身份、命令键会拒绝整批。
     pub async fn batch<T: BatchOperation>(
         &self,
         mut request: BatchRequest<T>,
@@ -153,7 +114,7 @@ impl SupplierOfferingProcess {
     }
 }
 
-/// 验证容器约束，并将客户端命令键限定到当前主体。
+// 验证容器约束，并将客户端命令键限定到当前主体。
 fn validate_envelope<T: BatchOperation>(request: &mut BatchRequest<T>, actor: &str) -> Result<()> {
     if request.rows.is_empty() || request.rows.len() > MAX_BATCH_ROWS {
         return Err(Error::ValidationError("每批请选择 1–100 行".into()));
@@ -181,9 +142,9 @@ fn validate_envelope<T: BatchOperation>(request: &mut BatchRequest<T>, actor: &s
 /// 批量编排依赖的窄执行端口，单元测试无需构造数据库客户端。
 #[async_trait]
 trait BatchRunner<T>: Sync {
-    /// 预检一个完整命令。
+    // 逐行校验或执行前，先预检完整供给命令；已有原结果时可直接回放。
     async fn prepare(&self, input: &T) -> Result<Option<Value>>;
-    /// 提交一个完整命令。
+    // 供给行通过预检且未命中原结果时，提交完整单行命令并返回该行结果。
     async fn execute(&self, input: T) -> Result<Value>;
 }
 struct ProcessRunner<'a> {
@@ -192,34 +153,28 @@ struct ProcessRunner<'a> {
 }
 #[async_trait]
 impl<T: BatchOperation> BatchRunner<T> for ProcessRunner<'_> {
-    /// 接入单条供给预检。
-    ///
-    /// # 参数
-    /// * `input` - 一条批量命令。
-    ///
-    /// # 返回
-    /// 转发 `BatchOperation::prepare`：已有持久化结果为 `Some`，尚未执行为 `None`。
-    ///
-    /// # 错误
-    /// 预检失败时返回原错误。
+    // 逐行校验或执行前，先预检完整供给命令；已有原结果时可直接回放。
+    //
+    // `input`：一条批量命令。
+    //
+    // 转发 `BatchOperation::prepare`：已有持久化结果为 `Some`，尚未执行为 `None`。
+    //
+    // 预检失败时返回原错误。
     async fn prepare(&self, input: &T) -> Result<Option<Value>> {
         input.prepare(self.process, self.actor).await
     }
-    /// 接入单条供给事务。
-    ///
-    /// # 参数
-    /// * `input` - 一条批量命令，交给单条 `execute` 消耗。
-    ///
-    /// # 返回
-    /// 转发单条执行结果的 JSON。
-    ///
-    /// # 错误
-    /// 单条执行失败时返回原错误。
+    // 供给行通过预检且未命中原结果时，提交完整单行命令并返回该行结果。
+    //
+    // `input`：一条批量命令，交给单条 `execute` 消耗。
+    //
+    // 转发单条执行结果的 JSON。
+    //
+    // 单条执行失败时返回原错误。
     async fn execute(&self, input: T) -> Result<Value> {
         input.execute(self.process, self.actor).await
     }
 }
-/// 全批预检通过后逐行提交，回执恢复优先于新写入。
+// 全批预检通过后逐行提交，回执恢复优先于新写入。
 async fn run_batch<T: Send + Sync>(
     runner: &impl BatchRunner<T>,
     request: BatchRequest<T>,
@@ -256,7 +211,7 @@ async fn run_batch<T: Send + Sync>(
     Ok(BatchResult { rows: results })
 }
 
-/// 保守区分明确拒绝与提交结果不确定，后者只允许原命令恢复。
+// 保守区分明确拒绝与提交结果不确定，后者只允许原命令恢复。
 fn failure_status(error: &Error) -> RowStatus {
     match error {
         Error::ValidationError(_)
@@ -271,7 +226,7 @@ fn failure_status(error: &Error) -> RowStatus {
     }
 }
 
-/// 不向逐行结果泄露数据库或服务内部细节。
+// 不向逐行结果泄露数据库或服务内部细节。
 fn safe_message(error: &Error) -> String {
     match error {
         Error::ValidationError(message)

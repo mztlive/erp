@@ -31,16 +31,8 @@ pub struct PurchaseChangeDraftView {
 }
 
 impl PurchaseChangeDraftView {
-    /// 从初始基准版本恢复采购变更编辑快照。
-    ///
-    /// # 参数
-    /// * `change` - 原变更草稿。
-    /// * `revision` - 原基准版本。
-    /// * `lines` - 完整且按稳定顺序排列的原版本行。
-    /// # 返回
-    /// 返回包含全部冻结关联和稳定行键的快照。
-    /// # 错误
-    /// 状态或固定来源不一致、缺少明细时拒绝。
+    /// 首次编辑采购变更时，从冻结的基准采购版本恢复付款条件及按稳定顺序保存的全部明细和行键。
+    /// 草稿状态、基准身份或明细关联不一致时拒绝。
     pub fn from_base(
         change: &PurchaseChangeOrder,
         revision: &PurchaseOrderRevision,
@@ -58,16 +50,8 @@ impl PurchaseChangeDraftView {
         })
     }
 
-    /// 从撤回前最后一次冻结提交恢复完整采购变更目标。
-    ///
-    /// # 参数
-    /// * `change` - 保留当前提交指针的原变更草稿。
-    /// * `submission` - 当前冻结目标提交。
-    /// * `lines` - 完整且按稳定顺序排列的目标提交行。
-    /// # 返回
-    /// 返回最后提交的付款条件和全部目标行，不以基准覆盖已修改内容。
-    /// # 错误
-    /// 状态、提交指针、固定来源或明细不一致时拒绝。
+    /// 重新打开已有目标的采购变更时，从当前提交指针指向的编辑副本或冻结提交恢复完整明细和付款条件。
+    /// 草稿资格、目标身份或明细不一致时拒绝，不回退到基准版本。
     pub fn from_submission(
         change: &PurchaseChangeOrder,
         submission: &PurchaseChangeSubmission,
@@ -87,17 +71,7 @@ impl PurchaseChangeDraftView {
 }
 
 impl PurchaseChangeDraftView {
-    /// 附上当前生效版本行与含税总额，供界面对照改动。
-    ///
-    /// # 参数
-    /// * `revision` - 变更基准版本，即当前生效版本
-    /// * `lines` - 基准版本全部行
-    ///
-    /// # 返回
-    /// 返回带对照基准的快照。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将基准采购生效版本的明细和含税总额附到可编辑目标旁，供界面对照变更，不覆盖目标内容。
     pub fn with_base(
         mut self,
         revision: &PurchaseOrderRevision,
@@ -110,18 +84,11 @@ impl PurchaseChangeDraftView {
 }
 
 impl From<&PurchaseOrderRevisionLine> for SavePurchaseOrderLine {
-    /// 由采购版本行投影可再次编辑的行载荷。
-    ///
-    /// 历史销售提交行固定为空；仅物流费用行携带含税金额。
-    ///
-    /// # 参数
-    /// * `line` - 已保存的采购版本行。
-    ///
-    /// # 返回
-    /// 返回字段已转为字符串的 `SavePurchaseOrderLine`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 由采购版本行投影可再次编辑的行载荷。
+    //
+    // 历史销售提交行固定为空；仅物流费用行携带含税金额。
+    //
+    // 返回字段已转为字符串的 `SavePurchaseOrderLine`。
     fn from(line: &PurchaseOrderRevisionLine) -> Self {
         Self {
             line_type: line.line_type,
@@ -152,18 +119,11 @@ impl From<&PurchaseOrderRevisionLine> for SavePurchaseOrderLine {
 }
 
 impl From<&PurchaseChangeSubmissionLine> for SavePurchaseOrderLine {
-    /// 由采购变更提交行投影可再次编辑的行载荷。
-    ///
-    /// 保留历史销售提交行；仅物流费用行携带含税金额。
-    ///
-    /// # 参数
-    /// * `line` - 已保存的采购变更提交行。
-    ///
-    /// # 返回
-    /// 返回字段已转为字符串的 `SavePurchaseOrderLine`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 由采购变更提交行投影可再次编辑的行载荷。
+    //
+    // 保留历史销售提交行；仅物流费用行携带含税金额。
+    //
+    // 返回字段已转为字符串的 `SavePurchaseOrderLine`。
     fn from(line: &PurchaseChangeSubmissionLine) -> Self {
         Self {
             line_type: line.line_type,

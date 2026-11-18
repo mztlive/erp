@@ -49,15 +49,11 @@ impl TaskPurpose {
     }
 }
 
-/// 在当前命令事务内核验真实任务的当前版本，允许已提交命令沿原任务重放。
-/// # 参数
-/// db 为业务数据库，ports 为共享授权设施，actor 为当前认证操作人，
-/// task_id 为原任务主键，purpose 为固定动作，executor 为原命令事务执行器。
-/// # 返回
-/// 当前账号仍具备同一任务办理资格时成功。
-/// # 错误
-/// 任务缺失时返回 `NotFound`；资格、任务版本或指派失效时拒绝。
-/// 授权及仓储读取错误按原分类传播。
+// 在当前命令事务内核验真实任务的当前版本，允许已提交命令沿原任务重放。
+//
+// db 为业务数据库，ports 为共享授权设施，actor 为当前认证操作人， task_id 为原任务主键，purpose 为固定动作，executor 为原命令事务执行器。
+//
+// 当前账号仍具备同一任务办理资格时成功。任务缺失时返回 `NotFound`；资格、任务版本或指派失效时拒绝。授权及仓储读取错误按原分类传播。
 pub(crate) async fn require_entry(
     db: &Database,
     ports: &FinancePostingPorts,
@@ -74,13 +70,11 @@ pub(crate) async fn require_entry(
     require_task(ports, actor, &task, purpose, executor).await
 }
 
-/// 在原事务检查固定动作；付款和开票同时核对精确任务。
-/// # 参数
-/// ports 为共享授权能力；task 为同执行器已读任务，purpose 为本次固定动作。
-/// # 返回
-/// 揭示具备当前功能资格且为任务责任人时成功；付款和开票还须满足任务版本与实际指派。
-/// # 错误
-/// 资格、任务版本、指派或事实读取失败时拒绝。
+// 在原事务检查固定动作；付款和开票同时核对精确任务。
+//
+// ports 为共享授权能力；task 为同执行器已读任务，purpose 为本次固定动作。
+//
+// 揭示具备当前功能资格且为任务责任人时成功；付款和开票还须满足任务版本与实际指派。资格、任务版本、指派或事实读取失败时拒绝。
 pub(crate) async fn require_task(
     ports: &FinancePostingPorts,
     actor: &AuditActor,
@@ -95,11 +89,9 @@ pub(crate) async fn require_task(
 }
 
 /// 提供财务办理动作的真实任务事实；由组合根复用工作项读取器。
-/// # 参数
-/// db 为工作项所在数据库；financial_facts 复用应收子账、付款申请及采购单的完整事实读取器。
-/// # 返回
-/// 只接受固定财务任务权限的事实读取器；保留真实任务身份和版本。
-/// # 错误
+///
+/// db 为工作项所在数据库；financial_facts 复用应收子账、付款申请及采购单的完整事实读取器。只接受固定财务任务权限的事实读取器；保留真实任务身份和版本。
+///
 /// 缺少应收子账、付款申请或采购单读取器时立即拒绝；构造不执行 I/O。
 pub fn authorization_task_facts(
     db: Database,
@@ -204,7 +196,7 @@ impl TaskSources for MongoTaskSources {
     }
 }
 
-/// 实际采购安排任务直接引用采购单；付款、审批揭示和开票任务展开真实资金根的完整来源。
+// 实际采购安排任务直接引用采购单；付款、审批揭示和开票任务展开真实资金根的完整来源。
 async fn source_relations(
     financial_facts: &BTreeMap<String, Arc<dyn AccessFactsPort>>,
     task: &WorkItem,
@@ -234,7 +226,7 @@ async fn source_relations(
     Ok(source.relations)
 }
 
-/// 每个财务办理动作只接受其正式工作项种类和真实主题资源。
+// 每个财务办理动作只接受其正式工作项种类和真实主题资源。
 fn task_subject(task: &WorkItem, permission: &Permission) -> IdentityResult<(&'static str, Permission)> {
     let (resource, source_permission, kind) = if permission == &receivable::INVOICE_POST {
         ("receivable_account", receivable::ACCOUNT_DETAIL, WorkItemType::SalesInvoiceExecution)

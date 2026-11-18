@@ -29,27 +29,17 @@ pub struct DeliveryCoverageRefreshProcess {
 impl DeliveryCoverageRefreshProcess {
     /// 绑定数据库。
     ///
-    /// # 参数
-    /// * `db` - 供给、商品与覆盖所在数据库
+    /// `db`：供给、商品与覆盖所在数据库。
     ///
-    /// # 返回
     /// 返回未执行 I/O 的流程。
-    ///
-    /// # 错误
-    /// 无。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
     /// 执行一轮刷新：必要时全量重建，扫描变化与到期日标记待重算，再重算一部分。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回本轮保存的覆盖数。
     ///
-    /// # 错误
     /// 读取或写入失败时返回错误；已完成的标记与保存保留，下一轮继续。
     pub async fn run_due(&self) -> Result<usize> {
         let now = Instant::now().unix_secs();
@@ -60,7 +50,7 @@ impl DeliveryCoverageRefreshProcess {
         self.recompute(now).await
     }
 
-    /// 读取进度；首次运行或口径升级时把全部有供给的 SKU 标记待重算。
+    // 读取进度；首次运行或口径升级时把全部有供给的 SKU 标记待重算。
     async fn prepare_state(&self, now: i64) -> Result<SkuDeliveryCoverageState> {
         let store = self.db.sku_delivery_coverages();
         let state = store.state(&mut NoTransaction).await?;
@@ -77,7 +67,7 @@ impl DeliveryCoverageRefreshProcess {
         Ok(state)
     }
 
-    /// 扫描即时与延迟时间窗内的变化并标记受影响 SKU，完成后推进进度。
+    // 扫描即时与延迟时间窗内的变化并标记受影响 SKU，完成后推进进度。
     async fn mark_changes(&self, state: &SkuDeliveryCoverageState, now: i64) -> Result<()> {
         let store = self.db.sku_delivery_coverages();
         for window in state.watermarks.scan_windows(now) {
@@ -92,7 +82,7 @@ impl DeliveryCoverageRefreshProcess {
         Ok(())
     }
 
-    /// 分批重算待重算 SKU；同一批内相同政策组合只计算一次。
+    // 分批重算待重算 SKU；同一批内相同政策组合只计算一次。
     async fn recompute(&self, now: i64) -> Result<usize> {
         let store = self.db.sku_delivery_coverages();
         let mut executor = NoTransaction;

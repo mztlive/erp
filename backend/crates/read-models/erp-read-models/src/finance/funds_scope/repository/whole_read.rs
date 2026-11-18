@@ -7,13 +7,15 @@ use super::super::{FundsAccess, FundsAuthorization};
 use crate::{Error, Result};
 
 impl FundsAccess {
-    /// 在原事务查询当前根是否属于统一完整单据视图。
-    /// # 参数
-    /// authorization 为当前读取凭证，id 为根身份，sales/purchases 为仓储实际读取的完整引用。
-    /// # 返回
-    /// identity 的完整视图包含该根时为 true。
-    /// # 错误
-    /// 未知根模型、授权失效或数据库读取失败保留对应错误。
+    // 需要交付资金整单信息时，沿原事务按当前根身份和仓储读取的完整来源引用查询整单可见性。
+    //
+    // 调用参数：
+    // authorization 为当前读取凭证，id 为根身份，sales/purchases 为仓储实际读取的完整引用。
+    //
+    // identity 的完整视图包含该根时为 true。
+    //
+    // 失败边界：
+    // 未知根模型、授权失效或数据库读取失败保留对应错误。
     pub(in crate::finance::funds_scope) async fn whole_allowed(
         &self,
         authorization: &FundsAuthorization,

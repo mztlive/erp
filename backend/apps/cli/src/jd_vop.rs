@@ -9,13 +9,11 @@ use erp_supplier_orders::supplier_credentials::{JdVopCredentialImport, JdVopCred
 use crate::error::{Error, Result};
 use crate::runtime::JdVopCredentialRuntime;
 
-/// 预览或明确写入已有授权；令牌只读取本地输入，不进入参数和日志。
-/// # 参数
-/// `source` 为部署配置，`args` 为文件、版本和明确操作模式。
-/// # 返回
-/// 输出脱敏状态；默认模式不写入凭据、审计或索引。
-/// # 错误
-/// 读取、格式、绑定、版本、未知刷新边界或持久化失败时返回脱敏错误。
+/// 处理 `jd-vop-credential-import`，从本地文件或标准输入接收已取得的京东授权，
+/// 按部署绑定校验身份；替换已有凭据时必须给出当前版本。令牌不经命令参数或日志传递。
+///
+/// 默认只预览，不写凭据、审计或索引。确认后用 `--apply` 写入密文及审计；
+/// 刷新结果未知时不能普通覆盖，须等用例允许恢复并提供新授权依据。
 pub async fn import(source: &ConfigArgs, args: JdVopCredentialImportArgs) -> Result<()> {
     let file = args.file;
     let input = tokio::task::spawn_blocking(move || read_input::<JdVopCredentialImport>(&file))
@@ -36,25 +34,16 @@ pub async fn import(source: &ConfigArgs, args: JdVopCredentialImportArgs) -> Res
     print_status(&status, if args.apply { "已写入" } else { "预览，未写入" })
 }
 
-/// 查询配置绑定凭据的脱敏状态，不读取令牌明文或发出任何刷新请求。
-/// # 参数
-/// `source` 为统一配置来源，凭据身份仅由部署配置决定。
-/// # 返回
-/// 输出版本、有效期、刷新阶段与期限及是否需要重新授权。
-/// # 错误
-/// 配置、绑定或数据库查询失败时返回脱敏错误。
+/// 处理 `jd-vop-credential-status`，按部署配置查询对应凭据的版本、有效期、
+/// 刷新阶段和恢复期限，并提示是否需要重新授权。用于判断下一步运维操作，
+/// 不解密令牌，也不向京东发起刷新。
 pub async fn status(source: &ConfigArgs) -> Result<()> {
     let runtime = JdVopCredentialRuntime::connect(source).await?;
     print_status(&runtime.process.status().await?, "只读状态")
 }
 
-/// 输出由凭据管理用例统一脱敏的状态，禁止输出输入 DTO。
-/// # 参数
-/// `status` 为安全状态 DTO，`mode` 为固定操作模式摘要。
-/// # 返回
-/// 完成标准输出写入。
-/// # 错误
-/// 序列化失败时只返回固定错误，不传播可能包含字段值的正文。
+// 在预览、写入和查询结束后，只向标准输出打印操作模式与用例生成的脱敏状态。
+// 序列化失败时返回固定摘要，不回显字段值或导入内容。
 fn print_status(status: &JdVopCredentialStatus, mode: &str) -> Result<()> {
     let output = serde_json::to_string_pretty(status)
         .map_err(|_| Error::Usage("凭据状态序列化失败；内容已隐藏".into()))?;

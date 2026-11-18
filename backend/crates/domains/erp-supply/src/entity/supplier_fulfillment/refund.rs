@@ -40,16 +40,7 @@ pub enum AllocationAction {
 }
 
 impl AllocationAction {
-    /// 返回动作的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为供应商退款提供中文展示名；界面展示时使用，不以文案作为稳定标识。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Apply => "应用",
@@ -57,16 +48,7 @@ impl AllocationAction {
         }
     }
 
-    /// 返回动作的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得供应商退款的稳定标识，供需要按代码而非展示文案识别取值的调用方使用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Apply => "APPLY",
@@ -125,17 +107,8 @@ pub struct SupplierRefundFact {
 
 impl SupplierRefundFact {
     /// 创建供应商退款事实。
-    ///
     /// 完成外部退款身份与来源事件的校验和规范化，并强制退款金额大于零。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::SupplierRefundFactId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
     /// 返回新建的退款事实实体。
-    ///
-    /// # 错误
     /// 字段为空/超长或退款金额小于等于零时返回错误。
     pub fn new(id: SupplierRefundFactId, data: SupplierRefundFactData) -> Result<Self> {
         let external_refund_no = normalize_required_text(
@@ -176,18 +149,8 @@ impl SupplierRefundFact {
     }
 
     /// 核对外部退款身份命中的回执是否对应本次已授权订单和退款结果。
-    ///
-    /// # 参数
-    /// * `order_id` - 本次已授权的供应商履约订单。
-    /// * `amount` - 请求中的实际退款金额。
-    /// * `refunded_at` - 请求中的退款发生时间。
-    /// * `source_event_id` - 请求中的来源事件身份。
-    ///
-    /// # 返回
     /// 订单和全部退款结果字段一致时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// `order_id`：本次已授权的供应商履约订单。
     pub fn matches_result(
         &self,
         order_id: &SupplierFulfillmentOrderId,
@@ -202,18 +165,9 @@ impl SupplierRefundFact {
     }
 
     /// 校验退款分配与退款头的一致性（数据模型 §6.19：各行净含税金额合计等于退款头金额）。
-    ///
-    /// 逐行校验分配归属本退款头；只有 `APPLY` 分配参与合计（`REVERSE` 是纠错事实，
-    /// 与原 `APPLY` 一对一由 P3 校验），累计净退款数量上限校验在 P3 锁定原明细与
-    /// 成本后执行（§6.19、§8.4 第 5 条）。
-    ///
-    /// # 参数
-    /// * `allocations` - 本退款头下的全部分配行
-    ///
-    /// # 返回
+    /// 逐行校验分配归属本退款头；只有 `APPLY` 分配参与合计（`REVERSE` 是纠错事实，与原 `APPLY` 一对一由
+    /// P3 校验），累计净退款数量上限校验在 P3 锁定原明细与成本后执行（§6.19、§8.4 第 5 条）。
     /// 归属正确且合计恒等时返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 分配归属其他退款头或 APPLY 合计不等于退款头金额时返回错误。
     ///
     /// # Panics
@@ -314,19 +268,9 @@ pub struct SupplierRefundAllocation {
 
 impl SupplierRefundAllocation {
     /// 创建供应商退款分配。
-    ///
-    /// 校验退款数量大于零、全部金额非负，并强制两条恒等（§6.19）：
-    /// `gross = net + tax`、`payable_reduction + cash_refund = gross`；
-    /// 同时强制 `REVERSE` 必填原分配、`APPLY` 不得引用原分配。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::SupplierRefundAllocationId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
+    /// 校验退款数量大于零、全部金额非负，并强制两条恒等（§6.19）：`gross = net + tax`、
+    /// `payable_reduction + cash_refund = gross`；同时强制 `REVERSE` 必填原分配、`APPLY` 不得引用原分配。
     /// 返回新建的退款分配实体。
-    ///
-    /// # 错误
     /// 数量或金额越界、金额恒等不成立或 REVERSE/APPLY 引用不一致时返回错误。
     pub fn new(id: SupplierRefundAllocationId, data: SupplierRefundAllocationData) -> Result<Self> {
         if data.refund_quantity.to_decimal() <= Decimal::ZERO {
@@ -375,14 +319,8 @@ impl SupplierRefundAllocation {
     }
 }
 
-/// 校验金额非负。
-///
-/// # 参数
-/// * `value` - 金额
-/// * `message` - 失败时的错误信息
-///
-/// # 错误
-/// 金额为负时返回错误。
+// 核对金额非负。
+// 金额为负时返回错误。
 fn ensure_non_negative(value: Amount, message: &str) -> Result<()> {
     if value.to_decimal() < Decimal::ZERO {
         return Err(Error::from(message));

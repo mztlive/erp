@@ -19,17 +19,9 @@ pub struct CommandIdentity {
 }
 impl CommandIdentity {
     /// 按操作人、连接、动作和原始命令生成原幂等摘要。
-    ///
-    /// # 参数
-    /// * `id` - 供应商连接主键。
-    /// * `actor_id` - 操作人身份。
-    /// * `command` - 原始连接命令，含幂等键与动作。
-    ///
-    /// # 返回
     /// 返回含幂等摘要、请求指纹和稳定回执、审计身份的 `CommandIdentity`。
-    ///
-    /// # 错误
     /// 幂等键经 trim 后为空时返回 `ValidationError`。
+    /// `command`：原始连接命令，含幂等键与动作。
     pub fn new(id: &str, actor_id: &str, command: &SupplierConnectionCommand) -> Result<Self> {
         required(Some(command.idempotency_key.as_str()), "本次操作缺少提交标识，请刷新页面后重新操作")?;
         let idempotency_hash =
@@ -46,27 +38,14 @@ impl CommandIdentity {
         })
     }
 }
-/// 将已分类能力变更应用于事务内快照，并拆分为更新与新增两组持久化输入。
-///
-/// 已存在能力逐项重验实时版本与采购确认覆盖后变更内存状态；新增能力以停用
-/// 状态构造实体（ID 由调用方注入）。本函数只做内存装配，实际写库由
-/// Repository 批量 primitive 在同一执行器下完成；调用方事务保证整体回滚。
-///
-/// # 参数
-/// * `connection_id` - 所属连接 ID（新增实体归属）
-/// * `classified` - 已分类变更集（保持输入顺序）
-/// * `confirmations` - 最新优先的采购确认历史
-/// * `capabilities` - 事务内加载的既有能力快照（只读，不就地变更）
-///
-/// # 返回
-/// 返回 `(待 CAS 写回的已更新实体, 待批量插入的新增实体)`。
-///
-/// # 错误
-/// 当实时版本冲突、启用缺少采购确认或实体构造校验失败时返回错误；任一失败
-/// 由调用方事务整体回滚。
-///
-/// # 约束
-/// 不访问数据库、不开事务；跨聚合确认结论只读取不解释归属。
+// 将已分类能力变更应用于事务内快照，并拆分为更新与新增两组持久化输入。
+// 已存在能力逐项重验实时版本与采购确认覆盖后变更内存状态；新增能力以停用状态构造实体（ID 由调用方注入）。
+// 本函数只做内存装配，实际写库由Repository 批量 primitive 在同一执行器下完成；调用方事务保证整体回滚。
+// 返回 `(待 CAS 写回的已更新实体, 待批量插入的新增实体)`。
+// 当实时版本冲突、启用缺少采购确认或实体构造校验失败时返回错误；任一失败由调用方事务整体回滚。
+// 不访问数据库、不开事务；跨聚合确认结论只读取不解释归属。
+// `classified`：已分类变更集（保持输入顺序）
+// `capabilities`：事务内加载的既有能力快照（只读，不就地变更）
 pub(super) fn apply_validated_changes(
     connection_id: &str,
     classified: &ClassifiedCapabilityChangeSet,
@@ -116,16 +95,8 @@ pub(super) fn apply_validated_changes(
 }
 
 /// 将能力变更集拒绝映射为历史 Service 错误语义（保持 HTTP 状态与文本）。
-///
-/// # 参数
-/// * `rejection` - 变更集校验拒绝原因
-///
-/// # 返回
-/// 形态问题映射为 `ValidationError`，新能力版本映射为 `ConflictError`，
-/// 新能力启用映射为 `BusinessLogicError`。
-///
-/// # 错误
-/// 不返回错误。
+/// 形态问题映射为 `ValidationError`，新能力版本映射为 `ConflictError`，新能力启用映射为
+/// `BusinessLogicError`。
 pub fn map_capability_change_rejection(rejection: CapabilityChangeSetRejection) -> Error {
     match rejection {
         CapabilityChangeSetRejection::EmptyOrTooMany
@@ -144,15 +115,7 @@ pub fn map_capability_change_rejection(rejection: CapabilityChangeSetRejection) 
 }
 
 /// 校验幂等指纹并返回已持久化的业务能力确认结果。
-///
-/// # 参数
-/// * `confirmation` - 已持久化的业务能力确认
-/// * `fingerprint` - 本次请求的指纹
-///
-/// # 返回
 /// 返回原确认身份、版本及审计事件身份。
-///
-/// # 错误
 /// 同一幂等键用于不同请求参数时返回冲突。
 pub fn replay_confirmation(
     confirmation: BusinessCapabilityConfirmation,
@@ -194,16 +157,7 @@ fn command_fingerprint(id: &str, command: &SupplierConnectionCommand) -> String 
 }
 
 /// 计算证据引用顺序无关的业务能力确认指纹。
-///
-/// # 参数
-/// * `id` - 供应商连接主键
-/// * `command` - 待确认的业务能力命令
-///
-/// # 返回
 /// 返回规范字段的稳定摘要。
-///
-/// # 错误
-/// 无。
 pub fn confirmation_fingerprint(id: &str, command: &ConfirmBusinessCapabilityRequirementCommand) -> String {
     let mut evidence = command.evidence_references.iter().map(String::as_str).collect::<Vec<_>>();
     evidence.sort();
@@ -221,18 +175,8 @@ pub fn confirmation_fingerprint(id: &str, command: &ConfirmBusinessCapabilityReq
 }
 
 /// 计算能力更新命令的稳定指纹。
-///
 /// 命令序列化失败时按空载荷参与摘要，不因此中断。
-///
-/// # 参数
-/// * `id` - 供应商连接主键。
-/// * `command` - 能力更新命令。
-///
-/// # 返回
 /// 返回连接主键与命令载荷的摘要。
-///
-/// # 错误
-/// 不返回错误。
 pub fn capability_update_fingerprint(id: &str, command: &UpdateSupplierCapabilitiesCommand) -> String {
     let payload = serde_json::to_string(command).unwrap_or_default();
     digest(&[id, &payload])

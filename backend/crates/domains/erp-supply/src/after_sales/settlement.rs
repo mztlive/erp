@@ -34,12 +34,9 @@ pub struct SettlementScan {
 
 impl SettlementScan {
     /// 构建连接级固定日窗口；首次从连接建立时间开始。
-    /// # 参数
-    /// `id` 为连接；`supplier` 为归属；`since` 为可靠起点；`now` 为本轮时间。
-    /// # 返回
     /// 原游标为空的有界窗口。
-    /// # 错误
-    /// 无；未来起点收缩到当前时间前一秒。
+    /// 未来起点收缩到当前时间前一秒。
+    /// `id` 为连接；`supplier` 为归属；`since` 为可靠起点；`now` 为本轮时间。
     pub fn new(id: String, supplier: String, since: Instant, now: Instant) -> Self {
         let start = since.unix_secs().min(now.unix_secs().saturating_sub(1));
         Self {
@@ -62,11 +59,7 @@ impl SettlementScan {
     }
 
     /// 完成旧窗口后开始下一窗口，保留五分钟重叠用于来源迟到去重。
-    /// # 参数
-    /// `now` 为本次采样时间。
-    /// # 返回
     /// 未完成窗口和原游标保持不变。
-    /// # 错误
     /// 全量窗口不能作为增量检查点。
     pub fn resume(&mut self, now: Instant) -> Result<()> {
         if self.complete {
@@ -89,12 +82,9 @@ impl SettlementScan {
     }
 
     /// 整页证据保存事务内推进游标，禁止不前进及循环游标。
-    /// # 参数
-    /// `next` 为供应商原样游标；`now` 为本地采样时间。
-    /// # 返回
     /// 完成窗口仅表示已读取，不表示财务已结算。
-    /// # 错误
     /// 循环、空游标、游标过长或窗口页数过多时拒绝。
+    /// `next` 为供应商原样游标；`now` 为本地采样时间。
     pub fn advance(&mut self, next: Option<String>, now: Instant) -> Result<()> {
         if let Some(cursor) = &next {
             if cursor.is_empty()
@@ -132,11 +122,7 @@ pub struct SettlementEvidence {
 
 impl SettlementEvidence {
     /// 同一来源流水只允许完全相同的业务载荷重复接收。
-    /// # 参数
-    /// `candidate` 为本次读取的标准来源。
-    /// # 返回
     /// 重复观察成功，保留原关联状态。
-    /// # 错误
     /// 同号异载荷或跨账号时拒绝，不能按接收时间覆盖。
     pub fn ensure_replay(&self, candidate: &Self) -> Result<()> {
         if self.base.id != candidate.base.id
@@ -149,12 +135,9 @@ impl SettlementEvidence {
     }
 
     /// 校验流水身份、窗口、金额并固定连接作用域。
-    /// # 参数
-    /// `scan` 为原检查点；`evidence` 为真实标准来源。
-    /// # 返回
     /// 同连接同流水生成相同主键；业务载荷独立摘要用于冲突检测。
-    /// # 错误
     /// 缺少身份、时间越界、非法费用及序列化失败时拒绝。
+    /// `scan` 为原检查点；`evidence` 为真实标准来源。
     pub fn new(scan: &SettlementScan, evidence: Snapshot<SettlementEntry>) -> Result<Self> {
         let row = &evidence.value;
         let ScanWindow::Changes { since, through } = scan.query.window else {

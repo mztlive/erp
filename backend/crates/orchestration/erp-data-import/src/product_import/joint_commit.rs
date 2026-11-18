@@ -39,7 +39,8 @@ pub(super) trait RowCommitPort: Send {
     ) -> Result<bool>;
 }
 
-/// 先重验供应商，再写目录及供给；任一步失败交给外层事务整体回滚。
+// 商品与供给联合导入已准备好外部媒体后，在调用方的行事务先重验供应商，再写目录与供给；任一步失败由外层整体回滚。
+// 供给和商品都未变更时，将该行标记为跳过。
 pub(super) async fn commit_row<P: RowCommitPort>(
     port: &mut P,
     executor: &mut dyn Executor,
@@ -118,7 +119,7 @@ impl RowCommitPort for ImportCommit<'_> {
 }
 
 impl ProductImportProcess {
-    /// 创建尚不存在的供给；重复供给只复用身份，禁止重置成本或数量。
+    // 商品行已定位最终 SKU 后，按当前供应商资格建立缺失的供给；已有供给只复用身份，不重置原成本或可供数量。
     async fn write_import_offering(
         &self,
         input: &SupplyImportInput,

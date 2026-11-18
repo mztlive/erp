@@ -89,13 +89,7 @@ pub struct NewNodeExecution {
 }
 
 impl ApprovalNodeExecution {
-    /// 返回当前参与人或实际决定人的显示名。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 已决定时返回决定人快照，待处理时返回完整参与人及或签标识。
-    /// # 错误
-    /// 无。
+    /// 展示节点执行时优先显示已记录决定人的冻结名字；未决定或无对应快照时，显示冻结人员名单并标明或签。
     pub fn assignee_display_name(&self) -> String {
         let people = self.participants();
         if let Some(actor) = &self.decided_by
@@ -108,13 +102,8 @@ impl ApprovalNodeExecution {
         if self.additional_assignees.is_empty() { names } else { format!("{names}（或签）") }
     }
 
-    /// 根据冻结参与人数校验取消时的任务数量。
-    /// # 参数
-    /// `policy` 为实例取消策略，`count` 为开放任务数量。
-    /// # 返回
-    /// 单人恰一项、或签至少一项且不超过参与人数、受阻零项时成功。
-    /// # 错误
-    /// 数量不满足策略时返回模型错误。
+    /// 撤回前用冻结人数解释执行关联的开放任务数：运行中单人须恰有一项，或签须至少一项且不超过人数；受阻必须为零。
+    /// 数量偏离实例的取消策略时返回模型错误，不能继续关闭任务。
     pub fn ensure_cancellation_tasks(
         &self,
         policy: ApprovalCancellationTaskPolicy,
@@ -124,26 +113,14 @@ impl ApprovalNodeExecution {
         policy.ensure_open_task_count(normalized)
     }
 
-    /// 设置同节点的其他或签审批人。
-    /// # 参数
-    /// `assignees` 为除首位之外的参与人快照。
-    /// # 返回
-    /// 返回包含完整或签集合的节点。
-    /// # 错误
-    /// 人员重复、超限或显示名非法时失败。
+    /// 进入节点时把其他或签成员写入执行，供任务分派与决定人展示沿用同一快照。人数、重复身份和名称受节点人数规则约束。
     pub fn with_additional_assignees(mut self, assignees: Vec<ApprovalParticipant>) -> ModelResult<Self> {
         validate_additional(&self.assignee_participant_id, &assignees)?;
         self.additional_assignees = assignees;
         Ok(self)
     }
 
-    /// 返回冻结的全部参与人。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 首位与其他参与人按定义顺序返回。
-    /// # 错误
-    /// 无。
+    /// 从执行快照按首位、其他或签成员的顺序取回名单，供显示和决定人匹配，不重新查询定义或账号。
     pub fn participants(&self) -> Vec<ApprovalParticipant> {
         let mut result = vec![ApprovalParticipant {
             participant_id: self.assignee_participant_id.clone(),
@@ -153,76 +130,33 @@ impl ApprovalNodeExecution {
         result
     }
 
-    /// 判断身份是否属于冻结参与人。
-    /// # 参数
-    /// `id` 为待校验身份。
-    /// # 返回
-    /// 集合内身份返回 true。
-    /// # 错误
-    /// 无。
+    /// 接受决定前用执行快照判断身份是否属于首位或其他或签成员，不用当前账号配置替换冻结名单。
     pub fn has_participant(&self, id: &str) -> bool {
         self.assignee_participant_id.as_str() == id
             || self.additional_assignees.iter().any(|item| item.participant_id.as_str() == id)
     }
 
-    /// 返回克隆后的强类型执行 ID，避免调用方手写字符串克隆与重包。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回与 `base.id` 同值的 [`ApprovalNodeExecutionId`]。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 构造执行关联事件、任务或实例令牌时，取得与 `base.id` 同值的 [`ApprovalNodeExecutionId`]，避免调用方自行包装。
     pub fn typed_id(&self) -> ApprovalNodeExecutionId {
         ApprovalNodeExecutionId::new(self.base.id.clone())
     }
 
-    /// 创建活动执行。
-    ///
-    /// # 参数
-    /// * `input` - 执行身份、节点、轮次与审批人快照
-    ///
-    /// # 返回
-    /// 返回状态为 `ACTIVE`、无阻塞码的当前执行。
-    ///
-    /// # 错误
-    /// 轮次或序号不是从 1 开始、分派来源与替换引用不匹配、节点或显示名非法，
-    /// 或调用方时间无法持久化时返回错误。
+    /// 节点有合格办理人时创建活动执行，供引擎挂到实例并生成任务；原人恢复必须带旧执行引用，定义进入不能带。
+    /// 轮次或序号为零、节点或快照文本非法、分派来源不合规则或时间不可持久化时返回错误。
     pub fn new_active(input: NewNodeExecution) -> ModelResult<Self> {
         Self::new_current(input, None)
     }
 
-    /// 创建受阻执行。
-    ///
-    /// # 参数
-    /// * `input` - 执行身份、节点、轮次与审批人快照
-    /// * `blocker_code` - 结构化阻塞码
-    ///
-    /// # 返回
-    /// 返回状态为 `BLOCKED` 且写入该阻塞码的当前执行。
-    ///
-    /// # 错误
-    /// 轮次或序号不是从 1 开始、分派来源与替换引用不匹配、节点或显示名非法，
-    /// 或调用方时间无法持久化时返回错误。原审批人恢复不得直接构造受阻执行。
+    /// 进入节点时无人能办理，用结构化阻塞码直接创建受阻执行，不先开任务再关闭。
+    /// 原人恢复不能直接构造受阻执行；轮次、序号、来源、文本或时间不合法时返回错误。
     pub fn new_blocked(input: NewNodeExecution, blocker_code: ApprovalBlockerCode) -> ModelResult<Self> {
         Self::new_current(input, Some(blocker_code))
     }
 
-    /// 将活动执行标记为通过。
-    ///
-    /// # 参数
-    /// * `actor` - 决定人
-    /// * `reason` - 可选通过意见
-    /// * `at` - 决定时间
-    ///
-    /// # 返回
-    /// 无返回值。成功时把执行标为已通过，并写入决定人与结束时间。
+    /// 引擎接受通过决定后结束活动执行，记录决定人、可选意见和决定时间，供后继节点或最终通过使用。
     ///
     /// # 错误
-    /// 执行已结束时返回 [`ModelError::ExecutionAlreadyEnded`]。当前不是活动态、
-    /// 意见超长，或时间与版本无法推进时返回对应模型错误。
+    /// 已结束返回 [`ModelError::ExecutionAlreadyEnded`]；非活动、意见超长、时间不可持久化或版本溢出也返回错误。
     pub fn record_approve(
         &mut self,
         actor: ParticipantId,
@@ -232,19 +166,10 @@ impl ApprovalNodeExecution {
         self.record_decision(ApprovalDecision::Approve, actor, reason, at)
     }
 
-    /// 将活动执行标记为驳回。
-    ///
-    /// # 参数
-    /// * `actor` - 决定人
-    /// * `reason` - 驳回原因
-    /// * `at` - 决定时间
-    ///
-    /// # 返回
-    /// 无返回值。成功时把执行标为已驳回并写入原因。
+    /// 引擎接受驳回决定后，结束活动执行并记录决定人与事由，保留本次实例被驳回的依据。
     ///
     /// # 错误
-    /// 原因为空或超长、执行不是活动态，或时间与版本无法推进时返回错误。
-    /// 已结束时为 [`ModelError::ExecutionAlreadyEnded`]。
+    /// 原因裁剪后为空或超长、非活动、时间不可持久化或版本溢出时返回错误；已结束执行返回 [`ModelError::ExecutionAlreadyEnded`]。
     pub fn record_reject(
         &mut self,
         actor: ParticipantId,
@@ -255,16 +180,8 @@ impl ApprovalNodeExecution {
         self.record_decision(ApprovalDecision::Reject, actor, Some(reason), at)
     }
 
-    /// 将当前执行取消。
-    ///
-    /// # 参数
-    /// * `at` - 结束时间
-    ///
-    /// # 返回
-    /// 无返回值。成功时把活动或受阻执行标为 `CANCELLED`。
-    ///
-    /// # 错误
-    /// 执行已结束时返回 [`ModelError::ExecutionAlreadyEnded`]。时间无法持久化或版本溢出时返回对应错误。
+    /// 撤回实例时一并结束其活动或受阻执行，防止撤回后还有可办理令牌。
+    /// 执行已结束返回 [`ModelError::ExecutionAlreadyEnded`]；时间不可持久化或版本溢出时也返回错误。
     pub fn cancel(&mut self, at: Timestamp) -> ModelResult<()> {
         self.ensure_current()?;
         self.status = ApprovalNodeExecutionStatus::Cancelled;
@@ -272,18 +189,8 @@ impl ApprovalNodeExecution {
         touch_base(&mut self.base, at)
     }
 
-    /// 将活动执行置为受阻。
-    ///
-    /// # 参数
-    /// * `code` - 结构化阻塞码
-    /// * `at` - 阻塞时间
-    ///
-    /// # 返回
-    /// 无返回值。成功时把活动执行标为 `BLOCKED` 并写入阻塞码与阻塞时间。
-    ///
-    /// # 错误
-    /// 执行已结束时返回 [`ModelError::ExecutionAlreadyEnded`]。当前不是活动态时返回
-    /// [`ModelError::InvalidStatus`]。时间无法持久化或版本溢出时返回对应模型错误。
+    /// 当前活动执行不能继续时写入结构化阻塞码和时间，使它保持为当前令牌但不再接受决定。
+    /// 已结束返回 [`ModelError::ExecutionAlreadyEnded`]，已受阻返回 [`ModelError::InvalidStatus`]；时间或版本非法也返回模型错误。
     pub fn block(&mut self, code: ApprovalBlockerCode, at: Timestamp) -> ModelResult<()> {
         self.ensure_current()?;
         if self.status != ApprovalNodeExecutionStatus::Active {
@@ -296,16 +203,8 @@ impl ApprovalNodeExecution {
         touch_base(&mut self.base, at)
     }
 
-    /// 仅为原审批人恢复把受阻执行转为已替换，并写入固定结束原因。
-    ///
-    /// # 参数
-    /// * `at` - 结束时间
-    ///
-    /// # 返回
-    /// 无返回值。成功时把受阻执行标为 `SUPERSEDED`，结束原因为 `ASSIGNEE_RECOVERED`。
-    ///
-    /// # 错误
-    /// 当前不是受阻、缺少阻塞码、阻塞码不允许恢复原审批人，或时间与版本无法推进时返回错误。
+    // 创建原人恢复的新执行前，把人员失效导致的旧受阻执行结束为 `SUPERSEDED`，固定原因为 `ASSIGNEE_RECOVERED`。
+    // 非受阻、缺阻塞码、结构性阻塞或时间及版本非法时拒绝替换。
     pub(crate) fn supersede_for_assignee_recovery(&mut self, at: Timestamp) -> ModelResult<()> {
         if self.status != ApprovalNodeExecutionStatus::Blocked {
             return Err(ModelError::InvalidStatus("只有受阻执行可以替换"));
@@ -323,7 +222,7 @@ impl ApprovalNodeExecution {
         touch_base(&mut self.base, at)
     }
 
-    /// 只构造当前令牌：轮次与序号从 1 起；定义进入不得带替换引用，原审批人恢复必须关联旧执行且为活动态。
+    // 活动和受阻构造共用：轮次与序号从 1 起；定义进入不带旧执行，只有原人恢复关联旧执行且必须创建活动令牌。
     fn new_current(input: NewNodeExecution, blocker_code: Option<ApprovalBlockerCode>) -> ModelResult<Self> {
         if input.round_no == 0 || input.execution_no == 0 {
             return Err(ModelError::InvalidField("轮次和执行序号必须从 1 开始"));
@@ -379,7 +278,7 @@ impl ApprovalNodeExecution {
         })
     }
 
-    /// 仅活动执行可记决定；受阻或已结束都拒绝，避免覆盖未接受的阻塞事实。
+    // 通过和驳回复用同一落点，由活动执行记录决定、决定人和结束时间；已结束或受阻时不能覆盖既有事实。
     fn record_decision(
         &mut self,
         decision: ApprovalDecision,
@@ -404,7 +303,7 @@ impl ApprovalNodeExecution {
         touch_base(&mut self.base, at)
     }
 
-    /// 已结束执行不得再改状态；`BLOCKED` 仍算当前令牌。
+    // 变更执行前拒绝已结束状态；受阻仍是当前令牌，能撤回或在专用恢复路径中被替换。
     fn ensure_current(&self) -> ModelResult<()> {
         if self.status.is_ended() {
             return Err(ModelError::ExecutionAlreadyEnded);
@@ -440,7 +339,7 @@ mod tests {
         .unwrap()
     }
 
-    /// 构造器不得创建等待态；活动执行可记录决定。
+    // 验证构造入口分别生成活动或受阻状态，而不是未进入节点的等待记录。
     #[test]
     fn constructor_only_creates_current_execution() {
         let exec = active();
@@ -467,7 +366,7 @@ mod tests {
         assert_eq!(blocked.status, ApprovalNodeExecutionStatus::Blocked);
     }
 
-    /// 已结束执行不能重开或覆盖决定。
+    // 通过后再次驳回或试图替换旧执行均应失败，保护已记录决定。
     #[test]
     fn ended_execution_cannot_reopen() {
         let mut exec = active();
@@ -490,7 +389,7 @@ mod tests {
         );
     }
 
-    /// 原审批人恢复必须写入固定结束原因并保留旧责任快照。
+    // 验证人员失效的旧执行结束时标记原人恢复，且保留当时的责任人快照。
     #[test]
     fn assignee_recovery_supersedes_blocked_and_keeps_snapshot() {
         let mut exec = active();
@@ -503,7 +402,7 @@ mod tests {
         assert_eq!(exec.assignee_participant_id, old_assignee);
     }
 
-    /// 结构性 blocker 不得通过执行模型旁路恢复守卫。
+    // 验证直接调用执行模型也不能以原人恢复替换结构受阻执行；拒绝后仍保留原状态和未结束事实。
     #[test]
     fn structural_blocker_cannot_be_superseded_for_assignee_recovery() {
         let mut exec = active();
@@ -518,7 +417,7 @@ mod tests {
         assert!(exec.ended_at.is_none());
     }
 
-    /// 执行来源与被替换执行引用必须成对出现。
+    // 覆盖定义进入携带旧引用、原人恢复缺旧引用以及受阻恢复，用于锁定来源、引用和活动态的配对约束。
     #[test]
     fn assignment_source_requires_matching_replacement_reference() {
         let invalid_definition = ApprovalNodeExecution::new_active(NewNodeExecution {

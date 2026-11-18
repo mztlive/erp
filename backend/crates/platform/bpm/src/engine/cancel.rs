@@ -19,22 +19,11 @@ pub struct CancelCommand {
     pub now: Timestamp,
 }
 
-/// 将当前执行与实例置为 `CANCELLED`，并清空当前执行引用。
-///
-/// 本函数不区分业务撤回与受阻取消；调用方必须先完成权限与 blocker 分类校验。
-/// 无法形成合法取消快照时返回不可提交错误。
-///
-/// # 参数
-/// * `instance` - 当前流程实例
-/// * `current` - 待结束的当前节点执行
-/// * `command` - 取消人、原因、是否关闭开放任务与调用方时间
-///
-/// # 返回
-/// 返回提交类别为 `CommitRequired::Cancelled` 的迁移计划。
+/// 在调用方完成撤回授权、开放任务核验和阻塞分类后，计算实例与当前执行一并取消的计划。
+/// 计划清除当前执行引用，发出 `InstanceCancelled`，并按命令决定是否加入任务关闭意图；不会自行判断该走业务取消还是受阻取消。
 ///
 /// # 错误
-/// 实例已终态、当前执行不是活动或受阻、缺少当前执行、执行不是当前令牌、
-/// 原因空白，或模型拒绝取消快照时返回错误。
+/// 终态、缺失或不匹配的当前令牌、不可结束的执行、空白事由或模型不变式失败均不能提交。
 pub fn cancel(
     mut instance: ApprovalProcessInstance,
     mut current: ApprovalNodeExecution,
@@ -69,7 +58,7 @@ pub fn cancel(
     Ok(plan)
 }
 
-/// 运行中或受阻实例才允许取消，且必须存在可结束的当前执行。
+// 在生成取消快照前，确认实例仍在运行或受阻，且传入的是可结束的当前执行，避免用旧令牌撤回实例。
 fn ensure_cancellable(
     instance: &ApprovalProcessInstance,
     current: &ApprovalNodeExecution,

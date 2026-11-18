@@ -14,10 +14,7 @@ use build_format::push_description;
 use build_permissions::PermissionGroup;
 use build_policy_catalog::write_policy_catalog;
 
-/// 构建脚本入口。
-///
-/// # 返回
-/// 不返回数据，仅表示执行结果。
+// 在 Cargo 构建或独立生成权限目录时读取公共权限与实际路由，输出后端校验目录、路由合同及前端权限和审计目录；解析或写出失败时不继续生成。
 fn main() {
     let manifest_dir = match env::var("ERP_PERMISSION_MANIFEST_DIR")
         .or_else(|_| env::var("CARGO_MANIFEST_DIR"))
@@ -91,18 +88,7 @@ fn main() {
         .expect("必须生成前端权限目录");
 }
 
-/// 记录 build.rs 的文件依赖，路径不存在时跳过。
-///
-/// cargo 把指向不存在路径的 `rerun-if-changed` 永久判定为脏，会导致 build script
-/// 与 web-api 每次 `cargo test` / `cargo build` 无条件重编译。`DOMAIN_MODULES` 中
-/// 存在没有独立路由文件的域（如 organization 的路由挂在 `routes/access_control.rs`），
-/// 故此处按存在性过滤。新增路由文件必然伴随 `routes/mod.rs` 改动，该文件已被监听。
-///
-/// # 参数
-/// * `path` - 路径
-///
-/// # 返回
-/// 不返回数据，仅表示执行结果。
+// 只将存在的源码路径登记为 Cargo 构建依赖，避免缺少独立文件的领域让构建一直失效。新增路由模块仍会通过已监听的路由目录与模块入口触发重建。
 fn rerun_if_changed(path: &Path) {
     if !path.exists() {
         return;
@@ -110,13 +96,7 @@ fn rerun_if_changed(path: &Path) {
     println!("cargo:rerun-if-changed={}", path.display());
 }
 
-/// 解析 `/admin` 路由前缀。
-///
-/// # 参数
-/// * `content` - 文件内容
-///
-/// # 返回
-/// 返回可选结果，`Some` 表示存在，`None` 表示不存在。
+// 生成路由权限合同时，从根路由的 `nest` 注册查找 `admin::routes` 挂载前缀；找不到时不猜测路径。
 fn parse_admin_prefix(content: &str) -> Option<String> {
     let marker = "nest(";
     let mut index = 0;
@@ -183,18 +163,7 @@ fn parse_admin_prefix(content: &str) -> Option<String> {
     None
 }
 
-/// 生成并写入权限配置文件。
-///
-/// # 参数
-/// * `output_path` - 输出路径
-/// * `groups` - 权限分组
-/// * `permission_item_source` - `PermissionItem` 类型来源（import 行或内联类型定义）
-///
-/// # 返回
-/// 返回执行结果，`Ok` 表示成功，`Err` 表示失败。
-///
-/// # 错误
-/// 当验证失败或底层操作失败时返回错误。
+// 把已归组权限和前端 `PermissionItem` 类型写成 TypeScript，供前端消费同一权限目录；传播文件写入错误。
 fn write_generated_file(
     output_path: &Path,
     groups: &[(String, PermissionGroup)],
@@ -246,21 +215,12 @@ fn write_generated_file(
     fs::write(output_path, content)
 }
 
-/// 转义 TS 字符串中的特殊字符。
-///
-/// # 参数
-/// * `value` - 值
-///
-/// # 返回
-/// 返回字符串结果。
+// 在写出权限目录的 TypeScript 字符串字面量前转义内容，避免描述中的特殊字符改变生成源码。
 fn escape_ts(value: &str) -> String {
     value.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
-/// 返回 erp-client 侧 `PermissionItem` 的内联类型定义。
-///
-/// `erp-client` 的 tsconfig 没有 `@/types/admin` 映射，且代码风格为 4 空格缩进、
-/// 无分号；生成文件按该风格输出，避免 lint/tsc 漂移。
+// 为前端权限目录提供自包含的 `PermissionItem` 类型，不依赖 erp-client 未配置的 `@/types/admin` 路径别名。
 fn client_permission_item_source() -> &'static str {
     concat!(
         "export interface PermissionItem {\n",
@@ -276,7 +236,7 @@ fn client_permission_item_source() -> &'static str {
     )
 }
 
-/// 从事件拥有领域生成前端固定目录；写失败使构建失败，禁止保留过期生成物。
+// 从审计动作定义生成前端固定目录；写入失败必须中止构建，不允许沿用旧目录。
 fn generate_audit_actions(backend_root: &Path, client_output_dir: &Path) -> io::Result<()> {
     rerun_if_changed(
         &backend_root.join("crates/domains/erp-identity/src/entity/access_control/audit_actions.rs"),

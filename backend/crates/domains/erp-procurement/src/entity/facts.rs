@@ -141,14 +141,7 @@ pub enum ProductKind {
 impl ProductKind {
     /// 返回稳定代码，用于既有采购责任选择器。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回 `PHYSICAL`、`VIRTUAL`、`OFFLINE_SERVICE` 或 `VOUCHER`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Physical => "PHYSICAL",
@@ -157,16 +150,7 @@ impl ProductKind {
             Self::Voucher => "VOUCHER",
         }
     }
-    /// 返回原业务展示标签。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回「实物」「虚拟」「线下服务」或「卡券」。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将商品类型转换为面向操作人的中文展示名称。返回「实物」「虚拟」「线下服务」或「卡券」。
     pub fn label(self) -> &'static str {
         match self {
             Self::Physical => "实物",
@@ -290,59 +274,23 @@ pub struct SupplierCommercialFact {
 }
 
 impl SupplierCommercialFact {
-    /// 由必填付款代码构造商务事实。
-    ///
-    /// # 参数
-    /// * `payment_term_code` - 供应商领域解释后的付款代码
-    ///
-    /// # 返回
-    /// 返回经营类目为空的商务事实。
-    ///
-    /// # 错误
-    /// 无。
+    /// 由必填付款代码构造商务事实。返回经营类目为空的商务事实。
     pub fn new(payment_term_code: impl Into<String>) -> Self {
         Self { payment_term_code: payment_term_code.into(), business_category: None }
     }
 
-    /// 设置供应商经营类目。
-    ///
-    /// # 参数
-    /// * `business_category` - 供应商领域解释后的经营类目
-    ///
-    /// # 返回
-    /// 返回更新后的商务事实。
-    ///
-    /// # 错误
-    /// 无。
+    /// 设置供应商经营类目。返回更新后的商务事实。
     pub fn with_business_category(mut self, business_category: impl Into<String>) -> Self {
         self.business_category = Some(business_category.into());
         self
     }
 
-    /// 返回提供方已经解释的付款条件原值。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `payment_term_code` 的克隆，空字符串保持缺失语义。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 复制供给方已解释的付款条件代码，供采购流程使用；空字符串仍表示缺失。
     pub fn effective_payment_term_code(&self) -> String {
         self.payment_term_code.clone()
     }
 
-    /// 返回提供方已经解释的经营类目。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回经营类目克隆；未登记时返回 `None`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 复制供给方提供的经营类目以供采购匹配，未登记时保持 `None`。
     pub fn effective_business_category(&self) -> Option<String> {
         self.business_category.clone()
     }
@@ -388,16 +336,7 @@ pub struct PaymentTermFact {
 }
 
 impl PaymentTermFact {
-    /// 由必填规范化代码构造付款事实。
-    ///
-    /// # 参数
-    /// * `canonical_code` - 提供方规范化的受控代码
-    ///
-    /// # 返回
-    /// 返回无先款门禁、无比例、无账期的付款事实。
-    ///
-    /// # 错误
-    /// 无。
+    /// 由必填规范化代码构造付款事实。返回无先款门禁、无比例、无账期的付款事实。
     pub fn new(canonical_code: impl Into<String>) -> Self {
         Self {
             canonical_code: canonical_code.into(),
@@ -408,61 +347,25 @@ impl PaymentTermFact {
         }
     }
 
-    /// 设置先款门禁。
-    ///
-    /// # 参数
-    /// * `prepay_gate` - 先款门禁
-    ///
-    /// # 返回
-    /// 返回更新后的付款事实。
-    ///
-    /// # 错误
-    /// 无。
+    /// 设置先款门禁。返回更新后的付款事实。
     pub fn with_prepay_gate(mut self, prepay_gate: bool) -> Self {
         self.prepay_gate = prepay_gate;
         self
     }
 
-    /// 设置受控先款最低比例。
-    ///
-    /// # 参数
-    /// * `prepay_minimum_ratio` - 先款最低比例
-    ///
-    /// # 返回
-    /// 返回更新后的付款事实。
-    ///
-    /// # 错误
-    /// 无。
+    /// 设置受控先款最低比例。返回更新后的付款事实。
     pub fn with_prepay_minimum_ratio(mut self, prepay_minimum_ratio: Rate) -> Self {
         self.prepay_minimum_ratio = Some(prepay_minimum_ratio);
         self
     }
 
-    /// 设置预计交期后付款天数。
-    ///
-    /// # 参数
-    /// * `days_after_delivery` - 预计交期后付款天数
-    ///
-    /// # 返回
-    /// 返回更新后的付款事实。
-    ///
-    /// # 错误
-    /// 无。
+    /// 设置预计交期后付款天数。返回更新后的付款事实。
     pub fn with_days_after_delivery(mut self, days_after_delivery: u64) -> Self {
         self.days_after_delivery = Some(days_after_delivery);
         self
     }
 
-    /// 设置自然周期到期规则。
-    ///
-    /// # 参数
-    /// * `calendar_due` - 自然周期及期末后付款天数
-    ///
-    /// # 返回
-    /// 返回更新后的付款事实。
-    ///
-    /// # 错误
-    /// 无。
+    /// 设置自然周期到期规则。返回更新后的付款事实。
     pub fn with_calendar_due(
         mut self,
         calendar_due: (erp_core::common::calendar::CalendarPeriod, u16),
@@ -476,7 +379,7 @@ impl PaymentTermFact {
 mod tests {
     use super::{ProductCategoryFact, ProductKind, SupplierCommercialFact, SupplierRoleFact};
 
-    /// 已冻结的采购责任 selector 必须沿用商品类型 wire 代码。
+    // 已冻结的采购责任 selector 必须沿用商品类型 wire 代码。
     #[test]
     fn product_kind_preserves_selector_wire_codes() {
         for (kind, code) in [

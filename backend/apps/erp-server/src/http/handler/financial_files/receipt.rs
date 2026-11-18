@@ -12,7 +12,7 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 use crate::wiring::{funds_access, receivable_posting_ports};
 
-/// 编辑入口与查看入口分别核验各自权限，下载前后均重新读取。
+// 为回款附件列表及下载取得同一份授权清单：草稿走原登记编辑资格，其他读取走整单详情范围。
 async fn files(
     state: &HttpState,
     actor: &AuditActor,
@@ -32,7 +32,7 @@ async fn files(
             .await?)
     }
 }
-/// 文件下载沿用业务资格与前后资产版本重验。
+// 先按当前入口授权及原单关联定位文件，再读取对象；交付私有响应前重新核对原单关联与资产版本，防止越权或读到已变更的文件。
 async fn download(
     state: &HttpState,
     actor: &AuditActor,
@@ -48,13 +48,7 @@ async fn download(
     asset_download_response(&view, content)
 }
 
-/// 查询回款凭证，保持原单与当前操作人授权。
-/// # 参数
-/// 应用状态、认证账号和路径中的单据及文件身份。
-/// # 返回
-/// 授权后的文件清单或私有下载响应。
-/// # 错误
-/// 无权、跨单文件或读取失败时拒绝。
+/// 打开回款详情时按整单读取范围列出该单据的凭证元数据；无权或读取失败时拒绝。
 pub async fn receipt_files(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -63,13 +57,7 @@ pub async fn receipt_files(
     Ok(ApiResponse::ok_with_data(files(&state, &actor, &id, false).await?))
 }
 
-/// 下载回款凭证，保持原单与当前操作人授权。
-/// # 参数
-/// 应用状态、认证账号和路径中的单据及文件身份。
-/// # 返回
-/// 授权后的文件清单或私有下载响应。
-/// # 错误
-/// 无权、跨单文件或读取失败时拒绝。
+/// 从回款详情下载指定凭证。读取对象前后复验详情权限、凭证归属及资产版本，不交付跨单文件。
 pub async fn receipt_file_download(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -78,13 +66,7 @@ pub async fn receipt_file_download(
     download(&state, &actor, &id, &asset_id, false).await
 }
 
-/// 查询回款凭证，保持原单与当前操作人授权。
-/// # 参数
-/// 应用状态、认证账号和路径中的单据及文件身份。
-/// # 返回
-/// 授权后的文件清单或私有下载响应。
-/// # 错误
-/// 无权、跨单文件或读取失败时拒绝。
+/// 编辑原回款草稿时按当前编辑资格列出凭证，而不是用整单查看资格替代。
 pub async fn receipt_draft_files(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -93,13 +75,7 @@ pub async fn receipt_draft_files(
     Ok(ApiResponse::ok_with_data(files(&state, &actor, &id, true).await?))
 }
 
-/// 下载回款凭证，保持原单与当前操作人授权。
-/// # 参数
-/// 应用状态、认证账号和路径中的单据及文件身份。
-/// # 返回
-/// 授权后的文件清单或私有下载响应。
-/// # 错误
-/// 无权、跨单文件或读取失败时拒绝。
+/// 从回款草稿编辑页私有下载凭证，读取前后核验编辑资格、原单文件关联与资产版本。
 pub async fn receipt_draft_file_download(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,

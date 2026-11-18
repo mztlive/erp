@@ -205,25 +205,10 @@ pub struct SupplierCreationPlan {
     pub rating: Option<SupplierRatingRevision>,
 }
 
-/// 按已准备值与已分配 ID 生成合法的根资料创建聚合。
-///
-/// 首版修订号恒为 1；供应商当前指针在构造内推进；
-/// 能力代码映射与资质适用关联由领域工厂逐项校验。
-///
-/// # 参数
-/// * `ids` - Service 已分配的全部主键，能力与资质 ID 与输入顺序对应
-/// * `inputs` - Service 已校验的根资料业务值与操作人
-///
-/// # 返回
-/// 返回一次性待写的合法聚合计划；调用方应在同一事务内整体落库。
-///
-/// # 错误
-/// 能力重复、资质身份重复、资质引用未勾选能力、任一实体字段校验失败、
-/// 能力与资质 ID 数量不匹配或评级校验失败时返回错误，且不返回部分计划。
-///
-/// # 约束
-/// 纯内存构造，不触及 MongoDB、HTTP、全局时钟、全局 ID 生成器或原始密钥；
-/// 加密密文与文件资产登记由 Service 另行处理。
+/// 把已准备字段和按输入顺序分配的主键组装为根资料创建计划：建立供应商、首版商务及当前指针、能力代码映射、
+/// 资质关联和可选评级。各首版修订号为 1，调用方须在同一事务中整体写入。
+/// 重复能力或资质、资质引用未勾选能力、主键数量不符或字段校验失败时不返回部分计划；这里不分配 ID、不访问
+/// 外部系统，也不登记加密字段或文件资产。
 pub fn plan_supplier_creation(
     ids: SupplierCreationIds,
     inputs: SupplierCreationInputs,
@@ -256,17 +241,9 @@ pub fn plan_supplier_creation(
     })
 }
 
-/// 校验创建输入的资质选择合法性与 ID 数量对应关系。
-///
-/// # 参数
-/// * `ids` - Service 已分配的全部主键
-/// * `inputs` - Service 已校验的根资料业务值
-///
-/// # 返回
-/// 校验通过返回 `Ok(())`。
-///
-/// # 错误
-/// 资质选择非法、能力与资质 ID 数量不匹配时返回错误。
+// 校验创建输入的资质选择合法性与 ID 数量对应关系。
+// 资质选择非法、能力与资质 ID 数量不匹配时返回错误。
+// `ids`：Service 已分配的全部主键。
 fn validate_creation_cardinality(
     ids: &SupplierCreationIds,
     inputs: &SupplierCreationInputs,
@@ -291,19 +268,11 @@ fn validate_creation_cardinality(
     Ok(())
 }
 
-/// 构造主体快照、供应商角色与首版商务资料。
-///
-/// 首版修订号恒为 1；供应商当前指针在构造内推进。
-///
-/// # 参数
-/// * `ids` - Service 已分配的全部主键
-/// * `inputs` - Service 已校验的根资料业务值
-///
-/// # 返回
-/// 返回 `(主体快照, 供应商角色, 首版商务资料)`。
-///
-/// # 错误
-/// 任一实体字段校验失败时返回错误。
+// 构造主体快照、供应商角色与首版商务资料。
+// 首版修订号恒为 1；供应商当前指针在构造内推进。
+// 返回 `(主体快照, 供应商角色, 首版商务资料)`。
+// 任一实体字段校验失败时返回错误。
+// `ids`：Service 已分配的全部主键。
 fn build_creation_head(
     ids: &SupplierCreationIds,
     inputs: &SupplierCreationInputs,
@@ -357,18 +326,10 @@ fn build_creation_head(
 type NewCapabilities =
     (Vec<SupplierCapability>, Vec<SupplierCapabilityRevision>, HashMap<String, SupplierCapabilityId>);
 
-/// 逐能力构造新能力、首版修订与代码到稳定 ID 的映射。
-///
-/// # 参数
-/// * `supplier_id` - 新供应商稳定主键
-/// * `allocated_ids` - 按输入顺序消费的能力与首版修订主键
-/// * `inputs` - Service 已校验的根资料业务值
-///
-/// # 返回
-/// 返回 `(能力, 能力首版修订, 代码到稳定 ID 映射)`。
-///
-/// # 错误
-/// 能力负责人缺失或任一实体字段校验失败时返回错误。
+// 逐能力构造新能力、首版修订与代码到稳定 ID 的映射。
+// 返回 `(能力, 能力首版修订, 代码到稳定 ID 映射)`。
+// 能力负责人缺失或任一实体字段校验失败时返回错误。
+// `allocated_ids`：按输入顺序消费的能力与首版修订主键。
 fn build_creation_capabilities(
     supplier_id: &SupplierAccountId,
     allocated_ids: Vec<(CapabilityCode, SupplierCapabilityId, SupplierCapabilityRevisionId)>,
@@ -397,20 +358,10 @@ fn build_creation_capabilities(
     Ok((capabilities, capability_revisions, capability_ids))
 }
 
-/// 逐资质构造新资质、首版快照及适用能力关联。
-///
-/// # 参数
-/// * `supplier_id` - 新供应商稳定主键
-/// * `allocated_ids` - 与资质输入一一对应的已分配主键
-/// * `qualifications` - 待创建的资质输入（按输入顺序消费）
-/// * `actor_id` - 操作人 ID
-/// * `capability_ids` - 能力代码到稳定 ID 的映射
-///
-/// # 返回
-/// 返回 `(资质, 资质首版修订, 适用能力关联)`。
-///
-/// # 错误
-/// 资质身份重复、引用未勾选能力或任一实体字段校验失败时返回错误。
+// 逐资质构造新资质、首版快照及适用能力关联。
+// 返回 `(资质, 资质首版修订, 适用能力关联)`。
+// 资质身份重复、引用未勾选能力或任一实体字段校验失败时返回错误。
+// `allocated_ids`：与资质输入一一对应的已分配主键。
 fn build_creation_qualifications(
     supplier_id: &SupplierAccountId,
     allocated_ids: Vec<SupplierCreationQualificationIds>,
@@ -450,19 +401,11 @@ fn build_creation_qualifications(
     Ok((out, revisions, links))
 }
 
-/// 构造首版评级；输入与 ID 必须同时存在或同时缺失。
-///
-/// # 参数
-/// * `supplier_id` - 新供应商稳定主键
-/// * `rating_id` - 可选首版评级主键
-/// * `rating` - 首版评级输入；`None` 表示不写评级
-/// * `change_reason` - 变更原因
-///
-/// # 返回
-/// 返回首版评级；不写评级时返回 `None`。
-///
-/// # 错误
-/// 评级输入与 ID 一有一无，或评级校验失败时返回错误。
+// 构造首版评级；输入与 ID 必须同时存在或同时缺失。
+// 返回首版评级；不写评级时返回 `None`。
+// 评级输入与 ID 一有一无，或评级校验失败时返回错误。
+// `rating_id`：可选首版评级主键。
+// `rating`：`None` 表示不写评级。
 fn build_creation_rating(
     supplier_id: SupplierAccountId,
     rating_id: Option<SupplierRatingRevisionId>,
@@ -489,17 +432,9 @@ fn build_creation_rating(
     }
 }
 
-/// 读取指定能力的显式负责人。
-///
-/// # 参数
-/// * `owners` - 能力代码到负责人
-/// * `code` - 待创建能力
-///
-/// # 返回
-/// 返回该能力的负责人。
-///
-/// # 错误
-/// 未显式指定时拒绝，不得回退操作人。
+// 读取指定能力的显式负责人。
+// 返回该能力的负责人。
+// 未显式指定时拒绝，不得回退操作人。
 fn capability_owner(owners: &[(CapabilityCode, String)], code: CapabilityCode) -> erp_core::Result<&str> {
     owners
         .iter()
@@ -579,7 +514,7 @@ mod tests {
         }
     }
 
-    /// 首版修订号、当前指针、能力映射、资质关联与可选评级均合法生成。
+    // 验证首版修订号、当前指针、能力映射、资质关联与可选评级均合法生成。
     #[test]
     fn creation_plan_builds_first_revisions_and_links() {
         let plan = plan_supplier_creation(test_ids(true), test_inputs()).unwrap();
@@ -609,7 +544,7 @@ mod tests {
         assert_ne!(plan.capabilities[0].owner_user_id, plan.supplier.stable.created_by);
     }
 
-    /// 无评级输入时不生成评级实体。
+    // 验证无评级输入时不生成评级实体。
     #[test]
     fn creation_plan_supports_missing_optional_rating() {
         let mut inputs = test_inputs();
@@ -619,7 +554,7 @@ mod tests {
         assert_eq!(plan.qualifications.len(), 1);
     }
 
-    /// 新建能力未显式指定负责人时失败关闭。
+    // 验证新建能力未显式指定负责人时失败关闭。
     #[test]
     fn creation_plan_rejects_missing_capability_owner() {
         let mut inputs = test_inputs();
@@ -627,7 +562,7 @@ mod tests {
         assert!(plan_supplier_creation(test_ids(true), inputs).is_err());
     }
 
-    /// 重复能力输入整体拒绝，不返回部分计划。
+    // 验证重复能力输入整体拒绝，不返回部分计划。
     #[test]
     fn creation_plan_rejects_duplicate_capabilities_atomically() {
         let mut inputs = test_inputs();
@@ -650,7 +585,7 @@ mod tests {
         assert!(plan_supplier_creation(ids, inputs).is_err());
     }
 
-    /// 资质引用未勾选能力时整体拒绝。
+    // 验证资质引用未勾选能力时整体拒绝。
     #[test]
     fn creation_plan_rejects_qualification_referencing_unselected_capability() {
         let mut inputs = test_inputs();
@@ -658,14 +593,14 @@ mod tests {
         assert!(plan_supplier_creation(test_ids(true), inputs).is_err());
     }
 
-    /// 能力 ID 数量与输入不一致时失败关闭。
+    // 验证能力 ID 数量与输入不一致时失败关闭。
     #[test]
     fn creation_plan_rejects_mismatched_allocated_ids() {
         let ids = SupplierCreationIds { capability_ids: vec![], ..test_ids(true) };
         assert!(plan_supplier_creation(ids, test_inputs()).is_err());
     }
 
-    /// 评级输入与评级 ID 不一致时失败关闭。
+    // 验证评级输入与评级 ID 不一致时失败关闭。
     #[test]
     fn creation_plan_rejects_rating_input_id_mismatch() {
         let inputs = test_inputs();

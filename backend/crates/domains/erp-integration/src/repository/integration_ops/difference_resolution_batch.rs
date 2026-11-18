@@ -15,19 +15,13 @@ use persistence_core::{Executor, Repository, Result};
 use crate::entity::integration_ops::ReconciliationDifferenceResolution;
 use crate::repository::integration_ops::undeleted_base;
 
-/// 对差异 ID 集合去重并保持首次出现顺序。
-///
-/// # 参数
-/// * `ids` - 原始差异 ID 集合（可含重复）
-///
-/// # 返回
-/// 返回去重后的差异 ID；空输入返回空集合。
-///
-/// # 错误
-/// 不返回错误。
-///
-/// # 约束
-/// 纯内存函数，不访问数据库。
+// 对差异 ID 集合去重并保持首次出现顺序。
+//
+// 纯内存函数，不访问数据库。
+//
+// 返回去重后的差异 ID；空输入返回空集合。
+//
+// `ids` 为原始差异 ID 集合（可含重复）。
 fn dedupe_difference_ids(ids: &[String]) -> Vec<String> {
     let mut seen = HashSet::new();
     let mut unique = Vec::new();
@@ -39,44 +33,27 @@ fn dedupe_difference_ids(ids: &[String]) -> Vec<String> {
     unique
 }
 
-/// 构造按差异 ID 集合批量查询决定行的过滤文档。
-///
-/// # 参数
-/// * `ids` - 去重后的差异 ID 集合（非空）
-///
-/// # 返回
-/// 返回含 `$in` 分支与软删除排除的过滤文档。
-///
-/// # 错误
-/// 不返回错误。
-///
-/// # 约束
-/// 纯过滤构造，不访问数据库；只限定所属差异与未删除标记，不截断行数，
-/// 最新选择由内存按决定序号完成，与单差异查询的序号语义同义。
+// 构造按差异 ID 集合批量查询决定行的过滤文档。
+//
+// 纯过滤构造，不访问数据库；只限定所属差异与未删除标记，不截断行数，最新选择由内存按决定序号完成，与单差异查询的序号语义同义。
+//
+// 返回含 `$in` 分支与软删除排除的过滤文档。
+//
+// `ids` 为去重后的差异 ID 集合（非空）。
 fn latest_batch_filter(ids: &[String]) -> Document {
     let mut filter = undeleted_base();
     filter.insert("reconciliation_difference_id", doc! { "$in": ids });
     filter
 }
 
-/// 在内存中按差异取决定序号最大的一条（与单差异查询同序）。
-///
-/// 最新定义与 [`super::ReconciliationDifferenceResolutionRepositoryExt::find_latest_by_difference`]
-/// 一致：`resolution_no` 最大者胜出；决定序号在同一差异内唯一，无并列。
-/// 无决定行的差异不出现，由 Service 解释为无状态。
-///
-/// # 参数
-/// * `records` - 批量取回的决定记录（可含多差异、多条）
-///
-/// # 返回
-/// 返回按差异 ID 索引的最新决定记录。
-///
-/// # 错误
-/// 不返回错误。
-///
-/// # 约束
-/// 纯内存选择，不访问数据库；序号比较只用 `resolution_no`，与数据库
-/// `resolution_no` 降序取首条同义。
+// 在内存中按差异取决定序号最大的一条（与单差异查询同序）。
+//
+// 最新定义与 [`super::ReconciliationDifferenceResolutionRepositoryExt::find_latest_by_difference`]一致：`resolution_no`
+//  最大者胜出；决定序号在同一差异内唯一，无并列。无决定行的差异不出现，由 Service 解释为无状态。
+//
+// 纯内存选择，不访问数据库；序号比较只用 `resolution_no`，与数据库`resolution_no` 降序取首条同义。
+//
+// `records` 为批量取回的决定记录（可含多差异、多条）。
 fn latest_per_difference(
     records: Vec<ReconciliationDifferenceResolution>,
 ) -> HashMap<String, ReconciliationDifferenceResolution> {
@@ -95,24 +72,16 @@ fn latest_per_difference(
 pub trait ReconciliationDifferenceResolutionBatchExt {
     /// 按当前页差异 ID 集合批量读取各差异最新决定（INT-R26）。
     ///
-    /// 一次 `$in` 查询装载本页全部决议行，再按单差异查询同序在内存中取每
-    /// 差异序号最大的一条；空输入不访问数据库。无决定行的差异不在结果中，
-    /// 由 Service 解释为无状态、版本零。页面过滤、稳定排序与总数仍由
-    /// `search_differences` 负责，本方法不改变分页语义。
+    /// 一次 `$in` 查询装载本页全部决议行，再按单差异查询同序在内存中取每差异序号最大的一条；空输入不访问数据库。无决定行的差异不在结果中，由 Service
+    /// 解释为无状态、版本零。页面过滤、稳定排序与总数仍由`search_differences` 负责，本方法不改变分页语义。
     ///
-    /// # 参数
-    /// * `difference_ids` - 本页差异 ID 集合；空集合直接返回空结果
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 只返回实体，不返回 services DTO、HTTP View 或授权结论；不裁决缺失；不开启或提交事务；软删除行永不命中。
     ///
-    /// # 返回
-    /// 返回按差异 ID 索引的最新决定记录；缺项表示该差异尚无决定。
+    /// 返回按差异 ID 索引的最新决定记录；缺项表示该差异尚无决定。当 MongoDB 查询或游标读取失败时返回错误。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 沿用调用方传入的执行器。
     ///
-    /// # 约束
-    /// 只返回实体，不返回 services DTO、HTTP View 或授权结论；不裁决缺失；
-    /// 不开启或提交事务；软删除行永不命中。
+    /// `difference_ids` 为本页差异 ID 集合；空集合直接返回空结果。
     async fn find_latest_by_differences(
         &self,
         difference_ids: &[String],

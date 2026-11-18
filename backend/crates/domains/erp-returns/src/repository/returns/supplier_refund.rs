@@ -11,17 +11,10 @@ use crate::entity::returns::SupplierRefund;
 #[allow(async_fn_in_trait)]
 pub trait SupplierRefundRepositoryExt {
     /// 批量按原事实取回供应商退款（`$in`，用于累计冲正校验）。
-    ///
-    /// # 参数
-    /// * `payment_ids` - 原付款 ID 集合（可为空）
-    /// * `entry_ids` - 原应付分录 ID 集合（可为空）
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回全部匹配退款。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// `payment_ids` 为原付款 ID 集合（可为空）；`entry_ids` 为原应付分录 ID 集合（可为空）。
+    /// 沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询或游标读取错误。
     async fn find_refunds_by_originals(
         &self,
         payment_ids: &[SupplierPaymentId],
@@ -42,7 +35,7 @@ impl SupplierRefundRepositoryExt for Repository<'_, SupplierRefund> {
     }
 }
 
-/// 保留原事实筛选：两个来源集合都非空时同时匹配，都为空时交给基础仓储查询全部未删除事实。
+// 保留原事实筛选：两个来源集合都非空时同时匹配，都为空时交给基础仓储查询全部未删除事实。
 fn supplier_refund_originals_filter(
     payment_ids: &[SupplierPaymentId],
     entry_ids: &[PayableEntryId],

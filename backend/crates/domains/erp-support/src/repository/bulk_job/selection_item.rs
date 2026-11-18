@@ -32,22 +32,11 @@ pub struct BulkSelectionItemRow {
 #[allow(async_fn_in_trait)]
 pub trait BulkSelectionItemRepositoryExt {
     /// 分页检索快照逐项结果（投影查询）。
-    ///
-    /// 只返回 [`BulkSelectionItemRow`] 所需的逐项字段，不加载整文档；
-    /// `result_status` 过滤覆盖 `idx_bulk_selection_items_result`。
-    ///
-    /// # 参数
-    /// * `snapshot_id` - 选择快照 ID
-    /// * `result_status` - 逐项执行结果；`None` 表示不筛选
-    /// * `page` - 页码（1 起）
-    /// * `page_size` - 单页条数
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
+    /// 只返回 [`BulkSelectionItemRow`] 所需的逐项字段，不加载整文档；`result_status` 过滤覆盖 `idx_bulk_selection_items_result`。
     /// 返回当前页逐项结果行与总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// `snapshot_id` 为选择快照 ID；`result_status` 为逐项执行结果；`None` 表示不筛选。
+    /// 沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询、游标读取或计数错误。
     async fn search_items(
         &self,
         snapshot_id: &BulkSelectionSnapshotId,
@@ -86,10 +75,7 @@ impl BulkSelectionItemRepositoryExt for persistence_core::Repository<'_, BulkSel
     }
 }
 
-/// 选择项逐项结果投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
+// 选择项逐项结果投影字段。
 fn selection_item_projection() -> Document {
     doc! {
         "id": 1,

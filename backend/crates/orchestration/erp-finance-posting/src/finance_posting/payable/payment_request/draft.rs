@@ -9,13 +9,8 @@ use crate::FinancePostingPorts;
 
 impl PurchasePaymentRequestProcess {
     /// 创建当前采购经办人的付款申请草稿。
-    /// # 参数
-    /// * `req` - 逐应付来源、金额和付款依据。
-    /// * `actor` - 当前已认证申请人。
-    /// # 返回
-    /// 返回不占用额度的申请草稿。
-    /// # 错误
-    /// 来源无资格、金额或收款账户不合法时返回错误。
+    ///
+    /// `req` 为逐应付来源、金额和付款依据；`actor` 为当前已认证申请人。返回不占用额度的申请草稿。来源无资格、金额或收款账户不合法时返回错误。
     pub async fn create(
         &self,
         req: SavePurchasePaymentRequest,
@@ -38,13 +33,9 @@ impl PurchasePaymentRequestProcess {
     }
 
     /// 保存草稿、驳回或撤回后的申请资料。
-    /// # 参数
-    /// * `id` - 申请身份。
-    /// * `req` - 当前版本与完整表单。
-    /// * `actor` - 具备操作和完整来源资格的当前经办人。
-    /// # 返回
-    /// 返回新版本申请；草稿不占用额度。
-    /// # 错误
+    ///
+    /// `id` 为申请身份；`req` 为当前版本与完整表单；`actor` 为具备操作和完整来源资格的当前经办人。返回新版本申请；草稿不占用额度。
+    ///
     /// 操作无权、版本变化、已经批准或来源不合法时拒绝。
     pub async fn update(
         &self,

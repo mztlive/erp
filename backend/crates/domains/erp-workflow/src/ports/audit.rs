@@ -29,18 +29,7 @@ pub struct WorkflowAuditFact {
 #[cfg(test)]
 impl WorkflowAuditFact {
     /// 构造一条成功的资源审计事实。
-    ///
-    /// # 参数
-    /// * `actor_id` - 操作人账号 ID。
-    /// * `action` - 业务动作。
-    /// * `resource_type` - 资源类型。
-    /// * `resource_id` - 资源 ID。
-    ///
-    /// # 返回
     /// 返回成功、无说明，且带资源 ID 的审计事实。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn successful(
         actor_id: impl Into<String>,
         action: impl Into<String>,
@@ -108,25 +97,22 @@ pub struct PreparedWorkflowAudit {
 
 impl PreparedWorkflowAudit {
     /// 保留同一命令内安全事件的非零顺序。
-    /// # 参数
-    /// * `event_sequence` - 原命令确定的事件序号。
-    /// # 返回
     /// 返回保留操作人、请求及命令关联的事件输入。
-    /// # 错误
-    /// 无；参数类型保证序号非零。
+    ///
+    /// 参数类型保证序号非零。
+    ///
+    /// `event_sequence`：原命令确定的事件序号。
     pub fn with_event_sequence(mut self, event_sequence: NonZeroU32) -> Self {
         self.event_sequence = event_sequence;
         self
     }
 
     /// 将动作绑定到独立回执，禁止错配动作与资源。
-    /// # 参数
-    /// * `command_id` - 原命令身份。
-    /// * `operation` - 本域登记的安全动作。
-    /// # 返回
     /// 返回安全投影完成的事件输入。
-    /// # 错误
+    ///
     /// 动作、资源或命令身份无效时拒绝。
+    ///
+    /// `command_id`：原命令身份；`operation`：本域登记的安全动作。
     pub fn for_command(mut self, command_id: String, operation: WorkflowAuditOperation) -> Result<Self> {
         let (action, resource) = match operation {
             WorkflowAuditOperation::Reassigned => ("work_item.reassign", "work_item"),
@@ -146,17 +132,8 @@ impl PreparedWorkflowAudit {
     }
 
     /// 由已认证操作人构造成功的资源审计。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证操作人。
-    /// * `action` - 业务动作。
-    /// * `resource_type` - 资源类型。
-    /// * `resource_id` - 资源 ID。
-    ///
-    /// # 返回
     /// 返回无说明的成功审计；序号为 1，尚未绑定命令。
     ///
-    /// # 错误
     /// 资源 ID 为空白时返回 `ValidationError`。
     pub fn resource(
         actor: AuditActor,
@@ -168,18 +145,8 @@ impl PreparedWorkflowAudit {
     }
 
     /// 构造带可选说明的成功资源审计。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证操作人。
-    /// * `action` - 业务动作。
-    /// * `resource_type` - 资源类型。
-    /// * `resource_id` - 资源 ID。
-    /// * `message` - 可选可读说明。
-    ///
-    /// # 返回
     /// 返回带说明的成功审计；标识由 ID 生成器分配。
     ///
-    /// # 错误
     /// 资源 ID 为空白时返回 `ValidationError`。
     pub fn resource_with_message(
         actor: AuditActor,
@@ -192,19 +159,8 @@ impl PreparedWorkflowAudit {
     }
 
     /// 用显式标识和可选说明构造成功的资源审计。
-    ///
-    /// # 参数
-    /// * `id` - 审计标识。
-    /// * `actor` - 已认证操作人。
-    /// * `action` - 业务动作。
-    /// * `resource_type` - 资源类型。
-    /// * `resource_id` - 资源 ID。
-    /// * `message` - 可选可读说明。
-    ///
-    /// # 返回
     /// 返回序号为 1、尚未绑定命令的成功审计。
     ///
-    /// # 错误
     /// 资源 ID 为空白时返回 `ValidationError`。
     pub fn resource_with_id(
         id: String,
@@ -241,29 +197,16 @@ impl PreparedWorkflowAudit {
 #[async_trait]
 pub trait WorkflowAuditPort: Send + Sync {
     /// 在事务开始前校验静态动作和操作人。
-    ///
-    /// # 参数
-    /// * `audit` - 待校验的成功审计。
-    ///
-    /// # 返回
     /// 默认实现不附加校验并成功。
     ///
-    /// # 错误
     /// 实现拒绝该审计时返回错误。
     fn validate(&self, _audit: &PreparedWorkflowAudit) -> Result<()> {
         Ok(())
     }
 
     /// 在原事务已结束后保存独立尝试，禁止用于业务回放。
-    ///
-    /// # 参数
-    /// * `audit` - 已准备的审计。
-    /// * `result` - 事务外尝试的结果，不含错误正文。
-    ///
-    /// # 返回
     /// 无返回值；尝试记录已保存。
     ///
-    /// # 错误
     /// 默认实现返回未接线的内部错误；实现无法保存时返回错误。
     async fn persist_attempt(
         &self,
@@ -274,16 +217,11 @@ pub trait WorkflowAuditPort: Send + Sync {
     }
 
     /// 用调用方执行器保存已准备的成功审计。
-    ///
-    /// # 参数
-    /// * `audit` - 已准备的成功审计。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
     /// 无返回值；审计已保存。
     ///
-    /// # 错误
     /// 实现无法保存时返回错误。
+    ///
+    /// `audit`：已准备的成功审计。
     async fn persist(&self, audit: &PreparedWorkflowAudit, executor: &mut dyn Executor) -> Result<()>;
 }
 

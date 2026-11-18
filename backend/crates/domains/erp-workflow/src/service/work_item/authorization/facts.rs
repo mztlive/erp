@@ -18,7 +18,7 @@ pub(super) struct WorkItemFacts {
 }
 
 impl WorkItemFacts {
-    /// 拟创建任务只读取输入事实，已有任务沿用原执行器读取持久化事实。
+    // 创建授权从已验证输入取得候选责任；已有任务则沿原执行器重新读持久化事实，不能使用候选替换当前记录。
     async fn items(&self, targets: &ResourceTargets, executor: &mut dyn Executor) -> Result<Vec<WorkItem>> {
         let mut items = Vec::new();
         for id in targets.ids() {
@@ -61,7 +61,7 @@ impl AccessFactsPort for WorkItemFacts {
     }
 }
 
-/// 当前负责人提供范围及办理事实；历次负责人、完成人和关闭人提供真实历史参与。
+// 把当前负责人映射为范围与办理事实，将历次负责人、完成人和关闭人作为真实历史参与，供统一授权解释。
 pub(super) fn item_facts(item: WorkItem, org: Option<String>, valid_until: Option<Instant>) -> ObjectFacts {
     ObjectFacts {
         resource: "work_item".into(),

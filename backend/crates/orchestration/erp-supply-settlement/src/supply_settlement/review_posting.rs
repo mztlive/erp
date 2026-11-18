@@ -61,7 +61,7 @@ const ORDER: [Step; 11] = [
 trait PostingSteps: Send {
     async fn apply(&mut self, step: Step, executor: &mut dyn Executor) -> Result<()>;
 }
-/// 按 `ORDER` 逐步过账；任一步失败则不执行后续步骤。
+// 按固定 `ORDER` 执行复核写入，任一步失败立即停止，防止依赖前序校验或事实的步骤继续运行。
 async fn execute(steps: &mut impl PostingSteps, executor: &mut dyn Executor) -> Result<()> {
     for step in ORDER {
         steps.apply(step, executor).await?;
@@ -127,7 +127,7 @@ impl<A: WorkflowAuthorizationPort> PostingSteps for MongoPosting<'_, A> {
         Ok(())
     }
 }
-/// 复核权限和任务访问分别校验，保持制单人分离步骤仍在其后。
+// 分别核验正式复核权限、任务访问权和复核人资格，供过账流程在单独的制单复核分离检查前完成授权。
 async fn authorize_posting<A: WorkflowAuthorizationPort>(
     input: &Posting<'_, A>,
     ex: &mut dyn Executor,
@@ -144,7 +144,7 @@ async fn authorize_posting<A: WorkflowAuthorizationPort>(
     .await
 }
 
-/// 在应付、成本写入之后登记原复核结果，审计仍由后续步骤保存。
+// 应付与成本写入后保存决定回执，记录精确结算版本和财务结果供重试恢复；展示审计由后续步骤保存。
 async fn persist_review_result<A: WorkflowAuthorizationPort>(
     input: &Posting<'_, A>,
     ex: &mut dyn Executor,
@@ -172,7 +172,7 @@ async fn persist_review_result<A: WorkflowAuthorizationPort>(
     Ok(receipt)
 }
 
-/// 构造单次中文复核事件；原结果只保存在领域回执。
+// 为本次财务复核构造单次可读审计事件；原决定及金额由领域回执负责恢复，不依赖审计文案。
 fn review_audit<A: WorkflowAuthorizationPort>(input: &Posting<'_, A>) -> Result<erp_audit::AuditLog> {
     Ok(input
         .actor
@@ -187,17 +187,8 @@ fn review_audit<A: WorkflowAuthorizationPort>(input: &Posting<'_, A>) -> Result<
         .with_command_id(Some(input.audit_id.clone()))?
         .with_resource_number(Some(input.statement.statement_no.clone()))?)
 }
-/// 在同一执行器上按授权、岗位分离、明细、差异、主题、结算单、任务、应付、成本、回执和审计的顺序过账。
-///
-/// # 参数
-/// * `input` - 已准备的复核决定及财务构造结果。
-/// * `ex` - 调用方事务执行器。
-///
-/// # 返回
-/// 返回已持久化的复核决定回执。
-///
-/// # 错误
-/// 任一步失败时返回对应错误且不执行后续步骤。回执未生成时返回 `Internal`。
+// 沿原事务依次执行授权、岗位分离、明细和差异复验、主题复验，再写结算单、任务、应付、成本、回执和审计。
+// 任一步失败即停止；成功返回正式回执，未生成回执视为内部错误。
 pub(super) async fn post<A: WorkflowAuthorizationPort>(
     input: Posting<'_, A>,
     ex: &mut dyn Executor,

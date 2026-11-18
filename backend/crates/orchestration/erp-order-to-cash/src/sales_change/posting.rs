@@ -19,19 +19,19 @@ use crate::{Error, Result};
 /// 销售变更最终生效的最小写入能力；不得在实现内另开事务。
 #[async_trait]
 trait SalesChangePostingPort: Send {
-    /// 写入新的销售正式版本。
+    // 变更最终通过时先写新的销售正式版本，后续应收差额和任务步骤沿用同一执行器。
     async fn revision(&mut self, executor: &mut dyn Executor) -> Result<()>;
-    /// 写入差额并更新卡券复核及开票任务。
+    // 写入差额并更新卡券复核及开票任务。
     async fn receivable_and_tasks(&mut self, executor: &mut dyn Executor) -> Result<()>;
-    /// 在财务和任务成功之后推进变更状态。
+    // 在财务和任务成功之后推进变更状态。
     async fn change(&mut self, executor: &mut dyn Executor) -> Result<()>;
-    /// 新版本生效后撤回受影响的审批中采购，并同步采购依据更新与供给分配任务。
+    // 新版本生效后撤回受影响的审批中采购，并同步采购依据更新与供给分配任务。
     async fn procurement(&mut self, executor: &mut dyn Executor) -> Result<()>;
-    /// 最后写入成功审计。
+    // 成功审计只在销售、应收、状态及采购联动全部成功后写入。
     async fn audit(&mut self, executor: &mut dyn Executor) -> Result<()>;
 }
 
-/// 依次写入销售修订、应收差额及工作项、变更状态、采购联动与审计；任何失败原样传播。
+// 依次写入销售修订、应收差额及工作项、变更状态、采购联动与审计；任何失败原样传播。
 async fn post(port: &mut impl SalesChangePostingPort, executor: &mut dyn Executor) -> Result<()> {
     port.revision(executor).await?;
     port.receivable_and_tasks(executor).await?;
@@ -75,21 +75,10 @@ impl SalesChangePostingPort for DatabasePosting<'_> {
     }
 }
 
-/// 使用传入 Executor 执行真实销售变更写入路径。
-///
-/// # 参数
-/// * `db` - 数据库。
-/// * `write` - 已准备的生效写入。
-/// * `delta` - 非零应收差额；没有差额时为 `None`。
-/// * `audit` - 同一执行器中最后写入的审计日志。
-/// * `actor` - 触发生效的审批人，记为受影响采购的撤回人。
-/// * `executor` - 调用方事务执行器。
-///
-/// # 返回
-/// 无返回值。顺序为销售修订、应收差额及任务、变更状态、采购联动、审计。
-///
-/// # 错误
-/// 任一步失败时返回该错误并停止后续写入。
+// 使用传入 Executor 执行真实销售变更写入路径。
+//
+// `write` 为已准备的生效写入；`delta` 为非零应收差额；没有差额时为 `None`；`audit` 为同一执行器中最后写入的审计日志；`actor` 为触发生效的审批人，记为受影响采购的撤回人；
+// 沿用原事务的执行器。顺序为销售修订、应收差额及任务、变更状态、采购联动、审计。任一步失败时返回该错误并停止后续写入。
 pub(super) async fn persist_effective_writes(
     db: &Database,
     services: &SalesServices,
@@ -102,10 +91,7 @@ pub(super) async fn persist_effective_writes(
     post(&mut DatabasePosting { db, services, write, delta, audit, actor }, executor).await
 }
 
-/// 写入应收差额分录。
-///
-/// # 错误
-/// 仓储失败时返回错误。
+// 写入应收差额分录。仓储失败时返回错误。
 async fn write_receivable_delta(
     db: &mongodb::Database,
     mut delta: SalesChangeReceivableWrite,
@@ -120,18 +106,11 @@ async fn write_receivable_delta(
         .map_err(Error::from)
 }
 
-/// 在原销售准备完成后读取主应收子账，保持 NoTransaction 和财务取时位置。
-///
-/// # 参数
-/// * `db` - 数据库。
-/// * `write` - 已准备的生效写入。
-/// * `actor` - 当前操作人，写入应收更新人。
-///
-/// # 返回
-/// 非零差额的应收写入。新旧金额相等时为 `None`，不产生分录。
-///
-/// # 错误
-/// 生效事实无法读取、金额不合法、正式应收子账缺失或仓储读取失败时返回对应错误。
+// 在原销售准备完成后读取主应收子账，保持 NoTransaction 和财务取时位置。
+//
+// `write` 为已准备的生效写入；`actor` 为当前操作人，写入应收更新人。非零差额的应收写入。新旧金额相等时为 `None`，不产生分录。
+//
+// 生效事实无法读取、金额不合法、正式应收子账缺失或仓储读取失败时返回对应错误。
 pub(super) async fn prepare_receivable_delta(
     db: &Database,
     write: &EffectiveChangeWrite,
@@ -209,7 +188,7 @@ mod tests {
         }
     }
 
-    /// 采购联动在新版本与变更状态写入之后、审计之前，与其他写入共用同一执行器。
+    // 采购联动在新版本与变更状态写入之后、审计之前，与其他写入共用同一执行器。
     #[tokio::test]
     async fn formal_revision_finance_tasks_change_procurement_and_audit_share_executor_in_order() {
         let mut port = RecordingPosting::default();
@@ -221,7 +200,7 @@ mod tests {
         assert_eq!(port.executors, vec![expected; 5]);
     }
 
-    /// 任一步失败（含采购撤回 CAS 冲突）即停止后续写入，销售变更不生效。
+    // 任一步失败（含采购撤回 CAS 冲突）即停止后续写入，销售变更不生效。
     #[tokio::test]
     async fn every_failure_keeps_error_category_and_stops_later_writes() {
         let steps = ["revision", "receivable_and_tasks", "change", "procurement", "audit"];

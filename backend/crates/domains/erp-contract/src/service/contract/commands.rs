@@ -12,13 +12,8 @@ use crate::repository::prelude::*;
 use crate::{Error, Result};
 
 impl ContractService {
-    /// 在原授权事务追加不可变修订并切换当前版本指针。
-    /// # 参数
-    /// id 为合同身份，req 含已见版本与新 PDF，actor 为当前操作人。
-    /// # 返回
-    /// 原归档命令事务内生成的完整合同响应。
-    /// # 错误
-    /// 无权、对象缺失、版本冲突、输入非法或数据库失败时拒绝。
+    /// 签约 PDF 或归档资料更新时，以请求的期望版本为并发边界追加不可变修订，并切换稳定合同的当前版本指针。
+    /// 同一写事务完成实际合同授权、追加版本、审计和完整回包；无权、缺单、版本冲突、输入非法或仓储失败时拒绝。
     pub async fn archive_contract_revision(
         &self,
         id: &str,
@@ -36,7 +31,7 @@ impl ContractService {
             .await
     }
 
-    /// 先授权再读取原对象与最大修订序号；写入、审计和完整回包共用同一执行器。
+    // 在原写事务先授权，再核对原合同版本并读取历史最大修订号；追加修订、切换当前指针和写审计后用同一执行器装配结果。
     async fn archive_stage(
         &self,
         id: &str,
@@ -65,13 +60,8 @@ impl ContractService {
         self.detail_view(planned.contract, executor).await
     }
 
-    /// 在原授权事务终止合同，保持既有销售引用。
-    /// # 参数
-    /// id 为合同身份，req 含已见版本，actor 为当前操作人。
-    /// # 返回
-    /// 原终止命令事务内生成的完整合同响应。
-    /// # 错误
-    /// 无权、对象缺失、版本冲突、状态非法或数据库失败时拒绝。
+    /// 合同终止时保持既有销售引用与历史修订，只在原授权事务变更对应稳定合同的状态并记录审计。
+    /// 无权、缺单、版本冲突、状态非法或数据库失败时不交付完整合同响应。
     pub async fn terminate_contract(
         &self,
         id: &str,
@@ -89,7 +79,7 @@ impl ContractService {
             .await
     }
 
-    /// 原事务先授权，再检查版本和状态；命令结果不追加详情菜单资格。
+    // 终止命令在写事务内先检查对象授权，再核对版本和状态并写回审计。命令回包沿原执行器装配，不附加详情菜单资格。
     async fn terminate_stage(
         &self,
         id: &str,
@@ -108,7 +98,7 @@ impl ContractService {
         self.detail_view(contract, executor).await
     }
 
-    /// 命令授权必须先于原对象、版本与业务状态的读取。
+    // 命令处理中先按固定动作检查实际合同对象授权，再读取原合同供版本及业务状态检查；授权失败不继续读取。
     async fn command_contract(
         &self,
         actor: &AuditActor,

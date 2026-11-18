@@ -112,21 +112,10 @@ pub struct SettlementReviewDecisionData {
 
 impl SettlementReviewDecisionData {
     /// 解析复核决定附带的原因代码并执行命令协议校验。
-    ///
-    /// 驳回必须携带可解析为 [`SettlementReviewRejectReason`] 的原因代码；
-    /// 确认不得携带任何原因代码。线上传输字符串的规范化与 allowlist 由
-    /// 领域值对象独占，本方法只做协议分支。
-    ///
-    /// # 参数
-    /// 无显式参数（方法接收者为已反序列化的决定载荷）。
-    ///
-    /// # 返回
+    /// 驳回必须携带可解析为 [`SettlementReviewRejectReason`] 的原因代码；确认不得携带任何原因代码。线上
+    /// 传输字符串的规范化与 allowlist 由领域值对象独占，本方法只做协议分支。
     /// 驳回时返回解析后的强类型原因；确认时返回 `None`。
-    ///
-    /// # 错误
     /// 驳回缺失、非法或未知原因，以及确认携带原因时返回错误。
-    ///
-    /// # 约束
     /// 不改变线上传输形态；原因语义以领域值对象三元集合为准。
     pub fn parsed_reject_reason(&self) -> Result<Option<SettlementReviewRejectReason>> {
         match self.action {

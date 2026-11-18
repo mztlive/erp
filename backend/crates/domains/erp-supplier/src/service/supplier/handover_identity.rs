@@ -6,17 +6,9 @@ use sha2::{Digest, Sha256};
 use crate::dto::handover::{HandoverSupplierCapabilityRequest, HandoverSupplierRequest};
 use crate::{Error, Result};
 
-/// 序列化载荷并计算指纹（erp-supplier-009）。
-///
-/// # 参数
-/// * `label` - 序列化失败时的命令标签
-/// * `payload` - 待指纹的载荷元组
-///
-/// # 返回
-/// 返回载荷 SHA-256 hex 指纹。
-///
-/// # 错误
-/// 请求序列化失败时返回内部错误。
+// 序列化载荷并计算指纹（erp-supplier-009）。
+// 返回载荷 SHA-256 hex 指纹。
+// 请求序列化失败时返回内部错误。
 fn handover_fingerprint(label: &str, payload: &impl Serialize) -> Result<String> {
     let bytes = serde_json::to_vec(payload)
         .map_err(|error| Error::Internal(format!("{label}序列化失败: {error}")))?;
@@ -24,16 +16,7 @@ fn handover_fingerprint(label: &str, payload: &impl Serialize) -> Result<String>
 }
 
 /// 锁定同一幂等键可重放的完整交接请求身份。
-///
-/// # 参数
-/// * `actor_id` - 操作人
-/// * `supplier_id` - 供应商
-/// * `request` - 交接请求
-///
-/// # 返回
 /// 返回载荷指纹。
-///
-/// # 错误
 /// 请求序列化失败时返回内部错误。
 pub fn supplier_handover_fingerprint(
     actor_id: &str,
@@ -44,16 +27,7 @@ pub fn supplier_handover_fingerprint(
 }
 
 /// 锁定同一幂等键可重放的能力交接请求身份。
-///
-/// # 参数
-/// * `actor_id` - 操作人
-/// * `capability_id` - 能力
-/// * `request` - 交接请求
-///
-/// # 返回
 /// 返回载荷指纹。
-///
-/// # 错误
 /// 请求序列化失败时返回内部错误。
 pub fn capability_handover_fingerprint(
     actor_id: &str,

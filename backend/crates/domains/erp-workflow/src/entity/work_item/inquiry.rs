@@ -20,13 +20,11 @@ pub struct InquiryTaskAssignments(Vec<InquiryTaskAssignment>);
 
 impl InquiryTaskAssignments {
     /// 规范化分派并验证全部需求行恰好有一位责任人。
-    ///
-    /// # 参数
-    /// `assignments` 为采购责任，`line_ids` 为当前有效需求行。
-    /// # 返回
     /// 可直接创建责任任务的分派集合。
-    /// # 错误
+    ///
     /// 空责任、重复责任人、未知、重复或遗漏需求行时拒绝。
+    ///
+    /// `assignments` 为采购责任，`line_ids` 为当前有效需求行。
     pub fn new(mut assignments: Vec<InquiryTaskAssignment>, line_ids: &[String]) -> Result<Self> {
         let expected: BTreeSet<_> = line_ids.iter().cloned().collect();
         if expected.is_empty() || expected.len() != line_ids.len() || assignments.is_empty() {
@@ -58,39 +56,29 @@ impl InquiryTaskAssignments {
     }
 
     /// 取出已校验责任集合。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 一位采购一组稳定需求行。
-    /// # 错误
-    /// 不返回错误。
     pub fn into_values(self) -> Vec<InquiryTaskAssignment> {
         self.0
     }
 }
 
 /// 生成询价任务冻结的需求身份。
-///
-/// # 参数
-/// `requirement_version` 为已提交需求版本。
-/// # 返回
 /// 与业务任务一并冻结的版本键。
-/// # 错误
+///
 /// 不返回错误；零版本不应创建任务。
+///
+/// `requirement_version` 为已提交需求版本。
 pub fn inquiry_subject_version(requirement_version: u32) -> String {
     format!("requirement-{requirement_version}")
 }
 
 impl WorkItem {
     /// 校验已授权询价任务的开放状态、需求版本及责任行。
-    ///
-    /// # 参数
-    /// `inquiry_id` 与 `requirement_version` 为当前需求，`line_ids` 为需求有效行。
-    /// # 返回
     /// 任务开放且版本、责任行完整匹配时返回 `true`。
-    /// # 错误
+    ///
     /// 不返回错误；终态、过时或损坏的业务事实返回 `false`。
+    ///
+    /// `inquiry_id` 与 `requirement_version` 为当前需求，`line_ids` 为需求有效行。
     pub fn inquiry_task_current(
         &self,
         inquiry_id: &str,
@@ -102,12 +90,11 @@ impl WorkItem {
     }
 
     /// 校验已授权历史询价任务的完成事实及冻结需求范围。
-    /// # 参数
-    /// `inquiry_id` 与 `requirement_version` 为历史需求，`line_ids` 为该需求有效行。
-    /// # 返回
     /// 任务完成且完成证据和冻结责任行完整匹配时为真。
-    /// # 错误
+    ///
     /// 不返回错误；关闭、删除或缺失完成证据返回 `false`。
+    ///
+    /// `inquiry_id` 与 `requirement_version` 为历史需求，`line_ids` 为该需求有效行。
     pub fn completed_inquiry_current(
         &self,
         inquiry_id: &str,

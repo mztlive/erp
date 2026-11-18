@@ -61,17 +61,7 @@ mod supplier_settlement;
 mod warehouse;
 mod work_item;
 
-/// 声明路由的公共权限目录信息，供构建生成器读取。
-///
-/// # 参数
-/// * `route` - 由业务用例执行授权的 HTTP 路由。
-/// * `_permission` - 公共权限目录中的主常量。
-///
-/// # 返回
-/// 原路由；此声明不执行授权，也不增加中间件。
-///
-/// # 错误
-/// 不执行 I/O，不返回错误。
+// 为构建生成器把真实路由与公共权限常量关联起来。运行时原样返回方法路由；不安装中间件，也不替业务用例授权。
 fn permission_route(route: MethodRouter<HttpState>, _permission: &Permission) -> MethodRouter<HttpState> {
     route
 }
@@ -79,16 +69,7 @@ fn permission_route(route: MethodRouter<HttpState>, _permission: &Permission) ->
 /// 覆盖 MongoDB 最长 120 秒提交确认窗口，避免服务端先返回 408 而事务随后提交。
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(180);
 
-/// 构建应用主路由。
-///
-/// # 参数
-/// * `app_state` - 应用状态
-///
-/// # 返回
-/// 返回 `Router` 实例。
-///
-/// # 错误
-/// 不执行 I/O，不返回错误。
+/// 为 Web API 组装探针、公开接口、门户、账号和管理端路由，并安装公共追踪、超时和 CORS 层。上传先经过后台认证及准入，再读取请求体。
 pub fn create(app_state: HttpState) -> Router {
     let upload = post(upload_handler::upload_file)
         .route_layer(middleware::from_fn_with_state(upload::limiter(), enforce_admission));
@@ -121,18 +102,12 @@ pub fn create(app_state: HttpState) -> Router {
     )
 }
 
-/// 健康检查
-///
-/// # 返回
-/// 返回执行结果，`Ok` 表示成功，`Err` 表示失败。
-///
-/// # 错误
-/// 当内部逻辑或依赖操作失败时返回错误。
+/// 响应 Web API 的 `/health` 存活探针，不访问数据库或外部连接器。
 pub async fn health() -> Result<()> {
     Ok(ApiResponse::<()>::ok())
 }
 
-/// 就绪检查；外部连接器未配置时返回 503，并公开各能力的失败关闭状态。
+/// 供部署探针读取当前外部连接器配置状态；必要能力未就绪时返回 503，并公开各能力的失败关闭状态。
 pub async fn readiness(State(state): State<HttpState>) -> ApiResponse<ExternalConnectorReadiness> {
     readiness_response(state.application().external_connector_readiness())
 }

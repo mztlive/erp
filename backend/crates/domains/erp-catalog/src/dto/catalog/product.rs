@@ -97,19 +97,11 @@ pub struct ProductSkuInput {
 impl ProductSkuInput {
     /// 为未填写编号的 SKU 行按 `SkuNoSequence` 补齐 `SKU` 前缀编号。
     ///
-    /// 先登记既有编号与本次已填写的编号，再按行序为空白行取号，
-    /// 保证自动编号不与同一请求中的显式编号冲突。
+    /// 先登记既有编号与本次已填写的编号，再按行序为空白行取号，保证自动编号不与同一请求中的显式编号冲突。
     ///
-    /// # 参数
-    /// * `product_no` - 所属商品编号
-    /// * `existing` - 该商品既有 SKU 的编号（含已停用）
-    /// * `skus` - 本次提交的 SKU 行
-    ///
-    /// # 返回
     /// 无；空白行的 `sku_no` 被原地补齐。
     ///
-    /// # 错误
-    /// 无。
+    /// `existing` 为该商品既有 SKU 的编号（含已停用）。
     pub fn fill_blank_sku_nos(
         product_no: &str,
         existing: impl IntoIterator<Item = String>,
@@ -173,14 +165,9 @@ pub struct CreateProductRequest {
 impl CreateProductRequest {
     /// 取出请求显式指定的商品编号。
     ///
-    /// # 参数
-    /// 无；取出后请求中的编号置空。
-    ///
-    /// # 返回
     /// 非空白时返回原编号（规范化由实体完成）；缺省或空白返回 `None`，表示由服务端取号。
     ///
-    /// # 错误
-    /// 无。
+    /// 无；取出后请求中的编号置空。
     pub fn take_explicit_product_no(&mut self) -> Option<String> {
         self.product_no.take().filter(|value| !value.trim().is_empty())
     }
@@ -287,15 +274,9 @@ pub struct ProductView {
 }
 
 impl From<ProductRow> for ProductView {
-    /// 从投影行构造响应视图，与 `From<Product>` 同语义（erp-catalog-002）。
-    ///
-    /// 确定性字段搬运只在此一处实现；`product_page_view` 等列表装配只做映射调用。
-    ///
-    /// # 参数
-    /// * `row` - 商品列表投影行
-    ///
-    /// # 返回
-    /// 返回响应视图。
+    // 从投影行构造响应视图，与 `From<Product>` 同语义（erp-catalog-002）。
+    //
+    // 确定性字段搬运只在此一处实现；`product_page_view` 等列表装配只做映射调用。
     fn from(row: ProductRow) -> Self {
         Self {
             id: row.id,
@@ -354,15 +335,6 @@ pub struct ProductListingView {
 
 impl ProductListingView {
     /// 以商品稳定 ID 构造未上架的继承状态视图。
-    ///
-    /// # 参数
-    /// * `product_id` - 商品稳定 ID
-    ///
-    /// # 返回
-    /// 返回计数为零的未上架视图。
-    ///
-    /// # 错误
-    /// 无。
     pub fn new(product_id: impl Into<String>) -> Self {
         Self {
             product_id: product_id.into(),
@@ -374,16 +346,9 @@ impl ProductListingView {
 
     /// 设置继承的上架状态与 SKU 计数。
     ///
-    /// # 参数
-    /// * `listing_status` - 从当前启用 SKU 继承的状态
-    /// * `listed_sku_count` - 当前已上架 SKU 数
-    /// * `sku_count` - 当前启用 SKU 总数
-    ///
-    /// # 返回
-    /// 返回更新后的状态视图。
-    ///
-    /// # 错误
-    /// 无。
+    /// - `listing_status`：从当前启用 SKU 继承的状态。
+    /// - `listed_sku_count`：当前已上架 SKU 数。
+    /// - `sku_count`：当前启用 SKU 总数。
     pub fn with_counts(
         mut self,
         listing_status: ProductListingStatus,
@@ -447,13 +412,7 @@ pub struct ProductRevisionView {
 }
 
 impl From<ProductRevision> for ProductRevisionView {
-    /// 从实体构造响应视图（不含媒体行；列表装配见 `product_revision_list`）。
-    ///
-    /// # 参数
-    /// * `revision` - 商品修订实体
-    ///
-    /// # 返回
-    /// 返回响应视图。
+    // 从实体构造响应视图（不含媒体行；列表装配见 `product_revision_list`）。
     fn from(revision: ProductRevision) -> Self {
         Self {
             id: revision.base.id,
@@ -475,13 +434,7 @@ impl From<ProductRevision> for ProductRevisionView {
 }
 
 impl From<ProductRevisionMedia> for ProductRevisionMediaView {
-    /// 从媒体实体构造响应视图（erp-catalog-002）。
-    ///
-    /// # 参数
-    /// * `media` - 商品修订媒体实体
-    ///
-    /// # 返回
-    /// 返回响应视图。
+    // 从媒体实体构造响应视图（erp-catalog-002）。
     fn from(media: ProductRevisionMedia) -> Self {
         Self {
             id: media.base.id,
@@ -494,15 +447,11 @@ impl From<ProductRevisionMedia> for ProductRevisionMediaView {
 }
 
 impl From<ProductRevisionRow> for ProductRevisionView {
-    /// 从投影行构造响应视图，与 `From<ProductRevision>` 同语义（erp-catalog-002）。
-    ///
-    /// 媒体行转换复用 `From<ProductRevisionMedia>`；列表装配只做映射调用。
-    ///
-    /// # 参数
-    /// * `row` - 商品修订列表投影行（含已装配媒体行）
-    ///
-    /// # 返回
-    /// 返回响应视图。
+    // 从投影行构造响应视图，与 `From<ProductRevision>` 同语义（erp-catalog-002）。
+    //
+    // 媒体行转换复用 `From<ProductRevisionMedia>`；列表装配只做映射调用。
+    //
+    // `row` 为商品修订列表投影行（含已装配媒体行）。
     fn from(row: ProductRevisionRow) -> Self {
         Self {
             id: row.id,
@@ -554,18 +503,11 @@ pub(crate) struct ProductRevisionListQuery {
 }
 
 impl ProductRevisionListParams {
-    /// 归一化商品修订列表查询参数。
-    ///
-    /// 分页取默认值、排序字段过白名单校验。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    // 归一化商品修订列表查询参数。
+    //
+    // 分页取默认值、排序字段过白名单校验。
+    //
+    // 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<ProductRevisionListQuery> {
         Ok(ProductRevisionListQuery {
             product_id: self.product_id.as_ref().map(|id| id.to_string()),
@@ -609,13 +551,7 @@ pub struct SkuView {
 }
 
 impl From<Sku> for SkuView {
-    /// 从实体构造响应视图。
-    ///
-    /// # 参数
-    /// * `sku` - SKU 实体
-    ///
-    /// # 返回
-    /// 返回响应视图。
+    // 将SKU实体投影为接口视图，不在转换时另查关联资料。
     fn from(sku: Sku) -> Self {
         Self {
             id: sku.base.id,
@@ -634,13 +570,9 @@ impl From<Sku> for SkuView {
 }
 
 impl From<SkuRow> for SkuView {
-    /// 从投影行构造响应视图，与 `From<Sku>` 同语义（erp-catalog-002）。
-    ///
-    /// # 参数
-    /// * `row` - SKU 列表投影行（含已装配的当前修订名称）
-    ///
-    /// # 返回
-    /// 返回响应视图。
+    // 从投影行构造响应视图，与 `From<Sku>` 同语义（erp-catalog-002）。
+    //
+    // `row` 为 SKU 列表投影行（含已装配的当前修订名称）。
     fn from(row: SkuRow) -> Self {
         Self {
             id: row.id,
@@ -701,18 +633,11 @@ pub(crate) struct SkuListQuery {
 }
 
 impl SkuListParams {
-    /// 归一化 SKU 列表查询参数。
-    ///
-    /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    // 归一化 SKU 列表查询参数。
+    //
+    // 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
+    //
+    // 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<SkuListQuery> {
         Ok(SkuListQuery {
             q: normalized_text(self.q.as_deref()),

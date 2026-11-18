@@ -7,12 +7,10 @@ use persistence_core::Result;
 use crate::repository::SalesInquiryExt;
 
 /// 注册询价身份、责任列表、客户、来源查询及回执唯一索引。
-/// # 参数
-/// `db` 为目标数据库。
-/// # 返回
-/// 索引已存在或创建完成时返回空结果。
-/// # 错误
+/// 结果：索引已存在或创建完成时返回空结果。
 /// 存量重复身份或数据库创建失败时返回错误。
+///
+/// 输入约定：`db` 为目标数据库。
 pub async fn ensure(db: &Database) -> Result<()> {
     let indexes = [
         (doc! { "id": 1 }, "uk_sales_inquiries_id", true),

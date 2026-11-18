@@ -26,19 +26,10 @@ pub(crate) const SUPPLIER_API_COMMAND_RECEIPTS: &str =
     <mongodb::Database as SupplierApiExt>::SUPPLIER_API_COMMAND_RECEIPTS;
 
 /// 创建本域集合的幂等命名索引。
-///
-/// 逐条落地数据模型 §6.14「必需约束与索引」：`connection_code` 身份类字段使用
-/// **全局唯一索引**（与 accounts 的 code 处理一致）：连接属于稳定配置对象，
-/// 软删除后仍保留身份，避免复用连接代码破坏历史轨迹与恢复语义；
-/// `(connection_id, capability_code)` 能力声明唯一由复合唯一索引保证。
-///
-/// # 参数
-/// * `db` - 目标 MongoDB 数据库
-///
-/// # 返回
+/// 逐条落地数据模型 §6.14「必需约束与索引」：`connection_code` 身份类字段使用**全局唯一索引**（与
+/// accounts 的 code 处理一致）：连接属于稳定配置对象，软删除后仍保留身份，避免复用连接代码破坏历史轨迹与
+/// 恢复语义；`(connection_id, capability_code)` 能力声明唯一由复合唯一索引保证。
 /// 连接、能力、业务确认、健康检查和命令回执索引都登记成功时返回 `Ok(())`。
-///
-/// # 错误
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, SUPPLIER_API_CONNECTIONS, supplier_api_connection_indexes()).await?;
@@ -118,13 +109,13 @@ fn catalog_item_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 为单个集合创建一组幂等命名索引。
+// 为单个集合创建一组幂等命名索引。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
     db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
-/// 返回 `supplier_api_connection` 的身份约束与查询索引。
+// 提供 `supplier_api_connection` 的身份约束与查询索引。
 fn supplier_api_connection_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_supplier_api_connections_id", doc! { "id": 1 }),
@@ -189,7 +180,7 @@ fn command_receipt_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `supplier_api_capability` 的能力声明唯一约束索引。
+// 提供 `supplier_api_capability` 的能力声明唯一约束索引。
 fn supplier_api_capability_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_supplier_api_capabilities_id", doc! { "id": 1 }),
@@ -202,7 +193,7 @@ fn supplier_api_capability_indexes() -> Vec<IndexModel> {
 
 #[cfg(test)]
 mod tests {
-    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    // 验证按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
     #[test]
     fn collections_look_up_by_unique_stable_id() {
         for indexes in [

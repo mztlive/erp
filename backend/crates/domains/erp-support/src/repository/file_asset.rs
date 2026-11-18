@@ -74,16 +74,7 @@ pub struct FileAssetFilter {
 }
 
 impl Default for FileAssetFilter {
-    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回第 1 页、每页 20 条的空筛选条件。
-    ///
-    /// # 错误
-    /// 无。
+    // 初始化文件资产筛选：第一页、每页 20 条，业务筛选默认留空。
     fn default() -> Self {
         Self {
             file_name: None,
@@ -99,20 +90,8 @@ impl Default for FileAssetFilter {
 }
 
 impl QueryFilter for FileAssetFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// `file_name` 为 `Some` 时按转义后的字面量、忽略大小写匹配；`None` 不写入。
-    /// `security_scan_status`、`retention_class`、`sensitivity_class` 为 `Some` 时
-    /// 分别写入对应字段的 `as_str()`。分页与排序字段不进入条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 转换为 MongoDB 查询条件（自动追加未删除过滤）。
+    // `file_name` 为 `Some` 时按转义后的字面量、忽略大小写匹配；`None` 不写入。`security_scan_status`、`retention_class`、`sensitivity_class` 为 `Some` 时分别写入对应字段的 `as_str()`。分页与排序字段不进入条件。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_literal_regex_filter(&mut filter, "file_name", self.file_name.as_deref());
@@ -130,16 +109,7 @@ impl QueryFilter for FileAssetFilter {
 }
 
 impl Pagination for FileAssetFilter {
-    /// 返回文件资产筛选保存的页码与单页条数，不把小于 1 的页码归一成第一页。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组；`page_size` 由 `u32` 转为 `u64`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 返回文件资产筛选保存的页码与单页条数，不把小于 1 的页码归一成第一页。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -149,53 +119,24 @@ impl Pagination for FileAssetFilter {
 #[allow(async_fn_in_trait)]
 pub trait FileAssetRepositoryExt {
     /// 在调用方执行器内有序批量创建文件资产。
-    ///
-    /// 空集合直接返回且不访问数据库；MongoDB 默认的 ordered 插入保证首个失败
-    /// 后不继续写入，完整原子性仍由调用方事务负责。
-    ///
-    /// # 参数
-    /// * `assets` - 按业务命令顺序排列的文件资产
-    /// * `executor` - 调用方事务或非事务执行器
-    ///
-    /// # 返回
+    /// 空集合直接返回且不访问数据库；MongoDB 默认的 ordered 插入保证首个失败后不继续写入，完整原子性仍由调用方事务负责。
     /// 全部插入成功时无返回值；空集合不访问数据库。
-    ///
-    /// # 错误
+    /// `assets` 按业务命令顺序排列的文件资产；`executor` 为调用方事务或非事务执行器。
     /// 插入失败时返回包含 MongoDB 批量写错误索引的仓储错误。
     async fn create_many_ordered(&self, assets: &[FileAsset], executor: &mut dyn Executor) -> Result<()>;
 
     /// 批量按文件资产 ID 读取活跃文件事实。
-    ///
-    /// 查询复用通用仓储的未软删除过滤；空 ID 集合直接返回空结果，不访问
-    /// MongoDB。返回顺序不承诺与输入一致，由 Service 按业务输入顺序解释缺失。
-    ///
-    /// # 参数
-    /// * `ids` - 文件资产 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
+    /// 查询复用通用仓储的未软删除过滤；空 ID 集合直接返回空结果，不访问 MongoDB。返回顺序不承诺与输入一致，由 Service 按业务输入顺序解释缺失。
     /// 返回全部匹配且未软删除的文件资产事实。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// `ids` 为文件资产 ID 集合；沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询或游标读取错误。
     async fn find_by_ids(&self, ids: &[FileAssetId], executor: &mut dyn Executor) -> Result<Vec<FileAsset>>;
 
     /// 返回给定文件资产 ID 中尚未登记的缺失 ID。
-    ///
-    /// 基于 [`Repository::find_by_ids`] 复用未软删除过滤取回已存在事实，
-    /// 再与输入做差集；本方法是文件资产存在性判定的唯一属主实现。
-    ///
-    /// # 参数
-    /// * `ids` - 待校验的文件资产 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
+    /// 基于 [`Repository::find_by_ids`] 复用未软删除过滤取回已存在事实，再与输入做差集；本方法是文件资产存在性判定的唯一属主实现。
     /// 返回未命中的 ID，保持输入顺序并去除重复值；输入为空时返回空集合。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    ///
-    /// # 约束
+    /// `ids` 为待校验的文件资产 ID 集合；沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询或游标读取错误。
     /// 只查询 `file_assets` 集合，不跨聚合访问其他集合。
     async fn missing_file_asset_ids(
         &self,
@@ -204,20 +145,11 @@ pub trait FileAssetRepositoryExt {
     ) -> Result<Vec<FileAssetId>>;
 
     /// 分页检索文件资产列表（投影查询）。
-    ///
-    /// 只返回 [`FileAssetRow`] 所需的展示与治理字段，不加载整文档；
-    /// `file_name` 按字面量忽略大小写模糊匹配（复用 `repository::regex_filter`），
+    /// 只返回 [`FileAssetRow`] 所需的展示与治理字段，不加载整文档；`file_name` 按字面量忽略大小写模糊匹配（复用 `repository::regex_filter`），
     /// 状态/保留策略/敏感级别精确匹配覆盖 `idx_file_assets_scan_retention`。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// 沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询、游标读取或计数错误。
     async fn search_file_assets(
         &self,
         filter: &FileAssetFilter,
@@ -279,16 +211,9 @@ impl FileAssetRepositoryExt for persistence_core::Repository<'_, FileAsset> {
 #[allow(async_fn_in_trait)]
 pub trait DocumentAttachmentRepositoryExt {
     /// 按业务单据批量取回附件关联（`idx_document_attachments_document`，无 N+1）。
-    ///
-    /// # 参数
-    /// * `document_id` - 业务单据 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回按创建时间升序排列的附件关联。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// `document_id` 为业务单据 ID；沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询或游标读取错误。
     async fn list_by_document(
         &self,
         document_id: &BusinessDocumentId,
@@ -311,26 +236,16 @@ impl DocumentAttachmentRepositoryExt for persistence_core::Repository<'_, Docume
     }
 }
 
-/// 构建排序文档（排序字段白名单化，禁止透传任意字段名）。
-///
-/// 仅允许 `created_at` / `updated_at`；未知字段回落默认 `created_at`。
-///
-/// # 参数
-/// * `sort_by` - 排序字段；`None` 或白名单外字段时默认 `created_at`
-/// * `sort_ascending` - 升序为 `true`，降序为 `false`
-///
-/// # 返回
-/// 返回排序条件文档。
+// 构建排序文档（排序字段白名单化，禁止透传任意字段名）。
+// 仅允许 `created_at` / `updated_at`；未知字段回落默认 `created_at`。
+// `sort_by` 为排序字段；`None` 或白名单外字段时默认 `created_at`；`sort_ascending` 为升序为 `true`，降序为 `false`。
 fn sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
     let direction = sort_direction(sort_ascending);
     let field = created_updated_field(sort_by);
     doc! { field: direction }
 }
 
-/// 文件资产列表投影字段（不含敏感对象键）。
-///
-/// # 返回
-/// 返回投影条件文档。
+// 文件资产列表投影字段（不含敏感对象键）。
 fn file_asset_projection() -> Document {
     doc! {
         "id": 1,

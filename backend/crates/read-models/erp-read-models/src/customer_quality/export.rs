@@ -2,16 +2,12 @@
 use super::dto::{CurrentQualityView, HistoryQualityView, QualityExport};
 use crate::support::csv_record as record;
 
-/// 直接序列化服务端全量结果，不使用客户端金额或当前页数据。
-///
-/// # 参数
-/// * `view` - 已装载的现任口径全量视图
-///
-/// # 返回
-/// 返回 CSV 正文、文件名、`view.rows.total` 行数和生成时点。
-///
-/// # 错误
-/// 不返回错误。
+// 处理客户经营质量导出时，直接序列化服务端全量结果，不使用客户端金额或当前页数据。
+//
+// 调用参数：
+// * `view` - 已装载的现任口径全量视图
+//
+// 返回 CSV 正文、文件名、`view.rows.total` 行数和生成时点。
 pub(super) fn current(view: CurrentQualityView) -> QualityExport {
     let mut lines = vec![
         record(&["客户经营质量", "当前负责口径", "含税"]),
@@ -55,16 +51,12 @@ pub(super) fn current(view: CurrentQualityView) -> QualityExport {
     }
 }
 
-/// 历史口径导出冻结归属列；现任负责人永不出现在历史文件中。
-///
-/// # 参数
-/// * `view` - 已装载的历史口径全量视图
-///
-/// # 返回
-/// 返回 CSV 正文、文件名、`view.rows.total` 行数和生成时点。
-///
-/// # 错误
-/// 不返回错误。
+// 处理客户经营质量导出时，历史口径导出冻结归属列；现任负责人永不出现在历史文件中。
+//
+// 调用参数：
+// * `view` - 已装载的历史口径全量视图
+//
+// 返回 CSV 正文、文件名、`view.rows.total` 行数和生成时点。
 pub(super) fn history(view: HistoryQualityView) -> QualityExport {
     let mut lines = vec![
         record(&["客户经营质量", "历史贡献口径", "含税"]),

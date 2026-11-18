@@ -31,16 +31,7 @@ pub enum SupplierAccountStatus {
 }
 
 impl SupplierAccountStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为供应商账户状态提供中文展示名；界面展示时使用，不以文案作为稳定标识。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Active => "启用",
@@ -48,16 +39,7 @@ impl SupplierAccountStatus {
         }
     }
 
-    /// 返回状态的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得供应商账户状态的稳定标识，供需要按代码而非展示文案识别取值的调用方使用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Active => "active",
@@ -65,32 +47,16 @@ impl SupplierAccountStatus {
         }
     }
 
-    /// 判断是否处于启用状态。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 处于 `Active` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 检查供应商账户状态是否启用；此处仅检查启停标记，不代表业务资格已经通过。
     pub fn is_active(&self) -> bool {
         matches!(self, Self::Active)
     }
 }
 
 impl DocumentState for SupplierAccountStatus {
-    /// 返回合法后继：启用 ⇄ 停用。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// `Active` 的静态切片只含 `Disabled`；`Disabled` 的静态切片只含 `Active`。切片不含当前状态自身。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 提供供应商账户状态允许迁移到的后继状态，供状态更新校验。
+    // 允许的迁移为：启用 ⇄ 停用。
+    // `Active` 的静态切片只含 `Disabled`；`Disabled` 的静态切片只含 `Active`。切片不含当前状态自身。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Active => &[Self::Disabled],
@@ -170,7 +136,7 @@ pub struct SupplierAccount {
 }
 
 impl PartialEq for SupplierAccount {
-    /// 全字段语义相等。
+    // 按全部实体字段比较供应商账户，而非只比较稳定 ID。
     fn eq(&self, other: &Self) -> bool {
         self.base == other.base
             && self.stable.status == other.stable.status
@@ -190,19 +156,9 @@ impl Eq for SupplierAccount {}
 
 impl SupplierAccount {
     /// 创建供应商角色。
-    ///
-    /// 完成供应商编号、维护人与业务组织的必填校验与规范化（去首尾空白、非空、长度
-    /// 上限），并规范化结算条件引用。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::SupplierAccountId`）
-    /// * `data` - 创建数据
-    /// * `created_by` - 创建人（账号或系统身份）
-    ///
-    /// # 返回
+    /// 完成供应商编号、维护人与业务组织的必填校验与规范化（去首尾空白、非空、长度上限），并规范化结算条
+    /// 件引用。
     /// 返回新建的供应商角色实体。
-    ///
-    /// # 错误
     /// 供应商编号、维护人或业务组织为空或超长，或结算条件引用超长时返回错误。
     pub fn new(
         id: SupplierAccountId,
@@ -242,18 +198,7 @@ impl SupplierAccount {
     }
 
     /// 更新供应商角色。
-    ///
-    /// `supplier_no` 与 `party_id` 是稳定身份，不允许在通用更新中修改；
-    /// 状态迁移按固定状态机校验（§13.3）。
-    ///
-    /// # 参数
-    /// * `update` - 更新数据
-    /// * `updated_by` - 本次更新执行人
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// `supplier_no` 与 `party_id` 是稳定身份，不允许在通用更新中修改；状态迁移按固定状态机校验（§13.3）。
     /// 当结算条件引用非法或状态迁移非法时返回错误。
     pub fn update(&mut self, update: SupplierAccountUpdate, updated_by: impl Into<String>) -> Result<()> {
         self.apply_payment_term(update.default_payment_term_id)?;
@@ -263,49 +208,21 @@ impl SupplierAccount {
         Ok(())
     }
 
-    /// 判断供应商角色是否处于启用状态。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 状态为 `Active` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 检查供应商账户是否启用；此处仅检查启停标记，不代表业务资格已经通过。
     pub fn is_active(&self) -> bool {
         self.stable.status().is_active()
     }
 
     /// 判断是否已采集整体维护人与业务组织。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 去空白后两字段均非空时为 `true`。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
     /// 缺责任不得用创建人回填后开放筛选。
     pub fn has_responsibility(&self) -> bool {
         !self.maintainer_user_id.trim().is_empty() && !self.business_org_unit_id.trim().is_empty()
     }
 
     /// 正式资料变更前要求已有维护人与业务组织。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 责任齐全时成功。
-    ///
-    /// # 错误
     /// 缺维护人或业务组织时拒绝。
-    ///
-    /// # 关键业务约束
     /// 存量缺责任只能走显式交接／补录，不得静默写成操作人。
     pub fn ensure_responsibility(&self) -> Result<()> {
         if self.has_responsibility() {
@@ -315,20 +232,10 @@ impl SupplierAccount {
     }
 
     /// 显式交接整体维护人与可选业务组织。
-    ///
-    /// # 参数
-    /// * `target_user_id` - 目标维护人
-    /// * `target_org_unit_id` - 显式目标组织；`None` 保留原组织
-    /// * `updated_by` - 本次交接执行人
-    ///
-    /// # 返回
     /// 责任确有变化时返回 `true`。
-    ///
-    /// # 错误
     /// 目标维护人或业务组织为空、标识过长，或与当前完全一致时拒绝。
-    ///
-    /// # 关键业务约束
     /// 组织不随接收人部门隐式变化；不改审批任务。
+    /// `target_org_unit_id`：显式目标组织；`None` 保留原组织。
     pub fn handover(
         &mut self,
         target_user_id: String,
@@ -365,15 +272,7 @@ impl SupplierAccount {
     }
 
     /// 判断当前供应商是否允许从指定乐观锁版本修订资料。
-    ///
-    /// # 参数
-    /// * `expected_version` - 客户端读取资料时看到的供应商版本
-    ///
-    /// # 返回
     /// 版本一致且供应商启用时返回 `None`；否则返回稳定违反原因。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn profile_update_violation(&self, expected_version: u64) -> Option<SupplierProfileUpdateViolation> {
         if self.base.version != expected_version {
             return Some(SupplierProfileUpdateViolation::VersionMismatch);
@@ -384,13 +283,8 @@ impl SupplierAccount {
         None
     }
 
-    /// 应用默认结算条件更新。
-    ///
-    /// # 参数
-    /// * `update` - 结算条件更新意图
-    ///
-    /// # 错误
-    /// 当引用超长时返回错误。
+    // 应用默认结算条件更新。
+    // 当引用超长时返回错误。
     fn apply_payment_term(&mut self, update: FieldUpdate<String>) -> Result<()> {
         match update {
             FieldUpdate::Unchanged => {},
@@ -400,21 +294,14 @@ impl SupplierAccount {
         Ok(())
     }
 
-    /// 应用当前商务结算版本更新。
-    ///
-    /// # 参数
-    /// * `update` - 版本引用更新意图
+    // 应用当前商务结算版本更新。
     fn apply_profile_revision(&mut self, update: FieldUpdate<SupplierCommercialProfileRevisionId>) {
         update.apply_to(&mut self.current_commercial_profile_revision_id);
     }
 
-    /// 应用状态更新。
-    ///
-    /// # 参数
-    /// * `status` - 可选目标状态
-    ///
-    /// # 错误
-    /// 目标状态不在固定状态机后继中时返回错误。
+    // 应用状态更新。
+    // 目标状态不在固定状态机后继中时返回错误。
+    // `status`：可选目标状态。
     fn apply_status(&mut self, status: Option<SupplierAccountStatus>) -> Result<()> {
         if let Some(to) = status {
             ensure_transition(self.stable.status, to)?;
@@ -424,21 +311,12 @@ impl SupplierAccount {
     }
 }
 
-/// 规范化结算条件引用。
-///
-/// 空值规范化为 `None`；非空值去首尾空白并校验长度上限。
-/// 结算条件是跨域受控码表字典（`default_payment_term_id` 解析），
-/// 实体层只保存引用不校验码表内容（**地基修订候选**：共享
-/// `PaymentTermId` newtype 与付款条件值对象下沉到 `common/`）。
-///
-/// # 参数
-/// * `value` - 原始输入
-///
-/// # 返回
-/// 返回规范化后的引用或 `None`。
-///
-/// # 错误
-/// 当引用超长时返回错误。
+// 规范化结算条件引用。
+// 空值规范化为 `None`；非空值去首尾空白并校验长度上限。结算条件是跨域受控码表字典
+// （`default_payment_term_id` 解析），实体层只保存引用不校验码表内容（**地基修订候选**：共享
+// `PaymentTermId` newtype 与付款条件值对象下沉到 `common/`）。
+// 返回规范化后的引用或 `None`。
+// 当引用超长时返回错误。
 fn normalize_payment_term_id(value: Option<String>) -> Result<Option<String>> {
     let Some(value) = value else {
         return Ok(None);
@@ -453,19 +331,9 @@ fn normalize_payment_term_id(value: Option<String>) -> Result<Option<String>> {
     Ok(Some(value))
 }
 
-/// 合并两个供应商角色候选集合；两个条件同时存在时取交集。
-///
-/// 列表筛选的能力与资质候选约束经此合并，输入顺序按 `current` 保留。
-///
-/// # 参数
-/// * `current` - 已有筛选条件命中的候选集合
-/// * `matched` - 新筛选条件命中的候选集合
-///
-/// # 返回
-/// 两者均存在时返回交集，仅一者存在时原样返回，均不存在时返回 `None`。
-///
-/// # 错误
-/// 无。
+// 合并两个供应商角色候选集合；两个条件同时存在时取交集。
+// 列表筛选的能力与资质候选约束经此合并，输入顺序按 `current` 保留。
+// 两者均存在时返回交集，仅一者存在时原样返回，均不存在时返回 `None`。
 pub(crate) fn intersect_supplier_ids(
     current: Option<Vec<SupplierAccountId>>,
     matched: Option<Vec<SupplierAccountId>>,
@@ -487,7 +355,7 @@ mod intersect_tests {
 
     use super::intersect_supplier_ids;
 
-    /// 双维度同时命中时取交集且保留首个输入顺序；单侧约束原样透传。
+    // 验证双维度同时命中时取交集且保留首个输入顺序；单侧约束原样透传。
     #[test]
     fn candidate_intersection_preserves_order_and_empty() {
         let capability_ids = Some(vec![
@@ -573,7 +441,7 @@ mod tests {
         }
     }
 
-    /// happy path：编号去空白，结算条件引用规范化，商务版本引用保留。
+    // 验证编号去空白，结算条件引用规范化，商务版本引用保留。
     #[test]
     fn new_trims_and_normalizes() {
         let account =
@@ -588,7 +456,7 @@ mod tests {
         assert_eq!(account.stable.created_by, "admin-1");
     }
 
-    /// 失败路径：编号为空/超长、引用超长。
+    // 验证编号为空/超长、引用超长。
     #[test]
     fn new_rejects_invalid_inputs() {
         let blank = SupplierAccountData { supplier_no: "   ".to_string(), ..account_data() };
@@ -608,7 +476,7 @@ mod tests {
         assert!(SupplierAccount::new(SupplierAccountId::new("s"), blank_org, "admin-1").is_err());
     }
 
-    /// 缺责任阻断正式变更；交接推进维护人与可选组织，冲突保持原值。
+    // 验证缺责任阻断正式变更；交接推进维护人与可选组织，冲突保持原值。
     #[test]
     fn missing_responsibility_blocks_and_handover_is_explicit() {
         let mut account =
@@ -625,7 +493,7 @@ mod tests {
         assert_eq!(account.business_org_unit_id, "org-b");
     }
 
-    /// 状态机：邻接矩阵闭包完整，合法迁移通过。
+    // 验证邻接矩阵闭包完整，合法迁移通过。
     #[test]
     fn status_transitions_follow_fixed_matrix() {
         assert_adjacency_closed(&[SupplierAccountStatus::Active, SupplierAccountStatus::Disabled]);
@@ -652,7 +520,7 @@ mod tests {
         assert_eq!(account.stable.updated_by, "admin-2");
     }
 
-    /// 更新：编号与主体不可修改（不在更新面），商务版本可清除。
+    // 验证编号与主体不可修改（不在更新面），商务版本可清除。
     #[test]
     fn update_keeps_stable_identity() {
         let mut account = SupplierAccount::new(
@@ -682,7 +550,7 @@ mod tests {
         assert!(account.current_commercial_profile_revision_id.is_some(), "Unchanged 保留原值");
     }
 
-    /// 资料修订先校验版本，再校验供应商启停状态。
+    // 验证资料修订先校验版本，再校验供应商启停状态。
     #[test]
     fn profile_update_violation_preserves_gate_order() {
         let mut account =
@@ -700,7 +568,7 @@ mod tests {
         );
     }
 
-    /// 实体 BSON 往返。
+    // 验证该实体写成 BSON 后能还原成原实体。
     #[test]
     fn bson_roundtrip() {
         let account =

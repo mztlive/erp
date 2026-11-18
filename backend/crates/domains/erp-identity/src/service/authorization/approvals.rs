@@ -32,7 +32,7 @@ pub(super) fn supports(permission: &Permission) -> bool {
     .contains(permission)
 }
 
-/// 初次资格取证同时覆盖全部潜在类型和来源；实际类型只能由持久化事实确定。
+// 对象加载前一次取得各可能审批类型及来源所需资格；实际单据类型仍从持久化主体确定。
 pub(super) fn qualifications(permission: &Permission) -> Vec<Permission> {
     if !supports(permission) {
         return vec![];
@@ -166,7 +166,7 @@ fn ensure_admin(entry: &Permission, admin: Permission, qualified: &QualifiedPerm
 }
 
 impl AuthorizationService {
-    /// 使用已解析的账号资格检查实际审批源，不开启第二授权阶段。
+    // 审批对象取证后，以同次已解析身份检查真实业务来源，不开始新的读取阶段或换用执行器。
     pub(super) async fn approval_sources(
         &self,
         proof: &AccessProof,
@@ -200,7 +200,7 @@ impl AuthorizationService {
         Ok(sources)
     }
 
-    /// 真实类型管理资格、完整来源、显式授权及全部到期边界在同一读取阶段核验。
+    // 在原读取阶段校验真实单据类型的管理资格、完整来源及显式记录授权，保留全部最早到期边界供交付复验。
     async fn approval_source(
         &self,
         proof: &AccessProof,
@@ -230,7 +230,7 @@ impl AuthorizationService {
         Ok(source_proof)
     }
 
-    /// 普通读取未命中时在原快照按需加载管理来源，不给普通读追加当前来源要求。
+    // 普通审批读取未命中时再沿原快照加载管理分支需要的业务来源，不给正常本人读取追加当前来源要求。
     async fn management_facts(
         &self,
         proof: &AccessProof,
@@ -259,7 +259,7 @@ impl AuthorizationService {
     }
 }
 
-/// 固定普通读取关系；当前职责同时要求同角色办理资格，历史只使用实际决定事实。
+// 判断固定普通审批读取分支：现职责须满足同角色办理资格，历史参与只接受真实已决定记录。
 fn ordinary_readable(object: &ObjectFacts, actor: &str, qualified: &QualifiedPermissions) -> Result<bool> {
     let owner = object.owner_id.get()?;
     let assigned = object.assignee_id.get()?;
@@ -271,7 +271,7 @@ fn ordinary_readable(object: &ObjectFacts, actor: &str, qualified: &QualifiedPer
 }
 
 impl AuthorizationService {
-    /// 以完整审批管理角色解析实际业务来源，不追加来源菜单资格。
+    // 用满足审批管理完整资格的角色解析真实来源范围，不额外要求该来源的菜单权限。
     pub(super) async fn resolve_approval_source(
         &self,
         entry: &AccessContext,
@@ -304,7 +304,7 @@ impl AuthorizationService {
         self.approval_source_proof(context, source, qualified, rule, resolution, executor)
     }
 
-    /// 固定管理上下文和当前事务边界签发本次专有来源证明。
+    // 为当前审批管理分支生成专用来源证明，绑定固定管理上下文及当前执行边界，不跨事务复用。
     fn approval_source_proof(
         &self,
         context: AccessContext,
@@ -374,7 +374,7 @@ impl AuthorizationService {
     }
 }
 
-/// 对象与列表使用相同的管理来源范围、记录读取补充及完整性条件。
+// 为审批管理构建对象与列表共用的来源范围条件，同时保留读取补充和完整性要求。
 pub(super) fn scoped_source_condition(
     source: &Permission,
     scopes: &[(Permission, ResolvedScope)],

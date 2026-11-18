@@ -23,11 +23,14 @@ pub struct ApprovalManagementMapping {
 }
 
 impl ApprovalManagementMapping {
-    /// 连接已有实例模型与拥有领域的来源模型，不声明账号资格或授权组合。
+    /// 装配审批管理来源映射时，连接已有实例模型与拥有领域的来源模型，不声明账号资格或授权组合。
+    ///
     /// # 参数
     /// base 为完整实例映射；roots 按来源资源提供同一组合根已构造的模型。
+    ///
     /// # 返回
     /// 固定真实来源分区的只读映射。
+    ///
     /// # 错误
     /// 实例模型错配、来源缺失或来源不是完整对象时拒绝。
     pub fn new(
@@ -107,7 +110,7 @@ impl AccessMapping for ApprovalManagementMapping {
     }
 }
 
-/// 资金列表只签发存在性结果；审批关系使用独立完整模型并由identity施加整账条件。
+// 处理审批管理来源映射时，资金列表只签发存在性结果；审批关系使用独立完整模型并由identity施加整账条件。
 fn complete_source(resource: &str, mapping: Arc<dyn AccessMapping>) -> Result<Arc<dyn AccessMapping>> {
     if mapping.model().output == QueryOutput::Object {
         return Ok(mapping);
@@ -165,7 +168,7 @@ impl AccessMapping for CompleteSourceMapping {
     }
 }
 
-/// 每个分区只取对应类型的真实引用；缺失、重复或互斥外键损坏形成空来源。
+// 处理审批管理来源映射时，每个分区只取对应类型的真实引用；缺失、重复或互斥外键损坏形成空来源。
 fn source_references() -> Vec<(&'static str, &'static str, Bson)> {
     let mut references = vec![
         ("sales_order", "sales_order", singleton("$subject.subject_id")),
@@ -254,7 +257,7 @@ fn refund_reference(alias: &str, selected: &str, other: &str, entry: Option<(&st
     ]}}}.into()
 }
 
-/// 只关联完整身份和强外键，不展开、不过滤根记录，也不执行请求外动态准备。
+// 组装审批管理来源映射的聚合管道时，只关联完整身份和强外键，不展开、不过滤根记录，也不执行请求外动态准备。
 fn source_stages() -> Vec<Document> {
     let mut stages = snapshot_stages();
     for (kind, collection, alias) in [
@@ -435,7 +438,7 @@ mod tests {
         }
     }
 
-    /// 对生成的Mongo表达式执行固定样本；未知操作立即失败，不接触数据库。
+    // 处理审批管理来源映射时，对生成的Mongo表达式执行固定样本；未知操作立即失败，不接触数据库。
     fn evaluate(expression: &Bson, row: &Document, variables: &Document) -> Bson {
         match expression {
             Bson::String(field) if field.starts_with("$$") => path(variables, &field[2..]),

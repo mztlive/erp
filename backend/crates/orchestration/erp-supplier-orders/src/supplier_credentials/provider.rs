@@ -36,11 +36,11 @@ pub struct MongoJdVopTokenProvider {
 
 impl MongoJdVopTokenProvider {
     /// 创建固定 Mongo 身份及受控 OAuth 刷新客户端，不发起读取或网络。
-    /// # 参数
+    ///
     /// `db` 是应用数据库；`settings` 提供独立加密密钥、应用凭据和超时；`oauth` 是应用注入的单次刷新通信。
-    /// # 返回
+    ///
     /// 可显式注入京东 HTTP 客户端的令牌提供器。
-    /// # 错误
+    ///
     /// 配置或 TLS 客户端无法构造时返回脱敏鉴权错误。
     pub fn new(db: Database, settings: &JdVopConfig, oauth: Arc<dyn OAuthRefresh>) -> ConnectorResult<Self> {
         let crypto = CredentialCrypto::new(settings)?;

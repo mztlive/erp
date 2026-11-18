@@ -27,15 +27,7 @@ pub enum ParticipantRole {
 
 impl ParticipantRole {
     /// 返回角色类型的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::OwnerSales => "主负责销售",
@@ -43,16 +35,8 @@ impl ParticipantRole {
         }
     }
 
-    /// 返回角色类型的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
+    /// 取得角色类型的稳定代码。
     /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::OwnerSales => "owner_sales",
@@ -102,15 +86,11 @@ impl DocumentParticipant {
     ///
     /// 完成全部文本字段的校验与规范化（trim、非空、长度上限）。
     ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::DocumentParticipantId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
     /// 返回新建的参与人记录。
     ///
-    /// # 错误
     /// 当参与人用户 ID、名称或记录人为空/超长时返回错误。
+    ///
+    /// `id`：实体主键（`erp_core::ids::DocumentParticipantId`）。
     pub fn new(id: DocumentParticipantId, data: DocumentParticipantData) -> Result<Self> {
         let participant_user_id = normalize_required_text(
             data.participant_user_id,
@@ -153,7 +133,7 @@ mod tests {
         }
     }
 
-    /// happy path：全部文本字段去首尾空白。
+    // 验证全部文本字段去首尾空白。
     #[test]
     fn new_trims_all_text_fields() {
         let participant = DocumentParticipant::new(DocumentParticipantId::new("dp-1"), data()).unwrap();
@@ -164,21 +144,21 @@ mod tests {
         assert_eq!(participant.document_id, BusinessDocumentId::new("order-1"));
     }
 
-    /// 失败路径：必填为空被拒。
+    // 验证登记单据参与人时拒绝空白用户 ID。
     #[test]
     fn new_rejects_empty_user_id() {
         let payload = DocumentParticipantData { participant_user_id: "   ".to_string(), ..data() };
         assert!(DocumentParticipant::new(DocumentParticipantId::new("dp-1"), payload).is_err());
     }
 
-    /// 失败路径：超长名称被拒。
+    // 验证超长名称时会被拒绝。
     #[test]
     fn new_rejects_overlong_name() {
         let payload = DocumentParticipantData { participant_name: "名".repeat(129), ..data() };
         assert!(DocumentParticipant::new(DocumentParticipantId::new("dp-1"), payload).is_err());
     }
 
-    /// 枚举序列化与标签稳定。
+    // 锁定单据参与岗位的序列化代码和中文展示标签。
     #[test]
     fn participant_role_codes_and_labels_are_stable() {
         assert_eq!(serde_json::to_string(&ParticipantRole::CoSales).unwrap(), "\"co_sales\"");
@@ -187,7 +167,7 @@ mod tests {
         assert_eq!(ParticipantRole::CoSales.label(), "协作销售");
     }
 
-    /// BSON 往返。
+    // 验证单据参与人记录经过 BSON 序列化与反序列化后仍保留原实体值。
     #[test]
     fn entity_roundtrips_through_bson() {
         let participant = DocumentParticipant::new(DocumentParticipantId::new("dp-1"), data()).unwrap();

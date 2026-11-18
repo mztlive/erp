@@ -11,38 +11,23 @@ use sha2::Sha256;
 /// 指纹十六进制长度（SHA-256 摘要 32 字节）。
 pub(crate) const FINGERPRINT_HEX_LEN: usize = 64;
 
-/// 计算密钥化 HMAC-SHA256 摘要（十六进制小写）。
-///
-/// HMAC-SHA256 接受任意长度密钥，`new_from_slice` 恒成功。
-///
-/// # 参数
-/// * `key` - 查询指纹密钥（调用方安全管理，如配置中心下发）
-/// * `data` - 敏感值原文字节（规范化后的履约地址等）
-///
-/// # 返回
-/// 返回 64 位小写十六进制指纹。
-///
-/// # 错误
-/// 不返回错误。
-///
-/// # Panics
-/// `Hmac::new_from_slice` 对任意长度密钥恒成功；若该约定被破坏则 panic。
+// 计算密钥化 HMAC-SHA256 摘要（十六进制小写）。
+// HMAC-SHA256 接受任意长度密钥，`new_from_slice` 恒成功。
+// 返回 64 位小写十六进制指纹。
+// `key` 为查询指纹密钥（调用方安全管理，如配置中心下发）；`data` 为敏感值原文字节（规范化后的履约地址等）。
+//
+// # Panics
+// `Hmac::new_from_slice` 对任意长度密钥恒成功；若该约定被破坏则 panic。
 pub(crate) fn hmac_sha256_hex(key: &[u8], data: &[u8]) -> String {
     let mut mac = Hmac::<Sha256>::new_from_slice(key).expect("HMAC-SHA256 accepts any key length");
     mac.update(data);
     hex::encode(mac.finalize().into_bytes())
 }
 
-/// 校验指纹格式（64 位十六进制，大小写均可）。
-///
-/// # 参数
-/// * `fingerprint` - 待校验的指纹字符串
-///
-/// # 返回
-/// 格式合法返回 `Ok(())`。
-///
-/// # 错误
-/// 长度不是 64 或含非十六进制字符时返回 `LogicError`。
+// 校验指纹格式（64 位十六进制，大小写均可）。
+// 格式合法返回 `Ok(())`。
+// `fingerprint` 为待校验的指纹字符串。
+// 长度不是 64 或含非十六进制字符时返回 `LogicError`。
 pub(crate) fn validate_fingerprint(fingerprint: &str) -> Result<()> {
     if fingerprint.len() != FINGERPRINT_HEX_LEN || !fingerprint.bytes().all(|b| b.is_ascii_hexdigit()) {
         return Err(Error::from("查询指纹必须是 64 位十六进制字符串"));
@@ -50,20 +35,12 @@ pub(crate) fn validate_fingerprint(fingerprint: &str) -> Result<()> {
     Ok(())
 }
 
-/// 规范化预计算的查询指纹（强类型指纹值对象共用入口）.
-///
-/// 只处理已计算好的十六进制串；密钥与明文不得传入.
-///
-/// # 参数
-/// * `empty_message` - 空白输入时的错误文案
-/// * `too_long_message` - 超长输入时的错误文案
-/// * `hex` - 预计算的指纹十六进制串
-///
-/// # 返回
-/// 返回规范化后的指纹串.
-///
-/// # 错误
-/// 空白、超长或非 64 位十六进制时返回错误.
+// 规范化预计算的查询指纹（强类型指纹值对象共用入口）.
+// 只处理已计算好的十六进制串；密钥与明文不得传入.
+// 返回规范化后的指纹串.
+// `empty_message` 为空白输入时的错误文案；`too_long_message` 为超长输入时的错误文案。
+// `hex` 为预计算的指纹十六进制串。
+// 空白、超长或非 64 位十六进制时返回错误.
 pub(crate) fn normalize_precomputed_fingerprint(
     empty_message: &str,
     too_long_message: &str,
@@ -85,7 +62,7 @@ mod tests {
 
     type HmacSha256 = Hmac<Sha256>;
 
-    /// 标准测试向量：RFC 4231 与公开 HMAC-SHA256 向量。
+    // 验证标准测试向量：RFC 4231 与公开 HMAC-SHA256 向量。
     #[test]
     fn matches_known_test_vectors() {
         assert_eq!(
@@ -98,7 +75,7 @@ mod tests {
         );
     }
 
-    /// 与 hmac/sha2 crate 实现逐字节一致（随机密钥与数据）。
+    // 验证与 hmac/sha2 crate 实现逐字节一致（随机密钥与数据）。
     #[test]
     fn matches_reference_crate_implementation() {
         let long_key = b"long-key-".repeat(20);
@@ -117,7 +94,7 @@ mod tests {
         }
     }
 
-    /// 指纹带密钥：同一明文不同密钥结果不同；同一密钥结果稳定。
+    // 验证指纹带密钥：同一明文不同密钥结果不同；同一密钥结果稳定。
     #[test]
     fn fingerprint_is_keyed_and_deterministic() {
         let plain = b"address";
@@ -126,7 +103,7 @@ mod tests {
         assert_ne!(hmac_sha256_hex(b"key-a", plain), hmac_sha256_hex(b"key-a", b"address2"));
     }
 
-    /// 校验函数接受小写/大写十六进制，拒绝长度与字符非法值。
+    // 验证校验函数接受小写/大写十六进制，拒绝长度与字符非法值。
     #[test]
     fn fingerprint_format_validation() {
         assert!(validate_fingerprint(&"a".repeat(64)).is_ok());
@@ -136,7 +113,7 @@ mod tests {
         assert!(validate_fingerprint(&format!("{}z", "a".repeat(63))).is_err());
     }
 
-    /// 预计算指纹入口：trim 后校验长度与十六进制；空白/超长/非法字符失败。
+    // 验证预计算指纹入口：trim 后校验长度与十六进制；空白/超长/非法字符失败。
     #[test]
     fn precomputed_fingerprint_normalizes_and_validates() {
         use super::normalize_precomputed_fingerprint;

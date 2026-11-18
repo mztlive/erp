@@ -10,16 +10,7 @@ pub struct DeliveryCoverageRefreshAdapter {
 }
 
 impl DeliveryCoverageRefreshAdapter {
-    /// 包装刷新流程。
-    ///
-    /// # 参数
-    /// * `process` - 覆盖刷新流程
-    ///
-    /// # 返回
-    /// 返回适配器。
-    ///
-    /// # 错误
-    /// 无。
+    /// 在后台运行时登记 SKU 配送覆盖刷新时，绑定已装配的刷新流程；构造适配器本身不刷新。
     pub fn new(process: DeliveryCoverageRefreshProcess) -> Self {
         Self { process }
     }

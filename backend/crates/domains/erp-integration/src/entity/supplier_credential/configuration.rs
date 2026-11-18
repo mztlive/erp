@@ -58,12 +58,10 @@ impl SupplierCredentialConfiguration {
 
 impl SupplierCredential {
     /// 首次配置令牌，建立加密记录和可查询的操作回执。
-    /// # 参数
+    ///
+    /// 版本为1的可用凭据，不声明已核验令牌所属京东账号。已携带原版本、命令或密文无效时拒绝。
+    ///
     /// 固定身份、部署绑定、受控密文、操作命令及当前时间。
-    /// # 返回
-    /// 版本为1的可用凭据，不声明已核验令牌所属京东账号。
-    /// # 错误
-    /// 已携带原版本、命令或密文无效时拒绝。
     pub fn configured(
         id: String,
         binding: SupplierCredentialBinding,
@@ -84,12 +82,10 @@ impl SupplierCredential {
     }
 
     /// 按所见版本替换令牌；同操作仅返回回执，不能回滚后续刷新。
-    /// # 参数
+    ///
+    /// 新配置返回真，同操作同内容重放返回假。活跃授权或刷新、版本变化、操作冲突或历史容量耗尽时拒绝。
+    ///
     /// 新密文、操作人及原版本、服务器时间。
-    /// # 返回
-    /// 新配置返回真，同操作同内容重放返回假。
-    /// # 错误
-    /// 活跃授权或刷新、版本变化、操作冲突或历史容量耗尽时拒绝。
     pub fn configure_tokens(
         &mut self,
         payload: SupplierCredentialPayload,

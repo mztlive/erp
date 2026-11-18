@@ -15,13 +15,11 @@ struct LegacyPool {
     owner_user_ids: Vec<String>,
 }
 
-/// 将旧字段迁为负责人池，合并启用默认规则并继承原轮转位置。
-/// # 参数
-/// `db` 为启动阶段数据库，不允许旧版同时写入。
-/// # 返回
-/// 迁移可重入；已有新格式成员与轮转位置不重置。
-/// # 错误
-/// 旧资料异常、池超限、唯一冲突或数据库失败时阻止启动。
+// 将旧字段迁为负责人池，合并启用默认规则并继承原轮转位置。
+//
+// 迁移可重入；已有新格式成员与轮转位置不重置。旧资料异常、池超限、唯一冲突或数据库失败时阻止启动。
+//
+// `db` 为启动阶段数据库，不允许旧版同时写入。
 pub(crate) async fn migrate_pools(db: &Database) -> Result<()> {
     let rules = db
         .collection::<Document>(<Database as ProcurementResponsibilityExt>::PROCUREMENT_RESPONSIBILITY_RULES);
@@ -56,7 +54,7 @@ pub(crate) async fn migrate_pools(db: &Database) -> Result<()> {
     Ok(())
 }
 
-/// 合并前先保存完整成员，再停用被合并规则，最后由调用方统一收敛选择器键。
+// 合并前先保存完整成员，再停用被合并规则，最后由调用方统一收敛选择器键。
 async fn merge_defaults(db: &Database) -> Result<()> {
     let rules = db.collection::<LegacyPool>(
         <Database as ProcurementResponsibilityExt>::PROCUREMENT_RESPONSIBILITY_RULES,
@@ -90,7 +88,7 @@ async fn merge_defaults(db: &Database) -> Result<()> {
     Ok(())
 }
 
-/// 从旧全局轮次反查最近成员；已经迁移的新池位置由 setOnInsert 保留。
+// 从旧全局轮次反查最近成员；已经迁移的新池位置由 setOnInsert 保留。
 async fn legacy_last_owner(db: &Database) -> Result<Option<String>> {
     let old = db
         .collection::<Document>("procurement_dispatch_rotation")
@@ -109,7 +107,7 @@ async fn legacy_last_owner(db: &Database) -> Result<Option<String>> {
     Ok(rule.and_then(|rule| rule.owner_user_ids.into_iter().next()))
 }
 
-/// 保留旧规则顺序与既有池成员顺序，合并重试不得丢人或增加权重。
+// 保留旧规则顺序与既有池成员顺序，合并重试不得丢人或增加权重。
 fn merged_owners(rules: &[LegacyPool]) -> Result<Vec<String>> {
     let mut owners = Vec::new();
     for owner in rules.iter().flat_map(|rule| &rule.owner_user_ids) {

@@ -6,19 +6,11 @@ use erp_returns::repository::{ReturnsExt, SupplierRefundPostedTotalsExt};
 
 use super::*;
 use crate::reverse_flow::return_settlement::{create_credit, validate_settlement};
-/// 在最终通过事务内执行过账副作用并写回退款单。
-///
-/// # 参数
-/// * `db` - 数据库。
-/// * `refund_id` - 退款单主键。
-/// * `actor` - 审计操作人。
-/// * `executor` - 最终通过事务的执行器；本函数不再开启事务。
-///
-/// # 返回
-/// 成功时无返回值。退款单已过账并写回。
-///
-/// # 错误
-/// 非审批中、原付款不存在、累计超额或仓储失败时返回错误。
+// 在最终通过事务内执行过账副作用并写回退款单。
+//
+// `refund_id` 为退款单主键；`executor` 为最终通过事务的执行器；本函数不再开启事务。成功时无返回值。退款单已过账并写回。
+//
+// 非审批中、原付款不存在、累计超额或仓储失败时返回错误。
 pub(in crate::reverse_flow) async fn apply_supplier_refund_final_post(
     db: &Database,
     rbac: &ReverseFlowPorts,
@@ -42,10 +34,7 @@ pub(in crate::reverse_flow) async fn apply_supplier_refund_final_post(
     Ok(())
 }
 
-/// 在调用方事务内写入退款入账副作用。
-///
-/// # 错误
-/// 原付款不存在、累计超额或仓储失败时返回错误。
+// 在调用方事务内写入退款入账副作用。原付款不存在、累计超额或仓储失败时返回错误。
 async fn apply_supplier_refund_posting(
     db: &Database,
     rbac: &ReverseFlowPorts,

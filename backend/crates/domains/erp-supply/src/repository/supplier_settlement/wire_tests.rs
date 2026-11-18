@@ -35,7 +35,7 @@ mod statement {
         }
     }
 
-    /// raw BSON 金额、业务时间与 JSON 空值/状态沿原持久化协议。
+    // 验证raw BSON 金额、业务时间与 JSON 空值/状态沿原持久化协议。
     #[test]
     fn statement_json_and_raw_bson_keep_storage_contract() {
         let value = SupplierSettlementStatement::new(
@@ -89,7 +89,7 @@ mod difference {
         }
     }
 
-    /// 差异状态、空处理三元组及有符号金额保持原 wire。
+    // 验证差异状态、空处理三元组及有符号金额保持原 wire。
     #[test]
     fn difference_json_and_raw_bson_keep_resolution_and_signed_amount_contract() {
         let mut input = sample_data();
@@ -136,7 +136,7 @@ mod item {
         }
     }
 
-    /// 原数量精度与全部金额字段在 raw BSON 使用 Decimal128。
+    // 验证原数量精度与全部金额字段在 raw BSON 使用 Decimal128。
     #[test]
     fn item_json_and_raw_bson_keep_quantity_and_amount_contract() {
         let value =
@@ -184,7 +184,7 @@ mod evidence {
         }
     }
 
-    /// 不可变补证保留秒级时间、显式空 Option 和基础字段 flatten。
+    // 验证不可变补证保留秒级时间、显式空 Option 和基础字段 flatten。
     #[test]
     fn difference_evidence_json_and_raw_bson_keep_time_and_null_contract() {
         let mut input = data();
@@ -264,7 +264,7 @@ mod source_evidence {
         }
     }
 
-    /// 来源冻结行的 18 个金额和数量按 raw BSON Decimal128 往返。
+    // 验证来源冻结行的 18 个金额和数量按 raw BSON Decimal128 往返。
     #[test]
     fn source_evidence_json_and_raw_bson_keep_frozen_line_contract() {
         let value = SupplierSettlementSourceEvidence::new("source-wire", data()).unwrap();

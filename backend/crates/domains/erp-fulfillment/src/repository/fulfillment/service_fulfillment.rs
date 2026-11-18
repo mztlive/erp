@@ -57,18 +57,8 @@ pub struct ServiceFulfillmentFilter {
 }
 
 impl QueryFilter for ServiceFulfillmentFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// 有值时写入 `sales_order_line_id` 与 `status`；二者皆空时只保留未删除条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 转换为 MongoDB 查询条件（自动追加未删除过滤）。
+    // 有值时写入 `sales_order_line_id` 与 `status`；二者皆空时只保留未删除条件。
     fn to_doc(&self) -> Document {
         let mut filter = super::active_filter();
         if let Some(sales_order_line_id) = &self.sales_order_line_id {
@@ -82,16 +72,7 @@ impl QueryFilter for ServiceFulfillmentFilter {
 }
 
 impl Pagination for ServiceFulfillmentFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组；`page_size` 由 `u32` 加宽为 `u64`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 向仓储分页传递页码与单页条数。
     fn page_and_size(&self) -> (u64, u64) {
         super::page_and_size(self.page, self.page_size)
     }
@@ -101,20 +82,10 @@ impl Pagination for ServiceFulfillmentFilter {
 #[allow(async_fn_in_trait)]
 pub trait ServiceFulfillmentRepositoryExt {
     /// 分页检索线下服务履约记录列表（投影查询）。
-    ///
-    /// 只返回 [`ServiceFulfillmentRow`] 所需的列表字段（交付对象快照、服务
-    /// 地点及其指纹不进投影）；排序字段走白名单映射
-    /// （`occurred_at`/`recorded_at`/`created_at`）。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
+    /// 只返回 [`ServiceFulfillmentRow`] 所需的列表字段（交付对象快照、服务地点及其指纹不进投影）；排序字段走白名单映射（`occurred_at`/`recorded_at`/`created_at`）。
     /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// 沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询、游标读取或计数错误。
     async fn search_service_fulfillments(
         &self,
         filter: &ServiceFulfillmentFilter,
@@ -152,10 +123,7 @@ impl ServiceFulfillmentRepositoryExt for persistence_core::Repository<'_, Servic
     }
 }
 
-/// 服务履约记录列表投影字段（交付对象快照、服务地点及指纹不进投影）。
-///
-/// # 返回
-/// 返回投影条件文档。
+// 服务履约记录列表投影字段（交付对象快照、服务地点及指纹不进投影）。
 fn service_fulfillment_projection() -> Document {
     doc! {
         "id": 1,

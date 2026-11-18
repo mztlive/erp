@@ -23,16 +23,9 @@ use super::*;
 use crate::finance_posting::task_access::{TaskPurpose, require_task};
 use crate::{FinancePostingPorts, FinanceTaskPort};
 
-/// 最终审批通过后授予原逐行额度并派发指定出纳任务。
-/// # 参数
-/// * `db` - 数据库。
-/// * `id` - 申请身份。
-/// * `actor` - 已授权财务审批人。
-/// * `executor` - 审批运行时同一事务。
-/// # 返回
-/// 返回批准及任务创建成功结果。
-/// # 错误
-/// 来源、账户、余额、状态或指定责任人不合法时拒绝。
+/// 采购付款申请最终审批通过时，在审批原事务中复验来源、授予原逐行额度，
+/// 并按供应商财务责任为冻结提交版本派发指定出纳任务。申请人不得审批本人申请；
+/// 来源、账户、余额、状态或责任人不合法时拒绝，不单独提交申请、任务或审计。
 pub async fn approve(
     db: &Database,
     rbac: &FinancePostingPorts,
@@ -103,15 +96,9 @@ pub(crate) struct PaymentRequestExecutionInput<'a> {
     pub actor: &'a AuditActor,
 }
 
-/// 命令恢复沿原付款与冻结任务授权；终止任务仍可证明已经完成的原命令。
-/// # 参数
-/// * `db` / `rbac` / `executor` - 当前数据库、授权服务与查询事务。
-/// * `request_id` / `task_id` / `payment` - 原命令的申请、任务和实际付款。
-/// * `actor` - 原命令操作人，仍须具有当前有效结果读取权限。
-/// # 返回
-/// 当前身份和不可变来源关系均成立时允许返回原付款结果。
-/// # 错误
-/// 账号或角色失效、任务责任改变、冻结依据缺失或付款关系不一致时拒绝。
+// 回读原付款时，在同一查询事务核对申请、付款经办人、原任务和任务对应的冻结申请版本，
+// 并校验经办人的当前读取资格。已终止的原任务仍可作为已完成付款的依据；
+// 账号或角色失效、任务责任改变、冻结依据缺失或付款关系不符时拒绝交付结果。
 pub(crate) async fn authorize_payment_result(
     db: &Database,
     rbac: &FinancePostingPorts,
@@ -151,15 +138,9 @@ pub(super) fn matches_payment_result_task(task: &WorkItem, request_id: &str) -> 
     matches_purchase_payment_request_identity(task, request_id)
 }
 
-/// 授权当前指定出纳并消耗该申请各采购行的实际付款金额。
-/// # 参数
-/// * `db` / `rbac` - 数据库与权限服务。
-/// * `input` - 页面所见申请和任务版本、实际付款、分配及指定出纳。
-/// * `executor` - 当前付款事务。
-/// # 返回
-/// 返回已在同一事务重验的应付和分录。
-/// # 错误
-/// 非批准任务、责任人、冻结账户或金额范围变化时拒绝。
+// 登记实际付款前，在原付款事务校验申请和任务的页面版本，重验指定出纳、真实来源、冻结账户和金额范围。
+// 按原申请各采购行扣减实际登记金额，返回已在该执行器复验的应付子账和分录。
+// 任务未经批准、责任人不符、冻结账户或金额范围变动时拒绝。
 pub(crate) async fn record_payment_execution(
     db: &Database,
     rbac: &FinancePostingPorts,
@@ -232,13 +213,11 @@ async fn audit_payment(
     Ok(())
 }
 
-/// 读取当前申请指定的付款任务并证明其正式办理资格。
-/// # 参数
-/// db、rbac、executor 为原事务能力；request、task_id、version、actor 为当前命令事实。
-/// # 返回
-/// 返回已校验申请关联、版本、责任人和工作流资格的任务。
-/// # 错误
-/// 任务不存在、申请关联或资格失效及读取失败时拒绝。
+// 读取当前申请指定的付款任务并证明其正式办理资格。
+//
+// db、rbac、executor 为原事务能力；request、task_id、version、actor 为当前命令事实。
+//
+// 返回已校验申请关联、版本、责任人和工作流资格的任务。任务不存在、申请关联或资格失效及读取失败时拒绝。
 pub(super) async fn authorize_task(
     db: &Database,
     rbac: &FinancePostingPorts,
@@ -258,13 +237,11 @@ pub(super) async fn authorize_task(
     Ok(task)
 }
 
-/// 复用调用方已读取的精确付款任务，在原执行器中重验正式办理资格。
-/// # 参数
-/// tasks、request、task 为原能力与已读事实，version、actor 为当前命令身份，executor 为原事务。
-/// # 返回
-/// 任务、申请、责任人和正式工作流资格均有效时成功。
-/// # 错误
-/// 任务版本、申请关联或状态失效、责任人不符及资格读取失败时拒绝。
+// 复用调用方已读取的精确付款任务，在原执行器中重验正式办理资格。
+//
+// tasks、request、task 为原能力与已读事实，version、actor 为当前命令身份，executor 为原事务。
+//
+// 任务、申请、责任人和正式工作流资格均有效时成功。任务版本、申请关联或状态失效、责任人不符及资格读取失败时拒绝。
 pub(super) async fn authorize_loaded_task(
     tasks: &dyn FinanceTaskPort,
     request: &PurchasePaymentRequest,
@@ -319,16 +296,9 @@ fn allocations_by_account(
 
 /// 同步原批准付款申请的指定执行任务，不创建或重放付款。
 ///
-/// # 参数
-/// * `db` - 原付款申请与工作项数据库。
-/// * `id` - 已持久化的原申请身份。
-/// * `executor` - 调用方资金调查或执行事务的同一执行器。
+/// `db` 为原付款申请与工作项数据库；`id` 为已持久化的原申请身份；`executor` 为调用方资金调查或执行事务的同一执行器。
 ///
-/// # 返回
-/// 原任务的剩余金额摘要或完成状态更新成功时返回。
-///
-/// # 错误
-/// 申请或任务不存在、版本竞争或持久化失败时返回原错误。
+/// 原任务的剩余金额摘要或完成状态更新成功时返回。申请或任务不存在、版本竞争或持久化失败时返回原错误。
 pub async fn sync_task(db: &Database, id: &str, executor: &mut dyn Executor) -> Result<()> {
     let request = load(db, id, executor).await?;
     let task_id =
@@ -357,16 +327,10 @@ pub async fn sync_task(db: &Database, id: &str, executor: &mut dyn Executor) -> 
 }
 
 /// 付款冲正后仅在原批准申请尚未关闭时恢复占用与执行任务。
-/// # 参数
-/// * `db` - 数据库。
-/// * `payment` - 原付款及逐申请采购分配。
-/// * `allocations` - 本次冲正按应付汇总的金额。
-/// * `actor` - 已授权冲正操作人。
-/// * `executor` - 冲正事务。
-/// # 返回
-/// 原申请净付款、占用与任务保持一致。
-/// # 错误
-/// 超原付款、来源或账户变化、责任规则失效时拒绝恢复。
+///
+/// `payment` 为原付款及逐申请采购分配；`allocations` 为本次冲正按应付汇总的金额；`actor` 为已授权冲正操作人；`executor` 为冲正事务。
+///
+/// 原申请净付款、占用与任务保持一致。超原付款、来源或账户变化、责任规则失效时拒绝恢复。
 pub async fn restore_reversed_payment(
     db: &Database,
     rbac: &FinancePostingPorts,

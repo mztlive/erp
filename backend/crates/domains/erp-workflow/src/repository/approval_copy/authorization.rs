@@ -23,7 +23,7 @@ pub(crate) const MODEL: &str = "approval_copy_receipts";
 pub(crate) struct CopyMapping(QueryModel);
 
 impl CopyMapping {
-    /// 返回只声明真实收件人和送达记录的固定查询模型。
+    // 登记抄送读取的静态模型，只声明真实收件人及送达记录支持的事实，不参与其他审批范围解释。
     pub(crate) fn shared() -> Result<Arc<dyn AccessMapping>> {
         Ok(Arc::new(Self(QueryModel {
             key: QueryModelKey::parse(MODEL)?,
@@ -97,7 +97,7 @@ impl AccessFactsPort for CopyFacts {
     }
 }
 
-/// 送达记录提供完整收件人事实；未送达记录不构成可读取的根对象。
+// 送达的抄送记录才提供完整收件人事实；待送达或未送达记录不能作为可读根对象。
 fn receipt_fact(receipt: ApprovalCopyReceipt) -> Option<ObjectFacts> {
     receipt.delivered.then(|| ObjectFacts {
         resource: RESOURCE.into(),

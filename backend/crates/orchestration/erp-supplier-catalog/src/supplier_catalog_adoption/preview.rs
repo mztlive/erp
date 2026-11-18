@@ -62,11 +62,11 @@ pub struct AdoptionPreviewView {
 
 impl SupplierCatalogAdoptionProcess {
     /// 冻结勾选或完整筛选结果，禁止只冻结当前页面或截断超限结果。
-    /// # 参数
+    ///
     /// 连接、明确选择与当前操作人。
-    /// # 返回
+    ///
     /// 一小时内可分批确认的固定预览。
-    /// # 错误
+    ///
     /// 无权、选择无效、来源不存在或超过五百行时拒绝。
     pub async fn preview(
         &self,
@@ -81,7 +81,7 @@ impl SupplierCatalogAdoptionProcess {
         .await
     }
 
-    /// 在同一快照中授权、冻结来源并保存预览。
+    // 在同一快照中授权、冻结来源并保存预览。
     async fn preview_in_snapshot(
         &self,
         connection: &str,
@@ -171,7 +171,7 @@ impl SupplierCatalogAdoptionProcess {
             .ok_or_else(|| Error::NotFound("供应商商品不存在".into()))
     }
 
-    /// 在原快照核验固定选品资格；资格组合由 identity 统一执行。
+    // 在原快照核验固定选品资格；资格组合由 identity 统一执行。
     pub(super) async fn ensure_adoption_permissions(
         &self,
         actor: &AuditActor,

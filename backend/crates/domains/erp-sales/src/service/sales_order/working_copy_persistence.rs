@@ -35,20 +35,16 @@ struct RowChange {
     row: SalesOrderWorkingCopyLine,
 }
 
-/// 批量复验并保存草稿行；不创建事务且不得改变现有完整唯一索引。
-///
-/// # 参数
-/// * `db` - 销售仓储来源
-/// * `copy_id` - 已验证可编辑的工作副本
-/// * `expected` - 准备阶段读取的活跃行及其版本
-/// * `lines` - 本次重建的明细内容
-/// * `executor` - 调用方根事务执行器
-///
-/// # 返回
-/// 复用已存在的行身份，恢复重新加入的软删除行，仅插入全新稳定明细。
-///
-/// # 错误
-/// 活跃行版本或身份变化、重复稳定行、工作副本归属错误以及仓储错误时失败。
+// 批量复验并保存草稿行；不创建事务且不得改变现有完整唯一索引。
+// 结果：复用已存在的行身份，恢复重新加入的软删除行，仅插入全新稳定明细。
+// 活跃行版本或身份变化、重复稳定行、工作副本归属错误以及仓储错误时失败。
+//
+// 输入约定：
+// - `db`：销售仓储来源
+// - `copy_id`：已验证可编辑的工作副本
+// - `expected`：准备阶段读取的活跃行及其版本
+// - `lines`：本次重建的明细内容
+// - `executor`：调用方根事务执行器
 pub(super) async fn replace_working_copy_lines(
     db: &Database,
     copy_id: &SalesOrderWorkingCopyId,
@@ -67,7 +63,7 @@ pub(super) async fn replace_working_copy_lines(
     persist_changes(&mut RepositoryWriter { repository }, changes, executor).await
 }
 
-/// 保留原准备阶段的行版本要求，事务内新增、删除或修改均返回并发冲突。
+// 写工作副本前比对准备阶段的活动行及各自版本，发现新增、删除或修改就报告并发冲突。
 fn validate_expected_rows(
     expected: &[SalesOrderWorkingCopyLine],
     current: &[SalesOrderWorkingCopyLine],
@@ -85,7 +81,7 @@ fn validate_expected_rows(
     Ok(())
 }
 
-/// 从已读取的当前行规划替换，稳定唯一键匹配成功时复用完整原元数据。
+// 把新草稿与当前持久化行比对并规划替换；稳定唯一键一致时沿用原行身份和版本等元数据。
 fn plan_changes(
     copy_id: &SalesOrderWorkingCopyId,
     existing: &[SalesOrderWorkingCopyLine],
@@ -120,7 +116,7 @@ fn plan_changes(
 /// 保留同一个执行器，恢复后的最新 CAS 元数据直接供内容更新使用。
 #[async_trait]
 trait DraftRowWriter: Send {
-    /// 执行一次行写入并在成功时同步行元数据；不得开启或提交事务。
+    // 草稿行替换逐个操作时用当前事务写入，成功才回填持久化元数据；写入器不另开或提交事务。
     async fn apply(
         &mut self,
         action: WriteAction,
@@ -151,7 +147,7 @@ impl DraftRowWriter for RepositoryWriter<'_> {
     }
 }
 
-/// 只有重新加入的软删除行执行恢复再更新；任一失败均停止后续动作。
+// 按计划更新草稿行，重新加入的软删除行先恢复再更新；任一步出错就停止后续写入。
 async fn persist_changes(
     writer: &mut impl DraftRowWriter,
     changes: Vec<RowChange>,
@@ -182,7 +178,7 @@ mod tests {
     use super::*;
     use crate::entity::sales_order::{SalesOrderWorkingCopyLineData, SalesPricingMode};
 
-    /// 构造真实草稿行，显式指定稳定行身份及成交价模式。
+    // 组装真实草稿行，显式指定稳定行身份及成交价模式。
     fn row(id: &str, line_no: u32, mode: SalesPricingMode, price: &str) -> SalesOrderWorkingCopyLine {
         let data: SalesOrderWorkingCopyLineData = serde_json::from_value(serde_json::json!({
             "sales_order_line_id": format!("stable-{line_no}"), "line_no": line_no,
@@ -213,7 +209,7 @@ mod tests {
 
     #[async_trait]
     impl DraftRowWriter for RecordingWriter {
-        /// 模拟 CAS 成功回填的元数据，记录真实编排动作与执行器。
+        // 记录草稿行测试实际执行的写入步骤和执行器，并模拟 CAS 成功后回填的元数据。
         async fn apply(
             &mut self,
             action: WriteAction,
@@ -238,7 +234,7 @@ mod tests {
         }
     }
 
-    /// 保留行复用原ID和CAS版本，更新内容包括AUTO切回MANUAL的显式序列化字段。
+    // 回归检查：保留行复用原ID和CAS版本，更新内容包括AUTO切回MANUAL的显式序列化字段。
     #[test]
     fn retained_row_reuses_identity_and_serializes_manual_over_auto() {
         let existing = row("persisted-row", 1, SalesPricingMode::Auto, "119");
@@ -256,7 +252,7 @@ mod tests {
         assert_eq!(document["pricing_mode"], "MANUAL");
     }
 
-    /// 重新加入的软删除行先恢复，随后使用恢复返回的新CAS版本更新新内容。
+    // 回归检查：重新加入的软删除行先恢复，随后使用恢复返回的新CAS版本更新新内容。
     #[tokio::test]
     async fn readded_row_restores_old_identity_then_updates_new_version() {
         let mut existing = row("persisted-row", 1, SalesPricingMode::Manual, "125");
@@ -281,7 +277,7 @@ mod tests {
         assert!(writer.calls.iter().all(|call| call.3 == pointer));
     }
 
-    /// 只软删被移除行，保留行执行更新，新稳定行才执行插入。
+    // 回归检查：只软删被移除行，保留行执行更新，新稳定行才执行插入。
     #[tokio::test]
     async fn replacement_soft_deletes_removed_rows_and_only_inserts_new_keys() {
         let existing = vec![
@@ -307,7 +303,7 @@ mod tests {
         );
     }
 
-    /// 活跃集合或准备阶段CAS版本变化时，在写入前拒绝命令。
+    // 回归检查：活跃集合或准备阶段CAS版本变化时，在写入前拒绝命令。
     #[test]
     fn expected_rows_reject_changed_versions_or_active_membership() {
         let old = row("old-1", 1, SalesPricingMode::Manual, "125");
@@ -319,7 +315,7 @@ mod tests {
         validate_expected_rows(from_ref(&old), from_ref(&old)).unwrap();
     }
 
-    /// 重复稳定行与错误工作副本归属不能产生写入计划。
+    // 回归检查：重复稳定行与错误工作副本归属不能产生写入计划。
     #[test]
     fn replacement_rejects_duplicate_keys_and_wrong_copy() {
         let first = row("new-1", 1, SalesPricingMode::Auto, "119");
@@ -332,7 +328,7 @@ mod tests {
         assert!(empty.is_empty());
     }
 
-    /// 恢复或后续更新失败时停止其他行写入，并保持原错误类别。
+    // 回归检查：恢复或后续更新失败时停止其他行写入，并保持原错误类别。
     #[tokio::test]
     async fn restore_or_update_failure_stops_later_row_writes() {
         for fail_at in [1, 2] {

@@ -19,12 +19,9 @@ fn service(state: &HttpState) -> InquiryReadService {
     InquiryReadService::new(state.application().db(), state.application().authorization())
 }
 
-/// 查询销售询价列表。
-/// # 参数
+/// 按请求条件查询销售询价列表。
 /// `state` 为应用，`actor` 为认证账号，其余参数限定当前对象或分页。
-/// # 返回
 /// 返回本视图允许读取的独立响应。
-/// # 错误
 /// 无权限、对象不可见、任务责任失效、参数或范围版本变化时拒绝。
 pub async fn sales_list(
     State(state): State<HttpState>,
@@ -35,11 +32,8 @@ pub async fn sales_list(
 }
 
 /// 读取销售询价详情。
-/// # 参数
 /// `state` 为应用，`actor` 为认证账号，其余参数限定当前对象或分页。
-/// # 返回
 /// 返回本视图允许读取的独立响应。
-/// # 错误
 /// 无权限、对象不可见、任务责任失效、参数或范围版本变化时拒绝。
 pub async fn sales_detail(
     State(state): State<HttpState>,
@@ -50,11 +44,8 @@ pub async fn sales_detail(
 }
 
 /// 查询当前采购询价任务。
-/// # 参数
 /// `state` 为应用，`actor` 为认证账号，其余参数限定当前对象或分页。
-/// # 返回
 /// 返回本视图允许读取的独立响应。
-/// # 错误
 /// 无权限、对象不可见、任务责任失效、参数或范围版本变化时拒绝。
 pub async fn procurement_list(
     State(state): State<HttpState>,
@@ -65,11 +56,8 @@ pub async fn procurement_list(
 }
 
 /// 读取当前采购询价责任资料。
-/// # 参数
 /// `state` 为应用，`actor` 为认证账号，其余参数限定当前对象或分页。
-/// # 返回
 /// 返回本视图允许读取的独立响应。
-/// # 错误
 /// 无权限、对象不可见、任务责任失效、参数或范围版本变化时拒绝。
 pub async fn procurement_detail(
     State(state): State<HttpState>,
@@ -81,11 +69,8 @@ pub async fn procurement_detail(
 }
 
 /// 读取当前责任行内部报价。
-/// # 参数
 /// `state` 为应用，`actor` 为认证账号，其余参数限定当前对象或分页。
-/// # 返回
 /// 返回本视图允许读取的独立响应。
-/// # 错误
 /// 无权限、对象不可见、任务责任失效、参数或范围版本变化时拒绝。
 pub async fn procurement_internal_quotes(
     State(state): State<HttpState>,
@@ -97,11 +82,8 @@ pub async fn procurement_internal_quotes(
 }
 
 /// 重验客户模板商品资格。
-/// # 参数
 /// `state` 为应用，`actor` 为认证账号，其余参数限定当前对象或分页。
-/// # 返回
 /// 返回本视图允许读取的独立响应。
-/// # 错误
 /// 无权限、对象不可见、任务责任失效、参数或范围版本变化时拒绝。
 pub async fn sales_template_products(
     State(state): State<HttpState>,

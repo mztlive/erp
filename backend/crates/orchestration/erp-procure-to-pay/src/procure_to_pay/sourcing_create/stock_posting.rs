@@ -34,20 +34,20 @@ pub(super) struct PersistedStockAllocation {
 /// 预占按余额汇总一次 CAS，预占与分录各一次批量插入；事务内只保留最小写入集。
 #[async_trait]
 trait StockAllocationPort: Send + Sync {
-    /// 在调用方事务内按可用数量条件增加预占。
+    // 在调用方事务内按可用数量条件增加预占。
     async fn reserve_quantity(
         &self,
         balance_id: &str,
         quantity: Quantity,
         executor: &mut dyn Executor,
     ) -> Result<bool>;
-    /// 按计划顺序保存全部预占实体。
+    // 选源库存写入按原计划行顺序保存全部预占实体，不自行开启事务。
     async fn create_reservations(
         &self,
         reservations: &[StockReservation],
         executor: &mut dyn Executor,
     ) -> Result<()>;
-    /// 在同一事务内保存对应的预占分录。
+    // 在同一事务内保存对应的预占分录。
     async fn create_entries(
         &self,
         entries: &[StockReservationEntry],
@@ -59,18 +59,11 @@ struct StockAllocationAdapter<'a> {
 }
 #[async_trait]
 impl StockAllocationPort for StockAllocationAdapter<'_> {
-    /// 复用库存领域仓储的余额 CAS。
-    ///
-    /// # 参数
-    /// * `id` - 库存余额主键。
-    /// * `quantity` - 本次增加的预占数量。
-    /// * `executor` - 调用方事务执行器。
-    ///
-    /// # 返回
-    /// 可用量充足且余额命中时返回 `true`；可用量不足或余额不存在时返回 `false`，且不修改余额。
-    ///
-    /// # 错误
-    /// 余额仓储写入失败时返回对应错误。
+    // 复用库存领域仓储的余额 CAS。
+    //
+    // `id` 为库存余额主键；`quantity` 为本次增加的预占数量；沿用原事务的执行器。
+    //
+    // 可用量充足且余额命中时返回 `true`；可用量不足或余额不存在时返回 `false`，且不修改余额。余额仓储写入失败时返回对应错误。
     async fn reserve_quantity(
         &self,
         id: &str,
@@ -79,17 +72,9 @@ impl StockAllocationPort for StockAllocationAdapter<'_> {
     ) -> Result<bool> {
         Ok(self.db.stock_balances().reserve_quantity(id, quantity, executor).await?)
     }
-    /// 经库存领域仓储批量保存预占，不直接操作集合。
-    ///
-    /// # 参数
-    /// * `reservations` - 已构造的预占实体，按入参顺序保存。
-    /// * `executor` - 调用方事务执行器。
-    ///
-    /// # 返回
-    /// 预占批量保存成功。
-    ///
-    /// # 错误
-    /// 仓储批量写入失败时返回对应错误。
+    // 经库存领域仓储批量保存预占，不直接操作集合。
+    //
+    // `reservations` 为已构造的预占实体，按入参顺序保存；沿用原事务的执行器。预占批量保存成功。仓储批量写入失败时返回对应错误。
     async fn create_reservations(
         &self,
         reservations: &[StockReservation],
@@ -98,17 +83,9 @@ impl StockAllocationPort for StockAllocationAdapter<'_> {
         self.db.inventory().create_reservations(reservations, executor).await?;
         Ok(())
     }
-    /// 经库存领域仓储批量保存分录，并传递同一执行器。
-    ///
-    /// # 参数
-    /// * `entries` - 与预占对应的分录，按入参顺序保存。
-    /// * `executor` - 与预占写入相同的执行器。
-    ///
-    /// # 返回
-    /// 分录批量保存成功。
-    ///
-    /// # 错误
-    /// 仓储批量写入失败时返回对应错误。
+    // 经库存领域仓储批量保存分录，并传递同一执行器。
+    //
+    // `entries` 为与预占对应的分录，按入参顺序保存；`executor` 为与预占写入相同的执行器。分录批量保存成功。仓储批量写入失败时返回对应错误。
     async fn create_entries(
         &self,
         entries: &[StockReservationEntry],
@@ -118,24 +95,12 @@ impl StockAllocationPort for StockAllocationAdapter<'_> {
         Ok(())
     }
 }
-/// 绑定实际库存仓储并复用原事务，不能提前查询或申请新会话。
-///
-/// 调用方在同一事务内重验库存依据；本函数汇总数量后执行 CAS 与批量插入。
-///
-/// # 参数
-/// * `db` - 组合层数据库句柄
-/// * `plans` - 已校验的库存分配计划
-/// * `latest_groups` - 同一事务内重验的库存依据
-/// * `sales_order_id` - 来源销售单
-/// * `command_id` - 命令收据 ID
-/// * `request_fingerprint` - 命令载荷指纹
-/// * `executor` - 调用方事务执行器
-///
-/// # 返回
-/// 按计划行顺序保存的预占及公开结果。
-///
-/// # 错误
-/// 库存依据失效、可用量不足或仓储写入失败时拒绝。
+// 绑定实际库存仓储并复用原事务，不能提前查询或申请新会话。
+//
+// 调用方在同一事务内重验库存依据；本函数汇总数量后执行 CAS 与批量插入。
+//
+// `db` 为组合层数据库句柄；`plans` 为已校验的库存分配计划；`latest_groups` 为同一事务内重验的库存依据；`sales_order_id` 为来源销售单；`command_id`
+// 为命令收据 ID；`request_fingerprint` 为命令载荷指纹。按计划行顺序保存的预占及公开结果。库存依据失效、可用量不足或仓储写入失败时拒绝。
 pub(super) async fn persist_stock_allocations(
     db: &Database,
     plans: &[StockAllocationPlan],
@@ -157,7 +122,7 @@ pub(super) async fn persist_stock_allocations(
     .await
 }
 
-/// 先完成全部余额 CAS，再保存预占和分录；任一步失败立即停止。
+// 先完成全部余额 CAS，再保存预占和分录；任一步失败立即停止。
 async fn persist_with_port(
     port: &dyn StockAllocationPort,
     plans: &[StockAllocationPlan],
@@ -193,20 +158,10 @@ struct PendingAllocations {
     persisted: Vec<PersistedStockAllocation>,
 }
 
-/// 组装全部预占与分录并按余额汇总总量（纯内存，不访问数据库）。
-///
-/// # 参数
-/// * `plans` - 现有库存分配计划
-/// * `latest_groups` - 最新库存余额依据
-/// * `sales_order_id` - 来源销售单
-/// * `command_id` - 命令收据 ID
-/// * `request_fingerprint` - 命令载荷指纹
-///
-/// # 返回
-/// 返回待批量写入的预占、分录、汇总总量与结果投影。
-///
-/// # 错误
-/// 余额依据失效、行缺失或实体构造失败时返回错误。
+// 组装全部预占与分录并按余额汇总总量（纯内存，不访问数据库）。
+//
+// `plans` 为现有库存分配计划；`latest_groups` 为最新库存余额依据；`sales_order_id` 为来源销售单；`command_id` 为命令收据 ID；
+// `request_fingerprint` 为命令载荷指纹。返回待批量写入的预占、分录、汇总总量与结果投影。余额依据失效、行缺失或实体构造失败时返回错误。
 fn build_pending_allocations(
     plans: &[StockAllocationPlan],
     latest_groups: &[StockBasisGroup],
@@ -247,21 +202,10 @@ fn build_pending_allocations(
     Ok(pending)
 }
 
-/// 组装单行的预占、分录与结果投影（纯内存）。
-///
-/// # 参数
-/// * `latest` - 命中的最新余额依据
-/// * `requested` - 本余额逐销售行分配数量
-/// * `zero` - 零数量
-/// * `sales_order_id` - 来源销售单
-/// * `command_id` - 命令收据 ID
-/// * `request_fingerprint` - 命令载荷指纹
-///
-/// # 返回
-/// 返回（余额 ID，数量，预占，分录，结果投影）。
-///
-/// # 错误
-/// 行缺失或实体构造失败时返回错误。
+// 组装单行的预占、分录与结果投影（纯内存）。
+//
+// `latest` 为命中的最新余额依据；`requested` 为本余额逐销售行分配数量；`zero` 为零数量；`sales_order_id` 为来源销售单；`command_id` 为命令收据 ID；
+// `request_fingerprint` 为命令载荷指纹。返回（余额 ID，数量，预占，分录，结果投影）。行缺失或实体构造失败时返回错误。
 fn build_pending_line(
     latest: &StockBasisGroup,
     requested: &RequestedStockLine,
@@ -320,17 +264,9 @@ fn build_pending_line(
     Ok((latest.balance.base.id.clone(), requested.quantity, reservation, entry, persisted))
 }
 
-/// 定点数量精确相加，不做舍入。
-///
-/// # 参数
-/// * `current` - 当前累计
-/// * `add` - 本次增量
-///
-/// # 返回
-/// 返回相加后的数量。
-///
-/// # 错误
-/// 精度溢出时返回逻辑错误。
+// 定点数量精确相加，不做舍入。
+//
+// `current` 为当前累计；`add` 为本次增量。返回相加后的数量。精度溢出时返回逻辑错误。
 fn sum_quantity(current: Quantity, add: Quantity) -> Result<Quantity> {
     Quantity::try_from(current.to_decimal() + add.to_decimal()).map_err(Error::Logic)
 }
@@ -503,7 +439,7 @@ mod tests {
         .await;
         (result, port.calls.into_inner().unwrap().steps)
     }
-    /// 同一余额两行汇总一次 CAS 后批量写预占与分录，保持同一非零大小执行器。
+    // 同一余额两行汇总一次 CAS 后批量写预占与分录，保持同一非零大小执行器。
     #[tokio::test]
     async fn stock_posting_uses_same_executor_and_original_write_order() {
         let (result, calls) = invoke(None, false).await;
@@ -516,7 +452,7 @@ mod tests {
         assert_eq!(persisted[1].result.sales_order_line_id, "line-2");
         assert_eq!(persisted[1].result.quantity, q("3").to_string());
     }
-    /// 每一写入失败均原样传播，停止剩余步骤和下一条分配。
+    // 每一写入失败均原样传播，停止剩余步骤和下一条分配。
     #[tokio::test]
     async fn stock_posting_stops_at_each_failed_write() {
         let sequence = ["reserve", "reservations", "entries"];
@@ -528,7 +464,7 @@ mod tests {
             assert_eq!(calls, sequence[..=index]);
         }
     }
-    /// 余额 CAS 未命中保持统一可刷新冲突，不能先写预占或分录。
+    // 余额 CAS 未命中保持统一可刷新冲突，不能先写预占或分录。
     #[tokio::test]
     async fn stock_reservation_cas_miss_stops_before_persisting_reservation() {
         let (result, calls) = invoke(None, true).await;

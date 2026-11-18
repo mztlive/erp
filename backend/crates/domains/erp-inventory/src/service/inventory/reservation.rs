@@ -11,19 +11,8 @@ use crate::repository::prelude::*;
 use crate::repository::{InventoryExt, InventorySearch, StockReservationFilter};
 
 impl InventoryService {
-    /// 分页查询库存预占列表（W10 销售预占视图）。
-    ///
-    /// # 参数
-    /// * `params` - 查询参数（仓库/SKU/状态/销售明细筛选）
-    /// * `actor` - 当前认证操作人，用于计算库存预占读取范围
-    ///
-    /// # 返回
-    /// 返回契约形状的分页视图。
-    ///
-    /// # 错误
-    /// 分页或排序非法时返回 `ValidationError`。
-    /// 账号未激活时返回 `Forbidden`。
-    /// 授权、商品匹配或仓储查询失败时返回对应错误。
+    /// 追踪销售预占时，按仓库、SKU、状态和销售明细筛选；完整库存授权条件用于分页和计数，结果在原快照复验凭证后才交付。
+    /// 分页或排序非法返回 `ValidationError`，账号失效返回 `Forbidden`；传播授权、商品匹配或仓储错误。
     #[tracing::instrument(
         name = "inventory.stock_reservation_list",
         skip_all,
@@ -83,7 +72,7 @@ impl InventoryService {
 }
 
 impl From<StockReservation> for StockReservationView {
-    /// 从预占实体构造视图。
+    // 从预占实体构造视图。
     fn from(reservation: StockReservation) -> Self {
         Self {
             id: reservation.base.id,
@@ -99,7 +88,7 @@ impl From<StockReservation> for StockReservationView {
     }
 }
 
-/// 请求仓库仅收窄业务候选，完整权限由独立查询凭证限定。
+// 请求仓库仅收窄业务候选，完整权限由独立查询凭证限定。
 fn reservation_filter(query: StockReservationListQuery, search: InventorySearch) -> StockReservationFilter {
     let (sort_by, sort_ascending) = query.paging.sort_selection();
     StockReservationFilter {

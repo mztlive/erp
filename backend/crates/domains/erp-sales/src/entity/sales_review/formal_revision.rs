@@ -12,19 +12,13 @@ use crate::entity::sales_order::{
 };
 
 impl FormalRevisionHeader {
-    /// 从销售变更提交复制表头快照、金额和内容指纹。
-    ///
-    /// # 参数
-    /// * `submission` - 已冻结变更提交
-    ///
-    /// # 返回
-    /// 返回销售单域正式版本表头输入。
-    ///
-    /// # 错误
-    /// 变更提交主键无法派生历史 `sub:{id}` 指纹时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 指纹与首次提交共用 `sub:{id}` 形态，来源提交主键为变更提交 ID。
+    // 从销售变更提交复制表头快照、金额和内容指纹。
+    // 返回销售单域正式版本表头输入。
+    // 变更提交主键无法派生历史 `sub:{id}` 指纹时返回错误。
+    // 业务边界：指纹与首次提交共用 `sub:{id}` 形态，来源提交主键为变更提交 ID。
+    //
+    // 输入约定：
+    // - `submission`：已冻结变更提交
     fn from_sales_change_submission(submission: &SalesChangeSubmission) -> Result<Self> {
         Ok(Self {
             sales_order_id: submission.sales_order_id.clone(),
@@ -44,19 +38,13 @@ impl FormalRevisionHeader {
 }
 
 impl PreparedRevisionLine {
-    /// 从变更提交行还原销售单域正式版本行输入。
-    ///
-    /// # 参数
-    /// * `line` - 已冻结变更提交行
-    ///
-    /// # 返回
-    /// 返回已转换为 D13 字段组的行输入。
-    ///
-    /// # 错误
-    /// 行类型与字段组不一致或必填字段缺失时返回领域错误。
-    ///
-    /// # 关键业务约束
-    /// 必须通过变更提交行 `goods_fields`/`voucher_fields` 还原，禁止再拆 Optional。
+    // 从变更提交行还原销售单域正式版本行输入。
+    // 返回已转换为 D13 字段组的行输入。
+    // 失败条件：行类型与字段组不一致或必填字段缺失时返回领域错误。
+    // 业务边界：必须通过变更提交行 `goods_fields`/`voucher_fields` 还原，禁止再拆 Optional。
+    //
+    // 输入约定：
+    // - `line`：已冻结变更提交行
     fn from_sales_change_submission_line(line: &SalesChangeSubmissionLine) -> Result<Self> {
         let line_type = line.line_type;
         let (goods, voucher) = match line.line_type {
@@ -82,22 +70,16 @@ impl PreparedRevisionLine {
 
 impl SalesOrderRevisionAggregate {
     /// 由销售变更提交构造正式版本聚合。
-    ///
-    /// # 参数
-    /// * `identities` - 调用方注入的版本与行身份
-    /// * `context` - 版本号、来源、上一版本与业务性质
-    /// * `submission` - 已冻结变更提交
-    /// * `lines` - 该提交的全部目标明细行
-    ///
-    /// # 返回
     /// 返回与首次形式化共用规则的正式版本聚合。
-    ///
-    /// # 错误
-    /// 业务性质漂移、空行、混合行、多卡券行、字段组缺失、身份不符或金额/快照
+    /// 失败条件：业务性质漂移、空行、混合行、多卡券行、字段组缺失、身份不符或金额/快照
     /// 不合法时返回领域错误。
+    /// 业务边界：本方法不得查询 latest revision no；版本号必须由调用方传入。
     ///
-    /// # 关键业务约束
-    /// 本方法不得查询 latest revision no；版本号必须由调用方传入。
+    /// 输入约定：
+    /// - `identities`：调用方注入的版本与行身份
+    /// - `context`：版本号、来源、上一版本与业务性质
+    /// - `submission`：已冻结变更提交
+    /// - `lines`：该提交的全部目标明细行
     pub fn from_sales_change_submission(
         identities: FormalRevisionIdentities,
         context: FormalRevisionContext,
@@ -120,20 +102,14 @@ impl SalesOrderRevisionAggregate {
     }
 }
 
-/// 校验销售单业务性质与变更提交业务性质一致。
-///
-/// # 参数
-/// * `expected` - 销售单业务性质
-/// * `actual` - 变更提交业务性质
-///
-/// # 返回
-/// 转换后一致时返回 `Ok(())`。
-///
-/// # 错误
-/// 不一致时返回领域错误。
-///
-/// # 关键业务约束
-/// 变更提交不得把卡券单改成实物单，也不得反向漂移。
+// 校验销售单业务性质与变更提交业务性质一致。
+// 结果：转换后一致时返回 `Ok(())`。
+// 失败条件：不一致时返回领域错误。
+// 业务边界：变更提交不得把卡券单改成实物单，也不得反向漂移。
+//
+// 输入约定：
+// - `expected`：销售单业务性质
+// - `actual`：变更提交业务性质
 fn ensure_change_business_type(
     expected: crate::entity::sales_order::BusinessType,
     actual: BusinessType,

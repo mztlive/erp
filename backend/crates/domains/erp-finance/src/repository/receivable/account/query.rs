@@ -13,16 +13,12 @@ pub trait ReceivableAccountRepositoryExt {
     ///
     /// 只返回 [`ReceivableAccountRow`] 所需的列表字段，不加载整文档；
     /// 排序字段经白名单映射，未命中回退 `created_at`，方向由 `sort_ascending` 决定（缺省降序）。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回当前页投影行与满足筛选条件的总数。
+    /// 传播数据库查询、游标读取或计数失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// 输入约定：
+    /// - `filter`：筛选与分页条件
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn search_receivable_accounts(
         &self,
         filter: &ReceivableAccountFilter,
@@ -30,16 +26,12 @@ pub trait ReceivableAccountRepositoryExt {
     ) -> Result<PageResult<ReceivableAccountRow>>;
 
     /// 按销售单读取全部活跃应收子账，供服务端关联列表投影使用。
-    ///
-    /// # 参数
-    /// * `sales_order_id` - 来源销售单身份。
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中。
-    ///
-    /// # 返回
     /// 返回 `sales_order_id` 匹配且未删除的应收子账；没有匹配时返回空列表。顺序不承诺。
+    /// 传播数据库查询或游标读取失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 输入约定：
+    /// - `sales_order_id`：来源销售单身份。
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中。
     async fn find_accounts_by_sales_order_id(
         &self,
         sales_order_id: &str,
@@ -47,16 +39,12 @@ pub trait ReceivableAccountRepositoryExt {
     ) -> Result<Vec<ReceivableAccount>>;
 
     /// 批量按应收子账 ID 读取活跃账户。
-    ///
-    /// # 参数
-    /// * `account_ids` - 应收子账 ID 字符串集合；空集合直接返回空结果
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回全部匹配且未删除的应收子账；返回顺序不承诺与输入一致。
+    /// 传播数据库查询或游标读取失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 输入约定：
+    /// - `account_ids`：应收子账 ID 字符串集合；空集合直接返回空结果
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn find_accounts_by_ids(
         &self,
         account_ids: &[String],
@@ -64,19 +52,13 @@ pub trait ReceivableAccountRepositoryExt {
     ) -> Result<Vec<ReceivableAccount>>;
 
     /// 列出销售单的全部应收子账。
-    ///
-    /// # 参数
-    /// * `sales_order_id` - 来源销售单
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回按子账序号升序排列的应收子账。
+    /// 传播数据库查询或游标读取失败。
+    /// 调用边界：仅查询本仓储拥有的 `receivable_accounts` 集合，不访问销售单集合。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    ///
-    /// # 约束
-    /// 仅查询本仓储拥有的 `receivable_accounts` 集合，不访问销售单集合。
+    /// 输入约定：
+    /// - `sales_order_id`：来源销售单
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn list_by_sales_order(
         &self,
         sales_order_id: &SalesOrderId,
@@ -84,19 +66,13 @@ pub trait ReceivableAccountRepositoryExt {
     ) -> Result<Vec<ReceivableAccount>>;
 
     /// 查找销售单的首个应收子账。
-    ///
-    /// # 参数
-    /// * `sales_order_id` - 来源销售单
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回 `account_seq = 1` 的应收子账；尚未形成时返回 `None`。
+    /// 传播数据库查询失败。
+    /// 调用边界：仅查询本仓储拥有的 `receivable_accounts` 集合，不访问销售单集合。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    ///
-    /// # 约束
-    /// 仅查询本仓储拥有的 `receivable_accounts` 集合，不访问销售单集合。
+    /// 输入约定：
+    /// - `sales_order_id`：来源销售单
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn find_primary_by_sales_order(
         &self,
         sales_order_id: &SalesOrderId,
@@ -106,19 +82,13 @@ pub trait ReceivableAccountRepositoryExt {
     /// 按稳定 ID 读取销项开票任务使用的应收子账。
     ///
     /// 工作项入口的历史名称；纯主键读取，直接委托基类单条查询。
-    ///
-    /// # 参数
-    /// * `id` - 应收子账 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回未删除应收子账；不存在时返回 `None`。
+    /// 传播数据库查询或反序列化失败。
+    /// 调用边界：仅查询本仓储拥有的 `receivable_accounts` 集合，不访问销售单集合。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或反序列化失败时返回错误。
-    ///
-    /// # 约束
-    /// 仅查询本仓储拥有的 `receivable_accounts` 集合，不访问销售单集合。
+    /// 输入约定：
+    /// - `id`：应收子账 ID
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn find_work_item_receivable_account(
         &self,
         id: &str,
@@ -126,19 +96,13 @@ pub trait ReceivableAccountRepositoryExt {
     ) -> Result<Option<ReceivableAccount>>;
 
     /// 按来源销售版本查找应收结果。
-    ///
-    /// # 参数
-    /// * `revision_id` - 来源销售单修订 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回引用该销售版本的应收账户；无匹配时返回 `None`。
+    /// 传播数据库查询失败。
+    /// 调用边界：仅查询本仓储拥有的 `receivable_accounts` 集合，按来源版本引用过滤，不访问销售单集合。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    ///
-    /// # 约束
-    /// 仅查询本仓储拥有的 `receivable_accounts` 集合，按来源版本引用过滤，不访问销售单集合。
+    /// 输入约定：
+    /// - `revision_id`：来源销售单修订 ID
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn find_by_source_sales_order_revision(
         &self,
         revision_id: &SalesOrderRevisionId,
@@ -241,10 +205,8 @@ impl ReceivableAccountRepositoryExt for persistence_core::Repository<'_, Receiva
     }
 }
 
-/// 应收往来子账列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
+// 限定应收往来子账列表查询返回的字段，避免读出列表不需要的完整实体。
+// 返回投影条件文档。
 fn receivable_account_projection() -> Document {
     doc! {
         "id": 1,

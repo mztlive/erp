@@ -42,15 +42,8 @@ pub struct SalesChangeWithdrawal<'a> {
 impl SalesChangeWithdrawal<'_> {
     /// 撤回全部受影响的审批中采购。
     ///
-    /// # 参数
-    /// * `db` - 业务数据库
-    /// * `state` - 生效写入后按新销售版本计算的覆盖与受影响采购
-    /// * `executor` - 销售变更生效事务执行器
+    /// `state` 为生效写入后按新销售版本计算的覆盖与受影响采购；`executor` 为销售变更生效事务执行器。全部撤回写入成功时返回 `Ok(())`。
     ///
-    /// # 返回
-    /// 全部撤回写入成功时返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 审批绑定、运行时、版本 CAS 或写入失败时返回错误，调用方整体回滚。
     pub async fn withdraw_affected(
         &self,
@@ -65,7 +58,7 @@ impl SalesChangeWithdrawal<'_> {
         Ok(())
     }
 
-    /// 撤回一张审批中采购并回到原草稿。
+    // 撤回一张审批中采购并回到原草稿。
     async fn withdraw(
         &self,
         db: &Database,
@@ -120,7 +113,7 @@ impl SalesChangeWithdrawal<'_> {
         post_cancel(&mut posting, executor).await
     }
 
-    /// 读取审批运行时并形成撤回计划；无需写入时返回 `None`。
+    // 读取审批运行时并形成撤回计划；无需写入时返回 `None`。
     async fn prepare(
         &self,
         db: &Database,
@@ -150,16 +143,9 @@ impl SalesChangeWithdrawal<'_> {
     }
 }
 
-/// 受影响且处于审批中的采购，顺序与事实一致。
-///
-/// # 参数
-/// * `state` - 覆盖与受影响采购
-///
-/// # 返回
-/// 返回需要撤回的采购。
-///
-/// # 错误
-/// 无。
+// 受影响且处于审批中的采购，顺序与事实一致。
+//
+// `state` 为覆盖与受影响采购。返回需要撤回的采购。
 fn in_approval_affected(state: &PurchaseSourceState) -> Vec<&PurchaseOrder> {
     state
         .facts
@@ -226,7 +212,7 @@ mod tests {
         }
     }
 
-    /// 只撤回受影响且处于审批中的采购；草稿、已生效和未受影响采购不撤回。
+    // 只撤回受影响且处于审批中的采购；草稿、已生效和未受影响采购不撤回。
     #[test]
     fn only_affected_in_approval_purchases_are_withdrawn() {
         let zero = Quantity::from_str("0").unwrap();

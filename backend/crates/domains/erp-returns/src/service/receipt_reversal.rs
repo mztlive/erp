@@ -21,15 +21,7 @@ use crate::repository::prelude::*;
 use crate::{Error, Result};
 
 /// 在请求校验后按原时点分配 ID，并由实体规范化创建数据。
-///
-/// # 参数
-/// * `req` - 创建请求。
-/// * `actor_id` - 已认证创建人。
-///
-/// # 返回
 /// 返回初始草稿回款冲正单。
-///
-/// # 错误
 /// 编号、原因、经办复核人、创建人为空或超长、金额非正或经办与复核人相同时返回 `Logic`。
 pub fn build_create(req: CreateReceiptReversalRequest, actor_id: &str) -> Result<ReceiptReversal> {
     Ok(ReceiptReversal::new(
@@ -50,19 +42,10 @@ pub fn build_create(req: CreateReceiptReversalRequest, actor_id: &str) -> Result
 }
 
 /// 按原回款窄事实构造一次提交草稿；先分配 ID，再读取发生时间。
-///
 /// 原回款的读取与版本/过账校验仍由根流程在原时点组织。
-///
-/// # 参数
-/// * `req` - 一次提交命令。
-/// * `source_fact_id` - 原回款身份。
-/// * `receipt_amount` - 省略金额时沿用的原回款金额。
-/// * `actor_id` - 经办人，同时作为创建人。
-///
-/// # 返回
 /// 返回指向该原回款的草稿冲正单。
-///
-/// # 错误
+/// `req` 为一次提交命令；`source_fact_id` 为原回款身份。
+/// `receipt_amount` 为省略金额时沿用的原回款金额；`actor_id` 为经办人，同时作为创建人。
 /// 原因、经办复核人或金额不满足实体不变量时返回 `Logic`。
 pub fn build_commit(
     req: &CommitReceiptReversalRequest,
@@ -87,32 +70,13 @@ pub fn build_commit(
     )?)
 }
 
-/// 使用实体版本比较并保留原并发冲突文案。
-///
-/// # 参数
-/// * `reversal` - 当前冲正单。
-/// * `expected_version` - 调用方持有的期望版本。
-///
-/// # 返回
-/// 版本一致时返回成功。
-///
-/// # 错误
-/// 版本不一致时返回 `ConflictError`。
+/// 回款冲正提交前核对当前实体和客户端所见版本；不匹配返回 `ConflictError` 并保留原并发冲突文案。
 pub fn ensure_receipt_reversal_version(reversal: &ReceiptReversal, expected_version: u64) -> Result<()> {
     conflict_if_stale_version(reversal.matches_version(expected_version))
 }
 
-/// 提交先检查实体版本，再执行草稿状态迁移；失败不递增审批版本。
-///
-/// # 参数
-/// * `reversal` - 待提交冲正单。
-/// * `expected_version` - 调用方持有的期望版本。
-///
-/// # 返回
-/// 成功时进入审批中，并返回成功。
-///
-/// # 错误
-/// 版本不一致时返回 `ConflictError`；非草稿或审批版本溢出时返回 `Logic`。版本失败时不改单据。
+/// 提交回款冲正时先比对期望版本，再从草稿进入审批并递增审批主题版本。
+/// 版本不匹配返回 `ConflictError` 且不改实体；非草稿或审批版本溢出返回 `Logic`。
 pub fn prepare_receipt_reversal_submit(reversal: &mut ReceiptReversal, expected_version: u64) -> Result<()> {
     ensure_receipt_reversal_version(reversal, expected_version)?;
     start_receipt_reversal_approval(reversal)?;
@@ -120,30 +84,14 @@ pub fn prepare_receipt_reversal_submit(reversal: &mut ReceiptReversal, expected_
 }
 
 impl ReturnsService {
-    /// 客户端直接过账失败关闭。最终动作只能由审批运行时调用。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 不返回成功值。
-    ///
-    /// # 错误
-    /// 恒返回 `ConflictError`。
+    /// 客户端请求直接过账回款冲正时恒返回 `ConflictError`；最终过账由审批运行时触发。
     pub fn reject_receipt_reversal_client_post() -> Result<std::convert::Infallible> {
         Err(Error::ConflictError("回款冲正过账只能由审批最终通过动作执行，客户端不得直接过账".to_string()))
     }
 
     /// 按主键在调用方原执行器中读取回款冲正单。
-    ///
-    /// # 参数
-    /// * `executor` - 原用例授权事务或读取阶段的执行器。
-    /// * `id` - 冲正单主键。
-    ///
-    /// # 返回
     /// 返回读到的冲正单。
-    ///
-    /// # 错误
+    /// `executor` 为原用例授权事务或读取阶段的执行器；`id` 为冲正单主键。
     /// 不存在时返回 `NotFound`；仓储读取失败时返回对应错误。
     pub async fn load_receipt_reversal(
         &self,
@@ -153,18 +101,8 @@ impl ReturnsService {
         or_not_found(self.db.receipt_reversals().find_by_id(id, executor).await?, "回款冲正单不存在")
     }
 
-    /// 读取冲正单并执行最终通过守卫；本接口不修改财务或销售事实。
-    ///
-    /// # 参数
-    /// * `db` - 数据库句柄。
-    /// * `reversal_id` - 冲正单主键。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 返回仍可过账的冲正单。
-    ///
-    /// # 错误
-    /// 单据不存在时返回 `NotFound`；已冲正时返回 `BusinessLogicError`；非审批中时返回 `ConflictError`；仓储读取失败时返回对应错误。
+    /// 审批最终通过、尚未写反向财务事实时，沿调用方事务加载回款冲正单，先拒绝已冲正，再要求仍在审批中。
+    /// 缺单返回 `NotFound`，已冲正返回 `BusinessLogicError`，非审批中返回 `ConflictError`；传播读取错误。
     pub async fn prepare_receipt_reversal_post(
         db: &Database,
         reversal_id: &str,
@@ -179,19 +117,8 @@ impl ReturnsService {
         Ok(reversal)
     }
 
-    /// 原回款存在且已过账后检查累计冲正上限，保留旧读取与报错时点。
-    ///
-    /// # 参数
-    /// * `db` - 数据库句柄。
-    /// * `reversal` - 本次冲正单，其主键从累计中排除。
-    /// * `receipt_amount` - 原回款金额。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 累计未超限时返回成功。
-    ///
-    /// # 错误
-    /// 已过账累计加上本次超过原回款金额时返回 `BusinessLogicError`；聚合失败时返回对应错误。
+    /// 在确认原回款已过账后，沿原执行器累计同一原单已过账的回款冲正金额（排除本单），加上本次与原金额比较。
+    /// 超限返回 `BusinessLogicError`；传播聚合错误。
     pub async fn validate_receipt_reversal_amount(
         db: &Database,
         reversal: &ReceiptReversal,
@@ -214,18 +141,8 @@ impl ReturnsService {
         )
     }
 
-    /// 财务逆向分配成功后写回本域过账状态；审计与销售刷新由根流程继续执行。
-    ///
-    /// # 参数
-    /// * `db` - 数据库句柄。
-    /// * `reversal` - 待标记过账的冲正单。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 过账状态写回成功时无返回值。
-    ///
-    /// # 错误
-    /// 状态不是审批中时返回 `Logic`；仓储更新失败时返回对应错误。
+    /// 正式财务写入成功后，在原事务把审批中的回款冲正单标记过账并以原版本 CAS 写回；审计与销售进度刷新仍由根流程完成。
+    /// 非审批中返回 `Logic`；传播仓储、版本竞争及其他写入错误。
     pub async fn persist_posted_receipt_reversal(
         db: &Database,
         reversal: &mut ReceiptReversal,
@@ -236,17 +153,8 @@ impl ReturnsService {
     }
 
     /// 在注册/审批编排的原写入时点创建本域冲正单，复用根事务。
-    ///
-    /// # 参数
-    /// * `db` - 数据库句柄。
-    /// * `reversal` - 待创建的冲正单。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 写入成功时无返回值。
-    ///
-    /// # 错误
-    /// 仓储写入失败时返回对应错误。
+    /// `reversal` 为待创建的冲正单；沿用调用方执行器 `executor`。
+    /// 传播仓储写入错误。
     pub async fn persist_created_receipt_reversal(
         db: &Database,
         reversal: &ReceiptReversal,
@@ -257,16 +165,7 @@ impl ReturnsService {
     }
 
     /// 使用已有仓储版本条件写回冲正单，不开启事务或生成额外时间/ID。
-    ///
-    /// # 参数
-    /// * `db` - 数据库句柄。
-    /// * `reversal` - 待写回的冲正单。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 写回成功时无返回值。
-    ///
-    /// # 错误
+    /// `reversal` 为待写回的冲正单；沿用调用方执行器 `executor`。
     /// 仓储更新失败时返回对应错误。
     pub async fn persist_receipt_reversal(
         db: &Database,

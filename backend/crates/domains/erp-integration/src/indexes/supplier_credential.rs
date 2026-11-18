@@ -19,12 +19,10 @@ pub(super) fn definitions() -> Vec<IndexModel> {
 }
 
 /// 仅创建技术凭据必要索引，首次明确导入之前必须调用本入口。
-/// # 参数
+///
+/// 凭据引用及账号应用唯一约束和刷新查询索引已经建立。现有重复身份、权限不足或索引创建失败时拒绝后续导入。
+///
 /// `db` 为目标应用数据库；只读预览和状态查询不得调用本入口。
-/// # 返回
-/// 凭据引用及账号应用唯一约束和刷新查询索引已经建立。
-/// # 错误
-/// 现有重复身份、权限不足或索引创建失败时拒绝后续导入。
 pub async fn ensure(db: &Database) -> Result<()> {
     db.collection::<Document>(Database::SUPPLIER_CREDENTIALS).create_indexes(definitions()).await?;
     Ok(())

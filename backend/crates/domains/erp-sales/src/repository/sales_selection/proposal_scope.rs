@@ -22,16 +22,13 @@ struct ProposalCount {
     count: i64,
 }
 
-/// 用当前册责任过滤方案，缺少有效父册的方案保持不可见。
-///
-/// # 参数
-/// * `db` - 本域数据库
-/// * `filter` - 已证明方案动作权限的来源责任条件
-/// * `executor` - 调用方执行器
-/// # 返回
-/// 授权后的分页及总数。
-/// # 错误
-/// 聚合或反序列化失败时返回仓储错误。
+// 用当前册责任过滤方案，缺少有效父册的方案保持不可见。
+// 结果：授权后的分页及总数。
+// 聚合或反序列化失败时返回仓储错误。
+//
+// 输入约定：
+// - `db`：本域数据库
+// - `filter`：已证明方案动作权限的来源责任条件
 pub(super) async fn search(
     db: &Database,
     filter: &SelectionProposalFilter,
@@ -48,7 +45,7 @@ pub(super) async fn search(
     Ok(PageResult { items: page.items, total: page.total.first().map_or(0, |row| row.count) })
 }
 
-/// 先按方案业务筛选缩小集合，再通过有索引的父册 ID 连接授权事实。
+// 生成已授权方案列表的聚合阶段，先用方案业务条件缩小范围，再以索引支持的父册 ID 连接授权事实。
 fn pipeline(filter: &SelectionProposalFilter, authorization: Vec<Document>) -> Vec<Document> {
     let mut stages = vec![doc! { "$match": filter.to_doc() }];
     stages.extend(authorization);
@@ -74,7 +71,7 @@ fn pipeline(filter: &SelectionProposalFilter, authorization: Vec<Document>) -> V
     stages
 }
 
-/// 负责人和组织筛选也按当前册解释，不读取方案提交时的冻结责任。
+// 方案列表按负责人或组织筛选时使用父册当前责任，不使用方案提交时冻结的旧责任。
 fn booklet_condition(filter: &SelectionProposalFilter) -> Document {
     let mut conditions = Vec::new();
     push_undeleted(&mut conditions);

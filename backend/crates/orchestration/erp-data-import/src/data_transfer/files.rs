@@ -20,11 +20,11 @@ use crate::{Error, Result};
 
 impl DataTransferProcess {
     /// 查询本人任务，供业务页在无全局任务管理权限时恢复进度。
-    /// # 参数
+    ///
     /// 当前认证人及任务 ID。
-    /// # 返回
+    ///
     /// 本人文件任务状态。
-    /// # 错误
+    ///
     /// 越权或不存在时拒绝。
     pub async fn status(&self, id: &str, actor: &AuditActor) -> Result<BackgroundJobView> {
         Ok(self.owned_job(id, actor).await?.into())
@@ -73,13 +73,13 @@ impl DataTransferProcess {
             .into_data(actor)?,
         )?)
     }
-    /// 后台执行使用的私有文件读取；外部入口通过 reader_private 完成资格检查。
-    /// # 参数
-    /// id、owner 为执行任务绑定的文件及原提交人。
-    /// # 返回
-    /// 完整性检查通过的私有内容。
-    /// # 错误
-    /// 归属、有效期、存储、密文或内容格式无效时拒绝。
+    // 后台执行使用的私有文件读取；外部入口通过 reader_private 完成资格检查。
+    //
+    // id、owner 为执行任务绑定的文件及原提交人。
+    //
+    // 完整性检查通过的私有内容。
+    //
+    // 归属、有效期、存储、密文或内容格式无效时拒绝。
     pub(super) async fn read_private<T: DeserializeOwned>(&self, id: &str, owner: &str) -> Result<T> {
         let asset = self.private_asset(id, owner, &mut ReadExecutor::default()).await?;
         self.decrypt_private(&asset).await
@@ -118,13 +118,13 @@ impl DataTransferProcess {
         serde_json::from_str(&json).map_err(|_| Error::Internal("任务文件格式无效".into()))
     }
 
-    /// 文件元数据与当前任务资格共用快照；外部下载解密在提交后执行。
-    /// # 参数
-    /// job 为原任务，id 为其私有文件，actor 为本次读取身份。
-    /// # 返回
-    /// 已解密内容及同快照文件元数据。
-    /// # 错误
-    /// 当前资格失效、任务变化、过期或私有文件不可用时拒绝。
+    // 文件元数据与当前任务资格共用快照；外部下载解密在提交后执行。
+    //
+    // job 为原任务，id 为其私有文件，actor 为本次读取身份。
+    //
+    // 已解密内容及同快照文件元数据。
+    //
+    // 当前资格失效、任务变化、过期或私有文件不可用时拒绝。
     pub(super) async fn reader_private<T: DeserializeOwned>(
         &self,
         job: &BackgroundJob,
@@ -154,11 +154,11 @@ impl DataTransferProcess {
         self.read_private(id.as_ref(), &job.requested_by).await
     }
     /// 返回当前身份仍获授权且未过期的结果；导出允许非原提交人下载。
-    /// # 参数
+    ///
     /// 后台任务 ID 和当前认证人。
-    /// # 返回
+    ///
     /// 受控文件或导入预览结果。
-    /// # 错误
+    ///
     /// 非本人读取导入、未完成、过期、撤权、范围变化或文件不可用时拒绝。
     pub async fn result(&self, id: &str, actor: &AuditActor) -> Result<TransferResult> {
         let reader = self.reader_snapshot(id, actor, true).await?;

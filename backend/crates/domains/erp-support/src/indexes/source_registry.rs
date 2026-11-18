@@ -10,20 +10,9 @@ use persistence_core::Result;
 use super::{create_indexes, named_index, unique_index};
 use crate::repository::extensions::SourceRegistryExt;
 
-/// 创建本域集合的幂等命名索引。
-///
-/// 逐条落地数据模型 §6.1「必需约束与索引」；身份类字段使用**全局唯一索引**
-/// （与 accounts 的 code 处理一致）：软删除后仍保留身份，避免复用破坏
-/// 来源追溯与恢复语义。`external_id_key` 以 BSON 二进制持久化，
-/// 唯一索引直接建在该字段上。
-///
-/// # 参数
-/// * `db` - 目标 MongoDB 数据库
-///
-/// # 返回
-/// 本域索引全部创建成功时无返回值。
-///
-/// # 错误
+/// 启动时注册该集合的命名索引，多次调用沿用同名索引。
+/// 逐条落地数据模型 §6.1「必需约束与索引」；身份类字段使用**全局唯一索引** （与 accounts 的 code 处理一致）：软删除后仍保留身份，避免复用破坏来源追溯与恢复语义。
+/// `external_id_key` 以 BSON 二进制持久化，唯一索引直接建在该字段上。
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, <Database as SourceRegistryExt>::SOURCE_SYSTEMS, source_system_indexes()).await?;
@@ -42,7 +31,7 @@ pub async fn ensure(db: &Database) -> Result<()> {
     Ok(())
 }
 
-/// 返回 `source_system` 的身份约束和列表查询索引。
+// 返回 `source_system` 的身份约束和列表查询索引。
 fn source_system_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_source_systems_id", doc! { "id": 1 }),
@@ -51,7 +40,7 @@ fn source_system_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `external_identity_map` 的身份约束和状态查询索引。
+// 返回 `external_identity_map` 的身份约束和状态查询索引。
 fn external_identity_map_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_external_identity_maps_id", doc! { "id": 1 }),
@@ -67,7 +56,7 @@ fn external_identity_map_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `external_identity_target` 的谱系唯一约束与查询索引。
+// 返回 `external_identity_target` 的谱系唯一约束与查询索引。
 fn external_identity_target_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_external_identity_targets_id", doc! { "id": 1 }),
@@ -91,7 +80,7 @@ fn external_identity_target_indexes() -> Vec<IndexModel> {
 
 #[cfg(test)]
 mod tests {
-    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    // 验证按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
     #[test]
     fn collections_look_up_by_unique_stable_id() {
         for indexes in [

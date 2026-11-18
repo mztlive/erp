@@ -113,20 +113,11 @@ struct BasisTransactionInput<'a> {
 impl PurchaseOrderProcess {
     /// 依据精确拆分维度和逐行本次数量创建一张采购单并提交审批。
     ///
-    /// # 参数
-    /// * `req` - 精确依据、逐行数量与幂等键
-    /// * `actor` - 已通过鉴权的审计操作人
+    /// `req` 为精确依据、逐行数量与幂等键。返回已提交审批的采购单；同一幂等键与同一载荷重复提交时返回原结果。
     ///
-    /// # 返回
-    /// 返回已提交审批的采购单；同一幂等键与同一载荷重复提交时返回原结果。
+    /// 操作账号不可登录或缺少采购创建权限、依据失效、数量非正或超过事务内最新剩余/可供量、幂等键载荷冲突、并发冲突、审批绑定、启动审批或仓储写入失败时返回错误。
     ///
-    /// # 错误
-    /// 操作账号不可登录或缺少采购创建权限、依据失效、数量非正或超过事务内最新
-    /// 剩余/可供量、幂等键载荷冲突、并发冲突、审批绑定、启动审批或仓储写入失败时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 操作人在原业务事务中重新核验统一授权；事务内再以销售单 CAS guard 串行化并重算剩余量。
-    /// 创建成功即进入审批中，不得留下可编辑草稿。
+    /// 操作人在原业务事务中重新核验统一授权；事务内再以销售单 CAS guard 串行化并重算剩余量。创建成功即进入审批中，不得留下可编辑草稿。
     pub async fn create_from_basis(
         &self,
         req: CreatePurchaseOrderFromBasisRequest,
@@ -168,7 +159,7 @@ impl PurchaseOrderProcess {
         }
     }
 
-    /// 在原业务事务中先重验授权，再执行实际业务写入。
+    // 在原业务事务中先重验授权，再执行实际业务写入。
     async fn basis_transaction(
         &self,
         input: BasisTransactionInput<'_>,
@@ -212,22 +203,13 @@ impl PurchaseOrderProcess {
     }
 }
 
-/// 在 MongoDB 事务内串行化、重算并写入一张采购单后立即提交审批。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `rbac` - 审批绑定授权源
-/// * `command` - 来源销售单、请求、幂等收据与审计操作人
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回本次创建或事务内命中的幂等结果。
-///
-/// # 错误
-/// 依据、数量、并发 guard、审批绑定或持久化失败时返回错误。
-///
-/// # 关键业务约束
-/// guard CAS 成功后必须再次按采购当前指针计算剩余量，并复用同一事务事实。
+// 在 MongoDB 事务内串行化、重算并写入一张采购单后立即提交审批。
+//
+// `rbac` 为审批绑定授权源；`command` 为来源销售单、请求、幂等收据与审计操作人。返回本次创建或事务内命中的幂等结果。
+//
+// 依据、数量、并发 guard、审批绑定或持久化失败时返回错误。
+//
+// guard CAS 成功后必须再次按采购当前指针计算剩余量，并复用同一事务事实。
 async fn create_from_basis_apply(
     db: &mongodb::Database,
     ports: &PurchaseOrderPorts,
@@ -309,23 +291,12 @@ pub struct VerifiedBasisInput<'a> {
 
 /// 在事务内持久化一张精确依据采购单并提交审批。
 ///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `rbac` - 审批绑定授权源
-/// * `input` - guard 重算后的事务内创建输入（销售单、依据范围、本次行与事实）
-/// * `command` - 原始请求、命令收据与审计操作人
-/// * `executor` - 数据访问执行器
+/// `rbac` 为审批绑定授权源；`input` 为guard 重算后的事务内创建输入（销售单、依据范围、本次行与事实）；`command` 为原始请求、命令收据与审计操作人。
 ///
-/// # 返回
-/// 返回已提交审批的创建结果。
+/// 返回已提交审批的创建结果。实体构造、审批绑定、启动审批或仓储写入失败时返回错误。
 ///
-/// # 错误
-/// 实体构造、审批绑定、启动审批或仓储写入失败时返回错误。
-///
-/// # 关键业务约束
-/// `creation_basis_id` 唯一，且本函数只创建一个采购聚合；命令收据记录提交后正式号。
-/// 供应商名称快照只从同一事务内批量加载的事实读取，不得再次逐段查询。
-/// 创建并提交必须在同一事务证明采购对象范围，不得由创建人审计字段兜底。
+/// `creation_basis_id` 唯一，且本函数只创建一个采购聚合；命令收据记录提交后正式号。供应商名称快照只从同一事务内批量加载的事实读取，不得再次逐段查询。创建并提交必须在同一事务证明采购对象范围，
+/// 不得由创建人审计字段兜底。
 pub async fn persist_basis_draft(
     db: &Database,
     ports: &PurchaseOrderPorts,
@@ -374,7 +345,7 @@ pub async fn persist_basis_draft(
     .await
 }
 
-/// 按原顺序校验目标仓库、初始责任人和对象范围，再构造完整草稿事实。
+// 按原顺序校验目标仓库、初始责任人和对象范围，再构造完整草稿事实。
 async fn prepare_basis_draft(
     db: &Database,
     ports: &PurchaseOrderPorts,
@@ -422,14 +393,11 @@ async fn prepare_basis_draft(
     Ok(PreparedBasisDraft { order, submission, lines })
 }
 
-/// 从同阶段依据和当前主属组织构造采购主表，沿用领域的唯一规范化与状态规则。
-/// # 参数
-/// db、executor 为原事务；sales_order、group 为精确依据；work_item_id、actor 为原命令身份；
-/// target_warehouse_id 为本单已确定的目标收货仓。
-/// # 返回
-/// 返回尚未分配正式号、尚未持久化的采购候选。
-/// # 错误
-/// 当前主属组织缺失或候选字段不满足采购领域不变式时拒绝。
+// 从同阶段依据和当前主属组织构造采购主表，沿用领域的唯一规范化与状态规则。
+//
+// db、executor 为原事务；sales_order、group 为精确依据；work_item_id、actor 为原命令身份； target_warehouse_id 为本单已确定的目标收货仓。
+//
+// 返回尚未分配正式号、尚未持久化的采购候选。当前主属组织缺失或候选字段不满足采购领域不变式时拒绝。
 pub(in crate::procure_to_pay) async fn prepare_basis_order(
     db: &Database,
     sales_order: &SalesOrder,
@@ -463,7 +431,7 @@ pub(in crate::procure_to_pay) async fn prepare_basis_order(
     .map_err(Into::into)
 }
 
-/// 按原销售行顺序冻结金额与供应商商务指针，复用 guard 后批量事实。
+// 按原销售行顺序冻结金额与供应商商务指针，复用 guard 后批量事实。
 async fn prepare_basis_submission(
     db: &Database,
     order: &PurchaseOrder,
@@ -497,22 +465,13 @@ async fn prepare_basis_submission(
     Ok((submission, submission_lines))
 }
 
-/// 写入采购草稿聚合、单据注册和审批绑定。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `ports` - 审批绑定与业务写入能力
-/// * `write` - 采购聚合与审计操作人
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回使用同一执行器成功登记的业务注册行，供随后的冻结步骤复用。
-///
-/// # 错误
-/// 审批绑定、单据注册或仓储写入失败时返回错误。
-///
-/// # 关键业务约束
-/// 本函数只写入草稿聚合；正式号与审批启动由随后的提交步骤完成。
+// 写入采购草稿聚合、单据注册和审批绑定。
+//
+// `ports` 为审批绑定与业务写入能力；`write` 为采购聚合与审计操作人。返回使用同一执行器成功登记的业务注册行，供随后的冻结步骤复用。
+//
+// 审批绑定、单据注册或仓储写入失败时返回错误。
+//
+// 本函数只写入草稿聚合；正式号与审批启动由随后的提交步骤完成。
 pub(in crate::procure_to_pay) async fn write_prepared_draft(
     db: &Database,
     ports: &PurchaseOrderPorts,
@@ -554,24 +513,13 @@ pub(in crate::procure_to_pay) async fn write_prepared_draft(
     Ok(document)
 }
 
-/// 写入提交后的采购创建命令收据。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `command` - 原始请求、收据身份与审计操作人
-/// * `purchase_order_id` - 采购单主键
-/// * `purchase_no` - 提交后正式号
-/// * `lock_version` - 提交后乐观锁版本
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回可回放的创建结果。
-///
-/// # 错误
-/// 收据序列化或仓储写入失败时返回错误。
-///
-/// # 关键业务约束
-/// 收据必须与提交后正式号同事务落库，回放不得返回空单号。
+// 写入提交后的采购创建命令收据。
+//
+// `command` 为原始请求、收据身份与审计操作人；`purchase_order_id` 为采购单主键；`purchase_no` 为提交后正式号；`lock_version` 为提交后乐观锁版本。
+//
+// 返回可回放的创建结果。收据序列化或仓储写入失败时返回错误。
+//
+// 收据必须与提交后正式号同事务落库，回放不得返回空单号。
 async fn write_creation_receipt(
     db: &mongodb::Database,
     command: &CreateBasisCommand<'_>,
@@ -595,7 +543,7 @@ async fn write_creation_receipt(
     Ok(receipt.into_result(false))
 }
 
-/// 从首次创建结果投影随后写入的创建事件。
+// 从首次创建结果投影随后写入的创建事件。
 pub(in crate::procure_to_pay) fn creation_audit(
     actor: &AuditActor,
     command_id: &str,
@@ -616,20 +564,11 @@ pub(in crate::procure_to_pay) fn creation_audit(
         .with_event_sequence(sequence.created())?)
 }
 
-/// 校验采购单初始责任人可以完成其责任类型对应的后续履约操作。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `rbac` - 与采购创建事务授权版本一致的 RBAC 服务
-/// * `responsibility` - 本单履约责任
-/// * `owner_user_id` - 创建后冻结为采购单责任人的账号
-/// * `executor` - 当前事务执行器
-///
-/// # 返回
-/// 入仓责任或责任人具备完整履约权限时返回成功。
-///
-/// # 错误
-/// 责任人账号不可用、缺少对应完整履约权限，或账号与 RBAC 查询失败时返回错误。
+// 校验采购单初始责任人可以完成其责任类型对应的后续履约操作。
+//
+// `rbac` 为与采购创建事务授权版本一致的 RBAC 服务；`responsibility` 为本单履约责任；`owner_user_id` 为创建后冻结为采购单责任人的账号；沿用原事务的执行器。
+//
+// 入仓责任或责任人具备完整履约权限时返回成功。责任人账号不可用、缺少对应完整履约权限，或账号与 RBAC 查询失败时返回错误。
 async fn ensure_initial_purchase_order_owner(
     db: &mongodb::Database,
     rbac: &Arc<AuthorizationService>,
@@ -656,21 +595,11 @@ async fn ensure_initial_purchase_order_owner(
     })
 }
 
-/// 校验并解析采购单目标收货仓。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `rbac` - 与采购创建事务授权版本一致的 RBAC 服务
-/// * `responsibility` - 本单履约责任
-/// * `requested_id` - 客户端指定的目标仓库
-/// * `executor` - 当前事务执行器
-///
-/// # 返回
-/// 仓库履约返回存在且启用的目标仓库，其他履约返回空。
-///
-/// # 错误
-/// 仓库履约未指定目标仓、仓库不存在或停用、入库经办人不可用或权限不足，
-/// 或非仓库履约携带目标仓时返回错误。
+// 校验并解析采购单目标收货仓。
+//
+// `rbac` 为与采购创建事务授权版本一致的 RBAC 服务；`responsibility` 为本单履约责任；`requested_id` 为客户端指定的目标仓库；沿用原事务的执行器。
+//
+// 仓库履约返回存在且启用的目标仓库，其他履约返回空。仓库履约未指定目标仓、仓库不存在或停用、入库经办人不可用或权限不足，或非仓库履约携带目标仓时返回错误。
 async fn resolve_target_warehouse(
     db: &mongodb::Database,
     rbac: &Arc<AuthorizationService>,
@@ -718,18 +647,11 @@ async fn resolve_target_warehouse(
     }
 }
 
-/// 读取集采入仓目标仓库当前修订的所在地区。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `warehouse_id` - 已校验启用的目标仓库；非仓库履约为空
-/// * `executor` - 当前事务执行器
-///
-/// # 返回
-/// 返回所在地区；非仓库履约或仓库缺少当前修订时为空，由配送判定拒绝。
-///
-/// # 错误
-/// 查询失败时返回错误。
+// 读取集采入仓目标仓库当前修订的所在地区。
+//
+// `warehouse_id` 为已校验启用的目标仓库；非仓库履约为空；沿用原事务的执行器。返回所在地区；非仓库履约或仓库缺少当前修订时为空，由配送判定拒绝。
+//
+// 查询失败时返回错误。
 async fn target_warehouse_region(
     db: &Database,
     warehouse_id: Option<&WarehouseId>,
@@ -748,7 +670,7 @@ async fn target_warehouse_region(
     Ok(revision.and_then(|revision| revision.region_code))
 }
 
-/// 把责任资格失败转换为当前创建场景可执行的校验提示，同时保留基础设施错误。
+// 把责任资格失败转换为当前创建场景可执行的校验提示，同时保留基础设施错误。
 fn contextualize_fulfillment_owner_error(error: Error, message: &str) -> Error {
     match error {
         Error::BusinessLogicError(_) => Error::ValidationError(message.to_string()),
@@ -756,23 +678,13 @@ fn contextualize_fulfillment_owner_error(error: Error, message: &str) -> Error {
     }
 }
 
-/// 查询并校验采购创建幂等收据。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `receipt_identity` - 稳定收据 ID
-/// * `expected_fingerprint` - 当前命令载荷指纹
-/// * `actor` - 当前操作人
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 收据不存在返回 `None`；存在且一致返回原创建结果并标记回放。
-///
-/// # 错误
-/// 同键异载荷、收据身份不一致、收据损坏或采购单缺失时返回错误。
-///
-/// # 关键业务约束
-/// 事务前、事务内和事务失败后均复用同一校验逻辑。
+// 查询并校验采购创建幂等收据。
+//
+// `receipt_identity` 为稳定收据 ID；`expected_fingerprint` 为当前命令载荷指纹。
+//
+// 收据不存在返回 `None`；存在且一致返回原创建结果并标记回放。同键异载荷、收据身份不一致、收据损坏或采购单缺失时返回错误。
+//
+// 事务前、事务内和事务失败后均复用同一校验逻辑。
 pub(in crate::procure_to_pay) async fn replay_creation(
     db: &mongodb::Database,
     authorization: &AuthorizationService,
@@ -828,7 +740,7 @@ pub(in crate::procure_to_pay) async fn replay_creation(
 }
 
 impl PurchaseOrderProcess {
-    /// 仅在原创建可能已提交后，用单次快照授权并读取精确原命令结果。
+    // 仅在原创建可能已提交后，用单次快照授权并读取精确原命令结果。
     pub(in crate::procure_to_pay) async fn replay_created_result(
         &self,
         identity: &PurchaseCommandReceiptIdentity,
@@ -894,7 +806,7 @@ mod tests {
         .unwrap()
     }
 
-    /// 执行生产投影工厂，按逐单提交、创建和最终批次主事件形成完整序号。
+    // 执行生产投影工厂，按逐单提交、创建和最终批次主事件形成完整序号。
     #[test]
     fn sourcing_factories_preserve_batch_order_command_and_immutable_snapshots() {
         let actor = actor();
@@ -956,7 +868,7 @@ mod tests {
         assert!(decoded.iter().all(|log| log.message.as_deref().unwrap().contains("陈国平")));
     }
 
-    /// 独立建单复用同一生产工厂，只有提交与创建；纯库存批次只有主事件。
+    // 独立建单复用同一生产工厂，只有提交与创建；纯库存批次只有主事件。
     #[test]
     fn standalone_and_stock_only_factories_keep_exact_event_sequences() {
         let actor = actor();

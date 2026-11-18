@@ -9,18 +9,8 @@ use crate::entity::purchase_order::*;
 use crate::repository::PurchaseOrderExt;
 use crate::{Error, Result};
 impl PurchaseOrderService {
-    /// 计算下一个版本号（同一采购单内从 1 递增）。
-    ///
-    /// 用 `NoTransaction` 读取已有版本，不加入调用方事务。
-    ///
-    /// # 参数
-    /// * `order` - 当前采购单
-    ///
-    /// # 返回
-    /// 没有历史版本时返回 `1`，否则返回最大版本号加一。
-    ///
-    /// # 错误
-    /// 版本列表读取失败时返回仓储错误；版本号达到 `u32::MAX` 时返回 `Logic`。
+    /// 正式化或采购变更落库前读取同一采购单的历史版本，取最大序号加一；无历史时从 1 开始。
+    /// 读取使用 `NoTransaction`，不加入调用方事务；仓储失败或 `u32` 序号溢出时返回错误。
     pub async fn next_revision_no(&self, order: &PurchaseOrder) -> Result<u32> {
         let existing = self
             .db
@@ -29,20 +19,8 @@ impl PurchaseOrderService {
             .await?;
         PurchaseOrderRevision::next_revision_no(&existing).map_err(Into::into)
     }
-    /// 由已冻结采购提交构造生效版本和版本行，不写库、不构造销售分配。
-    ///
-    /// # 参数
-    /// * `order` - 当前采购单，只核对其稳定 ID
-    /// * `submission` - 已冻结提交
-    /// * `submission_lines` - 该提交的行
-    /// * `revision_no` - 调用方算好的版本号
-    ///
-    /// # 返回
-    /// 返回尚未落库的版本头和版本行。
-    ///
-    /// # 错误
-    /// 提交不属于当前采购单时返回 `BusinessLogicError`；提交状态、版本号或行不变式
-    /// 不满足时返回 `Logic`。
+    /// 采购首次审批通过时，由冻结提交及其明细构造生效版本头和版本行，不在此写库或建立销售分配。
+    /// 冻结提交必须属于本采购单；提交状态、版本号或版本行不满足实体规则时拒绝构造。
     pub async fn build_effective_revision(
         &self,
         order: &PurchaseOrder,
@@ -76,17 +54,10 @@ impl PurchaseOrderService {
     }
     /// 由变更提交构造生效版本和版本行，不写库。
     ///
-    /// # 参数
-    /// * `order` - 当前采购单，只取其稳定 ID
-    /// * `submission` - 变更提交
-    /// * `lines` - 变更提交行
-    /// * `revision_no` - 调用方算好的版本号
+    /// 返回尚未落库的版本头和版本行。变更提交或行不能形成版本时返回 `Logic`。
     ///
-    /// # 返回
-    /// 返回尚未落库的版本头和版本行。
-    ///
-    /// # 错误
-    /// 变更提交或行不能形成版本时返回 `Logic`。
+    /// - `order`：当前采购单，只取其稳定 ID。
+    /// - `revision_no`：调用方算好的版本号。
     pub async fn build_change_revision(
         &self,
         order: &PurchaseOrder,
@@ -130,22 +101,8 @@ pub struct FormalizedOrderWrite<'a> {
     /// 与新正式版本同事务写入的分配。
     pub allocations: &'a super::allocation_maintenance::PreparedSalesAllocations,
 }
-/// 在调用方事务中依次创建版本及行、分配，推进订单与审核提交并按原序执行 CAS。
-///
-/// 任一步失败立即返回，本函数不继续后续写入。不开启事务。
-///
-/// # 参数
-/// * `db` - 采购数据库
-/// * `write` - 已准备的版本、分配、订单和提交
-/// * `actor_id` - 最终通过执行人
-/// * `executor` - 调用方事务执行器
-///
-/// # 返回
-/// 返回已推进为正式版本的采购单。
-///
-/// # 错误
-/// 版本或分配写入失败时返回仓储错误；订单或提交状态不允许时返回 `Logic`；
-/// 提交或订单 CAS 失败时返回对应仓储错误。
+/// 首次采购正式化时，在调用方事务内依次写入版本及明细、销售分配，再推进审核提交和采购单并按原顺序做 CAS。
+/// 返回已指向生效版本的采购单；状态校验或任一步写入失败即停止，由调用方处理回滚。
 pub async fn persist_formalized_order(
     db: &mongodb::Database,
     write: FormalizedOrderWrite<'_>,
@@ -170,17 +127,8 @@ pub async fn persist_formalized_order(
     Ok(order_mut)
 }
 
-/// 在原正式化写入前校验冻结提交与逐行金额一致，不增加外域或数据库规则。
-///
-/// # 参数
-/// * `submission` - 待审核提交
-/// * `lines` - 该提交的行
-///
-/// # 返回
-/// 金额一致时返回 `Ok(())`。
-///
-/// # 错误
-/// 行金额与提交头不一致时返回 `BusinessLogicError`，文案取实体错误文本。
+/// 采购正式化前，将冻结提交表头与同次提交的逐行金额核对。
+/// 金额不一致按实体文案返回 `BusinessLogicError`；不读取外域或补算来源事实。
 pub fn ensure_review_sources(
     submission: &PurchaseOrderSubmission,
     lines: &[PurchaseOrderSubmissionLine],

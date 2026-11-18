@@ -23,17 +23,9 @@ pub enum SupplierOrderAllowedAction {
 }
 
 impl SupplierOrderAllowedAction {
-    /// 返回稳定动作代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// `QueryResult`、`Replay`、`ConfirmVerifiedTerminalResult` 分别对应
-    /// `QUERY_RESULT`、`REPLAY`、`CONFIRM_VERIFIED_TERMINAL_RESULT`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得供应商订单动作的稳定标识，供需要按代码而非展示文案识别取值的调用方使用。
+    /// `QueryResult`、`Replay`、`ConfirmVerifiedTerminalResult` 分别对应`QUERY_RESULT`、`REPLAY`、
+    /// `CONFIRM_VERIFIED_TERMINAL_RESULT`。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::QueryResult => "QUERY_RESULT",
@@ -183,17 +175,9 @@ pub enum SupplierOrderResolution {
 }
 
 impl SupplierOrderResolution {
-    /// 返回稳定终态代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// `OrderAccepted` 为 `ORDER_ACCEPTED`，`OrderRejected` 为 `ORDER_REJECTED`，
-    /// `OrderCompleted` 为 `ORDER_COMPLETED`，`Canceled` 为 `CANCELED`，`Refunded` 为 `REFUNDED`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得供应商订单动作的稳定标识，供需要按代码而非展示文案识别取值的调用方使用。
+    /// `OrderAccepted` 为 `ORDER_ACCEPTED`，`OrderRejected` 为 `ORDER_REJECTED`，`OrderCompleted` 为
+    /// `ORDER_COMPLETED`，`Canceled` 为 `CANCELED`，`Refunded` 为 `REFUNDED`。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::OrderAccepted => "ORDER_ACCEPTED",
@@ -204,16 +188,8 @@ impl SupplierOrderResolution {
         }
     }
 
-    /// 返回面向处理人的业务结果名称。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
+    /// 为供应商订单动作提供中文展示名；界面展示时使用，不以文案作为稳定标识。
     /// 各终态对应的中文名称：已接单、已拒单、履约已完成、取消已完成或退款已完成。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn label(self) -> &'static str {
         match self {
             Self::OrderAccepted => "供应商已接单",
@@ -288,17 +264,8 @@ pub struct SupplierOrderActionBlockerView {
 /// 供应商取消/退款动作提交请求
 impl SupplierOrderActionBlockerView {
     /// 以必填阻断三元组构造视图；目标工作面默认为空。
-    ///
-    /// # 参数
-    /// * `action` - 被阻断动作
-    /// * `code` - 稳定阻断码
-    /// * `message` - 权限安全的业务说明
-    ///
-    /// # 返回
     /// 返回无目标工作面的视图。
-    ///
-    /// # 错误
-    /// 无。
+    /// `message`：权限安全的业务说明。
     pub fn new(action: String, code: String, message: String) -> Self {
         Self { action, code, message, destination_workspace_id: None }
     }

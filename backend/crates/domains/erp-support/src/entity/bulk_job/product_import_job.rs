@@ -15,35 +15,18 @@ pub const PRODUCT_IMPORT_JOB_NO_PREFIX: &str = "PIMP";
 pub const PRODUCT_IMPORT_DOMAIN_JOB_TYPE: &str = "PRODUCT_IMPORT";
 
 /// 构造商品导入任务编号。
-///
-/// # 参数
-/// * `request_id` - 幂等请求身份
-///
-/// # 返回
 /// 返回 `PIMP-<request_id>`。
-///
-/// # 错误
-/// 无。
+/// `request_id` 为幂等请求身份。
 pub fn product_import_job_no(request_id: &str) -> String {
     format!("{PRODUCT_IMPORT_JOB_NO_PREFIX}-{request_id}")
 }
 
 impl BackgroundJob {
     /// 为产品报价表导入登记后台任务。
-    ///
     /// 固定任务类型 `Import`、领域任务类型 `PRODUCT_IMPORT`，初始 `PENDING`。
-    ///
-    /// # 参数
-    /// * `job_id` - 任务主键
-    /// * `request_id` - 幂等请求身份
-    /// * `file_asset_id` - 源 xlsx 文件资产
-    /// * `total_rows` - 导入行数
-    /// * `requested_by` - 发起人账号 ID
-    ///
-    /// # 返回
-    /// 返回新建的后台任务实体。
-    ///
-    /// # 错误
+    /// `job_id` 为任务主键；`request_id` 为幂等请求身份。
+    /// `file_asset_id` 为源 xlsx 文件资产；`total_rows` 为导入行数。
+    /// `requested_by` 为发起人账号 ID。
     /// 编号或发起人校验失败时返回错误。
     pub fn for_product_import(
         job_id: BackgroundJobId,

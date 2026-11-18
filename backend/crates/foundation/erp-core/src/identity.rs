@@ -11,19 +11,7 @@ use serde::{Deserialize, Serialize};
 pub struct InvalidAccountKind;
 
 impl std::fmt::Display for InvalidAccountKind {
-    /// 输出稳定的解析失败说明。
-    ///
-    /// # 参数
-    /// * `f` - 格式化器
-    ///
-    /// # 返回
-    /// 格式化成功返回 `Ok`，写入失败返回格式化错误。
-    ///
-    /// # 错误
-    /// 仅在底层 `fmt` 写入失败时返回错误。
-    ///
-    /// # 约束
-    /// 文案不得携带输入原值，避免把未知枚举写进日志。
+    // 输出不含原值的账号类型错误，避免把未知输入写进日志。
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("未知的账号类型")
     }
@@ -47,16 +35,7 @@ impl AccountKind {
     /// 供应商门户账号的稳定代码。
     pub const SUPPLIER_CODE: &'static str = "supplier";
 
-    /// 返回账号类型字符串表示。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回稳定的账号类型字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为跨领域记录和比较提供稳定的账号类型代码，而非展示标签。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Admin => Self::ADMIN_CODE,
@@ -64,16 +43,8 @@ impl AccountKind {
         }
     }
 
-    /// 从字符串解析账号类型。
-    ///
-    /// # 参数
-    /// * `value` - 账号类型字符串
-    ///
-    /// # 返回
-    /// 成功返回账号类型。
-    ///
-    /// # 错误
-    /// 未知取值返回 [`InvalidAccountKind`]。
+    /// 从持久化或入口代码识别后台管理员与供应商门户账号。大小写和空白均须精确匹配；
+    /// 未知值返回 [`InvalidAccountKind`]。
     pub fn parse(value: &str) -> std::result::Result<Self, InvalidAccountKind> {
         if value == Self::ADMIN_CODE {
             return Ok(Self::Admin);
@@ -88,16 +59,7 @@ impl AccountKind {
 impl TryFrom<&str> for AccountKind {
     type Error = InvalidAccountKind;
 
-    /// 从字符串解析账号类型。
-    ///
-    /// # 参数
-    /// * `value` - 账号类型字符串
-    ///
-    /// # 返回
-    /// 成功返回账号类型。
-    ///
-    /// # 错误
-    /// 未知取值返回 [`InvalidAccountKind`]。
+    // 为接收 `&str` 的转换入口复用 `AccountKind::parse`；未知代码仍返回 `InvalidAccountKind`。
     fn try_from(value: &str) -> std::result::Result<Self, Self::Error> {
         Self::parse(value)
     }
@@ -106,14 +68,7 @@ impl TryFrom<&str> for AccountKind {
 impl FromStr for AccountKind {
     type Err = InvalidAccountKind;
 
-    /// 按账号稳定代码解析，保持既有转换的大小写及错误语义。
-    ///
-    /// # 参数
-    /// * `value` - 账号类型的稳定代码。
-    /// # 返回
-    /// 返回对应账号类型。
-    /// # 错误
-    /// 未知代码返回 [`InvalidAccountKind`]。
+    // 让标准字符串解析入口沿用稳定账号代码的精确匹配；不裁剪、不忽略大小写，未知代码返回 `InvalidAccountKind`。
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         Self::parse(value)
     }

@@ -160,16 +160,10 @@ impl PurchaseChangeSubmissionLineData {
         Ok(fields)
     }
 
-    /// 按行类型校验销售分配字段。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 商品行已引用销售稳定行与当前版本行且分配数量不为负（零数量表示已移除），或物流费用行不携带销售分配时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 商品行缺少销售行引用、分配数量缺失或为负，或物流费用行携带销售行、历史提交行或分配数量时返回领域错误。
+    // 按行类型校验销售分配字段。
+    //
+    // 商品行已引用销售稳定行与当前版本行且分配数量不为负（零数量表示已移除），或物流费用行不携带销售分配时返回 `Ok(())`。商品行缺少销售行引用、
+    // 分配数量缺失或为负，或物流费用行携带销售行、历史提交行或分配数量时返回领域错误。
     fn ensure_allocation(&self) -> Result<()> {
         match self.line_type {
             PurchaseLineType::ItemService => {
@@ -198,19 +192,11 @@ impl PurchaseChangeSubmissionLineData {
 impl PurchaseChangeSubmissionLine {
     /// 创建采购变更提交行。
     ///
-    /// 完成快照文本的规范化，并按行类型强制字段归属与金额三元组守恒（§6.6）；
-    /// 商品行必须引用销售稳定行与当前版本行，移除行的分配数量可以为零。
+    /// 完成快照文本的规范化，并按行类型强制字段归属与金额三元组守恒（§6.6）；商品行必须引用销售稳定行与当前版本行，移除行的分配数量可以为零。
     ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::PurchaseChangeSubmissionLineId`）
-    /// * `data` - 创建数据
+    /// 行号为零、字段归属与行类型不符、快照超长、数量/单价/税率越界或金额三元组不守恒时返回错误。
     ///
-    /// # 返回
-    /// 返回新建的提交行实体。
-    ///
-    /// # 错误
-    /// 行号为零、字段归属与行类型不符、快照超长、数量/单价/税率越界或
-    /// 金额三元组不守恒时返回错误。
+    /// `id` 为实体主键（`erp_core::ids::PurchaseChangeSubmissionLineId`）。
     pub fn new(
         id: PurchaseChangeSubmissionLineId,
         mut data: PurchaseChangeSubmissionLineData,
@@ -366,7 +352,7 @@ pub(super) mod tests {
         assert_error(data, "商品/服务行分配数量不能为负");
     }
 
-    /// 改单移除的商品行以零数量和零金额保留原行身份。
+    // 改单移除的商品行以零数量和零金额保留原行身份。
     #[test]
     fn change_line_keeps_removed_item_with_zero_quantity() {
         let zero = Quantity::from_str("0").unwrap();

@@ -33,14 +33,7 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 use crate::wiring::{offering_access, scoped_offering_service};
 
-/// 查询供应商供给列表。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `subject` - 当前授权主体
-/// * `params` - 筛选与分页参数
-///
-/// # 返回
+/// 按请求条件查询供应商供给列表。
 /// 返回供给分页列表；无成本权限时自动清除成本字段。
 pub async fn list(
     State(state): State<HttpState>,
@@ -63,13 +56,6 @@ pub async fn list(
 }
 
 /// 为公司 SKU 新增供应商供给。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 审计操作人
-/// * `req` - 供给身份、条款和初始可供状态
-///
-/// # 返回
 /// 返回新供给及首版事实主键。
 pub async fn create(
     State(state): State<HttpState>,
@@ -84,14 +70,7 @@ pub async fn create(
 }
 
 /// 追加供给商业条款修订。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 审计操作人
-/// * `id` - 供给主键
-/// * `req` - 新条款与期望版本
-///
-/// # 返回
+/// `req` 为新条款与期望版本。
 /// 返回新修订号与供给状态。
 pub async fn revise(
     State(state): State<HttpState>,
@@ -107,14 +86,6 @@ pub async fn revise(
 }
 
 /// 更新供给的实时可供状态与数量。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 审计操作人
-/// * `id` - 供给主键
-/// * `req` - 新可供事实
-///
-/// # 返回
 /// 返回更新后的可供状态与投影版本。
 pub async fn update_availability(
     State(state): State<HttpState>,
@@ -129,9 +100,7 @@ pub async fn update_availability(
     Ok(ApiResponse::ok_with_data(result))
 }
 
-/// 核对供应停止来源与安全暂停影响并完成正式任务。
-///
-/// 本命令不恢复供给、不恢复商品发布；安全暂停事实继续生效。
+/// 当供应停止原因与安全暂停影响已核对时，完成正式异常任务。结案不恢复供给或商品发布，安全暂停继续生效。
 pub async fn complete_supply_exception_task(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -146,14 +115,7 @@ pub async fn complete_supply_exception_task(
 }
 
 /// 显式交接供给维护人与可选业务组织。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 供给稳定 ID
-/// * `req` - 交接请求（目标、原因、版本与幂等键）
-///
-/// # 返回
+/// `req` 为交接请求（目标、原因、版本与幂等键）。
 /// 返回交接后的维护人、组织与版本。
 pub async fn offering_handover(
     State(state): State<HttpState>,
@@ -177,13 +139,6 @@ pub async fn offering_handover(
 }
 
 /// 查询合格有效的供给维护人交接候选。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 供给稳定 ID
-///
-/// # 返回
 /// 返回有效且具备 `supplier_offering:update` 的账号。
 pub async fn offering_handover_candidates(
     State(state): State<HttpState>,

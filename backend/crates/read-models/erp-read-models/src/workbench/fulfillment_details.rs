@@ -20,18 +20,15 @@ use crate::errors::Result;
 type Names = HashMap<String, (String, Option<String>)>;
 
 impl WorkbenchFactsReader<'_> {
-    /// 批量追加四种履约单据的公共业务字段；缺失字段明确显示待登记，不展示内部身份。
-    ///
-    /// # 参数
-    /// * `keys` - 本批任务引用的对象键
-    /// * `facts` - 输出的对象事实表
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 无返回值。已就地写入入库、发货、电子交付和服务履约的公共字段。
-    ///
-    /// # 错误
-    /// 任一种履约单据或名称解析的仓储读取失败时返回对应错误。
+    // 读取履约批次简报时，批量追加四种履约单据的公共业务字段；缺失字段明确显示待登记，不展示内部身份。
+    //
+    // 调用参数：
+    // * `keys` - 本批任务引用的对象键
+    // * `facts` - 输出的对象事实表
+    //
+    // 已就地写入入库、发货、电子交付和服务履约的公共字段。
+    //
+    // 任一种履约单据或名称解析的仓储读取失败时返回对应错误。
     pub(super) async fn load_fulfillment_details(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -44,7 +41,7 @@ impl WorkbenchFactsReader<'_> {
         self.service_details(keys, facts, executor).await
     }
 
-    /// 入库数量和质检结果使用实际入库行，不用来源订单数量替代。
+    // 处理履约批次简报时，入库数量和质检结果使用实际入库行，不用来源订单数量替代。
     async fn receipt_details(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -75,7 +72,7 @@ impl WorkbenchFactsReader<'_> {
         Ok(())
     }
 
-    /// 发货批次、实际发货数量和物流跟踪信息对阅读角色一致。
+    // 处理履约批次简报时，发货批次、实际发货数量和物流跟踪信息对阅读角色一致。
     async fn delivery_details(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -110,7 +107,7 @@ impl WorkbenchFactsReader<'_> {
         Ok(())
     }
 
-    /// 电子交付只展示业务结果、数量、时间与凭证引用，不返回加密收件信息。
+    // 处理履约批次简报时，电子交付只展示业务结果、数量、时间与凭证引用，不返回加密收件信息。
     async fn electronic_details(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -134,7 +131,7 @@ impl WorkbenchFactsReader<'_> {
         Ok(())
     }
 
-    /// 服务履约共享服务数量、期间、完成说明与凭证；私密服务地址仍走原专门授权。
+    // 处理履约批次简报时，服务履约共享服务数量、期间、完成说明与凭证；私密服务地址仍走原专门授权。
     async fn service_details(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -158,7 +155,7 @@ impl WorkbenchFactsReader<'_> {
         Ok(())
     }
 
-    /// 按入库行的精确采购版本读取品名与单位，避免当前版本覆盖批次来源。
+    // 依据入库行的精确采购版本读取品名与单位，避免当前版本覆盖批次来源。
     async fn receipt_line_names(
         &self,
         lines: &[PurchaseReceiptLine],
@@ -181,7 +178,7 @@ impl WorkbenchFactsReader<'_> {
             .collect())
     }
 
-    /// 从采购来源找到销售生效行，名称只用于展示。
+    // 补齐履约批次简报的展示名称时，从采购来源找到销售生效行，名称只用于展示。
     async fn purchase_sales_line_names(&self, ids: &[String], executor: &mut dyn Executor) -> Result<Names> {
         let orders = self.db.purchase_orders().list_active_by_ids(ids, executor).await?;
         self.sales_line_names(
@@ -191,7 +188,7 @@ impl WorkbenchFactsReader<'_> {
         .await
     }
 
-    /// 批量解析销售稳定行的当前业务名称与单位；缺失时使用行号，不展示 ID。
+    // 补齐履约批次简报的展示名称时，批量解析销售稳定行的当前业务名称与单位；缺失时使用行号，不展示 ID。
     async fn sales_line_names(&self, ids: &[String], executor: &mut dyn Executor) -> Result<Names> {
         let orders = self.db.sales_orders().list_active_by_ids(ids, executor).await?;
         let revisions = orders
@@ -213,7 +210,7 @@ impl WorkbenchFactsReader<'_> {
             .collect())
     }
 
-    /// 仓库主键仅用来批量解析名称。
+    // 补齐履约批次简报的展示名称时，仓库主键仅用来批量解析名称。
     async fn warehouse_labels(
         &self,
         ids: &[String],
@@ -247,7 +244,7 @@ impl WorkbenchFactsReader<'_> {
     }
 }
 
-/// 履约草稿代表尚待业务处理，不将内部保存状态作为业务进度。
+// 投影履约批次简报字段时，履约草稿代表尚待业务处理，不将内部保存状态作为业务进度。
 fn pending_status<'a>(status: &'a str, pending: &'a str) -> &'a str {
     if status == "草稿" {
         return pending;
@@ -255,7 +252,7 @@ fn pending_status<'a>(status: &'a str, pending: &'a str) -> &'a str {
     status
 }
 
-/// 公共表头以业务单号表示本次履约批次。
+// 处理履约批次简报时，公共表头以业务单号表示本次履约批次。
 fn head(number: &str, status: &str) -> Vec<BriefSection> {
     let mut fields = Vec::new();
     field(&mut fields, "履约批次", Some(number));
@@ -263,12 +260,12 @@ fn head(number: &str, status: &str) -> Vec<BriefSection> {
     fields
 }
 
-/// 缺失业务字段明确显示尚未登记。
+// 处理履约批次简报时，缺失业务字段明确显示尚未登记。
 fn field(fields: &mut Vec<BriefSection>, label: &str, value: Option<&str>) {
     push_section(fields, label, Some(value.filter(|v| !v.trim().is_empty()).unwrap_or("未登记")), false);
 }
 
-/// 凭证保留受控文件引用，界面渲染附件入口而非文件内部 ID。
+// 处理履约批次简报时，凭证保留受控文件引用，界面渲染附件入口而非文件内部 ID。
 fn evidence(fields: &mut Vec<BriefSection>, id: Option<&str>) {
     fields.push(BriefSection {
         label: "履约凭证".into(),
@@ -282,7 +279,7 @@ fn qty(value: &Quantity, name: Option<&(String, Option<String>)>) -> String {
     super::brief::format_quantity(value, name.and_then(|n| n.1.as_deref()))
 }
 
-/// 产品资料缺失时保留业务行号，不把稳定主键显示为品名。
+// 生成履约批次简报展示时，产品资料缺失时保留业务行号，不把稳定主键显示为品名。
 fn item_line(name: Option<&(String, Option<String>)>, line_no: u32, quantity: &Quantity) -> BriefLine {
     BriefLine {
         title: name.map(|n| n.0.clone()).unwrap_or_else(|| format!("履约明细 {line_no}")),
@@ -291,7 +288,7 @@ fn item_line(name: Option<&(String, Option<String>)>, line_no: u32, quantity: &Q
     }
 }
 
-/// 只补充已装载的授权对象；不得以展示内容制造新对象权限。
+// 组装履约批次简报时，只补充已装载的授权对象；不得以展示内容制造新对象权限。
 fn apply(
     facts: &mut WorkbenchObjectFactMap,
     kind: ObjectKind,
@@ -308,7 +305,7 @@ fn apply(
     source.more_count = 0;
 }
 
-/// 收货批次共享已登记的仓库和过账时点。
+// 处理履约批次简报时，收货批次共享已登记的仓库和过账时点。
 fn receipt_fields(row: &PurchaseReceipt, warehouses: &HashMap<String, String>) -> Vec<BriefSection> {
     let mut fields = head(&row.receipt_no, pending_status(row.status.label(), "待入库"));
     field(&mut fields, "收货仓库", warehouses.get(row.warehouse_id.as_ref()).map(String::as_str));
@@ -316,7 +313,7 @@ fn receipt_fields(row: &PurchaseReceipt, warehouses: &HashMap<String, String>) -
     fields
 }
 
-/// 收货、合格与不合格数量分别呈现，不把零数量或质量结果省略。
+// 处理履约批次简报时，收货、合格与不合格数量分别呈现，不把零数量或质量结果省略。
 fn receipt_line(row: &PurchaseReceiptLine, names: &Names) -> BriefLine {
     let name = names.get(row.purchase_order_revision_line_id.as_ref());
     BriefLine {
@@ -331,7 +328,7 @@ fn receipt_line(row: &PurchaseReceiptLine, names: &Names) -> BriefLine {
     }
 }
 
-/// 发货批次展示业务状态；物流信息随明细展示以保留归属。
+// 处理履约批次简报时，发货批次展示业务状态；物流信息随明细展示以保留归属。
 fn delivery_fields(row: &Delivery, warehouses: &HashMap<String, String>) -> Vec<BriefSection> {
     let mut fields = head(&row.delivery_no, pending_status(row.status.label(), "待发货"));
     field(&mut fields, "发货方式", Some(row.delivery_type.label()));
@@ -342,7 +339,7 @@ fn delivery_fields(row: &Delivery, warehouses: &HashMap<String, String>) -> Vec<
     fields
 }
 
-/// 明细简报只展示同一销售明细的物流单号与对应承运方。
+// 处理履约批次简报时，明细简报只展示同一销售明细的物流单号与对应承运方。
 fn delivery_line(row: &Delivery, line: &DeliveryLine, names: &Names) -> BriefLine {
     let mut brief = item_line(names.get(line.sales_order_line_id.as_ref()), line.line_no, &line.quantity);
     let tracking = row
@@ -358,7 +355,7 @@ fn delivery_line(row: &Delivery, line: &DeliveryLine, names: &Names) -> BriefLin
     brief
 }
 
-/// 草稿默认结果不是已完成事实，确认前结果与完成时点均显示未登记。
+// 处理履约批次简报时，草稿默认结果不是已完成事实，确认前结果与完成时点均显示未登记。
 fn electronic_fields(row: &ElectronicDelivery) -> Vec<BriefSection> {
     let mut fields = head(&row.fulfillment_no, pending_status(row.status.label(), "待交付"));
     let confirmed = row.status != ElectronicDeliveryState::Draft;
@@ -372,7 +369,7 @@ fn electronic_fields(row: &ElectronicDelivery) -> Vec<BriefSection> {
     fields
 }
 
-/// 服务详情保留期间、说明与凭证；草稿默认结果不得冒充实际结果。
+// 处理履约批次简报时，服务详情保留期间、说明与凭证；草稿默认结果不得冒充实际结果。
 fn service_fields(row: &ServiceFulfillment) -> Vec<BriefSection> {
     let mut fields = head(&row.fulfillment_no, pending_status(row.status.label(), "待履约"));
     field(
@@ -399,7 +396,7 @@ mod tests {
         serde_json::from_value(value).unwrap()
     }
 
-    /// 发货只展示业务单号和物流，私密地址与内部关联不得进入公共字段。
+    // 验证履约批次简报：发货只展示业务单号和物流，私密地址与内部关联不得进入公共字段。
     #[test]
     fn delivery_fields_are_business_facts_without_private_address() {
         let row: Delivery = entity(
@@ -413,7 +410,7 @@ mod tests {
         assert!(!format!("{fields:?}").contains("sales-id"));
     }
 
-    /// 同一单号可以跨明细，逐明细保留多条物流与各自承运方。
+    // 验证履约批次简报：同一单号可以跨明细，逐明细保留多条物流与各自承运方。
     #[test]
     fn delivery_lines_keep_tracking_entries_and_carriers_per_sales_line() {
         let row: Delivery = entity(json!({
@@ -444,7 +441,7 @@ mod tests {
         );
     }
 
-    /// 入库三种数量均按实际行保留，包含零值和业务单位。
+    // 验证履约批次简报：入库三种数量均按实际行保留，包含零值和业务单位。
     #[test]
     fn receipt_keeps_received_qualified_rejected_quantities() {
         let row: PurchaseReceiptLine = entity(
@@ -457,7 +454,7 @@ mod tests {
         assert_eq!(receipt_line(&row, &Names::new()).title, "入库明细 1");
     }
 
-    /// 两类履约草稿不得把默认成功结果和创建时间当成已履约事实。
+    // 验证履约批次简报：两类履约草稿不得把默认成功结果和创建时间当成已履约事实。
     #[test]
     fn electronic_and_service_drafts_do_not_claim_completion() {
         let fields = json!({"fulfillment_no":"F-001", "sales_order_line_id":"line", "purchase_order_id":"purchase", "purchase_line_sales_allocation_id":"allocation",

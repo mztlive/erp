@@ -47,16 +47,8 @@ pub struct StockAdjustmentLineUpdate {
 
 impl StockAdjustmentLineUpdate {
     /// 从服务输入构造调整明细更新值对象。
-    ///
-    /// # 参数
-    /// * `line_id` - 明细行主键
-    /// * `quantity` - 定点数量字符串
-    /// * `direction` - 可选调整方向
-    ///
-    /// # 返回
     /// 返回完成主键规范化与数量解析的更新值对象。
-    ///
-    /// # 错误
+    /// `line_id` 为明细行主键，`quantity` 为定点数量字符串，`direction` 为可选调整方向。
     /// 行主键为空或过长、数量无法解析，或数量不是正数时返回错误。
     pub fn new(
         line_id: impl Into<String>,
@@ -92,17 +84,9 @@ pub struct StockAdjustmentLine {
 
 impl StockAdjustmentLine {
     /// 创建库存调整明细。
-    ///
     /// 完成调整数量正数校验。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::StockAdjustmentLineId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
     /// 返回新建的调整明细实体。
-    ///
-    /// # 错误
+    /// `id` 为实体主键（`erp_core::ids::StockAdjustmentLineId`）。
     /// 调整数量非正时返回错误。
     pub fn new(id: StockAdjustmentLineId, data: StockAdjustmentLineData) -> Result<Self> {
         ensure_positive_quantity(data.quantity, "调整数量必须为正数")?;
@@ -116,16 +100,8 @@ impl StockAdjustmentLine {
     }
 
     /// 按调整原因创建库存调整明细。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键
-    /// * `reason_type` - 调整原因
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
     /// 返回数量与方向均符合原因约束的明细实体。
-    ///
-    /// # 错误
+    /// `id` 为实体主键；`reason_type` 为调整原因。
     /// 数量非正，或方向与调整原因不一致时返回错误。
     pub fn new_for_reason(
         id: StockAdjustmentLineId,
@@ -137,16 +113,9 @@ impl StockAdjustmentLine {
     }
 
     /// 应用调整明细数量与可选方向。
-    ///
-    /// # 参数
-    /// * `reason_type` - 调整单当前原因
-    /// * `quantity` - 新的正数数量
-    /// * `direction` - 新方向；空表示保持现状
-    ///
-    /// # 返回
     /// 校验并更新成功时返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// `reason_type` 为调整单当前原因；`quantity` 为新的正数数量。
+    /// `direction` 为新方向；空表示保持现状。
     /// 数量非正，或最终方向与调整原因不一致时返回错误。
     pub fn apply_update(
         &mut self,
@@ -194,7 +163,7 @@ mod tests {
         }
     }
 
-    /// happy path：调整明细创建成功。
+    // 验证调整明细创建成功。
     #[test]
     fn line_new_succeeds() {
         let line = StockAdjustmentLine::new(StockAdjustmentLineId::new("al-1"), line_data()).unwrap();
@@ -202,7 +171,7 @@ mod tests {
         assert_eq!(line.direction, MovementDirection::Decrease);
     }
 
-    /// 失败路径：数量越界（非正）。
+    // 验证数量越界（非正）。
     #[test]
     fn line_rejects_quantity_violations() {
         let zero_quantity =
@@ -213,7 +182,7 @@ mod tests {
         assert!(StockAdjustmentLine::new(StockAdjustmentLineId::new("al-3"), negative).is_err());
     }
 
-    /// 明细更新：整组校验失败不产生部分修改，完整合法输入一次应用。
+    // 验证明细更新：整组校验失败不产生部分修改，完整合法输入一次应用。
     #[test]
     fn line_updates_are_validated_atomically() {
         let mut adjustment =
@@ -275,7 +244,7 @@ mod tests {
         assert_eq!(lines[1].quantity, Quantity::from_str("4").unwrap());
     }
 
-    /// 大批明细按请求顺序返回变更，持久化明细顺序保持不变。
+    // 验证大批明细按请求顺序返回变更，持久化明细顺序保持不变。
     #[test]
     fn large_line_updates_sample() {
         let adjustment = StockAdjustment::new(StockAdjustmentId::new("adj-1"), data(), "creator-1").unwrap();
@@ -302,7 +271,7 @@ mod tests {
         eprintln!("inventory_2000_updates_10_runs={:?}", started.elapsed());
     }
 
-    /// 重复持久化 ID 沿用首次匹配行为，未选中的副本保持原值。
+    // 验证重复持久化 ID 沿用首次匹配行为，未选中的副本保持原值。
     #[test]
     fn line_update_uses_first_matching_persisted_id() {
         let adjustment = StockAdjustment::new(StockAdjustmentId::new("adj-1"), data(), "creator-1").unwrap();
@@ -321,7 +290,7 @@ mod tests {
         assert_eq!(lines[1], duplicate);
     }
 
-    /// 首个缺失或重复请求错误不受索引顺序影响，失败时整组明细保持原值。
+    // 验证首个缺失或重复请求错误不受索引顺序影响，失败时整组明细保持原值。
     #[test]
     fn line_update_errors_preserve_request_order_and_atomicity() {
         let adjustment = StockAdjustment::new(StockAdjustmentId::new("adj-1"), data(), "creator-1").unwrap();

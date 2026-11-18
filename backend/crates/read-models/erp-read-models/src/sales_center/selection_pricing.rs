@@ -18,7 +18,7 @@ use crate::Result;
 
 type OriginalPrices = BTreeMap<(String, String), SelectionReferencePrices>;
 
-/// 为已授权选品册补齐冻结参考价与相对集采价的加价比例。
+/// 组装选品册冻结参考价时，为已授权选品册补齐冻结参考价与相对集采价的加价比例。
 ///
 /// # 参数
 /// `db` 为数据库，`view` 必须来自已完成册权限校验的详情，`executor` 为调用方读取边界。

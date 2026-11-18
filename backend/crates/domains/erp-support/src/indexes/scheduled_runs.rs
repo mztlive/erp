@@ -11,11 +11,8 @@ use super::create_indexes;
 use crate::repository::scheduled_runs::ScheduledRunExt;
 
 /// 创建调度回执约束；未回报记录不设置 TTL 字段。
-/// # 参数
-/// `db` 为业务数据库。
-/// # 返回
 /// 所有索引建立成功。
-/// # 错误
+/// `db` 为业务数据库。
 /// 数据冲突或数据库失败时拒绝启动。
 pub async fn ensure(db: &Database) -> Result<()> {
     let active_job = IndexOptions::builder()

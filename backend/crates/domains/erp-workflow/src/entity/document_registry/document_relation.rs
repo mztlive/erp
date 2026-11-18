@@ -27,15 +27,7 @@ pub enum DocumentRelationType {
 
 impl DocumentRelationType {
     /// 返回关系类型的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Changes => "变更",
@@ -47,16 +39,8 @@ impl DocumentRelationType {
         }
     }
 
-    /// 返回关系类型的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
+    /// 取得关系类型的稳定代码。
     /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Changes => "CHANGES",
@@ -99,17 +83,12 @@ pub struct DocumentRelation {
 
 impl DocumentRelation {
     /// 创建单据关系。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::DocumentRelationId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
     /// 返回新建的关系实体。
     ///
-    /// # 错误
     /// 当 `from_document_id` 与 `to_document_id` 相同（单据不能与自己建立
     /// 关系）时返回错误。
+    ///
+    /// `id`：实体主键（`erp_core::ids::DocumentRelationId`）。
     pub fn new(id: DocumentRelationId, data: DocumentRelationData) -> Result<Self> {
         if data.from_document_id == data.to_document_id {
             return Err(Error::from("单据不能与自己建立关系"));
@@ -138,7 +117,7 @@ mod tests {
         }
     }
 
-    /// happy path：方向与类型正确落库。
+    // 验证方向与类型正确落库。
     #[test]
     fn new_keeps_direction_and_relation_type() {
         let relation = DocumentRelation::new(DocumentRelationId::new("rel-1"), data()).unwrap();
@@ -147,7 +126,7 @@ mod tests {
         assert_eq!(relation.relation_type, DocumentRelationType::Changes);
     }
 
-    /// 失败路径：同一单据不能与自己建立关系。
+    // 验证同一单据不能与自己建立关系。
     #[test]
     fn new_rejects_self_relation() {
         let payload = DocumentRelationData { from_document_id: BusinessDocumentId::new("order-1"), ..data() };
@@ -158,7 +137,7 @@ mod tests {
         }
     }
 
-    /// 枚举序列化与标签稳定。
+    // 锁定单据关系类型的序列化代码和中文展示标签。
     #[test]
     fn relation_type_codes_and_labels_are_stable() {
         assert_eq!(serde_json::to_string(&DocumentRelationType::RedOf).unwrap(), "\"RED_OF\"");
@@ -167,7 +146,7 @@ mod tests {
         assert_eq!(DocumentRelationType::DerivedFrom.label(), "派生");
     }
 
-    /// BSON 往返。
+    // 验证单据关系经 BSON 往返后仍保留关系方向、类型等实体事实。
     #[test]
     fn entity_roundtrips_through_bson() {
         let relation = DocumentRelation::new(DocumentRelationId::new("rel-1"), data()).unwrap();

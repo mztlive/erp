@@ -48,16 +48,9 @@ pub(super) struct SourceUpdateSync<'a> {
 }
 
 impl SourceUpdateSync<'_> {
-    /// 对账销售单下全部依据更新记录与待办。
-    ///
-    /// # 参数
-    /// * `executor` - 调用方事务执行器
-    ///
-    /// # 返回
-    /// 全部记录与待办同步成功时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 记录状态、待办字段或仓储写入失败时返回错误。
+    // 对账销售单下全部依据更新记录与待办。
+    //
+    // 沿用原事务的执行器。全部记录与待办同步成功时返回 `Ok(())`。记录状态、待办字段或仓储写入失败时返回错误。
     pub(super) async fn run(&self, executor: &mut dyn Executor) -> Result<()> {
         let mut open = list_by_sales_order(self.db, &self.order.base.id, executor)
             .await?
@@ -91,12 +84,12 @@ impl SourceUpdateSync<'_> {
         Ok(())
     }
 
-    /// 当前销售版本 ID。
+    // 同步采购依据时，使用本次覆盖事实中的正式销售版本作为任务主体版本。
     fn revision_id(&self) -> &str {
         &self.state.coverage.revision.base.id
     }
 
-    /// 为新受影响采购开立记录并派待办。
+    // 为新受影响采购开立记录并派待办。
     async fn open(
         &self,
         purchase: &PurchaseOrder,
@@ -120,7 +113,7 @@ impl SourceUpdateSync<'_> {
         Ok(())
     }
 
-    /// 刷新仍受影响采购的记录与待办摘要。
+    // 刷新仍受影响采购的记录与待办摘要。
     async fn refresh(
         &self,
         mut update: PurchaseSourceUpdate,
@@ -133,7 +126,7 @@ impl SourceUpdateSync<'_> {
         self.save_open(update, executor).await
     }
 
-    /// 草稿已不再受影响，转为等待重新提交并更新待办摘要。
+    // 草稿已不再受影响，转为等待重新提交并更新待办摘要。
     async fn await_submission(
         &self,
         mut update: PurchaseSourceUpdate,
@@ -145,7 +138,7 @@ impl SourceUpdateSync<'_> {
         self.save_open(update, executor).await
     }
 
-    /// 保存仍开放的记录，并同步待办摘要。
+    // 保存仍开放的记录，并同步待办摘要。
     async fn save_open(&self, mut update: PurchaseSourceUpdate, executor: &mut dyn Executor) -> Result<()> {
         purchase_source_updates(self.db).update(&mut update, executor).await?;
 
@@ -158,7 +151,7 @@ impl SourceUpdateSync<'_> {
         Ok(())
     }
 
-    /// 按事实判定处理方式并关闭记录与待办。
+    // 按事实判定处理方式并关闭记录与待办。
     async fn close(&self, mut update: PurchaseSourceUpdate, executor: &mut dyn Executor) -> Result<()> {
         let purchase = self
             .state
@@ -177,7 +170,7 @@ impl SourceUpdateSync<'_> {
         Ok(())
     }
 
-    /// 读取记录关联且仍开放的待办。
+    // 准备更新采购依据待办时，只读取记录直接关联且状态仍开放的任务。
     async fn open_work_item(
         &self,
         update: &PurchaseSourceUpdate,
@@ -190,7 +183,7 @@ impl SourceUpdateSync<'_> {
         Ok(item.filter(|item| item.status == WorkItemStatus::Open))
     }
 
-    /// 构造采购负责人的依据更新待办。
+    // 采购受销售来源变动影响时，为指定采购负责人构造绑定当前销售版本的依据更新待办。
     fn work_item(
         &self,
         purchase: &PurchaseOrder,
@@ -236,18 +229,9 @@ enum SyncAction {
     Skip,
 }
 
-/// 按受影响判定、开放记录与采购状态决定对账动作。
-///
-/// # 参数
-/// * `affected` - 采购按当前事实是否受影响
-/// * `has_open` - 采购是否有开放记录
-/// * `status` - 采购当前状态
-///
-/// # 返回
-/// 返回本次对账动作。
-///
-/// # 错误
-/// 无。
+// 按受影响判定、开放记录与采购状态决定对账动作。
+//
+// `affected` 为采购按当前事实是否受影响；`has_open` 为采购是否有开放记录；`status` 为采购当前状态。返回本次对账动作。
 fn sync_action(affected: bool, has_open: bool, status: PurchaseOrderStatus) -> SyncAction {
     match (affected, has_open) {
         (true, true) => SyncAction::Refresh,
@@ -260,18 +244,11 @@ fn sync_action(affected: bool, has_open: bool, status: PurchaseOrderStatus) -> S
     }
 }
 
-/// 由采购当前事实推出不再受影响的处理方式。
-///
-/// # 参数
-/// * `update` - 待关闭的开放记录
-/// * `purchase` - 仍参与覆盖的采购；已作废时为空
-/// * `current_revision_id` - 销售当前版本
-///
-/// # 返回
-/// 返回处理方式及其形成的单据。
-///
-/// # 错误
-/// 无。
+// 由采购当前事实推出不再受影响的处理方式。
+//
+// `update` 为待关闭的开放记录；`purchase` 为仍参与覆盖的采购；已作废时为空；`current_revision_id` 为销售当前版本。
+//
+// 返回处理方式及其形成的单据。
 fn derive_resolution(
     update: &PurchaseSourceUpdate,
     purchase: Option<&PurchaseOrder>,
@@ -368,7 +345,7 @@ mod tests {
         update
     }
 
-    /// 作废、修改原单、采购变更与他单调减分别推出对应处理方式。
+    // 作废、修改原单、采购变更与他单调减分别推出对应处理方式。
     #[test]
     fn resolution_is_derived_from_purchase_facts() {
         let open = record(false);
@@ -387,7 +364,7 @@ mod tests {
         );
     }
 
-    /// 受影响开立或刷新；不再受影响的草稿等待重新提交，其他状态关闭。
+    // 受影响开立或刷新；不再受影响的草稿等待重新提交，其他状态关闭。
     #[test]
     fn sync_action_follows_impact_record_and_status() {
         use PurchaseOrderStatus::*;
@@ -400,7 +377,7 @@ mod tests {
         assert_eq!(sync_action(false, false, Draft), SyncAction::Skip);
     }
 
-    /// 等待重新提交的草稿提交审批后记为修改原单，即使仍引用原销售版本。
+    // 等待重新提交的草稿提交审批后记为修改原单，即使仍引用原销售版本。
     #[test]
     fn awaiting_draft_submitted_is_resubmitted() {
         let awaiting = record(true);

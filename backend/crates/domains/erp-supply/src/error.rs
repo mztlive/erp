@@ -59,30 +59,19 @@ impl_repository_error!(
     duplicate = |error| { Error::ConflictError(duplicate_key_conflict_message(&error)) }
 );
 
-/// 将唯一键冲突映射为面向用户的冲突提示。
+// 把唯一键冲突映射为面向用户的冲突提示。
 fn duplicate_key_conflict_message(error: &persistence_core::Error) -> String {
     duplicate_index_conflict_message(error.duplicate_index_name())
 }
 
-/// 将供应链域唯一索引名称映射为面向用户的冲突提示。
-///
-/// 供给重复 SKU 保持原专用提示，其余供应链唯一索引保持通用提示。
+// 将供应链域唯一索引名称映射为面向用户的冲突提示。
+// 供给重复 SKU 保持原专用提示，其余供应链唯一索引保持通用提示。
 fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
     index_name.and_then(known_duplicate_index_message).unwrap_or("数据已存在，请勿重复提交").to_string()
 }
 
 /// 返回供应链领域已知唯一索引的固定冲突提示。
-///
-/// # 参数
-/// * `index_name` - 已由 persistence-core 提取的 MongoDB 索引名称
-///
-/// # 返回
 /// 精确命中本域索引时返回原提示；未知名称返回 `None`，由调用边界选择通用提示。
-///
-/// # 错误
-/// 不返回错误。
-///
-/// # 约束
 /// 不匹配子串或前后缀、不规范化索引名称，不拥有其他领域或 HTTP 历史索引的提示。
 pub fn known_duplicate_index_message(index_name: &str) -> Option<&'static str> {
     match index_name {
@@ -155,7 +144,7 @@ mod tests {
         assert_eq!(error.to_string(), "操作结果暂无法确认，请查询当前状态后再决定是否重试");
     }
 
-    /// 真实公开查询与私有格式化均保留精确命中及未知、缺失名称的原结果。
+    // 验证真实公开查询与私有格式化均保留精确命中及未知、缺失名称的原结果。
     #[test]
     fn known_duplicate_export_preserves_exact_match_and_fallback() {
         let cases = [

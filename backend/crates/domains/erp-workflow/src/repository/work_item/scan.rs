@@ -20,19 +20,13 @@ pub struct WorkItemScan {
 }
 
 impl WorkItemScan {
-    /// 打开一次完整排序查询，后续批次不重新执行 skip 查询。
-    ///
-    /// # 参数
-    /// * `collection` - `work_items` 集合。
-    /// * `filter` - 业务筛选及已编译的完整授权。
-    /// * `batch_size` - 每次服务端取数上限。
-    /// * `executor` - 调用方执行器；有会话时绑定该会话。
-    ///
-    /// # 返回
-    /// 返回绑定调用方会话的候选游标，不执行候选计数。
-    ///
-    /// # 错误
-    /// 数据库查询失败时保持原仓储错误分类。
+    // 打开一次完整排序查询，后续批次不重新执行 skip 查询。
+    // 返回绑定调用方会话的候选游标，不执行候选计数。
+    //
+    // 数据库查询失败时保持原仓储错误分类。
+    //
+    // `collection`：`work_items` 集合；`filter`：业务筛选及已编译的完整授权。
+    // `batch_size`：每次服务端取数上限；`executor`：调用方执行器；有会话时绑定该会话。
     pub(super) async fn open(
         collection: Collection<WorkItem>,
         filter: &WorkItemFilter,
@@ -49,13 +43,11 @@ impl WorkItemScan {
     }
 
     /// 消费至多一个批次，允许调用方在两批之间继续读取授权事实。
-    ///
-    /// # 参数
-    /// `executor` 必须沿用打开游标的执行上下文；`batch_size` 为非零批次大小。
-    /// # 返回
     /// 按原查询排序返回下一批；耗尽后返回空集合。
-    /// # 错误
+    ///
     /// 游标读取失败或事务游标失去会话时失败关闭。
+    ///
+    /// `executor` 必须沿用打开游标的执行上下文；`batch_size` 为非零批次大小。
     pub async fn next_batch(
         &mut self,
         batch_size: NonZeroU32,
@@ -65,7 +57,7 @@ impl WorkItemScan {
     }
 }
 
-/// 固定批次消费独立游标，不越过首个读取错误。
+// 从独立排序游标消费最多一个批次，读到首个错误立即返回，不跳过损坏候选继续分页。
 #[cfg(test)]
 async fn read_batch<S>(mut stream: S, batch_size: NonZeroU32) -> Result<Vec<WorkItemRow>>
 where
@@ -90,12 +82,12 @@ mod tests {
 
     use super::*;
 
-    /// 查询状态及两种游标的读取 future 都可跨异步执行线程传递。
+    // 验证：查询状态及两种游标的读取 future 都可跨异步执行线程传递。
     #[test]
     fn work_item_scan_and_reads_are_send() {
-        /// 约束查询状态可跨线程移动。
+        // 编译期验证任务候选游标可在不同线程之间移动。
         fn assert_send<T: Send>() {}
-        /// 约束读取 future 可跨线程调度。
+        // 编译期验证任务扫描读取的 future 可以跨线程调度。
         fn assert_future_send(_: impl std::future::Future + Send) {}
         fn buffered(cursor: &mut RowCursor<WorkItemRow>, size: NonZeroU32, executor: &mut dyn Executor) {
             assert_future_send(cursor.next_batch(size, executor));
@@ -104,7 +96,7 @@ mod tests {
         let _ = buffered;
     }
 
-    /// 使用真实投影反序列化构造候选，测试流式消费不会改变字段或顺序。
+    // 测试按真实投影解码候选行，检查流式消费没有改动投影字段或顺序。
     fn row(id: &str) -> WorkItemRow {
         deserialize_from_document(doc! {
             "id": id, "work_item_type": "CARD_FUNDS_DELTA_REVIEW",
@@ -117,7 +109,7 @@ mod tests {
         .unwrap()
     }
 
-    /// 全批、尾批及空批消费都保持游标原顺序，且不重复或丢失候选。
+    // 验证：全批、尾批及空批消费都保持游标原顺序，且不重复或丢失候选。
     #[tokio::test]
     async fn batches_preserve_order_and_stop_at_end() {
         let expected = vec![row("c"), row("a"), row("b")];
@@ -128,7 +120,7 @@ mod tests {
         assert!(read_batch(&mut source, size).await.unwrap().is_empty());
     }
 
-    /// 后续读取失败不能将已读取的部分批次报告为成功。
+    // 验证：后续读取失败不能将已读取的部分批次报告为成功。
     #[tokio::test]
     async fn batch_read_failure_returns_no_partial_success() {
         let error = MongoError::custom("读取失败");
@@ -138,7 +130,7 @@ mod tests {
         assert_eq!(read_batch(&mut source, size).await.unwrap(), vec![row("last")]);
     }
 
-    /// 前一批成功后出现读取错误，仍整体拒绝该后续批次。
+    // 验证：前一批成功后出现读取错误，仍整体拒绝该后续批次。
     #[tokio::test]
     async fn later_batch_read_failure_is_propagated() {
         let error = MongoError::custom("读取失败");

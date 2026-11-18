@@ -20,16 +20,8 @@ pub enum RuntimeInstanceListView {
 }
 
 impl RuntimeInstanceListView {
-    /// 返回稳定 view 名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
+    /// 取得稳定 view 名。
     /// 返回 `mine` / `started` / `managed` / `blocked`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Mine => "mine",
@@ -57,16 +49,8 @@ pub enum RuntimeInstanceStatusFilter {
 }
 
 impl RuntimeInstanceStatusFilter {
-    /// 返回稳定状态码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
+    /// 取得稳定状态码。
     /// 返回 `RUNNING`、`APPROVED`、`REJECTED`、`CANCELLED` 或 `BLOCKED`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Running => "RUNNING",
@@ -89,16 +73,9 @@ pub enum RuntimeRecoveryAction {
 }
 
 /// 按当前 blocker 返回唯一合法恢复动作。
-///
-/// # 参数
-/// * `blocked` - 实例是否 BLOCKED
-/// * `blocker` - 结构化 blocker
-///
-/// # 返回
 /// 可恢复原审批人的 blocker 只允许恢复；其它 blocker 只返回受阻取消；非 BLOCKED 返回空。
 ///
-/// # 错误
-/// 无。
+/// `blocked`：实例是否 BLOCKED；`blocker`：结构化 blocker。
 pub fn recovery_options_for(
     blocked: bool,
     blocker: Option<ApprovalBlockerCode>,
@@ -122,7 +99,7 @@ mod tests {
 
     use super::{RuntimeRecoveryAction, recovery_options_for};
 
-    /// 可恢复原审批人的 blocker 只给恢复；结构 blocker 只给受阻取消。
+    // 验证：可恢复原审批人的 blocker 只给恢复；结构 blocker 只给受阻取消。
     #[test]
     fn recovery_options_follow_blocker_kind() {
         assert!(recovery_options_for(false, Some(ApprovalBlockerCode::ApproverAccountInactive)).is_empty());

@@ -35,16 +35,9 @@ pub struct SavePurchaseOrderDraftRequest {
 }
 
 impl SavePurchaseOrderDraftRequest {
-    /// 由必填幂等键构造保存草稿请求。
+    /// 由必填幂等键构造保存草稿请求。返回零版本、行载荷为空的保存请求。
     ///
-    /// # 参数
-    /// * `idempotency_key` - 幂等键（同内容重复保存返回同一结果）
-    ///
-    /// # 返回
-    /// 返回零版本、行载荷为空的保存请求。
-    ///
-    /// # 错误
-    /// 无。
+    /// `idempotency_key` 为幂等键（同内容重复保存返回同一结果）。
     pub fn new(idempotency_key: impl Into<String>) -> Self {
         Self {
             expected_lock_version: 0,
@@ -55,61 +48,27 @@ impl SavePurchaseOrderDraftRequest {
         }
     }
 
-    /// 设置期望的乐观锁版本。
-    ///
-    /// # 参数
-    /// * `expected_lock_version` - 期望的乐观锁版本
-    ///
-    /// # 返回
-    /// 返回更新后的保存请求。
-    ///
-    /// # 错误
-    /// 无。
+    /// 设置期望的乐观锁版本。返回更新后的保存请求。
     pub fn with_expected_lock_version(mut self, expected_lock_version: u64) -> Self {
         self.expected_lock_version = expected_lock_version;
         self
     }
 
-    /// 设置付款条件。
-    ///
-    /// # 参数
-    /// * `payment_term_code` - 付款条件
-    ///
-    /// # 返回
-    /// 返回更新后的保存请求。
-    ///
-    /// # 错误
-    /// 无。
+    /// 设置付款条件。返回更新后的保存请求。
     pub fn with_payment_term_code(mut self, payment_term_code: impl Into<String>) -> Self {
         self.payment_term_code = Some(payment_term_code.into());
         self
     }
 
-    /// 设置完整行集合。
-    ///
-    /// # 参数
-    /// * `lines` - 完整行集合
-    ///
-    /// # 返回
-    /// 返回更新后的保存请求。
-    ///
-    /// # 错误
-    /// 无。
+    /// 设置完整行集合。返回更新后的保存请求。
     pub fn with_lines(mut self, lines: Vec<SavePurchaseOrderLine>) -> Self {
         self.lines = lines;
         self
     }
 
-    /// 设置草稿行补丁集合。
+    /// 设置草稿行补丁集合。返回更新后的保存请求。
     ///
-    /// # 参数
-    /// * `line_patches` - 草稿行可编辑字段快照
-    ///
-    /// # 返回
-    /// 返回更新后的保存请求。
-    ///
-    /// # 错误
-    /// 无。
+    /// `line_patches` 为草稿行可编辑字段快照。
     pub fn with_line_patches(mut self, line_patches: Vec<SavePurchaseOrderLinePatch>) -> Self {
         self.line_patches = line_patches;
         self
@@ -117,14 +76,7 @@ impl SavePurchaseOrderDraftRequest {
 
     /// 校验保存请求只使用一种行载荷。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 完整行与行补丁恰好提供一种时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 两种都提供或都缺失，或任一补丁字段非法时返回校验错误。
+    /// 完整行与行补丁恰好提供一种时返回 `Ok(())`。两种都提供或都缺失，或任一补丁字段非法时返回校验错误。
     pub fn ensure_shape(&self) -> Result<()> {
         if self.lines.is_empty() == self.line_patches.is_empty() {
             return Err(Error::ValidationError("完整采购行与草稿行补丁必须且只能提供一种".to_string()));
@@ -135,18 +87,11 @@ impl SavePurchaseOrderDraftRequest {
         Ok(())
     }
 
-    /// 生成已规范化草稿行：完整行原样保留顺序返回；补丁路径把客户端可编辑
-    /// 字段合并到服务端冻结的草稿来源行。
+    /// 生成已规范化草稿行：完整行原样保留顺序返回；补丁路径把客户端可编辑字段合并到服务端冻结的草稿来源行。
     ///
-    /// # 参数
-    /// * `existing` - 服务端当前草稿行
+    /// 返回可进入领域校验与写入的完整行集合。补丁未覆盖全部当前草稿行、包含重复行补丁、行类型被改写或行已变化时返回校验或冲突错误。
     ///
-    /// # 返回
-    /// 返回可进入领域校验与写入的完整行集合。
-    ///
-    /// # 错误
-    /// 补丁未覆盖全部当前草稿行、包含重复行补丁、行类型被改写或行已变化时
-    /// 返回校验或冲突错误。
+    /// `existing` 为服务端当前草稿行。
     pub fn resolve_lines(
         &self,
         existing: &[PurchaseOrderSubmissionLine],
@@ -159,18 +104,11 @@ impl SavePurchaseOrderDraftRequest {
 
     /// 计算保存草稿请求指纹（不含原始幂等键）。
     ///
-    /// # 参数
-    /// * `purchase_order_id` - 当前路径采购单 ID
+    /// 行顺序影响提交行序号，因此必须保留；付款条件按现有校验语义去除首尾空白；摘要形态与存量收据一致，修改会破坏幂等兼容。
     ///
-    /// # 返回
-    /// 返回不包含原始幂等键的稳定 SHA-256 指纹。
+    /// 返回不包含原始幂等键的稳定 SHA-256 指纹。指纹载荷无法序列化时返回内部错误。
     ///
-    /// # 错误
-    /// 指纹载荷无法序列化时返回内部错误。
-    ///
-    /// # 关键业务约束
-    /// 行顺序影响提交行序号，因此必须保留；付款条件按现有校验语义去除首尾
-    /// 空白；摘要形态与存量收据一致，修改会破坏幂等兼容。
+    /// `purchase_order_id` 为当前路径采购单 ID。
     pub fn request_fingerprint(&self, purchase_order_id: &str) -> Result<String> {
         let payload = SaveDraftFingerprintPayload {
             expected_lock_version: self.expected_lock_version,
@@ -218,19 +156,12 @@ pub struct SavePurchaseOrderLinePatch {
 }
 
 impl SavePurchaseOrderLinePatch {
-    /// 将草稿行补丁合并为完整采购行，冻结字段只从服务端当前草稿取得；未提供的
-    /// 预计交付日与交付安排沿用当前草稿。
+    /// 将草稿行补丁合并为完整采购行，冻结字段只从服务端当前草稿取得；未提供的预计交付日与交付安排沿用当前草稿。
     ///
-    /// # 参数
-    /// * `patches` - 客户端可编辑字段快照
-    /// * `existing` - 服务端当前草稿行
+    /// 返回合并后的完整行集合。补丁未覆盖全部当前草稿行、包含重复行补丁、行类型被改写或行已变化时返回校验或冲突错误。
     ///
-    /// # 返回
-    /// 返回合并后的完整行集合。
-    ///
-    /// # 错误
-    /// 补丁未覆盖全部当前草稿行、包含重复行补丁、行类型被改写或行已变化时
-    /// 返回校验或冲突错误。
+    /// - `patches`：客户端可编辑字段快照。
+    /// - `existing`：服务端当前草稿行。
     pub fn resolve_all(
         patches: &[Self],
         existing: &[PurchaseOrderSubmissionLine],
@@ -273,7 +204,7 @@ impl SavePurchaseOrderLinePatch {
     }
 }
 
-/// 以服务端当前提交行恢复补丁不能改写的来源，交付安排由继承步骤保留。
+// 以服务端当前提交行恢复补丁不能改写的来源，交付安排由继承步骤保留。
 fn saved_line(line: &PurchaseOrderSubmissionLine) -> SavePurchaseOrderLine {
     let is_item = line.line_type == PurchaseLineType::ItemService;
     let quantity = is_item.then(|| line.quantity.map(|value| value.to_string())).flatten();
@@ -352,17 +283,8 @@ pub struct SavePurchaseOrderLine {
 impl SavePurchaseOrderLine {
     /// 转换为领域草稿行编辑请求。
     ///
-    /// 字符串字段原样传递；空白、数量与引用校验由
-    /// `crate::entity::purchase_order::validate_draft_line_edits` 统一完成。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回与自身字段一致的草稿行编辑请求。
-    ///
-    /// # 错误
-    /// 无。
+    /// 字符串字段原样传递；空白、数量与引用校验由`crate::entity::purchase_order::validate_draft_line_edits`
+    /// 统一完成。
     pub fn to_draft_edit(&self) -> DraftLineEdit {
         DraftLineEdit {
             line_type: self.line_type,

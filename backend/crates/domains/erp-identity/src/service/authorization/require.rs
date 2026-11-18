@@ -12,13 +12,9 @@ use crate::entity::resource_access::ResourceKind;
 use crate::{Error, Permission, Result};
 
 impl AuthorizationService {
-    /// 检查固定操作及完整目标；不返回可供后续写入复用的凭证。
-    /// # 参数
-    /// actor、permission 为真实身份及操作；target 为服务端目标；executor 为原执行器。
-    /// # 返回
-    /// 全部目标、归属及精确任务要求通过时返回成功。
-    /// # 错误
-    /// 未知操作、不支持目标、缺权、事实缺失、越权或依赖变化均拒绝。
+    /// 在业务读取或写入前检查当前身份是否有权对服务端确认的目标执行固定操作。写入、精确任务、带来源的入口及无对象操作须沿用快照事务。
+    ///
+    /// 目标形状不受支持、资格不足、必需事实缺失或授权依赖变化均拒绝；成功只证明本次检查，不能作为后续写入凭证。
     pub async fn require(
         &self,
         actor: &AuditActor,
@@ -64,7 +60,8 @@ impl AuthorizationService {
         self.require_target(actor, permission, &target, executor).await
     }
 
-    /// 读取完整目标及来源，并在全部异步取证结束后检查原阶段与有效期。
+    // 验证已有记录、候选归属或精确任务时，加载完整根对象、实际来源及本次用到的记录授权。
+    // 异步取证结束后复核依赖、原执行阶段与有效期，不能凭其他放行分支跳过必需事实。
     async fn require_target(
         &self,
         actor: &AuditActor,
@@ -113,7 +110,7 @@ impl AuthorizationService {
         proof.ensure_current(executor)
     }
 
-    /// 授权行只读取本次目标及真实来源；不读取账号历史授权全集。
+    // 只在规则含记录读取补充时，按本次根目标及真实来源的资源和 ID 查询有效授权，不拉取账号的历史授权全集。
     pub(super) async fn target_grants(
         &self,
         context: &AccessContext,

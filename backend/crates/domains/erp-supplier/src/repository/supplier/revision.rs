@@ -31,18 +31,10 @@ pub struct SupplierCommercialProfileFilter {
 }
 
 impl QueryFilter for SupplierCommercialProfileFilter {
-    /// 转换为 MongoDB 查询条件（修订集合无软删除，过滤条件为空时仍显式
-    /// 追加未删除过滤，与基类语义保持一致）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。始终写入未删除的 `deleted_at`；
-    /// `supplier_id` 为 `Some` 时按字符串精确匹配，为 `None` 时不筛选。分页与排序字段不进入条件。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 将历史修订筛选条件转换为 MongoDB 谓词，供仓储取数使用。
+    // 转换为 MongoDB 查询条件（修订集合无软删除，过滤条件为空时仍显式追加未删除过滤，与基类语义保持一致）。
+    // 始终写入未删除的 `deleted_at`；`supplier_id` 为 `Some` 时按字符串精确匹配，为 `None` 时不筛选。分
+    // 页与排序字段不进入条件。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(supplier_id) = &self.supplier_id {
@@ -53,16 +45,8 @@ impl QueryFilter for SupplierCommercialProfileFilter {
 }
 
 impl Pagination for SupplierCommercialProfileFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。`page_size` 由 `u32` 展成 `u64`，不把 `0` 归一成第一页。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 向通用仓储提供历史修订查询的页码和页长；不在此处改写页码。
+    // `page_size` 由 `u32` 展成 `u64`。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -72,15 +56,7 @@ impl Pagination for SupplierCommercialProfileFilter {
 #[allow(async_fn_in_trait)]
 pub trait SupplierCommercialProfileRevisionRepositoryExt {
     /// 检索某供应商的商务版本历史（按 `revision_no` 升序，§6.2 历史查询）。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 供应商角色 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回该供应商的全部商务版本（修订集合追加式写入，无软删除）。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
     async fn list_revision_history(
         &self,
@@ -110,19 +86,9 @@ struct RevisionNoRow {
     revision_no: u32,
 }
 
-/// 查询当前最大修订号并返回下一号。
-///
-/// # 参数
-/// * `db` - 目标 MongoDB 数据库
-/// * `collection_name` - 追加式修订集合名称
-/// * `filter` - 修订序列的稳定业务身份条件
-/// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-///
-/// # 返回
-/// 无历史时返回 `1`，否则返回当前最大修订号加一。
-///
-/// # 错误
-/// 当 MongoDB 查询失败、反序列化失败或修订号达到 `u32::MAX` 时返回错误。
+// 查询当前最大修订号并返回下一号。
+// 无历史时返回 `1`，否则返回当前最大修订号加一。
+// 当 MongoDB 查询失败、反序列化失败或修订号达到 `u32::MAX` 时返回错误。
 async fn next_revision_no(
     db: &Database,
     collection_name: &str,
@@ -149,15 +115,7 @@ async fn next_revision_no(
 
 impl<'a> SupplierRepository<'a> {
     /// 按修订号倒序读取供应商商务资料历史。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 供应商角色 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回最新版本优先的商务资料修订。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询或反序列化失败时返回错误。
     pub async fn list_commercial_profiles_latest_first(
         &self,
@@ -174,16 +132,9 @@ impl<'a> SupplierRepository<'a> {
     }
 
     /// 按修订 ID 集合批量读取商务资料版本。
-    ///
-    /// # 参数
-    /// * `revision_ids` - 商务资料修订 ID 集合；为空时直接返回空集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回全部匹配的商务资料版本。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询或反序列化失败时返回错误。
+    /// `revision_ids`：为空时直接返回空集合。
     pub async fn list_commercial_profiles_by_ids(
         &self,
         revision_ids: &[String],
@@ -198,15 +149,7 @@ impl<'a> SupplierRepository<'a> {
     }
 
     /// 按修订号倒序读取供应商评级历史。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 供应商角色 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回最新评级优先的修订历史。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询或反序列化失败时返回错误。
     pub async fn list_ratings_latest_first(
         &self,
@@ -223,15 +166,7 @@ impl<'a> SupplierRepository<'a> {
     }
 
     /// 按修订号升序读取供应商评级历史。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 供应商角色 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回最早评级优先的修订历史。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询或反序列化失败时返回错误。
     pub async fn list_rating_history(
         &self,
@@ -248,15 +183,7 @@ impl<'a> SupplierRepository<'a> {
     }
 
     /// 返回下一商务资料修订序号。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 供应商角色 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 无历史时返回 `1`，否则返回当前最大修订号加一。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询或反序列化失败时返回错误。
     pub async fn next_commercial_profile_revision_no(
         &self,
@@ -273,16 +200,7 @@ impl<'a> SupplierRepository<'a> {
     }
 
     /// 返回下一能力修订序号。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 供应商角色 ID
-    /// * `capability_code` - 稳定能力代码
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 无历史时返回 `1`，否则返回当前最大修订号加一。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询或反序列化失败时返回错误。
     pub async fn next_capability_revision_no(
         &self,
@@ -303,17 +221,7 @@ impl<'a> SupplierRepository<'a> {
     }
 
     /// 返回下一资质修订序号。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 供应商角色 ID
-    /// * `qualification_type` - 稳定资质类型
-    /// * `certificate_no` - 稳定证书编号
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 无历史时返回 `1`，否则返回当前最大修订号加一。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询或反序列化失败时返回错误。
     pub async fn next_qualification_revision_no(
         &self,

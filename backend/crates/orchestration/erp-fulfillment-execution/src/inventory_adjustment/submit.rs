@@ -75,20 +75,11 @@ impl StockAdjustmentSubmission {
 impl InventoryAdjustmentProcess {
     /// 提交库存调整并调用统一 `start_approval`。
     ///
-    /// 按合同 §4.4.1 冻结 `approval_subject_version` 与 `subject_snapshot`，
-    /// 单据进入 `IN_APPROVAL`。定义与审批人取自已绑定事实，不接受客户端选择。
+    /// 按合同 §4.4.1 冻结 `approval_subject_version` 与 `subject_snapshot`，单据进入 `IN_APPROVAL`。定义与审批人取自已绑定事实，不接受客户端选择。
     ///
-    /// # 参数
-    /// * `id` - 调整单主键
-    /// * `req` - 最终草稿、余额版本与幂等键
-    /// * `actor` - 已通过鉴权的审计操作人
+    /// `id` 为调整单主键；`req` 为最终草稿、余额版本与幂等键。返回提交后的完整详情视图。`NotFound`：调整单不存在。
     ///
-    /// # 返回
-    /// 返回提交后的完整详情视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 调整单不存在
-    /// * `ConflictError` - 非草稿、无绑定或并发冲突
+    /// `ConflictError`：非草稿、无绑定或并发冲突。
     #[tracing::instrument(
         name = "inventory.stock_adjustment_submit",
         skip_all,
@@ -141,7 +132,7 @@ impl InventoryAdjustmentProcess {
             .map_err(Error::from)
     }
 
-    /// 在原快照中完成提交授权、草稿读取、审批规划及持久化。
+    // 在原快照中完成提交授权、草稿读取、审批规划及持久化。
     async fn submit_adjustment(
         &self,
         id: &str,
@@ -158,7 +149,7 @@ impl InventoryAdjustmentProcess {
         Ok(instance_id)
     }
 
-    /// 先加载并校验草稿，再冻结提交展示事实；不执行持久化。
+    // 先加载并校验草稿，再冻结提交展示事实；不执行持久化。
     async fn prepare_adjustment_submission(
         &self,
         id: &str,
@@ -192,7 +183,7 @@ impl InventoryAdjustmentProcess {
         })
     }
 
-    /// 用冻结绑定和人员解析结果准备审批运行态，拒绝新提交进入回放分支。
+    // 用冻结绑定和人员解析结果准备审批运行态，拒绝新提交进入回放分支。
     async fn prepare_adjustment_runtime(
         &self,
         context: &StockAdjustmentSubmission,
@@ -232,19 +223,11 @@ impl InventoryAdjustmentProcess {
 
     /// 按原 StartApproval 作用域和幂等键查询已提交的库存调整结果。
     ///
-    /// 本端口只承认精确存在且能通过 receipt → instance → snapshot → frozen
-    /// binding → actor/current scope 验证的收据；不存在或错 key 返回 `NotFound`，
-    /// 不得依据当前单据状态推断原命令成功。
+    /// 本端口只承认精确存在且能通过 receipt → instance → snapshot → frozen binding → actor/current scope 验证的收据；不存在或错 key 返回
+    /// `NotFound`，不得依据当前单据状态推断原命令成功。
     ///
-    /// # 参数
-    /// * `id` - 调整单主键。
-    /// * `query` - 期望主题版本与幂等键。
-    /// * `actor` - 当前认证操作人。
+    /// `id` 为调整单主键；`query` 为期望主题版本与幂等键。返回原命令实例对应的当前可读详情。
     ///
-    /// # 返回
-    /// 返回原命令实例对应的当前可读详情。
-    ///
-    /// # 错误
     /// 查询参数非法、事务内解析失败、结果不存在，或详情读取失败时返回对应错误。
     pub async fn stock_adjustment_submit_result(
         &self,
@@ -291,7 +274,7 @@ impl InventoryAdjustmentProcess {
     }
 }
 
-/// 在原快照先授权，再读取并校验本次提交草稿、绑定和明细。
+// 在原快照先授权，再读取并校验本次提交草稿、绑定和明细。
 async fn load_adjustment_submission_draft(
     db: &Database,
     identity: &AuthorizationService,
@@ -338,7 +321,7 @@ async fn load_adjustment_submission_draft(
 
 const START_REPLAY_RECOVERY_ATTEMPTS: usize = 32;
 
-/// 使用独立只读事务先解析启动收据，再返回当前可读详情。
+// 使用独立只读事务先解析启动收据，再返回当前可读详情。
 async fn committed_stock_adjustment_start_replay(
     service: &InventoryAdjustmentProcess,
     id: &str,
@@ -382,7 +365,7 @@ async fn committed_stock_adjustment_start_replay(
     ))
 }
 
-/// 事务失败或结果未知后，以有限次新会话等待并发 winner 的收据可见。
+// 事务失败或结果未知后，以有限次新会话等待并发 winner 的收据可见。
 async fn recover_stock_adjustment_start_replay(
     service: &InventoryAdjustmentProcess,
     id: &str,
@@ -409,7 +392,7 @@ mod tests {
 
     use super::*;
 
-    /// 提交草稿必须使用快照，且资格失败先于表头、版本、绑定与明细读取。
+    // 提交草稿必须使用快照，且资格失败先于表头、版本、绑定与明细读取。
     #[tokio::test]
     async fn submission_draft_authorizes_in_the_original_snapshot_before_business_reads() {
         let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")

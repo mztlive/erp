@@ -10,20 +10,11 @@ use super::PurchaseOrderProcess;
 use crate::Result;
 
 impl PurchaseOrderProcess {
-    /// 使用已装配的采购范围能力构造写命令检查器。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证操作人
-    /// * `entry` - 中央登记的采购权限常量
-    ///
-    /// # 返回
-    /// 返回可在事务内重验对象范围的检查器。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 每次检查均重新解析服务端授权，不得复用列表上下文。
+    // 使用已装配的采购范围能力构造写命令检查器。
+    //
+    // `entry` 为中央登记的采购权限常量。返回可在事务内重验对象范围的检查器。
+    //
+    // 每次检查均重新解析服务端授权，不得复用列表上下文。
     pub(super) fn command_access(&self, actor: &AuditActor, entry: &Permission) -> PurchaseCommandAccess {
         PurchaseCommandAccess {
             access: self.ports.access(self.db.clone()),
@@ -45,20 +36,9 @@ pub(super) struct PurchaseCommandAccess {
 }
 
 impl PurchaseCommandAccess {
-    /// 在调用方事务内读取当前可操作单据；历史参与不会产生写资格。
-    ///
-    /// # 参数
-    /// * `id` - 采购单主键
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 对象在范围内时返回采购单。
-    ///
-    /// # 错误
-    /// 不存在或越权时返回 NotFound，不泄露存在性。
-    ///
-    /// # 关键业务约束
-    /// 写命令必须在原事务重验，不得把入口事前检查当作凭证。
+    // 在调用方事务内读取当前可操作单据；历史参与不会产生写资格。对象在范围内时返回采购单。不存在或越权时返回 NotFound，不泄露存在性。
+    //
+    // 写命令必须在原事务重验，不得把入口事前检查当作凭证。
     pub(super) async fn current(&self, id: &str, executor: &mut dyn Executor) -> Result<PurchaseOrder> {
         self.access.require_object(&self.actor, &self.entry, id, executor).await.map_err(crate::Error::from)
     }

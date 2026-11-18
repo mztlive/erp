@@ -14,19 +14,8 @@ pub enum PasswordSource {
     Prompt,
 }
 
-/// 按标志、环境变量、交互输入的顺序选择密码来源。
-///
-/// 空字符串视为未提供，继续尝试下一来源。
-///
-/// # 参数
-/// * `flag` - `--password` 的原始值
-/// * `env_value` - 已读取的环境变量值
-///
-/// # 返回值
-/// 返回第一个非空来源；都为空时返回交互输入。
-///
-/// # 错误
-/// 无。
+/// 为管理员命令决定密码来源：优先使用非空的 `--password`，其次使用非空环境变量值，
+/// 都未提供才进入终端交互。此处只决定来源，不读取终端。
 pub fn select_password_source(flag: Option<String>, env_value: Option<String>) -> PasswordSource {
     if let Some(password) = nonempty(flag) {
         return PasswordSource::Flag(password);
@@ -38,16 +27,8 @@ pub fn select_password_source(flag: Option<String>, env_value: Option<String>) -
     PasswordSource::Prompt
 }
 
-/// 按来源取出明文密码，交互来源会要求确认。
-///
-/// # 参数
-/// * `source` - 已选择的密码来源
-///
-/// # 返回值
-/// 返回明文密码。
-///
-/// # 错误
-/// 交互输入失败或两次输入不一致时返回用法错误。
+/// 将已选来源中的明文密码交给管理员用例。脚本提供的值可直接使用；终端输入必须确认，
+/// 读取失败或两次不一致时返回用法错误。
 pub fn take_password(source: PasswordSource) -> Result<String> {
     match source {
         PasswordSource::Flag(password) | PasswordSource::Env(password) => Ok(password),
@@ -55,41 +36,18 @@ pub fn take_password(source: PasswordSource) -> Result<String> {
     }
 }
 
-/// 从命令行标志或环境变量解析密码，缺失时进入交互输入。
-///
-/// # 参数
-/// * `flag` - `--password` 的原始值
-///
-/// # 返回值
-/// 返回明文密码。
-///
-/// # 错误
-/// 交互输入失败或两次输入不一致时返回用法错误。
+/// 管理员初始化或重置密码前统一从 `--password`、`ERP_ADMIN_PASSWORD` 或终端取得密码。
+/// 交互失败时在连接目标数据库之前终止命令。
 pub fn resolve_password(flag: Option<String>) -> Result<String> {
     take_password(select_password_source(flag, std::env::var(PASSWORD_ENV).ok()))
 }
 
-/// 过滤空字符串。
-///
-/// # 参数
-/// * `value` - 可选字符串
-///
-/// # 返回值
-/// 非空字符串原值，空字符串视为缺失。
-///
-/// # 错误
-/// 无。
+// 选择密码来源时把空字符串视为缺省；其他值原样保留，不替用户裁剪空白。
 fn nonempty(value: Option<String>) -> Option<String> {
     value.filter(|item| !item.is_empty())
 }
 
-/// 交互输入密码并要求确认一次。
-///
-/// # 返回值
-/// 两次输入一致时返回明文密码。
-///
-/// # 错误
-/// 终端不可用或两次输入不一致时返回用法错误。
+// 没有非交互密码来源时，让运维人员输入并确认新密码；两次不一致时中止操作，防止误设。
 fn prompt_confirmed_password() -> Result<String> {
     let first = prompt_once("请输入密码: ")?;
     let second = prompt_once("请再次输入密码: ")?;
@@ -100,16 +58,7 @@ fn prompt_confirmed_password() -> Result<String> {
     Ok(first)
 }
 
-/// 从终端读取一次隐藏密码。
-///
-/// # 参数
-/// * `prompt` - 提示文案
-///
-/// # 返回值
-/// 返回用户输入的密码字符串。
-///
-/// # 错误
-/// 终端不可读时返回用法错误。
+// 初次输入和确认共用同一个不回显的终端入口；终端读取失败时按命令用法错误处理。
 fn prompt_once(prompt: &str) -> Result<String> {
     rpassword::prompt_password(prompt).map_err(|error| Error::Usage(format!("无法读取密码: {error}")))
 }

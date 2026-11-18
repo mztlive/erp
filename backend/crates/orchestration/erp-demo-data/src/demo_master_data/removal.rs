@@ -16,13 +16,10 @@ pub struct DemoResetReport {
 }
 
 impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
-    /// 清空配置数据库，仅原样保留 admin 和必要超管授权。
-    /// # 参数
-    /// `actor` 必须是具有内建超管授权的 admin 本人。
-    /// # 返回
-    /// 单个事务删除的文档总数；集合和索引保留。
-    /// # 错误
-    /// 功能未开放、身份不符合保留要求、策略并发变化、删除或提交失败时返回错误。
+    /// 重置已开启演示功能的数据库，仅允许具有内建超管授权的 `admin` 本人执行。
+    /// 在同一事务原样保留该账号及必要授权，返回物理删除条数；集合和索引不删除。
+    ///
+    /// 演示开关关闭、身份或策略版本不符、删除或提交失败时返回错误。
     pub async fn reset_database(&self, actor: &AuditActor) -> Result<DemoResetReport> {
         self.ensure_enabled()?;
         let revision = self.identity.authorize_database_reset(actor).await?;

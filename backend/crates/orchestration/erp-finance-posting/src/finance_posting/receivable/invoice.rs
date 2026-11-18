@@ -53,29 +53,16 @@ impl ReceivableProcess {
 
     /// 登记发票草稿：同一事务注册 `BusinessDocument` 并调用统一绑定端口。
     ///
-    /// 发票为 `NO_APPROVAL`：返回空绑定，不查询已发布定义，不启动审批实例，
-    /// 不创建审批任务。
+    /// 发票为 `NO_APPROVAL`：返回空绑定，不查询已发布定义，不启动审批实例，不创建审批任务。返回新建发票视图。
     ///
-    /// # 参数
-    /// * `req` - 创建请求
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回新建发票视图。
-    ///
-    /// # 错误
-    /// * `ValidationError` - 金额三元组不恒等或字段非法
+    /// `ValidationError`：金额三元组不恒等或字段非法。
     pub async fn create_invoice(&self, req: CreateInvoiceRequest, actor: &AuditActor) -> Result<InvoiceView> {
         self.create_invoice_with_assets(req, Arc::new(EmptyPendingAttachments), actor).await
     }
 
     /// 在发票草稿事务内登记附件资产与关系。
-    /// # 参数
-    /// 请求、已写入存储的附件批次与当前账号。
-    /// # 返回
-    /// 带准确附件关联的发票草稿。
-    /// # 错误
-    /// 文件无效或事务失败时拒绝。
+    ///
+    /// 请求、已写入存储的附件批次与当前账号。带准确附件关联的发票草稿。文件无效或事务失败时拒绝。
     pub async fn create_invoice_with_assets(
         &self,
         mut req: CreateInvoiceRequest,
@@ -91,33 +78,21 @@ impl ReceivableProcess {
 
     /// 原子创建或提交销项发票并完成分配。
     ///
-    /// 新发票的 `BusinessDocument` 注册、发票实体、销项分配、应收子账开票进度、
-    /// 销售单开票进度和审计全部位于同一 MongoDB 事务。已有草稿则用乐观锁
-    /// 校验后在同一事务过账，前端不得再执行“先创建、再过账”。
+    /// 新发票的 `BusinessDocument` 注册、发票实体、销项分配、应收子账开票进度、销售单开票进度和审计全部位于同一 MongoDB 事务。已有草稿则用乐观锁校验后在同一事务过账，前端不得再执行“先创建、
+    /// 再过账”。
     ///
-    /// # 参数
-    /// * `req` - 新发票或已有草稿身份、最终分配与幂等键
-    /// * `actor` - 已通过鉴权的审计操作人
+    /// `req` 为新发票或已有草稿身份、最终分配与幂等键。返回已登记发票及其正式分配。`ValidationError`：新建/已有草稿参数组合或金额不合法。
     ///
-    /// # 返回
-    /// 返回已登记发票及其正式分配。
-    ///
-    /// # 错误
-    /// * `ValidationError` - 新建/已有草稿参数组合或金额不合法
-    /// * `ConflictError` - 草稿版本、状态或规范化发票号码冲突
-    /// * `BusinessLogicError` - 跨主体、分配不守恒或超额开票
+    /// `ConflictError`：草稿版本、状态或规范化发票号码冲突。`BusinessLogicError`：跨主体、分配不守恒或超额开票。
     pub async fn commit_invoice(&self, req: CommitInvoiceRequest, actor: &AuditActor) -> Result<InvoiceView> {
         Ok(self.commit_invoice_with_assets(req, Arc::new(EmptyPendingAttachments), actor).await?.view)
     }
 
-    /// 原子开票时登记附件；重放结果指明本次新上传对象是否已消费。
-    /// # 参数
-    /// req 为发票身份、分配及幂等命令，pending 为待登记附件批次，actor 为当前认证操作人。
-    /// # 返回
-    /// 发票结果及附件是否已提交。
-    /// # 错误
-    /// 请求或附件非法时返回 `InvalidInput` 或 `ValidationError`；授权、对象、版本、额度或事务错误按原分类传播。
-    /// 提交结果无法查证或附件已提交后读取失败时返回 `OutcomeUnknown`，调用方须保留附件。
+    /// 销项发票原子登记入口：用发票身份、分配和幂等命令过账，同事务登记本批待处理附件。
+    /// 结果同时交付发票视图和本批附件是否已提交；已有回执的重放不等于消费了本次新上传。
+    ///
+    /// 请求或附件非法返回 `InvalidInput` 或 `ValidationError`；授权、对象、版本、额度和事务失败保持原分类。
+    /// 提交无法查证，或附件已提交但结果回读失败时返回 `OutcomeUnknown`，调用方须保留附件。
     pub async fn commit_invoice_with_assets(
         &self,
         req: CommitInvoiceRequest,
@@ -150,7 +125,7 @@ impl ReceivableProcess {
         self.committed_invoice_view(result, &command_receipt, has_pending, actor).await
     }
 
-    /// 结果恢复保留未知提交语义；已提交附件后读取失败不能触发存储补偿。
+    // 结果恢复保留未知提交语义；已提交附件后读取失败不能触发存储补偿。
     pub(super) async fn committed_invoice_view(
         &self,
         result: Result<(String, bool)>,
@@ -180,24 +155,12 @@ impl ReceivableProcess {
 
     /// 发票登记过账并分配（§8.3-2 事务不变量）。
     ///
-    /// 同一事务内：规范化号码去重（`find_by_direction_and_normalized_no` +
-    /// 唯一索引兜底）；校验发票与可开票子账同一往来主体；分配合计等于发票
-    /// 金额；写销项发票分配；按条件原子更新子账净已开票进度
-    /// （`apply_invoicing` 不超额开票）；发票迁移为已登记。
-    /// 任一校验失败整体回滚。规范化发票号码唯一构成重复提交去重。
+    /// 同一事务内：规范化号码去重（`find_by_direction_and_normalized_no` + 唯一索引兜底）；校验发票与可开票子账同一往来主体；分配合计等于发票金额；写销项发票分配；
+    /// 按条件原子更新子账净已开票进度（`apply_invoicing` 不超额开票）；发票迁移为已登记。任一校验失败整体回滚。规范化发票号码唯一构成重复提交去重。
     ///
-    /// # 参数
-    /// * `id` - 发票 ID
-    /// * `req` - 过账请求（分配行）
-    /// * `actor` - 已通过鉴权的审计操作人
+    /// `req` 为过账请求（分配行）。返回登记后发票视图。`NotFound`：发票或子账不存在。`ConflictError`：规范化号码已登记或发票已登记。
     ///
-    /// # 返回
-    /// 返回登记后发票视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 发票或子账不存在
-    /// * `ConflictError` - 规范化号码已登记或发票已登记
-    /// * `BusinessLogicError` - 跨主体开票、分配合计不等或超额开票
+    /// `BusinessLogicError`：跨主体开票、分配合计不等或超额开票。
     pub async fn post_invoice(
         &self,
         id: &str,
@@ -266,7 +229,7 @@ pub(super) fn new_invoice(req: CreateInvoiceRequest, actor_id: &str) -> Result<I
     )?)
 }
 
-/// 只加载可过账的销项草稿；非草稿或规范化号码已被其他发票占用时返回冲突。
+// 只加载可过账的销项草稿；非草稿或规范化号码已被其他发票占用时返回冲突。
 async fn load_postable_invoice(db: &Database, id: &str, executor: &mut dyn Executor) -> Result<Invoice> {
     let invoice = db
         .invoices()
@@ -297,7 +260,7 @@ pub(super) async fn ensure_postable_draft(
     Ok(())
 }
 
-/// 已提交文件后的响应读取失败必须保留对象，由同操作号重试核对已完成结果。
+// 已提交文件后的响应读取失败必须保留对象，由同操作号重试核对已完成结果。
 fn committed_read_error(error: impl Into<Error>, assets_committed: bool) -> Error {
     let error = error.into();
     if assets_committed {
@@ -309,13 +272,7 @@ fn committed_read_error(error: impl Into<Error>, assets_committed: bool) -> Erro
     }
 }
 
-/// 发票创建必须跳过绑定：政策只能是 `NO_APPROVAL`。
-///
-/// # 返回
-/// 返回 `SkipNoApproval`。
-///
-/// # 错误
-/// 政策缺失或误登记为必须审批时返回部署不变量错误。
+// 发票创建必须跳过绑定：政策只能是 `NO_APPROVAL`。返回 `SkipNoApproval`。政策缺失或误登记为必须审批时返回部署不变量错误。
 fn invoice_create_binding_decision() -> Result<BindingDecision> {
     let policy = policy_of(DocumentType::Invoice)?;
     match &policy {
@@ -331,10 +288,7 @@ fn invoice_create_binding_decision() -> Result<BindingDecision> {
     }
 }
 
-/// 确认发票创建路径不得查询发布定义。
-///
-/// # 错误
-/// 绑定决定不是跳过时返回错误。
+// 确认发票创建路径不得查询发布定义。绑定决定不是跳过时返回错误。
 fn ensure_invoice_skips_approval_binding() -> Result<BindingDecision> {
     let decision = invoice_create_binding_decision()?;
     if decision != BindingDecision::SkipNoApproval {
@@ -343,10 +297,7 @@ fn ensure_invoice_skips_approval_binding() -> Result<BindingDecision> {
     Ok(decision)
 }
 
-/// 发票不得注册空审批适配器。
-///
-/// # 错误
-/// 适配器登记存在时返回部署不变量错误。
+// 发票不得注册空审批适配器。适配器登记存在时返回部署不变量错误。
 fn ensure_invoice_has_no_adapter() -> Result<()> {
     if adapter_spec_of(DocumentType::Invoice).is_ok() {
         return Err(Error::Internal("发票不得注册审批适配器".to_string()));
@@ -354,16 +305,9 @@ fn ensure_invoice_has_no_adapter() -> Result<()> {
     Ok(())
 }
 
-/// 发票往来主体作为绑定上下文组织，不得用空串补位。
-///
-/// # 参数
-/// * `invoice` - 待登记发票
-///
-/// # 返回
-/// 返回非空往来主体。
-///
-/// # 错误
-/// 往来主体为空时返回校验错误。
+// 发票往来主体作为绑定上下文组织，不得用空串补位。
+//
+// `invoice` 为待登记发票。返回非空往来主体。往来主体为空时返回校验错误。
 fn invoice_binding_organization_id(invoice: &Invoice) -> Result<String> {
     let org = invoice.party_id.to_string();
     if org.trim().is_empty() {
@@ -372,14 +316,9 @@ fn invoice_binding_organization_id(invoice: &Invoice) -> Result<String> {
     Ok(org)
 }
 
-/// 构造发票创建绑定命令。客户端不得提交定义 ID。
-///
-/// # 参数
-/// * `invoice` - 待登记发票
-/// * `creator_id` - 创建人
-///
-/// # 错误
-/// 往来主体为空时返回校验错误。
+// 构造发票创建绑定命令。客户端不得提交定义 ID。
+//
+// `invoice` 为待登记发票。往来主体为空时返回校验错误。
 fn invoice_bind_command(invoice: &Invoice, creator_id: &str) -> Result<BindPublishedDefinitionCommand> {
     Ok(BindPublishedDefinitionCommand {
         document_type: DocumentType::Invoice,
@@ -392,17 +331,9 @@ fn invoice_bind_command(invoice: &Invoice, creator_id: &str) -> Result<BindPubli
     })
 }
 
-/// 将绑定端口返回值落实为发票注册行：空绑定保持未绑定。
-///
-/// # 参数
-/// * `document` - 发票注册行
-/// * `binding` - 统一绑定端口返回值
-///
-/// # 返回
-/// 固定返回 `None`。
-///
-/// # 错误
-/// 端口返回绑定或注册行已预置绑定时返回错误。
+// 将绑定端口返回值落实为发票注册行：空绑定保持未绑定。
+//
+// `document` 为发票注册行；`binding` 为统一绑定端口返回值。固定返回 `None`。端口返回绑定或注册行已预置绑定时返回错误。
 fn apply_invoice_create_binding(
     document: &mut BusinessDocument,
     binding: Option<ApprovalDefinitionBinding>,
@@ -419,12 +350,9 @@ fn apply_invoice_create_binding(
     Ok(None)
 }
 
-/// 在调用方事务内登记发票单据并证明空绑定。
-///
-/// 必须先确认政策跳过，再调用统一绑定端口；不得查询发布定义后假装成功。
-///
-/// # 错误
-/// 政策非无审批、端口返回绑定或写入失败时返回错误。
+// 在调用方事务内登记发票单据并证明空绑定。
+//
+// 必须先确认政策跳过，再调用统一绑定端口；不得查询发布定义后假装成功。政策非无审批、端口返回绑定或写入失败时返回错误。
 async fn persist_unbound_invoice_document(
     db: &Database,
     rbac: &FinancePostingPorts,
@@ -441,20 +369,11 @@ async fn persist_unbound_invoice_document(
     persist_registered_document(db, &document, executor).await.map_err(crate::Error::from)
 }
 
-/// 为已构造发票登记 `BusinessDocument` 并调用统一绑定端口。
-///
-/// # 参数
-/// * `db` - 数据库。
-/// * `rbac` - 授权源。
-/// * `invoice` - 已构造、尚未登记单据的发票。
-/// * `actor` - 登记人。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
-/// 无绑定单据登记成功时无返回值。
-///
-/// # 错误
-/// 绑定命令构造、绑定端口或注册写入失败时返回错误。
+// 为已构造发票登记 `BusinessDocument` 并调用统一绑定端口。
+//
+// `invoice` 为已构造、尚未登记单据的发票；`actor` 为登记人；沿用调用方的执行器。无绑定单据登记成功时无返回值。
+//
+// 绑定命令构造、绑定端口或注册写入失败时返回错误。
 pub(super) async fn register_created_invoice_document(
     db: &Database,
     rbac: &FinancePostingPorts,
@@ -472,10 +391,7 @@ pub(super) async fn register_created_invoice_document(
     persist_unbound_invoice_document(db, rbac, document, &bind_command, actor, executor).await
 }
 
-/// 在创建事务内写入发票草稿、登记无绑定单据并读取完整回包。
-///
-/// # 错误
-/// 绑定、注册、发票写入或结果读取失败时返回错误，调用方必须视作整体回滚。
+// 在创建事务内写入发票草稿、登记无绑定单据并读取完整回包。绑定、注册、发票写入或结果读取失败时返回错误，调用方必须视作整体回滚。
 async fn persist_created_invoice(
     db: &Database,
     rbac: &FinancePostingPorts,
@@ -516,13 +432,11 @@ async fn persist_created_invoice(
         .await
 }
 
-/// 在原事务的写后读取阶段重验创建资格并投影草稿结果。
-/// # 参数
-/// db 为发票数据库，authorization 为共享授权，actor 为当前账号，id 为本次草稿身份，executor 为原事务执行器。
-/// # 返回
-/// 返回当前快照内的完整草稿视图，不追加详情菜单资格。
-/// # 错误
-/// 原事务失效、创建资格不足或发票读取失败时拒绝交付结果。
+// 在原事务的写后读取阶段重验创建资格并投影草稿结果。
+//
+// db 为发票数据库，authorization 为共享授权，actor 为当前账号，id 为本次草稿身份，executor 为原事务执行器。
+//
+// 返回当前快照内的完整草稿视图，不追加详情菜单资格。原事务失效、创建资格不足或发票读取失败时拒绝交付结果。
 async fn created_invoice_result(
     db: &Database,
     authorization: &AuthorizationService,
@@ -544,7 +458,7 @@ mod result_tests {
 
     use super::*;
 
-    /// 原事务或创建资格不可用时，在读取草稿及分配前拒绝。
+    // 原事务或创建资格不可用时，在读取草稿及分配前拒绝。
     #[tokio::test]
     async fn created_invoice_results_require_snapshot_and_current_command_qualification() {
         let db =
@@ -609,7 +523,7 @@ mod invoice_no_approval_tests {
         .expect("草稿必须可构造")
     }
 
-    /// 政策仅含 document_type、approval_requirement、process_kind，不得注册空 Adapter。
+    // 验证销项发票只登记 `document_type`、`approval_requirement`、`process_kind`，不为无审批单据注册空适配器。
     #[test]
     fn invoice_policy_is_no_approval_identity_only() {
         let policy = policy_of(DocumentType::Invoice).expect("发票政策必须存在");
@@ -626,7 +540,7 @@ mod invoice_no_approval_tests {
         ensure_invoice_has_no_adapter().expect("不得注册空适配器");
     }
 
-    /// 创建必须注册 BusinessDocument，绑定端口返回空，禁止写入绑定。
+    // 验证创建销项发票仍注册 `BusinessDocument`；统一端口只能返回空绑定，注册行保持未绑定。
     #[test]
     fn create_registers_document_and_returns_empty_binding() {
         let invoice = draft_invoice();

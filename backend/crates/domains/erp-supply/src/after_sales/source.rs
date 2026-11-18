@@ -10,12 +10,9 @@ use crate::ports::connector::settlement::SettlementMovement;
 use crate::{Error, Result};
 
 /// 核对 API 流水与正式来源批次的订单、供应商、金额及一次关联。
-/// # 参数
-/// `source` 为领域已派生的完整来源批次；`rows` 为其引用的可靠 API 流水。
-/// # 返回
 /// 所有涉及订单的扣费、退款及费用分别守恒。
-/// # 错误
 /// 跨供应商、重复关联、未覆盖订单或金额不等时拒绝。
+/// `source` 为领域已派生的完整来源批次；`rows` 为其引用的可靠 API 流水。
 pub fn validate_settlement_source(
     source: &SupplierSettlementSourceEvidence,
     rows: &[SettlementEvidence],

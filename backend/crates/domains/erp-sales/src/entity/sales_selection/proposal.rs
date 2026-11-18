@@ -143,17 +143,13 @@ pub struct SalesSelectionProposal {
 }
 
 impl SalesSelectionProposal {
-    /// 创建方案表头。
-    ///
-    /// # 参数
-    /// * `id` - 方案身份
-    /// * `data` - 创建字段
-    ///
-    /// # 返回
+    /// 客户提交选择时用已冻结的客户、参与人及合计生成不可变方案表头。
     /// 返回不可改的方案表头。
-    ///
-    /// # 错误
     /// 编号、销售负责人或业务组织为空，或合计与提交方式不一致时拒绝。
+    ///
+    /// 输入约定：
+    /// - `id`：方案身份
+    /// - `data`：创建字段
     pub fn new(id: SalesSelectionProposalId, data: SalesSelectionProposalData) -> Result<Self> {
         let proposal_no = data.proposal_no.trim();
         if proposal_no.is_empty() {
@@ -191,7 +187,7 @@ impl SalesSelectionProposal {
     }
 }
 
-/// 确认方案参与人与收件信息同提交模式一致。
+// 冻结销售选品方案前核对参与人和收件人字段，确保与选品册的提交模式相符。
 fn validate_participant(
     mode: SubmitMode,
     participant_id: &str,
@@ -211,19 +207,15 @@ fn validate_participant(
 }
 
 /// 由会话选择与陈列快照构建方案明细。
-///
-/// # 参数
-/// * `proposal_id` - 方案
-/// * `submit_mode` - 提交方式
-/// * `choices` - 已保存选择
-/// * `items` - 陈列项
-/// * `next_id` - 明细行身份生成
-///
-/// # 返回
 /// 返回陈列项行、SKU 行与按份采购合计。
-///
-/// # 错误
 /// 缺项、份数与方式不符或金额不平衡时拒绝。
+///
+/// 输入约定：
+/// - `proposal_id`：方案
+/// - `submit_mode`：提交方式
+/// - `choices`：已保存选择
+/// - `items`：陈列项
+/// - `next_id`：明细行身份生成
 pub fn build_proposal_lines<F>(
     proposal_id: &SalesSelectionProposalId,
     submit_mode: SubmitMode,
@@ -274,20 +266,16 @@ where
     Ok((display_lines, sku_lines, total))
 }
 
-/// 为一项选择生成陈列行与 SKU 行。
-///
-/// # 参数
-/// * `proposal_id` - 方案
-/// * `submit_mode` - 提交方式
-/// * `choice` - 选择
-/// * `item` - 陈列项
-/// * `next_id` - 身份生成
-///
-/// # 返回
-/// 返回一行陈列与对应 SKU 行。不同套餐中相同 SKU 分别保留，不合并。
-///
-/// # 错误
-/// 份数或金额非法时拒绝。
+// 为一项选择生成陈列行与 SKU 行。
+// 返回一行陈列与对应 SKU 行。不同套餐中相同 SKU 分别保留，不合并。
+// 份数或金额非法时拒绝。
+//
+// 输入约定：
+// - `proposal_id`：方案
+// - `submit_mode`：提交方式
+// - `choice`：选择
+// - `item`：陈列项
+// - `next_id`：身份生成
 fn lines_for_choice<F>(
     proposal_id: &SalesSelectionProposalId,
     submit_mode: SubmitMode,
@@ -326,19 +314,15 @@ where
     Ok((display_line, sku_lines))
 }
 
-/// 按陈列项展开 SKU 行。
-///
-/// # 参数
-/// * `proposal_id` - 方案
-/// * `item` - 陈列项
-/// * `quantity` - 套餐或单品份数
-/// * `next_id` - 身份生成
-///
-/// # 返回
-/// 单品一行；套餐每个成员一行，数量等于套餐份数。
-///
-/// # 错误
-/// 金额溢出时拒绝。
+// 按陈列项展开 SKU 行。
+// 结果：单品一行；套餐每个成员一行，数量等于套餐份数。
+// 金额溢出时拒绝。
+//
+// 输入约定：
+// - `proposal_id`：方案
+// - `item`：陈列项
+// - `quantity`：套餐或单品份数
+// - `next_id`：身份生成
 fn sku_lines_for_item<F>(
     proposal_id: &SalesSelectionProposalId,
     item: &SalesSelectionDisplayItem,

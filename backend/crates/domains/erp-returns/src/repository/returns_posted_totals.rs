@@ -63,16 +63,9 @@ fn supplier_refund_total_filter(payment_id: &str, exclude_id: &str) -> Document 
 #[allow(async_fn_in_trait)]
 pub trait CustomerRefundPostedTotalsExt {
     /// 按原回款聚合已过账客户退款合计。
-    ///
-    /// # 参数
-    /// * `receipt_id` - 原客户回款
-    /// * `exclude_id` - 本次过账退款 ID，聚合中排除
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回已过账合计；无匹配时返回精确零。
-    ///
-    /// # 错误
+    /// `receipt_id` 为原客户回款；`exclude_id` 为本次过账退款 ID，聚合中排除。
+    /// 沿用调用方执行器 `executor`。
     /// MongoDB 聚合、游标读取或 Decimal128 反序列化失败时返回错误。
     async fn posted_refund_total_by_receipt(
         &self,
@@ -102,16 +95,9 @@ impl CustomerRefundPostedTotalsExt for persistence_core::Repository<'_, Customer
 #[allow(async_fn_in_trait)]
 pub trait SupplierRefundPostedTotalsExt {
     /// 按原付款聚合已过账供应商退款合计。
-    ///
-    /// # 参数
-    /// * `payment_id` - 原供应商付款
-    /// * `exclude_id` - 本次过账退款 ID，聚合中排除
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回已过账合计；无匹配时返回精确零。
-    ///
-    /// # 错误
+    /// `payment_id` 为原供应商付款；`exclude_id` 为本次过账退款 ID，聚合中排除。
+    /// 沿用调用方执行器 `executor`。
     /// MongoDB 聚合、游标读取或 Decimal128 反序列化失败时返回错误。
     async fn posted_refund_total_by_payment(
         &self,
@@ -141,16 +127,9 @@ impl SupplierRefundPostedTotalsExt for persistence_core::Repository<'_, Supplier
 #[allow(async_fn_in_trait)]
 pub trait ReceiptReversalPostedTotalsExt {
     /// 按原回款聚合已过账回款冲正合计。
-    ///
-    /// # 参数
-    /// * `receipt_id` - 原客户回款
-    /// * `exclude_id` - 本次过账冲正 ID，聚合中排除
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回已过账合计；无匹配时返回精确零。
-    ///
-    /// # 错误
+    /// `receipt_id` 为原客户回款；`exclude_id` 为本次过账冲正 ID，聚合中排除。
+    /// 沿用调用方执行器 `executor`。
     /// MongoDB 聚合、游标读取或 Decimal128 反序列化失败时返回错误。
     async fn posted_reversal_total_by_receipt(
         &self,
@@ -180,16 +159,9 @@ impl ReceiptReversalPostedTotalsExt for persistence_core::Repository<'_, Receipt
 #[allow(async_fn_in_trait)]
 pub trait PaymentReversalPostedTotalsExt {
     /// 按原付款聚合已过账付款冲正合计。
-    ///
-    /// # 参数
-    /// * `payment_id` - 原供应商付款
-    /// * `exclude_id` - 本次过账冲正 ID，聚合中排除
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回已过账合计；无匹配时返回精确零。
-    ///
-    /// # 错误
+    /// `payment_id` 为原供应商付款；`exclude_id` 为本次过账冲正 ID，聚合中排除。
+    /// 沿用调用方执行器 `executor`。
     /// MongoDB 聚合、游标读取或 Decimal128 反序列化失败时返回错误。
     async fn posted_reversal_total_by_payment(
         &self,
@@ -219,7 +191,7 @@ impl PaymentReversalPostedTotalsExt for persistence_core::Repository<'_, Payment
 mod tests {
     use super::{posted_total_filter, posted_total_pipeline, supplier_refund_total_filter};
 
-    /// 管道限定原单、已过账、排除当前单与未删除。
+    // 验证管道限定原单、已过账、排除当前单与未删除。
     #[test]
     fn pipeline_matches_original_and_posted_only() {
         let pipeline =
@@ -263,7 +235,7 @@ mod tests {
         );
     }
 
-    /// MongoDB $sum 结果必须按 Decimal128 反序列化，不经过浮点或整数金额。
+    // 验证MongoDB $sum 结果必须按 Decimal128 反序列化，不经过浮点或整数金额。
     #[test]
     fn posted_amount_row_reads_exact_decimal128_sum() {
         use std::str::FromStr;

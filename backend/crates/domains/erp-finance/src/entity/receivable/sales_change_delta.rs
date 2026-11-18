@@ -26,20 +26,14 @@ pub struct ReceivableDelta {
 
 impl ReceivableDelta {
     /// 由新旧含税总额推导应收差额。
-    ///
-    /// # 参数
-    /// * `new_gross` - 新版本含税总额
-    /// * `current_gross` - 当前生效版本含税总额
-    ///
-    /// # 返回
-    /// 差额为零时返回 `Ok(None)`（无分录）；非零时返回 `Ok(Some(delta))`，
+    /// 结果：差额为零时返回 `Ok(None)`（无分录）；非零时返回 `Ok(Some(delta))`，
     /// 其中方向与绝对金额已封装。
-    ///
-    /// # 错误
     /// 绝对金额无法表示为合法 `Amount`（如小数位非法或溢出）时返回错误。
+    /// 业务边界：该方法不触及持久化或账户存在性；零差额不得下沉为方向与金额的伪 VO。
     ///
-    /// # 关键业务约束
-    /// 该方法不触及持久化或账户存在性；零差额不得下沉为方向与金额的伪 VO。
+    /// 输入约定：
+    /// - `new_gross`：新版本含税总额
+    /// - `current_gross`：当前生效版本含税总额
     pub fn try_from_gross(new_gross: Amount, current_gross: Amount) -> Result<Option<Self>> {
         let delta = new_gross.to_decimal() - current_gross.to_decimal();
         if delta.is_zero() {
@@ -57,29 +51,13 @@ impl ReceivableDelta {
     }
 
     /// 返回差额方向。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// `Increase` 表示应收增加，`Decrease` 表示应收冲减。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 结果：`Increase` 表示应收增加，`Decrease` 表示应收冲减。
     pub fn direction(self) -> EntryDirection {
         self.direction
     }
 
     /// 返回差额绝对金额。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 恒为正数 `Amount`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 结果：恒为正数 `Amount`。
     pub fn absolute_amount(self) -> Amount {
         self.absolute_amount
     }
@@ -87,19 +65,13 @@ impl ReceivableDelta {
 
 impl ReceivableAccount {
     /// 销售变更差额对应的完整账户更新（含新总额）。
-    ///
-    /// # 参数
-    /// * `business_type` - 销售单业务性质
-    /// * `new_gross` - 新版本含税总额（将同时写入 `gross_total` 与 `invoiceable_total`）
-    ///
-    /// # 返回
-    /// 含新总额的 `ReceivableAccountUpdate`，可直接用于 `ReceivableAccount::update`。
-    ///
-    /// # 错误
+    /// 结果：含新总额的 `ReceivableAccountUpdate`，可直接用于 `ReceivableAccount::update`。
     /// 新总额校验失败（由 `update` 完成）时返回错误。
+    /// 业务边界：该方法不判断账户存在性；仅对已加载账户计算确定性更新。
     ///
-    /// # 关键业务约束
-    /// 该方法不判断账户存在性；仅对已加载账户计算确定性更新。
+    /// 输入约定：
+    /// - `business_type`：销售单业务性质
+    /// - `new_gross`：新版本含税总额（将同时写入 `gross_total` 与 `invoiceable_total`）
     pub fn sales_change_delta_update(
         &self,
         _business_type: BusinessType,

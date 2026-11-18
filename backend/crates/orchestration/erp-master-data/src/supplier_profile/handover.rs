@@ -46,15 +46,10 @@ const CAPABILITY_ACTION: AuditAction = AuditAction {
 impl SupplierProfileProcess {
     /// 显式交接供应商整体维护人；开放审批任务不改派。
     ///
-    /// # 参数
-    /// * `id` - 供应商 ID
-    /// * `req` - 交接请求
-    /// * `actor` - 已认证操作人
+    /// `id`：供应商 ID。
     ///
-    /// # 返回
     /// 返回交接后的维护人与业务组织。
     ///
-    /// # 错误
     /// 版本冲突、目标不合格、范围不足或幂等键载荷不一致时拒绝。
     pub async fn handover_supplier(
         &self,
@@ -93,16 +88,10 @@ impl SupplierProfileProcess {
 
     /// 显式交接供给能力负责人；开放审批任务不改派。
     ///
-    /// # 参数
-    /// * `supplier_id` - 供应商 ID
-    /// * `capability_id` - 供给能力 ID
-    /// * `req` - 交接请求
-    /// * `actor` - 已认证操作人
+    /// `supplier_id`：供应商 ID；`capability_id`：供给能力 ID。
     ///
-    /// # 返回
     /// 返回交接后的能力负责人。
     ///
-    /// # 错误
     /// 版本冲突、目标不合格、范围不足或幂等键载荷不一致时拒绝。
     pub async fn handover_capability(
         &self,
@@ -146,14 +135,10 @@ impl SupplierProfileProcess {
 
     /// 查询可交接的合格有效人员。
     ///
-    /// # 参数
-    /// * `id` - 供应商 ID
-    /// * `actor` - 已认证操作人
+    /// `id`：供应商 ID。
     ///
-    /// # 返回
     /// 返回不含当前维护人的合格后台账号。
     ///
-    /// # 错误
     /// 供应商不存在、范围不足或仓储失败时拒绝。
     pub async fn handover_candidates(
         &self,
@@ -310,16 +295,13 @@ impl AuditedCommand for SupplierHandoverCommand {
     type Error = Error;
     type Output = HandoverOutput;
 
-    /// 同执行器查证和交接，成功回执与正式事实共同提交。
-    ///
-    /// # 参数
-    /// * `executor` - 供应商或能力交接与回执共用的执行器。
-    ///
-    /// # 返回
-    /// 分支回放时返回 `AuditedWrite::Replayed`，不写新回执。首次成功先保存回执，再返回带交接事件的 `AuditedWrite::Fresh`。
-    ///
-    /// # 错误
-    /// 供应商或能力分支失败、回执构造或回执保存失败时返回对应错误。
+    // 同执行器查证和交接，成功回执与正式事实共同提交。
+    //
+    // `executor`：供应商或能力交接与回执共用的执行器。
+    //
+    // 分支回放时返回 `AuditedWrite::Replayed`，不写新回执。首次成功先保存回执，再返回带交接事件的 `AuditedWrite::Fresh`。
+    //
+    // 供应商或能力分支失败、回执构造或回执保存失败时返回对应错误。
     async fn execute(&self, executor: &mut dyn Executor) -> Result<AuditedWrite<Self::Output>> {
         let outcome = match &self.request {
             HandoverRequest::Supplier { id, req } => self.execute_supplier(id, req, executor).await?,
@@ -344,7 +326,7 @@ impl AuditedCommand for SupplierHandoverCommand {
 }
 
 impl SupplierHandoverCommand {
-    /// 执行供应商分支；回执命中时只返回当前授权视图。
+    // 执行供应商分支；回执命中时只返回当前授权视图。
     async fn execute_supplier(
         &self,
         id: &str,
@@ -370,7 +352,7 @@ impl SupplierHandoverCommand {
         Ok(AuditedWrite::Fresh { result: HandoverOutput::Supplier(view), content })
     }
 
-    /// 执行能力分支；原请求始终绑定供应商和能力目标。
+    // 执行能力分支；原请求始终绑定供应商和能力目标。
     async fn execute_capability(
         &self,
         supplier_id: &str,
@@ -413,7 +395,7 @@ enum HandoverOutput {
     Capability(HandoverSupplierCapabilityView),
 }
 
-/// 独立回执命中后重验当前供应商访问，返回当前责任视图。
+// 独立回执命中后重验当前供应商访问，返回当前责任视图。
 async fn replay_supplier(
     db: &mongodb::Database,
     rbac: &SupplierProfileAuthorization,
@@ -443,7 +425,7 @@ async fn replay_supplier(
     }))
 }
 
-/// 能力回放保留当前访问和供应商所属核验，不跨目标返回结果。
+// 能力回放保留当前访问和供应商所属核验，不跨目标返回结果。
 #[allow(clippy::too_many_arguments)]
 async fn replay_capability(
     db: &mongodb::Database,

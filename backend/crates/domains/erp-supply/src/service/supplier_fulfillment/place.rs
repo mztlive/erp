@@ -20,22 +20,15 @@ pub enum DispatchMessageResult {
     Failed(SupplierFailureClass),
 }
 impl SupplierFulfillmentService {
-    /// 校验下单前置条件并返回连接与供给。
-    ///
-    /// 连接必须存在、启用且属于请求供应商，并声明 `order` 能力；请求中的供给修订必须都能加载，且属于该供应商和连接。
-    ///
-    /// # 参数
-    /// * `req` - 下单请求
-    /// * `executor` - 创建用例的原事务执行器
-    ///
-    /// # 返回
+    /// 核对下单前置条件并返回连接与供给。
+    /// 连接必须存在、启用且属于请求供应商，并声明 `order` 能力；请求中的供给修订必须都能加载，且属于该供
+    /// 应商和连接。
     /// 返回已校验的供应商连接，以及按修订 ID 索引的供给。
-    ///
-    /// # 错误
+    /// 失败条件：
     /// * `NotFound` - 连接不存在，或供给修订不能全部加载
     /// * `BusinessLogicError` - 连接未启用、不属于下单供应商、缺少下单能力，或供给不属于该供应商或连接
-    ///
-    /// 仓储读取失败时返回对应错误。
+    /// 仓储读取失败时向上传播错误。
+    /// `executor`：创建用例的原事务执行器。
     pub async fn ensure_placeable(
         &self,
         req: &PlaceFulfillmentOrderRequest,
@@ -75,20 +68,9 @@ impl SupplierFulfillmentService {
     }
 
     /// 构建下单事实（子订单 + 明细 + 首个 `PLACE` 动作）。
-    ///
-    /// 明细含税成本快照由单位成本 × 数量按分舍入派生（§4.2 铁律 1）；
-    /// `PLACE` 动作幂等键为 ERP 供应商子订单号（§6.19）。
-    ///
-    /// # 参数
-    /// * `req` - 下单请求
-    /// * `offerings` - 按修订 ID 索引、已通过归属校验的供给
-    /// * `follow_up_user_id` - 子订单跟进人
-    /// * `business_org_unit_id` - 子订单业务组织
-    ///
-    /// # 返回
+    /// 明细含税成本快照由单位成本 × 数量按分舍入派生（§4.2 铁律 1）；`PLACE` 动作幂等键为 ERP 供应商子订
+    /// 单号（§6.19）。
     /// 返回 `(子订单, 明细, 动作)` 三元组。
-    ///
-    /// # 错误
     /// 跟进人校验失败、明细供给缺失，或实体构造校验失败时返回对应错误。
     pub fn build_place_facts(
         &self,
@@ -122,16 +104,7 @@ impl SupplierFulfillmentService {
     }
 
     /// 构建下单明细（含税成本快照派生）。
-    ///
-    /// # 参数
-    /// * `order_id` - 子订单 ID
-    /// * `req` - 下单请求
-    /// * `offerings` - 按修订 ID 索引的供给
-    ///
-    /// # 返回
     /// 返回明细集合。
-    ///
-    /// # 错误
     /// 修订缺少供给时返回 `NotFound`；数量或成本快照恒等校验失败时返回对应错误。
     pub fn build_place_items(
         &self,
@@ -160,18 +133,10 @@ impl SupplierFulfillmentService {
             .collect()
     }
     /// 按派发结果就地更新订单和动作（不落库），并返回集成消息结果。
-    ///
-    /// # 参数
-    /// * `order` - 供应商子订单（就地更新）
-    /// * `action` - 供应商动作（就地更新）
-    /// * `outcome` - 网关分类结果
-    /// * `can_auto_retry` - 失败时是否只记录下次尝试；为假时把动作标为失败，下单动作同时把订单标为例外
-    ///
-    /// # 返回
-    /// 明确接单或拒单返回 `DispatchMessageResult::Processed`。结果未知或失败返回 `DispatchMessageResult::Failed`，并带上失败类别。
-    ///
-    /// # 错误
+    /// 明确接单或拒单返回 `DispatchMessageResult::Processed`。结果未知或失败返回
+    /// `DispatchMessageResult::Failed`，并带上失败类别。
     /// 订单或动作更新失败时返回对应错误。
+    /// `can_auto_retry`：为假时把动作标为失败，下单动作同时把订单标为例外。
     pub fn apply_dispatch_outcome(
         order: &mut SupplierFulfillmentOrder,
         action: &mut SupplierOrderAction,
@@ -235,15 +200,7 @@ impl SupplierFulfillmentService {
     }
 }
 /// 校验连接能力声明包含指定能力且为启用态（D25 跨域读取判定）。
-///
-/// # 参数
-/// * `capabilities` - 连接能力集合
-/// * `needed` - 所需能力代码
-///
-/// # 返回
 /// 所需能力存在且为启用态时无返回值。
-///
-/// # 错误
 /// 能力缺失或未启用时返回 `BusinessLogicError`。
 pub fn ensure_capability(
     capabilities: &[SupplierApiCapabilityCode],
@@ -256,19 +213,8 @@ pub fn ensure_capability(
     Ok(())
 }
 /// 在原执行器写入子订单、全部明细和首个动作。
-///
-/// # 参数
-/// * `db` - 履约集合所在数据库。
-/// * `order` - 待创建的子订单。
-/// * `items` - 待创建的明细。
-/// * `action` - 首个下单动作。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
-/// 无返回值。子订单、明细和动作已写入。
-///
-/// # 错误
-/// 仓储写入失败时返回对应错误。
+/// 子订单、明细和动作已写入。
+/// 仓储写入失败时向上传播错误。
 pub async fn persist_place_facts(
     db: &Database,
     order: &SupplierFulfillmentOrder,
@@ -282,18 +228,10 @@ pub async fn persist_place_facts(
     Ok(())
 }
 /// 按原顺序保存订单和动作CAS，保持调用方事务。
-///
-/// # 参数
-/// * `db` - 履约集合所在数据库。
-/// * `order` - 待按 CAS 写回的子订单。
-/// * `action` - 待按 CAS 写回的动作。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
-/// 无返回值。订单先于动作写回。
-///
-/// # 错误
+/// 订单先于动作写回。
 /// 任一步仓储更新失败时返回对应错误。
+/// `order`：待按 CAS 写回的子订单。
+/// `action`：待按 CAS 写回的动作。
 pub async fn persist_dispatch_entities(
     db: &Database,
     order: &mut SupplierFulfillmentOrder,

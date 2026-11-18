@@ -13,23 +13,15 @@ use super::{BatchWorkRequest, CatalogAdoptionBatchItem};
 const WORK: &str = "supplier_catalog_adoption_work_requests";
 
 /// 取得持久化草稿请求仓储。
-/// # 参数
-/// `db` 为当前数据库。
-/// # 返回
 /// 仅保存请求，进度由批次头负责。
-/// # 错误
-/// 不返回错误。
 pub fn work_requests(db: &Database) -> Repository<'_, BatchWorkRequest> {
     Repository::new(db, WORK)
 }
 
 /// 使用单次更新管道保存有限多行，保留 Mongo 内部身份并核验每行版本。
-/// # 参数
-/// `rows` 为最多二百行、同一批次的完整新草稿；执行器必须处于短事务。
-/// # 返回
 /// 所有匹配行已更新；调用方同时提交任务进度。
-/// # 错误
 /// 行身份重复、版本冲突或数据库失败时返回错误，调用方必须回滚事务。
+/// `rows` 为最多二百行、同一批次的完整新草稿；执行器必须处于短事务。
 pub async fn update_draft_chunk(
     db: &Database,
     rows: &[CatalogAdoptionBatchItem],
@@ -51,7 +43,7 @@ pub async fn update_draft_chunk(
     Ok(())
 }
 
-/// 生成版本受控的文档替换管道，所有业务文本以 literal 写入。
+// 建立版本受控的文档替换管道，所有业务文本以 literal 写入。
 fn draft_chunk_update(rows: &[CatalogAdoptionBatchItem], now: i64) -> Result<(Document, Vec<Document>)> {
     if rows.len() > 200 || rows.is_empty() {
         return Err(Error::EntityMetadataOutOfRange("批量草稿页长必须为1至200"));
@@ -82,11 +74,7 @@ fn draft_chunk_update(rows: &[CatalogAdoptionBatchItem], now: i64) -> Result<(Do
 }
 
 /// 登记请求去重及后台扫描索引。
-/// # 参数
-/// 当前数据库。
-/// # 返回
 /// 索引创建完成。
-/// # 错误
 /// 数据库或存量唯一性冲突。
 pub async fn ensure_work_indexes(db: &Database) -> Result<()> {
     db.collection::<Document>(WORK)

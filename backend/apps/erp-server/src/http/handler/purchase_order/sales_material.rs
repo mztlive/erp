@@ -16,13 +16,8 @@ use crate::http::handler::file_asset::{asset_download_response, read_asset, reva
 use crate::http::state::HttpState;
 
 /// 下载本采购内容精确关联销售版本的合同或建单凭证。
-///
-/// # 参数
-/// * `state` / `actor` - 应用状态与已认证账号。
-/// * `order_id` / `asset_id` - 有权查看的采购单与其材料清单文件引用。
-/// # 返回
+/// `order_id` / `asset_id` 为有权查看的采购单与其材料清单文件引用。
 /// 返回经来源、资产内容、治理和审计证明的文件字节，不提供通用销售或合同读取资格。
-/// # 错误
 /// 采购不可见、跨单据材料、版本变化、内容变化、销毁或隔离均拒绝发送。
 pub async fn purchase_sales_material_download(
     State(state): State<HttpState>,
@@ -41,7 +36,7 @@ pub async fn purchase_sales_material_download(
     asset_download_response(&view, bytes)
 }
 
-/// 文件领域读取结果必须与采购上下文冻结允许清单完全一致。
+// 发出采购关联销售材料前，把文件领域读取结果与采购上下文的冻结白名单做精确比对。
 fn ensure_frozen_asset(frozen: &ApprovalMaterialFile, view: &FileAssetView) -> Result<(), Error> {
     let current = ApprovalMaterialFile {
         file_asset_id: FileAssetId::new(&view.id),

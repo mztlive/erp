@@ -75,24 +75,8 @@ struct FrozenCreatedDraft {
     audit_event_sequence: PurchaseCreationEventSequence,
 }
 
-/// 把刚创建的采购草稿冻结并启动审批。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `sales_order` - 来源销售单
-/// * `bundle` - 使用原执行器成功写入的采购单、草稿头、行及注册行
-/// * `actor` - 审计操作人
-/// * `idempotency_key` - 建单命令幂等键，复用于启动审批
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回正式号与提交后乐观锁版本。
-///
-/// # 错误
-/// 草稿缺失、无审批绑定、定义图非法或仓储写入失败时返回错误。
-///
-/// # 关键业务约束
-/// 必须与建单同事务；失败时整批采购单一起回滚，不得留下未提交草稿。
+// 采购建单写入草稿头、明细和注册行后立即调用，在同一事务冻结提交并复用建单幂等键启动审批。
+// 成功交出正式采购单号和提交后乐观锁版本；草稿缺失、未绑定审批、定义图非法或仓储失败时整批回滚，不留下未提交草稿。
 pub(super) async fn submit_created_draft(
     db: &Database,
     ports: &PurchaseOrderPorts,
@@ -116,7 +100,7 @@ pub(super) async fn submit_created_draft(
     .await
 }
 
-/// 沿用领域的草稿状态和提交指针检查，全部通过后才分配首次正式号。
+// 沿用领域的草稿状态和提交指针检查，全部通过后才分配首次正式号。
 fn prepare_created_order(
     order: &mut PurchaseOrder,
     document: &mut BusinessDocument,
@@ -129,21 +113,13 @@ fn prepare_created_order(
     assign_formal_identifiers(order, document, now)
 }
 
-/// 首次提交时分配正式采购单号并同步注册行编号。
-///
-/// # 参数
-/// * `order` - 待分配正式号的采购单
-/// * `document` - 对应业务注册行
-/// * `now` - 编号分配时间
-///
-/// # 返回
-/// 分配成功返回 `Ok(())`。
-///
-/// # 错误
-/// 编号非法或注册行已分配编号时返回错误。
-///
-/// # 关键业务约束
-/// 正式号只分配一次；已有正式号时保持不变。
+// 首次提交时分配正式采购单号并同步注册行编号。
+//
+// `order` 为待分配正式号的采购单；`document` 为对应业务注册行；`now` 为编号分配时间。分配成功返回 `Ok(())`。
+//
+// 编号非法或注册行已分配编号时返回错误。
+//
+// 正式号只分配一次；已有正式号时保持不变。
 fn assign_formal_identifiers(
     order: &mut PurchaseOrder,
     document: &mut BusinessDocument,
@@ -158,22 +134,11 @@ fn assign_formal_identifiers(
     Ok(())
 }
 
-/// 冻结草稿提交并推进采购单进入审批中。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `bundle` - 刚写入的草稿聚合
-/// * `actor` - 提交人
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回冻结提交与已进入审批中的采购单。
-///
-/// # 错误
-/// 草稿状态非法、提交序号溢出或领域动作失败时返回错误。
-///
-/// # 关键业务约束
-/// 旧草稿标记失效，正式提交是新快照，不得改写草稿行。
+// 冻结草稿提交并推进采购单进入审批中。
+//
+// `bundle` 为刚写入的草稿聚合；`actor` 为提交人。返回冻结提交与已进入审批中的采购单。草稿状态非法、提交序号溢出或领域动作失败时返回错误。
+//
+// 旧草稿标记失效，正式提交是新快照，不得改写草稿行。
 async fn freeze_created_order(
     db: &Database,
     bundle: CreatedDraftBundle,
@@ -218,23 +183,13 @@ struct CreatedOrderStartContext<'a> {
     now: Instant,
 }
 
-/// 构造启动计划并与冻结提交同会话写入。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `ports` - 原事务使用的采购应用能力。
-/// * `frozen` - 已冻结的采购提交。
-/// * `context` - 同一次创建命令的销售来源、身份、幂等键和时间。
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回提交后的正式号与乐观锁版本。
-///
-/// # 错误
-/// 无绑定、启动计划失败或仓储写入失败时返回错误。
-///
-/// # 关键业务约束
-/// 审批人取自已发布定义，不接受客户端选择。
+// 构造启动计划并与冻结提交同会话写入。
+//
+// `ports` 为原事务使用的采购应用能力；`frozen` 为已冻结的采购提交；`context` 为同一次创建命令的销售来源、身份、幂等键和时间。
+//
+// 返回提交后的正式号与乐观锁版本。无绑定、启动计划失败或仓储写入失败时返回错误。
+//
+// 审批人取自已发布定义，不接受客户端选择。
 async fn persist_created_order_start(
     db: &Database,
     ports: &PurchaseOrderPorts,
@@ -274,24 +229,13 @@ async fn persist_created_order_start(
     .await
 }
 
-/// 由冻结绑定构造 `prepare_start` 结果。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `order` - 已进入审批中的采购单
-/// * `actor` - 提交人
-/// * `idempotency_key` - 建单幂等键
-/// * `now` - 调用方时间
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回可写入的启动计划。
-///
-/// # 错误
-/// 绑定缺失、定义图非法或入口节点缺失时返回错误。
-///
-/// # 关键业务约束
-/// 新建提交没有既有启动收据。
+// 由冻结绑定构造 `prepare_start` 结果。
+//
+// `order` 为已进入审批中的采购单；`actor` 为提交人；`idempotency_key` 为建单幂等键。返回可写入的启动计划。
+//
+// 绑定缺失、定义图非法或入口节点缺失时返回错误。
+//
+// 新建提交没有既有启动收据。
 async fn prepare_created_order_start(
     db: &Database,
     identity: &Arc<AuthorizationService>,
@@ -338,21 +282,11 @@ struct PersistFrozenCreatedOrderStartInput<'a> {
     now: Instant,
 }
 
-/// 写入冻结提交、运行事实，并回读提交后的采购单。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `input` - 冻结提交、启动计划与责任组织上下文
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回正式号与提交后乐观锁版本。
-///
-/// # 错误
-/// 仓储写入失败或提交后采购单丢失时返回错误。
-///
-/// # 关键业务约束
-/// 提交审计与建单收据分开展示，互不覆盖幂等键。
+// 写入冻结提交、运行事实，并回读提交后的采购单。
+//
+// `input` 为冻结提交、启动计划与责任组织上下文。返回正式号与提交后乐观锁版本。仓储写入失败或提交后采购单丢失时返回错误。
+//
+// 提交审计与建单收据分开展示，互不覆盖幂等键。
 async fn persist_frozen_created_order_start(
     db: &Database,
     ports: &PurchaseOrderPorts,
@@ -393,22 +327,13 @@ async fn persist_frozen_created_order_start(
     load_submitted_created_order(db, &order_id, executor).await
 }
 
-/// 构造创建并提交的审计记录。
-///
-/// # 参数
-/// * `actor` - 提交人
-/// * `order` - 已分配正式号的采购单
-/// * `command_id` - 独立创建命令或原选源批次稳定关联
-/// * `sequence` - 业务首写前校验的提交与创建事件顺序
-///
-/// # 返回
-/// 返回稳定主键的提交审计。
-///
-/// # 错误
-/// 审计构造失败时返回错误。
-///
-/// # 关键业务约束
-/// 主键按采购单稳定，不复用独立提交接口的收据格式。
+// 构造创建并提交的审计记录。
+//
+// `actor` 为提交人；`order` 为已分配正式号的采购单；`command_id` 为独立创建命令或原选源批次稳定关联；`sequence` 为业务首写前校验的提交与创建事件顺序。
+//
+// 返回稳定主键的提交审计。审计构造失败时返回错误。
+//
+// 主键按采购单稳定，不复用独立提交接口的收据格式。
 pub(super) fn create_submit_audit(
     actor: &AuditActor,
     order: &PurchaseOrder,
@@ -428,21 +353,11 @@ pub(super) fn create_submit_audit(
         .with_event_sequence(sequence.submitted())?)
 }
 
-/// 回读提交后的采购单正式号与版本。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `order_id` - 采购单主键
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回正式号与乐观锁版本。
-///
-/// # 错误
-/// 提交后采购单丢失时返回内部错误。
-///
-/// # 关键业务约束
-/// 以事务内回读为准，不使用提交前内存版本。
+// 回读提交后的采购单正式号与版本。
+//
+// `order_id` 为采购单主键。返回正式号与乐观锁版本。提交后采购单丢失时返回内部错误。
+//
+// 以事务内回读为准，不使用提交前内存版本。
 async fn load_submitted_created_order(
     db: &Database,
     order_id: &str,
@@ -491,7 +406,7 @@ mod tests {
         .unwrap()
     }
 
-    /// 复用成功写入的草稿仍只分配一次正式号，同时保留原草稿指针与乐观锁版本。
+    // 复用成功写入的草稿仍只分配一次正式号，同时保留原草稿指针与乐观锁版本。
     #[test]
     fn created_facts_receive_stable_identifiers_without_changing_draft_version() {
         let mut order = created_order();
@@ -510,7 +425,7 @@ mod tests {
         assert_eq!(order.base.version, version);
     }
 
-    /// 缺草稿提交的输入在任何正式号分配之前返回原业务错误。
+    // 缺草稿提交的输入在任何正式号分配之前返回原业务错误。
     #[test]
     fn missing_created_draft_pointer_does_not_assign_formal_identifiers() {
         let mut order = created_order();
@@ -523,7 +438,7 @@ mod tests {
         assert!(document.document_no.is_empty());
     }
 
-    /// 复用事实仍先拒绝已提交状态，不得把现有正式提交当作可编辑草稿。
+    // 复用事实仍先拒绝已提交状态，不得把现有正式提交当作可编辑草稿。
     #[test]
     fn submitted_created_facts_keep_original_state_conflict() {
         let mut order = created_order();
@@ -539,7 +454,7 @@ mod tests {
         assert_eq!(order.current_submission_id.as_deref(), Some("formal"));
     }
 
-    /// 子采购提交事件保持原事件 ID，使用批次关联及真实编号，不伪造操作人名称。
+    // 子采购提交事件保持原事件 ID，使用批次关联及真实编号，不伪造操作人名称。
     #[test]
     fn created_submit_event_preserves_batch_command_and_known_number() {
         let mut order = created_order();
@@ -567,7 +482,7 @@ mod tests {
         assert!(!decoded.message.unwrap().contains("create_and_submit;"));
     }
 
-    /// 正式编号尚未分配时明确缺失，不用对象 ID 或账号冒充业务快照。
+    // 正式编号尚未分配时明确缺失，不用对象 ID 或账号冒充业务快照。
     #[test]
     fn created_submit_event_leaves_unavailable_number_missing() {
         let actor = AuditActor::new("buyer-id".into(), "buyer-account".into(), erp_core::AccountKind::Admin);

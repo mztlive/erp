@@ -56,11 +56,7 @@ pub struct InquiryQuoteUse {
 
 impl QuoteTerms {
     /// 规范化并校验报价商业条件。
-    /// # 参数
-    /// `self` 为采购输入的原始条件。
-    /// # 返回
     /// 返回规范化且数量、税率、期限合法的条款。
-    /// # 错误
     /// 非正价格/数量、非法税率、重复地址或地址额度不足时拒绝。
     pub fn validated(self) -> Result<Self> {
         self.validate()?;
@@ -80,33 +76,20 @@ impl QuoteTerms {
     }
 
     /// 核对回复价格是否符合正常报价或无法供货的价格规则。
-    /// # 参数
-    /// `unit_cost` 为含税单价；`unavailable` 表示无法供货。
-    /// # 返回
     /// 正常报价单价为正、无法供货单价为零时返回真。
-    /// # 错误
-    /// 无。
+    /// `unit_cost` 为含税单价；`unavailable` 表示无法供货。
     pub fn unit_cost_is_valid(unit_cost: Decimal, unavailable: bool) -> bool {
         if unavailable { unit_cost == Decimal::ZERO } else { unit_cost > Decimal::ZERO }
     }
 
     /// 核对内部报价税率的合法区间。
-    /// # 参数
-    /// `tax_rate` 为小数税率，百分数须先由输入适配层换算。
-    /// # 返回
     /// 税率位于闭区间零至一时返回真。
-    /// # 错误
-    /// 无。
     pub fn tax_rate_is_valid(tax_rate: Decimal) -> bool {
         (Decimal::ZERO..=Decimal::ONE).contains(&tax_rate)
     }
 
     /// 核对本次采用的数量、地址、交期；禁止静默切换价格。
-    /// # 参数
-    /// `usage` 为服务端读取且已核验的本次采购事实。
-    /// # 返回
     /// 精确条件适用时成功。
-    /// # 错误
     /// 地址变化、可供量或交期不满足时拒绝。
     pub fn ensure_applicable(&self, usage: &InquiryQuoteUse) -> Result<()> {
         self.validate()?;

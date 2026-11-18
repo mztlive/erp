@@ -21,17 +21,10 @@ pub const RESOLUTION_NO_OVERFLOW_MESSAGE: &str = "差异决定序号已达上限
 
 /// 判定领域错误是否为差异决定序号溢出（服务层冲突映射的唯一入口）。
 ///
-/// `erp_core::Error` 无结构化变体（跨组共享类型，本组不改），此处集中字面量
-/// 比对；文案变更只需改 [`RESOLUTION_NO_OVERFLOW_MESSAGE`] 一处。
+/// `erp_core::Error` 无结构化变体（跨组共享类型，本组不改），此处集中字面量比对；文案变更只需改
+/// [`RESOLUTION_NO_OVERFLOW_MESSAGE`] 一处。
 ///
-/// # 参数
-/// * `error` - 领域返回的错误
-///
-/// # 返回
 /// 序号溢出时返回 `true`。
-///
-/// # 错误
-/// 不返回错误。
 pub fn is_resolution_no_overflow(error: &Error) -> bool {
     matches!(error, Error::LogicError(message) if message == RESOLUTION_NO_OVERFLOW_MESSAGE)
 }
@@ -61,16 +54,7 @@ pub enum ResolutionAction {
 }
 
 impl ResolutionAction {
-    /// 返回面向用户的稳定标签。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回该决定动作的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 把对账决定的动作转换为中文标签，供决定记录和详情页展示。
     pub fn label(self) -> &'static str {
         match self {
             Self::QueryOriginalResult => "查询原结果",
@@ -85,16 +69,7 @@ impl ResolutionAction {
         }
     }
 
-    /// 返回持久化稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回该决定动作的 snake_case 稳定代码。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得对账决定动作的小写下划线代码，供持久化和筛选使用。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::QueryOriginalResult => "query_original_result",
@@ -111,15 +86,7 @@ impl ResolutionAction {
 
     /// 返回本决定唯一允许的派生状态。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 查询与重放为 `Open`，归集、补偿与补证为 `EvidencePending`，
-    /// 两种确认结论与两种关闭分别落到对应终态。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 查询与重放为 `Open`，归集、补偿与补证为 `EvidencePending`，两种确认结论与两种关闭分别落到对应终态。
     pub fn derived_status(self) -> ResultingStatus {
         match self {
             Self::QueryOriginalResult | Self::ReplayOriginal => ResultingStatus::Open,
@@ -132,7 +99,7 @@ impl ResolutionAction {
         }
     }
 
-    /// 查询和重放不强制证据，其余动作必须引用可追溯结果。
+    // 查询和重放不强制证据，其余动作必须引用可追溯结果。
     fn requires_evidence(self) -> bool {
         !matches!(self, Self::QueryOriginalResult | Self::ReplayOriginal)
     }
@@ -155,16 +122,7 @@ pub enum ResultingStatus {
 }
 
 impl ResultingStatus {
-    /// 返回面向用户的稳定标签。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回该派生状态的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 把对账决定推导出的状态转换为中文标签，供业务界面显示处理结果。
     pub fn label(self) -> &'static str {
         match self {
             Self::Open => "待处理",
@@ -175,16 +133,7 @@ impl ResultingStatus {
         }
     }
 
-    /// 返回持久化稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回该派生状态的 snake_case 稳定代码。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得对账派生状态的小写下划线代码，供持久化和筛选使用。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Open => "open",
@@ -197,14 +146,7 @@ impl ResultingStatus {
 
     /// 判断状态是否已经形成正式业务结论。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// `ConfirmedNoError`、`ConfirmedValidDifference` 或 `Closed` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn is_terminal(self) -> bool {
         matches!(self, Self::ConfirmedNoError | Self::ConfirmedValidDifference | Self::Closed)
     }
@@ -262,31 +204,17 @@ pub struct ReconciliationDifferenceResolution {
 }
 
 impl ReconciliationDifferenceResolution {
-    /// 返回当前差异决定版本。
+    /// 返回当前差异决定版本。尚无决定返回 0，否则返回最新决定序号。
     ///
-    /// # 参数
-    /// * `latest` - 当前最新决定；尚无决定时为 `None`
-    ///
-    /// # 返回
-    /// 尚无决定返回 0，否则返回最新决定序号。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// `latest` 为当前最新决定；尚无决定时为 `None`。
     pub fn current_version(latest: Option<&Self>) -> u64 {
         u64::from(latest.map_or(0, |record| record.resolution_no))
     }
 
-    /// 比较客户端版本与当前决定版本。
+    /// 比较客户端版本与当前决定版本。返回合法且当前、格式非法或陈旧三态结果。
     ///
-    /// # 参数
-    /// * `expected` - 客户端冻结的十进制版本字符串
-    /// * `latest` - 当前最新决定
-    ///
-    /// # 返回
-    /// 返回合法且当前、格式非法或陈旧三态结果。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// - `expected`：客户端冻结的十进制版本字符串。
+    /// - `latest`：当前最新决定。
     pub fn check_version(expected: &str, latest: Option<&Self>) -> ResolutionVersionCheck {
         let Ok(expected) = expected.trim().parse::<u64>() else {
             return ResolutionVersionCheck::Invalid;
@@ -298,53 +226,30 @@ impl ReconciliationDifferenceResolution {
         }
     }
 
-    /// 判断差异是否仍可追加业务决定。
+    /// 判断差异是否仍可追加业务决定。尚无决定或最新决定非终态时返回 `true`。
     ///
-    /// # 参数
-    /// * `latest` - 当前最新决定
-    ///
-    /// # 返回
-    /// 尚无决定或最新决定非终态时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// `latest` 为当前最新决定。
     pub fn is_open(latest: Option<&Self>) -> bool {
         latest.is_none_or(|record| !record.resulting_status.is_terminal())
     }
 
-    /// 计算下一条追加决定序号。
+    /// 计算下一条追加决定序号。尚无决定返回 1；存在决定时返回当前序号加一；溢出时返回 `None`。
     ///
-    /// # 参数
-    /// * `latest` - 当前最新决定
-    ///
-    /// # 返回
-    /// 尚无决定返回 1；存在决定时返回当前序号加一；溢出时返回 `None`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// `latest` 为当前最新决定。
     pub fn next_resolution_no(latest: Option<&Self>) -> Option<u32> {
         latest.map_or(Some(1), |record| record.resolution_no.checked_add(1))
     }
 
     /// 从强类型动作追加一条决定记录，序号自动递增、状态唯一派生。
     ///
-    /// # 参数
-    /// * `id` - 记录主键（调用方生成的稳定 ID）
-    /// * `reconciliation_difference_id` - 所属对账差异 ID
-    /// * `latest` - 当前最新决定；`None` 表示首条追加
-    /// * `action` - 强类型决定动作（派生状态由动作唯一确定）
-    /// * `evidence_reference` - 可追溯证据或正式结果引用
-    /// * `handled_by` - 决定人
-    /// * `handled_at` - 决定时间（调用方注入）
+    /// 纯领域构造，不访问数据库、不生成 ID、不读取时钟；序号上限失败关闭。
     ///
-    /// # 返回
-    /// 返回新建的不可变追加式决定记录。
-    ///
-    /// # 错误
     /// 序号已达 `u32` 上限，或动作、派生状态、决定人、证据约束不成立时返回错误。
     ///
-    /// # 约束
-    /// 纯领域构造，不访问数据库、不生成 ID、不读取时钟；序号上限失败关闭。
+    /// - `id`：记录主键（调用方生成的稳定 ID）。
+    /// - `latest`：当前最新决定；`None` 表示首条追加。
+    /// - `action`：强类型决定动作（派生状态由动作唯一确定）。
+    /// - `handled_at`：决定时间（调用方注入）。
     pub fn append(
         id: ReconciliationDifferenceResolutionId,
         reconciliation_difference_id: ReconciliationDifferenceId,
@@ -372,21 +277,11 @@ impl ReconciliationDifferenceResolution {
 
     /// 创建由 W02 受控关闭命令形成的专用领域关闭证据。
     ///
-    /// # 参数
-    /// * `id` - 记录主键。
-    /// * `reconciliation_difference_id` - 所属对账差异 ID。
-    /// * `resolution_no` - 追加序号，必须从 1 开始。
-    /// * `action` - 只接受 `CloseDuplicate` 或 `CloseMisrouted`。
-    /// * `evidence_reference` - 强类型关闭证据，其动作必须与 `action` 相同。
-    /// * `handled_by` - 决定人。
-    /// * `handled_at` - 决定时间。
+    /// 返回派生状态为 `Closed` 的不可变关闭记录。动作不是关闭重复或关闭误派、证据动作与 `action` 不一致，或序号、决定人、证据文本不满足
+    /// [`Self::new`] 的约束时返回领域错误。
     ///
-    /// # 返回
-    /// 返回派生状态为 `Closed` 的不可变关闭记录。
-    ///
-    /// # 错误
-    /// 动作不是关闭重复或关闭误派、证据动作与 `action` 不一致，或序号、决定人、
-    /// 证据文本不满足 [`Self::new`] 的约束时返回领域错误。
+    /// - `resolution_no`：追加序号，必须从 1 开始。
+    /// - `evidence_reference`：强类型关闭证据，其动作必须与 `action` 相同。
     pub fn new_close_evidence(
         id: ReconciliationDifferenceResolutionId,
         reconciliation_difference_id: ReconciliationDifferenceId,
@@ -419,16 +314,9 @@ impl ReconciliationDifferenceResolution {
 
     /// 创建不可变决定记录并校验固定派生关系。
     ///
-    /// # 参数
-    /// * `id` - 记录主键。
-    /// * `data` - 决定序号、动作、派生状态、证据、决定人与决定时间。
+    /// 序号为 0、派生状态与动作不一致、决定人为空或超长、证据引用超长，或该动作要求证据但证据为空时返回领域错误。
     ///
-    /// # 返回
-    /// 返回新建的不可变决定记录。
-    ///
-    /// # 错误
-    /// 序号为 0、派生状态与动作不一致、决定人为空或超长、证据引用超长，
-    /// 或该动作要求证据但证据为空时返回领域错误。
+    /// `data` 为决定序号、动作、派生状态、证据、决定人与决定时间。
     pub fn new(
         id: ReconciliationDifferenceResolutionId,
         data: ReconciliationDifferenceResolutionData,

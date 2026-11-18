@@ -17,13 +17,10 @@ use persistence_core::Executor;
 
 use crate::wiring::errors::{Error, Result};
 
-/// 读取一个审批主体的绑定事实；不构造未被业务消费的范围维度。
-/// # 参数
-/// db 为业务数据库，kind/id 为精确主体，executor 沿用升级事务。
-/// # 返回
-/// 主体及原有必要父链存在时返回绑定事实，缺失时返回 None。
-/// # 错误
-/// 查询失败或订单权威来源不完整时拒绝。
+// 读取一个审批主体的绑定事实；不构造未被业务消费的范围维度。
+// db 为业务数据库，kind/id 为精确主体，executor 沿用升级事务。
+// 主体及原有必要父链存在时返回绑定事实，缺失时返回 None。
+// 查询失败或订单权威来源不完整时拒绝。
 pub(super) async fn load(
     db: &Database,
     kind: DocumentType,
@@ -53,7 +50,7 @@ pub(super) async fn load(
     Ok(exists.then(ApprovalBindingFacts::default))
 }
 
-/// 订单变更仍沿强事实定位原订单，不从展示单号推断来源。
+// 加载订单变更的审批对象事实时沿真实外键找原订单，而不是用展示单号推定关联。
 async fn order(
     db: &Database,
     kind: DocumentType,
@@ -89,7 +86,7 @@ async fn order(
     Ok(result)
 }
 
-/// 退款必须仍能定位原有客户或供应商，不再为未消费的结算主体字段创建映射。
+// 校验退款审批主体仍关联原客户或供应商；不为没有消费方的结算主体字段虚构范围映射。
 async fn refund_exists(
     db: &Database,
     kind: DocumentType,
@@ -109,7 +106,7 @@ async fn refund_exists(
     }
 }
 
-/// 冲销保留原收款单或原付款单及供应商的完整存在性要求。
+// 检查冲正审批主体时继续要求原收款，或原付款及对应供应商，真实可定位。
 async fn reversal_exists(
     db: &Database,
     kind: DocumentType,

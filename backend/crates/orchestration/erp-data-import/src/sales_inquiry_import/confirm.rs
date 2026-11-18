@@ -21,11 +21,11 @@ use crate::{Error, Result};
 
 impl SalesInquiryImportProcess {
     /// 在一个事务内恢复原回执，或确认整份无错误预览。
-    /// # 参数
+    ///
     /// `actor`、`id` 为当前访问上下文，`command` 为版本化预览和幂等身份。
-    /// # 返回
+    ///
     /// 首次与相同命令重放均返回同一冻结结果。
-    /// # 错误
+    ///
     /// 越权、预览失效、异载荷、资格或版本变化均拒绝，不写入部分商品行。
     pub async fn confirm(
         &self,

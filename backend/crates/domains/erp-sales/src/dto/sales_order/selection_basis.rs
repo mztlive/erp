@@ -33,12 +33,10 @@ pub struct SelectionOrderLine {
 
 impl SelectionOrderBasis {
     /// 从已授权方案及其完整 SKU 行构造预填。
-    /// # 参数
-    /// `proposal` 为方案，`lines` 为该方案 SKU 明细，套餐重复 SKU 保持独立行。
-    /// # 返回
     /// 返回开单客户、来源和明细。
-    /// # 错误
     /// 模式不支持、明细为空、归属不符或数量无效时拒绝。
+    ///
+    /// 输入约定：`proposal` 为方案，`lines` 为该方案 SKU 明细，套餐重复 SKU 保持独立行。
     pub fn from_proposal(
         proposal: &SalesSelectionProposal,
         lines: Vec<SalesSelectionProposalSkuLine>,

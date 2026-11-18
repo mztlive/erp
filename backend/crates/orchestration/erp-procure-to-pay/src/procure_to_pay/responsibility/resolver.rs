@@ -66,19 +66,11 @@ pub struct AuthorizedResolutionPlan {
 }
 
 impl AuthorizedResolutionPlan {
-    /// 将授权计划映射为 API 预览视图.
-    ///
-    /// # 参数
-    /// 无，消费计划行的身份与展示姓名.
-    ///
-    /// # 返回
-    /// 返回与输入顺序一致的解析视图；这是展示姓名进入 View 的唯一位置.
-    ///
-    /// # 错误
-    /// 无；纯内存映射.
-    ///
-    /// # 约束
-    /// 仅在 Service 最后一跳调用；重验比较必须使用 `identities` 而非本方法结果.
+    // 将授权计划映射为 API 预览视图.
+    //
+    // 无，消费计划行的身份与展示姓名。返回与输入顺序一致的解析视图；这是展示姓名进入 View 的唯一位置.无；纯内存映射.
+    //
+    // 仅在 Service 最后一跳调用；重验比较必须使用 `identities` 而非本方法结果.
     pub(crate) fn views(&self) -> Vec<ProcurementResponsibilityResolutionView> {
         self.lines
             .iter()
@@ -92,19 +84,9 @@ impl AuthorizedResolutionPlan {
             .collect()
     }
 
-    /// 返回保持输入顺序的稳定责任身份集合.
-    ///
-    /// # 参数
-    /// 无.
-    ///
-    /// # 返回
-    /// 返回忽略展示姓名的稳定责任身份集合.
-    ///
-    /// # 错误
-    /// 无；纯内存克隆.
-    ///
-    /// # 约束
-    /// 姓名变化不得影响结果；顺序、负责人、规则 ID 或规则类型任一变化必须体现在返回值差异中.
+    // 返回保持输入顺序的稳定责任身份集合.返回忽略展示姓名的稳定责任身份集合.无；纯内存克隆.
+    //
+    // 姓名变化不得影响结果；顺序、负责人、规则 ID 或规则类型任一变化必须体现在返回值差异中.
     pub(crate) fn identities(&self) -> Vec<ProcurementResponsibilityResolutionIdentity> {
         self.lines.iter().map(|line| line.identity.clone()).collect()
     }
@@ -113,25 +95,15 @@ impl AuthorizedResolutionPlan {
 impl ProcurementResponsibilityProcess {
     /// 批量解析并校验每位负责人拥有采购单创建权限。
     ///
-    /// # 参数
-    /// * `inputs` - 稳定行键、SKU 与服务区域
-    ///
-    /// # 返回
-    /// 返回逐行具体负责人及授权策略版本。
-    ///
-    /// # 错误
-    /// 目录事实缺失、规则零/多命中、负责人不可登录或无采购建单权限时失败关闭。
+    /// `inputs` 为稳定行键、SKU 与服务区域。返回逐行具体负责人及授权策略版本。目录事实缺失、规则零/多命中、负责人不可登录或无采购建单权限时失败关闭。
     pub async fn resolve_strict(&self, inputs: &[ResolutionInput]) -> Result<AuthorizedResolutionPlan> {
         self.strict_plan(inputs, &mut NoTransaction).await
     }
 
     /// 使用调用方事务解析目录、规则与具体负责人的当前资格。
-    /// # 参数
-    /// * `inputs` - 已规范化的稳定销售行与SKU身份。
-    /// * `executor` - 原业务命令执行器。
-    /// # 返回
-    /// 返回同一快照取得的责任计划和授权策略版本。
-    /// # 错误
+    ///
+    /// `inputs` 为已规范化的稳定销售行与SKU身份；`executor` 为原业务命令执行器。返回同一快照取得的责任计划和授权策略版本。
+    ///
     /// 目录、规则、人员或采购建单资格不满足时拒绝。
     pub async fn strict_plan(
         &self,
@@ -142,18 +114,8 @@ impl ProcurementResponsibilityProcess {
         self.authorize_candidates(candidates, executor).await
     }
 
-    /// 在销售形式化事务中重验既定计划，并为实际采购任务占用整单默认轮次。
-    ///
-    /// # 参数
-    /// * `inputs` - 原始稳定行事实
-    /// * `expected` - 事务外已授权计划
-    /// * `executor` - 销售形式化事务执行器
-    ///
-    /// # 返回
-    /// 规则、目录、账号和策略版本均未变化时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 任一事实或策略版本变化时失败关闭，使销售生效事务回滚。
+    /// 销售形式化实际派采购任务前，在原业务事务复验事务外按原稳定行取得的责任计划，并占用整单默认轮次。
+    /// 目录、规则、负责人账号或授权策略版本变化时失败，由销售生效事务回滚。
     pub async fn claim_plan(
         &self,
         inputs: &[ResolutionInput],
@@ -170,13 +132,8 @@ impl ProcurementResponsibilityProcess {
 
     /// 稳定校验指定账号可作为具体采购负责人。
     ///
-    /// # 参数
-    /// * `owner_user_id` - 负责人账号 ID
+    /// `owner_user_id` 为负责人账号 ID。账号可登录、为后台管理员且拥有 `purchase_order:create` 时返回稳定策略版本。
     ///
-    /// # 返回
-    /// 账号可登录、为后台管理员且拥有 `purchase_order:create` 时返回稳定策略版本。
-    ///
-    /// # 错误
     /// 账号失效、缺少权限或身份设施读取失败时返回对应错误。
     pub async fn authorize_owner_eligibility(&self, owner_user_id: &str) -> Result<u64> {
         let permission = purchase_order::CREATE;
@@ -196,14 +153,11 @@ impl ProcurementResponsibilityProcess {
         Ok(qualified.policy_revision())
     }
 
-    /// 在调用方事务中按采购规则解析候选；不授予采购任务或普通单据访问权。
-    ///
-    /// # 参数
-    /// `inputs` 为稳定需求行和 SKU；`executor` 为调用方事务。
-    /// # 返回
-    /// 按输入顺序返回通过账号资格校验的候选。调用方必须另验其业务执行权限。
-    /// # 错误
-    /// 目录、规则、账号缺失或存在冲突时失败关闭。
+    // 在调用方事务中按采购规则解析候选；不授予采购任务或普通单据访问权。
+    //
+    // `inputs` 为稳定需求行和 SKU；`executor` 为调用方事务。按输入顺序返回通过账号资格校验的候选。调用方必须另验其业务执行权限。
+    //
+    // 目录、规则、账号缺失或存在冲突时失败关闭。
     pub(crate) async fn resolve_candidates(
         &self,
         inputs: &[ResolutionInput],
@@ -214,13 +168,8 @@ impl ProcurementResponsibilityProcess {
             .await?)
     }
 
-    /// 在询价原事务中按询价池优先匹配候选，不占轮次。
-    /// # 参数
-    /// `inputs` 为整单需求，`executor` 为原事务。
-    /// # 返回
-    /// 返回待询价业务权限核验的候选。
-    /// # 错误
-    /// 目录、规则池或人员失效时拒绝。
+    /// 询价任务分派前，沿原事务为整单需求优先匹配询价池候选，不占用轮次。
+    /// 结果还须经过询价业务权限校验；目录、规则池或人员失效时拒绝。
     pub async fn resolve_inquiry_candidates(
         &self,
         inputs: &[ResolutionInput],
@@ -231,17 +180,11 @@ impl ProcurementResponsibilityProcess {
             .await?)
     }
 
-    /// 对候选负责人执行 RBAC 校验并冻结原执行器内的策略版本。
-    ///
-    /// # 参数
-    /// * `candidates` - 账号状态已通过的候选责任
-    /// * `executor` - 候选解析使用的原执行器。
-    ///
-    /// # 返回
-    /// 返回授权计划和稳定策略版本。
-    ///
-    /// # 错误
-    /// 任一负责人缺少采购建单权限或策略无法稳定读取时返回错误。
+    // 对候选负责人执行 RBAC 校验并冻结原执行器内的策略版本。
+    //
+    // `candidates` 为账号状态已通过的候选责任；`executor` 为候选解析使用的原执行器。返回授权计划和稳定策略版本。
+    //
+    // 任一负责人缺少采购建单权限或策略无法稳定读取时返回错误。
     pub(super) async fn authorize_candidates(
         &self,
         candidates: Vec<CandidateResolution>,
@@ -251,19 +194,8 @@ impl ProcurementResponsibilityProcess {
     }
 }
 
-/// 将候选责任转换为直接持有领域身份的授权行.
-///
-/// # 参数
-/// * `candidate` - 已完成目录与账号资格校验的候选责任
-///
-/// # 返回
-/// 返回持有稳定责任身份与展示姓名的授权行.
-///
-/// # 错误
-/// 行键、负责人或规则 ID 非法时返回实体错误.
-///
-/// # 约束
-/// 身份经由领域构造函数生成，不经过 API View；展示姓名仅随行携带.
+// 候选责任的目录与账号资格校验通过后，用稳定的需求行、负责人及规则生成领域责任身份，不经 API 视图转换。
+// 展示姓名只随授权行携带；行键、负责人或规则 ID 非法时返回实体错误。
 pub(super) fn authorized_line(candidate: CandidateResolution) -> Result<AuthorizedResolutionLine> {
     let identity = ProcurementResponsibilityResolutionIdentity::new(
         candidate.line_key,
@@ -275,19 +207,11 @@ pub(super) fn authorized_line(candidate: CandidateResolution) -> Result<Authoriz
     Ok(AuthorizedResolutionLine { identity, owner_name: candidate.owner_name })
 }
 
-/// 将候选责任集合转换为稳定责任身份集合.
-///
-/// # 参数
-/// * `candidates` - 已完成目录与账号资格校验的候选责任
-///
-/// # 返回
-/// 返回保持输入顺序的稳定责任身份集合.
-///
-/// # 错误
-/// 任一候选行键、负责人或规则 ID 非法时返回实体错误.
-///
-/// # 约束
-/// 经由领域构造函数直接生成，不经过 API View；姓名变化不得影响结果.
+// 将候选责任集合转换为稳定责任身份集合.
+//
+// `candidates` 为已完成目录与账号资格校验的候选责任。返回保持输入顺序的稳定责任身份集合.任一候选行键、负责人或规则 ID 非法时返回实体错误.
+//
+// 经由领域构造函数直接生成，不经过 API View；姓名变化不得影响结果.
 pub(super) fn plan_identities(
     candidates: &[CandidateResolution],
 ) -> Result<Vec<ProcurementResponsibilityResolutionIdentity>> {
@@ -348,19 +272,9 @@ mod tests {
         }
     }
 
-    /// 授权行直接持有领域身份，视图映射只在最后一跳发生.
-    ///
-    /// # 参数
-    /// 无.
-    ///
-    /// # 返回
-    /// 断言身份字段与视图字段一致且计划不再持有 View.
-    ///
-    /// # 错误
-    /// 身份构造回归时测试失败.
-    ///
-    /// # 约束
-    /// 不得再由 API View 反向构造领域身份.
+    // 授权行直接持有领域身份，视图映射只在最后一跳发生.断言身份字段与视图字段一致且计划不再持有 View.身份构造回归时测试失败.
+    //
+    // 不得再由 API View 反向构造领域身份.
     #[test]
     fn authorized_plan_holds_identity_and_maps_view_last_hop() {
         let line = authorized_line(test_candidate("line-1", "owner-1", "张三", "rule-1")).unwrap();
@@ -376,19 +290,9 @@ mod tests {
         assert_eq!(plan.identities().len(), 1);
     }
 
-    /// 展示姓名变化不影响计划身份比较.
-    ///
-    /// # 参数
-    /// 无.
-    ///
-    /// # 返回
-    /// 断言不同姓名的候选生成相同身份.
-    ///
-    /// # 错误
-    /// 身份误纳展示字段时测试失败.
-    ///
-    /// # 约束
-    /// 姓名变化不得制造无效冲突.
+    // 展示姓名变化不影响计划身份比较.断言不同姓名的候选生成相同身份.身份误纳展示字段时测试失败.
+    //
+    // 姓名变化不得制造无效冲突.
     #[test]
     fn owner_name_change_does_not_change_identity() {
         let left = plan_identities(&[test_candidate("line-1", "owner-1", "张三", "rule-1")]).unwrap();
@@ -396,19 +300,9 @@ mod tests {
         assert_eq!(left, right);
     }
 
-    /// 行顺序、负责人、规则 ID 任一变化必须体现在身份差异中.
-    ///
-    /// # 参数
-    /// 无.
-    ///
-    /// # 返回
-    /// 断言三类变化均导致身份不等.
-    ///
-    /// # 错误
-    /// 身份遗漏关键字段时测试失败.
-    ///
-    /// # 约束
-    /// 顺序变化必须拒绝；负责人或规则变化必须拒绝.
+    // 行顺序、负责人、规则 ID 任一变化必须体现在身份差异中.断言三类变化均导致身份不等.身份遗漏关键字段时测试失败.
+    //
+    // 顺序变化必须拒绝；负责人或规则变化必须拒绝.
     #[test]
     fn order_owner_or_rule_change_changes_identity() {
         let base = test_candidate("line-1", "owner-1", "张三", "rule-1");
@@ -425,19 +319,11 @@ mod tests {
         assert_ne!(ordered[..1], rule_changed);
     }
 
-    /// 规则类型变化必须导致身份差异，重验比较必须拒绝.
-    ///
-    /// # 参数
-    /// 无.
-    ///
-    /// # 返回
-    /// 断言同行键同负责人同规则 ID 下 Sku 与 Category 生成不同身份，且授权计划的身份向量同样不等.
-    ///
-    /// # 错误
-    /// 身份遗漏规则类型时测试失败.
-    ///
-    /// # 约束
-    /// `claim_plan` 直接比较身份向量，身份不等即走 Conflict 回滚；展示姓名差异仍必须相等.
+    // 规则类型变化必须导致身份差异，重验比较必须拒绝.断言同行键同负责人同规则 ID 下 Sku 与 Category 生成不同身份，且授权计划的身份向量同样不等.
+    //
+    // 身份遗漏规则类型时测试失败.
+    //
+    // `claim_plan` 直接比较身份向量，身份不等即走 Conflict 回滚；展示姓名差异仍必须相等.
     #[test]
     fn rule_type_change_changes_identity_and_rejects_revalidation() {
         let sku = test_candidate_with_type(

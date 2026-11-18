@@ -34,32 +34,19 @@ pub struct CatalogHandoverPorts {
 }
 impl CatalogHandoverPorts {
     /// 绑定完成装配的领域服务，不执行读取或写入。
-    /// # 参数
-    /// * `access` - 当前范围服务。
-    /// * `service` - 使用相同范围 Port 的写入服务。
-    /// # 返回
-    /// 返回当前命令的领域合同。
-    /// # 错误
-    /// 不返回错误。
+    ///
+    /// `access`：当前范围服务；`service`：使用相同范围 Port 的写入服务。
     pub fn new(access: CatalogAccess, service: CatalogService) -> Self {
         Self { access, service }
     }
 }
 
-/// 显式交接商品维护人；目标须有效且具备 `product:update`。
+/// 变更商品维护人时，用原幂等键绑定操作人、商品和交接载荷；接任账号必须有效且具备 `product:update`。
 ///
-/// # 参数
-/// * `db` - 数据库
-/// * `rbac` - RBAC 快照
-/// * `ports` - 应用注入且采用同一授权来源的范围与写入服务。
-/// * `id` - 商品 ID
-/// * `req` - 交接请求
-/// * `actor` - 已认证操作人
+/// `ports`：应用注入且采用同一授权来源的范围与写入服务；`id`：商品 ID。
 ///
-/// # 返回
 /// 返回交接后责任视图。
 ///
-/// # 错误
 /// 账号失效、无维护资格、版本冲突或同幂等键异载荷时拒绝。
 pub async fn handover_product(
     db: Database,
@@ -109,17 +96,10 @@ pub async fn handover_product(
 
 /// 查询当前商品可交接的合格目标候选。
 ///
-/// # 参数
-/// * `db` - 数据库
-/// * `rbac` - RBAC 快照
-/// * `ports` - 应用注入且采用同一授权来源的范围与写入服务。
-/// * `id` - 商品 ID
-/// * `actor` - 已认证操作人
+/// `ports`：应用注入且采用同一授权来源的范围与写入服务；`id`：商品 ID。
 ///
-/// # 返回
 /// 返回有效且具备 `product:update` 的账号。
 ///
-/// # 错误
 /// 对象不可见时拒绝。
 pub async fn handover_candidates(
     db: Database,
@@ -159,19 +139,13 @@ pub async fn handover_candidates(
         .await
 }
 
-/// 在原执行器中匹配独立回执，并重验当前访问读取当前责任视图。
-///
-/// # 参数
-/// * `db` - 当前数据库。
-/// * `rbac` - 当前权限快照。
-/// * `command` - 当前请求的结构化命令身份。
-/// * `id` - 领域目标。
-/// * `actor` - 认证操作人。
-/// * `executor` - 当前查证或事务执行器。
-/// # 返回
-/// 无回执时返回 None，命中时返回当前责任视图。
-/// # 错误
-/// 指纹冲突、回执损坏、权限拒绝或持久化失败时返回错误。
+// 在原执行器中匹配独立回执，并重验当前访问读取当前责任视图。
+//
+// `command`：当前请求的结构化命令身份；`id`：领域目标；`executor`：当前查证或事务执行器。
+//
+// 无回执时返回 None，命中时返回当前责任视图。
+//
+// 指纹冲突、回执损坏、权限拒绝或持久化失败时返回错误。
 async fn replay(
     db: &Database,
     access: &CatalogAccess,
@@ -214,16 +188,13 @@ impl AuditedCommand for ProductHandoverCommand {
     type Error = Error;
     type Output = HandoverProductView;
 
-    /// 同 Executor 查证、资格校验、交接和回执；重放不追加成功事件。
-    ///
-    /// # 参数
-    /// * `executor` - 查证、交接与回执共用的调用方执行器。
-    ///
-    /// # 返回
-    /// 已有匹配回执时返回 `AuditedWrite::Replayed`，不追加成功事件。首次成功返回 `AuditedWrite::Fresh`，含交接事件和当前商品视图。
-    ///
-    /// # 错误
-    /// 回执不匹配、目标账号或组织校验失败、商品不可更新、交接写入、回执构造或保存失败时返回对应错误。
+    // 同 Executor 查证、资格校验、交接和回执；重放不追加成功事件。
+    //
+    // `executor`：查证、交接与回执共用的调用方执行器。
+    //
+    // 已有匹配回执时返回 `AuditedWrite::Replayed`，不追加成功事件。首次成功返回 `AuditedWrite::Fresh`，含交接事件和当前商品视图。
+    //
+    // 回执不匹配、目标账号或组织校验失败、商品不可更新、交接写入、回执构造或保存失败时返回对应错误。
     async fn execute(&self, executor: &mut dyn Executor) -> Result<AuditedWrite<Self::Output>> {
         self.rbac
             .require(&self.actor, &catalog::PRODUCT_PRODUCT_UPDATE, AccessTarget::record(&self.id)?, executor)
@@ -255,19 +226,13 @@ impl AuditedCommand for ProductHandoverCommand {
     }
 }
 
-/// 校验目标账号有效且具备商品维护资格。
-///
-/// # 参数
-/// * `db` - 数据库。
-/// * `rbac` - 当前权限服务。
-/// * `target` - 目标账号。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
-/// 账号资格满足时成功。
-///
-/// # 错误
-/// 账号缺失、失效或缺少 `product:update` 时返回既有拒绝文案。
+// 校验目标账号有效且具备商品维护资格。
+//
+// `rbac`：当前权限服务；`target`：目标账号；`executor`：调用方执行器。
+//
+// 账号资格满足时成功。
+//
+// 账号缺失、失效或缺少 `product:update` 时返回既有拒绝文案。
 async fn ensure_target_qualified(
     db: &Database,
     rbac: &Arc<AuthorizationService>,
@@ -280,19 +245,13 @@ async fn ensure_target_qualified(
     Err(Error::Forbidden("目标账号不存在、已失效或不具备商品维护资格".into()))
 }
 
-/// 计算交接命令指纹，供幂等回放比对。
-///
-/// # 参数
-/// * `actor_id` - 操作人
-/// * `product_id` - 商品 ID
-/// * `req` - 交接请求
-/// * `key` - 幂等键
-///
-/// # 返回
-/// 返回命令序列化指纹。
-///
-/// # 错误
-/// 序列化失败时拒绝。
+// 计算交接命令指纹，供幂等回放比对。
+//
+// `product_id`：商品 ID；`key`：幂等键。
+//
+// 返回命令序列化指纹。
+//
+// 序列化失败时拒绝。
 fn handover_fingerprint(
     actor_id: &str,
     product_id: &str,

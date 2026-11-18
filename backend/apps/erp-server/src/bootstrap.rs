@@ -23,28 +23,13 @@ struct DbConfigKey {
 }
 
 impl DbConfigKey {
-    /// 从完整配置提取数据库配置摘要。
-    ///
-    /// # 参数
-    /// * `config` - 完整配置
-    ///
-    /// # 返回
-    /// 返回数据库配置摘要。
+    // 从启动或热更新快照提取 URI 和库名，用来判断当前 MongoDB 连接是否需要靠重启切换。
     fn from_config(config: &Config) -> Self {
         Self { uri: config.database.uri.clone(), db_name: config.database.db_name.clone() }
     }
 }
 
-/// 按固定职责启动应用。
-///
-/// # 参数
-/// `role` 指定 业务 HTTP 或独立 Worker。
-///
-/// # 返回
-/// 返回执行结果，`Ok` 表示成功，`Err` 表示失败。
-///
-/// # 错误
-/// 当验证失败或底层操作失败时返回错误。
+/// 为二进制入口初始化日志、可选 OTLP 和配置，再按固定职责启动 Web API 或独立 Worker。初始化或服务退出出错时将错误交回入口。
 pub async fn run(role: ProcessRole) -> Result<()> {
     let tracing_config = TracingConfig {
         env_filter: std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string()),
@@ -66,42 +51,31 @@ pub async fn run(role: ProcessRole) -> Result<()> {
     start(config, role).await
 }
 
-/// 判断环境变量是否显式启用布尔开关。
+// 读取启动环境的布尔开关，仅把去空白并忽略大小写后的 `1`、`true`、`yes` 视为开启。
 fn env_flag(name: &str) -> bool {
     std::env::var(name)
         .ok()
         .is_some_and(|value| matches!(value.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
 }
 
-/// 读取非空环境变量；空白值按未配置处理。
+// 读取并裁剪可选的环境配置；将缺失和纯空白统一视为未设置，供 telemetry 配置回退。
 fn non_empty_env(name: &str) -> Option<String> {
     std::env::var(name).ok().map(|value| value.trim().to_string()).filter(|value| !value.is_empty())
 }
 
-/// 按标准 OTLP endpoint 与 SDK 禁用开关决定是否创建 exporter。
-///
-/// 未配置 endpoint 时保持原有纯日志模式，避免本地开发默认连接固定 Collector。
+// 启动时读取 trace 专用或通用 OTLP endpoint 以及 SDK 禁用项；没有 endpoint 时不向默认 Collector 发请求。
 fn otel_exporter_enabled() -> bool {
     let traces_endpoint = non_empty_env("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT");
     let endpoint = non_empty_env("OTEL_EXPORTER_OTLP_ENDPOINT");
     should_enable_otel(env_flag("OTEL_SDK_DISABLED"), traces_endpoint.as_deref(), endpoint.as_deref())
 }
 
-/// 对已解析的 OpenTelemetry 开关与 endpoint 执行确定性判定。
+// 用已解析配置判定是否初始化 OTLP：SDK 必须启用，并优先检查 trace 专用 endpoint；否则使用通用值。
 fn should_enable_otel(sdk_disabled: bool, traces_endpoint: Option<&str>, endpoint: Option<&str>) -> bool {
     !sdk_disabled && traces_endpoint.or(endpoint).is_some_and(|value| !value.trim().is_empty())
 }
 
-/// 启动应用程序。
-///
-/// # 参数
-/// * `cfg` - 配置对象
-///
-/// # 返回
-/// 返回执行结果，`Ok` 表示成功，`Err` 表示失败。
-///
-/// # 错误
-/// 当验证失败或底层操作失败时返回错误。
+// 监听端口前校验调度配置和 MongoDB 事务能力，装配连接器和共享资源、初始化索引与审批政策。仅 API 引导身份数据，服务退出后停止配置监听。
 async fn start(cfg: SafeConfig, role: ProcessRole) -> Result<()> {
     let config = cfg.snapshot();
     require_scheduler(role, config.xxl_job.as_ref())?;
@@ -122,7 +96,7 @@ async fn start(cfg: SafeConfig, role: ProcessRole) -> Result<()> {
     result
 }
 
-/// 在连接外部基础设施之前检查进程必需的调度配置。
+// 在连接外部资源前拒绝未配置 `[xxl_job]` 的 Worker；Web API 不依赖调度节即可启动。
 fn require_scheduler(role: ProcessRole, scheduler: Option<&XxlJobConfig>) -> Result<()> {
     if role.runs_workers() && scheduler.is_none() {
         return Err("Worker 必须配置 [xxl_job]".into());
@@ -130,7 +104,7 @@ fn require_scheduler(role: ProcessRole, scheduler: Option<&XxlJobConfig>) -> Res
     Ok(())
 }
 
-/// 仅 HTTP 应用启动时初始化身份基础数据，Worker 不重复执行管理账号引导。
+// 在 API 启动阶段初始化 root 与身份基础数据，按需引导管理员并同步内建公司；Worker 不重复这些操作。
 async fn initialize_identity(state: &Application, config: &Config) -> Result<()> {
     erp_identity::ensure_root_role(&state.rbac()).await?;
     ensure_identity_foundation(&state.rbac()).await?;
@@ -140,7 +114,7 @@ async fn initialize_identity(state: &Application, config: &Config) -> Result<()>
     Ok(())
 }
 
-/// 将存储连接的 DNS/TLS 首次等待移至有界启动准备，失败不改变服务启动合同。
+// 启动时给对象存储最多两秒完成首次连接预热，减少首个请求的 DNS/TLS 等待；失败只记日志，不阻止启动。
 async fn warm_storage_connection(storage: &S3Storage) {
     match tokio::time::timeout(std::time::Duration::from_secs(2), storage.warm_connection()).await {
         Ok(Ok(())) => {},
@@ -149,19 +123,7 @@ async fn warm_storage_connection(storage: &S3Storage) {
     }
 }
 
-/// 配置了初始密码且库中还没有超级管理员时，创建 `admin` 并绑定 root 角色。
-///
-/// 未配置密码，或账号已经存在时，不修改已有账号。
-///
-/// # 参数
-/// * `state` - 已连接数据库并完成角色初始化的应用状态
-/// * `password` - 配置中的初始密码；缺失表示不创建
-///
-/// # 返回
-/// 创建完成或无需创建时返回 `Ok(())`。
-///
-/// # 错误
-/// 密码不合法、同名账号不是系统管理员，或数据库写入失败时返回错误。
+// API 完成角色初始化后，只有配置初始密码才尝试补建 `admin` 并绑定 root；不会覆盖现有密码。同名非系统账号、非法密码或写库失败时返回错误。
 async fn bootstrap_initial_admin(state: &Application, password: Option<&str>) -> Result<()> {
     let Some(password) = password else {
         return Ok(());
@@ -176,12 +138,7 @@ async fn bootstrap_initial_admin(state: &Application, password: Option<&str>) ->
     Ok(())
 }
 
-/// 启动前穷尽校验全部固定单据类型政策。
-///
-/// 任一类型缺少政策时按部署不变量失败关闭，不得启动旧定义 bootstrap。
-///
-/// # 错误
-/// 政策缺失或权限字符串无法解析时返回服务错误。
+// 启动前逐一验证所有固定单据类型能解析到有效审批政策；政策或权限值无效时中止，不用旧定义补齐。
 fn ensure_registered_approval_policies() -> erp_workflow::Result<()> {
     for document_type in erp_workflow::service::approval::policy::ALL_DOCUMENT_TYPES {
         erp_workflow::service::approval::policy::policy_of(document_type)?;
@@ -189,16 +146,7 @@ fn ensure_registered_approval_policies() -> erp_workflow::Result<()> {
     Ok(())
 }
 
-/// 根据已校验的启动配置构建 S3 存储客户端。
-///
-/// # 参数
-/// * `config` - S3 连接、凭证、键前缀与公开 URL 配置
-///
-/// # 返回
-/// 返回可由所有上传 handler 共享的 S3 客户端。
-///
-/// # 错误
-/// S3 参数无效时返回存储配置错误。
+// 按启动快照装配供上传及业务资产共用的 S3 客户端，绑定连接、凭证、键前缀和公开 URL；无效配置阻止装配。
 fn build_storage(config: &S3Config) -> storage::Result<S3Storage> {
     S3Storage::new(S3StorageConfig {
         bucket: config.bucket.clone(),
@@ -213,17 +161,7 @@ fn build_storage(config: &S3Config) -> storage::Result<S3Storage> {
     })
 }
 
-/// 启动配置监听并刷新可安全热更新的运行时状态。
-///
-/// 数据库与 RBAC 必须始终指向同一存储，因此数据库连接配置只在进程启动时生效；
-/// S3 客户端固定为启动值，保证单次进程中 bucket、凭证、键前缀与公开 URL 一致。
-/// 监听到这些变化时保留当前运行时，并记录需要重启的结构化日志。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `initial_db` - 初始数据库配置摘要
-/// * `initial_secret` - 初始 JWT 密钥
-/// * `initial_storage` - 启动时使用的 S3 配置
+// 启动后监听配置变化。数据库连接与 RBAC 必须共用启动存储，S3 和 XXL 执行器也固定使用启动配置；相关配置变化只记录重启提示，不热切换。
 fn spawn_config_watcher(
     state: Application,
     initial_db: DbConfigKey,
@@ -281,7 +219,7 @@ fn spawn_config_watcher(
     })
 }
 
-/// 只记录 S3 变化的字段类别，不泄露凭据或配置值。
+// 提醒对象存储配置需重启时，只记录发生变化的配置类别；不打印凭据或配置值。
 fn log_storage_change(active: &S3Config, requested: &S3Config) {
     if storage_change_requires_restart(active, requested) {
         warn!(
@@ -302,26 +240,12 @@ fn log_storage_change(active: &S3Config, requested: &S3Config) {
     }
 }
 
-/// 判断请求的数据库配置是否需要通过重启应用生效。
-///
-/// # 参数
-/// * `active` - 应用启动时使用的数据库配置
-/// * `requested` - 配置中心当前请求的数据库配置
-///
-/// # 返回
-/// 两者不一致时返回 `true`。
+// 把配置中心请求的 URI 和库名与启动值比较；任一项变化时提醒重启，不在监听器内重新连接。
 fn database_change_requires_restart(active: &DbConfigKey, requested: &DbConfigKey) -> bool {
     active != requested
 }
 
-/// 判断 S3 配置变化是否需要通过重启应用生效。
-///
-/// # 参数
-/// * `active` - 启动时固定的 S3 配置
-/// * `requested` - 配置中心请求的 S3 配置
-///
-/// # 返回
-/// 两者不一致时返回 `true`。
+// 把请求的对象存储配置与正在使用的启动值比较，以决定是否提示重启而非热切换。
 fn storage_change_requires_restart(active: &S3Config, requested: &S3Config) -> bool {
     active != requested
 }
@@ -344,7 +268,7 @@ mod tests {
         );
     }
 
-    /// 构造测试使用的数据库配置摘要。
+    // 为数据库配置热更新单测构造可分别改变 URI 或库名的比较值。
     fn database_key(uri: &str, db_name: &str) -> DbConfigKey {
         DbConfigKey { uri: uri.to_string(), db_name: db_name.to_string() }
     }
@@ -391,7 +315,7 @@ mod tests {
         assert!(!storage_change_requires_restart(&active, &active));
     }
 
-    /// 构造用于重启判定的 S3 配置。
+    // 为对象存储重启判定单测提供可改字段的启动配置基线。
     fn storage_config(bucket: &str, public_base_url: &str) -> S3Config {
         S3Config {
             bucket: bucket.to_string(),

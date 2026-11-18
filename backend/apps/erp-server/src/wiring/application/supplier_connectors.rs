@@ -36,13 +36,10 @@ impl JdVopCredentialMaintenance {
         Self { tokens, credential_id: settings.credential_id.clone(), timeout: Duration::from_secs(300) }
     }
 
-    /// 检查本账号的有效凭据，续期时点和唯一发送由提供器负责。
-    /// # 参数
-    /// 无；稳定身份、提供器及截止预算来自同一启动快照。
-    /// # 返回
-    /// 已取得可用令牌时成功，不把令牌交付给调度日志。
-    /// # 错误
-    /// 读取、续期或完整编排超时时失败；已经发送的未知结果不得自动重放。
+    // 检查本账号的有效凭据，续期时点和唯一发送由提供器负责。
+    // 无；稳定身份、提供器及截止预算来自同一启动快照。
+    // 已取得可用令牌时成功，不把令牌交付给调度日志。
+    // 读取、续期或完整编排超时时失败；已经发送的未知结果不得自动重放。
     pub(crate) async fn run_once(&self) -> ConnectorResult<()> {
         tokio::time::timeout(self.timeout, self.tokens.access_token(&self.credential_id)).await.map_err(
             |_| {
@@ -57,13 +54,9 @@ impl JdVopCredentialMaintenance {
         Ok(())
     }
 
-    /// 等待已开始的续期保存完成，不在停机阶段发起新的续期。
-    /// # 参数
-    /// 无；与当前运行时共享同一提供器的在途任务。
-    /// # 返回
-    /// 已开始的原续期已完成持久化或有界失败处理。
-    /// # 错误
-    /// 提供器无法收敛原续期时返回脱敏错误，不重发请求。
+    // 等待已开始的续期保存完成，不在停机阶段发起新的续期。
+    // 已开始的原续期已完成持久化或有界失败处理。
+    // 提供器无法收敛原续期时返回脱敏错误，不重发请求。
     pub(crate) async fn settle_refresh(&self) -> ConnectorResult<()> {
         self.tokens.settle_refresh().await
     }
@@ -71,11 +64,7 @@ impl JdVopCredentialMaintenance {
 
 impl Application {
     /// 按注册表接收供应商回调并可靠保存证据。
-    /// # 参数
-    /// 协议、连接和原始 HTTP 请求。
-    /// # 返回
     /// 已持久化后的协议应答。
-    /// # 错误
     /// 未装配、验签、绑定或持久化失败时拒绝。
     pub async fn receive_supplier_callback(
         &self,
@@ -93,12 +82,7 @@ impl Application {
     }
 
     /// 返回商品回调的补查及来源应用消费者。
-    /// # 参数
-    /// 无，复用当前部署的协议注册表与权限服务。
-    /// # 返回
     /// 配置协议后返回流程，否则返回 None。
-    /// # 错误
-    /// 不返回错误。
     pub fn supplier_catalog_callback_process(&self) -> Option<SupplierCatalogCallbackProcess> {
         self.external_connectors.order_connectors.as_ref().map(|runtime| {
             SupplierCatalogCallbackProcess::new(
@@ -110,13 +94,9 @@ impl Application {
         })
     }
 
-    /// 返回独立于新增下单开关的账号凭据维护任务。
-    /// # 参数
-    /// 无；仅使用技术启用时已装配的同一个凭据提供器。
-    /// # 返回
-    /// 已启用京东返回维护对象；停用技术配置时返回 None。
-    /// # 错误
-    /// 不执行 I/O，不返回错误。
+    // 返回独立于新增下单开关的账号凭据维护任务。
+    // 无；仅使用技术启用时已装配的同一个凭据提供器。
+    // 已启用京东返回维护对象；停用技术配置时返回 None。
     pub(crate) fn jd_vop_credential_maintenance(&self) -> Option<Arc<JdVopCredentialMaintenance>> {
         self.external_connectors.jd_vop_credentials.clone()
     }
@@ -124,22 +104,16 @@ impl Application {
 
 impl ExternalConnectorPorts {
     /// 装配不需要数据库凭据的供应商，禁止为已启用京东登记空传输。
-    /// # 参数
     /// `config` 是 SafeConfig 的同一启动快照。
-    /// # 返回
     /// 返回原供应商或失败关闭端口；京东必须改用 from_database。
-    /// # 错误
     /// 已启用京东而缺少 Mongo 凭据提供器，或协议配置无效时拒绝。
     pub fn from_config(config: &Config) -> ConnectorResult<Self> {
         Self::with_jd_tokens(config, None)
     }
 
     /// 在应用数据库就绪后装配京东认证、已核实执行资料及已有供应商协议。
-    /// # 参数
     /// `config` 为启动快照，`db` 为应用当前数据库；不单独建立凭据数据库连接。
-    /// # 返回
     /// 京东缺省只读；有受控消息或执行资料时装配对应能力。
-    /// # 错误
     /// 凭据、加密密钥、调用渠道或 HTTP 构造无效时返回脱敏错误。
     pub fn from_database(config: &Config, db: Database) -> ConnectorResult<Self> {
         let tokens = config

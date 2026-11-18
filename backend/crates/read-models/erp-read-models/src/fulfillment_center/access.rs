@@ -22,22 +22,25 @@ pub struct AcceptanceReadService {
 }
 
 impl AcceptanceReadService {
-    /// 装配来源订单授权。
+    /// 装配独立验收入口时，接入来源订单授权。
+    ///
     /// # 参数
     /// `db` 为数据库，`rbac` 为当前权限服务。
+    ///
     /// # 返回
     /// 不缓存授权结论的读取服务。
-    /// # 错误
-    /// 无。
     pub fn new(db: Database, rbac: Arc<AuthorizationService>) -> Self {
         Self { db, rbac }
     }
 
-    /// 按当前来源范围查询验收列表。
+    /// 读取独立验收入口时，按当前来源范围查询验收列表。
+    ///
     /// # 参数
     /// `params` 为业务条件，`actor` 为认证操作人。
+    ///
     /// # 返回
     /// 授权过滤后的分页与总数。
+    ///
     /// # 错误
     /// 无动作权限、范围解析或查询失败时拒绝。
     pub async fn list(
@@ -66,11 +69,14 @@ impl AcceptanceReadService {
             .await
     }
 
-    /// 独立详情在同一事务重验来源销售单。
+    /// 处理独立验收入口时，独立详情在同一事务重验来源销售单。
+    ///
     /// # 参数
     /// `id` 为验收身份，`actor` 为认证操作人。
+    ///
     /// # 返回
     /// 已授权详情。
+    ///
     /// # 错误
     /// 来源不可读时拒绝，在来源授权命中前不装载验收表头、明细或分配。
     pub async fn detail(&self, id: &str, actor: &AuditActor) -> Result<CustomerAcceptanceDetailView> {
@@ -86,7 +92,7 @@ impl AcceptanceReadService {
             .await
     }
 
-    /// 先以实际销售来源授权验收身份，再在原快照读取业务详情。
+    // 读取独立验收入口时，先以实际销售来源授权验收身份，再在原快照读取业务详情。
     async fn load_detail(
         &self,
         id: &str,
@@ -106,11 +112,14 @@ impl AcceptanceReadService {
         context.validate(executor).await?;
         Ok(detail)
     }
-    /// 在来源详情授权的同一事务读取可验收事实。
+    /// 准备独立验收入口时，在来源详情授权的同一事务读取可验收事实。
+    ///
     /// # 参数
     /// `id` 为销售单，`actor` 为认证操作人。
+    ///
     /// # 返回
     /// 当前可验收数量与历史。
+    ///
     /// # 错误
     /// 无读取资格或事实读取失败时拒绝。
     pub async fn eligibility(
@@ -149,7 +158,7 @@ mod tests {
     use super::*;
     use crate::sales_center::repository::authorization::SalesMapping;
 
-    /// 实际读取路径必须先经过统一授权，身份设施故障时不得触达验收查询。
+    // 验证独立验收入口：实际读取路径必须先经过统一授权，身份设施故障时不得触达验收查询。
     #[tokio::test]
     async fn acceptance_detail_rejects_authorization_failure_before_loading_facts() {
         let client =

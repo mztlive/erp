@@ -18,29 +18,12 @@ pub struct MongoImportBulkJobs {
 
 impl MongoImportBulkJobs {
     /// 绑定后台任务集合所在数据库，构造时不读取。
-    ///
-    /// # 参数
-    /// * `db` - 支持域批量任务所在数据库。
-    ///
-    /// # 返回
-    /// 返回未执行 I/O 的 adapter。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
     /// 包装为导入域可注入的批量任务事实 Port。
-    ///
-    /// # 参数
-    /// * `db` - 支持域批量任务所在数据库。
-    ///
-    /// # 返回
     /// 返回共享的批量任务事实 Port。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn shared(db: Database) -> Arc<dyn BulkJobFactsPort> {
         Arc::new(Self::new(db))
     }
@@ -64,16 +47,7 @@ impl BulkJobFactsPort for MongoImportBulkJobs {
 }
 
 /// 装配带批量任务身份 adapter 的导入查询服务。
-///
-/// # 参数
-/// * `db` - 导入与批量任务所在数据库。
-/// * `authorization` - 进程共享统一授权服务。
-///
-/// # 返回
 /// 返回已注入批量任务事实 Port 的导入查询服务。
-///
-/// # 错误
-/// 不返回错误。
 pub fn legacy_import_service(db: Database, authorization: Arc<AuthorizationService>) -> LegacyImportService {
     LegacyImportService::new(db.clone(), MongoImportBulkJobs::shared(db), authorization)
 }

@@ -32,33 +32,13 @@ struct IdRow {
     id: String,
 }
 
-/// 标记待重算的更新文档。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 置 `dirty` 并递增 `dirty_token`。
-///
-/// # 错误
-/// 无。
+/// 为已有投影构造待重算更新：置 `dirty` 并递增 `dirty_token`，使计算中的旧结果无法清除新标记。
 pub fn mark_update() -> Document {
     doc! { "$set": { "dirty": true }, "$inc": { "dirty_token": 1_i64 } }
 }
 
-/// 按主键标记待重算；尚无记录的主键插入占位。
-///
-/// # 参数
-/// * `collection` - 投影集合
-/// * `ids` - 主键，允许重复
-/// * `pending` - 由主键生成占位文档的其余字段；不含 `_id`、`dirty`、`dirty_token`
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 标记完成时无返回值；空输入不写入。
-///
-/// # 错误
-/// MongoDB 读写失败时返回错误。
+/// 源数据变化后按投影主键去重、分批标脏；无投影的主键先插待算占位。
+/// 占位构造器只提供业务字段，不自行管理 `_id`、`dirty` 和 `dirty_token`；空输入不读写数据库。
 pub async fn mark_ids(
     collection: &Collection<Document>,
     ids: &[String],
@@ -82,7 +62,7 @@ pub async fn mark_ids(
     Ok(())
 }
 
-/// 批量插入占位；并发插入导致主键冲突时逐条按 upsert 补标记。
+// 为未出现的主键批量加入待算占位。并发插入触发唯一冲突时逐键 upsert，使被其他实例抢先插入的记录也标为待算。
 async fn insert_pending(
     collection: &Collection<Document>,
     ids: &[&str],
@@ -113,18 +93,7 @@ async fn insert_pending(
     Ok(())
 }
 
-/// 按条件标记待重算。
-///
-/// # 参数
-/// * `collection` - 投影集合
-/// * `filter` - 标记条件
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回被标记的记录数。
-///
-/// # 错误
-/// MongoDB 写入失败时返回错误。
+/// 投影已存在且可用同一条件定位时，批量递增标记序号并返回修改条数；不为未命中的主键补占位。
 pub async fn mark_matching(
     collection: &Collection<Document>,
     filter: Document,
@@ -133,18 +102,7 @@ pub async fn mark_matching(
     Ok(mongo_ops::update_many(collection, filter, mark_update(), executor).await?.modified_count)
 }
 
-/// 读取一批待重算记录。
-///
-/// # 参数
-/// * `collection` - 投影集合
-/// * `limit` - 本批上限
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回主键与读取时的标记序号。
-///
-/// # 错误
-/// MongoDB 查询失败时返回错误。
+/// 后台开始重算前，按给定 MongoDB `limit` 读取待处理主键及当时的标记序号；写回时用该序号检查计算期间是否有更新。
 pub async fn dirty_batch(
     collection: &Collection<Document>,
     limit: i64,
@@ -155,35 +113,13 @@ pub async fn dirty_batch(
     mongo_ops::find_many(&marks, doc! { "dirty": true }, options, executor).await
 }
 
-/// 统计待重算记录。
-///
-/// # 参数
-/// * `collection` - 投影集合
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回待重算记录数。
-///
-/// # 错误
-/// MongoDB 查询失败时返回错误。
+/// 统计投影集合当前仍标记待重算的条数，供后台判断积压，不把已完成项计入。
 pub async fn dirty_count(collection: &Collection<Document>, executor: &mut dyn Executor) -> Result<u64> {
     mongo_ops::count_documents(collection, doc! { "dirty": true }, executor).await
 }
 
-/// 保存计算结果并清除待重算；计算期间又被标记时不保存。
-///
-/// # 参数
-/// * `collection` - 投影集合
-/// * `id` - 记录主键
-/// * `dirty_token` - 开始计算前读取的标记序号
-/// * `fields` - 写回的计算字段；不含主键与标记字段
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 标记序号仍一致并已保存时为真；期间又被标记时为假，留待下一轮。
-///
-/// # 错误
-/// MongoDB 写入失败时返回错误。
+/// 只在主键与重算前的标记序号仍匹配时写回结果并清除 `dirty`。计算字段不得覆盖主键和标记字段；
+/// 未命中返回 `false`，避免覆盖计算期间的新标记。
 pub async fn save_clean(
     collection: &Collection<Document>,
     id: &str,

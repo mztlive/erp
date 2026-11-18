@@ -61,19 +61,9 @@ use crate::{Error, Result};
 impl SalesChangeProcess {
     /// 创建销售变更单（草稿 + 变更工作副本 + `BusinessDocument` 绑定原子形成）。
     ///
-    /// `PROCESS_REQUIRED` 无发布定义时返回 `APPROVAL_PROCESS_NOT_CONFIGURED`，
-    /// 业务单据零写入。客户端不得选择定义或审批人。
+    /// `PROCESS_REQUIRED` 无发布定义时返回 `APPROVAL_PROCESS_NOT_CONFIGURED`，业务单据零写入。客户端不得选择定义或审批人。
     ///
-    /// # 参数
-    /// * `req` - 创建请求
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回变更单详情视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 原销售单不存在或未生效
-    /// * `ConflictError` - 同一基准版本已有进行中变更或未配置审批流程
+    /// 返回变更单详情视图。`NotFound`：原销售单不存在或未生效。`ConflictError`：同一基准版本已有进行中变更或未配置审批流程。
     pub async fn create_sales_change_order(
         &self,
         req: CreateSalesChangeOrderRequest,
@@ -96,7 +86,7 @@ impl SalesChangeProcess {
             .map_err(crate::Error::from)
     }
 
-    /// 在授权、准备和写入共用的快照中创建销售变更。
+    // 在授权、准备和写入共用的快照中创建销售变更。
     async fn create_change_stage(
         &self,
         request: CreateSalesChangeOrderRequest,
@@ -126,20 +116,12 @@ impl SalesChangeProcess {
 
     /// 提交销售变更并调用统一 `start_approval`。
     ///
-    /// `subject_version` 取 `sales_change_submission.submission_no`，不得复用
-    /// `BaseModel.version`。定义与审批人取自已绑定事实，不接受客户端选择。
+    /// `subject_version` 取 `sales_change_submission.submission_no`，不得复用 `BaseModel.version`。定义与审批人取自已绑定事实，
+    /// 不接受客户端选择。
     ///
-    /// # 参数
-    /// * `id` - 变更单 ID
-    /// * `req` - 提交请求（含期望版本与幂等键）
-    /// * `actor` - 已通过鉴权的审计操作人
+    /// `id` 为变更单 ID；`req` 为提交请求（含期望版本与幂等键）。返回变更单详情视图。`NotFound`：变更单或变更工作副本不存在。
     ///
-    /// # 返回
-    /// 返回变更单详情视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 变更单或变更工作副本不存在
-    /// * `ConflictError` - 期望版本不一致、无绑定或状态不允许
+    /// `ConflictError`：期望版本不一致、无绑定或状态不允许。
     pub async fn submit_sales_change(
         &self,
         id: &str,
@@ -204,17 +186,9 @@ impl SalesChangeProcess {
 
     /// 作废草稿或已驳回的销售变更单。
     ///
-    /// # 参数
-    /// * `id` - 变更单 ID
-    /// * `req` - 作废请求（含期望版本）
-    /// * `actor` - 已通过鉴权的审计操作人
+    /// `id` 为变更单 ID；`req` 为作废请求（含期望版本）。返回变更单详情视图。`NotFound`：变更单不存在。
     ///
-    /// # 返回
-    /// 返回变更单详情视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 变更单不存在
-    /// * `ConflictError` - 期望版本与当前版本不一致
+    /// `ConflictError`：期望版本与当前版本不一致。
     pub async fn void_sales_change(
         &self,
         id: &str,
@@ -243,16 +217,7 @@ impl SalesChangeProcess {
 
     /// 撤回审批中的销售变更单，回到可修正草稿且 `subject_version` 不回退。
     ///
-    /// # 参数
-    /// * `id` - 变更单主键
-    /// * `req` - 撤回请求（原因必填）
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回撤回后的变更单详情。
-    ///
-    /// # 错误
-    /// 非审批中、已最终通过、原因缺失或并发冲突时返回错误。
+    /// `id` 为变更单主键；`req` 为撤回请求（原因必填）。返回撤回后的变更单详情。非审批中、已最终通过、原因缺失或并发冲突时返回错误。
     pub async fn cancel_approval(
         &self,
         id: &str,
@@ -310,7 +275,7 @@ impl SalesChangeProcess {
         persist_sales_change_cancel(&self.db, input, executor).await
     }
 
-    /// 按已授权原事务中的业务版本构造撤回运行态和审计写入计划。
+    // 按已授权原事务中的业务版本构造撤回运行态和审计写入计划。
     async fn prepare_change_cancel(
         &self,
         id: &str,
@@ -351,10 +316,7 @@ impl SalesChangeProcess {
         })
     }
 
-    /// 冻结提交并启动统一审批。
-    ///
-    /// # 错误
-    /// 无绑定、定义缺失、状态不允许或写入失败时返回错误。
+    // 冻结提交并启动统一审批。无绑定、定义缺失、状态不允许或写入失败时返回错误。
     async fn start_change_approval(
         &self,
         id: &str,
@@ -375,7 +337,7 @@ impl SalesChangeProcess {
         input.persist(&self.db, executor).await
     }
 
-    /// 在原读取位置准备领域提交与冻结快照，不执行写入。
+    // 在原读取位置准备领域提交与冻结快照，不执行写入。
     async fn prepare_change_context(
         &self,
         id: &str,
@@ -418,7 +380,7 @@ impl SalesChangeProcess {
         })
     }
 
-    /// 从冻结定义生成启动计划及元数据，保留审批人重验和审计构造顺序。
+    // 从冻结定义生成启动计划及元数据，保留审批人重验和审计构造顺序。
     async fn prepare_change_start(
         &self,
         id: &str,
@@ -458,7 +420,7 @@ impl SalesChangeProcess {
         })
     }
 
-    /// 读取冻结定义与回执并解析审批人，构造本次启动计划。
+    // 读取冻结定义与回执并解析审批人，构造本次启动计划。
     async fn prepare_change_runtime(
         &self,
         context: &SalesChangeApprovalContext,
@@ -497,7 +459,7 @@ impl SalesChangeProcess {
         prepare_start(start_input).map_err(Error::from)
     }
 
-    /// receipt 唯一竞争、瞬态事务或提交结果未知后，以 fresh session 有界回读。
+    // receipt 唯一竞争、瞬态事务或提交结果未知后，以 fresh session 有界回读。
     async fn recover_sales_change_start(
         &self,
         command: &SalesChangeSubmissionCommand,
@@ -550,7 +512,7 @@ struct CreatedChangeOrderPersistInput {
     actor: AuditActor,
 }
 impl CreatedChangeOrderPersistInput {
-    /// 用已授权来源和本事务准备的变更冻结注册、绑定与审计元数据。
+    // 用已授权来源和本事务准备的变更冻结注册、绑定与审计元数据。
     fn new(
         approvals: Arc<dyn ApprovalRuntimePort>,
         sales_write: CreatedChangeWrite,
@@ -581,7 +543,7 @@ impl CreatedChangeOrderPersistInput {
     }
 }
 
-/// 在原写事务内先证明独立作废资格，再沿来源范围加载并持久化业务变化。
+// 在原写事务内先证明独立作废资格，再沿来源范围加载并持久化业务变化。
 async fn void_change(
     db: &mongodb::Database,
     authorization: &Arc<AuthorizationService>,
@@ -612,24 +574,15 @@ async fn void_change(
     Ok(())
 }
 
-/// 在创建事务内写入变更单、绑定发布定义并登记单据。
-///
-/// # 用途
-/// 创建变更单时原子写入单据、工作副本与发布定义绑定。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `input` - 变更单、工作副本、注册行与审计
-/// * `executor` - 入口授权和准备读取使用的原事务执行器。
-///
-/// # 返回
-/// 成功时无返回值。
-///
-/// # 错误
-/// 无发布定义、人员重验失败或写入失败时返回错误，调用方必须回滚。
-///
-/// # 关键业务约束
-/// 销售变更单必须绑定已发布定义，不得无定义创建。
+// 在创建事务内写入变更单、绑定发布定义并登记单据。
+//
+// 创建变更单时原子写入单据、工作副本与发布定义绑定。
+//
+// `input` 为变更单、工作副本、注册行与审计；`executor` 为入口授权和准备读取使用的原事务执行器。
+//
+// 无发布定义、人员重验失败或写入失败时返回错误，调用方必须回滚。
+//
+// 销售变更单必须绑定已发布定义，不得无定义创建。
 async fn persist_created_change_order(
     db: &mongodb::Database,
     input: CreatedChangeOrderPersistInput,
@@ -644,10 +597,7 @@ async fn persist_created_change_order(
     Ok(())
 }
 
-/// 查询发布定义、写入绑定并持久化注册行。
-///
-/// # 错误
-/// 无发布定义或绑定失败时返回错误。
+// 查询发布定义、写入绑定并持久化注册行。无发布定义或绑定失败时返回错误。
 async fn persist_bound_change_document(
     db: &mongodb::Database,
     approvals: &dyn ApprovalRuntimePort,
@@ -677,7 +627,7 @@ struct SalesChangeApprovalContext {
     organization_id: String,
 }
 
-/// 构造本次提交的工作流元数据；不承载状态迁移规则。
+// 构造本次提交的工作流元数据；不承载状态迁移规则。
 fn submission_workflow_action(id: &str, actor: &AuditActor, owner_role: &str) -> Result<WorkflowAction> {
     WorkflowAction::new(
         WorkflowActionId::new(next_id()),
@@ -704,7 +654,7 @@ mod authorization_tests {
 
     use super::*;
 
-    /// 作废入口先检查独立动作资格，拒绝时不读取变更、不执行任何业务写入。
+    // 作废入口先检查独立动作资格，拒绝时不读取变更、不执行任何业务写入。
     #[tokio::test]
     async fn void_entry_rejects_before_loading_or_changing_business_facts() {
         let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")

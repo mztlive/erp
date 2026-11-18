@@ -22,12 +22,9 @@ pub struct QuoteTargetVersion {
 
 impl QuoteTargetVersion {
     /// 比较原报价依据与同一写事务读取的当前正式事实。
-    /// # 参数
-    /// `current` 为目录拥有领域读取的当前事实，必须先核对启用和引用归属。
-    /// # 返回
     /// 所有目标标识和版本相同时返回成功，不改写原稿。
-    /// # 错误
     /// 缺失标识、非法版本或任一正式依据变化时要求重新核对提交。
+    /// `current` 为目录拥有领域读取的当前事实，必须先核对启用和引用归属。
     pub fn ensure_current(&self, current: &Self) -> Result<()> {
         for id in [&self.sku_revision_id, &self.product_id, &self.product_revision_id, &self.unit_id] {
             ensure_text(id, "报价目标依据")?;

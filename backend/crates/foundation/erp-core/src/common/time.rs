@@ -24,98 +24,37 @@ pub const BUSINESS_TZ_OFFSET_SECS: i32 = 8 * 3600;
 pub struct BusinessDate(NaiveDate);
 
 impl BusinessDate {
-    /// 按年/月/日构造业务日期。
-    ///
-    /// # 参数
-    /// * `year` - 年份
-    /// * `month` - 月份（1–12）
-    /// * `day` - 日（1–31）
-    ///
-    /// # 返回
-    /// 日期合法返回 `Some`，非法（如 2 月 30 日）返回 `None`。
-    ///
-    /// # 错误
-    /// 不返回错误。非法日期由 `None` 表示。
+    /// 把表单或自然历计算得到的年月日构造成无时区的业务日，适用于到期日等字段；不存在的日期返回 `None`。
     pub fn from_ymd(year: i32, month: u32, day: u32) -> Option<Self> {
         NaiveDate::from_ymd_opt(year, month, day).map(Self)
     }
 
-    /// 由已合法的 `NaiveDate` 构造业务日期。
-    ///
-    /// # 参数
-    /// * `date` - 已构造成功的日历日期
-    ///
-    /// # 返回
-    /// 返回对应业务日期。
-    ///
-    /// # 错误
-    /// 无。
+    // 将日历运算已验证的 `NaiveDate` 封装回业务日期，不再转换时区或重复校验。
     pub(crate) fn from_naive_date(date: NaiveDate) -> Self {
         Self(date)
     }
 
-    /// 返回今天的业务自然日。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 以业务时区（Asia/Shanghai，+08:00）计算的今天。业务日期无时区语义，
-    /// 前端与各类业务输入（客户/合同/单据的生效日期、到期日）均按中国业务
-    /// 时区的自然日构造，这里必须与之一致，否则 00:00–08:00 期间以 UTC 计算
-    /// 的“今天”会早于前端日期，导致归属范围查询（如客户列表）查不到当天
-    /// 新建的数据。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 按上海业务时区（UTC+08:00）取当天日期，用于客户、合同等按自然日判断的查询。
+    /// 否则当地凌晨至 08:00 直接取 UTC 日期会落到前一日，可能漏掉当天新数据。
     ///
     /// # Panics
-    /// `BUSINESS_TZ_OFFSET_SECS` 不是合法固定偏移时，`expect` 会 panic。
-    /// 当前常量为 +08:00，处于 `FixedOffset` 允许范围内，正常不会触发。
+    /// 仅当共享固定偏移常量不在 `FixedOffset` 支持范围内时触发；当前 +08:00 合法。
     pub fn today() -> Self {
         let business_tz = FixedOffset::east_opt(BUSINESS_TZ_OFFSET_SECS).expect("+08:00 固定偏移量必然合法");
         Self(Utc::now().with_timezone(&business_tz).date_naive())
     }
 
-    /// 返回底层 `NaiveDate`。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回内部日期值。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 在计算周期或比较日历边界时取底层自然日，不添加时间或时区。
     pub fn as_naive_date(self) -> NaiveDate {
         self.0
     }
 
-    /// 判断日期是否在有效期内：生效日当天起有效，失效日当天起失效（左闭右开）。
-    ///
-    /// # 参数
-    /// * `valid_from` - 生效日（含）
-    /// * `valid_to` - 失效日（不含）；空表示长期有效
-    ///
-    /// # 返回
-    /// `valid_from <= self < valid_to` 时为真。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 查询合同等按日生效的对象时判断有效期。包含生效日，排除失效日；没有失效日则不限制上界。
     pub fn is_within(self, valid_from: BusinessDate, valid_to: Option<BusinessDate>) -> bool {
         valid_from <= self && valid_to.is_none_or(|until| self < until)
     }
 
-    /// 拆分为年/月/日。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(year, month, day)` 元组。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 拆出年、月、日，供需要按自然历分量处理业务日期的调用方使用。
     pub fn ymd(self) -> (i32, u32, u32) {
         (self.0.year(), self.0.month(), self.0.day())
     }
@@ -130,16 +69,7 @@ impl fmt::Display for BusinessDate {
 impl FromStr for BusinessDate {
     type Err = Error;
 
-    /// 从 `YYYY-MM-DD` 字符串解析业务日期。
-    ///
-    /// # 参数
-    /// * `value` - 日期字符串（须为零填充，如 `2026-08-05`）
-    ///
-    /// # 返回
-    /// 解析成功返回 `Ok`，否则返回 `Err`。
-    ///
-    /// # 错误
-    /// 格式非法或日期不存在（如 2 月 30 日）时返回 `LogicError`。
+    // 解析表单或外部文本中的业务日期；展示使用 `YYYY-MM-DD`，非法格式及不存在的日期归为业务值错误。
     fn from_str(value: &str) -> Result<Self> {
         let date = NaiveDate::parse_from_str(value, "%Y-%m-%d")
             .map_err(|_| Error::from("请填写有效日期，例如 2026-08-05"))?;
@@ -148,32 +78,14 @@ impl FromStr for BusinessDate {
 }
 
 impl Serialize for BusinessDate {
-    /// 序列化为 `YYYY-MM-DD` 字符串。
-    ///
-    /// # 参数
-    /// * `serializer` - serde 序列化器。
-    ///
-    /// # 返回
-    /// 成功时写入 `YYYY-MM-DD` 字符串。
-    ///
-    /// # 错误
-    /// 序列化器写入失败时返回 serde 错误。
+    // 将业务日写成固定的 `YYYY-MM-DD` 字符串，避免给只关心自然日的字段引入时区。
     fn serialize<S: Serializer>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> {
         serializer.serialize_str(&self.to_string())
     }
 }
 
 impl<'de> Deserialize<'de> for BusinessDate {
-    /// 从 `YYYY-MM-DD` 字符串反序列化。
-    ///
-    /// # 参数
-    /// * `deserializer` - serde 反序列化器。
-    ///
-    /// # 返回
-    /// 解析成功时返回业务日期。
-    ///
-    /// # 错误
-    /// 输入不是字符串，或格式非法、日期不存在时返回 serde 错误。日期失败文案与 [`BusinessDate::from_str`] 相同。
+    // 回读接口或持久化业务日期时只接受字符串；日期交由 `BusinessDate::from_str` 检查，保留同一错误提示。
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
         let value = String::deserialize(deserializer)?;
         Self::from_str(&value).map_err(de::Error::custom)
@@ -188,108 +100,45 @@ impl<'de> Deserialize<'de> for BusinessDate {
 pub struct Instant(DateTime<Utc>);
 
 impl Instant {
-    /// 返回当前时刻。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 UTC 当前时刻。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 捕获当前 UTC 时刻，供记录业务事实在 ERP 中的登记时间等需要真实时刻的场景使用。
     pub fn now() -> Self {
         Self(Utc::now())
     }
 
-    /// 由 Unix 秒级时间戳构造时刻。
-    ///
-    /// # 参数
-    /// * `secs` - Unix 秒（可为负数，表示 1970 年以前）
-    ///
-    /// # 返回
-    /// 返回对应时刻。
-    ///
-    /// # 错误
-    /// 不返回错误。越界时 panic，见 `# Panics`。
+    /// 用已知可表示的 Unix 秒构造业务时刻，负数表示 1970-01-01 UTC 纪元起点之前。
+    /// 外部或未验证输入应使用 [`Instant::try_from_unix_secs`]。
     ///
     /// # Panics
-    /// 时间戳超出 `DateTime<Utc>` 可表示范围时 panic（i64 秒在 ±2920 亿年范围
-    /// 内，实际业务数据不会触达）。不确定输入请用 [`Instant::try_from_unix_secs`]。
+    /// 秒数超过 `DateTime<Utc>` 可表示的范围时触发 panic。
     pub fn from_unix_secs(secs: i64) -> Self {
         Self::try_from_unix_secs(secs).expect("Unix 时间戳超出可表示范围")
     }
 
-    /// 由 Unix 秒级时间戳尝试构造时刻。
-    ///
-    /// # 参数
-    /// * `secs` - Unix 秒（可为负数，表示 1970 年以前）
-    ///
-    /// # 返回
-    /// 时间戳可表示时返回对应时刻。
-    ///
-    /// # 错误
-    /// 超出 `DateTime<Utc>` 可表示范围时返回 `LogicError`。
+    /// 转换外部或回读的 Unix 秒为 UTC 时刻，支持负值；超出 `DateTime<Utc>` 范围时返回业务值错误而非 panic。
     pub fn try_from_unix_secs(secs: i64) -> Result<Self> {
         DateTime::from_timestamp(secs, 0).map(Self).ok_or_else(|| Error::from("Unix 时间戳超出可表示范围"))
     }
 
-    /// 返回 Unix 秒级时间戳。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回整秒时间戳（i64）。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取与持久化合同一致的有符号 Unix 整秒，用于存储或跨层传输。
     pub fn unix_secs(self) -> i64 {
         self.0.timestamp()
     }
 
-    /// 返回底层 `DateTime<Utc>`。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回内部时刻值。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取底层 UTC 时刻，供展示层转换到业务时区或供调用方执行时间运算。
     pub fn as_utc(self) -> DateTime<Utc> {
         self.0
     }
 }
 
 impl Serialize for Instant {
-    /// 序列化为秒级时间戳（i64 数字，与 `BaseModel.created_at` 的 JSON 形态一致）。
-    ///
-    /// # 参数
-    /// * `serializer` - serde 序列化器。
-    ///
-    /// # 返回
-    /// 成功时写入 `unix_secs()` 的 i64。
-    ///
-    /// # 错误
-    /// 序列化器写入失败时返回 serde 错误。
+    // 持久化记录时间时写为有符号 Unix 整秒；JSON 保持与 `BaseModel.created_at` 一致的数字形态。
     fn serialize<S: Serializer>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> {
         serializer.serialize_i64(self.unix_secs())
     }
 }
 
 impl<'de> Deserialize<'de> for Instant {
-    /// 从秒级时间戳反序列化（接受 i64/u64/i32/u32，拒绝浮点）。
-    ///
-    /// # 参数
-    /// * `deserializer` - serde 反序列化器。
-    ///
-    /// # 返回
-    /// 整数时间戳落在 `DateTime<Utc>` 可表示范围时返回对应时刻。
-    ///
-    /// # 错误
-    /// 非整数或超出可表示时刻范围时返回 serde 错误。
+    // 回读时接受有符号或无符号的 32/64 位整数秒；拒绝浮点、非整数类型和无法表达的时刻。
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
         struct InstantVisitor;
 
@@ -300,30 +149,12 @@ impl<'de> Deserialize<'de> for Instant {
                 formatter.write_str("秒级 Unix 时间戳（整数）")
             }
 
-            /// 将有符号时间戳解析为可表示的时刻。
-            ///
-            /// # 参数
-            /// * `value` - 秒级 Unix 时间戳。
-            ///
-            /// # 返回
-            /// 时间戳可表示时返回对应 `Instant`。
-            ///
-            /// # 错误
-            /// 超出可表示时刻范围时返回 serde 错误。
+            // 解码有符号 Unix 秒时复用时刻范围检查，把不可表示的时间归为 serde 错误。
             fn visit_i64<E: de::Error>(self, value: i64) -> std::result::Result<Self::Value, E> {
                 Instant::try_from_unix_secs(value).map_err(de::Error::custom)
             }
 
-            /// 将无符号时间戳解析为可表示的时刻。
-            ///
-            /// # 参数
-            /// * `value` - 秒级 Unix 时间戳。
-            ///
-            /// # 返回
-            /// `value` 能转入 `i64` 且时刻可表示时返回对应 `Instant`。
-            ///
-            /// # 错误
-            /// 超出 i64 或可表示时刻范围时返回 serde 错误。
+            // 解码无符号 Unix 秒时先检查能否转入 `i64`，再校验时刻范围，避免溢出后变成负数。
             fn visit_u64<E: de::Error>(self, value: u64) -> std::result::Result<Self::Value, E> {
                 let secs =
                     i64::try_from(value).map_err(|_| de::Error::custom("时间戳超出 i64 可表示范围"))?;
@@ -347,7 +178,7 @@ impl<'de> Deserialize<'de> for Instant {
 mod tests {
     use super::*;
 
-    /// BusinessDate 构造、显示与解析往返。
+    // 核对有效日期可构造和回读、展示始终补零，并拒绝日历中不存在的日期。
     #[test]
     fn business_date_roundtrip() {
         let date = BusinessDate::from_ymd(2026, 8, 5).unwrap();
@@ -363,7 +194,7 @@ mod tests {
         assert!("2026-08-32".parse::<BusinessDate>().is_err());
     }
 
-    /// BusinessDate 的 serde 字符串形态。
+    // 锁定接口日期的字符串表示和往返行为，防止误接受斜杠分隔格式。
     #[test]
     fn business_date_serde_shape() {
         let date = BusinessDate::from_ymd(2026, 8, 5).unwrap();
@@ -373,7 +204,7 @@ mod tests {
         assert!(serde_json::from_str::<BusinessDate>("\"2026/08/05\"").is_err());
     }
 
-    /// Instant 秒级时间戳往返（JSON 数字形态，与 BaseModel.created_at 一致）。
+    // 核对 JSON 使用整数 Unix 秒并可回读，兼顾纪元前的负值与禁止浮点的约束。
     #[test]
     fn instant_secs_roundtrip() {
         let instant = Instant::from_unix_secs(1_700_000_000);
@@ -391,7 +222,7 @@ mod tests {
         assert!(serde_json::from_str::<Instant>("1700000000.5").is_err(), "禁止浮点");
     }
 
-    /// Instant 的 BSON 形态为 Int64 且可往返。
+    // 锁定记录时间在 MongoDB 中使用 BSON Int64 而非日期对象，并验证文档回读不变。
     #[test]
     fn instant_bson_roundtrip() {
         #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -406,7 +237,7 @@ mod tests {
         assert_eq!(back, doc);
     }
 
-    /// 时间先后比较。
+    // 核对用于时间排序的大小比较与先后顺序一致，同一秒构造的值相等。
     #[test]
     fn instant_ordering() {
         let earlier = Instant::from_unix_secs(100);

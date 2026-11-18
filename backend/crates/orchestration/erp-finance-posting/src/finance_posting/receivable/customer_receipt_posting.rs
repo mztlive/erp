@@ -66,18 +66,9 @@ pub(super) struct CommitTransactionRequest {
     pub(super) command_receipt: CommandReceipt,
 }
 
-/// 在唯一事务内落盘回款（或读取草稿）并执行启动装配与命令审计。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `rbac` - 授权源
-/// * `request` - 待提交候选、分配与幂等身份
-///
-/// # 返回
-/// 返回在原事务重验提交资格并装配的回款视图。
-///
-/// # 错误
-/// 新建冲突、草稿缺失、装配或写入失败时返回错误。
+// 在唯一事务内落盘回款（或读取草稿）并执行启动装配与命令审计。
+//
+// `request` 为待提交候选、分配与幂等身份。返回在原事务重验提交资格并装配的回款视图。新建冲突、草稿缺失、装配或写入失败时返回错误。
 pub(super) async fn run_commit_transaction(
     db: &Database,
     rbac: &FinancePostingPorts,
@@ -93,7 +84,7 @@ pub(super) async fn run_commit_transaction(
         .await
 }
 
-/// 首次提交和幂等重放在同一快照完成，回包前重新取得提交资格。
+// 首次提交和幂等重放在同一快照完成，回包前重新取得提交资格。
 async fn commit_receipt_snapshot(
     db: &Database,
     rbac: &FinancePostingPorts,
@@ -120,7 +111,7 @@ async fn commit_receipt_snapshot(
     .await
 }
 
-/// 仅首次提交准备候选并落盘启动事实，重放不进入该步骤。
+// 仅首次提交准备候选并落盘启动事实，重放不进入该步骤。
 async fn persist_receipt_commit(
     db: &Database,
     rbac: &FinancePostingPorts,
@@ -148,19 +139,8 @@ async fn persist_receipt_commit(
     .await
 }
 
-/// 在审批运行时持有的事务内过账客户回款并写入核销事实。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `receipt_id` - 客户回款单 ID
-/// * `actor` - 已认证操作人
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 回款、核销、应收进度、销售回款进度和成功审计全部写入时返回 `Ok(())`。
-///
-/// # 错误
-/// 回款/分录不存在、主体或额度不变量失败、任一写入失败时返回错误。
+/// 客户回款最终通过时，在审批原事务写回款核销、应收进度和成功审计，再刷新涉及的销售单回款进度。
+/// 回款或应收分录缺失、主体或核销额度不符、任一步写入失败时返回错误；已冲正的回款不得再核销。
 pub async fn post_customer_receipt_apply(
     db: &Database,
     receipt_id: &str,
@@ -211,20 +191,8 @@ pub async fn post_customer_receipt_apply(
     Ok(())
 }
 
-/// 在审批运行时持有的事务内撤回客户回款审批。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `receipt_id` - 客户回款单 ID
-/// * `action` - 已校验的撤回领域动作
-/// * `actor` - 已认证操作人
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 回款单已撤回并写入审计时无返回值。
-///
-/// # 错误
-/// 回款单不存在、动作不匹配、状态不允许、回款单更新或审计写入失败时返回错误。
+/// 审批运行时处理回款撤回时，复用当前事务检查回款和撤回动作、恢复草稿并写审计。
+/// 回款缺失、动作或状态不符、保存或审计失败时返回错误。
 pub async fn cancel_customer_receipt_approval_apply(
     db: &Database,
     receipt_id: &str,
@@ -251,16 +219,8 @@ pub async fn cancel_customer_receipt_approval_apply(
 
 /// 在审批事务内终态驳回回款，保留内容并释放审批占用。
 ///
-/// # 参数
-/// * `db` - 当前数据库。
-/// * `receipt_id` - 当前回款 ID。
-/// * `expected_subject_version` - 当前被决定的审批实例主题版本。
-/// * `actor` - 已授权的审批人。
-/// * `executor` - 审批运行时使用的同一事务。
-/// # 返回
-/// 状态及审计成功写入时返回空结果。
-/// # 错误
-/// 单据不存在、状态无效或任一写入失败时整笔事务回滚。
+/// `receipt_id` 为当前回款 ID；`expected_subject_version` 为当前被决定的审批实例主题版本；`actor` 为已授权的审批人；`executor`
+/// 为审批运行时使用的同一事务。状态及审计成功写入时返回空结果。单据不存在、状态无效或任一写入失败时整笔事务回滚。
 pub async fn reject_customer_receipt_approval_apply(
     db: &Database,
     receipt_id: &str,
@@ -287,21 +247,13 @@ pub async fn reject_customer_receipt_approval_apply(
     Ok(())
 }
 
-/// 在创建事务内写入回款单、绑定发布定义并登记单据。
-///
-/// 绑定失败必须回滚业务实体，不得留下以后补流程的单据。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `rbac` - 授权源
-/// * `receipt` - 新建回款候选
-/// * `actor` - 提交人
-///
-/// # 返回
-/// 回款单、绑定、审计及结果视图在同一事务完成后返回。
-///
-/// # 错误
-/// 责任组织无效、单据或审计构造失败、无发布定义、人员重验失败或事务写入失败时返回错误。
+// 在创建事务内写入回款单、绑定发布定义并登记单据。
+//
+// 绑定失败必须回滚业务实体，不得留下以后补流程的单据。
+//
+// `receipt` 为新建回款候选；`actor` 为提交人。回款单、绑定、审计及结果视图在同一事务完成后返回。
+//
+// 责任组织无效、单据或审计构造失败、无发布定义、人员重验失败或事务写入失败时返回错误。
 pub(super) async fn persist_created_customer_receipt(
     db: &Database,
     rbac: &FinancePostingPorts,
@@ -358,21 +310,11 @@ pub(super) async fn persist_created_customer_receipt(
         .await
 }
 
-/// 查询发布定义、写入绑定并持久化注册行。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `rbac` - 授权源
-/// * `document` - 待登记单据
-/// * `bind_command` - 绑定命令
-/// * `actor` - 提交人
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回已冻结的审批定义绑定。
-///
-/// # 错误
-/// 无发布定义或绑定失败时返回错误。
+// 查询发布定义、写入绑定并持久化注册行。
+//
+// `document` 为待登记单据；`bind_command` 为绑定命令；`actor` 为提交人；沿用调用方的执行器。返回已冻结的审批定义绑定。
+//
+// 无发布定义或绑定失败时返回错误。
 pub(super) async fn persist_bound_customer_receipt_document(
     db: &Database,
     rbac: &FinancePostingPorts,
@@ -406,17 +348,9 @@ pub(super) struct PendingCustomerReceiptCommit {
     pub(super) allocations: Vec<erp_finance::entity::receivable::PendingReceiptAllocation>,
 }
 
-/// 由已校验命令构造新建候选或已有草稿身份。
-///
-/// # 参数
-/// * `prepared` - 已校验的提交命令
-/// * `actor_id` - 提交人
-///
-/// # 返回
-/// 返回新建候选或已有草稿身份与冻结分配。
-///
-/// # 错误
-/// 新建候选构造或分配校验失败时返回错误。
+// 由已校验命令构造新建候选或已有草稿身份。
+//
+// `prepared` 为已校验的提交命令；`actor_id` 为提交人。返回新建候选或已有草稿身份与冻结分配。新建候选构造或分配校验失败时返回错误。
 pub(super) fn prepare_customer_receipt_commit_candidate(
     prepared: PreparedCustomerReceiptCommit,
     actor_id: &str,
@@ -454,20 +388,9 @@ pub(super) fn prepare_customer_receipt_commit_candidate(
     }
 }
 
-/// 在调用方事务内落盘新建回款的注册行、绑定与实体；主命令统一记录成功事件。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `rbac` - 授权源
-/// * `candidate` - 新建回款候选
-/// * `actor` - 提交人
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回已落盘回款与冻结绑定。
-///
-/// # 错误
-/// 回款单号重复、绑定失败或写入失败时返回错误。
+// 在调用方事务内落盘新建回款的注册行、绑定与实体；主命令统一记录成功事件。
+//
+// `candidate` 为新建回款候选；`actor` 为提交人。返回已落盘回款与冻结绑定。回款单号重复、绑定失败或写入失败时返回错误。
 pub(super) async fn create_new_commit_records(
     db: &Database,
     rbac: &FinancePostingPorts,
@@ -499,19 +422,11 @@ pub(super) async fn create_new_commit_records(
     Ok((candidate, binding))
 }
 
-/// 在调用方事务内读取已有草稿并校验期望版本与审批绑定。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `receipt_id` - 已有草稿主键
-/// * `expected_version` - 调用方期望版本
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回已有回款与冻结绑定。
-///
-/// # 错误
-/// 草稿不存在、版本不一致或缺少审批绑定时返回错误。
+// 在调用方事务内读取已有草稿并校验期望版本与审批绑定。
+//
+// `receipt_id` 为已有草稿主键；`expected_version` 为调用方期望版本。返回已有回款与冻结绑定。
+//
+// 草稿不存在、版本不一致或缺少审批绑定时返回错误。
 async fn load_existing_commit_records(
     db: &Database,
     receipt_id: &str,
@@ -548,20 +463,9 @@ pub(super) struct LoadedCommitStart {
     pub(super) actor: AuditActor,
 }
 
-/// 在调用方事务内落盘新建回款或读取已有草稿，收敛为统一二元组。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `rbac` - 授权源
-/// * `pending` - 待提交的新建候选或已有草稿身份
-/// * `actor` - 提交人
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回回款实体与冻结绑定。
-///
-/// # 错误
-/// 新建冲突、草稿缺失或版本不一致时返回错误。
+// 在调用方事务内落盘新建回款或读取已有草稿，收敛为统一二元组。
+//
+// `pending` 为待提交的新建候选或已有草稿身份；`actor` 为提交人。返回回款实体与冻结绑定。新建冲突、草稿缺失或版本不一致时返回错误。
 pub(super) async fn load_commit_receipt(
     db: &Database,
     rbac: &FinancePostingPorts,
@@ -588,20 +492,11 @@ pub(super) async fn load_commit_receipt(
     }
 }
 
-/// 在调用方事务内执行启动装配、运行事实持久化与命令审计。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `request` - 已加载的回款、绑定、分配与身份
-/// * `command_receipt` - 提交幂等收据
-/// * `context` - 业务写入前已校验的命令事件上下文
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回进入审批后的回款实体。
-///
-/// # 错误
-/// 快照、定义图、启动装配或写入失败时返回错误。
+// 在调用方事务内执行启动装配、运行事实持久化与命令审计。
+//
+// `request` 为已加载的回款、绑定、分配与身份；`context` 为业务写入前已校验的命令事件上下文。返回进入审批后的回款实体。
+//
+// 快照、定义图、启动装配或写入失败时返回错误。
 pub(super) async fn persist_loaded_commit_start(
     db: &Database,
     rbac: &FinancePostingPorts,
@@ -664,7 +559,7 @@ pub(super) async fn persist_loaded_commit_start(
     Ok(committed)
 }
 
-/// 在原事务读取冻结定义及启动回执，并解析本次提交的正式审批人员。
+// 在原事务读取冻结定义及启动回执，并解析本次提交的正式审批人员。
 async fn load_receipt_start_graph(
     db: &Database,
     rbac: &FinancePostingPorts,
@@ -691,7 +586,7 @@ async fn load_receipt_start_graph(
     Ok((graph, subject, existing))
 }
 
-/// 按原顺序准备提交快照、责任组织和对象可读资格。
+// 按原顺序准备提交快照、责任组织和对象可读资格。
 fn receipt_start_metadata(
     receipt: &CustomerReceipt,
     actor: &AuditActor,
@@ -703,24 +598,10 @@ fn receipt_start_metadata(
     Ok((snapshot, organization_id))
 }
 
-/// 由绑定与快照装配分发路径的统一启动输入。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `rbac` - 调用方共享身份与审批能力。
-/// * `binding` - 创建时冻结的定义绑定
-/// * `subject` - 业务对象引用
-/// * `subject_version` - 冻结提交版本
-/// * `organization_id` - 责任组织
-/// * `actor_id` - 提交人
-/// * `idempotency_key` - 幂等键
-/// * `now` - 调用方时间
-///
-/// # 返回
-/// 返回可交给统一 `prepare_start` 的启动编排输入装配后的待执行。
-///
-/// # 错误
-/// 定义图、收据读取或输入装配失败时返回错误。
+// 由绑定与快照装配分发路径的统一启动输入。
+//
+// `rbac` 为调用方共享身份与审批能力；`binding` 为创建时冻结的定义绑定；`subject_version` 为冻结提交版本；`organization_id` 为责任组织；`actor_id`
+// 为提交人；使用调用方提供的幂等键。返回可交给统一 `prepare_start` 的启动编排输入装配后的待执行。定义图、收据读取或输入装配失败时返回错误。
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn prepare_dispatch_start(
     db: &Database,

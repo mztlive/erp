@@ -73,21 +73,12 @@ pub use supplier_qualification_capability::{
 pub use supplier_qualification_revision::{SupplierQualificationRevision, SupplierQualificationRevisionData};
 pub use supplier_rating_revision::{SupplierRating, SupplierRatingRevision, SupplierRatingRevisionData};
 
-/// 校验生效区间：`valid_to` 必须晚于 `valid_from`。
-///
-/// 能力现档/修订与评级修订的窗口规则唯一来源；空结束日期表示长期有效。
-/// 资质窗口另经 [`QualificationType::ensure_validity_window`] 处理可空起始日，
-/// 倒挂判定转调本函数。
-///
-/// # 参数
-/// * `valid_from` - 生效开始日期
-/// * `valid_to` - 生效结束日期；`None` 表示长期有效
-///
-/// # 返回
-/// 区间合法返回 `Ok(())`。
-///
-/// # 错误
-/// 结束日期不晚于开始日期时返回错误。
+// 校验生效区间：`valid_to` 必须晚于 `valid_from`。
+// 能力现档/修订与评级修订的窗口规则唯一来源；空结束日期表示长期有效。资质窗口另经
+// [`QualificationType::ensure_validity_window`] 处理可空起始日，倒挂判定转调本函数。
+// 区间合法返回 `Ok(())`。
+// 结束日期不晚于开始日期时返回错误。
+// `valid_to`：生效结束日期；`None` 表示长期有效。
 pub(crate) fn ensure_window_valid(
     valid_from: erp_core::common::time::BusinessDate,
     valid_to: Option<erp_core::common::time::BusinessDate>,
@@ -101,14 +92,7 @@ pub(crate) fn ensure_window_valid(
 }
 
 /// 返回供应商追加式修订序列的下一号。
-///
-/// # 参数
-/// * `revision_numbers` - 已有修订号迭代器
-///
-/// # 返回
 /// 无历史时返回 `1`，否则返回最大修订号加一。
-///
-/// # 错误
 /// 当前最大修订号已达到 `u32::MAX` 时返回业务错误。
 pub fn next_supplier_revision_no(revision_numbers: impl IntoIterator<Item = u32>) -> erp_core::Result<u32> {
     revision_numbers
@@ -131,15 +115,7 @@ pub struct SupplierQualificationSelection<'a> {
 }
 
 /// 校验根资料命令中的能力与资质选择关系。
-///
-/// # 参数
-/// * `capability_codes` - 根资料勾选的供应商能力
-/// * `qualifications` - 根资料提交的资质选择项
-///
-/// # 返回
 /// 能力不重复、资质身份不重复且所有资质仅引用已勾选能力时返回 `Ok(())`。
-///
-/// # 错误
 /// 能力重复、同类证书编号重复或资质引用未勾选能力时返回业务错误。
 pub fn validate_profile_selection(
     capability_codes: &[CapabilityCode],
@@ -171,7 +147,7 @@ mod profile_selection_tests {
         validate_profile_selection,
     };
 
-    /// 修订序列从一开始、按最大值推进并拒绝溢出。
+    // 验证修订序列从一开始、按最大值推进并拒绝溢出。
     #[test]
     fn revision_sequence_starts_at_one_and_advances_maximum() {
         assert_eq!(next_supplier_revision_no([]).unwrap(), 1);
@@ -179,7 +155,7 @@ mod profile_selection_tests {
         assert!(next_supplier_revision_no([u32::MAX]).is_err());
     }
 
-    /// 唯一能力及其覆盖资质可以通过根资料校验。
+    // 验证唯一能力及其覆盖资质可以通过根资料校验。
     #[test]
     fn profile_selection_accepts_unique_covered_qualifications() {
         let qualification_codes = [CapabilityCode::Physical];
@@ -191,7 +167,7 @@ mod profile_selection_tests {
         assert!(validate_profile_selection(&[CapabilityCode::Physical], &qualifications).is_ok());
     }
 
-    /// 重复能力、重复资质身份和未勾选能力引用均被拒绝。
+    // 验证重复能力、重复资质身份和未勾选能力引用均被拒绝。
     #[test]
     fn profile_selection_rejects_duplicates_and_unselected_capabilities() {
         assert!(

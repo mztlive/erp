@@ -38,13 +38,15 @@ pub struct HistoricalDirectoryView {
     pub empty_reason: Option<String>,
 }
 impl HistoricalDirectoryView {
-    /// 聚合冻结身份、并列历史名称，组织包含直接归属及当时祖先路径。
-    /// # 参数
-    /// `rows` 是完整授权期间订单的归属；`scope_version` 绑定该来源快照。
-    /// # 返回
-    /// 稳定身份排序的完整候选，无历史数据时标记 `no_data`。
-    /// # 错误
-    /// 任一候选维度超过 10000 项整体拒绝，不截断。
+    // 生成历史归属目录视图时，聚合冻结身份、并列历史名称，组织包含直接归属及当时祖先路径。
+    //
+    // 调用参数：
+    // `rows` 是完整授权期间订单的归属；`scope_version` 绑定该来源快照。
+    //
+    // 稳定身份排序的完整候选，无历史数据时标记 `no_data`。
+    //
+    // 失败边界：
+    // 任一候选维度超过 10000 项整体拒绝，不截断。
     pub(crate) fn from_attributions<'a>(
         rows: impl Iterator<Item = &'a SalesAttribution>,
         scope_version: String,
@@ -72,7 +74,7 @@ impl HistoricalDirectoryView {
         })
     }
 }
-/// 冻结身份不因当前账号删除、改名或组织移动而变化。
+// 处理历史归属目录时，冻结身份不因当前账号删除、改名或组织移动而变化。
 fn remember(values: &mut BTreeMap<String, BTreeSet<String>>, id: &str, name: &str) {
     if id.trim().is_empty() {
         return;
@@ -82,7 +84,7 @@ fn remember(values: &mut BTreeMap<String, BTreeSet<String>>, id: &str, name: &st
         names.insert(name.to_owned());
     }
 }
-/// 同名不同身份不合并；一个身份的多个历史名称稳定并列。
+// 补齐历史归属目录的展示名称时，同名不同身份不合并；一个身份的多个历史名称稳定并列。
 fn labels(values: BTreeMap<String, BTreeSet<String>>) -> Vec<FilterOption> {
     values
         .into_iter()

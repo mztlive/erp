@@ -17,20 +17,10 @@ pub(super) const MEMBERS: &str = "supplier_catalog_pool_members";
 /// 本域目录池仓储访问器；不暴露其他领域集合。
 pub trait CatalogMembershipExt {
     /// 取得当前数据库的完整范围扫描仓储。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 扫描证据仓储。
-    /// # 错误
-    /// 不返回错误。
     fn supplier_catalog_membership_scans(&self) -> Repository<'_, CatalogMembershipScan>;
     /// 取得当前数据库的目录池成员仓储。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 账号连接专属成员仓储。
-    /// # 错误
-    /// 不返回错误。
     fn supplier_catalog_pool_members(&self) -> Repository<'_, CatalogPoolMember>;
 }
 
@@ -44,12 +34,9 @@ impl CatalogMembershipExt for Database {
 }
 
 /// 保存一页成员与完整范围进度，不自行开启或提交事务。
-/// # 参数
-/// 所有归属来自服务端任务；`page` 为来源证据，执行器须与目录检查点相同。
-/// # 返回
 /// 本页保存后的扫描状态；Uncertain 只保留正向观察。
-/// # 错误
 /// 并发扫描、账号变化、跳页、唯一冲突或数据库错误时拒绝。
+/// 所有归属来自服务端任务；`page` 为来源证据，执行器须与目录检查点相同。
 pub async fn record_page(
     db: &Database,
     connection: &str,
@@ -158,12 +145,9 @@ async fn save_member(
 }
 
 /// 有界读取完整范围内本轮未见的旧成员。
-/// # 参数
-/// `after` 为稳定成员 ID 游标，`limit` 必须为 1 至 100；调用方保留事务边界。
-/// # 返回
 /// 按 ID 排序的旧成员；其他账号、连接及池不进入核对。
-/// # 错误
 /// 扫描没有完整资格、已经中止或仓储失败时拒绝。
+/// `after` 为稳定成员 ID 游标，`limit` 必须为 1 至 100；调用方保留事务边界。
 pub async fn reconciliation_candidates(
     db: &Database,
     scan: &CatalogMembershipScan,
@@ -189,12 +173,9 @@ pub async fn reconciliation_candidates(
 }
 
 /// 将一条完整范围内的旧成员标记为本轮未见，不删除历史来源身份。
-/// # 参数
-/// `scan` 为完整范围，`member` 来自同一有界核对查询，执行器属外层结果事务。
-/// # 返回
 /// 成员失活或已被本轮正向观察保护时完成。
-/// # 错误
 /// 扫描失效、归属冲突或数据库失败时拒绝。
+/// `scan` 为完整范围，`member` 来自同一有界核对查询，执行器属外层结果事务。
 pub async fn retire_member(
     db: &Database,
     scan: &CatalogMembershipScan,
@@ -223,11 +204,7 @@ pub async fn retire_member(
 }
 
 /// 判断同订货规格本轮是否仍在任一明确授权池观察到。
-/// # 参数
-/// `spec_id` 是当前旧成员的订货身份，不能用商品名或不确定分组替代。
-/// # 返回
 /// 至少一个授权池有本轮正向成员时为真，禁止撤回该 SKU。
-/// # 错误
 /// 范围不完整或扫描失效时返回错误，不返回可被误解为缺项的假值。
 pub async fn has_current_membership(
     db: &Database,
@@ -244,12 +221,9 @@ pub async fn has_current_membership(
 }
 
 /// 完成所有旧成员核对并释放本账号扫描围栏。
-/// # 参数
-/// `scan` 来自当前任务；调用方须与最后一批目录结果共用事务。
-/// # 返回
 /// 当前完整范围成为新的 Reconciled 基线。
-/// # 错误
 /// 仍有待核对成员、范围已失效或仓储失败时拒绝。
+/// `scan` 来自当前任务；调用方须与最后一批目录结果共用事务。
 pub async fn finish_reconciliation(
     db: &Database,
     scan: &CatalogMembershipScan,
@@ -283,12 +257,9 @@ pub async fn finish_reconciliation(
 }
 
 /// 中止确定失败的本地扫描，保留正向观察并释放围栏。
-/// # 参数
-/// `job` 为当前已结算失败任务；正常发布后恢复的原任务不得调用。
-/// # 返回
 /// 已存在扫描转为待核实；没有扫描时不写入。
-/// # 错误
 /// 数据库读取或并发更新失败时返回错误。
+/// `job` 为当前已结算失败任务；正常发布后恢复的原任务不得调用。
 pub async fn abort_scan(db: &Database, job: &str, executor: &mut dyn Executor) -> Result<()> {
     let Some(mut scan) = db.supplier_catalog_membership_scans().find_by_id(job, executor).await? else {
         return Ok(());
@@ -326,11 +297,7 @@ fn stale_filter(scan: &CatalogMembershipScan) -> Document {
 }
 
 /// 由订货规格反查当前连接的来源目录，避免依赖未知 SPU 分组。
-/// # 参数
-/// `connection` 与 `spec_id` 来自已核实成员身份，不接受跨连接范围。
-/// # 返回
 /// 最多两条候选；超过一条时调用方必须阻断身份不明的负向应用。
-/// # 错误
 /// 身份为空或数据库查询失败时拒绝。
 pub async fn catalog_items_for_spec(
     db: &Database,

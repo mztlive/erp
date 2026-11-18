@@ -33,16 +33,8 @@ pub(super) struct SupplierViewAssembleInput {
     pub as_of: BusinessDate,
 }
 
-/// 将批量读取结果按稳定 ID 装配为供应商列表/详情统一视图。
-///
-/// # 参数
-/// * `input` - 投影行与水合事实
-///
-/// # 返回
-/// 返回与输入行顺序一致的供应商视图。
-///
-/// # 错误
-/// 无。
+// 将批量读取结果按稳定 ID 装配为供应商列表/详情统一视图。
+// 返回与输入行顺序一致的供应商视图。
 pub(super) fn assemble_supplier_views(input: SupplierViewAssembleInput) -> Vec<SupplierView> {
     let context = SupplierRowContext {
         parties: party_by_id(input.parties),
@@ -77,17 +69,8 @@ struct SupplierRowContext<'a> {
     as_of: BusinessDate,
 }
 
-/// 装配单行供应商视图。
-///
-/// # 参数
-/// * `row` - 供应商投影行
-/// * `context` - 已按 ID 建好的水合字典
-///
-/// # 返回
-/// 返回该行的列表视图。
-///
-/// # 错误
-/// 无。
+// 装配单行供应商视图。
+// 返回该行的列表视图。
 fn assemble_one_supplier_view(row: SupplierAccountRow, context: &SupplierRowContext<'_>) -> SupplierView {
     let party = context.parties.get(&row.party_id);
     let revision =
@@ -130,17 +113,8 @@ fn assemble_one_supplier_view(row: SupplierAccountRow, context: &SupplierRowCont
     }
 }
 
-/// 把商务资料映射为带主体名称的视图。
-///
-/// # 参数
-/// * `profile` - 商务资料实体
-/// * `names` - 主体 ID 到法定名称
-///
-/// # 返回
-/// 返回填好签约/付款主体名称的商务资料视图。
-///
-/// # 错误
-/// 无。
+// 把商务资料映射为带主体名称的视图。
+// 返回填好签约/付款主体名称的商务资料视图。
 fn named_profile(
     profile: SupplierCommercialProfileRevision,
     names: &HashMap<String, String>,
@@ -150,49 +124,28 @@ fn named_profile(
     view
 }
 
-/// 按主体 ID 建字典。
-///
-/// # 参数
-/// * `parties` - 主体列表事实
-///
-/// # 返回
-/// 返回主体 ID 到事实的映射。
+// 按主体 ID 建字典。
+// 返回主体 ID 到事实的映射。
 fn party_by_id(parties: Vec<PartyListFact>) -> HashMap<String, PartyListFact> {
     parties.into_iter().map(|party| (party.id.clone(), party)).collect()
 }
 
-/// 按修订 ID 建字典。
-///
-/// # 参数
-/// * `revisions` - 主体名称修订
-///
-/// # 返回
-/// 返回修订 ID 到事实的映射。
+// 按修订 ID 建字典。
+// 返回修订 ID 到事实的映射。
 fn revision_by_id(revisions: Vec<PartyRevisionFact>) -> HashMap<String, PartyRevisionFact> {
     revisions.into_iter().map(|revision| (revision.id.clone(), revision)).collect()
 }
 
-/// 按商务资料 ID 建字典。
-///
-/// # 参数
-/// * `profiles` - 商务资料版本
-///
-/// # 返回
-/// 返回资料 ID 到实体的映射。
+// 按商务资料 ID 建字典。
+// 返回资料 ID 到实体的映射。
 fn profile_by_id(
     profiles: Vec<SupplierCommercialProfileRevision>,
 ) -> HashMap<String, SupplierCommercialProfileRevision> {
     profiles.into_iter().map(|profile| (profile.base.id.clone(), profile)).collect()
 }
 
-/// 按供应商折叠当前有效能力代码。
-///
-/// # 参数
-/// * `capabilities` - 当前页能力
-/// * `as_of` - 判定业务日
-///
-/// # 返回
-/// 返回供应商 ID 到去重能力代码的映射。
+// 按供应商折叠当前有效能力代码。
+// 返回供应商 ID 到去重能力代码的映射。
 fn capability_codes_by_supplier(
     capabilities: &[SupplierCapability],
     as_of: BusinessDate,
@@ -208,13 +161,8 @@ fn capability_codes_by_supplier(
         .collect()
 }
 
-/// 按供应商分组资质引用。
-///
-/// # 参数
-/// * `qualifications` - 当前页资质
-///
-/// # 返回
-/// 返回供应商 ID 到资质引用列表的映射。
+// 按供应商分组资质引用。
+// 返回供应商 ID 到资质引用列表的映射。
 fn qualifications_by_supplier(
     qualifications: &[SupplierQualification],
 ) -> HashMap<String, Vec<&SupplierQualification>> {
@@ -253,7 +201,7 @@ mod tests {
         BusinessDate::from_ymd(2026, 8, 31).unwrap()
     }
 
-    /// 列表装配写入能力、资质健康度与签约主体名称。
+    // 验证列表装配写入能力、资质健康度与签约主体名称。
     #[test]
     fn assemble_fills_list_projection() {
         let profile = SupplierCommercialProfileRevision::new(

@@ -22,17 +22,8 @@ use crate::entity::fulfillment::{
 use crate::repository::FulfillmentExt;
 use crate::{Error, Result};
 impl super::FulfillmentService {
-    /// 校验工作台任务身份必须与期望版本成对提供，保持正式命令入口首错。
-    ///
-    /// # 参数
-    /// * `work_item_id` - 工作台任务主键；须与 `expected_task_version` 同有或同无
-    /// * `expected_task_version` - 任务期望版本
-    ///
-    /// # 返回
-    /// 两项同时提供或同时缺省时无返回值。
-    ///
-    /// # 错误
-    /// 只提供其中一项时返回 `ValidationError`。
+    /// 先校验工作台任务 ID 与期望任务版本是否同时提供或同时省略，避免把只携带一项的请求当作无任务登记。
+    /// 两项缺一时立即返回 `ValidationError`，保留正式命令的校验顺序。
     pub fn validate_customer_acceptance_task_context(
         work_item_id: Option<&str>,
         expected_task_version: Option<u64>,
@@ -43,17 +34,7 @@ impl super::FulfillmentService {
         Err(Error::ValidationError("客户验收任务主键和期望版本必须同时提供".to_string()))
     }
 
-    /// 在根事务前按原顺序构建验收行与行 ID；正式命令和原草稿共用领域规则。
-    ///
-    /// # 参数
-    /// * `id` - 验收单主键
-    /// * `lines` - 验收行输入
-    ///
-    /// # 返回
-    /// 返回按输入顺序构造的验收行。
-    ///
-    /// # 错误
-    /// 行批量构造失败时返回 `Logic`。
+    /// 正式登记和草稿共用同一验收行规则。在根事务前为输入逐行分配 ID 并保持原顺序；批量构造失败映射为 `Logic`。
     pub fn build_customer_acceptance_lines(
         id: CustomerAcceptanceId,
         lines: &[AcceptanceLineInput],
@@ -72,19 +53,8 @@ impl super::FulfillmentService {
         CustomerAcceptanceLineBatch::build(id, specs).map_err(Error::Logic)
     }
 
-    /// 加载可继续登记的草稿；新登记返回 `None`，不提前读取销售或任务。
-    ///
-    /// # 参数
-    /// * `db` - 数据库实例
-    /// * `req` - 客户验收登记请求；未带 `acceptance_id` 时表示新建
-    /// * `session` - 调用方事务执行器
-    ///
-    /// # 返回
-    /// 已有草稿返回 `Some`；请求未带验收单主键时返回 `None`。
-    ///
-    /// # 错误
-    /// 指定草稿不存在时返回 `NotFound`；草稿不属于当前销售单、不是草稿或版本不一致时返回
-    /// `ConflictError`；已有草稿缺少期望版本时返回 `ValidationError`；查询失败时返回对应错误。
+    /// 登记带原验收单 ID 时，沿根事务读取该销售单的草稿并核对期望版本；新登记直接返回 `None`，不抢先读取销售或责任任务。
+    /// 草稿不存在返回 `NotFound`，缺少期望版本返回 `ValidationError`，销售归属、草稿状态或版本不符返回 `ConflictError`；传播读取错误。
     pub async fn load_customer_acceptance_commit_draft(
         db: &Database,
         req: &CommitCustomerAcceptanceRequest,
@@ -102,19 +72,8 @@ impl super::FulfillmentService {
         Ok(Some(existing))
     }
 
-    /// 任务身份准备成功后构造或更新验收表头；返回是否需先注册新的业务单据。
-    ///
-    /// # 参数
-    /// * `existing` - 已加载的草稿；`None` 表示新建
-    /// * `acceptance_id` - 新建时使用的验收单主键
-    /// * `req` - 登记请求
-    /// * `generated_acceptance_no` - 新建时的服务端单号；更新已有草稿时不使用
-    ///
-    /// # 返回
-    /// 返回验收表头，以及是否为新建（`true` 表示调用方须先注册业务单据）。
-    ///
-    /// # 错误
-    /// 更新已有表头失败时返回对应错误；新建缺少单号时返回 `Internal`；新建表头构造失败时返回对应错误。
+    /// 任务身份检查通过后，更新已加载草稿的验收时间、结果和凭证，或用服务端分配的身份及单号新建表头。
+    /// 返回值的布尔位标识新建；为 `true` 时根流程须先注册业务单据。新建缺少单号返回 `Internal`，非法实体变更返回原错误。
     pub fn prepare_customer_acceptance_commit(
         existing: Option<CustomerAcceptance>,
         acceptance_id: &CustomerAcceptanceId,
@@ -148,23 +107,9 @@ impl super::FulfillmentService {
         }
     }
 
-    /// 写入登记表头/行、逐条履约分配与过账状态；新表头已由根流程完成无绑定注册。
-    ///
-    /// 验证和 ID 生成仍穿插在原逐行写入位置，不提前生成全部分配。
-    ///
-    /// # 参数
-    /// * `db` - 数据库实例
-    /// * `acceptance` - 待写入并过账的验收表头
-    /// * `is_new` - 为 `true` 时创建表头与行，否则更新表头并替换行
-    /// * `final_lines` - 最终验收行
-    /// * `req` - 登记请求，提供逐行分配
-    /// * `session` - 调用方事务执行器
-    ///
-    /// # 返回
-    /// 写入并标记过账成功时无返回值。
-    ///
-    /// # 错误
-    /// 缺少签收凭证、分配校验或写入失败、不能过账，或仓储写入失败时返回对应错误。
+    /// 登记提交时，在调用方事务先要求签收凭证，再创建表头和明细或更新草稿并替换明细；新单应已由根流程注册。
+    /// 按验收行顺序校验并写入履约分配，每条分配在其写入位置生成 ID，最后标记表头过账。
+    /// 凭证缺失、分配非法、无法过账或任一仓储操作失败时返回错误，由根流程决定提交或回滚。
     pub async fn persist_customer_acceptance_commit(
         db: &Database,
         acceptance: &mut CustomerAcceptance,
@@ -198,18 +143,8 @@ impl super::FulfillmentService {
         Ok(())
     }
 
-    /// 过账前读取并拒绝非草稿验收；任务读取必须位于本守卫之后。
-    ///
-    /// # 参数
-    /// * `db` - 数据库实例
-    /// * `acceptance_id` - 验收单主键
-    /// * `session` - 调用方事务执行器
-    ///
-    /// # 返回
-    /// 返回仍为草稿的验收单。
-    ///
-    /// # 错误
-    /// 验收单不存在时返回 `NotFound`；不是草稿时返回 `ConflictError`；查询失败时返回对应错误。
+    /// 普通过账在加载任务前先读取原验收单并要求草稿状态，沿调用方事务保留校验顺序。
+    /// 找不到验收单返回 `NotFound`，不是草稿返回 `ConflictError`；传播查询错误。
     pub async fn load_customer_acceptance_for_post(
         db: &Database,
         acceptance_id: &CustomerAcceptanceId,
@@ -224,19 +159,8 @@ impl super::FulfillmentService {
         Ok(acceptance)
     }
 
-    /// 当前责任任务准备成功后，校验并持久化草稿的履约分配及过账状态。
-    ///
-    /// # 参数
-    /// * `db` - 数据库实例
-    /// * `acceptance` - 待过账的草稿验收单
-    /// * `req` - 过账请求，提供逐行分配
-    /// * `session` - 调用方事务执行器
-    ///
-    /// # 返回
-    /// 分配写入并标记过账成功时无返回值。
-    ///
-    /// # 错误
-    /// 缺少签收凭证、验收行不完整或与请求不一致、分配校验或写入失败、不能过账，或仓储写入失败时返回对应错误。
+    /// 责任任务准备完成后，沿调用方事务校验草稿的签收凭证、已保存验收行以及与过账请求的一致性。
+    /// 逐行校验守恒并写入履约分配，再标记验收单过账；凭证、行、分配、状态或数据库操作不满足时中止并返回原错误。
     pub async fn persist_customer_acceptance_post(
         db: &Database,
         acceptance: &mut CustomerAcceptance,
@@ -267,21 +191,9 @@ impl super::FulfillmentService {
         Ok(())
     }
 
-    /// 校验原验收并按原顺序写反向验收、反向分配和原单冲正状态。
-    ///
-    /// 返回原单和新反向单，供根流程继续刷新销售与任务；本接口不写审计或销售。
-    ///
-    /// # 参数
-    /// * `db` - 数据库实例
-    /// * `original_id` - 原验收单主键
-    /// * `req` - 冲正请求，含期望版本与原因
-    /// * `session` - 调用方事务执行器
-    ///
-    /// # 返回
-    /// 返回已冲正的原单和已过账的反向单。
-    ///
-    /// # 错误
-    /// 原单不存在时返回 `NotFound`；原单或来源分配不可冲正时返回 `ConflictError`；反向单、反向行构造失败或写入失败时返回对应错误。
+    /// 在调用方事务按请求版本校验原验收单和来源分配，先写反向单及逐条反向分配，再把原单标为冲正。
+    /// 返回已冲正原单和已过账反向单，供根流程刷新销售与任务；本方法不写销售或审计。
+    /// 原单不存在返回 `NotFound`，版本、状态或来源分配不可冲正返回 `ConflictError`；构造或仓储失败返回原错误。
     pub async fn persist_customer_acceptance_reverse(
         db: &Database,
         original_id: &CustomerAcceptanceId,
@@ -337,22 +249,8 @@ impl super::FulfillmentService {
     }
 }
 
-/// 构造反向验收行与反向分配（冲正构造段；纯内存，无 I/O）。
-///
-/// 行号与数量沿用原行，依据说明替换为冲正原因；分配动作统一为 `Reverse` 并
-/// 引用原分配。行 ID 与分配 ID 由本函数内按原顺序生成。
-///
-/// # 参数
-/// * `reverse_acceptance_id` - 反向验收单主键
-/// * `original_lines` - 原验收行
-/// * `original_allocations` - 原验收分配（须全部为原始 `APPLY`，调用方已校验）
-/// * `reason_text` - 冲正原因说明
-///
-/// # 返回
-/// 返回（反向行，反向分配）；行与分配顺序与原集合一致。
-///
-/// # 错误
-/// 行/分配构造非法或分配缺少对应验收行时返回原错误。
+// 按原行号、数量和集合顺序构造反向行，记录本次冲正原因；每条 `Reverse` 分配引用对应的原 `Apply` 分配。
+// 调用方先校验原分配；这里只在内存中按顺序分配新 ID，原分配缺少对应行或实体非法时返回错误。
 fn build_reverse_lines_and_allocations(
     reverse_acceptance_id: &str,
     original_lines: &[CustomerAcceptanceLine],
@@ -406,23 +304,8 @@ fn build_reverse_lines_and_allocations(
     Ok((reverse_lines, reverse_allocations))
 }
 
-/// 写入反向验收表头/行/分配并登记双方状态（冲正写入段；调用方事务内）。
-///
-/// 纯写入编排：新建反向单过账、原单冲正引用登记；校验已在加载段完成。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `session` - 事务会话执行器
-/// * `original` - 已校验可冲正的原验收单（本函数内登记冲正状态）
-/// * `reverse_acceptance` - 已构造的反向验收表头（本函数内过账）
-/// * `reverse_lines` - 反向验收行
-/// * `reverse_allocations` - 反向履约分配
-///
-/// # 返回
-/// 返回（已冲正原单，已过账反向单）。
-///
-/// # 错误
-/// 任一写入或状态迁移失败时返回原错误。
+// 冲正校验完成后沿原事务写入反向表头、验收行和反向分配，先过账反向单，再登记原单的反向引用。
+// 返回两张单的更新后实体；传播状态迁移及仓储错误。
 async fn persist_reverse_acceptance(
     db: &Database,
     session: &mut dyn persistence_core::Executor,
@@ -447,21 +330,8 @@ async fn persist_reverse_acceptance(
     Ok((original, reverse_acceptance))
 }
 
-/// 按验收行顺序写入分配；每行使用销售明细匹配的首个请求行。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `session` - 事务会话执行器
-/// * `lines` - 验收行集合
-/// * `inputs` - （销售明细，请求分配）对
-/// * `missing_line_message` - 某验收行在请求中缺失时的错误文案
-/// * `sales_order_id` - 销售单（校验事实归属）
-///
-/// # 返回
-/// 全部行校验并写入完成后返回 `Ok(())`。
-///
-/// # 错误
-/// 行缺失、分配为空、守恒失败或单条写入失败时返回原错误。
+// 验收过账时按已保存行的顺序，以销售稳定明细匹配首个请求行，并在原事务逐行写分配。
+// 请求缺行、分配为空、数量不守恒、履约事实归属或写入失败时停止并返回原错误。
 async fn write_matched_line_allocations<'a>(
     db: &Database,
     session: &mut dyn persistence_core::Executor,
@@ -480,20 +350,8 @@ async fn write_matched_line_allocations<'a>(
     Ok(())
 }
 
-/// 校验单行分配守恒并逐条写入分配。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `session` - 事务会话执行器
-/// * `line` - 当前验收行
-/// * `allocations` - 当前行请求分配
-/// * `sales_order_id` - 销售单（校验事实归属）
-///
-/// # 返回
-/// 单行校验并写入完成后返回 `Ok(())`。
-///
-/// # 错误
-/// 分配为空、守恒失败或单条写入失败时返回原错误。
+// 先要求当前验收行至少一条分配且分配数量守恒，再沿原事务逐条校验归属并写入。
+// 空分配、数量不守恒或任一分配校验与写入失败时停止。
 async fn write_single_line_allocations(
     db: &Database,
     session: &mut dyn persistence_core::Executor,
@@ -513,15 +371,10 @@ async fn write_single_line_allocations(
     Ok(())
 }
 
-/// 校验显式提交的既有验收单仍是当前销售单的可编辑草稿。
-///
-/// # 参数
-/// * `existing` - 按草稿主键找到的既有验收单
-/// * `sales_order_id` - 当前提交所属销售单
-/// * `expected_version` - 客户端提交的草稿期望版本
-///
-/// # 错误
-/// 验收单不属于当前销售单、不是草稿、缺少版本或版本冲突时返回错误。
+// 校验显式提交的既有验收单仍是当前销售单的可编辑草稿。
+// `existing` 按草稿主键找到的既有验收单；`sales_order_id` 为当前提交所属销售单。
+// `expected_version` 为客户端提交的草稿期望版本。
+// 验收单不属于当前销售单、不是草稿、缺少版本或版本冲突时返回错误。
 fn ensure_existing_acceptance_draft(
     existing: &CustomerAcceptance,
     sales_order_id: &SalesOrderId,
@@ -538,17 +391,10 @@ fn ensure_existing_acceptance_draft(
     Ok(())
 }
 
-/// 校验过账分配与草稿验收行一一对应且数量一致（§8.2 第 5 条「锁定验收行」）。
-///
-/// # 参数
-/// * `lines` - 草稿验收行
-/// * `inputs` - 过账请求行
-///
-/// # 返回
-/// 一致返回 `Ok(())`。
-///
-/// # 错误
-/// 行集合不一致时返回 `ValidationError`。
+// 校验过账分配与草稿验收行一一对应且数量一致（§8.2 第 5 条「锁定验收行」）。
+// 一致返回 `Ok(())`。
+// `lines` 为草稿验收行；`inputs` 为过账请求行。
+// 行集合不一致时返回 `ValidationError`。
 fn ensure_post_lines_match(
     lines: &[CustomerAcceptanceLine],
     inputs: &[PostAcceptanceLineInput],
@@ -559,24 +405,13 @@ fn ensure_post_lines_match(
         .map_err(|error| Error::ValidationError(error.to_string()))
 }
 
-/// 写入单条验收履约分配并校验净验收上限（§8.2 第 5 条，位于调用方事务内）。
-///
-/// 校验履约事实存在、属于同一销售明细且处于有效状态；净验收（既有 APPLY −
-/// REVERSE + 本次）不得超过该事实的净成功履约数量。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `session` - 事务会话执行器
-/// * `line_id` - 验收行主键
-/// * `allocation` - 分配输入
-/// * `acceptance_line` - 验收行（销售明细归属）
-/// * `sales_order_id` - 销售单（校验事实归属）
-///
-/// # 返回
-/// 无返回值；写入失败时返回错误。
-///
-/// # 错误
-/// 事实不存在/状态无效/归属不符或净验收超上限时返回 `ValidationError`。
+// 写入单条验收履约分配并校验净验收上限（§8.2 第 5 条，位于调用方事务内）。
+// 校验履约事实存在、属于同一销售明细且处于有效状态；净验收（既有 APPLY − REVERSE + 本次）不得超过该事实的净成功履约数量。
+// 写入失败时返回错误。
+// 沿用调用方当前事务的执行器 `session`；`line_id` 为验收行主键。
+// `allocation` 为分配输入；`acceptance_line` 为验收行（销售明细归属）。
+// `sales_order_id` 为销售单（校验事实归属）。
+// 事实不存在/状态无效/归属不符或净验收超上限时返回 `ValidationError`。
 async fn write_acceptance_allocation(
     db: &Database,
     session: &mut dyn persistence_core::Executor,
@@ -626,21 +461,12 @@ async fn write_acceptance_allocation(
     Ok(())
 }
 
-/// 加载履约事实的净成功数量并校验事实存在与状态有效。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `session` - 事务会话执行器
-/// * `fact_type` - 履约事实类型
-/// * `fact_id` - 履约事实行主键
-/// * `sales_order_id` - 销售单（校验归属）
-/// * `acceptance_line` - 验收行（校验销售稳定明细归属）
-///
-/// # 返回
-/// 返回净成功履约数量。
-///
-/// # 错误
-/// 事实不存在或状态无效时返回 `ValidationError`。
+// 加载履约事实的净成功数量并校验事实存在与状态有效。
+// 返回净成功履约数量。
+// 沿用调用方当前事务的执行器 `session`；`fact_type` 为履约事实类型。
+// `fact_id` 为履约事实行主键；`sales_order_id` 为销售单（校验归属）。
+// `acceptance_line` 为验收行（校验销售稳定明细归属）。
+// 事实不存在或状态无效时返回 `ValidationError`。
 async fn load_fulfillment_fact(
     db: &Database,
     session: &mut dyn persistence_core::Executor,
@@ -710,7 +536,7 @@ mod tests {
         }
     }
 
-    /// 构造最小客户验收草稿用于提交状态分流测试。
+    // 构造最小客户验收草稿用于提交状态分流测试。
     fn draft_acceptance(id: &str, acceptance_no: &str) -> CustomerAcceptance {
         CustomerAcceptance::new(
             CustomerAcceptanceId::new(id),
@@ -725,7 +551,7 @@ mod tests {
         .expect("测试验收草稿应合法")
     }
 
-    /// 仅当前销售单的显式草稿可以继续登记；已过账记录由命令收据回放。
+    // 验证仅当前销售单的显式草稿可以继续登记；已过账记录由命令收据回放。
     #[test]
     fn existing_acceptance_draft_guard_accepts_only_current_draft() {
         let mut posted = draft_acceptance("acceptance-posted", "YS-POSTED");
@@ -778,7 +604,7 @@ mod tests {
         );
     }
 
-    /// 已冲正记录不得被当作草稿继续登记。
+    // 验证已冲正记录不得被当作草稿继续登记。
     #[test]
     fn existing_acceptance_draft_guard_rejects_reversed_record() {
         let mut reversed = draft_acceptance("acceptance-reversed", "YS-REVERSED");

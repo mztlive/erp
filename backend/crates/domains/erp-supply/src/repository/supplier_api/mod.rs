@@ -63,15 +63,7 @@ pub struct SupplierConnectionOwnedImpact {
 }
 impl SupplierConnectionOwnedImpact {
     /// 消耗 `self`，把本域供给与订单计数和活动同步任务数合成治理影响。
-    ///
-    /// # 参数
-    /// * `active_sync_jobs` - 调用方取得的活动同步任务数
-    ///
-    /// # 返回
     /// 返回包含活动供给数、未完成订单数和活动同步任务数的 `SupplierConnectionImpact`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn with_active_sync_jobs(self, active_sync_jobs: u64) -> SupplierConnectionImpact {
         SupplierConnectionImpact {
             active_offerings: self.active_offerings,
@@ -103,30 +95,13 @@ pub struct SupplierApiRepository<'a> {
 }
 
 impl<'a> SupplierApiRepository<'a> {
-    /// 创建域专用仓储。
-    ///
-    /// # 参数
-    /// * `db` - 目标 MongoDB 数据库
-    ///
-    /// # 返回
-    /// 返回仓储实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 绑定供应商接口连接集合所在的数据库，供调用方通过仓储访问本域记录。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
 
     /// 按 ID 读取未删除连接。
-    ///
-    /// # 参数
-    /// * `connection_id` - 连接 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回匹配连接；不存在时返回 `None`。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询或反序列化失败时返回错误。
     pub async fn connection(
         &self,
@@ -139,16 +114,7 @@ impl<'a> SupplierApiRepository<'a> {
     }
 
     /// 按连接和能力代码读取未删除能力声明。
-    ///
-    /// # 参数
-    /// * `connection_id` - 连接 ID
-    /// * `capability_code` - 固定能力代码
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回匹配能力；不存在时返回 `None`。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询或反序列化失败时返回错误。
     pub async fn connection_capability(
         &self,
@@ -168,15 +134,7 @@ impl<'a> SupplierApiRepository<'a> {
     }
 
     /// 按连接读取全部能力声明。
-    ///
-    /// # 参数
-    /// * `connection_id` - 连接 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回按能力代码升序排列的完整实体。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询或反序列化失败时返回错误。
     pub async fn connection_capabilities(
         &self,
@@ -189,18 +147,9 @@ impl<'a> SupplierApiRepository<'a> {
     }
 
     /// 按幂等身份读取采购业务确认回执。
-    ///
-    /// # 参数
-    /// * `connection_id` - 连接 ID
-    /// * `confirmed_by` - 确认人账号 ID
-    /// * `idempotency_key_hash` - 客户端幂等键摘要
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回既有确认；不存在时返回 `None`。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询或反序列化失败时返回错误。
+    /// `idempotency_key_hash`：客户端幂等键摘要。
     pub async fn business_confirmation_receipt(
         &self,
         connection_id: &SupplierApiConnectionId,
@@ -214,15 +163,7 @@ impl<'a> SupplierApiRepository<'a> {
     }
 
     /// 按连接读取最新优先的采购业务确认。
-    ///
-    /// # 参数
-    /// * `connection_id` - 连接 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回最新确认优先的追加式历史。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询或反序列化失败时返回错误。
     pub async fn business_confirmations(
         &self,
@@ -235,15 +176,7 @@ impl<'a> SupplierApiRepository<'a> {
     }
 
     /// 按后台任务读取健康检查运行记录。
-    ///
-    /// # 参数
-    /// * `job_id` - 后台任务 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回匹配运行记录；不存在时返回 `None`。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询或反序列化失败时返回错误。
     pub async fn health_run_for_job(
         &self,
@@ -256,16 +189,7 @@ impl<'a> SupplierApiRepository<'a> {
     }
 
     /// 按连接读取最新优先的健康检查运行记录。
-    ///
-    /// # 参数
-    /// * `connection_id` - 连接 ID
-    /// * `limit` - 最大返回条数，仓储收敛到 `1..=100`
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回最新运行优先的健康检查历史。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询或反序列化失败时返回错误。
     pub async fn recent_health_runs(
         &self,
@@ -279,19 +203,9 @@ impl<'a> SupplierApiRepository<'a> {
     }
 
     /// 按幂等身份读取连接治理命令回执。
-    ///
-    /// # 参数
-    /// * `connection_id` - 连接 ID
-    /// * `action` - 固定治理动作
-    /// * `actor_id` - 操作人账号 ID
-    /// * `idempotency_key_hash` - 客户端幂等键摘要
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回既有命令回执；不存在时返回 `None`。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询或反序列化失败时返回错误。
+    /// `idempotency_key_hash`：客户端幂等键摘要。
     pub async fn command_receipt(
         &self,
         connection_id: &SupplierApiConnectionId,
@@ -306,16 +220,7 @@ impl<'a> SupplierApiRepository<'a> {
     }
 
     /// 批量读取连接治理上下文与停用影响。
-    ///
-    /// # 参数
-    /// * `connection_id` - 连接 ID
-    /// * `health_limit` - 最大健康检查历史条数
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回能力、采购确认、健康检查和活动业务影响。
-    ///
-    /// # 错误
     /// 任一 MongoDB 查询或反序列化失败时返回错误。
     pub async fn governance_data(
         &self,
@@ -331,25 +236,14 @@ impl<'a> SupplierApiRepository<'a> {
     }
 
     /// 建立连接及其能力声明（跨集合多步骤写入）。
-    ///
-    /// 依次写入 `supplier_api_connections` 与 `supplier_api_capabilities`，
-    /// 保证「连接配置 + 能力清单」原子可见（数据模型 §6.14）。
-    /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction`
-    /// 时两笔写入各自自动提交，中途失败会留下只有连接没有能力（或只有部分
-    /// 能力）的半成品；Service 必须通过
+    /// 依次写入 `supplier_api_connections` 与 `supplier_api_capabilities`，保证「连接配置 + 能力清单」原
+    /// 子可见（数据模型 §6.14）。**必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction`时两
+    /// 笔写入各自自动提交，中途失败会留下只有连接没有能力（或只有部分能力）的半成品；Service 必须通过
     /// `persistence_core::Transactional::with_transaction` 传入事务会话。
-    ///
-    /// # 参数
-    /// * `connection` - 待写入的连接配置
-    /// * `capabilities` - 待写入的能力声明清单
-    /// * `executor` - 数据访问执行器，必须位于事务中
-    ///
-    /// # 返回
     /// 连接与能力清单都写入成功时无返回值。
-    ///
-    /// # 错误
-    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射
-    /// 为冲突语义）或 MongoDB 写入失败时返回错误。
+    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射为冲突语义）或
+    /// MongoDB 写入失败时返回错误。
+    /// `executor`：数据访问执行器，必须位于事务中。
     pub async fn create_connection_with_capabilities(
         &self,
         connection: &SupplierApiConnection,
@@ -372,18 +266,9 @@ impl<'a> SupplierApiRepository<'a> {
     }
 
     /// 汇总连接停用前必须重验的活动业务影响。
-    ///
-    /// 读取同供给域的活动供给和未完成供应商订单，保留原顺序与状态。
-    /// 后台目录任务计数由组合层在本方法之后读取；查询不读取地址或密钥引用。
-    ///
-    /// # 参数
-    /// * `connection_id` - 待评估的供应商连接 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
+    /// 读取同供给域的活动供给和未完成供应商订单，保留原顺序与状态。后台目录任务计数由组合层在本方法之后
+    /// 读取；查询不读取地址或密钥引用。
     /// 返回活动供给和未完成订单计数。
-    ///
-    /// # 错误
     /// 任一 MongoDB 查询或反序列化失败时返回错误。
     pub async fn owned_connection_impact(
         &self,
@@ -404,17 +289,9 @@ impl<'a> SupplierApiRepository<'a> {
         Ok(SupplierConnectionOwnedImpact { active_offerings, open_supplier_orders })
     }
 
-    /// 读取连接下活动供给数量及其当前修订 ID。
-    ///
-    /// # 参数
-    /// * `connection_id` - 供应商连接 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回活动供给数量和非空当前修订 ID 集合。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    // 读取连接下活动供给数量及其当前修订 ID。
+    // 返回活动供给数量和非空当前修订 ID 集合。
+    // 当 MongoDB 查询或反序列化失败时返回错误。
     async fn active_offering_revisions(
         &self,
         connection_id: &SupplierApiConnectionId,

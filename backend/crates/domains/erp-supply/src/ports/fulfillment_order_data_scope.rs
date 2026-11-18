@@ -11,15 +11,7 @@ use crate::error::{Error, Result};
 #[async_trait]
 pub trait FulfillmentExceptionHandlerPort: Send + Sync {
     /// 按订单批量读取当前开放 W26 处理人。
-    ///
-    /// # 参数
-    /// * `order_ids` - 供应商履约订单 ID
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
     /// 返回订单 ID 到当前开放处理人的映射；无开放任务的订单省略。
-    ///
-    /// # 错误
     /// 未接线或查询失败时拒绝。
     async fn open_handler_user_ids(
         &self,
@@ -28,15 +20,7 @@ pub trait FulfillmentExceptionHandlerPort: Send + Sync {
     ) -> Result<HashMap<String, String>>;
 
     /// 列出当前开放 W26 处理人命中的订单 ID。
-    ///
-    /// # 参数
-    /// * `handler_user_ids` - 处理人稳定 ID
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
     /// 返回去重后的订单 ID；无命中时为空。
-    ///
-    /// # 错误
     /// 未接线或查询失败时拒绝。
     async fn order_ids_for_handlers(
         &self,
@@ -51,15 +35,7 @@ pub struct FailClosedFulfillmentExceptionHandlerPort;
 
 impl FailClosedFulfillmentExceptionHandlerPort {
     /// 返回未接线的共享处理人端口。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回失败关闭端口。
-    ///
-    /// # 错误
-    /// 无。
     pub fn shared() -> Arc<dyn FulfillmentExceptionHandlerPort> {
         Arc::new(Self)
     }
@@ -84,7 +60,7 @@ impl FulfillmentExceptionHandlerPort for FailClosedFulfillmentExceptionHandlerPo
     }
 }
 
-/// 未装配授权 Port 时的失败关闭错误。
+// 未装配授权 Port 时的失败关闭错误。
 fn unwired() -> Error {
     Error::Internal("供应商履约订单范围端口未接线".into())
 }

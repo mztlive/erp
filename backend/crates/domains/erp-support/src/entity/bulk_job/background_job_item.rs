@@ -108,11 +108,7 @@ pub struct BackgroundJobItem {
 
 impl BackgroundJobItem {
     /// 将已有的结果待确认项按原命令持久化回执确认成功。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 原待确认项更新为成功，其他结果字段保持不变。
-    /// # 错误
     /// 只有失败且标记为结果待确认的项可被确认。
     pub fn confirm_unknown_success(&mut self) -> Result<()> {
         if self.status != Some(ItemStatus::Failed) || self.result_code.as_deref() != Some("outcome_unknown") {
@@ -125,11 +121,7 @@ impl BackgroundJobItem {
     }
 
     /// 按原命令封存的确定拒绝回执解除结果待确认标记。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 保留失败状态，将原因改为已确认执行失败。
-    /// # 错误
     /// 原项目不是结果待确认时拒绝覆盖已有结果。
     pub fn confirm_unknown_failure(&mut self) -> Result<()> {
         if self.status != Some(ItemStatus::Failed) || self.result_code.as_deref() != Some("outcome_unknown") {
@@ -141,19 +133,9 @@ impl BackgroundJobItem {
     }
 
     /// 创建逐项记录。
-    ///
-    /// 完成可选字段的校验与规范化（trim、长度上限），并强制两条关联一致性：
-    /// `object_type` 与 `object_id` 必须同时提供或同时省略；`item_no` 从 1 起
-    /// 递增（为 0 视为越界拒绝）。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::BackgroundJobItemId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
+    /// 完成可选字段的校验与规范化（trim、长度上限），并强制两条关联一致性：`object_type` 与 `object_id` 必须同时提供或同时省略；`item_no` 从 1 起递增（为 0 视为越界拒绝）。
     /// 返回新建的逐项记录（未执行）。
-    ///
-    /// # 错误
+    /// `id` 为实体主键（`erp_core::ids::BackgroundJobItemId`）。
     /// 当 `item_no` 为 0、对象类型/ID 不成对，或字段超长时返回错误。
     pub fn new(id: BackgroundJobItemId, data: BackgroundJobItemData) -> Result<Self> {
         if data.item_no == 0 {
@@ -197,21 +179,10 @@ impl BackgroundJobItem {
     }
 
     /// 记录逐项执行结果。
-    ///
-    /// 结果只追加不覆盖；`Failed` 必须携带脱敏原因代码；成功时结果对象
-    /// 类型与 ID 必须同时提供或同时省略。
-    ///
-    /// # 参数
-    /// * `status` - 执行结果
-    /// * `result_code` - 脱敏原因代码（`Failed` 时必填）
-    /// * `result_summary` - 脱敏结果摘要
-    /// * `result_object_type` - 成功形成的对象类型代码
-    /// * `result_object_id` - 成功形成的对象 ID
-    ///
-    /// # 返回
-    /// 无返回值。
-    ///
-    /// # 错误
+    /// 结果只追加不覆盖；`Failed` 必须携带脱敏原因代码；成功时结果对象类型与 ID 必须同时提供或同时省略。
+    /// `status` 为执行结果；`result_code` 为脱敏原因代码（`Failed` 时必填）。
+    /// `result_summary` 为脱敏结果摘要；`result_object_type` 为成功形成的对象类型代码。
+    /// `result_object_id` 为成功形成的对象 ID。
     /// 当该项已记录结果、`Failed` 未携带原因代码或结果对象不成对时返回错误。
     pub fn record_result(
         &mut self,
@@ -268,7 +239,7 @@ mod tests {
         }
     }
 
-    /// happy path：可选字段 trim、初始未执行。
+    // 验证可选字段 trim、初始未执行。
     #[test]
     fn new_trims_fields_and_starts_unexecuted() {
         let item = BackgroundJobItem::new(BackgroundJobItemId::new("ji-1"), data()).unwrap();
@@ -280,28 +251,28 @@ mod tests {
         assert!(item.status.is_none());
     }
 
-    /// 失败路径：逐项序号越界（0）被拒。
+    // 验证逐项序号越界（0）被拒。
     #[test]
     fn new_rejects_zero_item_no() {
         let payload = BackgroundJobItemData { item_no: 0, ..data() };
         assert!(BackgroundJobItem::new(BackgroundJobItemId::new("ji-1"), payload).is_err());
     }
 
-    /// 失败路径：关联不一致（对象类型/ID 不成对）被拒。
+    // 验证关联不一致（对象类型/ID 不成对）被拒。
     #[test]
     fn new_rejects_unpaired_object_type_and_id() {
         let payload = BackgroundJobItemData { object_id: None, ..data() };
         assert!(BackgroundJobItem::new(BackgroundJobItemId::new("ji-1"), payload).is_err());
     }
 
-    /// 失败路径：超长列名被拒。
+    // 验证超长列名被拒。
     #[test]
     fn new_rejects_overlong_column_name() {
         let payload = BackgroundJobItemData { source_column_name: Some("x".repeat(129)), ..data() };
         assert!(BackgroundJobItem::new(BackgroundJobItemId::new("ji-1"), payload).is_err());
     }
 
-    /// 执行结果：失败必须带原因代码，结果对象必须成对，结果只记录一次。
+    // 验证执行结果：失败必须带原因代码，结果对象必须成对，结果只记录一次。
     #[test]
     fn record_result_enforces_consistency_and_once_only() {
         let mut item = BackgroundJobItem::new(BackgroundJobItemId::new("ji-1"), data()).unwrap();
@@ -325,7 +296,7 @@ mod tests {
         assert!(item.record_result(ItemStatus::Skipped, None, None, None, None).is_err(), "结果只能记录一次");
     }
 
-    /// 枚举序列化与标签稳定。
+    // 验证后台任务明细的枚举序列化代码和中文标签不随实现变化。
     #[test]
     fn result_codes_and_labels_are_stable() {
         assert_eq!(serde_json::to_string(&ItemStatus::Failed).unwrap(), "\"failed\"");

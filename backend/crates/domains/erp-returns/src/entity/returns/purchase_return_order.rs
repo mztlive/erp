@@ -25,16 +25,7 @@ pub enum ReturnMode {
 }
 
 impl ReturnMode {
-    /// 返回模式的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回当前取值的中文名称，供业务界面展示，不作为持久化代码。
     pub fn label(&self) -> &'static str {
         match self {
             Self::CompanyWarehouseToSupplier => "公司仓退供应商",
@@ -42,16 +33,7 @@ impl ReturnMode {
         }
     }
 
-    /// 返回模式的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回当前取值的稳定代码，供持久化与查询匹配使用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::CompanyWarehouseToSupplier => "company_warehouse_to_supplier",
@@ -79,16 +61,7 @@ pub enum PurchaseReturnStatus {
 }
 
 impl PurchaseReturnStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回当前取值的中文名称，供业务界面展示，不作为持久化代码。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Draft => "草稿",
@@ -99,16 +72,7 @@ impl PurchaseReturnStatus {
         }
     }
 
-    /// 返回状态的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回当前取值的稳定代码，供持久化与查询匹配使用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Draft => "draft",
@@ -120,15 +84,7 @@ impl PurchaseReturnStatus {
     }
 
     /// 判断是否处于终态。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 状态为 `Completed` 或 `Voided` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn is_terminal(self) -> bool {
         matches!(self, Self::Completed | Self::Voided)
     }
@@ -182,7 +138,7 @@ pub struct PurchaseReturnOrder {
 }
 
 impl PartialEq for PurchaseReturnOrder {
-    /// 全字段语义相等。
+    // 全字段语义相等。
     fn eq(&self, other: &Self) -> bool {
         self.direct_return == other.direct_return
             && self.base == other.base
@@ -201,18 +157,9 @@ impl Eq for PurchaseReturnOrder {}
 
 impl PurchaseReturnOrder {
     /// 创建采购退货单。
-    ///
     /// 完成采购退货单号的 trim/非空/长度校验。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::PurchaseReturnOrderId`）
-    /// * `data` - 创建数据
-    /// * `created_by` - 创建人（账号或系统身份）
-    ///
-    /// # 返回
     /// 返回新建的退货单实体（状态为草稿）。
-    ///
-    /// # 错误
+    /// `id` 为实体主键（`erp_core::ids::PurchaseReturnOrderId`）；`created_by` 为创建人（账号或系统身份）。
     /// 当采购退货单号为空/超长时返回错误。
     pub fn new(
         id: PurchaseReturnOrderId,
@@ -238,18 +185,8 @@ impl PurchaseReturnOrder {
     }
 
     /// 更新采购退货单。
-    ///
-    /// 已完成与作废是终态（§6.11），终态不可编辑；原采购单与退货单号是固定
-    /// 字段不允许修改。
-    ///
-    /// # 参数
-    /// * `update` - 更新数据
-    /// * `updated_by` - 本次更新执行人
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// 已完成与作废是终态（§6.11），终态不可编辑；原采购单与退货单号是固定字段不允许修改。
+    /// `updated_by` 为本次更新执行人。
     /// 状态为终态时返回错误。
     pub fn update(&mut self, update: PurchaseReturnOrderUpdate, updated_by: impl Into<String>) -> Result<()> {
         if self.stable.status().is_terminal() {
@@ -268,15 +205,7 @@ impl PurchaseReturnOrder {
     }
 
     /// 判断退货单是否已完成。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 状态为 `Completed` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn is_completed(&self) -> bool {
         self.stable.status() == PurchaseReturnStatus::Completed
     }

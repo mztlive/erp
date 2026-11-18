@@ -11,13 +11,7 @@ pub trait ReturnsCommandExt {
     /// 本领域独立回执集合。
     const COMMAND_RECEIPTS: &'static str = "returns_command_receipts";
     /// 返回绑定拥有集合的仓储。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 返回独立回执仓储。
-    /// # 错误
-    /// 无。
     fn command_receipts(&self) -> ReturnsCommandReceiptRepository<'_>;
 }
 impl ReturnsCommandExt for Database {

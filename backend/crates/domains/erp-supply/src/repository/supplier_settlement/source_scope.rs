@@ -36,26 +36,12 @@ pub struct SupplierSettlementSourceScope {
 
 impl<'a> SupplierSettlementRepository<'a> {
     /// 读取供应商结算来源范围的最小事实快照。
-    ///
-    /// 来源证据核验只需三类正式事实：请求显式引用的订单与明细、期间内服务端可
-    /// 枚举的完成订单、期间内退款事实及其分配。本方法把这三类读取下沉为有界
-    /// 查询，不再按供应商全量历史订单/明细/退款做无界读取；完成与退款边界由
-    /// 领域 `SettlementPeriod::secs_bounds` 唯一提供（与 `contains` 同口径：
-    /// 开始日 `00:00`（`Asia/Shanghai`）含，结束日次日 `00:00` 不含），本层
-    /// 不再复制第二份边界计算。软删除过滤由基类自动追加，与本域其他读取一致。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 结算供应商
-    /// * `period_start` - 结算期间开始（含）
-    /// * `period_end` - 结算期间结束（含）
-    /// * `requested_order_ids` - 来源命令显式引用的履约订单主键
-    /// * `requested_item_ids` - 来源命令显式引用的履约明细主键
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
+    /// 来源证据核验只需三类正式事实：请求显式引用的订单与明细、期间内服务端可枚举的完成订单、期间内退款
+    /// 事实及其分配。本方法把这三类读取下沉为有界查询，不再按供应商全量历史订单/明细/退款做无界读取；完
+    /// 成与退款边界由领域 `SettlementPeriod::secs_bounds` 唯一提供（与 `contains` 同口径：开始日 `00:00`
+    /// （`Asia/Shanghai`）含，结束日次日 `00:00` 不含），本层不再复制第二份边界计算。软删除过滤由基类自
+    /// 动追加，与本域其他读取一致。
     /// 返回按主键稳定排序的订单、明细、退款事实与分配快照。
-    ///
-    /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
     pub async fn settlement_source_scope(
         &self,
@@ -138,20 +124,10 @@ impl<'a> SupplierSettlementRepository<'a> {
     }
 }
 
-/// 构建期间内退款事实的查询条件。
-///
-/// 只按供应商与退款时间过滤；软删除过滤由基类自动追加。
-///
-/// # 参数
-/// * `supplier_id` - 结算供应商
-/// * `start_secs` - 期间开始秒级时间戳（含）
-/// * `end_secs` - 期间结束次日零点的秒级时间戳（不含）
-///
-/// # 返回
-/// 返回退款事实查询条件文档。
-///
-/// # 错误
-/// 不返回错误。
+// 构建期间内退款事实的查询条件。
+// 只按供应商与退款时间过滤；软删除过滤由基类自动追加。
+// 返回退款事实查询条件文档。
+// `end_secs`：期间结束次日零点的秒级时间戳（不含）
 pub(super) fn refund_fact_scope_filter(
     supplier_id: &SupplierAccountId,
     start_secs: i64,
@@ -163,25 +139,13 @@ pub(super) fn refund_fact_scope_filter(
     }
 }
 
-/// 构建结算来源范围的履约订单查询条件。
-///
-/// 取「请求显式引用 ∪ 期间内完成 ∪ 期间内退款事实所属」的订单并集；订单归属
-/// 校验保留给 Service。第三分支只命中「已完成但缺少完成时间」的损坏行：正常
-/// 写入路径由实体构造器排除该形态，只有直接改库才能产生；若不纳入，其明细会
-/// 静默漏出完整性枚举（fail-open）。纳入后 Service 的 `confirmed_completed_at`
-/// 校验会对这类订单 fail-closed。
-///
-/// # 参数
-/// * `supplier_id` - 结算供应商
-/// * `order_ids` - 请求引用与期间内退款事实推导出的订单主键集合
-/// * `start_secs` - 期间开始秒级时间戳（含）
-/// * `end_secs` - 期间结束次日零点的秒级时间戳（不含）
-///
-/// # 返回
-/// 返回履约订单查询条件文档。
-///
-/// # 错误
-/// 不返回错误。
+// 构建结算来源范围的履约订单查询条件。
+// 取「请求显式引用 ∪ 期间内完成 ∪ 期间内退款事实所属」的订单并集；订单归属校验保留给 Service。第三分支只
+// 命中「已完成但缺少完成时间」的损坏行：正常写入路径由实体构造器排除该形态，只有直接改库才能产生；若不纳
+// 入，其明细会静默漏出完整性枚举（fail-open）。纳入后 Service 的 `confirmed_completed_at`校验会对这类订
+// 单 fail-closed。
+// 返回履约订单查询条件文档。
+// `end_secs`：期间结束次日零点的秒级时间戳（不含）
 pub(super) fn order_scope_filter(
     supplier_id: &SupplierAccountId,
     order_ids: &BTreeSet<String>,
@@ -198,19 +162,9 @@ pub(super) fn order_scope_filter(
     }
 }
 
-/// 构建结算来源范围的履约明细查询条件。
-///
-/// 取「范围订单的全部明细 ∪ 请求显式引用的明细」；明细归属校验保留给 Service。
-///
-/// # 参数
-/// * `order_ids` - 已取回订单的主键集合
-/// * `requested_item_ids` - 来源命令显式引用的履约明细主键
-///
-/// # 返回
-/// 返回履约明细查询条件文档。
-///
-/// # 错误
-/// 不返回错误。
+// 构建结算来源范围的履约明细查询条件。
+// 取「范围订单的全部明细 ∪ 请求显式引用的明细」；明细归属校验保留给 Service。
+// 返回履约明细查询条件文档。
 pub(super) fn item_scope_filter(
     order_ids: &BTreeSet<String>,
     requested_item_ids: &[SupplierFulfillmentItemId],

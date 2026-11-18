@@ -7,17 +7,7 @@ use persistence_core::ReadExecutor;
 use super::SupplierSettlementProcess;
 use crate::Result;
 impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
-    /// 按详情动作重验结算单可见性，不返回整单视图。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证操作人
-    /// * `id` - 结算单 ID
-    ///
-    /// # 返回
-    /// 对象在详情范围内时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 不可见对象返回 NotFound。
+    /// 按详情权限确认当前账号能看到指定结算单，供只需要访问校验的入口使用，不加载整单视图；不可见时按 `NotFound` 处理。
     pub async fn require_detail(&self, actor: &AuditActor, id: &str) -> Result<()> {
         self.domain()
             .access()

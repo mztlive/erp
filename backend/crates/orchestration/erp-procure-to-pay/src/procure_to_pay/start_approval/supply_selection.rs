@@ -27,14 +27,11 @@ struct SelectedSupplyFacts {
     availability: HashMap<String, AvailabilityFact>,
 }
 
-/// 以冻结主键读取最新三种事实后委托采购领域核对，不改写采购行。
-///
-/// # 参数
-/// `db` 为组合层数据库；`supplier_id`、`lines` 为本次冻结提交；`executor` 为启动事务执行器。
-/// # 返回
-/// 所有已记录正式选源的行仍可提交时成功；来源未知的历史行保留未知。
-/// # 错误
-/// 精确来源缺失、停止/暂停、版本或数量变化、条款失效时返回重核选源冲突。
+// 以冻结主键读取最新三种事实后委托采购领域核对，不改写采购行。
+//
+// `db` 为组合层数据库；`supplier_id`、`lines` 为本次冻结提交；`executor` 为启动事务执行器。
+//
+// 所有已记录正式选源的行仍可提交时成功；来源未知的历史行保留未知。精确来源缺失、停止/暂停、版本或数量变化、条款失效时返回重核选源冲突。
 pub(super) async fn revalidate_selected_supply(
     db: &Database,
     supplier_id: &SupplierAccountId,
@@ -84,7 +81,7 @@ pub(super) async fn revalidate_selected_supply(
     Ok(())
 }
 
-/// 三次批量查询只沿精确供给主键和当前条款指针，不按供应商及 SKU 寻找替代供给。
+// 三次批量查询只沿精确供给主键和当前条款指针，不按供应商及 SKU 寻找替代供给。
 async fn load_selected_facts(
     db: &Database,
     ids: &[SupplierOfferingId],
@@ -120,7 +117,7 @@ async fn load_selected_facts(
     })
 }
 
-/// 同一稳定冲突要求重新核对；不泄露外域当前版本或静默替换旧事实。
+// 同一稳定冲突要求重新核对；不泄露外域当前版本或静默替换旧事实。
 fn changed() -> Error {
     Error::ConflictError("供货选项、供货条件或可供数量已变化，请核对选源后再提交".into())
 }

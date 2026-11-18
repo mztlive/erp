@@ -8,12 +8,9 @@ use crate::entity::sales_order::inquiry_source::SalesOrderInquirySource;
 pub const SALES_INQUIRY_SOURCES: &str = "sales_order_inquiry_sources";
 
 /// 读取本域询价来源仓储，ID 为销售单稳定身份。
-/// # 参数
-/// `db` 为本域数据库。
-/// # 返回
 /// 返回沿用调用方执行器的仓储。
-/// # 错误
-/// 无。
+///
+/// 输入约定：`db` 为本域数据库。
 pub fn inquiry_sources(db: &Database) -> Repository<'_, SalesOrderInquirySource> {
     Repository::new(db, SALES_INQUIRY_SOURCES)
 }

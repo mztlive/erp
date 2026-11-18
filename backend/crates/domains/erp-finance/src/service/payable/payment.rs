@@ -34,35 +34,25 @@ pub struct PaymentSettlementFacts<'a> {
 
 impl<'a> PaymentSettlementFacts<'a> {
     /// 绑定同一 Executor、余额写入前读取的分录和子账。
-    ///
-    /// # 参数
-    /// * `entries` - 已完成付款任务完整覆盖校验的分录
-    /// * `accounts` - 已完成付款任务授权的子账
-    ///
-    /// # 返回
     /// 返回仅借用本次执行阶段事实的核销输入。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// 输入约定：
+    /// - `entries`：已完成付款任务完整覆盖校验的分录
+    /// - `accounts`：已完成付款任务授权的子账
     pub fn new(entries: &'a [PayableEntry], accounts: &'a [PayableAccount]) -> Self {
         Self { entries, accounts }
     }
 }
-/// 校验分配与应付余额并条件更新财务账户；禁止自行开启事务。
+/// 供应商付款需要分配到应付分录时，先按账本校验分配及账户余额，再以调用方执行器条件核销；不另开事务。
 /// 失败立即向调用者传播，后续任务与付款事实不得执行。
-///
-/// # 参数
-/// * `db` - 财务领域数据库。
-/// * `payment` - 当前付款单。
-/// * `pending` - 本次待核销分配。
-/// * `actor_id` - 执行人。
-/// * `session` - 调用方事务执行器。
-///
-/// # 返回
 /// 返回已条件更新余额的核销结果。
-///
-/// # 错误
 /// 付款状态、分配、供应商或开放余额不合法时返回错误。
+///
+/// 输入约定：
+/// - `db`：财务领域数据库。
+/// - `payment`：当前付款单。
+/// - `pending`：本次待核销分配。
+/// - `session`：调用方事务执行器。
 pub async fn settle_supplier_payment(
     db: &Database,
     payment: &SupplierPayment,
@@ -76,25 +66,20 @@ pub async fn settle_supplier_payment(
     apply_payment_settlement(db, payment, pending, ledger, facts, actor_id, session).await
 }
 
-/// 复用本次付款任务已经读取的应付事实并条件更新余额。
+/// 付款任务已在写余额之前读取分录和应付子账时复用该批事实，仍执行同样的账本校验和条件核销。
 ///
 /// 该组合层入口只允许复用同一事务、同一 Executor、余额写入前读取的子账与
 /// 分录。调用方必须先完成任务授权和完整分录覆盖校验；不得跨请求缓存事实。
 /// 既有付款分配仍在当前 Executor 重读，余额仍由仓储条件更新仲裁。
-///
-/// # 参数
-/// * `db` - 财务领域数据库。
-/// * `payment` - 当前付款单。
-/// * `pending` - 本次待核销分配。
-/// * `facts` - 当前任务授权与完整覆盖阶段读取的财务事实。
-/// * `actor_id` - 执行人。
-/// * `session` - 读取以上事实时使用的调用方事务执行器。
-///
-/// # 返回
 /// 返回已条件更新余额的核销结果。
+/// 失败条件：与 [`settle_supplier_payment`] 使用相同校验及错误顺序。
 ///
-/// # 错误
-/// 与 [`settle_supplier_payment`] 使用相同校验及错误顺序。
+/// 输入约定：
+/// - `db`：财务领域数据库。
+/// - `payment`：当前付款单。
+/// - `pending`：本次待核销分配。
+/// - `facts`：当前任务授权与完整覆盖阶段读取的财务事实。
+/// - `session`：读取以上事实时使用的调用方事务执行器。
 #[doc(hidden)]
 pub async fn settle_supplier_payment_with_facts(
     db: &Database,
@@ -108,7 +93,7 @@ pub async fn settle_supplier_payment_with_facts(
     apply_payment_settlement(db, payment, pending, ledger, facts, actor_id, session).await
 }
 
-/// 按原付款状态与既有分配顺序建立本次核销账本。
+// 付款核销前读取既有分配，并结合原付款状态组装账本，使追加分配沿用原序号与余额。
 async fn load_payment_ledger(
     db: &Database,
     payment: &SupplierPayment,
@@ -131,7 +116,7 @@ async fn load_payment_ledger(
     .map_err(Into::into)
 }
 
-/// 为没有上游任务事实的既有入口读取去重分录和关联子账。
+// 未从付款任务获得应付事实时，先批读去重分录与关联子账，供核销账本按请求行校验。
 async fn load_settlement_facts(
     db: &Database,
     pending: &[PendingPaymentAllocation],
@@ -151,7 +136,7 @@ async fn load_settlement_facts(
     Ok((entries, accounts))
 }
 
-/// 对已读取事实执行原核销规则，然后按仓储条件更新余额。
+// 先让账本核对已加载的应付事实并计算核销增量，再按子账额度执行条件更新。
 async fn apply_payment_settlement(
     db: &Database,
     payment: &SupplierPayment,
@@ -173,7 +158,7 @@ async fn apply_payment_settlement(
     Ok(PaymentSettlement { ledger, actor_id: actor_id.to_string(), applied_account_ids: settlement.applied })
 }
 
-/// 使用财务领域账本按请求顺序校验分录、子账与供应商并构造分配。
+// 按请求顺序核对付款分录、所属子账与供应商，生成分配行并聚合子账核销增量；不在此写库。
 fn apply_payment_ledger(
     payment: &SupplierPayment,
     pending: &[PendingPaymentAllocation],
@@ -206,20 +191,16 @@ fn apply_payment_ledger(
 
     Ok(())
 }
-/// 在任务同步成功后落付款状态、不可变执行身份与分配事实。
-///
-/// # 参数
-/// * `db` - 财务领域数据库
-/// * `payment` - 同一次执行的付款单
-/// * `pending` - 本次核销分配
-/// * `settlement` - 已写余额并冻结本次执行人的核销结果
-/// * `session` - 余额更新时使用的调用方执行器
-///
-/// # 返回
+/// 任务状态同步成功后才持久化付款状态、不可变的执行身份及核销分配，仍由调用方负责事务。
 /// 返回已经持久化过账身份、时间与核销分配的付款单。
-///
-/// # 错误
 /// 付款状态、分配、执行身份或持久化失败时返回错误。
+///
+/// 输入约定：
+/// - `db`：财务领域数据库
+/// - `payment`：同一次执行的付款单
+/// - `pending`：本次核销分配
+/// - `settlement`：已写余额并冻结本次执行人的核销结果
+/// - `session`：余额更新时使用的调用方执行器
 pub async fn finish_supplier_payment(
     db: &Database,
     payment: &mut SupplierPayment,
@@ -233,15 +214,13 @@ pub async fn finish_supplier_payment(
     Ok(())
 }
 
-/// 落留抵抵扣形成的核销行，不修改原付款的银行信息与原执行身份。
-/// # 参数
-/// * `db` - 数据库。
-/// * `settlement` - 已经完成余额条件更新的核销结果。
-/// * `executor` - 原抵扣事务。
-/// # 返回
-/// 核销记录写入成功。
-/// # 错误
-/// 仓储写入失败时返回错误。
+/// 留抵款实际抵扣应付后追加核销分配，不改原银行付款信息或原执行身份。
+/// 结果：核销记录写入成功。
+/// 传播数据库写入失败。
+///
+/// 输入约定：
+/// - `settlement`：已经完成余额条件更新的核销结果。
+/// - `executor`：原抵扣事务。
 pub async fn finish_credit_allocation(
     db: &Database,
     settlement: &PaymentSettlement,
@@ -265,7 +244,7 @@ mod tests {
         SupplierPaymentData,
     };
 
-    /// 复用完整分录集合时，核销仍按请求顺序生成序号并聚合同一子账。
+    // 回归检查：复用完整分录集合时，核销仍按请求顺序生成序号并聚合同一子账。
     #[test]
     fn reused_payment_facts_keep_allocation_order_and_aggregate_amounts() {
         let payment = payment();
@@ -288,7 +267,7 @@ mod tests {
         );
     }
 
-    /// 缺失分录与跨供应商并存时，保持逐请求行原首错顺序。
+    // 回归检查：缺失分录与跨供应商并存时，保持逐请求行原首错顺序。
     #[test]
     fn reused_payment_facts_keep_missing_entry_and_supplier_error_order() {
         let payment = payment();
@@ -307,7 +286,7 @@ mod tests {
         assert!(matches!(error, Error::BusinessLogicError(message) if message == "禁止跨供应商核销"));
     }
 
-    /// 复用事实也必须检查子账存在及重复分录累计开放余额。
+    // 回归检查：复用事实也必须检查子账存在及重复分录累计开放余额。
     #[test]
     fn reused_payment_facts_reject_missing_account_and_entry_over_allocation() {
         let payment = payment();
@@ -331,17 +310,17 @@ mod tests {
         assert_eq!(ledger.new_allocations().len(), 1);
     }
 
-    /// 构造测试核销账本，执行与复用入口相同的财务领域构造规则。
+    // 组装测试核销账本，执行与复用入口相同的财务领域构造规则。
     fn ledger(payment: &SupplierPayment, pending: &[PendingPaymentAllocation]) -> PaymentAllocationLedger {
         PaymentAllocationLedger::new(payment.base.id.clone().into(), payment.amount, &[], pending).unwrap()
     }
 
-    /// 构造一条请求核销行。
+    // 组装一条请求核销行。
     fn allocation(entry_id: &str, value: &str) -> PendingPaymentAllocation {
         PendingPaymentAllocation::new(PayableEntryId::new(entry_id), amount(value)).unwrap()
     }
 
-    /// 构造固定测试付款，金额足以覆盖分录超额边界。
+    // 组装固定测试付款，金额足以覆盖分录超额边界。
     fn payment() -> SupplierPayment {
         SupplierPayment::new(
             SupplierPaymentId::new("payment-1"),
@@ -359,7 +338,7 @@ mod tests {
         .unwrap()
     }
 
-    /// 构造供应商身份可调整的应付子账。
+    // 组装供应商身份可调整的应付子账。
     fn account(id: &str, supplier_id: &str) -> PayableAccount {
         PayableAccount::new(
             PayableAccountId::new(id),
@@ -377,7 +356,7 @@ mod tests {
         .unwrap()
     }
 
-    /// 构造金额为一百元的正式应付分录。
+    // 组装金额为一百元的正式应付分录。
     fn entry(id: &str, account_id: &str) -> PayableEntry {
         PayableEntry::new(
             PayableEntryId::new(id),
@@ -397,7 +376,7 @@ mod tests {
         .unwrap()
     }
 
-    /// 解析测试定点金额。
+    // 将样本字符串解析成定点金额，供付款账本测试直接比较核销额度。
     fn amount(value: &str) -> Amount {
         Amount::from_str(value).unwrap()
     }

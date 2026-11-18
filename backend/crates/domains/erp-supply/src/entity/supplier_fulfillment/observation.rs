@@ -7,12 +7,9 @@ use crate::{Error, Result};
 
 impl SupplierFulfillmentOrder {
     /// 应用已核对身份的供应商最新履约观察，不伪造中间状态或业务时间。
-    /// # 参数
-    /// `observed` 为供应商明确返回的状态，`changed_at` 仅为来源提供的业务更新时间。
-    /// # 返回
     /// 状态实际前进时为 true；重复或可证明的低阶段为 false。
-    /// # 错误
     /// 拒单与履约事实冲突，或本地处于异常终态时拒绝自动覆盖。
+    /// `observed` 为供应商明确返回的状态，`changed_at` 仅为来源提供的业务更新时间。
     pub fn apply_observed_fulfillment(
         &mut self,
         observed: FulfillmentStatus,
@@ -54,11 +51,7 @@ impl SupplierFulfillmentOrder {
     }
 
     /// 应用来源明确确认的取消结果，保持取消轨道独立。
-    /// # 参数
-    /// `observed` 为真实订单查询的取消轨道。
-    /// # 返回
     /// 已变化返回 true；重复或来源未提供进展返回 false。
-    /// # 错误
     /// 本地已有另一取消终态，或已经完成履约后来源声称取消时拒绝。
     pub fn apply_observed_cancellation(&mut self, observed: CancelStatus) -> Result<bool> {
         if observed == self.cancel_status || observed == CancelStatus::None {

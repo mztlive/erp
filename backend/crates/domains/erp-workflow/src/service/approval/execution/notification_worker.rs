@@ -32,46 +32,24 @@ pub enum DeliveryAttempt {
 pub const LEASE_SECS: i64 = 30;
 
 /// 计算下一次退避秒数。
-///
-/// # 参数
-/// * `attempt_count` - 已失败次数，从 1 开始
-///
-/// # 返回
 /// 下标仍落在退避表内时返回秒数；超出表长时返回 `None`。
 ///
-/// # 错误
-/// 不返回错误。
+/// `attempt_count`：已失败次数，从 1 开始。
 pub fn retry_backoff_secs(attempt_count: u32) -> Option<i64> {
     let index = usize::try_from(attempt_count.saturating_sub(1)).ok()?;
     RETRY_BACKOFF_SECS.get(index).copied()
 }
 
 /// 判断是否应进入死信。
-///
-/// # 参数
-/// * `attempt_count` - 累计尝试次数
-///
-/// # 返回
 /// 达到最大次数时返回 `true`。
-///
-/// # 错误
-/// 不返回错误。
 pub fn should_dead_letter(attempt_count: u32) -> bool {
     attempt_count >= MAX_DELIVERY_ATTEMPTS
 }
 
 /// 在已持有租约的消息上应用一次发送结果。
-///
-/// # 参数
-/// * `item` - 租约中的 outbox
-/// * `attempt` - 发送结果
-/// * `failed_at` - 失败时间
-///
-/// # 返回
-/// 成功、退避或死信状态写回实体后无返回值。
-///
-/// # 错误
 /// 消息不处于投递中时返回错误。
+///
+/// `item`：租约中的 outbox。
 pub fn apply_delivery_attempt(
     item: &mut ApprovalNotificationOutbox,
     attempt: DeliveryAttempt,
@@ -86,7 +64,7 @@ pub fn apply_delivery_attempt(
     }
 }
 
-/// 失败分类，不得包含敏感载荷。
+// 将发送失败归为可持久化的稳定分类；不把收件人或敏感通知载荷写入失败信息。
 fn error_class(attempt: DeliveryAttempt) -> &'static str {
     match attempt {
         DeliveryAttempt::Delivered => "delivered",
@@ -96,61 +74,32 @@ fn error_class(attempt: DeliveryAttempt) -> &'static str {
 }
 
 /// 计算租约截止时间。
-///
-/// # 参数
-/// * `now` - 当前时间
-///
-/// # 返回
 /// 返回租约截止。
 ///
-/// # 错误
-/// 不返回错误。
+/// `now`：当前时间。
 pub fn lease_until(now: Instant) -> Instant {
     Instant::from_unix_secs(now.unix_secs().saturating_add(LEASE_SECS))
 }
 
 /// 幂等发送接口。必须按去重键调用。
 pub trait NotificationSender {
-    /// 判断实际发送提供方是否已接入。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
+    /// 当实际发送提供方已接入时返回 `true`。
     /// 未接入时返回 `false`，worker 不得领取消息或消耗重试次数。
-    ///
-    /// # 错误
-    /// 不返回错误。
     fn is_ready(&self) -> bool;
 
     /// 以 outbox 去重键发送。
-    ///
-    /// # 参数
-    /// * `dedup_key` - 业务去重键
-    ///
-    /// # 返回
     /// 返回投递结果。
-    ///
-    /// # 错误
-    /// 不返回错误。
     fn send_idempotent(&self, dedup_key: &str) -> DeliveryAttempt;
 }
 
 /// 有界租约与 CAS 投递状态。
 pub trait OutboxLeaseStore {
     /// 原子领取一批可投递消息。
-    ///
-    /// # 参数
-    /// * `worker_id` - 租约持有者
-    /// * `now` - 当前时间
-    /// * `until` - 租约截止
-    /// * `limit` - 批次上限
-    ///
-    /// # 返回
     /// 返回已写入 worker ID 的消息。
     ///
-    /// # 错误
     /// 领取租约失败时返回实现方错误。
+    ///
+    /// `now`：当前时间。
     fn lease_batch(
         &mut self,
         worker_id: &str,
@@ -160,29 +109,17 @@ pub trait OutboxLeaseStore {
     ) -> Result<Vec<ApprovalNotificationOutbox>>;
 
     /// 按租约 owner CAS 标记成功。
-    ///
-    /// # 参数
-    /// * `id` - outbox 主键
-    /// * `worker_id` - 租约持有者
-    ///
-    /// # 返回
     /// 标记成功时无返回值。
     ///
-    /// # 错误
     /// owner 不匹配时返回冲突。
     fn mark_delivered(&mut self, id: &str, worker_id: &str) -> Result<()>;
 
     /// 按租约 owner 写回失败后的实体。
-    ///
-    /// # 参数
-    /// * `item` - 已更新的 outbox
-    /// * `worker_id` - 租约持有者
-    ///
-    /// # 返回
     /// 写回成功时无返回值。
     ///
-    /// # 错误
     /// owner 不匹配时返回冲突。
+    ///
+    /// `item`：已更新的 outbox。
     fn save_after_failure(&mut self, item: ApprovalNotificationOutbox, worker_id: &str) -> Result<()>;
 }
 
@@ -198,19 +135,11 @@ pub struct WorkerBatchOutcome {
 }
 
 /// 处理一批已租约消息：事务外发送，成功 CAS，失败退避或死信。
-///
-/// # 参数
-/// * `store` - 租约存储
-/// * `sender` - 幂等发送器
-/// * `worker_id` - 本实例 worker
-/// * `now` - 当前时间
-/// * `limit` - 批次上限
-///
-/// # 返回
 /// 返回本批成功、重试与死信计数。
 ///
-/// # 错误
 /// 租约、发送结果落库或 CAS 失败时返回错误。
+///
+/// `worker_id`：本实例 worker；`now`：当前时间。
 pub fn process_outbox_batch<S, N>(
     store: &mut S,
     sender: &N,
@@ -262,16 +191,10 @@ impl NotificationSender for FailClosedNotificationSender {
         false
     }
 
-    /// 以去重键调用发送口；提供方未接线时返回致命失败。
-    ///
-    /// # 参数
-    /// * `dedup_key` - outbox 业务去重键
-    ///
-    /// # 返回
-    /// 始终返回 `Fatal`；正常 worker 必须在领取前检查就绪状态。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 以去重键调用发送口；提供方未接线时返回致命失败。
+    // 始终返回 `Fatal`；正常 worker 必须在领取前检查就绪状态。
+    //
+    // `dedup_key`：outbox 业务去重键。
     fn send_idempotent(&self, dedup_key: &str) -> DeliveryAttempt {
         tracing::error!(dedup_key = %dedup_key, "审批通知提供方未接入，投递失败关闭");
         DeliveryAttempt::Fatal
@@ -282,12 +205,11 @@ impl NotificationSender for FailClosedNotificationSender {
 #[async_trait]
 pub trait ApprovalNotificationDelivery: Send + Sync {
     /// 使用完整不可变内容及去重键投递。
-    /// # 参数
-    /// item 为本轮已领取的通知。
-    /// # 返回
     /// 成功、暂时失败或永久失败分类。
-    /// # 错误
+    ///
     /// 失败以 DeliveryAttempt 返回，交给现有 outbox 退避及死信。
+    ///
+    /// item 为本轮已领取的通知。
     async fn deliver(&self, item: &ApprovalNotificationOutbox) -> DeliveryAttempt;
 }
 
@@ -299,53 +221,28 @@ pub struct ApprovalNotificationOutboxPort {
 
 impl ApprovalNotificationOutboxPort {
     /// 构造失败关闭的通知 outbox 端口。
-    ///
-    /// # 参数
-    /// * `db` - MongoDB
-    ///
-    /// # 返回
     /// 返回真实仓储端口，发送口未接入时失败关闭。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db, sender: None }
     }
 
     /// 装配已接入的异步通知提供方。
-    /// # 参数
-    /// db 为仓储数据库，sender 为组合根注入的投递端口。
-    /// # 返回
     /// 可领取及处理通知的 outbox 服务。
-    /// # 错误
+    ///
     /// 不执行 I/O。
+    ///
+    /// db 为仓储数据库，sender 为组合根注入的投递端口。
     pub fn with_sender(db: Database, sender: Arc<dyn ApprovalNotificationDelivery>) -> Self {
         Self { db, sender: Some(sender) }
     }
 
-    /// 判断实际通知提供方是否已接入。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
+    /// 当实际通知提供方已接入时返回 `true`。
     /// 未接入时返回 `false`，调用方应暂停 worker。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn is_ready(&self) -> bool {
         self.sender.is_some()
     }
 
     /// 领取并处理一批到期消息；未接入提供方时直接返回，不读写队列。
-    ///
-    /// # 参数
-    /// * `worker_id` - 本进程租约持有者
-    ///
-    /// # 返回
-    /// 本批已领取消息都处理完后无返回值。
-    ///
-    /// # 错误
     /// 租约或 CAS 落库失败时返回服务错误。
     pub async fn process_tick(&self, worker_id: &str) -> Result<()> {
         if !self.is_ready() {
@@ -366,14 +263,10 @@ impl ApprovalNotificationOutboxPort {
         Ok(())
     }
 
-    /// 对已租约消息应用一次发送结果并 CAS 写回。
-    ///
-    /// # 参数
-    /// * `worker_id` - 租约持有者
-    /// * `item` - 已领取消息
-    ///
-    /// # 错误
-    /// 实体状态或仓储 CAS 失败时返回错误。
+    // 对已租约消息应用一次发送结果并 CAS 写回。
+    // 实体状态或仓储 CAS 失败时返回错误。
+    //
+    // `item`：已领取消息。
     async fn persist_attempt(&self, worker_id: &str, mut item: ApprovalNotificationOutbox) -> Result<()> {
         let Some(sender) = &self.sender else {
             return Ok(());
@@ -389,10 +282,8 @@ impl ApprovalNotificationOutboxPort {
         self.save_failure(worker_id, item, attempt, now).await
     }
 
-    /// 按租约 owner CAS 标记投递成功。
-    ///
-    /// # 错误
-    /// 仓储写入失败时返回错误。
+    // 按租约 owner CAS 标记投递成功。
+    // 仓储写入失败时返回错误。
     async fn mark_delivered(&self, outbox_id: &str, worker_id: &str, now: Instant) -> Result<()> {
         self.db
             .approval_notification_outbox()
@@ -401,10 +292,8 @@ impl ApprovalNotificationOutboxPort {
         Ok(())
     }
 
-    /// 按发送结果写回退避或死信。
-    ///
-    /// # 错误
-    /// 仓储 CAS 失败时返回错误。
+    // 按发送结果写回退避或死信。
+    // 仓储 CAS 失败时返回错误。
     async fn save_failure(
         &self,
         worker_id: &str,
@@ -476,7 +365,7 @@ mod tests {
         assert!(port.is_ready());
     }
 
-    /// 未接线发送口必须失败关闭，不得伪造成功。
+    // 验证：未接线发送口必须失败关闭，不得伪造成功。
     #[test]
     fn unconfigured_sender_fails_closed() {
         let sender = super::FailClosedNotificationSender;
@@ -487,7 +376,7 @@ mod tests {
         );
     }
 
-    /// 退避表与死信次数符合合同。
+    // 验证：退避表与死信次数符合合同。
     #[test]
     fn execution_worker_backoff_and_dead_letter() {
         assert_eq!(retry_backoff_secs(1), Some(60));
@@ -497,7 +386,7 @@ mod tests {
         assert!(should_dead_letter(MAX_DELIVERY_ATTEMPTS));
     }
 
-    /// 租约成功后按 owner CAS 标记 delivered；失败进入重试。
+    // 验证：租约成功后按 owner CAS 标记 delivered；失败进入重试。
     #[test]
     fn execution_worker_lease_success_and_retry() {
         let now = Instant::from_unix_secs(1_700_000_000);
@@ -517,7 +406,7 @@ mod tests {
         assert_eq!(item.delivery_status, ApprovalNotificationDeliveryStatus::Delivered);
     }
 
-    /// 致命失败立即死信；没有租约时必须拒绝状态变更。
+    // 验证：致命失败立即死信；没有租约时必须拒绝状态变更。
     #[test]
     fn execution_worker_fatal_failure_stops_retrying() {
         let now = Instant::from_unix_secs(1_700_000_000);
@@ -537,7 +426,7 @@ mod tests {
         assert!(item.acquire_lease("worker-2", now, super::lease_until(now)).is_err());
     }
 
-    /// 超过最大次数进入死信。
+    // 验证：超过最大次数进入死信。
     #[test]
     fn execution_worker_dead_letters_after_max_attempts() {
         let now = Instant::from_unix_secs(1_700_000_000);
@@ -551,7 +440,7 @@ mod tests {
         assert_eq!(item.attempt_count, MAX_DELIVERY_ATTEMPTS);
     }
 
-    /// 有界租约后按去重键幂等发送，成功 CAS，失败退避。
+    // 验证：有界租约后按去重键幂等发送，成功 CAS，失败退避。
     #[test]
     fn execution_worker_processes_leased_batch() {
         use super::{OutboxLeaseStore, WorkerBatchOutcome, process_outbox_batch};

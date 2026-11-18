@@ -44,11 +44,7 @@ pub struct OrderFundsCoverage {
 
 impl OrderFundsCoverage {
     /// 核对资格回执覆盖原批准预算且关联真实账户与占用。
-    /// # 参数
-    /// `query` 为服务端冻结的原执行资金请求。
-    /// # 返回
     /// 回执金额与原请求一致且关联完整时成功。
-    /// # 错误
     /// 缺失身份或预算不一致时拒绝发单。
     pub fn ensure_matches(&self, query: &OrderFundsQuery) -> SupplyResult<()> {
         if self.reservation_id.trim().is_empty()
@@ -68,13 +64,9 @@ pub trait SupplierOrderFunds: Send + Sync {
     type Error: StdError + Send + Sync;
 
     /// 核对本执行组全额、专属且当前有效的预存款保障。
-    /// # 参数
-    /// * `query` - 冻结采购、连接、执行组和预算。
-    /// * `executor` - 当前用例执行器；不执行供应商 HTTP。
-    /// # 返回
     /// 返回有效资金保障回执。
-    /// # 错误
     /// 无占用、授权失效、跨账号、归属或版本变化时拒绝。
+    /// `executor`：不执行供应商 HTTP。
     async fn execution_coverage(
         &self,
         query: &OrderFundsQuery,
@@ -82,12 +74,9 @@ pub trait SupplierOrderFunds: Send + Sync {
     ) -> Result<OrderFundsCoverage, Self::Error>;
 
     /// 在外部发送意图的同一事务内重验并保护资金占用。
-    /// # 参数
-    /// `query` 为原执行与全部批准预算，`executor` 为保存发送意图的事务执行器。
-    /// # 返回
     /// 资金已标记为可能被远端使用，不能作为未发送占用自动释放。
-    /// # 错误
     /// 资格无效、占用已释放、缺少事务或持久化失败时拒绝发送。
+    /// `query` 为原执行与全部批准预算，`executor` 为保存发送意图的事务执行器。
     async fn mark_sent(
         &self,
         query: &OrderFundsQuery,
@@ -186,41 +175,25 @@ pub struct SupplierFundsObservation {
 #[async_trait]
 pub trait SupplierFundsSource: Send + Sync {
     /// 返回已经核实的外部账号引用，不使用前端提交值切换账号。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 服务端绑定的稳定资金账号引用。
-    /// # 错误
-    /// 不返回错误。
     fn account_reference(&self) -> &str;
 
     /// 声明已核验消息线索需要调查的资金方向，本声明不证明资金已经发生。
-    /// # 参数
-    /// `message_type` 为相同绑定协议的来源消息类型。
-    /// # 返回
     /// 仅已有账号协议明确规定的调查方向；支付失败及未知类型返回None。
-    /// # 错误
-    /// 不返回错误；None不允许根据空查询自动确认资金调查完成。
+    /// None不允许根据空查询自动确认资金调查完成。
     fn message_effect(&self, _message_type: &str) -> Option<SupplierFundsDirection> {
         None
     }
 
     /// 采样当前真实账户余额，仅用于余额预警与对账。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 原币种余额和加密证据；读取时刻不冒充账务发生时刻。
-    /// # 错误
     /// 无权限、缺币种或响应缺失时失败，不返回零余额。
     async fn balance(&self) -> ConnectorResult<Snapshot<SupplierFundsBalance>>;
 
     /// 按冻结时间窗口与绑定游标读取资金变动，不在适配器中登记付款。
-    /// # 参数
-    /// `query` 固定来源、时间窗口与分页上限，恢复时不得改变。
-    /// # 返回
     /// 带加密来源证据的已核实或未决交易；页结束不保证远端一致快照。
-    /// # 错误
     /// 账号、游标、查询范围或传输失败时拒绝，失败页不得推进检查点。
+    /// `query` 固定来源、时间窗口与分页上限，恢复时不得改变。
     async fn transactions(
         &self,
         query: &SupplierFundsQuery,

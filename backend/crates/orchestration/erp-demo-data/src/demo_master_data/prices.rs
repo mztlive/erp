@@ -6,13 +6,7 @@ use rust_decimal::Decimal;
 use super::record::DemoMasterRecord;
 use crate::{Error, Result};
 
-/// 在生成前拒绝缺项或非正数的演示价格与集采门槛。
-/// # 参数
-/// `sku` 为 JSON 中的公司 SKU 输入，不读取供应商成本或起订量。
-/// # 返回
-/// 三价及集采门槛完整、有效时返回空结果。
-/// # 错误
-/// 任一字段缺失或不大于零时返回包含 SKU 编号的校验错误。
+// 在任何生成前验证公司 SKU 的三种价格及集采起订量均存在且为正数；不要用供应商成本或 MOQ 补值，失败时指出 SKU 编号。
 pub(super) fn validate(sku: &ProductSkuInput) -> Result<()> {
     for (label, value) in [
         ("一件代发价", sku.sales_visible_price_gross.map(|value| value.to_decimal())),
@@ -27,13 +21,8 @@ pub(super) fn validate(sku: &ProductSkuInput) -> Result<()> {
     Ok(())
 }
 
-/// 按已登记实际 ID 和模板 SKU 编号补齐空价格，保留全部非空字段。
-/// # 参数
-/// `current` 为当前修订构造的输入，`templates` 为商品种子，`record` 为该商品的实际 ID 登记。
-/// # 返回
-/// 至少补齐一个字段时返回 true；完整数据及重复执行返回 false。
-/// # 错误
-/// 不返回错误；未登记或模板外 SKU 保持原样。
+// 仅对实际 ID 已登记且编号匹配模板的 SKU 补全价格及集采门槛，保留所有已有值。
+// 补到至少一项才返回 `true`，供调用方跳过无变化更新。
 pub(super) fn fill_missing(
     current: &mut [ProductSkuInput],
     templates: &[ProductSkuInput],

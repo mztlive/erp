@@ -31,14 +31,10 @@ impl ImportApplyProcess {
     /// `(batch_id, scope, trial_version)` 重复提交按幂等返回既有事实。
     /// 新建开放任务指定当前操作人为个人责任人，责任角色仍按确认范围注册表确定。
     ///
-    /// # 参数
-    /// * `req` - 创建请求
-    /// * `actor` - 已通过鉴权的审计操作人；新建任务以其为个人责任人
+    /// - `actor`：已通过鉴权的审计操作人；新建任务以其为个人责任人
     ///
-    /// # 返回
     /// 返回新建（或既有）确认事实的响应视图。
     ///
-    /// # 错误
     /// * `NotFound` - 批次不存在
     /// * `BusinessLogicError` - 批次已进入不可确认阶段
     /// * `ValidationError` - 请求体校验失败
@@ -80,7 +76,7 @@ impl ImportApplyProcess {
         Ok(confirmation_view(confirmation, &work_item))
     }
 
-    /// 失败回放重新核验当前资格，查询与结果交付不跨事务。
+    // 失败回放重新核验当前资格，查询与结果交付不跨事务。
     async fn replay_confirmation_creation(
         &self,
         identity: ConfirmationCreationIdentity,
@@ -281,7 +277,7 @@ impl PreparedConfirmationCreation {
     }
 }
 
-/// 校验创建确认任务时的批次与责任范围。
+// 校验创建确认任务时的批次与责任范围。
 fn validate_confirmation_creation_batch(
     batch: &LegacyImportBatch,
     scope: &str,
@@ -299,7 +295,7 @@ fn validate_confirmation_creation_batch(
     Ok(())
 }
 
-/// 校验同一试算矩阵的版本一致性和单调性。
+// 校验同一试算矩阵的版本一致性和单调性。
 fn validate_trial_snapshot(
     batch: &LegacyImportBatch,
     confirmations: &[LegacyImportConfirmation],
@@ -318,7 +314,7 @@ fn validate_trial_snapshot(
     Ok(())
 }
 
-/// 严格校验重复创建是否与已有事实及任务完全一致。
+// 严格校验重复创建是否与已有事实及任务完全一致。
 fn validate_confirmation_creation_replay(
     confirmation: &LegacyImportConfirmation,
     work_item: &WorkItem,
@@ -348,17 +344,11 @@ fn validate_confirmation_creation_replay(
     Err(Error::ConflictError("同一批次、范围与试算版本已用于不同的确认任务".to_string()))
 }
 
-/// 将本次决策后的事实替换进内存矩阵。
-///
-/// # 参数
-/// * `confirmations` - 当前确认矩阵。
-/// * `decided` - 已决策的确认事实。
-///
-/// # 返回
-/// 找到相同 `id` 时就地替换；矩阵中不存在该事实时保持原样。
-///
-/// # 错误
-/// 不返回错误。
+// 将本次决策后的事实替换进内存矩阵。
+//
+// `confirmations`：当前确认矩阵；`decided`：已决策的确认事实。
+//
+// 找到相同 `id` 时就地替换；矩阵中不存在该事实时保持原样。
 pub(super) fn replace_confirmation_in_matrix(
     confirmations: &mut [LegacyImportConfirmation],
     decided: &LegacyImportConfirmation,
@@ -368,16 +358,11 @@ pub(super) fn replace_confirmation_in_matrix(
     }
 }
 
-/// 将领域确认矩阵决策映射为服务契约下一步。
-///
-/// # 参数
-/// * `decision` - 领域层确定的唯一矩阵决策
-///
-/// # 返回
-/// 返回 HTTP 契约使用的下一步枚举。
-///
-/// # 错误
-/// 不返回错误。
+// 将领域确认矩阵决策映射为服务契约下一步。
+//
+// `decision`：领域层确定的唯一矩阵决策。
+//
+// 返回 HTTP 契约使用的下一步枚举。
 pub(super) fn confirmation_next_step(
     decision: ConfirmationMatrixDecision,
 ) -> ImportBusinessConfirmationNextStep {

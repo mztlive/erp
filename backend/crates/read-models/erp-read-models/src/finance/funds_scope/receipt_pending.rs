@@ -12,17 +12,16 @@ use super::{FundsAccess, FundsAuthorization, ScopedCustomerReceiptRow};
 use crate::Result;
 
 impl FundsAccess {
-    /// 在当前事务内补齐未过账回款的拟核销安排。
-    ///
-    /// # 参数
-    /// * `rows` - 已完成回款范围裁剪的返回行。
-    /// * `sources` - 同一快照的原回款行。
-    /// * `authorization` - 当前回款动作对应的销售来源授权。
-    /// * `executor` - 调用方事务。
-    /// # 返回
-    /// 仅整单及全部拟核销来源可见时写入安排；受限或关联缺失时保持省略。
-    /// # 错误
-    /// 分录、子账或授权销售读取失败时返回错误。
+    // 组装回款拟核销时，在当前事务内补齐未过账回款的拟核销安排。
+    //
+    // 调用参数：
+    // * `rows` - 已完成回款范围裁剪的返回行。
+    // * `sources` - 同一快照的原回款行。
+    // * `authorization` - 当前回款动作对应的销售来源授权。
+    //
+    // 仅整单及全部拟核销来源可见时写入安排；受限或关联缺失时保持省略。
+    //
+    // 分录、子账或授权销售读取失败时返回错误。
     pub(super) async fn attach_receipt_pending<'a>(
         &self,
         rows: &mut [ScopedCustomerReceiptRow],
@@ -50,7 +49,7 @@ impl FundsAccess {
         Ok(())
     }
 
-    /// 只查当前页引用的来源，并复用销售仓储的授权交集。
+    // 处理回款拟核销时，只查当前页引用的来源，并复用销售仓储的授权交集。
     async fn visible_pending_entries(
         &self,
         ids: &[ReceivableEntryId],

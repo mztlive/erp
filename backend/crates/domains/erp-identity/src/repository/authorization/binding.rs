@@ -131,7 +131,7 @@ fn encode_stages(stages: &[Document]) -> Result<Vec<Vec<u8>>> {
         .collect()
 }
 
-/// 固定准备只物化完整关系，不能提前过滤、展开或分页根记录。
+// 启动验证 Mapping 静态准备阶段时，只批准不改变根记录集合的关系物化；过滤、展开或分页须留在后续授权查询。
 fn validate_stages(stages: &[Document]) -> Result<()> {
     for stage in stages {
         if stage.len() != 1

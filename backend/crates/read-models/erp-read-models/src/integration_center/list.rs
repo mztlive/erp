@@ -10,7 +10,7 @@ use super::IntegrationCenterReadService;
 use crate::Result;
 
 impl IntegrationCenterReadService {
-    /// 查询完整错误任务分页，包括责任人与业务对象展示名。
+    /// 处理集成异常与对账列表时，查询完整错误任务分页，包括责任人与业务对象展示名。
     ///
     /// # 参数
     /// `params` 为列表筛选，`actor` 为当前已认证账号。
@@ -37,7 +37,7 @@ impl IntegrationCenterReadService {
             .await
     }
 
-    /// 查询完整对账差异分页，包括责任人与业务对象展示名。
+    /// 处理集成异常与对账列表时，查询完整对账差异分页，包括责任人与业务对象展示名。
     ///
     /// # 参数
     /// `params` 为列表筛选，`actor` 为当前已认证账号。
@@ -64,7 +64,7 @@ impl IntegrationCenterReadService {
             .await
     }
 
-    /// 根读取签发凭证后仅在原执行器补齐名称，最后交付一次。
+    // 处理集成异常与对账列表时，根读取签发凭证后仅在原执行器补齐名称，最后交付一次。
     async fn error_list_snapshot(
         &self,
         params: &ErrorTaskListParams,
@@ -78,7 +78,7 @@ impl IntegrationCenterReadService {
         Ok(page)
     }
 
-    /// 根读取签发凭证后仅在原执行器补齐名称，最后交付一次。
+    // 处理集成异常与对账列表时，根读取签发凭证后仅在原执行器补齐名称，最后交付一次。
     async fn difference_list_snapshot(
         &self,
         params: &DifferenceListParams,

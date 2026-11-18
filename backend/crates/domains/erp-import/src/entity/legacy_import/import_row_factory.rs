@@ -22,24 +22,7 @@ pub struct ImportRowSpec {
     pub normalized_payload_reference: String,
 }
 
-/// 按批次装配导入行实体（INT-E24 行工厂适配器）。
-///
-/// 逐行经 [`LegacyImportRow::new`] 规范化文本并拒绝空/超长；批内
-/// `(source_object_type, source_row_key)` 重复失败关闭，保证唯一索引
-/// 冲突不在写入时才暴露。空规格返回空集合。
-///
-/// # 参数
-/// * `batch_id` - 所属导入批次
-/// * `specs` - 行装配规格（保持调用方顺序）
-///
-/// # 返回
-/// 返回与规格顺序一致的行实体。
-///
-/// # 错误
-/// 当任一规格非法或批内来源身份重复时返回错误。
-///
-/// # 约束
-/// 纯内存装配；不访问 MongoDB、时钟、ID 生成器或密钥。
+/// 先拒绝首尾去空白后 `(source_object_type, source_row_key)` 重复的规格，再按原顺序经 [`LegacyImportRow::new`] 校验并构造同批导入行，避免写入时才触发唯一索引。空规格返回空集合；装配不直接访问数据库、外部时钟、ID 生成器或密钥。
 pub fn build_import_rows(
     batch_id: &LegacyImportBatchId,
     specs: Vec<ImportRowSpec>,

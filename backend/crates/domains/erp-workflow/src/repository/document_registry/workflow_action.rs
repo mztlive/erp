@@ -66,16 +66,7 @@ impl Default for WorkflowActionFilter {
 }
 
 impl QueryFilter for WorkflowActionFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(document_id) = &self.document_id {
@@ -90,16 +81,7 @@ impl QueryFilter for WorkflowActionFilter {
 }
 
 impl Pagination for WorkflowActionFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 返回页码与单页条数。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -113,15 +95,11 @@ pub trait WorkflowActionRepositoryExt {
     /// 只返回 [`WorkflowActionRow`] 所需的列表字段，不加载整文档；
     /// `actor_id` 按字面量忽略大小写模糊匹配（复用 `repository::regex_filter`）。
     ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回当前页投影行与满足筛选条件的总数。
     ///
-    /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    ///
+    /// `executor`：数据访问执行器，由 Service 决定是否位于事务中。
     async fn search_workflow_actions(
         &self,
         filter: &WorkflowActionFilter,
@@ -129,16 +107,11 @@ pub trait WorkflowActionRepositoryExt {
     ) -> Result<PageResult<WorkflowActionRow>>;
 
     /// 按单据查询动作历史（`idx_workflow_actions_document_created`）。
-    ///
-    /// # 参数
-    /// * `document_id` - 业务单据 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回按时间倒序排列的动作历史。
     ///
-    /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
+    ///
+    /// `executor`：数据访问执行器，由 Service 决定是否位于事务中。
     async fn list_by_document(
         &self,
         document_id: &BusinessDocumentId,
@@ -178,10 +151,7 @@ impl WorkflowActionRepositoryExt for Repository<'_, WorkflowAction> {
     }
 }
 
-/// 工作流动作列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
+// 工作流动作列表投影字段。
 fn workflow_action_projection() -> Document {
     doc! {
         "id": 1,

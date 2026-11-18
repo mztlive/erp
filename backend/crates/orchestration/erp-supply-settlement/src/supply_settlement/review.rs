@@ -50,21 +50,9 @@ struct PreparedDecision {
 }
 
 impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
-    /// 提交冻结结算主题并原子创建唯一财务复核任务。
+    /// 提交冻结结算主题供财务复核，重验单据版本、主题摘要、刷新截止策略、完整差异结论和复核人资格。
     ///
-    /// 命令重验结算单版本、服务端主题摘要、刷新截止策略与完整差异结论；结算单
-    /// 进入待复核、`SUPPLIER_SETTLEMENT_REVIEW` 任务和幂等审计在同一事务写入。
-    ///
-    /// # 参数
-    /// * `id` - 路径中的结算单 ID。
-    /// * `req` - 提交复核命令。
-    /// * `actor` - 当前经办人。
-    ///
-    /// # 返回
-    /// 返回已提交的结算单与新建复核任务；同一命令重放返回原结果。
-    ///
-    /// # 错误
-    /// 路径身份、版本、主题、策略或差异状态不一致时失败关闭。请求校验、范围、复核人资格或事务写入失败时返回对应错误。
+    /// 同一事务将结算单置为待复核，创建唯一 `SUPPLIER_SETTLEMENT_REVIEW` 任务并登记审计；重放返回原结算单与任务，身份、范围或冻结条件不符时拒绝。
     pub async fn submit_review(
         &self,
         id: &str,
@@ -121,7 +109,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         recover_command(error, recovered)
     }
 
-    /// 在入口事务内完成授权、准备、重放与持久化。
+    // 在提交事务内先核验经办权限和原回执，再准备冻结结算主题及唯一财务待办，避免重试创建第二项任务。
     async fn submit_review_apply(
         &self,
         id: &str,
@@ -179,7 +167,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         })
     }
 
-    /// 写入前用原执行器重验主题、差异和复核人资格。
+    // 保存前用原执行器重验主题、差异和指定复核人资格，使正式待办始终对应本次有效的冻结资料。
     async fn apply_review_submission(
         &self,
         prepared: PreparedSubmission,
@@ -227,22 +215,9 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         Ok((current, prepared.work_item))
     }
 
-    /// 使用当前正式任务完成供应商结算复核决定。
+    /// 依据正式复核任务确认或驳回供应商结算。两种决定都校验任务与单据版本、主题摘要、当前责任、财务权限、组织范围和岗位分离。
     ///
-    /// `REJECT` 与 `CONFIRM` 均校验任务 CAS、主题摘要、结算单 CAS、当前责任、
-    /// 财务角色/组织范围与岗位分离；业务事实、任务完成、审计以及确认形成的应付
-    /// 和成本差额在同一事务写入。
-    ///
-    /// # 参数
-    /// * `id` - 路径中的结算单 ID。
-    /// * `req` - 复核决定命令。
-    /// * `actor` - 当前复核人。
-    ///
-    /// # 返回
-    /// 返回复核决定结果；同一命令重放返回原结果。
-    ///
-    /// # 错误
-    /// 任务、责任、主题、结算版本或正式业务前置条件不一致时失败关闭。请求校验或事务写入失败时返回对应错误。
+    /// 决定、任务完成和审计同事务登记；确认还写入应付和成本差额。重试只恢复仍与回执一致的结果，不重复过账。
     pub async fn decide_review(
         &self,
         id: &str,
@@ -291,7 +266,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         recover_command(error, recovered)
     }
 
-    /// 在入口事务内完成授权、准备、重放与持久化。
+    // 在决定事务内核对正式任务及操作者，命中原回执则返回，否则准备决定和财务数据后调用过账，避免重复确认。
     async fn decide_review_apply(
         &self,
         id: &str,
@@ -332,7 +307,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         Ok(review_decision_result(statement, work_item, operation_id, receipt))
     }
 
-    /// 按原先的结算单、任务、明细、差异顺序准备领域决定与财务构造结果。
+    // 按结算单、正式任务、明细和差异的顺序读取准备资料，构造复核决定及财务结果供同事务写入。
     async fn prepare_decision(
         &self,
         id: &str,
@@ -360,7 +335,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         Ok(PreparedDecision { statement, work_item, financial })
     }
 
-    /// 按原顺序读取并验证决定所针对的结算单与正式任务。
+    // 先校验结算单版本，再读取和校验正式复核任务，避免使用未绑定该单或已变化的任务执行决定。
     async fn load_review_decision_state(
         &self,
         id: &str,
@@ -391,7 +366,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         Ok((statement, work_item))
     }
 
-    /// 重放提交复核命令并校验收据载荷。
+    // 核验提交复核回执的原身份和命令指纹，恢复关联的结算单与任务，不重复冻结主题或创建待办。
     async fn replay_review_submission(
         &self,
         audit_id: &str,
@@ -439,7 +414,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         }))
     }
 
-    /// 重放正式复核决定并恢复同一业务结果。
+    // 核对原回执身份及请求指纹，重验复核资格与制单复核分离；只有当前事实仍匹配已完成决定时才恢复，不重复过账。
     async fn replay_review_decision(
         &self,
         audit_id: &str,
@@ -523,7 +498,7 @@ impl<A: WorkflowAuthorizationPort> DecisionCommit<A> {
         }
     }
 
-    /// 沿公开决定入口的执行器调用原授权、事实重验和财务过账步骤。
+    // 沿用复核入口的执行器执行资格重验、事实重验和财务过账，使决定与任务、财务结果同事务提交。
     async fn persist(
         mut self,
         executor: &mut dyn Executor,
@@ -555,7 +530,7 @@ impl<A: WorkflowAuthorizationPort> DecisionCommit<A> {
     }
 }
 
-/// 创建绑定结算单内部组织的正式复核任务；拒绝公司根。
+// 按冻结主题构造结算财务待办，任务必须归属单据的内部组织；公司根不能作为任务责任组织。
 fn create_review_work_item(
     work_item_id: WorkItemId,
     statement: &SupplierSettlementStatement,
@@ -588,20 +563,10 @@ fn review_work_item_binds_statement(item: &WorkItem, statement: &SupplierSettlem
         && review_task_identity_matches(&item.owner_role, &item.owner_organization_id, statement)
 }
 
-/// 校验结算复核任务仍绑定当前结算单、版本和责任人。
+/// 执行决定前确认待办仍开放，任务版本、冻结主题和责任角色及组织仍与当前待复核单据匹配。
 ///
-/// # 参数
-/// * `item` - 正式复核任务。
-/// * `statement` - 当前结算单。
-/// * `expected_task_version` - 命令锁定的任务版本。
-/// * `expected_subject_version` - 命令锁定的主题摘要。
-/// * `actor` - 当前复核人。
-///
-/// # 返回
-/// 绑定、版本和责任一致时无返回值。
-///
-/// # 错误
-/// 任务版本或主题变化时返回 `ConflictError`。任务与结算单不匹配或结算单不在待复核时返回 `BusinessLogicError`。当前账号不是责任人时返回 `Forbidden`。
+/// 任务版本、主题变化或待办已结束返回 `ConflictError`；绑定或结算状态不符返回 `BusinessLogicError`。
+/// 操作者的办理资格须另行校验。
 pub fn validate_settlement_review_work_item(
     item: &WorkItem,
     statement: &SupplierSettlementStatement,
@@ -624,7 +589,7 @@ pub fn validate_settlement_review_work_item(
     Ok(())
 }
 
-/// 解析跨端字符串版本并拒绝零版本。
+// 将客户端任务版本解析为正整数，拒绝零或非法值，以便后续版本校验不接受占位值。
 fn parse_expected_task_version(value: &str) -> Result<u64> {
     let invalid = || Error::ValidationError("复核待办版本无效，请刷新后重新打开待办".into());
     let version = value.trim().parse::<u64>().map_err(|_| invalid())?;
@@ -634,7 +599,7 @@ fn parse_expected_task_version(value: &str) -> Result<u64> {
     Ok(version)
 }
 
-/// 计算提交复核命令指纹。
+// 用冻结主题、版本、复核人和操作字段生成提交指纹，供回执区分同键重试与载荷变更。
 fn submit_review_fingerprint(req: &SubmitSettlementReviewRequest) -> String {
     digest_parts(&[
         "SUBMIT_REVIEW".to_string(),
@@ -649,7 +614,7 @@ fn submit_review_fingerprint(req: &SubmitSettlementReviewRequest) -> String {
     ])
 }
 
-/// 计算正式复核决定命令指纹。
+// 为复核任务、决定及其版本生成稳定指纹，规范化版本文本和原因标识，供回执检测同键不同决定。
 fn review_decision_fingerprint(req: &SettlementReviewCommand) -> String {
     let action = match req.decision.action {
         dto::SettlementReviewAction::Reject => "REJECT",
@@ -668,7 +633,7 @@ fn review_decision_fingerprint(req: &SettlementReviewCommand) -> String {
     ])
 }
 
-/// 由正式事实与收据构造结算复核响应。
+// 从结算单、已完成任务和原决定回执组装响应，使应付身份、成本差额及任务版本与实际决定一致。
 fn review_decision_result(
     statement: SupplierSettlementStatement,
     work_item: WorkItem,
@@ -696,7 +661,7 @@ fn review_decision_result(
     }
 }
 
-/// 提交收据允许结算单推进；该检查仍先于正式任务读取。
+// 回放复核提交时先排除早于回执的结算单版本，再读取正式任务；允许结算单在原提交后继续推进。
 fn ensure_submission_statement(
     statement: &SupplierSettlementStatement,
     receipt: &ReviewSubmissionReceipt,
@@ -706,7 +671,7 @@ fn ensure_submission_statement(
     }
     Ok(())
 }
-/// 提交收据允许任务推进，保持当前归属与主题校验。
+// 校验任务仍归属回执对应结算单和冻结主题，并允许任务版本在提交后向前推进。
 fn ensure_submission_task(
     statement: &SupplierSettlementStatement,
     work_item: &WorkItem,
@@ -719,7 +684,7 @@ fn ensure_submission_task(
     }
     Ok(())
 }
-/// 决定收据要求精确版本和正式完成状态，不接受后续业务状态。
+// 只有结算单、已完成任务及财务结果仍与决定回执精确一致才可回放；拒绝后续业务状态冒充原结果。
 fn ensure_decision_replay(
     statement: &SupplierSettlementStatement,
     work_item: &WorkItem,
@@ -764,7 +729,7 @@ struct ReviewSubmissionWrite<'a> {
     request: &'a SubmitSettlementReviewRequest,
 }
 
-/// 保存首次复核提交的版本、任务引用及同事务单次事件。
+// 结算单和待办写入后，用原事务保存首次提交的版本、待办引用和单次审计，为幂等回放提供依据。
 async fn persist_review_submission(
     input: ReviewSubmissionWrite<'_>,
     executor: &mut dyn Executor,
@@ -803,7 +768,7 @@ async fn persist_review_submission(
     Ok(())
 }
 
-/// 提交前按原顺序验证负责人、结算版本和冻结主题。
+// 先校验结算单版本，再验证冻结主题及提交前置事实，避免用过期草稿建立复核任务。
 fn validate_submission_command(
     statement: &SupplierSettlementStatement,
     req: &SubmitSettlementReviewRequest,
@@ -815,7 +780,7 @@ fn validate_submission_command(
     Ok(())
 }
 
-/// 将正式复核决定映射为同一已登记动作代码。
+// 把确认和驳回映射到各自登记的动作码，供审计和回执准确区分正式决定。
 fn review_action(action: dto::SettlementReviewAction) -> &'static str {
     match action {
         dto::SettlementReviewAction::Reject => "supplier_settlement.review_reject",

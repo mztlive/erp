@@ -10,11 +10,14 @@ use crate::finance::document_files::{FinancialFileView, readable_file};
 use crate::{Error, Result};
 
 impl FundsAccess {
-    /// 在同一读取事务中验证整票资格并列出附件。
+    /// 读取销项发票附件时，在同一读取事务中验证整票资格并列出附件。
+    ///
     /// # 参数
     /// 发票身份与当前账号。
+    ///
     /// # 返回
     /// 文件名称、类型和下载所需身份，不返回存储地址。
+    ///
     /// # 错误
     /// 不可见发票、部分份额授权或文件读取失败时拒绝。
     pub async fn invoice_files_scoped(&self, id: &str, actor: &AuditActor) -> Result<Vec<FinancialFileView>> {
@@ -58,7 +61,7 @@ impl FundsAccess {
     }
 }
 
-/// 整票文件不能按份额裁剪，部分授权必须拒绝。
+// 核对销项发票附件边界时，整票文件不能按份额裁剪，部分授权必须拒绝。
 fn ensure_whole_invoice(permission_limited: bool) -> Result<()> {
     if permission_limited {
         return Err(Error::Forbidden("当前仅可查看部分核销份额，不能下载整张发票文件".into()));

@@ -39,16 +39,7 @@ pub enum CapabilityCode {
 }
 
 impl CapabilityCode {
-    /// 返回能力的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为供应商能力提供中文展示名；界面展示时使用，不以文案作为稳定标识。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Physical => "实物商品",
@@ -59,16 +50,7 @@ impl CapabilityCode {
         }
     }
 
-    /// 返回能力的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得供应商能力的稳定标识，供需要按代码而非展示文案识别取值的调用方使用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Physical => "physical",
@@ -79,18 +61,9 @@ impl CapabilityCode {
         }
     }
 
-    /// 由稳定代码反查能力代码。
-    ///
+    /// 按稳定代码识别供应商能力，让调用方区分已登记枚举值和无法识别的输入。
     /// 列表查询的逗号分隔代码经此归一化。
-    ///
-    /// # 参数
-    /// * `code` - 稳定代码（如 `physical`）
-    ///
-    /// # 返回
     /// 命中时返回对应能力代码，未知代码返回 `None`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn from_code(code: &str) -> Option<Self> {
         match code {
             "physical" => Some(Self::Physical),
@@ -115,16 +88,7 @@ pub enum CapabilityStatus {
 }
 
 impl CapabilityStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为供应能力状态提供中文展示名；界面展示时使用，不以文案作为稳定标识。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Active => "启用",
@@ -132,16 +96,7 @@ impl CapabilityStatus {
         }
     }
 
-    /// 返回状态的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得供应能力状态的稳定标识，供需要按代码而非展示文案识别取值的调用方使用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Active => "active",
@@ -149,32 +104,16 @@ impl CapabilityStatus {
         }
     }
 
-    /// 判断是否处于启用状态。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 处于 `Active` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 检查供应能力状态是否启用；此处仅检查启停标记，不代表业务资格已经通过。
     pub fn is_active(&self) -> bool {
         matches!(self, Self::Active)
     }
 }
 
 impl DocumentState for CapabilityStatus {
-    /// 返回合法后继：启用 ⇄ 停用。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// `Active` 的静态切片只含 `Disabled`；`Disabled` 的静态切片只含 `Active`。切片不含当前状态自身。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 提供供应能力状态允许迁移到的后继状态，供状态更新校验。
+    // 允许的迁移为：启用 ⇄ 停用。
+    // `Active` 的静态切片只含 `Disabled`；`Disabled` 的静态切片只含 `Active`。切片不含当前状态自身。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Active => &[Self::Disabled],
@@ -254,7 +193,7 @@ pub struct SupplierCapability {
 }
 
 impl PartialEq for SupplierCapability {
-    /// 全字段语义相等。
+    // 按全部实体字段比较供应商能力，而非只比较稳定 ID。
     fn eq(&self, other: &Self) -> bool {
         self.base == other.base
             && self.stable.status == other.stable.status
@@ -275,19 +214,9 @@ impl Eq for SupplierCapability {}
 
 impl SupplierCapability {
     /// 创建供应商能力。
-    ///
-    /// 完成负责人必填校验与全部文本字段的规范化（去首尾空白、长度
-    /// 上限）；强制 `valid_to` 晚于 `valid_from`。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::SupplierCapabilityId`）
-    /// * `data` - 创建数据
-    /// * `created_by` - 创建人（账号或系统身份）
-    ///
-    /// # 返回
+    /// 完成负责人必填校验与全部文本字段的规范化（去首尾空白、长度上限）；强制 `valid_to` 晚于
+    /// `valid_from`。
     /// 返回新建的能力实体。
-    ///
-    /// # 错误
     /// 当负责人为空/超长、其他文本超长或生效区间倒挂时返回错误。
     pub fn new(
         id: SupplierCapabilityId,
@@ -320,18 +249,8 @@ impl SupplierCapability {
     }
 
     /// 更新供应商能力。
-    ///
-    /// `supplier_id` 与 `capability_code` 是稳定身份，不允许在通用更新
-    /// 中修改；状态迁移按固定状态机校验（§13.3）。
-    ///
-    /// # 参数
-    /// * `update` - 更新数据
-    /// * `updated_by` - 本次更新执行人
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// `supplier_id` 与 `capability_code` 是稳定身份，不允许在通用更新中修改；状态迁移按固定状态机校验
+    /// （§13.3）。
     /// 当文本超长、`valid_to` 倒挂或状态迁移非法时返回错误。
     pub fn update(&mut self, update: SupplierCapabilityUpdate, updated_by: impl Into<String>) -> Result<()> {
         self.apply_service_region(update.service_region)?;
@@ -343,33 +262,14 @@ impl SupplierCapability {
         Ok(())
     }
 
-    /// 判断能力是否处于启用状态。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 状态为 `Active` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 检查供应商能力是否启用；此处仅检查启停标记，不代表业务资格已经通过。
     pub fn is_active(&self) -> bool {
         self.stable.status().is_active()
     }
 
     /// 显式交接供给能力负责人。
-    ///
-    /// # 参数
-    /// * `target_user_id` - 目标能力负责人
-    /// * `updated_by` - 本次交接执行人
-    ///
-    /// # 返回
     /// 交接成功时返回 `Ok(())`，并改写能力负责人。
-    ///
-    /// # 错误
     /// 目标负责人为空、过长或与当前负责人一致时返回错误。
-    ///
-    /// # 关键业务约束
     /// 独立于整体维护人；不得把操作人写成能力负责人。
     pub fn handover(&mut self, target_user_id: String, updated_by: impl Into<String>) -> Result<()> {
         let target = normalize_required_text(
@@ -388,32 +288,14 @@ impl SupplierCapability {
     }
 
     /// 判断能力在指定业务日是否可用于列表展示。
-    ///
     /// 须同时满足启用、已到生效日、且尚未到期；与列表按能力筛选的日期口径一致。
-    ///
-    /// # 参数
-    /// * `as_of` - 判定所用业务日
-    ///
-    /// # 返回
     /// 当前可用于新业务时返回 `true`。
-    ///
-    /// # 错误
-    /// 无。
     pub fn is_effective_on(&self, as_of: BusinessDate) -> bool {
         self.is_active() && self.valid_from <= as_of && self.valid_to.is_none_or(|end| as_of <= end)
     }
 
     /// 返回当前有效能力代码的去重稳定序列。
-    ///
-    /// # 参数
-    /// * `capabilities` - 同一供应商或当前页的能力集合
-    /// * `as_of` - 判定所用业务日
-    ///
-    /// # 返回
     /// 按稳定代码排序、去重后的有效能力代码。
-    ///
-    /// # 错误
-    /// 无。
     pub fn list_codes<'a, I>(capabilities: I, as_of: BusinessDate) -> Vec<CapabilityCode>
     where
         I: IntoIterator<Item = &'a Self>,
@@ -428,13 +310,8 @@ impl SupplierCapability {
         codes
     }
 
-    /// 应用服务区域更新。
-    ///
-    /// # 参数
-    /// * `update` - 区域更新意图
-    ///
-    /// # 错误
-    /// 当区域超长时返回错误。
+    // 应用服务区域更新。
+    // 当区域超长时返回错误。
     fn apply_service_region(&mut self, update: FieldUpdate<String>) -> Result<()> {
         match update {
             FieldUpdate::Unchanged => {},
@@ -447,13 +324,9 @@ impl SupplierCapability {
         Ok(())
     }
 
-    /// 应用负责人更新。
-    ///
-    /// # 参数
-    /// * `owner` - 可选负责人
-    ///
-    /// # 错误
-    /// 当负责人为空或超长时返回错误。
+    // 应用负责人更新。
+    // 当负责人为空或超长时返回错误。
+    // `owner`：可选负责人。
     fn apply_owner(&mut self, owner: Option<String>) -> Result<()> {
         if let Some(owner) = owner {
             self.owner_user_id =
@@ -462,13 +335,8 @@ impl SupplierCapability {
         Ok(())
     }
 
-    /// 应用履约说明更新。
-    ///
-    /// # 参数
-    /// * `update` - 履约说明更新意图
-    ///
-    /// # 错误
-    /// 当说明超长时返回错误。
+    // 应用履约说明更新。
+    // 当说明超长时返回错误。
     fn apply_fulfillment_note(&mut self, update: FieldUpdate<String>) -> Result<()> {
         match update {
             FieldUpdate::Unchanged => {},
@@ -481,13 +349,8 @@ impl SupplierCapability {
         Ok(())
     }
 
-    /// 应用生效结束日期更新。
-    ///
-    /// # 参数
-    /// * `update` - 结束日期更新意图
-    ///
-    /// # 错误
-    /// 当结束日期不晚于开始日期时返回错误。
+    // 应用生效结束日期更新。
+    // 当结束日期不晚于开始日期时返回错误。
     fn apply_valid_to(&mut self, update: FieldUpdate<BusinessDate>) -> Result<()> {
         if let Some(valid_to) = update.into_option() {
             super::ensure_window_valid(self.valid_from, Some(valid_to))?;
@@ -496,13 +359,9 @@ impl SupplierCapability {
         Ok(())
     }
 
-    /// 应用状态更新。
-    ///
-    /// # 参数
-    /// * `status` - 可选目标状态
-    ///
-    /// # 错误
-    /// 目标状态不在固定状态机后继中时返回错误。
+    // 应用状态更新。
+    // 目标状态不在固定状态机后继中时返回错误。
+    // `status`：可选目标状态。
     fn apply_status(&mut self, status: Option<CapabilityStatus>) -> Result<()> {
         if let Some(to) = status {
             ensure_transition(self.stable.status, to)?;
@@ -512,19 +371,11 @@ impl SupplierCapability {
     }
 
     /// 从当前能力状态构造不可变修订快照。
-    ///
-    /// # 参数
-    /// * `revision_id` - 新修订主键，由 Service 分配
-    /// * `revision_no` - 修订序号，由 Service 查询得出；溢出由调用方通过 `RevisionBase::next_revision_no` 提前校验
-    ///
-    /// # 返回
     /// 返回与当前能力字段完全一致的修订快照。
-    ///
-    /// # 错误
     /// 字段规范化失败或区间倒挂时返回错误。
-    ///
-    /// # 约束
     /// 纯内存，不触及 MongoDB、ID 生成器或时钟；快照字段必须与实体当前状态逐字段一致，不得漂移。
+    /// `revision_id`：新修订主键，由 Service 分配。
+    /// `revision_no`：溢出由调用方通过 `RevisionBase::next_revision_no` 提前校验。
     pub fn snapshot_revision(
         &self,
         revision_id: erp_core::ids::SupplierCapabilityRevisionId,
@@ -572,7 +423,7 @@ mod tests {
         }
     }
 
-    /// happy path：文本去空白，能力代码与状态落库。
+    // 验证文本去空白，能力代码与状态落库。
     #[test]
     fn new_trims_and_normalizes() {
         let capability =
@@ -598,7 +449,7 @@ mod tests {
         );
     }
 
-    /// 失败路径：负责人为空/超长、区域超长、区间倒挂。
+    // 验证负责人为空/超长、区域超长、区间倒挂。
     #[test]
     fn new_rejects_invalid_inputs() {
         let blank_owner = SupplierCapabilityData { owner_user_id: "   ".to_string(), ..capability_data() };
@@ -615,7 +466,7 @@ mod tests {
         assert!(SupplierCapability::new(SupplierCapabilityId::new("c"), reversed, "admin-1").is_err());
     }
 
-    /// 状态机：邻接矩阵闭包完整，合法迁移通过。
+    // 验证邻接矩阵闭包完整，合法迁移通过。
     #[test]
     fn status_transitions_follow_fixed_matrix() {
         assert_adjacency_closed(&[CapabilityStatus::Active, CapabilityStatus::Disabled]);
@@ -643,7 +494,7 @@ mod tests {
         assert_eq!(capability.stable.updated_by, "admin-2");
     }
 
-    /// 更新：能力代码与供应商不可修改（不在更新面）。
+    // 验证能力代码与供应商不可修改（不在更新面）。
     #[test]
     fn update_keeps_stable_identity() {
         let mut capability =
@@ -665,7 +516,7 @@ mod tests {
         assert_eq!(capability.supplier_id, SupplierAccountId::new("supplier-1"));
     }
 
-    /// 能力交接与维护人分列；相同目标冲突保持原值。
+    // 验证能力交接与维护人分列；相同目标冲突保持原值。
     #[test]
     fn capability_handover_rejects_same_owner() {
         let mut capability =
@@ -678,7 +529,8 @@ mod tests {
         assert_eq!(capability.owner_user_id, "buyer-2");
     }
 
-    /// 快照字段必须与实体当前状态完全一致；修订号溢出仍由 `RevisionBase::next_revision_no` 负责，本方法仅校验字段一致性。
+    // 验证快照字段必须与实体当前状态完全一致；修订号溢出仍由 `RevisionBase::next_revision_no` 负责，本方
+    // 法仅校验字段一致性。
     #[test]
     fn snapshot_matches_entity_fields() {
         let capability =
@@ -698,7 +550,7 @@ mod tests {
         assert_eq!(rev.revision.revision_no, 5);
     }
 
-    /// 修订号溢出由调用方通过 `RevisionBase::next_revision_no` 失败关闭，禁止在溢出时调用快照。
+    // 验证修订号溢出由调用方通过 `RevisionBase::next_revision_no` 失败关闭，禁止在溢出时调用快照。
     #[test]
     fn revision_overflow_fails_closed_and_snapshot_not_invoked() {
         use erp_core::common::revision::RevisionBase;
@@ -716,7 +568,7 @@ mod tests {
         assert_eq!(rev.revision.revision_no, 1);
     }
 
-    /// 实体 BSON 往返。
+    // 验证该实体写成 BSON 后能还原成原实体。
     #[test]
     fn bson_roundtrip() {
         let capability =

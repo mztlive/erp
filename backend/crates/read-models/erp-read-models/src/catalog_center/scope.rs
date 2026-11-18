@@ -18,11 +18,10 @@ use super::procurement::{ProductProcurementOwners, ensure_authorized_count};
 use crate::{Error, Result};
 
 impl CatalogCenterReadService {
-    /// 分页查询授权范围内的商品列表。
+    /// 打开公司商品列表时，只对本次授权及筛选命中的商品分页，并返回供后续页回传的范围版本。
     ///
     /// # 参数
     /// * `params` - 商品筛选与范围参数
-    /// * `actor` - 已认证操作人
     ///
     /// # 返回
     /// 返回分页与范围元信息；人员候选由独立目录提供。
@@ -51,11 +50,10 @@ impl CatalogCenterReadService {
         })
     }
 
-    /// 按稳定 ID 查询单个商品，独立按 detail 动作解析。
+    /// 打开单个商品时按稳定 ID 查询，在原快照独立校验商品详情动作及对象范围，交付前复验凭证。
     ///
     /// # 参数
     /// * `id` - 商品稳定 ID
-    /// * `actor` - 已认证操作人
     ///
     /// # 返回
     /// 返回与列表同构的单个商品视图。
@@ -96,7 +94,7 @@ impl CatalogCenterReadService {
             .await
     }
 
-    /// 在同一事务装载列表快照。
+    // 在商品列表入口的读取事务内装载完整授权快照，供跨页版本比较与当前页交付。
     async fn list_snapshot(&self, params: &ProductListParams, actor: &AuditActor) -> Result<ProductSnapshot> {
         let db = self.db.clone();
         let query = self.query.clone();
@@ -124,7 +122,7 @@ struct ProductSnapshot {
     as_of: String,
 }
 
-/// 在同一授权快照中查询商品，并按已授权行批量补齐维护人姓名。
+// 装载商品列表快照时，沿同一执行器应用授权和筛选、读取分页并补齐当前页维护人姓名，最后复验原授权凭证。
 async fn build_snapshot(
     db: mongodb::Database,
     query: Arc<dyn CatalogSupplyQueryPort>,
@@ -162,24 +160,20 @@ async fn build_snapshot(
     })
 }
 
-/// 按维护人身份匹配展示名；缺失姓名保持空值，不将内部 ID 当作姓名。
-///
-/// # 参数
-/// * `rows` - 待补维护人姓名的商品行
-/// * `names` - 账号身份到展示名
-///
-/// # 返回
-/// 无返回值。按 `maintainer_user_id` 写入 `maintainer_user_name`；映射没有该身份时为 `None`。
-///
-/// # 错误
-/// 不返回错误。
+// 依据维护人身份匹配展示名；缺失姓名保持空值，不将内部 ID 当作姓名。
+//
+// 调用参数：
+// * `rows` - 待补维护人姓名的商品行
+// * `names` - 账号身份到展示名
+//
+// 按 `maintainer_user_id` 写入 `maintainer_user_name`；映射没有该身份时为 `None`。
 pub(super) fn apply_maintainer_names(rows: &mut [ProductView], names: &HashMap<String, String>) {
     for row in rows {
         row.maintainer_user_name = names.get(&row.maintainer_user_id).cloned();
     }
 }
 
-/// 包含下级却没有组织时返回 `ValidationError`，不得展开成全部组织。
+// 组装商品列表与详情时，包含下级却没有组织时返回 `ValidationError`，不得展开成全部组织。
 async fn apply_org_filter(
     filter: &mut ProductFilter,
     access: &CatalogAccess,
@@ -203,20 +197,18 @@ async fn apply_org_filter(
     Ok(())
 }
 
-/// 先按完整查询读取候选身份，再在候选内解析采购责任，最终列表仍按全部条件分页。
-///
-/// # 参数
-/// * `query` - 商品候选查询
-/// * `filter` - 已含范围与组织条件的商品过滤；命中后写入 `ids`
-/// * `procurement` - 采购负责人规则解析
-/// * `params` - 列表参数；`procurement_owner_user_ids` 为 `None` 时不改过滤
-/// * `executor` - 与授权相同的执行器
-///
-/// # 返回
-/// `procurement_owner_user_ids` 为 `None` 时不改 `filter`。否则把命中商品写入 `filter.ids`。
-///
-/// # 错误
-/// 候选超过 10000 时返回 `ValidationError`；候选读取或责任解析失败时返回对应错误。
+// 组装商品列表与详情时，先按完整查询读取候选身份，再在候选内解析采购责任，最终列表仍按全部条件分页。
+//
+// 调用参数：
+// * `query` - 商品候选查询
+// * `filter` - 已含范围与组织条件的商品过滤；命中后写入 `ids`
+// * `procurement` - 采购负责人规则解析
+// * `params` - 列表参数；`procurement_owner_user_ids` 为 `None` 时不改过滤
+// * `executor` - 与授权相同的执行器
+//
+// `procurement_owner_user_ids` 为 `None` 时不改 `filter`。否则把命中商品写入 `filter.ids`。
+//
+// 候选超过 10000 时返回 `ValidationError`；候选读取或责任解析失败时返回对应错误。
 pub(super) async fn apply_procurement_filter(
     query: &dyn CatalogSupplyQueryPort,
     filter: &mut ProductFilter,

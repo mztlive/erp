@@ -10,13 +10,12 @@ use crate::repository::PurchasePaymentRequestExt;
 use crate::{Error, Result};
 
 /// 装载同资金账号、本采购生效修订的有界已批准余额申请候选。
-/// # 参数
-/// * `db` / `account` - 财务数据库和服务器绑定资金账户。
-/// * `purchase` / `revision` / `executor` - 原采购、当前修订及共同事务。
-/// # 返回
 /// 返回最多一百个候选，额度与唯一性由原申请实体核验。
-/// # 错误
-/// 超限或数据库读取失败时拒绝，不按列表前一百项猜测唯一性。
+/// 失败条件：超限或数据库读取失败时拒绝，不按列表前一百项猜测唯一性。
+///
+/// 输入约定：
+/// - `db` / `account`：财务数据库和服务器绑定资金账户。
+/// - `purchase` / `revision` / `executor`：原采购、当前修订及共同事务。
 pub async fn automatic_payment_requests(
     db: &Database,
     account: &str,

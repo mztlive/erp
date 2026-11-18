@@ -53,15 +53,11 @@ pub struct ProcurementCategoryFact {
 impl CatalogRepository<'_> {
     /// 批量读取候选商品的类型和当前修订指针。
     ///
-    /// # 参数
-    /// * `ids` - 已授权且满足基础筛选的商品主键
-    /// * `executor` - 调用方执行器
+    /// 返回未软删除商品的最小事实；空输入不查询。MongoDB 读取或投影反序列化失败时返回错误。
     ///
-    /// # 返回
-    /// 返回未软删除商品的最小事实；空输入不查询。
+    /// 沿用调用方的执行器，不另开事务。
     ///
-    /// # 错误
-    /// MongoDB 读取或投影反序列化失败时返回错误。
+    /// `ids` 为已授权且满足基础筛选的商品主键。
     pub async fn procurement_products(
         &self,
         ids: &[String],
@@ -79,15 +75,9 @@ impl CatalogRepository<'_> {
 
     /// 批量读取候选商品下所有未删除 SKU 身份。
     ///
-    /// # 参数
-    /// * `product_ids` - 候选商品主键
-    /// * `executor` - 调用方执行器
+    /// 返回 SKU 身份和商品引用；保持采购解析原有的所有 SKU 口径。MongoDB 读取或反序列化失败时返回错误。
     ///
-    /// # 返回
-    /// 返回 SKU 身份和商品引用；保持采购解析原有的所有 SKU 口径。
-    ///
-    /// # 错误
-    /// MongoDB 读取或反序列化失败时返回错误。
+    /// 沿用调用方的执行器，不另开事务。
     pub async fn procurement_product_skus(
         &self,
         product_ids: &[String],
@@ -98,15 +88,9 @@ impl CatalogRepository<'_> {
 
     /// 批量读取供给引用的未删除 SKU 身份。
     ///
-    /// # 参数
-    /// * `ids` - 供给引用的 SKU 主键
-    /// * `executor` - 调用方执行器
+    /// 返回 SKU 身份和商品引用；空输入不查询。MongoDB 读取或反序列化失败时返回错误。
     ///
-    /// # 返回
-    /// 返回 SKU 身份和商品引用；空输入不查询。
-    ///
-    /// # 错误
-    /// MongoDB 读取或反序列化失败时返回错误。
+    /// 沿用调用方的执行器，不另开事务。
     pub async fn procurement_skus(
         &self,
         ids: &[String],
@@ -117,15 +101,11 @@ impl CatalogRepository<'_> {
 
     /// 批量读取当前商品修订的分类引用。
     ///
-    /// # 参数
-    /// * `ids` - 商品稳定身份当前指向的修订主键
-    /// * `executor` - 调用方执行器
+    /// 返回未删除修订中的分类事实，保持当前指针语义。MongoDB 读取或反序列化失败时返回错误。
     ///
-    /// # 返回
-    /// 返回未删除修订中的分类事实，保持当前指针语义。
+    /// 沿用调用方的执行器，不另开事务。
     ///
-    /// # 错误
-    /// MongoDB 读取或反序列化失败时返回错误。
+    /// `ids` 为商品稳定身份当前指向的修订主键。
     pub async fn procurement_revisions(
         &self,
         ids: &[String],
@@ -143,15 +123,11 @@ impl CatalogRepository<'_> {
 
     /// 一次读取一层分类父指针，供请求内祖先批量展开。
     ///
-    /// # 参数
-    /// * `ids` - 当前层去重后的分类主键
-    /// * `executor` - 调用方执行器
+    /// 返回未删除分类的父引用；未返回的分类由调用方作为缺失末节点处理。MongoDB 读取或反序列化失败时返回错误。
     ///
-    /// # 返回
-    /// 返回未删除分类的父引用；未返回的分类由调用方作为缺失末节点处理。
+    /// 沿用调用方的执行器，不另开事务。
     ///
-    /// # 错误
-    /// MongoDB 读取或反序列化失败时返回错误。
+    /// `ids` 为当前层去重后的分类主键。
     pub async fn procurement_categories(
         &self,
         ids: &[String],
@@ -167,7 +143,7 @@ impl CatalogRepository<'_> {
         .await
     }
 
-    /// 读取单一领域集合的最小采购事实，空集合及软删除口径统一处理。
+    // 读取单一领域集合的最小采购事实，空集合及软删除口径统一处理。
     async fn procurement_projection<T: DeserializeOwned + Send + Sync>(
         &self,
         collection: &str,
@@ -191,7 +167,7 @@ impl CatalogRepository<'_> {
     }
 }
 
-/// 两类 SKU 采购事实查询共用稳定身份和商品引用投影。
+// 两类 SKU 采购事实查询共用稳定身份和商品引用投影。
 fn sku_projection() -> Document {
     doc! { "id": 1, "product_id": 1 }
 }
@@ -203,7 +179,7 @@ mod tests {
     use super::*;
 
     #[test]
-    /// 最小事实不要求实体中的名称、金额、媒体、状态或系统审计字段。
+    // 验证采购事实投影只需业务身份、类型和关联字段，可从省略名称、金额、媒体及审计字段的文档读取。
     fn procurement_projection_accepts_only_required_facts() {
         let product: ProcurementProductFact = deserialize_from_document(doc! {
             "id": "product", "product_kind": "PHYSICAL", "current_revision_id": "revision"
@@ -223,7 +199,7 @@ mod tests {
     }
 
     #[test]
-    /// 缺少业务身份时拒绝；允许原有缺失当前修订和根分类。
+    // 验证采购投影拒绝缺少稳定标识的记录，同时允许历史商品尚无当前修订和根分类没有父分类。
     fn procurement_projection_rejects_missing_identity_and_keeps_optional_links() {
         assert!(deserialize_from_document::<ProcurementSkuFact>(doc! { "product_id": "product" }).is_err());
 

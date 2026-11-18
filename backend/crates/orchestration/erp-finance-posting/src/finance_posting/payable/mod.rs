@@ -53,21 +53,12 @@ pub struct SupplierPaymentBankReceiptSnapshot {
 }
 
 impl PayableProcess {
-    /// 创建供应商往来流程实例。
-    ///
-    /// # 参数
-    /// * `db` - 数据库实例
-    ///
-    /// # 返回
-    /// 返回流程实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 应用装配供应商往来流程时注入业务数据库和财务授权、审批及任务端口，供应商应付和付款命令共同使用。
     pub fn new(db: Database, rbac: FinancePostingPorts) -> Self {
         Self { db, authorization_rbac: rbac }
     }
 
-    /// 取得应付跨领域读模型，命令回读复用相同装配实现。
+    // 取得应付跨领域读模型，命令回读复用相同装配实现。
     fn read(&self) -> PayableReadService {
         PayableReadService::new(self.db.clone())
     }
@@ -76,7 +67,7 @@ impl PayableProcess {
 mod supplier_payment_execution_tests {
     use erp_read_models::finance::payable::mapping::masked_bank_account_number;
 
-    /// 收款账号掩码不得泄露除末四位外的内容。
+    // 收款账号掩码不得泄露除末四位外的内容。
     #[test]
     fn recipient_mask_only_contains_last_four() {
         assert_eq!(masked_bank_account_number("1234"), "********1234");

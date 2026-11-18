@@ -97,10 +97,7 @@ pub enum Error {
 }
 
 impl From<persistence_core::Error> for Error {
-    /// 将仓储错误转换为 HTTP 边界错误。
-    ///
-    /// 唯一键与乐观锁冲突使用 409，其余仓储错误保持内部错误语义。
-    /// 唯一键冲突优先按已知索引名给出字段级提示。
+    // 形成 HTTP 错误时，唯一键、乐观锁和瞬态事务冲突使用 409；已知索引由拥有领域提供提示。单独保留提交结果未知，其余仓储错误归内部错误。
     fn from(error: persistence_core::Error) -> Self {
         match error {
             error @ persistence_core::Error::DuplicateKey(_) => {
@@ -119,39 +116,21 @@ impl From<persistence_core::Error> for Error {
 }
 
 impl From<String> for Error {
-    /// 从给定值构建实例。
-    ///
-    /// # 参数
-    /// * `msg` - 错误信息
-    ///
-    /// # 返回
-    /// 返回创建的实例。
+    // 将仅有内部诊断文本的失败归入 HTTP 内部错误，不当作客户端可修复的输入问题。
     fn from(msg: String) -> Self {
         Error::Internal(msg)
     }
 }
 
 impl From<&str> for Error {
-    /// 从给定值构建实例。
-    ///
-    /// # 参数
-    /// * `msg` - 错误信息
-    ///
-    /// # 返回
-    /// 返回创建的实例。
+    // 将借用的诊断文本复制成 HTTP 内部错误，不将其分类为客户端输入问题。
     fn from(msg: &str) -> Self {
         Error::Internal(msg.to_string())
     }
 }
 
 impl From<std::io::Error> for Error {
-    /// 从给定值构建实例。
-    ///
-    /// # 参数
-    /// * `err` - 错误对象
-    ///
-    /// # 返回
-    /// 返回创建的实例。
+    // 将 HTTP 边界收到的 I/O 失败归为内部错误，保留诊断文本供服务端处理。
     fn from(err: std::io::Error) -> Self {
         Error::Internal(err.to_string())
     }
@@ -182,7 +161,7 @@ macro_rules! boundary_error {
 mod application;
 
 impl From<erp_identity::Error> for Error {
-    /// 将身份领域错误映射为 HTTP 边界错误。
+    // 在交付 HTTP 响应前转换身份领域错误，保留业务分类供状态和错误信封使用。
     fn from(err: erp_identity::Error) -> Self {
         boundary_error!(err, erp_identity;
             error @ erp_identity::Error::Rbac(_) => Self::Internal(error.to_string()),
@@ -191,7 +170,7 @@ impl From<erp_identity::Error> for Error {
 }
 
 impl From<erp_audit::Error> for Error {
-    /// 将审计领域错误映射为 HTTP 边界错误。
+    // 在交付 HTTP 响应前转换审计领域错误，保留业务分类供状态和错误信封使用。
     fn from(err: erp_audit::Error) -> Self {
         boundary_error!(err, erp_audit;
         )
@@ -199,7 +178,7 @@ impl From<erp_audit::Error> for Error {
 }
 
 impl From<erp_workflow::Error> for Error {
-    /// 将工作流领域错误映射为 HTTP 边界错误。
+    // 在交付 HTTP 响应前转换工作流领域错误，保留业务分类供状态和错误信封使用。
     fn from(err: erp_workflow::Error) -> Self {
         boundary_error!(err, erp_workflow;
             error @ erp_workflow::Error::Rbac(_) => Self::Internal(error.to_string()),
@@ -209,7 +188,7 @@ impl From<erp_workflow::Error> for Error {
 }
 
 impl From<erp_support::Error> for Error {
-    /// 将支撑领域错误映射为 HTTP 边界错误。
+    // 在交付 HTTP 响应前转换支撑领域错误，保留业务分类供状态和错误信封使用。
     fn from(err: erp_support::Error) -> Self {
         boundary_error!(err, erp_support;
         )
@@ -217,7 +196,7 @@ impl From<erp_support::Error> for Error {
 }
 
 impl From<erp_party::Error> for Error {
-    /// 将主体领域错误映射为 HTTP 边界错误。
+    // 在交付 HTTP 响应前转换主体领域错误，保留业务分类供状态和错误信封使用。
     fn from(err: erp_party::Error) -> Self {
         boundary_error!(err, erp_party;
         )
@@ -225,7 +204,7 @@ impl From<erp_party::Error> for Error {
 }
 
 impl From<erp_customer::Error> for Error {
-    /// 将客户领域错误映射为 HTTP 边界错误。
+    // 在交付 HTTP 响应前转换客户领域错误，保留业务分类供状态和错误信封使用。
     fn from(err: erp_customer::Error) -> Self {
         boundary_error!(err, erp_customer;
         )
@@ -233,7 +212,7 @@ impl From<erp_customer::Error> for Error {
 }
 
 impl From<erp_supplier::Error> for Error {
-    /// 将供应商领域错误映射为 HTTP 边界错误。
+    // 在交付 HTTP 响应前转换供应商领域错误，保留业务分类供状态和错误信封使用。
     fn from(err: erp_supplier::Error) -> Self {
         boundary_error!(err, erp_supplier;
         )
@@ -241,7 +220,7 @@ impl From<erp_supplier::Error> for Error {
 }
 
 impl From<erp_catalog::Error> for Error {
-    /// 将商品领域错误映射为 HTTP 边界错误。
+    // 在交付 HTTP 响应前转换商品领域错误，保留业务分类供状态和错误信封使用。
     fn from(err: erp_catalog::Error) -> Self {
         boundary_error!(err, erp_catalog;
         )
@@ -249,7 +228,7 @@ impl From<erp_catalog::Error> for Error {
 }
 
 impl From<erp_warehouse::Error> for Error {
-    /// 将仓库领域错误映射为 HTTP 边界错误。
+    // 在交付 HTTP 响应前转换仓库领域错误，保留业务分类供状态和错误信封使用。
     fn from(err: erp_warehouse::Error) -> Self {
         boundary_error!(err, erp_warehouse;
         )
@@ -257,7 +236,7 @@ impl From<erp_warehouse::Error> for Error {
 }
 
 impl From<erp_contract::Error> for Error {
-    /// 将合同领域错误映射为 HTTP 边界错误。
+    // 在交付 HTTP 响应前转换合同领域错误，保留业务分类供状态和错误信封使用。
     fn from(err: erp_contract::Error) -> Self {
         boundary_error!(err, erp_contract;
         )
@@ -265,7 +244,7 @@ impl From<erp_contract::Error> for Error {
 }
 
 impl From<erp_inventory::Error> for Error {
-    /// 将库存领域错误映射为 HTTP 边界错误。
+    // 在交付 HTTP 响应前转换库存领域错误，保留业务分类供状态和错误信封使用。
     fn from(err: erp_inventory::Error) -> Self {
         boundary_error!(err, erp_inventory;
         )
@@ -273,7 +252,7 @@ impl From<erp_inventory::Error> for Error {
 }
 
 impl From<erp_finance::Error> for Error {
-    /// 将财务领域错误映射为 HTTP 边界错误。
+    // 在交付 HTTP 响应前转换财务领域错误，保留业务分类供状态和错误信封使用。
     fn from(err: erp_finance::Error) -> Self {
         boundary_error!(err, erp_finance;
         )
@@ -281,7 +260,7 @@ impl From<erp_finance::Error> for Error {
 }
 
 impl From<erp_sales::Error> for Error {
-    /// 将销售领域错误映射为 HTTP 边界错误。
+    // 在交付 HTTP 响应前转换销售领域错误，保留业务分类供状态和错误信封使用。
     fn from(err: erp_sales::Error) -> Self {
         boundary_error!(err, erp_sales;
             erp_sales::Error::SelectionConflict(msg) => Self::Conflict(msg),
@@ -294,7 +273,7 @@ impl From<erp_sales::Error> for Error {
 }
 
 impl From<erp_integration::Error> for Error {
-    /// 将集成领域错误映射为 HTTP 边界错误。
+    // 在交付 HTTP 响应前转换集成领域错误，保留业务分类供状态和错误信封使用。
     fn from(err: erp_integration::Error) -> Self {
         boundary_error!(err, erp_integration;
         )
@@ -302,7 +281,7 @@ impl From<erp_integration::Error> for Error {
 }
 
 impl From<erp_supply::Error> for Error {
-    /// 将供应链领域错误映射为 HTTP 边界错误。
+    // 在交付 HTTP 响应前转换供应链领域错误，保留业务分类供状态和错误信封使用。
     fn from(err: erp_supply::Error) -> Self {
         boundary_error!(err, erp_supply;
         )
@@ -310,7 +289,7 @@ impl From<erp_supply::Error> for Error {
 }
 
 impl From<erp_returns::Error> for Error {
-    /// 将退货逆向领域错误映射为 HTTP 边界错误。
+    // 在交付 HTTP 响应前转换退货逆向领域错误，保留业务分类供状态和错误信封使用。
     fn from(err: erp_returns::Error) -> Self {
         boundary_error!(err, erp_returns;
         )
@@ -318,9 +297,9 @@ impl From<erp_returns::Error> for Error {
 }
 
 impl From<erp_fulfillment::Error> for Error {
-    /// 将履约领域错误映射为 HTTP 边界错误。
-    /// 履约域已删除 `ReceiptDuplicate` 变体（唯一冲突按 `uk_*` 索引名细化为 `ConflictError` 并携带具体文案，
-    /// 由 `ConflictError` 分支透出），故手写映射；分类语义不变。
+    // 在交付 HTTP 响应前转换履约领域错误，保留业务分类供状态和错误信封使用。
+    // 履约域已删除 `ReceiptDuplicate` 变体（唯一冲突按 `uk_*` 索引名细化为 `ConflictError` 并携带具体文案，
+    // 由 `ConflictError` 分支透出），故手写映射；分类语义不变。
     fn from(err: erp_fulfillment::Error) -> Self {
         match err {
             erp_fulfillment::Error::ValidationError(msg) => Error::BadRequest(msg),
@@ -342,7 +321,7 @@ impl From<erp_fulfillment::Error> for Error {
 }
 
 impl From<erp_procurement::Error> for Error {
-    /// 将采购领域错误映射为 HTTP 边界错误。
+    // 在交付 HTTP 响应前转换采购领域错误，保留业务分类供状态和错误信封使用。
     fn from(err: erp_procurement::Error) -> Self {
         boundary_error!(err, erp_procurement;
         )
@@ -350,14 +329,14 @@ impl From<erp_procurement::Error> for Error {
 }
 
 impl From<erp_import::Error> for Error {
-    /// 将导入领域错误映射为 HTTP 边界错误。
+    // 在交付 HTTP 响应前转换导入领域错误，保留业务分类供状态和错误信封使用。
     fn from(err: erp_import::Error) -> Self {
         boundary_error!(err, erp_import;
         )
     }
 }
 
-/// 历史索引兼容提示仅在 HTTP 拥有；活动提示仍由实际领域唯一提供。
+// HTTP 在兼容旧客户端时查找已归档索引的提示；现行索引文案仍只由拥有业务的领域提供。
 fn historical_index_message(index: &str) -> Option<&'static str> {
     match index {
         "uk_procurement_confirmation_lines_confirmation_line"
@@ -371,13 +350,13 @@ fn historical_index_message(index: &str) -> Option<&'static str> {
     }
 }
 
-/// 仅三项精确历史 DuplicateKey 从应用 typed 载体进入兼容响应。
+// 仅将类型化错误中精确命中已归档三项索引的重复键投影为兼容响应，不按任意数据库文案推断冲突。
 fn historical_http_duplicate(error: &persistence_core::Error) -> bool {
     matches!(error, persistence_core::Error::DuplicateKey(_))
         && error.duplicate_index_name().and_then(historical_index_message).is_some()
 }
 
-/// 按唯一拥有者查询索引提示；未知或无索引名保持原通用提示。
+// 重复键冲突优先向索引拥有者取用户提示；没有可识别索引时沿用通用冲突文案。
 fn duplicate_index_conflict_message(index: Option<&str>) -> String {
     index
         .and_then(|name| {
@@ -395,10 +374,7 @@ fn duplicate_index_conflict_message(index: Option<&str>) -> String {
 }
 
 impl IntoResponse for Error {
-    /// 转换为 HTTP 响应。
-    ///
-    /// # 返回
-    /// 返回 `axum::response::Response` 实例。
+    // 转换为 HTTP 响应。
     fn into_response(self) -> axum::response::Response {
         let retry_after_secs = match &self {
             Error::RateLimited(error) => error.retry_after_secs(),
@@ -441,7 +417,7 @@ impl IntoResponse for Error {
 }
 
 impl Error {
-    /// 提取授权层明确报告的单项缺权；对象范围拒绝不得推测为功能缺权。
+    // 形成拒绝响应时，只交付授权层明确报告的单项权限；不由对象不可见或范围不足反推出功能权限。
     fn required_permission(&self) -> Option<String> {
         let Self::Forbidden(message) = self else {
             return None;
@@ -450,10 +426,8 @@ impl Error {
         Permission::parse(key).ok().map(|permission| permission.to_string())
     }
 
-    /// 返回稳定的 HTTP 状态码。
-    ///
-    /// # 返回
-    /// 返回与错误分类对应的协议状态码。
+    // 返回稳定的 HTTP 状态码。
+    // 返回与错误分类对应的协议状态码。
     pub(crate) fn http_status(&self) -> StatusCode {
         match self {
             Error::Internal(_) | Error::OutcomeUnknown(_) => StatusCode::INTERNAL_SERVER_ERROR,
@@ -475,7 +449,7 @@ impl Error {
         }
     }
 
-    /// 返回稳定的外部错误码；不得依赖可变的用户提示文案判断错误类型。
+    // 为响应信封选取客户端可稳定分支的错误码；可变的用户提示不参与错误分类。
     pub(crate) fn error_code(&self) -> &'static str {
         match self {
             Error::Internal(_) => "INTERNAL_ERROR",
@@ -495,13 +469,11 @@ impl Error {
         }
     }
 
-    /// 返回可直接展示给业务用户的错误说明。
-    ///
-    /// 内部错误和包含实现术语的消息必须在 HTTP 边界替换为安全说明；
-    /// 已经是业务语言的消息保留原原因，并在缺少恢复指引时补充下一步。
-    ///
-    /// # 返回
-    /// 返回不包含底层实现细节的中文错误说明。
+    // 返回可直接展示给业务用户的错误说明。
+    //
+    // 内部错误和包含实现术语的消息必须在 HTTP 边界替换为安全说明；
+    // 已经是业务语言的消息保留原原因，并在缺少恢复指引时补充下一步。
+    // 返回不包含底层实现细节的中文错误说明。
     pub(crate) fn user_message(&self) -> String {
         match self {
             Error::Internal(_) => "系统暂时无法完成操作，请稍后重试；如仍失败，请联系支持人员".to_string(),
@@ -556,11 +528,9 @@ impl Error {
         }
     }
 
-    /// 返回字段级校验说明。
-    ///
-    /// # 返回
-    /// 字段校验错误返回完整字段路径与公开提示；
-    /// 其它错误返回 `None`。
+    // 返回字段级校验说明。
+    // 字段校验错误返回完整字段路径与公开提示；
+    // 其它错误返回 `None`。
     pub(crate) fn field_errors(&self) -> Option<BTreeMap<String, String>> {
         let issues = match self {
             Self::InvalidInput(issues) => issues.clone(),
@@ -582,30 +552,20 @@ impl Error {
         (!fields.is_empty()).then_some(fields)
     }
 
-    /// 返回前端能否安全提供原操作重试入口。
-    ///
-    /// # 返回
-    /// 仅网络外的临时系统失败和限流允许直接重试；业务冲突、结果未知
-    /// 与已提交但结果不可读必须先核对当前状态。
+    // 返回前端能否安全提供原操作重试入口。
+    // 仅网络外的临时系统失败和限流允许直接重试；业务冲突、结果未知
+    // 与已提交但结果不可读必须先核对当前状态。
     pub(crate) fn retryable(&self) -> bool {
         matches!(self, Error::Internal(_) | Error::RateLimited(_))
             || matches!(self, Error::Coded(code) if code.retryable())
     }
 }
 
-/// 从冲突文案中取出范围变化的用户说明。
-///
-/// # 参数
-/// * `message` - 领域冲突原因，可能以内部稳定码开头
-///
-/// # 返回
-/// 命中 `DATA_SCOPE_CHANGED` 时返回去掉内部码的中文说明。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// HTTP `code` 必须输出稳定码；用户文案不得再携带会被消毒的内部码。
+// 从冲突文案中取出范围变化的用户说明。
+// `message` 为领域冲突原因，可能以内部稳定码开头。
+// 命中 `DATA_SCOPE_CHANGED` 时返回去掉内部码的中文说明。
+//
+// HTTP `code` 必须输出稳定码；用户文案不得再携带会被消毒的内部码。
 fn data_scope_changed_user_message(message: &str) -> Option<&str> {
     const CODE: &str = "DATA_SCOPE_CHANGED";
     let message = message.trim();
@@ -619,7 +579,7 @@ fn data_scope_changed_user_message(message: &str) -> Option<&str> {
         .filter(|text| !text.is_empty())
 }
 
-/// 将业务原因规范为安全且包含下一步的用户说明。
+// 向客户端公开业务失败前筛选原因，保留安全且能指导下一步的说明，否则使用预设提示。
 fn user_message_or(message: &str, fallback: &str, next_step: &str) -> String {
     if !user_message_is_safe(message) {
         return fallback.to_string();
@@ -631,7 +591,7 @@ fn user_message_or(message: &str, fallback: &str, next_step: &str) -> String {
     format!("{message}，{next_step}")
 }
 
-/// 判断内部错误原因是否符合用户展示合同。
+// 校验一条错误原因能否用于用户界面，避免把内部信息直接放进 HTTP 响应。
 fn user_message_is_safe(message: &str) -> bool {
     let message = message.trim();
     if message.is_empty() || !message.chars().any(|character| ('\u{3400}'..='\u{9fff}').contains(&character))
@@ -647,7 +607,7 @@ fn user_message_is_safe(message: &str) -> bool {
         .any(is_internal_code_token)
 }
 
-/// 判断一个 ASCII 词是否为不应展示的内部稳定码或枚举值。
+// 检查候选提示里的 ASCII 词是否像内部稳定码或枚举，用于拦截不适合展示的错误原因。
 fn is_internal_code_token(token: &str) -> bool {
     if matches!(
         token,

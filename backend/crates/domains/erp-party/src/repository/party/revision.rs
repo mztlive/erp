@@ -51,20 +51,11 @@ pub struct PartyRevisionFilter {
 }
 
 impl QueryFilter for PartyRevisionFilter {
-    /// 转换为 MongoDB 查询条件（修订集合无软删除，过滤条件为空时仍显式
-    /// 追加未删除过滤，与基类语义保持一致）。
-    ///
-    /// `party_id` 为 `None` 时不写入，有值时按字符串精确匹配。`legal_name` 与
-    /// `short_name` 为 `None` 时不写入，有值时按字面量正则、忽略大小写匹配。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 转换为 MongoDB 查询条件（修订集合无软删除，过滤条件为空时仍显式
+    // 追加未删除过滤，与基类语义保持一致）。
+    //
+    // `party_id` 为 `None` 时不写入，有值时按字符串精确匹配。`legal_name` 与
+    // `short_name` 为 `None` 时不写入，有值时按字面量正则、忽略大小写匹配。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(party_id) = &self.party_id {
@@ -77,16 +68,9 @@ impl QueryFilter for PartyRevisionFilter {
 }
 
 impl Pagination for PartyRevisionFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。`page` 原样取出，`page_size` 由 `u32` 转为 `u64`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 提供主体修订列表的页码和每页条数，供分页查询计算读取窗口。
+    //
+    // 返回 `(page, page_size)` 元组。`page` 原样取出，`page_size` 由 `u32` 转为 `u64`。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -103,10 +87,8 @@ pub trait PartyRevisionRepositoryExt {
     /// * `revision_ids` - 主体修订 ID 集合；空集合直接返回空结果
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回
     /// 返回全部匹配修订；返回顺序不承诺与输入一致。
     ///
-    /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
     async fn find_revisions_by_ids(
         &self,
@@ -120,10 +102,8 @@ pub trait PartyRevisionRepositoryExt {
     /// * `id` - 主体修订 ID
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回
     /// 返回匹配的修订；不存在时返回 `None`。
     ///
-    /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
     async fn find_revision(&self, id: &str, executor: &mut dyn Executor) -> Result<Option<PartyRevision>>;
 
@@ -136,10 +116,8 @@ pub trait PartyRevisionRepositoryExt {
     /// * `filter` - 筛选与分页条件
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回
     /// 返回当前页投影行与满足筛选条件的总数。
     ///
-    /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
     async fn search_party_revisions(
         &self,
@@ -153,10 +131,8 @@ pub trait PartyRevisionRepositoryExt {
     /// * `party_id` - 稳定主体 ID
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回
     /// 返回该主体的全部修订（修订集合追加式写入，无软删除）。
     ///
-    /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
     async fn list_revision_history(
         &self,
@@ -172,10 +148,8 @@ pub trait PartyRevisionRepositoryExt {
     /// * `revision_ids` - 修订 ID 集合；为空时直接返回空集合
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回
     /// 返回全部匹配的主体修订。
     ///
-    /// # 错误
     /// 当 MongoDB 查询或反序列化失败时返回错误。
     async fn list_by_ids(
         &self,
@@ -192,10 +166,8 @@ pub trait PartyRevisionRepositoryExt {
     /// * `keyword` - 名称关键词
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回
     /// 返回去重并按稳定 ID 排序的主体 ID。
     ///
-    /// # 错误
     /// 当 MongoDB 查询或反序列化失败时返回错误。
     async fn matching_party_ids_by_name(
         &self,
@@ -209,10 +181,8 @@ pub trait PartyRevisionRepositoryExt {
     /// * `party_id` - 稳定主体 ID
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回
     /// 无历史时返回 `1`，否则返回最大修订号加一。
     ///
-    /// # 错误
     /// 当 MongoDB 查询或反序列化失败时返回错误。
     async fn next_revision_no(&self, party_id: &PartyId, executor: &mut dyn Executor) -> Result<u32>;
 }
@@ -298,10 +268,9 @@ impl PartyRevisionRepositoryExt for Repository<'_, PartyRevision> {
             .map_err(|_| persistence_core::Error::EntityMetadataOutOfRange("revision_no"))
     }
 }
-/// 主体修订列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
+// 列出主体修订列表查询需要读取的字段。
+//
+// 返回投影条件文档。
 fn party_revision_projection() -> Document {
     doc! {
         "id": 1,

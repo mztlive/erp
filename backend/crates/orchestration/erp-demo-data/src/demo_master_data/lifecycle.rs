@@ -19,13 +19,7 @@ use serde::de::DeserializeOwned;
 
 use crate::{Error, Result};
 
-/// 恢复商品及登记的 SKU，使用同一快照核验当前版本。
-/// # 参数
-/// db 为数据库，authorization 为共享授权服务；actor 为操作人，product_id、sku_ids 为实际登记身份。
-/// # 返回
-/// 商品和登记 SKU 已有效或已恢复。
-/// # 错误
-/// 缺少演示生成权限、商品不存在、CAS 版本冲突或数据库故障时拒绝。
+// 用同一写事务校验演示生成权限并恢复登记商品及其 SKU，使原商品关系可继续用于补图和上架。商品缺失、版本冲突或读取失败时拒绝。
 pub(super) async fn restore_product_graph(
     db: &Database,
     authorization: Arc<AuthorizationService>,
@@ -48,7 +42,7 @@ pub(super) async fn restore_product_graph(
     .await
 }
 
-/// 恢复决定所用的商品与 SKU 均从当前写事务读取；通用仓储使用版本 CAS。
+// 从当前写事务读取商品和 SKU，再由仓储按版本恢复软删除记录，避免使用过期版本覆盖并发修改。
 async fn restore_product_records(
     db: &Database,
     product_id: &str,
@@ -73,7 +67,7 @@ async fn restore_product_records(
     Ok(())
 }
 
-/// 收集该商品当前和历史登记 SKU，不提前丢弃已软删除的记录。
+// 合并商品现有关系与历史登记中的 SKU，包含软删除项，供恢复流程检查并恢复原商品关系。
 async fn load_skus(
     db: &Database,
     product_id: &str,
@@ -96,13 +90,7 @@ async fn load_skus(
     Ok(skus)
 }
 
-/// 恢复仓库，读取、授权和写入使用同一事务。
-/// # 参数
-/// db、authorization 为共享设施；actor 为当前账号，id 为登记的仓库身份。
-/// # 返回
-/// 仓库已有效或已恢复。
-/// # 错误
-/// 无生成资格、仓库不存在、版本冲突或数据库故障时拒绝。
+// 按实际主键在同一授权写事务恢复登记仓库，已有效则保留；无生成权限、记录缺失、版本冲突或持久化失败时停止。
 pub(super) async fn restore_warehouse(
     db: &Database,
     authorization: Arc<AuthorizationService>,
@@ -112,13 +100,7 @@ pub(super) async fn restore_warehouse(
     restore_record(db, authorization, actor, "warehouse", id, Database::warehouses).await
 }
 
-/// 恢复客户角色，读取、授权和写入使用同一事务。
-/// # 参数
-/// db、authorization 为共享设施；actor 为当前账号，id 为登记的客户身份。
-/// # 返回
-/// 客户已有效或已恢复。
-/// # 错误
-/// 无生成资格、客户不存在、版本冲突或数据库故障时拒绝。
+// 在授权写事务恢复原客户角色，使销售种子重试沿用原客户 ID；无权、记录缺失、版本冲突或持久化失败时停止。
 pub(super) async fn restore_customer(
     db: &Database,
     authorization: Arc<AuthorizationService>,
@@ -128,13 +110,7 @@ pub(super) async fn restore_customer(
     restore_record(db, authorization, actor, "customer", id, Database::customer_accounts).await
 }
 
-/// 恢复供应商角色，读取、授权和写入使用同一事务。
-/// # 参数
-/// db、authorization 为共享设施；actor 为当前账号，id 为登记的供应商身份。
-/// # 返回
-/// 供应商已有效或已恢复。
-/// # 错误
-/// 无生成资格、供应商不存在、版本冲突或数据库故障时拒绝。
+// 在同一事务校验生成权限、读取并恢复登记的供应商角色，保留供给引用使用的主键；无权、记录缺失、版本冲突或持久化失败时停止。
 pub(super) async fn restore_supplier(
     db: &Database,
     authorization: Arc<AuthorizationService>,
@@ -144,13 +120,7 @@ pub(super) async fn restore_supplier(
     restore_record(db, authorization, actor, "supplier", id, Database::supplier_accounts).await
 }
 
-/// 恢复主体，读取、授权和写入使用同一事务。
-/// # 参数
-/// db、authorization 为共享设施；actor 为当前账号，id 为登记的主体身份。
-/// # 返回
-/// 主体已有效或已恢复。
-/// # 错误
-/// 无生成资格、主体不存在、版本冲突或数据库故障时拒绝。
+// 在授权写事务按登记主键恢复主体，供客户和供应商继续使用原主体关系；无权、主体缺失、版本冲突或持久化失败时停止。
 pub(super) async fn restore_party(
     db: &Database,
     authorization: Arc<AuthorizationService>,
@@ -160,13 +130,7 @@ pub(super) async fn restore_party(
     restore_record(db, authorization, actor, "party", id, Database::parties).await
 }
 
-/// 恢复品牌、分类或计量单位，授权与目标读取沿用实际写事务。
-/// # 参数
-/// db、authorization 为共享设施；actor 为当前账号，kind、id 为登记种类及身份。
-/// # 返回
-/// 字典记录已有效或已恢复。
-/// # 错误
-/// 无生成资格、字典不存在、版本冲突或数据库故障时拒绝。
+// 在原写事务核验权限并按种类恢复已登记品牌、分类或计量单位，保留商品字典引用；无权、记录缺失、版本冲突或持久化失败时停止。
 pub(super) async fn restore_dictionary(
     db: &Database,
     authorization: Arc<AuthorizationService>,
@@ -199,7 +163,7 @@ pub(super) enum DemoKindDictionary {
     Category,
 }
 
-/// 在原审计事务取得当前实体并恢复，写入版本由 Repository 的 CAS 保护。
+// 在原审计事务读取目标和当前版本，仅对软删除记录使用仓储 CAS 恢复，保证权限、恢复及审计基于同一次写入。
 async fn restore_record<T>(
     db: &Database,
     authorization: Arc<AuthorizationService>,

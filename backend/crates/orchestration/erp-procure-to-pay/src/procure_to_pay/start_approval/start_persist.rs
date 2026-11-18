@@ -106,24 +106,12 @@ pub(crate) struct PurchaseSubmitProcurementGuard {
     pub actor_id: String,
 }
 
-/// 在调用方事务会话中写入正式号、提交快照、运行事实与入口任务。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `input` - 提交写入集合
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回首个入口任务身份，无任务时为空。
-///
-/// # 错误
-/// 仓储写入失败或计划不完整时返回错误，由调用方事务回滚。
-///
-/// # 关键业务约束
-/// 独立提交通过本模块新建事务，因此审批收据是整笔事务第一写。创建并提交时，
-/// 外层创建命令已经完成自身幂等仲裁并持有同一事务；本方法不得再开事务，且其
-/// 审批写段仍必须按“启动收据 -> 带正式编号的注册行启动守卫 -> 业务提交 ->
-/// BPM 运行事实”顺序执行。写事务必须重验采购对象范围，历史参与不授予提交。
+// 在调用方事务会话中写入正式号、提交快照、运行事实与入口任务。
+//
+// `input` 为提交写入集合。返回首个入口任务身份，无任务时为空。仓储写入失败或计划不完整时返回错误，由调用方事务回滚。
+//
+// 独立提交通过本模块新建事务，因此审批收据是整笔事务第一写。创建并提交时，外层创建命令已经完成自身幂等仲裁并持有同一事务；本方法不得再开事务，且其审批写段仍必须按“启动收据 -> 带正式编号的注册行启动守卫 ->
+// 业务提交 -> BPM 运行事实”顺序执行。写事务必须重验采购对象范围，历史参与不授予提交。
 pub(crate) async fn persist_purchase_order_start(
     db: &Database,
     input: PurchaseOrderStartPersistInput,
@@ -161,31 +149,17 @@ pub(super) enum StartStep {
 
 #[async_trait]
 pub(super) trait StartSteps: Send {
-    /// 复用调用方执行器应用一个原步骤，失败时保留原错误。
-    ///
-    /// # 参数
-    /// * `step` - 采购启动生产写序中的一步。
-    /// * `executor` - 调用方持有的同一执行器。
-    ///
-    /// # 返回
-    /// 该步已完成。
-    ///
-    /// # 错误
-    /// 该步失败时返回原错误。
+    // 复用调用方执行器应用一个原步骤，失败时保留原错误。
+    //
+    // `step` 为采购启动生产写序中的一步；`executor` 为调用方持有的同一执行器。该步已完成。该步失败时返回原错误。
     async fn apply(&mut self, step: StartStep, executor: &mut dyn Executor) -> Result<()>;
 }
 
-/// 生产写序由此唯一入口执行；任一步失败后不再推进后续步骤。
-///
-/// # 参数
-/// * `steps` - 按固定顺序执行各步的端口。
-/// * `executor` - 全程复用的执行器。
-///
-/// # 返回
-/// 收据、守卫、资格、提交、采购依据更新、运行事实、命令收据与审计均已写入。
-///
-/// # 错误
-/// 任一步失败时返回原错误，后续步骤不再执行。
+// 生产写序由此唯一入口执行；任一步失败后不再推进后续步骤。
+//
+// `steps` 为按固定顺序执行各步的端口；`executor` 为全程复用的执行器。收据、守卫、资格、提交、采购依据更新、运行事实、命令收据与审计均已写入。
+//
+// 任一步失败时返回原错误，后续步骤不再执行。
 pub(super) async fn execute_start_steps(
     steps: &mut impl StartSteps,
     executor: &mut dyn Executor,
@@ -246,7 +220,7 @@ impl StartSteps for StartPosting<'_> {
 }
 
 impl StartPosting<'_> {
-    /// 审批启动回执保持为审批写段的第一写。
+    // 审批启动回执保持为审批写段的第一写。
     async fn receipt(&self, executor: &mut dyn Executor) -> Result<()> {
         let PreparedExecution::Apply(writes) = &self.input.prepared else { return Ok(()) };
         self.db
@@ -257,7 +231,7 @@ impl StartPosting<'_> {
         Ok(())
     }
 
-    /// 锁定已分配正式号的注册行，避免并发重复启动。
+    // 锁定已分配正式号的注册行，避免并发重复启动。
     async fn document_guard(&mut self, executor: &mut dyn Executor) -> Result<()> {
         let input = &mut self.input;
         let PreparedExecution::Apply(writes) = &input.prepared else { return Ok(()) };
@@ -279,7 +253,7 @@ impl StartPosting<'_> {
         Ok(())
     }
 
-    /// 草稿补丁在销售采购 guard 后重算覆盖并复验交付日与收件分配，不变更供给选源。
+    // 草稿补丁在销售采购 guard 后重算覆盖并复验交付日与收件分配，不变更供给选源。
     async fn procurement_guard(&mut self, executor: &mut dyn Executor) -> Result<()> {
         let input = &mut self.input;
         if let Some(guard) = input.procurement_guard.take() {
@@ -302,7 +276,7 @@ impl StartPosting<'_> {
         Ok(())
     }
 
-    /// 供应商当前资质与采购类型继续在提交事务中重验。
+    // 供应商当前资质与采购类型继续在提交事务中重验。
     async fn supplier_qualification(&self, executor: &mut dyn Executor) -> Result<()> {
         CreationBasisSupplierAdapter::new(self.db.clone())
             .ensure_qualified(
@@ -315,7 +289,7 @@ impl StartPosting<'_> {
         Ok(())
     }
 
-    /// 沿冻结身份重验当前供给、条款及可供版本，不静默刷新来源。
+    // 沿冻结身份重验当前供给、条款及可供版本，不静默刷新来源。
     async fn supply_selection(&self, executor: &mut dyn Executor) -> Result<()> {
         revalidate_payment_subject(self.db, &self.input.submission.payment_subject, executor).await?;
         revalidate_selected_supply(
@@ -328,7 +302,7 @@ impl StartPosting<'_> {
         .await
     }
 
-    /// 写入本次正式冻结提交，与前置资格核对共用执行器。
+    // 写入本次正式冻结提交，与前置资格核对共用执行器。
     async fn submission(&mut self, executor: &mut dyn Executor) -> Result<()> {
         let input = &mut self.input;
         persist_started_submission(
@@ -342,13 +316,13 @@ impl StartPosting<'_> {
         Ok(())
     }
 
-    /// 原草稿失效事实仅在正式提交同事务登记。
+    // 原草稿失效事实仅在正式提交同事务登记。
     async fn superseded_draft(&mut self, executor: &mut dyn Executor) -> Result<()> {
         persist_superseded_draft(self.db, &mut self.input.superseded_draft, executor).await?;
         Ok(())
     }
 
-    /// 保存 BPM 运行事实、不可变快照及首个真实入口任务。
+    // 保存 BPM 运行事实、不可变快照及首个真实入口任务。
     async fn runtime(&mut self, executor: &mut dyn Executor) -> Result<()> {
         let input = &self.input;
         let PreparedExecution::Apply(writes) = &input.prepared else { return Ok(()) };
@@ -370,13 +344,13 @@ impl StartPosting<'_> {
         Ok(())
     }
 
-    /// 原命令结果与首个任务版本一并持久化，保持未知结果恢复身份。
+    // 原命令结果与首个任务版本一并持久化，保持未知结果恢复身份。
     async fn command_receipt(&mut self, executor: &mut dyn Executor) -> Result<()> {
         persist_submit_command_receipt(self.db, &mut self.input, self.first_task.as_ref(), executor).await
     }
 }
 
-/// 首个任务形成后保存原采购提交结果，复用正式提交的执行器。
+// 首个任务形成后保存原采购提交结果，复用正式提交的执行器。
 async fn persist_submit_command_receipt(
     db: &Database,
     input: &mut PurchaseOrderStartPersistInput,
@@ -395,10 +369,7 @@ async fn persist_submit_command_receipt(
     Ok(())
 }
 
-/// 将启动计划写入 BPM 集合、不可变快照和入口 WorkItem。
-///
-/// # 错误
-/// 计划缺少入口执行或写入失败时返回错误。
+// 将启动计划写入 BPM 集合、不可变快照和入口 WorkItem。计划缺少入口执行或写入失败时返回错误。
 async fn persist_runtime_writes(
     db: &Database,
     runtime: (&dyn ApprovalRuntimePort, &Arc<AuthorizationService>),

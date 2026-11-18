@@ -112,18 +112,9 @@ pub(crate) struct ElectronicDeliveryListQuery {
 }
 
 impl ElectronicDeliveryListParams {
-    /// 归一化电子交付记录列表查询参数。
-    ///
-    /// 分页取默认值、排序字段过白名单校验。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    // 查询电子交付记录列表前校验并规范化筛选和分页输入，返回独立于仓储的查询参数。
+    // 分页取默认值、排序字段过白名单校验。
+    // 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<ElectronicDeliveryListQuery> {
         Ok(ElectronicDeliveryListQuery {
             sales_order_line_id: self.sales_order_line_id.clone(),

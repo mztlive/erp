@@ -52,15 +52,15 @@ struct CenterRelations {
 }
 
 impl PurchaseOrderReadService {
-    /// 按原有顺序装配已授权采购对象中心；交付检查由原读取入口执行。
-    ///
-    /// # 参数
-    /// * `id` - 调用方已证明本次采购业务入口及对象资格的采购单身份。
-    /// * `executor` - 当前查询凭证所属的原事务执行器。
-    /// # 返回
-    /// 返回原采购事实、可选关联销售投影及审批结构。
-    /// # 错误
-    /// 采购主表缺失、销售编号或责任关系异常、审批关联或仓储读取失败时拒绝。
+    // 依据原有顺序装配已授权采购对象中心；交付检查由原读取入口执行。
+    //
+    // 调用参数：
+    // * `id` - 调用方已证明本次采购业务入口及对象资格的采购单身份。
+    // * `executor` - 当前查询凭证所属的原事务执行器。
+    //
+    // 返回原采购事实、可选关联销售投影及审批结构。
+    //
+    // 采购主表缺失、销售编号或责任关系异常、审批关联或仓储读取失败时拒绝。
     pub(super) async fn detail_view(
         &self,
         id: &str,
@@ -130,17 +130,14 @@ async fn attach_inquiry_number(
     Ok(())
 }
 
-/// 汇总采购单冻结的配送判定，并标出仍待追加运费的商品。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `order` - 采购单
-///
-/// # 返回
-/// 选源采购单返回价格依据与逐行判定；费用采购单与历史采购单返回空。
-///
-/// # 错误
-/// 采购事实读取失败时返回错误。
+// 生成采购中心详情视图时，汇总采购单冻结的配送判定，并标出仍待追加运费的商品。
+//
+// 调用参数：
+// * `order` - 采购单
+//
+// 选源采购单返回价格依据与逐行判定；费用采购单与历史采购单返回空。
+//
+// 采购事实读取失败时返回错误。
 async fn delivery_summary(
     db: &Database,
     order: &PurchaseOrder,
@@ -181,7 +178,7 @@ async fn delivery_summary(
     Ok(Some(PurchaseDeliverySummaryView { price_basis, lines }))
 }
 
-/// 保留供应商、销售单号、当前责任人的原校验顺序与默认展示规则。
+// 组装采购中心详情时，保留供应商、销售单号、当前责任人的原校验顺序与默认展示规则。
 fn center_identity(order: &PurchaseOrder, facts: &PurchaseOrderCenterFacts) -> Result<CenterIdentity> {
     let supplier_name = supplier_display(order.supplier_id.as_ref(), facts.supplier_name.as_deref());
     let sales_order_id = order.sales_order_id.to_string();
@@ -191,7 +188,7 @@ fn center_identity(order: &PurchaseOrder, facts: &PurchaseOrderCenterFacts) -> R
     Ok(CenterIdentity { supplier_name, sales_order_id, sales_order_no, owner_user_id, owner_name })
 }
 
-/// 当前版本 > 当前提交 > 空内容；沿用取消审批草稿的既有内容来源解释。
+// 处理采购中心详情时，当前版本 > 当前提交 > 空内容；沿用取消审批草稿的既有内容来源解释。
 fn center_content(facts: &PurchaseOrderCenterFacts) -> CenterContent {
     let source = center_content_source(
         facts.current_revision.is_some(),
@@ -217,7 +214,7 @@ fn center_content(facts: &PurchaseOrderCenterFacts) -> CenterContent {
     CenterContent { source, lines, totals }
 }
 
-/// 原始事实消费顺序保持分配、变更、版本号及应付汇总。
+// 处理采购中心详情时，原始事实消费顺序保持分配、变更、版本号及应付汇总。
 fn center_relations(facts: PurchaseOrderCenterFacts) -> CenterRelations {
     let payment_progress = payment_progress(facts.payable.as_ref().map(|account| account.status));
     let allocations = allocation_views(facts.allocations);
@@ -231,7 +228,7 @@ fn center_relations(facts: PurchaseOrderCenterFacts) -> CenterRelations {
     CenterRelations { payment_progress, revision_no, allocations, changes, payable_summary }
 }
 
-/// 生效采购销售分配逐字段转换，保留输入次序及所有精确十进制金额。
+// 处理采购中心详情时，生效采购销售分配逐字段转换，保留输入次序及所有精确十进制金额。
 fn allocation_views(allocations: Vec<PurchaseLineSalesAllocation>) -> Vec<PurchaseSalesAllocationView> {
     allocations
         .into_iter()
@@ -246,7 +243,7 @@ fn allocation_views(allocations: Vec<PurchaseLineSalesAllocation>) -> Vec<Purcha
         .collect()
 }
 
-/// 采购变更摘要逐字段转换，不更改排序或状态映射。
+// 处理采购中心详情时，采购变更摘要逐字段转换，不更改排序或状态映射。
 fn change_views(changes: Vec<PurchaseChangeOrder>) -> Vec<PurchaseChangeSummaryView> {
     changes
         .into_iter()
@@ -261,7 +258,7 @@ fn change_views(changes: Vec<PurchaseChangeOrder>) -> Vec<PurchaseChangeSummaryV
         .collect()
 }
 
-/// 已解析身份、内容及关联事实统一组装为既有对象中心响应。
+// 生成采购中心详情视图时，已解析身份、内容及关联事实统一组装为既有对象中心响应。
 fn center_view(
     order: &PurchaseOrder,
     identity: CenterIdentity,
@@ -310,7 +307,7 @@ fn center_view(
     }
 }
 
-/// 已授权采购详情只解析其关联目标仓的名称。
+// 补齐采购中心详情的展示名称时，已授权采购详情只解析其关联目标仓的名称。
 async fn target_warehouse_name(
     db: &Database,
     order: &PurchaseOrder,

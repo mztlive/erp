@@ -11,7 +11,7 @@ pub(super) trait RefundStore: Send + Sync {
     async fn save(&self, execution: &mut RefundExecution) -> Result<()>;
 }
 
-/// 实际生产及替身测试共用的发送/恢复编排；持久化失败时不执行后续外部调用。
+// 实际生产及替身测试共用的发送/恢复编排；持久化失败时不执行后续外部调用。
 pub(super) async fn process(
     store: &dyn RefundStore,
     source: Option<&dyn Refunds>,

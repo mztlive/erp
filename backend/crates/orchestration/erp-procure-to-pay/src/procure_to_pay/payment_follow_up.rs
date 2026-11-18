@@ -29,12 +29,8 @@ pub struct SchedulePaymentFollowUp {
 }
 impl PurchaseOrderProcess {
     /// 安排当前采购付款任务的下次跟进日。
-    /// # 参数
-    /// 采购身份、精确任务版本及日期、已认证采购经办人。
-    /// # 返回
-    /// 同键同载荷返回原成功结果，不重复写入或推迟跟进。
-    /// # 错误
-    /// 非当前负责人、采购范围越界、版本或余额变化、日期非法时拒绝。
+    ///
+    /// 采购身份、精确任务版本及日期、已认证采购经办人。同键同载荷返回原成功结果，不重复写入或推迟跟进。非当前负责人、采购范围越界、版本或余额变化、日期非法时拒绝。
     pub async fn schedule_payment_follow_up(
         &self,
         id: &str,
@@ -63,7 +59,7 @@ impl PurchaseOrderProcess {
             .await
     }
 }
-/// 写入任务、审计与独立命令结果；不启动新事务。
+// 写入任务、审计与独立命令结果；不启动新事务。
 async fn schedule(
     db: &Database,
     rbac: &Arc<AuthorizationService>,

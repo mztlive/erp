@@ -27,12 +27,11 @@ struct DirectoryDisplay {
 }
 
 /// 使用中央查询条件在数据库分页前过滤人员目录。
-/// # 参数
-/// db、authorization 为共享设施；actor、category、request 为当前身份和目录筛选；executor 为原快照。
-/// # 返回
 /// 满足完整授权及业务筛选的目录页、总数与范围版本。
-/// # 错误
+///
 /// 无权限、非法筛选、超限、版本变化或读取失败时拒绝。
+///
+/// db、authorization 为共享设施；actor、category、request 为当前身份和目录筛选；executor 为原快照。
 pub async fn list_page(
     db: &Database,
     authorization: &AuthorizationService,
@@ -74,12 +73,11 @@ pub async fn list_page(
 }
 
 /// 已选账号只收窄同一目录查询，不以请求 ID 代替中央授权条件。
-/// # 参数
-/// db、authorization 为共享设施；actor、category、ids 为当前身份和已选完整集合；executor 为原快照。
-/// # 返回
 /// 当前仍可读且满足目录资格的人员及授权元信息。
-/// # 错误
+///
 /// 身份、动作无权、输入超限、依赖到期或读取失败时拒绝。
+///
+/// db、authorization 为共享设施；actor、category、ids 为当前身份和已选完整集合；executor 为原快照。
 pub async fn selected_page(
     db: &Database,
     authorization: &AuthorizationService,
@@ -115,7 +113,7 @@ pub async fn selected_page(
     Ok(page)
 }
 
-/// 范围和功能资格只解析一次，展示所需组织树仍使用同一快照读取。
+// 在目录读取开始时统一解析功能资格和数据范围；展示需要的组织树也沿该快照读取。
 async fn authorize(
     db: &Database,
     authorization: &AuthorizationService,
@@ -140,7 +138,7 @@ async fn authorize(
     Ok((access, display))
 }
 
-/// 路由固定类别直接引用公共权限常量。
+// 根据固定入口选择对应人员类别的公共权限常量，不接受调用方自选权限。
 fn permission(category: PersonDirectoryCategory) -> Permission {
     match category {
         PersonDirectoryCategory::Sales => access_control::PERSON_DIRECTORY_LIST_SALESPEOPLE,
@@ -149,7 +147,7 @@ fn permission(category: PersonDirectoryCategory) -> Permission {
     }
 }
 
-/// 仅为已授权内容版本索引读取标签，不扩大中央查询成员集合。
+// 为已经授权的目录版本计算补充标签，只读取准入成员所需的展示信息，不扩大成员集合。
 async fn display_version(
     db: &Database,
     display: &mut DirectoryDisplay,
@@ -180,7 +178,7 @@ async fn display_version(
     Ok(version.finish())
 }
 
-/// 内容索引包含账号显示信息和资格版本，不用人数代替目录版本。
+// 目录分页内容版本纳入账号展示字段及资格版本，不能用结果人数代替实际变化摘要。
 fn content_version(scope: &str, result: &DirectoryResult) -> String {
     let mut hash = Fingerprint::new("person-directory-content-v2");
     hash.text(scope);
@@ -188,7 +186,7 @@ fn content_version(scope: &str, result: &DirectoryResult) -> String {
     hash.finish()
 }
 
-/// 展开请求中的业务筛选；查询授权由原 CompiledAccess 负责。
+// 按组织树展开业务筛选，用于收窄目录查询；完整访问范围仍由原 `CompiledAccess` 提供。
 fn expand_org_filter(
     state: &OrganizationState,
     org_unit_ids: &[String],
@@ -218,7 +216,7 @@ fn org_label(state: &OrganizationState, primary_org: Option<&str>) -> Option<Str
         .map(|unit| unit.name.clone())
 }
 
-/// 客户端持有旧版本时整体拒绝，不把不同目录快照拼接。
+// 跨页读取人员目录时核对客户端版本与当前内容，旧版本拒绝整页以免拼接不同快照结果。
 fn ensure_current_version(requested: &Option<String>, current: &str) -> Result<()> {
     if requested.as_ref().is_some_and(|version| version != current) {
         return Err(Error::ConflictError("DATA_SCOPE_CHANGED：数据范围已变化，请从第一页刷新".into()));
@@ -226,7 +224,7 @@ fn ensure_current_version(requested: &Option<String>, current: &str) -> Result<(
     Ok(())
 }
 
-/// 目录成员已在数据库过滤，只在此补充同快照的展示标签。
+// 将已在数据库完成资格授权和分页的成员投影为目录响应，只在原读取快照补显示信息。
 fn page_from_result(
     result: DirectoryResult,
     page: u64,
@@ -349,7 +347,7 @@ mod tests {
         assert!(ensure_current_version(&None, &old).is_ok());
     }
 
-    /// 目录内容按人员事实集合编码，返回顺序变化不造成版本漂移。
+    // 验证：目录内容按人员事实集合编码，返回顺序变化不造成版本漂移。
     #[test]
     fn directory_versions_ignore_row_order_but_bind_scope() {
         let mut result = version_fixture("甲", "active");

@@ -3,13 +3,8 @@ use super::DefinitionGraph;
 use crate::model::{ApprovalInstanceAssignee, ApprovalProcessInstance, ModelError, ModelResult};
 
 impl DefinitionGraph {
-    /// 使用实例绑定填充动态节点，保留定义规则及原冻结姓名。
-    /// # 参数
-    /// 实例与其全部节点绑定。
-    /// # 返回
-    /// 返回可运行的完整图。
-    /// # 错误
-    /// 定义版本、节点、来源规则、实例身份或绑定不匹配时拒绝。
+    /// 回读运行实例时用实例绑定还原动态节点的审批人、冻结显示名与来源依据，不重新查询当前负责人。
+    /// 定义与实例版本不符、节点绑定缺失或重复、绑定未保持冻结事实，或规则、申请人及参与名单不匹配时返回错误。
     pub fn with_frozen_assignees(
         mut self,
         instance: &ApprovalProcessInstance,

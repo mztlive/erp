@@ -29,30 +29,18 @@ pub struct PersonScopeCommand {
 }
 impl Deref for PersonScopeCommand {
     type Target = SavePersonScopeRequest;
-    /// 只读访问已验证请求；不提供 DerefMut。
+    // 向范围配置和文件规范化用例借出已验证请求；不提供可变访问，避免绕过原校验。
     fn deref(&self) -> &Self::Target {
         &self.request
     }
 }
 impl PersonScopeCommand {
-    /// 消费已验证命令，输出规范化的持久化协议数据。
-    /// # 参数
-    /// 消费当前命令。
-    /// # 返回
-    /// 可用于授权文件规范化的请求数据。
-    /// # 错误
-    /// 不返回错误。
+    // 消耗已验证范围命令，导出规范化的协议数据，供授权文件保存或规范化使用。
     pub(crate) fn into_request(self) -> SavePersonScopeRequest {
         self.request
     }
 
-    /// 返回同次解析所得的目标，供事务内验证存在性。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 已验证目标的只读切片。
-    /// # 错误
-    /// 不返回错误。
+    // 借出原命令解析出的完整目标集合，供同一写事务核对引用实际存在性。
     pub(crate) fn targets(&self) -> &[ScopeTarget] {
         &self.targets
     }
@@ -86,12 +74,11 @@ pub struct PersonScopeView {
 
 impl PersonBusinessOption {
     /// 将已证明的角色动作映射为配置候选，说明按每个动作的实际能力生成。
-    /// # 参数
-    /// `resource`、`actions` 为当前角色已证明的动作。
-    /// # 返回
     /// 可编辑动作子集、维度并集与完整角色动作。
-    /// # 错误
+    ///
     /// 空动作或未登记动作返回校验错误。
+    ///
+    /// `resource`、`actions` 为当前角色已证明的动作。
     pub fn from_granted(resource: &str, actions: Vec<String>) -> Result<Self> {
         if actions.is_empty() {
             return Err(Error::ValidationError("缺少操作权限".into()));
@@ -136,12 +123,11 @@ pub struct RetiredPersonScope {
 
 impl RetiredPersonScope {
     /// 从历史记录取得当前配置政策退役说明。
-    /// # 参数
-    /// `scope` 为已存储的原始范围记录。
-    /// # 返回
     /// 不支持独立配置时返回说明；有效配置返回 None。
-    /// # 错误
-    /// 无；未知资源同样标记不可配置。
+    ///
+    /// 未知资源同样标记不可配置。
+    ///
+    /// `scope` 为已存储的原始范围记录。
     pub fn from_scope(scope: &PersonDataScope) -> Option<Self> {
         if scope_spec::is_configurable(&scope.resource, &scope.action) {
             return None;
@@ -161,13 +147,7 @@ impl RetiredPersonScope {
 }
 
 impl SavePersonScopeRequest {
-    /// 规范化动作和附加项，并独立检查每项的全部必需维度。
-    /// # 参数
-    /// 原始请求；必需维度由服务端动作登记确定。
-    /// # 返回
-    /// 去重后的原子保存命令；空附加项集合表示仅保留基础范围。
-    /// # 错误
-    /// 无效动作、超限、空授权条目或任一条目缺少维度时拒绝整次保存。
+    /// 将人员范围保存请求规范化为一次原子命令。去重动作和附加项后，按服务端登记逐条校验完整维度；任一项非法、为空或超限时拒绝整批。空附加项集合只保留基础范围。
     pub fn normalized(mut self) -> Result<PersonScopeCommand> {
         self.actions.sort();
         self.actions.dedup();
@@ -202,13 +182,7 @@ impl SavePersonScopeRequest {
         Ok(PersonScopeCommand { request: self, targets })
     }
 
-    /// 旧完整表达式必须经明确转换确认才允许改为基础加附加授权。
-    /// # 参数
-    /// * `existing` - 在保存事务中取得的当前配置。
-    /// # 返回
-    /// 本次不涉及旧配置，或已明确允许转换时成功。
-    /// # 错误
-    /// 未确认覆盖旧配置时拒绝，避免静默加入本人范围或去除旧上限。
+    /// 写事务按当前配置检查是否需要转换旧完整表达式。未明确确认时拒绝覆盖，避免静默加入本人范围或去掉旧上限。
     pub fn ensure_legacy_conversion(&self, existing: &[PersonDataScope]) -> Result<()> {
         if !self.replace_legacy
             && existing.iter().any(|scope| {
@@ -222,13 +196,7 @@ impl SavePersonScopeRequest {
         Ok(())
     }
 
-    /// 按操作选取附加授权，基础本人由解析时的业务政策计算。
-    /// # 参数
-    /// * `action` - 已验证属于本次保存的操作。
-    /// # 返回
-    /// 单个操作的完整新模型表达式。
-    /// # 错误
-    /// 无；未命中附加项时返回空附加列表。
+    /// 为本次已验证保存动作提取适用的附加条款；未命中时保留空附加列表。本人基础不在这里写死，由运行时政策解析。
     pub fn expression(&self, action: &str) -> PersonScopeExpression {
         PersonScopeExpression {
             additive: true,
@@ -245,7 +213,7 @@ impl SavePersonScopeRequest {
 }
 
 impl PersonScopeGrant {
-    /// 每个授权条目独立完成规范化，禁止在多个不完整条目之间拼出完整授权。
+    // 保存范围前逐条规范化动作和目标；同一动作的必需维度必须在单条授权内成立，不拼接同批的其他条款。
     fn normalize(&mut self, resource: &str, actions: &[String]) -> Result<Vec<ScopeTarget>> {
         self.actions.sort();
         self.actions.dedup();
@@ -285,7 +253,7 @@ impl PersonScopeGrant {
         Ok(targets)
     }
 
-    /// 每个所选动作均须在同一授权条目中满足全部必需维度。
+    // 保存授权条目前，按所选动作逐一核对条款内的必需维度；同批其他条款不能补足该条款。
     fn validate_dimensions(&self, resource: &str) -> Result<()> {
         let company = self.terms.iter().any(|term| term.scope_type == DataScopeType::Company);
         for action in &self.actions {
@@ -310,7 +278,7 @@ impl PersonScopeGrant {
 mod tests {
     use super::*;
 
-    /// 构造销售业务的逐操作附加授权请求。
+    // 为范围保存测试建立销售业务的按动作追加授权输入。
     fn request() -> SavePersonScopeRequest {
         SavePersonScopeRequest {
             resource: "sales_order".into(),
@@ -418,7 +386,7 @@ mod tests {
         assert!(invalid.normalized().is_err());
     }
 
-    /// 每个授权条目按自己选择的动作验证完整维度，不能借用同批其他条目补齐。
+    // 验证：每个授权条目按自己选择的动作验证完整维度，不能借用同批其他条目补齐。
     #[test]
     fn deposit_grants_require_both_dimensions_per_selected_action() {
         use crate::access_control::ScopeTargetMode;
@@ -468,7 +436,7 @@ mod tests {
         assert!(over_limit.normalized().is_err());
     }
 
-    /// 保存表达式与事务校验必须使用相同的规范化身份，协议字段保持原形状。
+    // 验证：保存表达式与事务校验必须使用相同的规范化身份，协议字段保持原形状。
     #[test]
     fn command_preserves_normalized_targets_and_storage_shape() {
         use crate::access_control::ScopeTargetMode;
@@ -500,7 +468,7 @@ mod tests {
         assert_eq!(serde_json::from_value::<PersonScopeExpression>(json).unwrap(), expression);
     }
 
-    /// 服务端登记决定必需维度，调用者不能用空维度声明绕过检查。
+    // 验证：服务端登记决定必需维度，调用者不能用空维度声明绕过检查。
     #[test]
     fn command_rejects_wrong_dimensions_and_role_only_mode() {
         use crate::access_control::ScopeTargetMode;
@@ -610,7 +578,7 @@ mod tests {
             assert!(scope.allows(&target, action == "list"));
         }
     }
-    /// 配置页面必须区分默认本人读取和显式管理范围，不依赖动作排列顺序。
+    // 验证：配置页面必须区分默认本人读取和显式管理范围，不依赖动作排列顺序。
     #[test]
     fn task_scope_options_expose_baseline_for_each_action() {
         for actions in [vec!["manage", "list", "detail"], vec!["detail", "manage", "list"]] {

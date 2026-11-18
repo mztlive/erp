@@ -36,7 +36,7 @@ use crate::supplier_center::keyword_supplier_ids;
 use crate::{Error, Result};
 
 impl SupplierApiReadService {
-    /// 按查询参数与服务端连接事实返回分页投影。
+    /// 依据查询参数与服务端连接事实返回分页投影。
     ///
     /// # 参数
     /// * `params` - 连接列表查询参数。
@@ -63,13 +63,15 @@ impl SupplierApiReadService {
             .await
     }
 
-    /// 在同一事务内检查列表功能资格并补齐完整分页展示。
-    /// # 参数
-    /// params 为业务筛选，actor 为当前账号，executor 为公开入口的原快照执行器。
-    /// # 返回
-    /// 返回同一快照中的连接分页及供应商展示资料。
-    /// # 错误
-    /// 功能资格不足、参数非法或任一读取失败时终止。
+    // 读取供应连接时，在同一事务内检查列表功能资格并补齐完整分页展示。
+    //
+    // 调用参数：
+    // params 为业务筛选，actor 为当前账号，executor 为公开入口的原快照执行器。
+    //
+    // 返回同一快照中的连接分页及供应商展示资料。
+    //
+    // 失败边界：
+    // 功能资格不足、参数非法或任一读取失败时终止。
     pub(super) async fn connection_list_snapshot(
         &self,
         params: &SupplierApiConnectionListParams,
@@ -156,7 +158,7 @@ impl SupplierApiReadService {
             .collect())
     }
 
-    /// 返回服务端权威动作、阻塞原因和安全引用投影的连接详情。
+    /// 处理供应连接时，给出服务端权威动作、阻塞原因和安全引用投影的连接详情。
     ///
     /// # 参数
     /// * `id` - 连接主键。
@@ -183,13 +185,14 @@ impl SupplierApiReadService {
             .await
     }
 
-    /// 展示资格在最终查询前读取；根与全部补齐结果在交付前共同校验。
-    /// # 参数
-    /// id、actor 为连接和当前账号，executor 为公开入口的原快照执行器。
-    /// # 返回
-    /// 返回同一快照的连接详情、动作及安全引用投影。
-    /// # 错误
-    /// 非快照执行器、资格或查询失败时拒绝；结果失效时不交付详情。
+    // 处理供应连接时，展示资格在最终查询前读取；根与全部补齐结果在交付前共同校验。
+    //
+    // 调用参数：
+    // id、actor 为连接和当前账号，executor 为公开入口的原快照执行器。
+    //
+    // 返回同一快照的连接详情、动作及安全引用投影。
+    //
+    // 非快照执行器、资格或查询失败时拒绝；结果失效时不交付详情。
     pub(super) async fn connection_detail_snapshot(
         &self,
         id: &str,
@@ -206,13 +209,14 @@ impl SupplierApiReadService {
         Ok(view)
     }
 
-    /// 先取得展示资格，再签发覆盖根及补齐读取的最终凭证。
-    /// # 参数
-    /// actor 为当前账号，executor 必须属于活动快照事务。
-    /// # 返回
-    /// 返回最终查询凭证与同快照内独立检查的展示权限。
-    /// # 错误
-    /// 执行边界、展示资格取证或详情查询资格失败时拒绝。
+    // 处理供应连接时，先取得展示资格，再签发覆盖根及补齐读取的最终凭证。
+    //
+    // 调用参数：
+    // actor 为当前账号，executor 必须属于活动快照事务。
+    //
+    // 返回最终查询凭证与同快照内独立检查的展示权限。
+    //
+    // 执行边界、展示资格取证或详情查询资格失败时拒绝。
     pub(super) async fn connection_detail_access(
         &self,
         actor: &AuditActor,
@@ -342,7 +346,7 @@ impl SupplierApiReadService {
         Ok((allowed, blocked))
     }
 
-    /// 只读动作资格；开启时的真实鉴权由命令自动执行。
+    // 处理供应连接时，只读动作资格；开启时的真实鉴权由命令自动执行。
     fn operation_blockers(
         &self,
         connection: &SupplierApiConnection,
@@ -400,7 +404,7 @@ fn health_run_view(run: &SupplierHealthCheckRun) -> SupplierHealthCheckRunView {
     }
 }
 
-/// 将运行中任务和部署变化转换为可直接操作的提示。
+// 组装供应连接时，将运行中任务和部署变化转换为可直接操作的提示。
 fn operation_blocker(action: SupplierConnectionAction, running: bool) -> Option<SupplierActionBlockerView> {
     match action {
         SupplierConnectionAction::StartCatalogSync if running => {

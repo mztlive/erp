@@ -18,13 +18,7 @@ pub struct AuthorizationBuilder {
 }
 
 impl AuthorizationService {
-    /// 绑定身份设施，开始构造完整授权服务。
-    /// # 参数
-    /// db、rbac 为同一个身份数据库及其共享 RBAC 服务。
-    /// # 返回
-    /// 尚未构造服务的 Builder；不读取数据库。
-    /// # 错误
-    /// 构造不返回错误，引用及能力校验在绑定和 build 时执行。
+    /// 应用组合根启动时，用同一身份库和共享 RBAC 服务创建 Builder。此步不访问数据库；绑定完整性由后续登记和 `build` 校验。
     pub fn builder(db: Database, rbac: SharedRbacService) -> AuthorizationBuilder {
         AuthorizationBuilder {
             facilities: Arc::new(IdentityFacilities { db, rbac }),
@@ -35,13 +29,7 @@ impl AuthorizationService {
 }
 
 impl AuthorizationBuilder {
-    /// 绑定资源唯一的根事实读取器。
-    /// # 参数
-    /// resource 为已接入固定规则的资源；facts 为拥有领域的读取实现。
-    /// # 返回
-    /// 包含该绑定的 Builder。
-    /// # 错误
-    /// 未知资源、仅功能资源或重复绑定返回接入错误。
+    /// 启动时为固定资源登记唯一的对象事实端口，供单条与批量授权读取真实根对象。未知、仅功能资格或重复的资源登记均拒绝。
     pub fn facts(mut self, resource: &str, facts: Arc<dyn AccessFactsPort>) -> Result<Self> {
         if !scope_spec::actions(resource)
             .iter()
@@ -55,13 +43,7 @@ impl AuthorizationBuilder {
         Ok(self)
     }
 
-    /// 为查询权限绑定唯一入口；业务不能在调用时替换 Mapping。
-    /// # 参数
-    /// permission 为具体查询权限，mapping 为固定根及来源描述。
-    /// # 返回
-    /// 包含该查询绑定的 Builder。
-    /// # 错误
-    /// 未知或不支持查询的权限、重复入口、模型错配返回接入错误。
+    /// 启动时为查询权限固定根模型及来源 Mapping，调用请求不能改选实现。权限不支持查询、重复登记或模型错配时拒绝。
     pub fn mapping(mut self, permission: &Permission, mapping: Arc<dyn AccessMapping>) -> Result<Self> {
         if !rules::query_supported(permission)? {
             return Err(Error::ValidationError(format!("此权限不支持 query：{permission}")));
@@ -76,13 +58,7 @@ impl AuthorizationBuilder {
         Ok(self)
     }
 
-    /// 校验全部固定规则的必要绑定并冻结查询描述。
-    /// # 参数
-    /// 消耗本 Builder；完整业务绑定由组合根提供。
-    /// # 返回
-    /// 不保存请求状态的统一授权服务。
-    /// # 错误
-    /// 目录错误、缺少 Facts/Mapping、来源能力缺失及输出错配均拒绝构造。
+    /// 应用启动时核对所有固定规则的 Facts、Mapping、来源能力和输出粒度，校验通过后冻结描述并构造无请求状态的共享授权服务。缺失或错配的绑定不能降级。
     pub fn build(self) -> Result<AuthorizationService> {
         scope_spec::validate_catalog()?;
         self.ensure_complete()?;

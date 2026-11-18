@@ -33,15 +33,8 @@ pub struct SkuRevisionFact {
 #[async_trait]
 pub trait CatalogFactsPort: Send + Sync {
     /// 按 SKU 编码、当前名称或规格做字面量匹配。
-    ///
-    /// # 参数
-    /// * `_q` - 待匹配的字面量。
-    /// * `_executor` - 调用方选择的数据访问执行器。
-    ///
-    /// # 返回
     /// 覆盖实现在成功时返回命中的 SKU 标识；无命中时为空集合。
-    ///
-    /// # 错误
+    /// `_q` 为待匹配的字面量；`_executor` 为调用方选择的数据访问执行器。
     /// 默认实现固定返回 `Error::Internal`（商品搜索端口未接线）。覆盖实现在商品查询失败时返回对应错误。
     async fn matching_sku_ids(
         &self,
@@ -52,16 +45,9 @@ pub trait CatalogFactsPort: Send + Sync {
     }
 
     /// 按标识返回 SKU 事实。
-    ///
-    /// # 参数
-    /// * `ids` - SKU 标识。
-    /// * `executor` - 调用方选择的数据访问执行器。
-    ///
-    /// # 返回
     /// 返回以 SKU 标识为键的事实映射。
-    ///
-    /// # 错误
-    /// 适配器查询失败时返回对应错误。
+    /// `ids` 为 SKU 标识；沿用调用方执行器 `executor`。
+    /// 传播适配器查询错误。
     async fn skus_by_ids(
         &self,
         ids: &[String],
@@ -69,16 +55,9 @@ pub trait CatalogFactsPort: Send + Sync {
     ) -> Result<HashMap<String, SkuFact>>;
 
     /// 按标识返回 SKU 版本展示事实。
-    ///
-    /// # 参数
-    /// * `ids` - SKU 版本标识。
-    /// * `executor` - 调用方选择的数据访问执行器。
-    ///
-    /// # 返回
     /// 返回以版本标识为键的展示事实映射。
-    ///
-    /// # 错误
-    /// 适配器查询失败时返回对应错误。
+    /// `ids` 为 SKU 版本标识；沿用调用方执行器 `executor`。
+    /// 传播适配器查询错误。
     async fn sku_revisions_by_ids(
         &self,
         ids: &[String],

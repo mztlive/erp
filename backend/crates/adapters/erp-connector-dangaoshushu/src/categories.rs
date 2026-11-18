@@ -9,13 +9,8 @@ use super::parsing::{id, mapping};
 use super::transport::Request;
 
 impl DangaoshushuConnector {
-    /// 读取当前供应商分类字典，保留来源分类编号。
-    /// # 参数
-    /// 无；使用当前连接的鉴权和传输配置。
-    /// # 返回
-    /// 各层级分类编号到中文名称的映射。
-    /// # 错误
-    /// 接口失败、字典结构错误或编号重复时返回错误。
+    // 目录单项查询或整页采集需要展示来源分类时，按当前连接读取各层级编号和名称。
+    // 远端失败、字典格式不符或分类编号重复均返回错误。
     pub(super) async fn category_names(&self) -> ConnectorResult<BTreeMap<String, String>> {
         let value = self
             .transport
@@ -37,13 +32,8 @@ impl DangaoshushuConnector {
         Ok(names)
     }
 
-    /// 为一页有效来源补齐分类名称；同页只查询一次分类字典。
-    /// # 参数
-    /// `items` 为已经解析的来源变化，不改来源编号或撤回记录。
-    /// # 返回
-    /// 已匹配的名称写入各规格；字典未包含的分类保留未知名称。
-    /// # 错误
-    /// 分类字典读取失败时返回错误，调用方不得推进本页检查点。
+    // 一页规格解析完成后，有来源分类编号才补查字典，同页只查一次。
+    // 只填更新项的名称，不改编号或撤回记录；查不到的名称保持未知，读取失败时本页不得推进检查点。
     pub(super) async fn name_catalog_categories(
         &self,
         items: &mut [Snapshot<OfferChange>],

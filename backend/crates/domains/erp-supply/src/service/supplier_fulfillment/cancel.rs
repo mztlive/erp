@@ -12,17 +12,7 @@ use crate::repository::prelude::*;
 use crate::{Error, Result};
 impl SupplierFulfillmentService {
     /// 构建取消/退款动作头。
-    ///
-    /// # 参数
-    /// * `order` - 供应商子订单
-    /// * `req` - 动作提交请求
-    /// * `idempotency_key` - 「订单号 + 动作类型」
-    /// * `action_type` - `Cancel` 或 `Refund`
-    ///
-    /// # 返回
     /// 返回动作实体。
-    ///
-    /// # 错误
     /// 实体构造校验失败时返回 `LogicError`。
     pub fn build_after_sales_action(
         &self,
@@ -44,15 +34,7 @@ impl SupplierFulfillmentService {
     }
 
     /// 构建取消/退款动作行（行号从 1 起，冻结实际提交范围）。
-    ///
-    /// # 参数
-    /// * `action` - 动作头
-    /// * `req` - 动作提交请求
-    ///
-    /// # 返回
     /// 返回动作行集合。
-    ///
-    /// # 错误
     /// 数量/金额非正的实体校验失败时返回 `LogicError`。
     pub fn build_action_lines(
         &self,
@@ -79,20 +61,11 @@ impl SupplierFulfillmentService {
     }
 
     /// 校验动作行范围（§6.19）：行明细必须属于该子订单。
-    ///
-    /// # 参数
-    /// * `order` - 供应商子订单
-    /// * `req` - 动作提交请求
-    ///
-    /// * `executor` - 原售后命令授权及写入的事务执行器。
-    ///
-    /// # 返回
     /// 全部动作行都属于该子订单时无返回值。
-    ///
-    /// # 错误
+    /// 失败条件：
     /// * `BusinessLogicError` - 明细归属非法
-    ///
     /// 仓储读取明细失败时返回对应错误。
+    /// `executor`：原售后命令授权及写入的事务执行器。
     pub async fn ensure_action_lines(
         &self,
         order: &SupplierFulfillmentOrder,
@@ -116,16 +89,9 @@ impl SupplierFulfillmentService {
         Ok(())
     }
     /// 沿原类型推进取消或退款状态；不附加旧代码不存在的版本/余额校验。
-    ///
-    /// # 参数
-    /// * `order` - 就地推进状态的供应商子订单。
-    /// * `action_type` - 售后动作类型。仅 `Cancel` 与 `Refund` 改变状态。
-    ///
-    /// # 返回
-    /// 无返回值。取消进入 `CancelPending`，退款进入 `RefundPending`；其他类型不改状态。
-    ///
-    /// # 错误
+    /// 取消进入 `CancelPending`，退款进入 `RefundPending`；其他类型不改状态。
     /// 订单状态迁移失败时返回对应错误。
+    /// `action_type`：售后动作类型。仅 `Cancel` 与 `Refund` 改变状态。
     pub fn advance_after_sales(
         &self,
         order: &mut SupplierFulfillmentOrder,
@@ -140,19 +106,9 @@ impl SupplierFulfillmentService {
     }
 }
 /// 动作头、逐行写入、订单CAS复用调用方执行器。
-///
-/// # 参数
-/// * `db` - 履约集合所在数据库。
-/// * `action` - 待创建的动作头。
-/// * `lines` - 待逐行创建的动作行。
-/// * `order` - 待按 CAS 写回的子订单。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
-/// 无返回值。动作头、动作行和订单已按该顺序写入。
-///
-/// # 错误
+/// 动作头、动作行和订单已按该顺序写入。
 /// 任一步仓储写入失败时返回对应错误。
+/// `order`：待按 CAS 写回的子订单。
 pub async fn persist_after_sales(
     db: &Database,
     action: &SupplierOrderAction,

@@ -39,7 +39,7 @@ struct ApplyBatchDeltas {
 }
 
 impl ApplyBatchDeltas {
-    /// 空增量。
+    // 开始归并一批导入结果时，以无变更行、成功/失败/跳过计数全零作为增量基线。
     fn empty() -> Self {
         Self { rows: Vec::new(), success: 0, failed: 0, skipped: 0 }
     }
@@ -68,15 +68,10 @@ impl ImportApplyProcess {
     /// 且受批次约束读取，未知 ID 失败关闭；仅把实际发生合法状态迁移的
     /// delta 行、批次统计与后台任务进度写入同一事务。
     ///
-    /// # 参数
-    /// * `batch_id` - 导入批次 ID
-    /// * `req` - 逐行结果
-    /// * `actor` - 已通过鉴权的审计操作人
+    /// `batch_id`：导入批次 ID；`req`：逐行结果。
     ///
-    /// # 返回
     /// 返回应用后批次的响应视图。
     ///
-    /// # 错误
     /// * `NotFound` - 批次不存在
     /// * `BusinessLogicError` - 批次未进入 `Importing` 阶段
     /// * `ValidationError` - 请求体校验失败或存在未知行 ID
@@ -100,7 +95,7 @@ impl ImportApplyProcess {
             .await
     }
 
-    /// 授权、决定写入的读取、批次增量和回包沿用同一事务。
+    // 授权、决定写入的读取、批次增量和回包沿用同一事务。
     async fn apply_batch_stage(
         &self,
         batch_id: &str,
@@ -147,16 +142,13 @@ impl ImportApplyProcess {
         self.persist_apply_batch(batch, job, deltas, all_terminal, actor, executor).await
     }
 
-    /// 装载已由 `START_APPLY` 启动的后台任务。
-    ///
-    /// # 参数
-    /// * `batch` - 导入中的批次
-    ///
-    /// # 返回
-    /// 返回可记录进度的后台任务。
-    ///
-    /// # 错误
-    /// 任务缺失或尚未启动时返回错误。
+    // 装载已由 `START_APPLY` 启动的后台任务。
+    //
+    // `batch`：导入中的批次。
+    //
+    // 返回可记录进度的后台任务。
+    //
+    // 任务缺失或尚未启动时返回错误。
     async fn load_running_import_job(
         &self,
         batch: &LegacyImportBatch,
@@ -174,22 +166,18 @@ impl ImportApplyProcess {
         Ok(job)
     }
 
-    /// 预查客户行目标主体是否存在（INT-R30 批量读取）。
-    ///
-    /// 预收集全部仍待导入的 `CUSTOMER` 且 outcome 为 imported 行的目标主体，
-    /// 单次 `$in` 确认存在性；缺失记为 `false`，由 [`collect_apply_deltas`] 登记失败。
-    /// 重复 target 只查询一次，混合对象类型与非 imported 结果不进入查询，
-    /// 软删除视为缺失。
-    ///
-    /// # 参数
-    /// * `result_set` - 已校验结果集
-    /// * `rows` - 仓储命中行
-    ///
-    /// # 返回
-    /// 返回行 ID → 主体是否存在；非客户行不出现，默认视为通过。
-    ///
-    /// # 错误
-    /// 主体查询失败时返回错误。
+    // 预查客户行目标主体是否存在（INT-R30 批量读取）。
+    //
+    // 预收集全部仍待导入的 `CUSTOMER` 且 outcome 为 imported 行的目标主体，
+    // 单次 `$in` 确认存在性；缺失记为 `false`，由 [`collect_apply_deltas`] 登记失败。
+    // 重复 target 只查询一次，混合对象类型与非 imported 结果不进入查询，
+    // 软删除视为缺失。
+    //
+    // `result_set`：已校验结果集；`rows`：仓储命中行。
+    //
+    // 返回行 ID → 主体是否存在；非客户行不出现，默认视为通过。
+    //
+    // 主体查询失败时返回错误。
     async fn customer_import_party_ok(
         &self,
         result_set: &ApplyResultSet,
@@ -213,20 +201,13 @@ impl ImportApplyProcess {
         Ok(map_customer_party_ok(&targets, &found))
     }
 
-    /// 将 delta 行、批次、后台任务与审计写入同一事务。
-    ///
-    /// # 参数
-    /// * `batch` - 已更新计数与状态的批次
-    /// * `job` - 后台任务
-    /// * `deltas` - 本批实际迁移的行
-    /// * `all_terminal` - 是否全部行终态
-    /// * `actor` - 审计操作人
-    ///
-    /// # 返回
-    /// 返回提交后的批次视图。
-    ///
-    /// # 错误
-    /// 事务写入或终态迁移失败时整体回滚。
+    // 将 delta 行、批次、后台任务与审计写入同一事务。
+    //
+    // `batch`：已更新计数与状态的批次；`deltas`：本批实际迁移的行；`all_terminal`：是否全部行终态。
+    //
+    // 返回提交后的批次视图。
+    //
+    // 事务写入或终态迁移失败时整体回滚。
     async fn persist_apply_batch(
         &self,
         batch: LegacyImportBatch,
@@ -266,21 +247,18 @@ impl ImportApplyProcess {
     }
 }
 
-/// 将已校验结果应用到命中行，只收集实际发生合法迁移的 delta。
-///
-/// 已终态行跳过且不改字段；任一待导入行 `prepare_for_import` / `mark_*`
-/// 失败则返回错误，调用方不得持久化本批 deltas。
-///
-/// # 参数
-/// * `result_set` - 已通过唯一 ID 与字段形状校验的结果集
-/// * `rows` - 仓储返回的命中行
-/// * `party_ok` - 客户行主体存在性；缺项视为通过
-///
-/// # 返回
-/// 返回需要交给 `update` 的 delta 行与本批计数。
-///
-/// # 错误
-/// 行缺失或状态迁移非法时返回错误。
+// 将已校验结果应用到命中行，只收集实际发生合法迁移的 delta。
+//
+// 已终态行跳过且不改字段；任一待导入行 `prepare_for_import` / `mark_*`
+// 失败则返回错误，调用方不得持久化本批 deltas。
+//
+// - `result_set`：已通过唯一 ID 与字段形状校验的结果集
+// - `rows`：仓储返回的命中行
+// - `party_ok`：客户行主体存在性；缺项视为通过
+//
+// 返回需要交给 `update` 的 delta 行与本批计数。
+//
+// 行缺失或状态迁移非法时返回错误。
 fn collect_apply_deltas(
     result_set: &ApplyResultSet,
     rows: &mut HashMap<String, LegacyImportRow>,
@@ -301,15 +279,13 @@ fn collect_apply_deltas(
     Ok(deltas)
 }
 
-/// 对仍待导入的行执行一次合法状态迁移。
-///
-/// # 参数
-/// * `row` - 待导入行
-/// * `item` - 已校验的行结果
-/// * `party_ok` - 客户行目标主体是否存在；非客户行传 `true`
-///
-/// # 错误
-/// 行未准备好转导入或状态迁移失败时返回错误。
+// 对仍待导入的行执行一次合法状态迁移。
+//
+// - `row`：待导入行
+// - `item`：已校验的行结果
+// - `party_ok`：客户行目标主体是否存在；非客户行传 `true`
+//
+// 行未准备好转导入或状态迁移失败时返回错误。
 fn apply_pending_row(row: &mut LegacyImportRow, item: &ApplyResultItem, party_ok: bool) -> Result<()> {
     row.prepare_for_import(item.external_identity_map_id().cloned())?;
     match item {
@@ -333,29 +309,24 @@ fn apply_pending_row(row: &mut LegacyImportRow, item: &ApplyResultItem, party_ok
     Ok(())
 }
 
-/// 将 HTTP 请求收紧为应用结果集。
-///
-/// # 参数
-/// * `req` - 原始应用请求
-///
-/// # 返回
-/// 返回已拒绝重复 ID 与非法字段形状的结果集。
-///
-/// # 错误
-/// 集合长度、重复 ID 或 outcome 字段形状非法时返回 `ValidationError`。
+// 将 HTTP 请求收紧为应用结果集。
+//
+// `req`：原始应用请求。
+//
+// 返回已拒绝重复 ID 与非法字段形状的结果集。
+//
+// 集合长度、重复 ID 或 outcome 字段形状非法时返回 `ValidationError`。
 fn apply_result_set_from_request(req: ApplyLegacyImportBatchRequest) -> Result<ApplyResultSet> {
     req.validate()?;
     ApplyResultSet::try_from_drafts(req.results.into_iter().map(apply_result_draft_from).collect())
         .map_err(|error| Error::ValidationError(error.to_string()))
 }
 
-/// 任一未知行 ID 失败关闭。
-///
-/// # 参数
-/// * `missing` - 仓储返回的缺失 ID
-///
-/// # 错误
-/// 存在缺失 ID 时返回 `ValidationError`。
+// 任一未知行 ID 失败关闭。
+//
+// `missing`：仓储返回的缺失 ID。
+//
+// 存在缺失 ID 时返回 `ValidationError`。
 fn ensure_no_missing_apply_rows(missing: &[LegacyImportRowId]) -> Result<()> {
     if missing.is_empty() {
         return Ok(());
@@ -363,15 +334,11 @@ fn ensure_no_missing_apply_rows(missing: &[LegacyImportRowId]) -> Result<()> {
     Err(Error::ValidationError("选中的导入行不属于当前批次或已不存在，请刷新批次后重新选择".into()))
 }
 
-/// 按本批 delta 更新批次计数并派生应用状态。
-///
-/// # 参数
-/// * `batch` - 导入中的批次
-/// * `deltas` - 本批实际迁移计数
-/// * `pending_rows` - 请求外仍待导入的行数
-///
-/// # 错误
-/// 计数不变量或状态迁移失败时返回错误。
+// 按本批 delta 更新批次计数并派生应用状态。
+//
+// `batch`：导入中的批次；`deltas`：本批实际迁移计数；`pending_rows`：请求外仍待导入的行数。
+//
+// 计数不变量或状态迁移失败时返回错误。
 fn advance_batch_counts(
     batch: &mut LegacyImportBatch,
     deltas: &ApplyBatchDeltas,
@@ -390,12 +357,9 @@ fn advance_batch_counts(
     Ok(())
 }
 
-/// 将一次成功迁移记入 delta 集合。
-///
-/// # 参数
-/// * `deltas` - 本批累计
-/// * `row` - 已迁移的行
-/// * `item` - 请求结果（客户主体缺失时 imported 记为失败）
+// 将一次成功迁移记入 delta 集合。
+//
+// `deltas`：本批累计；`row`：已迁移的行；`item`：请求结果（客户主体缺失时 imported 记为失败）。
 fn record_delta(deltas: &mut ApplyBatchDeltas, row: &LegacyImportRow, item: &ApplyResultItem) {
     deltas.rows.push(row.clone());
     match item {
@@ -407,24 +371,17 @@ fn record_delta(deltas: &mut ApplyBatchDeltas, row: &LegacyImportRow, item: &App
     }
 }
 
-/// 预收集需批量确认主体的客户行目标（INT-R30 纯映射）。
-///
-/// 仅保留仍待导入的 `CUSTOMER` 且 outcome 为 imported 的行；返回全部命中行
-/// 的 `(行 ID, 目标主体 ID)`，调用方按目标去重后单次仓储 `$in` 查询，
-/// 大批量仍由单次读取承载。
-///
-/// # 参数
-/// * `result_set` - 已校验结果集
-/// * `rows` - 仓储命中行
-///
-/// # 返回
-/// 返回按请求顺序的 `(行 ID, 目标主体 ID)`；无需查询时返回空集合。
-///
-/// # 错误
-/// 不返回错误。
-///
-/// # 约束
-/// 纯内存过滤，不访问数据库；混合对象类型与终态行不进入结果。
+// 预收集需批量确认主体的客户行目标（INT-R30 纯映射）。
+//
+// 仅保留仍待导入的 `CUSTOMER` 且 outcome 为 imported 的行；返回全部命中行
+// 的 `(行 ID, 目标主体 ID)`，调用方按目标去重后单次仓储 `$in` 查询，
+// 大批量仍由单次读取承载。
+//
+// `result_set`：已校验结果集；`rows`：仓储命中行。
+//
+// 返回按请求顺序的 `(行 ID, 目标主体 ID)`；无需查询时返回空集合。
+//
+// 纯内存过滤，不访问数据库；混合对象类型与终态行不进入结果。
 fn collect_customer_import_targets(
     result_set: &ApplyResultSet,
     rows: &HashMap<String, LegacyImportRow>,
@@ -446,22 +403,15 @@ fn collect_customer_import_targets(
     targets
 }
 
-/// 将批量主体命中映射为逐行存在性（INT-R30 纯映射）。
-///
-/// 按目标 ID 归组：共享同一主体的多行共享同一存在性结论；缺失记为 `false`。
-///
-/// # 参数
-/// * `targets` - 预收集的 `(行 ID, 目标主体 ID)`
-/// * `found` - 仓储批量返回的已存在主体
-///
-/// # 返回
-/// 返回行 ID → 主体是否存在。
-///
-/// # 错误
-/// 不返回错误。
-///
-/// # 约束
-/// 纯内存映射，不访问数据库；未命中目标一律视为不存在。
+// 将批量主体命中映射为逐行存在性（INT-R30 纯映射）。
+//
+// 按目标 ID 归组：共享同一主体的多行共享同一存在性结论；缺失记为 `false`。
+//
+// `targets`：预收集的 `(行 ID, 目标主体 ID)`；`found`：仓储批量返回的已存在主体。
+//
+// 返回行 ID → 主体是否存在。
+//
+// 纯内存映射，不访问数据库；未命中目标一律视为不存在。
 fn map_customer_party_ok(targets: &[(String, String)], found: &[erp_party::Party]) -> HashMap<String, bool> {
     use std::collections::{HashMap, HashSet};
     let existing = found.iter().map(|party| party.base.id.clone()).collect::<HashSet<_>>();
@@ -499,20 +449,15 @@ struct PersistApplyWrite<'a> {
     now: Instant,
 }
 
-/// 事务内只更新 delta 行、批次、后台任务与审计。
-///
-/// # 参数
-/// * `write` - 待持久化的 delta 行、批次、任务、审计与本批计数
-/// * `executor` - 调用方事务执行器
-///
-/// # 返回
-/// 返回已写入的批次实体。
-///
-/// # 错误
-/// 任一行 CAS、任务终态或写入失败时返回错误，由调用方整体回滚。
-///
-/// # 约束
-/// 不自行开启或提交事务；调用方必须传入同一事务 executor。
+// 事务内只更新 delta 行、批次、后台任务与审计。
+//
+// `write`：待持久化的 delta 行、批次、任务、审计与本批计数；`executor`：调用方事务执行器。
+//
+// 返回已写入的批次实体。
+//
+// 任一行 CAS、任务终态或写入失败时返回错误，由调用方整体回滚。
+//
+// 不自行开启或提交事务；调用方必须传入同一事务 executor。
 async fn persist_apply_transaction(
     write: PersistApplyWrite<'_>,
     executor: &mut dyn Executor,
@@ -552,7 +497,7 @@ mod tests {
         persist_apply_transaction,
     };
 
-    /// 批次应用在读取既有批次及幂等分支前必须进入写授权事务。
+    // 验证：批次应用在读取既有批次及幂等分支前必须进入写授权事务。
     #[tokio::test]
     async fn apply_batch_rejects_unproven_transaction_before_reading_existing_batch() {
         let (service, actor) = super::super::testing::fixture().await;

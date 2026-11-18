@@ -14,12 +14,11 @@ use crate::repository::BpmExt;
 
 impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     /// 查询当前有效账号发起的未读审批数量。
-    /// # 参数
-    /// `actor` 为认证上下文中的账号。
-    /// # 返回
     /// 按审批实例去重后的未读数量。
-    /// # 错误
+    ///
     /// 账号停用、没有读取权限或数据库失败时返回错误。
+    ///
+    /// `actor` 为认证上下文中的账号。
     pub async fn started_unread_count(&self, actor: &AuditActor) -> Result<u64> {
         let service = self.clone();
         let actor = actor.clone();
@@ -43,12 +42,11 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     }
 
     /// 确认当前账号实际看过的审批进展。
-    /// # 参数
-    /// `actor` 为登录账号，`instance_id` 为审批实例，`version` 为展示版本。
-    /// # 返回
     /// 确认成功返回空；旧确认不会清除更新的提醒。
-    /// # 错误
+    ///
     /// 无权、实例缺失、版本非法或数据库失败时返回错误。
+    ///
+    /// `actor` 为登录账号，`instance_id` 为审批实例，`version` 为展示版本。
     pub async fn mark_progress_read(
         &self,
         actor: &AuditActor,

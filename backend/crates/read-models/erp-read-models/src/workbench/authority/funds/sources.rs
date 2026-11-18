@@ -6,17 +6,12 @@ use persistence_core::Executor;
 use super::super::WorkItemFactsReader;
 use crate::errors::Result;
 impl WorkItemFactsReader {
-    /// 按原输入顺序读取 receivable_accounts；空输入仍由原仓储处理，同一 Executor 透传。
-    ///
-    /// # 参数
-    /// * `ids` - 应收子账 ID。
-    /// * `executor` - 调用方执行器，原样透传。
-    ///
-    /// # 返回
-    /// 返回仓储读到的有效应收子账。
-    ///
-    /// # 错误
-    /// 仓储读取失败时返回对应错误。
+    // 工作项授权和简报需要应收子账时，保持传入 ID 的原顺序并沿用原执行器交给领域仓储；空批次仍按原仓储处理。
+    //
+    // 调用参数：
+    // * `ids` - 应收子账 ID。
+    //
+    // 返回仓储读到的有效应收子账。
     pub(in crate::workbench) async fn read_receivable_accounts(
         &self,
         ids: &[String],
@@ -24,17 +19,12 @@ impl WorkItemFactsReader {
     ) -> Result<Vec<erp_finance::entity::receivable::ReceivableAccount>> {
         self.db.receivable_accounts().list_active_by_ids(ids, executor).await.map_err(Into::into)
     }
-    /// 按原输入顺序读取 payable_accounts；空输入仍由原仓储处理，同一 Executor 透传。
-    ///
-    /// # 参数
-    /// * `ids` - 应付账户 ID。
-    /// * `executor` - 调用方执行器，原样透传。
-    ///
-    /// # 返回
-    /// 返回仓储读到的有效应付账户。
-    ///
-    /// # 错误
-    /// 仓储读取失败时返回对应错误。
+    // 工作项授权和简报需要应付账户时，保持传入 ID 的原顺序并沿用原执行器交给领域仓储；空批次仍按原仓储处理。
+    //
+    // 调用参数：
+    // * `ids` - 应付账户 ID。
+    //
+    // 返回仓储读到的有效应付账户。
     pub(in crate::workbench) async fn read_payable_accounts(
         &self,
         ids: &[String],
@@ -42,17 +32,12 @@ impl WorkItemFactsReader {
     ) -> Result<Vec<erp_finance::entity::payable::PayableAccount>> {
         self.db.payable_accounts().list_active_by_ids(ids, executor).await.map_err(Into::into)
     }
-    /// 按原输入顺序读取 customer_receipts；空输入仍由原仓储处理，同一 Executor 透传。
-    ///
-    /// # 参数
-    /// * `ids` - 客户回款单 ID。
-    /// * `executor` - 调用方执行器，原样透传。
-    ///
-    /// # 返回
-    /// 返回仓储读到的有效客户回款单。
-    ///
-    /// # 错误
-    /// 仓储读取失败时返回对应错误。
+    // 工作项授权和简报需要客户回款时，保持传入 ID 的原顺序并沿用原执行器交给领域仓储；空批次仍按原仓储处理。
+    //
+    // 调用参数：
+    // * `ids` - 客户回款单 ID。
+    //
+    // 返回仓储读到的有效客户回款单。
     pub(in crate::workbench) async fn read_customer_receipts(
         &self,
         ids: &[String],
@@ -60,17 +45,12 @@ impl WorkItemFactsReader {
     ) -> Result<Vec<erp_finance::entity::receivable::CustomerReceipt>> {
         self.db.customer_receipts().list_active_by_ids(ids, executor).await.map_err(Into::into)
     }
-    /// 按原输入顺序读取 supplier_payments；空输入仍由原仓储处理，同一 Executor 透传。
-    ///
-    /// # 参数
-    /// * `ids` - 供应商付款 ID。
-    /// * `executor` - 调用方执行器，原样透传。
-    ///
-    /// # 返回
-    /// 返回仓储读到的有效供应商付款。
-    ///
-    /// # 错误
-    /// 仓储读取失败时返回对应错误。
+    // 工作项授权和简报需要供应商付款时，保持传入 ID 的原顺序并沿用原执行器交给领域仓储；空批次仍按原仓储处理。
+    //
+    // 调用参数：
+    // * `ids` - 供应商付款 ID。
+    //
+    // 返回仓储读到的有效供应商付款。
     pub(in crate::workbench) async fn read_supplier_payments(
         &self,
         ids: &[String],
@@ -78,17 +58,12 @@ impl WorkItemFactsReader {
     ) -> Result<Vec<erp_finance::entity::payable::SupplierPayment>> {
         self.db.supplier_payments().list_active_by_ids(ids, executor).await.map_err(Into::into)
     }
-    /// 按原输入顺序读取 customer_refunds；空输入仍由原仓储处理，同一 Executor 透传。
-    ///
-    /// # 参数
-    /// * `ids` - 客户退款 ID。
-    /// * `executor` - 调用方执行器，原样透传。
-    ///
-    /// # 返回
-    /// 返回仓储读到的有效客户退款。
-    ///
-    /// # 错误
-    /// 仓储读取失败时返回对应错误。
+    // 工作项授权和简报需要客户退款时，保持传入 ID 的原顺序并沿用原执行器交给领域仓储；空批次仍按原仓储处理。
+    //
+    // 调用参数：
+    // * `ids` - 客户退款 ID。
+    //
+    // 返回仓储读到的有效客户退款。
     pub(in crate::workbench) async fn read_customer_refunds(
         &self,
         ids: &[String],
@@ -96,17 +71,12 @@ impl WorkItemFactsReader {
     ) -> Result<Vec<erp_returns::entity::returns::CustomerRefund>> {
         self.db.customer_refunds().list_active_by_ids(ids, executor).await.map_err(Into::into)
     }
-    /// 按原输入顺序读取 supplier_refunds；空输入仍由原仓储处理，同一 Executor 透传。
-    ///
-    /// # 参数
-    /// * `ids` - 供应商退款 ID。
-    /// * `executor` - 调用方执行器，原样透传。
-    ///
-    /// # 返回
-    /// 返回仓储读到的有效供应商退款。
-    ///
-    /// # 错误
-    /// 仓储读取失败时返回对应错误。
+    // 工作项授权和简报需要供应商退款时，保持传入 ID 的原顺序并沿用原执行器交给领域仓储；空批次仍按原仓储处理。
+    //
+    // 调用参数：
+    // * `ids` - 供应商退款 ID。
+    //
+    // 返回仓储读到的有效供应商退款。
     pub(in crate::workbench) async fn read_supplier_refunds(
         &self,
         ids: &[String],
@@ -114,17 +84,12 @@ impl WorkItemFactsReader {
     ) -> Result<Vec<erp_returns::entity::returns::SupplierRefund>> {
         self.db.supplier_refunds().list_active_by_ids(ids, executor).await.map_err(Into::into)
     }
-    /// 按原输入顺序读取 receipt_reversals；空输入仍由原仓储处理，同一 Executor 透传。
-    ///
-    /// # 参数
-    /// * `ids` - 回款冲正 ID。
-    /// * `executor` - 调用方执行器，原样透传。
-    ///
-    /// # 返回
-    /// 返回仓储读到的有效回款冲正。
-    ///
-    /// # 错误
-    /// 仓储读取失败时返回对应错误。
+    // 工作项授权和简报需要回款冲正时，保持传入 ID 的原顺序并沿用原执行器交给领域仓储；空批次仍按原仓储处理。
+    //
+    // 调用参数：
+    // * `ids` - 回款冲正 ID。
+    //
+    // 返回仓储读到的有效回款冲正。
     pub(in crate::workbench) async fn read_receipt_reversals(
         &self,
         ids: &[String],
@@ -132,17 +97,12 @@ impl WorkItemFactsReader {
     ) -> Result<Vec<erp_returns::entity::returns::ReceiptReversal>> {
         self.db.receipt_reversals().list_active_by_ids(ids, executor).await.map_err(Into::into)
     }
-    /// 按原输入顺序读取 payment_reversals；空输入仍由原仓储处理，同一 Executor 透传。
-    ///
-    /// # 参数
-    /// * `ids` - 付款冲正 ID。
-    /// * `executor` - 调用方执行器，原样透传。
-    ///
-    /// # 返回
-    /// 返回仓储读到的有效付款冲正。
-    ///
-    /// # 错误
-    /// 仓储读取失败时返回对应错误。
+    // 工作项授权和简报需要付款冲正时，保持传入 ID 的原顺序并沿用原执行器交给领域仓储；空批次仍按原仓储处理。
+    //
+    // 调用参数：
+    // * `ids` - 付款冲正 ID。
+    //
+    // 返回仓储读到的有效付款冲正。
     pub(in crate::workbench) async fn read_payment_reversals(
         &self,
         ids: &[String],
@@ -150,17 +110,12 @@ impl WorkItemFactsReader {
     ) -> Result<Vec<erp_returns::entity::returns::PaymentReversal>> {
         self.db.payment_reversals().list_active_by_ids(ids, executor).await.map_err(Into::into)
     }
-    /// 按原输入顺序读取 receivable_entries；空输入仍由原仓储处理，同一 Executor 透传。
-    ///
-    /// # 参数
-    /// * `ids` - 应收分录 ID。
-    /// * `executor` - 调用方执行器，原样透传。
-    ///
-    /// # 返回
-    /// 返回仓储读到的有效应收分录。
-    ///
-    /// # 错误
-    /// 仓储读取失败时返回对应错误。
+    // 工作项命令和简报装配需要应收分录时，按原输入顺序向领域仓储传入 ID，空输入仍由原仓储处理，复用调用方执行器。
+    //
+    // 调用参数：
+    // * `ids` - 应收分录 ID。
+    //
+    // 返回仓储读到的有效应收分录。
     pub(in crate::workbench) async fn read_receivable_entries(
         &self,
         ids: &[String],
@@ -168,17 +123,12 @@ impl WorkItemFactsReader {
     ) -> Result<Vec<erp_finance::entity::receivable::ReceivableEntry>> {
         self.db.receivable_entries().list_active_by_ids(ids, executor).await.map_err(Into::into)
     }
-    /// 按原输入顺序读取 payable_entries；空输入仍由原仓储处理，同一 Executor 透传。
-    ///
-    /// # 参数
-    /// * `ids` - 应付分录 ID。
-    /// * `executor` - 调用方执行器，原样透传。
-    ///
-    /// # 返回
-    /// 返回仓储读到的有效应付分录。
-    ///
-    /// # 错误
-    /// 仓储读取失败时返回对应错误。
+    // 工作项授权和简报需要应付分录时，保持传入 ID 的原顺序并沿用原执行器交给领域仓储；空批次仍按原仓储处理。
+    //
+    // 调用参数：
+    // * `ids` - 应付分录 ID。
+    //
+    // 返回仓储读到的有效应付分录。
     pub(in crate::workbench) async fn read_payable_entries(
         &self,
         ids: &[String],

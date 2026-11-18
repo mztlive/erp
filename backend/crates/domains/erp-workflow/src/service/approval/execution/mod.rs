@@ -117,7 +117,7 @@ mod tests {
     use crate::service::approval::execution::decision::decision_commits_blocked;
     use crate::service::approval::execution::idempotency::normalize_idempotency_key;
 
-    /// 启动、通过、驳回、取消和恢复均为单次编排计划。
+    // 验证：启动、通过、驳回、取消和恢复均为单次编排计划。
     #[test]
     fn execution_commands_are_single_transaction_plans() {
         let started = prepare_start(start_input(eligible("u1", "张三"), None)).unwrap();
@@ -242,7 +242,7 @@ mod tests {
         assert_eq!(rejected.updated_executions[0].status, ApprovalNodeExecutionStatus::Rejected);
     }
 
-    /// 重复命令同载荷回读，异载荷冲突。
+    // 验证：重复命令同载荷回读，异载荷冲突。
     #[test]
     fn execution_idempotent_replay_and_payload_conflict() {
         let first = prepare_start(start_input(eligible("u1", "张三"), None)).unwrap();
@@ -259,7 +259,7 @@ mod tests {
         assert!(conflict.to_string().contains("APPROVAL_IDEMPOTENCY_PAYLOAD_CONFLICT"));
     }
 
-    /// 当前审批人失效提交 BLOCKED，而不是回滚为空。
+    // 验证：当前审批人失效提交 BLOCKED，而不是回滚为空。
     #[test]
     fn execution_blocks_current_actor_instead_of_rollback() {
         let started = prepare_start(start_input(eligible("u1", "张三"), None)).unwrap();
@@ -285,7 +285,7 @@ mod tests {
         assert_eq!(blocked_writes.instance.status, ApprovalProcessInstanceStatus::Blocked);
     }
 
-    /// 取消与受阻取消都产生取消领域动作。
+    // 验证：取消与受阻取消都产生取消领域动作。
     #[test]
     fn execution_cancel_and_blocked_cancel_use_same_action() {
         let started = prepare_start(start_input(eligible("u1", "张三"), None)).unwrap();
@@ -306,7 +306,7 @@ mod tests {
         assert_eq!(cancel_writes.instance.status, ApprovalProcessInstanceStatus::Cancelled);
     }
 
-    /// 业务撤回收据同载荷可回放，业务单据版本漂移必须返回幂等冲突。
+    // 验证：业务撤回收据同载荷可回放，业务单据版本漂移必须返回幂等冲突。
     #[test]
     fn document_cancel_receipt_binds_expected_document_version() {
         let started = prepare_start(start_input(eligible("u1", "张三"), None)).unwrap();
@@ -331,7 +331,7 @@ mod tests {
         assert!(conflict.to_string().contains("APPROVAL_IDEMPOTENCY_PAYLOAD_CONFLICT"));
     }
 
-    /// 原审批人恢复创建新执行且不改变审批人绑定。
+    // 验证：原审批人恢复创建新执行且不改变审批人绑定。
     #[test]
     fn execution_resume_replaces_execution_without_changing_assignee() {
         let started = prepare_start(start_input(eligible("u1", "张三"), None)).unwrap();
@@ -368,7 +368,7 @@ mod tests {
         assert_eq!(resume_writes.created_executions[0].assignee_participant_id.as_str(), "u1");
     }
 
-    /// 入口有效但非入口审批人失效时，由 BPM 拒绝创建实例。
+    // 验证：入口有效但非入口审批人失效时，由 BPM 拒绝创建实例。
     #[test]
     fn execution_start_rejects_ineligible_assignee() {
         let mut input = start_input(eligible("u1", "张三"), None);
@@ -377,7 +377,7 @@ mod tests {
         assert!(error.to_string().contains("全部审批人必须有效"));
     }
 
-    /// 原审批人可恢复的 blocker 不得走受阻取消；结构 blocker 只能走受阻取消。
+    // 验证：原审批人可恢复的 blocker 不得走受阻取消；结构 blocker 只能走受阻取消。
     #[test]
     fn execution_cancel_blocked_rejects_assignee_recovery_and_accepts_structural() {
         let started = prepare_start(start_input(eligible("u1", "张三"), None)).unwrap();
@@ -450,7 +450,7 @@ mod tests {
         assert_eq!(cancel_writes.instance.status, ApprovalProcessInstanceStatus::Cancelled);
     }
 
-    /// 同一执行多个 OPEN 任务提交 OPEN_TASK_CONFLICT。
+    // 验证：同一执行多个 OPEN 任务提交 OPEN_TASK_CONFLICT。
     #[test]
     fn execution_blocks_open_task_conflict() {
         let started = prepare_start(start_input(eligible("u1", "张三"), None)).unwrap();
@@ -483,7 +483,7 @@ mod tests {
         assert_eq!(blocked_writes.notifications[0].dedup_key, "blocked:e1");
     }
 
-    /// 事务内应用计划；领域动作失败整单回滚；收据重复键按同/异载荷回读。
+    // 验证：事务内应用计划；领域动作失败整单回滚；收据重复键按同/异载荷回读。
     #[test]
     fn execution_commit_writes_and_duplicate_key_replay() {
         use erp_core::common::time::Instant;
@@ -606,7 +606,7 @@ mod tests {
         assert_eq!(next.subject_version, "1");
     }
 
-    /// 运行路径不接受旧恢复动作名称。
+    // 验证：运行路径不接受旧恢复动作名称。
     #[test]
     fn execution_has_no_retry_current_step_symbol() {
         let key = normalize_idempotency_key(" key ").unwrap();

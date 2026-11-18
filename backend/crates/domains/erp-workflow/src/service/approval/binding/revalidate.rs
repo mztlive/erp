@@ -14,19 +14,8 @@ use crate::entity::approval_qualification::ApprovalQualification;
 use crate::error::{Error, Result};
 use crate::repository::bpm::DefinitionGraph;
 
-/// 复用 BPM 图原语重验发布结构；不得把 Executor 传入 BPM。
-///
-/// # 参数
-/// * `graph` - Repository 一次性加载的发布定义图
-///
-/// # 返回
-/// 状态为已发布且线性图完整时返回 `Ok(())`。
-///
-/// # 错误
-/// 状态不是已发布时映射为未配置；图结构损坏时返回稳定校验错误。
-///
-/// # 关键业务约束
-/// Service 不得复制节点顺序、入口或连线算法；仓储过滤不能替代 BPM 确认。
+// 绑定或升级前，将一次读取的图交给 BPM 验证发布状态、入口、节点顺序和连线；仓储过滤不能替代图验证。
+// 未发布报告未配置，结构损坏报告校验错误；持久化执行器不传入 BPM。
 pub(super) fn revalidate_published_graph(graph: &DefinitionGraph) -> Result<()> {
     graph.validate_published_linear().map_err(|error| match error {
         ModelError::InvalidStatus(_) => process_not_configured(),
@@ -34,23 +23,7 @@ pub(super) fn revalidate_published_graph(graph: &DefinitionGraph) -> Result<()> 
     })
 }
 
-/// 重验指定审批人的账号、审批权限、订单必要事实与岗位分离。
-///
-/// # 参数
-/// * `identity_service` - 同一应用注入的共享身份与权限服务。
-/// * `policy` - 当前单据类型必须审批政策
-/// * `context` - 当前单据组织与创建人事实
-/// * `graph` - 已由 BPM 校验的定义图
-/// * `executor` - 调用方事务执行器
-///
-/// # 返回
-/// 全部定义审批人资格和绑定事实有效时返回 `Ok(())`。
-///
-/// # 错误
-/// 岗位分离、账号、审批权限或订单必要事实校验失败时返回错误。
-///
-/// # 关键业务约束
-/// 审批人集合由 BPM 图确定性提取，Service 只编排外部资格判断。
+/// 绑定或升级时，从 BPM 已校验图提取全部指定审批人，沿调用方事务复核岗位分离、有效账号、审批读写权限和订单必需事实。任一条件不满足即拒绝绑定。
 pub async fn revalidate_binding_graph(
     authorization: &AuthorizationService,
     db: &Database,

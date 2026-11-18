@@ -9,17 +9,13 @@ impl CostEntryView {
     /// 根据独立整笔资格及可见销售分配生成读取视图。
     ///
     /// 本方法消耗 `self`。
-    ///
-    /// # 参数
-    /// * `whole` - 是否具备整笔读取资格。
-    /// * `orders` - 可见销售单 ID。
-    ///
-    /// # 返回
-    /// 无整笔资格且无可见分配返回 `None`；部分金额保持原始分配正反事实。
+    /// 结果：无整笔资格且无可见分配返回 `None`；部分金额保持原始分配正反事实。
     /// 无整笔资格时整笔金额与来源单据字段为 `None`，范围金额只合计可见分配。
+    /// 失败条件：可见份额合计超出金额上限时返回 `ValidationError`；合计无法构成金额时返回 `Logic`。
     ///
-    /// # 错误
-    /// 可见份额合计超出金额上限时返回 `ValidationError`；合计无法构成金额时返回 `Logic`。
+    /// 输入约定：
+    /// - `whole`：是否具备整笔读取资格。
+    /// - `orders`：可见销售单 ID。
     pub fn restrict(
         self,
         whole: bool,
@@ -63,7 +59,7 @@ impl CostEntryView {
     }
 }
 
-/// 超大合计必须拒绝，不允许 Decimal 溢出或舍入后伪造份额。
+// 汇总可见成本份额时检查定点金额上限，拒绝会溢出或因舍入改变实际份额的总额。
 fn sum(mut values: impl Iterator<Item = Amount>) -> crate::Result<Amount> {
     let total = values.try_fold(rust_decimal::Decimal::ZERO, |sum, value| {
         sum.checked_add(value.to_decimal())

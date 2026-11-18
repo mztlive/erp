@@ -9,46 +9,20 @@ pub const IMPORT_BARCODE_MAX_CHARS: usize = 128;
 /// 视为未填写的占位文本。
 const PLACEHOLDERS: &[&str] = &["-", "—", "－", "无", "N/A", "n/a"];
 
-/// 判断单元格是否为空白或占位符。
-///
-/// # 参数
-/// * `value` - 单元格原文
-///
-/// # 返回
-/// 去空白后为空或属于占位符时返回 `true`。
-///
-/// # 错误
-/// 无。
+/// 判断单元格是否为空白或占位符。去空白后为空或属于占位符时返回 `true`。
 pub fn is_import_blank(value: &str) -> bool {
     let trimmed = value.trim();
     trimmed.is_empty() || PLACEHOLDERS.iter().any(|token| trimmed.eq_ignore_ascii_case(token))
 }
 
-/// 折叠空白并去掉首尾空白。
-///
-/// # 参数
-/// * `value` - 原文
-///
-/// # 返回
-/// 连续空白（含换行）压缩为单个空格后的文本。
-///
-/// # 错误
-/// 无。
+/// 折叠空白并去掉首尾空白。连续空白（含换行）压缩为单个空格后的文本。
 pub fn collapse_import_text(value: &str) -> String {
     value.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-/// 截断到最大字符数，超出时保留省略号。
+/// 截断到最大字符数，超出时保留省略号。不超过上限的文本。
 ///
-/// # 参数
-/// * `value` - 已规范化文本
-/// * `max_chars` - 最大字符数，至少为 1
-///
-/// # 返回
-/// 不超过上限的文本。
-///
-/// # 错误
-/// 无。
+/// `max_chars` 为最大字符数，至少为 1。
 pub fn truncate_import_text(value: &str, max_chars: usize) -> String {
     let count = value.chars().count();
     if count <= max_chars {
@@ -61,16 +35,7 @@ pub fn truncate_import_text(value: &str, max_chars: usize) -> String {
     out
 }
 
-/// 取第一个有效条码；多行或多个分隔符时只保留第一项。
-///
-/// # 参数
-/// * `value` - 条码单元格
-///
-/// # 返回
-/// 第一个非占位条码；没有有效条码时返回 `None`。
-///
-/// # 错误
-/// 无。
+/// 取第一个有效条码；多行或多个分隔符时只保留第一项。第一个非占位条码；没有有效条码时返回 `None`。
 pub fn first_import_barcode(value: &str) -> Option<String> {
     let candidate =
         value.split(['\n', '\r', ',', '，', ';', '；']).map(str::trim).find(|part| !is_import_blank(part))?;
@@ -85,14 +50,7 @@ pub fn first_import_barcode(value: &str) -> Option<String> {
 ///
 /// Excel / WPS 可能写成 `=DISPIMG(...)`、`_xlfn.DISPIMG(...)` 或带 `&quot;`。
 ///
-/// # 参数
-/// * `value` - 主图或副图单元格
-///
-/// # 返回
 /// 公式中的图片 ID；不是 DISPIMG 公式时返回 `None`。
-///
-/// # 错误
-/// 无。
 pub fn dispimg_id(value: &str) -> Option<&str> {
     let trimmed = value.trim();
     let marker = "DISPIMG(";
@@ -105,30 +63,12 @@ pub fn dispimg_id(value: &str) -> Option<&str> {
     if id.is_empty() { None } else { Some(id) }
 }
 
-/// 未填写品牌时使用的稳定名称。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回占位品牌名称。
-///
-/// # 错误
-/// 不返回错误。
+/// 未填写品牌时使用的稳定名称。返回占位品牌名称。
 pub fn unspecified_brand_name() -> &'static str {
     "未填写品牌"
 }
 
-/// 解析导入品牌名称；占位符映射为「未填写品牌」。
-///
-/// # 参数
-/// * `value` - 品牌单元格
-///
-/// # 返回
-/// 规范化后的品牌名称。
-///
-/// # 错误
-/// 无。
+/// 解析导入品牌名称；占位符映射为「未填写品牌」。规范化后的品牌名称。
 pub fn import_brand_name(value: &str) -> String {
     if is_import_blank(value) { unspecified_brand_name().to_string() } else { collapse_import_text(value) }
 }

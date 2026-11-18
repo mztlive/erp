@@ -16,14 +16,13 @@ pub(super) struct BankRoutingChange {
 }
 
 impl BankRoutingChange {
-    /// 以同一事务内的默认账户事实保存联行号，保留版本冲突和原资料审计。
-    ///
-    /// # 参数
-    /// * `db` / `executor` - 当前数据库与供应商资料修订执行器。
-    /// # 返回
-    /// 完成更新；内容一致时不写入账户。
-    /// # 错误
-    /// 默认账户缺失或不唯一、格式非法或账户版本变化时拒绝。
+    // 以同一事务内的默认账户事实保存联行号，保留版本冲突和原资料审计。
+    //
+    // `db` / `executor`：当前数据库与供应商资料修订执行器。
+    //
+    // 完成更新；内容一致时不写入账户。
+    //
+    // 默认账户缺失或不唯一、格式非法或账户版本变化时拒绝。
     pub(super) async fn persist(self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
         let accounts =
             db.party_bank_accounts().list_current_on(&self.party_id, BusinessDate::today(), executor).await?;

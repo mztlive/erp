@@ -19,14 +19,7 @@ use crate::http::extractor::{Json, Query};
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
-/// 查询成本事实列表。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `query` - 分页与筛选参数（扁平传递）
-///
-/// # 返回
-/// 返回契约形状的分页视图。
+/// 按请求条件查询成本事实列表。
 pub async fn cost_entry_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -40,12 +33,6 @@ pub async fn cost_entry_list(
 }
 
 /// 查询成本事实详情（事实 + 分配行）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `id` - 成本事实 ID
-///
-/// # 返回
 /// 返回完整成本视图。
 pub async fn cost_entry_detail(
     State(state): State<HttpState>,
@@ -60,13 +47,6 @@ pub async fn cost_entry_detail(
 }
 
 /// 手工登记成本事实与分配行（跨集合事务：事实 + 分配行原子可见）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 创建请求
-///
-/// # 返回
 /// 返回新建成本事实视图。
 pub async fn cost_entry_create(
     State(state): State<HttpState>,
@@ -83,14 +63,8 @@ pub async fn cost_entry_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 查询成本分配列表。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `query` - 分页与筛选参数（`cost_entry_id`/`sales_order_id`）
-///
-/// # 返回
-/// 返回契约形状的分页视图。
+/// 按请求条件查询成本分配列表。
+/// `query` 为分页与筛选参数（`cost_entry_id`/`sales_order_id`）。
 pub async fn cost_allocation_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,

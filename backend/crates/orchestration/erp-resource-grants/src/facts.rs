@@ -22,13 +22,7 @@ pub(crate) struct Facts {
     pub event: Option<GrantEvent>,
 }
 impl Facts {
-    /// 读取当前事实并计算来源完整目标。
-    /// # 参数
-    /// event 为正式事件，ex 为发布执行器。
-    /// # 返回
-    /// 经关联校验的完整来源结果。
-    /// # 错误
-    /// 读取失败、缺失或关联错配时拒绝。
+    // 用传入的执行器从正式业务记录计算授权来源的完整目标，供发布和就绪查询共用；证据不匹配、事实版本回退或读取失败时返回错误，不生成空目标。
     pub(crate) async fn compute(
         db: &Database,
         event: &GrantEvent,

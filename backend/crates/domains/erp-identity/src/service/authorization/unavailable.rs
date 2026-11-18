@@ -16,13 +16,10 @@ use crate::service::access_control::resolve::AuthorizedDataScope;
 use crate::{Error, Permission, QualifiedPermissions, Result};
 
 impl AuthorizationService {
-    /// 构造用于验证缺少查询绑定的失败关闭测试服务。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 没有Facts或Mapping、身份设施始终报错的测试实例。
-    /// # 错误
-    /// 不连接数据库；受支持查询在身份取证前返回缺少Mapping错误。
+    // 构造用于验证缺少查询绑定的失败关闭测试服务。
+    // 没有Facts或Mapping、身份设施始终报错的测试实例。
+    //
+    // 不连接数据库；受支持查询在身份取证前返回缺少Mapping错误。
     pub(crate) fn unbound_for_test() -> Arc<Self> {
         Arc::new(Self {
             facilities: Arc::new(Unavailable),
@@ -32,13 +29,10 @@ impl AuthorizationService {
         })
     }
 
-    /// 为输入校验和设施故障测试提供失败关闭的统一授权入口。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 所有登记查询具有静态描述、身份设施始终报错的测试服务。
-    /// # 错误
-    /// 不读取数据库；查询无法通过身份取证，也不能执行映射转换。
+    // 为输入校验和设施故障测试提供失败关闭的统一授权入口。
+    // 所有登记查询具有静态描述、身份设施始终报错的测试服务。
+    //
+    // 不读取数据库；查询无法通过身份取证，也不能执行映射转换。
     pub(crate) fn unavailable_for_test() -> Arc<Self> {
         Arc::new(Self {
             facilities: Arc::new(Unavailable),

@@ -13,20 +13,16 @@ use validator::Validate;
 
 use super::{SelectionBookletListView, SelectionProposalListView};
 use crate::{Error, Result};
-/// 选品册列表授权快照；同一执行器内授权与计数。
-///
-/// # 参数
-/// * `access` - 选品范围访问器
-/// * `db` - 选品集合所在数据库
-/// * `params` - 列表筛选
-/// * `actor` - 已认证操作人
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回分页与范围版本；当前页行带负责人显示名。
-///
-/// # 错误
-/// 参数非法、无动作权限或范围变化时拒绝。
+// 处理销售选品册与方案时，选品册列表授权快照；同一执行器内授权与计数。
+//
+// 调用参数：
+// * `access` - 选品范围访问器
+// * `db` - 选品集合所在数据库
+// * `params` - 列表筛选
+//
+// 返回分页与范围版本；当前页行带负责人显示名。
+//
+// 参数非法、无动作权限或范围变化时拒绝。
 pub(crate) async fn booklet_list_snapshot(
     access: &SelectionAccess,
     db: &Database,
@@ -59,20 +55,16 @@ pub(crate) async fn booklet_list_snapshot(
     Ok(SelectionBookletListView { page, scope_version: scope.version(), no_scope: false })
 }
 
-/// 方案列表授权快照；方案沿所属册责任解释。
-///
-/// # 参数
-/// * `access` - 选品范围访问器
-/// * `db` - 方案集合所在数据库
-/// * `params` - 列表筛选
-/// * `actor` - 已认证操作人
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回分页与范围版本；当前页行带负责人显示名。
-///
-/// # 错误
-/// 参数非法、无动作权限或范围变化时拒绝。
+// 处理销售选品册与方案时，方案列表授权快照；方案沿所属册责任解释。
+//
+// 调用参数：
+// * `access` - 选品范围访问器
+// * `db` - 方案集合所在数据库
+// * `params` - 列表筛选
+//
+// 返回分页与范围版本；当前页行带负责人显示名。
+//
+// 参数非法、无动作权限或范围变化时拒绝。
 pub(crate) async fn proposal_list_snapshot(
     access: &SelectionAccess,
     db: &Database,
@@ -105,17 +97,15 @@ pub(crate) async fn proposal_list_snapshot(
     Ok(SelectionProposalListView { page, scope_version: scope.version(), no_scope: false })
 }
 
-/// 按 ID 批量读取负责人显示名；缺失账号省略。
-///
-/// # 参数
-/// * `db` - 账号集合所在数据库
-/// * `ids` - 负责人 ID
-///
-/// # 返回
-/// 返回 ID 到显示名的映射。
-///
-/// # 错误
-/// 仓储失败时拒绝。
+// 依据 ID 批量读取负责人显示名；缺失账号省略。
+//
+// 调用参数：
+// * `db` - 账号集合所在数据库
+// * `ids` - 负责人 ID
+//
+// 返回 ID 到显示名的映射。
+//
+// 仓储失败时拒绝。
 pub(crate) async fn owner_display_names(
     db: &Database,
     ids: &[String],
@@ -124,19 +114,16 @@ pub(crate) async fn owner_display_names(
     Ok(db.accounts().names_by_ids(ids, executor).await?)
 }
 
-/// 展开组织筛选；包含下级时必须提供组织。
-///
-/// # 参数
-/// * `access` - 选品范围访问器
-/// * `orgs` - 请求组织
-/// * `include` - 是否包含有效下级
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 无筛选时为 `None`，否则为展开后的组织。
-///
-/// # 错误
-/// 包含下级缺少组织或未知组织时拒绝。
+// 处理销售选品册与方案时，展开组织筛选；包含下级时必须提供组织。
+//
+// 调用参数：
+// * `access` - 选品范围访问器
+// * `orgs` - 请求组织
+// * `include` - 是否包含有效下级
+//
+// 无筛选时为 `None`，否则为展开后的组织。
+//
+// 包含下级缺少组织或未知组织时拒绝。
 async fn expanded_orgs(
     access: &SelectionAccess,
     orgs: Option<&[String]>,
@@ -156,20 +143,17 @@ async fn expanded_orgs(
     Ok(Some(expanded.into_iter().collect()))
 }
 
-/// 给当前页行补负责人显示名；只读本页 ID，不生成筛选候选。
-///
-/// # 参数
-/// * `db` - 账号集合所在数据库
-/// * `page` - 已授权分页
-/// * `owner_id` - 行上负责人 ID
-/// * `map_row` - 组装带显示名的行
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回原分页与总数，行上附带显示名。
-///
-/// # 错误
-/// 账号读取失败时拒绝。
+// 补齐销售选品册与方案的展示名称时，给当前页行补负责人显示名；只读本页 ID，不生成筛选候选。
+//
+// 调用参数：
+// * `db` - 账号集合所在数据库
+// * `page` - 已授权分页
+// * `owner_id` - 行上负责人 ID
+// * `map_row` - 组装带显示名的行
+//
+// 返回原分页与总数，行上附带显示名。
+//
+// 账号读取失败时拒绝。
 async fn named_owner_page<T, R>(
     db: &Database,
     page: PageView<T>,
@@ -191,34 +175,30 @@ async fn named_owner_page<T, R>(
     Ok(PageView { items, total: page.total, page: page.page, page_size: page.page_size })
 }
 
-/// 后续页必须携带当前范围版本。
-///
-/// # 参数
-/// * `page` - 请求页码
-/// * `version` - 客户端回传版本
-///
-/// # 返回
-/// 第一页或版本非空时成功。
-///
-/// # 错误
-/// 第二页缺版本时返回 `DATA_SCOPE_CHANGED`。
+// 核对销售选品册与方案边界时，后续页必须携带当前范围版本。
+//
+// 调用参数：
+// * `page` - 请求页码
+// * `version` - 客户端回传版本
+//
+// 第一页或版本非空时成功。
+//
+// 第二页缺版本时返回 `DATA_SCOPE_CHANGED`。
 fn ensure_page(page: u64, version: Option<&str>) -> Result<()> {
     ScopeVersion::new(version, EmptyScopeVersion::Missing)
         .require_for_page(page)
         .map_err(|error| crate::support::data_scope_changed(error.detail()))
 }
 
-/// 回传版本必须与当前快照一致。
-///
-/// # 参数
-/// * `expected` - 客户端回传版本
-/// * `actual` - 当前快照版本
-///
-/// # 返回
-/// 未携带或一致时成功。
-///
-/// # 错误
-/// 不一致时返回 `DATA_SCOPE_CHANGED`。
+// 核对销售选品册与方案边界时，回传版本必须与当前快照一致。
+//
+// 调用参数：
+// * `expected` - 客户端回传版本
+// * `actual` - 当前快照版本
+//
+// 未携带或一致时成功。
+//
+// 不一致时返回 `DATA_SCOPE_CHANGED`。
 fn ensure_version(expected: Option<&str>, actual: &str) -> Result<()> {
     ScopeVersion::new(expected, EmptyScopeVersion::Provided)
         .verify(actual)

@@ -111,7 +111,7 @@ impl MongoIntegrationEvidenceAuthority {
     }
 }
 
-/// 候选由仓储按创建时间倒序提供；新失败或执行中检查必须阻断旧成功记录。
+// 候选由仓储按创建时间倒序提供；新失败或执行中检查必须阻断旧成功记录。
 fn latest_authentication(runs: &[SupplierHealthCheckRun]) -> Option<&SupplierHealthCheckRun> {
     runs.iter().find(|run| run.check_type == SupplierHealthCheckType::Authentication)
 }

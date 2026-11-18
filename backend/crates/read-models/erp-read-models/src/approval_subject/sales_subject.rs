@@ -9,21 +9,18 @@ use erp_workflow::entity::approval_integration::{
 };
 use erp_workflow::entity::document_registry::DocumentType;
 
-/// 把销售业务性质映射为唯一的工作流单据类型。
+/// 组装销售审批主体时，把销售业务性质映射为唯一的工作流单据类型。
 ///
 /// # 参数
 /// * `business_type` - 销售单业务性质。
 ///
 /// # 返回
 /// 返回实物及服务或卡券对应的单据类型。
-///
-/// # 错误
-/// 不返回错误。
 pub fn document_type_of_sales_business(business_type: BusinessType) -> DocumentType {
     map_kind(sales_kind(business_type))
 }
 
-/// 按销售业务性质和主键构造主体引用。
+/// 组装销售审批主体时，按销售业务性质和主键构造主体引用。
 ///
 /// # 参数
 /// * `business_type` - 销售单业务性质。

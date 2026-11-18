@@ -21,35 +21,26 @@ use crate::{Error, Result};
 
 impl SalesReviewService {
     /// 在调用方执行器内读取可编辑的原变更内容。
-    ///
-    /// # 参数
-    /// * `id` - 原销售变更单身份
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回原单与工作副本版本及全部目标明细。
-    ///
-    /// # 错误
     /// 缺单、工作副本错配或不是草稿时拒绝。
+    ///
+    /// 输入约定：
+    /// - `id`：原销售变更单身份
     pub async fn draft(&self, id: &str, executor: &mut dyn Executor) -> Result<SalesChangeDraftView> {
         let (change, copy, lines) = self.load_draft(id, executor).await?;
         self.draft_view(&change, &copy, &lines, executor).await
     }
 
     /// 在调用方事务内保存原变更内容，已提交副本保持不可变。
-    ///
-    /// # 参数
-    /// * `id` - 原销售变更单身份
-    /// * `request` - 两项期望版本、变更原因与完整目标明细
-    /// * `actor_id` - 当前编辑人
-    /// * `catalog` - 精确商品修订资格接口
-    /// * `executor` - 调用方事务执行器
-    ///
-    /// # 返回
     /// 返回保存后的完整目标草稿。
-    ///
-    /// # 错误
     /// 状态、版本、完整明细或商品资格不成立，及仓储失败时拒绝。
+    ///
+    /// 输入约定：
+    /// - `id`：原销售变更单身份
+    /// - `request`：两项期望版本、变更原因与完整目标明细
+    /// - `actor_id`：当前编辑人
+    /// - `catalog`：精确商品修订资格接口
+    /// - `executor`：调用方事务执行器
     pub async fn save_draft(
         &self,
         id: &str,
@@ -94,7 +85,7 @@ impl SalesReviewService {
         self.draft_view(&change, &copy, &lines, executor).await
     }
 
-    /// 加载原单与对应的完整工作副本，状态由拥有领域校验。
+    // 编辑或展示变更草稿时一起加载原销售单与完整工作副本；变更状态守卫由领域实体执行。
     async fn load_draft(
         &self,
         id: &str,
@@ -131,7 +122,7 @@ impl SalesReviewService {
 }
 
 impl SalesReviewService {
-    /// 从已验证事实生成草稿视图，并避开历史已占用的行号。
+    // 将已核验的变更草稿事实投影给编辑界面，为新增行提示可用行号时避开历史身份已占用的号码。
     async fn draft_view(
         &self,
         change: &SalesChangeOrder,
@@ -169,7 +160,7 @@ impl SalesReviewService {
         })
     }
 
-    /// 读取基准明细，草稿保存不得覆盖界面的变更前依据。
+    // 加载基准明细，草稿保存不得覆盖界面的变更前依据。
     async fn base_lines(
         &self,
         change: &SalesChangeOrder,
@@ -198,7 +189,7 @@ impl SalesReviewService {
             .collect()
     }
 
-    /// 为本次新增商品分配稳定行；命名空间及唯一索引禁止借用其他订单身份。
+    // 保存变更新增明细时分配稳定行，命名空间校验和唯一索引阻止借用其他订单身份。
     async fn new_change_lines(
         &self,
         change: &SalesChangeOrder,

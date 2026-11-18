@@ -38,13 +38,8 @@ impl Mutation {
     }
 }
 impl FileAssetService {
-    /// 在原事务核验安全检查管理资格及业务版本后记录扫描结果。
-    /// # 参数
-    /// id为实际资产，req含所见版本及扫描结果，actor为当前账号。
-    /// # 返回
-    /// 原字段口径的更新后文件视图。
-    /// # 错误
-    /// 无资格、不存在、版本或状态冲突、审计失败时拒绝。
+    /// 实际安全扫描完成后，用请求的资产 ID 和所见版本登记扫描结论。在同一事务检查扫描权限、版本和状态并写审计。
+    /// 权限不足、资产缺失、版本或状态冲突、仓储或审计失败时不返回更新视图。
     pub async fn mark_scan_result(
         &self,
         id: &str,
@@ -54,13 +49,8 @@ impl FileAssetService {
         req.validate()?;
         self.mutate_asset(id, req.version, Mutation::Scan(req.security_scan_status), actor).await
     }
-    /// 在原事务核验销毁管理资格及业务版本后销毁资产。
-    /// # 参数
-    /// id为实际资产，req含所见版本，actor为当前账号。
-    /// # 返回
-    /// 更新后文件视图。
-    /// # 错误
-    /// 无资格、不存在、版本或状态冲突、审计失败时拒绝。
+    /// 文件治理决定销毁时，在原写事务检查销毁权限和实际资产版本，执行销毁状态迁移并保存审计。
+    /// 操作不删除对象字节；资产缺失、无权、版本或状态冲突及写入失败时拒绝。
     pub async fn destroy_file_asset(
         &self,
         id: &str,
@@ -70,7 +60,7 @@ impl FileAssetService {
         req.validate()?;
         self.mutate_asset(id, req.version, Mutation::Destroy, actor).await
     }
-    /// 原写事务内重读资产并执行状态迁移及审计。
+    // 扫描与销毁共用写入阶段：在原事务先检查对应权限，再重读资产、核对请求版本并执行状态迁移，最后更新资产及审计。
     async fn mutate_asset(
         &self,
         id: &str,

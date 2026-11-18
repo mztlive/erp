@@ -45,18 +45,9 @@ pub struct VoucherCategoryProfileRevisionRow {
 }
 
 impl VoucherCategoryProfileRevisionRow {
-    /// 以稳定身份构造投影行，关联展示字段保持空条件。
+    /// 以稳定身份构造投影行，关联展示字段保持空条件。返回待装配关联展示字段的投影行。
     ///
-    /// # 参数
-    /// * `id` - 实体主键
-    /// * `sku_id` - 卡券类目使用的 VOUCHER SKU 稳定身份
-    /// * `description` - 卡券类目描述
-    ///
-    /// # 返回
-    /// 返回待装配关联展示字段的投影行。
-    ///
-    /// # 错误
-    /// 无。
+    /// `sku_id` 为卡券类目使用的 VOUCHER SKU 稳定身份。
     pub fn new(id: impl Into<String>, sku_id: impl Into<String>, description: impl Into<String>) -> Self {
         Self {
             id: id.into(),
@@ -92,17 +83,9 @@ pub struct VoucherCategoryProfileRevisionFilter {
 }
 
 impl QueryFilter for VoucherCategoryProfileRevisionFilter {
-    /// 转换为 MongoDB 查询条件，并追加未删除的 `deleted_at` 条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。`sku_id` 有值时精确匹配；`status` 有值时按稳定代码精确匹配。
-    /// 分页与排序字段不进入条件。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 将卡券品类资料修订筛选条件编译为 MongoDB 查询，排除软删除记录。
+    //
+    // `sku_id` 有值时精确匹配；`status` 有值时按稳定代码精确匹配。分页与排序字段不进入条件。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(sku_id) = &self.sku_id {
@@ -116,16 +99,7 @@ impl QueryFilter for VoucherCategoryProfileRevisionFilter {
 }
 
 impl Pagination for VoucherCategoryProfileRevisionFilter {
-    /// 返回卡券类目扩展修订列表的页码与单页条数，不做页码归一或条数钳制。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组：第一项为 `page`，第二项为 `page_size` 转成的 `u64`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 读取卡券类目扩展修订列表的页码与单页条数，不做页码归一或条数限制。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -136,18 +110,12 @@ impl Pagination for VoucherCategoryProfileRevisionFilter {
 pub trait VoucherCategoryProfileRevisionRepositoryExt {
     /// 分页检索卡券类目扩展修订列表（投影查询）。
     ///
-    /// 只返回 [`VoucherCategoryProfileRevisionRow`] 所需的列表字段；排序字段
-    /// 白名单化（`created_at`/`revision_no`）。
+    /// 只返回 [`VoucherCategoryProfileRevisionRow`] 所需的列表字段；
+    /// 排序字段白名单化（`created_at`/`revision_no`）。
     ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回当前页投影行与满足筛选条件的总数。当 MongoDB 查询、游标读取或计数失败时返回错误。
     ///
-    /// # 返回
-    /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// 沿用调用方传入的执行器。
     async fn search_voucher_category_profile_revisions(
         &self,
         filter: &VoucherCategoryProfileRevisionFilter,
@@ -156,18 +124,11 @@ pub trait VoucherCategoryProfileRevisionRepositoryExt {
 
     /// 查找 SKU 当前启用的卡券类目扩展修订。
     ///
-    /// # 参数
-    /// * `sku_id` - 目标 SKU ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回状态为 `Active` 的卡券类目扩展修订；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    ///
-    /// # 约束
     /// 仅查询本仓储拥有的卡券类目扩展修订集合，按 SKU 引用过滤，不访问 SKU 集合。
+    ///
+    /// 返回状态为 `Active` 的卡券类目扩展修订；无匹配时返回 `None`。当 MongoDB 查询失败时返回错误。
+    ///
+    /// 沿用调用方传入的执行器。
     async fn find_active_by_sku(
         &self,
         sku_id: &str,
@@ -210,17 +171,11 @@ impl VoucherCategoryProfileRevisionRepositoryExt
 }
 
 impl<'a> CatalogRepository<'a> {
-    /// 分页查询卡券类目扩展修订并批量装配 SKU、商品和当前名称关系。
+    /// 分页查询卡券类目扩展修订并批量装配 SKU、商品和当前名称关系。MongoDB 查询、计数或批量关系装配失败时返回错误。
     ///
-    /// # 参数
-    /// * `filter` - 卡券类目修订、状态、分页与排序条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 沿用调用方的执行器，不另开事务。
     ///
-    /// # 返回
-    /// 返回已补齐关联展示字段的卡券类目修订分页结果。
-    ///
-    /// # 错误
-    /// MongoDB 查询、计数或批量关系装配失败时返回错误。
+    /// `filter` 为卡券类目修订、状态、分页与排序条件。
     pub async fn voucher_profile_page(
         &self,
         filter: &VoucherCategoryProfileRevisionFilter,
@@ -237,15 +192,9 @@ impl<'a> CatalogRepository<'a> {
 
     /// 装配单个卡券类目扩展修订的关联展示上下文。
     ///
-    /// # 参数
-    /// * `revision` - 已写入的卡券类目扩展修订实体
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回已补齐 SKU、商品和当前名称关系的投影行。MongoDB 批量关系查询或反序列化失败时返回错误。
     ///
-    /// # 返回
-    /// 返回已补齐 SKU、商品和当前名称关系的投影行。
-    ///
-    /// # 错误
-    /// MongoDB 批量关系查询或反序列化失败时返回错误。
+    /// 沿用调用方的执行器，不另开事务。
     pub async fn voucher_profile(
         &self,
         revision: &VoucherCategoryProfileRevision,
@@ -267,15 +216,11 @@ impl<'a> CatalogRepository<'a> {
 
     /// 读取指定卡券类目 SKU 的历史最大扩展修订序号。
     ///
-    /// # 参数
-    /// * `sku_id` - 卡券类目 SKU 稳定 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回历史最大修订号；无修订时返回 `None`。MongoDB 查询或反序列化失败时返回错误。
     ///
-    /// # 返回
-    /// 返回历史最大修订号；无修订时返回 `None`。
+    /// 沿用调用方的执行器，不另开事务。
     ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
+    /// `sku_id` 为卡券类目 SKU 稳定 ID。
     pub async fn latest_voucher_profile_revision_no(
         &self,
         sku_id: &SkuId,
@@ -293,15 +238,11 @@ impl<'a> CatalogRepository<'a> {
     ///
     /// 卡券扩展表没有稳定主表指针，因此当前修订按最大修订号确定。
     ///
-    /// # 参数
-    /// * `sku_id` - 卡券类目 SKU 稳定 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回最大修订号对应的扩展修订；无修订时返回 `None`。MongoDB 查询或反序列化失败时返回错误。
     ///
-    /// # 返回
-    /// 返回最大修订号对应的扩展修订；无修订时返回 `None`。
+    /// 沿用调用方的执行器，不另开事务。
     ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
+    /// `sku_id` 为卡券类目 SKU 稳定 ID。
     pub async fn current_voucher_profile_revision(
         &self,
         sku_id: &SkuId,
@@ -316,17 +257,13 @@ impl<'a> CatalogRepository<'a> {
             .max_by_key(|revision| revision.revision.revision_no))
     }
 
-    /// 批量装配卡券类目修订的 SKU、商品和当前名称关系。
-    ///
-    /// # 参数
-    /// * `rows` - 当前页卡券类目修订投影
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 成功时原位填充每行关联展示字段；缺失关系保持兼容的空值。
-    ///
-    /// # 错误
-    /// MongoDB 批量查询或反序列化失败时返回错误。
+    // 批量装配卡券类目修订的 SKU、商品和当前名称关系。
+    //
+    // 成功时原位填充每行关联展示字段；缺失关系保持兼容的空值。MongoDB 批量查询或反序列化失败时返回错误。
+    //
+    // 沿用调用方的执行器，不另开事务。
+    //
+    // `rows` 为当前页卡券类目修订投影。
     async fn attach_voucher_profile_context(
         &self,
         rows: &mut [VoucherCategoryProfileRevisionRow],
@@ -347,17 +284,13 @@ impl<'a> CatalogRepository<'a> {
         Ok(())
     }
 
-    /// 批量读取卡券类目修订关联的 SKU。
-    ///
-    /// # 参数
-    /// * `rows` - 当前页卡券类目修订投影
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回全部命中的未删除 SKU。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
+    // 批量读取卡券类目修订关联的 SKU。
+    //
+    // 返回全部命中的未删除 SKU。MongoDB 查询或反序列化失败时返回错误。
+    //
+    // 沿用调用方的执行器，不另开事务。
+    //
+    // `rows` 为当前页卡券类目修订投影。
     async fn voucher_profile_skus(
         &self,
         rows: &[VoucherCategoryProfileRevisionRow],
@@ -370,17 +303,13 @@ impl<'a> CatalogRepository<'a> {
         self.db.skus().find_many(in_filter("id", sku_ids), executor).await
     }
 
-    /// 批量读取卡券类目 SKU 所属商品。
-    ///
-    /// # 参数
-    /// * `skus` - 当前页关联 SKU
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回全部命中的未删除商品。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
+    // 批量读取卡券类目 SKU 所属商品。
+    //
+    // 返回全部命中的未删除商品。MongoDB 查询或反序列化失败时返回错误。
+    //
+    // 沿用调用方的执行器，不另开事务。
+    //
+    // `skus` 为当前页关联 SKU。
     async fn voucher_profile_products(
         &self,
         skus: &[Sku],
@@ -394,18 +323,13 @@ impl<'a> CatalogRepository<'a> {
     }
 }
 
-/// 把批量关系快照装配到单条卡券类目修订投影。
-///
-/// # 参数
-/// * `row` - 待填充的卡券类目修订投影
-/// * `sku_by_id` / `product_by_id` - 稳定实体映射
-/// * `product_revisions` / `sku_revisions` - 当前修订映射
-///
-/// # 返回
-/// 无返回值；缺失 SKU 时保持全部关联字段为空，命中 SKU 后名称最终回退到描述。
-///
-/// # 错误
-/// 无。
+// 把批量关系快照装配到单条卡券类目修订投影。
+//
+// 无返回值；缺失 SKU 时保持全部关联字段为空，命中 SKU 后名称最终回退到描述。
+//
+// * `sku_by_id` / `product_by_id` - 稳定实体映射。
+//
+// * `product_revisions` / `sku_revisions` - 当前修订映射。
 fn attach_voucher_row(
     row: &mut VoucherCategoryProfileRevisionRow,
     sku_by_id: &HashMap<String, Sku>,
@@ -431,12 +355,12 @@ fn attach_voucher_row(
     }
 }
 
-/// 构建卡券类目修订排序文档（白名单：`created_at`/`revision_no`）。
+// 构建卡券类目修订排序文档（白名单：`created_at`/`revision_no`）。
 fn voucher_revision_sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
     sort_doc(whitelisted_sort(sort_by, VOUCHER_PROFILE_SORT_FIELDS), sort_ascending)
 }
 
-/// 卡券类目扩展修订列表投影字段。
+// 卡券类目扩展修订列表投影字段。
 fn voucher_revision_projection() -> Document {
     doc! {
         "id": 1,

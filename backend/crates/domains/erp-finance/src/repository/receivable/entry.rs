@@ -20,16 +20,11 @@ struct AccountDueDateRow {
 #[allow(async_fn_in_trait)]
 pub trait ReceivableEntryRepositoryExt {
     /// 按应收账户聚合最早正向分录到期日。
+    /// 结果：每个存在 Increase 分录的账户至多返回一个最早到期日；Decrease 与无分录账户不上表。
+    /// 传播数据库聚合或反序列化失败。
     ///
-    /// # 参数
-    /// * `account_ids` - 应收账户 ID；空集合不访问数据库
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 每个存在 Increase 分录的账户至多返回一个最早到期日；Decrease 与无分录账户不上表。
-    ///
-    /// # 错误
-    /// MongoDB 聚合或反序列化失败时返回错误。
+    /// 输入约定：
+    /// - `account_ids`：应收账户 ID；空集合不访问数据库
     async fn minimum_increase_due_dates_by_accounts(
         &self,
         account_ids: &[ReceivableAccountId],
@@ -39,16 +34,12 @@ pub trait ReceivableEntryRepositoryExt {
     /// 批量按子账集合取回分录（`$in` 一次取回，禁止 N+1）。
     ///
     /// 用于账龄汇总与开票核销锁定；只返回未删除分录（事实类恒未删除）。
-    ///
-    /// # 参数
-    /// * `account_ids` - 应收往来子账 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回全部匹配分录。
+    /// 传播数据库查询或游标读取失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 输入约定：
+    /// - `account_ids`：应收往来子账 ID 集合
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn find_entries_by_accounts(
         &self,
         account_ids: &[ReceivableAccountId],
@@ -56,16 +47,12 @@ pub trait ReceivableEntryRepositoryExt {
     ) -> Result<Vec<ReceivableEntry>>;
 
     /// 按子账取回全部分录（按来源序号升序）。
-    ///
-    /// # 参数
-    /// * `account_id` - 应收往来子账 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回按 `source_sequence` 升序的全部分录。
+    /// 传播数据库查询或游标读取失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 输入约定：
+    /// - `account_id`：应收往来子账 ID
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn find_entries_by_account(
         &self,
         account_id: &ReceivableAccountId,
@@ -118,7 +105,7 @@ impl ReceivableEntryRepositoryExt for persistence_core::Repository<'_, Receivabl
     }
 }
 
-/// 构造应收正向分录最早到期日聚合管道。
+// 组装应收正向分录最早到期日聚合管道。
 fn minimum_due_dates_pipeline(account_ids: Vec<String>) -> Vec<Document> {
     vec![
         doc! {
@@ -141,16 +128,12 @@ fn minimum_due_dates_pipeline(account_ids: Vec<String>) -> Vec<Document> {
 #[allow(async_fn_in_trait)]
 pub trait ReceivableEntryOffsetRepositoryExt {
     /// 按减少分录集合批量取回抵销记录。
-    ///
-    /// # 参数
-    /// * `decrease_entry_ids` - 减少分录 ID 集合；空集合直接返回空结果
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回全部匹配抵销记录；调用方按分录分组后按抵销序号排序。
+    /// 传播数据库查询或游标读取失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 输入约定：
+    /// - `decrease_entry_ids`：减少分录 ID 集合；空集合直接返回空结果
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn find_offsets_by_decreases(
         &self,
         decrease_entry_ids: &[ReceivableEntryId],
@@ -160,16 +143,12 @@ pub trait ReceivableEntryOffsetRepositoryExt {
     /// 按减少分录取回全部抵销（按抵销序号升序）。
     ///
     /// 用于校验「减少分录分配合计等于其金额」（数据模型 §6.8）。
-    ///
-    /// # 参数
-    /// * `decrease_entry_id` - 减少分录 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回按 `offset_sequence` 升序的抵销记录。
+    /// 传播数据库查询或游标读取失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 输入约定：
+    /// - `decrease_entry_id`：减少分录 ID
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn find_offsets_by_decrease(
         &self,
         decrease_entry_id: &ReceivableEntryId,
@@ -179,16 +158,12 @@ pub trait ReceivableEntryOffsetRepositoryExt {
     /// 按增加分录取回被冲减的抵销集合。
     ///
     /// 用于校验「每笔增加分录累计净冲减不超过原增加金额」（数据模型 §6.8）。
-    ///
-    /// # 参数
-    /// * `increase_entry_id` - 增加分录 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回全部引用该增加分录的抵销记录。
+    /// 传播数据库查询或游标读取失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 输入约定：
+    /// - `increase_entry_id`：增加分录 ID
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn find_offsets_by_increase(
         &self,
         increase_entry_id: &ReceivableEntryId,

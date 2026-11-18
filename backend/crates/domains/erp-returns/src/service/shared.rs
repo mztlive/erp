@@ -16,36 +16,14 @@ pub const RECEIPT_REVERSAL_COMMAND_PREFIX: &str = "CZ";
 /// 付款冲正一次提交单号前缀。
 pub const PAYMENT_REVERSAL_COMMAND_PREFIX: &str = "PCZ";
 
-/// 由操作者与幂等键生成不泄露原键的稳定纠错单号。
-///
-/// # 参数
-/// * `prefix` - 单号前缀。
-/// * `actor_id` - 操作者。
-/// * `idempotency_key` - 幂等键，参与摘要前会 trim。
-///
-/// # 返回
-/// 返回 `前缀-` 加摘要前 8 位十六进制。
-///
-/// # 错误
-/// 不返回错误。
+/// 首次提交资金纠错单时，用操作人 ID 和去除首尾空白的幂等键生成稳定单号；返回业务前缀加 SHA-256 摘要的前 8 位十六进制字符，不回显原键。
 pub fn return_command_no(prefix: &str, actor_id: &str, idempotency_key: &str) -> String {
     let digest = hex::encode(Sha256::digest(format!("{actor_id}|{}", idempotency_key.trim()).as_bytes()));
     format!("{prefix}-{}", &digest[..8])
 }
 
-/// 校验纠错命令的原资金事实仍为同一版本且已经过账。
-///
-/// # 参数
-/// * `actual_version` - 事务内重读所得版本
-/// * `expected_version` - 命令准备阶段读取的版本
-/// * `is_posted` - 原事实是否处于已过账状态
-/// * `not_posted_message` - 当前纠错类型对应的业务说明
-///
-/// # 返回
-/// 版本和状态均满足时返回成功。
-///
-/// # 错误
-/// 版本变化返回冲突；原事实未过账返回业务规则错误。
+/// 纠错入事务后用重读的原资金事实先核对准备阶段的版本，再要求原事实已过账。
+/// 版本变化返回 `ConflictError`，未过账返回该纠错类型的业务规则错误。
 pub fn ensure_posted_source(
     actual_version: u64,
     expected_version: u64,
@@ -61,32 +39,12 @@ pub fn ensure_posted_source(
     Ok(())
 }
 
-/// 缺失单据统一映射为 `NotFound`（文案由调用方保持原语义）。
-///
-/// # 参数
-/// * `option` - 仓储读取结果。
-/// * `message` - 缺失时的说明。
-///
-/// # 返回
-/// `Some` 时返回内部值。
-///
-/// # 错误
-/// `None` 时返回 `NotFound`。
+// 将仓储查无记录的 `None` 转成该单据类型的 `NotFound` 文案，已有对象直接交给后续业务检查。
 pub(crate) fn or_not_found<T>(option: Option<T>, message: &str) -> Result<T> {
     option.ok_or_else(|| Error::NotFound(message.to_string()))
 }
 
-/// 已冲正单据禁止再次过账（文案由调用方保持原语义）。
-///
-/// # 参数
-/// * `is_reversed` - 单据是否已冲正。
-/// * `message` - 已冲正时的说明。
-///
-/// # 返回
-/// 未冲正时返回成功。
-///
-/// # 错误
-/// 已冲正时返回 `BusinessLogicError`。
+// 资金纠错过账前拒绝已冲正单据，以免重复过账；按调用单据的文案返回 `BusinessLogicError`。
 pub(crate) fn reject_if_reversed(is_reversed: bool, message: &str) -> Result<()> {
     if is_reversed {
         return Err(Error::BusinessLogicError(message.to_string()));
@@ -94,19 +52,7 @@ pub(crate) fn reject_if_reversed(is_reversed: bool, message: &str) -> Result<()>
     Ok(())
 }
 
-/// 累计限额判断并按单据类型映射为面向用户的业务文案。
-///
-/// # 参数
-/// * `source` - 原收付金额。
-/// * `posted_before` - 同一原单已过账合计，不含本次。
-/// * `current` - 本次金额。
-/// * `message` - 超限时的说明。
-///
-/// # 返回
-/// 累计未超过原金额时返回成功。
-///
-/// # 错误
-/// 超限时返回 `BusinessLogicError`。
+// 资金纠错过账前，以同一原收付款的已过账合计（不含本次）加本次金额核对原单限额，超限按单据类型返回 `BusinessLogicError`。
 pub(crate) fn ensure_cumulative_within(
     source: Amount,
     posted_before: Amount,

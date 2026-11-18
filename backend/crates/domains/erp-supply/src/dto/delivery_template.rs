@@ -63,14 +63,7 @@ pub struct SaveDeliveryTemplateRequest {
 
 impl SaveDeliveryTemplateRequest {
     /// 转换为模板内容并解析地区代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回待实体校验的模板内容。
-    ///
-    /// # 错误
     /// 地区代码格式非法或不存在时返回校验错误。
     pub fn into_content(self) -> Result<SupplierDeliveryTemplateContent> {
         Ok(SupplierDeliveryTemplateContent {
@@ -101,14 +94,7 @@ pub struct AssignDeliveryTemplateRequest {
 
 impl AssignDeliveryTemplateRequest {
     /// 去重并校验供给数量。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回保持首次出现顺序的供给主键。
-    ///
-    /// # 错误
     /// 为空或超过上限时返回校验错误。
     pub fn normalized_offering_ids(&self) -> Result<Vec<String>> {
         let mut ids = Vec::new();
@@ -156,15 +142,7 @@ pub struct DeliveryRuleSetView {
 
 impl DeliveryRuleSetView {
     /// 由规则值对象生成视图。
-    ///
-    /// # 参数
-    /// * `rule_set` - 规则
-    ///
-    /// # 返回
     /// 返回带完整地区名称的视图。
-    ///
-    /// # 错误
-    /// 无。
     pub fn from_rule_set(rule_set: &DeliveryRuleSet) -> Self {
         Self {
             default_term: rule_set.default_term,
@@ -206,15 +184,7 @@ pub struct DeliveryTemplateView {
 
 impl DeliveryTemplateView {
     /// 由模板实体生成视图。
-    ///
-    /// # 参数
-    /// * `template` - 模板
-    ///
-    /// # 返回
     /// 返回模板视图。
-    ///
-    /// # 错误
-    /// 无。
     pub fn from_template(template: &SupplierDeliveryTemplate) -> Self {
         Self {
             id: template.base.id.clone(),
@@ -245,15 +215,7 @@ pub struct OfferingDeliveryView {
 
 impl OfferingDeliveryView {
     /// 由解析结果生成摘要。
-    ///
-    /// # 参数
-    /// * `resolved` - 供给生效配送政策
-    ///
-    /// # 返回
     /// 返回摘要视图。
-    ///
-    /// # 错误
-    /// 无。
     pub fn from_resolved(resolved: &ResolvedDelivery) -> Self {
         Self {
             source: resolved.source,

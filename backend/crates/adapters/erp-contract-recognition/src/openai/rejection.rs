@@ -13,44 +13,17 @@ pub(super) struct Rejection {
 }
 
 impl Rejection {
-    /// 标记错误正文尚未读完。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// `body_state` 为 `pending` 的拒绝记录。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 收到非成功 HTTP 状态但还未读完正文时标记 pending，区分上游已拒绝与尚未收到任何响应。
     pub(super) fn pending() -> Self {
         Self { body_state: Some("pending"), ..Self::default() }
     }
 
-    /// 记录错误正文读取失败，不保存正文。
-    ///
-    /// # 参数
-    /// * `error` - 读取失败的诊断文本。
-    ///
-    /// # 返回
-    /// `body_state` 为 `read_failed` 的拒绝记录。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 读取拒绝正文出错时标记 read_failed 并保存诊断文本，不将部分内容当作完整正文。
     pub(super) fn read_failed(error: String) -> Self {
         Self { body_state: Some("read_failed"), read_error: Some(error), ..Self::default() }
     }
 
-    /// 保留完整错误正文；能解析 JSON 时展开常见错误字段。
-    ///
-    /// # 参数
-    /// * `body` - 供应商返回的完整错误正文。
-    ///
-    /// # 返回
-    /// `body_state` 为 `received` 的拒绝记录。非 JSON 时只保留正文。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 拒绝正文读完或从 SDK 取得时标记 received，保留完整文本；能解析 JSON 时再展开 type、code、param 和 message 供查询。
     pub(super) fn parse(body: String) -> Self {
         let value = serde_json::from_str::<Value>(&body);
         let mut result = Self { body_state: Some("received"), body: Some(body), ..Self::default() };

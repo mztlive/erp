@@ -15,7 +15,7 @@ use crate::entity::authorization::{AccessTarget, FactValue, ObjectFacts, Related
 use crate::entity::resource_access::ResourceKind;
 use crate::{AuthorizationService, Error};
 
-/// 替身只提供真实事实和账号角色，授权组合仍执行生产实现。
+// 测试替身只接入角色和对象事实，任务资格组合仍走生产 `AuthorizationService`。
 fn service(identity: Arc<Identity>, facts: Arc<Facts>) -> AuthorizationService {
     let mut builder = complete();
     builder.facilities = identity;
@@ -23,13 +23,13 @@ fn service(identity: Arc<Identity>, facts: Arc<Facts>) -> AuthorizationService {
     builder.build().unwrap()
 }
 
-/// 配置本次账号的真实直接角色资格。
+// 为当前测试账号配置真实直接角色资格，供检查完整同角色组合。
 fn grant(identity: &Identity, roles: &[(&str, &[Permission])]) {
     identity.state.lock().unwrap().grants =
         roles.iter().map(|(role, permissions)| ((*role).into(), permissions.to_vec())).collect();
 }
 
-/// 候选只表达尚未形成任务的服务端种类与来源类型。
+// 构造任务形成前的候选授权输入，只表达服务端知道的任务种类和来源种类。
 fn candidate(kind: &str, source: &str) -> ObjectFacts {
     ObjectFacts {
         resource: "work_item".into(),
@@ -39,7 +39,7 @@ fn candidate(kind: &str, source: &str) -> ObjectFacts {
     }
 }
 
-/// 当前任务仍属于其他人，接收者只按真实业务来源检查。
+// 在测试中保留他人为当前任务负责人，使接收人只能从真实业务来源证明自己的独立资格。
 fn task() -> ObjectFacts {
     ObjectFacts {
         id: "task".into(),
@@ -59,7 +59,7 @@ fn task() -> ObjectFacts {
     }
 }
 
-/// 客户验收执行资格不包含销售单详情，不能由新入口追加。
+// 提供客户验收所需的执行权限组合，用来验证新入口不额外要求销售单详情。
 fn acceptance() -> [Permission; 5] {
     [
         fulfillment::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_LIST,

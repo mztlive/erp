@@ -22,14 +22,7 @@ use crate::{Error, Result};
 
 /// 把库存拥有的冻结快照事实映射为工作流载荷形状。
 ///
-/// # 参数
-/// * `fact` - 库存领域持有的冻结快照。
-///
-/// # 返回
-/// 返回保留原字段与序列化取值的 `ApprovalSubjectSnapshotPayload`。
-///
-/// # 错误
-/// 不返回错误。
+/// `fact` 为库存领域持有的冻结快照。返回保留原字段与序列化取值的 `ApprovalSubjectSnapshotPayload`。
 pub fn workflow_snapshot_from_inventory(fact: StockAdjustmentSnapshotFact) -> ApprovalSubjectSnapshotPayload {
     ApprovalSubjectSnapshotPayload {
         document_no: fact.document_no,
@@ -70,26 +63,14 @@ pub struct StockAdjustmentAdapter {
     pub read_scope: AdapterReadScope,
 }
 
-/// 返回试点类型的完整适配器登记。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回已校验完整性的规格与显式字段声明。
-///
-/// # 错误
-/// 政策缺失或三类动作不互异时返回部署不变量错误。
+/// 装配库存调整单的审批适配器，启动、通过和撤回时按已登记的动作分派。政策缺失或动作重复时拒绝装配。
 pub fn stock_adjustment_adapter() -> Result<StockAdjustmentAdapter> {
     let spec = adapter_spec_of(DocumentType::StockAdjustment)?;
     ensure_adapter_spec_complete(&spec)?;
     adapter_from_spec(spec)
 }
 
-/// 由政策规格填充显式 Adapter 字段。
-///
-/// # 错误
-/// 字段与合同签署值不一致时返回错误。
+// 由政策规格填充显式 Adapter 字段。字段与合同签署值不一致时返回错误。
 fn adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<StockAdjustmentAdapter> {
     if spec.document_type != DocumentType::StockAdjustment
         || spec.process_kind != process_kind_of(DocumentType::StockAdjustment)
@@ -122,14 +103,7 @@ fn adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<StockAdjustmentAdapter
 
 /// 为库存调整单构造唯一 `bpm::SubjectRef`。
 ///
-/// # 参数
-/// * `business_object_id` - 调整单主键。
-///
-/// # 返回
-/// 返回库存调整单据类型下的主体引用。
-///
-/// # 错误
-/// 主键为空或超长时返回 `ValidationError`。
+/// `business_object_id` 为调整单主键。返回库存调整单据类型下的主体引用。主键为空或超长时返回 `ValidationError`。
 pub fn stock_adjustment_subject_ref(business_object_id: &str) -> Result<SubjectRef> {
     erp_workflow::entity::approval_integration::subject_ref_for(
         DocumentType::StockAdjustment,
@@ -140,14 +114,7 @@ pub fn stock_adjustment_subject_ref(business_object_id: &str) -> Result<SubjectR
 
 /// 无已绑定定义的必须审批单据不得提交。
 ///
-/// # 参数
-/// * `binding` - 已加载的定义绑定；缺失时拒绝。
-///
-/// # 返回
-/// 绑定存在时返回其引用。
-///
-/// # 错误
-/// 绑定缺失时返回 `ConflictError`。
+/// `binding` 为已加载的定义绑定；缺失时拒绝。绑定存在时返回其引用。绑定缺失时返回 `ConflictError`。
 pub fn require_frozen_binding(
     binding: Option<&ApprovalDefinitionBinding>,
 ) -> Result<&ApprovalDefinitionBinding> {
@@ -156,14 +123,8 @@ pub fn require_frozen_binding(
 
 /// 执行签署的库存调整领域动作。
 ///
-/// # 参数
-/// * `adjustment` - 待迁移状态的库存调整单。
-/// * `action` - 合同强类型动作。
+/// `adjustment` 为待迁移状态的库存调整单；`action` 为合同强类型动作。动作已作用到 `adjustment` 时无返回值。
 ///
-/// # 返回
-/// 动作已作用到 `adjustment` 时无返回值。
-///
-/// # 错误
 /// 动作不属于本类型时返回 `ValidationError`；状态不允许时返回 `ConflictError`。
 pub fn execute_stock_adjustment_domain_action(
     adjustment: &mut StockAdjustment,
@@ -226,7 +187,7 @@ mod tests {
         .expect("明细必须可构造")
     }
 
-    /// 适配器必须显式声明合同要求的全部字段。
+    // 验证库存调整审批适配器逐项声明合同规定的字段。
     #[test]
     fn adapter_declares_all_required_fields() {
         let adapter = stock_adjustment_adapter().expect("试点必须可登记");
@@ -255,7 +216,7 @@ mod tests {
         assert_ne!(adapter.on_approval_start, adapter.cancel_action);
     }
 
-    /// 提交冻结版本并进入审批中；撤回不回退版本。
+    // 提交冻结版本并进入审批中；撤回不回退版本。
     #[test]
     fn submit_freezes_version_and_cancel_does_not_rollback() {
         let mut adjustment = draft_adjustment();
@@ -279,7 +240,7 @@ mod tests {
         assert_eq!(adjustment.approval_subject_version, 2);
     }
 
-    /// 非草稿不得提交；非审批中不得撤回或过账。
+    // 对照该单据的非法状态：非草稿不能提交，非审批中不能撤回或过账。
     #[test]
     fn illegal_status_transitions_fail_closed() {
         let mut posted = draft_adjustment();
@@ -313,7 +274,7 @@ mod tests {
         );
     }
 
-    /// 过账只允许审批中，旧复核态不得再作为过账入口。
+    // 过账只允许审批中，旧复核态不得再作为过账入口。
     #[test]
     fn post_only_accepts_in_approval() {
         let mut adjustment = draft_adjustment();
@@ -337,7 +298,7 @@ mod tests {
         );
     }
 
-    /// 快照冻结仓库对手方与数量合计，客户端不能写入定义。
+    // 快照冻结仓库对手方与数量合计，客户端不能写入定义。
     #[test]
     fn snapshot_freezes_warehouse_and_quantity() {
         let adjustment = draft_adjustment();
@@ -366,13 +327,13 @@ mod tests {
         );
     }
 
-    /// 缺少冻结审批定义时拒绝提交。
+    // 验证库存调整缺少冻结审批定义时不能提交。
     #[test]
     fn missing_frozen_binding_is_rejected() {
         assert!(require_frozen_binding(None).is_err());
     }
 
-    /// 领域动作分派只接受三类签署动作。
+    // 领域动作分派只接受三类签署动作。
     #[test]
     fn domain_action_dispatch_is_exhaustive_for_pilot() {
         let mut adjustment = draft_adjustment();

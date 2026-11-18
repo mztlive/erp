@@ -44,11 +44,14 @@ pub struct FulfillmentRequestView {
 }
 
 impl BusinessFinanceFiles {
-    /// 在原快照内核验任务资格，按任务真实采购来源读取付款摘要。
+    /// 准备履约采购付款时，在原快照内核验任务资格，按任务真实采购来源读取付款摘要。
+    ///
     /// # 参数
     /// 当前账号、任务身份及工作流授权端口。
+    ///
     /// # 返回
     /// 当前采购单的应付余额、冻结付款条件与逐申请金额。
+    ///
     /// # 错误
     /// 无任务资格、非采购履约、缺少正式来源或交付凭证失效时拒绝。
     pub async fn fulfillment_payment(
@@ -166,13 +169,15 @@ impl BusinessFinanceFiles {
 mod tests;
 
 impl FulfillmentRequestView {
-    /// 仅提取精确采购及应付身份匹配的申请分配。
-    /// # 参数
-    /// 关联申请、已授权采购身份及其应付子账身份。
-    /// # 返回
-    /// 匹配时返回本采购行的金额与申请进度，否则为空。
-    /// # 错误
-    /// 无；不返回其他采购的金额、附件或账户资料。
+    // 处理履约采购付款时，仅提取精确采购及应付身份匹配的申请分配。
+    //
+    // 调用参数：
+    // 关联申请、已授权采购身份及其应付子账身份。
+    //
+    // 匹配时返回本采购行的金额与申请进度，否则为空。
+    //
+    // 失败边界：
+    // 无；不返回其他采购的金额、附件或账户资料。
     pub(crate) fn for_purchase(
         request: &PurchasePaymentRequest,
         purchase_id: &PurchaseOrderId,

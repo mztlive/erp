@@ -26,7 +26,7 @@ pub mod dangaoshushu;
 pub mod jd_vop;
 pub mod references;
 
-/// 查询供应商 API 连接列表。
+/// 按请求条件查询供应商 API 连接列表。
 pub async fn supplier_api_connection_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -37,7 +37,7 @@ pub async fn supplier_api_connection_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-/// 查询供应商 API 连接详情。
+/// 查询供应商 API 连接详情，将认证操作人与路径对象交给读模型校验。
 pub async fn supplier_api_connection_detail(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -48,7 +48,7 @@ pub async fn supplier_api_connection_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 创建停用状态的供应商 API 连接身份。
+/// 为后续明确配置和启用登记供应商 API 连接身份，新建记录保持停用。
 pub async fn supplier_api_connection_create(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -58,7 +58,7 @@ pub async fn supplier_api_connection_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 执行固定动作注册表中的连接治理命令。
+/// 维护已存在的供应商连接时，把请求分派给治理流程的固定动作注册表，不接受开放式命令。
 pub async fn supplier_api_connection_command(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -98,7 +98,7 @@ pub async fn supplier_api_connection_command(
     Ok(ApiResponse::ok_with_data(result))
 }
 
-/// 查询健康检查或目录同步任务进度与终态。
+/// 查询健康检查或目录同步任务进度与终态，由读模型按认证操作人限定可见结果。
 pub async fn supplier_api_connection_job_detail(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,

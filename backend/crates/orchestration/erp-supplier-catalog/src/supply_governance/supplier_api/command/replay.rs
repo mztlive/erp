@@ -17,13 +17,13 @@ use super::SupplierApiGovernanceProcess;
 use crate::{Error, Result};
 
 impl SupplierApiGovernanceProcess {
-    /// 在原命令资格成立的同一快照中完整回放收据。
-    /// # 参数
-    /// id、command 和 actor 为当前连接命令及认证人。
-    /// # 返回
-    /// 已提交命令结果，未命中时返回 None，后续写入仍须重新授权。
-    /// # 错误
-    /// 撤权、同键异载荷或收据及任务读取失败时返回原错误。
+    // 供应连接命令同键重试时，用同一快照重验原资格、匹配回执并读取关联任务；未命中不等于写入已获准。
+    //
+    // id、command 和 actor 为当前连接命令及认证人。
+    //
+    // 已提交命令结果，未命中时返回 None，后续写入仍须重新授权。
+    //
+    // 撤权、同键异载荷或收据及任务读取失败时返回原错误。
     pub(super) async fn replay_command(
         &self,
         id: &str,

@@ -39,13 +39,13 @@ struct PreparedPage {
 }
 
 impl SupplierConnectionExecutionProcess {
-    /// 按冻结窗口顺序采集、补齐资料并保存；失败保留此前页面。
-    /// # 参数
-    /// 连接、已开始任务及真实任务操作人。
-    /// # 返回
-    /// 末页完成持久化时返回成功。
-    /// # 错误
-    /// 上游、映射、配置冲突或存储失败时返回脱敏分类错误。
+    // 启动事务提交后，按任务冻结窗口顺序拉取并补齐目录资料，将页面逐批保存；当前页失败不撤销先前页面。
+    //
+    // 连接、已开始任务及真实任务操作人。
+    //
+    // 末页完成持久化时返回成功。
+    //
+    // 上游、映射、配置冲突或存储失败时返回脱敏分类错误。
     pub(super) async fn scan_catalog(
         &self,
         connection: &SupplierApiConnection,
@@ -271,7 +271,7 @@ impl SupplierConnectionExecutionProcess {
     }
 }
 
-/// 在当前页面事务中保存有效来源、异常和检查点。
+// 页面资料在事务外补齐后，用本页事务写入有效来源观察、异常及检查点，避免检查点越过未保存的页面。
 async fn save_page_items(
     db: &Database,
     catalog: &CatalogService,
@@ -337,13 +337,13 @@ async fn save_membership_page(
     Ok(())
 }
 
-/// 复用同一目录规则保存完整查询观察并同步既有供给及公司资料。
-/// # 参数
-/// `db`、`item`、`actor` 为已核验来源与采集授权，`executor` 属于调用方结果事务。
-/// # 返回
-/// 来源观察、供给及已选品资料按原规则原子应用。
-/// # 错误
-/// 来源身份、版本、供给关联或仓储失败时拒绝。
+// 目录同步或消息补查取得完整来源观察后，在调用方结果事务更新来源、已关联供给和已选品的公司资料。
+//
+// `db`、`item`、`actor` 为已核验来源与采集授权，`executor` 属于调用方结果事务。
+//
+// 来源观察、供给及已选品资料按原规则原子应用。
+//
+// 来源身份、版本、供给关联或仓储失败时拒绝。
 pub(crate) async fn save_observation(
     db: &Database,
     catalog: &CatalogService,

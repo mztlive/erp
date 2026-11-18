@@ -27,24 +27,18 @@ pub(crate) struct BackgroundAuthorization {
 }
 
 impl BackgroundAuthorization {
-    /// 装配固定任务目录，不从请求接受政策。
-    /// # 参数
-    /// db、identity 为应用共享身份设施。
-    /// # 返回
-    /// 未执行 I/O 的任务授权服务。
-    /// # 错误
-    /// 固定登记损坏时启动失败。
+    // 装配固定任务目录，不从请求接受政策。
+    // 未执行 I/O 的任务授权服务。
+    // db、identity 为应用共享身份设施。
+    // 固定登记损坏时启动失败。
     pub(crate) fn new(service: Arc<AuthorizationService>) -> Self {
         Self { service }
     }
 
-    /// 在调用方事务编译任务中心完整授权条件。
-    /// # 参数
-    /// actor 为当前账号，executor 为列表读取事务。
-    /// # 返回
-    /// identity 编译的任务查询凭证。
-    /// # 错误
-    /// 账号、权限、登记或事实取证失败时拒绝。
+    // 在调用方事务编译任务中心完整授权条件。
+    // identity 编译的任务查询凭证。
+    // actor 为当前账号，executor 为列表读取事务。
+    // 账号、权限、登记或事实取证失败时拒绝。
     pub(crate) async fn query(
         &self,
         actor: &AuditActor,
@@ -54,13 +48,10 @@ impl BackgroundAuthorization {
         Ok(compiled)
     }
 
-    /// 检查真实后台任务的当前动作资格。
-    /// # 参数
-    /// permission 为固定动作，id 为任务主键，actor、executor 为本阶段账号与事务。
-    /// # 返回
-    /// 当前账号具有入口资格且拥有任务或启用管理员角色时成功。
-    /// # 错误
-    /// 对象缺失、无权或身份设施故障时拒绝。
+    // 检查真实后台任务的当前动作资格。
+    // 当前账号具有入口资格且拥有任务或启用管理员角色时成功。
+    // permission 为固定动作，id 为任务主键，actor、executor 为本阶段账号与事务。
+    // 对象缺失、无权或身份设施故障时拒绝。
     pub(crate) async fn require(
         &self,
         permission: &Permission,
@@ -71,13 +62,10 @@ impl BackgroundAuthorization {
         Ok(self.service.require(actor, permission, AccessTarget::record(id)?, executor).await?)
     }
 
-    /// 批量取消前在每个写事务重验启用管理员角色和入口权限。
-    /// # 参数
-    /// actor、executor 为当前账号与取消事务。
-    /// # 返回
-    /// identity 证明管理员批量取消资格时成功。
-    /// # 错误
-    /// 角色停用、权限不足或设施读取失败时拒绝。
+    // 批量取消前在每个写事务重验启用管理员角色和入口权限。
+    // identity 证明管理员批量取消资格时成功。
+    // actor、executor 为当前账号与取消事务。
+    // 角色停用、权限不足或设施读取失败时拒绝。
     pub(crate) async fn require_cancel_all(
         &self,
         actor: &AuditActor,
@@ -91,27 +79,20 @@ impl BackgroundAuthorization {
 }
 
 /// 构造后台任务真实发起人 Facts。
-/// # 参数
-/// db 为后台任务数据库。
-/// # 返回
 /// 统一读取器。
-/// # 错误
+/// db 为后台任务数据库。
 /// 构造不执行 I/O。
 pub fn facts(db: Database) -> Arc<dyn AccessFactsPort> {
     Arc::new(JobFacts(db))
 }
 /// 构造后台任务静态查询映射。
-/// # 参数
-/// 无。
-/// # 返回
 /// 固定后台任务模型。
-/// # 错误
 /// 构造不执行 I/O。
 pub fn mapping() -> Arc<dyn AccessMapping> {
     Arc::new(JobMapping(model()))
 }
 
-/// 后台任务所有者只映射到不可变发起人字段。
+// 后台任务所有者只映射到不可变发起人字段。
 fn model() -> QueryModel {
     QueryModel {
         key: QueryModelKey::parse("background_jobs").expect("固定后台任务模型"),
@@ -182,7 +163,7 @@ impl AccessFactsPort for JobFacts {
             .collect())
     }
 }
-/// 从实际任务及版本生成根对象事实，不能由请求提供所有者结论。
+// 从实际任务及版本生成根对象事实，不能由请求提供所有者结论。
 fn job_facts(job: &BackgroundJob, resource: &str) -> ObjectFacts {
     ObjectFacts {
         resource: resource.into(),

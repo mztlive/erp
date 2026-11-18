@@ -9,22 +9,8 @@ use crate::repository::FulfillmentExt;
 use crate::{Error, Result};
 
 impl FulfillmentService {
-    /// 按原序加载发货单、校验草稿和版本、应用物流信息并读取非空发货行。
-    ///
-    /// # 参数
-    /// * `delivery_id` - 发货单主键
-    /// * `expected_version` - 期望的乐观锁版本
-    /// * `update` - 过账前写入的物流更新
-    /// * `executor` - 调用方事务执行器
-    ///
-    /// # 返回
-    /// 返回已应用物流更新的草稿发货单及其非空发货行。
-    ///
-    /// # 错误
-    /// 不存在、非草稿、版本冲突、物流更新非法或没有行时保留原首错。
-    ///
-    /// # 关键业务约束
-    /// 此方法不读取时间和库存，不校验后续仓发行；调用方在返回后取得原过账时间。
+    /// 发货过账开始时，在调用方事务按顺序查单、核对草稿和乐观锁版本、应用物流变更，再读取非空发货行并校验物流关联。
+    /// 缺单、非草稿、版本冲突、物流不合法或无发货行时按该顺序拒绝；不读取时间或库存，不提前校验后续仓发行。
     pub async fn prepare_delivery_posting(
         &self,
         delivery_id: &DeliveryId,
@@ -59,18 +45,8 @@ impl FulfillmentService {
         Ok((delivery, lines))
     }
 
-    /// 在库存或采购门槛成功之后，以同一执行器迁移发货状态并写入原版本 CAS。
-    ///
-    /// # 参数
-    /// * `delivery` - 待标记已发货的发货单
-    /// * `occurred_at` - 发货发生时间
-    /// * `executor` - 与前置门槛相同的执行器
-    ///
-    /// # 返回
-    /// 状态迁移并写回成功时无返回值。
-    ///
-    /// # 错误
-    /// 状态迁移或仓储写入失败时保留原错误，调用方不得推进任务或审计。
+    /// 库存或采购前置门槛通过后，用同一执行器登记发货发生时间并以原版本 CAS 写回已发货状态。
+    /// 状态迁移或持久化失败时传播原错误，调用方不得继续推进任务或记录成功审计。
     pub async fn persist_posted_delivery(
         &self,
         delivery: &mut Delivery,
@@ -83,16 +59,7 @@ impl FulfillmentService {
     }
 }
 
-/// 在直发分支原位置读取采购来源引用，不提前触发采购或付款校验。
-///
-/// # 参数
-/// * `delivery` - 待读取采购来源的发货单
-///
-/// # 返回
-/// 返回供应商直发引用的采购单主键。
-///
-/// # 错误
-/// 仓发或缺少采购来源时返回 `BusinessLogicError`。
+/// 只在供应商直发分支取采购单引用，不提前读取采购或付款事实。仓发或直发缺采购引用时返回 `BusinessLogicError`。
 pub fn supplier_purchase_source(delivery: &Delivery) -> Result<PurchaseOrderId> {
     delivery.supplier_purchase_source().map_err(|error| Error::BusinessLogicError(error.to_string()))
 }

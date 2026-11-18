@@ -41,7 +41,7 @@ pub(crate) enum TargetForm {
     Task,
 }
 
-/// 完整功能资格由入口固定，业务输入不能追加或删减。
+// 取固定入口要求的完整同角色功能权限组合，不接受业务调用方改动所需集合。
 pub(crate) fn same_role_permissions(permission: &Permission) -> Vec<Permission> {
     if let Some(source) = inventory_warehouses::source(permission) {
         return same_role_permissions(&source);
@@ -87,7 +87,7 @@ pub(crate) fn same_role_permissions(permission: &Permission) -> Vec<Permission> 
     required
 }
 
-/// 产生对象判断和查询转换共用的数据条件。任务办理和创建专有检查不走这里。
+// 把固定数据规则转成对象判断与查询编译共用条件；任务办理与创建的专用规则另行处理。
 pub(crate) fn data_condition(permission: &Permission, scope: Option<&ResolvedScope>) -> Result<AccessRule> {
     if permission == &internal::WORK_ITEM_RECIPIENT {
         return Ok(AccessRule::Allow);
@@ -223,7 +223,7 @@ pub(super) fn ensure_target(permission: &Permission, kind: ActionKind, target: T
     if allowed { Ok(()) } else { Err(Error::ValidationError("此权限不支持该授权目标".into())) }
 }
 
-/// 已有记录的读取动作；其余对象操作必须先进入快照事务。
+// 区分允许已有记录读取的动作与必须先进入快照事务的其他对象操作。
 pub(super) fn is_read(permission: &Permission) -> bool {
     if let Some(source) = inventory_warehouses::source(permission) {
         return is_read(&source);
@@ -278,7 +278,7 @@ pub(super) fn is_read(permission: &Permission) -> bool {
     )
 }
 
-/// 普通任务读取允许参与关系；内部资料和办理要求当前指派，已完成采购任务还须本人参与。
+// 按任务用途生成数据条件：普通读取可以按参与关系；内部材料及办理须当前指派，已完成采购任务还要本人参与。
 fn task_data_condition(permission: &Permission) -> AccessRule {
     if permission == &internal::APPROVAL_INSTANCE_READ {
         return AccessRule::Allow.requiring(&BTreeSet::from([
@@ -308,7 +308,7 @@ fn task_data_condition(permission: &Permission) -> AccessRule {
     }
 }
 
-/// 目标必需维度独立于本次条款是否恰好使用该字段，不能被公司或记录授权分支掩盖。
+// 从固定目标合同取得必需维度，不以本次范围条款引用了哪些字段为准。公司或记录授权命中也不能掩盖事实缺失。
 fn required_facts(permission: &Permission) -> Result<BTreeSet<FactKind>> {
     let spec = scope_spec::require_scope(permission)?;
     let mut facts = BTreeSet::new();
@@ -342,18 +342,18 @@ fn record_grant(permission: &Permission) -> bool {
     ) && matches!(permission.resource(), "sales_order" | "purchase_order")
 }
 
-/// 查询能力按固定权限声明，不能用动作拼写推断；写入目标的事务要求保持独立。
+// 按固定权限登记决定是否能编译查询，不用动作名称推断；可查询不意味相同权限的写入可绕过事务要求。
 pub(super) fn query_supported(permission: &Permission) -> Result<bool> {
     scope_spec::kind(permission)?;
     Ok(queries::PERMISSIONS.contains(permission))
 }
 
-/// 所有固定规则，不以公共目录条目替代已接入的动作。
+// 供 Builder 枚举已接入的全部固定权限规则，不用公共菜单目录代替实际可执行的规则集。
 pub(super) fn permissions() -> Vec<&'static Permission> {
     scope_spec::resources().into_iter().flat_map(scope_spec::actions).collect()
 }
 
-/// 用所有可配置维度检查 Mapping，不依赖启动时偶然的人员范围配置。
+// 启动校验 Mapping 时展开所有可配置维度，不因某次启动人员范围未配置而漏掉能力检查。
 pub(super) fn capability_scope(permission: &Permission) -> Result<ResolvedScope> {
     let spec = scope_spec::require_scope(permission)?;
     if matches!(scope_spec::runtime_source(spec)?.source(), scope_spec::ScopeSource::Company) {
@@ -386,7 +386,7 @@ pub(super) fn capability_scope(permission: &Permission) -> Result<ResolvedScope>
     Ok(ResolvedScope { role_clauses: vec![clause], user_limit: None })
 }
 
-/// 固定条件的全部可能能力；运行时仍按真实资格和范围生成条件。
+// 启动时为固定规则列全 Mapping 可能需要的能力；请求期间仍按实际身份与范围编译条件。
 pub(crate) fn binding_condition(permission: &Permission, output: &QueryOutput) -> Result<AccessRule> {
     let kind = scope_spec::kind(permission)?;
     if materials::supports(permission) {
@@ -437,7 +437,7 @@ pub(crate) fn binding_condition(permission: &Permission, output: &QueryOutput) -
     }
 }
 
-/// 商品目录沿真实供应商对象读取，连接资格不替代供应商的数据范围。
+// 商品目录查询按真实供应商对象执行数据范围，拥有连接访问资格不等于能读取所有供应商。
 pub(super) fn supplier_catalog_condition(rule: AccessRule) -> Result<AccessRule> {
     Ok(AccessRule::Related {
         relation: RelationKey::parse("supplier")?,
@@ -447,12 +447,12 @@ pub(super) fn supplier_catalog_condition(rule: AccessRule) -> Result<AccessRule>
     })
 }
 
-/// 工作项读取固定附带管理动作过滤，不新增调用方选择的查询入口。
+// 为工作项查询指定固定的管理动作过滤，业务调用不能另选查询入口作为管理范围。
 pub(crate) fn management_permission(permission: &Permission) -> Option<Permission> {
     (permission == &work_item::LIST || permission == &work_item::DETAIL).then_some(work_item::MANAGE)
 }
 
-/// 全部额外资格只由固定入口声明，内部分支分别取证。
+// 从固定入口提取附加功能资格，为规则内部各分支准备独立取证；客户端不能添加或省略资格。
 pub(super) fn qualifications(permission: &Permission) -> Vec<Permission> {
     if let Some(required) = transfers::requirements(permission) {
         return required.to_vec();
@@ -485,7 +485,7 @@ pub(super) fn qualified(permission: &Permission, qualified: &QualifiedPermission
         && records::qualified(permission, qualified)
 }
 
-/// 只有必需权限在所有启用角色中都缺失且能唯一定位到公共权限时，才报告权限码。
+// 生成可公开的缺权说明时，仅在所有启用角色均未授予且能唯一识别公共权限时报告具体权限码。
 pub(super) fn missing_public_permission(
     permission: &Permission,
     task_required: &[Permission],
@@ -509,7 +509,7 @@ pub(super) fn missing_public_permission(
         .then(|| missing.clone())
 }
 
-/// 精确任务目标的资格与普通读取分开，不能借读取权限办理任务。
+// 查出精确任务办理目标独有的功能资格，防止把普通读取权限当成可以办理。
 pub(super) fn task_permissions(permission: &Permission) -> Vec<Permission> {
     let mut permissions = same_role_permissions(permission);
     if permission == &supplier_settlement::STATEMENT_REVIEW_DECIDE {

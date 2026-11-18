@@ -32,13 +32,11 @@ pub struct SupplierOrderTrackingProcess {
 
 impl SupplierOrderTrackingProcess {
     /// 注入部署数据库及供应商实际协议运行时。
-    /// # 参数
+    ///
     /// `db` 为当前部署业务库；`runtime` 为已配置协议的共享运行时。
     /// `task_identity` 在任务创建、完成和验收资格核验的原位置创建独立身份。
-    /// # 返回
+    ///
     /// 订单跟踪 Process。
-    /// # 错误
-    /// 无。
     pub fn new(
         db: Database,
         runtime: Arc<SupplierConnectorRegistry>,
@@ -47,24 +45,20 @@ impl SupplierOrderTrackingProcess {
         Self { db, runtime, task_identity }
     }
 
-    /// 处理回调意图及完成确认，不执行周期订单查询。
-    /// # 参数
-    /// 无。
-    /// # 返回
+    /// 跟踪 worker 消费已持久化的回调补查意图并保存完成状态；周期性的到期订单查询由 `poll_due` 单独执行。
+    ///
     /// 当前有界回调批次已处理。
-    /// # 错误
+    ///
     /// 回调读取或保存失败时返回错误。
     pub async fn run_callbacks(&self) -> Result<()> {
         self.refresh_callbacks().await?;
         self.finish_callbacks().await
     }
 
-    /// 查询并应用至多二十个到期订单，保留原认领和逐单失败处理。
-    /// # 参数
-    /// 无。
-    /// # 返回
+    /// 跟踪 worker 周期查询并应用至多 20 个到期订单；先沿用原认领边界，再按订单保存补查结果。
+    ///
     /// 本轮完成处理的订单数；逐单业务结果以原记录为准。
-    /// # 错误
+    ///
     /// 扫描、认领或结果保存失败时返回错误。
     pub async fn poll_due(&self) -> Result<usize> {
         let orders = repository::due(&self.db, Instant::now(), &mut NoTransaction).await?;

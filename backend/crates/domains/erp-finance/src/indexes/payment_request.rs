@@ -8,12 +8,7 @@ use persistence_core::Result;
 use crate::repository::{PurchasePaymentRequestExt, PurchasePaymentRequestSnapshotExt};
 
 /// 幂等登记付款申请集合索引。
-///
-/// # 参数
-/// * `db` - 目标数据库。
-/// # 返回
-/// 全部命名索引创建成功时无返回值。
-/// # 错误
+/// 结果：全部命名索引创建成功时无返回值。
 /// 唯一身份冲突或数据库错误时返回错误。
 pub async fn ensure(db: &Database) -> Result<()> {
     db.collection::<Document>(<Database as PurchasePaymentRequestExt>::PURCHASE_PAYMENT_REQUESTS)

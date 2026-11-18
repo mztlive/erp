@@ -9,14 +9,7 @@ pub trait FinanceCommandExt {
     /// 财务命令回执集合名。
     const FINANCE_COMMAND_RECEIPTS: &'static str = "finance_command_receipts";
 
-    /// 返回绑定本域集合的命令回执仓储。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 返回财务命令回执仓储。
-    /// # 错误
-    /// 无。
+    /// 从当前数据库取得返回绑定本域集合的命令回执仓储，供相关用例复用调用方执行器。
     fn finance_command_receipts(&self) -> FinanceCommandReceiptRepository<'_>;
 }
 

@@ -4,7 +4,7 @@ use crate::entity::authorization::{
 };
 
 impl Fingerprint {
-    /// 规则编码：固定节点标记及声明顺序的字段；All/Any 分支按无序集合编码。
+    // 编码授权规则作为版本的一部分。节点使用固定标记及字段顺序，`All`、`Any` 子分支按无序集合处理。
     pub(crate) fn rule(&mut self, rule: &AccessRule) {
         match rule {
             AccessRule::Allow => self.text("allow"),
@@ -51,7 +51,7 @@ impl Fingerprint {
         }
     }
 
-    /// 事实节点以固定维度标记及可选 ID 集合编码。
+    // 将条件事实写入授权摘要，使用固定维度标记，必要时附上该条件的 ID 集合。
     fn fact(&mut self, fact: &AccessFact) {
         self.kind(&fact.kind());
         match fact {
@@ -69,7 +69,7 @@ impl Fingerprint {
         }
     }
 
-    /// 不依赖枚举名称、声明顺序或 Debug 的事实维度代码。
+    // 为事实维度写入稳定指纹标记，不依赖 Rust 枚举名、顺序或调试输出。
     fn kind(&mut self, kind: &FactKind) {
         self.text(match kind {
             FactKind::Owner => "owner",
@@ -84,7 +84,7 @@ impl Fingerprint {
         });
     }
 
-    /// 模型字段顺序：标识、资源、集合、主键、输出种类及字段、事实维度。
+    // 写入查询模型的稳定指纹字段：标识、资源、集合、主键、输出种类与字段，以及支持的事实维度。
     pub(crate) fn model(&mut self, model: &QueryModel) {
         let QueryModel { key, resource, collection, id_field, output, facts } = model;
         self.text(key.as_str());
@@ -101,7 +101,7 @@ impl Fingerprint {
         self.unordered(facts, Self::kind);
     }
 
-    /// 映射事实字段顺序：修订号、到期时刻；时刻保留秒及纳秒。
+    // 写入动态 Mapping 的修订号和到期时刻以绑定查询摘要；时刻保留秒及纳秒。
     pub(crate) fn facts(&mut self, facts: &MappingFacts) {
         let MappingFacts { version, valid_until, .. } = facts;
         self.optional(version.as_deref(), Self::text);
@@ -122,7 +122,7 @@ mod tests {
     use crate::entity::authorization::{QueryModelKey, RelationKey};
     use crate::entity::resource_access::ResourceKind;
 
-    /// 所有节点、事实维度和主体种类均具有独立编码。
+    // 验证：所有节点、事实维度和主体种类均具有独立编码。
     #[test]
     fn authorization_tags_and_branch_order_are_explicit() {
         let rules = vec![
@@ -171,7 +171,7 @@ mod tests {
         assert_ne!(hash(&AccessRule::All(branches.clone())), hash(&AccessRule::Any(branches)));
     }
 
-    /// 完成状态取值与参与事实分别影响授权版本。
+    // 验证：完成状态取值与参与事实分别影响授权版本。
     #[test]
     fn task_completion_values_have_distinct_fingerprints() {
         let facts = [AccessFact::Completed(false), AccessFact::Completed(true), AccessFact::Participant];
@@ -186,7 +186,7 @@ mod tests {
         assert_eq!(hashes.len(), 3);
     }
 
-    /// 模型身份、集合、输出范围和事实内容均影响分页版本。
+    // 验证：模型身份、集合、输出范围和事实内容均影响分页版本。
     #[test]
     fn model_and_mapping_facts_bind_every_field() {
         let model = QueryModel {

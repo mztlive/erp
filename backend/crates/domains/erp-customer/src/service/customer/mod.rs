@@ -60,21 +60,13 @@ pub struct CustomerService {
 }
 
 impl CustomerService {
-    /// 创建客户服务实例。
+    /// 装配客户账户服务的仓储、授权以及审计，并接入主体事实端口，供客户建档和资料查询使用。
     ///
     /// # 参数
-    /// * `db` - 数据库实例
     /// * `audit` - 审计写入端口
     /// * `party` - 主体事实端口
     /// * `access` - 客户统一授权访问器
     ///
-    /// # 返回
-    /// 返回服务实例。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
     /// 范围解析必须由 identity 完整授权，不得补公司范围。
     pub fn new(
         db: Database,
@@ -85,7 +77,7 @@ impl CustomerService {
         Self { accounts: AccountDirectoryService::new(db.clone()), db, audit, party, access }
     }
 
-    /// 创建客户（跨集合事务：customer_account + 首条 OWNER 归属 + 审计原子写入）。
+    /// 为往来主体建立客户账户，并以当前操作人作为首位负责人。客户账户、首条归属和审计一起提交，避免留下没有负责人的客户。
     ///
     /// 前置校验：主体必须存在、创建人账号必须存在且启用、该主体不得已有客户
     /// 角色（§6.2：一个 party 最多一个有效客户角色，唯一索引兜底）。同一事务
@@ -95,7 +87,6 @@ impl CustomerService {
     /// * `req` - 创建请求；`owner_user_id` 即使提交也会被忽略
     /// * `actor` - 已通过鉴权的审计操作人；其账号 ID 写入首条 OWNER 归属
     ///
-    /// # 返回
     /// 返回新建客户角色的响应视图。
     ///
     /// # 错误
@@ -123,7 +114,7 @@ impl CustomerService {
             .await
     }
 
-    /// 在原创建事务校验候选归属、账号和主体，再原子写入客户、负责人及审计。
+    // 在建档事务里核对主体、操作账号与拟生效归属，资格成立后才一起保存账户、首位负责人和审计。
     async fn create_stage(
         &self,
         account: CustomerAccount,
@@ -156,19 +147,16 @@ impl CustomerService {
         Ok(account.into())
     }
 
-    /// 在调用方 Executor 上写入客户角色与首条 OWNER 归属。
+    /// 在上层用例的事务中写入客户账户及首位负责人，使账户和归属对后续读取同时可见。
     ///
     /// 组合层持有根事务时必须调用本方法，不得再开事务。
     ///
     /// # 参数
     /// * `account` - 已构造的客户角色
     /// * `assignment` - 已构造的首条 OWNER 归属
-    /// * `executor` - 调用方执行器
     ///
-    /// # 返回
     /// 客户角色与首条 OWNER 归属都写入完成。
     ///
-    /// # 错误
     /// 唯一索引冲突或底层写入失败时返回对应错误。
     pub async fn persist_new_account(
         &self,
@@ -181,14 +169,12 @@ impl CustomerService {
         Ok(())
     }
 
-    /// 更新客户角色（乐观锁；单集合 + 审计）。
+    /// 修改客户账户可编辑资料。用请求版本防止覆盖他人已提交的改动，并把审计与账户更新一并提交。
     ///
     /// # 参数
     /// * `id` - 客户角色 ID
     /// * `req` - 更新请求（含期望版本）
-    /// * `actor` - 已通过鉴权的审计操作人
     ///
-    /// # 返回
     /// 返回更新后客户角色的响应视图。
     ///
     /// # 错误
@@ -214,7 +200,7 @@ impl CustomerService {
             .await
     }
 
-    /// 原事务先授权客户，再读取业务版本并更新及记录审计。
+    // 在更新事务里先校验目标客户的维护资格，再按版本更新账户并写审计。
     async fn update_stage(
         &self,
         id: &str,
@@ -247,7 +233,7 @@ impl CustomerService {
     }
 }
 
-/// 构造客户角色与首条 OWNER 归属；忽略请求中的 `owner_user_id`。
+// 把建档数据和真实操作人转换成客户账户与首条负责人归属。负责人从服务端操作身份取得。
 fn prepare_new_customer(
     req: &CreateCustomerRequest,
     actor_id: &str,
@@ -276,23 +262,19 @@ fn prepare_new_customer(
     Ok((account, assignment))
 }
 
-/// 将批量读取结果按稳定 ID 装配为客户列表视图。
-///
-/// 主体身份、负责人与目录标签按 ID 对齐；缺失的主体或归属不补造记录。
-///
-/// # 参数
-/// * `rows` - 客户角色投影行，决定结果顺序
-/// * `identities` - 主体身份事实；同一 `party_id` 后者覆盖前者
-/// * `assignments` - 归属行，按客户分组
-/// * `actor_user_id` - 当前账号，用于目录标签
-/// * `requested_scope` - 页面请求的目录范围
-/// * `account_names` - 账号显示名
-///
-/// # 返回
-/// 按 `rows` 顺序返回已填充主体、负责人和范围标签的客户视图。
-///
-/// # 错误
-/// 不返回错误。
+// 按客户和主体的稳定 ID 对齐批量查询结果，为目录行补全主体身份及负责人。
+//
+// 主体身份、负责人与目录标签按 ID 对齐；缺失的主体或归属不补造记录。
+//
+// # 参数
+// * `rows` - 客户角色投影行，决定结果顺序
+// * `identities` - 主体身份事实；同一 `party_id` 后者覆盖前者
+// * `assignments` - 归属行，按客户分组
+// * `actor_user_id` - 当前账号，用于目录标签
+// * `requested_scope` - 页面请求的目录范围
+// * `account_names` - 账号显示名
+//
+// 按 `rows` 顺序返回已填充主体、负责人和范围标签的客户视图。
 pub(super) fn assemble_customer_views(
     rows: Vec<CustomerAccountRow>,
     identities: Vec<PartyIdentityFact>,

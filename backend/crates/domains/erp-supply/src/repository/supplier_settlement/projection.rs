@@ -2,79 +2,37 @@ use mongodb::bson::{Document, doc};
 
 use super::{DIFFERENCE_SORT_FIELDS, ITEM_SORT_FIELDS, STATEMENT_SORT_FIELDS};
 
-/// 构建结算单排序文档（白名单映射，禁止透传任意字段名）。
-///
-/// # 参数
-/// * `sort_by` - 排序字段；`None` 或不在白名单内时默认 `created_at`
-/// * `sort_ascending` - 升序为 `true`，降序为 `false`
-///
-/// # 返回
-/// 返回排序条件文档。
-///
-/// # 错误
-/// 不返回错误。
+// 构建结算单排序文档（白名单映射，禁止透传任意字段名）。
+// `sort_by`：`None` 或不在白名单内时默认 `created_at`。
+// `sort_ascending`：升序为 `true`，降序为 `false`。
 pub(super) fn statement_sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
     sort_doc(STATEMENT_SORT_FIELDS, sort_by, sort_ascending)
 }
 
-/// 构建结算明细排序文档（白名单映射，禁止透传任意字段名）。
-///
-/// # 参数
-/// * `sort_by` - 排序字段；`None` 或不在白名单内时默认 `created_at`
-/// * `sort_ascending` - 升序为 `true`，降序为 `false`
-///
-/// # 返回
-/// 返回排序条件文档。
-///
-/// # 错误
-/// 不返回错误。
+// 构建结算明细排序文档（白名单映射，禁止透传任意字段名）。
+// `sort_by`：`None` 或不在白名单内时默认 `created_at`。
+// `sort_ascending`：升序为 `true`，降序为 `false`。
 pub(super) fn item_sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
     sort_doc(ITEM_SORT_FIELDS, sort_by, sort_ascending)
 }
 
-/// 构建结算差异排序文档（白名单映射，禁止透传任意字段名）。
-///
-/// # 参数
-/// * `sort_by` - 排序字段；`None` 或不在白名单内时默认 `created_at`
-/// * `sort_ascending` - 升序为 `true`，降序为 `false`
-///
-/// # 返回
-/// 返回排序条件文档。
-///
-/// # 错误
-/// 不返回错误。
+// 构建结算差异排序文档（白名单映射，禁止透传任意字段名）。
+// `sort_by`：`None` 或不在白名单内时默认 `created_at`。
+// `sort_ascending`：升序为 `true`，降序为 `false`。
 pub(super) fn difference_sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
     sort_doc(DIFFERENCE_SORT_FIELDS, sort_by, sort_ascending)
 }
 
-/// 构建白名单排序文档。
-///
-/// # 参数
-/// * `whitelist` - 允许的排序字段集合
-/// * `sort_by` - 排序字段；`None` 或不在白名单内时默认 `created_at`
-/// * `sort_ascending` - 升序为 `true`，降序为 `false`
-///
-/// # 返回
-/// 返回排序条件文档。
-///
-/// # 错误
-/// 不返回错误。
+// 构建白名单排序文档。
+// `sort_by`：`None` 或不在白名单内时默认 `created_at`。
+// `sort_ascending`：升序为 `true`，降序为 `false`。
 pub(super) fn sort_doc(whitelist: &[&str], sort_by: Option<&str>, sort_ascending: bool) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
     let field = sort_by.filter(|field| whitelist.contains(field)).unwrap_or("created_at");
     doc! { field: direction, "id": direction }
 }
 
-/// 供应商结算单列表投影字段。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回投影条件文档。
-///
-/// # 错误
-/// 不返回错误。
+// 供应商结算单列表投影字段。
 pub(super) fn supplier_settlement_statement_projection() -> Document {
     doc! {
         "id": 1,
@@ -112,16 +70,7 @@ pub(super) fn supplier_settlement_statement_projection() -> Document {
     }
 }
 
-/// 供应商结算明细列表投影字段。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回投影条件文档。
-///
-/// # 错误
-/// 不返回错误。
+// 供应商结算明细列表投影字段。
 pub(super) fn supplier_settlement_item_projection() -> Document {
     doc! {
         "id": 1,
@@ -144,16 +93,7 @@ pub(super) fn supplier_settlement_item_projection() -> Document {
     }
 }
 
-/// 供应商结算差异列表投影字段。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回投影条件文档。
-///
-/// # 错误
-/// 不返回错误。
+// 供应商结算差异列表投影字段。
 pub(super) fn supplier_settlement_difference_projection() -> Document {
     doc! {
         "id": 1,

@@ -15,17 +15,13 @@ use super::{FundsAccess, ScopedPayableAccountRow};
 use crate::Result;
 
 impl FundsAccess {
-    /// 为整单可读的采购应付补齐付款依据；缺失版本保留空值。
-    ///
-    /// # 参数
-    /// * `rows` - 已完成范围裁剪的当前页或详情。
-    /// * `executor` - 授权读取使用的同一执行器。
-    ///
-    /// # 返回
-    /// 原位填充建议；不读取供应商当前商务条款。
-    ///
-    /// # 错误
-    /// 仓储读取失败时返回错误。
+    // 为整单可读的采购应付补齐付款依据；缺失版本沿用空值。
+    //
+    // 调用参数：
+    // * `rows` - 已完成范围裁剪的当前页或详情。
+    // * `executor` - 授权读取使用的同一执行器。
+    //
+    // 原位填充建议；不读取供应商当前商务条款。
     pub(super) async fn fill_payment_guidance(
         &self,
         rows: &mut [ScopedPayableAccountRow],

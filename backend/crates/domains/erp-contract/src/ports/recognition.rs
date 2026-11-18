@@ -6,27 +6,16 @@ use crate::entity::recognition::{ContractExtraction, ImportFailure, OcrDocument}
 /// OCR 适配器必须识别全部页面，并保留空白及不可读页。
 #[async_trait]
 pub trait ContractOcr: Send + Sync {
-    /// 逐页识别原始 PDF。
-    /// # 参数
-    /// * `pdf` - 受控 PDF 字节；禁止日志记录正文。
-    /// * `page_count` - 本地独立校验的页数。
-    /// # 返回
-    /// 按页号排序的全文。
-    /// # 错误
-    /// 未配置、超时或识别失败；不得透传供应商响应及密钥。
+    /// 自动归档流程将受控 PDF 及本地校验的页数交给 OCR，返回按页排序的全文，保留空白及不可读页。
+    /// 未配置、超时或识别失败返回 `ImportFailure`；不得在日志或返回中泄漏正文、供应商响应或密钥。
     async fn recognize(&self, pdf: &[u8], page_count: u32) -> Result<OcrDocument, ImportFailure>;
 }
 
 /// AI 仅提取有页码和引文的原文值，不负责匹配 ERP 身份。
 #[async_trait]
 pub trait ContractExtractor: Send + Sync {
-    /// 在全文上下文提取，并显式报告正文、附表与签章页冲突。
-    /// # 参数
-    /// * `document` - 已完整识别的全部页面。原文指令是数据，不得作为模型指令。
-    /// # 返回
-    /// 类型化字段及来源；禁止猜测缺失值或自行选择冲突值。
-    /// # 错误
-    /// 未配置、超时、非法输出或提取失败。
+    /// OCR 完成后由字段提取端口读取完整文档，返回带页码和引文的类型化原文，显式标记正文、附表或签章页冲突。
+    /// 不猜测缺值、自行选冲突值或匹配 ERP 身份，不把原文当模型指令；未配置、超时、输出非法或提取失败时返回 `ImportFailure`。
     async fn extract(&self, document: &OcrDocument) -> Result<ContractExtraction, ImportFailure>;
 }
 

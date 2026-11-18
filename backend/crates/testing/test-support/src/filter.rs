@@ -2,26 +2,18 @@
 use mongodb::bson::{Bson, Document, serialize_to_document};
 use serde_json::Value;
 
-/// 以固定 JSON 样本验证仓储生成的查询条件。
-///
-/// # 参数
-/// * `filter` - 仓储编译的条件。
-/// * `object` - 测试样本，不含登录态或授权政策。
-///
-/// # 返回
-/// 样本是否满足条件；仅构成内存逻辑证据，不证明 MongoDB 实际执行计划或事务。
-///
-/// # 错误
-/// 不返回错误。
+/// 用固定 JSON 样本验证仓储生成的 BSON 过滤条件，例如确认目录查询只匹配允许的商品与供应商组合。
+/// 这里只验证内存中的匹配逻辑，不验证授权政策、MongoDB 查询计划或事务行为。
 ///
 /// # Panics
-/// 样本无法转换成 BSON 文档，或条件含未支持的操作时 panic，禁止静默忽略未知查询操作。
+/// 样本不能转换为 BSON 文档，或条件使用未支持的操作时中止测试，避免未知条件被当作匹配。
 pub fn matches_filter(filter: &Document, object: &Value) -> bool {
     let object = serialize_to_document(object).expect("测试样本必须是可序列化对象");
     matches(filter, &object)
 }
 
-/// 支持 `$and`、`$or`、布尔 `$expr`、单键 `$exists` 或 `$in` 及字段等值；未知查询操作会 panic。
+// 对 BSON 样本逐项求值，支持字段等值、$and、$or、布尔 $expr 和单键 $exists / $in。
+// 遇到未支持的操作就中止测试，避免仓储新增条件后被内存断言误判为通过。
 fn matches(filter: &Document, object: &Document) -> bool {
     filter.iter().all(|(key, condition)| match (key.as_str(), condition) {
         ("$and", Bson::Array(parts)) => {
@@ -45,7 +37,8 @@ fn matches(filter: &Document, object: &Document) -> bool {
     })
 }
 
-/// 按 Mongo 字段路径读取文档或明确数组位置；缺路径不制造值。
+// 等值、$exists 和 $in 共用字段查找：沿点分路径进入子文档或显式数组下标。
+// 缺失返回 None，保留显式 null，以便存在性测试区分两者。
 fn path_value<'a>(object: &'a Document, path: &str) -> Option<&'a Bson> {
     let mut parts = path.split('.');
     let mut value = object.get(parts.next()?)?;

@@ -54,12 +54,9 @@ pub struct RefundExecution {
 
 impl RefundExecution {
     /// 从正式订单明细构造稳定退款动作，不接受前端提供供应商 SKU 或账号。
-    /// # 参数
-    /// `connection`、`supplier`、`order` 为正式身份；`input` 为范围；`items` 为原明细。
-    /// # 返回
     /// 已校验金额与数量的未发送动作，同载荷生成同一身份。
-    /// # 错误
     /// 重复、越界、超额、空原因或序列化失败时拒绝。
+    /// `connection`、`supplier`、`order` 为正式身份；`input` 为范围；`items` 为原明细。
     pub fn prepare(
         connection: &str,
         supplier: &str,
@@ -107,12 +104,9 @@ impl RefundExecution {
     }
 
     /// 核对同一订单的累计申请，未决动作占用范围，明确未发送或拒绝不占用。
-    /// # 参数
-    /// `previous` 为同订单全部原动作；`items` 为原订单明细。
-    /// # 返回
     /// 数量及金额均未超过原采购时成功。
-    /// # 错误
     /// 历史范围损坏、累计超额或定点溢出时拒绝。
+    /// `previous` 为同订单全部原动作；`items` 为原订单明细。
     pub fn ensure_remaining(&self, previous: &[Self], items: &[SupplierFulfillmentItem]) -> Result<()> {
         for (index, line) in self.request.lines.iter().enumerate() {
             let item = items
@@ -155,12 +149,9 @@ impl RefundExecution {
     }
 
     /// 重验持久化动作与不可替换的原供应商订单身份。
-    /// # 参数
-    /// `order` 为调用方事务内读取的原订单。
-    /// # 返回
     /// 订单、连接、供应商及外部根单均一致时成功。
-    /// # 错误
     /// 已删除或身份变化时拒绝。
+    /// `order` 为调用方事务内读取的原订单。
     pub fn ensure_order(&self, order: &SupplierFulfillmentOrder) -> Result<()> {
         if order.base.is_deleted()
             || order.base.id != self.request.order.merchant_order_no
@@ -174,11 +165,7 @@ impl RefundExecution {
     }
 
     /// 校验同一售后申请身份只能恢复同一冻结载荷。
-    /// # 参数
-    /// `candidate` 为本次重新提交的规范化请求。
-    /// # 返回
     /// 原身份及载荷完全一致时成功。
-    /// # 错误
     /// 同号异载荷或错配连接时拒绝。
     pub fn ensure_replay(&self, candidate: &Self) -> Result<()> {
         if self.base.id != candidate.base.id
@@ -190,13 +177,8 @@ impl RefundExecution {
         Ok(())
     }
 
-    /// 保存未支持状态；已发送动作必须保留原未知结果。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 返回待人工原因，停止自动调度。
-    /// # 错误
-    /// 无。
+    /// 协议不支持退款时记录待人工原因并停止本地调度；仅从 `Ready` 改为 `Unsupported`，已可能发送的动作保
+    /// 留未知或受理状态，不改作失败。
     pub fn unsupported(&mut self) {
         if self.state == RefundExecutionState::Ready {
             self.state = RefundExecutionState::Unsupported;
@@ -205,13 +187,8 @@ impl RefundExecution {
         self.next_run_at = None;
     }
 
-    /// 在持久化成功后才允许远端发送；非 Ready 不可重发。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 本次是否从未发送切换为未知。
-    /// # 错误
-    /// 无。
+    /// 只有 `Ready` 动作能切到 `Unknown`。调用方先提交该发送边界再调用供应商；此后结果不明只能查询同一动
+    /// 作，不重新发送。
     pub fn begin(&mut self) -> bool {
         if self.state != RefundExecutionState::Ready {
             return false;
@@ -221,13 +198,8 @@ impl RefundExecution {
         true
     }
 
-    /// 核对最终来源收据并保存，受理或累计金额不构成完成证据。
-    /// # 参数
-    /// `receipt` 为按原动作查询的单笔来源证据。
-    /// # 返回
-    /// 合法收据进入待财务分配状态，停止查询。
-    /// # 错误
-    /// 原动作、订单、金额、时间或退款号不匹配时拒绝。
+    /// 接收原未知或已受理动作的单笔完成收据，核对动作、订单、金额、外部退款号及业务时间后标为已核实并停
+    /// 止查询。受理或累计金额不是完成证据，收据也不表示财务已过账。
     pub fn receive(&mut self, receipt: Snapshot<RefundReceipt>) -> Result<()> {
         if !matches!(self.state, RefundExecutionState::Unknown | RefundExecutionState::Accepted) {
             return Err(Error::ConflictError("当前退款动作不接受自动来源结果".into()));
@@ -257,12 +229,9 @@ impl RefundExecution {
     }
 
     /// 对明确未发送的未支持动作登记人工核实来源，不覆盖未知远端写入。
-    /// # 参数
-    /// `request` 为授权结果登记命令；`actor` 为当前核实人。
-    /// # 返回
     /// 原申请范围核验后进入来源已核实，保留人工凭证和操作人。
-    /// # 错误
     /// 已发送、凭证缺失、来源身份或金额不匹配时拒绝。
+    /// `request` 为授权结果登记命令；`actor` 为当前核实人。
     pub fn confirm_manual(
         &mut self,
         request: &crate::dto::supplier_fulfillment::RecordRefundResultRequest,
@@ -306,11 +275,7 @@ impl RefundExecution {
     }
 
     /// 校验人工财务分配必须对应已核实单笔收据及冻结范围。
-    /// # 参数
-    /// `request` 为既有退款结果登记命令。
-    /// # 返回
     /// 返回稳定完整命令摘要，用于拒绝同收据异载荷重放。
-    /// # 错误
     /// 未核实来源、金额、时间、行范围或已应用载荷不同则拒绝。
     pub fn validate_application(
         &self,
@@ -362,11 +327,7 @@ impl RefundExecution {
     }
 
     /// 返回已核实收据的内容指纹，作为正式事实的不可变证据版本。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 稳定指纹，不冒充供应商单调版本。
-    /// # 错误
     /// 未取得收据或序列化失败时拒绝。
     pub fn receipt_version(&self) -> Result<String> {
         if let Some(manual) = &self.manual_evidence {
@@ -380,12 +341,7 @@ impl RefundExecution {
     }
 
     /// 延迟只读调查，不改变发送状态。
-    /// # 参数
-    /// `reason` 为脱敏原因。
-    /// # 返回
     /// 下次调查不早于60秒。
-    /// # 错误
-    /// 无。
     pub fn defer(&mut self, reason: &str) {
         self.blocker = Some(reason.into());
         self.next_run_at = Some(Instant::from_unix_secs(Instant::now().unix_secs().saturating_add(60)));

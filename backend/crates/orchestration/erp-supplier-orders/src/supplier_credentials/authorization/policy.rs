@@ -15,11 +15,11 @@ use persistence_core::Executor;
 const SUPPLIER_RELATION: &str = "supplier";
 
 /// 构造连接及其真实供应商来源的持久化事实读取器。
-/// # 参数
+///
 /// db 为连接与供应商所在数据库。
-/// # 返回
+///
 /// 不保存请求对象的共享事实适配器。
-/// # 错误
+///
 /// 构造不执行 I/O。
 pub fn connection_facts_port(db: Database) -> Arc<dyn AccessFactsPort> {
     Arc::new(ConnectionFacts { db })
@@ -60,7 +60,7 @@ impl AccessFactsPort for ConnectionFacts {
     }
 }
 
-/// 保留实际引用，缺失供应商交由统一 AllNonEmpty 政策拒绝。
+// 保留实际引用，缺失供应商交由统一 AllNonEmpty 政策拒绝。
 fn connection_facts(connection: &SupplierApiConnection, sources: Vec<ObjectFacts>) -> Result<ObjectFacts> {
     Ok(ObjectFacts {
         resource: "supplier_api_connection".into(),

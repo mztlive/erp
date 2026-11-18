@@ -7,14 +7,9 @@ use super::SalesCommandAccess;
 use crate::{Error, Result};
 
 impl SalesCommandAccess {
-    /// 校验所选结算主体并读取当前法定名称。
-    /// # 参数
-    /// `selected` 为所选我方公司主体。
-    /// `executor` 沿用调用方事务。
-    /// # 返回
-    /// 启用的我方企业主体名称。
-    /// # 错误
-    /// 所选主体不是我方公司、停用、缺失或资料版本无效时拒绝。
+    // 校验所选结算主体并读取当前法定名称。
+    //
+    // `selected` 为所选我方公司主体。 `executor` 沿用调用方事务。启用的我方企业主体名称。所选主体不是我方公司、停用、缺失或资料版本无效时拒绝。
     pub(in crate::order_to_cash) async fn settlement_name(
         &self,
         selected: &PartyId,
@@ -32,13 +27,9 @@ impl SalesCommandAccess {
         self.party_name(selected, executor).await
     }
 
-    /// 在已完成身份授权后读取启用主体的现行名称。
-    /// # 参数
-    /// `id` 为已授权主体，`executor` 为调用方执行器。
-    /// # 返回
-    /// 归属该主体的有效资料版本名称。
-    /// # 错误
-    /// 主体不可用、版本缺失或归属不一致时拒绝。
+    // 在已完成身份授权后读取启用主体的现行名称。
+    //
+    // `id` 为已授权主体，`executor` 为调用方执行器。归属该主体的有效资料版本名称。主体不可用、版本缺失或归属不一致时拒绝。
     pub(in crate::order_to_cash) async fn party_name(
         &self,
         id: &PartyId,

@@ -25,13 +25,8 @@ pub struct ContractAccess {
 }
 
 impl ContractAccess {
-    /// 在原事务中检查合同识别任务的功能资格；归档仍须检查真实创建候选。
-    /// # 参数
-    /// actor 为当前账号，executor 为任务读取或写入的快照执行器。
-    /// # 返回
-    /// 当前有效账号具备合同创建功能资格时成功。
-    /// # 错误
-    /// 无资格、非快照执行器或身份设施失败时拒绝。
+    /// 处理合同识别任务时，在调用方快照中检查当前账号的固定导入功能资格；正式归档仍须检查实际客户创建候选。
+    /// 无资格、非快照执行器或身份设施故障时拒绝。
     pub async fn require_import(&self, actor: &AuditActor, executor: &mut dyn Executor) -> Result<()> {
         Ok(self
             .authorization
@@ -40,11 +35,8 @@ impl ContractAccess {
     }
 
     /// 绑定完整固定模型和共享身份设施。
-    /// # 参数
-    /// db 为组织事实数据库，authorization 为共享授权服务，creation 提供真实客户候选归属。
-    /// # 返回
     /// 不缓存请求级授权结果的能力。
-    /// # 错误
+    /// db 为组织事实数据库，authorization 为共享授权服务，creation 提供真实客户候选归属。
     /// 构造不执行 I/O。
     pub fn new(
         db: Database,
@@ -55,11 +47,8 @@ impl ContractAccess {
     }
 
     /// 编译当前读取阶段的完整合同条件。
-    /// # 参数
-    /// actor、permission 为可信入口，executor 为原执行器。
-    /// # 返回
     /// 包含完整复验能力的当前阶段凭证。
-    /// # 错误
+    /// actor、permission 为可信入口，executor 为原执行器。
     /// 身份、模型、功能资格或事实取证失败时拒绝。
     pub async fn resolve(
         &self,
@@ -73,11 +62,8 @@ impl ContractAccess {
     }
 
     /// 在原业务事务内检查完整合同对象。
-    /// # 参数
-    /// actor、permission、id 为可信入口及目标，executor 为原执行器。
-    /// # 返回
     /// 对象授权通过时成功。
-    /// # 错误
+    /// actor、permission、id 为可信入口及目标，executor 为原执行器。
     /// 缺少对象、功能或来源资格时拒绝。
     pub async fn require_with(
         &self,
@@ -91,11 +77,8 @@ impl ContractAccess {
     }
 
     /// 检查真实客户来源的归档资格。
-    /// # 参数
-    /// actor 为当前账号，customer_id 为完整来源，executor 为原执行器。
-    /// # 返回
     /// 真实客户当前归属满足合同创建范围时成功。
-    /// # 错误
+    /// actor 为当前账号，customer_id 为完整来源，executor 为原执行器。
     /// 来源缺失、无权或版本变化时拒绝。
     pub async fn require_create(
         &self,
@@ -113,11 +96,7 @@ impl ContractAccess {
     }
 
     /// 返回筛选所需的身份域组织目录。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 使用当前数据库的组织事实查询能力。
-    /// # 错误
     /// 构造不执行 I/O。
     pub fn organization(&self) -> OrganizationDirectoryService {
         OrganizationDirectoryService::new(self.db.clone())
@@ -137,74 +116,38 @@ impl std::fmt::Debug for CompiledScope {
     }
 }
 impl CompiledScope {
-    /// 读取本次授权账号。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// identity 绑定的实际账号身份。
-    /// # 错误
-    /// 无。
+    /// 返回身份域绑定到当前查询凭证的实际账号，用于识别本次范围归属，而非请求传入的账号。
     pub fn user_id(&self) -> &str {
         self.compiled.actor().id()
     }
 
-    /// 读取当前凭证的策略版本。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// identity 绑定的策略版本。
-    /// # 错误
-    /// 无。
+    /// 返回该凭证在编译时绑定的策略版本，用于识别分页和复验间的政策变化。
     pub fn policy_version(&self) -> u64 {
         self.compiled.policy_version()
     }
 
-    /// 读取当前凭证的组织版本。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// identity 绑定的组织版本。
-    /// # 错误
-    /// 无。
+    /// 返回该凭证在编译时绑定的组织版本，用于识别组织来源变化。
     pub fn organization_version(&self) -> u64 {
         self.compiled.organization_version()
     }
 
-    /// 读取本次授权时点。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// identity 绑定的授权时点。
-    /// # 错误
-    /// 无。
+    /// 返回身份域固定的授权时点，供同一查询阶段使用。
     pub fn as_of(&self) -> Instant {
         self.compiled.as_of()
     }
 
-    /// 读取身份域完整编译阶段。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 在分页与统计前执行的阶段。
-    /// # 错误
-    /// 无。
+    /// 返回身份域编译的完整合同查询阶段；仓储必须在分页和统计前执行，不能由业务筛选替代。
     pub fn stages(&self) -> Vec<Document> {
         self.compiled.stages().to_vec()
     }
 
-    /// 核验当前事务、读取阶段及有效期，不读取数据库。
-    /// # 参数
-    /// executor 为原读取执行器。
-    /// # 返回
-    /// 凭证仍属于当前阶段时成功。
-    /// # 错误
-    /// 跨事务、跨阶段或已经到期时拒绝。
+    /// 仓储使用凭证前检查合同对象模型、原事务、原读取阶段及有效期，不进行数据库 I/O。跨边界、模型错配或到期时拒绝。
     pub fn ensure_current(&self, executor: &mut dyn Executor) -> erp_identity::Result<()> {
         Self::ensure_model(self.compiled.model())?;
         self.compiled.ensure_current(executor)
     }
 
-    /// 合同仓储只执行合同集合的完整对象凭证，拒绝跨资源或受限输出复用。
+    // 合同仓储只执行合同集合的完整对象凭证，拒绝跨资源或受限输出复用。
     fn ensure_model(model: &QueryModel) -> erp_identity::Result<()> {
         if model.resource != "contract"
             || model.collection != <Database as ContractExt>::CONTRACTS
@@ -216,30 +159,21 @@ impl CompiledScope {
         Ok(())
     }
 
-    /// 复验账号、权限、版本和有效期。
-    /// # 参数
-    /// executor 必须为原执行器。
-    /// # 返回
-    /// 凭证仍有效时成功。
-    /// # 错误
-    /// 撤权、到期或版本变化拒绝。
+    /// 在原读取执行器上向共享授权服务复验账号、权限、版本和有效期；撤权、到期或版本变化时不交付查询结果。
     pub async fn validate(&self, executor: &mut dyn Executor) -> erp_identity::Result<()> {
         self.authorization.validate(&self.compiled, executor).await
     }
 }
 
 /// 组合根将统一编译结果绑定原服务，业务无法自行构造有效凭证。
-/// # 参数
-/// compiled 为 identity 生成的凭证，service 为原服务。
-/// # 返回
 /// 本阶段载体。
-/// # 错误
+/// compiled 为 identity 生成的凭证，service 为原服务。
 /// 构造不执行 I/O。
 pub fn scope(compiled: CompiledAccess, service: Arc<AuthorizationService>) -> CompiledScope {
     CompiledScope { scope_version: compiled.version(), compiled: Arc::new(compiled), authorization: service }
 }
 
-/// 内置权限直接接入时仍校验拥有资源，禁止跨域凭证替换。
+// 内置权限直接接入时仍校验拥有资源，禁止跨域凭证替换。
 fn ensure_permission(permission: &Permission) -> Result<()> {
     if permission.resource() != "contract" {
         return Err(Error::ValidationError("权限资源与对象访问器不符".into()));

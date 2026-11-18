@@ -51,7 +51,7 @@ pub(super) fn parse_refresh(body: &[u8]) -> ConnectorResult<JdVopRefreshResult> 
     let expires_in: u64 = result.expires_in.0.parse().map_err(|_| token_error())?;
     JdVopRefreshResult::new(result.access_token, result.refresh_token, expires_in)
 }
-/// 编码刷新参数；只由协议 HTTP 发送，编排不接触请求格式。
+// 刷新传输发送请求前，把应用凭据和原刷新令牌编码成京东查询参数；凭据编排不依赖这层格式。
 pub(super) fn encode_refresh(request: &JdVopRefreshRequest) -> String {
     Serializer::new(String::new())
         .extend_pairs([
@@ -62,7 +62,7 @@ pub(super) fn encode_refresh(request: &JdVopRefreshRequest) -> String {
         ])
         .finish()
 }
-/// 只将官方明确的会话/刷新令牌失效代码识别为授权撤销；未知正文不推断旧令牌有效或无效。
+// 刷新响应分类时，只以明确的会话或刷新令牌失效代码判定授权撤销；未知正文不足以判断旧令牌是否仍有效。
 pub(super) fn authorization_invalid(body: &[u8]) -> bool {
     let Ok(fields) = from_slice::<RawObject>(body) else { return false };
     ["code", "resultCode"]

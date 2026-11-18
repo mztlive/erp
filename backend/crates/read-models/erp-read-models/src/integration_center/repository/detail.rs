@@ -10,13 +10,14 @@ use serde::de::DeserializeOwned;
 
 use crate::{Error, Result};
 
-/// 按本阶段完整根条件读取指定异常；无权与缺失使用相同错误。
-/// # 参数
-/// db、executor 为原事务；id 为实际异常身份，access 为当前阶段的完整对象凭证。
-/// # 返回
-/// 满足全部授权条件的异常记录。
-/// # 错误
-/// 模型错配、边界失效、无权、缺失或数据库错误时拒绝。
+// 依据本阶段完整根条件读取指定异常；无权与缺失使用相同错误。
+//
+// 调用参数：
+// db、executor 为原事务；id 为实际异常身份，access 为当前阶段的完整对象凭证。
+//
+// 满足全部授权条件的异常记录。
+//
+// 模型错配、边界失效、无权、缺失或数据库错误时拒绝。
 pub(in crate::integration_center) async fn error_task(
     db: &Database,
     id: &str,
@@ -27,13 +28,14 @@ pub(in crate::integration_center) async fn error_task(
         .await
 }
 
-/// 按本阶段完整根条件读取指定差异；不先读取未经授权的根文档。
-/// # 参数
-/// db、executor 为原事务；id 为实际差异身份，access 为当前阶段的完整对象凭证。
-/// # 返回
-/// 满足全部授权条件的差异记录。
-/// # 错误
-/// 模型错配、边界失效、无权、缺失或数据库错误时拒绝。
+// 依据本阶段完整根条件读取指定差异；不先读取未经授权的根文档。
+//
+// 调用参数：
+// db、executor 为原事务；id 为实际差异身份，access 为当前阶段的完整对象凭证。
+//
+// 满足全部授权条件的差异记录。
+//
+// 模型错配、边界失效、无权、缺失或数据库错误时拒绝。
 pub(in crate::integration_center) async fn difference(
     db: &Database,
     id: &str,
@@ -50,7 +52,7 @@ pub(in crate::integration_center) async fn difference(
     .await
 }
 
-/// 业务主键只收窄固定授权计划，不替换字段、输出或依赖。
+// 检查集成详情事实资格时，业务主键只收窄固定授权计划，不替换字段、输出或依赖。
 async fn authorized<T: DeserializeOwned + Send + Sync>(
     collection: Collection<T>,
     resource: &str,

@@ -55,15 +55,8 @@ enum ReadPhase {
     Revalidate,
 }
 
-/// 建立关联前验证文件来源资格，冻结提交时仍须在事务内重新验证。
-/// # 参数
-/// * `identity_service` - 同一应用注入的共享身份与权限服务。
-///
-/// 身份数据库、权限服务、当前账号及目标文件 ID。
-/// # 返回
-/// 文件由本人创建或当前具有文件读取资格时成功。
-/// # 错误
-/// 文件不存在、账号失效或无文件来源资格时拒绝。
+/// 关联已有文件前，核验当前账号是有权转授该资产的实际上传人。
+/// 文件不存在、账号失效或转授不允许时拒绝；冻结材料时仍须在提交事务内重验。
 pub async fn authorize_attachment(
     identity_service: &Arc<AuthorizationService>,
     db: &Database,
@@ -91,16 +84,9 @@ pub async fn authorize_attachment(
         .await
 }
 
-/// 取得已授权、仍匹配提交版本且可供读取的附件元数据。
-///
-/// # 参数
-/// * `runtime` / `files` - 审批授权与文件领域服务。
-/// * `actor` - 当前认证账号。
-/// * `db` / `target` - 业务来源数据库及精确实例、文件和可选销售版本。
-/// # 返回
-/// 返回服务器内部文件视图；存储键不得序列化到 HTTP 响应。
-/// # 错误
-/// 未指派、来源不匹配、文件改变、销毁、隔离或审计失败时拒绝。
+/// 按当前账号和精确审批目标核验访问资格，在读取元数据时记录敏感审计。
+/// 只有当前文件仍与冻结资料一致且可读取，才返回供对象存储使用的元数据。
+/// 文件变化、销毁、隔离、权限或审计失败时拒绝；返回的存储键不得写入 HTTP 响应。
 pub async fn readable<A: WorkflowAuthorizationPort>(
     db: &Database,
     runtime: &ApprovalRuntimeService<A>,
@@ -111,13 +97,7 @@ pub async fn readable<A: WorkflowAuthorizationPort>(
     checked(db, runtime, files, actor, target, ReadPhase::Initial).await
 }
 
-/// 存储读取后重验当前文件治理状态和实例资格，不重复写入读取审计。
-/// # 参数
-/// 数据库、审批与文件服务、认证账号、同一文件目标及读取前的文件版本。
-/// # 返回
-/// 仍允许发送文件内容时成功。
-/// # 错误
-/// 文件被撤回、版本变化或读者资格失效时拒绝。
+/// 对象存储读取成功后、交付字节前，重验审批资格和文件治理状态。文件版本、内容摘要或存储键变化时拒绝，不重复记录首次读取审计。
 pub async fn revalidate<A: WorkflowAuthorizationPort>(
     db: &Database,
     runtime: &ApprovalRuntimeService<A>,
@@ -136,7 +116,7 @@ pub async fn revalidate<A: WorkflowAuthorizationPort>(
     Ok(())
 }
 
-/// 文件读取前后复用相同冻结内容与当前治理状态检查。
+// 读取前后共用审批目标、冻结指纹和当前治理状态校验；只有首次读取写审计，避免交付前重验重复写审计。
 async fn checked<A: WorkflowAuthorizationPort>(
     db: &Database,
     runtime: &ApprovalRuntimeService<A>,

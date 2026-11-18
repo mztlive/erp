@@ -211,7 +211,7 @@ fn order() -> Vec<Call> {
     ]
 }
 
-/// 真实算法保持逐chunk抵销先写、唯一减少分录后写、反向核销最后写，原回款保持Posted。
+// 回归检查：真实算法保持逐chunk抵销先写、唯一减少分录后写、反向核销最后写，原回款保持Posted。
 #[tokio::test]
 async fn refund_writes_offsets_before_decrease_then_reverse_allocations_with_frozen_facts() {
     let mut ex = ReadExecutor::default();
@@ -250,7 +250,7 @@ async fn refund_writes_offsets_before_decrease_then_reverse_allocations_with_fro
         assert_ne!(allocation.base.id, decrease.base.id);
     }
 }
-/// 每个实际仓储失败保持原错误并停止其后全部步骤，包含第二chunk失败不写减少分录。
+// 回归检查：每个实际仓储失败保持原错误并停止其后全部步骤，包含第二chunk失败不写减少分录。
 #[tokio::test]
 async fn refund_stops_at_each_repository_failure_with_same_executor() {
     let expected = order();
@@ -264,7 +264,7 @@ async fn refund_stops_at_each_repository_failure_with_same_executor() {
         assert_eq!(store.calls, expected[..=index]);
     }
 }
-/// 分录/账户缺项及跨主体在回冲之前失败关闭；条件回冲false保持原文案。
+// 回归检查：分录/账户缺项及跨主体在回冲之前失败关闭；条件回冲false保持原文案。
 #[tokio::test]
 async fn refund_keeps_missing_cross_party_and_settlement_failure_order() {
     for case in 0..4 {
@@ -299,7 +299,7 @@ async fn refund_keeps_missing_cross_party_and_settlement_failure_order() {
         assert!(store.reverses.is_empty());
     }
 }
-/// 第二次部分退款消费第一次反向分配；累计可逆分配不足在批读事实和任何写入之前拒绝。
+// 回归检查：第二次部分退款消费第一次反向分配；累计可逆分配不足在批读事实和任何写入之前拒绝。
 #[tokio::test]
 async fn refund_reloads_interleaved_reverse_facts_and_rejects_over_reversal() {
     let mut ex = ReadExecutor::default();

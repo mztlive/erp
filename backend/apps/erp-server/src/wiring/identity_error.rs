@@ -19,19 +19,7 @@
 /// `Rbac` 必须映射为 `Internal`；不得把 Forbidden 改写成空集。
 macro_rules! map_identity_error {
     ($domain:ident) => {
-        /// 将身份域错误映射为消费方领域错误。
-        ///
-        /// # 参数
-        /// * `error` - 身份域错误
-        ///
-        /// # 返回
-        /// 返回同构载荷的领域错误；RBAC 内部失败归入系统错误。
-        ///
-        /// # 错误
-        /// 无。
-        ///
-        /// # 关键业务约束
-        /// 不得把身份域 Forbidden 改写成校验通过后的空集。
+        // 外域授权读取失败时原样传递身份错误载荷；消费域没有 RBAC 变体时归为内部错误。拒绝访问不能改写成查询通过后的空集。
         fn map_identity_error(error: erp_identity::Error) -> $domain::Error {
             match error {
                 erp_identity::Error::Internal(payload) => $domain::Error::Internal(payload),

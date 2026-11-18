@@ -13,12 +13,10 @@ pub struct InvoiceRequestSource {
 
 impl InvoiceRequestSource {
     /// 返回当前不能申请开票的原因。
-    /// # 参数
-    /// * `available` - 扣除审批中与已批准待开票占用后的额度。
-    /// # 返回
-    /// 可申请时返回 None，否则返回面向经办人的原因。
-    /// # 错误
-    /// 不返回错误。
+    /// 结果：可申请时返回 None，否则返回面向经办人的原因。
+    ///
+    /// 输入约定：
+    /// - `available`：扣除审批中与已批准待开票占用后的额度。
     pub fn unavailable_reason(&self, available: Amount) -> Option<&'static str> {
         if !self.effective {
             Some("销售单尚未生效，暂不能申请开票")
@@ -34,13 +32,12 @@ impl InvoiceRequestSource {
     }
 
     /// 校验准入及页面确认的购方资料，禁止申请人覆盖主体身份。
-    /// # 参数
-    /// * `data` - 页面提交的开票资料。
-    /// * `available` - 当前可申请额度。
-    /// # 返回
-    /// 资料与当前主体一致且准入满足时返回成功。
-    /// # 错误
+    /// 结果：资料与当前主体一致且准入满足时返回成功。
     /// 来源未生效、无额度、档案不全或页面资料已变化时返回错误。
+    ///
+    /// 输入约定：
+    /// - `data`：页面提交的开票资料。
+    /// - `available`：当前可申请额度。
     pub fn validate(&self, data: &InvoiceRequestData, available: Amount) -> Result<()> {
         if let Some(reason) = self.unavailable_reason(available) {
             return Err(Error::from(reason));

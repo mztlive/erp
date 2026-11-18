@@ -11,19 +11,9 @@ use crate::error::{Error, Result};
 #[async_trait]
 pub trait ContractParticipantPort: Send + Sync {
     /// 读取本次合同目标中的历史参与身份，不枚举账号的其他单据。
-    ///
-    /// # 参数
-    /// * `user_id` - 当前账号
-    /// * `ids` - 当前授权所检查的合同身份
-    /// * `executor` - 与授权相同的执行器
-    ///
-    /// # 返回
     /// 返回目标集合中去重后的参与单据 ID；空目标返回空集合。
-    ///
-    /// # 错误
+    /// `user_id` 为当前账号，`ids` 为当前授权所检查的合同身份，`executor` 为与授权相同的执行器。
     /// 未装配或读取失败时拒绝。
-    ///
-    /// # 关键业务约束
     /// 历史参与必须来自有效业务参与事实，不得由签约经办或业绩快照推导。
     async fn document_ids_in(
         &self,
@@ -39,17 +29,7 @@ pub struct FailClosedContractParticipantPort;
 
 impl FailClosedContractParticipantPort {
     /// 返回未接线的共享端口。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回可注入合同 Service 的失败关闭端口。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
     /// 读取动作补充历史参与前必须注入真实 adapter。
     pub fn shared() -> Arc<dyn ContractParticipantPort> {
         Arc::new(Self)

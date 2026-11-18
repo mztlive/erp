@@ -9,14 +9,12 @@ use crate::entity::document_registry::WorkflowAction;
 #[allow(async_fn_in_trait)]
 pub trait WorkflowTimelineRepositoryExt {
     /// 读取已授权单据的下一批动作。
+    /// 按时间、ID 倒序排列的历史动作。
     ///
-    /// # 参数
+    /// 数据库读取失败时返回错误。
+    ///
     /// `ids` 为已授权单据；`before` 为时间及原始动作 ID；`limit` 为批次上限。
     /// `executor` 为调用方的同一读取事务。
-    /// # 返回
-    /// 按时间、ID 倒序排列的历史动作。
-    /// # 错误
-    /// 数据库读取失败时返回错误。
     async fn timeline_actions(
         &self,
         ids: &[String],

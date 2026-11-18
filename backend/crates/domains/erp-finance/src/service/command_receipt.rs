@@ -15,27 +15,19 @@ pub struct FinanceCommandReceiptService {
 }
 
 impl FinanceCommandReceiptService {
-    /// 绑定拥有领域数据库句柄。
-    ///
-    /// # 参数
-    /// * `db` - 数据库句柄。
-    /// # 返回
+    /// 在组装财务命令回执用例时绑定本域数据库句柄，实际查询或写入由各用例方法执行。
     /// 返回本域回执服务。
-    /// # 错误
-    /// 无。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
-    /// 查询已提交的同一登记命令，沿用原发票当前视图恢复语义。
-    ///
-    /// # 参数
-    /// * `command` - 当前请求的原命令身份及载荷。
-    /// * `executor` - 首次、事务内或异常查证使用的执行器。
-    /// # 返回
+    /// 进项登记重试或确认提交结果时，按原命令核对独立回执，取强类型发票 ID 供调用方在当前授权下回读结果。
     /// 返回原已登记发票 ID；无命中返回 None。
-    /// # 错误
     /// 异载荷、回执损坏、重复身份或数据库错误时明确失败。
+    ///
+    /// 输入约定：
+    /// - `command`：当前请求的原命令身份及载荷。
+    /// - `executor`：首次、事务内或异常查证使用的执行器。
     pub async fn committed_purchase_invoice_id(
         &self,
         command: &CommandReceipt,
@@ -47,17 +39,15 @@ impl FinanceCommandReceiptService {
             .transpose()
     }
 
-    /// 保存新鲜执行结果，业务写入、审计和本回执必须复用同一事务。
-    ///
-    /// # 参数
-    /// * `command` - 原命令身份及载荷。
-    /// * `invoice_id` - 已登记发票 ID。
-    /// * `audit_event_id` - 关联审计 ID。
-    /// * `executor` - 拥有用例的事务执行器。
-    /// # 返回
-    /// 保存成功时返回空结果。
-    /// # 错误
+    /// 首次登记进项发票成功时追加登记回执；发票事实、成功审计及回执须用同一事务执行器提交。
+    /// 结果：保存成功时返回空结果。
     /// 身份/结果不合法、唯一身份冲突或数据库写入失败时返回错误。
+    ///
+    /// 输入约定：
+    /// - `command`：原命令身份及载荷。
+    /// - `invoice_id`：已登记发票 ID。
+    /// - `audit_event_id`：关联审计 ID。
+    /// - `executor`：拥有用例的事务执行器。
     pub async fn save_purchase_invoice(
         &self,
         command: &CommandReceipt,
@@ -70,15 +60,13 @@ impl FinanceCommandReceiptService {
         Ok(())
     }
 
-    /// 读取显式目录内资金命令的原结果对象 ID。
-    ///
-    /// # 参数
-    /// * `command` - 原命令身份及载荷。
-    /// * `executor` - 调用方事务或只读查证执行器。
-    /// # 返回
+    /// 资金命令重试或查证提交结果时，核对登记目录、原命令及载荷后取得既有结果 ID，供调用方重读当前视图。
     /// 返回原对象 ID；无命中返回 None。
-    /// # 错误
     /// 异载荷、损坏、重复身份或数据库错误时返回错误。
+    ///
+    /// 输入约定：
+    /// - `command`：原命令身份及载荷。
+    /// - `executor`：调用方事务或只读查证执行器。
     pub async fn committed_resource_id(
         &self,
         command: &CommandReceipt,
@@ -99,17 +87,15 @@ impl FinanceCommandReceiptService {
         unique_receipt(receipts)
     }
 
-    /// 保存显式目录内资金命令的强类型结果，与业务及成功审计同 Executor。
-    ///
-    /// # 参数
-    /// * `command` - 原命令身份及载荷。
-    /// * `resource_id` - 正式结果对象 ID。
-    /// * `audit_event_id` - 关联成功审计 ID。
-    /// * `executor` - 拥有用例的事务执行器。
-    /// # 返回
-    /// 保存成功时返回空结果。
-    /// # 错误
+    /// 首次执行资金命令时，将目录声明的强类型结果与成功审计关联；复用写入正式财务事实的事务执行器。
+    /// 结果：保存成功时返回空结果。
     /// 目录/结果非法、唯一身份冲突或写入失败时返回错误。
+    ///
+    /// 输入约定：
+    /// - `command`：原命令身份及载荷。
+    /// - `resource_id`：正式结果对象 ID。
+    /// - `audit_event_id`：关联成功审计 ID。
+    /// - `executor`：拥有用例的事务执行器。
     pub async fn save_resource(
         &self,
         command: &CommandReceipt,

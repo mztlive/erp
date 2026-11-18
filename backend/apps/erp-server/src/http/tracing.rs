@@ -20,17 +20,7 @@ pub(crate) const TRACE_ID_HEADER: &str = "X-Trace-Id";
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct RequestId(pub(crate) String);
 
-/// 记录请求追踪信息并继续处理。
-///
-/// # 参数
-/// * `request` - 请求对象
-/// * `next` - 下一处理器
-///
-/// # 返回
-/// 返回执行结果，`Ok` 表示成功，`Err` 表示失败。
-///
-/// # 错误
-/// 当验证失败或底层操作失败时返回错误。
+// 在 HTTP 处理前注入安全请求关联 ID、接续远程 trace 并脱敏选品路径；响应完成后记录状态与耗时，回传同一 `X-Trace-Id`。
 pub(crate) async fn trace_middleware(mut request: Request, next: Next) -> Result<Response, StatusCode> {
     let parent_context = extract_remote_context(request.headers());
     let (trace_id, trace_value) = prepare_trace(&mut request)?;
@@ -94,14 +84,7 @@ pub(crate) async fn trace_middleware(mut request: Request, next: Next) -> Result
     Ok(response)
 }
 
-/// 冻结当前 HTTP 追踪号，并按原顺序写入请求头和审计请求扩展。
-///
-/// # 参数
-/// * `request` - 已提取远程父上下文的原请求。
-/// # 返回
-/// 返回同一追踪号及供响应头复用的值。
-/// # 错误
-/// 无法构造安全 HTTP 头时沿原路径返回内部错误。
+// 在提取远程父上下文后冻结本地请求关联 ID，同时写入请求头、审计扩展及响应头待用值；无法编码为安全 HTTP 头时返回 500。
 fn prepare_trace(request: &mut Request) -> Result<(String, HeaderValue), StatusCode> {
     let trace_id = extract_or_generate_trace_id(request.headers());
     let trace_value: HeaderValue = trace_id.parse().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -110,25 +93,17 @@ fn prepare_trace(request: &mut Request) -> Result<(String, HeaderValue), StatusC
     Ok((trace_id, trace_value))
 }
 
-/// 从标准 W3C `traceparent`/`tracestate` 请求头提取远程父上下文。
-///
-/// 无有效传播头时返回空上下文，由当前进程创建新的根 trace。
+// 请求进入追踪中间件时从 W3C `traceparent` 和 `tracestate` 恢复父上下文；没有可用传播头时让本进程创建根 trace。
 fn extract_remote_context(headers: &HeaderMap) -> Context {
     TraceContextPropagator::new().extract(&HeaderExtractor(headers))
 }
 
-/// 使用低基数路由模板构造 HTTP server span 名称。
+// 服务器 span 以低基数路由模板命名，避免业务 ID 等实际路径值扩展追踪维度。
 fn http_span_name(method: &Method, matched_route: Option<&str>) -> String {
     matched_route.map_or_else(|| method.to_string(), |route| format!("{method} {route}"))
 }
 
-/// 提取或生成 Trace ID。
-///
-/// # 参数
-/// * `headers` - 请求头
-///
-/// # 返回
-/// 返回字符串结果。
+// 对外部关联 ID 仅接受不超过 128 字符、无控制字符及首尾空白的非空值；非法或缺失时生成 UUID，供日志与审计关联。
 fn extract_or_generate_trace_id(headers: &HeaderMap) -> String {
     headers
         .get(TRACE_ID_HEADER)
@@ -147,12 +122,12 @@ fn extract_or_generate_trace_id(headers: &HeaderMap) -> String {
 struct HeaderExtractor<'a>(&'a HeaderMap);
 
 impl Extractor for HeaderExtractor<'_> {
-    /// 按不区分大小写的 HTTP 头名读取 UTF-8 文本值。
+    // 为 W3C 传播器提供不区分大小写的头查询，只交付可按 UTF-8 读取的值。
     fn get(&self, key: &str) -> Option<&str> {
         self.0.get(key).and_then(|value| value.to_str().ok())
     }
 
-    /// 返回传播器可读取的全部请求头名称。
+    // 枚举当前请求的头名，供传播器发现可读取的上下文字段。
     fn keys(&self) -> Vec<&str> {
         self.0.keys().map(|name| name.as_str()).collect()
     }
@@ -200,7 +175,7 @@ mod tests {
         assert!(Uuid::parse_str(&trace_id).is_ok());
     }
 
-    /// 无效的客户端追踪值走原 UUID 生成路径，防止审计入口读取不安全关联。
+    // 用非法的客户端追踪值覆盖回退分支，确保空值、超长及非规范文本不会进入审计关联。
     #[test]
     fn trace_id_generates_uuid_when_header_is_empty_unbounded_or_not_normalized() {
         for invalid in
@@ -269,7 +244,7 @@ mod tests {
     }
 }
 
-/// 在所有日志字段生成前移除公开选品凭证，包含未匹配到路由的路径。
+// 请求进入日志或追踪字段前去掉公开选品链接凭证，即便路由未匹配也不记录原始凭证。
 fn redacted_path(path: &str) -> String {
     for prefix in ["/public/selection/", "/public/sales-selections/"] {
         if let Some(rest) = path.strip_prefix(prefix) {

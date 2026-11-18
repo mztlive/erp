@@ -54,18 +54,8 @@ pub(super) struct FormalizedSubmissionWrite {
 }
 
 impl SalesOrderCommandProcess {
-    /// 在审批运行时持有的事务内形式化最终通过的销售单。
-    ///
-    /// # 参数
-    /// * `id` - 销售单主键
-    /// * `actor` - 已认证操作人
-    /// * `executor` - 审批运行时持有的执行器
-    ///
-    /// # 返回
-    /// 正式版本、应收、供给任务和成功审计全部写入时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 单据状态、提交、采购责任或持久化不变量失败时返回错误。
+    /// 销售审批最终通过时，在原审批事务形成销售正式版本、应收、供给任务和成功审计，不另外提交。
+    /// 已完整形式化则不重复写入；单据状态、冻结提交、采购责任或持久化不变量失败时返回原错误。
     pub async fn formalize_approved_submission_apply(
         &self,
         id: &str,
@@ -80,18 +70,8 @@ impl SalesOrderCommandProcess {
         Ok(())
     }
 
-    /// 准备最终通过的销售事实；重复形式化返回 `None`，由外层流程复用原回执。
-    ///
-    /// # 参数
-    /// * `id` - 销售单主键。
-    /// * `actor` - 已认证操作人。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 尚未形式化时返回待写入上下文；已经完全形式化时返回 `None`。
-    ///
-    /// # 错误
-    /// 销售单不存在、状态或提交不满足、采购责任授权失败或仓储失败时返回错误。
+    // 最终通过端口用原执行器读取最新冻结提交、冻结销售归属并准备形式化上下文；已经完整形式化时返回 `None`，供外层沿用原回执。
+    // 销售单缺失、状态或提交不合法、采购责任不授权或仓储失败时拒绝继续写入。
     async fn prepare_approved_submission(
         &self,
         id: &str,
@@ -128,17 +108,11 @@ impl SalesOrderCommandProcess {
         .map(Some)
     }
 
-    /// 为实物及服务销售单构造事务外授权的采购责任计划。
-    ///
-    /// # 参数
-    /// * `order` - 待最终生效销售单
-    /// * `lines` - 最新冻结提交行
-    ///
-    /// # 返回
-    /// 卡券销售单返回 `None`；实物服务单返回逐行具体负责人计划。
-    ///
-    /// # 错误
-    /// 任一行责任无法确定或负责人不合格时失败关闭。
+    // 为实物及服务销售单构造事务外授权的采购责任计划。
+    //
+    // `order` 为待最终生效销售单；`lines` 为最新冻结提交行。卡券销售单返回 `None`；实物服务单返回逐行具体负责人计划。
+    //
+    // 任一行责任无法确定或负责人不合格时失败关闭。
     async fn build_procurement_formalization_plan(
         &self,
         order: &SalesOrder,
@@ -155,10 +129,7 @@ impl SalesOrderCommandProcess {
     }
 }
 
-/// 完成销售形式化的纯领域计算并生成待写上下文。
-///
-/// # 错误
-/// 状态、版本或任务字段不合法时返回错误。
+// 完成销售形式化的纯领域计算并生成待写上下文。状态、版本或任务字段不合法时返回错误。
 fn prepare_formalized_submission_write(
     db: &Database,
     (authorization, finance_responsibility): (Arc<AuthorizationService>, Arc<dyn FinanceResponsibilityPort>),
@@ -204,18 +175,11 @@ fn prepare_formalized_submission_write(
     })
 }
 
-/// 按负责人分组构造供给分配任务。
-///
-/// # 参数
-/// * `order` - 待生效销售单
-/// * `submission` - 冻结提交
-/// * `plan` - 已授权逐行责任计划
-///
-/// # 返回
-/// 返回每位具体负责人一条任务，责任键冻结稳定销售行集合。
-///
-/// # 错误
-/// 责任组织缺失、行集合为空或任务字段非法时返回错误。
+// 按负责人分组构造供给分配任务。
+//
+// `order` 为待生效销售单；`submission` 为冻结提交；`plan` 为已授权逐行责任计划。返回每位具体负责人一条任务，责任键冻结稳定销售行集合。
+//
+// 责任组织缺失、行集合为空或任务字段非法时返回错误。
 fn build_procurement_work_items(
     order: &SalesOrder,
     submission: &SalesOrderSubmission,
@@ -258,18 +222,11 @@ fn build_procurement_work_items(
         .collect()
 }
 
-/// 幂等写入同一销售生效事务中的供给分配任务。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `items` - 按负责人分组后的完整任务集合
-/// * `executor` - 销售形式化事务执行器
-///
-/// # 返回
-/// 全部任务已存在或全部创建成功时返回 `Ok(())`。
-///
-/// # 错误
-/// 同一责任键存在多条开放任务或任一写入失败时返回错误并回滚事务。
+// 幂等写入同一销售生效事务中的供给分配任务。
+//
+// `items` 为按负责人分组后的完整任务集合；`executor` 为销售形式化事务执行器。全部任务已存在或全部创建成功时返回 `Ok(())`。
+//
+// 同一责任键存在多条开放任务或任一写入失败时返回错误并回滚事务。
 pub(super) async fn persist_procurement_work_items(
     db: &Database,
     items: &[WorkItem],
@@ -346,7 +303,7 @@ mod tests {
         assert!(procurement_responsibility_key(&[]).is_err());
     }
 
-    /// 卡券最终通过同样只接受审批中.
+    // 验证卡券销售和实物服务销售一样，只能在审批中执行最终通过。
     #[test]
     fn voucher_formalize_accepts_in_approval() {
         let mut order = draft_order();

@@ -54,21 +54,11 @@ pub struct BulkJobRepository<'a> {
 
 impl<'a> BulkJobRepository<'a> {
     /// 在唯一键竞争事务结束后按请求 ID 复核登记结果。
-    ///
-    /// 无指纹历史行采取失败关闭兼容策略：不猜测旧载荷，返回异载荷冲突，调用方
-    /// 必须使用新的 request_id 重新提交。
-    ///
-    /// # 参数
-    /// * `requested` - 本次尝试登记的任务，用于比对 `request_id` 与请求指纹
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 没有相同 `request_id` 的未删除任务时返回 `None`。指纹一致时返回
-    /// [`BackgroundJobRegistration::ReplaySame`]；指纹缺失或不同时返回
-    /// [`BackgroundJobRegistration::ConflictDifferentPayload`]。
-    ///
-    /// # 错误
-    /// MongoDB 查询失败时返回错误。
+    /// 无指纹历史行采取失败关闭兼容策略：不猜测旧载荷，返回异载荷冲突，调用方必须使用新的 request_id 重新提交。
+    /// 没有相同 `request_id` 的未删除任务时返回 `None`。指纹一致时返回 [`BackgroundJobRegistration::ReplaySame`]；
+    /// 指纹缺失或不同时返回 [`BackgroundJobRegistration::ConflictDifferentPayload`]。
+    /// `requested` 为本次尝试登记的任务，用于比对 `request_id` 与请求指纹；沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询错误。
     pub async fn registration_by_request_id(
         &self,
         requested: &BackgroundJob,
@@ -95,38 +85,18 @@ impl<'a> BulkJobRepository<'a> {
     }
 
     /// 创建域专用仓储。
-    ///
-    /// # 参数
-    /// * `db` - 目标 MongoDB 数据库
-    ///
-    /// # 返回
-    /// 返回仓储实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
 
     /// 创建选择快照并冻结逐项目标（跨集合多步骤写入）。
-    ///
-    /// 依次写入 `bulk_selection_snapshots` 与 `bulk_selection_items`，保证
-    /// 「快照 + 冻结目标集合」原子可见（数据模型 §6.1）。**必须收到事务
-    /// 执行器**：本方法不构成原子边界，传入 `NoTransaction` 时两笔写入各自
-    /// 自动提交，逐项失败会留下没有目标的空快照；Service 必须通过
-    /// `persistence_core::Transactional::with_transaction` 传入事务会话。
-    ///
-    /// # 参数
-    /// * `snapshot` - 待写入的选择快照
-    /// * `items` - 待写入的冻结目标集合
-    /// * `executor` - 数据访问执行器，必须位于事务中
-    ///
-    /// # 返回
+    /// 依次写入 `bulk_selection_snapshots` 与 `bulk_selection_items`，保证「快照 + 冻结目标集合」原子可见（数据模型 §6.1）。
+    /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction` 时两笔写入各自自动提交，逐项失败会留下没有目标的空快照；
+    /// Service 必须通过 `persistence_core::Transactional::with_transaction` 传入事务会话。
     /// 快照与逐项全部写入成功时无返回值。
-    ///
-    /// # 错误
-    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射
-    /// 为冲突语义）或 MongoDB 写入失败时返回错误。
+    /// `snapshot` 为待写入的选择快照；`items` 为待写入的冻结目标集合。
+    /// 沿用调用方当前事务的执行器 `executor`。
+    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射为冲突语义）或 MongoDB 写入失败时返回错误。
     pub async fn create_snapshot_with_items(
         &self,
         snapshot: &BulkSelectionSnapshot,
@@ -149,26 +119,14 @@ impl<'a> BulkJobRepository<'a> {
     }
 
     /// 创建后台任务并登记逐项结果表（跨集合多步骤写入）。
-    ///
-    /// 依次写入 `background_jobs` 与 `background_job_items`，保证「任务注册 +
-    /// 逐项行」原子可见（数据模型 §6.1）。**必须收到事务执行器**：本方法
-    /// 不构成原子边界，传入 `NoTransaction` 时两笔写入各自自动提交，逐项
-    /// 失败会留下没有逐项行的任务注册；Service 必须通过
-    /// `persistence_core::Transactional::with_transaction` 传入事务会话。
-    ///
-    /// # 参数
-    /// * `job` - 待写入的后台任务
-    /// * `items` - 待写入的逐项结果行
-    /// * `executor` - 数据访问执行器，必须位于事务中
-    ///
-    /// # 返回
-    /// 成功插入任务与逐项行后返回 [`BackgroundJobRegistration::Created`]。
-    /// 幂等回放与异载荷冲突不在本方法产生，由 [`Self::registration_by_request_id`]
-    /// 在唯一键竞争后回查。
-    ///
-    /// # 错误
-    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射
-    /// 为冲突语义）或 MongoDB 写入失败时返回错误。
+    /// 依次写入 `background_jobs` 与 `background_job_items`，保证「任务注册 + 逐项行」原子可见（数据模型 §6.1）。
+    /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction` 时两笔写入各自自动提交，逐项失败会留下没有逐项行的任务注册；
+    /// Service 必须通过 `persistence_core::Transactional::with_transaction` 传入事务会话。
+    /// 成功插入任务与逐项行后返回 [`BackgroundJobRegistration::Created`]。幂等回放与异载荷冲突不在本方法产生，
+    /// 由 [`Self::registration_by_request_id`] 在唯一键竞争后回查。
+    /// `job` 为待写入的后台任务；`items` 为待写入的逐项结果行。
+    /// 沿用调用方当前事务的执行器 `executor`。
+    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射为冲突语义）或 MongoDB 写入失败时返回错误。
     pub async fn create_job_with_items(
         &self,
         job: &BackgroundJob,
@@ -191,19 +149,9 @@ impl<'a> BulkJobRepository<'a> {
     }
 }
 
-/// 构建排序文档（排序字段白名单化，禁止透传任意字段名）。
-///
-/// 仅允许 `created_at` / `updated_at`；未知字段回落默认 `created_at`。
-///
-/// # 参数
-/// * `sort_by` - 排序字段；`None` 或白名单外字段时默认 `created_at`
-/// * `sort_ascending` - 升序为 `true`，降序为 `false`
-///
-/// # 返回
-/// 返回排序条件文档。
-///
-/// # 错误
-/// 不返回错误。
+// 构建排序文档（排序字段白名单化，禁止透传任意字段名）。
+// 仅允许 `created_at` / `updated_at`；未知字段回落默认 `created_at`。
+// `sort_by` 为排序字段；`None` 或白名单外字段时默认 `created_at`；`sort_ascending` 为升序为 `true`，降序为 `false`。
 pub(super) fn sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
     let direction = sort_direction(sort_ascending);
     let field = created_updated_field(sort_by);

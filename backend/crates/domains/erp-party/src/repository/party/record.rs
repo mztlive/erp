@@ -53,16 +53,9 @@ pub struct PartyFilter {
 }
 
 impl Default for PartyFilter {
-    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回第 1 页、每页 20 条的空筛选条件。
-    ///
-    /// # 错误
-    /// 无。
+    // 初始化往来主体列表的默认筛选，从第 1 页开始每页 20 条，其余筛选留空。
+    //
+    // 返回第 1 页、每页 20 条的空筛选条件。
     fn default() -> Self {
         Self {
             keyword: None,
@@ -78,20 +71,11 @@ impl Default for PartyFilter {
 }
 
 impl QueryFilter for PartyFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// `matching_name_ids` 为空时，把 `keyword` 作为 `party_no` 的字面量正则并入；`None` 则不写。
-    /// 非空时改为 `$or`：一条是这些主体 `id` 的 `$in`，`keyword` 为 `Some` 时再并入 `party_no` 条件。
-    /// `party_kind` 与 `status` 为 `None` 时不写入，有值时按稳定代码精确匹配，并与上述条件同时生效。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 把往来主体筛选转换为 MongoDB 查询条件，并排除软删除记录，供列表和计数共用。
+    //
+    // `matching_name_ids` 为空时，把 `keyword` 作为 `party_no` 的字面量正则并入；`None` 则不写。
+    // 非空时改为 `$or`：一条是这些主体 `id` 的 `$in`，`keyword` 为 `Some` 时再并入 `party_no` 条件。
+    // `party_kind` 与 `status` 为 `None` 时不写入，有值时按稳定代码精确匹配，并与上述条件同时生效。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         let mut number = Document::new();
@@ -119,16 +103,9 @@ impl QueryFilter for PartyFilter {
 }
 
 impl Pagination for PartyFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。`page` 原样取出，`page_size` 由 `u32` 转为 `u64`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 提供往来主体列表的页码和每页条数，供分页查询计算读取窗口。
+    //
+    // 返回 `(page, page_size)` 元组。`page` 原样取出，`page_size` 由 `u32` 转为 `u64`。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -145,10 +122,8 @@ pub trait PartyRepositoryExt {
     /// * `party_ids` - 主体 ID 集合；空集合直接返回空结果
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回
     /// 返回全部匹配且未删除的主体；返回顺序不承诺与输入一致。
     ///
-    /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
     async fn find_parties_by_ids(
         &self,
@@ -162,10 +137,8 @@ pub trait PartyRepositoryExt {
     /// * `id` - 稳定 Party ID
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回
     /// 返回匹配的未删除主体；不存在时返回 `None`。
     ///
-    /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
     async fn find_party(&self, id: &PartyId, executor: &mut dyn Executor) -> Result<Option<Party>>;
 
@@ -178,10 +151,8 @@ pub trait PartyRepositoryExt {
     /// * `filter` - 筛选与分页条件
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回
     /// 返回当前页投影行与满足筛选条件的总数。
     ///
-    /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
     async fn search_parties(
         &self,
@@ -198,10 +169,8 @@ pub trait PartyRepositoryExt {
     /// * `party_no` - 主体编号
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回
     /// 返回匹配的主体（含已软删除）；无匹配时返回 `None`。
     ///
-    /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
     async fn find_by_party_no_including_deleted(
         &self,
@@ -218,10 +187,8 @@ pub trait PartyRepositoryExt {
     /// * `unified_credit_code` - 已规范化的统一社会信用代码
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回
     /// 返回匹配的主体（含已软删除）；无匹配时返回 `None`。
     ///
-    /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
     async fn find_by_unified_credit_code_including_deleted(
         &self,
@@ -237,10 +204,8 @@ pub trait PartyRepositoryExt {
     /// * `party_ids` - 主体 ID 集合；为空时直接返回空集合
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回
     /// 返回全部匹配的未删除主体。
     ///
-    /// # 错误
     /// 当 MongoDB 查询或反序列化失败时返回错误。
     async fn list_by_ids(&self, party_ids: &[PartyId], executor: &mut dyn Executor) -> Result<Vec<Party>>;
 }
@@ -305,10 +270,9 @@ impl PartyRepositoryExt for Repository<'_, Party> {
         self.find_many(doc! { "id": { "$in": ids } }, executor).await
     }
 }
-/// 主体列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
+// 列出主体列表查询需要读取的字段。
+//
+// 返回投影条件文档。
 fn party_projection() -> Document {
     doc! {
         "id": 1,

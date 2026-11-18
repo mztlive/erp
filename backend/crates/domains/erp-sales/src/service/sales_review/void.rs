@@ -19,33 +19,19 @@ pub struct VoidChangeWrite {
 }
 impl VoidChangeWrite {
     /// 来源销售单主键，供事务内沿原单范围重验。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回原销售单稳定身份。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 作废不得改写来源销售单身份。
+    /// 业务边界：作废不得改写来源销售单身份。
     pub fn sales_order_id(&self) -> &str {
         self.change_order.sales_order_id.as_ref()
     }
 
     /// 在同一执行器内先写作废变更，再写放弃的工作副本。
+    /// 结果：先更新变更单，再更新存在的工作副本；都成功时返回 `Ok(())`。
+    /// 失败条件：任一步 CAS 失败时交由根事务回滚。
     ///
-    /// # 参数
-    /// * `db` - 销售集合所在数据库。
-    /// * `executor` - 调用方根事务执行器。
-    ///
-    /// # 返回
-    /// 先更新变更单，再更新存在的工作副本；都成功时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 任一步 CAS 失败时交由根事务回滚。
+    /// 输入约定：
+    /// - `db`：销售集合所在数据库。
+    /// - `executor`：调用方根事务执行器。
     pub async fn persist(&mut self, db: &mongodb::Database, executor: &mut dyn Executor) -> Result<()> {
         db.sales_change_orders().update(&mut self.change_order, executor).await?;
         if let Some(copy) = &mut self.working_copy {
@@ -56,21 +42,18 @@ impl VoidChangeWrite {
 }
 impl SalesReviewService {
     /// 作废草稿或已驳回的销售变更单。
-    ///
-    /// # 参数
-    /// * `id` - 变更单 ID
-    /// * `req` - 作废请求（含期望版本）
-    /// * `actor` - 已通过鉴权的审计操作人
-    /// * `executor` - 完成授权、版本读取和写入的原事务执行器。
-    ///
-    /// # 返回
     /// 返回已作废、尚未落库的变更单；存在工作副本时一并返回已放弃的副本。
-    ///
-    /// # 错误
+    /// 失败条件：
     /// * `NotFound` - 变更单不存在
     /// * `ConflictError` - 期望版本与当前版本不一致
     ///
     /// 请求校验、作废或放弃工作副本被拒绝，以及仓储读取失败时返回对应错误。
+    ///
+    /// 输入约定：
+    /// - `id`：变更单 ID
+    /// - `req`：作废请求（含期望版本）
+    /// - `actor`：已通过鉴权的审计操作人
+    /// - `executor`：完成授权、版本读取和写入的原事务执行器。
     pub async fn prepare_void(
         &self,
         id: &str,

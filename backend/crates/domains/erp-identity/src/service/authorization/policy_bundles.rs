@@ -19,13 +19,12 @@ pub(crate) struct PolicyBundleAccess {
 }
 
 impl PolicyBundleAccess {
-    /// 核对文件读取仍属于授权时的原快照、阶段和有效期。
-    /// # 参数
-    /// executor 为文件用例的原执行器。
-    /// # 返回
-    /// 全部边界仍有效时成功。
-    /// # 错误
-    /// 事务、读取阶段或期限失效时拒绝交付。
+    // 核对文件读取仍属于授权时的原快照、阶段和有效期。
+    // 全部边界仍有效时成功。
+    //
+    // 事务、读取阶段或期限失效时拒绝交付。
+    //
+    // executor 为文件用例的原执行器。
     pub(crate) fn ensure_current(&self, executor: &mut dyn Executor) -> Result<()> {
         if !self.boundary.is_current(executor) {
             return Err(Error::ValidationError("授权文件读取跨越执行阶段".into()));
@@ -37,7 +36,7 @@ impl PolicyBundleAccess {
     }
 }
 
-/// 文件预览和应用使用相同基础资格，实际文档只能追加必要写配置能力。
+// 预览与应用授权文件使用同一组基础权限；根据实际文档内容只增加涉及的写配置资格。
 pub(super) fn requirements(
     permission: &Permission,
     document: Option<&PolicyDocument>,
@@ -67,14 +66,13 @@ pub(super) fn requirements(
 }
 
 impl AuthorizationService {
-    /// 在原快照一次证明文件所需的同角色资格和公司组织边界。
-    /// # 参数
-    /// actor、permission 为真实账号及固定文件入口；document 为预览或应用的规范化文件。
-    /// executor 必须属于文件用例的原快照；导出传入 None。
-    /// # 返回
-    /// 已授权的策略版本及组织事实，供文件计划校验使用。
-    /// # 错误
-    /// 入口错配、非快照、完整资格不足、范围收窄或阶段到期时拒绝。
+    // 在原快照一次证明文件所需的同角色资格和公司组织边界。
+    // 已授权的策略版本及组织事实，供文件计划校验使用。
+    //
+    // 入口错配、非快照、完整资格不足、范围收窄或阶段到期时拒绝。
+    //
+    // actor、permission 为真实账号及固定文件入口；document 为预览或应用的规范化文件。
+    // executor 必须属于文件用例的原快照；导出传入 None。
     pub(crate) async fn require_policy_bundle(
         &self,
         actor: &AuditActor,

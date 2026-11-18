@@ -31,17 +31,9 @@ const ACTOR_MAX_LEN: usize = 128;
 const MAX_LINES: usize = 1_000;
 const MAX_REFERENCES_PER_LINE: usize = 32;
 
-/// 校验金额非负。
-///
-/// # 参数
-/// * `value` - 待校验金额
-/// * `field` - 错误消息使用的业务字段名称
-///
-/// # 返回
-/// 金额非负时返回 `Ok(())`。
-///
-/// # 错误
-/// 金额为负时返回领域错误。
+// 核对金额非负。
+// 金额非负时返回 `Ok(())`。
+// 金额为负时返回领域错误。
 fn ensure_non_negative(value: Amount, field: &str) -> Result<()> {
     if value.to_decimal() < Decimal::ZERO {
         return Err(Error::from(format!("{field}不得为负")));
@@ -49,7 +41,7 @@ fn ensure_non_negative(value: Amount, field: &str) -> Result<()> {
     Ok(())
 }
 
-/// 校验含税金额等于不含税加税额，不成立时返回领域错误。
+// 核验含税金额等于不含税加税额，不成立时返回领域错误。
 fn ensure_triple(gross: Amount, net: Amount, tax: Amount, field: &str) -> Result<()> {
     if net.checked_add(tax) != gross {
         return Err(Error::from(format!("{field}必须满足含税等于不含税加税额")));
@@ -57,7 +49,7 @@ fn ensure_triple(gross: Amount, net: Amount, tax: Amount, field: &str) -> Result
     Ok(())
 }
 
-/// 规范化证据引用：去空白、限长、排序去重；超限、空白或超长时失败。
+// 规范化证据引用：去空白、限长、排序去重；超限、空白或超长时失败。
 fn normalize_references(values: &mut Vec<String>, max: usize) -> Result<()> {
     if values.len() > max {
         return Err(Error::from("来源证据引用数量超限"));
@@ -75,7 +67,7 @@ fn normalize_references(values: &mut Vec<String>, max: usize) -> Result<()> {
     Ok(())
 }
 
-/// 把来源摘要规范成小写 SHA-256，失败时改写为来源证据摘要错误。
+// 把来源摘要规范成小写 SHA-256，失败时改写为来源证据摘要错误。
 fn normalize_hash(value: String) -> Result<String> {
     normalize_statement_sha256(value, "来源证据摘要")
         .map_err(|_| Error::from("来源证据摘要必须是64位SHA-256十六进制值"))

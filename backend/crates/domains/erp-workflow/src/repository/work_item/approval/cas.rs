@@ -8,20 +8,12 @@ use persistence_core::{Error, Executor, Repository, Result, mongo_ops};
 use super::super::super::bpm::{CasWriteOutcome, approval_task_cas_filter, classify_cas_miss};
 use crate::entity::work_item::{WorkItem, WorkItemStatus};
 
-/// 按开放任务版本与执行身份写入，未命中时分类当前责任状态。
-///
-/// # 参数
-/// * `repo` - 工作项仓储。
-/// * `item` - 待写回的任务。
-/// * `expected_task_version` - 加载时的任务版本。
-/// * `approval_node_execution_id` - 必须仍绑定的节点执行。
-/// * `executor` - 数据访问执行器。
-///
-/// # 返回
-/// 命中时返回版本已加一的 [`CasWriteOutcome::Applied`]；否则按回读分类缺失、版本冲突或状态变化。
-///
-/// # 错误
-/// 下一版本越界、任务无法序列化、版本无法表示为 BSON 整数，或 MongoDB 更新与回读失败时返回错误。
+// 按开放任务版本与执行身份写入，未命中时分类当前责任状态。
+// 命中时返回版本已加一的 `CasWriteOutcome::Applied`；否则按回读分类缺失、版本冲突或状态变化。
+//
+// 下一版本越界、任务无法序列化、版本无法表示为 BSON 整数，或 MongoDB 更新与回读失败时返回错误。
+//
+// `expected_task_version`：加载时的任务版本；`approval_node_execution_id`：必须仍绑定的节点执行。
 pub(super) async fn persist_open_approval_task(
     repo: &Repository<'_, WorkItem>,
     item: &WorkItem,
@@ -53,22 +45,18 @@ pub(super) async fn persist_open_approval_task(
         approval_task_still_open(row, approval_node_execution_id)
     }))
 }
-/// 计算审批任务 CAS 的下一持久化版本。
-///
-/// # 参数
-/// * `expected_task_version` - 加载时任务版本
-///
-/// # 返回
-/// 返回可写入 BSON 的下一版本。
-///
-/// # 错误
-/// 版本溢出或无法表示为 BSON 整数时返回错误。
+// 计算审批任务 CAS 的下一持久化版本。
+// 返回可写入 BSON 的下一版本。
+//
+// 版本溢出或无法表示为 BSON 整数时返回错误。
+//
+// `expected_task_version`：加载时任务版本。
 fn next_task_version(expected_task_version: u64) -> Result<i64> {
     let next = expected_task_version.checked_add(1).ok_or(Error::EntityMetadataOutOfRange("version"))?;
     i64::try_from(next).map_err(|_| Error::EntityMetadataOutOfRange("version"))
 }
 
-/// 当前任务仍为开放，且绑定的节点执行与本次 CAS 相同。
+// 审批任务 CAS 未命中后检查任务是否仍开放且绑定原执行，供区分版本冲突与责任状态已经变化。
 fn approval_task_still_open(item: &WorkItem, execution_id: &ApprovalNodeExecutionId) -> bool {
     item.status == WorkItemStatus::Open && item.approval_node_execution_id.as_ref() == Some(execution_id)
 }

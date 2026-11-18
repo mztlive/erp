@@ -7,19 +7,17 @@ use erp_permissions::{Permission, party, payable};
 use super::CustomerProfileReadService;
 use crate::{Error, Result};
 impl CustomerProfileReadService {
-    /// 为每条当前敏感事实签发一分钟有效的字段级令牌。
-    ///
-    /// # 参数
-    /// * `customer_id` - 令牌绑定的客户主键。
-    /// * `contacts` - 当前联系人事实。
-    /// * `addresses` - 当前地址事实。
-    /// * `bank_accounts` - 当前银行账户事实。
-    ///
-    /// # 返回
-    /// 按联系人、地址、银行账户的顺序返回令牌视图；手机号和账号使用末四位掩码，地址固定掩码。
-    ///
-    /// # 错误
-    /// 系统时间无法转换为秒，或令牌签发失败时返回错误。
+    // 处理客户敏感字段时，为每条当前敏感事实签发一分钟有效的字段级令牌。
+    //
+    // 调用参数：
+    // * `customer_id` - 令牌绑定的客户主键。
+    // * `contacts` - 当前联系人事实。
+    // * `addresses` - 当前地址事实。
+    // * `bank_accounts` - 当前银行账户事实。
+    //
+    // 按联系人、地址、银行账户的顺序返回令牌视图；手机号和账号使用末四位掩码，地址固定掩码。
+    //
+    // 系统时间无法转换为秒，或令牌签发失败时返回错误。
     pub(super) fn sensitive_fields(
         &self,
         customer_id: &str,
@@ -61,7 +59,7 @@ impl CustomerProfileReadService {
         Ok(fields)
     }
 
-    /// 签发一个受客户与事实行约束的敏感字段令牌。
+    // 处理客户敏感字段时，签发一个受客户与事实行约束的敏感字段令牌。
     fn sensitive_field(
         &self,
         kind: SensitiveFieldKind,
@@ -81,17 +79,17 @@ impl CustomerProfileReadService {
         })
     }
 }
-/// 读取当前时刻的 Unix 秒；负值或溢出不能签发令牌。
+// 处理客户敏感字段时，读取当前时刻的 Unix 秒；负值或溢出不能签发令牌。
 fn unix_now() -> Result<u64> {
     u64::try_from(Instant::now().unix_secs()).map_err(|_| Error::Internal("系统时间非法".to_string()))
 }
 
-/// 生成不可逆末四位掩码。
+// 处理客户敏感字段时，生成不可逆末四位掩码。
 fn masked_last4(last4: &str) -> String {
     if last4.is_empty() { "****".to_string() } else { format!("****{last4}") }
 }
 
-/// 每类字段保留独立的详情与揭示资格。
+// 处理客户敏感字段时，每类字段保留独立的详情与揭示资格。
 pub(super) fn field_permissions(kind: SensitiveFieldKind) -> [Permission; 2] {
     match kind {
         SensitiveFieldKind::ContactMobile => [party::CONTACT_DETAIL, party::CONTACT_REVEAL],

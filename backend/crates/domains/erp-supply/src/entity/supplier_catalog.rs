@@ -95,11 +95,7 @@ pub struct SupplierCatalogItem {
 }
 impl SupplierCatalogItem {
     /// 合并最新观察时保留同身份记录的既有关联与持久化版本。
-    /// # 参数
-    /// `previous` 为同一来源身份的既有目录记录。
-    /// # 返回
     /// 将既有身份和关联复制到当前观察。
-    /// # 错误
     /// 来源身份不相同则拒绝，禁止跨连接沿用匹配。
     pub fn retain_match(&mut self, previous: Self) -> Result<()> {
         if self.base.id != previous.base.id
@@ -141,12 +137,9 @@ impl SupplierCatalogItem {
     }
 
     /// 将人工选择的、已由调用方核验的公司 SKU 保存为匹配。
-    /// # 参数
-    /// 预期目录版本与当前授权公司 SKU 的身份、业务编号和商品身份。
-    /// # 返回
     /// 匹配变化为 true；重复确认同一 SKU 为 false。
-    /// # 错误
     /// 变更匹配时目录版本冲突则拒绝。
+    /// 预期目录版本与当前授权公司 SKU 的身份、业务编号和商品身份。
     pub fn match_sku(
         &mut self,
         expected_version: u64,
@@ -171,11 +164,7 @@ impl SupplierCatalogItem {
     }
 
     /// 将来源目录观察转为待选品记录；不声称已经取得公司销售资格。
-    /// # 参数
-    /// 连接、供应商和任务身份由服务器提供，`snapshot` 来自协议适配器。
-    /// # 返回
     /// 按连接、商品和规格确定稳定身份的目录记录。
-    /// # 错误
     /// 身份缺失、名称为空或来源资料无法生成摘要时拒绝。
     pub fn observed(connection: &str, supplier: &str, job: &str, snapshot: Snapshot<Offer>) -> Result<Self> {
         let Offer { sku, name, specification, unit, quote, details } = snapshot.value;
@@ -230,12 +219,9 @@ impl SupplierCatalogItem {
     }
 
     /// 记录明确选品结果；既有不同供给不可覆写。
-    /// # 参数
-    /// 预期目录版本和已在同事务建立的公司 SKU、商品及供给身份。
-    /// # 返回
     /// 保存关联；同一正式选品结果保持幂等。
-    /// # 错误
     /// 目录版本变化、空身份或已有其他供给时拒绝。
+    /// 预期目录版本和已在同事务建立的公司 SKU、商品及供给身份。
     pub fn record_adoption(
         &mut self,
         expected_version: u64,
@@ -266,22 +252,14 @@ impl SupplierCatalogItem {
     }
 
     /// 计算连接内供应商商品规格的稳定目录身份。
-    /// # 参数
-    /// 已核验的连接、来源商品及规格编号。
-    /// # 返回
     /// 与首次采集相同的目录主键。
-    /// # 错误
-    /// 不返回错误；输入合法性由协议边界负责。
+    /// 输入合法性由协议边界负责。
     pub fn source_id(connection: &str, product: &str, spec: &str) -> String {
         format!("sc-{}", catalog_identity(&[connection, product, spec]))
     }
 
     /// 拒绝来源单位与公司已确认基础单位不同的身份恢复。
-    /// # 参数
-    /// 公司字典中同一个单位的代码、名称及符号。
-    /// # 返回
     /// 来源未报告单位时由明确人工确认负责；已报告时须精确匹配一种字典表达。
-    /// # 错误
     /// 单位不同则拒绝，不执行隐式数量换算。
     pub fn ensure_company_unit(&self, aliases: &[&str]) -> Result<()> {
         if let Some(source) = &self.unit
@@ -295,11 +273,7 @@ impl SupplierCatalogItem {
     }
 
     /// 在调用方已核对公司 SKU 和供给后确认来源身份未实质变化。
-    /// # 参数
-    /// 人工看过的来源版本、资料与明确同一销售项确认。
-    /// # 返回
     /// 解除来源身份核对阻断，不修改公司 SKU、单位及供给身份。
-    /// # 错误
     /// 来源版本或内容变化、未明确确认、原因缺失及来源撤回时拒绝。
     pub fn confirm_identity_review(&mut self, request: &ReviewCatalogIdentityRequest) -> Result<()> {
         if self.base.version != request.expected_version
@@ -329,12 +303,9 @@ impl SupplierCatalogItem {
     }
 
     /// 合并来源观察，拒绝可证明旧版本及同版本异载荷。
-    /// # 参数
-    /// `previous` 必须是同一连接和外部 SKU 的持久化记录。
-    /// # 返回
     /// 内容应写入为 true；旧版本或重复观察为 false。
-    /// # 错误
     /// 身份不符、同版本不同内容或无法序列化时拒绝。
+    /// `previous` 必须是同一连接和外部 SKU 的持久化记录。
     pub fn merge_observation(&mut self, previous: Self) -> Result<bool> {
         if self.base.id != previous.base.id
             || self.connection_id != previous.connection_id
@@ -361,11 +332,7 @@ impl SupplierCatalogItem {
     }
 
     /// 保存供应商明确撤回；列表缺项不得调用此操作。
-    /// # 参数
-    /// 已核验的同对象来源版本、接收时间及任务身份。
-    /// # 返回
     /// 是否需要持久化本次撤回。
-    /// # 错误
     /// 指纹构造失败时返回错误。
     pub fn withdraw(&mut self, revision: SourceRevision, at: Instant, job: &str) -> Result<bool> {
         match revision.compare(&self.source_revision) {
@@ -388,12 +355,9 @@ impl SupplierCatalogItem {
     }
 
     /// 根据当前来源资料计算稳定内容摘要，不包含接收时间和公司匹配。
-    /// # 参数
-    /// 无；素材准备后使用当前图片内容指纹。
-    /// # 返回
     /// 更新来源内容摘要。
-    /// # 错误
     /// 内容无法序列化时返回错误。
+    /// 素材准备后使用当前图片内容指纹。
     pub fn refresh_fingerprint(&mut self) -> Result<()> {
         if let Some(terms) = &self.source_purchase_terms {
             terms.validate()?;
@@ -481,12 +445,7 @@ pub struct CatalogIdentityReviewReceipt {
 }
 impl SupplierCatalogRun {
     /// 为任务冻结技术配置和初始游标。
-    /// # 参数
-    /// `job` 为任务 ID，`connection` 为已自动配置的连接，`mapping_version` 来自适配器。
-    /// # 返回
     /// 尚未扫描的检查点。
-    /// # 错误
-    /// 不返回错误。
     pub fn new(
         job: &str,
         connection: &super::supplier_api::SupplierApiConnection,
@@ -513,12 +472,7 @@ impl SupplierCatalogRun {
         }
     }
     /// 判断完成的检查点能否作为当前配置和映射版本的增量依据。
-    /// # 参数
-    /// `config_version` 为当前连接技术配置版本，`mapping_version` 为适配器当前版本。
-    /// # 返回
     /// 已完整处理且没有跳过项，并与当前配置和映射版本一致时返回 true。
-    /// # 错误
-    /// 不返回错误。
     pub fn supports_incremental(&self, config_version: u64, mapping_version: u32) -> bool {
         self.finished
             && self.succeeded
@@ -526,11 +480,7 @@ impl SupplierCatalogRun {
             && self.compatible(config_version, mapping_version)
     }
     /// 累计跳过数量并保留最近一百条原因，与页面推进同事务保存。
-    /// # 参数
-    /// `skipped` 为本页单项异常，不能包含鉴权、网络或存储错误。
-    /// # 返回
     /// 更新异常总数和有界样本。
-    /// # 错误
     /// 数量转换或累计溢出时拒绝。
     pub fn record_skipped(&mut self, skipped: Vec<String>) -> Result<()> {
         let count =
@@ -546,11 +496,7 @@ impl SupplierCatalogRun {
         Ok(())
     }
     /// 仅在一页全部保存后推进检查点；限制扫描次数并拒绝自循环游标。
-    /// # 参数
-    /// `next` 为供应商后续游标，`count` 为本页规格数。
-    /// # 返回
     /// 更新页数和观察数。
-    /// # 错误
     /// 重复游标、超过 10000 页或计数溢出时拒绝。
     pub fn advance(&mut self, next: Option<String>, count: u64) -> Result<()> {
         if self.finished
@@ -571,7 +517,7 @@ impl SupplierCatalogRun {
     }
 }
 
-/// 长度分帧避免外部编号包含分隔符时发生身份碰撞。
+// 长度分帧避免外部编号包含分隔符时发生身份碰撞。
 fn catalog_identity(parts: &[&str]) -> String {
     let mut hash = Sha256::new();
     for part in parts {

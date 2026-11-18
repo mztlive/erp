@@ -44,16 +44,9 @@ const OFFERING_SORT_FIELDS: &[&str] = &["created_at", "status", "supplier_sku_co
 #[allow(async_fn_in_trait)]
 pub trait SupplierOfferingCommandRepositoryExt {
     /// 按客户端幂等键查询已成功命令。
-    ///
-    /// # 参数
-    /// * `idempotency_key` - 客户端幂等键
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回已提交命令；不存在时返回 `None`。
-    ///
-    /// # 错误
     /// MongoDB 查询失败时返回错误。
+    /// `idempotency_key`：客户端幂等键。
     async fn find_by_idempotency_key(
         &self,
         idempotency_key: &str,
@@ -141,7 +134,7 @@ pub struct SupplierOfferingFilter {
 }
 
 impl Default for SupplierOfferingFilter {
-    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
+    // 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
     fn default() -> Self {
         Self {
             offering_ids: None,
@@ -163,21 +156,13 @@ impl Default for SupplierOfferingFilter {
 }
 
 impl QueryFilter for SupplierOfferingFilter {
-    /// 编译未删除供给查询；授权范围与筛选取交集，供应商 SKU 编码与关键词 SKU 取并集。
-    ///
-    /// 始终写入未删除的 `deleted_at`。供给主键、公司 SKU、供应商、状态、来源、维护人与业务组织按字段追加。
-    /// 授权阶段由仓储在业务筛选和分页前执行。只给出 `supplier_sku_code` 时按字面量正则匹配；只给出
-    /// `keyword_sku_ids` 时按 `sku_id` 的 `$in`，空集合也写入。两者同时为 `Some` 时组成 `$or`，
-    /// 但空的关键词 SKU 不进入该 `$or`。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回编译后的查询文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 将供应商供给筛选条件转换为 MongoDB 谓词，供仓储取数使用。
+    // 编译未删除供给查询；授权范围与筛选取交集，供应商 SKU 编码与关键词 SKU 取并集。
+    // 始终写入未删除的 `deleted_at`。供给主键、公司 SKU、供应商、状态、来源、维护人与业务组织按字段追加。
+    // 授权阶段由仓储在业务筛选和分页前执行。只给出 `supplier_sku_code` 时按字面量正则匹配；只给出
+    // `keyword_sku_ids` 时按 `sku_id` 的 `$in`，空集合也写入。两者同时为 `Some` 时组成 `$or`，但空的关键
+    // 词 SKU 不进入该 `$or`。
+    // 返回编译后的查询文档。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(offering_ids) = &self.offering_ids {
@@ -240,15 +225,7 @@ impl Pagination for SupplierOfferingFilter {
 #[allow(async_fn_in_trait)]
 pub trait SupplierOfferingRepositoryExt {
     /// 分页检索供给列表。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回当前页投影及总数。
-    ///
-    /// # 错误
     /// MongoDB 查询失败时返回错误。
     async fn search_supplier_offerings(
         &self,
@@ -257,15 +234,7 @@ pub trait SupplierOfferingRepositoryExt {
     ) -> crate::Result<PageResult<SupplierOfferingRow>>;
 
     /// 按供给主键批量取回稳定身份。
-    ///
-    /// # 参数
-    /// * `offering_ids` - 供给主键集合
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回全部匹配的未删除供给稳定身份。
-    ///
-    /// # 错误
     /// MongoDB 查询失败时返回错误。
     async fn list_by_ids(
         &self,
@@ -274,15 +243,7 @@ pub trait SupplierOfferingRepositoryExt {
     ) -> Result<Vec<SupplierOffering>>;
 
     /// 按公司 SKU 批量取回供给。
-    ///
-    /// # 参数
-    /// * `sku_ids` - 公司 SKU 集合
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回全部匹配的供给身份。
-    ///
-    /// # 错误
     /// MongoDB 查询失败时返回错误。
     async fn find_by_sku_ids(
         &self,
@@ -291,16 +252,7 @@ pub trait SupplierOfferingRepositoryExt {
     ) -> Result<Vec<SupplierOffering>>;
 
     /// 按供应商与供应商 SKU 编码查询唯一供给身份。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 供应商
-    /// * `supplier_sku_code` - 供应商订货编码
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回匹配供给；不存在时返回 `None`。
-    ///
-    /// # 错误
     /// MongoDB 查询失败时返回错误。
     async fn find_by_supplier_identity(
         &self,
@@ -310,18 +262,8 @@ pub trait SupplierOfferingRepositoryExt {
     ) -> Result<Option<SupplierOffering>>;
 
     /// 列出当前范围内的供给主键，供采购负责人批量解析。
-    ///
-    /// # 参数
-    /// * `scope` - 已证明的对象范围
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
     /// 最多 10001 个主键；调用方必须整体拒绝超限。
-    ///
-    /// # 错误
-    /// 数据库读取失败时返回仓储错误。
-    ///
-    /// # 关键业务约束
+    /// 数据库读取失败时向上传播错误。
     /// 仓储不得按登录用户自行推断权限；公司范围应由调用方跳过本方法。
     async fn list_authorized_ids(
         &self,
@@ -330,17 +272,8 @@ pub trait SupplierOfferingRepositoryExt {
     ) -> crate::Result<Vec<String>>;
 
     /// 列出未删除供给主键，供公司范围采购负责人筛选。
-    ///
-    /// # 参数
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
     /// 最多 10001 个主键；调用方必须整体拒绝超限。
-    ///
-    /// # 错误
-    /// 数据库读取失败时返回仓储错误。
-    ///
-    /// # 关键业务约束
+    /// 数据库读取失败时向上传播错误。
     /// 仅用于已证明的公司范围；不得替代授权条件。
     async fn list_ids(&self, executor: &mut dyn Executor) -> Result<Vec<String>>;
 }
@@ -455,15 +388,7 @@ impl SupplierOfferingRepositoryExt for SupplierOfferingRepository<'_> {
 #[allow(async_fn_in_trait)]
 pub trait SupplierOfferingRevisionRepositoryExt {
     /// 按修订主键批量取回商业条款修订。
-    ///
-    /// # 参数
-    /// * `revision_ids` - 商业条款修订主键集合
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回全部匹配的未删除修订。
-    ///
-    /// # 错误
     /// MongoDB 查询失败时返回错误。
     async fn list_by_ids(
         &self,
@@ -472,15 +397,7 @@ pub trait SupplierOfferingRevisionRepositoryExt {
     ) -> Result<Vec<SupplierOfferingRevision>>;
 
     /// 读取供给当前最大修订号。
-    ///
-    /// # 参数
-    /// * `offering_id` - 供给主键
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回当前最大修订号；尚无修订时返回 `0`。
-    ///
-    /// # 错误
     /// MongoDB 查询失败时返回错误。
     async fn current_revision_no(
         &self,
@@ -489,15 +406,7 @@ pub trait SupplierOfferingRevisionRepositoryExt {
     ) -> Result<u32>;
 
     /// 批量取回多个供给的全部商业条款修订。
-    ///
-    /// # 参数
-    /// * `offering_ids` - 供给主键集合
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回全部匹配修订。
-    ///
-    /// # 错误
     /// MongoDB 查询失败时返回错误。
     async fn find_revisions_by_offering_ids(
         &self,
@@ -557,15 +466,7 @@ impl SupplierOfferingRevisionRepositoryExt for SupplierOfferingRevisionRepositor
 #[allow(async_fn_in_trait)]
 pub trait SupplierOfferingAvailabilityRepositoryExt {
     /// 按当前可供状态查询供给主键。
-    ///
-    /// # 参数
-    /// * `status` - 当前可供状态
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回状态匹配的供给主键集合。
-    ///
-    /// # 错误
     /// MongoDB 查询失败时返回错误。
     async fn find_offering_ids_by_status(
         &self,
@@ -574,15 +475,7 @@ pub trait SupplierOfferingAvailabilityRepositoryExt {
     ) -> Result<Vec<SupplierOfferingId>>;
 
     /// 按供给主键查询实时可供投影。
-    ///
-    /// # 参数
-    /// * `offering_id` - 供给主键
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回当前投影；尚未同步时返回 `None`。
-    ///
-    /// # 错误
     /// MongoDB 查询失败时返回错误。
     async fn find_by_offering_id(
         &self,
@@ -591,15 +484,7 @@ pub trait SupplierOfferingAvailabilityRepositoryExt {
     ) -> Result<Option<SupplierOfferingAvailability>>;
 
     /// 批量取回供给的实时可供投影。
-    ///
-    /// # 参数
-    /// * `offering_ids` - 供给主键集合
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回已存在的可供投影。
-    ///
-    /// # 错误
     /// MongoDB 查询失败时返回错误。
     async fn find_by_offering_ids(
         &self,
@@ -649,32 +534,14 @@ pub struct SupplierOfferingDomainRepository<'a> {
 
 impl<'a> SupplierOfferingDomainRepository<'a> {
     /// 创建供给聚合仓储。
-    ///
-    /// # 参数
-    /// * `db` - 数据库
-    ///
-    /// # 返回
-    /// 返回仓储实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
 
     /// 批量加载列表行指向的当前商业条款修订。
-    ///
-    /// 查询只读取列表行已经冻结的当前修订指针，并按供给主键返回，避免 Service
-    /// 再次拼装 `$in` 或自行关联修订身份。
-    ///
-    /// # 参数
-    /// * `rows` - 当前页供给投影行
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
+    /// 查询只读取列表行已经冻结的当前修订指针，并按供给主键返回，避免 Service再次拼装 `$in` 或自行关联修
+    /// 订身份。
     /// 返回以供给主键为键的当前修订映射；缺失指针或修订时不生成条目。
-    ///
-    /// # 错误
     /// MongoDB 查询失败时返回错误。
     pub async fn load_current_revisions(
         &self,
@@ -702,18 +569,12 @@ impl<'a> SupplierOfferingDomainRepository<'a> {
     }
 
     /// 原子创建供给、首版商业条款与初始可供投影。
-    ///
-    /// # 参数
-    /// * `offering` - 已指向首版修订的供给
-    /// * `revision` - 首版商业条款
-    /// * `availability` - 初始实时可供事实
-    /// * `executor` - 事务执行器
-    ///
-    /// # 返回
     /// 三项写入成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 唯一约束冲突或 MongoDB 写入失败时返回错误。
+    ///
+    /// `offering`：已指向首版修订的供给。
+    /// `revision`：首版商业条款。
+    /// `executor`：事务执行器。
     pub async fn create_with_revision_and_availability(
         &self,
         offering: &SupplierOffering,
@@ -725,17 +586,9 @@ impl<'a> SupplierOfferingDomainRepository<'a> {
     }
 
     /// 追加商业条款修订并乐观锁推进供给当前版本。
-    ///
-    /// # 参数
-    /// * `offering` - 已更新当前修订指针和状态的供给
-    /// * `revision` - 新商业条款修订
-    /// * `executor` - 事务执行器
-    ///
-    /// # 返回
     /// 两项写入成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 修订号冲突、乐观锁冲突或 MongoDB 失败时返回错误。
+    /// `executor`：事务执行器。
     pub async fn append_revision(
         &self,
         offering: &mut SupplierOffering,
@@ -746,7 +599,7 @@ impl<'a> SupplierOfferingDomainRepository<'a> {
     }
 }
 
-/// 白名单外的排序字段回退 `created_at`，避免把任意字段名透传给数据库。
+// 白名单外的排序字段回退 `created_at`，避免把任意字段名透传给数据库。
 fn sort_doc(sort_by: Option<&str>, whitelist: &[&str], sort_ascending: bool) -> Document {
     let field = sort_by.filter(|field| whitelist.contains(field)).unwrap_or("created_at");
     doc! { field: if sort_ascending { 1 } else { -1 } }
@@ -784,7 +637,7 @@ mod tests {
 
     use super::{SupplierOfferingFilter, sort_doc};
 
-    /// 同时给精确SKU和编号候选时，保留原BSON同名字段extend的覆盖行为。
+    // 验证同时给精确SKU和编号候选时，保留原BSON同名字段extend的覆盖行为。
     #[test]
     fn code_candidates_preserve_original_exact_sku_field_overwrite() {
         for candidates in [vec![erp_core::ids::SkuId::new("candidate")], vec![]] {

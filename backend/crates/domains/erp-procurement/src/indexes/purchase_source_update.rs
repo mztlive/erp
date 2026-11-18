@@ -7,16 +7,7 @@ use persistence_core::Result;
 use crate::entity::purchase_order::PurchaseSourceUpdateStatus;
 use crate::repository::purchase_source_update::PURCHASE_SOURCE_UPDATES;
 
-/// 注册采购依据更新记录索引。
-///
-/// # 参数
-/// * `db` - 目标 MongoDB 数据库
-///
-/// # 返回
-/// 全部索引注册成功时无返回值。
-///
-/// # 错误
-/// 存量数据违反唯一约束或索引操作失败时返回错误。
+// 注册采购依据更新记录索引。存量数据违反唯一约束或索引操作失败时返回错误。
 pub(super) async fn ensure(db: &Database) -> Result<()> {
     let collection = db.collection::<Document>(PURCHASE_SOURCE_UPDATES);
     let unique = |name: &str| IndexOptions::builder().name(name.to_string()).unique(true).build();
@@ -50,7 +41,7 @@ pub(super) async fn ensure(db: &Database) -> Result<()> {
     .await
 }
 
-/// 创建单个索引。
+// 创建单个索引。
 async fn create(collection: &Collection<Document>, keys: Document, options: IndexOptions) -> Result<()> {
     collection.create_index(IndexModel::builder().keys(keys).options(options).build()).await?;
     Ok(())

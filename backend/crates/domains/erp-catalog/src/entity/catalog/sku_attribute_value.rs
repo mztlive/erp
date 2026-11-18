@@ -65,7 +65,7 @@ pub struct SkuAttributeValue {
 }
 
 impl PartialEq for SkuAttributeValue {
-    /// 全字段语义相等。
+    // 逐字段比较SKU 规格属性值，仅持有相同标识不视为内容相等。
     fn eq(&self, other: &Self) -> bool {
         self.base == other.base
             && self.stable.status == other.stable.status
@@ -84,19 +84,12 @@ impl Eq for SkuAttributeValue {}
 impl SkuAttributeValue {
     /// 创建规格属性值。
     ///
-    /// 完成 value_code/display_value 的校验与规范化（去首尾空白、非空、长度上限），
-    /// 并要求 `sort_order` 为非负整数。
+    /// 完成 value_code/display_value 的校验与规范化（去首尾空白、非空、长度上限），并要求 `sort_order` 为非负整数。
     ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::SkuAttributeValueId`）
-    /// * `data` - 创建数据
-    /// * `created_by` - 创建人（账号或系统身份）
-    ///
-    /// # 返回
-    /// 返回新建的属性值实体。
-    ///
-    /// # 错误
     /// 当 value_code/display_value 为空、超长，或 sort_order 为负数时返回错误。
+    ///
+    /// - `id`：实体主键（`erp_core::ids::SkuAttributeValueId`）。
+    /// - `created_by`：创建人（账号或系统身份）。
     pub fn new(
         id: SkuAttributeValueId,
         data: SkuAttributeValueData,
@@ -124,17 +117,8 @@ impl SkuAttributeValue {
 
     /// 更新规格属性值。
     ///
-    /// 复用 `new` 的校验规则；`value_code` 与 `attribute_id` 是稳定身份，
-    /// 不允许在通用更新中修改。
+    /// 复用 `new` 的校验规则；`value_code` 与 `attribute_id` 是稳定身份，不允许在通用更新中修改。
     ///
-    /// # 参数
-    /// * `update` - 更新数据
-    /// * `updated_by` - 本次更新执行人
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 当更新字段校验失败时返回错误。
     pub fn update(&mut self, update: SkuAttributeValueUpdate, updated_by: impl Into<String>) -> Result<()> {
         if let Some(display_value) = update.display_value {
@@ -156,31 +140,15 @@ impl SkuAttributeValue {
         Ok(())
     }
 
-    /// 判断属性值是否处于启用状态。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 状态为 `Active` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 读取SKU 规格属性值的启用标记，供调用方过滤停用记录。
     pub fn is_active(&self) -> bool {
         self.stable.status().is_active()
     }
 }
 
-/// 校验展示排序为非负整数。
-///
-/// # 参数
-/// * `sort_order` - 展示排序
-///
-/// # 返回
-/// 非负时返回 `Ok(())`。
-///
-/// # 错误
-/// 为负数时返回错误。
+// 校验展示排序为非负整数。
+//
+// 非负时返回 `Ok(())`。为负数时返回错误。
 fn ensure_non_negative_sort_order(sort_order: i32) -> Result<()> {
     if sort_order < 0 {
         return Err(Error::from("展示排序不能为负数"));
@@ -205,7 +173,7 @@ mod tests {
         }
     }
 
-    /// happy path：字段 trim 规范化。
+    // 字段 去除首尾空白。
     #[test]
     fn new_trims_and_normalizes_fields() {
         let value = SkuAttributeValue::new(SkuAttributeValueId::new("val-1"), data(), "admin-1").unwrap();
@@ -217,7 +185,7 @@ mod tests {
         assert!(value.is_active());
     }
 
-    /// 失败路径：必填空与越界（负排序）各一条。
+    // 必填空与越界（负排序）均应拒绝。
     #[test]
     fn new_rejects_empty_and_negative_sort_order() {
         let empty_code = SkuAttributeValueData { value_code: "  ".to_string(), ..data() };
@@ -227,7 +195,7 @@ mod tests {
         assert!(SkuAttributeValue::new(SkuAttributeValueId::new("val-1"), negative_sort, "admin-1").is_err());
     }
 
-    /// update 修改展示值/排序/状态并 touch 审计人；稳定代码与归属属性不可修改。
+    // 更新时修改展示值/排序/状态并更新审计人；稳定代码与归属属性不可修改。
     #[test]
     fn update_applies_fields_and_preserves_identity() {
         let mut value = SkuAttributeValue::new(SkuAttributeValueId::new("val-1"), data(), "admin-1").unwrap();
@@ -252,7 +220,7 @@ mod tests {
         assert!(value.update(negative_sort, "admin-2").is_err());
     }
 
-    /// 状态机：合法迁移通过，邻接矩阵对称闭合。
+    // 锁定SKU 规格属性值启停的正向、反向与幂等迁移，防止状态表缺边。
     #[test]
     fn status_transitions_follow_document_state() {
         assert!(ensure_transition(EnableStatus::Active, EnableStatus::Disabled).is_ok());

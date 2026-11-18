@@ -27,12 +27,7 @@ pub enum SettlementMovement {
 #[async_trait]
 pub trait Settlements: Send + Sync {
     /// 分页读取订单扣费及退款来源，保留原流水身份和修订证据。
-    ///
-    /// # 参数
-    /// `scan` 为固定时间窗口或全量扫描及恢复游标。
-    /// # 返回
     /// 独立来源明细；各费用不得重复相加，退款不能抵消商城消费事实。
-    /// # 错误
     /// 缺乏可核对的稳定身份或费用口径时返回 MappingError，不伪造结算证据。
     async fn entries(&self, scan: &Scan) -> ConnectorResult<Page<Snapshot<SettlementEntry>>>;
 }

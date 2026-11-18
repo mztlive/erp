@@ -19,35 +19,27 @@ impl Default for CatalogTaskControl {
 }
 
 impl CatalogTaskControl {
-    /// 请求停止领取并在页面边界交接已运行任务。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 所有克隆立即可见停止状态。
-    /// # 错误
-    /// 不返回错误。
+    /// 请求停止领取并在页面边界交接已运行任务。所有克隆立即可见停止状态。
     pub fn request_stop(&self) {
         self.stopping.store(true, Ordering::Release);
     }
 
     /// 有界等待已领取任务完成当前页和结算。
-    /// # 参数
+    ///
     /// `timeout` 为允许的排空时间。
-    /// # 返回
+    ///
     /// 排空成功为 true；超时为 false，由心跳恢复兜底。
-    /// # 错误
-    /// 不返回错误。
     pub async fn drain(&self, timeout: Duration) -> bool {
         self.request_stop();
         matches!(tokio::time::timeout(timeout, self.permits.acquire_many(2)).await, Ok(Ok(_)))
     }
 
-    /// 查询本进程是否正在退出。
+    // 目录任务在领取和页面边界读取共享退出标记，避免在进程退出时继续开始新工作。
     pub(crate) fn stopping(&self) -> bool {
         self.stopping.load(Ordering::Acquire)
     }
 
-    /// 领取有界执行许可，停止后不再领取。
+    // 目录 worker 开始任务前尝试领取进程内并发许可；许可用尽或已请求停止时不领取。
     pub(crate) fn claim(&self) -> Option<OwnedSemaphorePermit> {
         if self.stopping() {
             return None;

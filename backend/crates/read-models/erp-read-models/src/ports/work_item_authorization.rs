@@ -28,11 +28,10 @@ pub struct AuthorizedTaskFact {
 /// 实现不得另开事务，也不得把授权结果带到其他读取阶段复用。
 #[async_trait]
 pub trait WorkItemAuthorizationReadPort: Send + Sync {
-    /// 授权后返回该详情需要的最小正式任务事实。
+    /// 详情需要正式任务权限时，按当前操作者在原快照读取任务类型、业务对象、冻结版本、可执行动作及待读取方复验的凭证。
     ///
     /// # 参数
     /// * `id` - 正式任务身份
-    /// * `actor` - 已认证操作人
     /// * `executor` - 读取用例的原快照事务执行器
     ///
     /// # 返回

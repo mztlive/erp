@@ -40,16 +40,8 @@ pub enum SalesInvoiceTaskReason {
 }
 
 impl SalesInvoiceTaskReason {
-    /// 返回稳定的原因代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
+    /// 取得稳定的原因代码。
     /// 返回批准申请、初次可开票、红票重开或销售变更重开的稳定原因码。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::ApprovedInvoiceRequest => "SALES_INVOICE_REQUEST_APPROVED",
@@ -74,16 +66,8 @@ pub enum SupplierPaymentTaskReason {
 }
 
 impl SupplierPaymentTaskReason {
-    /// 返回稳定的原因代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
+    /// 取得稳定的原因代码。
     /// 返回与真实业务触发原因一致的付款任务原因码。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::ApprovedPurchasePaymentRequest => "PURCHASE_PAYMENT_REQUEST_APPROVED",
@@ -116,18 +100,7 @@ pub struct PayablePurchaseAdmissionFact<'a> {
 /// 销项开票任务创建规格
 impl<'a> PayablePurchaseAdmissionFact<'a> {
     /// 以必填引用身份构造应付准入事实；布尔维度默认为假。
-    ///
-    /// # 参数
-    /// * `account_id` - 应付子账 ID
-    /// * `source_document_id` - 子账来源单据 ID
-    /// * `entry_payable_account_id` - 分录应付子账 ID
-    /// * `entry_source_document_id` - 分录来源单据 ID
-    ///
-    /// # 返回
     /// 返回全假布尔的准入事实。
-    ///
-    /// # 错误
-    /// 无。
     pub fn new(
         account_id: &'a str,
         source_document_id: &'a str,
@@ -181,17 +154,12 @@ pub struct SupplierPaymentTaskSpec {
 }
 
 /// 创建销项开票执行任务（W11 factory）。
-///
-/// # 参数
-/// * `id` - 任务主键（Service 注入）
-/// * `spec` - 已解析的任务规格
-/// * `responsibility_key` - 服务端财务责任键（参与开放唯一性）
-///
-/// # 返回
 /// 返回已冻结身份的开放任务。
 ///
-/// # 错误
 /// 责任键为空或字段超长时返回错误。
+///
+/// `id`：任务主键（Service 注入）；`spec`：已解析的任务规格。
+/// `responsibility_key`：服务端财务责任键（参与开放唯一性）。
 pub fn new_sales_invoice_task(
     id: WorkItemId,
     spec: SalesInvoiceTaskSpec,
@@ -218,19 +186,12 @@ pub fn new_sales_invoice_task(
 }
 
 /// 为批准申请生成独立责任身份，保留应收作业面与申请额度摘要。
-///
-/// # 参数
-/// * `id` - 任务主键。
-/// * `spec` - 已解析的销项开票任务规格；原因会被改为批准申请。
-/// * `responsibility_key` - 服务端财务责任键。
-/// * `request_id` - 开票申请 ID，拼入责任键。
-/// * `request_no` - 开票申请编号，写入影响摘要。
-///
-/// # 返回
 /// 返回原因码为批准申请、摘要含申请编号和待开票金额的开放任务。
 ///
-/// # 错误
 /// 申请 ID 或编号为空白、责任键为空或过长、任务字段非法，或影响摘要超长时返回错误。
+///
+/// `spec`：已解析的销项开票任务规格；原因会被改为批准申请；`responsibility_key`：服务端财务责任键。
+/// `request_id`：开票申请 ID，拼入责任键；`request_no`：开票申请编号，写入影响摘要。
 pub fn new_approved_sales_invoice_task(
     id: WorkItemId,
     mut spec: SalesInvoiceTaskSpec,
@@ -250,17 +211,12 @@ pub fn new_approved_sales_invoice_task(
 }
 
 /// 创建供应商付款执行任务（W12 factory，应付域复用同一 contract）。
-///
-/// # 参数
-/// * `id` - 任务主键（Service 注入）
-/// * `spec` - 已解析的任务规格
-/// * `responsibility_key` - 服务端财务责任键（参与开放唯一性）
-///
-/// # 返回
 /// 返回已冻结身份的开放任务。
 ///
-/// # 错误
 /// 责任键为空或字段超长时返回错误。
+///
+/// `id`：任务主键（Service 注入）；`spec`：已解析的任务规格。
+/// `responsibility_key`：服务端财务责任键（参与开放唯一性）。
 pub fn new_supplier_payment_task(
     id: WorkItemId,
     spec: SupplierPaymentTaskSpec,
@@ -287,16 +243,12 @@ pub fn new_supplier_payment_task(
 }
 
 /// 为已批准采购付款申请建立独立到人的执行任务。
-///
-/// # 参数
-/// * `id` - 新任务身份。
-/// * `spec` - 申请版本、业务组织、责任人、希望付款日和申请未付金额。
-/// * `responsibility_key` - 已解析的供应商付款责任规则键。
-/// * `request_id` / `request_no` - 已批准的申请身份与编号。
-/// # 返回
 /// 返回只绑定本次批准申请的开放任务。
-/// # 错误
+///
 /// 申请身份为空、未付金额非正、责任字段非法时返回错误。
+///
+/// `spec`：申请版本、业务组织、责任人、希望付款日和申请未付金额；`responsibility_key`：已解析的供应商付款责任规则键。
+/// `request_id` / `request_no`：已批准的申请身份与编号。
 pub fn new_approved_purchase_payment_request_task(
     id: WorkItemId,
     spec: SupplierPaymentTaskSpec,
@@ -328,14 +280,11 @@ pub fn new_approved_purchase_payment_request_task(
 }
 
 /// 证明任务只能执行指定申请的未付批准额度。
-///
-/// # 参数
-/// * `task` - 当前执行任务。
-/// * `request_id` - 付款申请主键。
-/// # 返回
 /// 类型、对象、责任角色、原因及申请责任键全部一致时返回 true。
-/// # 错误
-/// 无；旧应付直付任务返回 false。
+///
+/// 旧应付直付任务返回 false。
+///
+/// `task`：当前执行任务。
 pub fn matches_purchase_payment_request_identity(task: &WorkItem, request_id: &str) -> bool {
     task.work_item_type == WorkItemType::SupplierPaymentExecution
         && task.business_object_type == PURCHASE_PAYMENT_REQUEST_OBJECT_TYPE
@@ -352,15 +301,7 @@ pub fn matches_purchase_payment_request_identity(task: &WorkItem, request_id: &s
 /// 覆盖 object、task type、role、reason 与 business key；调用方另行比对
 /// subject version 与 open balance 归零终态。
 ///
-/// # 参数
-/// * `task` - 待校验任务
-/// * `account_id` - 应收子账主键
-///
-/// # 返回
 /// 身份一致返回 `true`，任一维度不符返回 `false`。
-///
-/// # 错误
-/// 不返回错误。
 pub fn matches_sales_invoice_identity(task: &WorkItem, account_id: &str) -> bool {
     task.work_item_type == WorkItemType::SalesInvoiceExecution
         && task.business_object_type == RECEIVABLE_OBJECT_TYPE
@@ -378,19 +319,14 @@ pub fn matches_sales_invoice_identity(task: &WorkItem, account_id: &str) -> bool
         )
 }
 
-/// 校验采购应付与原始分录属于同一正式事实（原 Service ensure_purchase_payable 唯一规则源）。
+/// 核验采购应付与原始分录属于同一正式事实（原 Service ensure_purchase_payable 唯一规则源）。
 ///
 /// 覆盖来源类型、子账与分录归属、增加方向、来源单据一致与未结清；
 /// 调用方（Service）负责把 `false` 映射为稳定业务错误并解析责任人/组织。
 ///
-/// # 参数
-/// * `fact` - 已在当前事务形成的采购应付子账与原始分录事实。
-///
-/// # 返回
 /// 同一正式采购应付事实返回 `true`，任一维度不符返回 `false`。
 ///
-/// # 错误
-/// 不返回错误。
+/// `fact`：已在当前事务形成的采购应付子账与原始分录事实。
 pub fn is_purchase_payable(fact: &PayablePurchaseAdmissionFact<'_>) -> bool {
     fact.source_type_is_purchase_order
         && fact.entry_payable_account_id == fact.account_id
@@ -400,15 +336,8 @@ pub fn is_purchase_payable(fact: &PayablePurchaseAdmissionFact<'_>) -> bool {
 }
 
 /// 校验任务与指定应付子账的付款执行身份（W12 identity，应付域复用）。
-///
-/// # 参数
-/// * `task` - 待校验任务
-/// * `account_id` - 应付子账主键
-///
-/// # 返回
 /// 身份一致返回 `true`，任一维度不符返回 `false`。
 ///
-/// # 错误
 /// 不返回错误；任一身份维度不匹配时返回 `false`。
 pub fn matches_supplier_payment_identity(task: &WorkItem, account_id: &str) -> bool {
     task.work_item_type == WorkItemType::SupplierPaymentExecution
@@ -427,43 +356,23 @@ pub fn matches_supplier_payment_identity(task: &WorkItem, account_id: &str) -> b
 }
 
 /// 返回随可开票额度变化的开票影响摘要（稳定编码，同一金额同一文本）。
-///
-/// # 参数
-/// * `open_invoiceable_total` - 当前可开票金额。
-///
-/// # 返回
 /// 返回包含该金额的固定开票提示。
 ///
-/// # 错误
-/// 不返回错误。
+/// `open_invoiceable_total`：当前可开票金额。
 pub fn sales_invoice_impact_summary(open_invoiceable_total: Amount) -> String {
     format!("待开票金额 ¥{open_invoiceable_total}，请登记销项发票并完成分配")
 }
 
 /// 返回随开放余额变化的付款影响摘要（稳定编码，应付域复用）。
-///
-/// # 参数
-/// * `open_total` - 当前未付金额。
-///
-/// # 返回
 /// 返回包含该金额的固定付款提示。
 ///
-/// # 错误
-/// 不返回错误。
+/// `open_total`：当前未付金额。
 pub fn supplier_payment_impact_summary(open_total: Amount) -> String {
     format!("未付金额 ¥{open_total}，请按付款条件登记付款")
 }
 
-/// 判断金额是否为零（open balance 归零即终态的唯一口径）。
-///
-/// # 参数
-/// * `amount` - 待判断金额。
-///
-/// # 返回
+/// 当金额为零（open balance 归零即终态的唯一口径）时返回 `true`。
 /// 等于 `0.00` 时返回 `true`，否则返回 `false`。
-///
-/// # 错误
-/// 不返回错误。
 ///
 /// # Panics
 /// 静态字面量 `0.00` 无法解析为金额时 panic；该字面量按金额格式必须合法。
@@ -472,14 +381,8 @@ pub fn is_zero_amount(amount: Amount) -> bool {
 }
 
 /// 把业务自然日转换为上海时区当日 23:59:59 的工作项时限。
-///
-/// # 参数
-/// * `due_date` - 业务自然日
-///
-/// # 返回
 /// 返回付款任务的稳定时限。
 ///
-/// # 错误
 /// 日期无法转换时返回错误。
 pub fn payment_due_at(due_date: BusinessDate) -> Result<Instant> {
     let (year, month, day) = due_date.ymd();
@@ -598,7 +501,7 @@ mod tests {
         .unwrap()
     }
 
-    /// factory 冻结全部关键身份字段；同一业务事实生成稳定 key/summary/due。
+    // 验证：factory 冻结全部关键身份字段；同一业务事实生成稳定 key/summary/due。
     #[test]
     fn sales_invoice_factory_freezes_identity_and_stable_summary() {
         let first = sales_task();
@@ -614,7 +517,7 @@ mod tests {
         assert!(first.impact_summary.as_deref().unwrap().contains("100"));
     }
 
-    /// 错误 object/task type/role/reason/business key 均不匹配。
+    // 验证：错误 object/task type/role/reason/business key 均不匹配。
     #[test]
     fn sales_invoice_identity_rejects_wrong_dimensions() {
         let task = sales_task();
@@ -655,7 +558,7 @@ mod tests {
         assert!(!matches_sales_invoice_identity(&wrong_key, "ra-1"), "business key 前缀不符");
     }
 
-    /// 红票/销售变更重开原因同样通过身份校验。
+    // 验证：红票/销售变更重开原因同样通过身份校验。
     #[test]
     fn sales_invoice_reopened_reasons_match_identity() {
         for reason in
@@ -671,7 +574,7 @@ mod tests {
         }
     }
 
-    /// 付款 factory 冻结时限与摘要；错误组合不匹配。
+    // 验证：付款 factory 冻结时限与摘要；错误组合不匹配。
     #[test]
     fn supplier_payment_factory_freezes_due_and_summary() {
         let due = payment_due_at(BusinessDate::from_ymd(2026, 8, 26).unwrap()).unwrap();
@@ -696,7 +599,7 @@ mod tests {
         assert!(task.impact_summary.as_deref().unwrap().contains("200"));
     }
 
-    /// 零金额即终态口径；非零不终结。
+    // 验证：零金额即终态口径；非零不终结。
     #[test]
     fn zero_amount_is_terminal() {
         assert!(is_zero_amount(amount("0.00")));
@@ -724,7 +627,7 @@ mod tests {
         .unwrap()
     }
 
-    /// 错误 object/task type/role/reason/business key 均不匹配；重开原因通过。
+    // 验证：错误 object/task type/role/reason/business key 均不匹配；重开原因通过。
     #[test]
     fn supplier_payment_identity_rejects_wrong_dimensions() {
         let task = supplier_task();
@@ -756,7 +659,7 @@ mod tests {
         assert!(matches_supplier_payment_identity(&reopened, "pa-1"));
     }
 
-    /// 采购变更后继任务具备合法付款身份，且不冒用冲正原因。
+    // 验证：采购变更后继任务具备合法付款身份，且不冒用冲正原因。
     #[test]
     fn purchase_change_payment_task_preserves_source_identity_and_distinct_reason() {
         let task = new_supplier_payment_task(
@@ -779,7 +682,7 @@ mod tests {
         assert_eq!(task.status, WorkItemStatus::Open);
     }
 
-    /// 同一业务事实生成稳定 key/summary/due；重复 ensure 幂等。
+    // 验证：同一业务事实生成稳定 key/summary/due；重复 ensure 幂等。
     #[test]
     fn supplier_payment_factory_is_stable_and_idempotent() {
         let first = supplier_task();
@@ -792,7 +695,7 @@ mod tests {
         assert_eq!(first.business_object_type, PAYABLE_OBJECT_TYPE);
     }
 
-    /// 结清终态后不得重复完成或更新摘要；终态任务保持关闭。
+    // 验证：结清终态后不得重复完成或更新摘要；终态任务保持关闭。
     #[test]
     fn supplier_payment_terminal_state_is_closed() {
         let mut task = supplier_task();
@@ -802,7 +705,7 @@ mod tests {
         assert!(task.update_impact_summary(Some("changed".to_string())).is_err());
     }
 
-    /// 采购应付准入覆盖来源、分录归属、方向、单据一致与未结清。
+    // 验证：采购应付准入覆盖来源、分录归属、方向、单据一致与未结清。
     #[test]
     fn purchase_payable_admission_covers_all_dimensions() {
         fn fact<'a>(

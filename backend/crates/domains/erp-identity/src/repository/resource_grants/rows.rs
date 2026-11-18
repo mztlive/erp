@@ -8,13 +8,12 @@ use crate::Result;
 use crate::entity::resource_access::rows::GrantRows;
 use crate::entity::resource_access::{GrantSource, ResourceGrant};
 
-/// 刷新历史页并批量创建差异目标，全部加入来源发布事务。
-/// # 参数
-/// db 为身份数据库，source 为已保存来源，executor 为同一发布事务。
-/// # 返回
-/// 历史行版本和目标状态同步完成。
-/// # 错误
-/// 查询、乐观锁、唯一索引或数据库写入失败时传播错误。
+// 刷新历史页并批量创建差异目标，全部加入来源发布事务。
+// 历史行版本和目标状态同步完成。
+//
+// 查询、乐观锁、唯一索引或数据库写入失败时传播错误。
+//
+// db 为身份数据库，source 为已保存来源，executor 为同一发布事务。
 pub(crate) async fn sync_rows(
     db: &Database,
     source: &GrantSource,

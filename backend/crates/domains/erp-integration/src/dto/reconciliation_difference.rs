@@ -121,19 +121,11 @@ pub(crate) struct DifferenceListQuery {
 }
 
 impl DifferenceListParams {
-    /// 归一化对账差异列表查询参数。
-    ///
-    /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 范围版本为空或超长、包含下级却无组织筛选、处理人 ID 为 `me`、
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    // 归一化对账差异列表查询参数。
+    //
+    // 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
+    //
+    // 范围版本为空或超长、包含下级却无组织筛选、处理人 ID 为 `me`、排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<DifferenceListQuery> {
         check_scoped_version(&self.scope_version, &self.org_unit_ids, self.include_descendants)?;
         let (handler_user_ids, operator_user_ids) =
@@ -237,13 +229,7 @@ pub struct ResolutionView {
 }
 
 impl From<ReconciliationDifferenceResolution> for ResolutionView {
-    /// 从处理记录实体构造视图。
-    ///
-    /// # 参数
-    /// * `resolution` - 处理记录实体
-    ///
-    /// # 返回
-    /// 返回处理记录视图。
+    // 从处理记录实体构造视图。
     fn from(resolution: ReconciliationDifferenceResolution) -> Self {
         Self {
             id: resolution.base.id,
@@ -280,13 +266,7 @@ pub struct DifferenceDetailView {
 }
 
 impl From<ReconciliationDifference> for DifferenceView {
-    /// 从差异实体构造视图（无处理记录时状态为 `None`）。
-    ///
-    /// # 参数
-    /// * `difference` - 差异实体
-    ///
-    /// # 返回
-    /// 返回差异视图。
+    // 从差异实体构造视图（无处理记录时状态为 `None`）。
     fn from(difference: ReconciliationDifference) -> Self {
         Self {
             id: difference.base.id,

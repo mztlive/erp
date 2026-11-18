@@ -59,26 +59,15 @@ pub struct StockAdjustmentCancellation {
 }
 
 impl StockAdjustmentCancellation {
-    /// 构造不可变撤回事实。
-    /// # 参数
-    /// * `data` - 已授权且计划提交的原命令及取消结果。
-    /// # 返回
-    /// 返回按审批实例唯一定位的事实。
-    /// # 错误
-    /// 身份、原因、版本或任务引用不完整。
+    /// 撤回审批成功时按审批实例 ID 生成不可变事实，冻结已授权原命令和实际取消结果。身份、原因、版本或任务引用不完整时拒绝。
     pub fn new(data: StockAdjustmentCancellationData) -> Result<Self> {
         let fact = Self { base: BaseModel::new(data.instance_id.clone()), data };
         fact.validate()?;
         Ok(fact)
     }
 
-    /// 校验持久化事实的身份、版本及任务引用完整性。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 完整事实返回空值。
-    /// # 错误
-    /// 损坏或未完成的事实返回冲突，禁止回退审计。
+    /// 创建或查证撤回事实时核对记录身份、模式版本、原单/实例/执行版本及成对的任务引用。
+    /// 损坏、删除或不完整的事实返回冲突，不回退到审计日志。
     pub fn validate(&self) -> Result<()> {
         let data = &self.data;
         let texts = [
@@ -111,16 +100,8 @@ impl StockAdjustmentCancellation {
         Ok(())
     }
 
-    /// 精确验证请求是否属于原撤回命令。
-    /// # 参数
-    /// * `adjustment_id` - 路径中的调整单 ID。
-    /// * `request` - 原期望版本及实例身份。
-    /// * `actor_id` - 当前认证操作人。
-    /// * `reason` - 已规范化原因。
-    /// # 返回
-    /// 身份和全部请求版本相同返回真。
-    /// # 错误
-    /// 无；损坏事实返回假。
+    /// 只读查证撤回结果时，需要有效事实及完全一致的原调整单、实例、全部期望版本、当前账号和规范化原因。
+    /// 任一条件不符或事实损坏时返回 `false`。
     pub fn matches_request(
         &self,
         adjustment_id: &str,

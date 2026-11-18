@@ -57,13 +57,10 @@ impl ProductImportProcess {
     ///
     /// 认领阶段通过乐观锁保证单执行器推进；`Pending` 转 `Running` 冲突时返回 `Ok` 表示已被接管。
     ///
-    /// # 参数
-    /// * `job_id` - 后台任务 ID
+    /// `job_id`：后台任务 ID。
     ///
-    /// # 返回
     /// 无；被其他执行器认领时直接返回，不视为错误。
     ///
-    /// # 错误
     /// 源文件不存在、解析失败或状态迁移失败时返回错误。
     pub async fn execute_job(&self, job_id: &str) -> Result<()> {
         let Some(mut job) = self.claim_job(job_id).await? else {
@@ -106,7 +103,7 @@ impl ProductImportProcess {
         result
     }
 
-    /// 加载任务并竞争待执行状态；被接管或已终态的任务不执行。
+    // 加载任务并竞争待执行状态；被接管或已终态的任务不执行。
     async fn claim_job(&self, job_id: &str) -> Result<Option<BackgroundJob>> {
         let mut job = self
             .db
@@ -134,20 +131,13 @@ impl ProductImportProcess {
         Ok(Some(job))
     }
 
-    /// 按行执行并立即保存结果；上一行保存完成后才允许执行下一行。
-    ///
-    /// # 参数
-    /// * `job` - 本轮持有并持续推进的任务实体
-    /// * `items` - 任务全部明细
-    /// * `actor` - 审计操作人
-    /// * `cache` - 字典缓存
-    /// * `row_source` - 行来源
-    ///
-    /// # 返回
-    /// 无；被其他执行器认领时直接返回。
-    ///
-    /// # 错误
-    /// 行状态迁移或结果保存失败时返回错误。
+    // 按行执行并立即保存结果；上一行保存完成后才允许执行下一行。
+    //
+    // `job`：本轮持有并持续推进的任务实体；`items`：任务全部明细；`row_source`：行来源。
+    //
+    // 无；被其他执行器认领时直接返回。
+    //
+    // 行状态迁移或结果保存失败时返回错误。
     async fn execute_pending_items(
         &self,
         job: &mut BackgroundJob,
@@ -176,18 +166,11 @@ impl ProductImportProcess {
         execute_rows(&mut execution, job, items, import_budget()).await
     }
 
-    /// 执行单行的业务写入并转为可持久化结果。
-    ///
-    /// # 参数
-    /// * `row_number` - Excel 行号
-    /// * `entries` - 清单行映射
-    /// * `workbook` - 源文件字节与解析结果
-    /// * `legacy_cells` - 源文件行号到单元格的预建映射
-    /// * `actor` - 审计操作人
-    /// * `cache` - 字典缓存
-    ///
-    /// # 返回
-    /// 返回明细状态、原因码与结果对象。
+    // 执行单行的业务写入并转为可持久化结果。
+    //
+    // `entries`：清单行映射；`workbook`：源文件字节与解析结果；`legacy_cells`：源文件行号到单元格的预建映射。
+    //
+    // 返回明细状态、原因码与结果对象。
     async fn import_single_row(
         &self,
         row_number: u32,
@@ -208,19 +191,14 @@ impl ProductImportProcess {
         }
     }
 
-    /// 行来源：清单优先，老任务回退到源文件。
-    ///
-    /// 清单由提交时写入，执行阶段只读清单；清单缺失或损坏
-    /// （部署前创建的老任务）时回退到源文件下载解析。
-    ///
-    /// # 参数
-    /// * `job` - 后台任务实体
-    ///
-    /// # 返回
-    /// 返回清单或源文件行来源。
-    ///
-    /// # 错误
-    /// 私有输入读取失败时保留持久化错误；其余清单与源文件均不可用时返回错误。
+    // 行来源：清单优先，老任务回退到源文件。
+    //
+    // 清单由提交时写入，执行阶段只读清单；清单缺失或损坏
+    // （部署前创建的老任务）时回退到源文件下载解析。
+    //
+    // 返回清单或源文件行来源。
+    //
+    // 私有输入读取失败时保留持久化错误；其余清单与源文件均不可用时返回错误。
     async fn load_row_source(&self, job: &BackgroundJob) -> Result<JobRowSource> {
         let job_id = BackgroundJobId::new(job.base.id.clone());
         let input = self
@@ -250,16 +228,11 @@ impl ProductImportProcess {
         }
     }
 
-    /// 执行清单中的一行（单元格与媒体均来自清单，不接触源文件）。
-    ///
-    /// # 参数
-    /// * `row_number` - Excel 行号
-    /// * `entries` - 行号到清单行的映射
-    /// * `actor` - 审计操作人
-    /// * `cache` - 字典缓存
-    ///
-    /// # 返回
-    /// 返回可持久化的明细结果；清单缺行或图片预提失败记该行失败。
+    // 执行清单中的一行（单元格与媒体均来自清单，不接触源文件）。
+    //
+    // `entries`：行号到清单行的映射。
+    //
+    // 返回可持久化的明细结果；清单缺行或图片预提失败记该行失败。
     async fn import_manifest_row(
         &self,
         row_number: u32,
@@ -290,16 +263,11 @@ impl ProductImportProcess {
         record_row_outcome(self.import_row(row_number, &entry.cells, &media_source, actor, cache).await)
     }
 
-    /// 加载任务源文件并解析报价表（老任务回退链路）。
-    ///
-    /// # 参数
-    /// * `job` - 后台任务实体
-    ///
-    /// # 返回
-    /// 返回源文件字节与解析后的工作表。
-    ///
-    /// # 错误
-    /// 源文件缺失、读取失败或解析失败时返回错误。
+    // 加载任务源文件并解析报价表（老任务回退链路）。
+    //
+    // 返回源文件字节与解析后的工作表。
+    //
+    // 源文件缺失、读取失败或解析失败时返回错误。
     async fn load_source(&self, job: &BackgroundJob) -> Result<(Arc<Vec<u8>>, ParsedProductSheet)> {
         let file_id = job
             .input_file_asset_id
@@ -326,17 +294,13 @@ impl ProductImportProcess {
         Ok((bytes, parsed))
     }
 
-    /// 在同一事务内保存单行结果和任务进度，返回已推进版本的任务。
-    ///
-    /// # 参数
-    /// * `job` - 本轮持有的任务版本及累计结果
-    /// * `item` - 刚完成的单行结果
-    ///
-    /// # 返回
-    /// 成功后沿用仓储已更新的任务版本，无需额外回读。
-    ///
-    /// # 错误
-    /// 取消或并发执行造成的版本冲突、结果写入或提交失败时返回错误。
+    // 在同一事务内保存单行结果和任务进度，返回已推进版本的任务。
+    //
+    // `job`：本轮持有的任务版本及累计结果；`item`：刚完成的单行结果。
+    //
+    // 成功后沿用仓储已更新的任务版本，无需额外回读。
+    //
+    // 取消或并发执行造成的版本冲突、结果写入或提交失败时返回错误。
     async fn persist_progress(&self, job: &mut BackgroundJob, mut item: BackgroundJobItem) -> Result<()> {
         let db = self.db.clone();
         let client = db.client().clone();
@@ -376,7 +340,7 @@ pub(super) enum JobRowSource {
 }
 
 impl JobRowSource {
-    /// 清单按 JSON 输入计费；旧工作簿同时计入原文与解析后的单元格字节。
+    // 清单按 JSON 输入计费；旧工作簿同时计入原文与解析后的单元格字节。
     fn input_bytes(&self) -> Result<usize> {
         match self {
             Self::Manifest(manifest) => serde_json::to_vec(manifest)
@@ -392,24 +356,20 @@ impl JobRowSource {
 /// 并发认领冲突的稳定文案，与持久层乐观锁映射保持一致。
 const CONCURRENT_CLAIM_MESSAGE: &str = "数据已被其他请求修改，请刷新后重试";
 
-/// 判断是否为并发认领冲突。
-///
-/// # 参数
-/// * `error` - 待判断的流程错误
-///
-/// # 返回
-/// 乐观锁冲突时返回 `true`，其余错误返回 `false`。
+// 判断是否为并发认领冲突。
+//
+// `error`：待判断的流程错误。
+//
+// 乐观锁冲突时返回 `true`，其余错误返回 `false`。
 fn is_concurrent_claim(error: &Error) -> bool {
     matches!(error, Error::ConflictError(message) if message == CONCURRENT_CLAIM_MESSAGE)
 }
 
-/// 把单行导入结果转为可持久化的明细结果。
-///
-/// # 参数
-/// * `outcome` - 单行导入的业务结果
-///
-/// # 返回
-/// 返回明细状态、原因码与结果对象。
+// 把单行导入结果转为可持久化的明细结果。
+//
+// `outcome`：单行导入的业务结果。
+//
+// 返回明细状态、原因码与结果对象。
 fn record_row_outcome(outcome: Result<super::row::RowImportOutcome>) -> RecordedOutcome {
     match outcome {
         Ok(result) if result.skipped => {
@@ -438,16 +398,11 @@ fn record_row_outcome(outcome: Result<super::row::RowImportOutcome>) -> Recorded
     }
 }
 
-/// 组装明细结果记录。
-///
-/// # 参数
-/// * `status` - 明细状态
-/// * `code` - 失败原因码，成功或跳过时为空
-/// * `summary` - 结果说明
-/// * `product_id` - 成功或跳过时关联的商品 ID
-///
-/// # 返回
-/// 返回可写入明细实体的结果。
+// 组装明细结果记录。
+//
+// `status`：明细状态；`code`：失败原因码，成功或跳过时为空；`summary`：结果说明；`product_id`：成功或跳过时关联的商品 ID。
+//
+// 返回可写入明细实体的结果。
 fn recorded(
     status: ItemStatus,
     code: Option<&str>,
@@ -484,16 +439,7 @@ impl ImportRowExecution for ProductImportRows<'_> {
         Ok(current.base.version == job.base.version && current.finished_at.is_none())
     }
 
-    /// 使用本轮行来源与字典缓存执行单行导入。
-    ///
-    /// # 参数
-    /// * `row_number` - 源表行号。
-    ///
-    /// # 返回
-    /// 返回该行的状态、原因码、摘要和可选商品身份。导入失败记在结果里，不中断返回。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 使用本轮行来源与字典缓存执行单行导入。返回该行的状态、原因码、摘要和可选商品身份。导入失败记在结果里，不中断返回。
     async fn import(&mut self, row_number: u32) -> RecordedOutcome {
         self.process
             .import_single_row(
@@ -507,17 +453,14 @@ impl ImportRowExecution for ProductImportRows<'_> {
             .await
     }
 
-    /// 将当前行结果与累计任务进度交给原事务边界保存。
-    ///
-    /// # 参数
-    /// * `job` - 当前导入任务；保存成功后反映已推进的版本。
-    /// * `item` - 当前行结果明细。
-    ///
-    /// # 返回
-    /// 明细与任务进度已保存。
-    ///
-    /// # 错误
-    /// 版本冲突、明细或任务写入、事务提交失败时返回对应错误。
+    // 将当前行结果与累计任务进度交给原事务边界保存。
+    //
+    // - `job`：当前导入任务；保存成功后反映已推进的版本。
+    // - `item`：当前行结果明细。
+    //
+    // 明细与任务进度已保存。
+    //
+    // 版本冲突、明细或任务写入、事务提交失败时返回对应错误。
     async fn persist(&mut self, job: &mut BackgroundJob, item: BackgroundJobItem) -> Result<()> {
         self.process.persist_progress(job, item).await
     }

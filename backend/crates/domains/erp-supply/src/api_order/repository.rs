@@ -16,12 +16,9 @@ const EXECUTIONS: &str = "supplier_api_order_executions";
 const SETUP_RECEIPTS: &str = "supplier_api_order_setup_receipts";
 
 /// 按当前已授权执行集合读取同身份正式供应商订单。
-/// # 参数
-/// `ids` 为读模型从已授权采购派生的执行身份，空集合不查询。
-/// # 返回
 /// 仅指定且未删除的正式订单，不扩大采购范围。
-/// # 错误
-/// 数据库读取失败时返回原仓储错误。
+/// 数据库读取失败时向上传播错误。
+/// `ids` 为读模型从已授权采购派生的执行身份，空集合不查询。
 pub async fn fulfillment_orders_by_execution_ids(
     db: &Database,
     ids: &[String],
@@ -36,12 +33,9 @@ pub async fn fulfillment_orders_by_execution_ids(
 }
 
 /// 按执行记录反查其所属连接，禁止从前端指定供应商归属。
-/// # 参数
-/// `ids` 为服务端从已授权执行派生的连接身份，空集合不查询。
-/// # 返回
 /// 指定未删除连接，调用方仍须逐执行核对供应商和连接归属。
-/// # 错误
-/// 数据库读取失败时返回原仓储错误。
+/// 数据库读取失败时向上传播错误。
+/// `ids` 为服务端从已授权执行派生的连接身份，空集合不查询。
 pub async fn connections_by_ids(
     db: &Database,
     ids: &[String],
@@ -56,11 +50,7 @@ pub async fn connections_by_ids(
 }
 
 /// 按已绑定连接和实际外部子单定位原执行，供消息唤醒原根单。
-/// # 参数
-/// `connection` 和 `external` 来自已认证账号消息，不接受跨连接归属。
-/// # 返回
 /// 唯一原执行或 None；未完整关系只能作为唤醒线索。
-/// # 错误
 /// 多个执行争用同一外部身份时拒绝，数据库失败向上传递。
 pub async fn for_external_order(
     db: &Database,
@@ -91,20 +81,10 @@ pub async fn for_external_order(
 /// 接口执行意图的领域仓储访问器。
 pub trait ApiOrderExt {
     /// 返回当前数据库的执行意图仓储。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 使用调用方执行器的仓储。
-    /// # 错误
-    /// 不返回错误。
     fn supplier_api_order_executions(&self) -> Repository<'_, ApiOrderExecution>;
     /// 取得不可删除的配送补充命令回执仓储。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 当前数据库回执仓储。
-    /// # 错误
-    /// 不返回错误。
     fn supplier_api_order_setup_receipts(&self) -> Repository<'_, ApiOrderSetupReceipt>;
 }
 impl ApiOrderExt for Database {
@@ -117,12 +97,9 @@ impl ApiOrderExt for Database {
 }
 
 /// 取得同一采购尚未由新版本明确退役的执行，避免历史意图重复阻断变更。
-/// # 参数
-/// `purchase` 是已授权采购身份，读取沿用变更根事务。
-/// # 返回
 /// 当前及历史仍有效的执行；已记载替代版本的记录不再参与变更核验。
-/// # 错误
-/// 数据库读取失败时返回原仓储错误。
+/// 数据库读取失败时向上传播错误。
+/// `purchase` 是已授权采购身份，读取沿用变更根事务。
 pub async fn active_for_purchase(
     db: &Database,
     purchase: &str,
@@ -134,12 +111,8 @@ pub async fn active_for_purchase(
 }
 
 /// 有界取得到期执行记录，观察状态由独立跟踪器处理。
-/// # 参数
-/// `executor` 为调用方执行器。
-/// # 返回
 /// 最多二十条按时间、身份稳定排序的记录。
-/// # 错误
-/// 数据库读取失败时返回错误。
+/// 数据库读取失败时向上传播错误。
 pub async fn due(db: &Database, executor: &mut dyn Executor) -> Result<Vec<ApiOrderExecution>> {
     mongo_ops::find_many(
         &db.collection::<ApiOrderExecution>(EXECUTIONS),
@@ -149,12 +122,8 @@ pub async fn due(db: &Database, executor: &mut dyn Executor) -> Result<Vec<ApiOr
 }
 
 /// 有界读取实际收货通知调度，观察和停止主状态不影响原通知结果调查。
-/// # 参数
-/// 应用数据库及当前只读执行器。
-/// # 返回
 /// 最多二十条按原调度时刻和身份稳定排序的执行。
-/// # 错误
-/// 数据库读取失败时拒绝。
+/// 数据库读取失败时向上传播错误。
 pub async fn receipts_due(db: &Database, executor: &mut dyn Executor) -> Result<Vec<ApiOrderExecution>> {
     mongo_ops::find_many(
         &db.collection::<ApiOrderExecution>(EXECUTIONS),
@@ -166,12 +135,9 @@ pub async fn receipts_due(db: &Database, executor: &mut dyn Executor) -> Result<
 }
 
 /// 从已正式验收的销售行定位原采购执行，不能按 SKU 扩大通知范围。
-/// # 参数
-/// `lines` 来自实际验收行；空输入不访问数据库。
-/// # 返回
 /// 返回最多一千项原执行，超限时拒绝整次唤醒。
-/// # 错误
 /// 数量超限或数据库失败时拒绝。
+/// `lines` 来自实际验收行；空输入不访问数据库。
 pub async fn for_sales_lines(
     db: &Database,
     lines: &[String],
@@ -195,12 +161,9 @@ pub async fn for_sales_lines(
 }
 
 /// 按同连接、同地址指纹复用已明确配置的坐标，不猜测地理位置。
-/// # 参数
-/// `fingerprint` 为应用密钥生成的地址指纹，不包含收件人明文。
-/// # 返回
 /// 最近有请求密文的候选记录。
-/// # 错误
-/// 数据库失败时返回错误。
+/// 数据库失败时向上传播错误。
+/// `fingerprint` 为应用密钥生成的地址指纹，不包含收件人明文。
 pub async fn reusable_address(
     db: &Database,
     connection: &str,
@@ -213,12 +176,8 @@ pub async fn reusable_address(
 }
 
 /// 读取一张正式采购下的执行关联，可进一步限定冻结采购修订。
-/// # 参数
-/// `purchase` 为已核验采购身份，`revision` 为精确版本或全部历史。
-/// # 返回
 /// 仅该采购范围的执行事实。
-/// # 错误
-/// 数据库查询失败时返回错误。
+/// 数据库查询失败时向上传播错误。
 pub async fn for_purchase(
     db: &Database,
     purchase: &str,
@@ -233,11 +192,7 @@ pub async fn for_purchase(
 }
 
 /// 增量登记执行身份、调度及地址复用索引。
-/// # 参数
-/// `db` 为当前应用数据库。
-/// # 返回
 /// 索引全部建立成功。
-/// # 错误
 /// 索引冲突或数据库错误时拒绝启动。
 pub async fn ensure_indexes(db: &Database) -> Result<()> {
     db.collection::<Document>(SETUP_RECEIPTS)

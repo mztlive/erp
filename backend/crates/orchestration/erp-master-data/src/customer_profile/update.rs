@@ -24,20 +24,14 @@ use super::{CustomerProfileProcess, field_changes};
 use crate::{Error, Result, command_insert_error};
 
 impl CustomerProfileProcess {
-    /// 原子修订 Party 身份、客户角色与显式提交的资料事实集合。
+    /// 保存客户资料修订时，原子更新 Party、客户角色和显式提交的资料集合；回执和审计与变更一起提交。
     ///
-    /// # 参数
-    /// * `customer_id` - 目标客户
-    /// * `req` - 修订命令
-    /// * `actor` - 已认证操作人
+    /// `customer_id`：目标客户。
     ///
-    /// # 返回
     /// 返回修订命令的稳定结果视图。
     ///
-    /// # 错误
     /// 输入非法、无更新范围、乐观锁冲突、既有事实不属于当前客户、幂等键冲突或事务失败时返回错误。
     ///
-    /// # 关键业务约束
     /// 写入事务内必须调用 `CustomerAccess.require_with`；handler 事前检查不能代替。
     pub async fn update(
         &self,
@@ -87,22 +81,15 @@ impl CustomerProfileProcess {
         self.resolve_transaction(transaction, &replay, actor, &fields).await
     }
 
-    /// 装载并校验修订载荷；不写入、不重验范围。
-    ///
-    /// # 参数
-    /// * `customer_id` - 目标客户
-    /// * `req` - 修订命令
-    /// * `replay` - 幂等上下文
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 返回可在事务内持久化的修订载荷。
-    ///
-    /// # 错误
-    /// 客户不存在、版本冲突或事实校验失败时拒绝。
-    ///
-    /// # 关键业务约束
-    /// 授权、载荷读取和落库必须使用原写入事务执行器。
+    // 更新入口在原事务通过授权且未命中原命令回执后，加载当前资料并校验修订载荷，不执行写入。
+    //
+    // `customer_id`：目标客户；`replay`：幂等上下文。
+    //
+    // 返回可在事务内持久化的修订载荷。
+    //
+    // 客户不存在、版本冲突或事实校验失败时拒绝。
+    //
+    // 授权、载荷读取和落库必须使用原写入事务执行器。
     async fn prepare_update(
         &self,
         customer_id: &str,
@@ -140,7 +127,7 @@ struct PreparedUpdate {
 }
 
 impl PreparedUpdate {
-    /// 构造命令、审计及保存后的稳定版本结果。
+    // 构造命令、审计及保存后的稳定版本结果。
     fn new(
         party: Party,
         revision: PartyRevision,
@@ -175,7 +162,7 @@ impl PreparedUpdate {
         Ok(Self { party, revision, account, facts, command, audit, result })
     }
 
-    /// 将根修订、事实差异、幂等结果与审计写入同一事务。
+    // 将根修订、事实差异、幂等结果与审计写入同一事务。
     async fn persist(mut self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
         ensure_identity_available(db, &self.party, &self.revision, executor).await?;
 
@@ -228,7 +215,7 @@ fn update_roots(
     )?)
 }
 
-/// 返回 Party ID newtype。
+// 准备新的客户主体名称修订时，将当前 Party 主键转成领域类型，避免误用客户角色主键。
 fn party_id(party: &Party) -> PartyId {
     PartyId::new(party.base.id.clone())
 }

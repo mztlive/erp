@@ -9,14 +9,14 @@ const MAX_QUERY_IDS: usize = 100;
 /// 单个稳定 ID 长度上限（字节）。
 const MAX_QUERY_ID_LEN: usize = 128;
 
-/// 校验单个稳定 ID：非空、限长、仅 ASCII 字母数字及 `-_`。
+// 使用人员 ID 筛选前，检查非空、至多 128 字节且只含 ASCII 字母数字、`-` 或 `_`，不接受姓名。
 fn is_valid_query_id(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= MAX_QUERY_ID_LEN
         && id.bytes().all(|c| c.is_ascii_alphanumeric() || b"_-".contains(&c))
 }
 
-/// 解析逗号分隔的 ID 集合：限项、去首尾空白、去重排序。
+// 把逗号参数转换为去重且按字典序排列的 ID；先检查原始段数不超过 100，再裁剪并校验每段，重复值不能绕过段数上限。
 fn parse_query_ids(raw: &str) -> Result<Vec<String>, &'static str> {
     let parts = raw.split(',');
     if parts.clone().nth(MAX_QUERY_IDS).is_some() {
@@ -40,48 +40,20 @@ fn parse_query_ids(raw: &str) -> Result<Vec<String>, &'static str> {
 pub struct QueryIds(Vec<String>);
 
 impl QueryIds {
-    /// 返回规范化身份集合；调用方必须与服务端授权条件求交。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回已保存的身份切片。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 借用规范化的人员 ID 来构造筛选条件；调用方必须与服务端授权范围求交。
     pub fn as_slice(&self) -> &[String] {
         &self.0
     }
 
-    /// 消费筛选条件并返回已规范化的身份集合。
-    ///
-    /// # 参数
-    /// * `self` - 已完成校验、去重和排序的筛选条件
-    ///
-    /// # 返回
-    /// 返回原有身份集合，不复制身份或重新分配集合。
-    ///
-    /// # 错误
-    /// 无。
+    /// 需要自有 ID 集合作为查询条件时，直接转移已校验、去重并排序的向量，不复制。
     pub fn into_vec(self) -> Vec<String> {
         self.0
     }
 }
 
 impl<'de> Deserialize<'de> for QueryIds {
-    /// 从单个查询参数解析逗号分隔的稳定 ID。
-    ///
-    /// 姓名不能写入本字段，只允许用于独立关键词搜索。解析时去首尾空白、去重并按字典序排列。
-    ///
-    /// # 参数
-    /// * `deserializer` - 提供原始查询字符串的反序列化器。
-    ///
-    /// # 返回
-    /// 成功时返回 `QueryIds`。
-    ///
-    /// # 错误
-    /// 值不是字符串时返回反序列化错误。按逗号拆分后超过 100 段，或任一段去空白后为空、超过 128 字节、含 ASCII 字母数字与 `-_` 以外的字符时，返回对应校验文案。
+    // 将单个字符串查询参数交给人员 ID 解析器；超过 100 段，或任一段为空、超 128 字节、含非法字符都会拒绝。
+    // 姓名应走独立关键词搜索。
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let raw = String::deserialize(deserializer)?;
         parse_query_ids(&raw).map(Self).map_err(serde::de::Error::custom)

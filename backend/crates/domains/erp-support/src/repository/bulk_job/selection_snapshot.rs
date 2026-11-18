@@ -53,16 +53,7 @@ pub struct BulkSelectionSnapshotFilter {
 }
 
 impl Default for BulkSelectionSnapshotFilter {
-    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回第 1 页、每页 20 条的空筛选条件。
-    ///
-    /// # 错误
-    /// 无。
+    // 初始化批量选择快照筛选：第一页、每页 20 条，业务筛选默认留空。
     fn default() -> Self {
         Self {
             selection_type: None,
@@ -77,19 +68,8 @@ impl Default for BulkSelectionSnapshotFilter {
 }
 
 impl QueryFilter for BulkSelectionSnapshotFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// `selection_type` 与 `status` 为 `Some` 时分别写入 `as_str()`。`created_by`
-    /// 为 `Some` 时精确匹配。分页与排序字段不进入条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 转换为 MongoDB 查询条件（自动追加未删除过滤）。
+    // `selection_type` 与 `status` 为 `Some` 时分别写入 `as_str()`。`created_by` 为 `Some` 时精确匹配。分页与排序字段不进入条件。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(selection_type) = self.selection_type {
@@ -106,16 +86,7 @@ impl QueryFilter for BulkSelectionSnapshotFilter {
 }
 
 impl Pagination for BulkSelectionSnapshotFilter {
-    /// 返回选择快照筛选保存的页码与单页条数，不把小于 1 的页码归一成第一页。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组；`page_size` 由 `u32` 转为 `u64`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 返回选择快照筛选保存的页码与单页条数，不把小于 1 的页码归一成第一页。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -125,19 +96,10 @@ impl Pagination for BulkSelectionSnapshotFilter {
 #[allow(async_fn_in_trait)]
 pub trait BulkSelectionSnapshotRepositoryExt {
     /// 分页检索选择快照列表（投影查询）。
-    ///
-    /// 只返回 [`BulkSelectionSnapshotRow`] 所需的列表字段，不加载整文档；
-    /// `created_by` 精确匹配覆盖 `idx_bulk_selection_snapshots_created`。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
+    /// 只返回 [`BulkSelectionSnapshotRow`] 所需的列表字段，不加载整文档；`created_by` 精确匹配覆盖 `idx_bulk_selection_snapshots_created`。
     /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// 沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询、游标读取或计数错误。
     async fn search_snapshots(
         &self,
         filter: &BulkSelectionSnapshotFilter,
@@ -161,10 +123,7 @@ impl BulkSelectionSnapshotRepositoryExt for persistence_core::Repository<'_, Bul
     }
 }
 
-/// 选择快照列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
+// 选择快照列表投影字段。
 fn snapshot_projection() -> Document {
     doc! {
         "id": 1,

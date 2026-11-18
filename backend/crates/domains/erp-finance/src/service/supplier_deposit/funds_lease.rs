@@ -10,14 +10,13 @@ use crate::repository::FundsEvidenceExt;
 use crate::{Error, Result};
 
 impl SupplierDepositService {
-    /// 领取账号调查持有权；账户停用不阻断原资金事实调查。
-    /// # 参数
-    /// * `account_id` / `owner` - 已存在资金账户及本次处理者身份。
-    /// * `now` / `ttl_secs` / `executor` - 服务器时间、期限和领取事务。
-    /// # 返回
+    /// 启动账户资金调查时按租约领取持有权；账户停用后仍可调查已经发生的资金事实。
     /// 返回新的单调持有版本；其他持有者尚未到期时返回None。
-    /// # 错误
     /// 未知账户、身份期限非法、版本溢出或数据库失败时拒绝。
+    ///
+    /// 输入约定：
+    /// - `account_id` / `owner`：已存在资金账户及本次处理者身份。
+    /// - `now` / `ttl_secs` / `executor`：服务器时间、期限和领取事务。
     pub async fn claim_funds_lease(
         &self,
         account_id: &str,
@@ -51,14 +50,13 @@ impl SupplierDepositService {
         Ok(Some(lease))
     }
 
-    /// 在收件或记账同一事务写入租约CAS，阻断旧持有者提交。
-    /// # 参数
-    /// * `account_id` / `owner` / `fencing_token` - 原领取的完整身份。
-    /// * `now` / `executor` - 当前服务器时间及业务写入同一执行器。
-    /// # 返回
-    /// 当前持有者写屏障成功；不隐式延长期限。
-    /// # 错误
-    /// 已过期、持有者变化或CAS竞争时拒绝整个调用方事务。
+    /// 保存收件或实际资金账之前，在同一事务 CAS 写入租约守卫，防止旧持有者继续提交。
+    /// 结果：当前持有者写屏障成功；不隐式延长期限。
+    /// 失败条件：已过期、持有者变化或CAS竞争时拒绝整个调用方事务。
+    ///
+    /// 输入约定：
+    /// - `account_id` / `owner` / `fencing_token`：原领取的完整身份。
+    /// - `now` / `executor`：当前服务器时间及业务写入同一执行器。
     pub async fn assert_funds_lease(
         &self,
         account_id: &str,
@@ -79,14 +77,13 @@ impl SupplierDepositService {
         Ok(())
     }
 
-    /// 仅由原持有版本释放账号调查，旧执行者不能释放新处理者。
-    /// # 参数
-    /// * `account_id` / `owner` / `fencing_token` - 原领取身份。
-    /// * `now` / `executor` - 服务器时间和释放事务。
-    /// # 返回
-    /// 原租约到期，原证据全部保留。
-    /// # 错误
+    /// 调查结束时只释放原持有版本的租约，不能由旧处理者取消后来领取的工作。
+    /// 结果：原租约到期，原证据全部保留。
     /// 持有者或版本不一致、数据库失败时拒绝。
+    ///
+    /// 输入约定：
+    /// - `account_id` / `owner` / `fencing_token`：原领取身份。
+    /// - `now` / `executor`：服务器时间和释放事务。
     pub async fn release_funds_lease(
         &self,
         account_id: &str,

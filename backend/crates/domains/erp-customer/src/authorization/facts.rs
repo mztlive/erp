@@ -18,23 +18,24 @@ use crate::service::customer::access::business_date;
 pub struct CustomerFacts(Database);
 
 impl CustomerFacts {
-    /// 绑定拥有领域的客户和归属集合。
+    // 绑定拥有领域的客户和归属集合。
     pub(super) fn new(db: Database) -> Self {
         Self(db)
     }
 
     /// 创建可供跨域来源授权复用的客户事实端口。
+    ///
     /// # 参数
     /// db 为客户集合所在数据库。
-    /// # 返回
+    ///
     /// 仅装载完整业务事实、不组合权限政策的共享端口。
-    /// # 错误
-    /// 构造不执行 I/O。
+    ///
+    /// 失败条件：构造不执行 I/O。
     pub fn shared(db: Database) -> Arc<dyn AccessFactsPort> {
         Arc::new(Self::new(db))
     }
 
-    /// 读取当前负责人组织；缺失主属组织保持已知空值，重叠主属关系返回错误。
+    // 读取当前负责人组织；缺失主属组织保持已知空值，重叠主属关系返回错误。
     async fn owner_organizations(
         &self,
         owners: &BTreeSet<String>,
@@ -85,7 +86,7 @@ impl AccessFactsPort for CustomerFacts {
     }
 }
 
-/// 当前读写取有效负责人；创建检查已写入的拟生效归属，历史参与保留全部 OWNER。
+// 当前读写取有效负责人；创建检查已写入的拟生效归属，历史参与保留全部 OWNER。
 fn responsibility(
     rows: &[&CustomerAssignment],
     context: &AccessContext,
@@ -110,7 +111,7 @@ fn responsibility(
     Ok((owners, history))
 }
 
-/// 完整归属版本参与事实复验；日期边界使到期关系不能跨日继续使用。
+// 完整归属版本参与事实复验；日期边界使到期关系不能跨日继续使用。
 fn object(
     account: &CustomerAccount,
     assignments: &[&CustomerAssignment],
@@ -195,7 +196,7 @@ mod tests {
         assert!(history.is_empty());
     }
 
-    /// 旧协作行不能使对象判定或查询事实获得协作资格；当前负责人及公司范围仍按原规则工作。
+    // 旧协作行不能使对象判定或查询事实获得协作资格；当前负责人及公司范围仍按原规则工作。
     #[test]
     fn retired_collaboration_is_known_empty_and_matches_the_query_denial() {
         use erp_core::ids::PartyId;

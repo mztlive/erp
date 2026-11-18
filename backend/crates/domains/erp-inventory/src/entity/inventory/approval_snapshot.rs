@@ -33,20 +33,10 @@ pub struct StockAdjustmentApprovalSnapshot;
 
 impl StockAdjustmentApprovalSnapshot {
     /// 冻结库存调整审批快照。
-    ///
-    /// # 参数
-    /// * `adjustment` - 已冻结提交版本的调整单
-    /// * `lines` - 当前已加载的调整明细
-    /// * `submitted_by` - 提交人
-    /// * `submitted_at` - 提交时间（Service 注入时钟事实）
-    ///
-    /// # 返回
     /// 返回本域冻结快照事实；工作流 payload 由组合层 adapter 映射。
-    ///
-    /// # 错误
+    /// `adjustment` 为已冻结提交版本的调整单；`lines` 为当前已加载的调整明细。
+    /// `submitted_by` 为提交人；`submitted_at` 为提交时间（Service 注入时钟事实）。
     /// 空行、数量合计溢出、行数溢出或组织/提交人空白时返回错误。
-    ///
-    /// # 约束
     /// 无 I/O、无时钟、无 ID 生成；不接受客户端定义 ID 或审批人。
     pub fn build(
         adjustment: &StockAdjustment,
@@ -76,17 +66,10 @@ impl StockAdjustmentApprovalSnapshot {
     }
 }
 
-/// 受检数量合计（十进制累加后一次性转 `Quantity`）。
-///
-/// # 参数
-/// * `first` - 首条明细，调用方已检查非空。
-/// * `remaining` - 其余明细。
-///
-/// # 返回
-/// 返回合计数量。
-///
-/// # 错误
-/// 十进制累加溢出或合计超出数量标度时返回错误。
+// 受检数量合计（十进制累加后一次性转 `Quantity`）。
+// 返回合计数量。
+// `first` 为首条明细，调用方已检查非空；`remaining` 为其余明细。
+// 十进制累加溢出或合计超出数量标度时返回错误。
 fn sum_line_quantity(first: &StockAdjustmentLine, remaining: &[StockAdjustmentLine]) -> Result<Quantity> {
     let mut total = first.quantity.to_decimal();
     for line in remaining {
@@ -135,7 +118,7 @@ mod tests {
         .unwrap()
     }
 
-    /// 仓库责任组织与 counterparty 精确冻结，合计/行数/编号/提交人正确。
+    // 验证仓库责任组织与 counterparty 精确冻结，合计/行数/编号/提交人正确。
     #[test]
     fn snapshot_freezes_org_counterparty_and_totals() {
         let payload = StockAdjustmentApprovalSnapshot::build(
@@ -179,7 +162,7 @@ mod tests {
         }
     }
 
-    /// 空行失败；数量合计溢出失败。
+    // 验证空行失败；数量合计溢出失败。
     #[test]
     fn empty_and_overflow_fail() {
         assert!(StockAdjustmentApprovalSnapshot::build(

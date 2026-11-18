@@ -12,17 +12,12 @@ pub const PURCHASE_COMMAND_ID_INDEX: &str = "uk_purchase_command_receipts_id";
 
 /// 注册采购独立回执索引。
 ///
-/// # 参数
-/// * `db` - 目标数据库。
-/// # 返回
-/// 成功时返回空结果。
-/// # 错误
-/// 存量命令 ID 冲突或索引写入失败时返回错误。
+/// 返回空结果。存量命令 ID 冲突或索引写入失败时返回错误。
 pub async fn ensure(db: &Database) -> Result<()> {
     db.collection::<Document>(Database::PURCHASE_COMMAND_RECEIPTS).create_indexes(receipt_indexes()).await?;
     Ok(())
 }
-/// 去重覆盖所有回执生命周期，不接受过期或软删除过滤。
+// 去重覆盖所有回执生命周期，不接受过期或软删除过滤。
 fn receipt_indexes() -> Vec<IndexModel> {
     vec![
         IndexModel::builder()

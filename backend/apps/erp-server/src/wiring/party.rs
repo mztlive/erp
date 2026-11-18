@@ -22,30 +22,13 @@ pub struct MongoPartyAudit {
 }
 
 impl MongoPartyAudit {
-    /// 绑定审计日志所在数据库，构造时不写库。
-    ///
-    /// # 参数
-    /// * `db` - 持久化审计日志的数据库。
-    ///
-    /// # 返回
-    /// 返回未执行 I/O 的 adapter。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为 `MongoPartyAudit` 绑定审计日志库，供后续业务审计写入；构造时不写库。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
     /// 包装为主体域可注入的共享审计 Port。
-    ///
-    /// # 参数
-    /// * `db` - 持久化审计日志的数据库。
-    ///
-    /// # 返回
     /// 返回共享的主体审计 Port。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn shared(db: Database) -> Arc<dyn PartyAuditPort> {
         Arc::new(Self::new(db))
     }
@@ -83,29 +66,12 @@ pub struct MongoSupplierRole {
 
 impl MongoSupplierRole {
     /// 绑定供应商账号集合所在数据库，构造时不读取。
-    ///
-    /// # 参数
-    /// * `db` - 供应商账号所在数据库。
-    ///
-    /// # 返回
-    /// 返回未执行 I/O 的 adapter。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
     /// 包装为主体域可注入的供应商角色 Port。
-    ///
-    /// # 参数
-    /// * `db` - 供应商账号所在数据库。
-    ///
-    /// # 返回
     /// 返回共享的供应商角色 Port。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn shared(db: Database) -> Arc<dyn SupplierRolePort> {
         Arc::new(Self::new(db))
     }

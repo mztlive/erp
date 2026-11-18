@@ -2,13 +2,7 @@
 use super::*;
 
 impl WarehouseService {
-    /// 校验修订筛选并证明读取资格。
-    /// # 参数
-    /// actor 为读取账号，params 为原始筛选，executor 为原读取快照。
-    /// # 返回
-    /// 返回供修订仓储读取使用的筛选条件。
-    /// # 错误
-    /// 筛选非法、缺少资格或非快照时拒绝。
+    // 在原读取快照校验筛选并检查仓库修订读取资格，供仓储随后分页；非法输入、缺资格或非快照时拒绝。
     pub(super) async fn revision_filter(
         &self,
         actor: &AuditActor,
@@ -23,13 +17,7 @@ impl WarehouseService {
         Ok(filter)
     }
 
-    /// 校验策略筛选并证明读取资格。
-    /// # 参数
-    /// actor 为读取账号，params 为原始筛选，executor 为原读取快照。
-    /// # 返回
-    /// 返回供仓库策略仓储读取使用的筛选条件。
-    /// # 错误
-    /// 筛选非法、缺少资格或非快照时拒绝。
+    // 在同一快照校验预警策略筛选并确认读取资格，再交给仓储；筛选非法、缺资格或非快照时拒绝。
     pub(super) async fn sku_policy_filter(
         &self,
         actor: &AuditActor,
@@ -44,13 +32,7 @@ impl WarehouseService {
         Ok(filter)
     }
 
-    /// 先证明配置资格，再使用同一快照读取候选。
-    /// # 参数
-    /// actor 为读取账号，executor 为原读取快照。
-    /// # 返回
-    /// 返回经过生产视图转换的经办候选。
-    /// # 错误
-    /// 缺少资格、非快照或身份端口读取失败时拒绝。
+    // 先在读取快照验证仓库配置资格，再通过身份端口取候选并转换为视图；缺资格、非快照或身份查询失败都不返回候选。
     pub(super) async fn handler_options_snapshot(
         &self,
         actor: &AuditActor,

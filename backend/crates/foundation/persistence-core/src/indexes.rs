@@ -4,32 +4,12 @@ use mongodb::IndexModel;
 use mongodb::bson::Document;
 use mongodb::options::IndexOptions;
 
-/// 构造命名普通索引，不设置唯一性或部分过滤条件。
-///
-/// # 参数
-/// * `name` - 拥有领域确定的稳定索引名。
-/// * `keys` - 保持字段顺序与排序方向的索引键文档。
-///
-/// # 返回
-/// 返回仅设置名称和键的索引模型。
-///
-/// # 错误
-/// 无；本方法不校验业务定义，也不访问数据库。
+/// 为领域登记普通索引时只设置稳定名称和有序键文档，保留字段顺序与方向，不加唯一或部分过滤，也不直接创建索引。
 pub fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
     IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
 }
 
-/// 构造命名唯一索引，不设置部分过滤条件。
-///
-/// # 参数
-/// * `name` - 拥有领域确定的稳定索引名。
-/// * `keys` - 保持字段顺序与排序方向的唯一索引键文档。
-///
-/// # 返回
-/// 返回设置名称、键与 `unique: true` 的索引模型。
-///
-/// # 错误
-/// 无；已有数据是否违反约束由索引创建操作判定。
+/// 领域需要对全集合强制唯一性时构造带稳定名称的索引，保留复合键顺序；存量数据能否满足约束由实际创建操作判断。
 pub fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
     IndexModel::builder()
         .keys(keys)
@@ -37,18 +17,7 @@ pub fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
         .build()
 }
 
-/// 构造命名部分唯一索引，原样保留领域提供的过滤条件。
-///
-/// # 参数
-/// * `name` - 拥有领域确定的稳定索引名。
-/// * `keys` - 保持字段顺序与排序方向的唯一索引键文档。
-/// * `filter` - 拥有领域确定的部分过滤表达式。
-///
-/// # 返回
-/// 返回设置名称、键、唯一性及部分过滤表达式的索引模型。
-///
-/// # 错误
-/// 无；过滤表达式合法性及已有数据约束由索引创建操作判定。
+/// 仅匹配领域过滤条件的文档须唯一时使用，原样保留复合键顺序与过滤表达式；建索引时由数据库检查表达式和数据。
 pub fn unique_partial_index(name: impl Into<String>, keys: Document, filter: Document) -> IndexModel {
     IndexModel::builder()
         .keys(keys)

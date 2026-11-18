@@ -71,22 +71,25 @@ pub struct PortalOfferingReadService {
 }
 
 impl PortalOfferingReadService {
-    /// 绑定供给读取所需的数据库。
+    /// 装配门户供给时，绑定供给读取所需的数据库。
+    ///
     /// # 参数
     /// `db` 为组合根提供的数据库。
+    ///
     /// # 返回
     /// 返回查询入口。
-    /// # 错误
-    /// 无。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
-    /// 读取当前供应商的供给分页与统计。
+    /// 处理门户供给时，读取当前供应商的供给分页与统计。
+    ///
     /// # 参数
     /// `actor` 为当前验证身份，`params` 仅收窄该供应商结果。
+    ///
     /// # 返回
     /// 返回允许列表字段的分页。
+    ///
     /// # 错误
     /// 分页非法或读取失败时拒绝。
     pub async fn offerings(
@@ -105,11 +108,14 @@ impl PortalOfferingReadService {
         Ok(PageView { items, total: page.total, page: page.page, page_size: page.page_size })
     }
 
-    /// 按当前供应商范围读取详情，未知及越权目标使用相同错误。
+    /// 依据当前供应商范围读取详情，未知及越权目标使用相同错误。
+    ///
     /// # 参数
     /// `actor` 为验证身份，`id` 为供给标识。
+    ///
     /// # 返回
     /// 返回该供应商必要的供给资料。
+    ///
     /// # 错误
     /// 不存在或属于其他供应商时返回相同 `NotFound`。仓储或下层读取失败会返回对应错误。
     pub async fn offering(&self, actor: &PortalActor, id: &str) -> Result<PortalOfferingView> {
@@ -126,11 +132,14 @@ impl PortalOfferingReadService {
         self.external_view(view, &mut NoTransaction).await
     }
 
-    /// 读取自己供给的历史条款，先验证供给归属再查询历史。
+    /// 处理门户供给时，读取自己供给的历史条款，先验证供给归属再查询历史。
+    ///
     /// # 参数
     /// `actor` 为验证身份，`id` 为供给标识。
+    ///
     /// # 返回
     /// 返回价格及供货条件的历史。
+    ///
     /// # 错误
     /// 不存在、越权或仓储失败时拒绝。
     pub async fn revisions(&self, actor: &PortalActor, id: &str) -> Result<Vec<PortalRevisionView>> {

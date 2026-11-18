@@ -28,24 +28,13 @@ use crate::{Error, Result, ReverseFlowPorts};
 impl ReturnsProcess {
     /// 建立销售退货/拒收处理单与明细行（跨集合事务写入）。
     ///
-    /// 同一事务注册 `BusinessDocument` 并调用统一绑定端口。销售退货为
-    /// `NO_APPROVAL`：返回空绑定，不查询已发布定义，不启动审批实例，
-    /// 不创建审批任务。本期不新建正式化命令。
+    /// 同一事务注册 `BusinessDocument` 并调用统一绑定端口。销售退货为 `NO_APPROVAL`：返回空绑定，不查询已发布定义，不启动审批实例，不创建审批任务。本期不新建正式化命令。
     ///
-    /// `return_no` 全局唯一（唯一索引）构成幂等去重；同事务写入处理单与
-    /// 明细行（`ReturnsRepository::create_sales_return_with_line`）。
+    /// `return_no` 全局唯一（唯一索引）构成幂等去重；同事务写入处理单与明细行（`ReturnsRepository::create_sales_return_with_line`）。
     ///
-    /// # 参数
-    /// * `req` - 创建请求
-    /// * `actor` - 已通过鉴权的审计操作人
+    /// 返回新建处理单视图。`ValidationError`：请求体校验失败。`ConflictError`：退货处理号重复。
     ///
-    /// # 返回
-    /// 返回新建处理单视图。
-    ///
-    /// # 错误
-    /// * `ValidationError` - 请求体校验失败
-    /// * `ConflictError` - 退货处理号重复
-    /// * `RepositoryError` - 数据库写入失败
+    /// `RepositoryError`：数据库写入失败。
     pub async fn create_sales_return_case(
         &self,
         req: CreateSalesReturnCaseRequest,
@@ -57,13 +46,7 @@ impl ReturnsProcess {
     }
 }
 
-/// 销售退货创建必须跳过绑定：政策只能是 `NO_APPROVAL`。
-///
-/// # 返回
-/// 返回 `SkipNoApproval`。
-///
-/// # 错误
-/// 政策缺失或误登记为必须审批时返回部署不变量错误。
+// 销售退货创建必须跳过绑定：政策只能是 `NO_APPROVAL`。返回 `SkipNoApproval`。政策缺失或误登记为必须审批时返回部署不变量错误。
 fn sales_return_case_create_binding_decision() -> Result<BindingDecision> {
     let policy = policy_of(DocumentType::SalesReturnCase)?;
     match &policy {
@@ -79,10 +62,7 @@ fn sales_return_case_create_binding_decision() -> Result<BindingDecision> {
     }
 }
 
-/// 确认销售退货创建路径不得查询发布定义。
-///
-/// # 错误
-/// 绑定决定不是跳过时返回错误。
+// 确认销售退货创建路径不得查询发布定义。绑定决定不是跳过时返回错误。
 fn ensure_sales_return_case_skips_approval_binding() -> Result<BindingDecision> {
     let decision = sales_return_case_create_binding_decision()?;
     if decision != BindingDecision::SkipNoApproval {
@@ -91,10 +71,7 @@ fn ensure_sales_return_case_skips_approval_binding() -> Result<BindingDecision> 
     Ok(decision)
 }
 
-/// 销售退货不得注册空审批适配器。
-///
-/// # 错误
-/// 适配器登记存在时返回部署不变量错误。
+// 销售退货不得注册空审批适配器。适配器登记存在时返回部署不变量错误。
 fn ensure_sales_return_case_has_no_adapter() -> Result<()> {
     if adapter_spec_of(DocumentType::SalesReturnCase).is_ok() {
         return Err(Error::Internal("销售退货不得注册审批适配器".to_string()));
@@ -102,16 +79,9 @@ fn ensure_sales_return_case_has_no_adapter() -> Result<()> {
     Ok(())
 }
 
-/// 原销售单作为绑定上下文组织，不得用空串补位。
-///
-/// # 参数
-/// * `case` - 待登记销售退货处理单
-///
-/// # 返回
-/// 返回非空销售单标识。
-///
-/// # 错误
-/// 销售单为空时返回校验错误。
+// 原销售单作为绑定上下文组织，不得用空串补位。
+//
+// `case` 为待登记销售退货处理单。返回非空销售单标识。销售单为空时返回校验错误。
 fn sales_return_case_binding_organization_id(case: &SalesReturnCase) -> Result<String> {
     let org = case.sales_order_id.to_string();
     if org.trim().is_empty() {
@@ -120,14 +90,9 @@ fn sales_return_case_binding_organization_id(case: &SalesReturnCase) -> Result<S
     Ok(org)
 }
 
-/// 构造销售退货创建绑定命令。客户端不得提交定义 ID。
-///
-/// # 参数
-/// * `case` - 待登记销售退货处理单
-/// * `creator_id` - 创建人
-///
-/// # 错误
-/// 原销售单为空时返回校验错误。
+// 构造销售退货创建绑定命令。客户端不得提交定义 ID。
+//
+// `case` 为待登记销售退货处理单。原销售单为空时返回校验错误。
 fn sales_return_case_bind_command(
     case: &SalesReturnCase,
     creator_id: &str,
@@ -143,17 +108,9 @@ fn sales_return_case_bind_command(
     })
 }
 
-/// 将绑定端口返回值落实为销售退货注册行：空绑定保持未绑定。
-///
-/// # 参数
-/// * `document` - 销售退货注册行
-/// * `binding` - 统一绑定端口返回值
-///
-/// # 返回
-/// 固定返回 `None`。
-///
-/// # 错误
-/// 端口返回绑定或注册行已预置绑定时返回错误。
+// 将绑定端口返回值落实为销售退货注册行：空绑定保持未绑定。
+//
+// `document` 为销售退货注册行；`binding` 为统一绑定端口返回值。固定返回 `None`。端口返回绑定或注册行已预置绑定时返回错误。
 fn apply_sales_return_case_create_binding(
     document: &mut BusinessDocument,
     binding: Option<ApprovalDefinitionBinding>,
@@ -170,12 +127,9 @@ fn apply_sales_return_case_create_binding(
     Ok(None)
 }
 
-/// 在调用方事务内登记销售退货单据并证明空绑定。
-///
-/// 必须先确认政策跳过，再调用统一绑定端口；不得查询发布定义后假装成功。
-///
-/// # 错误
-/// 政策非无审批、端口返回绑定或写入失败时返回错误。
+// 在调用方事务内登记销售退货单据并证明空绑定。
+//
+// 必须先确认政策跳过，再调用统一绑定端口；不得查询发布定义后假装成功。政策非无审批、端口返回绑定或写入失败时返回错误。
 async fn persist_unbound_sales_return_document(
     db: &Database,
     rbac: &ReverseFlowPorts,
@@ -191,10 +145,7 @@ async fn persist_unbound_sales_return_document(
     persist_registered_document(db, &document, executor).await.map_err(crate::Error::from)
 }
 
-/// 为已构造销售退货登记 `BusinessDocument` 并调用统一绑定端口。
-///
-/// # 错误
-/// 绑定端口或注册写入失败时返回错误。
+// 为已构造销售退货登记 `BusinessDocument` 并调用统一绑定端口。绑定端口或注册写入失败时返回错误。
 pub(super) async fn register_created_sales_return_document(
     db: &Database,
     rbac: &ReverseFlowPorts,
@@ -209,10 +160,7 @@ pub(super) async fn register_created_sales_return_document(
     persist_unbound_sales_return_document(db, rbac, document, &bind_command, actor, executor).await
 }
 
-/// 在创建事务内写入销售退货草稿并登记无绑定单据。
-///
-/// # 错误
-/// 绑定、注册或处理单写入失败时返回错误，调用方必须视作整体回滚。
+// 在创建事务内写入销售退货草稿并登记无绑定单据。绑定、注册或处理单写入失败时返回错误，调用方必须视作整体回滚。
 async fn persist_created_sales_return_case(
     db: &Database,
     rbac: &ReverseFlowPorts,
@@ -336,7 +284,7 @@ mod sales_return_case_no_approval_tests {
         .expect("草稿必须可构造")
     }
 
-    /// 政策仅含 document_type、approval_requirement、process_kind，不得注册空 Adapter。
+    // 政策仅含 document_type、approval_requirement、process_kind，不得注册空 Adapter。
     #[test]
     fn sales_return_case_policy_is_no_approval_identity_only() {
         let policy = policy_of(DocumentType::SalesReturnCase).expect("销售退货政策必须存在");
@@ -356,7 +304,7 @@ mod sales_return_case_no_approval_tests {
         ensure_sales_return_case_has_no_adapter().expect("不得注册空适配器");
     }
 
-    /// 创建必须注册 BusinessDocument，绑定端口返回空，禁止写入绑定。
+    // 验证创建销售退货仍注册 `BusinessDocument`；统一端口只能返回空绑定，注册行保持未绑定。
     #[test]
     fn create_registers_document_and_returns_empty_binding() {
         let case = draft_case();

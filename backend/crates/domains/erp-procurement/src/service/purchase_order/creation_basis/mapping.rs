@@ -24,16 +24,7 @@ pub(super) struct SupplierSettlementTerms {
 }
 
 impl SupplierSettlementTerms {
-    /// 商务资料缺失时的缺省付款条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// `NET-30` 且无经营类目。
-    ///
-    /// # 错误
-    /// 无。
+    // 商务资料缺失时的缺省付款条件。`NET-30` 且无经营类目。
     fn net30() -> Self {
         Self { payment_term_code: "NET-30".to_string(), business_category: None }
     }
@@ -41,21 +32,12 @@ impl SupplierSettlementTerms {
 
 /// 由销售当前版本、当前覆盖和批量供给事实形成精确依据集合（纯规则）。
 ///
-/// # 参数
-/// * `order` - 已生效销售单
-/// * `coverage` - 当前销售版本采购覆盖
-/// * `responsibility_scope_ids` - 当前采购任务冻结的稳定销售行 ID
-/// * `facts` - 任务涉及 SKU 的批量供给事实
+/// 同一依据内供应商、采购类型、付款条件和履约责任完全一致；非生效销售单返回空集合；`min(remaining, available)` 为零时丢弃该供应商。
 ///
-/// # 返回
-/// 返回任务责任范围内按精确拆分维度分组并稳定排序的依据。
+/// 返回任务责任范围内按精确拆分维度分组并稳定排序的依据。商品类型映射或可供数量非法时返回错误。
 ///
-/// # 错误
-/// 商品类型映射或可供数量非法时返回错误。
-///
-/// # 关键业务约束
-/// 同一依据内供应商、采购类型、付款条件和履约责任完全一致；非生效销售单返回
-/// 空集合；`min(remaining, available)` 为零时丢弃该供应商。
+/// - `coverage`：当前销售版本采购覆盖。
+/// - `responsibility_scope_ids`：当前采购任务冻结的稳定销售行 ID。
 pub fn basis_groups_from_facts(
     order: &SalesOrderBasisFact,
     coverage: &SalesProcurementCoverage,
@@ -86,24 +68,14 @@ pub fn basis_groups_from_facts(
     Ok(groups)
 }
 
-/// 将一条销售目标行的合格供给加入精确依据分组。
-///
-/// # 参数
-/// * `revision` - 销售当前版本
-/// * `line` - 当前销售版本目标行
-/// * `supplies` - 每供应商一条确定供给
-/// * `facts` - 批量供给与供应商结算事实
-/// * `groups` - 待追加依据集合
-///
-/// # 返回
-/// 追加完成返回 `Ok(())`。
-///
-/// # 错误
-/// 商品类型映射或可供数量计算失败时返回错误。
-///
-/// # 关键业务约束
-/// 有限可供量使用 `min(remaining, available)`，不因不足全量而丢弃供应商；付款
-/// 条件与经营类目只从批量事实解释，不再逐供应商读取。
+// 将一条销售目标行的合格供给加入精确依据分组。
+//
+// 有限可供量使用 `min(remaining, available)`，不因不足全量而丢弃供应商；付款条件与经营类目只从批量事实解释，不再逐供应商读取。
+//
+// 追加完成返回 `Ok(())`。商品类型映射或可供数量计算失败时返回错误。
+//
+// - `revision`：销售当前版本。
+// - `line`：当前销售版本目标行。
 fn append_line_supplies(
     revision: &SalesRevisionFact,
     line: &SalesProcurementCoverageLine,
@@ -159,21 +131,11 @@ fn append_line_supplies(
     Ok(())
 }
 
-/// 从批量事实解释供应商当前付款条件与经营类目。
-///
-/// # 参数
-/// * `facts` - 批量供应商结算事实
-/// * `supplier_id` - 供应商身份
-///
-/// # 返回
-/// 返回该供应商已拆开的付款条件与经营类目；供应商、商务版本缺失或付款条件为
-/// 空时付款条件回退 `NET-30`。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 付款条件是精确拆单维度的一部分；经营类目不得写入付款条件代码。
+// 从批量事实解释供应商当前付款条件与经营类目。
+//
+// 付款条件是精确拆单维度的一部分；经营类目不得写入付款条件代码。
+//
+// 返回该供应商已拆开的付款条件与经营类目；供应商、商务版本缺失或付款条件为空时付款条件回退 `NET-30`。
 pub(super) fn settlement_terms_for(
     facts: &CreationBasisFacts,
     supplier_id: &SupplierAccountId,
@@ -198,21 +160,14 @@ pub(super) fn settlement_terms_for(
     }
 }
 
-/// 查询一条销售当前版本行的合格供给，并为每个供应商确定一条稳定供给。
-///
-/// # 参数
-/// * `facts` - 批量 ACTIVE 供给、当前修订与可供投影
-/// * `line` - 销售当前版本目标行
-///
-/// # 返回
-/// 返回按供应商和供给 ID 稳定排序、每供应商最多一条的供给。
-///
-/// # 错误
-/// 可供数量为负时返回业务错误。
-///
-/// # 关键业务约束
-/// 仅 ACTIVE、条款当前有效且 availability 为 AVAILABLE 的供给合格；同一 SKU
-/// 的供给顺序由批量事实保证，与逐 SKU 查询完全一致。
+// 查询一条销售当前版本行的合格供给，并为每个供应商确定一条稳定供给。
+//
+// 仅 ACTIVE、条款当前有效且 availability 为 AVAILABLE 的供给合格；同一 SKU的供给顺序由批量事实保证，与逐 SKU 查询完全一致。
+//
+// 返回按供应商和供给 ID 稳定排序、每供应商最多一条的供给。可供数量为负时返回业务错误。
+//
+// - `facts`：批量 ACTIVE 供给、当前修订与可供投影。
+// - `line`：销售当前版本目标行。
 fn qualified_supplies_for_line(
     facts: &CreationBasisFacts,
     line: &SalesProcurementCoverageLine,
@@ -232,21 +187,13 @@ fn qualified_supplies_for_line(
     Ok(supplies)
 }
 
-/// 复验单条供给当前修订与可供投影。
-///
-/// # 参数
-/// * `facts` - 批量供给修订与可供投影
-/// * `offering` - ACTIVE 供给稳定身份
-///
-/// # 返回
-/// 当前合格时返回供给；缺少当前修订、条款失效或不可供时返回 `None`。
-///
-/// # 错误
-/// 可供数量为负时返回业务错误。
-///
-/// # 关键业务约束
-/// 可供数量为空表示供应商未给出上限，不等于不可供；条款有效期按当前业务日期
-/// 判定，业务日期由 Service 注入。
+// 复验单条供给当前修订与可供投影。
+//
+// 可供数量为空表示供应商未给出上限，不等于不可供；条款有效期按当前业务日期判定，业务日期由 Service 注入。
+//
+// 当前合格时返回供给；缺少当前修订、条款失效或不可供时返回 `None`。可供数量为负时返回业务错误。
+//
+// `offering` 为 ACTIVE 供给稳定身份。
 fn qualified_supply(facts: &CreationBasisFacts, offering: &OfferingFact) -> Result<Option<LineSupply>> {
     let Some(revision_id) = offering.stable.current_revision_id.as_ref() else {
         return Ok(None);
@@ -282,37 +229,22 @@ fn qualified_supply(facts: &CreationBasisFacts, offering: &OfferingFact) -> Resu
 
 /// 将精确时间转换为上海业务自然日。
 ///
-/// # 参数
-/// * `instant` - 销售履约期限
-///
-/// # 返回
-/// 返回 Asia/Shanghai 自然日。
-///
-/// # 错误
-/// 时区或日期构造失败时返回内部错误。
-///
-/// # 关键业务约束
 /// 不按 UTC 日期截断；规则由实体层统一提供。
+///
+/// 返回 Asia/Shanghai 自然日。时区或日期构造失败时返回内部错误。
 pub fn business_date_of(instant: Instant) -> Result<BusinessDate> {
     purchase_order::business_date_of(instant).map_err(|error| Error::Internal(error.to_string()))
 }
 
 /// 返回合法采购数量零值。
 ///
-/// # 参数
-/// 无。
+/// 只用于边界比较，不代表缺失业务数量。
 ///
-/// # 返回
 /// 返回六位精度数量零值。
 ///
-/// # 错误
-/// 不返回错误。
-///
 /// # Panics
-/// 常量 `"0"` 无法解析为数量时 panic。
 ///
-/// # 关键业务约束
-/// 只用于边界比较，不代表缺失业务数量。
+/// 常量 `"0"` 无法解析为数量时 panic。
 pub fn zero_quantity() -> Quantity {
     Quantity::from_str("0").expect("零数量合法")
 }
@@ -365,14 +297,14 @@ mod tests {
         );
         facts
     }
-    /// 缺少当前条款修订先跳过；不得让随后负可供量覆盖原资格顺序。
+    // 缺少当前条款修订先跳过；不得让随后负可供量覆盖原资格顺序。
     #[test]
     fn missing_revision_precedes_negative_availability() {
         let mut facts = facts(Some("-1"), AvailabilityStatus::Available);
         facts.revisions.clear();
         assert!(qualified_supply(&facts, &offering()).unwrap().is_none());
     }
-    /// 明确不可供先跳过；只有可供投影才进入数量合法性判断。
+    // 明确不可供先跳过；只有可供投影才进入数量合法性判断。
     #[test]
     fn unavailable_supply_precedes_negative_quantity_validation() {
         assert!(
@@ -384,7 +316,7 @@ mod tests {
             matches!(qualified_supply(&facts(Some("-1"),AvailabilityStatus::Available),&offering()),Err(Error::BusinessLogicError(message)) if message=="供应商可供数量不能为负")
         );
     }
-    /// 数量为空表示无限制，零数量仍不构成合格依据。
+    // 数量为空表示无限制，零数量仍不构成合格依据。
     #[test]
     fn unlimited_and_zero_availability_remain_distinct() {
         let unlimited =
@@ -396,7 +328,7 @@ mod tests {
                 .is_none()
         );
     }
-    /// 缺少供应商或当前商务资料沿用 NET-30；空付款代码不抹去已解析的经营类目。
+    // 缺少供应商或当前商务资料沿用 NET-30；空付款代码不抹去已解析的经营类目。
     #[test]
     fn settlement_missing_facts_and_blank_payment_keep_original_fallback() {
         let id = SupplierAccountId::new("supplier-1");

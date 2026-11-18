@@ -11,34 +11,15 @@ use super::identity::shared_rbac_service;
 use super::workflow::{WorkflowAuth, work_item_service};
 
 /// 构造绑定身份数据库的供给访问器。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `authorization` - 进程共享统一授权服务
-///
-/// # 返回
 /// 返回已注入本 adapter 的供给访问器。
 ///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
 /// 授权由本域直接调用 identity，组合根仅注入身份设施。
 pub fn offering_access(db: Database, authorization: Arc<AuthorizationService>) -> OfferingAccess {
     OfferingAccess::new(db, authorization)
 }
 
 /// 装配已接线范围 Port 的供给服务。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `authorization` - 进程共享统一授权服务
-///
-/// # 返回
 /// 返回注入生产范围 adapter 的供给服务。
-///
-/// # 错误
-/// 无。
 pub fn scoped_offering_service(
     db: Database,
     authorization: Arc<AuthorizationService>,
@@ -47,16 +28,7 @@ pub fn scoped_offering_service(
 }
 
 /// 装配已接线范围 Port 的供给治理流程。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `authorization` - 进程共享统一授权服务
-///
-/// # 返回
 /// 返回注入生产范围 adapter 的供给流程。
-///
-/// # 错误
-/// 无。
 pub fn scoped_offering_process(
     db: Database,
     authorization: Arc<AuthorizationService>,

@@ -12,15 +12,7 @@ use crate::repository::owned::{SupplierDeliveryTemplateRepository, SupplierOffer
 /// 配送模板集合查询。
 pub trait SupplierDeliveryTemplateRepositoryExt {
     /// 批量读取多个供应商的全部未删除模板。
-    ///
-    /// # 参数
-    /// * `supplier_ids` - 供应商集合
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 按供应商、名称排序的模板；空输入不查询。
-    ///
-    /// # 错误
     /// MongoDB 查询失败时返回错误。
     async fn list_by_suppliers(
         &self,
@@ -29,15 +21,7 @@ pub trait SupplierDeliveryTemplateRepositoryExt {
     ) -> Result<Vec<SupplierDeliveryTemplate>>;
 
     /// 读取供应商当前默认模板。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 供应商
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 存在默认模板时返回该模板。
-    ///
-    /// # 错误
     /// MongoDB 查询失败时返回错误。
     async fn find_default(
         &self,
@@ -46,16 +30,7 @@ pub trait SupplierDeliveryTemplateRepositoryExt {
     ) -> Result<Option<SupplierDeliveryTemplate>>;
 
     /// 按供应商与名称读取未删除模板。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 供应商
-    /// * `name` - 已规范化名称
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 同名模板存在时返回该模板。
-    ///
-    /// # 错误
     /// MongoDB 查询失败时返回错误。
     async fn find_by_name(
         &self,
@@ -104,15 +79,7 @@ impl SupplierDeliveryTemplateRepositoryExt for SupplierDeliveryTemplateRepositor
 /// 供给对配送模板的引用查询。
 pub trait OfferingDeliveryTemplateRepositoryExt {
     /// 判断是否仍有未删除供给指定该模板。
-    ///
-    /// # 参数
-    /// * `template_id` - 模板主键
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 存在引用时返回 `true`。
-    ///
-    /// # 错误
     /// MongoDB 查询失败时返回错误。
     async fn references_delivery_template(
         &self,

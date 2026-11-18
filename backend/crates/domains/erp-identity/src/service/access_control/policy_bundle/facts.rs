@@ -11,13 +11,12 @@ use crate::repository::access_control::person_scope::PersonDataScopeRepositoryEx
 use crate::{AccessControlExt, Error, MongoCasbinAdapter, Permission, Result, subject};
 
 impl PolicyBundleService {
-    /// 按文件引用有界读取人员、直接绑定、角色及范围。
-    /// # 参数
-    /// document 为规范化文件，executor 为原事务执行器。
-    /// # 返回
-    /// 同一事务内读取的目标事实。
-    /// # 错误
-    /// 人员失效、角色形态不受支持或读取失败时拒绝。
+    // 按文件引用有界读取人员、直接绑定、角色及范围。
+    // 同一事务内读取的目标事实。
+    //
+    // 人员失效、角色形态不受支持或读取失败时拒绝。
+    //
+    // document 为规范化文件，executor 为原事务执行器。
     pub(super) async fn facts(
         &self,
         document: &PolicyDocument,
@@ -44,13 +43,12 @@ impl PolicyBundleService {
         Ok(facts)
     }
 
-    /// 用户必须为当前有效后台账号；不读取 user_roles 留痕替代真实绑定。
-    /// # 参数
-    /// id 为后台账号标识，executor 为原事务执行器。
-    /// # 返回
-    /// 账号版本及真实角色绑定。
-    /// # 错误
-    /// 账号失效、角色键无效或读取失败时拒绝。
+    // 用户必须为当前有效后台账号；不读取 user_roles 留痕替代真实绑定。
+    // 账号版本及真实角色绑定。
+    //
+    // 账号失效、角色键无效或读取失败时拒绝。
+    //
+    // id 为后台账号标识，executor 为原事务执行器。
     pub(super) async fn user_fact(&self, id: &str, executor: &mut dyn Executor) -> Result<PolicyUserState> {
         let user = self
             .access
@@ -67,13 +65,12 @@ impl PolicyBundleService {
         PolicyUserState::from_role_keys(user.base.version, keys)
     }
 
-    /// 角色权限和所有直接受影响人员均从持久化事实读取。
-    /// # 参数
-    /// id 为角色标识，executor 为原事务执行器。
-    /// # 返回
-    /// 现有角色及直接权限和影响人员；全新身份返回空。
-    /// # 错误
-    /// 存在孤立授权、继承、非后台主体、影响超限或读取失败时拒绝。
+    // 角色权限和所有直接受影响人员均从持久化事实读取。
+    // 现有角色及直接权限和影响人员；全新身份返回空。
+    //
+    // 存在孤立授权、继承、非后台主体、影响超限或读取失败时拒绝。
+    //
+    // id 为角色标识，executor 为原事务执行器。
     pub(super) async fn role_fact(
         &self,
         id: &str,

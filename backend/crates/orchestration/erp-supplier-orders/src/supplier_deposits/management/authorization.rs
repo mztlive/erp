@@ -19,11 +19,11 @@ use crate::{Error, Result};
 
 impl SupplierDepositManagementProcess {
     /// 授予指定账户有期限和累计限额的自动余额执行权。
-    /// # 参数
-    /// * `account` / `command` / `actor` - 资金账户、完整条款和财务授权人。
-    /// # 返回
+    ///
+    /// `account` / `command` / `actor`：资金账户、完整条款和财务授权人。
+    ///
     /// 返回服务端记录授权身份的条款。
-    /// # 错误
+    ///
     /// 越范围、缺依据或无限额条款时拒绝。
     pub async fn authorize(
         &self,
@@ -43,11 +43,11 @@ impl SupplierDepositManagementProcess {
     }
 
     /// 撤销新写动作授权，原占用与资金调查继续保留。
-    /// # 参数
-    /// * `account` / `id` / `command` / `actor` - 原归属、授权、版本和操作人。
-    /// # 返回
+    ///
+    /// `account` / `id` / `command` / `actor`：原归属、授权、版本和操作人。
+    ///
     /// 返回已撤销授权。
-    /// # 错误
+    ///
     /// 越账户、越范围或版本漂移时拒绝。
     pub async fn revoke(
         &self,
@@ -69,11 +69,11 @@ impl SupplierDepositManagementProcess {
     }
 
     /// 登记同一观察范围的资金对账证据；异常不自动消失。
-    /// # 参数
-    /// * `account` / `command` / `actor` - 归属、对账证据和核验人。
-    /// # 返回
+    ///
+    /// `account` / `command` / `actor`：归属、对账证据和核验人。
+    ///
     /// 返回保留历史且不覆盖余额的对账记录。
-    /// # 错误
+    ///
     /// 越范围、时间不完整、重复异载荷或证据缺失时拒绝。
     pub async fn reconcile(
         &self,

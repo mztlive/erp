@@ -33,16 +33,7 @@ pub enum ReceivableAccountStatus {
 }
 
 impl ReceivableAccountStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为界面或响应展示提供应收子账结清状态的中文名称；机器筛选和存储不使用该名称。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Open => "未结",
@@ -51,16 +42,7 @@ impl ReceivableAccountStatus {
         }
     }
 
-    /// 返回状态的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将应收子账结清状态转成用于持久化和查询的稳定代码，与中文展示文案分开。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Open => "open",
@@ -91,15 +73,10 @@ pub enum AccountReviewStatus {
 
 impl AccountReviewStatus {
     /// 按来源销售单业务性质返回新建应收账户的唯一合法初始状态。
+    /// 结果：恒返回不适用；历史状态仅用于存量数据解码。
     ///
-    /// # 参数
-    /// * `_business_type` - 来源销售单业务性质（各性质结论相同，保留参数仅为调用兼容）
-    ///
-    /// # 返回
-    /// 恒返回不适用；历史状态仅用于存量数据解码。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 输入约定：
+    /// - `_business_type`：来源销售单业务性质（各性质结论相同，保留参数仅为调用兼容）
     pub fn initial_for_sales_business_type(_business_type: BusinessType) -> Self {
         Self::NotApplicable
     }
@@ -107,16 +84,12 @@ impl AccountReviewStatus {
     /// 派生并校验新建应收账户的唯一合法票款复核初始状态。
     ///
     /// 新建入口不接受历史待复核或已复核状态，所有销售性质均不适用复核。
-    ///
-    /// # 参数
-    /// * `requested` - 新建请求可选携带的复核状态
-    /// * `_business_type` - 来源销售单业务性质（各性质结论相同，保留参数仅为调用兼容）
-    ///
-    /// # 返回
-    /// 未携带或携带不适用时返回不适用。
-    ///
-    /// # 错误
+    /// 结果：未携带或携带不适用时返回不适用。
     /// 携带任一已退役状态时返回错误。
+    ///
+    /// 输入约定：
+    /// - `requested`：新建请求可选携带的复核状态
+    /// - `_business_type`：来源销售单业务性质（各性质结论相同，保留参数仅为调用兼容）
     pub fn resolve_initial(requested: Option<Self>, _business_type: BusinessType) -> Result<Self> {
         match requested {
             None | Some(Self::NotApplicable) => Ok(Self::NotApplicable),
@@ -124,16 +97,7 @@ impl AccountReviewStatus {
         }
     }
 
-    /// 返回状态的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为界面或响应展示提供应收子账审核状态的中文名称；机器筛选和存储不使用该名称。
     pub fn label(&self) -> &'static str {
         match self {
             Self::NotApplicable => "不适用",
@@ -143,16 +107,7 @@ impl AccountReviewStatus {
         }
     }
 
-    /// 返回状态的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将应收子账审核状态转成用于持久化和查询的稳定代码，与中文展示文案分开。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::NotApplicable => "not_applicable",
@@ -256,7 +211,7 @@ pub struct ReceivableAccount {
 }
 
 impl PartialEq for ReceivableAccount {
-    /// 全字段语义相等。
+    // 比较两份应收子账是否完全一致，业务字段和持久化元数据都参与比较。
     fn eq(&self, other: &Self) -> bool {
         self.base == other.base
             && self.stable.status == other.stable.status
@@ -284,22 +239,17 @@ impl PartialEq for ReceivableAccount {
 impl Eq for ReceivableAccount {}
 
 impl ReceivableAccount {
-    /// 创建应收往来子账。
+    /// 确认销售应收时建立往来子账，从应收、已核销及已开票金额计算开放余额。
     ///
     /// 完成复核三件套（人/时间/证据）的一致性校验、金额非负与上限校验，并派生
     /// `open_total`、`open_invoiceable_total` 与 `status`。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::ReceivableAccountId`）
-    /// * `data` - 创建数据
-    /// * `created_by` - 创建人（账号或系统身份）
-    ///
-    /// # 返回
     /// 返回新建的子账实体。
-    ///
-    /// # 错误
     /// 当子账序号为 0、复核三件套与复核状态不一致、金额为负或已核销/已开票
     /// 超过对应总额时返回错误。
+    ///
+    /// 输入约定：
+    /// - `id`：实体主键（`erp_core::ids::ReceivableAccountId`）
+    /// - `created_by`：创建人（账号或系统身份）
     pub fn new(
         id: ReceivableAccountId,
         data: ReceivableAccountData,
@@ -348,15 +298,6 @@ impl ReceivableAccount {
     ///
     /// 复核三件套（人/时间/证据）必须整体设置或整体省略；`reviewed_by` /
     /// `review_evidence_reference` 传入 `Some("")` 表示清除。
-    ///
-    /// # 参数
-    /// * `update` - 更新数据
-    /// * `updated_by` - 本次更新执行人
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 当复核三件套与复核状态不一致或文本超长时返回错误。
     pub fn update(&mut self, update: ReceivableAccountUpdate, updated_by: impl Into<String>) -> Result<()> {
         let review_status = update.review_status.unwrap_or(self.review_status);
@@ -396,17 +337,11 @@ impl ReceivableAccount {
     ///
     /// 由回款/发票分配过账事务在锁定子账后调用，重算 `open_total`、
     /// `open_invoiceable_total` 并派生 `status`（数据模型 §6.8「事务内同步汇总」）。
-    ///
-    /// # 参数
-    /// * `settled_total` - 重算后的已核销含税总额
-    /// * `invoiced_total` - 重算后的净已开含税总额
-    /// * `updated_by` - 本次更新执行人
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 当金额为负或已核销/已开票超过对应总额时返回错误。
+    ///
+    /// 输入约定：
+    /// - `settled_total`：重算后的已核销含税总额
+    /// - `invoiced_total`：重算后的净已开含税总额
     pub fn sync_totals(
         &mut self,
         settled_total: Amount,
@@ -425,36 +360,23 @@ impl ReceivableAccount {
         Ok(())
     }
 
-    /// 判断子账是否已结清。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 开放余额为零时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 判断应收子账是否已结清，仅开放余额为零时成立。
     pub fn is_settled(&self) -> bool {
         self.stable.status() == ReceivableAccountStatus::Settled
     }
 
-    /// 校验复核三件套与复核状态的一致性。
-    ///
-    /// 规则（数据模型 §6.8）：`reviewed` 状态必须携带复核人/时间/证据三件套，
-    /// 非 `reviewed` 状态不得携带；三件套内部必须成对出现。
-    ///
-    /// # 参数
-    /// * `review_status` - 复核状态
-    /// * `reviewed_by` - 复核人
-    /// * `reviewed_at` - 复核时间
-    /// * `evidence` - 复核证据引用
-    ///
-    /// # 返回
-    /// 返回规范化后的复核三件套。
-    ///
-    /// # 错误
-    /// 三件套不完整或与复核状态矛盾时返回错误。
+    // 校验复核三件套与复核状态的一致性。
+    //
+    // 规则（数据模型 §6.8）：`reviewed` 状态必须携带复核人/时间/证据三件套，
+    // 非 `reviewed` 状态不得携带；三件套内部必须成对出现。
+    // 返回规范化后的复核三件套。
+    // 三件套不完整或与复核状态矛盾时返回错误。
+    //
+    // 输入约定：
+    // - `review_status`：复核状态
+    // - `reviewed_by`：复核人
+    // - `reviewed_at`：复核时间
+    // - `evidence`：复核证据引用
     fn validate_review(
         review_status: AccountReviewStatus,
         reviewed_by: Option<String>,
@@ -484,19 +406,15 @@ impl ReceivableAccount {
     }
 }
 
-/// 校验子账汇总四金额并派生开放余额。
-///
-/// # 参数
-/// * `gross_total` - 含税总额
-/// * `settled_total` - 已核销总额
-/// * `invoiceable_total` - 可开票总额
-/// * `invoiced_total` - 净已开总额
-///
-/// # 返回
-/// 返回 `(open_total, open_invoiceable_total)`，均不得为负。
-///
-/// # 错误
-/// 金额为负或已核销/已开票超过对应总额时返回错误。
+// 校验子账汇总四金额并派生开放余额。
+// 返回 `(open_total, open_invoiceable_total)`，均不得为负。
+// 金额为负或已核销/已开票超过对应总额时返回错误。
+//
+// 输入约定：
+// - `gross_total`：含税总额
+// - `settled_total`：已核销总额
+// - `invoiceable_total`：可开票总额
+// - `invoiced_total`：净已开总额
 fn validate_totals(
     gross_total: Amount,
     settled_total: Amount,
@@ -519,14 +437,7 @@ fn validate_totals(
     Ok((gross_total.checked_sub(settled_total), invoiceable_total.checked_sub(invoiced_total)))
 }
 
-/// 由开放余额派生子账状态。
-///
-/// # 参数
-/// * `open_total` - 开放余额
-/// * `settled_total` - 已核销总额
-///
-/// # 返回
-/// 开放余额为零时为已结清，已核销为零时为未结，其余为部分结清。
+// 在构造或更新应收子账时由金额派生结清状态：开放余额为零视为已结清；否则，已核销为零视为未结，其余为部分结清。
 fn derive_status(open_total: Amount, settled_total: Amount) -> ReceivableAccountStatus {
     if open_total.to_decimal().is_zero() {
         ReceivableAccountStatus::Settled

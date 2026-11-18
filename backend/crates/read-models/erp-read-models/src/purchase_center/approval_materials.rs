@@ -47,18 +47,13 @@ pub struct ApprovalExtraCostSummary {
     pub pending_gross_total: String,
 }
 
-/// 费用采购单审批资料附带来源销售单已有附加费用合计；其他采购单返回空。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `materials` - 已授权的审批资料
-/// * `executor` - 原审批授权快照。
-///
-/// # 返回
-/// 费用采购单返回来源销售单的附加费用合计。
-///
-/// # 错误
-/// 仓储读取失败时返回错误。
+// 生成采购审批材料视图时，费用采购单审批资料附带来源销售单已有附加费用合计；其他采购单返回空。
+//
+// 调用参数：
+// * `materials` - 已授权的审批资料
+// * `executor` - 原审批授权快照。
+//
+// 费用采购单返回来源销售单的附加费用合计。
 pub(crate) async fn extra_cost_summary(
     db: &Database,
     materials: &ApprovalMaterialsView,
@@ -100,13 +95,14 @@ pub struct ApprovalPurchaseSourceLine {
     pub fulfillment_due_at: i64,
 }
 
-/// 已授权资料的精确采购提交对照；历史未冻结来源时不回填。
-/// # 参数
-/// 数据库、已经通过审批实例读取授权的资料及原快照执行器。
-/// # 返回
-/// 全部采购提交行；没有冻结销售来源的历史资料返回空值。
-/// # 错误
-/// 提交、总行数、销售版本或稳定销售行不匹配时拒绝读取。
+// 处理采购审批材料时，已授权资料的精确采购提交对照；历史未冻结来源时不回填。
+//
+// 调用参数：
+// 数据库、已经通过审批实例读取授权的资料及原快照执行器。
+//
+// 全部采购提交行；没有冻结销售来源的历史资料返回空值。
+//
+// 提交、总行数、销售版本或稳定销售行不匹配时拒绝读取。
 pub(crate) async fn purchase_lines(
     db: &Database,
     materials: &ApprovalMaterialsView,
@@ -207,7 +203,7 @@ async fn validate_revisions(
     Ok(())
 }
 
-/// 从不可变采购行组装主行与补充信息，并校验冻结销售来源。
+// 从不可变采购行生成主行与补充信息，并校验冻结销售来源。
 fn comparison_line(
     line: &PurchaseOrderSubmissionLine,
     allowed: &[ApprovalRelatedSalesSnapshot],
@@ -391,7 +387,7 @@ mod tests {
         assert_eq!(source.fulfillment_due_at, 1_800_000_000);
     }
 
-    /// 销售填写的采购供给价随来源行进入采购审批对照，不改变采购单价。
+    // 验证采购审批材料：销售填写的采购供给价随来源行进入采购审批对照，不改变采购单价。
     #[test]
     fn comparison_exposes_sales_procurement_supply_price() {
         let mut sales = goods();

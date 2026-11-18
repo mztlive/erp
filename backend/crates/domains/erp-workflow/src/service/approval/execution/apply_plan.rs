@@ -54,16 +54,9 @@ pub struct PlannedWrites {
 ///
 /// 最终通过必须先登记 `FinalApprove` 动作，再允许应用实例终态。
 ///
-/// # 参数
-/// * `plan` - 引擎计划
-/// * `receipt` - 已构造收据
-/// * `domain_action` - 本命令对应的领域动作
-///
-/// # 返回
 /// 返回可在一个事务中应用的写入集合。
 ///
-/// # 错误
-/// 不返回错误。
+/// `receipt`：已构造收据；`domain_action`：本命令对应的领域动作。
 pub fn apply_plan(
     plan: TransitionPlan,
     receipt: ApprovalCommandReceipt,
@@ -97,15 +90,7 @@ pub fn apply_plan(
 }
 
 /// 最终通过计划必须先执行领域动作。
-///
-/// # 参数
-/// * `writes` - 计划写入
-///
-/// # 返回
 /// 终态通过且未登记最终动作时返回 `false`。
-///
-/// # 错误
-/// 不返回错误。
 pub fn final_approve_requires_domain_action(writes: &PlannedWrites) -> bool {
     writes.commit != CommitRequired::TerminalApproved
         || writes.domain_action == Some(DomainActionKind::FinalApprove)
@@ -127,7 +112,7 @@ mod tests {
     use super::{DomainActionKind, apply_plan, final_approve_requires_domain_action};
     use crate::service::approval::execution::idempotency::{decision_identity, normalize_idempotency_key};
 
-    /// 任务意图按类型拆分，终态通过必须带最终动作。
+    // 验证：任务意图按类型拆分，终态通过必须带最终动作。
     #[test]
     fn execution_apply_plan_splits_task_intents() {
         let instance = ApprovalProcessInstance::start_running(NewProcessInstance {

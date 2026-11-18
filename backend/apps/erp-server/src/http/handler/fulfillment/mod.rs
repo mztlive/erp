@@ -18,18 +18,13 @@ use crate::http::state::HttpState;
 use crate::wiring::approval_runtime;
 use crate::wiring::workflow::work_item_service;
 
-/// 构造本域履约查询服务。
-///
-/// # 参数
-/// * `state` - 应用状态
-///
-/// # 返回
-/// 返回履约服务实例。
+// 构造本域履约查询服务。
+// 返回履约服务实例。
 fn service(state: &HttpState) -> FulfillmentReadService {
     FulfillmentReadService::new(state.application().db(), state.application().authorization())
 }
 
-/// 构造跨域履约过程并保留实际配置和对象读取授权注入。
+// 为跨域履约命令构造 Process，接入应用实际配置与对象读取授权，而非在 HTTP 侧执行业务规则。
 fn process(state: &HttpState) -> FulfillmentProcess {
     FulfillmentProcess::new(
         state.application().db(),

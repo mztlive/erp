@@ -73,16 +73,7 @@ pub struct StockMovementFilter {
 }
 
 impl Default for StockMovementFilter {
-    /// 返回首页空筛选（`page: 1`，`page_size: 20`）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回筛选为空、降序的首页过滤条件。
-    ///
-    /// # 错误
-    /// 无。
+    // 初始化库存流水筛选：第一页、每页 20 条，业务筛选默认留空，默认降序排序。
     fn default() -> Self {
         Self {
             search: super::InventorySearch::default(),
@@ -102,21 +93,8 @@ impl Default for StockMovementFilter {
 }
 
 impl QueryFilter for StockMovementFilter {
-    /// 转换为 MongoDB 查询条件（正式事实恒为未删除）。
-    ///
-    /// 基底来自 `scoped_base_filter`（未删除，以及 `warehouse_ids`：`None` 不限仓库，空集合保持空 `$in`）。
-    /// 有值时精确匹配 `sku_id`，并按稳定代码匹配 `movement_type`、`direction`；给出的 `occurred_from`、
-    /// `occurred_to` 分别写成 `occurred_at` 的 `$gte`、`$lte`（秒级时间戳，含端点），都缺则不写该字段；
-    /// `recorded_by_ids` 为 `Some` 时按 `recorded_by` 做 `$in`（空集合无命中）。最后并入 `search`。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 转换为 MongoDB 查询条件（正式事实恒为未删除）。
+    // 基底来自 `scoped_base_filter`（未删除，以及 `warehouse_ids`：`None` 不限仓库，空集合保持空 `$in`）。有值时精确匹配 `sku_id`，并按稳定代码匹配 `movement_type`、`direction`；给出的 `occurred_from`、`occurred_to` 分别写成 `occurred_at` 的 `$gte`、`$lte`（秒级时间戳，含端点），都缺则不写该字段；`recorded_by_ids` 为 `Some` 时按 `recorded_by` 做 `$in`（空集合无命中）。最后并入 `search`。
     fn to_doc(&self) -> Document {
         let mut filter = scoped_base_filter(self.warehouse_ids.as_deref());
         if let Some(sku_id) = &self.sku_id {
@@ -149,18 +127,8 @@ impl QueryFilter for StockMovementFilter {
 }
 
 impl Pagination for StockMovementFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// 原样返回 `page`，并把 `page_size` 从 `u32` 拓宽为 `u64`；不在此处把小于 1 的页码归一。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 向仓储分页传递页码与单页条数。
+    // 原样返回 `page`，并把 `page_size` 从 `u32` 拓宽为 `u64`；不在此处把小于 1 的页码归一。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -170,26 +138,11 @@ impl Pagination for StockMovementFilter {
 #[allow(async_fn_in_trait)]
 pub trait StockMovementRepositoryExt {
     /// 分页检索库存流水台账（投影查询）。
-    ///
-    /// 只返回 [`StockMovementRow`] 所需的列表字段，不加载整文档；排序字段走
-    /// 白名单映射（`occurred_at`/`recorded_at`/`created_at`）。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
+    /// 只返回 [`StockMovementRow`] 所需的列表字段，不加载整文档；排序字段走白名单映射（`occurred_at`/`recorded_at`/`created_at`）。
     /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    /// 按统一库存模型凭证分页查询；候选条件只收窄结果。
-    /// # 参数
-    /// filter 为业务筛选，access 为当前动作凭证，executor 为原读取执行器。
-    /// # 返回
     /// 完整授权条件下的页与总数；缺资格返回空页。
-    /// # 错误
-    /// 模型错配、复验或数据库失败返回错误。
+    /// `executor` 为数据访问执行器，由 Service 决定是否位于事务中 filter 为业务筛选，access 为当前动作凭证，executor 为原读取执行器。
+    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。按统一库存模型凭证分页查询；候选条件只收窄结果。模型错配、复验或数据库失败返回错误。
     async fn search_authorized_stock_movements(
         &self,
         filter: &StockMovementFilter,
@@ -198,11 +151,8 @@ pub trait StockMovementRepositoryExt {
     ) -> InventoryResult<PageResult<StockMovementRow>>;
 
     /// 查询已授权父对象的附属流水，调用方必须先证明父对象资格。
-    /// # 参数
-    /// filter 为固定父对象维度，executor 为原读取执行器。
-    /// # 返回
     /// 该维度内的流水页。
-    /// # 错误
+    /// filter 为固定父对象维度，executor 为原读取执行器。
     /// 数据库或解码失败返回错误。
     async fn search_stock_movements(
         &self,
@@ -211,18 +161,10 @@ pub trait StockMovementRepositoryExt {
     ) -> Result<PageResult<StockMovementRow>>;
 
     /// 按唯一来源单据标识查询库存流水（详情查询）。
-    ///
     /// 同一来源单据（如一次采购入库）可能产生多行流水。
-    ///
-    /// # 参数
-    /// * `source_document_id` - 唯一来源单据标识
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回匹配的流水集合。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// `source_document_id` 为唯一来源单据标识；沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询或游标读取错误。
     async fn find_by_source_document(
         &self,
         source_document_id: &str,
@@ -280,7 +222,7 @@ impl StockMovementRepositoryExt for Repository<'_, StockMovement> {
     }
 }
 
-/// 为库存流水分页追加唯一主键 tie-breaker，避免相同主排序值跨页重复或遗漏。
+// 为库存流水分页追加唯一主键 tie-breaker，避免相同主排序值跨页重复或遗漏。
 fn stock_movement_sort(filter: &StockMovementFilter) -> Document {
     with_id_tie_breaker(
         sort_doc(
@@ -294,16 +236,9 @@ fn stock_movement_sort(filter: &StockMovementFilter) -> Document {
 
 impl<'a> InventoryRepository<'a> {
     /// 按来源单据读取库存流水。
-    ///
-    /// # 参数
-    /// * `source_document_id` - 来源单据主键
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回该来源单据产生的全部未删除流水。
-    ///
-    /// # 错误
-    /// MongoDB 查询或游标读取失败时返回错误。
+    /// `source_document_id` 为来源单据主键；沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询或游标读取错误。
     #[tracing::instrument(
         name = "repository.inventory.movements_for_source_document",
         skip_all,
@@ -333,16 +268,9 @@ impl<'a> InventoryRepository<'a> {
     }
 
     /// 按主键集合批量读取库存流水。
-    ///
-    /// # 参数
-    /// * `ids` - 流水主键集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回全部命中的未删除流水。
-    ///
-    /// # 错误
-    /// MongoDB 查询或游标读取失败时返回错误。
+    /// `ids` 为流水主键集合；沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询或游标读取错误。
     pub async fn movements_by_ids(
         &self,
         ids: &[String],
@@ -352,10 +280,7 @@ impl<'a> InventoryRepository<'a> {
     }
 }
 
-/// 库存流水列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
+// 库存流水列表投影字段。
 fn stock_movement_projection() -> Document {
     doc! {
         "id": 1,

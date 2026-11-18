@@ -23,7 +23,7 @@ pub struct UpdateCustomerReceiptRequest {
 }
 
 impl From<UpdateCustomerReceiptRequest> for CustomerReceiptUpdate {
-    /// 只映射实体允许修改的字段，原单号、来源及创建人不进入更新数据。
+    // 把编辑请求转换为回款实体可写字段；保存草稿时不得由请求替换原单号、资金来源或创建人。
     fn from(value: UpdateCustomerReceiptRequest) -> Self {
         Self { received_at: value.received_at, amount: value.amount, bank_reference: value.bank_reference }
     }
@@ -37,7 +37,7 @@ mod tests {
     use super::UpdateCustomerReceiptRequest;
     use crate::entity::receivable::CustomerReceiptUpdate;
 
-    /// 草稿编辑只接受原可变字段与非零版本。
+    // 回归检查：草稿编辑只接受原可变字段与非零版本。
     #[test]
     fn request_maps_mutable_fields_and_rejects_identity_changes() {
         let valid =

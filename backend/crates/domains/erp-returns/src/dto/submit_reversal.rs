@@ -8,7 +8,7 @@ use super::{
     SubmitSupplierRefundRequest,
 };
 
-/// 将同一原单、操作人、操作号和请求版本绑定为不可变提交收据。
+// 提交退款或冲正时将真实操作人、动作、原单与幂等键绑定到命令身份；载荷取原请求版本，重提说明有值时去除首尾空白后纳入指纹。
 fn submit_receipt(
     resource_type: &str,
     id: &str,
@@ -35,17 +35,8 @@ fn submit_receipt(
 }
 
 impl SubmitReceiptReversalRequest {
-    /// 构造回款冲正原单提交的稳定命令收据。
-    ///
-    /// # 参数
-    /// * `id` - 原冲正单主键。
-    /// * `actor_id` - 当前提交人。
-    ///
-    /// # 返回
-    /// 返回绑定原版本的提交收据。
-    ///
-    /// # 错误
-    /// 单据或操作号为空时返回参数错误。
+    /// 提交回款冲正审批前，将原回款冲正单 ID、实际提交人和幂等键绑定到该动作的命令身份。
+    /// 以请求中的原期望版本与规范化后的重提说明形成载荷指纹，不读取原回款冲正单的当前审批轮次；单据或操作号为空时拒绝。
     pub fn command_receipt(&self, id: &str, actor_id: &str) -> Result<CommandReceipt> {
         submit_receipt(
             "receipt_reversal",
@@ -59,17 +50,8 @@ impl SubmitReceiptReversalRequest {
 }
 
 impl SubmitPaymentReversalRequest {
-    /// 构造付款冲正原单提交的稳定命令收据。
-    ///
-    /// # 参数
-    /// * `id` - 原冲正单主键。
-    /// * `actor_id` - 当前提交人。
-    ///
-    /// # 返回
-    /// 返回绑定原版本的提交收据。
-    ///
-    /// # 错误
-    /// 单据或操作号为空时返回参数错误。
+    /// 提交付款冲正审批前，将原付款冲正单 ID、实际提交人和幂等键绑定到该动作的命令身份。
+    /// 以请求中的原期望版本与规范化后的重提说明形成载荷指纹，不读取原付款冲正单的当前审批轮次；单据或操作号为空时拒绝。
     pub fn command_receipt(&self, id: &str, actor_id: &str) -> Result<CommandReceipt> {
         submit_receipt(
             "payment_reversal",
@@ -83,17 +65,8 @@ impl SubmitPaymentReversalRequest {
 }
 
 impl SubmitCustomerRefundRequest {
-    /// 构造客户退款原单提交的稳定命令收据。
-    ///
-    /// # 参数
-    /// * `id` - 原冲正单主键。
-    /// * `actor_id` - 当前提交人。
-    ///
-    /// # 返回
-    /// 返回绑定原版本的提交收据。
-    ///
-    /// # 错误
-    /// 单据或操作号为空时返回参数错误。
+    /// 提交客户退款审批前，将原客户退款单 ID、实际提交人和幂等键绑定到该动作的命令身份。
+    /// 以请求中的原期望版本与规范化后的重提说明形成载荷指纹，不读取原客户退款单的当前审批轮次；单据或操作号为空时拒绝。
     pub fn command_receipt(&self, id: &str, actor_id: &str) -> Result<CommandReceipt> {
         submit_receipt(
             "customer_refund",
@@ -107,17 +80,8 @@ impl SubmitCustomerRefundRequest {
 }
 
 impl SubmitSupplierRefundRequest {
-    /// 构造供应商退款原单提交的稳定命令收据。
-    ///
-    /// # 参数
-    /// * `id` - 原冲正单主键。
-    /// * `actor_id` - 当前提交人。
-    ///
-    /// # 返回
-    /// 返回绑定原版本的提交收据。
-    ///
-    /// # 错误
-    /// 单据或操作号为空时返回参数错误。
+    /// 提交供应商退款审批前，将原供应商退款单 ID、实际提交人和幂等键绑定到该动作的命令身份。
+    /// 以请求中的原期望版本与规范化后的重提说明形成载荷指纹，不读取原供应商退款单的当前审批轮次；单据或操作号为空时拒绝。
     pub fn command_receipt(&self, id: &str, actor_id: &str) -> Result<CommandReceipt> {
         submit_receipt(
             "supplier_refund",
@@ -136,7 +100,7 @@ mod tests {
 
     use super::*;
 
-    /// 两类冲正均以请求原版本匹配回放，同一键的不同版本必须冲突。
+    // 验证两类冲正均以请求原版本匹配回放，同一键的不同版本必须冲突。
     #[test]
     fn reversal_submission_receipts_bind_actor_document_and_original_version() {
         let receipt_request = SubmitReceiptReversalRequest {
@@ -196,7 +160,7 @@ mod tests {
         );
     }
 
-    /// 操作号按同一 trim 语义形成身份，空操作号和空资源拒绝进入命令。
+    // 验证操作号按同一 trim 语义形成身份，空操作号和空资源拒绝进入命令。
     #[test]
     fn reversal_submission_receipts_normalize_keys_and_reject_blank_identity() {
         let req = SubmitReceiptReversalRequest {
@@ -226,7 +190,7 @@ mod tests {
         );
     }
 
-    /// 重提说明属于幂等载荷；同键改说明冲突，首尾空白不改变语义。
+    // 验证重提说明属于幂等载荷；同键改说明冲突，首尾空白不改变语义。
     #[test]
     fn reversal_resubmission_receipts_bind_reason() {
         for resource_type in ["customer_refund", "supplier_refund", "receipt_reversal", "payment_reversal"] {
@@ -243,7 +207,7 @@ mod tests {
         }
     }
 
-    /// 退款请求版本进入独立收据，不随单据后续审批轮次变化。
+    // 验证退款请求版本进入独立收据，不随单据后续审批轮次变化。
     #[test]
     fn refund_submission_receipts_bind_original_version() {
         let customer = SubmitCustomerRefundRequest {

@@ -37,14 +37,8 @@ use crate::http::handler::file_asset::{
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
-/// 查询商品分类列表。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `query` - 分页与筛选参数（`category_code`/`name`/`parent_category_id`/`status` 扁平传递）
-///
-/// # 返回
-/// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
+/// 按请求条件查询商品分类列表。
+/// `query` 为分页与筛选参数（`category_code`/`name`/`parent_category_id`/`status` 扁平传递）。
 pub async fn product_category_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -56,13 +50,8 @@ pub async fn product_category_list(
 }
 
 /// 创建商品分类。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 创建请求（`{ category_code?, parent_category_id?, name, product_kind, status? }`）；省略代码时自动取号。
-///
-/// # 返回
+/// `req` 为创建请求（`{ category_code?, parent_category_id?, name, product_kind, status? }`）；
+/// 省略代码时自动取号。
 /// 返回新建分类的响应视图。
 pub async fn product_category_create(
     State(state): State<HttpState>,
@@ -82,14 +71,7 @@ pub async fn product_category_create(
 }
 
 /// 更新商品分类（乐观锁：请求携带期望版本，冲突返回 409）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 分类 ID
-/// * `req` - 更新请求（含期望版本）
-///
-/// # 返回
+/// `req` 为更新请求（含期望版本）。
 /// 返回更新后分类的响应视图。
 pub async fn product_category_update(
     State(state): State<HttpState>,
@@ -103,14 +85,7 @@ pub async fn product_category_update(
 }
 
 /// 移动商品分类到新父分类（树形维护，成环检测在服务层完成）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 分类 ID
-/// * `req` - 移动请求（含期望版本与新父分类）
-///
-/// # 返回
+/// `req` 为移动请求（含期望版本与新父分类）。
 /// 返回移动后分类的响应视图。
 pub async fn product_category_move(
     State(state): State<HttpState>,
@@ -124,13 +99,6 @@ pub async fn product_category_move(
 }
 
 /// 删除商品分类（软删除；存在子分类时拒绝）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 分类 ID
-///
-/// # 返回
 /// 返回删除结果（`data` 为 `null`）。
 pub async fn product_category_delete(
     State(state): State<HttpState>,
@@ -142,14 +110,8 @@ pub async fn product_category_delete(
     Ok(ApiResponse::ok())
 }
 
-/// 查询商品品牌列表。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `query` - 分页与筛选参数（`brand_code`/`name`/`status` 扁平传递）
-///
-/// # 返回
-/// 返回契约形状的分页视图。
+/// 按请求条件查询商品品牌列表。
+/// `query` 为分页与筛选参数（`brand_code`/`name`/`status` 扁平传递）。
 pub async fn product_brand_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -161,13 +123,7 @@ pub async fn product_brand_list(
 }
 
 /// 创建商品品牌。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 创建请求（`{ brand_code?, name, status? }`）；省略代码时自动取号。
-///
-/// # 返回
+/// `req` 为创建请求（`{ brand_code?, name, status? }`）；省略代码时自动取号。
 /// 返回新建品牌的响应视图。
 pub async fn product_brand_create(
     State(state): State<HttpState>,
@@ -180,16 +136,7 @@ pub async fn product_brand_create(
 }
 
 /// 一次接收品牌创建命令与 Logo，并原子登记文件元数据和品牌。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 当前认证账号
-/// * `multipart` - 品牌 JSON 命令和具名 Logo 文件
-///
-/// # 返回
 /// 返回新建品牌视图。
-///
-/// # 错误
 /// 文件、业务校验或事务失败时返回原错误；提交结果未知时保留对象。
 pub async fn product_brand_create_with_assets(
     State(state): State<HttpState>,
@@ -206,14 +153,7 @@ pub async fn product_brand_create_with_assets(
 }
 
 /// 更新商品品牌（乐观锁）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 品牌 ID
-/// * `req` - 更新请求（含期望版本）
-///
-/// # 返回
+/// `req` 为更新请求（含期望版本）。
 /// 返回更新后品牌的响应视图。
 pub async fn product_brand_update(
     State(state): State<HttpState>,
@@ -227,17 +167,7 @@ pub async fn product_brand_update(
 }
 
 /// 一次接收品牌更新命令与 Logo，并原子登记文件元数据和品牌变更。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 当前认证账号
-/// * `id` - 品牌 ID
-/// * `multipart` - 品牌 JSON 命令和具名 Logo 文件
-///
-/// # 返回
 /// 返回更新后品牌视图。
-///
-/// # 错误
 /// 文件、版本或事务失败时返回原错误；提交结果未知时保留对象。
 pub async fn product_brand_update_with_assets(
     State(state): State<HttpState>,
@@ -256,13 +186,6 @@ pub async fn product_brand_update_with_assets(
 }
 
 /// 删除商品品牌（软删除）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 品牌 ID
-///
-/// # 返回
 /// 返回删除结果（`data` 为 `null`）。
 pub async fn product_brand_delete(
     State(state): State<HttpState>,
@@ -274,14 +197,8 @@ pub async fn product_brand_delete(
     Ok(ApiResponse::ok())
 }
 
-/// 查询计量单位列表。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `query` - 分页与筛选参数（`unit_code`/`name`/`status` 扁平传递）
-///
-/// # 返回
-/// 返回契约形状的分页视图。
+/// 按请求条件查询计量单位列表。
+/// `query` 为分页与筛选参数（`unit_code`/`name`/`status` 扁平传递）。
 pub async fn unit_of_measure_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -293,13 +210,7 @@ pub async fn unit_of_measure_list(
 }
 
 /// 创建计量单位。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 创建请求（`{ unit_code, name, symbol, quantity_scale, status? }`）
-///
-/// # 返回
+/// `req` 为创建请求（`{ unit_code, name, symbol, quantity_scale, status? }`）。
 /// 返回新建单位的响应视图。
 pub async fn unit_of_measure_create(
     State(state): State<HttpState>,
@@ -314,14 +225,7 @@ pub async fn unit_of_measure_create(
 }
 
 /// 更新计量单位（乐观锁）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 单位 ID
-/// * `req` - 更新请求（含期望版本）
-///
-/// # 返回
+/// `req` 为更新请求（含期望版本）。
 /// 返回更新后单位的响应视图。
 pub async fn unit_of_measure_update(
     State(state): State<HttpState>,
@@ -335,13 +239,6 @@ pub async fn unit_of_measure_update(
 }
 
 /// 删除计量单位（软删除）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 单位 ID
-///
-/// # 返回
 /// 返回删除结果（`data` 为 `null`）。
 pub async fn unit_of_measure_delete(
     State(state): State<HttpState>,
@@ -353,14 +250,8 @@ pub async fn unit_of_measure_delete(
     Ok(ApiResponse::ok())
 }
 
-/// 查询规格属性列表。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `query` - 分页与筛选参数（`attribute_code`/`name`/`value_type`/`status` 扁平传递）
-///
-/// # 返回
-/// 返回契约形状的分页视图。
+/// 按请求条件查询规格属性列表。
+/// `query` 为分页与筛选参数（`attribute_code`/`name`/`value_type`/`status` 扁平传递）。
 pub async fn sku_attribute_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -372,13 +263,7 @@ pub async fn sku_attribute_list(
 }
 
 /// 创建规格属性。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 创建请求（`{ attribute_code, name, value_type, status? }`）
-///
-/// # 返回
+/// `req` 为创建请求（`{ attribute_code, name, value_type, status? }`）。
 /// 返回新建属性的响应视图。
 pub async fn sku_attribute_create(
     State(state): State<HttpState>,
@@ -393,14 +278,7 @@ pub async fn sku_attribute_create(
 }
 
 /// 更新规格属性（乐观锁）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 属性 ID
-/// * `req` - 更新请求（含期望版本）
-///
-/// # 返回
+/// `req` 为更新请求（含期望版本）。
 /// 返回更新后属性的响应视图。
 pub async fn sku_attribute_update(
     State(state): State<HttpState>,
@@ -414,13 +292,6 @@ pub async fn sku_attribute_update(
 }
 
 /// 删除规格属性（软删除）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 属性 ID
-///
-/// # 返回
 /// 返回删除结果（`data` 为 `null`）。
 pub async fn sku_attribute_delete(
     State(state): State<HttpState>,
@@ -432,14 +303,8 @@ pub async fn sku_attribute_delete(
     Ok(ApiResponse::ok())
 }
 
-/// 查询规格属性值列表。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `query` - 分页与筛选参数（`attribute_id`/`value_code`/`display_value`/`status` 扁平传递）
-///
-/// # 返回
-/// 返回契约形状的分页视图。
+/// 按请求条件查询规格属性值列表。
+/// `query` 为分页与筛选参数（`attribute_id`/`value_code`/`display_value`/`status` 扁平传递）。
 pub async fn sku_attribute_value_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -451,13 +316,7 @@ pub async fn sku_attribute_value_list(
 }
 
 /// 创建规格属性值。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 创建请求（`{ attribute_id, value_code, display_value, sort_order, status? }`）
-///
-/// # 返回
+/// `req` 为创建请求（`{ attribute_id, value_code, display_value, sort_order, status? }`）。
 /// 返回新建属性值的响应视图。
 pub async fn sku_attribute_value_create(
     State(state): State<HttpState>,
@@ -477,14 +336,7 @@ pub async fn sku_attribute_value_create(
 }
 
 /// 更新规格属性值（乐观锁）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 属性值 ID
-/// * `req` - 更新请求（含期望版本）
-///
-/// # 返回
+/// `req` 为更新请求（含期望版本）。
 /// 返回更新后属性值的响应视图。
 pub async fn sku_attribute_value_update(
     State(state): State<HttpState>,
@@ -498,13 +350,6 @@ pub async fn sku_attribute_value_update(
 }
 
 /// 删除规格属性值（软删除）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 属性值 ID
-///
-/// # 返回
 /// 返回删除结果（`data` 为 `null`）。
 pub async fn sku_attribute_value_delete(
     State(state): State<HttpState>,

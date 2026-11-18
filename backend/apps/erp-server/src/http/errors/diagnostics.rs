@@ -13,14 +13,9 @@ pub(super) struct Diagnostic {
 }
 
 impl Diagnostic {
-    /// 从边界错误提取安全诊断。
-    ///
-    /// # 参数
-    /// `error` 为当前请求错误；原始内容只用于内存内分类和摘要计算。
-    /// # 返回
-    /// 固定类别与单向摘要，供关联同类服务故障使用。
-    /// # 错误
-    /// 无。
+    // 从边界错误提取安全诊断。
+    // `error` 为当前请求错误；原始内容只用于内存内分类和摘要计算。
+    // 固定类别与单向摘要，供关联同类服务故障使用。
     pub(super) fn from_error(error: &Error) -> Self {
         let kind = match error {
             Error::Internal(_) => "internal",
@@ -49,7 +44,7 @@ impl Diagnostic {
     }
 }
 
-/// 分类只用于诊断，不改变 HTTP 错误码、业务判断或重试政策。
+// 为服务端诊断归类原始失败；分类只用于记录，不参与客户端错误码、业务决定或重试判定。
 fn internal_category(message: &str) -> &'static str {
     let normalized = message.to_ascii_lowercase();
     let categories: &[(&[&str], &str)] = &[
@@ -67,7 +62,7 @@ fn internal_category(message: &str) -> &'static str {
         .map_or("unclassified", |(_, category)| *category)
 }
 
-/// 使用不落日志的进程随机盐，避免通过枚举错误文本反查敏感值。
+// 用未记录的进程内随机盐生成诊断摘要，避免只凭日志枚举可能的敏感错误文本。
 fn digest(message: &str) -> String {
     static SALT: OnceLock<Uuid> = OnceLock::new();
     let mut digest = Sha256::new();

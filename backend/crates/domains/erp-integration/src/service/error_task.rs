@@ -19,15 +19,7 @@ use crate::{Error, Result};
 impl IntegrationOpsService {
     /// 分页查询集成错误任务列表。
     ///
-    /// # 参数
-    /// * `params` - 列表查询参数
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 返回已执行完整授权条件的分页视图及范围元数据。
-    ///
-    /// # 错误
-    /// 查询参数非法、范围版本变化、授权或组织展开失败、仓储查询或事务失败时返回对应错误。
+    /// 返回已执行完整授权条件的分页视图及范围元数据。查询参数非法、范围版本变化、授权或组织展开失败、仓储查询或事务失败时返回对应错误。
     pub async fn error_task_list(
         &self,
         params: &ErrorTaskListParams,
@@ -51,14 +43,10 @@ impl IntegrationOpsService {
 
     /// 在调用方读取阶段取得完整授权分页及待交付的原查询凭证。
     ///
-    /// # 参数
+    /// 分页视图及查询凭证；调用方必须补齐展示后通过 `IntegrationAccess::validate` 才能交付。参数非法、资格不足、
+    /// 范围变化或分页读取失败时拒绝。
+    ///
     /// `params` 为原列表筛选，`actor` 为当前账号，`executor` 为用例原执行器。
-    ///
-    /// # 返回
-    /// 分页视图及查询凭证；调用方必须补齐展示后通过 `IntegrationAccess::validate` 才能交付。
-    ///
-    /// # 错误
-    /// 参数非法、资格不足、范围变化或分页读取失败时拒绝。
     pub async fn error_task_list_read(
         &self,
         params: &ErrorTaskListParams,
@@ -91,15 +79,9 @@ impl IntegrationOpsService {
 
     /// 确认关联入站消息存在；不校验处理状态。
     ///
-    /// # 参数
-    /// * `executor` - 原用例授权事务或读取阶段的执行器。
-    /// * `id` - 消息 ID
+    /// 消息存在时成功。消息不存在时返回 `NotFound`；仓储读取失败时返回对应错误。
     ///
-    /// # 返回
-    /// 消息存在时成功。
-    ///
-    /// # 错误
-    /// 消息不存在时返回 `NotFound`；仓储读取失败时返回对应错误。
+    /// 使用原用例授权事务或读取阶段的执行器。
     pub async fn ensure_message_exists(&self, id: &str, executor: &mut dyn Executor) -> Result<()> {
         self.db
             .inbox_messages()
@@ -111,15 +93,9 @@ impl IntegrationOpsService {
 }
 /// 由已校验请求构造原责任政策下的错误任务。
 ///
-/// # 参数
-/// * `req` - 错误任务登记请求
-/// * `owner_org_unit_id` - 处理人当前内部组织
+/// 返回带派生责任角色的错误任务。实体字段或责任不变量失败时返回 `Logic`。
 ///
-/// # 返回
-/// 返回带派生责任角色的错误任务。
-///
-/// # 错误
-/// 实体字段或责任不变量失败时返回 `Logic`。
+/// `owner_org_unit_id` 为处理人当前内部组织。
 pub fn prepare_error_task(
     req: &CreateErrorTaskRequest,
     owner_org_unit_id: String,
@@ -134,7 +110,7 @@ pub fn prepare_error_task(
     )?)
 }
 
-/// 把已规范化查询与授权条件装配为仓储筛选。
+// 把已规范化查询与授权条件装配为仓储筛选。
 fn error_task_filter(
     query: dto::ErrorTaskListQuery,
     owner_org_unit_ids: Vec<String>,
@@ -156,7 +132,7 @@ fn error_task_filter(
     }
 }
 
-/// 装配带范围元数据的错误任务列表响应。
+// 组装错误任务分页响应，供调用方返回当前筛选及授权范围的摘要。
 fn error_task_list_view(
     page: persistence_core::PageResult<crate::repository::integration_ops::IntegrationErrorTaskRow>,
     filter: &IntegrationErrorTaskFilter,
@@ -199,18 +175,7 @@ fn map_error_task_row(row: crate::repository::integration_ops::IntegrationErrorT
     }
 }
 
-/// 在调用方事务内保存错误任务。
-///
-/// # 参数
-/// * `db` - 目标数据库
-/// * `task` - 待写入的错误任务
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 成功时任务已写入。
-///
-/// # 错误
-/// 仓储写入失败时返回对应错误。
+/// 在调用方事务内保存错误任务。成功时任务已写入。
 pub async fn persist_error_task(
     db: &Database,
     task: &IntegrationErrorTask,

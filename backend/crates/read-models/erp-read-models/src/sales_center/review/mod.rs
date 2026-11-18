@@ -20,17 +20,13 @@ pub struct SalesChangeReadService {
     rbac: Arc<AuthorizationService>,
 }
 impl SalesChangeReadService {
-    /// 使用数据库句柄和共享授权服务构造只读查询服务。
+    /// 装配销售变更时，使用数据库句柄和共享授权服务构造只读查询服务。
     ///
     /// # 参数
-    /// * `db` - MongoDB 数据库
     /// * `rbac` - 应用启动时完整装配的共享授权服务
     ///
     /// # 返回
     /// 返回可解析销售范围的服务；构造不执行查询。
-    ///
-    /// # 错误
-    /// 无。
     ///
     /// # 关键业务约束
     /// 变更单沿原销售单当前负责人和 `business_org_unit_id` 接入。

@@ -105,7 +105,7 @@ mod tests {
 
     use super::test_support;
 
-    /// 治理能力声明必须与适配器实际实现的窄 trait 保持一致。
+    // 对照治理声明与实际可用的各个 Port，防止后台投放适配器尚不支持的取消、退款或结算任务。
     #[test]
     fn declared_capabilities_match_implemented_connector_traits() {
         let connector = test_support::connector(vec![]);

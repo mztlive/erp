@@ -39,24 +39,12 @@ use crate::{Error, FinancePostingPorts, Result};
 impl ReceivableProcess {
     /// 按原蓝票一次开具红票并红冲（§8.3-3 事务不变量）。
     ///
-    /// 服务端在同一事务内读取原票的有效分配、计算本次反向行、创建红票、
-    /// 冲减应收或应付子账进度并写审计。客户端不得提交分配 ID、净额或税额。
-    /// 部分红冲时原蓝票保持已登记；全部剩余金额红冲后才置为已红冲。
+    /// 服务端在同一事务内读取原票的有效分配、计算本次反向行、创建红票、冲减应收或应付子账进度并写审计。客户端不得提交分配 ID、净额或税额。部分红冲时原蓝票保持已登记；全部剩余金额红冲后才置为已红冲。
     ///
-    /// # 参数
-    /// * `id` - 原蓝票 ID
-    /// * `req` - 红票业务意图与幂等键
-    /// * `actor` - 已通过鉴权的审计操作人
+    /// `id` 为原蓝票 ID；`req` 为红票业务意图与幂等键。返回新建红票视图。`NotFound`：原蓝票或有效分配不存在。
     ///
-    /// # 返回
-    /// 返回新建红票视图。
+    /// `ConflictError`：红票号码重复。`BusinessLogicError`：红冲累计超过原分配或超额红冲。
     ///
-    /// # 错误
-    /// * `NotFound` - 原蓝票或有效分配不存在
-    /// * `ConflictError` - 红票号码重复
-    /// * `BusinessLogicError` - 红冲累计超过原分配或超额红冲
-    ///
-    /// # 约束
     /// 领域计划只计算金额；ID 生成、事务、写入、任务同步和审计继续由 Service 持有。
     pub async fn issue_red_invoice(
         &self,
@@ -81,16 +69,11 @@ impl ReceivableProcess {
     }
 }
 
-/// 在原事务中重验红冲资格并读取新建或幂等命中的红票视图。
-///
-/// # 参数
-/// db 为发票数据库，authorization 为共享授权服务，actor 为本次操作人，id 为实际红票身份，executor 为原事务执行器。
-///
-/// # 返回
-/// 返回同一授权快照内的完整发票及分配视图。
-///
-/// # 错误
-/// 原事务失效、资格不足或发票读取失败时拒绝交付结果。
+// 在原事务中重验红冲资格并读取新建或幂等命中的红票视图。
+//
+// db 为发票数据库，authorization 为共享授权服务，actor 为本次操作人，id 为实际红票身份，executor 为原事务执行器。
+//
+// 返回同一授权快照内的完整发票及分配视图。原事务失效、资格不足或发票读取失败时拒绝交付结果。
 async fn red_invoice_result(
     db: &Database,
     authorization: &AuthorizationService,
@@ -121,15 +104,9 @@ struct RedInvoiceCommand {
 }
 
 impl RedInvoiceCommand {
-    /// 组装命令快照（纯内存，不访问数据库）。
-    ///
-    /// # 参数
-    /// * `actor` - 已通过鉴权的审计操作人
-    /// * `id` - 原蓝票 ID
-    /// * `req` - 红票业务意图与幂等键
-    ///
-    /// # 返回
-    /// 返回事务外快照。
+    // 组装命令快照（纯内存，不访问数据库）。
+    //
+    // `id` 为原蓝票 ID；`req` 为红票业务意图与幂等键。返回事务外快照。
     fn prepare(actor: &AuditActor, id: &str, req: &CommitRedInvoiceRequest) -> Result<Self> {
         let actor_owned = actor.clone();
         let digest = hex::encode(Sha256::digest(
@@ -155,14 +132,9 @@ impl RedInvoiceCommand {
     }
 }
 
-/// 计算红票号码（纯内存）。
-///
-/// # 参数
-/// * `req` - 红票业务意图与幂等键
-/// * `digest` - 幂等键摘要
-///
-/// # 返回
-/// 返回显式号码或按幂等键生成的稳定号码。
+// 计算红票号码（纯内存）。
+//
+// `req` 为红票业务意图与幂等键；`digest` 为幂等键摘要。返回显式号码或按幂等键生成的稳定号码。
 fn red_number(req: &CommitRedInvoiceRequest, digest: &str) -> String {
     req.invoice_no
         .as_deref()
@@ -172,21 +144,11 @@ fn red_number(req: &CommitRedInvoiceRequest, digest: &str) -> String {
         .unwrap_or_else(|| format!("HT-{}", &digest[..12]))
 }
 
-/// 在调用方事务内执行红票开具的全部写入与扇出。
-///
-/// 收据幂等由外层根命令持有；本函数只做事务内读取、校验与写入。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `rbac` - 审批绑定授权源
-/// * `command` - 事务外命令快照
-/// * `executor` - 调用方事务执行器
-///
-/// # 返回
-/// 返回新建或幂等命中的红票 ID。
-///
-/// # 错误
-/// 原票缺失、资格不符、号码冲突或写入失败时返回错误。
+// 在调用方事务内执行红票开具的全部写入与扇出。
+//
+// 收据幂等由外层根命令持有；本函数只做事务内读取、校验与写入。
+//
+// `rbac` 为审批绑定授权源；`command` 为事务外命令快照。返回新建或幂等命中的红票 ID。原票缺失、资格不符、号码冲突或写入失败时返回错误。
 async fn apply_red_invoice(
     db: &Database,
     rbac: &FinancePostingPorts,
@@ -242,19 +204,9 @@ async fn apply_red_invoice(
     Ok(red_mut.base.id.clone())
 }
 
-/// 加载红票反向分配计划（同一事务内批量读取）。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `original` - 原蓝票
-/// * `requested_amount` - 本次红冲含税金额
-/// * `executor` - 调用方事务执行器
-///
-/// # 返回
-/// 返回校验通过的反向分配计划。
-///
-/// # 错误
-/// 分配缺失或超额红冲时返回错误。
+// 加载红票反向分配计划（同一事务内批量读取）。
+//
+// `original` 为原蓝票；`requested_amount` 为本次红冲含税金额。返回校验通过的反向分配计划。分配缺失或超额红冲时返回错误。
 async fn load_red_invoice_plan(
     db: &Database,
     original: &Invoice,
@@ -295,13 +247,9 @@ async fn load_red_invoice_plan(
     }
 }
 
-/// 收集销项有效分配的目标子账（纯内存）。
-///
-/// # 参数
-/// * `blue` - 原蓝票有效分配
-///
-/// # 返回
-/// 返回 `Apply` 行的目标子账 ID。
+// 收集销项有效分配的目标子账（纯内存）。
+//
+// `blue` 为原蓝票有效分配。返回 `Apply` 行的目标子账 ID。
 fn apply_account_ids(blue: &[SalesInvoiceAllocation]) -> Vec<ReceivableAccountId> {
     blue.iter()
         .filter(|line| line.allocation_action == AllocationAction::Apply)
@@ -309,13 +257,9 @@ fn apply_account_ids(blue: &[SalesInvoiceAllocation]) -> Vec<ReceivableAccountId
         .collect()
 }
 
-/// 收集购项有效分配的目标子账（纯内存）。
-///
-/// # 参数
-/// * `blue` - 原蓝票有效分配
-///
-/// # 返回
-/// 返回 `Apply` 行的目标子账 ID。
+// 收集购项有效分配的目标子账（纯内存）。
+//
+// `blue` 为原蓝票有效分配。返回 `Apply` 行的目标子账 ID。
 fn purchase_apply_account_ids(blue: &[PurchaseInvoiceAllocation]) -> Vec<PayableAccountId> {
     blue.iter()
         .filter(|line| line.allocation_action == PayableAllocationAction::Apply)
@@ -323,22 +267,11 @@ fn purchase_apply_account_ids(blue: &[PurchaseInvoiceAllocation]) -> Vec<Payable
         .collect()
 }
 
-/// 按红票号码查找幂等命中（纯读取，无写入）。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `original` - 原蓝票
-/// * `red_no` - 红票号码
-/// * `red_gross` - 红冲含税金额
-/// * `red_net` - 红冲净额
-/// * `red_tax` - 红冲税额
-/// * `executor` - 调用方事务执行器
-///
-/// # 返回
-/// 同票同金额返回红票 ID；号码冲突由调用方映射为冲突错误。
-///
-/// # 错误
-/// 号码重复提交时返回冲突错误。
+// 按红票号码查找幂等命中（纯读取，无写入）。
+//
+// `original` 为原蓝票；`red_no` 为红票号码；`red_gross` 为红冲含税金额；`red_net` 为红冲净额；`red_tax` 为红冲税额；沿用原事务的执行器。
+//
+// 同票同金额返回红票 ID；号码冲突由调用方映射为冲突错误。号码重复提交时返回冲突错误。
 async fn find_red_idempotent(
     db: &Database,
     original: &Invoice,
@@ -366,21 +299,11 @@ async fn find_red_idempotent(
     Err(Error::ConflictError("红票号码已登记，请勿重复提交".to_string()))
 }
 
-/// 构造已登记的红票实体（纯内存）。
-///
-/// # 参数
-/// * `original` - 原蓝票
-/// * `red_no` - 红票号码
-/// * `red_gross` - 红冲含税金额
-/// * `red_net` - 红冲净额
-/// * `red_tax` - 红冲税额
-/// * `actor_id` - 操作人 ID
-///
-/// # 返回
-/// 返回已登记的红票实体。
-///
-/// # 错误
-/// 实体构造失败时返回错误。
+// 构造已登记的红票实体（纯内存）。
+//
+// `original` 为原蓝票；`red_no` 为红票号码；`red_gross` 为红冲含税金额；`red_net` 为红冲净额；`red_tax` 为红冲税额。
+//
+// 返回已登记的红票实体。实体构造失败时返回错误。
 fn build_red_invoice(
     original: &Invoice,
     red_no: &str,
@@ -411,22 +334,11 @@ fn build_red_invoice(
     Ok(red_mut)
 }
 
-/// 红冲后任务同步与销售进度扇出（分片顺序短路）。
-///
-/// 去重分组已在上游批量查询完成；同一事务执行器不可并发共享，
-/// 按片顺序推进即分组后的可靠形态，保持原失败短路语义。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `account_ids` - 受影响的应收子账
-/// * `actor_id` - 审计操作人
-/// * `executor` - 调用方事务执行器
-///
-/// # 返回
-/// 无。
-///
-/// # 错误
-/// 任一任务同步或进度刷新失败时返回错误并停止后续分片。
+// 红冲后任务同步与销售进度扇出（分片顺序短路）。
+//
+// 去重分组已在上游批量查询完成；同一事务执行器不可并发共享，按片顺序推进即分组后的可靠形态，保持原失败短路语义。
+//
+// `account_ids` 为受影响的应收子账；`actor_id` 为审计操作人。任一任务同步或进度刷新失败时返回错误并停止后续分片。
 async fn apply_red_invoice_fanout(
     db: &Database,
     account_ids: &[String],
@@ -455,19 +367,9 @@ async fn apply_red_invoice_fanout(
     refresh_progress_shards(db, &order_ids, actor_id, executor).await
 }
 
-/// 分片刷新销售单资金进度，首错短路。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `order_ids` - 去重后的销售单
-/// * `actor_id` - 审计操作人
-/// * `executor` - 调用方事务执行器
-///
-/// # 返回
-/// 无。
-///
-/// # 错误
-/// 任一销售单刷新失败时返回错误并停止后续分片。
+// 分片刷新销售单资金进度，首错短路。
+//
+// `order_ids` 为去重后的销售单；`actor_id` 为审计操作人；沿用原事务的执行器。任一销售单刷新失败时返回错误并停止后续分片。
 async fn refresh_progress_shards(
     db: &Database,
     order_ids: &[String],
@@ -542,7 +444,7 @@ mod result_tests {
 
     use super::*;
 
-    /// 原事务或红冲资格不可用时，必须在读取发票及分配前拒绝。
+    // 原事务或红冲资格不可用时，必须在读取发票及分配前拒绝。
     #[tokio::test]
     async fn red_invoice_results_require_snapshot_and_current_command_qualification() {
         let db = Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("red_invoice_results");

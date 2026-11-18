@@ -27,11 +27,7 @@ pub struct PreviewAdoptionRequest {
 
 impl PreviewAdoptionRequest {
     /// 验证选择模式和批次大小，不静默截取超限集合。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 规范合法时返回空结果。
-    /// # 错误
     /// 两种模式同时出现、空选择、重复或超限时拒绝。
     pub fn validate(&self) -> Result<()> {
         match (&self.item_ids, &self.filter) {
@@ -65,12 +61,9 @@ pub struct CatalogAdoptionPreview {
 
 impl CatalogAdoptionPreview {
     /// 核验当前来源仍对应预览时实际看过的内容和选品状态。
-    /// # 参数
-    /// `current` 为事务内重读的最新来源。
-    /// # 返回
     /// 身份和来源内容均未变化时返回空结果。
-    /// # 错误
     /// 行不在冻结范围、来源或正式选品关联变化时拒绝。
+    /// `current` 为事务内重读的最新来源。
     pub fn ensure_current_item(&self, current: &SupplierCatalogItem) -> Result<()> {
         let frozen = self
             .items
@@ -102,11 +95,7 @@ impl CatalogAdoptionPreview {
     }
 
     /// 在 identity 完成创建人授权后核验连接、冻结版本、有效期及请求行。
-    /// # 参数
-    /// 连接、版本、确认行与当前时间由命令入口提供。
-    /// # 返回
     /// 全部行合法时返回空结果。
-    /// # 错误
     /// 连接不符、过期、旧版本、重复或超量行时拒绝。
     pub fn ensure_confirmable(
         &self,
@@ -122,12 +111,9 @@ impl CatalogAdoptionPreview {
     }
 
     /// 核验连接和原始选择，允许已提交命令在预览过期后只读恢复结果。
-    /// # 参数
-    /// 连接及原始确认请求；创建人资格由调用方通过 identity 核验。
-    /// # 返回
     /// 请求属于该冻结预览时返回空结果。
-    /// # 错误
     /// 连接不符、版本不符、重复或越界行时拒绝。
+    /// 连接及原始确认请求；创建人资格由调用方通过 identity 核验。
     pub fn ensure_request(&self, connection: &str, request: &ConfirmAdoptionRequest) -> Result<()> {
         if self.connection_id != connection || self.base.is_deleted() {
             return Err(Error::NotFound("选品预览不存在或无权使用".into()));
@@ -144,7 +130,7 @@ impl CatalogAdoptionPreview {
     }
 }
 
-/// 尚未展示的图片完成归档时，不让后台处理阻断已冻结的选品。
+// 尚未展示的图片完成归档时，不让后台处理阻断已冻结的选品。
 fn preserve_unseen_media(
     current: &mut Option<Vec<crate::entity::supplier_catalog::CatalogImage>>,
     frozen: &Option<Vec<crate::entity::supplier_catalog::CatalogImage>>,
@@ -243,11 +229,7 @@ pub struct AdoptionRow {
 
 impl AdoptionRow {
     /// 固定一行原始命令的内容指纹，不包含可重试的操作号。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 返回确定性 SHA256 指纹。
-    /// # 错误
     /// 请求无法序列化时返回内部错误。
     pub fn fingerprint(&self) -> Result<String> {
         let bytes = serde_json::to_vec(self).map_err(|_| Error::Internal("选品命令无法编码".into()))?;
@@ -275,11 +257,7 @@ pub struct CatalogAdoptionCommand {
 
 impl ConfirmAdoptionRequest {
     /// 验证分批确认边界及原操作号，不静默丢弃行。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 请求合法时返回空结果。
-    /// # 错误
     /// 空行、重复、超量、非法版本或操作号时拒绝。
     pub fn validate(&self) -> Result<()> {
         let ids: HashSet<_> = self.rows.iter().map(|row| &row.item_id).collect();
@@ -321,11 +299,7 @@ pub struct CatalogAdoptionReceipt {
 
 impl CatalogAdoptionReceipt {
     /// 同一来源重复确认恢复原结果，拒绝变更原目标或条款。
-    /// # 参数
-    /// `fingerprint` 为本次逐行原请求的指纹。
-    /// # 返回
     /// 已提交的原结果。
-    /// # 错误
     /// 回执损坏、已删除或异载荷重用来源时拒绝。
     pub fn replay(&self, fingerprint: &str) -> Result<AdoptionResult> {
         if self.base.is_deleted() || self.result.item_id != self.item_id {
@@ -349,12 +323,7 @@ pub struct CatalogAdoptionProduct {
 }
 
 /// 组合来源身份，使用长度分帧避免编号分隔符碰撞。
-/// # 参数
-/// `parts` 为有顺序的身份组成部分。
-/// # 返回
 /// 固定长度 SHA256 身份。
-/// # 错误
-/// 不返回错误。
 pub fn adoption_identity(parts: &[&str]) -> String {
     let mut digest = Sha256::new();
     for part in parts {

@@ -68,20 +68,9 @@ pub struct SupplierCallbackParams {
 
 impl SupplierOrderStatusHistoryData {
     /// 构造供应商回调形成的履约状态历史数据。
-    ///
-    /// 回调来源类型固定为 `SUPPLIER_CALLBACK`，调用方只提供订单关系、状态迁移和
-    /// 外部事件身份，不得自行组合其他来源。
-    ///
-    /// # 参数
-    /// * `params` - 订单关系、状态迁移与外部事件身份
-    ///
-    /// # 返回
+    /// 回调来源类型固定为 `SUPPLIER_CALLBACK`，调用方只提供订单关系、状态迁移和外部事件身份，不得自行组
+    /// 合其他来源。
     /// 返回来源已固定的状态历史创建数据。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 约束
     /// 来源类型固定为 `SUPPLIER_CALLBACK`，调用方不得改写。
     pub fn supplier_callback(params: SupplierCallbackParams) -> Self {
         Self {
@@ -125,18 +114,9 @@ pub struct SupplierOrderStatusHistory {
 
 impl SupplierOrderStatusHistory {
     /// 创建状态历史记录。
-    ///
-    /// 完成版本与事件 ID 的校验和规范化，并强制三条不变式：原状态不等于新状态；
-    /// 迁移必须是履约状态机的合法迁移（§7.6）；接收时间不早于发生时间。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::SupplierOrderStatusHistoryId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
+    /// 完成版本与事件 ID 的校验和规范化，并强制三条不变式：原状态不等于新状态；迁移必须是履约状态机的合
+    /// 法迁移（§7.6）；接收时间不早于发生时间。
     /// 返回新建的状态历史实体。
-    ///
-    /// # 错误
     /// 字段为空/超长、原新状态相同、迁移非法或接收时间早于发生时间时返回错误。
     pub fn new(id: SupplierOrderStatusHistoryId, data: SupplierOrderStatusHistoryData) -> Result<Self> {
         let supplier_status_version = normalize_required_text(
@@ -176,31 +156,14 @@ impl SupplierOrderStatusHistory {
     }
 
     /// 判断状态历史是否属于指定供应商履约订单。
-    ///
-    /// # 参数
-    /// * `order_id` - 供应商履约订单主键
-    ///
-    /// # 返回
     /// 归属一致时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn belongs_to_order(&self, order_id: &SupplierFulfillmentOrderId) -> bool {
         self.supplier_fulfillment_order_id == *order_id
     }
 
     /// 核对外部事件命中的拒单回执是否对应本次真实订单和业务载荷。
-    ///
-    /// # 参数
-    /// * `order_id` - 本次已授权的实际供应商履约订单。
-    /// * `status_version` - 请求中的供应商状态版本。
-    /// * `occurred_at` - 请求中的业务发生时间。
-    ///
-    /// # 返回
     /// 订单、拒单结果、版本和发生时间全部一致时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// `order_id`：本次已授权的实际供应商履约订单。
     pub fn matches_reject(
         &self,
         order_id: &SupplierFulfillmentOrderId,

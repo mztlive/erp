@@ -61,19 +61,10 @@ pub struct PartyAddressFilter {
 }
 
 impl QueryFilter for PartyAddressFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// `party_id`、`address_type`、`status`、`is_default` 为 `None` 时不写入；
-    /// 否则分别按主体 ID 字符串、地址类型与状态的稳定代码以及布尔值精确匹配。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 把主体地址筛选转换为 MongoDB 查询条件，并排除软删除记录，供列表和计数共用。
+    //
+    // `party_id`、`address_type`、`status`、`is_default` 为 `None` 时不写入；
+    // 否则分别按主体 ID 字符串、地址类型与状态的稳定代码以及布尔值精确匹配。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(party_id) = &self.party_id {
@@ -93,16 +84,9 @@ impl QueryFilter for PartyAddressFilter {
 }
 
 impl Pagination for PartyAddressFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。`page` 原样取出，`page_size` 由 `u32` 转为 `u64`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 提供主体地址列表的页码和每页条数，供分页查询计算读取窗口。
+    //
+    // 返回 `(page, page_size)` 元组。`page` 原样取出，`page_size` 由 `u32` 转为 `u64`。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -120,10 +104,8 @@ pub trait PartyAddressRepositoryExt {
     /// * `filter` - 筛选与分页条件
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回
     /// 返回当前页投影行与满足筛选条件的总数。
     ///
-    /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
     async fn search_party_addresses(
         &self,
@@ -137,10 +119,8 @@ pub trait PartyAddressRepositoryExt {
     /// * `id` - 地址事实 ID
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回
     /// 返回匹配地址；不存在时返回 `None`。
     ///
-    /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
     async fn find_address(&self, id: &str, executor: &mut dyn Executor) -> Result<Option<PartyAddress>>;
 
@@ -151,10 +131,8 @@ pub trait PartyAddressRepositoryExt {
     /// * `as_of` - 业务日期
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回
     /// 返回该日期处于启用有效期的地址。
     ///
-    /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
     async fn list_active_on(
         &self,
@@ -170,10 +148,8 @@ pub trait PartyAddressRepositoryExt {
     /// * `as_of` - 业务日期
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回
     /// 返回默认地址优先、同组内最新创建优先的当前事实。
     ///
-    /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
     async fn list_current_on(
         &self,
@@ -191,10 +167,8 @@ pub trait PartyAddressRepositoryExt {
     /// * `exclude_id` - 保留默认标记的地址 ID
     /// * `executor` - 数据访问执行器，必须位于调用方事务中
     ///
-    /// # 返回
     /// 全部冲突默认标记清除后返回 `Ok(())`。
     ///
-    /// # 错误
     /// 当 MongoDB 查询、游标读取或 CAS 更新失败时返回错误。
     async fn clear_other_default_marks(
         &self,
@@ -209,10 +183,8 @@ pub trait PartyAddressRepositoryExt {
     /// * `party_id` - 所属主体 ID
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回
     /// 返回默认地址优先、同组内最新创建优先的完整实体。
     ///
-    /// # 错误
     /// 当 MongoDB 查询或反序列化失败时返回错误。
     async fn list_by_party(
         &self,
@@ -276,10 +248,9 @@ impl PartyAddressRepositoryExt for Repository<'_, PartyAddress> {
         self.find_many_sorted(doc! { "party_id": party_id.to_string() }, default_first_sort(), executor).await
     }
 }
-/// 地址列表投影字段（不含敏感字段）。
-///
-/// # 返回
-/// 返回投影条件文档。
+// 列出地址列表查询需要读取的字段。涉及敏感资料时，投影仅包含允许列表展示的字段。
+//
+// 返回投影条件文档。
 fn party_address_projection() -> Document {
     doc! {
         "id": 1,

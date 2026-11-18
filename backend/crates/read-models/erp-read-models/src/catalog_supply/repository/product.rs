@@ -31,11 +31,10 @@ struct ProductTotal {
 }
 
 impl CatalogSupplyRepository<'_> {
-    /// 读取已经满足完整筛选的商品身份，不生成页面、展示字段或总数。
+    /// 准备商品列表候选时，读取已经满足完整筛选的商品身份，不生成页面、展示字段或总数。
     ///
     /// # 参数
     /// * `filter` - 已规范化且包含授权范围的完整商品筛选
-    /// * `executor` - 调用方执行器
     ///
     /// # 返回
     /// 返回至多 10001 个稳定身份，供调用方整体检查规模上限。
@@ -69,14 +68,13 @@ impl CatalogSupplyRepository<'_> {
         }
         Ok(rows.into_iter().map(|row| row.id).collect())
     }
-    /// 分页查询商品及当前启用 SKU 的聚合筛选结果。
+    /// 处理商品列表时，分页查询商品及当前启用 SKU 的聚合筛选结果。
     ///
     /// 统一关键字覆盖商品编号/名称与 SKU 编号/名称/规格/条码；上架状态、
     /// 供给覆盖和销售价区间均按当前启用 SKU 实时派生，不在商品主表冗余落库。
     ///
     /// # 参数
     /// * `filter` - 商品、当前修订与 SKU 聚合筛选条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
     /// # 返回
     /// 返回当前页商品投影与满足筛选条件的总数。
@@ -105,7 +103,7 @@ impl CatalogSupplyRepository<'_> {
         Ok(PageResult { items: facet.items, total: facet.total.first().map_or(0, |row| row.count) })
     }
 
-    /// 执行商品列表类型化聚合并收集唯一的 facet 结果。
+    // 调用此入口时，执行商品列表类型化聚合并收集唯一的 facet 结果。
     async fn aggregate_products(
         &self,
         pipeline: Vec<Document>,

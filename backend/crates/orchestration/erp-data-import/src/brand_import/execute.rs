@@ -36,7 +36,7 @@ impl BackgroundTaskAdapter for BrandImportProcess {
 }
 
 impl BrandImportProcess {
-    /// 用 CAS 认领；每行执行前重新验证取消、提交人权限和输入。
+    // worker 用版本比较认领可恢复的品牌任务，再从不可变来源读取输入，逐行核验取消、提交人权限和任务版本。
     async fn execute(&self, job: &mut BackgroundJob) -> Result<()> {
         if !job.can_resume_import(Instant::now(), 120) {
             return Ok(());
@@ -74,7 +74,7 @@ impl BrandImportProcess {
         result
     }
 
-    /// 失败终态只保存概括信息，不覆盖并发取消或其他执行器的版本。
+    // 失败终态只保存概括信息，不覆盖并发取消或其他执行器的版本。
     async fn fail_job(&self, job: &mut BackgroundJob, message: &str) -> Result<()> {
         job.mark_failed(Some(message.into()), Instant::now())?;
         self.db.background_jobs().update(job, &mut ReadExecutor::default()).await?;
@@ -82,7 +82,7 @@ impl BrandImportProcess {
         Ok(())
     }
 
-    /// 来源只缓存不可变内容；任务状态与授权每行都从数据库重读。
+    // 来源只缓存不可变内容；任务状态与授权每行都从数据库重读。
     async fn execution_source(&self, job: &BackgroundJob) -> Result<Arc<BrandImportJobRequest>> {
         self.sources
             .get_or_load(job, || async {
@@ -97,7 +97,8 @@ impl BrandImportProcess {
             .await
     }
 
-    /// 一个行事务持有全部写入；提交结果不确定时不自动重放，下一轮先读任务事实。
+    // 执行未处理品牌行时，在同一事务重验原提交人权限，并写入品牌、审计、行结果和任务进度。
+    // 提交结果未知时不自动重放；下一轮以已保存的任务与行状态为准。
     async fn commit_row(
         &self,
         job: &mut BackgroundJob,
@@ -151,7 +152,7 @@ impl BrandImportProcess {
         }
     }
 
-    /// 决定写入前在同一事务中重读任务；取消和被接管都停止当前执行器。
+    // 决定写入前在同一事务中重读任务；取消和被接管都停止当前执行器。
     async fn current_job(
         &self,
         expected: &BackgroundJob,

@@ -8,11 +8,14 @@ use persistence_core::Executor;
 use super::{FinancialFileView, readable_file};
 use crate::Result;
 
-/// 使用调用方的授权事务读取可用附件，不暴露存储地址。
+/// 使用调用方的授权事务取得可用附件，不暴露存储地址。
+///
 /// # 参数
 /// 数据库、已授权单据身份、展示单号及当前执行器。
+///
 /// # 返回
 /// 文件展示清单。
+///
 /// # 错误
 /// 附件或资产读取失败时返回错误。
 pub async fn financial_document_files(

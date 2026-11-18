@@ -23,7 +23,7 @@ pub(super) fn mapping() -> ConnectorError {
         "蛋糕叔叔提供的业务资料不完整或无法核实，请联系管理员核对供应商资料",
     )
 }
-/// 为映射失败补充固定字段说明，不暴露供应商原始值。
+// 目录字段解析失败时补上固定的字段说明，便于定位供应商资料问题；不回显原值，也不改写非映射错误。
 pub(super) fn context(mut failure: ConnectorError, message: &str) -> ConnectorError {
     if failure.class == SupplierFailureClass::MappingError {
         failure.summary = format!("{message}，请核对蛋糕叔叔的商品资料");
@@ -69,13 +69,7 @@ pub(super) fn fixed<T: FromStr>(value: &Value) -> ConnectorResult<T> {
     text(value)?.parse().map_err(|_| mapping())
 }
 
-/// 解析非负金额，保留来源精度及通用映射错误。
-/// # 参数
-/// `value` 为供应商返回的金额字段。
-/// # 返回
-/// 精确金额，允许零值。
-/// # 错误
-/// 缺失、格式或精度非法、负数时返回映射错误。
+// 配送费和订单应付金额入业务结果前按十进制精确解析，允许零元；缺值、负数或格式及精度非法均返回映射错误。
 pub(super) fn non_negative_amount(value: &Value) -> ConnectorResult<Amount> {
     let amount: Amount = fixed(value)?;
     if amount.to_decimal().is_sign_negative() {

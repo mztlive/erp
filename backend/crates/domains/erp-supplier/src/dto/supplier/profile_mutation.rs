@@ -27,16 +27,7 @@ pub struct SupplierProfileContactInput {
 
 impl SupplierProfileContactInput {
     /// 以必填联系人构造资料输入；固话与邮箱默认为空。
-    ///
-    /// # 参数
-    /// * `contact_name` - 联系人姓名
-    /// * `mobile` - 手机号明文
-    ///
-    /// # 返回
     /// 返回无固话邮箱的输入。
-    ///
-    /// # 错误
-    /// 无。
     pub fn new(contact_name: String, mobile: String) -> Self {
         Self { contact_name, mobile, telephone: None, email: None }
     }
@@ -192,17 +183,9 @@ pub struct SaveSupplierProfileRequest {
 
 impl SaveSupplierProfileRequest {
     /// 校验根级供应商资料请求的完整输入合同。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 根字段、清空/替换意图及全部嵌套输入均合法时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 根字段格式非法、同一资料同时请求替换与清空，或嵌套输入非法时返回
-    /// 字段错误 `InvalidInput` 或意图冲突 `ValidationError`；顺序为根字段、互斥意图、联系人、地址、
-    /// 银行账户、资质。
+    /// 根字段格式非法、同一资料同时请求替换与清空，或嵌套输入非法时返回字段错误 `InvalidInput` 或意图冲
+    /// 突 `ValidationError`；顺序为根字段、互斥意图、联系人、地址、银行账户、资质。
     pub fn validate_contract(&self) -> Result<()> {
         self.validate()?;
 
@@ -237,19 +220,10 @@ impl SaveSupplierProfileRequest {
     }
 
     /// 计算根命令稳定指纹，保证同一幂等键只能重放完全相同的请求。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回对请求规范 JSON（键排序、确定性序列化）进行 SHA-256 后的 `sha256-v1:<hex>` 指纹。
-    ///
-    /// # 错误
     /// JSON 序列化失败时返回 `Internal` 错误。
-    ///
-    /// # 约束
-    /// 输入为 `&self`，不触及外部 I/O；规范 JSON 按键排序固定字段顺序，旧裸 `64hex`
-    /// 指纹仍通过 `SupplierProfileCommand::ensure_replayable` 兼容回读。
+    /// 输入为 `&self`，不触及外部 I/O；规范 JSON 按键排序固定字段顺序，旧裸 `64hex`指纹仍通过
+    /// `SupplierProfileCommand::ensure_replayable` 兼容回读。
     pub fn fingerprint(&self) -> Result<String> {
         use sha2::{Digest, Sha256};
         let value = serde_json::to_value(self)
@@ -259,36 +233,17 @@ impl SaveSupplierProfileRequest {
     }
 
     /// 读取更新场景必填版本号。
-    ///
-    /// # 参数
-    /// * `value` - 可空版本输入
-    /// * `object` - 业务对象名，用于错误文案
-    ///
-    /// # 返回
     /// 存在时返回版本号。
-    ///
-    /// # 错误
     /// `value` 为 `None` 时返回 `ValidationError`。
-    ///
-    /// # 约束
     /// 仅做存在性校验，不触及持久化。
+    /// `value`：可空版本输入。
     pub fn required_update_version(value: Option<u64>, object: &str) -> Result<u64> {
         value.ok_or_else(|| Error::ValidationError(format!("修订供应商时{object}版本不能为空")))
     }
 
-    /// 校验乐观锁版本。
-    ///
-    /// # 参数
-    /// * `actual` - 当前持久化版本
-    /// * `expected` - 客户端期望版本
-    ///
-    /// # 返回
+    /// 核对乐观锁版本。
     /// 版本一致时返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 版本不一致时返回 `ConflictError`。
-    ///
-    /// # 约束
     /// 纯内存比较，不触及外部状态。
     pub fn ensure_version(actual: u64, expected: u64) -> Result<()> {
         if actual != expected {
@@ -298,19 +253,10 @@ impl SaveSupplierProfileRequest {
     }
 
     /// 校验创建场景必填的稳定业务编号。
-    ///
-    /// # 参数
-    /// * `value` - 可空输入
-    /// * `field` - 字段中文名，用于错误文案
-    ///
-    /// # 返回
     /// 去首尾空白后非空时返回规范化编号。
-    ///
-    /// # 错误
     /// 输入为空或全空白时返回 `ValidationError`。
-    ///
-    /// # 约束
     /// 仅做空白与存在性校验，不触及唯一性查询。
+    /// `value`：可空输入。
     pub fn required_create_identity(value: Option<&str>, field: &str) -> Result<String> {
         value
             .map(str::trim)
@@ -320,36 +266,19 @@ impl SaveSupplierProfileRequest {
     }
 }
 
-/// 将 JSON 值按规范（键排序）序列化为确定性字符串，用于稳定指纹。
-///
-/// # 参数
-/// * `value` - 待序列化的 JSON 值
-///
-/// # 返回
-/// 返回键排序后的规范 JSON 字符串。
-///
-/// # 错误
-/// 序列化失败时返回 `Internal` 错误。
-///
-/// # 约束
-/// 对象键按字典序排序，数组保持输入顺序，标量按 `serde_json` 标准编码。
+// 将 JSON 值按规范（键排序）序列化为确定性字符串，用于稳定指纹。
+// 返回键排序后的规范 JSON 字符串。
+// 序列化失败时返回 `Internal` 错误。
+// 对象键按字典序排序，数组保持输入顺序，标量按 `serde_json` 标准编码。
 fn canonical_json_string(value: &serde_json::Value) -> Result<String> {
     let mut output = String::new();
     write_canonical_json(value, &mut output)?;
     Ok(output)
 }
 
-/// 递归按规范写入 JSON，保持对象键排序。
-///
-/// # 参数
-/// * `value` - 当前 JSON 节点
-/// * `output` - 写入目标字符串
-///
-/// # 返回
-/// 成功时返回 `Ok(())`。
-///
-/// # 错误
-/// 键序列化失败时返回 `Internal` 错误。
+// 递归按规范写入 JSON，保持对象键排序。
+// 成功时返回 `Ok(())`。
+// 键序列化失败时返回 `Internal` 错误。
 fn write_canonical_json(value: &serde_json::Value, output: &mut String) -> Result<()> {
     match value {
         serde_json::Value::Object(map) => {

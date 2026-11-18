@@ -51,7 +51,7 @@ pub struct CostAllocationSet {
 }
 
 impl CostAllocationSet {
-    /// 构造成本分配计划。
+    /// 手工入账之前校验并汇总各归属行，形成总额守恒的成本分配计划。
     ///
     /// 规则（与 `CostService::create_cost_entry` 原实现一致，责任归位到本
     /// 类型后 Service 不再重复求和）：
@@ -65,18 +65,14 @@ impl CostAllocationSet {
     /// - 尾差归属解析：显式值优先；`None` 默认落到第一条分配行
     ///   （`index == 0`），其余 `None` 行解析为 `false`；
     /// - 顺序确定性：计划行保持输入顺序。
-    ///
-    /// # 参数
-    /// * `gross_amount` - 成本事实含税金额
-    /// * `net_amount` - 成本事实不含税金额
-    /// * `lines` - 分配输入行（顺序即计划顺序）
-    ///
-    /// # 返回
     /// 返回守恒校验通过、行金额均为正数且尾差归属已解析的成本分配计划。
-    ///
-    /// # 错误
-    /// 空分配、零／负分配行、合计溢出，或含税／不含税任一口径合计与成本事实
+    /// 失败条件：空分配、零／负分配行、合计溢出，或含税／不含税任一口径合计与成本事实
     /// 金额不一致时返回 [`Error::LogicError`]，且不产生部分计划。
+    ///
+    /// 输入约定：
+    /// - `gross_amount`：成本事实含税金额
+    /// - `net_amount`：成本事实不含税金额
+    /// - `lines`：分配输入行（顺序即计划顺序）
     pub fn new(
         gross_amount: Amount,
         net_amount: Amount,
@@ -117,32 +113,14 @@ impl CostAllocationSet {
     }
 
     /// 返回按输入顺序排列的计划行。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回计划内部行切片，供 Service 生成 ID 并执行持久化写入。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    ///
-    /// # 约束
-    /// 调用方不能修改计划；事务与持久化职责仍属于 Service。
+    /// 调用边界：调用方不能修改计划；事务与持久化职责仍属于 Service。
     pub fn lines(&self) -> &[CostAllocationPlanLine] {
         &self.lines
     }
 
     /// 消费计划并返回按输入顺序排列的计划行。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回计划内部行；计划被消费后不可再次使用。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn into_lines(self) -> Vec<CostAllocationPlanLine> {
         self.lines
     }

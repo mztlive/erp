@@ -24,18 +24,11 @@ pub struct QualificationChange {
 
 impl PersonDirectoryService {
     /// 读取或维护单个账号的查询资格；授权在事务内按目标账号及有效主属组织判定。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证操作人。
-    /// * `category` - 查询类别。
-    /// * `account_id` - 目标后台账号 ID。
-    /// * `change` - 为空时只读取；有值时按版本终止或再授予。
-    ///
-    /// # 返回
     /// 返回该账号当前资格；尚无记录时返回 `None`。
     ///
-    /// # 错误
     /// 非岗位类别、无范围、目标非后台账号、版本冲突或持久化失败时拒绝。
+    ///
+    /// `account_id`：目标后台账号 ID；`change`：为空时只读取；有值时按版本终止或再授予。
     pub async fn qualification(
         &self,
         actor: AuditActor,
@@ -59,7 +52,7 @@ impl PersonDirectoryService {
     }
 }
 
-/// 在同一事务内校验目标范围并读写资格。
+// 在一个事务中校验目标范围并读写资格。
 async fn manage_target(
     db: &mongodb::Database,
     authorization: &AuthorizationService,
@@ -103,7 +96,7 @@ async fn manage_target(
     Ok(Some(updated))
 }
 
-/// 对显式维护执行版本与状态校验，终止资格只能通过本入口显式恢复。
+// 处理显式目录资格维护时匹配期望版本并核验当前状态；终止的资格只能通过该入口显式恢复。
 fn apply_change(
     current: Option<PersonQueryQualification>,
     account_id: &str,
@@ -134,7 +127,7 @@ fn apply_change(
     Ok(row)
 }
 
-/// 将资格维护与不可变审计事件一起提交。
+// 把目录资格变动及其不可变审计记录写入同一事务，避免管理变动丢失审计证据。
 async fn record_change(
     db: &mongodb::Database,
     actor: &AuditActor,

@@ -20,16 +20,7 @@ pub enum EnableStatus {
 }
 
 impl EnableStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// `Active` 返回「启用」，`Disabled` 返回「停用」。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将启停状态映射为中文标签，供界面显示。`Active` 返回「启用」，`Disabled` 返回「停用」。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Active => "启用",
@@ -37,16 +28,9 @@ impl EnableStatus {
         }
     }
 
-    /// 返回状态的稳定代码。
+    /// 将启停状态编码为稳定字符串，供持久化和精确查询复用。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// `Active` 返回 `active`，`Disabled` 返回 `disabled`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Active => "active",
@@ -54,32 +38,16 @@ impl EnableStatus {
         }
     }
 
-    /// 判断是否处于启用状态。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 处于 `Active` 时返回 `true`，否则返回 `false`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 读取启停状态的启用标记，供调用方过滤停用记录。处于 `Active` 时返回 `true`，否则返回 `false`。
     pub fn is_active(&self) -> bool {
         matches!(self, Self::Active)
     }
 }
 
 impl DocumentState for EnableStatus {
-    /// 返回合法后继状态：启用 ↔ 停用 双向可迁移。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// `Active` 只返回 `Disabled`，`Disabled` 只返回 `Active`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 返回合法后继状态：启用 ↔ 停用 双向可迁移。
+    //
+    // `Active` 只返回 `Disabled`，`Disabled` 只返回 `Active`。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Active => &[Self::Disabled],
@@ -92,7 +60,7 @@ impl DocumentState for EnableStatus {
 mod tests {
     use super::EnableStatus;
 
-    /// 规则筛选与历史文档保持原小写状态代码。
+    // 规则筛选与历史文档保持原小写状态代码。
     #[test]
     fn enable_status_preserves_rule_wire_codes() {
         for (status, code) in [(EnableStatus::Active, "active"), (EnableStatus::Disabled, "disabled")] {

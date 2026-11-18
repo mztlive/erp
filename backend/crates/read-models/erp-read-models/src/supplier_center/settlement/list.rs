@@ -23,11 +23,7 @@ use super::SupplierSettlementReadService;
 use crate::Result;
 
 impl SupplierSettlementReadService {
-    /// 分页查询授权范围内的结算单。
-    ///
-    /// # 参数
-    /// * `params` - 查询参数
-    /// * `actor` - 已认证操作人
+    /// 打开结算管理列表时，由对账负责人范围决定对象资格，再按供应商主体名称与当前复核任务等条件收窄并分页。
     ///
     /// # 返回
     /// 返回带范围版本的列表；空范围返回空集。
@@ -79,7 +75,7 @@ trait ListReader: Sync {
     ) -> Result<Self::Output>;
 }
 
-/// 授权通过后才读取跨域筛选事实，三个阶段复用原执行器。
+// 先解析结算列表资格，通过后再查供应商与复核任务筛选事实并读取分页，三步复用原执行器。
 async fn load_list<R: ListReader>(reader: &R, executor: &mut dyn Executor) -> Result<R::Output> {
     let scope = reader.scope(executor).await?;
     let filters = reader.filters(executor).await?;

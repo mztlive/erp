@@ -26,16 +26,7 @@ use crate::wiring::workflow::workflow_audit;
 type ApprovalResult<T> = std::result::Result<ApiResponse<T>, ApprovalHttpError>;
 
 /// 返回固定 20 行非敏感目录。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已认证操作人
-/// * `headers` - 用于关联 ID
-///
-/// # 返回
 /// 返回目录行；政策缺失时映射为 500。
-///
-/// # 错误
 /// 政策或仓储失败时返回审批 HTTP 错误。
 pub async fn definition_catalog(
     State(state): State<HttpState>,
@@ -50,8 +41,6 @@ pub async fn definition_catalog(
 }
 
 /// 列出某单据类型的定义版本。
-///
-/// # 错误
 /// 无读取权或不适用类型时不泄露存在性。
 pub async fn definition_versions(
     State(state): State<HttpState>,
@@ -67,8 +56,6 @@ pub async fn definition_versions(
 }
 
 /// 返回定义图详情。
-///
-/// # 错误
 /// 无权或不存在时返回不泄露存在性的错误。
 pub async fn definition_detail(
     State(state): State<HttpState>,
@@ -86,8 +73,6 @@ pub async fn definition_detail(
 /// 创建定义草稿。
 ///
 /// actor 只从认证上下文注入，请求体不得携带源定义 ID。
-///
-/// # 错误
 /// 无发布源、已有活动草稿或权限不足时返回稳定错误。
 pub async fn create_definition_draft(
     State(state): State<HttpState>,
@@ -105,8 +90,6 @@ pub async fn create_definition_draft(
 /// 整组替换草稿节点。
 ///
 /// 新增节点不接受 `node_key`；已有节点只接受本定义内 `node_id`。
-///
-/// # 错误
 /// 锁冲突或节点不合法时返回稳定错误。
 pub async fn replace_definition_nodes(
     State(state): State<HttpState>,
@@ -124,8 +107,6 @@ pub async fn replace_definition_nodes(
 }
 
 /// 发布草稿并退役旧版本。
-///
-/// # 错误
 /// 图、人员或锁冲突时返回稳定错误。
 pub async fn publish_definition(
     State(state): State<HttpState>,
@@ -143,8 +124,6 @@ pub async fn publish_definition(
 }
 
 /// 退役当前已发布定义。
-///
-/// # 错误
 /// 目标不是当前发布版本或锁冲突时返回稳定错误。
 pub async fn retire_definition(
     State(state): State<HttpState>,
@@ -164,8 +143,6 @@ pub async fn retire_definition(
 /// 服务端过滤定义期可选审批人。
 ///
 /// 只执行定义期静态过滤，不得复用运行期改派候选。
-///
-/// # 错误
 /// 查询非法时返回 422；应用端口未接入时失败关闭。
 pub async fn eligible_assignees(
     State(state): State<HttpState>,
@@ -191,7 +168,7 @@ pub async fn eligible_assignees(
     Ok(ApiResponse::ok_with_data(page.items))
 }
 
-/// 构造定义管理服务。
+// 为审批定义查询和版本维护构造领域服务，复用当前应用的工作流授权与审计端口。
 fn definition_service(state: &HttpState) -> ApprovalDefinitionService {
     ApprovalDefinitionService::with_audit(
         state.application().db(),
@@ -201,10 +178,8 @@ fn definition_service(state: &HttpState) -> ApprovalDefinitionService {
     )
 }
 
-/// 把 HTTP 节点写请求转为服务命令。
-///
-/// # 错误
-/// 锁版本非法时返回 400。
+// 把 HTTP 节点写请求转为服务命令。
+// 锁版本非法时返回 400。
 fn replace_nodes_command(
     definition_id: String,
     request: ReplaceNodesHttpRequest,
@@ -223,10 +198,8 @@ fn replace_nodes_command(
     })
 }
 
-/// 把 HTTP 发布请求转为服务命令。
-///
-/// # 错误
-/// 锁版本非法时返回 400。
+// 把 HTTP 发布请求转为服务命令。
+// 锁版本非法时返回 400。
 fn publish_command(
     definition_id: String,
     request: DefinitionLockHttpRequest,
@@ -243,10 +216,8 @@ fn publish_command(
     })
 }
 
-/// 把 HTTP 退役请求转为服务命令。
-///
-/// # 错误
-/// 锁版本非法时返回 400。
+// 把 HTTP 退役请求转为服务命令。
+// 锁版本非法时返回 400。
 fn retire_command(
     definition_id: String,
     request: DefinitionLockHttpRequest,

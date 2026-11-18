@@ -5,13 +5,9 @@ use rust_decimal::Decimal;
 
 use crate::{Error, Result};
 
-/// 按共同整数尺度相加，只在最终结果转分时舍入。
-/// # 参数
-/// `source` 为非负接口报价，`amount` 为非负固定加价额，均已通过类型精度校验。
-/// # 返回
-/// 按非负数半入规则保留两位小数的公司售价。
-/// # 错误
-/// 计算结果无法准确表示为公司金额时拒绝。
+// 按共同整数尺度相加，只在最终结果转分时舍入。
+// 按非负数半入规则保留两位小数的公司售价。
+// 计算结果无法准确表示为公司金额时拒绝。
 pub(super) fn add(source: Decimal, amount: Decimal) -> Result<Amount> {
     let (source, amount) = (source.normalize(), amount.normalize());
     let scale = source.scale().max(amount.scale());
@@ -21,13 +17,9 @@ pub(super) fn add(source: Decimal, amount: Decimal) -> Result<Amount> {
     rounded_amount(value, 1, scale)
 }
 
-/// 用整数商余数完成比例乘法，禁止 Decimal 中途降低精度。
-/// # 参数
-/// `source` 为非负接口报价，`rate` 为非负百分数，均已通过四位有效小数校验。
-/// # 返回
-/// 完整乘法后仅进行一次半入的公司售价。
-/// # 错误
-/// 精确结果超出公司金额可表示范围时拒绝。
+// 用整数商余数完成比例乘法，禁止 Decimal 中途降低精度。
+// 完整乘法后仅进行一次半入的公司售价。
+// 精确结果超出公司金额可表示范围时拒绝。
 pub(super) fn percentage(source: Decimal, rate: Decimal) -> Result<Amount> {
     let (source, rate) = (source.normalize(), rate.normalize());
     let factor = 100_i128

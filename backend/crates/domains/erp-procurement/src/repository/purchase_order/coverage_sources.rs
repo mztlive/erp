@@ -27,19 +27,8 @@ pub struct PurchaseCoverageSources {
 }
 
 impl PurchaseOrderDomainRepository<'_> {
-    /// 批量读取销售单对应的当前采购覆盖来源。
-    ///
-    /// 所有读取复用调用方 `executor`，顺序为采购单、当前提交行、当前版本行、商品行分配。
-    ///
-    /// # 参数
-    /// * `sales_order_id` - 来源销售单
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回当前指针下的采购单、提交行、版本行和分配。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。指针缺失由采购领域规则校验。
+    /// 计算销售单的当前采购覆盖前，沿调用方执行器批量读取采购单、当前提交行、当前版本行及商品行分配。
+    /// 只按状态关联当前指针，不把历史提交或修订算入当前来源；缺失指针由领域规则判定，仓储错误原样返回。
     pub async fn coverage_sources(
         &self,
         sales_order_id: &SalesOrderId,
@@ -82,7 +71,7 @@ impl PurchaseOrderDomainRepository<'_> {
     }
 }
 
-/// 提取草稿类当前提交指针，保留原顺序；缺失由领域完整性校验处理。
+// 提取草稿类当前提交指针，保留原顺序；缺失由领域完整性校验处理。
 fn current_pointer_ids(orders: &[PurchaseOrder]) -> Vec<PurchaseOrderSubmissionId> {
     orders
         .iter()
@@ -101,7 +90,7 @@ fn current_pointer_ids(orders: &[PurchaseOrder]) -> Vec<PurchaseOrderSubmissionI
         .collect()
 }
 
-/// 提取正式类当前版本指针，保留原顺序；历史和作废单不进入结果。
+// 提取正式类当前版本指针，保留原顺序；历史和作废单不进入结果。
 fn current_revision_pointer_ids(orders: &[PurchaseOrder]) -> Vec<PurchaseOrderRevisionId> {
     orders
         .iter()

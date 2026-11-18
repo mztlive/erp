@@ -19,12 +19,8 @@ pub(super) struct Sources {
 }
 impl Sources {
     /// 批量读取采购地址和供应商接口执行状态。
-    /// # 参数
-    /// 用例实例、销售上下文及执行器。
-    /// # 返回
-    /// 当前订单的采购版本、地址与接口执行身份。
-    /// # 错误
-    /// 关联采购行缺失或仓储读取失败时拒绝。
+    ///
+    /// 用例实例、销售上下文及执行器。当前订单的采购版本、地址与接口执行身份。关联采购行缺失或仓储读取失败时拒绝。
     pub async fn load(
         process: &FulfillmentProcess,
         context: &Context,
@@ -76,12 +72,8 @@ impl Sources {
         Ok(Self { versions, allocations: mapped, external })
     }
     /// 计算发货对应的生效来源版本。
-    /// # 参数
-    /// 销售上下文及发货记录。
-    /// # 返回
-    /// 销售与采购版本组合。
-    /// # 错误
-    /// 采购缺少生效版本时拒绝。
+    ///
+    /// 销售上下文及发货记录。销售与采购版本组合。采购缺少生效版本时拒绝。
     pub fn version(&self, context: &Context, delivery: &Delivery) -> Result<String> {
         let purchase = if let Some(id) = &delivery.purchase_order_id {
             self.versions
@@ -95,12 +87,8 @@ impl Sources {
         Ok(format!("{}:{}", context.revision, purchase))
     }
     /// 按原采购或销售分配生成可信任务地址。
-    /// # 参数
-    /// 销售上下文、发货记录与指纹密钥。
-    /// # 返回
-    /// 可核对的地址快照；多地址数量不匹配返回空。
-    /// # 错误
-    /// 采购分配缺失或数量计算失败时拒绝。
+    ///
+    /// 销售上下文、发货记录与指纹密钥。可核对的地址快照；多地址数量不匹配返回空。采购分配缺失或数量计算失败时拒绝。
     pub fn original(
         &self,
         context: &Context,

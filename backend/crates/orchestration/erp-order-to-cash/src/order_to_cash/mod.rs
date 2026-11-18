@@ -37,18 +37,7 @@ pub struct SalesOrderCommandProcess {
     authorization: Arc<AuthorizationService>,
 }
 impl SalesOrderCommandProcess {
-    /// 用共享授权源构造销售命令流程。
-    ///
-    /// # 参数
-    /// * `db` - 业务数据库。
-    /// * `authorization` - 共享授权源。
-    /// * `services` - 应用已装配的领域服务、范围及审批能力。
-    ///
-    /// # 返回
-    /// 返回已完整装配授权依赖的命令流程。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 装配销售单命令流程，使销售写入、授权范围、商品资格和审批能力由同一个用例协调。
     pub fn new(db: Database, authorization: Arc<AuthorizationService>, services: Arc<SalesServices>) -> Self {
         Self { db, services, authorization }
     }
@@ -68,7 +57,7 @@ fn document_type_of_sales_business(business_type: BusinessType) -> DocumentType 
         BusinessType::Voucher => DocumentType::VoucherSalesOrder,
     }
 }
-/// 按业务性质生成审批主体引用；种类无法映射时返回校验错误。
+// 按实物及服务、卡券两类销售单生成对应的审批主体引用，避免流程关联到另一种单据。无效单据身份返回校验错误。
 fn subject_ref_for_sales_business(business_type: BusinessType, id: &str) -> Result<bpm::SubjectRef> {
     erp_workflow::entity::approval_integration::subject_ref_for(
         document_type_of_sales_business(business_type),
@@ -77,21 +66,8 @@ fn subject_ref_for_sales_business(business_type: BusinessType, id: &str) -> Resu
     .map_err(|error| Error::ValidationError(error.to_string()))
 }
 
-/// 在审批运行时已有事务内取消销售审批状态。
+/// 审批运行时撤回销售单时，按销售类型核对撤回动作，再在当前审批事务更新销售单并写入审计。
 ///
-/// 写销售单和审计之前，先按销售类型核对工作流动作。
-///
-/// # 参数
-/// * `db` - 业务数据库。
-/// * `id` - 销售单主键。
-/// * `action` - 审批领域动作。
-/// * `actor` - 审计操作人。
-/// * `executor` - 审批运行时已有执行器。
-///
-/// # 返回
-/// 销售单状态与审计都写入后返回。
-///
-/// # 错误
 /// 销售单不存在、动作不属于该类型、状态不允许或仓储写入失败时返回错误。
 pub async fn cancel_approval(
     db: &Database,

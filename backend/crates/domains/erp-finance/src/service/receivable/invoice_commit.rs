@@ -17,18 +17,13 @@ use crate::{Error, Result};
 /// 两条入口（`commit_invoice` 的 `Existing` 与 `post_invoice`）在装载
 /// 持久化发票后必须共用本校验，保证非销项发票以同一错误码 fail-closed，
 /// 文案与 `CommitInvoiceRequest::prepare` 的新建分支保持一致。
-///
-/// # 参数
-/// * `invoice` - 已从仓储装载的发票实体
-///
-/// # 返回
-/// 方向为 `Sales` 时返回 `Ok(())`。
-///
-/// # 错误
+/// 结果：方向为 `Sales` 时返回 `Ok(())`。
+/// 失败条件：
 /// * `ValidationError` - 发票方向非销项时返回 `应收登记命令只接受销项发票`
+/// 调用边界：纯内存校验，不触及 I/O、时钟或事务。
 ///
-/// # 约束
-/// 纯内存校验，不触及 I/O、时钟或事务。
+/// 输入约定：
+/// - `invoice`：已从仓储装载的发票实体
 pub fn ensure_sales_invoice(invoice: &Invoice) -> Result<()> {
     if invoice.invoice_direction != InvoiceDirection::Sales {
         return Err(Error::ValidationError("应收登记命令只接受销项发票".to_string()));
@@ -62,21 +57,15 @@ pub enum PreparedInvoiceCommit {
 }
 
 /// 将销项发票分配请求行转换为领域计划输入行。
-///
-/// # 参数
-/// * `lines` - 请求中的销项分配行（含税/不含税/税额三元组）
-///
-/// # 返回
-/// 全部行均合法时返回与输入顺序一致的 `SalesInvoiceAllocationLine` 集合；
+/// 结果：全部行均合法时返回与输入顺序一致的 `SalesInvoiceAllocationLine` 集合；
 /// 调用方随后交由 `SalesInvoiceAllocationPlan` 完成守恒与序号校验。
-///
-/// # 错误
-/// 不返回错误；金额正数与恒等校验由 `SalesInvoiceAllocationPlan` 统一完成，
+/// 金额正数与恒等校验由 `SalesInvoiceAllocationPlan` 统一完成，
 /// 本函数仅做结构映射，保持 DTO 职责的单一性。
-///
-/// # 约束
-/// 纯转换，不触及 I/O、时钟或 ID 生成；顺序与输入一致，保证调用方可
+/// 调用边界：纯转换，不触及 I/O、时钟或 ID 生成；顺序与输入一致，保证调用方可
 /// 以确定性复现首错语义与序号分配。
+///
+/// 输入约定：
+/// - `lines`：请求中的销项分配行（含税/不含税/税额三元组）
 pub fn convert_invoice_allocations(
     lines: &[SalesInvoiceAllocationLineRequest],
 ) -> Vec<SalesInvoiceAllocationLine> {
@@ -97,24 +86,20 @@ impl CommitInvoiceRequest {
     /// 判定 `invoice` / `invoice_id + expected_version` 的互斥形态，
     /// 校验 `expected_version` 为正数、销项发票类型与分配行结构，
     /// 并将 `allocations` 转换为强类型的计划输入行集合。
-    ///
-    /// # 参数
-    /// * `&self` - 原始提交请求（`invoice_id` / `expected_version` / `invoice` / `allocations`）
-    ///
-    /// # 返回
-    /// 合法时返回 `PreparedInvoiceCommit::New` 或 `::Existing`，
+    /// 结果：合法时返回 `PreparedInvoiceCommit::New` 或 `::Existing`，
     /// 携带已验证的分配集合；非法组合在进入事务前即失败。
-    ///
-    /// # 错误
+    /// 失败条件：
     /// * `ValidationError` - `new` 与 `existing` 字段同时提供、同时缺失、
     ///   `expected_version` 为 `None` 或 `0`、非销项发票类型、`allocations` 为空
     ///   时返回
-    ///
-    /// # 约束
+    /// 调用边界：
     /// * I/O-free：不查询数据库、不触及全局时钟/ID 生成器
     /// * 确定性：同输入必得同输出或同首错，分配顺序与输入一致
     /// * 兼容性：错误文案保持与原 `commit_invoice` 分支一致，
     ///   以免改变前端对非法形态与非销项类型的展示
+    ///
+    /// 输入约定：
+    /// - `&self`：原始提交请求（`invoice_id` / `expected_version` / `invoice` / `allocations`）
     pub fn prepare(&self) -> Result<PreparedInvoiceCommit> {
         if self.allocations.is_empty() {
             return Err(Error::ValidationError("至少提供一条发票分配".to_string()));
@@ -141,19 +126,13 @@ impl CommitInvoiceRequest {
 
 /// 将 `PostInvoiceRequest` 的分配行转换为领域计划输入行，供 `post_invoice`
 /// 与 `commit_invoice` 复用同一 `SalesInvoiceAllocationPlan`。
-///
-/// # 参数
-/// * `lines` - `PostInvoiceRequest.allocations` 集合
-///
-/// # 返回
 /// 返回与输入顺序一致的 `SalesInvoiceAllocationLine` 集合。
-///
-/// # 错误
-/// 不返回错误；总量守恒与单行恒等由 `Plan` 完成，转换本身只映射结构。
-///
-/// # 约束
-/// 纯转换，不触及 I/O；顺序确定性与 `commit` 路径一致，保证两条入口对
+/// 总量守恒与单行恒等由 `Plan` 完成，转换本身只映射结构。
+/// 调用边界：纯转换，不触及 I/O；顺序确定性与 `commit` 路径一致，保证两条入口对
 /// 同一 `facts` 产出完全相同 `plan`（FIN-E08 关闭验收）。
+///
+/// 输入约定：
+/// - `lines`：`PostInvoiceRequest.allocations` 集合
 pub fn convert_post_allocations(
     lines: &[SalesInvoiceAllocationLineRequest],
 ) -> Vec<SalesInvoiceAllocationLine> {

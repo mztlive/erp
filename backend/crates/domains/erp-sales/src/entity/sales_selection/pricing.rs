@@ -5,16 +5,12 @@ use erp_core::{Error, Result};
 use rust_decimal::Decimal;
 
 /// 两个金额精确相加。
-///
-/// # 参数
-/// * `left` - 左操作数
-/// * `right` - 右操作数
-///
-/// # 返回
 /// 返回可被 `Amount` 精确表达的和。
+/// 失败条件：溢出或小数位无法表达时拒绝，不截断、不按零处理。
 ///
-/// # 错误
-/// 溢出或小数位无法表达时拒绝，不截断、不按零处理。
+/// 输入约定：
+/// - `left`：左操作数
+/// - `right`：右操作数
 pub fn try_add(left: Amount, right: Amount) -> Result<Amount> {
     let sum = left
         .to_decimal()
@@ -24,16 +20,12 @@ pub fn try_add(left: Amount, right: Amount) -> Result<Amount> {
 }
 
 /// 金额乘以正整数量。
-///
-/// # 参数
-/// * `unit` - 单价
-/// * `quantity` - 份数或件数
-///
-/// # 返回
 /// 返回行金额。
-///
-/// # 错误
 /// 溢出或无法精确表达时拒绝。
+///
+/// 输入约定：
+/// - `unit`：单价
+/// - `quantity`：份数或件数
 pub fn try_mul_u32(unit: Amount, quantity: u32) -> Result<Amount> {
     let product = unit
         .to_decimal()
@@ -43,15 +35,11 @@ pub fn try_mul_u32(unit: Amount, quantity: u32) -> Result<Amount> {
 }
 
 /// 多个金额求和。
-///
-/// # 参数
-/// * `amounts` - 金额序列
-///
-/// # 返回
-/// 空序列返回零；否则返回精确合计。
-///
-/// # 错误
+/// 结果：空序列返回零；否则返回精确合计。
 /// 任一步溢出时拒绝。
+///
+/// 输入约定：
+/// - `amounts`：金额序列
 pub fn try_sum<I>(amounts: I) -> Result<Amount>
 where
     I: IntoIterator<Item = Amount>,
@@ -64,32 +52,24 @@ where
 }
 
 /// 两个金额的绝对差。
-///
-/// # 参数
-/// * `left` - 左操作数
-/// * `right` - 右操作数
-///
-/// # 返回
 /// 返回 `|left - right|`。
+/// 失败条件：金额类型减法不溢出。
 ///
-/// # 错误
-/// 无。金额类型减法不溢出。
+/// 输入约定：
+/// - `left`：左操作数
+/// - `right`：右操作数
 pub fn abs_diff(left: Amount, right: Amount) -> Amount {
     if left >= right { left.checked_sub(right) } else { right.checked_sub(left) }
 }
 
 /// 判断售价是否落在目标金额 ± 容差内（含边界）。
-///
-/// # 参数
-/// * `price` - 套餐售价
-/// * `target` - 档位目标金额
-/// * `tolerance` - 容差
-///
-/// # 返回
-/// 落在区间内返回 `true`。下限按 0 处理。
-///
-/// # 错误
+/// 结果：落在区间内返回 `true`。下限按 0 处理。
 /// 目标加容差溢出时返回错误。
+///
+/// 输入约定：
+/// - `price`：套餐售价
+/// - `target`：档位目标金额
+/// - `tolerance`：容差
 pub fn price_in_tier(price: Amount, target: Amount, tolerance: Amount) -> Result<bool> {
     let lower = if tolerance >= target { Amount::zero() } else { target.checked_sub(tolerance) };
     let upper = try_add(target, tolerance)?;

@@ -25,17 +25,7 @@ pub struct WarehouseSkuPolicyPeriod {
 }
 
 impl WarehouseSkuPolicyPeriod {
-    /// 构造仓库-SKU 策略生效区间。
-    ///
-    /// # 参数
-    /// * `effective_from` - 生效开始日（含）
-    /// * `effective_to` - 生效结束日（不含）；空表示无限期
-    ///
-    /// # 返回
-    /// 返回合法的半开区间值对象。
-    ///
-    /// # 错误
-    /// 结束日不晚于开始日时返回错误。
+    /// 构造供仓库策略使用的半开区间，包含开始日、不包含结束日，`None` 表示无上界；结束日不晚于开始日时拒绝。
     pub fn new(effective_from: BusinessDate, effective_to: Option<BusinessDate>) -> Result<Self> {
         if effective_to.is_some_and(|effective_to| effective_to <= effective_from) {
             return Err(Error::from("生效结束日必须晚于生效开始日"));
@@ -43,60 +33,24 @@ impl WarehouseSkuPolicyPeriod {
         Ok(Self { effective_from, effective_to })
     }
 
-    /// 判断业务日是否落在半开生效区间内（区间语义的唯一原语）。
-    ///
-    /// # 参数
-    /// * `business_day` - 待判断的业务日
-    ///
-    /// # 返回
-    /// 业务日落在 `[effective_from, effective_to)` 时返回 `true`；结束日当天返回 `false`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 按半开区间的统一规则判断业务日是否生效，结束日当天不命中，未配置结束日则不设上界。
     pub fn contains(self, business_day: BusinessDate) -> bool {
         business_day >= self.effective_from
             && self.effective_to.is_none_or(|effective_to| business_day < effective_to)
     }
 
-    /// 判断两个半开区间是否存在交集。
-    ///
-    /// # 参数
-    /// * `other` - 另一个策略生效区间
-    ///
-    /// # 返回
-    /// 两个区间存在至少一个共同业务日时返回 `true`；相邻区间返回 `false`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 判断两个半开区间是否共享至少一个业务日，避免把首尾相接的策略当成重叠。
     pub fn overlaps(self, other: Self) -> bool {
         // 非退化半开区间相交当且仅当一方的起点落在另一方内。
         self.contains(other.effective_from) || other.contains(self.effective_from)
     }
 
-    /// 返回生效开始日。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回半开区间的包含端点。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 提供包含在生效区间内的起始日，供策略调期和存储使用。
     pub fn effective_from(self) -> BusinessDate {
         self.effective_from
     }
 
-    /// 返回生效结束日。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不包含的结束日；`None` 表示无限期。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 提供不包含在生效区间内的结束日；`None` 表示无限期。
     pub fn effective_to(self) -> Option<BusinessDate> {
         self.effective_to
     }
@@ -148,19 +102,7 @@ pub struct WarehouseSkuPolicy {
 }
 
 impl WarehouseSkuPolicy {
-    /// 创建仓库-SKU 预警策略。
-    ///
-    /// 完成预警阈值非负校验与生效区间校验（结束日晚于开始日）。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::WarehouseSkuPolicyId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
-    /// 返回新建的策略实体。
-    ///
-    /// # 错误
-    /// 当预警阈值为负数或生效区间倒挂时返回错误。
+    /// 创建指定仓库与 SKU 的预警策略；负数阈值、结束日等于或早于开始日都会被拒绝，避免保存无法执行的规则。
     pub fn new(id: WarehouseSkuPolicyId, data: WarehouseSkuPolicyData) -> Result<Self> {
         ensure_non_negative_quantity(data.minimum_available_quantity)?;
         WarehouseSkuPolicyPeriod::new(data.effective_from, data.effective_to)?;
@@ -176,18 +118,7 @@ impl WarehouseSkuPolicy {
         })
     }
 
-    /// 更新仓库-SKU 预警策略。
-    ///
-    /// 复用 `new` 的校验规则；`warehouse_id`/`sku_id` 是策略身份，不允许修改。
-    ///
-    /// # 参数
-    /// * `update` - 更新数据
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 预警阈值为负数，或启停迁移被 `ensure_transition` 拒绝时返回错误。
+    /// 修改预警阈值和启停状态，不改变作为身份的仓库与 SKU。负数阈值或公共状态机拒绝的迁移返回错误。
     pub fn update(&mut self, update: WarehouseSkuPolicyUpdate) -> Result<()> {
         if let Some(minimum_available_quantity) = update.minimum_available_quantity {
             ensure_non_negative_quantity(minimum_available_quantity)?;
@@ -201,44 +132,17 @@ impl WarehouseSkuPolicy {
         Ok(())
     }
 
-    /// 返回当前策略的半开生效区间。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回由实体持久化起止日构造的区间值对象，不再次校验起止顺序。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将已持久化的起止日作为半开区间交给比较逻辑，此处不重新验证日期顺序。
     pub fn effective_period(&self) -> WarehouseSkuPolicyPeriod {
         WarehouseSkuPolicyPeriod { effective_from: self.effective_from, effective_to: self.effective_to }
     }
 
-    /// 判断当前策略是否仍参与启用策略约束。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 策略状态为启用时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 只有启用策略才参与同维度防重叠约束，停用策略不构成冲突。
     pub fn is_operable(&self) -> bool {
         self.status.is_active()
     }
 
-    /// 判断两个策略是否构成同维度启用区间冲突。
-    ///
-    /// # 参数
-    /// * `other` - 待比较的另一条策略
-    ///
-    /// # 返回
-    /// 两者不同主键、同仓库、同 SKU、均启用且区间重叠时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 比较不同 ID 的策略，只有同仓库、同 SKU、均启用且区间重叠时才构成冲突，更新时不和自身比较。
     pub fn conflicts_with(&self, other: &Self) -> bool {
         self.base.id != other.base.id
             && self.warehouse_id == other.warehouse_id
@@ -248,16 +152,7 @@ impl WarehouseSkuPolicy {
             && self.effective_period().overlaps(other.effective_period())
     }
 
-    /// 校验当前策略不与既有策略的启用区间重叠。
-    ///
-    /// # 参数
-    /// * `existing` - 同维度或批量加载的既有策略
-    ///
-    /// # 返回
-    /// 不存在冲突时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 任一同仓库、同 SKU 的启用策略区间重叠时返回错误。
+    /// 对既有策略集逐项核对启用区间，遇到同仓库同 SKU 的重叠便拒绝；调用方须提供该维度的完整集合。
     pub fn ensure_no_overlap(&self, existing: &[Self]) -> Result<()> {
         if existing.iter().any(|policy| self.conflicts_with(policy)) {
             return Err(Error::from("同一仓库和SKU的启用区间不得重叠"));
@@ -265,34 +160,12 @@ impl WarehouseSkuPolicy {
         Ok(())
     }
 
-    /// 判断当前乐观锁版本是否与期望版本一致。
-    ///
-    /// # 参数
-    /// * `expected` - 调用方读取后携带的期望版本
-    ///
-    /// # 返回
-    /// 当前版本等于期望版本时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 核对策略当前乐观锁版本与调用方期望是否一致，供更新前识别并发变化。
     pub fn matches_version(&self, expected: u64) -> bool {
         self.base.version == expected
     }
 
-    /// 调整策略生效区间。
-    ///
-    /// 用于策略重排；「同一仓库和 SKU 的启用区间不得重叠」需要跨行校验，
-    /// 由 P3 服务层在事务内完成（数据模型 §6.3）。
-    ///
-    /// # 参数
-    /// * `effective_from` - 新的生效开始日
-    /// * `effective_to` - 新的生效结束日；空表示无限期
-    ///
-    /// # 返回
-    /// 调整成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 当生效区间倒挂时返回错误。
+    /// 调整策略的半开生效区间，结束日缺失时不设上界；结束日不晚于开始日时返回错误。跨记录的启用区间重叠由用例在事务内核查。
     pub fn reschedule(
         &mut self,
         effective_from: BusinessDate,
@@ -305,16 +178,7 @@ impl WarehouseSkuPolicy {
     }
 }
 
-/// 校验预警阈值为非负定点数量。
-///
-/// # 参数
-/// * `value` - 预警阈值
-///
-/// # 返回
-/// 非负时返回 `Ok(())`。
-///
-/// # 错误
-/// 为负数时返回错误。
+// 统一新建和更新的定点阈值校验，预警数量为负时拒绝，零允许。
 fn ensure_non_negative_quantity(value: Quantity) -> Result<()> {
     if value.to_decimal().is_sign_negative() {
         return Err(Error::from("预警阈值不能为负数"));
@@ -342,7 +206,7 @@ mod tests {
         }
     }
 
-    /// happy path：阈值与区间落位。
+    // 验证新策略保存给定的定点阈值和生效日期，供预警判定按原值执行。
     #[test]
     fn new_normalizes_policy() {
         let policy = WarehouseSkuPolicy::new(WarehouseSkuPolicyId::new("policy-1"), data()).unwrap();
@@ -353,7 +217,7 @@ mod tests {
         assert!(policy.status.is_active());
     }
 
-    /// 半开区间包含判定：开始日含、结束日不含、无限期无上界。
+    // 验证半开区间包含开始日、排除结束日，且无限期策略不受上界限制。
     #[test]
     fn period_contains_is_half_open() {
         let period = WarehouseSkuPolicyPeriod::new(
@@ -372,7 +236,7 @@ mod tests {
         assert!(!open_ended.contains(BusinessDate::from_ymd(2025, 12, 31).unwrap()));
     }
 
-    /// 半开区间与启用状态共同决定同维度策略冲突。
+    // 验证只有不同记录、同仓库同 SKU、均启用且实际重叠才冲突，相邻区间可以共存。
     #[test]
     fn effective_period_overlap_respects_boundaries_and_status() {
         let first = WarehouseSkuPolicy::new(
@@ -419,7 +283,7 @@ mod tests {
         assert!(first.ensure_no_overlap(&[adjacent, disabled]).is_ok());
     }
 
-    /// 失败路径：越界（负阈值）与关联不一致（生效区间倒挂）各一条。
+    // 验证负预警阈值和倒挂的生效日期都不能建立策略。
     #[test]
     fn new_rejects_negative_threshold_and_reversed_window() {
         let negative = WarehouseSkuPolicyData {
@@ -436,7 +300,7 @@ mod tests {
         assert!(WarehouseSkuPolicy::new(WarehouseSkuPolicyId::new("policy-1"), reversed).is_err());
     }
 
-    /// 金额/数量：定点类型拒绝超位小数，阈值 JSON 形态为字符串。
+    // 验证预警阈值保持定点精度、拒绝过多小数位，JSON 使用字符串存储其文本形态。
     #[test]
     fn threshold_is_fixed_point_with_string_wire_shape() {
         assert!(Quantity::from_str("10.0000001").is_err());
@@ -450,7 +314,7 @@ mod tests {
         assert_eq!(back, policy);
     }
 
-    /// update 修改阈值与状态；reschedule 调整区间。
+    // 验证更新只改阈值和状态，生效区间由独立调期入口修改。
     #[test]
     fn update_and_reschedule_apply_fields() {
         let mut policy = WarehouseSkuPolicy::new(WarehouseSkuPolicyId::new("policy-1"), data()).unwrap();
@@ -497,7 +361,7 @@ mod tests {
         );
     }
 
-    /// 状态机：合法迁移通过，邻接矩阵对称闭合。
+    // 验证策略启停沿用公共状态图，切换与同状态重复操作均有确定语义。
     #[test]
     fn status_transitions_follow_document_state() {
         assert!(ensure_transition(EnableStatus::Active, EnableStatus::Disabled).is_ok());

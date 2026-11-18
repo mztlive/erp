@@ -31,20 +31,15 @@ struct ActorPermissionSnapshot<'a> {
 }
 
 impl RbacService {
-    /// 在同一 Enforcer 快照下取操作人权限集并捕获 policy 版本。
-    ///
-    /// 四个 `authorize_*` 入口共享该快照序列：快照内读操作人权限，调用方再按
-    /// 各自业务规则做子集校验；拒绝/子集语义不变。
-    ///
-    /// # 参数
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回操作人权限集、`policy_revision` 与持有读锁的 Enforcer 快照守卫；
-    /// 调用方用完后 `drop` 守卫再做网络 I/O。
-    ///
-    /// # 错误
-    /// Enforcer 快照加载或操作人权限解析失败时返回错误。
+    // 在同一 Enforcer 快照下取操作人权限集并捕获 policy 版本。
+    //
+    // 四个 `authorize_*` 入口共享该快照序列：快照内读操作人权限，调用方再按
+    // 各自业务规则做子集校验；拒绝/子集语义不变。
+    //
+    // 返回操作人权限集、`policy_revision` 与持有读锁的 Enforcer 快照守卫；
+    // 调用方用完后 `drop` 守卫再做网络 I/O。
+    //
+    // Enforcer 快照加载或操作人权限解析失败时返回错误。
     async fn actor_permission_snapshot(&self, actor: &AuditActor) -> Result<ActorPermissionSnapshot<'_>> {
         let enforcer = self.fresh_enforcer().await?.read().await;
         let actor_permissions = permissions_for_actor(&enforcer, actor)?;
@@ -56,15 +51,11 @@ impl RbacService {
     ///
     /// 系统角色不允许通过普通管理接口分配；目标角色权限必须是操作人当前隐式权限的子集。
     ///
-    /// # 参数
-    /// * `actor` - 已认证操作人。
-    /// * `role_ids` - 待授予的角色 ID。
-    ///
-    /// # 返回
     /// 返回已校验的角色集合和当时的 policy 版本。
     ///
-    /// # 错误
     /// 当角色不存在、不可分配、权限越界或 policy 加载失败时返回错误。
+    ///
+    /// `role_ids`：待授予的角色 ID。
     pub async fn authorize_role_assignment(
         &self,
         actor: &AuditActor,
@@ -87,17 +78,11 @@ impl RbacService {
     /// 目标账号当前权限与待分配角色权限都必须是操作人权限的子集；绑定任一系统
     /// 角色的账号禁止通过普通管理接口修改。整个判断共享同一 Enforcer 快照。
     ///
-    /// # 参数
-    /// * `actor` - 已认证操作人。
-    /// * `target_kind` - 目标账号类型。
-    /// * `target_id` - 目标账号 ID。
-    /// * `requested_role_ids` - 可选的新角色集合；为空表示不改角色。
-    ///
-    /// # 返回
     /// 返回 policy 版本；请求了新角色时同时带上已校验的授予上下文。
     ///
-    /// # 错误
     /// 当目标含系统角色、权限越界、待分配角色无效或 policy 加载失败时返回错误。
+    ///
+    /// `requested_role_ids`：可选的新角色集合；为空表示不改角色。
     pub async fn authorize_target_management(
         &self,
         actor: &AuditActor,
@@ -125,17 +110,12 @@ impl RbacService {
         Ok(AuthorizedAccountManagement { policy_revision, role_grant })
     }
 
-    /// 校验待写入角色权限不超过操作人当前权限。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证操作人。
-    /// * `permissions` - 待写入的权限。
-    ///
-    /// # 返回
-    /// 返回规范化后的权限集和当时的 policy 版本。
-    ///
-    /// # 错误
-    /// 权限超出操作人范围或 policy 加载失败时返回错误。
+    // 校验待写入角色权限不超过操作人当前权限。
+    // 返回规范化后的权限集和当时的 policy 版本。
+    //
+    // 权限超出操作人范围或 policy 加载失败时返回错误。
+    //
+    // `permissions`：待写入的权限。
     pub(super) async fn authorize_permissions(
         &self,
         actor: &AuditActor,
@@ -147,7 +127,7 @@ impl RbacService {
         Ok(AuthorizedPermissions { permissions, policy_revision: snapshot.policy_revision })
     }
 
-    /// 批量加载目标账号当前角色和可选待分配角色。
+    // 为账号管理资格检查批量加载目标已有角色和拟分配角色，供比较授予上限。
     async fn load_management_roles(
         &self,
         target_role_ids: &[RoleId],
@@ -169,18 +149,12 @@ impl RbacService {
             .collect())
     }
 
-    /// 校验操作人可管理角色的当前权限范围，并按需校验更新后的权限。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证操作人。
-    /// * `role_id` - 目标角色 ID。
-    /// * `updated_permissions` - 更新后的权限；为空表示不改权限。
-    ///
-    /// # 返回
-    /// 返回可选的新权限集和当时的 policy 版本。
-    ///
-    /// # 错误
-    /// 当前或更新后的权限超出操作人范围，或 policy 加载失败时返回错误。
+    // 校验操作人可管理角色的当前权限范围，并按需校验更新后的权限。
+    // 返回可选的新权限集和当时的 policy 版本。
+    //
+    // 当前或更新后的权限超出操作人范围，或 policy 加载失败时返回错误。
+    //
+    // `updated_permissions`：更新后的权限；为空表示不改权限。
     pub(super) async fn authorize_role_update(
         &self,
         actor: &AuditActor,
@@ -203,17 +177,11 @@ impl RbacService {
     /// 调用方必须传入事务执行器，并通过
     /// [`Self::run_authorized_policy_transaction`] 建立取消安全的事务与刷新边界。
     ///
-    /// # 参数
-    /// * `account_kind` - 账号类型
-    /// * `account_id` - 账号 ID
-    /// * `grant` - 已按操作人权限和 policy 版本校验的授予上下文
-    /// * `executor` - 数据访问执行器，必须为事务执行器
-    ///
-    /// # 返回
     /// 事务内角色校验和绑定替换成功时返回 `Ok(())`。
     ///
-    /// # 错误
     /// 当角色无效或 MongoDB policy 写入失败时返回错误。
+    ///
+    /// `grant`：已按操作人权限和 policy 版本校验的授予上下文；`executor`：数据访问执行器，必须为事务执行器。
     pub async fn assign_roles(
         &self,
         account_kind: AccountKind,
@@ -229,17 +197,11 @@ impl RbacService {
     /// 仅超级管理员初始化可调用；普通管理入口必须使用
     /// [`Self::assign_roles`] 的授权上下文。
     ///
-    /// # 参数
-    /// * `account_kind` - 账号类型
-    /// * `account_id` - 账号 ID
-    /// * `role_ids` - 完整角色 ID 集合
-    /// * `executor` - 数据访问执行器，必须为事务执行器
-    ///
-    /// # 返回
     /// 角色校验和绑定替换成功时返回 `Ok(())`。
     ///
-    /// # 错误
     /// 当角色无效或 MongoDB policy 写入失败时返回错误。
+    ///
+    /// `role_ids`：完整角色 ID 集合；`executor`：数据访问执行器，必须为事务执行器。
     pub async fn assign_system_roles(
         &self,
         account_kind: AccountKind,
@@ -250,22 +212,16 @@ impl RbacService {
         self.write_subject_roles(account_kind, account_id, role_ids, executor).await
     }
 
-    /// 校验角色有效并覆盖账号角色绑定（授权与系统初始化入口共用该写入）。
-    ///
-    /// 该方法只写数据，不更新本地 Enforcer；调用方必须传入事务执行器，并通过
-    /// [`Self::run_authorized_policy_transaction`] 建立取消安全的事务与刷新边界。
-    ///
-    /// # 参数
-    /// * `account_kind` - 账号类型
-    /// * `account_id` - 账号 ID
-    /// * `role_ids` - 已规范化的完整角色 ID 集合
-    /// * `executor` - 数据访问执行器，必须为事务执行器
-    ///
-    /// # 返回
-    /// 事务内角色校验和绑定替换成功时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 当角色无效或 MongoDB policy 写入失败时返回错误。
+    // 校验角色有效并覆盖账号角色绑定（授权与系统初始化入口共用该写入）。
+    //
+    // 该方法只写数据，不更新本地 Enforcer；调用方必须传入事务执行器，并通过
+    // `Self::run_authorized_policy_transaction` 建立取消安全的事务与刷新边界。
+    //
+    // 事务内角色校验和绑定替换成功时返回 `Ok(())`。
+    //
+    // 当角色无效或 MongoDB policy 写入失败时返回错误。
+    //
+    // `role_ids`：已规范化的完整角色 ID 集合；`executor`：数据访问执行器，必须为事务执行器。
     pub(super) async fn write_subject_roles(
         &self,
         account_kind: AccountKind,
@@ -289,16 +245,11 @@ impl RbacService {
     /// 该方法只写数据，不更新本地 Enforcer。调用方必须传入事务执行器，并通过
     /// [`Self::run_authorized_policy_transaction`] 建立取消安全的事务与刷新边界。
     ///
-    /// # 参数
-    /// * `account_kind` - 账号类型
-    /// * `account_id` - 账号 ID
-    /// * `executor` - 数据访问执行器，必须为事务执行器
-    ///
-    /// # 返回
     /// 事务内角色绑定清除成功时返回 `Ok(())`。
     ///
-    /// # 错误
     /// 当 MongoDB policy 删除失败时返回错误。
+    ///
+    /// `executor`：数据访问执行器，必须为事务执行器。
     pub async fn clear_roles(
         &self,
         account_kind: AccountKind,
@@ -309,20 +260,16 @@ impl RbacService {
         Ok(())
     }
 
-    /// 校验并 CAS touch 全部待分配角色。
-    ///
-    /// 写触碰会与并发角色更新或删除产生写冲突，避免纯快照读取允许已删除角色被绑定；
-    /// 因此调用方必须传入事务执行器。
-    ///
-    /// # 参数
-    /// * `role_ids` - 待分配角色 ID
-    /// * `executor` - 数据访问执行器，必须为事务执行器
-    ///
-    /// # 返回值
-    /// 全部角色存在、启用且写触碰成功时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 当角色缺失、被停用或 MongoDB 写入冲突时返回错误。
+    // 校验并 CAS touch 全部待分配角色。
+    //
+    // 写触碰会与并发角色更新或删除产生写冲突，避免纯快照读取允许已删除角色被绑定；
+    // 因此调用方必须传入事务执行器。
+    //
+    // 全部角色存在、启用且写触碰成功时返回 `Ok(())`。
+    //
+    // 当角色缺失、被停用或 MongoDB 写入冲突时返回错误。
+    //
+    // `executor`：数据访问执行器，必须为事务执行器。
     async fn ensure_roles_assignable(&self, role_ids: &RoleIdSet, executor: &mut dyn Executor) -> Result<()> {
         let mut roles = self.db.roles().enabled_roles(role_ids, executor).await?;
         ensure_all_roles_assignable(role_ids.len(), roles.len())?;
@@ -333,17 +280,12 @@ impl RbacService {
     }
 }
 
-/// 校验事务内解析出的可分配角色数量与请求一致。
-///
-/// # 参数
-/// * `requested_count` - 请求中的角色数量。
-/// * `existing_count` - 实际读到的启用角色数量。
-///
-/// # 返回
-/// 两边数量一致时无返回值。
-///
-/// # 错误
-/// 数量不一致时返回业务错误，表示角色不存在或已停用。
+// 校验事务内解析出的可分配角色数量与请求一致。
+// 两边数量一致时无返回值。
+//
+// 数量不一致时返回业务错误，表示角色不存在或已停用。
+//
+// `existing_count`：实际读到的启用角色数量。
 pub(super) fn ensure_all_roles_assignable(requested_count: usize, existing_count: usize) -> Result<()> {
     if existing_count != requested_count {
         return Err(Error::BusinessLogicError("角色不存在或已停用".to_string()));
@@ -351,16 +293,10 @@ pub(super) fn ensure_all_roles_assignable(requested_count: usize, existing_count
     Ok(())
 }
 
-/// 确保每个请求角色均允许通过普通管理入口分配。
-///
-/// # 参数
-/// * `roles` - 待分配角色。
-///
-/// # 返回
-/// 每个角色都可分配时无返回值。
-///
-/// # 错误
-/// 任一角色是系统角色或已停用时返回 `Forbidden`。
+// 确保每个请求角色均允许通过普通管理入口分配。
+// 每个角色都可分配时无返回值。
+//
+// 任一角色是系统角色或已停用时返回 `Forbidden`。
 pub(super) fn ensure_roles_delegable(roles: &[Role]) -> Result<()> {
     roles.iter().try_for_each(|role| {
         role.ensure_assignable()
@@ -368,7 +304,7 @@ pub(super) fn ensure_roles_delegable(roles: &[Role]) -> Result<()> {
     })
 }
 
-/// 在同一 Enforcer 快照内要求目标账号现有权限和待分配角色权限都不超过操作人。
+// 管理目标账号前用同一 Enforcer 快照核对现有权限与待授予角色权限，两者都不得超过操作人的授权上限。
 fn authorize_account_permissions(
     enforcer: &Enforcer,
     actor_permissions: &PermissionSet,
@@ -385,17 +321,12 @@ fn authorize_account_permissions(
     Ok(())
 }
 
-/// 拒绝通过普通管理接口修改绑定了 root 或其他系统角色的账号。
-///
-/// # 参数
-/// * `target_role_ids` - 目标账号当前直接角色。
-/// * `roles` - 已加载的角色实体。
-///
-/// # 返回
-/// 没有受保护角色时无返回值。
-///
-/// # 错误
-/// 绑定 root 或系统角色，或角色实体缺失时返回 `Forbidden`。
+// 拒绝通过普通管理接口修改绑定了 root 或其他系统角色的账号。
+// 没有受保护角色时无返回值。
+//
+// 绑定 root 或系统角色，或角色实体缺失时返回 `Forbidden`。
+//
+// `target_role_ids`：目标账号当前直接角色；`roles`：已加载的角色实体。
 pub(super) fn ensure_target_roles_manageable(
     target_role_ids: &[RoleId],
     roles: &HashMap<String, Role>,
@@ -409,7 +340,7 @@ pub(super) fn ensure_target_roles_manageable(
     Ok(())
 }
 
-/// 在借用已加载角色的情况下冻结有效授予身份与策略版本。
+// 从已加载并校验的角色构造授予上下文，冻结目标角色身份和策略版本供写入重验。
 fn authorized_role_grant(
     role_ids: RoleIdSet,
     policy_revision: u64,
@@ -425,37 +356,27 @@ fn authorized_role_grant(
     Ok(AuthorizedRoleGrant { role_ids, policy_revision })
 }
 
-/// 要求待授予权限是操作人权限的子集。
-///
-/// # 参数
-/// * `actor` - 操作人权限集。
-/// * `required` - 待授予权限集。
-///
-/// # 返回
-/// 操作人覆盖目标时无返回值。
-///
-/// # 错误
-/// 目标超出操作人范围时返回 `Forbidden`。
+// 要求待授予权限是操作人权限的子集。
+// 操作人覆盖目标时无返回值。
+//
+// 目标超出操作人范围时返回 `Forbidden`。
+//
+// `actor`：操作人权限集；`required`：待授予权限集。
 pub(super) fn ensure_permission_subset(actor: &PermissionSet, required: &PermissionSet) -> Result<()> {
     ensure_covers(actor, required, "不能授予超出自身权限范围的角色或权限")
 }
 
-/// 要求被管理对象的权限不超过操作人。
-///
-/// # 参数
-/// * `actor` - 操作人权限集。
-/// * `target` - 目标账号或角色的权限集。
-///
-/// # 返回
-/// 操作人覆盖目标时无返回值。
-///
-/// # 错误
-/// 目标权限高于操作人时返回 `Forbidden`。
+// 要求被管理对象的权限不超过操作人。
+// 操作人覆盖目标时无返回值。
+//
+// 目标权限高于操作人时返回 `Forbidden`。
+//
+// `actor`：操作人权限集；`target`：目标账号或角色的权限集。
 pub(super) fn ensure_management_subset(actor: &PermissionSet, target: &PermissionSet) -> Result<()> {
     ensure_covers(actor, target, "不能管理权限范围高于自身的账号或角色")
 }
 
-/// 校验操作人权限覆盖目标集合；两个授权子集检查共用该覆盖语义。
+// 判断目标权限是否超出操作人可授予集合，让原目标和新授予两个子集检查复用一致的覆盖语义。
 fn ensure_covers(actor: &PermissionSet, required: &PermissionSet, message: &str) -> Result<()> {
     if !actor.covers(required) {
         return Err(Error::Forbidden(message.to_string()));

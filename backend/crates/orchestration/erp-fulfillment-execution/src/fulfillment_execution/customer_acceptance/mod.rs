@@ -27,16 +27,9 @@ pub struct CustomerAcceptanceProcess {
 impl CustomerAcceptanceProcess {
     /// 使用入口已有配置构造流程；查询及写入步骤共用调用方数据库。
     ///
-    /// # 参数
-    /// * `db` - 业务数据库。读模型由此新建。
-    /// * `authorization` - 组合根构造并共享的统一授权服务。
-    /// * `workflow` - 应用装配的工作流绑定、材料和正式任务能力。
+    /// `db` 为业务数据库。读模型由此新建；`authorization` 为组合根构造并共享的统一授权服务；`workflow` 为应用装配的工作流绑定、材料和正式任务能力。
     ///
-    /// # 返回
     /// 返回持有同一数据库、工作流端口和共享授权服务的验收流程。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(
         db: Database,
         authorization: Arc<AuthorizationService>,

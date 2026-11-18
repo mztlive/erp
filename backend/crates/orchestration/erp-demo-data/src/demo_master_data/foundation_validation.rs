@@ -18,13 +18,7 @@ use super::{DemoMasterDataProcess, spec};
 use crate::{Error, Result};
 
 impl FoundationFile {
-    /// 校验声明输入与当前审批政策严格对应。
-    /// # 参数
-    /// 无；读取当前基础规格。
-    /// # 返回
-    /// 岗位、部门、责任和全部必须审批类型一致时成功。
-    /// # 错误
-    /// 重复身份、缺失引用、错误审批类型或违反该类型岗位分离政策时拒绝。
+    // 在准备演示环境前检查岗位、部门、责任及审批定义是否覆盖当前工作流政策，拒绝重复身份、缺失引用、错误单据类型或岗位分离冲突。
     pub(super) fn validate(&self) -> Result<()> {
         let keys = self.accounts.iter().map(|row| row.key.as_str()).collect::<HashSet<_>>();
         let logins = self.accounts.iter().map(|row| row.account.as_str()).collect::<HashSet<_>>();
@@ -78,7 +72,7 @@ impl FoundationFile {
         Ok(())
     }
 
-    /// 验证业务责任和范围声明中的账号均已定义且有唯一主属部门。
+    // 确认责任配置和业务范围引用的都是已声明且只有一个主属部门的账号，避免后续生成无法解析实际归属。
     fn validate_account_references(&self, keys: &HashSet<&str>, logins: &HashSet<&str>) -> Result<()> {
         for login in [
             &self.customer_owner_account,
@@ -124,13 +118,7 @@ impl FoundationFile {
 }
 
 impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
-    /// 对当前启用角色逐项核验演示操作，不自动覆盖人工撤权。
-    /// # 参数
-    /// `accounts` 为已准备的真实岗位 ID。
-    /// # 返回
-    /// 所有声明动作均有启用角色授予时成功。
-    /// # 错误
-    /// 缺权时返回账号和具体权限；数据库或策略读取失败时停止。
+    // 逐项核验已准备账号的启用角色是否授予演示动作；缺权限时指出账号和动作，不覆盖人工撤权，身份或策略读取失败立即停止。
     pub(super) async fn validate_demo_permissions(&self, accounts: &PreparedAccounts) -> Result<()> {
         let service = &self.authorization;
         for account in &spec::foundation_spec().accounts {

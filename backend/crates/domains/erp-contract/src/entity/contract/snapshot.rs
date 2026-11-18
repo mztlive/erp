@@ -36,14 +36,7 @@ pub struct CustomerSnapshot {
 
 impl CustomerSnapshot {
     /// 构造客户名称快照（trim、非空、长度上限）。
-    ///
-    /// # 参数
-    /// * `customer_name` - 客户名称
-    ///
-    /// # 返回
-    /// 返回规范化后的快照。
-    ///
-    /// # 错误
+    /// `customer_name` 为客户名称。
     /// 名称为空或超长时返回错误。
     pub fn new(customer_name: impl Into<String>) -> Result<Self> {
         let customer_name = normalize_required_text(
@@ -65,14 +58,7 @@ pub struct ContractSnapshot {
 
 impl ContractSnapshot {
     /// 构造合同编号快照（trim、非空、长度上限）。
-    ///
-    /// # 参数
-    /// * `contract_no` - 合同编号
-    ///
-    /// # 返回
-    /// 返回规范化后的快照。
-    ///
-    /// # 错误
+    /// `contract_no` 为合同编号。
     /// 编号为空或超长时返回错误。
     pub fn new(contract_no: impl Into<String>) -> Result<Self> {
         let contract_no = normalize_required_text(
@@ -94,14 +80,7 @@ pub struct SettlementPartySnapshot {
 
 impl SettlementPartySnapshot {
     /// 构造结算主体快照（trim、非空、长度上限）。
-    ///
-    /// # 参数
-    /// * `settlement_party_name` - 结算主体名称
-    ///
-    /// # 返回
-    /// 返回规范化后的快照。
-    ///
-    /// # 错误
+    /// `settlement_party_name` 为结算主体名称。
     /// 名称为空或超长时返回错误。
     pub fn new(settlement_party_name: impl Into<String>) -> Result<Self> {
         let settlement_party_name = normalize_required_text(
@@ -125,15 +104,7 @@ pub struct PaymentTermSnapshot {
 
 impl PaymentTermSnapshot {
     /// 构造付款条件快照（trim、非空、长度上限）。
-    ///
-    /// # 参数
-    /// * `payment_term_code` - 付款条件代码
-    /// * `payment_term_name` - 付款条件名称
-    ///
-    /// # 返回
-    /// 返回规范化后的快照。
-    ///
-    /// # 错误
+    /// `payment_term_code` 为付款条件代码；`payment_term_name` 为付款条件名称。
     /// 代码或名称为空、超长时返回错误。
     pub fn new(payment_term_code: impl Into<String>, payment_term_name: impl Into<String>) -> Result<Self> {
         let payment_term_code = normalize_required_text(
@@ -163,15 +134,7 @@ pub struct InvoiceRequirementSnapshot {
 
 impl InvoiceRequirementSnapshot {
     /// 构造开票要求快照（trim、非空、长度上限）。
-    ///
-    /// # 参数
-    /// * `invoice_type` - 开票类型
-    /// * `tax_point` - 税点
-    ///
-    /// # 返回
-    /// 返回规范化后的快照。
-    ///
-    /// # 错误
+    /// `invoice_type` 为开票类型；`tax_point` 为税点。
     /// 类型或税点为空、超长时返回错误。
     pub fn new(invoice_type: impl Into<String>, tax_point: impl Into<String>) -> Result<Self> {
         let invoice_type = normalize_required_text(

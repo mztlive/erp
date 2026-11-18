@@ -17,13 +17,14 @@ pub struct SettlementPartyDirectoryPage {
 }
 
 impl SettlementPartyDirectoryPage {
-    /// 按目录内容生成稳定分页及版本。
-    /// # 参数
-    /// `items` 为当前我方公司轻量快照，`query` 为已规范化的请求。
-    /// # 返回
-    /// 搜索或回显结果；空结果表示没有匹配主体。
-    /// # 错误
-    /// 目录超限或请求的内容版本过期时拒绝。
+    // 按目录内容生成稳定分页及版本。
+    //
+    // # 参数
+    // `items` 为当前我方公司轻量快照，`query` 为已规范化的请求。
+    //
+    // 搜索或回显结果；空结果表示没有匹配主体。
+    //
+    // 目录超限或请求的内容版本过期时拒绝。
     pub(crate) fn from_snapshot(items: Vec<DirectoryItem>, query: &DirectoryQuery) -> Result<Self> {
         let page = DirectoryPage::from_snapshot(
             items,

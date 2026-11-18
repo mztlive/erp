@@ -24,64 +24,24 @@ pub trait IntegrationOpsExt {
     /// `reconciliation_difference_resolution` 集合名。
     const RECONCILIATION_DIFFERENCE_RESOLUTIONS: &'static str = "reconciliation_difference_resolutions";
 
-    /// 获取 `inbox_message` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `InboxMessageRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 绑定 `inbox_message` 集合仓储，供领域查询或写入步骤复用。返回 `InboxMessageRepository<'_>`。
     fn inbox_messages(&self) -> InboxMessageRepository<'_>;
 
-    /// 获取 `integration_error_task` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `IntegrationErrorTaskRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 绑定 `integration_error_task` 集合仓储，供领域查询或写入步骤复用。返回
+    /// `IntegrationErrorTaskRepository<'_>`。
     fn integration_error_tasks(&self) -> IntegrationErrorTaskRepository<'_>;
 
-    /// 获取 `reconciliation_difference` 集合的 Repository。
+    /// 绑定 `reconciliation_difference` 集合仓储，供领域查询或写入步骤复用。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回 `ReconciliationDifferenceRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     fn reconciliation_differences(&self) -> ReconciliationDifferenceRepository<'_>;
 
-    /// 获取 `reconciliation_difference_resolution` 集合的 Repository。
+    /// 绑定 `reconciliation_difference_resolution` 集合仓储，供领域查询或写入步骤复用。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回 `ReconciliationDifferenceResolutionRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     fn reconciliation_difference_resolutions(&self) -> ReconciliationDifferenceResolutionRepository<'_>;
 
-    /// 获取承载跨集合事务写入的域专用仓储。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `IntegrationOpsRepository` 实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 绑定本域跨集合用例的仓储；读写和事务边界仍由调用方传入的执行器决定。返回 `IntegrationOpsRepository` 实例。
     fn integration_ops(&self) -> IntegrationOpsRepository<'_>;
 }
 

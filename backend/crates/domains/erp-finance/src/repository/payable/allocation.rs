@@ -22,32 +22,15 @@ pub struct PurchaseInvoiceAllocationFilter {
 }
 
 impl Default for PurchaseInvoiceAllocationFilter {
-    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回第 1 页、每页 20 条的空筛选条件。
-    ///
-    /// # 错误
-    /// 无。
+    // 未提供列表条件时，从第 1 页读取，每页 20 条，不预设可选业务筛选。
     fn default() -> Self {
         Self { payable_account_id: None, invoice_id: None, page: 1, page_size: 20, sort_ascending: false }
     }
 }
 
 impl QueryFilter for PurchaseInvoiceAllocationFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。有值时等值匹配 `payable_account_id`、`invoice_id`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 转换为 MongoDB 查询条件（自动追加未删除过滤）。
+    // 返回查询条件文档。有值时等值匹配 `payable_account_id`、`invoice_id`。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(account_id) = &self.payable_account_id {
@@ -61,16 +44,7 @@ impl QueryFilter for PurchaseInvoiceAllocationFilter {
 }
 
 impl Pagination for PurchaseInvoiceAllocationFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。`page` 原样返回，`page_size` 由 `u32` 转为 `u64`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 向仓储分页器交付筛选中的页码与每页条数；页码原样保留，条数转为 `u64`。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -79,16 +53,12 @@ impl Pagination for PurchaseInvoiceAllocationFilter {
 #[allow(async_fn_in_trait)]
 pub trait PaymentAllocationRepositoryExt {
     /// 批量按付款单集合取回核销分配（`$in` 一次取回，禁止 N+1）。
-    ///
-    /// # 参数
-    /// * `payment_ids` - 付款单 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回全部匹配分配。
+    /// 传播数据库查询或游标读取失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 输入约定：
+    /// - `payment_ids`：付款单 ID 集合
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn find_allocations_by_payments(
         &self,
         payment_ids: &[erp_core::ids::SupplierPaymentId],
@@ -96,14 +66,12 @@ pub trait PaymentAllocationRepositoryExt {
     ) -> Result<Vec<PaymentAllocation>>;
 
     /// 批量读取预存款使用的核销，不混入原充值银行付款。
-    ///
-    /// # 参数
-    /// * `usage_ids` - 已核实使用的稳定身份集合。
-    /// * `executor` - 核销所属事务执行器。
-    /// # 返回
     /// 返回指定使用形成的正反向分配；空输入不查询。
-    /// # 错误
-    /// 数据库查询或反序列化失败时返回错误。
+    /// 传播数据库查询或反序列化失败。
+    ///
+    /// 输入约定：
+    /// - `usage_ids`：已核实使用的稳定身份集合。
+    /// - `executor`：核销所属事务执行器。
     async fn find_allocations_by_deposit_usages(
         &self,
         usage_ids: &[String],
@@ -111,16 +79,12 @@ pub trait PaymentAllocationRepositoryExt {
     ) -> Result<Vec<PaymentAllocation>>;
 
     /// 批量按应付分录集合取回核销分配（`$in`，用于反向核销锁定）。
-    ///
-    /// # 参数
-    /// * `entry_ids` - 应付分录 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回全部匹配分配。
+    /// 传播数据库查询或游标读取失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 输入约定：
+    /// - `entry_ids`：应付分录 ID 集合
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn find_allocations_by_entries(
         &self,
         entry_ids: &[PayableEntryId],
@@ -168,16 +132,12 @@ impl PaymentAllocationRepositoryExt for persistence_core::Repository<'_, Payment
 #[allow(async_fn_in_trait)]
 pub trait PurchaseInvoiceAllocationRepositoryExt {
     /// 批量按发票集合取回进项发票分配（`$in` 一次取回，禁止 N+1）。
-    ///
-    /// # 参数
-    /// * `invoice_ids` - 发票 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回全部匹配分配。
+    /// 传播数据库查询或游标读取失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 输入约定：
+    /// - `invoice_ids`：发票 ID 集合
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn find_allocations_by_invoices(
         &self,
         invoice_ids: &[erp_core::ids::InvoiceId],
@@ -191,16 +151,12 @@ pub trait PurchaseInvoiceAllocationRepositoryExt {
     /// 传入，两个键始终同方向，保证同秒记录跨页无重复、无遗漏。
     /// 查询形状由 `idx_purchase_invoice_allocations_account_page` 与
     /// `idx_purchase_invoice_allocations_invoice_page` 覆盖。
-    ///
-    /// # 参数
-    /// * `filter` - 账户/发票条件与分页排序
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回当前页分配实体与满足筛选条件的总数。
+    /// 传播数据库查询、游标读取或计数失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// 输入约定：
+    /// - `filter`：账户/发票条件与分页排序
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn search_purchase_invoice_allocations(
         &self,
         filter: &PurchaseInvoiceAllocationFilter,
@@ -208,16 +164,12 @@ pub trait PurchaseInvoiceAllocationRepositoryExt {
     ) -> Result<PageResult<PurchaseInvoiceAllocation>>;
 
     /// 批量按应付子账集合取回进项发票分配（`$in`，用于收票进度校验）。
-    ///
-    /// # 参数
-    /// * `account_ids` - 应付往来子账 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回全部匹配分配。
+    /// 传播数据库查询或游标读取失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 输入约定：
+    /// - `account_ids`：应付往来子账 ID 集合
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn find_allocations_by_accounts(
         &self,
         account_ids: &[PayableAccountId],

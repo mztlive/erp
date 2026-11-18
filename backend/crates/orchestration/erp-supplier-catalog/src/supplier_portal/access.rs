@@ -13,12 +13,11 @@ use crate::{Error, Result};
 
 impl SupplierPortalProcess {
     /// 在调用方执行器中重验旧会话及供应商状态。
-    /// # 参数
-    /// * `actor` - JWT中的原账号和绑定版本。
-    /// * `executor` - 当前请求或事务执行器。
-    /// # 返回
+    ///
+    /// `actor`：JWT中的原账号和绑定版本；`executor`：当前请求或事务执行器。
+    ///
     /// 返回当前真实门户身份。
-    /// # 错误
+    ///
     /// 停用、解绑、版本失效或供应商停用时拒绝。
     pub async fn session_validate(
         &self,
@@ -38,17 +37,13 @@ impl SupplierPortalProcess {
         Ok(current)
     }
 
-    /// 读取仍启用的供应商角色。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 供应商角色 ID。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 返回仍启用的供应商角色。
-    ///
-    /// # 错误
-    /// 供应商不存在时返回 `NotFound`；已停用时返回 `Forbidden`。读取失败时返回对应错误。
+    // 读取仍启用的供应商角色。
+    //
+    // `supplier_id`：供应商角色 ID；`executor`：调用方执行器。
+    //
+    // 返回仍启用的供应商角色。
+    //
+    // 供应商不存在时返回 `NotFound`；已停用时返回 `Forbidden`。读取失败时返回对应错误。
     pub(super) async fn active_supplier(
         &self,
         supplier_id: &str,
@@ -66,19 +61,13 @@ impl SupplierPortalProcess {
         Ok(supplier)
     }
 
-    /// 重验内部账号对指定动作和供应商的对象范围，并要求供应商仍启用。
-    ///
-    /// # 参数
-    /// * `actor` - 内部操作人。
-    /// * `permission` - 供应商内置权限。
-    /// * `supplier_id` - 供应商角色 ID。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 返回仍启用且在范围内的供应商角色。
-    ///
-    /// # 错误
-    /// 不是可登录的内部账号、对象范围不足、供应商不存在或已停用时返回对应错误。
+    // 重验内部账号对指定动作和供应商的对象范围，并要求供应商仍启用。
+    //
+    // `actor`：内部操作人；`permission`：供应商内置权限；`supplier_id`：供应商角色 ID；`executor`：调用方执行器。
+    //
+    // 返回仍启用且在范围内的供应商角色。
+    //
+    // 不是可登录的内部账号、对象范围不足、供应商不存在或已停用时返回对应错误。
     pub(super) async fn internal_supplier(
         &self,
         actor: &AuditActor,
@@ -97,17 +86,13 @@ impl SupplierPortalProcess {
         self.active_supplier(supplier_id, executor).await
     }
 
-    /// 授权失败时补查内部身份，以保留账号不存在与失效的错误合同。
-    ///
-    /// # 参数
-    /// * `actor` - 声称的内部操作人。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 账号种类与登录状态仍匹配时无返回值。
-    ///
-    /// # 错误
-    /// 不是内部账号时返回 `Forbidden`；账号不存在或已失效时返回 `Unauthenticated`。读取失败时返回对应错误。
+    // 授权失败时补查内部身份，以保留账号不存在与失效的错误合同。
+    //
+    // `actor`：声称的内部操作人；`executor`：调用方执行器。
+    //
+    // 账号种类与登录状态仍匹配时无返回值。
+    //
+    // 不是内部账号时返回 `Forbidden`；账号不存在或已失效时返回 `Unauthenticated`。读取失败时返回对应错误。
     pub(super) async fn internal_actor(&self, actor: &AuditActor, executor: &mut dyn Executor) -> Result<()> {
         if actor.kind() != AccountKind::Admin {
             return Err(Error::Forbidden("供应商身份不能操作内部审核".into()));
@@ -123,18 +108,13 @@ impl SupplierPortalProcess {
         Ok(())
     }
 
-    /// 重验原提交人仍绑定同一供应商且具备门户写权限。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 申请所属供应商。
-    /// * `actor_id` - 原提交人账号 ID。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 会话仍绑定该供应商且允许写入时无返回值。
-    ///
-    /// # 错误
-    /// 会话失效、供应商绑定已变，或当前身份不可写时返回对应错误。
+    // 重验原提交人仍绑定同一供应商且具备门户写权限。
+    //
+    // `supplier_id`：申请所属供应商；`actor_id`：原提交人账号 ID；`executor`：调用方执行器。
+    //
+    // 会话仍绑定该供应商且允许写入时无返回值。
+    //
+    // 会话失效、供应商绑定已变，或当前身份不可写时返回对应错误。
     pub(super) async fn submission_actor(
         &self,
         supplier_id: &str,
@@ -159,18 +139,13 @@ impl SupplierPortalProcess {
         Ok(())
     }
 
-    /// 按门户动作重验当前策略下的内部权限，并钉住事务内策略版本。
-    ///
-    /// # 参数
-    /// * `actor` - 内部操作人。
-    /// * `permission` - 当前入口直接引用的门户权限常量。
-    /// * `executor` - 调用方执行器，用于核对策略快照。
-    ///
-    /// # 返回
-    /// 权限存在且策略快照未漂移时无返回值。
-    ///
-    /// # 错误
-    /// 无入口资格或写入缺少快照事务时拒绝；身份取证失败原样传播。
+    // 按门户动作重验当前策略下的内部权限，并钉住事务内策略版本。
+    //
+    // `actor`：内部操作人；`permission`：当前入口直接引用的门户权限常量；`executor`：调用方执行器，用于核对策略快照。
+    //
+    // 权限存在且策略快照未漂移时无返回值。
+    //
+    // 无入口资格或写入缺少快照事务时拒绝；身份取证失败原样传播。
     pub(super) async fn internal_permission(
         &self,
         actor: &AuditActor,
@@ -181,18 +156,13 @@ impl SupplierPortalProcess {
         Ok(())
     }
 
-    /// 把内部处理人账号还原为仍可登录的管理员审计身份。
-    ///
-    /// # 参数
-    /// * `owner` - 内部处理人账号 ID。
-    /// * `permissions` - 须由有效角色逐项授予的门户权限，可分别来自不同角色。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 返回该账号的 `AuditActor`。
-    ///
-    /// # 错误
-    /// 账号不存在、不是管理员或不能登录时返回 `Forbidden`。读取失败时返回对应错误。
+    // 把内部处理人账号还原为仍可登录的管理员审计身份。
+    //
+    // `owner`：内部处理人账号 ID；`permissions`：须由有效角色逐项授予的门户权限，可分别来自不同角色；`executor`：调用方执行器。
+    //
+    // 返回该账号的 `AuditActor`。
+    //
+    // 账号不存在、不是管理员或不能登录时返回 `Forbidden`。读取失败时返回对应错误。
     pub(super) async fn reviewer_actor(
         &self,
         owner: &str,

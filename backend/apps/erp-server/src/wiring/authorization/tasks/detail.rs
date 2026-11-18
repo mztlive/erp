@@ -25,7 +25,7 @@ pub(in super::super) struct TaskDetailMapping {
 }
 
 impl TaskDetailMapping {
-    /// 复用完整来源模型；详情专用模型不替换列表与管理模型。
+    // 装配详情专用映射时复用真实来源模型，不覆盖列表与任务管理使用的映射。
     pub(in super::super) fn shared(
         base: Arc<dyn AccessMapping>,
         mappings: &MappingBindings,
@@ -88,7 +88,7 @@ impl AccessMapping for TaskDetailMapping {
     }
 }
 
-/// 来源读取只关联身份与真实外键，不过滤、展开或分页工作项根记录。
+// 为工作项详情搭建只补充身份和真实外键的读取阶段，不过滤、展开或分页根工作项。
 fn source_stages() -> Vec<Document> {
     let mut stages = Vec::new();
     for (kind, collection, alias, field) in [
@@ -206,7 +206,7 @@ fn order_reference(sales: bool) -> Bson {
     doc! { "$switch": { "branches": branches, "default": [] } }.into()
 }
 
-/// 与材料 Facts 相同，首个实际存在的非删除申请决定类型，不按授权结果选择来源。
+// 确定门户材料的申请类型时与材料事实端口保持一致：选择首个真实存在且未删除的申请，不按授权结果换源。
 fn portal_reference(key: &str) -> Bson {
     let application = "$_task_detail_application";
     let new_product = "$_task_detail_new_product";
@@ -250,7 +250,7 @@ fn unique(alias: &str, field: &str) -> Bson {
 mod tests {
     use super::*;
 
-    /// 执行静态来源引用表达式；不模拟权限规则、不访问数据库。
+    // 在组装工作项授权映射时求值静态来源引用；只解析表达式，不模拟权限或查询数据库。
     fn evaluate(value: &Bson, row: &Document, variables: &Document) -> Bson {
         match value {
             Bson::String(field) if field.starts_with("$$") => {

@@ -42,22 +42,19 @@ mod subject_tests {
     }
 }
 
-/// 在已授权业务快照内取得最新实例；缺失事实不补造审批对象。
-///
-/// # 参数
-/// * `db` - 应用数据库
-/// * `kind` - 业务单据类型
-/// * `id` - 业务单据身份
-/// * `binding` - 单据冻结的审批定义；缺失不能代替一致绑定
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 没有最新实例时返回 `None`。有实例且与主题、流程种类和冻结绑定一致时返回运行摘要。
-///
-/// # 错误
-/// 主题引用无法构造时返回 `ValidationError`。已有实例但 `binding` 为 `None`，或实例的主题、
-/// 流程种类、定义身份或定义版本与绑定不一致时返回 `ConflictError`。当前执行、开放任务或历史读取失败，
-/// 以及执行与任务不一致时返回对应错误。
+// 单据详情需要当前审批进度时，沿已授权的业务快照读取最新实例及其运行事实；不存在实例就不补造审批对象。
+//
+// 调用参数：
+// * `kind` - 业务单据类型
+// * `id` - 业务单据身份
+// * `binding` - 单据冻结的审批定义；缺失不能代替一致绑定
+//
+// 没有最新实例时返回 `None`。有实例且与主题、流程种类和冻结绑定一致时返回运行摘要。
+//
+// 失败边界：
+// 主题引用无法构造时返回 `ValidationError`。已有实例但 `binding` 为 `None`，或实例的主题、
+// 流程种类、定义身份或定义版本与绑定不一致时返回 `ConflictError`。当前执行、开放任务或历史读取失败，
+// 以及执行与任务不一致时返回对应错误。
 pub(crate) async fn load_document_runtime(
     db: &Database,
     kind: DocumentType,
@@ -73,16 +70,15 @@ pub(crate) async fn load_document_runtime(
     load_runtime_facts(db, instance, executor).await.map(Some)
 }
 
-/// 按单据保存的精确实例身份读取，重提实例不得按创建时间推断。
-///
-/// # 参数
-/// * `db` / `kind` / `id` - 已授权单据的数据库、类型与身份。
-/// * `binding` / `instance_id` / `subject_version` - 单据冻结定义、本次实例与提交版本。
-/// * `executor` - 调用方执行器。
-/// # 返回
-/// 返回该实例的真实运行摘要与有界历史。
-/// # 错误
-/// 实例缺失、身份、主题或冻结定义不一致时拒绝，运行事实不一致时拒绝。
+// 命令结果已指定审批实例时，按保存的实例身份与提交版本沿原执行器读取运行事实；重提后仍不按创建时间猜测实例。
+//
+// 调用参数：
+// * `db` / `kind` / `id` - 已授权单据的数据库、类型与身份。
+// * `binding` / `instance_id` / `subject_version` - 单据冻结定义、本次实例与提交版本。
+//
+// 返回该实例的真实运行摘要与有界历史。
+//
+// 实例缺失、身份、主题或冻结定义不一致时拒绝，运行事实不一致时拒绝。
 pub(crate) async fn load_document_runtime_for_instance(
     db: &Database,
     kind: DocumentType,
@@ -126,7 +122,7 @@ fn ensure_instance_binding(
     Ok(())
 }
 
-/// 当前执行链、任务数和最新驳回均来自持久化事实。
+// 读取审批运行事实时，当前执行链、任务数和最新驳回均来自持久化事实。
 async fn load_runtime_facts(
     db: &Database,
     instance: ApprovalProcessInstance,
@@ -160,7 +156,7 @@ async fn load_runtime_facts(
     })
 }
 
-/// 当前实例令牌必须与同实例的开放执行一一对应。
+// 组装审批运行摘要前，核对令牌与同一实例的开放执行一一对应，避免把其他执行显示为当前节点。
 fn ensure_current_execution(
     instance: &ApprovalProcessInstance,
     current: Option<&ApprovalNodeExecution>,
@@ -194,7 +190,7 @@ fn ensure_current_execution(
     }
 }
 
-/// 开放任务不得引用其他业务对象、主题版本或当前审批人。
+// 使用开放任务计算审批进度或动作前，拒绝业务对象、主题版本或当前审批人与实例不一致的任务。
 fn ensure_runtime_tasks(
     instance: &ApprovalProcessInstance,
     current: Option<&ApprovalNodeExecution>,
@@ -220,7 +216,7 @@ fn ensure_runtime_tasks(
     Ok(())
 }
 
-/// 单据撤回不能接管一致性受阻或缺失、多重开放任务。
+// 计算单据详情的撤回动作前，检查实例状态和开放任务数；一致性受阻、开放任务缺失或重复时不得接管。
 fn runtime_cancellable(
     instance: &ApprovalProcessInstance,
     current: Option<&ApprovalNodeExecution>,
@@ -234,7 +230,7 @@ fn runtime_cancellable(
         })
 }
 
-/// 使用权威字段映射版本、节点、任务和最后驳回；不做 JSON 转换。
+// 将已核对的运行事实转为单据审批摘要，直接使用版本、节点、任务和最后驳回字段，不经 JSON 中转。
 fn instance_view(
     instance: &ApprovalProcessInstance,
     current: Option<&ApprovalNodeExecution>,
@@ -270,7 +266,7 @@ fn instance_view(
     }
 }
 
-/// 空白文本不作为有效驳回原因或显示名。
+// 写入审批摘要前将空白驳回原因或显示名视为缺失，避免详情把空白当成有效快照。
 fn optional_text(value: &str) -> Option<String> {
     let value = value.trim();
     (!value.is_empty()).then(|| value.to_owned())
@@ -344,7 +340,7 @@ mod tests {
         (instance, current, task)
     }
 
-    /// 同秒重提以保存的实例和提交版本为准，旧实例和其他绑定不得替代。
+    // 验证审批运行事实：同秒重提以保存的实例和提交版本为准，旧实例和其他绑定不得替代。
     #[test]
     fn exact_instance_reference_rejects_same_time_previous_submission_and_foreign_binding() {
         let (mut current, _, _) = running();
@@ -393,7 +389,7 @@ mod tests {
         assert!(check(&invalid, Some(&binding)).is_err());
     }
 
-    /// 真实实例、执行和任务大版本均原样传输，驳回不依赖首屏八条历史。
+    // 验证审批运行事实：真实实例、执行和任务大版本均原样传输，驳回不依赖首屏八条历史。
     #[test]
     fn runtime_projection_preserves_authoritative_versions_and_rejection() {
         let (mut instance, mut current, mut task) = running();
@@ -422,7 +418,7 @@ mod tests {
         assert_eq!(view.started_by.as_deref(), Some("creator"));
     }
 
-    /// 缺失姓名快照不能把决定人标识当作显示名。
+    // 验证审批运行事实：缺失姓名快照不能把决定人标识当作显示名。
     #[test]
     fn runtime_rejection_name_preserves_snapshot_and_omits_missing_name() {
         let (instance, current, task) = running();
@@ -447,7 +443,7 @@ mod tests {
         assert_eq!(view.latest_rejection_by_name, None);
     }
 
-    /// 其他执行、来源单、提交版本、审批人和多任务均无法提供操作版本。
+    // 验证审批运行事实：其他执行、来源单、提交版本、审批人和多任务均无法提供操作版本。
     #[test]
     fn runtime_read_fails_closed_for_mismatched_execution_and_tasks() {
         let (instance, current, task) = running();
@@ -470,7 +466,7 @@ mod tests {
         assert!(ensure_runtime_tasks(&instance, Some(&current), &[task.clone(), task]).is_err());
     }
 
-    /// 审批批准、驳回和撤回均不再持有当前执行令牌，保留的令牌仍须拒绝。
+    // 验证审批运行事实：审批批准、驳回和撤回均不再持有当前执行令牌，保留的令牌仍须拒绝。
     #[test]
     fn terminal_runtime_requires_no_current_execution_or_open_tasks() {
         let (mut instance, current, task) = running();
@@ -489,7 +485,7 @@ mod tests {
         }
     }
 
-    /// 普通取消只适用于匹配任务数的运行事实，结构受阻和终态不带取消动作。
+    // 验证审批运行事实：普通取消只适用于匹配任务数的运行事实，结构受阻和终态不带取消动作。
     #[test]
     fn runtime_cancel_requires_valid_tasks_and_recoverable_state() {
         let (mut instance, mut current, _) = running();

@@ -38,14 +38,7 @@ pub enum StructuredReceiptMatch {
 }
 
 impl StructuredCommandReceipt {
-    /// 从当前请求构造结构化身份，不改变已有命令 ID 或请求指纹。
-    ///
-    /// # 参数
-    /// * `command` - 已规范化命令身份。
-    /// # 返回
-    /// 返回可由领域实体持久化的身份事实。
-    /// # 错误
-    /// 身份字段为空或定位形态不合法时返回错误。
+    /// 领域准备持久化独立回执时，将原命令 ID、身份与版本化指纹复制为事实；必填身份字段或指定目标为空白时拒绝。
     pub fn from_command(command: &CommandReceipt) -> Result<Self> {
         let value = Self {
             schema_version: 1,
@@ -62,16 +55,8 @@ impl StructuredCommandReceipt {
         Ok(value)
     }
 
-    /// 校验共享身份形态；未知 schema 必须停止恢复。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 合法时无返回值。
-    ///
-    /// # 错误
-    /// `schema_version` 不是 1、`command_id` / `actor_id` / `action` / `resource_type` 去空白后为空，或 `scope_id` 为空白时返回错误。
-    /// 指纹格式由 `CommandFingerprint` 在构造和反序列化时保证。
+    /// 写入或恢复前检查回执形态：仅接受版本 1，命令 ID、操作人、动作、资源类型及存在时的目标 ID 均不得为空白。
+    /// 指纹格式在构造与解码时由 [`CommandFingerprint`] 保证。
     pub fn validate(&self) -> Result<()> {
         if self.schema_version != 1
             || [&self.command_id, &self.actor_id, &self.action, &self.resource_type]
@@ -86,14 +71,8 @@ impl StructuredCommandReceipt {
 }
 
 impl CommandReceipt {
-    /// 比对结构化身份及原算法指纹，完全不读取展示消息。
-    ///
-    /// # 参数
-    /// * `fact` - 拥有领域持久化的共享身份事实。
-    /// # 返回
-    /// 返回同载荷、异载荷或损坏分类。
-    /// # 错误
-    /// 无；非法持久化事实归为 Corrupted。
+    /// 查证命令重试时先校验回执形态和完整身份，再比较原算法指纹；形态或身份不符视为损坏，同身份不同载荷单独归类。
+    /// 不读取展示消息。
     pub fn match_structured(&self, fact: &StructuredCommandReceipt) -> StructuredReceiptMatch {
         if fact.validate().is_err() || !self.structured_identity_matches(fact) {
             return StructuredReceiptMatch::Corrupted;
@@ -103,7 +82,8 @@ impl CommandReceipt {
         if matched { StructuredReceiptMatch::SamePayload } else { StructuredReceiptMatch::DifferentPayload }
     }
 
-    /// 校验独立持久化回执的完整身份，不查询历史审计候选。
+    // 比对回执的命令 ID、操作人、动作、资源类型、目标和幂等键摘要，防止把其他操作误作原请求，
+    // 不从历史审计猜测身份。
     fn structured_identity_matches(&self, fact: &StructuredCommandReceipt) -> bool {
         fact.actor_id == self.actor_id()
             && fact.action == self.action()

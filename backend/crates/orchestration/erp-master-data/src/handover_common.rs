@@ -16,19 +16,15 @@ use persistence_core::Executor;
 
 use crate::{Error, Result};
 
-/// 去空白后的幂等键；空白时拒绝。
-///
-/// # 参数
-/// * `raw` - 请求携带的原始幂等键
-///
-/// # 返回
-/// 返回去空白后的幂等键。
-///
-/// # 错误
-/// 去空白后为空时返回校验错误。
-///
-/// # 关键业务约束
-/// 与既有交接入口保持同一空键文案，不得补默认键。
+// 去空白后的幂等键；空白时拒绝。
+//
+// `raw`：请求携带的原始幂等键。
+//
+// 返回去空白后的幂等键。
+//
+// 去空白后为空时返回校验错误。
+//
+// 与既有交接入口保持同一空键文案，不得补默认键。
 pub(crate) fn trimmed_idempotency_key(raw: &str) -> Result<String> {
     let key = raw.trim().to_string();
     if key.is_empty() {
@@ -56,16 +52,13 @@ pub(crate) struct HandoverEventFacts {
     pub organization_changed: bool,
 }
 
-/// 预先验证明确登记的交接动作及命令关联。
-///
-/// # 参数
-/// * `actor` - 认证操作人。
-/// * `command` - 独立回执的稳定命令身份。
-/// * `action` - 调用方明确登记的领域动作。
-/// # 返回
-/// 返回提交前使用的安全事件上下文。
-/// # 错误
-/// 静态元数据或身份非法时拒绝。
+// 预先验证明确登记的交接动作及命令关联。
+//
+// `command`：独立回执的稳定命令身份；`action`：调用方明确登记的领域动作。
+//
+// 返回提交前使用的安全事件上下文。
+//
+// 静态元数据或身份非法时拒绝。
 pub(crate) fn handover_context(
     actor: &AuditActor,
     command: &CommandReceipt,
@@ -76,14 +69,13 @@ pub(crate) fn handover_context(
         .with_target(command.scope_id().map(str::to_string), None)?)
 }
 
-/// 提供执行后明确的交接完成事实，回放分支不调用本函数。
-///
-/// # 参数
-/// * `value` - 实际目标、业务编号及允许记录的真实变更标记。
-/// # 返回
-/// 返回安全的成功事件投影。
-/// # 错误
-/// 无；提交前由统一审计边界校验。
+// 提供执行后明确的交接完成事实，回放分支不调用本函数。
+//
+// `value`：实际目标、业务编号及允许记录的真实变更标记。
+//
+// 返回安全的成功事件投影。
+//
+// 无；提交前由统一审计边界校验。
 pub(crate) fn handover_content(value: HandoverEventFacts) -> BusinessEventContent {
     let mut facts = vec![AuditFact {
         field: "handover_result".into(),
@@ -105,13 +97,13 @@ pub(crate) fn handover_content(value: HandoverEventFacts) -> BusinessEventConten
     }
 }
 
-/// 通过统一授权服务检查实际目标账号的功能资格。
-/// # 参数
-/// db、rbac 为身份设施，target 为目标账号，permission 为已登记的具体功能，executor 为原事务。
-/// # 返回
-/// 账号有效且功能资格成立时返回 true。
-/// # 错误
-/// 身份设施或策略读取失败时透传。
+// 通过统一授权服务检查实际目标账号的功能资格。
+//
+// db、rbac 为身份设施，target 为目标账号，permission 为已登记的具体功能，executor 为原事务。
+//
+// 账号有效且功能资格成立时返回 true。
+//
+// 身份设施或策略读取失败时透传。
 pub(crate) async fn target_qualified(
     _db: &Database,
     rbac: &Arc<AuthorizationService>,
@@ -125,13 +117,13 @@ pub(crate) async fn target_qualified(
     Ok(authorization.has_permission(&actor, permission, executor).await?)
 }
 
-/// 通过统一功能资格取得交接目标展示候选。
-/// # 参数
-/// db、rbac为身份设施，excluded为当前责任人，permission为目标岗位功能，executor为当前读取阶段。
-/// # 返回
-/// 按姓名、账号、ID排序的候选。
-/// # 错误
-/// 账号、权限或身份设施读取失败时停止。
+// 通过统一功能资格取得交接目标展示候选。
+//
+// db、rbac为身份设施，excluded为当前责任人，permission为目标岗位功能，executor为当前读取阶段。
+//
+// 按姓名、账号、ID排序的候选。
+//
+// 账号、权限或身份设施读取失败时停止。
 pub(crate) async fn qualified_candidates(
     db: &Database,
     rbac: &Arc<AuthorizationService>,

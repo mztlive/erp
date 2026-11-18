@@ -3,12 +3,8 @@ use crate::entity::supplier_credential::SupplierCredentialConfiguration;
 
 impl SupplierCredentialRepository<'_> {
     /// 在固定凭据引用保存页面提供的令牌，所有更新遵守原版本CAS。
-    /// # 参数
-    /// 部署引用及绑定、加密令牌、配置命令、当前时间及事务执行器。
-    /// # 返回
-    /// 当前记录和是否实际写入；重放不会覆盖后续刷新。
-    /// # 错误
-    /// 绑定、版本、活跃操作、唯一约束或持久化失败时拒绝。
+    ///
+    /// 当前记录和是否实际写入；重放不会覆盖后续刷新。绑定、版本、活跃操作、唯一约束或持久化失败时拒绝。
     pub async fn configure_tokens(
         &self,
         id: &str,

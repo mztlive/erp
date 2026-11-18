@@ -5,15 +5,9 @@ use erp_support::{BackgroundJob, BackgroundJobItemRow, FileAsset};
 
 /// 把后台任务投影为商品导入任务视图。
 ///
-/// # 参数
-/// * `job` - 后台任务
-/// * `file_name` - 源文件名
+/// `file_name`：源文件名。
 ///
-/// # 返回
 /// 返回导入任务视图。
-///
-/// # 错误
-/// 无。
 pub fn job_view(job: &BackgroundJob, file_name: Option<String>) -> ProductImportJobView {
     ProductImportJobView {
         id: job.base.id.clone(),
@@ -35,28 +29,18 @@ pub fn job_view(job: &BackgroundJob, file_name: Option<String>) -> ProductImport
 
 /// 从文件资产取展示文件名。
 ///
-/// # 参数
-/// * `asset` - 源文件资产
+/// `asset`：源文件资产。
 ///
-/// # 返回
 /// 返回文件名。
-///
-/// # 错误
-/// 无。
 pub fn file_name_of(asset: Option<&FileAsset>) -> Option<String> {
     asset.map(|item| item.file_name.clone())
 }
 
 /// 把后台任务逐项投影为导入结果行。
 ///
-/// # 参数
-/// * `row` - 逐项投影
+/// `row`：逐项投影。
 ///
-/// # 返回
 /// 返回导入结果视图。
-///
-/// # 错误
-/// 无。
 pub fn item_view(row: BackgroundJobItemRow) -> ProductImportItemView {
     let result_summary = if row.result_code.as_deref() == Some("media_unavailable") {
         let row_number = row.source_row_no.unwrap_or(row.item_no);

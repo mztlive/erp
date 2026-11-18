@@ -20,7 +20,7 @@ def _cached_resolve(path: Path) -> Path:
 
 
 def workspace_errors(backend: Path, metadata: Mapping[str, Any], required: set[str]) -> list[str]:
-    """Require a real workspace and every declared/required member manifest."""
+    """核对指定后端的工作区清单、Cargo metadata 和必需成员；领域与 BPM 门禁据此拒绝不完整的源码输入。"""
     errors: list[str] = []
     manifest = backend / "Cargo.toml"
     if not manifest.is_file():
@@ -93,7 +93,7 @@ def workspace_errors(backend: Path, metadata: Mapping[str, Any], required: set[s
 
 
 def legacy_graph_errors(metadata: Mapping[str, Any]) -> list[str]:
-    """Reject legacy packages and declared normal/build/dev edges at every depth."""
+    """检查解析出的所有包及其 normal/build/dev 声明，供最终切换门禁拒绝仍在依赖闭包中的旧包或旧依赖。"""
     errors = []
     for package in metadata.get("packages", []):
         name = package.get("name")
@@ -107,16 +107,16 @@ def legacy_graph_errors(metadata: Mapping[str, Any]) -> list[str]:
 
 
 def legacy_tree_errors(backend: Path) -> list[str]:
-    """Require retired roots to be absent; historical files live in docs/archive."""
+    """检查已退役的三层目录是否仍在后端根目录；最终切换只允许历史文件留在 `docs/archive`。"""
     return [f"最终仍有旧目录或路径: {path}" for name in sorted(LEGACY)
             for path in (backend / name,) if path.exists() or path.is_symlink()]
 
 
 def active_source_paths(metadata: Mapping[str, Any]) -> list[Path]:
-    """Inventory active members including test-support and explicit target roots.
+    """列出活动成员的 Rust 源码，供边界门禁共用，包括测试支持 crate 和显式 target 入口。
 
-Root tests/ archives are excluded. Inline src/tests modules stay included.
-Rust compilation still supplies the final macro/cfg reachability evidence.
+不纳入成员根目录下的 `tests/` 归档；`src` 中的测试模块仍列出。
+宏展开和 `cfg` 可达性仍须由 Rust 编译验证。
 """
     paths: set[Path] = set()
     members = set(metadata.get("workspace_members", []))
@@ -167,15 +167,15 @@ LEGACY_INCLUDE_CONTEXT_RE = re.compile(
 LEGACY_DYNAMIC_CONTEXT_RE = re.compile(r'include(?:_str|_bytes)?\s*!\s*\(\s*concat!\s*\([^;]*$')
 
 
+# 以空格覆盖注释或字面量片段中的非换行字符，使词法扫描仍能按原始偏移和行号定位。
 def _mask_segment(segment: str) -> str:
-    """Replace non-newline characters in segment with spaces."""
     if "\n" not in segment:
         return " " * len(segment)
     return "\n".join(" " * len(line) for line in segment.split("\n"))
 
 
+# 屏蔽 Rust 注释及字符串、字符字面量，并单独保留字面量位置，供源码门禁按原始偏移检查代码和集合名。
 def _code_and_literals(source: str) -> tuple[str, list[tuple[int, str]]]:
-    """Mask Rust comments and string/character literals; keep their offsets."""
     chunks: list[str] = []
     literals: list[tuple[int, str]] = []
     i = 0
@@ -219,7 +219,7 @@ def _code_and_literals(source: str) -> tuple[str, list[tuple[int, str]]]:
 
 
 def legacy_source_errors(path: Path, source: str) -> list[str]:
-    """Reject real legacy tokens and legacy #[path]/include references."""
+    """区分实际旧 crate 引用与注释或普通字符串，供最终切换拒绝遗留依赖及指向旧源码的 `#[path]` 和 `include`。"""
     if "entities" not in source and "database" not in source and "services" not in source:
         return []
     code, literals = _code_and_literals(source)

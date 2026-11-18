@@ -78,44 +78,18 @@ impl Diagnostics {
         self.0.lock().unwrap_or_else(|error| error.into_inner())
     }
 
-    /// 记录传输失败。锁中毒时仍写回内部记录。
-    ///
-    /// # 参数
-    /// * `failure` - 传输层失败分类。
-    ///
-    /// # 返回
-    /// 无返回值。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 发送请求或读取响应正文失败时，存下原传输分类，避免 Rig 包装错误后丢失超时阶段等信息；锁中毒仍写入。
     pub(super) fn transport_failure(&self, failure: Failure) {
         self.metadata().transport_failure = Some(failure);
     }
 
-    /// 读取已记录的传输失败。锁中毒时仍返回内部记录。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 已记录的 `Failure`；尚未记录时为 `None`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 提取失败分类时取回底层传输错误，以补足 Rig 报告中丢失的类型；未记录时返回 None，锁中毒仍读取。
     pub(super) fn failure(&self) -> Option<Failure> {
         self.metadata().transport_failure
     }
 
-    /// 记录提取失败。完成错误转入 `error`；已有校验原因时不覆盖。
-    ///
-    /// # 参数
-    /// * `error` - Rig 结构化输出错误。
-    ///
-    /// # 返回
-    /// 无返回值。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // Rig 提取失败后补记 SDK 错误及供应商响应；模型调用阶段的供应商错误沿用专门的诊断路径。
+    // 若响应 hook 已给出更具体的校验原因，不用后续取消错误覆盖。
     pub(super) fn extraction_error(&self, error: &StructuredOutputError) {
         if let StructuredOutputError::PromptError(PromptError::CompletionError(error)) = error {
             self.error(error);
@@ -136,61 +110,25 @@ impl Diagnostics {
         }
     }
 
-    /// 按损失编码保存原始响应正文。锁中毒时仍写回内部记录。
-    ///
-    /// # 参数
-    /// * `body` - 已读完的响应字节。
-    ///
-    /// # 返回
-    /// 无返回值。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 成功响应的正文读完后保留一份有损 UTF-8 文本，供诊断 JSON 解码及输出校验失败；锁中毒仍写入。
     pub(super) fn body(&self, body: &[u8]) {
         self.metadata().response_body = Some(String::from_utf8_lossy(body).into_owned());
     }
 
-    /// 保存解码后的原始响应和结束原因。
-    ///
-    /// # 参数
-    /// * `response` - Rig 完成响应。
-    ///
-    /// # 返回
-    /// 无返回值。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 响应 hook 在校验完成结果前保存原始响应对象和结束原因，便于区分模型截断与提交结构异常。
     pub(super) fn output(&self, response: &CompletionResponse) {
         let mut metadata = self.metadata();
         metadata.decoded_response = Some(response.raw.clone());
         metadata.finish_reason = response.finish_reason().map(|reason| format!("{reason:?}"));
     }
 
-    /// 把输出校验失败记入 `validation_error`。
-    ///
-    /// # 参数
-    /// * `error` - 本地输出解码错误。
-    ///
-    /// # 返回
-    /// 无返回值。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 响应 hook 或领域结果转换拒绝输出时，保留具体校验原因供任务结束日志使用。
     pub(super) fn output_error(&self, error: &DecodeError) {
         self.metadata().validation_error = Some(error.to_string());
     }
 
-    /// 记录 HTTP 状态、请求标识和响应头。非成功状态把拒绝正文标为待读取。
-    ///
-    /// # 参数
-    /// * `status` - HTTP 状态码。
-    /// * `headers` - 原始响应头。
-    ///
-    /// # 返回
-    /// 无返回值。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 响应头到达即保存 HTTP 状态、请求标识和响应头，使正文未读完时也能按状态分类。
+    // 非成功响应先把拒绝正文标记为待读取。
     pub(super) fn response(&self, status: u16, headers: &HeaderMap) {
         let mut metadata = self.metadata();
         metadata.status = Some(status);
@@ -201,44 +139,19 @@ impl Diagnostics {
         }
     }
 
-    /// 读取已记录的 HTTP 状态。锁中毒时仍返回内部记录。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 已记录的状态码；尚未记录时为 `None`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 任务期限先于 HTTP 正文读取结束时，用已收到的状态识别供应商拒绝，避免误报任务超时。
+    // 尚未记录时返回 None；锁中毒仍读取已有状态。
     pub(super) fn status(&self) -> Option<u16> {
         self.metadata().status
     }
 
-    /// 用已解析的供应商拒绝替换当前拒绝记录。
-    ///
-    /// # 参数
-    /// * `rejection` - 错误正文的解析结果。
-    ///
-    /// # 返回
-    /// 无返回值。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 非成功响应的正文读取结束时，用已解析结果或读取失败记录替换待读取标记。
     pub(super) fn rejection(&self, rejection: Rejection) {
         self.metadata().rejection = rejection;
     }
 
-    /// 记录供应商错误的调试文本、状态、响应头和正文。已有拒绝正文时不覆盖。
-    ///
-    /// # 参数
-    /// * `error` - Rig 供应商错误。
-    ///
-    /// # 返回
-    /// 无返回值。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // Rig 报告供应商错误时收集调试文本、状态、响应头与可用正文，便于和 HTTP 记录对照。
+    // 已有拒绝正文状态时保留传输层记录，不用 SDK 转述覆盖。
     pub(super) fn error(&self, error: &ProviderError) {
         self.metadata().record_provider_error(
             format!("{error:?}"),
@@ -248,18 +161,8 @@ impl Diagnostics {
         );
     }
 
-    /// 按成功或失败写一条合同提取结束日志，不改变调用结果。
-    ///
-    /// # 参数
-    /// * `start` - 提取开始时刻，用于计算耗时。
-    /// * `result` - 调用方的提取结果；只读成功与失败码。
-    /// * `timeout_source` - 超时所在阶段；没有超时时为 `None`。
-    ///
-    /// # 返回
-    /// 无返回值。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 提取结束后按结果写一条任务日志，用开始时间计算耗时；失败时附上阶段、错误码与收集到的响应证据。
+    // 只记录诊断信息，不改变返回给合同任务的结果。
     pub(super) fn finish<T>(&self, start: Instant, result: &Result<T>, timeout_source: Option<&str>) {
         let metadata = self.metadata();
         let elapsed_ms = u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX);

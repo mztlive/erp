@@ -32,12 +32,10 @@ pub struct InquirySalesProgress {
 
 impl InquirySalesProgress {
     /// 按稳定需求行汇总跨轮次占用、消耗及当前接受结果的有效性。
-    /// # 参数
-    /// `inquiry` 为已授权聚合；`now` 为本次服务端读取时刻。
-    /// # 返回
-    /// 数量按行比较，不混加不同单位；开单资格包含接受结果及重询范围。
-    /// # 错误
-    /// 无；缺少有效开单依据时返回不可开单，不扩大权限。
+    /// 结果：数量按行比较，不混加不同单位；开单资格包含接受结果及重询范围。
+    /// 失败条件：缺少有效开单依据时返回不可开单，不扩大权限。
+    ///
+    /// 输入约定：`inquiry` 为已授权聚合；`now` 为本次服务端读取时刻。
     pub fn from_inquiry(inquiry: &SalesInquiry, now: Instant) -> Self {
         let mut any_used = false;
         let mut completed_lines = 0;

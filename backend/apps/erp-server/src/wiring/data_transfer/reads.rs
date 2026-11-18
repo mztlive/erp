@@ -183,7 +183,7 @@ async fn funds(state: &Application, kind: TransferKind, query: &Value, actor: &A
 }
 
 impl Reads {
-    /// 固定商品池和报价任务沿原功能资格快照读取，保留所属业务数据授权。
+    // 为商品池和报价任务导出沿原功能资格快照分页，继续执行对应业务数据范围校验。
     async fn read_page_with(
         &self,
         kind: TransferKind,
@@ -207,7 +207,7 @@ impl Reads {
         }
     }
 
-    /// 商品资格、分页、计数及供应商编号由同一业务读取步骤执行。
+    // 导出商品页时在同一次业务读取中检查商品资格并取得分页、总数及供应商编号。
     async fn product_page(
         &self,
         query: &Value,
@@ -217,7 +217,7 @@ impl Reads {
         output(self.0.catalog_center().sellable_sku_list_with(&input(query)?, actor, executor).await?)
     }
 
-    /// 报价来源只在原快照读取供给，并保留既有成本脱敏。
+    // 导出报价时在原授权快照读取相关供给，保持成本字段按既有资格脱敏。
     async fn quote_page(
         &self,
         query: &Value,

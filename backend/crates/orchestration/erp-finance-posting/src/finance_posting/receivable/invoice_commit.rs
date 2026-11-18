@@ -35,11 +35,8 @@ pub(super) struct InvoiceCommitTransaction {
 impl InvoiceCommitTransaction {
     /// 在入口已开启的事务内读取、过账及关联全部发票事实。
     ///
-    /// # 参数
-    /// * `executor` - 入口授权事务使用的同一执行器。
-    /// # 返回
-    /// 返回原发票 ID 与本事务是否首次执行；重放不会消费新上传对象。
-    /// # 错误
+    /// `executor` 为入口授权事务使用的同一执行器。返回原发票 ID 与本事务是否首次执行；重放不会消费新上传对象。
+    ///
     /// 回执、授权、版本、发票、金额、任务或附件失败时停止并返回原错误。
     pub async fn execute(mut self, executor: &mut dyn Executor) -> Result<(String, bool)> {
         require_entry(&self.db, &self.rbac, &self.actor, &self.work_item_id, TaskPurpose::Invoice, executor)
@@ -89,7 +86,7 @@ impl InvoiceCommitTransaction {
         Ok((invoice.base.id, true))
     }
 
-    /// 新建路径登记无审批单据；已有草稿路径重验版本及销项方向。
+    // 新建路径登记无审批单据；已有草稿路径重验版本及销项方向。
     async fn load_invoice(
         &self,
         prepared: PreparedInvoiceCommit,

@@ -72,10 +72,9 @@ pub struct CustomerCenterReadService {
 }
 
 impl CustomerCenterReadService {
-    /// 创建客户对象中心读服务。
+    /// 初始化客户中心时接入客户、合同、销售与资金的授权设施，供关联摘要和应收汇总读取，不在构造时访问数据库。
     ///
     /// # 参数
-    /// * `db` - 应用数据库
     /// * `rbac` - 当前账号功能与销售范围授权服务
     /// * `contracts` - 合同独立责任范围访问器
     /// * `customers` - 客户资料范围访问器
@@ -83,9 +82,6 @@ impl CustomerCenterReadService {
     ///
     /// # 返回
     /// 返回绑定该数据库的只读服务，构造不访问数据库。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(
         db: Database,
         rbac: Arc<AuthorizationService>,
@@ -96,7 +92,7 @@ impl CustomerCenterReadService {
         Self { db, rbac, contracts, customers, funds }
     }
 
-    /// 查询合同/销售单最近摘要与跨页指标。
+    /// 打开客户中心的关联业务区时，读取当前操作者可见的最近合同、销售单及跨页计数；不返回全量分页。
     ///
     /// # 参数
     /// * `customer_id` - 客户 ID
@@ -164,7 +160,7 @@ impl CustomerCenterReadService {
         Ok(row.into())
     }
 
-    /// 查询跨应收账户的余额、逾期和可开票汇总。
+    /// 展示客户中心应收指标时，先在同一事务确认客户可读，再按财务来源范围汇总余额、逾期、可开票金额和最早逾期日。
     ///
     /// # 参数
     /// * `customer_id` - 客户 ID

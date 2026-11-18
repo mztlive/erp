@@ -12,11 +12,7 @@ pub struct DeliveryCoverageLine {
 }
 
 /// 核验该子订单是否完整覆盖一张既有发货单，禁止部分数量冒充整单发货。
-/// # 参数
-/// 冻结发单来源行与当前发货单的真实采购分配、销售明细及数量。
-/// # 返回
 /// 无交集返回空集合；完整覆盖返回所用的外部订货行身份。
-/// # 错误
 /// 存在交集但不能证明全部发货数量、身份或算术守恒时拒绝。
 pub fn complete_delivery_coverage(
     sources: &[TrackingSourceLine],

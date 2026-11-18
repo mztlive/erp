@@ -26,26 +26,21 @@ pub(crate) const PARTY_TAX_PROFILES: &str = <mongodb::Database as PartyExt>::PAR
 /// `party_bank_account` 集合名。
 pub(crate) const PARTY_BANK_ACCOUNTS: &str = <mongodb::Database as PartyExt>::PARTY_BANK_ACCOUNTS;
 
-/// 创建本域集合的幂等命名索引。
-///
-/// 逐条落地数据模型 §6.2「必需约束与索引」：`party_no` 与规范化统一信用
-/// 代码全局唯一；`(party_id, revision_no)` 唯一；法定名称/简称搜索索引；
-/// 银行账户编号与 `(party_id, 账号HMAC)` 唯一。
-///
-/// 身份类字段使用**全局唯一索引**（与 accounts 的处理一致）：`party` 软
-/// 删除后仍保留身份（编号/信用代码），避免复用破坏恢复与历史追溯语义。
-/// 统一信用代码允许为空（历史数据），MongoDB 唯一索引把缺失字段视为 null，
-/// 直接建全局唯一会拒绝多个空值，因此采用**部分唯一索引**只约束非空代码；
-/// 回滚方式：清空该集合后删除并重建索引，或改为 Service 层查重（不推荐）。
-///
-/// # 参数
-/// * `db` - 目标 MongoDB 数据库
-///
-/// # 返回
-/// 全部目标集合的命名索引创建成功时返回 `Ok(())`。
-///
-/// # 错误
-/// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
+// 创建本域集合的幂等命名索引。
+//
+// 逐条落地数据模型 §6.2「必需约束与索引」：`party_no` 与规范化统一信用
+// 代码全局唯一；`(party_id, revision_no)` 唯一；法定名称/简称搜索索引；
+// 银行账户编号与 `(party_id, 账号HMAC)` 唯一。
+//
+// 身份类字段使用**全局唯一索引**（与 accounts 的处理一致）：`party` 软
+// 删除后仍保留身份（编号/信用代码），避免复用破坏恢复与历史追溯语义。
+// 统一信用代码允许为空（历史数据），MongoDB 唯一索引把缺失字段视为 null，
+// 直接建全局唯一会拒绝多个空值，因此采用**部分唯一索引**只约束非空代码；
+// 回滚方式：清空该集合后删除并重建索引，或改为 Service 层查重（不推荐）。
+//
+// 全部目标集合的命名索引创建成功时返回 `Ok(())`。
+//
+// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub(crate) async fn ensure(db: &Database) -> Result<()> {
     create_indexes(
         db,
@@ -73,17 +68,17 @@ pub(crate) async fn ensure(db: &Database) -> Result<()> {
     Ok(())
 }
 
-/// 为单个集合创建一组幂等命名索引。
+// 将一组命名索引注册到指定集合，供服务启动时重复执行同一套索引定义。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
     db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
-/// 返回 `party` 的身份约束和列表查询索引。
-///
-/// `uk_parties_id` 覆盖业务主键 `id` 的精确与 `$in` 批量读取（PROC-R10）；
-/// 部署前须按 `id` 分组审计重复值（为空才可继续），存量重复时 `ensure`
-/// 返回唯一冲突错误，部署必须中止并清理重复后再重跑。
+// 返回 `party` 的身份约束和列表查询索引。
+//
+// `uk_parties_id` 覆盖业务主键 `id` 的精确与 `$in` 批量读取（PROC-R10）；
+// 部署前须按 `id` 分组审计重复值（为空才可继续），存量重复时 `ensure`
+// 返回唯一冲突错误，部署必须中止并清理重复后再重跑。
 fn party_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_parties_id", doc! { "id": 1 }),
@@ -115,7 +110,7 @@ fn party_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `party_revision` 的版本唯一约束与名称搜索索引。
+// 返回 `party_revision` 的版本唯一约束与名称搜索索引。
 fn party_revision_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_party_revisions_id", doc! { "id": 1 }),
@@ -124,7 +119,7 @@ fn party_revision_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `party_contact` 的主体/状态列表与手机指纹查询索引。
+// 返回 `party_contact` 的主体/状态列表与手机指纹查询索引。
 fn party_contact_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_party_contacts_id", doc! { "id": 1 }),
@@ -133,7 +128,7 @@ fn party_contact_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `party_address` 的主体/类型列表索引。
+// 返回 `party_address` 的主体/类型列表索引。
 fn party_address_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_party_addresses_id", doc! { "id": 1 }),
@@ -141,7 +136,7 @@ fn party_address_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `party_tax_profile` 的主体列表索引。
+// 返回 `party_tax_profile` 的主体列表索引。
 fn party_tax_profile_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_party_tax_profiles_id", doc! { "id": 1 }),
@@ -149,7 +144,7 @@ fn party_tax_profile_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `party_bank_account` 的身份约束和列表查询索引。
+// 返回 `party_bank_account` 的身份约束和列表查询索引。
 fn party_bank_account_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_party_bank_accounts_id", doc! { "id": 1 }),
@@ -165,7 +160,7 @@ fn party_bank_account_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 构建命名部分唯一索引。
+// 构建命名部分唯一索引。
 fn partial_unique_index(name: impl Into<String>, keys: Document, partial_filter: Document) -> IndexModel {
     IndexModel::builder()
         .keys(keys)
@@ -181,7 +176,7 @@ fn partial_unique_index(name: impl Into<String>, keys: Document, partial_filter:
 
 #[cfg(test)]
 mod tests {
-    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    // 验证集合的稳定业务 ID 具有唯一索引，使按 ID 查找和按版本更新能使用索引。
     #[test]
     fn collections_look_up_by_unique_stable_id() {
         for indexes in [
@@ -252,7 +247,7 @@ mod tests {
         assert_eq!(index.options.as_ref().and_then(|options| options.unique), Some(true));
     }
 
-    /// 当前修订分批关联使用非唯一覆盖索引，不改变主体身份约束。
+    // 当前修订分批关联使用非唯一覆盖索引，不改变主体身份约束。
     #[test]
     fn party_current_revision_index_covers_active_id_projection() {
         let indexes = party_indexes();
@@ -315,16 +310,14 @@ mod proc_r10_mongo_tests {
     }
 
     impl TestDb {
-        /// 创建独立测试数据库。
-        ///
-        /// # 参数
-        /// * `prefix` - 数据库名前缀，仅保留字母数字与 `-`/`_`，超长截断
-        ///
-        /// # 返回值
-        /// 返回连接并创建完成（含标记集合）的测试数据库夹具。
-        ///
-        /// # 错误
-        /// `ERP_TEST_MONGO_URI` 未设置或 MongoDB 连接/建库失败时返回错误。
+        // 创建独立测试数据库。
+        //
+        // # 参数
+        // * `prefix` - 数据库名前缀，仅保留字母数字与 `-`/`_`，超长截断
+        //
+        // 返回连接并创建完成（含标记集合）的测试数据库夹具。
+        //
+        // `ERP_TEST_MONGO_URI` 未设置或 MongoDB 连接/建库失败时返回错误。
         async fn new(prefix: &str) -> mongodb::error::Result<Self> {
             let uri = std::env::var("ERP_TEST_MONGO_URI").unwrap_or_default();
             let client = mongodb::Client::with_uri_str(&uri).await?;
@@ -340,7 +333,7 @@ mod proc_r10_mongo_tests {
             Ok(Self { client, db, name })
         }
 
-        /// 返回数据库实例引用。
+        // 返回数据库实例引用。
         fn db(&self) -> &mongodb::Database {
             &self.db
         }
@@ -358,7 +351,7 @@ mod proc_r10_mongo_tests {
         }
     }
 
-    /// `ERP_TEST_MONGO_URI` 已设置且非空时返回 `true`。
+    // `ERP_TEST_MONGO_URI` 已设置且非空时返回 `true`。
     fn mongo_env_present() -> bool {
         std::env::var("ERP_TEST_MONGO_URI").map(|uri| !uri.trim().is_empty()).unwrap_or(false)
     }
@@ -389,15 +382,14 @@ mod proc_r10_mongo_tests {
         count: i64,
     }
 
-    /// 插入仅携带索引相关字段的主体原始文档。
-    ///
-    /// # 参数
-    /// * `db` - 隔离测试库
-    /// * `id` - 业务主键（可故意重复）
-    /// * `party_no` - 主体编号（保持唯一，避免干扰其他唯一索引）
-    ///
-    /// # 错误
-    /// 写入失败时 panic。
+    // 插入仅携带索引相关字段的主体原始文档。
+    //
+    // # 参数
+    // * `db` - 隔离测试库
+    // * `id` - 业务主键（可故意重复）
+    // * `party_no` - 主体编号（保持唯一，避免干扰其他唯一索引）
+    //
+    // 写入失败时 panic。
     async fn insert_raw_party(db: &mongodb::Database, id: &str, party_no: &str) {
         db.collection::<Document>(PARTIES)
             .insert_one(doc! { "id": id, "party_no": party_no })
@@ -405,16 +397,14 @@ mod proc_r10_mongo_tests {
             .expect("原始主体写入失败");
     }
 
-    /// 按 `id` 分组审计重复值，与部署前检查共用同一语义。
-    ///
-    /// # 参数
-    /// * `db` - 隔离测试库
-    ///
-    /// # 返回
-    /// 按 `id` 字典序排列的重复主键及出现次数。
-    ///
-    /// # 错误
-    /// 聚合执行失败时 panic。
+    // 按 `id` 分组审计重复值，与部署前检查共用同一语义。
+    //
+    // # 参数
+    // * `db` - 隔离测试库
+    //
+    // 按 `id` 字典序排列的重复主键及出现次数。
+    //
+    // 聚合执行失败时 panic。
     async fn audit_duplicate_party_ids(db: &mongodb::Database) -> Vec<DuplicatePartyId> {
         let mut cursor = db
             .collection::<Document>(PARTIES)
@@ -434,19 +424,16 @@ mod proc_r10_mongo_tests {
         duplicates
     }
 
-    /// 重复 `id` 必须先被审计报出，再拒绝索引迁移并输出冲突索引诊断。
-    ///
-    /// # 参数
-    /// 无，内部创建隔离库。
-    ///
-    /// # 返回
-    /// 审计命中重复主键且迁移失败关闭时通过。
-    ///
-    /// # 错误
-    /// 审计漏报或迁移未拒绝时测试失败。
-    ///
-    /// # 约束
-    /// 仅验证 `parties` 集合；`#[ignore]` 由 Quality 在隔离副本集执行。
+    // 重复 `id` 必须先被审计报出，再拒绝索引迁移并输出冲突索引诊断。
+    //
+    // # 参数
+    // 无，内部创建隔离库。
+    //
+    // 审计命中重复主键且迁移失败关闭时通过。
+    //
+    // 审计漏报或迁移未拒绝时测试失败。
+    //
+    // 仅验证 `parties` 集合；`#[ignore]` 由 Quality 在隔离副本集执行。
     #[tokio::test]
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn duplicate_party_ids_are_audited_and_refuse_migration() {
@@ -468,19 +455,16 @@ mod proc_r10_mongo_tests {
         });
     }
 
-    /// `id $in` 批量查询的执行计划必须命中唯一索引且无集合扫描。
-    ///
-    /// # 参数
-    /// 无，内部创建隔离库。
-    ///
-    /// # 返回
-    /// `explain` 命中 `uk_parties_id` 的 `IXSCAN` 且无 `COLLSCAN` 时通过。
-    ///
-    /// # 错误
-    /// 索引未命中或出现集合扫描时测试失败。
-    ///
-    /// # 约束
-    /// 不使用 `hint`；`#[ignore]` 由 Quality 在隔离副本集执行。
+    // `id $in` 批量查询的执行计划必须命中唯一索引且无集合扫描。
+    //
+    // # 参数
+    // 无，内部创建隔离库。
+    //
+    // `explain` 命中 `uk_parties_id` 的 `IXSCAN` 且无 `COLLSCAN` 时通过。
+    //
+    // 索引未命中或出现集合扫描时测试失败。
+    //
+    // 不使用 `hint`；`#[ignore]` 由 Quality 在隔离副本集执行。
     #[tokio::test]
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn party_id_in_queries_use_unique_id_index() {

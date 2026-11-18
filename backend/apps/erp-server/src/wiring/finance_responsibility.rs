@@ -81,11 +81,7 @@ impl FinanceTaskPort for FinanceWorkItems {
 }
 
 /// 装配原指定任务资格和独立负责人解析能力。
-/// # 参数
-/// db 为工作项数据库，caller_rbac 为身份设施，authorization 为进程共享统一授权服务。
-/// # 返回
 /// 返回任务资格沿用调用方、负责人解析每次独立创建身份的能力。
-/// # 错误
 /// 构造不执行 I/O，不返回错误；资格和责任分配错误由原调用位置返回。
 pub fn finance_tasks(
     db: Database,
@@ -96,11 +92,7 @@ pub fn finance_tasks(
 }
 
 /// 装配每次独立创建身份的财务责任池分配能力。
-/// # 参数
-/// db 为工作项数据库，caller_rbac 为身份设施，authorization 为进程共享统一授权服务。
-/// # 返回
 /// 返回两个责任解析方法均在调用时创建新身份的窄合同。
-/// # 错误
 /// 构造不执行 I/O，不返回错误；分配时保持原领域错误及执行器。
 pub fn finance_responsibility(
     db: Database,

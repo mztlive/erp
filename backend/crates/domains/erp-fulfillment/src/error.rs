@@ -52,18 +52,7 @@ pub enum Error {
 
 impl Error {
     /// 返回供 HTTP 映射使用的稳定错误分类；不要解析 `Display` 文本。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `ErrorClass`。`Internal`、`Logic`、`RepositoryError` 与
-    /// `OutcomeUnknown` 为 `Internal`；`ConflictError` 与 `TransientTransaction`
-    /// 为 `Conflict`；`BusinessLogicError`、`ValidationError` 与 `NotFound` 为
-    /// `BusinessRule`；`Forbidden` 与 `Unauthenticated` 为 `Forbidden`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回 `ErrorClass`。`Internal`、`Logic`、`RepositoryError` 与 `OutcomeUnknown` 为 `Internal`；`ConflictError` 与 `TransientTransaction` 为 `Conflict`；`BusinessLogicError`、`ValidationError` 与 `NotFound` 为 `BusinessRule`；`Forbidden` 与 `Unauthenticated` 为 `Forbidden`。
     pub fn class(&self) -> ErrorClass {
         match self {
             Self::Internal(_) | Self::Logic(_) | Self::RepositoryError(_) => ErrorClass::Internal,
@@ -83,14 +72,14 @@ impl_repository_error!(
     duplicate = |error| { Error::ConflictError(duplicate_key_conflict_message(&error)) }
 );
 
-/// 将唯一键冲突映射为面向用户的冲突提示。
+// 将唯一键冲突映射为面向用户的冲突提示。
 fn duplicate_key_conflict_message(error: &persistence_core::Error) -> String {
     duplicate_index_conflict_message(error.duplicate_index_name())
 }
 
-/// 将履约域唯一索引名称映射为面向用户的冲突提示。
-///
-/// 未知索引回落通用文案；错误分类保持 `Conflict` 不变。
+// 将履约域唯一索引名称映射为面向用户的冲突提示。
+//
+// 未知索引回落通用文案；错误分类保持 `Conflict` 不变。
 fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
     match index_name {
         Some("uk_purchase_receipts_receipt_no") => "采购入库单号重复，请勿重复提交".to_string(),

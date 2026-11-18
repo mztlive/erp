@@ -96,16 +96,7 @@ struct BusinessDocumentIdRow {
 }
 
 impl QueryFilter for BusinessDocumentFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(document_type) = self.document_type {
@@ -117,16 +108,7 @@ impl QueryFilter for BusinessDocumentFilter {
 }
 
 impl Pagination for BusinessDocumentFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 返回页码与单页条数。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -137,25 +119,18 @@ impl Pagination for BusinessDocumentFilter {
 pub trait BusinessDocumentRepositoryExt {
     /// 在审批启动事务内永久写入注册表启动守卫。
     ///
-    /// # 参数
-    /// * `document_id` - 强类型业务对象与注册表共用主键
-    /// * `document_type` - 启动命令已经证明的精确单据类型
-    /// * `expected_definition_id` - 本次实例冻结的定义主键
-    /// * `expected_definition_version` - 本次实例冻结的定义业务版本
-    /// * `at` - 首次启动时间
-    /// * `executor` - 调用方启动事务执行器
+    /// 所有 `PROCESS_REQUIRED` 启动路径必须在写 BPM 实例前调用本入口。绑定升级
+    /// 与启动因此竞争同一注册行，禁止退回“查询是否已有实例”的跨集合竞态。
     ///
-    /// # 返回
     /// 精确类型、绑定时返回实体：首次启动执行 CAS，曾启动则保持首次时间并
     /// 直接通过；缺失或任一守卫不匹配时返回 `None`。并发修改导致的 CAS/事务
     /// 冲突作为仓储错误返回。
     ///
-    /// # 错误
     /// MongoDB 读取、CAS 更新或事务冲突时返回错误。
     ///
-    /// # 关键业务约束
-    /// 所有 `PROCESS_REQUIRED` 启动路径必须在写 BPM 实例前调用本入口。绑定升级
-    /// 与启动因此竞争同一注册行，禁止退回“查询是否已有实例”的跨集合竞态。
+    /// `document_id`：强类型业务对象与注册表共用主键；`document_type`：启动命令已经证明的精确单据类型。
+    /// `expected_definition_id`：本次实例冻结的定义主键；`expected_definition_version`：本次实例冻结的定义业务版本。
+    /// `executor`：调用方启动事务执行器。
     async fn mark_approval_started(
         &self,
         document_id: &str,
@@ -168,27 +143,20 @@ pub trait BusinessDocumentRepositoryExt {
 
     /// 在调用方已经加载并可能合法修改的注册实体上合并审批启动守卫后执行 CAS。
     ///
-    /// # 参数
-    /// * `document` - 调用方已加载、可能已合法修改的注册行。
-    /// * `document_type` - 启动命令已经证明的精确单据类型。
-    /// * `expected_definition_id` - 本次实例冻结的定义主键。
-    /// * `expected_definition_version` - 本次实例冻结的定义业务版本。
-    /// * `at` - 首次启动时间。
-    /// * `executor` - 调用方事务执行器。
-    ///
-    /// # 返回
-    /// 精确类型、定义绑定时返回 `true`：首次启动合并守卫并执行 CAS，曾启动
-    /// 则保持首次时间且不写注册行；守卫不匹配时返回 `false`。CAS 或事务冲突
-    /// 返回仓储错误。
-    ///
-    /// # 错误
-    /// 首次启动的 `update` 发生版本冲突或 MongoDB 写入失败时返回错误。守卫不匹配返回 `Ok(false)`。
-    ///
-    /// # 关键业务约束
     /// 创建并提交等同事务路径可用本入口把正式编号分配与启动守卫合并为一次
     /// 注册行 CAS，避免先写守卫后以旧版本实体覆盖或冲突。调用方不得修改类型、
     /// 已有绑定或首次启动时间。驳回或撤回后的新 subject version 可再次启动，
     /// 但不得覆盖首次启动事实。
+    ///
+    /// 精确类型、定义绑定时返回 `true`：首次启动合并守卫并执行 CAS，曾启动
+    /// 则保持首次时间且不写注册行；守卫不匹配时返回 `false`。CAS 或事务冲突
+    /// 返回仓储错误。
+    ///
+    /// 首次启动的 `update` 发生版本冲突或 MongoDB 写入失败时返回错误。守卫不匹配返回 `Ok(false)`。
+    ///
+    /// `document`：调用方已加载、可能已合法修改的注册行；`document_type`：启动命令已经证明的精确单据类型。
+    /// `expected_definition_id`：本次实例冻结的定义主键；`expected_definition_version`：本次实例冻结的定义业务版本。
+    /// `executor`：调用方事务执行器。
     async fn mark_loaded_approval_started(
         &self,
         document: &mut BusinessDocument,
@@ -200,15 +168,8 @@ pub trait BusinessDocumentRepositoryExt {
     ) -> Result<bool>;
 
     /// 查询单据审批绑定事实，仅投影 `id` 与 `approval_binding`。
-    ///
-    /// # 参数
-    /// * `document_id` - 业务单据 ID
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回单据不存在、已注册未绑定、已注册且已绑定三态之一。
     ///
-    /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
     async fn approval_binding_lookup(
         &self,
@@ -217,15 +178,8 @@ pub trait BusinessDocumentRepositoryExt {
     ) -> Result<ApprovalBindingLookup>;
 
     /// 判断未删除的单据注册行是否存在。
-    ///
-    /// # 参数
-    /// * `document_id` - 业务单据 ID
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 存在时返回 `true`。
     ///
-    /// # 错误
     /// MongoDB 查询失败时返回错误。
     async fn exists_by_id(
         &self,
@@ -237,15 +191,11 @@ pub trait BusinessDocumentRepositoryExt {
     ///
     /// 输入会先去重；查询仅投影 `id`，空集合不会访问数据库。
     ///
-    /// # 参数
-    /// * `document_ids` - 待核验业务单据 ID
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回按 ID 升序排列的已存在 ID。
     ///
-    /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// `document_ids`：待核验业务单据 ID。
     async fn existing_ids(
         &self,
         document_ids: &[BusinessDocumentId],
@@ -253,16 +203,11 @@ pub trait BusinessDocumentRepositoryExt {
     ) -> Result<Vec<String>>;
 
     /// 批量按业务单据 ID 读取注册行。
-    ///
-    /// # 参数
-    /// * `document_ids` - 业务单据 ID 集合；空集合直接返回空结果
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回全部匹配且未删除的注册行；返回顺序不承诺与输入一致。
     ///
-    /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
+    ///
+    /// `document_ids`：业务单据 ID 集合；空集合直接返回空结果。
     async fn find_documents_by_ids(
         &self,
         document_ids: &[String],
@@ -283,17 +228,13 @@ pub trait BusinessDocumentRepositoryExt {
     /// `(document_type, document_no)` 身份（与 accounts 处理一致），恢复语义
     /// 不被身份复用破坏。
     ///
-    /// # 参数
-    /// * `doc` - 待注册的单据（`document_no` 已由实体校验规范化）
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回 `Ok(None)` 表示本次写入新注册行；`Ok(Some(existing))` 表示同身份
     /// 同 ID 的幂等命中，返回已存在的注册行。
     ///
-    /// # 错误
     /// 同身份不同 ID（含已软删除身份）写入时返回 [`persistence_core::Error::DuplicateKey`]；
     /// 其他 MongoDB 写入或查询失败时返回错误。
+    ///
+    /// `doc`：待注册的单据（`document_no` 已由实体校验规范化）。
     async fn register(
         &self,
         doc: &BusinessDocument,
@@ -306,15 +247,11 @@ pub trait BusinessDocumentRepositoryExt {
     /// [`BusinessDocument::ensure_no_approval_registration`] 校验业务类型、注册行
     /// 预置绑定与统一绑定端口返回值，再调用本语义入口。
     ///
-    /// # 参数
-    /// * `doc` - 已校验为无审批注册的业务单据
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回值与 [`Self::register`] 相同。
     ///
-    /// # 错误
     /// 唯一键冲突或 MongoDB 写入失败时返回错误。
+    ///
+    /// `doc`：已校验为无审批注册的业务单据。
     async fn register_no_approval_document(
         &self,
         doc: &BusinessDocument,
@@ -326,18 +263,11 @@ pub trait BusinessDocumentRepositoryExt {
     /// 成功时同时写入 `document_no_assigned_at`，不得覆盖已有编号。同载荷回读
     /// 同一结果；不同编号竞争只允许一个成功。
     ///
-    /// # 参数
-    /// * `id` - 单据注册行主键。
-    /// * `document_no` - 要写入的正式编号。
-    /// * `expected_version` - 预期乐观锁版本。
-    /// * `assigned_at` - 编号赋值时间。
-    /// * `executor` - 数据访问执行器。
-    ///
-    /// # 返回
     /// 返回赋值成功、同载荷、编号冲突、版本冲突或目标缺失的分类。
     ///
-    /// # 错误
     /// 版本无法表示为 BSON 整数、更新失败，或未命中后的回读失败时返回错误。
+    ///
+    /// `document_no`：要写入的正式编号；`expected_version`：预期乐观锁版本。
     async fn assign_document_no(
         &self,
         id: &str,
@@ -353,15 +283,11 @@ pub trait BusinessDocumentRepositoryExt {
     /// `document_no` 按字面量忽略大小写模糊匹配（复用
     /// `repository::regex_filter`，禁止自拼正则）。
     ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回当前页投影行与满足筛选条件的总数。
     ///
-    /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    ///
+    /// `executor`：数据访问执行器，由 Service 决定是否位于事务中。
     async fn search_business_documents(
         &self,
         filter: &BusinessDocumentFilter,
@@ -574,21 +500,15 @@ impl BusinessDocumentRepositoryExt for Repository<'_, BusinessDocument> {
         Ok(PageResult { items, total: total as i64 })
     }
 }
-/// 判断唯一键冲突是否为同一 `document_id` 的幂等回读。
-///
-/// 命中 `uk_business_documents_id` 且现有行 id 相同则回读；id 冲突或其它
-/// 唯一键冲突（例如非空编号身份被另一行占用）不得视为同一注册。
-///
-/// # 参数
-/// * `existing` - 按请求 `document_id` 回读到的现有行
-/// * `expected_id` - 本次注册请求的稳定 `document_id`
-/// * `id_of` - 从现有行取出 id 的函数
-///
-/// # 返回
-/// 同 ID 时返回 `true`；无现有行或 id 不同时返回 `false`。
-///
-/// # 错误
-/// 无。
+// 当唯一键冲突为同一 `document_id` 的幂等回读时返回 `true`。
+//
+// 命中 `uk_business_documents_id` 且现有行 id 相同则回读；id 冲突或其它
+// 唯一键冲突（例如非空编号身份被另一行占用）不得视为同一注册。
+//
+// 同 ID 时返回 `true`；无现有行或 id 不同时返回 `false`。
+//
+// `existing`：按请求 `document_id` 回读到的现有行；`expected_id`：本次注册请求的稳定 `document_id`。
+// `id_of`：从现有行取出 id 的函数。
 pub(super) fn same_id_registration<T>(
     existing: Option<&T>,
     expected_id: &str,
@@ -597,7 +517,7 @@ pub(super) fn same_id_registration<T>(
     existing.is_some_and(|row| id_of(row) == expected_id)
 }
 
-/// 将审批绑定窄投影分类为稳定三态事实。
+// 将注册库的精简审批绑定投影转换为调用方处理的三态事实，不要求读取完整单据。
 fn classify_approval_binding(row: Option<ApprovalBindingRow>) -> ApprovalBindingLookup {
     match row {
         None => ApprovalBindingLookup::DocumentMissing,
@@ -608,23 +528,16 @@ fn classify_approval_binding(row: Option<ApprovalBindingRow>) -> ApprovalBinding
     }
 }
 
-/// 对批量单据 ID 去重并转换为稳定字符串集合。
+// 为批量注册查询规范化单据 ID 字符串集合，移除重复项，避免重复请求同一单据。
 fn distinct_document_ids(document_ids: &[BusinessDocumentId]) -> Vec<String> {
     let mut seen = HashSet::with_capacity(document_ids.len());
     document_ids.iter().filter(|&id| seen.insert(id.as_ref())).map(ToString::to_string).collect()
 }
 
-/// 一次性编号赋值更新管道。
-///
-/// # 参数
-/// * `document_no` - 要写入的正式编号
-/// * `assigned_at` - 编号赋值时间
-///
-/// # 返回
-/// 返回同时写入编号、赋值时间和版本递增的 `$set` 管道。
-///
-/// # 错误
-/// 无。
+// 一次性编号赋值更新管道。
+// 返回同时写入编号、赋值时间和版本递增的 `$set` 管道。
+//
+// `document_no`：要写入的正式编号。
 pub(super) fn assign_document_no_pipeline(document_no: &str, assigned_at: Instant) -> Vec<Document> {
     let assigned_at = assigned_at.unix_secs();
     vec![doc! {
@@ -636,10 +549,7 @@ pub(super) fn assign_document_no_pipeline(document_no: &str, assigned_at: Instan
         }
     }]
 }
-/// 单据注册列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
+// 单据注册列表投影字段。
 fn business_document_projection() -> Document {
     doc! {
         "id": 1,

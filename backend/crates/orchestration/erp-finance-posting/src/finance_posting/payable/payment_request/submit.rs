@@ -28,13 +28,9 @@ use super::*;
 use crate::FinancePostingPorts;
 use crate::finance_posting::receivable::start_approval;
 
-/// 在调用方事务内创建并正式提交；回执只在审批启动完成后保存。
-/// # 参数
-/// 数据库、授权与审批端口、申请表单、申请人、批次命令及同一事务执行器。
-/// # 返回
-/// 已冻结来源、占用余额并启动审批的申请。
-/// # 错误
-/// 创建或提交任一步失败时交由调用方回滚整个事务。
+// 在调用方事务内创建并正式提交；回执只在审批启动完成后保存。
+//
+// 数据库、授权与审批端口、申请表单、申请人、批次命令及同一事务执行器。已冻结来源、占用余额并启动审批的申请。创建或提交任一步失败时交由调用方回滚整个事务。
 pub(super) async fn create_and_submit(
     db: &Database,
     rbac: &FinancePostingPorts,
@@ -58,13 +54,9 @@ pub(super) async fn create_and_submit(
 
 impl PurchasePaymentRequestProcess {
     /// 原子提交申请并冻结逐采购付款额度。
-    /// # 参数
-    /// * `id` - 已保存的付款申请。
-    /// * `req` - 本次版本及幂等键。
-    /// * `actor` - 具备提交和完整来源资格的当前经办人。
-    /// # 返回
-    /// 返回审批中申请；相同幂等键只恢复原结果。
-    /// # 错误
+    ///
+    /// `id` 为已保存的付款申请；`req` 为本次版本及幂等键；`actor` 为具备提交和完整来源资格的当前经办人。返回审批中申请；相同幂等键只恢复原结果。
+    ///
     /// 来源、主体、账户、余额、审批人或版本不满足时整体拒绝。
     pub async fn submit(
         &self,
@@ -116,14 +108,11 @@ impl PurchasePaymentRequestProcess {
         self.finish_command(result, &recovery, &response_actor, "submit", &response_id).await
     }
 
-    /// 首次事务直接返回同快照结果；失败只查证原命令，不重放业务写入。
-    /// # 参数
-    /// result 为首次事务结果，command 为原命令回执，actor 为当前认证操作人，
-    /// action 为原命令动作，id 为原付款申请主键。
-    /// # 返回
-    /// 返回同事务授权的付款申请，或已提交命令的当前授权结果。
-    /// # 错误
-    /// 查证缺失保留原错；未知提交下授权或读取失败保留原未知结果。
+    // 首次事务直接返回同快照结果；失败只查证原命令，不重放业务写入。
+    //
+    // result 为首次事务结果，command 为原命令回执，actor 为当前认证操作人， action 为原命令动作，id 为原付款申请主键。
+    //
+    // 返回同事务授权的付款申请，或已提交命令的当前授权结果。查证缺失保留原错；未知提交下授权或读取失败保留原未知结果。
     pub(super) async fn finish_command(
         &self,
         result: Result<PurchasePaymentRequest>,

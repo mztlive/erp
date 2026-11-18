@@ -12,11 +12,7 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
 /// 查询本付款任务可用留抵。
-/// # 参数
-/// 应用、当前出纳及付款申请身份。
-/// # 返回
 /// 同主体同供应商可用余额。
-/// # 错误
 /// 非本任务经办人或任务失效时拒绝。
 pub async fn list(
     State(state): State<HttpState>,
@@ -26,11 +22,7 @@ pub async fn list(
     Ok(ApiResponse::ok_with_data(process(&state).supplier_credits(&id, &actor).await?))
 }
 /// 按批准额度抵扣留抵。
-/// # 参数
-/// 应用、当前出纳、申请身份及抵扣请求。
-/// # 返回
 /// 抵扣记录身份。
-/// # 错误
 /// 版本、责任、主体或余额不符时拒绝。
 pub async fn apply(
     State(state): State<HttpState>,

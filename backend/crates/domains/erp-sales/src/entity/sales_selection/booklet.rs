@@ -151,17 +151,13 @@ impl fmt::Debug for SalesSelectionBooklet {
 }
 
 impl SalesSelectionBooklet {
-    /// 创建草稿选品册。
-    ///
-    /// # 参数
-    /// * `id` - 册身份
-    /// * `data` - 创建字段
-    ///
-    /// # 返回
+    /// 为后续编辑建立草稿选品册，构造阶段校验输入后再交给调用方保存。
     /// 返回草稿状态的选品册。
-    ///
-    /// # 错误
     /// 创建人、客户编号、客户名称、销售负责人或业务组织为空或超长，或档位与形态不合规时拒绝。
+    ///
+    /// 输入约定：
+    /// - `id`：册身份
+    /// - `data`：创建字段
     pub fn new(id: SalesSelectionBookletId, data: SalesSelectionBookletData) -> Result<Self> {
         let created = normalize_actor(&data.created_by, "创建人不能为空")?;
         let customer_no = normalize_required_text(data.customer_no, "客户编号不能为空", 64, "客户编号过长")?;
@@ -213,17 +209,13 @@ impl SalesSelectionBooklet {
     }
 
     /// 草稿内更新筛选、勾选或档位规则，不改变来源类型。
-    ///
-    /// # 参数
-    /// * `pool_source` - 同源类型的新来源
-    /// * `tiers` - 新档位；单品必须为空
-    /// * `actor_id` - 更新人
-    ///
-    /// # 返回
     /// 成功时更新规则。
-    ///
-    /// # 错误
     /// 非草稿、来源类型变化、档位非法，或操作人为空、超长时拒绝。
+    ///
+    /// 输入约定：
+    /// - `pool_source`：同源类型的新来源
+    /// - `tiers`：新档位；单品必须为空
+    /// - `actor_id`：更新人
     pub fn update_draft_rules(
         &mut self,
         pool_source: PoolSource,
@@ -246,16 +238,12 @@ impl SalesSelectionBooklet {
     /// 整册重新准备时在内存中替换筛选、勾选或档位，不改变来源类型。
     ///
     /// 仅在准备成功落库后成为有效规则；失败路径必须先恢复原规则再 `fail_prepare`。
-    ///
-    /// # 参数
-    /// * `pool_source` - 同源类型的新来源
-    /// * `tiers` - 新档位；单品必须为空
-    ///
-    /// # 返回
     /// 成功时更新内存中的规则。
-    ///
-    /// # 错误
     /// 来源类型变化或档位非法时拒绝。
+    ///
+    /// 输入约定：
+    /// - `pool_source`：同源类型的新来源
+    /// - `tiers`：新档位；单品必须为空
     pub fn apply_reprepare_rules(&mut self, pool_source: PoolSource, tiers: Vec<TierRule>) -> Result<()> {
         if pool_source.kind != self.pool_source.kind {
             return Err(Error::from("商品池来源类型创建后不可修改"));
@@ -266,18 +254,13 @@ impl SalesSelectionBooklet {
     }
 
     /// 进入准备中并占用唯一活动任务。
-    ///
-    /// # 参数
-    /// * `task_id` - 新任务身份
-    /// * `kind` - 准备种类
-    /// * `actor_id` - 操作人
-    ///
-    /// # 返回
-    /// 册进入准备中。
-    ///
-    /// # 错误
-    /// 已有活动任务、当前状态不能准备、单品请求组合重生成、草稿不是首次准备、
+    /// 结果：册进入准备中。
+    /// 失败条件：已有活动任务、当前状态不能准备、单品请求组合重生成、草稿不是首次准备、
     /// 待发布发起首次准备，或操作人为空、超长时拒绝。
+    ///
+    /// 输入约定：
+    /// - `task_id`：新任务身份
+    /// - `kind`：准备种类
     pub fn begin_prepare(&mut self, task_id: &str, kind: PrepareKind, actor_id: &str) -> Result<()> {
         self.ensure_no_active_task()?;
         if !self.status.allows_prepare() {
@@ -302,18 +285,13 @@ impl SalesSelectionBooklet {
     }
 
     /// 准备成功，进入待发布。
-    ///
-    /// # 参数
-    /// * `batch_id` - 新有效批次
-    /// * `eligibility_as_of` - 资格业务日期
-    /// * `prepared_at` - 准备时间
-    /// * `actor_id` - 操作人
-    ///
-    /// # 返回
-    /// 册进入待发布并清除活动任务。
-    ///
-    /// # 错误
+    /// 结果：册进入待发布并清除活动任务。
     /// 当前不是准备中，或操作人为空、超长时拒绝。
+    ///
+    /// 输入约定：
+    /// - `batch_id`：新有效批次
+    /// - `eligibility_as_of`：资格业务日期
+    /// - `prepared_at`：准备时间
     pub fn complete_prepare(
         &mut self,
         batch_id: &str,
@@ -331,16 +309,11 @@ impl SalesSelectionBooklet {
     }
 
     /// 准备失败并按规则恢复。
-    ///
-    /// # 参数
-    /// * `reason` - 失败原因
-    /// * `actor_id` - 操作人
-    ///
-    /// # 返回
-    /// 首次准备回草稿；从待发布发起则恢复待发布。
-    ///
-    /// # 错误
+    /// 结果：首次准备回草稿；从待发布发起则恢复待发布。
     /// 当前不是准备中，或操作人为空、超长时拒绝。
+    ///
+    /// 输入约定：
+    /// - `reason`：失败原因
     pub fn fail_prepare(&mut self, reason: &str, actor_id: &str) -> Result<()> {
         let restore = self.pre_prepare_status.unwrap_or(BookletStatus::Draft);
         ensure_transition(self.status, restore)?;
@@ -351,18 +324,14 @@ impl SalesSelectionBooklet {
     }
 
     /// 发布当前批次并写入链接。
-    ///
-    /// # 参数
-    /// * `token_hash` - 令牌哈希
-    /// * `token_ciphertext` - 令牌密文
-    /// * `published_at` - 发布时间
-    /// * `actor_id` - 发布人
-    ///
-    /// # 返回
-    /// 册进入已发布，有效期为 30 天。
-    ///
-    /// # 错误
+    /// 结果：册进入已发布，有效期为 30 天。
     /// 非待发布、缺少有效批次，或发布人、操作人为空或超长时拒绝。
+    ///
+    /// 输入约定：
+    /// - `token_hash`：令牌哈希
+    /// - `token_ciphertext`：令牌密文
+    /// - `published_at`：发布时间
+    /// - `actor_id`：发布人
     pub fn publish(
         &mut self,
         token_hash: String,
@@ -391,17 +360,12 @@ impl SalesSelectionBooklet {
     }
 
     /// 更换链接：原令牌立即失效，到期时间不变。
-    ///
-    /// # 参数
-    /// * `token_hash` - 新哈希
-    /// * `token_ciphertext` - 新密文
-    /// * `actor_id` - 操作人
-    ///
-    /// # 返回
-    /// 令牌版本递增。
-    ///
-    /// # 错误
+    /// 结果：令牌版本递增。
     /// 非已发布状态，或操作人为空、超长时拒绝。
+    ///
+    /// 输入约定：
+    /// - `token_hash`：新哈希
+    /// - `token_ciphertext`：新密文
     pub fn rotate_link(
         &mut self,
         token_hash: String,
@@ -418,16 +382,11 @@ impl SalesSelectionBooklet {
     }
 
     /// 关闭未提交选品册。
-    ///
-    /// # 参数
-    /// * `now` - 关闭时间
-    /// * `actor_id` - 操作人
-    ///
-    /// # 返回
-    /// 册进入已关闭。
-    ///
-    /// # 错误
+    /// 结果：册进入已关闭。
     /// 非已发布时拒绝。已提交不得关闭为已关闭。操作人为空或超长时也拒绝。
+    ///
+    /// 输入约定：
+    /// - `now`：关闭时间
     pub fn close(&mut self, now: Instant, actor_id: &str) -> Result<()> {
         ensure_transition(self.status, BookletStatus::Closed)?;
         self.status = BookletStatus::Closed;
@@ -437,14 +396,7 @@ impl SalesSelectionBooklet {
     }
 
     /// 撤销已提交选品册的链接访问。
-    ///
-    /// # 参数
-    /// * `actor_id` - 操作人
-    ///
-    /// # 返回
-    /// 不改变已提交状态，不删除方案。
-    ///
-    /// # 错误
+    /// 结果：不改变已提交状态，不删除方案。
     /// 非已提交，或操作人为空、超长时拒绝。
     pub fn revoke_access(&mut self, actor_id: &str) -> Result<()> {
         if self.status != BookletStatus::Submitted {
@@ -455,16 +407,11 @@ impl SalesSelectionBooklet {
     }
 
     /// 发布前作废。
-    ///
-    /// # 参数
-    /// * `now` - 作废时间
-    /// * `actor_id` - 操作人
-    ///
-    /// # 返回
-    /// 册进入已作废。
-    ///
-    /// # 错误
+    /// 结果：册进入已作废。
     /// 状态不允许作废，或操作人为空、超长时拒绝。
+    ///
+    /// 输入约定：
+    /// - `now`：作废时间
     pub fn void(&mut self, now: Instant, actor_id: &str) -> Result<()> {
         if !self.status.allows_void() {
             return Err(Error::from("当前状态不能作废"));
@@ -476,16 +423,12 @@ impl SalesSelectionBooklet {
     }
 
     /// 提交成功：冻结册并关联唯一方案。
-    ///
-    /// # 参数
-    /// * `proposal_id` - 方案身份
-    /// * `now` - 提交时间
-    ///
-    /// # 返回
-    /// 册进入已提交。
-    ///
-    /// # 错误
+    /// 结果：册进入已提交。
     /// 非已发布或已有方案时拒绝。
+    ///
+    /// 输入约定：
+    /// - `proposal_id`：方案身份
+    /// - `now`：提交时间
     pub fn mark_submitted(&mut self, proposal_id: SalesSelectionProposalId, now: Instant) -> Result<()> {
         if self.submit_mode == SubmitMode::PickupVoucher {
             if self.status != BookletStatus::Published {
@@ -505,16 +448,11 @@ impl SalesSelectionBooklet {
     }
 
     /// 设置或更换访问密码哈希。
-    ///
-    /// # 参数
-    /// * `hash` - 服务端生成的密码哈希
-    /// * `actor_id` - 操作人
-    ///
-    /// # 返回
-    /// 保存哈希与更新人。
-    ///
-    /// # 错误
+    /// 结果：保存哈希与更新人。
     /// 准备中、存在活动任务、已作废、哈希为空或操作人非法时拒绝。
+    ///
+    /// 输入约定：
+    /// - `hash`：服务端生成的密码哈希
     pub fn set_access_password_hash(&mut self, hash: String, actor_id: &str) -> Result<()> {
         self.ensure_no_active_task()?;
         if self.status == BookletStatus::Voided {
@@ -529,15 +467,11 @@ impl SalesSelectionBooklet {
     }
 
     /// 验证服务端重算的个人选品合计。
-    ///
-    /// # 参数
-    /// * `total` - 根据冻结商品价格及份数计算的合计
-    ///
-    /// # 返回
-    /// 普通模式或提货券合计不超过个人额度时通过。
-    ///
-    /// # 错误
+    /// 结果：普通模式或提货券合计不超过个人额度时通过。
     /// 提货券缺额度、合计为负或超额度时拒绝。
+    ///
+    /// 输入约定：
+    /// - `total`：根据冻结商品价格及份数计算的合计
     pub fn ensure_participant_total(&self, total: Amount) -> Result<()> {
         if self.submit_mode != SubmitMode::PickupVoucher {
             return Ok(());
@@ -550,47 +484,30 @@ impl SalesSelectionBooklet {
     }
 
     /// 判断服务端当前是否已到期。
+    /// 结果：已到或过到期时间返回 `true`。
     ///
-    /// # 参数
-    /// * `now` - 服务端时间
-    ///
-    /// # 返回
-    /// 已到或过到期时间返回 `true`。
-    ///
-    /// # 错误
-    /// 无。
+    /// 输入约定：
+    /// - `now`：服务端时间
     pub fn is_expired(&self, now: Instant) -> bool {
         self.link_expires_at.is_some_and(|expires| now >= expires)
     }
 
-    /// 判断持久化文档是否带齐组织范围字段。
-    ///
-    /// 清库漏集合时，组织范围落地前的选品册可能没有销售负责人或业务组织；
-    /// 反序列化后为空，后台准备不得当作有效单据继续执行或写回。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 两个字段都非空时返回 `true`。
-    ///
-    /// # 错误
-    /// 无。
+    // 判断持久化文档是否带齐组织范围字段。
+    //
+    // 清库漏集合时，组织范围落地前的选品册可能没有销售负责人或业务组织；
+    // 反序列化后为空，后台准备不得当作有效单据继续执行或写回。
+    // 结果：两个字段都非空时返回 `true`。
     pub(crate) fn has_persisted_scope(&self) -> bool {
         !self.sales_owner_user_id.is_empty() && !self.business_org_unit_id.is_empty()
     }
 
     /// 公开写操作前校验令牌、状态与到期。
-    ///
-    /// # 参数
-    /// * `token_hash` - 当前请求令牌哈希
-    /// * `now` - 服务端时间
-    ///
-    /// # 返回
-    /// 通过时返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// 结果：通过时返回 `Ok(())`。
     /// 令牌不匹配、已撤销、已到期或状态不允许写入时拒绝。
+    ///
+    /// 输入约定：
+    /// - `token_hash`：当前请求令牌哈希
+    /// - `now`：服务端时间
     pub fn ensure_public_write(&self, token_hash: &str, now: Instant) -> Result<()> {
         self.ensure_current_token(token_hash)?;
         if self.link_revoked || self.is_expired(now) {
@@ -603,15 +520,11 @@ impl SalesSelectionBooklet {
     }
 
     /// 校验请求令牌是否为当前有效哈希。
-    ///
-    /// # 参数
-    /// * `token_hash` - 请求令牌哈希
-    ///
-    /// # 返回
-    /// 匹配当前哈希时通过。
-    ///
-    /// # 错误
+    /// 结果：匹配当前哈希时通过。
     /// 无链接或哈希不匹配时拒绝。
+    ///
+    /// 输入约定：
+    /// - `token_hash`：请求令牌哈希
     pub fn ensure_current_token(&self, token_hash: &str) -> Result<()> {
         match self.link_token_hash.as_deref() {
             Some(current) if current == token_hash => Ok(()),
@@ -620,15 +533,11 @@ impl SalesSelectionBooklet {
     }
 
     /// 乐观锁：请求版本必须等于当前版本。
-    ///
-    /// # 参数
-    /// * `expected` - 请求携带的册版本
-    ///
-    /// # 返回
-    /// 版本一致时通过。
-    ///
-    /// # 错误
+    /// 结果：版本一致时通过。
     /// 基于旧版本时整次拒绝。
+    ///
+    /// 输入约定：
+    /// - `expected`：请求携带的册版本
     pub fn ensure_version(&self, expected: u64) -> Result<()> {
         if self.base.version != expected {
             return Err(Error::from("选品册已被更新，请刷新后重试"));
@@ -637,59 +546,29 @@ impl SalesSelectionBooklet {
     }
 
     /// 记录陈列删减，供仓储乐观锁递增版本。
-    ///
-    /// # 参数
-    /// * `actor_id` - 操作人
-    ///
-    /// # 返回
-    /// 写入操作人后无业务返回值。
-    ///
-    /// # 错误
+    /// 结果：写入操作人后无业务返回值。
     /// 操作人为空或超长时拒绝。
     pub fn record_display_edit(&mut self, actor_id: &str) -> Result<()> {
         self.touch(actor_id)
     }
 
-    /// 记录更新人。
-    ///
-    /// # 参数
-    /// * `actor_id` - 操作人
-    ///
-    /// # 返回
-    /// 写入更新人后返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 操作人为空或超长时拒绝。
+    // 记录更新人。
+    // 结果：写入更新人后返回 `Ok(())`。
+    // 操作人为空或超长时拒绝。
     fn touch(&mut self, actor_id: &str) -> Result<()> {
         self.updated_by = normalize_actor(actor_id, "操作人不能为空")?;
         Ok(())
     }
 
-    /// 清除活动任务槽。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 无。
-    ///
-    /// # 错误
-    /// 无。
+    // 清除活动任务槽。
     fn clear_task(&mut self) {
         self.active_task_id = None;
         self.pre_prepare_status = None;
     }
 
-    /// 同册同时最多一个活动准备任务。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 无活动任务时通过。
-    ///
-    /// # 错误
-    /// 已有活动任务时拒绝。
+    // 同册同时最多一个活动准备任务。
+    // 结果：无活动任务时通过。
+    // 已有活动任务时拒绝。
     fn ensure_no_active_task(&self) -> Result<()> {
         if self.active_task_id.is_some() || self.status == BookletStatus::Preparing {
             return Err(Error::from("已有准备任务进行中，请等待完成后再试"));
@@ -698,7 +577,7 @@ impl SalesSelectionBooklet {
     }
 }
 
-/// 校验提货券固定配置。
+// 核对提货券固定配置。
 fn validate_voucher_settings(mode: SubmitMode, budget: Option<Amount>, count: Option<u32>) -> Result<()> {
     if mode != SubmitMode::PickupVoucher {
         if budget.is_some() || count.is_some() {
@@ -715,7 +594,7 @@ fn validate_voucher_settings(mode: SubmitMode, budget: Option<Amount>, count: Op
     Ok(())
 }
 
-/// 拒绝空密码哈希；None 仅供历史文档读取与领域构造兼容。
+// 保存选品册密码哈希时拒绝空字符串；仅为历史文档读取及领域构造保留 `None`。
 fn validate_password_hash(hash: Option<&str>) -> Result<()> {
     if hash.is_some_and(|value| value.trim().is_empty()) {
         return Err(Error::from("访问密码哈希不能为空"));
@@ -723,17 +602,13 @@ fn validate_password_hash(hash: Option<&str>) -> Result<()> {
     Ok(())
 }
 
-/// 按形态校验档位。
-///
-/// # 参数
-/// * `form` - 选品形态
-/// * `tiers` - 档位
-///
-/// # 返回
-/// 单品返回空列表；套餐返回规范化档位。
-///
-/// # 错误
-/// 单品带档位或套餐缺档位时拒绝。
+// 按形态校验档位。
+// 结果：单品返回空列表；套餐返回规范化档位。
+// 单品带档位或套餐缺档位时拒绝。
+//
+// 输入约定：
+// - `form`：选品形态
+// - `tiers`：档位
 fn normalize_form_tiers(form: SelectionForm, tiers: Vec<TierRule>) -> Result<Vec<TierRule>> {
     if form.is_package() {
         normalize_tiers(tiers)
@@ -744,32 +619,22 @@ fn normalize_form_tiers(form: SelectionForm, tiers: Vec<TierRule>) -> Result<Vec
     }
 }
 
-/// 规范化操作人身份。
-///
-/// # 参数
-/// * `actor_id` - 操作人
-/// * `empty_message` - 为空提示
-///
-/// # 返回
-/// 返回去空白身份。
-///
-/// # 错误
-/// 为空或超过 64 个字符时拒绝。
+// 规范化操作人身份。
+// 返回去空白身份。
+// 为空或超过 64 个字符时拒绝。
+//
+// 输入约定：
+// - `empty_message`：为空提示
 fn normalize_actor(actor_id: &str, empty_message: &str) -> Result<String> {
     normalize_required_text_ref(actor_id, empty_message, 64, "操作人身份过长")
 }
 
-/// 为发布时间加上整天数。
-///
-/// # 参数
-/// * `start` - 起点
-/// * `days` - 天数
-///
-/// # 返回
-/// 返回到期时刻。
-///
-/// # 错误
-/// 无。
+// 为发布时间加上整天数。
+// 返回到期时刻。
+//
+// 输入约定：
+// - `start`：起点
+// - `days`：天数
 fn add_days(start: Instant, days: i64) -> Instant {
     Instant::from_unix_secs(start.unix_secs().saturating_add(days.saturating_mul(24 * 3600)))
 }
@@ -783,7 +648,7 @@ mod tests {
         PoolFilterSnapshot, PoolSource, PoolSourceKind, PrepareKind, SelectionForm, SubmitMode,
     };
 
-    /// 构造单品草稿。
+    // 组装单品草稿。
     fn draft() -> SalesSelectionBooklet {
         SalesSelectionBooklet::new(
             SalesSelectionBookletId::new("book-1"),

@@ -35,10 +35,7 @@ pub struct TracingConfig {
 }
 
 impl Default for TracingConfig {
-    /// 返回默认值。
-    ///
-    /// # 返回
-    /// 返回创建的实例。
+    // 提供未覆盖遥测配置时的基线：`info` 文本日志，不写滚动文件，也不开启 OTLP。
     fn default() -> Self {
         Self {
             env_filter: "info".to_string(),
@@ -61,7 +58,7 @@ pub struct TracingGuard {
 }
 
 impl Drop for TracingGuard {
-    /// 关闭 tracer provider 并刷新仍在批量队列中的 span。
+    // 进程退出并释放 guard 时关闭 tracer provider，以便刷新仍在批量导出队列中的 span。
     fn drop(&mut self) {
         let Some(provider) = self.tracer_provider.take() else {
             return;
@@ -76,11 +73,7 @@ impl Drop for TracingGuard {
 /// 使用指定配置初始化全局 tracing subscriber。
 ///
 /// `RUST_LOG` 存在时优先使用环境变量，否则回退到 `config.env_filter`。
-///
-/// # 返回值
 /// 返回必须由进程入口持有至退出的 tracing 生命周期 guard。
-///
-/// # 错误
 /// 创建滚动日志文件或 OTLP exporter 失败时返回错误。
 pub fn init_tracing(config: TracingConfig) -> Result<TracingGuard, Box<dyn std::error::Error + Send + Sync>> {
     let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&config.env_filter));
@@ -180,16 +173,10 @@ pub fn init_tracing(config: TracingConfig) -> Result<TracingGuard, Box<dyn std::
     Ok(TracingGuard { _file_guard: file_guard, tracer_provider })
 }
 
-/// 按配置创建 OTLP tracer provider；禁用时不构建网络 exporter。
-///
-/// # 参数
-/// * `config` - 日志与 OpenTelemetry 进程配置
-///
-/// # 返回值
-/// 启用时返回批量导出的 provider，禁用时返回 `None`。
-///
-/// # 错误
-/// OTLP exporter 参数无效时返回构建错误。
+// 按配置创建 OTLP tracer provider；禁用时不构建网络 exporter。
+// `config` 为日志与 OpenTelemetry 进程配置。
+// 启用时返回批量导出的 provider，禁用时返回 `None`。
+// OTLP exporter 参数无效时返回构建错误。
 fn build_tracer_provider(
     config: &TracingConfig,
 ) -> Result<Option<SdkTracerProvider>, Box<dyn std::error::Error + Send + Sync>> {
@@ -208,7 +195,7 @@ fn build_tracer_provider(
     Ok(Some(provider))
 }
 
-// SDK 0.8.0 的认证及响应日志可能包含凭据，禁止通过 RUST_LOG 重新开启。
+// 在应用日志过滤后始终拦截可能带凭据的 SDK 认证及响应日志；提高 `RUST_LOG` 级别也不能解除此限制。
 fn allow_log(metadata: &Metadata<'_>) -> bool {
     !metadata.target().starts_with("nacos_sdk")
 }

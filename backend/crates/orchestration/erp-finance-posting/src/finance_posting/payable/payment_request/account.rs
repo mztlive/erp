@@ -15,15 +15,10 @@ use crate::finance_posting::task_access::{TaskPurpose, require_task};
 
 impl PurchasePaymentRequestProcess {
     /// 在当前任务和敏感权限验证后主动揭示冻结收款账号。
-    /// # 参数
-    /// * `id` - 付款申请。
-    /// * `req` - 当前任务及审核冻结账户的版本。
-    /// * `actor` - 当前任务责任人。
-    /// * `codec` - 共享敏感字段解码器。
-    /// # 返回
-    /// 返回完整账号并记录敏感揭示审计。
-    /// # 错误
-    /// 权限、当前任务、账户身份或来源变化时拒绝。
+    ///
+    /// `id` 为付款申请；`req` 为当前任务及审核冻结账户的版本；`actor` 为当前任务责任人；`codec` 为共享敏感字段解码器。
+    ///
+    /// 返回完整账号并记录敏感揭示审计。权限、当前任务、账户身份或来源变化时拒绝。
     pub async fn reveal_account(
         &self,
         id: &str,

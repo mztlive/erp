@@ -32,7 +32,7 @@ impl Default for ReceivableFacts {
 }
 
 impl ReceivableFacts {
-    /// 合并当前页之外的子账事实；调用方保证每个子账只装载一批。
+    // 处理应收子账时，合并当前页之外的子账事实；调用方保证每个子账只装载一批。
     #[cfg(test)]
     pub(super) fn extend(&mut self, other: Self) {
         self.overdue_total = self.overdue_total.checked_add(other.overdue_total);
@@ -40,37 +40,29 @@ impl ReceivableFacts {
         self.entries.extend(other.entries);
     }
 
-    /// 返回该子账净额；无分录或无核销分配均为零。
-    ///
-    /// # 参数
-    /// * `account_id` - 应收子账主键。
-    ///
-    /// # 返回
-    /// 已装载的净核销额；没有记录时返回零金额。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 处理应收子账时，给出该子账净额；无分录或无核销分配均为零。
+    //
+    // 调用参数：
+    // * `account_id` - 应收子账主键。
+    //
+    // 已装载的净核销额；没有记录时返回零金额。
     pub(super) fn share(&self, account_id: &str) -> Amount {
         self.shares.get(account_id).copied().unwrap_or_else(Amount::zero)
     }
 
-    /// 取走当前页分录，沿用按来源序号稳定排序的展示口径。
-    ///
-    /// # 参数
-    /// * `account_id` - 应收子账主键。
-    ///
-    /// # 返回
-    /// 移出该子账的分录视图，并按 `source_sequence` 排序；没有分录时为空。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 处理应收子账时，取走当前页分录，沿用按来源序号稳定排序的展示口径。
+    //
+    // 调用参数：
+    // * `account_id` - 应收子账主键。
+    //
+    // 移出该子账的分录视图，并按 `source_sequence` 排序；没有分录时为空。
     pub(super) fn take_entries(&mut self, account_id: &str) -> Vec<ReceivableEntryView> {
         let mut entries = self.entries.remove(account_id).unwrap_or_default();
         entries.sort_by_key(|entry| entry.source_sequence);
         entries
     }
 
-    /// 单子账原查询结果按原返回顺序逐笔折叠，不按动作或分录重组运算。
+    // 组装应收子账时，单子账原查询结果按原返回顺序逐笔折叠，不按动作或分录重组运算。
     fn append_allocations(&mut self, account_id: &str, allocations: Vec<ReceiptAllocation>) {
         let mut net = Amount::zero();
         for allocation in allocations {
@@ -79,7 +71,7 @@ impl ReceivableFacts {
         self.shares.insert(account_id.to_string(), net);
     }
 
-    /// 同批分配按原返回流归入其真实子账，保持每个子账的逐笔金额顺序。
+    // 组装应收子账时，同批分配按原返回流归入其真实子账，保持每个子账的逐笔金额顺序。
     fn append_batch_allocations(
         &mut self,
         account_ids: &[String],
@@ -111,7 +103,7 @@ impl ReceivableFacts {
         fallback
     }
 
-    /// 当前页的批量分录按仓储返回顺序保留，稳定排序仅在生成展示时执行。
+    // 组装应收子账时，当前页的批量分录按仓储返回顺序保留，稳定排序仅在生成展示时执行。
     fn append_entries(&mut self, entries: Vec<ReceivableEntry>, display_ids: &BTreeSet<String>) {
         for entry in entries {
             if display_ids.contains(entry.receivable_account_id.as_ref()) {
@@ -124,7 +116,7 @@ impl ReceivableFacts {
     }
 }
 
-/// 逐子账收集完整分录集合，保留批量返回流的子账内顺序，不扩大核销查询边界。
+// 处理应收子账时，逐子账收集完整分录集合，保留批量返回流的子账内顺序，不扩大核销查询边界。
 fn entry_ids_by_account(entries: &[ReceivableEntry]) -> HashMap<String, Vec<ReceivableEntryId>> {
     let mut ids: HashMap<String, Vec<ReceivableEntryId>> = HashMap::new();
     for entry in entries {
@@ -136,18 +128,16 @@ fn entry_ids_by_account(entries: &[ReceivableEntry]) -> HashMap<String, Vec<Rece
 }
 
 impl FundsAccess {
-    /// 本次事务批量装载分录，核销按同批完整分录一次查询；页行与汇总共享事实。
-    ///
-    /// # 参数
-    /// * `account_ids` - 已授权、已筛选的全部子账
-    /// * `display_ids` - 需要返回分录的当前页子账
-    /// * `executor` - 本次快照事务，不跨快照复用
-    ///
-    /// # 返回
-    /// 返回全部子账净额和当前页分录；分录每批最多 500 个子账，核销每批一次读取。
-    ///
-    /// # 错误
-    /// 读取失败时返回仓储错误；金额溢出语义沿用原逐笔折叠。
+    // 处理应收子账时，本次事务批量装载分录，核销按同批完整分录一次查询；页行与汇总共享事实。
+    //
+    // 调用参数：
+    // * `account_ids` - 已授权、已筛选的全部子账
+    // * `display_ids` - 需要返回分录的当前页子账
+    // * `executor` - 本次快照事务，不跨快照复用
+    //
+    // 返回全部子账净额和当前页分录；分录每批最多 500 个子账，核销每批一次读取。
+    //
+    // 读取失败时返回仓储错误；金额溢出语义沿用原逐笔折叠。
     pub(super) async fn receivable_facts(
         &self,
         account_ids: &[String],
@@ -205,12 +195,12 @@ mod tests {
     use super::super::list::{receivable_page_rows, receivable_summary};
     use super::*;
 
-    /// 测试使用真实分配金额进入生产顺序证明。
+    // 处理应收子账时，测试使用真实分配金额进入生产顺序证明。
     fn guard_for_test(rows: &[ReceiptAllocation]) -> bool {
         order_guard::order_independent(rows.iter().map(|row| row.allocated_amount))
     }
 
-    /// 构造来自仓储的有效分录事实。
+    // 处理应收子账时，生成来自仓储的有效分录事实。
     fn entry(id: &str, account: &str, sequence: u32) -> ReceivableEntry {
         ReceivableEntry {
             base: BaseModel { id: id.into(), ..BaseModel::fake() },
@@ -227,7 +217,7 @@ mod tests {
         }
     }
 
-    /// 构造正向或反向分配，不改变存储金额符号。
+    // 处理应收子账时，生成正向或反向分配，不改变存储金额符号。
     fn allocation(entry: &str, action: AllocationAction, amount: &str) -> ReceiptAllocation {
         ReceiptAllocation {
             base: BaseModel::fake(),
@@ -242,7 +232,7 @@ mod tests {
         }
     }
 
-    /// 构造实际分页组装所需的仓储投影行。
+    // 处理应收子账时，生成实际分页组装所需的仓储投影行。
     fn account(id: &str, order: &str, gross: &str) -> ReceivableAccountRow {
         let zero = Amount::zero();
         ReceivableAccountRow {
@@ -263,7 +253,7 @@ mod tests {
         }
     }
 
-    /// 构造已通过授权的真实销售来源实体。
+    // 处理应收子账时，生成已通过授权的真实销售来源实体。
     fn order(id: &str, owner: &str) -> SalesOrder {
         SalesOrder::new(
             SalesOrderId::new(id),
@@ -284,7 +274,7 @@ mod tests {
         .unwrap()
     }
 
-    /// 页行取走分录后，汇总仍使用同一净额并覆盖全部匹配行。
+    // 验证应收子账：页行取走分录后，汇总仍使用同一净额并覆盖全部匹配行。
     #[test]
     fn batched_receivable_facts_page_and_summary_share_net_amounts_without_reloading() {
         let rows = [account("a", "so-a", "100"), account("b", "so-b", "60")];
@@ -348,7 +338,7 @@ mod tests {
         assert_eq!(summary.unassigned, Amount::zero());
     }
 
-    /// 未开票、全额开票与红票冲减后的净额均沿用子账事实，不从应收余额推算。
+    // 验证应收子账：未开票、全额开票与红票冲减后的净额均沿用子账事实，不从应收余额推算。
     #[test]
     fn receivable_page_preserves_invoice_totals_in_response() {
         for (invoiced, remaining) in [("0.00", "165.00"), ("165.00", "0.00"), ("125.00", "40.00")] {
@@ -373,7 +363,7 @@ mod tests {
         }
     }
 
-    /// 单子账核销查询输入只含其完整分录，批量分录读取不合并核销边界。
+    // 验证应收子账：单子账核销查询输入只含其完整分录，批量分录读取不合并核销边界。
     #[test]
     fn batched_receivable_facts_keep_complete_single_account_allocation_query_keys() {
         let entries =
@@ -387,7 +377,7 @@ mod tests {
         assert!(entry_ids_by_account(&[]).is_empty());
     }
 
-    /// 单子账净额与当前页分录共享事实，同来源序号保持仓储顺序。
+    // 验证应收子账：单子账净额与当前页分录共享事实，同来源序号保持仓储顺序。
     #[test]
     fn batched_receivable_facts_group_shares_and_keep_page_entries() {
         let mut facts = ReceivableFacts::default();
@@ -423,7 +413,7 @@ mod tests {
         assert_eq!(facts.share("a"), "50.02".parse().unwrap());
     }
 
-    /// 批量查询结果按真实分录归账，交错正反流不能混入另一子账。
+    // 验证应收子账：批量查询结果按真实分录归账，交错正反流不能混入另一子账。
     #[test]
     fn batch_allocations_group_by_real_entry_and_keep_each_account_order() {
         let mut facts = ReceivableFacts::default();
@@ -444,7 +434,7 @@ mod tests {
         assert_eq!(facts.shares.len(), 3);
     }
 
-    /// 极值不进入新批流折叠，必须由调用方回读原单账 find；常规金额仍批量。
+    // 验证应收子账：极值不进入新批流折叠，必须由调用方回读原单账 find；常规金额仍批量。
     #[test]
     fn batch_guard_falls_back_before_any_extreme_decimal_operation() {
         let maximum = "79228162514264337593543950335";
@@ -475,7 +465,7 @@ mod tests {
         ]));
     }
 
-    /// 空事实、缺失子账和完全反向仍返回零额。
+    // 验证应收子账：空事实、缺失子账和完全反向仍返回零额。
     #[test]
     fn batched_receivable_facts_empty_missing_and_full_reverse_are_zero() {
         let mut facts = ReceivableFacts::default();
@@ -495,7 +485,7 @@ mod tests {
         assert!(facts.entries.is_empty());
     }
 
-    /// 单子账核销保留原查询返回顺序，极值边界不按正反动作重组。
+    // 验证应收子账：单子账核销保留原查询返回顺序，极值边界不按正反动作重组。
     #[test]
     fn batched_receivable_facts_preserve_single_account_order_near_amount_limit() {
         let max = "79228162514264337593543950335";
@@ -519,7 +509,7 @@ mod tests {
         assert_eq!(facts.share("b"), max.parse::<Amount>().unwrap().checked_sub("1".parse().unwrap()));
     }
 
-    /// 中间值溢出保持原逐笔运算的失败语义。
+    // 验证应收子账：中间值溢出保持原逐笔运算的失败语义。
     #[test]
     #[should_panic]
     fn batched_receivable_facts_keep_existing_overflow_behavior() {

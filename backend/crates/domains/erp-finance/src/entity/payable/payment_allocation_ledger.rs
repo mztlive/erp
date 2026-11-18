@@ -59,23 +59,17 @@ impl PaymentAllocationLedger {
     /// 完成既有净额计算（`APPLY` 加、`REVERSE` 减）、待过账合计与
     /// 「净已核销 + 本次合计不得超过付款金额」上限校验，并为本次待过账行
     /// 预分配连续序号（`max(allocation_seq) + 1` 起）。
-    ///
-    /// # 参数
-    /// * `payment_id` - 被核销付款单
-    /// * `payment_amount` - 付款单含税金额（上限）
-    /// * `existing` - 同一付款单已持久化核销分配
-    /// * `pending` - 本次待过账核销行（顺序即序号顺序）
-    ///
-    /// # 返回
     /// 返回校验通过、可逐行 [`Self::apply`] 的账本。
-    ///
-    /// # 错误
-    /// 净额/合计运算溢出、合计超过付款金额或序号区间溢出时返回
+    /// 失败条件：净额/合计运算溢出、合计超过付款金额或序号区间溢出时返回
     /// [`Error::LogicError`]，且不产生部分计划。
-    ///
-    /// # 约束
-    /// 不生成 ID、不读写数据库、不校验分录/供应商存在性；分录事实由
+    /// 调用边界：不生成 ID、不读写数据库、不校验分录/供应商存在性；分录事实由
     /// Service 装载后逐行传入 [`Self::apply`]。
+    ///
+    /// 输入约定：
+    /// - `payment_id`：被核销付款单
+    /// - `payment_amount`：付款单含税金额（上限）
+    /// - `existing`：同一付款单已持久化核销分配
+    /// - `pending`：本次待过账核销行（顺序即序号顺序）
     pub fn new(
         payment_id: SupplierPaymentId,
         payment_amount: Amount,
@@ -86,16 +80,14 @@ impl PaymentAllocationLedger {
     }
 
     /// 依据真实资金来源构建统一核销账本。
-    ///
-    /// # 参数
-    /// * `source` - 普通付款或已核实的预存款使用。
-    /// * `payment_amount` - 该来源实际可核销金额上限。
-    /// * `existing` - 同一来源的既有分配。
-    /// * `pending` - 本次待核销分配。
-    /// # 返回
     /// 返回保持金额、顺序及来源约束的账本。
-    /// # 错误
     /// 来源混用、身份非法、超额或溢出时拒绝。
+    ///
+    /// 输入约定：
+    /// - `source`：普通付款或已核实的预存款使用。
+    /// - `payment_amount`：该来源实际可核销金额上限。
+    /// - `existing`：同一来源的既有分配。
+    /// - `pending`：本次待核销分配。
     pub fn for_source(
         source: PaymentAllocationSource,
         payment_amount: Amount,
@@ -144,24 +136,18 @@ impl PaymentAllocationLedger {
     /// 开放余额充足（既有占用 + 本次已过账行 + 本行不超过分录含税金额），
     /// 随后构造核销分配并按分录所属子账聚合增量。调用方必须按 `new` 时的
     /// `pending` 顺序逐行调用，且先完成分录/子账存在性与跨供应商一致性校验。
-    ///
-    /// # 参数
-    /// * `line` - 待过账核销行，必须等于 `pending[applied_count]`
-    /// * `entry` - 该行已装载的应付分录事实
-    /// * `allocation_id` - 本行核销分配 ID（由 Service 生成后注入）
-    /// * `allocated_at` - 核销发生时间（由 Service 注入）
-    ///
-    /// # 返回
-    /// 本行核销构造成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 传入行与冻结顺序不一致、分录事实与行不一致、超出待过账行数、开放
+    /// 结果：本行核销构造成功返回 `Ok(())`。
+    /// 失败条件：传入行与冻结顺序不一致、分录事实与行不一致、超出待过账行数、开放
     /// 余额不足或金额运算溢出时返回 [`Error::LogicError`]；本行写入全部
     /// 在校验通过后提交，失败保持调用前状态。
-    ///
-    /// # 约束
-    /// 纯内存计算，不依赖数据库自然顺序；并发正确性由 Service 的条件更新
+    /// 调用边界：纯内存计算，不依赖数据库自然顺序；并发正确性由 Service 的条件更新
     /// 与事务保证。
+    ///
+    /// 输入约定：
+    /// - `line`：待过账核销行，必须等于 `pending[applied_count]`
+    /// - `entry`：该行已装载的应付分录事实
+    /// - `allocation_id`：本行核销分配 ID（由 Service 生成后注入）
+    /// - `allocated_at`：核销发生时间（由 Service 注入）
     pub fn apply(
         &mut self,
         line: &PendingPaymentAllocation,
@@ -214,54 +200,28 @@ impl PaymentAllocationLedger {
     }
 
     /// 返回本次构造的核销分配。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回按待过账行顺序排列的分配切片，供 Service 批量持久化。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    ///
-    /// # 约束
-    /// 调用方不能修改账本；事务与持久化职责仍属于 Service。
+    /// 调用边界：调用方不能修改账本；事务与持久化职责仍属于 Service。
     pub fn new_allocations(&self) -> &[PaymentAllocation] {
         &self.allocations
     }
 
     /// 返回按子账聚合的本次核销增量。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回 `(子账, 增量金额)` 列表，按待过账行首次出现顺序排列（确定性），
     /// 供 Service 按子账执行并发安全的条件核销。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    ///
-    /// # 约束
-    /// 聚合只保证金额守恒；子账存在性与供应商一致性由 Service 校验。
+    /// 调用边界：聚合只保证金额守恒；子账存在性与供应商一致性由 Service 校验。
     pub fn account_settlement_deltas(&self) -> &[(PayableAccountId, Amount)] {
         &self.account_deltas
     }
 
-    /// 校验传入行即冻结的下一待过账行，并返回该行预分配序号。
-    ///
-    /// # 参数
-    /// * `line` - 调用方传入的待过账行
-    ///
-    /// # 返回
-    /// 行身份与顺序匹配时返回该行连续序号。
-    ///
-    /// # 错误
-    /// 已用尽待过账行或传入行不是 `pending[applied_count]` 时返回
-    /// [`Error::LogicError`]。
-    ///
-    /// # 约束
-    /// 不修改账本；序号在 [`Self::new`] 时已预分配。
+    // 校验传入行即冻结的下一待过账行，并返回该行预分配序号。
+    // 结果：行身份与顺序匹配时返回该行连续序号。
+    // 失败条件：已用尽待过账行或传入行不是 `pending[applied_count]` 时返回
+    // [`Error::LogicError`]。
+    // 调用边界：不修改账本；序号在 [`Self::new`] 时已预分配。
+    //
+    // 输入约定：
+    // - `line`：调用方传入的待过账行
     fn expected_seq(&self, line: &PendingPaymentAllocation) -> Result<u32> {
         let expected =
             self.pending.get(self.applied_count).ok_or_else(|| Error::from("核销计划行数超过待过账行数"))?;
@@ -272,33 +232,19 @@ impl PaymentAllocationLedger {
     }
 
     /// 返回净已核销合计（既有净额 + 本次待过账合计）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回 `APPLY` 加、`REVERSE` 减后的净核销总额。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    ///
-    /// # 约束
-    /// 只反映构造时的事实快照；付款金额守恒由 [`Self::new`] 保证。
+    /// 调用边界：只反映构造时的事实快照；付款金额守恒由 [`Self::new`] 保证。
     pub fn net_allocated_total(&self) -> Amount {
         self.net_allocated_total
     }
 }
 
-/// 既有分配行的符号化净额增量（`APPLY` 为正、`REVERSE` 为负），与回款账本同语义。
-///
-/// # 参数
-/// * `allocation` - 已持久化付款核销分配
-///
-/// # 返回
-/// 返回可直接累加的符号化金额。
-///
-/// # 错误
-/// 取反溢出时返回 [`Error::LogicError`]。
+// 既有分配行的符号化净额增量（`APPLY` 为正、`REVERSE` 为负），与回款账本同语义。
+// 返回可直接累加的符号化金额。
+// 失败条件：取反溢出时返回 [`Error::LogicError`]。
+//
+// 输入约定：
+// - `allocation`：已持久化付款核销分配
 fn signed_existing_delta(allocation: &PaymentAllocation) -> Result<Amount> {
     match allocation.allocation_action {
         AllocationAction::Apply => Ok(allocation.allocated_amount),
@@ -306,16 +252,12 @@ fn signed_existing_delta(allocation: &PaymentAllocation) -> Result<Amount> {
     }
 }
 
-/// 返回金额的相反数（仅用于 `REVERSE` 方向的净额扣减）。
-///
-/// # 参数
-/// * `amount` - 正数金额
-///
-/// # 返回
-/// 返回符号相反且数值相等的金额。
-///
-/// # 错误
-/// 取反溢出时返回 [`Error::LogicError`]。
+// 返回金额的相反数（仅用于 `REVERSE` 方向的净额扣减）。
+// 返回符号相反且数值相等的金额。
+// 失败条件：取反溢出时返回 [`Error::LogicError`]。
+//
+// 输入约定：
+// - `amount`：正数金额
 fn negate_amount(amount: Amount) -> Result<Amount> {
     let negated = -amount.to_decimal();
     Amount::try_from(negated).map_err(|_| Error::from("核销金额合计溢出"))

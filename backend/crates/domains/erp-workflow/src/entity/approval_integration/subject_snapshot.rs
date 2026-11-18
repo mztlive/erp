@@ -98,19 +98,11 @@ impl ApprovalSubjectSnapshot {
     ///
     /// 金额与数量按单据类型强制校验，不得保存任意 Map 或未约束 JSON。
     ///
-    /// # 参数
-    /// * `id` - 快照主键
-    /// * `approval_process_instance_id` - 关联实例
-    /// * `document_type` - 单据类型
-    /// * `business_object_id` - 业务对象主键
-    /// * `subject_version` - 冻结提交版本
-    /// * `payload` - 有界快照字段
-    ///
-    /// # 返回
     /// 返回尚未附带展示快照和材料文件的业务对象快照。
     ///
-    /// # 错误
     /// 必填字段缺失、超长或类型要求的金额/数量缺失时返回错误。
+    ///
+    /// `subject_version`：冻结提交版本。
     pub fn new(
         id: ApprovalSubjectSnapshotId,
         approval_process_instance_id: ApprovalProcessInstanceId,
@@ -140,15 +132,11 @@ impl ApprovalSubjectSnapshot {
     }
 
     /// 校验前次审批并冻结本次重新提交说明。
-    ///
-    /// # 参数
-    /// * `previous` - 排除当前实例后的最近审批实例。
-    /// * `reason` - 本次请求说明。
-    /// * `actor_id` - 已认证的本次提交人。
-    /// # 返回
     /// 返回应关闭待处理任务的已驳回实例 ID；没有时返回空。
-    /// # 错误
+    ///
     /// 身份不符、旧实例未结束、版本未递增、驳回后缺说明或说明超长时拒绝。
+    ///
+    /// `previous`：排除当前实例后的最近审批实例；`actor_id`：已认证的本次提交人。
     pub fn record_resubmission(
         &mut self,
         previous: Option<&ApprovalProcessInstance>,
@@ -187,13 +175,11 @@ impl ApprovalSubjectSnapshot {
     }
 
     /// 在材料展示冻结后补充本次重新提交说明。
-    ///
-    /// # 参数
-    /// 无；读取已校验的说明与展示快照。
-    /// # 返回
     /// 说明追加到冻结展示资料，首次提交不追加。
-    /// # 错误
+    ///
     /// 有说明但缺少展示资料，或追加后超出展示边界时返回错误。
+    ///
+    /// 读取已校验的说明与展示快照。
     pub fn freeze_resubmission_display(&mut self) -> Result<()> {
         let Some(reason) = self.resubmission_reason.as_ref() else {
             return Ok(());
@@ -207,12 +193,8 @@ impl ApprovalSubjectSnapshot {
     }
 
     /// 为新提交快照冻结已由业务领域证明的材料文件引用。
-    ///
-    /// # 参数
-    /// * `ids` - 当前业务版本实际关联的文件资产 ID，最多 100 个。
-    /// # 返回
     /// 返回去重并稳定排序的快照；本方法不生成文件读取授权。
-    /// # 错误
+    ///
     /// 超量、空白或非法长度 ID 时拒绝整个快照。
     pub fn with_material_files(mut self, mut files: Vec<ApprovalMaterialFile>) -> Result<Self> {
         if files.len() > MATERIAL_FILE_LIMIT {
@@ -233,14 +215,11 @@ impl ApprovalSubjectSnapshot {
     }
 
     /// 证明材料属于精确运行实例及其冻结提交版本。
-    ///
-    /// # 参数
-    /// * `instance_id` / `document_type` / `document_id` / `version` - 已授权运行主体。
-    /// * `file_id` - 本次请求的文件资产 ID。
-    /// # 返回
     /// 所有主体引用和冻结允许清单同时匹配时返回 true；调用方仍须证明参与或管理资格。
-    /// # 错误
-    /// 无；旧快照、缺失引用、串实例或串版本均返回 false。
+    ///
+    /// 旧快照、缺失引用、串实例或串版本均返回 false。
+    ///
+    /// `instance_id` / `document_type` / `document_id` / `version`：已授权运行主体；`file_id`：本次请求的文件资产 ID。
     pub fn allows_runtime_material(
         &self,
         instance_id: &str,
@@ -258,21 +237,15 @@ impl ApprovalSubjectSnapshot {
                 .any(|file| file.file_asset_id.as_ref() == file_id && file.validate().is_ok())
     }
 
-    /// 校验冻结快照与运行时主体的三项不可变引用完全一致。
+    /// 核验冻结快照与运行时主体的三项不可变引用完全一致。
+    /// 三项比较均不可省略；字符串不裁剪、不折叠大小写，也不接受任何别名。
     ///
-    /// # 参数
-    /// * `document_type` - 运行时解析出的单据类型
-    /// * `business_object_id` - 运行时主体持有的业务对象主键
-    /// * `subject_version` - 运行时实例冻结的提交版本
-    ///
-    /// # 返回
     /// 单据类型、业务对象主键和提交版本全部精确一致时返回 `Ok(())`。
     ///
-    /// # 错误
     /// 按单据类型、业务对象主键、提交版本的固定顺序返回首个不匹配错误。
     ///
-    /// # 关键业务约束
-    /// 三项比较均不可省略；字符串不裁剪、不折叠大小写，也不接受任何别名。
+    /// `document_type`：运行时解析出的单据类型；`business_object_id`：运行时主体持有的业务对象主键。
+    /// `subject_version`：运行时实例冻结的提交版本。
     pub fn ensure_matches_runtime_subject(
         &self,
         document_type: DocumentType,
@@ -292,10 +265,8 @@ impl ApprovalSubjectSnapshot {
     }
 }
 
-/// 规范化快照载荷并按单据类型校验金额/数量必填范围。
-///
-/// # 错误
-/// 文本非法或必填合计缺失时返回错误。
+// 规范化快照载荷并按单据类型校验金额/数量必填范围。
+// 文本非法或必填合计缺失时返回错误。
 fn normalize_payload(
     document_type: DocumentType,
     payload: ApprovalSubjectSnapshotPayload,
@@ -327,10 +298,8 @@ fn normalize_payload(
     })
 }
 
-/// 按合同 §4.4.5 校验金额与数量必填范围。
-///
-/// # 错误
-/// 对应类型缺少必填合计时返回错误。
+// 按合同 §4.4.5 校验金额与数量必填范围。
+// 对应类型缺少必填合计时返回错误。
 fn ensure_required_totals(
     document_type: DocumentType,
     total_amount: Option<&Amount>,
@@ -345,7 +314,7 @@ fn ensure_required_totals(
     Ok(())
 }
 
-/// 资金、销售、采购、变更、退款、冲正类必须冻结金额。
+// 生成或验证提交快照时，判定资金、销售、采购、变更、退款及冲正类单据何时必须附金额。
 fn requires_amount(document_type: DocumentType) -> bool {
     matches!(
         document_type,
@@ -365,7 +334,7 @@ fn requires_amount(document_type: DocumentType) -> bool {
     )
 }
 
-/// 库存调整、销售、采购类必须冻结数量。
+// 验证冻结提交材料时要求库存调整、销售及采购类单据提供数量，其他类型不在此增加必填条件。
 fn requires_quantity(document_type: DocumentType) -> bool {
     matches!(
         document_type,
@@ -493,7 +462,7 @@ mod tests {
         );
     }
 
-    /// 快照规范化文本，并与实例一一对应。
+    // 验证：快照规范化文本，并与实例一一对应。
     #[test]
     fn snapshot_normalizes_and_binds_instance() {
         let snapshot = ApprovalSubjectSnapshot::new(
@@ -511,7 +480,7 @@ mod tests {
         assert_eq!(snapshot.subject_version, 1);
     }
 
-    /// 库存调整缺少数量合计必须失败。
+    // 验证：库存调整缺少数量合计必须失败。
     #[test]
     fn stock_adjustment_requires_quantity() {
         let mut payload = stock_payload();
@@ -529,7 +498,7 @@ mod tests {
         );
     }
 
-    /// 回款单缺少金额合计必须失败。
+    // 验证：回款单缺少金额合计必须失败。
     #[test]
     fn receipt_requires_amount() {
         assert!(
@@ -545,19 +514,12 @@ mod tests {
         );
     }
 
-    /// 验证运行时主体的三项精确引用可以匹配冻结快照。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 三项引用完全一致时测试通过。
-    ///
-    /// # 错误
-    /// 任一相等值被误判为不匹配时测试失败。
-    ///
-    /// # 关键业务约束
-    /// 正常路径必须同时比较单据类型、业务对象主键和提交版本。
+    // 验证运行时主体的三项精确引用可以匹配冻结快照。
+    // 正常路径必须同时比较单据类型、业务对象主键和提交版本。
+    //
+    // 三项引用完全一致时测试通过。
+    //
+    // 任一相等值被误判为不匹配时测试失败。
     #[test]
     fn runtime_subject_exact_match_succeeds() {
         let snapshot = ApprovalSubjectSnapshot::new(
@@ -573,19 +535,12 @@ mod tests {
         assert!(snapshot.ensure_matches_runtime_subject(DocumentType::StockAdjustment, "adj-1", 1).is_ok());
     }
 
-    /// 验证三项主体不匹配按固定顺序失败且不做规范化。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 每类不匹配都返回对应确定错误时测试通过。
-    ///
-    /// # 错误
-    /// 任一比较被省略、顺序变化或空白输入被裁剪时测试失败。
-    ///
-    /// # 关键业务约束
-    /// 单据类型优先于主键，主键优先于版本；零版本和空白变体仍按原值比较。
+    // 验证三项主体不匹配按固定顺序失败且不做规范化。
+    // 单据类型优先于主键，主键优先于版本；零版本和空白变体仍按原值比较。
+    //
+    // 每类不匹配都返回对应确定错误时测试通过。
+    //
+    // 任一比较被省略、顺序变化或空白输入被裁剪时测试失败。
     #[test]
     fn runtime_subject_mismatches_are_deterministic_and_strict() {
         let snapshot = ApprovalSubjectSnapshot::new(
@@ -684,7 +639,7 @@ mod tests {
         );
     }
 
-    /// BSON 往返保持有界结构。
+    // 验证 BSON 序列化与反序列化保持有界结构。
     #[test]
     fn snapshot_roundtrips_through_bson() {
         let snapshot = ApprovalSubjectSnapshot::new(

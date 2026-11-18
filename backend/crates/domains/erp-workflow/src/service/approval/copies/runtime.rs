@@ -18,14 +18,11 @@ use crate::repository::approval_copy::ApprovalCopyExt;
 use crate::repository::{ApprovalIntegrationExt, ApprovalSubjectSnapshotRepositoryExt, BpmExt};
 
 /// 启动事务生成一次流程开始抄送；旧定义无配置时零写入。
-/// # 参数
-/// * `identity_service` - 同一应用注入的共享身份与权限服务。
+/// 实例不匹配、配置损坏或数据库失败时中止提交。
+///
+/// `identity_service`：同一应用注入的共享身份与权限服务。
 ///
 /// 数据库、当前授权端口、已冻结快照和提交事务。
-/// # 返回
-/// 无。
-/// # 错误
-/// 实例不匹配、配置损坏或数据库失败时中止提交。
 pub async fn persist_started_copy(
     identity_service: &SharedRbacService,
     db: &Database,
@@ -46,14 +43,13 @@ pub async fn persist_started_copy(
 }
 
 /// 决定或取消原事务中按绑定版本追加抄送。
-/// # 参数
-/// * `identity_service` - 同一应用注入的共享身份与权限服务。
+/// 无；恢复与受阻事件不产生记录。
+///
+/// 快照不匹配、数据库或账号读取失败时回滚。
+///
+/// `identity_service`：同一应用注入的共享身份与权限服务。
 ///
 /// 数据库、授权端口、实例、已接受事件和原事务。
-/// # 返回
-/// 无；恢复与受阻事件不产生记录。
-/// # 错误
-/// 快照不匹配、数据库或账号读取失败时回滚。
 pub async fn persist_copies(
     identity_service: &SharedRbacService,
     db: &Database,

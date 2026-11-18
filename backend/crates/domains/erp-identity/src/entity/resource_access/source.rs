@@ -17,12 +17,11 @@ pub enum ResourceKind {
 }
 impl ResourceKind {
     /// 固定读取范围动作，拒绝把记录读取权用于原单据写入。
-    /// # 参数
-    /// entry_permission 为服务端登记并解析的实际入口权限。
-    /// # 返回
     /// 同资源列表采用 list，其余读取来源采用 detail。
-    /// # 错误
+    ///
     /// 同资源非读取动作拒绝；跨资源入口仍须由统一解析器校验功能权限。
+    ///
+    /// entry_permission 为服务端登记并解析的实际入口权限。
     pub fn scope_action(self, entry_permission: &Permission) -> Result<&'static str> {
         if entry_permission.resource() == self.code() {
             return match entry_permission.action() {
@@ -34,12 +33,7 @@ impl ResourceKind {
         Ok("detail")
     }
     /// 取得固定资源代码。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 权限目录资源名。
-    /// # 错误
-    /// 不返回错误。
     pub fn code(self) -> &'static str {
         match self {
             Self::SalesOrder => resources::SALES_ORDER,
@@ -57,12 +51,11 @@ pub struct SourceKey {
 }
 impl SourceKey {
     /// 校验并生成无分隔符碰撞的来源身份。
-    /// # 参数
-    /// 无；字段来自可信业务来源。
-    /// # 返回
     /// 结构化来源身份的完整 JSON 编码。
-    /// # 错误
+    ///
     /// 空值、超长或未规范化身份拒绝。
+    ///
+    /// 字段来自可信业务来源。
     pub fn id(&self) -> Result<String> {
         for value in [&self.rule, &self.business_type, &self.business_id, &self.recipient] {
             if normalize_required_text_ref(value, "来源身份不能为空", 128, "来源身份过长")? != *value
@@ -80,13 +73,12 @@ pub struct GrantTarget {
     pub id: String,
 }
 impl GrantTarget {
-    /// 校验完整目标集合并去重。
-    /// # 参数
-    /// targets 为来源计算出的全部读取目标。
-    /// # 返回
-    /// 排序后的唯一目标，空集表示明确清空。
-    /// # 错误
-    /// 超过 1000 项、空或未规范化身份拒绝。
+    // 校验完整目标集合并去重。
+    // 排序后的唯一目标，空集表示明确清空。
+    //
+    // 超过 1000 项、空或未规范化身份拒绝。
+    //
+    // targets 为来源计算出的全部读取目标。
     fn normalize(mut targets: Vec<Self>) -> Result<Vec<Self>> {
         if targets.len() > 1000 {
             return Err(Error::ValidationError("单来源最多 1000 个目标".into()));
@@ -118,22 +110,16 @@ pub struct GrantSource {
 }
 impl GrantSource {
     /// 取得当前来源影响的资源类型。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 去重后的资源类型，供修改前后取并集并递增授权修订号。
-    /// # 错误
-    /// 不返回错误。
     pub fn resources(&self) -> BTreeSet<ResourceKind> {
         self.targets.iter().map(|target| target.resource).collect()
     }
     /// 构造尚未应用事实的来源。
-    /// # 参数
-    /// key 为稳定来源身份。
-    /// # 返回
     /// 等待首次应用的来源。
-    /// # 错误
+    ///
     /// 来源身份非法时拒绝。
+    ///
+    /// key 为稳定来源身份。
     pub fn new(key: SourceKey) -> Result<Self> {
         Ok(Self {
             base: BaseModel::new(key.id()?),
@@ -147,12 +133,11 @@ impl GrantSource {
         })
     }
     /// 原子计算来源的新状态；失败不修改当前值。
-    /// # 参数
-    /// rule_version、fact_version 为可信正版本；targets 是完整结果；operator、reason 为审计事实。
-    /// # 返回
     /// 是否发生变化；完全相同的重放返回 false。
-    /// # 错误
+    ///
     /// 终止、版本倒退、同版本异载荷及非法输入拒绝。
+    ///
+    /// rule_version、fact_version 为可信正版本；targets 是完整结果；operator、reason 为审计事实。
     pub fn apply(
         &mut self,
         rule_version: u64,
@@ -192,12 +177,11 @@ impl GrantSource {
         Ok(true)
     }
     /// 永久终止单一来源，不影响其他来源。
-    /// # 参数
-    /// operator、reason 为撤销审计事实。
-    /// # 返回
     /// 首次终止为 true，重放为 false。
-    /// # 错误
+    ///
     /// 操作人或原因非法时拒绝。
+    ///
+    /// operator、reason 为撤销审计事实。
     pub fn revoke(&mut self, operator: &str, reason: &str) -> Result<bool> {
         let operator = normalize_required_text_ref(operator, "操作人不能为空", 128, "操作人过长")?;
         let reason = normalize_required_text_ref(reason, "撤销原因不能为空", 512, "原因过长")?;

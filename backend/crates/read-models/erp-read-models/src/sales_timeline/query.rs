@@ -10,12 +10,14 @@ use crate::Result;
 use crate::sales_center::access::SalesAccess;
 
 impl SalesTimelineReadService {
-    /// 在同一读取事务校验销售单和关联单据权限后返回时间线。
+    /// 准备销售全流程动态时，在同一读取事务校验销售单和关联单据权限后返回时间线。
     ///
     /// # 参数
     /// `actor` 为认证账号，`id` 为销售单，`query` 为业务分类与游标。
+    ///
     /// # 返回
     /// 返回有权查看的历史事件及下一页位置；不修改业务状态。
+    ///
     /// # 错误
     /// 权限不足、参数无效及数据库故障均返回错误。
     pub async fn sales(&self, actor: &AuditActor, id: &str, query: TimelineQuery) -> Result<TimelinePage> {

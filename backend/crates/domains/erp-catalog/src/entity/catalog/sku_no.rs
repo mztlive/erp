@@ -22,17 +22,9 @@ pub struct SkuNoSequence {
 }
 
 impl SkuNoSequence {
-    /// 创建 SKU 编号序列。
+    /// 创建 SKU 编号序列。返回从 `-01` 开始取号的序列。
     ///
-    /// # 参数
-    /// * `product_no` - 所属商品编号
-    /// * `taken` - 已占用的 SKU 编号（既有 SKU 与本次显式填写的编号）
-    ///
-    /// # 返回
-    /// 返回从 `-01` 开始取号的序列。
-    ///
-    /// # 错误
-    /// 无。
+    /// `taken` 为已占用的 SKU 编号（既有 SKU 与本次显式填写的编号）。
     pub fn new(product_no: &str, taken: impl IntoIterator<Item = String>) -> Self {
         let product_no = product_no.trim();
         let sku_prefix = match product_no.strip_prefix("SPU") {
@@ -47,16 +39,7 @@ impl SkuNoSequence {
         }
     }
 
-    /// 取下一个未占用编号，并登记为已占用。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回以 `SKU` 开头、以 `-NN` 规格序号结尾的编号。
-    ///
-    /// # 错误
-    /// 无。
+    /// 取下一个未占用编号，并登记为已占用。返回以 `SKU` 开头、以 `-NN` 规格序号结尾的编号。
     pub fn next_no(&mut self) -> String {
         loop {
             let candidate = format!("{}-{:02}", self.sku_prefix, self.next_index);

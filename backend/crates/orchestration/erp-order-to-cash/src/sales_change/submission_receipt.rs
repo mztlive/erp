@@ -15,7 +15,7 @@ use persistence_core::Executor;
 
 use crate::{Error, Result};
 
-/// 先证明当前提交资格，再按固定命令ID回读原提交和原实例，完全不使用current_submission_id。
+// 先证明当前提交资格，再按固定命令ID回读原提交和原实例，完全不使用current_submission_id。
 pub(super) async fn replay_submission(
     db: &Database,
     authorization: Arc<AuthorizationService>,
@@ -36,7 +36,7 @@ pub(super) async fn replay_submission(
     .await
 }
 
-/// 只有本独立回执的唯一索引竞争允许进入只读结果恢复。
+// 只有本独立回执的唯一索引竞争允许进入只读结果恢复。
 pub(super) fn receipt_write_error(error: persistence_core::Error) -> Error {
     if error.duplicate_index_name() == Some("uk_sales_command_receipts_id") {
         Error::ReceiptDuplicate(error)
@@ -117,7 +117,7 @@ impl ReplaySource for MongoReplay<'_> {
     }
 }
 
-/// 所有恢复分支只执行此顺序；拒绝授权时不得读取回执或任何历史目标。
+// 所有恢复分支只执行此顺序；拒绝授权时不得读取回执或任何历史目标。
 async fn replay(
     source: &impl ReplaySource,
     command: &SalesChangeSubmissionCommand,
@@ -208,7 +208,7 @@ mod tests {
         }
     }
 
-    /// 正常提交与回执恢复先验证独立入口；资格取证失败时不能触及变更或回执仓储。
+    // 正常提交与回执恢复先验证独立入口；资格取证失败时不能触及变更或回执仓储。
     #[tokio::test]
     async fn submission_entry_is_checked_before_loading_change_or_receipt() {
         let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
@@ -235,7 +235,7 @@ mod tests {
         assert!(matches!(error, Error::ValidationError(message) if message == "写入授权必须使用快照事务"));
     }
 
-    /// 后续 S2 已存在时原 K1 仍精确恢复 S1，不读 S2、不写任何事实。
+    // 后续 S2 已存在时原 K1 仍精确恢复 S1，不读 S2、不写任何事实。
     #[tokio::test]
     async fn original_request_replays_first_instance_after_second_submission() {
         let first = record(4, "k1", 1);
@@ -251,7 +251,7 @@ mod tests {
         assert_eq!(source.receipts[&second.command.id], second);
     }
 
-    /// 撞键/提交未知恢复复用本函数，不能把版本5提交当成版本4请求的成功结果。
+    // 撞键/提交未知恢复复用本函数，不能把版本5提交当成版本4请求的成功结果。
     #[tokio::test]
     async fn duplicate_or_unknown_recovery_rejects_another_source_version() {
         let winner = record(5, "same-key", 1);
@@ -281,7 +281,7 @@ mod tests {
         );
     }
 
-    /// 相同操作号改说明或持久化提交来源版本不符均失败关闭。
+    // 相同操作号改说明或持久化提交来源版本不符均失败关闭。
     #[tokio::test]
     async fn replay_refuses_changed_explanation_and_mismatched_frozen_fact() {
         let original = record(4, "key", 1);
@@ -299,7 +299,7 @@ mod tests {
         ));
     }
 
-    /// 当前授权撤销后即使原回执存在也不能读取或恢复原提交。
+    // 当前授权撤销后即使原回执存在也不能读取或恢复原提交。
     #[tokio::test]
     async fn replay_checks_current_permission_before_receipt_or_submission() {
         let original = record(4, "key", 1);
@@ -319,7 +319,7 @@ mod tests {
         assert_eq!(source.calls.lock().unwrap().as_slice(), ["authorize"]);
     }
 
-    /// 旧数据没有完整命令回执时不根据当前提交或历史序号猜测成功。
+    // 旧数据没有完整命令回执时不根据当前提交或历史序号猜测成功。
     #[tokio::test]
     async fn missing_command_receipt_is_not_a_successful_replay() {
         let original = record(4, "key", 1);

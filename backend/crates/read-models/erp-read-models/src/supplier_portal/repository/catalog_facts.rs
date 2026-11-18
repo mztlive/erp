@@ -5,16 +5,9 @@ use erp_catalog::CatalogExt;
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
 
-/// 沿两个稳定身份的当前指针取数，拒绝不属于该身份的修订。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回目录聚合阶段。只保留当前有效 SKU、商品、修订和计量单位。
-///
-/// # 错误
-/// 不返回错误。
+// 沿两个稳定身份的当前指针取数，不接受不属于该身份的修订。
+//
+// 返回目录聚合阶段。只保留当前有效 SKU、商品、修订和计量单位。
 pub(super) fn current_catalog_facts() -> Vec<Document> {
     let mut pipeline =
         vec![doc! {"$match":{"sku.status":"active","sku.deleted_at":NOT_DELETED_TIMESTAMP_BSON}}];
@@ -38,18 +31,14 @@ pub(super) fn current_catalog_facts() -> Vec<Document> {
     pipeline
 }
 
-/// 使用正式领域集合常量取得一对一展示事实。
-///
-/// # 参数
-/// * `collection` - 正式领域集合名。
-/// * `local` - 本地关联字段。
-/// * `alias` - 展开后的字段名。
-///
-/// # 返回
-/// 返回 `$lookup` 与 `$unwind` 两段。未命中关联会被展开丢掉。
-///
-/// # 错误
-/// 不返回错误。
+// 组装门户商品与图片事实时，使用正式领域集合常量取得一对一展示事实。
+//
+// 调用参数：
+// * `collection` - 正式领域集合名。
+// * `local` - 本地关联字段。
+// * `alias` - 展开后的字段名。
+//
+// 返回 `$lookup` 与 `$unwind` 两段。未命中关联会被展开丢掉。
 pub(super) fn join(collection: &str, local: &str, alias: &str) -> Vec<Document> {
     vec![
         doc! {"$lookup":{"from":collection,"localField":local,"foreignField":"id","as":alias}},
@@ -57,21 +46,14 @@ pub(super) fn join(collection: &str, local: &str, alias: &str) -> Vec<Document> 
     ]
 }
 
-/// 公共图片仅来自精确当前商品修订的首张轮播图，附件和历史修订不参与。
+// 处理门户商品与图片事实时，公共图片仅来自精确当前商品修订的首张轮播图，附件和历史修订不参与。
 fn current_product_image() -> Document {
     doc! {"$lookup":{"from":<Database as CatalogExt>::PRODUCT_REVISION_MEDIAS,"let":{"revision_id":"$product_revision.id"},"pipeline":[{"$match":{"media_role":"carousel","deleted_at":NOT_DELETED_TIMESTAMP_BSON,"$expr":{"$eq":["$product_revision_id","$$revision_id"]}}},{"$sort":{"sort_order":1,"id":1}},{"$limit":1},{"$project":{"_id":0,"file_asset_id":1}}],"as":"product_image"}}
 }
 
-/// 目录和图片来源解析共用相同的允许列表，冻结两个身份及当前修订版本。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回只含允许字段的 `$project` 阶段。
-///
-/// # 错误
-/// 不返回错误。
+// 组装门户商品与图片事实的聚合管道时，目录和图片来源解析共用相同的允许列表，冻结两个身份及当前修订版本。
+//
+// 返回只含允许字段的 `$project` 阶段。
 pub(super) fn catalog_projection() -> Document {
     doc! {"$project":{"_id":0,"id":"$sku.id","sku_no":"$sku.sku_no","name":"$revision.name","specification_signature":"$sku.specification_signature","unit_id":"$unit.id","unit_name":"$unit.name","unit_precision":"$unit.quantity_scale","image_asset_id":"$revision.source_main_image_asset_id","product_image_asset_id":{"$ifNull":[{"$arrayElemAt":["$product_image.file_asset_id",0]},null]},"product_kind":"$product.product_kind","version":"$sku.version","product_id":"$product.id","listing_status":{"$ifNull":["$sku.listing_status","listed"]},"own_offering_id":{"$ifNull":[{"$arrayElemAt":["$own_offering.id",0]},null]},"target_version":{"sku_version":"$sku.version","sku_revision_id":"$revision.id","sku_revision_version":"$revision.version","product_id":"$product.id","product_version":"$product.version","product_revision_id":"$product_revision.id","product_revision_version":"$product_revision.version","unit_id":"$unit.id","unit_version":"$unit.version"}}}
 }

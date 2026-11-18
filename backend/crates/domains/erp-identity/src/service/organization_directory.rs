@@ -17,23 +17,21 @@ pub struct OrganizationDirectoryService {
 
 impl OrganizationDirectoryService {
     /// 绑定组织事实数据库。
-    /// # 参数
-    /// db 为身份数据库。
-    /// # 返回
     /// 不缓存组织快照的目录服务。
-    /// # 错误
+    ///
     /// 不执行 I/O。
+    ///
+    /// db 为身份数据库。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
     /// 展开启用组织及可选下级。
-    /// # 参数
-    /// ids 为筛选组织，include_descendants 控制下级展开，executor 为原执行器。
-    /// # 返回
     /// 排序去重的有效组织集合。
-    /// # 错误
+    ///
     /// 未知组织、非法组织树或读取失败时返回错误。
+    ///
+    /// ids 为筛选组织，include_descendants 控制下级展开，executor 为原执行器。
     pub async fn expand_org_units(
         &self,
         ids: &[String],
@@ -50,12 +48,11 @@ impl OrganizationDirectoryService {
     }
 
     /// 读取指定组织在给定时点的有效成员。
-    /// # 参数
-    /// ids 为组织集合，at 为解释时点，executor 为原执行器。
-    /// # 返回
     /// 排序去重的有效成员账号 ID。
-    /// # 错误
+    ///
     /// 组织事实读取失败时返回错误。
+    ///
+    /// ids 为组织集合，at 为解释时点，executor 为原执行器。
     pub async fn org_member_ids(
         &self,
         ids: &BTreeSet<String>,
@@ -76,12 +73,11 @@ impl OrganizationDirectoryService {
     }
 
     /// 查询账号在给定时点的唯一主属组织。
-    /// # 参数
-    /// user 为真实账号，at 为解释时点，executor 为原执行器。
-    /// # 返回
     /// 主属组织 ID；没有主属组织时为 None。
-    /// # 错误
+    ///
     /// 读取失败或存在重叠主属关系时返回错误。
+    ///
+    /// user 为真实账号，at 为解释时点，executor 为原执行器。
     pub async fn own_org(
         &self,
         user: &str,
@@ -94,12 +90,11 @@ impl OrganizationDirectoryService {
     }
 
     /// 查询账号当前唯一主属组织及下一次关系变化边界。
-    /// # 参数
-    /// user 为明确账号，at 为授权解释时点，executor 为原执行器。
-    /// # 返回
     /// 当前组织及最近未来生效或失效时点；无关系时组织为 None。
-    /// # 错误
+    ///
     /// 查询失败或当前存在重叠主属关系时返回错误。
+    ///
+    /// user 为明确账号，at 为授权解释时点，executor 为原执行器。
     pub async fn own_org_with_validity(
         &self,
         user: &str,

@@ -11,23 +11,13 @@ pub enum SupplierConnectorType {
 
 impl SupplierConnectorType {
     /// 返回当前程序已实现的接口类型。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 可用于新建连接的类型清单；不表示部署已配置凭据。
-    /// # 错误
-    /// 不返回错误。
     pub const fn all() -> [Self; 2] {
         [Self::Dangaoshushu, Self::JdVop]
     }
 
-    /// 返回接口类型的中文名称。
-    /// # 参数
-    /// 无。
-    /// # 返回
+    /// 为 `SupplierConnectorType` 提供中文展示名；界面展示时使用，不以文案作为稳定标识。
     /// 可直接展示的名称。
-    /// # 错误
-    /// 不返回错误。
     pub fn label(self) -> &'static str {
         match self {
             Self::Dangaoshushu => "蛋糕叔叔 API",

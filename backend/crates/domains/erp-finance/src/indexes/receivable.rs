@@ -38,14 +38,7 @@ pub(crate) const SALES_INVOICE_ALLOCATIONS: &str =
 /// 与恢复语义。无代码数电票的「(invoice_direction, normalized_no) 唯一」用
 /// **部分唯一索引**表达：`normalized_code` 为空的文档才参与唯一判定，有代码
 /// 发票互不干扰（理由与回滚见 [`uncoded_index_options`] 注释）。
-///
-/// # 参数
-/// * `db` - 目标 MongoDB 数据库
-///
-/// # 返回
-/// 本域索引全部幂等创建成功时无返回值。
-///
-/// # 错误
+/// 结果：本域索引全部幂等创建成功时无返回值。
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub async fn ensure(db: &Database) -> Result<()> {
     create_indexes(
@@ -80,13 +73,13 @@ pub async fn ensure(db: &Database) -> Result<()> {
     Ok(())
 }
 
-/// 为单个集合创建一组幂等命名索引。
+// 安装本模块定义的命名索引；服务启动时按集合注册，重复注册沿用现有定义。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
     db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
-/// 返回 `receivable_account` 的身份约束与往来列表索引。
+// 为 `receivable_account` 注册身份约束与往来列表索引，供所在领域的索引安装入口使用。
 fn receivable_account_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_receivable_accounts_id", doc! { "id": 1 }),
@@ -96,7 +89,7 @@ fn receivable_account_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `receivable_entry` 的业务幂等与账龄索引。
+// 为 `receivable_entry` 注册业务幂等与账龄索引，供所在领域的索引安装入口使用。
 fn receivable_entry_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_receivable_entries_id", doc! { "id": 1 }),
@@ -116,7 +109,7 @@ fn receivable_entry_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `receivable_entry_offset` 的抵销序号与累计冲减索引。
+// 为 `receivable_entry_offset` 注册抵销序号与累计冲减索引，供所在领域的索引安装入口使用。
 fn receivable_entry_offset_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_receivable_entry_offsets_id", doc! { "id": 1 }),
@@ -128,7 +121,7 @@ fn receivable_entry_offset_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `customer_receipt` 的单号唯一与往来列表索引。
+// 为 `customer_receipt` 注册单号唯一与往来列表索引，供所在领域的索引安装入口使用。
 fn customer_receipt_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_customer_receipts_id", doc! { "id": 1 }),
@@ -145,7 +138,7 @@ fn customer_receipt_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `receipt_allocation` 的分配序号与反向追溯索引。
+// 为 `receipt_allocation` 注册分配序号与反向追溯索引，供所在领域的索引安装入口使用。
 fn receipt_allocation_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_receipt_allocations_id", doc! { "id": 1 }),
@@ -161,13 +154,9 @@ fn receipt_allocation_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 构建无代码数电票唯一索引的选项（部分唯一，`normalized_code` 为空才参与）。
-///
-/// §6.8：有代码发票按 `(invoice_direction, normalized_code, normalized_no)` 唯一，
-/// 无代码数电票按 `(invoice_direction, normalized_no)` 唯一。MongoDB 唯一索引对
-/// null 值不去重，因此有代码唯一索引天然放过无代码发票；「无代码」唯一约束必须
-/// 用部分唯一索引限定 `normalized_code: null` 的文档，否则两张不同代码、同号码
-/// 的有代码发票会被误判重复。回滚：改为应用层登记前去重后删除本索引。
+// 为 `normalized_code` 为空的数电票定义方向和号码的部分唯一索引。
+// 有代码发票另按方向、代码、号码限制唯一，允许不同代码使用同一号码。
+// 移除此索引前须先由应用侧接替无代码票的判重规则。
 fn uncoded_index_options() -> IndexOptions {
     IndexOptions::builder()
         .name("uk_invoices_uncoded".to_string())
@@ -176,7 +165,7 @@ fn uncoded_index_options() -> IndexOptions {
         .build()
 }
 
-/// 返回 `invoice` 的登记唯一与查询索引。
+// 为 `invoice` 注册登记唯一与查询索引，供所在领域的索引安装入口使用。
 fn invoice_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_invoices_id", doc! { "id": 1 }),
@@ -193,7 +182,7 @@ fn invoice_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `sales_invoice_allocation` 的分配序号与账户追溯索引。
+// 为 `sales_invoice_allocation` 注册分配序号与账户追溯索引，供所在领域的索引安装入口使用。
 fn sales_invoice_allocation_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_sales_invoice_allocations_id", doc! { "id": 1 }),
@@ -208,7 +197,7 @@ fn sales_invoice_allocation_indexes() -> Vec<IndexModel> {
 
 #[cfg(test)]
 mod tests {
-    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    // 检查各集合是否声明稳定 `id` 的唯一索引，防止主键读取和乐观锁写入退化为集合扫描。
     #[test]
     fn collections_look_up_by_unique_stable_id() {
         for indexes in [

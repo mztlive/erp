@@ -23,13 +23,13 @@ use super::catalog_supply::apply_source_supply;
 use crate::{Error, Result};
 
 impl SupplierConnectionExecutionProcess {
-    /// 完整目录页保存之后，对同账号授权池内的旧成员逐批核对。
-    /// # 参数
-    /// `run` 为本次原目录检查点，`actor` 为原任务操作人。
-    /// # 返回
-    /// 无来源证明、范围待核实或旧成员核对已完成时结束。
-    /// # 错误
-    /// 范围重验、归属、租期交接或结果事务失败时停止，不重建缺失事实。
+    // 完整目录页保存之后，对同账号授权池内的旧成员逐批核对。
+    //
+    // `run` 为本次原目录检查点，`actor` 为原任务操作人。
+    //
+    // 无来源证明、范围待核实或旧成员核对已完成时结束。
+    //
+    // 范围重验、归属、租期交接或结果事务失败时停止，不重建缺失事实。
     pub(super) async fn reconcile_catalog_memberships(
         &self,
         run: &SupplierCatalogRun,

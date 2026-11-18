@@ -31,23 +31,23 @@ pub struct ProfitLossQuery {
     #[serde(default = "default_page_size")]
     pub page_size: usize,
 }
-/// 默认成本完整筛选。
+// 实际盈亏报表未指定覆盖状态时，默认成本完整筛选。
 fn default_coverage() -> String {
     "covered".into()
 }
-/// 默认销售单维度。
+// 实际盈亏报表未指定分组维度时，默认销售单维度。
 fn default_dimension() -> String {
     "sales_order".into()
 }
-/// 默认盈亏升序。
+// 实际盈亏报表未指定排序时，默认盈亏升序。
 fn default_sort() -> String {
     "actualProfitLossNet:asc".into()
 }
-/// 默认页码。
+// 实际盈亏报表请求未指定页码时从首页开始。
 fn default_page() -> usize {
     1
 }
-/// 默认页大小。
+// 实际盈亏报表请求未指定页大小时每页取 20 条。
 fn default_page_size() -> usize {
     20
 }
@@ -110,7 +110,7 @@ pub struct ProfitLossRow {
 }
 
 impl ProfitLossRow {
-    /// 构造盈亏行。
+    /// 初始化盈亏行，供实际盈亏报表使用。
     ///
     /// # 参数
     /// * `row_id` - 行稳定身份
@@ -120,9 +120,6 @@ impl ProfitLossRow {
     ///
     /// # 返回
     /// 返回归属、金额、阻断全空的行。
-    ///
-    /// # 错误
-    /// 无。
     pub fn new(row_id: String, object_type: String, identity_label: String, coverage_state: String) -> Self {
         Self {
             row_id,
@@ -146,51 +143,33 @@ impl ProfitLossRow {
         }
     }
 
-    /// 设置对象身份。
+    /// 组装实际盈亏报表时填入对象身份。
     ///
     /// # 参数
     /// * `object_id` - 对象身份
-    ///
-    /// # 返回
-    /// 返回更新后的行。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_object_id(mut self, object_id: Option<String>) -> Self {
         self.object_id = object_id;
         self
     }
 
-    /// 设置客户身份。
+    /// 组装实际盈亏报表时补充客户身份。
     ///
     /// # 参数
     /// * `customer_id` - 客户身份
     /// * `customer_label` - 客户展示名
-    ///
-    /// # 返回
-    /// 返回更新后的行。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_customer(mut self, customer_id: Option<String>, customer_label: Option<String>) -> Self {
         self.customer_id = customer_id;
         self.customer_label = customer_label;
         self
     }
 
-    /// 设置冻结归属。
+    /// 组装实际盈亏报表时补充冻结归属。
     ///
     /// # 参数
     /// * `user_id` - 冻结人员
     /// * `user_name` - 人员姓名
     /// * `org_unit_id` - 冻结组织
     /// * `org_unit_name` - 组织名称
-    ///
-    /// # 返回
-    /// 返回更新后的行。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_attribution(
         mut self,
         user_id: Option<String>,
@@ -205,35 +184,23 @@ impl ProfitLossRow {
         self
     }
 
-    /// 设置业务场景与履约方式。
+    /// 组装实际盈亏报表时补充业务场景与履约方式。
     ///
     /// # 参数
     /// * `benefit_scenarios` - 业务场景
     /// * `fulfillment_modes` - 履约方式
-    ///
-    /// # 返回
-    /// 返回更新后的行。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_modes(mut self, benefit_scenarios: Vec<String>, fulfillment_modes: Vec<String>) -> Self {
         self.benefit_scenarios = benefit_scenarios;
         self.fulfillment_modes = fulfillment_modes;
         self
     }
 
-    /// 设置下钻与成本来源。
+    /// 组装实际盈亏报表时补充下钻与成本来源。
     ///
     /// # 参数
     /// * `latest_cost_occurred_at` - 最近成本发生时间
     /// * `allowed_drilldowns` - 允许下钻
     /// * `cost_entry_ids` - 成本来源
-    ///
-    /// # 返回
-    /// 返回更新后的行。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_drilldown(
         mut self,
         latest_cost_occurred_at: Option<String>,

@@ -20,11 +20,10 @@ use crate::catalog_center::procurement::ensure_authorized_count;
 use crate::{Error, Result};
 
 impl SupplierOfferingReadService {
-    /// 分页查询授权范围内的供给列表。
+    /// 读取供应商供给时，分页查询授权范围内的供给列表。
     ///
     /// # 参数
     /// * `params` - 供给筛选与范围参数
-    /// * `actor` - 已认证操作人
     ///
     /// # 返回
     /// 返回分页、维护人候选、采购负责人候选与范围元信息。
@@ -47,11 +46,10 @@ impl SupplierOfferingReadService {
             .await
     }
 
-    /// 在调用方快照内读取完整供给分页并完成展示补齐与原凭证交付检查。
+    /// 读取供应商供给时，在调用方快照内读取完整供给分页并完成展示补齐与原凭证交付检查。
     ///
     /// # 参数
     /// * `params` - 原供给筛选、排序、分页及跨页范围版本。
-    /// * `actor` - 当前已认证账号。
     /// * `executor` - 调用方活动快照，资格、候选、分页、计数及补齐共用它。
     ///
     /// # 返回
@@ -149,7 +147,7 @@ async fn build_snapshot(
     })
 }
 
-/// 先用完整查询条件读取身份，再解析负责人，禁止对页面先切片后过滤。
+// 组装供应商供给时，先用完整查询条件读取身份，再解析负责人，禁止对页面先切片后过滤。
 async fn apply_procurement_filter(
     db: &mongodb::Database,
     query: &crate::supplier_center::repository::offering::SupplierOfferingListQuery,
@@ -167,7 +165,7 @@ async fn apply_procurement_filter(
     Ok(Some(filter))
 }
 
-/// 解析已筛选候选并收窄身份，复用原过滤的授权、搜索、状态及页面字段。
+// 组装供应商供给时，解析已筛选候选并收窄身份，复用原过滤的授权、搜索、状态及页面字段。
 async fn apply_candidate_filter(
     filter: &mut SupplierOfferingFilter,
     candidates: &[String],
@@ -182,7 +180,7 @@ async fn apply_candidate_filter(
     Ok(())
 }
 
-/// 保留可供状态与其它既有身份筛选，仅收窄到采购责任命中项；空命中保持空集。
+// 定位供应商供给关联时，保留可供状态与其它既有身份筛选，仅收窄到采购责任命中项；空命中保持空集。
 fn intersect_ids(
     existing: Option<Vec<SupplierOfferingId>>,
     matched: Vec<SupplierOfferingId>,
@@ -231,7 +229,7 @@ mod tests {
     }
 
     #[test]
-    /// 最终负责人身份与已解析的可供状态/既有身份求交，不能放宽候选或丢掉空筛选。
+    // 应用供应商供给筛选时，最终负责人身份与已解析的可供状态/既有身份求交，不能放宽候选或丢掉空筛选。
     fn offering_procurement_ids_preserve_existing_filter_intersection() {
         let ids = |values: &[&str]| values.iter().map(|id| SupplierOfferingId::new(*id)).collect();
         assert_eq!(
@@ -244,7 +242,7 @@ mod tests {
     }
 
     #[tokio::test]
-    /// 实际候选编排仅收窄身份，其余已解析的关键词、编号、授权和深页条件全部保留。
+    // 应用供应商供给筛选时，实际候选编排仅收窄身份，其余已解析的关键词、编号、授权和深页条件全部保留。
     async fn offering_candidate_filter_keeps_complete_query_and_page_fields() {
         let mut filter = SupplierOfferingFilter {
             offering_ids: Some(vec![SupplierOfferingId::new("off-a"), SupplierOfferingId::new("off-b")]),

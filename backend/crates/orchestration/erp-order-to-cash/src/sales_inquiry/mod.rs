@@ -33,12 +33,7 @@ pub struct SalesInquiryProcess {
 impl SalesInquiryProcess {
     /// 绑定业务库与授权源，命令每次在写事务中重验。
     ///
-    /// # 参数
-    /// `db` 为业务库，`authorization` 为当前授权源，`services` 为同一政策下装配的领域消费合同。
-    /// # 返回
-    /// 未执行 I/O 的询价流程。
-    /// # 错误
-    /// 不返回错误。
+    /// `db` 为业务库，`authorization` 为当前授权源，`services` 为同一政策下装配的领域消费合同。未执行 I/O 的询价流程。
     pub fn new(db: Database, authorization: Arc<AuthorizationService>, services: Arc<SalesServices>) -> Self {
         Self { db, authorization, services }
     }

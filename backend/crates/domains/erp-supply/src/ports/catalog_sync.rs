@@ -18,12 +18,8 @@ pub struct CatalogSyncPolicy {
 
 impl CatalogSyncPolicy {
     /// 按协议要求计算下一次增量的重叠起点。
-    /// # 参数
-    /// `through` 为上次成功扫描冻结的截止时间。
-    /// # 返回
     /// 回退协议要求秒数后的时间；零重叠保持原值。
-    /// # 错误
-    /// 不返回错误，时间下溢饱和处理。
+    /// 时间下溢饱和处理。
     pub fn since(self, through: Instant) -> Instant {
         Instant::from_unix_secs(through.unix_secs().saturating_sub(i64::from(self.overlap_seconds)))
     }

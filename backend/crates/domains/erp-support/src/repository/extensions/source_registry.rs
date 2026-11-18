@@ -29,52 +29,16 @@ pub trait SourceRegistryExt {
     /// 外部身份映射列表筛选条件类型（定义见 `repository::source_registry`）。
     type ExternalIdentityMapFilter;
 
-    /// 获取 `source_system` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `SourceSystemRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得 `source_system` 集合的仓储，供来源系统登记和维护；由调用方提供执行器。
     fn source_systems(&self) -> SourceSystemRepository<'_>;
 
-    /// 获取 `external_identity_map` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `ExternalIdentityMapRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得 `external_identity_map` 集合的仓储，供外部标识与内部身份关联的读写；由调用方提供执行器。
     fn external_identity_maps(&self) -> ExternalIdentityMapRepository<'_>;
 
-    /// 获取 `external_identity_target` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `ExternalIdentityTargetRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得 `external_identity_target` 集合的仓储，供外部映射目标及有效期的读写；由调用方提供执行器。
     fn external_identity_targets(&self) -> ExternalIdentityTargetRepository<'_>;
 
-    /// 获取承载跨集合事务写入的域专用仓储。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `SourceRegistryRepository` 实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得来源与外部身份映射的跨集合操作入口；原子写入沿用用例事务，不在仓储内开启事务。
     fn source_registry(&self) -> SourceRegistryRepository<'_>;
 }
 

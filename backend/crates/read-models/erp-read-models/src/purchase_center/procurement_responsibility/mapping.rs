@@ -7,7 +7,7 @@ use erp_procurement::entity::procurement_responsibility::ProcurementResponsibili
 use super::dto::ProcurementResponsibilityRuleView;
 use super::facts::ProcurementRuleListDisplayFacts;
 
-/// 将规则分页读模型映射为管理列表视图.
+/// 生成采购责任规则视图时，将规则分页读模型映射为管理列表视图。
 ///
 /// # 参数
 /// * `items` - 当前页规则实体，按优先级与创建时间稳定排序
@@ -30,7 +30,7 @@ pub fn to_rule_list_views(
     views
 }
 
-/// 原地补全规则视图的负责人、SKU 与分类展示字段.
+/// 组装采购责任规则时，原地补全规则视图的负责人、SKU 与分类展示字段。
 ///
 /// # 参数
 /// * `views` - 已由规则实体映射的当前页视图
@@ -108,19 +108,15 @@ mod tests {
         }
     }
 
-    /// 完整事实映射展示字段并保持输入顺序.
-    ///
-    /// # 参数
-    /// 无.
-    ///
-    /// # 返回
-    /// 断言顺序与展示字段.
-    ///
-    /// # 错误
-    /// 映射回归时测试失败.
-    ///
-    /// # 约束
-    /// 不改变分页与排序；仅补展示字段.
+    // 验证采购责任规则：完整事实映射展示字段并保持输入顺序。
+    //
+    // 断言顺序与展示字段.
+    //
+    // 失败边界：
+    // 映射回归时测试失败.
+    //
+    // 调用约束：
+    // 不改变分页与排序；仅补展示字段.
     #[test]
     fn full_facts_fill_display_fields_in_order() {
         let facts = test_facts();
@@ -138,19 +134,15 @@ mod tests {
         assert_eq!(views[1].category_name.as_deref(), Some("五金"));
     }
 
-    /// 缺失历史引用保持空展示而不报错.
-    ///
-    /// # 参数
-    /// 无.
-    ///
-    /// # 返回
-    /// 断言缺失键展示为 `None`.
-    ///
-    /// # 错误
-    /// 空展示语义漂移时测试失败.
-    ///
-    /// # 约束
-    /// 缺项不得报错；软删除与总数语义由 Repository 保证.
+    // 验证采购责任规则：缺失历史引用保持空展示而不报错。
+    //
+    // 断言缺失键展示为 `None`.
+    //
+    // 失败边界：
+    // 空展示语义漂移时测试失败.
+    //
+    // 调用约束：
+    // 缺项不得报错；软删除与总数语义由 Repository 保证.
     #[test]
     fn missing_references_keep_empty_display() {
         let facts = ProcurementRuleListDisplayFacts::default();
@@ -162,19 +154,15 @@ mod tests {
         assert!(views[0].category_name.is_none());
     }
 
-    /// SKU 存在但当前修订缺失时编号保留而名称为空.
-    ///
-    /// # 参数
-    /// 无.
-    ///
-    /// # 返回
-    /// 断言编号填充且名称为空.
-    ///
-    /// # 错误
-    /// 稀疏语义回归时测试失败.
-    ///
-    /// # 约束
-    /// 修订缺失不得清空 SKU 编号展示.
+    // 验证采购责任规则：SKU 存在但当前修订缺失时编号保留而名称为空。
+    //
+    // 断言编号填充且名称为空.
+    //
+    // 失败边界：
+    // 稀疏语义回归时测试失败.
+    //
+    // 调用约束：
+    // 修订缺失不得清空 SKU 编号展示.
     #[test]
     fn sku_without_current_revision_keeps_number_without_name() {
         let facts = ProcurementRuleListDisplayFacts {

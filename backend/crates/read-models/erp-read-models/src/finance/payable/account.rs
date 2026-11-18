@@ -22,7 +22,7 @@ impl PayableReadService {
     // 私有视图装配
     // -----------------------------------------------------------------------
 
-    /// 装配应付往来子账视图。
+    /// 生成应付子账命令结果视图时，组合应付往来子账视图。
     ///
     /// # 参数
     /// * `id` - 本用例已授权的实际子账 ID。
@@ -79,7 +79,7 @@ impl PayableReadService {
         })
     }
 
-    /// 读取详情分录并补全与子账相同来源的业务单号。
+    // 处理应付子账命令结果时，读取详情分录并补全与子账相同来源的业务单号。
     async fn detail_entries(
         &self,
         account: &PayableAccount,
@@ -108,7 +108,7 @@ impl PayableReadService {
             .collect())
     }
 
-    /// 为详情按原只读规则解析当前收款账户。
+    // 处理应付子账命令结果时，为详情按原只读规则解析当前收款账户。
     async fn detail_recipient(
         &self,
         account: &PayableAccount,

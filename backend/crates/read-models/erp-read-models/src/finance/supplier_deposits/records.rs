@@ -6,13 +6,14 @@ use entity_core::HasBaseModel;
 
 use crate::{Error, Result};
 
-/// 为同一授权账户合并近期与全部待处理记录，不按近期窗口截断历史事项。
-/// # 参数
-/// `recent` 是最近一百项，`required` 是拥有仓储完整读取的最多一千项待处理记录。
-/// # 返回
-/// 返回按创建时间和稳定身份倒序、相同身份仅保留一次的完整列表。
-/// # 错误
-/// 输入超限或同一身份读取到冲突版本时拒绝，不能交付不完整资金明细。
+// 处理供应商预存款时，为同一授权账户合并近期与全部待处理记录，不按近期窗口截断历史事项。
+//
+// 调用参数：
+// `recent` 是最近一百项，`required` 是拥有仓储完整读取的最多一千项待处理记录。
+//
+// 返回按创建时间和稳定身份倒序、相同身份仅保留一次的完整列表。
+//
+// 输入超限或同一身份读取到冲突版本时拒绝，不能交付不完整资金明细。
 pub(super) fn merge_recent<T: HasBaseModel + PartialEq>(recent: Vec<T>, required: Vec<T>) -> Result<Vec<T>> {
     if recent.len() > 100 || required.len() > 1000 {
         return Err(Error::BusinessLogicError("账户待处理资金记录超过读取上限，请先分批核实原记录".into()));

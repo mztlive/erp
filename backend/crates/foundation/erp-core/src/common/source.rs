@@ -21,16 +21,7 @@ pub enum SourceType {
 }
 
 impl SourceType {
-    /// 返回用于展示的中文标签。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回中文标签字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为事实来源提供中文展示名；不要将标签代替持久化或接口使用的固定代码。
     pub fn label(self) -> &'static str {
         match self {
             Self::Erp => "ERP 系统",
@@ -50,7 +41,7 @@ impl fmt::Display for SourceType {
 mod tests {
     use super::*;
 
-    /// 全部变体的 Display 中文标签与 serde snake_case 形态。
+    // 同时核对来源的中文标签和稳定序列化代码，防止调整展示文案时改掉存储格式。
     #[test]
     fn label_and_serde_shape() {
         let cases = [

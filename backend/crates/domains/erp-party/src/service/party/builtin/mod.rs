@@ -16,13 +16,13 @@ use crate::entity::party::builtin::BuiltinCompany;
 const ACTOR: &str = "system:company-bootstrap";
 
 impl PartyService {
-    /// 将内建我方公司资料同步到当前数据库；同内容重启不产生新版本。
+    /// 服务启动时把内建我方公司清单同步到当前数据库。资料和审计在同一事务提交，相同内容重启时复用已有事实与版本。
     ///
     /// # 参数
     /// * `codec` - 当前应用使用的敏感资料编解码器。
-    /// # 返回
+    ///
     /// 返回本次发生资料变更的公司数量。
-    /// # 错误
+    ///
     /// 身份冲突、历史账户内容冲突、资料校验或事务失败时返回错误；整体回滚。
     pub async fn sync_builtin_companies(&self, codec: Arc<SensitiveDataCodec>) -> Result<usize> {
         let seeds = BuiltinCompany::all()?;

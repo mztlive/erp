@@ -11,18 +11,9 @@ pub use document_number::{DocumentNumberGenerator, DocumentNumberKind, Error, Re
 pub use persistence_core::{Executor, NoTransaction};
 use uuid::Uuid;
 
-/// 生成新的 UUID v4 字符串 ID。
-///
-/// 返回不带连字符的 32 位十六进制字符串，不依赖进程内锁或跨实例 worker ID 配置。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回 32 位十六进制内部主键。
-///
-/// # 错误
-/// 无。
+/// 新建对象并需要无业务含义的内部主键时，生成不带连字符的 32 位十六进制 UUID v4。
+/// 不访问数据库，不依赖进程内锁或跨实例 worker ID 配置；正式业务编号另由
+/// [`DocumentNumberGenerator`] 分配。
 pub fn next_id() -> String {
     Uuid::new_v4().simple().to_string()
 }

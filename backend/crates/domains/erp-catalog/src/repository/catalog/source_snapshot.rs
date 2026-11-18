@@ -10,15 +10,8 @@ use crate::entity::catalog::Product;
 use crate::repository::CatalogExt;
 
 impl CatalogRepository<'_> {
-    /// 按真实商品身份执行完整授权条件，不读取无权商品的来源或修订。
-    /// # 参数
-    /// * `product_id` - 商品稳定身份。
-    /// * `scope` - 当前读取阶段的商品详情查询凭证。
-    /// * `executor` - 与授权相同的读取执行器。
-    /// # 返回
-    /// 授权范围内的商品；缺失或无权时为 None。
-    /// # 错误
-    /// 凭证失效、数据库查询或解码失败时返回错误。
+    /// 读取来源或商品修订之前，在原读取阶段按稳定 ID 应用当前商品详情凭证。
+    /// 不存在或不在范围内均返回 `None`，不进一步加载来源；凭证或仓储失败原样返回。
     pub async fn authorized_product(
         &self,
         product_id: &str,
@@ -38,13 +31,8 @@ impl CatalogRepository<'_> {
         Ok(rows.into_iter().next())
     }
 
-    /// 读取来源同步需要的当前快照，不加载商品全部历史修订。
-    /// # 参数
-    /// 商品身份和调用方事务执行器。
-    /// # 返回
-    /// 商品、当前修订、当前媒体及历史最大修订序号。
-    /// # 错误
-    /// 数据库读取失败时拒绝。
+    /// 来源同步准备展示资料更新时，沿原执行器读取商品、当前修订和媒体，并取历史最大修订号用于追加。
+    /// 不加载完整修订历史，也不替代调用方的商品授权。
     pub async fn source_product_snapshot(
         &self,
         product_id: &str,

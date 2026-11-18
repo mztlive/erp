@@ -28,16 +28,7 @@ pub enum ContractStatus {
 }
 
 impl ContractStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回合同状态的中文名称，供业务界面展示，不作为持久化代码。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Effective => "生效",
@@ -46,16 +37,7 @@ impl ContractStatus {
         }
     }
 
-    /// 返回状态的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回合同状态的稳定代码，供持久化与查询匹配使用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Effective => "EFFECTIVE",
@@ -66,16 +48,8 @@ impl ContractStatus {
 }
 
 impl DocumentState for ContractStatus {
-    /// 生效后可终止或到期；终止/到期为终态（W04 无重新激活入口）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// `Effective` 返回 `Terminated` 与 `Expired`；`Terminated` 与 `Expired` 返回空切片。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 生效后可终止或到期；终止/到期为终态（W04 无重新激活入口）。
+    // `Effective` 返回 `Terminated` 与 `Expired`；`Terminated` 与 `Expired` 返回空切片。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Effective => &[Self::Terminated, Self::Expired],
@@ -132,7 +106,7 @@ pub struct Contract {
 }
 
 impl PartialEq for Contract {
-    /// 全字段语义相等。
+    // 全字段语义相等。
     fn eq(&self, other: &Self) -> bool {
         self.base == other.base
             && self.stable.status == other.stable.status
@@ -152,18 +126,9 @@ impl Eq for Contract {}
 
 impl Contract {
     /// 创建合同（首个不可变版本与 PDF 关联由 P3 事务同时形成）。
-    ///
     /// 完成 contract_no 的校验与规范化（去首尾空白、非空、长度上限）。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::ContractId`）
-    /// * `data` - 创建数据
-    /// * `created_by` - 创建人（账号或系统身份）
-    ///
-    /// # 返回
     /// 返回新建的合同实体，状态为 `Effective`。
-    ///
-    /// # 错误
+    /// `id` 为实体主键（`erp_core::ids::ContractId`）；`created_by` 为创建人（账号或系统身份）。
     /// 当 contract_no 为空或超长时返回错误。
     pub fn new(id: ContractId, data: ContractData, created_by: impl Into<String>) -> Result<Self> {
         let contract_no = ContractSnapshot::new(data.contract_no)?.contract_no;
@@ -183,12 +148,8 @@ impl Contract {
     }
 
     /// 设置本合同明确共享的销售，保留单据负责销售。
-    ///
-    /// # 参数
-    /// * `users` - 共享账号，最多一百人
-    /// # 返回
     /// 规范化并去重后保存共享账号。
-    /// # 错误
+    /// `users` 为共享账号，最多一百人。
     /// 人数过多、账号为空或过长时返回错误。
     pub fn set_shared_sales(&mut self, users: Vec<String>) -> Result<()> {
         if self.sales_owner_user_id.is_empty() {
@@ -216,18 +177,8 @@ impl Contract {
     }
 
     /// 更新合同（复用 `new` 的校验规则）。
-    ///
-    /// `contract_no` 是稳定编号，不允许在通用更新中修改；已终止或已到期的合同
-    /// 不允许再修改（历史版本永久保留）。
-    ///
-    /// # 参数
-    /// * `update` - 更新数据
-    /// * `updated_by` - 本次更新执行人
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// `contract_no` 是稳定编号，不允许在通用更新中修改；已终止或已到期的合同不允许再修改（历史版本永久保留）。
+    /// `updated_by` 为本次更新执行人。
     /// 合同已终止/到期，或更新字段校验失败时返回错误。
     pub fn update(&mut self, update: ContractUpdate, updated_by: impl Into<String>) -> Result<()> {
         self.ensure_mutable()?;
@@ -242,77 +193,37 @@ impl Contract {
     }
 
     /// 终止合同（W04：授权终止，历史销售引用保持不变）。
-    ///
-    /// # 参数
-    /// * `updated_by` - 操作人
-    ///
-    /// # 返回
-    /// 状态迁移成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 非 `Effective` 状态下调用时返回 [`Error::InvalidStateTransition`]。
     pub fn terminate(&mut self, updated_by: impl Into<String>) -> Result<()> {
         self.transition(ContractStatus::Terminated, updated_by)
     }
 
     /// 标记合同到期。
-    ///
-    /// # 参数
-    /// * `updated_by` - 操作人（通常为系统任务）
-    ///
-    /// # 返回
-    /// 状态迁移成功返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// `updated_by` 为操作人（通常为系统任务）。
     /// 非 `Effective` 状态下调用时返回 [`Error::InvalidStateTransition`]。
     pub fn expire(&mut self, updated_by: impl Into<String>) -> Result<()> {
         self.transition(ContractStatus::Expired, updated_by)
     }
 
     /// 绑定当前生效版本（归档新 PDF 版本后切换当前版本指针）。
-    ///
-    /// # 参数
-    /// * `revision_id` - 新合同版本主键
-    /// * `updated_by` - 操作人
-    ///
-    /// # 返回
-    /// 无返回值；更新当前版本指针并记录更新人。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 更新当前版本指针并记录更新人。
+    /// `revision_id` 为新合同版本主键。
     pub fn attach_revision(&mut self, revision_id: impl Into<String>, updated_by: impl Into<String>) {
         self.stable.current_revision_id = Some(revision_id.into());
         self.stable.touch(updated_by);
     }
 
     /// 判断乐观锁版本是否与调用方期望一致。
-    ///
-    /// # 参数
-    /// * `expected` - 调用方读取后携带的期望版本
-    ///
-    /// # 返回
-    /// 当前版本等于期望版本时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    ///
-    /// # 约束
+    /// `expected` 为调用方读取后携带的期望版本。
     /// 只比较 `base.version`；不读取时钟、不产生 Service Error。
     pub fn matches_version(&self, expected: u64) -> bool {
         self.base.version == expected
     }
 
-    /// 执行一次固定状态机迁移。
-    ///
-    /// # 参数
-    /// * `to` - 目标状态
-    /// * `updated_by` - 操作人
-    ///
-    /// # 返回
-    /// 迁移合法时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 迁移非法时返回 [`Error::InvalidStateTransition`]。
+    // 执行一次固定状态机迁移。
+    // 迁移合法时返回 `Ok(())`。
+    // `to` 为目标状态。
+    // 迁移非法时返回 [`Error::InvalidStateTransition`]。
     fn transition(&mut self, to: ContractStatus, updated_by: impl Into<String>) -> Result<()> {
         ensure_transition(self.stable.status, to)?;
         self.stable.status = to;
@@ -320,13 +231,9 @@ impl Contract {
         Ok(())
     }
 
-    /// 校验合同是否允许修改业务字段。
-    ///
-    /// # 返回
-    /// 可修改时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 已终止或已到期时返回错误。
+    // 校验合同是否允许修改业务字段。
+    // 可修改时返回 `Ok(())`。
+    // 已终止或已到期时返回错误。
     fn ensure_mutable(&self) -> Result<()> {
         if matches!(self.stable.status, ContractStatus::Terminated | ContractStatus::Expired) {
             return Err(Error::from("已终止或已到期的合同不允许修改"));

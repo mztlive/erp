@@ -15,12 +15,11 @@ pub struct ResolvedApprover {
 }
 impl ResolvedApprover {
     /// 从独立姓名和来源快照构造已校验的负责人。
-    /// # 参数
-    /// 人员身份及解析快照；组织名称仅保留在 `source_name`。
-    /// # 返回
     /// 姓名规范化后保持参与人与来源快照一致的负责人。
-    /// # 错误
+    ///
     /// 姓名为空或超过节点执行的字节限制时拒绝，不截断姓名或组织名称。
+    ///
+    /// 人员身份及解析快照；组织名称仅保留在 `source_name`。
     pub fn new(participant_id: ParticipantId, mut resolution: AssigneeResolution) -> Result<Self> {
         let participant = ApprovalParticipant::new(participant_id, resolution.participant_name)
             .map_err(|error| Error::ValidationError(error.to_string()))?;
@@ -32,12 +31,11 @@ impl ResolvedApprover {
 /// 组织负责人窄接口，不查询业务单据或创建事务。
 pub trait ApproverDirectory {
     /// 解析申请人最近团队或部门的负责人及审批资格。
-    /// # 参数
-    /// 申请人、来源、解析时点、调用方执行器。
-    /// # 返回
     /// 返回唯一合格负责人及来源依据。
-    /// # 错误
+    ///
     /// 组织或负责人缺失、资格失败及读取错误时拒绝。
+    ///
+    /// 申请人、来源、解析时点、调用方执行器。
     fn resolve(
         &self,
         applicant: &str,

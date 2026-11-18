@@ -51,8 +51,8 @@ class Dependency:
     operation: str
 
 
+# 解码 Rust 集合名，保留原始字符串语义。审计依赖扫描用它识别以字节或转义形式写出的审计集合名。
 def literal_value(literal: str) -> str | None:
-    """Decode Rust collection-name literals while preserving raw-string semantics."""
     raw = re.fullmatch(r'(?:br|r)(?P<hashes>#{0,255})"(?P<value>.*)"(?P=hashes)', literal, re.S)
     if raw:
         return raw.group("value")
@@ -180,11 +180,11 @@ def _has_entry_candidate(text: str, path: str) -> bool:
     )
 
 
+# 为审计读写和执行入口扫描提供 `(masked_code, literals, test_ranges)`；复用预处理结果，避免重复分词和定位测试项。
 def _prepare_source(
     source: str,
     prepared: tuple[str, list[tuple[int, str]], list[tuple[int, int]]] | None = None,
 ) -> tuple[str, list[tuple[int, str]], list[tuple[int, int]]]:
-    """Return `(masked_code, literals, test_ranges)` for `source`, reusing precomputed data when given."""
     if prepared is not None:
         return prepared
     code, literals = _code_and_literals(source)
@@ -192,12 +192,12 @@ def _prepare_source(
     return mask_ranges(code, ranges), literals, ranges
 
 
+# 统计生产源码中的直接审计读写、裸集合访问和已退役回执适配器，供门禁按路径、函数和操作核对登记。
 def dependencies(
     source: str,
     path: str,
     prepared: tuple[str, list[tuple[int, str]], list[tuple[int, int]]] | None = None,
 ) -> Counter[Dependency]:
-    """Find direct reads, physical writes and retired receipt adapters."""
     code, literals, ranges = _prepare_source(source, prepared)
     findings: Counter[Dependency] = Counter()
     accessors = list(ACCESSOR.finditer(code))
@@ -227,8 +227,8 @@ def dependencies(
     return findings
 
 
+# 读取并校验逐项审计边界登记，供门禁核对访问次数、展示与写入策略，以及既有边界的退出条件。
 def load_registry(path: Path) -> dict[Dependency, dict]:
-    """Read explicit per-boundary scope, contract and removal requirements."""
     document = json.loads(path.read_text(encoding="utf-8"))
     if document.get("schema_version") != 1:
         raise ValueError("审计依赖登记 schema_version 必须为 1")
@@ -250,8 +250,8 @@ def load_registry(path: Path) -> dict[Dependency, dict]:
     return registered
 
 
+# 收集应用和 crate 的 Rust 源码，排除归档及外置测试模块；内联测试留给后续扫描按源码偏移屏蔽。
 def production_sources(backend: Path) -> dict[str, str]:
-    """Exclude inline and externally declared test modules from enforcement."""
     sources = {}
     test_files = set()
     for root in (backend / "apps", backend / "crates"):
@@ -268,16 +268,16 @@ def production_sources(backend: Path) -> dict[str, str]:
     return {path: source for path, source in sources.items() if path not in test_files}
 
 
+# 汇总生产源码的审计依赖及出现次数，供登记检查使用；逐文件扫描时排除内联测试。
 def scan(sources: dict[str, str]) -> Counter[Dependency]:
-    """Inspect active production boundaries, preserving test exclusions."""
     findings: Counter[Dependency] = Counter()
     for path, source in sources.items():
         findings.update(dependencies(source, path))
     return findings
 
 
+# 对照登记核验审计读写，拒绝未登记或超出次数上限的访问，并要求移除已退出的登记。
 def check(actual: Counter[Dependency], registered: dict[Dependency, dict]) -> list[str]:
-    """Reject uncovered or expanded access and stale explicit registrations."""
     errors = []
     for dependency, count in sorted(actual.items()):
         row = registered.get(dependency)
@@ -291,12 +291,12 @@ def check(actual: Counter[Dependency], registered: dict[Dependency, dict]) -> li
     return errors
 
 
+# 从实际函数体统计审计调用及定义位置；合并不同 `impl` 的同名方法，供入口门禁识别调用或位置变化。
 def execution_entries(
     source: str,
     path: str,
     prepared: tuple[str, list[tuple[int, str]], list[tuple[int, int]]] | None = None,
 ) -> dict[tuple[str, str], dict]:
-    """Scan actual function bodies, including repeated names in distinct impls."""
     code, _, _ = _prepare_source(source, prepared)
     entry_matches = [
         (m.start(), re.sub(r"\s+", "", next(group for group in m.groups() if group)))
@@ -332,12 +332,12 @@ def execution_entries(
     }
 
 
+# 核对审计执行入口的策略、调用次数和位置数，阻断新增未登记、已变更或已退出但未清理的入口。
 def check_execution_entries(
     backend: Path,
     sources: dict[str, str],
     prepared_map: dict[str, tuple[str, list[tuple[int, str]], list[tuple[int, int]]]] | None = None,
 ) -> list[str]:
-    """Fail closed on missing, changed or stale explicit boundary policies."""
     document = json.loads((backend / "scripts/audit-entrypoints.json").read_text(encoding="utf-8"))
     if document.get("schema_version") != 1:
         raise ValueError("审计执行入口登记 schema_version 必须为 1")
@@ -449,7 +449,7 @@ class GateTests(unittest.TestCase):
 
 
 def main() -> int:
-    """Run fixtures then enforce the checked-in migration register."""
+    """运行审计门禁自检后，按两份登记核验生产审计读写和执行入口，防止新增业务反查或绕过统一写入的路径。"""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--backend", type=Path, default=Path(__file__).resolve().parent.parent)
     args = parser.parse_args()

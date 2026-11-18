@@ -23,11 +23,10 @@ pub use projection::{RECENT_HISTORY_LIMIT, document_approval_view_with_history};
 /// 审批动作沿用正式命令的资格与运行事实政策；不提供业务数据读取或写入。
 #[async_trait]
 pub trait InventoryAdjustmentApprovalPolicyPort: Send + Sync {
-    /// 在调用方快照内判定当前操作人的提交资格。
+    /// 读取库存调整详情时，在调用方快照内判定当前操作人的提交资格。
     ///
     /// # 参数
     /// * `adjustment` - 已授权的调整单。
-    /// * `actor` - 当前操作人。
     /// * `executor` - 调用方读取快照。
     ///
     /// # 返回
@@ -42,11 +41,10 @@ pub trait InventoryAdjustmentApprovalPolicyPort: Send + Sync {
         executor: &mut dyn Executor,
     ) -> Result<bool>;
 
-    /// 在调用方快照内判定当前操作人的普通撤回资格。
+    /// 读取库存调整详情时，在调用方快照内判定当前操作人的普通撤回资格。
     ///
     /// # 参数
     /// * `instance` - 精确审批实例。
-    /// * `actor` - 当前操作人。
     /// * `executor` - 调用方读取快照。
     ///
     /// # 返回
@@ -61,7 +59,7 @@ pub trait InventoryAdjustmentApprovalPolicyPort: Send + Sync {
         executor: &mut dyn Executor,
     ) -> Result<bool>;
 
-    /// 校验精确实例与冻结定义绑定。
+    /// 投影库存调整的精确审批实例前，确认实例的定义身份及版本与单据冻结绑定一致。
     ///
     /// # 参数
     /// * `instance` - 已加载实例。
@@ -78,7 +76,7 @@ pub trait InventoryAdjustmentApprovalPolicyPort: Send + Sync {
         binding: &ApprovalDefinitionBinding,
     ) -> Result<()>;
 
-    /// 校验精确实例与调整单主题版本。
+    /// 将审批实例用于库存调整详情前，确认其属于本单据及预期的主题版本。
     ///
     /// # 参数
     /// * `instance` - 已加载实例。
@@ -97,7 +95,7 @@ pub trait InventoryAdjustmentApprovalPolicyPort: Send + Sync {
         version: u32,
     ) -> Result<()>;
 
-    /// 校验开放任务与当前审批运行事实。
+    /// 使用开放任务投影库存调整审批动作前，核对它与实例、当前执行及冻结责任组织的一致性。
     ///
     /// # 参数
     /// * `task` - 当前开放任务。
@@ -128,7 +126,7 @@ pub struct InventoryAdjustmentReadService {
 }
 
 impl InventoryAdjustmentReadService {
-    /// 装配领域读取和正式命令共用的审批政策。
+    /// 装配库存调整详情时，接入领域读取和正式命令共用的审批政策。
     ///
     /// # 参数
     /// * `db` - 各领域共用数据库。
@@ -137,9 +135,6 @@ impl InventoryAdjustmentReadService {
     ///
     /// # 返回
     /// 返回未执行 I/O 的读取服务。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(
         db: Database,
         inventory: Arc<InventoryService>,

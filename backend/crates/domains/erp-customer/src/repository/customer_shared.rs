@@ -11,19 +11,16 @@ use serde::{Deserialize, Serialize};
 use crate::entity::customer::{AssignmentRole, CustomerAccountStatus};
 use crate::repository::CustomerExt;
 
-/// 对客户 ID 迭代器排序去重（授权并集、组织展开与投影归一化的唯一入口）。
-///
-/// # 参数
-/// * `ids` - 原始客户 ID 迭代器（可含重复、无序）
-///
-/// # 返回
-/// 返回升序去重后的客户 ID；空输入返回空集合。
-///
-/// # 错误
-/// 无错误返回。
-///
-/// # 约束
-/// 纯内存函数；固定升序保证投影顺序稳定，与业务日期边界无关。
+// 对客户 ID 迭代器排序去重（授权并集、组织展开与投影归一化的唯一入口）。
+//
+// # 参数
+// * `ids` - 原始客户 ID 迭代器（可含重复、无序）
+//
+// 返回升序去重后的客户 ID；空输入返回空集合。
+//
+// 无错误返回。
+//
+// 纯内存函数；固定升序保证投影顺序稳定，与业务日期边界无关。
 pub(crate) fn distinct_sorted_customer_ids(ids: impl IntoIterator<Item = String>) -> Vec<String> {
     let mut sorted: Vec<String> = ids.into_iter().collect();
     sorted.sort();
@@ -31,21 +28,17 @@ pub(crate) fn distinct_sorted_customer_ids(ids: impl IntoIterator<Item = String>
     sorted
 }
 
-/// 构造用户对目标客户的当前有效归属查询条件。
-///
-/// 有效期采用半开区间 `[valid_from, valid_to)`；`valid_to = null` 表示长期有效。
-/// 角色限定为 `OWNER` 与 `COLLABORATOR`。
-///
-/// # 参数
-/// * `customer_id` - 客户角色 ID
-/// * `user_id` - 销售人员 ID
-/// * `as_of` - 业务日期
-///
-/// # 返回
-/// 返回含半开有效期的 MongoDB 过滤文档。
-///
-/// # 错误
-/// 不返回错误。
+// 构造用户对目标客户的当前有效归属查询条件。
+//
+// 有效期采用半开区间 `[valid_from, valid_to)`；`valid_to = null` 表示长期有效。
+// 角色限定为 `OWNER` 与 `COLLABORATOR`。
+//
+// # 参数
+// * `customer_id` - 客户角色 ID
+// * `user_id` - 销售人员 ID
+// * `as_of` - 业务日期
+//
+// 返回含半开有效期的 MongoDB 过滤文档。
 pub(crate) fn active_customer_user_assignment_filter(
     customer_id: &str,
     user_id: &str,
@@ -66,22 +59,18 @@ pub(crate) fn active_customer_user_assignment_filter(
     )
 }
 
-/// 组装半开有效期过滤条件的唯一入口（erp-customer-001）。
-///
-/// `list_active_for_customers`、`find_current_owner`、
-/// `find_active_assignments_for_user`、`active_customer_user_assignment_filter`
-/// 与 `current_owner_pipeline` 的 `valid_from $lte` 加 `$or(valid_to null/$gt)`
-/// 语义相同；各查询只传自有约束，窗口部分只在此一处实现。
-///
-/// # 参数
-/// * `as_of` - 业务日期边界
-/// * `owned` - 自有约束（客户、用户、角色等）；`None` 表示仅窗口
-///
-/// # 返回
-/// 返回含半开窗口的 MongoDB 过滤文档。
-///
-/// # 错误
-/// 不返回错误。
+// 组装半开有效期过滤条件的唯一入口（erp-customer-001）。
+//
+// `list_active_for_customers`、`find_current_owner`、
+// `find_active_assignments_for_user`、`active_customer_user_assignment_filter`
+// 与 `current_owner_pipeline` 的 `valid_from $lte` 加 `$or(valid_to null/$gt)`
+// 语义相同；各查询只传自有约束，窗口部分只在此一处实现。
+//
+// # 参数
+// * `as_of` - 业务日期边界
+// * `owned` - 自有约束（客户、用户、角色等）；`None` 表示仅窗口
+//
+// 返回含半开窗口的 MongoDB 过滤文档。
 pub(crate) fn active_window_filter(as_of: &BusinessDate, owned: Option<Document>) -> Document {
     let as_of = as_of.to_string();
     let mut filter = owned.unwrap_or_default();
@@ -90,39 +79,31 @@ pub(crate) fn active_window_filter(as_of: &BusinessDate, owned: Option<Document>
     filter
 }
 
-/// 构建排序文档（仓储白名单）。
-///
-/// `sort_by` 不在 `allowed` 白名单内时回落默认 `created_at`，禁止透传任意
-/// 字段名（P2 §2.3）。
-///
-/// # 参数
-/// * `sort_by` - 排序字段；`None` 或不在白名单时默认 `created_at`
-/// * `sort_ascending` - 升序为 `true`，降序为 `false`
-/// * `allowed` - 允许的排序字段白名单
-///
-/// # 返回
-/// 返回排序条件文档。
-///
-/// # 错误
-/// 不返回错误。
+// 构建排序文档（仓储白名单）。
+//
+// `sort_by` 不在 `allowed` 白名单内时回落默认 `created_at`，禁止透传任意
+// 字段名（P2 §2.3）。
+//
+// # 参数
+// * `sort_by` - 排序字段；`None` 或不在白名单时默认 `created_at`
+// * `sort_ascending` - 升序为 `true`，降序为 `false`
+// * `allowed` - 允许的排序字段白名单
+//
+// 返回排序条件文档。
 pub(crate) fn sort_doc(sort_by: Option<&str>, sort_ascending: bool, allowed: &[&str]) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
     let field = sort_by.filter(|candidate| allowed.contains(candidate)).unwrap_or("created_at");
     doc! { field: direction, "id": direction }
 }
 
-/// 构造当前主责查询：未删除归属和未删除客户共同受有效期及可见边界限制。
-///
-/// # 参数
-/// * `customer_ids` - 可见客户边界；`None` 不按客户收窄
-/// * `owner_ids` - 额外收窄的负责人；`None` 不按人员收窄
-/// * `as_of` - 归属有效期判定业务日期
-///
-/// # 返回
-/// 返回聚合管道：匹配当前 `OWNER` 窗口、关联未删除客户并去掉关联数组。
-///
-/// # 错误
-/// 不返回错误。
+// 构造当前主责查询：未删除归属和未删除客户共同受有效期及可见边界限制。
+//
+// # 参数
+// * `customer_ids` - 可见客户边界；`None` 不按客户收窄
+// * `owner_ids` - 额外收窄的负责人；`None` 不按人员收窄
+// * `as_of` - 归属有效期判定业务日期
+//
+// 返回聚合管道：匹配当前 `OWNER` 窗口、关联未删除客户并去掉关联数组。
 pub(crate) fn current_owner_pipeline(
     customer_ids: Option<&[String]>,
     owner_ids: Option<&[String]>,
@@ -147,16 +128,9 @@ pub(crate) fn current_owner_pipeline(
     ]
 }
 
-/// 客户角色列表投影字段。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回投影条件文档。
-///
-/// # 错误
-/// 不返回错误。
+// 列出客户角色列表查询需要读取的字段。
+//
+// 返回投影条件文档。
 pub(crate) fn customer_account_projection() -> Document {
     doc! {
         "id": 1,
@@ -170,16 +144,9 @@ pub(crate) fn customer_account_projection() -> Document {
     }
 }
 
-/// 客户归属列表投影字段。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回投影条件文档。
-///
-/// # 错误
-/// 不返回错误。
+// 列出客户归属列表查询需要读取的字段。
+//
+// 返回投影条件文档。
 pub(crate) fn customer_assignment_projection() -> Document {
     doc! {
         "id": 1,
@@ -223,11 +190,7 @@ impl CustomerAccountRow {
     /// * `party_id` - 共用企业主体 ID
     /// * `customer_no` - 客户编号
     ///
-    /// # 返回
     /// 返回启用状态的投影行。
-    ///
-    /// # 错误
-    /// 无。
     pub fn new(id: impl Into<String>, party_id: impl Into<String>, customer_no: impl Into<String>) -> Self {
         Self {
             id: id.into(),

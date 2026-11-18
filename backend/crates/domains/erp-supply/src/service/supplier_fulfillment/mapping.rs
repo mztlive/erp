@@ -4,7 +4,7 @@ use crate::entity::supplier_fulfillment::{
 };
 
 impl From<VerifiedSupplierOrderResolution> for SupplierOrderResolution {
-    /// 将实体层已验证业务终态映射为服务契约枚举。
+    // 把实体层已验证业务终态映射为服务契约枚举。
     fn from(value: VerifiedSupplierOrderResolution) -> Self {
         match value {
             VerifiedSupplierOrderResolution::OrderAccepted => Self::OrderAccepted,
@@ -17,15 +17,7 @@ impl From<VerifiedSupplierOrderResolution> for SupplierOrderResolution {
 }
 
 /// 从动作行实体构造响应视图。
-///
-/// # 参数
-/// * `line` - 动作行实体
-///
-/// # 返回
 /// 返回动作行响应视图。
-///
-/// # 错误
-/// 不返回错误。
 pub fn action_line_view(
     line: SupplierOrderActionLine,
 ) -> crate::dto::supplier_fulfillment::SupplierOrderActionLineView {
@@ -39,16 +31,7 @@ pub fn action_line_view(
 }
 
 /// 从退款事实头与分配行构造响应视图。
-///
-/// # 参数
-/// * `fact` - 退款事实头
-/// * `allocations` - 分配行集合
-///
-/// # 返回
 /// 返回含分配行的退款事实响应视图。
-///
-/// # 错误
-/// 不返回错误。
 pub fn refund_fact_view(
     fact: &SupplierRefundFact,
     allocations: &[SupplierRefundAllocation],
@@ -66,13 +49,7 @@ pub fn refund_fact_view(
     }
 }
 
-/// 从退款分配行实体构造响应视图。
-///
-/// # 参数
-/// * `allocation` - 退款分配行实体
-///
-/// # 返回
-/// 返回响应视图。
+// 从退款分配行实体构造响应视图。
 fn refund_allocation_view(
     allocation: &SupplierRefundAllocation,
 ) -> crate::dto::supplier_fulfillment::SupplierRefundAllocationView {

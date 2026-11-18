@@ -32,13 +32,9 @@ struct SaveTarget {
 
 impl PurchaseOrderProcess {
     /// 保存原采购变更的完整编辑目标，不创建审批版本或占用报价额度。
-    /// # 参数
-    /// * `id` - 原变更单身份。
-    /// * `request` - 完整目标、原锁版本和幂等键。
-    /// * `actor` - 当前已认证操作人。
-    /// # 返回
-    /// 返回首次保存后的完整编辑快照；同键同请求重放该快照。
-    /// # 错误
+    ///
+    /// `id` 为原变更单身份；`request` 为完整目标、原锁版本和幂等键。返回首次保存后的完整编辑快照；同键同请求重放该快照。
+    ///
     /// 权限、来源、版本、内容不合规，或同键不同内容时拒绝。
     pub async fn save_change_draft(
         &self,
@@ -79,7 +75,7 @@ impl PurchaseOrderProcess {
     }
 }
 
-/// 读取目标前同时证明当前更新和提交资格，避免以历史审批参与身份读取成本。
+// 读取目标前同时证明当前更新和提交资格，避免以历史审批参与身份读取成本。
 async fn authorized_order(
     db: &Database,
     ports: &PurchaseOrderPorts,
@@ -93,7 +89,7 @@ async fn authorized_order(
         .await?)
 }
 
-/// 同事务重验权限、原版本和来源后写入独立头行及精确保存回执。
+// 同事务重验权限、原版本和来源后写入独立头行及精确保存回执。
 async fn persist_save(
     db: &Database,
     ports: &PurchaseOrderPorts,
@@ -146,7 +142,7 @@ async fn persist_save(
     Ok(result)
 }
 
-/// 按原身份和完整请求恢复保存结果，不读取当前可变目标拼接回执。
+// 按原身份和完整请求恢复保存结果，不读取当前可变目标拼接回执。
 async fn replay_save(
     db: &Database,
     identity: &PurchaseCommandReceiptIdentity,

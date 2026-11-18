@@ -71,17 +71,9 @@ pub struct RuntimeAssigneeCandidate {
 
 impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     /// 创建运行服务。
-    ///
-    /// # 参数
-    /// * `identity` - 共享身份与权限服务。
-    /// * `db` - MongoDB
-    /// * `auth` - 授权 Port
-    ///
-    /// # 返回
     /// 返回尚未由 P0-B 注入 AppState 的应用端口。
     ///
-    /// # 错误
-    /// 无。
+    /// `identity`：共享身份与权限服务。
     pub fn new(
         db: Database,
         identity: SharedRbacService,
@@ -100,20 +92,9 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     }
 
     /// 用组合根注入的全部端口创建运行服务。
-    ///
-    /// # 参数
-    /// * `identity` - 共享身份与权限服务。
-    /// * `db` - MongoDB。
-    /// * `auth` - 授权端口。
-    /// * `action_port` - 领域动作端口。
-    /// * `upgrade` - 未提交绑定升级端口。
-    /// * `audit` - 审计端口。
-    ///
-    /// # 返回
     /// 返回已装配端口的运行服务。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// `identity`：共享身份与权限服务；`upgrade`：未提交绑定升级端口。
     pub fn with_ports(
         db: Database,
         identity: SharedRbacService,
@@ -127,19 +108,12 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     }
 }
 
-/// 加载并校验实例、process_kind 与冻结快照的不可变主体三元组。
-///
-/// # 参数
-/// * `db` - 工作流数据库
-/// * `instance` - 本次读取的实例事实
-/// * `executor` - 调用方执行器
-/// * `hide_mismatch` - 是否将主体不一致映射为隐藏资源的 NotFound
-///
-/// # 返回
-/// 返回已证明与实例完全对应的单据类型和冻结快照。
-///
-/// # 错误
-/// 主体损坏时返回原有冲突或 NotFound；仓储错误原样传播。
+// 加载并校验实例、process_kind 与冻结快照的不可变主体三元组。
+// 返回已证明与实例完全对应的单据类型和冻结快照。
+//
+// 主体损坏时返回原有冲突或 NotFound；仓储错误原样传播。
+//
+// `hide_mismatch`：是否将主体不一致映射为隐藏资源的 NotFound。
 async fn load_exact_runtime_snapshot(
     db: &Database,
     instance: &ApprovalProcessInstance,
@@ -156,35 +130,24 @@ async fn load_exact_runtime_snapshot(
     Ok((document_type, snapshot))
 }
 
-/// 证明实例的主体类型与流程种类仍是一一对应的正式审批类型。
-///
-/// # 参数
-/// * `instance` - 本次读取的审批实例
-/// * `hide_mismatch` - 是否隐藏资源存在性
-///
-/// # 返回
-/// 返回唯一对应的业务单据类型。
-///
-/// # 错误
-/// 类型或流程种类不一致时返回原有主体冲突或 NotFound。
+// 证明实例的主体类型与流程种类仍是一一对应的正式审批类型。
+// 返回唯一对应的业务单据类型。
+//
+// 类型或流程种类不一致时返回原有主体冲突或 NotFound。
+//
+// `instance`：本次读取的审批实例。
 fn runtime_document_type(instance: &ApprovalProcessInstance, hide_mismatch: bool) -> Result<DocumentType> {
     resolve_runtime_document_type(instance.subject.subject_kind(), instance.process_kind)
         .map_err(|_| runtime_snapshot_mismatch(hide_mismatch))
 }
 
-/// 校验冻结快照的主体类型、身份和提交版本与本次实例完全一致。
-///
-/// # 参数
-/// * `instance` - 当前实例事实
-/// * `snapshot` - 按实例身份读取的冻结快照
-/// * `document_type` - 已证明的正式业务类型
-/// * `hide_mismatch` - 是否隐藏资源存在性
-///
-/// # 返回
-/// 三元组一致时成功。
-///
-/// # 错误
-/// 不一致时返回原有主体冲突或 NotFound。
+// 校验冻结快照的主体类型、身份和提交版本与本次实例完全一致。
+// 三元组一致时成功。
+//
+// 不一致时返回原有主体冲突或 NotFound。
+//
+// `instance`：当前实例事实；`snapshot`：按实例身份读取的冻结快照。
+// `document_type`：已证明的正式业务类型。
 fn ensure_exact_runtime_snapshot(
     instance: &ApprovalProcessInstance,
     snapshot: &ApprovalSubjectSnapshot,
@@ -200,16 +163,8 @@ fn ensure_exact_runtime_snapshot(
         .map_err(|_| runtime_snapshot_mismatch(hide_mismatch))
 }
 
-/// 按既有隐藏策略生成冻结主体不一致错误。
-///
-/// # 参数
-/// * `hide_mismatch` - 是否隐藏资源存在性
-///
-/// # 返回
-/// 返回原有稳定错误类型与文案。
-///
-/// # 错误
-/// 无。
+// 按既有隐藏策略生成冻结主体不一致错误。
+// 返回原有稳定错误类型与文案。
 fn runtime_snapshot_mismatch(hide_mismatch: bool) -> Error {
     if hide_mismatch {
         hidden_not_found()
@@ -218,7 +173,7 @@ fn runtime_snapshot_mismatch(hide_mismatch: bool) -> Error {
     }
 }
 
-/// 以调用方事务执行器读取最新运行视图；回放不依赖原任务仍为 OPEN。
+// 从调用方事务快照装配已保存命令的最新运行视图。终态回放无需原任务仍开放，不能因此回退到新命令。
 async fn persisted_command_view_with_executor(
     db: &Database,
     instance_id: &str,
@@ -255,10 +210,7 @@ async fn persisted_command_view_with_executor(
     Ok(map_command_view(&instance, current.as_ref(), None, None, next_open_task, commit, replay))
 }
 
-/// 按当前 V3 scope 优先、已知历史 scope 次之读取唯一命令收据。
-///
-/// scope 与 digest 的完整成对判定由 [`PreparedCommandIdentity::classify`] 完成；
-/// 当前 scope 一旦存在收据，调用方不得继续向历史 scope 降级。
+// 先用当前 V3 作用域查找命令收据，再观察已知的精确历史候选；不能用宽松查找混淆不同命令身份。
 async fn find_receipt_for_identity(
     db: &Database,
     identity: &PreparedCommandIdentity,
@@ -281,12 +233,12 @@ async fn find_receipt_for_identity(
     Ok(None)
 }
 
-/// 隐藏实例存在性。
+// 实例不存在或不可向当前账号证明时使用同一未找到错误，避免泄露实例存在性。
 fn hidden_not_found() -> Error {
     Error::NotFound("审批实例不存在".to_string())
 }
 
-/// 校验协议命令只能由当前认证主体执行。
+// 命令声明操作人时须与当前已认证身份一致，不能替另一账号签署或回放。
 fn ensure_command_actor(actor: &AuditActor, command_actor_id: &str) -> Result<()> {
     if actor.id() == command_actor_id {
         return Ok(());
@@ -294,7 +246,7 @@ fn ensure_command_actor(actor: &AuditActor, command_actor_id: &str) -> Result<()
     Err(Error::Forbidden("审批命令操作人与认证主体不一致".to_string()))
 }
 
-/// 校验调用方持有的乐观锁版本。
+// 将命令携带的期望版本与刚读到的运行事实比较；不相同时不进入计划写入。
 fn ensure_expected_version(label: &str, expected: u64, actual: u64) -> Result<()> {
     if expected == actual {
         return Ok(());
@@ -302,10 +254,8 @@ fn ensure_expected_version(label: &str, expected: u64, actual: u64) -> Result<()
     Err(Error::version_conflict(label))
 }
 
-/// CAS 未应用时失败关闭。
-///
-/// # 错误
-/// 未找到、版本冲突或状态已变时返回冲突。
+// CAS 未应用时失败关闭。
+// 未找到、版本冲突或状态已变时返回冲突。
 fn require_cas_applied<T>(outcome: crate::repository::bpm::CasWriteOutcome<T>, label: &str) -> Result<()> {
     match outcome {
         crate::repository::bpm::CasWriteOutcome::Applied(_) => Ok(()),
@@ -313,20 +263,16 @@ fn require_cas_applied<T>(outcome: crate::repository::bpm::CasWriteOutcome<T>, l
     }
 }
 
-/// 命令提交加恢复的通用编排模板。
-///
-/// 先执行调用方事务内提交；仅当错误表明命令可能已提交（收据唯一键竞争、
-/// 瞬态事务冲突或提交结果未知）时，才调用恢复函数回读胜者收据。
-///
-/// # 参数
-/// * `commit` - 事务内提交函数
-/// * `recover` - 提交疑似成功时的恢复函数
-///
-/// # 返回
-/// 返回提交成功或恢复成功的结果。
-///
-/// # 错误
-/// 提交失败且不属于可恢复形态，或恢复仍失败时返回原错误。
+// 命令提交加恢复的通用编排模板。
+//
+// 先执行调用方事务内提交；仅当错误表明命令可能已提交（收据唯一键竞争、
+// 瞬态事务冲突或提交结果未知）时，才调用恢复函数回读胜者收据。
+//
+// 返回提交成功或恢复成功的结果。
+//
+// 提交失败且不属于可恢复形态，或恢复仍失败时返回原错误。
+//
+// `commit`：事务内提交函数；`recover`：提交疑似成功时的恢复函数。
 pub(super) async fn commit_or_recover<T, Commit, Recover, CommitFut, RecoverFut>(
     commit: Commit,
     recover: Recover,
@@ -344,21 +290,17 @@ where
     }
 }
 
-/// 竞争提交后有限回读胜者收据的通用恢复模板。
-///
-/// 调用方每次以新会话执行只读回放；回放仍报可恢复错误则退避重试，遇到明确
-/// 失败立即返回，始终未见胜者则返回原始提交错误。
-///
-/// # 参数
-/// * `original_error` - 触发恢复的原始提交错误
-/// * `replay` - 每次以新会话回读胜者收据的回放函数
-///
-/// # 返回
-/// 回放返回 `Some` 时返回该值。
-///
-/// # 错误
-/// 回放明确失败时返回该错误；首次未知提交的查证失败始终保留原错误和来源；
-/// 重试耗尽时返回原始提交错误。
+// 竞争提交后有限回读胜者收据的通用恢复模板。
+//
+// 调用方每次以新会话执行只读回放；回放仍报可恢复错误则退避重试，遇到明确
+// 失败立即返回，始终未见胜者则返回原始提交错误。
+//
+// 回放返回 `Some` 时返回该值。
+//
+// 回放明确失败时返回该错误；首次未知提交的查证失败始终保留原错误和来源；
+// 重试耗尽时返回原始提交错误。
+//
+// `original_error`：触发恢复的原始提交错误；`replay`：每次以新会话回读胜者收据的回放函数。
 pub(super) async fn recover_by_replay<T, Replay, ReplayFut>(
     original_error: Error,
     mut replay: Replay,

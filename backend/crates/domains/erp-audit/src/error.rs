@@ -58,13 +58,7 @@ impl_domain_error_class!(Error);
 impl_repository_error!(Error, duplicate = Error::ReceiptDuplicate);
 
 impl From<IdentityError> for Error {
-    /// 保留统一授权错误的分类与原持久化来源。
-    /// # 参数
-    /// error 为统一授权服务返回的错误。
-    /// # 返回
-    /// 对应分类的审计领域错误。
-    /// # 错误
-    /// 不返回额外错误。
+    // 将统一授权错误映射到审计领域，保留原有分类和持久化错误来源，便于读取入口正确交付错误。
     fn from(error: IdentityError) -> Self {
         match error {
             IdentityError::Internal(v) | IdentityError::Rbac(v) => Self::Internal(v),

@@ -181,7 +181,7 @@ impl SalesInquiryProcess {
         Ok(())
     }
 
-    /// 改派只按真实目标账号和原任务版本证明接收资格，责任行及组织规则独立保留。
+    // 改派只按真实目标账号和原任务版本证明接收资格，责任行及组织规则独立保留。
     async fn reassign_task(
         &self,
         actor: &AuditActor,

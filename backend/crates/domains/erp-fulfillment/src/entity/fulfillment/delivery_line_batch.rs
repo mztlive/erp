@@ -31,20 +31,10 @@ pub struct DeliveryLineBatch;
 
 impl DeliveryLineBatch {
     /// 按输入顺序从首行号连续编号批量构造发货行。
-    ///
-    /// # 参数
-    /// * `delivery_id` - 所属发货单主键
-    /// * `delivery_type` - 发货类型（决定行级 reservation/allocation 互斥）
-    /// * `first_line_no` - 起始行号（1 为新建，>1 为追加）
-    /// * `specs` - 与输入顺序一致的行规格（含 Service 注入的行 ID）
-    ///
-    /// # 返回
     /// 返回与输入顺序一致的行实体集合。
-    ///
-    /// # 错误
+    /// `delivery_id` 为所属发货单主键；`delivery_type` 为发货类型（决定行级 reservation/allocation 互斥）。
+    /// `first_line_no` 为起始行号（1 为新建，>1 为追加）；`specs` 为与输入顺序一致的行规格（含 Service 注入的行 ID）。
     /// 首行号为 0、行号溢出 `u32` 上限或行级归属/数量违规时返回错误。
-    ///
-    /// # 约束
     /// 无 I/O、无时钟、无 ID 生成；行号 `checked_add`，溢出 fail-closed。
     pub fn build(
         delivery_id: DeliveryId,
@@ -93,7 +83,7 @@ mod tests {
         }
     }
 
-    /// 仓发正常路径：输入顺序与行号一一对应。
+    // 验证仓发正常路径：输入顺序与行号一一对应。
     #[test]
     fn warehouse_build_preserves_order_and_numbers() {
         let lines = DeliveryLineBatch::build(
@@ -109,7 +99,7 @@ mod tests {
         assert_eq!(lines[0].base.id, "l-1");
     }
 
-    /// 非 1 首行号连续追加。
+    // 验证非 1 首行号连续追加。
     #[test]
     fn non_one_first_line_no_appends_continuously() {
         let lines = DeliveryLineBatch::build(
@@ -123,7 +113,7 @@ mod tests {
         assert_eq!(lines[1].line_no, 5);
     }
 
-    /// 直发行字段映射：分配必填、预占为空。
+    // 验证直发行字段映射：分配必填、预占为空。
     #[test]
     fn direct_line_maps_allocation_fields() {
         let lines = DeliveryLineBatch::build(
@@ -140,7 +130,7 @@ mod tests {
         assert_eq!(lines[0].purchase_line_sales_allocation_id.as_ref().unwrap().as_ref(), "pla-1");
     }
 
-    /// 错误组合 fail-closed：仓发行缺预占、直发行带预占。
+    // 验证错误组合 fail-closed：仓发行缺预占、直发行带预占。
     #[test]
     fn invalid_reservation_allocation_combo_fails_closed() {
         assert!(
@@ -164,7 +154,7 @@ mod tests {
         );
     }
 
-    /// 行号溢出返回错误而非 panic：首行号 0 与 u32 上限追加。
+    // 验证行号溢出返回错误而非 panic：首行号 0 与 u32 上限追加。
     #[test]
     fn line_no_overflow_fails_without_panic() {
         assert!(

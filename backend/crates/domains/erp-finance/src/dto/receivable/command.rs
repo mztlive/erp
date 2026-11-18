@@ -121,15 +121,10 @@ pub struct CommitCustomerReceiptRequest {
 
 impl CommitCustomerReceiptRequest {
     /// 以幂等键构造原子提交请求，其余字段保持空条件由链式方法补齐。
-    ///
-    /// # 参数
-    /// * `idempotency_key` - 业务请求幂等键
-    ///
-    /// # 返回
     /// 返回仅携带幂等键的提交请求。
     ///
-    /// # 错误
-    /// 无。
+    /// 输入约定：
+    /// - `idempotency_key`：业务请求幂等键
     pub fn new(idempotency_key: impl Into<String>) -> Self {
         Self {
             resubmission_reason: None,
@@ -142,45 +137,30 @@ impl CommitCustomerReceiptRequest {
     }
 
     /// 设置已有回款草稿主键。
-    ///
-    /// # 参数
-    /// * `receipt_id` - 已有回款草稿主键
-    ///
-    /// # 返回
     /// 返回更新后的提交请求。
     ///
-    /// # 错误
-    /// 无。
+    /// 输入约定：
+    /// - `receipt_id`：已有回款草稿主键
     pub fn with_receipt_id(mut self, receipt_id: impl Into<String>) -> Self {
         self.receipt_id = Some(receipt_id.into());
         self
     }
 
     /// 设置已有草稿期望乐观锁版本。
-    ///
-    /// # 参数
-    /// * `expected_version` - 期望乐观锁版本
-    ///
-    /// # 返回
     /// 返回更新后的提交请求。
     ///
-    /// # 错误
-    /// 无。
+    /// 输入约定：
+    /// - `expected_version`：期望乐观锁版本
     pub fn with_expected_version(mut self, expected_version: u64) -> Self {
         self.expected_version = Some(expected_version);
         self
     }
 
     /// 设置新回款完整字段。
-    ///
-    /// # 参数
-    /// * `receipt` - 新回款完整字段
-    ///
-    /// # 返回
     /// 返回更新后的提交请求。
     ///
-    /// # 错误
-    /// 无。
+    /// 输入约定：
+    /// - `receipt`：新回款完整字段
     pub fn with_receipt(mut self, receipt: CreateCustomerReceiptRequest) -> Self {
         self.receipt = Some(receipt);
         self

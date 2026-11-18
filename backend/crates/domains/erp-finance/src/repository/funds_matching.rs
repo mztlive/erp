@@ -15,12 +15,11 @@ use crate::repository::{PayableExt, SupplierDepositExt};
 use crate::{Error, Result};
 
 /// 读取账户稳定外部资金交易的唯一既有记账结果。
-/// # 参数
-/// * `db` / `account` / `transaction` / `executor` - 已绑定账号与来源交易身份。
-/// # 返回
 /// 返回原流水；不存在不代表未扣款。
-/// # 错误
 /// 数据库查询失败时拒绝。
+///
+/// 输入约定：
+/// - `db` / `account` / `transaction` / `executor`：已绑定账号与来源交易身份。
 pub async fn ledger_by_external_transaction(
     db: &Database,
     account: &str,
@@ -34,12 +33,11 @@ pub async fn ledger_by_external_transaction(
 }
 
 /// 将实际到账充值匹配唯一已批准且银行已付的原申请。
-/// # 参数
-/// * `db` / `account` / `reference` / `amount` / `executor` - 真实银行及到账依据。
-/// # 返回
-/// 只有唯一付款和原申请金额完全相符才返回候选。
-/// # 错误
-/// 多个原付款、查询失败或来源损坏时拒绝，不按远端余额补造申请。
+/// 结果：只有唯一付款和原申请金额完全相符才返回候选。
+/// 失败条件：多个原付款、查询失败或来源损坏时拒绝，不按远端余额补造申请。
+///
+/// 输入约定：
+/// - `db` / `account` / `reference` / `amount` / `executor`：真实银行及到账依据。
 pub async fn bank_paid_recharge_candidate(
     db: &Database,
     account: &str,
@@ -67,12 +65,11 @@ pub async fn bank_paid_recharge_candidate(
 }
 
 /// 返款只关联稳定原扣款或同外单唯一原使用，多次扣款不能猜测分摊。
-/// # 参数
-/// * `db` / `account` / `external_order` / `original_transaction` / `executor` - 原账号、订单和可选来源原交易。
-/// # 返回
 /// 返回唯一原真实扣款使用；缺失或歧义保持待核对。
-/// # 错误
 /// 来源损坏或查询失败时拒绝。
+///
+/// 输入约定：
+/// - `db` / `account` / `external_order` / `original_transaction` / `executor`：原账号、订单和可选来源原交易。
 pub async fn unique_original_usage(
     db: &Database,
     account: &str,

@@ -16,15 +16,9 @@ impl CatalogService {
     // ---------- 计量单位 ----------
 
     /// 分页查询计量单位列表。
-    ///
-    /// # 参数
-    /// * `params` - 查询参数（`unit_code`/`name`/`status` 扁平筛选）
-    ///
-    /// # 返回
-    /// 返回契约形状的分页视图。
-    ///
-    /// # 错误
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
+    ///
+    /// `params` 为查询参数（`unit_code`/`name`/`status` 扁平筛选）。
     pub async fn unit_of_measure_list(
         &self,
         actor: &AuditActor,
@@ -44,7 +38,7 @@ impl CatalogService {
             .await
     }
 
-    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    // 分页查询计量单位，沿用公开入口提供的授权快照完成查询。
     async fn unit_of_measure_list_snapshot(
         &self,
         actor: &AuditActor,
@@ -75,17 +69,11 @@ impl CatalogService {
 
     /// 更新计量单位（乐观锁语义）。
     ///
-    /// # 参数
-    /// * `id` - 单位 ID
-    /// * `req` - 更新请求（含期望版本）
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回更新后单位的响应视图。
-    ///
-    /// # 错误
+    /// 失败情形如下：
     /// * `NotFound` - 单位不存在
     /// * `ConflictError` - 期望版本与当前版本不一致
+    ///
+    /// `req` 为更新请求（含期望版本）。
     pub async fn unit_of_measure_update(
         &self,
         id: &str,
@@ -105,7 +93,7 @@ impl CatalogService {
             .await
     }
 
-    /// 在原授权快照内读取版本与关联事实，完成修改和审计。
+    // 更新计量单位，在原事务内完成授权、关联事实核对和写入与审计。
     async fn unit_of_measure_update_stage(
         &self,
         id: &str,
@@ -144,14 +132,7 @@ impl CatalogService {
 
     /// 删除计量单位（软删除，乐观锁语义）。
     ///
-    /// # 参数
-    /// * `id` - 单位 ID
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回删除结果。
-    ///
-    /// # 错误
+    /// 失败情形如下：
     /// * `NotFound` - 单位不存在
     /// * `ConflictError` - 并发修改（CAS 冲突）
     pub async fn unit_of_measure_delete(&self, id: &str, actor: &AuditActor) -> Result<()> {
@@ -166,7 +147,7 @@ impl CatalogService {
             .await
     }
 
-    /// 在原授权快照内读取版本与关联事实，完成修改和审计。
+    // 删除计量单位，在原事务内完成授权、关联事实核对和写入与审计。
     async fn unit_of_measure_delete_stage(
         &self,
         id: &str,

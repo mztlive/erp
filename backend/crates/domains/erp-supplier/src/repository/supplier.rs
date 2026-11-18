@@ -68,18 +68,9 @@ struct SupplierIdRow {
     supplier_id: SupplierAccountId,
 }
 
-/// 按供应商子集合条件读取去重后的供应商角色 ID。
-///
-/// # 参数
-/// * `collection` - 供应商能力或资质集合句柄
-/// * `filter` - 已按业务语义构造的集合查询条件
-/// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-///
-/// # 返回
-/// 返回按字符串 ID 稳定排序并去重的供应商角色 ID。
-///
-/// # 错误
-/// 当 MongoDB 查询或反序列化失败时返回错误。
+// 按供应商子集合条件读取去重后的供应商角色 ID。
+// 返回按字符串 ID 稳定排序并去重的供应商角色 ID。
+// 当 MongoDB 查询或反序列化失败时返回错误。
 async fn find_supplier_ids(
     collection: mongodb::Collection<SupplierIdRow>,
     mut filter: Document,
@@ -104,33 +95,14 @@ pub struct SupplierRepository<'a> {
 }
 
 impl<'a> SupplierRepository<'a> {
-    /// 创建域专用仓储。
-    ///
-    /// # 参数
-    /// * `db` - 目标 MongoDB 数据库
-    ///
-    /// # 返回
-    /// 返回仓储实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 绑定供应商主档集合所在的数据库，供调用方通过仓储访问本域记录。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
 
     /// 按能力负责人收窄供应商集合；空条件表示不筛选。
-    ///
-    /// # 参数
-    /// * `owner_user_ids` - 能力负责人 ID
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
     /// `None` 表示不筛选；`Some` 为命中的供应商 ID，空集合保持空结果。
-    ///
-    /// # 错误
-    /// 数据库读取失败时拒绝。
-    ///
-    /// # 关键业务约束
+    /// 数据库读取失败时向上传播错误。
     /// 能力负责人只收窄，不单独扩大可见供应商。
     pub async fn supplier_ids_by_capability_owners(
         &self,

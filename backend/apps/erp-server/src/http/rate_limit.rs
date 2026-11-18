@@ -31,19 +31,14 @@ struct WindowState {
 }
 
 impl RateLimiter {
-    /// 创建滑动窗口限流器。
-    ///
-    /// # 参数
-    /// * `max_per_key` - 单个 key 在窗口内允许的请求数
-    /// * `max_global` - 全部 key 在窗口内允许的请求总数
-    /// * `window` - 统计窗口
-    /// * `max_concurrent` - 同时处理的最大请求数
-    ///
-    /// # 返回值
-    /// 返回可在线程间共享的进程内限流器。
-    ///
-    /// # Panics
-    /// 任一限制为零，或全局窗口小于单 key 窗口时 panic；调用点使用编译期常量。
+    // 创建滑动窗口限流器。
+    // `max_per_key` 为单个 key 在窗口内允许的请求数，`max_global` 为全部 key 在窗口内允许的请求总数。
+    // `window` 为统计窗口。
+    // 返回可在线程间共享的进程内限流器。
+    //
+    // # Panics
+    //
+    // 任一限制为零，或全局窗口小于单 key 窗口时 panic；调用点使用编译期常量。
     pub(crate) fn new(
         max_per_key: usize,
         max_global: usize,
@@ -53,19 +48,14 @@ impl RateLimiter {
         Self::with_key_limits(&[max_per_key], max_global, window, max_concurrent)
     }
 
-    /// 创建支持多层 key 配额的滑动窗口限流器。
-    ///
-    /// # 参数
-    /// * `key_limits` - 各层 key 按顺序对应的窗口请求上限
-    /// * `max_global` - 全部 key 在窗口内允许的请求总数
-    /// * `window` - 统计窗口
-    /// * `max_concurrent` - 同时处理的最大请求数
-    ///
-    /// # 返回值
-    /// 返回可原子预留多层 key 配额的进程内限流器。
-    ///
-    /// # Panics
-    /// key 层级为空、任一限制为零、全局窗口小于任一 key 窗口，或并发数为零时 panic。
+    // 创建支持多层 key 配额的滑动窗口限流器。
+    // `key_limits` 为各层 key 按顺序对应的窗口请求上限，`max_global` 为全部 key 在窗口内允许的请求总数。
+    // `window` 为统计窗口。
+    // 返回可原子预留多层 key 配额的进程内限流器。
+    //
+    // # Panics
+    //
+    // key 层级为空、任一限制为零、全局窗口小于任一 key 窗口，或并发数为零时 panic。
     pub(crate) fn with_key_limits(
         key_limits: &[usize],
         max_global: usize,
@@ -88,26 +78,17 @@ impl RateLimiter {
         }
     }
 
-    /// 为给定 key 原子预留窗口配额与全局并发槽位。
-    ///
-    /// # 参数
-    /// * `key` - 已由调用方规范化的稳定限流 key
-    ///
-    /// # 返回值
-    /// 返回必须持有到请求处理结束的并发许可。
-    ///
-    /// # 错误
-    /// 单 key 或全局窗口超限、并发槽位已满或计数状态不可用时返回错误。
+    // 请求开始前以稳定键预留滑动窗口配额和全局并发槽位；并发许可保留至处理结束。配额耗尽、无可用槽位或计数状态故障时拒绝。
     pub(crate) fn admit(&self, key: &str) -> Result<OwnedSemaphorePermit, Error> {
         self.admit_at(key, Instant::now())
     }
 
-    /// 在显式时间点执行准入，便于确定性验证窗口边界。
+    // 接收可注入的时钟并走统一准入路径，让单键窗口边界可以确定性复现。
     fn admit_at(&self, key: &str, now: Instant) -> Result<OwnedSemaphorePermit, Error> {
         self.admit_hierarchy_at(&[key], now)
     }
 
-    /// 在显式时间点原子执行多层 key 准入。
+    // 按显式时间点校验层级键并取得并发许可，再为各层申请窗口配额；任一条件不满足时不准入。
     fn admit_hierarchy_at(&self, keys: &[&str], now: Instant) -> Result<OwnedSemaphorePermit, Error> {
         if !self.keys_match_policy(keys) {
             return Err(Error::Unavailable);
@@ -117,13 +98,13 @@ impl RateLimiter {
         Ok(permit)
     }
 
-    /// 检查 key 数量与唯一性是否符合构造时策略。
+    // 在触碰限流计数前确认调用的键数量等于配置层数，且不让同一个键占用多个层级。
     fn keys_match_policy(&self, keys: &[&str]) -> bool {
         keys.len() == self.policy.key_limits.len()
             && !keys.iter().enumerate().any(|(index, key)| keys[..index].contains(key))
     }
 
-    /// 清理过期计数并同时预留全局与所有层级 key 配额。
+    // 持锁清理过期记录，先检查全局和全部键的余量，再一起记账；拒绝请求不会留下部分配额记录。
     fn reserve_window(&self, keys: &[&str], now: Instant) -> Result<(), Error> {
         let mut state = self.state.lock().map_err(|_| Error::Unavailable)?;
         remove_expired(&mut state.global, now, self.policy.window);
@@ -174,10 +155,8 @@ pub enum Error {
 }
 
 impl Error {
-    /// 返回客户端可以重试前需要等待的秒数。
-    ///
-    /// # 返回值
-    /// 配额或并发超限时返回秒数；内部状态不可用时返回 `None`。
+    // 返回客户端可以重试前需要等待的秒数。
+    // 配额或并发超限时返回秒数；内部状态不可用时返回 `None`。
     pub(crate) fn retry_after_secs(&self) -> Option<u64> {
         match self {
             Self::KeyExceeded { retry_after_secs } | Self::GlobalExceeded { retry_after_secs } => {

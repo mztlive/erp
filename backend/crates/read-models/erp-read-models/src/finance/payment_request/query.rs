@@ -24,12 +24,14 @@ use crate::ports::work_item_authorization::{AuthorizedTaskFact, WorkItemAuthoriz
 use crate::{Error, Result};
 
 impl PurchasePaymentRequestReadService {
-    /// 按全部采购来源过滤后分页，列表和总数共用同一读取事务。
+    /// 依据全部采购来源过滤后分页，列表和总数共用同一读取事务。
     ///
     /// # 参数
     /// * `actor` / `query` - 当前账号与申请筛选。
+    ///
     /// # 返回
     /// 返回整单申请分页，无部分来源泄漏。
+    ///
     /// # 错误
     /// 动作拒绝、超过候选上限或读取失败时拒绝。
     pub async fn list(
@@ -49,12 +51,14 @@ impl PurchasePaymentRequestReadService {
             .await
     }
 
-    /// 逐采购来源证明普通详情资格，不以申请人字段或供应商访问替代来源范围。
+    /// 处理采购付款申请时，逐采购来源证明普通详情资格，不以申请人字段或供应商访问替代来源范围。
     ///
     /// # 参数
     /// * `actor` / `id` - 当前账号与申请身份。
+    ///
     /// # 返回
     /// 返回完整冻结依据和当前余额进度。
+    ///
     /// # 错误
     /// 任一来源不可读或申请不存在时均返回 NotFound。
     pub async fn detail(&self, actor: &AuditActor, id: &str) -> Result<PurchasePaymentRequestView> {
@@ -70,7 +74,7 @@ impl PurchasePaymentRequestReadService {
             .await
     }
 
-    /// 先取得详情资格再读取申请；动作检查后重新生成最终交付凭证。
+    // 处理采购付款申请时，先取得详情资格再读取申请；动作检查后重新生成最终交付凭证。
     async fn detail_read(
         &self,
         actor: &AuditActor,
@@ -96,12 +100,14 @@ impl PurchasePaymentRequestReadService {
         Ok(view)
     }
 
-    /// 当前审批人和执行人只凭专用任务资格读取本申请必要资料。
+    /// 处理采购付款申请时，当前审批人和执行人只凭专用任务资格读取本申请必要资料。
     ///
     /// # 参数
     /// * `actor` / `task_id` / `auth` - 当前身份、正式任务与工作流授权器。
+    ///
     /// # 返回
     /// 返回同形状整单上下文，不要求全局销售、采购、合同或文件权限。
+    ///
     /// # 错误
     /// 任务不匹配、失效、来源版本变化或责任资格改变时拒绝。
     pub async fn task_context(
@@ -353,7 +359,7 @@ impl PurchasePaymentRequestReadService {
     }
 }
 
-/// 审批面板只展示已经通过实际对象授权的申请动作。
+// 投影采购付款申请字段时，审批面板只展示已经通过实际对象授权的申请动作。
 fn approval_actions(status: PurchasePaymentRequestStatus, authorized: &[String]) -> Vec<String> {
     let action = match status {
         PurchasePaymentRequestStatus::Draft

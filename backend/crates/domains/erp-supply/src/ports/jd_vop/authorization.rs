@@ -57,14 +57,7 @@ pub struct JdVopAuthorizationStatusQuery {
 
 impl JdVopAuthorizationRequest {
     /// 校验授权资料的有界字段和回调地址。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 字段均满足受控授权合同后成功。
-    ///
-    /// # 错误
     /// 字段非法时返回固定脱敏错误。
     pub fn validate(&self) -> Result<()> {
         if Uuid::parse_str(&self.operation_id).is_err()
@@ -89,11 +82,7 @@ impl JdVopAuthorizationRequest {
 
 impl JdVopAuthorizationStatusQuery {
     /// 校验可选操作ID，不解析或回显任何授权正文。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 未指定操作或符合UUID格式时成功。
-    /// # 错误
     /// 操作ID非法时返回固定错误。
     pub fn validate(&self) -> Result<()> {
         if self.operation_id.as_ref().is_some_and(|id| Uuid::parse_str(id).is_err()) {
@@ -108,14 +97,7 @@ fn bounded(value: &str, maximum: usize) -> bool {
 }
 
 /// 校验授权回调地址，不访问其网络。
-///
-/// # 参数
-/// `value` 为用户配置的原回调地址。
-///
-/// # 返回
 /// 保留原查询参数的合法地址。
-///
-/// # 错误
 /// 非 HTTP(S)、账号密码、片段或保留查询字段时拒绝。
 pub fn callback_uri(value: &str) -> Result<Url> {
     let uri = Url::parse(value).map_err(|_| AuthorizationError::InvalidInput)?;
@@ -149,71 +131,32 @@ pub struct AuthorizationGrant {
 #[async_trait]
 pub trait AuthorizationHttp: Send + Sync {
     /// 检查授权通信是否完成初始化，不影响本地绑定和资料校验。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// HTTP 客户端已就绪时成功，不发送请求。
-    ///
-    /// # 错误
     /// HTTP 客户端初始化失败时返回未就绪错误。
     fn ensure_available(&self) -> Result<()>;
 
     /// 重新核验持久化连接与当前技术账号绑定，不发送请求。
-    ///
-    /// # 参数
-    /// `connection` 为同事务加载的持久化连接。
-    ///
-    /// # 返回
     /// 连接绑定仍有效时成功。
-    ///
-    /// # 错误
     /// 技术配置或引用不匹配时拒绝。
+    /// `connection` 为同事务加载的持久化连接。
     fn verify_binding(&self, connection: &SupplierApiConnection) -> Result<()>;
 
     /// 预检及编码资料，不发送网络；失败时编排不得认领发送。
-    ///
-    /// # 参数
-    /// 单次授权资料与当前应用标识。
-    ///
-    /// # 返回
     /// 不含明文密码的已编码授权参数。
-    ///
-    /// # 错误
     /// 资料格式或私钥非法时拒绝。
+    /// 单次授权资料与当前应用标识。
     fn prepare(&self, request: &JdVopAuthorizationRequest, app_key: &str) -> Result<AuthorizationParameters>;
     /// 编码已取得的授权码，不发送网络。
-    ///
-    /// # 参数
-    /// 应用标识、应用密钥与刚取得的原授权码。
-    ///
-    /// # 返回
     /// 短生命周期交换参数。
-    ///
-    /// # 错误
-    /// 不返回错误；不启动网络。
+    /// 不启动网络。
+    /// 应用标识、应用密钥与刚取得的原授权码。
     fn exchange_parameters(&self, app_key: &str, app_secret: &str, code: &str) -> Zeroizing<String>;
     /// 只发送原授权请求一次，返回官方重定向中的授权码。
-    ///
-    /// # 参数
-    /// 已预检并认领发送的原参数。
-    ///
-    /// # 返回
     /// 原回调地址携带的授权码。
-    ///
-    /// # 错误
     /// 明确拒绝或结果未知时停止执行。
     async fn code(&self, parameters: AuthorizationParameters) -> Result<Zeroizing<String>>;
     /// 只交换原授权码一次；失败不得重放。
-    ///
-    /// # 参数
-    /// 已登记交换身份的原参数。
-    ///
-    /// # 返回
     /// 新凭据与可选的账号观察。
-    ///
-    /// # 错误
     /// 交换结果未知或响应无效时拒绝。
     async fn exchange(&self, parameters: Zeroizing<String>) -> Result<AuthorizationGrant>;
 }

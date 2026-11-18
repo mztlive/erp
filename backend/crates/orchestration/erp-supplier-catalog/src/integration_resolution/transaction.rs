@@ -12,16 +12,8 @@ use super::IntegrationResolutionProcess;
 use crate::Result;
 
 impl IntegrationResolutionProcess {
-    /// 在事务中执行业务写入与审计日志写入（跨集合原子提交，D01 样板写法）。
-    ///
-    /// # 参数
-    /// * `f` - 事务闭包（业务写入 + 审计写入；禁止外部 HTTP/文件 IO）
-    ///
-    /// # 返回
-    /// 返回事务结果（闭包返回值）。
-    ///
-    /// # 错误
-    /// 事务内错误透出；提交结果未知映射为 `OutcomeUnknown`。
+    // 集成处置跨集合写命令业务事实和成功审计时，共用此事务；闭包不得进行外部 HTTP 或文件 I/O。
+    // 返回闭包结果或原事务错误，提交结果未知保留 `OutcomeUnknown`。
     pub(super) async fn run_audited<R, F>(&self, f: F) -> Result<R>
     where
         R: Send,

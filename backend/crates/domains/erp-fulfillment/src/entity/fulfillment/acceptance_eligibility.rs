@@ -31,21 +31,8 @@ pub struct AcceptanceFactEligibility {
 }
 
 impl AcceptanceFactEligibility {
-    /// 计算单条履约事实的验收资格投影。
-    ///
-    /// 净验收与剩余可验收规则委托 [`AcceptanceFulfillmentAllocation`]，本类型
-    /// 是三类履约事实共用的确定性投影入口。
-    ///
-    /// # 参数
-    /// * `fulfillment_line_id` - 履约事实行主键
-    /// * `net_successful_quantity` - 该事实的净成功履约数量
-    /// * `allocations` - 该事实类型的全部验收分配（函数内按事实行主键过滤）
-    ///
-    /// # 返回
-    /// 返回净验收与剩余可验收投影。
-    ///
-    /// # 错误
-    /// 净验收为负、净验收超过净成功履约数量或数量超出统一精度时返回错误。
+    /// 计算一条发货、电子交付或服务履约事实的验收资格，从同类分配中按事实行 ID 取 `Apply - Reverse` 净量。
+    /// 按净成功履约量扣除净已验收量得剩余额度；负净量、超过成功履约量或不符合数量精度时返回领域错误。
     pub fn from_fact(
         fulfillment_line_id: &str,
         net_successful_quantity: Quantity,
@@ -56,7 +43,7 @@ impl AcceptanceFactEligibility {
         Self::from_net_quantity(fulfillment_line_id, net_successful_quantity, net_accepted_quantity)
     }
 
-    /// 复用净验收数量创建投影，并保留剩余数量的领域校验与错误。
+    // 逐事实汇总后，以净成功履约量扣除净验收量构造资格投影；保留余量校验及其领域错误。
     fn from_net_quantity(
         fulfillment_line_id: &str,
         net_successful_quantity: Quantity,
@@ -80,16 +67,7 @@ pub(crate) struct AcceptanceAllocationIndex<'a> {
 }
 
 impl<'a> AcceptanceAllocationIndex<'a> {
-    /// 建立当前计算使用的引用索引，不提前汇总或校验未消费的分配。
-    ///
-    /// # 参数
-    /// * `allocations` - 当前事实类型的已加载分配
-    ///
-    /// # 返回
-    /// 返回按事实 ID 分组、组内保持原顺序的引用索引。
-    ///
-    /// # 错误
-    /// 不返回错误。数量校验延迟到事实消费时执行。
+    // 多条事实计算前按事实 ID 索引已加载的同类分配，保持组内原顺序；不提前汇总或校验未消费的组。
     pub(crate) fn new(allocations: &'a [AcceptanceFulfillmentAllocation]) -> Self {
         let mut grouped: HashMap<&str, Vec<&AcceptanceFulfillmentAllocation>> = HashMap::new();
         for allocation in allocations {
@@ -98,17 +76,7 @@ impl<'a> AcceptanceAllocationIndex<'a> {
         Self { allocations: grouped }
     }
 
-    /// 在原事实处理位置计算资格，按组内原顺序汇总并传递原数量错误。
-    ///
-    /// # 参数
-    /// * `fulfillment_line_id` - 履约事实主键
-    /// * `net_successful_quantity` - 当前事实净成功履约数量
-    ///
-    /// # 返回
-    /// 返回当前事实的净验收与剩余资格数量。
-    ///
-    /// # 错误
-    /// 净验收为负、超额或数量精度非法时返回原领域错误。
+    // 处理当前履约事实时只汇总对应组并保留组内顺序；负净量、超额或数量精度非法时传播原错误。
     pub(crate) fn fact(
         &self,
         fulfillment_line_id: &str,
@@ -139,18 +107,8 @@ pub struct AcceptanceLineEligibility {
 }
 
 impl AcceptanceLineEligibility {
-    /// 汇总一个销售行的验收资格。
-    ///
-    /// # 参数
-    /// * `sales_order_line_id` - 销售稳定明细
-    /// * `required_quantity` - 销售行应履约数量
-    /// * `facts` - 该销售行的逐事实资格投影（保持输入顺序）
-    ///
-    /// # 返回
-    /// 返回行级净验收与剩余可验收汇总。
-    ///
-    /// # 错误
-    /// 汇总算术溢出或结果超出统一数量精度时返回错误。
+    /// 装配销售稳定明细的验收资格时，保留逐事实投影顺序，并受检汇总净已验收量及剩余额度。
+    /// 算术溢出或超出统一数量精度时返回错误，不把异常汇总降为零。
     pub fn from_facts(
         sales_order_line_id: String,
         required_quantity: Quantity,
@@ -185,47 +143,20 @@ impl AcceptanceLineEligibility {
     }
 
     /// 判断销售行是否已全部验收。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 净已验收数量不小于应履约数量时返回 `true`（应履约数量为零的行视为
-    /// 已满足，与历史进度规则一致）。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 净已验收数量不小于应履约数量时返回 `true`（应履约数量为零的行视为已满足，与历史进度规则一致）。
     pub fn is_fully_fulfilled(&self) -> bool {
         self.net_accepted_quantity.to_decimal() >= self.required_quantity.to_decimal()
     }
 
     /// 判断销售行是否存在任一验收。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 净已验收数量不为零时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn has_acceptance(&self) -> bool {
         self.net_accepted_quantity.to_decimal() != Decimal::ZERO
     }
 
     /// 判断销售行是否仍存在剩余可验收数量。
-    ///
-    /// 每条事实的剩余可验收数量由投影保证非负，因此行级汇总不为零当且仅当
-    /// 存在某条事实剩余可验收数量不为零。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
+    /// 每条事实的剩余可验收数量由投影保证非负，因此行级汇总不为零当且仅当存在某条事实剩余可验收数量不为零。
     /// 行级剩余可验收数量不为零时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn has_remaining_eligible(&self) -> bool {
         self.remaining_eligible_quantity.to_decimal() != Decimal::ZERO
     }
@@ -244,17 +175,8 @@ pub struct AcceptanceProgress {
 }
 
 impl AcceptanceProgress {
-    /// 从销售行资格投影派生销售单履约进度。
-    ///
-    /// # 参数
-    /// * `lines` - 全部销售行的资格投影
-    ///
-    /// # 返回
-    /// 存在销售行时返回进度与剩余可验收标记；没有任何销售行时返回 `None`，
-    /// 表示无法派生进度（调用方不得写回进度）。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 刷新销售履约进度时按全部销售行的净验收量判断是否完成、有部分履约或尚未开始，并派生是否仍可验收。
+    /// 没有销售行时返回 `None`，调用方不得写回进度。
     pub fn derive(lines: &[AcceptanceLineEligibility]) -> Option<Self> {
         if lines.is_empty() {
             return None;
@@ -294,7 +216,7 @@ mod tests {
         FulfillmentFactType,
     };
 
-    /// 构造一条 APPLY 分配（默认数量 4）。
+    // 构造给定数量的原始 `Apply` 分配，供净验收量和反向分配测试复用。
     fn apply_allocation(line_id: &str, quantity: &str) -> AcceptanceFulfillmentAllocation {
         AcceptanceFulfillmentAllocation::new(
             AcceptanceFulfillmentAllocationId::new(format!("allocation-{line_id}-{quantity}")),
@@ -312,7 +234,7 @@ mod tests {
         .unwrap()
     }
 
-    /// 构造冲销 `applied` 的 REVERSE 分配。
+    // 构造冲销 `applied` 的 REVERSE 分配。
     fn reverse_allocation(
         line_id: &str,
         quantity: &str,
@@ -334,7 +256,7 @@ mod tests {
         .unwrap()
     }
 
-    /// 单条事实投影按 APPLY − REVERSE 计算净验收与剩余可验收数量。
+    // 验证单条事实投影按 APPLY − REVERSE 计算净验收与剩余可验收数量。
     #[test]
     fn fact_projection_conserves_apply_reverse_net() {
         let applied = apply_allocation("dl-1", "4");
@@ -348,7 +270,7 @@ mod tests {
         assert_eq!(projection.eligible_quantity, Quantity::from_str("2.5").unwrap());
     }
 
-    /// 大批履约事实仍只消费各自的分配，并保持数量守恒。
+    // 验证大批履约事实仍只消费各自的分配，并保持数量守恒。
     #[test]
     fn large_fact_projection_sample() {
         let allocations =
@@ -369,7 +291,7 @@ mod tests {
         eprintln!("fulfillment_1000_facts_10_runs={:?}", started.elapsed());
     }
 
-    /// 引用索引与公开逐事实入口一致，保持 APPLY/REVERSE 守恒及空组语义。
+    // 验证引用索引与公开逐事实入口一致，保持 APPLY/REVERSE 守恒及空组语义。
     #[test]
     fn indexed_fact_matches_slice_projection_for_interleaved_allocations() {
         let first = apply_allocation("dl-1", "4");
@@ -394,7 +316,7 @@ mod tests {
         }
     }
 
-    /// 净验收为负、净验收超过成功履约数量时投影明确失败，不得回退为零。
+    // 验证净验收为负、净验收超过成功履约数量时投影明确失败，不得回退为零。
     #[test]
     fn fact_projection_fails_on_negative_net_or_over_acceptance() {
         let applied = apply_allocation("dl-1", "4");
@@ -415,7 +337,7 @@ mod tests {
         );
     }
 
-    /// 行级投影按输入顺序汇总多条事实并保持事实顺序。
+    // 验证行级投影按输入顺序汇总多条事实并保持事实顺序。
     #[test]
     fn line_projection_sums_facts_in_input_order() {
         let fact_a = AcceptanceFactEligibility {
@@ -439,7 +361,7 @@ mod tests {
         assert_eq!(line.facts, vec![fact_a, fact_b]);
     }
 
-    /// 空事实集合并入零应履约数量时行级汇总为零。
+    // 验证空事实集合并入零应履约数量时行级汇总为零。
     #[test]
     fn line_projection_empty_facts_zeroes() {
         let line = AcceptanceLineEligibility::from_facts(
@@ -455,7 +377,7 @@ mod tests {
         assert!(!line.has_remaining_eligible());
     }
 
-    /// 汇总算术溢出时行级投影明确失败，不得回退为零。
+    // 验证汇总算术溢出时行级投影明确失败，不得回退为零。
     #[test]
     fn line_projection_overflow_fails() {
         let max = Quantity::from_str(&Decimal::MAX.to_string()).unwrap();
@@ -478,7 +400,7 @@ mod tests {
         assert!(error.to_string().contains("溢出"));
     }
 
-    /// 行级谓词覆盖未验收、部分验收与全部验收。
+    // 验证行级谓词覆盖未验收、部分验收与全部验收。
     #[test]
     fn line_predicates_cover_not_started_partial_full() {
         let no_acceptance =
@@ -498,7 +420,7 @@ mod tests {
         assert!(over.is_fully_fulfilled());
     }
 
-    /// 行级剩余可验收标记只在仍有剩余时成立。
+    // 验证行级剩余可验收标记只在仍有剩余时成立。
     #[test]
     fn line_remaining_eligible_flag() {
         let remaining = line_with_net(Quantity::from_str("2").unwrap(), Quantity::from_str("10").unwrap());
@@ -508,7 +430,7 @@ mod tests {
         assert!(!exhausted.has_remaining_eligible());
     }
 
-    /// 进度派生覆盖未开始、部分履约、已完成及剩余可验收标记。
+    // 验证进度派生覆盖未开始、部分履约、已完成及剩余可验收标记。
     #[test]
     fn progress_derive_covers_full_matrix() {
         let not_started = line_with_net(Quantity::from_str("0").unwrap(), Quantity::from_str("10").unwrap());
@@ -541,13 +463,13 @@ mod tests {
         assert!(!derived.has_remaining_eligible);
     }
 
-    /// 没有任何销售行时进度无法派生（调用方不得写回）。
+    // 验证没有任何销售行时进度无法派生（调用方不得写回）。
     #[test]
     fn progress_derive_returns_none_for_empty_lines() {
         assert!(AcceptanceProgress::derive(&[]).is_none());
     }
 
-    /// 构造指定净验收与应履约数量的行级投影。
+    // 构造指定净验收与应履约数量的行级投影。
     fn line_with_net(net_accepted: Quantity, required: Quantity) -> AcceptanceLineEligibility {
         AcceptanceLineEligibility::from_facts(
             "sol-1".to_string(),

@@ -14,18 +14,8 @@ use super::working_copy_line::SalesOrderWorkingCopyLine;
 
 impl SalesOrderWorkingCopy {
     /// 将已规范化的表头快照还原为提交构造入参。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回与当前工作副本快照字段一一对应的表头入参。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    ///
-    /// # 关键业务约束
-    /// 只复制已规范化快照，不再次 trim。
+    /// 业务边界：只复制已规范化快照，不再次 trim。
     pub fn header_snapshot_data(&self) -> HeaderSnapshotData {
         HeaderSnapshotData::from_snapshots(
             &self.customer_snapshot,
@@ -39,18 +29,12 @@ impl SalesOrderWorkingCopy {
 
 impl SalesOrderSubmissionLineData {
     /// 从工作副本行复制提交行字段组与快照。
-    ///
-    /// # 参数
-    /// * `line` - 已冻结的工作副本行
-    ///
-    /// # 返回
     /// 返回提交行创建数据；金额由提交行 `new` 按字段组重算。
-    ///
-    /// # 错误
     /// 行类型对应字段组缺失时返回错误。
+    /// 业务边界：调用方必须保持输入行顺序；本方法不排序、不生成行 ID。
     ///
-    /// # 关键业务约束
-    /// 调用方必须保持输入行顺序；本方法不排序、不生成行 ID。
+    /// 输入约定：
+    /// - `line`：已冻结的工作副本行
     pub fn from_working_copy_line(line: &SalesOrderWorkingCopyLine) -> Result<Self> {
         Ok(Self {
             sales_order_line_id: line.sales_order_line_id.clone(),
@@ -68,22 +52,16 @@ impl SalesOrderSubmissionLineData {
 
 impl SalesOrderSubmissionData {
     /// 从工作副本头、行复制提交快照创建数据。
-    ///
-    /// # 参数
-    /// * `working_copy` - 已迁移到可提交状态的工作副本
-    /// * `lines` - 工作副本行（顺序即提交行顺序）
-    /// * `submission_no` - 调用方读取的下一提交序号
-    /// * `submitted_at` - 调用方注入的提交时间
-    /// * `submitted_by` - 调用方注入的提交人
-    ///
-    /// # 返回
     /// 返回提交头创建数据（含行创建数据）。
-    ///
-    /// # 错误
     /// 任一行字段组缺失时返回错误。
+    /// 业务边界：金额来自行实体已舍入合计；ID 与事务写入仍由 Service 负责。
     ///
-    /// # 关键业务约束
-    /// 金额来自行实体已舍入合计；ID 与事务写入仍由 Service 负责。
+    /// 输入约定：
+    /// - `working_copy`：已迁移到可提交状态的工作副本
+    /// - `lines`：工作副本行（顺序即提交行顺序）
+    /// - `submission_no`：调用方读取的下一提交序号
+    /// - `submitted_at`：调用方注入的提交时间
+    /// - `submitted_by`：调用方注入的提交人
     pub fn from_working_copy(
         working_copy: &SalesOrderWorkingCopy,
         lines: &[SalesOrderWorkingCopyLine],

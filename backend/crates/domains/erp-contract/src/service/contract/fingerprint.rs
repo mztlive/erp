@@ -2,13 +2,9 @@
 
 use crate::repository::scope::ContractVersion;
 
-/// 编码合同身份和业务版本；输入顺序不影响分页指纹。
-/// # 参数
-/// versions 为当前查询的合同身份及业务版本。
-/// # 返回
-/// 按身份排序并带长度边界的稳定字节串。
-/// # 错误
-/// 无。
+// 编码合同身份和业务版本；输入顺序不影响分页指纹。
+// 按身份排序并带长度边界的稳定字节串。
+// versions 为当前查询的合同身份及业务版本。
 pub(super) fn version_fingerprint_input(versions: &[ContractVersion]) -> Vec<u8> {
     let mut pairs = versions.iter().map(|version| (version.id.as_str(), version.version)).collect::<Vec<_>>();
     pairs.sort_unstable();
@@ -31,16 +27,9 @@ fn push_u64(out: &mut Vec<u8>, value: u64) {
     out.extend_from_slice(&value.to_le_bytes());
 }
 
-/// 对规范字节串计算稳定指纹（FNV-1a 64 位固定算法，不随工具链漂移）。
-///
-/// # 参数
-/// * `input` - `version_fingerprint_input` 输出的规范字节串
-///
-/// # 返回
-/// 返回 64 位指纹，仅用于同版本内快照比对。
-///
-/// # 错误
-/// 不返回错误。
+// 对规范字节串计算稳定指纹（FNV-1a 64 位固定算法，不随工具链漂移）。
+// 返回 64 位指纹，仅用于同版本内快照比对。
+// `input` 为`version_fingerprint_input` 输出的规范字节串。
 pub(super) fn stable_fingerprint(input: &[u8]) -> u64 {
     let mut hash: u64 = 0xcbf29ce484222325;
     for byte in input {

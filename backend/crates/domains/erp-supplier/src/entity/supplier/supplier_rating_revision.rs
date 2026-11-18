@@ -32,16 +32,7 @@ pub enum SupplierRating {
 }
 
 impl SupplierRating {
-    /// 返回评级的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为 `SupplierRating` 提供中文展示名；界面展示时使用，不以文案作为稳定标识。
     pub fn label(&self) -> &'static str {
         match self {
             Self::A => "A 级",
@@ -51,16 +42,7 @@ impl SupplierRating {
         }
     }
 
-    /// 返回评级的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得 `SupplierRating` 的稳定标识，供需要按代码而非展示文案识别取值的调用方使用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::A => "A",
@@ -117,21 +99,10 @@ pub struct SupplierRatingRevision {
 
 impl SupplierRatingRevision {
     /// 创建评估版本。
-    ///
-    /// 完成变更原因必填校验与规范化；评分必须在 `[0, 100]` 百分制区间；
-    /// 期初评分只在首次合作版本（`revision_no == 1`）允许填写；
-    /// 强制 `valid_to` 晚于 `valid_from`。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::SupplierRatingRevisionId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
+    /// 完成变更原因必填校验与规范化；评分必须在 `[0, 100]` 百分制区间；期初评分只在首次合作版本
+    /// （`revision_no == 1`）允许填写；强制 `valid_to` 晚于 `valid_from`。
     /// 返回新建的评估版本实体。
-    ///
-    /// # 错误
-    /// 当原因为空/超长、评分越界、期初评分出现在非首次版本或生效区间
-    /// 倒挂时返回错误。
+    /// 当原因为空/超长、评分越界、期初评分出现在非首次版本或生效区间倒挂时返回错误。
     pub fn new(id: SupplierRatingRevisionId, data: SupplierRatingRevisionData) -> Result<Self> {
         let change_reason = normalize_required_text(
             data.change_reason,
@@ -156,14 +127,8 @@ impl SupplierRatingRevision {
     }
 
     /// 在追加下一评估版本前结束当前开放区间。
-    ///
-    /// # 参数
-    /// * `next_valid_from` - 下一版本的生效开始日
-    ///
-    /// # 返回
-    /// 成功时把当前 `valid_to` 设为 `next_valid_from` 的前一业务日。该前一日无法转成 `BusinessDate` 时写成 `None`。
-    ///
-    /// # 错误
+    /// 成功时把当前 `valid_to` 设为 `next_valid_from` 的前一业务日。该前一日无法转成 `BusinessDate` 时写
+    /// 成 `None`。
     /// `next_valid_from` 不晚于当前 `valid_from`，或无法取得其前一日时返回业务错误。
     pub fn close_before(&mut self, next_valid_from: BusinessDate) -> Result<()> {
         if next_valid_from <= self.valid_from {
@@ -183,21 +148,10 @@ impl SupplierRatingRevision {
     }
 }
 
-/// 校验评分数值与期初评分归属。
-///
-/// 评分必须在 `[0, 100]` 百分制区间（合作评估口径，W14）；
-/// 期初评分只在首次合作版本填写（§6.2）。
-///
-/// # 参数
-/// * `revision_no` - 修订序号
-/// * `initial_score` - 期初评分（可空）
-/// * `current_score` - 合作中评分
-///
-/// # 返回
-/// 校验通过返回 `Ok(())`。
-///
-/// # 错误
-/// 评分越界或期初评分出现在非首次版本时返回错误。
+// 核对评分数值与期初评分归属。
+// 评分必须在 `[0, 100]` 百分制区间（合作评估口径，W14）；期初评分只在首次合作版本填写（§6.2）。
+// 评分越界或期初评分出现在非首次版本时返回错误。
+// `initial_score`：期初评分（可空）
 fn ensure_scores_valid(revision_no: u32, initial_score: Option<u8>, current_score: u8) -> Result<()> {
     if current_score > SCORE_MAX {
         return Err(Error::from("合作中评分必须在 0–100 百分制区间内"));
@@ -233,7 +187,7 @@ mod tests {
         }
     }
 
-    /// happy path：原因去空白，评分与评级落库。
+    // 验证原因去空白，评分与评级落库。
     #[test]
     fn new_trims_and_normalizes() {
         let revision =
@@ -246,7 +200,7 @@ mod tests {
         assert_eq!(revision.revision.revision_no, 1);
     }
 
-    /// 失败路径：原因为空/超长、评分越界、期初评分出现在非首次版本、区间倒挂。
+    // 验证原因为空/超长、评分越界、期初评分出现在非首次版本、区间倒挂。
     #[test]
     fn new_rejects_invalid_inputs() {
         let blank_reason = SupplierRatingRevisionData { change_reason: "   ".to_string(), ..rating_data() };
@@ -271,7 +225,7 @@ mod tests {
         assert!(SupplierRatingRevision::new(SupplierRatingRevisionId::new("r"), reversed).is_err());
     }
 
-    /// 后续版本：期初评分省略、合作中评分随周期追加。
+    // 验证后续版本：期初评分省略、合作中评分随周期追加。
     #[test]
     fn later_revision_drops_initial_score() {
         let data = SupplierRatingRevisionData {
@@ -287,7 +241,7 @@ mod tests {
         assert_eq!(revision.current_score, 88);
     }
 
-    /// 追加下一版本前，上一开放区间结束到新版本前一日。
+    // 验证追加下一版本前，上一开放区间结束到新版本前一日。
     #[test]
     fn close_before_ends_previous_day() {
         let mut revision = SupplierRatingRevision::new(
@@ -301,7 +255,7 @@ mod tests {
         assert!(revision.close_before(BusinessDate::from_ymd(2026, 1, 1).unwrap()).is_err());
     }
 
-    /// 评级稳定代码与中文标签。
+    // 验证评级稳定代码与中文标签。
     #[test]
     fn rating_codes_and_labels() {
         assert_eq!(serde_json::to_string(&SupplierRating::A).unwrap(), "\"A\"");
@@ -309,7 +263,7 @@ mod tests {
         assert_eq!(SupplierRating::C.label(), "C 级");
     }
 
-    /// 实体 BSON 往返。
+    // 验证供应商评级修订写成 BSON 后能还原成原实体。
     #[test]
     fn bson_roundtrip() {
         let revision =

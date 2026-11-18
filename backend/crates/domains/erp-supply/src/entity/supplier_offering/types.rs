@@ -15,16 +15,7 @@ pub enum OfferingSourceType {
 }
 
 impl OfferingSourceType {
-    /// 返回持久化与查询使用的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回大写稳定代码。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得供给登记来源的稳定标识，供需要按代码而非展示文案识别取值的调用方使用。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Excel => "EXCEL",
@@ -33,16 +24,7 @@ impl OfferingSourceType {
         }
     }
 
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回来源标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为供给登记来源提供中文展示名；界面展示时使用，不以文案作为稳定标识。
     pub fn label(self) -> &'static str {
         match self {
             Self::Excel => "Excel",
@@ -66,12 +48,8 @@ pub enum OfferingStatus {
 
 impl OfferingStatus {
     /// 返回关系暂停或停供导致履约受阻的正式领域原因。
-    /// # 参数
-    /// 无；读取当前关系状态。
-    /// # 返回
     /// 停供和暂停分别返回停止供应与当前不可供；启用返回空。
-    /// # 错误
-    /// 无。
+    /// 读取当前关系状态。
     pub fn interruption_reason(self) -> Option<AvailabilityInterruptionReason> {
         match self {
             Self::Active => None,
@@ -80,16 +58,7 @@ impl OfferingStatus {
         }
     }
 
-    /// 返回持久化与查询使用的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回大写稳定代码。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得供给关系状态的稳定标识，供需要按代码而非展示文案识别取值的调用方使用。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Active => "ACTIVE",
@@ -98,16 +67,7 @@ impl OfferingStatus {
         }
     }
 
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回状态标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为供给关系状态提供中文展示名；界面展示时使用，不以文案作为稳定标识。
     pub fn label(self) -> &'static str {
         match self {
             Self::Active => "启用",
@@ -156,16 +116,7 @@ pub enum AvailabilityStatus {
 }
 
 impl AvailabilityStatus {
-    /// 返回持久化与查询使用的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回大写稳定代码。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得可供状态的稳定标识，供需要按代码而非展示文案识别取值的调用方使用。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Available => "AVAILABLE",
@@ -175,16 +126,7 @@ impl AvailabilityStatus {
         }
     }
 
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回状态标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为可供状态提供中文展示名；界面展示时使用，不以文案作为稳定标识。
     pub fn label(self) -> &'static str {
         match self {
             Self::Available => "可供",

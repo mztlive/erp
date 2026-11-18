@@ -16,13 +16,14 @@ use rust_decimal::Decimal;
 
 use crate::Result;
 
-/// 读取准确已接受结果关联的内部报价版本，不读取采购未发布工作。
-/// # 参数
-/// `db`、`source` 为已授权销售的询价来源及数据库；`executor` 为当前读取或写事务。
-/// # 返回
-/// 返回仅可用于该销售稳定行的报价候选，余额跨销售和报价修订核算。
-/// # 错误
-/// 来源损坏、读取失败或报价数量溢出时拒绝。
+// 准备采购询价报价候选时，读取准确已接受结果关联的内部报价版本，不读取采购未发布工作。
+//
+// 调用参数：
+// `db`、`source` 为已授权销售的询价来源及数据库；`executor` 为当前读取或写事务。
+//
+// 返回仅可用于该销售稳定行的报价候选，余额跨销售和报价修订核算。
+//
+// 来源损坏、读取失败或报价数量溢出时拒绝。
 pub(super) async fn inquiry_candidates(
     db: &Database,
     source: &SalesOrderInquirySource,
@@ -121,13 +122,13 @@ async fn quote_balances(
     Ok((latest.into_values().collect(), balances))
 }
 
-/// 从供应领域原始报价确定性冻结实际采购采用链，不接受销售反馈价格替代。
+/// 组装采购询价报价时，从供应领域原始报价确定性冻结实际采购采用链，不接受销售反馈价格替代。
+///
 /// # 参数
 /// `quote` 为已核验范围的不可变采购内部报价。
+///
 /// # 返回
 /// 返回不含备注附件的采购专项快照。
-/// # 错误
-/// 无。
 pub fn inquiry_quote_source(quote: &InquiryQuote) -> PurchaseInquiryQuoteSource {
     let data = &quote.data;
     let terms = &data.terms;

@@ -72,10 +72,8 @@ where
 }
 
 impl PreparedInstanceListQuery {
-    /// 解码 HTTP cursor，并把查询交给 Service DTO 规范化。
-    ///
-    /// # 错误
-    /// cursor wire 非法或 Service 查询合同不成立时返回 422。
+    // 解码 HTTP cursor，并把查询交给 Service DTO 规范化。
+    // cursor wire 非法或 Service 查询合同不成立时返回 422。
     fn prepare(query: InstanceListQuery, headers: &axum::http::HeaderMap) -> Result<Self, ApprovalHttpError> {
         let cursor =
             query.decode_cursor().map_err(|message| ApprovalHttpError::unprocessable(message, headers))?;
@@ -126,16 +124,12 @@ pub struct InstanceListCursor {
 
 impl InstanceListCursor {
     /// 编码游标。
-    ///
-    /// # 返回
     /// 返回 `view|primary|id`。
     pub fn encode(&self) -> String {
         format!("{}|{}|{}", self.view.as_str(), self.sort_time, self.id)
     }
 
     /// 解码并校验 view。
-    ///
-    /// # 错误
     /// 格式非法或跨 view 使用时返回说明。
     pub fn decode(raw: &str, expected: RuntimeInstanceListView) -> Result<Self, String> {
         let mut parts = raw.splitn(3, '|');
@@ -153,20 +147,12 @@ impl InstanceListCursor {
     }
 
     /// 由 Service 游标形成 HTTP opaque cursor。
-    ///
-    /// # 参数
-    /// * `view` - 当前查询视图
-    /// * `cursor` - Service 返回的稳定游标
-    ///
-    /// # 返回
     /// 返回只负责 wire 编码的 HTTP 游标。
     pub fn from_runtime(view: RuntimeInstanceListView, cursor: RuntimeInstanceListCursor) -> Self {
         Self { view, sort_time: cursor.sort_time, id: cursor.id }
     }
 
     /// 转为 Service 稳定游标。
-    ///
-    /// # 返回
     /// 返回已完成 wire 解码的 `sort_time/id`。
     pub fn into_runtime(self) -> RuntimeInstanceListCursor {
         RuntimeInstanceListCursor { sort_time: self.sort_time, id: self.id }
@@ -175,11 +161,7 @@ impl InstanceListCursor {
 
 impl InstanceListQuery {
     /// 解码可选 HTTP opaque cursor。
-    ///
-    /// # 返回
     /// 未提交 cursor 时返回 `None`；否则返回 Service 稳定游标。
-    ///
-    /// # 错误
     /// 显式空 cursor、格式非法、排序时间越出 `i64`、跨 view 使用，或 Mine
     /// 使用负排序时间时返回说明。
     pub fn decode_cursor(&self) -> Result<Option<RuntimeInstanceListCursor>, String> {
@@ -212,8 +194,6 @@ pub struct InstanceHistoryQuery {
 
 impl InstanceHistoryQuery {
     /// 规范化历史上限。
-    ///
-    /// # 错误
     /// 超过上限时返回说明。
     pub fn normalized_limit(&self) -> Result<u32, String> {
         let limit = self.limit.unwrap_or(DEFAULT_HISTORY_LIMIT);
@@ -224,14 +204,7 @@ impl InstanceHistoryQuery {
     }
 
     /// 将游标解析为上一页最后一条执行序号。
-    ///
-    /// # 参数
-    /// 无；读取 `cursor` 字段。
-    ///
-    /// # 返回
     /// 首页返回 `None`；后续页返回上一页 `execution_no`。
-    ///
-    /// # 错误
     /// 非空但不是无符号整数时返回说明。
     pub fn normalized_cursor(&self) -> Result<Option<u32>, String> {
         let Some(raw) = self.cursor.as_deref().map(str::trim).filter(|value| !value.is_empty()) else {
@@ -269,8 +242,6 @@ pub enum DecisionValue {
 
 impl DecisionValue {
     /// 返回稳定决定码。
-    ///
-    /// # 返回
     /// 返回 `APPROVE` 或 `REJECT`。
     pub fn as_str(self) -> &'static str {
         match self {
@@ -299,18 +270,8 @@ pub struct ResumeApproverHttpRequest {
 /// 受阻取消请求。
 impl ResumeApproverHttpRequest {
     /// 以必填版本构造恢复请求；已关闭任务版本默认为空。
-    ///
-    /// # 参数
-    /// * `expected_instance_version` - 期望实例版本
-    /// * `expected_execution_version` - 期望执行版本
-    /// * `expected_assignment_version` - 期望绑定版本
-    /// * `idempotency_key` - 幂等键
-    ///
-    /// # 返回
+    /// `expected_assignment_version` 为期望绑定版本。
     /// 返回无已关闭任务版本的请求。
-    ///
-    /// # 错误
-    /// 无。
     pub fn new(
         expected_instance_version: String,
         expected_execution_version: String,
@@ -547,7 +508,7 @@ mod tests {
         assert_eq!(DETAIL_HISTORY_LIMIT, 20);
     }
 
-    /// 历史游标只接受执行序号。
+    // 锁定历史续页游标的协议含义：只解码执行序号，不接受其他对象身份。
     #[test]
     fn history_cursor_parses_execution_no() {
         let empty = InstanceHistoryQuery { cursor: None, limit: None, ..Default::default() };

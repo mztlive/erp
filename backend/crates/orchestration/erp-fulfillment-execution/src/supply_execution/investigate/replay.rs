@@ -31,13 +31,9 @@ struct InvestigationReplay {
 }
 
 impl SupplierFulfillmentProcess {
-    /// 在当前动作授权的原快照中恢复已提交调查结果。
-    /// # 参数
-    /// 命令身份、原载荷、操作号、任务或对象定位及真实操作人。
-    /// # 返回
-    /// 原成功结果；未命中回执时返回 None。
-    /// # 错误
-    /// 当前资格、目标、回执身份或证据失效时拒绝。
+    // 在当前动作授权的原快照中恢复已提交调查结果。
+    //
+    // 命令身份、原载荷、操作号、任务或对象定位及真实操作人。原成功结果；未命中回执时返回 None。当前资格、目标、回执身份或证据失效时拒绝。
     pub(super) async fn replay_investigation(
         &self,
         command_id: &str,
@@ -67,7 +63,7 @@ impl SupplierFulfillmentProcess {
 }
 
 impl InvestigationReplay {
-    /// 当前资格与来源成立后才读取原回执，未命中时后续提交仍重新授权。
+    // 当前资格与来源成立后才读取原回执，未命中时后续提交仍重新授权。
     async fn load(
         &self,
         db: &Database,
@@ -104,7 +100,7 @@ impl InvestigationReplay {
         )))
     }
 
-    /// 对象回放使用原动作范围；任务回放先取得完整资格，再校验当前精确任务。
+    // 对象回放使用原动作范围；任务回放先取得完整资格，再校验当前精确任务。
     async fn authorized_order(
         &self,
         db: &Database,
@@ -144,7 +140,7 @@ impl InvestigationReplay {
             .ok_or_else(|| Error::NotFound("供应商订单不存在".into()))
     }
 
-    /// 原操作人、目标、操作号及载荷均须精确匹配，不使用旧任务版本拒绝重放。
+    // 原操作人、目标、操作号及载荷均须精确匹配，不使用旧任务版本拒绝重放。
     fn receipt(&self, stored: SupplyCommandReceipt, order_id: &str) -> Result<InvestigationReceipt> {
         let action = if self.task.is_some() {
             "supplier_fulfillment.task_investigate"

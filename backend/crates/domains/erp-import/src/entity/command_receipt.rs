@@ -69,15 +69,7 @@ pub struct ImportCommandReceipt {
 }
 
 impl ImportCommandReceipt {
-    /// 形成拥有领域的不可变命令结果。
-    /// # 参数
-    /// * `identity` - 当前规范化命令的完整结构化身份。
-    /// * `result` - 动作专属正式结果。
-    /// * `audit_event_id` - 本次成功事件的随机关联号。
-    /// # 返回
-    /// 返回以稳定命令 ID 唯一定位的回执。
-    /// # 错误
-    /// 身份或强类型结果非法时拒绝构造。
+    /// 以稳定命令 ID 构造不可变回执，保存规范化命令身份、动作专属结果和成功事件关联号，以便按原键恢复结果；身份或结果非法时拒绝构造。
     pub fn new(
         identity: StructuredCommandReceipt,
         result: ImportCommandResult,
@@ -94,16 +86,7 @@ impl ImportCommandReceipt {
         Ok(fact)
     }
 
-    /// 校验持久化回执，损坏的新事实不得退回展示审计。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 完整身份及合法动作结果返回空值。
-    ///
-    /// # 错误
-    /// 共享身份非法时返回 [`Error::Logic`]。`schema_version` 不是 1、已软删除、主键与 `command_id` 不一致、`audit_event_id` 为空白，或动作结果不匹配时返回 [`Error::ConflictError`]。
+    /// 恢复前校验独立回执，不允许损坏事实退回到展示审计。共享命令身份非法返回 [`Error::Logic`]；schema 非 `1`、已软删除、主键与命令 ID 不符、事件 ID 为空白或结果与动作不匹配时返回 [`Error::ConflictError`]。
     pub fn validate(&self) -> Result<()> {
         self.identity.validate()?;
         if self.schema_version != 1
@@ -119,13 +102,7 @@ impl ImportCommandReceipt {
         Ok(())
     }
 
-    /// 精确核对当前命令身份和载荷，不查询旧别名。
-    /// # 参数
-    /// * `expected` - 当前请求按原稳定算法构造的身份。
-    /// # 返回
-    /// 完整身份和载荷一致时返回空值。
-    /// # 错误
-    /// 同键异参、损坏身份或结果时停止恢复。
+    /// 验证回执后逐项核对当前请求的完整身份与载荷指纹；同键异参或回执损坏即停止恢复，不查旧别名。
     pub fn ensure_identity(&self, expected: &StructuredCommandReceipt) -> Result<()> {
         self.validate()?;
         if &self.identity != expected {
@@ -136,7 +113,7 @@ impl ImportCommandReceipt {
         Ok(())
     }
 
-    /// 动作、资源作用域及强类型结果同时成立。
+    // 核对确认或执行结果的动作、资源类型和作用域，再校验各自的结果矩阵，防止跨任务或批次恢复。
     fn valid_result(&self) -> bool {
         match &self.result {
             ImportCommandResult::Confirmation(result) => {
@@ -157,7 +134,7 @@ impl ImportCommandReceipt {
     }
 }
 
-/// 确认决定和下一步必须保持原业务矩阵。
+// 验证冻结的确认身份、版本和决定矩阵：同意只能等待其他确认或启动应用，退回只能修复重验。
 fn valid_confirmation(result: &ImportConfirmationOutcome) -> bool {
     let receipt = &result.receipt;
     [&result.confirmation_id, &result.batch_id, &result.work_item_id, &result.subject_version]
@@ -183,7 +160,7 @@ fn valid_confirmation(result: &ImportConfirmationOutcome) -> bool {
         }
 }
 
-/// 执行状态仅表示命令原提交结果，不能记录 Unknown 作为成功回执。
+// 验证启动、取消和重试各自动作对应的批次、任务、结果状态与下一步，只允许原提交的确定结果，不能把结果未知写成成功回执。
 fn valid_execution(receipt: &ImportExecutionReceipt) -> bool {
     receipt.batch_version > 0
         && receipt.job_version > 0

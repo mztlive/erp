@@ -7,17 +7,10 @@ use erp_supply::ports::supplier_api_gateway::{ClassifiedError, SupplierApiGatewa
 pub struct UnavailableSupplierApiGateway;
 
 impl SupplierApiGateway for UnavailableSupplierApiGateway {
-    /// 执行一次连接健康检查（默认实现恒失败关闭）。
-    ///
-    /// # 参数
-    /// * `connection` - 目标连接。
-    /// * `check_type` - 本次启动运行冻结的检查种类。
-    ///
-    /// # 返回
-    /// 不返回成功值。
-    ///
-    /// # 错误
-    /// 恒返回 `TransientFailure`、代码 `ENDPOINT_UNRESOLVED`：端点引用是配置引用，未注册可调用地址。
+    // 执行一次连接健康检查（默认实现恒失败关闭）。
+    // `check_type` 为本次启动运行冻结的检查种类。
+    // 不返回成功值。
+    // 恒返回 `TransientFailure`、代码 `ENDPOINT_UNRESOLVED`：端点引用是配置引用，未注册可调用地址。
     fn health_check<'a>(
         &'a self,
         connection: &'a SupplierApiConnection,

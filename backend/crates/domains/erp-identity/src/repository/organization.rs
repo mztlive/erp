@@ -26,29 +26,17 @@ pub struct OrganizationRepository<'a> {
 
 impl<'a> OrganizationRepository<'a> {
     /// 绑定数据库。
-    ///
-    /// # 参数
-    /// * `db` - 组织集合所在数据库
-    ///
-    /// # 返回
     /// 返回仅拥有组织集合的仓储实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
 
     /// 在调用方同一事务中读取版本与完整组织事实。
-    ///
-    /// # 参数
-    /// * `executor` - 调用方事务或非事务执行器
-    ///
-    /// # 返回
     /// 返回组织单元、成员和版本；旧管理关系仅从历史回执读取；尚无版本文档时版本为 `0`。
     ///
-    /// # 错误
     /// 任一集合读取失败时返回仓储错误，不返回残缺状态。
+    ///
+    /// `executor`：调用方事务或非事务执行器。
     pub async fn state(&self, executor: &mut dyn Executor) -> Result<OrganizationState> {
         Ok(OrganizationState {
             version: self.revision(executor).await?.map(|value| value.revision).unwrap_or(0),
@@ -61,29 +49,16 @@ impl<'a> OrganizationRepository<'a> {
     }
 
     /// 读取当前组织版本，用于跨页重验与缓存失效。
-    ///
-    /// # 参数
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
     /// 返回标识为 `organization` 的版本文档；尚无文档时返回 `None`。
     ///
-    /// # 错误
     /// 底层读取失败时返回仓储错误。
     pub async fn revision(&self, executor: &mut dyn Executor) -> Result<Option<OrganizationRevision>> {
         Repository::new(self.db, ORG_REVISIONS).find_by_id("organization", executor).await
     }
 
     /// 查询幂等命令回执；仅组织管理用例可返回审计详情。
-    ///
-    /// # 参数
-    /// * `id` - 变更回执 ID
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
     /// 返回匹配回执；不存在时返回 `None`。
     ///
-    /// # 错误
     /// 底层读取失败时返回仓储错误。
     pub async fn receipt(
         &self,
@@ -97,15 +72,11 @@ impl<'a> OrganizationRepository<'a> {
     ///
     /// 不写入管理范围集合。必须传入同一业务事务执行器。
     ///
-    /// # 参数
-    /// * `receipt` - 含预期版本和前后组织状态的变更回执
-    /// * `executor` - 调用方的同一事务执行器
-    ///
-    /// # 返回
     /// 版本、变化的组织单元与成员以及回执都写入成功时无额外返回值。
     ///
-    /// # 错误
     /// 版本与预期不符、回执键重复或任一写入失败时返回仓储错误，由调用方回滚。
+    ///
+    /// `receipt`：含预期版本和前后组织状态的变更回执；`executor`：调用方的同一事务执行器。
     pub async fn save(
         &self,
         receipt: &mut OrganizationChangeReceipt,
@@ -126,7 +97,7 @@ impl<'a> OrganizationRepository<'a> {
         Repository::new(self.db, ORG_CHANGES).create(receipt, executor).await
     }
 
-    /// 所有组织写入争用同一版本文档，防止并发移动和成员时段写偏差。
+    // 组织写事务先竞争推进统一修订文档，以便并发移动及成员有效期变更不能绕过跨行校验。
     async fn advance(&self, expected: u64, next: u64, executor: &mut dyn Executor) -> Result<()> {
         let repository = Repository::<OrganizationRevision>::new(self.db, ORG_REVISIONS);
         let current = self.revision(executor).await?;
@@ -151,7 +122,7 @@ impl<'a> OrganizationRepository<'a> {
     }
 }
 
-/// 仅写入新增或改变的本域实体，保持实体乐观锁与历史记录。
+// 持久化组织状态差异时只插入新增实体或更新变动行，沿用实体乐观锁并保留历史。
 async fn save_changed<T>(
     db: &Database,
     collection: &str,
@@ -178,12 +149,11 @@ where
 }
 
 /// 声明组织版本提交后的授权刷新来源。
-/// # 参数
-/// topic 为消费方主题。
-/// # 返回
 /// 组织事务完成后才可见的版本事件。
-/// # 错误
+///
 /// 不执行 I/O。
+///
+/// topic 为消费方主题。
 pub fn changes<T>(topic: T) -> ChangeSource<T> {
     ChangeSource::shared(ORG_REVISIONS, topic)
 }

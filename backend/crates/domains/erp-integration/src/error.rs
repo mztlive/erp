@@ -63,30 +63,21 @@ impl_repository_error!(
 /// 乐观锁版本冲突的统一文案（`From<persistence_core::Error>` 与版本校验共用）。
 pub const OPTIMISTIC_LOCK_CONFLICT_MESSAGE: &str = "数据已被其他请求修改，请刷新后重试";
 
-/// 由乐观锁冲突构造版本冲突错误（版本校验与仓储映射的统一入口）。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回 `ConflictError`。
-///
-/// # 错误
-/// 不返回错误。
+/// 由乐观锁冲突构造版本冲突错误（版本校验与仓储映射的统一入口）。返回 `ConflictError`。
 pub fn optimistic_lock_conflict() -> Error {
     Error::ConflictError(OPTIMISTIC_LOCK_CONFLICT_MESSAGE.to_string())
 }
 
-/// 将唯一键冲突映射为面向用户的冲突提示（唯一调用方为仓储错误映射）。
-///
-/// 未知索引回落通用文案；错误分类保持 `Conflict` 不变。
+// 将唯一键冲突映射为面向用户的冲突提示（唯一调用方为仓储错误映射）。
+//
+// 未知索引回落通用文案；错误分类保持 `Conflict` 不变。
 fn duplicate_key_conflict_message(error: &persistence_core::Error) -> String {
     duplicate_index_conflict_message(error.duplicate_index_name())
 }
 
-/// 将集成域唯一索引名称映射为面向用户的冲突提示。
-///
-/// 未知索引回落通用文案；错误分类保持 `Conflict` 不变。
+// 将集成域唯一索引名称映射为面向用户的冲突提示。
+//
+// 未知索引回落通用文案；错误分类保持 `Conflict` 不变。
 fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
     match index_name {
         Some("uk_inbox_messages_identity") => "入站消息已存在，请勿重复提交".to_string(),
@@ -99,13 +90,9 @@ fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
 }
 
 impl From<IdentityError> for Error {
-    /// 保留身份域拒绝、变化冲突和持久化失败的错误类别。
-    /// # 参数
-    /// error 为统一授权错误。
-    /// # 返回
-    /// 等价的集成领域错误。
-    /// # 错误
-    /// 不执行 I/O。
+    // 保留身份域拒绝、变化冲突和持久化失败的错误类别。
+    //
+    // 等价的集成领域错误。不执行 I/O。
     fn from(error: IdentityError) -> Self {
         match error {
             IdentityError::Internal(v) | IdentityError::Rbac(v) => Self::Internal(v),

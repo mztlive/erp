@@ -13,13 +13,8 @@ use super::transport::Request;
 use super::{DangaoshushuConnector, DangaoshushuOffer};
 
 impl DangaoshushuConnector {
-    /// 按商品补查详情，记录单项映射异常并继续读取有效规格。
-    /// # 参数
-    /// `scan` 为冻结窗口、游标及页面大小。
-    /// # 返回
-    /// 有效来源、跳过原因及按原始商品数计算的下一页。
-    /// # 错误
-    /// 页面结构、网络或鉴权等非单项映射失败时返回错误，禁止推进游标。
+    // 同步任务先读冻结窗口的一页列表，再按商品补查详情，返回有效规格和逐项跳过原因。
+    // 续页按原始商品数判断；页面结构、网络、鉴权或分类字典读取失败时整页失败，不推进检查点。
     pub(super) async fn scan_with_details(&self, scan: &Scan) -> ConnectorResult<ScopedOfferPage> {
         let (number, parameters) = scan_parameters(scan)?;
         let value = self
@@ -89,7 +84,7 @@ impl DangaoshushuConnector {
     }
 }
 
-/// 只隔离有明确商品位置的映射错误，禁止把传输失败转换成跳过。
+// 转换列表或详情中的单个规格时，只把能注明位置的映射错误记为跳过；传输等其他错误须交给整页恢复。
 fn collect_item<T>(
     result: ConnectorResult<T>,
     position: &str,

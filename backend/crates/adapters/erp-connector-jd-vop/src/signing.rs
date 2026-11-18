@@ -23,37 +23,22 @@ pub struct SignedParameters {
 }
 
 impl SignedParameters {
-    /// 借用签名后冻结的参数串。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 可直接用作 URL 查询部分或表单正文的编码串；不得写入日志。
-    /// # 错误
-    /// 不返回错误，不执行 I/O。
+    /// 发送方只借用签名结果时，可把该串原样用作查询参数或表单正文，不再编码。串中含访问令牌，不得写入日志。
     pub fn as_str(&self) -> &str {
         &self.encoded
     }
 
-    /// 取得签名后冻结的参数串所有权。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 与签名时同一份原始参数对应的编码串，包含签名及访问令牌。
-    /// # 错误
-    /// 不返回错误，不执行 I/O。
+    /// 发送方需要持有表单正文时，移交与签名参数一一对应的原编码串；其中含访问令牌和签名，不得记录或二次编码。
     pub fn into_string(self) -> String {
         self.encoded
     }
 }
 
-/// 按京东 VOP 官方规则签名并编码，公共参数和业务 JSON 仅形成一份请求内容。
-/// # 参数
-/// `parameters` 提供实际公共及扩展参数，不补造版本、时间或令牌；旧 sign 自动排除。
-/// `business` 为类型化业务载荷，`app_secret` 单独传入且不作为请求参数发送。
-/// # 返回
-/// 业务 JSON 一次序列化、参数原值签名及 URL 编码后的冻结参数串。
+/// 调用方持有类型化业务参数时，按京东 VOP 规则将业务 JSON 只序列化一次，用同一份原值签名，再做 URL 编码。
+/// 沿用调用方提供的公共及扩展参数，不补造版本、时间或令牌；替换旧 `sign`，应用密钥单独提供且不发送。
+///
 /// # 错误
-/// 公共参数缺失、格式不支持、密钥被混入参数、业务参数重复或序列化失败时返回脱敏错误。
+/// 公共参数缺失、格式不受支持、密钥混入参数、重复提供业务参数或序列化失败时返回脱敏错误。
 pub fn encode<B: Serialize + ?Sized>(
     mut parameters: BTreeMap<String, String>,
     business: &B,
@@ -65,13 +50,8 @@ pub fn encode<B: Serialize + ?Sized>(
     Ok(finish(parameters, business, app_secret))
 }
 
-/// 对已完成类型化序列化的业务 JSON 签名，保持数字和 JSON 原文不变。
-/// # 参数
-/// 公共参数、原始业务 JSON 和独立的应用密钥。
-/// # 返回
-/// 直接复用业务 JSON 字节的冻结参数串。
-/// # 错误
-/// 公共参数或密钥边界不符合协议时返回脱敏错误。
+// 业务 JSON 已按方法编码时，直接用原始字节签名并生成待发送参数串，保持长编号、金额和 JSON 原文不变。
+// 公共参数无效或密钥混入待发送字段时返回脱敏错误。
 pub(super) fn encode_raw(
     mut parameters: BTreeMap<String, String>,
     business: &RawValue,

@@ -23,14 +23,13 @@ pub struct DepositAutomaticSettlementPlan {
 
 impl DepositAutomaticSettlementPlan {
     /// 按稳定入账时间和身份分配实际未核销扣款，不产生超批准的部分计划。
-    /// # 参数
-    /// * `usage` / `reservation` / `request` - 原真实使用、专属占用和逐单批准。
-    /// * `entries` - 本采购应付的完整增加分录。
-    /// * `allocations` / `offsets` - 各分录全部来源正反向核销及正式抵销。
-    /// # 返回
     /// 返回覆盖本次真实未核销金额的完整分配。
-    /// # 错误
     /// 归属、审批、锁定额度、净核销或分录开放金额不足及溢出时拒绝。
+    ///
+    /// 输入约定：
+    /// - `usage` / `reservation` / `request`：原真实使用、专属占用和逐单批准。
+    /// - `entries`：本采购应付的完整增加分录。
+    /// - `allocations` / `offsets`：各分录全部来源正反向核销及正式抵销。
     pub fn from_facts(
         usage: &SupplierDepositUsage,
         reservation: &SupplierDepositReservation,
@@ -195,13 +194,12 @@ impl DepositAutomaticSettlementPlan {
 
 impl SupplierDepositSettlement {
     /// 验证自动核销原命令的已提交回执，不按当前余额重新分配。
-    /// # 参数
-    /// * `usage` - 原真实资金使用当前记录。
-    /// * `operation_key` - 原自动核销命令身份。
-    /// # 返回
-    /// 身份和原正式核销金额仍可证明时成功。
-    /// # 错误
+    /// 结果：身份和原正式核销金额仍可证明时成功。
     /// 跨使用、跨账户、异命令或回执损坏时拒绝。
+    ///
+    /// 输入约定：
+    /// - `usage`：原真实资金使用当前记录。
+    /// - `operation_key`：原自动核销命令身份。
     pub fn require_automatic_usage(&self, usage: &SupplierDepositUsage, operation_key: &str) -> Result<()> {
         if self.usage_id != usage.base.id
             || self.account_id != usage.account_id

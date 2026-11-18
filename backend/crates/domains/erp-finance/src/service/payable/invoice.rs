@@ -14,17 +14,13 @@ use crate::repository::prelude::*;
 use crate::repository::{PayableExt, ReceivableExt};
 use crate::{Error, Result};
 impl PayableService {
-    /// 按已提交发票主键回读稳定登记结果。
-    ///
-    /// # 参数
-    /// * `invoice_id` - 首次命令收据记录的进项发票主键
-    /// * `executor` - 调用方授权读取快照的执行器
-    ///
-    /// # 返回
+    /// 进项登记成功或幂等回放时按原发票 ID 重读登记视图，保留调用方指定的读取边界。
     /// 返回发票号码、金额和正式分配行。
-    ///
-    /// # 错误
     /// 收据引用损坏、发票或分配查询失败时返回错误。
+    ///
+    /// 输入约定：
+    /// - `invoice_id`：首次命令收据记录的进项发票主键
+    /// - `executor`：调用方授权读取快照的执行器
     pub async fn purchase_invoice_registered_view(
         &self,
         invoice_id: &str,
@@ -53,16 +49,11 @@ impl PayableService {
         })
     }
 }
-/// 装配进项发票分配视图。
-///
-/// # 参数
-/// * `allocation` - 进项发票分配实体
-///
-/// # 返回
-/// 返回响应视图。
-///
-/// # 错误
-/// 不返回错误。
+// 向进项登记响应投影正式分配身份、应付来源和原金额，不重新计算精度。
+// 返回响应视图。
+//
+// 输入约定：
+// - `allocation`：进项发票分配实体
 pub(super) fn purchase_invoice_allocation_view(
     allocation: &PurchaseInvoiceAllocation,
 ) -> crate::dto::payable::PurchaseInvoiceAllocationView {
@@ -79,18 +70,14 @@ pub(super) fn purchase_invoice_allocation_view(
     }
 }
 
-/// 为供应商主体事实构建进项发票；调用者先完成命令幂等和供应商存在校验。
-///
-/// # 参数
-/// * `req` - 进项发票登记请求。
-/// * `party_id` - 已确认的供应商往来主体。
-/// * `actor_id` - 登记人。
-///
-/// # 返回
+/// 调用方处理幂等和供应商存在性后，使用已核实的供应商事实准备进项发票实体。
 /// 返回方向为进项、种类为蓝字、尚未登记状态迁移的发票。舍入调整额为零。
+/// 失败条件：发票实体构造失败时返回对应错误。
 ///
-/// # 错误
-/// 发票实体构造失败时返回对应错误。
+/// 输入约定：
+/// - `req`：进项发票登记请求。
+/// - `party_id`：已确认的供应商往来主体。
+/// - `actor_id`：登记人。
 pub fn prepare_purchase_invoice(
     req: &RegisterPurchaseInvoiceRequest,
     party_id: PartyId,
@@ -117,20 +104,16 @@ pub fn prepare_purchase_invoice(
     )?;
     Ok(invoice)
 }
-/// 在调用方 Executor 内按原顺序校验号码、构建分配计划并批量读取应付账户。
+/// 持久化进项登记之前，在原执行器下按既定顺序核对票号、生成分配计划并批读应付账户。
 /// 供应商主体一致性由流程使用这些财务账户事实完成，之后才可调用持久化接口。
-///
-/// # 参数
-/// * `db` - 财务领域数据库。
-/// * `req` - 含分配行的登记请求。
-/// * `invoice_for_tx` - 已构造、尚未持久化的进项发票。
-/// * `session` - 调用方事务执行器。
-///
-/// # 返回
 /// 返回分配计划，以及计划涉及的应付子账；本函数不校验账户是否齐全。
+/// 失败条件：同方向规范化号码已登记时返回 `ConflictError`；分配计划构造失败或账户查询失败时返回对应错误。
 ///
-/// # 错误
-/// 同方向规范化号码已登记时返回 `ConflictError`；分配计划构造失败或账户查询失败时返回对应错误。
+/// 输入约定：
+/// - `db`：财务领域数据库。
+/// - `req`：含分配行的登记请求。
+/// - `invoice_for_tx`：已构造、尚未持久化的进项发票。
+/// - `session`：调用方事务执行器。
 pub async fn prepare_purchase_invoice_allocations(
     db: &Database,
     req: &RegisterPurchaseInvoiceRequest,
@@ -179,21 +162,17 @@ pub async fn prepare_purchase_invoice_allocations(
     let accounts = db.payable_accounts().find_accounts_by_ids(&account_ids, session).await?;
     Ok((plan, accounts))
 }
-/// 使用原 Executor 更新收票额度、发票状态与分配事实，禁止在此写工作项或审计。
-///
-/// # 参数
-/// * `db` - 财务领域数据库。
-/// * `invoice_for_tx` - 待登记的进项发票。
-/// * `plan` - 已校验的分配计划。
-/// * `actor_id` - 登记人。
-/// * `session` - 调用方事务执行器。
-///
-/// # 返回
+/// 在原事务写进项登记事实、收票进度和分配；调用方另外处理工作项及审计。
 /// 返回已标记登记并完成持久化的发票。
-///
-/// # 错误
-/// 任一子账剩余可收票额度不足时返回 `BusinessLogicError`，且不写发票与分配；
+/// 失败条件：任一子账剩余可收票额度不足时返回 `BusinessLogicError`，且不写发票与分配；
 /// 状态迁移或仓储写入失败时返回对应错误。
+///
+/// 输入约定：
+/// - `db`：财务领域数据库。
+/// - `invoice_for_tx`：待登记的进项发票。
+/// - `plan`：已校验的分配计划。
+/// - `actor_id`：登记人。
+/// - `session`：调用方事务执行器。
 pub async fn persist_purchase_invoice(
     db: &Database,
     invoice_for_tx: Invoice,
@@ -228,10 +207,10 @@ mod purchase_invoice_allocation_list_tests {
         AllocationAction, PurchaseInvoiceAllocation, PurchaseInvoiceAllocationData,
     };
 
-    /// 构造具有指定稳定 ID 与秒级创建时间的最小进项发票分配事实。
-    ///
-    /// 参数提供排序键，返回通过实体校验的正式分配；测试金额固定为 `1.00`，
-    /// 构造失败时直接 panic，且不访问数据库。
+    // 组装具有指定稳定 ID 与秒级创建时间的最小进项发票分配事实。
+    //
+    // 参数提供排序键，返回通过实体校验的正式分配；测试金额固定为 `1.00`，
+    // 构造失败时直接 panic，且不访问数据库。
     fn allocation(id: &str, created_at: u64) -> PurchaseInvoiceAllocation {
         let mut allocation = PurchaseInvoiceAllocation::new(
             PurchaseInvoiceAllocationId::new(id),
@@ -251,7 +230,7 @@ mod purchase_invoice_allocation_list_tests {
         allocation
     }
 
-    /// 视图映射保留分配身份，不改变金额精度。
+    // 回归检查：视图映射保留分配身份，不改变金额精度。
     #[test]
     fn allocation_view_mapping_preserves_identity() {
         let view = purchase_invoice_allocation_view(&allocation("a-1", 10));

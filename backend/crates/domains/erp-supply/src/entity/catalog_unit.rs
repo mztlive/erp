@@ -38,12 +38,8 @@ const MEASURES: &[(&str, &str)] = &[
 
 impl SupplierCatalogItem {
     /// 提供来源单位或从规格、名称提取的常用单位建议。
-    /// # 参数
-    /// 无，读取当前商品的来源字段。
-    /// # 返回
     /// 明确来源优先，其次规格、名称；冲突或无依据返回空。
-    /// # 错误
-    /// 无；不将建议写回来源字段。
+    /// 不将建议写回来源字段。
     pub fn suggested_unit(&self) -> Option<String> {
         suggest(self.unit.as_deref(), &self.specification, &self.name)
     }

@@ -47,12 +47,7 @@ pub struct TemplateListParams {
 
 impl TemplateListParams {
     /// 统一分页边界。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 一基页码与最多 100 条的页容量。
-    /// # 错误
-    /// 无。
     pub fn pagination(&self) -> (u64, u32) {
         (self.page.unwrap_or(1).clamp(1, 1_000_000), self.page_size.unwrap_or(20).clamp(1, 100))
     }

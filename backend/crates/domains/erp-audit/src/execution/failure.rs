@@ -4,22 +4,10 @@ use crate::{AuditAttemptResult, Error};
 
 /// 只提供安全分类，不传递业务错误正文或解释业务回执。
 pub trait AuditFailure {
-    /// 返回失败尝试的安全结果分类。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 拒绝、未知或失败分类。
-    /// # 错误
-    /// 不返回错误。
+    /// 将原失败映射成拒绝、失败或结果未知的安全分类，供事务外尝试记录使用。
     fn audit_attempt_result(&self) -> AuditAttemptResult;
 
-    /// 判断原事务提交是否无法确认。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 仅提交结果未知时返回 `true`。
-    /// # 错误
-    /// 不返回错误。
+    /// 仅在首次事务提交结果无法确认时返回 `true`，供查证路径决定是否保留原错误。
     fn outcome_unknown(&self) -> bool;
 }
 

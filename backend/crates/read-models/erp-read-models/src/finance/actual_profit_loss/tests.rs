@@ -11,7 +11,7 @@ use super::dto::ProfitLossQuery;
 use super::source::Sources;
 use super::{calculation, projection};
 
-/// 固定上海九月生效的单行销售及实际成本事实。
+// 处理实际盈亏报表时，固定上海九月生效的单行销售及实际成本事实。
 fn sources() -> Sources {
     let now = instant("2026-09-01T00:00:00Z");
     let revision = SalesOrderRevision::new(
@@ -85,11 +85,11 @@ fn sources() -> Sources {
     cost(&mut result, "confirmed", CostStage::Confirmed, CostType::Product, "80");
     result
 }
-/// 正式金额解析。
+// 计算实际盈亏报表金额时，正式金额解析。
 fn amount(value: &str) -> Amount {
     Amount::from_str(value).unwrap()
 }
-/// 成本分配与事实一起构造，测试不绕过领域金额校验。
+// 处理实际盈亏报表时，成本分配与事实一起构造，测试不绕过领域金额校验。
 fn cost(source: &mut Sources, id: &str, stage: CostStage, kind: CostType, net: &str) {
     let entry = CostEntry::new(
         id.to_owned().into(),
@@ -132,7 +132,7 @@ fn cost(source: &mut Sources, id: &str, stage: CostStage, kind: CostType, net: &
     source.entries.push(entry);
     source.allocations.push(allocation);
 }
-/// 所有测试使用同一显式期间。
+// 读取实际盈亏报表时，所有测试使用同一显式期间。
 fn query() -> ProfitLossQuery {
     ProfitLossQuery {
         from: "2026-09-01".into(),
@@ -146,7 +146,7 @@ fn query() -> ProfitLossQuery {
         ..Default::default()
     }
 }
-/// 成本发生之后的固定查询时点。
+// 处理实际盈亏报表时，成本发生之后的固定查询时点。
 fn as_of() -> i64 {
     instant("2026-09-11T00:00:00Z").as_utc().timestamp()
 }
@@ -405,7 +405,7 @@ fn partial_coverage_keeps_missing_revenue_in_denominator() {
     assert_eq!(view.totals.net_sales_revenue, "100.00");
 }
 
-/// 固定时间解析，仓储时间值使用秒级时间戳。
+// 处理实际盈亏报表时，固定时间解析，仓储时间值使用秒级时间戳。
 fn instant(value: &str) -> Instant {
     Instant::from_unix_secs(chrono::DateTime::parse_from_rfc3339(value).unwrap().timestamp())
 }

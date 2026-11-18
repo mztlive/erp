@@ -47,11 +47,10 @@ pub struct ApprovalListPage {
     pub document_type_counts: Option<BTreeMap<String, u64>>,
 }
 impl WorkbenchReadService {
-    /// 先由已装配的运行服务执行原列表授权，再批量补齐相同单据摘要。
+    /// 处理工作台审批跟踪时，先由已装配的运行服务执行原列表授权，再批量补齐相同单据摘要。
     ///
     /// # 参数
     /// * `runtime` - 已装配的审批运行服务，负责原列表授权。
-    /// * `actor` - 当前账号。
     /// * `query` - 运行实例列表查询。
     /// * `executor` - 摘要与提交人姓名读取使用的执行器。
     ///
@@ -80,13 +79,15 @@ impl WorkbenchReadService {
             })
         })
     }
-    /// 为已授权实例补齐精确版本摘要。
-    /// # 参数
-    /// `instances` 已经运行服务授权，`executor` 沿用查询快照。
-    /// # 返回
-    /// 返回可显示摘要，不替换缺失历史。
-    /// # 错误
-    /// 单据或姓名读取失败时传播错误。
+    // 计算工作台审批跟踪金额时，为已授权实例补齐精确版本摘要。
+    //
+    // 调用参数：
+    // `instances` 已经运行服务授权，`executor` 沿用查询快照。
+    //
+    // 返回可显示摘要，不替换缺失历史。
+    //
+    // 失败边界：
+    // 单据或姓名读取失败时传播错误。
     pub(super) async fn approval_list_summaries(
         &self,
         instances: Vec<RuntimeInstanceListItem>,
@@ -117,17 +118,13 @@ impl WorkbenchReadService {
         Ok(items)
     }
 }
-/// 有提交级摘要时必须精确匹配版本，不得用当前提交覆盖历史审批。
-///
-/// # 参数
-/// * `fact` - 已装载的对象事实。
-/// * `version` - 审批实例上的提交版本。
-///
-/// # 返回
-/// 匹配到简报源时返回单据摘要。无提交级摘要时，`version` 缺失或不等于展示上的审批版本则返回 `None`；有提交级摘要时必须命中该版本，否则返回 `None`。
-///
-/// # 错误
-/// 不返回错误。
+// 生成工作台审批跟踪视图时，有提交级摘要时必须精确匹配版本，不得用当前提交覆盖历史审批。
+//
+// 调用参数：
+// * `fact` - 已装载的对象事实。
+// * `version` - 审批实例上的提交版本。
+//
+// 匹配到简报源时返回单据摘要。无提交级摘要时，`version` 缺失或不等于展示上的审批版本则返回 `None`；有提交级摘要时必须命中该版本，否则返回 `None`。
 pub(super) fn document_summary(
     fact: &WorkbenchObjectFact,
     version: Option<u32>,
@@ -182,7 +179,7 @@ mod tests {
     use crate::workbench::WorkbenchSubjectDisplay;
     use crate::workbench::brief::{BriefLine, BriefSection, ObjectBriefSource};
 
-    /// 同单据两个提交保留各自金额与明细；两个入口消费同一组摘要字段。
+    // 验证工作台审批跟踪：同单据两个提交保留各自金额与明细；两个入口消费同一组摘要字段。
     #[test]
     fn shared_summary_selects_exact_submission_and_never_substitutes_latest() {
         let mut fact = WorkbenchObjectFact::from_authority(erp_workflow::ports::ObjectFact::new(
@@ -235,7 +232,7 @@ mod tests {
         let json = serde_json::to_value(old).unwrap();
         assert!(json.get("allowed_actions").is_none());
     }
-    /// 单据政策与工作台审批对象注册必须一一对应，执行类不能伪造审批入口。
+    // 验证工作台审批跟踪：单据政策与工作台审批对象注册必须一一对应，执行类不能伪造审批入口。
     #[test]
     fn all_document_policies_match_workbench_approval_relations() {
         use erp_workflow::entity::document_registry::DocumentType;
@@ -259,7 +256,7 @@ mod tests {
         );
     }
 
-    /// 没有提交表的资金和库存单据不允许拿新版本或已撤回草稿替代旧审批。
+    // 验证工作台审批跟踪：没有提交表的资金和库存单据不允许拿新版本或已撤回草稿替代旧审批。
     #[test]
     fn mutable_document_summary_requires_proven_approval_version() {
         let mut fact = WorkbenchObjectFact::from_authority(erp_workflow::ports::ObjectFact::new(

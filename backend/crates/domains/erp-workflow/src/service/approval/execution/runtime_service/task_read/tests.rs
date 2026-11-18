@@ -102,7 +102,7 @@ pub(super) fn fixture() -> (RuntimeReadSubject, WorkItem) {
     )
 }
 
-/// 开放任务必须是当前执行的唯一开放任务，缺失或重复均不可读。
+// 验证：开放任务必须是当前执行的唯一开放任务，缺失或重复均不可读。
 #[test]
 fn approval_task_batch_chain_requires_unique_exact_open_task() {
     let (subject, task) = fixture();
@@ -124,7 +124,7 @@ fn approval_task_chain_without_execution_is_unreadable_for_open_and_terminal_tas
     }
 }
 
-/// 批量判定沿用节点、岗位、组织、责任人和精确提交版本全部约束。
+// 验证：批量判定沿用节点、岗位、组织、责任人和精确提交版本全部约束。
 #[test]
 fn approval_task_batch_chain_rejects_frozen_responsibility_drift() {
     let (subject, task) = fixture();
@@ -152,7 +152,7 @@ fn approval_task_batch_chain_rejects_frozen_responsibility_drift() {
     assert!(!task_chain_matches_subject(&task, &subject, from_ref(&task)).unwrap());
 }
 
-/// 已完成任务只承认实际执行人的同一次决定，不依赖实例当前节点仍指向旧执行。
+// 验证：已完成任务只承认实际执行人的同一次决定，不依赖实例当前节点仍指向旧执行。
 #[test]
 fn approval_task_batch_terminal_chain_requires_original_completed_decision() {
     let (mut subject, mut task) = fixture();

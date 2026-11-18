@@ -38,16 +38,7 @@ pub enum Error {
 }
 
 impl Error {
-    /// 返回稳定的错误分类，供协议层决定传输语义。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回与变体对应的分类。
-    ///
-    /// # 错误
-    /// 无。
+    /// 供协议层按变体选择响应语义，不解析文案：内部故障归为 `Internal`，请求和字段校验失败归为 `BusinessRule`。
     pub fn class(&self) -> ErrorClass {
         match self {
             Self::Internal(_) => ErrorClass::Internal,
@@ -57,16 +48,7 @@ impl Error {
 }
 
 impl From<validator::ValidationErrors> for Error {
-    /// 将请求校验失败转为参数错误。
-    ///
-    /// # 参数
-    /// * `errors` - 校验失败明细
-    ///
-    /// # 返回
-    /// 返回参数验证错误。
-    ///
-    /// # 错误
-    /// 无。
+    // 把请求校验失败保留为结构化字段问题，供上层定位字段，不必拆解一条错误文案。
     fn from(errors: validator::ValidationErrors) -> Self {
         Self::InvalidInput(errors.into())
     }

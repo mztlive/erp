@@ -18,13 +18,13 @@ use super::{SupplierProfileProcess, SupplierProfileWithAssetsResult};
 use crate::{Error, Result};
 
 impl SupplierProfileProcess {
-    /// 仅对可能已提交的失败执行重新授权的只读查证。
-    /// # 参数
-    /// transaction 为原事务结果，key、fingerprint 为原请求身份，target 为原写命令目标，actor 为当前操作人。
-    /// # 返回
-    /// 已知结果直接返回；可疑提交仅在原命令重新授权后回读稳定结果。
-    /// # 错误
-    /// 不可恢复错误保持原语义；恢复时授权、请求核对或数据库读取失败时拒绝。
+    // 供应商资料写入可能已提交时，以原命令目标、幂等键和指纹在新快照重新授权并只读查证。
+    //
+    // transaction 为原事务结果，key、fingerprint 为原请求身份，target 为原写命令目标，actor 为当前操作人。
+    //
+    // 已知结果直接返回；可疑提交仅在原命令重新授权后回读稳定结果。
+    //
+    // 不可恢复错误保持原语义；恢复时授权、请求核对或数据库读取失败时拒绝。
     pub(super) async fn resolve_transaction_result_with_assets(
         &self,
         transaction: Result<SupplierProfileWithAssetsResult>,
@@ -58,16 +58,13 @@ impl SupplierProfileProcess {
         }
     }
 
-    /// 校验签约或付款主体存在且启用。
-    ///
-    /// # 参数
-    /// * `party_id` - 待引用的企业主体 ID
-    ///
-    /// # 返回
-    /// 主体存在且启用时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 主体不存在、已停用或仓储查询失败时返回错误。
+    // 校验签约或付款主体存在且启用。
+    //
+    // `party_id`：待引用的企业主体 ID。
+    //
+    // 主体存在且启用时返回 `Ok(())`。
+    //
+    // 主体不存在、已停用或仓储查询失败时返回错误。
     pub(super) async fn ensure_party_active(
         &self,
         party_id: &PartyId,
@@ -89,17 +86,13 @@ impl SupplierProfileProcess {
         Ok(())
     }
 
-    /// 校验资质附件存在且敏感级别符合附件用途。
-    ///
-    /// # 参数
-    /// * `qualifications` - 根资料命令提交的资质集合
-    /// * `pending_assets` - 同命令待登记的文件资产
-    ///
-    /// # 返回
-    /// 全部附件存在且满足资质类型最低敏感级别时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 附件不存在、敏感级别不足或仓储查询失败时返回错误。
+    // 校验资质附件存在且敏感级别符合附件用途。
+    //
+    // `qualifications`：根资料命令提交的资质集合；`pending_assets`：同命令待登记的文件资产。
+    //
+    // 全部附件存在且满足资质类型最低敏感级别时返回 `Ok(())`。
+    //
+    // 附件不存在、敏感级别不足或仓储查询失败时返回错误。
     pub(super) async fn ensure_attachment_references(
         &self,
         qualifications: &[SupplierProfileQualificationInput],
@@ -134,16 +127,13 @@ impl SupplierProfileProcess {
         Ok(())
     }
 
-    /// 校验根资料能力与资质选择关系。
-    ///
-    /// # 参数
-    /// * `req` - 已通过 DTO 格式校验的根资料命令
-    ///
-    /// # 返回
-    /// 能力、资质身份唯一且资质仅引用已勾选能力时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 任一纯领域选择规则不满足时返回校验错误。
+    // 校验根资料能力与资质选择关系。
+    //
+    // `req`：已通过 DTO 格式校验的根资料命令。
+    //
+    // 能力、资质身份唯一且资质仅引用已勾选能力时返回 `Ok(())`。
+    //
+    // 任一纯领域选择规则不满足时返回校验错误。
     pub(super) fn ensure_unique_inputs(&self, req: &SaveSupplierProfileRequest) -> Result<()> {
         let qualifications: Vec<SupplierQualificationSelection<'_>> = req
             .qualifications
@@ -159,17 +149,13 @@ impl SupplierProfileProcess {
     }
 }
 
-/// 解析供应商根命令中的临时资质文件引用，并把命中的临时 ID 换成正式 ID。
-///
-/// # 参数
-/// * `req` - 根资料请求，资质附件 ID 会被就地替换。
-/// * `pending_assets` - 同一次命令待登记的文件。
-///
-/// # 返回
-/// 本次命令实际用到的临时文件 ID。
-///
-/// # 错误
-/// 临时引用无法解析时返回 `pending_assets` 的错误。
+// 解析供应商根命令中的临时资质文件引用，并把命中的临时 ID 换成正式 ID。
+//
+// `req`：根资料请求，资质附件 ID 会被就地替换；`pending_assets`：同一次命令待登记的文件。
+//
+// 本次命令实际用到的临时文件 ID。
+//
+// 临时引用无法解析时返回 `pending_assets` 的错误。
 pub(super) fn resolve_supplier_file_references(
     req: &mut SaveSupplierProfileRequest,
     pending_assets: &dyn PendingAttachmentBatch,
@@ -183,17 +169,13 @@ pub(super) fn resolve_supplier_file_references(
     Ok(used)
 }
 
-/// 校验敏感事实行归属于令牌限定供应商的 Party。
-///
-/// # 参数
-/// * `actual` - 事实行上的主体 ID。
-/// * `expected` - 令牌供应商的主体 ID。
-///
-/// # 返回
-/// 两者相同时无额外值。
-///
-/// # 错误
-/// 主体不一致时返回校验错误。
+// 校验敏感事实行归属于令牌限定供应商的 Party。
+//
+// `actual`：事实行上的主体 ID；`expected`：令牌供应商的主体 ID。
+//
+// 两者相同时无额外值。
+//
+// 主体不一致时返回校验错误。
 pub(super) fn ensure_sensitive_party(actual: &PartyId, expected: &PartyId) -> Result<()> {
     if actual != expected {
         return Err(Error::ValidationError(

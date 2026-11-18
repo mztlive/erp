@@ -274,15 +274,8 @@ pub struct CostEntryListQuery {
 
 impl CostEntryListParams {
     /// 归一化成本事实列表查询参数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    /// 失败条件：排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub fn normalized(&self) -> Result<CostEntryListQuery> {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, COST_ENTRY_SORT_FIELDS)?;
         Ok(CostEntryListQuery {
@@ -337,15 +330,8 @@ pub struct CostAllocationListQuery {
 
 impl CostAllocationListParams {
     /// 归一化成本分配列表查询参数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    /// 失败条件：排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub fn normalized(&self) -> Result<CostAllocationListQuery> {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, COST_ALLOCATION_SORT_FIELDS)?;
         Ok(CostAllocationListQuery {

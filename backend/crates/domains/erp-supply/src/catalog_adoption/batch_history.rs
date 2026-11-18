@@ -31,13 +31,10 @@ pub enum BatchHistoryStatus {
 }
 
 impl BatchHistoryStatus {
-    /// 根据批次提交事实和完整成员状态集合判断列表状态。
-    /// # 参数
-    /// `submitted`、`execution_pending` 为批次事实；`states` 为聚合状态集合。
-    /// # 返回
-    /// 执行优先；未提交归草稿；已提交且全部为终态时才归已完成。
-    /// # 错误
-    /// 不返回错误；缺少成员摘要时按待处理保守展示。
+    // 根据批次提交事实和完整成员状态集合判断列表状态。
+    // 执行优先；未提交归草稿；已提交且全部为终态时才归已完成。
+    // 缺少成员摘要时按待处理保守展示。
+    // `submitted`、`execution_pending` 为批次事实；`states` 为聚合状态集合。
     fn from_states(submitted: bool, execution_pending: bool, states: &[BatchItemStatus]) -> Self {
         if execution_pending || states.contains(&BatchItemStatus::Processing) {
             Self::Processing
@@ -66,12 +63,9 @@ struct BatchStates {
 }
 
 /// 查询当前已授权连接最近二十个批次，并一次聚合其成员状态。
-/// # 参数
-/// `connection` 须已核验当前权限及供应商范围；`executor` 沿用调用方事务。
-/// # 返回
 /// 最近批次及当前状态，保持批次原有倒序；不返回成员详情。
-/// # 错误
 /// 数据库读取、聚合或状态解析失败时返回错误。
+/// `connection` 须已核验当前权限及供应商范围；`executor` 沿用调用方事务。
 pub async fn batch_history(
     db: &Database,
     connection: &str,

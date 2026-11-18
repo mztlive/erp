@@ -25,18 +25,7 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 use crate::wiring::sales::sales_services;
 
-/// 查询销售单列表。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `query` - 分页与筛选参数（扁平传递）
-///
-/// # 返回
-/// 返回带范围版本的分页视图，不附带负责销售候选。
-///
-/// # 关键业务约束
-/// 负责销售筛选只收窄销售单。行负责人姓名来自当前页单据事实，不由此接口产生候选。
-/// 创建人筛选保持独立，不并入负责销售候选。
+/// 为销售工作台按条件和范围版本分页读取销售单；负责销售筛选只收窄订单，展示姓名来自当前页单据事实。创建人筛选独立，此处不生成负责销售候选。
 pub async fn sales_order_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -49,21 +38,8 @@ pub async fn sales_order_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-/// 创建销售单（订单 + 稳定明细 + 工作副本原子形成；`intent=SUBMIT` 时立即提交）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 创建请求（含幂等键与意图）
-///
-/// # 返回
-/// 返回销售单详情视图。
-///
-/// # 错误
-/// 所选合同或客户不在本次业务授权范围内时拒绝。
-///
-/// # 关键业务约束
-/// 业务流程在原事务内分别校验合同详情与客户当前选择资格。
+/// 创建销售单时将订单、稳定明细与工作副本作为一次原子写入；命令携带幂等键，`intent=SUBMIT` 时随建单提交。编排在事务内分别核验合同详情及当前客户选择资格，
+/// 不允许选用范围外对象。
 pub async fn sales_order_create(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -83,14 +59,7 @@ pub async fn sales_order_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 查询销售单详情（订单 + 稳定明细 + 草稿 + 提交历史 + 版本历史）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `id` - 销售单 ID
-///
-/// # 返回
-/// 返回详情视图。
+/// 打开单笔销售单时读取订单、稳定明细、当前草稿及提交和版本历史；将当前操作人交给读模型校验详情访问。
 pub async fn sales_order_detail(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -103,22 +72,7 @@ pub async fn sales_order_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 保存草稿（整表头覆盖 + 明细整批替换，乐观锁）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 销售单 ID
-/// * `req` - 保存请求（含期望版本）
-///
-/// # 返回
-/// 返回保存后的工作副本视图。
-///
-/// # 错误
-/// 所选合同或客户不在本次业务授权范围内时拒绝。
-///
-/// # 关键业务约束
-/// 业务流程在原事务内按原关系或本次归属变更校验合同与客户资格。
+/// 编辑销售草稿时按期望版本整批替换表头与明细，不将缺失行视为保留。编排在原事务按现有或拟变更归属复验合同与客户资格，成功后返回工作副本。
 pub async fn sales_order_save_working_copy(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -139,22 +93,7 @@ pub async fn sales_order_save_working_copy(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 提交销售单（冻结提交快照并推进审核轨；重复提交幂等返回既有提交）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 销售单 ID
-/// * `req` - 提交请求（含期望版本与幂等键）
-///
-/// # 返回
-/// 返回提交快照视图。
-///
-/// # 错误
-/// 所选合同或客户不在本次业务授权范围内时拒绝。
-///
-/// # 关键业务约束
-/// 业务流程在原事务内按原关系或本次归属变更校验合同与客户资格。
+/// 销售草稿完成后，以期望版本和幂等键提交并冻结快照，推进审核轨；同一提交重试返回已有快照。编排在原事务按当前或拟变更归属校验合同与客户资格，越界时拒绝。
 pub async fn sales_order_submit(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -175,16 +114,7 @@ pub async fn sales_order_submit(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 撤回尚未最终通过的销售单审批（含 `VoucherSalesOrder`）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 销售单 ID
-/// * `req` - 撤回请求（原因必填）
-///
-/// # 返回
-/// 返回撤回后的销售单详情。
+/// 要求说明原因，将仍未最终通过的销售审批退回撤回流程，涵盖 `VoucherSalesOrder`；成功后返回销售单最新详情。
 pub async fn sales_order_cancel_approval(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -206,16 +136,7 @@ pub async fn sales_order_cancel_approval(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 作废销售单草稿（主状态 `DRAFT → VOIDED`，乐观锁）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 销售单 ID
-/// * `req` - 作废请求（含期望版本）
-///
-/// # 返回
-/// 返回作废后的销售单详情视图。
+/// 不再继续办理草稿时，按期望版本把销售单从 `DRAFT` 转为 `VOIDED`，并返回作废后的详情。
 pub async fn sales_order_void(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -237,19 +158,7 @@ pub async fn sales_order_void(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 显式交接销售单负责销售与业务组织，并原子转交开放验收任务。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 销售单 ID
-/// * `req` - 交接请求（含期望版本、目标、原因与幂等键）
-///
-/// # 返回
-/// 返回交接后责任与转交任务清单。
-///
-/// # 关键业务约束
-/// 开放审批任务、已完成验收与历史归属保持不变；新验收任务取交接后负责人。
+/// 变更负责销售及业务组织时，按原版本和幂等键提交交接原因及目标，并原子转交现有开放验收任务。审批任务、已完成验收和历史归属不改写；新验收任务使用交接后负责人。
 pub async fn sales_order_handover(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -271,15 +180,7 @@ pub async fn sales_order_handover(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 查询当前销售单可交接的合格目标候选。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 销售单 ID
-///
-/// # 返回
-/// 返回有效且具备验收执行资格的账号；只作交互提示，提交仍重验。
+/// 填销售单交接目标时列出仍有效且具备验收执行资格的账号；候选只作选择提示，提交时重新校验。
 pub async fn sales_order_handover_candidates(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -310,7 +211,7 @@ mod owner_query_tests {
 
     use crate::http::extractor::Query;
 
-    /// 实际 Query 解码器支持去重 ID，拒绝旧姓名；客户、合同、销售已接入组织筛选，采购仍拒绝。
+    // 通过四类业务的实际查询解码器验证账号 ID 去重和旧姓名拒绝；客户、合同与销售支持组织过滤，采购仍须拒绝。
     #[test]
     fn all_four_resources_validate_identity_queries() {
         let valid: Uri = "/?owner_user_ids=user-2,user-1,user-2&page=2".parse().unwrap();
@@ -359,13 +260,7 @@ mod scope_query_tests {
 }
 
 /// 为原销售单首次补录合同，保留既有客户、结算主体与全部历史商业快照。
-///
-/// # 参数
-/// * `state` / `actor` - 当前应用状态和认证用户
-/// * `id` / `req` - 原销售单身份、单据版本及合同当前有效修订
-/// # 返回
 /// 返回更新后的销售单详情。
-/// # 错误
 /// 越权、冲突或不符合关联规则时拒绝。
 pub async fn sales_order_bind_contract(
     State(state): State<HttpState>,

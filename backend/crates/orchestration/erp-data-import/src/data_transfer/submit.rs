@@ -31,11 +31,11 @@ struct Submission {
 }
 impl DataTransferProcess {
     /// 校验并保存私有输入，原子登记任务与源文件资产。
-    /// # 参数
+    ///
     /// 稳定操作号、业务参数和已认证提交人。
-    /// # 返回
+    ///
     /// 新任务或同内容重放的原任务。
-    /// # 错误
+    ///
     /// 非法输入、异内容重试、授权或持久化失败时拒绝。
     pub async fn submit(&self, request: TransferRequest, actor: &AuditActor) -> Result<BackgroundJobView> {
         validate_request(&request)?;
@@ -150,7 +150,7 @@ impl DataTransferProcess {
     }
 }
 
-/// 命中回执仍须保持原任务内容和原提交人，当前业务资格另由事务内入口核验。
+// 命中回执仍须保持原任务内容和原提交人，当前业务资格另由事务内入口核验。
 fn ensure_replay(job: &BackgroundJob, digest: &str, actor: &str) -> Result<()> {
     if job.requested_by != actor
         || job.domain_job_type.as_deref() != Some(DOMAIN)

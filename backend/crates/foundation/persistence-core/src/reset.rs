@@ -13,19 +13,8 @@ use crate::{Error, Executor, Result, mongo_ops};
 pub struct ResetRetention(HashMap<String, Vec<Bson>>);
 
 impl ResetRetention {
-    /// 精确读取必须保留的文档，并登记其物理主键。
-    ///
-    /// # 参数
-    /// * `db` - 目标数据库。
-    /// * `collection` - 拥有领域指定的集合名。
-    /// * `filter` - 拥有领域指定的精确匹配条件。
-    /// * `executor` - 数据访问执行器。本方法不检查是否处于事务中。
-    ///
-    /// # 返回
-    /// 无返回值。文档存在时登记其原始 `_id`，不修改库中内容。
-    ///
-    /// # 错误
-    /// 必需文档缺失或没有物理主键时返回 `EntityMetadataOutOfRange`；读取失败时返回下层错误。
+    /// 事务内清库前，按领域的精确条件查出必须保留的记录，登记原始 BSON `_id`，不修改数据库。此入口不单独检查事务；
+    /// 记录或物理主键缺失时报元数据错误。
     pub async fn require(
         &mut self,
         db: &Database,
@@ -52,16 +41,8 @@ pub struct DatabaseReset {
 }
 
 impl DatabaseReset {
-    /// 在事务外读取集合元数据；不得由客户端提交集合白名单。
-    ///
-    /// # 参数
-    /// * `db` - 应用配置指定的目标数据库。调用后由重置计划持有。
-    ///
-    /// # 返回
-    /// 返回当前数据库的重置计划，包含未登记的历史业务集合。
-    ///
-    /// # 错误
-    /// MongoDB 元数据读取失败时返回错误。
+    /// 重置前在事务外从配置的数据库读取集合清单，排除系统集合但涵盖未登记的历史集合；
+    /// 不能用客户端传来的集合白名单代替。
     pub async fn prepare(db: Database) -> Result<Self> {
         let mut collections = db.list_collection_names().await?;
         collections.retain(|name| !name.starts_with("system."));
@@ -69,17 +50,8 @@ impl DatabaseReset {
         Ok(Self { db, collections })
     }
 
-    /// 在调用方事务中清除保留清单之外的全部文档。
-    ///
-    /// # 参数
-    /// * `retention` - 领域核准、需要原样保留的物理主键。
-    /// * `executor` - 必须已绑定事务会话的数据访问执行器。
-    ///
-    /// # 返回
-    /// 实际删除的文档总数；集合与索引保持不变。
-    ///
-    /// # 错误
-    /// `executor` 没有会话时返回 `UnsupportedDeployment`。保留集合不在当前库、删除计数溢出或删除后仍有残留时返回 `EntityMetadataOutOfRange`。删除或残留检查失败时返回下层错误。出错后由调用方回滚。
+    /// 须在受管快照事务中执行，按领域核准的物理主键保留文档，删除其余内容但不动集合或索引。返回删除总数；
+    /// 保留集合不存在、计数溢出、仍有残留或数据库失败时交外层回滚。
     pub async fn execute(self, retention: ResetRetention, executor: &mut dyn Executor) -> Result<u64> {
         if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
             return Err(Error::UnsupportedDeployment("database reset requires a transaction"));
@@ -96,9 +68,9 @@ impl DatabaseReset {
 /// 重置编排使用的持久化操作，测试替身只替换 I/O。
 #[async_trait]
 trait ResetStore: Send {
-    /// 删除 `kept` 以外的文档并返回删除条数；下层失败原样返回。
+    // 按计划删去保留主键以外的文档，供编排累加删除条数；删除失败交外层事务处理。
     async fn erase(&mut self, collection: &str, kept: &[Bson]) -> Result<u64>;
-    /// 检查 `kept` 以外是否仍有文档。
+    // 清理后查保留主键以外还有无文档，防止不完整的重置被当作成功提交。
     async fn has_residue(&mut self, collection: &str, kept: &[Bson]) -> Result<bool>;
 }
 
@@ -125,7 +97,7 @@ impl ResetStore for MongoResetStore<'_> {
     }
 }
 
-/// 精确排除物理主键，未登记保留身份的集合全部清空。
+// 用 BSON 物理主键排除保留记录，不依赖业务 ID；集合没有保留项时用空条件全部清除。
 fn deletion_filter(kept: &[Bson]) -> Document {
     if kept.is_empty() {
         doc! {}
@@ -134,7 +106,7 @@ fn deletion_filter(kept: &[Bson]) -> Document {
     }
 }
 
-/// 顺序执行完整计划并核对残留，任何失败立即交给外层事务处理。
+// 先按计划清理各集合并累加条数，再逐一检查残留；任一步失败、溢出或残留立即向外层事务报错。
 async fn execute(store: &mut impl ResetStore, collections: &[String], kept: &ResetRetention) -> Result<u64> {
     let mut removed = 0_u64;
     for collection in collections {

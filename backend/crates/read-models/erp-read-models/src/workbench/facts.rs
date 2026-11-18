@@ -22,26 +22,19 @@ pub(super) struct WorkbenchFactsReader<'db> {
 }
 
 impl<'db> WorkbenchFactsReader<'db> {
-    /// 借用调用方数据库，不执行查询或授权。
-    ///
-    /// # 参数
-    /// * `db` - 与当前用例共用的数据库句柄。
-    /// # 返回
-    /// 返回不持有授权 Port 的事实读取器。
-    /// # 错误
-    /// 不返回错误。
+    // 装配责任队列对象事实时，借用调用方数据库，不执行查询或授权。
+    //
+    // 调用参数：
+    // * `db` - 与当前用例共用的数据库句柄。
+    //
+    // 返回不持有授权 Port 的事实读取器。
     pub(super) fn new(db: &'db Database) -> Self {
         Self { db }
     }
 
-    /// 绑定权威事实来源，沿用各读取步骤传入的执行器。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 返回与当前读取器共用数据库的权威事实来源。
-    /// # 错误
-    /// 不返回错误。
+    // 处理责任队列对象事实时，绑定权威事实来源，沿用各读取步骤传入的执行器。
+    //
+    // 返回与当前读取器共用数据库的权威事实来源。
     pub(super) fn facts_reader(&self) -> WorkItemFactsReader {
         WorkItemFactsReader::new(self.db.clone())
     }
@@ -69,17 +62,13 @@ pub(crate) struct WorkbenchObjectDisplay {
 }
 
 impl WorkbenchObjectDisplay {
-    /// 构造对象展示。
-    ///
-    /// # 参数
-    /// * `root_document_id` - 页面跳转的父单据
-    /// * `label` - 对象标题
-    ///
-    /// # 返回
-    /// 返回展示覆盖全空的显示。
-    ///
-    /// # 错误
-    /// 无。
+    // 初始化对象展示，供责任队列对象事实使用。
+    //
+    // 调用参数：
+    // * `root_document_id` - 页面跳转的父单据
+    // * `label` - 对象标题
+    //
+    // 返回展示覆盖全空的显示。
     pub(crate) fn new(root_document_id: String, label: String) -> Self {
         Self {
             root_document_id,
@@ -93,17 +82,13 @@ impl WorkbenchObjectDisplay {
         }
     }
 
-    /// 设置往来方与影响覆盖。
-    ///
-    /// # 参数
-    /// * `counterparty_label` - 往来方覆盖
-    /// * `impact_summary` - 影响覆盖
-    ///
-    /// # 返回
-    /// 返回更新后的显示。
-    ///
-    /// # 错误
-    /// 无。
+    // 组装责任队列对象事实时补充往来方与影响覆盖。
+    //
+    // 调用参数：
+    // * `counterparty_label` - 往来方覆盖
+    // * `impact_summary` - 影响覆盖
+    //
+    // 返回更新后的显示。
     pub(crate) fn with_counterparty_and_impact(
         mut self,
         counterparty_label: Option<String>,
@@ -114,16 +99,12 @@ impl WorkbenchObjectDisplay {
         self
     }
 
-    /// 设置提交版本展示。
-    ///
-    /// # 参数
-    /// * `subject_briefs` - 提交版本展示
-    ///
-    /// # 返回
-    /// 返回更新后的显示。
-    ///
-    /// # 错误
-    /// 无。
+    // 组装责任队列对象事实时填入提交版本展示。
+    //
+    // 调用参数：
+    // * `subject_briefs` - 提交版本展示
+    //
+    // 返回更新后的显示。
     pub(crate) fn with_subject_briefs(
         mut self,
         subject_briefs: HashMap<String, WorkbenchSubjectDisplay>,
@@ -140,16 +121,12 @@ pub(crate) struct WorkbenchObjectFact {
     pub(super) display: WorkbenchObjectDisplay,
 }
 impl WorkbenchObjectFact {
-    /// 用权威事实生成展示，不另查显示层。
-    ///
-    /// # 参数
-    /// * `authority` - 命令侧对象事实。
-    ///
-    /// # 返回
-    /// 展示的根单据、标题、往来方、影响和提交摘要均复制自 `authority`；简报源保持为空。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 生成责任队列对象事实视图时，用权威事实生成展示，不另查显示层。
+    //
+    // 调用参数：
+    // * `authority` - 命令侧对象事实。
+    //
+    // 展示的根单据、标题、往来方、影响和提交摘要均复制自 `authority`；简报源保持为空。
     pub(super) fn from_authority(authority: erp_workflow::ports::ObjectFact) -> Self {
         let display =
             WorkbenchObjectDisplay::new(authority.root_document_id.clone(), authority.label.clone())
@@ -179,17 +156,13 @@ impl WorkbenchObjectFact {
 
 pub(crate) type WorkbenchObjectFactMap = HashMap<(ObjectKind, String), WorkbenchObjectFact>;
 
-/// 解析实体注册的工作项简报关系。
-///
-/// # 参数
-/// * `work_item_type` - 工作项类型
-/// * `business_object_type` - 工作项持久化的业务对象类型
-///
-/// # 返回
-/// 已注册组合返回权威对象种类与读取权限；未注册组合返回 `None`。
-///
-/// # 错误
-/// 无。
+// 处理责任队列对象事实时，解析实体注册的工作项简报关系。
+//
+// 调用参数：
+// * `work_item_type` - 工作项类型
+// * `business_object_type` - 工作项持久化的业务对象类型
+//
+// 已注册组合返回权威对象种类与读取权限；未注册组合返回 `None`。
 pub(super) fn object_policy(
     work_item_type: WorkItemType,
     business_object_type: &str,
@@ -198,17 +171,14 @@ pub(super) fn object_policy(
 }
 
 impl WorkbenchReadService {
-    /// 按固定对象注册表分组查询；未注册类型不会进入本映射。
-    ///
-    /// # 参数
-    /// * `keys` - 对象种类与 ID。
-    /// * `executor` - 数据访问执行器。
-    ///
-    /// # 返回
-    /// 返回当前业务事实，并补上审批展示。
-    ///
-    /// # 错误
-    /// 业务事实或审批展示读取失败时返回错误。
+    // 依据固定对象注册表分组查询；未注册类型不会进入本映射。
+    //
+    // 调用参数：
+    // * `keys` - 对象种类与 ID。
+    //
+    // 返回当前业务事实，并补上审批展示。
+    //
+    // 业务事实或审批展示读取失败时返回错误。
     pub(super) async fn load_object_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -219,17 +189,14 @@ impl WorkbenchReadService {
         Ok(facts)
     }
 
-    /// 读取当前业务事实；审批提交捕获与普通展示复用，禁止在此叠加旧快照。
-    ///
-    /// # 参数
-    /// * `keys` - 对象种类与 ID。
-    /// * `executor` - 数据访问执行器。
-    ///
-    /// # 返回
-    /// 返回销售、采购、履约、变更、资金及独立对象的当前事实，不含审批历史快照。
-    ///
-    /// # 错误
-    /// 任一类事实读取失败时返回错误。
+    // 为责任队列对象事实取数时，读取当前业务事实；审批提交捕获与普通展示复用，禁止在此叠加旧快照。
+    //
+    // 调用参数：
+    // * `keys` - 对象种类与 ID。
+    //
+    // 返回销售、采购、履约、变更、资金及独立对象的当前事实，不含审批历史快照。
+    //
+    // 任一类事实读取失败时返回错误。
     pub(super) async fn load_live_object_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -244,17 +211,14 @@ impl WorkbenchReadService {
 }
 
 impl WorkbenchFactsReader<'_> {
-    /// 读取业务对象当前事实；调用方继续按原顺序装载供应商申请人和运营展示。
-    ///
-    /// # 参数
-    /// * `keys` - 对象种类与 ID。
-    /// * `executor` - 数据访问执行器。
-    ///
-    /// # 返回
-    /// 返回销售、采购、履约、变更、资金及独立对象的当前事实，不含审批历史快照。
-    ///
-    /// # 错误
-    /// 任一类事实读取失败时返回错误。
+    // 责任队列按本批对象键读取当前单据事实，不展开历史审批快照；调用方随后按原顺序补供应商申请人及运营展示。
+    //
+    // 调用参数：
+    // * `keys` - 对象种类与 ID。
+    //
+    // 返回销售、采购、履约、变更、资金及独立对象的当前事实，不含审批历史快照。
+    //
+    // 任一类事实读取失败时返回错误。
     // 每批只分配一次，将大型异步状态机留在读模型 crate 内生成。
     #[inline(never)]
     fn load_document_facts<'a>(
@@ -292,18 +256,13 @@ impl WorkbenchFactsReader<'_> {
         })
     }
 
-    /// 装载库存、结算、导入、集成和供应侧对象事实。
-    ///
-    /// # 参数
-    /// * `keys` - 本批任务引用的对象键
-    /// * `facts` - 输出的对象事实表
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 成功时写入已注册独立对象的事实。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
+    // 为责任队列对象事实取数时，读取库存、结算、导入、集成和供应侧对象事实。
+    //
+    // 调用参数：
+    // * `keys` - 本批任务引用的对象键
+    // * `facts` - 输出的对象事实表
+    //
+    // 成功时写入已注册独立对象的事实。
     async fn load_independent_object_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -320,7 +279,7 @@ impl WorkbenchFactsReader<'_> {
         self.load_supplier_portal_facts(keys, facts, executor).await
     }
 
-    /// 权威申请归属与冻结版本由命令和显示共用的 reader 唯一生成。
+    // 读取责任队列对象事实时，权威申请归属与冻结版本由命令和显示共用的 reader 唯一生成。
     async fn load_supplier_portal_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -345,7 +304,7 @@ impl WorkbenchFactsReader<'_> {
         Ok(())
     }
 
-    /// 批量读取 W26 供应商履约订单事实，并冻结订单乐观锁版本用于任务对象校验。
+    // 读取责任队列对象事实时，批量读取 W26 供应商履约订单事实，并冻结订单乐观锁版本用于任务对象校验。
     async fn load_supplier_fulfillment_order_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -358,7 +317,7 @@ impl WorkbenchFactsReader<'_> {
         Ok(())
     }
 
-    /// 批量读取 W21 供应商供给事实；未建模的供应商外部商品继续失败关闭。
+    // 读取责任队列对象事实时，批量读取 W21 供应商供给事实；未建模的供应商外部商品继续失败关闭。
     async fn load_supplier_offering_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,

@@ -21,23 +21,12 @@ use crate::Result;
 impl SalesOrderCommandProcess {
     /// 保存草稿（整表头覆盖 + 明细整批替换，乐观锁语义）。
     ///
-    /// 采购/销售驳回后订单回到草稿，但首次提交工作副本已是 `Submitted` 终态时，
-    /// 会新开一份 `Editing` 副本，而不是返回「有效工作副本不存在」。
-    /// 已有有效副本时，`req.version` 必须与当前工作副本版本一致；新开副本不校验
-    /// 该版本（前端在无副本时会把销售单版本误当成草稿版本）。
-    /// 行替换在事务内「软删旧行 + 写入新行」原子完成。
+    /// 采购/销售驳回后订单回到草稿，但首次提交工作副本已是 `Submitted` 终态时，会新开一份 `Editing` 副本，而不是返回「有效工作副本不存在」。已有有效副本时，`req.version`
+    /// 必须与当前工作副本版本一致；新开副本不校验该版本（前端在无副本时会把销售单版本误当成草稿版本）。行替换在事务内「软删旧行 + 写入新行」原子完成。
     ///
-    /// # 参数
-    /// * `id` - 销售单 ID
-    /// * `req` - 保存请求（含期望版本与草稿内容）
-    /// * `actor` - 已通过鉴权的审计操作人
+    /// `req` 为保存请求（含期望版本与草稿内容）。返回保存后的工作副本视图。`NotFound`：销售单不存在。
     ///
-    /// # 返回
-    /// 返回保存后的工作副本视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 销售单不存在
-    /// * `ConflictError` - 非草稿，或已有副本但期望版本不一致
+    /// `ConflictError`：非草稿，或已有副本但期望版本不一致。
     #[tracing::instrument(
         name = "sales_order.save_working_copy",
         skip_all,
@@ -104,7 +93,7 @@ impl SalesOrderCommandProcess {
         self.working_copy_result(&working_copy, actor).await
     }
 
-    /// 在同一读取事务内核验当前销售单、所选合同和客户后准备草稿。
+    // 在同一读取事务内核验当前销售单、所选合同和客户后准备草稿。
     async fn saved_draft_context(
         &self,
         access: &SalesCommandAccess,

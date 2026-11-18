@@ -21,13 +21,10 @@ use persistence_core::{Executor, Repository};
 
 use super::{FactsBindings, MappingBindings};
 
-/// 构造组织、查询资格及三个人员目录的完整实现绑定。
-/// # 参数
-/// db 为身份数据库；所有读取继续使用调用方执行器。
-/// # 返回
-/// 五个资源的共享 Facts，以及组织和人员入口的静态 Mapping。
-/// # 错误
-/// 固定模型或资源标识非法时拒绝；构造不执行 I/O。
+// 构造组织、查询资格及三个人员目录的完整实现绑定。
+// db 为身份数据库；所有读取继续使用调用方执行器。
+// 五个资源的共享 Facts，以及组织和人员入口的静态 Mapping。
+// 固定模型或资源标识非法时拒绝；构造不执行 I/O。
 pub(super) fn bindings(db: Database) -> Result<(FactsBindings, MappingBindings)> {
     let reader: Arc<dyn AccessFactsPort> = Arc::new(DirectoryFacts { db });
     let resources =

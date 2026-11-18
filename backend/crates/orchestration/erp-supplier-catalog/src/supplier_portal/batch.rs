@@ -118,11 +118,11 @@ impl PreparedRow {
 
 impl SupplierPortalProcess {
     /// 仅查询原批量操作的已保存回执，不重新执行业务或封存新的拒绝。
-    /// # 参数
+    ///
     /// `actor` 为当前门户身份，`input` 为保留原操作号及原内容的批量输入。
-    /// # 返回
+    ///
     /// 已保存的成功、拒绝回执，以及尚无终态回执的待确认行。
-    /// # 错误
+    ///
     /// 当前会话、批量输入或原命令身份无效，或回执读取失败时拒绝。
     pub async fn batch_receipts(
         &self,
@@ -153,11 +153,11 @@ impl SupplierPortalProcess {
     }
 
     /// 先预检整批，再对各行独立提交；恢复重用原内容及原操作号。
-    /// # 参数
+    ///
     /// 当前门户身份和保留原命令标识的批量请求。
-    /// # 返回
+    ///
     /// 返回原顺序逐行结果；新品准备返回草稿，最终提交返回带具体任务的原申请。
-    /// # 错误
+    ///
     /// 批次数量、身份或归属输入非法时拒绝；行失败保留成功行。
     pub async fn batch(&self, actor: &PortalActor, input: PortalBatchInput) -> Result<PortalBatchResult> {
         actor.require_write()?;
@@ -685,7 +685,7 @@ fn rejected_row_result(id: &str, rejection: &CommandRejection) -> PortalBatchRow
         Some(json!({"command_outcome":"rejected"})),
     )
 }
-/// 恢复重试失败只能说明本次未完成，不能排除更早原请求仍在提交。
+// 恢复重试失败只能说明本次未完成，不能排除更早原请求仍在提交。
 fn execution_row_result(id: &str, recovery_only: bool, result: Result<Value>) -> PortalBatchRowResult {
     match result {
         Ok(value) => row_result(id, "succeeded", None, Some(external_result(value))),
@@ -701,7 +701,7 @@ fn execution_row_result(id: &str, recovery_only: bool, result: Result<Value>) ->
 fn batch_rows_valid(rows: &[PortalBatchRowResult]) -> bool {
     rows.iter().all(|row| matches!(row.status.as_str(), "valid" | "replayed"))
 }
-/// 处理资格中的配置或策略失败属于授权失败，不得作为原业务命令的确定拒绝封存。
+// 处理资格中的配置或策略失败属于授权失败，不得作为原业务命令的确定拒绝封存。
 fn qualification_error(error: Error) -> Error {
     match error {
         Error::ValidationError(_) | Error::BusinessLogicError(_) | Error::ConflictError(_) => {
@@ -710,7 +710,7 @@ fn qualification_error(error: Error) -> Error {
         error => error,
     }
 }
-/// 本次未执行的预检不能证明旧请求未提交；只有成功或拒绝回执可以解除未知状态。
+// 本次未执行的预检不能证明旧请求未提交；只有成功或拒绝回执可以解除未知状态。
 fn retain_unresolved_recovery(input: &PortalBatchInput, valid: bool, rows: &mut [PortalBatchRowResult]) {
     if !input.recovery_only || (valid && !input.validate_only) {
         return;

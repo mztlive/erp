@@ -23,14 +23,8 @@ pub(super) struct CommitApproval {
     pub(super) now: Instant,
 }
 
-/// 按实际创建、提交顺序生成同一逆向命令的两条业务事件。
-///
-/// # 参数
-/// 操作人、已经规范化的命令收据和实际创建的结果主键。
-/// # 返回
-/// 返回共用命令编号、序号分别为 1 和 2 的创建与提交事件。
-/// # 错误
-/// 审计身份、动作目录、命令关联或事件序号不合法时返回原错误。
+// 准备逆向建单并提交时的业务审计。两条事件关联原命令和实际结果，先创建（序号 1）、再提交（序号 2）；
+// 身份、动作目录、关联或序号不合法时返回原错误。
 pub(super) fn commit_audits(
     actor: &AuditActor,
     receipt: &CommandReceipt,
@@ -58,14 +52,8 @@ pub(super) fn commit_audits(
     Ok((create, submit))
 }
 
-/// 在原事务内先保存创建、提交审计，再保存逆向命令结果。
-///
-/// # 参数
-/// 数据库、命令收据、实际结果主键、两条原业务审计及同一执行器。
-/// # 返回
-/// 两条业务审计及独立命令收据均持久化成功。
-/// # 错误
-/// 任一步持久化失败时返回原错误，由外层事务回滚。
+// 逆向审批启动完成后，在原命令执行器依次写入创建审计、提交审计和独立结果回执，回执关联提交事件。
+// 任一步失败时返回原错误，由根事务回滚。
 pub(super) async fn save_commit(
     db: &Database,
     receipt: &CommandReceipt,
@@ -81,15 +69,8 @@ pub(super) async fn save_commit(
     Ok(())
 }
 
-/// 将只读查证结果与原提交错误合并，不开启写事务。
-///
-/// # 参数
-/// * `original` - 首次事务错误。
-/// * `recovered` - 原命令的只读查证结果。
-/// # 返回
-/// 查证命中时返回原正式结果 ID。
-/// # 错误
-/// 未命中返回原错误；提交未知且查证失败仍返回原未知错误。
+// 写事务结束后合并原错误与原命令的只读查证；确认已提交则返回正式结果 ID。
+// 未命中保留原错误，提交未知且查证失败仍保留首次未知错误，不启动写事务。
 pub(crate) fn recovered_resource(original: Error, recovered: Result<Option<String>>) -> Result<String> {
     recover_resource(original, recovered, |error| matches!(error, Error::OutcomeUnknown(_)))
 }

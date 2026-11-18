@@ -17,12 +17,10 @@ use mongodb::bson::{Bson, doc};
 
 /// 构造材料事实对应的三个真实查询分区，供固定工作项来源计划使用。
 ///
-/// # 参数
-/// * `supplier` - 已绑定的完整供应商 Mapping。
-/// * `offering` - 已绑定的完整供给 Mapping。
-/// # 返回
+/// `supplier`：已绑定的完整供应商 Mapping；`offering`：已绑定的完整供给 Mapping。
+///
 /// 按 `application`、`new_product` 和 `cooperation` 索引的不可变 Mapping。
-/// # 错误
+///
 /// 来源模型资源或输出粒度不符时拒绝；本函数不执行 I/O。
 pub fn material_mappings(
     supplier: Arc<dyn AccessMapping>,

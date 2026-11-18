@@ -8,7 +8,7 @@ use crate::finance::dto::{
     DocumentApprovalView,
 };
 
-/// 由绑定与可选实例事实构造只读审批结构。
+/// 为回款审批详情组装审批视图时，只使用冻结的定义绑定与实际读到的可选实例。
 ///
 /// 创建后未提交只返回绑定定义；客户端不得据此选择定义或审批人。
 ///
@@ -19,9 +19,6 @@ use crate::finance::dto::{
 ///
 /// # 返回
 /// 返回有界只读审批结构。
-///
-/// # 错误
-/// 不返回错误。
 pub fn document_approval_view(
     binding: Option<&ApprovalDefinitionBinding>,
     instance: Option<DocumentApprovalInstanceView>,
@@ -36,7 +33,7 @@ pub fn document_approval_view(
         allowed_actions: allowed_document_actions(status),
     }
 }
-/// 单据详情允许的审批相关动作。不含选择定义或审批人。
+// 为回款审批详情计算详情可展示的审批动作，不允许借此选择流程定义或审批人。
 fn allowed_document_actions(status: CustomerReceiptStatus) -> Vec<String> {
     match status {
         CustomerReceiptStatus::Draft | CustomerReceiptStatus::Rejected => vec!["SUBMIT".to_string()],

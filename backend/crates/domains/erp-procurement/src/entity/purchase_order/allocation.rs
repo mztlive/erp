@@ -109,18 +109,11 @@ impl PurchaseLineSalesAllocation {
     ///
     /// 校验分配数量、两端成本金额非负，且不含税成本不超过含税成本（方向校验）。
     ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::PurchaseLineSalesAllocationId`）
-    /// * `data` - 创建数据
+    /// 跨行上限校验（不超采购行数量、不超销售承诺数量）依赖聚合查询，留 P3（§6.6）。
     ///
-    /// # 返回
-    /// 返回新建的分配实体。
-    ///
-    /// # 错误
     /// 分配数量/成本为负，或不含税成本大于含税成本时返回错误。
     ///
-    /// # 说明
-    /// 跨行上限校验（不超采购行数量、不超销售承诺数量）依赖聚合查询，留 P3（§6.6）。
+    /// `id` 为实体主键（`erp_core::ids::PurchaseLineSalesAllocationId`）。
     pub fn new(id: PurchaseLineSalesAllocationId, data: PurchaseLineSalesAllocationData) -> Result<Self> {
         if data.allocated_quantity.to_decimal() < rust_decimal::Decimal::ZERO {
             return Err(Error::from("分配数量不能为负"));
@@ -147,21 +140,13 @@ impl PurchaseLineSalesAllocation {
 impl CurrentSalesAllocationPlan {
     /// 构造采购版本行到销售当前版本行的确定性正式分配计划。
     ///
-    /// # 参数
-    /// * `purchase_lines` - 即将成为当前版本的类型化采购版本行
-    /// * `current_sales_lines` - 来源销售单当前版本的稳定行与版本行事实
-    /// * `allocation_ids` - Service 预先生成且按商品/服务采购行顺序提供的分配主键
+    /// 物流费用行保持原样且不消耗分配主键；稳定销售行优先取采购行已有引用，缺失时才回退采购确认行引用；输入采购行不会被原地修改。
     ///
-    /// # 返回
-    /// 返回重绑定采购行、正式分配实体和采购行到分配主键的查找表。
+    /// 返回重绑定采购行、正式分配实体和采购行到分配主键的查找表。稳定行、数量或分配主键缺失，当前销售版本无法匹配，SKU 或数量不相等，
+    /// 或单行分配实体不满足自身不变式时返回错误。
     ///
-    /// # 错误
-    /// 稳定行、数量或分配主键缺失，当前销售版本无法匹配，SKU 或数量不相等，或单行
-    /// 分配实体不满足自身不变式时返回错误。
-    ///
-    /// # 关键约束
-    /// 物流费用行保持原样且不消耗分配主键；稳定销售行优先取采购行已有引用，
-    /// 缺失时才回退采购确认行引用；输入采购行不会被原地修改。
+    /// - `purchase_lines`：即将成为当前版本的类型化采购版本行。
+    /// - `current_sales_lines`：来源销售单当前版本的稳定行与版本行事实。
     pub fn build(
         purchase_lines: &[PurchaseOrderRevisionLine],
         current_sales_lines: &[CurrentSalesAllocationLine],
@@ -193,23 +178,13 @@ impl CurrentSalesAllocationPlan {
     }
 }
 
-/// 重绑定一个商品/服务采购版本行并构造对应正式分配。
-///
-/// # 参数
-/// * `purchase_line` - 待重绑定的商品/服务采购版本行
-/// * `current_sales_by_stable_line` - 销售稳定行到当前版本行事实的查找表
-/// * `allocation_ids` - 按采购商品/服务行顺序提供的分配主键迭代器
-///
-/// # 返回
-/// 返回本采购行消费的分配主键和新建正式分配实体。
-///
-/// # 错误
-/// 稳定行、当前销售版本行、数量或分配主键缺失，数量不相等，或分配实体校验
-/// 失败时返回错误。
-///
-/// # 关键约束
-/// 校验顺序保持稳定行、当前版本行、采购数量、分配数量、数量相等、SKU、主键；成功后
-/// 才按销售当前版本事实重写采购行关联。
+// 重绑定一个商品/服务采购版本行并构造对应正式分配。
+//
+// 校验顺序保持稳定行、当前版本行、采购数量、分配数量、数量相等、SKU、主键；成功后才按销售当前版本事实重写采购行关联。
+//
+// 稳定行、当前销售版本行、数量或分配主键缺失，数量不相等，或分配实体校验失败时返回错误。
+//
+// `current_sales_by_stable_line` 为销售稳定行到当前版本行事实的查找表。
 fn build_current_sales_allocation(
     purchase_line: &mut PurchaseOrderRevisionLine,
     current_sales_by_stable_line: &HashMap<String, &CurrentSalesAllocationLine>,
@@ -454,19 +429,11 @@ mod tests {
         );
     }
 
-    /// 验证计划按稳定行优先级重绑定并保持分配主键关联顺序。
-    ///
-    /// # 参数
-    /// 无；测试使用两个采购商品行和两个销售当前版本行事实。
-    ///
-    /// # 返回
-    /// 无；全部重绑定、实体和查找表断言通过即测试成功。
-    ///
-    /// # 错误
-    /// 匹配优先级、输入不可变性、重绑定结果或主键关联漂移时测试失败。
-    ///
-    /// # 关键约束
-    /// 已有销售稳定行优先于采购确认行回退，且输入采购行不被原地修改。
+    // 验证计划按稳定行优先级重绑定并保持分配主键关联顺序。
+    //
+    // 已有销售稳定行优先于采购确认行回退，且输入采购行不被原地修改。
+    //
+    // 无；全部重绑定、实体和查找表断言通过即测试成功。
     #[test]
     fn current_sales_plan_rebinds_lines_and_builds_allocations() {
         let direct = item_purchase_line("porl-1", "sol-primary", "sol-fallback", "2");
@@ -512,7 +479,7 @@ mod tests {
         assert_eq!(plan.allocation_ids_by_purchase_line["porl-2"].as_ref(), "alloc-2");
     }
 
-    /// 当前来源同稳定行换 SKU 时不得构造新 allocation，原采购行与历史引用保持不变。
+    // 当前来源同稳定行换 SKU 时不得构造新 allocation，原采购行与历史引用保持不变。
     #[test]
     fn current_sales_plan_rejects_changed_sku_without_rebinding_purchase_lines() {
         let original = item_purchase_line("porl-1", "sol-1", "confirm-1", "2");
@@ -530,19 +497,11 @@ mod tests {
         assert_eq!(purchase_lines, vec![original]);
     }
 
-    /// 验证计划按既有优先级拒绝缺失匹配事实和数量不一致。
-    ///
-    /// # 参数
-    /// 无；测试逐项破坏采购行的稳定引用、当前版本匹配和数量字段。
-    ///
-    /// # 返回
-    /// 无；每个输入均返回对应领域错误即测试成功。
-    ///
-    /// # 错误
-    /// 错误优先级或错误变体与既有业务规则不一致时测试失败。
-    ///
-    /// # 关键约束
-    /// 校验顺序固定为稳定行、当前版本行、采购数量、分配数量和数量相等。
+    // 验证计划按既有优先级拒绝缺失匹配事实和数量不一致。
+    //
+    // 校验顺序固定为稳定行、当前版本行、采购数量、分配数量和数量相等。
+    //
+    // 无；每个输入均返回对应领域错误即测试成功。
     #[test]
     fn current_sales_plan_rejects_missing_facts_and_quantity_mismatch() {
         let current_sales_lines = vec![current_sales_line("sol-1", "current-sorl")];
@@ -583,19 +542,11 @@ mod tests {
         assert_eq!(error.to_string(), "采购版本行分配数量必须等于采购数量");
     }
 
-    /// 验证物流费用边界和分配主键数量守恒。
-    ///
-    /// # 参数
-    /// 无；测试零商品行、缺少主键和多余主键三种边界。
-    ///
-    /// # 返回
-    /// 无；物流行保持原样且主键数量偏差均被拒绝即测试成功。
-    ///
-    /// # 错误
-    /// 物流行消耗主键、被改写，或主键基数不匹配未失败时测试失败。
-    ///
-    /// # 关键约束
-    /// 每个商品/服务行恰好消费一个 Service 生成的主键，物流费用行消费零个。
+    // 验证物流费用边界和分配主键数量守恒。
+    //
+    // 每个商品/服务行恰好消费一个 Service 生成的主键，物流费用行消费零个。
+    //
+    // 无；物流行保持原样且主键数量偏差均被拒绝即测试成功。
     #[test]
     fn current_sales_plan_skips_logistics_and_requires_exact_id_count() {
         let logistics = logistics_purchase_line("porl-logistics");

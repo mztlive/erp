@@ -19,11 +19,11 @@ pub struct HttpSourceImages {
 
 impl HttpSourceImages {
     /// 创建可复用的图片下载客户端。
-    /// # 参数
+    ///
     /// 无；无需登记图片域名。
-    /// # 返回
+    ///
     /// 不执行网络请求的来源读取器。
-    /// # 错误
+    ///
     /// HTTP 客户端初始化失败时返回错误。
     pub fn new() -> Result<Self> {
         let client = Client::builder()

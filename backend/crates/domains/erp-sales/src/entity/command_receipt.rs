@@ -21,7 +21,7 @@ pub enum SalesCommandResult {
 }
 
 impl SalesCommandResult {
-    /// 返回结果种类允许的唯一命令动作。
+    // 提供结果种类允许的唯一命令动作。
     fn action(&self) -> &'static str {
         match self {
             Self::Created { .. } => "sales_order.create",
@@ -30,7 +30,7 @@ impl SalesCommandResult {
         }
     }
 
-    /// 返回该结果引用对应的资源类型。
+    // 提供该结果引用对应的资源类型。
     fn resource_type(&self) -> &'static str {
         match self {
             Self::Submitted { .. } => "sales_order_submission",
@@ -38,7 +38,7 @@ impl SalesCommandResult {
         }
     }
 
-    /// 返回正式结果对象 ID，提交命令引用原提交快照。
+    // 提供正式结果对象 ID，提交命令引用原提交快照。
     fn result_id(&self) -> &str {
         match self {
             Self::Created { sales_order_id } | Self::HandedOver { sales_order_id } => sales_order_id.as_ref(),
@@ -46,7 +46,7 @@ impl SalesCommandResult {
         }
     }
 
-    /// 返回命令作用的原销售单 ID。
+    // 提供命令作用的原销售单 ID。
     fn scope_id(&self) -> &str {
         match self {
             Self::Created { sales_order_id }
@@ -75,21 +75,17 @@ pub struct SalesCommandReceipt {
 
 impl SalesCommandReceipt {
     /// 构造必须与销售事实、审计同事务写入的回执。
-    ///
-    /// # 参数
-    /// * `id` - 稳定命令 ID
-    /// * `actor_id` - 认证账号
-    /// * `key` - 只用于计算幂等摘要，不明文落库
-    /// * `fingerprint` - 领域规范化请求的十六进制指纹
-    /// * `result` - 已提交结果
-    /// * `audit_event_id` - 关联审计事件
-    ///
-    /// # 返回
     /// 返回已通过 `validate` 的独立回执。
-    ///
-    /// # 错误
-    /// 操作号为空时返回 `Error::ValidationError`。命令身份、结果引用或审计事件为空，
+    /// 失败条件：操作号为空时返回 `Error::ValidationError`。命令身份、结果引用或审计事件为空，
     /// 或请求指纹不是 64 位十六进制时，`validate` 返回 `Error::Internal`。
+    ///
+    /// 输入约定：
+    /// - `id`：稳定命令 ID
+    /// - `actor_id`：认证账号
+    /// - `key`：只用于计算幂等摘要，不明文落库
+    /// - `fingerprint`：领域规范化请求的十六进制指纹
+    /// - `result`：已提交结果
+    /// - `audit_event_id`：关联审计事件
     pub fn new(
         id: String,
         actor_id: &str,
@@ -120,15 +116,8 @@ impl SalesCommandReceipt {
     }
 
     /// 校验结构化身份及结果之间的一致性。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 合法时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 未知 `schema_version`、已删除、身份或结果引用缺失、动作与结果不一致，
+    /// 结果：合法时返回 `Ok(())`。
+    /// 失败条件：未知 `schema_version`、已删除、身份或结果引用缺失、动作与结果不一致，
     /// 或请求指纹不是 64 位十六进制时返回 `Error::Internal`。
     /// 幂等摘要无法按 v1 解析时返回 `Error::Logic`。
     pub fn validate(&self) -> Result<()> {
@@ -155,22 +144,18 @@ impl SalesCommandReceipt {
     /// 核对回执与本次命令身份、作用域、指纹和幂等摘要一致。
     ///
     /// 成功后调用方仍须用回执上的结果做当前授权和业务交叉验证；本方法不返回该结果。
-    ///
-    /// # 参数
-    /// * `command_id` - 稳定命令 ID
-    /// * `actor_id` - 认证账号
-    /// * `action` - 命令动作
-    /// * `scope_id` - 原销售单作用域；创建命令必须为 `None`，提交和交接必须携带原销售单
-    /// * `fingerprint` - 本次规范化请求指纹
-    /// * `expected_key_hash` - 本次规范化幂等键摘要
-    ///
-    /// # 返回
-    /// 一致时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 回执损坏时 `validate` 返回 `Error::Internal` 或 `Error::Logic`。
+    /// 结果：一致时返回 `Ok(())`。
+    /// 失败条件：回执损坏时 `validate` 返回 `Error::Internal` 或 `Error::Logic`。
     /// 命令身份、动作、作用域或幂等摘要不一致时返回 `Error::Internal`。
     /// 同一操作号的请求指纹不同时返回 `Error::ConflictError`。
+    ///
+    /// 输入约定：
+    /// - `command_id`：稳定命令 ID
+    /// - `actor_id`：认证账号
+    /// - `action`：命令动作
+    /// - `scope_id`：原销售单作用域；创建命令必须为 `None`，提交和交接必须携带原销售单
+    /// - `fingerprint`：本次规范化请求指纹
+    /// - `expected_key_hash`：本次规范化幂等键摘要
     pub fn matches(
         &self,
         command_id: &str,
@@ -323,7 +308,7 @@ mod tests {
         assert!(invalid.validate().is_err());
     }
 
-    /// 合法但被替换的幂等摘要必须视为身份损坏，并先于异载荷冲突失败。
+    // 回归检查：合法但被替换的幂等摘要必须视为身份损坏，并先于异载荷冲突失败。
     #[test]
     fn altered_well_formed_key_digest_cannot_replay_the_command() {
         let expected_key_hash = CommandFingerprint::from_parts(["raw-key".into()]);

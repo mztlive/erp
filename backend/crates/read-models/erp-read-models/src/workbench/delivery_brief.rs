@@ -46,16 +46,14 @@ struct DeliveryContext {
 }
 
 impl WorkbenchFactsReader<'_> {
-    /// 为授权发货对象批量补齐来源资料和本批次数量。
-    ///
-    /// # 参数
-    /// * `rows` / `lines` - 当前页实际发货表头和行
-    /// * `facts` - 已装载的任务对象
-    /// * `executor` - 当前查询执行器
-    /// # 返回
-    /// 原地追加只读展示，不改变责任、权限或业务状态。
-    /// # 错误
-    /// 仓储读取失败时返回对应错误。
+    // 组装发货工作台资料时，为授权发货对象批量补齐来源资料和本批次数量。
+    //
+    // 调用参数：
+    // * `rows` / `lines` - 当前页实际发货表头和行
+    // * `facts` - 已装载的任务对象
+    // * `executor` - 当前查询执行器
+    //
+    // 原地追加只读展示，不改变责任、权限或业务状态。
     pub(super) async fn enrich_delivery_briefs(
         &self,
         rows: &[Delivery],

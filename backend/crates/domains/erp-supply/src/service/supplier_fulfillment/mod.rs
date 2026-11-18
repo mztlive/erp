@@ -29,15 +29,7 @@ pub struct SupplierFulfillmentService {
 }
 impl SupplierFulfillmentService {
     /// 绑定本域数据访问；授权访问器 缺省失败关闭。
-    ///
-    /// # 参数
-    /// * `db` - 履约集合所在数据库。
-    ///
-    /// # 返回
     /// 返回授权访问器 与处理人 Port 均为失败关闭的服务。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self {
             db: db.clone(),
@@ -48,23 +40,14 @@ impl SupplierFulfillmentService {
     }
 
     /// 注入组合根已有的适配器能力来源。
-    /// # 参数
-    /// `registry` 为已注册的供应商适配器。
-    /// # 返回
     /// 已绑定能力来源的服务。
-    /// # 错误
-    /// 不返回错误。
     pub fn with_registry(mut self, registry: Arc<dyn SupplierReferenceRegistry>) -> Self {
         self.registry = Some(registry);
         self
     }
 
     /// 读取当前适配器实际支持的操作。
-    /// # 参数
-    /// `connection` 为已读取的连接身份。
-    /// # 返回
     /// 不受自动下单开关影响的能力清单。
-    /// # 错误
     /// 适配器未装配或身份不符时拒绝。
     pub fn capabilities(&self, connection: &SupplierApiConnection) -> Result<Vec<SupplierApiCapabilityCode>> {
         let registry = self.registry.as_ref().ok_or_else(|| {
@@ -76,16 +59,8 @@ impl SupplierFulfillmentService {
     }
 
     /// 注入履约订单范围与 W26 处理人 Port。
-    ///
-    /// # 参数
-    /// * `data_scope` - 组合层装配的本域授权访问器
-    /// * `handlers` - 当前开放 W26 处理人事实
-    ///
-    /// # 返回
     /// 返回绑定授权访问器 的服务。
-    ///
-    /// # 错误
-    /// 无。
+    /// `data_scope`：组合层装配的本域授权访问器。
     pub fn with_scope(
         mut self,
         data_scope: FulfillmentOrderAccess,
@@ -97,29 +72,13 @@ impl SupplierFulfillmentService {
     }
 
     /// 构造本域范围访问器。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回绑定当前数据库和授权访问器 的 `FulfillmentOrderAccess`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn access(&self) -> FulfillmentOrderAccess {
         self.data_scope.clone()
     }
 
     /// 当前开放 W26 处理人端口。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回处理人 Port 的共享句柄。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn handlers(&self) -> Arc<dyn FulfillmentExceptionHandlerPort> {
         self.handlers.clone()
     }

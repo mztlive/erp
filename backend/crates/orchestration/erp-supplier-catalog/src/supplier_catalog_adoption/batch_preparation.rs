@@ -14,11 +14,11 @@ use crate::{Error, Result};
 
 impl SupplierCatalogAdoptionProcess {
     /// 读取准备摘要，允许未完成批次，仍校验当前连接和供应商权限。
-    /// # 参数
+    ///
     /// connection、id 为连接和批次身份；actor 为当前认证用户。
-    /// # 返回
+    ///
     /// 不含成员资料的批次头。
-    /// # 错误
+    ///
     /// 不存在、旧未完成孤立批次或越权时拒绝。
     pub async fn preparation_batch(
         &self,
@@ -33,7 +33,7 @@ impl SupplierCatalogAdoptionProcess {
         .await
     }
 
-    /// 在调用方原事务内先授权，再读取并核对批次所属连接和供应商。
+    // 在调用方原事务内先授权，再读取并核对批次所属连接和供应商。
     pub(super) async fn read_preparation_batch(
         &self,
         connection: &str,
@@ -55,11 +55,11 @@ impl SupplierCatalogAdoptionProcess {
     }
 
     /// 返回商品库选择条所需轻量成员，避免下载全部配置资料。
-    /// # 参数
+    ///
     /// 连接、批次与当前认证用户。
-    /// # 返回
+    ///
     /// 完成批次的成员身份、名称和商品数量。
-    /// # 错误
+    ///
     /// 越权、未准备完成或数据库失败时拒绝。
     pub async fn batch_selection_view(
         &self,
@@ -78,11 +78,11 @@ impl SupplierCatalogAdoptionProcess {
     }
 
     /// 重试或取消原准备任务，不变更其冻结成员及已完成部分。
-    /// # 参数
+    ///
     /// 连接、批次、动作和认证用户。
-    /// # 返回
+    ///
     /// 原子更新后的准备摘要。
-    /// # 错误
+    ///
     /// 权限、状态或并发冲突时拒绝。
     pub async fn control_preparation(
         &self,
@@ -113,11 +113,11 @@ impl SupplierCatalogAdoptionProcess {
     }
 
     /// 由统一后台执行器持续处理有限分块，崩溃后从持久化进度继续。
-    /// # 参数
+    ///
     /// `id` 为已登记批次身份。
-    /// # 返回
+    ///
     /// 已完成或不再需要运行时成功。
-    /// # 错误
+    ///
     /// 权限、来源变化或存储错误时保留原进度；明确失败进入可重试状态。
     pub async fn prepare_batch(&self, id: &str) -> Result<()> {
         loop {
@@ -153,7 +153,7 @@ impl SupplierCatalogAdoptionProcess {
         }
     }
 
-    /// 在同一事务重验权限、读取成员、批量写入并推进版本。
+    // 在同一事务重验权限、读取成员、批量写入并推进版本。
     async fn prepare_chunk(&self, original: CatalogAdoptionBatch, executor: &mut dyn Executor) -> Result<()> {
         let Some(mut batch) =
             self.db.catalog_adoption_batches().find_by_id(&original.base.id, executor).await?
@@ -197,7 +197,7 @@ impl SupplierCatalogAdoptionProcess {
         Ok(())
     }
 
-    /// 只给仍处于原版本的任务记失败，不覆盖并发进度或取消。
+    // 只给仍处于原版本的任务记失败，不覆盖并发进度或取消。
     async fn fail_preparation(&self, mut original: CatalogAdoptionBatch, error: &Error) -> Result<()> {
         let state = original.preparation.as_mut().ok_or_else(|| Error::Internal("准备状态缺失".into()))?;
         state.fail(match error {

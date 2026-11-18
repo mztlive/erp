@@ -21,17 +21,13 @@ use crate::{Error, Result};
 type DeliveryFilter = <mongodb::Database as FulfillmentExt>::DeliveryFilter;
 
 impl FulfillmentService {
-    /// 分页查询发货单列表（W01 履约任务作业面）。
-    ///
-    /// # 参数
-    /// * `params` - 查询参数（`sales_order_id`/`status` 扁平筛选）
-    ///
-    /// # 返回
-    /// 返回契约形状的分页视图。
-    ///
-    /// # 错误
-    /// * `ValidationError` - 分页参数非法或排序字段不在白名单
-    /// * `RepositoryError` - 数据库查询失败
+    // 分页查询发货单列表（W01 履约任务作业面）。
+    // 返回契约形状的分页视图。
+    // `params` 为查询参数（`sales_order_id`/`status` 扁平筛选）。
+    //
+    // 失败条件：
+    // * `ValidationError` - 分页参数非法或排序字段不在白名单
+    // * `RepositoryError` - 数据库查询失败
     #[tracing::instrument(
         name = "fulfillment.delivery_list",
         skip_all,
@@ -75,21 +71,13 @@ impl FulfillmentService {
     }
 
     /// 查询发货单详情（表头 + 行）。
-    ///
     /// 调用方必须已完成所属业务授权，并传入原读取阶段执行器。
-    ///
-    /// # 参数
-    /// * `id` - 发货单主键
-    ///
-    /// # 返回
     /// 返回发货单详情视图。
+    /// `id` 为发货单主键。
     ///
-    /// # 错误
+    /// 失败条件：
     /// * `NotFound` - 发货单不存在
     /// * `RepositoryError` - 数据库查询失败
-    ///
-    /// # 关键业务约束
-    /// 调用方必须已完成所属业务授权，并传入原读取阶段执行器。
     #[tracing::instrument(
         name = "fulfillment.delivery_detail",
         skip_all,
@@ -119,14 +107,8 @@ impl FulfillmentService {
     }
 
     /// 按原请求校验、表头 ID 和逐行 ID 顺序构造发货草稿。
-    ///
-    /// # 参数
-    /// * `req` - 发货单创建请求
-    ///
-    /// # 返回
     /// 返回发货表头及其行。
-    ///
-    /// # 错误
+    /// `req` 为发货单创建请求。
     /// 请求、表头或发货类型与行归属不合法时返回原错误，不执行持久化。
     pub fn prepare_delivery(&self, req: CreateDeliveryRequest) -> Result<(Delivery, Vec<DeliveryLine>)> {
         req.validate()?;
@@ -154,16 +136,9 @@ impl FulfillmentService {
     }
 
     /// 在调用方事务内加载真实发货行并校验包裹关联后修改草稿。
-    ///
-    /// # 参数
-    /// * `id` - 发货单主键
-    /// * `req` - 带期望版本的更新请求
-    /// * `executor` - 调用方事务执行器
-    ///
-    /// # 返回
     /// 返回已应用物流更新、尚未写回的发货单及其行。
-    ///
-    /// # 错误
+    /// `id` 为发货单主键；`req` 为带期望版本的更新请求。
+    /// 沿用调用方当前事务的执行器 `executor`。
     /// 请求非法、发货单不存在、版本冲突或状态不允许更新时保留原错误。
     pub async fn prepare_delivery_update(
         &self,
@@ -200,16 +175,8 @@ impl FulfillmentService {
     }
 
     /// 将已构造的发货表头和行写入调用方事务；单据注册必须由组合层先完成。
-    ///
-    /// # 参数
-    /// * `delivery` - 发货表头
-    /// * `lines` - 发货行
-    /// * `executor` - 调用方事务执行器
-    ///
-    /// # 返回
-    /// 写入成功时无返回值。
-    ///
-    /// # 错误
+    /// `delivery` 为发货表头；`lines` 为发货行。
+    /// 沿用调用方当前事务的执行器 `executor`。
     /// 表头或行持久化失败时返回原错误，不创建任务或审计。
     pub async fn persist_created_delivery(
         &self,
@@ -222,15 +189,7 @@ impl FulfillmentService {
     }
 
     /// 使用调用方执行器 CAS 写回已完成领域修改的发货单。
-    ///
-    /// # 参数
-    /// * `delivery` - 已完成领域修改的发货单
-    /// * `executor` - 调用方执行器；本方法不创建事务
-    ///
-    /// # 返回
-    /// 写回成功时无返回值。
-    ///
-    /// # 错误
+    /// `delivery` 为已完成领域修改的发货单；`executor` 为调用方执行器；本方法不创建事务。
     /// 版本冲突或仓储写入失败时返回原错误；本方法不创建事务。
     pub async fn persist_delivery(&self, delivery: &mut Delivery, executor: &mut dyn Executor) -> Result<()> {
         self.db.deliveries().update(delivery, executor).await?;
@@ -241,7 +200,7 @@ impl FulfillmentService {
 // ------------------------------------------------------------------ private helpers (line rules owned by entities)
 
 impl From<Delivery> for DeliveryView {
-    /// 从发货单实体构造视图。
+    // 从发货单实体构造视图。
     fn from(delivery: Delivery) -> Self {
         Self {
             id: delivery.base.id,
@@ -260,7 +219,7 @@ impl From<Delivery> for DeliveryView {
 }
 
 impl From<DeliveryLine> for DeliveryLineView {
-    /// 从发货行实体构造视图。
+    // 从发货行实体构造视图。
     fn from(line: DeliveryLine) -> Self {
         Self {
             id: line.base.id,

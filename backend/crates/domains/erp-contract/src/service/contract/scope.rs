@@ -24,21 +24,11 @@ pub(super) struct ContractSnapshot {
 }
 
 impl ContractService {
-    /// 授权、总数、范围指标与合同版本全部在同一个事务读取。
-    ///
-    /// # 参数
-    /// * `query` - 已归一化查询
-    /// * `actor` - 已认证操作人
-    /// * `executor` - 当前列表用例的快照执行器
-    ///
-    /// # 返回
-    /// 返回带范围版本的列表快照。
-    ///
-    /// # 错误
-    /// 缺范围版本的后续页、范围变化、筛选非法或仓储失败时拒绝。
-    ///
-    /// # 关键业务约束
-    /// 组织筛选按当前主负责人所属组织收窄，不得扩大授权结果。
+    // 授权、总数、范围指标与合同版本全部在同一个事务读取。
+    // 返回带范围版本的列表快照。
+    // `query` 为已归一化查询；`executor` 为当前列表用例的快照执行器。
+    // 缺范围版本的后续页、范围变化、筛选非法或仓储失败时拒绝。
+    // 组织筛选按当前主负责人所属组织收窄，不得扩大授权结果。
     pub(super) async fn list_snapshot(
         &self,
         query: &ContractListQuery,
@@ -64,13 +54,10 @@ impl ContractService {
             .map(|(view, context)| ContractSnapshot { view, context })
     }
 
-    /// 只复核列表依赖版本，不重复分页、汇总及展示水合。
-    /// # 参数
-    /// query 为同一归一化筛选，actor 为当前账号，executor 为当前列表的快照执行器。
-    /// # 返回
-    /// 同一授权和业务事实口径下的范围版本。
-    /// # 错误
-    /// 当前授权、筛选事实或仓储读取失败时拒绝。
+    // 只复核列表依赖版本，不重复分页、汇总及展示水合。
+    // 同一授权和业务事实口径下的范围版本。
+    // query 为同一归一化筛选，actor 为当前账号，executor 为当前列表的快照执行器。
+    // 当前授权、筛选事实或仓储读取失败时拒绝。
     pub(super) async fn list_scope_version(
         &self,
         query: &ContractListQuery,
@@ -95,22 +82,13 @@ impl ContractService {
     }
 }
 
-/// 求交授权与基础条件并装配列表搜索事实（`list_snapshot` 第二步）。
-///
-/// # 参数
-/// * `db` - 合同数据库
-/// * `data_scope` - 组织展开与成员事实 Port
-/// * `customers` - 客户编号事实
-/// * `accounts` - identity 公开账号目录
-/// * `context` - 已解析的合同范围事实
-/// * `query` - 归一化查询
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回基础筛选、结果搜索条件及同一基础范围的有界合同版本集合。
-///
-/// # 错误
-/// 组织展开失败、基础范围或成员超限、归属查询失败时拒绝。
+// 求交授权与基础条件并装配列表搜索事实（`list_snapshot` 第二步）。
+// 返回基础筛选、结果搜索条件及同一基础范围的有界合同版本集合。
+// `db` 为合同数据库；`data_scope` 为组织展开与成员事实 Port。
+// `customers` 为客户编号事实；`accounts` 为identity 公开账号目录。
+// `context` 为已解析的合同范围事实；`query` 为归一化查询。
+// 沿用调用方执行器 `executor`。
+// 组织展开失败、基础范围或成员超限、归属查询失败时拒绝。
 #[allow(clippy::too_many_arguments)]
 async fn load_list_filter_and_search(
     db: &mongodb::Database,
@@ -153,21 +131,12 @@ async fn load_list_filter_and_search(
     Ok((filter, search, versions))
 }
 
-/// 执行搜索聚合并组装对外视图（`list_snapshot` 第三步）。
-///
-/// # 参数
-/// * `db` - 合同数据库
-/// * `filter` - 已与授权求交的仓储筛选
-/// * `search` - 列表搜索条件
-/// * `versions` - 同一基础范围已经过规模校验的合同版本集合
-/// * `context` - 已解析事实（指纹写入范围版本）
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回对外视图与携带指纹的授权上下文。
-///
-/// # 错误
-/// 聚合或行展示事实读取失败时拒绝。
+// 执行搜索聚合并组装对外视图（`list_snapshot` 第三步）。
+// 返回对外视图与携带指纹的授权上下文。
+// `db` 为合同数据库；`filter` 为已与授权求交的仓储筛选。
+// `search` 为列表搜索条件；`versions` 为同一基础范围已经过规模校验的合同版本集合。
+// `context` 为已解析事实（指纹写入范围版本）；沿用调用方执行器 `executor`。
+// 聚合或行展示事实读取失败时拒绝。
 async fn finish_list_snapshot(
     db: &mongodb::Database,
     filter: ContractFilter,
@@ -198,7 +167,7 @@ async fn finish_list_snapshot(
     Ok((view, context))
 }
 
-/// 把授权及列表业务事实绑定到同一个跨页版本。
+// 把授权及列表业务事实绑定到同一个跨页版本。
 fn fingerprint_version(
     authorization_version: &str,
     versions: &[ContractVersion],
@@ -216,19 +185,10 @@ fn fingerprint_version(
     Ok(format!("{}:{:x}", authorization_version, super::fingerprint::stable_fingerprint(&fingerprint)))
 }
 
-/// 将内部快照转换为对外列表视图。
-///
-/// # 参数
-/// * `snapshot` - 同一事务读取的授权与业务快照
-///
-/// # 返回
-/// 返回可序列化的列表响应。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 不把内部授权证明或全量人员集合返回给客户端。
+// 将内部快照转换为对外列表视图。
+// 返回可序列化的列表响应。
+// `snapshot` 为同一事务读取的授权与业务快照。
+// 不把内部授权证明或全量人员集合返回给客户端。
 pub(super) fn to_list_view(snapshot: ContractSnapshot) -> ContractListView {
     let mut view = snapshot.view;
     view.policy_version = snapshot.context.policy_version();
@@ -238,97 +198,51 @@ pub(super) fn to_list_view(snapshot: ContractSnapshot) -> ContractListView {
     view
 }
 
-/// 构造可被 HTTP 边界识别的范围变化冲突。
-///
-/// # 参数
-/// * `detail` - 面向用户的中文恢复说明
-///
-/// # 返回
-/// 返回带 `DATA_SCOPE_CHANGED` 前缀的冲突错误。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 稳定码必须出现在错误载荷中，供 HTTP 映射为独立 `code`，不得只依赖展示文案。
+// 构造可被 HTTP 边界识别的范围变化冲突。
+// 返回带 `DATA_SCOPE_CHANGED` 前缀的冲突错误。
+// `detail` 为面向用户的中文恢复说明。
+// 稳定码必须出现在错误载荷中，供 HTTP 映射为独立 `code`，不得只依赖展示文案。
 pub(super) fn data_scope_changed(detail: &str) -> Error {
     Error::ConflictError(format!("DATA_SCOPE_CHANGED：{detail}"))
 }
 
-/// 后续页必须携带当前范围版本，禁止拼接不同授权快照。
-///
-/// # 参数
-/// * `page` - 请求页码
-/// * `version` - 客户端回传的范围版本
-///
-/// # 返回
-/// 第一页或版本非空时成功。
-///
-/// # 错误
-/// 第二页及之后缺少版本时返回 `DATA_SCOPE_CHANGED`。
-///
-/// # 关键业务约束
-/// 不得在缺版本时继续查询并默默使用新授权。
+// 后续页必须携带当前范围版本，禁止拼接不同授权快照。
+// 第一页或版本非空时成功。
+// `page` 为请求页码；`version` 为客户端回传的范围版本。
+// 第二页及之后缺少版本时返回 `DATA_SCOPE_CHANGED`。
+// 不得在缺版本时继续查询并默默使用新授权。
 pub(super) fn ensure_page(page: u64, version: Option<&str>) -> Result<()> {
     ScopeVersion::new(version, EmptyScopeVersion::Missing)
         .require_for_page(page)
         .map_err(|error| data_scope_changed(error.detail()))
 }
 
-/// 客户端回传的范围版本必须与当前快照一致。
-///
-/// # 参数
-/// * `expected` - 后续页携带的范围版本；第一页可为空
-/// * `actual` - 本次查询快照的范围版本
-///
-/// # 返回
-/// 未携带或完全一致时成功。
-///
-/// # 错误
-/// 版本不一致时返回 `DATA_SCOPE_CHANGED`。
-///
-/// # 关键业务约束
-/// 不得把新旧授权结果拼接成同一列表。
+// 客户端回传的范围版本必须与当前快照一致。
+// 未携带或完全一致时成功。
+// `expected` 为后续页携带的范围版本；第一页可为空；`actual` 为本次查询快照的范围版本。
+// 版本不一致时返回 `DATA_SCOPE_CHANGED`。
+// 不得把新旧授权结果拼接成同一列表。
 pub(super) fn ensure_scope_version(expected: Option<&str>, actual: &str) -> Result<()> {
     ScopeVersion::new(expected, EmptyScopeVersion::Provided)
         .verify(actual)
         .map_err(|error| data_scope_changed(error.detail()))
 }
 
-/// 同一快照内两次读取的范围版本必须一致。
-///
-/// # 参数
-/// * `first` - 首次快照版本
-/// * `second` - 复核快照版本
-///
-/// # 返回
-/// 两次版本相同时成功。
-///
-/// # 错误
-/// 查询过程中范围或合同资料变化时返回 `DATA_SCOPE_CHANGED`。
-///
-/// # 关键业务约束
-/// 复核失败必须整页拒绝，不得返回半新半旧结果。
+// 同一快照内两次读取的范围版本必须一致。
+// 两次版本相同时成功。
+// `first` 为首次快照版本；`second` 为复核快照版本。
+// 查询过程中范围或合同资料变化时返回 `DATA_SCOPE_CHANGED`。
+// 复核失败必须整页拒绝，不得返回半新半旧结果。
 pub(super) fn ensure_stable_snapshot(first: &str, second: &str) -> Result<()> {
     ScopeVersion::new(Some(first), EmptyScopeVersion::Provided)
         .verify(second)
         .map_err(|_| data_scope_changed("数据范围或合同资料已变化，请刷新"))
 }
 
-/// 归一化查询与权限客户集合求交后的仓储条件；空集合必须保留。
-///
-/// # 参数
-/// * `query` - 归一化查询
-/// * `customer_ids` - 请求中的客户筛选
-///
-/// # 返回
-/// 返回仓储筛选。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 授权凭证由调用方单独绑定，业务筛选不得替代授权。
+// 归一化查询与权限客户集合求交后的仓储条件；空集合必须保留。
+// 返回仓储筛选。
+// `query` 为归一化查询；`customer_ids` 为请求中的客户筛选。
+// 授权凭证由调用方单独绑定，业务筛选不得替代授权。
 fn list_filter(query: &ContractListQuery, customer_ids: Option<Vec<String>>) -> ContractFilter {
     ContractFilter {
         access: None,
@@ -344,7 +258,7 @@ fn list_filter(query: &ContractListQuery, customer_ids: Option<Vec<String>>) -> 
         sort_ascending: matches!(query.paging.sort_dir, crate::dto::contract::SortDir::Asc),
     }
 }
-/// 请求组织只按合同独立负责销售收窄，不按客户负责名单解释。
+// 请求组织只按合同独立负责销售收窄，不按客户负责名单解释。
 async fn requested_contract_owners(
     data_scope: &ContractAccess,
     context: &ContractResolvedScope,

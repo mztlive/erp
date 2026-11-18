@@ -49,7 +49,7 @@ impl WorkPayload {
 }
 
 impl SupplierCatalogAdoptionProcess {
-    /// 登记原版本对应的唯一处理任务，不加载或重写全部明细。
+    // 登记原版本对应的唯一处理任务，不加载或重写全部明细。
     pub(super) async fn enqueue_batch_work(
         &self,
         connection: &str,
@@ -96,7 +96,7 @@ impl SupplierCatalogAdoptionProcess {
             .await
     }
 
-    /// 只登记状态及原预览代次；规则在后台完成保存后才发布。
+    // 只登记状态及原预览代次；规则在后台完成保存后才发布。
     fn register_work(
         &self,
         batch: &mut CatalogAdoptionBatch,
@@ -136,7 +136,7 @@ impl SupplierCatalogAdoptionProcess {
         Ok(())
     }
 
-    /// 领取持久化任务；过期处理者的标记被替换后不能再写入。
+    // 领取持久化任务；过期处理者的标记被替换后不能再写入。
     async fn claim_batch_work(&self, id: &str) -> Result<Option<CatalogAdoptionBatch>> {
         let (process, id) = (self.clone(), id.to_owned());
         self.db
@@ -170,11 +170,11 @@ impl SupplierCatalogAdoptionProcess {
     }
 
     /// 执行保存或核对，进度由每个短事务持久化。
-    /// # 参数
+    ///
     /// `id` 为批次身份。
-    /// # 返回
+    ///
     /// 本轮处理结束或任务已由其他处理者领取。
-    /// # 错误
+    ///
     /// 失败记录到原任务，不发布部分核对结果。
     pub async fn process_batch_work(&self, id: &str) -> Result<()> {
         let Some(batch) = self.claim_batch_work(id).await? else { return Ok(()) };
@@ -186,7 +186,7 @@ impl SupplierCatalogAdoptionProcess {
         result
     }
 
-    /// 恢复原请求及真实操作人，保存后按同一任务继续核对。
+    // 恢复原请求及真实操作人，保存后按同一任务继续核对。
     async fn execute_batch_work(&self, batch: &CatalogAdoptionBatch, token: &str) -> Result<()> {
         let (phase, payload, actor) = self.batch_work_request(batch, token).await?;
         if phase == BatchWorkPhase::Saving {
@@ -212,7 +212,7 @@ impl SupplierCatalogAdoptionProcess {
         Ok(())
     }
 
-    /// 在当前授权快照内读取原处理请求并核对真实操作人及处理标记。
+    // 在当前授权快照内读取原处理请求并核对真实操作人及处理标记。
     async fn batch_work_request(
         &self,
         batch: &CatalogAdoptionBatch,
@@ -238,7 +238,7 @@ impl SupplierCatalogAdoptionProcess {
         .await
     }
 
-    /// 在只读匹配阶段续期当前处理标记，防止长批次被错误接管。
+    // 在只读匹配阶段续期当前处理标记，防止长批次被错误接管。
     pub(super) async fn renew_batch_work(
         &self,
         original: &CatalogAdoptionBatch,
@@ -259,7 +259,7 @@ impl SupplierCatalogAdoptionProcess {
         .await
     }
 
-    /// 失败只覆盖仍由原处理标记持有的任务，保留原游标。
+    // 失败只覆盖仍由原处理标记持有的任务，保留原游标。
     async fn fail_batch_work(
         &self,
         original: &CatalogAdoptionBatch,
@@ -290,11 +290,11 @@ impl SupplierCatalogAdoptionProcess {
     }
 
     /// 重试原任务或结束尚未写入的失败保存，拒绝丢弃半批保存。
-    /// # 参数
+    ///
     /// 连接、批次、原任务身份、是否重试与认证用户。
-    /// # 返回
+    ///
     /// 操作后的批次摘要。
-    /// # 错误
+    ///
     /// 越权、任务已变化或不安全的结束请求时拒绝。
     pub async fn control_batch_work(
         &self,

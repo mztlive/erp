@@ -15,13 +15,8 @@ use super::CustomerProfileProcess;
 use crate::{Error, Result};
 
 impl CustomerProfileProcess {
-    /// 在同一快照检查资料详情资格后查询稳定结果。
-    /// # 参数
-    /// idempotency_key 为原命令键，actor 为当前操作人。
-    /// # 返回
-    /// 已授权的稳定结果；没有记录时为 None。
-    /// # 错误
-    /// 缺少详情资格、他人客户对象越权或数据库失败时拒绝。
+    /// 按原幂等键查证客户资料命令时，在同一快照验证详情功能资格。命中时返回稳定结果，无记录时返回 `None`。
+    /// 原发起人保留回读例外；他人必须通过关联客户的详情范围。资格、范围或数据库读取失败时不返回结果。
     pub async fn command_result(
         &self,
         idempotency_key: &str,
@@ -38,7 +33,7 @@ impl CustomerProfileProcess {
             .await
     }
 
-    /// 原发起人保留既有回读例外；他人回读必须通过真实客户详情范围。
+    // 原发起人保留既有回读例外；他人回读必须通过真实客户详情范围。
     async fn command_result_snapshot(
         &self,
         key: &str,
@@ -61,7 +56,7 @@ impl CustomerProfileProcess {
         Ok(Some(command_view(command)))
     }
 
-    /// 所有命令记录读取使用调用方事务。
+    // 首次请求及恢复都使用原事务按幂等键查找客户资料命令，避免回执与授权事实来自不同快照。
     pub(super) async fn command_record(
         &self,
         key: &str,
@@ -70,7 +65,7 @@ impl CustomerProfileProcess {
         Ok(self.db.customer_profile_commands().find_by_idempotency_key(key, executor).await?)
     }
 
-    /// 在原事务按请求核对并重新授权回放结果。
+    // 建档或修订命令重试时，在原事务按幂等键读取回执；先重验回执对象的当前资格，再核对原请求。
     pub(super) async fn replay_command(
         &self,
         context: &CustomerProfileReplayContext,
@@ -84,7 +79,7 @@ impl CustomerProfileProcess {
         Ok(Some(checked_command_view(command, context)?))
     }
 
-    /// 创建回放按回执中的真实客户检查原创建资格与当前归属，修订回放沿用更新资格。
+    // 创建回放按回执中的真实客户检查原创建资格与当前归属，修订回放沿用更新资格。
     async fn authorize_command(
         &self,
         command: &CustomerProfileCommand,
@@ -109,7 +104,8 @@ impl CustomerProfileProcess {
         }
     }
 
-    /// 只有可能已提交的错误允许在新事务内重新授权并只读查证。
+    // 客户资料写入可能已提交时，才用原请求和幂等键开启新的只读查证，重新检查入口、字段与回执权限。
+    // 不重执行写入；不能确认原结果时保留原错误。
     pub(super) async fn resolve_transaction(
         &self,
         transaction: Result<CustomerProfileMutationView>,
@@ -160,17 +156,13 @@ impl CustomerProfileProcess {
     }
 }
 
-/// 核对命令与本次请求上下文后，映射为稳定返回视图。
-///
-/// # 参数
-/// * `command` - 已提交的客户资料命令。
-/// * `context` - 本次请求的幂等核对字段。
-///
-/// # 返回
-/// 上下文一致时返回稳定视图。
-///
-/// # 错误
-/// 幂等键已用于另一项请求时返回冲突。
+// 核对命令与本次请求上下文后，映射为稳定返回视图。
+//
+// `command`：已提交的客户资料命令；`context`：本次请求的幂等核对字段。
+//
+// 上下文一致时返回稳定视图。
+//
+// 幂等键已用于另一项请求时返回冲突。
 pub(super) fn checked_command_view(
     command: CustomerProfileCommand,
     context: &CustomerProfileReplayContext,
@@ -181,16 +173,11 @@ pub(super) fn checked_command_view(
     Ok(command_view(command))
 }
 
-/// 把命令实体转换为稳定返回视图，不重新核对幂等上下文。
-///
-/// # 参数
-/// * `command` - 已提交的客户资料命令。
-///
-/// # 返回
-/// 返回由命令字段组成的稳定视图。
-///
-/// # 错误
-/// 不返回错误。
+// 把命令实体转换为稳定返回视图，不重新核对幂等上下文。
+//
+// `command`：已提交的客户资料命令。
+//
+// 返回由命令字段组成的稳定视图。
 pub(super) fn command_view(command: CustomerProfileCommand) -> CustomerProfileMutationView {
     CustomerProfileMutationView {
         initiated_by: command.initiated_by,

@@ -13,17 +13,7 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 use crate::wiring::local_reverse_flow_ports;
 
-/// 查询销售退货/拒收处理单列表。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `query` - 分页与筛选参数（扁平传递）
-///
-/// # 返回
-/// 返回契约形状的分页视图。
-///
-/// # 错误
-/// 业务处理或数据读取失败时返回对应错误。
+/// 按请求条件查询销售退货/拒收处理单列表。
 pub async fn sales_return_case_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -37,16 +27,7 @@ pub async fn sales_return_case_list(
 }
 
 /// 查询销售退货/拒收处理单详情（处理单 + 明细行）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `id` - 处理单 ID
-///
-/// # 返回
 /// 返回完整处理单视图。
-///
-/// # 错误
-/// 业务处理或数据读取失败时返回对应错误。
 pub async fn sales_return_case_detail(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -60,17 +41,7 @@ pub async fn sales_return_case_detail(
 }
 
 /// 建立销售退货/拒收处理单与明细行（跨集合事务）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 创建请求
-///
-/// # 返回
 /// 返回新建处理单视图。
-///
-/// # 错误
-/// 业务处理或数据读取失败时返回对应错误。
 pub async fn sales_return_case_create(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,

@@ -14,11 +14,7 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
 /// 冻结本次采购明确勾选或完整筛选的来源规格。
-/// # 参数
-/// 路径为连接，载荷为选择模式，actor 为认证采购人员。
-/// # 返回
 /// 最多五百行的固定预览，可按每批五十行确认。
-/// # 错误
 /// 无权限、来源不存在、选择重复或超限时拒绝。
 pub async fn preview(
     State(state): State<HttpState>,
@@ -32,11 +28,8 @@ pub async fn preview(
 }
 
 /// 按明确映射及条款逐项建立正式公司商品、供给和来源关系。
-/// # 参数
 /// 路径为连接及预览；载荷为预览版本、原始操作号和确认行。
-/// # 返回
 /// 每行真实成功结果或失败原因，预览版本保持冻结。
-/// # 错误
 /// 越权、过期、异载荷或请求不属于冻结范围时整体拒绝。
 pub async fn confirm(
     State(state): State<HttpState>,
@@ -54,11 +47,7 @@ pub async fn confirm(
 }
 
 /// 解析冻结来源商品的自动匹配结果。
-/// # 参数
-/// 路径为连接与预览；请求只包含建档字典和展示内容。
-/// # 返回
 /// 自动关联或新建的结果及提交重验摘要。
-/// # 错误
 /// 越权、过期、重复候选或身份冲突时拒绝。
 pub async fn resolve(
     State(state): State<HttpState>,

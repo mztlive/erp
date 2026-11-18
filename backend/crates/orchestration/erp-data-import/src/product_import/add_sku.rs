@@ -19,20 +19,13 @@ use super::row::RowImportOutcome;
 use crate::{Error, Result};
 
 impl ProductImportProcess {
-    /// 把当前行作为新 SKU 并入已有商品；规格已存在则只补图。
-    ///
-    /// # 参数
-    /// * `product` - 已有 SPU
-    /// * `row` - 规范化后的导入行
-    /// * `cells` - 原单元格
-    /// * `media_source` - 行媒体来源（清单复用或源文件提取）
-    /// * `actor` - 审计操作人
-    ///
-    /// # 返回
-    /// 新增 SKU、补图或跳过时的行结果。
-    ///
-    /// # 错误
-    /// 规格冲突、条码占用或更新失败时返回错误。
+    // 把当前行作为新 SKU 并入已有商品；规格已存在则只补图。
+    //
+    // `product`：已有 SPU；`row`：规范化后的导入行；`cells`：原单元格；`media_source`：行媒体来源（清单复用或源文件提取）。
+    //
+    // 新增 SKU、补图或跳过时的行结果。
+    //
+    // 规格冲突、条码占用或更新失败时返回错误。
     pub(super) async fn import_sku_into_spu(
         &self,
         product: Product,
@@ -90,7 +83,7 @@ impl ProductImportProcess {
         }
     }
 
-    /// 读取现有商品修订后追加导入 SKU，保留现存 SKU 价格与媒体顺序。
+    // 读取现有商品修订后追加导入 SKU，保留现存 SKU 价格与媒体顺序。
     pub(super) async fn append_sku_request(
         &self,
         product: &Product,
@@ -113,7 +106,7 @@ impl ProductImportProcess {
     }
 }
 
-/// 将当前修订和导入行组装为完整更新请求，保留既有轮播图、详情图和 SKU 资料。
+// 将当前修订和导入行组装为完整更新请求，保留既有轮播图、详情图和 SKU 资料。
 fn append_request(
     product: &Product,
     row: &NormalizedImportRow,
@@ -154,7 +147,7 @@ fn append_request(
     })
 }
 
-/// 按媒体用途复制当前修订的文件身份、展示顺序和替代文本。
+// 按媒体用途复制当前修订的文件身份、展示顺序和替代文本。
 fn media_inputs(media: &[ProductRevisionMedia], role: MediaRole) -> Vec<ProductMediaInput> {
     media
         .iter()
@@ -167,16 +160,13 @@ fn media_inputs(media: &[ProductRevisionMedia], role: MediaRole) -> Vec<ProductM
         .collect()
 }
 
-/// 计算本行 SKU 规格签名，用于判断是否已在同一 SPU 下存在。
-///
-/// # 参数
-/// * `row` - 规范化导入行
-///
-/// # 返回
-/// 返回规格签名。
-///
-/// # 错误
-/// 规格名或值非法时返回错误。
+// 计算本行 SKU 规格签名，用于判断是否已在同一 SPU 下存在。
+//
+// `row`：规范化导入行。
+//
+// 返回规格签名。
+//
+// 规格名或值非法时返回错误。
 pub(super) fn sku_signature(row: &NormalizedImportRow) -> Result<String> {
     let entries = row
         .spec_entries
@@ -190,7 +180,7 @@ pub(super) fn sku_signature(row: &NormalizedImportRow) -> Result<String> {
         .map_err(|_| Error::BusinessLogicError("无法识别这行商品规格，请核对报价表中的规格名称和选项".into()))
 }
 
-/// 继承公司计量单位并维护独立三价；新编号留空，由商品服务按全部历史 SKU 统一取号。
+// 继承公司计量单位并维护独立三价；新编号留空，由商品服务按全部历史 SKU 统一取号。
 fn appended_sku_input(
     row: &NormalizedImportRow,
     sku_inputs: &[ProductSkuInput],
@@ -235,7 +225,7 @@ mod tests {
     use crate::product_import::identity::normalize_import_row;
     use crate::product_import::legacy::COMPACT_HEADERS as PRODUCT_IMPORT_HEADERS;
 
-    /// 联合模板新增规格继承单位并写入公司价格，已有规格不被覆盖。
+    // 验证：联合模板新增规格继承单位并写入公司价格，已有规格不被覆盖。
     #[test]
     fn joint_template_appends_company_prices() {
         let (_, _, _, existing) = fixture();
@@ -329,7 +319,7 @@ mod tests {
         }
     }
 
-    /// 检查完整更新请求的媒体字段，而非只检查中间过滤结果。
+    // 检查完整更新请求的媒体字段，而非只检查中间过滤结果。
     fn media_values(media: &[ProductMediaInput]) -> Vec<(&str, i32, Option<&str>)> {
         media
             .iter()
@@ -337,7 +327,7 @@ mod tests {
             .collect()
     }
 
-    /// 追加带图规格必须保留已有详情图、轮播图元数据及全部既有 SKU 输入。
+    // 验证：追加带图规格必须保留已有详情图、轮播图元数据及全部既有 SKU 输入。
     #[test]
     fn append_preserves_details_and_existing_sku_while_extending_carousel() {
         let (product, row, revision, existing) = fixture();
@@ -393,7 +383,7 @@ mod tests {
         assert!(!appended.reenable);
     }
 
-    /// 无新图片时仍保留详情图；空媒体允许新增轮播从零开始。
+    // 验证：无新图片时仍保留详情图；空媒体允许新增轮播从零开始。
     #[test]
     fn append_handles_detail_only_and_empty_media() {
         let (product, row, revision, existing) = fixture();
@@ -423,7 +413,7 @@ mod tests {
         assert_eq!(media_values(&request.carousel_media), vec![("new-carousel", 0, Some("新增规格名称"))]);
     }
 
-    /// 导入请求交给正式取号方法后，必须跳过未回传的历史停用 SKU 编号。
+    // 验证：导入请求交给正式取号方法后，必须跳过未回传的历史停用 SKU 编号。
     #[test]
     fn append_numbering_skips_disabled_skus() {
         let (product, row, revision, existing) = fixture();
@@ -436,7 +426,7 @@ mod tests {
         assert_eq!(request.skus[1].sku_no, "SKU20261026-000001-04");
     }
 
-    /// 无可继承单位时明确失败，不创建缺少单位的新 SKU。
+    // 验证：无可继承单位时明确失败，不创建缺少单位的新 SKU。
     #[test]
     fn append_rejects_missing_existing_sku() {
         let (product, row, revision, _) = fixture();

@@ -42,15 +42,12 @@ struct UsageRow {
 impl PurchaseOrderDomainRepository<'_> {
     /// 按正式供给身份反查权限范围内采购的当前有效选源。
     ///
-    /// # 参数
-    /// * `offering_id` - 明确供给主键，禁止供应商及SKU猜测。
-    /// * `scope` - 消费方已证明的采购读取范围，下推到采购主表。
-    /// * `limit` - 1至10000的结果行上限，超过上限整体拒绝。
-    /// * `executor` - 调用方读取执行器。
-    /// # 返回
-    /// 返回非完成、非作废采购的当前修订行，尚未生效时取当前提交行。
-    /// # 错误
-    /// 上限非法、结果超限、当前采购责任缺失或仓储失败时拒绝。
+    /// 返回非完成、非作废采购的当前修订行，尚未生效时取当前提交行。上限非法、结果超限、当前采购责任缺失或仓储失败时拒绝。
+    ///
+    /// - `offering_id`：明确供给主键，禁止供应商及SKU猜测。
+    /// - `scope`：消费方已证明的采购读取范围，下推到采购主表。
+    /// - `limit`：1至10000的结果行上限，超过上限整体拒绝。
+    /// - `executor`：调用方读取执行器。
     pub async fn find_current_offering_usage(
         &self,
         offering_id: &SupplierOfferingId,
@@ -85,13 +82,9 @@ impl PurchaseOrderDomainRepository<'_> {
 
     /// 读取已授权采购当前指针中的明确供给选源，缺失的历史关联保持未知。
     ///
-    /// # 参数
-    /// * `order_id` - 消费方已独立授权的采购身份。
-    /// * `executor` - 同一读取执行器。
-    /// # 返回
-    /// 返回当前有效版本或未生效当前提交中已记录的精确选源。
-    /// # 错误
-    /// 仓储读取失败时返回错误；未知采购或已终止采购返回空集合。
+    /// 返回当前有效版本或未生效当前提交中已记录的精确选源。仓储读取失败时返回错误；未知采购或已终止采购返回空集合。
+    ///
+    /// 使用同一读取执行器。
     pub async fn current_offering_sources_for_order(
         &self,
         order_id: &PurchaseOrderId,
@@ -124,7 +117,7 @@ impl PurchaseOrderDomainRepository<'_> {
         Ok(Vec::new())
     }
 
-    /// 聚合仅返回已匹配当前指针和授权范围的有限行。
+    // 聚合仅返回已匹配当前指针和授权范围的有限行。
     async fn offering_usage_rows(
         &self,
         id: &SupplierOfferingId,
@@ -139,7 +132,7 @@ impl PurchaseOrderDomainRepository<'_> {
     }
 }
 
-/// 明确来源先使用索引定位，再在采购主表内合并范围与当前指针条件。
+// 明确来源先使用索引定位，再在采购主表内合并范围与当前指针条件。
 fn usage_pipeline(
     id: &SupplierOfferingId,
     scope: &PurchaseReadScope,
@@ -169,7 +162,7 @@ fn usage_pipeline(
     ]
 }
 
-/// 授权条件留在采购对象字段内，不能被供给业务筛选覆盖。
+// 授权条件留在采购对象字段内，不能被供给业务筛选覆盖。
 fn order_lookup(scope: &PurchaseReadScope) -> Document {
     let mut pipeline = vec![
         doc! { "$match": { "$expr": { "$eq": ["$id", "$$order_id"] }, "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "status": { "$nin": ["COMPLETED", "VOIDED"] } } },

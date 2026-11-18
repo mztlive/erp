@@ -7,10 +7,9 @@ use persistence_core::{Executor, Result};
 use super::super::repository::mapping::{category_fact, product_fact, product_revision_fact, sku_fact};
 use super::ids::unique_ids;
 
-/// 批量加载采购责任目录所需的最小持久化事实.
+/// 读取采购责任规则时，批量加载采购责任目录所需的最小持久化事实。
 ///
 /// # 参数
-/// * `db` - MongoDB 数据库句柄
 /// * `sku_ids` - 待解析的 SKU 集合，已去重并保持调用方顺序
 /// * `executor` - 数据访问执行器，由 Service 决定事务边界；事务内重验必须复用调用方 executor
 ///
@@ -73,21 +72,18 @@ pub async fn load_procurement_catalog_bundle(
     })
 }
 
-/// 分层批量加载当前分类及全部父分类.
-///
-/// # 参数
-/// * `db` - MongoDB 数据库句柄
-/// * `initial_ids` - 商品当前修订直接引用的分类 ID
-/// * `executor` - 数据访问执行器，可加入销售形式化事务
-///
-/// # 返回
-/// 返回当前分类和全部可达父分类的 ID 映射。
-///
-/// # 错误
-/// MongoDB 查询失败时返回错误；缺失由 Entity 层分类链构造时校验，环由 Entity 检测。
-///
-/// # 约束
-/// 按层级批量读取，每层一次查询，查询次数随分类深度线性增长但与输入规模无关。
+// 读取采购责任规则时，分层批量加载当前分类及全部父分类。
+//
+// 调用参数：
+// * `initial_ids` - 商品当前修订直接引用的分类 ID
+// * `executor` - 数据访问执行器，可加入销售形式化事务
+//
+// 返回当前分类和全部可达父分类的 ID 映射。
+//
+// MongoDB 查询失败时返回错误；缺失由 Entity 层分类链构造时校验，环由 Entity 检测。
+//
+// 调用约束：
+// 按层级批量读取，每层一次查询，查询次数随分类深度线性增长但与输入规模无关。
 async fn load_category_ancestors(
     db: &mongodb::Database,
     initial_ids: Vec<ProductCategoryId>,

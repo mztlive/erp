@@ -13,7 +13,7 @@ pub mod person_scope;
 pub use audit_event::{AuditEventFilter, AuditEventRepositoryExt, AuditEventRow};
 pub use permission::{PermissionFilter, PermissionRepositoryExt, UserRoleRepositoryExt};
 
-/// 将已验证时间排序编译为稳定的数据库排序。
+// 为权限与审计列表把已校验的时间排序翻译成稳定 MongoDB 排序条件。
 fn sort_doc(paging: &PageParams) -> Document {
     let direction = match paging.sort_dir {
         SortDir::Asc => 1,
@@ -26,16 +26,7 @@ fn sort_doc(paging: &PageParams) -> Document {
     doc! { field: direction, "id": direction }
 }
 
-/// 权限定义列表投影字段。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回投影条件文档。
-///
-/// # 错误
-/// 不返回错误。
+// 权限定义列表投影字段。
 pub(super) fn permission_projection() -> Document {
     doc! {
         "id": 1,
@@ -50,16 +41,7 @@ pub(super) fn permission_projection() -> Document {
     }
 }
 
-/// 审计事件列表投影字段。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回投影条件文档。
-///
-/// # 错误
-/// 不返回错误。
+// 审计事件列表投影字段。
 pub(super) fn audit_event_projection() -> Document {
     doc! {
         "id": 1,

@@ -31,18 +31,13 @@ fn party_address_type(address_type: erp_customer::AddressType) -> erp_party::Add
 }
 
 impl CustomerProfileProcess {
-    /// 构造创建场景的全部从属事实并完成敏感值加密。未提交的集合按空处理。
-    ///
-    /// # 参数
-    /// * `req` - 创建请求中的联系人、地址和银行账户。
-    /// * `party_id` - 这些事实所属的主体。
-    /// * `actor` - 写入事实的操作人。
-    ///
-    /// # 返回
-    /// 返回尚未持久化的联系人、地址和银行账户。
-    ///
-    /// # 错误
-    /// 必填明文缺失、事实构造失败或敏感值加密失败时返回错误。
+    // 构造创建场景的全部从属事实并完成敏感值加密。未提交的集合按空处理。
+    //
+    // `req`：创建请求中的联系人、地址和银行账户；`party_id`：这些事实所属的主体；`actor`：写入事实的操作人。
+    //
+    // 返回尚未持久化的联系人、地址和银行账户。
+    //
+    // 必填明文缺失、事实构造失败或敏感值加密失败时返回错误。
     pub(super) fn create_facts(
         &self,
         req: &SaveCustomerProfileRequest,
@@ -73,18 +68,15 @@ impl CustomerProfileProcess {
         Ok(PartyFacts { contacts, addresses, bank_accounts })
     }
 
-    /// 为显式提交的事实集合计算保留、结束和新增差异。请求里缺省的集合不参与差异。
-    ///
-    /// # 参数
-    /// * `party_id` - 待比较的主体。
-    /// * `req` - 修订请求；只有出现的事实集合才会加载当前行。
-    /// * `actor` - 写入结束或更新的操作人。
-    ///
-    /// # 返回
-    /// 返回三类事实各自的更新与新增差异。
-    ///
-    /// # 错误
-    /// 当前事实查询失败，或差异中的校验、冲突、构造与加密失败时返回错误。
+    // 为显式提交的事实集合计算保留、结束和新增差异。请求里缺省的集合不参与差异。
+    //
+    // - `party_id`：待比较的主体。
+    // - `req`：修订请求；只有出现的事实集合才会加载当前行。
+    // - `actor`：写入结束或更新的操作人。
+    //
+    // 返回三类事实各自的更新与新增差异。
+    //
+    // 当前事实查询失败，或差异中的校验、冲突、构造与加密失败时返回错误。
     pub(super) async fn prepare_fact_changes(
         &self,
         party_id: &PartyId,
@@ -114,7 +106,7 @@ impl CustomerProfileProcess {
         Ok(changes)
     }
 
-    /// 构造并加密联系人事实。
+    // 构造并加密联系人事实。
     fn new_contact(
         &self,
         input: &CustomerProfileContactInput,
@@ -144,7 +136,7 @@ impl CustomerProfileProcess {
         Ok(contact)
     }
 
-    /// 构造并加密地址事实。
+    // 构造并加密地址事实。
     fn new_address(
         &self,
         input: &CustomerProfileAddressInput,
@@ -172,7 +164,7 @@ impl CustomerProfileProcess {
         Ok(entity)
     }
 
-    /// 构造并加密银行账户事实；内部账户编号由服务端生成。
+    // 构造并加密银行账户事实；内部账户编号由服务端生成。
     fn new_bank_account(
         &self,
         input: &CustomerProfileBankAccountInput,
@@ -203,7 +195,7 @@ impl CustomerProfileProcess {
         Ok(entity)
     }
 
-    /// 计算联系人集合差异；既有行未携带明文且元数据未变化时原样保留。
+    // 计算联系人集合差异；既有行未携带明文且元数据未变化时原样保留。
     fn diff_contacts(
         &self,
         existing: Vec<PartyContact>,
@@ -245,16 +237,14 @@ impl CustomerProfileProcess {
         Ok(changes)
     }
 
-    /// 由请求构造联系人比较输入，并预计算手机号指纹。
-    ///
-    /// 敏感明文缺失或去空白后为空时沿用原事实，不计算指纹；非空明文由
-    /// crypto port 持密钥计算强类型指纹后传入实体比较 VO。
-    ///
-    /// # 参数
-    /// * `input` - 客户资料联系人输入
-    ///
-    /// # 返回
-    /// 返回不含密钥与明文的比较值对象。
+    // 由请求构造联系人比较输入，并预计算手机号指纹。
+    //
+    // 敏感明文缺失或去空白后为空时沿用原事实，不计算指纹；非空明文由
+    // crypto port 持密钥计算强类型指纹后传入实体比较 VO。
+    //
+    // `input`：客户资料联系人输入。
+    //
+    // 返回不含密钥与明文的比较值对象。
     fn contact_content_match(&self, input: &CustomerProfileContactInput) -> PartyContactContentMatch {
         PartyContactContentMatch::new(
             &input.contact_name,
@@ -265,22 +255,16 @@ impl CustomerProfileProcess {
         )
     }
 
-    /// 由可选手机号明文构造敏感比较意图。
-    ///
-    /// 缺失或空白表示未提供敏感值，沿用原事实；非空明文由 crypto port 计算
-    /// 强类型指纹，密钥与明文不进入实体。
-    ///
-    /// # 参数
-    /// * `plaintext` - 请求中的手机号明文；`None` 或空白表示未提供
-    ///
-    /// # 返回
-    /// 返回沿用原事实或带预计算指纹的比较意图。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 指纹计算只在本方法执行，实体仅接收 typed 结果。
+    // 由可选手机号明文构造敏感比较意图。
+    //
+    // 缺失或空白表示未提供敏感值，沿用原事实；非空明文由 crypto port 计算
+    // 强类型指纹，密钥与明文不进入实体。
+    //
+    // - `plaintext`：请求中的手机号明文；`None` 或空白表示未提供
+    //
+    // 返回沿用原事实或带预计算指纹的比较意图。
+    //
+    // 指纹计算只在本方法执行，实体仅接收 typed 结果。
     fn mobile_reuse(&self, plaintext: Option<&str>) -> SensitiveFactReuse {
         match plaintext {
             Some(value) if !value.trim().is_empty() => {
@@ -290,16 +274,14 @@ impl CustomerProfileProcess {
         }
     }
 
-    /// 由请求构造地址比较输入，并预计算地址指纹。
-    ///
-    /// 敏感明文缺失或去空白后为空时沿用原事实，不计算指纹；非空明文由
-    /// crypto port 持密钥计算强类型指纹后传入实体比较 VO。
-    ///
-    /// # 参数
-    /// * `input` - 客户资料地址输入
-    ///
-    /// # 返回
-    /// 返回不含密钥与明文的比较值对象。
+    // 由请求构造地址比较输入，并预计算地址指纹。
+    //
+    // 敏感明文缺失或去空白后为空时沿用原事实，不计算指纹；非空明文由
+    // crypto port 持密钥计算强类型指纹后传入实体比较 VO。
+    //
+    // `input`：客户资料地址输入。
+    //
+    // 返回不含密钥与明文的比较值对象。
     fn address_content_match(&self, input: &CustomerProfileAddressInput) -> PartyAddressContentMatch {
         PartyAddressContentMatch::new(
             party_address_type(input.address_type),
@@ -308,22 +290,16 @@ impl CustomerProfileProcess {
         )
     }
 
-    /// 由可选地址明文构造敏感比较意图。
-    ///
-    /// 缺失或空白表示未提供敏感值，沿用原事实；非空明文由 crypto port 计算
-    /// 强类型指纹，密钥与明文不进入实体。
-    ///
-    /// # 参数
-    /// * `plaintext` - 请求中的地址明文；`None` 或空白表示未提供
-    ///
-    /// # 返回
-    /// 返回沿用原事实或带预计算指纹的比较意图。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 指纹计算只在本方法执行，实体仅接收 typed 结果。
+    // 由可选地址明文构造敏感比较意图。
+    //
+    // 缺失或空白表示未提供敏感值，沿用原事实；非空明文由 crypto port 计算
+    // 强类型指纹，密钥与明文不进入实体。
+    //
+    // - `plaintext`：请求中的地址明文；`None` 或空白表示未提供
+    //
+    // 返回沿用原事实或带预计算指纹的比较意图。
+    //
+    // 指纹计算只在本方法执行，实体仅接收 typed 结果。
     fn address_reuse(&self, plaintext: Option<&str>) -> SensitiveFactReuse {
         match plaintext {
             Some(value) if !value.trim().is_empty() => {
@@ -333,16 +309,14 @@ impl CustomerProfileProcess {
         }
     }
 
-    /// 由请求构造银行账户比较输入，并预计算账号指纹。
-    ///
-    /// 敏感明文缺失或去空白后为空时沿用原事实，不计算指纹；非空明文由
-    /// crypto port 持密钥计算强类型指纹后传入实体比较 VO。
-    ///
-    /// # 参数
-    /// * `input` - 客户资料银行账户输入
-    ///
-    /// # 返回
-    /// 返回不含密钥与明文的比较值对象。
+    // 由请求构造银行账户比较输入，并预计算账号指纹。
+    //
+    // 敏感明文缺失或去空白后为空时沿用原事实，不计算指纹；非空明文由
+    // crypto port 持密钥计算强类型指纹后传入实体比较 VO。
+    //
+    // `input`：客户资料银行账户输入。
+    //
+    // 返回不含密钥与明文的比较值对象。
     fn bank_account_content_match(
         &self,
         input: &CustomerProfileBankAccountInput,
@@ -355,22 +329,16 @@ impl CustomerProfileProcess {
         )
     }
 
-    /// 由可选银行账号明文构造敏感比较意图。
-    ///
-    /// 缺失或空白表示未提供敏感值，沿用原事实；非空明文由 crypto port 计算
-    /// 强类型指纹，密钥与明文不进入实体。
-    ///
-    /// # 参数
-    /// * `plaintext` - 请求中的银行账号明文；`None` 或空白表示未提供
-    ///
-    /// # 返回
-    /// 返回沿用原事实或带预计算指纹的比较意图。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 指纹计算只在本方法执行，实体仅接收 typed 结果。
+    // 由可选银行账号明文构造敏感比较意图。
+    //
+    // 缺失或空白表示未提供敏感值，沿用原事实；非空明文由 crypto port 计算
+    // 强类型指纹，密钥与明文不进入实体。
+    //
+    // - `plaintext`：请求中的银行账号明文；`None` 或空白表示未提供
+    //
+    // 返回沿用原事实或带预计算指纹的比较意图。
+    //
+    // 指纹计算只在本方法执行，实体仅接收 typed 结果。
     fn bank_account_reuse(&self, plaintext: Option<&str>) -> SensitiveFactReuse {
         match plaintext {
             Some(value) if !value.trim().is_empty() => SensitiveFactReuse::from_fingerprint(
@@ -380,7 +348,7 @@ impl CustomerProfileProcess {
         }
     }
 
-    /// 计算地址集合差异；既有行未携带明文且元数据未变化时原样保留。
+    // 计算地址集合差异；既有行未携带明文且元数据未变化时原样保留。
     fn diff_addresses(
         &self,
         existing: Vec<PartyAddress>,
@@ -422,7 +390,7 @@ impl CustomerProfileProcess {
         Ok(changes)
     }
 
-    /// 计算银行账户集合差异；既有稳定账户只允许调整默认标记或结束。
+    // 计算银行账户集合差异；既有稳定账户只允许调整默认标记或结束。
     fn diff_bank_accounts(
         &self,
         existing: Vec<PartyBankAccount>,
@@ -466,17 +434,13 @@ pub(super) struct PartyFacts {
 }
 
 impl PartyFacts {
-    /// 消耗本批新事实，按联系人、地址、银行账户的顺序写入。
-    ///
-    /// # 参数
-    /// * `db` - 主体事实所在数据库。
-    /// * `executor` - 调用方事务执行器。
-    ///
-    /// # 返回
-    /// 全部创建成功后返回。
-    ///
-    /// # 错误
-    /// 任一事实创建失败时返回仓储错误。
+    // 消耗本批新事实，按联系人、地址、银行账户的顺序写入。
+    //
+    // `db`：主体事实所在数据库；`executor`：调用方事务执行器。
+    //
+    // 全部创建成功后返回。
+    //
+    // 任一事实创建失败时返回仓储错误。
     pub(super) async fn persist(self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
         for item in &self.contacts {
             db.party_contacts().create(item, executor).await?;
@@ -512,17 +476,13 @@ pub(super) struct PartyFactChanges {
 }
 
 impl PartyFactChanges {
-    /// 消耗差异，按联系人、地址、银行账户的顺序先更新旧事实，再创建新事实。
-    ///
-    /// # 参数
-    /// * `db` - 主体事实所在数据库。
-    /// * `executor` - 调用方事务执行器。
-    ///
-    /// # 返回
-    /// 全部更新和创建成功后返回。
-    ///
-    /// # 错误
-    /// 任一更新或创建失败时返回仓储错误。
+    // 消耗差异，按联系人、地址、银行账户的顺序先更新旧事实，再创建新事实。
+    //
+    // `db`：主体事实所在数据库；`executor`：调用方事务执行器。
+    //
+    // 全部更新和创建成功后返回。
+    //
+    // 任一更新或创建失败时返回仓储错误。
     pub(super) async fn persist(mut self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
         for item in &mut self.contacts.updated {
             db.party_contacts().update(item, executor).await?;
@@ -548,17 +508,17 @@ impl PartyFactChanges {
     }
 }
 
-/// 把实体集合转成按 ID 索引的当前集合。
+// 计算客户从属资料差异前，按稳定 ID 索引当前事实，便于区分保留项与应结束项。
 fn by_id<T>(items: Vec<T>, id: impl Fn(&T) -> String) -> HashMap<String, T> {
     items.into_iter().map(|item| (id(&item), item)).collect()
 }
 
-/// 从当前集合取出客户端引用的既有事实。
+// 客户资料修订引用既有行时，从当前集合取出对应事实；缺失或重复引用则返回冲突。
 fn take_existing<T>(current: &mut HashMap<String, T>, id: &str, label: &str) -> Result<T> {
     current.remove(id).ok_or_else(|| Error::ConflictError(format!("{label}已变化，请刷新后重试")))
 }
 
-/// 结束未在目标集合中保留的事实。
+// 处理完客户提交的目标集合后，结束仍留在当前集合中的事实，并交给上层事务写入。
 fn close_remaining<T>(
     current: HashMap<String, T>,
     updated: &mut Vec<T>,
@@ -571,7 +531,7 @@ fn close_remaining<T>(
     Ok(())
 }
 
-/// 去掉首尾空白后仍为空则拒绝，避免把空白明文加密入库。
+// 去掉首尾空白后仍为空则拒绝，避免把空白明文加密入库。
 fn required_text(value: Option<&str>, label: &str) -> Result<String> {
     value
         .map(str::trim)

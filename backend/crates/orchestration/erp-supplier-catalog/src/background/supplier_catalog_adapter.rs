@@ -31,12 +31,12 @@ pub struct SupplierCatalogTaskAdapter {
 
 impl SupplierCatalogTaskAdapter {
     /// 复用应用已经装配的技术网关、授权与媒体准备器。
-    /// # 参数
+    ///
     /// 数据库、执行流程、治理流程及应用共享的停止控制器。
-    /// # 返回
+    ///
     /// 可登记到统一后台执行器的适配器。
-    /// # 错误
-    /// 不返回错误；周期由配置边界验证。
+    ///
+    /// 周期由配置边界验证。
     pub fn new(
         db: Database,
         execution: SupplierConnectionExecutionProcess,
@@ -54,11 +54,9 @@ impl SupplierCatalogTaskAdapter {
     }
 
     /// 扫描一页连接并持久化到期任务，不启动目录采集。
-    /// # 参数
-    /// 无。
-    /// # 返回
+    ///
     /// 本页已生成待执行任务的连接数。
-    /// # 错误
+    ///
     /// 任一连接无法确认调度结果时返回错误；已保存任务不回滚或重放。
     pub async fn schedule_due(&self) -> Result<usize> {
         let mut cursor = self.schedule_cursor.lock().await;
@@ -130,7 +128,7 @@ impl SupplierCatalogTaskAdapter {
         self.create_job(connection, latest).await
     }
 
-    /// XXL 只生成新的到期任务，旧任务恢复交给持续消费循环。
+    // XXL 只生成新的到期任务，旧任务恢复交给持续消费循环。
     async fn schedule_connection(
         &self,
         connection: &SupplierApiConnection,
@@ -163,7 +161,7 @@ impl SupplierCatalogTaskAdapter {
         self.create_job(connection, latest).await
     }
 
-    /// 周期生成与恢复均沿原任务身份执行治理命令。
+    // 周期生成与恢复均沿原任务身份执行治理命令。
     async fn create_job(
         &self,
         connection: &SupplierApiConnection,

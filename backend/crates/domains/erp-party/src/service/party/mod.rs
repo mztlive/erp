@@ -81,18 +81,11 @@ pub struct PartyService {
 }
 
 impl PartyService {
-    /// 创建主体服务实例。
+    /// 绑定主体仓储、审计、供应商角色查询和统一授权，供主体建档、资料维护及目录查询使用。
     ///
     /// # 参数
-    /// * `db` - 数据库实例
     /// * `audit` - 审计写入端口
     /// * `supplier_roles` - 供应商角色事实端口
-    ///
-    /// # 返回
-    /// 返回服务实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(
         db: Database,
         audit: Arc<dyn PartyAuditPort>,
@@ -102,7 +95,7 @@ impl PartyService {
         Self { db, audit, supplier_roles, authorization }
     }
 
-    /// 创建主体（跨集合事务：party + 首版 party_revision + 审计原子写入）。
+    /// 建立往来主体及第一版法定资料，将主记录、首版修订和审计一起提交，创建后即可回读完整身份。
     ///
     /// 同一事务写入 `party_revisions` 与 `parties`（表头携带
     /// `current_revision_id` 指向首版），保证「修订 + 生效指针」原子可见
@@ -110,9 +103,7 @@ impl PartyService {
     ///
     /// # 参数
     /// * `req` - 创建请求
-    /// * `actor` - 已通过鉴权的审计操作人
     ///
-    /// # 返回
     /// 返回新建主体的响应视图。
     ///
     /// # 错误
@@ -131,7 +122,7 @@ impl PartyService {
             .await
     }
 
-    /// 公司入口复用主体与首版名称事务。
+    // 复用同一事务里的主体及首版名称写入，供普通主体和我方公司入口统一建档。
     async fn create_party_record(
         &self,
         req: CreatePartyRequest,
@@ -170,7 +161,7 @@ impl PartyService {
         self.create_stage(party, revision, actor, permission, executor).await
     }
 
-    /// 先取得入口资格，再在原快照校验唯一身份并写入全部记录。
+    // 先取得入口资格，再在原快照校验唯一身份并写入全部记录。
     async fn create_stage(
         &self,
         party: Party,
@@ -196,14 +187,10 @@ impl PartyService {
         Ok(party.into())
     }
 
-    /// 分页查询主体列表。
+    /// 按筛选条件分页读取主体目录，关联当前修订以展示现行法定名称。
     ///
     /// 排序字段白名单在 Service 层校验（api-contract §4），禁止任意字段透传。
     ///
-    /// # 参数
-    /// * `params` - 查询参数
-    ///
-    /// # 返回
     /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
     ///
     /// # 错误
@@ -225,7 +212,7 @@ impl PartyService {
             .await
     }
 
-    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    // 在同一授权快照读取业务数据；执行器由公开入口提供。
     async fn party_list_snapshot(
         &self,
         actor: &AuditActor,
@@ -269,12 +256,11 @@ impl PartyService {
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
-    /// 查询主体详情（主体 + 当前生效修订快照）。
+    /// 读取主体和当前生效修订，供往来主体详情展示稳定身份及现行法定资料。
     ///
     /// # 参数
     /// * `id` - 主体 ID
     ///
-    /// # 返回
     /// 返回主体详情视图；当前生效修订缺失时 `current_revision` 为 `None`。
     ///
     /// # 错误
@@ -292,7 +278,7 @@ impl PartyService {
             .await
     }
 
-    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    // 在同一授权快照读取业务数据；执行器由公开入口提供。
     async fn party_detail_snapshot(
         &self,
         actor: &AuditActor,
@@ -314,7 +300,7 @@ impl PartyService {
         Ok(PartyDetailView { party: party.into(), current_revision })
     }
 
-    /// 更新主体（乐观锁 + 追加修订）。
+    /// 按请求版本维护往来主体，同时追加最新修订；既有修订保留给历史业务引用。
     ///
     /// 期望版本 `req.version` 与当前版本不一致时直接返回冲突（409）；
     /// 新修订保存即成为当前修订。仓储层 `append_party_revision` 以
@@ -323,9 +309,7 @@ impl PartyService {
     /// # 参数
     /// * `id` - 主体 ID
     /// * `req` - 更新请求（含期望版本与新修订快照）
-    /// * `actor` - 已通过鉴权的审计操作人
     ///
-    /// # 返回
     /// 返回更新后主体的响应视图。
     ///
     /// # 错误
@@ -351,15 +335,14 @@ impl PartyService {
             .await
     }
 
-    /// 在调用方事务内授权并软删除主体；成功审计由拥有根事务的流程写入。
+    /// 在调用方事务核验资格并软删除主体。串联其它业务步骤的调用方在同一事务记录成功审计。
     ///
     /// # 参数
     /// * `id` - 真实主体 ID。
-    /// * `actor` - 已认证操作人。
     /// * `executor` - 调用方的原写入事务。
-    /// # 返回
+    ///
     /// 主体允许删除且软删除写入成功时返回。
-    /// # 错误
+    ///
     /// 资格不足、主体不存在、供应商资料边界或数据库失败时拒绝。
     pub async fn delete_party(
         &self,
@@ -379,7 +362,7 @@ impl PartyService {
         Ok(())
     }
 
-    /// 在同一授权事务中读取原主体、版本和修订号，完成状态更新与审计。
+    // 在授权事务内核对主体版本和身份唯一性，然后一起保存主体更新、新修订及审计。
     async fn update_stage(
         &self,
         id: &str,
@@ -406,21 +389,19 @@ impl PartyService {
         Ok(party.into())
     }
 
-    /// 使用已授权的原事务读取主体并校验分支、供应商边界、版本及信用代码冲突。
-    ///
-    /// # 参数
-    /// * `id` - 主体 ID
-    /// * `req` - 更新请求（含期望版本与新修订快照）
-    /// * `company` - 公司资料分支；`Some` 表示公司入口
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回待更新主体与序号占位的修订草稿（修订号由事务内回填）。
-    ///
-    /// # 错误
-    /// * `NotFound` - 主体不存在
-    /// * `ConflictError` - 期望版本不一致或信用代码冲突
-    /// * `ValidationError` - 请求体校验失败
+    // 为主体更新准备原记录和新修订草稿，在原事务核验入口分支、档案边界、版本和信用代码冲突。
+    //
+    // # 参数
+    // * `id` - 主体 ID
+    // * `req` - 更新请求（含期望版本与新修订快照）
+    // * `company` - 公司资料分支；`Some` 表示公司入口
+    //
+    // 返回待更新主体与序号占位的修订草稿（修订号由事务内回填）。
+    //
+    // # 错误
+    // * `NotFound` - 主体不存在
+    // * `ConflictError` - 期望版本不一致或信用代码冲突
+    // * `ValidationError` - 请求体校验失败
     async fn load_party_for_update(
         &self,
         id: &str,
@@ -484,13 +465,11 @@ impl PartyService {
         Ok(pending)
     }
 
-    /// 分页查询主体修订列表。
+    /// 分页查询指定主体的法定资料修订历史，供追踪名称等资料历次变更。
     ///
     /// # 参数
     /// * `party_id` - 稳定主体 ID
-    /// * `params` - 查询参数
     ///
-    /// # 返回
     /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
     ///
     /// # 错误
@@ -516,7 +495,7 @@ impl PartyService {
             .await
     }
 
-    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    // 在同一授权快照读取业务数据；执行器由公开入口提供。
     async fn party_revision_list_snapshot(
         &self,
         actor: &AuditActor,
@@ -545,22 +524,21 @@ impl PartyService {
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
-    /// 确保主体编号与统一社会信用代码未被占用。
-    ///
-    /// 全局唯一索引包含软删除记录，因此必须按「含已删除」查询占用状态；
-    /// 并发竞争仍由唯一索引兜底，并映射为字段级冲突提示。
-    ///
-    /// # 参数
-    /// * `party_no` - 已规范化的主体编号
-    /// * `unified_credit_code` - 已规范化的统一社会信用代码；`None` 表示不校验
-    /// * `exclude_party_id` - 更新场景下排除自身 ID
-    /// * `executor` - 数据访问执行器，由调用方决定是否位于事务中
-    ///
-    /// # 返回
-    /// 身份可用时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// * `ConflictError` - 主体编号或统一社会信用代码已被占用
+    // 确保主体编号与统一社会信用代码未被占用。
+    //
+    // 全局唯一索引包含软删除记录，因此必须按「含已删除」查询占用状态；
+    // 并发竞争仍由唯一索引兜底，并映射为字段级冲突提示。
+    //
+    // # 参数
+    // * `party_no` - 已规范化的主体编号
+    // * `unified_credit_code` - 已规范化的统一社会信用代码；`None` 表示不校验
+    // * `exclude_party_id` - 更新场景下排除自身 ID
+    // * `executor` - 数据访问执行器，由调用方决定是否位于事务中
+    //
+    // 身份可用时返回 `Ok(())`。
+    //
+    // # 错误
+    // * `ConflictError` - 主体编号或统一社会信用代码已被占用
     async fn ensure_party_identity_available(
         &self,
         party_no: &str,
@@ -598,7 +576,7 @@ struct PendingPartyUpdate {
     update: PartyUpdate,
 }
 
-/// 拒绝通过共享 Party 子资源接口访问已挂供应商角色的主体。
+/// 检查共享主体资料接口是否可用于当前主体。已关联供应商角色的主体须使用供应商档案入口。
 ///
 /// 供应商的主体、联系人、地址、税务等事实必须由供应商资料根级命令统一维护，
 /// 以确保 Party 与 Supplier 双版本及其子事实位于同一事务边界。
@@ -608,10 +586,8 @@ struct PendingPartyUpdate {
 /// * `party_id` - 主体 ID。
 /// * `executor` - 原事务或读取阶段执行器。
 ///
-/// # 返回
 /// 主体未挂供应商角色时返回 `Ok(())`。
 ///
-/// # 错误
 /// 端口读取失败时返回该错误；已挂供应商角色时返回 `BusinessLogicError`。
 pub async fn ensure_outside_supplier_profile(
     supplier_roles: &dyn SupplierRolePort,
@@ -622,19 +598,17 @@ pub async fn ensure_outside_supplier_profile(
     ensure_supplier_profile_boundary(has_supplier_role)
 }
 
-/// 在原事务中先校验主体存在，再检查供应商资料边界。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `supplier_roles` - 供应商角色事实端口
-/// * `party_id` - 主体 ID
-///
-/// # 返回
-/// 两守卫均通过返回 `Ok(())`。
-///
-/// # 错误
-/// * `NotFound` - 主体不存在
-/// * `BusinessLogicError` - 主体已挂供应商角色
+// 在原事务中先校验主体存在，再检查供应商资料边界。
+//
+// # 参数
+// * `supplier_roles` - 供应商角色事实端口
+// * `party_id` - 主体 ID
+//
+// 两守卫均通过返回 `Ok(())`。
+//
+// # 错误
+// * `NotFound` - 主体不存在
+// * `BusinessLogicError` - 主体已挂供应商角色
 pub(crate) async fn ensure_new_fact_guards(
     db: &Database,
     supplier_roles: &dyn SupplierRolePort,
@@ -648,23 +622,22 @@ pub(crate) async fn ensure_new_fact_guards(
     ensure_outside_supplier_profile(supplier_roles, &PartyId::new(party_id), executor).await
 }
 
-/// 将实体乐观锁冲突映射为稳定的业务冲突错误（erp-party-011）。
-///
-/// 各从属事实与主体更新入口的 `ensure_version` 映射唯一来源；冲突文案由实体层保证。
-///
-/// # 参数
-/// * `version_check` - 实体 `ensure_version` 的返回结果
-///
-/// # 返回
-/// 版本一致返回 `Ok(())`。
-///
-/// # 错误
-/// * `ConflictError` - 期望版本与当前版本不一致
+// 将实体乐观锁冲突映射为稳定的业务冲突错误（erp-party-011）。
+//
+// 各从属事实与主体更新入口的 `ensure_version` 映射唯一来源；冲突文案由实体层保证。
+//
+// # 参数
+// * `version_check` - 实体 `ensure_version` 的返回结果
+//
+// 版本一致返回 `Ok(())`。
+//
+// # 错误
+// * `ConflictError` - 期望版本与当前版本不一致
 pub(crate) fn map_version_conflict(version_check: CoreResult<()>) -> Result<()> {
     version_check.map_err(|error| Error::ConflictError(error.to_string()))
 }
 
-/// 将仓储查询结果转换为稳定的供应商资料边界错误。
+// 将仓储查询结果转换为稳定的供应商资料边界错误。
 fn ensure_supplier_profile_boundary(has_supplier_role: bool) -> Result<()> {
     if has_supplier_role {
         return Err(Error::BusinessLogicError("请在供应商资料页面修改该供应商的主体资料".to_string()));

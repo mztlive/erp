@@ -25,13 +25,7 @@ use crate::repository::directory::{authorized_ids_in, authorized_rows_exist};
 /// 只把仓库业务字段映射为 identity 事实，不组合权限规则。
 pub struct WarehouseMapping(QueryModel);
 impl WarehouseMapping {
-    /// 提供仓库真实身份映射供跨域来源登记复用。
-    /// # 参数
-    /// resource 为消费入口的固定资源。
-    /// # 返回
-    /// 固定仓库集合及仓库事实的映射。
-    /// # 错误
-    /// 固定模型标识无效时失败。
+    /// 为组合层构造消费入口到真实仓库集合的授权映射，固定使用 `id` 标识仓库对象并支持仓库和协作事实；生成的模型标识不合法时返回错误。
     pub fn shared(resource: &str) -> erp_identity::Result<Arc<dyn AccessMapping>> {
         Ok(Arc::new(Self(QueryModel {
             key: QueryModelKey::parse(format!("{resource}_warehouse_identity"))?,
@@ -46,18 +40,12 @@ impl WarehouseMapping {
 
 pub struct WarehouseFacts(Database);
 impl WarehouseFacts {
-    /// 构造本域仓库事实读取器。
-    /// # 参数
-    /// db 为拥有仓库集合的数据库。
-    /// # 返回
-    /// 供统一授权装配复用的共享事实读取器。
-    /// # 错误
-    /// 构造不执行 I/O。
+    /// 将本域仓库数据库封装为共享授权事实端口，供跨域身份检查复用；构造不访问数据库。
     pub fn shared(db: Database) -> Arc<dyn AccessFactsPort> {
         Arc::new(Self(db))
     }
 
-    /// 仓库模型没有协作关系，已知空集合与查询端恒假协作条件保持一致。
+    // 把仓库行转换成授权对象事实；仓库身份取自身 ID，协作人明确为空，与查询端协作条件恒不匹配保持一致。
     fn object(context: &AccessContext, row: Warehouse) -> ObjectFacts {
         ObjectFacts {
             resource: context.resource.clone(),
@@ -129,24 +117,12 @@ pub struct WarehouseAuthorization {
 }
 
 impl WarehouseAuthorization {
-    /// 登记一个固定仓库身份入口。
-    /// # 参数
-    /// db 为基础设施，service 为共享授权服务；permission 为固定入口权限。
-    /// # 返回
-    /// 不执行 I/O 的查询入口。
-    /// # 错误
-    /// 构造不执行 I/O；固定权限及映射由共享服务在启动时校验。
+    /// 将共享授权服务和固定动作权限绑定到仓库数据库，供实际仓库身份检查；构造不执行 I/O，权限与映射由共享服务在启动时校验。
     pub fn new(db: Database, service: Arc<AuthorizationService>, permission: Permission) -> Self {
         Self { db, service, permission }
     }
 
-    /// 查询本次展示候选内有权的真实仓库。
-    /// # 参数
-    /// actor 为真实账号，ids 为当前页候选，executor 为原读取执行器。
-    /// # 返回
-    /// 已授权候选子集，不装载全量授权身份。
-    /// # 错误
-    /// 身份、权限、映射或数据库失败透传。
+    /// 用原读取执行器对当前页候选执行完整仓库授权，返回候选中的已授权 ID，不加载全量范围。非空候选在返回前复验凭证，身份、权限、映射或仓储错误直接返回；空候选直接返回空集合。
     pub async fn ids_in(
         &self,
         actor: &AuditActor,
@@ -162,13 +138,7 @@ impl WarehouseAuthorization {
         Ok(ids)
     }
 
-    /// 在原业务执行器检查实际仓库的完整动作资格。
-    /// # 参数
-    /// actor 为实际账号，id 为实际仓库，executor 为原事务。
-    /// # 返回
-    /// 功能、同角色附加资格和仓库范围均成立时成功。
-    /// # 错误
-    /// 仓库缺失、无权或事实变化拒绝。
+    /// 在原业务事务对实际仓库核验动作、同角色附加资格及对象范围；仓库缺失、无权或授权事实变化时拒绝，不能用先前读到的 ID 替代。
     pub async fn require(
         &self,
         actor: &AuditActor,
@@ -178,26 +148,14 @@ impl WarehouseAuthorization {
         self.service.require(actor, &self.permission, AccessTarget::record(id)?, executor).await
     }
 
-    /// 判断完整仓库授权是否命中真实记录，并在返回前复验当前查询。
-    /// # 参数
-    /// actor 为真实账号，executor 为本次存在性读取的原执行器。
-    /// # 返回
-    /// 至少一个真实仓库通过完整功能资格和范围条件时返回 true。
-    /// # 错误
-    /// 身份、映射、数据库或授权依赖失效时返回原错误。
+    /// 检查完整授权条件下是否至少存在一个真实仓库，并在交付结果前复验凭证。身份、映射、仓储或授权依赖失败时返回原错误，不当作无范围。
     pub async fn has_any(&self, actor: &AuditActor, executor: &mut dyn Executor) -> IdentityResult<bool> {
         let query = self.query(actor, executor).await?;
         query.validate(executor).await?;
         Ok(!query.is_empty())
     }
 
-    /// 编译当前仓库查询，不预载全部授权身份。
-    /// # 参数
-    /// actor 为真实账号，executor 为调用方读取事务。
-    /// # 返回
-    /// 完整授权凭证和最多一行存在性查询得到的空范围标记。
-    /// # 错误
-    /// 身份、权限、映射、数据库或授权复验失败时返回原错误。
+    /// 在原读取事务编译完整仓库授权，并最多读一条身份判断范围是否为空，不预载全量 ID。返回绑定当前读取边界的凭证；身份、权限、映射、仓储或边界复验失败时直接返回。
     pub async fn query(
         &self,
         actor: &AuditActor,
@@ -219,80 +177,38 @@ pub struct WarehouseQuery {
 }
 
 impl WarehouseQuery {
-    /// 读取完整授权阶段。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// identity 编译的全部阶段，须在分页和数量上限前执行。
-    /// # 错误
-    /// 无。
+    // 交给仓储执行统一授权编译出的全部聚合阶段；必须放在分页和数量上限之前，以免截断授权结果。
     pub(crate) fn stages(&self) -> &[Document] {
         self.compiled.stages()
     }
 
-    /// 读取本次授权查询版本。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 完整身份及映射依赖版本。
-    /// # 错误
-    /// 无。
+    // 提供绑定本次身份与映射依赖的范围版本，供后续页判断是否继续沿用该范围。
     pub(crate) fn version(&self) -> String {
         self.compiled.version()
     }
 
-    /// 返回本次冻结的授权元数据。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 权限版本、组织版本和授权时点。
-    /// # 错误
-    /// 无；实际有效性仍由 validate 核验。
+    // 提供本次查询冻结的权限版本、组织版本和授权时点，供构造响应元信息；有效性仍由 `validate` 复验。
     pub(crate) fn metadata(&self) -> (u64, u64, Instant) {
         (self.compiled.policy_version(), self.compiled.organization_version(), self.compiled.as_of())
     }
 
-    /// 判断完整授权查询是否没有实际仓库。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 完整查询的有界存在性结果，不解释权限规则。
-    /// # 错误
-    /// 无。
+    /// 判断完整授权条件是否未命中任何实际仓库；这是有界存在性查询的结果，不用于解释权限规则。
     pub fn is_empty(&self) -> bool {
         !self.has_rows
     }
 
-    /// 核验固定仓库模型、当前事务、读取阶段及有效期。
-    /// # 参数
-    /// executor 为产生本凭证的原读取执行器。
-    /// # 返回
-    /// 模型和当前读取边界均匹配时成功，不读取数据库。
-    /// # 错误
-    /// 资源、集合、行身份、输出粒度错配或凭证失效时拒绝。
+    // 在原执行器上无 I/O 核对仓库模型、事务、读取阶段和有效期；资源、集合、行标识或输出粒度不符，或凭证失效时拒绝。
     pub(crate) fn ensure_current(&self, executor: &mut dyn Executor) -> IdentityResult<()> {
         ensure_warehouse_query(&self.compiled, executor)
     }
 
-    /// 在实际业务读取前后复验凭证。
-    /// # 参数
-    /// executor 为产生本凭证的原读取事务。
-    /// # 返回
-    /// 当前凭证仍然有效时成功。
-    /// # 错误
-    /// 授权或版本失效时返回原始错误。
+    // 向统一授权服务复验绑定原读取事务的凭证，供业务取数前后核对授权依赖；授权或版本失效时保留原错误。
     pub(crate) async fn validate(&self, executor: &mut dyn Executor) -> erp_identity::Result<()> {
         self.authorization.validate(&self.compiled, executor).await
     }
 }
 
-/// 所有仓库查询执行入口共用固定模型与当前边界核验。
-/// # 参数
-/// access 为统一授权服务编译的查询，executor 为原读取执行器。
-/// # 返回
-/// 可用于完整仓库身份读取时成功，不执行 I/O。
-/// # 错误
-/// 模型错配、跨事务、跨阶段或到期时拒绝。
+// 为仓库查询共用固定模型与读取边界校验，不访问数据库；模型错配、跨事务、跨读取阶段或凭证到期均拒绝。
 pub(crate) fn ensure_warehouse_query(
     access: &CompiledAccess,
     executor: &mut dyn Executor,
@@ -301,7 +217,7 @@ pub(crate) fn ensure_warehouse_query(
     access.ensure_current(executor)
 }
 
-/// 仓库身份读取不得消费其他资源、集合、行身份或受限输出。
+// 只接受 `warehouse` 或 `inventory_warehouse` 对真实仓库集合、`id` 和对象粒度的映射，防止借其它资源或受限输出读取仓库身份。
 fn warehouse_model(model: &QueryModel) -> IdentityResult<()> {
     if !matches!(model.resource.as_str(), "warehouse" | "inventory_warehouse")
         || model.collection != <Database as WarehouseExt>::WAREHOUSES

@@ -8,16 +8,12 @@ use erp_sales::entity::sales_order::SalesOrderRevision;
 use erp_workflow::ports::ObjectFact;
 
 use super::super::amount::format_yuan;
-/// 仅识别原销售修订上的两个卡券标志，不受富显示卡券行扩展影响。
-///
-/// # 参数
-/// * `revisions` - 已读销售修订。
-///
-/// # 返回
-/// 返回带 `voucher_category_sku_id` 或 `voucher_expiry_at` 的修订 ID。
-///
-/// # 错误
-/// 不返回错误。
+// 处理资金工作项授权事实的版本事实时，仅识别原销售修订上的两个卡券标志，不受富显示卡券行扩展影响。
+//
+// 调用参数：
+// * `revisions` - 已读销售修订。
+//
+// 返回带 `voucher_category_sku_id` 或 `voucher_expiry_at` 的修订 ID。
 pub(in crate::workbench) fn voucher_revision_ids(revisions: &[SalesOrderRevision]) -> HashSet<String> {
     revisions
         .iter()
@@ -25,18 +21,14 @@ pub(in crate::workbench) fn voucher_revision_ids(revisions: &[SalesOrderRevision
         .map(|revision| revision.base.id.clone())
         .collect()
 }
-/// 应收权威影响使用命令的修订标志，创建人来自账户稳定事实。
-///
-/// # 参数
-/// * `account` - 已读应收子账。
-/// * `counterparty` - 往来方名称；缺失时为空。
-/// * `is_voucher` - 来源修订是否按命令侧卡券标志判定为卡券。
-///
-/// # 返回
-/// 返回以销售单为根、账户序号为标题的事实，影响由 `receivable_account_impact` 生成。
-///
-/// # 错误
-/// 不返回错误。
+// 处理资金工作项授权事实时，应收权威影响使用命令的修订标志，创建人来自账户稳定事实。
+//
+// 调用参数：
+// * `account` - 已读应收子账。
+// * `counterparty` - 往来方名称；缺失时为空。
+// * `is_voucher` - 来源修订是否按命令侧卡券标志判定为卡券。
+//
+// 返回以销售单为根、账户序号为标题的事实，影响由 `receivable_account_impact` 生成。
 pub(in crate::workbench) fn receivable_account_fact(
     account: &ReceivableAccount,
     counterparty: Option<String>,
@@ -51,18 +43,14 @@ pub(in crate::workbench) fn receivable_account_fact(
     fact.impact_summary = Some(receivable_account_impact(is_voucher));
     fact
 }
-/// 应付权威标题、参与根和开放金额沿用原已读账户。
-///
-/// # 参数
-/// * `account` - 已读应付账户。
-/// * `supplier` - 供应商显示名；缺失时往来方为空。
-/// * `purchase_no` - 来源采购单号；缺失时标题为「采购应付」。
-///
-/// # 返回
-/// 返回以来源单据为根的事实，影响为未付金额。
-///
-/// # 错误
-/// 不返回错误。
+// 处理资金工作项授权事实时，应付权威标题、参与根和开放金额沿用原已读账户。
+//
+// 调用参数：
+// * `account` - 已读应付账户。
+// * `supplier` - 供应商显示名；缺失时往来方为空。
+// * `purchase_no` - 来源采购单号；缺失时标题为「采购应付」。
+//
+// 返回以来源单据为根的事实，影响为未付金额。
 pub(in crate::workbench) fn payable_account_fact(
     account: &PayableAccount,
     supplier: Option<String>,
@@ -76,17 +64,13 @@ pub(in crate::workbench) fn payable_account_fact(
     fact.impact_summary = Some(format!("未付金额 {}", format_yuan(&account.open_total)));
     fact
 }
-/// 创建人直接来自不可变领域事实，缺失身份不授予创建人参与资格。
-///
-/// # 参数
-/// * `receipt` - 已读客户回款。
-/// * `counterparty` - 往来方名称；缺失时为空。
-///
-/// # 返回
-/// 返回以回款自身为根的事实，影响为不审批则不能过账、不能核销应收。
-///
-/// # 错误
-/// 不返回错误。
+// 处理资金工作项授权事实时，创建人直接来自不可变领域事实，缺失身份不授予创建人参与资格。
+//
+// 调用参数：
+// * `receipt` - 已读客户回款。
+// * `counterparty` - 往来方名称；缺失时为空。
+//
+// 返回以回款自身为根的事实，影响为不审批则不能过账、不能核销应收。
 pub(in crate::workbench) fn customer_receipt_fact(
     receipt: &CustomerReceipt,
     counterparty: Option<String>,
@@ -100,17 +84,13 @@ pub(in crate::workbench) fn customer_receipt_fact(
     fact.impact_summary = Some("不审批则回款不能过账、不能核销应收".to_string());
     fact
 }
-/// 创建人直接来自不可变领域事实，缺失身份不授予创建人参与资格。
-///
-/// # 参数
-/// * `payment` - 已读供应商付款。
-/// * `counterparty` - 往来方名称；缺失时为空。
-///
-/// # 返回
-/// 返回以付款自身为根的事实，影响为付款已过账，纠错须走冲正或退款。
-///
-/// # 错误
-/// 不返回错误。
+// 处理资金工作项授权事实时，创建人直接来自不可变领域事实，缺失身份不授予创建人参与资格。
+//
+// 调用参数：
+// * `payment` - 已读供应商付款。
+// * `counterparty` - 往来方名称；缺失时为空。
+//
+// 返回以付款自身为根的事实，影响为付款已过账，纠错须走冲正或退款。
 pub(in crate::workbench) fn supplier_payment_fact(
     payment: &SupplierPayment,
     counterparty: Option<String>,
@@ -124,19 +104,15 @@ pub(in crate::workbench) fn supplier_payment_fact(
     fact.impact_summary = Some("付款已登记并过账；纠错须走付款冲正或供应商退款".to_string());
     fact
 }
-/// 命令名称优先直接往来，再首选来源，再分录来源；传入的来源 map 必须丢弃缺名称条目。
-///
-/// # 参数
-/// * `refund` - 已读客户退款。
-/// * `customer` - 客户显示名。
-/// * `origins` - 原回款 ID 到往来名称。
-/// * `entry_origins` - 原应收分录 ID 到往来名称。
-///
-/// # 返回
-/// 返回以退款自身为根的事实。往来方优先 `customer`，否则原回款名称，再否则分录名称。
-///
-/// # 错误
-/// 不返回错误。
+// 处理资金工作项授权事实时，命令名称优先直接往来，再首选来源，再分录来源；传入的来源 map 必须丢弃缺名称条目。
+//
+// 调用参数：
+// * `refund` - 已读客户退款。
+// * `customer` - 客户显示名。
+// * `origins` - 原回款 ID 到往来名称。
+// * `entry_origins` - 原应收分录 ID 到往来名称。
+//
+// 返回以退款自身为根的事实。往来方优先 `customer`，否则原回款名称，再否则分录名称。
 pub(in crate::workbench) fn customer_refund_fact(
     refund: &CustomerRefund,
     customer: Option<String>,
@@ -156,19 +132,15 @@ pub(in crate::workbench) fn customer_refund_fact(
     fact.impact_summary = Some("不审批则客户退款不能过账".to_string());
     fact
 }
-/// 命令名称优先直接往来，再首选来源，再分录来源；传入的来源 map 必须丢弃缺名称条目。
-///
-/// # 参数
-/// * `refund` - 已读供应商退款。
-/// * `supplier` - 供应商显示名。
-/// * `origins` - 原付款 ID 到往来名称。
-/// * `entry_origins` - 原应付分录 ID 到往来名称。
-///
-/// # 返回
-/// 返回以退款自身为根的事实。往来方优先 `supplier`，否则原付款名称，再否则分录名称。
-///
-/// # 错误
-/// 不返回错误。
+// 处理资金工作项授权事实时，命令名称优先直接往来，再首选来源，再分录来源；传入的来源 map 必须丢弃缺名称条目。
+//
+// 调用参数：
+// * `refund` - 已读供应商退款。
+// * `supplier` - 供应商显示名。
+// * `origins` - 原付款 ID 到往来名称。
+// * `entry_origins` - 原应付分录 ID 到往来名称。
+//
+// 返回以退款自身为根的事实。往来方优先 `supplier`，否则原付款名称，再否则分录名称。
 pub(in crate::workbench) fn supplier_refund_fact(
     refund: &SupplierRefund,
     supplier: Option<String>,
@@ -198,17 +170,13 @@ pub(in crate::workbench) fn supplier_refund_fact(
     fact.impact_summary = Some("审核采购处置依据及本次结算方式，批准后入账".to_string());
     fact
 }
-/// 冲正对象以自身为参与根，名称仅消费命令 counterpart-only 来源。
-///
-/// # 参数
-/// * `reversal` - 已读回款冲正。
-/// * `origins` - 原回款 ID 到往来名称。
-///
-/// # 返回
-/// 返回以冲正自身为根的事实。没有对应名称时往来方为空。
-///
-/// # 错误
-/// 不返回错误。
+// 处理资金工作项授权事实时，冲正对象以自身为参与根，名称仅消费命令 counterpart-only 来源。
+//
+// 调用参数：
+// * `reversal` - 已读回款冲正。
+// * `origins` - 原回款 ID 到往来名称。
+//
+// 返回以冲正自身为根的事实。没有对应名称时往来方为空。
 pub(in crate::workbench) fn receipt_reversal_fact(
     reversal: &ReceiptReversal,
     origins: &HashMap<String, String>,
@@ -222,17 +190,13 @@ pub(in crate::workbench) fn receipt_reversal_fact(
     fact.impact_summary = Some("不审批则回款冲正不能过账".to_string());
     fact
 }
-/// 冲正对象以自身为参与根，名称仅消费命令 counterpart-only 来源。
-///
-/// # 参数
-/// * `reversal` - 已读付款冲正。
-/// * `origins` - 原付款 ID 到往来名称。
-///
-/// # 返回
-/// 返回以冲正自身为根的事实。没有对应名称时往来方为空。
-///
-/// # 错误
-/// 不返回错误。
+// 处理资金工作项授权事实时，冲正对象以自身为参与根，名称仅消费命令 counterpart-only 来源。
+//
+// 调用参数：
+// * `reversal` - 已读付款冲正。
+// * `origins` - 原付款 ID 到往来名称。
+//
+// 返回以冲正自身为根的事实。没有对应名称时往来方为空。
 pub(in crate::workbench) fn payment_reversal_fact(
     reversal: &PaymentReversal,
     origins: &HashMap<String, String>,
@@ -247,16 +211,12 @@ pub(in crate::workbench) fn payment_reversal_fact(
     fact
 }
 
-/// 应收票款影响文案的唯一实现；命令与显示分别传入原有卡券判定结果。
-///
-/// # 参数
-/// * `is_voucher` - 是否按调用方已有规则判定为卡券。
-///
-/// # 返回
-/// 卡券返回票款、开票与兑付不能确认；否则只返回票款与开票不能确认。
-///
-/// # 错误
-/// 不返回错误。
+// 处理资金工作项授权事实时，应收票款影响文案的唯一实现；命令与显示分别传入原有卡券判定结果。
+//
+// 调用参数：
+// * `is_voucher` - 是否按调用方已有规则判定为卡券。
+//
+// 卡券返回票款、开票与兑付不能确认；否则只返回票款与开票不能确认。
 pub(in crate::workbench) fn receivable_account_impact(is_voucher: bool) -> String {
     if is_voucher {
         "不复核则卡券票款、开票与兑付前置事实不能确认".to_string()
@@ -265,16 +225,12 @@ pub(in crate::workbench) fn receivable_account_impact(is_voucher: bool) -> Strin
     }
 }
 
-/// 开票申请的授权事实来源；申请创建人及销售根对象均取实体。
-///
-/// # 参数
-/// * `request` - 已读销售开票申请。
-///
-/// # 返回
-/// 返回以销售单为根的事实。往来方为发票抬头，影响带上申请金额。
-///
-/// # 错误
-/// 不返回错误。
+// 处理资金工作项授权事实时，开票申请的授权事实来源；申请创建人及销售根对象均取实体。
+//
+// 调用参数：
+// * `request` - 已读销售开票申请。
+//
+// 返回以销售单为根的事实。往来方为发票抬头，影响带上申请金额。
 pub(in crate::workbench) fn invoice_request_fact(
     request: &erp_finance::entity::receivable::SalesInvoiceRequest,
 ) -> ObjectFact {
@@ -303,7 +259,7 @@ mod tests {
     };
     use crate::workbench::facts::WorkbenchObjectFact;
 
-    /// 构造用于读取投影的六类领域文档；经办人与创建人故意不同。
+    // 处理资金工作项授权事实时，生成用于读取投影的六类领域文档；经办人与创建人故意不同。
     fn document<T: DeserializeOwned>(creator: Option<&str>) -> T {
         let mut value = json!({
             "status": "draft",
@@ -328,7 +284,7 @@ mod tests {
         serde_json::from_value(value).unwrap()
     }
 
-    /// 执行生产权威映射，与显示共用同一身份来源。
+    // 处理资金工作项授权事实时，执行生产权威映射，与显示共用同一身份来源。
     fn facts(creator: Option<&str>) -> [ObjectFact; 6] {
         let origins = HashMap::new();
         [

@@ -25,10 +25,9 @@ use super::mapping::{
     supplier_commercial_fact, supplier_role_fact,
 };
 
-/// 批量加载采购创建依据计算所需的最小持久化事实。
+/// 读取采购创建依据时，批量加载采购创建依据计算所需的最小持久化事实。
 ///
 /// # 参数
-/// * `db` - MongoDB 数据库句柄
 /// * `sku_ids` - 任务责任范围内仍有剩余量的销售目标行 SKU 集合
 /// * `executor` - 数据访问执行器，由 Service 决定事务边界；事务内重验必须复用调用方 executor
 ///
@@ -119,19 +118,13 @@ pub async fn load_creation_basis_facts(
     })
 }
 
-/// 解析供给当前生效的配送政策，供应商模板一次批量读取。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库句柄
-/// * `offerings` - 本批 ACTIVE 供给
-/// * `supplier_ids` - 本批供给涉及的供应商
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 以供给主键索引的配送事实。
-///
-/// # 错误
-/// MongoDB 查询失败时返回错误。
+// 处理采购创建依据时，解析供给当前生效的配送政策，供应商模板一次批量读取。
+//
+// 调用参数：
+// * `offerings` - 本批 ACTIVE 供给
+// * `supplier_ids` - 本批供给涉及的供应商
+//
+// 以供给主键索引的配送事实。
 async fn delivery_facts(
     db: &Database,
     offerings: &[SupplierOffering],
@@ -150,36 +143,28 @@ async fn delivery_facts(
         .collect())
 }
 
-/// 去重 SKU 集合且保持首次出现顺序。
-///
-/// # 参数
-/// * `sku_ids` - 原始 SKU 集合，允许重复
-///
-/// # 返回
-/// 返回无重复且顺序稳定的 SKU 集合。
-///
-/// # 错误
-/// 无。
-///
-/// # 约束
-/// 去重只用于缩小 `$in` 范围，不改变任何业务语义。
+// 定位采购创建依据关联时，去重 SKU 集合且保持首次出现顺序。
+//
+// 调用参数：
+// * `sku_ids` - 原始 SKU 集合，允许重复
+//
+// 返回无重复且顺序稳定的 SKU 集合。
+//
+// 调用约束：
+// 去重只用于缩小 `$in` 范围，不改变任何业务语义。
 fn unique_sku_ids(sku_ids: &[SkuId]) -> Vec<SkuId> {
     crate::support::dedup_ordered(sku_ids.iter().cloned())
 }
 
-/// 提取供给涉及的供应商集合且保持首次出现顺序。
-///
-/// # 参数
-/// * `offerings` - 已按供应商稳定排序的供给
-///
-/// # 返回
-/// 返回无重复的供应商主键集合。
-///
-/// # 错误
-/// 无。
-///
-/// # 约束
-/// 供应商集合只用于批量读取结算事实，不承担任何业务过滤。
+// 定位采购创建依据关联时，提取供给涉及的供应商集合且保持首次出现顺序。
+//
+// 调用参数：
+// * `offerings` - 已按供应商稳定排序的供给
+//
+// 返回无重复的供应商主键集合。
+//
+// 调用约束：
+// 供应商集合只用于批量读取结算事实，不承担任何业务过滤。
 fn unique_supplier_ids(
     offerings: &[erp_supply::entity::supplier_offering::SupplierOffering],
 ) -> Vec<SupplierAccountId> {
@@ -214,7 +199,7 @@ mod isolation_tests {
     use super::load_creation_basis_facts;
     use crate::test_indexes::ensure_indexes;
 
-    /// 构造供给稳定身份。
+    // 处理采购创建依据时，生成供给稳定身份。
     fn offering(id: &str, sku_id: &str, supplier_id: &str) -> SupplierOffering {
         SupplierOffering::new(
             SupplierOfferingId::new(id),
@@ -233,7 +218,7 @@ mod isolation_tests {
         .unwrap()
     }
 
-    /// 构造供给商业条款修订。
+    // 处理采购创建依据的版本事实时，生成供给商业条款修订。
     fn offering_revision(id: &str, offering_id: &str) -> SupplierOfferingRevision {
         SupplierOfferingRevision::new(
             SupplierOfferingRevisionId::new(id),
@@ -258,7 +243,7 @@ mod isolation_tests {
         .unwrap()
     }
 
-    /// 构造供给实时可供投影。
+    // 处理采购创建依据时，生成供给实时可供投影。
     fn availability(id: &str, offering_id: &str) -> SupplierOfferingAvailability {
         SupplierOfferingAvailability::new(
             SupplierOfferingAvailabilityId::new(id),
@@ -275,7 +260,7 @@ mod isolation_tests {
         .unwrap()
     }
 
-    /// 构造供应商角色与当前商务资料修订。
+    // 处理采购创建依据时，生成供应商角色与当前商务资料修订。
     fn supplier(id: &str, party_id: &str) -> SupplierAccount {
         SupplierAccount::new(
             SupplierAccountId::new(id),
@@ -293,7 +278,7 @@ mod isolation_tests {
         .unwrap()
     }
 
-    /// 构造商务资料修订。
+    // 处理采购创建依据时，生成商务资料修订。
     fn commercial_profile(id: &str, supplier_id: &str) -> SupplierCommercialProfileRevision {
         SupplierCommercialProfileRevision::new(
             SupplierCommercialProfileRevisionId::new(id),
@@ -315,7 +300,7 @@ mod isolation_tests {
         .unwrap()
     }
 
-    /// 构造企业主体及其当前修订。
+    // 处理采购创建依据时，生成企业主体及其当前修订。
     fn party(id: &str, revision_id: &str) -> (Party, PartyRevision) {
         let mut party = Party::new(
             PartyId::new(id),
@@ -389,19 +374,18 @@ mod isolation_tests {
         }
     }
 
-    /// 空 SKU 集合直接返回空事实集合，不发任何查询。
-    ///
-    /// # 参数
-    /// 无，内部创建隔离库。
-    ///
-    /// # 返回
-    /// 断言各事实集合全部为空。
-    ///
-    /// # 错误
-    /// MongoDB 连接或事实加载失败时测试失败。
-    ///
-    /// # 约束
-    /// Batch 维度：空输入直接短路，不允许空 `$in` 查询。
+    // 验证采购创建依据：空 SKU 集合直接返回空事实集合，不发任何查询。
+    //
+    // 调用参数：
+    // 无，内部创建隔离库。
+    //
+    // 断言各事实集合全部为空。
+    //
+    // 失败边界：
+    // MongoDB 连接或事实加载失败时测试失败。
+    //
+    // 调用约束：
+    // Batch 维度：空输入直接短路，不允许空 `$in` 查询。
     #[tokio::test]
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn empty_sku_ids_return_empty_facts() {
@@ -419,19 +403,18 @@ mod isolation_tests {
         });
     }
 
-    /// 一次批量返回全部 SKU 的 ACTIVE 供给与关联结算事实。
-    ///
-    /// # 参数
-    /// 无，内部创建隔离库并写入完整夹具。
-    ///
-    /// # 返回
-    /// 断言供给按 SKU/供应商稳定排序且修订、投影、供应商与名称齐备。
-    ///
-    /// # 错误
-    /// MongoDB 连接、夹具写入或事实加载失败时测试失败。
-    ///
-    /// # 约束
-    /// Batch 维度：一次调用返回全部来源，查询次数与行数无关。
+    // 验证采购创建依据：一次批量返回全部 SKU 的 ACTIVE 供给与关联结算事实。
+    //
+    // 调用参数：
+    // 无，内部创建隔离库并写入完整夹具。
+    //
+    // 断言供给按 SKU/供应商稳定排序且修订、投影、供应商与名称齐备。
+    //
+    // 失败边界：
+    // MongoDB 连接、夹具写入或事实加载失败时测试失败。
+    //
+    // 调用约束：
+    // Batch 维度：一次调用返回全部来源，查询次数与行数无关。
     #[tokio::test]
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn loads_active_offerings_and_settlement_facts_in_one_batch() {
@@ -465,19 +448,18 @@ mod isolation_tests {
         });
     }
 
-    /// 停用供给及其修订、投影不进入事实集合。
-    ///
-    /// # 参数
-    /// 无，内部创建隔离库并写入含停用供给的夹具。
-    ///
-    /// # 返回
-    /// 断言停用供给被过滤，其余事实不受影响。
-    ///
-    /// # 错误
-    /// MongoDB 连接、夹具写入或事实加载失败时测试失败。
-    ///
-    /// # 约束
-    /// 软删除与停用过滤由 Repository 查询条件保证。
+    // 验证采购创建依据：停用供给及其修订、投影不进入事实集合。
+    //
+    // 调用参数：
+    // 无，内部创建隔离库并写入含停用供给的夹具。
+    //
+    // 断言停用供给被过滤，其余事实不受影响。
+    //
+    // 失败边界：
+    // MongoDB 连接、夹具写入或事实加载失败时测试失败。
+    //
+    // 调用约束：
+    // 软删除与停用过滤由 Repository 查询条件保证。
     #[tokio::test]
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn inactive_offerings_are_excluded() {
@@ -502,19 +484,18 @@ mod isolation_tests {
         });
     }
 
-    /// 事务内调用复用调用方 session，读取自身未提交写入。
-    ///
-    /// # 参数
-    /// 无，内部创建隔离库。
-    ///
-    /// # 返回
-    /// 断言事务内可读到同一 session 刚写入的供给事实。
-    ///
-    /// # 错误
-    /// MongoDB 连接、夹具写入、事务或事实加载失败时测试失败。
-    ///
-    /// # 约束
-    /// 事务内重验必须复用调用方 executor，不得另开连接或独立事务。
+    // 验证采购创建依据：事务内调用复用调用方 session，读取自身未提交写入。
+    //
+    // 调用参数：
+    // 无，内部创建隔离库。
+    //
+    // 断言事务内可读到同一 session 刚写入的供给事实。
+    //
+    // 失败边界：
+    // MongoDB 连接、夹具写入、事务或事实加载失败时测试失败。
+    //
+    // 调用约束：
+    // 事务内重验必须复用调用方 executor，不得另开连接或独立事务。
     #[tokio::test]
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn transaction_reads_own_writes_with_same_session() {

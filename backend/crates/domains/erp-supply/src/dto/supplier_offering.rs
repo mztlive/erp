@@ -51,19 +51,7 @@ pub struct SupplierOfferingTermsWrite {
 }
 impl SupplierOfferingTermsWrite {
     /// 以必填商业条款构造写入字段；可选维度默认为空。
-    ///
-    /// # 参数
-    /// * `dropship_supply_price_gross` - 一件代发含税价
-    /// * `bulk_supply_price_gross` - 集采含税价
-    /// * `input_tax_rate` - 进项税率
-    /// * `bulk_minimum_order_quantity` - 集采起订量
-    /// * `valid_from` - 生效日期
-    ///
-    /// # 返回
     /// 返回可选维度为空的可写条款。
-    ///
-    /// # 错误
-    /// 无。
     pub fn new(
         dropship_supply_price_gross: String,
         bulk_supply_price_gross: String,
@@ -125,17 +113,8 @@ pub struct CreateSupplierOfferingRequest {
 
 impl CreateSupplierOfferingRequest {
     /// 计算新增供给命令的稳定指纹。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回对 `(操作名, 请求体)` 元组 JSON 进行 SHA-256 后的 64 位十六进制指纹，与存量命令格式一致。
-    ///
-    /// # 错误
     /// JSON 序列化失败时返回 `Internal` 错误。
-    ///
-    /// # 约束
     /// 输入为 `&self`，不触及外部 I/O；序列化形态与历史实现字节一致，存量幂等键可继续重放。
     pub fn command_fingerprint(&self) -> Result<String> {
         let payload = serde_json::to_vec(&(CREATE_OFFERING_COMMAND, self))
@@ -180,20 +159,10 @@ pub struct ReviseSupplierOfferingRequest {
 
 impl ReviseSupplierOfferingRequest {
     /// 计算修订供给命令的稳定指纹。
-    ///
-    /// # 参数
-    /// * `offering_id` - 命令目标供给主键
-    ///
-    /// # 返回
-    /// 返回对 `(操作名, (目标供给, 请求体))` 元组 JSON 进行 SHA-256 后的 64 位十六进制指纹，
-    /// 与存量命令格式一致。
-    ///
-    /// # 错误
+    /// 返回对 `(操作名, (目标供给, 请求体))` 元组 JSON 进行 SHA-256 后的 64 位十六进制指纹，与存量命令格
+    /// 式一致。
     /// JSON 序列化失败时返回 `Internal` 错误。
-    ///
-    /// # 约束
-    /// 输入为 `&self` 与目标供给 ID，不触及外部 I/O；序列化形态与历史实现字节一致，
-    /// 存量幂等键可继续重放。
+    /// 输入为 `&self` 与目标供给 ID，不触及外部 I/O；序列化形态与历史实现字节一致，存量幂等键可继续重放。
     pub fn command_fingerprint(&self, offering_id: &str) -> Result<String> {
         let payload = serde_json::to_vec(&(REVISE_OFFERING_COMMAND, (offering_id, self)))
             .map_err(|error| Error::Internal(format!("序列化供给命令指纹失败: {error}")))?;
@@ -241,20 +210,10 @@ pub struct UpdateSupplierOfferingAvailabilityRequest {
 
 impl UpdateSupplierOfferingAvailabilityRequest {
     /// 计算更新可供状态命令的稳定指纹。
-    ///
-    /// # 参数
-    /// * `offering_id` - 命令目标供给主键
-    ///
-    /// # 返回
-    /// 返回对 `(操作名, (目标供给, 请求体))` 元组 JSON 进行 SHA-256 后的 64 位十六进制指纹，
-    /// 与存量命令格式一致。
-    ///
-    /// # 错误
+    /// 返回对 `(操作名, (目标供给, 请求体))` 元组 JSON 进行 SHA-256 后的 64 位十六进制指纹，与存量命令格
+    /// 式一致。
     /// JSON 序列化失败时返回 `Internal` 错误。
-    ///
-    /// # 约束
-    /// 输入为 `&self` 与目标供给 ID，不触及外部 I/O；序列化形态与历史实现字节一致，
-    /// 存量幂等键可继续重放。
+    /// 输入为 `&self` 与目标供给 ID，不触及外部 I/O；序列化形态与历史实现字节一致，存量幂等键可继续重放。
     pub fn command_fingerprint(&self, offering_id: &str) -> Result<String> {
         let payload = serde_json::to_vec(&(UPDATE_OFFERING_AVAILABILITY_COMMAND, (offering_id, self)))
             .map_err(|error| Error::Internal(format!("序列化供给命令指纹失败: {error}")))?;
@@ -351,20 +310,12 @@ pub struct CompleteSupplierSupplyExceptionTaskResult {
 /// Service 只分配 ID、计算时钟时间戳、执行资格检查并组织事务。
 impl SupplierOfferingTermsWrite {
     /// 将写入条款转换为供给修订领域数据。
-    ///
-    /// # 参数
-    /// * `offering_id` - 所属供给主键，由 Service 分配
-    /// * `revision_no` - 修订号，首版为 1，后续由领域版本规则推进
-    ///
-    /// # 返回
     /// 返回含税/不含税换算后的修订数据。
-    ///
-    /// # 错误
-    /// 空白、非法数值、非法日期时返回 `ValidationError`，文案与历史 Service
-    /// helper 逐字一致（`非法进项税率/供给价/起订量/金额/业务日期`）。
-    ///
-    /// # 约束
+    /// 空白、非法数值、非法日期时返回 `ValidationError`，文案与历史 Service helper 逐字一致
+    /// （`非法进项税率/供给价/起订量/金额/业务日期`）。
     /// 纯内存转换；不分配 ID、不读取时钟、不触碰 I/O 或密钥。
+    /// `offering_id`：所属供给主键，由 Service 分配。
+    /// `revision_no`：修订号，首版为 1，后续由领域版本规则推进。
     pub fn try_into_revision_data(
         &self,
         offering_id: SupplierOfferingId,
@@ -374,12 +325,9 @@ impl SupplierOfferingTermsWrite {
     }
 
     /// 将 API 来源的已确认条款转换为修订，允许明确不支持集采。
-    /// # 参数
-    /// 供给身份与新修订号；两项集采输入须同时有值或同时缺失。
-    /// # 返回
     /// 保留真实缺失的商业条款，不推导集采价格。
-    /// # 错误
     /// 单项集采输入、数值或日期无效时拒绝。
+    /// 供给身份与新修订号；两项集采输入须同时有值或同时缺失。
     pub fn try_into_api_revision_data(
         &self,
         offering_id: SupplierOfferingId,
@@ -389,11 +337,7 @@ impl SupplierOfferingTermsWrite {
     }
 
     /// 按供给来源转换条款，只有 API 允许明确缺失集采价格。
-    /// # 参数
-    /// 供给身份、新修订号和服务端已核验的来源类型。
-    /// # 返回
     /// 保留真实缺失并派生含税换算后的商业条款。
-    /// # 错误
     /// 普通来源缺少集采条件、输入不成对或数值非法时拒绝。
     pub fn try_into_source_revision_data(
         &self,
@@ -463,11 +407,7 @@ impl SupplierOfferingTermsWrite {
 
 impl CreateSupplierOfferingRequest {
     /// 按已核验登记来源转换首版商业条款。
-    /// # 参数
-    /// `offering_id` 为服务端分配且已通过身份及连接校验的供给身份。
-    /// # 返回
     /// 修订号为一的条款；仅 API 来源允许明确缺失集采条件。
-    /// # 错误
     /// 普通来源缺少集采条件、金额或日期非法时拒绝。
     pub fn try_into_initial_revision(
         &self,
@@ -477,24 +417,10 @@ impl CreateSupplierOfferingRequest {
     }
 
     /// 将创建请求转换为供给稳定身份数据。
-    ///
-    /// # 参数
-    /// 无，读取请求内的 SKU、供应商与来源字段。
-    ///
-    /// # 返回
     /// 返回规整后的供给身份数据；ID 分配与实体构造由 Service 继续完成。
-    ///
-    /// # 错误
-    /// 当前仅做去空白与空值缺省，不做数值解析，故永不失败；
-    /// 编码超长与来源约束由供给实体构造时拒绝。
-    ///
-    /// # 参数
-    /// * `maintainer_user_id` - 已解析的供给维护人
-    /// * `business_org_unit_id` - 维护人主属组织
-    ///
-    /// # 约束
-    /// 纯内存转换，不分配 ID、不读取时钟、不触碰 I/O 或密钥。
-    /// 维护人不得用创建人回填，须由调用方先解析主属组织。
+    /// 当前仅做去空白与空值缺省，不做数值解析，故永不失败；编码超长与来源约束由供给实体构造时拒绝。
+    /// 纯内存转换，不分配 ID、不读取时钟、不触碰 I/O 或密钥。维护人不得用创建人回填，须由调用方先解析主
+    /// 属组织。
     pub fn try_into_offering_data(
         &self,
         maintainer_user_id: String,
@@ -518,21 +444,13 @@ impl CreateSupplierOfferingRequest {
     }
 
     /// 将创建请求转换为初始可供投影数据。
-    ///
-    /// # 参数
-    /// * `offering_id` - 所属供给主键，由 Service 分配
-    /// * `source_updated_at` - 来源更新时间，由 Service 解析或取接收时间
-    /// * `received_at` - ERP 接收时间，由 Service 在调用前取时钟
-    /// * `updated_by` - 更新人，由 Service 传入审计身份
-    ///
-    /// # 返回
     /// 返回可供投影数据；实体构造由 Service 继续完成。
-    ///
-    /// # 错误
     /// 数量非法时返回 `ValidationError`，文案为 `非法数量: {value}`。
-    ///
-    /// # 约束
     /// 纯内存转换；时钟时间戳由调用方传入，本方法不读取全局时钟。
+    ///
+    /// `offering_id`：所属供给主键，由 Service 分配。
+    /// `source_updated_at`：来源更新时间，由 Service 解析或取接收时间。
+    /// `updated_by`：更新人，由 Service 传入审计身份。
     pub fn try_into_availability_data(
         &self,
         offering_id: SupplierOfferingId,
@@ -555,21 +473,13 @@ impl CreateSupplierOfferingRequest {
 
 impl UpdateSupplierOfferingAvailabilityRequest {
     /// 将更新请求转换为可供投影数据。
-    ///
-    /// # 参数
-    /// * `offering_id` - 所属供给主键，由 Service 从路径解析
-    /// * `source_updated_at` - 来源更新时间，由 Service 解析或取接收时间
-    /// * `received_at` - ERP 接收时间，由 Service 在调用前取时钟
-    /// * `updated_by` - 更新人，由 Service 传入审计身份
-    ///
-    /// # 返回
     /// 返回可供投影数据；版本校验与时间倒退拒绝由可供实体 `apply` 负责。
-    ///
-    /// # 错误
     /// 数量非法时返回 `ValidationError`，文案为 `非法数量: {value}`。
-    ///
-    /// # 约束
     /// 纯内存转换；时钟时间戳由调用方传入，本方法不读取全局时钟。
+    ///
+    /// `offering_id`：所属供给主键，由 Service 从路径解析。
+    /// `source_updated_at`：来源更新时间，由 Service 解析或取接收时间。
+    /// `updated_by`：更新人，由 Service 传入审计身份。
     pub fn try_into_availability_data(
         &self,
         offering_id: SupplierOfferingId,
@@ -590,38 +500,20 @@ impl UpdateSupplierOfferingAvailabilityRequest {
     }
 }
 
-/// 解析可供数量字符串。
-///
-/// # 参数
-/// * `value` - 原始数量字符串；`None` 或空白表示缺省
-///
-/// # 返回
-/// 缺省时返回 `None`，否则返回类型化数量。
-///
-/// # 错误
-/// 非法数值时返回 `ValidationError`，文案为 `非法数量: {value}`。
-///
-/// # 约束
-/// 纯内存转换，不触碰 I/O、时钟或密钥。
+// 解析可供数量字符串。
+// 缺省时返回 `None`，否则返回类型化数量。
+// 非法数值时返回 `ValidationError`，文案为 `非法数量: {value}`。
+// 纯内存转换，不触碰 I/O、时钟或密钥。
+// `value`：`None` 或空白表示缺省。
 fn parse_availability_quantity(value: Option<&str>) -> Result<Option<Quantity>> {
     use crate::entity::supplier_offering::write_data;
     write_data::parse_optional_quantity(value).map_err(|error| Error::ValidationError(error.to_string()))
 }
 
 /// 解析来源更新时间，缺省时回退到接收时间。
-///
-/// # 参数
-/// * `requested` - 请求携带的来源 Unix 秒；`None` 表示来源未提供时间
-/// * `received_at` - ERP 接收时间，由 Service 在调用前取时钟
-///
-/// # 返回
 /// 来源提供时返回其时间，否则返回接收时间。
-///
-/// # 错误
-/// 永不失败。
-///
-/// # 约束
 /// 纯内存转换；时钟读取由调用方完成，本方法不触碰全局时钟。
+/// `requested`：`None` 表示来源未提供时间。
 pub fn resolve_source_updated_at(requested: Option<i64>, received_at: Instant) -> Instant {
     requested.map(Instant::from_unix_secs).unwrap_or(received_at)
 }
@@ -633,7 +525,7 @@ mod tests {
     use super::*;
     use crate::entity::supplier_offering::{AvailabilityStatus, OfferingSourceType, OfferingStatus};
 
-    /// 覆盖新增供给命令指纹：同一请求确定稳定，任一载荷字段变化必须产生不同指纹。
+    // 验证同一请求确定稳定，任一载荷字段变化必须产生不同指纹。
     #[test]
     fn create_command_fingerprint_is_deterministic_and_payload_sensitive() {
         let req = create_request();
@@ -650,7 +542,7 @@ mod tests {
         assert_ne!(fp1, other_key.command_fingerprint().unwrap());
     }
 
-    /// 覆盖修订与更新命令指纹：目标供给或载荷任一变化必须产生不同指纹。
+    // 验证目标供给或载荷任一变化必须产生不同指纹。
     #[test]
     fn revise_and_update_command_fingerprints_are_target_sensitive() {
         let revise = revise_request();
@@ -668,7 +560,7 @@ mod tests {
         assert_ne!(fp2, other_update.command_fingerprint("offering-1").unwrap());
     }
 
-    /// 覆盖指纹与历史算法字节一致：`(操作名, 请求体)` 元组 JSON 的 SHA-256 裸十六进制。
+    // 验证 `(操作名, 请求体)` 元组 JSON 的 SHA-256 裸十六进制。
     #[test]
     fn command_fingerprint_matches_legacy_tuple_serialization() {
         let create = create_request();
@@ -690,7 +582,7 @@ mod tests {
         );
     }
 
-    /// 历史实现：`serde_json::to_vec(&(operation, request))` 的 SHA-256 裸十六进制。
+    // 历史实现：`serde_json::to_vec(&(operation, request))` 的 SHA-256 裸十六进制。
     fn legacy_fingerprint<T: Serialize>(operation: &str, request: &T) -> String {
         use sha2::{Digest, Sha256};
 
@@ -698,7 +590,7 @@ mod tests {
         hex::encode(Sha256::digest(bytes))
     }
 
-    /// 覆盖指纹金 test：锁定三个操作的稳定字节合同，防止未来漂移破坏存量重放。
+    // 锁定三个操作的稳定字节合同，防止未来漂移破坏存量重放。
     #[test]
     fn command_fingerprint_golden_contracts() {
         assert_eq!(

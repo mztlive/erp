@@ -50,17 +50,17 @@ const REQUIREMENTS: &[(&Permission, &[Permission])] = &[
     (&internal::DATA_TRANSFER_OFFERING_AVAILABILITY, &[supplier_offering::UPDATE_AVAILABILITY]),
 ];
 
-/// 返回任务的原有独立功能资格；任务输入不能追加或删减资格。
+// 取任务转交预检登记的独立功能资格；候选任务输入不能更改资格集合。
 pub(super) fn requirements(permission: &Permission) -> Option<&'static [Permission]> {
     REQUIREMENTS.iter().find(|(entry, _)| *entry == permission).map(|(_, required)| *required)
 }
 
-/// 仅识别固定功能预检入口，不将业务对象权限转换为无对象操作。
+// 识别允许无对象预检的固定入口，真正的任务对象授权不在这里降级成功能操作。
 pub(super) fn supports(permission: &Permission) -> bool {
     requirements(permission).is_some()
 }
 
-/// 各资格沿原规则独立取证，可以来自不同启用角色。
+// 检查目标接收资格时分别按原规则取证，各独立资格可由不同的启用角色满足。
 pub(super) fn qualified(permission: &Permission, qualified: &QualifiedPermissions) -> bool {
     requirements(permission)
         .is_some_and(|required| required.iter().all(|entry| qualified.same_role(std::slice::from_ref(entry))))

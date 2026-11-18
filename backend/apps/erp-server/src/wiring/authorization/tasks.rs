@@ -71,7 +71,7 @@ impl AccessFactsPort for TaskFacts {
 }
 
 impl TaskFacts {
-    /// 从持久化任务和真实业务外键补齐来源，不读取任何账号授权结论。
+    // 解析工作项执行授权依赖时从持久化任务及真实外键补齐来源事实，不读取或缓存任何账号的授权结论。
     async fn execution_sources(
         &self,
         context: &AccessContext,
@@ -123,7 +123,7 @@ impl TaskFacts {
         Ok(())
     }
 
-    /// 审批任务沿实际执行定位唯一实例，不以业务展示根代替审批身份。
+    // 由审批任务实际关联的执行记录定位唯一实例；展示用业务根不能代替审批身份。
     async fn approval_source(
         &self,
         context: &AccessContext,
@@ -144,7 +144,7 @@ impl TaskFacts {
         self.approval_instance_facts(context, object, execution.process_instance_id.as_ref(), executor).await
     }
 
-    /// 详情只需实例来源；办理与接收者还需继续补齐原业务来源。
+    // 工作项详情只需审批实例来源；解析办理人或收件人资格时继续加载关联的原业务事实。
     async fn approval_instance_facts(
         &self,
         context: &AccessContext,
@@ -159,7 +159,7 @@ impl TaskFacts {
         Ok(context.permission == work_item::DETAIL)
     }
 
-    /// 用原执行器读取真实来源的完整事实，保留精确引用供 identity 校验完整性。
+    // 在调用者执行器上读取任务的真实来源及精确引用，交给身份授权层校验来源完整性。
     async fn related(
         &self,
         context: &AccessContext,
@@ -179,7 +179,7 @@ impl TaskFacts {
     }
 }
 
-/// 来源必须来自实际业务对象，不能使用展示根节点或任务业务主键替代。
+// 从真实业务对象解析订单来源；展示根节点和任务业务主键都不能作为订单授权事实。
 fn order_source(kind: ObjectKind, fact: Option<&ObjectFact>) -> Result<OrderTaskSource> {
     fact.and_then(|fact| fact.order_scope_source.as_ref())
         .filter(|source| source.matches_kind(kind))
@@ -187,7 +187,7 @@ fn order_source(kind: ObjectKind, fact: Option<&ObjectFact>) -> Result<OrderTask
         .ok_or_else(|| Error::NotFound("订单任务缺少权威业务来源".into()))
 }
 
-/// 跨边界读取保留冲突、基础设施和授权错误的原始分类。
+// 把任务事实读取错误传回身份边界，区分冲突、基础设施故障与明确的授权拒绝。
 fn read_error(error: ReadError) -> Error {
     match error {
         ReadError::Internal(value) => Error::Internal(value),

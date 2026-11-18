@@ -15,14 +15,16 @@ use super::{
 };
 use crate::errors::{Error, Result};
 
-/// 在已授权提交的事务内捕获当前业务展示，不读取历史覆盖，也不授予任何权限。
+/// 生成审批展示快照视图时，在已授权提交的事务内捕获当前业务展示，不读取历史覆盖，也不授予任何权限。
 ///
 /// # 参数
 /// * `db` - 当前数据库
 /// * `document_type` / `id` - 由正式提交用例确定的业务对象
 /// * `executor` - 必须使用审批启动事务的执行器
+///
 /// # 返回
 /// 返回与责任队列采用同一定义的不可变展示。
+///
 /// # 错误
 /// 业务对象或展示缺失、字段越界、仓储读取失败时中止提交。
 pub async fn capture_approval_display(
@@ -50,18 +52,15 @@ pub async fn capture_approval_display(
 }
 
 impl WorkbenchFactsReader<'_> {
-    /// 批量加载不可变展示；只覆盖已存在业务事实的同类型、同版本摘要，不改变授权事实。
-    ///
-    /// # 参数
-    /// * `keys` - 本批任务引用的对象键
-    /// * `facts` - 已有对象事实表
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 无返回值。已把查到的审批展示快照套到对应事实的展示上。
-    ///
-    /// # 错误
-    /// 审批主体快照批量查询失败时返回对应错误。
+    // 读取审批展示快照时，批量加载不可变展示；只覆盖已存在业务事实的同类型、同版本摘要，不改变授权事实。
+    //
+    // 调用参数：
+    // * `keys` - 本批任务引用的对象键
+    // * `facts` - 已有对象事实表
+    //
+    // 已把查到的审批展示快照套到对应事实的展示上。
+    //
+    // 审批主体快照批量查询失败时返回对应错误。
     pub(super) async fn load_approval_displays(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -86,15 +85,15 @@ impl WorkbenchFactsReader<'_> {
     }
 }
 
-/// 以注册对象类型与业务身份精确关联；历史快照缺失保持原缺失规则。
-///
-/// # 参数
-/// * `facts` - 已加载且已授权的业务对象事实。
-/// * `snapshot` - 当前对象某次提交的不可变审批快照。
-/// # 返回
-/// 只覆盖快照所属版本的展示，不改变授权事实。
-/// # 错误
-/// 不返回错误；无对象或无有效展示时保留原缺失规则。
+// 组装审批展示快照时，以注册对象类型与业务身份精确关联；历史快照缺失保持原缺失规则。
+//
+// 调用参数：
+// * `facts` - 已加载且已授权的业务对象事实。
+// * `snapshot` - 当前对象某次提交的不可变审批快照。
+//
+// 只覆盖快照所属版本的展示，不改变授权事实。
+//
+// 无对象或无有效展示时保留原缺失规则。
 pub(super) fn apply_snapshot(facts: &mut WorkbenchObjectFactMap, snapshot: ApprovalSubjectSnapshot) {
     let Some(policy) = object_policy(WorkItemType::DocumentApproval, snapshot.document_type.as_str()) else {
         return;
@@ -142,7 +141,7 @@ pub(super) fn apply_snapshot(facts: &mut WorkbenchObjectFactMap, snapshot: Appro
     );
 }
 
-/// 旧快照只展示实际保存的金额、数量与提交时间；不得从当前单据补历史字段。
+// 组装审批展示快照时，旧快照只展示实际保存的金额、数量与提交时间；不得从当前单据补历史字段。
 fn apply_legacy(fact: &mut super::WorkbenchObjectFact, snapshot: &ApprovalSubjectSnapshot) {
     use super::brief::{ObjectBriefSource, format_instant_datetime, format_quantity, push_section};
     if super::approval_list::document_summary(fact, Some(snapshot.subject_version)).is_some() {
@@ -200,7 +199,7 @@ mod tests {
     use super::super::brief::{BriefSection, ObjectBriefSource};
     use super::*;
 
-    /// 六类原本可被草稿覆盖的单据，都必须优先读取对应版本的冻结字段。
+    // 验证审批展示快照：六类原本可被草稿覆盖的单据，都必须优先读取对应版本的冻结字段。
     #[test]
     fn snapshots_preserve_history_across_all_mutable_document_types() {
         for kind in [
@@ -279,7 +278,7 @@ mod tests {
         assert_eq!(summary.list_summary, "旧供应商摘要");
     }
 
-    /// 快照没有授权对象时不得制造可读事实。
+    // 验证审批展示快照：快照没有授权对象时不得制造可读事实。
     #[test]
     fn snapshot_does_not_create_authority() {
         let mut facts = WorkbenchObjectFactMap::new();

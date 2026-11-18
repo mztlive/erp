@@ -19,12 +19,11 @@ pub struct BuiltinRoleTemplate {
 
 impl BuiltinRoleTemplate {
     /// 根据共享岗位权限构造模板；财务整账资格随显式生成一同提供。
-    /// # 参数
-    /// 稳定岗位身份、名称、职责及共享权限。
-    /// # 返回
     /// 去重后的普通岗位模板。
-    /// # 错误
+    ///
     /// 任一权限标识非法时拒绝。
+    ///
+    /// 稳定岗位身份、名称、职责及共享权限。
     pub fn new(id: &str, name: &str, description: &str, raw: &[&str]) -> Result<Self> {
         let mut permissions =
             raw.iter().map(Permission::parse).collect::<std::result::Result<Vec<_>, _>>()?;
@@ -49,7 +48,7 @@ impl BuiltinRoleTemplate {
         })
     }
 
-    /// 管理层只读，技术管理员不从技术岗位自动取得业务审批及流程配置资格。
+    // 生成内建模板时按岗位保留权限；管理层只读，技术岗位不自动获得业务审批和流程配置权限。
     fn retain_position_permissions(id: &str, permissions: &mut Vec<Permission>) {
         match id {
             "role-management" => permissions.retain(|permission| {
@@ -63,7 +62,7 @@ impl BuiltinRoleTemplate {
         }
     }
 
-    /// 岗位上岗前必须明确的人员范围与任务配置，不在角色生成时写人员数据。
+    // 为岗位模板预览列出上岗前需配置的范围和任务；生成角色不替管理员修改人员配置。
     fn setup_requirements(id: &str) -> &'static [&'static str] {
         match id {
             "role-sales" => &[
@@ -103,12 +102,11 @@ impl BuiltinRoleTemplate {
     }
 
     /// 从综合财务模板派生审批、资金、发票三个互相独立的岗位。
-    /// # 参数
-    /// `kind` 为明确的财务岗位。
-    /// # 返回
     /// 保留共同读取与附件能力、只开放岗位写操作的模板。
-    /// # 错误
+    ///
     /// 来源不是综合财务或静态权限错误时拒绝。
+    ///
+    /// `kind` 为明确的财务岗位。
     pub fn finance(&self, kind: FinancePosition) -> Result<Self> {
         if self.id != "role-finance" {
             return Err(Error::ValidationError("财务岗位必须从综合财务模板派生".into()));
@@ -144,7 +142,7 @@ impl BuiltinRoleTemplate {
         })
     }
 
-    /// 财务资源真实读取动作；冲正及供应商退款没有独立列表入口。
+    // 登记财务岗位在各资源上的实际读入口；冲正和供应商退款不增加独立列表权限。
     fn read_actions(resource: &str) -> &'static [&'static str] {
         match resource {
             "purchase_invoice_allocation" | "supplier_settlement_difference" => &["list"],
@@ -153,7 +151,7 @@ impl BuiltinRoleTemplate {
         }
     }
 
-    /// 附件、本人后台任务及单据上下文能力供财务各岗位共同使用。
+    // 为财务岗位模板复用附件、本人后台任务及单据上下文的公共操作资格。
     fn shared_operation(permission: &Permission) -> bool {
         if permission.resource() == "approval_instance" && permission.action() == "cancel" {
             return true;
@@ -165,12 +163,11 @@ impl BuiltinRoleTemplate {
     }
 
     /// 解析一批模板选择，拒绝空集、重复和未知身份，保持用户选择顺序。
-    /// # 参数
-    /// 服务端目录与客户端选择的模板标识。
-    /// # 返回
     /// 仅包含服务端定义的模板。
-    /// # 错误
+    ///
     /// 不合法选择整批拒绝。
+    ///
+    /// 服务端目录与客户端选择的模板标识。
     pub fn select(catalog: &[Self], ids: &[String]) -> Result<Vec<Self>> {
         if ids.is_empty() {
             return Err(Error::ValidationError("请选择有效的内建岗位".into()));
@@ -202,13 +199,13 @@ pub enum FinancePosition {
 }
 
 impl FinancePosition {
-    /// 付款申请分别授予财务关闭和出纳付款，三个岗位共同保留读取。
+    // 在付款申请权限分配中，三个财务岗位都保留读取；关闭归财务、付款归出纳。
     fn allows_payment_request(self, action: &str) -> bool {
         matches!(action, "list" | "detail")
             || matches!((self, action), (Self::Director, "close") | (Self::Cashier, "pay"))
     }
 
-    /// 返回岗位固定身份、职责和必须由管理员配置的责任。
+    // 输出财务岗位模板的固定身份与职责说明，以及上岗前须由管理员配置的责任。
     fn metadata(self) -> (&'static str, &'static str, &'static str, &'static [&'static str]) {
         match self {
             Self::Director => (
@@ -235,7 +232,7 @@ impl FinancePosition {
         }
     }
 
-    /// 判定本岗位拥有写操作的业务，其他财务业务保留读取。
+    // 生成财务角色模板时判断当前岗位能写哪类业务，其他财务业务保持只读。
     fn allows_write(self, resource: &str) -> bool {
         match self {
             Self::Director => matches!(
@@ -276,12 +273,10 @@ pub enum BuiltinRoleState {
 
 impl BuiltinRoleState {
     /// 将包含软删除记录的角色读取结果映射为生成状态。
-    /// # 参数
-    /// * `role` - 按固定模板身份读取的角色；没有记录时为 `None`。
-    /// # 返回
+    ///
     /// 没有记录为 `Missing`，已软删除为 `Deleted`，已停用为 `Disabled`，其余为 `Existing`。只有 `Missing` 允许新建。
-    /// # 错误
-    /// 不返回错误。
+    ///
+    /// `role`：按固定模板身份读取的角色；没有记录时为 `None`。
     pub fn from_role(role: Option<&Role>) -> Self {
         match role {
             None => Self::Missing,
@@ -296,7 +291,7 @@ impl BuiltinRoleState {
 mod tests {
     use super::*;
 
-    /// 超过目录数量的选择按具体重复或未知身份拒绝。
+    // 验证：超过目录数量的选择按具体重复或未知身份拒绝。
     #[test]
     fn oversized_selection_reports_duplicate_or_unknown_template() {
         let catalog = [BuiltinRoleTemplate::new("role-sales", "销售", "销售岗位", &[]).unwrap()];

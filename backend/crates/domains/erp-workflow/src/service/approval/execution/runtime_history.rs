@@ -37,18 +37,7 @@ pub struct RuntimeHistoryItem {
 /// 构造执行历史项。
 impl RuntimeHistoryItem {
     /// 以必填执行身份构造历史项；决定维度默认为空。
-    ///
-    /// # 参数
-    /// * `execution_id` - 执行主键
-    /// * `node_key` - 节点键
-    /// * `node_name` - 节点名称
-    /// * `result` - 执行结果
-    ///
-    /// # 返回
     /// 返回首轮的历史项。
-    ///
-    /// # 错误
-    /// 无。
     pub fn new(execution_id: String, node_key: String, node_name: String, result: String) -> Self {
         Self {
             execution_id,
@@ -83,13 +72,10 @@ pub struct RuntimeHistoryPage {
 }
 
 impl RuntimeHistoryPage {
-    /// 仅向发起人提供本页已展示的最新进展版本。
-    /// # 参数
-    /// 实例快照、登录账号、历史游标与排序方向。
-    /// # 返回
-    /// 无；旧记录页和非发起人不获得确认版本。
-    /// # 错误
-    /// 无。
+    // 仅向发起人提供本页已展示的最新进展版本。
+    // 无；旧记录页和非发起人不获得确认版本。
+    //
+    // 实例快照、登录账号、历史游标与排序方向。
     pub(crate) fn observe_progress(
         &mut self,
         instance: &ApprovalProcessInstance,
@@ -107,18 +93,11 @@ impl RuntimeHistoryPage {
 }
 
 /// 将节点执行映射为历史项。不得按 `node_key` 去重。
+/// `result` 取执行状态，`ACTIVE` 表示当前办理中，不得丢弃未结束执行。
 ///
-/// # 参数
-/// * `execution` - 已持久化的节点执行
-///
-/// # 返回
 /// 返回审批 Tab 可分组渲染的历史项。
 ///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// `result` 取执行状态，`ACTIVE` 表示当前办理中，不得丢弃未结束执行。
+/// `execution`：已持久化的节点执行。
 pub fn history_item_from_execution(execution: &ApprovalNodeExecution) -> RuntimeHistoryItem {
     RuntimeHistoryItem {
         execution_id: execution.base.id.clone(),
@@ -135,16 +114,9 @@ pub fn history_item_from_execution(execution: &ApprovalNodeExecution) -> Runtime
 }
 
 /// 用多取一条的结果切出当前页并生成游标。
-///
-/// # 参数
-/// * `items` - 已按请求方向排序、长度不超过 `limit + 1` 的映射结果
-/// * `limit` - 合同页大小
-///
-/// # 返回
 /// 返回截断后的当前页；超出 `limit` 时带上下一页游标。
 ///
-/// # 错误
-/// 无。
+/// `items`：已按请求方向排序、长度不超过 `limit + 1` 的映射结果；`limit`：合同页大小。
 pub fn history_page_from(mut items: Vec<RuntimeHistoryItem>, limit: u32) -> RuntimeHistoryPage {
     let has_more = items.len() > limit as usize;
     if has_more {
@@ -155,15 +127,9 @@ pub fn history_page_from(mut items: Vec<RuntimeHistoryItem>, limit: u32) -> Runt
 }
 
 /// 从已排序历史中取最近一次驳回原因。
-///
-/// # 参数
-/// * `items` - 按 `execution_no` 升序的历史项
-///
-/// # 返回
 /// 最后一条 `REJECTED` 的决定原因；没有驳回，或该条没有决定原因时返回 `None`。
 ///
-/// # 错误
-/// 无。
+/// `items`：按 `execution_no` 升序的历史项。
 pub fn latest_rejection_reason(items: &[RuntimeHistoryItem]) -> Option<String> {
     items
         .iter()
@@ -172,16 +138,10 @@ pub fn latest_rejection_reason(items: &[RuntimeHistoryItem]) -> Option<String> {
         .and_then(|item| item.decision_reason.clone())
 }
 
-/// 去掉空白显示名，空快照不得上屏。
-///
-/// # 参数
-/// * `value` - 原始显示名
-///
-/// # 返回
-/// 非空文本；空白返回 `None`。
-///
-/// # 错误
-/// 无。
+// 去掉空白显示名，空快照不得上屏。
+// 非空文本；空白返回 `None`。
+//
+// `value`：原始显示名。
 fn optional_text(value: &str) -> Option<String> {
     let text = value.trim();
     if text.is_empty() { None } else { Some(text.to_string()) }
@@ -261,7 +221,7 @@ mod tests {
         }
     }
 
-    /// 活动执行必须出现在历史中，结果为 `ACTIVE`。
+    // 验证：活动执行必须出现在历史中，结果为 `ACTIVE`。
     #[test]
     fn maps_active_execution_as_history_item() {
         let item = history_item_from_execution(&active_execution());
@@ -273,7 +233,7 @@ mod tests {
         assert_eq!(item.assignee_name.as_deref(), Some("李思勇"));
     }
 
-    /// 驳回执行写入结果、原因与决定人。
+    // 验证：驳回执行写入结果、原因与决定人。
     #[test]
     fn maps_rejected_execution_decision_fields() {
         let mut execution = active_execution();
@@ -291,7 +251,7 @@ mod tests {
         assert_eq!(item.decided_at, Some(20));
     }
 
-    /// 多取一条用于判断是否还有后续页。
+    // 验证：多取一条用于判断是否还有后续页。
     #[test]
     fn history_page_truncates_and_sets_cursor() {
         let items = vec![
@@ -306,7 +266,7 @@ mod tests {
         assert_eq!(latest_rejection_reason(&page.items).as_deref(), Some("价格过高"));
     }
 
-    /// 恰好一页时不得伪造 has_more。
+    // 验证：恰好一页时不得伪造 has_more。
     #[test]
     fn history_page_without_overflow_has_no_cursor() {
         let page = history_page_from(vec![history_item(1, "ACTIVE", None)], 8);

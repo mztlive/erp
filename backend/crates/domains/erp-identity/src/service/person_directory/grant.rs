@@ -12,21 +12,12 @@ use crate::{AccessControlExt, Error, Result, RoleId};
 
 /// 为本次角色分配中新出现的目录来源角色补记查询资格。
 ///
-/// # 参数
-/// * `db` - 身份数据库
-/// * `account_id` - 被分配角色的账号
-/// * `role_ids` - 分配后的完整角色集合
-/// * `executor` - 调用方事务执行器
-///
-/// # 返回
-/// 需要补记的资格写入完成后无返回值。
-///
-/// # 错误
-/// 资格写入失败时返回错误，以便与角色分配一起回滚。
-///
-/// # 关键业务约束
 /// 只在集合中出现 `role-sales` 或 `role-procurement` 时插入缺失记录。
 /// 集合里没有这些角色时不做任何删除。
+///
+/// 资格写入失败时返回错误，以便与角色分配一起回滚。
+///
+/// `role_ids`：分配后的完整角色集合；`executor`：调用方事务执行器。
 pub async fn grant_assigned_roles(
     db: &Database,
     account_id: &str,
@@ -43,21 +34,9 @@ pub async fn grant_assigned_roles(
 }
 
 /// 在没有资格记录时插入一条有效资格。
-///
-/// # 参数
-/// * `db` - 身份数据库
-/// * `account_id` - 账号 ID
-/// * `category` - 查询类别
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 已有记录或本次插入完成后无返回值。
-///
-/// # 错误
-/// 非唯一冲突的写入失败时返回错误。
-///
-/// # 关键业务约束
 /// 已终止记录保持终止。并发插入冲突视为另一事务已经写过，不再覆盖。
+///
+/// 非唯一冲突的写入失败时返回错误。
 pub async fn ensure_grant(
     db: &Database,
     account_id: &str,

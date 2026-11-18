@@ -25,16 +25,7 @@ pub enum PayableSourceType {
 }
 
 impl PayableSourceType {
-    /// 返回类型的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为界面或响应展示提供应付来源类型的中文名称；机器筛选和存储不使用该名称。
     pub fn label(&self) -> &'static str {
         match self {
             Self::PurchaseOrder => "采购单",
@@ -42,16 +33,7 @@ impl PayableSourceType {
         }
     }
 
-    /// 返回类型的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将应付来源类型转成用于持久化和查询的稳定代码，与中文展示文案分开。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::PurchaseOrder => "purchase_order",
@@ -76,16 +58,7 @@ pub enum PayableAccountStatus {
 }
 
 impl PayableAccountStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为界面或响应展示提供应付子账结清状态的中文名称；机器筛选和存储不使用该名称。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Open => "未结",
@@ -94,16 +67,7 @@ impl PayableAccountStatus {
         }
     }
 
-    /// 返回状态的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将应付子账结清状态转成用于持久化和查询的稳定代码，与中文展示文案分开。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Open => "open",
@@ -140,17 +104,13 @@ pub(crate) struct PurchaseChangePayableDelta {
 }
 
 impl PurchaseChangePayableDelta {
-    /// 按冻结基准与目标含税金额计算差额。
-    ///
-    /// # 参数
-    /// * `base_gross` - 冻结基准版本金额
-    /// * `new_gross` - 本次目标版本金额
-    ///
-    /// # 返回
-    /// 零差额返回 `None`，其余返回方向及差额绝对金额。
-    ///
-    /// # 错误
-    /// 任一版本金额为负或差额无法表示时返回错误。
+    // 按冻结基准与目标含税金额计算差额。
+    // 结果：零差额返回 `None`，其余返回方向及差额绝对金额。
+    // 任一版本金额为负或差额无法表示时返回错误。
+    //
+    // 输入约定：
+    // - `base_gross`：冻结基准版本金额
+    // - `new_gross`：本次目标版本金额
     pub(crate) fn between(base_gross: Amount, new_gross: Amount) -> Result<Option<Self>> {
         if base_gross.to_decimal().is_sign_negative() || new_gross.to_decimal().is_sign_negative() {
             return Err(Error::from("采购版本含税金额不得为负"));
@@ -205,7 +165,7 @@ pub struct PayableAccount {
 }
 
 impl PartialEq for PayableAccount {
-    /// 全字段语义相等。
+    // 比较两份应付子账是否完全一致，业务字段和持久化元数据都参与比较。
     fn eq(&self, other: &Self) -> bool {
         self.base == other.base
             && self.stable.status == other.stable.status
@@ -231,21 +191,16 @@ impl PartialEq for PayableAccount {
 impl Eq for PayableAccount {}
 
 impl PayableAccount {
-    /// 创建应付往来子账。
+    /// 确认采购或结算应付时建立往来子账，按金额派生可核销及可收票额度。
     ///
     /// 完成来源单据 ID 的 trim/非空/长度校验、金额非负与上限校验，并派生
     /// `open_total`、`open_invoiceable_total` 与 `status`。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::PayableAccountId`）
-    /// * `data` - 创建数据
-    /// * `created_by` - 创建人（账号或系统身份）
-    ///
-    /// # 返回
     /// 返回新建的子账实体。
-    ///
-    /// # 错误
     /// 当来源单据 ID 为空/超长或金额为负/已核销/已收票超过对应总额时返回错误。
+    ///
+    /// 输入约定：
+    /// - `id`：实体主键（`erp_core::ids::PayableAccountId`）
+    /// - `created_by`：创建人（账号或系统身份）
     pub fn new(
         id: PayableAccountId,
         data: PayableAccountData,
@@ -288,17 +243,11 @@ impl PayableAccount {
     ///
     /// 由付款/进项票分配过账事务在锁定子账后调用，重算 `open_total`、
     /// `open_invoiceable_total` 并派生 `status`（数据模型 §6.9「事务内同步汇总」）。
-    ///
-    /// # 参数
-    /// * `settled_total` - 重算后的已核销含税总额
-    /// * `invoiced_total` - 重算后的净已收票含税总额
-    /// * `updated_by` - 本次更新执行人
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 当金额为负或已核销/已收票超过对应总额时返回错误。
+    ///
+    /// 输入约定：
+    /// - `settled_total`：重算后的已核销含税总额
+    /// - `invoiced_total`：重算后的净已收票含税总额
     pub fn sync_totals(
         &mut self,
         settled_total: Amount,
@@ -317,29 +266,7 @@ impl PayableAccount {
         Ok(())
     }
 
-    /// 将采购变更目标金额应用到既有应付子账，保留已核销及已收票事实。
-    ///
-    /// # 参数
-    /// * `purchase_order_id` - 原采购单身份
-    /// * `supplier_id` - 冻结采购供应商身份
-    /// * `base_gross` - 本次冻结基准含税金额
-    /// * `new_gross` - 本次冻结目标含税金额
-    ///
-    /// # 返回
-    /// 成功时同步应付及可收票总额、开放余额和状态，其他身份字段保持原值。
-    ///
-    /// # 错误
-    /// 来源或供应商不一致、基准金额漂移，或目标金额低于已核销/已收票时拒绝。
-    /// 采购改单提交前预检改后含税总额不低于已付款和已收票金额。
-    ///
-    /// # 参数
-    /// * `new_gross` - 改后含税总额
-    ///
-    /// # 返回
-    /// 改后金额覆盖已付款与已收票时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 低于已付款或已收票金额时返回领域错误，文案指明下一步。
+    /// 采购改单提交前检查改后含税总额能否覆盖已核销付款与已收票金额。低于已付款时须先退款；低于已收票时须先办理进项红票。该检查不修改子账。
     pub fn ensure_purchase_change_amount(&self, new_gross: Amount) -> Result<()> {
         if new_gross < self.settled_total {
             return Err(Error::from(format!(
@@ -385,34 +312,21 @@ impl PayableAccount {
         Ok(())
     }
 
-    /// 判断子账是否已结清。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 开放余额为零时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 判断应付子账是否已结清，仅开放余额为零时成立。
     pub fn is_settled(&self) -> bool {
         self.stable.status() == PayableAccountStatus::Settled
     }
 }
 
-/// 校验子账汇总四金额并派生开放余额。
-///
-/// # 参数
-/// * `gross_total` - 含税总额
-/// * `settled_total` - 已核销总额
-/// * `invoiceable_total` - 可收票总额
-/// * `invoiced_total` - 净已收票总额
-///
-/// # 返回
-/// 返回 `(open_total, open_invoiceable_total)`，均不得为负。
-///
-/// # 错误
-/// 金额为负或已核销/已收票超过对应总额时返回错误。
+// 校验子账汇总四金额并派生开放余额。
+// 返回 `(open_total, open_invoiceable_total)`，均不得为负。
+// 金额为负或已核销/已收票超过对应总额时返回错误。
+//
+// 输入约定：
+// - `gross_total`：含税总额
+// - `settled_total`：已核销总额
+// - `invoiceable_total`：可收票总额
+// - `invoiced_total`：净已收票总额
 fn validate_totals(
     gross_total: Amount,
     settled_total: Amount,
@@ -435,14 +349,7 @@ fn validate_totals(
     Ok((gross_total.checked_sub(settled_total), invoiceable_total.checked_sub(invoiced_total)))
 }
 
-/// 由开放余额派生子账状态。
-///
-/// # 参数
-/// * `open_total` - 开放余额
-/// * `settled_total` - 已核销总额
-///
-/// # 返回
-/// 开放余额为零时为已结清，已核销为零时为未结，其余为部分结清。
+// 在构造或更新应付子账时由金额派生结清状态：开放余额为零视为已结清；否则，已核销为零视为未结，其余为部分结清。
 fn derive_status(open_total: Amount, settled_total: Amount) -> PayableAccountStatus {
     if open_total.to_decimal().is_zero() {
         PayableAccountStatus::Settled
@@ -499,7 +406,7 @@ mod tests {
         assert!(PayableAccount::new(PayableAccountId::new("pa-5"), negative, "admin").is_err());
     }
 
-    /// 改后金额不得低于已付款和已收票金额，等于时允许。
+    // 回归检查：改后金额不得低于已付款和已收票金额，等于时允许。
     #[test]
     fn purchase_change_amount_must_cover_paid_and_invoiced() {
         let account = PayableAccount::new(
@@ -548,7 +455,7 @@ mod tests {
         );
     }
 
-    /// 所有采购变更校验失败必须发生在账户字段修改之前。
+    // 回归检查：所有采购变更校验失败必须发生在账户字段修改之前。
     #[test]
     fn purchase_change_guard_failures_leave_original_account_unchanged() {
         let original = PayableAccount::new(

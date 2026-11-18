@@ -11,11 +11,8 @@ use crate::http::state::HttpState;
 use crate::wiring::sales_timeline_service;
 
 /// 读取销售单及关联单据的已授权时间线。
-/// # 参数
 /// `state`、`actor` 为应用与身份；`id`、`query` 为销售单及分页。
-/// # 返回
 /// 返回业务动态与下一页游标。
-/// # 错误
 /// 不可见、参数无效或底层故障时返回统一错误。
 pub async fn sales_timeline(
     State(state): State<HttpState>,

@@ -23,20 +23,16 @@ impl SalesSelectionService {
     ///
     /// 创建成功后册进入准备中；准备失败恢复仍回草稿。独立准备接口只用于重生成与重新准备。
     /// 调用方须先在同一执行器核验创建候选；本步骤只复用已授权的创建人和责任事实。
-    ///
-    /// # 参数
-    /// * `req` - 创建请求
-    /// * `creator` - 已认证创建人及其有效主属组织
-    /// * `password_hash` - 事务外生成的慢哈希
-    /// * `fingerprint` - 组合层对完整原请求生成的带密钥指纹
-    /// * `customer_port` - 客户事实
-    /// * `executor` - 执行器；多集合写入须在事务中
-    ///
-    /// # 返回
     /// 返回已排队的准备中详情。
-    ///
-    /// # 错误
     /// 缺客户、形态、提交方式、幂等冲突、客户停用或无法排队准备时拒绝。
+    ///
+    /// 输入约定：
+    /// - `req`：创建请求
+    /// - `creator`：已认证创建人及其有效主属组织
+    /// - `password_hash`：事务外生成的慢哈希
+    /// - `fingerprint`：组合层对完整原请求生成的带密钥指纹
+    /// - `customer_port`：客户事实
+    /// - `executor`：执行器；多集合写入须在事务中
     pub async fn create(
         &self,
         req: CreateSalesSelectionBookletRequest,
@@ -92,20 +88,15 @@ impl SalesSelectionService {
         Ok(view)
     }
 
-    /// 读取同键幂等结果。
-    ///
-    /// # 参数
-    /// * `operation` - 操作
-    /// * `scope_id` - 作用域
-    /// * `key` - 幂等键
-    /// * `hash` - 请求哈希
-    /// * `executor` - 执行器
-    ///
-    /// # 返回
-    /// 同键同请求返回 `Ok(Some(原结果))`；无同键记录时返回 `Ok(None)`。
-    ///
-    /// # 错误
-    /// 同键不同请求拒绝。
+    // 读取同键幂等结果。
+    // 结果：同键同请求返回 `Ok(Some(原结果))`；无同键记录时返回 `Ok(None)`。
+    // 同键不同请求拒绝。
+    //
+    // 输入约定：
+    // - `operation`：操作
+    // - `scope_id`：作用域
+    // - `key`：幂等键
+    // - `hash`：请求哈希
     pub(super) async fn replay_idempotency<T: serde::de::DeserializeOwned>(
         &self,
         operation: IdempotencyOperation,
@@ -141,17 +132,12 @@ impl SalesSelectionService {
         Ok(Some(value))
     }
 
-    /// 写入幂等记录。
-    ///
-    /// # 参数
-    /// * `input` - 幂等写入上下文
-    /// * `executor` - 执行器
-    ///
-    /// # 返回
-    /// 成功写入。
-    ///
-    /// # 错误
-    /// 序列化或写入失败。
+    // 写入幂等记录。
+    // 结果：成功写入。
+    // 序列化或写入失败。
+    //
+    // 输入约定：
+    // - `input`：幂等写入上下文
     pub(super) async fn store_idempotency<T: serde::Serialize>(
         &self,
         input: IdempotencyStoreInput<'_, T>,
@@ -162,16 +148,12 @@ impl SalesSelectionService {
         Ok(())
     }
 
-    /// 构造幂等记录（纯函数，事务内复用，不借用服务）。
-    ///
-    /// # 参数
-    /// * `input` - 幂等写入上下文
-    ///
-    /// # 返回
-    /// 返回待写入记录。
-    ///
-    /// # 错误
-    /// 序列化失败。
+    // 构造幂等记录（纯函数，事务内复用，不借用服务）。
+    // 返回待写入记录。
+    // 序列化失败。
+    //
+    // 输入约定：
+    // - `input`：幂等写入上下文
     pub(super) fn idempotency_record<T: serde::Serialize>(
         input: IdempotencyStoreInput<'_, T>,
     ) -> Result<SalesSelectionIdempotency> {
@@ -191,17 +173,12 @@ impl SalesSelectionService {
         ))
     }
 
-    /// 读取选品册，不存在则失败。
-    ///
-    /// # 参数
-    /// * `id` - 册身份
-    /// * `executor` - 执行器
-    ///
-    /// # 返回
-    /// 返回选品册。
-    ///
-    /// # 错误
-    /// 不存在。
+    // 读取选品册，不存在则失败。
+    // 返回选品册。
+    // 失败条件：不存在。
+    //
+    // 输入约定：
+    // - `id`：册身份
     pub(super) async fn load_booklet(
         &self,
         id: &str,

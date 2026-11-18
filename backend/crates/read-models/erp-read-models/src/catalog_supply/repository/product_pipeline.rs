@@ -8,32 +8,24 @@ use persistence_core::{Pagination, QueryFilter};
 
 use super::shared::{PRODUCT_REVISIONS, SKU_REVISIONS, SKUS, SUPPLIER_OFFERINGS, sort_doc};
 
-/// 构造商品列表的当前修订与 SKU 聚合管道。
-///
-/// # 参数
-/// * `filter` - 商品、当前修订与 SKU 聚合筛选。
-///
-/// # 返回
-/// 返回分页前完整筛选再加 facet 的管道。
-///
-/// # 错误
-/// 不返回错误。
+// 读取商品列表时先联查当前修订和 SKU 并应用完整筛选，再分支计算页面和总数。
+//
+// 调用参数：
+// * `filter` - 商品、当前修订与 SKU 聚合筛选。
+//
+// 返回分页前完整筛选再加 facet 的管道。
 pub(super) fn product_list_pipeline(filter: &ProductFilter) -> Vec<Document> {
     let mut pipeline = product_matching_pipeline(filter);
     pipeline.push(product_facet(filter));
     pipeline
 }
 
-/// 候选查询保留全部筛选，只投影身份；10001 为整体超限拒绝的探测条数。
-///
-/// # 参数
-/// * `filter` - 已规范化的商品筛选。
-///
-/// # 返回
-/// 返回按 `id` 升序并截断到 10001 条的身份投影管道。
-///
-/// # 错误
-/// 不返回错误。
+// 为采购负责人解析准备商品候选时沿用列表的完整匹配条件，只按稳定 ID 输出至多 10001 项供上层探测超限。
+//
+// 调用参数：
+// * `filter` - 已规范化的商品筛选。
+//
+// 返回按 `id` 升序并截断到 10001 条的身份投影管道。
 pub(super) fn product_candidate_pipeline(filter: &ProductFilter) -> Vec<Document> {
     let mut pipeline = product_candidate_matching_pipeline(filter);
     pipeline.extend([
@@ -44,7 +36,7 @@ pub(super) fn product_candidate_pipeline(filter: &ProductFilter) -> Vec<Document
     pipeline
 }
 
-/// 基础筛选仅查商品头，当前分类/品牌仅查修订；SKU 条件才需要完整聚合。
+// 读取采购责任候选时按实际筛选选择最小关联：基础条件只查商品头，分类或品牌查当前修订，需要 SKU 条件时使用完整管道。
 fn product_candidate_matching_pipeline(filter: &ProductFilter) -> Vec<Document> {
     if filter.keyword.is_some()
         || filter.listing_status.is_some()
@@ -68,7 +60,7 @@ fn product_candidate_matching_pipeline(filter: &ProductFilter) -> Vec<Document> 
     pipeline
 }
 
-/// 构造列表与采购责任候选共用的分页前完整筛选，避免口径漂移。
+// 在商品列表分页和采购负责人候选读取前复用同一套当前修订、SKU 及聚合筛选，确保两处命中范围一致。
 fn product_matching_pipeline(filter: &ProductFilter) -> Vec<Document> {
     let not_deleted = NOT_DELETED_TIMESTAMP_BSON;
     let mut pipeline = vec![
@@ -84,7 +76,7 @@ fn product_matching_pipeline(filter: &ProductFilter) -> Vec<Document> {
     pipeline
 }
 
-/// 从当前启用 SKU 集合派生数量、供给与销售价覆盖计数。
+// 组装商品列表时，从当前启用 SKU 集合派生数量、供给与销售价覆盖计数。
 fn product_sku_counts() -> Document {
     doc! {
         "$set": {
@@ -120,7 +112,7 @@ fn product_sku_counts() -> Document {
     }
 }
 
-/// 保持空 SKU、部分上架和全部上架的现有商品列表分类。
+// 调用此入口时，保持空 SKU、部分上架和全部上架的现有商品列表分类。
 fn product_listing_status() -> Document {
     doc! {
         "$set": {
@@ -148,7 +140,7 @@ fn product_listing_status() -> Document {
     }
 }
 
-/// 构造商品当前修订关联，列表只读取稳定商品指向的当前版本。
+// 组装商品列表的聚合管道时，生成商品当前修订关联，列表只读取稳定商品指向的当前版本。
 fn product_revision_lookup(not_deleted: i64) -> Document {
     doc! {
         "$lookup": {
@@ -165,7 +157,7 @@ fn product_revision_lookup(not_deleted: i64) -> Document {
     }
 }
 
-/// 构造当前启用 SKU、当前 SKU 修订与有效供给关系的批量关联。
+// 组装商品列表的聚合管道时，生成当前启用 SKU、当前 SKU 修订与有效供给关系的批量关联。
 fn product_sku_lookup(not_deleted: i64) -> Document {
     let stages = vec![
         doc! { "$match": {
@@ -186,7 +178,7 @@ fn product_sku_lookup(not_deleted: i64) -> Document {
     } }
 }
 
-/// 仅沿 SKU 当前指针关联修订，缺失时继续保留 SKU。
+// 组装商品列表的聚合管道时，仅沿 SKU 当前指针关联修订，缺失时继续保留 SKU。
 fn product_sku_revision_lookup(not_deleted: i64) -> Document {
     doc! { "$lookup": {
         "from": SKU_REVISIONS,
@@ -199,7 +191,7 @@ fn product_sku_revision_lookup(not_deleted: i64) -> Document {
     } }
 }
 
-/// 读取 SKU 当前有效供给的供应商身份，保持既有状态及当前指针条件。
+// 组装商品列表的聚合管道时，读取 SKU 当前有效供给的供应商身份，保持既有状态及当前指针条件。
 fn product_sku_offering_lookup(not_deleted: i64) -> Document {
     doc! { "$lookup": {
         "from": SUPPLIER_OFFERINGS,
@@ -214,7 +206,7 @@ fn product_sku_offering_lookup(not_deleted: i64) -> Document {
     } }
 }
 
-/// 投影原列表的 SKU 搜索字段和状态事实，不改变数量及价格口径。
+// 组装商品列表的聚合管道时，投影原列表的 SKU 搜索字段和状态事实，不改变数量及价格口径。
 fn product_sku_projection() -> Document {
     doc! { "$project": {
         "_id": 0,
@@ -229,7 +221,7 @@ fn product_sku_projection() -> Document {
     } }
 }
 
-/// 追加只依赖当前商品修订的分类与品牌筛选。
+// 组装商品列表查询条件时，追加只依赖当前商品修订的分类与品牌筛选。
 fn append_product_revision_filters(pipeline: &mut Vec<Document>, filter: &ProductFilter) {
     if let Some(category_id) = &filter.category_id {
         pipeline.push(doc! { "$match": { "product_revision.category_id": category_id } });
@@ -239,7 +231,7 @@ fn append_product_revision_filters(pipeline: &mut Vec<Document>, filter: &Produc
     }
 }
 
-/// 追加统一关键字与 SKU 聚合状态筛选。
+// 组装商品列表查询条件时，追加统一关键字与 SKU 聚合状态筛选。
 fn append_product_aggregate_filters(pipeline: &mut Vec<Document>, filter: &ProductFilter) {
     if let Some(keyword) = filter.keyword.as_deref() {
         let pattern = regex::escape(keyword);
@@ -267,7 +259,7 @@ fn append_product_aggregate_filters(pipeline: &mut Vec<Document>, filter: &Produ
     append_sales_price_filter(pipeline, filter.sales_price_min, filter.sales_price_max);
 }
 
-/// 追加销售价闭区间筛选；商品下至少一个当前启用 SKU 的销售价必须落入区间。
+// 组装商品列表查询条件时，追加销售价闭区间筛选；商品下至少一个当前启用 SKU 的销售价必须落入区间。
 fn append_sales_price_filter(pipeline: &mut Vec<Document>, minimum: Option<Amount>, maximum: Option<Amount>) {
     if minimum.is_none() && maximum.is_none() {
         return;
@@ -288,12 +280,12 @@ fn append_sales_price_filter(pipeline: &mut Vec<Document>, minimum: Option<Amoun
     });
 }
 
-/// 把查询金额转换为与库内价格一致的 BSON Decimal128。
+// 应用商品列表筛选时，把查询金额转换为与库内价格一致的 BSON Decimal128。
 fn amount_filter_bson(amount: Amount) -> Bson {
     Bson::Decimal128(amount.to_string().parse().expect("合法 Amount 必须可转换为 MongoDB Decimal128"))
 }
 
-/// 追加完整、部分或无覆盖筛选；空 SKU 集合只属于无覆盖。
+// 组装商品列表查询条件时，追加完整、部分或无覆盖筛选；空 SKU 集合只属于无覆盖。
 fn append_coverage_filter(
     pipeline: &mut Vec<Document>,
     count_field: &str,
@@ -319,7 +311,7 @@ fn append_coverage_filter(
     pipeline.push(doc! { "$match": { "$expr": expression } });
 }
 
-/// 构造商品列表分页、排序与投影 facet。
+// 生成商品列表分页、排序与投影 facet。
 fn product_facet(filter: &ProductFilter) -> Document {
     let item_stages = vec![
         doc! { "$sort": product_sort_doc(filter.sort_by.as_deref(), filter.sort_ascending) },
@@ -358,7 +350,7 @@ fn product_facet(filter: &ProductFilter) -> Document {
     }
 }
 
-/// 构建商品排序文档（白名单：`created_at`/`product_no`）。
+// 生成商品列表分页时，构建商品排序文档（白名单：`created_at`/`product_no`）。
 fn product_sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
     let field = match sort_by {
         Some("product_no") => "product_no",
@@ -367,7 +359,7 @@ fn product_sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
     sort_doc(field, sort_ascending)
 }
 
-/// 在分页和总数统计之前关联唯一来源，只收窄已经授权的商品集合。
+// 组装商品列表时，在分页和总数统计之前关联唯一来源，只收窄已经授权的商品集合。
 fn append_source_diff(pipeline: &mut Vec<Document>, filter: &ProductFilter) {
     use erp_catalog::source_sync::repository::ProductSourceExt;
     pipeline.push(doc!{"$lookup":{"from":<mongodb::Database as ProductSourceExt>::PRODUCT_SOURCES,"localField":"id","foreignField":"product_id","as":"source_sync"}});
@@ -391,7 +383,7 @@ mod tests {
     use super::*;
 
     #[test]
-    /// 候选和列表复用完整 q/SKU/金额条件，候选忽略深页并返回身份。
+    // 准备商品列表候选时，候选和列表复用完整 q/SKU/金额条件，候选忽略深页并返回身份。
     fn product_candidates_preserve_complete_filters_before_identity_limit() {
         let filter = ProductFilter {
             keyword: Some("礼盒.*".into()),
@@ -414,7 +406,7 @@ mod tests {
     }
 
     #[test]
-    /// 组织维护人等头表条件无需关联 SKU，当前分类品牌仅沿当前修订读取。
+    // 准备商品列表候选时，组织维护人等头表条件无需关联 SKU，当前分类品牌仅沿当前修订读取。
     fn product_candidates_avoid_unneeded_sku_facts_and_keep_empty_identity_filter() {
         let filter = ProductFilter {
             ids: Some(Vec::new()),
@@ -437,7 +429,7 @@ mod tests {
         assert_eq!(matching.last(), Some(&doc! { "$match": { "product_revision.brand_id": "brand" } }));
     }
 
-    /// 商品列表统一搜索必须覆盖商品与 SKU 字段，并在分页前应用聚合筛选。
+    // 验证商品列表：商品列表统一搜索必须覆盖商品与 SKU 字段，并在分页前应用聚合筛选。
     #[test]
     fn product_list_pipeline_applies_keyword_and_sku_coverage_filters() {
         let filter = ProductFilter {

@@ -7,13 +7,9 @@ use persistence_core::Executor;
 
 use crate::{Error, Result};
 
-/// 取得真实单据类型对应的公共固定提交权限。
-/// # 参数
-/// kind 为退款或冲正单据类型。
-/// # 返回
-/// 返回公共权限目录中的固定提交权限。
-/// # 错误
-/// 未登记的单据类型返回校验错误。
+// 取得真实单据类型对应的公共固定提交权限。
+//
+// kind 为退款或冲正单据类型。返回公共权限目录中的固定提交权限。未登记的单据类型返回校验错误。
 pub(in crate::reverse_flow) fn submit_permission(kind: DocumentType) -> Result<Permission> {
     match kind {
         DocumentType::CustomerRefund => Ok(returns::CUSTOMER_REFUND_CUSTOMER_REFUND_SUBMIT),
@@ -24,14 +20,11 @@ pub(in crate::reverse_flow) fn submit_permission(kind: DocumentType) -> Result<P
     }
 }
 
-/// 使用真实单据主键执行固定完整提交规则。
-/// # 参数
-/// authorization 为共享授权服务，actor 为当前账号，kind、id 为真实单据身份。
-/// executor 必须是调用方持有的原快照事务。
-/// # 返回
-/// 固定的提交资格、完整资金来源与原经办人条件均满足时成功。
-/// # 错误
-/// 非事务执行器、未知类型、缺少资格或越权时拒绝。
+// 使用真实单据主键执行固定完整提交规则。
+//
+// authorization 为共享授权服务，actor 为当前账号，kind、id 为真实单据身份。 executor 必须是调用方持有的原快照事务。
+//
+// 固定的提交资格、完整资金来源与原经办人条件均满足时成功。非事务执行器、未知类型、缺少资格或越权时拒绝。
 pub(super) async fn require_submission(
     authorization: &AuthorizationService,
     actor: &AuditActor,
@@ -51,7 +44,7 @@ mod tests {
 
     use super::*;
 
-    /// 四种真实提交入口必须由中央规则在身份或对象取证前拒绝普通读取执行器。
+    // 四种真实提交入口必须由中央规则在身份或对象取证前拒绝普通读取执行器。
     #[tokio::test]
     async fn submissions_require_snapshot_before_loading_identity_or_source() {
         let authorization = unavailable_authorization();

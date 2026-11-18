@@ -27,16 +27,9 @@ pub(super) struct CustomerAdapter {
 
 #[async_trait]
 impl SelectionCustomerPort for CustomerAdapter {
-    /// 读取客户编号与展示名称。
-    ///
-    /// # 参数
-    /// * `customer_id` - 客户身份
-    ///
-    /// # 返回
-    /// 返回客户事实。
-    ///
-    /// # 错误
-    /// 不存在。
+    // 读取客户编号与展示名称。
+    //
+    // `customer_id` 为客户身份。返回客户事实。不存在。
     async fn customer_fact(&self, customer_id: &str) -> SalesResult<SelectionCustomerFact> {
         let detail =
             self.service.load_customer_detail(customer_id, &mut ReadExecutor::default()).await.map_err(
@@ -64,17 +57,9 @@ pub(super) struct CatalogAdapter {
 
 #[async_trait]
 impl SelectionCatalogPort for CatalogAdapter {
-    /// 按筛选取出可售 SKU。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选
-    /// * `as_of` - 资格日期
-    ///
-    /// # 返回
-    /// 最多取 501 条以检测超限。
-    ///
-    /// # 错误
-    /// 仓储失败。
+    // 按筛选取出可售 SKU。
+    //
+    // `filter` 为筛选；`as_of` 为资格日期。最多取 501 条以检测超限。仓储失败。
     async fn collect_by_filter(
         &self,
         filter: &PoolFilterSnapshot,
@@ -113,17 +98,9 @@ impl SelectionCatalogPort for CatalogAdapter {
         Ok(page.items.into_iter().map(to_fact).collect())
     }
 
-    /// 按身份取出当前可售修订。
-    ///
-    /// # 参数
-    /// * `sku_ids` - 稳定身份
-    /// * `as_of` - 资格日期
-    ///
-    /// # 返回
-    /// 返回仍可售行。
-    ///
-    /// # 错误
-    /// 仓储失败。
+    // 按身份取出当前可售修订。
+    //
+    // `sku_ids` 为稳定身份；`as_of` 为资格日期。返回仍可售行。仓储失败。
     async fn collect_by_ids(
         &self,
         sku_ids: &[String],
@@ -137,18 +114,9 @@ impl SelectionCatalogPort for CatalogAdapter {
         Ok(rows.into_iter().map(to_fact).collect())
     }
 
-    /// 复核精确修订。
-    ///
-    /// # 参数
-    /// * `refs` - 引用
-    /// * `as_of` - 资格日期
-    /// * `executor` - 发布入口持有的原事务执行器
-    ///
-    /// # 返回
-    /// 返回仍合格引用。
-    ///
-    /// # 错误
-    /// 仓储失败。
+    // 复核精确修订。
+    //
+    // `refs` 为引用；`as_of` 为资格日期；`executor` 为发布入口持有的原事务执行器。返回仍合格引用。仓储失败。
     async fn qualified_refs(
         &self,
         refs: &[(String, String)],
@@ -168,18 +136,9 @@ pub(super) struct ImageAdapter {
 
 #[async_trait]
 impl SelectionImagePort for ImageAdapter {
-    /// 快照 SKU 主图。无法读取时按无图处理。
-    ///
-    /// # 参数
-    /// * `source_asset_id` - 原资产
-    /// * `booklet_id` - 选品册
-    /// * `batch_id` - 批次
-    ///
-    /// # 返回
-    /// 返回快照引用。
-    ///
-    /// # 错误
-    /// 存储失败以外的缺失返回 `None`。
+    // 快照 SKU 主图。无法读取时按无图处理。
+    //
+    // `source_asset_id` 为原资产；`booklet_id` 为选品册；`batch_id` 为批次。返回快照引用。存储失败以外的缺失返回 `None`。
     async fn snapshot_image(
         &self,
         source_asset_id: Option<&str>,
@@ -208,16 +167,9 @@ impl SelectionImagePort for ImageAdapter {
         }))
     }
 
-    /// 读取快照对象。
-    ///
-    /// # 参数
-    /// * `storage_object_key` - 对象键
-    ///
-    /// # 返回
-    /// 返回字节与内容类型。
-    ///
-    /// # 错误
-    /// 对象不存在。
+    // 读取快照对象。
+    //
+    // `storage_object_key` 为对象键。返回字节与内容类型。对象不存在。
     async fn load_bytes(&self, storage_object_key: &str) -> SalesResult<(Vec<u8>, String)> {
         let bytes = self.storage.read(storage_object_key).await.map_err(|error| {
             tracing::debug!(error_kind = ?std::mem::discriminant(&error), "选品图片读取失败");
@@ -227,16 +179,9 @@ impl SelectionImagePort for ImageAdapter {
     }
 }
 
-/// 映射商品池行为。
-///
-/// # 参数
-/// * `row` - 可售行
-///
-/// # 返回
-/// 返回选品事实。
-///
-/// # 错误
-/// 无。
+// 映射商品池行为。
+//
+// `row` 为可售行。返回选品事实。
 fn to_fact(row: erp_catalog::repository::SellableSkuRow) -> SelectionSkuFact {
     let specification_attributes = match read_specification_signature(&row.specification_signature) {
         SpecificationSignatureRead::Canonical(entries) => entries
@@ -268,16 +213,9 @@ fn to_fact(row: erp_catalog::repository::SellableSkuRow) -> SelectionSkuFact {
     }
 }
 
-/// 映射存储错误。
-///
-/// # 参数
-/// * `error` - 持久化错误
-///
-/// # 返回
-/// 返回销售错误。
-///
-/// # 错误
-/// 无。
+// 映射存储错误。
+//
+// `error` 为持久化错误。返回销售错误。
 fn map_store(error: persistence_core::Error) -> erp_sales::Error {
     erp_sales::Error::from(error)
 }

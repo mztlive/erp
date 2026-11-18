@@ -37,18 +37,11 @@ pub struct RuntimePersistenceContract {
 }
 
 /// 断言内存与 Mongo 必须同时满足的持久化契约。
+/// 重复 OPEN 必须全部关闭；CAS 失败不得留下半提交；收据同载荷回放、异载荷冲突。
 ///
-/// # 参数
-/// * `actual` - 某一适配器跑完三组场景后的计数与回放结果
-///
-/// # 返回
-/// 无。
-///
-/// # 错误
 /// 任一计数或回放结果偏离合同时测试失败。
 ///
-/// # 关键业务约束
-/// 重复 OPEN 必须全部关闭；CAS 失败不得留下半提交；收据同载荷回放、异载荷冲突。
+/// `actual`：某一适配器跑完三组场景后的计数与回放结果。
 pub fn assert_runtime_persistence_contract(actual: RuntimePersistenceContract) {
     assert_eq!(actual.open_before_close, 2);
     assert_eq!(actual.open_after_close, 0);
@@ -58,37 +51,23 @@ pub fn assert_runtime_persistence_contract(actual: RuntimePersistenceContract) {
 }
 
 /// 构造同一执行下的两条开放审批任务。
+/// 两条任务必须属于同一 execution，供重复关闭契约使用。
 ///
-/// # 参数
-/// * `execution_id` - 节点执行
-/// * `prefix` - 任务主键前缀
-///
-/// # 返回
 /// 两条 OPEN 单据审批任务。
 ///
-/// # 错误
 /// 任务构造失败时测试失败。
 ///
-/// # 关键业务约束
-/// 两条任务必须属于同一 execution，供重复关闭契约使用。
+/// `prefix`：任务主键前缀。
 pub fn duplicate_open_tasks(execution_id: &str, prefix: &str) -> [WorkItem; 2] {
     [open_task(&format!("{prefix}-1"), execution_id), open_task(&format!("{prefix}-2"), execution_id)]
 }
 
 /// 构造契约使用的启动命令收据。
+/// 回放必须使用同一 scope/key/digest。
 ///
-/// # 参数
-/// * `key` - 幂等键
-/// * `receipt_id` - 收据主键
-///
-/// # 返回
 /// 规范化后的命令收据。
 ///
-/// # 错误
 /// 身份构造失败时测试失败。
-///
-/// # 关键业务约束
-/// 回放必须使用同一 scope/key/digest。
 pub fn contract_receipt(
     key: &str,
     receipt_id: &str,
@@ -133,18 +112,11 @@ fn open_task(id: &str, execution_id: &str) -> WorkItem {
 }
 
 /// 内存适配器跑完三组契约场景。
+/// 必须调用 `MemoryRuntimeStore` 的 close/CAS/收据路径，不得只断言辅助函数。
 ///
-/// # 参数
-/// 无。
-///
-/// # 返回
 /// 可供 [`assert_runtime_persistence_contract`] 核对的结果。
 ///
-/// # 错误
 /// 适配器失败时测试失败。
-///
-/// # 关键业务约束
-/// 必须调用 `MemoryRuntimeStore` 的 close/CAS/收据路径，不得只断言辅助函数。
 pub fn run_memory_runtime_persistence_contract() -> RuntimePersistenceContract {
     let execution_id = ApprovalNodeExecutionId::new("e-contract");
     let mut store = MemoryRuntimeStore::default();
@@ -216,13 +188,13 @@ pub fn run_memory_runtime_persistence_contract() -> RuntimePersistenceContract {
 mod tests {
     use super::{assert_runtime_persistence_contract, run_memory_runtime_persistence_contract};
 
-    /// 内存适配器必须满足共用持久化契约。
+    // 验证：内存适配器必须满足共用持久化契约。
     #[test]
     fn memory_adapter_satisfies_runtime_persistence_contract() {
         assert_runtime_persistence_contract(run_memory_runtime_persistence_contract());
     }
 
-    /// 真实数据库运行未验证。本阶段不启动 MongoDB，也不引入 test-support 回边。
+    // 验证：真实数据库运行未验证。本阶段不启动 MongoDB，也不引入 test-support 回边。
     #[tokio::test]
     #[ignore = "requires MongoDB replica set"]
     async fn mongo_adapter_satisfies_runtime_persistence_contract() {}

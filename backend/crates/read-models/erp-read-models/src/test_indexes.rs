@@ -1,12 +1,11 @@
 //! 组合根按固定顺序登记各领域索引，索引定义仍由领域唯一拥有。
 
-/// 创建全部域依赖的幂等命名索引。
-///
-/// # 参数
-/// * `db` - 目标 MongoDB 数据库
-///
-/// # 错误
-/// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
+// 库单测准备隔离数据库时依次调用各领域的幂等索引入口，不在读模型内重定义索引。
+//
+// 调用参数：
+// * `db` - 目标 MongoDB 数据库
+//
+// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub(crate) async fn ensure_indexes(db: &mongodb::Database) -> persistence_core::Result<()> {
     erp_identity::indexes::ensure_accounts_and_roles(db).await?;
     erp_audit::indexes::ensure(db).await?;

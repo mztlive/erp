@@ -47,34 +47,13 @@ pub struct SalesSelectionProcess {
 }
 
 impl SalesSelectionProcess {
-    /// 创建流程。
-    ///
-    /// # 参数
-    /// * `db` - 数据库
-    /// * `storage` - 对象存储
-    /// * `secret` - 应用密钥，用于链接加密
-    /// * `services` - 应用已装配的客户、目录、文件与范围能力。
-    ///
-    /// # 返回
-    /// 返回流程。
-    ///
-    /// # 错误
-    /// 无。
+    /// 应用装配选品流程时注入客户、目录、文件和授权范围能力，以应用密钥派生链接加密器，并接入对象存储。
     pub fn new(db: Database, storage: S3Storage, secret: &[u8], services: Arc<SalesServices>) -> Self {
         Self { db, storage, services, crypto: LinkTokenCrypto::from_secret(secret) }
     }
 
-    /// 创建选品册并排队首次准备。
-    ///
-    /// # 参数
-    /// * `req` - 请求
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 返回准备中详情。
-    ///
-    /// # 错误
-    /// 校验、客户不可用或无法排队准备。
+    /// 销售为客户新建选品册时，在事务内核验经办人组织和客户范围，创建册并排队首次准备，返回准备中详情。
+    /// 请求校验、客户不可用或排队失败时返回错误。
     pub async fn create(
         &self,
         req: CreateSalesSelectionBookletRequest,
@@ -120,18 +99,7 @@ impl SalesSelectionProcess {
             .await
     }
 
-    /// 启动准备。
-    ///
-    /// # 参数
-    /// * `id` - 选品册
-    /// * `req` - 请求
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 返回准备中详情。
-    ///
-    /// # 错误
-    /// 状态、版本或无权操作。
+    /// 选品册开始准备时，调用目录和图片能力处理当前册的准备命令，返回准备中详情；权限、状态或版本不符时拒绝。
     pub async fn start_prepare(
         &self,
         id: String,
@@ -150,19 +118,7 @@ impl SalesSelectionProcess {
         .await
     }
 
-    /// 删除陈列。
-    ///
-    /// # 参数
-    /// * `booklet_id` - 选品册
-    /// * `item_id` - 陈列
-    /// * `req` - 版本
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 返回详情。
-    ///
-    /// # 错误
-    /// 状态、版本或无权操作。
+    /// 维护选品陈列时，按所见版本删除指定册的指定陈列并返回更新详情；权限、状态或版本不符时拒绝。
     pub async fn delete_display_item(
         &self,
         booklet_id: String,
@@ -176,18 +132,8 @@ impl SalesSelectionProcess {
             .map_err(Error::from)
     }
 
-    /// 发布。
-    ///
-    /// # 参数
-    /// * `id` - 选品册
-    /// * `req` - 请求
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 返回含链接的详情。
-    ///
-    /// # 错误
-    /// 复核失败、状态不允许或无权操作。
+    /// 选品册对外发布前按当前权限和目录复核册内容，成功后返回带访问链接的详情。
+    /// 无权操作、复核失败或状态不允许时不发布。
     pub async fn publish(
         &self,
         id: String,
@@ -206,31 +152,12 @@ impl SalesSelectionProcess {
         .await
     }
 
-    /// 复制链接。
-    ///
-    /// # 参数
-    /// * `id` - 选品册
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 返回含路径的详情。
-    ///
-    /// # 错误
-    /// 不存在或无权操作。
+    /// 内部人员分享当前选品册时，在授权快照读取带当前链接路径的详情；册或链接不可用、无权查看时拒绝。
     pub async fn copy_link(&self, id: &str, actor: &AuditActor) -> Result<SalesSelectionBookletView> {
         copy_link_checked(&self.db, &self.crypto, self.services.selections.clone(), id, actor).await
     }
-    /// 复制当前链接的相对地址。
-    ///
-    /// # 参数
-    /// * `id` - 选品册
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 返回 `/s/{token}`，不记录完整令牌。
-    ///
-    /// # 错误
-    /// 无链接或无权操作。
+    /// 仅需分发相对地址时，在同一快照检查复制链接权限和册归属，返回 `/s/{token}`，不记录完整令牌。
+    /// 没有可复制的链接或无权访问时拒绝。
     pub async fn copy_link_url(&self, id: &str, actor: &AuditActor) -> Result<CopyLinkView> {
         let access = self.services.selections.clone();
         let db = self.db.clone();
@@ -268,33 +195,12 @@ impl SalesSelectionProcess {
             .await
     }
 
-    /// 内部会话快照。
-    ///
-    /// # 参数
-    /// * `id` - 选品册
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 返回当前会话。
-    ///
-    /// # 错误
-    /// 无会话或无权查看。
+    /// 内部查看选品进度时，在选品册详情授权快照读取当前会话；无会话或当前账号无权查看时拒绝。
     pub async fn admin_session(&self, id: &str, actor: &AuditActor) -> Result<SalesSelectionSessionView> {
         session_checked(&self.db, self.services.selections.clone(), id, actor).await
     }
 
-    /// 更换链接。
-    ///
-    /// # 参数
-    /// * `id` - 选品册
-    /// * `req` - 命令
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 返回新链接。
-    ///
-    /// # 错误
-    /// 状态、版本或无权操作。
+    /// 选品册需要换发访问链接时，执行带当前版本的更换命令，成功返回新链接；权限、状态或版本不符时拒绝。
     pub async fn rotate_link(
         &self,
         id: String,
@@ -307,18 +213,7 @@ impl SalesSelectionProcess {
             .map_err(Error::from)
     }
 
-    /// 关闭。
-    ///
-    /// # 参数
-    /// * `id` - 选品册
-    /// * `req` - 命令
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 返回已关闭详情。
-    ///
-    /// # 错误
-    /// 状态不允许或无权操作。
+    /// 经办人结束选品办理时，将册关闭并返回关闭后的详情；状态不允许或当前账号无权操作时拒绝。
     pub async fn close(
         &self,
         id: String,
@@ -331,18 +226,7 @@ impl SalesSelectionProcess {
             .map_err(Error::from)
     }
 
-    /// 撤销访问。
-    ///
-    /// # 参数
-    /// * `id` - 选品册
-    /// * `req` - 命令
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 返回详情。
-    ///
-    /// # 错误
-    /// 状态不允许或无权操作。
+    /// 需要撤回选品册的公开访问时，执行访问撤销并返回更新后的册详情；状态不允许或无权操作时拒绝。
     pub async fn revoke(
         &self,
         id: String,
@@ -355,18 +239,7 @@ impl SalesSelectionProcess {
             .map_err(Error::from)
     }
 
-    /// 作废。
-    ///
-    /// # 参数
-    /// * `id` - 选品册
-    /// * `req` - 命令
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 返回已作废详情。
-    ///
-    /// # 错误
-    /// 状态不允许或无权操作。
+    /// 不再使用选品册时，由经办人作废并返回已作废详情；状态不允许或无权限时拒绝。
     pub async fn void(
         &self,
         id: String,
@@ -379,16 +252,7 @@ impl SalesSelectionProcess {
             .map_err(Error::from)
     }
 
-    /// 运行到期准备任务。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 处理数量。
-    ///
-    /// # 错误
-    /// 仓储失败。
+    /// 后台轮询到期选品准备任务时，用已装配的目录与图片能力执行一轮准备，返回本轮处理数量；仓储失败向轮询端返回错误。
     pub async fn run_due_prepare_tasks(&self) -> Result<u32> {
         let catalog = CatalogAdapter { query: self.services.catalog.clone() };
         let images =
@@ -398,18 +262,8 @@ impl SalesSelectionProcess {
             .await?)
     }
 
-    /// 读取已通过管理端客户权限校验的册图片。
-    ///
-    /// # 参数
-    /// * `id` - 选品册
-    /// * `asset_id` - 资产
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 返回快照字节与内容类型。
-    ///
-    /// # 错误
-    /// 资产不属于本册或对象不存在时拒绝。
+    /// 管理端展示选品册图片时，先按当前账号核对本册权限和资产归属，再从对象存储读取快照字节及内容类型。
+    /// 资产不属于本册或对应对象不存在时不返回内容。
     pub async fn admin_image(
         &self,
         id: &str,
@@ -420,16 +274,7 @@ impl SalesSelectionProcess {
         self.read_image_bytes(&key).await
     }
 
-    /// 读取图片字节。
-    ///
-    /// # 参数
-    /// * `storage_object_key` - 对象键
-    ///
-    /// # 返回
-    /// 返回内容。
-    ///
-    /// # 错误
-    /// 对象不存在。
+    /// 图片入口取得可读对象键后，由本方法读取快照字节及内容类型；对象不存在时返回错误。
     pub async fn read_image_bytes(&self, storage_object_key: &str) -> Result<(Vec<u8>, String)> {
         ImageAdapter { files: self.services.files.clone(), storage: Arc::new(self.storage.clone()) }
             .load_bytes(storage_object_key)
@@ -437,19 +282,8 @@ impl SalesSelectionProcess {
             .map_err(Error::from)
     }
 
-    /// 公开限流。非法令牌只按 IP 限流。
-    ///
-    /// # 参数
-    /// * `kind` - 读/写/提交/图片
-    /// * `ip` - 来源 IP
-    /// * `token` - 令牌；无效时忽略
-    /// * `limit` - 每分钟上限
-    ///
-    /// # 返回
-    /// 通过时 `Ok`。
-    ///
-    /// # 错误
-    /// 超限。
+    // 公开选品入口按读、写、提交或图片动作执行每分钟限流；有有效令牌时纳入对应限制，无效令牌只按来源 IP 计限。
+    // 超过调用方给定上限时拒绝。
     async fn admit_public(&self, kind: &str, ip: &str, token: Option<&str>, limit: i64) -> Result<()> {
         use erp_sales::entity::sales_selection::token_hash;
         use erp_sales::repository::SalesSelectionExt;

@@ -17,13 +17,7 @@ use crate::http::state::HttpState;
 use crate::http::upload;
 
 /// 返回商品目录管理路由，按资源合并各操作入口。
-///
-/// # 参数
-/// 无。
-/// # 返回
 /// 返回逐路由绑定权限的完整管理端路由集合。
-/// # 错误
-/// 无；业务错误由处理器返回。
 pub fn routes() -> Router<HttpState> {
     Router::new()
         .merge(product_category_routes())
@@ -48,14 +42,7 @@ pub fn routes() -> Router<HttpState> {
         .merge(voucher_category_routes())
 }
 
-/// 商品分类管理路由。
-///
-/// # 参数
-/// 无。
-/// # 返回
-/// 返回逐操作声明权限目录信息并保留上传限制的路由集合。
-/// # 错误
-/// 无；业务错误由处理器返回。
+// 为父路由挂载商品分类管理路由。
 fn product_category_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -95,14 +82,8 @@ fn product_category_routes() -> Router<HttpState> {
         )
 }
 
-/// 品牌列表与创建管理路由。
-///
-/// # 参数
-/// 无。
-/// # 返回
-/// 返回逐操作声明权限目录信息并保留上传限制的路由集合。
-/// # 错误
-/// 无；业务错误由处理器返回。
+// 为父路由挂载品牌列表与创建管理路由。
+// 对 multipart 方法保留独立的准入及请求体上限。
 fn product_brand_collection_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -142,14 +123,8 @@ fn product_brand_collection_routes() -> Router<HttpState> {
         )
 }
 
-/// 品牌更新与删除管理路由。
-///
-/// # 参数
-/// 无。
-/// # 返回
-/// 返回逐操作声明权限目录信息并保留上传限制的路由集合。
-/// # 错误
-/// 无；业务错误由处理器返回。
+// 为父路由挂载品牌更新与删除管理路由。
+// 对 multipart 方法保留独立的准入及请求体上限。
 fn product_brand_item_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -175,14 +150,7 @@ fn product_brand_item_routes() -> Router<HttpState> {
         )
 }
 
-/// 计量单位管理路由。
-///
-/// # 参数
-/// 无。
-/// # 返回
-/// 返回逐操作声明权限目录信息并保留上传限制的路由集合。
-/// # 错误
-/// 无；业务错误由处理器返回。
+// 为父路由挂载计量单位管理路由。
 fn unit_of_measure_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -212,14 +180,7 @@ fn unit_of_measure_routes() -> Router<HttpState> {
         )
 }
 
-/// 规格属性管理路由。
-///
-/// # 参数
-/// 无。
-/// # 返回
-/// 返回逐操作声明权限目录信息并保留上传限制的路由集合。
-/// # 错误
-/// 无；业务错误由处理器返回。
+// 为父路由挂载规格属性管理路由。
 fn sku_attribute_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -246,14 +207,7 @@ fn sku_attribute_routes() -> Router<HttpState> {
         )
 }
 
-/// 规格属性值管理路由。
-///
-/// # 参数
-/// 无。
-/// # 返回
-/// 返回逐操作声明权限目录信息并保留上传限制的路由集合。
-/// # 错误
-/// 无；业务错误由处理器返回。
+// 为父路由挂载规格属性值管理路由。
 fn sku_attribute_value_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -286,14 +240,8 @@ fn sku_attribute_value_routes() -> Router<HttpState> {
         )
 }
 
-/// 商品列表与创建管理路由。
-///
-/// # 参数
-/// 无。
-/// # 返回
-/// 返回逐操作声明权限目录信息并保留上传限制的路由集合。
-/// # 错误
-/// 无；业务错误由处理器返回。
+// 为父路由挂载商品列表与创建管理路由。
+// 对 multipart 方法保留独立的准入及请求体上限。
 fn product_collection_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -322,14 +270,8 @@ fn product_collection_routes() -> Router<HttpState> {
         )
 }
 
-/// 商品导入上传管理路由。
-///
-/// # 参数
-/// 无。
-/// # 返回
-/// 返回逐操作声明权限目录信息并保留上传限制的路由集合。
-/// # 错误
-/// 无；业务错误由处理器返回。
+// 为父路由挂载商品导入上传管理路由。
+// 对 multipart 方法保留独立的准入及请求体上限。
 fn product_import_upload_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -372,14 +314,7 @@ fn product_import_upload_routes() -> Router<HttpState> {
         )
 }
 
-/// 商品导入任务管理路由。
-///
-/// # 参数
-/// 无。
-/// # 返回
-/// 返回逐操作声明权限目录信息并保留上传限制的路由集合。
-/// # 错误
-/// 无；业务错误由处理器返回。
+// 为父路由挂载商品导入任务管理路由。
 fn product_import_job_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -405,14 +340,7 @@ fn product_import_job_routes() -> Router<HttpState> {
         )
 }
 
-/// 商品详情与更新管理路由。
-///
-/// # 参数
-/// 无。
-/// # 返回
-/// 返回逐操作声明权限目录信息并保留上传限制的路由集合。
-/// # 错误
-/// 无；业务错误由处理器返回。
+// 为父路由挂载商品详情与更新管理路由。
 fn product_item_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -431,14 +359,7 @@ fn product_item_routes() -> Router<HttpState> {
         )
 }
 
-/// 商品维护责任交接管理路由。
-///
-/// # 参数
-/// 无。
-/// # 返回
-/// 返回逐操作声明权限目录信息并保留上传限制的路由集合。
-/// # 错误
-/// 无；业务错误由处理器返回。
+// 为父路由挂载商品维护责任交接管理路由。
 fn product_handover_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -457,14 +378,7 @@ fn product_handover_routes() -> Router<HttpState> {
         )
 }
 
-/// 商品与 SKU 修订查询管理路由。
-///
-/// # 参数
-/// 无。
-/// # 返回
-/// 返回逐操作声明权限目录信息并保留上传限制的路由集合。
-/// # 错误
-/// 无；业务错误由处理器返回。
+// 为父路由挂载商品与 SKU 修订查询管理路由。
 fn product_revision_query_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -490,14 +404,8 @@ fn product_revision_query_routes() -> Router<HttpState> {
         )
 }
 
-/// 商品与媒体原子更新管理路由。
-///
-/// # 参数
-/// 无。
-/// # 返回
-/// 返回逐操作声明权限目录信息并保留上传限制的路由集合。
-/// # 错误
-/// 无；业务错误由处理器返回。
+// 为父路由挂载商品与媒体原子更新管理路由。
+// 对 multipart 方法保留独立的准入及请求体上限。
 fn product_asset_routes() -> Router<HttpState> {
     Router::new().route(
         "/products/{id}/with-assets",
@@ -511,14 +419,7 @@ fn product_asset_routes() -> Router<HttpState> {
     )
 }
 
-/// 商品状态管理路由。
-///
-/// # 参数
-/// 无。
-/// # 返回
-/// 返回逐操作声明权限目录信息并保留上传限制的路由集合。
-/// # 错误
-/// 无；业务错误由处理器返回。
+// 为父路由挂载商品状态管理路由。
 fn product_status_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -537,14 +438,7 @@ fn product_status_routes() -> Router<HttpState> {
         )
 }
 
-/// 商品修订列表管理路由。
-///
-/// # 参数
-/// 无。
-/// # 返回
-/// 返回逐操作声明权限目录信息并保留上传限制的路由集合。
-/// # 错误
-/// 无；业务错误由处理器返回。
+// 为父路由挂载商品修订列表管理路由。
 fn product_revision_routes() -> Router<HttpState> {
     Router::new().route(
         "/product-revisions",
@@ -555,14 +449,7 @@ fn product_revision_routes() -> Router<HttpState> {
     )
 }
 
-/// SKU 列表与状态管理路由。
-///
-/// # 参数
-/// 无。
-/// # 返回
-/// 返回逐操作声明权限目录信息并保留上传限制的路由集合。
-/// # 错误
-/// 无；业务错误由处理器返回。
+// 为父路由挂载SKU 列表与状态管理路由。
 fn sku_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -578,14 +465,7 @@ fn sku_routes() -> Router<HttpState> {
         )
 }
 
-/// 可售 SKU管理路由。
-///
-/// # 参数
-/// 无。
-/// # 返回
-/// 返回逐操作声明权限目录信息并保留上传限制的路由集合。
-/// # 错误
-/// 无；业务错误由处理器返回。
+// 为父路由挂载可售 SKU管理路由。
 fn sellable_sku_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -604,14 +484,7 @@ fn sellable_sku_routes() -> Router<HttpState> {
         )
 }
 
-/// SKU 修订管理路由。
-///
-/// # 参数
-/// 无。
-/// # 返回
-/// 返回逐操作声明权限目录信息并保留上传限制的路由集合。
-/// # 错误
-/// 无；业务错误由处理器返回。
+// 为父路由挂载SKU 修订管理路由。
 fn sku_revision_routes() -> Router<HttpState> {
     Router::new().route(
         "/sku-revisions",
@@ -622,14 +495,7 @@ fn sku_revision_routes() -> Router<HttpState> {
     )
 }
 
-/// 卡券类目管理路由。
-///
-/// # 参数
-/// 无。
-/// # 返回
-/// 返回逐操作声明权限目录信息并保留上传限制的路由集合。
-/// # 错误
-/// 无；业务错误由处理器返回。
+// 为父路由挂载卡券类目管理路由。
 fn voucher_category_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -655,13 +521,8 @@ fn voucher_category_routes() -> Router<HttpState> {
         )
 }
 
-/// 商品来源资料读取与确认路由，分别复用商品详情和维护权限。
-/// # 参数
-/// 无。
-/// # 返回
-/// 两条具有独立动作权限的管理路由。
-/// # 错误
-/// 无；业务错误由处理器返回。
+// 商品来源资料读取与确认路由，分别复用商品详情和维护权限。
+// 两条具有独立动作权限的管理路由。
 fn product_source_diff_routes() -> Router<HttpState> {
     Router::new()
         .route(

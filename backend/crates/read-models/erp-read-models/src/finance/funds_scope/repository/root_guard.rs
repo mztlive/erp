@@ -7,13 +7,15 @@ use super::super::{FundsAccess, FundsAuthorization};
 use crate::Result;
 
 impl FundsAccess {
-    /// 在水合单个资金根前执行同一凭证的完整根过滤。
-    /// # 参数
-    /// authorization 为当前根凭证，id 为真实根身份，executor 为原读取阶段。
-    /// # 返回
-    /// 根存在且固定来源及完整性要求满足时成功。
-    /// # 错误
-    /// 根缺失或无权均返回 NotFound，数据库与凭证错误原样传播。
+    // 确定财务来源范围的适用条件时，在水合单个资金根前执行同一凭证的完整根过滤。
+    //
+    // 调用参数：
+    // authorization 为当前根凭证，id 为真实根身份，executor 为原读取阶段。
+    //
+    // 根存在且固定来源及完整性要求满足时成功。
+    //
+    // 失败边界：
+    // 根缺失或无权均返回 NotFound，数据库与凭证错误原样传播。
     pub(in crate::finance::funds_scope) async fn require_visible_root(
         &self,
         authorization: &FundsAuthorization,
@@ -36,13 +38,12 @@ impl FundsAccess {
 }
 
 impl FundsAuthorization {
-    /// 保留根身份且在分页前应用完整授权与真实来源完整性。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 只读根关联过滤；不展开根记录或交付额外字段。
-    /// # 错误
-    /// 无凭证时产生拒绝全部的过滤。
+    // 组装财务来源范围的聚合管道时，保留根身份且在分页前应用完整授权与真实来源完整性。
+    //
+    // 只读根关联过滤；不展开根记录或交付额外字段。
+    //
+    // 失败边界：
+    // 无凭证时产生拒绝全部的过滤。
     pub(in crate::finance::funds_scope) fn guard_stages(&self) -> Vec<Document> {
         let Some(access) = &self.access else {
             return vec![doc! { "$match": { "$expr": false } }];
@@ -59,7 +60,7 @@ impl FundsAuthorization {
     }
 }
 
-/// 根会员同时接受匹配份额和完整整账路径，允许有整账职责的真实零分配根。
+// 组装财务来源范围的聚合管道时，根会员同时接受匹配份额和完整整账路径，允许有整账职责的真实零分配根。
 fn root_membership_stages(access: &CompiledAccess) -> Vec<Document> {
     let Ok(whole) = access.whole_stages() else {
         return access.stages().to_vec();

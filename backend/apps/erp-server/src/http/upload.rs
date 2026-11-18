@@ -48,23 +48,16 @@ const MAX_GLOBAL_UPLOADS_PER_WINDOW: usize = 100;
 const UPLOAD_WINDOW: Duration = Duration::from_secs(60);
 const MAX_CONCURRENT_UPLOADS: usize = 4;
 
-/// 创建上传路由使用的进程内准入控制器。
-///
-/// # 返回值
-/// 返回每主体 10 次/60 秒、全局 100 次/60 秒、并发 4 个请求的限流器。
+// 创建上传路由使用的进程内准入控制器。
+// 返回每主体 10 次/60 秒、全局 100 次/60 秒、并发 4 个请求的限流器。
 pub(crate) fn limiter() -> RateLimiter {
     static SHARED_LIMITER: OnceLock<RateLimiter> = OnceLock::new();
     SHARED_LIMITER.get_or_init(new_limiter).clone()
 }
 
-/// 为单个 multipart 方法安装共享上传准入和显式请求体上限。
-///
-/// # 参数
-/// * `route` - 已注册 handler 的方法路由
-/// * `request_limit` - 包含文件、命令字段和协议边界的累计字节上限
-///
-/// # 返回值
-/// 返回仅对当前 multipart 方法生效的受保护路由。
+// 为单个 multipart 方法安装共享上传准入和显式请求体上限。
+// `route` 为已注册 handler 的方法路由，`request_limit` 为包含文件、命令字段和协议边界的累计字节上限。
+// 返回仅对当前 multipart 方法生效的受保护路由。
 pub(crate) fn multipart_route(
     route: MethodRouter<HttpState>,
     request_limit: usize,
@@ -74,7 +67,7 @@ pub(crate) fn multipart_route(
         .layer(DefaultBodyLimit::max(request_limit))
 }
 
-/// 创建一份上传策略；生产路由通过 `limiter` 共享同一份实例。
+// 按统一生产配额创建进程内上传准入策略；实际路由从 `limiter` 取共享实例，避免按路由重置配额。
 fn new_limiter() -> RateLimiter {
     RateLimiter::new(
         MAX_UPLOADS_PER_WINDOW,
@@ -116,15 +109,13 @@ pub(crate) enum Error {
 }
 
 impl From<Error> for errors::Error {
-    /// 将上传输入校验错误映射为 400。
+    // 将 HTTP 上传解析或文件校验失败包装成客户端可修正的 400。
     fn from(error: Error) -> Self {
         Self::BadRequest(error.to_string())
     }
 }
 
-/// 在读取 Multipart 请求体前执行上传配额与并发限制。
-///
-/// 该中间件必须放在后台或供应商门户认证之后；缺少认证主体时失败关闭。
+// 认证后的上传路由在解析 Multipart 之前校验主体配额和并发；后台和门户共用准入，缺少认证主体即拒绝。
 pub(crate) async fn enforce_admission(
     State(admission): State<RateLimiter>,
     request: Request,
@@ -170,13 +161,9 @@ pub(crate) struct FormFile {
 }
 
 impl FormFile {
-    /// 校验图片大小、扩展名及 MIME，并返回只能使用安全扩展名的文件。
-    ///
-    /// # 返回值
-    /// 校验成功后返回可持久化的图片。
-    ///
-    /// # 错误
-    /// 文件超过 5 MiB、类型不受支持或扩展名、MIME、真实内容不一致时返回错误。
+    // 校验图片大小、扩展名及 MIME，并返回只能使用安全扩展名的文件。
+    // 校验成功后返回可持久化的图片。
+    // 文件超过 5 MiB、类型不受支持或扩展名、MIME、真实内容不一致时返回错误。
     pub(crate) fn validate_image(self) -> Result<ValidatedImage, Error> {
         if self.content.len() > MAX_UPLOAD_FILE_BYTES {
             return Err(Error::FileTooLarge);
@@ -201,7 +188,7 @@ impl FormFile {
         Ok(ValidatedImage { content: self.content, extension, content_type: expected_mime })
     }
 
-    /// 读取 Multipart 字段，并在累计内容超过限制时立即失败。
+    // 分块读取单个上传字段时累计字节；超限立刻返回错误，不先缓存完整文件。
     async fn from_field(mut field: Field<'_>) -> Result<Self, Error> {
         let filename = field
             .file_name()
@@ -231,29 +218,25 @@ pub(crate) struct ValidatedImage {
 }
 
 impl ValidatedImage {
-    /// 返回图片内容。
+    // 上传经验证后提供原始图片字节，供对象存储保存。
     pub(crate) fn content(&self) -> &[u8] {
         &self.content
     }
 
-    /// 返回与已验证扩展名一致的图片 MIME。
+    // 保存或返回已验证图片时使用与安全扩展名匹配的 MIME，不沿用未经校验的声明。
     pub(crate) fn content_type(&self) -> &'static str {
         self.content_type
     }
 
-    /// 使用已验证扩展名生成唯一文件名。
+    // 写入图片对象时生成服务端独立名称，只采用已验证的扩展名。
     pub(crate) fn unique_name(&self) -> String {
         format!("{}.{}", id_generator::next_id(), self.extension)
     }
 }
 
-/// 提取 Multipart 表单中的第一个文件字段。
-///
-/// # 返回值
-/// 没有文件字段时返回 `None`。
-///
-/// # 错误
-/// Multipart 无效、字段读取失败或文件超过 5 MiB 时返回错误。
+// 提取 Multipart 表单中的第一个文件字段。
+// 没有文件字段时返回 `None`。
+// Multipart 无效、字段读取失败或文件超过 5 MiB 时返回错误。
 pub(crate) async fn extract_file(multipart: &mut Multipart) -> Result<Option<FormFile>, Error> {
     while let Some(field) = multipart.next_field().await.map_err(|_| Error::InvalidFormData)? {
         if field.file_name().is_some() {
@@ -289,7 +272,7 @@ fn is_supported_mime(content_type: &str) -> bool {
     )
 }
 
-/// 根据文件头识别受支持的图片 MIME，不信任客户端声明。
+// 校验上传或回读内容时按文件头识别受支持的图片类型，不以客户端 MIME 声明为准。
 pub(crate) fn detect_image_mime(content: &[u8]) -> Option<&'static str> {
     if content.starts_with(b"\x89PNG\r\n\x1a\n") {
         return Some("image/png");

@@ -44,7 +44,7 @@ pub(super) trait Facilities: Send + Sync {
         ids: &ResourceTargets,
         executor: &mut dyn Executor,
     ) -> Result<BTreeSet<String>>;
-    /// 只接受当前审批实例为当前接收人形成的精确来源读取授权。
+    // 审批来源补权时检查该实例给真实接收人形成的精确读取授权，其他实例或账号的来源不能命中。
     async fn source_grant(
         &self,
         _source: &SourceKey,

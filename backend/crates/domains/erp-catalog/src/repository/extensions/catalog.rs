@@ -51,369 +51,158 @@ pub trait CatalogExt {
     /// 公司商品池预算投影刷新进度集合名。
     const SELLABLE_SKU_PROJECTION_STATE: &'static str = "sellable_sku_projection_state";
 
-    /// 获取 `product_category` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `ProductCategoryRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 绑定 `product_category` 集合仓储，供领域查询或写入步骤复用。返回 `ProductCategoryRepository<'_>`。
     fn product_categories(&self) -> ProductCategoryRepository<'_>;
 
-    /// 获取 `product_brand` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `ProductBrandRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 绑定 `product_brand` 集合仓储，供领域查询或写入步骤复用。返回 `ProductBrandRepository<'_>`。
     fn product_brands(&self) -> ProductBrandRepository<'_>;
 
-    /// 获取 `unit_of_measure` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `UnitOfMeasureRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 绑定 `unit_of_measure` 集合仓储，供领域查询或写入步骤复用。返回 `UnitOfMeasureRepository<'_>`。
     fn unit_of_measures(&self) -> UnitOfMeasureRepository<'_>;
 
-    /// 获取 `sku_attribute` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `SkuAttributeRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 绑定 `sku_attribute` 集合仓储，供领域查询或写入步骤复用。返回 `SkuAttributeRepository<'_>`。
     fn sku_attributes(&self) -> SkuAttributeRepository<'_>;
 
-    /// 获取 `sku_attribute_value` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `SkuAttributeValueRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 绑定 `sku_attribute_value` 集合仓储，供领域查询或写入步骤复用。返回 `SkuAttributeValueRepository<'_>`。
     fn sku_attribute_values(&self) -> SkuAttributeValueRepository<'_>;
 
-    /// 获取 `product_category_attribute` 集合的 Repository。
+    /// 绑定 `product_category_attribute` 集合仓储，供领域查询或写入步骤复用。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回 `ProductCategoryAttributeRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     fn product_category_attributes(&self) -> ProductCategoryAttributeRepository<'_>;
 
-    /// 获取 `product` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `ProductRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 绑定 `product` 集合仓储，供领域查询或写入步骤复用。返回 `ProductRepository<'_>`。
     fn products(&self) -> ProductRepository<'_>;
 
-    /// 获取 `product_revision` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `ProductRevisionRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 绑定 `product_revision` 集合仓储，供领域查询或写入步骤复用。返回 `ProductRevisionRepository<'_>`。
     fn product_revisions(&self) -> ProductRevisionRepository<'_>;
 
-    /// 获取 `product_revision_media` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `ProductRevisionMediaRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 绑定 `product_revision_media` 集合仓储，供领域查询或写入步骤复用。返回
+    /// `ProductRevisionMediaRepository<'_>`。
     fn product_revision_medias(&self) -> ProductRevisionMediaRepository<'_>;
 
-    /// 获取 `sku` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `SkuRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 绑定 `sku` 集合仓储，供领域查询或写入步骤复用。返回 `SkuRepository<'_>`。
     fn skus(&self) -> SkuRepository<'_>;
 
-    /// 获取 `sku_revision` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `SkuRevisionRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 绑定 `sku_revision` 集合仓储，供领域查询或写入步骤复用。返回 `SkuRevisionRepository<'_>`。
     fn sku_revisions(&self) -> SkuRevisionRepository<'_>;
 
-    /// 获取实际条码唯一归属占用仓储。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 当前数据库的标准乐观锁仓储。
-    /// # 错误
-    /// 无。
+    /// 获取实际条码唯一归属占用仓储。当前数据库的标准乐观锁仓储。
     fn sku_barcode_claims(&self) -> SkuBarcodeClaimRepository<'_>;
 
-    /// 获取 `sku_revision_attribute_value` 集合的 Repository。
+    /// 绑定 `sku_revision_attribute_value` 集合仓储，供领域查询或写入步骤复用。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回 `persistence_core::Repository<'_, crate::entity::catalog::SkuRevisionAttributeValue>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     fn sku_revision_attribute_values(&self) -> persistence_core::Repository<'_, SkuRevisionAttributeValue>;
 
-    /// 获取 `voucher_category_profile_revision` 集合的 Repository。
+    /// 绑定 `voucher_category_profile_revision` 集合仓储，供领域查询或写入步骤复用。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回 `VoucherCategoryProfileRevisionRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     fn voucher_category_profile_revisions(&self) -> VoucherCategoryProfileRevisionRepository<'_>;
 
-    /// 获取承载跨集合事务写入的域专用仓储。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `CatalogRepository` 实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 绑定本域跨集合用例的仓储；读写和事务边界仍由调用方传入的执行器决定。返回 `CatalogRepository` 实例。
     fn catalog(&self) -> CatalogRepository<'_>;
 
     /// 获取公司商品池预算投影访问器。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回投影访问器。
-    ///
-    /// # 错误
-    /// 不返回错误。
     fn sellable_sku_projections(&self) -> SellableSkuProjectionStore<'_>;
 }
 
 impl CatalogExt for Database {
-    /// 获取 `product_category` 集合的 Repository。
-    ///
-    /// 以当前数据库和集合常量 `PRODUCT_CATEGORIES` 构造，不在此访问集合。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `ProductCategoryRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 绑定 `product_category` 集合仓储，供领域查询或写入步骤复用。
+    //
+    // 以当前数据库和集合常量 `PRODUCT_CATEGORIES` 构造，不在此访问集合。
+    //
+    // 返回 `ProductCategoryRepository<'_>`。
     fn product_categories(&self) -> ProductCategoryRepository<'_> {
         ProductCategoryRepository::new(self, Self::PRODUCT_CATEGORIES)
     }
 
-    /// 获取 `product_brand` 集合的 Repository。
-    ///
-    /// 以当前数据库和集合常量 `PRODUCT_BRANDS` 构造，不在此访问集合。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `ProductBrandRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 绑定 `product_brand` 集合仓储，供领域查询或写入步骤复用。
+    //
+    // 以当前数据库和集合常量 `PRODUCT_BRANDS` 构造，不在此访问集合。
+    //
+    // 返回 `ProductBrandRepository<'_>`。
     fn product_brands(&self) -> ProductBrandRepository<'_> {
         ProductBrandRepository::new(self, Self::PRODUCT_BRANDS)
     }
 
-    /// 获取 `unit_of_measure` 集合的 Repository。
-    ///
-    /// 以当前数据库和集合常量 `UNIT_OF_MEASURES` 构造，不在此访问集合。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `UnitOfMeasureRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 绑定 `unit_of_measure` 集合仓储，供领域查询或写入步骤复用。
+    //
+    // 以当前数据库和集合常量 `UNIT_OF_MEASURES` 构造，不在此访问集合。
+    //
+    // 返回 `UnitOfMeasureRepository<'_>`。
     fn unit_of_measures(&self) -> UnitOfMeasureRepository<'_> {
         UnitOfMeasureRepository::new(self, Self::UNIT_OF_MEASURES)
     }
 
-    /// 获取 `sku_attribute` 集合的 Repository。
-    ///
-    /// 以当前数据库和集合常量 `SKU_ATTRIBUTES` 构造，不在此访问集合。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `SkuAttributeRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 绑定 `sku_attribute` 集合仓储，供领域查询或写入步骤复用。
+    //
+    // 以当前数据库和集合常量 `SKU_ATTRIBUTES` 构造，不在此访问集合。
+    //
+    // 返回 `SkuAttributeRepository<'_>`。
     fn sku_attributes(&self) -> SkuAttributeRepository<'_> {
         SkuAttributeRepository::new(self, Self::SKU_ATTRIBUTES)
     }
 
-    /// 获取 `sku_attribute_value` 集合的 Repository。
-    ///
-    /// 以当前数据库和集合常量 `SKU_ATTRIBUTE_VALUES` 构造，不在此访问集合。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `SkuAttributeValueRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 绑定 `sku_attribute_value` 集合仓储，供领域查询或写入步骤复用。
+    //
+    // 以当前数据库和集合常量 `SKU_ATTRIBUTE_VALUES` 构造，不在此访问集合。
+    //
+    // 返回 `SkuAttributeValueRepository<'_>`。
     fn sku_attribute_values(&self) -> SkuAttributeValueRepository<'_> {
         SkuAttributeValueRepository::new(self, Self::SKU_ATTRIBUTE_VALUES)
     }
 
-    /// 获取 `product_category_attribute` 集合的 Repository。
-    ///
-    /// 以当前数据库和集合常量 `PRODUCT_CATEGORY_ATTRIBUTES` 构造，不在此访问集合。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `ProductCategoryAttributeRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 绑定 `product_category_attribute` 集合仓储，供领域查询或写入步骤复用。
+    //
+    // 以当前数据库和集合常量 `PRODUCT_CATEGORY_ATTRIBUTES` 构造，不在此访问集合。
+    //
+    // 返回 `ProductCategoryAttributeRepository<'_>`。
     fn product_category_attributes(&self) -> ProductCategoryAttributeRepository<'_> {
         ProductCategoryAttributeRepository::new(self, Self::PRODUCT_CATEGORY_ATTRIBUTES)
     }
 
-    /// 获取 `product` 集合的 Repository。
-    ///
-    /// 以当前数据库和集合常量 `PRODUCTS` 构造，不在此访问集合。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `ProductRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 绑定 `product` 集合仓储，供领域查询或写入步骤复用。
+    //
+    // 以当前数据库和集合常量 `PRODUCTS` 构造，不在此访问集合。
+    //
+    // 返回 `ProductRepository<'_>`。
     fn products(&self) -> ProductRepository<'_> {
         ProductRepository::new(self, Self::PRODUCTS)
     }
 
-    /// 获取 `product_revision` 集合的 Repository。
-    ///
-    /// 以当前数据库和集合常量 `PRODUCT_REVISIONS` 构造，不在此访问集合。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `ProductRevisionRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 绑定 `product_revision` 集合仓储，供领域查询或写入步骤复用。
+    //
+    // 以当前数据库和集合常量 `PRODUCT_REVISIONS` 构造，不在此访问集合。
+    //
+    // 返回 `ProductRevisionRepository<'_>`。
     fn product_revisions(&self) -> ProductRevisionRepository<'_> {
         ProductRevisionRepository::new(self, Self::PRODUCT_REVISIONS)
     }
 
-    /// 获取 `product_revision_media` 集合的 Repository。
-    ///
-    /// 以当前数据库和集合常量 `PRODUCT_REVISION_MEDIAS` 构造，不在此访问集合。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `ProductRevisionMediaRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 绑定 `product_revision_media` 集合仓储，供领域查询或写入步骤复用。
+    //
+    // 以当前数据库和集合常量 `PRODUCT_REVISION_MEDIAS` 构造，不在此访问集合。
+    //
+    // 返回 `ProductRevisionMediaRepository<'_>`。
     fn product_revision_medias(&self) -> ProductRevisionMediaRepository<'_> {
         ProductRevisionMediaRepository::new(self, Self::PRODUCT_REVISION_MEDIAS)
     }
 
-    /// 获取 `sku` 集合的 Repository。
-    ///
-    /// 以当前数据库和集合常量 `SKUS` 构造，不在此访问集合。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `SkuRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 绑定 `sku` 集合仓储，供领域查询或写入步骤复用。
+    //
+    // 以当前数据库和集合常量 `SKUS` 构造，不在此访问集合。
+    //
+    // 返回 `SkuRepository<'_>`。
     fn skus(&self) -> SkuRepository<'_> {
         SkuRepository::new(self, Self::SKUS)
     }
 
-    /// 获取 `sku_revision` 集合的 Repository。
-    ///
-    /// 以当前数据库和集合常量 `SKU_REVISIONS` 构造，不在此访问集合。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `SkuRevisionRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 绑定 `sku_revision` 集合仓储，供领域查询或写入步骤复用。
+    //
+    // 以当前数据库和集合常量 `SKU_REVISIONS` 构造，不在此访问集合。
+    //
+    // 返回 `SkuRevisionRepository<'_>`。
     fn sku_revisions(&self) -> SkuRevisionRepository<'_> {
         SkuRevisionRepository::new(self, Self::SKU_REVISIONS)
     }
@@ -422,50 +211,29 @@ impl CatalogExt for Database {
         SkuBarcodeClaimRepository::new(self, Self::SKU_BARCODE_CLAIMS)
     }
 
-    /// 获取 `sku_revision_attribute_value` 集合的 Repository。
-    ///
-    /// 以当前数据库和集合常量 `SKU_REVISION_ATTRIBUTE_VALUES` 构造，不在此访问集合。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `persistence_core::Repository<'_, crate::entity::catalog::SkuRevisionAttributeValue>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 绑定 `sku_revision_attribute_value` 集合仓储，供领域查询或写入步骤复用。
+    //
+    // 以当前数据库和集合常量 `SKU_REVISION_ATTRIBUTE_VALUES` 构造，不在此访问集合。
+    //
+    // 返回 `persistence_core::Repository<'_, crate::entity::catalog::SkuRevisionAttributeValue>`。
     fn sku_revision_attribute_values(&self) -> persistence_core::Repository<'_, SkuRevisionAttributeValue> {
         persistence_core::Repository::new(self, Self::SKU_REVISION_ATTRIBUTE_VALUES)
     }
 
-    /// 获取 `voucher_category_profile_revision` 集合的 Repository。
-    ///
-    /// 以当前数据库和集合常量 `VOUCHER_CATEGORY_PROFILE_REVISIONS` 构造，不在此访问集合。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `VoucherCategoryProfileRevisionRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 绑定 `voucher_category_profile_revision` 集合仓储，供领域查询或写入步骤复用。
+    //
+    // 以当前数据库和集合常量 `VOUCHER_CATEGORY_PROFILE_REVISIONS` 构造，不在此访问集合。
+    //
+    // 返回 `VoucherCategoryProfileRevisionRepository<'_>`。
     fn voucher_category_profile_revisions(&self) -> VoucherCategoryProfileRevisionRepository<'_> {
         VoucherCategoryProfileRevisionRepository::new(self, Self::VOUCHER_CATEGORY_PROFILE_REVISIONS)
     }
 
-    /// 获取承载跨集合事务写入的域专用仓储。
-    ///
-    /// 以当前数据库构造 `CatalogRepository`，不在此开启事务或访问集合。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `CatalogRepository` 实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 绑定本域跨集合用例的仓储；读写和事务边界仍由调用方传入的执行器决定。
+    //
+    // 以当前数据库构造 `CatalogRepository`，不在此开启事务或访问集合。
+    //
+    // 返回 `CatalogRepository` 实例。
     fn catalog(&self) -> CatalogRepository<'_> {
         CatalogRepository::new(self)
     }

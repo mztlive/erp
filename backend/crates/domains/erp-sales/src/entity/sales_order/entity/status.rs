@@ -17,16 +17,7 @@ pub enum CommercialStatus {
 }
 
 impl CommercialStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为界面或响应展示提供销售单商业主状态的中文名称；机器筛选和存储不使用该名称。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Draft => "草稿",
@@ -36,16 +27,7 @@ impl CommercialStatus {
         }
     }
 
-    /// 返回状态的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将销售单商业主状态转成用于持久化和查询的稳定代码，与中文展示文案分开。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Draft => "DRAFT",
@@ -57,19 +39,13 @@ impl CommercialStatus {
 }
 
 impl DocumentState for CommercialStatus {
-    /// 数据模型 §7.1：`DRAFT → PENDING_REVIEW`、`DRAFT → VOIDED`、
-    /// `PENDING_REVIEW → DRAFT`（驳回回到草稿）、`PENDING_REVIEW → EFFECTIVE`；
-    /// `EFFECTIVE`/`VOIDED` 为终态（生效后变化走销售变更单）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// `Draft` 的后继为 `PendingReview`、`Voided`；`PendingReview` 的后继为 `Draft`、`Effective`。
-    /// `Effective`、`Voided` 返回空切片。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 校验销售单商业主状态迁移时查本状态可直接到达的后继状态；无后继即不能再迁移。
+    //
+    // 数据模型 §7.1：`DRAFT → PENDING_REVIEW`、`DRAFT → VOIDED`、
+    // `PENDING_REVIEW → DRAFT`（驳回回到草稿）、`PENDING_REVIEW → EFFECTIVE`；
+    // `EFFECTIVE`/`VOIDED` 为终态（生效后变化走销售变更单）。
+    // 结果：`Draft` 的后继为 `PendingReview`、`Voided`；`PendingReview` 的后继为 `Draft`、`Effective`。
+    // `Effective`、`Voided` 返回空切片。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Draft => &[Self::PendingReview, Self::Voided],
@@ -103,16 +79,7 @@ pub enum ReviewStatus {
 }
 
 impl ReviewStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为界面或响应展示提供销售单审核状态的中文名称；机器筛选和存储不使用该名称。
     pub fn label(&self) -> &'static str {
         match self {
             Self::NotSubmitted => "未提交",
@@ -126,16 +93,7 @@ impl ReviewStatus {
         }
     }
 
-    /// 返回状态的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将销售单审核状态转成用于持久化和查询的稳定代码，与中文展示文案分开。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::NotSubmitted => "NOT_SUBMITTED",
@@ -150,42 +108,26 @@ impl ReviewStatus {
     }
 
     /// 判断当前审核轨是否应存在开放审批任务。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 统一审批中或兼容历史待审阶段返回 `true`；未提交、已通过和已驳回返回 `false`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 结果：统一审批中或兼容历史待审阶段返回 `true`；未提交、已通过和已驳回返回 `false`。
     pub fn has_active_review_task(self) -> bool {
         !matches!(self, Self::NotSubmitted | Self::Approved | Self::Rejected)
     }
 }
 
 impl DocumentState for ReviewStatus {
-    /// 审核轨固定邻接。
-    ///
-    /// `SalesOrder` 与 `VoucherSalesOrder` 目标路径均为
-    /// `NOT_SUBMITTED → IN_APPROVAL → APPROVED`，撤回
-    /// `IN_APPROVAL → NOT_SUBMITTED`。驳回由专用实体方法原子退回草稿并记录 `REJECTED`。
-    /// 旧逐节点复核态不得由新提交写入；已驳回可重新提交。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// `NotSubmitted` 的后继为 `PendingProcurementConfirmation`、`PendingSalesLeader`、`InApproval`；
-    /// `InApproval` 的后继为 `Approved`、`NotSubmitted`；
-    /// `PendingProcurementConfirmation` 的后继为 `PendingLowMarginSuperior`、`Approved`、`Rejected`；
-    /// `PendingLowMarginSuperior` 的后继为 `PendingProcurementConfirmation`；
-    /// `PendingSalesLeader` 的后继为 `PendingOperations`、`Rejected`；
-    /// `PendingOperations` 的后继为 `Approved`、`Rejected`；
-    /// `Approved` 返回空切片；`Rejected` 的后继为 `NotSubmitted`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 校验销售单审核状态迁移时查本状态可直接到达的后继状态；无后继即不能再迁移。
+    //
+    // `SalesOrder` 与 `VoucherSalesOrder` 目标路径均为
+    // `NOT_SUBMITTED → IN_APPROVAL → APPROVED`，撤回
+    // `IN_APPROVAL → NOT_SUBMITTED`。驳回由专用实体方法原子退回草稿并记录 `REJECTED`。
+    // 旧逐节点复核态不得由新提交写入；已驳回可重新提交。
+    // 结果：`NotSubmitted` 的后继为 `PendingProcurementConfirmation`、`PendingSalesLeader`、`InApproval`；
+    // `InApproval` 的后继为 `Approved`、`NotSubmitted`；
+    // `PendingProcurementConfirmation` 的后继为 `PendingLowMarginSuperior`、`Approved`、`Rejected`；
+    // `PendingLowMarginSuperior` 的后继为 `PendingProcurementConfirmation`；
+    // `PendingSalesLeader` 的后继为 `PendingOperations`、`Rejected`；
+    // `PendingOperations` 的后继为 `Approved`、`Rejected`；
+    // `Approved` 返回空切片；`Rejected` 的后继为 `NotSubmitted`。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::NotSubmitted => {
@@ -217,16 +159,7 @@ pub enum FulfillmentProgress {
 }
 
 impl FulfillmentProgress {
-    /// 返回进度的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为界面或响应展示提供订单履约进度的中文名称；机器筛选和存储不使用该名称。
     pub fn label(&self) -> &'static str {
         match self {
             Self::NotStarted => "未开始",
@@ -235,16 +168,7 @@ impl FulfillmentProgress {
         }
     }
 
-    /// 返回进度的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将订单履约进度转成用于持久化和查询的稳定代码，与中文展示文案分开。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::NotStarted => "NOT_STARTED",
@@ -267,16 +191,7 @@ pub enum CollectionProgress {
 }
 
 impl CollectionProgress {
-    /// 返回进度的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为界面或响应展示提供订单回款进度的中文名称；机器筛选和存储不使用该名称。
     pub fn label(&self) -> &'static str {
         match self {
             Self::NotCollected => "未收",
@@ -285,16 +200,7 @@ impl CollectionProgress {
         }
     }
 
-    /// 返回进度的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将订单回款进度转成用于持久化和查询的稳定代码，与中文展示文案分开。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::NotCollected => "NOT_COLLECTED",
@@ -304,16 +210,11 @@ impl CollectionProgress {
     }
 
     /// 从应收子账开放余额与已结清金额派生回款进度。
-    ///
-    /// # 参数
-    /// * `balances` - `(开放余额, 已结清金额)` 序列
-    ///
-    /// # 返回
-    /// 无子账或尚无结清金额时返回 `NotCollected`；部分结清返回
+    /// 结果：无子账或尚无结清金额时返回 `NotCollected`；部分结清返回
     /// `PartiallyCollected`；全部子账开放余额清零且已有结清金额时返回 `Settled`。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// 输入约定：
+    /// - `balances`：`(开放余额, 已结清金额)` 序列
     pub fn from_receivable_balances<I>(balances: I) -> Self
     where
         I: IntoIterator<Item = (Amount, Amount)>,
@@ -349,16 +250,7 @@ pub enum InvoiceProgress {
 }
 
 impl InvoiceProgress {
-    /// 返回进度的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为界面或响应展示提供订单开票进度的中文名称；机器筛选和存储不使用该名称。
     pub fn label(&self) -> &'static str {
         match self {
             Self::NotInvoiced => "未开",
@@ -367,16 +259,7 @@ impl InvoiceProgress {
         }
     }
 
-    /// 返回进度的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将订单开票进度转成用于持久化和查询的稳定代码，与中文展示文案分开。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::NotInvoiced => "NOT_INVOICED",
@@ -386,16 +269,11 @@ impl InvoiceProgress {
     }
 
     /// 从应收子账可开票余额与已开票金额派生开票进度。
-    ///
-    /// # 参数
-    /// * `balances` - `(剩余可开票余额, 已开票金额)` 序列
-    ///
-    /// # 返回
-    /// 无子账或尚无开票金额时返回 `NotInvoiced`；部分开票返回
+    /// 结果：无子账或尚无开票金额时返回 `NotInvoiced`；部分开票返回
     /// `PartiallyInvoiced`；全部子账可开票余额清零且已有开票金额时返回 `Completed`。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// 输入约定：
+    /// - `balances`：`(剩余可开票余额, 已开票金额)` 序列
     pub fn from_receivable_balances<I>(balances: I) -> Self
     where
         I: IntoIterator<Item = (Amount, Amount)>,
@@ -432,16 +310,7 @@ pub enum CloseStatus {
 }
 
 impl CloseStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为界面或响应展示提供销售结案状态的中文名称；机器筛选和存储不使用该名称。
     pub fn label(&self) -> &'static str {
         match self {
             Self::NotSatisfied => "未满足关闭",
@@ -450,16 +319,7 @@ impl CloseStatus {
         }
     }
 
-    /// 返回状态的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将销售结案状态转成用于持久化和查询的稳定代码，与中文展示文案分开。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::NotSatisfied => "NOT_SATISFIED",
@@ -469,17 +329,12 @@ impl CloseStatus {
     }
 
     /// 从履约与回款进度派生关闭状态。
-    ///
-    /// # 参数
-    /// * `fulfillment` - 销售单履约进度
-    /// * `collection` - 销售单回款进度
-    ///
-    /// # 返回
-    /// 履约完成且回款结清返回 `Closed`；仅满足其一返回 `Closeable`；均未满足返回
+    /// 结果：履约完成且回款结清返回 `Closed`；仅满足其一返回 `Closeable`；均未满足返回
     /// `NotSatisfied`。开票进度不参与关闭判定。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// 输入约定：
+    /// - `fulfillment`：销售单履约进度
+    /// - `collection`：销售单回款进度
     pub fn from_progress(fulfillment: FulfillmentProgress, collection: CollectionProgress) -> Self {
         match (fulfillment == FulfillmentProgress::Completed, collection == CollectionProgress::Settled) {
             (true, true) => Self::Closed,
@@ -500,16 +355,7 @@ pub enum LineStatus {
 }
 
 impl LineStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为界面或响应展示提供销售明细状态的中文名称；机器筛选和存储不使用该名称。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Active => "有效",
@@ -519,16 +365,8 @@ impl LineStatus {
 }
 
 impl DocumentState for LineStatus {
-    /// 有效行可被后续版本移除；移除行为终态（不复用历史行号，§6.4）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// `Active` 的后继为 `Removed`；`Removed` 返回空切片。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 校验销售明细状态迁移时查本状态可直接到达的后继状态；无后继即不能再迁移。
+    // 结果：`Active` 的后继为 `Removed`；`Removed` 返回空切片。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Active => &[Self::Removed],

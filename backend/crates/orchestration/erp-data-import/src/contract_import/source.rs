@@ -18,11 +18,11 @@ use super::audit::{CreateImport, context};
 use crate::{Error, Result};
 
 /// 独立解析 PDF 页数和原文件摘要，不能相信 OCR 报告的页数。
-/// # 参数
-/// * `pdf` - 已校验上传大小的 PDF 字节。
-/// # 返回
+///
+/// `pdf`：已校验上传大小的 PDF 字节。
+///
 /// SHA256 和页数。
-/// # 错误
+///
 /// 损坏、加密、空文件或超过 200 页。
 pub async fn inspect_pdf(pdf: Vec<u8>) -> Result<(String, u32)> {
     tokio::task::spawn_blocking(move || {
@@ -35,11 +35,11 @@ pub async fn inspect_pdf(pdf: Vec<u8>) -> Result<(String, u32)> {
 
 impl ContractImportProcess {
     /// 在保存识别源文件前检查合同导入功能资格。
-    /// # 参数
+    ///
     /// actor 为已认证账号。
-    /// # 返回
+    ///
     /// 当前快照具备导入功能资格时成功；追加目标仍在登记事务重新授权。
-    /// # 错误
+    ///
     /// 身份失效、缺少功能资格或快照失败时拒绝外部上传。
     pub async fn prepare_attachment_upload(&self, actor: &AuditActor) -> Result<()> {
         let access = self.services.contract_access.clone();
@@ -54,11 +54,11 @@ impl ContractImportProcess {
     }
 
     /// 登记源文件及任务；重放时返回 false，调用方删除本次未使用对象。
-    /// # 参数
-    /// * `command` / `asset_request` / `digest` / `actor` - 控制信息、受控文件、摘要页数与认证人。
-    /// # 返回
+    ///
+    /// `command` / `asset_request` / `digest` / `actor`：控制信息、受控文件、摘要页数与认证人。
+    ///
     /// 任务及是否接纳本次对象。
-    /// # 错误
+    ///
     /// 异载荷重放、授权失败、事务失败或未知提交；未知提交禁止清理对象。
     pub async fn create(
         &self,
@@ -78,20 +78,17 @@ impl ContractImportProcess {
         .await
     }
 
-    /// 在当前执行器内登记源文件和导入任务；同人同请求键重放时不写新记录。
-    ///
-    /// # 参数
-    /// * `command` - 导入控制信息。
-    /// * `asset` - 已构造的源文件资产。
-    /// * `digest` - 原文件 SHA256 与页数。
-    /// * `actor` - 认证人。
-    /// * `executor` - 创建事务执行器。
-    ///
-    /// # 返回
-    /// 任务视图，以及本次对象是否被接纳。重放命中时第二项为 `false`。
-    ///
-    /// # 错误
-    /// 重放载荷不一致、追加目标无权更新、任务构造失败，或文件与任务仓储写入失败时返回对应错误。
+    // 在当前执行器内登记源文件和导入任务；同人同请求键重放时不写新记录。
+    //
+    // - `command`：导入控制信息。
+    // - `asset`：已构造的源文件资产。
+    // - `digest`：原文件 SHA256 与页数。
+    // - `actor`：认证人。
+    // - `executor`：创建事务执行器。
+    //
+    // 任务视图，以及本次对象是否被接纳。重放命中时第二项为 `false`。
+    //
+    // 重放载荷不一致、追加目标无权更新、任务构造失败，或文件与任务仓储写入失败时返回对应错误。
     pub(super) async fn create_task(
         &self,
         command: ImportCommand,
@@ -133,17 +130,13 @@ impl ContractImportProcess {
         Ok((task.into(), true))
     }
 
-    /// 读取任务绑定的源文件，并拒绝已销毁、拒绝或隔离的文件。
-    ///
-    /// # 参数
-    /// * `task` - 已归属的导入任务。
-    /// * `executor` - 读取所用执行器。
-    ///
-    /// # 返回
-    /// 可继续读取的源文件。
-    ///
-    /// # 错误
-    /// 文件不存在时返回 `NotFound`；已销毁、扫描拒绝或隔离时返回 `BusinessLogicError`；仓储读取失败时返回对应错误。
+    // 读取任务绑定的源文件，并拒绝已销毁、拒绝或隔离的文件。
+    //
+    // `task`：已归属的导入任务；`executor`：读取所用执行器。
+    //
+    // 可继续读取的源文件。
+    //
+    // 文件不存在时返回 `NotFound`；已销毁、扫描拒绝或隔离时返回 `BusinessLogicError`；仓储读取失败时返回对应错误。
     pub(super) async fn require_source(
         &self,
         task: &ContractImport,

@@ -42,14 +42,8 @@ pub struct PurchaseFulfillmentEligibility;
 
 impl PurchaseFulfillmentEligibility {
     /// 校验采购单状态允许形成收货、电子交付或服务履约事实。
-    ///
-    /// # 参数
-    /// * `status` - 当前采购单状态
-    ///
-    /// # 返回
     /// 生效或部分执行时返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// `status` 为当前采购单状态。
     /// 其它状态返回业务规则错误。
     pub fn ensure_order_fulfillable(status: PurchaseOrderStatus) -> Result<()> {
         if matches!(status, PurchaseOrderStatus::Effective | PurchaseOrderStatus::PartiallyExecuted) {
@@ -59,16 +53,9 @@ impl PurchaseFulfillmentEligibility {
     }
 
     /// 校验冻结的先款后货门槛。
-    ///
-    /// # 参数
-    /// * `snapshot` - 当前生效采购版本的付款条件快照
-    /// * `gross_amount` - 当前生效采购版本含税总额
-    /// * `effective_paid` - 有效已过账付款净核销金额
-    ///
-    /// # 返回
     /// 未启用门槛或已达到全部门槛时返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// `snapshot` 为当前生效采购版本的付款条件快照；`gross_amount` 为当前生效采购版本含税总额。
+    /// `effective_paid` 为有效已过账付款净核销金额。
     /// 已启用先款门槛但金额与比例门槛都未冻结，或有效付款低于冻结金额或比例门槛时返回业务规则错误。
     pub fn ensure_prepayment_satisfied(
         snapshot: &PaymentTermSnapshot,
@@ -98,17 +85,9 @@ impl PurchaseFulfillmentEligibility {
     }
 
     /// 校验采购销售分配属于当前采购版本和目标销售稳定明细。
-    ///
-    /// # 参数
-    /// * `allocation` - 已加载的采购销售分配
-    /// * `current_purchase_line_ids` - 当前生效采购版本行主键集合
-    /// * `sales_revision_line` - 已加载销售版本行的「版本行主键、稳定行主键」
-    /// * `expected_sales_order_line_id` - 本次履约声明的销售稳定明细
-    ///
-    /// # 返回
     /// 两端关联一致时返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// `allocation` 已加载的采购销售分配；`current_purchase_line_ids` 为当前生效采购版本行主键集合。
+    /// `sales_revision_line` 已加载销售版本行的「版本行主键、稳定行主键」；`expected_sales_order_line_id` 为本次履约声明的销售稳定明细。
     /// 分配不属于当前采购版本，或销售版本行与声明明细不一致时返回错误。
     pub fn ensure_allocation_consistent(
         allocation: &PurchaseLineSalesAllocation,
@@ -145,16 +124,7 @@ pub enum PurchaseReceiptState {
 }
 
 impl PurchaseReceiptState {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回采购收货单状态的中文名称，供业务界面展示，不作为持久化代码。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Draft => "草稿",
@@ -163,16 +133,7 @@ impl PurchaseReceiptState {
         }
     }
 
-    /// 返回状态的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回采购收货单状态的稳定代码，供持久化与查询匹配使用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Draft => "DRAFT",
@@ -181,33 +142,15 @@ impl PurchaseReceiptState {
         }
     }
 
-    /// 判断是否可编辑（仅草稿）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 草稿状态返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 编辑入口据此判断是否能继续修改当前记录；仅草稿状态允许。
     pub fn is_editable(&self) -> bool {
         matches!(self, Self::Draft)
     }
 }
 
 impl DocumentState for PurchaseReceiptState {
-    /// 固定邻接矩阵（§7.5 定向链，`REVERSED` 为不可逆终态）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// `Draft` 只允许进入 `Posted`；`Posted` 只允许进入 `Reversed`；
-    /// `Reversed` 没有后继。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 固定邻接矩阵（§7.5 定向链，`REVERSED` 为不可逆终态）。
+    // `Draft` 只允许进入 `Posted`；`Posted` 只允许进入 `Reversed`；`Reversed` 没有后继。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Draft => &[Self::Posted],
@@ -231,16 +174,8 @@ pub enum QualityResult {
 
 impl QualityResult {
     /// 按合格与不合格数量派生质量结果。
-    ///
-    /// # 参数
-    /// * `qualified_quantity` - 合格数量
-    /// * `rejected_quantity` - 不合格数量
-    ///
-    /// # 返回
-    /// 不合格数量非正时返回合格；否则合格数量非正时返回不合格；两者均为
-    /// 正数时返回部分合格。
-    ///
-    /// # 错误
+    /// 不合格数量非正时返回合格；否则合格数量非正时返回不合格；两者均为正数时返回部分合格。
+    /// `qualified_quantity` 为合格数量；`rejected_quantity` 为不合格数量。
     /// 不返回错误。数量非负与到货数量守恒由入库行构造器统一校验。
     pub fn from_quantities(qualified_quantity: Quantity, rejected_quantity: Quantity) -> Self {
         if rejected_quantity.to_decimal() <= rust_decimal::Decimal::ZERO {
@@ -252,16 +187,7 @@ impl QualityResult {
         }
     }
 
-    /// 返回结果的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回采购收货质检结果的中文名称，供业务界面展示，不作为持久化代码。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Passed => "合格",
@@ -270,16 +196,7 @@ impl QualityResult {
         }
     }
 
-    /// 返回结果的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回采购收货质检结果的稳定代码，供持久化与查询匹配使用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Passed => "PASSED",
@@ -331,17 +248,9 @@ pub struct PurchaseReceipt {
 
 impl PurchaseReceipt {
     /// 创建采购入库单（初始状态为草稿）。
-    ///
     /// 完成 receipt_no 的规范化（去首尾空白、非空、长度上限）。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::PurchaseReceiptId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
     /// 返回新建的入库单实体。
-    ///
-    /// # 错误
+    /// `id` 为实体主键（`erp_core::ids::PurchaseReceiptId`）。
     /// 当 receipt_no 为空或超长时返回错误。
     pub fn new(id: PurchaseReceiptId, data: PurchaseReceiptData) -> Result<Self> {
         let receipt_no = normalize_required_text(
@@ -362,17 +271,7 @@ impl PurchaseReceipt {
     }
 
     /// 更新采购入库单。
-    ///
-    /// 复用 `new` 的校验规则；已过账/已冲正的入库单不可编辑（§6.7），
-    /// 只能冲正或走采购退货。
-    ///
-    /// # 参数
-    /// * `update` - 更新数据
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// 复用 `new` 的校验规则；已过账/已冲正的入库单不可编辑（§6.7），只能冲正或走采购退货。
     /// 状态不可编辑时返回错误。
     pub fn update(&mut self, update: PurchaseReceiptUpdate) -> Result<()> {
         self.ensure_editable()?;
@@ -383,14 +282,8 @@ impl PurchaseReceipt {
     }
 
     /// 校验入库单仍为调用方看到的草稿版本。
-    ///
-    /// # 参数
-    /// * `expected_version` - 调用方提交的乐观锁版本
-    ///
-    /// # 返回
     /// 草稿且版本一致时返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// `expected_version` 为调用方提交的乐观锁版本。
     /// 状态或版本不满足时返回错误。
     pub fn ensure_draft_version(&self, expected_version: u64) -> Result<()> {
         if self.status != PurchaseReceiptState::Draft {
@@ -403,14 +296,8 @@ impl PurchaseReceipt {
     }
 
     /// 校验已加载入库行完整且全部归属本单。
-    ///
-    /// # 参数
-    /// * `lines` - 已在事务内加载的入库行
-    ///
-    /// # 返回
     /// 至少一行且全部行归属本单时返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// `lines` 为已在事务内加载的入库行。
     /// 空行或行表头关联不一致时返回错误。
     pub fn ensure_posting_lines(&self, lines: &[PurchaseReceiptLine]) -> Result<()> {
         if lines.is_empty() {
@@ -423,16 +310,9 @@ impl PurchaseReceipt {
     }
 
     /// 根据当前生效采购版本与累计有效收货计算采购履约进度。
-    ///
-    /// # 参数
-    /// * `revision_lines` - 当前生效采购版本行
-    /// * `received` - 按采购版本行（强类型主键）汇总的累计合格收货
-    ///
-    /// # 返回
-    /// 有数量的版本行数量相加为应到货合计；`revision_lines` 里能在 `received` 命中的数量相加为累计收货（没有数量的行若在映射中也计入）。应到货合计大于零且累计收货不低于应到货合计时返回 `Completed`，否则返回 `Partial`。比较的是合计，不是逐行收满。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 有数量的版本行数量相加为应到货合计；`revision_lines` 里能在 `received` 命中的数量相加为累计收货（没有数量的行若在映射中也计入）。
+    /// 应到货合计大于零且累计收货不低于应到货合计时返回 `Completed`，否则返回 `Partial`。比较的是合计，不是逐行收满。
+    /// `revision_lines` 为当前生效采购版本行；`received` 按采购版本行（强类型主键）汇总的累计合格收货。
     pub fn fulfillment_progress(
         revision_lines: &[PurchaseOrderRevisionLine],
         received: &HashMap<PurchaseOrderRevisionLineId, Quantity>,
@@ -454,18 +334,9 @@ impl PurchaseReceipt {
     }
 
     /// 过账入库（草稿 → 已过账）。
-    ///
-    /// 过账时记录入库过账时间与仓储经办人（§6.7）。库存入账、余额更新与
-    /// 销售预占等跨聚合动作由 P3 在过账事务中完成（§8.2 第 1 条）。
-    ///
-    /// # 参数
-    /// * `posted_at` - 入库过账时间
-    /// * `posted_by` - 仓储经办人（账号或系统身份）
-    ///
-    /// # 返回
+    /// 过账时记录入库过账时间与仓储经办人（§6.7）。库存入账、余额更新与销售预占等跨聚合动作由 P3 在过账事务中完成（§8.2 第 1 条）。
     /// 迁移成功返回 `Ok(())`。已过账再次过账按幂等成功，并覆盖过账时间与经办人。
-    ///
-    /// # 错误
+    /// `posted_at` 为入库过账时间；`posted_by` 为仓储经办人（账号或系统身份）。
     /// 已冲正不能过账，或经办人为空或超长时返回错误。
     pub fn mark_posted(&mut self, posted_at: Instant, posted_by: impl Into<String>) -> Result<()> {
         ensure_transition(self.status, PurchaseReceiptState::Posted)?;
@@ -479,17 +350,8 @@ impl PurchaseReceipt {
     }
 
     /// 冲正入库单（已过账 → 已冲正，终态）。
-    ///
-    /// `REVERSED` 表示存在正式反向事实（冲正流水/采购退货），不删除原事实
-    /// （§4.5.1、§7.5）；反向事实由 P3 形成。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
+    /// `REVERSED` 表示存在正式反向事实（冲正流水/采购退货），不删除原事实（§4.5.1、§7.5）；反向事实由 P3 形成。
     /// 迁移成功返回 `Ok(())`。已冲正再次冲正按幂等成功。
-    ///
-    /// # 错误
     /// 草稿不能冲正时返回错误。
     pub fn reverse(&mut self) -> Result<()> {
         ensure_transition(self.status, PurchaseReceiptState::Reversed)?;
@@ -497,27 +359,13 @@ impl PurchaseReceipt {
         Ok(())
     }
 
-    /// 判断当前状态是否可编辑。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 草稿状态返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 编辑入口据此判断是否能继续修改当前记录；仅草稿状态允许。
     pub fn is_editable(&self) -> bool {
         self.status.is_editable()
     }
 
-    /// 校验当前状态可编辑。
-    ///
-    /// # 返回
-    /// 可编辑返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 已过账或已冲正的入库单不可编辑时返回错误。
+    // 校验当前状态可编辑。
+    // 已过账或已冲正的入库单不可编辑时返回错误。
     fn ensure_editable(&self) -> Result<()> {
         if !self.is_editable() {
             return Err(Error::from("已过账或已冲正的采购入库单不可编辑"));
@@ -572,21 +420,11 @@ pub struct PurchaseReceiptLine {
 
 impl PurchaseReceiptLine {
     /// 创建采购入库行。
-    ///
-    /// 完成数量约束校验：三个数量均非负、合格与不合格数量合计不超过到货数量、
-    /// 行号从 1 开始。行级约束 `(purchase_receipt_id, line_no)` 唯一由唯一索引
-    /// 保证；入库单已过账后行不可再变更由 P3 按表头状态把关。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::PurchaseReceiptLineId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
+    /// 完成数量约束校验：三个数量均非负、合格与不合格数量合计不超过到货数量、行号从 1 开始。行级约束 `(purchase_receipt_id, line_no)` 唯一由唯一索引保证；
+    /// 入库单已过账后行不可再变更由 P3 按表头状态把关。
     /// 返回新建的入库行实体。
-    ///
-    /// # 错误
-    /// 行号小于 1、数量为负、合格/不合格合计超过到货数量，或质量结果与
-    /// 合格/不合格数量不一致时返回错误。
+    /// `id` 为实体主键（`erp_core::ids::PurchaseReceiptLineId`）。
+    /// 行号小于 1、数量为负、合格/不合格合计超过到货数量，或质量结果与合格/不合格数量不一致时返回错误。
     pub fn new(id: PurchaseReceiptLineId, data: PurchaseReceiptLineData) -> Result<Self> {
         ensure_line_valid(&data)?;
         Ok(Self {
@@ -602,14 +440,7 @@ impl PurchaseReceiptLine {
     }
 
     /// 返回本行计入累计有效收货上限的数量。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回合格数量与不合格数量之和。
-    ///
-    /// # 错误
     /// 数量相加超出统一精度范围时返回错误。
     pub fn posting_quantity(&self) -> Result<Quantity> {
         Quantity::try_from(self.qualified_quantity.to_decimal() + self.rejected_quantity.to_decimal())
@@ -617,15 +448,8 @@ impl PurchaseReceiptLine {
     }
 
     /// 校验本行属于当前采购版本且累计收货不超采购数量。
-    ///
-    /// # 参数
-    /// * `revision_line` - 按本行采购版本行主键加载的当前生效版本行
-    /// * `already_received` - 过账前该采购版本行的累计合格收货
-    ///
-    /// # 返回
     /// 关联一致、非物流费用行且累计不超收时返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// `revision_line` 按本行采购版本行主键加载的当前生效版本行；`already_received` 为过账前该采购版本行的累计合格收货。
     /// 采购版本行关联不一致、没有可收货数量、累计超收，或合格与不合格数量之和超出统一精度时返回错误。
     pub fn ensure_within_revision(
         &self,
@@ -643,17 +467,9 @@ impl PurchaseReceiptLine {
     }
 
     /// 按采购销售分配比例分摊本次合格入库数量。
-    ///
     /// 最后一个分配吸收六位数量精度的舍入尾差。
-    ///
-    /// # 参数
-    /// * `allocation_quantities` - 各采购销售分配数量
-    /// * `purchase_line_total` - 当前采购版本行总数量
-    ///
-    /// # 返回
     /// 返回与分配集合一一对应的预占份额；非空时最后一笔吸收尾差，合计等于本行合格数量。分配集合为空时返回空向量，不另报错。
-    ///
-    /// # 错误
+    /// `allocation_quantities` 为各采购销售分配数量；`purchase_line_total` 为当前采购版本行总数量。
     /// 采购行数量非正或份额超出统一数量精度时返回错误。
     pub fn reservation_shares(
         &self,
@@ -681,17 +497,9 @@ impl PurchaseReceiptLine {
     }
 }
 
-/// 校验入库行数量约束。
-///
-/// # 参数
-/// * `data` - 行创建/更新数据
-///
-/// # 返回
-/// 通过返回 `Ok(())`。
-///
-/// # 错误
-/// 行号小于 1、数量为负、合格/不合格合计超过到货数量，或质量结果与
-/// 合格/不合格数量不一致时返回错误。
+// 校验入库行数量约束。
+// `data` 为行创建/更新数据。
+// 行号小于 1、数量为负、合格/不合格合计超过到货数量，或质量结果与合格/不合格数量不一致时返回错误。
 fn ensure_line_valid(data: &PurchaseReceiptLineData) -> Result<()> {
     if data.line_no < 1 {
         return Err(Error::from("行号必须从 1 开始"));
@@ -744,13 +552,9 @@ pub(crate) mod tests {
         }
     }
 
-    /// 构造具备数量和销售关联的最小采购版本行测试夹具。
-    ///
-    /// # 参数
-    /// * `quantity` - 采购版本行数量
-    ///
-    /// # 返回
-    /// 返回用于收货上限、进度与关联规则测试的采购版本行。
+    // 构造具备数量和销售关联的最小采购版本行测试夹具。
+    // 返回用于收货上限、进度与关联规则测试的采购版本行。
+    // `quantity` 为采购版本行数量。
     fn revision_line(quantity: Quantity) -> PurchaseOrderRevisionLine {
         PurchaseOrderRevisionLine {
             id: PurchaseOrderRevisionLineId::new("po-line-1"),
@@ -758,7 +562,7 @@ pub(crate) mod tests {
         }
     }
 
-    /// happy path：单号规范化、初始草稿、过账与冲正全链路。
+    // 验证单号规范化、初始草稿、过账与冲正全链路。
     #[test]
     fn new_normalizes_no_and_drives_state_machine() {
         let mut receipt = PurchaseReceipt::new(PurchaseReceiptId::new("receipt-1"), receipt_data()).unwrap();
@@ -775,7 +579,7 @@ pub(crate) mod tests {
         assert_eq!(receipt.status, PurchaseReceiptState::Reversed);
     }
 
-    /// 失败路径：必填空（单号空白）与超长。
+    // 验证必填空（单号空白）与超长。
     #[test]
     fn new_rejects_blank_or_overlong_no() {
         let blank = PurchaseReceiptData { receipt_no: "   ".to_string(), ..receipt_data() };
@@ -785,7 +589,7 @@ pub(crate) mod tests {
         assert!(PurchaseReceipt::new(PurchaseReceiptId::new("r3"), overlong).is_err());
     }
 
-    /// 状态机：合法/非法/终态定向断言（含不可逆终态 REVERSED，逐边定向）。
+    // 验证合法迁移、非法迁移和终态边界（含不可逆终态 REVERSED，逐边定向）。
     #[test]
     fn state_machine_directed_edges() {
         let mut receipt = PurchaseReceipt::new(PurchaseReceiptId::new("receipt-2"), receipt_data()).unwrap();
@@ -803,7 +607,7 @@ pub(crate) mod tests {
         assert!(receipt.reverse().is_ok(), "REVERSED 幂等迁移合法，且无法迁移到其他状态");
     }
 
-    /// 状态机：固定邻接矩阵的合法/非法迁移（幂等合法）。
+    // 验证固定邻接矩阵的合法/非法迁移（幂等合法）。
     #[test]
     fn state_machine_transition_matrix() {
         assert!(ensure_transition(PurchaseReceiptState::Draft, PurchaseReceiptState::Draft).is_ok());
@@ -815,7 +619,7 @@ pub(crate) mod tests {
         assert!(ensure_transition(PurchaseReceiptState::Reversed, PurchaseReceiptState::Reversed).is_ok());
     }
 
-    /// happy path：行创建成功，字段完整。
+    // 验证行创建成功，字段完整。
     #[test]
     fn line_new_succeeds() {
         let line = PurchaseReceiptLine::new(PurchaseReceiptLineId::new("line-1"), line_data()).unwrap();
@@ -853,7 +657,7 @@ pub(crate) mod tests {
         assert!(PurchaseReceiptLine::new(PurchaseReceiptLineId::new("line-invalid"), inconsistent).is_err());
     }
 
-    /// 失败路径：数量越界（合计超过到货）与负数量。
+    // 验证数量越界（合计超过到货）与负数量。
     #[test]
     fn line_rejects_quantity_violations() {
         let over_sum =
@@ -868,7 +672,7 @@ pub(crate) mod tests {
         assert!(PurchaseReceiptLine::new(PurchaseReceiptLineId::new("l4"), zero_line_no).is_err());
     }
 
-    /// 过账资格校验状态、版本、表头行归属、超收和预占分摊守恒。
+    // 验证过账资格校验状态、版本、表头行归属、超收和预占分摊守恒。
     #[test]
     fn posting_rules_are_entity_owned() {
         let mut receipt = PurchaseReceipt::new(PurchaseReceiptId::new("receipt-1"), receipt_data()).unwrap();
@@ -931,7 +735,7 @@ pub(crate) mod tests {
         assert!(receipt.ensure_draft_version(receipt.base.version).is_err());
     }
 
-    /// 采购来源履约资格校验采购状态、先款门槛与分配两端关联。
+    // 验证采购来源履约资格校验采购状态、先款门槛与分配两端关联。
     #[test]
     fn purchase_fulfillment_eligibility_checks_loaded_context() {
         assert!(
@@ -1052,7 +856,7 @@ pub(crate) mod tests {
         );
     }
 
-    /// 当前采购多行按总数量派生完成度，不改成逐行收满判断。
+    // 验证当前采购多行按总数量派生完成度，不改成逐行收满判断。
     #[test]
     fn fulfillment_progress_preserves_total_quantity_contract() {
         let lines = [

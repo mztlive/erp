@@ -61,13 +61,11 @@ impl_repository_error!(
 );
 
 impl From<IdentityError> for Error {
-    /// 保留统一授权的拒绝、接入错误、冲突及设施错误类别。
-    /// # 参数
-    /// error 为统一授权服务返回的原始错误。
-    /// # 返回
-    /// 对应财务领域错误，持久化错误保留原始来源。
-    /// # 错误
-    /// 转换不返回错误。
+    // 保留统一授权的拒绝、接入错误、冲突及设施错误类别。
+    // 结果：对应财务领域错误，持久化错误保留原始来源。
+    // 转换不返回错误。
+    //
+    // 输入约定：error 为统一授权服务返回的原始错误。
     fn from(error: IdentityError) -> Self {
         match error {
             IdentityError::Internal(value) | IdentityError::Rbac(value) => Self::Internal(value),

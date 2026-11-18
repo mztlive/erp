@@ -48,13 +48,11 @@ pub struct SupplierApiOrderProcess {
 }
 
 impl SupplierApiOrderProcess {
-    /// 装配真实连接器运行时与应用敏感资料加密器。
-    /// # 参数
+    /// 组合根装配正式采购执行时注入协议运行时、敏感资料加密器和 ERP 资金资格；构造流程本身不外呼。
+    ///
     /// `db`、`runtime`、`codec` 与 ERP 资金资格 `funds` 均来自应用组合根。
-    /// # 返回
+    ///
     /// 不执行外部调用的流程实例。
-    /// # 错误
-    /// 不返回错误。
     pub fn new(
         db: Database,
         runtime: Arc<SupplierConnectorRegistry>,
@@ -65,12 +63,12 @@ impl SupplierApiOrderProcess {
         Self { db, runtime, codec, funds, authorization }
     }
 
-    /// 处理一批到期意图；单个异常只延迟该订单，后续订单继续执行。
-    /// # 参数
+    /// 后台轮询时扫描一批到期的原采购执行意图；单个执行受阻只延迟该订单，不阻断后续订单。
+    ///
     /// 无；到期记录由有界领域查询取得。
-    /// # 返回
+    ///
     /// 本轮检查记录数。
-    /// # 错误
+    ///
     /// 初始队列读取失败时返回数据库错误。
     pub async fn run_once(&self) -> Result<usize> {
         let rows = erp_supply::api_order::due(&self.db, &mut NoTransaction).await?;

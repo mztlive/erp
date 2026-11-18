@@ -82,19 +82,12 @@ pub(super) enum DefinitionResultExpectation {
 }
 
 impl ApprovalDefinitionService {
-    /// 在原快照中完成真实类型授权后读取定义图。
-    ///
-    /// # 参数
-    /// * `definition_id` - 定义主键
-    /// * `actor` - 当前认证操作人
-    /// * `permission` - 当前定义命令固定入口
-    /// * `executor` - 原快照事务执行器
-    ///
-    /// # 返回
-    /// 返回同一事务内已授权的定义图。
-    ///
-    /// # 错误
-    /// 入口或真实类型资格不足、定义不存在或仓储读取失败时拒绝。
+    // 在原快照中完成真实类型授权后读取定义图。
+    // 返回同一事务内已授权的定义图。
+    //
+    // 入口或真实类型资格不足、定义不存在或仓储读取失败时拒绝。
+    //
+    // `permission`：当前定义命令固定入口；`executor`：原快照事务执行器。
     pub(super) async fn require_graph(
         &self,
         definition_id: &str,
@@ -110,7 +103,7 @@ impl ApprovalDefinitionService {
             .ok_or_else(definition_not_found)
     }
 
-    /// 入口资格仅允许读取真实类型事实；完整 Candidate 授权先于任何图读取。
+    // 已有定义操作先凭入口资格读取最小真实类型，再完成该类型的候选授权；在完整授权前不读取定义图。
     async fn require_existing_definition_access(
         &self,
         definition_id: &str,
@@ -135,20 +128,13 @@ impl ApprovalDefinitionService {
         require_definition_access(&self.authorization, actor, permission, &policy, executor).await
     }
 
-    /// 收据竞争、瞬态事务或提交结果未知后，在新会话有限回读胜者。
-    ///
-    /// # 参数
-    /// * `outcome` - 失败会话的原始结果
-    /// * `permission` - 原命令固定入口权限
-    /// * `actor` - 已认证操作人
-    /// * `identity` - 当前命令身份
-    /// * `expectation` - 回放结果必须仍属原始资源
-    ///
-    /// # 返回
-    /// 原结果已成功时原样返回；否则返回回读到的胜者详情。
-    ///
-    /// # 错误
-    /// 不可恢复的错误立即返回。有限次回读仍找不到胜者时返回原错误；回放前定义管理权失效时返回禁止；回放校验失败时返回对应错误。
+    // 收据竞争、瞬态事务或提交结果未知后，在新会话有限回读胜者。
+    // 原结果已成功时原样返回；否则返回回读到的胜者详情。
+    //
+    // 不可恢复的错误立即返回。有限次回读仍找不到胜者时返回原错误；回放前定义管理权失效时返回禁止；回放校验失败时返回对应错误。
+    //
+    // `outcome`：失败会话的原始结果；`permission`：原命令固定入口权限。
+    // `identity`：当前命令身份；`expectation`：回放结果必须仍属原始资源。
     pub(super) async fn recover_definition_command(
         &self,
         outcome: Result<DefinitionDetailView>,
@@ -179,7 +165,7 @@ impl ApprovalDefinitionService {
         Err(error)
     }
 
-    /// 在独立回读快照中重建真实授权目标，不复用失败事务的业务事实。
+    // 定义写入结果不确定时在独立的回读快照重新构建真实授权目标，不沿用失败事务中的图或类型事实。
     async fn recover_definition_attempt(
         &self,
         permission: &Permission,
@@ -203,7 +189,7 @@ impl ApprovalDefinitionService {
             .await
     }
 
-    /// 创建命令按固定类型复验；已有定义命令按真实 ID 重新读取最小类型事实。
+    // 定义命令回放前重新取证：新建按固定类型，已有定义按真实 ID 读取最小类型事实，再检查完整授权。
     async fn require_recovery_access(
         &self,
         permission: &Permission,
@@ -223,7 +209,7 @@ impl ApprovalDefinitionService {
     }
 }
 
-/// 事务内若已有同载荷 v3 收据则回读仍未漂移的结果版本。
+// 同载荷的 v3 收据命中时，在当前事务读回收据冻结的定义结果；持久化版本已漂移时不得返回近似结果。
 async fn replay_current_receipt(
     db: &Database,
     identity: &ApprovalCommandIdentity,
@@ -255,22 +241,16 @@ async fn replay_current_receipt(
     Ok(Some(detail_with_copies(db, &graph, session).await?))
 }
 
-/// 单一回放策略表（当前 V3 → 已登记历史候选），各命令入口共用。
-///
-/// 事务内先读取 v3 收据；仅在 v3 不存在时读取命令声明的精确旧格式候选。
-/// 当前格式一旦存在即由 `reconcile_identity` 决定回放或冲突，不得降级至旧格式。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `identity` - 当前 V3 身份与唯一历史候选
-/// * `expectation` - 回放结果仍属原始资源的期望约束
-/// * `session` - 调用方执行器
-///
-/// # 返回
-/// 同载荷收据回读详情；无收据返回 `None`。
-///
-/// # 错误
-/// 仓储读取失败、收据身份冲突或结果无法证明时返回错误。
+// 单一回放策略表（当前 V3 → 已登记历史候选），各命令入口共用。
+//
+// 事务内先读取 v3 收据；仅在 v3 不存在时读取命令声明的精确旧格式候选。
+// 当前格式一旦存在即由 `reconcile_identity` 决定回放或冲突，不得降级至旧格式。
+//
+// 同载荷收据回读详情；无收据返回 `None`。
+//
+// 仓储读取失败、收据身份冲突或结果无法证明时返回错误。
+//
+// `identity`：当前 V3 身份与唯一历史候选；`expectation`：回放结果仍属原始资源的期望约束。
 pub(super) async fn replay_prepared_definition_receipt(
     db: &Database,
     identity: &PreparedDefinitionIdentity,
@@ -287,7 +267,7 @@ pub(super) async fn replay_prepared_definition_receipt(
     replay_legacy_receipt(db, identity.current.idempotency_key(), legacy, session).await
 }
 
-/// 精确读取一个旧 scope/digest 候选，并以不可变结果事实证明完整载荷。
+// 按精确身份读取一个旧 scope/digest 候选，并以不可变结果事实证明完整载荷。
 async fn replay_legacy_receipt(
     db: &Database,
     key: &IdempotencyKey,
@@ -311,19 +291,12 @@ async fn replay_legacy_receipt(
     Ok(Some(detail_with_copies(db, &graph, session).await?))
 }
 
-/// 写入命令收据。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `identity` - 当前命令身份
-/// * `result_ref` - 结果引用
-/// * `session` - 调用方执行器
-///
-/// # 返回
-/// 收据写入完成时无返回值。
-///
-/// # 错误
-/// 收据构造失败时映射为模型错误；幂等索引冲突标记为 `ReceiptDuplicate`，其它仓储失败原样转换。
+// 写入命令收据。
+// 收据写入完成时无返回值。
+//
+// 收据构造失败时映射为模型错误；幂等索引冲突标记为 `ReceiptDuplicate`，其它仓储失败原样转换。
+//
+// `identity`：当前命令身份。
 pub(super) async fn write_receipt(
     db: &Database,
     identity: &ApprovalCommandIdentity,
@@ -336,22 +309,12 @@ pub(super) async fn write_receipt(
     db.bpm_workflow().insert_command_receipt(&receipt, session).await.map_err(mark_receipt_duplicate)
 }
 
-/// 写入定义变更审计。
-///
-/// # 参数
-/// * `audit_port` - 审计写入端口
-/// * `actor` - 已认证操作人
-/// * `action` - 审计动作
-/// * `graph` - 变更后的定义图
-/// * `expected_lock` - 调用方期望的锁版本；没有时为空
-/// * `extra` - 附加说明
-/// * `session` - 调用方执行器
-///
-/// # 返回
-/// 审计写入完成时无返回值。
-///
-/// # 错误
-/// 审计构造或持久化失败时返回错误。
+// 写入定义变更审计。
+// 审计写入完成时无返回值。
+//
+// 审计构造或持久化失败时返回错误。
+//
+// `graph`：变更后的定义图；`expected_lock`：调用方期望的锁版本；没有时为空。
 pub(super) async fn write_definition_audit(
     audit_port: &dyn crate::ports::WorkflowAuditPort,
     actor: &AuditActor,
@@ -382,16 +345,12 @@ pub(super) async fn write_definition_audit(
     Ok(())
 }
 
-/// 取出 CAS 成功后的定义。
-///
-/// # 参数
-/// * `outcome` - 定义图 CAS 写入结果
-///
-/// # 返回
-/// `Applied` 时返回写入后的定义。
-///
-/// # 错误
-/// 版本冲突返回陈旧锁；状态变化返回 `ApprovalDefinitionNotDraft`；未找到返回不泄露存在性的未找到。
+// 取出 CAS 成功后的定义。
+// `Applied` 时返回写入后的定义。
+//
+// 版本冲突返回陈旧锁；状态变化返回 `ApprovalDefinitionNotDraft`；未找到返回不泄露存在性的未找到。
+//
+// `outcome`：定义图 CAS 写入结果。
 pub(super) fn applied_definition(
     outcome: CasWriteOutcome<ApprovalProcessDefinition>,
 ) -> Result<ApprovalProcessDefinition> {
@@ -405,64 +364,40 @@ pub(super) fn applied_definition(
     }
 }
 
-/// 校验定义锁版本并映射陈旧锁错误。
-///
-/// # 参数
-/// * `definition` - 当前定义快照
-/// * `expected` - 调用方期望的锁版本
-///
-/// # 返回
-/// 锁版本一致时返回 `Ok(())`。
-///
-/// # 错误
-/// 锁版本不一致时返回“未写入任何节点”的稳定冲突错误。
-///
-/// # 关键业务约束
-/// 不得使用业务版本替代 `definition_lock_version`。
+// 校验定义锁版本并映射陈旧锁错误。
+// 不得使用业务版本替代 `definition_lock_version`。
+//
+// 锁版本一致时返回 `Ok(())`。
+//
+// 锁版本不一致时返回“未写入任何节点”的稳定冲突错误。
+//
+// `definition`：当前定义快照；`expected`：调用方期望的锁版本。
 pub(super) fn ensure_lock(definition: &ApprovalProcessDefinition, expected: u64) -> Result<()> {
     definition.ensure_lock_version(expected).map_err(|_| stale_lock_error())
 }
 
-/// 由定义的流程种类读取必须审批政策。
-///
-/// # 参数
-/// * `definition` - 审批流程定义
-///
-/// # 返回
-/// 返回该定义所属单据类型的必须审批政策。
-///
-/// # 错误
-/// 类型无需审批或政策构造失败时返回 `require_process_required` 的错误。
+// 由定义的流程种类读取必须审批政策。
+// 返回该定义所属单据类型的必须审批政策。
+//
+// 类型无需审批或政策构造失败时返回 `require_process_required` 的错误。
+//
+// `definition`：审批流程定义。
 pub(super) fn policy_for_definition(
     definition: &ApprovalProcessDefinition,
 ) -> Result<ProcessRequiredApprovalPolicy> {
     require_process_required(document_type_of(definition.process_kind))
 }
 
-/// 节点摘要，供审计使用。
-///
-/// # 参数
-/// * `nodes` - 定义节点
-///
-/// # 返回
-/// 返回按展示顺序与节点键拼接的摘要。
-///
-/// # 错误
-/// 不返回错误。
+// 节点摘要，供审计使用。
+// 返回按展示顺序与节点键拼接的摘要。
 pub(super) fn node_summary(nodes: &[ApprovalNodeDefinition]) -> String {
     nodes.iter().map(|node| format!("{}:{}", node.display_order, node.node_key)).collect::<Vec<_>>().join(",")
 }
 
-/// 在任何 Repository 读取前把外部幂等键转换为规范值对象。
-///
-/// # 参数
-/// * `raw` - 调用方提交的幂等键
-///
-/// # 返回
-/// 返回规范 `IdempotencyKey`。
-///
-/// # 错误
-/// 字段非法时返回校验错误；其它模型错误返回内部错误。
+// 在任何 Repository 读取前把外部幂等键转换为规范值对象。
+// 返回规范 `IdempotencyKey`。
+//
+// 字段非法时返回校验错误；其它模型错误返回内部错误。
 pub(super) fn parse_idempotency_key(raw: &str) -> Result<IdempotencyKey> {
     IdempotencyKey::parse(raw.to_string()).map_err(|error| match error {
         ModelError::InvalidField(detail) => {
@@ -473,20 +408,12 @@ pub(super) fn parse_idempotency_key(raw: &str) -> Result<IdempotencyKey> {
     })
 }
 
-/// 创建草稿的 v3 身份与唯一旧格式候选。
-///
-/// # 参数
-/// * `key` - 规范幂等键
-/// * `document_type` - 单据类型
-/// * `name` - 已规范化的定义名称
-/// * `draft_source` - 草稿来源
-/// * `actor_id` - 操作人 ID
-///
-/// # 返回
-/// 返回当前 V3 身份，以及不可证明的旧格式候选。
-///
-/// # 错误
-/// 身份构造失败时返回内部错误。
+// 创建草稿的 v3 身份与唯一旧格式候选。
+// 返回当前 V3 身份，以及不可证明的旧格式候选。
+//
+// 身份构造失败时返回内部错误。
+//
+// `name`：已规范化的定义名称。
 pub(super) fn create_draft_identity(
     key: IdempotencyKey,
     document_type: DocumentType,
@@ -523,21 +450,12 @@ pub(super) fn create_draft_identity(
     })
 }
 
-/// 发布或退役的 v3 身份与可证明旧格式候选。
-///
-/// # 参数
-/// * `key` - 规范幂等键
-/// * `command_kind` - 发布或退役命令种类
-/// * `domain` - 命令域
-/// * `definition_id` - 定义主键
-/// * `expected_lock` - 期望的定义锁版本
-/// * `actor_id` - 操作人 ID
-///
-/// # 返回
-/// 返回当前 V3 身份及对应发布或退役证明。
-///
-/// # 错误
-/// 命令种类不是发布或退役，或身份构造失败时返回内部错误。
+// 发布或退役的 v3 身份与可证明旧格式候选。
+// 返回当前 V3 身份及对应发布或退役证明。
+//
+// 命令种类不是发布或退役，或身份构造失败时返回内部错误。
+//
+// `expected_lock`：期望的定义锁版本。
 pub(super) fn lock_command_identity(
     key: IdempotencyKey,
     command_kind: ApprovalCommandKind,
@@ -584,7 +502,7 @@ pub(super) fn lock_command_identity(
     })
 }
 
-/// 只用于精确读取旧收据候选的历史 U+001F 摘要。
+// 为旧定义收据候选重建以 U+001F 拼接的历史摘要，只用于精确回读，不为新命令签名。
 fn legacy_payload_digest(parts: &[&str]) -> String {
     let mut hasher = Sha256::new();
     for (index, part) in parts.iter().enumerate() {
@@ -597,16 +515,8 @@ fn legacy_payload_digest(parts: &[&str]) -> String {
 }
 
 impl DefinitionCommandResultRef {
-    /// 从尚未或已经持久化的图冻结定义身份与结果锁版本。
-    ///
-    /// # 参数
-    /// * `graph` - 定义图
-    ///
-    /// # 返回
-    /// 返回定义 ID 与当前锁版本。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 从尚未或已经持久化的图冻结定义身份与结果锁版本。
+    // 返回定义 ID 与当前锁版本。
     pub(super) fn from_graph(graph: &DefinitionGraph) -> Self {
         Self {
             definition_id: graph.definition.base.id.clone(),
@@ -614,16 +524,8 @@ impl DefinitionCommandResultRef {
         }
     }
 
-    /// 使用长度定界 ID 编码版本化结果引用。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回带前缀、ID 长度、定义 ID 与锁版本的结果引用。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 使用长度定界 ID 编码版本化结果引用。
+    // 返回带前缀、ID 长度、定义 ID 与锁版本的结果引用。
     pub(super) fn encode(&self) -> String {
         format!(
             "{DEFINITION_RESULT_REF_PREFIX}{}:{}:{}",
@@ -633,7 +535,7 @@ impl DefinitionCommandResultRef {
         )
     }
 
-    /// 解析当前结果引用；旧 raw ID 不得被当前 v3 收据接受。
+    // 从 v3 收据解析结构化结果引用；不接受旧收据使用的裸定义 ID。
     fn parse(raw: &str) -> Result<Self> {
         let payload =
             raw.strip_prefix(DEFINITION_RESULT_REF_PREFIX).ok_or_else(idempotency_payload_conflict)?;
@@ -655,7 +557,7 @@ impl DefinitionCommandResultRef {
         Ok(Self { definition_id: definition_id.to_string(), definition_lock_version: version })
     }
 
-    /// 证明当前图仍是该命令冻结的精确结果版本与资源。
+    // 回放定义命令前确认当前图仍是收据引用的精确资源和结果版本，避免拿后来修改的草稿当原响应。
     fn ensure_matches(
         &self,
         graph: &DefinitionGraph,
@@ -679,44 +581,25 @@ impl DefinitionCommandResultRef {
     }
 }
 
-/// 当前调用方时间。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回当前 UTC 时间。
-///
-/// # 错误
-/// 当前构造不会失败。
+// 当前调用方时间。
+// 返回当前 UTC 时间。
+//
+// 当前构造不会失败。
 pub(super) fn now() -> Result<Timestamp> {
     Ok(Timestamp::from_utc(Utc::now()))
 }
 
-/// 构造处理人引用。
-///
-/// # 参数
-/// * `actor` - 已认证操作人
-///
-/// # 返回
-/// 返回操作人 ID 对应的 `ParticipantId`。
-///
-/// # 错误
-/// 处理人 ID 无法构造时返回 `ApprovalDefinitionInvalid`。
+// 构造处理人引用。
+// 返回操作人 ID 对应的 `ParticipantId`。
+//
+// 处理人 ID 无法构造时返回 `ApprovalDefinitionInvalid`。
 pub(super) fn participant(actor: &AuditActor) -> Result<ParticipantId> {
     ParticipantId::new(actor.id().to_string()).map_err(map_bpm_error)
 }
 
-/// 映射 BPM 模型错误。
-///
-/// # 参数
-/// * `error` - BPM 模型错误
-///
-/// # 返回
-/// 收据载荷冲突映射为 `ApprovalIdempotencyPayloadConflict`；字段或迁移非法映射为 `ApprovalDefinitionInvalid`；非法状态返回冲突；溢出返回业务错误；其余返回业务错误。
-///
-/// # 错误
-/// 不返回错误。
+// 映射 BPM 模型错误。
+//
+// 收据载荷冲突映射为 `ApprovalIdempotencyPayloadConflict`；字段或迁移非法映射为 `ApprovalDefinitionInvalid`；非法状态返回冲突；溢出返回业务错误；其余返回业务错误。
 pub(super) fn map_model_error(error: ModelError) -> Error {
     match error {
         ModelError::CommandReceiptConflict => {
@@ -734,43 +617,31 @@ pub(super) fn map_model_error(error: ModelError) -> Error {
     }
 }
 
-/// 映射 BPM 边界错误。
-///
-/// # 参数
-/// * `error` - BPM 边界错误；不保留原文
-///
-/// # 返回
-/// 一律返回 `ApprovalDefinitionInvalid`。
-///
-/// # 错误
-/// 不返回错误。
+// 映射 BPM 边界错误。
+// 一律返回 `ApprovalDefinitionInvalid`。
+//
+// `error`：BPM 边界错误；不保留原文。
 pub(super) fn map_bpm_error(error: bpm::Error) -> Error {
     let _ = error;
     Error::from_approval_code(ErrorCode::ApprovalDefinitionInvalid)
 }
 
-/// v3 身份构造失败只可能来自服务端固定 domain，按内部错误处理。
+// 将服务端固定命令域生成 V3 身份失败分类为内部错误，不归咎于调用者载荷。
 fn map_identity_error(error: ModelError) -> Error {
     Error::Internal(format!("审批定义命令身份构造失败: {error}"))
 }
 
-/// 返回稳定幂等载荷冲突。
+// 提供稳定幂等载荷冲突。
 fn idempotency_payload_conflict() -> Error {
     Error::from_approval_code(ErrorCode::ApprovalIdempotencyPayloadConflict)
 }
 
-/// 证明旧收据结果完整对应历史载荷；不可证明时不得降级回放。
-///
-/// # 参数
-/// * `receipt` - 历史命令收据
-/// * `graph` - 收据指向的定义图
-/// * `proof` - 发布或退役的历史证明；`Unprovable` 不能通过
-///
-/// # 返回
-/// 定义身份、状态、操作人与锁版本都吻合时无返回值。
-///
-/// # 错误
-/// 无法证明时返回 `ApprovalIdempotencyPayloadConflict`。
+// 证明旧收据结果完整对应历史载荷；不可证明时不得降级回放。
+// 定义身份、状态、操作人与锁版本都吻合时无返回值。
+//
+// 无法证明时返回 `ApprovalIdempotencyPayloadConflict`。
+//
+// `proof`：发布或退役的历史证明；`Unprovable` 不能通过。
 pub(super) fn ensure_legacy_result(
     receipt: &ApprovalCommandReceipt,
     graph: &DefinitionGraph,
@@ -812,23 +683,15 @@ pub(super) fn ensure_legacy_result(
     Err(idempotency_payload_conflict())
 }
 
-/// 使用统一入口检查固定动作及真实单据类型的管理资格。
-///
-/// # 参数
-/// * `authorization` - 共享授权服务。
-/// * `actor` - 已认证操作人。
-/// * `permission` - 固定审批定义动作。
-/// * `policy` - 服务端确认的单据类型政策。
-/// * `executor` - 原事务执行器。
-///
-/// # 返回
-/// 入口权限与该动作固定的类型管理资格均成立时返回 `Ok(())`。
-///
-/// # 错误
-/// 缺少权限或仅剩禁用角色残留 Casbin grant 时返回禁止。
-///
-/// # 关键业务约束
-/// 回放与 Fresh 必须共用本检查，禁止用账号级 Casbin 判定绕过停用角色。
+// 使用统一入口检查固定动作及真实单据类型的管理资格。
+// 回放与 Fresh 必须共用本检查，禁止用账号级 Casbin 判定绕过停用角色。
+//
+// 入口权限与该动作固定的类型管理资格均成立时返回 `Ok(())`。
+//
+// 缺少权限或仅剩禁用角色残留 Casbin grant 时返回禁止。
+//
+// `permission`：固定审批定义动作；`policy`：服务端确认的单据类型政策。
+// `executor`：原事务执行器。
 pub(in crate::service::approval) async fn require_definition_access(
     authorization: &AuthorizationService,
     actor: &AuditActor,
@@ -846,16 +709,10 @@ pub(in crate::service::approval) async fn require_definition_access(
     Ok(())
 }
 
-/// 仅把 receipt-first 的唯一键竞争标记为可恢复错误。
-///
-/// # 参数
-/// * `error` - 收据插入返回的持久化错误
-///
-/// # 返回
-/// 命中命令收据幂等索引时返回 `ReceiptDuplicate`；其它错误原样转换。
-///
-/// # 错误
-/// 不返回错误。
+// 仅把 receipt-first 的唯一键竞争标记为可恢复错误。
+// 命中命令收据幂等索引时返回 `ReceiptDuplicate`；其它错误原样转换。
+//
+// `error`：收据插入返回的持久化错误。
 pub(super) fn mark_receipt_duplicate(error: persistence_core::Error) -> Error {
     match error {
         error @ persistence_core::Error::DuplicateKey(_)
@@ -867,49 +724,26 @@ pub(super) fn mark_receipt_duplicate(error: persistence_core::Error) -> Error {
     }
 }
 
-/// 只有收据竞争、瞬态事务和提交结果未知允许退出失败会话后回读。
-///
-/// # 参数
-/// * `error` - 失败会话返回的错误
-///
-/// # 返回
-/// `ReceiptDuplicate`、`TransientTransaction` 或 `OutcomeUnknown` 时返回 `true`。
-///
-/// # 错误
-/// 不返回错误。
+// 只有收据竞争、瞬态事务和提交结果未知允许退出失败会话后回读。
+//
+// `ReceiptDuplicate`、`TransientTransaction` 或 `OutcomeUnknown` 时返回 `true`。
 pub(super) fn definition_command_may_have_committed(error: &Error) -> bool {
     matches!(error, Error::ReceiptDuplicate(_) | Error::TransientTransaction(_) | Error::OutcomeUnknown(_))
 }
 
-/// 并发胜者可能仍在提交，使用有界指数退避等待新会话可见。
+// 并发胜者可能尚未完成提交时，用有上限的指数退避等待新会话可见，不无限等待或重做写入。
 fn definition_recovery_delay(attempt: usize) -> Duration {
     Duration::from_millis(5_u64 << attempt.min(5))
 }
 
-/// 陈旧锁错误。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回 `ApprovalDefinitionVersionConflict`。
-///
-/// # 错误
-/// 不返回错误。
+// 陈旧锁错误。
+// 返回 `ApprovalDefinitionVersionConflict`。
 pub(super) fn stale_lock_error() -> Error {
     Error::from_approval_code(ErrorCode::ApprovalDefinitionVersionConflict)
 }
 
-/// 不泄露存在性的未找到错误。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回“审批流程定义不存在”。
-///
-/// # 错误
-/// 不返回错误。
+// 不泄露存在性的未找到错误。
+// 返回“审批流程定义不存在”。
 pub(super) fn definition_not_found() -> Error {
     Error::NotFound("审批流程定义不存在".to_string())
 }
@@ -985,7 +819,7 @@ mod tests {
         persistence_core::Error::DuplicateKey(mongo)
     }
 
-    /// 四条定义命令固定 v3 golden，Create/Replace domain 隔离且完整载荷可区分。
+    // 验证：四条定义命令固定 v3 golden，Create/Replace domain 隔离且完整载荷可区分。
     #[test]
     fn canonical_payloads_are_stable() {
         assert!(matches!(parse_idempotency_key("  "), Err(Error::ValidationError(_))));
@@ -1138,7 +972,7 @@ mod tests {
         ));
     }
 
-    /// 只有幂等三元组唯一索引冲突可进入胜者回读，ID 或未知索引必须失败关闭。
+    // 验证：只有幂等三元组唯一索引冲突可进入胜者回读，ID 或未知索引必须失败关闭。
     #[test]
     fn receipt_duplicate_recovery_requires_exact_idempotency_index() {
         let idempotency =
@@ -1156,7 +990,7 @@ mod tests {
         assert!(!definition_command_may_have_committed(&unknown));
     }
 
-    /// 当前结果引用冻结 UTF-8 字节长度与锁版本，资源或版本漂移必须失败关闭。
+    // 验证：当前结果引用冻结 UTF-8 字节长度与锁版本，资源或版本漂移必须失败关闭。
     #[test]
     fn definition_result_reference_is_versioned_and_exact() {
         let unicode = DefinitionCommandResultRef {
@@ -1193,7 +1027,7 @@ mod tests {
         );
     }
 
-    /// 旧收据只按精确候选读取；发布/退役可由不可变事实证明，创建来源不可证明。
+    // 验证：旧收据只按精确候选读取；发布/退役可由不可变事实证明，创建来源不可证明。
     #[test]
     fn legacy_definition_receipts_require_complete_immutable_proof() {
         let key = IdempotencyKey::parse("key-legacy").unwrap();

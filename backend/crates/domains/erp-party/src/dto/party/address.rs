@@ -67,7 +67,7 @@ pub struct PartyAddressView {
 }
 
 impl From<PartyAddress> for PartyAddressView {
-    /// 从实体构造响应视图。
+    // 将地址的内部字段转换成外部响应格式，供接口展示。
     fn from(address: PartyAddress) -> Self {
         Self {
             id: address.base.id,

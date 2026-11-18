@@ -2,19 +2,9 @@ use std::path::{Component, Path};
 
 use crate::{Error, Result};
 
-/// 将相对路径转换为跨平台 S3 对象键。
-///
-/// 跳过 `.` 分量，其余正常分量原样保留。
-///
-/// # 参数
-/// * `path` - 待转换的相对路径。
-///
-/// # 返回
-/// 成功时返回以 `/` 连接的对象键。
-///
-/// # 错误
-/// 路径为空或为绝对路径、正常分量不是 UTF-8 或含 `\`、遇到 `ParentDir`、`RootDir` 或 `Prefix`，
-/// 或没有正常分量时，返回 `Error::PathError`。
+// 对象读写和公开 URL 共用同一相对路径规则：忽略 `.`，其余正常分量以 `/` 连接。
+// 空路径、绝对路径、父目录、根目录、Windows 前缀、非 UTF-8 或含反斜杠的分量均返回 PathError，
+// 避免同一输入在不同平台生成不同对象键或越过配置前缀。
 pub(super) fn object_key_path(path: &Path) -> Result<String> {
     if path.as_os_str().is_empty() || path.is_absolute() {
         return Err(Error::PathError("存储路径必须是非空相对路径".to_string()));
@@ -47,30 +37,13 @@ pub(super) fn object_key_path(path: &Path) -> Result<String> {
     Ok(key)
 }
 
-/// 判断配置值是否为空，或带有首尾空白。
-///
-/// # 参数
-/// * `value` - 待检查的配置文本。
-///
-/// # 返回
-/// `trim` 后为空，或 `trim` 结果与原值不同时返回 `true`，否则返回 `false`。
-///
-/// # 错误
-/// 不返回错误。
+// 对配置值拒绝全空白和首尾空白，而不是悄悄修剪，避免改变实际使用的 bucket、凭据或键前缀。
 pub(super) fn is_blank_or_padded(value: &str) -> bool {
     value.trim().is_empty() || value.trim() != value
 }
 
-/// 校验可选对象键前缀；合法时原样返回，不裁剪、不改写。
-///
-/// # 参数
-/// * `prefix` - 配置中的对象键前缀。`None` 表示不使用前缀。
-///
-/// # 返回
-/// `prefix` 为 `None` 时返回 `Ok(None)`。格式合法时返回 `Ok(Some(prefix))`，内容与入参相同。
-///
-/// # 错误
-/// 前缀为空白或含首尾空白、以 `/` 开头或结尾、含 `\`，或任一段为空、`.` 或 `..` 时，返回 `Error::InvalidConfig`。
+// 创建存储客户端时校验可选的对象键前缀，合法值原样用于 S3 键和公开 URL。
+// 拒绝空字符串、全空白、首尾空白或斜杠，以及反斜杠、空段、`.` 和 `..`；未配置前缀时直接使用相对对象键。
 pub(super) fn normalize_prefix(prefix: Option<String>) -> Result<Option<String>> {
     let Some(prefix) = prefix else {
         return Ok(None);
@@ -90,7 +63,7 @@ pub(super) fn normalize_prefix(prefix: Option<String>) -> Result<Option<String>>
 mod tests {
     use super::*;
 
-    /// 相对路径按分量以 `/` 连接为对象键。
+    // 检查普通相对路径及含当前目录分量的路径都生成用 `/` 分隔的对象键。
     #[test]
     fn joins_normal_segments_with_slash() -> Result<()> {
         assert_eq!(object_key_path(Path::new("images/example.png"))?, "images/example.png");
@@ -98,7 +71,7 @@ mod tests {
         Ok(())
     }
 
-    /// 绝对路径与空路径拒绝为对象键。
+    // 验证绝对路径以及没有有效分量的空串或当前目录不能成为对象键。
     #[test]
     fn rejects_absolute_or_empty_path() {
         assert!(matches!(object_key_path(Path::new("/a.png")), Err(Error::PathError(_))));
@@ -107,20 +80,20 @@ mod tests {
         assert!(matches!(object_key_path(Path::new("././")), Err(Error::PathError(_))));
     }
 
-    /// 父目录分量不得越过基础目录。
+    // 验证无论父目录出现在开头还是正常目录之后，都不能借此越过配置的存储前缀。
     #[test]
     fn rejects_parent_directory() {
         assert!(matches!(object_key_path(Path::new("../escaped.txt")), Err(Error::PathError(_))));
         assert!(matches!(object_key_path(Path::new("a/../../b")), Err(Error::PathError(_))));
     }
 
-    /// 反斜杠分量拒绝为对象键。
+    // 验证含反斜杠的路径不能生成对象键，防止同一输入在不同平台被解释成不同路径。
     #[test]
     fn rejects_backslash_segment() {
         assert!(matches!(object_key_path(Path::new("a\\b")), Err(Error::PathError(_))));
     }
 
-    /// 前缀首尾分隔符与保留分量拒绝为规范前缀。
+    // 确认缺省与合法多段前缀能通过校验，绝对前缀和含父目录的前缀会在建客户端时被拒绝。
     #[test]
     fn rejects_unsafe_prefix() -> Result<()> {
         assert!(normalize_prefix(None)?.is_none());

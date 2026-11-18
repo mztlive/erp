@@ -17,18 +17,13 @@ use crate::errors::Result;
 use crate::workbench::authority::funds::mapping as authority_mapping;
 
 impl WorkbenchFactsReader<'_> {
-    /// 供应商付款事实简报。
-    ///
-    /// # 参数
-    /// * `keys` - 本批任务引用的对象键
-    /// * `facts` - 输出的对象事实表
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 成功时写入付款单号、供应商、金额和凭证。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
+    // 读取付款单据任务简报时，供应商付款事实简报。
+    //
+    // 调用参数：
+    // * `keys` - 本批任务引用的对象键
+    // * `facts` - 输出的对象事实表
+    //
+    // 成功时写入付款单号、供应商、金额和凭证。
     pub(crate) async fn load_supplier_payment_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -92,18 +87,13 @@ impl WorkbenchFactsReader<'_> {
         Ok(())
     }
 
-    /// 供应商退款审批任务的对象事实。
-    ///
-    /// # 参数
-    /// * `keys` - 本批任务引用的对象键
-    /// * `facts` - 输出的对象事实表
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 成功时写入退款单号、金额和原因。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
+    // 读取付款单据任务简报时，供应商退款审批任务的对象事实。
+    //
+    // 调用参数：
+    // * `keys` - 本批任务引用的对象键
+    // * `facts` - 输出的对象事实表
+    //
+    // 成功时写入退款单号、金额和原因。
     pub(crate) async fn load_supplier_refund_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -177,18 +167,13 @@ impl WorkbenchFactsReader<'_> {
         Ok(())
     }
 
-    /// 付款冲正审批任务的对象事实。
-    ///
-    /// # 参数
-    /// * `keys` - 本批任务引用的对象键
-    /// * `facts` - 输出的对象事实表
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 成功时写入冲正单号、金额和原因。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
+    // 读取付款单据任务简报时，付款冲正审批任务的对象事实。
+    //
+    // 调用参数：
+    // * `keys` - 本批任务引用的对象键
+    // * `facts` - 输出的对象事实表
+    //
+    // 成功时写入冲正单号、金额和原因。
     pub(crate) async fn load_payment_reversal_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,

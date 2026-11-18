@@ -18,31 +18,25 @@ pub(crate) struct CategoryChainCache<'a> {
 }
 
 impl<'a> CategoryChainCache<'a> {
-    /// 为当前执行器下的一次筛选创建空缓存。
-    ///
-    /// # 参数
-    /// * `db` - 分类所属数据库
-    ///
-    /// # 返回
-    /// 返回尚未读取分类的缓存。
-    ///
-    /// # 错误
-    /// 无。
+    // 装配采购责任分类链时，为当前执行器下的一次筛选创建空缓存。
+    //
+    // 调用参数：
+    // * `db` - 分类所属数据库
+    //
+    // 返回尚未读取分类的缓存。
     pub(crate) fn new(db: &'a Database) -> Self {
         Self { db, parents: HashMap::new() }
     }
 
-    /// 按层批量预读候选分类祖先，只缓存成功取得或已确认缺失的节点。
-    ///
-    /// # 参数
-    /// * `category_ids` - 候选商品当前修订所引用的分类
-    /// * `executor` - 本次筛选的同一执行器
-    ///
-    /// # 返回
-    /// 成功时缓存最多 32 层父指针；异常链仍由 `ids` 验证并拒绝。
-    ///
-    /// # 错误
-    /// 某层数据库读取失败时返回原错误，失败层不入缓存，调用方可按原策略重试。
+    // 依据层批量预读候选分类祖先，只缓存成功取得或已确认缺失的节点。
+    //
+    // 调用参数：
+    // * `category_ids` - 候选商品当前修订所引用的分类
+    // * `executor` - 本次筛选的同一执行器
+    //
+    // 成功时缓存最多 32 层父指针；异常链仍由 `ids` 验证并拒绝。
+    //
+    // 某层数据库读取失败时返回原错误，失败层不入缓存，调用方可按原策略重试。
     pub(crate) async fn prefetch<'id>(
         &mut self,
         category_ids: impl IntoIterator<Item = &'id str> + Send,
@@ -64,17 +58,15 @@ impl<'a> CategoryChainCache<'a> {
         Ok(())
     }
 
-    /// 按原顺序读取分类链，并记住成功取得的父节点或终止事实。
-    ///
-    /// # 参数
-    /// * `category_id` - 商品当前修订的分类 ID
-    /// * `executor` - 本次筛选的执行器，整次筛选必须保持相同
-    ///
-    /// # 返回
-    /// 返回从当前分类到根的有序链；缺失分类仍作为末节点保留。
-    ///
-    /// # 错误
-    /// 数据库读取失败、成环或超过 32 层时返回原错误；失败读取不入缓存。
+    // 依据原顺序读取分类链，并记住成功取得的父节点或终止事实。
+    //
+    // 调用参数：
+    // * `category_id` - 商品当前修订的分类 ID
+    // * `executor` - 本次筛选的执行器，整次筛选必须保持相同
+    //
+    // 返回从当前分类到根的有序链；缺失分类仍作为末节点保留。
+    //
+    // 数据库读取失败、成环或超过 32 层时返回原错误；失败读取不入缓存。
     pub(crate) async fn ids(
         &mut self,
         category_id: &str,
@@ -94,7 +86,7 @@ impl<'a> CategoryChainCache<'a> {
     }
 }
 
-/// 缺失节点保留为空父引用，并只安排尚未缓存的父分类进入下一层批量读取。
+// 处理采购责任分类链时，缺失节点保留为空父引用，并只安排尚未缓存的父分类进入下一层批量读取。
 fn cache_parent_batch(
     parents: &mut HashMap<String, Option<String>>,
     ids: &[String],
@@ -119,12 +111,12 @@ struct CategoryChain {
 }
 
 impl CategoryChain {
-    /// 从商品修订引用的分类开始构造有序链。
+    // 装配采购责任分类链时，从商品修订引用的分类开始构造有序链。
     fn new(category_id: &str) -> Self {
         Self { ids: Vec::new(), seen: HashSet::new(), current: Some(category_id.to_string()) }
     }
 
-    /// 消费已加载父节点，返回仍需读取的首个分类；非法链在发起读取前拒绝。
+    // 处理采购责任分类链时，消费已加载父节点，返回仍需读取的首个分类；非法链在发起读取前拒绝。
     fn advance(&mut self, parents: &HashMap<String, Option<String>>) -> Result<Option<String>> {
         while let Some(id) = self.current.as_ref() {
             if self.seen.contains(id) || self.ids.len() >= CATEGORY_CHAIN_LIMIT {
@@ -146,13 +138,13 @@ impl CategoryChain {
 mod tests {
     use super::*;
 
-    /// 构造无需数据库的父分类读取结果。
+    // 处理采购责任分类链时，生成无需数据库的父分类读取结果。
     fn parents(rows: &[(&str, Option<&str>)]) -> HashMap<String, Option<String>> {
         rows.iter().map(|(id, parent)| (id.to_string(), parent.map(ToString::to_string))).collect()
     }
 
     #[test]
-    /// 同层多叶节点共用一个父节点，缺失末节点保留，并继续按原有序链解析。
+    // 处理采购责任分类链时，同层多叶节点共用一个父节点，缺失末节点保留，并继续按原有序链解析。
     fn category_parent_batch_deduplicates_ancestors_and_keeps_missing_nodes() {
         let mut known = HashMap::new();
         let pending = cache_parent_batch(
@@ -173,7 +165,7 @@ mod tests {
     }
 
     #[test]
-    /// 复用成功节点且保持叶分类到根的顺序。
+    // 处理采购责任分类链时，复用成功节点且保持叶分类到根的顺序。
     fn category_chain_cache_reuses_successes_and_preserves_leaf_to_root_order() {
         let mut known = parents(&[("leaf", Some("parent"))]);
         let mut first = CategoryChain::new("leaf");
@@ -190,7 +182,7 @@ mod tests {
     }
 
     #[test]
-    /// 未读取节点继续请求读取，仓储成功确认缺失的末节点保留。
+    // 处理采购责任分类链时，未读取节点继续请求读取，仓储成功确认缺失的末节点保留。
     fn category_chain_cache_keeps_missing_terminal_and_retries_unread_facts() {
         let mut known = parents(&[("leaf", Some("missing"))]);
         let mut first = CategoryChain::new("leaf");
@@ -208,7 +200,7 @@ mod tests {
     }
 
     #[test]
-    /// 成环与超过 32 层均拒绝，正好 32 层仍允许。
+    // 处理采购责任分类链时，成环与超过 32 层均拒绝，正好 32 层仍允许。
     fn category_chain_cache_rejects_cycles_and_more_than_32_nodes() {
         let cyclic = parents(&[("leaf", Some("parent")), ("parent", Some("leaf"))]);
         assert!(matches!(CategoryChain::new("leaf").advance(&cyclic), Err(Error::ValidationError(_))));

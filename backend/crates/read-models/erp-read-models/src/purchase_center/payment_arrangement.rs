@@ -45,11 +45,14 @@ pub struct PaymentArrangementView {
     pub can_schedule: bool,
     pub requests: Vec<FulfillmentRequestView>,
 }
-/// 读取一张已确定采购的安排事实，不扫描无关采购或待办。
+/// 处理采购付款安排时，读取一张已确定采购的安排事实，不扫描无关采购或待办。
+///
 /// # 参数
 /// 数据库、采购身份及调用方事务执行器。
+///
 /// # 返回
 /// 采购、可选应付和开放安排任务。
+///
 /// # 错误
 /// 采购不存在、重复开放责任或仓储读取失败时返回错误。
 pub async fn arrangement_facts(
@@ -84,11 +87,14 @@ pub async fn arrangement_facts(
     Ok(PaymentArrangementFacts { order, account, task, state, payment_blocked: blocked })
 }
 impl PurchaseOrderReadService {
-    /// 读取当前账号有权查看的采购付款安排。
+    /// 查询当前账号有权查看的采购付款安排。
+    ///
     /// # 参数
     /// 已认证账号与采购单身份。
+    ///
     /// # 返回
     /// 仅本采购金额和本采购在合并申请内的分配，不授予其他来源访问权。
+    ///
     /// # 错误
     /// 无采购详情资格、来源缺失或读取失败时拒绝。
     pub async fn payment_arrangement(&self, actor: &AuditActor, id: &str) -> Result<PaymentArrangementView> {
@@ -112,7 +118,7 @@ impl PurchaseOrderReadService {
             .await
     }
 }
-/// 仅从已授权采购及其精确关联组装展示。
+// 生成采购付款安排视图时，仅从已授权采购及其精确关联组装展示。
 async fn arrangement_view(
     db: &Database,
     facts: PaymentArrangementFacts,
@@ -147,7 +153,7 @@ async fn arrangement_view(
     Ok(view)
 }
 
-/// 任务身份和余额展示使用同一份读取事实。
+// 生成采购付款安排视图时，任务身份和余额展示使用同一份读取事实。
 fn base_view(facts: &PaymentArrangementFacts, actor: &str) -> PaymentArrangementView {
     PaymentArrangementView {
         state: facts.state,
@@ -165,7 +171,7 @@ fn base_view(facts: &PaymentArrangementFacts, actor: &str) -> PaymentArrangement
     }
 }
 
-/// 加载当前生效版本的付款条件及履约前实付缺口。
+// 组装采购付款安排时，读取当前生效版本的付款条件及履约前实付缺口。
 async fn fill_terms(
     db: &Database,
     order: &PurchaseOrder,

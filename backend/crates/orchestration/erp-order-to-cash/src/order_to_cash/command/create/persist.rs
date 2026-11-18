@@ -47,13 +47,11 @@ pub(super) struct CreationWriteContext {
 }
 
 impl SalesOrderCommandProcess {
-    /// 按绑定命令、授权源和可售引用的顺序准备写入上下文。
-    /// # 参数
-    /// `plan` 为本次建单计划；`actor` 和 `access` 保持认证命令身份。
-    /// # 返回
-    /// 返回可移入入口事务的依赖与参数，不执行持久化。
-    /// # 错误
-    /// 绑定输入、授权源或可售引用不完整时返回首个错误。
+    // 按绑定命令、授权源和可售引用的顺序准备写入上下文。
+    //
+    // `plan` 为本次建单计划；`actor` 和 `access` 保持认证命令身份。返回可移入入口事务的依赖与参数，不执行持久化。
+    //
+    // 绑定输入、授权源或可售引用不完整时返回首个错误。
     pub(super) fn creation_write_context(
         &self,
         plan: &CreationPlan,
@@ -78,13 +76,11 @@ impl SalesOrderCommandProcess {
     }
 }
 
-/// 事务内先重验关联、创建和可售资格，再查证命令结果，未重放时才写入。
-/// # 参数
-/// `context`、`plan` 来自同一建单入口；`executor` 为入口开启的唯一写入事务。
-/// # 返回
-/// 重放返回原销售单 ID，新鲜写入返回 `None`。
-/// # 错误
-/// 资格、载荷身份或任一步写入失败时返回错误，由入口统一回滚或查证未知提交。
+// 事务内先重验关联、创建和可售资格，再查证命令结果，未重放时才写入。
+//
+// `context`、`plan` 来自同一建单入口；`executor` 为入口开启的唯一写入事务。重放返回原销售单 ID，新鲜写入返回 `None`。
+//
+// 资格、载荷身份或任一步写入失败时返回错误，由入口统一回滚或查证未知提交。
 pub(super) async fn persist_creation(
     context: CreationWriteContext,
     plan: CreationPlan,
@@ -119,7 +115,7 @@ pub(super) async fn persist_creation(
     Ok(None)
 }
 
-/// 草稿按组织、凭证、销售单、审批绑定、副本、事件的顺序原子形成。
+// 草稿按组织、凭证、销售单、审批绑定、副本、事件的顺序原子形成。
 async fn persist_created_draft(
     context: &CreationWriteContext,
     mut draft: CreationDraft,
@@ -152,7 +148,7 @@ async fn persist_created_draft(
     Ok(())
 }
 
-/// 立即提交按绑定、凭证、审批计划、组织、业务事实、运行事实、双事件形成。
+// 立即提交按绑定、凭证、审批计划、组织、业务事实、运行事实、双事件形成。
 async fn persist_created_submission(
     context: &CreationWriteContext,
     mut submit: CreationSubmit,
@@ -189,7 +185,7 @@ async fn persist_created_submission(
     Ok(())
 }
 
-/// 沿用当前事务，冻结创建时的发布定义并保存单据注册行。
+// 沿用当前事务，冻结创建时的发布定义并保存单据注册行。
 async fn persist_creation_binding(
     context: &CreationWriteContext,
     document: &mut BusinessDocument,
@@ -206,7 +202,7 @@ async fn persist_creation_binding(
     .await
 }
 
-/// 绑定成功后才读取冻结定义并构造首次提交的审批计划。
+// 绑定成功后才读取冻结定义并构造首次提交的审批计划。
 async fn prepare_bound_submission(
     db: &Database,
     identity: &Arc<AuthorizationService>,
@@ -235,7 +231,7 @@ async fn prepare_bound_submission(
     Ok(prepare_start(start_input)?)
 }
 
-/// 原子保存销售单、稳定行及锁定副本、冻结提交、工作流动作。
+// 原子保存销售单、稳定行及锁定副本、冻结提交、工作流动作。
 async fn persist_submission_records(
     db: &Database,
     submit: &CreationSubmit,
@@ -258,7 +254,7 @@ async fn persist_submission_records(
     Ok(())
 }
 
-/// 只对 Apply 写入运行事实；Replay 沿用已存在事实。
+// 只对 Apply 写入运行事实；Replay 沿用已存在事实。
 async fn persist_created_runtime(
     context: &CreationWriteContext,
     submit: &CreationSubmit,
@@ -288,7 +284,7 @@ async fn persist_created_runtime(
     Ok(())
 }
 
-/// 在原位置依次重验关联、创建资格与精确可售引用。
+// 在原位置依次重验关联、创建资格与精确可售引用。
 async fn ensure_creation_ready(
     context: &CreationWriteContext,
     order: &SalesOrder,
@@ -320,7 +316,7 @@ async fn ensure_creation_ready(
     Ok(())
 }
 
-/// 在对应分支的原事务位置重验该单责任组织。
+// 在对应分支的原事务位置重验该单责任组织。
 async fn ensure_creation_org(db: &Database, order: &SalesOrder, executor: &mut dyn Executor) -> Result<()> {
     ensure_order_creation_org(db, &order.sales_owner_user_id, &order.business_org_unit_id, executor)
         .await

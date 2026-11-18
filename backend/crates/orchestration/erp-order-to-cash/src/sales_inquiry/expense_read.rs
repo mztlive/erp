@@ -53,22 +53,16 @@ pub struct InquiryExpenseReadService {
 
 impl InquiryExpenseReadService {
     /// 绑定现有采购来源与当前权限服务。
-    /// # 参数
-    /// `db` 为业务库，`authorization` 为当前权限源。
-    /// # 返回
-    /// 不缓存任务或销售范围的读取器。
-    /// # 错误
-    /// 不执行 I/O，不返回错误。
+    ///
+    /// `db` 为业务库，`authorization` 为当前权限源。不缓存任务或销售范围的读取器。
     pub fn new(db: Database, authorization: Arc<AuthorizationService>) -> Self {
         Self { db, authorization }
     }
 
     /// 获取当前销售明确分摊的费用、余额与必要付款依据。
-    /// # 参数
-    /// `sales_id` 为来源销售，`actor` 为具备采购创建及费用转换资格的当前账号。
-    /// # 返回
-    /// 仅含本销售的询价费用；无来源或未明确分摊时返回空集合。
-    /// # 错误
+    ///
+    /// `sales_id` 为来源销售，`actor` 为具备采购创建及费用转换资格的当前账号。仅含本销售的询价费用；无来源或未明确分摊时返回空集合。
+    ///
     /// 当前账号、费用采购来源范围、询价链或期间版本失效时拒绝。
     pub async fn candidates(&self, sales_id: &str, actor: &AuditActor) -> Result<InquiryExpenseCandidates> {
         let service = self.clone();
@@ -142,11 +136,9 @@ impl InquiryExpenseReadService {
         Ok(InquiryExpenseCandidates { items })
     }
     /// 按财务附加费用登记资格取得本销售的 ERP 外费用来源。
-    /// # 参数
-    /// `sales_id` 为生效来源销售，`actor` 为具有费用登记和既有销售范围的账号。
-    /// # 返回
-    /// 仅含公开费用身份、金额、税率和办理原因，不含供应商及付款资料。
-    /// # 错误
+    ///
+    /// `sales_id` 为生效来源销售，`actor` 为具有费用登记和既有销售范围的账号。仅含公开费用身份、金额、税率和办理原因，不含供应商及付款资料。
+    ///
     /// 当前账号、费用登记权限、销售范围或来源版本失效时拒绝。
     pub async fn financial_candidates(
         &self,

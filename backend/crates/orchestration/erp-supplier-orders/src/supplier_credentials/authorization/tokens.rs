@@ -49,11 +49,11 @@ fn valid_token(value: &str) -> bool {
 
 impl JdVopAuthorizationProcess {
     /// 将外部授权令牌保存到自动刷新使用的同一加密记录。
-    /// # 参数
+    ///
     /// 原连接ID、同次授权的两项令牌和实际有效期、当前操作人。
-    /// # 返回
+    ///
     /// 脱敏配置状态及操作回执，不返回令牌或自动开启下单。
-    /// # 错误
+    ///
     /// 格式、权限、绑定、所见版本或活跃操作不符时拒绝；提交结果不明时须查询原操作。
     pub async fn configure_tokens(
         &self,

@@ -22,16 +22,7 @@ pub enum ProductKind {
 }
 
 impl ProductKind {
-    /// 返回类型的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将商品类型映射为中文标签，供界面显示。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Physical => "实物",
@@ -41,16 +32,7 @@ impl ProductKind {
         }
     }
 
-    /// 返回类型的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将商品类型编码为稳定字符串，供持久化和精确查询复用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Physical => "PHYSICAL",
@@ -65,7 +47,7 @@ impl ProductKind {
 mod tests {
     use super::*;
 
-    /// serde 形态与中文标签。
+    // serde 形态与中文标签。
     #[test]
     fn product_kind_exposes_labels_and_stable_codes() {
         assert_eq!(serde_json::to_string(&ProductKind::OfflineService).unwrap(), "\"OFFLINE_SERVICE\"");

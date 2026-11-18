@@ -12,16 +12,7 @@ use crate::http::handler::customer;
 use crate::http::routes::permission_route;
 use crate::http::state::HttpState;
 
-/// 返回本域管理端路由集合。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回声明公共权限目录信息的路由集合。
-///
-/// # 错误
-/// 不执行 I/O，不返回错误。
+/// 为管理端挂载客户档案与经营查询接口，按操作登记公共权限目录信息。
 pub fn routes() -> Router<HttpState> {
     Router::new()
         .merge(profile_query_routes())
@@ -30,7 +21,7 @@ pub fn routes() -> Router<HttpState> {
         .merge(assignment_routes())
 }
 
-/// 客户资料与业务汇总读取路由。
+// 为父路由挂载客户资料与业务汇总读取路由。
 fn profile_query_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -51,7 +42,7 @@ fn profile_query_routes() -> Router<HttpState> {
         )
 }
 
-/// 客户资料命令与敏感字段路由。
+// 为父路由挂载客户资料命令与敏感字段路由。
 fn profile_command_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -71,7 +62,7 @@ fn profile_command_routes() -> Router<HttpState> {
         )
 }
 
-/// 客户档案查询与维护路由。
+// 为父路由挂载客户档案查询与维护路由。
 fn customer_routes() -> Router<HttpState> {
     Router::new()
         .route("/customers", permission_route(get(customer::customer_list), &permissions::customer::LIST))
@@ -100,7 +91,7 @@ fn customer_routes() -> Router<HttpState> {
         )
 }
 
-/// 客户负责人分配路由。
+// 为父路由挂载客户负责人分配路由。
 fn assignment_routes() -> Router<HttpState> {
     Router::new()
         .route(

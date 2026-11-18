@@ -169,14 +169,7 @@ pub enum DraftStatus {
 }
 
 impl DraftStatus {
-    /// 返回提报状态的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 返回持久化和界面传输使用的 snake_case 状态。
-    /// # 错误
-    /// 无。
+    /// 将提报状态编码为稳定字符串，供持久化和精确查询复用。返回持久化和界面传输使用的 snake_case 状态。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Draft => "draft",
@@ -233,15 +226,11 @@ pub struct NewProductDraft {
 impl NewProductDraft {
     /// 创建归属固定的新品草稿，不建立正式商品或供给。
     ///
-    /// # 参数
-    /// * `id` - 提报单稳定标识。
-    /// * `supplier_id` - 服务端确认的供应商归属。
-    /// * `created_by` - 创建人的外部账号标识。
-    /// * `draft` - 可尚未填写完整的原始输入。
-    /// # 返回
-    /// 返回草稿状态的新品提报单。
-    /// # 错误
-    /// 归属、创建人或存储输入非法时返回验证错误。
+    /// 返回草稿状态的新品提报单。归属、创建人或存储输入非法时返回验证错误。
+    ///
+    /// - `id`：提报单稳定标识。
+    /// - `supplier_id`：服务端确认的供应商归属。
+    /// - `draft`：可尚未填写完整的原始输入。
     pub fn new(id: String, supplier_id: String, created_by: String, draft: NewProductInput) -> Result<Self> {
         validate_id(&id, "提报单")?;
         validate_id(&supplier_id, "供应商")?;
@@ -265,13 +254,9 @@ impl NewProductDraft {
 
     /// 更新尚未生效且未送审的原稿，保留历次提交。
     ///
-    /// # 参数
-    /// * `expected_version` - 读取草稿时的乐观锁版本。
-    /// * `draft` - 本次完整替换的可编辑原稿。
-    /// # 返回
-    /// 更新成功返回空结果；仓储负责递增持久化版本。
-    /// # 错误
-    /// 版本冲突、待确认、生效、软删除或输入非法时拒绝更新。
+    /// 更新成功返回空结果；仓储负责递增持久化版本。版本冲突、待确认、生效、软删除或输入非法时拒绝更新。
+    ///
+    /// `expected_version` 为读取草稿时的乐观锁版本。
     pub fn update(&mut self, expected_version: u64, draft: NewProductInput) -> Result<()> {
         self.ensure_editable(expected_version)?;
         draft.validate_storage()?;
@@ -283,16 +268,11 @@ impl NewProductDraft {
 
     /// 冻结一份完整提交并关联本次单人确认任务。
     ///
-    /// # 参数
-    /// * `expected_version` - 当前提报版本。
-    /// * `submission_id` - 本次提交稳定标识，不能复用历史标识。
-    /// * `task_id` - 已登记的本次确认任务标识。
-    /// * `submitted_by` - 实际供应商提交人。
-    /// * `submitted_at` - 实际提交时间。
-    /// # 返回
-    /// 状态变为待确认，原稿及提交历史分别保存。
-    /// # 错误
-    /// 非可编辑状态、版本过期、输入不完整或关联标识重复时拒绝提交。
+    /// 状态变为待确认，原稿及提交历史分别保存。非可编辑状态、版本过期、输入不完整或关联标识重复时拒绝提交。
+    ///
+    /// - `expected_version`：当前提报版本。
+    /// - `submission_id`：本次提交稳定标识，不能复用历史标识。
+    /// - `task_id`：已登记的本次确认任务标识。
     pub fn submit(
         &mut self,
         expected_version: u64,
@@ -335,12 +315,7 @@ impl NewProductDraft {
 
     /// 读取当前待确认的供应商冻结输入。
     ///
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 返回本次冻结输入的借用，调用方不得原地修改。
-    /// # 错误
-    /// 非待确认状态或提交关联损坏时返回错误。
+    /// 返回本次冻结输入的借用，调用方不得原地修改。非待确认状态或提交关联损坏时返回错误。
     pub fn submitted(&self) -> Result<&NewProductInput> {
         let id = self.current_submission_id.as_deref().ok_or_else(|| validation("新品尚未提交"))?;
         self.pending_index(id)?;
@@ -349,13 +324,9 @@ impl NewProductDraft {
 
     /// 保存当前待确认提交的独立内部映射，保留供应商冻结原稿。
     ///
-    /// # 参数
-    /// * `expected_version` - 当前提报版本。
-    /// * `normalized` - 本次内部明确确认的字典和目标 SKU 映射。
-    /// # 返回
-    /// 映射与原稿完全对应时保存并返回空结果。
-    /// # 错误
-    /// 版本过期、非待确认或映射不符合原稿规则时拒绝保存。
+    /// 映射与原稿完全对应时保存并返回空结果。版本过期、非待确认或映射不符合原稿规则时拒绝保存。
+    ///
+    /// `expected_version` 为当前提报版本。
     pub fn map(&mut self, expected_version: u64, normalized: NormalizedProduct) -> Result<()> {
         self.ensure_version(expected_version)?;
         self.submitted()?.ensure_normalized(&normalized)?;
@@ -365,15 +336,10 @@ impl NewProductDraft {
 
     /// 撤回当前尚未完成的提交，保留原始输入及撤回记录。
     ///
-    /// # 参数
-    /// * `expected_version` - 当前提报版本。
-    /// * `submission_id` - 当前待确认提交标识。
-    /// * `actor_id` - 实际供应商操作人。
-    /// * `at` - 撤回发生时间。
-    /// # 返回
-    /// 状态变为已撤回，当前任务解除关联。
-    /// # 错误
-    /// 版本或提交过期、已完成、非待确认或操作人无效时拒绝撤回。
+    /// 状态变为已撤回，当前任务解除关联。版本或提交过期、已完成、非待确认或操作人无效时拒绝撤回。
+    ///
+    /// - `expected_version`：当前提报版本。
+    /// - `submission_id`：当前待确认提交标识。
     pub fn withdraw(
         &mut self,
         expected_version: u64,
@@ -390,16 +356,9 @@ impl NewProductDraft {
 
     /// 将当前提交退回供应商，必须记录供应商可见原因。
     ///
-    /// # 参数
-    /// * `expected_version` - 当前提报版本。
-    /// * `submission_id` - 本次待确认提交标识。
-    /// * `reason` - 供应商可见的明确退回原因。
-    /// * `actor_id` - 实际内部确认人。
-    /// * `at` - 决定时间。
-    /// # 返回
-    /// 状态变为已退回并保存本次决定。
-    /// # 错误
-    /// 原因空白、版本冲突或提交不再待确认时拒绝退回。
+    /// 状态变为已退回并保存本次决定。原因空白、版本冲突或提交不再待确认时拒绝退回。
+    ///
+    /// `expected_version` 为当前提报版本。
     pub fn return_to_supplier(
         &mut self,
         expected_version: u64,
@@ -418,14 +377,10 @@ impl NewProductDraft {
 
     /// 保存原子建档编排已完成的全部结果和内部映射。
     ///
-    /// # 参数
-    /// * `submission_id` - 本次待确认提交标识。
-    /// * `command` - 精确提报、版本、内部映射、全部正式结果、真实确认人和核对理由。
-    /// * `at` - 审核决定时间，不替代供应商填报时间。
-    /// # 返回
-    /// 状态变为已生效并独立保留原稿、映射和最终结果。
-    /// # 错误
-    /// 缺真实核对理由、版本或状态冲突、映射改变含义、结果不完整或新 SKU 上架时拒绝。
+    /// 状态变为已生效并独立保留原稿、映射和最终结果。缺真实核对理由、版本或状态冲突、映射改变含义、结果不完整或新 SKU 上架时拒绝。
+    ///
+    /// - `command`：精确提报、版本、内部映射、全部正式结果、真实确认人和核对理由。
+    /// - `at`：审核决定时间，不替代供应商填报时间。
     pub fn mark_effective(
         &mut self,
         submission_id: &str,
@@ -454,12 +409,9 @@ impl NewProductDraft {
 
     /// 校验实体版本及活动状态，持久化更新另受仓储乐观锁保护。
     ///
-    /// # 参数
-    /// * `expected` - 调用方读取提报单时的版本。
-    /// # 返回
-    /// 当前活动提报版本一致时返回空结果。
-    /// # 错误
-    /// 软删除时返回不存在，版本缺失或不一致时返回冲突。
+    /// 当前活动提报版本一致时返回空结果。软删除时返回不存在，版本缺失或不一致时返回冲突。
+    ///
+    /// `expected` 为调用方读取提报单时的版本。
     pub fn ensure_version(&self, expected: u64) -> Result<()> {
         if self.base.is_deleted() {
             return Err(Error::NotFound("新品提报单".into()));
@@ -470,7 +422,7 @@ impl NewProductDraft {
         Ok(())
     }
 
-    /// 仅草稿、退回和撤回可更新或重新提交。
+    // 仅草稿、退回和撤回可更新或重新提交。
     fn ensure_editable(&self, expected: u64) -> Result<()> {
         self.ensure_version(expected)?;
         if matches!(self.status, DraftStatus::Pending | DraftStatus::Effective) {
@@ -479,7 +431,7 @@ impl NewProductDraft {
         Ok(())
     }
 
-    /// 同时核对主状态、当前提交指针和历史提交决定。
+    // 同时核对主状态、当前提交指针和历史提交决定。
     fn pending_index(&self, submission_id: &str) -> Result<usize> {
         if self.base.is_deleted() {
             return Err(Error::NotFound("新品提报单".into()));
@@ -502,7 +454,7 @@ impl NewProductDraft {
         Ok(index)
     }
 
-    /// 调用方完成所有校验后一次性写入决定，避免失败产生部分状态。
+    // 调用方完成所有校验后一次性写入决定，避免失败产生部分状态。
     fn finish(&mut self, index: usize, mut decision: DraftDecision) {
         if decision.normalized_product.is_none() {
             decision.normalized_product = self.normalized_product.clone();

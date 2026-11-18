@@ -45,15 +45,7 @@ pub struct RegisterExtraCostRequest {
 
 impl RegisterExtraCostRequest {
     /// 转换为领域登记输入。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回未校验的领域输入，由 [`crate::entity::cost::ExtraCostRegistration`] 校验。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn input(&self) -> ExtraCostInput {
         ExtraCostInput {
             category: self.category,
@@ -88,15 +80,7 @@ pub struct ReduceExtraCostRequest {
 
 impl ReduceExtraCostRequest {
     /// 转换为领域冲减输入。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回未校验的领域输入。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn input(&self) -> ExtraCostReductionInput {
         ExtraCostReductionInput {
             description: self.description.clone(),
@@ -203,16 +187,11 @@ pub struct SalesExtraCostListView {
 
 impl SalesExtraCostView {
     /// 由财务登记的附加费用及其冲减生成视图。
-    ///
-    /// # 参数
-    /// * `entries` - 归属同一销售单的成本事实；非财务登记费用被忽略
-    /// * `allocations` - 这些成本事实的分配
-    ///
-    /// # 返回
     /// 返回每笔财务登记费用一条视图，冲减挂在原费用下。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// 输入约定：
+    /// - `entries`：归属同一销售单的成本事实；非财务登记费用被忽略
+    /// - `allocations`：这些成本事实的分配
     pub fn registrations(entries: &[CostEntry], allocations: &[CostAllocation]) -> Vec<Self> {
         entries
             .iter()
@@ -274,15 +253,10 @@ fn reductions_of(original: &CostEntry, entries: &[CostEntry]) -> Vec<ExtraCostRe
 
 impl SalesExtraCostListView {
     /// 排序并汇总附加费用。
+    /// 结果：已发生在前按发生时间升序，待发生在后；返回待发生合计与扣除冲减后的已发生合计。
     ///
-    /// # 参数
-    /// * `items` - 全部附加费用
-    ///
-    /// # 返回
-    /// 已发生在前按发生时间升序，待发生在后；返回待发生合计与扣除冲减后的已发生合计。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 输入约定：
+    /// - `items`：全部附加费用
     pub fn from_items(mut items: Vec<SalesExtraCostView>) -> Self {
         items.sort_by(|left, right| {
             let key = |item: &SalesExtraCostView| {

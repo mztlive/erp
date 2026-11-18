@@ -42,11 +42,7 @@ pub struct BatchDefaults {
 
 impl BatchDefaults {
     /// 核验逐来源分类映射不重复，允许明确映射来源未分类组。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 映射结构合法时成功。
-    /// # 错误
     /// 空白分类身份、空公司分类或同一来源分类重复映射时拒绝。
     pub fn validate(&self) -> Result<()> {
         self.validate_clears()?;
@@ -81,12 +77,7 @@ impl BatchDefaults {
     }
 
     /// 优先采用逐来源分类映射，再采用统一公司分类。
-    /// # 参数
-    /// `item` 为冻结的来源 SKU。
-    /// # 返回
     /// 此项适用的公司分类；没有配置时为空。
-    /// # 错误
-    /// 不返回错误。
     pub fn category_for(&self, item: &SupplierCatalogItem) -> Option<&str> {
         self.category_mappings
             .iter()
@@ -147,11 +138,7 @@ pub struct CatalogAdoptionBatch {
 
 impl CatalogAdoptionBatch {
     /// 核验没有仍在有效处理时间内的草稿操作。
-    /// # 参数
-    /// `now` 为服务器当前 Unix 秒数。
-    /// # 返回
     /// 持久化任务必须完成；旧版临时操作未占用或达到三百秒时允许修改。
-    /// # 错误
     /// 草稿操作仍有效或起始时间位于未来时拒绝。
     pub fn ensure_draft_available(&self, now: i64) -> Result<()> {
         if self.work.as_ref().is_some_and(BatchWork::blocking)
@@ -164,11 +151,7 @@ impl CatalogAdoptionBatch {
     }
 
     /// 核验当前草稿操作仍由原始操作号持有。
-    /// # 参数
-    /// `token` 为开始草稿操作时保存的完整操作号。
-    /// # 返回
     /// 操作号精确一致时成功。
-    /// # 错误
     /// 已释放或已被其他操作接管时拒绝。
     pub fn ensure_draft_operation(&self, token: &str) -> Result<()> {
         if self.draft_operation.as_deref() != Some(token) {
@@ -178,11 +161,7 @@ impl CatalogAdoptionBatch {
     }
 
     /// 校验客户端读取的版本，禁止覆盖其他页面已保存的草稿。
-    /// # 参数
-    /// `expected_version` 为最后一次读取的批次版本。
-    /// # 返回
     /// 版本仍一致时成功。
-    /// # 错误
     /// 版本过期或批次已删除时拒绝。
     pub fn ensure_version(&self, expected_version: u64) -> Result<()> {
         if self.base.is_deleted() || self.base.version != expected_version {
@@ -192,22 +171,13 @@ impl CatalogAdoptionBatch {
     }
 
     /// 修改草稿后取消最终预览资格。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 原地清除预览版本。
-    /// # 错误
-    /// 不返回错误。
     pub fn invalidate_preview(&mut self) {
         self.preview_version = None;
     }
 
     /// 提交前要求已重新预览当前保存版本且本次确认非空。
-    /// # 参数
-    /// `preview_version` 为页面最后核对的版本，`item_ids` 为明确确认范围。
-    /// # 返回
     /// 当前预览及所选集合有效时成功。
-    /// # 错误
     /// 预览失效、零项或重复确认行时拒绝。
     pub fn ensure_submission(&self, preview_version: u64, item_ids: &[String]) -> Result<()> {
         if !self.selection_complete
@@ -285,12 +255,9 @@ pub struct CatalogAdoptionBatchItem {
 
 impl CatalogAdoptionBatchItem {
     /// 保存单项公司映射并区分人工填写、明确清空及采用来源。
-    /// # 参数
-    /// `mapping` 为完整单项映射；调用方负责使该项及批次的旧预览失效。
-    /// # 返回
     /// 保存映射和各字段值来源。
-    /// # 错误
     /// 已确认执行、已完成或结果待核实时拒绝。
+    /// `mapping` 为完整单项映射；调用方负责使该项及批次的旧预览失效。
     pub fn edit_mapping(&mut self, mapping: AdoptionMapping) -> Result<()> {
         if !self.editable() {
             return Err(Error::ConflictError("该项已确认执行或结果待核实，不能调整资料".into()));
@@ -315,12 +282,9 @@ impl CatalogAdoptionBatchItem {
     }
 
     /// 保存单项供给补值，接口采购报价须与已核验来源完全一致。
-    /// # 参数
-    /// `terms` 为完整供给草稿；调用方负责使该项及批次的旧预览失效。
-    /// # 返回
     /// 保存供给补值及人工填写或明确清空标记。
-    /// # 错误
     /// 已确认执行、来源报价缺失或试图修改接口采购报价时拒绝。
+    /// `terms` 为完整供给草稿；调用方负责使该项及批次的旧预览失效。
     pub fn edit_terms(&mut self, terms: SupplierOfferingTermsWrite) -> Result<()> {
         if !self.editable() {
             return Err(Error::ConflictError("该项已确认执行或结果待核实，不能调整供给".into()));
@@ -342,11 +306,7 @@ impl CatalogAdoptionBatchItem {
     }
 
     /// 依照填值策略应用资料默认值，保留人工值和明确清空。
-    /// # 参数
-    /// `defaults` 为本次公司分类和供给补值，`policy` 为明确覆盖范围。
-    /// # 返回
     /// 将允许补值的字段保存为批量来源。
-    /// # 错误
     /// 非可编辑行或映射结构不合法时拒绝。
     pub fn apply_defaults(&mut self, defaults: &BatchDefaults, policy: FillPolicy) -> Result<()> {
         if !self.editable() {
@@ -460,12 +420,7 @@ impl CatalogAdoptionBatchItem {
     }
 
     /// 判断该项是否仍可修改；成功与待核实结果必须保留。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 待补、可提交、明确失败或已排除项返回真。
-    /// # 错误
-    /// 不返回错误。
     pub fn editable(&self) -> bool {
         matches!(
             self.status,
@@ -477,11 +432,7 @@ impl CatalogAdoptionBatchItem {
     }
 
     /// 单项修改取消旧匹配和提交资格，不改变已冻结的原操作。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 草稿恢复为待核对。
-    /// # 错误
     /// 正在执行、结果待核实或已经完成时拒绝。
     pub fn invalidate_preview(&mut self) -> Result<()> {
         if !self.editable() {
@@ -495,11 +446,7 @@ impl CatalogAdoptionBatchItem {
     }
 
     /// 为已核对项冻结原操作和真实载荷，进入后台队列。
-    /// # 参数
-    /// `operation_id` 为本次稳定操作号，`preview_version` 为已确认预览版本。
-    /// # 返回
     /// 行保持可提交状态并保存原操作；后台通过 CAS 领取。
-    /// # 错误
     /// 待补、未知、已完成、未确认价格提示或预览过期时拒绝。
     pub fn freeze(&mut self, operation_id: String, preview_version: u64) -> Result<()> {
         if self.status != BatchItemStatus::Ready
@@ -516,11 +463,7 @@ impl CatalogAdoptionBatchItem {
     }
 
     /// 领取已确认行；持久化 CAS 成功后才能执行实际业务写入。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 行变为处理中。
-    /// # 错误
     /// 未确认、未知或已被其他执行器领取时拒绝。
     pub fn begin(&mut self) -> Result<()> {
         if self.status != BatchItemStatus::Ready || self.operation_id.is_none() || self.frozen_row.is_none() {
@@ -532,11 +475,7 @@ impl CatalogAdoptionBatchItem {
     }
 
     /// 执行中断后保存待核实，保持原操作号及冻结载荷。
-    /// # 参数
-    /// `message` 为面向用户的查证原因。
-    /// # 返回
     /// 行变为结果待核实。
-    /// # 错误
     /// 不是正在执行的原操作时拒绝。
     pub fn mark_unknown(&mut self, message: String) -> Result<()> {
         if self.status != BatchItemStatus::Processing {
@@ -548,11 +487,7 @@ impl CatalogAdoptionBatchItem {
     }
 
     /// 明确失败后保留原因并解除本次执行冻结，必须重新预览再提交。
-    /// # 参数
-    /// `message` 为已证明未成功的错误原因。
-    /// # 返回
     /// 行变为明确失败；原业务回执仍由永久回执集合保存。
-    /// # 错误
     /// 结果待核实时拒绝清除原操作。
     pub fn mark_failed(&mut self, message: String) -> Result<()> {
         if self.status != BatchItemStatus::Processing {
@@ -566,12 +501,9 @@ impl CatalogAdoptionBatchItem {
     }
 
     /// 仅根据正式成功回执保存业务结果，支持原操作查证完成。
-    /// # 参数
-    /// `result` 为原子业务事务写入的永久回执结果。
-    /// # 返回
     /// 行变为成功并保留原操作。
-    /// # 错误
     /// 回执来源不符或当前行不是执行及查证状态时拒绝。
+    /// `result` 为原子业务事务写入的永久回执结果。
     pub fn complete(&mut self, result: AdoptionResult) -> Result<()> {
         if !matches!(self.status, BatchItemStatus::Processing | BatchItemStatus::Unknown)
             || result.item_id != self.source.base.id
@@ -610,12 +542,8 @@ pub struct BatchCounts {
 
 impl BatchCounts {
     /// 汇总完整冻结成员集合的互斥状态。
-    /// # 参数
-    /// `items` 为同批次所有行，不得用当前页替代全部成员。
-    /// # 返回
     /// 总量与各互斥状态数量。
-    /// # 错误
-    /// 不返回错误。
+    /// `items` 为同批次所有行，不得用当前页替代全部成员。
     pub fn from_items<'a>(items: impl IntoIterator<Item = &'a CatalogAdoptionBatchItem>) -> Self {
         let mut counts = Self::default();
         for item in items {

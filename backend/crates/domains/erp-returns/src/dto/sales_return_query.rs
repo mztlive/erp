@@ -97,16 +97,8 @@ pub(crate) struct SalesReturnCaseListQuery {
 }
 
 impl SalesReturnCaseListParams {
-    /// 归一化销售退货处理单列表查询参数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    // 查询销售退货处理单列表前校验并规范化筛选和分页输入，返回独立于仓储的查询参数。
+    // 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<SalesReturnCaseListQuery> {
         let (sort_by, sort_dir) =
             normalize_sort(&self.sort_by, &self.sort_dir, SALES_RETURN_CASE_SORT_FIELDS)?;

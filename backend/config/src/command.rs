@@ -33,14 +33,8 @@ pub struct ConfigArgs {
 }
 
 impl ConfigArgs {
-    /// 读取一次完整配置，供运维命令使用，不启动刷新任务。
-    ///
-    /// # 参数
-    /// 使用当前实例中的配置源参数。
-    /// # 返回
-    /// 经过解析和应用校验的配置快照。
-    /// # 错误
-    /// 参数、凭据、远端读取或内容校验失败时返回错误，不回退到文件。
+    /// 按命令指定的来源读取并校验完整配置。运维命令可在整个操作中使用同一份快照，
+    /// 不会启动刷新；Nacos 参数、凭据、读取或内容校验失败时直接报错，不回退到文件。
     pub async fn load(&self) -> Result<Config> {
         if self.enable_nacos {
             let client = NacosConfigClient::from_config(self.nacos_config()?).await?;

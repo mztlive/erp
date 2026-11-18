@@ -65,13 +65,9 @@ pub struct PortalAccountView {
 
 impl PortalAccountView {
     /// 将同一账号与绑定装配为管理视图。
-    ///
-    /// # 参数
-    /// `account`、`binding` 为同一外部账号的正式事实。
-    /// # 返回
     /// 返回安全展示字段，失效账号仍可由内部查看。
-    /// # 错误
-    /// 无。
+    ///
+    /// `account`、`binding` 为同一外部账号的正式事实。
     pub fn from_account(account: &AccountCore, binding: &PortalBinding) -> Self {
         Self {
             account_id: account.base.id.clone(),

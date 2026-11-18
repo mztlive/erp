@@ -71,22 +71,11 @@ impl PurchaseOrderProcess {
     ///
     /// 新变更单独立绑定已发布定义，不继承原采购单定义。客户端不得选择定义或审批人。
     ///
-    /// # 参数
-    /// * `id` - 采购单 ID
-    /// * `req` - 发起请求
-    /// * `actor` - 已通过鉴权的审计操作人
+    /// `req` 为发起请求。返回变更单结果。`NotFound`：采购单不存在或无权操作。`ConflictError`：版本不一致、已存在进行中变更或未配置审批流程。
     ///
-    /// # 返回
-    /// 返回变更单结果。
+    /// `BusinessLogicError`：采购单未生效。
     ///
-    /// # 错误
-    /// * `NotFound` - 采购单不存在或无权操作
-    /// * `ConflictError` - 版本不一致、已存在进行中变更或未配置审批流程
-    /// * `BusinessLogicError` - 采购单未生效
-    ///
-    /// # 关键业务约束
-    /// 必须先证明采购变更创建资格及来源采购单更新范围；不可见对象一律 NotFound，
-    /// 不得先返回进行中、版本或未生效错误。
+    /// 必须先证明采购变更创建资格及来源采购单更新范围；不可见对象一律 NotFound，不得先返回进行中、版本或未生效错误。
     pub async fn start_change(
         &self,
         id: &str,
@@ -129,22 +118,13 @@ impl PurchaseOrderProcess {
 
     /// 提交采购变更并调用统一 `start_approval`。
     ///
-    /// 同一事务内：锁定单据、递增 `approval_subject_version`、冻结 `subject_snapshot`、
-    /// 从 `BusinessDocument` 读取绑定并启动审批。客户端不得选择定义或审批人。
+    /// 同一事务内：锁定单据、递增 `approval_subject_version`、冻结 `subject_snapshot`、从 `BusinessDocument` 读取绑定并启动审批。
+    /// 客户端不得选择定义或审批人。
     ///
-    /// # 参数
-    /// * `change_id` - 变更单 ID
-    /// * `req` - 提交请求（目标完整头、行）
-    /// * `actor` - 已通过鉴权的审计操作人
+    /// `change_id` 为变更单 ID；`req` 为提交请求（目标完整头、行）。返回变更提交结果。`NotFound`：变更单不存在，或来源采购单不可见。
     ///
-    /// # 返回
-    /// 返回变更提交结果。
+    /// `ConflictError`：版本不一致、无绑定或重复提交。
     ///
-    /// # 错误
-    /// * `NotFound` - 变更单不存在，或来源采购单不可见
-    /// * `ConflictError` - 版本不一致、无绑定或重复提交
-    ///
-    /// # 关键业务约束
     /// 读取变更单后必须立即证明变更提交资格及来源采购单提交范围，再做草稿与版本校验。
     pub async fn submit_change(
         &self,
@@ -207,16 +187,7 @@ impl PurchaseOrderProcess {
 
     /// 提交采购变更并返回提交后的完整变更单视图。
     ///
-    /// # 参数
-    /// * `change_id` - 变更单 ID
-    /// * `req` - 期望版本、可选目标内容与幂等键
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回写事务完成后重读的完整变更单视图。
-    ///
-    /// # 错误
-    /// 提交事务或提交后权威视图读取失败时返回错误。
+    /// `change_id` 为变更单 ID；`req` 为期望版本、可选目标内容与幂等键。返回写事务完成后重读的完整变更单视图。提交事务或提交后权威视图读取失败时返回错误。
     pub async fn submit_change_view(
         &self,
         change_id: &str,
@@ -227,13 +198,11 @@ impl PurchaseOrderProcess {
         self.change_view(change_id, actor, &internal::PURCHASE_CHANGE_SUBMITTED_RESULT_READ).await
     }
 
-    /// 写事务结束后使用新快照和原命令资格读取完整结果。
-    /// # 参数
-    /// change_id、actor 为原命令身份，permission 为固定提交或作废结果入口。
-    /// # 返回
-    /// 新快照内重新授权的完整变更结果。
-    /// # 错误
-    /// 当前资格失效、来源无权、事务或读取失败时拒绝。
+    // 写事务结束后使用新快照和原命令资格读取完整结果。
+    //
+    // change_id、actor 为原命令身份，permission 为固定提交或作废结果入口。新快照内重新授权的完整变更结果。
+    //
+    // 当前资格失效、来源无权、事务或读取失败时拒绝。
     pub(super) async fn change_view(
         &self,
         change_id: &str,
@@ -262,18 +231,8 @@ impl PurchaseOrderProcess {
     ///
     /// 作为合同 `cancel_action`，供业务撤回与管理员受阻取消共用。
     ///
-    /// # 参数
-    /// * `id` - 变更单主键
-    /// * `req` - 撤回请求（原因必填）
-    /// * `actor` - 已通过鉴权的审计操作人
+    /// `id` 为变更单主键；`req` 为撤回请求（原因必填）。撤回成功返回 `Ok(())`。来源采购单不可见、非审批中、已最终通过、原因缺失或并发冲突时返回错误。
     ///
-    /// # 返回
-    /// 撤回成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 来源采购单不可见、非审批中、已最终通过、原因缺失或并发冲突时返回错误。
-    ///
-    /// # 关键业务约束
     /// 必须先证明变更撤回资格及来源采购单撤回范围，再校验期望版本。
     pub async fn cancel_change_approval(
         &self,
@@ -310,10 +269,7 @@ impl PurchaseOrderProcess {
             .await
     }
 
-    /// 为新变更单独立绑定已发布定义并写入事务。
-    ///
-    /// # 错误
-    /// 无发布定义、人员重验失败或写入失败时返回错误。
+    // 为新变更单独立绑定已发布定义并写入事务。无发布定义、人员重验失败或写入失败时返回错误。
     async fn persist_started_change(
         &self,
         order: &PurchaseOrder,
@@ -362,10 +318,7 @@ impl PurchaseOrderProcess {
         .await
     }
 
-    /// 冻结提交并启动统一审批。
-    ///
-    /// # 错误
-    /// 无绑定、定义缺失、状态不允许或写入失败时返回错误。
+    // 冻结提交并启动统一审批。无绑定、定义缺失、状态不允许或写入失败时返回错误。
     async fn start_change_approval(
         &self,
         id: &str,
@@ -406,10 +359,7 @@ impl PurchaseOrderProcess {
         .await
     }
 
-    /// 构造冻结提交与明细。
-    ///
-    /// # 错误
-    /// 基准版本缺失或行非法时返回错误。
+    // 构造冻结提交与明细。基准版本缺失或行非法时返回错误。
     pub(super) async fn prepare_change_target(
         &self,
         change: &PurchaseChangeOrder,
@@ -467,7 +417,7 @@ impl PurchaseOrderProcess {
         })
     }
 
-    /// 使用原事务读取本次变更冻结的供应商名称。
+    // 使用原事务读取本次变更冻结的供应商名称。
     async fn change_supplier_name(
         &self,
         order: &PurchaseOrder,
@@ -482,23 +432,13 @@ impl PurchaseOrderProcess {
             .unwrap_or_else(|| order.supplier_id.to_string()))
     }
 
-    /// 从绑定读取定义并持久化启动事实。
-    ///
-    /// # 用途
-    /// 加载冻结绑定并写入采购变更启动事实。
-    ///
-    /// # 参数
-    /// * `dispatch` - 变更单、原单、提交与适配器
-    /// * `actor` - 审计操作人
-    ///
-    /// # 返回
-    /// 返回提交结果。
-    ///
-    /// # 错误
-    /// 无绑定、定义缺失或写入失败时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 必须使用单据创建时冻结的发布定义。
+    // 从绑定读取定义并持久化启动事实。
+    //
+    // 加载冻结绑定并写入采购变更启动事实。
+    //
+    // `dispatch` 为变更单、原单、提交与适配器。返回提交结果。无绑定、定义缺失或写入失败时返回错误。
+    //
+    // 必须使用单据创建时冻结的发布定义。
     async fn dispatch_change_start(
         &self,
         dispatch: ChangeStartDispatch<'_>,
@@ -510,7 +450,7 @@ impl PurchaseOrderProcess {
         self.persist_change_dispatch(dispatch, context, prepared_exec, actor, executor).await
     }
 
-    /// 按既有顺序读取冻结绑定、构造快照并校验启动组织。
+    // 按既有顺序读取冻结绑定、构造快照并校验启动组织。
     async fn prepare_change_start_context(
         &self,
         dispatch: &ChangeStartDispatch<'_>,
@@ -535,7 +475,7 @@ impl PurchaseOrderProcess {
         Ok(PurchaseChangeApprovalContext { subject, binding, now, snapshot, organization_id })
     }
 
-    /// 从绑定图和候选收据准备启动，不提前执行持久化。
+    // 从绑定图和候选收据准备启动，不提前执行持久化。
     async fn prepare_change_execution(
         &self,
         dispatch: &ChangeStartDispatch<'_>,
@@ -577,7 +517,7 @@ impl PurchaseOrderProcess {
         Ok(prepare_start(start_input)?)
     }
 
-    /// 准备审计后提交原写入计划，只有原持久化错误进入有界恢复。
+    // 准备审计后提交原写入计划，只有原持久化错误进入有界恢复。
     async fn persist_change_dispatch(
         &self,
         dispatch: ChangeStartDispatch<'_>,
@@ -618,7 +558,7 @@ impl PurchaseOrderProcess {
         .await
     }
 
-    /// 原事务提交未知或并发撞键后，仅按完整原请求回读首次命令结果。
+    // 原事务提交未知或并发撞键后，仅按完整原请求回读首次命令结果。
     async fn recover_purchase_change_start(
         &self,
         identity: &PurchaseCommandReceiptIdentity,
@@ -655,10 +595,7 @@ impl PurchaseOrderProcess {
         .await
     }
 
-    /// 加载撤回运行事实并写回草稿。
-    ///
-    /// # 错误
-    /// 无绑定、实例终态或写入失败时返回错误。
+    // 加载撤回运行事实并写回草稿。无绑定、实例终态或写入失败时返回错误。
     async fn persist_cancelled_change(
         &self,
         id: &str,
@@ -756,10 +693,7 @@ pub(super) struct FrozenChangeSubmission {
     resubmission_reason: Option<String>,
 }
 
-/// 在创建事务内写入变更单、绑定发布定义并登记单据。
-///
-/// # 错误
-/// 无发布定义、人员重验失败或写入失败时返回错误，调用方必须回滚。
+// 在创建事务内写入变更单、绑定发布定义并登记单据。无发布定义、人员重验失败或写入失败时返回错误，调用方必须回滚。
 #[allow(clippy::too_many_arguments)]
 async fn persist_created_change_order(
     db: &Database,
@@ -787,10 +721,7 @@ async fn persist_created_change_order(
     Ok(())
 }
 
-/// 查询发布定义、写入绑定并持久化注册行。
-///
-/// # 错误
-/// 无发布定义或绑定失败时返回错误。
+// 查询发布定义、写入绑定并持久化注册行。无发布定义或绑定失败时返回错误。
 async fn persist_bound_change_document(
     db: &Database,
     ports: &PurchaseOrderPorts,

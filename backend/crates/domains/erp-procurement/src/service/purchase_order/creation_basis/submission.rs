@@ -12,22 +12,12 @@ use crate::ports::creation_basis::CreationBasisSupplierPort;
 use crate::{Error, Result};
 /// 构造采购草稿提交头。
 ///
-/// # 参数
-/// * `port` - 供应商事务事实与唯一付款解析提供方
-/// * `order_id` - 新采购单主键
-/// * `scope` - 精确拆分范围
-/// * `supplier_name` - 供应商名称快照
-/// * `totals` - 表头金额三元组
-/// * `executor` - 数据访问执行器
+/// 供应商修订和付款条件在创建事务内重新读取并冻结。
 ///
-/// # 返回
-/// 返回采购草稿提交头。
-///
-/// # 错误
 /// 供应商或商务版本缺失、快照字段非法时返回错误。
 ///
-/// # 关键业务约束
-/// 供应商修订和付款条件在创建事务内重新读取并冻结。
+/// - `scope`：精确拆分范围。
+/// - `supplier_name`：供应商名称快照。
 pub async fn build_draft_submission(
     port: &dyn CreationBasisSupplierPort,
     order_id: &PurchaseOrderId,
@@ -171,7 +161,7 @@ mod tests {
         .await;
         (result, port.calls.into_inner().unwrap())
     }
-    /// 同一非零大小执行器重读供应商后，才解析付款并冻结草稿快照。
+    // 同一非零大小执行器重读供应商后，才解析付款并冻结草稿快照。
     #[tokio::test]
     async fn draft_supplier_port_preserves_executor_and_read_then_parse_order() {
         let (result, calls) = invoke(SupplierOutcome::Ready, "NET-30").await;
@@ -181,14 +171,14 @@ mod tests {
         assert_eq!(submission.supplier_snapshot.supplier_name, "供应商名称");
         assert_eq!(submission.payment_term_snapshot.payment_term_code, "POSTPAY_NET30");
     }
-    /// 供应商缺失在任何付款解析或草稿构造前返回原首错。
+    // 供应商缺失在任何付款解析或草稿构造前返回原首错。
     #[tokio::test]
     async fn missing_supplier_stops_before_payment_parse() {
         let (result, calls) = invoke(SupplierOutcome::Missing, "INVALID").await;
         assert!(matches!(result,Err(Error::NotFound(message)) if message=="供应商不存在"));
         assert_eq!(calls, vec!["supplier:supplier-1"]);
     }
-    /// 当前商务指针缺失保持原业务错误，不能被非法付款条件覆盖。
+    // 当前商务指针缺失保持原业务错误，不能被非法付款条件覆盖。
     #[tokio::test]
     async fn missing_commercial_pointer_stops_before_payment_parse() {
         let (result, calls) = invoke(SupplierOutcome::NoRevision, "INVALID").await;
@@ -197,14 +187,14 @@ mod tests {
         );
         assert_eq!(calls, vec!["supplier:supplier-1"]);
     }
-    /// 提供方读取失败直接传播，后续解析与构造均不执行。
+    // 提供方读取失败直接传播，后续解析与构造均不执行。
     #[tokio::test]
     async fn supplier_failure_stops_before_payment_parse() {
         let (result, calls) = invoke(SupplierOutcome::Failure, "NET-30").await;
         assert!(matches!(result,Err(Error::Internal(message)) if message=="supplier read failed"));
         assert_eq!(calls, vec!["supplier:supplier-1"]);
     }
-    /// 付款解析错误发生在供应商存在与商务指针校验之后。
+    // 付款解析错误发生在供应商存在与商务指针校验之后。
     #[tokio::test]
     async fn payment_failure_follows_supplier_validation() {
         let (result, calls) = invoke(SupplierOutcome::Ready, "INVALID").await;

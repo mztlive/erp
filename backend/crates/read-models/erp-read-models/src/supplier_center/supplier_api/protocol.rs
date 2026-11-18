@@ -15,7 +15,7 @@ enum ProtocolAccess {
 }
 
 impl ProtocolAccess {
-    /// 由服务端入口固定完整资格，不接受调用方权限参数。
+    // 检查供应商协议读取或技术票据操作前，用服务端操作类型选择登记权限，不能由调用方传入权限常量。
     fn permission(self) -> Permission {
         match self {
             Self::Read => internal::CONNECTION_PROTOCOL_READ,
@@ -25,22 +25,28 @@ impl ProtocolAccess {
 }
 
 impl SupplierApiReadService {
-    /// 授权并读取协议目录操作所需的真实连接。
+    /// 处理供应商协议时，授权并读取协议目录操作所需的真实连接。
+    ///
     /// # 参数
     /// id 为连接身份，actor 为当前已认证账号。
+    ///
     /// # 返回
     /// 在同一快照中通过 protocol_read、连接详情及供应商资格检查的连接。
+    ///
     /// # 错误
     /// 缺少资格、连接或来源不存在、事实不完整或数据库读取失败时拒绝。
     pub async fn protocol_connection(&self, id: &str, actor: &AuditActor) -> Result<SupplierApiConnection> {
         self.connection_for_protocol(id, actor, ProtocolAccess::Read).await
     }
 
-    /// 授权并读取技术绑定票据操作所需的真实连接。
+    /// 处理供应商协议时，授权并读取技术绑定票据操作所需的真实连接。
+    ///
     /// # 参数
     /// id 为连接身份，actor 为当前已认证账号。
+    ///
     /// # 返回
     /// 通过凭证引用管理、连接详情及供应商资格检查的连接。
+    ///
     /// # 错误
     /// 缺少资格、连接或来源不存在、事实不完整或数据库读取失败时拒绝。
     pub async fn reference_ticket_connection(
@@ -51,7 +57,7 @@ impl SupplierApiReadService {
         self.connection_for_protocol(id, actor, ProtocolAccess::ReferenceTickets).await
     }
 
-    /// 连接事实和协议用连接数据在一个快照内读取，外部供应商调用由调用方执行。
+    // 处理供应商协议时，连接事实和协议用连接数据在一个快照内读取，外部供应商调用由调用方执行。
     async fn connection_for_protocol(
         &self,
         id: &str,
@@ -69,7 +75,7 @@ impl SupplierApiReadService {
             .await
     }
 
-    /// 入口资格与真实连接、完整来源由 identity 的单一固定入口取证。
+    // 处理供应商协议时，入口资格与真实连接、完整来源由 identity 的单一固定入口取证。
     async fn protocol_snapshot(
         &self,
         id: &str,

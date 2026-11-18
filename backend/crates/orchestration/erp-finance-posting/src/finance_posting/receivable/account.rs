@@ -34,23 +34,11 @@ impl ReceivableProcess {
 
     /// 建立应收往来子账与原始应收分录（跨集合事务写入）。
     ///
-    /// 校验来源销售单存在（D13 Repository），同事务写入子账与分录，
-    /// 保证「子账 + 原始应收」原子可见（数据模型 §6.8）。业务幂等唯一
-    /// `(receivable_account_id, source_fact_type, source_document_id,
-    /// source_revision_id, entry_type, source_sequence)` 由唯一索引保证，
-    /// 重复提交落入 409。
+    /// 校验来源销售单存在（D13 Repository），同事务写入子账与分录，保证「子账 + 原始应收」原子可见（数据模型 §6.8）。业务幂等唯一
+    /// `(receivable_account_id, source_fact_type, source_document_id, source_revision_id, entry_type, source_sequence)`
+    /// 由唯一索引保证，重复提交落入 409。返回新建子账的响应视图。`NotFound`：来源销售单不存在。`ConflictError`：业务唯一键重复（唯一索引透出）。
     ///
-    /// # 参数
-    /// * `req` - 创建请求
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回新建子账的响应视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 来源销售单不存在
-    /// * `ConflictError` - 业务唯一键重复（唯一索引透出）
-    /// * `ValidationError` - 请求体校验失败
+    /// `ValidationError`：请求体校验失败。
     pub async fn create_receivable_account(
         &self,
         req: CreateReceivableAccountRequest,
@@ -97,7 +85,7 @@ impl ReceivableProcess {
     }
 }
 
-/// 写入已推进阶段，按原创建入口和实际销售来源重新授权后读取当前事务结果。
+// 写入已推进阶段，按原创建入口和实际销售来源重新授权后读取当前事务结果。
 async fn created_account_view(
     read: &ReceivableReadService,
     authorization: &AuthorizationService,
@@ -122,9 +110,9 @@ async fn created_account_view(
     Ok(read.receivable_account_view(id.to_owned(), executor).await?)
 }
 
-/// 把已持久化的销售业务类型显式映射为财务消费的稳定事实。
-///
-/// 每个来源变体都有对应项，不用缺省分支改变复核政策。
+// 把已持久化的销售业务类型显式映射为财务消费的稳定事实。
+//
+// 每个来源变体都有对应项，不用缺省分支改变复核政策。
 fn sales_business_type_fact(value: BusinessType) -> SalesBusinessTypeFact {
     match value {
         BusinessType::GoodsService => SalesBusinessTypeFact::GoodsService,
@@ -183,7 +171,7 @@ fn new_entry(
     )?)
 }
 
-/// 校验来源版本并确定新建子账复核状态。
+// 校验来源版本并确定新建子账复核状态。
 fn initial_review_status(
     req: &CreateReceivableAccountRequest,
     sales_order: &SalesOrder,
@@ -204,7 +192,7 @@ fn initial_review_status(
     Ok(review_status)
 }
 
-/// 同一事务校验真实销售单、绑定版本与客户，避免客户端拼接跨单来源。
+// 同一事务校验真实销售单、绑定版本与客户，避免客户端拼接跨单来源。
 async fn authorized_source(
     db: &Database,
     rbac: &FinancePostingPorts,
@@ -252,7 +240,7 @@ mod result_tests {
 
     use super::*;
 
-    /// 写后回包仍须原创建资格；错误必须先于台账及跨域事实读取。
+    // 写后回包仍须原创建资格；错误必须先于台账及跨域事实读取。
     #[tokio::test]
     async fn created_account_reauthorizes_original_source_before_result_reads() {
         let db = Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("created_receivable");

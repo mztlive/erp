@@ -3,7 +3,7 @@
 use super::{Error, historical_http_duplicate, wiring_errors};
 
 impl From<erp_supplier_orders::Error> for Error {
-    /// 保留编排边界的原错误载荷和 HTTP 分类。
+    // 接收 `erp_supplier_orders::Error` 的编排失败，将其原有错误载荷与分类投影到统一 HTTP 响应。
     fn from(err: erp_supplier_orders::Error) -> Self {
         boundary_error!(err, erp_supplier_orders;
             error @ erp_supplier_orders::Error::Rbac(_) => Self::Internal(error.to_string()),
@@ -14,7 +14,7 @@ impl From<erp_supplier_orders::Error> for Error {
 }
 
 impl From<erp_file_assets::Error> for Error {
-    /// 将实际组合边界错误转换为稳定 HTTP 响应。
+    // 接收 `erp_file_assets::Error` 的编排失败，将其原有错误载荷与分类投影到统一 HTTP 响应。
     fn from(err: erp_file_assets::Error) -> Self {
         boundary_error!(err, erp_file_assets;
             erp_file_assets::Error::RepositoryError(error) if historical_http_duplicate(&error) => Self::from(error),
@@ -23,7 +23,7 @@ impl From<erp_file_assets::Error> for Error {
 }
 
 impl From<erp_approval_runtime::Error> for Error {
-    /// 将实际组合边界错误转换为稳定 HTTP 响应。
+    // 接收 `erp_approval_runtime::Error` 的编排失败，将其原有错误载荷与分类投影到统一 HTTP 响应。
     fn from(err: erp_approval_runtime::Error) -> Self {
         boundary_error!(err, erp_approval_runtime;
             error @ erp_approval_runtime::Error::Rbac(_) => Self::Internal(error.to_string()),
@@ -34,7 +34,7 @@ impl From<erp_approval_runtime::Error> for Error {
 }
 
 impl From<erp_master_data::Error> for Error {
-    /// 保留编排边界的原错误载荷和 HTTP 分类。
+    // 接收 `erp_master_data::Error` 的编排失败，将其原有错误载荷与分类投影到统一 HTTP 响应。
     fn from(err: erp_master_data::Error) -> Self {
         boundary_error!(err, erp_master_data;
             error @ erp_master_data::Error::Rbac(_) => Self::Internal(error.to_string()),
@@ -44,7 +44,7 @@ impl From<erp_master_data::Error> for Error {
 }
 
 impl From<erp_order_to_cash::Error> for Error {
-    /// 保留编排边界的原错误载荷和 HTTP 分类。
+    // 接收 `erp_order_to_cash::Error` 的编排失败，将其原有错误载荷与分类投影到统一 HTTP 响应。
     fn from(err: erp_order_to_cash::Error) -> Self {
         boundary_error!(err, erp_order_to_cash;
             erp_order_to_cash::Error::CommittedResultUnavailable(message) => Self::CommittedResultUnavailable(message),
@@ -56,7 +56,7 @@ impl From<erp_order_to_cash::Error> for Error {
 }
 
 impl From<erp_fulfillment_execution::Error> for Error {
-    /// 保留编排边界的原错误载荷和 HTTP 分类。
+    // 接收 `erp_fulfillment_execution::Error` 的编排失败，将其原有错误载荷与分类投影到统一 HTTP 响应。
     fn from(err: erp_fulfillment_execution::Error) -> Self {
         boundary_error!(err, erp_fulfillment_execution;
             error @ erp_fulfillment_execution::Error::Rbac(_) => Self::Internal(error.to_string()),
@@ -67,7 +67,7 @@ impl From<erp_fulfillment_execution::Error> for Error {
 }
 
 impl From<erp_demo_data::Error> for Error {
-    /// 保留编排边界的原错误载荷和 HTTP 分类。
+    // 接收 `erp_demo_data::Error` 的编排失败，将其原有错误载荷与分类投影到统一 HTTP 响应。
     fn from(err: erp_demo_data::Error) -> Self {
         boundary_error!(err, erp_demo_data;
             error @ erp_demo_data::Error::Rbac(_) => Self::Internal(error.to_string()),
@@ -78,7 +78,7 @@ impl From<erp_demo_data::Error> for Error {
 }
 
 impl From<erp_procure_to_pay::Error> for Error {
-    /// 保留编排边界的原错误载荷和 HTTP 分类。
+    // 接收 `erp_procure_to_pay::Error` 的编排失败，将其原有错误载荷与分类投影到统一 HTTP 响应。
     fn from(err: erp_procure_to_pay::Error) -> Self {
         boundary_error!(err, erp_procure_to_pay;
             error @ erp_procure_to_pay::Error::Rbac(_) => Self::Internal(error.to_string()),
@@ -89,7 +89,7 @@ impl From<erp_procure_to_pay::Error> for Error {
 }
 
 impl From<erp_supply_settlement::Error> for Error {
-    /// 保留编排边界的原错误载荷和 HTTP 分类。
+    // 接收 `erp_supply_settlement::Error` 的编排失败，将其原有错误载荷与分类投影到统一 HTTP 响应。
     fn from(err: erp_supply_settlement::Error) -> Self {
         boundary_error!(err, erp_supply_settlement;
             error @ erp_supply_settlement::Error::Rbac(_) => Self::Internal(error.to_string()),
@@ -100,7 +100,7 @@ impl From<erp_supply_settlement::Error> for Error {
 }
 
 impl From<erp_finance_posting::Error> for Error {
-    /// 保留编排边界的原错误载荷和 HTTP 分类。
+    // 接收 `erp_finance_posting::Error` 的编排失败，将其原有错误载荷与分类投影到统一 HTTP 响应。
     fn from(err: erp_finance_posting::Error) -> Self {
         boundary_error!(err, erp_finance_posting;
             erp_finance_posting::Error::CommittedResultUnavailable(message) => Self::CommittedResultUnavailable(message),
@@ -112,7 +112,7 @@ impl From<erp_finance_posting::Error> for Error {
 }
 
 impl From<erp_reverse_flow::Error> for Error {
-    /// 保留编排边界的原错误载荷和 HTTP 分类。
+    // 接收 `erp_reverse_flow::Error` 的编排失败，将其原有错误载荷与分类投影到统一 HTTP 响应。
     fn from(err: erp_reverse_flow::Error) -> Self {
         boundary_error!(err, erp_reverse_flow;
             error @ erp_reverse_flow::Error::Rbac(_) => Self::Internal(error.to_string()),
@@ -123,7 +123,7 @@ impl From<erp_reverse_flow::Error> for Error {
 }
 
 impl From<erp_data_import::Error> for Error {
-    /// 保留编排边界的原错误载荷和 HTTP 分类。
+    // 接收 `erp_data_import::Error` 的编排失败，将其原有错误载荷与分类投影到统一 HTTP 响应。
     fn from(err: erp_data_import::Error) -> Self {
         boundary_error!(err, erp_data_import;
             erp_data_import::Error::CommittedResultUnavailable(message) => Self::CommittedResultUnavailable(message),
@@ -135,7 +135,7 @@ impl From<erp_data_import::Error> for Error {
 }
 
 impl From<erp_supplier_catalog::Error> for Error {
-    /// 保留编排边界的原错误载荷和 HTTP 分类。
+    // 接收 `erp_supplier_catalog::Error` 的编排失败，将其原有错误载荷与分类投影到统一 HTTP 响应。
     fn from(err: erp_supplier_catalog::Error) -> Self {
         boundary_error!(err, erp_supplier_catalog;
             error @ erp_supplier_catalog::Error::Rbac(_) => Self::Internal(error.to_string()),
@@ -146,7 +146,7 @@ impl From<erp_supplier_catalog::Error> for Error {
 }
 
 impl From<wiring_errors::Error> for Error {
-    /// 将实际组合边界错误转换为稳定 HTTP 响应。
+    // 接收 `wiring_errors::Error` 的编排失败，将其原有错误载荷与分类投影到统一 HTTP 响应。
     fn from(err: wiring_errors::Error) -> Self {
         boundary_error!(err, wiring_errors;
             wiring_errors::Error::CommittedResultUnavailable(message) => Self::CommittedResultUnavailable(message),
@@ -158,7 +158,7 @@ impl From<wiring_errors::Error> for Error {
 }
 
 impl From<erp_read_models::Error> for Error {
-    /// 将实际组合边界错误转换为稳定 HTTP 响应。
+    // 接收 `erp_read_models::Error` 的编排失败，将其原有错误载荷与分类投影到统一 HTTP 响应。
     fn from(err: erp_read_models::Error) -> Self {
         boundary_error!(err, erp_read_models;
             error @ erp_read_models::Error::Rbac(_) => Self::Internal(error.to_string()),

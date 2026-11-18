@@ -19,18 +19,11 @@ use crate::entity::catalog::status::{EnableStatus, ListingStatus};
 /// SKU 编号最大长度。
 const SKU_NO_MAX_LEN: usize = 64;
 
-/// 上架概念引入前的 SKU 均视为延续原有可售行为，读取时兼容为已上架。
-///
-/// 仓储投影的 `serde default` 引用同一口径（erp-catalog-007）。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回 [`ListingStatus::Listed`]。
-///
-/// # 错误
-/// 不返回错误。
+// 上架概念引入前的 SKU 均视为延续原有可售行为，读取时兼容为已上架。
+//
+// 仓储投影的 `serde default` 引用同一口径（erp-catalog-007）。
+//
+// 返回 [`ListingStatus::Listed`]。
 pub(crate) fn legacy_listing_status() -> ListingStatus {
     ListingStatus::Listed
 }
@@ -79,14 +72,7 @@ pub struct SkuEditIdentity<'a> {
 impl SkuEditIdentity<'_> {
     /// 校验该身份快照可用于创建全新规格 SKU。
     ///
-    /// # 参数
-    /// 无；使用值对象中携带的客户端提交字段。
-    ///
-    /// # 返回
-    /// 未指定既有身份、期望修订和重新启用意图时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 新规格猜测既有 SKU 身份或提交重新启用意图时返回身份规则错误。
+    /// 未指定既有身份、期望修订和重新启用意图时返回 `Ok(())`。新规格猜测既有 SKU 身份或提交重新启用意图时返回身份规则错误。
     pub fn ensure_new(&self) -> std::result::Result<(), SkuEditIdentityError> {
         if self.sku_id.is_some() || self.expected_revision_id.is_some() || self.reenable {
             return Err(SkuEditIdentityError::NewIdentitySpecified);
@@ -153,7 +139,7 @@ pub struct Sku {
 }
 
 impl PartialEq for Sku {
-    /// 全字段语义相等。
+    // 逐字段比较SKU，仅持有相同标识不视为内容相等。
     fn eq(&self, other: &Self) -> bool {
         self.base == other.base
             && self.stable.status == other.stable.status
@@ -173,20 +159,13 @@ impl Eq for Sku {}
 impl Sku {
     /// 创建 SKU。
     ///
-    /// 完成 sku_no 的校验与规范化（去首尾空白、非空、长度上限），并校验
-    /// `specification_signature` 是规范化形态（空签名必须为固定空规格签名）。
+    /// 完成 sku_no 的校验与规范化（去首尾空白、非空、长度上限），并校验`specification_signature`
+    /// 是规范化形态（空签名必须为固定空规格签名）。
     ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::SkuId`）
-    /// * `data` - 创建数据
-    /// * `created_by` - 创建人（账号或系统身份）
+    /// 当 sku_no 为空/超长、规格签名不是规范化形态，或停用 SKU 被标记为已上架时返回错误。
     ///
-    /// # 返回
-    /// 返回新建的 SKU 实体。
-    ///
-    /// # 错误
-    /// 当 sku_no 为空/超长、规格签名不是规范化形态，或停用 SKU 被标记为
-    /// 已上架时返回错误。
+    /// - `id`：实体主键（`erp_core::ids::SkuId`）。
+    /// - `created_by`：创建人（账号或系统身份）。
     pub fn new(id: SkuId, data: SkuData, created_by: impl Into<String>) -> Result<Self> {
         let sku_no = normalize_required_text(data.sku_no, "SKU编号不能为空", SKU_NO_MAX_LEN, "SKU编号过长")?;
         let signature = data.specification_signature.trim().to_string();
@@ -208,19 +187,8 @@ impl Sku {
 
     /// 更新 SKU。
     ///
-    /// `sku_no`、`product_id`、`base_unit_id` 与 `specification_signature` 是
-    /// 创建后不可变的稳定身份，通用更新只允许修改启停状态。
-    /// 传入停用状态时同时把 `listing_status` 改为 `Unlisted`。
-    ///
-    /// # 参数
-    /// * `update` - 更新数据
-    /// * `updated_by` - 本次更新执行人
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 函数体不产生失败，始终返回 `Ok(())`。
+    /// `sku_no`、`product_id`、`base_unit_id` 与 `specification_signature` 是创建后不可变的稳定身份，
+    /// 通用更新只允许修改启停状态。传入停用状态时同时把 `listing_status` 改为 `Unlisted`。
     pub fn update(&mut self, update: SkuUpdate, updated_by: impl Into<String>) -> Result<()> {
         if let Some(status) = update.status {
             self.stable.status = status;
@@ -232,16 +200,7 @@ impl Sku {
         Ok(())
     }
 
-    /// 判断 SKU 是否处于启用状态。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 状态为 `Active` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 判断 SKU 是否处于启用状态。状态为 `Active` 时返回 `true`。
     pub fn is_active(&self) -> bool {
         self.stable.status().is_active()
     }
@@ -250,15 +209,7 @@ impl Sku {
     ///
     /// 停用 SKU 不允许上架；幂等提交不会增加实体版本。
     ///
-    /// # 参数
-    /// * `listing_status` - 目标上架状态
-    /// * `updated_by` - 本次操作人
-    ///
-    /// # 返回
-    /// 状态发生变化时返回 `true`，幂等提交返回 `false`。
-    ///
-    /// # 错误
-    /// 停用 SKU 尝试上架时返回领域错误。
+    /// 状态发生变化时返回 `true`，幂等提交返回 `false`。停用 SKU 尝试上架时返回领域错误。
     pub fn set_listing_status(
         &mut self,
         listing_status: ListingStatus,
@@ -278,15 +229,10 @@ impl Sku {
 
     /// 根据稳定身份、当前修订和重新启用意图分类既有 SKU 编辑动作。
     ///
-    /// # 参数
-    /// * `identity` - 客户端提交的 SKU 稳定身份快照
+    /// 当前启用 SKU 返回 `Keep`，历史停用且明确重新启用返回 `Reactivate`。SKU ID 或期望修订不匹配、稳定字段变化、
+    /// 重新启用意图缺失或多余时返回[`SkuEditIdentityError`]。
     ///
-    /// # 返回
-    /// 当前启用 SKU 返回 `Keep`，历史停用且明确重新启用返回 `Reactivate`。
-    ///
-    /// # 错误
-    /// SKU ID 或期望修订不匹配、稳定字段变化、重新启用意图缺失或多余时返回
-    /// [`SkuEditIdentityError`]。
+    /// `identity` 为客户端提交的 SKU 稳定身份快照。
     pub fn classify_edit(
         &self,
         identity: &SkuEditIdentity<'_>,
@@ -316,15 +262,9 @@ impl Sku {
 
     /// 关联一份属于本 SKU 的新当前修订。
     ///
-    /// # 参数
-    /// * `revision` - 待设为当前版本的不可变 SKU 修订
-    /// * `updated_by` - 本次关联操作人
+    /// 关联成功返回 `Ok(())`，并同步启停状态、下架约束与当前修订指针。修订属于其他 SKU 时返回领域错误。`update` 本身不失败。
     ///
-    /// # 返回
-    /// 关联成功返回 `Ok(())`，并同步启停状态、下架约束与当前修订指针。
-    ///
-    /// # 错误
-    /// 修订属于其他 SKU 时返回领域错误。`update` 本身不失败。
+    /// `revision` 为待设为当前版本的不可变 SKU 修订。
     pub fn attach_revision(&mut self, revision: &SkuRevision, updated_by: impl Into<String>) -> Result<()> {
         if revision.sku_id.as_ref() != self.base.id.as_str() {
             return Err("SKU 修订不属于目标 SKU".into());
@@ -336,28 +276,14 @@ impl Sku {
 
     /// 停用 SKU 并自动下架。
     ///
-    /// # 参数
-    /// * `updated_by` - 本次停用操作人
-    ///
-    /// # 返回
-    /// 返回 `Ok(())`；重复停用保持幂等状态并刷新操作人。
-    ///
-    /// # 错误
-    /// 当前 `update` 不会失败，本方法始终返回 `Ok(())`。
+    /// 返回 `Ok(())`；重复停用保持幂等状态并刷新操作人。当前 `update` 不会失败，本方法始终返回 `Ok(())`。
     pub fn disable(&mut self, updated_by: impl Into<String>) -> Result<()> {
         self.update(SkuUpdate { status: Some(EnableStatus::Disabled) }, updated_by)
     }
 
     /// 重新启用历史停用 SKU，保持下架状态等待显式上架。
     ///
-    /// # 参数
-    /// * `updated_by` - 本次重新启用操作人
-    ///
-    /// # 返回
-    /// SKU 从停用切回启用时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// SKU 已经启用时返回领域错误，防止把普通编辑误标为重新启用。
+    /// SKU 从停用切回启用时返回 `Ok(())`。SKU 已经启用时返回领域错误，防止把普通编辑误标为重新启用。
     pub fn reactivate(&mut self, updated_by: impl Into<String>) -> Result<()> {
         if self.is_active() {
             return Err("当前 SKU 已经启用".into());
@@ -365,16 +291,7 @@ impl Sku {
         self.update(SkuUpdate { status: Some(EnableStatus::Active) }, updated_by)
     }
 
-    /// 判断是否为无规格 SKU。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 规格签名为固定空规格签名时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 判断是否为无规格 SKU。规格签名为固定空规格签名时返回 `true`。
     pub fn is_no_spec(&self) -> bool {
         self.specification_signature == crate::entity::catalog::specification::EMPTY_SPEC_SIGNATURE
     }
@@ -399,7 +316,7 @@ mod tests {
         }
     }
 
-    /// happy path：编号 trim 规范化，签名与归属落位。
+    // 编号 去除首尾空白，签名与归属按请求保存。
     #[test]
     fn new_trims_and_normalizes_fields() {
         let sku = Sku::new(SkuId::new("sku-1"), data(), "admin-1").unwrap();
@@ -413,7 +330,7 @@ mod tests {
         assert_eq!(sku.listing_status, ListingStatus::Unlisted);
     }
 
-    /// happy path：无规格 SKU 使用固定空规格签名，空白输入规范化为空签名。
+    // 无规格 SKU 使用固定空规格签名，空白输入规范化为空签名。
     #[test]
     fn new_accepts_empty_spec_signature() {
         let no_spec = SkuData { specification_signature: EMPTY_SPEC_SIGNATURE.to_string(), ..data() };
@@ -425,7 +342,7 @@ mod tests {
         assert!(sku.is_no_spec());
     }
 
-    /// 失败路径：必填空与超长各一条。
+    // SKU的必填字段为空或超长时均应拒绝创建。
     #[test]
     fn new_rejects_empty_and_overlong_sku_no() {
         let empty = SkuData { sku_no: "  ".to_string(), ..data() };
@@ -435,7 +352,7 @@ mod tests {
         assert!(Sku::new(SkuId::new("sku-1"), overlong, "admin-1").is_err());
     }
 
-    /// 失败路径：签名超长被拒绝。
+    // 签名超长被拒绝。
     #[test]
     fn new_rejects_overlong_signature() {
         let overlong_signature =
@@ -443,7 +360,7 @@ mod tests {
         assert!(Sku::new(SkuId::new("sku-1"), overlong_signature, "admin-1").is_err());
     }
 
-    /// update 只允许改状态：编号、签名与基础单位保持不变。
+    // 更新时只允许改状态：编号、签名与基础单位保持不变。
     #[test]
     fn update_only_changes_status_and_preserves_identity() {
         let mut sku = Sku::new(SkuId::new("sku-1"), data(), "admin-1").unwrap();
@@ -458,7 +375,7 @@ mod tests {
         assert_eq!(sku.stable.updated_by, "admin-2");
     }
 
-    /// 上架状态独立切换，幂等提交不触碰版本。
+    // 上架状态独立切换，幂等提交不触碰版本。
     #[test]
     fn listing_status_changes_independently_and_idempotently() {
         let mut sku = Sku::new(SkuId::new("sku-1"), data(), "admin-1").unwrap();
@@ -471,7 +388,7 @@ mod tests {
         assert_eq!(sku.stable.updated_by, "admin-2");
     }
 
-    /// 停用 SKU 自动下架，且不能在停用状态下重新上架。
+    // 停用 SKU 自动下架，且不能在停用状态下重新上架。
     #[test]
     fn disabled_sku_is_unlisted_and_cannot_be_listed() {
         let mut sku = Sku::new(SkuId::new("sku-1"), data(), "admin-1").unwrap();
@@ -482,7 +399,7 @@ mod tests {
         assert!(sku.set_listing_status(ListingStatus::Listed, "admin-4").is_err());
     }
 
-    /// 构造阶段拒绝“停用但已上架”的非法组合。
+    // 构造阶段拒绝“停用但已上架”的非法组合。
     #[test]
     fn new_rejects_disabled_but_listed_sku() {
         let invalid =
@@ -491,7 +408,7 @@ mod tests {
         assert!(Sku::new(SkuId::new("sku-1"), invalid, "admin-1").is_err());
     }
 
-    /// 上架概念引入前的旧文档缺字段时保持原有可售行为。
+    // 上架概念引入前的旧文档缺字段时保持原有可售行为。
     #[test]
     fn legacy_document_without_listing_status_is_treated_as_listed() {
         let sku = Sku::new(SkuId::new("sku-1"), data(), "admin-1").unwrap();
@@ -503,7 +420,7 @@ mod tests {
         assert_eq!(restored.listing_status, ListingStatus::Listed);
     }
 
-    /// 新规格不得猜测既有身份，既有 SKU 按状态和意图分类编辑动作。
+    // 新规格不得猜测既有身份，既有 SKU 按状态和意图分类编辑动作。
     #[test]
     fn edit_identity_rules_classify_keep_and_reactivate() {
         let mut sku = Sku::new(SkuId::new("sku-1"), data(), "admin-1").unwrap();
@@ -532,7 +449,7 @@ mod tests {
         assert_eq!(sku.classify_edit(&reactivation).unwrap(), SkuEditAction::Reactivate);
     }
 
-    /// 既有 SKU 修订冲突与缺失重新启用原因均被拒绝。
+    // 既有 SKU 修订冲突与缺失重新启用原因均被拒绝。
     #[test]
     fn edit_identity_rules_reject_stale_or_ambiguous_intent() {
         let mut sku = Sku::new(SkuId::new("sku-1"), data(), "admin-1").unwrap();
@@ -565,7 +482,7 @@ mod tests {
         );
     }
 
-    /// SKU 只接受自身修订并同步当前修订指针。
+    // SKU 只接受自身修订并同步当前修订指针。
     #[test]
     fn attach_revision_enforces_relationship() {
         let mut sku = Sku::new(SkuId::new("sku-1"), data(), "admin-1").unwrap();
@@ -619,7 +536,7 @@ mod tests {
         assert!(sku.attach_revision(&foreign, "admin-3").is_err());
     }
 
-    /// 状态机：合法迁移通过，邻接矩阵对称闭合。
+    // 锁定SKU启停的正向、反向与幂等迁移，防止状态表缺边。
     #[test]
     fn status_transitions_follow_document_state() {
         assert!(ensure_transition(EnableStatus::Active, EnableStatus::Disabled).is_ok());

@@ -10,16 +10,7 @@ pub struct SellableProjectionRefreshAdapter {
 }
 
 impl SellableProjectionRefreshAdapter {
-    /// 包装投影刷新。
-    ///
-    /// # 参数
-    /// * `refresher` - 投影刷新
-    ///
-    /// # 返回
-    /// 返回适配器。
-    ///
-    /// # 错误
-    /// 无。
+    /// 包装投影刷新。`refresher`：投影刷新。
     pub fn new(refresher: SellableProjectionRefresher) -> Self {
         Self { refresher }
     }

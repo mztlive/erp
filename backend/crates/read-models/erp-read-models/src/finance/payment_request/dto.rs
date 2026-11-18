@@ -140,14 +140,14 @@ impl From<&SupplierDepositAccount> for PaymentRequestDepositAccountCandidate {
 }
 
 impl PurchasePaymentRequestCandidate {
-    /// 从当前生效采购版本的前三行生成商品或费用摘要。
-    ///
-    /// # 参数
-    /// * `lines` - 当前生效版本的采购明细。
-    /// # 返回
-    /// 商品行显示名称，费用行显示类别和说明；旧费用行缺少内容时显示“费用”。
-    /// # 错误
-    /// 不返回错误；无明细时返回空摘要。
+    // 汇总采购付款申请时，从当前生效采购版本的前三行生成商品或费用摘要。
+    //
+    // 调用参数：
+    // * `lines` - 当前生效版本的采购明细。
+    //
+    // 商品行显示名称，费用行显示类别和说明；旧费用行缺少内容时显示“费用”。
+    //
+    // 无明细时返回空摘要。
     pub(super) fn summary_from_lines(lines: &[PurchaseOrderRevisionLine]) -> String {
         lines
             .iter()

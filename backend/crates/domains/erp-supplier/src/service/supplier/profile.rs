@@ -6,15 +6,7 @@ use crate::dto::supplier::SupplierProfileMutationView;
 use crate::entity::supplier::SupplierProfileCommand;
 
 /// 将命令实体转换为稳定 HTTP 结果。
-///
-/// # 参数
-/// * `command` - 已成功的供应商资料根命令
-///
-/// # 返回
 /// 返回与原 HTTP 契约一致的稳定业务视图。
-///
-/// # 错误
-/// 不返回错误。
 pub fn command_view(command: SupplierProfileCommand) -> SupplierProfileMutationView {
     SupplierProfileMutationView {
         supplier_id: command.supplier_id,

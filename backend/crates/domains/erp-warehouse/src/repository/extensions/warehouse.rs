@@ -32,52 +32,16 @@ pub trait WarehouseExt {
     /// 仓库-SKU 预警策略列表筛选条件类型（定义见 `repository::warehouse`）。
     type WarehouseSkuPolicyFilter;
 
-    /// 获取 `warehouse` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `WarehouseRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 获取仓库稳定身份的集合仓储，供资料、经办配置和启停状态的读写复用。
     fn warehouses(&self) -> WarehouseRepository<'_>;
 
-    /// 获取 `warehouse_revision` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `WarehouseRevisionRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 获取仓库修订仓储，供追加资料快照并读取历史修订。
     fn warehouse_revisions(&self) -> WarehouseRevisionRepository<'_>;
 
-    /// 获取 `warehouse_sku_policy` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `WarehouseSkuPolicyRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 获取仓库 SKU 策略仓储，供按仓库和 SKU 查询或更新预警阈值。
     fn warehouse_sku_policies(&self) -> WarehouseSkuPolicyRepository<'_>;
 
-    /// 获取承载跨集合事务写入的域专用仓储。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `WarehouseDomainRepository` 实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 获取负责多集合仓库写入的领域仓储，原子性由调用方事务保证。
     fn warehouse(&self) -> WarehouseDomainRepository<'_>;
 }
 
@@ -86,58 +50,22 @@ impl WarehouseExt for Database {
     type WarehouseRevisionFilter = WarehouseRevisionFilter;
     type WarehouseSkuPolicyFilter = WarehouseSkuPolicyFilter;
 
-    /// 获取 `warehouse` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `WarehouseRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 将稳定仓库访问绑定到本域声明的集合名，避免调用方自行选表。
     fn warehouses(&self) -> WarehouseRepository<'_> {
         WarehouseRepository::new(self, Self::WAREHOUSES)
     }
 
-    /// 获取 `warehouse_revision` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `WarehouseRevisionRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 将修订访问绑定到本域声明的修订集合，供首修订、后续追加和历史查询使用。
     fn warehouse_revisions(&self) -> WarehouseRevisionRepository<'_> {
         WarehouseRevisionRepository::new(self, Self::WAREHOUSE_REVISIONS)
     }
 
-    /// 获取 `warehouse_sku_policy` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `WarehouseSkuPolicyRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 将 SKU 策略访问绑定到本域预警策略集合，避免与库存事实混用。
     fn warehouse_sku_policies(&self) -> WarehouseSkuPolicyRepository<'_> {
         WarehouseSkuPolicyRepository::new(self, Self::WAREHOUSE_SKU_POLICIES)
     }
 
-    /// 获取承载跨集合事务写入的域专用仓储。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `WarehouseDomainRepository` 实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 用当前数据库构造仓库领域仓储，供稳定身份和修订的跨集合步骤共享连接。
     fn warehouse(&self) -> WarehouseDomainRepository<'_> {
         WarehouseDomainRepository::new(self)
     }

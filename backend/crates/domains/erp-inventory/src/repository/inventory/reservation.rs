@@ -66,16 +66,7 @@ pub struct StockReservationFilter {
 }
 
 impl Default for StockReservationFilter {
-    /// 返回首页空筛选（`page: 1`，`page_size: 20`）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回筛选为空、降序的首页过滤条件。
-    ///
-    /// # 错误
-    /// 无。
+    // 初始化库存预占筛选：第一页、每页 20 条，业务筛选默认留空，默认降序排序。
     fn default() -> Self {
         Self {
             search: super::InventorySearch::default(),
@@ -92,19 +83,8 @@ impl Default for StockReservationFilter {
 }
 
 impl QueryFilter for StockReservationFilter {
-    /// 转换为 MongoDB 查询条件。
-    ///
-    /// 基底来自 `scoped_base_filter`（未删除，以及 `warehouse_ids`：`None` 不限仓库，空集合保持空 `$in`）。
-    /// 有值时精确匹配 `sku_id`、`sales_order_line_id`，并按稳定代码匹配 `status`，最后并入 `search`。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 转换为 MongoDB 查询条件。
+    // 基底来自 `scoped_base_filter`（未删除，以及 `warehouse_ids`：`None` 不限仓库，空集合保持空 `$in`）。有值时精确匹配 `sku_id`、`sales_order_line_id`，并按稳定代码匹配 `status`，最后并入 `search`。
     fn to_doc(&self) -> Document {
         let mut filter = scoped_base_filter(self.warehouse_ids.as_deref());
         if let Some(sku_id) = &self.sku_id {
@@ -122,18 +102,8 @@ impl QueryFilter for StockReservationFilter {
 }
 
 impl Pagination for StockReservationFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// 原样返回 `page`，并把 `page_size` 从 `u32` 拓宽为 `u64`；不在此处把小于 1 的页码归一。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 向仓储分页传递页码与单页条数。
+    // 原样返回 `page`，并把 `page_size` 从 `u32` 拓宽为 `u64`；不在此处把小于 1 的页码归一。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -143,26 +113,11 @@ impl Pagination for StockReservationFilter {
 #[allow(async_fn_in_trait)]
 pub trait StockReservationRepositoryExt {
     /// 分页检索库存预占列表（投影查询）。
-    ///
-    /// 只返回 [`StockReservationRow`] 所需的列表字段，不加载整文档；排序字段
-    /// 走白名单映射（`created_at`/`updated_at`）。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
+    /// 只返回 [`StockReservationRow`] 所需的列表字段，不加载整文档；排序字段走白名单映射（`created_at`/`updated_at`）。
     /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    /// 按统一库存模型凭证分页查询；候选条件只收窄结果。
-    /// # 参数
-    /// filter 为业务筛选，access 为当前动作凭证，executor 为原读取执行器。
-    /// # 返回
     /// 完整授权条件下的页与总数；缺资格返回空页。
-    /// # 错误
-    /// 模型错配、复验或数据库失败返回错误。
+    /// `executor` 为数据访问执行器，由 Service 决定是否位于事务中 filter 为业务筛选，access 为当前动作凭证，executor 为原读取执行器。
+    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。按统一库存模型凭证分页查询；候选条件只收窄结果。模型错配、复验或数据库失败返回错误。
     async fn search_authorized_stock_reservations(
         &self,
         filter: &StockReservationFilter,
@@ -170,25 +125,8 @@ pub trait StockReservationRepositoryExt {
         executor: &mut dyn Executor,
     ) -> InventoryResult<PageResult<StockReservationRow>>;
 
-    /// ★原子条件写★：消耗预占（`reserved -= q`、`consumed += q`）。
-    ///
-    /// 第一步写条件内联 `reserved_quantity >= q` 且状态为有效/部分消耗
-    /// （§6.7 只有仓发消耗可以扣减预占），不足或状态不符时**直接拒绝**：
-    /// 返回 `Ok(false)` 且文档不变。第二步是状态收敛写：剩余为 0 迁移到
-    /// `CONSUMED`，否则迁移到 `PARTIALLY_CONSUMED`（两笔均为原子写，第一步
-    /// 是本方法的原子守卫；极端并发下状态收敛由 P3 事务兜底）。本方法不更新
-    /// 内存实体，调用方需要最新预占时重新读取。
-    ///
-    /// # 参数
-    /// * `id` - 预占主键
-    /// * `quantity` - 正数消耗数量
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 预占充足且命中时返回 `true`；预占不足、状态不符或预占不存在时返回 `false`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 写入失败时返回错误。
+    /// 仓发消耗正数预占时，沿调用方事务先原子校验记录仍有效或部分消耗且剩余量足够，再从预占量转入消耗量。
+    /// 写入后按剩余量收敛为 `Consumed` 或 `PartiallyConsumed`；缺记录、状态不符或不足返回 `false` 且不改文档，传播写入错误。调用方需要新实体时重读。
     async fn consume_quantity(
         &self,
         id: &str,
@@ -196,25 +134,8 @@ pub trait StockReservationRepositoryExt {
         executor: &mut dyn Executor,
     ) -> Result<bool>;
 
-    /// ★原子条件写★：整体释放预占（`reserved -> 0`、`released += q`）。
-    ///
-    /// 实体状态一致性要求 `RELEASED` 时剩余预占必须为 0（§6.7），因此本方法
-    /// 只接受**全额释放**：写条件内联 `reserved_quantity == q` 且状态为有效/
-    /// 部分消耗，只有释放全部剩余预占时命中并把状态迁移到 `RELEASED`；剩余
-    /// 预占大于 `q` 时返回 `Ok(false)` 且文档不变（部分释放不构成合法状态，
-    /// 由 P3 按单据语义编排）。本方法不更新内存实体。
-    ///
-    /// # 参数
-    /// * `id` - 预占主键
-    /// * `quantity` - 待释放的剩余预占数量（必须等于当前 `reserved_quantity`）
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 剩余预占恰好等于 `quantity` 且命中时返回 `true`；数量不符、状态不符或
-    /// 预占不存在时返回 `false`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 写入失败时返回错误。
+    /// 释放预占时沿用调用方执行器，仅对有效或部分消耗、且剩余量恰等于请求量的记录原子全额释放并切换为 `Released`。
+    /// 缺记录、状态不符或请求部分释放返回 `false`，文档不变；传播写入错误，不同步内存实体。
     async fn release_quantity(
         &self,
         id: &str,
@@ -353,7 +274,7 @@ impl StockReservationRepositoryExt for Repository<'_, StockReservation> {
     }
 }
 
-/// 为库存预占分页追加唯一主键 tie-breaker，避免相同主排序值跨页重复或遗漏。
+// 为库存预占分页追加唯一主键 tie-breaker，避免相同主排序值跨页重复或遗漏。
 fn stock_reservation_sort(filter: &StockReservationFilter) -> Document {
     with_id_tie_breaker(
         sort_doc(filter.sort_by.as_deref(), filter.sort_ascending, &["created_at", "updated_at"]),
@@ -363,16 +284,9 @@ fn stock_reservation_sort(filter: &StockReservationFilter) -> Document {
 
 impl<'a> InventoryRepository<'a> {
     /// 批量读取销售稳定行的现有库存预占。
-    ///
-    /// # 参数
-    /// * `sales_order_line_ids` - 销售稳定行主键集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回由现有库存分配建立的全部未删除预占；采购入库预占不进入结果。
-    ///
-    /// # 错误
-    /// MongoDB 查询或游标读取失败时返回错误。
+    /// `sales_order_line_ids` 为销售稳定行主键集合；沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询或游标读取错误。
     #[tracing::instrument(
         name = "repository.inventory.existing_reservations_for_sales_lines",
         skip_all,
@@ -406,17 +320,9 @@ impl<'a> InventoryRepository<'a> {
     }
 
     /// 读取指定余额维度上的可操作预占。
-    ///
-    /// # 参数
-    /// * `warehouse_id` - 仓库主键
-    /// * `sku_id` - SKU 主键
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回有效或部分消耗的预占集合。
-    ///
-    /// # 错误
-    /// MongoDB 查询或游标读取失败时返回错误。
+    /// `warehouse_id` 为仓库主键，`sku_id` 为 SKU 主键，沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询或游标读取错误。
     pub async fn operable_reservations_for_balance(
         &self,
         warehouse_id: &WarehouseId,
@@ -436,17 +342,10 @@ impl<'a> InventoryRepository<'a> {
     }
 
     /// 批量读取页内库存维度上的可操作预占。
-    ///
-    /// # 参数
-    /// * `warehouse_ids` - 仓库主键集合
-    /// * `sku_ids` - SKU 主键集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回命中任一页内仓库与 SKU 的可操作预占。
-    ///
-    /// # 错误
-    /// MongoDB 查询或游标读取失败时返回错误。
+    /// `warehouse_ids` 为仓库主键集合；`sku_ids` 为 SKU 主键集合。
+    /// 沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询或游标读取错误。
     pub async fn operable_reservations_for_dimensions(
         &self,
         warehouse_ids: &[String],
@@ -469,17 +368,9 @@ impl<'a> InventoryRepository<'a> {
     }
 
     /// 按建立时间读取指定维度上的可操作预占。
-    ///
-    /// # 参数
-    /// * `warehouse_id` - 仓库主键
-    /// * `sku_id` - SKU 主键
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回按 `created_at` 升序排列的可操作预占。
-    ///
-    /// # 错误
-    /// MongoDB 查询或游标读取失败时返回错误。
+    /// `warehouse_id` 为仓库主键，`sku_id` 为 SKU 主键，沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询或游标读取错误。
     #[tracing::instrument(
         name = "repository.inventory.oldest_operable_reservations",
         skip_all,
@@ -510,19 +401,10 @@ impl<'a> InventoryRepository<'a> {
     }
 }
 
-/// 按维度条件读取可操作预占。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `filter` - 仓库与 SKU 维度条件
-/// * `sort` - 可选排序条件
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回有效或部分消耗的预占。
-///
-/// # 错误
-/// MongoDB 查询或游标读取失败时返回错误。
+// 按维度条件读取可操作预占。
+// 返回有效或部分消耗的预占。
+// `filter` 为仓库与 SKU 维度条件，`sort` 为可选排序条件，沿用调用方执行器 `executor`。
+// 传播 MongoDB 查询或游标读取错误。
 async fn reservations_for_dimensions(
     db: &Database,
     mut filter: Document,
@@ -536,21 +418,14 @@ async fn reservations_for_dimensions(
         .await
 }
 
-/// 把预占状态集合转换为持久化代码。
-///
-/// # 参数
-/// * `statuses` - 预占状态集合
-///
-/// # 返回
-/// 返回用于 MongoDB `$in` 的稳定代码集合。
+// 把预占状态集合转换为持久化代码。
+// 返回用于 MongoDB `$in` 的稳定代码集合。
+// `statuses` 为预占状态集合。
 fn reservation_status_codes(statuses: &[ReservationStatus]) -> Vec<&'static str> {
     statuses.iter().map(ReservationStatus::as_str).collect()
 }
 
-/// 库存预占列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
+// 库存预占列表投影字段。
 fn stock_reservation_projection() -> Document {
     doc! {
         "id": 1,

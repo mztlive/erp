@@ -15,16 +15,7 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
 /// 查询采购入库单列表（W09 入库视图）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `query` - 分页与筛选参数（`purchase_order_id`/`status` 扁平传递）
-///
-/// # 返回
-/// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
-///
-/// # 错误
-/// 业务处理或数据读取失败时返回对应错误。
+/// `query` 为分页与筛选参数（`purchase_order_id`/`status` 扁平传递）。
 pub async fn purchase_receipt_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -36,16 +27,7 @@ pub async fn purchase_receipt_list(
 }
 
 /// 查询采购入库单详情（表头 + 行）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `id` - 入库单主键
-///
-/// # 返回
 /// 返回入库单详情视图。
-///
-/// # 错误
-/// 业务处理或数据读取失败时返回对应错误。
 pub async fn purchase_receipt_detail(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -57,17 +39,7 @@ pub async fn purchase_receipt_detail(
 }
 
 /// 创建采购入库单（草稿）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 创建请求（表头 + 行）
-///
-/// # 返回
 /// 返回新建入库单的响应视图。
-///
-/// # 错误
-/// 业务处理或数据读取失败时返回对应错误。
 pub async fn purchase_receipt_create(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -79,18 +51,8 @@ pub async fn purchase_receipt_create(
 }
 
 /// 更新采购入库单（仅草稿；乐观锁冲突返回 409）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 入库单主键
-/// * `req` - 最终草稿与期望版本
-///
-/// # 返回
+/// `req` 为最终草稿与期望版本。
 /// 返回更新后入库单的响应视图。
-///
-/// # 错误
-/// 业务处理或数据读取失败时返回对应错误。
 pub async fn purchase_receipt_update(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -103,17 +65,7 @@ pub async fn purchase_receipt_update(
 }
 
 /// 过账采购入库（入库行 + 库存流水 + 余额 + 销售预占同事务，§8.2 第 1 条）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 入库单主键
-///
-/// # 返回
 /// 返回过账后的入库单视图。
-///
-/// # 错误
-/// 业务处理或数据读取失败时返回对应错误。
 pub async fn purchase_receipt_post(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,

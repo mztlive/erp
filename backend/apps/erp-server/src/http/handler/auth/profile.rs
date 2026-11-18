@@ -16,16 +16,7 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
 /// 获取当前账号信息。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `user_id` - 当前账号ID
-/// * `account_kind` - 当前账号类型
-///
-/// # 返回值
-/// 返回当前账号信息
-///
-/// # 错误
+/// 返回当前账号信息。
 /// 当账号不存在或查询失败时返回错误。
 pub async fn account_profile(
     State(state): State<HttpState>,
@@ -47,11 +38,7 @@ pub struct LeaderQuery {
 }
 
 /// 预览当前内部账号的团队或部门审批负责人。
-/// # 参数
-/// 应用状态、认证账号和组织类型。
-/// # 返回
 /// 负责人及组织可读名称。
-/// # 错误
 /// 非内部账号、组织或负责人缺失、资格失效及读取错误沿用错误信封。
 pub async fn own_approval_leader(
     State(state): State<HttpState>,

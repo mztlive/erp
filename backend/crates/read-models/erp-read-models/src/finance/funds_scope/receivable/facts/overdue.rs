@@ -6,19 +6,18 @@ use erp_core::common::time::BusinessDate;
 use erp_core::money::Amount;
 use erp_finance::entity::receivable::{ReceiptAllocation, ReceivableEntry, ReceivableEntryOffset};
 
-/// 汇总逾期增加分录，保留各分录实际核销和冲减归属。
-///
-/// # 参数
-/// * `entries` - 同批全部已授权应收分录。
-/// * `allocations` - 同批分录的完整正反核销流。
-/// * `offsets` - 同批减少分录对应的冲减关系。
-/// * `today` - 中国业务日期，到期当日不算逾期。
-///
-/// # 返回
-/// 全部分录的逾期未收余额。
-///
-/// # 错误
-/// 不返回错误，金额运算遵循 Amount 约定。
+// 计算应收子账金额时，汇总逾期增加分录，保留各分录实际核销和冲减归属。
+//
+// 调用参数：
+// * `entries` - 同批全部已授权应收分录。
+// * `allocations` - 同批分录的完整正反核销流。
+// * `offsets` - 同批减少分录对应的冲减关系。
+// * `today` - 中国业务日期，到期当日不算逾期。
+//
+// 全部分录的逾期未收余额。
+//
+// 失败边界：
+// 不返回错误，金额运算遵循 Amount 约定。
 pub(super) fn total(
     entries: &[ReceivableEntry],
     allocations: &[ReceiptAllocation],

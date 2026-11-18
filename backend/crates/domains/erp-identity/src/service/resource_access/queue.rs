@@ -7,12 +7,11 @@ use crate::Result;
 
 impl ResourceGrantService {
     /// 管理员在同一事务校验资格并重排一页正式事件。
-    /// # 参数
-    /// actor 为管理员，selection 为维护范围，after 为排他游标，now 为当前秒数。
-    /// # 返回
     /// 本页末尾游标；空页返回 None。
-    /// # 错误
+    ///
     /// 越权、查询或写入冲突时整页拒绝；未知提交结果不自动重试。
+    ///
+    /// actor 为管理员，selection 为维护范围，after 为排他游标，now 为当前秒数。
     pub async fn recompute_managed(
         &self,
         actor: &AuditActor,
@@ -39,12 +38,11 @@ impl ResourceGrantService {
 
 impl GrantEventService {
     /// 对正式事件按主键有界重算，禁止从当前责任人猜测历史授权。
-    /// # 参数
-    /// filter 为类型化选择条件，after 为主键游标，now 为重新可领取时间。
-    /// # 返回
     /// 本页末尾游标；空页表示一轮结束。每次最多 100 条。
-    /// # 错误
+    ///
     /// 查询或更新失败返回错误；已重新排队事件可安全重放。
+    ///
+    /// filter 为类型化选择条件，after 为主键游标，now 为重新可领取时间。
     pub async fn requeue(
         &self,
         filter: &GrantRecompute,

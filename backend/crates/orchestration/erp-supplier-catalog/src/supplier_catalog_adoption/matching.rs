@@ -90,11 +90,11 @@ impl AdoptionResolution {
 
 impl SupplierCatalogAdoptionProcess {
     /// 在冻结预览内自动解析目标，不接受客户端指定 SKU。
-    /// # 参数
+    ///
     /// 连接、预览、建档映射及认证操作人。
-    /// # 返回
+    ///
     /// 将关联或创建的结果和提交重验摘要。
-    /// # 错误
+    ///
     /// 越权、过期、身份冲突、资料不足或重复候选时拒绝。
     pub async fn resolve(
         &self,
@@ -112,7 +112,7 @@ impl SupplierCatalogAdoptionProcess {
         .await
     }
 
-    /// 使用原快照核验预览、来源与匹配商品的修改资格。
+    // 使用原快照核验预览、来源与匹配商品的修改资格。
     async fn resolve_in_snapshot(
         &self,
         connection: &str,

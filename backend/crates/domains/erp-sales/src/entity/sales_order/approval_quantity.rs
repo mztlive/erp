@@ -16,18 +16,12 @@ impl SalesOrderSubmission {
     ///
     /// 实物及服务汇总各行基础单位 `quantity`；卡券取唯一卡券行 `card_count`，
     /// 精确转换成 `Quantity`（单位为张）。
-    ///
-    /// # 参数
-    /// * `lines` - 该提交的全部明细行
-    ///
-    /// # 返回
     /// 返回审批快照应冻结的总数量。
+    /// 失败条件：空行、行类型与业务性质不一致、适用行缺量、卡张数缺失或数量溢出时返回领域错误。
+    /// 业务边界：不得跳过无 `quantity` 的卡券行；卡券数量不得从 `quantity` 字段读取。
     ///
-    /// # 错误
-    /// 空行、行类型与业务性质不一致、适用行缺量、卡张数缺失或数量溢出时返回领域错误。
-    ///
-    /// # 关键业务约束
-    /// 不得跳过无 `quantity` 的卡券行；卡券数量不得从 `quantity` 字段读取。
+    /// 输入约定：
+    /// - `lines`：该提交的全部明细行
     pub fn approval_total_quantity(&self, lines: &[SalesOrderSubmissionLine]) -> Result<Quantity> {
         let summaries = lines
             .iter()
@@ -46,19 +40,13 @@ impl SalesOrderSubmission {
     }
 }
 
-/// 在行清单已通过跨行断言后取出唯一一行。
-///
-/// # 参数
-/// * `lines` - 已通过 [`validate_line_list`] 的明细行
-///
-/// # 返回
-/// 恰好一行时返回该行。
-///
-/// # 错误
-/// 行数不是 1 时返回领域错误。
-///
-/// # 关键业务约束
-/// 卡券审批数量只承认唯一卡券行，禁止按多行合计。
+// 在行清单已通过跨行断言后取出唯一一行。
+// 结果：恰好一行时返回该行。
+// 失败条件：行数不是 1 时返回领域错误。
+// 业务边界：卡券审批数量只承认唯一卡券行，禁止按多行合计。
+//
+// 输入约定：
+// - `lines`：已通过 [`validate_line_list`] 的明细行
 fn required_single_line(lines: &[SalesOrderSubmissionLine]) -> Result<&SalesOrderSubmissionLine> {
     match lines {
         [line] => Ok(line),
@@ -66,19 +54,13 @@ fn required_single_line(lines: &[SalesOrderSubmissionLine]) -> Result<&SalesOrde
     }
 }
 
-/// 合计实物及服务行的基础单位数量。
-///
-/// # 参数
-/// * `lines` - 已确认为实物及服务的明细行
-///
-/// # 返回
-/// 返回精确合计数量。
-///
-/// # 错误
-/// 任一行缺少数量、合计溢出或超出数量精度时返回领域错误。
-///
-/// # 关键业务约束
-/// 缺量必须失败，禁止 `filter_map` 跳过。
+// 合计实物及服务行的基础单位数量。
+// 返回精确合计数量。
+// 失败条件：任一行缺少数量、合计溢出或超出数量精度时返回领域错误。
+// 业务边界：缺量必须失败，禁止 `filter_map` 跳过。
+//
+// 输入约定：
+// - `lines`：已确认为实物及服务的明细行
 fn sum_goods_quantities(lines: &[SalesOrderSubmissionLine]) -> Result<Quantity> {
     let mut total = Decimal::ZERO;
     for line in lines {
@@ -88,36 +70,24 @@ fn sum_goods_quantities(lines: &[SalesOrderSubmissionLine]) -> Result<Quantity> 
     quantity_from_total(total)
 }
 
-/// 读取实物及服务行已冻结的基础单位数量。
-///
-/// # 参数
-/// * `line` - 实物及服务提交行
-///
-/// # 返回
-/// 返回该行基础单位数量。
-///
-/// # 错误
-/// `quantity` 缺失时返回领域错误。
-///
-/// # 关键业务约束
-/// 不得用零值或空值代替缺失数量。
+// 读取实物及服务行已冻结的基础单位数量。
+// 返回该行基础单位数量。
+// 失败条件：`quantity` 缺失时返回领域错误。
+// 业务边界：不得用零值或空值代替缺失数量。
+//
+// 输入约定：
+// - `line`：实物及服务提交行
 fn goods_line_quantity(line: &SalesOrderSubmissionLine) -> Result<Quantity> {
     line.quantity.ok_or_else(|| Error::from(format!("请填写第 {} 行的数量后再提交审批", line.line_no)))
 }
 
-/// 将唯一卡券行的卡张数换算为审批数量。
-///
-/// # 参数
-/// * `line` - 卡券提交行
-///
-/// # 返回
-/// 返回以张为单位的 `Quantity`。
-///
-/// # 错误
-/// 卡张数缺失、为零或超出数量精度时返回领域错误。
-///
-/// # 关键业务约束
-/// 只使用 `card_count`，忽略可能为空的 `quantity`。
+// 将唯一卡券行的卡张数换算为审批数量。
+// 返回以张为单位的 `Quantity`。
+// 失败条件：卡张数缺失、为零或超出数量精度时返回领域错误。
+// 业务边界：只使用 `card_count`，忽略可能为空的 `quantity`。
+//
+// 输入约定：
+// - `line`：卡券提交行
 fn voucher_line_quantity(line: &SalesOrderSubmissionLine) -> Result<Quantity> {
     let card_count = line
         .card_count
@@ -128,19 +98,13 @@ fn voucher_line_quantity(line: &SalesOrderSubmissionLine) -> Result<Quantity> {
     integer_quantity(card_count)
 }
 
-/// 把已合计的定点值收成数量值对象。
-///
-/// # 参数
-/// * `total` - 已完成 checked 合计的定点值
-///
-/// # 返回
-/// 返回合规 `Quantity`。
-///
-/// # 错误
-/// 有效小数位超过数量精度时返回领域错误。
-///
-/// # 关键业务约束
-/// 禁止静默舍入。
+// 把已合计的定点值收成数量值对象。
+// 返回合规 `Quantity`。
+// 失败条件：有效小数位超过数量精度时返回领域错误。
+// 业务边界：禁止静默舍入。
+//
+// 输入约定：
+// - `total`：已完成 checked 合计的定点值
 fn quantity_from_total(total: Decimal) -> Result<Quantity> {
     Quantity::try_from(total).map_err(|error| {
         tracing::warn!(%error, "审批总数量超出精度");

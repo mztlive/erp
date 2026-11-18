@@ -31,18 +31,8 @@ pub struct SettlementDifferenceEvidenceRequest {
 /// 差异补证命令结果。
 impl SettlementDifferenceEvidenceRequest {
     /// 以必填身份构造补证命令；意见与说明默认为空。
-    ///
-    /// # 参数
-    /// * `statement_id` - 结算单ID
-    /// * `difference_id` - 差异ID
-    /// * `request_id` - 请求ID
-    /// * `idempotency_key` - 幂等键
-    ///
-    /// # 返回
     /// 返回首版的补证命令。
-    ///
-    /// # 错误
-    /// 无。
+    /// `idempotency_key`：幂等键。
     pub fn new(
         statement_id: String,
         difference_id: String,

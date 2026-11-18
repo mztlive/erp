@@ -17,20 +17,15 @@ use crate::errors::Result;
 use crate::workbench::authority::funds::mapping as authority_mapping;
 
 impl WorkbenchFactsReader<'_> {
-    /// 回款审批任务的对象事实：任务对象是回款单本身。
-    ///
-    /// 创建人直接读取不可变领域字段；缺失身份不授予创建人参与资格。
-    ///
-    /// # 参数
-    /// * `keys` - 本批任务引用的对象键
-    /// * `facts` - 输出的对象事实表
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 成功时写入回款单号、往来主体、金额和待核销销售单。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
+    // 读取回款单据任务简报时，回款审批任务的对象事实：任务对象是回款单本身。
+    //
+    // 创建人直接读取不可变领域字段；缺失身份不授予创建人参与资格。
+    //
+    // 调用参数：
+    // * `keys` - 本批任务引用的对象键
+    // * `facts` - 输出的对象事实表
+    //
+    // 成功时写入回款单号、往来主体、金额和待核销销售单。
     pub(crate) async fn load_customer_receipt_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -70,18 +65,13 @@ impl WorkbenchFactsReader<'_> {
         Ok(())
     }
 
-    /// 客户退款审批任务的对象事实。
-    ///
-    /// # 参数
-    /// * `keys` - 本批任务引用的对象键
-    /// * `facts` - 输出的对象事实表
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 成功时写入退款单号、金额和原因。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
+    // 读取回款单据任务简报时，客户退款审批任务的对象事实。
+    //
+    // 调用参数：
+    // * `keys` - 本批任务引用的对象键
+    // * `facts` - 输出的对象事实表
+    //
+    // 成功时写入退款单号、金额和原因。
     pub(crate) async fn load_customer_refund_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -155,18 +145,13 @@ impl WorkbenchFactsReader<'_> {
         Ok(())
     }
 
-    /// 回款冲正审批任务的对象事实。
-    ///
-    /// # 参数
-    /// * `keys` - 本批任务引用的对象键
-    /// * `facts` - 输出的对象事实表
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 成功时写入冲正单号、金额和原因。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
+    // 读取回款单据任务简报时，回款冲正审批任务的对象事实。
+    //
+    // 调用参数：
+    // * `keys` - 本批任务引用的对象键
+    // * `facts` - 输出的对象事实表
+    //
+    // 成功时写入冲正单号、金额和原因。
     pub(crate) async fn load_receipt_reversal_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -223,7 +208,7 @@ impl WorkbenchFactsReader<'_> {
 }
 
 impl WorkbenchFactsReader<'_> {
-    /// 读取申请用于当前展示及不可变审批快照；税号与内容取提交实体。
+    // 为回款单据任务简报取数时，读取申请用于当前展示及不可变审批快照；税号与内容取提交实体。
     async fn load_invoice_request_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,

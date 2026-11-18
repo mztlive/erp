@@ -21,14 +21,10 @@ use crate::{Error, Result};
 impl SupplierProfileProcess {
     /// 验证短时令牌、字段资格与供应商详情范围后解密单个敏感字段并记录审计。
     ///
-    /// # 参数
-    /// * `req` - 含短时揭示令牌的请求。
-    /// * `actor` - 当前操作人，写入揭示审计。
+    /// `req`：含短时揭示令牌的请求；`actor`：当前操作人，写入揭示审计。
     ///
-    /// # 返回
     /// 解密后的单个敏感字段值。
     ///
-    /// # 错误
     /// 请求非法、字段或供应商详情无权、令牌非法或过期、归属不符、记录缺失、解密或审计失败时返回错误。
     pub async fn reveal_sensitive(
         &self,
@@ -46,7 +42,7 @@ impl SupplierProfileProcess {
             .await
     }
 
-    /// 在原事务内核验揭示资格、真实主体归属并记录审计。
+    // 在原事务内核验揭示资格、真实主体归属并记录审计。
     async fn reveal_snapshot(
         &self,
         req: &RevealSupplierSensitiveRequest,
@@ -72,7 +68,7 @@ impl SupplierProfileProcess {
         Ok(SupplierSensitiveRevealView { value })
     }
 
-    /// 在读取供应商与敏感事实前核对令牌供应商的当前详情范围。
+    // 在读取供应商与敏感事实前核对令牌供应商的当前详情范围。
     async fn reveal_supplier(
         &self,
         supplier_id: &str,
@@ -87,7 +83,7 @@ impl SupplierProfileProcess {
             .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))
     }
 
-    /// 读取与已授权供应商主体一致的单个敏感事实密文。
+    // 读取与已授权供应商主体一致的单个敏感事实密文。
     async fn reveal_ciphertext(
         &self,
         scope: &SensitiveRevealScope,

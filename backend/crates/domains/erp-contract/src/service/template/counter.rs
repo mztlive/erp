@@ -14,12 +14,8 @@ use crate::repository::templates::ContractTemplateExt;
 
 impl ContractTemplateService {
     /// 返回当前业务年度四组流水；未落库时返回用户确认的历史起点。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 四组当前已用流水和可选版本。
-    /// # 错误
-    /// 数据库读取失败。
+    /// 传播数据库读取错误。
     pub async fn counters(&self, actor: &AuditActor) -> Result<Vec<CounterView>> {
         let service = self.clone();
         let actor = actor.clone();
@@ -55,12 +51,8 @@ impl ContractTemplateService {
     }
 
     /// 原子校准已用流水并记审计；不得覆盖旧版本或降低初始号段。
-    /// # 参数
-    /// * `request` - 编号组、年度、已用流水与期望版本。
-    /// * `actor` - 管理员。
-    /// # 返回
     /// 校准后流水。
-    /// # 错误
+    /// `request` 为编号组、年度、已用流水与期望版本；`actor` 为管理员。
     /// 版本冲突、回退、溢出或事务失败。
     pub async fn configure_counter(
         &self,

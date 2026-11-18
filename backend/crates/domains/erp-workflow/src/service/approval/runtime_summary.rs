@@ -21,18 +21,13 @@ pub struct ApprovalRuntimeSummary {
 
 /// 按已授权主体读取详情所需的轻量运行事实。
 ///
-/// # 参数
-/// * `db` - 审批数据库。
-/// * `subject` - 调用方已授权的单据主体。
-/// * `history_limit` - 首屏历史条数；多读一条判断后续页。
-/// * `executor` - 所有读取共用的调用方执行器。
-///
-/// # 返回
 /// 主体尚无实例时返回 `None`；否则返回最新实例、可选当前执行与有界历史。
 /// 本入口仅读取事实，不核验业务冻结绑定、不补默认实例、不读取办理任务。
 ///
-/// # 错误
 /// 任一仓储读取失败时保留持久化错误分类，立即停止后续读取。
+///
+/// `db`：审批数据库；`subject`：调用方已授权的单据主体。
+/// `history_limit`：首屏历史条数；多读一条判断后续页；`executor`：所有读取共用的调用方执行器。
 pub async fn latest_runtime_summary(
     db: &Database,
     subject: &SubjectRef,

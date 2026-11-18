@@ -20,24 +20,9 @@ use crate::ports::PreparedWorkflowAudit;
 use crate::repository::bpm::DefinitionGraph;
 use crate::repository::{BpmExt, DocumentRegistryExt};
 
-/// 创建单据时绑定当前发布定义。
+/// 创建单据时在调用方写事务固定审批政策。无审批类型只记录政策事实并返回 `None`；必须审批类型读取唯一发布定义，重验图与审批人并返回完整绑定。
 ///
-/// `NO_APPROVAL` 返回空绑定并记录政策事实，不查询定义。
-/// `PROCESS_REQUIRED` 查询唯一 `PUBLISHED` 定义并重验图与人员。
-///
-/// # 参数
-/// * `identity_service` - 同一应用注入的共享身份与权限服务。
-/// * `db` - 数据库
-/// * `audit_port` - 审计写入端口
-/// * `command` - 绑定命令
-/// * `actor` - 已认证操作人
-/// * `executor` - 调用方事务执行器
-///
-/// # 返回
-/// 无审批返回 `None`；必须审批返回完整绑定。
-///
-/// # 错误
-/// 缺失发布定义、图损坏、人员或范围失败时返回错误，调用方必须回滚。
+/// 缺少发布定义、结构损坏或人员与数据资格检查失败时，调用方必须回滚创建事务。
 pub async fn bind_published_definition_on_document_create(
     authorization: &AuthorizationService,
     identity_service: &SharedRbacService,
@@ -70,17 +55,7 @@ pub async fn bind_published_definition_on_document_create(
     }
 }
 
-/// 将已计算绑定写入单据实体。
-///
-/// # 参数
-/// * `document` - 待写入绑定的注册单据
-/// * `binding` - 已计算的审批定义绑定
-///
-/// # 返回
-/// 返回写入后的同一绑定。
-///
-/// # 错误
-/// 单据已有绑定时返回错误。
+/// 将已确认的发布定义绑定写入注册单据，供随后提交按冻结定义运行。已有绑定时拒绝覆盖，成功返回写入的同一绑定。
 pub fn attach_published_binding(
     document: &mut BusinessDocument,
     binding: ApprovalDefinitionBinding,
@@ -89,18 +64,7 @@ pub fn attach_published_binding(
     Ok(binding)
 }
 
-/// 由发布定义构造初次绑定。
-///
-/// # 参数
-/// * `definition_id` - 已发布定义 ID
-/// * `definition_version` - 定义版本
-/// * `bound_at` - 绑定时间
-///
-/// # 返回
-/// 返回初次审批定义绑定。
-///
-/// # 错误
-/// 定义版本为零时返回错误。
+/// 为初次绑定冻结已发布定义的 ID、正版本和绑定时刻，防止之后发布变更影响该单据；版本为零时拒绝。
 pub fn binding_from_published(
     definition_id: ApprovalProcessDefinitionId,
     definition_version: u32,
@@ -109,7 +73,7 @@ pub fn binding_from_published(
     ApprovalDefinitionBinding::new(definition_id, definition_version, bound_at).map_err(Into::into)
 }
 
-/// 必须审批路径：查询发布定义、重验并写绑定审计。
+// 必须审批的单据创建时，在当前事务加载唯一发布定义，重验图及人员资格，再签发绑定并写审计。
 async fn bind_required_definition(
     authorization: &AuthorizationService,
     identity_service: &SharedRbacService,
@@ -141,18 +105,10 @@ async fn bind_required_definition(
     Ok(binding)
 }
 
-/// 加载当前唯一已发布定义图。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `document_type` - 单据类型
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回已通过发布图重验的定义图。
-///
-/// # 错误
-/// 仓储读取失败、缺少发布定义或图重验失败时返回错误。
+// 加载当前唯一已发布定义图。
+// 返回已通过发布图重验的定义图。
+//
+// 仓储读取失败、缺少发布定义或图重验失败时返回错误。
 pub(super) async fn load_published_graph(
     db: &Database,
     document_type: DocumentType,
@@ -165,7 +121,7 @@ pub(super) async fn load_published_graph(
     Ok(graph)
 }
 
-/// 记录无审批政策事实，不查询定义。
+// 无审批单据创建时只在原事务记录政策事实，不选择或加载定义图。
 async fn record_no_approval_policy(
     db: &Database,
     audit_port: &dyn crate::ports::WorkflowAuditPort,
@@ -192,7 +148,7 @@ async fn record_no_approval_policy(
     Ok(())
 }
 
-/// 写入 `approval.definition.bound` 审计。
+// 确认发布定义绑定后沿原事务写入 `approval.definition.bound`，记录新旧绑定及当前单据版本供追溯。
 async fn write_bound_audit(
     db: &Database,
     audit_port: &dyn crate::ports::WorkflowAuditPort,
@@ -222,18 +178,10 @@ async fn write_bound_audit(
     Ok(())
 }
 
-/// 读取注册行。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `document_id` - 业务单据 ID
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回已注册的业务单据。
-///
-/// # 错误
-/// 单据未注册时返回未找到；仓储读取失败时返回对应错误。
+// 读取注册行。
+// 返回已注册的业务单据。
+//
+// 单据未注册时返回未找到；仓储读取失败时返回对应错误。
 pub(super) async fn load_registered_document(
     db: &Database,
     document_id: &str,

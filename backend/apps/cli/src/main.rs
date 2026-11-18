@@ -19,13 +19,7 @@ use tracing_subscriber::EnvFilter;
 use tracing_subscriber::filter::filter_fn;
 use tracing_subscriber::prelude::*;
 
-/// 程序入口。
-///
-/// # 返回值
-/// 无；失败时向 stderr 打印错误并以状态码 1 退出。
-///
-/// # 错误
-/// 命令解析、配置、数据库或服务编排失败时进程退出码为 1。
+// 进入 Tokio 运行时后执行运维命令；用例返回错误时写入标准错误并以状态码 1 退出。
 #[tokio::main]
 async fn main() {
     if let Err(error) = run().await {
@@ -34,13 +28,7 @@ async fn main() {
     }
 }
 
-/// 解析参数并分发子命令。
-///
-/// # 返回值
-/// 子命令执行成功返回 `Ok(())`。
-///
-/// # 错误
-/// 配置、数据库、密码输入或服务编排失败时返回错误。
+// 在接触配置或数据库前初始化日志，随后按脱敏规则解析参数，将配置来源交给选中的子命令。
 async fn run() -> Result<()> {
     init_tracing();
     let cli = Cli::try_parse_safe_from(std::env::args_os()).unwrap_or_else(|error| error.exit());
@@ -53,16 +41,8 @@ async fn run() -> Result<()> {
     }
 }
 
-/// 按 `RUST_LOG` 初始化 tracing，默认 `info`。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回值
-/// 无。
-///
-/// # 错误
-/// 无；环境变量缺失时回退到 `info`。
+// CLI 启动时按 `RUST_LOG` 设置日志级别，缺失或无效时用 `info`。
+// 始终屏蔽可能记录登录密码的 Nacos SDK 日志，不受运维日志级别影响。
 fn init_tracing() {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
     tracing_subscriber::fmt()

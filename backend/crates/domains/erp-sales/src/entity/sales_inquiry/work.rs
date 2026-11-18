@@ -7,13 +7,11 @@ use super::{InquiryFeedbackData, InquiryReassignmentData, InquiryStatus, SalesIn
 use crate::{Error, Result};
 
 impl SalesInquiry {
-    /// 费用范围由当前责任归属确定。
-    /// # 参数
-    /// `actor`、`scope` 为已授权责任人和范围，`data` 为当前反馈草稿。
-    /// # 返回
-    /// 覆盖客户端传入的范围，保留既有费用归属。
-    /// # 错误
-    /// 费用过多、身份重复或既有费用超出责任范围时拒绝。
+    // 费用范围由当前责任归属确定。
+    // 结果：覆盖客户端传入的范围，保留既有费用归属。
+    // 费用过多、身份重复或既有费用超出责任范围时拒绝。
+    //
+    // 输入约定：`actor`、`scope` 为已授权责任人和范围，`data` 为当前反馈草稿。
     pub(super) fn prepare_feedback_fees(
         &self,
         actor: &str,
@@ -53,12 +51,10 @@ impl SalesInquiry {
     }
 
     /// 按当前任务责任合并本轮工作，不能复用旧任务或旧需求版本。
-    /// # 参数
-    /// `responsibilities` 为事务内重验的当前责任采购及稳定需求行。
-    /// # 返回
     /// 返回覆盖当前全部需求的完整反馈候选；发布仍执行最终规则校验。
-    /// # 错误
     /// 责任重复、缺行、草稿与当前任务不一致或费用越出责任范围时拒绝。
+    ///
+    /// 输入约定：`responsibilities` 为事务内重验的当前责任采购及稳定需求行。
     pub fn merge_feedback_work(
         &self,
         responsibilities: &[(String, Vec<String>)],
@@ -118,12 +114,10 @@ impl SalesInquiry {
     }
 
     /// 设置整单费用责任人；自动分派优先沿用仍参与本轮的负责人。
-    /// # 参数
-    /// `requested` 为采购侧明确责任人；`owners` 按首个负责需求行的顺序排列。
-    /// # 返回
-    /// 未明确指定且原负责人已不在本轮时，使用首个需求商品的责任采购。
-    /// # 错误
+    /// 结果：未明确指定且原负责人已不在本轮时，使用首个需求商品的责任采购。
     /// 无有效责任人或明确指定账号不在责任组内时拒绝。
+    ///
+    /// 输入约定：`requested` 为采购侧明确责任人；`owners` 按首个负责需求行的顺序排列。
     pub fn assign_shared_fee_owner(&mut self, requested: Option<String>, owners: &[String]) -> Result<()> {
         let unique: HashSet<_> =
             owners.iter().map(String::as_str).filter(|owner| !owner.trim().is_empty()).collect();
@@ -145,12 +139,10 @@ impl SalesInquiry {
     }
 
     /// 改派时冻结原责任工作，防止旧资料在再次改派后复活。
-    /// # 参数
-    /// `data` 为事务内核验的原责任、新责任、需求范围及原因；`actor` 为改派操作人。
-    /// # 返回
-    /// 保留冻结工作及改派事件；不自行修改外域任务。
-    /// # 错误
+    /// 结果：保留冻结工作及改派事件；不自行修改外域任务。
     /// 版本、状态、责任或原因非法时拒绝。
+    ///
+    /// 输入约定：`data` 为事务内核验的原责任、新责任、需求范围及原因；`actor` 为改派操作人。
     pub fn reassign_work(
         &mut self,
         expected_version: u64,

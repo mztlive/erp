@@ -22,13 +22,8 @@ pub struct InquiryBasisCandidate {
     pub remaining_address_limits: Vec<PurchaseInquiryAddress>,
 }
 
-/// 把只属于当前销售询价来源的专项候选加入同一正式创建依据。
-/// # 参数
-/// 销售生效事实、最新覆盖、当前任务行、批量供给及服务端来源候选。
-/// # 返回
-/// 返回按专项报价版本及既有拆单维度隔离的依据。
-/// # 错误
-/// 条款身份、商品类型或数量非法时拒绝。
+/// 计算已生效销售单的采购创建依据时，只把当前责任范围内、与稳定销售行及精确 SKU 匹配的专项报价加入候选。
+/// 按报价修订和既有拆单维度分组；按销售缺口、报价及地址剩余、可供量和交期约束筛选。不用通用供给价替代专项条款。
 pub fn inquiry_basis_groups(
     order: &SalesOrderBasisFact,
     coverage: &SalesProcurementCoverage,

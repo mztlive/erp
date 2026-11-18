@@ -66,16 +66,9 @@ pub(super) struct InvoiceShare {
 }
 
 impl InvoiceShare {
-    /// 将已登记分配的正反动作转换为原定点方向金额。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 正向分配返回含税金额；冲正分配返回其相反数。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 组装发票及分配汇总时，将已登记分配的正反动作转换为原定点方向金额。
+    //
+    // 正向分配返回含税金额；冲正分配返回其相反数。
     pub(super) fn signed(&self) -> Amount {
         match self.allocation_action {
             AllocationAction::Apply => self.allocated_gross_amount,
@@ -84,18 +77,15 @@ impl InvoiceShare {
     }
 }
 
-/// 使用同快照内原最终父 ID 集合的两方向 find，保留旧分配流和来源事实。
-///
-/// # 参数
-/// * `db` - 发票汇总仓储所在数据库。
-/// * `versions` - 最终匹配发票版本；首拍须带汇总资格。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
-/// 保持原父票及两方向分配流的汇总行。
-///
-/// # 错误
-/// 查询、解码失败，或某条版本缺少首拍汇总资格时拒绝。
+// 使用同快照内原最终父 ID 集合的两方向 find，沿用旧分配流和来源事实。
+//
+// 调用参数：
+// * `db` - 发票汇总仓储所在数据库。
+// * `versions` - 最终匹配发票版本；首拍须带汇总资格。
+//
+// 保持原父票及两方向分配流的汇总行。
+//
+// 查询、解码失败，或某条版本缺少首拍汇总资格时拒绝。
 pub(super) async fn summary_rows(
     db: &Database,
     versions: &[InvoiceVersion],
@@ -108,7 +98,7 @@ pub(super) async fn summary_rows(
     assemble_summary_rows(versions, sales, purchase)
 }
 
-/// 先销项后进项、按父票原顺序消费各方向原 find 流，禁止金额重新排序。
+// 生成发票及分配汇总视图时，先销项后进项、按父票原顺序消费各方向原 find 流，禁止金额重新排序。
 fn assemble_summary_rows(
     versions: &[InvoiceVersion],
     sales: Vec<InvoiceSummaryLink>,
@@ -158,7 +148,7 @@ fn assemble_summary_rows(
         .collect())
 }
 
-/// 所有存在来源均按原事实口径提供负责人，采购 map 最后覆盖销售 map。
+// 汇总发票及分配汇总时，所有存在来源均按原事实口径提供负责人，采购 map 最后覆盖销售 map。
 fn summary_owners(sources: &[InvoiceSummarySource], purchase: bool) -> HashMap<String, String> {
     sources
         .iter()
@@ -175,7 +165,7 @@ fn summary_owners(sources: &[InvoiceSummarySource], purchase: bool) -> HashMap<S
         .collect()
 }
 
-/// 单次映射只筛选匹配份额，不归并动作或金额，不读取第二份跨域来源。
+// 组装发票及分配汇总时，单次映射只筛选匹配份额，不归并动作或金额，不读取第二份跨域来源。
 fn append_summary_links(
     links: Vec<InvoiceSummaryLink>,
     purchase: bool,
@@ -215,17 +205,13 @@ fn append_summary_links(
     }
 }
 
-/// 只归并数据库最终匹配的金额流，整单合计仅在全部行完整可读时返回。
-///
-/// # 参数
-/// * `rows` - 最终匹配票的金额与份额。
-/// * `version` - 本次范围版本。
-///
-/// # 返回
-/// 按原顺序归并的份额分区；只有全部行完整可读时才带整票金额合计。
-///
-/// # 错误
-/// 不返回错误。本函数没有失败分支。
+// 生成发票及分配汇总视图时，只归并数据库最终匹配的金额流，整单合计仅在全部行完整可读时返回。
+//
+// 调用参数：
+// * `rows` - 最终匹配票的金额与份额。
+// * `version` - 本次范围版本。
+//
+// 按原顺序归并的份额分区；只有全部行完整可读时才带整票金额合计。
 pub(super) fn invoice_summary(rows: &[InvoiceSummaryRow], version: &str) -> Result<FundsSummaryView> {
     let mut triples = Vec::new();
     let mut owners = HashMap::new();
@@ -264,7 +250,7 @@ pub(super) fn invoice_summary(rows: &[InvoiceSummaryRow], version: &str) -> Resu
 mod tests {
     use super::*;
 
-    /// 独立生产装配保留父票排序、两方向原 find 流和未匹配来源的 owner 覆盖。
+    // 验证发票及分配汇总：独立生产装配保留父票排序、两方向原 find 流和未匹配来源的 owner 覆盖。
     #[test]
     fn assembly_keeps_parent_and_allocation_flow_with_all_source_owner_precedence() {
         let versions: Vec<InvoiceVersion> = serde_json::from_value(serde_json::json!([
@@ -319,7 +305,7 @@ mod tests {
         assert_eq!(summary.whole_total, None);
     }
 
-    /// 测试只构造事实，不复制装配或汇总算法。
+    // 汇总发票及分配汇总时，测试只构造事实，不复制装配或汇总算法。
     fn summary_link(
         id: &str,
         parent: &str,
@@ -338,7 +324,7 @@ mod tests {
         }
     }
 
-    /// 二拍纯版本不能冒充首拍票面资格，也不能静默生成零合计。
+    // 验证发票及分配汇总：二拍纯版本不能冒充首拍票面资格，也不能静默生成零合计。
     #[test]
     fn assembly_rejects_missing_summary_header() {
         let versions: Vec<InvoiceVersion> = serde_json::from_value(serde_json::json!([
@@ -349,7 +335,7 @@ mod tests {
             if message == "发票汇总资格缺失"));
     }
 
-    /// 原正反动作先后关系保留中间溢出，不能在数据库先净额归并。
+    // 验证发票及分配汇总：原正反动作先后关系保留中间溢出，不能在数据库先净额归并。
     #[test]
     #[should_panic(expected = "Addition overflowed")]
     fn summary_keeps_intermediate_overflow_in_original_flow() {
@@ -363,7 +349,7 @@ mod tests {
         let _ = invoice_summary(&rows, "v").unwrap();
     }
 
-    /// 安全顺序 MAX、-1、+1 必须完整成功，独立于预期溢出测试验证。
+    // 验证发票及分配汇总：安全顺序 MAX、-1、+1 必须完整成功，独立于预期溢出测试验证。
     #[test]
     fn summary_keeps_safe_reverse_before_apply_near_maximum() {
         let rows: Vec<InvoiceSummaryRow> = serde_json::from_value(serde_json::json!([
@@ -382,7 +368,7 @@ mod tests {
         assert!(summary.permission_limited);
     }
 
-    /// 解码生产聚合金额投影，校验冲正、结算无负责人及部分票面隐藏。
+    // 验证发票及分配汇总：解码生产聚合金额投影，校验冲正、结算无负责人及部分票面隐藏。
     #[test]
     fn summary_preserves_reverse_unassigned_and_partial_nulls() {
         let rows: Vec<InvoiceSummaryRow> = serde_json::from_value(serde_json::json!([
@@ -401,7 +387,7 @@ mod tests {
         assert!(summary.permission_limited);
     }
 
-    /// 真正零分配的整票保留票面合计，空匹配集合保留零合计。
+    // 验证发票及分配汇总：真正零分配的整票保留票面合计，空匹配集合保留零合计。
     #[test]
     fn empty_allocations_keep_whole_invoice_and_empty_summary() {
         let rows = vec![InvoiceSummaryRow {

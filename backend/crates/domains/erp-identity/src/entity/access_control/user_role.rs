@@ -43,29 +43,17 @@ pub struct UserRoleRevokeData {
 
 impl UserRoleRevokeData {
     /// 由必填撤权原因代码构造撤权数据。
-    ///
-    /// # 参数
-    /// * `revoke_reason_code` - 撤权原因代码
-    ///
-    /// # 返回
     /// 返回说明为空的撤权数据。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// `revoke_reason_code`：撤权原因代码。
     pub fn new(revoke_reason_code: impl Into<String>) -> Self {
         Self { revoke_reason_code: revoke_reason_code.into(), revoke_reason_text: None }
     }
 
     /// 设置撤权原因说明。
-    ///
-    /// # 参数
-    /// * `revoke_reason_text` - 撤权原因说明
-    ///
-    /// # 返回
     /// 返回更新后的撤权数据。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// `revoke_reason_text`：撤权原因说明。
     pub fn with_revoke_reason_text(mut self, revoke_reason_text: impl Into<String>) -> Self {
         self.revoke_reason_text = Some(revoke_reason_text.into());
         self
@@ -108,15 +96,11 @@ impl UserRole {
     /// `role_id` 复用 `RoleId::parse` 校验；`effective_to` 必须晚于
     /// `effective_from`。
     ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::UserRoleId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
     /// 返回新建的绑定（未撤权）。
     ///
-    /// # 错误
     /// 当用户 ID/分配人为空或超长、角色 ID 非法或有效期倒挂时返回错误。
+    ///
+    /// `id`：实体主键（`erp_core::ids::UserRoleId`）。
     pub fn new(id: UserRoleId, data: UserRoleData) -> Result<Self> {
         let user_id = normalize_required_text(data.user_id, "用户ID不能为空", USER_ID_MAX_LEN, "用户ID过长")?;
         let assigned_by =
@@ -145,15 +129,6 @@ impl UserRole {
     /// 撤权是安全动作（W19：立即紧急撤权），必须记录结构化原因；已撤权绑定
     /// 不可重复撤权。
     ///
-    /// # 参数
-    /// * `data` - 撤权数据
-    /// * `revoked_by` - 撤权执行人
-    /// * `at` - 撤权时刻
-    ///
-    /// # 返回
-    /// 无返回值。
-    ///
-    /// # 错误
     /// 当绑定已撤权、原因代码为空/超长或执行人非法时返回错误。
     pub fn revoke(
         &mut self,
@@ -206,7 +181,7 @@ mod tests {
         }
     }
 
-    /// happy path：用户 ID/分配人 trim，角色 ID 保留既有解析。
+    // 验证用户 ID/分配人 去除首尾空白，角色 ID 保留既有解析。
     #[test]
     fn new_trims_text_and_keeps_role_id() {
         let binding = UserRole::new(UserRoleId::new("ur-1"), data()).unwrap();
@@ -215,28 +190,28 @@ mod tests {
         assert_eq!(binding.role_id, RoleId::parse("role-sales").unwrap());
     }
 
-    /// 失败路径：必填为空被拒。
+    // 验证创建角色绑定时拒绝空白用户 ID。
     #[test]
     fn new_rejects_empty_user_id() {
         let payload = UserRoleData { user_id: "  ".to_string(), ..data() };
         assert!(UserRole::new(UserRoleId::new("ur-1"), payload).is_err());
     }
 
-    /// 失败路径：角色 ID 经既有 RoleId 解析校验（非法字符被拒）。
+    // 验证角色 ID 经既有 RoleId 解析校验（非法字符被拒）。
     #[test]
     fn role_id_parse_rejects_invalid_value() {
         assert!(RoleId::parse("非法角色").is_err(), "RoleId 解析拒绝非法字符");
         assert!(RoleId::parse("role-sales").is_ok());
     }
 
-    /// 失败路径：关联不一致（有效期倒挂）被拒。
+    // 验证关联不一致（有效期倒挂）时会被拒绝。
     #[test]
     fn new_rejects_reversed_effective_window() {
         let payload = UserRoleData { effective_to: Some(Instant::from_unix_secs(1_699_913_600)), ..data() };
         assert!(UserRole::new(UserRoleId::new("ur-1"), payload).is_err());
     }
 
-    /// 撤权：必须记录原因，撤权后失效，不可重复撤权。
+    // 验证：撤权：必须记录原因，撤权后失效，不可重复撤权。
     #[test]
     fn revoke_requires_reason_and_deactivates() {
         let mut binding = UserRole::new(UserRoleId::new("ur-1"), data()).unwrap();
@@ -277,7 +252,7 @@ mod tests {
         assert_eq!(noted.revoke_reason_text.as_deref(), Some("紧急撤权"));
     }
 
-    /// JSON 往返。
+    // 验证用户角色绑定经 JSON 序列化再读回时保留原实体值。
     #[test]
     fn entity_roundtrips_through_bson() {
         let binding = UserRole::new(UserRoleId::new("ur-1"), data()).unwrap();

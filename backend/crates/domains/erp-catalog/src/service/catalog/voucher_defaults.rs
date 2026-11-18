@@ -8,19 +8,13 @@ use crate::error::{Error, Result};
 use crate::repository::CatalogExt;
 
 impl CatalogService {
-    /// 确保共用卡券根分类存在。
-    ///
-    /// 原事务内读取稳定代码；已存在时校验类型，不存在时原子创建。
-    ///
-    /// # 参数
-    /// * `executor` - 原授权事务或读取阶段的执行器。
-    /// * `actor` - 审计操作人；仅在新建时写入创建人和审计日志
-    ///
-    /// # 返回
-    /// 返回共用卡券根分类稳定 ID。
-    ///
-    /// # 错误
-    /// 默认分类类型漂移、并发唯一键冲突或持久化失败时返回错误。
+    // 确保共用卡券根分类存在。
+    //
+    // 原事务内读取稳定代码；已存在时校验类型，不存在时原子创建。
+    //
+    // 返回共用卡券根分类稳定 ID。默认分类类型漂移、并发唯一键冲突或持久化失败时返回错误。
+    //
+    // `actor` 为审计操作人；仅在新建时写入创建人和审计日志。
     pub(super) async fn ensure_voucher_root_category(
         &self,
         actor: &AuditActor,
@@ -44,20 +38,13 @@ impl CatalogService {
         Ok(category_id)
     }
 
-    /// 确保卡券默认品牌“福尚云”存在。
-    ///
-    /// Repository 优先按稳定代码 `FSY` 查询并兼容历史名称；不存在时按实体默认工厂
-    /// 在原事务中创建。
-    ///
-    /// # 参数
-    /// * `executor` - 原授权事务或读取阶段的执行器。
-    /// * `actor` - 审计操作人；仅在新建时写入创建人和审计日志
-    ///
-    /// # 返回
-    /// 返回默认品牌稳定 ID。
-    ///
-    /// # 错误
-    /// 并发唯一键冲突或持久化失败时返回错误。
+    // 确保卡券默认品牌“福尚云”存在。
+    //
+    // Repository 优先按稳定代码 `FSY` 查询并兼容历史名称；不存在时按实体默认工厂在原事务中创建。
+    //
+    // 返回默认品牌稳定 ID。并发唯一键冲突或持久化失败时返回错误。
+    //
+    // `actor` 为审计操作人；仅在新建时写入创建人和审计日志。
     pub(super) async fn ensure_voucher_default_brand(
         &self,
         actor: &AuditActor,
@@ -80,19 +67,13 @@ impl CatalogService {
         Ok(brand_id)
     }
 
-    /// 确保卡券默认基础单位“张”存在且启用。
-    ///
-    /// 原事务内校验既有单位的启用状态；不存在时按实体默认工厂创建。
-    ///
-    /// # 参数
-    /// * `executor` - 原授权事务或读取阶段的执行器。
-    /// * `actor` - 审计操作人；仅在新建时写入创建人和审计日志
-    ///
-    /// # 返回
-    /// 返回默认基础单位稳定 ID。
-    ///
-    /// # 错误
-    /// 默认单位停用、并发唯一键冲突或持久化失败时返回错误。
+    // 确保卡券默认基础单位“张”存在且启用。
+    //
+    // 原事务内校验既有单位的启用状态；不存在时按实体默认工厂创建。
+    //
+    // 返回默认基础单位稳定 ID。默认单位停用、并发唯一键冲突或持久化失败时返回错误。
+    //
+    // `actor` 为审计操作人；仅在新建时写入创建人和审计日志。
     pub(super) async fn ensure_voucher_default_unit(
         &self,
         actor: &AuditActor,
@@ -117,32 +98,22 @@ impl CatalogService {
     }
 }
 
-/// 把默认卡券根分类兼容性规则映射为稳定的 Service 业务错误。
-///
-/// # 参数
-/// * `category` - 按默认稳定代码查询到的分类
-///
-/// # 返回
-/// 分类仍允许卡券类型时返回 `Ok(())`。
-///
-/// # 错误
-/// 默认稳定代码被错误用于其他商品类型时返回业务逻辑错误。
+// 把默认卡券根分类兼容性规则映射为稳定的 Service 业务错误。
+//
+// 分类仍允许卡券类型时返回 `Ok(())`。默认稳定代码被错误用于其他商品类型时返回业务逻辑错误。
+//
+// `category` 为按默认稳定代码查询到的分类。
 fn ensure_voucher_root_compatible(category: &crate::entity::catalog::ProductCategory) -> Result<()> {
     VoucherCatalogDefaults::ensure_root_category_compatible(category).map_err(|_| {
         Error::BusinessLogicError("系统的卡券根分类未设为卡券类型，请调整分类后再创建卡券类目".to_string())
     })
 }
 
-/// 把默认基础单位启用规则映射为稳定的 Service 业务错误。
-///
-/// # 参数
-/// * `unit` - 按默认稳定代码查询到的计量单位
-///
-/// # 返回
-/// 单位启用时返回 `Ok(())`。
-///
-/// # 错误
-/// 默认单位已停用时返回业务逻辑错误。
+// 把默认基础单位启用规则映射为稳定的 Service 业务错误。
+//
+// 单位启用时返回 `Ok(())`。默认单位已停用时返回业务逻辑错误。
+//
+// `unit` 为按默认稳定代码查询到的计量单位。
 fn ensure_voucher_default_unit_active(unit: &crate::entity::catalog::UnitOfMeasure) -> Result<()> {
     VoucherCatalogDefaults::ensure_unit_active(unit)
         .map_err(|_| Error::BusinessLogicError("默认单位“张”已停用，请启用后再创建卡券类目".to_string()))

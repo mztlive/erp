@@ -40,15 +40,7 @@ pub use stock_reservation::{
 };
 
 /// 返回库存域数量零值（定点 `0`，不做字符串解析）。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
 /// 返回精确零数量。
-///
-/// # 错误
-/// 不返回错误。
 ///
 /// # Panics
 /// `Quantity::try_from(Decimal::ZERO)` 失败时 panic。零值恒满足数量精度，正常路径不会发生。
@@ -56,17 +48,10 @@ pub fn zero_quantity() -> Quantity {
     Quantity::try_from(rust_decimal::Decimal::ZERO).expect("Decimal::ZERO 恒满足数量精度")
 }
 
-/// 校验数量为正数（方向单独表达的流水与明细共用）。
-///
-/// # 参数
-/// * `quantity` - 待校验数量
-/// * `message` - 数量非正时的错误文案（各实体保留原有面向用户提示）
-///
-/// # 返回
-/// 数量为正时返回 `Ok(())`。
-///
-/// # 错误
-/// 数量为零或负数时返回 `message`。
+// 校验数量为正数（方向单独表达的流水与明细共用）。
+// 数量为正时返回 `Ok(())`。
+// `message` 为数量非正时的错误文案（各实体保留原有面向用户提示）。
+// 数量为零或负数时返回 `message`。
 pub(crate) fn ensure_positive_quantity(quantity: Quantity, message: &str) -> Result<()> {
     if quantity.to_decimal() <= rust_decimal::Decimal::ZERO {
         return Err(Error::from(message.to_string()));
@@ -74,19 +59,10 @@ pub(crate) fn ensure_positive_quantity(quantity: Quantity, message: &str) -> Res
     Ok(())
 }
 
-/// 校验三个数量均非负（余额三元组与预占三数量共用）。
-///
-/// # 参数
-/// * `first` - 第一个数量
-/// * `second` - 第二个数量
-/// * `third` - 第三个数量
-/// * `message` - 任一数量为负时的错误文案（各实体保留原有面向用户提示）
-///
-/// # 返回
-/// 全部非负时返回 `Ok(())`。
-///
-/// # 错误
-/// 任一数量为负时返回 `message`。
+// 校验三个数量均非负（余额三元组与预占三数量共用）。
+// 全部非负时返回 `Ok(())`。
+// `message` 为任一数量为负时的错误文案（各实体保留原有面向用户提示）。
+// 任一数量为负时返回 `message`。
 pub(crate) fn ensure_non_negative_quantities(
     first: Quantity,
     second: Quantity,

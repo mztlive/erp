@@ -10,12 +10,11 @@ use crate::{Error, ROOT_ROLE_ID, Result};
 
 impl RbacService {
     /// 核验直接 root 绑定和全量权限，返回此次授权的策略版本。
-    /// # 参数
-    /// `actor` 为当前已认证后台账号。
-    /// # 返回
     /// 供全库重置事务进行版本比较的快照版本。
-    /// # 错误
+    ///
     /// 操作人不是 admin、缺少 root 绑定或全量权限时返回禁止操作。
+    ///
+    /// `actor` 为当前已认证后台账号。
     pub async fn authorize_database_reset(&self, actor: &AuditActor) -> Result<u64> {
         if actor.account() != "admin" {
             return Err(Error::Forbidden("仅 admin 超级管理员可以清空演示数据库".into()));
@@ -31,12 +30,11 @@ impl RbacService {
     }
 
     /// 在重置事务中重新核验账号、root 角色和持久化授权，返回最小保留清单。
-    /// # 参数
-    /// `actor` 为发起人，`executor` 为重置事务。
-    /// # 返回
     /// admin 账号、root 角色、两条 Casbin 策略和全局策略版本的精确保留身份。
-    /// # 错误
+    ///
     /// 账号、角色或策略缺失、停用、删除或读取失败时拒绝重置。
+    ///
+    /// `actor` 为发起人，`executor` 为重置事务。
     pub async fn database_reset_retention(
         &self,
         actor: &AuditActor,

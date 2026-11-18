@@ -78,13 +78,13 @@ pub struct PortalOfferingImpactReadService {
 }
 
 impl PortalOfferingImpactReadService {
-    /// 装配领域对象范围与当前工作项授权，不缓存岗位或责任人。
+    /// 装配供给变更采购影响时，接入领域对象范围与当前工作项授权，不缓存岗位或责任人。
+    ///
     /// # 参数
     /// `db` 为数据库；`purchase` 为真实采购范围；`authorization` 为供给资格；`workflow` 为真实任务授权。
+    ///
     /// # 返回
     /// 内部供给影响读取器。
-    /// # 错误
-    /// 无。
     pub fn new(
         db: Database,
         purchase: PurchaseAccess,
@@ -94,11 +94,14 @@ impl PortalOfferingImpactReadService {
         Self { db, purchase, authorization, workflow }
     }
 
-    /// 查询精确供给关联、范围内未完成采购及真实当前履约任务。
+    /// 处理供给变更采购影响时，查询精确供给关联、范围内未完成采购及真实当前履约任务。
+    ///
     /// # 参数
     /// `actor` 为内部账号；`offering_id` 为服务器解析对象；`params` 为有界分页与采购单号搜索。
+    ///
     /// # 返回
     /// 当前缺货/停供提示及可读采购页，不修改任何正式事实。
+    ///
     /// # 错误
     /// 专项与对象资格未满足、来源损坏、读取超限或基础设施失败时拒绝。
     pub async fn offering_impacts(
@@ -123,7 +126,7 @@ impl PortalOfferingImpactReadService {
             .await
     }
 
-    /// 同事务快照证明供给、采购范围、真实关联和当前任务。
+    // 读取供给变更采购影响时，同事务快照证明供给、采购范围、真实关联和当前任务。
     async fn read_with(
         &self,
         actor: &AuditActor,
@@ -172,7 +175,7 @@ impl PortalOfferingImpactReadService {
         })
     }
 
-    /// 使用正式采购范围过滤精确供给关系，供应商归属损坏时失败关闭。
+    // 组装供给变更采购影响时，使用正式采购范围过滤精确供给关系，供应商归属损坏时失败关闭。
     async fn visible_usage(
         &self,
         actor: &AuditActor,
@@ -206,7 +209,7 @@ impl PortalOfferingImpactReadService {
         Ok(visible)
     }
 
-    /// 当前页批量补真实采购负责人名称，并独立过滤任务读取资格。
+    // 生成供给变更采购影响视图时，当前页批量补真实采购负责人名称，并独立过滤任务读取资格。
     async fn project_page(
         &self,
         actor: &AuditActor,
@@ -241,7 +244,7 @@ impl PortalOfferingImpactReadService {
     }
 }
 
-/// 投影允许的关联与责任字段，正式采购实体不进入响应。
+// 生成供给变更采购影响视图时，投影允许的关联与责任字段，正式采购实体不进入响应。
 fn purchase_view(
     fact: PurchaseOfferingUsageFact,
     names: &HashMap<String, String>,

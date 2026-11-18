@@ -29,20 +29,10 @@ use crate::{Error, Result, ReverseFlowPorts};
 impl ReturnsProcess {
     /// 建立采购退货单与明细行（跨集合事务写入）。
     ///
-    /// 同一事务注册 `BusinessDocument` 并调用统一绑定端口。采购退货为
-    /// `NO_APPROVAL`：返回空绑定，不查询已发布定义，不启动审批实例，
-    /// 不创建审批任务。`purchase_return_no` 全局唯一（唯一索引）构成幂等去重。
+    /// 同一事务注册 `BusinessDocument` 并调用统一绑定端口。采购退货为 `NO_APPROVAL`：返回空绑定，不查询已发布定义，不启动审批实例，不创建审批任务。
+    /// `purchase_return_no` 全局唯一（唯一索引）构成幂等去重。返回新建退货单视图。`ConflictError`：采购退货单号重复。
     ///
-    /// # 参数
-    /// * `req` - 创建请求
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回新建退货单视图。
-    ///
-    /// # 错误
-    /// * `ConflictError` - 采购退货单号重复
-    /// * `ValidationError` - 请求体校验失败
+    /// `ValidationError`：请求体校验失败。
     pub async fn create_purchase_return_order(
         &self,
         req: CreatePurchaseReturnOrderRequest,
@@ -71,13 +61,7 @@ impl ReturnsProcess {
     }
 }
 
-/// 采购退货创建必须跳过绑定：政策只能是 `NO_APPROVAL`。
-///
-/// # 返回
-/// 返回 `SkipNoApproval`。
-///
-/// # 错误
-/// 政策缺失或误登记为必须审批时返回部署不变量错误。
+// 采购退货创建必须跳过绑定：政策只能是 `NO_APPROVAL`。返回 `SkipNoApproval`。政策缺失或误登记为必须审批时返回部署不变量错误。
 fn purchase_return_create_binding_decision() -> Result<BindingDecision> {
     let policy = policy_of(DocumentType::PurchaseReturnOrder)?;
     match &policy {
@@ -93,10 +77,7 @@ fn purchase_return_create_binding_decision() -> Result<BindingDecision> {
     }
 }
 
-/// 确认采购退货创建路径不得查询发布定义。
-///
-/// # 错误
-/// 绑定决定不是跳过时返回错误。
+// 确认采购退货创建路径不得查询发布定义。绑定决定不是跳过时返回错误。
 fn ensure_purchase_return_skips_approval_binding() -> Result<BindingDecision> {
     let decision = purchase_return_create_binding_decision()?;
     if decision != BindingDecision::SkipNoApproval {
@@ -105,10 +86,7 @@ fn ensure_purchase_return_skips_approval_binding() -> Result<BindingDecision> {
     Ok(decision)
 }
 
-/// 采购退货不得注册空审批适配器。
-///
-/// # 错误
-/// 适配器登记存在时返回部署不变量错误。
+// 采购退货不得注册空审批适配器。适配器登记存在时返回部署不变量错误。
 fn ensure_purchase_return_has_no_adapter() -> Result<()> {
     if adapter_spec_of(DocumentType::PurchaseReturnOrder).is_ok() {
         return Err(Error::Internal("采购退货不得注册审批适配器".to_string()));
@@ -116,16 +94,9 @@ fn ensure_purchase_return_has_no_adapter() -> Result<()> {
     Ok(())
 }
 
-/// 原采购单作为绑定上下文组织，不得用空串补位。
-///
-/// # 参数
-/// * `order` - 待登记采购退货单
-///
-/// # 返回
-/// 返回非空采购单标识。
-///
-/// # 错误
-/// 采购单为空时返回校验错误。
+// 原采购单作为绑定上下文组织，不得用空串补位。
+//
+// `order` 为待登记采购退货单。返回非空采购单标识。采购单为空时返回校验错误。
 fn purchase_return_binding_organization_id(order: &PurchaseReturnOrder) -> Result<String> {
     let org = order.purchase_order_id.to_string();
     if org.trim().is_empty() {
@@ -134,14 +105,9 @@ fn purchase_return_binding_organization_id(order: &PurchaseReturnOrder) -> Resul
     Ok(org)
 }
 
-/// 构造采购退货创建绑定命令。客户端不得提交定义 ID。
-///
-/// # 参数
-/// * `order` - 待登记采购退货单
-/// * `creator_id` - 创建人
-///
-/// # 错误
-/// 原采购单为空时返回校验错误。
+// 构造采购退货创建绑定命令。客户端不得提交定义 ID。
+//
+// `order` 为待登记采购退货单。原采购单为空时返回校验错误。
 fn purchase_return_bind_command(
     order: &PurchaseReturnOrder,
     creator_id: &str,
@@ -157,17 +123,9 @@ fn purchase_return_bind_command(
     })
 }
 
-/// 将绑定端口返回值落实为采购退货注册行：空绑定保持未绑定。
-///
-/// # 参数
-/// * `document` - 采购退货注册行
-/// * `binding` - 统一绑定端口返回值
-///
-/// # 返回
-/// 固定返回 `None`。
-///
-/// # 错误
-/// 端口返回绑定或注册行已预置绑定时返回错误。
+// 将绑定端口返回值落实为采购退货注册行：空绑定保持未绑定。
+//
+// `document` 为采购退货注册行；`binding` 为统一绑定端口返回值。固定返回 `None`。端口返回绑定或注册行已预置绑定时返回错误。
 fn apply_purchase_return_create_binding(
     document: &mut BusinessDocument,
     binding: Option<ApprovalDefinitionBinding>,
@@ -184,12 +142,9 @@ fn apply_purchase_return_create_binding(
     Ok(None)
 }
 
-/// 在调用方事务内登记采购退货单据并证明空绑定。
-///
-/// 必须先确认政策跳过，再调用统一绑定端口；不得查询发布定义后假装成功。
-///
-/// # 错误
-/// 政策非无审批、端口返回绑定或写入失败时返回错误。
+// 在调用方事务内登记采购退货单据并证明空绑定。
+//
+// 必须先确认政策跳过，再调用统一绑定端口；不得查询发布定义后假装成功。政策非无审批、端口返回绑定或写入失败时返回错误。
 async fn persist_unbound_purchase_return_document(
     db: &Database,
     rbac: &ReverseFlowPorts,
@@ -205,10 +160,7 @@ async fn persist_unbound_purchase_return_document(
     persist_registered_document(db, &document, executor).await.map_err(crate::Error::from)
 }
 
-/// 为已构造采购退货登记 `BusinessDocument` 并调用统一绑定端口。
-///
-/// # 错误
-/// 绑定端口或注册写入失败时返回错误。
+// 为已构造采购退货登记 `BusinessDocument` 并调用统一绑定端口。绑定端口或注册写入失败时返回错误。
 pub(super) async fn register_created_purchase_return_document(
     db: &Database,
     rbac: &ReverseFlowPorts,
@@ -226,10 +178,7 @@ pub(super) async fn register_created_purchase_return_document(
     persist_unbound_purchase_return_document(db, rbac, document, &bind_command, actor, executor).await
 }
 
-/// 在创建事务内写入采购退货草稿并登记无绑定单据。
-///
-/// # 错误
-/// 绑定、注册或退货单写入失败时返回错误，调用方必须视作整体回滚。
+// 在创建事务内写入采购退货草稿并登记无绑定单据。绑定、注册或退货单写入失败时返回错误，调用方必须视作整体回滚。
 async fn persist_created_purchase_return_order(
     db: &Database,
     rbac: &ReverseFlowPorts,
@@ -329,7 +278,7 @@ mod purchase_return_no_approval_tests {
         .expect("草稿必须可构造")
     }
 
-    /// 政策仅含 document_type、approval_requirement、process_kind，不得注册空 Adapter。
+    // 验证采购退货只登记 `document_type`、`approval_requirement`、`process_kind`，不为无审批单据注册空适配器。
     #[test]
     fn purchase_return_policy_is_no_approval_identity_only() {
         let policy = policy_of(DocumentType::PurchaseReturnOrder).expect("采购退货政策必须存在");
@@ -349,7 +298,7 @@ mod purchase_return_no_approval_tests {
         ensure_purchase_return_has_no_adapter().expect("不得注册空适配器");
     }
 
-    /// 创建必须注册 BusinessDocument，绑定端口返回空，禁止写入绑定。
+    // 验证创建采购退货仍注册 `BusinessDocument`；统一端口只能返回空绑定，注册行保持未绑定。
     #[test]
     fn create_registers_document_and_returns_empty_binding() {
         let order = draft_order();
@@ -439,7 +388,7 @@ mod creation_authorization_tests {
     use super::super::testing::{actor, denied, process};
     use super::*;
 
-    /// 统一来源授权失败必须先于注册、写入、审计及命令回包读取。
+    // 统一来源授权失败必须先于注册、写入、审计及命令回包读取。
     #[tokio::test]
     async fn creation_authorizes_the_purchase_source_before_any_business_io() {
         let process = process().await;

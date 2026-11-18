@@ -51,13 +51,12 @@ pub struct PersonDataScope {
 }
 
 impl PersonScopeTerm {
-    /// 将原始人员范围解析为已验证目标，拒绝角色专用动态模式。
-    /// # 参数
-    /// resource、actions 为所属业务和操作。
-    /// # 返回
-    /// 不包含角色管理部门模式的人员目标。
-    /// # 错误
-    /// 绑定、目标或人员动态模式非法时拒绝。
+    // 将原始人员范围解析为已验证目标，拒绝角色专用动态模式。
+    // 不包含角色管理部门模式的人员目标。
+    //
+    // 绑定、目标或人员动态模式非法时拒绝。
+    //
+    // resource、actions 为所属业务和操作。
     pub(crate) fn target(&self, resource: &str, actions: &[String]) -> Result<ScopeTarget> {
         let target = self.binding(resource, actions).target(self.scope_type, &self.scope_targets)?;
         match target {
@@ -68,13 +67,10 @@ impl PersonScopeTerm {
         }
     }
 
-    /// 生成持久化协议绑定，仅在输入和历史数据边界使用。
-    /// # 参数
-    /// resource、actions 为所属业务和操作。
-    /// # 返回
-    /// 与原始范围字段对应的绑定，尚未证明有效性。
-    /// # 错误
-    /// 不返回错误。
+    // 生成持久化协议绑定，仅在输入和历史数据边界使用。
+    // 与原始范围字段对应的绑定，尚未证明有效性。
+    //
+    // resource、actions 为所属业务和操作。
     pub(crate) fn binding(&self, resource: &str, actions: &[String]) -> ScopeBinding {
         ScopeBinding {
             schema_version: 2,
@@ -90,18 +86,14 @@ impl PersonScopeTerm {
 
 impl PersonScopeExpression {
     /// 按资源动作判定本人基础；任务仅 list/detail 默认本人，manage 必须显式授权。
-    /// # 参数
-    /// * `resource` - 已注册业务标识。
-    /// * `action` - 已登记的资源动作。
-    /// # 返回
     /// 仅负责人语义明确且不要求其他身份维度的业务返回 `true`；其余业务返回 `false`。
-    /// # 错误
-    /// 不返回错误。
+    ///
+    /// `resource`：已注册业务标识；`action`：已登记的资源动作。
     pub fn default_self(resource: &str, action: &str) -> bool {
         scope_spec::find_action(resource, action).is_some_and(|spec| spec.default_self())
     }
 
-    /// 基础本人只加入新模型；旧配置原样保留，不因发布自动扩权。
+    // 编译新版附加范围时按政策加上本人基础；旧完整表达式直接保留，不因发布新模型自动扩大范围。
     fn branches(&self, resource: &str, action: &str) -> Vec<Vec<PersonScopeTerm>> {
         let mut branches = self.alternatives.clone();
         if self.additive && Self::default_self(resource, action) {
@@ -116,7 +108,7 @@ impl PersonScopeExpression {
         branches
     }
 
-    /// 读取的上限精确匹配授权并集，防止历史参与在范围外补权。
+    // 为读取组合生成与授予并集一致的上限，防止历史参与分支补权到该范围以外。
     fn read_limit(
         &self,
         branches: &[Vec<PersonScopeTerm>],
@@ -151,27 +143,23 @@ impl PersonScopeExpression {
 
 impl PersonDataScope {
     /// 按资源动作的唯一规格解析人员范围，调用方不能覆盖维度或历史读取能力。
-    /// # 参数
-    /// `state` 为组织事实；`at` 为本次统一判断时点。
-    /// # 返回
     /// 当前动作的分支并集与表达式条件。
-    /// # 错误
+    ///
     /// 未登记动作或非法范围表达式返回校验错误。
+    ///
+    /// `state` 为组织事实；`at` 为本次统一判断时点。
     pub fn resolve(&self, state: &OrganizationState, at: Instant) -> Result<ResolvedScope> {
         let spec = scope_spec::require_action(&self.resource, &self.action)?;
         self.compile(state, spec.required_dimensions(), spec.allows_history(), at)
     }
 
-    /// 将单份表达式编译为所有业务查询与对象检查共用的范围中间态。
-    /// # 参数
-    /// * `state` - 当前组织及成员有效期事实。
-    /// * `dimensions` - 本业务必需维度。
-    /// * `allows_history` - 该业务是否允许用历史参与补读取。
-    /// * `at` - 本次统一判断时点。
-    /// # 返回
-    /// 分支并集与表达式条件的精确结果。
-    /// # 错误
-    /// 非法部门或不支持的动态模式拒绝。
+    // 将单份表达式编译为所有业务查询与对象检查共用的范围中间态。
+    // 分支并集与表达式条件的精确结果。
+    //
+    // 非法部门或不支持的动态模式拒绝。
+    //
+    // `state`：当前组织及成员有效期事实；`dimensions`：本业务必需维度。
+    // `allows_history`：该业务是否允许用历史参与补读取；`at`：本次统一判断时点。
     fn compile(
         &self,
         state: &OrganizationState,
@@ -206,14 +194,9 @@ impl PersonDataScope {
     }
 
     /// 构造尚未持久化的基础范围；必须先完成账号与动作资格检查。
-    /// # 参数
-    /// * `user` - 人员账号 ID。
-    /// * `resource` - 已注册业务标识。
-    /// * `action` - 操作标识。
-    /// # 返回
     /// 仅含默认政策、没有附加授权的临时配置。无基础政策的业务留待解析时得到空范围。
-    /// # 错误
-    /// 不返回错误。
+    ///
+    /// `resource`：已注册业务标识。
     pub fn default_for(user: &str, resource: &str, action: &str) -> Self {
         Self {
             base: BaseModel::new("default-person-scope".into()),
@@ -225,12 +208,7 @@ impl PersonDataScope {
     }
 
     /// 缺配置时同时拒绝普通与历史路径。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 空范围。
-    /// # 错误
-    /// 不返回错误。
     pub fn denied() -> ResolvedScope {
         ResolvedScope { role_clauses: vec![], user_limit: Some(ScopeClause::default()) }
     }
@@ -415,7 +393,7 @@ mod tests {
         target.settlement_party_id = Some("y");
         assert!(!scope.allows(&target, false));
     }
-    /// 建立两个有效部门用于验证实际组织范围解析。
+    // 为本人和指定部门范围测试准备两个当前有效部门，使解析走真实组织关系。
     fn departments() -> OrganizationState {
         OrganizationState {
             units: ["one", "two"]
@@ -436,7 +414,7 @@ mod tests {
         }
     }
 
-    /// 生成明确部门范围，包含下级的选择不能省略。
+    // 构造指定部门的范围目标，测试请求须明确是否包含下级组织。
     fn department(id: &str) -> PersonScopeTerm {
         PersonScopeTerm {
             target_mode: Some(ScopeTargetMode::Explicit),
@@ -539,7 +517,7 @@ mod tests {
         assert!(!scope.allows(&target, false));
         assert!(policy.compile(&departments(), &dimensions, true, Instant::now()).is_err());
     }
-    /// 无人员配置时只为任务读取提供本人基础，不能取得他人任务或管理范围。
+    // 验证：无人员配置时只为任务读取提供本人基础，不能取得他人任务或管理范围。
     #[test]
     fn task_read_defaults_to_self_without_granting_manage() {
         for action in ["list", "detail", "manage"] {
@@ -550,7 +528,7 @@ mod tests {
         }
     }
 
-    /// 追加组织范围不会替代本人读取；旧显式限制与显式拒绝不被新默认绕过。
+    // 验证：追加组织范围不会替代本人读取；旧显式限制与显式拒绝不被新默认绕过。
     #[test]
     fn task_self_baseline_respects_explicit_scope_contract() {
         let mut policy = PersonDataScope::default_for("alice", "work_item", "detail");
@@ -566,7 +544,7 @@ mod tests {
         policy.expression.condition = None;
         assert!(resolve(&policy).allows(&object(true, false), false));
     }
-    /// 公开入口使用动作规格；默认本人和历史读取不能由调用者覆盖。
+    // 验证：公开入口使用动作规格；默认本人和历史读取不能由调用者覆盖。
     #[test]
     fn registered_resolution_uses_one_default_and_history_contract() {
         let state = departments();

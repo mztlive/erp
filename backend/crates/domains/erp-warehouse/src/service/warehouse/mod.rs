@@ -64,19 +64,7 @@ pub struct WarehouseService {
 }
 
 impl WarehouseService {
-    /// 创建仓库域服务实例。
-    ///
-    /// # 参数
-    /// * `db` - 数据库实例
-    /// * `identity` - 经办人身份与权限事实端口
-    /// * `audit` - 审计写入端口
-    /// * `fingerprint` - 敏感字段指纹端口（委托 support 唯一实现）
-    ///
-    /// # 返回
-    /// 返回服务实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 注入仓库数据库、共享授权和经办人、审计、指纹端口，供服务在同一事务校验并写入；敏感值指纹由组合层接入统一实现。
     pub fn new(
         db: Database,
         identity: Arc<dyn IdentityFactPort>,
@@ -87,21 +75,7 @@ impl WarehouseService {
         Self { db, identity, audit, fingerprint, fingerprint_key: FINGERPRINT_KEY, authorization }
     }
 
-    /// 创建仓库（仓库稳定身份 + 首个修订，跨集合事务）。
-    ///
-    /// 地址与联系人生成带密钥 HMAC 指纹的 `SensitiveText` 后落库
-    /// （数据模型 §4.5.5：数据库加密列 + 查询指纹，禁止裸摘要）。
-    ///
-    /// # 参数
-    /// * `req` - 创建请求
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回新建仓库的响应视图。
-    ///
-    /// # 错误
-    /// * `ValidationError` - 请求体校验失败
-    /// * `ConflictError` - warehouse_code 重复（唯一索引透出）
+    /// 在一个事务创建仓库稳定身份、首修订和审计，返回新仓库视图。地址和联系人封装为 `SensitiveText`，查询指纹须为带密钥 HMAC，不可用裸摘要。请求非法返回 `ValidationError`，代码唯一性冲突返回 `ConflictError`。
     pub async fn warehouse_create(
         &self,
         req: CreateWarehouseRequest,
@@ -118,22 +92,7 @@ impl WarehouseService {
             .await
     }
 
-    /// 更新仓库（追加新修订并更新稳定身份，跨集合事务）。
-    ///
-    /// `warehouse_code` 是稳定代码不可修改；「有库存或有效预占时不得停用」
-    /// 需要库存域数据，当前未接线（见域报告「未实现且已知的缺口」）。
-    ///
-    /// # 参数
-    /// * `id` - 仓库 ID
-    /// * `req` - 更新请求（含期望版本与新修订快照）
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回更新后仓库的响应视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 仓库不存在
-    /// * `ConflictError` - 期望版本与当前版本不一致
+    /// 在一个事务追加资料修订、更新仓库稳定身份和审计，不改仓库代码。对象缺失返回 `NotFound`，期望版本不符返回 `ConflictError`。有库存或有效预占不得停用，但此处尚未接入库存域事实。
     pub async fn warehouse_update(
         &self,
         id: &str,
@@ -152,21 +111,7 @@ impl WarehouseService {
             .await
     }
 
-    /// 更新仓库入库与仓发经办人。
-    ///
-    /// # 参数
-    /// * `id` - 仓库稳定 ID
-    /// * `req` - 期望版本与两个具体经办人
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回更新后的仓库稳定视图。
-    ///
-    /// # 错误
-    /// 仓库不存在、版本冲突、账号不可用或缺少对应履约权限时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 配置变更只用于之后新建的履约任务，不改派已开放任务。
+    /// 在事务内校验并更新入库与仓发经办人，配置只影响之后创建的履约任务，不改派已开放任务。仓库不存在、版本冲突、账号不可用或缺少对应权限时拒绝。
     pub async fn warehouse_fulfillment_handlers_update(
         &self,
         id: &str,
@@ -185,16 +130,7 @@ impl WarehouseService {
             .await
     }
 
-    /// 列出仓库收发责任配置可选的具体账号。
-    ///
-    /// # 参数
-    /// actor 为检查仓库配置资格的当前账号。
-    ///
-    /// # 返回
-    /// 返回可登录管理账号及其入库、仓发权限资格。
-    ///
-    /// # 错误
-    /// 当前账号缺少仓库配置资格时返回 `Forbidden`；授权、身份端口及事务错误按原分类传播。
+    /// 在查询快照中验证仓库配置资格，列出能登录管理端、至少具备一项入库或仓发资格的具体账号。未授权返回 `Forbidden`，其它授权、身份端口或事务失败保留原分类。
     pub async fn warehouse_fulfillment_handler_options(
         &self,
         actor: &AuditActor,
@@ -210,16 +146,7 @@ impl WarehouseService {
             .await
     }
 
-    /// 分页查询仓库修订列表。
-    ///
-    /// # 参数
-    /// * `params` - 查询参数（`warehouse_id`/`name` 扁平筛选）
-    ///
-    /// # 返回
-    /// 返回契约形状的分页视图（不含加密地址/联系人等敏感字段）。
-    ///
-    /// # 错误
-    /// * `ValidationError` - 分页参数非法或排序字段不在白名单
+    /// 在一个授权快照内按仓库和名称分页读取修订，不返回地址、联系人等敏感字段。分页或排序参数非法时返回 `ValidationError`。
     pub async fn warehouse_revision_list(
         &self,
         actor: &AuditActor,
@@ -239,7 +166,7 @@ impl WarehouseService {
             .await
     }
 
-    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    // 用公开入口提供的同一快照检查修订读取资格和筛选，再查询列表投影及总数，避免先取业务记录。
     async fn warehouse_revision_list_snapshot(
         &self,
         actor: &AuditActor,
@@ -256,16 +183,7 @@ impl WarehouseService {
         .await
     }
 
-    /// 分页查询仓库-SKU 预警策略列表。
-    ///
-    /// # 参数
-    /// * `params` - 查询参数（`warehouse_id`/`sku_id`/`status` 扁平筛选）
-    ///
-    /// # 返回
-    /// 返回契约形状的分页视图。
-    ///
-    /// # 错误
-    /// * `ValidationError` - 分页参数非法或排序字段不在白名单
+    /// 在一个授权快照内按仓库、SKU 和状态读取预警策略分页。分页非法或排序字段超出白名单时返回 `ValidationError`。
     pub async fn warehouse_sku_policy_list(
         &self,
         actor: &AuditActor,
@@ -285,7 +203,7 @@ impl WarehouseService {
             .await
     }
 
-    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    // 用原快照校验策略筛选并检查读取资格，再取分页和总数并转为视图。
     async fn warehouse_sku_policy_list_snapshot(
         &self,
         actor: &AuditActor,
@@ -302,23 +220,8 @@ impl WarehouseService {
         .await
     }
 
-    /// 更新仓库-SKU 预警策略（乐观锁语义；`warehouse_id`/`sku_id` 是策略身份）。
-    ///
-    /// # 参数
-    /// * `id` - 策略 ID
-    /// * `req` - 更新请求（含期望版本）
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回更新后策略的响应视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 策略不存在
-    /// * `ConflictError` - 期望版本与当前版本不一致
-    /// * `BusinessLogicError` - 同一仓库和 SKU 的启用区间重叠
-    ///
-    /// 请求体校验失败时返回 `ValidationError`；预警阈值为负数或启停迁移被拒绝时返回实体错误；
-    /// 写入或审计持久化失败时返回仓储或下层错误。
+    /// 在事务内按期望版本更新预警阈值或启停状态，仓库和 SKU 身份不变，成功后返回新策略视图。
+    /// 策略缺失为 `NotFound`，版本不符为 `ConflictError`，启用区间重叠为 `BusinessLogicError`，请求非法为 `ValidationError`；负阈值、非法迁移、写入和审计错误沿用对应实体或下层分类。
     pub async fn warehouse_sku_policy_update(
         &self,
         id: &str,
@@ -337,18 +240,7 @@ impl WarehouseService {
             .await
     }
 
-    /// 删除仓库-SKU 预警策略（软删除，乐观锁语义）。
-    ///
-    /// # 参数
-    /// * `id` - 策略 ID
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回删除结果。
-    ///
-    /// # 错误
-    /// * `NotFound` - 策略不存在
-    /// * `ConflictError` - 并发修改（CAS 冲突）
+    /// 在事务中按实际版本软删除策略并写审计；无匹配策略时返回 `NotFound`，CAS 并发冲突返回 `ConflictError`。
     pub async fn warehouse_sku_policy_delete(&self, id: &str, actor: &AuditActor) -> Result<()> {
         let service = self.clone();
         let actor = actor.clone();
@@ -362,7 +254,7 @@ impl WarehouseService {
             .await
     }
 
-    /// 校验仓储经办人是当前有效账号且具备对应正式操作权限。
+    // 用原执行器读取经办账号身份，验证其可以登录且具备指定入库或仓发权限，避免配置不可履约的人员。
     async fn ensure_handler_eligible(
         &self,
         account_id: &str,
@@ -375,17 +267,7 @@ impl WarehouseService {
     }
 }
 
-/// 校验乐观锁期望版本一致（三处更新守卫共用；冲突文案保持 HTTP 契约）。
-///
-/// # 参数
-/// * `current` - 当前版本
-/// * `expected` - 调用方期望版本
-///
-/// # 返回
-/// 版本一致时返回 `Ok(())`。
-///
-/// # 错误
-/// 版本不一致时返回 `ConflictError`。
+// 让更新入口共用期望版本核对；不一致时返回保持 HTTP 约定文案的 `ConflictError`。
 fn ensure_expected_version(current: u64, expected: u64) -> Result<()> {
     if current != expected {
         return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
@@ -393,21 +275,7 @@ fn ensure_expected_version(current: u64, expected: u64) -> Result<()> {
     Ok(())
 }
 
-/// 执行投影分页查询并映射视图行（三类列表共用编排）。
-///
-/// 各列表方法经 crate 私有 `into_filter` / `from_row` 组装筛选与视图；查询语义与返回形状不变。
-///
-/// # 参数
-/// * `search` - 投影分页查询 future
-/// * `map_row` - 投影行转视图闭包
-/// * `page` - 页码（1 起）
-/// * `page_size` - 单页条数
-///
-/// # 返回
-/// 返回契约形状的分页视图。
-///
-/// # 错误
-/// 投影查询失败时返回仓储错误。
+// 等待仓储分页投影后逐行转成视图，统一仓库、修订、策略列表的响应形状；查询失败时保留仓储错误，不生成空成功结果。
 async fn map_search_page<Row, View>(
     search: impl Future<Output = persistence_core::Result<PageResult<Row>>>,
     mut map_row: impl FnMut(Row) -> View,
@@ -424,16 +292,7 @@ async fn map_search_page<Row, View>(
 }
 
 impl WarehouseListQuery {
-    /// 转为仓储筛选；`sort_by` 保持 `Some(白名单字段)`。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回与规范化查询字段一一对应的 [`WarehouseFilter`]。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 将规范化仓库列表输入转成仓储条件，保留指定范围、经办筛选和 `Some` 白名单排序字段。
     pub(crate) fn into_filter(self) -> WarehouseFilter {
         WarehouseFilter {
             warehouse_id: self.warehouse_id,
@@ -450,16 +309,7 @@ impl WarehouseListQuery {
 }
 
 impl WarehouseRevisionListQuery {
-    /// 转为仓储筛选；`sort_by` 保持 `Some(白名单字段)`。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回与规范化查询字段一一对应的 [`WarehouseRevisionFilter`]。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 将规范化修订的仓库、名称和分页转成仓储条件，排序保留已校验字段。
     pub(crate) fn into_filter(self) -> WarehouseRevisionFilter {
         WarehouseRevisionFilter {
             warehouse_id: self.warehouse_id,
@@ -473,16 +323,7 @@ impl WarehouseRevisionListQuery {
 }
 
 impl WarehouseSkuPolicyListQuery {
-    /// 转为仓储筛选；`sort_by` 保持 `Some(白名单字段)`。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回与规范化查询字段一一对应的 [`WarehouseSkuPolicyFilter`]。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 将规范化的仓库、SKU、状态和分页转成策略仓储条件，保留 `Some` 白名单排序字段。
     pub(crate) fn into_filter(self) -> WarehouseSkuPolicyFilter {
         WarehouseSkuPolicyFilter {
             warehouse_id: self.warehouse_id,
@@ -497,16 +338,7 @@ impl WarehouseSkuPolicyListQuery {
 }
 
 impl WarehouseView {
-    /// 由列表投影行构造响应视图（不搬迁行上的 `#[serde(default)]`）。
-    ///
-    /// # 参数
-    /// * `row` - 仓库列表投影行。
-    ///
-    /// # 返回
-    /// 返回契约形状的仓库视图。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 将仓库列表行映射为响应，保留仓库身份及经办配置；仓储行的 `#[serde(default)]` 兼容规则不转移到视图。
     pub(crate) fn from_row(row: WarehouseRow) -> Self {
         Self {
             id: row.id,
@@ -521,16 +353,7 @@ impl WarehouseView {
 }
 
 impl WarehouseRevisionView {
-    /// 由列表投影行构造响应视图。
-    ///
-    /// # 参数
-    /// * `row` - 仓库修订列表投影行。
-    ///
-    /// # 返回
-    /// 返回不含敏感字段的修订视图。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 将修订列表投影转成不含地址、联系人等敏感字段的展示视图。
     pub(crate) fn from_row(row: WarehouseRevisionRow) -> Self {
         Self {
             id: row.id,
@@ -549,16 +372,7 @@ impl WarehouseRevisionView {
 }
 
 impl WarehouseSkuPolicyView {
-    /// 由列表投影行构造响应视图。
-    ///
-    /// # 参数
-    /// * `row` - 预警策略列表投影行。
-    ///
-    /// # 返回
-    /// 返回策略列表视图。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 由列表投影构造预警策略视图，保留定点阈值、启停与有效日期。
     pub(crate) fn from_row(row: WarehouseSkuPolicyRow) -> Self {
         Self {
             id: row.id,
@@ -574,19 +388,7 @@ impl WarehouseSkuPolicyView {
     }
 }
 
-/// 校验身份事实是否满足仓库经办人资格，并保留原错误文案。
-///
-/// # 参数
-/// * `fact` - 身份端口返回的事实；`None` 表示账号不存在或已停用。
-/// * `duty` - 入库或仓发责任。
-///
-/// # 返回
-/// 账号可登录且具备对应资格时返回 `Ok(())`。
-///
-/// # 错误
-/// `fact` 为 `None` 时返回 `BusinessLogicError`，文案为「{入库|仓发}经办人账号不存在或已停用，请重新选择」；
-/// 不可登录时文案为「{入库|仓发}经办人账号不可用，请重新选择」；
-/// 缺少对应资格时文案为「{入库|仓发}经办人缺少对应操作权限，请先调整角色或重新选择」。
+// 按职责核验经办账号事实，分别把缺失或停用、不可登录、缺少操作权限映射为 `BusinessLogicError`，提示重新选择，缺权限时也可先调整角色。
 pub(crate) fn ensure_handler_fact_eligible(
     fact: Option<&HandlerIdentityFact>,
     duty: HandlerDuty,
@@ -604,18 +406,7 @@ pub(crate) fn ensure_handler_fact_eligible(
     Err(Error::BusinessLogicError(format!("{label}经办人缺少对应操作权限，请先调整角色或重新选择")))
 }
 
-/// 把身份事实投影为经办人选项。
-///
-/// 只保留可登录且具备入库或仓发至少一项资格的账号，再按显示名、账号 ID 排序。
-///
-/// # 参数
-/// * `facts` - 全公司经办人身份事实。
-///
-/// # 返回
-/// 返回经办人选项；不可登录，或两项资格都没有的账号不会出现。
-///
-/// # 错误
-/// 不返回错误。
+// 把公司经办候选转成界面选项，只保留可登录且具备至少一项履约资格的账号，再按显示名、账号 ID 稳定排序。
 pub(crate) fn handler_option_views(
     mut facts: Vec<HandlerIdentityFact>,
 ) -> Vec<WarehouseFulfillmentHandlerOptionView> {
@@ -654,25 +445,8 @@ struct WarehouseRevisionInput {
     change_reason: String,
 }
 
-/// 构造仓库修订（名称/变更原因校验 + 地址/联系人敏感值指纹化）。
-///
-/// 地址与联系人按数据模型 §4.5.5 生成带密钥 HMAC 指纹的 `SensitiveText`；
-/// 密文列当前无生产级加密原语（见域报告「地基修订候选」），P3 落库为
-/// 明文占位 + 真 HMAC 查询指纹，列表投影与 Debug 均不暴露。
-///
-/// # 参数
-/// * `warehouse_id` - 所属仓库
-/// * `revision_id` - 修订 ID
-/// * `revision_no` - 修订序号
-/// * `input` - 修订内容
-/// * `fingerprint` - 敏感字段指纹端口
-/// * `fingerprint_key` - 指纹密钥（默认 `FINGERPRINT_KEY`，经服务构造参数注入）
-///
-/// # 返回
-/// 返回仓库修订实体。
-///
-/// # 错误
-/// 字段校验失败时返回错误。
+// 先用注入密钥为地址和联系人计算 HMAC 查询指纹，再验证敏感值、叶级地区、名称、变更原因与生效区间并构造修订。字段不合法直接返回。
+// 当前敏感列以明文占位，未接入生产级加密；列表投影和 `Debug` 不输出该列。服务使用 `FINGERPRINT_KEY`，这里由调用方传入密钥。
 fn build_warehouse_revision(
     warehouse_id: WarehouseId,
     revision_id: WarehouseRevisionId,

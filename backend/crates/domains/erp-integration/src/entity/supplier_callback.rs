@@ -54,14 +54,8 @@ pub struct SupplierCallbackReceipt {
 }
 
 impl SupplierCallbackReceipt {
-    /// 构造只认证信封的推送接收记录。
-    ///
-    /// # 参数
-    /// `id` 是本地接收号；其余参数是绑定连接、接收时间、路由、密文和补查意图。
-    /// # 返回
-    /// 来源事件号缺省、状态为 received 的证据记录。
-    /// # 错误
-    /// 连接、路由、密文或补查意图不满足接收合同则拒绝。
+    /// 接收已认证信封后，冻结连接、路由、密文和待补查意图；无可靠来源事件号时使用本地接收号。
+    /// `Received` 只表示等待核验，未应用供给或订单事实。连接、路由、密文或意图不符合接收合同即拒绝。
     pub fn received(
         id: String,
         connection_id: SupplierApiConnectionId,
@@ -114,25 +108,20 @@ impl SupplierCallbackReceipt {
         })
     }
 
-    /// 在全部订单刷新意图已经查询并完成领域应用后标记接收处理完成。
-    /// # 参数
-    /// `at` 为 ERP 完成应用的时刻，不代表来源业务发生时间。
-    /// # 返回
-    /// 将接收状态更新为 applied 并清理处理错误。
-    /// # 错误
-    /// 混合商品意图或非订单意图不允许由订单消费者标记全部完成。
+    /// 仅在全部订单刷新意图已完成补查和领域应用后，结束本地接收记录并清除处理错误。
+    /// 时间取 ERP 应用完成时点，不是来源业务时点；混入非订单意图时拒绝。
     pub fn mark_orders_applied(&mut self, at: Instant) -> Result<()> {
         self.mark_orders_resolved(0, at)
     }
 
     /// 结束已应用或已被采购变更退役的订单刷新意图，保留原始接收证据。
-    /// # 参数
+    ///
+    /// 全部退役标记 ignored_retired，混合结果标记 applied_with_retired，全部应用标记 applied。意图不是订单、
+    /// 数量越界或缺少意图时拒绝结束。
+    ///
     /// `retired_intents` 为服务器已证明退役的意图数量；其他意图须已经完成领域应用。
+    ///
     /// `at` 为 ERP 结束处理的时间。
-    /// # 返回
-    /// 全部退役标记 ignored_retired，混合结果标记 applied_with_retired，全部应用标记 applied。
-    /// # 错误
-    /// 意图不是订单、数量越界或缺少意图时拒绝结束。
     pub fn mark_orders_resolved(&mut self, retired_intents: usize, at: Instant) -> Result<()> {
         if self.refresh_hints.is_empty() || retired_intents > self.refresh_hints.len() {
             return Err(Error::ValidationError("订单回调完成意图数量无效".into()));

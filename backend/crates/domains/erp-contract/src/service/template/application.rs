@@ -21,14 +21,9 @@ pub struct TemplateDownloadSource {
 }
 
 impl ContractTemplateService {
-    /// 一个申请键原子形成一个编号，网络重试不得多占流水。
-    /// # 参数
-    /// * `request` - 稳定申请键、模板及用途。
-    /// * `actor` - 申请销售。
-    /// # 返回
-    /// 已分配编号；同内容重试返回原记录。
-    /// # 错误
-    /// 模板停用、主体停用、键冲突、流水耗尽或并发冲突。
+    /// 销售申请用模板领号时，先规范化用途并在同一事务授权、查申请键、分配公司编号组的年度流水并保存申请和审计。
+    /// 同申请人和申请键仅在模板与用途一致时复用原结果，不另占流水。模板或主体停用、键冲突、流水耗尽或并发冲突会阻止本次新写入。
+    /// 提交不确定时只读核对原申请；领号不创建已签合同。
     pub async fn apply(
         &self,
         mut request: ApplyTemplateRequest,
@@ -67,7 +62,8 @@ impl ContractTemplateService {
         self.finish_apply(result, &request, actor).await
     }
 
-    /// 写事务退出后只读查证胜者；不自动重放写入，未知提交保留原始错误。
+    // 写事务冲突、瞬时失败或提交结果未知后，用新事务只读查证同键的已提交记录，不重放写入。
+    // 无匹配时保留原错误；结果未知且查证失败时也保留原错误。
     async fn finish_apply(
         &self,
         result: Result<ApplicationView>,
@@ -104,7 +100,7 @@ impl ContractTemplateService {
         }
     }
 
-    /// 在新快照先核验原申请资格，再查证同申请人和幂等键的已提交结果。
+    // 只读查证领号结果时在新快照先复核原申请权限，再按当前申请人及原键定位记录；只在模板和用途匹配时返回原申请。
     async fn application_replay(
         &self,
         request: &ApplyTemplateRequest,
@@ -168,7 +164,8 @@ impl ContractTemplateService {
         Ok(application.into())
     }
 
-    /// 已签档案占号时有界跳过；失败整事务回滚，不消耗流水。
+    // 新申请在原事务为公司编号组和业务年份递增流水；已归档合同（含软删除）占用的号码最多尝试跳过 100 次。
+    // 只有找到未占用编号才写回计数器；其写入与申请同事务，失败不单独消耗流水。
     async fn allocate(&self, initial: ContractCounter, executor: &mut dyn Executor) -> Result<String> {
         let existing = self.db.contract_counters().find_by_id(&initial.base.id, executor).await?;
         let is_new = existing.is_none();
@@ -196,14 +193,8 @@ impl ContractTemplateService {
         Err(Error::ConflictError("已有合同占用后续号码，请联系管理员校准已用流水".into()))
     }
 
-    /// 每次下载都按申请人重新授权，停用模板不影响历史申请。
-    /// # 参数
-    /// * `id` - 申请记录 ID。
-    /// * `actor` - 当前销售。
-    /// # 返回
-    /// 不可变模板存储身份及原合同号。
-    /// # 错误
-    /// 非本人申请统一返回不存在，避免暴露他人合同号。
+    /// 正式下载前在同一事务校验下载权限及申请归属，再返回不可变模板对象键和原申请号并登记审计。
+    /// 停用模板仍可用于历史申请；不存在和非本人申请返回同一错误，不暴露他人合同号。
     pub async fn download_source(&self, id: &str, actor: &AuditActor) -> Result<TemplateDownloadSource> {
         let service = self.clone();
         let actor = actor.clone();
@@ -238,14 +229,7 @@ impl ContractTemplateService {
             .await
     }
 
-    /// 管理员下载样张核对首页布局；不占用任何流水。
-    /// # 参数
-    /// * `id` - 模板 ID。
-    /// * `actor` - 管理员。
-    /// # 返回
-    /// 使用 SAMPLE 标识的样张读取信息。
-    /// # 错误
-    /// 模板不存在或审计失败。
+    /// 管理员为核对首页布局下载带 `SAMPLE` 标识的样张，返回模板读取信息，不占年度流水。模板不存在或审计失败时拒绝。
     pub async fn sample_source(&self, id: &str, actor: &AuditActor) -> Result<TemplateDownloadSource> {
         let service = self.clone();
         let actor = actor.clone();

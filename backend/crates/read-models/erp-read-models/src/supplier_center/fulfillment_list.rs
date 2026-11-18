@@ -30,22 +30,20 @@ pub struct SupplierFulfillmentListReadService {
 use crate::{Error, Result};
 
 impl SupplierFulfillmentListReadService {
-    /// 绑定已装配范围与处理人 Port 的领域服务。
+    /// 装配供应商履约列表时，绑定已装配范围与处理人 Port 的领域服务。
+    ///
     /// # 参数
     /// db 为原数据库，domain 为共享供应链查询服务。
+    ///
     /// # 返回
     /// 不缓存授权结果的列表读模型。
-    /// # 错误
+    ///
     /// 构造不执行 I/O。
     pub fn new(db: Database, domain: Arc<SupplierFulfillmentService>) -> Self {
         Self { db, domain }
     }
 
-    /// 分页查询授权范围内的供应商履约订单。
-    ///
-    /// # 参数
-    /// * `params` - 查询参数
-    /// * `actor` - 已认证操作人
+    /// 处理供应商履约列表时，分页查询授权范围内的供应商履约订单。
     ///
     /// # 返回
     /// 返回分页、行内跟进人与处理人姓名及范围元信息。
@@ -198,7 +196,7 @@ async fn account_display_names(
     db.accounts().names_by_ids(&ids, executor).await.map_err(Error::from)
 }
 
-/// 把已授权行上的账号姓名写入列表项。缺失姓名保持空，不用 ID 或另一角色顶替。
+// 补齐供应商履约列表的展示名称时，把已授权行上的账号姓名写入列表项。缺失姓名保持空，不用 ID 或另一角色顶替。
 fn named_rows(
     rows: Vec<SupplierFulfillmentOrderView>,
     names: &HashMap<String, String>,
@@ -212,7 +210,7 @@ fn named_rows(
         .collect()
 }
 
-/// 只返回账号姓名。账号不存在或姓名为空白时返回 `None`，禁止回退成 ID。
+// 补齐供应商履约列表的展示名称时，仅给出账号姓名。账号不存在或姓名为空白时返回 `None`，禁止回退成 ID。
 fn stored_name(names: &HashMap<String, String>, id: &str) -> Option<String> {
     let trimmed = id.trim();
     if trimmed.is_empty() {

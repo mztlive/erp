@@ -92,7 +92,7 @@ impl InquiryCommand {
             _ => None,
         }
     }
-    /// 由销售命令本身选择公共入口，采购命令不能借用销售资格。
+    // 由销售命令本身选择公共入口，采购命令不能借用销售资格。
     fn sales_permission(&self) -> Result<AccessPermission> {
         Ok(match self {
             Self::Create(_) => sales_inquiry_permissions::COMMANDS_SALES_CREATE,
@@ -104,7 +104,7 @@ impl InquiryCommand {
             _ => return Err(Error::ValidationError("请从采购询价页面办理此操作".into())),
         })
     }
-    /// 由精确采购命令选择固定任务入口，销售命令不能借用采购资格。
+    // 由精确采购命令选择固定任务入口，销售命令不能借用采购资格。
     fn procurement_permission(&self) -> Result<AccessPermission> {
         Ok(match self {
             Self::Publish(_) | Self::Renew(_) => sales_inquiry_permissions::COMMANDS_PROCUREMENT_PUBLISH,
@@ -163,7 +163,7 @@ impl SalesInquiryProcess {
         }
     }
 
-    /// 未知提交只读取原收据并在独立恢复快照重新授权，不重放写命令。
+    // 未知提交只读取原收据并在独立恢复快照重新授权，不重放写命令。
     async fn recovered_result(
         &self,
         actor: &AuditActor,
@@ -246,10 +246,10 @@ impl SalesInquiryProcess {
 /// 回放只读原回执并调用现有完整授权，不具备写入业务或审计的能力。
 #[async_trait]
 pub(super) trait ReplaySource: Sync {
-    /// 在本次快照读取完整回执。
+    // 在询价回放快照读取完整成功回执，供后续核对原命令身份和实际结果。
     async fn receipt(&self, id: &str, executor: &mut dyn Executor) -> Result<Option<InquiryCommandReceipt>>;
 
-    /// 以原结果的真实询价重验销售动作；创建仍使用候选归属合同。
+    // 以原结果的真实询价重验销售动作；创建仍使用候选归属合同。
     async fn sales(
         &self,
         actor: &AuditActor,
@@ -258,7 +258,7 @@ pub(super) trait ReplaySource: Sync {
         executor: &mut dyn Executor,
     ) -> Result<()>;
 
-    /// 保持采购命令回放的原动作资格，不借用销售权限。
+    // 保持采购命令回放的原动作资格，不借用销售权限。
     async fn procurement(
         &self,
         actor: &AuditActor,
@@ -269,12 +269,12 @@ pub(super) trait ReplaySource: Sync {
 
 #[async_trait]
 impl ReplaySource for SalesInquiryProcess {
-    /// 回执、授权和交付使用调用方同一个快照。
+    // 回执、授权和交付使用调用方同一个快照。
     async fn receipt(&self, id: &str, executor: &mut dyn Executor) -> Result<Option<InquiryCommandReceipt>> {
         Ok(SalesInquiryService::new(self.db.clone()).receipt(id, executor).await?)
     }
 
-    /// 现有销售访问器从真实对象构造创建候选或执行记录检查。
+    // 现有销售访问器从真实对象构造创建候选或执行记录检查。
     async fn sales(
         &self,
         actor: &AuditActor,
@@ -286,7 +286,7 @@ impl ReplaySource for SalesInquiryProcess {
         Ok(())
     }
 
-    /// 采购回放仍只核对原命令资格，不重新办理已完成任务。
+    // 采购回放仍只核对原命令资格，不重新办理已完成任务。
     async fn procurement(
         &self,
         actor: &AuditActor,
@@ -298,7 +298,7 @@ impl ReplaySource for SalesInquiryProcess {
     }
 }
 
-/// 核对命令身份与载荷后，授权原结果对象并直接交付冻结结果。
+// 核对命令身份与载荷后，授权原结果对象并直接交付冻结结果。
 async fn replay(
     source: &impl ReplaySource,
     actor: &AuditActor,
@@ -311,7 +311,7 @@ async fn replay(
     replay_receipt(source, actor, id, command, receipt, &prior, executor).await.map(Some)
 }
 
-/// 已读回执验证与授权由普通重试和未知提交恢复共用，读取失败不被误认为授权失败。
+// 已读回执验证与授权由普通重试和未知提交恢复共用，读取失败不被误认为授权失败。
 async fn replay_receipt(
     source: &impl ReplaySource,
     actor: &AuditActor,
@@ -402,7 +402,7 @@ mod tests {
     }
 
     impl Source {
-        /// 使用真实命令指纹和冻结结果构造待回放的原成功回执。
+        // 使用真实命令指纹和冻结结果构造待回放的原成功回执。
         fn new(command: &InquiryCommand, request_id: &str, result_id: &str) -> Self {
             let receipt = command_receipt(command, request_id);
             let receipt = InquiryCommandReceipt::new(
@@ -417,7 +417,7 @@ mod tests {
             Self { receipt: Some(receipt), denied: false, calls: Mutex::default() }
         }
 
-        /// 记录实际编排选择的入口、对象和执行器。
+        // 记录实际编排选择的入口、对象和执行器。
         fn record(&self, entry: &str, id: &str, executor: &mut dyn Executor) {
             assert!(executor.boundary().is_some_and(|boundary| boundary.is_snapshot()));
             self.calls.lock().unwrap().push((
@@ -430,7 +430,7 @@ mod tests {
 
     #[async_trait]
     impl ReplaySource for Source {
-        /// 从同一快照返回原成功回执。
+        // 回执替身记录查询身份和实际执行器，再交出原成功回执。
         async fn receipt(
             &self,
             id: &str,
@@ -440,7 +440,7 @@ mod tests {
             Ok(self.receipt.clone())
         }
 
-        /// 返回实际销售动作授权结果，不改变冻结业务结果。
+        // 返回实际销售动作授权结果，不改变冻结业务结果。
         async fn sales(
             &self,
             actor: &AuditActor,
@@ -456,7 +456,7 @@ mod tests {
             Ok(())
         }
 
-        /// 保留采购入口并拒绝错误地转为销售动作。
+        // 保留采购入口并拒绝错误地转为销售动作。
         async fn procurement(
             &self,
             actor: &AuditActor,
@@ -485,7 +485,7 @@ mod tests {
         })
     }
 
-    /// 沿生产入口使用相同命令身份和载荷生成指纹。
+    // 沿生产入口使用相同命令身份和载荷生成指纹。
     fn command_receipt(command: &InquiryCommand, id: &str) -> CommandReceipt {
         CommandReceipt::from_payload(
             "sales-inquiry-command:",

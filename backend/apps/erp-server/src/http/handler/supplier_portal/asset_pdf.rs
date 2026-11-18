@@ -16,13 +16,9 @@ const MAX_PDF_PAGES: usize = 500;
 const MAX_PDF_DECODE_BYTES: usize = 32 * 1024 * 1024;
 const MAX_PDF_STREAM_BYTES: usize = 8 * 1024 * 1024;
 
-/// 检查完整静态 PDF、全部对象和有界解压内容，拒绝不能检查的文件。
-/// # 参数
-/// 已完成大小、扩展名和 MIME 一致性校验的原始 PDF 字节。
-/// # 返回
-/// 返回真实检查到的页面数。
-/// # 错误
-/// 损坏、加密、主动行为、嵌入文件、未知过滤器或资源预算超限时拒绝。
+// 检查完整静态 PDF、全部对象和有界解压内容，拒绝不能检查的文件。
+// 返回真实检查到的页面数。
+// 损坏、加密、主动行为、嵌入文件、未知过滤器或资源预算超限时拒绝。
 pub(super) fn inspect_pdf(bytes: &[u8]) -> Result<u32, Error> {
     preflight(bytes)?;
     let document = Document::load_mem_with_options(
@@ -49,7 +45,7 @@ pub(super) fn inspect_pdf(bytes: &[u8]) -> Result<u32, Error> {
     inspection.pages(&document)
 }
 
-/// 载入前拒绝会被解析器提前解压的对象流和交叉引用流，限流总开销。
+// 在正式解析门户 PDF 前拒绝可能触发提前解压的对象流及交叉引用流，给解析成本设边界。
 fn preflight(bytes: &[u8]) -> Result<(), Error> {
     if bytes.is_empty()
         || bytes.len() > MAX_UPLOAD_FILE_BYTES

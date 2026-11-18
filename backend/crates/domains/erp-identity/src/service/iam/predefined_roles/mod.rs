@@ -17,12 +17,11 @@ use permission_tables::{
 pub use templates::builtin_role_templates;
 
 /// 启动时仅准备组织基础与目录资格，不创建或补权业务角色。
-/// # 参数
-/// `rbac` 为当前身份授权服务。
-/// # 返回
 /// 基础数据检查完成。
-/// # 错误
+///
 /// 组织或目录持久化失败时返回错误。
+///
+/// `rbac` 为当前身份授权服务。
 pub async fn ensure_identity_foundation(rbac: &SharedRbacService) -> Result<()> {
     ensure_home_department(rbac.database().clone()).await?;
     sync_role_grants(rbac).await
@@ -99,12 +98,12 @@ mod tests {
     use crate::Result;
     use crate::entity::rbac::{Permission, PermissionSet};
 
-    /// 解析静态权限表，供岗位职责断言使用。
+    // 在岗位职责测试中解析内建模板的静态权限表，使断言使用规范化权限值。
     fn parse_permissions(raw: &[&str]) -> Result<Vec<Permission>> {
         Ok(raw.iter().map(Permission::parse).collect::<std::result::Result<_, _>>()?)
     }
 
-    /// 显式采购模板授予门户职责和供应商维护权限，不授予内部账号管理。
+    // 验证：显式采购模板授予门户职责和供应商维护权限，不授予内部账号管理。
     #[test]
     fn portal_permissions_are_explicit_procurement_template_grants() {
         let catalog = builtin_role_templates().unwrap();
@@ -126,7 +125,7 @@ mod tests {
         assert!(procurement.permissions.iter().all(|permission| permission.resource() != "account"));
     }
 
-    /// 抄送接收资格不通过岗位模板授予。
+    // 验证：抄送接收资格不通过岗位模板授予。
     #[test]
     fn copy_receiving_is_not_a_role_permission() {
         for template in builtin_role_templates().unwrap() {
@@ -134,7 +133,7 @@ mod tests {
         }
     }
 
-    /// 整账读取仅授予综合财务及三个细分财务模板。
+    // 验证：整账读取仅授予综合财务及三个细分财务模板。
     #[test]
     fn ledger_read_is_only_granted_to_finance_templates() {
         let ledger = Permission::parse("finance_ledger:read").unwrap();
@@ -152,7 +151,7 @@ mod tests {
         }
     }
 
-    /// 采购和销售选择已有公司，系统管理员维护公司。
+    // 验证：采购和销售选择已有公司，系统管理员维护公司。
     #[test]
     fn company_permissions_follow_role_duties() {
         let procurement = PermissionSet::new(parse_permissions(PROCUREMENT_PERMISSIONS).unwrap());
@@ -166,7 +165,7 @@ mod tests {
         }
     }
 
-    /// 岗位身份保持唯一，且不包含独立维护的超级管理员。
+    // 验证：岗位身份保持唯一，且不包含独立维护的超级管理员。
     #[test]
     fn predefined_role_ids_are_unique_and_stable() {
         let ids: Vec<_> = PREDEFINED_ROLES.iter().map(|role| role.id).collect();
@@ -187,7 +186,7 @@ mod tests {
         }
     }
 
-    /// 财务模板不授予已退役的采购审核旁路权限。
+    // 验证：财务模板不授予已退役的采购审核旁路权限。
     #[test]
     fn finance_template_excludes_retired_purchase_review_permission() {
         let catalog = builtin_role_templates().unwrap();
@@ -196,7 +195,7 @@ mod tests {
         assert!(!permissions.covers_one(&Permission::parse("purchase_order:review").unwrap()));
     }
 
-    /// 财务模板只读结算主体修订和销售变更。
+    // 验证：财务模板只读结算主体修订和销售变更。
     #[test]
     fn finance_template_reads_parties_and_sales_changes_without_writes() {
         let catalog = builtin_role_templates().unwrap();
@@ -217,7 +216,7 @@ mod tests {
         }
     }
 
-    /// 仓储审批采购变更需要读取对象，但不得获得创建或提交变更的职责。
+    // 验证：仓储审批采购变更需要读取对象，但不得获得创建或提交变更的职责。
     #[test]
     fn warehouse_can_read_purchase_changes_for_approval() {
         let permissions = super::WAREHOUSE_PERMISSIONS;
@@ -361,7 +360,7 @@ mod tests {
         }
     }
 
-    /// 销售变更审批权限仅授予销售领导、采购和运营岗位。
+    // 验证：销售变更审批权限仅授予销售领导、采购和运营岗位。
     #[test]
     fn sales_change_approval_permissions_follow_assigned_roles() {
         let required = ["sales_change_order:approve"];
@@ -489,7 +488,7 @@ mod tests {
         assert!(!permissions.iter().any(|p| p.covers(&Permission::parse("customer_scope:detail").unwrap())));
     }
 
-    /// 最终管理层模板只读，仅保留待办查看管理资格。
+    // 验证：最终管理层模板只读，仅保留待办查看管理资格。
     #[test]
     fn management_permissions_are_read_only() {
         let catalog = builtin_role_templates().unwrap();
@@ -503,7 +502,7 @@ mod tests {
         }
     }
 
-    /// 最终岗位模板必须使用显式工作流动作。
+    // 验证：最终岗位模板必须使用显式工作流动作。
     #[test]
     fn workflow_permissions_are_explicit() {
         for template in builtin_role_templates().unwrap() {
@@ -518,7 +517,7 @@ mod tests {
         }
     }
 
-    /// 最终模板排除退役审批动作，系统管理员不自动获得流程或审批权限。
+    // 验证：最终模板排除退役审批动作，系统管理员不自动获得流程或审批权限。
     #[test]
     fn approval_templates_exclude_retired_actions_and_sysadmin_approval_access() {
         for template in builtin_role_templates().unwrap() {

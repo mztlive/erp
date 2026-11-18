@@ -22,21 +22,11 @@ pub(super) struct SalesCommandEvent {
 }
 
 impl SalesCommandEvent {
-    /// 校验静态动作与身份，提前固定安全历史快照。
-    ///
-    /// # 参数
-    /// * `id` - 稳定命令 ID。
-    /// * `actor` - 操作人。
-    /// * `key` - 原幂等键。
-    /// * `fingerprint` - 请求摘要。
-    /// * `result` - 强类型命令结果。
-    /// * `number` - 业务编号。
-    ///
-    /// # 返回
-    /// 返回同事务执行包装的输入。
-    ///
-    /// # 错误
-    /// 动作身份或结果无效时拒绝构造。
+    // 校验静态动作与身份，提前固定安全历史快照。
+    //
+    // `id` 为稳定命令 ID；`key` 为原幂等键；`fingerprint` 为请求摘要；`result` 为强类型命令结果；`number` 为业务编号。
+    //
+    // 返回同事务执行包装的输入。动作身份或结果无效时拒绝构造。
     pub(super) fn new(
         id: String,
         actor: &AuditActor,
@@ -78,26 +68,18 @@ impl SalesCommandEvent {
         Ok(Self { receipt, context, content })
     }
 
-    /// 给同一外层命令的成功事件登记关联与实际写入序号，领域回执身份保持独立。
-    /// # 参数
-    /// `command_id` 是外层命令 ID，`sequence` 是从1开始的写入次序。
-    /// # 返回
-    /// 返回保持原事件 ID 和领域回执的事件输入。
-    /// # 错误
-    /// 命令 ID 非法或序号为零时拒绝。
+    // 给同一外层命令的成功事件登记关联与实际写入序号，领域回执身份保持独立。
+    //
+    // `command_id` 是外层命令 ID，`sequence` 是从1开始的写入次序。返回保持原事件 ID 和领域回执的事件输入。命令 ID 非法或序号为零时拒绝。
     pub(super) fn with_command_sequence(mut self, command_id: &str, sequence: u32) -> Result<Self> {
         self.context =
             self.context.with_command_id(Some(command_id.to_string()))?.with_event_sequence(sequence)?;
         Ok(self)
     }
 
-    /// 复用销售事实写入的执行器记录回执和成功事件。
-    /// # 参数
-    /// `db` 为目标库；`executor` 为调用方事务。
-    /// # 返回
-    /// 成功时返回空结果。
-    /// # 错误
-    /// 回执或审计失败停止事务。
+    // 复用销售事实写入的执行器记录回执和成功事件。
+    //
+    // `db` 为目标库；`executor` 为调用方事务。成功时返回空结果。回执或审计失败停止事务。
     pub(super) async fn persist(&self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
         execute_audited(
             &self.context,
@@ -128,22 +110,10 @@ impl AuditedCommand for RecordCommand<'_> {
     }
 }
 
-/// 在调用方执行器内读取并验证完整命令身份，不将删除的回执当作未执行。
-///
-/// # 参数
-/// * `db` - 业务数据库。
-/// * `command_id` - 稳定命令 ID。
-/// * `actor_id` - 认证账号。
-/// * `action` - 固定动作。
-/// * `scope_id` - 原销售单作用域；无作用域时为 `None`。
-/// * `fingerprint` - 规范化请求指纹，以及从本次请求形成的幂等键摘要。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
-/// 命中返回已验证的强类型回执，没有回执返回 `None`。
-///
-/// # 错误
-/// 异载荷、身份损坏或读取失败时停止回放。
+// 在调用方执行器内读取并验证完整命令身份，不将删除的回执当作未执行。
+//
+// `command_id` 为稳定命令 ID；`actor_id` 为认证账号；`action` 为固定动作；`scope_id` 为原销售单作用域；无作用域时为 `None`；`fingerprint`
+// 为规范化请求指纹，以及从本次请求形成的幂等键摘要。命中返回已验证的强类型回执，没有回执返回 `None`。异载荷、身份损坏或读取失败时停止回放。
 pub(super) async fn load_command_receipt(
     db: &Database,
     command_id: &str,
@@ -168,22 +138,12 @@ pub(super) async fn load_command_receipt(
     Ok(receipt)
 }
 
-/// 同执行器恢复精确提交快照和原行，查证后重验当前提交资格。
-///
-/// # 参数
-/// * `db` - 业务数据库。
-/// * `command_id` - 稳定命令 ID。
-/// * `fingerprint` - 规范化请求指纹与幂等键摘要。
-/// * `sales_order_id` - 原销售单。
-/// * `actor_id` - 原提交人。
-/// * `access` - 当前提交资格检查器。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
-/// 回执命中且快照一致时返回原提交视图；没有回执时返回 `None`。
-///
-/// # 错误
-/// 回执种类无效、快照缺失或不一致、身份不匹配，或当前提交资格不足时返回错误。
+// 同执行器恢复精确提交快照和原行，查证后重验当前提交资格。
+//
+// `command_id` 为稳定命令 ID；`fingerprint` 为规范化请求指纹与幂等键摘要；`sales_order_id` 为原销售单；`actor_id` 为原提交人；`access`
+// 为当前提交资格检查器；沿用调用方的执行器。回执命中且快照一致时返回原提交视图；没有回执时返回 `None`。
+//
+// 回执种类无效、快照缺失或不一致、身份不匹配，或当前提交资格不足时返回错误。
 pub(super) async fn replay_submission_with_executor(
     db: &Database,
     command_id: &str,
@@ -231,7 +191,7 @@ pub(super) async fn replay_submission_with_executor(
     Ok(Some(erp_sales::service::sales_order::mapper::submission_view(submission, lines)))
 }
 
-/// 已冻结销售单、快照及提交人三项一致后，才允许返回原快照。
+// 已冻结销售单、快照及提交人三项一致后，才允许返回原快照。
 fn validate_submission_fact(
     expected_order: &str,
     expected_submission: &str,
@@ -249,7 +209,7 @@ fn validate_submission_fact(
     Ok(())
 }
 
-/// 将领域匹配结果映射为原入口的稳定异载荷错误，完整身份检查始终先于载荷。
+// 将领域匹配结果映射为原入口的稳定异载荷错误，完整身份检查始终先于载荷。
 fn validate_command_replay(
     receipt: &SalesCommandReceipt,
     command_id: &str,
@@ -274,7 +234,7 @@ fn validate_command_replay(
     })
 }
 
-/// 独立销售回执的唯一竞争进入原只读恢复路径，其他写入错误按原口径返回。
+// 独立销售回执的唯一竞争进入原只读恢复路径，其他写入错误按原口径返回。
 fn receipt_write_error(error: persistence_core::Error) -> Error {
     if error.duplicate_index_name() == Some("uk_sales_command_receipts_id") {
         Error::ReceiptDuplicate(error)
@@ -293,7 +253,7 @@ mod tests {
 
     use super::*;
 
-    /// 创建并提交使用同一外层命令关联，原事件与回执 ID 各自稳定。
+    // 创建并提交使用同一外层命令关联，原事件与回执 ID 各自稳定。
     #[test]
     fn sales_events_keep_command_correlation_and_original_write_order() {
         let actor = AuditActor::new("actor".into(), "sales".into(), AccountKind::Admin);
@@ -329,7 +289,7 @@ mod tests {
         assert_ne!(event_ids[0], event_ids[1]);
     }
 
-    /// 生产回放 helper 对创建、提交与交接的固定身份和原结果种类逐项查证。
+    // 生产回放 helper 对创建、提交与交接的固定身份和原结果种类逐项查证。
     #[test]
     fn replay_guard_checks_complete_identity_before_payload() {
         for (action, scope, result) in [
@@ -424,7 +384,7 @@ mod tests {
         }
     }
 
-    /// 查证只恢复原结果；没有结果和二次查证失败均保留首次提交未知错误。
+    // 查证只恢复原结果；没有结果和二次查证失败均保留首次提交未知错误。
     #[test]
     fn recovery_preserves_original_unknown_error_after_lookup_failure() {
         let unknown = || {
@@ -445,7 +405,7 @@ mod tests {
         );
     }
 
-    /// 生产快照查证必须拒绝替代快照、错销售单及其他提交人。
+    // 生产快照查证必须拒绝替代快照、错销售单及其他提交人。
     #[test]
     fn submission_replay_keeps_the_original_snapshot_order_and_submitter() {
         validate_submission_fact("order", "snapshot", "actor", "order", "snapshot", "actor").unwrap();
@@ -460,7 +420,7 @@ mod tests {
         }
     }
 
-    /// 只有命令身份唯一竞争可只读恢复，其他业务唯一冲突保留普通冲突。
+    // 只有命令身份唯一竞争可只读恢复，其他业务唯一冲突保留普通冲突。
     #[test]
     fn only_the_owned_receipt_unique_constraint_enters_recovery() {
         use mongodb::error::{ErrorKind, WriteError, WriteFailure};
@@ -485,7 +445,7 @@ mod tests {
         ));
     }
 
-    /// 实际 Process 匹配边界校验本次键摘要，合法格式无法绕过损坏检查。
+    // 实际 Process 匹配边界校验本次键摘要，合法格式无法绕过损坏检查。
     #[test]
     fn replay_guard_rejects_validly_encoded_key_digest_damage_before_payload() {
         let expected_key_hash = CommandFingerprint::from_parts([" key ".trim().into()]);

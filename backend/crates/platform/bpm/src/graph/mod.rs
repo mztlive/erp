@@ -54,25 +54,9 @@ pub struct NodeReplacementDraft {
 }
 
 impl NodeReplacementDraft {
-    /// 由调用方注入的身份构造节点替换输入，并校验节点/参与人不变量。
-    ///
-    /// # 参数
-    /// * `existing_node_id` - 保留已有节点时的主键；新建时为空
-    /// * `new_node_id` - 调用方为新节点生成的主键；保留已有节点时忽略
-    /// * `new_node_key` - 调用方为新节点生成的稳定键；保留已有节点时忽略
-    /// * `node_name` - 节点显示名称
-    /// * `display_order` - 从 1 开始的展示顺序
-    /// * `assignee_participant_id` - 已由调用方构造的指定审批人
-    ///
-    /// # 返回
-    /// 名称已规范化、顺序合法且身份非空时返回替换输入。
-    ///
-    /// # 错误
-    /// 名称为空/超长、顺序为 0、已有主键为空、新建稳定键为空或超长时返回模型错误。
-    ///
-    /// # 关键业务约束
-    /// 本构造不生成 ID、不读取时钟，也不依赖 services DTO；跨定义引用与重复 ID
-    /// 由 [`DefinitionGraph::plan_replacement_nodes`] 判定。
+    /// 将整组替换命令中的单个节点整理为领域输入：规范化名称和新稳定键，检查非零顺序及调用方提供的身份。
+    /// 即使保留已有节点，也校验提供的新主键和新键，但规划时不用它们替换旧身份。
+    /// 是否引用了当前草稿的节点、是否重复使用旧 ID，由 [`DefinitionGraph::plan_replacement_nodes`] 统一判定。
     pub fn new(
         existing_node_id: Option<ApprovalNodeDefinitionId>,
         new_node_id: ApprovalNodeDefinitionId,
@@ -116,104 +100,34 @@ pub struct CopiedNodeIdentity {
 }
 
 impl DefinitionGraph {
-    /// 按节点键查找节点。
-    ///
-    /// # 参数
-    /// * `node_key` - 定义内稳定节点键
-    ///
-    /// # 返回
-    /// 命中时返回节点引用，否则返回 `None`。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 本方法不为缺失节点补默认值。
+    /// 按定义内的稳定键定位入口、当前或后继节点；找不到时返回 `None`，由调用场景决定如何处理坏图。
     pub fn node(&self, node_key: &str) -> Option<&ApprovalNodeDefinition> {
         self.nodes.iter().find(|item| item.node_key == node_key)
     }
 
-    /// 返回按展示顺序排列且顺序连续的节点。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回从 `display_order = 1` 开始的节点引用。
-    ///
-    /// # 错误
-    /// 节点数量越界或展示顺序不连续时返回模型错误。
-    ///
-    /// # 关键业务约束
-    /// 节点数量固定在 `1..=20`，同一顺序不得重复。
+    /// 读取定义节点时以展示顺序为准，而不是存储顺序。空集合、超过 20 个节点或顺序不是从 1 连续递增时返回错误。
     pub fn ordered_nodes(&self) -> ModelResult<Vec<&ApprovalNodeDefinition>> {
         ordered_nodes(&self.nodes)
     }
 
-    /// 提取定义内确定性的审批人 ID 集合。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回按字符串排序并去重的审批人 ID。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 输出不得依赖节点存储顺序，供批量账号查询与资格重验复用。
+    /// 供调用方批量读取账号并复验资格：收集指定及已解析的审批人和其他或签参与人，排序去重以消除存储顺序的影响。
     pub fn assignee_ids(&self) -> Vec<String> {
         assignee_ids(&self.nodes)
     }
 
-    /// 提取节点用途引用。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回每个节点当前保存的可选用途键。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// BPM 只保持用途为不透明字符串，不解释 ERP 含义。
+    /// 把每个节点的可选用途键按现有节点顺序交给上层做绑定或解释；BPM 不解析这些不透明引用。
     pub fn purpose_refs(&self) -> Vec<Option<&str>> {
         self.nodes.iter().map(|node| node.node_purpose.as_deref()).collect()
     }
 
-    /// 校验定义图符合完整线性审批模型。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 入口、节点顺序和全部连线与线性模型一致时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 节点数量、顺序、入口或连线不一致时返回模型错误。
-    ///
-    /// # 关键业务约束
-    /// 每个节点必须恰有通过与驳回连线，驳回回入口，末节点通过进入已批准终态。
+    /// 发布、绑定或重建草稿时核对整张图：入口必须排首位，每个节点各有一条通过和驳回边，末节点通过即收结。
+    /// 驳回应指向终态；历史冻结的驳回回入口连线只作终止解释。节点、指派或连线不合法时返回模型错误。
     pub fn validate_linear(&self) -> ModelResult<()> {
         validate_linear_graph(&self.definition, &self.nodes, &self.transitions)
     }
 
-    /// 确认定义已发布且线性图完整，供绑定前 BPM 校验。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 状态为已发布且线性图完整时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 草稿、退役返回状态错误；图结构损坏返回字段或连线错误。
-    ///
-    /// # 关键业务约束
-    /// 仓储按 `PUBLISHED` 过滤不能替代本确认；损坏的已发布图必须失败关闭。
+    /// 绑定定义前同时确认状态已发布且图完整；仅按 `PUBLISHED` 查询不能排除图损坏。
+    /// 草稿或退役返回状态错误，发布图不满足线性规则也不得绑定。
     pub fn validate_published_linear(&self) -> ModelResult<()> {
         if !self.definition.is_published() {
             return Err(ModelError::InvalidStatus("只有已发布定义可以绑定"));
@@ -221,20 +135,8 @@ impl DefinitionGraph {
         self.validate_linear()
     }
 
-    /// 解析当前节点决定连线的目标节点。
-    ///
-    /// # 参数
-    /// * `current_node_key` - 当前节点键
-    /// * `decision` - 通过或驳回决定
-    ///
-    /// # 返回
-    /// 连线指向节点时返回目标键，指向终态时返回 `None`。
-    ///
-    /// # 错误
-    /// 决定连线缺失、重复或形状损坏时返回模型错误。
-    ///
-    /// # 关键业务约束
-    /// 同一来源节点与事件必须恰有一条连线，不得取第一条掩盖重复定义。
+    /// 按当前节点及决定解析后继键，供调用方为后继节点准备资格。决定终结实例时返回 `None`，包括历史上指回入口的驳回边。
+    /// 缺边、重复边、连线形状非法或历史驳回边不指向入口时返回模型错误，不从重复边中任取一条。
     pub fn decision_target_node_key(
         &self,
         current_node_key: &str,
@@ -256,21 +158,7 @@ impl DefinitionGraph {
         Ok(edge.to_node_key.clone())
     }
 
-    /// 查找指定来源与事件的唯一连线。
-    ///
-    /// # 参数
-    /// * `from_node_key` - 事件来源节点键
-    /// * `event` - 通过或驳回事件
-    ///
-    /// # 返回
-    /// 同一来源与事件恰有一条连线时返回该连线引用。
-    ///
-    /// # 错误
-    /// 连线缺失或重复时返回连线错误。
-    ///
-    /// # 关键业务约束
-    /// 本方法不校验连线形状；调用方解析目标前必须调用
-    /// `validate_shape`，不得取第一条掩盖重复定义。
+    // 在解释决定前按来源节点和事件取唯一边；缺边与重复都返回错误，避免凭存储顺序选择路径。
     pub(crate) fn unique_transition(
         &self,
         from_node_key: &str,
@@ -285,20 +173,11 @@ impl DefinitionGraph {
         Ok(edge)
     }
 
-    /// 按整组替换输入规划草稿节点。
-    ///
-    /// # 参数
-    /// * `drafts` - 调用方提供的已有节点引用、新身份、名称、顺序与审批人
-    /// * `at` - 调用方提供的规划时间
-    ///
-    /// # 返回
-    /// 返回按展示顺序排列、用途已清空的完整节点集合。
+    /// 草稿整组编辑时按展示顺序构造完整节点集：保留项沿用原 ID 和稳定键，新节点使用调用方提供的新身份。
+    /// 输出清除历史用途，显示名暂作占位，供调用方补齐快照后重建图。
     ///
     /// # 错误
-    /// 节点数量、顺序、名称、身份、跨定义引用或重复引用非法时返回模型错误。
-    ///
-    /// # 关键业务约束
-    /// 已有节点保留 ID 与 `node_key`；新节点只使用调用方提供的新身份；历史用途不得复制。
+    /// 非草稿、顺序或节点字段非法、重复身份、跨定义引用或引用已删除节点时返回错误。
     pub fn plan_replacement_nodes(
         &self,
         drafts: &[NodeReplacementDraft],
@@ -334,22 +213,8 @@ impl DefinitionGraph {
         Ok(planned)
     }
 
-    /// 以新节点集合重建现有草稿的入口与线性连线。
-    ///
-    /// # 参数
-    /// * `definition` - 需要保持身份与业务版本的草稿定义
-    /// * `nodes` - 完整替换后的节点集合
-    /// * `transition_ids` - 调用方为每条线性连线提供的 ID
-    /// * `at` - 调用方提供的重建时间
-    ///
-    /// # 返回
-    /// 返回保持定义身份、重写入口与连线后的完整图。
-    ///
-    /// # 错误
-    /// 定义不可修改、节点非法或连线 ID 数量不匹配时返回模型错误。
-    ///
-    /// # 关键业务约束
-    /// 入口固定为 `display_order = 1` 的节点键，连线完全由线性生成器产生。
+    /// 节点整组替换后保留草稿 ID 和业务版本，把首位节点设为入口，并按节点顺序与调用方提供的连线 ID 重建完整图。
+    /// 非草稿、节点为空或归属及顺序非法、连线 ID 数量不符、最终图校验失败时返回模型错误。
     pub fn rebuild_draft(
         definition: &ApprovalProcessDefinition,
         nodes: Vec<ApprovalNodeDefinition>,
@@ -373,19 +238,8 @@ impl DefinitionGraph {
         Ok(graph)
     }
 
-    /// 由已复制节点构造新的非空草稿图。
-    ///
-    /// # 参数
-    /// * `params` - 定义身份、节点与连线 ID
-    ///
-    /// # 返回
-    /// 返回入口和线性连线完整的新草稿图。
-    ///
-    /// # 错误
-    /// 定义字段、节点归属、顺序或连线 ID 数量非法时返回模型错误。
-    ///
-    /// # 关键业务约束
-    /// 本入口只用于至少一个节点的复制草稿；空草稿由定义实体单独创建。
+    /// 复制已发布定义时，把带新身份的节点组装成有入口和完整连线的新草稿。要创建不带节点的草稿，直接构造定义实体。
+    /// 定义字段、节点归属或顺序不合法，以及连线 ID 数量不符时返回模型错误。
     pub fn new_populated_draft(params: NewPopulatedDraftParams) -> ModelResult<Self> {
         let NewPopulatedDraftParams {
             definition_id,
@@ -433,19 +287,7 @@ pub struct NewPopulatedDraftParams {
     pub at: Timestamp,
 }
 
-/// 提取节点集合中确定性的审批人 ID。
-///
-/// # 参数
-/// * `nodes` - 任意存储顺序的节点集合
-///
-/// # 返回
-/// 返回按字符串排序并去重的审批人 ID。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 输出不得依赖节点存储顺序，供批量账号查询与资格重验复用。
+/// 批量校验资格前汇总节点已知的首位审批人和其他或签成员；按身份字符串排序去重，避免同一人被重复查询。
 pub fn assignee_ids(nodes: &[ApprovalNodeDefinition]) -> Vec<String> {
     let mut ids = nodes
         .iter()
@@ -461,22 +303,11 @@ pub fn assignee_ids(nodes: &[ApprovalNodeDefinition]) -> Vec<String> {
     ids
 }
 
-/// 把已发布节点复制为新定义节点，清除历史用途并替换全部身份。
-///
-/// # 参数
-/// * `source` - 被复制定义的节点集合
-/// * `definition_id` - 新草稿定义 ID
-/// * `identities` - 与有序源节点一一对应的新节点身份
-/// * `at` - 调用方提供的复制时间
-///
-/// # 返回
-/// 返回按原展示顺序复制、用途为空的新节点集合。
+/// 以旧定义创建新草稿时，按展示顺序使用调用方提供的新 ID 和稳定键复制节点。
+/// 保留名称、顺序、人员与显示名快照及指派规则，不沿用历史用途和原身份。
 ///
 /// # 错误
-/// 源节点顺序非法、身份数量不匹配或新节点字段非法时返回模型错误。
-///
-/// # 关键业务约束
-/// 不复制节点 ID、`node_key` 或历史用途，但保留名称、顺序、审批人与显示名快照。
+/// 源节点顺序非法、身份数量不符、新身份重复或节点字段不合法时返回模型错误。
 pub fn copy_nodes_for_definition(
     source: &[ApprovalNodeDefinition],
     definition_id: ApprovalProcessDefinitionId,
@@ -511,17 +342,7 @@ pub fn copy_nodes_for_definition(
     Ok(copied)
 }
 
-/// 按展示顺序排列并校验数量与连续性（节点与替换草稿共用）。
-///
-/// # 参数
-/// * `items` - 待排序的节点或替换草稿
-/// * `display_order` - 读取单项展示顺序
-///
-/// # 返回
-/// 返回从 1 开始按展示顺序排列的引用。
-///
-/// # 错误
-/// 数量不在 `1..=`[`MAX_DEFINITION_NODES`]，或顺序不从 1 连续时返回 [`ModelError::InvalidField`]。
+// 定义节点和整组替换输入共用同一展示顺序规则：先限制数量为 1 至 `MAX_DEFINITION_NODES`，再按从 1 连续且不重复的顺序返回引用，否则报 `ModelError::InvalidField`。
 pub(crate) fn ordered_by_display_order<T>(
     items: &[T],
     display_order: impl Fn(&T) -> u32,
@@ -537,19 +358,7 @@ pub(crate) fn ordered_by_display_order<T>(
     Ok(ordered)
 }
 
-/// 解析替换输入应使用的节点身份。
-///
-/// # 参数
-/// * `definition_id` - 当前草稿定义 ID
-/// * `existing` - 当前定义内按节点 ID 建立的索引
-/// * `seen_existing` - 本次已引用的已有节点 ID
-/// * `draft` - 当前替换输入
-///
-/// # 返回
-/// 已有节点返回原 ID 与键，新节点返回调用方提供的新身份。
-///
-/// # 错误
-/// 已有节点重复、跨定义引用或节点归属损坏时返回模型错误。
+// 整组替换逐项决定是沿用旧节点的主键与稳定键，还是接收调用方提供的新身份；拦截重复引用、跨定义引用和已删除节点。
 fn replacement_identity(
     definition_id: &str,
     existing: &HashMap<&str, &ApprovalNodeDefinition>,
@@ -572,16 +381,7 @@ fn replacement_identity(
     Ok((ApprovalNodeDefinitionId::new(node.base.id.clone()), node.node_key.clone()))
 }
 
-/// 校验节点 ID 与稳定键在定义内均唯一。
-///
-/// # 参数
-/// * `nodes` - 待持久化的完整节点集合
-///
-/// # 返回
-/// 身份均唯一时返回 `Ok(())`。
-///
-/// # 错误
-/// 节点 ID 或稳定键重复时返回模型错误。
+// 在替换或复制的完整节点组中检查主键和稳定键各自唯一，防止不同节点被合并到同一记录或路径。
 fn ensure_unique_node_identities(nodes: &[ApprovalNodeDefinition]) -> ModelResult<()> {
     let mut ids = HashSet::new();
     let mut keys = HashSet::new();
@@ -596,20 +396,7 @@ fn ensure_unique_node_identities(nodes: &[ApprovalNodeDefinition]) -> ModelResul
     Ok(())
 }
 
-/// 按展示顺序排列节点，并校验全部归属给定定义。
-///
-/// `rebuild_draft` 与 `new_populated_draft` 共用本规则：顺序非法、数量越界
-/// 或任一节点指向其它定义时均不得构图。
-///
-/// # 参数
-/// * `nodes` - 待构图节点
-/// * `definition_id` - 目标定义 ID
-///
-/// # 返回
-/// 返回从 `display_order = 1` 开始连续排列的节点引用。
-///
-/// # 错误
-/// 节点数量、顺序非法或归属不一致时返回模型错误。
+// 新建非空草稿和重建草稿共用：选入口前核对节点数量、连续顺序以及归属，避免从别的定义取首节点。
 fn ordered_nodes_for_definition<'a>(
     nodes: &'a [ApprovalNodeDefinition],
     definition_id: &str,
@@ -619,17 +406,7 @@ fn ordered_nodes_for_definition<'a>(
     Ok(ordered)
 }
 
-/// 校验全部节点归属于给定定义。
-///
-/// # 参数
-/// * `nodes` - 待构图节点
-/// * `definition_id` - 目标定义 ID
-///
-/// # 返回
-/// 全部节点归属一致时返回 `Ok(())`。
-///
-/// # 错误
-/// 任一节点指向其它定义时返回模型错误。
+// 构图时逐节点核对定义 ID，不让完整的展示顺序掩盖跨定义混入的节点。
 fn ensure_nodes_belong_to_definition(
     nodes: &[ApprovalNodeDefinition],
     definition_id: &str,
@@ -702,7 +479,7 @@ mod tests {
         assert_eq!(graph.assignee_ids(), ["u1", "u2", "u3"]);
     }
 
-    /// 节点替换保留已有身份、使用调用方新身份，并拒绝重复与跨定义引用。
+    // 验证整组替换既能沿用当前节点身份、接收新身份并清除用途，也拒绝空集合、重复引用和跨定义引用。
     #[test]
     fn replacement_planning_owns_node_identity_rules() {
         let graph = DefinitionGraph {
@@ -777,7 +554,7 @@ mod tests {
         assert!(graph.plan_replacement_nodes(&[], Timestamp::from_unix_secs(2).unwrap()).is_err());
     }
 
-    /// 节点替换草稿拒绝空白身份、空名称、零顺序，且不生成 ID。
+    // 覆盖空白身份、空名称和零顺序，并验证合法输入规范化后仍使用调用方给定的主键。
     #[test]
     fn replacement_draft_constructor_owns_node_invariants() {
         let assignee = ParticipantId::new("u1").unwrap();
@@ -851,7 +628,7 @@ mod tests {
         assert_eq!(draft.new_node_id.as_ref(), "id2");
     }
 
-    /// 节点复制替换全部身份并清除用途，结果可直接重建为合法线性图。
+    // 复制时置换身份、清除用途，再重建草稿并按新键解析路径，验证新图不依赖旧节点身份。
     #[test]
     fn copied_nodes_and_rebuilt_graph_are_deterministic() {
         let source = vec![node("old2", "old-n2", 2, None), node("old1", "old-n1", 1, Some("legacy"))];
@@ -899,7 +676,7 @@ mod tests {
         assert!(graph.decision_target_node_key("missing", ApprovalDecision::Approve).is_err());
     }
 
-    /// 同一来源与事件出现重复连线时失败关闭，不得取第一条掩盖重复定义。
+    // 为同一来源和事件放入重复边，验证解析决定时不会取第一条继续推进。
     #[test]
     fn duplicate_decision_edges_fail_closed() {
         let at = Timestamp::from_unix_secs(1).unwrap();
@@ -925,7 +702,7 @@ mod tests {
         );
     }
 
-    /// 只有已发布且线性完整的图可通过绑定校验；草稿、退役和损坏发布图失败关闭。
+    // 分别检查未发布、已退役和结构损坏的已发布图，验证绑定不能只凭状态或图形状放行。
     #[test]
     fn published_linear_validation_rejects_draft_retired_and_corrupt_graphs() {
         let mut graph = DefinitionGraph::new_populated_draft(NewPopulatedDraftParams {

@@ -21,38 +21,18 @@ pub struct ReturnsRepository<'a> {
 
 impl<'a> ReturnsRepository<'a> {
     /// 创建域专用仓储。
-    ///
-    /// # 参数
-    /// * `db` - 目标 MongoDB 数据库
-    ///
-    /// # 返回
-    /// 返回仓储实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
 
     /// 建立销售退货处理单与其明细（跨集合多步骤写入）。
-    ///
-    /// 依次写入 `sales_return_cases` 与 `sales_return_lines`，保证「处理单 + 明细」
-    /// 原子可见（数据模型 §6.11）。
-    /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction` 时
-    /// 两笔写入各自自动提交，第二笔失败会留下只有处理单没有明细的半成品；
+    /// 依次写入 `sales_return_cases` 与 `sales_return_lines`，保证「处理单 + 明细」原子可见（数据模型 §6.11）。
+    /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction` 时两笔写入各自自动提交，第二笔失败会留下只有处理单没有明细的半成品；
     /// Service 必须通过 `persistence_core::Transactional::with_transaction` 传入事务会话。
-    ///
-    /// # 参数
-    /// * `case_entity` - 待写入的处理单
-    /// * `line` - 待写入的明细
-    /// * `executor` - 数据访问执行器，必须位于事务中
-    ///
-    /// # 返回
     /// 两笔写入都成功时无返回值。
-    ///
-    /// # 错误
-    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射
-    /// 为冲突语义）或 MongoDB 写入失败时返回错误。
+    /// `case_entity` 为待写入的处理单；`line` 为待写入的明细。
+    /// 沿用调用方当前事务的执行器 `executor`。
+    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射为冲突语义）或 MongoDB 写入失败时返回错误。
     pub async fn create_sales_return_with_line(
         &self,
         case_entity: &SalesReturnCase,
@@ -71,24 +51,13 @@ impl<'a> ReturnsRepository<'a> {
     }
 
     /// 建立采购退货单与其明细（跨集合多步骤写入）。
-    ///
-    /// 依次写入 `purchase_return_orders` 与 `purchase_return_lines`，保证
-    /// 「退货单 + 明细」原子可见（数据模型 §6.11）。
-    /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction` 时
-    /// 两笔写入各自自动提交，第二笔失败会留下只有退货单没有明细的半成品；
+    /// 依次写入 `purchase_return_orders` 与 `purchase_return_lines`，保证「退货单 + 明细」原子可见（数据模型 §6.11）。
+    /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction` 时两笔写入各自自动提交，第二笔失败会留下只有退货单没有明细的半成品；
     /// Service 必须通过 `persistence_core::Transactional::with_transaction` 传入事务会话。
-    ///
-    /// # 参数
-    /// * `order` - 待写入的采购退货单
-    /// * `line` - 待写入的明细
-    /// * `executor` - 数据访问执行器，必须位于事务中
-    ///
-    /// # 返回
     /// 两笔写入都成功时无返回值。
-    ///
-    /// # 错误
-    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射
-    /// 为冲突语义）或 MongoDB 写入失败时返回错误。
+    /// `order` 为待写入的采购退货单；`line` 为待写入的明细。
+    /// 沿用调用方当前事务的执行器 `executor`。
+    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射为冲突语义）或 MongoDB 写入失败时返回错误。
     pub async fn create_purchase_return_with_line(
         &self,
         order: &PurchaseReturnOrder,

@@ -19,17 +19,7 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
 /// 在管理端维护公开访问密码。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已认证操作人
-/// * `id` - 选品册身份
-/// * `req` - 密码和预期版本
-///
-/// # 返回
 /// 返回更新后的册详情，不返回密码或其哈希。
-///
-/// # 错误
 /// 无维护权限、版本冲突或密码格式不合法时拒绝。
 pub async fn booklet_password(
     State(state): State<HttpState>,
@@ -41,16 +31,7 @@ pub async fn booklet_password(
 }
 
 /// 读取仅供销售发放的个人提货码。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已认证操作人
-/// * `id` - 选品册身份
-///
-/// # 返回
 /// 返回该册提货码及办理状态。
-///
-/// # 错误
 /// 无复制链接权限或无客户访问资格时拒绝。
 pub async fn booklet_vouchers(
     State(state): State<HttpState>,
@@ -61,16 +42,7 @@ pub async fn booklet_vouchers(
 }
 
 /// 读取该册所有已提交人的选品和收件明细。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已认证操作人
-/// * `id` - 选品册身份
-///
-/// # 返回
 /// 返回完整方案明细，供详情展示和表格导出。
-///
-/// # 错误
 /// 无册读取权限或无客户访问资格时拒绝。
 pub async fn booklet_selection_details(
     State(state): State<HttpState>,
@@ -81,17 +53,8 @@ pub async fn booklet_selection_details(
 }
 
 /// 验证密码和个人提货码，签发限于当前册与个人的访问凭证。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `token` - 当前选品链接令牌
-/// * `addr` - 来源地址
-/// * `req` - 密码和可选提货码
-///
-/// # 返回
+/// `req` 为密码和可选提货码。
 /// 返回访问凭证与当前个人公开页。
-///
-/// # 错误
 /// 密码错误、提货码不属于该册、链接失效或超过限流时拒绝。
 pub async fn public_unlock(
     State(state): State<HttpState>,

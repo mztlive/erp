@@ -31,17 +31,9 @@ pub struct PermissionData {
 
 impl PermissionData {
     /// 由必填资源、动作与展示名称构造权限创建数据。
-    ///
-    /// # 参数
-    /// * `resource` - 权限资源（如 `sales_order`）
-    /// * `action` - 权限动作（如 `approve`）
-    /// * `name` - 展示名称
-    ///
-    /// # 返回
     /// 返回描述为空、非系统权限的创建数据。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// `resource`：权限资源（如 `sales_order`）；`action`：权限动作（如 `approve`）。
     pub fn new(resource: impl Into<String>, action: impl Into<String>, name: impl Into<String>) -> Self {
         Self {
             resource: resource.into(),
@@ -53,30 +45,13 @@ impl PermissionData {
     }
 
     /// 设置权限描述。
-    ///
-    /// # 参数
-    /// * `description` - 权限描述
-    ///
-    /// # 返回
-    /// 返回更新后的创建数据。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// `description`：权限描述。
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
         self.description = Some(description.into());
         self
     }
 
     /// 设置是否为系统内建权限。
-    ///
-    /// # 参数
-    /// * `system` - 系统内建标记
-    ///
-    /// # 返回
-    /// 返回更新后的创建数据。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn with_system(mut self, system: bool) -> Self {
         self.system = system;
         self
@@ -120,12 +95,7 @@ pub struct PermissionDefinition {
 
 impl PermissionDefinition {
     /// 返回已验证的资源动作身份。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 不可变的权限值对象。
-    /// # 错误
-    /// 不返回错误。
     pub fn permission(&self) -> &Permission {
         &self.permission
     }
@@ -135,15 +105,11 @@ impl PermissionDefinition {
     /// 通过 `Permission::parse` 校验并规范化 `resource:action`
     /// （trim、小写、白名单字符、长度上限），完成 name/description 的规范化。
     ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::PermissionId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
     /// 返回新建的权限定义（未停用）。
     ///
-    /// # 错误
     /// 当 `resource:action` 非法或 name/description 为空/超长时返回错误。
+    ///
+    /// `id`：实体主键（`erp_core::ids::PermissionId`）。
     pub fn new(id: PermissionId, data: PermissionData) -> Result<Self> {
         let parsed = Permission::parse(format!("{}:{}", data.resource, data.action))?;
         let name = normalize_required_text(data.name, "权限名称不能为空", NAME_MAX_LEN, "权限名称过长")?;
@@ -163,13 +129,8 @@ impl PermissionDefinition {
     /// 复用 `new` 的校验规则；`resource:action` 与 `system` 是权限身份与
     /// 安全边界，不允许在通用更新中修改。
     ///
-    /// # 参数
-    /// * `update` - 更新数据
-    ///
-    /// # 返回
     /// 更新成功返回 `Ok(())`。
     ///
-    /// # 错误
     /// 当名称或描述校验失败时返回错误。
     pub fn update(&mut self, update: PermissionUpdate) -> Result<()> {
         if let Some(name) = update.name {
@@ -185,14 +146,8 @@ impl PermissionDefinition {
     }
 
     /// 校验权限定义是否允许删除。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 非系统权限时无返回值。
     ///
-    /// # 错误
     /// `system` 为真时返回业务错误，文案为「系统权限不能删除」。
     pub fn ensure_deletable(&self) -> Result<()> {
         if self.system {
@@ -212,7 +167,7 @@ mod tests {
         PermissionData::new(" SalesOrder", "APPROVE", " 销售单审批 ").with_description(" 审批销售单 ")
     }
 
-    /// happy path：resource:action 小写规范化，name/description trim。
+    // 验证resource:action 小写规范化，name/description 去除首尾空白。
     #[test]
     fn definition_preserves_document_shape_and_validates_decoded_permission() {
         let value = PermissionDefinition::new(PermissionId::new("p"), data()).unwrap();
@@ -236,14 +191,14 @@ mod tests {
         assert!(!permission.disabled);
     }
 
-    /// 失败路径：resource:action 非法（缺冒号）被拒。
+    // 验证resource:action 非法（缺冒号）时会被拒绝。
     #[test]
     fn new_rejects_malformed_resource_action() {
         let payload = PermissionData { action: "approve:extra".to_string(), ..data() };
         assert!(PermissionDefinition::new(PermissionId::new("perm-1"), payload).is_err());
     }
 
-    /// 失败路径：名称为空与超长被拒。
+    // 验证名称为空与超长时会被拒绝。
     #[test]
     fn new_rejects_blank_and_overlong_name() {
         let blank = PermissionData { name: "  ".to_string(), ..data() };
@@ -253,7 +208,7 @@ mod tests {
         assert!(PermissionDefinition::new(PermissionId::new("perm-2"), overlong).is_err());
     }
 
-    /// 更新：复用校验且不改关键字段。
+    // 验证：更新：复用校验且不改关键字段。
     #[test]
     fn update_applies_name_and_disabled_only() {
         let mut permission = PermissionDefinition::new(PermissionId::new("perm-1"), data()).unwrap();
@@ -276,7 +231,7 @@ mod tests {
         );
     }
 
-    /// 系统权限删除保护。
+    // 验证：系统权限删除保护。
     #[test]
     fn system_permission_is_not_deletable() {
         let system =
@@ -308,7 +263,7 @@ mod permission_parts {
         action: String,
     }
 
-    /// 按既有文档字段编码已验证权限。
+    // 落库时把已验证权限值拆回既有资源与动作字段，保持历史文档形状。
     pub(super) fn serialize<S: Serializer>(
         permission: &Permission,
         serializer: S,
@@ -316,7 +271,7 @@ mod permission_parts {
         Parts { resource: permission.resource().into(), action: permission.action().into() }
             .serialize(serializer)
     }
-    /// 将文档字段一次性解析为权限值对象。
+    // 读库时将既有资源与动作字段解析为同一个权限值对象，不保留未校验标识。
     pub(super) fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Permission, D::Error> {
         let parts = Parts::deserialize(deserializer)?;
         Permission::parse(format!("{}:{}", parts.resource, parts.action)).map_err(serde::de::Error::custom)

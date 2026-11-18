@@ -18,7 +18,7 @@ pub(super) struct SupplyImportInput {
 }
 
 impl SupplyImportInput {
-    /// 从联合模板读取供应商采购条款；空起订量默认为 1，税率以百分数填写。
+    // 从联合模板读取供应商采购条款；空起订量默认为 1，税率以百分数填写。
     pub(super) fn from_cells(cells: &[String], today: BusinessDate) -> Result<Self> {
         let cell = |index: usize| cells.get(index).map(|value| value.trim()).unwrap_or("");
         for (index, label) in [(13, "供应商编号"), (14, "供应商订货编码"), (15, "进项税率（%）")]
@@ -60,7 +60,7 @@ impl SupplyImportInput {
         })
     }
 
-    /// 为目标 SKU 构造供给命令，999 仅作为首次创建的可供数量。
+    // 为目标 SKU 构造供给命令，999 仅作为首次创建的可供数量。
     pub(super) fn request(&self, supplier_id: &str, sku_id: &str) -> CreateSupplierOfferingRequest {
         CreateSupplierOfferingRequest {
             sku_id: sku_id.to_string(),

@@ -13,18 +13,14 @@ pub trait PaymentRequestRestorationPort: Send + Sync {
     type Error: std::error::Error + Send + Sync;
 
     /// 在调用方事务内重验原付款申请，并恢复净付款、占用和任务责任。
+    /// 结果：原付款申请及其执行责任恢复成功时返回。
+    /// 失败条件：金额、来源、账户、版本或责任资格不一致时返回原财务错误。
     ///
-    /// # 参数
-    /// * `payment` - 原事务已经核验的付款事实。
-    /// * `allocations` - 原付款申请的精确分配。
-    /// * `actor` - 当前冲正操作人。
-    /// * `executor` - 冲正命令的同一执行器。
-    ///
-    /// # 返回
-    /// 原付款申请及其执行责任恢复成功时返回。
-    ///
-    /// # 错误
-    /// 金额、来源、账户、版本或责任资格不一致时返回原财务错误。
+    /// 输入约定：
+    /// - `payment`：原事务已经核验的付款事实。
+    /// - `allocations`：原付款申请的精确分配。
+    /// - `actor`：当前冲正操作人。
+    /// - `executor`：冲正命令的同一执行器。
     async fn restore(
         &self,
         payment: &SupplierPayment,

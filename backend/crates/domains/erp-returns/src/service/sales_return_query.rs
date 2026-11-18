@@ -19,13 +19,7 @@ pub struct SalesReturnQueryService {
     authorization: Arc<AuthorizationService>,
 }
 impl SalesReturnQueryService {
-    /// 绑定退货本域数据库与授权服务。
-    /// # 参数
-    /// db 为本域数据库，authorization 为组合根共享授权服务。
-    /// # 返回
-    /// 不缓存授权结果的单域查询服务。
-    /// # 错误
-    /// 无。
+    /// 装配使用退货库与共享授权服务的销售退货查询入口，不缓存请求级授权结果。
     pub fn new(db: Database, authorization: Arc<AuthorizationService>) -> Self {
         Self { db, authorization }
     }
@@ -39,17 +33,8 @@ type SalesReturnCaseFilter = <Database as ReturnsExt>::SalesReturnCaseFilter;
 impl SalesReturnQueryService {
     // -----------------------------------------------------------------------
 
-    /// 分页查询销售退货/拒收处理单列表。
-    ///
-    /// # 参数
-    /// * `actor` - 本次已认证账号，按固定列表入口检查功能资格。
-    /// * `params` - 查询参数（`return_no`/`sales_order_id`/`status` 扁平筛选）
-    ///
-    /// # 返回
-    /// 返回契约形状的分页视图。
-    ///
-    /// # 错误
-    /// 参数校验或排序白名单失败时返回 `ValidationError`。处理单或明细读取失败时返回对应错误。
+    /// 打开销售退货或拒收列表时，先在读取快照内检查固定列表权限，再按退货单号、销售单或状态筛选、计数并装配明细。
+    /// 参数或排序字段非法返回 `ValidationError`；授权、表头或明细读取失败时不交付页面。
     pub async fn sales_return_case_list(
         &self,
         actor: &AuditActor,
@@ -67,7 +52,7 @@ impl SalesReturnQueryService {
             .await
     }
 
-    /// 功能资格、分页计数及每条明细沿用调用方同一快照。
+    // 现有读取事务内先检查固定列表权限，再用同一快照完成筛选、分页计数与逐单明细装配。
     async fn sales_return_case_list_snapshot(
         &self,
         actor: &AuditActor,
@@ -99,19 +84,8 @@ impl SalesReturnQueryService {
         Ok(PageView { items: views, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
-    /// 查询销售退货/拒收处理单详情（处理单 + 明细行）。
-    ///
-    /// # 参数
-    /// * `actor` - 本次已认证账号，按固定详情入口检查功能资格。
-    /// * `id` - 处理单 ID
-    ///
-    /// # 返回
-    /// 返回完整处理单视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 处理单不存在
-    ///
-    /// 仓储读取失败时返回对应错误。
+    /// 按处理单 ID 打开销售退货或拒收详情时，固定详情权限、表头和明细读取共用一次快照。
+    /// 处理单不存在返回 `NotFound`，授权或读取失败时不交付视图。
     pub async fn sales_return_case_detail(
         &self,
         id: &str,
@@ -129,7 +103,7 @@ impl SalesReturnQueryService {
             .await
     }
 
-    /// 功能资格、处理单和明细沿用调用方同一快照。
+    // 详情快照先检查固定功能权限，再沿同一执行器读取处理单及其明细。
     async fn sales_return_case_detail_snapshot(
         &self,
         id: &str,
@@ -155,20 +129,8 @@ impl SalesReturnQueryService {
 }
 
 impl ReturnsService {
-    /// 调用方必须先完成所属命令授权，并传入原执行器。
-    /// 装配销售退货/拒收处理单视图。
-    ///
-    /// # 参数
-    /// * `executor` - 已完成所属命令授权的原读取或事务执行器。
-    /// * `id` - 处理单 ID
-    ///
-    /// # 返回
-    /// 返回完整处理单视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 处理单不存在
-    ///
-    /// 仓储读取失败时返回对应错误。
+    /// 给已完成所属命令授权的调用方装配销售退货或拒收的表头和明细；沿用原读取或写入执行器，本方法不另行授权。
+    /// 处理单不存在返回 `NotFound`，仓储失败返回对应错误。
     pub async fn load_sales_return_case_view(
         &self,
         id: &str,
@@ -223,7 +185,7 @@ mod tests {
 
     use super::*;
 
-    /// 授权设施故障必须中止原快照中的列表和详情，不继续读取业务集合。
+    // 验证授权设施故障必须中止原快照中的列表和详情，不继续读取业务集合。
     #[tokio::test]
     async fn authorization_failure_stops_list_and_detail_before_business_reads() {
         let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")

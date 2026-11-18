@@ -128,16 +128,7 @@ pub struct PreparedConfirmationCompletion {
 impl TryFrom<CompleteImportBusinessConfirmationCommand> for PreparedConfirmationCompletion {
     type Error = Error;
 
-    /// 从强类型命令构造已规范化的完成准备（INT-E24 纯转换）。
-    ///
-    /// # 参数
-    /// * `command` - 强类型完成命令
-    ///
-    /// # 返回
-    /// 返回动作矩阵已校验的准备。
-    ///
-    /// # 错误
-    /// 范围未注册、版本非法或动作专属原因矩阵非法时返回错误。
+    // 在完成确认前规范化范围、版本和文本。未登记范围、非法版本、退回缺原因或同意时传退回原因均拒绝，避免后续按无效决定更新任务。
     fn try_from(command: CompleteImportBusinessConfirmationCommand) -> Result<Self> {
         let decision = command.decision;
         let confirmation_scope = ConfirmationScope::parse(&decision.confirmation_scope)?.as_str().to_string();
@@ -207,16 +198,7 @@ pub struct LegacyImportConfirmationListQuery {
 }
 
 impl LegacyImportConfirmationListParams {
-    /// 归一化导入确认列表查询参数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    /// 将确认列表筛选和分页归一化为仓储无关的查询参数；排序字段不在白名单或方向非法时返回 `ValidationError`。
     pub fn normalized(&self) -> Result<LegacyImportConfirmationListQuery> {
         Ok(LegacyImportConfirmationListQuery {
             batch_id: self.batch_id.clone(),

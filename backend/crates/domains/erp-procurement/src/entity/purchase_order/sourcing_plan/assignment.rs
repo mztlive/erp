@@ -42,24 +42,15 @@ pub struct SourcingAssignment {
 impl SourcingAssignment {
     /// 由原始请求文本规范化并校验一条选源分配行。
     ///
-    /// # 参数
-    /// * `sales_order_line_id` - 稳定销售行原始文本
-    /// * `basis_id` - 精确创建依据原始文本
-    /// * `source_type` - 供给来源
-    /// * `target_warehouse_id` - 可选目标收货仓原始文本
-    /// * `quantity` - 本次分配数量原始文本
-    /// * `expected_delivery_date` - 预计交付日原始文本
+    /// 不做重复检查与排序，集合级规则由 [`SourcingAssignmentSet::normalize`]承担；现有库存的仓库由所选库存余额确定，不得由客户端指定。
     ///
-    /// # 返回
-    /// 返回去除首尾空白、可选目标仓已归一且数量与日期已类型化的选源行。
+    /// 返回去除首尾空白、可选目标仓已归一且数量与日期已类型化的选源行。销售行或依据空白、数量或预计交付日非法、现有库存另行指定目标仓、数量不大于零时返回领域错误。
     ///
-    /// # 错误
-    /// 销售行或依据空白、数量或预计交付日非法、现有库存另行指定目标仓、
-    /// 数量不大于零时返回领域错误。
-    ///
-    /// # 关键业务约束
-    /// 不做重复检查与排序，集合级规则由 [`SourcingAssignmentSet::normalize`]
-    /// 承担；现有库存的仓库由所选库存余额确定，不得由客户端指定。
+    /// - `sales_order_line_id`：稳定销售行原始文本。
+    /// - `basis_id`：精确创建依据原始文本。
+    /// - `target_warehouse_id`：可选目标收货仓原始文本。
+    /// - `quantity`：本次分配数量原始文本。
+    /// - `expected_delivery_date`：预计交付日原始文本。
     pub fn parse(
         sales_order_line_id: &str,
         basis_id: &str,
@@ -118,19 +109,10 @@ pub struct SourcingAssignmentSet {
 impl SourcingAssignmentSet {
     /// 校验并稳定排序选源分配集合。
     ///
-    /// # 参数
-    /// * `assignments` - 已逐行类型化的选源行
+    /// 同一稳定销售行可按不同依据拆分，但同一依据只能出现一次；排序与[`super::super::creation_basis::normalize_requested_lines`]
+    /// 同序，保证命令指纹与建单行序稳定。
     ///
-    /// # 返回
-    /// 返回同销售行同依据不重复且按销售行、依据升序排列的集合。
-    ///
-    /// # 错误
-    /// 同一稳定销售行重复使用同一依据时返回领域错误。
-    ///
-    /// # 关键业务约束
-    /// 同一稳定销售行可按不同依据拆分，但同一依据只能出现一次；排序与
-    /// [`super::super::creation_basis::normalize_requested_lines`] 同序，保证命令
-    /// 指纹与建单行序稳定。
+    /// 返回同销售行同依据不重复且按销售行、依据升序排列的集合。同一稳定销售行重复使用同一依据时返回领域错误。
     pub fn normalize(assignments: &[SourcingAssignment]) -> Result<Self> {
         let mut seen = HashSet::new();
         let mut normalized = Vec::with_capacity(assignments.len());
@@ -154,16 +136,7 @@ impl SourcingAssignmentSet {
         Ok(Self { assignments: normalized })
     }
 
-    /// 返回规范化后的逐行分配。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回已去重并稳定排序的选源行切片。
-    ///
-    /// # 错误
-    /// 无。
+    /// 借用去重并按稳定顺序排列的选源行，供拆单前逐行计算分配。
     pub fn assignments(&self) -> &[SourcingAssignment] {
         &self.assignments
     }

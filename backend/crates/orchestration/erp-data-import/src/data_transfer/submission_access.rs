@@ -11,13 +11,13 @@ use super::{BusinessTransfers, TransferHandler, TransferKind};
 use crate::{Error, Result};
 
 impl BusinessTransfers {
-    /// 私有读取先检查当前功能和真实业务目标，不把历史版本当作当前任务事实。
-    /// # 参数
-    /// kind、input 为保存的分类和业务引用，actor、executor 为当前身份及读取快照。
-    /// # 返回
-    /// 当前功能及可由轻量引用证明的业务目标均获授权时成功。
-    /// # 错误
-    /// 当前身份、功能、任务关系或业务目标资格失效时拒绝。
+    // 私有读取先检查当前功能和真实业务目标，不把历史版本当作当前任务事实。
+    //
+    // kind、input 为保存的分类和业务引用，actor、executor 为当前身份及读取快照。
+    //
+    // 当前功能及可由轻量引用证明的业务目标均获授权时成功。
+    //
+    // 当前身份、功能、任务关系或业务目标资格失效时拒绝。
     pub(super) async fn read_access(
         &self,
         kind: TransferKind,
@@ -53,13 +53,13 @@ impl BusinessTransfers {
         Ok(())
     }
 
-    /// 在文件归档后的登记事务中执行当前功能及实际目标检查。
-    /// # 参数
-    /// kind、input 为本次任务类型与业务参数，actor、executor 为当前身份及原事务。
-    /// # 返回
-    /// 当前资格和所属业务目标均允许时成功。
-    /// # 错误
-    /// 身份、权限、目标或版本不符时拒绝。
+    // 在文件归档后的登记事务中执行当前功能及实际目标检查。
+    //
+    // kind、input 为本次任务类型与业务参数，actor、executor 为当前身份及原事务。
+    //
+    // 当前资格和所属业务目标均允许时成功。
+    //
+    // 身份、权限、目标或版本不符时拒绝。
     pub(super) async fn submission_access(
         &self,
         kind: TransferKind,
@@ -81,7 +81,7 @@ impl BusinessTransfers {
         }
     }
 
-    /// 逐真实供给目标重验固定动作，批处理本身仍由原用例执行。
+    // 逐真实供给目标重验固定动作，批处理本身仍由原用例执行。
     async fn supply_submission(
         &self,
         input: &Value,
@@ -111,7 +111,7 @@ impl BusinessTransfers {
         Ok(())
     }
 
-    /// 固定采购任务身份和版本在登记快照内保持原询价资格。
+    // 固定采购任务身份和版本在登记快照内保持原询价资格。
     async fn quote_submission(
         &self,
         input: &Value,
@@ -136,13 +136,13 @@ impl BusinessTransfers {
     }
 }
 
-/// 公共流程只向原事务开放登记检查；接入缺失不能降为预检结果。
-/// # 参数
-/// handler 为已装配业务适配器，kind、input 为固定任务，actor、executor 为当前身份及登记事务。
-/// # 返回
-/// 业务在原事务授权通过时成功。
-/// # 错误
-/// 非快照执行器或业务授权失败时拒绝。
+// 公共流程只向原事务开放登记检查；接入缺失不能降为预检结果。
+//
+// handler 为已装配业务适配器，kind、input 为固定任务，actor、executor 为当前身份及登记事务。
+//
+// 业务在原事务授权通过时成功。
+//
+// 非快照执行器或业务授权失败时拒绝。
 pub(super) async fn authorize_registration(
     handler: &dyn TransferHandler,
     kind: TransferKind,

@@ -6,13 +6,14 @@ use persistence_core::{Executor, Result, aggregate, insert_literal_regex_filter}
 
 use crate::repository::PartyExt;
 
-/// 查询我方公司目录快照。
-/// # 参数
-/// `query` 为规范化条件，`executor` 为调用方执行器。
-/// # 返回
-/// 最多10001项轻量结果；服务层对超限整体拒绝。
-/// # 错误
-/// 数据库读取或反序列化失败时传播原始错误。
+// 查询我方公司目录快照。
+//
+// # 参数
+// `query` 为规范化条件，`executor` 为调用方执行器。
+//
+// 最多10001项轻量结果；服务层对超限整体拒绝。
+//
+// 数据库读取或反序列化失败时传播原始错误。
 pub(crate) async fn snapshot(
     db: &Database,
     query: &DirectoryQuery,
@@ -22,7 +23,7 @@ pub(crate) async fn snapshot(
     aggregate::rows(&collection, pipeline(query), executor).await
 }
 
-/// 在关联修订前筛选我方企业及回显 ID；停用主体保留供历史回显。
+// 在关联修订前筛选我方企业及回显 ID；停用主体保留供历史回显。
 fn pipeline(query: &DirectoryQuery) -> Vec<Document> {
     let mut filter = doc! { "deleted_at": 0 };
     filter.insert("party_kind", "enterprise");

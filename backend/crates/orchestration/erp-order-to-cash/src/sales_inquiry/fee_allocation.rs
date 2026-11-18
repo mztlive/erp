@@ -46,12 +46,7 @@ pub struct InquiryFeeSalesView {
 impl SalesInquiryProcess {
     /// 读取本询价生成的销售摘要，用于明确费用归属。
     ///
-    /// # 参数
-    /// `id` 为询价，`actor` 为当前具有询价详情资格的销售。
-    /// # 返回
-    /// 返回来源台账内销售的业务编号、状态和分摊资格。
-    /// # 错误
-    /// 询价越范围、账号失效或存储失败时拒绝。
+    /// `id` 为询价，`actor` 为当前具有询价详情资格的销售。返回来源台账内销售的业务编号、状态和分摊资格。询价越范围、账号失效或存储失败时拒绝。
     pub async fn fee_sales(&self, id: &str, actor: &AuditActor) -> Result<Vec<InquiryFeeSalesView>> {
         let this = self.clone();
         let id = id.to_owned();
@@ -64,7 +59,7 @@ impl SalesInquiryProcess {
             .await
     }
 
-    /// 询价授权与台账内销售摘要读取共用原快照。
+    // 询价授权与台账内销售摘要读取共用原快照。
     async fn fee_sales_stage(
         &self,
         id: &str,

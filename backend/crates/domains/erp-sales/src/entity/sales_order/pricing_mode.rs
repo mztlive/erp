@@ -19,43 +19,23 @@ pub enum SalesPricingMode {
 
 impl SalesPricingMode {
     /// 判断是否保留用户成交价。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 手工模式返回 `true`。
-    ///
-    /// # 错误
-    /// 无。
+    /// 结果：手工模式返回 `true`。
     pub fn is_manual(&self) -> bool {
         *self == Self::Manual
     }
 
     /// 判断是否为赠品明细。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 赠品模式返回 `true`。
-    ///
-    /// # 错误
-    /// 无。
+    /// 结果：赠品模式返回 `true`。
     pub fn is_gift(&self) -> bool {
         *self == Self::Gift
     }
 
     /// 校验成交单价与赠品标记一致：赠品必须为 0，非赠品必须大于 0。
-    ///
-    /// # 参数
-    /// * `unit_price_gross` - 含税成交单价
-    ///
-    /// # 返回
-    /// 一致时返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// 结果：一致时返回 `Ok(())`。
     /// 赠品单价不为 0，或非赠品单价不大于 0 时返回错误。
+    ///
+    /// 输入约定：
+    /// - `unit_price_gross`：含税成交单价
     pub fn ensure_price(&self, unit_price_gross: UnitPrice) -> Result<()> {
         let price = unit_price_gross.to_decimal();
         match (self.is_gift(), price.is_zero()) {
@@ -74,7 +54,7 @@ mod tests {
     use super::super::working_copy_test_support::line_data;
     use super::*;
 
-    /// 历史缺省模式使用手工价，并保持已有序列化及命令载荷形状。
+    // 回归检查：历史缺省模式使用手工价，并保持已有序列化及命令载荷形状。
     #[test]
     fn historical_goods_default_to_manual_without_serialization_drift() {
         let goods = line_data(1).goods.unwrap();

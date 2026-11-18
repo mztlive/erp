@@ -55,16 +55,7 @@ pub struct PurchaseReturnOrderFilter {
 }
 
 impl Default for PurchaseReturnOrderFilter {
-    /// 返回首页空筛选（`page: 1`，`page_size: 20`）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回筛选为空、降序的首页过滤条件。
-    ///
-    /// # 错误
-    /// 无。
+    // 初始化采购退货单筛选：第一页、每页 20 条，业务筛选默认留空，默认降序排序。
     fn default() -> Self {
         Self {
             purchase_return_no: None,
@@ -79,19 +70,8 @@ impl Default for PurchaseReturnOrderFilter {
 }
 
 impl QueryFilter for PurchaseReturnOrderFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// `purchase_return_no` 按字面量模糊匹配，来源采购单和状态按指定值精确匹配。
-    /// 此处只构造业务筛选，授权由读取入口的完整来源查询执行。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 转换为 MongoDB 查询条件（自动追加未删除过滤）。
+    // `purchase_return_no` 按字面量模糊匹配，来源采购单和状态按指定值精确匹配。此处只构造业务筛选，授权由读取入口的完整来源查询执行。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_literal_regex_filter(&mut filter, "purchase_return_no", self.purchase_return_no.as_deref());
@@ -106,18 +86,8 @@ impl QueryFilter for PurchaseReturnOrderFilter {
 }
 
 impl Pagination for PurchaseReturnOrderFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// 不修正 `page`；`page_size` 由 `u32` 转为 `u64`。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 向仓储分页传递页码与单页条数。
+    // 不修正 `page`；`page_size` 由 `u32` 转为 `u64`。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -127,19 +97,10 @@ impl Pagination for PurchaseReturnOrderFilter {
 #[allow(async_fn_in_trait)]
 pub trait PurchaseReturnOrderRepositoryExt {
     /// 分页检索采购退货单列表（投影查询）。
-    ///
-    /// 只返回 [`PurchaseReturnOrderRow`] 所需的列表字段；采购退货单号支持
-    /// 字面量模糊匹配。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
+    /// 只返回 [`PurchaseReturnOrderRow`] 所需的列表字段；采购退货单号支持字面量模糊匹配。
     /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// 沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询、游标读取或计数错误。
     async fn search_purchase_return_orders(
         &self,
         filter: &PurchaseReturnOrderFilter,
@@ -147,18 +108,9 @@ pub trait PurchaseReturnOrderRepositoryExt {
     ) -> Result<PageResult<PurchaseReturnOrderRow>>;
 
     /// 装载采购退货查询的有界身份与版本集合，用于跨页一致性校验。
-    ///
-    /// # 参数
-    /// * `filter` - 与列表相同的筛选
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
     /// 最多 10001 行主键与版本；调用方必须整体拒绝超限。
-    ///
-    /// # 错误
+    /// `filter` 为与列表相同的筛选；沿用调用方执行器 `executor`。
     /// 数据库读取失败时返回仓储错误。
-    ///
-    /// # 关键业务约束
     /// 版本集合必须与列表同一授权条件和筛选快照。
     async fn query_purchase_return_versions(
         &self,
@@ -215,16 +167,9 @@ pub struct PurchaseReturnVersion {
 #[allow(async_fn_in_trait)]
 pub trait PurchaseReturnLineRepositoryExt {
     /// 批量按退货单集合取回明细（`$in` 一次取回，禁止 N+1）。
-    ///
-    /// # 参数
-    /// * `order_ids` - 采购退货单 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回全部匹配明细。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// `order_ids` 为采购退货单 ID 集合；沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询或游标读取错误。
     async fn find_lines_by_orders(
         &self,
         order_ids: &[PurchaseReturnOrderId],
@@ -246,10 +191,7 @@ impl PurchaseReturnLineRepositoryExt for Repository<'_, PurchaseReturnLine> {
     }
 }
 
-/// 采购退货单列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
+// 采购退货单列表投影字段。
 fn purchase_return_order_projection() -> Document {
     doc! {
         "id": 1,

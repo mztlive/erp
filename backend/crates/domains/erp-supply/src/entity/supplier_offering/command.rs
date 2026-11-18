@@ -45,15 +45,7 @@ pub struct SupplierOfferingCommand {
 
 impl SupplierOfferingCommand {
     /// 创建已成功命令的去重记录。
-    ///
-    /// # 参数
-    /// * `id` - 命令主键
-    /// * `data` - 命令内容
-    ///
-    /// # 返回
     /// 返回规范化后的命令记录。
-    ///
-    /// # 错误
     /// 字段为空或超过合同长度、请求指纹格式非法时返回错误。
     pub fn new(id: impl Into<String>, data: SupplierOfferingCommandData) -> Result<Self> {
         let idempotency_key = normalize_required_text(
@@ -85,22 +77,10 @@ impl SupplierOfferingCommand {
     }
 
     /// 创建带序列化成功结果的命令去重记录。
-    ///
-    /// # 参数
-    /// * `id` - 命令主键
-    /// * `idempotency_key` - 客户端生成的幂等键
-    /// * `operation` - 稳定操作名
-    /// * `request_fingerprint` - 当前请求指纹（接受 `sha256-v1:<hex>` 或历史裸 `64hex`）
-    /// * `result` - 与请求同构的成功响应
-    ///
-    /// # 返回
     /// 返回把 `result` 序列化为 `result_json` 后的规范化命令记录。
-    ///
-    /// # 错误
     /// 字段为空或超过合同长度、指纹格式非法或结果序列化失败时返回错误。
-    ///
-    /// # 约束
     /// 纯内存序列化与规范化，不触及 MongoDB 或时钟；命令主键由 Service 注入。
+    /// `idempotency_key`：客户端生成的幂等键。
     pub fn with_result<T: Serialize>(
         id: impl Into<String>,
         idempotency_key: impl Into<String>,
@@ -120,21 +100,11 @@ impl SupplierOfferingCommand {
         )
     }
 
-    /// 校验幂等重放的操作与指纹一致性。
-    ///
-    /// # 参数
-    /// * `operation` - 期望操作名（如 `create_offering`）
-    /// * `request_fingerprint` - 当前请求指纹（接受 `sha256-v1:<hex>` 或历史裸 `64hex`）
-    ///
-    /// # 返回
+    /// 核对幂等重放的操作与指纹一致性。
     /// 操作与指纹均一致时返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 操作或指纹任一不一致时返回校验错误。
-    ///
-    /// # 约束
-    /// 纯内存校验，不触及 MongoDB 或时钟；指纹按摘要兼容比较（前缀与大小写不敏感），
-    /// 存量裸摘要命令可继续重放。
+    /// 纯内存校验，不触及 MongoDB 或时钟；指纹按摘要兼容比较（前缀与大小写不敏感），存量裸摘要命令可继续
+    /// 重放。
     pub fn ensure_replayable(&self, operation: &str, request_fingerprint: &str) -> Result<()> {
         if self.operation != operation || !fingerprints_match(&self.request_fingerprint, request_fingerprint)
         {
@@ -144,44 +114,23 @@ impl SupplierOfferingCommand {
     }
 
     /// 解码已持久化的成功响应结果。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回与存储 JSON 同构的强类型结果。
-    ///
-    /// # 错误
     /// 存储结果 JSON 非法时返回稳定的内部错误。
-    ///
-    /// # 约束
     /// 纯内存反序列化，不触及 MongoDB；结果类型由调用方（Service View）指定。
     pub fn replay_result<T: DeserializeOwned>(&self) -> Result<T> {
         serde_json::from_str(&self.result_json).map_err(|_| Error::from("供给命令结果反序列化失败"))
     }
 }
 
-/// 提取指纹摘要部分，兼容 `sha256-v1:` 前缀与历史裸摘要。
-///
-/// # 参数
-/// * `value` - 完整指纹字符串
-///
-/// # 返回
-/// 返回小写摘要切片；非法格式由外层校验失败。
+// 提取指纹摘要部分，兼容 `sha256-v1:` 前缀与历史裸摘要。
+// 返回小写摘要切片；非法格式由外层校验失败。
 fn fingerprint_digest(value: &str) -> &str {
     value.strip_prefix(FINGERPRINT_V1_PREFIX).unwrap_or(value)
 }
 
-/// 校验指纹格式：接受 `sha256-v1:<64hex>` 或历史裸 `64hex`。
-///
-/// # 参数
-/// * `value` - 待校验指纹
-///
-/// # 返回
-/// 格式合法返回 `Ok(())`。
-///
-/// # 错误
-/// 非法长度、非十六进制或空白时返回错误。
+// 校验指纹格式：接受 `sha256-v1:<64hex>` 或历史裸 `64hex`。
+// 格式合法返回 `Ok(())`。
+// 非法长度、非十六进制或空白时返回错误。
 fn validate_fingerprint_format(value: &str) -> Result<()> {
     let digest = fingerprint_digest(value.trim());
     if digest.len() != FINGERPRINT_HEX_LEN
@@ -193,14 +142,8 @@ fn validate_fingerprint_format(value: &str) -> Result<()> {
     Ok(())
 }
 
-/// 指纹按摘要兼容比较，前缀与大小写不敏感。
-///
-/// # 参数
-/// * `a` - 已持久化指纹
-/// * `b` - 当前请求指纹
-///
-/// # 返回
-/// 摘要一致返回 `true`。
+// 指纹按摘要兼容比较，前缀与大小写不敏感。
+// 摘要一致返回 `true`。
 fn fingerprints_match(a: &str, b: &str) -> bool {
     fingerprint_digest(a).eq_ignore_ascii_case(fingerprint_digest(b))
         && validate_fingerprint_format(a).is_ok()
@@ -241,7 +184,7 @@ mod tests {
         assert!(SupplierOfferingCommand::new("command-2", invalid).is_err());
     }
 
-    /// 覆盖重放一致性：同键同操作同载荷可重放，操作或指纹任一不同必须冲突。
+    // 验证同键同操作同载荷可重放，操作或指纹任一不同必须冲突。
     #[test]
     fn replay_is_bound_to_operation_and_fingerprint() {
         let command = command_with(ZERO_DIGEST);
@@ -251,7 +194,7 @@ mod tests {
         assert!(command.ensure_replayable("create_offering", "bad-fingerprint").is_err());
     }
 
-    /// 覆盖指纹格式校验：非法长度、非十六进制或空白拒绝。
+    // 验证非法长度、非十六进制或空白拒绝。
     #[test]
     fn fingerprint_format_rejects_invalid() {
         let bad = SupplierOfferingCommandData {
@@ -267,7 +210,7 @@ mod tests {
         assert!(SupplierOfferingCommand::new("bad-2", short).is_err());
     }
 
-    /// 覆盖结果序列化与重放解码：写入的 `result_json` 与输入同构，解码后可完整还原。
+    // 验证写入的 `result_json` 与输入同构，解码后可完整还原。
     #[test]
     fn with_result_serializes_and_replays_roundtrip() {
         #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -288,7 +231,7 @@ mod tests {
         assert_eq!(command.replay_result::<OfferingResult>().unwrap(), expected);
     }
 
-    /// 覆盖坏结果 JSON：存储结果非法时返回稳定内部错误而非 panic。
+    // 验证存储结果非法时返回稳定内部错误而非 panic。
     #[test]
     fn replay_result_rejects_bad_json_with_stable_error() {
         let command = SupplierOfferingCommand::new(
@@ -305,7 +248,7 @@ mod tests {
         assert_eq!(error.to_string(), "供给命令结果反序列化失败");
     }
 
-    /// 覆盖结果序列化失败：不可序列化结果返回稳定错误，不生成部分命令记录。
+    // 验证不可序列化结果返回稳定错误，不生成部分命令记录。
     #[test]
     fn with_result_serialization_failure_is_stable() {
         struct FailingSerialize;

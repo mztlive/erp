@@ -53,30 +53,17 @@ pub struct GeneratedPackage {
 
 impl GeneratedPackage {
     /// 返回组合去重键。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回成员稳定 SKU 身份以 `|` 连接的升序键。
-    ///
-    /// # 错误
-    /// 无。
     pub fn combination_key(&self) -> String {
         combination_key(self.members.iter().map(|item| item.sku_id_str()))
     }
 }
 
 /// 计算组合去重键。
+/// 结果：排序后连接的键。同一集合无论顺序均为同一键。
 ///
-/// # 参数
-/// * `sku_ids` - 成员稳定身份
-///
-/// # 返回
-/// 排序后连接的键。同一集合无论顺序均为同一键。
-///
-/// # 错误
-/// 无。
+/// 输入约定：
+/// - `sku_ids`：成员稳定身份
 pub fn combination_key<'a, I>(sku_ids: I) -> String
 where
     I: IntoIterator<Item = &'a str>,
@@ -87,19 +74,15 @@ where
 }
 
 /// 按档位顺序搜索套餐。
-///
-/// # 参数
-/// * `pool` - 已按稳定 SKU 身份升序的商品池
-/// * `tiers` - 创建顺序的档位
-/// * `occupied` - 其他档已占用的组合
-/// * `generator` - 套餐图生成端口
-/// * `seed` - 搜索种子；P0 算法确定，种子只记录
-///
-/// # 返回
 /// 返回可交付套餐与逐档报告。任一档 0 套时返回错误，调用方不得提交部分新结果。
-///
-/// # 错误
 /// 池为空、SKU 数超过池大小、某档 0 套、金额溢出，或可交付套餐超过 200 时失败。
+///
+/// 输入约定：
+/// - `pool`：已按稳定 SKU 身份升序的商品池
+/// - `tiers`：创建顺序的档位
+/// - `occupied`：其他档已占用的组合
+/// - `generator`：套餐图生成端口
+/// - `seed`：搜索种子；P0 算法确定，种子只记录
 pub fn search_packages(
     pool: &[SkuSnapshot],
     tiers: &[TierRule],
@@ -135,7 +118,7 @@ pub fn search_packages(
     Ok((packages, reports))
 }
 
-/// 区分金额无解和已找到组合但主图失败，返回可执行的修正提示。
+// 某档未能产出陈列时给出可操作提示，区分预算内没有组合与找到组合却缺少可用主图。
 fn empty_tier_error(pool: &[SkuSnapshot], tier: &TierRule, report: &TierSearchReport) -> Error {
     let reason = if report.image_failures > 0 {
         let missing = pool
@@ -159,20 +142,16 @@ fn empty_tier_error(pool: &[SkuSnapshot], tier: &TierRule, report: &TierSearchRe
     Error::from(format!("档位「{}」准备失败：{reason}；原陈列保持不变", tier.name))
 }
 
-/// 搜索一档。
-///
-/// # 参数
-/// * `pool` - 商品池
-/// * `tier` - 档位规则
-/// * `occupied` - 已占用组合
-/// * `generator` - 图片端口
-/// * `seed` - 搜索种子
-///
-/// # 返回
-/// 返回本档可交付套餐与报告。允许不足期望数量。
-///
-/// # 错误
-/// 金额溢出时失败。
+// 搜索一档。
+// 返回本档可交付套餐与报告。允许不足期望数量。
+// 金额溢出时失败。
+//
+// 输入约定：
+// - `pool`：商品池
+// - `tier`：档位规则
+// - `occupied`：已占用组合
+// - `generator`：图片端口
+// - `seed`：搜索种子
 fn search_one_tier(
     pool: &[SkuSnapshot],
     tier: &TierRule,
@@ -274,21 +253,17 @@ struct DfsProgress {
     candidates: Vec<Vec<usize>>,
 }
 
-/// 深度优先搜索合法组合。
-///
-/// # 参数
-/// * `scope` - 共享只读上下文
-/// * `progress` - 可变进度
-/// * `remaining` - 仍需挑选的成员数
-/// * `start` - 下一个可取下标
-/// * `sum` - 已选售价之和
-/// * `chosen` - 已选下标
-///
-/// # 返回
-/// 预算内收集候选。
-///
-/// # 错误
-/// 金额溢出时失败。
+// 深度优先搜索合法组合。
+// 结果：预算内收集候选。
+// 金额溢出时失败。
+//
+// 输入约定：
+// - `scope`：共享只读上下文
+// - `progress`：可变进度
+// - `remaining`：仍需挑选的成员数
+// - `start`：下一个可取下标
+// - `sum`：已选售价之和
+// - `chosen`：已选下标
 fn dfs_collect(
     scope: &DfsScope<'_>,
     progress: &mut DfsProgress,
@@ -339,21 +314,17 @@ fn dfs_collect(
     Ok(())
 }
 
-/// 记录一个完整合法候选。
-///
-/// # 参数
-/// * `pool` - 商品池
-/// * `chosen` - 成员下标
-/// * `tier` - 档位
-/// * `occupied` - 已占用组合
-/// * `sum` - 售价
-/// * `candidates` - 输出
-///
-/// # 返回
-/// 合法且未占用时写入候选。
-///
-/// # 错误
-/// 区间上界溢出时失败。
+// 记录一个完整合法候选。
+// 结果：合法且未占用时写入候选。
+// 区间上界溢出时失败。
+//
+// 输入约定：
+// - `pool`：商品池
+// - `chosen`：成员下标
+// - `tier`：档位
+// - `occupied`：已占用组合
+// - `sum`：售价
+// - `candidates`：输出
 fn record_complete_candidate(
     pool: &[SkuSnapshot],
     chosen: &[usize],
@@ -373,20 +344,16 @@ fn record_complete_candidate(
     Ok(())
 }
 
-/// 用后缀最小/最大金额判断是否还能落入容差。
-///
-/// # 参数
-/// * `pool` - 商品池，调用方按 sku_id 排序；本函数按价格取后缀极值
-/// * `start` - 剩余起点
-/// * `remaining` - 仍需件数
-/// * `sum` - 已选金额
-/// * `tier` - 档位
-///
-/// # 返回
-/// 仍可能落入区间时返回 `true`。
-///
-/// # 错误
-/// 金额溢出时失败。
+// 用后缀最小/最大金额判断是否还能落入容差。
+// 结果：仍可能落入区间时返回 `true`。
+// 金额溢出时失败。
+//
+// 输入约定：
+// - `pool`：商品池，调用方按 sku_id 排序；本函数按价格取后缀极值
+// - `start`：剩余起点
+// - `remaining`：仍需件数
+// - `sum`：已选金额
+// - `tier`：档位
 fn can_still_hit_range(
     pool: &[SkuSnapshot],
     start: usize,
@@ -413,19 +380,15 @@ fn can_still_hit_range(
     Ok(max_total >= lower && min_total <= upper)
 }
 
-/// 把候选下标物化为带封面的套餐。
-///
-/// # 参数
-/// * `pool` - 商品池
-/// * `indexes` - 成员下标
-/// * `tier` - 档位
-/// * `generator` - 图片端口
-///
-/// # 返回
-/// 返回成员按 sku_id 升序、已写入主图的套餐。
-///
-/// # 错误
-/// 图片端口失败或金额溢出时拒绝该套餐。
+// 把候选下标物化为带封面的套餐。
+// 返回成员按 sku_id 升序、已写入主图的套餐。
+// 失败条件：图片端口失败或金额溢出时拒绝该套餐。
+//
+// 输入约定：
+// - `pool`：商品池
+// - `indexes`：成员下标
+// - `tier`：档位
+// - `generator`：图片端口
 fn materialize_package(
     pool: &[SkuSnapshot],
     indexes: &[usize],
@@ -446,18 +409,14 @@ fn materialize_package(
     Ok(GeneratedPackage { tier_id: tier.tier_id.clone(), members, price, cover })
 }
 
-/// 把端口输出 URL 映射回成员快照资产。
-///
-/// # 参数
-/// * `members` - 已排序成员
-/// * `cover_url` - 端口输出
-/// * `version` - 实现版本
-///
-/// # 返回
-/// 返回套餐主图引用。
-///
-/// # 错误
-/// 输出无法对应到成员资产时拒绝，防止绕过端口直接写 SKU 主图字段。
+// 把端口输出 URL 映射回成员快照资产。
+// 返回套餐主图引用。
+// 失败条件：输出无法对应到成员资产时拒绝，防止绕过端口直接写 SKU 主图字段。
+//
+// 输入约定：
+// - `members`：已排序成员
+// - `cover_url`：端口输出
+// - `version`：实现版本
 fn cover_from_port_url(members: &[SkuSnapshot], cover_url: &str, version: &str) -> Result<PackageCoverRef> {
     let matched = members.iter().find_map(|member| {
         let url = member.image_port_url()?;
@@ -472,19 +431,14 @@ fn cover_from_port_url(members: &[SkuSnapshot], cover_url: &str, version: &str) 
     )
 }
 
-/// 偏好排序。
-///
-/// # 参数
-/// * `left` / `right` - 成员下标
-/// * `accepted` - 本档已接纳套餐的组合键
-/// * `target` - 目标金额
-/// * `pool` - 商品池
-///
-/// # 返回
-/// 按重复 SPU、分类种类、重合、差额、SKU 序列排序。
-///
-/// # 错误
-/// 无。
+// 偏好排序。
+// 结果：按重复 SPU、分类种类、重合、差额、SKU 序列排序。
+//
+// 输入约定：
+// - `left` / `right`：成员下标
+// - `accepted`：本档已接纳套餐的组合键
+// - `target`：目标金额
+// - `pool`：商品池
 fn compare_preference(
     left: &[usize],
     right: &[usize],
@@ -502,17 +456,12 @@ fn compare_preference(
         .then_with(|| sku_id_seq(left, pool).cmp(&sku_id_seq(right, pool)))
 }
 
-/// 计算重复 SPU 成员数。
-///
-/// # 参数
-/// * `indexes` - 成员下标
-/// * `pool` - 商品池
-///
-/// # 返回
-/// 返回 `sum(count - 1)`，同 SPU 只出现一次则为 0。
-///
-/// # 错误
-/// 无。
+// 计算重复 SPU 成员数。
+// 返回 `sum(count - 1)`，同 SPU 只出现一次则为 0。
+//
+// 输入约定：
+// - `indexes`：成员下标
+// - `pool`：商品池
 fn duplicate_spu_count(indexes: &[usize], pool: &[SkuSnapshot]) -> u32 {
     let mut counts = std::collections::BTreeMap::<&str, u32>::new();
     for index in indexes {
@@ -521,35 +470,25 @@ fn duplicate_spu_count(indexes: &[usize], pool: &[SkuSnapshot]) -> u32 {
     counts.values().map(|count| count.saturating_sub(1)).sum()
 }
 
-/// 计算已知分类种类。
-///
-/// # 参数
-/// * `indexes` - 成员下标
-/// * `pool` - 商品池
-///
-/// # 返回
-/// 缺失分类不计为一个新分类。
-///
-/// # 错误
-/// 无。
+// 计算已知分类种类。
+// 结果：缺失分类不计为一个新分类。
+//
+// 输入约定：
+// - `indexes`：成员下标
+// - `pool`：商品池
 fn known_category_count(indexes: &[usize], pool: &[SkuSnapshot]) -> u32 {
     let set: BTreeSet<&str> =
         indexes.iter().filter_map(|index| pool[*index].category_id.as_deref()).collect();
     u32::try_from(set.len()).unwrap_or(0)
 }
 
-/// 与已接纳套餐的最大 SKU 重合数。
-///
-/// # 参数
-/// * `indexes` - 成员下标
-/// * `accepted` - 已接纳组合键
-/// * `pool` - 商品池
-///
-/// # 返回
-/// 尚无套餐时返回 0。
-///
-/// # 错误
-/// 无。
+// 与已接纳套餐的最大 SKU 重合数。
+// 结果：尚无套餐时返回 0。
+//
+// 输入约定：
+// - `indexes`：成员下标
+// - `accepted`：已接纳组合键
+// - `pool`：商品池
 fn max_overlap(indexes: &[usize], accepted: &[String], pool: &[SkuSnapshot]) -> u32 {
     if accepted.is_empty() {
         return 0;
@@ -562,50 +501,35 @@ fn max_overlap(indexes: &[usize], accepted: &[String], pool: &[SkuSnapshot]) -> 
         .unwrap_or(0) as u32
 }
 
-/// 候选售价。
-///
-/// # 参数
-/// * `indexes` - 成员下标
-/// * `pool` - 商品池
-///
-/// # 返回
-/// 返回成员售价之和；合计失败时返回零。
-///
-/// # 错误
-/// 无。
+// 候选售价。
+// 返回成员售价之和；合计失败时返回零。
+//
+// 输入约定：
+// - `indexes`：成员下标
+// - `pool`：商品池
 fn index_price(indexes: &[usize], pool: &[SkuSnapshot]) -> Amount {
     super::pricing::try_sum(indexes.iter().map(|index| pool[*index].sales_visible_price_gross))
         .unwrap_or(Amount::zero())
 }
 
-/// 成员 SKU 身份序列。
-///
-/// # 参数
-/// * `indexes` - 成员下标
-/// * `pool` - 商品池
-///
-/// # 返回
-/// 返回升序身份向量。
-///
-/// # 错误
-/// 无。
+// 成员 SKU 身份序列。
+// 返回升序身份向量。
+//
+// 输入约定：
+// - `indexes`：成员下标
+// - `pool`：商品池
 fn sku_id_seq(indexes: &[usize], pool: &[SkuSnapshot]) -> Vec<String> {
     let mut ids: Vec<String> = indexes.iter().map(|index| pool[*index].sku_id_str().to_string()).collect();
     ids.sort();
     ids
 }
 
-/// 从已接纳套餐取成员下标。
-///
-/// # 参数
-/// * `pool` - 商品池
-/// * `package` - 套餐
-///
-/// # 返回
-/// 返回成员在池中的下标。
-///
-/// # 错误
-/// 无。
+// 从已接纳套餐取成员下标。
+// 返回成员在池中的下标。
+//
+// 输入约定：
+// - `pool`：商品池
+// - `package`：套餐
 fn member_indexes(pool: &[SkuSnapshot], package: &GeneratedPackage) -> Vec<usize> {
     package
         .members
@@ -614,19 +538,14 @@ fn member_indexes(pool: &[SkuSnapshot], package: &GeneratedPackage) -> Vec<usize
         .collect()
 }
 
-/// 按已接纳集合重新择优直到达到期望数量。
-///
-/// # 参数
-/// * `accepted` - 已通过图片的套餐
-/// * `pool` - 商品池
-/// * `target` - 目标金额
-/// * `expected` - 期望数量
-///
-/// # 返回
-/// 返回择优后的有序列表。
-///
-/// # 错误
-/// 无。
+// 按已接纳集合重新择优直到达到期望数量。
+// 返回择优后的有序列表。
+//
+// 输入约定：
+// - `accepted`：已通过图片的套餐
+// - `pool`：商品池
+// - `target`：目标金额
+// - `expected`：期望数量
 fn rerank_accepted(
     accepted: Vec<GeneratedPackage>,
     pool: &[SkuSnapshot],

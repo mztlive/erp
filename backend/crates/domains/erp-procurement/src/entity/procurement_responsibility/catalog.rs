@@ -43,17 +43,11 @@ pub struct ProcurementCatalogBundle {
 
 /// 提取全部商品当前修订 ID。
 ///
-/// # 参数
-/// * `products` - 商品稳定 ID 到商品实体的映射
-///
-/// # 返回
-/// 返回去重后按字典序稳定排序的当前商品修订 ID 集合。
-///
-/// # 错误
-/// 任一商品缺少 `current_revision_id` 时返回 `LogicError`。
-///
-/// # 约束
 /// 去重后按 ID 字符串字典序稳定排序，满足确定性顺序；不依赖 HashMap 迭代随机性。
+///
+/// 返回去重后按字典序稳定排序的当前商品修订 ID 集合。任一商品缺少 `current_revision_id` 时返回 `LogicError`。
+///
+/// `products` 为商品稳定 ID 到商品实体的映射。
 pub fn current_revision_ids(products: &HashMap<String, Product>) -> Result<Vec<ProductRevisionId>> {
     let mut products: Vec<_> = products.iter().collect();
     products.sort_by_key(|(key, _)| *key);
@@ -74,21 +68,15 @@ pub fn current_revision_ids(products: &HashMap<String, Product>) -> Result<Vec<P
 
 /// 由批量目录映射构造每行解析事实。
 ///
-/// # 参数
-/// * `inputs` - 已校验的采购责任解析行
-/// * `skus` - SKU ID 到稳定 SKU 的映射
-/// * `products` - 商品 ID 到稳定商品的映射
-/// * `revisions` - 商品修订 ID 到当前修订的映射
-/// * `categories` - 当前分类与父分类的完整映射
-///
-/// # 返回
-/// 返回行键到分类链和商品类型事实的映射。
-///
-/// # 错误
-/// SKU、商品、当前修订或修订映射缺失时返回 `LogicError`；分类缺失或成环时返回 `category_chain` 的错误。
-///
-/// # 约束
 /// 结果以输入行键为键保持确定性；分类链顺序从当前分类到根，不依赖输入乱序。
+///
+/// 返回行键到分类链和商品类型事实的映射。SKU、商品、当前修订或修订映射缺失时返回 `LogicError`；分类缺失或成环时返回 `category_chain` 的错误。
+///
+/// - `inputs`：已校验的采购责任解析行。
+/// - `skus`：SKU ID 到稳定 SKU 的映射。
+/// - `products`：商品 ID 到稳定商品的映射。
+/// - `revisions`：商品修订 ID 到当前修订的映射。
+/// - `categories`：当前分类与父分类的完整映射。
 pub fn build_catalog_facts(
     inputs: &[ProcurementResponsibilityResolutionLine],
     skus: &HashMap<String, Sku>,
@@ -124,18 +112,12 @@ pub fn build_catalog_facts(
 
 /// 构造当前分类到根分类的有序链并检测环。
 ///
-/// # 参数
-/// * `first` - 商品当前修订直接引用的分类
-/// * `categories` - 当前分类与全部父分类映射
-///
-/// # 返回
-/// 返回从当前分类到根分类的有序强类型 ID 链，顺序固定为自底向上。
-///
-/// # 错误
-/// 分类不在 `categories` 中，或父级自环、多节点环时，均返回 `LogicError`。
-///
-/// # 约束
 /// 环检测使用访问集合，去重键为分类 ID 字符串；链内不得出现重复。
+///
+/// 返回从当前分类到根分类的有序强类型 ID 链，顺序固定为自底向上。分类不在 `categories` 中，或父级自环、多节点环时，均返回 `LogicError`。
+///
+/// - `first`：商品当前修订直接引用的分类。
+/// - `categories`：当前分类与全部父分类映射。
 pub fn category_chain(
     first: &ProductCategoryId,
     categories: &HashMap<String, ProductCategory>,
@@ -158,17 +140,11 @@ pub fn category_chain(
 
 /// 对强类型目录 ID 去重并按字典序稳定排序，供目录查询与仓储复用。
 ///
-/// # 参数
-/// * `values` - 待去重的强类型 ID 迭代器
+/// 去重后按字符串字典序排序，避免 HashMap 随机迭代导致结果不确定。
 ///
-/// # 返回
 /// 返回按 ID 字符串字典序稳定排序的唯一值集合，满足确定性。
 ///
-/// # 错误
-/// 无。
-///
-/// # 约束
-/// 去重后按字符串字典序排序，避免 HashMap 随机迭代导致结果不确定。
+/// `values` 为待去重的强类型 ID 迭代器。
 pub fn dedup_sorted_ids<T>(values: impl Iterator<Item = T>) -> Vec<T>
 where
     T: PartialEq + ToString,

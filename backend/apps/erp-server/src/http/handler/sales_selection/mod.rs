@@ -47,13 +47,8 @@ fn process(state: &HttpState) -> SalesSelectionProcess {
     )
 }
 
-/// 为只读入口复用当前选品范围与目录 Port。
-/// # 参数
-/// state 为当前 HTTP 应用状态。
-/// # 返回
-/// 只读选品册及方案查询服务。
-/// # 错误
-/// 构造不执行 I/O。
+// 为只读入口复用当前选品范围与目录 Port。
+// 只读选品册及方案查询服务。
 fn read_service(state: &HttpState) -> SalesSelectionReadService {
     let services = sales_services(
         state.application().db(),
@@ -67,14 +62,7 @@ fn read_service(state: &HttpState) -> SalesSelectionReadService {
     )
 }
 
-/// 查询选品册列表。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `params` - 筛选
-///
-/// # 返回
-/// 返回分页。
+/// 按请求条件查询选品册列表。
 pub async fn booklet_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -84,13 +72,6 @@ pub async fn booklet_list(
 }
 
 /// 查询选品册详情。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `id` - 选品册
-///
-/// # 返回
-/// 返回详情。
 pub async fn booklet_detail(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -101,13 +82,6 @@ pub async fn booklet_detail(
 }
 
 /// 创建选品册并排队首次准备。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 操作人
-/// * `req` - 创建请求
-///
-/// # 返回
 /// 返回准备中详情。
 pub async fn booklet_create(
     State(state): State<HttpState>,
@@ -118,14 +92,6 @@ pub async fn booklet_create(
 }
 
 /// 启动准备。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 操作人
-/// * `id` - 选品册
-/// * `req` - 准备请求
-///
-/// # 返回
 /// 返回准备中详情。
 pub async fn booklet_prepare(
     State(state): State<HttpState>,
@@ -137,15 +103,6 @@ pub async fn booklet_prepare(
 }
 
 /// 删除陈列项。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 操作人
-/// * `ids` - 册与项
-/// * `req` - 版本
-///
-/// # 返回
-/// 返回详情。
 pub async fn booklet_delete_item(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -156,15 +113,6 @@ pub async fn booklet_delete_item(
 }
 
 /// 删除陈列项（POST 兼容路径）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 操作人
-/// * `ids` - 册与项
-/// * `req` - 版本
-///
-/// # 返回
-/// 返回详情。
 pub async fn booklet_delete_item_post(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -175,14 +123,6 @@ pub async fn booklet_delete_item_post(
 }
 
 /// 发布选品册。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 发布人
-/// * `id` - 选品册
-/// * `req` - 发布请求
-///
-/// # 返回
 /// 返回含链接的详情。
 pub async fn booklet_publish(
     State(state): State<HttpState>,
@@ -194,12 +134,6 @@ pub async fn booklet_publish(
 }
 
 /// 复制当前链接。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `id` - 选品册
-///
-/// # 返回
 /// 返回含路径的详情。
 pub async fn booklet_copy_link(
     State(state): State<HttpState>,
@@ -210,12 +144,6 @@ pub async fn booklet_copy_link(
 }
 
 /// 复制当前链接相对地址。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `id` - 选品册
-///
-/// # 返回
 /// 返回 `{ public_url }`。
 pub async fn booklet_copy_link_url(
     State(state): State<HttpState>,
@@ -226,12 +154,6 @@ pub async fn booklet_copy_link_url(
 }
 
 /// 内部会话快照。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `id` - 选品册
-///
-/// # 返回
 /// 返回当前会话。
 pub async fn booklet_session(
     State(state): State<HttpState>,
@@ -242,14 +164,6 @@ pub async fn booklet_session(
 }
 
 /// 更换链接。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 操作人
-/// * `id` - 选品册
-/// * `req` - 命令
-///
-/// # 返回
 /// 返回新链接。
 pub async fn booklet_rotate_link(
     State(state): State<HttpState>,
@@ -261,14 +175,6 @@ pub async fn booklet_rotate_link(
 }
 
 /// 关闭未提交选品册。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 操作人
-/// * `id` - 选品册
-/// * `req` - 命令
-///
-/// # 返回
 /// 返回已关闭详情。
 pub async fn booklet_close(
     State(state): State<HttpState>,
@@ -280,15 +186,6 @@ pub async fn booklet_close(
 }
 
 /// 撤销已提交链接访问。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 操作人
-/// * `id` - 选品册
-/// * `req` - 命令
-///
-/// # 返回
-/// 返回详情。
 pub async fn booklet_revoke(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -299,14 +196,6 @@ pub async fn booklet_revoke(
 }
 
 /// 作废选品册。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 操作人
-/// * `id` - 选品册
-/// * `req` - 命令
-///
-/// # 返回
 /// 返回已作废详情。
 pub async fn booklet_void(
     State(state): State<HttpState>,
@@ -317,14 +206,7 @@ pub async fn booklet_void(
     Ok(ApiResponse::ok_with_data(process(&state).void(id, req, actor).await?))
 }
 
-/// 查询销售方案列表。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `params` - 筛选
-///
-/// # 返回
-/// 返回分页。
+/// 按请求条件查询销售方案列表。
 pub async fn proposal_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -334,13 +216,6 @@ pub async fn proposal_list(
 }
 
 /// 查询销售方案详情。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `id` - 方案
-///
-/// # 返回
-/// 返回详情。
 pub async fn proposal_detail(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -351,7 +226,6 @@ pub async fn proposal_detail(
 }
 
 /// 读取管理端受权限保护的快照图片。
-/// # 错误
 /// 客户越权、跨册资产和存储读取失败时拒绝。
 pub async fn admin_image(
     State(state): State<HttpState>,
@@ -370,13 +244,6 @@ pub async fn admin_image(
 }
 
 /// 公开选品页。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `token` - 令牌
-/// * `addr` - 来源地址
-///
-/// # 返回
 /// 返回公开视图。
 pub async fn public_page(
     State(state): State<HttpState>,
@@ -389,14 +256,6 @@ pub async fn public_page(
 }
 
 /// 公开保存会话。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `token` - 令牌
-/// * `req` - 保存请求
-/// * `addr` - 来源地址
-///
-/// # 返回
 /// 返回最新公开页。
 pub async fn public_save(
     State(state): State<HttpState>,
@@ -412,14 +271,6 @@ pub async fn public_save(
 }
 
 /// 公开提交。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `token` - 令牌
-/// * `req` - 提交请求
-/// * `addr` - 来源地址
-///
-/// # 返回
 /// 返回回执。
 pub async fn public_submit(
     State(state): State<HttpState>,
@@ -435,14 +286,6 @@ pub async fn public_submit(
 }
 
 /// 公开图片。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `token` - 令牌
-/// * `asset_id` - 资产
-/// * `addr` - 来源地址
-///
-/// # 返回
 /// 返回图片字节；禁止公共缓存。
 pub async fn public_image(
     State(state): State<HttpState>,
@@ -461,13 +304,6 @@ pub async fn public_image(
 }
 
 /// 公开图片（路径参数兼容）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `ids` - 令牌与资产
-/// * `addr` - 来源地址
-///
-/// # 返回
 /// 返回图片字节。
 pub async fn public_image_path(
     State(state): State<HttpState>,
@@ -479,16 +315,7 @@ pub async fn public_image_path(
         .await
 }
 
-/// 拒绝 P0 换品/自组。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 无。
-///
-/// # 错误
-/// 始终拒绝并提示后续能力。
+/// 公开选品页只支持整套选择；旧自组或换品请求返回 422，不修改当前选品。
 pub async fn public_customize() -> Result<PublicSelectionPageView> {
     Err(Error::Unprocessable("换品与自组为后续能力，当前仅支持整套选择".into()))
 }
@@ -503,19 +330,9 @@ pub struct PublicImageQuery {
     pub access_token: Option<String>,
 }
 
-/// 读取并封装公开图片响应。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `token` - 令牌
-/// * `asset_id` - 资产
-/// * `addr` - 来源地址
-///
-/// # 返回
-/// 返回禁止公共缓存的图片响应。
-///
-/// # 错误
-/// 越权或对象不存在。
+// 读取并封装公开图片响应。
+// 返回禁止公共缓存的图片响应。
+// 越权或对象不存在。
 async fn respond_public_image(
     state: &HttpState,
     token: &str,

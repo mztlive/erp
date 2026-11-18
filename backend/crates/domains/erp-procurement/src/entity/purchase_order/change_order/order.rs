@@ -52,16 +52,7 @@ status_display!(PurchaseChangeOrderStatus, {
 });
 
 impl PurchaseChangeOrderStatus {
-    /// 判断状态是否代表尚未结束的采购变更。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 草稿或审批中返回 `true`，已生效或作废返回 `false`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 判断状态是否代表尚未结束的采购变更。草稿或审批中返回 `true`，已生效或作废返回 `false`。
     pub fn is_in_progress(self) -> bool {
         matches!(self, Self::Draft | Self::Rejected | Self::InApproval)
     }
@@ -120,7 +111,7 @@ pub struct PurchaseChangeOrder {
 }
 
 impl PartialEq for PurchaseChangeOrder {
-    /// 全字段语义相等。
+    // 逐字段比较采购变更单，仅持有相同标识不视为内容相等。
     fn eq(&self, other: &Self) -> bool {
         self.base == other.base
             && self.stable.status == other.stable.status
@@ -144,16 +135,10 @@ impl PurchaseChangeOrder {
     ///
     /// 完成变更原因校验与规范化；初始状态为 `Draft`。
     ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::PurchaseChangeOrderId`）
-    /// * `data` - 创建数据
-    /// * `created_by` - 创建人（账号或系统身份）
-    ///
-    /// # 返回
-    /// 返回新建的变更单实体。
-    ///
-    /// # 错误
     /// 变更原因为空或超长时返回错误。
+    ///
+    /// - `id`：实体主键（`erp_core::ids::PurchaseChangeOrderId`）。
+    /// - `created_by`：创建人（账号或系统身份）。
     pub fn new(
         id: PurchaseChangeOrderId,
         data: PurchaseChangeOrderData,
@@ -176,14 +161,9 @@ impl PurchaseChangeOrder {
 
     /// 校验调用方持有的乐观锁版本。
     ///
-    /// # 参数
-    /// * `expected` - 调用方读取到的期望版本
+    /// 版本一致时返回 `Ok(())`。期望版本与实体当前版本不一致时返回领域错误。
     ///
-    /// # 返回
-    /// 版本一致时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 期望版本与实体当前版本不一致时返回领域错误。
+    /// `expected` 为调用方读取到的期望版本。
     pub fn ensure_expected_version(&self, expected: u64) -> Result<()> {
         if self.base.version != expected {
             return Err(Error::from("采购变更单版本已变化"));
@@ -191,16 +171,7 @@ impl PurchaseChangeOrder {
         Ok(())
     }
 
-    /// 校验变更单仍可冻结新的审批提交。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 草稿状态返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 非草稿状态返回领域错误。
+    /// 冻结新的采购变更审批提交前，允许草稿或已驳回的变更单重新编辑与提交；审批中和其他状态不得重复提交。
     pub fn ensure_draft_for_submission(&self) -> Result<()> {
         if !matches!(
             self.stable.status,
@@ -213,14 +184,9 @@ impl PurchaseChangeOrder {
 
     /// 解析最终生效动作必须使用的当前冻结提交。
     ///
-    /// # 参数
-    /// * `requested` - 可选的调用方提交 ID；空值表示直接采用当前冻结提交
+    /// 返回当前冻结提交的类型化稳定身份。变更单尚未提交，或请求提交与当前冻结提交不一致时返回领域错误。
     ///
-    /// # 返回
-    /// 返回当前冻结提交的类型化稳定身份。
-    ///
-    /// # 错误
-    /// 变更单尚未提交，或请求提交与当前冻结提交不一致时返回领域错误。
+    /// `requested` 为可选的调用方提交 ID；空值表示直接采用当前冻结提交。
     pub fn submission_id_for_effect(&self, requested: Option<&str>) -> Result<PurchaseChangeSubmissionId> {
         let current = self.current_submission_id.clone().ok_or_else(|| Error::from("变更单尚未提交审批"))?;
         if let Some(requested) = requested.map(str::trim).filter(|value| !value.is_empty())
@@ -233,12 +199,9 @@ impl PurchaseChangeOrder {
 
     /// 校验当前审批仍引用本变更单的待处理冻结提交。
     ///
-    /// # 参数
-    /// * `submission` - 同一事务按当前提交指针读取的提交。
-    /// # 返回
-    /// 提交身份、所属单据、基准版本和待处理状态一致时成功。
-    /// # 错误
-    /// 历史提交、跨单据提交、错误基准或非待处理提交均拒绝。
+    /// 提交身份、所属单据、基准版本和待处理状态一致时成功。历史提交、跨单据提交、错误基准或非待处理提交均拒绝。
+    ///
+    /// `submission` 为同一事务按当前提交指针读取的提交。
     pub fn ensure_current_approval_submission(&self, submission: &PurchaseChangeSubmission) -> Result<()> {
         if self.current_submission_id.as_ref().map(AsRef::as_ref) != Some(submission.base.id.as_str())
             || submission.purchase_change_order_id.as_ref() != self.base.id
@@ -254,14 +217,7 @@ impl PurchaseChangeOrder {
 
     /// 校验变更基准版本仍是采购单当前生效版本。
     ///
-    /// # 参数
-    /// * `current_revision_id` - 原采购单当前生效版本
-    ///
-    /// # 返回
-    /// 基准版本一致时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 原采购单缺少当前版本，或当前版本已偏离变更基准时返回领域错误。
+    /// 基准版本一致时返回 `Ok(())`。原采购单缺少当前版本，或当前版本已偏离变更基准时返回领域错误。
     pub fn ensure_base_revision_current(&self, current_revision_id: Option<&str>) -> Result<()> {
         if current_revision_id != Some(self.base_revision_id.as_ref()) {
             return Err(Error::from("基准版本已不是当前版本，变更不能生效"));
@@ -271,17 +227,9 @@ impl PurchaseChangeOrder {
 
     /// 更新采购变更单。
     ///
-    /// 原因/目标提交等内容只允许在草稿状态编辑；状态与生效版本由
-    /// P3 按 §6.6/§8.1 第 3 条编排（`purchase_order_id`、`base_revision_id` 不可修改）。
+    /// 原因/目标提交等内容只允许在草稿状态编辑；状态与生效版本由P3 按 §6.6/§8.1 第 3 条编排（`purchase_order_id`、
+    /// `base_revision_id` 不可修改）。
     ///
-    /// # 参数
-    /// * `update` - 更新数据
-    /// * `updated_by` - 本次更新执行人
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 更新包含内容字段且状态不是草稿，或原因、内容指纹为空或超长时返回错误。
     pub fn update(&mut self, update: PurchaseChangeOrderUpdate, updated_by: impl Into<String>) -> Result<()> {
         self.apply_content(update, updated_by)
@@ -289,15 +237,9 @@ impl PurchaseChangeOrder {
 
     /// 提交时更新变更原因；缺省、空白或与现值相同时沿用原原因。
     ///
-    /// # 参数
-    /// * `reason` - 提交携带的可选变更原因
-    /// * `updated_by` - 提交人
+    /// 原因沿用或更新成功时返回 `Ok(())`；沿用时不改写更新人。原因发生变化且变更单不是草稿，或原因超长时返回领域错误。
     ///
-    /// # 返回
-    /// 原因沿用或更新成功时返回 `Ok(())`；沿用时不改写更新人。
-    ///
-    /// # 错误
-    /// 原因发生变化且变更单不是草稿，或原因超长时返回领域错误。
+    /// `reason` 为提交携带的可选变更原因。
     pub fn update_submission_reason(&mut self, reason: Option<&str>, updated_by: &str) -> Result<()> {
         let Some(reason) = reason.map(str::trim).filter(|value| !value.is_empty()) else {
             return Ok(());
@@ -311,14 +253,7 @@ impl PurchaseChangeOrder {
         )
     }
 
-    /// 应用内容更新（草稿门禁）。
-    ///
-    /// # 参数
-    /// * `update` - 更新数据
-    /// * `updated_by` - 本次更新执行人
-    ///
-    /// # 错误
-    /// 更新包含内容字段且状态不是草稿，或原因、内容指纹为空或超长时返回错误。
+    // 应用内容更新（草稿门禁）。更新包含内容字段且状态不是草稿，或原因、内容指纹为空或超长时返回错误。
     fn apply_content(
         &mut self,
         update: PurchaseChangeOrderUpdate,
@@ -359,16 +294,9 @@ impl PurchaseChangeOrder {
     ///
     /// 版本使用 checked add，成功后不回退。不得改写 `BaseModel.version`。
     ///
-    /// # 参数
-    /// * `submission_id` - 本次冻结的不可变目标提交
-    /// * `target_content_hash` - 目标内容指纹
-    /// * `updated_by` - 提交人
+    /// 返回冻结后的提交版本。非草稿、指纹非法或版本溢出时返回冲突。
     ///
-    /// # 返回
-    /// 返回冻结后的提交版本。
-    ///
-    /// # 错误
-    /// 非草稿、指纹非法或版本溢出时返回冲突。
+    /// `submission_id` 为本次冻结的不可变目标提交。
     pub fn start_approval(
         &mut self,
         submission_id: PurchaseChangeSubmissionId,
@@ -400,14 +328,7 @@ impl PurchaseChangeOrder {
 
     /// 撤回审批：回到草稿，且 `approval_subject_version` 不回退。
     ///
-    /// # 参数
-    /// * `updated_by` - 撤回人
-    ///
-    /// # 返回
-    /// 审批中变更单回到草稿时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 非审批中时返回冲突。
+    /// 审批中变更单回到草稿时返回 `Ok(())`。非审批中时返回冲突。
     pub fn cancel_approval(&mut self, updated_by: impl Into<String>) -> Result<()> {
         if self.stable.status != PurchaseChangeOrderStatus::InApproval {
             return Err(Error::from("只有审批中的采购变更单可以撤回审批"));
@@ -419,13 +340,10 @@ impl PurchaseChangeOrder {
 
     /// 终止本次审批并允许保存后重新提交。
     ///
-    /// # 参数
-    /// * `expected_subject_version` - 当前实例冻结的审批提交版本。
-    /// * `updated_by` - 当前审批决定人。
-    /// # 返回
-    /// 状态改为已驳回，冻结提交和提交版本保留。
-    /// # 错误
-    /// 非审批中状态返回领域错误。
+    /// 状态改为已驳回，冻结提交和提交版本保留。非审批中状态返回领域错误。
+    ///
+    /// - `expected_subject_version`：当前实例冻结的审批提交版本。
+    /// - `updated_by`：当前审批决定人。
     pub fn reject_approval(
         &mut self,
         expected_subject_version: u32,
@@ -444,14 +362,7 @@ impl PurchaseChangeOrder {
 
     /// 作废草稿变更单：仅 `DRAFT` 可进入 `VOIDED`，原采购单当前版本保持不变。
     ///
-    /// # 参数
-    /// * `updated_by` - 作废人
-    ///
-    /// # 返回
-    /// 草稿进入作废时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 审批中、已生效或已作废时返回冲突；审批中须先撤回。
+    /// 草稿进入作废时返回 `Ok(())`。审批中、已生效或已作废时返回冲突；审批中须先撤回。
     pub fn void(&mut self, updated_by: impl Into<String>) -> Result<()> {
         if !matches!(
             self.stable.status,
@@ -466,15 +377,7 @@ impl PurchaseChangeOrder {
 
     /// 最终通过并生效：仅 `IN_APPROVAL` 可进入 `EFFECTIVE`。
     ///
-    /// # 参数
-    /// * `effective_revision_id` - 生效后形成的新采购版本
-    /// * `updated_by` - 最终通过执行人
-    ///
-    /// # 返回
-    /// 写入生效版本并进入 `EFFECTIVE` 时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 状态不是审批中时返回冲突。
+    /// 写入生效版本并进入 `EFFECTIVE` 时返回 `Ok(())`。状态不是审批中时返回冲突。
     pub fn apply_effective(
         &mut self,
         effective_revision_id: PurchaseOrderRevisionId,
@@ -489,14 +392,7 @@ impl PurchaseChangeOrder {
 
     /// 校验采购变更单是否允许最终生效。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 审批中返回 `Ok(())`；只检查主状态，不附加冻结提交或版本条件。
-    ///
-    /// # 错误
-    /// 非审批中状态返回最终生效的领域错误。
+    /// 审批中返回 `Ok(())`；只检查主状态，不附加冻结提交或版本条件。非审批中状态返回最终生效的领域错误。
     pub fn ensure_can_take_effect(&self) -> Result<()> {
         if self.stable.status != PurchaseChangeOrderStatus::InApproval {
             return Err(Error::from("只有审批中的采购变更单可以在审批通过后生效，请核对变更单状态"));
@@ -505,13 +401,7 @@ impl PurchaseChangeOrder {
     }
 }
 
-/// 判断更新数据是否包含内容字段。
-///
-/// # 参数
-/// * `update` - 更新数据
-///
-/// # 返回
-/// 包含原因/目标提交/内容指纹/生效版本任一字段时返回 `true`。
+// 判断更新数据是否包含内容字段。包含原因/目标提交/内容指纹/生效版本任一字段时返回 `true`。
 fn update_has_content(update: &PurchaseChangeOrderUpdate) -> bool {
     update.reason.is_some()
         || update.current_submission_id.is_some()
@@ -537,7 +427,7 @@ mod tests {
         }
     }
 
-    /// 已驳回目标可修改或原内容重提，旧冻结目标不被删除。
+    // 已驳回目标可修改或原内容重提，旧冻结目标不被删除。
     #[test]
     fn rejected_change_keeps_target_and_allows_resubmission() {
         let mut order =
@@ -556,7 +446,7 @@ mod tests {
         assert_eq!(order.approval_subject_version, 2);
     }
 
-    /// 重提后来自旧实例的驳回不得修改新的审批版本。
+    // 重提后来自旧实例的驳回不得修改新的审批版本。
     #[test]
     fn rejection_refuses_previous_approval_version() {
         let mut order =
@@ -586,7 +476,7 @@ mod tests {
         assert!(order.current_submission_id.is_none());
     }
 
-    /// 只有草稿可作废；审批中须先撤回，终态不得再次作废。
+    // 只有草稿可作废；审批中须先撤回，终态不得再次作废。
     #[test]
     fn void_only_from_draft() {
         let mut order =
@@ -652,7 +542,7 @@ mod tests {
         );
     }
 
-    /// 提交进入审批中；撤回不回退版本；最终通过进入生效。
+    // 提交进入审批中；撤回不回退版本；最终通过进入生效。
     #[test]
     fn start_approval_cancel_and_apply_effective() {
         let mut order =
@@ -680,7 +570,7 @@ mod tests {
         assert!(order.apply_effective(PurchaseOrderRevisionId::new("por-3"), "u").is_err());
     }
 
-    /// 内容更新不得改写状态；状态只能经签署邻接方法迁移。
+    // 内容更新不得改写状态；状态只能经签署邻接方法迁移。
     #[test]
     fn update_cannot_rewrite_status() {
         let mut order =

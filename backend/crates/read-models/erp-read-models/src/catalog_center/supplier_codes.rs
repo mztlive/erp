@@ -11,17 +11,15 @@ use super::CatalogCenterReadService;
 use crate::Result;
 
 impl CatalogCenterReadService {
-    /// 按当前商品池页内的有效供应商身份批量读取编号。
-    ///
-    /// # 参数
-    /// * `row_ids` - 每行当前有效供给的供应商身份
-    /// * `executor` - 商品池资格和分页读取使用的原快照执行器。
-    ///
-    /// # 返回
-    /// 返回未删除供应商的编号映射，不读取完整供应商资料。
-    ///
-    /// # 错误
-    /// 编号仓储读取失败时拒绝整页，避免展示不完整的编号结论。
+    // 依据当前商品池页内的有效供应商身份批量读取编号。
+    //
+    // 调用参数：
+    // * `row_ids` - 每行当前有效供给的供应商身份
+    // * `executor` - 商品池资格和分页读取使用的原快照执行器。
+    //
+    // 返回未删除供应商的编号映射，不读取完整供应商资料。
+    //
+    // 编号仓储读取失败时拒绝整页，避免展示不完整的编号结论。
     pub(super) async fn supplier_numbers(
         &self,
         row_ids: &[Vec<String>],
@@ -36,18 +34,14 @@ impl CatalogCenterReadService {
     }
 }
 
-/// 为每行补齐去重、排序后的供应商业务编号，不返回内部身份。
-///
-/// # 参数
-/// * `rows` - 授权商品池页
-/// * `row_ids` - 同序页行的有效供给供应商身份
-/// * `numbers` - 供应商业务编号映射
-///
-/// # 返回
-/// 原地补齐可读取的编号；缺失或已删除的供应商不补编号。
-///
-/// # 错误
-/// 不返回错误。
+// 为每行补齐去重、排序后的供应商业务编号，不给出内部身份。
+//
+// 调用参数：
+// * `rows` - 授权商品池页
+// * `row_ids` - 同序页行的有效供给供应商身份
+// * `numbers` - 供应商业务编号映射
+//
+// 原地补齐可读取的编号；缺失或已删除的供应商不补编号。
 pub(super) fn apply_supplier_codes(
     rows: &mut [SellableSkuView],
     row_ids: &[Vec<String>],
@@ -58,7 +52,7 @@ pub(super) fn apply_supplier_codes(
     }
 }
 
-/// 根据有效供给身份选择业务编号，保持稳定排序并保留编号前导零。
+// 处理公司商品池供应商编号时，根据有效供给身份选择业务编号，保持稳定排序并保留编号前导零。
 fn codes_for(ids: &[String], numbers: &HashMap<String, String>) -> Vec<String> {
     ids.iter().filter_map(|id| numbers.get(id)).cloned().collect::<BTreeSet<_>>().into_iter().collect()
 }

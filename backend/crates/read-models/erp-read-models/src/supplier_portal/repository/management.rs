@@ -28,20 +28,16 @@ struct ManagementCount {
     total: i64,
 }
 
-/// 固定绑定供应商并只投影安全账号字段。
-///
-/// # 参数
-/// * `db` - 数据库。
-/// * `supplier_id` - 已证明详情资格的供应商。
-/// * `query` - 已规范化的分页与搜索。
-/// * `active` - 启停筛选；`None` 表示不过滤。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
-/// 返回安全账号字段的分页。空结果总数为 `0`。
-///
-/// # 错误
-/// 聚合或反序列化失败时返回对应错误。
+// 处理门户账号与定向开放管理时，固定绑定供应商并只投影安全账号字段。
+//
+// 调用参数：
+// * `supplier_id` - 已证明详情资格的供应商。
+// * `query` - 已规范化的分页与搜索。
+// * `active` - 启停筛选；`None` 表示不过滤。
+//
+// 返回安全账号字段的分页。空结果总数为 `0`。
+//
+// 聚合或反序列化失败时返回对应错误。
 pub(in crate::supplier_portal) async fn accounts_page(
     db: &Database,
     supplier_id: &str,
@@ -57,20 +53,16 @@ pub(in crate::supplier_portal) async fn accounts_page(
     management_page(aggregate(collection, pipeline, executor).await?, query)
 }
 
-/// 固定开放供应商并保留可撤销的失效SKU关系。
-///
-/// # 参数
-/// * `db` - 数据库。
-/// * `supplier_id` - 已证明详情资格的供应商。
-/// * `query` - 已规范化的分页与搜索。
-/// * `active` - 启停筛选；`None` 表示不过滤。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
-/// 返回定向开放关系的分页。缺失或停用的 SKU 仍保留关系身份。
-///
-/// # 错误
-/// 聚合或反序列化失败时返回对应错误。
+// 处理门户账号与定向开放管理时，固定开放供应商并保留可撤销的失效SKU关系。
+//
+// 调用参数：
+// * `supplier_id` - 已证明详情资格的供应商。
+// * `query` - 已规范化的分页与搜索。
+// * `active` - 启停筛选；`None` 表示不过滤。
+//
+// 返回定向开放关系的分页。缺失或停用的 SKU 仍保留关系身份。
+//
+// 聚合或反序列化失败时返回对应错误。
 pub(in crate::supplier_portal) async fn grants_page(
     db: &Database,
     supplier_id: &str,
@@ -86,7 +78,7 @@ pub(in crate::supplier_portal) async fn grants_page(
     management_page(aggregate(collection, pipeline, executor).await?, query)
 }
 
-/// 启停和搜索都在分页与统计之前执行。
+// 应用门户账号与定向开放管理筛选时，启停和搜索都在分页与统计之前执行。
 fn management_filter(query: &PortalQuery, active: Option<bool>, fields: &[&str]) -> Vec<Document> {
     let mut stages = Vec::new();
     if let Some(active) = active {
@@ -101,7 +93,7 @@ fn management_filter(query: &PortalQuery, active: Option<bool>, fields: &[&str])
     stages
 }
 
-/// 只从供应商绑定联查外部账号，停用仍可被管理。
+// 组装门户账号与定向开放管理的聚合管道时，只从供应商绑定联查外部账号，停用仍可被管理。
 fn account_pipeline(supplier_id: &str, accounts: &str) -> Vec<Document> {
     vec![
         doc! {"$match":{"supplier_id":supplier_id,"deleted_at":NOT_DELETED_TIMESTAMP_BSON}},
@@ -112,7 +104,7 @@ fn account_pipeline(supplier_id: &str, accounts: &str) -> Vec<Document> {
     ]
 }
 
-/// 缺失或停用 SKU 仍保留可撤销的关系身份。
+// 组装门户账号与定向开放管理的聚合管道时，缺失或停用 SKU 仍保留可撤销的关系身份。
 fn grant_pipeline(supplier_id: &str) -> Vec<Document> {
     vec![
         doc! {"$match":{"supplier_id":supplier_id,"deleted_at":NOT_DELETED_TIMESTAMP_BSON}},
@@ -124,12 +116,12 @@ fn grant_pipeline(supplier_id: &str) -> Vec<Document> {
     ]
 }
 
-/// 同一筛选集合同时生成页与总数。
+// 处理门户账号与定向开放管理时，同一筛选集合同时生成页与总数。
 fn page_stage(query: &PortalQuery) -> Document {
     doc! {"$facet":{"items":[{"$skip":query.skip},{"$limit":i64::from(query.page_size)}],"count":[{"$count":"total"}]}}
 }
 
-/// 空集合也返回稳定的分页信封。
+// 处理门户账号与定向开放管理时，空集合也返回稳定的分页信封。
 fn management_page<T: DeserializeOwned>(
     pages: Vec<ManagementPage<T>>,
     query: &PortalQuery,

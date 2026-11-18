@@ -32,10 +32,9 @@ use super::repository::load_procurement_coverage_facts;
 use crate::{Error, Result};
 
 impl PurchaseOrderReadService {
-    /// 读取采购各行可调整的预计交付日上限与收件地址剩余量。
+    /// 处理采购交付选项时，读取采购各行可调整的预计交付日上限与收件地址剩余量。
     ///
     /// # 参数
-    /// * `actor` - 当前账号
     /// * `id` - 采购单 ID
     ///
     /// # 返回
@@ -60,7 +59,7 @@ impl PurchaseOrderReadService {
     }
 }
 
-/// 授权、来源地址和数量上限均使用原事务，完整投影后交付原查询凭证。
+// 处理采购交付选项时，授权、来源地址和数量上限均使用原事务，完整投影后交付原查询凭证。
 async fn delivery_snapshot(
     db: &Database,
     authorization: Arc<AuthorizationService>,
@@ -87,7 +86,7 @@ async fn delivery_snapshot(
     Ok(view)
 }
 
-/// 按销售当前版本装配交付安排范围；已生效采购附带改单数量范围。
+// 依据销售当前版本装配交付安排范围；已生效采购附带改单数量范围。
 async fn delivery_options_view(
     db: &Database,
     order: &PurchaseOrder,
@@ -103,7 +102,7 @@ async fn delivery_options_view(
     Ok(view)
 }
 
-/// 采购草稿只需交付安排范围。
+// 生成采购交付选项视图时，采购草稿只需交付安排范围。
 async fn draft_delivery_options_view(
     db: &Database,
     order: &PurchaseOrder,
@@ -128,17 +127,15 @@ async fn draft_delivery_options_view(
     delivery_options(order, &facts)
 }
 
-/// 由覆盖事实计算采购各行的交付安排范围。
-///
-/// # 参数
-/// * `order` - 正在调整的采购单
-/// * `facts` - 销售当前版本的覆盖事实
-///
-/// # 返回
-/// 按销售行号返回采购当前内容引用的商品行范围；已移出销售当前版本的行不返回。
-///
-/// # 错误
-/// 履约期限无法换算或地址剩余量非法时返回错误。
+// 处理采购交付选项时，由覆盖事实计算采购各行的交付安排范围。
+//
+// 调用参数：
+// * `order` - 正在调整的采购单
+// * `facts` - 销售当前版本的覆盖事实
+//
+// 按销售行号返回采购当前内容引用的商品行范围；已移出销售当前版本的行不返回。
+//
+// 履约期限无法换算或地址剩余量非法时返回错误。
 fn delivery_options(
     order: &PurchaseOrder,
     facts: &ProcurementCoverageFacts,
@@ -185,17 +182,15 @@ fn delivery_options(
     Ok(PurchaseDeliveryOptionsView { lines })
 }
 
-/// 按稳定销售行附上改单数量范围。
-///
-/// # 参数
-/// * `view` - 交付安排范围
-/// * `bounds` - 采购当前生效版本商品行的数量范围
-///
-/// # 返回
-/// 成功时原地写入各行的数量范围。
-///
-/// # 错误
-/// 数量越界时返回错误。
+// 组装采购交付选项时，按稳定销售行附上改单数量范围。
+//
+// 调用参数：
+// * `view` - 交付安排范围
+// * `bounds` - 采购当前生效版本商品行的数量范围
+//
+// 成功时原地写入各行的数量范围。
+//
+// 数量越界时返回错误。
 fn attach_quantity_bounds(
     view: &mut PurchaseDeliveryOptionsView,
     bounds: &[ChangeQuantityBound],
@@ -218,7 +213,7 @@ fn attach_quantity_bounds(
     Ok(())
 }
 
-/// 采购当前提交与当前版本引用的销售稳定行。
+// 处理采购交付选项时，采购当前提交与当前版本引用的销售稳定行。
 fn referenced_lines(order: &PurchaseOrder, facts: &ProcurementCoverageFacts) -> BTreeSet<String> {
     let submissions = facts
         .submission_lines
@@ -362,7 +357,7 @@ mod tests {
         .unwrap()
     }
 
-    /// 当前版本第 2 行要求两个地址；另一张采购已在地址A承担 2 件；本采购还引用了已移除的行。
+    // 处理采购交付选项时，当前版本第 2 行要求两个地址；另一张采购已在地址A承担 2 件；本采购还引用了已移除的行。
     fn facts() -> ProcurementCoverageFacts {
         ProcurementCoverageFacts {
             revision_lines: vec![SalesRevisionLineFact {
@@ -393,7 +388,7 @@ mod tests {
         }
     }
 
-    /// 直发采购按地址给出扣除其他采购后的剩余量，并以销售履约期限为交付日上限。
+    // 验证采购交付选项：直发采购按地址给出扣除其他采购后的剩余量，并以销售履约期限为交付日上限。
     #[test]
     fn direct_purchase_gets_remaining_address_capacity() {
         let order = purchase("po-1", "sub-1", FulfillmentResponsibility::SupplierDirect);
@@ -414,7 +409,7 @@ mod tests {
         assert_eq!(remaining, vec![("地址A", qty("4")), ("地址B", qty("4"))]);
     }
 
-    /// 仓库履约采购只给交付日上限，不暴露客户地址。
+    // 验证采购交付选项：仓库履约采购只给交付日上限，不暴露客户地址。
     #[test]
     fn warehouse_purchase_hides_addresses() {
         let order = purchase("po-1", "sub-1", FulfillmentResponsibility::Warehouse);

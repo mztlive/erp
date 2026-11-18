@@ -16,11 +16,7 @@ pub struct SourceServiceRegions {
 
 impl SourceServiceRegions {
     /// 仅接受查询得到的完整允许集合，严格验证标准地区。
-    /// # 参数
-    /// `snapshot` 为适配器查询，`received_at` 为通知接收时间。
-    /// # 返回
     /// 去重排序的完整来源地区，保留空集合。
-    /// # 错误
     /// 未报告、非允许集合、过旧观察或地区无法识别时拒绝。
     pub fn queried(snapshot: Snapshot<RegionCoverage>, received_at: Instant) -> Result<Self> {
         let RegionCoverage::Included(mut included) = snapshot.value else {
@@ -41,11 +37,7 @@ impl SourceServiceRegions {
 
 impl SupplierCatalogItem {
     /// 更新独立地区事实，禁止迟到查询覆盖较新结果。
-    /// # 参数
-    /// `regions` 为已验证的完整地区观察。
-    /// # 返回
     /// 保存来源地区，不改变报价、商品资料或人工配送模板。
-    /// # 错误
     /// 观察时间倒退时拒绝。
     pub fn apply_service_regions(&mut self, regions: SourceServiceRegions) -> Result<()> {
         if self.source_service_regions.as_ref().is_some_and(|old| old.observed_at > regions.observed_at) {

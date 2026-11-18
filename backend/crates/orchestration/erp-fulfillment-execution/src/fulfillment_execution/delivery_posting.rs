@@ -29,27 +29,12 @@ use super::task::{FulfillmentTaskObject, complete_fulfillment_task};
 use crate::{Error, Result};
 
 impl FulfillmentProcess {
-    /// 过账发货（草稿 → 已发货；§8.2 第 2 条跨集合事务）。
+    /// 确认实际发货时，按最终草稿和期望版本把发货单从草稿推进到已发货，并返回过账视图（§8.2 第 2 条）。
+    /// 仓发在同一事务校验本销售明细的预占归属及数量，扣减预占并写预占流水，追加出库流水、更新余额、迁移状态并写审计。
+    /// 供应商直发复验采购履约门槛，不写自有库存流水；未付款本身不阻止登记实际履约。
     ///
-    /// 仓发在同一事务内：校验预占归属（预占必须属于本销售明细且数量充足）、
-    /// 消耗预占（含预占流水）、追加库存减少流水、更新库存余额、迁移发货单
-    /// 状态、写审计。供应商直发不写自有库存流水，校验采购单可履约后迁移状态。
-    /// 未付款不阻止登记实际履约。重复过账由状态守卫（仅草稿）与流水唯一索引双重
-    /// 防护。
-    ///
-    /// # 参数
-    /// * `id` - 发货单主键
-    /// * `req` - 最终草稿与期望版本
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回过账后的发货单视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 发货单/预占/余额不存在
-    /// * `ConflictError` - 状态不允许过账或重复过账
-    /// * `BusinessLogicError` - 预占归属不符、数量不足或门槛未满足
-    /// * `OutcomeUnknown` - 提交结果无法确认
+    /// 草稿状态和流水唯一索引防止重复过账。发货单、预占或余额缺失返回 `NotFound`；非法状态或重复过账返回 `ConflictError`；
+    /// 预占归属、数量或业务门槛不符返回 `BusinessLogicError`；提交无法确认返回 `OutcomeUnknown`。
     #[tracing::instrument(
         name = "fulfillment.delivery_post",
         skip_all,
@@ -103,7 +88,7 @@ struct DeliveryPostingCommand {
 }
 
 impl DeliveryPostingCommand {
-    /// 在同一授权事务内准备最终草稿，再执行库存、履约、任务与审计。
+    // 在同一授权事务内准备最终草稿，再执行库存、履约、任务与审计。
     async fn execute(self, executor: &mut dyn Executor) -> Result<Delivery> {
         super::task::require_fulfillment_entry(
             &self.db,
@@ -158,11 +143,11 @@ enum PostingStep {
 
 #[async_trait]
 trait PostingSteps: Send {
-    /// 在调用方执行器中执行当前步骤，首个失败立即返回。
+    // 在调用方执行器中执行当前步骤，首个失败立即返回。
     async fn apply(&mut self, step: PostingStep, executor: &mut dyn Executor) -> Result<()>;
 }
 
-/// 实际生产顺序：当前行库存完成后才推进下一行，之后推进履约和任务。
+// 实际生产顺序：当前行库存完成后才推进下一行，之后推进履约和任务。
 async fn execute_posting(
     steps: &mut impl PostingSteps,
     delivery_type: DeliveryType,
@@ -243,13 +228,8 @@ impl PostingSteps for DeliveryPosting<'_> {
     }
 }
 
-/// 在来源观察应用事务内复用直发的采购门槛、任务完成与验收待办。
-/// # 参数
-/// 数据库、已经校验全部数量与包裹关联的发货单、真实行、来源发货时间、责任人及同一执行器。
-/// # 返回
-/// 原子完成直发过账，不创建自有库存和客户验收事实。
-/// # 错误
-/// 非直发、采购/预付/任务权限门槛未满足或任一步写入失败时拒绝。
+/// 外部来源已确认直发数量、真实明细和包裹归属后，用该观察的时间与责任人，在应用观察的同一事务过账、完成履约任务并安排验收待办。
+/// 不生成自有库存流水或客户验收事实。非直发、采购或预付门槛不符、任务不授权或任一写入失败时拒绝。
 pub async fn post_observed_supplier_delivery(
     db: &Database,
     task_identity: &Arc<AuthorizationService>,
@@ -356,7 +336,7 @@ mod tests {
         RecordingSteps { executor: executor as *mut TestExecutor as usize, calls: vec![], fail_at: None }
     }
 
-    /// 生产入口先逐行完成仓发库存，再写发货状态、执行任务、验收任务与审计。
+    // 生产入口先逐行完成仓发库存，再写发货状态、执行任务、验收任务与审计。
     #[tokio::test]
     async fn warehouse_posting_preserves_each_line_and_following_task_order() {
         let mut executor = TestExecutor::default();
@@ -375,7 +355,7 @@ mod tests {
         );
     }
 
-    /// 供应商直发只校验采购可履约状态，不调用任何自有库存行步骤。
+    // 供应商直发只校验采购可履约状态，不调用任何自有库存行步骤。
     #[tokio::test]
     async fn supplier_direct_posting_checks_purchase_before_delivery_without_stock() {
         let mut executor = TestExecutor::default();
@@ -393,7 +373,7 @@ mod tests {
         );
     }
 
-    /// 任一当前行或后续步骤失败，保留原错，不访问下一行，不推进后续任务与审计。
+    // 任一当前行或后续步骤失败，保留原错，不访问下一行，不推进后续任务与审计。
     #[tokio::test]
     async fn posting_failure_stops_before_next_line_and_later_domains() {
         for (delivery_type, expected) in [

@@ -12,26 +12,13 @@ pub struct FulfillmentCommandReceiptService {
     db: Database,
 }
 impl FulfillmentCommandReceiptService {
-    /// 绑定拥有领域数据库句柄。
-    ///
-    /// # 参数
-    /// * `db` - 数据库句柄。
-    /// # 返回
-    /// 返回领域命令回执服务。
-    /// # 错误
-    /// 无。
+    /// 装配履约命令回执读写入口；使用本域数据库，不开启事务或读取审计正文。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
-    /// 读取已提交原命令的结果引用。
-    ///
-    /// # 参数
-    /// * `command` - 原身份与载荷。
-    /// * `executor` - 调用方事务或只读查证执行器。
-    /// # 返回
-    /// 命中返回原对象 ID，无命中返回 None。
-    /// # 错误
-    /// 异载荷、损坏或数据库失败时返回错误。
+    /// 原客户验收命令重试或提交结果未知时，用调用方的事务或只读执行器按原命令身份查证。
+    /// 仅身份与载荷匹配时返回已提交结果的对象 ID；没有记录时返回 `None`，载荷冲突、记录损坏和读取失败均返回错误。
+    /// 调用方仍须执行本次授权；查证不会再写业务事实或成功审计。
     pub async fn committed_resource_id(
         &self,
         command: &CommandReceipt,
@@ -40,17 +27,8 @@ impl FulfillmentCommandReceiptService {
         let receipt = self.db.command_receipts().find_by_id_including_deleted(command.id(), executor).await?;
         receipt.map(|receipt| receipt.resource_id(command)).transpose()
     }
-    /// 保存新鲜执行的强类型结果；业务事实与审计由入口统一事务提交。
-    ///
-    /// # 参数
-    /// * `command` - 原身份与载荷。
-    /// * `resource_id` - 正式结果对象 ID。
-    /// * `audit_event_id` - 关联成功审计 ID。
-    /// * `executor` - 拥有用例事务执行器。
-    /// # 返回
-    /// 写入成功时返回空结果。
-    /// # 错误
-    /// 目录/结果非法、唯一冲突或写入失败时返回错误。
+    /// 首次完成客户验收命令时，沿用用例事务保存原命令、强类型结果 ID 和成功审计 ID。
+    /// 回执与业务写入及成功审计须由入口共同提交；目录或结果非法、唯一键冲突或写入失败时返回错误。
     pub async fn save_resource(
         &self,
         command: &CommandReceipt,

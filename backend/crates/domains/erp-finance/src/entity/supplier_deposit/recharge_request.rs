@@ -39,13 +39,12 @@ pub struct SupplierDepositRechargeRequest {
 
 impl SupplierDepositRechargeRequest {
     /// 创建尚不可用的充值申请。
-    /// # 参数
-    /// * `id` / `account` / `operation` / `fingerprint` - 服务端身份和稳定命令。
-    /// * `amount` / `reason` / `actor` - 申请金额、用途及申请人。
-    /// # 返回
     /// 返回待独立批准申请。
-    /// # 错误
     /// 金额、理由或身份非法时拒绝。
+    ///
+    /// 输入约定：
+    /// - `id` / `account` / `operation` / `fingerprint`：服务端身份和稳定命令。
+    /// - `amount` / `reason` / `actor`：申请金额、用途及申请人。
     pub fn new(
         id: String,
         account: String,
@@ -76,12 +75,11 @@ impl SupplierDepositRechargeRequest {
     }
 
     /// 由具备财务批准权限的另一位人员批准，批准不形成现金或到账。
-    /// # 参数
-    /// * `actor` / `reference` / `now` - 实际批准人、批准依据及时间。
-    /// # 返回
-    /// 申请进入待银行付款。
-    /// # 错误
+    /// 结果：申请进入待银行付款。
     /// 非待批准、自己批准或依据不合法时拒绝。
+    ///
+    /// 输入约定：
+    /// - `actor` / `reference` / `now`：实际批准人、批准依据及时间。
     pub fn approve(&mut self, actor: &str, reference: String, now: Instant) -> Result<()> {
         if self.status != DepositRechargeStatus::Requested || self.requested_by == actor {
             return Err(Error::from("充值申请需由另一位财务人员批准"));

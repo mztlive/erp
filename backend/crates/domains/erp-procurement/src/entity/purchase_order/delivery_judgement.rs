@@ -74,17 +74,9 @@ pub struct PurchaseFreightWaiver {
 impl PurchaseFreightWaiver {
     /// 校验并构造标记。
     ///
-    /// # 参数
-    /// * `sales_order_line_id` - 稳定销售行
-    /// * `reason` - 原因
-    /// * `waived_by` - 操作人
-    /// * `waived_at` - 标记时间
+    /// 返回已规范化原因的标记。原因为空或超过 200 字时返回错误。
     ///
-    /// # 返回
-    /// 返回已规范化原因的标记。
-    ///
-    /// # 错误
-    /// 原因为空或超过 200 字时返回错误。
+    /// `sales_order_line_id` 为稳定销售行。
     pub fn new(
         sales_order_line_id: SalesOrderLineId,
         reason: String,
@@ -103,18 +95,7 @@ impl PurchaseFreightWaiver {
 
 /// 判定一条采购行的配送范围。
 ///
-/// # 参数
-/// * `delivery` - 供给生效配送政策
-/// * `price_basis` - 采购价格依据
-/// * `responsibility` - 履约责任
-/// * `allocations` - 直发本次承担的收货地址
-/// * `warehouse_region` - 集采入仓目标仓库所在地区
-///
-/// # 返回
-/// 返回是否运费另计；电子交付、服务履约和无地址的直发不做判定。
-///
-/// # 错误
-/// 任一收货地址或目标仓库不配送，或入仓目标仓库未设置所在地区时返回错误。
+/// 返回是否运费另计；电子交付、服务履约和无地址的直发不做判定。任一收货地址或目标仓库不配送，或入仓目标仓库未设置所在地区时返回错误。
 pub fn judge_line_delivery(
     delivery: &OfferingDeliveryFact,
     price_basis: SupplyPriceBasis,
@@ -172,14 +153,7 @@ pub struct BulkOrderQuantity<'a> {
 
 /// 校验集采直发向同一供给采购的数量合计不少于集采起订量。
 ///
-/// # 参数
-/// * `lines` - 本次确认中价格依据为集采且供应商直发的采购行
-///
-/// # 返回
-/// 每条供给的合计均达到起订量时返回 `Ok(())`。
-///
-/// # 错误
-/// 任一供给合计不足起订量时返回错误。
+/// 每条供给的合计均达到起订量时返回 `Ok(())`。任一供给合计不足起订量时返回错误。
 pub fn ensure_bulk_direct_minimum(lines: &[BulkOrderQuantity<'_>]) -> Result<()> {
     let mut totals: BTreeMap<&str, (rust_decimal::Decimal, Quantity)> = BTreeMap::new();
     for line in lines {

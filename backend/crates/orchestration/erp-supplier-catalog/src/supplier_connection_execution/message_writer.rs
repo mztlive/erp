@@ -22,33 +22,31 @@ pub struct CatalogMessageWriter {
 
 impl CatalogMessageWriter {
     /// 绑定原应用数据库及已装配的商品服务。
-    /// # 参数
+    ///
     /// 数据库、商品领域服务和应用共享授权服务。
-    /// # 返回
+    ///
     /// 不执行读取或写入的目录写入器。
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: Database, catalog: CatalogService, authorization: Arc<AuthorizationService>) -> Self {
         Self { db, catalog, authorization }
     }
 
-    /// 在外部补查前沿用本连接原目录采集授权。
-    /// # 参数
+    /// 消息消费者补查目录前，按服务端连接找回原采集授权的有效操作人；不能把消息本身作为授权依据。
+    ///
     /// 服务端连接身份。
-    /// # 返回
+    ///
     /// 原采集授权对应的当前有效操作人。
-    /// # 错误
+    ///
     /// 缺少授权、账号失效或读取失败时拒绝。
     pub async fn actor(&self, connection: &str) -> Result<AuditActor> {
         catalog_refresh_actor(&self.db, connection).await
     }
 
-    /// 同事务重验补查连接与授权，并保存来源、供给与公司资料。
-    /// # 参数
+    /// 外部目录补查完成后，在同一结果事务用补查前的连接快照重验配置和授权，再提交来源观察、供给与公司资料。
+    ///
     /// 补查前连接快照、已核验的观察和原采集授权操作人。
-    /// # 返回
+    ///
     /// 原子应用已经完成。
-    /// # 错误
+    ///
     /// 配置、授权或数据版本变化时拒绝；保留原持久化错误分类。
     pub async fn save(
         &self,

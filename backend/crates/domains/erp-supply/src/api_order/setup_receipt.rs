@@ -15,11 +15,7 @@ pub struct ApiOrderSetupReceipt {
 
 impl ApiOrderSetupReceipt {
     /// 核对同一命令身份的原载荷，不重放已成功的资料修改。
-    /// # 参数
-    /// `execution` 为当前订单，`payload_hash` 为规范化业务载荷指纹。
-    /// # 返回
     /// 身份和载荷相同时成功。
-    /// # 错误
     /// 相同操作号跨订单或改变载荷时返回冲突。
     pub fn ensure_replay(&self, execution: &str, payload_hash: &str) -> Result<()> {
         if self.execution_id != execution || self.payload_hash != payload_hash {

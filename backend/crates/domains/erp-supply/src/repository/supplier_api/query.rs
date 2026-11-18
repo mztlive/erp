@@ -94,19 +94,10 @@ impl Default for SupplierApiConnectionFilter {
 }
 
 impl QueryFilter for SupplierApiConnectionFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// `supplier_id`、`status` 按等值写入；`connection_code` 按字面量正则匹配。
-    /// `q` 为 `Some` 时再以 `$and` 追加 `connection_code` 与 `keyword_supplier_ids` 的 `$or`。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 将 `SupplierApiConnectionFilter` 筛选条件转换为 MongoDB 谓词，供仓储取数使用。
+    // 查询仅包含未删除记录。
+    // `supplier_id`、`status` 按等值写入；`connection_code` 按字面量正则匹配。`q` 为 `Some` 时再以
+    // `$and` 追加 `connection_code` 与 `keyword_supplier_ids` 的 `$or`。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(supplier_id) = &self.supplier_id {
@@ -134,16 +125,8 @@ impl QueryFilter for SupplierApiConnectionFilter {
 }
 
 impl Pagination for SupplierApiConnectionFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。`page_size` 由 `u32` 转为 `u64`，页码不在此方法内归一。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 向通用仓储提供 `SupplierApiConnectionFilter` 查询的页码和页长；不在此处改写页码。
+    // `page_size` 由 `u32` 转为 `u64`。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -153,20 +136,11 @@ impl Pagination for SupplierApiConnectionFilter {
 #[allow(async_fn_in_trait)]
 pub trait SupplierApiConnectionRepositoryExt {
     /// 分页检索供应商 API 连接列表（投影查询）。
-    ///
-    /// 只返回 [`SupplierApiConnectionRow`] 所需的列表字段，不加载整文档，
-    /// 敏感字段（密钥管理系统引用）不进入投影；排序字段白名单在
-    /// [`sort_doc`] 内收敛，禁止透传任意字段名。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 已完成列表功能资格检查的原快照事务执行器
-    ///
-    /// # 返回
+    /// 只返回 [`SupplierApiConnectionRow`] 所需的列表字段，不加载整文档，敏感字段（密钥管理系统引用）不
+    /// 进入投影；排序字段白名单在[`sort_doc`] 内收敛，禁止透传任意字段名。
     /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// `executor`：已完成列表功能资格检查的原快照事务执行器。
     async fn search_supplier_api_connections(
         &self,
         filter: &SupplierApiConnectionFilter,
@@ -246,18 +220,10 @@ impl Default for SupplierApiCapabilityFilter {
 }
 
 impl QueryFilter for SupplierApiCapabilityFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// `connection_id`、`capability_code`、`status` 为 `None` 时不写入对应字段；给出时分别按连接主键、能力代码和状态码等值匹配。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 将 `SupplierApiCapabilityFilter` 筛选条件转换为 MongoDB 谓词，供仓储取数使用。
+    // 查询仅包含未删除记录。
+    // `connection_id`、`capability_code`、`status` 为 `None` 时不写入对应字段；给出时分别按连接主键、能
+    // 力代码和状态码等值匹配。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(connection_id) = &self.connection_id {
@@ -274,16 +240,8 @@ impl QueryFilter for SupplierApiCapabilityFilter {
 }
 
 impl Pagination for SupplierApiCapabilityFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。`page_size` 由 `u32` 转为 `u64`，页码不在此方法内归一。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 向通用仓储提供 `SupplierApiCapabilityFilter` 查询的页码和页长；不在此处改写页码。
+    // `page_size` 由 `u32` 转为 `u64`。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -293,18 +251,11 @@ impl Pagination for SupplierApiCapabilityFilter {
 #[allow(async_fn_in_trait)]
 pub trait SupplierApiCapabilityRepositoryExt {
     /// 按连接 ID 集合批量读取能力声明。
-    ///
     /// 列表读模型使用一次查询补齐当前页能力摘要，禁止逐连接读取。
-    ///
-    /// # 参数
-    /// * `connection_ids` - 当前页连接 ID；空集合直接返回空结果
-    /// * `executor` - 已完成列表功能资格检查的原快照事务执行器
-    ///
-    /// # 返回
     /// 返回按连接 ID、能力代码稳定排序的完整能力实体。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// `connection_ids`：空集合直接返回空结果。
+    /// `executor`：已完成列表功能资格检查的原快照事务执行器。
     async fn find_capabilities_by_connections(
         &self,
         connection_ids: &[SupplierApiConnectionId],
@@ -312,19 +263,11 @@ pub trait SupplierApiCapabilityRepositoryExt {
     ) -> Result<Vec<SupplierApiCapability>>;
 
     /// 分页检索连接能力声明列表（投影查询）。
-    ///
-    /// 只返回 [`SupplierApiCapabilityRow`] 所需的列表字段，不加载整文档
-    /// （`constraint_snapshot` 长文本不进入列表投影）。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 已完成列表功能资格检查的原快照事务执行器
-    ///
-    /// # 返回
+    /// 只返回 [`SupplierApiCapabilityRow`] 所需的列表字段，不加载整文档（`constraint_snapshot` 长文本不
+    /// 进入列表投影）。
     /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// `executor`：已完成列表功能资格检查的原快照事务执行器。
     async fn search_supplier_api_capabilities(
         &self,
         filter: &SupplierApiCapabilityFilter,
@@ -332,19 +275,10 @@ pub trait SupplierApiCapabilityRepositoryExt {
     ) -> Result<PageResult<SupplierApiCapabilityRow>>;
 
     /// 查找指定连接的全部能力声明（按能力代码升序）。
-    ///
-    /// 单次查询取回整组能力，避免逐条 N+1；返回完整实体供 Service 做
-    /// 能力判定与替换计算。
-    ///
-    /// # 参数
-    /// * `connection_id` - 所属连接
-    /// * `executor` - 已完成列表功能资格检查的原快照事务执行器
-    ///
-    /// # 返回
+    /// 单次查询取回整组能力，避免逐条 N+1；返回完整实体供 Service 做能力判定与替换计算。
     /// 返回该连接下按 `capability_code` 升序的能力声明。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// `executor`：已完成列表功能资格检查的原快照事务执行器。
     async fn find_capabilities_by_connection(
         &self,
         connection_id: &SupplierApiConnectionId,
@@ -406,18 +340,9 @@ impl SupplierApiCapabilityRepositoryExt for SupplierApiCapabilityRepository<'_> 
 #[allow(async_fn_in_trait)]
 pub trait BusinessCapabilityConfirmationRepositoryExt {
     /// 按连接、操作人与幂等摘要查找既有业务确认。
-    ///
-    /// # 参数
-    /// * `connection_id` - 供应商 API 连接
-    /// * `confirmed_by` - 确认人账号
-    /// * `idempotency_key_hash` - 幂等键摘要
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回匹配确认；不存在时返回 `None`。
-    ///
-    /// # 错误
     /// 查询失败时返回对应错误。
+    /// `idempotency_key_hash`：幂等键摘要。
     async fn find_business_confirmation_receipt(
         &self,
         connection_id: &SupplierApiConnectionId,
@@ -427,15 +352,7 @@ pub trait BusinessCapabilityConfirmationRepositoryExt {
     ) -> Result<Option<BusinessCapabilityConfirmation>>;
 
     /// 查询连接下全部追加式业务确认，按最新优先返回。
-    ///
-    /// # 参数
-    /// * `connection_id` - 供应商 API 连接
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回该连接的确认，按 `confirmed_at`、`id` 降序。
-    ///
-    /// # 错误
     /// 查询失败时返回对应错误。
     async fn find_business_confirmations_by_connection(
         &self,
@@ -481,15 +398,7 @@ impl BusinessCapabilityConfirmationRepositoryExt for BusinessCapabilityConfirmat
 #[allow(async_fn_in_trait)]
 pub trait SupplierHealthCheckRunRepositoryExt {
     /// 按后台任务 ID 查询健康检查运行记录。
-    ///
-    /// # 参数
-    /// * `job_id` - 后台任务 ID，对应字段 `background_job_id`
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回匹配记录；不存在时返回 `None`。
-    ///
-    /// # 错误
     /// 查询失败时返回对应错误。
     async fn find_health_run_by_job(
         &self,
@@ -498,19 +407,10 @@ pub trait SupplierHealthCheckRunRepositoryExt {
     ) -> Result<Option<SupplierHealthCheckRun>>;
 
     /// 查询连接最近的健康运行记录。
-    ///
     /// `limit` 收敛到 `1..=100`。结果按 `created_at`、`id` 降序，并排除软删除。
-    ///
-    /// # 参数
-    /// * `connection_id` - 供应商 API 连接
-    /// * `limit` - 最大条数；小于 1 时按 1，大于 100 时按 100
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回未删除的健康运行记录，最新优先。
-    ///
-    /// # 错误
     /// 查询失败时返回对应错误。
+    /// `limit`：小于 1 时按 1，大于 100 时按 100。
     async fn find_health_runs_by_connection(
         &self,
         connection_id: &SupplierApiConnectionId,
@@ -555,19 +455,9 @@ impl SupplierHealthCheckRunRepositoryExt for SupplierHealthCheckRunRepository<'_
 #[allow(async_fn_in_trait)]
 pub trait SupplierConnectionCommandReceiptRepositoryExt {
     /// 按连接、动作、操作人与幂等摘要查询命令回执。
-    ///
-    /// # 参数
-    /// * `connection_id` - 供应商 API 连接
-    /// * `action` - 治理动作
-    /// * `actor_id` - 操作人账号
-    /// * `idempotency_key_hash` - 幂等键摘要
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回匹配回执；不存在时返回 `None`。
-    ///
-    /// # 错误
     /// 查询失败时返回对应错误。
+    /// `idempotency_key_hash`：幂等键摘要。
     async fn find_command_receipt(
         &self,
         connection_id: &SupplierApiConnectionId,
@@ -600,15 +490,10 @@ impl SupplierConnectionCommandReceiptRepositoryExt for SupplierConnectionCommand
     }
 }
 
-/// 构建排序文档（排序字段白名单收敛）。
-///
-/// # 参数
-/// * `sort_by` - 排序字段；仅允许 `connection_code`/`updated_at`/`created_at`，
-///   其余一律回退 `created_at`，方向仍由 `sort_ascending` 决定
-/// * `sort_ascending` - 升序为 `true`，降序为 `false`
-///
-/// # 返回
-/// 返回排序条件文档。
+// 构建排序文档（排序字段白名单收敛）。
+// `sort_by`：仅允许 `connection_code`/`updated_at`/`created_at`，  其余一律回退 `created_at`，方向仍由
+// `sort_ascending` 决定。
+// `sort_ascending`：升序为 `true`，降序为 `false`。
 fn sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
     match sort_by {
@@ -618,10 +503,7 @@ fn sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
     }
 }
 
-/// 连接列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
+// 连接列表投影字段。
 fn supplier_api_connection_projection() -> Document {
     doc! {
         "id": 1,
@@ -640,10 +522,7 @@ fn supplier_api_connection_projection() -> Document {
     }
 }
 
-/// 连接能力列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
+// 连接能力列表投影字段。
 fn supplier_api_capability_projection() -> Document {
     doc! {
         "id": 1,

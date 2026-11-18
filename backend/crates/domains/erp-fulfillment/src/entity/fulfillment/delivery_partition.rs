@@ -9,11 +9,8 @@ use super::{Delivery, DeliveryData, DeliveryLine, DeliveryLineData, DeliveryStat
 
 impl Delivery {
     /// 为同一采购、销售及地址创建独立的部分发货草稿。
-    /// # 参数
-    /// `id` 与 `number` 为服务端生成的新发货身份及业务编号。
-    /// # 返回
     /// 未发货的独立草稿，数量须由 split_quantity 提供。
-    /// # 错误
+    /// `id` 与 `number` 为服务端生成的新发货身份及业务编号。
     /// 原单不是有效供应商直发草稿时拒绝。
     pub fn observed_partition(&self, id: DeliveryId, number: String) -> Result<Self> {
         if self.delivery_type != DeliveryType::SupplierDirect
@@ -40,11 +37,8 @@ impl Delivery {
 
 impl DeliveryLine {
     /// 从原行中取得确定数量，新行与剩余行数量之和等于原行。
-    /// # 参数
-    /// 新发货及新行身份、来源能够证明的本次发货数量。
-    /// # 返回
     /// 本次交付行和剩余草稿行；恰好用尽时剩余为 None。
-    /// # 错误
+    /// 新发货及新行身份、来源能够证明的本次发货数量。
     /// 非直发、数量不正、超过剩余、身份复用或算术溢出时拒绝。
     pub fn split_quantity(
         &self,

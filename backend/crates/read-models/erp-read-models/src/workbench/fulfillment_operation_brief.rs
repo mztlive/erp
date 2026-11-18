@@ -16,18 +16,16 @@ use crate::errors::Result;
 
 type SourceBriefs = HashMap<(ObjectKind, String), ObjectBriefSource>;
 impl WorkbenchFactsReader<'_> {
-    /// 装载履约权威事实，并批量补充来源单据当前生效金额。
-    ///
-    /// # 参数
-    /// * `keys` - 本批任务对象键
-    /// * `facts` - 输出事实；仅覆盖展示，不修改权威身份与参与关系
-    /// * `executor` - 仓储执行器
-    ///
-    /// # 返回
-    /// 成功时写入履约标题与来源单据金额；来源或生效版本缺失时不虚构金额。
-    ///
-    /// # 错误
-    /// 任一仓储读取失败时返回错误。
+    // 为履约执行简报取数时，读取履约权威事实，并批量补充来源单据当前生效金额。
+    //
+    // 调用参数：
+    // * `keys` - 本批任务对象键
+    // * `facts` - 输出事实；仅覆盖展示，不修改权威身份与参与关系
+    // * `executor` - 仓储执行器
+    //
+    // 成功时写入履约标题与来源单据金额；来源或生效版本缺失时不虚构金额。
+    //
+    // 任一仓储读取失败时返回错误。
     pub(super) async fn load_fulfillment_operation_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -56,7 +54,7 @@ impl WorkbenchFactsReader<'_> {
     }
 }
 
-/// 按履约对象类型选择来源单据，发货使用销售单，其余使用采购单。
+// 依据履约对象类型选择来源单据，发货使用销售单，其余使用采购单。
 fn source_kind(kind: ObjectKind) -> Option<ObjectKind> {
     match kind {
         ObjectKind::Delivery => Some(ObjectKind::SalesOrder),
@@ -67,7 +65,7 @@ fn source_kind(kind: ObjectKind) -> Option<ObjectKind> {
     }
 }
 
-/// 只挂接同类来源单据的简报；缺失关联时保留标题，不把未知金额补零。
+// 组装履约执行简报时，只挂接同类来源单据的简报；缺失关联时保留标题，不把未知金额补零。
 fn apply_source_brief(kind: ObjectKind, fact: &mut WorkbenchObjectFact, briefs: &SourceBriefs) {
     let Some(kind) = source_kind(kind) else {
         return;
@@ -80,7 +78,7 @@ fn apply_source_brief(kind: ObjectKind, fact: &mut WorkbenchObjectFact, briefs: 
 }
 
 impl WorkbenchFactsReader<'_> {
-    /// 批量读取发货来源销售单与其当前生效版本；缺失版本不回退审核中提交。
+    // 处理履约执行简报时，批量读取发货来源销售单与其当前生效版本；缺失版本不回退审核中提交。
     async fn fulfillment_sales_briefs(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -107,7 +105,7 @@ impl WorkbenchFactsReader<'_> {
         Ok(sales_source_briefs(&orders, &revisions))
     }
 
-    /// 批量读取入库、电子交付与服务履约来源采购单的当前生效版本。
+    // 处理履约执行简报时，批量读取入库、电子交付与服务履约来源采购单的当前生效版本。
     async fn fulfillment_purchase_briefs(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -135,7 +133,7 @@ impl WorkbenchFactsReader<'_> {
     }
 }
 
-/// 仅为当前生效版本存在且归属正确的销售来源单据生成金额。
+// 只为当前生效版本存在且归属正确的销售来源单据生成金额。
 fn sales_source_briefs(
     orders: &[erp_sales::entity::sales_order::SalesOrder],
     revisions: &HashMap<String, erp_sales::entity::sales_order::SalesOrderRevision>,
@@ -159,7 +157,7 @@ fn sales_source_briefs(
         .collect()
 }
 
-/// 仅为当前生效版本存在且归属正确的采购来源单据生成金额。
+// 只为当前生效版本存在且归属正确的采购来源单据生成金额。
 fn purchase_source_briefs(
     orders: &[erp_procurement::entity::purchase_order::PurchaseOrder],
     revisions: &HashMap<String, erp_procurement::entity::purchase_order::PurchaseOrderRevision>,
@@ -183,7 +181,7 @@ fn purchase_source_briefs(
         .collect()
 }
 
-/// 组装明确标注来源的含税总额，不生成含义不明的默认「含税金额」。
+// 生成履约执行简报视图时，组装明确标注来源的含税总额，不生成含义不明的默认「含税金额」。
 fn source_brief(kind: ObjectKind, id: &str, number: &str, party: &str, amount: &Amount) -> ObjectBriefSource {
     let (document_label, amount_label) = match kind {
         ObjectKind::SalesOrder => ("来源销售单", "来源销售单金额"),

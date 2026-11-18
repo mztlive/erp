@@ -15,15 +15,11 @@ pub struct ReturnSettlementDecision {
     pub supplier_confirmation: String,
 }
 impl ReturnSettlementDecision {
-    /// 判断当前采购是否可交接财务办理。
-    /// # 参数
-    /// * `decision` - 采购已确认方案。
+    /// 判断当前采购是否可交接财务办理。方案与当前依据匹配且实物已完成时返回真。
+    ///
     /// * `revision` / `target` - 当前销售依据及采购目标。
+    ///
     /// * `pending` / `physical_complete` - 已登记退货未结案，且应退实物已全部确认。
-    /// # 返回
-    /// 方案与当前依据匹配且实物已完成时返回真。
-    /// # 错误
-    /// 无。
     pub fn ready_for_finance(
         decision: Option<&Self>,
         revision: &str,
@@ -37,25 +33,20 @@ impl ReturnSettlementDecision {
                 .is_some_and(|value| value.sales_revision_id == revision && value.target_gross == target)
     }
 
-    /// 计算本次需处理的款票差额。
-    /// # 参数
+    /// 计算本次需处理的款票差额。大于目标的部分，否则为零。
+    ///
     /// * `total` / `target` - 当前净额及目标。
-    /// # 返回
-    /// 大于目标的部分，否则为零。
-    /// # 错误
-    /// 无。
     pub fn excess(total: Amount, target: Amount) -> Amount {
         if total > target { total.checked_sub(target) } else { Amount::zero() }
     }
 
     /// 核对本次方案与当前来源及多付金额完全一致。
-    /// # 参数
+    ///
+    /// 金额守恒且依据完整时成功。版本过期、负数、金额不守恒或缺少依据时拒绝。
+    ///
     /// * `revision` / `target` - 当前来源版本与调整目标。
-    /// * `excess` - 当前需退款或转留抵的金额。
-    /// # 返回
-    /// 金额守恒且依据完整时成功。
-    /// # 错误
-    /// 版本过期、负数、金额不守恒或缺少依据时拒绝。
+    ///
+    /// `excess` 为当前需退款或转留抵的金额。
     pub fn validate(&self, revision: &str, target: Amount, excess: Amount) -> Result<()> {
         if self.sales_revision_id != revision || self.target_gross != target {
             return Err(Error::from("销售依据或调整金额已变化，请重新核对处置方案"));

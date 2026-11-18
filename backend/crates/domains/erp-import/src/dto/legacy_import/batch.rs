@@ -103,13 +103,7 @@ pub struct LegacyImportBatchView {
 }
 
 impl From<LegacyImportBatch> for LegacyImportBatchView {
-    /// 从实体构造响应视图（不含后台任务关联，由 Service 另行补充）。
-    ///
-    /// # 参数
-    /// * `batch` - 导入批次实体
-    ///
-    /// # 返回
-    /// 返回响应视图。
+    // 用批次实体构造详情响应；后台任务 ID 留给查询服务在原快照中补齐。
     fn from(batch: LegacyImportBatch) -> Self {
         Self {
             id: batch.base.id,
@@ -216,18 +210,7 @@ pub struct LegacyImportBatchListQuery {
 }
 
 impl LegacyImportBatchListParams {
-    /// 归一化导入批次列表查询参数。
-    ///
-    /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    /// 清理批次列表的文本筛选并填入缺省分页，生成与仓储无关的查询参数；排序字段不在白名单或方向非法时返回 `ValidationError`。
     pub fn normalized(&self) -> Result<LegacyImportBatchListQuery> {
         Ok(LegacyImportBatchListQuery {
             batch_no: normalized_text(self.batch_no.as_deref()),

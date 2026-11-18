@@ -39,11 +39,7 @@ impl CustomerProfileContactInput {
     /// # 参数
     /// * `contact_name` - 联系人姓名
     ///
-    /// # 返回
     /// 返回仅携带姓名的联系人输入。
-    ///
-    /// # 错误
-    /// 无。
     pub fn new(contact_name: impl Into<String>) -> Self {
         Self {
             existing_id: None,
@@ -61,11 +57,7 @@ impl CustomerProfileContactInput {
     /// # 参数
     /// * `mobile` - 手机号明文
     ///
-    /// # 返回
     /// 返回更新后的联系人输入。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_mobile(mut self, mobile: impl Into<String>) -> Self {
         self.mobile = Some(mobile.into());
         self
@@ -225,11 +217,7 @@ pub struct CustomerActionBlockerView {
 /// # 参数
 /// * `status` - 客户角色启停状态
 ///
-/// # 返回
 /// 启用客户返回空集合；停用客户返回禁止新合同和新销售单的稳定阻断原因。
-///
-/// # 错误
-/// 不返回错误。
 pub fn customer_status_blockers(status: CustomerAccountStatus) -> Vec<CustomerActionBlockerView> {
     status
         .blocked_actions()

@@ -15,11 +15,8 @@ pub type PackingPartition =
     (Vec<DeliveryLine>, Vec<DeliveryLine>, DeliveryAddressSnapshot, DeliveryAddressSnapshot, DeliveryPacking);
 impl DeliveryPacking {
     /// 按地址拆出本次正式明细和未发明细，保持每个地址商品数量守恒。
-    /// # 参数
-    /// 本次和剩余发货身份、真实来源行、已核验地址快照及独立身份生成器。
-    /// # 返回
     /// 本次行、剩余行、各自快照和更新真实行身份后的包裹。
-    /// # 错误
+    /// 本次和剩余发货身份、真实来源行、已核验地址快照及独立身份生成器。
     /// 来源缺失、数量越界、身份或行号非法时拒绝，不执行任何持久化。
     pub fn partition(
         self,
@@ -83,7 +80,7 @@ impl DeliveryPacking {
     }
 }
 
-/// 未选择的地址商品本次发货量为零。
+// 未选择的地址商品本次发货量为零。
 fn partition_quantities(
     packing: &DeliveryPacking,
     address: &str,

@@ -28,29 +28,12 @@ pub struct MongoInventoryPeopleFacts {
 
 impl MongoInventoryPeopleFacts {
     /// 绑定库存调整与审批集合所在数据库，构造时不读取。
-    ///
-    /// # 参数
-    /// * `db` - 库存调整与工作项所在数据库。
-    ///
-    /// # 返回
-    /// 返回未执行 I/O 的 adapter。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
     /// 包装为库存域可注入的调整人员事实 Port。
-    ///
-    /// # 参数
-    /// * `db` - 库存调整与工作项所在数据库。
-    ///
-    /// # 返回
     /// 返回共享的调整人员事实 Port。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn shared(db: Database) -> Arc<dyn AdjustmentPeopleFactsPort> {
         Arc::new(Self::new(db))
     }

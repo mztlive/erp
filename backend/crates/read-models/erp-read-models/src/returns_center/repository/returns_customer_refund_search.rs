@@ -60,7 +60,7 @@ fn list_filter(
     }
 }
 
-/// 插入实体后按投影反序列化，锁定 Amount/Instant/可选 ID 与分页边界。
+// 验证客户退款关联搜索：插入实体后按投影反序列化，锁定 Amount/Instant/可选 ID 与分页边界。
 #[tokio::test]
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn search_customer_refunds_pages_filters_and_projects_view_facts() {
@@ -131,7 +131,7 @@ async fn search_customer_refunds_pages_filters_and_projects_view_facts() {
     });
 }
 
-/// 相同主排序字段时 `id` 次键必须稳定区分升序与降序。
+// 验证客户退款关联搜索：相同主排序字段时 `id` 次键必须稳定区分升序与降序。
 #[tokio::test]
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn search_customer_refunds_id_tiebreaker_is_stable() {

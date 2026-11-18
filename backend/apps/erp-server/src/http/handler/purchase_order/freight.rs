@@ -13,14 +13,7 @@ use crate::http::state::HttpState;
 use crate::wiring::purchase_ports;
 
 /// 标记采购单某商品的运费另计由供应商免收。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 采购单
-/// * `req` - 销售行与原因
-///
-/// # 返回
+/// `req` 为销售行与原因。
 /// 返回已标记的采购单与销售行。
 pub async fn freight_waiver_create(
     State(state): State<HttpState>,

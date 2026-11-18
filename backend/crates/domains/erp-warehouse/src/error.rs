@@ -61,9 +61,7 @@ impl_repository_error!(
         |error| { Error::ConflictError(duplicate_index_conflict_message(error.duplicate_index_name())) }
 );
 
-/// 将仓库域唯一索引名称映射为面向用户的冲突提示。
-///
-/// 未知索引回落通用文案；错误分类保持 `Conflict` 不变。
+// 用仓库唯一索引名区分用户可处理的冲突原因；未登记索引显示通用提示，仍归类为 `Conflict`。
 fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
     match index_name {
         Some("uk_warehouses_warehouse_code") => "仓库代码重复，请勿重复提交".to_string(),

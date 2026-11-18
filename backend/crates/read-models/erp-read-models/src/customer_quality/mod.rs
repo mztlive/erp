@@ -35,27 +35,22 @@ pub struct CustomerQualityReadModel {
 }
 
 impl CustomerQualityReadModel {
-    /// 复用应用数据库、RBAC 与组合层注入的客户授权服务。
+    /// 装配客户经营质量时，复用应用数据库、RBAC 与组合层注入的客户授权服务。
     ///
     /// # 参数
-    /// * `db` - 应用数据库
     /// * `rbac` - 当前 RBAC 快照服务
     /// * `customer_scope` - 已装配的客户授权服务
     ///
     /// # 返回
     /// 返回执行双口径一致快照查询的读模型。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: Database, rbac: Arc<AuthorizationService>, customer_scope: CustomerAccess) -> Self {
         Self { db, rbac, customer_scope }
     }
 
-    /// 当前负责口径分页视图：现任主责客户及其期间订单汇总。
+    /// 查看现任负责口径时，按当前归属返回可读客户的分页和期间订单汇总。
     ///
     /// # 参数
     /// * `query` - 现任负责人／组织／业务筛选
-    /// * `actor` - 已认证操作人
     ///
     /// # 返回
     /// 返回现任口径分页视图。
@@ -70,11 +65,10 @@ impl CustomerQualityReadModel {
         self.read_current(query, actor, false).await
     }
 
-    /// 历史贡献口径分页视图：冻结归属分组的期间订单汇总。
+    /// 查看历史贡献口径时，按冻结人员或组织归属分组返回期间订单汇总，不使用客户现任负责人回填。
     ///
     /// # 参数
     /// * `query` - 历史人员／组织／业务筛选
-    /// * `actor` - 已认证操作人
     ///
     /// # 返回
     /// 返回历史口径分页视图。
@@ -89,11 +83,10 @@ impl CustomerQualityReadModel {
         self.read_history(query, actor, false).await
     }
 
-    /// 当前口径全量 CSV；分页参数不截断行集合，版本绑定首个响应。
+    /// 导出现任负责报表时沿用原查询和范围版本，对完整匹配集合生成 CSV，而不是导出当前页。
     ///
     /// # 参数
     /// * `query` - 与列表相同的现任筛选
-    /// * `actor` - 已认证操作人
     ///
     /// # 返回
     /// 返回当前口径全量 CSV。
@@ -108,11 +101,10 @@ impl CustomerQualityReadModel {
         Ok(export::current(self.read_current(query, actor, true).await?))
     }
 
-    /// 历史口径全量 CSV；冻结归属列随行导出，不使用客户端金额。
+    /// 导出历史贡献报表时用同一筛选和授权范围读取全部匹配行，将冻结归属写入 CSV，不采用客户端提供的金额。
     ///
     /// # 参数
     /// * `query` - 与列表相同的历史筛选
-    /// * `actor` - 已认证操作人
     ///
     /// # 返回
     /// 返回历史口径全量 CSV。
@@ -127,7 +119,7 @@ impl CustomerQualityReadModel {
         Ok(export::history(self.read_history(query, actor, true).await?))
     }
 
-    /// 在同一授权快照产生当前口径全部投影，返回前再检查撤权。
+    // 现任负责报表在首个快照内组合完整授权、业务筛选和投影；交付列表或导出前在新事务复验范围指纹。
     async fn read_current(
         &self,
         query: CurrentQualityQuery,
@@ -155,7 +147,7 @@ impl CustomerQualityReadModel {
         Ok(view.view)
     }
 
-    /// 在同一授权快照产生历史口径全部投影，返回前再检查撤权。
+    // 历史贡献报表在首个快照内按冻结归属投影；交付列表或导出前在新事务复验范围指纹。
     async fn read_history(
         &self,
         query: HistoryQualityQuery,
@@ -184,7 +176,7 @@ impl CustomerQualityReadModel {
     }
 }
 
-/// 跨页与生成返回前必须使用相同授权版本；不拼接撤权前后的结果。
+// 客户经营质量列表翻页或导出前，用本次快照的指纹检查已携带的范围版本，避免拼接授权变化前后的结果。
 fn ensure_version(expected: Option<&str>, current: &str) -> Result<()> {
     ScopeVersion::new(expected, EmptyScopeVersion::Provided)
         .verify(current)

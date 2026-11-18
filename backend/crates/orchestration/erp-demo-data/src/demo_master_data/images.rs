@@ -21,13 +21,8 @@ use super::{DemoMasterDataProcess, image_assets, prices};
 use crate::{Error, Result};
 
 impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
-    /// 仅给已登记的演示商品补齐图片及价格缺项；失败可再次生成继续。
-    /// # 参数
-    /// `actor` 为操作人；`step` 为种子；`records` 为实际 ID 登记。
-    /// # 返回
-    /// 登记的模板 SKU 补齐价格，启用 SKU 有主图，商品有轮播图；已有值不替换。
-    /// # 错误
-    /// 归属、图片、存储或商品版本冲突时返回错误，禁止报告生成完成。
+    // 只为已登记演示商品补齐轮播图、启用 SKU 的主图及模板价格缺项，不替换已有值。
+    // 归属、图片、对象存储或版本出错时不报告完成，重试可继续补齐。
     pub(super) async fn ensure_product_defaults(
         &self,
         actor: &AuditActor,

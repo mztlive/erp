@@ -16,15 +16,7 @@ use crate::http::state::HttpState;
 mod approval_process;
 
 /// 返回审批实例与定义管理路由。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
 /// 返回合同 §3 运行 API 与定义管理 API。
-///
-/// # 错误
-/// 不执行 I/O，不返回错误。
 pub fn routes() -> Router<HttpState> {
     Router::new()
         .merge(approval_process::routes())
@@ -35,7 +27,7 @@ pub fn routes() -> Router<HttpState> {
         .merge(command_routes())
 }
 
-/// 提交资料和冻结附件读取路由。
+// 为父路由挂载提交资料和冻结附件读取路由。
 fn material_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -75,7 +67,7 @@ fn material_routes() -> Router<HttpState> {
         )
 }
 
-/// 审批实例列表、详情、历史与恢复选项。
+// 为审批工作台挂载实例列表、详情、历史及受阻恢复选项的只读入口。
 fn query_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -115,7 +107,7 @@ fn query_routes() -> Router<HttpState> {
         )
 }
 
-/// 审批决定及管理写命令。
+// 挂载审批任务决定与管理员运行维护接口，供开放任务办理和受阻处置使用。
 fn command_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -158,7 +150,7 @@ fn copy_routes() -> Router<HttpState> {
     )
 }
 
-/// 发起人个人提醒复用实例读取权限，并在服务层校验本人身份。
+// 挂载发起人个人进展提醒，沿用实例读取资格；只经服务层核验后交付本人记录。
 fn progress_routes() -> Router<HttpState> {
     Router::new()
         .route(

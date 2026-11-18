@@ -29,13 +29,7 @@ pub struct SavePurchaseChangeDraftRequest {
 }
 
 impl SavePurchaseChangeDraftRequest {
-    /// 复用提交前的完整目标校验和构造，不执行提交动作。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 返回同一目标内容，重提说明为空。
-    /// # 错误
-    /// 无。
+    /// 复用提交前的完整目标校验和构造，不执行提交动作。返回同一目标内容，重提说明为空。
     pub fn target_request(&self) -> SubmitPurchaseChangeRequest {
         SubmitPurchaseChangeRequest {
             expected_lock_version: self.expected_lock_version,
@@ -48,12 +42,10 @@ impl SavePurchaseChangeDraftRequest {
     }
 
     /// 构造独立保存的稳定命令身份与完整原请求摘要。
-    /// # 参数
+    ///
+    /// 返回不依赖当前单据状态的身份、请求摘要。身份无效或请求序列化失败时拒绝。
+    ///
     /// * `change_id` / `actor_id` - 已授权变更单和操作人。
-    /// # 返回
-    /// 返回不依赖当前单据状态的身份、请求摘要。
-    /// # 错误
-    /// 身份无效或请求序列化失败时拒绝。
     pub fn command(
         &self,
         change_id: &str,
@@ -82,7 +74,7 @@ mod tests {
     use super::*;
     use crate::entity::purchase_order::PurchaseCommandReceiptError;
 
-    /// 保存命令精确回放首次版本和目标，同键改版本或内容时必须冲突。
+    // 保存命令精确回放首次版本和目标，同键改版本或内容时必须冲突。
     #[test]
     fn save_command_replays_original_target_and_rejects_changed_request() {
         let request: SavePurchaseChangeDraftRequest = serde_json::from_value(json!({

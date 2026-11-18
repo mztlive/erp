@@ -27,87 +27,31 @@ pub trait SupplierOfferingExt: Sized {
     const SKU_DELIVERY_COVERAGE_STATE: &'static str = "sku_delivery_coverage_state";
 
     /// 获取供给稳定身份集合。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回通用供给仓储。
-    ///
-    /// # 错误
-    /// 不返回错误。
     fn supplier_offerings(&self) -> SupplierOfferingRepository<'_>;
 
     /// 获取供给商业条款修订集合。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回通用修订仓储。
-    ///
-    /// # 错误
-    /// 不返回错误。
     fn supplier_offering_revisions(&self) -> SupplierOfferingRevisionRepository<'_>;
 
     /// 获取实时可供投影集合。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回通用可供投影仓储。
-    ///
-    /// # 错误
-    /// 不返回错误。
     fn supplier_offering_availabilities(&self) -> SupplierOfferingAvailabilityRepository<'_>;
 
     /// 获取供给写命令去重集合。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回通用命令仓储。
-    ///
-    /// # 错误
-    /// 不返回错误。
     fn supplier_offering_commands(&self) -> SupplierOfferingCommandRepository<'_>;
 
     /// 获取供给跨集合事务仓储。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回供给聚合仓储。
-    ///
-    /// # 错误
-    /// 不返回错误。
     fn supplier_offering_repository(&self) -> SupplierOfferingDomainRepository<'_>;
 
-    /// 获取 `supplier_delivery_template` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
+    /// 用当前数据库打开 `supplier_delivery_template` 集合仓储。
     /// 返回配送模板仓储。
-    ///
-    /// # 错误
-    /// 不返回错误。
     fn supplier_delivery_templates(&self) -> SupplierDeliveryTemplateRepository<'_>;
 
     /// 获取 SKU 配送覆盖投影访问器。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回覆盖访问器。
-    ///
-    /// # 错误
-    /// 不返回错误。
     fn sku_delivery_coverages(&self) -> SkuDeliveryCoverageStore<'_>;
 }
 

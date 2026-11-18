@@ -18,25 +18,14 @@ use crate::{Error, Result};
 impl CustomerAcceptanceProcess {
     /// 冲正客户验收（已过账 → 已冲正；§8.2 第 5 条反向分配事务）。
     ///
-    /// 客户验收签署为 `NO_APPROVAL`：冲正只追加反向验收事实，不得启动审批
-    /// 或创建任务。
+    /// 客户验收签署为 `NO_APPROVAL`：冲正只追加反向验收事实，不得启动审批或创建任务。
     ///
-    /// 误录时新增反向验收单：原验收行的通过/短少/拒收数量镜像复制，原
-    /// `APPLY` 分配逐条生成 `REVERSE` 分配（引用原分配），新验收单立即过账，
-    /// 原验收单登记反向引用并迁移到 `REVERSED`。冲正不覆盖原验收事实。
+    /// 误录时新增反向验收单：原验收行的通过/短少/拒收数量镜像复制，原 `APPLY` 分配逐条生成 `REVERSE` 分配（引用原分配），新验收单立即过账，原验收单登记反向引用并迁移到 `REVERSED`。
+    /// 冲正不覆盖原验收事实。
     ///
-    /// # 参数
-    /// * `id` - 待冲正验收单主键
-    /// * `req` - 冲正请求（期望版本 + 原因）
-    /// * `actor` - 已通过鉴权的审计操作人
+    /// `id` 为待冲正验收单主键；`req` 为冲正请求（期望版本 + 原因）。返回新建反向验收单的视图。`NotFound`：验收单不存在。
     ///
-    /// # 返回
-    /// 返回新建反向验收单的视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 验收单不存在
-    /// * `ConflictError` - 版本不符或状态不允许冲正
-    /// * `OutcomeUnknown` - 提交结果无法确认
+    /// `ConflictError`：版本不符或状态不允许冲正。`OutcomeUnknown`：提交结果无法确认。
     #[tracing::instrument(
         name = "fulfillment.customer_acceptance_reverse",
         skip_all,
@@ -92,7 +81,7 @@ impl CustomerAcceptanceProcess {
         }
     }
 
-    /// 恢复只查询当前授权快照中的已提交结果，不重放冲正写入。
+    // 恢复只查询当前授权快照中的已提交结果，不重放冲正写入。
     async fn recover_reverse(
         &self,
         error: Error,
@@ -103,7 +92,7 @@ impl CustomerAcceptanceProcess {
         recover(error, self.reversed_result(id, actor, receipt)).await
     }
 
-    /// 原功能资格、真实原单和回执结果共用同一恢复事务。
+    // 原功能资格、真实原单和回执结果共用同一恢复事务。
     async fn reversed_result(
         &self,
         id: &str,
@@ -128,7 +117,7 @@ struct ReverseAuthorization {
     authorization: Arc<AuthorizationService>,
 }
 
-/// 重验授权和回执后，沿用当前事务依次写反向事实与后续任务。
+// 重验授权和回执后，沿用当前事务依次写反向事实与后续任务。
 async fn commit_reverse(
     db: &Database,
     authorization: ReverseAuthorization,

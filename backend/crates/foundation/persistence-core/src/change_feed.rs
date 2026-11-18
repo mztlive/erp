@@ -19,24 +19,13 @@ pub struct ChangeSource<T> {
     recipient_field: Option<&'static str>,
 }
 impl<T> ChangeSource<T> {
-    /// 登记需要按当前授权重新查询的共享资源。
-    /// # 参数
-    /// collection 为本域集合；topic 为消费者的刷新主题。
-    /// # 返回
-    /// 不包含业务数据的来源声明。
-    /// # 错误
-    /// 不执行 I/O。
+    /// 登记本领域集合的共享刷新主题，不读取数据库。通知本身没有业务数据或收件人，
+    /// 消费者收到后须按当前权限重新查询。
     pub fn shared(collection: &str, topic: T) -> Self {
         Self { collection: collection.to_owned(), topic, recipient_field: None }
     }
-    /// 登记收件关系不可变的个人资源。
-    /// # 参数
-    /// recipient_field 为文档中的账号字段；缺少文档时退化为无载荷刷新。
-    /// collection 和 topic 分别为本域集合与消费者主题。
-    /// # 返回
-    /// 限定个人收件人的来源声明。
-    /// # 错误
-    /// 不执行 I/O。
+    /// 为收件人归属不可变的资源登记账号字段和刷新主题，不执行 I/O。
+    /// 变更流取不到文档或账号时，退化为没有收件人信息的刷新通知。
     pub fn personal(collection: &str, topic: T, recipient_field: &'static str) -> Self {
         Self { collection: collection.to_owned(), topic, recipient_field: Some(recipient_field) }
     }
@@ -51,13 +40,8 @@ pub struct CommittedChange<T> {
     pub recipient: Option<String>,
 }
 
-/// 打开一个数据库级变更流，只订阅各领域登记的集合。
-/// # 参数
-/// db 为目标数据库；sources 为拥有领域提供的来源白名单。
-/// # 返回
-/// 已建立的订阅；调用方随后读取初始快照可避免订阅窗口丢失。
-/// # 错误
-/// BSON、权限或数据库不支持变更流时返回错误；禁止回退为成功空流。
+/// 打开数据库级订阅，只输出已登记集合的刷新信号及数据库结构失效通知，不传业务文档。
+/// 应先订阅再读取初始快照，以免漏掉窗口内的变更。BSON、权限或部署能力错误必须返回，不当作空流。
 pub async fn subscribe<T: Serialize + DeserializeOwned + Send + Sync>(
     db: &Database,
     sources: &[ChangeSource<T>],

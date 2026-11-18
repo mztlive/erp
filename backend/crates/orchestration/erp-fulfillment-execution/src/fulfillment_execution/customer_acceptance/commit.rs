@@ -28,24 +28,12 @@ use super::task::prepare_customer_acceptance_task_command;
 use crate::workflow::FulfillmentWorkflow;
 use crate::{Error, Result};
 impl CustomerAcceptanceProcess {
-    /// 原子登记并过账客户验收。
+    /// 客户最终确认验收时直接登记并过账，无需先保存草稿或查询事实类型。原事务按最终表头、行、分配及乐观锁版本
+    /// 新建或替换草稿，校验并写入履约事实分配，再过账、刷新销售履约进度并审计。
     ///
-    /// 同一事务内完成草稿创建或完整替换、履约事实分配校验与写入、验收过账、
-    /// 销售单履约进度刷新和审计。前端无需先保存草稿或预查询事实类型。
-    /// 同一操作号已完成过账时直接返回既有结果，支持结果未知后的安全重试。
-    ///
-    /// # 参数
-    /// * `req` - 最终验收表头、行、分配和乐观锁版本
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回已过账验收单以及过账后重新计算的剩余可验收事实。
-    ///
-    /// # 错误
-    /// * `ValidationError` - 行、分配、事实归属或版本参数不合法
-    /// * `ConflictError` - 草稿、销售单版本或状态冲突
-    /// * `NotFound` - 草稿、销售单或履约事实不存在
-    /// * `OutcomeUnknown` - 事务提交结果无法确认
+    /// 按原操作号查证和重放，不再次过账。返回已过账验收单及重算后的剩余可验收事实。
+    /// 行、分配、事实归属或版本参数不合法返回 `ValidationError`；草稿、销售版本或状态冲突返回 `ConflictError`；
+    /// 草稿、销售单或履约事实缺失返回 `NotFound`；无法确认事务结果返回 `OutcomeUnknown`。
     #[tracing::instrument(
         name = "fulfillment.customer_acceptance_commit",
         skip_all,
@@ -91,7 +79,7 @@ impl CustomerAcceptanceProcess {
         commit_command_receipt(req, actor.id())
     }
 
-    /// 恢复只读取原回执；未确认的提交保留原错误，不重放命令。
+    // 写事务失败后只按原请求和回执查证；未确认成功时保留原错误，不再次执行验收过账。
     async fn recover_commit(
         &self,
         error: Error,
@@ -102,7 +90,7 @@ impl CustomerAcceptanceProcess {
         recover(error, self.committed_result(req, actor, receipt)).await
     }
 
-    /// 回执、真实任务、销售来源及完整结果都在同一恢复快照内读取。
+    // 重试或提交查证时，在同一恢复快照核对原回执、真实验收任务和销售来源，再按原验收单读取完整结果；无原回执时不交付视图。
     async fn committed_result(
         &self,
         req: &CommitCustomerAcceptanceRequest,
@@ -252,7 +240,7 @@ impl PreparedAcceptanceCommit {
             .await?)
     }
 
-    /// 新建时必须已通过任务资格，再完成创建及凭证授权后消费独立编号。
+    // 新建时必须已通过任务资格，再完成创建及凭证授权后消费独立编号。
     async fn allocate_number(
         &self,
         existing: &Option<CustomerAcceptance>,
@@ -280,7 +268,7 @@ impl PreparedAcceptanceCommit {
         Ok(Some(number))
     }
 
-    /// 单据注册与验收事实写入沿原命令执行器完成。
+    // 单据注册与验收事实写入沿原命令执行器完成。
     async fn write(
         &self,
         acceptance: &mut CustomerAcceptance,
@@ -312,7 +300,7 @@ struct CustomerAcceptanceDocument<'a> {
 }
 
 impl CustomerAcceptanceDocument<'_> {
-    /// 新单沿取号前已校验的资格登记；既有草稿在写入前校验最终凭证。
+    // 新单沿取号前已校验的资格登记；既有草稿在写入前校验最终凭证。
     async fn prepare(
         &self,
         acceptance: &CustomerAcceptance,

@@ -21,52 +21,16 @@ pub trait LegacyImportExt {
     /// `legacy_import_confirmation` 集合名。
     const LEGACY_IMPORT_CONFIRMATIONS: &'static str = "legacy_import_confirmations";
 
-    /// 获取 `legacy_import_batch` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `LegacyImportBatchRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得导入批次集合仓储，供按稳定身份读写批次和查询列表。
     fn legacy_import_batches(&self) -> LegacyImportBatchRepository<'_>;
 
-    /// 获取 `legacy_import_row` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `LegacyImportRowRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得导入行集合仓储，供处理阶段读写逐行事实。
     fn legacy_import_rows(&self) -> LegacyImportRowRepository<'_>;
 
-    /// 获取 `legacy_import_confirmation` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `LegacyImportConfirmationRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得导入确认集合仓储，供按任务或试算定位责任范围事实。
     fn legacy_import_confirmations(&self) -> LegacyImportConfirmationRepository<'_>;
 
-    /// 获取承载跨集合事务写入的域专用仓储。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `LegacyImportRepository` 实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得协调批次和导入行写入的领域仓储；跨集合写入仍须调用方提供事务。
     fn legacy_import(&self) -> LegacyImportRepository<'_>;
 }
 

@@ -19,14 +19,8 @@ pub struct AliyunContractOcr {
     pdftoppm_path: PathBuf,
 }
 impl AliyunContractOcr {
-    /// 从当前 SafeConfig 快照装配 OCR 适配器。
-    /// # 参数
-    /// * `credentials` - 阿里云凭据
-    /// * `pdftoppm_path` - 管理员配置的 Poppler 执行文件
-    /// # 返回
-    /// 延迟创建 HTTP 客户端的适配器，不访问网络。
-    /// # 错误
-    /// 无；配置及运行环境错误由识别任务记录。
+    /// 应用从当前 SafeConfig 快照取出阿里云凭据与 Poppler 路径，用于装配合同逐页识别。
+    /// 这里仅保存配置；HTTP 客户端在识别任务中创建，配置或运行环境有问题也在任务执行时报告。
     pub fn new(credentials: Credentials, pdftoppm_path: PathBuf) -> Self {
         Self { credentials, pdftoppm_path }
     }

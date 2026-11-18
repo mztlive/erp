@@ -9,17 +9,13 @@ use crate::entity::receivable::{CustomerReceipt, CustomerReceiptStatus, PendingR
 #[allow(async_fn_in_trait)]
 pub trait ReceiptCapacityRepositoryExt {
     /// 汇总指定分录的审批中拟核销金额。
-    ///
-    /// # 参数
-    /// * `entry_ids` - 已限定子账的全部分录，空集合不查询。
-    /// * `excluded_receipt` - 最终核销或重提时排除本单；读取候选传 `None`。
-    /// * `executor` - 调用方事务。
-    ///
-    /// # 返回
-    /// 每个分录最多一行金额；草稿、已核销和已冲正单据不占用。
-    ///
-    /// # 错误
+    /// 结果：每个分录最多一行金额；草稿、已核销和已冲正单据不占用。
     /// 数据读取或金额反序列化失败时返回错误。
+    ///
+    /// 输入约定：
+    /// - `entry_ids`：已限定子账的全部分录，空集合不查询。
+    /// - `excluded_receipt`：最终核销或重提时排除本单；读取候选传 `None`。
+    /// - `executor`：调用方事务。
     async fn reserved_allocations(
         &self,
         entry_ids: &[ReceivableEntryId],

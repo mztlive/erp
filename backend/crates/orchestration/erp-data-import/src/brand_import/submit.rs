@@ -17,16 +17,12 @@ use super::{BRAND_IMPORT_DOMAIN, BrandImportProcess, authorize};
 use crate::{Error, Result};
 
 impl BrandImportProcess {
-    /// 加密保存输入并原子登记任务及行明细，不执行品牌写入。
+    /// 提交品牌批量导入时，以提交人和完整输入生成来源指纹，先保存加密源文件，再原子登记任务及全部行；入口不写品牌。
     ///
-    /// # 参数
-    /// * `request` - 已解析的导入请求。
-    /// * `actor` - 提交人，参与源内容指纹。
+    /// `actor`：提交人，参与源内容指纹。
     ///
-    /// # 返回
     /// 返回新建任务；同一提交身份且载荷相同则返回已有任务。
     ///
-    /// # 错误
     /// 请求校验失败、内容超过 5 MB、编码或保存失败、事务失败，或同一提交身份对应不同载荷时返回错误。
     pub async fn submit(
         &self,
@@ -64,7 +60,7 @@ impl BrandImportProcess {
         self.persist(job, items, actor).await
     }
 
-    /// 在同一快照内先证明当前入口资格，再读取并核验原提交。
+    // 在同一快照内先证明当前入口资格，再读取并核验原提交。
     async fn replay(&self, proposed: &BackgroundJob, actor: &AuditActor) -> Result<Option<BackgroundJob>> {
         let db = self.db.clone();
         let authorization = self.authorization.clone();
@@ -80,7 +76,7 @@ impl BrandImportProcess {
             .await
     }
 
-    /// 任务与行明细在同一事务内落库；唯一竞争和未知提交结果回读原任务。
+    // 加密来源已保存后，在同一事务重验提交人资格并登记任务与行；唯一键竞争或未知提交用原提交身份回读。
     async fn persist(
         &self,
         job: BackgroundJob,
@@ -120,7 +116,7 @@ impl BrandImportProcess {
     }
 }
 
-/// 首次回放与提交结果未知后的查证使用相同授权及载荷校验。
+// 首次回放与提交结果未知后的查证使用相同授权及载荷校验。
 async fn replay_registration(
     db: &Database,
     authorization: &AuthorizationService,
@@ -133,7 +129,7 @@ async fn replay_registration(
     checked_replay(existing, proposed)
 }
 
-/// 返回经过原提交身份和完整输入指纹校验的既有任务，保留其最新状态。
+// 返回经过原提交身份和完整输入指纹校验的既有任务，保留其最新状态。
 fn checked_replay(
     existing: Option<BackgroundJob>,
     proposed: &BackgroundJob,
@@ -144,32 +140,22 @@ fn checked_replay(
     Ok(existing)
 }
 
-/// 用服务端生成的摘要组成加密对象路径，不接受客户端路径。
-///
-/// # 参数
-/// * `source` - 源内容摘要的十六进制文本。
-///
-/// # 返回
-/// 返回 `brand-import/{source}.enc`。
-///
-/// # 错误
-/// 不返回错误。
+// 用服务端生成的摘要组成加密对象路径，不接受客户端路径。
+//
+// `source`：源内容摘要的十六进制文本。
+//
+// 返回 `brand-import/{source}.enc`。
 pub(super) fn source_key(source: &str) -> String {
     format!("brand-import/{source}.enc")
 }
 
-/// 构造有界任务聚合；源内容摘要写入任务身份，行明细覆盖全部模板行。
-///
-/// # 参数
-/// * `request` - 已校验的导入请求。
-/// * `actor` - 提交人账号。
-/// * `source` - 源内容摘要。
-///
-/// # 返回
-/// 返回待落库的任务和行明细。
-///
-/// # 错误
-/// 任务聚合构造失败时返回错误。
+// 构造有界任务聚合；源内容摘要写入任务身份，行明细覆盖全部模板行。
+//
+// `actor`：提交人账号；`source`：源内容摘要。
+//
+// 返回待落库的任务和行明细。
+//
+// 任务聚合构造失败时返回错误。
 pub(super) fn build_job(
     request: &BrandImportJobRequest,
     actor: &str,
@@ -217,17 +203,13 @@ pub(super) fn build_job(
     .into_parts())
 }
 
-/// 同一提交身份不得切换操作者、业务类型或源数据；旧记录没有指纹时也拒绝。
-///
-/// # 参数
-/// * `existing` - 已落库的任务。
-/// * `proposed` - 本次请求构造的任务。
-///
-/// # 返回
-/// 操作者、业务类型和请求指纹都一致时返回。
-///
-/// # 错误
-/// 任一字段不一致或已有任务没有指纹时返回冲突。
+// 同一提交身份不得切换操作者、业务类型或源数据；旧记录没有指纹时也拒绝。
+//
+// `existing`：已落库的任务；`proposed`：本次请求构造的任务。
+//
+// 操作者、业务类型和请求指纹都一致时返回。
+//
+// 任一字段不一致或已有任务没有指纹时返回冲突。
 pub(super) fn ensure_replay(existing: &BackgroundJob, proposed: &BackgroundJob) -> Result<()> {
     if existing.requested_by != proposed.requested_by
         || existing.domain_job_type != proposed.domain_job_type
@@ -268,7 +250,7 @@ pub(super) mod tests {
         build_job(&request(), "actor-1", &"a".repeat(64)).unwrap()
     }
 
-    /// 回放交付已有任务的真实状态及版本，不使用本次候选任务覆盖原结果。
+    // 验证：回放交付已有任务的真实状态及版本，不使用本次候选任务覆盖原结果。
     #[test]
     fn replay_returns_existing_job_state_and_rejects_another_payload_for_the_same_request() {
         let (mut existing, _) = fixture();
@@ -292,7 +274,7 @@ pub(super) mod tests {
             if reason == "该提交已用于其他导入内容，请重新选择文件"));
     }
 
-    /// 身份取证失败必须在读取原回执前结束；非快照执行器不能用于该回放。
+    // 验证：身份取证失败必须在读取原回执前结束；非快照执行器不能用于该回放。
     #[tokio::test]
     async fn replay_authorizes_in_the_original_snapshot_before_reading_any_job() {
         let db = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")

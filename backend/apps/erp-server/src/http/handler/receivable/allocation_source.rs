@@ -10,11 +10,7 @@ use crate::http::state::HttpState;
 use crate::wiring::funds_access;
 
 /// 按分配目标返回财务来源资料。
-/// # 参数
-/// state、actor 为认证上下文；kind、id 为应收分配目标。
-/// # 返回
 /// 经财务功能与来源授权验证的窄资料响应。
-/// # 错误
 /// 无权限、目标不存在或版本错配时拒绝。
 pub async fn detail(
     State(state): State<HttpState>,

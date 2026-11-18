@@ -19,13 +19,12 @@ pub(super) struct ScopeCompiler<'a, 'tree> {
 }
 
 impl ScopeCompiler<'_, '_> {
-    /// 编译一个完整分支；同维度合并，维度完整性由调用方检查。
-    /// # 参数
-    /// terms 为同一分支的完整范围项。
-    /// # 返回
-    /// 可用于数据库查询和对象检查的条款。
-    /// # 错误
-    /// 目标形态非法、旧角色动态模式或组织不存在时拒绝。
+    // 编译一个完整分支；同维度合并，维度完整性由调用方检查。
+    // 可用于数据库查询和对象检查的条款。
+    //
+    // 目标形态非法、旧角色动态模式或组织不存在时拒绝。
+    //
+    // terms 为同一分支的完整范围项。
     pub(super) fn clause(&self, terms: &[PersonScopeTerm]) -> Result<ScopeClause> {
         let mut clause = ScopeClause::default();
         for term in terms {
@@ -54,7 +53,7 @@ impl ScopeCompiler<'_, '_> {
         Ok(clause)
     }
 
-    /// 解析当前有效本人组织或显式组织，不读取旧角色关系。
+    // 授权编译需要组织维度时，按当前解释时点解析本人主属或显式部门，不读取旧角色关系。
     fn organizations(&self, ids: &[String], include_descendants: bool) -> Result<BTreeSet<String>> {
         let mut result = BTreeSet::new();
         for id in ids {

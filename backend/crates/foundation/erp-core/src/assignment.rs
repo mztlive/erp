@@ -17,13 +17,8 @@ pub enum AssignmentStrategy {
 }
 
 impl AssignmentStrategy {
-    /// 从已规范化的池中选取本批次负责人，不修改轮次。
-    /// # 参数
-    /// `members` 为配置顺序；`last_owner` 为该规则最近成功分派的人员。
-    /// # 返回
-    /// 返回下一位成员；首次使用或上次成员移除时从首位开始。
-    /// # 错误
-    /// 空池拒绝解析。
+    /// 为采购、财务等规则挑选本批次负责人，不推进分派轮次。按配置顺序从上次成功分派者之后继续，末尾回到首位；
+    /// 首次分派或上次人员已移除时从首位开始。空池返回错误。
     pub fn select<'a>(self, members: &'a [String], last_owner: Option<&str>) -> Result<&'a str> {
         if members.is_empty() {
             return Err(Error::from("负责人池至少需要一名负责人"));
@@ -39,13 +34,8 @@ impl AssignmentStrategy {
     }
 }
 
-/// 校验负责人池，保持配置顺序，拒绝重复成员。
-/// # 参数
-/// `members` 为输入账号，最多 100 人。
-/// # 返回
-/// 返回去除首尾空白的非空成员列表。
-/// # 错误
-/// 空池、超长、空账号或重复人员时返回配置错误。
+/// 保存分派规则前清理负责人账号并保留配置顺序，避免轮询顺序意外变化。池须有 1–100 人；
+/// 剪掉首尾空白后，拒绝空值、超过 128 字符的账号及重复账号。
 pub fn normalize_pool(members: Vec<String>) -> Result<Vec<String>> {
     if members.is_empty() || members.len() > 100 {
         return Err(Error::from("负责人池人数必须在 1 至 100 之间"));

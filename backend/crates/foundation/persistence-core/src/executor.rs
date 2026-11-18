@@ -18,7 +18,7 @@ pub(crate) mod sealed {
 /// 对外取得原始会话会永久撤销该执行器的快照证明；统一读写操作使用本许可。
 pub struct SessionAccess(());
 
-/// 在统一读写封装中使用会话，写操作必须先推进读取阶段。
+// 统一读写封装借会话时保留当前执行边界；写入方必须先推进读取阶段，再借会话。
 pub(crate) fn session(executor: &mut dyn Executor) -> Option<&mut ClientSession> {
     executor.scoped_session(SessionAccess(()))
 }
@@ -29,48 +29,21 @@ pub(crate) fn session(executor: &mut dyn Executor) -> Option<&mut ClientSession>
 /// 会话本身不构成活动快照证明；授权只使用设施签发的 boundary。
 /// 业务和测试通过本库的执行器及窄 Port 替身接入，不自行实现本 trait。
 pub trait Executor: Send + sealed::Sealed {
-    /// 取得当前可核验的执行边界。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 未经设施管理的执行器返回 None，不能据此跳过复验。
-    /// # 错误
-    /// 无。
+    /// 取得授权读取和结果复验可比对的当前事务或读取阶段。无受管阶段时返回 `None`，不能凭它跳过复验。
     fn boundary(&self) -> Option<ExecutionBoundary> {
         None
     }
 
-    /// 开始下一读取阶段，或在任何写入尝试前使旧读取凭证失效。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 无返回值；事务身份保持不变。
-    /// # 错误
-    /// 无。
+    /// 开始新的读取阶段，或在尝试写入前让所有旧凭证失效；不因此结束或重启当前事务。
     fn next_read(&mut self) {}
 
-    /// 供持久化设施执行受控的会话操作。
-    /// # 参数
-    /// access 仅由统一读写封装签发。
-    /// # 返回
-    /// 当前操作的会话。
-    /// # 错误
-    /// 无。
+    /// 统一持久化操作持内部许可借用会话，避免仅因读操作就撤销受管执行器的边界。业务仓储应使用读写封装。
     #[doc(hidden)]
     fn scoped_session(&mut self, _: SessionAccess) -> Option<&mut ClientSession> {
         self.session()
     }
-    /// 返回本次操作应当加入的 MongoDB 会话。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 事务执行器返回会话并撤销边界证明；非事务执行器返回 None。
-    /// 仓储须使用统一读写封装，不能取得原始会话后继续复用授权凭证。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 直接取得操作应加入的原始 MongoDB 会话；对受管事务执行器，这会永久撤销当前边界证明。
+    /// 仓储应使用统一封装，不能拿到原始会话后继续复用授权凭证。
     fn session(&mut self) -> Option<&mut ClientSession>;
 }
 
@@ -103,7 +76,7 @@ pub(crate) struct TransactionExecutor<'a> {
 }
 
 impl<'a> TransactionExecutor<'a> {
-    /// 调用方已经以统一快照选项开启事务。
+    // 事务设施用已经开启快照事务的会话建立执行器和首个读取阶段；不要以普通会话直接签发快照证明。
     pub(crate) fn new(session: &'a mut ClientSession) -> Self {
         Self { session, scope: Some(ExecutionScope::snapshot()) }
     }
@@ -142,16 +115,7 @@ pub struct NoTransaction;
 impl sealed::Sealed for NoTransaction {}
 
 impl Executor for NoTransaction {
-    /// 返回空会话，表示本次操作不加入任何事务。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 恒为 `None`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 独立自动提交操作不附加驱动会话，也不提供事务边界。
     fn session(&mut self) -> Option<&mut ClientSession> {
         None
     }
@@ -160,19 +124,7 @@ impl Executor for NoTransaction {
 impl sealed::Sealed for ClientSession {}
 
 impl Executor for ClientSession {
-    /// 返回自身作为本次操作的事务会话。
-    ///
-    /// 原始会话可用于独立数据访问，但不提供活动事务或读取阶段证明。
-    /// `with_transaction` 回调使用设施管理的执行器，不直接暴露本实现。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 恒为 `Some(self)`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 原始会话可用于独立数据访问，返回自身但不证明事务仍活动或阶段一致；统一事务回调用受管执行器。
     fn session(&mut self) -> Option<&mut ClientSession> {
         Some(self)
     }
@@ -195,16 +147,7 @@ where
     fn scoped_session(&mut self, access: SessionAccess) -> Option<&mut ClientSession> {
         (**self).scoped_session(access)
     }
-    /// 透传被借用执行器的会话。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回内层执行器的会话。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 借用执行器仍沿用内层会话及其暴露语义，不另建会话。
     fn session(&mut self) -> Option<&mut ClientSession> {
         (**self).session()
     }

@@ -7,13 +7,8 @@ use crate::{Error, Result};
 
 impl SupplierRefund {
     /// 校验本次金额不超过同采购、同方案、同结算方式的剩余额度。
-    ///
-    /// # 参数
-    /// * `limit` - 采购方案中选定结算方式的总金额。
-    /// * `settlements` - 已读取的处理记录；自身、非占用状态及软删除记录不计入。
-    /// # 返回
     /// 未超过剩余额度时返回成功，允许刚好用尽。
-    /// # 错误
+    /// `limit` 为采购方案中选定结算方式的总金额；`settlements` 为已读取的处理记录；自身、非占用状态及软删除记录不计入。
     /// 审批中及已过账占用加本次金额超过方案限额时返回冲突。
     pub fn ensure_settlement_limit(&self, limit: Amount, settlements: &[Self]) -> Result<()> {
         let used = settlements

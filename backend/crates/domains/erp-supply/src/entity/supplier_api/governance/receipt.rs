@@ -75,21 +75,9 @@ pub struct SupplierConnectionCommandReceipt {
 
 impl SupplierConnectionCommandReceipt {
     /// 构造不可变命令回执。
-    ///
-    /// # 用途
     /// 校验并规范化回执字段后创建不可变实体。
-    ///
-    /// # 参数
-    /// * `id` - 回执主键
-    /// * `data` - 回执字段
-    ///
-    /// # 返回
     /// 校验通过后的命令回执。
-    ///
-    /// # 错误
     /// 必填摘要、审计号为空或连接版本为零时返回错误。
-    ///
-    /// # 关键业务约束
     /// 连接版本必须大于零；不保存客户端原始幂等键或密钥正文。
     pub fn new(id: impl Into<String>, data: SupplierConnectionCommandReceiptData) -> Result<Self> {
         if data.connection_version == 0 {

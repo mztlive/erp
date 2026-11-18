@@ -58,18 +58,8 @@ pub struct DeliveryFilter {
 }
 
 impl QueryFilter for DeliveryFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// 有值时写入 `sales_order_id` 与 `status`；二者皆空时只保留未删除条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 转换为 MongoDB 查询条件（自动追加未删除过滤）。
+    // 有值时写入 `sales_order_id` 与 `status`；二者皆空时只保留未删除条件。
     fn to_doc(&self) -> Document {
         let mut filter = super::active_filter();
         if let Some(sales_order_id) = &self.sales_order_id {
@@ -83,16 +73,7 @@ impl QueryFilter for DeliveryFilter {
 }
 
 impl Pagination for DeliveryFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组；`page_size` 由 `u32` 加宽为 `u64`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 向仓储分页传递页码与单页条数。
     fn page_and_size(&self) -> (u64, u64) {
         super::page_and_size(self.page, self.page_size)
     }
@@ -102,11 +83,8 @@ impl Pagination for DeliveryFilter {
 #[allow(async_fn_in_trait)]
 pub trait DeliveryRepositoryExt {
     /// 在指定采购单内读取冻结的发货单身份，不扩大到其他采购单。
-    /// # 参数
-    /// 采购单身份、已冻结的非空发货单集合，以及调用方执行器。
-    /// # 返回
     /// 属于该采购单且尚未删除的指定发货单；空身份集合直接返回空。
-    /// # 错误
+    /// 采购单身份、已冻结的非空发货单集合，以及调用方执行器。
     /// 数据库读取失败时返回原仓储错误。
     async fn find_for_purchase(
         &self,
@@ -116,19 +94,10 @@ pub trait DeliveryRepositoryExt {
     ) -> Result<Vec<Delivery>>;
 
     /// 分页检索发货单列表（投影查询）。
-    ///
-    /// 只返回 [`DeliveryRow`] 所需的列表字段（敏感履约地址字段不进投影）；
-    /// 排序字段走白名单映射（`created_at`/`shipped_at`）。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
+    /// 只返回 [`DeliveryRow`] 所需的列表字段（敏感履约地址字段不进投影）；排序字段走白名单映射（`created_at`/`shipped_at`）。
     /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// 沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询、游标读取或计数错误。
     async fn search_deliveries(
         &self,
         filter: &DeliveryFilter,
@@ -179,10 +148,7 @@ impl DeliveryRepositoryExt for persistence_core::Repository<'_, Delivery> {
     }
 }
 
-/// 发货单列表投影字段（履约地址敏感字段不进投影）。
-///
-/// # 返回
-/// 返回投影条件文档。
+// 发货单列表投影字段（履约地址敏感字段不进投影）。
 fn delivery_projection() -> Document {
     doc! {
         "id": 1,

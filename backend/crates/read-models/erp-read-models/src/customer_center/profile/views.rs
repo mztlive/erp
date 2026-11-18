@@ -13,16 +13,12 @@ use erp_party::{
     SensitiveFieldKind as PartySensitiveFieldKind,
 };
 
-/// 把主体状态映射为客户资料状态。
-///
-/// # 参数
-/// * `status` - 主体稳定状态。
-///
-/// # 返回
-/// 返回同名的客户资料状态。
-///
-/// # 错误
-/// 不返回错误。
+// 投影客户资料详情字段时，把主体状态映射为客户资料状态。
+//
+// 调用参数：
+// * `status` - 主体稳定状态。
+//
+// 返回同名的客户资料状态。
 pub(super) fn party_status(status: SourcePartyStatus) -> PartyStatus {
     match status {
         SourcePartyStatus::Active => PartyStatus::Active,
@@ -30,16 +26,12 @@ pub(super) fn party_status(status: SourcePartyStatus) -> PartyStatus {
     }
 }
 
-/// 把主体名称修订映射为客户资料修订快照。
-///
-/// # 参数
-/// * `revision` - 主体名称修订。
-///
-/// # 返回
-/// 返回不含敏感明文的修订视图。
-///
-/// # 错误
-/// 不返回错误。
+// 生成客户资料详情视图时，把主体名称修订映射为客户资料修订快照。
+//
+// 调用参数：
+// * `revision` - 主体名称修订。
+//
+// 返回不含敏感明文的修订视图。
 pub(super) fn party_revision_view(revision: PartyRevision) -> PartyRevisionView {
     let view = SourcePartyRevisionView::from(revision);
     PartyRevisionView {
@@ -53,16 +45,12 @@ pub(super) fn party_revision_view(revision: PartyRevision) -> PartyRevisionView 
     }
 }
 
-/// 把联系人事实映射为客户资料联系人快照，手机号只保留掩码。
-///
-/// # 参数
-/// * `contact` - 联系人事实。
-///
-/// # 返回
-/// 返回联系人视图。
-///
-/// # 错误
-/// 不返回错误。
+// 生成客户资料详情视图时，把联系人事实映射为客户资料联系人快照，手机号只保留掩码。
+//
+// 调用参数：
+// * `contact` - 联系人事实。
+//
+// 返回联系人视图。
 pub(super) fn party_contact_view(contact: PartyContact) -> PartyContactView {
     let view = SourcePartyContactView::from(contact);
     PartyContactView {
@@ -82,16 +70,12 @@ pub(super) fn party_contact_view(contact: PartyContact) -> PartyContactView {
     }
 }
 
-/// 把地址事实映射为客户资料地址快照，不输出地址明文。
-///
-/// # 参数
-/// * `address` - 地址事实。
-///
-/// # 返回
-/// 返回地址视图。
-///
-/// # 错误
-/// 不返回错误。
+// 生成客户资料详情视图时，把地址事实映射为客户资料地址快照，不输出地址明文。
+//
+// 调用参数：
+// * `address` - 地址事实。
+//
+// 返回地址视图。
 pub(super) fn party_address_view(address: PartyAddress) -> PartyAddressView {
     let view = SourcePartyAddressView::from(address);
     PartyAddressView {
@@ -108,16 +92,12 @@ pub(super) fn party_address_view(address: PartyAddress) -> PartyAddressView {
     }
 }
 
-/// 把税务资料映射为客户资料税务快照。
-///
-/// # 参数
-/// * `profile` - 税务资料事实。
-///
-/// # 返回
-/// 返回税务资料视图。
-///
-/// # 错误
-/// 不返回错误。
+// 生成客户资料详情视图时，把税务资料映射为客户资料税务快照。
+//
+// 调用参数：
+// * `profile` - 税务资料事实。
+//
+// 返回税务资料视图。
 pub(super) fn party_tax_profile_view(profile: PartyTaxProfile) -> PartyTaxProfileView {
     let view = SourcePartyTaxProfileView::from(profile);
     PartyTaxProfileView {
@@ -133,16 +113,12 @@ pub(super) fn party_tax_profile_view(profile: PartyTaxProfile) -> PartyTaxProfil
     }
 }
 
-/// 把银行账户映射为客户资料账户快照，账号只保留掩码。
-///
-/// # 参数
-/// * `account` - 银行账户事实。
-///
-/// # 返回
-/// 返回银行账户视图。
-///
-/// # 错误
-/// 不返回错误。
+// 生成客户资料详情视图时，把银行账户映射为客户资料账户快照，账号只保留掩码。
+//
+// 调用参数：
+// * `account` - 银行账户事实。
+//
+// 返回银行账户视图。
 pub(super) fn party_bank_account_view(account: PartyBankAccount) -> PartyBankAccountView {
     let view = SourcePartyBankAccountView::from(account);
     PartyBankAccountView {
@@ -162,16 +138,12 @@ pub(super) fn party_bank_account_view(account: PartyBankAccount) -> PartyBankAcc
     }
 }
 
-/// 把主体敏感字段种类映射为客户资料种类。
-///
-/// # 参数
-/// * `kind` - 主体侧敏感字段种类。
-///
-/// # 返回
-/// 返回同名的客户资料敏感字段种类。
-///
-/// # 错误
-/// 不返回错误。
+// 投影客户资料详情字段时，把主体敏感字段种类映射为客户资料种类。
+//
+// 调用参数：
+// * `kind` - 主体侧敏感字段种类。
+//
+// 返回同名的客户资料敏感字段种类。
 pub(super) fn customer_sensitive_kind(kind: PartySensitiveFieldKind) -> SensitiveFieldKind {
     match kind {
         PartySensitiveFieldKind::ContactMobile => SensitiveFieldKind::ContactMobile,

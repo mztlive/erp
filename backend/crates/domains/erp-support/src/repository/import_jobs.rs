@@ -11,17 +11,10 @@ use crate::entity::bulk_job::{BackgroundJob, BackgroundJobId, BackgroundJobItem,
 #[allow(async_fn_in_trait)]
 pub trait BackgroundJobRepositoryImportExt {
     /// 读取指定领域类型且尚未终态的后台任务，供 worker 领取。
-    ///
-    /// # 参数
-    /// * `domain_job_type` - 领域任务类型
-    /// * `limit` - 最多返回条数
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 按创建时间升序的待处理任务。
-    ///
-    /// # 错误
-    /// MongoDB 查询失败时返回错误。
+    /// `domain_job_type` 为领域任务类型；`limit` 为最多返回条数。
+    /// 沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询错误。
     async fn list_open_by_domain_job_type(
         &self,
         domain_job_type: &str,
@@ -29,12 +22,9 @@ pub trait BackgroundJobRepositoryImportExt {
         executor: &mut dyn Executor,
     ) -> Result<Vec<BackgroundJob>>;
     /// 读取可认领的等待任务及心跳过期任务。
-    /// # 参数
-    /// 领域类型、过期时间、最大数量和执行器。
-    /// # 返回
     /// 排除活动任务的候选列表。
-    /// # 错误
-    /// 数据库读取失败时返回错误。
+    /// 领域类型、过期时间、最大数量和执行器。
+    /// 传播数据库读取错误。
     async fn claimable_jobs(
         &self,
         domain: &str,
@@ -92,16 +82,9 @@ impl BackgroundJobRepositoryImportExt for persistence_core::Repository<'_, Backg
 #[allow(async_fn_in_trait)]
 pub trait BackgroundJobItemRepositoryImportExt {
     /// 读取一个后台任务的全部逐项实体，按序号升序。
-    ///
-    /// # 参数
-    /// * `job_id` - 后台任务 ID
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回该任务全部逐项记录。
-    ///
-    /// # 错误
-    /// MongoDB 查询失败时返回错误。
+    /// `job_id` 为后台任务 ID；沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询错误。
     async fn list_entities_by_job(
         &self,
         job_id: &BackgroundJobId,

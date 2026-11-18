@@ -239,16 +239,12 @@ pub struct FundsSummaryView {
 }
 
 impl FundsSummaryView {
-    /// 未具备整账职责时隐藏款票余额，包括空匹配结果。
-    ///
-    /// # 参数
-    /// * `allowed` - 本次授权快照的整账读取资格。
-    ///
-    /// # 返回
-    /// 原份额摘要；无资格时余额为 null，不能把不可见未分配记录表示为零。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 组装财务来源范围时填入本次授权快照的整账读取资格。
+    //
+    // 调用参数：
+    // * `allowed` - 本次授权快照的整账读取资格。
+    //
+    // 原份额摘要；无资格时余额为 null，不能把不可见未分配记录表示为零。
     pub(super) fn with_balance_access(mut self, allowed: bool) -> Self {
         if !allowed {
             self.balance_total = None;
@@ -334,17 +330,14 @@ pub(super) struct PaymentLink {
 }
 
 impl FundsAccess {
-    /// 批量读取关联销售单当前责任；缺失单据按无责任处理，调用方跳过该行。
-    ///
-    /// # 参数
-    /// * `ids` - 销售单主键；重复值会去重。
-    /// * `executor` - 调用方事务。
-    ///
-    /// # 返回
-    /// 销售单 ID 到当前负责人、业务组织与版本；查不到的单据不进入映射。
-    ///
-    /// # 错误
-    /// 销售单读取失败时返回对应错误。
+    // 处理财务来源范围时，批量读取关联销售单当前责任；缺失单据按无责任处理，调用方跳过该行。
+    //
+    // 调用参数：
+    // * `ids` - 销售单主键；重复值会去重。
+    //
+    // 销售单 ID 到当前负责人、业务组织与版本；查不到的单据不进入映射。
+    //
+    // 销售单读取失败时返回对应错误。
     pub(super) async fn sales_fact_map(
         &self,
         ids: &[String],
@@ -369,17 +362,14 @@ impl FundsAccess {
         Ok(map)
     }
 
-    /// 批量读取关联采购单当前责任；责任人缺失的老单保留组织事实。
-    ///
-    /// # 参数
-    /// * `ids` - 采购单主键或带类型的结算关联键。
-    /// * `executor` - 调用方事务。
-    ///
-    /// # 返回
-    /// 采购单与结算来源的责任事实；含 `:` 的键不按采购单查询。
-    ///
-    /// # 错误
-    /// 采购单或结算单读取失败时返回对应错误。
+    // 处理财务来源范围时，批量读取关联采购单当前责任；责任人缺失的老单保留组织事实。
+    //
+    // 调用参数：
+    // * `ids` - 采购单主键或带类型的结算关联键。
+    //
+    // 采购单与结算来源的责任事实；含 `:` 的键不按采购单查询。
+    //
+    // 采购单或结算单读取失败时返回对应错误。
     pub(super) async fn purchase_fact_map(
         &self,
         ids: &[String],
@@ -406,19 +396,15 @@ impl FundsAccess {
     }
 }
 
-/// 多关联单据行的条件匹配：负责人与组织任一关联命中，操作人按单据事实判定。
-///
-/// # 参数
-/// * `orders` - 关联单据责任元组。
-/// * `operators` - 第一经办人。
-/// * `secondary` - 第二经办人。
-/// * `condition` - 负责人、经办人与组织条件。
-///
-/// # 返回
-/// 已提供的经办条件都命中，且在提供了负责人或组织时至少一条关联同时命中时返回 true。
-///
-/// # 错误
-/// 不返回错误。
+// 应用财务来源范围筛选时，多关联单据行的条件匹配：负责人与组织任一关联命中，操作人按单据事实判定。
+//
+// 调用参数：
+// * `orders` - 关联单据责任元组。
+// * `operators` - 第一经办人。
+// * `secondary` - 第二经办人。
+// * `condition` - 负责人、经办人与组织条件。
+//
+// 已提供的经办条件都命中，且在提供了负责人或组织时至少一条关联同时命中时返回 true。
 pub(super) fn matches_multi_condition(
     orders: &[LinkedOrderRow],
     operators: &[String],
@@ -455,17 +441,14 @@ use erp_finance::entity::payable::AllocationAction as PayableAllocationAction;
 use erp_finance::entity::receivable::AllocationAction as ReceivableAllocationAction;
 
 impl FundsAccess {
-    /// 回款分配按核销分录反查所属子账与销售单；金额按正反动作记方向。
-    ///
-    /// # 参数
-    /// * `receipt_ids` - 客户回款主键。
-    /// * `executor` - 调用方事务。
-    ///
-    /// # 返回
-    /// 回款 ID 到分配关联；冲正金额为负，找不到销售单时 `order` 为 `None`。
-    ///
-    /// # 错误
-    /// 分配、分录或子账读取失败时返回对应错误。
+    // 应用财务来源范围筛选时，回款分配按核销分录反查所属子账与销售单；金额按正反动作记方向。
+    //
+    // 调用参数：
+    // * `receipt_ids` - 客户回款主键。
+    //
+    // 回款 ID 到分配关联；冲正金额为负，找不到销售单时 `order` 为 `None`。
+    //
+    // 分配、分录或子账读取失败时返回对应错误。
     pub(super) async fn receipt_matched_links(
         &self,
         receipt_ids: &[String],
@@ -509,17 +492,14 @@ impl FundsAccess {
         Ok(links)
     }
 
-    /// 销项发票分配按子账反查销售单；含税金额按正反动作记方向。
-    ///
-    /// # 参数
-    /// * `invoice_ids` - 发票主键。
-    /// * `executor` - 调用方事务。
-    ///
-    /// # 返回
-    /// 发票 ID 到销项分配关联；冲正金额为负。
-    ///
-    /// # 错误
-    /// 分配或应收子账读取失败时返回对应错误。
+    // 应用财务来源范围筛选时，销项发票分配按子账反查销售单；含税金额按正反动作记方向。
+    //
+    // 调用参数：
+    // * `invoice_ids` - 发票主键。
+    //
+    // 发票 ID 到销项分配关联；冲正金额为负。
+    //
+    // 分配或应收子账读取失败时返回对应错误。
     pub(super) async fn sales_invoice_matched_links(
         &self,
         invoice_ids: &[String],
@@ -552,17 +532,14 @@ impl FundsAccess {
         Ok(links)
     }
 
-    /// 付款核销按应付分录反查子账与采购单；结算来源保留自身责任边界。
-    ///
-    /// # 参数
-    /// * `payment_ids` - 供应商付款主键。
-    /// * `executor` - 调用方事务。
-    ///
-    /// # 返回
-    /// 付款 ID 到核销关联；来源键带真实来源类型，冲正金额为负。
-    ///
-    /// # 错误
-    /// 分配、应付分录或子账读取失败时返回对应错误。
+    // 应用财务来源范围筛选时，付款核销按应付分录反查子账与采购单；结算来源保留自身责任边界。
+    //
+    // 调用参数：
+    // * `payment_ids` - 供应商付款主键。
+    //
+    // 付款 ID 到核销关联；来源键带真实来源类型，冲正金额为负。
+    //
+    // 分配、应付分录或子账读取失败时返回对应错误。
     pub(super) async fn payment_matched_links(
         &self,
         payment_ids: &[String],
@@ -611,17 +588,14 @@ impl FundsAccess {
         Ok(links)
     }
 
-    /// 工作项当前处理人；已关闭任务回退完成人，缺失任务按无处理人。
-    ///
-    /// # 参数
-    /// * `work_item_ids` - 工作项主键；空 ID 会被去掉。
-    /// * `executor` - 调用方事务。
-    ///
-    /// # 返回
-    /// 工作项 ID 到处理人；优先负责人，否则完成人。查不到的任务不进入映射。
-    ///
-    /// # 错误
-    /// 工作项读取失败时返回对应错误。
+    // 处理财务来源范围时，工作项当前处理人；已关闭任务回退完成人，缺失任务按无处理人。
+    //
+    // 调用参数：
+    // * `work_item_ids` - 工作项主键；空 ID 会被去掉。
+    //
+    // 工作项 ID 到处理人；优先负责人，否则完成人。查不到的任务不进入映射。
+    //
+    // 工作项读取失败时返回对应错误。
     pub(super) async fn work_item_handlers(
         &self,
         work_item_ids: &[String],
@@ -637,12 +611,12 @@ impl FundsAccess {
     }
 }
 
-/// 工作项读取键去重并去掉空 ID，空结果不会产生批次或数据库读取。
+// 定位财务来源范围关联时，工作项读取键去重并去掉空 ID，空结果不会产生批次或数据库读取。
 fn handler_work_item_ids(ids: &[String]) -> Vec<String> {
     crate::support::dedup_sorted(ids.iter().filter(|id| !id.is_empty()).cloned())
 }
 
-/// 已装载工作项映射为处理人；负责人优先，缺负责人时使用完成人，不按状态裁剪。
+// 处理财务来源范围时，已装载工作项映射为处理人；负责人优先，缺负责人时使用完成人，不按状态裁剪。
 fn handlers_from_work_items(items: Vec<WorkItem>) -> HashMap<String, String> {
     items
         .into_iter()
@@ -650,34 +624,25 @@ fn handlers_from_work_items(items: Vec<WorkItem>) -> HashMap<String, String> {
         .collect()
 }
 
-/// 分配金额求和的零值；与应收映射保持同一零金额口径。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 应收映射使用的零金额。
-///
-/// # 错误
-/// 不返回错误。
+// 计算财务来源范围金额时，分配金额求和的零值；与应收映射保持同一零金额口径。
+//
+// 应收映射使用的零金额。
 pub(super) fn zero_amount() -> Amount {
     erp_finance::service::receivable::mapping::zero_amount()
 }
 
-/// 同一快照的匹配份额汇总；未分配单列，整单合计部分授权为 null。
-///
-/// # 参数
-/// * `matched` - 分配主键、方向金额与来源单。
-/// * `owner_of` - 来源单到负责人。
-/// * `whole_total` - 整单合计；部分授权时由调用方传入 `None`。
-/// * `scope_version` - 本次范围版本。
-/// * `permission_limited` - 为 true 时丢掉没有来源单的份额。
-///
-/// # 返回
-/// 按负责人排序的可见份额、未分配金额和整单合计。
-///
-/// # 错误
-/// 不返回错误。金额归并始终成功。
+// 生成财务来源范围视图时，同一快照的匹配份额汇总；未分配单列，整单合计部分授权为 null。
+//
+// 调用参数：
+// * `matched` - 分配主键、方向金额与来源单。
+// * `owner_of` - 来源单到负责人。
+// * `whole_total` - 整单合计；部分授权时由调用方传入 `None`。
+// * `scope_version` - 本次范围版本。
+// * `permission_limited` - 为 true 时丢掉没有来源单的份额。
+//
+// 按负责人排序的可见份额、未分配金额和整单合计。
+//
+// 金额归并始终成功。
 pub(super) fn build_summary(
     matched: &[(String, Amount, LinkedOrderId)],
     owner_of: &HashMap<String, String>,
@@ -765,7 +730,7 @@ mod tests {
         assert_eq!(json["summary"]["whole_total"].is_null(), !whole);
     }
 
-    /// 资金列表不携带负责人候选；行上的负责人、经办与发票方向仍是业务事实。
+    // 验证财务来源范围：资金列表不携带负责人候选；行上的负责人、经办与发票方向仍是业务事实。
     #[test]
     fn funds_pages_omit_owner_candidates_and_keep_row_owner_facts() {
         let receivable = page(
@@ -925,17 +890,13 @@ mod tests {
     }
 }
 
-/// 已存在的分配必须指向存在的来源；真正零分配单据单独由整账职责授权。
-///
-/// # 参数
-/// * `sources` - 分配上的来源主键；`None` 表示来源缺失。
-/// * `facts` - 已装载的来源事实。
-///
-/// # 返回
-/// 每个来源都非空且存在于 `facts` 时返回 true；空迭代器返回 true。
-///
-/// # 错误
-/// 不返回错误。
+// 处理财务来源范围时，已存在的分配必须指向存在的来源；真正零分配单据单独由整账职责授权。
+//
+// 调用参数：
+// * `sources` - 分配上的来源主键；`None` 表示来源缺失。
+// * `facts` - 已装载的来源事实。
+//
+// 每个来源都非空且存在于 `facts` 时返回 true；空迭代器返回 true。
 pub(super) fn linked_sources_exist<'a, T>(
     mut sources: impl Iterator<Item = Option<&'a str>>,
     facts: &HashMap<String, T>,
@@ -966,7 +927,7 @@ mod work_item_handler_tests {
 
     use super::*;
 
-    /// 构造已装载的工作项事实，终态仅调整与映射有关的公共字段。
+    // 装配财务来源范围展示时，生成已装载的工作项事实，终态仅调整与映射有关的公共字段。
     fn item(id: &str, owner: Option<&str>, completed: Option<&str>, status: WorkItemStatus) -> WorkItem {
         let mut item = WorkItem::new_with_responsibility_key(
             WorkItemId::new(id),
@@ -993,7 +954,7 @@ mod work_item_handler_tests {
         item
     }
 
-    /// 读取键过滤保持空 ID 不查、重复去重及稳定批次边界。
+    // 验证财务来源范围：读取键过滤保持空 ID 不查、重复去重及稳定批次边界。
     #[test]
     fn work_item_handler_ids_remove_empty_and_deduplicate_before_batching() {
         assert!(handler_work_item_ids(&[String::new(), String::new()]).is_empty());
@@ -1006,7 +967,7 @@ mod work_item_handler_tests {
         assert_eq!(unique.chunks(500).map(<[String]>::len).collect::<Vec<_>>(), [500, 1]);
     }
 
-    /// 终态不改变负责人优先规则，缺失任务或无责任事实保持无处理人。
+    // 验证财务来源范围：终态不改变负责人优先规则，缺失任务或无责任事实保持无处理人。
     #[test]
     fn work_item_handlers_keep_owner_priority_completed_fallback_and_missing_absence() {
         let handlers = handlers_from_work_items(vec![

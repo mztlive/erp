@@ -13,13 +13,11 @@ use persistence_core::Executor;
 
 use crate::{Error, Result};
 
-/// 用销售当前版本和其他有效采购安排复验本单交付调整。
-/// # 参数
-/// `db`、`executor` 沿用调用方读取边界；`order` 为采购单，`edits` 为待复验的交付调整。
-/// # 返回
-/// 预计交付日、当前地址、单位精度和地址剩余量均合法时成功。
-/// # 错误
-/// 来源失效、交付日晚于履约期限、地址被修改或其他采购已占用目标数量时拒绝。
+// 用销售当前版本和其他有效采购安排复验本单交付调整。
+//
+// `db`、`executor` 沿用调用方读取边界；`order` 为采购单，`edits` 为待复验的交付调整。
+//
+// 预计交付日、当前地址、单位精度和地址剩余量均合法时成功。来源失效、交付日晚于履约期限、地址被修改或其他采购已占用目标数量时拒绝。
 pub(super) async fn validate_delivery(
     db: &Database,
     order: &PurchaseOrder,
@@ -48,7 +46,7 @@ pub(super) async fn validate_delivery(
     validate_edits(order, edits, &facts)
 }
 
-/// 收件分配引用的销售行必须仍在当前版本，再按领域规则复验。
+// 收件分配引用的销售行必须仍在当前版本，再按领域规则复验。
 fn validate_edits(
     order: &PurchaseOrder,
     edits: &[DeliveryEdit<'_>],
@@ -64,13 +62,11 @@ fn validate_edits(
     Ok(facts.validate_delivery_edits(order, edits)?)
 }
 
-/// 复验采购版本行的全部收件分配，用于采购变更生效前的分配重建。
-/// # 参数
-/// `db`、`executor` 为调用方执行器；`order` 为采购单；`lines` 为待生效的版本行。
-/// # 返回
-/// 全部收件分配通过复验时成功。
-/// # 错误
-/// 地址、数量、来源或数据读取失败时拒绝。
+// 复验采购版本行的全部收件分配，用于采购变更生效前的分配重建。
+//
+// `db`、`executor` 为调用方执行器；`order` 为采购单；`lines` 为待生效的版本行。全部收件分配通过复验时成功。
+//
+// 地址、数量、来源或数据读取失败时拒绝。
 pub(super) async fn validate_revision_delivery(
     db: &Database,
     order: &PurchaseOrder,
@@ -81,21 +77,11 @@ pub(super) async fn validate_revision_delivery(
     validate_delivery(db, order, &delivery_edits(&fields, &[], RowCheck::All), executor).await
 }
 
-/// 采购改单目标转为待复验交付调整：收件分配全部复验，预计交付日复验改动行和因
-/// 履约期限提前受影响的行；已登记维持的旧交期不阻断其他调整。
-///
-/// # 参数
-/// * `db`、`executor` - 调用方执行器
-/// * `order` - 来源采购单
-/// * `inputs` - 本次改单目标行
-/// * `base` - 采购当前生效版本行
-/// * `recheck` - 须复验预计交付日的稳定销售行
-///
-/// # 返回
-/// 完整通过交付来源校验时成功。
-///
-/// # 错误
-/// 交付日、地址、数量、来源或数据读取失败时拒绝。
+// 采购改单目标转为待复验交付调整：收件分配全部复验，预计交付日复验改动行和因履约期限提前受影响的行；已登记维持的旧交期不阻断其他调整。
+//
+// `db`、`executor` 为调用方执行器；`order` 为来源采购单；`inputs` 为本次改单目标行；`base` 为采购当前生效版本行；`recheck` 为须复验预计交付日的稳定销售行。
+//
+// 完整通过交付来源校验时成功。交付日、地址、数量、来源或数据读取失败时拒绝。
 pub(super) async fn validate_change_input_delivery(
     db: &Database,
     order: &PurchaseOrder,
@@ -108,20 +94,10 @@ pub(super) async fn validate_change_input_delivery(
     validate_change_fields(db, order, &fields, base, recheck, executor).await
 }
 
-/// 采购改单生效时按新版本行复验交付调整，规则同 [`validate_change_input_delivery`]。
-///
-/// # 参数
-/// * `db`、`executor` - 生效事务执行器
-/// * `order` - 尚未切换版本的来源采购单
-/// * `lines` - 即将写入的新版本行
-/// * `base` - 采购当前生效版本行
-/// * `recheck` - 须复验预计交付日的稳定销售行
-///
-/// # 返回
-/// 完整通过交付来源校验时成功。
-///
-/// # 错误
-/// 交付日、地址、数量、来源或数据读取失败时拒绝。
+// 采购改单生效时按新版本行复验交付调整，规则同 [`validate_change_input_delivery`]。
+//
+// `db`、`executor` 为生效事务执行器；`order` 为尚未切换版本的来源采购单；`lines` 为即将写入的新版本行；`base` 为采购当前生效版本行；`recheck`
+// 为须复验预计交付日的稳定销售行。完整通过交付来源校验时成功。交付日、地址、数量、来源或数据读取失败时拒绝。
 pub(super) async fn validate_change_revision_delivery(
     db: &Database,
     order: &PurchaseOrder,
@@ -134,7 +110,7 @@ pub(super) async fn validate_change_revision_delivery(
     validate_change_fields(db, order, &fields, base, recheck, executor).await
 }
 
-/// 以基准版本为对照复验改单交付调整；须复验的行不进入对照，视为改动。
+// 以基准版本为对照复验改单交付调整；须复验的行不进入对照，视为改动。
 async fn validate_change_fields(
     db: &Database,
     order: &PurchaseOrder,
@@ -151,14 +127,11 @@ async fn validate_change_fields(
     validate_delivery(db, order, &delivery_edits(fields, &previous, RowCheck::All), executor).await
 }
 
-/// 采购草稿或提交行相对原草稿的交付调整复验。
-/// # 参数
-/// `db`、`executor` 为调用方执行器；`order` 为采购单，其当前提交仍指向被替换的原草稿；
-/// `lines` 为待写入的完整行；`previous` 为原草稿行。
-/// # 返回
-/// 改动的预计交付日与收件分配通过复验时成功；未改动的部分不复验。
-/// # 错误
-/// 交付日晚于履约期限、地址不在销售当前收件资料中、超过地址剩余量、精度非法或数据读取失败时拒绝。
+// 采购草稿或提交行相对原草稿的交付调整复验。
+//
+// `db`、`executor` 为调用方执行器；`order` 为采购单，其当前提交仍指向被替换的原草稿； `lines` 为待写入的完整行；`previous` 为原草稿行。
+//
+// 改动的预计交付日与收件分配通过复验时成功；未改动的部分不复验。交付日晚于履约期限、地址不在销售当前收件资料中、超过地址剩余量、精度非法或数据读取失败时拒绝。
 pub(super) async fn validate_submission_delivery(
     db: &Database,
     order: &PurchaseOrder,

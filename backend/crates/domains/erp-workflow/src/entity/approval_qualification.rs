@@ -9,13 +9,12 @@ pub(crate) enum ApprovalQualification {
 }
 
 impl ApprovalQualification {
-    /// 根据 identity 已核验的账号和同角色完整权限形成审批资格。
-    /// # 参数
-    /// account 为有效账号摘要；same_role 表示同一有效角色授予读取与决定权限。
-    /// # 返回
-    /// 保留账号失效、权限不足与合格账号三种结果。
-    /// # 错误
-    /// 无；基础设施错误由取证用例传播。
+    // 根据 identity 已核验的账号和同角色完整权限形成审批资格。
+    // 保留账号失效、权限不足与合格账号三种结果。
+    //
+    // 基础设施错误由取证用例传播。
+    //
+    // account 为有效账号摘要；same_role 表示同一有效角色授予读取与决定权限。
     pub(crate) fn from_account(account: Option<AccountSummary>, same_role: bool) -> Self {
         match account {
             None => Self::Inactive,

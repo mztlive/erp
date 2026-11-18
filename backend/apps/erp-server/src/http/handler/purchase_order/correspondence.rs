@@ -14,11 +14,8 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
 /// 下载当前保存内容的独立采购单文件。
-/// # 参数
 /// `state` 为应用状态，`actor` 为认证人，`id` 为采购单。
-/// # 返回
 /// 独立 HTML 文件名及正文。
-/// # 错误
 /// 对象不可见或读取失败时拒绝。
 pub async fn purchase_paper(
     State(state): State<HttpState>,
@@ -37,11 +34,8 @@ pub async fn purchase_paper(
     ))
 }
 /// 发送已生效采购单，所有正文由服务端生成。
-/// # 参数
 /// `state`、`actor`、`id` 为应用身份上下文，`req` 为发件确认。
-/// # 返回
 /// 返回服务商受理状态；不声明送达。
-/// # 错误
 /// 无权限、配置缺失、版本变化或请求非法时拒绝。
 pub async fn send_purchase_email(
     State(state): State<HttpState>,
@@ -65,11 +59,8 @@ pub async fn send_purchase_email(
 }
 
 /// 读取本采购单的发送记录。
-/// # 参数
 /// `state`、`actor` 和 `id` 为应用身份及采购单上下文。
-/// # 返回
 /// 最新 20 次发件记录。
-/// # 错误
 /// 对象不可见或读取失败时拒绝。
 pub async fn purchase_email_history(
     State(state): State<HttpState>,

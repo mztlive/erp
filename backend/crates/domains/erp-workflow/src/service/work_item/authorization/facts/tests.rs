@@ -29,7 +29,7 @@ fn task() -> WorkItem {
     .unwrap()
 }
 
-/// 拟创建任务按完整根目标取证，无需预先存在数据库记录。
+// 验证：拟创建任务按完整根目标取证，无需预先存在数据库记录。
 #[test]
 fn task_facts_preserve_actual_identity_version_and_assignment() {
     let item = task();

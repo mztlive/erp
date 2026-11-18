@@ -26,17 +26,7 @@ use crate::{Error, Result};
 impl SalesOrderCommandProcess {
     /// 作废销售单草稿（主状态 `DRAFT → VOIDED`；放弃有效工作副本）。
     ///
-    /// # 参数
-    /// * `id` - 销售单 ID
-    /// * `req` - 作废请求（含期望版本）
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回作废后的销售单详情视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 销售单不存在
-    /// * `ConflictError` - 期望版本与当前版本不一致
+    /// `req` 为作废请求（含期望版本）。返回作废后的销售单详情视图。`NotFound`：销售单不存在。`ConflictError`：期望版本与当前版本不一致。
     #[tracing::instrument(
         name = "sales_order.void",
         skip_all,
@@ -66,7 +56,7 @@ impl SalesOrderCommandProcess {
     }
 }
 
-/// 在原快照先授权，再读取当前版本、作废工作副本并原子持久化。
+// 在原快照先授权，再读取当前版本、作废工作副本并原子持久化。
 async fn void_order(
     db: &Database,
     authorization: Arc<AuthorizationService>,

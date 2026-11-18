@@ -21,14 +21,7 @@ pub(crate) const COST_ALLOCATIONS: &str = <mongodb::Database as CostExt>::COST_A
 /// 逐条落地数据模型 §6.10「必需约束与索引」。成本事实是正式事实集合
 /// （§4.5 不设业务软删除，冲减用 `REDUCTION` 阶段追加事实），业务幂等唯一
 /// 用唯一索引保证，不提供软删除方法。
-///
-/// # 参数
-/// * `db` - 目标 MongoDB 数据库
-///
-/// # 返回
-/// 本域索引全部幂等创建成功时无返回值。
-///
-/// # 错误
+/// 结果：本域索引全部幂等创建成功时无返回值。
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, COST_ENTRIES, cost_entry_indexes()).await?;
@@ -36,13 +29,13 @@ pub async fn ensure(db: &Database) -> Result<()> {
     Ok(())
 }
 
-/// 为单个集合创建一组幂等命名索引。
+// 安装本模块定义的命名索引；服务启动时按集合注册，重复注册沿用现有定义。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
     db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
-/// 返回 `cost_entry` 的业务幂等与利润查询索引。
+// 为 `cost_entry` 注册业务幂等与利润查询索引，供所在领域的索引安装入口使用。
 fn cost_entry_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_cost_entries_id", doc! { "id": 1 }),
@@ -63,7 +56,7 @@ fn cost_entry_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `cost_allocation` 的经营归属查询索引。
+// 为 `cost_allocation` 注册经营归属查询索引，供所在领域的索引安装入口使用。
 fn cost_allocation_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_cost_allocations_id", doc! { "id": 1 }),
@@ -77,7 +70,7 @@ fn cost_allocation_indexes() -> Vec<IndexModel> {
 
 #[cfg(test)]
 mod tests {
-    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    // 检查各集合是否声明稳定 `id` 的唯一索引，防止主键读取和乐观锁写入退化为集合扫描。
     #[test]
     fn collections_look_up_by_unique_stable_id() {
         for indexes in [super::cost_allocation_indexes(), super::cost_entry_indexes()] {

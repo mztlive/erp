@@ -18,12 +18,7 @@ pub struct CooperationRequest {
 
 impl CooperationRequest {
     /// 规范化合作条款并校验固定付款规则。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 返回规范化后可冻结的申请内容。
-    /// # 错误
     /// 版本为零、目标为空、付款规则不一致或原因非法时拒绝。
     pub fn normalized(mut self) -> Result<Self> {
         if self.expected_supplier_version == 0 {
@@ -79,13 +74,8 @@ pub struct CooperationSubmissionView {
 
 impl CooperationView {
     /// 将本域申请转换为供应商可见视图。
-    ///
-    /// # 参数
-    /// * `value` - 已完成供应商范围授权的申请。
-    /// # 返回
     /// 返回允许列表字段。
-    /// # 错误
-    /// 无。
+    /// `value`：已完成供应商范围授权的申请。
     pub fn from_application(value: &CooperationApplication) -> Self {
         Self {
             id: value.base.id.clone(),

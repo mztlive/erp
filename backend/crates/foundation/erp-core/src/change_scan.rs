@@ -27,30 +27,14 @@ pub struct ChangeWatermarks {
 }
 
 impl ChangeWatermarks {
-    /// 全量重建开始时的进度：即时扫描从现在开始，延迟复扫回退一个提交余量。
-    ///
-    /// # 参数
-    /// * `now` - 当前时间（Unix 秒）
-    ///
-    /// # 返回
-    /// 返回起始进度。
-    ///
-    /// # 错误
-    /// 无。
+    /// 开始全量重建时初始化扫描进度：即时扫描从当前 Unix 秒起步，复扫回退一个提交余量，以覆盖此前起事务、
+    /// 此后才提交的更新。
     pub fn starting_at(now: i64) -> Self {
         Self { fresh_watermark: now, settled_watermark: now - COMMIT_MARGIN_SECS }
     }
 
-    /// 本轮需扫描的时间窗：即时扫描到现在，延迟复扫到现在减提交余量；空窗不返回。
-    ///
-    /// # 参数
-    /// * `now` - 当前时间（Unix 秒）
-    ///
-    /// # 返回
-    /// 返回非空时间窗。
-    ///
-    /// # 错误
-    /// 无。
+    /// 为后台本轮投影刷新提供非空的半开时间窗：即时扫到当前秒，延迟复扫只扫到扣除提交余量的时刻，
+    /// 以补扫提交较晚的写入。
     pub fn scan_windows(&self, now: i64) -> Vec<ChangeWindow> {
         [
             ChangeWindow { from: self.fresh_watermark, to: now },
@@ -61,47 +45,18 @@ impl ChangeWatermarks {
         .collect()
     }
 
-    /// 读取前追平用的时间窗：包含当前这一秒，使刚提交的写入立即可见。
-    ///
-    /// `updated_at` 精确到秒；当前这一秒之后仍可能有写入，因此进度只推进到
-    /// `now`（见 [`Self::fresh_advanced`]），这一秒会在下一次扫描中再扫一遍。
-    ///
-    /// # 参数
-    /// * `now` - 当前时间（Unix 秒）
-    ///
-    /// # 返回
-    /// 返回从即时扫描进度到当前这一秒（含）的时间窗。
-    ///
-    /// # 错误
-    /// 无。
+    /// 交付读结果前追平即时变更，时间窗包含当前这一秒，让刚提交的记录可见。
+    /// `updated_at` 只精确到秒，因此应以 [`Self::fresh_advanced`] 将扫描终点留在该秒，以便下一轮重扫。
     pub fn catch_up_window(&self, now: i64) -> ChangeWindow {
         ChangeWindow { from: self.fresh_watermark.min(now), to: now + 1 }
     }
 
-    /// 只推进即时扫描进度；延迟复扫仍按时间窗补漏。
-    ///
-    /// # 参数
-    /// * `now` - 当前时间（Unix 秒）
-    ///
-    /// # 返回
-    /// 返回即时扫描推进到 `now` 的进度。
-    ///
-    /// # 错误
-    /// 无。
+    /// 读取前追平成功后只推进即时进度至当前秒，不跳过当前秒内的后续写入，也不影响延迟复扫的补漏进度。
     pub fn fresh_advanced(&self, now: i64) -> Self {
         Self { fresh_watermark: self.fresh_watermark.max(now), ..*self }
     }
 
-    /// 扫描完成后的进度；只前进不后退。
-    ///
-    /// # 参数
-    /// * `now` - 本轮扫描使用的当前时间（Unix 秒）
-    ///
-    /// # 返回
-    /// 返回推进后的进度。
-    ///
-    /// # 错误
-    /// 无。
+    /// 两路扫描完成后，分别推进到本轮的当前秒和扣除提交余量的边界；若时钟回拨，不让已处理进度倒退。
     pub fn advanced(&self, now: i64) -> Self {
         Self {
             fresh_watermark: self.fresh_watermark.max(now),

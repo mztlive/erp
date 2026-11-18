@@ -9,7 +9,7 @@ use tower::ServiceExt;
 use crate::http::routes;
 use crate::http::state::HttpState;
 
-/// 只构造本地客户端；请求在 JWT 认证边界拒绝，不执行数据库命令或对象存储写入。
+// 为供应商上传认证测试构造本地 HTTP 状态；测试必须在触碰 MongoDB 和对象存储之前结束。
 fn state() -> HttpState {
     let config = Config::from_toml_str(
         r#"
@@ -49,7 +49,7 @@ access_token = "test-token-123456"
     HttpState::new(db, SafeConfig::new(config), storage)
 }
 
-/// 生产路由先验证身份，未认证请求不能进入上传资格预检或文件处理。
+// 向生产供应商上传路由提交未认证请求，确认身份校验先于业务资格预检及文件处理。
 #[tokio::test]
 async fn asset_routes_require_authentication_before_upload_processing() {
     let app = routes::create(state());

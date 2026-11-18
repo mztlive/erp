@@ -21,15 +21,7 @@ pub enum AuthorizationFailure {
 
 impl AuthorizationFailure {
     /// 映射为合同稳定 blocker。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回允许原审批人恢复的 blocker。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn blocker_code(self) -> ApprovalBlockerCode {
         match self {
             Self::AccountInactive => ApprovalBlockerCode::ApproverAccountInactive,
@@ -41,17 +33,11 @@ impl AuthorizationFailure {
 }
 
 /// 将写时重验收敛为引擎资格。
-///
-/// # 参数
-/// * `participant` - 责任人
-/// * `name_snapshot` - 显示名
-/// * `failure` - 失败分类
-///
-/// # 返回
 /// 无失败时返回 `Eligible`。
 ///
-/// # 错误
 /// 处理人引用非法或显示名为空白时返回 `ValidationError`。
+///
+/// `participant`：责任人。
 pub fn converge_eligibility(
     participant: &str,
     name_snapshot: &str,
@@ -74,46 +60,26 @@ pub fn converge_eligibility(
 }
 
 /// 不允许原审批人恢复的 blocker 只能走受阻取消。
-///
-/// # 参数
-/// * `code` - 当前 blocker
-///
-/// # 返回
 /// 结构、任务、版本或内部不变量返回 `true`。
 ///
-/// # 错误
-/// 不返回错误。
+/// `code`：当前 blocker。
 pub fn requires_blocked_cancel(code: ApprovalBlockerCode) -> bool {
     !code.allows_assignee_recovery()
 }
 
 /// 幂等回读失权时不得泄露资源存在性。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
 /// 返回不包含资源细节的禁止错误。
-///
-/// # 错误
-/// 不返回错误。
 pub fn hidden_forbidden() -> Error {
     Error::Forbidden("无权执行该审批动作".to_string())
 }
 
 /// 三方责任必须一致：任务 owner、执行 assignee、实例节点当前审批人。
-///
-/// # 参数
-/// * `actor_id` - 当前操作人
-/// * `task_owner_id` - 任务责任人
-/// * `execution_assignee` - 执行审批人
-/// * `instance_assignee` - 实例节点当前审批人
-///
-/// # 返回
 /// 三方标识一致时无返回值。
 ///
-/// # 错误
 /// 任一不一致返回 `ConflictError`，码为 `APPROVAL_RESPONSIBILITY_CONFLICT`。
+///
+/// `task_owner_id`：任务责任人；`execution_assignee`：执行审批人。
+/// `instance_assignee`：实例节点当前审批人。
 pub fn ensure_triple_responsibility(
     actor_id: &str,
     task_owner_id: &str,
@@ -127,12 +93,11 @@ pub fn ensure_triple_responsibility(
 }
 
 /// 按定义顺序重验同节点全部参与人并组合或签资格。
-/// # 参数
-/// `node` 为冻结节点，`check` 对每人返回调用方资格失败原因。
-/// # 返回
 /// 返回完整节点资格；单人保持旧格式。
-/// # 错误
+///
 /// 人员、显示名或集合非法时失败。
+///
+/// `node` 为冻结节点，`check` 对每人返回调用方资格失败原因。
 pub fn converge_node_eligibility(
     node: &ApprovalNodeDefinition,
     mut check: impl FnMut(&str) -> Option<AuthorizationFailure>,
@@ -163,7 +128,7 @@ mod tests {
         requires_blocked_cancel,
     };
 
-    /// 写时失效收敛为人员 blocker，不得回落默认人。
+    // 验证：写时失效收敛为人员 blocker，不得回落默认人。
     #[test]
     fn execution_auth_converges_assignee_recovery_blocker() {
         let eligibility =
@@ -173,7 +138,7 @@ mod tests {
         assert!(requires_blocked_cancel(ApprovalBlockerCode::OpenTaskConflict));
     }
 
-    /// 三方责任不一致返回稳定冲突。
+    // 验证：三方责任不一致返回稳定冲突。
     #[test]
     fn execution_auth_requires_triple_responsibility() {
         assert!(ensure_triple_responsibility("u1", "u1", "u1", "u1").is_ok());

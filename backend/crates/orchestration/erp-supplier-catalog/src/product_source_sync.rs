@@ -16,11 +16,11 @@ use persistence_core::Executor;
 use crate::{Error, Result};
 
 /// 在采购明确选品事务中建立唯一资料来源及当前规格绑定。
-/// # 参数
+///
 /// 已持久化公司商品/供给对应的目录项及同一事务。
-/// # 返回
+///
 /// 同源SPU增加规格绑定；其他供货来源不改变已选资料来源。
-/// # 错误
+///
 /// 来源关联冲突、公司资料缺失或写入失败时拒绝。
 pub async fn initialize_source(
     db: &Database,
@@ -63,11 +63,11 @@ pub async fn initialize_source(
 }
 
 /// 将持续目录同步应用于已经明确选品的同源公司商品。
-/// # 参数
+///
 /// 最新来源观察及目录持久化所用的事务执行器。
-/// # 返回
+///
 /// 无选品、非展示资料来源时保持公司资料；其他情况原子更新资料和差异。
-/// # 错误
+///
 /// 公司修订、素材或乐观锁失败时拒绝，不丢弃人工内容。
 pub async fn apply_source_observation(
     db: &Database,

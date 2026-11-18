@@ -15,13 +15,9 @@ pub enum PaymentArrangementState {
     Settled,
 }
 impl PaymentArrangementState {
-    /// 根据同一快照中的采购及应付事实确定安排状态。
-    /// # 参数
+    /// 根据同一快照中的采购及应付事实确定安排状态。当前安排状态；申请占用不视为已付。
+    ///
     /// 采购状态、剩余应付、有效申请占用、来源付款阻断。
-    /// # 返回
-    /// 当前安排状态；申请占用不视为已付。
-    /// # 错误
-    /// 无。
     pub fn resolve(status: PurchaseOrderStatus, open: Amount, reserved: Amount, blocked: bool) -> Self {
         if !matches!(
             status,
@@ -40,13 +36,7 @@ impl PaymentArrangementState {
         }
         if blocked { Self::Blocked } else { Self::Available }
     }
-    /// 是否需要保留采购经办人的安排责任。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 有未申请余额时返回真，阻断不消除跟进责任。
-    /// # 错误
-    /// 无。
+    /// 是否需要保留采购经办人的安排责任。有未申请余额时返回真，阻断不消除跟进责任。
     pub fn needs_task(self) -> bool {
         matches!(self, Self::Available | Self::Blocked)
     }

@@ -42,16 +42,7 @@ pub struct SupplierAccountRow {
 }
 
 impl SupplierAccountRow {
-    /// 从供应商账户构造与仓储列表查询一致的投影行。
-    ///
-    /// # 参数
-    /// * `supplier` - 已装载的供应商账户；保留其责任归属与当前商务版本指针
-    ///
-    /// # 返回
-    /// 返回账户当前字段的只读投影，不查询关联事实。
-    ///
-    /// # 错误
-    /// 无；仅映射已有字段。
+    // 把内存中的账户转成列表仓储使用的投影行，保留实际责任归属和当前商务指针，不读取关联事实。
     pub(crate) fn from_account(supplier: &SupplierAccount) -> Self {
         Self {
             id: supplier.base.id.clone(),
@@ -129,25 +120,13 @@ pub struct SupplierAccountFilter {
 }
 
 impl QueryFilter for SupplierAccountFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。始终写入未删除的 `deleted_at`。
-    /// `party_id` 与 `status` 为 `Some` 时精确匹配。
-    /// `keyword` 与非空 `party_ids` 同时存在时，以 `supplier_no` 的字面量、忽略大小写正则
-    /// 和 `party_id` 的 `$in` 组成 `$or`；仅有 `keyword` 时只匹配 `supplier_no`。
-    /// 没有 `keyword` 时不使用 `party_ids`。
-    /// `supplier_ids` 为 `Some` 时写入 `id` 的 `$in`（空集合即无命中），
-    /// `excluded_supplier_ids` 为 `Some` 时再写入 `$nin`；只排除时只写 `$nin`。
-    /// `maintainer_user_ids` 为 `Some` 时按 `$in` 过滤。
-    /// 授权阶段由查询仓储独立完整执行。
-    /// 分页与排序字段不进入条件。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 将供应商账户筛选条件转换为 MongoDB 谓词，供仓储取数使用。
+    // 始终写入未删除的 `deleted_at`。`party_id` 与 `status` 为 `Some` 时精确匹配。`keyword` 与非空
+    // `party_ids` 同时存在时，以 `supplier_no` 的字面量、忽略大小写正则和 `party_id` 的 `$in` 组成 `$or`；
+    // 仅有 `keyword` 时只匹配 `supplier_no`。没有 `keyword` 时不使用 `party_ids`。`supplier_ids` 为
+    // `Some` 时写入 `id` 的 `$in`（空集合即无命中），`excluded_supplier_ids` 为 `Some` 时再写入 `$nin`；
+    // 只排除时只写 `$nin`。`maintainer_user_ids` 为 `Some` 时按 `$in` 过滤。授权阶段由查询仓储独立完整执
+    // 行。分页与排序字段不进入条件。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(party_id) = &self.party_id {
@@ -186,15 +165,10 @@ impl QueryFilter for SupplierAccountFilter {
     }
 }
 
-/// 将供应商候选与排除集合写入账户列表查询条件。
-///
-/// # 参数
-/// * `filter` - 待补充的 MongoDB 查询条件
-/// * `supplier_ids` - 必须命中的供应商候选集合；`None` 表示不限制
-/// * `excluded_supplier_ids` - 必须排除的供应商集合；`None` 表示不排除
-///
-/// # 返回
-/// 无返回值；查询条件在原地更新。
+// 将供应商候选与排除集合写入账户列表查询条件。
+// 查询条件在原地更新。
+// `supplier_ids`：`None` 表示不限制。
+// `excluded_supplier_ids`：`None` 表示不排除。
 fn insert_supplier_id_constraints(
     filter: &mut Document,
     supplier_ids: Option<&[SupplierAccountId]>,
@@ -213,45 +187,23 @@ fn insert_supplier_id_constraints(
     filter.insert("id", id_filter);
 }
 
-/// 转换供应商角色 ID，供 MongoDB 集合条件使用。
-///
-/// 批量 `$in` 的字符串列表只在这里由 `ToString` 生成（erp-supplier-013）。
-/// 空集合与去重由调用方处理，本函数不短路、不去重。
-///
-/// # 参数
-/// * `ids` - 强类型供应商角色 ID 集合
-///
-/// # 返回
-/// 返回与输入等长、保持输入顺序的字符串 ID 集合。
-///
-/// # 错误
-/// 不返回错误。
+// 转换供应商角色 ID，供 MongoDB 集合条件使用。
+// 批量 `$in` 的字符串列表只在这里由 `ToString` 生成（erp-supplier-013）。空集合与去重由调用方处理，本函
+// 数不短路、不去重。
+// 返回与输入等长、保持输入顺序的字符串 ID 集合。
 pub(super) fn supplier_id_strings(ids: &[SupplierAccountId]) -> Vec<String> {
     ids.iter().map(ToString::to_string).collect()
 }
 
-/// 转换主体 ID，供 MongoDB 集合条件使用（erp-supplier-013）。
-///
-/// # 参数
-/// * `ids` - 强类型主体 ID 集合
-///
-/// # 返回
-/// 返回保持输入顺序的字符串 ID 集合。
+// 转换主体 ID，供 MongoDB 集合条件使用（erp-supplier-013）。
+// 返回保持输入顺序的字符串 ID 集合。
 fn party_id_strings(ids: &[PartyId]) -> Vec<String> {
     ids.iter().map(ToString::to_string).collect()
 }
 
 impl Pagination for SupplierAccountFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。`page_size` 由 `u32` 展成 `u64`，不把 `0` 归一成第一页。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 向通用仓储提供供应商账户查询的页码和页长；不在此处改写页码。
+    // `page_size` 由 `u32` 展成 `u64`。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -261,85 +213,41 @@ impl Pagination for SupplierAccountFilter {
 #[allow(async_fn_in_trait)]
 pub trait SupplierAccountRepositoryExt {
     /// 按唯一供应商编号精确读取未删除的供应商。
-    ///
-    /// # 参数
-    /// * `supplier_no` - 已规范化的供应商编号。
-    /// * `executor` - 调用方执行器。
-    /// # 返回
     /// 返回匹配的供应商，缺失时为 `None`。
-    /// # 错误
-    /// 数据库读取失败时返回错误。
+    /// 数据库读取失败时向上传播错误。
     async fn find_by_number(
         &self,
         supplier_no: &str,
         executor: &mut dyn Executor,
     ) -> Result<Option<SupplierAccount>>;
     /// 批量读取未删除供应商的稳定 ID 与供应商编号。
-    ///
-    /// # 参数
-    /// * `supplier_ids` - 供应商 ID 集合；空集合不访问数据库
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回实际存在的供应商编号映射；停用但未删除供应商仍保留编号，软删除或缺失不补行。
-    ///
-    /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
+    /// `supplier_ids`：空集合不访问数据库。
     async fn supplier_numbers_by_ids(
         &self,
         supplier_ids: &[SupplierAccountId],
         executor: &mut dyn Executor,
     ) -> Result<HashMap<String, String>>;
 
-    /// 按供应商角色 ID 集合批量读取活跃账户。
-    ///
-    /// # 参数
-    /// * `supplier_ids` - 供应商角色 ID 集合；空集合直接返回空结果
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回全部匹配且未删除的供应商角色；返回顺序不承诺与输入一致。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 按供应商角色 ID 批量读取未删除账户，不承诺返回顺序；空输入直接返回空集合，查询失败向上传播。
     async fn find_accounts_by_ids(
         &self,
         supplier_ids: &[SupplierAccountId],
         executor: &mut dyn Executor,
     ) -> Result<Vec<SupplierAccount>>;
 
-    /// 分页检索供应商角色列表（投影查询）。
-    ///
-    /// 只返回 [`SupplierAccountRow`] 所需的列表字段，不加载整文档；排序字段
-    /// 经仓储白名单校验（`created_at`/`supplier_no`/`status`），非法字段回落
-    /// 默认 `created_at`。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// 分页读取供应商列表投影及匹配总数。先校验当前授权凭证，分页和计数共用完整授权阶段及同一筛选，返回
+    /// 前再校验边界。仅允许 `created_at`、`supplier_no`、`status` 排序，否则按 `created_at`；读取或总数
+    /// 溢出时失败。
     async fn search_supplier_accounts(
         &self,
         filter: &SupplierAccountFilter,
         executor: &mut dyn Executor,
     ) -> crate::Result<PageResult<SupplierAccountRow>>;
 
-    /// 按共用企业主体查找供应商角色（一个主体至多一个供应商角色，由
-    /// `uk_supplier_accounts_party` 保证）。
-    ///
-    /// # 参数
-    /// * `party_id` - 共用企业主体 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
+    /// 按共用企业主体查找供应商角色（一个主体至多一个供应商角色，由`uk_supplier_accounts_party` 保证）。
     /// 返回匹配的未删除供应商角色；无匹配时返回 `None`。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
     async fn find_by_party(
         &self,
@@ -348,13 +256,7 @@ pub trait SupplierAccountRepositoryExt {
     ) -> Result<Option<SupplierAccount>>;
 
     /// 读取命中主体名称的未删除供应商身份。
-    ///
-    /// # 参数
-    /// * `party_ids` - 主体领域返回的名称匹配身份
-    /// * `executor` - 调用方执行器
-    /// # 返回
     /// 返回供应商稳定身份；空输入返回空集合。
-    /// # 错误
     /// 查询或反序列化失败时返回仓储错误。
     async fn matching_ids_by_parties(
         &self,
@@ -478,15 +380,7 @@ impl SupplierAccountRepositoryExt for Repository<'_, SupplierAccount> {
 
 impl<'a> SupplierRepository<'a> {
     /// 按稳定 ID 读取未删除供应商角色账号。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 供应商角色 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回匹配供应商角色；不存在时返回 `None`。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询或反序列化失败时返回错误。
     pub async fn account(
         &self,
@@ -499,22 +393,12 @@ impl<'a> SupplierRepository<'a> {
     }
 
     /// 按供应商账号 ID 批量读取未删除账号到企业主体的关联。
-    ///
-    /// 主体法定名称由消费方 `PartyFactsPort` 组装；本方法只返回本域
-    /// `supplier_accounts` 的账号-主体投影。缺失账号或已软删除时不生成键。
-    ///
-    /// # 参数
-    /// * `supplier_ids` - 供应商账号 ID；允许重复，空集合直接返回空映射
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
+    /// 主体法定名称由消费方 `PartyFactsPort` 组装；本方法只返回本域`supplier_accounts` 的账号-主体投影。
+    /// 缺失账号或已软删除时不生成键。
     /// 返回供应商账号 ID 到主体 ID 的映射。
-    ///
-    /// # 错误
     /// 当任一批量查询或投影反序列化失败时返回错误。
-    ///
-    /// # 约束
     /// 只查询本域 `supplier_accounts` 集合。
+    /// `supplier_ids`：允许重复，空集合直接返回空映射。
     pub async fn supplier_party_ids_by_account_ids(
         &self,
         supplier_ids: &[SupplierAccountId],
@@ -528,17 +412,9 @@ impl<'a> SupplierRepository<'a> {
         Ok(suppliers.into_iter().map(|row| (row.id, PartyId::new(row.party_id))).collect())
     }
 
-    /// 批量读取未删除供应商账号到企业主体的关联。
-    ///
-    /// # 参数
-    /// * `supplier_ids` - 已去重的供应商账号 ID
-    /// * `executor` - 调用方提供的数据访问执行器
-    ///
-    /// # 返回
-    /// 返回全部命中的账号与主体最小关联行。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或投影反序列化失败时返回错误。
+    // 批量读取未删除供应商账号到企业主体的关联。
+    // 返回全部命中的账号与主体最小关联行。
+    // 当 MongoDB 查询或投影反序列化失败时返回错误。
     async fn supplier_party_refs(
         &self,
         supplier_ids: &[String],
@@ -554,24 +430,13 @@ impl<'a> SupplierRepository<'a> {
     }
 
     /// 审计 `supplier_accounts` 集合中重复的业务主键 `id`。
-    ///
-    /// 部署 `uk_supplier_accounts_id` 唯一索引前的门禁查询：按 `id` 分组统计
-    /// 出现次数并返回全部出现超过一次的主键，供部署在建索引前失败关闭。
-    /// 审计覆盖全部文档（含已软删除）：身份唯一索引是全局的，软删除后仍保留
-    /// 身份，删除态重复同样会阻断迁移。
-    ///
-    /// # 参数
-    /// * `executor` - 数据访问执行器，由调用方决定是否位于事务中；本方法只读，
-    ///   不开启或提交事务
-    ///
-    /// # 返回
+    /// 部署 `uk_supplier_accounts_id` 唯一索引前的门禁查询：按 `id` 分组统计出现次数并返回全部出现超过一
+    /// 次的主键，供部署在建索引前失败关闭。审计覆盖全部文档（含已软删除）：身份唯一索引是全局的，软删除
+    /// 后仍保留身份，删除态重复同样会阻断迁移。
     /// 按 `id` 字典序排列的重复主键及出现次数；无重复时返回空集合。
-    ///
-    /// # 错误
     /// 当 MongoDB 聚合或游标读取失败时返回错误。
-    ///
-    /// # 约束
     /// 只查询本域 `supplier_accounts` 集合；仅返回审计事实，不执行清理或建索引。
+    /// `executor`：本方法只读，  不开启或提交事务。
     pub async fn duplicate_supplier_account_ids(
         &self,
         executor: &mut dyn Executor,
@@ -580,28 +445,19 @@ impl<'a> SupplierRepository<'a> {
     }
 }
 
-/// 构建排序文档（仓储白名单）。
-///
-/// `sort_by` 不在 `allowed` 白名单内时回落默认 `created_at`，禁止透传任意
-/// 字段名（P2 §2.3）。
-///
-/// # 参数
-/// * `sort_by` - 排序字段；`None` 或不在白名单时默认 `created_at`
-/// * `sort_ascending` - 升序为 `true`，降序为 `false`
-/// * `allowed` - 允许的排序字段白名单
-///
-/// # 返回
-/// 返回排序条件文档。
+// 构建排序文档（仓储白名单）。
+// `sort_by` 不在 `allowed` 白名单内时回落默认 `created_at`，禁止透传任意字段名（P2 §2.3）。
+//
+// `sort_by`：`None` 或不在白名单时默认 `created_at`。
+// `sort_ascending`：升序为 `true`，降序为 `false`。
+// `allowed`：允许的排序字段白名单。
 fn sort_doc(sort_by: Option<&str>, sort_ascending: bool, allowed: &[&str]) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
     let field = sort_by.filter(|candidate| allowed.contains(candidate)).unwrap_or("created_at");
     doc! { field: direction }
 }
 
-/// 供应商角色列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
+// 供应商角色列表投影字段。
 fn supplier_account_projection() -> Document {
     doc! {
         "id": 1,
@@ -617,13 +473,8 @@ fn supplier_account_projection() -> Document {
     }
 }
 
-/// 按首次出现顺序去重字符串集合。
-///
-/// # 参数
-/// * `values` - 允许包含重复值的字符串迭代器
-///
-/// # 返回
-/// 返回保留首次出现顺序的唯一字符串集合。
+// 按首次出现顺序去重字符串集合。
+// 返回保留首次出现顺序的唯一字符串集合。
 fn unique_strings(values: impl IntoIterator<Item = String>) -> Vec<String> {
     let mut seen = HashSet::new();
     let mut unique = Vec::new();
@@ -635,13 +486,8 @@ fn unique_strings(values: impl IntoIterator<Item = String>) -> Vec<String> {
     unique
 }
 
-/// 构建未删除稳定对象的批量 ID 查询条件。
-///
-/// # 参数
-/// * `ids` - 已去重的稳定对象 ID
-///
-/// # 返回
-/// 返回同时限定 ID 集合与软删除标记的查询文档。
+// 构建未删除稳定对象的批量 ID 查询条件。
+// 返回同时限定 ID 集合与软删除标记的查询文档。
 fn active_ids_filter(ids: &[String]) -> Document {
     doc! {
         "id": { "$in": ids },
@@ -649,25 +495,16 @@ fn active_ids_filter(ids: &[String]) -> Document {
     }
 }
 
-/// 返回供应商账号到主体关联的最小字段投影。
-///
-/// # 返回
-/// 返回排除 MongoDB `_id` 且仅保留账号与主体 ID 的投影文档。
+// 返回供应商账号到主体关联的最小字段投影。
+// 返回排除 MongoDB `_id` 且仅保留账号与主体 ID 的投影文档。
 fn supplier_party_ref_projection() -> Document {
     doc! { "_id": 0, "id": 1, "party_id": 1 }
 }
 
-/// 执行业务主键重复审计聚合，复用调用方执行器的会话语义。
-///
-/// # 参数
-/// * `collection` - 供应商账号集合句柄
-/// * `executor` - 数据访问执行器，由调用方决定是否位于事务中
-///
-/// # 返回
-/// 按 `id` 字典序排列的重复主键及出现次数。
-///
-/// # 错误
-/// 当 MongoDB 聚合或游标读取失败时返回错误。
+// 执行业务主键重复审计聚合，复用调用方执行器的会话语义。
+// 按 `id` 字典序排列的重复主键及出现次数。
+// 当 MongoDB 聚合或游标读取失败时返回错误。
+// `executor`：数据访问执行器，由调用方决定是否位于事务中。
 async fn aggregate_id_duplicates(
     collection: &mongodb::Collection<Document>,
     executor: &mut dyn Executor,
@@ -677,13 +514,10 @@ async fn aggregate_id_duplicates(
     aggregate::rows(&collection, pipeline, executor).await
 }
 
-/// 返回业务主键重复审计的聚合管道，供审计执行与测试共用。
-///
-/// 按 `id` 分组计数，仅保留出现超过一次的主键并按 `id` 字典序稳定排列；
-/// 不附加软删除过滤，全局唯一索引同样约束已软删除文档。
-///
-/// # 返回
-/// 与 [`SupplierRepository::duplicate_supplier_account_ids`] 相同的聚合管道。
+// 返回业务主键重复审计的聚合管道，供审计执行与测试共用。
+// 按 `id` 分组计数，仅保留出现超过一次的主键并按 `id` 字典序稳定排列；不附加软删除过滤，全局唯一索引同样
+// 约束已软删除文档。
+// 与 [`SupplierRepository::duplicate_supplier_account_ids`] 相同的聚合管道。
 fn supplier_account_id_duplicate_pipeline() -> Vec<Document> {
     vec![
         doc! { "$group": { "_id": "$id", "count": { "$sum": 1 } } },

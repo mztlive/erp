@@ -17,20 +17,7 @@ use crate::repository::{
 };
 
 impl LegacyImportService {
-    /// 分页查询导入批次列表。
-    ///
-    /// 排序字段白名单在 Service 层校验（api-contract §4），禁止任意字段透传。
-    ///
-    /// # 参数
-    /// * `params` - 查询参数
-    /// * `actor` - 当前认证账号
-    /// * `executor` - 调用方快照；关联展示补齐必须继续使用该执行器。
-    ///
-    /// # 返回
-    /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
-    ///
-    /// # 错误
-    /// 非快照、分页或排序参数非法时返回 `ValidationError`；功能资格及仓储失败保留原错误。
+    /// 在调用方快照中检查认证账号的列表资格，再按白名单排序读批次投影和总数，返回 `items`、`total`、`page`、`page_size`。非快照或分页、排序非法时返回 `ValidationError`；授权及仓储失败保留原分类。
     pub async fn batch_list(
         &self,
         params: &LegacyImportBatchListParams,
@@ -61,18 +48,7 @@ impl LegacyImportService {
         Ok(page_view(items, page.total, filter.page, filter.page_size))
     }
 
-    /// 查询导入批次详情（含后台任务关联）。
-    ///
-    /// # 参数
-    /// * `id` - 导入批次 ID
-    /// * `actor` - 当前认证账号
-    /// * `executor` - 调用方快照；关联展示补齐必须继续使用该执行器。
-    ///
-    /// # 返回
-    /// 返回批次的响应视图（含 `background_job_id`）。
-    ///
-    /// # 错误
-    /// 非快照返回 `ValidationError`，批次不存在返回 `NotFound`；功能资格、批次及后台任务失败保留原错误。
+    /// 在原快照内检查详情资格、读取批次并补齐后台任务 ID。非快照返回 `ValidationError`，批次缺失返回 `NotFound`，授权、批次和任务读取失败沿用原错误。
     pub async fn batch_detail(
         &self,
         id: &str,
@@ -94,19 +70,7 @@ impl LegacyImportService {
         self.batch_view_of(batch, executor).await
     }
 
-    /// 分页查询导入行列表（按批次）。
-    ///
-    /// # 参数
-    /// * `batch_id` - 所属导入批次
-    /// * `params` - 查询参数
-    /// * `actor` - 当前认证账号
-    ///
-    /// # 返回
-    /// 返回契约形状的分页视图。
-    ///
-    /// # 错误
-    /// 批次不存在时返回 `NotFound`。分页或排序参数非法时返回 `ValidationError`。
-    /// 批次核对或行查询的仓储失败返回对应的导入领域错误，不限于 `RepositoryError`。
+    /// 为指定批次的导入行列表建立读取快照，使授权、批次存在校验、分页及计数一致。批次不存在返回 `NotFound`，分页或排序无效返回 `ValidationError`；其它授权和仓储失败保留对应领域错误。
     pub async fn row_list(
         &self,
         batch_id: &str,
@@ -127,7 +91,7 @@ impl LegacyImportService {
             .await
     }
 
-    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    // 在公开入口建立的同一快照中检查列表资格、确认批次存在，再按状态及来源行键查询并转换分页结果。
     async fn row_list_snapshot(
         &self,
         batch_id: &str,
@@ -159,17 +123,7 @@ impl LegacyImportService {
         Ok(page_view(items, page.total, filter.page, filter.page_size))
     }
 
-    /// 构造导入批次详情视图（补充 D04 后台任务关联）。
-    ///
-    /// # 参数
-    /// * `batch` - 导入批次实体
-    /// * `executor` - 公开查询已授权的原读取执行器
-    ///
-    /// # 返回
-    /// 返回含 `background_job_id` 的响应视图。
-    ///
-    /// # 错误
-    /// 后台任务身份查询失败时返回 [`crate::ports::BulkJobFactsPort`] 的错误，不是本方法直接查库。
+    // 用已授权的原执行器，按批次号通过 `BulkJobFactsPort` 查后台任务 ID 并补入详情；端口失败直接返回，服务不绕过端口查任务库。
     pub(super) async fn batch_view_of(
         &self,
         batch: LegacyImportBatch,
@@ -183,16 +137,7 @@ impl LegacyImportService {
         Ok(view)
     }
 
-    /// 校验批次存在。
-    ///
-    /// # 参数
-    /// * `batch_id` - 导入批次 ID
-    ///
-    /// # 返回
-    /// 批次存在时无返回值。
-    ///
-    /// # 错误
-    /// 批次不存在时返回 `NotFound`。仓储读取失败时返回对应的导入领域错误。
+    // 在当前快照验证父批次真实存在，避免把不存在的批次误报为空列表；没有记录返回 `NotFound`，读取失败保留领域错误。
     async fn ensure_batch_exists(&self, batch_id: &str, executor: &mut dyn Executor) -> Result<()> {
         self.db
             .legacy_import_batches()
@@ -203,7 +148,7 @@ impl LegacyImportService {
     }
 }
 
-/// 功能资格读取只允许在调用方持有的同一快照完成。
+// 在授权或批次读取前拒绝非快照执行器，保证资格、批次与关联读取不被拆成多个边界。
 fn ensure_batch_snapshot(executor: &dyn Executor) -> Result<()> {
     if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
         return Err(Error::ValidationError("导入批次读取必须使用快照事务".into()));
@@ -211,28 +156,13 @@ fn ensure_batch_snapshot(executor: &dyn Executor) -> Result<()> {
     Ok(())
 }
 
-/// 组装契约形状的分页视图（批次/行列表共用；分页口径不变）。
-///
-/// # 参数
-/// * `items` - 当前页数据
-/// * `total` - 满足筛选条件的总数
-/// * `page` - 当前页码
-/// * `page_size` - 单页条数
-///
-/// # 返回
-/// 返回 `items`/`total`/`page`/`page_size` 视图。
+// 统一批次、行列表的响应分页结构，用当前页结果和仓储总数保留原分页口径。
 fn page_view<Item>(items: Vec<Item>, total: i64, page: u64, page_size: u32) -> PageView<Item> {
     PageView { items, total, page, page_size }
 }
 
 impl From<LegacyImportBatchRow> for LegacyImportBatchListItem {
-    /// 从批次列表投影行构造响应项（与详情 `From<LegacyImportBatch>` 风格统一）。
-    ///
-    /// # 参数
-    /// * `row` - 批次列表投影行
-    ///
-    /// # 返回
-    /// 返回列表响应项。
+    // 将批次列表投影映射成展示项，不走详情取数或后台任务补齐路径。
     fn from(row: LegacyImportBatchRow) -> Self {
         Self {
             id: row.id,
@@ -255,13 +185,7 @@ impl From<LegacyImportBatchRow> for LegacyImportBatchListItem {
 }
 
 impl From<LegacyImportRowRow> for LegacyImportRowView {
-    /// 从导入行列表投影行构造响应视图。
-    ///
-    /// # 参数
-    /// * `row` - 导入行列表投影行
-    ///
-    /// # 返回
-    /// 返回行响应视图。
+    // 将仓储行投影转成列表响应，只展示投影允许的身份、状态及诊断信息。
     fn from(row: LegacyImportRowRow) -> Self {
         Self {
             id: row.id,
@@ -284,7 +208,7 @@ impl From<LegacyImportRowRow> for LegacyImportRowView {
 mod tests {
     use super::page_view;
 
-    /// 批次根与来源名称不得在非事务执行器上拆开读取。
+    // 验证非快照读取在接触身份设施或批次存储前失败，避免分开读取批次和关联事实。
     #[tokio::test]
     async fn batch_reads_reject_non_snapshot_before_identity_or_batch_reads() {
         use std::sync::Arc;
@@ -325,7 +249,7 @@ mod tests {
         }
     }
 
-    /// 管理读取的事务步骤均须先经身份设施，不能先探测真实批次或行。
+    // 验证批次或行的管理查询先经身份设施，不能在授权失败时探测业务数据。
     #[tokio::test]
     async fn import_reads_require_identity_before_querying_batches_or_rows() {
         use std::sync::Arc;

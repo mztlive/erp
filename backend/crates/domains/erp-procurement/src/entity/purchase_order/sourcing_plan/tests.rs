@@ -28,7 +28,7 @@ use crate::service::purchase_order::creation_basis::{
     build_submission_line, compute_selected_lines, validate_requested_quantities,
 };
 
-/// 选源建单沿用销售规格的可选语义，冻结和生效版本不得补造规格或丢失已有规格。
+// 选源建单沿用销售规格的可选语义，冻结和生效版本不得补造规格或丢失已有规格。
 #[test]
 fn sourcing_preserves_optional_specification_through_formalization() {
     for (source, expected) in [(None, None), (Some("  "), None), (Some(" 礼盒装 "), Some("礼盒装"))] {
@@ -297,7 +297,7 @@ fn assignment(
     }
 }
 
-/// 解析成功时去除首尾空白并类型化数量与日期。
+// 解析成功时去除首尾空白并类型化数量与日期。
 #[test]
 fn parse_trims_and_types_valid_assignment() {
     let parsed = SourcingAssignment::parse(
@@ -316,7 +316,7 @@ fn parse_trims_and_types_valid_assignment() {
     assert_eq!(parsed.quantity, Quantity::from_str("10").unwrap());
 }
 
-/// 空白销售行必须拒绝。
+// 空白销售行必须拒绝。
 #[test]
 fn parse_rejects_blank_sales_line() {
     let error =
@@ -325,7 +325,7 @@ fn parse_rejects_blank_sales_line() {
     assert_eq!(error.to_string(), "销售行不能为空");
 }
 
-/// 空白依据必须拒绝。
+// 空白依据必须拒绝。
 #[test]
 fn parse_rejects_blank_basis() {
     let error = SourcingAssignment::parse("sol-1", " ", SupplySourceType::Purchase, None, "10", "2026-09-01")
@@ -333,7 +333,7 @@ fn parse_rejects_blank_basis() {
     assert_eq!(error.to_string(), "履约方案不能为空");
 }
 
-/// 非法数量文本必须拒绝。
+// 非法数量文本必须拒绝。
 #[test]
 fn parse_rejects_invalid_quantity() {
     let error =
@@ -342,7 +342,7 @@ fn parse_rejects_invalid_quantity() {
     assert!(error.to_string().contains("本次分配数量格式无效"));
 }
 
-/// 非法预计交付日必须拒绝。
+// 非法预计交付日必须拒绝。
 #[test]
 fn parse_rejects_invalid_delivery_date() {
     let error =
@@ -351,7 +351,7 @@ fn parse_rejects_invalid_delivery_date() {
     assert!(error.to_string().contains("预计交付日期无效"));
 }
 
-/// 零数量与负数量必须拒绝。
+// 零数量与负数量必须拒绝。
 #[test]
 fn parse_rejects_zero_and_negative_quantity() {
     for quantity in ["0", "-1"] {
@@ -368,7 +368,7 @@ fn parse_rejects_zero_and_negative_quantity() {
     }
 }
 
-/// 现有库存不能另行指定目标仓。
+// 现有库存不能另行指定目标仓。
 #[test]
 fn parse_rejects_target_warehouse_for_existing_stock() {
     let error = SourcingAssignment::parse(
@@ -383,7 +383,7 @@ fn parse_rejects_target_warehouse_for_existing_stock() {
     assert_eq!(error.to_string(), "现有库存由所选库存余额确定仓库，不能另行指定目标仓");
 }
 
-/// 现有库存不携带目标仓时解析成功。
+// 现有库存不携带目标仓时解析成功。
 #[test]
 fn parse_accepts_existing_stock_without_target_warehouse() {
     let parsed = SourcingAssignment::parse(
@@ -399,7 +399,7 @@ fn parse_accepts_existing_stock_without_target_warehouse() {
     assert_eq!(parsed.target_warehouse_id, None);
 }
 
-/// 空白目标仓归一为未指定。
+// 空白目标仓归一为未指定。
 #[test]
 fn parse_treats_blank_target_warehouse_as_none() {
     let parsed = SourcingAssignment::parse(
@@ -414,7 +414,7 @@ fn parse_treats_blank_target_warehouse_as_none() {
     assert_eq!(parsed.target_warehouse_id, None);
 }
 
-/// 同一销售行可拆到不同依据，但同一依据不能重复。
+// 同一销售行可拆到不同依据，但同一依据不能重复。
 #[test]
 fn normalize_allows_split_and_rejects_duplicate() {
     let set = SourcingAssignmentSet::normalize(&[
@@ -432,7 +432,7 @@ fn normalize_allows_split_and_rejects_duplicate() {
     assert_eq!(error.to_string(), "同一销售行不能重复使用同一履约方案");
 }
 
-/// 规范化结果按销售行与依据稳定排序。
+// 规范化结果按销售行与依据稳定排序。
 #[test]
 fn normalize_sorts_stably_by_line_then_basis() {
     let set = SourcingAssignmentSet::normalize(&[
@@ -450,14 +450,14 @@ fn normalize_sorts_stably_by_line_then_basis() {
     assert_eq!(ids, vec![("sol-1", "basis-a"), ("sol-1", "basis-b"), ("sol-2", "basis-a")]);
 }
 
-/// 空集合必须归一为空计划。
+// 空集合必须归一为空计划。
 #[test]
 fn normalize_accepts_empty_set() {
     let set = SourcingAssignmentSet::normalize(&[]).expect("空集合必须成功");
     assert!(set.assignments().is_empty());
 }
 
-/// 同一拆分维度与目标仓的多销售行合并为一张采购单。
+// 同一拆分维度与目标仓的多销售行合并为一张采购单。
 #[test]
 fn purchase_assignments_merge_into_one_plan_per_scope_and_warehouse() {
     let order = sales_order("so-1");
@@ -483,7 +483,7 @@ fn purchase_assignments_merge_into_one_plan_per_scope_and_warehouse() {
     assert!(plan.stock_plans().is_empty());
 }
 
-/// 同一依据的不同销售行指定不同目标仓时必须拆分为不同采购单。
+// 同一依据的不同销售行指定不同目标仓时必须拆分为不同采购单。
 #[test]
 fn purchase_assignments_split_by_target_warehouse() {
     let order = sales_order("so-1");
@@ -510,7 +510,7 @@ fn purchase_assignments_split_by_target_warehouse() {
     assert_eq!(warehouses, vec![Some("wh-1".to_string()), Some("wh-2".to_string())]);
 }
 
-/// 不同付款条件必须拆分为不同采购单。
+// 不同付款条件必须拆分为不同采购单。
 #[test]
 fn purchase_assignments_split_by_scope() {
     let order = sales_order("so-1");
@@ -540,7 +540,7 @@ fn purchase_assignments_split_by_scope() {
     assert_eq!(plan.purchase_plans().len(), 2);
 }
 
-/// 选源行依据失效必须失败关闭。
+// 选源行依据失效必须失败关闭。
 #[test]
 fn purchase_assignment_with_unknown_basis_fails_closed() {
     let order = sales_order("so-1");
@@ -565,7 +565,7 @@ fn purchase_assignment_with_unknown_basis_fails_closed() {
     assert_eq!(error, SourcingPlanError::StaleFacts);
 }
 
-/// 仓库履约必须先选择目标收货仓。
+// 仓库履约必须先选择目标收货仓。
 #[test]
 fn warehouse_fulfillment_requires_target_warehouse() {
     let order = sales_order("so-1");
@@ -591,7 +591,7 @@ fn warehouse_fulfillment_requires_target_warehouse() {
     assert_eq!(error, SourcingPlanError::WarehouseContract("仓库履约必须先选择目标收货仓".to_string()));
 }
 
-/// 非仓库履约不能指定目标收货仓。
+// 非仓库履约不能指定目标收货仓。
 #[test]
 fn non_warehouse_fulfillment_rejects_target_warehouse() {
     let order = sales_order("so-1");
@@ -617,7 +617,7 @@ fn non_warehouse_fulfillment_rejects_target_warehouse() {
     assert_eq!(error, SourcingPlanError::WarehouseContract("非仓库履约不能指定目标收货仓".to_string()));
 }
 
-/// 现有库存按余额归组，同余额的多销售行合并为一次预占。
+// 现有库存按余额归组，同余额的多销售行合并为一次预占。
 #[test]
 fn stock_assignments_group_by_balance() {
     let order = sales_order("so-1");
@@ -637,7 +637,7 @@ fn stock_assignments_group_by_balance() {
     assert!(plan.purchase_plans().is_empty());
 }
 
-/// 不同余额必须拆分，未知余额依据失败关闭。
+// 不同余额必须拆分，未知余额依据失败关闭。
 #[test]
 fn stock_assignments_split_by_balance_and_reject_unknown() {
     let order = sales_order("so-1");
@@ -673,7 +673,7 @@ fn stock_assignments_split_by_balance_and_reject_unknown() {
     assert_eq!(error, SourcingPlanError::StaleFacts);
 }
 
-/// 库存与采购合计不得超过同一份最新剩余量。
+// 库存与采购合计不得超过同一份最新剩余量。
 #[test]
 fn combined_purchase_and_stock_totals_capped_by_latest_remaining() {
     let order = sales_order("so-1");
@@ -713,7 +713,7 @@ fn combined_purchase_and_stock_totals_capped_by_latest_remaining() {
     assert_eq!(error, SourcingPlanError::StaleFacts);
 }
 
-/// 无选源行时计划为空。
+// 无选源行时计划为空。
 #[test]
 fn plan_without_assignments_is_empty() {
     let order = sales_order("so-1");
@@ -725,7 +725,7 @@ fn plan_without_assignments_is_empty() {
     plan.validate_against_latest_sourcing(&[]).unwrap();
 }
 
-/// 最新余额重验接受恰好等于行剩余量与余额可用量的分配。
+// 最新余额重验接受恰好等于行剩余量与余额可用量的分配。
 #[test]
 fn validate_against_latest_stock_accepts_exact_cap() {
     let order = sales_order("so-1");
@@ -745,7 +745,7 @@ fn validate_against_latest_stock_accepts_exact_cap() {
     plan.validate_against_latest_stock(&[group]).expect("恰好等于上限必须成功");
 }
 
-/// 最新行剩余量下降时重验失败关闭。
+// 最新行剩余量下降时重验失败关闭。
 #[test]
 fn validate_against_latest_stock_rejects_line_excess() {
     let order = sales_order("so-1");
@@ -767,7 +767,7 @@ fn validate_against_latest_stock_rejects_line_excess() {
     assert_eq!(error, SourcingPlanError::StaleFacts);
 }
 
-/// 余额可用量下降时重验失败关闭。
+// 余额可用量下降时重验失败关闭。
 #[test]
 fn validate_against_latest_stock_rejects_balance_excess() {
     let order = sales_order("so-1");
@@ -789,7 +789,7 @@ fn validate_against_latest_stock_rejects_balance_excess() {
     assert_eq!(error, SourcingPlanError::StaleFacts);
 }
 
-/// 最新余额缺失时重验失败关闭。
+// 最新余额缺失时重验失败关闭。
 #[test]
 fn validate_against_latest_stock_missing_group_fails_closed() {
     let order = sales_order("so-1");
@@ -809,7 +809,7 @@ fn validate_against_latest_stock_missing_group_fails_closed() {
     assert_eq!(error, SourcingPlanError::StaleFacts);
 }
 
-/// 最新依据重验接受恰好等于剩余量与可供量的拆分。
+// 最新依据重验接受恰好等于剩余量与可供量的拆分。
 #[test]
 fn validate_against_latest_sourcing_accepts_exact_cap() {
     let order = sales_order("so-1");
@@ -835,7 +835,7 @@ fn validate_against_latest_sourcing_accepts_exact_cap() {
     plan.validate_against_latest_sourcing(&[group]).expect("恰好等于上限必须成功");
 }
 
-/// 最新行剩余量下降时重验失败关闭。
+// 最新行剩余量下降时重验失败关闭。
 #[test]
 fn validate_against_latest_sourcing_rejects_line_excess() {
     let order = sales_order("so-1");
@@ -869,7 +869,7 @@ fn validate_against_latest_sourcing_rejects_line_excess() {
     assert_eq!(error, SourcingPlanError::StaleFacts);
 }
 
-/// 同一供给跨方案累计，采用最后登记的可供量；未知可供量不设置供给上限。
+// 同一供给跨方案累计，采用最后登记的可供量；未知可供量不设置供给上限。
 #[test]
 fn validate_against_latest_sourcing_shares_supply_cap_across_plans() {
     let order = sales_order("so-1");
@@ -932,7 +932,7 @@ fn validate_against_latest_sourcing_shares_supply_cap_across_plans() {
     }
 }
 
-/// 上限统一复核之前仍先校验全部行的单位精度，保留首个错误分类。
+// 上限统一复核之前仍先校验全部行的单位精度，保留首个错误分类。
 #[test]
 fn latest_sourcing_validates_unit_precision_before_total_limits() {
     let order = sales_order("so-1");
@@ -958,7 +958,7 @@ fn latest_sourcing_validates_unit_precision_before_total_limits() {
     assert!(matches!(error, SourcingPlanError::QuantityContract(_)));
 }
 
-/// 相同输入重复构造库存依据 ID 完全一致。
+// 相同输入重复构造库存依据 ID 完全一致。
 #[test]
 fn stock_basis_id_is_deterministic() {
     let order = sales_order("so-1");
@@ -966,7 +966,7 @@ fn stock_basis_id_is_deterministic() {
     assert_eq!(stock_basis_id_for(&order, &group, "wi-1"), stock_basis_id_for(&order, &group, "wi-1"));
 }
 
-/// 逐行剩余量变化必须改变库存依据 ID。
+// 逐行剩余量变化必须改变库存依据 ID。
 #[test]
 fn stock_basis_id_changes_with_quantity() {
     let order = sales_order("so-1");
@@ -975,7 +975,7 @@ fn stock_basis_id_changes_with_quantity() {
     assert_ne!(stock_basis_id_for(&order, &first, "wi-1"), stock_basis_id_for(&order, &second, "wi-1"));
 }
 
-/// 余额依据可按稳定销售行查找。
+// 余额依据可按稳定销售行查找。
 #[test]
 fn stock_group_line_for_finds_and_misses() {
     let group = stock_basis_group("bal-1", "wh-1", "8", &[("sol-1", "10", "2")]);
@@ -983,7 +983,7 @@ fn stock_group_line_for_finds_and_misses() {
     assert!(group.line_for("sol-2").is_none());
 }
 
-/// 计划错误必须保持稳定文案。
+// 计划错误必须保持稳定文案。
 #[test]
 fn sourcing_plan_error_messages_are_stable() {
     assert_eq!(SourcingPlanError::StaleFacts.to_string(), "可分配供给数量已更新，请刷新后重试");
@@ -993,7 +993,7 @@ fn sourcing_plan_error_messages_are_stable() {
     );
 }
 
-/// 采购与库存路径都不能绕过整件精度；最新单位配置也必须重新验证。
+// 采购与库存路径都不能绕过整件精度；最新单位配置也必须重新验证。
 #[test]
 fn sourcing_plan_enforces_unit_precision_for_purchase_and_stock() {
     let order = sales_order("1");

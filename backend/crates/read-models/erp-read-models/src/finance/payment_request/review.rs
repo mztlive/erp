@@ -15,14 +15,14 @@ use super::{
 use crate::{Error, Result};
 
 impl PurchasePaymentRequestReadService {
-    /// 读取每张已授权采购的核销与其他申请占用，不扩展文件下载范围。
-    ///
-    /// # 参数
-    /// * `request` / `executor` - 已授权申请及同一读取事务。
-    /// # 返回
-    /// 返回逐采购审核上下文。
-    /// # 错误
-    /// 来源记录缺失、主体不符或金额异常时拒绝。
+    // 处理付款申请审核时，读取每张已授权采购的核销与其他申请占用，不扩展文件下载范围。
+    //
+    // 调用参数：
+    // * `request` / `executor` - 已授权申请及同一读取事务。
+    //
+    // 返回逐采购审核上下文。
+    //
+    // 来源记录缺失、主体不符或金额异常时拒绝。
     pub(super) async fn review_lines(
         &self,
         request: &PurchasePaymentRequest,
@@ -68,7 +68,7 @@ impl PurchasePaymentRequestReadService {
         Ok(rows)
     }
 
-    /// 批量补齐银行付款单号，金额始终使用本采购核销净额。
+    // 补齐付款申请审核的展示名称时，批量补齐银行付款单号，金额始终使用本采购核销净额。
     async fn settlement_labels(
         &self,
         request: &PurchasePaymentRequest,

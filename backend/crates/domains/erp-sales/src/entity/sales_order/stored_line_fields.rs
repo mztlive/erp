@@ -71,16 +71,9 @@ macro_rules! stored_line_fields {
 stored_line_fields!(SalesOrderWorkingCopyLine, SalesOrderSubmissionLine, SalesChangeSubmissionLine);
 
 impl StoredLineFields<'_> {
-    /// 还原实物及服务字段，沿用扁平快照的必填检查顺序。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回保留可选字段及冻结配送分配的商品字段组。
-    ///
-    /// # 错误
-    /// 行类型不符或 SKU、修订、履约期限、数量、单位、成交价缺失时返回原有错误。
+    // 还原实物及服务字段，沿用扁平快照的必填检查顺序。
+    // 返回保留可选字段及冻结配送分配的商品字段组。
+    // 失败条件：行类型不符或 SKU、修订、履约期限、数量、单位、成交价缺失时返回原有错误。
     pub(crate) fn goods(&self) -> Result<GoodsLineFields> {
         if self.line_type != LineType::GoodsService {
             return Err(Error::from(format!("第 {} 行不是实物及服务行", self.line_no)));
@@ -100,16 +93,9 @@ impl StoredLineFields<'_> {
         })
     }
 
-    /// 还原卡券字段，不重算快照金额或可选配赠率。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回可交给正式卡券行构造的字段组。
-    ///
-    /// # 错误
-    /// 行类型不符或卡券任一必填字段缺失时返回原有错误。
+    // 还原卡券字段，不重算快照金额或可选配赠率。
+    // 返回可交给正式卡券行构造的字段组。
+    // 失败条件：行类型不符或卡券任一必填字段缺失时返回原有错误。
     pub(crate) fn voucher(&self) -> Result<VoucherLineDraft> {
         if self.line_type != LineType::Voucher {
             return Err(Error::from(format!("第 {} 行不是卡券行", self.line_no)));

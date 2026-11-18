@@ -31,23 +31,14 @@ pub struct InquirySupplyService {
 }
 impl InquirySupplyService {
     /// 装配内部报价服务。
-    /// # 参数
-    /// `db` 为供应领域数据库。
-    /// # 返回
-    /// 返回服务实例。
-    /// # 错误
-    /// 无。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
     /// 读取精确询价需求版本的内部报价历史，不读取通用推荐。
-    /// # 参数
-    /// `inquiry_id`、`requirement_version` 为已授权需求；`executor` 为调用方事务。
-    /// # 返回
     /// 返回该需求版本的内部报价。
-    /// # 错误
     /// 数据读取失败时返回错误。
+    /// `inquiry_id`、`requirement_version` 为已授权需求；`executor` 为调用方事务。
     pub async fn quotes(
         &self,
         inquiry_id: &str,
@@ -62,12 +53,9 @@ impl InquirySupplyService {
     }
 
     /// 读取指定的不可变报价版本。
-    /// # 参数
-    /// `id` 为报价版本主键；`executor` 为调用方执行器。
-    /// # 返回
     /// 返回内部报价；缺失或删除时拒绝。
-    /// # 错误
     /// 找不到报价或读取失败时返回错误。
+    /// `id` 为报价版本主键；`executor` 为调用方执行器。
     pub async fn quote(&self, id: &str, executor: &mut dyn Executor) -> Result<InquiryQuote> {
         self.db
             .inquiry_quotes()
@@ -77,12 +65,9 @@ impl InquirySupplyService {
     }
 
     /// 追加不可变报价，不隐式维护通用供给条款。
-    /// # 参数
-    /// `quote` 为规范化报价；`port` 提供供应资格；`executor` 为当前写事务。
-    /// # 返回
     /// 保存报价成功。
-    /// # 错误
     /// 版本不连续、稳定身份换范围、供给归属或资格失效时拒绝。
+    /// `quote` 为规范化报价；`port` 提供供应资格；`executor` 为当前写事务。
     pub async fn append_quote<P: QualificationPort + ?Sized>(
         &self,
         quote: &InquiryQuote,
@@ -109,12 +94,9 @@ impl InquirySupplyService {
     }
 
     /// 在正式采购事务精确复验报价版本、作用域、资格及商业条件。
-    /// # 参数
-    /// `id`、`expected_version` 为候选冻结版本；`usage` 为当前采用事实，`port` 重验资格。
-    /// # 返回
     /// 返回原始不可变报价，不替换任何价格。
-    /// # 错误
     /// 原报价变化、越界或资格失效时拒绝。
+    /// `id`、`expected_version` 为候选冻结版本；`usage` 为当前采用事实，`port` 重验资格。
     pub async fn ensure_quote<P: QualificationPort + ?Sized>(
         &self,
         id: &str,
@@ -135,23 +117,16 @@ impl InquirySupplyService {
     }
 
     /// 追加当前反馈精确费用的采购内部依据。
-    /// # 参数
-    /// `basis` 为权限及当前责任已校验的内部收款依据；`executor` 为当前事务。
-    /// # 返回
     /// 保存成功；同一反馈稳定费用不得重复保存。
-    /// # 错误
     /// 依据非法、重复或持久化失败时拒绝。
+    /// `basis` 为权限及当前责任已校验的内部收款依据；`executor` 为当前事务。
     pub async fn append_fee_basis(&self, basis: &InquiryFeeBasis, executor: &mut dyn Executor) -> Result<()> {
         let basis = InquiryFeeBasis::new(basis.base.id.clone(), basis.data.clone())?;
         self.db.inquiry_fee_bases().create(&basis, executor).await.map_err(Into::into)
     }
 
     /// 读取准确费用的内部依据；已发布轮次的写入资格由Process拒绝。
-    /// # 参数
-    /// 精确询价、需求、反馈、费用身份及当前执行器。
-    /// # 返回
     /// 返回原内部依据及稳定附件归属ID。
-    /// # 错误
     /// 读取失败时返回错误。
     pub async fn fee_basis(
         &self,
@@ -168,12 +143,9 @@ impl InquirySupplyService {
             .map_err(Into::into)
     }
     /// 保存尚未发布轮次的费用内部工作依据，保持稳定附件归属。
-    /// # 参数
-    /// `basis`为Process已验证未发布轮次的输入，`executor`为含任务/聚合CAS的事务。
-    /// # 返回
     /// 新增或同ID更新成功，不修改其他轮次。
-    /// # 错误
     /// 内容非法、稳定身份不符或并发CAS失败时拒绝。
+    /// `basis`为Process已验证未发布轮次的输入，`executor`为含任务/聚合CAS的事务。
     pub async fn save_fee_basis(&self, basis: &InquiryFeeBasis, executor: &mut dyn Executor) -> Result<()> {
         let normalized = InquiryFeeBasis::new(basis.base.id.clone(), basis.data.clone())?;
         let data = &normalized.data;
@@ -200,11 +172,7 @@ impl InquirySupplyService {
     }
 
     /// 读取明确询价及反馈轮次的费用收款依据。
-    /// # 参数
-    /// 精确询价、需求版本、反馈轮次和当前调用方执行器。
-    /// # 返回
     /// 返回该轮内部费用依据，不对普通销售视图返回。
-    /// # 错误
     /// 读取失败时返回错误。
     pub async fn fee_bases(
         &self,
@@ -221,12 +189,9 @@ impl InquirySupplyService {
     }
 
     /// 与正式采购原子登记专项报价采用，并用稳定报价余额CAS阻止跨销售超量。
-    /// # 参数
-    /// `id`、`version` 为原报价；`reservation_id` 为采购行ID；`usage` 为本次真实承担量。
-    /// # 返回
     /// 精确采用的原始报价。
-    /// # 错误
     /// 条件失效、余额不足、重复采用或并发CAS失败时拒绝。
+    /// `id`、`version` 为原报价；`reservation_id` 为采购行ID；`usage` 为本次真实承担量。
     pub async fn reserve_quote<P: QualificationPort + ?Sized>(
         &self,
         input: QuoteReservationInput<'_>,
@@ -266,11 +231,7 @@ impl InquirySupplyService {
     }
 
     /// 重验并调整同一采购采用；审批期间不提前释放原正式需求。
-    /// # 参数
-    /// `reservation_id`为原采用，`usage`为服务器新目标，`keep_existing`为审批中保留旧范围。
-    /// # 返回
     /// 新余额与采用历史原子更新，调用方负责整个采购事务。
-    /// # 错误
     /// 报价或资格失效、余额不足和CAS冲突时拒绝。
     pub async fn resize_quote<P: QualificationPort + ?Sized>(
         &self,
@@ -309,12 +270,9 @@ impl InquirySupplyService {
     }
 
     /// 根据已保存正式采购事实恢复原采用，仅缩减待审保留量。
-    /// # 参数
-    /// 原采用ID、原专项报价版本、正式数量与地址及调用方作废事务。
-    /// # 返回
     /// 返回原报价历史；不检查当前供应商资格和报价期限。
-    /// # 错误
     /// 采用缺失、已释放、换报价、增量、新地址或CAS冲突时拒绝。
+    /// 原采用ID、原专项报价版本、正式数量与地址及调用方作废事务。
     pub async fn restore_existing_usage(
         &self,
         reservation_id: &str,
@@ -352,12 +310,9 @@ impl InquirySupplyService {
     }
 
     /// 查询具体采购的专项采用，不提供任意过滤器。
-    /// # 参数
-    /// `order_id`为已证明范围的采购，`executor`为原事务。
-    /// # 返回
     /// 返回未释放采用。
-    /// # 错误
     /// 读取失败时返回错误。
+    /// `order_id`为已证明范围的采购，`executor`为原事务。
     pub async fn reservations(
         &self,
         order_id: &str,
@@ -366,12 +321,9 @@ impl InquirySupplyService {
         self.db.inquiry_quote_reservations().active_for_order(order_id, executor).await.map_err(Into::into)
     }
     /// 按正式减少或作废事实释放一条准确采用。
-    /// # 参数
-    /// `reservation_id`为原采购采用身份，`executor`为原业务事务。
-    /// # 返回
     /// 保留历史数量并标记已释放，重复调用无变化。
-    /// # 错误
     /// 余额损坏、并发修改或读取失败时拒绝。
+    /// `reservation_id`为原采购采用身份，`executor`为原业务事务。
     pub async fn release_reservation(&self, reservation_id: &str, executor: &mut dyn Executor) -> Result<()> {
         let mut reservation = self
             .db
@@ -398,12 +350,9 @@ impl InquirySupplyService {
     }
 
     /// 按采购正式作废资格释放专项采用；调用方先校验收货、履约和财务事实。
-    /// # 参数
-    /// `purchase_order_id`为正式允许作废的采购单，`executor`为原作废事务。
-    /// # 返回
     /// 保留原采用数量并标记已释放，重复调用无额外变化。
-    /// # 错误
     /// 余额损坏、并发更新或持久化失败时拒绝。
+    /// `purchase_order_id`为正式允许作废的采购单，`executor`为原作废事务。
     pub async fn release_order_quotes(
         &self,
         purchase_order_id: &str,

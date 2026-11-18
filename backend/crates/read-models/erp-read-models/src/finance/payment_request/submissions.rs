@@ -14,12 +14,14 @@ use super::{
 use crate::{Error, Result};
 
 impl PurchasePaymentRequestReadService {
-    /// 返回指定提交版本的完整原审核材料，重新提交不得改变旧结果。
+    /// 处理付款申请不可变提交时，给出指定提交版本的完整原审核材料，重新提交不得改变旧结果。
     ///
     /// # 参数
     /// * `actor` / `id` / `version` - 当前身份、申请及精确提交版本。
+    ///
     /// # 返回
     /// 返回完整原始金额、来源预览、脱敏账户和冻结附件。
+    ///
     /// # 错误
     /// 任一历史采购来源不可读、版本缺失或冻结关系不一致时拒绝。
     pub async fn submission(
@@ -54,12 +56,14 @@ impl PurchasePaymentRequestReadService {
             .await
     }
 
-    /// 历史下载沿历史逐采购资格及精确提交冻结文件版本复验。
+    /// 确定付款申请不可变提交的适用条件时，历史下载沿历史逐采购资格及精确提交冻结文件版本复验。
     ///
     /// # 参数
     /// * `actor` / `id` / `version` / `asset_id` - 当前身份、申请、提交版本和文件。
+    ///
     /// # 返回
     /// 返回历史文件下载前后可比较的关系证明。
+    ///
     /// # 错误
     /// 历史资格失效、文件不在原清单或治理/内容版本改变时拒绝。
     pub async fn require_submission_material(

@@ -38,16 +38,7 @@ pub enum AddressType {
 }
 
 impl AddressType {
-    /// 返回类型的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 把地址类型转换为中文展示名称，供详情、列表或业务提示显示。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Registered => "注册地址",
@@ -56,16 +47,7 @@ impl AddressType {
         }
     }
 
-    /// 返回类型的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回地址类型的固定代码，供持久化值和查询条件使用同一口径。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Registered => "registered",
@@ -76,14 +58,7 @@ impl AddressType {
 
     /// 判断地址内容是否属于敏感值。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 履约地址返回 `true`（§4.5.5 加密列 + 带密钥 HMAC）。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn is_sensitive(&self) -> bool {
         matches!(self, Self::Fulfillment)
     }
@@ -162,7 +137,7 @@ pub struct PartyAddress {
 }
 
 impl fmt::Debug for PartyAddress {
-    /// 脱敏 `Debug`：不输出地址密文与指纹（明文字段永不进入 `Debug` 输出）。
+    // 脱敏 `Debug`：不输出地址密文与指纹（明文字段永不进入 `Debug` 输出）。
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("PartyAddress")
@@ -182,7 +157,7 @@ impl fmt::Debug for PartyAddress {
 }
 
 impl fmt::Debug for PartyAddressData {
-    /// 脱敏 `Debug`：地址明文不进入任何输出。
+    // 脱敏 `Debug`：地址明文不进入任何输出。
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("PartyAddressData")
@@ -199,7 +174,7 @@ impl fmt::Debug for PartyAddressData {
 }
 
 impl PartyAddress {
-    /// 生成地址查询指纹。
+    /// 对规范化地址生成带密钥的查询指纹，供比较地址内容时复用。
     ///
     /// 规范化规则：去首尾空白并折叠内部连续空白后，以带密钥
     /// HMAC-SHA256 计算并输出 64 位小写 hex（§4.5.5：禁止裸摘要；
@@ -209,16 +184,12 @@ impl PartyAddress {
     /// * `plain` - 地址明文
     /// * `key` - 查询密钥
     ///
-    /// # 返回
     /// 返回指纹字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn address_fingerprint(plain: &str, key: &[u8]) -> String {
         hmac_sha256_hex(key, normalize_address(plain).as_bytes())
     }
 
-    /// 创建地址。
+    /// 校验地址内容和有效期，构造带查询指纹的主体地址，供服务在持久化前补入密文。
     ///
     /// 完成联系人可选文本规范化与地址明文规范化（去空白、长度上限）；
     /// 以 `fingerprint_key` 从明文地址生成查询指纹，密文字段留空由
@@ -230,10 +201,8 @@ impl PartyAddress {
     /// * `fingerprint_key` - 查询指纹密钥
     /// * `created_by` - 创建人（账号或系统身份）
     ///
-    /// # 返回
     /// 返回新建的地址实体。
     ///
-    /// # 错误
     /// 当地址为空/超长、联系人超长或生效区间倒挂时返回错误。
     pub fn new(
         id: PartyAddressId,
@@ -262,7 +231,7 @@ impl PartyAddress {
         })
     }
 
-    /// 校验期望版本与当前版本一致（erp-party-008）。
+    /// 修改地址前核对请求期望版本，发现并发更新时返回冲突。
     ///
     /// 冲突文案与主体 `ensure_version` 同源（见 [`super::ensure_base_version`]），
     /// Service 层只做错误类映射。
@@ -270,28 +239,23 @@ impl PartyAddress {
     /// # 参数
     /// * `expected` - 调用方持有的期望版本
     ///
-    /// # 返回
     /// 版本一致返回 `Ok(())`。
     ///
-    /// # 错误
     /// 版本不一致时返回版本冲突错误。
     pub fn ensure_version(&self, expected: u64) -> Result<()> {
         super::ensure_base_version(&self.base, expected)
     }
 
-    /// 更新地址（仅限生命周期字段）。
+    /// 修改地址的生效状态、结束日或默认标记；需要修改地址内容时由上层流程建立新记录。
     ///
     /// 地址内容变更必须通过新的有效期事实行追加（W03）；原地更新
     /// 只允许切换启停状态（固定状态机）、结束有效期与调整默认标记。
     ///
     /// # 参数
-    /// * `update` - 更新数据
     /// * `updated_by` - 本次更新执行人
     ///
-    /// # 返回
     /// 更新成功返回 `Ok(())`。
     ///
-    /// # 错误
     /// 当状态迁移非法或 `valid_to` 不晚于 `valid_from` 时返回错误。
     pub fn update(&mut self, update: PartyAddressUpdate, updated_by: impl Into<String>) -> Result<()> {
         if let Some(to) = update.status {
@@ -308,31 +272,22 @@ impl PartyAddress {
         Ok(())
     }
 
-    /// 判断地址是否处于启用状态。
+    /// 返回地址的启用状态，供默认地址选择等流程判断。有效期由调用方另行筛选。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 状态为 `Active` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn is_active(&self) -> bool {
         self.status.is_active()
     }
 }
 
-/// 规范化地址明文：去首尾空白、折叠内部连续空白并校验非空与长度。
-///
-/// # 参数
-/// * `value` - 地址明文
-///
-/// # 返回
-/// 返回规范化后的地址。
-///
-/// # 错误
-/// 地址为空或超长时返回错误。
+// 规范化地址明文：去首尾空白、折叠内部连续空白并校验非空与长度。
+//
+// # 参数
+// * `value` - 地址明文
+//
+// 返回规范化后的地址。
+//
+// 地址为空或超长时返回错误。
 fn normalize_required_address(value: String) -> Result<String> {
     let address = normalize_address(&value);
     if address.is_empty() {
@@ -368,7 +323,7 @@ mod tests {
         }
     }
 
-    /// happy path：地址明文折叠空白、指纹由规范化明文生成且实体不含明文。
+    // 验证：地址明文折叠空白、指纹由规范化明文生成且实体不含明文。
     #[test]
     fn new_normalizes_and_fingerprints() {
         let address =
@@ -384,7 +339,7 @@ mod tests {
         assert!(address.is_active());
     }
 
-    /// 失败路径：地址为空/超长、联系人超长、区间倒挂。
+    // 验证：地址为空/超长、联系人超长、区间倒挂。
     #[test]
     fn new_rejects_invalid_inputs() {
         let blank = PartyAddressData { address: "   ".to_string(), ..address_data() };
@@ -400,7 +355,7 @@ mod tests {
         assert!(PartyAddress::new(PartyAddressId::new("a"), reversed, KEY, "admin-1").is_err());
     }
 
-    /// 状态机：启停切换经固定矩阵校验。
+    // 状态机：启停切换经固定矩阵校验。
     #[test]
     fn status_transitions_are_validated() {
         let mut address =
@@ -432,7 +387,7 @@ mod tests {
         assert!(!address.is_default);
     }
 
-    /// 敏感字段：Debug 与 Debug(Data) 均不泄漏地址明文与指纹。
+    // 敏感字段：Debug 与 Debug(Data) 均不泄漏地址明文与指纹。
     #[test]
     fn debug_never_leaks_plaintext() {
         let data = address_data();
@@ -449,7 +404,7 @@ mod tests {
         assert!(debug_data.contains("[REDACTED]"));
     }
 
-    /// 敏感字段：指纹稳定（同密钥同明文）且带密钥（换密钥指纹不同）。
+    // 敏感字段：指纹稳定（同密钥同明文）且带密钥（换密钥指纹不同）。
     #[test]
     fn fingerprint_is_stable_and_keyed() {
         let a = PartyAddress::address_fingerprint("北京市 朝阳区 望京街 10 号", b"key-a");
@@ -460,7 +415,7 @@ mod tests {
         assert_eq!(a.len(), 64);
     }
 
-    /// 实体 BSON 往返。
+    // 实体 BSON 往返。
     #[test]
     fn entity_roundtrips_through_json() {
         let address =

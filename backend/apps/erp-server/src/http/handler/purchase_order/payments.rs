@@ -14,11 +14,7 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
 /// 按采购详情资格读取本单付款记录。
-/// # 参数
-/// 当前账号与采购单身份。
-/// # 返回
 /// 当前采购单的付款核销金额及回单。
-/// # 错误
 /// 采购单不可见或读取失败时拒绝。
 pub async fn purchase_payments(
     State(state): State<HttpState>,
@@ -29,11 +25,7 @@ pub async fn purchase_payments(
 }
 
 /// 读取回单前后重验采购资格、有效付款分配及精确文件身份。
-/// # 参数
-/// 当前账号、采购单与付款单身份。
-/// # 返回
 /// 经审计的私有文件字节，不提供通用资产访问资格。
-/// # 错误
 /// 跨单、分配被冲销、资格失效或资产被隔离时拒绝。
 pub async fn purchase_payment_receipt(
     State(state): State<HttpState>,

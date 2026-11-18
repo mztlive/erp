@@ -40,22 +40,11 @@ pub struct BackgroundJobItemRow {
 #[allow(async_fn_in_trait)]
 pub trait BackgroundJobItemRepositoryExt {
     /// 分页检索任务逐项结果（投影查询）。
-    ///
-    /// 只返回 [`BackgroundJobItemRow`] 所需的逐项字段，不加载整文档；
-    /// `status` 过滤覆盖 `idx_background_job_items_status`。
-    ///
-    /// # 参数
-    /// * `job_id` - 后台任务 ID
-    /// * `status` - 逐项执行结果；`None` 表示不筛选
-    /// * `page` - 页码（1 起）
-    /// * `page_size` - 单页条数
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
+    /// 只返回 [`BackgroundJobItemRow`] 所需的逐项字段，不加载整文档；`status` 过滤覆盖 `idx_background_job_items_status`。
     /// 返回当前页逐项结果行与总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// `job_id` 为后台任务 ID；`status` 为逐项执行结果；`None` 表示不筛选。
+    /// 沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询、游标读取或计数错误。
     async fn search_job_items(
         &self,
         job_id: &BackgroundJobId,
@@ -94,10 +83,7 @@ impl BackgroundJobItemRepositoryExt for persistence_core::Repository<'_, Backgro
     }
 }
 
-/// 后台任务逐项结果投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
+// 后台任务逐项结果投影字段。
 fn job_item_projection() -> Document {
     doc! {
         "id": 1,

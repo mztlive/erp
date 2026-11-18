@@ -37,16 +37,7 @@ pub enum ParseStatus {
 }
 
 impl ParseStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 提供行解析状态的中文文案，供进度及差异展示。
     pub fn label(&self) -> &'static str {
         match self {
             Self::PendingParse => "待解析",
@@ -55,16 +46,7 @@ impl ParseStatus {
         }
     }
 
-    /// 返回状态的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 提供解析状态的稳定代码，供行存储和按解析进度筛选复用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::PendingParse => "pending_parse",
@@ -98,16 +80,7 @@ pub enum MappingStatus {
 }
 
 impl MappingStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 提供行身份映射状态的中文文案，供识别映射成功与冲突。
     pub fn label(&self) -> &'static str {
         match self {
             Self::PendingMapping => "待映射",
@@ -116,16 +89,7 @@ impl MappingStatus {
         }
     }
 
-    /// 返回状态的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 提供映射状态的稳定代码，供仓储查询及处理队列识别。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::PendingMapping => "pending_mapping",
@@ -162,16 +126,7 @@ pub enum ImportStatus {
 }
 
 impl ImportStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 提供行应用状态的中文文案，供展示成功、失败和跳过等结果。
     pub fn label(&self) -> &'static str {
         match self {
             Self::PendingImport => "待导入",
@@ -181,16 +136,7 @@ impl ImportStatus {
         }
     }
 
-    /// 返回状态的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 提供行应用状态的稳定代码，供状态写入、筛选及重试查询复用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::PendingImport => "pending_import",
@@ -260,20 +206,7 @@ pub struct LegacyImportRow {
 }
 
 impl LegacyImportRow {
-    /// 创建导入行。
-    ///
-    /// 完成来源对象类型、来源行键、规范化载荷的校验与规范化
-    /// （去首尾空白、非空、长度上限）；三个处理维度均从待处理状态开始。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::LegacyImportRowId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
-    /// 返回新建的导入行实体。
-    ///
-    /// # 错误
-    /// 当必填文本为空或超长时返回错误。
+    /// 构造批次下的一行导入记录，解析、映射和应用均从待处理开始；来源对象类型、行键及规范化载荷去首尾空白后为空或超长则拒绝。
     pub fn new(id: erp_core::ids::LegacyImportRowId, data: LegacyImportRowData) -> Result<Self> {
         let source_object_type = normalize_required_text(
             data.source_object_type,
@@ -311,23 +244,8 @@ impl LegacyImportRow {
         })
     }
 
-    /// 登记解析结果。
-    ///
-    /// 待解析行可登记为有效或无效；与当前解析状态相同的调用按幂等通过。
-    /// 无效行必须给出错误码（数据模型 §11.5：类型不合法、金额不守恒、
-    /// 外部身份重复、明细数量异常、税额不平、状态无法识别等均进入差异）。
-    ///
-    /// # 参数
-    /// * `status` - 目标解析状态
-    /// * `error_code` - 失败原因错误码（无效时必填）
-    /// * `error_detail` - 失败原因明细（可为空）
-    ///
-    /// # 返回
-    /// 登记成功返回 `Ok(())`。登记为有效时清空错误码与明细。
-    ///
-    /// # 错误
-    /// 目标既不是当前解析状态也不在其后继中时返回 `InvalidStateTransition`。
-    /// 无效结果缺少错误码或错误文本超长时返回错误。
+    /// 登记行解析结果，合法结果为有效或无效，同状态可重复登记。有效清空诊断；无效必须有错误码，如类型不合法、金额或税额不平、外部身份重复、明细数量异常或状态不可识别。
+    /// 非法迁移返回 `InvalidStateTransition`；无效行缺错误码或诊断超长时返回错误。
     pub fn mark_parse_result(
         &mut self,
         status: ParseStatus,
@@ -352,21 +270,7 @@ impl LegacyImportRow {
         Ok(())
     }
 
-    /// 登记映射成功。
-    ///
-    /// 仅有效行可登记映射结果；映射通过 `external_identity_map` 形成
-    /// 来源稳定身份（数据模型 §6.12：正式业务对象通过
-    /// `external_identity_map` 追溯来源）。
-    ///
-    /// # 参数
-    /// * `external_identity_map_id` - 来源稳定身份
-    ///
-    /// # 返回
-    /// 登记成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 解析状态不是有效时返回错误。映射状态既不是待映射也不是已映射时返回 `InvalidStateTransition`。
-    /// 已映射时幂等成功，并覆盖来源身份、清空错误字段。
+    /// 仅为解析有效行绑定 `external_identity_map` 的稳定来源身份，以便正式对象追溯来源。待映射或已映射时可登记，重复登记覆盖来源身份并清空诊断；其它映射状态返回 `InvalidStateTransition`，解析无效也拒绝。
     pub fn mark_mapped(&mut self, external_identity_map_id: ExternalIdentityMapId) -> Result<()> {
         Self::ensure_parseable(self)?;
         ensure_transition(self.mapping_status, MappingStatus::Mapped)?;
@@ -377,21 +281,7 @@ impl LegacyImportRow {
         Ok(())
     }
 
-    /// 登记映射冲突。
-    ///
-    /// 冲突行保留原值、解析错误、来源文件和行号诊断（数据模型 §11.5），
-    /// 冲突未解决前不形成正式目标（§8.4 第 2 条）。
-    ///
-    /// # 参数
-    /// * `error_code` - 失败原因错误码
-    /// * `error_detail` - 失败原因明细（可为空）
-    ///
-    /// # 返回
-    /// 登记成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 解析状态不是有效、当前映射状态不能迁到冲突，或错误码为空、错误文本超长时返回错误。
-    /// 已是冲突时幂等成功并覆盖诊断。
+    /// 给已解析有效的行登记映射冲突，保留原值、解析错误、来源文件和行号诊断，冲突解决前不形成正式目标。状态非法、缺错误码或诊断超长时失败；已是冲突时允许覆盖诊断。
     pub fn mark_conflict(&mut self, error_code: String, error_detail: Option<String>) -> Result<()> {
         Self::ensure_parseable(self)?;
         Self::write_diagnostic(
@@ -404,22 +294,8 @@ impl LegacyImportRow {
         )
     }
 
-    /// 登记导入成功。
-    ///
-    /// 仅解析有效且映射完成的行可导入；登记成功目标并清除错误信息。
-    ///
-    /// # 参数
-    /// * `target_document_id` - 成功结果目标单据 ID
-    /// * `target_object_reference` - 成功结果目标对象引用（可为空）
-    ///
-    /// # 返回
-    /// 导入成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 解析状态不是有效、映射状态不是已映射时返回错误。
-    /// 导入状态既不是待导入也不是已导入时返回 `InvalidStateTransition`。
-    /// 状态迁移通过后才校验目标文本；目标 ID 为空或超长、目标引用超长时返回错误，此时导入状态可能已经写成已导入。
-    /// 目标文本也合法时，已导入的重复调用幂等成功。
+    /// 为解析有效且已映射的行记录成功目标并清除诊断；仅待导入或已导入允许登记，否则返回 `InvalidStateTransition`。
+    /// 先推进状态再验证目标文本：单据 ID 为空或超长、引用超长时返回错误，行可能已变为已导入，调用方不得保存失败的修改；合法重复调用可成功。
     pub fn mark_imported(
         &mut self,
         target_document_id: String,
@@ -443,21 +319,7 @@ impl LegacyImportRow {
         Ok(())
     }
 
-    /// 登记导入失败。
-    ///
-    /// 失败行保留规范化载荷与行列诊断（数据模型 §4.5.7：失败合规包及
-    /// 行列诊断明细保留 30 天）。
-    ///
-    /// # 参数
-    /// * `error_code` - 失败原因错误码
-    /// * `error_detail` - 失败原因明细（可为空）
-    ///
-    /// # 返回
-    /// 登记成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 解析状态不是有效、映射状态不是已映射、错误码为空或错误文本超长时返回错误。
-    /// 导入状态既不是待导入也不是失败时返回 `InvalidStateTransition`。已失败时幂等成功并覆盖诊断。
+    /// 为解析有效且已映射的行登记应用失败，保留规范化载荷和诊断，失败合规包及行列明细保留 30 天。仅待导入或已失败可登记，后者覆盖诊断；非法迁移返回 `InvalidStateTransition`，前置状态无效、缺错误码或文本超长时也拒绝。
     pub fn mark_import_failed(&mut self, error_code: String, error_detail: Option<String>) -> Result<()> {
         Self::ensure_parseable(self)?;
         Self::ensure_mapped(self)?;
@@ -471,20 +333,7 @@ impl LegacyImportRow {
         )
     }
 
-    /// 登记跳过。
-    ///
-    /// 跳过表示按规则不导入该行（如重复身份幂等处理），错误码必填说明原因。
-    ///
-    /// # 参数
-    /// * `error_code` - 跳过原因错误码
-    /// * `error_detail` - 跳过原因明细（可为空）
-    ///
-    /// # 返回
-    /// 登记成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 解析状态不是有效、映射状态不是已映射、错误码为空或错误文本超长时返回错误。
-    /// 导入状态既不是待导入也不是已跳过时返回 `InvalidStateTransition`。已跳过时幂等成功并覆盖诊断。
+    /// 记录按规则无需应用的行（如重复来源身份的幂等处理）。仅解析有效、已映射且待导入或已跳过的行可登记，重复跳过覆盖诊断。非法迁移返回 `InvalidStateTransition`；缺错误码、诊断超长或前置状态不满足时也拒绝。
     pub fn mark_skipped(&mut self, error_code: String, error_detail: Option<String>) -> Result<()> {
         Self::ensure_parseable(self)?;
         Self::ensure_mapped(self)?;
@@ -498,19 +347,7 @@ impl LegacyImportRow {
         )
     }
 
-    /// 将失败行重新准备为待导入。
-    ///
-    /// 失败态迁回待导入；已是待导入时幂等通过。保留解析、映射和来源身份，
-    /// 并清空错误码、错误明细和目标单据字段。已导入或已跳过行不得调用。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 重新准备成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 当前导入状态是已导入或已跳过时返回 `InvalidStateTransition`。
+    /// 将失败行重置为待导入，保留解析、映射和来源身份，清除错误与正式目标字段；原为待导入时可重复准备，已导入或已跳过返回 `InvalidStateTransition`。
     pub fn prepare_failed_retry(&mut self) -> Result<()> {
         ensure_transition(self.import_status, ImportStatus::PendingImport)?;
         self.import_status = ImportStatus::PendingImport;
@@ -521,19 +358,7 @@ impl LegacyImportRow {
         Ok(())
     }
 
-    /// 将试算行推进到可导入状态。
-    ///
-    /// 待解析行按试算成功结果登记为有效；待映射行必须同时提供来源稳定身份。
-    /// 已无效或映射冲突的行不得进入应用阶段。
-    ///
-    /// # 参数
-    /// * `external_identity_map_id` - 待映射行对应的来源稳定身份
-    ///
-    /// # 返回
-    /// 行已达到解析有效且映射完成时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 行已无效、映射冲突，或待映射行缺少来源稳定身份时返回错误。
+    /// 用试算结果把行推进为解析有效、映射完成：待解析行按成功登记，待映射行必须有稳定来源身份。已无效、有映射冲突或缺所需身份时拒绝进入应用。
     pub fn prepare_for_import(
         &mut self,
         external_identity_map_id: Option<ExternalIdentityMapId>,
@@ -551,42 +376,17 @@ impl LegacyImportRow {
         Self::ensure_mapped(self)
     }
 
-    /// 统计指定导入状态的行数。
-    ///
-    /// # 参数
-    /// * `rows` - 同一批次或查询结果中的导入行
-    /// * `status` - 待统计的导入状态
-    ///
-    /// # 返回
-    /// 返回导入状态匹配的行数。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 统计给定导入行中匹配指定应用状态的数量，供批次汇总处理结果。
     pub fn count_by_import_status(rows: &[Self], status: ImportStatus) -> u64 {
         rows.iter().filter(|row| row.import_status == status).count() as u64
     }
 
-    /// 统计仍等待导入的行数。
-    ///
-    /// # 参数
-    /// * `rows` - 同一批次或查询结果中的导入行
-    ///
-    /// # 返回
-    /// 返回导入状态为 `PendingImport` 的行数。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 统计仍为 `PendingImport` 的行，供批次判断是否还有待应用项。
     pub fn pending_import_count(rows: &[Self]) -> u64 {
         Self::count_by_import_status(rows, ImportStatus::PendingImport)
     }
 
-    /// 校验行已通过解析。
-    ///
-    /// # 参数
-    /// * `row` - 导入行
-    ///
-    /// # 错误
-    /// 解析状态不是有效时返回错误。
+    // 在登记映射或应用结果前要求行解析有效，避免无效数据推进；其它解析状态返回错误。
     fn ensure_parseable(row: &Self) -> Result<()> {
         if row.parse_status != ParseStatus::Valid {
             return Err(Error::from("无效行不能进入映射或导入"));
@@ -594,13 +394,7 @@ impl LegacyImportRow {
         Ok(())
     }
 
-    /// 校验行已完成映射。
-    ///
-    /// # 参数
-    /// * `row` - 导入行
-    ///
-    /// # 错误
-    /// 映射状态不是已映射时返回错误。
+    // 在登记应用结果前要求行已完成来源映射，防止未定位正式身份便更新结果。
     fn ensure_mapped(row: &Self) -> Result<()> {
         if row.mapping_status != MappingStatus::Mapped {
             return Err(Error::from("未完成映射的行不能导入"));
@@ -608,24 +402,7 @@ impl LegacyImportRow {
         Ok(())
     }
 
-    /// 统一登记行级诊断（解析无效/映射冲突/导入失败/跳过共用；状态机与校验语义不变）。
-    ///
-    /// 映射/导入分支调用方先完成本分支特有的前置校验（`ensure_parseable`/`ensure_mapped`）。
-    /// 顺序固定为：状态迁移校验 → 错误码 → 错误明细 → 写状态 → 写错误字段。
-    ///
-    /// # 参数
-    /// * `status` - 本分支当前状态
-    /// * `next` - 本分支目标状态
-    /// * `error_code_slot` - 错误码字段
-    /// * `error_detail_slot` - 错误明细字段
-    /// * `error_code` - 失败原因错误码
-    /// * `error_detail` - 失败原因明细（可为空）
-    ///
-    /// # 返回
-    /// 登记成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 状态迁移非法或错误码/明细非法时返回错误。
+    // 让解析无效、映射冲突、导入失败和跳过共用诊断写入顺序。调用方先校验分支的解析、映射前置状态；本方法先校验迁移，再校验错误码和明细，两项通过后才写状态与诊断，非法输入直接返回错误。
     fn write_diagnostic<S: DocumentState + 'static>(
         status: &mut S,
         next: S,

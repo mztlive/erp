@@ -15,19 +15,16 @@ use super::flow::{self, FlowHeader, FlowPage, FlowVersion, first, lookup};
 use super::{aggregate, linked_condition_document, source_stages};
 use crate::{Error, Result};
 
-/// 银行回单等整单附件只接收完整读取资格，部分核销份额不能取得整单资格。
-///
-/// # 参数
-/// * `db` - 付款集合所在数据库。
-/// * `id` - 付款单身份。
-/// * `authorization` - 已解析的当前付款详情授权。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
-/// 付款版本，以及覆盖授权、付款和全部实际来源版本的指纹。
-///
-/// # 错误
-/// 聚合或解码失败时返回对应错误。没有整单资格行时返回 `NotFound`，文案为供应商付款单不存在。匹配行多于一条时返回 `Internal`。
+// 处理供应商付款时，银行回单等整单附件只接收完整读取资格，部分核销份额不能取得整单资格。
+//
+// 调用参数：
+// * `db` - 付款集合所在数据库。
+// * `id` - 付款单身份。
+// * `authorization` - 已解析的当前付款详情授权。
+//
+// 付款版本，以及覆盖授权、付款和全部实际来源版本的指纹。
+//
+// 聚合或解码失败时返回对应错误。没有整单资格行时返回 `NotFound`，文案为供应商付款单不存在。匹配行多于一条时返回 `Internal`。
 pub(in crate::finance::funds_scope) async fn full_read_qualification(
     db: &Database,
     id: &str,
@@ -48,7 +45,7 @@ pub(in crate::finance::funds_scope) async fn full_read_qualification(
     Ok(result)
 }
 
-/// 复用付款最终来源集合后进一步要求整单覆盖，只投影必要身份版本。
+// 组装供应商付款的聚合管道时，复用付款最终来源集合后进一步要求整单覆盖，只投影必要身份版本。
 fn full_read_pipeline(id: &str, authorization: &FundsAuthorization) -> Vec<Document> {
     let filter = SupplierPaymentFilter { keyword_ids: Some(vec![id.into()]), ..Default::default() };
     let mut stages = pipeline(&filter, authorization, &FundsLinkedCondition::default());
@@ -57,7 +54,7 @@ fn full_read_pipeline(id: &str, authorization: &FundsAuthorization) -> Vec<Docum
     stages
 }
 
-/// 不存在及部分可见保持统一拒绝，完整来源版本变化不能复用旧附件资格。
+// 处理供应商付款的版本事实时，不存在及部分可见保持统一拒绝，完整来源版本变化不能复用旧附件资格。
 fn full_read_version(scope: &str, rows: Vec<FlowVersion>) -> Result<(u64, String)> {
     let row = rows.first().ok_or_else(|| Error::NotFound("供应商付款单不存在".into()))?;
     if rows.len() != 1 {
@@ -66,21 +63,18 @@ fn full_read_version(scope: &str, rows: Vec<FlowVersion>) -> Result<(u64, String
     Ok((row.version, flow::version(scope, &rows)))
 }
 
-/// 同一最终条件返回当前页、总数、完整窄版本和授权份额摘要。
-///
-/// # 参数
-/// * `db` - 付款集合所在数据库。
-/// * `query` - 已规范化的付款列表查询，提供页码、页大小和排序。
-/// * `filter` - 付款主表筛选。
-/// * `authorization` - 已解析来源授权。
-/// * `condition` - 负责人、经办人与组织条件。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
-/// 当前页与计数。计数为零时直接返回该页；计数非零时再填入完整版本和授权份额摘要。
-///
-/// # 错误
-/// 聚合、解码或金额流读取失败时返回对应错误。计数达到 10000 时返回校验错误，文案为付款查询超过上限。头信息条数与计数不一致时返回 `Internal`。
+// 生成供应商付款分页时，同一最终条件返回当前页、总数、完整窄版本和授权份额摘要。
+//
+// 调用参数：
+// * `db` - 付款集合所在数据库。
+// * `query` - 已规范化的付款列表查询，提供页码、页大小和排序。
+// * `filter` - 付款主表筛选。
+// * `authorization` - 已解析来源授权。
+// * `condition` - 负责人、经办人与组织条件。
+//
+// 当前页与计数。计数为零时直接返回该页；计数非零时再填入完整版本和授权份额摘要。
+//
+// 聚合、解码或金额流读取失败时返回对应错误。计数达到 10000 时返回校验错误，文案为付款查询超过上限。头信息条数与计数不一致时返回 `Internal`。
 pub(in crate::finance::funds_scope) async fn page(
     db: &Database,
     query: &SupplierPaymentListQuery,
@@ -119,21 +113,18 @@ pub(in crate::finance::funds_scope) async fn page(
     Ok(result)
 }
 
-/// 第二次授权只取完整责任版本，页外金额和分配视图不重新生成。
-///
-/// # 参数
-/// * `db` - 付款集合所在数据库。
-/// * `query` - 已规范化的付款列表查询，只使用其排序。
-/// * `filter` - 付款主表筛选。
-/// * `authorization` - 已解析来源授权。
-/// * `condition` - 负责人、经办人与组织条件。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
-/// 按原主表排序的全部匹配付款及获授权来源版本。
-///
-/// # 错误
-/// 聚合或投影解码失败时返回对应错误。
+// 处理供应商付款时，第二次授权只取完整责任版本，页外金额和分配视图不重新生成。
+//
+// 调用参数：
+// * `db` - 付款集合所在数据库。
+// * `query` - 已规范化的付款列表查询，只使用其排序。
+// * `filter` - 付款主表筛选。
+// * `authorization` - 已解析来源授权。
+// * `condition` - 负责人、经办人与组织条件。
+//
+// 按原主表排序的全部匹配付款及获授权来源版本。
+//
+// 聚合或投影解码失败时返回对应错误。
 pub(in crate::finance::funds_scope) async fn versions(
     db: &Database,
     query: &SupplierPaymentListQuery,
@@ -155,7 +146,7 @@ pub(in crate::finance::funds_scope) async fn versions(
     Ok(result)
 }
 
-/// 原父单金额流按同拍完整头信息归组，拒绝缺失的非当前页版本。
+// 处理供应商付款时，原父单金额流按同拍完整头信息归组，拒绝缺失的非当前页版本。
 fn finish_page(
     mut snapshot: FlowPage<SupplierPaymentRow>,
     headers: Vec<FlowHeader>,
@@ -168,7 +159,7 @@ fn finish_page(
     Ok(snapshot)
 }
 
-/// 付款候选上限保留该资源的原校验文案，其他错误原样传播。
+// 处理供应商付款时，付款候选上限保留该资源的原校验文案，其他错误原样传播。
 fn payment_count<T>(snapshot: &FlowPage<T>) -> Result<u64> {
     snapshot.count().map_err(|error| match error {
         Error::ValidationError(_) => {
@@ -178,7 +169,7 @@ fn payment_count<T>(snapshot: &FlowPage<T>) -> Result<u64> {
     })
 }
 
-/// 经办筛选、业务条件与真实来源权限形成一个数据库最终集合。
+// 处理供应商付款时，经办筛选、业务条件与真实来源权限形成一个数据库最终集合。
 fn pipeline(
     filter: &SupplierPaymentFilter,
     authorization: &FundsAuthorization,
@@ -196,7 +187,7 @@ fn pipeline(
     stages
 }
 
-/// 核销通过应付分录和子账识别实际来源类型，身份相同不能跨域串权。
+// 组装供应商付款的聚合管道时，核销通过应付分录和子账识别实际来源类型，身份相同不能跨域串权。
 fn allocation_lookup(authorization: &FundsAuthorization, condition: &FundsLinkedCondition) -> Document {
     let mut stages = vec![
         doc! { "$match": { "deleted_at": 0_i64, "$expr": { "$eq": ["$supplier_payment_id", "$$payment"] } } },
@@ -226,7 +217,7 @@ fn allocation_lookup(authorization: &FundsAuthorization, condition: &FundsLinked
     doc! { "$lookup": { "from": Database::PAYMENT_ALLOCATIONS, "let": { "payment": "$id" }, "pipeline": stages, "as": "scope_links" } }
 }
 
-/// 采购与结算分别采用各自已经解析的来源范围及负责人字段。
+// 组装供应商付款的聚合管道时，采购与结算分别采用各自已经解析的来源范围及负责人字段。
 fn source_lookups(authorization: &FundsAuthorization, condition: &FundsLinkedCondition) -> Vec<Document> {
     let purchase = authorization.purchase_scope.as_ref().map_or_else(|| doc! { "$expr": false }, |_| doc! {});
     let settlement = authorization.settlement.as_ref().map_or_else(|| doc! { "$expr": false }, |_| doc! {});
@@ -257,12 +248,12 @@ fn source_lookups(authorization: &FundsAuthorization, condition: &FundsLinkedCon
     stages
 }
 
-/// 未命中实际来源类型时不向另一来源集合查询同名身份。
+// 定位供应商付款关联时，未命中实际来源类型时不向另一来源集合查询同名身份。
 fn source_id(kind: &str) -> Bson {
     doc! { "$cond": [{ "$eq": ["$scope_source_type", kind] }, "$scope_source_id", Bson::Null] }.into()
 }
 
-/// 付款经办人来自已提交的不可变过账执行事实，不使用创建人或采购负责人替代。
+// 组装供应商付款的聚合管道时，付款经办人来自已提交的不可变过账执行事实，不使用创建人或采购负责人替代。
 fn operator_stages(condition: &FundsLinkedCondition) -> Vec<Document> {
     let Some(operators) = &condition.operator_user_ids else {
         return Vec::new();
@@ -273,13 +264,13 @@ fn operator_stages(condition: &FundsLinkedCondition) -> Vec<Document> {
     } }]
 }
 
-/// 页内付款行仅装载正式裁剪所需主表字段。
+// 处理供应商付款时，页内付款行仅装载正式裁剪所需主表字段。
 fn projection() -> Document {
     doc! { "_id": 0, "id": 1, "status": 1, "payment_no": 1, "supplier_id": 1, "paid_at": 1,
     "amount": 1, "bank_reference": 1, "version": 1, "created_at": 1 }
 }
 
-/// 保留领域排序字段及 ID 尾键，最终授权不改变顺序。
+// 生成供应商付款分页时，保留领域排序字段及 ID 尾键，最终授权不改变顺序。
 fn sort(query: &SupplierPaymentListQuery) -> Document {
     flow::sort(query.paging.sort_by, matches!(query.paging.sort_dir, application_core::SortDir::Asc))
 }
@@ -294,7 +285,7 @@ mod tests {
     use super::flow::{FlowCount, SourceOwner, SourceVersion};
     use super::*;
 
-    /// 整单附件资格精确绑定付款身份，必须经过原来源可见性和整单覆盖条件。
+    // 验证供应商付款：整单附件资格精确绑定付款身份，必须经过原来源可见性和整单覆盖条件。
     #[test]
     fn full_read_pipeline_requires_whole_coverage_before_version_projection() {
         let mut authorization = authorization();
@@ -310,7 +301,7 @@ mod tests {
         assert!(!project.contains_key("amount"));
     }
 
-    /// 无完整资格和重复身份拒绝；授权、主单及页外实际来源变化均使附件指纹失效。
+    // 验证供应商付款：无完整资格和重复身份拒绝；授权、主单及页外实际来源变化均使附件指纹失效。
     #[test]
     fn full_read_version_rejects_missing_and_binds_all_current_versions() {
         assert!(matches!(full_read_version("scope", vec![]), Err(Error::NotFound(_))));
@@ -328,7 +319,7 @@ mod tests {
         assert!(matches!(full_read_version("scope", vec![row(3, 4), row(3, 4)]), Err(Error::Internal(_))));
     }
 
-    /// 过账执行事实先收窄父单，再读取核销真实来源，不改变未筛选集合。
+    // 验证供应商付款：过账执行事实先收窄父单，再读取核销真实来源，不改变未筛选集合。
     #[test]
     fn payment_operator_filter_precedes_allocation_sources() {
         let condition =

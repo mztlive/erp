@@ -29,15 +29,7 @@ pub struct SupplierRefundSourceFact {
 }
 
 /// 从已校验请求构造草稿，保留原 ID 与字段求值顺序。
-///
-/// # 参数
-/// * `req` - 创建请求。
-/// * `actor_id` - 已认证创建人。
-///
-/// # 返回
 /// 返回初始草稿供应商退款单。
-///
-/// # 错误
 /// 编号、原因、经办复核人、创建人为空或超长、金额非正、经办与复核人相同，或原付款与原应付未二选一时返回 `Logic`。
 pub fn new_supplier_refund(req: CreateSupplierRefundRequest, actor_id: &str) -> Result<SupplierRefund> {
     let result = SupplierRefund::new(
@@ -62,16 +54,9 @@ pub fn new_supplier_refund(req: CreateSupplierRefundRequest, actor_id: &str) -> 
 }
 
 /// 在原资金预读之后构造提交草稿，保留原编号、时钟和默认经办/复核人。
-///
-/// # 参数
-/// * `req` - 一次提交命令。
-/// * `source` - 原付款窄事实。
-/// * `actor_id` - 经办人，同时作为创建人。
-///
-/// # 返回
 /// 返回指向该原付款的草稿退款单；省略金额时沿用原付款金额。
-///
-/// # 错误
+/// `req` 为一次提交命令；`source` 为原付款窄事实。
+/// `actor_id` 为经办人，同时作为创建人。
 /// 原因、经办复核人或金额不满足实体不变量时返回 `Logic`。
 pub fn new_supplier_refund_commit(
     req: &CommitSupplierRefundRequest,
@@ -105,15 +90,8 @@ pub fn new_supplier_refund_commit(
 
 impl ReturnsService {
     /// 读取本域单据，使用调用方传入的原 Executor 与 NotFound 文案。
-    ///
-    /// # 参数
-    /// * `id` - 退款单主键。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
     /// 返回读到的供应商退款单。
-    ///
-    /// # 错误
+    /// `id` 为退款单主键；沿用调用方执行器 `executor`。
     /// 不存在时返回 `NotFound`；仓储读取失败时返回对应错误。
     pub async fn load_supplier_refund(
         &self,
@@ -124,16 +102,8 @@ impl ReturnsService {
     }
 
     /// 在调用方创建根内插入本域单据。
-    ///
-    /// # 参数
-    /// * `record` - 待写入的退款单。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 写入成功时无返回值。
-    ///
-    /// # 错误
-    /// 仓储写入失败时返回对应错误。
+    /// `record` 为待写入的退款单；沿用调用方执行器 `executor`。
+    /// 传播仓储写入错误。
     pub async fn create_supplier_refund(
         &self,
         record: &SupplierRefund,
@@ -144,16 +114,7 @@ impl ReturnsService {
     }
 
     /// 在外层审批或命令事务内以原 CAS 更新本域单据。
-    ///
-    /// # 参数
-    /// * `db` - 数据库句柄。
-    /// * `record` - 待写回的退款单。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 写回成功时无返回值。
-    ///
-    /// # 错误
+    /// `record` 为待写回的退款单；沿用调用方执行器 `executor`。
     /// 仓储更新失败时返回对应错误。
     pub async fn persist_supplier_refund(
         db: &mongodb::Database,
@@ -164,17 +125,8 @@ impl ReturnsService {
         Ok(())
     }
 
-    /// 读取并执行最终过账的原状态闸门；签署的动作分派仍在 Process。
-    ///
-    /// # 参数
-    /// * `id` - 退款单主键。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 返回仍可过账的退款单。
-    ///
-    /// # 错误
-    /// 单据不存在时返回 `NotFound`；已冲正时返回 `BusinessLogicError`；非审批中时返回 `ConflictError`；仓储读取失败时返回对应错误。
+    /// 审批最终通过、尚未写反向财务事实时，沿调用方事务加载供应商退款单，先拒绝已冲正，再要求仍在审批中。
+    /// 缺单返回 `NotFound`，已冲正返回 `BusinessLogicError`，非审批中返回 `ConflictError`；传播读取错误。
     pub async fn prepare_supplier_refund_post(
         &self,
         id: &str,
@@ -186,18 +138,8 @@ impl ReturnsService {
         Ok(record)
     }
 
-    /// 在原付款已过账检查之后读取本域累计金额并检查本次限额。
-    ///
-    /// # 参数
-    /// * `record` - 本次退款单，其主键从累计中排除。
-    /// * `original_amount` - 原付款金额。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 累计未超限时返回成功。
-    ///
-    /// # 错误
-    /// 退款未引用原付款，或累计超过原付款金额时返回 `BusinessLogicError`；聚合失败时返回对应错误。
+    /// 在确认原付款已过账后，沿原执行器累计同一原单已过账的供应商退款金额（排除本单），加上本次与原金额比较。
+    /// 超限返回 `BusinessLogicError`；没有原付款引用也按业务规则错误返回；传播聚合错误。
     pub async fn validate_supplier_refund_amount(
         &self,
         record: &SupplierRefund,
@@ -213,17 +155,8 @@ impl ReturnsService {
         ensure_cumulative_within(original_amount, before, record.amount, "累计退款金额不得超过原付款金额")
     }
 
-    /// 财务事实写入后标记本域已过账并以原 CAS 持久化。
-    ///
-    /// # 参数
-    /// * `refund` - 待标记过账的退款单。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 过账状态写回成功时无返回值。
-    ///
-    /// # 错误
-    /// 状态不是审批中时返回 `Logic`；仓储更新失败时返回对应错误。
+    /// 正式财务写入成功后，在原事务把审批中的供应商退款单标记过账并以原版本 CAS 写回。
+    /// 非审批中返回 `Logic`；传播仓储、版本竞争及其他写入错误。
     pub async fn persist_supplier_refund_post(
         &self,
         refund: &mut SupplierRefund,
@@ -234,30 +167,15 @@ impl ReturnsService {
         Ok(())
     }
 
-    /// 客户端直接过账恒按原冲突规则拒绝。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 不返回成功值。
-    ///
-    /// # 错误
-    /// 恒返回 `ConflictError`。
+    /// 客户端请求直接过账供应商退款时恒返回 `ConflictError`；最终过账由审批运行时触发。
     pub fn reject_supplier_refund_client_post() -> Result<std::convert::Infallible> {
         Err(Error::ConflictError("供应商退款过账只能由审批最终通过动作执行，客户端不得直接过账".to_string()))
     }
 }
 
 /// 最终退款必须引用原付款，分录来源保持原拒绝信息。
-///
-/// # 参数
-/// * `refund` - 供应商退款单。
-///
-/// # 返回
 /// 返回原付款 ID。
-///
-/// # 错误
+/// `refund` 为供应商退款单。
 /// 没有原付款引用时返回 `BusinessLogicError`。
 pub fn original_payment_id(refund: &SupplierRefund) -> Result<SupplierPaymentId> {
     refund

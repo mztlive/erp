@@ -30,20 +30,10 @@ pub(crate) const RECEIPT_REVERSALS: &str = <mongodb::Database as ReturnsExt>::RE
 /// `payment_reversal` 集合名。
 pub(crate) const PAYMENT_REVERSALS: &str = <mongodb::Database as ReturnsExt>::PAYMENT_REVERSALS;
 
-/// 创建本域集合的幂等命名索引。
-///
-/// 逐条落地数据模型 §6.11「必需约束与索引」。本域全部集合是退货/退款/冲正
-/// 事实与处理单（§4.5 不设业务软删除，纠错用反向事实），**不提供软删除
-/// 方法**；处理单编号用**全局唯一索引**（与 accounts 的 code 处理一致），
-/// 软删除语义不适用但仍保留身份唯一，避免作废后复用破坏追溯。
-///
-/// # 参数
-/// * `db` - 目标 MongoDB 数据库
-///
-/// # 返回
+/// 启动时注册该集合的命名索引，多次调用沿用同名索引。
+/// 逐条落地数据模型 §6.11「必需约束与索引」。本域全部集合是退货/退款/冲正事实与处理单（§4.5 不设业务软删除，纠错用反向事实），**不提供软删除方法**；
+/// 处理单编号用**全局唯一索引**（与 accounts 的 code 处理一致），软删除语义不适用但仍保留身份唯一，避免作废后复用破坏追溯。
 /// 八个集合的命名索引创建完成。无返回值。
-///
-/// # 错误
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, SALES_RETURN_CASES, sales_return_case_indexes()).await?;
@@ -57,13 +47,13 @@ pub async fn ensure(db: &Database) -> Result<()> {
     Ok(())
 }
 
-/// 为单个集合创建一组幂等命名索引。
+// 为单个集合创建一组幂等命名索引。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
     db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
-/// 返回 `sales_return_case` 的编号唯一与处理队列索引。
+// 返回 `sales_return_case` 的编号唯一与处理队列索引。
 fn sales_return_case_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_sales_return_cases_id", doc! { "id": 1 }),
@@ -73,7 +63,7 @@ fn sales_return_case_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `sales_return_line` 的退货单与原明细追溯索引。
+// 返回 `sales_return_line` 的退货单与原明细追溯索引。
 fn sales_return_line_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_sales_return_lines_id", doc! { "id": 1 }),
@@ -82,7 +72,7 @@ fn sales_return_line_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `purchase_return_order` 的编号唯一与采购单追溯索引。
+// 返回 `purchase_return_order` 的编号唯一与采购单追溯索引。
 fn purchase_return_order_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_purchase_return_orders_id", doc! { "id": 1 }),
@@ -91,7 +81,7 @@ fn purchase_return_order_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `purchase_return_line` 的退货单追溯索引。
+// 返回 `purchase_return_line` 的退货单追溯索引。
 fn purchase_return_line_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_purchase_return_lines_id", doc! { "id": 1 }),
@@ -100,7 +90,7 @@ fn purchase_return_line_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `customer_refund` 的编号唯一、列表与原事实追溯索引。
+// 返回 `customer_refund` 的编号唯一、列表与原事实追溯索引。
 fn customer_refund_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_customer_refunds_id", doc! { "id": 1 }),
@@ -118,7 +108,7 @@ fn customer_refund_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `supplier_refund` 的编号唯一、列表与原事实追溯索引。
+// 返回 `supplier_refund` 的编号唯一、列表与原事实追溯索引。
 fn supplier_refund_indexes() -> Vec<IndexModel> {
     vec![
         named_index("idx_supplier_refunds_purchase", doc! {"source_purchase_order_id": 1, "status": 1}),
@@ -134,7 +124,7 @@ fn supplier_refund_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `receipt_reversal` 的编号唯一与原回款追溯索引。
+// 返回 `receipt_reversal` 的编号唯一与原回款追溯索引。
 fn receipt_reversal_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_receipt_reversals_id", doc! { "id": 1 }),
@@ -146,7 +136,7 @@ fn receipt_reversal_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `payment_reversal` 的编号唯一与原付款追溯索引。
+// 返回 `payment_reversal` 的编号唯一与原付款追溯索引。
 fn payment_reversal_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_payment_reversals_id", doc! { "id": 1 }),
@@ -160,7 +150,7 @@ fn payment_reversal_indexes() -> Vec<IndexModel> {
 
 #[cfg(test)]
 mod tests {
-    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    // 验证按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
     #[test]
     fn collections_look_up_by_unique_stable_id() {
         for indexes in [
@@ -238,7 +228,7 @@ mod tests {
         );
     }
 
-    /// 固定八集合的命名索引，名称、复合键顺序与全局唯一语义不可漂移。
+    // 验证固定八集合的命名索引，名称、复合键顺序与全局唯一语义不可漂移。
     #[test]
     fn all_named_indexes_keep_order_keys_and_unique_options() {
         let groups = [

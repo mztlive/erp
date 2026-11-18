@@ -66,13 +66,7 @@ struct ApprovalCreationContext {
 }
 
 impl CreationPlan {
-    /// 取得该计划使用的销售稳定对象。
-    /// # 参数
-    /// 无额外参数。
-    /// # 返回
-    /// 返回草稿或已进入审批状态的销售单。
-    /// # 错误
-    /// 本方法不返回错误。
+    // 建单持久化前从计划取稳定销售对象；保存草稿与立即提交分支分别保留各自状态。
     pub(super) fn order(&self) -> &SalesOrder {
         match self {
             Self::Draft(plan) => &plan.creation.order,
@@ -80,13 +74,7 @@ impl CreationPlan {
         }
     }
 
-    /// 取得同一创建命令的独立回执事件。
-    /// # 参数
-    /// 无额外参数。
-    /// # 返回
-    /// 返回草稿或立即提交分支的创建事件。
-    /// # 错误
-    /// 本方法不返回错误。
+    // 用于查证原建单结果：不论是否立即提交，都使用计划中的创建事件，不以提交事件替代。
     pub(super) fn create_event(&self) -> &SalesCommandEvent {
         match self {
             Self::Draft(plan) => &plan.audit,
@@ -94,13 +82,7 @@ impl CreationPlan {
         }
     }
 
-    /// 取得当前工作副本行，供原子写入前校验商品引用。
-    /// # 参数
-    /// 无额外参数。
-    /// # 返回
-    /// 返回准备时保持原顺序的工作副本行。
-    /// # 错误
-    /// 本方法不返回错误。
+    // 建单写入前按工作副本的原行顺序校验商品引用，草稿和立即提交均使用对应计划中的行。
     pub(super) fn working_copy_lines(&self) -> &[SalesOrderWorkingCopyLine] {
         match self {
             Self::Draft(plan) => &plan.creation.working_copy_lines,
@@ -110,13 +92,11 @@ impl CreationPlan {
 }
 
 impl SalesOrderCommandProcess {
-    /// 先检查提交资格，再调用领域构造首次提交和审批快照。
-    /// # 参数
-    /// `creation` 为已准备的对象；`intent`、`identity` 和 `actor` 来自同一认证命令。
-    /// # 返回
-    /// 返回草稿或立即提交计划，尚未持久化。
-    /// # 错误
-    /// 按端口、主体、组织、采购责任、提交构造与事件构造的顺序返回首个错误。
+    // 先检查提交资格，再调用领域构造首次提交和审批快照。
+    //
+    // `creation` 为已准备的对象；`intent`、`identity` 和 `actor` 来自同一认证命令。返回草稿或立即提交计划，尚未持久化。
+    //
+    // 按端口、主体、组织、采购责任、提交构造与事件构造的顺序返回首个错误。
     pub(super) async fn prepare_creation_plan(
         &self,
         creation: PreparedSalesCreation,
@@ -156,7 +136,7 @@ impl SalesOrderCommandProcess {
     }
 }
 
-/// 调用领域迁移及既有快照构造，保持首次提交准备的首错顺序。
+// 调用领域迁移及既有快照构造，保持首次提交准备的首错顺序。
 fn prepare_submitted_creation(
     mut creation: PreparedSalesCreation,
     context: ApprovalCreationContext,
@@ -195,7 +175,7 @@ fn prepare_submitted_creation(
     Ok(CreationSubmit { creation, submission, submission_lines, approval, create_audit, submit_audit })
 }
 
-/// 通过工作流实体构造对应首次提交的动作事实。
+// 通过工作流实体构造对应首次提交的动作事实。
 fn created_submission_action(order: &SalesOrder, actor: &AuditActor) -> Result<WorkflowAction> {
     Ok(WorkflowAction::new(
         WorkflowActionId::new(next_id()),
@@ -211,7 +191,7 @@ fn created_submission_action(order: &SalesOrder, actor: &AuditActor) -> Result<W
     )?)
 }
 
-/// 创建事件先构造、提交事件后构造，共用外层命令及连续事件序号。
+// 创建事件先构造、提交事件后构造，共用外层命令及连续事件序号。
 fn creation_submission_events(
     identity: &CreationIdentity,
     actor: &AuditActor,
@@ -355,7 +335,7 @@ mod tests {
         }
     }
 
-    /// 两类新单都冻结同一副本、真实金额及顺序，并登记原创建和首次提交身份。
+    // 两类新单都冻结同一副本、真实金额及顺序，并登记原创建和首次提交身份。
     #[test]
     fn creation_submission_freezes_first_copy_and_original_command_results() {
         let actor = actor();
@@ -406,7 +386,7 @@ mod tests {
         }
     }
 
-    /// 已放弃副本和不可提交销售单同时出现时，先返回副本锁定错误。
+    // 已放弃副本和不可提交销售单同时出现时，先返回副本锁定错误。
     #[test]
     fn creation_submission_stops_on_copy_transition_before_order_transition() {
         let actor = actor();
@@ -420,7 +400,7 @@ mod tests {
             if from == "Abandoned" && to == "Submitted"));
     }
 
-    /// 行字段缺失先于副本迁移失败，错误仍按请求中第一行报告。
+    // 行字段缺失先于副本迁移失败，错误仍按请求中第一行报告。
     #[test]
     fn creation_submission_keeps_first_line_error_before_copy_transition() {
         let actor = actor();

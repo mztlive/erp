@@ -23,13 +23,12 @@ pub(super) struct Resolution {
 }
 
 impl AuthorizationService {
-    /// 检查目标账号的完整功能资格，并按该资格解析本动作的固定范围来源。
-    /// # 参数
-    /// actor、permission 为待检查身份及动作；executor 为检查人的原读取事务。
-    /// # 返回
-    /// 范围动作返回本次合格角色的范围；其他动作返回 None，仍须取得对象或任务上下文。
-    /// # 错误
-    /// 账号失效、完整资格不足、未知动作及范围设施错误原样传播。
+    // 检查目标账号的完整功能资格，并按该资格解析本动作的固定范围来源。
+    // 范围动作返回本次合格角色的范围；其他动作返回 None，仍须取得对象或任务上下文。
+    //
+    // 账号失效、完整资格不足、未知动作及范围设施错误原样传播。
+    //
+    // actor、permission 为待检查身份及动作；executor 为检查人的原读取事务。
     pub(crate) async fn inspection_scope(
         &self,
         actor: &AuditActor,
@@ -50,7 +49,7 @@ impl AuthorizationService {
         self.resolve_scope(&context, permission, &qualified, executor).await.map(Some)
     }
 
-    /// 身份先于业务事实读取；全部资格由一次账号及启用角色取证完成。
+    // 统一授权读取业务对象前，一次取证账号及全部可用启用角色，为各固定分支提供同一身份快照。
     pub(super) async fn qualify(
         &self,
         actor: &AuditActor,
@@ -87,7 +86,7 @@ impl AuthorizationService {
         }))
     }
 
-    /// 保存本次精确任务语义，使非事务复验不能退回普通记录规则。
+    // 解析根目标时在证明中保存精确任务语义，确保非事务重验仍使用精确目标规则而不是普通记录权限。
     pub(super) async fn resolve_target(
         &self,
         actor: &AuditActor,
@@ -108,7 +107,7 @@ impl AuthorizationService {
         self.resolve_context(context, model, task, &qualified, executor).await
     }
 
-    /// 复用同次账号与角色资格解析固定来源，保持原读取阶段。
+    // 需要解析固定附加来源规则时，沿用已取证账号、角色和原读取阶段，不以新资格替换根身份。
     pub(super) async fn resolve_context(
         &self,
         context: AccessContext,
@@ -167,7 +166,7 @@ impl AuthorizationService {
         Ok(proof)
     }
 
-    /// 可选管理范围使用自己的合格角色，与根读取共享身份、有效期和读取阶段。
+    // 为工作项读取批次独立解析管理角色的范围，仍与根查询共享账号、有效期和读取阶段。
     async fn management_condition(
         &self,
         context: &AccessContext,
@@ -213,7 +212,7 @@ impl AuthorizationService {
         Ok(versions)
     }
 
-    /// 任务保留入口基础规则，并追加固定关系；普通目标继续原数据条件。
+    // 精确任务目标保留入口基础范围并附加固定责任关系；普通对象继续使用该入口原数据规则。
     async fn target_condition(
         &self,
         context: &AccessContext,
@@ -296,7 +295,7 @@ impl AuthorizationService {
         }
     }
 
-    /// 商品目录的供应商范围来自其独立详情角色，不与连接菜单角色拼接。
+    // 为商品目录解析真实供应商范围时，只使用独立供应商详情入口的合格角色，不能用连接菜单角色拼接数据范围。
     async fn supplier_catalog_scope(
         &self,
         context: &AccessContext,

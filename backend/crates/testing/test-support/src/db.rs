@@ -25,16 +25,9 @@ pub struct TestDb {
 }
 
 impl TestDb {
-    /// 创建独立测试数据库。
+    /// 为需要真实 MongoDB 的测试创建独立数据库。把调用方前缀清理、截断并加随机后缀，再创建标记集合，使库名互不冲突且可清理。
     ///
-    /// # 参数
-    /// * `prefix` - 数据库名前缀，仅保留字母数字与 `-`/`_`，超长截断。
-    ///
-    /// # 返回
-    /// 返回连接并创建完成（含标记集合）的测试数据库夹具。
-    ///
-    /// # 错误
-    /// `ERP_TEST_MONGO_URI` 未设置或为空时返回 `Error::EnvMissing`；连接或创建标记集合失败时返回 MongoDB 错误。
+    /// `ERP_TEST_MONGO_URI` 缺失或为空时返回 `Error::EnvMissing`；连接或创建集合失败时返回 MongoDB 错误。
     pub async fn new(prefix: &str) -> Result<Self> {
         let uri = test_mongo_uri().ok_or(Error::EnvMissing(TEST_MONGO_URI_ENV))?;
         let client = Client::with_uri_str(&uri).await?;
@@ -43,61 +36,22 @@ impl TestDb {
         Ok(Self { db })
     }
 
-    /// 返回数据库实例引用。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回当前测试数据库的引用。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 借用此测试独占的数据库句柄，供布置数据、调用仓储或核对写入结果。
     pub fn db(&self) -> &Database {
         &self.db
     }
 
-    /// 返回底层 MongoDB 客户端引用。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回创建当前测试数据库所用的客户端引用。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 借用创建此测试数据库的 MongoDB 客户端，供测试用同一客户端建立会话。
     pub fn client(&self) -> &Client {
         self.db.client()
     }
 
-    /// 返回随机数据库名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回当前测试数据库的名称。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回此测试实际分配的随机数据库名，供集合命名空间相关的核对或诊断使用。
     pub fn name(&self) -> &str {
         self.db.name()
     }
 
-    /// 显式清理测试数据库并传播错误。
-    ///
-    /// `Drop` 的隐式清理不保证在进程退出前完成且丢弃错误；需要确定性
-    /// 清理的用例应在末尾调用本方法。`Drop` 仅保留尽力而为的兜底。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 无返回值。成功时已删除当前测试数据库。
-    ///
-    /// # 错误
-    /// 数据库删除失败时返回错误。
+    /// 在用例结束时等待测试数据库删除完成，并把 MongoDB 删除错误交给调用方。需要确认清理结果时显式调用此方法；析构只提供兜底。
     pub async fn cleanup(&self) -> Result<()> {
         self.db.drop().await?;
         Ok(())
@@ -105,12 +59,7 @@ impl TestDb {
 }
 
 impl Drop for TestDb {
-    /// 在独立线程中异步 drop 测试数据库（尽力而为的兜底）。
-    ///
-    /// 异步测试的 `Drop` 发生在运行时内部，直接 `block_on` 会恐慌；这里
-    /// 用独立当前线程运行时完成清理，避免影响测试进程。运行时构建失败与
-    /// `drop` 错误均被丢弃，且不保证在进程退出前完成——需要确定性清理
-    /// 的用例应显式调用 [`TestDb::cleanup`] 并传播错误。
+    // 测试夹具离开作用域时，启动独立线程和运行时尝试删除测试库，避免在当前异步运行时内阻塞。用例需要确认完成或接收失败时，应显式调用 `TestDb::cleanup`。
     fn drop(&mut self) {
         let db = self.db.clone();
         std::thread::spawn(move || {
@@ -121,13 +70,7 @@ impl Drop for TestDb {
     }
 }
 
-/// 生成 `前缀_uuid短前缀` 形式的合法数据库名。
-///
-/// # 参数
-/// * `prefix` - 调用方指定的前缀
-///
-/// # 返回值
-/// 返回去除非法字符并截断后的随机数据库名。
+// 过滤并截断测试库名前缀，加随机后缀以隔离并发用例；过滤后没有可用字符时使用 `test`。
 fn random_db_name(prefix: &str) -> String {
     let sanitized: String = prefix
         .chars()

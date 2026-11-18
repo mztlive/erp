@@ -19,13 +19,8 @@ use crate::repository::owned::{ProductRepository, SkuRepository, SkuRevisionRepo
 use crate::repository::prelude::*;
 
 impl<'a> CatalogRepository<'a> {
-    /// 判断同一公司商品的规格签名是否已被历史或当前 SKU 占用。
-    /// # 参数
-    /// `product_id` 为公司商品身份，`signature` 为已规范化规格签名，沿用调用方执行器。
-    /// # 返回
-    /// 存在同签名 SKU 时返回 true，包含已停用身份。
-    /// # 错误
-    /// 数据库查询失败时返回持久化错误。
+    /// 为商品检查规范规格签名是否已占用，既查当前启用 SKU，也查历史停用身份。
+    /// 沿用调用方执行器；同签名已存在时不能当作全新 SKU。
     pub async fn sku_signature_exists(
         &self,
         product_id: &ProductId,
@@ -40,18 +35,13 @@ impl<'a> CatalogRepository<'a> {
 
     /// 按 SKU 编号、正式规格签名或当前修订名称解析公司 SKU 主键。
     ///
-    /// 两个字段均按字面量部分匹配并忽略大小写；名称命中只接受稳定 SKU 当前修订，
-    /// 避免历史名称继续污染供给列表关键字筛选。
+    /// 两个字段均按字面量部分匹配并忽略大小写；名称命中只接受稳定 SKU 当前修订，避免历史名称继续污染供给列表关键字筛选。
     ///
-    /// # 参数
-    /// * `keyword` - 已去除首尾空白的关键字
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回去重并按主键排序的命中 SKU 主键；无命中时返回空集合。MongoDB 查询或反序列化失败时返回错误。
     ///
-    /// # 返回
-    /// 返回去重并按主键排序的命中 SKU 主键；无命中时返回空集合。
+    /// 沿用调用方的执行器，不另开事务。
     ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
+    /// `keyword` 为已去除首尾空白的关键字。
     pub async fn resolve_sku_ids_by_keyword(
         &self,
         keyword: &str,
@@ -60,22 +50,13 @@ impl<'a> CatalogRepository<'a> {
         self.keyword_sku_ids(keyword, false, executor).await
     }
 
-    /// 解析库存搜索的 SKU 编码、当前名称和规格，不匹配历史修订。
-    ///
-    /// # 参数
-    /// * `keyword` - 已去除首尾空白的关键字
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回去重并按主键排序的命中 SKU 主键；无命中时返回空集合。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败。
+    /// 库存搜索按 SKU 编码、当前修订名称和规格查找稳定 SKU，不匹配历史修订。
+    /// 沿用调用方执行器，返回去重且按主键排序的命中；无匹配返回空集合。
     pub async fn inventory_sku_ids(&self, keyword: &str, executor: &mut dyn Executor) -> Result<Vec<SkuId>> {
         self.keyword_sku_ids(keyword, true, executor).await
     }
 
-    /// 共享当前修订匹配规则；库存搜索额外包含规格。
+    // 共享当前修订匹配规则；库存搜索额外包含规格。
     async fn keyword_sku_ids(
         &self,
         keyword: &str,
@@ -110,19 +91,11 @@ impl<'a> CatalogRepository<'a> {
 
     /// 按 SPU 编号和 SKU 编号解析供给筛选所需的公司 SKU 主键。
     ///
-    /// 两个字段均按字面量部分匹配并忽略大小写；同时提供时取交集。任一已提供
-    /// 条件无命中时返回空集合，`None` 只表示两个条件均未提供。
+    /// 两个字段均按字面量部分匹配并忽略大小写；同时提供时取交集。任一已提供条件无命中时返回空集合，`None` 只表示两个条件均未提供。
     ///
-    /// # 参数
-    /// * `product_no` - 公司商品编号筛选
-    /// * `sku_no` - 公司 SKU 编号筛选
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回可选的去重 SKU 主键集合。MongoDB 查询或反序列化失败时返回错误。
     ///
-    /// # 返回
-    /// 返回可选的去重 SKU 主键集合。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
+    /// 沿用调用方的执行器，不另开事务。
     pub async fn resolve_sku_ids_by_codes(
         &self,
         product_no: Option<&str>,
@@ -148,17 +121,9 @@ impl<'a> CatalogRepository<'a> {
         Ok(Some(ids))
     }
 
-    /// 按商品编号解析其下全部 SKU 主键。
-    ///
-    /// # 参数
-    /// * `product_no` - 公司商品编号字面量关键字
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回命中商品下的全部未删除 SKU 主键。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
+    // 按商品编号解析其下全部 SKU 主键。MongoDB 查询或反序列化失败时返回错误。
+    //
+    // 沿用调用方的执行器，不另开事务。
     async fn sku_ids_by_product_no(
         &self,
         product_no: &str,
@@ -183,17 +148,9 @@ impl<'a> CatalogRepository<'a> {
             .collect())
     }
 
-    /// 按 SKU 编号解析 SKU 主键。
-    ///
-    /// # 参数
-    /// * `sku_no` - 公司 SKU 编号字面量关键字
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回命中的未删除 SKU 主键。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
+    // 按 SKU 编号解析 SKU 主键。MongoDB 查询或反序列化失败时返回错误。
+    //
+    // 沿用调用方的执行器，不另开事务。
     async fn sku_ids_by_sku_no(&self, sku_no: &str, executor: &mut dyn Executor) -> Result<Vec<SkuId>> {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_literal_regex_filter(&mut filter, "sku_no", Some(sku_no));
@@ -207,16 +164,12 @@ impl<'a> CatalogRepository<'a> {
 
     /// 分页查询 SKU 并批量装配当前修订名称。
     ///
-    /// # 参数
-    /// * `keyword` - SKU 编号、当前名称、规格、商品编号或当前商品名称关键字；`None` 表示不筛选
-    /// * `filter` - SKU 编号、归属、状态、分页与排序条件；`ids` 与关键词匹配身份取交集
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回已带当前修订名称的 SKU 分页投影。MongoDB 查询、计数或当前修订批量读取失败时返回错误。
     ///
-    /// # 返回
-    /// 返回已带当前修订名称的 SKU 分页投影。
+    /// 沿用调用方的执行器，不另开事务。
     ///
-    /// # 错误
-    /// MongoDB 查询、计数或当前修订批量读取失败时返回错误。
+    /// - `keyword`：SKU 编号、当前名称、规格、商品编号或当前商品名称关键字；`None` 表示不筛选。
+    /// - `filter`：SKU 编号、归属、状态、分页与排序条件；`ids` 与关键词匹配身份取交集。
     pub async fn sku_page(
         &self,
         keyword: Option<&str>,
@@ -242,15 +195,11 @@ impl<'a> CatalogRepository<'a> {
 
     /// 分页查询 SKU 修订投影。
     ///
-    /// # 参数
-    /// * `filter` - SKU 修订、名称、条码、状态、分页与排序条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回 SKU 修订分页投影。MongoDB 查询、计数或结果反序列化失败时返回错误。
     ///
-    /// # 返回
-    /// 返回 SKU 修订分页投影。
+    /// 沿用调用方的执行器，不另开事务。
     ///
-    /// # 错误
-    /// MongoDB 查询、计数或结果反序列化失败时返回错误。
+    /// `filter` 为 SKU 修订、名称、条码、状态、分页与排序条件。
     pub async fn sku_revision_page(
         &self,
         filter: &SkuRevisionFilter,
@@ -261,30 +210,18 @@ impl<'a> CatalogRepository<'a> {
 
     /// 按稳定 ID 读取单个未删除 SKU。
     ///
-    /// # 参数
-    /// * `sku_id` - SKU 稳定 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回匹配 SKU；不存在时返回 `None`。MongoDB 查询或反序列化失败时返回错误。
     ///
-    /// # 返回
-    /// 返回匹配 SKU；不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
+    /// 沿用调用方的执行器，不另开事务。
     pub async fn sku(&self, sku_id: &str, executor: &mut dyn Executor) -> Result<Option<Sku>> {
         self.db.skus().find_by_id(sku_id, executor).await
     }
 
     /// 读取一个商品下的全部未删除 SKU。
     ///
-    /// # 参数
-    /// * `product_id` - 商品稳定 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回该商品的全部 SKU，包含启用和历史停用身份。MongoDB 查询或反序列化失败时返回错误。
     ///
-    /// # 返回
-    /// 返回该商品的全部 SKU，包含启用和历史停用身份。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
+    /// 沿用调用方的执行器，不另开事务。
     pub async fn skus_for_product(
         &self,
         product_id: &ProductId,
@@ -295,15 +232,9 @@ impl<'a> CatalogRepository<'a> {
 
     /// 读取指定 SKU 的历史最大修订序号。
     ///
-    /// # 参数
-    /// * `sku_id` - SKU 稳定 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回历史最大修订号；无修订时返回 `None`。MongoDB 查询或反序列化失败时返回错误。
     ///
-    /// # 返回
-    /// 返回历史最大修订号；无修订时返回 `None`。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
+    /// 沿用调用方的执行器，不另开事务。
     pub async fn latest_sku_revision_no(
         &self,
         sku_id: &SkuId,
@@ -319,15 +250,11 @@ impl<'a> CatalogRepository<'a> {
 
     /// 返回当前启用修订中占用规范化条码的 SKU 身份。
     ///
-    /// # 参数
-    /// * `barcode` - 条码原值，Repository 按实体 trim 规则规范化
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回去重后的条码占用 SKU ID 集合。MongoDB 查询或反序列化失败时返回错误。
     ///
-    /// # 返回
-    /// 返回去重后的条码占用 SKU ID 集合。
+    /// 沿用调用方的执行器，不另开事务。
     ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
+    /// `barcode` 为条码原值，Repository 按实体 trim 规则规范化。
     pub async fn barcode_owner_sku_ids(
         &self,
         barcode: &str,
@@ -347,15 +274,11 @@ impl<'a> CatalogRepository<'a> {
     ///
     /// 优先使用稳定主表当前修订指针；指针缺失或失效时回退到该 SKU 最大修订号。
     ///
-    /// # 参数
-    /// * `skus` - 待解析的 SKU 稳定实体
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回 `sku_id -> 当前 SKU 修订` 映射；没有修订的 SKU 不出现在映射中。MongoDB 批量查询或反序列化失败时返回错误。
     ///
-    /// # 返回
-    /// 返回 `sku_id -> 当前 SKU 修订` 映射；没有修订的 SKU 不出现在映射中。
+    /// 沿用调用方的执行器，不另开事务。
     ///
-    /// # 错误
-    /// MongoDB 批量查询或反序列化失败时返回错误。
+    /// `skus` 为待解析的 SKU 稳定实体。
     pub async fn current_sku_revisions(
         &self,
         skus: &[Sku],
@@ -368,15 +291,11 @@ impl<'a> CatalogRepository<'a> {
 
     /// 解析单个 SKU 的当前修订。
     ///
-    /// # 参数
-    /// * `sku` - 已加载的 SKU 稳定实体
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回当前指针命中或最大修订号对应的修订；无修订时返回 `None`。MongoDB 查询或反序列化失败时返回错误。
     ///
-    /// # 返回
-    /// 返回当前指针命中或最大修订号对应的修订；无修订时返回 `None`。
+    /// 沿用调用方的执行器，不另开事务。
     ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
+    /// `sku` 为已加载的 SKU 稳定实体。
     pub async fn current_sku_revision(
         &self,
         sku: &Sku,
@@ -385,17 +304,13 @@ impl<'a> CatalogRepository<'a> {
         Ok(self.current_sku_revisions(std::slice::from_ref(sku), executor).await?.remove(&sku.base.id))
     }
 
-    /// 批量装配 SKU 列表投影的当前修订名称。
-    ///
-    /// # 参数
-    /// * `rows` - 当前页 SKU 投影
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 成功时原位填充每行 `name` 字段。
-    ///
-    /// # 错误
-    /// MongoDB 批量查询或反序列化失败时返回错误。
+    // 批量装配 SKU 列表投影的当前修订名称。
+    //
+    // 成功时原位填充每行 `name` 字段。MongoDB 批量查询或反序列化失败时返回错误。
+    //
+    // 沿用调用方的执行器，不另开事务。
+    //
+    // `rows` 为当前页 SKU 投影。
     async fn attach_current_sku_names(&self, rows: &mut [SkuRow], executor: &mut dyn Executor) -> Result<()> {
         let revision_ids = rows.iter().filter_map(|row| row.current_revision_id.clone()).collect::<Vec<_>>();
         if revision_ids.is_empty() {
@@ -423,21 +338,14 @@ impl<'a> CatalogRepository<'a> {
     /// 时各笔写入各自自动提交，中途失败会留下有 SKU 没有修订的半成品；
     /// Service 必须通过 `persistence_core::Transactional::with_transaction` 传入事务会话。
     ///
-    /// # 参数
-    /// * `sku` - 待写入的稳定 SKU
-    /// * `revision` - 待写入的 SKU 首个修订
-    /// * `attribute_values` - 待写入的修订规格属性值
-    /// * `executor` - 数据访问执行器，必须位于事务中
+    /// 条码占用（空条码则跳过）、SKU、首个修订与规格属性值都写入规格属性值为空时不插入该集合。先调用 `claim_sku_barcode`：无事务会话返回
+    /// [`crate::Error::Internal`]，归属冲突、标识校验失败或占用写入失败返回对应的领域错误。
+    /// 随后的插入经`From<persistence_core::Error>` 转换后返回：唯一索引冲突成为
+    /// [`crate::Error::ConflictError`]，不会原样透出 [`persistence_core::Error::DuplicateKey`]；
+    /// 其他仓储失败按该转换返回。
     ///
-    /// # 返回
-    /// 条码占用（空条码则跳过）、SKU、首个修订与规格属性值都写入成功时返回 `Ok(())`。
-    /// 规格属性值为空时不插入该集合。
-    ///
-    /// # 错误
-    /// 先调用 `claim_sku_barcode`：无事务会话返回 [`crate::Error::Internal`]，归属冲突、
-    /// 标识校验失败或占用写入失败返回对应的领域错误。随后的插入经
-    /// `From<persistence_core::Error>` 转换后返回：唯一索引冲突成为 [`crate::Error::ConflictError`]，
-    /// 不会原样透出 [`persistence_core::Error::DuplicateKey`]；其他仓储失败按该转换返回。
+    /// - `sku`：待写入的稳定 SKU。
+    /// - `executor`：数据访问执行器，必须位于事务中。
     pub async fn create_sku_with_revision(
         &self,
         sku: &Sku,
@@ -461,9 +369,9 @@ impl<'a> CatalogRepository<'a> {
 }
 
 impl CatalogRepository<'_> {
-    /// 公司 SKU 列表匹配 SKU 编号、当前名称/规格及商品编号/当前名称。
-    ///
-    /// 保持库存专用搜索口径不变；只接受商品当前修订，数据库错误整次返回。
+    // 公司 SKU 列表匹配 SKU 编号、当前名称/规格及商品编号/当前名称。
+    //
+    // 保持库存专用搜索口径不变；只接受商品当前修订，数据库错误整次返回。
     async fn list_keyword_sku_ids(&self, keyword: &str, executor: &mut dyn Executor) -> Result<Vec<SkuId>> {
         let mut ids = self.keyword_sku_ids(keyword, true, executor).await?;
 
@@ -599,7 +507,7 @@ mod tests {
 #[cfg(test)]
 mod inventory_keyword_tests {
     use super::*;
-    /// 库存额外支持字面量规格，既有商品编号与名称搜索保持原语义。
+    // 库存额外支持字面量规格，既有商品编号与名称搜索保持原语义。
     #[test]
     fn inventory_search_includes_literal_specification_without_changing_other_consumers() {
         let regular = sku_revision_keyword_filter("500ml.[x]", false);

@@ -45,31 +45,21 @@ pub(in crate::supplier_portal) struct PortalApplicationRepository<'a> {
     db: &'a Database,
 }
 impl<'a> PortalApplicationRepository<'a> {
-    /// 绑定数据库，不缓存账号或对象授权。
-    ///
-    /// # 参数
-    /// * `db` - 数据库。
-    ///
-    /// # 返回
-    /// 返回未缓存授权的仓储。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 装配门户供应商申请时，绑定数据库，不缓存账号或对象授权。
+    //
+    // 返回未缓存授权的仓储。
     pub(in crate::supplier_portal) fn new(db: &'a Database) -> Self {
         Self { db }
     }
-    /// 有界取得待逐申请授权的身份，超限必须收窄。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 已绑定的供应商。
-    /// * `query` - 已规范化的分页与筛选。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 返回至多一万个申请身份。
-    ///
-    /// # 错误
-    /// 超过一万个时返回 `ValidationError`。聚合或反序列化失败时返回对应错误。
+    // 定位门户供应商申请关联时，有界取得待逐申请授权的身份，超限必须收窄。
+    //
+    // 调用参数：
+    // * `supplier_id` - 已绑定的供应商。
+    // * `query` - 已规范化的分页与筛选。
+    //
+    // 返回至多一万个申请身份。
+    //
+    // 超过一万个时返回 `ValidationError`。聚合或反序列化失败时返回对应错误。
     pub(in crate::supplier_portal) async fn application_ids(
         &self,
         supplier_id: &str,
@@ -86,18 +76,15 @@ impl<'a> PortalApplicationRepository<'a> {
         Ok(ids.into_iter().map(|row| row.id).collect())
     }
 
-    /// 固定供应商与申请身份，未命中各域均保持同一不可见语义。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 供应商。
-    /// * `id` - 申请身份。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 返回该供应商名下的报价、新品或合作申请。
-    ///
-    /// # 错误
-    /// 三个域都未命中时返回 `NotFound`。仓储读取失败时返回对应错误。
+    // 处理门户供应商申请时，固定供应商与申请身份，未命中各域均保持同一不可见语义。
+    //
+    // 调用参数：
+    // * `supplier_id` - 供应商。
+    // * `id` - 申请身份。
+    //
+    // 返回该供应商名下的报价、新品或合作申请。
+    //
+    // 三个域都未命中时返回 `NotFound`。仓储读取失败时返回对应错误。
     pub(in crate::supplier_portal) async fn scoped_application(
         &self,
         supplier_id: &str,
@@ -117,17 +104,14 @@ impl<'a> PortalApplicationRepository<'a> {
         Err(hidden_target())
     }
 
-    /// 内部授权通过后才读取完整申请。
-    ///
-    /// # 参数
-    /// * `id` - 申请身份。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 返回任一域中的申请，不按供应商预过滤。
-    ///
-    /// # 错误
-    /// 三个域都未命中时返回 `NotFound`。仓储读取失败时返回对应错误。
+    // 处理门户供应商申请时，内部授权通过后才读取完整申请。
+    //
+    // 调用参数：
+    // * `id` - 申请身份。
+    //
+    // 返回任一域中的申请，不按供应商预过滤。
+    //
+    // 三个域都未命中时返回 `NotFound`。仓储读取失败时返回对应错误。
     pub(in crate::supplier_portal) async fn any_application(
         &self,
         id: &str,
@@ -145,19 +129,16 @@ impl<'a> PortalApplicationRepository<'a> {
         Err(hidden_target())
     }
 
-    /// 同一阶段过滤集合再分页，授权后页总数保持一致。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 供应商。
-    /// * `query` - 已规范化的分页与筛选。
-    /// * `allowed` - 已逐项授权的申请身份；`None` 表示不再按身份收窄。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 返回当前页申请和同一筛选下的总数。空结果为 `0`。
-    ///
-    /// # 错误
-    /// 聚合失败、记录无法反序列化或领域类型非法时返回对应错误。
+    // 处理门户供应商申请时，同一阶段过滤集合再分页，授权后页总数保持一致。
+    //
+    // 调用参数：
+    // * `supplier_id` - 供应商。
+    // * `query` - 已规范化的分页与筛选。
+    // * `allowed` - 已逐项授权的申请身份；`None` 表示不再按身份收窄。
+    //
+    // 返回当前页申请和同一筛选下的总数。空结果为 `0`。
+    //
+    // 聚合失败、记录无法反序列化或领域类型非法时返回对应错误。
     pub(in crate::supplier_portal) async fn application_page(
         &self,
         supplier_id: &str,
@@ -183,14 +164,14 @@ impl<'a> PortalApplicationRepository<'a> {
         Ok((items, total))
     }
 
-    /// 从供给领域公开仓储取得集合，其他域由公开集合名参与只读联合。
+    // 从供给领域公开仓储提取集合，其他域由公开集合名参与只读联合。
     fn application_collection(&self) -> Collection<Document> {
         self.db.portal_applications().collection().clone_with_type::<Document>()
     }
 }
 
 impl Application {
-    /// 将所属领域根记录还原为真实领域类型。
+    // 生成门户供应商申请视图时，将所属领域根记录还原为真实领域类型。
     fn from_record(row: ApplicationRecord) -> Result<Self> {
         match row.domain.as_str() {
             "offering" => deserialize_from_document(row.record).map(Self::Offering),
@@ -201,16 +182,11 @@ impl Application {
         .map_err(|error| Error::Internal(error.to_string()))
     }
 
-    /// 外部仅序列化声明允许的字段。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回对应申请种类的门户视图。
-    ///
-    /// # 错误
-    /// 允许字段序列化失败时返回 `Internal`。
+    // 处理门户供应商申请时，外部仅序列化声明允许的字段。
+    //
+    // 返回对应申请种类的门户视图。
+    //
+    // 允许字段序列化失败时返回 `Internal`。
     pub(in crate::supplier_portal) fn external(&self) -> Result<PortalApplicationView> {
         match self {
             Self::Offering(app) => PortalApplicationView::from_offering(app),
@@ -219,16 +195,11 @@ impl Application {
         }
     }
 
-    /// 内部审核读取保留任务和规范化历史，并加入统一协议字段。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回带 `kind`、`status`、`input` 和 `version` 的对象。新品与合作申请另写入任务身份。
-    ///
-    /// # 错误
-    /// 序列化失败或领域根不是对象时返回 `Internal`。
+    // 处理门户供应商申请时，内部审核读取保留任务和规范化历史，并加入统一协议字段。
+    //
+    // 返回带 `kind`、`status`、`input` 和 `version` 的对象。新品与合作申请另写入任务身份。
+    //
+    // 序列化失败或领域根不是对象时返回 `Internal`。
     pub(in crate::supplier_portal) fn internal(&self) -> Result<Value> {
         let mut result = match self {
             Self::Offering(app) => value(app)?,
@@ -264,7 +235,7 @@ impl Application {
     }
 }
 
-/// 对每个所属集合先应用相同的供应商边界，不扫描全库请求。
+// 组装门户供应商申请的聚合管道时，对每个所属集合先应用相同的供应商边界，不扫描全库请求。
 fn application_pipeline(supplier_id: &str, query: &PortalQuery) -> Vec<Document> {
     let mut pipeline = domain_pipeline(supplier_id, "offering");
     pipeline.push(doc! {"$unionWith":{"coll":<Database as CatalogPortalExt>::NEW_PRODUCT_DRAFTS,"pipeline":domain_pipeline(supplier_id,"new_product")}});
@@ -280,7 +251,7 @@ fn application_pipeline(supplier_id: &str, query: &PortalQuery) -> Vec<Document>
     pipeline
 }
 
-/// 保存完整领域记录于内部载荷，统一状态只用于过滤和排序。
+// 组装门户供应商申请的聚合管道时，保存完整领域记录于内部载荷，统一状态只用于过滤和排序。
 fn domain_pipeline(supplier_id: &str, domain: &str) -> Vec<Document> {
     vec![
         doc! {"$match":{"supplier_id":supplier_id,"deleted_at":NOT_DELETED_TIMESTAMP_BSON}},
@@ -288,7 +259,7 @@ fn domain_pipeline(supplier_id: &str, domain: &str) -> Vec<Document> {
     ]
 }
 
-/// 未知、已删除与范围外目标共用错误，不暴露对象存在性差别。
+// 处理门户供应商申请时，未知、已删除与范围外目标共用错误，不暴露对象存在性差别。
 fn hidden_target() -> Error {
     Error::NotFound("申请不存在或无权查看".into())
 }

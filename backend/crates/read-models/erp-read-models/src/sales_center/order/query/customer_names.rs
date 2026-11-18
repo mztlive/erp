@@ -11,15 +11,15 @@ use super::{SalesOrderReadService, SalesOrderView};
 use crate::Result;
 
 impl SalesOrderReadService {
-    /// 批量补齐当前页客户名称，不改变列表成员与顺序。
-    ///
-    /// # 参数
-    /// * `items` - 已完成授权分页的销售单视图
-    /// * `executor` - 原授权事务执行器。
-    /// # 返回
-    /// 原地填写客户名称；缺失客户或主体资料时名称为空。
-    /// # 错误
-    /// 客户或主体仓储查询失败时返回错误。
+    // 组装销售列表客户名称时，批量补齐当前页客户名称，不改变列表成员与顺序。
+    //
+    // 调用参数：
+    // * `items` - 已完成授权分页的销售单视图
+    // * `executor` - 原授权事务执行器。
+    //
+    // 原地填写客户名称；缺失客户或主体资料时名称为空。
+    //
+    // 客户或主体仓储查询失败时返回错误。
     pub(super) async fn fill_customer_names(
         &self,
         items: &mut [SalesOrderView],
@@ -33,15 +33,15 @@ impl SalesOrderReadService {
         Ok(())
     }
 
-    /// 只按已授权销售当前页引用的客户读取名称，不产生客户目录候选。
-    ///
-    /// # 参数
-    /// * `customer_ids` - 当前页销售客户身份
-    /// * `executor` - 当前读取用例的执行器。
-    /// # 返回
-    /// 返回现行主体名称映射；缺失客户或主体资料保持缺失。
-    /// # 错误
-    /// 客户或主体仓储查询失败时返回错误。
+    // 补齐销售列表客户名称的展示名称时，只按已授权销售当前页引用的客户读取名称，不产生客户目录候选。
+    //
+    // 调用参数：
+    // * `customer_ids` - 当前页销售客户身份
+    // * `executor` - 当前读取用例的执行器。
+    //
+    // 返回现行主体名称映射；缺失客户或主体资料保持缺失。
+    //
+    // 客户或主体仓储查询失败时返回错误。
     pub(crate) async fn customer_names_batch(
         &self,
         customer_ids: &[String],

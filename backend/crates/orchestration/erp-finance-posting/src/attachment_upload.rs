@@ -21,7 +21,7 @@ pub enum FinanceAttachmentUpload {
 }
 
 impl FinanceAttachmentUpload {
-    /// 每个附件入口只使用 identity 固定的功能资格准备规则。
+    // 把附件工作流映射到 identity 登记的预检权限，不接受调用方指定权限。
     fn permission(self) -> Permission {
         match self {
             Self::CustomerReceipt => internal::FINANCE_UPLOAD_CUSTOMER_RECEIPT,
@@ -41,24 +41,14 @@ pub struct FinanceAttachmentService {
 }
 
 impl FinanceAttachmentService {
-    /// 绑定共享数据库与统一授权服务。
-    /// # 参数
-    /// db 为业务数据库，authorization 为进程共享的完整授权服务。
-    /// # 返回
-    /// 不缓存请求资格的附件准备服务。
-    /// # 错误
-    /// 不执行 I/O，不返回错误。
+    /// 供应用装配上传预检：复用进程共享的授权服务和业务数据库，不做 I/O，也不缓存请求资格。
     pub fn new(db: Database, authorization: Arc<AuthorizationService>) -> Self {
         Self { db, authorization }
     }
 
-    /// 在对象存储写入前取得固定财务入口的完整功能资格。
-    /// # 参数
-    /// actor 为当前账号，upload 为固定工作流。
-    /// # 返回
-    /// 功能资格通过后允许开始文件存储；不证明具体对象、来源或任务可操作。
-    /// # 错误
-    /// 身份无效、功能资格不足或授权设施失败时拒绝；写事务仍须重验完整业务授权。
+    /// 应用在写入对象存储前调用，按固定财务工作流检查当前账号是否具备同一角色下的完整功能资格。
+    /// 身份无效、功能资格不足或授权设施失败时拒绝上传。这一步不授予具体对象、来源或任务的办理权，
+    /// 文件存储后的写事务仍须用真实目标重验完整业务授权。
     pub async fn prepare_attachment_upload(
         &self,
         actor: &AuditActor,
@@ -75,7 +65,7 @@ impl FinanceAttachmentService {
     }
 }
 
-/// 资格准备与后续命令授权分开，不能用此结果替代对象或精确任务判断。
+// 上传预检事务只按工作流映射的固定权限检查功能资格，不产生可供后续对象或任务授权复用的凭证。
 async fn authorize_upload(
     authorization: &AuthorizationService,
     actor: &AuditActor,

@@ -45,11 +45,7 @@ struct Feed {
 }
 
 /// 建立可重连的单连接通知流，身份只取认证上下文。
-/// # 参数
-/// state、actor 和 headers 为当前已认证请求。
-/// # 返回
 /// 首帧完整同步；后续按业务变化发送 snapshot 或 refresh，15 秒复验会话。
-/// # 错误
 /// 凭证缺失返回 401；订阅、查询或会话错误显式发送 error/auth 后关闭。
 pub async fn events(
     State(state): State<HttpState>,

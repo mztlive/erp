@@ -51,58 +51,25 @@ impl SkuDeliveryCoverageState {
     pub const ID: &'static str = "refresh";
 
     /// 构造刷新进度。
-    ///
-    /// # 参数
-    /// * `version` - 覆盖口径版本
-    /// * `watermarks` - 变更扫描进度
-    ///
-    /// # 返回
     /// 返回带固定主键的进度。
-    ///
-    /// # 错误
-    /// 无。
     pub fn new(version: i32, watermarks: ChangeWatermarks) -> Self {
         Self { id: Self::ID.to_string(), version, watermarks }
     }
 
     /// 判断是否需要全量重建：首次运行或口径版本低于当前版本。
-    ///
-    /// # 参数
-    /// * `state` - 已保存的进度
-    ///
-    /// # 返回
     /// 需要重建时为真；较新版本写入的进度不触发重建。
-    ///
-    /// # 错误
-    /// 无。
     pub fn needs_rebuild(state: Option<&Self>) -> bool {
         state.is_none_or(|state| state.version < SKU_DELIVERY_COVERAGE_VERSION)
     }
 
     /// 全量重建开始时的进度。
-    ///
-    /// # 参数
-    /// * `now` - 当前时间（Unix 秒）
-    ///
-    /// # 返回
     /// 返回当前口径版本、从现在开始扫描的进度。
-    ///
-    /// # 错误
-    /// 无。
     pub fn rebuilt(now: i64) -> Self {
         Self::new(SKU_DELIVERY_COVERAGE_VERSION, ChangeWatermarks::starting_at(now))
     }
 
     /// 扫描完成后的进度。
-    ///
-    /// # 参数
-    /// * `now` - 本轮扫描使用的当前时间（Unix 秒）
-    ///
-    /// # 返回
     /// 返回推进后的进度，口径版本不变。
-    ///
-    /// # 错误
-    /// 无。
     pub fn advanced(&self, now: i64) -> Self {
         Self::new(self.version, self.watermarks.advanced(now))
     }
@@ -110,15 +77,7 @@ impl SkuDeliveryCoverageState {
 
 impl SkuDeliveryCoverage {
     /// 尚未计算、待重算的占位记录。
-    ///
-    /// # 参数
-    /// * `sku_id` - 公司 SKU
-    ///
-    /// # 返回
     /// 返回任何地区都不可送、待重算的记录。
-    ///
-    /// # 错误
-    /// 无。
     pub fn pending(sku_id: String) -> Self {
         Self {
             sku_id,
@@ -149,16 +108,7 @@ pub struct SkuDeliveryInput {
 
 impl SkuDeliveryInput {
     /// 按事实计算覆盖。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 没有有效供给时任何地区都不可送；虚拟商品与线下服务不受配送范围限制；
-    /// 实物商品按配送政策逐地区判定。
-    ///
-    /// # 错误
-    /// 无。
+    /// 没有有效供给时任何地区都不可送；虚拟商品与线下服务不受配送范围限制；实物商品按配送政策逐地区判定。
     pub fn coverage(&self) -> DeliveryCoverage {
         if self.policies.is_empty() {
             DeliveryCoverage::none()
@@ -170,16 +120,7 @@ impl SkuDeliveryInput {
     }
 
     /// 由事实生成已计算的覆盖记录。
-    ///
-    /// # 参数
-    /// * `coverage` - 按本事实计算的覆盖
-    /// * `computed_at` - 计算时间（Unix 秒）
-    ///
-    /// # 返回
     /// 返回不再待重算的记录；`dirty_token` 由保存条件保持不变。
-    ///
-    /// # 错误
-    /// 无。
     pub fn into_record(self, coverage: DeliveryCoverage, computed_at: i64) -> SkuDeliveryCoverage {
         SkuDeliveryCoverage {
             sku_id: self.sku_id,
@@ -201,15 +142,7 @@ pub struct SkuDeliveryCoverageMemo {
 
 impl SkuDeliveryCoverageMemo {
     /// 计算或复用一个 SKU 的覆盖。
-    ///
-    /// # 参数
-    /// * `input` - SKU 事实
-    ///
-    /// # 返回
     /// 返回与 [`SkuDeliveryInput::coverage`] 相同的结果。
-    ///
-    /// # 错误
-    /// 无。
     pub fn coverage(&mut self, input: &SkuDeliveryInput) -> DeliveryCoverage {
         if let Some((_, _, coverage)) = self
             .entries

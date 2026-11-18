@@ -102,21 +102,13 @@ pub struct HistoricalSalesLineFact {
 
 /// 由采购覆盖事实构造逐行与总体采购覆盖结果。
 ///
-/// # 参数
-/// * `facts` - Repository 批量返回的当前销售目标与全部当前覆盖来源
+/// 沿采购当前指针计算，稳定关联键为 `sales_order_line_id`；作废采购不参与；现有库存预占只按 `reserved + consumed` 计入一次，
+/// 采购入库预占由 Repository过滤；覆盖超过目标时剩余为零并单独计量超出数量，不截断覆盖。
 ///
-/// # 返回
-/// 返回逐行剩余量与总体汇总；结果只依赖输入事实，重复构造结果完全一致。
+/// 返回逐行剩余量与总体汇总；结果只依赖输入事实，重复构造结果完全一致。销售当前版本文档缺失、商品公共行缺少子类型行、SKU/商品/商品类型缺失、草稿类或正式状态缺少当前指针、
+/// 正式行缺少唯一销售分配、分配既未绑定销售当前版本行也未绑定同一稳定行的历史版本行，或数量精度非法时返回领域错误。
 ///
-/// # 错误
-/// 销售当前版本文档缺失、商品公共行缺少子类型行、SKU/商品/商品类型缺失、
-/// 草稿类或正式状态缺少当前指针、正式行缺少唯一销售分配、分配既未绑定销售
-/// 当前版本行也未绑定同一稳定行的历史版本行，或数量精度非法时返回领域错误。
-///
-/// # 关键业务约束
-/// 沿采购当前指针计算，稳定关联键为 `sales_order_line_id`；作废采购不参与；
-/// 现有库存预占只按 `reserved + consumed` 计入一次，采购入库预占由 Repository
-/// 过滤；覆盖超过目标时剩余为零并单独计量超出数量，不截断覆盖。
+/// `facts` 为 Repository 批量返回的当前销售目标与全部当前覆盖来源。
 pub fn build_procurement_coverage(facts: ProcurementCoverageFacts) -> Result<SalesProcurementCoverage> {
     let revision = facts.revision.ok_or_else(|| Error::from("销售单当前版本不存在，无法计算采购剩余量"))?;
     let mut targets = join_target_lines(facts.revision_lines, facts.goods_lines)?;
@@ -154,20 +146,11 @@ pub fn build_procurement_coverage(facts: ProcurementCoverageFacts) -> Result<Sal
     build_coverage(revision, targets, covered, product_kinds, facts.quantity_scales)
 }
 
-/// 将当前版本公共行与商品子类型行一一连接。
-///
-/// # 参数
-/// * `lines` - 当前版本公共行
-/// * `goods` - 商品/服务子类型行
-///
-/// # 返回
-/// 返回只包含商品/服务行的稳定有序目标集合。
-///
-/// # 错误
-/// 任一商品公共行缺少子类型行时返回一致性错误。
-///
-/// # 关键业务约束
-/// 连接键为当前销售版本行 ID，不按 SKU 猜测。
+// 将当前版本公共行与商品子类型行一一连接。
+//
+// 连接键为当前销售版本行 ID，不按 SKU 猜测。
+//
+// 返回只包含商品/服务行的稳定有序目标集合。任一商品公共行缺少子类型行时返回一致性错误。
 fn join_target_lines(
     lines: Vec<SalesRevisionLineFact>,
     goods: Vec<SalesGoodsLineFact>,
@@ -188,21 +171,14 @@ fn join_target_lines(
         .collect()
 }
 
-/// 解析采购目标行 SKU 对应的商品业务类型。
-///
-/// # 参数
-/// * `targets` - 当前版本商品目标行
-/// * `skus` - SKU 稳定 ID 到 SKU 事实的映射
-/// * `products` - 商品 ID 到商品事实的映射
-///
-/// # 返回
-/// 返回以 SKU 稳定 ID 为键的商品业务类型。
-///
-/// # 错误
-/// SKU 或商品缺失时返回一致性错误。
-///
-/// # 关键业务约束
-/// 采购类型只读取商品稳定主表的 `product_kind`，不得从销售字段或分类名称推导。
+// 解析采购目标行 SKU 对应的商品业务类型。
+//
+// 采购类型只读取商品稳定主表的 `product_kind`，不得从销售字段或分类名称推导。
+//
+// 返回以 SKU 稳定 ID 为键的商品业务类型。SKU 或商品缺失时返回一致性错误。
+//
+// - `targets`：当前版本商品目标行。
+// - `skus`：SKU 稳定 ID 到 SKU 事实的映射。
 fn resolve_product_kinds(
     targets: &[(SalesRevisionLineFact, SalesGoodsLineFact)],
     skus: &HashMap<String, SkuFact>,
@@ -223,22 +199,15 @@ fn resolve_product_kinds(
         .collect()
 }
 
-/// 汇总草稿、旧待财务与审批中采购的当前提交行。
-///
-/// # 参数
-/// * `targets` - 当前销售版本商品目标行
-/// * `orders` - 参与覆盖的采购单
-/// * `lines` - 草稿类采购单当前提交行
-/// * `covered` - 待累加的稳定销售行覆盖映射
-///
-/// # 返回
-/// 汇总成功返回 `Ok(())`。
-///
-/// # 错误
-/// 草稿类状态缺少当前提交指针、提交行缺少销售稳定行或分配数量时返回一致性错误。
-///
-/// # 关键业务约束
-/// 禁止读取同一采购单的历史提交行；已从销售当前版本移除的目标行不参与。
+// 汇总草稿、旧待财务与审批中采购的当前提交行。
+//
+// 禁止读取同一采购单的历史提交行；已从销售当前版本移除的目标行不参与。
+//
+// 草稿类状态缺少当前提交指针、提交行缺少销售稳定行或分配数量时返回一致性错误。
+//
+// - `targets`：当前销售版本商品目标行。
+// - `lines`：草稿类采购单当前提交行。
+// - `covered`：待累加的稳定销售行覆盖映射。
 fn accumulate_submission_coverage(
     targets: &[(SalesRevisionLineFact, SalesGoodsLineFact)],
     orders: &[PurchaseOrder],
@@ -262,24 +231,16 @@ fn accumulate_submission_coverage(
     Ok(())
 }
 
-/// 汇总生效、部分执行与已完成采购的当前版本销售分配。
-///
-/// # 参数
-/// * `targets` - 当前销售版本商品目标行
-/// * `historical` - 采购行引用的历史销售版本行
-/// * `sources` - 参与覆盖的采购单、正式采购当前版本行及其销售分配
-/// * `covered` - 待累加的稳定销售行覆盖映射
-///
-/// # 返回
-/// 汇总成功返回 `Ok(())`。
-///
-/// # 错误
-/// 正式状态缺少当前版本指针、分配与采购行未绑定同一销售版本行、销售版本行与
-/// 采购行稳定行不符、正式行缺少唯一销售分配时返回一致性错误。
-///
-/// # 关键业务约束
-/// 禁止累计历史采购版本或脱离 allocation 直接使用采购行数量；引用历史销售版本
-/// 的分配按稳定行计入当前覆盖。
+// 汇总生效、部分执行与已完成采购的当前版本销售分配。
+//
+// 禁止累计历史采购版本或脱离 allocation 直接使用采购行数量；引用历史销售版本的分配按稳定行计入当前覆盖。
+//
+// 正式状态缺少当前版本指针、分配与采购行未绑定同一销售版本行、销售版本行与采购行稳定行不符、正式行缺少唯一销售分配时返回一致性错误。
+//
+// - `targets`：当前销售版本商品目标行。
+// - `historical`：采购行引用的历史销售版本行。
+// - `sources`：参与覆盖的采购单、正式采购当前版本行及其销售分配。
+// - `covered`：待累加的稳定销售行覆盖映射。
 fn accumulate_revision_coverage(
     targets: &[(SalesRevisionLineFact, SalesGoodsLineFact)],
     historical: &HashMap<String, HistoricalSalesLineFact>,
@@ -321,20 +282,14 @@ struct RevisionCoverageSources<'a> {
     allocations: &'a [PurchaseLineSalesAllocation],
 }
 
-/// 校验一条正式采购分配的销售来源并返回其稳定销售行。
-///
-/// # 参数
-/// * `targets` - 稳定销售行到当前销售版本行的映射
-/// * `historical` - 采购行引用的历史销售版本行
-/// * `purchase_lines` - 当前采购版本行映射
-/// * `allocation` - 待汇总的正式采购分配
-///
-/// # 返回
-/// 返回分配所属的稳定销售行；该行已不在当前目标中时不校验来源并由调用方忽略。
-///
-/// # 错误
-/// 分配对应采购行缺失、采购行缺少销售行引用、分配与采购行引用不同的销售版本行，
-/// 或引用行既非当前版本行也非同一稳定行的历史版本行时返回一致性错误。
+// 校验一条正式采购分配的销售来源并返回其稳定销售行。
+//
+// 返回分配所属的稳定销售行；该行已不在当前目标中时不校验来源并由调用方忽略。分配对应采购行缺失、采购行缺少销售行引用、分配与采购行引用不同的销售版本行，
+// 或引用行既非当前版本行也非同一稳定行的历史版本行时返回一致性错误。
+//
+// - `targets`：稳定销售行到当前销售版本行的映射。
+// - `historical`：采购行引用的历史销售版本行。
+// - `purchase_lines`：当前采购版本行映射。
 fn allocation_stable_line(
     targets: &HashMap<String, String>,
     historical: &HashMap<String, HistoricalSalesLineFact>,
@@ -368,22 +323,15 @@ fn allocation_stable_line(
     Ok(stable_id)
 }
 
-/// 将现有库存直接分配形成的预占计入供给覆盖。
-///
-/// # 参数
-/// * `reservations` - 现有库存预占（Repository 已排除采购入库预占）
-/// * `covered` - 待累加的稳定销售行覆盖映射
-///
-/// # 返回
-/// 累加成功返回 `Ok(())`。
-///
-/// # 错误
-/// 预占数量精度非法时返回一致性错误。
-///
-/// # 关键业务约束
-/// 采购入库形成的预占已经由采购单覆盖量承载，必须排除以免重复累计；现有库存
-/// 预占按 `reserved + consumed` 计入：仍锁定和已经仓发的数量都已满足供给；释放
-/// 数量不再覆盖，释放后任务同步会重新出现缺口。
+// 将现有库存直接分配形成的预占计入供给覆盖。
+//
+// 采购入库形成的预占已经由采购单覆盖量承载，必须排除以免重复累计；现有库存预占按 `reserved + consumed` 计入：仍锁定和已经仓发的数量都已满足供给；
+// 释放数量不再覆盖，释放后任务同步会重新出现缺口。
+//
+// 预占数量精度非法时返回一致性错误。
+//
+// - `reservations`：现有库存预占（Repository 已排除采购入库预占）。
+// - `covered`：待累加的稳定销售行覆盖映射。
 fn accumulate_stock_coverage(
     reservations: &[ExistingStockReservationFact],
     covered: &mut HashMap<String, Quantity>,
@@ -398,24 +346,16 @@ fn accumulate_stock_coverage(
     Ok(())
 }
 
-/// 返回一条现有库存预占仍然满足销售供给的数量。
+// 返回一条现有库存预占仍然满足销售供给的数量。
 fn reservation_covered_quantity(reservation: &ExistingStockReservationFact) -> Result<Quantity> {
     quantity_of(reservation.reserved_quantity.to_decimal() + reservation.consumed_quantity.to_decimal())
 }
 
-/// 提取草稿类采购单的当前提交指针。
-///
-/// # 参数
-/// * `orders` - 参与覆盖的采购单
-///
-/// # 返回
-/// 返回草稿、旧待财务与审批中采购的当前提交 ID。
-///
-/// # 错误
-/// 草稿类状态缺少当前提交指针时返回一致性错误。
-///
-/// # 关键业务约束
-/// 其他状态不进入本集合。
+// 提取草稿类采购单的当前提交指针。
+//
+// 其他状态不进入本集合。
+//
+// 返回草稿、旧待财务与审批中采购的当前提交 ID。草稿类状态缺少当前提交指针时返回一致性错误。
 fn current_submission_ids(orders: &[PurchaseOrder]) -> Result<Vec<PurchaseOrderSubmissionId>> {
     orders
         .iter()
@@ -438,19 +378,11 @@ fn current_submission_ids(orders: &[PurchaseOrder]) -> Result<Vec<PurchaseOrderS
         .collect()
 }
 
-/// 提取正式采购单的当前版本指针。
-///
-/// # 参数
-/// * `orders` - 参与覆盖的采购单
-///
-/// # 返回
-/// 返回生效、部分执行与已完成采购的当前版本 ID。
-///
-/// # 错误
-/// 正式状态缺少当前版本指针时返回一致性错误。
-///
-/// # 关键业务约束
-/// 其他状态不进入本集合。
+// 提取正式采购单的当前版本指针。
+//
+// 其他状态不进入本集合。
+//
+// 返回生效、部分执行与已完成采购的当前版本 ID。正式状态缺少当前版本指针时返回一致性错误。
 fn current_revision_ids(orders: &[PurchaseOrder]) -> Result<Vec<PurchaseOrderRevisionId>> {
     orders
         .iter()
@@ -473,38 +405,22 @@ fn current_revision_ids(orders: &[PurchaseOrder]) -> Result<Vec<PurchaseOrderRev
         .collect()
 }
 
-/// 构造稳定销售行到当前销售版本行的映射。
-///
-/// # 参数
-/// * `targets` - 当前销售版本商品目标行
-///
-/// # 返回
-/// 返回稳定销售行 ID 到当前版本行 ID 的映射。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 稳定销售行是跨销售版本关联采购覆盖的唯一键。
+// 构造稳定销售行到当前销售版本行的映射。
+//
+// 稳定销售行是跨销售版本关联采购覆盖的唯一键。
+//
+// 返回稳定销售行 ID 到当前版本行 ID 的映射。
+//
+// `targets` 为当前销售版本商品目标行。
 fn target_stable_ids(targets: &[(SalesRevisionLineFact, SalesGoodsLineFact)]) -> HashMap<String, String> {
     targets.iter().map(|(line, _)| (line.sales_order_line_id.to_string(), line.base.id.clone())).collect()
 }
 
-/// 向稳定销售行累加覆盖数量。
-///
-/// # 参数
-/// * `covered` - 覆盖数量映射
-/// * `sales_order_line_id` - 销售稳定行 ID
-/// * `quantity` - 本次增加的覆盖数量
-///
-/// # 返回
-/// 累加成功返回 `Ok(())`。
-///
-/// # 错误
-/// 数量和超过 [`Quantity`] 精度约束时返回一致性错误。
-///
-/// # 关键业务约束
-/// 使用十进制定点数精确相加，不做舍入。
+// 向稳定销售行累加覆盖数量。
+//
+// 使用十进制定点数精确相加，不做舍入。
+//
+// 数量和超过 [`Quantity`] 精度约束时返回一致性错误。
 fn add_covered(
     covered: &mut HashMap<String, Quantity>,
     sales_order_line_id: &str,
@@ -519,22 +435,15 @@ fn add_covered(
     Ok(())
 }
 
-/// 构造逐行与总体采购覆盖结果。
-///
-/// # 参数
-/// * `revision` - 销售当前版本头
-/// * `targets` - 当前版本商品目标行
-/// * `covered` - 稳定销售行覆盖数量
-/// * `product_kinds` - SKU 到商品业务类型的映射
-///
-/// # 返回
-/// 返回逐行剩余量与总体汇总。
-///
-/// # 错误
-/// 数量精度非法或进度无法构造时返回一致性错误。
-///
-/// # 关键业务约束
-/// 逐行派生剩余与超出数量；整单汇总逐行累计，一行超出不冲抵另一行缺口。
+// 构造逐行与总体采购覆盖结果。
+//
+// 逐行派生剩余与超出数量；整单汇总逐行累计，一行超出不冲抵另一行缺口。
+//
+// 返回逐行剩余量与总体汇总。数量精度非法或进度无法构造时返回一致性错误。
+//
+// - `revision`：销售当前版本头。
+// - `targets`：当前版本商品目标行。
+// - `covered`：稳定销售行覆盖数量。
 fn build_coverage(
     revision: SalesRevisionFact,
     targets: Vec<(SalesRevisionLineFact, SalesGoodsLineFact)>,
@@ -570,20 +479,11 @@ fn build_coverage(
     Ok(SalesProcurementCoverage { revision, lines, summary })
 }
 
-/// 构造覆盖值对象并统一映射为一致性错误。
-///
-/// # 参数
-/// * `total` - 目标数量
-/// * `covered` - 覆盖数量
-///
-/// # 返回
-/// 返回采购覆盖值对象。
-///
-/// # 错误
-/// 目标或覆盖数量为负，或剩余数量、超出数量与进度无法构造时返回领域错误。
-///
-/// # 关键业务约束
-/// 所有查询入口共享同一错误语义。
+// 构造覆盖值对象并统一映射为一致性错误。
+//
+// 所有查询入口共享同一错误语义。
+//
+// 返回采购覆盖值对象。目标或覆盖数量为负，或剩余数量、超出数量与进度无法构造时返回领域错误。
 fn coverage_summary(total: Quantity, covered: Quantity) -> Result<ProcurementCoverageSummary> {
     ProcurementCoverageSummary::new(total, covered).map_err(|error| {
         tracing::warn!(%error, "采购数量一致性错误");
@@ -591,19 +491,11 @@ fn coverage_summary(total: Quantity, covered: Quantity) -> Result<ProcurementCov
     })
 }
 
-/// 从十进制构造数量并统一映射错误。
-///
-/// # 参数
-/// * `value` - 待封装十进制数量
-///
-/// # 返回
-/// 返回符合六位小数约束的数量。
-///
-/// # 错误
-/// 有效小数位超过六位时返回一致性错误。
-///
-/// # 关键业务约束
-/// 不做隐式舍入。
+// 从十进制构造数量并统一映射错误。
+//
+// 不做隐式舍入。
+//
+// 返回符合六位小数约束的数量。有效小数位超过六位时返回一致性错误。
 fn quantity_of(value: Decimal) -> Result<Quantity> {
     Quantity::try_from(value).map_err(|error| {
         tracing::warn!(%error, "采购数量精度非法");
@@ -611,22 +503,13 @@ fn quantity_of(value: Decimal) -> Result<Quantity> {
     })
 }
 
-/// 返回采购数量零值。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回合法的零数量。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 零值只用于缺省覆盖，不代表缺失采购指针。
-///
-/// # Panics
-/// 数量类型拒绝零值时 panic；零数量是合法数量，panic 只表示数量类型不变量被破坏。
+// 返回采购数量零值。
+//
+// 零值只用于缺省覆盖，不代表缺失采购指针。
+//
+// 返回合法的零数量。
+//
+// 数量类型拒绝零值时 panic；零数量是合法数量，panic 只表示数量类型不变量被破坏。
 fn zero_quantity() -> Quantity {
     Quantity::try_from(Decimal::ZERO).expect("零数量合法")
 }
@@ -893,7 +776,7 @@ mod tests {
         }
     }
 
-    /// 覆盖累加使用稳定销售行键且保持定点精度。
+    // 覆盖累加使用稳定销售行键且保持定点精度。
     #[test]
     fn covered_quantities_accumulate_by_stable_line() {
         let mut covered = std::collections::HashMap::new();
@@ -904,14 +787,14 @@ mod tests {
         assert_eq!(zero_quantity(), Quantity::from_str("0").unwrap());
     }
 
-    /// 现有库存覆盖保留已仓发数量，并排除已经释放的剩余部分。
+    // 现有库存覆盖保留已仓发数量，并排除已经释放的剩余部分。
     #[test]
     fn existing_stock_coverage_is_reserved_plus_consumed() {
         let reservation = reservation("rsv-direct-1", "line-1", "6", "4");
         assert_eq!(reservation_covered_quantity(&reservation).unwrap(), Quantity::from_str("10").unwrap());
     }
 
-    /// 覆盖超过销售当前版本数量时剩余为零并单独计量超出。
+    // 覆盖超过销售当前版本数量时剩余为零并单独计量超出。
     #[test]
     fn over_coverage_reports_excess() {
         let summary =
@@ -921,7 +804,7 @@ mod tests {
         assert_eq!(summary.excess_quantity, Quantity::from_str("0.000001").unwrap());
     }
 
-    /// 状态分流只提取草稿类当前提交和正式类当前版本指针。
+    // 状态分流只提取草稿类当前提交和正式类当前版本指针。
     #[test]
     fn coverage_pointer_selection_uses_current_status_pointer_only() {
         let orders = vec![
@@ -954,7 +837,7 @@ mod tests {
         assert_eq!(revision_ids, vec!["rev-current", "rev-partial", "rev-completed"]);
     }
 
-    /// 当前销售版本文档缺失时按一致性错误失败。
+    // 当前销售版本文档缺失时按一致性错误失败。
     #[test]
     fn missing_current_revision_is_consistency_error() {
         let facts = ProcurementCoverageFacts::default();
@@ -962,7 +845,7 @@ mod tests {
         assert_eq!(error, "销售单当前版本不存在，无法计算采购剩余量");
     }
 
-    /// 草稿类状态缺少当前提交指针时按一致性错误失败。
+    // 草稿类状态缺少当前提交指针时按一致性错误失败。
     #[test]
     fn missing_submission_pointer_is_consistency_error() {
         let mut facts = facts_with_two_coverage_sources();
@@ -971,7 +854,7 @@ mod tests {
         assert_eq!(error, "采购草稿类状态缺少当前提交指针");
     }
 
-    /// 正式状态缺少当前版本指针时按一致性错误失败。
+    // 正式状态缺少当前版本指针时按一致性错误失败。
     #[test]
     fn missing_revision_pointer_is_consistency_error() {
         let mut facts = facts_with_two_coverage_sources();
@@ -981,7 +864,7 @@ mod tests {
         assert_eq!(error, "采购正式状态缺少当前版本指针");
     }
 
-    /// 零覆盖、部分覆盖与完整覆盖均正确派生剩余量与进度。
+    // 零覆盖、部分覆盖与完整覆盖均正确派生剩余量与进度。
     #[test]
     fn coverage_build_handles_zero_partial_and_full() {
         let mut facts = facts_with_two_coverage_sources();
@@ -1018,7 +901,7 @@ mod tests {
         assert_eq!(zero.lines[0].summary.progress, Rate::from_str("0").unwrap());
     }
 
-    /// 已驳回采购仍按独立编辑副本持有来源数量。
+    // 已驳回采购仍按独立编辑副本持有来源数量。
     #[test]
     fn rejected_order_preserves_draft_source_coverage() {
         let mut facts = facts_with_two_coverage_sources();
@@ -1035,7 +918,7 @@ mod tests {
         assert_eq!(coverage.lines[0].summary.remaining_quantity, Quantity::from_str("8").unwrap());
     }
 
-    /// 销售减量后覆盖超过目标：保留全部覆盖、剩余为零并计量超出。
+    // 销售减量后覆盖超过目标：保留全部覆盖、剩余为零并计量超出。
     #[test]
     fn coverage_build_reports_excess_after_sales_reduction() {
         let mut facts = facts_with_two_coverage_sources();
@@ -1050,7 +933,7 @@ mod tests {
         assert_eq!(coverage.summary.excess_quantity, Quantity::from_str("1").unwrap());
     }
 
-    /// 引用历史销售版本的正式分配按稳定行计入当前覆盖。
+    // 引用历史销售版本的正式分配按稳定行计入当前覆盖。
     #[test]
     fn historical_source_allocation_counts_by_stable_line() {
         let mut facts = facts_with_two_coverage_sources();
@@ -1071,7 +954,7 @@ mod tests {
         assert_eq!(coverage.lines[0].summary.covered_quantity, Quantity::from_str("7").unwrap());
     }
 
-    /// 历史版本行属于其他稳定行时拒绝，不得借用历史行跨行计入。
+    // 历史版本行属于其他稳定行时拒绝，不得借用历史行跨行计入。
     #[test]
     fn historical_line_of_another_stable_line_is_rejected() {
         let mut facts = facts_with_two_coverage_sources();
@@ -1092,7 +975,7 @@ mod tests {
         assert_eq!(error, "采购正式分配未绑定来源销售版本行");
     }
 
-    /// 已从销售当前版本移除的稳定行：提交行与分配不再累计且不报错。
+    // 已从销售当前版本移除的稳定行：提交行与分配不再累计且不报错。
     #[test]
     fn removed_sales_line_is_ignored() {
         let mut facts = facts_with_two_coverage_sources();
@@ -1108,7 +991,7 @@ mod tests {
         assert_eq!(coverage.summary.remaining_quantity, Quantity::from_str("10").unwrap());
     }
 
-    /// 正式分配绑定到错误的销售当前版本行时按一致性错误失败。
+    // 正式分配绑定到错误的销售当前版本行时按一致性错误失败。
     #[test]
     fn wrong_version_allocation_is_rejected() {
         let mut facts = facts_with_two_coverage_sources();
@@ -1117,7 +1000,7 @@ mod tests {
         assert_eq!(error, "采购正式分配未绑定来源销售版本行");
     }
 
-    /// 正式商品行缺少唯一销售分配时按一致性错误失败。
+    // 正式商品行缺少唯一销售分配时按一致性错误失败。
     #[test]
     fn missing_unique_allocation_is_rejected() {
         let mut facts = facts_with_two_coverage_sources();
@@ -1126,7 +1009,7 @@ mod tests {
         assert_eq!(error, "采购当前版本商品行缺少唯一销售分配");
     }
 
-    /// 现有库存预占按 reserved + consumed 计入且与采购覆盖互不重复累计。
+    // 现有库存预占按 reserved + consumed 计入且与采购覆盖互不重复累计。
     #[test]
     fn stock_coverage_counts_reserved_plus_consumed_once() {
         let facts = facts_with_two_coverage_sources();
@@ -1136,7 +1019,7 @@ mod tests {
         assert_eq!(coverage.lines[0].summary.remaining_quantity, Quantity::from_str("3").unwrap());
     }
 
-    /// 相同事实重复构造产生完全一致的结果（确定性）。
+    // 相同事实重复构造产生完全一致的结果（确定性）。
     #[test]
     fn coverage_build_is_deterministic() {
         let first = build_procurement_coverage(facts_with_two_coverage_sources()).unwrap();
@@ -1145,7 +1028,7 @@ mod tests {
         assert_eq!(first.lines[0].summary.remaining_quantity, Quantity::from_str("3").unwrap());
     }
 
-    /// 商品类型缺失时按一致性错误失败。
+    // 商品类型缺失时按一致性错误失败。
     #[test]
     fn missing_product_kind_is_rejected() {
         let mut facts = facts_with_two_coverage_sources();
@@ -1154,7 +1037,7 @@ mod tests {
         assert!(error.contains("SKU sku-1 所属商品不存在"));
     }
 
-    /// 测试构造确保当前版本目标模型以稳定行和版本行双重定位。
+    // 测试构造确保当前版本目标模型以稳定行和版本行双重定位。
     #[test]
     fn target_line_model_keeps_stable_and_revision_identity() {
         let revision_line = revision_line("sorl-1", "sol-1", 1);

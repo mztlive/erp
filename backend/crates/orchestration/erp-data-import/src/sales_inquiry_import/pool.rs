@@ -6,13 +6,13 @@ use erp_sales::entity::sales_inquiry_pool::{INVALID_POOL_HEADERS, POOL_SHEET, Po
 use super::parse::{Row, issue};
 use crate::{Error, Result};
 
-/// 解析已版本校验的选品页，只映射客户实际填写的需求。
-/// # 参数
-/// `rows` 保留 Excel 原始行号，`errors` 收集逐单元格错误。
-/// # 返回
-/// 返回固定白名单顺序的需求行，不包含原导出的内部展示列。
-/// # 错误
-/// 表头非法或商品数量超限时拒绝。
+// 解析已版本校验的选品页，只映射客户实际填写的需求。
+//
+// `rows` 保留 Excel 原始行号，`errors` 收集逐单元格错误。
+//
+// 返回固定白名单顺序的需求行，不包含原导出的内部展示列。
+//
+// 表头非法或商品数量超限时拒绝。
 pub(super) fn pool_rows(rows: &[Row], errors: &mut Vec<InquiryImportIssue>) -> Result<Vec<Row>> {
     if rows.iter().filter(|row| row.number > 2).count() > INQUIRY_IMPORT_MAX_ROWS {
         return Err(Error::ValidationError("选品页每次不得超过 2000 个商品，请减少后重新导入".into()));

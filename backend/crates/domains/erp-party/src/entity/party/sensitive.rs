@@ -13,78 +13,61 @@ use sha2::Sha256;
 
 type HmacSha256 = Hmac<Sha256>;
 
-/// 计算 HMAC-SHA256 摘要（RFC 2104）。
-///
-/// HMAC-SHA256 接受任意长度密钥，`new_from_slice` 恒成功。
-///
-/// # 参数
-/// * `key` - 密钥字节
-/// * `data` - 消息字节
-///
-/// # 返回
-/// 返回 32 字节摘要。
-///
-/// # Panics
-/// `HmacSha256::new_from_slice` 对任意长度密钥应成功；若该前提不成立则 `expect` panic。
+// 计算 HMAC-SHA256 摘要（RFC 2104）。
+//
+// HMAC-SHA256 接受任意长度密钥，`new_from_slice` 恒成功。
+//
+// # 参数
+// * `key` - 密钥字节
+// * `data` - 消息字节
+//
+// 返回 32 字节摘要。
+//
+// # Panics
+// `HmacSha256::new_from_slice` 对任意长度密钥应成功；若该前提不成立则 `expect` panic。
 fn hmac_sha256(key: &[u8], data: &[u8]) -> [u8; 32] {
     let mut mac = HmacSha256::new_from_slice(key).expect("HMAC-SHA256 accepts any key length");
     mac.update(data);
     mac.finalize().into_bytes().into()
 }
 
-/// 计算带密钥查询指纹（HMAC-SHA256，hex 编码）。
-///
-/// # 参数
-/// * `key` - 密钥字节（更换密钥后旧指纹全部失效）
-/// * `data` - 规范化后的明文
-///
-/// # 返回
-/// 返回 64 位小写 hex 指纹。
-///
-/// # 错误
-/// 不返回错误。
+// 计算带密钥查询指纹（HMAC-SHA256，hex 编码）。
+//
+// # 参数
+// * `key` - 密钥字节（更换密钥后旧指纹全部失效）
+// * `data` - 规范化后的明文
+//
+// 返回 64 位小写 hex 指纹。
 pub(crate) fn hmac_sha256_hex(key: &[u8], data: &[u8]) -> String {
     hmac_sha256(key, data).iter().map(|b| format!("{b:02x}")).collect()
 }
 
-/// 规范化银行账号：去首尾空白并移除空格、连字符与下划线。
-///
-/// # 参数
-/// * `plain` - 账号明文
-///
-/// # 返回
-/// 返回可用于指纹与精确查询的规范化账号。
-///
-/// # 错误
-/// 不返回错误。
+// 规范化银行账号：去首尾空白并移除空格、连字符与下划线。
+//
+// # 参数
+// * `plain` - 账号明文
+//
+// 返回可用于指纹与精确查询的规范化账号。
 pub(crate) fn normalize_account_number(plain: &str) -> String {
     plain.chars().filter(|ch| !ch.is_whitespace() && *ch != '-' && *ch != '_').collect()
 }
 
-/// 规范化手机号：仅去首尾空白（不折叠内部格式）。
-///
-/// # 参数
-/// * `plain` - 手机号明文
-///
-/// # 返回
-/// 返回可用于指纹与精确查询的规范化手机号。
-///
-/// # 错误
-/// 不返回错误。
+// 规范化手机号：仅去首尾空白（不折叠内部格式）。
+//
+// # 参数
+// * `plain` - 手机号明文
+//
+// 返回可用于指纹与精确查询的规范化手机号。
 pub(crate) fn normalize_mobile(plain: &str) -> String {
     plain.trim().to_string()
 }
 
-/// 规范化地址文本：去首尾空白并折叠内部连续空白为单个空格。
-///
-/// # 参数
-/// * `plain` - 地址明文
-///
-/// # 返回
-/// 返回可用于指纹与精确查询的规范化地址。
-///
-/// # 错误
-/// 不返回错误。
+// 规范化地址文本：去首尾空白并折叠内部连续空白为单个空格。
+//
+// # 参数
+// * `plain` - 地址明文
+//
+// 返回可用于指纹与精确查询的规范化地址。
 pub(crate) fn normalize_address(plain: &str) -> String {
     plain.split_whitespace().collect::<Vec<_>>().join(" ")
 }
@@ -93,7 +76,7 @@ pub(crate) fn normalize_address(plain: &str) -> String {
 mod tests {
     use super::{hmac_sha256_hex, normalize_account_number, normalize_address, normalize_mobile};
 
-    /// RFC 4231 测试向量 1–3：锁定 HMAC-SHA256 实现正确性。
+    // RFC 4231 测试向量 1–3：锁定 HMAC-SHA256 实现正确性。
     #[test]
     fn matches_rfc4231_test_vectors() {
         let cases: [(&[u8], &[u8], &str); 3] = [
@@ -110,7 +93,7 @@ mod tests {
         }
     }
 
-    /// 指纹稳定：同密钥同明文结果一致，且与明文可区分。
+    // 指纹稳定：同密钥同明文结果一致，且与明文可区分。
     #[test]
     fn fingerprint_is_deterministic() {
         let key = b"k1";
@@ -121,7 +104,7 @@ mod tests {
         assert_ne!(first, "6222021234567890");
     }
 
-    /// 带密钥：换密钥后指纹不同（禁止无密钥裸摘要）。
+    // 带密钥：换密钥后指纹不同（禁止无密钥裸摘要）。
     #[test]
     fn fingerprint_changes_with_key() {
         let with_key_a = hmac_sha256_hex(b"key-a", b"6222021234567890");
@@ -129,7 +112,7 @@ mod tests {
         assert_ne!(with_key_a, with_key_b);
     }
 
-    /// 规范化函数行为：账号移除分隔符、手机号仅去空白、地址折叠空白。
+    // 规范化函数行为：账号移除分隔符、手机号仅去空白、地址折叠空白。
     #[test]
     fn normalizers_behave_as_documented() {
         assert_eq!(normalize_account_number(" 6222-0212_3456 7890 "), "6222021234567890");

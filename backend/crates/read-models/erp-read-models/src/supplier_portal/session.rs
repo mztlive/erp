@@ -38,12 +38,14 @@ pub struct PortalCooperationView {
 }
 
 impl SupplierPortalReadService {
-    /// 读取已验证会话对应的供应商名称。
+    /// 处理供应商门户会话时，读取已验证会话对应的供应商名称。
     ///
     /// # 参数
     /// `actor` 为每次请求重新读取账号与绑定的身份。
+    ///
     /// # 返回
     /// 只含本账号和本供应商的必要字段。
+    ///
     /// # 错误
     /// 供应商已停用、删除或查询失败时拒绝。
     pub async fn session(&self, actor: &PortalActor) -> Result<PortalSessionView> {
@@ -61,12 +63,14 @@ impl SupplierPortalReadService {
         })
     }
 
-    /// 返回本供应商当前正式商务资料，不显示银行和内部评价。
+    /// 处理供应商门户会话时，给出本供应商当前正式商务资料，不显示银行和内部评价。
     ///
     /// # 参数
     /// `actor` 为已验证门户账号。
+    ///
     /// # 返回
     /// 当前付款条件及内部采购联系人姓名。
+    ///
     /// # 错误
     /// 供应商或商务版本归属失效、查询失败时拒绝。
     pub async fn cooperation(&self, actor: &PortalActor) -> Result<PortalCooperationView> {
@@ -108,17 +112,14 @@ impl SupplierPortalReadService {
         })
     }
 
-    /// 按服务端绑定取得本供应商，不授予任何内部 `DataScope`。
-    ///
-    /// # 参数
-    /// * `actor` - 已验证的门户身份。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 返回仍有效的供应商账户。
-    ///
-    /// # 错误
-    /// 账户不存在或已停用时返回 `Unauthenticated`。仓储读取失败时返回对应错误。
+    // 依据服务端绑定取得本供应商，不授予任何内部 `DataScope`。
+    //
+    // 调用参数：
+    // * `actor` - 已验证的门户身份。
+    //
+    // 返回仍有效的供应商账户。
+    //
+    // 账户不存在或已停用时返回 `Unauthenticated`。仓储读取失败时返回对应错误。
     pub(super) async fn portal_supplier(
         &self,
         actor: &PortalActor,
@@ -132,7 +133,7 @@ impl SupplierPortalReadService {
             .ok_or_else(|| Error::Unauthenticated("认证已失效".into()))
     }
 
-    /// 仅取主体当前名称，隐藏税务、联系人、银行及其他角色资料。
+    // 补齐供应商门户会话的展示名称时，仅取主体当前名称，隐藏税务、联系人、银行及其他角色资料。
     async fn supplier_name(&self, supplier: &SupplierAccount, executor: &mut dyn Executor) -> Result<String> {
         let names = self
             .db

@@ -9,14 +9,7 @@ use crate::repository::command_receipt::PurchaseCommandReceiptRepository;
 pub trait PurchaseCommandExt {
     /// 全部采购命令共用的不可变回执集合。
     const PURCHASE_COMMAND_RECEIPTS: &'static str = "purchase_command_receipts";
-    /// 获取与结果类型绑定的拥有仓储。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 返回采购回执仓储，所有操作接收原 Executor。
-    /// # 错误
-    /// 无。
+    /// 获取与结果类型绑定的拥有仓储。返回采购回执仓储，所有操作接收原 Executor。
     fn purchase_command_receipts<T: PurchaseReceiptResult>(&self) -> PurchaseCommandReceiptRepository<'_, T>;
 }
 impl PurchaseCommandExt for Database {

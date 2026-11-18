@@ -43,7 +43,7 @@ impl AccessMapping for UnavailableMapping {
     }
 }
 
-/// 映射错误与身份故障区分，保证测试可以证明实际失败于身份设施。
+// 测试替身为 Mapping 返回与身份设施不同的错误，便于断言请求实际在哪层失败。
 fn mapping_unavailable() -> Error {
     Error::Internal("测试查询映射不可执行".into())
 }

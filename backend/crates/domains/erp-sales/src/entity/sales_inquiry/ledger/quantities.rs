@@ -9,13 +9,11 @@ use super::super::{
 use crate::{Error, Result};
 
 impl SalesInquiry {
-    /// 取得当前已接受的反馈；逐行数量及当前重询范围须在选择时校验。
-    /// # 参数
-    /// `round` 为明确引用轮次；`now` 为操作时刻。
-    /// # 返回
+    /// 办理询价来源时取当前已接受的反馈，而不是刚发布但未接受的轮次；逐行数量和重询限制仍由选行步骤校验。
     /// 返回需求版本及接受事实一致的原反馈。
-    /// # 错误
     /// 已关闭、未接受、被新结果替代或需求版本改变时拒绝。
+    ///
+    /// 输入约定：`round` 为明确引用轮次；`now` 为操作时刻。
     pub fn accepted_feedback(&self, round: u32, _now: Instant) -> Result<&InquiryFeedbackSnapshot> {
         if self.status == InquiryStatus::Closed
             || self.acceptances.last().is_none_or(|entry| {
@@ -32,13 +30,11 @@ impl SalesInquiry {
             .ok_or_else(|| Error::BusinessLogicError("需求已变更，必须接受新反馈".into()))
     }
 
-    /// 原子占用已接受反馈的商品及配送数量。
-    /// # 参数
-    /// `reservation_id` 和 `sales_order_id` 为调用方生成的稳定单据身份；`selections` 为本次来源数量。
-    /// # 返回
-    /// 追加未消耗占用；完全相同重放无新增。
-    /// # 错误
+    /// 从已接受反馈转销售草稿时，同时校验并占用需求商品和对应地址的配送数量，避免两种余额脱节。
+    /// 结果：追加未消耗占用；完全相同重放无新增。
     /// 重询范围、价格条件、不供货、行或地址余额不足时拒绝。
+    ///
+    /// 输入约定：`reservation_id` 和 `sales_order_id` 为调用方生成的稳定单据身份；`selections` 为本次来源数量。
     pub fn reserve_quantities(
         &mut self,
         reservation_id: &str,
@@ -75,13 +71,11 @@ impl SalesInquiry {
         Ok(())
     }
 
-    /// 调整既有草稿来源；减少不要求报价仍有效。
-    /// # 参数
-    /// `reservation_id` 为原占用；`selections` 为新的完整来源数量。
-    /// # 返回
-    /// 替换占用；空选择释放全部未消耗占用。
-    /// # 错误
-    /// 已正式消耗不能直接修改；增加或变更地址时重新校验当前结果。
+    /// 原草稿调整询价来源数量时按整组新数量重算占用；只减量时无需重新取得仍有效的报价。
+    /// 结果：替换占用；空选择释放全部未消耗占用。
+    /// 失败条件：已正式消耗不能直接修改；增加或变更地址时重新校验当前结果。
+    ///
+    /// 输入约定：`reservation_id` 为原占用；`selections` 为新的完整来源数量。
     pub fn reconcile_quantities(
         &mut self,
         reservation_id: &str,
@@ -110,13 +104,11 @@ impl SalesInquiry {
         Ok(())
     }
 
-    /// 将已保留来源转为正式消耗，不重复扣减余额。
-    /// # 参数
-    /// `reservation_id` 为销售单创建时的来源占用。
-    /// # 返回
-    /// Reserved 变为 Handled；重复调用保持不变。
-    /// # 错误
-    /// 未找到或已经释放时拒绝；询价关闭或重询不影响既有销售生效。
+    /// 来源销售单首次生效时将草稿占用转成正式消耗，不在同一份数量上再次扣减余额。
+    /// 结果：Reserved 变为 Handled；重复调用保持不变。
+    /// 失败条件：未找到或已经释放时拒绝；询价关闭或重询不影响既有销售生效。
+    ///
+    /// 输入约定：`reservation_id` 为销售单创建时的来源占用。
     pub fn consume_quantities(&mut self, reservation_id: &str) -> Result<()> {
         let entry = self
             .quantity_ledger
@@ -130,13 +122,11 @@ impl SalesInquiry {
         Ok(())
     }
 
-    /// 释放尚未生效的销售草稿占用。
-    /// # 参数
-    /// `reservation_id` 为原来源占用。
-    /// # 返回
-    /// 已释放重放无新增；未消耗来源恢复可用余额。
-    /// # 错误
-    /// 已正式消耗不能凭状态直接释放，必须执行正式销售变更规则。
+    /// 草稿不再使用询价来源时释放尚未生效的数量占用，不释放已经正式消耗的数量。
+    /// 结果：已释放重放无新增；未消耗来源恢复可用余额。
+    /// 失败条件：已正式消耗不能凭状态直接释放，必须执行正式销售变更规则。
+    ///
+    /// 输入约定：`reservation_id` 为原来源占用。
     pub fn release_quantities(&mut self, reservation_id: &str) -> Result<()> {
         let entry = self
             .quantity_ledger
@@ -290,13 +280,11 @@ impl SalesInquiry {
         Ok(())
     }
 
-    /// 核对当前接受之后尚未接受的重询范围，不以新发布反馈替代接受事实。
-    /// # 参数
-    /// `line_id` 为稳定需求行，调用前须验证接受轮次与需求版本。
-    /// # 返回
-    /// 已确认或所有未接受重询均不影响该行时通过。
-    /// # 错误
-    /// 没有可证明的接受范围、整单重询或该行受影响时拒绝。
+    // 选择反馈商品前检查该行是否仍处于上次接受之后的重询范围；新反馈发布并不等同销售已接受。
+    // 结果：已确认或所有未接受重询均不影响该行时通过。
+    // 没有可证明的接受范围、整单重询或该行受影响时拒绝。
+    //
+    // 输入约定：`line_id` 为稳定需求行，调用前须验证接受轮次与需求版本。
     pub(crate) fn ensure_line_not_reinquiring(&self, line_id: &str) -> Result<()> {
         if self.status == InquiryStatus::Confirmed {
             return Ok(());

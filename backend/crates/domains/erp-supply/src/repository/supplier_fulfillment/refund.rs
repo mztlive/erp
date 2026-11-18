@@ -8,20 +8,9 @@ use super::*;
 #[allow(async_fn_in_trait)]
 pub trait SupplierRefundFactRepositoryExt {
     /// 按「连接 + 外部退款号 + 外部退款版本」查找退款事实头。
-    ///
-    /// 唯一性由 `uk_supplier_refund_facts_connection_refund` 唯一索引保证
-    /// （§6.19：外部退款身份与版本组成幂等键）。
-    ///
-    /// # 参数
-    /// * `connection_id` - 供应商 API 连接
-    /// * `external_refund_no` - 外部退款号
-    /// * `external_refund_version` - 外部退款版本
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
+    /// 唯一性由 `uk_supplier_refund_facts_connection_refund` 唯一索引保证（§6.19：外部退款身份与版本组成
+    /// 幂等键）。
     /// 返回匹配的未删除退款事实头；无匹配时返回 `None`。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
     async fn find_by_connection_and_refund(
         &self,
@@ -32,18 +21,8 @@ pub trait SupplierRefundFactRepositoryExt {
     ) -> Result<Option<SupplierRefundFact>>;
 
     /// 批量按供应商子订单查询退款事实头（`$in` 一次取回，避免 N+1）。
-    ///
-    /// 退款事实是冲减供应商成本和应付的唯一事实（§6.19），订单详情页按子订单
-    /// 聚合退款时使用本方法。
-    ///
-    /// # 参数
-    /// * `order_ids` - 供应商子订单 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
+    /// 退款事实是冲减供应商成本和应付的唯一事实（§6.19），订单详情页按子订单聚合退款时使用本方法。
     /// 返回命中集合对应的全部未删除退款事实头。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
     async fn find_refund_facts_by_order_ids(
         &self,
@@ -52,18 +31,8 @@ pub trait SupplierRefundFactRepositoryExt {
     ) -> Result<Vec<SupplierRefundFact>>;
 
     /// 判断指定入站消息是否已形成供应商退款正式事实。
-    ///
-    /// # 参数
-    /// * `message_id` - 入站消息 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 已存在正式退款事实时返回 `true`。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
-    ///
-    /// # 约束
     /// 仅查询本仓储拥有的 `supplier_refund_fact` 集合，按入站消息引用判定存在性，不访问入站消息集合。
     async fn exists_by_inbox_message(&self, message_id: &str, executor: &mut dyn Executor) -> Result<bool>;
 }
@@ -115,18 +84,9 @@ impl SupplierRefundFactRepositoryExt for SupplierRefundFactRepository<'_> {
 #[allow(async_fn_in_trait)]
 pub trait SupplierRefundAllocationRepositoryExt {
     /// 批量按退款事实头查询退款分配行（`$in` 一次取回，避免 N+1）。
-    ///
-    /// 分配行是正式事实行，创建后不可修改（§6.19）；`validate_allocations` 与
-    /// REVERSE 纠错编排在 P3 使用本方法加载全部分配行。
-    ///
-    /// # 参数
-    /// * `fact_ids` - 供应商退款事实头 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
+    /// 分配行是正式事实行，创建后不可修改（§6.19）；`validate_allocations` 与REVERSE 纠错编排在 P3 使用
+    /// 本方法加载全部分配行。
     /// 返回命中集合对应的全部未删除退款分配行。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
     async fn find_allocations_by_fact_ids(
         &self,

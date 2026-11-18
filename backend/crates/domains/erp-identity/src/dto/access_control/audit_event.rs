@@ -46,8 +46,7 @@ pub struct AuditEventView {
 }
 
 impl From<crate::repository::AuditEventRow> for AuditEventView {
-    /// 从列表投影行构造响应视图（`trace_id`/`safe_digest`/`device_context`
-    /// 非投影字段，列表视图固定为 `None`，与现有手工映射一致）。
+    // 把审计仓储的列表投影转换为响应，未读取的 `trace_id`、`safe_digest` 和 `device_context` 固定留空。
     fn from(row: crate::repository::AuditEventRow) -> Self {
         Self {
             id: row.id,
@@ -110,18 +109,13 @@ pub struct AuditEventListParams {
 }
 
 impl AuditEventListParams {
-    /// 归一化审计事件列表查询参数。
-    ///
-    /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回服务与仓储共用的规范化筛选条件。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    // 归一化审计事件列表查询参数。
+    //
+    // 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
+    //
+    // 返回服务与仓储共用的规范化筛选条件。
+    //
+    // 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<AuditEventFilter> {
         Ok(AuditEventFilter {
             q: normalized_text(self.q.as_deref()),

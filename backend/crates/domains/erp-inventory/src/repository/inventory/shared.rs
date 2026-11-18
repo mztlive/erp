@@ -11,19 +11,10 @@ use serde::{Deserialize, Serialize};
 use crate::ports::InventoryQuery;
 use crate::{Error, Result as InventoryResult};
 
-/// 把已证明可读的仓库范围写入查询过滤（`None` 为公司级不限，空集合保持空 `$in`）。
-///
-/// 空集合必须解释为空结果，禁止退化为全量查询。
-///
-/// # 参数
-/// * `filter` - 待追加条件的查询文档
-/// * `warehouse_ids` - Service 已证明的仓库集合
-///
-/// # 返回
-/// 无返回值；直接修改传入的查询文档。
-///
-/// # 错误
-/// 不返回错误。
+// 把已证明可读的仓库范围写入查询过滤（`None` 为公司级不限，空集合保持空 `$in`）。
+// 空集合必须解释为空结果，禁止退化为全量查询。
+// 直接修改传入的查询文档。
+// `filter` 为待追加条件的查询文档；`warehouse_ids` 为Service 已证明的仓库集合。
 pub(super) fn apply_warehouse_scope_filter(filter: &mut Document, warehouse_ids: Option<&[WarehouseId]>) {
     if let Some(warehouse_ids) = warehouse_ids {
         filter.insert(
@@ -33,57 +24,30 @@ pub(super) fn apply_warehouse_scope_filter(filter: &mut Document, warehouse_ids:
     }
 }
 
-/// 把已证明可读的仓库范围与未删除过滤组成列表查询基底。
-///
-/// 四类列表筛选共用：调用方再追加各自维度条件与搜索交集。
-/// 空仓库集合保持空 `$in`，禁止退化为全量查询。
-///
-/// # 参数
-/// * `warehouse_ids` - Service 已证明的仓库集合；`None` 表示公司级不限
-///
-/// # 返回
-/// 返回含未删除过滤与仓库范围的查询文档。
-///
-/// # 错误
-/// 不返回错误。
+// 把已证明可读的仓库范围与未删除过滤组成列表查询基底。
+// 四类列表筛选共用：调用方再追加各自维度条件与搜索交集。空仓库集合保持空 `$in`，禁止退化为全量查询。
+// 返回含未删除过滤与仓库范围的查询文档。
+// `warehouse_ids` 为Service 已证明的仓库集合；`None` 表示公司级不限。
 pub(super) fn scoped_base_filter(warehouse_ids: Option<&[WarehouseId]>) -> Document {
     let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
     apply_warehouse_scope_filter(&mut filter, warehouse_ids);
     filter
 }
 
-/// 为分页排序追加唯一主键 tie-breaker，避免相同主排序值跨页重复或遗漏。
-///
-/// # 参数
-/// * `sort` - 主排序文档
-/// * `sort_ascending` - 升序为 `true`，降序为 `false`
-///
-/// # 返回
-/// 返回带 `id` 同向 tie-breaker 的排序文档。
-///
-/// # 错误
-/// 不返回错误。
+// 为分页排序追加唯一主键 tie-breaker，避免相同主排序值跨页重复或遗漏。
+// 返回带 `id` 同向 tie-breaker 的排序文档。
+// `sort` 为主排序文档；`sort_ascending` 为升序为 `true`，降序为 `false`。
 pub(super) fn with_id_tie_breaker(mut sort: Document, sort_ascending: bool) -> Document {
     sort.insert("id", if sort_ascending { 1 } else { -1 });
     sort
 }
 
-/// 执行投影分页查询：使用调用方的 `FindOptions`、按行类型投影，并对同一查询文档
-/// 先 `find_many` 再 `count_documents`（计数使用原文档，列表使用克隆）。
-///
-/// 调用方各自构造 `to_doc()`、排序与投影；本函数不合并四套列表字段。
-///
-/// # 参数
-/// * `base` - 基集合句柄（用于计数）
-/// * `filter` - 调用方 `to_doc()` 得到的查询文档
-/// * `options` - 已组装的排序、分页与投影选项
-/// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-///
-/// # 返回
-/// 返回当前页投影行与满足筛选条件的总数。
-///
-/// # 错误
-/// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+// 执行投影分页查询：使用调用方的 `FindOptions`、按行类型投影，并对同一查询文档先 `find_many` 再 `count_documents`（计数使用原文档，列表使用克隆）。
+// 调用方各自构造 `to_doc()`、排序与投影；本函数不合并四套列表字段。
+// 返回当前页投影行与满足筛选条件的总数。
+// `base` 为基集合句柄（用于计数）；`filter` 为调用方 `to_doc()` 得到的查询文档。
+// `options` 为已组装的排序、分页与投影选项；沿用调用方执行器 `executor`。
+// 传播 MongoDB 查询、游标读取或计数错误。
 pub(super) async fn paged_projection_search<Entity, Row>(
     base: &Collection<Entity>,
     filter: Document,
@@ -100,54 +64,31 @@ where
     Ok(PageResult { items, total: total as i64 })
 }
 
-/// 把 ID newtype 集合转为字符串集合（用于 `$in` 查询）。
-///
-/// # 参数
-/// * `ids` - ID newtype 集合
-///
-/// # 返回
-/// 返回字符串集合。
-///
-/// # 错误
-/// 不返回错误。
+// 把 ID newtype 集合转为字符串集合（用于 `$in` 查询）。
+// `ids` 为ID newtype 集合。
 pub(super) fn ids_to_strings<T: AsRef<str>>(ids: &[T]) -> Vec<String> {
     ids.iter().map(|id| id.as_ref().to_string()).collect()
 }
 
-/// 把 `Quantity` 转为 BSON `Decimal128`（存储形态由 P0 固化，不做任何舍入/换算）。
-///
-/// `bson::serialize_to_bson` 的人性化序列化器会把数量写成字符串，无法参与
-/// `$inc`/`$gte`；这里直接构造 Decimal128，确保与实体持久化形态一致。
-///
-/// # 参数
-/// * `quantity` - 定点数量
-///
-/// # 返回
-/// 返回 Decimal128 BSON 值。
-///
-/// # 错误
-/// 数量无法表示为 Decimal128 时返回错误。
+// 把 `Quantity` 转为 BSON `Decimal128`（存储形态由 P0 固化，不做任何舍入/换算）。
+// `bson::serialize_to_bson` 的人性化序列化器会把数量写成字符串，无法参与 `$inc`/`$gte`；这里直接构造 Decimal128，确保与实体持久化形态一致。
+// 返回 Decimal128 BSON 值。
+// `quantity` 为定点数量。
+// 数量无法表示为 Decimal128 时返回错误。
 pub(super) fn to_decimal128(quantity: Quantity) -> Result<Decimal128> {
     Ok(quantity.to_string().parse()?)
 }
 
-/// 翻转 Decimal128 符号位，保留数量精度、幅值及零值的符号语义。
-///
-/// # 参数
-/// * `quantity` - 已由数量转换得到的 Decimal128。
-///
-/// # 返回
-/// 返回符号位翻转后的值。
-///
-/// # 错误
-/// 不返回错误。
+// 翻转 Decimal128 符号位，保留数量精度、幅值及零值的符号语义。
+// 返回符号位翻转后的值。
+// `quantity` 为已由数量转换得到的 Decimal128。
 pub(super) fn negate_decimal128(quantity: Decimal128) -> Decimal128 {
     let mut bytes = quantity.bytes();
     bytes[15] ^= 0x80;
     Decimal128::from_bytes(bytes)
 }
 
-/// 用已确定方向的数量构造原子更新，统一追加版本与更新时间。
+// 用已确定方向的数量构造原子更新，统一追加版本与更新时间。
 fn quantity_update(fields: &[(&str, Decimal128)]) -> Document {
     let mut inc = Document::new();
     for (field, quantity) in fields {
@@ -160,81 +101,44 @@ fn quantity_update(fields: &[(&str, Decimal128)]) -> Document {
     }
 }
 
-/// 构建两个字段同向增加的原子 `$inc` 更新（含 `version` 与 `updated_at` 元数据）。
-///
-/// # 参数
-/// * `quantity` - 增加数量（Decimal128）
-/// * `field_a` - 增加字段一
-/// * `field_b` - 增加字段二
-///
-/// # 返回
-/// 返回更新条件文档。
-///
-/// # 错误
-/// 数量无法表示为 Decimal128 时返回错误。
+// 构建两个字段同向增加的原子 `$inc` 更新（含 `version` 与 `updated_at` 元数据）。
+// `quantity` 为增加数量（Decimal128）；`field_a` 为增加字段一。
+// `field_b` 为增加字段二。
+// 数量无法表示为 Decimal128 时返回错误。
 pub(super) fn both_inc(quantity: Quantity, field_a: &str, field_b: &str) -> Result<Document> {
     let quantity = to_decimal128(quantity)?;
     Ok(quantity_update(&[(field_a, quantity), (field_b, quantity)]))
 }
 
-/// 构建两个字段同向减少的原子 `$inc` 更新（含 `version` 与 `updated_at` 元数据）。
-///
-/// # 参数
-/// * `quantity` - 已转换的减少数量，与原子条件复用同一 Decimal128
-/// * `field_a` - 减少字段一
-/// * `field_b` - 减少字段二
-///
-/// # 返回
-/// 返回更新条件文档。
-///
-/// # 错误
-/// 不返回错误。
+// 构建两个字段同向减少的原子 `$inc` 更新（含 `version` 与 `updated_at` 元数据）。
+// `quantity` 为已转换的减少数量，与原子条件复用同一 Decimal128；`field_a` 为减少字段一。
+// `field_b` 为减少字段二。
 pub(super) fn both_dec(quantity: Decimal128, field_a: &str, field_b: &str) -> Document {
     let quantity = negate_decimal128(quantity);
     quantity_update(&[(field_a, quantity), (field_b, quantity)])
 }
 
-/// 构建一个字段增加、另一个字段减少的原子 `$inc` 更新（含 `version` 与 `updated_at` 元数据）。
-///
-/// # 参数
-/// * `quantity` - 已转换的增减数量，与原子条件复用同一 Decimal128
-/// * `increase_field` - 增加字段
-/// * `decrease_field` - 减少字段
-///
-/// # 返回
-/// 返回更新条件文档。
-///
-/// # 错误
-/// 不返回错误。
+// 构建一个字段增加、另一个字段减少的原子 `$inc` 更新（含 `version` 与 `updated_at` 元数据）。
+// `quantity` 为已转换的增减数量，与原子条件复用同一 Decimal128；`increase_field` 为增加字段。
+// `decrease_field` 为减少字段。
 pub(super) fn cross_inc(quantity: Decimal128, increase_field: &str, decrease_field: &str) -> Document {
     quantity_update(&[(increase_field, quantity), (decrease_field, negate_decimal128(quantity))])
 }
 
-/// 构建排序文档（字段名白名单映射）。
-///
-/// # 参数
-/// * `sort_by` - 排序字段；`None` 或不在白名单内时默认 `created_at`
-/// * `sort_ascending` - 升序为 `true`，降序为 `false`
-/// * `allowed` - 允许的排序字段白名单
-///
-/// # 返回
-/// 返回排序条件文档。字段不在白名单或未提供时使用 `created_at`。
-///
-/// # 错误
-/// 不返回错误。
+// 构建排序文档（字段名白名单映射）。
+// 返回排序条件文档。字段不在白名单或未提供时使用 `created_at`。
+// `sort_by` 为排序字段；`None` 或不在白名单内时默认 `created_at`；`sort_ascending` 为升序为 `true`，降序为 `false`。
+// `allowed` 为允许的排序字段白名单。
 pub(super) fn sort_doc(sort_by: Option<&str>, sort_ascending: bool, allowed: &[&str]) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
     let field = sort_by.filter(|field| allowed.contains(field)).unwrap_or("created_at");
     doc! { field: direction }
 }
 
-/// 执行同一完整授权条件下的投影分页和计数。
-/// # 参数
-/// base、filter、options 为本域业务查询；access 为固定模型凭证，executor 为原执行器。
-/// # 返回
-/// 授权先于分页和计数的结果；缺功能资格保持空集合。
-/// # 错误
-/// 模型错配、复验、数据库或计数转换失败返回原错误。
+// 执行同一完整授权条件下的投影分页和计数。
+// 授权先于分页和计数的结果；缺功能资格保持空集合。
+// base、filter、options 为本域业务查询；access 为固定模型凭证，executor 为原执行器。
+// 模型错配、复验、数据库或计数转换失败返回原错误。
 pub(super) async fn authorized_projection_search<Entity, Row>(
     base: &Collection<Entity>,
     filter: Document,

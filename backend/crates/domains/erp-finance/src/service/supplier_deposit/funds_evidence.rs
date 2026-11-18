@@ -20,14 +20,13 @@ use crate::repository::{FundsEvidenceExt, SupplierDepositExt};
 use crate::{Error, Result};
 
 impl SupplierDepositService {
-    /// 创建或恢复账号固定资金窗口，不改变进行中的窗口和游标。
-    /// # 参数
-    /// * `account_id` / `scan_key` - 已存在账户及服务器稳定窗口身份。
-    /// * `window` / `executor` - 固定起止范围及调用方事务。
-    /// # 返回
+    /// 调查供应商账户资金事实时创建固定扫描时间窗；有未完成窗口则恢复原时间窗与游标。
     /// 返回原检查点或新的首游标检查点。
-    /// # 错误
     /// 未知账户、活跃窗口冲突、范围跳跃或写入失败时拒绝。
+    ///
+    /// 输入约定：
+    /// - `account_id` / `scan_key`：已存在账户及服务器稳定窗口身份。
+    /// - `window` / `executor`：固定起止范围及调用方事务。
     pub async fn begin_funds_scan(
         &self,
         account_id: &str,
@@ -71,14 +70,13 @@ impl SupplierDepositService {
         Ok(checkpoint)
     }
 
-    /// 在同一事务先保存整页证据，再CAS推进原游标，未知提交以原页恢复。
-    /// # 参数
-    /// * `checkpoint_id` / `expected_version` - 原固定窗口和所见版本。
-    /// * `page` / `executor` - 来源完整页和已通过账号租约屏障的同一事务。
-    /// # 返回
+    /// 接收一页资金记录时先在原事务保存全部证据，再以 CAS 推进游标；结果未知时以同一页重试恢复。
     /// 返回可靠收件后的检查点；不登记任何资金使用或核销。
-    /// # 错误
     /// 窗口、游标、旧页待处理、版本、来源身份或数据库失败时拒绝。
+    ///
+    /// 输入约定：
+    /// - `checkpoint_id` / `expected_version`：原固定窗口和所见版本。
+    /// - `page` / `executor`：来源完整页和已通过账号租约屏障的同一事务。
     pub async fn save_funds_page(
         &self,
         checkpoint_id: &str,
@@ -120,13 +118,12 @@ impl SupplierDepositService {
         Ok(checkpoint)
     }
 
-    /// 完成已可靠收件且本页无自动待处理项的窗口，待核对线索继续保留。
-    /// # 参数
-    /// * `checkpoint_id` / `executor` - 原检查点和已通过账号租约屏障的事务。
-    /// # 返回
+    /// 已保存可靠收件且本页没有自动待办时结束原扫描窗，未核实线索继续保留。
     /// 返回完成收件范围；不证明订单未扣款、已付款或退款完成。
-    /// # 错误
     /// 来源尚有后页、Received未处理、证据缺失或写入失败时拒绝。
+    ///
+    /// 输入约定：
+    /// - `checkpoint_id` / `executor`：原检查点和已通过账号租约屏障的事务。
     pub async fn finish_funds_scan(
         &self,
         checkpoint_id: &str,
@@ -148,14 +145,13 @@ impl SupplierDepositService {
         Ok(checkpoint)
     }
 
-    /// 将来源证据关联到已真实写入的财务资源，不凭消息标记付款。
-    /// # 参数
-    /// * `id` / `resource` - 原证据和同账户真实充值、使用或返款资源。
-    /// * `executor` - 记账、核销和本证据共同事务，调用方须先写账号租约屏障。
-    /// # 返回
+    /// 资金证据对应的财务资源实际落库后才登记关联，不能仅凭外部消息认定付款完成。
     /// 返回已应用证据，相同资源重放不重复变更。
-    /// # 错误
     /// 来源或真实资源不匹配、待核对、重复改派或写入失败时拒绝。
+    ///
+    /// 输入约定：
+    /// - `id` / `resource`：原证据和同账户真实充值、使用或返款资源。
+    /// - `executor`：记账、核销和本证据共同事务，调用方须先写账号租约屏障。
     pub async fn mark_funds_evidence_applied(
         &self,
         id: &str,
@@ -173,14 +169,13 @@ impl SupplierDepositService {
         Ok(inbox)
     }
 
-    /// 保留未知资金事实并限制账户新增使用，不删除原应用资源。
-    /// # 参数
-    /// * `id` / `reason_code` - 原证据及稳定脱敏原因。
-    /// * `executor` - 原调查或记账同一事务。
-    /// # 返回
+    /// 资金事实无法自动核实就保留证据、限制账户新增使用，不删除先前已应用的财务引用。
     /// 返回待人工核对证据；原始内容和原核销均保留。
-    /// # 错误
     /// 原证据不存在、原因非法或写入失败时拒绝。
+    ///
+    /// 输入约定：
+    /// - `id` / `reason_code`：原证据及稳定脱敏原因。
+    /// - `executor`：原调查或记账同一事务。
     pub async fn mark_funds_evidence_needs_review(
         &self,
         id: &str,
@@ -195,14 +190,13 @@ impl SupplierDepositService {
         Ok(inbox)
     }
 
-    /// 追加余额采样证据，不比较不同采样时刻或覆盖本地账面余额。
-    /// # 参数
-    /// * `account_id` / `observation` - 已核验账户和来源完整采样。
-    /// * `executor` - 来源证据收件事务。
-    /// # 返回
+    /// 调查资金余额时追加独立的采样事实；不同采样时刻不互相校验，也不覆盖本地余额。
     /// 返回原精确采样或新增观察；同来源身份不同余额分别保留。
-    /// # 错误
     /// 未知账户、归档缺失或数据库失败时拒绝。
+    ///
+    /// 输入约定：
+    /// - `account_id` / `observation`：已核验账户和来源完整采样。
+    /// - `executor`：来源证据收件事务。
     pub async fn record_funds_balance_observation(
         &self,
         account_id: &str,

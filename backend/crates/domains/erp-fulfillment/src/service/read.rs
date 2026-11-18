@@ -23,18 +23,12 @@ pub struct FulfillmentReadService {
     authorization: Arc<AuthorizationService>,
 }
 impl FulfillmentReadService {
-    /// 绑定数据库和共享授权服务。
-    /// # 参数
-    /// db为本域数据库，authorization为启动绑定完成的进程共享服务。
-    /// # 返回
-    /// 不保存请求身份或授权结果的读取用例。
-    /// # 错误
-    /// 构造不执行I/O。
+    /// 装配履约管理读取服务，使用本域数据库和启动时注入的共享授权服务；不执行 I/O，也不缓存请求身份或权限。
     pub fn new(db: Database, authorization: Arc<AuthorizationService>) -> Self {
         Self { domain: FulfillmentService::new(db), authorization }
     }
 
-    /// 在一个快照事务中执行固定功能授权及完整履约读取。
+    // 在一个快照事务中执行固定功能授权及完整履约读取。
     async fn read<T: Send + 'static, F>(
         &self,
         actor: &AuditActor,
@@ -58,13 +52,8 @@ impl FulfillmentReadService {
             .await
     }
 
-    /// 在固定功能资格内读取履约列表。
-    /// # 参数
-    /// 查询参数或真实ID，以及已认证actor。
-    /// # 返回
-    /// 功能资格与完整业务读取在同一快照事务内成功后返回原视图。
-    /// # 错误
-    /// 身份、权限或数据读取失效时拒绝，不交付未检查结果。
+    /// 按筛选条件读取采购收货列表；在同一个快照中先检查当前账号的固定列表权限，再装配分页视图。
+    /// 身份或权限不满足、输入非法或读取失败时不交付结果。
     pub async fn purchase_receipt_list(
         &self,
         params: &PurchaseReceiptListParams,
@@ -77,13 +66,8 @@ impl FulfillmentReadService {
         .await
     }
 
-    /// 在固定功能资格内读取履约详情。
-    /// # 参数
-    /// 查询参数或真实ID，以及已认证actor。
-    /// # 返回
-    /// 功能资格与完整业务读取在同一快照事务内成功后返回原视图。
-    /// # 错误
-    /// 身份、权限或数据读取失效时拒绝，不交付未检查结果。
+    /// 按真实单据 ID 读取采购收货详情（表头和收货行）；固定详情权限检查与数据读取共用一个快照。
+    /// 身份或权限不满足、记录缺失或读取失败时不交付结果。
     pub async fn purchase_receipt_detail(
         &self,
         id: &str,
@@ -96,13 +80,8 @@ impl FulfillmentReadService {
         .await
     }
 
-    /// 在固定功能资格内读取履约列表。
-    /// # 参数
-    /// 查询参数或真实ID，以及已认证actor。
-    /// # 返回
-    /// 功能资格与完整业务读取在同一快照事务内成功后返回原视图。
-    /// # 错误
-    /// 身份、权限或数据读取失效时拒绝，不交付未检查结果。
+    /// 按筛选条件读取实物发货列表；在同一个快照中先检查当前账号的固定列表权限，再装配分页视图。
+    /// 身份或权限不满足、输入非法或读取失败时不交付结果。
     pub async fn delivery_list(
         &self,
         params: &DeliveryListParams,
@@ -115,13 +94,8 @@ impl FulfillmentReadService {
         .await
     }
 
-    /// 在固定功能资格内读取履约详情。
-    /// # 参数
-    /// 查询参数或真实ID，以及已认证actor。
-    /// # 返回
-    /// 功能资格与完整业务读取在同一快照事务内成功后返回原视图。
-    /// # 错误
-    /// 身份、权限或数据读取失效时拒绝，不交付未检查结果。
+    /// 按真实单据 ID 读取实物发货详情（表头和发货行）；固定详情权限检查与数据读取共用一个快照。
+    /// 身份或权限不满足、记录缺失或读取失败时不交付结果。
     pub async fn delivery_detail(&self, id: &str, actor: &AuditActor) -> Result<DeliveryDetailView> {
         let id = id.to_owned();
         self.read(actor, fulfillment::DELIVERY_DELIVERY_DETAIL, move |domain, executor| {
@@ -130,13 +104,8 @@ impl FulfillmentReadService {
         .await
     }
 
-    /// 在固定功能资格内读取履约列表。
-    /// # 参数
-    /// 查询参数或真实ID，以及已认证actor。
-    /// # 返回
-    /// 功能资格与完整业务读取在同一快照事务内成功后返回原视图。
-    /// # 错误
-    /// 身份、权限或数据读取失效时拒绝，不交付未检查结果。
+    /// 按筛选条件读取电子交付列表；在同一个快照中先检查当前账号的固定列表权限，再装配分页视图。
+    /// 身份或权限不满足、输入非法或读取失败时不交付结果。
     pub async fn electronic_delivery_list(
         &self,
         params: &ElectronicDeliveryListParams,
@@ -153,13 +122,8 @@ impl FulfillmentReadService {
         .await
     }
 
-    /// 在固定功能资格内读取履约详情。
-    /// # 参数
-    /// 查询参数或真实ID，以及已认证actor。
-    /// # 返回
-    /// 功能资格与完整业务读取在同一快照事务内成功后返回原视图。
-    /// # 错误
-    /// 身份、权限或数据读取失效时拒绝，不交付未检查结果。
+    /// 按真实单据 ID 读取电子交付详情（交付记录）；固定详情权限检查与数据读取共用一个快照。
+    /// 身份或权限不满足、记录缺失或读取失败时不交付结果。
     pub async fn electronic_delivery_detail(
         &self,
         id: &str,
@@ -176,13 +140,8 @@ impl FulfillmentReadService {
         .await
     }
 
-    /// 在固定功能资格内读取履约列表。
-    /// # 参数
-    /// 查询参数或真实ID，以及已认证actor。
-    /// # 返回
-    /// 功能资格与完整业务读取在同一快照事务内成功后返回原视图。
-    /// # 错误
-    /// 身份、权限或数据读取失效时拒绝，不交付未检查结果。
+    /// 按筛选条件读取服务履约列表；在同一个快照中先检查当前账号的固定列表权限，再装配分页视图。
+    /// 身份或权限不满足、输入非法或读取失败时不交付结果。
     pub async fn service_fulfillment_list(
         &self,
         params: &ServiceFulfillmentListParams,
@@ -199,13 +158,8 @@ impl FulfillmentReadService {
         .await
     }
 
-    /// 在固定功能资格内读取履约详情。
-    /// # 参数
-    /// 查询参数或真实ID，以及已认证actor。
-    /// # 返回
-    /// 功能资格与完整业务读取在同一快照事务内成功后返回原视图。
-    /// # 错误
-    /// 身份、权限或数据读取失效时拒绝，不交付未检查结果。
+    /// 按真实单据 ID 读取服务履约详情（履约记录）；固定详情权限检查与数据读取共用一个快照。
+    /// 身份或权限不满足、记录缺失或读取失败时不交付结果。
     pub async fn service_fulfillment_detail(
         &self,
         id: &str,
@@ -225,7 +179,7 @@ impl FulfillmentReadService {
 
 type ReadOutput<'a, T> = Pin<Box<dyn Future<Output = Result<T>> + Send + 'a>>;
 
-/// 使用原执行器先完成固定资格检查，再执行本次完整读取。
+// 使用原执行器先完成固定资格检查，再执行本次完整读取。
 async fn authorized_read<T: Send + 'static, F>(
     domain: &FulfillmentService,
     authorization: &AuthorizationService,
@@ -251,7 +205,7 @@ mod tests {
     use super::*;
     use crate::Error;
 
-    /// 八个功能入口共用的真实读取编排在授权拒绝后不执行任何业务读取。
+    // 验证八个功能入口共用的真实读取编排在授权拒绝后不执行任何业务读取。
     #[tokio::test]
     async fn all_reads_stop_before_business_io_when_authorization_is_unavailable() {
         let db = Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("unit_test");

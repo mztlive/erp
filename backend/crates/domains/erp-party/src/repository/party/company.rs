@@ -7,7 +7,7 @@ use crate::Party;
 use crate::dto::company::CompanyListParams;
 use crate::entity::party::company::identity_name;
 
-/// 构建分页前公司筛选条件，列表和总数共用。
+// 构建分页前公司筛选条件，列表和总数共用。
 fn company_filter(params: &CompanyListParams) -> Document {
     let mut filter = doc! { "deleted_at": 0_i64, "company_profile": { "$type": "object" } };
     if let Some(status) = params.status {
@@ -30,12 +30,9 @@ pub trait PartyRepositoryCompanyExt {
     ///
     /// # 参数
     /// * `params` - 关键词、状态与分页条件。
-    /// * `executor` - 数据访问执行器。
     ///
-    /// # 返回
     /// 返回当前页主体与满足筛选条件的总数。
     ///
-    /// # 错误
     /// 查询或计数失败时返回仓储错误。
     async fn companies(
         &self,
@@ -49,12 +46,9 @@ pub trait PartyRepositoryCompanyExt {
     ///
     /// # 参数
     /// * `name` - 公司全称、简称或别名。
-    /// * `executor` - 数据访问执行器。
     ///
-    /// # 返回
     /// 命中启用公司时返回该主体；无匹配或已停用时返回 `None`。
     ///
-    /// # 错误
     /// 查询失败时返回仓储错误。
     async fn company_by_name(&self, name: &str, executor: &mut dyn Executor) -> Result<Option<Party>>;
 }

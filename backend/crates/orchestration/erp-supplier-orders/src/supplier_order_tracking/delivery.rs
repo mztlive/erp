@@ -29,13 +29,13 @@ use super::persistence::load_claimed;
 use crate::{Error, Result};
 
 impl SupplierOrderTrackingProcess {
-    /// 在单个事务中将当前来源观察应用到真实 ERP 直发及检查点。
-    /// # 参数
-    /// 本轮查询权和已经持久化的来源观察身份。
-    /// # 返回
-    /// 保存包裹、必要发货事实及应用检查点。
-    /// # 错误
-    /// 来源变化、数量不符、当前采购/责任门槛不满足或写入失败时整体回滚。
+    // 在单个事务中将当前来源观察应用到真实 ERP 直发及检查点。
+    //
+    // 本轮查询权和已经持久化的来源观察身份。
+    //
+    // 保存包裹、必要发货事实及应用检查点。
+    //
+    // 来源变化、数量不符、当前采购/责任门槛不满足或写入失败时整体回滚。
     pub(super) async fn apply_delivery(&self, claimed: &OrderTracking, observation_id: &str) -> Result<()> {
         let (db, claimed, observation_id) = (self.db.clone(), claimed.clone(), observation_id.to_owned());
         let task_identity = self.task_identity.clone();
@@ -269,13 +269,13 @@ async fn apply_one_delivery(
     Ok(())
 }
 
-/// 读取自动直发任务的有效采购责任人，沿用原履约权限和审计归属。
-/// # 参数
-/// 业务库、原采购单身份及同一事务执行器。
-/// # 返回
-/// 当前仍然有效的采购责任人审计身份。
-/// # 错误
-/// 采购、责任人缺失或账号失效时拒绝自动发货。
+// 读取自动直发任务的有效采购责任人，沿用原履约权限和审计归属。
+//
+// 业务库、原采购单身份及同一事务执行器。
+//
+// 当前仍然有效的采购责任人审计身份。
+//
+// 采购、责任人缺失或账号失效时拒绝自动发货。
 pub(super) async fn delegated_actor(
     db: &Database,
     purchase_id: &str,

@@ -85,16 +85,7 @@ pub struct SkuRevisionFilter {
 }
 
 impl Default for SkuRevisionFilter {
-    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回第 1 页、每页 20 条的空筛选条件。
-    ///
-    /// # 错误
-    /// 无。
+    // SKU 修订列表未传筛选时默认第 1 页、每页 20 条，不另加筛选条件。
     fn default() -> Self {
         let (page, page_size, sort_by, sort_ascending) = default_paging();
         Self {
@@ -111,18 +102,10 @@ impl Default for SkuRevisionFilter {
 }
 
 impl QueryFilter for SkuRevisionFilter {
-    /// 转换为 MongoDB 查询条件，并追加未删除的 `deleted_at` 条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。`sku_id` 有值时精确匹配；`name` 有值时按字面量正则匹配；
-    /// `barcode` 有值时先去掉首尾空白，再按规范化结果精确匹配；`status` 有值时按稳定代码精确匹配。
-    /// 分页与排序字段不进入条件。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 将SKU 修订筛选条件编译为 MongoDB 查询，排除软删除记录。
+    //
+    // `sku_id` 有值时精确匹配；`name` 有值时按字面量正则匹配；`barcode` 有值时先去掉首尾空白，再按规范化结果精确匹配；`status`
+    // 有值时按稳定代码精确匹配。分页与排序字段不进入条件。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(sku_id) = &self.sku_id {
@@ -140,16 +123,7 @@ impl QueryFilter for SkuRevisionFilter {
 }
 
 impl Pagination for SkuRevisionFilter {
-    /// 返回 SKU 修订列表的页码与单页条数，不做页码归一或条数钳制。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组：第一项为 `page`，第二项为 `page_size` 转成的 `u64`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 读取 SKU 修订列表的页码与单页条数，不做页码归一或条数限制。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -160,18 +134,12 @@ impl Pagination for SkuRevisionFilter {
 pub trait SkuRevisionRepositoryExt {
     /// 分页检索 SKU 修订列表（投影查询）。
     ///
-    /// 只返回 [`SkuRevisionRow`] 所需的列表字段（含 Decimal128 一件代发价，
-    /// 不做舍入或换算）；排序字段白名单化（`created_at`/`revision_no`）。
+    /// 只返回 [`SkuRevisionRow`] 所需的列表字段（含 Decimal128 一件代发价，不做舍入或换算）；
+    /// 排序字段白名单化（`created_at`/`revision_no`）。
     ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回当前页投影行与满足筛选条件的总数。当 MongoDB 查询、游标读取或计数失败时返回错误。
     ///
-    /// # 返回
-    /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// 沿用调用方传入的执行器。
     async fn search_sku_revisions(
         &self,
         filter: &SkuRevisionFilter,
@@ -180,21 +148,13 @@ pub trait SkuRevisionRepositoryExt {
 
     /// 按稳定 ID 读取发布修订引用的 SKU 修订。
     ///
-    /// 发布修订通过 SKU 修订稳定 ID 引用不可变商品版本，本方法提供该跨域只读
-    /// 事实的数据访问能力，不承载业务规则判断。
+    /// 发布修订通过 SKU 修订稳定 ID 引用不可变商品版本，本方法提供该跨域只读事实的数据访问能力，不承载业务规则判断。
     ///
-    /// # 参数
-    /// * `id` - SKU 修订 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回未删除 SKU 修订；不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
-    ///
-    /// # 约束
     /// 只查询本域 `sku_revisions` 集合，不触碰其他集合。
+    ///
+    /// 返回未删除 SKU 修订；不存在时返回 `None`。MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// 沿用调用方传入的执行器。
     async fn find_publication_sku_revision(
         &self,
         id: &SkuRevisionId,
@@ -203,19 +163,14 @@ pub trait SkuRevisionRepositoryExt {
 
     /// 按规范化条码精确查询全部「在用」SKU 修订。
     ///
-    /// 条码走 `idx_sku_revisions_barcode` 精确查询索引；同一条码允许命中多个
-    /// 在用 SKU 修订（数据模型 §6.3：同一条码出现多个在用 SKU 时由 Service
-    /// 阻断正式启用并转人工，条码不是稳定身份）。
+    /// 条码走 `idx_sku_revisions_barcode` 精确查询索引；同一条码允许命中多个在用 SKU 修订（数据模型 §6.3：同一条码出现多个在用
+    /// SKU 时由 Service阻断正式启用并转人工，条码不是稳定身份）。
     ///
-    /// # 参数
-    /// * `barcode` - 条码原值（内部按 trim 规范化后精确匹配）
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回启用状态且条码精确匹配的 SKU 修订集合。当 MongoDB 查询或游标读取失败时返回错误。
     ///
-    /// # 返回
-    /// 返回启用状态且条码精确匹配的 SKU 修订集合。
+    /// 沿用调用方传入的执行器。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// `barcode` 为条码原值（内部按 trim 规范化后精确匹配）。
     async fn find_active_by_barcode(
         &self,
         barcode: &str,
@@ -226,15 +181,9 @@ pub trait SkuRevisionRepositoryExt {
     ///
     /// 用于按 SKU 聚合修订明细，避免逐 SKU N+1。
     ///
-    /// # 参数
-    /// * `sku_ids` - SKU ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回匹配的修订实体集合。当 MongoDB 查询或游标读取失败时返回错误。
     ///
-    /// # 返回
-    /// 返回匹配的修订实体集合。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 沿用调用方传入的执行器。
     async fn find_by_sku_ids(
         &self,
         sku_ids: &[SkuId],
@@ -243,15 +192,11 @@ pub trait SkuRevisionRepositoryExt {
 
     /// 按稳定主键批量查询 SKU 修订。
     ///
-    /// # 参数
-    /// * `ids` - SKU 修订稳定 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定事务边界
+    /// 返回匹配的未删除 SKU 修订实体；输入为空时返回空集合。MongoDB 查询或反序列化失败时返回错误。
     ///
-    /// # 返回
-    /// 返回匹配的未删除 SKU 修订实体；输入为空时返回空集合。
+    /// 沿用调用方传入的执行器。
     ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
+    /// `ids` 为 SKU 修订稳定 ID 集合。
     async fn find_by_ids(
         &self,
         ids: &[SkuRevisionId],
@@ -260,18 +205,11 @@ pub trait SkuRevisionRepositoryExt {
 
     /// 批量读取采购责任规则展示需要的 SKU 当前修订。
     ///
-    /// 采购责任展示入口的历史名称，语义与 [`Self::find_by_ids`] 完全一致；
-    /// 保留本方法以避免展示层调用方改名，仅委托属主批量查询，不重复实现查询。
+    /// 采购责任展示入口的历史名称，语义与 [`Self::find_by_ids`] 完全一致；保留本方法以避免展示层调用方改名，仅委托属主批量查询，不重复实现查询。
     ///
-    /// # 参数
-    /// * `revision_ids` - SKU 修订 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定事务边界
+    /// 返回全部匹配且未删除的 SKU 修订；输入为空时返回空集合。MongoDB 查询或反序列化失败时返回错误。
     ///
-    /// # 返回
-    /// 返回全部匹配且未删除的 SKU 修订；输入为空时返回空集合。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
+    /// 沿用调用方传入的执行器。
     async fn list_procurement_responsibility_sku_revisions(
         &self,
         revision_ids: &[SkuRevisionId],
@@ -349,31 +287,15 @@ impl SkuRevisionRepositoryExt for persistence_core::Repository<'_, SkuRevision> 
     }
 }
 
-/// 构建 SKU 修订排序文档（白名单：`created_at`/`revision_no`）。
-///
-/// # 参数
-/// * `sort_by` - 请求的排序字段；不在白名单时回退 `created_at`
-/// * `sort_ascending` - 升序为 `true`，降序为 `false`
-///
-/// # 返回
-/// 返回排序文档；同一方向同时作用于排序字段与 `id`。
-///
-/// # 错误
-/// 不返回错误。
+// 构建 SKU 修订排序文档（白名单：`created_at`/`revision_no`）。返回排序文档；同一方向同时作用于排序字段与 `id`。
+//
+// - `sort_by`：请求的排序字段；不在白名单时回退 `created_at`。
+// - `sort_ascending`：升序为 `true`，降序为 `false`。
 pub(super) fn sku_revision_sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
     sort_doc(whitelisted_sort(sort_by, SKU_REVISION_SORT_FIELDS), sort_ascending)
 }
 
-/// SKU 修订列表投影字段。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回身份、文案、规格、条码、物流、价格、生效区间、版本与创建时间的投影文档。
-///
-/// # 错误
-/// 不返回错误。
+// SKU 修订列表投影字段。返回身份、文案、规格、条码、物流、价格、生效区间、版本与创建时间的投影文档。
 pub(super) fn sku_revision_projection() -> Document {
     doc! {
         "id": 1,
@@ -398,20 +320,12 @@ pub(super) fn sku_revision_projection() -> Document {
     }
 }
 
-/// 构造未删除 SKU 修订的名称字面量匹配条件。
-///
-/// `include_specification` 为真时名称与规格满足其一即可；为假时只匹配名称。
-/// 本函数不限定当前修订，调用方再按 `current_revision_id` 收窄。
-///
-/// # 参数
-/// * `keyword` - 名称或规格的字面量关键字
-/// * `include_specification` - 是否把规格纳入匹配
-///
-/// # 返回
-/// 返回带 `deleted_at` 过滤的查询文档。
-///
-/// # 错误
-/// 不返回错误。
+// 构造未删除 SKU 修订的名称字面量匹配条件。
+//
+// `include_specification` 为真时名称与规格满足其一即可；为假时只匹配名称。本函数不限定当前修订，调用方再按
+// `current_revision_id` 收窄。
+//
+// 返回带 `deleted_at` 过滤的查询文档。
 pub(super) fn sku_revision_keyword_filter(keyword: &str, include_specification: bool) -> Document {
     let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
     let mut name = Document::new();
@@ -427,20 +341,13 @@ pub(super) fn sku_revision_keyword_filter(keyword: &str, include_specification: 
     filter
 }
 
-/// 从同一 SKU 的修订集合解析当前修订（erp-catalog-006）。
-///
-/// 优先当前修订指针，缺失回退最大修订号；判定内核见共享
-/// [`select_current_revision`](super::shared::select_current_revision)。
-///
-/// # 参数
-/// * `sku` - 稳定 SKU，读取其当前修订指针
-/// * `revisions` - 同一 SKU 的修订集合
-///
-/// # 返回
-/// 指针命中时返回该修订；否则返回修订号最大的一条；没有修订时返回 `None`。
-///
-/// # 错误
-/// 不返回错误。
+// 从同一 SKU 的修订集合解析当前修订（erp-catalog-006）。
+//
+// 优先当前修订指针，缺失回退最大修订号；判定内核见共享[`select_current_revision`](super::shared::select_current_revision)。
+//
+// 指针命中时返回该修订；否则返回修订号最大的一条；没有修订时返回 `None`。
+//
+// `sku` 为稳定 SKU，读取其当前修订指针。
 pub(super) fn select_current_sku_revision<'a>(
     sku: &Sku,
     revisions: &'a [SkuRevision],
@@ -453,17 +360,9 @@ pub(super) fn select_current_sku_revision<'a>(
     )
 }
 
-/// 批量解析 SKU 当前修订映射。
-///
-/// # 参数
-/// * `skus` - SKU 稳定实体集合
-/// * `revisions` - 这些 SKU 的全部修订
-///
-/// # 返回
-/// 返回 `sku_id -> 当前修订` 映射，没有修订的 SKU 被忽略。
-///
-/// # 错误
-/// 无。
+// 批量解析 SKU 当前修订映射。返回 `sku_id -> 当前修订` 映射，没有修订的 SKU 被忽略。
+//
+// `skus` 为 SKU 稳定实体集合。
 pub(super) fn select_current_sku_revisions(
     skus: &[Sku],
     revisions: Vec<SkuRevision>,
@@ -482,16 +381,9 @@ pub(super) fn select_current_sku_revisions(
         .collect()
 }
 
-/// 按实体构造时的 trim 规则规范化条码（与 `SkuRevision::new` 一致）。
-///
-/// # 参数
-/// * `barcode` - 条码原值
-///
-/// # 返回
-/// 返回去除首尾空白后的规范化值。
-///
-/// # 错误
-/// 不返回错误。
+// 按实体构造时的 trim 规则规范化条码（与 `SkuRevision::new` 一致）。返回去除首尾空白后的规范化值。
+//
+// `barcode` 为条码原值。
 pub(super) fn normalized_barcode(barcode: &str) -> &str {
     barcode.trim()
 }

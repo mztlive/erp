@@ -20,11 +20,7 @@ pub enum PriceRule {
 
 impl PriceRule {
     /// 验证公司售价规则，不读取或改写采购报价。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 参数为非负定点数时成功。
-    /// # 错误
     /// 负比例或负金额时拒绝。
     pub fn validate(&self) -> Result<()> {
         let value = match self {
@@ -39,11 +35,7 @@ impl PriceRule {
     }
 
     /// 按本次来源价计算公司售价，最终仅舍入一次。
-    /// # 参数
-    /// `source` 是本次核验的接口采购报价，缺失与零价分别处理。
-    /// # 返回
     /// 两位小数公司售价；未设置规则返回空。
-    /// # 错误
     /// 缺少必要报价、负数或计算溢出时拒绝。
     pub fn calculate(&self, source: Option<UnitPrice>) -> Result<Option<Amount>> {
         self.validate()?;
@@ -119,12 +111,7 @@ impl Default for FillPolicy {
 
 impl FillPolicy {
     /// 判断本批草稿字段能否接受批量写入。
-    /// # 参数
-    /// `origin` 为已保存的字段值来源。
-    /// # 返回
     /// 仅空值或明确允许覆盖的值返回真。
-    /// # 错误
-    /// 不返回错误。
     pub fn allows(self, origin: ValueOrigin) -> bool {
         match origin {
             ValueOrigin::Unset => true,

@@ -198,16 +198,9 @@ pub struct StockAdjustmentLineView {
 }
 
 impl StockAdjustmentView {
-    /// 用当前人员事实补齐可读姓名，禁止用人员标识补位。
-    ///
-    /// # 参数
-    /// * `names` - 按人员标识索引的当前姓名。
-    ///
-    /// # 返回
-    /// 无返回值；缺失、空白或与人员标识相同的姓名保持为空。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 用当前人员事实补齐可读姓名，禁止用人员标识补位。
+    // 缺失、空白或与人员标识相同的姓名保持为空。
+    // `names` 按人员标识索引的当前姓名。
     pub(crate) fn apply_names(&mut self, names: &HashMap<String, String>) {
         self.prepared_by_name = readable_name(names.get(&self.prepared_by), &self.prepared_by);
         self.submitted_by_name = self.submitted_by.as_ref().and_then(|id| readable_name(names.get(id), id));
@@ -217,17 +210,9 @@ impl StockAdjustmentView {
 }
 
 impl StockAdjustmentLineView {
-    /// 按当前 SKU 身份及其准确修订补齐业务编码与名称。
-    ///
-    /// # 参数
-    /// * `skus` - 按 SKU 标识索引的身份事实。
-    /// * `revisions` - 按修订标识索引的当前展示事实。
-    ///
-    /// # 返回
-    /// 无返回值；缺失、空白或与 SKU 标识相同的编码、名称保持为空。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 按当前 SKU 身份及其准确修订补齐业务编码与名称。
+    // 缺失、空白或与 SKU 标识相同的编码、名称保持为空。
+    // `skus` 按 SKU 标识索引的身份事实；`revisions` 按修订标识索引的当前展示事实。
     pub(crate) fn apply_sku_names(
         &mut self,
         skus: &HashMap<String, SkuFact>,
@@ -476,30 +461,13 @@ pub struct StockAdjustmentLineUpdateInput {
 
 impl StockAdjustmentLineUpdateInput {
     /// 由必填明细行主键与调整数量构造明细更新。
-    ///
-    /// # 参数
-    /// * `line_id` - 明细行主键
-    /// * `quantity` - 调整数量（正数）
-    ///
-    /// # 返回
     /// 返回方向为空的明细更新。
-    ///
-    /// # 错误
-    /// 无。
+    /// `line_id` 为明细行主键；`quantity` 为调整数量（正数）。
     pub fn new(line_id: impl Into<String>, quantity: impl Into<String>) -> Self {
         Self { line_id: line_id.into(), quantity: quantity.into(), direction: None }
     }
 
     /// 设置调整方向。
-    ///
-    /// # 参数
-    /// * `direction` - 调整方向
-    ///
-    /// # 返回
-    /// 返回更新后的明细更新。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_direction(mut self, direction: MovementDirection) -> Self {
         self.direction = Some(direction);
         self
@@ -597,13 +565,10 @@ pub struct CancelStockAdjustmentApprovalRequest {
 }
 
 impl From<StockReservationRow> for StockReservationView {
-    /// 从库存预占查询投影构造列表视图。
-    /// # 参数
-    /// row 为已授权仓储查询返回的预占投影。
-    /// # 返回
-    /// 保留数量、状态和版本的列表视图。
-    /// # 错误
-    /// 不执行 I/O。
+    // 从库存预占查询投影构造列表视图。
+    // 保留数量、状态和版本的列表视图。
+    // row 为已授权仓储查询返回的预占投影。
+    // 不执行 I/O。
     fn from(row: StockReservationRow) -> Self {
         Self {
             id: row.id,
@@ -908,7 +873,7 @@ mod tests {
         assert!(adjustment.validate().is_err());
     }
 
-    /// 提交与撤回请求拒绝客户端选择定义或审批人。
+    // 验证提交与撤回请求拒绝客户端选择定义或审批人。
     #[test]
     fn submit_and_cancel_reject_client_chosen_definition_or_assignee() {
         use super::{CancelStockAdjustmentApprovalRequest, SubmitStockAdjustmentRequest};
@@ -965,7 +930,7 @@ mod tests {
         assert_eq!(submit.expected_version, 1);
     }
 
-    /// 余额响应版本必须保持十进制字符串，不能经过 JS number。
+    // 验证余额响应版本必须保持十进制字符串，不能经过 JS number。
     #[test]
     fn stock_balance_view_serializes_version_as_decimal_string() {
         let quantity = Quantity::from_str("1").unwrap();
@@ -993,7 +958,7 @@ mod tests {
         assert_eq!(value["allowed_actions"], serde_json::json!(["CREATE_ADJUSTMENT"]));
     }
 
-    /// 库存调整列表、详情及 PUT 响应的版本不得经过 JSON number。
+    // 验证库存调整列表、详情及 PUT 响应的版本不得经过 JSON number。
     #[test]
     fn stock_adjustment_view_serializes_version_as_decimal_string() {
         let value = serde_json::to_value(StockAdjustmentView {

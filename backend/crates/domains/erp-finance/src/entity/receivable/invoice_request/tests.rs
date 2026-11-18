@@ -172,7 +172,7 @@ fn attachment_completion_uses_only_current_approved_remainder() {
     assert!(req.completion_amount(req.base.version).is_err());
 }
 
-/// 驳回释放占用，修改或原内容重提均重新校验额度并递增提交版本。
+// 回归检查：驳回释放占用，修改或原内容重提均重新校验额度并递增提交版本。
 #[test]
 fn rejection_releases_capacity_and_allows_fresh_submission() {
     let mut req = request("600");
@@ -198,7 +198,7 @@ fn rejection_releases_capacity_and_allows_fresh_submission() {
     assert_eq!(req, approved);
 }
 
-/// 驳回后可独立保存资料，原实例版本、状态及已执行金额不变。
+// 回归检查：驳回后可独立保存资料，原实例版本、状态及已执行金额不变。
 #[test]
 fn rejected_edit_preserves_state_and_rejects_invalid_data_atomically() {
     let mut req = request("600");

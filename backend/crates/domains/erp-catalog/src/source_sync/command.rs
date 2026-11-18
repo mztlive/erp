@@ -23,13 +23,8 @@ pub(crate) trait ResolutionStore: Send {
     ) -> Result<ProductSourceDiffView>;
 }
 
-/// 执行授权、回执恢复、版本核验及单次保存的完整确认顺序。
-/// # 参数
-/// 当前事务的存储能力、商品身份及原始确认命令。
-/// # 返回
-/// 首次保存的结果或相同命令的原回执结果。
-/// # 错误
-/// 权限、回执身份、版本、字段或持久化任一步失败即停止。
+// 确认来源差异时先授权，再按操作号检查回执；同商品同请求重放原结果，不按后来版本重新执行。
+// 首次命令才比较商品、来源和涉及的 SKU 版本，再应用字段决定并交原存储事务一次保存。异载荷、旧版本或校验失败不继续写入。
 pub(crate) async fn resolve<S: ResolutionStore>(
     store: &mut S,
     product_id: &str,

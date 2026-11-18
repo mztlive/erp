@@ -17,11 +17,7 @@ use super::{
 };
 
 /// 装配复用进程统一授权服务的销售业务服务与 Port。
-/// # 参数
-/// db 为应用数据库，rbac 为身份设施，authorization 为进程共享统一授权服务。
-/// # 返回
 /// 不执行 I/O 的销售消费合同。
-/// # 错误
 /// 不返回错误；资格与版本均在业务原事务中重验。
 pub fn sales_services(
     db: Database,

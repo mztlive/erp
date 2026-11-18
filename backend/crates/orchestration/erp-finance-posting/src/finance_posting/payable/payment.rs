@@ -47,25 +47,12 @@ const PAYMENT_COMMIT: AuditAction = AuditAction {
 };
 
 impl PayableProcess {
-    /// 在文件存储前拒绝已关闭的应付直付入口。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 不返回付款结果。
-    /// # 错误
-    /// 恒返回冲突；付款只能从已批准付款申请办理。
+    /// 旧应付直付入口应在上传回单前调用并返回冲突，不受理付款。实际付款只能从已批准的采购付款申请办理。
     pub fn reject_client_payment() -> Result<SupplierPaymentView> {
         Err(Error::ConflictError("旧采购应付直付入口已停止，请从已批准付款申请登记付款".into()))
     }
 
-    /// 停止旧应付任务合并入口。
-    /// # 参数
-    /// * `params` - 旧任务筛选。
-    /// * `actor` - 当前用户。
-    /// # 返回
-    /// 不返回可付款候选。
-    /// # 错误
-    /// 固定拒绝并要求走采购付款申请。
+    /// 旧应付合并直付查询固定返回冲突，不读取筛选条件或候选任务；请从已批准的采购付款申请办理。
     pub async fn payment_merge_candidates(
         &self,
         _params: PaymentMergeCandidatesParams,
@@ -76,18 +63,9 @@ impl PayableProcess {
 
     /// 读取付款单归属的银行回单元数据，并记录受控预览审计。
     ///
-    /// 完整对象资格、付款引用和文件资产在同一事务 Executor 读取，资格通过后
-    /// 记录敏感预览审计；实际对象字节由 HTTP 层在事务外读取。
+    /// 完整对象资格、付款引用和文件资产在同一事务 Executor 读取，资格通过后记录敏感预览审计；实际对象字节由 HTTP 层在事务外读取。
     ///
-    /// # 参数
-    /// * `id` - 付款单 ID。
-    /// * `actor` - 当前已认证操作人。
-    ///
-    /// # 返回
-    /// 返回已通过资格校验并完成预览审计的回单快照。
-    ///
-    /// # 错误
-    /// 完整读取资格不通过、付款单或回单引用或文件资产不存在，以及审计写入失败时返回错误。
+    /// 返回已通过资格校验并完成预览审计的回单快照。完整读取资格不通过、付款单或回单引用或文件资产不存在，以及审计写入失败时返回错误。
     pub async fn supplier_payment_bank_receipt(
         &self,
         id: &str,
@@ -106,19 +84,11 @@ impl PayableProcess {
 
     /// 在对象字节读取后重验付款引用与银行回单治理事实。
     ///
-    /// 本方法在新的事务 Executor 内读取当前完整资格、付款和文件元数据，
-    /// 不复用授权或治理缓存，不重复审计；对象缓存命中使用同一重验入口。
+    /// 本方法在新的事务 Executor 内读取当前完整资格、付款和文件元数据，不复用授权或治理缓存，不重复审计；对象缓存命中使用同一重验入口。
     ///
-    /// # 参数
-    /// * `id` - 当前请求的付款单身份
-    /// * `actor` - 当前已认证操作人，重新读取其当前完整对象资格
-    /// * `expected` - 已通过初始完整对象读取与审计的回单快照
+    /// `id` 为当前请求的付款单身份；`actor` 为当前已认证操作人，重新读取其当前完整对象资格；`expected` 为已通过初始完整对象读取与审计的回单快照。
     ///
-    /// # 返回
-    /// 引用、版本、对象键、指纹、扫描和销毁状态均保持一致时返回成功。
-    ///
-    /// # 错误
-    /// 引用缺失、元数据读取失败或治理事实发生变化时拒绝返回对象字节。
+    /// 引用、版本、对象键、指纹、扫描和销毁状态均保持一致时返回成功。引用缺失、元数据读取失败或治理事实发生变化时拒绝返回对象字节。
     pub async fn revalidate_supplier_payment_bank_receipt(
         &self,
         id: &str,
@@ -135,7 +105,7 @@ impl PayableProcess {
         Ok(())
     }
 
-    /// 同一事务中取得完整来源读取资格、付款直接引用和当前文件治理元数据。
+    // 同一事务中取得完整来源读取资格、付款直接引用和当前文件治理元数据。
     async fn bank_receipt_snapshot(
         &self,
         id: &str,
@@ -173,16 +143,12 @@ impl PayableProcess {
             })
             .await
     }
-    /// 从已批准采购付款申请原子登记实际付款和回单。
-    /// # 参数
-    /// * `id` - 路径所指定的付款申请。
-    /// * `req` - 精确申请、任务、账户版本及逐分录分配和幂等键。
-    /// * `pending_assets` - 首笔新付款必须消费的本次上传回单；原回执重放可为空。
-    /// * `actor` - 申请任务指定的出纳。
-    /// # 返回
-    /// 返回确定提交的详情读取结果和回单提交资格。
-    /// # 错误
-    /// 未批准、额度不足、来源漂移、非指定出纳，或新付款引用既有资产时拒绝。
+    /// 指定出纳从单份已批准的采购付款申请登记实际付款。路径申请须与请求一致；
+    /// 首办按申请、任务和账户版本及逐分录分配校验，并在同一事务登记付款和本批新上传的回单。
+    /// 未批准、额度不足、来源变化、非指定出纳或首办引用已有资产时拒绝。
+    ///
+    /// 按原幂等键和原载荷查证付款回执；重放不要求新回单。详情按原任务与冻结依据重新授权，
+    /// 结果把详情读取与本批回单的提交状态分开，已确认提交后的回读失败不得触发文件删除。
     pub async fn commit_purchase_payment_request_with_assets(
         &self,
         id: &str,
@@ -231,7 +197,8 @@ impl PayableProcess {
         self.committed_payment_view(result, &command_receipt, has_pending_assets, &authority).await
     }
 
-    /// 按原命令收据恢复与未知提交规则回读付款结果。
+    // 写事务返回后，必要时用原命令查财务回执，再以原申请和任务回读详情。
+    // 回读失败不抹掉本批回单的提交状态；未知提交下查证失败仍保留首次错误。
     async fn committed_payment_view(
         &self,
         transaction_result: Result<(SupplierPayment, bool)>,
@@ -303,7 +270,7 @@ impl PayableProcess {
     }
 }
 
-/// 回读付款详情，同时保留已确定的附件提交状态和首次未知提交错误。
+// 回读付款详情，同时保留已确定的附件提交状态和首次未知提交错误。
 async fn read_payment_result<E>(
     view: impl Future<Output = std::result::Result<SupplierPaymentView, E>>,
     assets_committed: bool,
@@ -338,7 +305,7 @@ struct PreparedSupplierPayment {
 }
 
 impl PreparedSupplierPayment {
-    /// 按本次上传临时引用、任务版本、付款与分配次序构造事务输入。
+    // 按本次上传临时引用、任务版本、付款与分配次序构造事务输入。
     fn prepare(
         mut req: CommitSupplierPaymentRequest,
         pending_assets: &dyn PendingAttachmentBatch,
@@ -388,7 +355,7 @@ struct SupplierPaymentCommand {
 }
 
 impl SupplierPaymentCommand {
-    /// 先重验当前指定任务资格；重放不解析或消费本次上传。
+    // 先重验当前指定任务资格；重放不解析或消费本次上传。
     async fn execute(self, executor: &mut dyn Executor) -> Result<(SupplierPayment, bool)> {
         require_entry(
             &self.db,
@@ -439,7 +406,7 @@ struct SupplierPaymentTransaction {
 }
 
 impl SupplierPaymentTransaction {
-    /// 在同一 Executor 按原首错顺序完成注册、资产、账户占用、任务和过账。
+    // 在同一 Executor 按原首错顺序完成注册、资产、账户占用、任务和过账。
     async fn execute(mut self, executor: &mut dyn Executor) -> Result<(SupplierPayment, bool)> {
         let receipts = FinanceCommandReceiptService::new(self.db.clone());
         let context = BusinessEventContext::new(self.actor.clone(), PAYMENT_COMMIT)?
@@ -472,7 +439,7 @@ impl SupplierPaymentTransaction {
         Ok((self.prepared.payment, true))
     }
 
-    /// 保持付款任务记录、财务过账及单次业务事件的原执行顺序。
+    // 保持付款任务记录、财务过账及单次业务事件的原执行顺序。
     async fn finish_payment(
         &mut self,
         context: &BusinessEventContext,
@@ -509,7 +476,7 @@ impl SupplierPaymentTransaction {
         Ok(())
     }
 
-    /// 保持付款单号冲突先于供应商缺失的读取错误次序。
+    // 保持付款单号冲突先于供应商缺失的读取错误次序。
     async fn load_supplier(&self, executor: &mut dyn Executor) -> Result<SupplierAccount> {
         if self
             .db
@@ -528,7 +495,7 @@ impl SupplierPaymentTransaction {
             .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))
     }
 
-    /// 在同一阶段已读取的供应商主体上校验 NO_APPROVAL 并登记付款单据。
+    // 在同一阶段已读取的供应商主体上校验 NO_APPROVAL 并登记付款单据。
     async fn persist_document(&self, supplier: &SupplierAccount, executor: &mut dyn Executor) -> Result<()> {
         let payment = &self.prepared.payment;
         let bind_command = BindPublishedDefinitionCommand {
@@ -557,7 +524,7 @@ impl SupplierPaymentTransaction {
         .await
     }
 
-    /// 同一事务登记本批次资产、校验回单证据并创建付款，完整命令统一记录一次事件。
+    // 同一事务登记本批次资产、校验回单证据并创建付款，完整命令统一记录一次事件。
     async fn persist_payment(&self, executor: &mut dyn Executor) -> Result<()> {
         let payment = &self.prepared.payment;
         self.pending_assets.persist(&self.db, executor).await?;
@@ -569,10 +536,7 @@ impl SupplierPaymentTransaction {
     }
 }
 
-/// 证明供应商付款为无审批单据并持久化未绑定注册行。
-///
-/// # 错误
-/// 政策不是 `NO_APPROVAL`、绑定端口意外返回定义或注册写入失败时返回错误。
+// 证明供应商付款为无审批单据并持久化未绑定注册行。政策不是 `NO_APPROVAL`、绑定端口意外返回定义或注册写入失败时返回错误。
 async fn persist_unbound_supplier_payment_document(
     db: &Database,
     rbac: &FinancePostingPorts,

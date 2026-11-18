@@ -31,23 +31,8 @@ pub struct FactBase {
 }
 
 impl FactBase {
-    /// 由已规范化字段构造正式事实公共字段。
-    ///
-    /// # 参数
-    /// * `fact_no` - 聚合内稳定序号
-    /// * `occurred_at` - 业务实际发生时间
-    /// * `recorded_at` - ERP 记录时间
-    /// * `recorded_by` - 记录人或系统身份
-    /// * `source` - 来源类型、引用来源与原因
-    ///
-    /// # 返回
-    /// 返回事实公共字段实例。
-    ///
-    /// # 错误
-    /// 无。本构造不做校验，调用方须先完成 trim/非空/长度规范化。
-    ///
-    /// # 约束
-    /// 正式事实不可变；冲正与纠错必须追加反向事实。
+    /// 记录正式事实时组合稳定序号、实际发生时间、ERP 记录时间、记录人和来源。调用方须先完成裁剪、非空及长度校验。
+    /// 已经记录的事实不可修改；冲正和纠错须追加反向事实。
     pub fn new(
         fact_no: impl Into<String>,
         occurred_at: Instant,
@@ -81,22 +66,8 @@ pub struct FactSource {
 }
 
 impl FactSource {
-    /// 构造事实来源与原因字段组。
-    ///
-    /// 必填仅 `source_type`；引用与原因均为可选，调用方按业务场景组合。
-    /// 本构造不做 trim/非空/长度校验，调用方须先完成规范化（见 [`FactBase::new`]）。
-    ///
-    /// # 参数
-    /// * `source_type` - 事实来源类型
-    /// * `source_reference` - 可追溯的来源单据或消息引用
-    /// * `reason_code` - 变更、纠错或人工处理原因代码
-    /// * `reason_text` - 原因说明文本
-    ///
-    /// # 返回
-    /// 返回来源与原因字段组。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 登记正式事实前，把必填来源类型与适用的来源引用、原因代码和说明组合起来。这里不裁剪或校验文本；
+    /// 调用本构造及 [`FactBase::new`] 前，由领域按场景校验引用和原因。
     pub fn new(
         source_type: SourceType,
         source_reference: Option<String>,

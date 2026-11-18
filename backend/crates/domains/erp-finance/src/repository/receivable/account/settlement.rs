@@ -15,18 +15,13 @@ pub trait ReceivableAccountSettlementExt {
     /// （matched 为 0），返回 `false` 且金额与状态均不变。核销进度同时重算
     /// `open_total` 与派生状态，全部在同一条件更新内完成，不会产生负开放余额。
     /// 单文档更新本身原子，可在 Service 的过账事务内参与回滚。
+    /// 结果：核销在额度内并已生效时返回 `true`；超过剩余开放余额被拒绝时返回 `false`。
+    /// 传播数据库更新失败。
     ///
-    /// # 参数
-    /// * `id` - 应收往来子账 ID
-    /// * `amount` - 本次核销含税金额（正数）
-    /// * `updated_by` - 本次更新执行人
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 核销在额度内并已生效时返回 `true`；超过剩余开放余额被拒绝时返回 `false`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 更新失败时返回错误。
+    /// 输入约定：
+    /// - `id`：应收往来子账 ID
+    /// - `amount`：本次核销含税金额（正数）
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn apply_settlement(
         &self,
         id: &str,
@@ -40,18 +35,13 @@ pub trait ReceivableAccountSettlementExt {
     /// 反向核销（`REVERSE` 分配）的原子写入口：以写条件保证
     /// `本次冲减 <= settled_total`，不满足时整个更新不生效，返回 `false`。
     /// 用于冲正/退款时追加反向核销，防止冲减超过已核销金额。
+    /// 结果：冲减在已核销额度内并已生效时返回 `true`；超过已核销金额被拒绝时返回 `false`。
+    /// 传播数据库更新失败。
     ///
-    /// # 参数
-    /// * `id` - 应收往来子账 ID
-    /// * `amount` - 本次冲减含税金额（正数）
-    /// * `updated_by` - 本次更新执行人
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 冲减在已核销额度内并已生效时返回 `true`；超过已核销金额被拒绝时返回 `false`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 更新失败时返回错误。
+    /// 输入约定：
+    /// - `id`：应收往来子账 ID
+    /// - `amount`：本次冲减含税金额（正数）
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn revert_settlement(
         &self,
         id: &str,

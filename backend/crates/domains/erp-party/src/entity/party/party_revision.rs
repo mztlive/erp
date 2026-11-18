@@ -51,7 +51,7 @@ pub struct PartyRevision {
 }
 
 impl PartyRevision {
-    /// 计算指定 Party 的下一修订号。
+    /// 以所属主体的当前修订为基准分配下一序号，供追加名称资料版本时使用。
     ///
     /// 空修订链从 `1` 开始；非空链取最大修订号加一。输入修订必须全部
     /// 属于指定 Party，且最大修订号不能溢出 `u32`。
@@ -60,10 +60,8 @@ impl PartyRevision {
     /// * `party_id` - 稳定 Party ID
     /// * `revisions` - 已加载的修订链
     ///
-    /// # 返回
     /// 返回下一修订号。
     ///
-    /// # 错误
     /// 修订属于其他 Party 或修订号已达到上限时返回错误。
     pub fn next_revision_no(party_id: &PartyId, revisions: &[Self]) -> Result<u32> {
         if revisions.iter().any(|revision| &revision.party_id != party_id) {
@@ -78,19 +76,16 @@ impl PartyRevision {
             .ok_or_else(|| erp_core::Error::from("主体修订号已达到上限"))
     }
 
-    /// 创建主体修订。
+    /// 校验名称资料并构造不可变修订，供主体新增或维护时保存新的法定资料版本。
     ///
     /// 完成 legal_name / change_reason 的必填校验与规范化（去首尾空白、
     /// 长度上限），short_name 可选。
     ///
     /// # 参数
     /// * `id` - 实体主键（`erp_core::ids::PartyRevisionId`）
-    /// * `data` - 创建数据
     ///
-    /// # 返回
     /// 返回新建的修订实体。
     ///
-    /// # 错误
     /// 当必填字段为空或超长时返回错误。
     pub fn new(id: PartyRevisionId, data: PartyRevisionData) -> Result<Self> {
         let legal_name =
@@ -131,7 +126,7 @@ mod tests {
         }
     }
 
-    /// happy path：名称去空白，字段落库正确。
+    // 验证：名称去空白，字段落库正确。
     #[test]
     fn new_trims_and_normalizes() {
         let revision = PartyRevision::new(PartyRevisionId::new("rev-1"), revision_data()).unwrap();
@@ -141,7 +136,7 @@ mod tests {
         assert_eq!(revision.change_reason, "首次建档");
     }
 
-    /// 失败路径：必填为空、超长。
+    // 验证：必填为空、超长。
     #[test]
     fn new_rejects_invalid_inputs() {
         let blank_name = PartyRevisionData { legal_name: "   ".to_string(), ..revision_data() };
@@ -154,7 +149,7 @@ mod tests {
         assert!(PartyRevision::new(PartyRevisionId::new("r"), overlong_short).is_err());
     }
 
-    /// 下一修订号覆盖空链、正常递增、归属错误与溢出边界。
+    // 下一修订号覆盖空链、正常递增、归属错误与溢出边界。
     #[test]
     fn next_revision_no_enforces_chain_ownership_and_overflow() {
         let party_id = PartyId::new("party-1");
@@ -174,7 +169,7 @@ mod tests {
         assert!(PartyRevision::next_revision_no(&party_id, &[overflow]).is_err());
     }
 
-    /// 修订不可变：BSON 往返保持全字段一致。
+    // 修订不可变：BSON 往返保持全字段一致。
     #[test]
     fn entity_roundtrips_through_json() {
         let revision = PartyRevision::new(PartyRevisionId::new("rev-2"), revision_data()).unwrap();

@@ -23,12 +23,10 @@ pub struct SupplierCatalogAdoptionTaskAdapter {
 
 impl SupplierCatalogAdoptionTaskAdapter {
     /// 注入已装配权限、来源注册表与素材客户端的采纳流程。
-    /// # 参数
+    ///
     /// `db` 为当前数据库，`process` 为应用装配完成的流程。
-    /// # 返回
+    ///
     /// 可登记到统一后台执行器的持久化任务适配器。
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: Database, process: SupplierCatalogAdoptionProcess) -> Self {
         Self {
             db,

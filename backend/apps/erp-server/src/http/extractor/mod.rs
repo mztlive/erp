@@ -12,20 +12,16 @@ pub struct UserID(pub String);
 pub struct Account(pub String);
 
 impl From<UserID> for String {
-    /// 将 UserID 包装转换为 String。
-    ///
-    /// # 返回值
-    /// 返回内部的字符串值。
+    // 将 UserID 包装转换为 String。
+    // 返回内部的字符串值。
     fn from(user_id: UserID) -> Self {
         user_id.0
     }
 }
 
 impl From<Account> for String {
-    /// 将 Account 包装转换为 String。
-    ///
-    /// # 返回值
-    /// 返回内部的字符串值。
+    // 将 Account 包装转换为 String。
+    // 返回内部的字符串值。
     fn from(account: Account) -> Self {
         account.0
     }

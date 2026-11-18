@@ -25,11 +25,11 @@ struct SelectionRegistration {
 
 impl SupplierCatalogAdoptionProcess {
     /// 冻结轻量成员清单并登记准备任务；相同操作号返回原批次。
-    /// # 参数
+    ///
     /// 连接、选择请求与当前认证用户。
-    /// # 返回
+    ///
     /// 已持久化的批次摘要，不返回全量草稿明细。
-    /// # 错误
+    ///
     /// 越权、空结果、异载荷复用或存储失败时拒绝。
     pub async fn create_batch(
         &self,
@@ -75,7 +75,7 @@ impl SupplierCatalogAdoptionProcess {
         .await
     }
 
-    /// 在取号前使用同一快照核对当前授权和原选择回执。
+    // 在取号前使用同一快照核对当前授权和原选择回执。
     async fn selection_replay(
         &self,
         connection: &str,
@@ -93,7 +93,7 @@ impl SupplierCatalogAdoptionProcess {
         .await
     }
 
-    /// 在原事务内核验操作号与已保存选择的归属及载荷。
+    // 在原事务内核验操作号与已保存选择的归属及载荷。
     async fn existing_selection(
         &self,
         connection: &str,
@@ -114,7 +114,7 @@ impl SupplierCatalogAdoptionProcess {
         Ok(Some(batch))
     }
 
-    /// 保存身份集合及批次头，所有写入与一致性读取原子提交。
+    // 保存身份集合及批次头，所有写入与一致性读取原子提交。
     async fn register_selection(
         &self,
         connection: &str,
@@ -168,7 +168,7 @@ impl SupplierCatalogAdoptionProcess {
     }
 }
 
-/// 组装尚未生成草稿的批次；所有成员输入已由受理事务核验。
+// 组装尚未生成草稿的批次；所有成员输入已由受理事务核验。
 fn selection_batch(
     connection: &str,
     supplier_id: String,

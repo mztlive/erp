@@ -15,18 +15,10 @@ use crate::repository::extensions::FulfillmentExt;
 
 impl FulfillmentRepository<'_> {
     /// 创建采购入库单及全部行（跨集合多步骤写入）。
-    ///
-    /// # 参数
-    /// * `receipt` - 待写入的入库单表头
-    /// * `lines` - 待写入的入库行集合
-    /// * `executor` - 数据访问执行器，必须位于事务中
-    ///
-    /// # 返回
     /// 表头与行写入成功时无返回值。
-    ///
-    /// # 错误
-    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）或 MongoDB 写入
-    /// 失败时返回错误。
+    /// `receipt` 为待写入的入库单表头；`lines` 为待写入的入库行集合。
+    /// 沿用调用方当前事务的执行器 `executor`。
+    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）或 MongoDB 写入失败时返回错误。
     #[tracing::instrument(
         name = "repository.fulfillment.create_purchase_receipt_with_lines",
         skip_all,
@@ -54,18 +46,10 @@ impl FulfillmentRepository<'_> {
     }
 
     /// 创建发货单及全部行（跨集合多步骤写入）。
-    ///
-    /// # 参数
-    /// * `delivery` - 待写入的发货单表头
-    /// * `lines` - 待写入的发货行集合
-    /// * `executor` - 数据访问执行器，必须位于事务中
-    ///
-    /// # 返回
     /// 表头与行写入成功时无返回值。
-    ///
-    /// # 错误
-    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）或 MongoDB 写入
-    /// 失败时返回错误。
+    /// `delivery` 为待写入的发货单表头；`lines` 为待写入的发货行集合。
+    /// 沿用调用方当前事务的执行器 `executor`。
+    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）或 MongoDB 写入失败时返回错误。
     #[tracing::instrument(
         name = "repository.fulfillment.create_delivery_with_lines",
         skip_all,
@@ -93,18 +77,10 @@ impl FulfillmentRepository<'_> {
     }
 
     /// 创建客户验收单及全部行（跨集合多步骤写入）。
-    ///
-    /// # 参数
-    /// * `acceptance` - 待写入的验收单表头
-    /// * `lines` - 待写入的验收行集合
-    /// * `executor` - 数据访问执行器，必须位于事务中
-    ///
-    /// # 返回
     /// 表头与行写入成功时无返回值。
-    ///
-    /// # 错误
-    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）或 MongoDB 写入
-    /// 失败时返回错误。
+    /// `acceptance` 为待写入的验收单表头；`lines` 为待写入的验收行集合。
+    /// 沿用调用方当前事务的执行器 `executor`。
+    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）或 MongoDB 写入失败时返回错误。
     #[tracing::instrument(
         name = "repository.fulfillment.create_customer_acceptance_with_lines",
         skip_all,
@@ -133,26 +109,14 @@ impl FulfillmentRepository<'_> {
         .await
     }
 
-    /// 依次写入表头与行，保证表头与行原子可见（§6.7）。
-    ///
-    /// **必须收到事务执行器**：本方法不构成原子边界，传入
-    /// `NoTransaction` 时两笔写入各自自动提交，中途失败会留下只有表头没有行
-    /// 的半成品；Service 必须通过 `persistence_core::Transactional::with_transaction`
-    /// 传入事务会话。
-    ///
-    /// # 参数
-    /// * `header_collection` - 表头集合
-    /// * `header` - 待写入的表头
-    /// * `lines_collection` - 行集合
-    /// * `lines` - 待写入的行集合
-    /// * `executor` - 数据访问执行器，必须位于事务中
-    ///
-    /// # 返回
-    /// 两笔写入均成功后返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）或 MongoDB 写入
-    /// 失败时返回错误。
+    // 依次写入表头与行，保证表头与行原子可见（§6.7）。
+    // **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction` 时两笔写入各自自动提交，中途失败会留下只有表头没有行的半成品；
+    // Service 必须通过 `persistence_core::Transactional::with_transaction` 传入事务会话。
+    // 两笔写入均成功后返回 `Ok(())`。
+    // `header_collection` 为表头集合；`header` 为待写入的表头。
+    // `lines_collection` 为行集合；`lines` 为待写入的行集合。
+    // 沿用调用方当前事务的执行器 `executor`。
+    // 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）或 MongoDB 写入失败时返回错误。
     async fn create_header_with_lines<Header, Line>(
         &self,
         header_collection: &mongodb::Collection<Header>,
@@ -170,19 +134,10 @@ impl FulfillmentRepository<'_> {
     }
 
     /// 原子替换草稿客户验收单的全部行。
-    ///
-    /// 本方法只执行仓储写入，不判断表头状态；Service 必须先锁定并校验表头仍
-    /// 为草稿，再传入同一个事务执行器。删除旧行与插入新行必须共同回滚。
-    ///
-    /// # 参数
-    /// * `acceptance_id` - 草稿验收单主键
-    /// * `lines` - 完整的新验收行集合
-    /// * `executor` - 数据访问执行器，必须位于事务中
-    ///
-    /// # 返回
+    /// 本方法只执行仓储写入，不判断表头状态；Service 必须先锁定并校验表头仍为草稿，再传入同一个事务执行器。删除旧行与插入新行必须共同回滚。
     /// 旧行删除且新行插入成功时无返回值。
-    ///
-    /// # 错误
+    /// `acceptance_id` 为草稿验收单主键；`lines` 为完整的新验收行集合。
+    /// 沿用调用方当前事务的执行器 `executor`。
     /// 当删除或批量插入失败时返回错误。
     #[tracing::instrument(
         name = "repository.fulfillment.replace_customer_acceptance_lines",

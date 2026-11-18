@@ -9,18 +9,11 @@ use crate::service::iam::SharedRbacService;
 use crate::{AccessControlExt, Result};
 
 /// 为当前仍绑定授予来源角色的后台账号补齐缺失资格。
+/// 角色停用时不再新增资格。已有终止记录不会被恢复，已撤销角色的历史资格也不会被删除。
 ///
-/// # 参数
-/// * `rbac` - 共享 RBAC 服务
-///
-/// # 返回
-/// 销售与采购两类缺失资格补齐后无返回值。
-///
-/// # 错误
 /// 角色、策略或资格写入失败时返回错误。
 ///
-/// # 关键业务约束
-/// 角色停用时不再新增资格。已有终止记录不会被恢复，已撤销角色的历史资格也不会被删除。
+/// `rbac`：共享 RBAC 服务。
 pub async fn sync_role_grants(rbac: &SharedRbacService) -> Result<()> {
     for category in [PersonDirectoryCategory::Sales, PersonDirectoryCategory::Procurement] {
         sync_category(rbac, category).await?;
@@ -28,7 +21,7 @@ pub async fn sync_role_grants(rbac: &SharedRbacService) -> Result<()> {
     Ok(())
 }
 
-/// 将一个目录类别的现有角色成员资格写入同一事务。
+// 为选定目录类别同步现有角色成员的资格，整批写入继续沿用调用方事务。
 async fn sync_category(rbac: &SharedRbacService, category: PersonDirectoryCategory) -> Result<()> {
     let Some(role_id) = category.grant_role_id() else {
         return Ok(());

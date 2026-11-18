@@ -44,112 +44,31 @@ pub trait ReturnsExt {
     /// 客户退款列表筛选条件类型（定义见 `repository::returns`）。
     type CustomerRefundFilter;
 
-    /// 获取 `sales_return_case` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `SalesReturnCaseRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得 `sales_return_case` 集合的仓储，供销售退货处理单表头的读写；由调用方提供执行器。
     fn sales_return_cases(&self) -> SalesReturnCaseRepository<'_>;
 
-    /// 获取 `sales_return_line` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `SalesReturnLineRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得 `sales_return_line` 集合的仓储，供销售退货明细的读写；由调用方提供执行器。
     fn sales_return_lines(&self) -> SalesReturnLineRepository<'_>;
 
-    /// 获取 `purchase_return_order` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `PurchaseReturnOrderRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得 `purchase_return_order` 集合的仓储，供采购退货表头的读写；由调用方提供执行器。
     fn purchase_return_orders(&self) -> PurchaseReturnOrderRepository<'_>;
 
-    /// 获取 `purchase_return_line` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `PurchaseReturnLineRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得 `purchase_return_line` 集合的仓储，供采购退货明细的读写；由调用方提供执行器。
     fn purchase_return_lines(&self) -> PurchaseReturnLineRepository<'_>;
 
-    /// 获取 `customer_refund` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `CustomerRefundRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得 `customer_refund` 集合的仓储，供客户退款单据的读写；由调用方提供执行器。
     fn customer_refunds(&self) -> CustomerRefundRepository<'_>;
 
-    /// 获取 `supplier_refund` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `SupplierRefundRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得 `supplier_refund` 集合的仓储，供供应商退款单据的读写；由调用方提供执行器。
     fn supplier_refunds(&self) -> SupplierRefundRepository<'_>;
 
-    /// 获取 `receipt_reversal` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `ReceiptReversalRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得 `receipt_reversal` 集合的仓储，供回款冲正单据的读写；由调用方提供执行器。
     fn receipt_reversals(&self) -> ReceiptReversalRepository<'_>;
 
-    /// 获取 `payment_reversal` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `PaymentReversalRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得 `payment_reversal` 集合的仓储，供付款冲正单据的读写；由调用方提供执行器。
     fn payment_reversals(&self) -> PaymentReversalRepository<'_>;
 
-    /// 获取承载跨集合事务写入的域专用仓储。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `ReturnsRepository` 实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得退货表头与明细等跨集合操作入口；原子写入沿用用例事务，不在仓储内开启事务。
     fn returns(&self) -> ReturnsRepository<'_>;
 }
 

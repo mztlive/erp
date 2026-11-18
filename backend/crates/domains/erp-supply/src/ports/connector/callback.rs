@@ -91,23 +91,15 @@ pub struct VerifiedCallback {
 /// 纯协议校验接口；密钥由装配注入，不从请求的 channel_no 切换连接。
 pub trait Callbacks: Send + Sync {
     /// 保留协议已有的字节级接收身份。
-    /// # 参数
-    /// `request` 为已验签的原始请求。
-    /// # 返回
     /// 旧协议可返回稳定身份；None 使用共用接收身份。
-    /// # 错误
-    /// 不返回错误；不得返回业务事件号冒充本地身份。
+    /// 不得返回业务事件号冒充本地身份。
     fn reception_id(&self, _request: &CallbackRequest<'_>) -> Option<String> {
         None
     }
 
     /// 验证绑定连接、签名和允许的时间窗口，转换为需要刷新对象的通知。
-    ///
-    /// # 参数
-    /// `request` 为原始 HTTP 报文和服务端接收时间，验签前禁止重编码正文。
-    /// # 返回
     /// 校验范围、标准通知/完整观察值及延迟发送的成功应答；不直接推进业务状态。
-    /// # 错误
     /// 签名/来源错误返回 AuthSignature，字段语义错误返回 MappingError；失败不发成功应答。
+    /// `request` 为原始 HTTP 报文和服务端接收时间，验签前禁止重编码正文。
     fn verify(&self, request: &CallbackRequest<'_>) -> ConnectorResult<VerifiedCallback>;
 }

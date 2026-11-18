@@ -60,26 +60,17 @@ struct SupplyContext<'a> {
 }
 
 impl SupplierPortalProcess {
-    /// 组装绑定当前数据库和目录范围的新品门户服务。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回未额外缓存的 `CatalogPortalService`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 组装绑定当前数据库和目录范围的新品门户服务。返回未额外缓存的 `CatalogPortalService`。
     pub(super) fn catalog_portal(&self) -> CatalogPortalService {
         CatalogPortalService::new(self.db.clone(), self.services.catalog.clone())
     }
 
     /// 保存供应商新品原稿，不建立正式商品或供给。
-    /// # 参数
+    ///
     /// 可选草稿ID、原始商品/SKU/图片及当前门户身份。
-    /// # 返回
+    ///
     /// 返回保存后草稿和版本。
-    /// # 错误
+    ///
     /// 越界、附件归属、版本或输入非法时拒绝。
     pub async fn new_product_save(
         &self,
@@ -128,11 +119,11 @@ impl SupplierPortalProcess {
     }
 
     /// 冻结完整新品原稿并登记供应商维护人的采购确认任务。
-    /// # 参数
+    ///
     /// 申请ID、版本命令及当前门户身份。
-    /// # 返回
+    ///
     /// 返回带提交历史和具体任务的待确认申请。
-    /// # 错误
+    ///
     /// 资料、条款、文件或处理资格不合法时拒绝。
     pub async fn new_product_submit(
         &self,
@@ -155,19 +146,13 @@ impl SupplierPortalProcess {
         .await
     }
 
-    /// 在调用方事务内冻结新品原稿并登记采购确认任务。
-    ///
-    /// # 参数
-    /// * `id` - 新品草稿 ID。
-    /// * `input` - 期望版本与幂等键。
-    /// * `actor` - 当前门户身份。
-    /// * `executor` - 调用方事务执行器。
-    ///
-    /// # 返回
-    /// 返回已提交、带确认任务的新品草稿。
-    ///
-    /// # 错误
-    /// 草稿不可见、图片或附件不合法、确认人资格不足、提交版本冲突，或任务创建失败时返回对应错误。
+    // 在调用方事务内冻结新品原稿并登记采购确认任务。
+    //
+    // `id`：新品草稿 ID；`input`：期望版本与幂等键；`actor`：当前门户身份；`executor`：调用方事务执行器。
+    //
+    // 返回已提交、带确认任务的新品草稿。
+    //
+    // 草稿不可见、图片或附件不合法、确认人资格不足、提交版本冲突，或任务创建失败时返回对应错误。
     pub(super) async fn submit_new_product(
         &self,
         id: &str,
@@ -219,11 +204,11 @@ impl SupplierPortalProcess {
     }
 
     /// 撤回待确认新品并关闭对应任务，保留全部原稿。
-    /// # 参数
+    ///
     /// 申请ID、版本命令及门户身份。
-    /// # 返回
+    ///
     /// 返回已撤回申请。
-    /// # 错误
+    ///
     /// 越界、版本漂移或已确认时拒绝。
     pub async fn new_product_withdraw(
         &self,
@@ -272,11 +257,11 @@ impl SupplierPortalProcess {
     }
 
     /// 当前采购人一次确认商品、全部SKU、供给和正式素材引用。
-    /// # 参数
+    ///
     /// 精确申请/任务版本、字典映射及明确复用身份。
-    /// # 返回
+    ///
     /// 返回每个SKU及供给的实际建档结果。
-    /// # 错误
+    ///
     /// 资格、映射、资料含义或任一版本失效时整单回滚。
     pub async fn new_product_review(
         &self,
@@ -547,16 +532,13 @@ fn validate_reported_times(input: &NewProductInput, confirmed: bool) -> Result<(
     Ok(())
 }
 
-/// 用当前提交编号构造新品任务主题。
-///
-/// # 参数
-/// * `draft` - 已加载的新品草稿。
-///
-/// # 返回
-/// 返回 `new_product:` 加当前提交编号。
-///
-/// # 错误
-/// 尚未提交时返回 `ConflictError`。
+// 用当前提交编号构造新品任务主题。
+//
+// `draft`：已加载的新品草稿。
+//
+// 返回 `new_product:` 加当前提交编号。
+//
+// 尚未提交时返回 `ConflictError`。
 pub(super) fn new_product_subject(draft: &NewProductDraft) -> Result<String> {
     draft
         .current_submission_id

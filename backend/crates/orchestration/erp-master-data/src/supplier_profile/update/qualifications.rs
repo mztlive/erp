@@ -27,19 +27,13 @@ struct QualificationPlan {
 }
 
 impl SupplierProfileProcess {
-    /// 将资质集合解析为新增、更新、停用、快照及能力关联替换。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 供应商角色 ID
-    /// * `req` - 已校验的根资料命令
-    /// * `capability_ids` - 当前命令能力代码到稳定能力 ID 的映射
-    /// * `actor_id` - 执行变更的账号 ID
-    ///
-    /// # 返回
-    /// 返回待事务持久化的资质、修订及关联替换集合。
-    ///
-    /// # 错误
-    /// 仓储查询、能力引用、领域更新或修订构造失败时返回错误。
+    // 将资质集合解析为新增、更新、停用、快照及能力关联替换。
+    //
+    // `supplier_id`：供应商角色 ID；`req`：已校验的根资料命令；`capability_ids`：当前命令能力代码到稳定能力 ID 的映射。
+    //
+    // 返回待事务持久化的资质、修订及关联替换集合。
+    //
+    // 仓储查询、能力引用、领域更新或修订构造失败时返回错误。
     pub(super) async fn prepare_qualification_changes(
         &self,
         supplier_id: &SupplierAccountId,
@@ -85,7 +79,7 @@ impl SupplierProfileProcess {
         Ok(changes)
     }
 
-    /// 先加载当前资质及关联，再交由供应商领域生成差异计划。
+    // 先加载当前资质及关联，再交由供应商领域生成差异计划。
     async fn qualification_plan(
         &self,
         supplier_id: &SupplierAccountId,
@@ -151,7 +145,7 @@ impl SupplierProfileProcess {
         Ok(linked_capabilities)
     }
 
-    /// 对一个更新计划执行领域变更后，按原顺序读取修订号并替换能力关联。
+    // 对一个更新计划执行领域变更后，按原顺序读取修订号并替换能力关联。
     async fn prepare_qualification_update(
         &self,
         mut qualification: SupplierQualification,
@@ -216,7 +210,7 @@ impl SupplierProfileProcess {
         Ok(())
     }
 
-    /// 修订号读取成功后才分配新修订 ID，不改变失败时的 ID 分配顺序。
+    // 修订号读取成功后才分配新修订 ID，不改变失败时的 ID 分配顺序。
     async fn qualification_revision(
         &self,
         qualification: &mut SupplierQualification,
@@ -241,7 +235,7 @@ impl SupplierProfileProcess {
 }
 
 impl QualificationChanges {
-    /// 仅分配主键并接入领域工厂；工厂成功后才追加待持久化变更。
+    // 仅分配主键并接入领域工厂；工厂成功后才追加待持久化变更。
     fn append_created(
         &mut self,
         supplier_id: &SupplierAccountId,

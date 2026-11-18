@@ -12,13 +12,11 @@ use super::super::SalesOrderCommandProcess;
 use crate::{Error, Result};
 
 impl SalesOrderCommandProcess {
-    /// 在新的快照内按原命令入口重新授权并读取完整结果。
-    /// # 参数
-    /// id、actor 为已完成命令的真实对象和账号；permission 为命令固定的结果读取资格。
-    /// # 返回
-    /// 与新授权快照一致的完整销售结果，不追加详情菜单资格。
-    /// # 错误
-    /// 当前资格、归属、有效期或读取失败时丢弃结果。
+    // 在新的快照内按原命令入口重新授权并读取完整结果。
+    //
+    // id、actor 为已完成命令的真实对象和账号；permission 为命令固定的结果读取资格。与新授权快照一致的完整销售结果，不追加详情菜单资格。
+    //
+    // 当前资格、归属、有效期或读取失败时丢弃结果。
     pub(in crate::order_to_cash) async fn command_result(
         &self,
         id: &str,
@@ -37,13 +35,9 @@ impl SalesOrderCommandProcess {
             .await
     }
 
-    /// 在同一新快照核验当前修改资格、工作副本身份并装配行视图。
-    /// # 参数
-    /// copy 为刚保存或重开的服务端副本，actor 为原命令操作人。
-    /// # 返回
-    /// 当前持久化副本及其同快照行视图。
-    /// # 错误
-    /// 无修改资格、副本缺失、归属不符或读取失败时拒绝。
+    // 在同一新快照核验当前修改资格、工作副本身份并装配行视图。
+    //
+    // copy 为刚保存或重开的服务端副本，actor 为原命令操作人。当前持久化副本及其同快照行视图。无修改资格、副本缺失、归属不符或读取失败时拒绝。
     pub(super) async fn working_copy_result(
         &self,
         copy: &SalesOrderWorkingCopy,

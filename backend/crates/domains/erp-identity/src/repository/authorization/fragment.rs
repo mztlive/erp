@@ -16,7 +16,7 @@ impl Fragment {
         Self { stages, ..Self::default() }
     }
 
-    /// 等价关联只执行一次；字段别名仅在当前集合的管道内使用。
+    // 向同一集合管道登记关联并复用完全相同的 lookup；临时别名不跨来源子管道。
     pub(super) fn lookup(&mut self, lookup: Document) -> Result<String> {
         // BSON 文档的 PartialEq 忽略字段顺序，不能用于合并含排序或嵌入文档比较的管道。
         let bytes = lookup.to_vec().map_err(|_| Error::ValidationError("授权关联无法编码为 BSON".into()))?;
@@ -31,7 +31,7 @@ impl Fragment {
         Ok(format!("__identity_fact_{index}"))
     }
 
-    /// 事实关联只准备数组，最终逻辑过滤前保留全部根记录。
+    // 把业务事实映射成谓词或关联存在性条件，准备关联数组时保留所有根记录供最终逻辑过滤。
     pub(super) fn fact(&mut self, fragment: QueryFragment) -> Result<Document> {
         match fragment {
             QueryFragment::Match(filter) => Ok(filter),
@@ -47,7 +47,7 @@ impl Fragment {
         }
     }
 
-    /// 关联全部准备完成后统一过滤，再清理仅在本集合内使用的临时字段。
+    // 关联都已登记后生成最终授权过滤与临时字段清理阶段；别名只在当前集合的条件求值期间存在。
     pub(super) fn finish(self) -> Vec<Document> {
         let mut stages = self.stages;
         let mut aliases = Vec::new();
@@ -66,12 +66,12 @@ impl Fragment {
     }
 }
 
-/// 存在性条件不展开数组，不放大根记录数量。
+// 用数组是否存在来判断关联命中，不展开元素或改变根记录条数。
 pub(super) fn exists(alias: &str) -> Document {
     doc! { format!("{alias}.0"): { "$exists": true } }
 }
 
-/// 组合完整条件；空要求不能被解释为无限制访问。
+// 组装完整授权谓词的与或分支；没有条件时拒绝，不把空集合解释为无范围限制。
 pub(super) fn combine(operator: &str, conditions: Vec<Document>) -> Document {
     if conditions.is_empty() {
         doc! { "$expr": false }

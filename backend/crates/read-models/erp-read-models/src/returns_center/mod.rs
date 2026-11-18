@@ -26,7 +26,7 @@ pub struct ReturnsReadService {
     purchase_scope: Arc<dyn PurchaseDataScopePort>,
 }
 impl ReturnsReadService {
-    /// 已完成命令授权的投影只允许沿调用方当前快照继续读取。
+    // 核对退货中心边界时，已完成命令授权的投影只允许沿调用方当前快照继续读取。
     fn ensure_command_snapshot(executor: &mut dyn Executor) -> Result<()> {
         if executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
             Ok(())
@@ -37,17 +37,13 @@ impl ReturnsReadService {
         }
     }
 
-    /// 使用组合根提供的数据库读取退货与审批事实。
+    /// 装配退货中心时，使用组合根提供的数据库读取退货与审批事实。
     ///
     /// # 参数
     /// * `authorization` - 组合根构造并共享的统一授权服务。
-    /// * `db` - MongoDB 数据库
     ///
     /// # 返回
     /// 返回未注入采购范围 Port 的服务。
-    ///
-    /// # 错误
-    /// 无。
     ///
     /// # 关键业务约束
     /// 采购退货列表、详情必须改用 `with_purchase_scope`，未注入时失败关闭。
@@ -55,16 +51,13 @@ impl ReturnsReadService {
         Self { db, authorization, purchase_scope: FailClosedPurchaseDataScopePort::shared() }
     }
 
-    /// 注入采购范围 Port，供采购退货沿来源采购单授权。
+    /// 组装退货中心时填入组合层注入的采购范围 Port。
     ///
     /// # 参数
     /// * `purchase_scope` - 组合层注入的采购范围 Port
     ///
     /// # 返回
     /// 返回可解析采购退货范围的服务。
-    ///
-    /// # 错误
-    /// 无。
     ///
     /// # 关键业务约束
     /// 不得把 RBAC 直接交给退货域解释原始范围。
@@ -73,19 +66,12 @@ impl ReturnsReadService {
         self
     }
 
-    /// 构造绑定当前采购 Port 的访问器。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回无授权缓存的采购访问器。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 采购退货必须沿来源采购单责任接入。
+    // 处理退货中心时，生成绑定当前采购 Port 的访问器。
+    //
+    // 返回无授权缓存的采购访问器。
+    //
+    // 业务边界：
+    // 采购退货必须沿来源采购单责任接入。
     fn purchase_access(&self) -> crate::purchase_center::access::PurchaseAccess {
         crate::purchase_center::access::PurchaseAccess::new(self.db.clone(), Arc::clone(&self.purchase_scope))
     }
@@ -98,7 +84,7 @@ mod command_snapshot_tests {
 
     use super::*;
 
-    /// 裸投影不能在提交后换用普通执行器，并且在读取数据库之前失败。
+    // 验证退货中心：裸投影不能在提交后换用普通执行器，并且在读取数据库之前失败。
     #[tokio::test]
     async fn command_views_reject_non_snapshot_executors_before_loading_records() {
         let client =

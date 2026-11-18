@@ -6,7 +6,7 @@ const ZERO_DIGEST: &str = "00000000000000000000000000000000000000000000000000000
 const ONE_DIGEST: &str = "1111111111111111111111111111111111111111111111111111111111111111";
 const FINGERPRINT_V1_PREFIX: &str = "sha256-v1:";
 
-/// 覆盖指纹版本化与历史裸摘要兼容：前带 `sha256-v1:` 与裸摘要按摘要兼容比较。
+// 验证前带 `sha256-v1:` 与裸摘要按摘要兼容比较。
 #[test]
 fn fingerprint_versioned_and_legacy_are_compatible() {
     let bare = command_with(ZERO_DIGEST);

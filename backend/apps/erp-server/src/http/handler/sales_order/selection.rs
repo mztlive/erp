@@ -11,11 +11,8 @@ use crate::http::state::HttpState;
 use crate::wiring::sales::sales_services;
 
 /// 读取按份采购方案开单内容，不执行写入。
-/// # 参数
 /// `state` 为应用依赖；`actor` 为认证操作人；`id` 为方案身份。
-/// # 返回
 /// 返回客户、冻结报价及独立 SKU 行。
-/// # 错误
 /// 无创建权限、方案或客户不可访问、非按份采购时拒绝。
 pub async fn selection_basis(
     State(state): State<HttpState>,

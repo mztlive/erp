@@ -18,21 +18,12 @@ const CANCEL_BLOCKED_DOMAIN: &str = "APPROVAL_EXECUTION_CANCEL_BLOCKED";
 const UPGRADE_BINDING_DOMAIN: &str = "APPROVAL_EXECUTION_UPGRADE_BINDING";
 
 /// 形成审批决定的 V3 身份，并精确登记 V2 与无前缀历史摘要。
-///
-/// # 参数
-/// * `idempotency_key` - 已规范化幂等键。
-/// * `execution_id` - 当前执行 ID，同时作为 scope。
-/// * `work_item_id` - 任务 ID。
-/// * `decision` - 决定稳定码。
-/// * `reason` - 决定原因；可空。
-/// * `expected_task_version` - 期望任务版本。
-/// * `actor_id` - 决定人。
-///
-/// # 返回
 /// 返回当前 V3 身份，以及同一执行 scope 上的 V2 与无前缀历史候选。
 ///
-/// # 错误
 /// 幂等键或载荷字段非法时返回校验错误。
+///
+/// `idempotency_key`：已规范化幂等键；`execution_id`：当前执行 ID，同时作为 scope。
+/// `reason`：决定原因；可空；`expected_task_version`：期望任务版本。
 pub fn decision_identity(
     idempotency_key: IdempotencyKey,
     execution_id: &str,
@@ -110,21 +101,15 @@ pub struct CancelIdentityParams<'a> {
 }
 
 /// 形成通用审批取消的 V3 身份与无前缀历史身份。
+/// 受阻取消与单据撤回不得复用本身份。
 ///
-/// # 用途
 /// 构造通用 Cancel 命令的 V3 身份并登记无前缀历史候选。
 ///
-/// # 参数
-/// * `params` - 取消命令 scope/digest 字段
-///
-/// # 返回
 /// 当前 V3 身份与精确 legacy 候选。
 ///
-/// # 错误
 /// 幂等键或载荷字段非法时返回校验错误。
 ///
-/// # 关键业务约束
-/// 受阻取消与单据撤回不得复用本身份。
+/// `params`：取消命令 scope/digest 字段。
 pub fn cancel_identity(params: CancelIdentityParams<'_>) -> Result<PreparedCommandIdentity> {
     let CancelIdentityParams {
         idempotency_key,
@@ -206,21 +191,15 @@ pub struct DocumentCancelIdentityParams<'a> {
 }
 
 /// 形成业务单据普通撤回的 V3 身份与已知无前缀历史身份。
+/// 不得与通用取消或受阻取消共享 digest 域。
 ///
-/// # 用途
 /// 构造单据撤回命令的 V3 身份并登记无前缀历史候选。
 ///
-/// # 参数
-/// * `params` - 单据撤回 scope/digest 字段
-///
-/// # 返回
 /// 当前 V3 身份与精确 legacy 候选。
 ///
-/// # 错误
 /// 幂等键或载荷字段非法时返回校验错误。
 ///
-/// # 关键业务约束
-/// 不得与通用取消或受阻取消共享 digest 域。
+/// `params`：单据撤回 scope/digest 字段。
 pub fn document_cancel_identity(params: DocumentCancelIdentityParams<'_>) -> Result<PreparedCommandIdentity> {
     let DocumentCancelIdentityParams {
         idempotency_key,
@@ -267,21 +246,13 @@ pub fn document_cancel_identity(params: DocumentCancelIdentityParams<'_>) -> Res
 }
 
 /// 形成原审批人恢复的 V3 身份与无前缀历史身份。
-///
-/// # 参数
-/// * `idempotency_key` - 已规范化幂等键。
-/// * `instance_id` - 实例 ID，同时作为 scope。
-/// * `expected_instance_version` - 期望实例版本。
-/// * `expected_execution_version` - 期望执行版本。
-/// * `expected_assignment_version` - 期望绑定版本。
-/// * `expected_closed_task_version` - 期望已关闭任务版本；无任务时为 `None`。
-/// * `actor_id` - 恢复人。
-///
-/// # 返回
 /// 返回当前 V3 身份，以及同一实例 scope 上的无前缀历史候选。
 ///
-/// # 错误
 /// 幂等键或载荷字段非法时返回校验错误。
+///
+/// `idempotency_key`：已规范化幂等键；`instance_id`：实例 ID，同时作为 scope。
+/// `expected_instance_version`：期望实例版本；`expected_execution_version`：期望执行版本。
+/// `expected_assignment_version`：期望绑定版本；`expected_closed_task_version`：期望已关闭任务版本；无任务时为 `None`。
 pub fn resume_identity(
     idempotency_key: IdempotencyKey,
     instance_id: &str,
@@ -357,21 +328,15 @@ pub struct CancelBlockedIdentityParams<'a> {
 }
 
 /// 形成受阻取消的 V3 身份，并精确登记 V2 与无前缀历史摘要。
+/// 原审批人可恢复时不得走受阻取消身份。
 ///
-/// # 用途
 /// 构造 CancelBlocked 命令的 V3 身份并登记 V2/legacy 候选。
 ///
-/// # 参数
-/// * `params` - 受阻取消 scope/digest 字段
-///
-/// # 返回
 /// 当前 V3 身份与精确 legacy 候选。
 ///
-/// # 错误
 /// 幂等键或载荷字段非法时返回校验错误。
 ///
-/// # 关键业务约束
-/// 原审批人可恢复时不得走受阻取消身份。
+/// `params`：受阻取消 scope/digest 字段。
 pub fn cancel_blocked_identity(params: CancelBlockedIdentityParams<'_>) -> Result<PreparedCommandIdentity> {
     let CancelBlockedIdentityParams {
         idempotency_key,
@@ -433,20 +398,12 @@ pub fn cancel_blocked_identity(params: CancelBlockedIdentityParams<'_>) -> Resul
 /// 精确绑定单据类型与 ID；digest 同时绑定 scope 字段、业务对象版本、绑定版本、
 /// 规范化原因和实际操作人。
 ///
-/// # 参数
-/// * `document_type` - 单据类型稳定码。
-/// * `document_id` - 单据 ID。
-/// * `expected_business_object_version` - 期望业务对象版本。
-/// * `expected_binding_version` - 期望绑定版本。
-/// * `normalized_reason` - 已规范化升级原因。
-/// * `actor_id` - 实际操作人。
-/// * `idempotency_key` - 已规范化幂等键。
-///
-/// # 返回
 /// 返回不含历史候选的当前 V3 身份。
 ///
-/// # 错误
 /// 幂等键或载荷字段非法时返回校验错误。
+///
+/// `expected_business_object_version`：期望业务对象版本；`expected_binding_version`：期望绑定版本。
+/// `normalized_reason`：已规范化升级原因；`idempotency_key`：已规范化幂等键。
 pub fn upgrade_binding_identity(
     document_type: &str,
     document_id: &str,

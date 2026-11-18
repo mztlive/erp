@@ -36,13 +36,7 @@ pub enum TransferKind {
     PortalBatch,
 }
 impl TransferKind {
-    /// 返回个人任务列表中的业务名称。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 不包含业务敏感数据的固定中文名称。
-    /// # 错误
-    /// 无。
+    /// 返回个人任务列表中的业务名称。不包含业务敏感数据的固定中文名称。
     pub fn label(self) -> &'static str {
         match self {
             Self::ProductPoolExcel => "商品池 Excel 导出",
@@ -71,13 +65,7 @@ impl TransferKind {
         }
     }
 
-    /// 判断任务是否生成文件。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 导出返回 true；导入解析或批量写入返回 false。
-    /// # 错误
-    /// 无。
+    /// 判断任务是否生成文件。导出返回 true；导入解析或批量写入返回 false。
     pub fn is_export(self) -> bool {
         !matches!(
             self,
@@ -107,17 +95,13 @@ pub(super) struct Envelope {
     pub account_kind: AccountKind,
 }
 impl Envelope {
-    /// 使用任务提交时冻结的账号与账号类型恢复审计操作人。
-    ///
-    /// # 参数
-    /// * `id` - 任务记录的提交人 ID。
-    /// * `request` - 任务记录的稳定请求号。
-    ///
-    /// # 返回
-    /// 返回绑定该请求号的审计操作人；业务权限由执行入口重新校验。
-    ///
-    /// # 错误
-    /// 操作人身份或请求号不符合审计约束时返回错误。
+    // 使用任务提交时冻结的账号与账号类型恢复审计操作人。
+    //
+    // `id`：任务记录的提交人 ID；`request`：任务记录的稳定请求号。
+    //
+    // 返回绑定该请求号的审计操作人；业务权限由执行入口重新校验。
+    //
+    // 操作人身份或请求号不符合审计约束时返回错误。
     pub(super) fn actor(&self, id: &str, request: &str) -> Result<AuditActor> {
         Ok(AuditActor::new(id.into(), self.account.clone(), self.account_kind)
             .with_request_id(Some(request.into()))?)
@@ -136,11 +120,11 @@ pub struct TransferResult {
 }
 impl TransferResult {
     /// 构造有界文件结果，禁止不安全文件名。
-    /// # 参数
+    ///
     /// 文件名、MIME、完整文件字节与业务范围依据。
-    /// # 返回
+    ///
     /// 可加密持久化的结果。
-    /// # 错误
+    ///
     /// 文件超出 64 MiB 或名称包含路径及控制字符时拒绝。
     pub fn file(name: String, mime: &str, bytes: Vec<u8>, authorization: Value) -> Result<Self> {
         if bytes.len() > 64 * 1024 * 1024
@@ -159,11 +143,9 @@ impl TransferResult {
         })
     }
     /// 解码受控结果字节。
-    /// # 参数
-    /// 无。
-    /// # 返回
+    ///
     /// 原始文件内容。
-    /// # 错误
+    ///
     /// 持久化内容损坏时拒绝。
     pub fn bytes(&self) -> Result<Vec<u8>> {
         STANDARD.decode(&self.content_base64).map_err(|_| Error::Internal("任务结果损坏，请重新提交".into()))

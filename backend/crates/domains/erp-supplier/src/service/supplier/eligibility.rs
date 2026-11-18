@@ -19,25 +19,10 @@ use crate::error::{Error, Result};
 use crate::repository::SupplierExt;
 use crate::repository::prelude::*;
 
-/// 读取供给所需当前能力指针，再委派同一权威资格规则。
-///
-/// 先按商品类型对应的能力代码读取能力；缺失或没有当前修订时立即失败。
-/// 通过后再按修订重读能力，不缓存资格事实。读取使用调用方执行器。
-///
-/// # 参数
-/// * `db` - 目标数据库
-/// * `supplier_id` - 供应商角色 ID
-/// * `kind` - 供给商品类型
-/// * `on_date` - 业务自然日
-/// * `executor` - 调用方执行器；本函数不开启事务
-///
-/// # 返回
-/// 当前能力与已关联合约都合格时返回 `Ok(())`。
-///
-/// # 错误
-/// 所需能力未启用或缺少当前版本时返回 `BusinessLogicError`。
-/// 供应商停用、能力或版本缺失、版本非当前、未生效、已过期或关联合约不合格时返回业务错误。
-/// 供应商不存在或仓储读取失败时返回对应错误。
+/// 检查供应商能否在指定业务日提供该类商品。用调用方执行器先找所需能力及当前修订，再重读账号、修订、能力
+/// 并核对关联合同；不自行开启事务或缓存资格。
+/// 未配置能力或没有当前修订先失败；账号缺失、停用、修订非当前、越过有效期或关联合同不合格也拒绝，仓储错
+/// 误向上传播。
 pub async fn ensure_offering_capability_qualified(
     db: &Database,
     supplier_id: &SupplierAccountId,
@@ -108,7 +93,8 @@ impl QualificationFactsPort for Database {
         self.supplier_capabilities().find_by_supplier_and_code(id, code, executor).await.map_err(Into::into)
     }
 }
-/// 首次能力读取先于供应商/修订读取，保留原供给入口首错。
+// 根据商品类型加载供给所需能力及其当前修订指针。缺能力或缺当前指针立即返回，避免被后续供应商或修订读取错
+// 误掩盖。
 async fn ensure_offering_with_port<P: QualificationFactsPort>(
     port: &P,
     supplier_id: &SupplierAccountId,
@@ -130,7 +116,8 @@ async fn ensure_offering_with_port<P: QualificationFactsPort>(
         )?;
     ensure_qualified_with_port(port, supplier_id, &revision_id, on_date, executor).await
 }
-/// 原资格加载与纯规则委派；供应商状态仍在三次读取之后判定。
+// 复用同一执行器依次读取供应商、指定修订及对应能力，交给领域规则判定是否仍合格；通过后才加载其关联的合同
+// 核验业务日资格。
 async fn ensure_qualified_with_port<P: QualificationFactsPort>(
     port: &P,
     supplier_id: &SupplierAccountId,

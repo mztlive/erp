@@ -10,15 +10,10 @@ use crate::{Error, Result};
 
 impl InventoryAdjustmentProcess {
     /// 在统一审批事务内把库存调整单标记为已驳回。
-    /// # 参数
-    /// * `id` - 原单主键。
-    /// * `expected_subject_version` - 被驳回实例冻结的审批主题版本。
-    /// * `actor` - 已授权审批人。
-    /// * `executor` - 审批运行时持有的事务执行器。
-    /// # 返回
-    /// 保存已驳回状态和审计，不生成库存流水。
-    /// # 错误
-    /// 缺少事务、单据不存在、状态或并发版本冲突时拒绝。
+    ///
+    /// `id` 为原单主键；`expected_subject_version` 为被驳回实例冻结的审批主题版本；`actor` 为已授权审批人；`executor` 为审批运行时持有的事务执行器。
+    ///
+    /// 保存已驳回状态和审计，不生成库存流水。缺少事务、单据不存在、状态或并发版本冲突时拒绝。
     pub async fn reject(
         &self,
         id: &str,

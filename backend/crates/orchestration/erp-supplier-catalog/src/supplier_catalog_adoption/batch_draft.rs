@@ -18,11 +18,11 @@ use crate::{Error, Result};
 
 impl SupplierCatalogAdoptionProcess {
     /// 保存草稿并作废受修改项的旧核对结果。
-    /// # 参数
+    ///
     /// 来源连接、批次、页面已读版本、局部修改及当前用户。
-    /// # 返回
+    ///
     /// 无明细修改时返回已保存步骤；批量修改返回已受理任务摘要。
-    /// # 错误
+    ///
     /// 越权、版本过期、修改已冻结项或字段错误时拒绝。
     pub async fn save_batch(
         &self,
@@ -44,7 +44,7 @@ impl SupplierCatalogAdoptionProcess {
         self.enqueue_batch_work(connection, id, WorkPayload::Save(Box::new(request)), actor).await
     }
 
-    /// 切换步骤或保存未生效定价输入只更新批次头，保留已有核对结果。
+    // 切换步骤或保存未生效定价输入只更新批次头，保留已有核对结果。
     async fn save_batch_step(
         &self,
         connection: &str,
@@ -73,7 +73,7 @@ impl SupplierCatalogAdoptionProcess {
             .await
     }
 
-    /// 在受理前校验请求结构，避免明显无效的输入占用后台任务。
+    // 在受理前校验请求结构，避免明显无效的输入占用后台任务。
     pub(super) fn validate_draft_request(&self, request: &SaveBatchRequest) -> Result<()> {
         if let Some(defaults) = &request.defaults {
             defaults.validate()?;
@@ -92,7 +92,7 @@ impl SupplierCatalogAdoptionProcess {
         Ok(())
     }
 
-    /// 后台验证完整修改后，仅分块写入实际发生变化的草稿。
+    // 后台验证完整修改后，仅分块写入实际发生变化的草稿。
     pub(super) async fn save_batch_work(
         &self,
         batch: &CatalogAdoptionBatch,
@@ -132,7 +132,7 @@ impl SupplierCatalogAdoptionProcess {
         self.finish_saved_work(&batch, &desired, token, actor).await
     }
 
-    /// 在同一快照内核对处理标记、当前权限和完整草稿资料。
+    // 在同一快照内核对处理标记、当前权限和完整草稿资料。
     async fn batch_work_rows(
         &self,
         batch: &CatalogAdoptionBatch,
@@ -153,7 +153,7 @@ impl SupplierCatalogAdoptionProcess {
         .await
     }
 
-    /// 同一短事务批量更新有变化的行并保存扫描进度。
+    // 同一短事务批量更新有变化的行并保存扫描进度。
     async fn persist_draft_chunk(
         &self,
         original: &CatalogAdoptionBatch,
@@ -195,7 +195,7 @@ impl SupplierCatalogAdoptionProcess {
             .await
     }
 
-    /// 全部草稿保存完成后发布规则；需要核对时沿同一任务继续。
+    // 全部草稿保存完成后发布规则；需要核对时沿同一任务继续。
     async fn finish_saved_work(
         &self,
         original: &CatalogAdoptionBatch,
@@ -409,7 +409,7 @@ impl SupplierCatalogAdoptionProcess {
     }
 }
 
-/// 只比较业务草稿是否实际变化，避免每次步骤切换重写整批。
+// 只比较业务草稿是否实际变化，避免每次步骤切换重写整批。
 fn draft_digest(row: &CatalogAdoptionBatchItem) -> Result<Vec<u8>> {
     let encoded = serde_json::to_vec(row).map_err(|error| Error::Internal(error.to_string()))?;
     Ok(Sha256::digest(encoded).to_vec())

@@ -112,17 +112,12 @@ impl PrepareSalesSelectionRequest {
     /// 构造创建后立刻排队的首次准备命令。
     ///
     /// 商品池和档位沿用刚写入的册，不重复提交筛选或勾选。
-    ///
-    /// # 参数
-    /// * `booklet_id` - 刚创建的选品册身份
-    /// * `expected_version` - 创建落库后的册版本
-    /// * `idempotency_key` - 与创建请求相同的幂等键；准备操作域单独记账
-    ///
-    /// # 返回
     /// 返回首次准备命令。
     ///
-    /// # 错误
-    /// 无。
+    /// 输入约定：
+    /// - `booklet_id`：刚创建的选品册身份
+    /// - `expected_version`：创建落库后的册版本
+    /// - `idempotency_key`：与创建请求相同的幂等键；准备操作域单独记账
     pub fn first_prepare(
         booklet_id: impl Into<String>,
         expected_version: u64,
@@ -608,15 +603,10 @@ pub struct PublicChoiceView {
 /// 公开回执。
 impl PublicChoiceView {
     /// 以必填项身份构造公开已选；份数与金额默认为空。
-    ///
-    /// # 参数
-    /// * `item_id` - 项身份
-    ///
-    /// # 返回
     /// 返回空份数的公开已选。
     ///
-    /// # 错误
-    /// 无。
+    /// 输入约定：
+    /// - `item_id`：项身份
     pub fn new(item_id: String) -> Self {
         Self { item_id, quantity: None, line_amount: None }
     }
@@ -643,16 +633,12 @@ pub type SalesSelectionBookletPage = PageView<SalesSelectionBookletListItemView>
 /// 方案分页。
 pub type SalesSelectionProposalPage = PageView<SalesSelectionProposalListItemView>;
 
-/// 解析可选单值 CSV；空串视为未提供，未知姓名参数已在路由层拒绝。
-///
-/// # 参数
-/// * `deserializer` - serde 反序列化器
-///
-/// # 返回
-/// 返回单值或 `None`。
-///
-/// # 错误
-/// 类型不符时返回反序列化错误。
+// 解析可选单值 CSV；空串视为未提供，未知姓名参数已在路由层拒绝。
+// 返回单值或 `None`。
+// 失败条件：类型不符时返回反序列化错误。
+//
+// 输入约定：
+// - `deserializer`：serde 反序列化器
 fn deserialize_optional_csv<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -662,16 +648,12 @@ where
     Ok(raw.map(|value| value.trim().to_string()).filter(|value| !value.is_empty()))
 }
 
-/// 解析可选多值 CSV；去空白去重，最多 100 个。
-///
-/// # 参数
-/// * `deserializer` - serde 反序列化器
-///
-/// # 返回
-/// 返回去重后的 ID 或 `None`。
-///
-/// # 错误
-/// 超限或类型不符时返回反序列化错误。
+// 解析可选多值 CSV；去空白去重，最多 100 个。
+// 返回去重后的 ID 或 `None`。
+// 失败条件：超限或类型不符时返回反序列化错误。
+//
+// 输入约定：
+// - `deserializer`：serde 反序列化器
 fn deserialize_optional_csv_vec<'de, D>(deserializer: D) -> Result<Option<Vec<String>>, D::Error>
 where
     D: serde::Deserializer<'de>,

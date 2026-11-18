@@ -22,11 +22,14 @@ pub struct FundsMapping {
     stages: Vec<Document>,
 }
 impl FundsMapping {
-    /// 构造固定资金根和它全部可能的来源。
+    /// 初始化固定资金根和它全部可能的来源，供财务来源范围使用。
+    ///
     /// # 参数
     /// db 为共享数据库；resource 为已有资金资源。
+    ///
     /// # 返回
     /// 只在数据库内准备完整关系的固定映射。
+    ///
     /// # 错误
     /// 未支持的资源或映射描述非法时拒绝。
     pub fn new(db: Database, resource: &str) -> Result<Self> {
@@ -53,11 +56,14 @@ impl FundsMapping {
             stages: source_projection(if resource == "cost_allocation" { "cost_entry" } else { resource })?,
         })
     }
-    /// 在服务构造前复用组合根已有的完整来源映射实例。
+    /// 生成财务来源范围视图时，在服务构造前复用组合根已有的完整来源映射实例。
+    ///
     /// # 参数
     /// sales、purchase、settlement 分别为对应拥有领域的固定来源模型。
+    ///
     /// # 返回
     /// 保留当前根模型并复用来源实现的 Mapping。
+    ///
     /// # 错误
     /// 来源资源不匹配时拒绝。
     pub fn with_sources(

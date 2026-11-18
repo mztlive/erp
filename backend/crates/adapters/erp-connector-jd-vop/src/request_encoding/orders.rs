@@ -1,13 +1,8 @@
 //! 首期订单、资金和消息请求；字段名以对应官方 API 文档为准。
 use super::*;
 
-/// 编码原订单、预检、资金及消息读取。
-/// # 参数
-/// 类型化读取意图及受信账号上下文。
-/// # 返回
-/// 含准确字段层级的业务 JSON。
-/// # 错误
-/// 原身份或数量不符合接口范围时拒绝。
+// 签名前按方法编码订单、预检、资金和消息读取，核对原订单身份、批次及账号渠道。
+// 原单查询同时请求特殊履约标记，供后续判断能否走普通履约。
 pub(super) fn read(
     request: &JdVopReadRequest,
     context: &JdVopRequestContext,
@@ -115,13 +110,8 @@ fn funds_messages(
     }
 }
 
-/// 编码唯一原外部写动作，不执行网络。
-/// # 参数
-/// 持久化写意图及其受信账号上下文。
-/// # 返回
-/// 可直接用于签名的业务 JSON。
-/// # 错误
-/// 原目标、渠道或批次范围无效时拒绝。
+// 发送前校验原写动作的账号渠道、目标和批次，按对应方法组装可直接签名的业务 JSON。
+// 例如创建使用请求对象，确认、取消和消息删除用顶层字段；这里不访问网络。
 pub(super) fn write(
     request: &JdVopWriteRequest,
     context: &JdVopRequestContext,
@@ -160,7 +150,7 @@ pub(super) fn write(
     }
 }
 
-/// 校验订单批次后按网关要求编码为逗号分隔的编号，不经过浮点数。
+// 批量校验可取消资格前，将有效的京东单号按网关约定拼成逗号分隔串；转换不经浮点数。
 fn csv_ids(values: &[String], maximum: usize) -> ConnectorResult<String> {
     Ok(ids(values, maximum)?.iter().map(u64::to_string).collect::<Vec<_>>().join(","))
 }

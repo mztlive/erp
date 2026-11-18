@@ -41,23 +41,16 @@ struct ReassignmentContext {
 }
 
 impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
-    /// 在同一事务内重验管理人、目标责任人及全部业务事实后执行转交与审计。
-    ///
-    /// # 用途
-    /// 按原事务中的账号及任务事实转交任务并写入幂等审计。
-    ///
-    /// # 参数
-    /// * `input` - 任务、目标责任人与审计字段
-    /// * `executor` - 公开命令传入的原活动快照事务
-    ///
-    /// # 返回
-    /// 返回已转交任务；任务版本冲突保留专用错误分类。
-    ///
-    /// # 错误
-    /// 授权变化、版本冲突或仓储失败时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 事务内必须通过统一授权入口重验管理人和目标责任人，再提交任务与审计。
+    // 在同一事务内重验管理人、目标责任人及全部业务事实后执行转交与审计。
+    // 事务内必须通过统一授权入口重验管理人和目标责任人，再提交任务与审计。
+    //
+    // 按原事务中的账号及任务事实转交任务并写入幂等审计。
+    //
+    // 返回已转交任务；任务版本冲突保留专用错误分类。
+    //
+    // 授权变化、版本冲突或仓储失败时返回错误。
+    //
+    // `input`：任务、目标责任人与审计字段；`executor`：公开命令传入的原活动快照事务。
     pub(super) async fn reassign_with_assignment_policy_audit(
         &self,
         input: AssignmentPolicyAuditInput<'_>,
@@ -189,16 +182,13 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         Ok(current)
     }
 
-    /// 在原转交事务内准备并校验任务与采购履约的安全审计上下文。
-    /// # 参数
-    /// * `actor` - 命令操作人及调用上下文。
-    /// * `receipt` - 已规范化的命令身份。
-    /// * `item` - 原选中任务。
-    /// * `purchase_order_id` - 原责任键解析出的采购单编号。
-    /// # 返回
-    /// 返回原任务事件及可选采购履约事件，保留原构造与校验顺序。
-    /// # 错误
-    /// 动作或上下文校验失败时返回原错误。
+    // 在原转交事务内准备并校验任务与采购履约的安全审计上下文。
+    // 返回原任务事件及可选采购履约事件，保留原构造与校验顺序。
+    //
+    // 动作或上下文校验失败时返回原错误。
+    //
+    // `actor`：命令操作人及调用上下文；`receipt`：已规范化的命令身份。
+    // `item`：原选中任务；`purchase_order_id`：原责任键解析出的采购单编号。
     fn prepare_reassignment_audits(
         &self,
         actor: &AuditActor,
@@ -216,16 +206,13 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     }
 }
 
-/// 冻结同一转交命令的任务与采购履约事件及其写入顺序。
-/// # 参数
-/// * `actor` - 原命令操作人及调用上下文。
-/// * `receipt` - 原命令身份。
-/// * `item_id` - 原选中任务编号。
-/// * `purchase_order_id` - 原责任键解析出的采购单编号。
-/// # 返回
-/// 返回任务事件与可选采购事件；采购事件为一，随后任务为二，否则任务为一。
-/// # 错误
-/// 事件动作或命令关联非法时返回原错误。
+// 冻结同一转交命令的任务与采购履约事件及其写入顺序。
+// 返回任务事件与可选采购事件；采购事件为一，随后任务为二，否则任务为一。
+//
+// 事件动作或命令关联非法时返回原错误。
+//
+// `actor`：原命令操作人及调用上下文；`receipt`：原命令身份。
+// `item_id`：原选中任务编号；`purchase_order_id`：原责任键解析出的采购单编号。
 pub(super) fn reassignment_audits(
     actor: &AuditActor,
     receipt: &CommandReceipt,
@@ -292,24 +279,16 @@ struct AssignmentPolicyCheck<'a> {
     allow_current_owner: bool,
 }
 
-/// 在任务责任事务内重放全部固定分派策略。
-///
-/// # 用途
-/// 重验操作人授权与候选人资格后再允许写入。
-///
-/// # 参数
-/// * `service` - 保留已装配事实与授权 Port 的任务服务
-/// * `check` - 分派策略重验输入
-/// * `executor` - 事务执行器
-///
-/// # 返回
-/// 策略仍成立时返回 `Ok(())`。
-///
-/// # 错误
-/// 身份变化、授权不足或候选人非法时返回错误。
-///
-/// # 关键业务约束
-/// 必须在同一任务责任事务内调用。
+// 在任务责任事务内重放全部固定分派策略。
+// 必须在同一任务责任事务内调用。
+//
+// 重验操作人授权与候选人资格后再允许写入。
+//
+// 策略仍成立时返回 `Ok(())`。
+//
+// 身份变化、授权不足或候选人非法时返回错误。
+//
+// `service`：保留已装配事实与授权 Port 的任务服务；`executor`：事务执行器。
 async fn ensure_assignment_policy<A: WorkflowAuthorizationPort>(
     service: &WorkItemService<A>,
     check: AssignmentPolicyCheck<'_>,
@@ -339,21 +318,15 @@ struct ReassignPurchaseOrderFulfillmentInput<'a> {
     actor_id: &'a str,
 }
 
-/// 原子变更采购单当前责任人与其全部开放采购履约任务。
-///
-/// # 参数
-/// * `service` - 保留生产事实 Port 的任务服务
-/// * `input` - 选中任务、目标责任人与授权快照
-/// * `executor` - 当前事务执行器
-///
-/// # 返回
-/// 返回已完成转交的选中任务。
-///
-/// # 错误
-/// 采购单、任务集合或原责任不一致，目标缺少任一履约权限，或 CAS 写入失败时返回错误。
-///
-/// # 关键业务约束
-/// 完成和关闭的历史任务保持不变；只有同一 `purchase_order:{id}` 下的开放履约任务级联。
+// 原子变更采购单当前责任人与其全部开放采购履约任务。
+// 完成和关闭的历史任务保持不变；只有同一 `purchase_order:{id}` 下的开放履约任务级联。
+//
+// 返回已完成转交的选中任务。
+//
+// 采购单、任务集合或原责任不一致，目标缺少任一履约权限，或 CAS 写入失败时返回错误。
+//
+// `service`：保留生产事实 Port 的任务服务；`input`：选中任务、目标责任人与授权快照。
+// `executor`：当前事务执行器。
 async fn reassign_purchase_order_fulfillment_responsibility<A: WorkflowAuthorizationPort>(
     service: &WorkItemService<A>,
     input: ReassignPurchaseOrderFulfillmentInput<'_>,

@@ -16,15 +16,9 @@ use crate::{Error, Result};
 
 /// 收集被更新试算取代的确认所引用的任务 ID。
 ///
-/// # 参数
-/// * `confirmations` - 当前确认矩阵。
-/// * `replacement_trial_version` - 新试算版本。
+/// `confirmations`：当前确认矩阵；`replacement_trial_version`：新试算版本。
 ///
-/// # 返回
 /// 按矩阵顺序返回被该试算取代的确认的 `work_item_id`，同一 ID 只保留首次出现。
-///
-/// # 错误
-/// 不返回错误。
 pub fn replaced_confirmation_work_item_ids(
     confirmations: &[LegacyImportConfirmation],
     replacement_trial_version: u32,
@@ -42,16 +36,13 @@ pub fn replaced_confirmation_work_item_ids(
 
 /// 把已加载的任务快照映射为本次取代必须关闭的开放任务。
 ///
-/// # 参数
-/// * `confirmations` - 内存中已作废之后的确认矩阵。
-/// * `replacement_trial_version` - 新试算版本。
-/// * `work_items_by_id` - 以任务 ID 为键的快照；命中项会被移出。
-/// * `replacement_id` - 取代确认的 ID。
+/// - `confirmations`：内存中已作废之后的确认矩阵。
+/// - `replacement_trial_version`：新试算版本。
+/// - `work_items_by_id`：以任务 ID 为键的快照；命中项会被移出。
+/// - `replacement_id`：取代确认的 ID。
 ///
-/// # 返回
 /// 返回仍为 `Open`、且已被该取代确认作废的任务。已关闭任务不进入关闭集合。
 ///
-/// # 错误
 /// 已作废确认缺少对应任务快照时返回 `Internal`。
 pub fn collect_superseded_closable_work_items(
     confirmations: &[LegacyImportConfirmation],
@@ -79,17 +70,13 @@ pub fn collect_superseded_closable_work_items(
 ///
 /// 任务写入走工作流仓储，确认作废留在导入确认仓储。任一失败由调用方事务回滚。
 ///
-/// # 参数
-/// * `db` - 数据库。
-/// * `confirmations` - 当前试算矩阵；被取代的行就地作废。
-/// * `replacement` - 新试算确认。
-/// * `actor_id` - 当前操作人。
-/// * `executor` - 调用方事务执行器。
+/// - `confirmations`：当前试算矩阵；被取代的行就地作废。
+/// - `replacement`：新试算确认。
+/// - `actor_id`：当前操作人。
+/// - `executor`：调用方事务执行器。
 ///
-/// # 返回
 /// 无被取代确认时直接返回；否则作废事实并关闭仍开放的关联任务。
 ///
-/// # 错误
 /// 确认作废、任务缺失、关闭或后续 CAS 写入失败时返回对应错误。
 pub async fn invalidate_replaced_confirmation(
     db: &Database,

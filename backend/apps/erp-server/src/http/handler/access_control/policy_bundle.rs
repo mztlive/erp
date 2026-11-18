@@ -18,7 +18,7 @@ use crate::wiring::scope_configuration;
 
 include!(concat!(env!("OUT_DIR"), "/policy_permissions.rs"));
 
-/// 从同一生成目录装配可配置权限及领域校验端口。
+// 为权限配置文件读写接入生成目录中的可配置权限，以及解析与应用所需的领域端口。
 fn service(state: &HttpState) -> IdentityResult<PolicyBundleService> {
     let catalog =
         POLICY_PERMISSION_CODES.iter().map(Permission::parse).collect::<std::result::Result<Vec<_>, _>>()?;
@@ -33,11 +33,7 @@ fn service(state: &HttpState) -> IdentityResult<PolicyBundleService> {
 }
 
 /// 只读校验结构、当前目标和授权能力。
-/// # 参数
-/// state 为依赖，actor 为认证身份，document 为授权文件。
-/// # 返回
 /// 规范化文件及完整预览。
-/// # 错误
 /// 无效输入、越权或读取失败使用统一错误信封。
 pub async fn validate(
     State(state): State<HttpState>,
@@ -48,11 +44,7 @@ pub async fn validate(
 }
 
 /// 只读生成绑定当前事实和操作人的审核计划。
-/// # 参数
-/// state 为依赖，actor 为认证身份，document 为授权文件。
-/// # 返回
 /// 原始差异、版本和审核摘要。
-/// # 错误
 /// 无效输入、越权或读取失败使用统一错误信封。
 pub async fn preview(
     State(state): State<HttpState>,
@@ -63,11 +55,7 @@ pub async fn preview(
 }
 
 /// 应用已审核文件，重验事实后在同一授权事务提交。
-/// # 参数
-/// state 为依赖，actor 为认证身份，request 为原文件及预览和命令身份。
-/// # 返回
 /// 原子应用结果或原命令回执。
-/// # 错误
 /// 越权、冲突或写入失败使用统一错误信封。
 pub async fn apply(
     State(state): State<HttpState>,
@@ -78,11 +66,7 @@ pub async fn apply(
 }
 
 /// 导出明确选择的人员及角色。
-/// # 参数
-/// state 为依赖，actor 为认证身份，request 为有界选择。
-/// # 返回
 /// 配置文件、授权版本及系统政策说明。
-/// # 错误
 /// 越权、无效选择或无法无损导出时拒绝。
 pub async fn export(
     State(state): State<HttpState>,
@@ -100,7 +84,7 @@ mod tests {
 
     use super::*;
 
-    /// 执行生产请求提取器，拒绝格式外的授权字段。
+    // 用生产 JSON 提取器检验权限配置文件，断言未知授权字段与不合法版本不能进入业务流程。
     #[tokio::test]
     async fn json_extractor_rejects_unknown_policy_fields_and_bad_versions() {
         for body in [

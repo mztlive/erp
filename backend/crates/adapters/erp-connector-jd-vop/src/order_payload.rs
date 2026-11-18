@@ -73,13 +73,8 @@ pub struct JdVopInvoiceRecipient {
 }
 
 impl JdVopExecutionProfile {
-    /// 校验已验收的服务端账号资料；本方法不代替 G0 外部证据核验。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 账号调用渠道、证据引用及发票资料完整时成功。
-    /// # 错误
-    /// 未核实参数、缺失财务资料或不支持的发票类型时阻断。
+    /// 启用京东订单执行前，检查服务端已验收的账号资料是否可用，包括渠道、证据及资金账号引用、预检范围、发票和已配置的确认资金规则。
+    /// 资料缺失或发票参数不受支持时拒绝装配；本地校验不代替 G0 外部证据核验。
     pub fn validate(&self) -> ConnectorResult<()> {
         if self.confirmation_funds_policy.is_some() {
             self.ensure_confirmation_funds()?;
@@ -106,13 +101,8 @@ impl JdVopExecutionProfile {
         Ok(())
     }
 
-    /// 核对原订单确认只使用已核实的原资金保障。
-    /// # 参数
-    /// 无；读取服务端冻结的账号证据。
-    /// # 返回
-    /// 已核实原预占或原扣款足以支持确认时成功。
-    /// # 错误
-    /// 未取得规则或证据引用无效时返回能力缺失，禁止发送写请求。
+    // 在开放下单能力或发送原单确认前，要求服务端证据表明原预占或原扣款可继续保障该订单。
+    // 规则缺失或证据引用无效时返回能力缺失，不能发送写请求。
     pub(super) fn ensure_confirmation_funds(&self) -> ConnectorResult<()> {
         match &self.confirmation_funds_policy {
             Some(JdVopConfirmationFundsPolicy::OriginalOrderReservation { evidence_reference })
@@ -128,13 +118,8 @@ impl JdVopExecutionProfile {
         }
     }
 
-    /// 取得技术账号绑定内容，确认资金准入证据的更新不改变原订单查询身份。
-    /// # 参数
-    /// 无；读取当前服务端执行资料。
-    /// # 返回
-    /// 与新增确认准入字段之前相同的账号绑定内容。
-    /// # 错误
-    /// 执行资料无法序列化时返回脱敏映射错误。
+    // 计算部署账号绑定时，序列化执行资料但排除确认资金规则，以便补齐准入证据后仍可按原身份查询既有订单。
+    // 序列化失败只返回脱敏映射错误。
     pub(super) fn binding_content(&self) -> ConnectorResult<Value> {
         let mut content = to_value(self).map_err(|_| mapping("京东账号配置绑定编码失败"))?;
         if let Some(fields) = content.as_object_mut() {

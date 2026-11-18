@@ -12,17 +12,11 @@ use crate::repository::prelude::*;
 use crate::service::auth::password;
 
 /// 将可选账号收窄为指定后台类型，缺失或类型不符统一按不存在处理。
-///
-/// # 参数
-/// * `account` - 仓储返回的可选账号
-/// * `expected_kind` - 调用场景要求的账号类型
-/// * `not_found_message` - 统一的不存在提示
-///
-/// # 返回
 /// 返回类型匹配的账号。
 ///
-/// # 错误
 /// 账号不存在或类型不匹配时返回 `NotFound`，避免暴露同 ID 的其他账号类型。
+///
+/// `expected_kind`：调用场景要求的账号类型；`not_found_message`：统一的不存在提示。
 pub fn account_of_kind(
     account: Option<AccountCore>,
     expected_kind: AccountKind,
@@ -34,18 +28,12 @@ pub fn account_of_kind(
 }
 
 /// 确保账号可用。
+/// 校验通过返回 Ok。
 ///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `account` - 待检查账号
-/// * `exclude_account_id` - 可选排除账号ID（更新场景）
-/// * `executor` - 数据访问执行器，由调用方决定是否位于事务中
-///
-/// # 返回
-/// 校验通过返回 Ok
-///
-/// # 错误
+/// 失败情形：
 /// * `ConflictError` - 账号已存在
+///
+/// `exclude_account_id`：可选排除账号ID（更新场景）；`executor`：数据访问执行器，由调用方决定是否位于事务中。
 pub async fn ensure_account_available(
     db: &Database,
     account: &LoginAccount,
@@ -67,15 +55,11 @@ pub async fn ensure_account_available(
 /// 不含密码的 patch 直接执行轻量领域校验；包含密码时返回已完整应用更新的
 /// 账号，供调用方随后进入 MongoDB 事务或单集合写入。
 ///
-/// # 参数
-/// * `account` - 当前账号实体
-/// * `update` - 待应用的账号更新
-///
-/// # 返回
 /// 返回已应用领域更新、可安全持久化的账号。
 ///
-/// # 错误
 /// 当领域校验或密码处理失败时返回错误。
+///
+/// `account`：当前账号实体。
 pub async fn apply_account_update(
     mut account: AccountCore,
     update: AccountCoreUpdate,

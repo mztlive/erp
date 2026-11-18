@@ -22,13 +22,8 @@ enum CursorKind<T> {
 }
 
 impl<T: DeserializeOwned + Send + Sync> RowCursor<T> {
-    /// 打开按固定管道过滤后的聚合游标。
-    /// # 参数
-    /// collection、pipeline 为拥有领域的集合和完整管道，batch_size 为批次上限，executor 为原执行器。
-    /// # 返回
-    /// 保留原会话的游标。
-    /// # 错误
-    /// 数据库或解码错误原样传播。
+    /// 为不宜一次载入的聚合结果打开游标，使用领域的完整管道和指定驱动批大小。
+    /// 记录已有的读取边界，事务查询留在原会话，供后续分批读取。
     pub async fn open<S: Send + Sync>(
         collection: &Collection<S>,
         pipeline: Vec<Document>,
@@ -48,13 +43,8 @@ impl<T: DeserializeOwned + Send + Sync> RowCursor<T> {
         Ok(Self { cursor, boundary })
     }
 
-    /// 经原执行器读取下一有界批次。
-    /// # 参数
-    /// batch_size 为返回上限，executor 为打开游标的执行器。
-    /// # 返回
-    /// 至多 batch_size 条记录；空集合表示耗尽。
-    /// # 错误
-    /// 事务游标失去会话、查询或解码失败时拒绝。
+    /// 沿用打开游标时的执行器读取至多指定条数，空批表示耗尽。
+    /// 若打开时记录的边界已失效或事务游标缺少会话，拒绝续读；查询和解码错误向上返回。
     pub async fn next_batch(
         &mut self,
         batch_size: NonZeroU32,

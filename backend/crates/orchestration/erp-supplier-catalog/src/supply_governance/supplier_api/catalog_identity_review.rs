@@ -23,11 +23,11 @@ use crate::{Error, Result};
 
 impl SupplierApiGovernanceProcess {
     /// 读取人工核对所需的当前来源、公司规格、单位与并发版本。
-    /// # 参数
+    ///
     /// 连接、目录身份及已认证操作人。
-    /// # 返回
+    ///
     /// 按公司商品和供给范围授权的核对快照，不含采购成本。
-    /// # 错误
+    ///
     /// 无权限、越范围、缺少已选品关联或单位时拒绝。
     pub async fn catalog_identity_review(
         &self,
@@ -51,11 +51,11 @@ impl SupplierApiGovernanceProcess {
     }
 
     /// 确认来源文案仍对应当前实际销售项；实体身份变化须专门重新建档。
-    /// # 参数
+    ///
     /// 来源/公司/供给版本、原文、同一销售项确认、单位、原因和操作号。
-    /// # 返回
+    ///
     /// 同事务保存核对事实与回执；同号同载荷返回原结果。
-    /// # 错误
+    ///
     /// 越权、版本变化、单位不符、未明确核对、来源撤回或同号异载荷时拒绝。
     pub async fn review_catalog_identity(
         &self,
@@ -98,7 +98,7 @@ impl SupplierApiGovernanceProcess {
     }
 }
 
-/// 连接、供给、商品和资料必须沿同一快照读取，不将对象授权带入非事务查询。
+// 连接、供给、商品和资料必须沿同一快照读取，不将对象授权带入非事务查询。
 async fn authorize_review_read(
     authorization: &AuthorizationService,
     connection: &str,
@@ -294,7 +294,7 @@ mod read_tests {
 
     use super::*;
 
-    /// 禁止非事务读取；同一快照内的授权失败必须先于来源及商品资料读取。
+    // 验证：禁止非事务读取；同一快照内的授权失败必须先于来源及商品资料读取。
     #[tokio::test]
     async fn review_read_requires_snapshot_and_propagates_authorization_failure() {
         let actor = AuditActor::new("actor".into(), "operator".into(), AccountKind::Admin);

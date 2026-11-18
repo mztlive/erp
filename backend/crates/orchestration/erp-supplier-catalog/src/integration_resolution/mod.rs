@@ -41,18 +41,11 @@ pub struct IntegrationResolutionProcess {
 impl IntegrationResolutionProcess {
     /// 绑定同一权威证据实例与范围 Port；不在构造时执行授权或读取。
     ///
-    /// # 参数
-    /// * `db` - 数据库。
-    /// * `evidence` - 权威证据端口。
-    /// * `data_scope` - 集成数据范围端口。
-    /// * `authorization` - 进程共享的统一授权服务。
-    /// * `work_items_factory` - 每次任务命令或重放独立创建身份的工作项工厂。
+    /// - `evidence`：权威证据端口。
+    /// - `data_scope`：集成数据范围端口。
+    /// - `work_items_factory`：每次任务命令或重放独立创建身份的工作项工厂。
     ///
-    /// # 返回
     /// 集成写入流程。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(
         db: Database,
         evidence: Arc<dyn IntegrationEvidenceAuthority>,

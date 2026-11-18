@@ -63,24 +63,13 @@ pub struct OrgRoleView {
 
 impl OrganizationStateView {
     /// 组合组织查询展示字段。
+    /// 缺范围标记 `no_scope`，不得补 Company；组织配置权不授予业务执行权。
     ///
-    /// # 参数
-    /// * `visible` - 已按配置边界裁剪的组织事实
-    /// * `scope_version` - 本次解析范围版本
-    /// * `policy_version` - 权限策略版本
-    /// * `as_of` - 解析时点
-    /// * `no_scope` - 角色是否缺少该动作范围
-    /// * `people` - 人员展示
-    /// * `roles` - 角色展示
-    ///
-    /// # 返回
     /// 含范围版本、空集原因和展示标签的查询视图。
     ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 缺范围标记 `no_scope`，不得补 Company；组织配置权不授予业务执行权。
+    /// `visible`：已按配置边界裁剪的组织事实；`scope_version`：本次解析范围版本。
+    /// `policy_version`：权限策略版本；`as_of`：解析时点。
+    /// `no_scope`：角色是否缺少该动作范围。
     pub fn compose(
         visible: crate::entity::organization_change::OrganizationState,
         scope_version: String,

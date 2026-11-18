@@ -23,16 +23,11 @@ pub struct ReceivableBalanceFact {
 #[async_trait]
 pub trait SalesMoneyProgressPort: Send + Sync {
     /// 读取该销售单全部未删除应收账户，零余额账户不得被汇总掉。
-    ///
-    /// # 参数
-    /// * `sales_order_id` - 销售单身份。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
     /// 返回逐账户余额。空列表表示没有账户，与余额为零的账户不同。
+    /// 失败条件：供方读取失败时原样传播，且发生在任何销售进度写入之前。
     ///
-    /// # 错误
-    /// 供方读取失败时原样传播，且发生在任何销售进度写入之前。
+    /// 输入约定：
+    /// - `sales_order_id`：销售单身份。
     async fn receivable_balances(
         &self,
         sales_order_id: &SalesOrderId,
@@ -44,17 +39,12 @@ pub trait SalesMoneyProgressPort: Send + Sync {
 #[async_trait]
 pub trait SellableSkuPort: Send + Sync {
     /// 按请求的业务日返回当前目录接受的 SKU 与修订配对。
-    ///
-    /// # 参数
-    /// * `refs` - 待核对的 SKU 与修订配对。
-    /// * `date` - 资格业务日。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
     /// 返回合格配对；未合格的配对保持不出现。
+    /// 失败条件：仓储失败按原错误类别传播。
     ///
-    /// # 错误
-    /// 仓储失败按原错误类别传播。
+    /// 输入约定：
+    /// - `refs`：待核对的 SKU 与修订配对。
+    /// - `date`：资格业务日。
     async fn qualified_refs(
         &self,
         refs: &[(String, String)],
@@ -87,17 +77,13 @@ pub struct SalesReferencePriceFact {
 #[async_trait]
 pub trait SalesReferencePricePort: Send + Sync {
     /// 按精确修订与数量返回可售 SKU 的参考价，缺失项保持缺失。
-    ///
-    /// # 参数
-    /// * `requests` - 自动报价行的修订与数量
-    /// * `date` - 销售资格业务日
-    /// * `executor` - 调用方数据执行器
-    ///
-    /// # 返回
     /// 返回匹配成功的参考价事实；不得使用其他修订价格替代。
+    /// 失败条件：仓储与参考价转换失败原样传播。
     ///
-    /// # 错误
-    /// 仓储与参考价转换失败原样传播。
+    /// 输入约定：
+    /// - `requests`：自动报价行的修订与数量
+    /// - `date`：销售资格业务日
+    /// - `executor`：调用方数据执行器
     async fn reference_prices(
         &self,
         requests: &[SalesReferencePriceRequest],

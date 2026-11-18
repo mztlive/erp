@@ -14,29 +14,19 @@ use crate::entity::AccountCore;
 #[allow(async_fn_in_trait)]
 pub trait AccountCoreRepositoryExt {
     /// 按账号 ID 查找未删除统一账号。
-    ///
-    /// # 参数
-    /// * `id` - 账号 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回匹配的未删除账号；不存在时返回 `None`。
     ///
-    /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
+    ///
+    /// `executor`：数据访问执行器，由 Service 决定是否位于事务中。
     async fn find_account(&self, id: &str, executor: &mut dyn Executor) -> Result<Option<AccountCore>>;
 
     /// 根据账号查找未删除的统一账号。
-    ///
-    /// # 参数
-    /// * `account` - 账号
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回匹配的未删除统一账号；不存在或已软删除时返回 `None`。
     ///
-    /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
+    ///
+    /// `executor`：数据访问执行器，由 Service 决定是否位于事务中。
     async fn find_by_account(
         &self,
         account: &str,
@@ -47,15 +37,11 @@ pub trait AccountCoreRepositoryExt {
     ///
     /// 全局唯一索引包含软删除记录；账号占用校验必须使用本方法。
     ///
-    /// # 参数
-    /// * `account` - 账号
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回匹配的统一账号，包含已软删除记录；不存在时返回 `None`。
     ///
-    /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
+    ///
+    /// `executor`：数据访问执行器，由 Service 决定是否位于事务中。
     async fn find_by_account_including_deleted(
         &self,
         account: &str,
@@ -63,29 +49,19 @@ pub trait AccountCoreRepositoryExt {
     ) -> Result<Option<AccountCore>>;
 
     /// 按账号 ID 集合批量查询统一账号。
-    ///
-    /// # 参数
-    /// * `ids` - 账号 ID 集合；为空时直接返回空集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回全部匹配且未软删除的账号记录。
     ///
-    /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
+    ///
+    /// `ids`：账号 ID 集合；为空时直接返回空集合；`executor`：数据访问执行器，由 Service 决定是否位于事务中。
     async fn list_by_ids(&self, ids: &[String], executor: &mut dyn Executor) -> Result<Vec<AccountCore>>;
 
     /// 按账号 ID 集合批量读取展示名称。
-    ///
-    /// # 参数
-    /// * `ids` - 账号 ID 集合；为空时直接返回空映射
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回以账号 ID 为键、展示名称为值的映射。
     ///
-    /// # 错误
     /// 当 MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// `ids`：账号 ID 集合；为空时直接返回空映射；`executor`：数据访问执行器，由 Service 决定是否位于事务中。
     async fn names_by_ids(
         &self,
         ids: &[String],
@@ -97,15 +73,11 @@ pub trait AccountCoreRepositoryExt {
     /// 采购责任展示入口的历史名称，语义与 [`Self::list_by_ids`] 完全一致；
     /// 保留本方法以避免展示层调用方改名，仅委托属主批量查询，不重复实现查询。
     ///
-    /// # 参数
-    /// * `owner_ids` - 负责人账号 ID 集合；为空时直接返回空集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回全部匹配且未软删除的统一账号；输入为空时返回空集合。
     ///
-    /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
+    ///
+    /// `owner_ids`：负责人账号 ID 集合；为空时直接返回空集合；`executor`：数据访问执行器，由 Service 决定是否位于事务中。
     async fn list_procurement_responsibility_owners(
         &self,
         owner_ids: &[String],
@@ -117,15 +89,11 @@ pub trait AccountCoreRepositoryExt {
     /// 采购责任展示入口的历史名称，语义与 [`Self::find_account`] 完全一致；
     /// 保留本方法以避免展示层调用方改名，仅委托属主单条查询。
     ///
-    /// # 参数
-    /// * `owner_id` - 负责人账号 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回未删除账号；不存在时返回 `None`。
     ///
-    /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
+    ///
+    /// `executor`：数据访问执行器，由 Service 决定是否位于事务中。
     async fn find_procurement_responsibility_owner(
         &self,
         owner_id: &str,
@@ -136,31 +104,21 @@ pub trait AccountCoreRepositoryExt {
     ///
     /// 未删除过滤下推到仓储查询（`deleted_at = 0`），调用方不再内存过滤。
     ///
-    /// # 参数
-    /// * `kind` - 账号类型
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回匹配的账号集合
     ///
-    /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
+    ///
+    /// `executor`：数据访问执行器，由 Service 决定是否位于事务中。
     async fn list_by_kind(&self, kind: AccountKind, executor: &mut dyn Executor) -> Result<Vec<AccountCore>>;
 
     /// 按审批责任人身份读取账号。
+    /// 本方法只封装审批责任人的持久化身份查询，账号状态与权限仍由调用方重验。
     ///
-    /// # 参数
-    /// * `id` - 审批责任人账号 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回匹配且未软删除的账号；不存在时返回 `None`。
     ///
-    /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
     ///
-    /// # 关键业务约束
-    /// 本方法只封装审批责任人的持久化身份查询，账号状态与权限仍由调用方重验。
+    /// `id`：审批责任人账号 ID；`executor`：数据访问执行器，由 Service 决定是否位于事务中。
     async fn find_approval_assignee_by_id(
         &self,
         id: &str,
@@ -168,20 +126,14 @@ pub trait AccountCoreRepositoryExt {
     ) -> Result<Option<AccountCore>>;
 
     /// 查询定义期可选的有效后台审批账号。
+    /// 查询固定限制为 `active + admin`，调用方不得自行拼装更宽的候选范围。
     ///
-    /// # 参数
-    /// * `search` - 可选姓名或登录账号包含检索，按大小写不敏感字面量匹配
-    /// * `limit` - 最大返回条数；为零时直接返回空集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回有效后台账号，最多 `limit` 条。
     ///
-    /// # 错误
     /// 当 MongoDB 查询或反序列化失败时返回错误。
     ///
-    /// # 关键业务约束
-    /// 查询固定限制为 `active + admin`，调用方不得自行拼装更宽的候选范围。
+    /// `search`：可选姓名或登录账号包含检索，按大小写不敏感字面量匹配；`limit`：最大返回条数；为零时直接返回空集合。
+    /// `executor`：数据访问执行器，由 Service 决定是否位于事务中。
     async fn list_active_approval_candidates(
         &self,
         search: Option<&str>,
@@ -194,18 +146,13 @@ pub trait AccountCoreRepositoryExt {
     /// 工作项入口的历史名称，语义与 [`Self::find_account`] 完全一致；
     /// 保留本方法以避免调用方改名，仅委托属主单条查询，不重复实现查询。
     ///
-    /// # 参数
-    /// * `id` - 统一账号 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 本方法只封装工作项授权所需的持久化账号事实，账号状态与权限仍由调用方重验。
     ///
-    /// # 返回
     /// 返回未删除账号；不存在时返回 `None`。
     ///
-    /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
     ///
-    /// # 关键业务约束
-    /// 本方法只封装工作项授权所需的持久化账号事实，账号状态与权限仍由调用方重验。
+    /// `executor`：数据访问执行器，由 Service 决定是否位于事务中。
     async fn find_work_item_account(
         &self,
         id: &str,
@@ -217,18 +164,13 @@ pub trait AccountCoreRepositoryExt {
     /// 工作项入口的历史名称，语义与 [`Self::list_by_ids`] 完全一致；
     /// 保留本方法以避免调用方改名，仅委托属主批量查询，不重复实现查询。
     ///
-    /// # 参数
-    /// * `ids` - 账号 ID 集合；为空时直接返回空集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 本方法只返回未软删除账号的持久化事实，展示名称映射由调用方完成。
     ///
-    /// # 返回
     /// 返回全部匹配且未删除的账号记录。
     ///
-    /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
     ///
-    /// # 关键业务约束
-    /// 本方法只返回未软删除账号的持久化事实，展示名称映射由调用方完成。
+    /// `ids`：账号 ID 集合；为空时直接返回空集合；`executor`：数据访问执行器，由 Service 决定是否位于事务中。
     async fn list_work_item_party_accounts(
         &self,
         ids: &[String],

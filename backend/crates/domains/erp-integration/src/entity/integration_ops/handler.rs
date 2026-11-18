@@ -10,16 +10,9 @@ use erp_core::{Error, Result};
 /// 处理人内部组织标识最大长度（两实体同值，唯一来源）。
 pub(crate) const HANDLER_ORG_UNIT_ID_MAX_LEN: usize = 128;
 
-/// 拒绝 `"me"` 人员占位（大小写不敏感，调用方已去空白）。
-///
-/// # 参数
-/// * `owner` - 已规范化的处理人 ID
-///
-/// # 返回
-/// 不是 `me` 占位时返回 `Ok(())`。
-///
-/// # 错误
-/// 为 `me`（大小写不敏感）时返回领域校验错误。
+// 拒绝 `"me"` 人员占位（大小写不敏感，调用方已去空白）。
+//
+// 不是 `me` 占位时返回 `Ok(())`。为 `me`（大小写不敏感）时返回领域校验错误。
 pub(crate) fn reject_me_handler(owner: &str) -> Result<()> {
     if owner.eq_ignore_ascii_case("me") {
         return Err(Error::from("处理人不得使用 me 作为人员 ID"));
@@ -27,16 +20,9 @@ pub(crate) fn reject_me_handler(owner: &str) -> Result<()> {
     Ok(())
 }
 
-/// 规范化并拒绝公司占位的处理人内部组织（两实体文案相同，唯一实现）。
-///
-/// # 参数
-/// * `raw` - 原始组织 ID
-///
-/// # 返回
-/// 返回去首尾空白后的内部组织 ID。
-///
-/// # 错误
-/// 为空、超长或为 `company` 占位时返回领域校验错误。
+// 规范化并拒绝公司占位的处理人内部组织（两实体文案相同，唯一实现）。
+//
+// 返回去首尾空白后的内部组织 ID。为空、超长或为 `company` 占位时返回领域校验错误。
 pub(crate) fn require_handler_org_unit_id(raw: String) -> Result<String> {
     let org =
         normalize_required_text(raw, "处理人组织不能为空", HANDLER_ORG_UNIT_ID_MAX_LEN, "处理人组织过长")?;

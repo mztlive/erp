@@ -14,11 +14,8 @@ use crate::ports::ContractCreationPort;
 use crate::{Error, Result};
 
 /// 为合同创建连接同一组合根提供的客户事实读取器。
-/// # 参数
-/// customers 为拥有领域的真实客户事实实例；本模块只读取本次指定来源。
-/// # 返回
 /// 在原事务中校验客户身份并转换为合同候选的窄端口。
-/// # 错误
+/// customers 为拥有领域的真实客户事实实例；本模块只读取本次指定来源。
 /// 构造不执行 I/O；读取时的缺失、错配和设施错误保持失败。
 pub fn creation_facts(customers: Arc<dyn AccessFactsPort>) -> Arc<dyn ContractCreationPort> {
     Arc::new(CreationFacts(customers))

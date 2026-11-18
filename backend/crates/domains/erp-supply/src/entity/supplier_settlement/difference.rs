@@ -36,16 +36,7 @@ pub enum SettlementDifferenceType {
 }
 
 impl SettlementDifferenceType {
-    /// 返回差异类型的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为结算差异提供中文展示名；界面展示时使用，不以文案作为稳定标识。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Missing => "漏单",
@@ -56,16 +47,7 @@ impl SettlementDifferenceType {
         }
     }
 
-    /// 返回差异类型的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得结算差异的稳定标识，供需要按代码而非展示文案识别取值的调用方使用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Missing => "MISSING",
@@ -94,16 +76,7 @@ pub enum SettlementDifferenceStatus {
 }
 
 impl SettlementDifferenceStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为结算差异状态提供中文展示名；界面展示时使用，不以文案作为稳定标识。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Pending => "待处理",
@@ -114,16 +87,7 @@ impl SettlementDifferenceStatus {
         }
     }
 
-    /// 返回状态的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得结算差异状态的稳定标识，供需要按代码而非展示文案识别取值的调用方使用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Pending => "PENDING",
@@ -150,15 +114,7 @@ pub enum SettlementDifferenceConclusionKind {
 
 impl SettlementDifferenceConclusionKind {
     /// 返回结论对应的持久化差异状态。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回供应商认可、ERP 认可、已补偿或已关闭状态。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn status(self) -> SettlementDifferenceStatus {
         match self {
             Self::SupplierAccepted => SettlementDifferenceStatus::SupplierAcknowledged,
@@ -168,16 +124,7 @@ impl SettlementDifferenceConclusionKind {
         }
     }
 
-    /// 返回审计与命令摘要使用的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回大写稳定代码。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得结算差异的稳定标识，供需要按代码而非展示文案识别取值的调用方使用。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::SupplierAccepted => "SUPPLIER_ACCEPTED",
@@ -187,7 +134,7 @@ impl SettlementDifferenceConclusionKind {
         }
     }
 
-    /// 返回该结论允许的受控原因代码。
+    // 提供该结论允许的受控原因代码。
     fn allowed_reason_codes(self) -> &'static [&'static str] {
         match self {
             Self::SupplierAccepted => &["BILL_ALIGNED", "NO_BUSINESS_IMPACT", "OTHER"],
@@ -197,7 +144,7 @@ impl SettlementDifferenceConclusionKind {
         }
     }
 
-    /// 判断结论是否必须携带正式证据引用。
+    // 检查结论是否必须携带正式证据引用。
     fn requires_evidence(self) -> bool {
         matches!(self, Self::Compensated | Self::ClosedNoAdjustment)
     }
@@ -214,19 +161,9 @@ pub struct SettlementDifferenceConclusion {
 
 impl SettlementDifferenceConclusion {
     /// 创建并校验差异正式结论。
-    ///
-    /// 原因代码按大写稳定格式规范化，并校验与结论类别的固定组合；证据引用去除
-    /// 首尾空白、排序去重，禁止分隔符注入。已补偿与无需调整关闭必须携带证据。
-    ///
-    /// # 参数
-    /// * `kind` - 正式结论类别
-    /// * `reason_code` - 受控原因代码
-    /// * `evidence_reference_ids` - 正式证据引用
-    ///
-    /// # 返回
+    /// 原因代码按大写稳定格式规范化，并校验与结论类别的固定组合；证据引用去除首尾空白、排序去重，禁止分
+    /// 隔符注入。已补偿与无需调整关闭必须携带证据。
     /// 返回可直接用于差异状态推进与持久化的规范化结论。
-    ///
-    /// # 错误
     /// 原因格式或组合非法、证据超限/非法/缺失，或编码结果超过 512 字节时返回错误。
     pub fn new(
         kind: SettlementDifferenceConclusionKind,
@@ -251,71 +188,31 @@ impl SettlementDifferenceConclusion {
     }
 
     /// 返回结论对应的差异状态。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回正式持久化状态。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn status(&self) -> SettlementDifferenceStatus {
         self.kind.status()
     }
 
     /// 返回正式结论类别。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回构造时的强类型结论类别。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn kind(&self) -> SettlementDifferenceConclusionKind {
         self.kind
     }
 
     /// 返回规范化原因代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回大写受控原因代码。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn reason_code(&self) -> &str {
         &self.reason_code
     }
 
     /// 返回排序去重后的证据引用。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回只读证据引用切片。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn evidence_reference_ids(&self) -> &[String] {
         &self.evidence_reference_ids
     }
 
     /// 返回稳定持久化文本。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回 `reason=<code>;evidence=<refs>` 格式文本。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn encoded(&self) -> &str {
         &self.encoded
     }
@@ -379,19 +276,9 @@ pub struct SupplierSettlementDifference {
 
 impl SupplierSettlementDifference {
     /// 创建结算差异。
-    ///
-    /// 完成处理结果字段的校验和规范化，并强制三元组成组约束（§6.20）：
-    /// 处理结果/处理人/处理时间必须同时提供或同时省略；待处理不得填写；
-    /// 已补偿或已关闭必填。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::SupplierSettlementDifferenceId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
+    /// 完成处理结果字段的校验和规范化，并强制三元组成组约束（§6.20）：处理结果/处理人/处理时间必须同时提
+    /// 供或同时省略；待处理不得填写；已补偿或已关闭必填。
     /// 返回新建的结算差异实体。
-    ///
-    /// # 错误
     /// 文本超长或处理结果三元组与状态不一致时返回错误。
     pub fn new(id: SupplierSettlementDifferenceId, data: SupplierSettlementDifferenceData) -> Result<Self> {
         let resolution = normalize_optional_text(data.resolution, "处理结果", RESOLUTION_MAX_LEN)?;
@@ -411,14 +298,7 @@ impl SupplierSettlementDifference {
     }
 
     /// 校验调用方持有的差异版本仍是当前版本。
-    ///
-    /// # 参数
-    /// * `expected` - 调用方读取到的差异版本
-    ///
-    /// # 返回
     /// 版本一致时返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 版本不一致时返回领域错误。
     pub fn ensure_version(&self, expected: u64) -> Result<()> {
         if self.base.version != expected {
@@ -428,33 +308,15 @@ impl SupplierSettlementDifference {
     }
 
     /// 判断差异是否仍等待正式结论。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 状态为 `PENDING` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn is_pending(&self) -> bool {
         self.status == SettlementDifferenceStatus::Pending
     }
 
     /// 登记强类型正式结论。
-    ///
-    /// 只有待处理差异可以首次登记正式结论；状态、持久化文本、处理人和处理时间
-    /// 作为一个整体推进，调用方不能分别拼装。
-    ///
-    /// # 参数
-    /// * `conclusion` - 已规范化的原因与证据组合
-    /// * `resolved_by` - 处理人
-    /// * `resolved_at` - 处理时间
-    ///
-    /// # 返回
+    /// 只有待处理差异可以首次登记正式结论；状态、持久化文本、处理人和处理时间作为一个整体推进，调用方不
+    /// 能分别拼装。
     /// 登记成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 差异不是待处理状态，或处理字段校验失败时返回错误。
     pub fn record_conclusion(
         &mut self,
@@ -474,16 +336,7 @@ impl SupplierSettlementDifference {
     }
 
     /// 更新结算差异。
-    ///
     /// 复用 `new` 的校验规则；结算明细、差异类型与差异金额不可修改。
-    ///
-    /// # 参数
-    /// * `update` - 更新数据
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 文本为空/超长或处理结果三元组与目标状态不一致时返回错误。
     pub fn update(&mut self, update: SupplierSettlementDifferenceUpdate) -> Result<()> {
         let status = update.status.unwrap_or(self.status);
@@ -508,7 +361,7 @@ impl SupplierSettlementDifference {
     }
 }
 
-/// 规范化受控原因代码。
+// 规范化受控原因代码。
 fn normalize_reason_code(value: String) -> Result<String> {
     let value = value.trim().to_ascii_uppercase();
     if value.is_empty() || value.len() > 64 {
@@ -523,7 +376,7 @@ fn normalize_reason_code(value: String) -> Result<String> {
     Ok(value)
 }
 
-/// 规范化正式证据引用。
+// 规范化正式证据引用。
 fn normalize_evidence_references(mut values: Vec<String>) -> Result<Vec<String>> {
     if values.len() > 20 {
         return Err(Error::from("证据引用最多20项"));
@@ -542,16 +395,8 @@ fn normalize_evidence_references(mut values: Vec<String>) -> Result<Vec<String>>
     Ok(values)
 }
 
-/// 校验处理结果三元组与状态的成组约束。
-///
-/// # 参数
-/// * `status` - 差异状态
-/// * `resolution` - 处理结果文本
-/// * `resolved_by` - 处理人
-/// * `resolved_at` - 处理时间
-///
-/// # 错误
-/// 三元组不完整、待处理填写了处理结果或已补偿/已关闭缺少处理结果时返回错误。
+// 校验处理结果三元组与状态的成组约束。
+// 三元组不完整、待处理填写了处理结果或已补偿/已关闭缺少处理结果时返回错误。
 fn validate_resolution_state(
     status: SettlementDifferenceStatus,
     resolution: &Option<String>,

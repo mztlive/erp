@@ -60,15 +60,10 @@ impl_repository_error!(
         |error| { Error::ConflictError(duplicate_key_conflict_message(error.duplicate_index_name())) }
 );
 
-/// 将唯一键冲突映射为面向用户的冲突提示。
-///
-/// 按索引名做最小映射：`request_id`/`job_no` 与外部身份键给出各自的冲突
-/// 文案，未知索引回退到通用「数据已存在」文案（原先走旧 `services::Error`
-/// 的未知索引分支，保持 HTTP 冲突提示不变）。`Error::class` 保持 `Conflict`。
-///
-/// # 参数
-/// * `index` - `persistence_core::Error::duplicate_index_name` 提取的索引名；
-///   `None` 表示无法识别，走通用文案。
+// 将唯一键冲突映射为面向用户的冲突提示。
+// 按索引名做最小映射：`request_id`/`job_no` 与外部身份键给出各自的冲突文案，未知索引回退到通用「数据已存在」文案（原先走旧 `services::Error` 的未知索引分支，
+// 保持 HTTP 冲突提示不变）。`Error::class` 保持 `Conflict`。
+// `index` 为`persistence_core::Error::duplicate_index_name` 提取的索引名；  `None` 表示无法识别，走通用文案。
 fn duplicate_key_conflict_message(index: Option<&str>) -> String {
     let index = index.unwrap_or_default();
     if index.contains("request_id") {

@@ -61,16 +61,7 @@ pub struct ReceivableProcess {
 }
 
 impl ReceivableProcess {
-    /// 创建客户往来服务实例。
-    ///
-    /// # 参数
-    /// * `db` - 数据库实例
-    ///
-    /// # 返回
-    /// 返回服务实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 应用装配客户回款及销项开票流程时注入数据库和财务端口；命令仍在各自的读写边界检查资格。
     pub fn new(db: Database, rbac: FinancePostingPorts) -> Self {
         Self { db, rbac }
     }

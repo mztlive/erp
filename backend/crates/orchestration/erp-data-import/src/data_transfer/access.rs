@@ -19,13 +19,13 @@ pub(super) struct ReaderJob {
 }
 
 impl DataTransferProcess {
-    /// 在短快照先核验真实任务归属，再读取本人任务。
-    /// # 参数
-    /// id、actor 为真实任务和当前身份。
-    /// # 返回
-    /// 当前账号拥有的文件任务。
-    /// # 错误
-    /// 当前资格、归属、任务类型或事务失败时拒绝。
+    // 在短快照先核验真实任务归属，再读取本人任务。
+    //
+    // id、actor 为真实任务和当前身份。
+    //
+    // 当前账号拥有的文件任务。
+    //
+    // 当前资格、归属、任务类型或事务失败时拒绝。
     pub(super) async fn owned_job(&self, id: &str, actor: &AuditActor) -> Result<BackgroundJob> {
         let process = self.clone();
         let id = id.to_owned();
@@ -41,13 +41,13 @@ impl DataTransferProcess {
             .await
     }
 
-    /// 在短快照完成任务和业务资格，不在事务内下载或解密。
-    /// # 参数
-    /// id、actor 为真实任务和当前身份，shared 允许当前获授权账号读取共享导出。
-    /// # 返回
-    /// 同快照授权的任务及可选轻量上下文。
-    /// # 错误
-    /// 当前资格、归属、任务类型或事务失败时拒绝。
+    // 在短快照完成任务和业务资格，不在事务内下载或解密。
+    //
+    // id、actor 为真实任务和当前身份，shared 允许当前获授权账号读取共享导出。
+    //
+    // 同快照授权的任务及可选轻量上下文。
+    //
+    // 当前资格、归属、任务类型或事务失败时拒绝。
     pub(super) async fn reader_snapshot(
         &self,
         id: &str,
@@ -65,13 +65,13 @@ impl DataTransferProcess {
             .await
     }
 
-    /// 原执行器先授权，再读取完整任务；共享分支只预读选择业务权限所需的持久化分类。
-    /// # 参数
-    /// id、actor 为真实任务和当前身份，shared 为共享导出入口，executor 为原快照。
-    /// # 返回
-    /// 当前资格允许读取的真实任务和分类事实。
-    /// # 错误
-    /// 当前身份、归属、功能资格、任务分类或读取失败时拒绝。
+    // 原执行器先授权，再读取完整任务；共享分支只预读选择业务权限所需的持久化分类。
+    //
+    // id、actor 为真实任务和当前身份，shared 为共享导出入口，executor 为原快照。
+    //
+    // 当前资格允许读取的真实任务和分类事实。
+    //
+    // 当前身份、归属、功能资格、任务分类或读取失败时拒绝。
     pub(super) async fn reader(
         &self,
         id: &str,
@@ -112,7 +112,7 @@ impl DataTransferProcess {
         Ok(ReaderJob { job, context, owned })
     }
 
-    /// 门户只查询不可变本人关系；内部账号由 identity 读取真实任务事实。
+    // 门户只查询不可变本人关系；内部账号由 identity 读取真实任务事实。
     async fn reader_owner(&self, id: &str, actor: &AuditActor, executor: &mut dyn Executor) -> Result<()> {
         if actor.kind() == AccountKind::Supplier {
             let owned = self.db.bulk_job().is_requester(id, DOMAIN, actor.id(), executor).await?;
@@ -129,25 +129,25 @@ impl DataTransferProcess {
         Ok(())
     }
 
-    /// 外部读取结束后重验当前资格及原任务版本。
-    /// # 参数
-    /// original 为外部读取前的任务，actor 为交付身份。
-    /// # 返回
-    /// 当前资格与任务版本仍一致时成功。
-    /// # 错误
-    /// 撤权、任务变化或事务失败时拒绝交付。
+    // 外部读取结束后重验当前资格及原任务版本。
+    //
+    // original 为外部读取前的任务，actor 为交付身份。
+    //
+    // 当前资格与任务版本仍一致时成功。
+    //
+    // 撤权、任务变化或事务失败时拒绝交付。
     pub(super) async fn validate_reader(&self, original: &BackgroundJob, actor: &AuditActor) -> Result<()> {
         let current = self.reader_snapshot(&original.base.id, actor, true).await?;
         same_job(original, &current.job)
     }
 
-    /// 历史本人源只用于恢复缺失分类；结果读取前在新快照核验恢复出的业务资格。
-    /// # 参数
-    /// job、context 为原任务与已恢复分类，actor 为当前读取身份。
-    /// # 返回
-    /// 当前任务与业务资格仍允许读取时成功。
-    /// # 错误
-    /// 当前资格、任务版本或事务失效时拒绝。
+    // 历史本人源只用于恢复缺失分类；结果读取前在新快照核验恢复出的业务资格。
+    //
+    // job、context 为原任务与已恢复分类，actor 为当前读取身份。
+    //
+    // 当前任务与业务资格仍允许读取时成功。
+    //
+    // 当前资格、任务版本或事务失效时拒绝。
     pub(super) async fn qualify_context(
         &self,
         job: &BackgroundJob,
@@ -175,7 +175,7 @@ impl DataTransferProcess {
     }
 }
 
-/// 资格失败时不轮询受保护读取 future，执行器始终沿用原快照。
+// 资格失败时不轮询受保护读取 future，执行器始终沿用原快照。
 async fn authorized_read<'a, T>(
     handler: &dyn TransferHandler,
     context: &ContextInput,
@@ -190,13 +190,13 @@ async fn authorized_read<'a, T>(
     read(executor).await
 }
 
-/// 只向原任务及其原版本交付外部读取结果。
-/// # 参数
-/// original、current 为外部读取前后真实任务。
-/// # 返回
-/// 任务身份与版本一致时成功。
-/// # 错误
-/// 任一身份或版本发生变化时拒绝。
+// 只向原任务及其原版本交付外部读取结果。
+//
+// original、current 为外部读取前后真实任务。
+//
+// 任务身份与版本一致时成功。
+//
+// 任一身份或版本发生变化时拒绝。
 pub(super) fn same_job(original: &BackgroundJob, current: &BackgroundJob) -> Result<()> {
     if original.base.id != current.base.id || original.base.version != current.base.version {
         return Err(Error::ConflictError("文件任务已变化，请重新读取".into()));

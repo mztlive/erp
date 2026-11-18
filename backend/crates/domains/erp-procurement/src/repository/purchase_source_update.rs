@@ -9,32 +9,14 @@ use crate::entity::purchase_order::{PurchaseSourceUpdate, PurchaseSourceUpdateSt
 /// 采购依据更新记录集合名。
 pub const PURCHASE_SOURCE_UPDATES: &str = "purchase_source_updates";
 
-/// 获取采购依据更新记录仓储。
-///
-/// # 参数
-/// * `db` - 业务数据库
-///
-/// # 返回
-/// 返回使用调用方 Executor 的仓储。
-///
-/// # 错误
-/// 无。
+/// 获取采购依据更新记录仓储。返回使用调用方 Executor 的仓储。
 pub fn purchase_source_updates(db: &Database) -> Repository<'_, PurchaseSourceUpdate> {
     Repository::new(db, PURCHASE_SOURCE_UPDATES)
 }
 
-/// 按创建顺序列出销售单下全部依据更新记录。
+/// 按创建顺序列出销售单下全部依据更新记录。返回开放与已处理记录，按创建时间与主键升序。
 ///
-/// # 参数
-/// * `db` - 业务数据库
-/// * `sales_order_id` - 来源销售单
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回开放与已处理记录，按创建时间与主键升序。
-///
-/// # 错误
-/// 仓储读取失败时返回错误。
+/// 沿用调用方的执行器，不另开事务。
 pub async fn list_by_sales_order(
     db: &Database,
     sales_order_id: &str,
@@ -49,18 +31,9 @@ pub async fn list_by_sales_order(
         .await
 }
 
-/// 列出某张销售变更单触发的依据更新记录。
+/// 列出某张销售变更单触发的依据更新记录。返回该变更单触发的记录，按创建时间与主键升序。
 ///
-/// # 参数
-/// * `db` - 业务数据库
-/// * `sales_change_order_id` - 销售变更单
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回该变更单触发的记录，按创建时间与主键升序。
-///
-/// # 错误
-/// 仓储读取失败时返回错误。
+/// 沿用调用方的执行器，不另开事务。
 pub async fn list_by_trigger_change(
     db: &Database,
     sales_change_order_id: &str,
@@ -75,18 +48,9 @@ pub async fn list_by_trigger_change(
         .await
 }
 
-/// 读取采购当前的开放依据更新记录。
+/// 读取采购当前的开放依据更新记录。存在开放记录时返回该记录。
 ///
-/// # 参数
-/// * `db` - 业务数据库
-/// * `purchase_order_id` - 采购单
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 存在开放记录时返回该记录。
-///
-/// # 错误
-/// 仓储读取失败时返回错误。
+/// 沿用调用方的执行器，不另开事务。
 pub async fn find_open_for_purchase(
     db: &Database,
     purchase_order_id: &str,
@@ -97,18 +61,9 @@ pub async fn find_open_for_purchase(
         .await
 }
 
-/// 读取采购最近一条依据更新记录。
+/// 读取采购最近一条依据更新记录。返回创建时间最晚的记录；没有记录时返回 `None`。
 ///
-/// # 参数
-/// * `db` - 业务数据库
-/// * `purchase_order_id` - 采购单
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回创建时间最晚的记录；没有记录时返回 `None`。
-///
-/// # 错误
-/// 仓储读取失败时返回错误。
+/// 沿用调用方的执行器，不另开事务。
 pub async fn latest_for_purchase(
     db: &Database,
     purchase_order_id: &str,
@@ -187,7 +142,7 @@ mod tests {
         )
     }
 
-    /// 记录可经 BSON 存取，数量、处理方式与说明保持原值。
+    // 记录可经 BSON 存取，数量、处理方式与说明保持原值。
     #[test]
     fn record_round_trips_through_bson() {
         let mut update = record();
@@ -201,7 +156,7 @@ mod tests {
         assert_eq!(back.maintain_note.as_deref(), Some("供应商不接受减量"));
     }
 
-    /// 缺少等待提交字段的记录按未等待提交读取。
+    // 缺少等待提交字段的记录按未等待提交读取。
     #[test]
     fn missing_awaiting_submission_defaults_to_false() {
         let mut document = serialize_to_document(&record()).unwrap();

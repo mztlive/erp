@@ -13,28 +13,10 @@ pub const EVIDENCE: &str = "supplier_api_settlement_evidence";
 
 pub trait AfterSalesExt {
     /// 退款写意图仓储。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 当前数据库仓储。
-    /// # 错误
-    /// 无。
     fn api_refunds(&self) -> Repository<'_, RefundExecution>;
     /// 结算检查点仓储。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 当前数据库仓储。
-    /// # 错误
-    /// 无。
     fn api_settlement_scans(&self) -> Repository<'_, SettlementScan>;
     /// 不可变来源流水仓储。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 当前数据库仓储。
-    /// # 错误
-    /// 无。
     fn api_settlement_evidence(&self) -> Repository<'_, SettlementEvidence>;
 }
 impl AfterSalesExt for Database {
@@ -50,12 +32,8 @@ impl AfterSalesExt for Database {
 }
 
 /// 查询最多20个到期退款，未支持和最终来源均不自动重试。
-/// # 参数
-/// 数据库及调用方执行器。
-/// # 返回
 /// 有界到期队列。
-/// # 错误
-/// 数据库失败。
+/// 数据库失败时向上传播错误。
 pub async fn refunds_due(db: &Database, executor: &mut dyn Executor) -> Result<Vec<RefundExecution>> {
     mongo_ops::find_many(
         &db.collection(REFUNDS),
@@ -67,12 +45,9 @@ pub async fn refunds_due(db: &Database, executor: &mut dyn Executor) -> Result<V
 }
 
 /// 读取原订单最多1000笔退款；超限由调用方拒绝新申请。
-/// # 参数
-/// 数据库、订单及原事务执行器。
-/// # 返回
 /// 包含未决及终态，不过滤累计占用证据。
-/// # 错误
-/// 数据库失败。
+/// 数据库失败时向上传播错误。
+/// 数据库、订单及原事务执行器。
 pub async fn refunds_for_order(
     db: &Database,
     order: &str,
@@ -88,12 +63,9 @@ pub async fn refunds_for_order(
 }
 
 /// 读取一个连接最多50项未关联流水，供已有结算来源录入引用。
-/// # 参数
-/// 数据库、已授权连接和执行器。
-/// # 返回
 /// 只返回当前连接来源，不等同于已过账。
-/// # 错误
-/// 数据库失败。
+/// 数据库失败时向上传播错误。
+/// 数据库、已授权连接和执行器。
 pub async fn pending_settlements(
     db: &Database,
     connection: &str,
@@ -109,11 +81,7 @@ pub async fn pending_settlements(
 }
 
 /// 登记新增集合唯一及有界查询索引，不变更历史集合。
-/// # 参数
-/// 应用数据库。
-/// # 返回
 /// 索引创建完成。
-/// # 错误
 /// 索引冲突或数据库失败。
 pub async fn ensure_indexes(db: &Database) -> Result<()> {
     db.collection::<RefundExecution>(REFUNDS)

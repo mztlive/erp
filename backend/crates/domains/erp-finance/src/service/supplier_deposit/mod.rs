@@ -27,13 +27,11 @@ pub struct SupplierDepositService {
 }
 
 impl SupplierDepositService {
-    /// 绑定财务数据库。
-    /// # 参数
-    /// * `db` - 当前财务拥有的数据库。
-    /// # 返回
+    /// 在组装供应商预存款用例时绑定本域数据库句柄，实际查询或写入由各用例方法执行。
     /// 返回事务步骤服务。
-    /// # 错误
-    /// 无。
+    ///
+    /// 输入约定：
+    /// - `db`：当前财务拥有的数据库。
     pub fn new(db: Database) -> Self {
         Self { db }
     }

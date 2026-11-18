@@ -30,21 +30,8 @@ struct ProductListingChange {
 }
 
 impl CatalogService {
-    /// 一次切换 SPU 下全部当前启用 SKU 的上架状态。
-    ///
-    /// 下架操作同时清理历史停用 SKU 的遗留上架状态；上架操作只作用于当前
-    /// 启用 SKU。全部写入与审计日志在同一事务内提交。
-    ///
-    /// # 参数
-    /// * `product_id` - 商品稳定 ID
-    /// * `req` - 全部当前启用 SKU 的目标上架状态
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回 SPU 继承上架状态与 SKU 数量汇总。
-    ///
-    /// # 错误
-    /// 商品不存在、停用商品尝试上架、没有可上架 SKU 或事务失败时返回错误。
+    /// 批量上下架商品时，对当前启用 SKU 切换上架状态；下架还清理历史停用 SKU 遗留的上架标记。
+    /// 变更和审计在同一事务提交，返回按 SKU 计数继承的商品上架状态。商品缺失、停用商品尝试上架或无可上架 SKU 时拒绝。
     pub async fn product_listing_update(
         &self,
         product_id: &str,
@@ -64,7 +51,7 @@ impl CatalogService {
             .await
     }
 
-    /// 在原事务完成授权、事实读取、写入与回包。
+    // 在原事务中核验商品权限和整组 SKU；只有状态确有变化才写入与审计，否则直接返回继承上架状态。
     async fn product_listing_update_stage(
         &self,
         product_id: &str,
@@ -81,18 +68,8 @@ impl CatalogService {
         self.write_product_listing_change(change, req.listing_status, actor, executor).await
     }
 
-    /// 切换单个 SKU 的上架状态。
-    ///
-    /// # 参数
-    /// * `sku_id` - SKU 稳定 ID
-    /// * `req` - 期望版本与目标上架状态
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回更新后的 SKU 视图。
-    ///
-    /// # 错误
-    /// SKU/商品不存在、版本冲突、停用对象尝试上架或事务失败时返回错误。
+    /// 单独切换 SKU 上架状态时，先检查所属商品的修改资格，再核对该 SKU 的期望版本与目标状态。
+    /// SKU 或商品缺失、版本冲突、停用对象尝试上架或事务失败时拒绝；成功返回 SKU 视图。
     pub async fn sku_listing_update(
         &self,
         sku_id: &str,
@@ -112,7 +89,7 @@ impl CatalogService {
             .await
     }
 
-    /// 在原事务完成授权、事实读取、写入与回包。
+    // 在原事务内校验单个 SKU 的上架请求、对象权限及版本；状态不变时直接返回，不写仓储或审计。
     async fn sku_listing_update_stage(
         &self,
         sku_id: &str,
@@ -131,7 +108,8 @@ impl CatalogService {
         Ok(sku.into())
     }
 
-    /// 校验整组操作并构造需要持久化的 SKU 集合。
+    // 商品批量上下架的写入准备阶段，在原事务核验商品修改资格与责任，并按启用 SKU 计算应修改项和继承状态。
+    // 停用商品或没有启用 SKU 时拒绝上架；只把状态发生变化的 SKU 交给写入阶段。
     async fn prepare_product_listing_change(
         &self,
         product_id: &str,
@@ -160,7 +138,7 @@ impl CatalogService {
         Ok(ProductListingChange { product_id, changed, view })
     }
 
-    /// 沿用本事务准备阶段的完整授权，写入整组 SKU 状态与审计日志。
+    // 沿用本事务准备阶段的完整授权，写入整组 SKU 状态与审计日志。
     async fn write_product_listing_change(
         &self,
         change: ProductListingChange,
@@ -184,7 +162,8 @@ impl CatalogService {
         Ok(view)
     }
 
-    /// 校验单 SKU 操作并应用领域状态迁移。
+    // 单 SKU 上下架前验证功能资格和所属商品对象权限，核对 SKU 版本并执行领域状态迁移。
+    // 返回是否确有变更，供写入阶段跳过幂等请求。
     async fn prepare_sku_listing_change(
         &self,
         sku_id: &str,
@@ -208,7 +187,7 @@ impl CatalogService {
         Ok((sku, changed))
     }
 
-    /// 先检查所属商品的完整修改资格，再报告当前 SKU 的版本冲突。
+    // 先检查所属商品的完整修改资格，再报告当前 SKU 的版本冲突。
     async fn authorize_sku_listing_change(
         &self,
         sku: &Sku,
@@ -229,7 +208,7 @@ impl CatalogService {
         Ok(product)
     }
 
-    /// 沿用本事务准备阶段的完整授权，写入单 SKU 状态与审计日志。
+    // 沿用本事务准备阶段的完整授权，写入单 SKU 状态与审计日志。
     async fn write_sku_listing_change(
         &self,
         mut sku: Sku,
@@ -250,17 +229,8 @@ impl CatalogService {
         Ok(sku)
     }
 
-    /// 为一组 SPU 批量计算继承上架状态，避免列表 N+1。
-    ///
-    /// # 参数
-    /// * `executor` - 原授权事务或读取阶段的执行器。
-    /// * `product_ids` - 要汇总的商品稳定 ID
-    ///
-    /// # 返回
-    /// 返回按商品 ID 索引的继承上架视图。
-    ///
-    /// # 错误
-    /// 上架汇总读取失败时返回仓储错误。
+    // 列表等批量读取阶段一次汇总所请求商品的启用 SKU 与已上架数，按商品 ID 返回继承状态，避免逐商品查询。
+    // 复用调用方执行器；汇总读取失败时返回仓储错误。
     pub(super) async fn product_listing_views(
         &self,
         product_ids: &[ProductId],
@@ -270,19 +240,13 @@ impl CatalogService {
         Ok(product_listing_views_from_summaries(product_ids, &summaries))
     }
 
-    /// 将商品实体映射为包含实时 SKU 上架汇总的响应。
-    ///
-    /// 名称、分类、品牌、维护人姓名与供给计数不在此填充。
-    ///
-    /// # 参数
-    /// * `executor` - 原授权事务或读取阶段的执行器。
-    /// * `product` - 已加载的商品实体
-    ///
-    /// # 返回
-    /// 返回带继承上架状态和启用 SKU 计数的 `ProductView`；没有汇总时计数为零。
-    ///
-    /// # 错误
-    /// 上架汇总读取失败时返回仓储错误。
+    // 将商品实体映射为包含实时 SKU 上架汇总的响应。
+    //
+    // 名称、分类、品牌、维护人姓名与供给计数不在此填充。
+    //
+    // 返回带继承上架状态和启用 SKU 计数的 `ProductView`；没有汇总时计数为零。上架汇总读取失败时返回仓储错误。
+    //
+    // 沿用调用方的执行器，不另开事务。
     pub(super) async fn product_view(
         &self,
         product: Product,
@@ -318,7 +282,7 @@ impl CatalogService {
     }
 }
 
-/// 从整组 SKU 中筛出状态实际发生变化的实体。
+// 从整组 SKU 中筛出状态实际发生变化的实体。
 fn changed_skus(skus: Vec<Sku>, target: ListingStatus, actor_id: &str) -> Result<Vec<Sku>> {
     let mut changed = Vec::new();
     for mut sku in skus {
@@ -332,25 +296,19 @@ fn changed_skus(skus: Vec<Sku>, target: ListingStatus, actor_id: &str) -> Result
     Ok(changed)
 }
 
-/// 已完成整组切换后构造 SPU 继承状态。
+// 已完成整组切换后构造 SPU 继承状态。
 fn product_listing_view(product_id: &str, sku_count: usize, target: ListingStatus) -> ProductListingView {
     let sku_count = u32::try_from(sku_count).unwrap_or(u32::MAX);
     let listed_sku_count = if target.is_listed() { sku_count } else { 0 };
     listing_view_from_counts(product_id, listed_sku_count, sku_count)
 }
 
-/// 把仓储上架计数映射为 SPU 继承状态视图。
-///
-/// # 参数
-/// * `product_id` - 商品稳定主键
-/// * `listed_sku_count` - 当前启用且已上架的 SKU 数
-/// * `sku_count` - 当前启用 SKU 总数
-///
-/// # 返回
-/// 返回 `ProductListingStatus::inherited` 计算后的响应视图。
-///
-/// # 错误
-/// 无。
+// 把仓储上架计数映射为 SPU 继承状态视图。
+//
+// 返回 `ProductListingStatus::inherited` 计算后的响应视图。
+//
+// - `listed_sku_count`：当前启用且已上架的 SKU 数。
+// - `sku_count`：当前启用 SKU 总数。
 fn listing_view_from_counts(product_id: &str, listed_sku_count: u32, sku_count: u32) -> ProductListingView {
     ProductListingView {
         product_id: product_id.to_string(),
@@ -360,17 +318,9 @@ fn listing_view_from_counts(product_id: &str, listed_sku_count: u32, sku_count: 
     }
 }
 
-/// 把批量上架汇总投影映射为按商品 ID 索引的响应视图。
-///
-/// # 参数
-/// * `product_ids` - 请求的商品稳定 ID
-/// * `summaries` - Repository 按首次出现顺序返回的上架计数
-///
-/// # 返回
-/// 返回每个请求商品的继承上架视图；仓储已对缺项补零。
-///
-/// # 错误
-/// 无。
+// 把批量上架汇总投影映射为按商品 ID 索引的响应视图。返回每个请求商品的继承上架视图；仓储已对缺项补零。
+//
+// `product_ids` 为请求的商品稳定 ID。
 fn product_listing_views_from_summaries(
     product_ids: &[ProductId],
     summaries: &[ProductListingSummary],
@@ -422,7 +372,7 @@ mod tests {
         assert_eq!(unlisted.listed_sku_count, 0);
     }
 
-    /// 零 SKU、全部停用、全部上架、部分上架、全部未上架及多商品批量共用 inherited 口径。
+    // 零 SKU、全部停用、全部上架、部分上架、全部未上架及多商品批量共用 inherited 口径。
     #[test]
     fn listing_views_cover_zero_disabled_listed_partial_and_batch() {
         let product_ids = [

@@ -24,11 +24,7 @@ pub struct ConfirmationAction {
 
 impl ApiOrderExecution {
     /// 由服务端分配本地拓扑版本后应用完整观察。
-    /// # 参数
-    /// `incoming` 为供应商观察，外部携带的 version 不作为本地版本依据。
-    /// # 返回
     /// 相同内容保留原版本；内容变化安全递增，再执行历史及数量核验。
-    /// # 错误
     /// 版本溢出或关系校验失败时原有效拓扑不变。
     pub fn apply_observed_tree(&mut self, mut incoming: OrderTree, frozen: &[OrderLine]) -> Result<()> {
         incoming.version = match &self.order_tree {
@@ -49,11 +45,7 @@ impl ApiOrderExecution {
     }
 
     /// 应用已核验的完整订单关系，保留根和历史父节点。
-    /// # 参数
-    /// `incoming` 为来源新关系，`frozen` 为原请求行。
-    /// # 返回
     /// 保存可用于后续确认与数量应用的当前拓扑。
-    /// # 错误
     /// 数量不守恒、版本回退或历史身份变化时原记录不改变。
     pub fn apply_order_tree(&mut self, incoming: OrderTree, frozen: &[OrderLine]) -> Result<()> {
         let tree = match &self.order_tree {
@@ -70,12 +62,9 @@ impl ApiOrderExecution {
     }
 
     /// 在事务内登记单个叶子的确认发送意图。
-    /// # 参数
-    /// `request` 为当前拓扑叶子和稳定动作；返回后须先提交再调用供应商。
-    /// # 返回
     /// 首次意图为 true；同键同载荷重放为 false，禁止重复发送。
-    /// # 错误
     /// 已拆分目标、过期版本、不同载荷或不同订单身份时拒绝。
+    /// `request` 为当前拓扑叶子和稳定动作；返回后须先提交再调用供应商。
     pub fn begin_confirmation(&mut self, request: &ConfirmOrder) -> Result<bool> {
         if let Some(previous) = self.confirmations.get(&request.order.external_order_no) {
             return if previous.request == *request {
@@ -99,11 +88,7 @@ impl ApiOrderExecution {
     }
 
     /// 仅将原目标的明确确认结果应用到原动作。
-    /// # 参数
-    /// `external_order_no` 为原动作目标，`state` 来自原单查询或本次响应。
-    /// # 返回
     /// 明确成功或拒绝时更新原动作；Pending 保留未知且不允许重新发送。
-    /// # 错误
     /// 找不到原动作或已确认事实冲突时拒绝，不传播成功到新拆分子单。
     pub fn observe_confirmation(&mut self, external_order_no: &str, state: ConfirmationState) -> Result<()> {
         let action = self
@@ -154,12 +139,7 @@ impl ApiOrderExecution {
     }
 
     /// 判断全部当前叶子是否均有明确成功事实。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 缺少拓扑或任何叶子未确认时为 false。
-    /// # 错误
-    /// 不返回错误。
     pub fn all_leaves_confirmed(&self) -> bool {
         self.order_tree.as_ref().is_some_and(|tree| {
             let leaves = tree.leaves();
@@ -170,12 +150,9 @@ impl ApiOrderExecution {
     }
 
     /// 判断原预占根单已确认、但来源尚未提供可跟踪的拆单结果。
-    /// # 参数
-    /// 无；读取原根动作回执与当前来源观察，二者不相互替代。
-    /// # 返回
     /// 已确认的预占根动作仍对应预占观察时返回真，须继续查询原根单。
-    /// # 错误
-    /// 不返回错误，不把根动作成功复制给后续子单。
+    /// 不把根动作成功复制给后续子单。
+    /// 读取原根动作回执与当前来源观察，二者不相互替代。
     pub fn awaiting_reservation_discovery(&self) -> bool {
         self.order_tree.as_ref().is_some_and(|tree| {
             tree.nodes.iter().any(|node| {

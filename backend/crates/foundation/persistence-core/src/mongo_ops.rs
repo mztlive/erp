@@ -37,18 +37,8 @@ macro_rules! exec_with_session {
     };
 }
 
-/// 按执行器语义插入单个文档。
-///
-/// # 参数
-/// * `collection` - 目标集合
-/// * `document` - 待插入文档
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 插入成功时返回 `Ok(())`。
-///
-/// # 错误
-/// 当唯一索引冲突或 MongoDB 写入失败时返回错误。
+/// 用调用方执行器插入一个文档，加入已有会话或独立提交；尝试写入前撤销旧读取阶段。
+/// 唯一索引冲突等数据库错误按持久化分类返回。
 pub fn insert_one<'a, T>(
     collection: &'a Collection<T>,
     document: &'a T,
@@ -64,21 +54,8 @@ where
     })
 }
 
-/// 按执行器语义批量插入文档。
-///
-/// 文档集合为空时直接返回；拥有型集合与借用切片均直接交给驱动序列化，
-/// 不要求克隆业务实体。输入顺序及驱动默认的有序插入语义保持不变。
-///
-/// # 参数
-/// * `collection` - 目标集合
-/// * `documents` - 待插入文档集合或借用切片
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 插入成功时返回 `Ok(())`。
-///
-/// # 错误
-/// 当唯一索引冲突或 MongoDB 写入失败时返回错误。
+/// 批量入库时按输入顺序有序插入；接收自有集合或借用切片，无需克隆实体。空输入不访问执行器，也不推进读取阶段；
+/// 非空则在尝试写入前推进，并返回首个驱动错误。
 pub fn insert_many<'a, T, D>(
     collection: &'a Collection<T>,
     documents: D,
@@ -102,20 +79,8 @@ where
     })
 }
 
-/// 按执行器语义更新单个文档。
-///
-/// # 参数
-/// * `collection` - 目标集合
-/// * `filter` - 更新条件
-/// * `update` - 更新内容
-/// * `upsert` - 条件未命中时是否插入新文档
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回 MongoDB 更新结果，调用方据此判断乐观锁是否命中。
-///
-/// # 错误
-/// 当 MongoDB 更新失败时返回错误。
+/// 需要核对单文档修改或乐观锁命中时，在原执行器内更新并读取 `UpdateResult`。
+/// 仅显式启用 `upsert` 才能在未命中时插入；尝试前先废止旧读取阶段。
 pub fn update_one<'a, T>(
     collection: &'a Collection<T>,
     filter: Document,
@@ -133,19 +98,7 @@ where
     })
 }
 
-/// 按执行器语义更新符合条件的全部文档。
-///
-/// # 参数
-/// * `collection` - 目标集合
-/// * `filter` - 更新条件
-/// * `update` - 更新内容
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回 MongoDB 更新结果。
-///
-/// # 错误
-/// 当 MongoDB 更新失败时返回错误。
+/// 将同一更新应用于全部命中文档，返回匹配与修改计数供批处理核对；沿用当前执行器，写入尝试前结束旧读取阶段。
 pub fn update_many<'a, T>(
     collection: &'a Collection<T>,
     filter: Document,
@@ -162,13 +115,8 @@ where
     })
 }
 
-/// 按执行器语义批量执行聚合更新管道，并在写入尝试前结束旧读取阶段。
-/// # 参数
-/// collection 为目标集合；filter 为前置条件；pipeline 为原子更新管道；executor 为调用方执行器。
-/// # 返回
-/// MongoDB 更新结果，供拥有领域核对完整 CAS 匹配数量。
-/// # 错误
-/// 数据库错误保留原分类，不暴露原始事务会话。
+/// 批量依赖文档现值计算新字段时，提交领域构造的过滤和更新管道，并返回匹配计数供核对完整 CAS。
+/// 沿用原会话，尝试前撤销旧阶段，保留数据库错误分类。
 pub fn update_many_pipeline<'a, T>(
     collection: &'a Collection<T>,
     filter: Document,
@@ -185,23 +133,8 @@ where
     })
 }
 
-/// 按执行器语义执行单文档更新管道，并返回更新后的文档。
-///
-/// 该入口用于必须由 MongoDB 原子计算的写入，例如依赖当前字段同时形成历史
-/// 事实并推进版本。Repository 负责组装业务过滤条件和更新管道；事务边界仍由
-/// 调用方传入的执行器决定。
-///
-/// # 参数
-/// * `collection` - 目标集合
-/// * `filter` - 更新前置条件
-/// * `pipeline` - MongoDB 聚合更新管道。
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回更新后的文档；条件未命中时返回 `None`。
-///
-/// # 错误
-/// 当 MongoDB 更新或文档反序列化失败时返回错误。
+/// 当前字段必须同时生成历史事实、推进版本等场景，可用管道原子计算并返回更新后的文档。领域负责过滤与管道；
+/// 沿用调用方执行器，写入尝试前撤销旧读取阶段，未匹配返回 `None`。
 pub fn find_one_and_update_pipeline<'a, T>(
     collection: &'a Collection<T>,
     filter: Document,
@@ -220,18 +153,7 @@ where
     })
 }
 
-/// 按执行器语义删除符合条件的全部文档。
-///
-/// # 参数
-/// * `collection` - 目标集合
-/// * `filter` - 删除条件
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回 MongoDB 删除结果，调用方据此判断是否确有数据被删除。
-///
-/// # 错误
-/// 当 MongoDB 删除失败时返回错误。
+/// 清理一批匹配记录时执行物理删除并返回删除计数；沿用原执行器，尝试前结束旧读取阶段，不提供软删。
 pub fn delete_many<'a, T>(
     collection: &'a Collection<T>,
     filter: Document,
@@ -247,18 +169,7 @@ where
     })
 }
 
-/// 按执行器语义删除符合条件的单个文档。
-///
-/// # 参数
-/// * `collection` - 目标集合
-/// * `filter` - 删除条件
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回 MongoDB 删除结果，调用方据此判断是否确有数据被删除。
-///
-/// # 错误
-/// 当 MongoDB 删除失败时返回错误。
+/// 仅需物理删除一条匹配记录时使用，调用方可凭删除计数识别未命中；沿用原执行器，写入尝试前撤销旧凭证。
 pub fn delete_one<'a, T>(
     collection: &'a Collection<T>,
     filter: Document,
@@ -274,18 +185,7 @@ where
     })
 }
 
-/// 按执行器语义查询单个文档。
-///
-/// # 参数
-/// * `collection` - 目标集合
-/// * `filter` - 查询条件
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回匹配的第一个文档；无匹配时返回 `None`。
-///
-/// # 错误
-/// 当 MongoDB 查询或反序列化失败时返回错误。
+/// 用本次读取的执行器取第一条匹配记录；不改变读取阶段，无匹配返回 `None`，查询或反序列化错误照常上报。
 pub fn find_one<'a, T>(
     collection: &'a Collection<T>,
     filter: Document,
@@ -300,21 +200,8 @@ where
     })
 }
 
-/// 按执行器语义查询多个文档。
-///
-/// 带会话时使用 `SessionCursor` 逐条读取，与非会话游标返回同样的集合结果。
-///
-/// # 参数
-/// * `collection` - 目标集合
-/// * `filter` - 查询条件
-/// * `options` - 排序与分页等查询选项
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回全部匹配文档。
-///
-/// # 错误
-/// 当 MongoDB 查询、游标读取或反序列化失败时返回错误。
+/// 按过滤及排序、分页等选项取完本次游标。若有会话，每次游标读取都继续借用同一会话；
+/// 任何查询、取数或解码错误均返回，不交付部分结果。
 pub fn find_many<'a, T>(
     collection: &'a Collection<T>,
     filter: Document,
@@ -344,21 +231,8 @@ where
     })
 }
 
-/// 按执行器语义判断是否存在符合条件的文档。
-///
-/// 查询只投影 MongoDB `_id` 并在首条命中后停止，避免为存在性判断加载完整文档。
-/// 投影使用独立结果类型，不能按缺少业务必填字段的完整实体反序列化。
-///
-/// # 参数
-/// * `collection` - 目标集合
-/// * `filter` - 查询条件
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 存在匹配文档时返回 `true`，否则返回 `false`。
-///
-/// # 错误
-/// 当 MongoDB 查询失败时返回错误。
+/// 只判断条件是否命中时投影 `_id` 并在首条停止，不载入完整业务文档。
+/// 独立解码类型不要求实体字段或某种特定 `_id` 类型，读取沿用原阶段。
 pub fn exists<'a, T>(
     collection: &'a Collection<T>,
     filter: Document,
@@ -379,18 +253,7 @@ where
 #[derive(Debug, Deserialize)]
 struct ExistsDocument {}
 
-/// 按执行器语义统计符合条件的文档数量。
-///
-/// # 参数
-/// * `collection` - 目标集合
-/// * `filter` - 统计条件
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回匹配文档数量。
-///
-/// # 错误
-/// 当 MongoDB 统计失败时返回错误。
+/// 用与列表或查询相同的过滤条件及执行器统计命中总数，不载入或解码完整文档。
 pub fn count_documents<'a, T>(
     collection: &'a Collection<T>,
     filter: Document,
@@ -405,13 +268,7 @@ where
     })
 }
 
-/// 在原执行器中取得字段的去重值，不撤销事务边界。
-/// # 参数
-/// collection、field、filter 为实际集合、字段与条件；executor 为原读取执行器。
-/// # 返回
-/// MongoDB distinct 返回的全部 BSON 值。
-/// # 错误
-/// 数据库读取失败原样传播。
+/// 需要字段候选值时在原读取阶段做去重，不暴露或撤销事务边界；结果保留 BSON 类型，读取失败返回持久化错误。
 pub fn distinct<'a, T>(
     collection: &'a Collection<T>,
     field: &'a str,
@@ -424,13 +281,8 @@ where
     Box::pin(async move { Ok(exec_with_session!(executor, collection.distinct(field, filter))) })
 }
 
-/// 按固定排序原子更新首个匹配文档，保留原执行器和读取阶段边界。
-/// # 参数
-/// collection、filter、pipeline、sort 为拥有领域的更新条件、管道和排序；executor 为原执行器。
-/// # 返回
-/// 更新后的文档；无匹配时返回 None。
-/// # 错误
-/// 数据库或解码失败原样传播。
+/// 从多个匹配候选中按领域指定顺序原子选取并更新第一条，返回更新后的文档，未命中返回 `None`。
+/// 继续使用原执行器，但写入尝试前结束旧读取阶段。
 pub fn find_one_and_update_sorted_pipeline<'a, T>(
     collection: &'a Collection<T>,
     filter: Document,
@@ -451,13 +303,8 @@ where
     })
 }
 
-/// 在原执行器中以聚合管道更新一个文档。
-/// # 参数
-/// collection、filter、pipeline 为实际写入；executor 为原事务执行器。
-/// # 返回
-/// 原始 UpdateResult，保留匹配与修改计数。
-/// # 错误
-/// 数据库写入失败原样传播；写入尝试前结束旧读取阶段。
+/// 用原执行器为单文档执行基于当前字段的更新管道，保留匹配与修改计数；
+/// 写入尝试前结束旧读取阶段，驱动错误按持久化分类返回。
 pub fn update_one_pipeline<'a, T>(
     collection: &'a Collection<T>,
     filter: Document,
@@ -528,7 +375,7 @@ mod tests {
         }
     }
 
-    /// 拥有型及借用型空集合都直接成功，不调用执行器。
+    // 验证空的自有集合与借用切片都绕过数据库和会话，不为无需插入的批次要求文档实现 `Clone`。
     #[tokio::test]
     async fn insert_many_accepts_empty_owned_and_borrowed_non_clone_documents() {
         let collection = traced_collection();
@@ -537,7 +384,7 @@ mod tests {
         insert_many(&collection, documents, &mut UnusedExecutor).await.unwrap();
     }
 
-    /// 两种输入均保持序列化顺序、首个错误及数据库错误分类，不要求实体 Clone。
+    // 用不可克隆的文档比较两种输入的有序序列化：遇到第二项错误立即停止，且错误文案和仓储分类一致。
     #[tokio::test]
     async fn insert_many_preserves_first_serialization_error_for_owned_and_borrowed_inputs() {
         let collection = traced_collection();

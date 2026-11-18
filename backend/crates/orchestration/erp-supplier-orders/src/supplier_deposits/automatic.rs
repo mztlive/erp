@@ -31,12 +31,11 @@ struct AutomaticPreparation {
 }
 
 /// 为已通过采购预检的创建步骤取得本执行组全额资金保障。
-/// # 参数
-/// * `db` / `execution` - 服务器数据源及已预检的冻结执行组。
-/// * `codec` - 读取原批准预算的共享解码器。
-/// # 返回
+///
+/// `db` / `execution`：服务器数据源及已预检的冻结执行组；`codec`：读取原批准预算的共享解码器。
+///
 /// 原占用有效或本次按唯一批准及自动授权占用成功时返回成功。
-/// # 错误
+///
 /// 采购或预算变化、批准不唯一、自动授权缺失或资金不足时阻断，不冒用出纳。
 pub async fn prepare_automatic_execution_funds(
     db: &Database,

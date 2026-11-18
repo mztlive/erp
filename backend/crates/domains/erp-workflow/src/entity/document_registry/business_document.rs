@@ -100,15 +100,7 @@ impl DocumentType {
     ];
 
     /// 返回类型的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::SalesOrder => "销售单",
@@ -136,16 +128,8 @@ impl DocumentType {
         }
     }
 
-    /// 返回类型的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
+    /// 取得类型的稳定代码。
     /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::SalesOrder => "sales_order",
@@ -174,18 +158,13 @@ impl DocumentType {
     }
 
     /// 仅接受已登记的精确稳定代码。
+    /// 本方法不裁剪、不折叠大小写、不接受别名，也不提供默认类型。
     ///
-    /// # 参数
-    /// * `code` - 待解析的单据类型稳定代码
-    ///
-    /// # 返回
     /// 代码与冻结集合中的某一项完全一致时返回对应类型。
     ///
-    /// # 错误
     /// 空值、未知代码、大小写变化或任何前后空白均返回错误。
     ///
-    /// # 关键业务约束
-    /// 本方法不裁剪、不折叠大小写、不接受别名，也不提供默认类型。
+    /// `code`：待解析的单据类型稳定代码。
     pub fn try_from_code(code: &str) -> Result<Self> {
         Self::ALL
             .into_iter()
@@ -209,17 +188,11 @@ pub struct ApprovalDefinitionBinding {
 
 impl ApprovalDefinitionBinding {
     /// 创建完整绑定。初次绑定版本为 1。
-    ///
-    /// # 参数
-    /// * `approval_process_definition_id` - 定义主键
-    /// * `approval_definition_version` - 定义业务版本
-    /// * `approval_definition_bound_at` - 绑定时间
-    ///
-    /// # 返回
     /// 返回绑定版本为 1 的完整绑定。
     ///
-    /// # 错误
     /// 定义版本为零时返回错误。
+    ///
+    /// `approval_definition_version`：定义业务版本。
     pub fn new(
         approval_process_definition_id: ApprovalProcessDefinitionId,
         approval_definition_version: u32,
@@ -237,18 +210,11 @@ impl ApprovalDefinitionBinding {
     }
 
     /// 整体替换为更高绑定版本。
-    ///
-    /// # 参数
-    /// * `approval_process_definition_id` - 新定义
-    /// * `approval_definition_version` - 新定义版本
-    /// * `expected_binding_version` - 期望的当前绑定版本
-    /// * `at` - 升级时间
-    ///
-    /// # 返回
     /// 返回绑定版本加一后的新绑定。
     ///
-    /// # 错误
     /// 当前绑定版本与期望不一致、新定义版本为零或绑定版本溢出时返回错误。
+    ///
+    /// `approval_definition_version`：新定义版本；`expected_binding_version`：期望的当前绑定版本。
     pub fn upgrade(
         &self,
         approval_process_definition_id: ApprovalProcessDefinitionId,
@@ -353,15 +319,11 @@ impl BusinessDocument {
     /// 完成 document_no 的校验与规范化（去首尾空白、长度上限）；
     /// 尚未分配正式号的草稿允许以空编号注册。
     ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::BusinessDocumentId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
     /// 返回新建的注册实体（`formalized_at` 为 `None`）。
     ///
-    /// # 错误
     /// 当 document_no 超长时返回错误。
+    ///
+    /// `id`：实体主键（`erp_core::ids::BusinessDocumentId`）。
     pub fn new(id: BusinessDocumentId, data: BusinessDocumentData) -> Result<Self> {
         let document_no = normalize_optional_text(Some(data.document_no), "单据编号", DOCUMENT_NO_MAX_LEN)?
             .unwrap_or_default();
@@ -389,15 +351,11 @@ impl BusinessDocument {
     ///
     /// 成功后编号永久不可修改或清空。
     ///
-    /// # 参数
-    /// * `document_no` - 正式编号
-    /// * `at` - 分配时间
-    ///
-    /// # 返回
     /// 无返回值；写入正式编号和分配时间。
     ///
-    /// # 错误
     /// 编号为空或超长，或已经分配过时返回错误。
+    ///
+    /// `document_no`：正式编号。
     pub fn assign_document_no(&mut self, document_no: impl Into<String>, at: Instant) -> Result<()> {
         if !self.document_no.is_empty() || self.document_no_assigned_at.is_some() {
             return Err(Error::from("单据编号只能分配一次"));
@@ -415,14 +373,8 @@ impl BusinessDocument {
     }
 
     /// 为尚未绑定的单据设置完整审批绑定。
-    ///
-    /// # 参数
-    /// * `binding` - 整体绑定值对象
-    ///
-    /// # 返回
     /// 无返回值；写入审批绑定。
     ///
-    /// # 错误
     /// 已经存在绑定时返回错误。
     pub fn bind_approval_definition(&mut self, binding: ApprovalDefinitionBinding) -> Result<()> {
         if self.approval_binding.is_some() {
@@ -433,16 +385,11 @@ impl BusinessDocument {
     }
 
     /// 校验 `NO_APPROVAL` 单据注册不得写入任何审批绑定。
-    ///
-    /// # 参数
-    /// * `expected_document_type` - 强类型业务实体声明的单据类型
-    /// * `returned_binding` - 统一绑定端口返回的可选绑定
-    ///
-    /// # 返回
     /// 注册类型一致、注册行未预置绑定且端口返回空绑定时返回 `Ok(())`。
     ///
-    /// # 错误
     /// 类型不一致、注册行已有绑定或端口返回绑定时返回错误。
+    ///
+    /// `expected_document_type`：强类型业务实体声明的单据类型；`returned_binding`：统一绑定端口返回的可选绑定。
     pub fn ensure_no_approval_registration(
         &self,
         expected_document_type: DocumentType,
@@ -461,18 +408,11 @@ impl BusinessDocument {
     }
 
     /// 整体升级未提交单据的审批绑定。
-    ///
-    /// # 参数
-    /// * `approval_process_definition_id` - 新定义
-    /// * `approval_definition_version` - 新定义版本
-    /// * `expected_binding_version` - 期望的当前绑定版本
-    /// * `at` - 升级时间
-    ///
-    /// # 返回
     /// 无返回值；用升级后的绑定替换当前绑定。
     ///
-    /// # 错误
     /// 尚无绑定，或 [`ApprovalDefinitionBinding::upgrade`] 因版本不匹配、定义版本为零、绑定版本溢出而失败时返回错误。
+    ///
+    /// `approval_definition_version`：新定义版本；`expected_binding_version`：期望的当前绑定版本。
     pub fn upgrade_approval_binding(
         &mut self,
         approval_process_definition_id: ApprovalProcessDefinitionId,
@@ -494,19 +434,14 @@ impl BusinessDocument {
 
     /// 校验未提交单据是否允许升级审批绑定。
     ///
-    /// # 参数
-    /// * `expected_binding_version` - 调用方期望的审批绑定版本
-    /// * `reason` - 本次升级原因
-    ///
-    /// # 返回
-    /// 全部未提交升级约束满足时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 缺少绑定、已提交、已启动、双版本冲突或原因为空时返回对应错误。
-    ///
-    /// # 关键业务约束
     /// 审批启动事实必须持久化在本注册聚合中，以便启动与升级竞争同一行写冲突；
     /// 不得以查询 BPM 实例替代该并发守卫。
+    ///
+    /// 全部未提交升级约束满足时返回 `Ok(())`。
+    ///
+    /// 缺少绑定、已提交、已启动、双版本冲突或原因为空时返回对应错误。
+    ///
+    /// `expected_binding_version`：调用方期望的审批绑定版本；`reason`：本次升级原因。
     pub fn ensure_unsubmitted_approval_binding_upgrade(
         &self,
         expected_binding_version: u64,
@@ -531,18 +466,13 @@ impl BusinessDocument {
     }
 
     /// 整体升级满足未提交约束的审批绑定。
+    /// 校验与写入使用同一实体快照，禁止只更新定义 ID、版本或时间中的部分字段。
     ///
-    /// # 参数
-    /// * `input` - 当前发布定义、审批启动事实、期望版本、升级原因与发生时间
-    ///
-    /// # 返回
     /// 成功时整体替换审批绑定并将绑定 CAS 版本加一。
     ///
-    /// # 错误
     /// 未提交升级约束失败或绑定值对象拒绝新版本时返回错误。
     ///
-    /// # 关键业务约束
-    /// 校验与写入使用同一实体快照，禁止只更新定义 ID、版本或时间中的部分字段。
+    /// `input`：当前发布定义、审批启动事实、期望版本、升级原因与发生时间。
     pub fn upgrade_unsubmitted_approval_binding(
         &mut self,
         input: ApprovalBindingUpgradeInput<'_>,
@@ -560,18 +490,12 @@ impl BusinessDocument {
 
     /// 永久标记该注册单据已经启动审批。
     ///
-    /// # 参数
-    /// * `at` - 首次启动发生时间
-    ///
-    /// # 返回
-    /// 已经持有完整审批绑定时写入首次启动时间；重复调用保持首次时间不变。
-    ///
-    /// # 错误
-    /// 缺少审批绑定时返回错误。
-    ///
-    /// # 关键业务约束
     /// 生产启动路径必须在创建 BPM 实例的同一事务内持久化本事实。字段只允许
     /// 从空变为有值，不得由取消、驳回、完成、再次提交或数据修复覆盖、清空。
+    ///
+    /// 已经持有完整审批绑定时写入首次启动时间；重复调用保持首次时间不变。
+    ///
+    /// 缺少审批绑定时返回错误。
     pub fn mark_approval_started(&mut self, at: Instant) -> Result<()> {
         if self.approval_binding.is_none() {
             return Err(Error::from("未绑定审批定义的单据不能启动审批"));
@@ -586,14 +510,9 @@ impl BusinessDocument {
     ///
     /// `formalized_at` 只记录首次成为正式事实的时间，重复调用不覆盖。
     ///
-    /// # 参数
-    /// * `at` - 正式化时刻
-    ///
-    /// # 返回
     /// 无返回值；首次调用写入 `formalized_at`，后续调用保持原值。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// `at`：正式化时刻。
     pub fn formalize(&mut self, at: Instant) {
         if self.formalized_at.is_none() {
             self.formalized_at = Some(at);
@@ -620,7 +539,7 @@ mod tests {
         }
     }
 
-    /// happy path：编号去首尾空白，类型与编号正确落库，初始未正式化。
+    // 验证编号去首尾空白，类型与编号正确落库，初始未正式化。
     #[test]
     fn new_trims_document_no_and_starts_unformalized() {
         let doc = BusinessDocument::new(BusinessDocumentId::new("bd-1"), data()).unwrap();
@@ -629,7 +548,7 @@ mod tests {
         assert!(doc.formalized_at.is_none());
     }
 
-    /// 草稿允许空编号，正式号只能分配一次。
+    // 验证：草稿允许空编号，正式号只能分配一次。
     #[test]
     fn assign_document_no_is_one_shot() {
         let payload = BusinessDocumentData { document_no: "   ".to_string(), ..data() };
@@ -644,7 +563,7 @@ mod tests {
         assert!(doc.assign_document_no("  ", Instant::from_unix_secs(2)).is_err());
     }
 
-    /// 绑定必须整体设置；升级要求期望版本。
+    // 验证：绑定必须整体设置；升级要求期望版本。
     #[test]
     fn approval_binding_is_atomic() {
         let mut doc = BusinessDocument::new(BusinessDocumentId::new("bd-1"), data()).unwrap();
@@ -697,7 +616,7 @@ mod tests {
         );
     }
 
-    /// 无审批注册要求类型一致且注册行与绑定端口都保持空绑定。
+    // 验证：无审批注册要求类型一致且注册行与绑定端口都保持空绑定。
     #[test]
     fn no_approval_registration_rejects_any_binding_or_type_mismatch() {
         let document = BusinessDocument::new(
@@ -727,7 +646,7 @@ mod tests {
         assert!(prebound.ensure_no_approval_registration(DocumentType::ElectronicDelivery, None).is_err());
     }
 
-    /// 未提交绑定升级由实体统一校验绑定 CAS、提交状态、启动事实与原因。
+    // 验证：未提交绑定升级由实体统一校验绑定 CAS、提交状态、启动事实与原因。
     #[test]
     fn unsubmitted_binding_upgrade_enforces_all_document_rules() {
         let mut document = BusinessDocument::new(BusinessDocumentId::new("bd-1"), data()).unwrap();
@@ -788,14 +707,14 @@ mod tests {
         assert_eq!(started.approval_started_at, Some(Instant::from_unix_secs(12)));
     }
 
-    /// 失败路径：超长编号被拒。
+    // 验证超长编号时会被拒绝。
     #[test]
     fn new_rejects_overlong_document_no() {
         let payload = BusinessDocumentData { document_no: "x".repeat(129), ..data() };
         assert!(BusinessDocument::new(BusinessDocumentId::new("bd-1"), payload).is_err());
     }
 
-    /// 正式化时间只记录首次。
+    // 验证：正式化时间只记录首次。
     #[test]
     fn formalize_only_records_first_time() {
         let mut doc = BusinessDocument::new(BusinessDocumentId::new("bd-1"), data()).unwrap();
@@ -806,19 +725,12 @@ mod tests {
         assert_eq!(doc.formalized_at.unwrap(), first);
     }
 
-    /// 验证全部二十二个冻结代码都能精确解析。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 所有代码映射到对应枚举时测试通过。
-    ///
-    /// # 错误
-    /// 任一代码被拒绝或映射到错误类型时测试失败。
-    ///
-    /// # 关键业务约束
-    /// 用例覆盖 `DocumentType` 的完整稳定代码集合。
+    // 验证全部二十二个冻结代码都能精确解析。
+    // 用例覆盖 `DocumentType` 的完整稳定代码集合。
+    //
+    // 所有代码映射到对应枚举时测试通过。
+    //
+    // 任一代码被拒绝或映射到错误类型时测试失败。
     #[test]
     fn document_type_try_from_code_accepts_all_stable_codes() {
         assert_eq!(DocumentType::ALL.len(), 22);
@@ -827,19 +739,12 @@ mod tests {
         }
     }
 
-    /// 验证非精确代码按失败关闭处理。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 所有非法输入均被拒绝时测试通过。
-    ///
-    /// # 错误
-    /// 空值、未知值、大小写变化或空白变体被接受时测试失败。
-    ///
-    /// # 关键业务约束
-    /// 解析不得裁剪、折叠大小写、接受别名或回落默认类型。
+    // 验证非精确代码按失败关闭处理。
+    // 解析不得裁剪、折叠大小写、接受别名或回落默认类型。
+    //
+    // 所有非法输入均被拒绝时测试通过。
+    //
+    // 空值、未知值、大小写变化或空白变体被接受时测试失败。
     #[test]
     fn document_type_try_from_code_rejects_non_exact_codes() {
         for code in
@@ -849,7 +754,7 @@ mod tests {
         }
     }
 
-    /// 合同 §4.3 的 20 个固定类型：as_str、label 与 serde 必须穷尽一致。
+    // 验证：合同 §4.3 的 20 个固定类型：as_str、label 与 serde 必须穷尽一致。
     #[test]
     fn document_type_codes_and_labels_are_stable() {
         const ROWS: &[(DocumentType, &str, &str)] = &[
@@ -895,7 +800,7 @@ mod tests {
         assert_eq!(voucher, DocumentType::VoucherSalesOrder);
     }
 
-    /// BSON 往返（实体层持久化形态与 P0 约定一致）。
+    // 验证 BSON 序列化与反序列化（实体层持久化形态与 P0 约定一致）。
     #[test]
     fn entity_roundtrips_through_bson() {
         let doc = BusinessDocument::new(BusinessDocumentId::new("bd-1"), data()).unwrap();

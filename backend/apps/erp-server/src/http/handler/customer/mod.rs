@@ -21,7 +21,7 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 use crate::wiring::{contract_access, customer_access, funds_access};
 
-/// 原子创建完整客户资料。
+/// 接收完整客户建档请求并交由主数据 Process 原子写入，而不是从 HTTP 分别保存各部分资料。
 pub async fn customer_profile_create(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -31,7 +31,7 @@ pub async fn customer_profile_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 原子修订完整客户资料。
+/// 以路径客户 ID 和完整资料进入主数据修订流程，在同一次业务写入中保存这次档案变更。
 pub async fn customer_profile_update(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -42,7 +42,7 @@ pub async fn customer_profile_update(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 查询完整客户资料，并按当前字段权限裁剪从属事实与允许动作。
+/// 打开客户资料页时读取完整档案，由资料读模型按当前权限剪裁从属数据和可执行动作。
 pub async fn customer_profile_detail(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -52,7 +52,7 @@ pub async fn customer_profile_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 查询客户中心合同/销售最近摘要与跨页指标。
+/// 为客户中心加载近期合同和销售摘要及跨页指标，请求使用同一客户、合同和财务授权组合。
 pub async fn customer_center_related(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -70,7 +70,7 @@ pub async fn customer_center_related(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 查询客户中心跨应收账户的定点金额汇总。
+/// 在客户中心展示应收概况时，将当前客户与认证身份交给读模型汇总跨应收账户的定点金额。
 pub async fn customer_center_receivable(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -88,7 +88,7 @@ pub async fn customer_center_receivable(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 按幂等键查询已成功客户资料命令结果。
+/// 客户建档或更新结果待确认时，按原幂等键读取已成功命令的结果，不重放资料写入。
 pub async fn customer_profile_command_detail(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -99,7 +99,7 @@ pub async fn customer_profile_command_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 按短时令牌揭示单个敏感字段，并同时校验客户范围、字段详情与揭示权限。
+/// 需要查看客户敏感字段原值时，用短时令牌向主数据流程请求单字段揭示；该流程同时校验客户范围、详情和揭示资格。
 pub async fn customer_sensitive_reveal(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -109,16 +109,10 @@ pub async fn customer_sensitive_reveal(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 查询客户列表。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `query` - 分页与筛选参数（`keyword`/`party_id`/`status` 扁平传递）
-///
-/// # 返回
+/// 按请求条件查询客户列表。
+/// `query` 为分页与筛选参数（`keyword`/`party_id`/`status` 扁平传递）。
 /// 返回带范围版本的分页视图，不附带负责销售候选。
 ///
-/// # 关键业务约束
 /// 负责销售筛选只收窄客户。行负责人姓名来自当前页归属，不由此接口产生候选。
 pub async fn customer_list(
     State(state): State<HttpState>,
@@ -130,10 +124,7 @@ pub async fn customer_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-/// 查询不受个人归属限制的全部有权客户。
-///
-/// 与常规列表共用同一响应，不附带负责销售候选。
-/// `all_authorized` 只放宽客户归属收窄，不按客户归属定义销售人员全集。
+/// 为需要超出个人归属的客户查询使用 `all_authorized`，只放宽归属收窄，不放宽业务权限。复用常规客户列表响应，不在这里生成负责销售候选或人员全集。
 pub async fn customer_all_authorized_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -145,13 +136,6 @@ pub async fn customer_all_authorized_list(
 }
 
 /// 创建客户（同事务建立客户角色 + 首条 OWNER 归属）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 创建请求
-///
-/// # 返回
 /// 返回新建客户角色的响应视图。
 pub async fn customer_create(
     State(state): State<HttpState>,
@@ -163,12 +147,6 @@ pub async fn customer_create(
 }
 
 /// 查询客户详情（客户 + 主体身份 + 当前生效 OWNER）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `id` - 客户角色 ID
-///
-/// # 返回
 /// 返回客户详情视图。
 pub async fn customer_detail(
     State(state): State<HttpState>,
@@ -180,14 +158,7 @@ pub async fn customer_detail(
 }
 
 /// 更新客户角色（乐观锁）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 客户角色 ID
-/// * `req` - 更新请求（含期望版本）
-///
-/// # 返回
+/// `req` 为更新请求（含期望版本）。
 /// 返回更新后客户角色的响应视图。
 pub async fn customer_update(
     State(state): State<HttpState>,
@@ -200,14 +171,6 @@ pub async fn customer_update(
 }
 
 /// 软删除客户角色。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 客户角色 ID
-///
-/// # 返回
-/// 返回统一成功信封。
 pub async fn customer_delete(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -223,15 +186,7 @@ pub async fn customer_delete(
     Ok(ApiResponse::ok())
 }
 
-/// 查询客户归属列表。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `id` - 客户角色 ID
-/// * `query` - 分页与筛选参数
-///
-/// # 返回
-/// 返回契约形状的分页视图。
+/// 按请求条件查询客户归属列表。
 pub async fn customer_assignment_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -247,14 +202,6 @@ pub async fn customer_assignment_list(
 }
 
 /// 调整客户归属（Assign 建立新归属并结束重叠旧归属；End 提前结束有效期）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 客户角色 ID
-/// * `req` - 归属变更请求
-///
-/// # 返回
 /// 返回本次变更涉及的归属行。
 pub async fn customer_assignment_apply(
     State(state): State<HttpState>,
@@ -266,19 +213,11 @@ pub async fn customer_assignment_apply(
     Ok(ApiResponse::ok_with_data(views))
 }
 
-/// 常规列表拒绝全量授权口径，避免只凭 `customer:list` 绕过专用入口。
-///
-/// # 参数
-/// * `scope` - 请求中的目录范围标签
-///
-/// # 返回
-/// 非 `all_authorized` 时成功。
-///
-/// # 错误
-/// 常规入口携带全量授权时返回校验错误。
-///
-/// # 关键业务约束
-/// 全部有权客户必须走 `customer_scope:detail` 专用入口。
+// 常规列表拒绝全量授权口径，避免只凭 `customer:list` 绕过专用入口。
+// 非 `all_authorized` 时成功。
+// 常规入口携带全量授权时返回校验错误。
+//
+// 全部有权客户必须走 `customer_scope:detail` 专用入口。
 fn reject_all_authorized_on_regular_list(scope: CustomerScope) -> std::result::Result<(), Error> {
     if scope == CustomerScope::AllAuthorized {
         return Err(Error::BadRequest("全部有权客户请使用专用查询入口".to_string()));
@@ -331,19 +270,9 @@ mod tests {
         }
     }
 
-    /// 客户 Query 解码必须消费范围版本与组织筛选，并拒绝旧姓名参数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 无。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 未知参数不得被忽略后返回全部客户。
+    // 客户 Query 解码必须消费范围版本与组织筛选，并拒绝旧姓名参数。
+    //
+    // 未知参数不得被忽略后返回全部客户。
     #[test]
     fn customer_scope_version_and_org_filters_decode_from_url() {
         let uri: Uri = "/?page=2&page_size=25&scope_version=v1&owner_user_ids=a,b&org_unit_ids=org-1&include_descendants=true"
@@ -359,19 +288,9 @@ mod tests {
         assert!(Query::<CustomerListParams>::try_from_uri(&legacy).is_err());
     }
 
-    /// 常规列表不得接受 all_authorized，专用入口才覆盖该口径。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 无。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 组织范围内账号不能靠常规列表看到全部有权客户。
+    // 常规列表不得接受 all_authorized，专用入口才覆盖该口径。
+    //
+    // 组织范围内账号不能靠常规列表看到全部有权客户。
     #[test]
     fn regular_list_rejects_all_authorized_scope() {
         assert!(reject_all_authorized_on_regular_list(CustomerScope::Mine).is_ok());

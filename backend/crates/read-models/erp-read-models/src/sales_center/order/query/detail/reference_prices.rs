@@ -8,13 +8,14 @@ use crate::Result;
 use crate::sales_center::prices::enrich_line_prices;
 
 impl SalesOrderReadService {
-    /// 为已授权草稿补齐锁定版本价格，不覆盖单据金额。
-    /// # 参数
-    /// `view` 为已读取的工作副本。
-    /// # 返回
-    /// 原地补齐参考价和原采购供给价。
-    /// # 错误
-    /// 批量读取失败时返回错误。
+    // 组装销售草稿锁定参考价时，为已授权草稿补齐锁定版本价格，不覆盖单据金额。
+    //
+    // 调用参数：
+    // `view` 为已读取的工作副本。
+    //
+    // 原地补齐参考价和原采购供给价。
+    //
+    // 批量读取失败时返回错误。
     pub(super) async fn enrich_working_copy_prices(
         &self,
         view: &mut WorkingCopyView,

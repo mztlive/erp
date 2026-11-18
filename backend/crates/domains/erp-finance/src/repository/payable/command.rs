@@ -14,18 +14,14 @@ impl<'a> PayableRepository<'a> {
     /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction` 时
     /// 两笔写入各自自动提交，第二笔失败会留下只有子账没有分录的半成品；
     /// Service 必须通过 `persistence_core::Transactional::with_transaction` 传入事务会话。
-    ///
-    /// # 参数
-    /// * `account` - 待写入的应付往来子账
-    /// * `entry` - 待写入的原始应付分录
-    /// * `executor` - 数据访问执行器，必须位于事务中
-    ///
-    /// # 返回
-    /// 子账与原始分录都写入成功时返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// 结果：子账与原始分录都写入成功时返回 `Ok(())`。
     /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射
     /// 为冲突语义）或 MongoDB 写入失败时返回错误。
+    ///
+    /// 输入约定：
+    /// - `account`：待写入的应付往来子账
+    /// - `entry`：待写入的原始应付分录
+    /// - `executor`：数据访问执行器，必须位于事务中
     pub async fn create_payable_with_entry(
         &self,
         account: &PayableAccount,
@@ -42,17 +38,13 @@ impl<'a> PayableRepository<'a> {
     /// 过账时抛出唯一键冲突，由 Service 转译并整体回滚。
     /// **必须收到事务执行器**：本方法不构成原子边界，Service 必须通过
     /// `persistence_core::Transactional::with_transaction` 传入事务会话。
-    ///
-    /// # 参数
-    /// * `allocations` - 待持久化的核销分配
-    /// * `executor` - 数据访问执行器，必须位于事务中
-    ///
-    /// # 返回
-    /// 全部写入成功返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// 结果：全部写入成功返回 `Ok(())`。
     /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射
     /// 为冲突语义）或 MongoDB 写入失败时返回错误。
+    ///
+    /// 输入约定：
+    /// - `allocations`：待持久化的核销分配
+    /// - `executor`：数据访问执行器，必须位于事务中
     pub async fn create_payment_allocations_many(
         &self,
         allocations: &[PaymentAllocation],
@@ -73,17 +65,13 @@ impl<'a> PayableRepository<'a> {
     /// 唯一键冲突，由 Service 转译并整体回滚。
     /// **必须收到事务执行器**：本方法不构成原子边界，Service 必须通过
     /// `persistence_core::Transactional::with_transaction` 传入事务会话。
-    ///
-    /// # 参数
-    /// * `allocations` - 待持久化的进项发票分配
-    /// * `executor` - 数据访问执行器，必须位于事务中
-    ///
-    /// # 返回
-    /// 全部写入成功返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// 结果：全部写入成功返回 `Ok(())`。
     /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射
     /// 为冲突语义）或 MongoDB 写入失败时返回错误。
+    ///
+    /// 输入约定：
+    /// - `allocations`：待持久化的进项发票分配
+    /// - `executor`：数据访问执行器，必须位于事务中
     pub async fn create_purchase_invoice_allocations_many(
         &self,
         allocations: &[PurchaseInvoiceAllocation],
@@ -106,7 +94,7 @@ mod tests {
 
     use super::PayableRepository;
 
-    /// 空输入必须直接成功且不访问数据库。
+    // 回归检查：空输入必须直接成功且不访问数据库。
     #[tokio::test]
     async fn create_purchase_invoice_allocations_many_empty_input_without_db() {
         let client =

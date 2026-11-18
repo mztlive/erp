@@ -20,13 +20,7 @@ use crate::error::Error;
 use crate::repository::WarehouseExt;
 
 impl WarehouseService {
-    /// 在原事务授权并创建仓库身份与首修订。
-    /// # 参数
-    /// actor、req 为操作人和输入，executor 为入口事务。
-    /// # 返回
-    /// 已创建的仓库视图。
-    /// # 错误
-    /// 授权、资格、业务校验或持久化失败时终止。
+    // 在入口事务验证请求、动作及经办资格，再写仓库稳定身份、首修订和审计。授权、资格、业务校验或持久化失败时停止，不交付部分结果。
     pub(super) async fn create(
         &self,
         actor: &AuditActor,
@@ -71,13 +65,7 @@ impl WarehouseService {
         Ok(warehouse.into())
     }
 
-    /// 原对象、修订序号及写入均在授权后的同一快照读取。
-    /// # 参数
-    /// actor、id、req 为原操作目标，executor 为入口事务。
-    /// # 返回
-    /// 已更新的仓库视图。
-    /// # 错误
-    /// 无资格、对象缺失、版本冲突或持久化失败时终止。
+    // 在授权后的原事务读取目标和修订序号，追加修订、更新当前指针并写审计。资格不足、对象缺失、版本冲突或写入失败时停止。
     pub(super) async fn update(
         &self,
         actor: &AuditActor,
@@ -134,13 +122,7 @@ impl WarehouseService {
         Ok(warehouse.into())
     }
 
-    /// 经办人资格和仓库版本沿用原事务，不在授权前预读。
-    /// # 参数
-    /// actor、id、req 为原操作目标，executor 为入口事务。
-    /// # 返回
-    /// 配置生效后的仓库视图。
-    /// # 错误
-    /// 无资格、对象缺失、版本冲突或持久化失败时终止。
+    // 在原事务先验动作和经办资格，再读取仓库、核对版本并保存新配置及审计，不在授权前探测对象。对象缺失、资格不符、版本冲突或写入失败时终止。
     pub(super) async fn update_handlers(
         &self,
         actor: &AuditActor,
@@ -188,13 +170,7 @@ impl WarehouseService {
         Ok(warehouse.into())
     }
 
-    /// 授权后在原快照检查策略版本和完整重叠集合。
-    /// # 参数
-    /// actor、id、req 为原操作目标，executor 为入口事务。
-    /// # 返回
-    /// 已更新的策略视图。
-    /// # 错误
-    /// 无资格、对象缺失、版本冲突、区间重叠或持久化失败时终止。
+    // 授权后在原事务检查策略版本和同仓同 SKU 的完整重叠集合；更新与审计一起写入。无权、缺失、版本冲突、区间重叠或写入失败时停止。
     pub(super) async fn update_policy(
         &self,
         actor: &AuditActor,
@@ -237,13 +213,7 @@ impl WarehouseService {
         Ok(policy.into())
     }
 
-    /// 授权、真实策略读取、CAS 删除和审计共用原事务。
-    /// # 参数
-    /// actor 为操作人，id 为策略身份，executor 为入口事务。
-    /// # 返回
-    /// 策略及审计写入成功时完成。
-    /// # 错误
-    /// 无资格、策略缺失、并发冲突或持久化失败时终止。
+    // 在同一事务授权、读取实际策略、按版本软删除并保存审计；无权、缺失、并发冲突或持久化失败不完成删除。
     pub(super) async fn delete_policy(
         &self,
         actor: &AuditActor,
@@ -272,7 +242,7 @@ impl WarehouseService {
         Ok(())
     }
 
-    /// 按既定顺序校验操作资格、经办人及仓库版本。
+    // 按动作授权、经办资格、仓库读取、期望版本的顺序校验更新前置条件，避免先于授权探测数据。
     async fn load_warehouse_for_update(
         &self,
         actor: &AuditActor,
@@ -305,7 +275,7 @@ impl WarehouseService {
         self.ensure_handler_eligible(outbound, HandlerDuty::Outbound, executor).await
     }
 
-    /// 为本次业务写入构造独立修订，不访问数据库。
+    // 为本次写入分配独立修订 ID，用指定序号和资料建立快照；只构造实体，不访问数据库。
     fn revision(
         &self,
         id: WarehouseId,

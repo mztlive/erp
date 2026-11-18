@@ -14,7 +14,7 @@ use crate::finance::dto::CustomerReceiptView;
 use crate::{Error, Result};
 
 impl ReceivableReadService {
-    /// 使用调用方执行器读取完整回款、核销安排与冻结审批绑定。
+    /// 使用调用方执行器取得完整回款、核销安排与冻结审批绑定。
     ///
     /// # 参数
     /// * `id` - 回款单主键
@@ -77,13 +77,12 @@ impl ReceivableReadService {
         })
     }
 }
-/// 汇总回款核销分配并装配视图（`APPLY` 加、`REVERSE` 减）。
-///
-/// # 参数
-/// * `allocations` - 回款核销分配集合
-///
-/// # 返回
-/// 返回 `(净已核销合计, 分配视图列表)`。
+// 生成客户回款命令结果视图时，汇总回款核销分配并装配视图（`APPLY` 加、`REVERSE` 减）。
+//
+// 调用参数：
+// * `allocations` - 回款核销分配集合
+//
+// 返回 `(净已核销合计, 分配视图列表)`。
 fn allocation_view(allocations: &[ReceiptAllocation]) -> (Amount, Vec<ReceiptAllocationView>) {
     let mut net = zero_amount();
     let views = allocations

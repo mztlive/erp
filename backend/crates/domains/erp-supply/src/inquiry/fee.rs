@@ -32,12 +32,9 @@ pub struct InquiryFeeBasis {
 }
 impl InquiryFeeBasis {
     /// 建立不可变费用收款依据，不产生应付或付款授权。
-    /// # 参数
-    /// `id` 为依据主键，`data` 为已授权采购输入。
-    /// # 返回
     /// 返回内部费用依据。
-    /// # 错误
     /// 作用域、收款身份、付款条件或内部资料非法时拒绝。
+    /// `id` 为依据主键，`data` 为已授权采购输入。
     pub fn new(id: String, mut data: InquiryFeeBasisData) -> Result<Self> {
         if id.trim().is_empty()
             || data.requirement_version == 0

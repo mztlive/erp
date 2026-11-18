@@ -36,24 +36,18 @@ pub(super) use application_core::non_blank;
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
 pub(crate) use application_core::normalize_sort;
 
-/// 归一化分页与排序参数（DTO `normalized()` 唯一入口）。
-///
-/// 九处列表查询的 `PageParams` 组装（`normalize_sort` + 默认页码/条数）
-/// 收敛至此；各 `normalized()` 只声明白名单并搬运筛选字段，不再复制
-/// 四行分页字面量。
-///
-/// # 参数
-/// * `page` - 可选页码；缺省为第一页
-/// * `page_size` - 可选单页条数；缺省 20 并 clamp 到 1–100
-/// * `sort_by` - 可选排序字段；空白视为未提供
-/// * `sort_dir` - 可选排序方向；空白视为未提供
-/// * `allowed_fields` - 该列表的排序白名单
-///
-/// # 返回
-/// 返回归一化后的分页与排序参数。
-///
-/// # 错误
-/// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
+// 归一化分页与排序参数（DTO `normalized()` 唯一入口）。
+//
+// 九处列表查询的 `PageParams` 组装（`normalize_sort` + 默认页码/条数）收敛至此；各 `normalized()`
+// 只声明白名单并搬运筛选字段，不再复制四行分页字面量。
+//
+// 返回归一化后的分页与排序参数。字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
+//
+// - `page`：可选页码；缺省为第一页。
+// - `page_size`：可选单页条数；缺省 20 并 clamp 到 1–100。
+// - `sort_by`：可选排序字段；空白视为未提供。
+// - `sort_dir`：可选排序方向；空白视为未提供。
+// - `allowed_fields`：该列表的排序白名单。
 pub(crate) fn paging_params(
     page: Option<u64>,
     page_size: Option<u32>,
@@ -72,20 +66,14 @@ pub(crate) fn paging_params(
     })
 }
 
-/// 校验目录查询共用的销售价区间。
-///
-/// 先检查任一端点为负，再检查同时存在的下限是否高于上限；该顺序与对外
-/// 参数错误合同一致，商品列表与公司商品池必须复用同一规则源。
-///
-/// # 参数
-/// * `minimum` - 可选销售价下限（含）
-/// * `maximum` - 可选销售价上限（含）
-///
-/// # 返回
-/// 区间合法时返回 `Ok(())`。
-///
-/// # 错误
-/// 金额为负或下限高于上限时返回 `ValidationError`。
+// 校验目录查询共用的销售价区间。
+//
+// 先检查任一端点为负，再检查同时存在的下限是否高于上限；该顺序与对外参数错误合同一致，商品列表与公司商品池必须复用同一规则源。
+//
+// 区间合法时返回 `Ok(())`。金额为负或下限高于上限时返回 `ValidationError`。
+//
+// - `minimum`：可选销售价下限（含）。
+// - `maximum`：可选销售价上限（含）。
 pub(crate) fn validate_sales_price_range(minimum: Option<Amount>, maximum: Option<Amount>) -> Result<()> {
     if minimum.is_some_and(|value| value.to_decimal().is_sign_negative())
         || maximum.is_some_and(|value| value.to_decimal().is_sign_negative())

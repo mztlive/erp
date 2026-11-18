@@ -44,11 +44,7 @@ pub struct InquiryQuote {
 
 impl InquiryQuote {
     /// 创建不可变内部报价版本。
-    /// # 参数
-    /// `id` 为版本主键，`data` 为独立内部报价资料。
-    /// # 返回
     /// 返回尚未持久化的报价版本。
-    /// # 错误
     /// 作用域、供应身份、条款或内部资料非法时拒绝。
     pub fn new(id: String, mut data: InquiryQuoteData) -> Result<Self> {
         if id.trim().is_empty()
@@ -85,12 +81,7 @@ impl InquiryQuote {
     }
 
     /// 判断是否已登记完全相同的供应商回复，不依赖导入文件名或客户端报价ID。
-    /// # 参数
-    /// `scope`、`round` 指定需求和轮次，其余参数为已校验的供应身份与商业条件。
-    /// # 返回
     /// 原记录未删除且回复身份、条款和备注完全一致时为真。
-    /// # 错误
-    /// 无。
     pub fn matches_reply(
         &self,
         scope: &InquiryQuoteScope,
@@ -125,11 +116,7 @@ impl InquiryQuote {
     }
 
     /// 校验精确需求和供应身份后核对条款，不修改报价历史。
-    /// # 参数
-    /// `usage` 为本次正式采用的服务器事实。
-    /// # 返回
     /// 作用域和商业条件全部匹配时成功。
-    /// # 错误
     /// 跨询价、跨需求版本、换SKU或供应商及条款失效时拒绝。
     pub fn ensure_applicable(&self, usage: &InquiryQuoteUse) -> Result<()> {
         if self.base.is_deleted()

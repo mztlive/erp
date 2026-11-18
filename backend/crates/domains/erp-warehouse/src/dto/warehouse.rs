@@ -173,13 +173,7 @@ pub struct WarehouseView {
 }
 
 impl From<Warehouse> for WarehouseView {
-    /// 从实体构造响应视图。
-    ///
-    /// # 参数
-    /// * `warehouse` - 仓库实体
-    ///
-    /// # 返回
-    /// 返回响应视图。
+    // 将仓库身份、启停状态、经办配置与版本转成命令响应，不读取额外修订内容。
     fn from(warehouse: Warehouse) -> Self {
         Self {
             id: warehouse.base.id,
@@ -240,18 +234,7 @@ pub(crate) struct WarehouseListQuery {
 }
 
 impl WarehouseListParams {
-    /// 归一化仓库列表查询参数。
-    ///
-    /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    // 清理关键词等文本并填入缺省分页，生成与仓储无关的仓库列表条件；排序字段不在白名单或方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<WarehouseListQuery> {
         Ok(WarehouseListQuery {
             warehouse_id: normalized_text(self.warehouse_id.as_deref()),
@@ -328,18 +311,7 @@ pub(crate) struct WarehouseRevisionListQuery {
 }
 
 impl WarehouseRevisionListParams {
-    /// 归一化仓库修订列表查询参数。
-    ///
-    /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    // 将仓库 ID 转成仓储可用的字符串，清理修订名称并填入缺省分页；排序字段不在白名单或方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<WarehouseRevisionListQuery> {
         Ok(WarehouseRevisionListQuery {
             warehouse_id: self.warehouse_id.as_ref().map(|id| id.to_string()),
@@ -409,13 +381,7 @@ pub struct WarehouseSkuPolicyView {
 }
 
 impl From<WarehouseSkuPolicy> for WarehouseSkuPolicyView {
-    /// 从实体构造响应视图。
-    ///
-    /// # 参数
-    /// * `policy` - 预警策略实体
-    ///
-    /// # 返回
-    /// 返回响应视图。
+    // 将策略实体转成响应，保留仓库和 SKU、定点阈值、生效区间及乐观锁版本，供后续展示或提交修改。
     fn from(policy: WarehouseSkuPolicy) -> Self {
         Self {
             id: policy.base.id,
@@ -466,18 +432,7 @@ pub(crate) struct WarehouseSkuPolicyListQuery {
 }
 
 impl WarehouseSkuPolicyListParams {
-    /// 归一化仓库-SKU 预警策略列表查询参数。
-    ///
-    /// 分页取默认值、排序字段过白名单校验。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    // 整理仓库、SKU、状态和缺省分页为预警策略查询条件；排序字段不在白名单或方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<WarehouseSkuPolicyListQuery> {
         Ok(WarehouseSkuPolicyListQuery {
             warehouse_id: self.warehouse_id.as_ref().map(|id| id.to_string()),

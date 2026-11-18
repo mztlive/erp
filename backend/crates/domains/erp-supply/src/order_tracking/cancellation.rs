@@ -6,12 +6,9 @@ use crate::{Error, Result};
 
 impl OrderObservation {
     /// 核对完整当前子单均已取消且没有发货及未决返款。
-    /// # 参数
-    /// 无；订单树已在来源观察构建与应用时验证数量守恒。
-    /// # 返回
     /// 无订单树的旧协议沿用原取消校验；有树时所有叶子必须具备明确事实。
-    /// # 错误
     /// 缺失任一取消、发货或返款事实，或仍有处理中子单时拒绝。
+    /// 订单树已在来源观察构建与应用时验证数量守恒。
     pub fn ensure_leaf_cancellations(&self) -> Result<()> {
         let Some(tree) = &self.topology else {
             return Ok(());

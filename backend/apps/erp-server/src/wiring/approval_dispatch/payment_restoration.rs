@@ -20,16 +20,9 @@ pub(crate) struct PaymentRequestRestoration {
     ports: FinancePostingPorts,
 }
 impl PaymentRequestRestoration {
-    /// 绑定当前应用数据库，不执行读写。
-    ///
-    /// # 参数
-    /// `db` 为冲正命令数据库，`rbac` 为共享身份来源，`authorization` 为完整绑定的共享授权服务。
-    ///
-    /// # 返回
-    /// 可注入逆向编排的原申请恢复能力。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 绑定当前应用数据库，不执行读写。
+    // `db` 为冲正命令数据库，`rbac` 为共享身份来源，`authorization` 为完整绑定的共享授权服务。
+    // 可注入逆向编排的原申请恢复能力。
     pub(crate) fn new(
         db: Database,
         rbac: SharedRbacService,

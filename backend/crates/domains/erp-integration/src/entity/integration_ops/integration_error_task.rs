@@ -51,16 +51,7 @@ pub enum ErrorClass {
 }
 
 impl ErrorClass {
-    /// 返回错误分类的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将错误分类映射为中文标签，供界面显示。
     pub fn label(&self) -> &'static str {
         match self {
             Self::CapabilityGap => "能力不足",
@@ -74,16 +65,7 @@ impl ErrorClass {
         }
     }
 
-    /// 返回错误分类的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将错误分类编码为稳定字符串，供持久化和精确查询复用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::CapabilityGap => "capability_gap",
@@ -99,34 +81,18 @@ impl ErrorClass {
 
     /// 判断该错误分类是否允许按规则自动重试。
     ///
-    /// §7.7：网络超时、临时不可用和限流可按规则自动重试；参数/映射错误、业务明确
-    /// 拒绝、鉴权或签名失败不自动重试；结果未知先查询原请求，不盲目重试。
+    /// §7.7：网络超时、临时不可用和限流可按规则自动重试；参数/映射错误、业务明确拒绝、鉴权或签名失败不自动重试；结果未知先查询原请求，不盲目重试。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 属于可自动重试分类时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn can_auto_retry(&self) -> bool {
         matches!(self, Self::TransientFailure | Self::RateLimited)
     }
 
     /// 判断服务端确认原动作无结果后是否允许人工重放。
     ///
-    /// 结果未知必须先查询原结果；确认不存在后可安全重放。临时故障与限流
-    /// 同样允许沿原业务事实键重放，其余分类失败关闭。
+    /// 结果未知必须先查询原结果；确认不存在后可安全重放。临时故障与限流同样允许沿原业务事实键重放，其余分类失败关闭。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 允许在无结果结论后重放时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn allows_replay_after_no_result(self) -> bool {
         self.can_auto_retry() || self == Self::ResultUnknown
     }
@@ -150,16 +116,7 @@ pub enum ErrorTaskStatus {
 }
 
 impl ErrorTaskStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将状态映射为中文标签，供界面显示。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Pending => "待处理",
@@ -170,16 +127,7 @@ impl ErrorTaskStatus {
         }
     }
 
-    /// 返回状态的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将状态编码为稳定字符串，供持久化和精确查询复用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Pending => "pending",
@@ -192,24 +140,17 @@ impl ErrorTaskStatus {
 }
 
 impl DocumentState for ErrorTaskStatus {
-    /// 返回当前状态的全部合法后继状态。
-    ///
-    /// 迁移规则（数据模型 §6.21、§7.7）：
-    /// - 待处理可按规则进入自动重试中，或直接转人工（不自动重试的分类）；
-    /// - 自动重试中因重试耗尽、鉴权失败或结果未知转人工，取得可验证终态则解决；
-    /// - 重复或误派任务（含待处理/自动重试中/待人工）经证据核对后关闭；
-    /// - 已解决/已关闭是终态，无出边。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不含自身的静态后继切片：`Pending` 为 `AutoRetrying`、`ManualRequired`、
-    /// `Resolved`、`Closed`；`AutoRetrying` 为 `ManualRequired`、`Resolved`、`Closed`；
-    /// `ManualRequired` 为 `Resolved`、`Closed`；`Resolved` 与 `Closed` 为空切片。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 返回当前状态的全部合法后继状态。
+    //
+    // 迁移规则（数据模型 §6.21、§7.7）：
+    // - 待处理可按规则进入自动重试中，或直接转人工（不自动重试的分类）；
+    // - 自动重试中因重试耗尽、鉴权失败或结果未知转人工，取得可验证终态则解决；
+    // - 重复或误派任务（含待处理/自动重试中/待人工）经证据核对后关闭；
+    // - 已解决/已关闭是终态，无出边。
+    //
+    // 返回不含自身的静态后继切片：`Pending` 为 `AutoRetrying`、`ManualRequired`、`Resolved`、`Closed`；
+    // `AutoRetrying` 为 `ManualRequired`、`Resolved`、`Closed`；`ManualRequired` 为
+    // `Resolved`、`Closed`；`Resolved` 与 `Closed` 为空切片。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Pending => &[Self::AutoRetrying, Self::ManualRequired, Self::Resolved, Self::Closed],
@@ -237,16 +178,7 @@ pub enum ResolutionType {
 }
 
 impl ResolutionType {
-    /// 返回解决方式的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将解决方式映射为中文标签，供界面显示。
     pub fn label(&self) -> &'static str {
         match self {
             Self::QueryConfirm => "查询确认",
@@ -257,16 +189,7 @@ impl ResolutionType {
         }
     }
 
-    /// 返回解决方式的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将解决方式编码为稳定字符串，供持久化和精确查询复用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::QueryConfirm => "query_confirm",
@@ -281,15 +204,7 @@ impl ResolutionType {
     ///
     /// 补偿结果优先于业务对象核验；两者均无时使用查询确认。
     ///
-    /// # 参数
-    /// * `has_compensation` - 是否含正式补偿结果
-    /// * `has_business_verification` - 是否含业务对象核验证据
-    ///
-    /// # 返回
     /// 返回唯一解决方式。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn from_verified_evidence(has_compensation: bool, has_business_verification: bool) -> Self {
         if has_compensation {
             Self::Compensate
@@ -366,19 +281,12 @@ pub struct IntegrationErrorTask {
 impl IntegrationErrorTask {
     /// 创建集成错误任务。
     ///
-    /// 完成 `business_object_id` 与责任字段的校验与规范化，并强制不变式：任务必须
-    /// 至少关联消息或业务对象之一（关联一致性）。新任务一律为待处理，重试次数从 0 起。
+    /// 完成 `business_object_id` 与责任字段的校验与规范化，并强制不变式：任务必须至少关联消息或业务对象之一（关联一致性）。新任务一律为待处理，
+    /// 重试次数从 0 起。
     ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::IntegrationErrorTaskId`）
-    /// * `data` - 创建数据
+    /// 消息与业务对象都缺失、业务对象 ID 或责任角色超长、处理人为空或为 `me`、或处理人组织为空、超长或为 `company` 时返回领域校验错误。
     ///
-    /// # 返回
-    /// 返回新建的错误任务实体。
-    ///
-    /// # 错误
-    /// 消息与业务对象都缺失、业务对象 ID 或责任角色超长、处理人为空或为 `me`、
-    /// 或处理人组织为空、超长或为 `company` 时返回领域校验错误。
+    /// `id` 为实体主键（`erp_core::ids::IntegrationErrorTaskId`）。
     pub fn new(id: IntegrationErrorTaskId, data: IntegrationErrorTaskData) -> Result<Self> {
         let business_object_id =
             normalize_optional_text(data.business_object_id, "业务对象ID", BUSINESS_OBJECT_ID_MAX_LEN)?;
@@ -413,19 +321,11 @@ impl IntegrationErrorTask {
     ///
     /// 责任角色恒为错误分类的固定责任角色；处理人与组织仍由调用方提供。
     ///
-    /// # 参数
-    /// * `id` - 实体主键
-    /// * `message_id` - 关联消息（消息类失败必填其一）
-    /// * `business_object_id` - 关联业务对象（非消息类失败必填其一）
-    /// * `error_class` - 错误分类
-    /// * `owner_user_id` - 当前处理人
-    /// * `owner_org_unit_id` - 处理人内部组织
+    /// 返回状态为待处理的错误任务；责任角色取该错误分类的固定角色。关联缺失、处理人/组织非法时返回领域校验错误。
     ///
-    /// # 返回
-    /// 返回状态为待处理的错误任务；责任角色取该错误分类的固定角色。
-    ///
-    /// # 错误
-    /// 关联缺失、处理人/组织非法时返回领域校验错误。
+    /// - `message_id`：关联消息（消息类失败必填其一）。
+    /// - `business_object_id`：关联业务对象（非消息类失败必填其一）。
+    /// - `owner_user_id`：当前处理人。
     pub fn with_derived_owner_role(
         id: IntegrationErrorTaskId,
         message_id: Option<InboxMessageId>,
@@ -451,13 +351,6 @@ impl IntegrationErrorTask {
     ///
     /// 消息、业务对象与错误分类是关键字段，不在通用更新中修改。
     ///
-    /// # 参数
-    /// * `update` - 更新数据
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 责任角色超长，或给出的处理人为空、为 `me` 或超长时返回领域校验错误。
     pub fn update(&mut self, update: IntegrationErrorTaskUpdate) -> Result<()> {
         self.owner_role = normalize_optional_text(update.owner_role, "责任角色", OWNER_ROLE_MAX_LEN)?;
@@ -467,33 +360,16 @@ impl IntegrationErrorTask {
         Ok(())
     }
 
-    /// 改派当前处理人，并同步其有效内部组织。
+    /// 改派当前处理人，并同步其有效内部组织。处理人或组织为空、为 `me`/`company` 占位或超长时返回错误。
     ///
-    /// # 参数
-    /// * `owner_user_id` - 合格内部处理人
-    /// * `owner_org_unit_id` - 处理人当前有效内部组织
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 处理人或组织为空、为 `me`/`company` 占位或超长时返回错误。
+    /// `owner_org_unit_id` 为处理人当前有效内部组织。
     pub fn reassign_handler(&mut self, owner_user_id: String, owner_org_unit_id: String) -> Result<()> {
         self.owner_user_id = Some(require_handler_user_id(Some(owner_user_id))?);
         self.owner_org_unit_id = require_handler_org_unit_id(owner_org_unit_id)?;
         Ok(())
     }
 
-    /// 记录已办处理人；不删除既有参与留痕。
-    ///
-    /// # 参数
-    /// * `user_id` - 完成或关闭该任务的处理人
-    ///
-    /// # 返回
-    /// 记录成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 处理人为空、为 `me` 或超长时返回错误。
+    /// 记录已办处理人；不删除既有参与留痕。处理人为空、为 `me` 或超长时返回错误。
     pub fn record_completed_by(&mut self, user_id: String) -> Result<()> {
         self.completed_by = Some(require_handler_user_id(Some(user_id))?);
         Ok(())
@@ -501,17 +377,9 @@ impl IntegrationErrorTask {
 
     /// 记录一次重试尝试。
     ///
-    /// 重试次数递增并记录最近尝试时间与脱敏结果（自动重试与人工重放均使用原幂等键，
-    /// §7.7；幂等键由 `inbox_message.business_fact_key` 承载）。
+    /// 重试次数递增并记录最近尝试时间与脱敏结果（自动重试与人工重放均使用原幂等键，§7.7；幂等键由 `inbox_message.business_fact_key`
+    /// 承载）。
     ///
-    /// # 参数
-    /// * `at` - 本次尝试时间
-    /// * `summary` - 脱敏的尝试结果摘要
-    ///
-    /// # 返回
-    /// 记录成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 任务已是已解决或已关闭，或最近尝试结果超长时返回领域校验错误。
     pub fn record_attempt(&mut self, at: Instant, summary: Option<String>) -> Result<()> {
         if self.is_terminal() {
@@ -535,17 +403,10 @@ impl IntegrationErrorTask {
     ///   W02 受控关闭入口负责校验替代任务、对象类别与管理范围；
     /// - 非终态迁移不允许携带解决信息。
     ///
-    /// # 参数
-    /// * `to` - 目标状态
-    /// * `resolution_type` - 解决方式（终态迁移必填）
-    /// * `resolution` - 解决/关闭证据说明（终态迁移必填）
-    /// * `at` - 完成时间
-    ///
-    /// # 返回
-    /// 迁移成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 迁移不在邻接矩阵中，或终态迁移缺少解决方式/证据、非终态迁移携带解决信息时返回错误。
+    ///
+    /// - `resolution_type`：解决方式（终态迁移必填）。
+    /// - `resolution`：解决/关闭证据说明（终态迁移必填）。
     pub fn transition(
         &mut self,
         to: ErrorTaskStatus,
@@ -569,30 +430,12 @@ impl IntegrationErrorTask {
         Ok(())
     }
 
-    /// 判断任务是否处于终态。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 状态为已解决或已关闭时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 判断任务是否处于终态。状态为已解决或已关闭时返回 `true`。
     pub fn is_terminal(&self) -> bool {
         matches!(self.status, ErrorTaskStatus::Resolved | ErrorTaskStatus::Closed)
     }
 
-    /// 判断最近一次动作是否已由服务端确认原动作无结果。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 最近摘要同时包含查询原结果动作与无结果结论时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 判断最近一次动作是否已由服务端确认原动作无结果。最近摘要同时包含查询原结果动作与无结果结论时返回 `true`。
     pub fn prior_query_confirmed_no_result(&self) -> bool {
         self.last_attempt_summary.as_deref().is_some_and(|summary| {
             summary.contains("w29_action=QUERY_ORIGINAL_RESULT")
@@ -600,63 +443,33 @@ impl IntegrationErrorTask {
         })
     }
 
-    /// 判断当前任务是否满足人工重放的全部纯领域前置条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 任务尚未终态、服务端已确认原动作无结果，且错误分类允许重放时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 判断当前任务是否满足人工重放的全部纯领域前置条件。任务尚未终态、服务端已确认原动作无结果，且错误分类允许重放时返回 `true`。
     pub fn can_replay_original(&self) -> bool {
         !self.is_terminal()
             && self.prior_query_confirmed_no_result()
             && self.error_class.allows_replay_after_no_result()
     }
 
-    /// 判断命令携带的业务主题版本是否仍与任务一致。
+    /// 判断命令携带的业务主题版本是否仍与任务一致。去除首尾空白后与当前乐观锁版本一致时返回 `true`。
     ///
-    /// # 参数
-    /// * `expected` - 客户端冻结的十进制版本字符串
-    ///
-    /// # 返回
-    /// 去除首尾空白后与当前乐观锁版本一致时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// `expected` 为客户端冻结的十进制版本字符串。
     pub fn has_subject_version(&self, expected: &str) -> bool {
         self.base.version.to_string() == expected.trim()
     }
 
     /// 判断任务当前是否允许自动重试。
     ///
-    /// 要求错误分类可自动重试（§7.7）且任务仍处于待处理/自动重试中（转人工后由
-    /// 人工决定，人工重放仍使用原幂等键）。
+    /// 要求错误分类可自动重试（§7.7）且任务仍处于待处理/自动重试中（转人工后由人工决定，人工重放仍使用原幂等键）。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 允许自动重试时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn can_auto_retry(&self) -> bool {
         self.error_class.can_auto_retry()
             && matches!(self.status, ErrorTaskStatus::Pending | ErrorTaskStatus::AutoRetrying)
     }
 
-    /// 应用「已解决」终态要求。
-    ///
-    /// # 参数
-    /// * `resolution_type` - 解决方式（不得为「关闭」）
-    /// * `resolution` - 终态证据
-    /// * `at` - 完成时间
-    ///
-    /// # 错误
-    /// 解决方式缺失或为「关闭」、证据为空或超长时返回错误。
+    // 应用「已解决」终态要求。解决方式缺失或为「关闭」、证据为空或超长时返回错误。
+    //
+    // `resolution_type` 为解决方式（不得为「关闭」）。
     fn apply_resolve(
         &mut self,
         resolution_type: Option<ResolutionType>,
@@ -679,15 +492,9 @@ impl IntegrationErrorTask {
         )
     }
 
-    /// 应用「已关闭」终态要求。
-    ///
-    /// # 参数
-    /// * `resolution_type` - 解决方式（必须为「关闭」）
-    /// * `resolution` - 替代任务或终态证据
-    /// * `at` - 完成时间
-    ///
-    /// # 错误
-    /// 解决方式不是「关闭」或证据为空、超长时返回错误。
+    // 应用「已关闭」终态要求。解决方式不是「关闭」或证据为空、超长时返回错误。
+    //
+    // `resolution_type` 为解决方式（必须为「关闭」）。
     fn apply_close(
         &mut self,
         resolution_type: Option<ResolutionType>,
@@ -725,7 +532,7 @@ impl IntegrationErrorTask {
     }
 }
 
-/// 规范化并拒绝 `"me"` 占位的处理人 ID。
+// 规范化并拒绝 `"me"` 占位的处理人 ID。
 fn require_handler_user_id(raw: Option<String>) -> Result<String> {
     let owner = normalize_optional_text(raw, "责任人", OWNER_USER_ID_MAX_LEN)?
         .ok_or_else(|| Error::from("错误任务必须指定合格内部处理人"))?;

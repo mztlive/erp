@@ -26,12 +26,10 @@ pub struct SupplierAfterSalesProcess {
 }
 impl SupplierAfterSalesProcess {
     /// 装配统一售后处理器，不在构造时执行 I/O。
-    /// # 参数
+    ///
     /// 数据库与应用共享协议注册表。
-    /// # 返回
+    ///
     /// 可共享的处理器。
-    /// # 错误
-    /// 无。
     pub fn new(db: Database, registry: Arc<SupplierConnectorRegistry>) -> Self {
         Self { db, registry, cursor: Arc::new(tokio::sync::Mutex::new(String::new())) }
     }

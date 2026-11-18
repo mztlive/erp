@@ -6,13 +6,10 @@ use super::{SalesOrderDraftRequest, SalesOrderEditableDraftRequest};
 use crate::{Error, Result};
 impl SalesOrderEditableDraftRequest {
     /// 编辑旧销售单时，省略结算主体表示保留原选择。
+    /// 结果：仅补齐对应请求字段中的缺省值，显式选择保持不变。
+    /// 失败条件：关联和主体资格由命令流程另行校验。
     ///
-    /// # 参数
-    /// `existing` 为原销售单结算主体，`has_contract` 表示本次是否关联合同。
-    /// # 返回
-    /// 仅补齐对应请求字段中的缺省值，显式选择保持不变。
-    /// # 错误
-    /// 无；关联和主体资格由命令流程另行校验。
+    /// 输入约定：`existing` 为原销售单结算主体，`has_contract` 表示本次是否关联合同。
     pub fn retain_settlement(&mut self, existing: &PartyId, has_contract: bool) {
         if has_contract {
             self.settlement_party_id.get_or_insert_with(|| existing.clone());
@@ -22,13 +19,11 @@ impl SalesOrderEditableDraftRequest {
     }
 
     /// 规范化并组装无合同草稿；主体名称来自服务器。
-    ///
-    /// # 参数
-    /// * `name` / `settlement_name` - 服务器读取的客户及结算主体当前法定名称
-    /// # 返回
     /// 返回规范化后的完整无合同销售草稿。
-    /// # 错误
     /// 缺少或存在非法付款与开票条款、行为空时拒绝。
+    ///
+    /// 输入约定：
+    /// - `name` / `settlement_name`：服务器读取的客户及结算主体当前法定名称
     pub fn into_no_contract_draft(
         self,
         name: String,

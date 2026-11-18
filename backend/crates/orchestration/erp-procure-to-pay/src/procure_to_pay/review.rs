@@ -44,15 +44,7 @@ use crate::{Error, Result};
 impl PurchaseOrderProcess {
     /// 读取并完成采购形式化的事务外领域计算。
     ///
-    /// # 参数
-    /// * `id` - 采购单主键。
-    /// * `actor` - 最终通过的审计操作人。
-    ///
-    /// # 返回
-    /// 返回尚未落库的形式化写入计划与审核结果。
-    ///
-    /// # 错误
-    /// 单据、提交或来源事实不完整时返回错误。
+    /// `actor` 为最终通过的审计操作人。返回尚未落库的形式化写入计划与审核结果。单据、提交或来源事实不完整时返回错误。
     pub async fn prepare_formalized_order(
         &self,
         id: &str,
@@ -108,7 +100,7 @@ impl PurchaseOrderProcess {
         })
     }
 
-    /// 按原读取顺序取得仍待审核的提交，状态校验失败时停止后续版本计算。
+    // 按原读取顺序取得仍待审核的提交，状态校验失败时停止后续版本计算。
     async fn pending_submission(&self, id: &PurchaseOrderSubmissionId) -> Result<PurchaseOrderSubmission> {
         let submission = self
             .db
@@ -122,7 +114,7 @@ impl PurchaseOrderProcess {
         Ok(submission)
     }
 
-    /// 构建应付子账与原始应付分录（D19；子账按采购单维度）。
+    // 构建应付子账与原始应付分录（D19；子账按采购单维度）。
     async fn build_payable(
         &self,
         order: &PurchaseOrder,
@@ -163,7 +155,7 @@ impl PurchaseOrderProcess {
         )?)
     }
 
-    /// 构建 `CONFIRMED` 成本事实（D20；逐采购行一个成本事实）。
+    // 构建 `CONFIRMED` 成本事实（D20；逐采购行一个成本事实）。
     async fn build_confirmed_cost_entries(
         &self,
         submission: &PurchaseOrderSubmission,
@@ -195,7 +187,7 @@ impl PurchaseOrderProcess {
     }
 }
 
-/// 从冻结版本与应付分录投影本次正式生效结果。
+// 从冻结版本与应付分录投影本次正式生效结果。
 fn formalized_order_result(
     order: &PurchaseOrder,
     revision: &PurchaseOrderRevision,
@@ -258,7 +250,7 @@ pub struct FormalizedOrderPersist {
     cost_entries: Vec<erp_finance::entity::cost::CostEntry>,
 }
 
-/// 为生效采购单按创建时冻结的目标仓库创建采购入库草稿。
+// 为生效采购单按创建时冻结的目标仓库创建采购入库草稿。
 async fn create_receipt_draft_for_order(
     db: &Database,
     ports: &PurchaseOrderPorts,
@@ -318,11 +310,11 @@ async fn create_receipt_draft_for_order(
     Ok(())
 }
 
-/// 为生效供应商直发采购单创建发货草稿（§6.7 直发）。
-///
-/// 行按版本行全额生成，引用同一事务内已创建的「采购行→销售行」分配
-/// （`DeliveryLine` 行级校验要求直发必填分配）；草稿进入 W01 履约任务作业面
-/// 「交付与代发」通道，采购登记物流后过账发货。
+// 为生效供应商直发采购单创建发货草稿（§6.7 直发）。
+//
+// 行按版本行全额生成，引用同一事务内已创建的「采购行→销售行」分配
+// （`DeliveryLine` 行级校验要求直发必填分配）；草稿进入 W01 履约任务作业面
+// 「交付与代发」通道，采购登记物流后过账发货。
 async fn create_delivery_draft_for_order(
     db: &Database,
     ports: &PurchaseOrderPorts,
@@ -382,12 +374,12 @@ async fn create_delivery_draft_for_order(
 /// 草稿阶段为占位快照，代码库无按指纹查询服务履约的路径）。
 const SERVICE_FULFILLMENT_FINGERPRINT_KEY: &[u8] = b"erp-service-fulfillment-draft-key-v1";
 
-/// 为生效线下服务采购单创建服务履约草稿（§6.7 服务）。
-///
-/// 服务履约记录按采购版本行逐行生成（单记录单明细），引用同一事务内已创建
-/// 的「采购行→销售行」分配；草稿进入 W01 履约任务作业面的
-/// 服务类型。采购登记服务地点、时间、结果和现场图片凭证后确认完成。
-/// 交付对象为占位快照（UI 不采集）；服务地点占位值必须在确认时替换。
+// 为生效线下服务采购单创建服务履约草稿（§6.7 服务）。
+//
+// 服务履约记录按采购版本行逐行生成（单记录单明细），引用同一事务内已创建
+// 的「采购行→销售行」分配；草稿进入 W01 履约任务作业面的
+// 服务类型。采购登记服务地点、时间、结果和现场图片凭证后确认完成。
+// 交付对象为占位快照（UI 不采集）；服务地点占位值必须在确认时替换。
 async fn create_service_fulfillment_draft_for_order(
     db: &Database,
     ports: &PurchaseOrderPorts,
@@ -425,16 +417,7 @@ async fn create_service_fulfillment_draft_for_order(
 }
 
 impl PreparedFormalizedOrder {
-    /// 消耗 `self`，把写入计划与审核结果交给采购形式化流程。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回形式化持久化计划与审核结果。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 消耗 `self`，把写入计划与审核结果交给采购形式化流程。返回形式化持久化计划与审核结果。
     pub fn into_parts(self) -> (FormalizedOrderPersist, PurchaseReviewResult) {
         (self.persist, self.result)
     }
@@ -451,16 +434,7 @@ pub struct FormalizedPurchaseEffects {
 }
 
 impl FormalizedOrderPersist {
-    /// 本次正式化的采购单标识，供组合层创建原成功审计。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回采购单主键。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 本次正式化的采购单标识，供组合层创建原成功审计。返回采购单主键。
     pub fn order_id(&self) -> &str {
         &self.order.base.id
     }
@@ -469,15 +443,8 @@ impl FormalizedOrderPersist {
     ///
     /// 消耗 `self`，只能在调用方事务内执行一次。
     ///
-    /// # 参数
-    /// * `db` - 采购与销售事实所在数据库。
-    /// * `actor` - 生效操作人。
-    /// * `session` - 调用方唯一事务执行器。
+    /// `db` 为采购与销售事实所在数据库；`actor` 为生效操作人；`session` 为调用方唯一事务执行器。返回供应付、成本与履约继续消费的冻结事实。
     ///
-    /// # 返回
-    /// 返回供应付、成本与履约继续消费的冻结事实。
-    ///
-    /// # 错误
     /// 来源、版本或 CAS 校验失败时，在调用方唯一事务内传播错误。
     pub async fn persist_order(
         self,
@@ -532,32 +499,14 @@ impl FormalizedOrderPersist {
 }
 
 impl FormalizedPurchaseEffects {
-    /// 本次原始应付账户与分录；采购生效仅形成应付，不授予付款执行资格。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回应付子账与原始应付分录。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 本次原始应付账户与分录；采购生效仅形成应付，不授予付款执行资格。返回应付子账与原始应付分录。
     pub fn payable(
         &self,
     ) -> &(erp_finance::entity::payable::PayableAccount, erp_finance::entity::payable::PayableEntry) {
         &self.payable
     }
 
-    /// 按原采购提交顺序产生的确认成本分录。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回确认成本分录切片。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 按原采购提交顺序产生的确认成本分录。返回确认成本分录切片。
     pub fn cost_entries(&self) -> &[erp_finance::entity::cost::CostEntry] {
         &self.cost_entries
     }
@@ -566,15 +515,8 @@ impl FormalizedPurchaseEffects {
     ///
     /// 消耗 `self`。
     ///
-    /// # 参数
-    /// * `db` - 履约集合所在数据库。
-    /// * `actor_id` - 电子交付与服务草稿的登记人。
-    /// * `session` - 调用方事务执行器。
+    /// `db` 为履约集合所在数据库；`actor_id` 为电子交付与服务草稿的登记人；`session` 为调用方事务执行器。对应履约责任的草稿与任务已写入。
     ///
-    /// # 返回
-    /// 对应履约责任的草稿与任务已写入。
-    ///
-    /// # 错误
     /// 履约事实不完整或持久化失败时传播给调用方事务。
     pub async fn persist_fulfillment(
         self,

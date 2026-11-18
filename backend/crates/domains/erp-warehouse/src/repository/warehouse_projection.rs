@@ -2,7 +2,7 @@
 
 use mongodb::bson::{Document, doc};
 
-/// 仓库列表投影字段。
+// 只选仓库列表所需的稳定资料和经办字段，避免加载整个仓库文档。
 pub(super) fn warehouse_projection() -> Document {
     doc! {
         "id": 1,
@@ -15,7 +15,7 @@ pub(super) fn warehouse_projection() -> Document {
     }
 }
 
-/// 仓库修订列表投影字段（敏感字段密文/指纹不进入投影）。
+// 只取修订列表展示字段，不选择敏感地址和联系人的密文列或指纹。
 pub(super) fn warehouse_revision_projection() -> Document {
     doc! {
         "id": 1,
@@ -31,7 +31,7 @@ pub(super) fn warehouse_revision_projection() -> Document {
     }
 }
 
-/// 仓库-SKU 预警策略列表投影字段。
+// 选取预警策略列表所需的仓库与 SKU、阈值、状态及生效日期等字段。
 pub(super) fn warehouse_sku_policy_projection() -> Document {
     doc! {
         "id": 1,

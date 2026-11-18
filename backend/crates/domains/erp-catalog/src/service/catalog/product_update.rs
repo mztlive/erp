@@ -75,18 +75,7 @@ struct SkuLineContext<'a> {
     change_reason: Option<&'a str>,
 }
 
-/// 扫描移除签名：既有启用 SKU 的签名未出现在本次请求时转为停用。
-///
-/// # 参数
-/// * `current_by_signature` - 既有 SKU 按规范化签名的映射
-/// * `signatures` - 本次请求登记的签名集
-/// * `actor_id` - 停用操作人
-///
-/// # 返回
-/// 返回转为停用的既有 SKU。
-///
-/// # 错误
-/// 停用迁移非法时返回状态机错误。
+// 完整规格编辑结束时，将未在目标签名集中出现的原启用 SKU 标为停用；既不删除 SKU，也不改历史修订。
 fn sweep_removed_signatures(
     current_by_signature: &mut HashMap<String, Sku>,
     signatures: &SpecificationSignatureSet,
@@ -102,19 +91,11 @@ fn sweep_removed_signatures(
     Ok(disable)
 }
 
-/// 组装新商品修订并挂到 SPU 当前指针。
-///
-/// # 参数
-/// * `product` - 待编辑 SPU（可变，修订挂载更新其状态）
-/// * `base` - 编辑基准（含新修订 ID 与修订号）
-/// * `req` - 规格编辑请求（修订字段来源）
-/// * `actor_id` - 修订创建人
-///
-/// # 返回
-/// 返回新商品修订。
-///
-/// # 错误
-/// 修订字段校验失败时返回对应错误。
+// 组装新商品修订并挂到 SPU 当前指针。修订字段校验失败时返回对应错误。
+//
+// - `product`：待编辑 SPU（可变，修订挂载更新其状态）。
+// - `base`：编辑基准（含新修订 ID 与修订号）。
+// - `req`：规格编辑请求（修订字段来源）。
 fn assemble_spec_product_revision(
     product: &mut Product,
     base: &SpecEditBase,
@@ -141,26 +122,9 @@ fn assemble_spec_product_revision(
 }
 
 impl CatalogService {
-    /// 规格编辑商品（数据模型 §6.3 全量替换语义，跨集合事务）。
-    ///
-    /// 按规范化签名把提交前后的签名集合分类为「保留/新增/重新启用/移除」：
-    /// 签名未变沿用原 `sku_id` 并追加修订；从未存在的新签名分配新 `sku_id`，
-    /// 未填写编号时按 `SkuNoSequence` 生成 `SKU` 前缀编号，跳过该商品新旧编号已占用的序号；
-    /// 历史停用签名复用原 `sku_id` 并显式重新启用；移除签名的旧 SKU 保留
-    /// 全部历史并转为停用。任一校验失败或并发冲突整体回滚。
-    ///
-    /// # 参数
-    /// * `id` - 商品 ID
-    /// * `req` - 规格编辑请求（含期望版本与修订后全部 SKU 行）
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回编辑后商品的响应视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 商品/分类/品牌/基础单位/媒体文件不存在
-    /// * `ConflictError` - 期望版本与当前版本不一致，或并发事务冲突
-    /// * `BusinessLogicError` - 分类不允许商品类型、规格不适用于分类、条码冲突等
+    /// 按期望版本和完整 SKU 目标列表编辑商品规格；不携带待登记附件时使用此入口。
+    /// 规范签名未变则保留 SKU ID 并追加修订；首次出现的签名创建新 SKU，缺省编号按序列生成并避开新旧占用。
+    /// 显式恢复历史签名时复用原 SKU ID；移除的签名只停用 SKU，不删除历史。授权、版本、字典或条码校验失败不提交写入。
     pub async fn product_update(
         &self,
         id: &str,
@@ -170,19 +134,8 @@ impl CatalogService {
         self.product_update_with_assets(id, req, Arc::new(EmptyPendingAttachments), actor).await
     }
 
-    /// 编辑商品，并把同一次 multipart 命令携带的文件资产与新修订原子登记。
-    ///
-    /// # 参数
-    /// * `id` - 商品稳定 ID
-    /// * `req` - 完整规格编辑请求，文件字段可使用本次请求内临时引用
-    /// * `asset_requests` - 已写入对象存储、尚未登记的文件资产
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回更新后的商品视图。
-    ///
-    /// # 错误
-    /// 临时引用无效、业务校验失败、版本冲突或事务写入失败时返回错误。
+    /// 同一 multipart 请求同时编辑商品规格和添加媒体时，先校验临时附件引用，再在一个事务中登记文件资产和新修订。
+    /// 文件字节由调用方预先上传；引用无效、业务校验失败、版本冲突或写入失败时不提交目录修改。
     pub async fn product_update_with_assets(
         &self,
         id: &str,
@@ -208,15 +161,7 @@ impl CatalogService {
 
     /// 校验更新输入及附件引用；版本、字典和规格事实由原写事务核验。
     ///
-    /// # 参数
-    /// * `id` - 商品 ID。
-    /// * `req` - 完整编辑请求。
-    /// * `pending_assets` - 已上传且尚未登记的附件。
-    /// * `actor` - 当前操作人。
-    /// # 返回
-    /// 返回尚未持久化的编辑计划。
-    /// # 错误
-    /// 输入、临时附件引用或未使用附件校验失败时返回错误。
+    /// 返回尚未持久化的编辑计划。输入、临时附件引用或未使用附件校验失败时返回错误。
     pub async fn prepare_product_update(
         &self,
         id: &str,
@@ -235,18 +180,9 @@ impl CatalogService {
         Ok(SpecEditPlan { id: id.to_owned(), request: req })
     }
 
-    /// 构造规格编辑计划（分类保留/新增/重新启用/移除 + 新商品修订与媒体）。
-    ///
-    /// # 参数
-    /// * `product` - 已加载并完成版本校验的 SPU，所有权转入编辑计划
-    /// * `req` - 规格编辑请求
-    /// * `actor` - 审计操作人
-    ///
-    /// # 返回
-    /// 返回编辑计划。
-    ///
-    /// # 错误
-    /// 字典/媒体/规格/条码校验失败时返回对应错误。
+    // 构造规格编辑计划（分类保留/新增/重新启用/移除 + 新商品修订与媒体）。字典/媒体/规格/条码校验失败时返回对应错误。
+    //
+    // `product` 为已加载并完成版本校验的 SPU，所有权转入编辑计划。
     async fn build_spec_edit_plan(
         &self,
         mut product: Product,
@@ -295,18 +231,9 @@ impl CatalogService {
         })
     }
 
-    /// 准备规格编辑的基准事实：字典校验、既有 SKU、修订号与 SPU 媒体。
-    ///
-    /// # 参数
-    /// * `product` - 已加载的 SPU
-    /// * `req` - 规格编辑请求
-    /// * `pending_assets` - 待登记附件批次
-    ///
-    /// # 返回
-    /// 返回编辑基准（商品 ID、既有签名映射、下个修订号、新修订 ID、媒体行）。
-    ///
-    /// # 错误
-    /// 字典/媒体校验失败时返回对应错误。
+    // 准备规格编辑的基准事实：字典校验、既有 SKU、修订号与 SPU 媒体。
+    //
+    // 返回编辑基准（商品 ID、既有签名映射、下个修订号、新修订 ID、媒体行）。字典/媒体校验失败时返回对应错误。
     async fn prepare_spec_edit_base(
         &self,
         product: &Product,
@@ -337,21 +264,14 @@ impl CatalogService {
         Ok(SpecEditBase { product_id, current_by_signature, next_product_revision_no, revision_id, media })
     }
 
-    /// 分类一行 SKU 输入：命中既有签名走保留/重新启用修订，既有签名缺失走新增。
-    ///
-    /// 签名计算与签名去重登记在此完成；调用方传入的签名集用于后续移除扫描。
-    ///
-    /// # 参数
-    /// * `current_by_signature` - 既有 SKU 按规范化签名的映射
-    /// * `signatures` - 本次请求的签名去重集（可变，逐行登记）
-    /// * `line_ctx` - 行级共享上下文（商品 ID、有效期、创建人、变更原因）
-    /// * `sku_input` - 待分类的 SKU 输入行
-    ///
-    /// # 返回
-    /// 返回带新修订的 SKU 编辑行（含 `Create`/`Keep`/`Reactivate` 动作）。
-    ///
-    /// # 错误
-    /// 签名/规格/条码校验失败时返回对应错误。
+    // 分类一行 SKU 输入：命中既有签名走保留/重新启用修订，既有签名缺失走新增。
+    //
+    // 签名计算与签名去重登记在此完成；调用方传入的签名集用于后续移除扫描。
+    //
+    // 返回带新修订的 SKU 编辑行（含 `Create`/`Keep`/`Reactivate` 动作）。签名/规格/条码校验失败时返回对应错误。
+    //
+    // - `signatures`：本次请求的签名去重集（可变，逐行登记）。
+    // - `line_ctx`：行级共享上下文（商品 ID、有效期、创建人、变更原因）。
     async fn build_sku_edit_item(
         &self,
         current_by_signature: &mut HashMap<String, Sku>,
@@ -395,22 +315,8 @@ impl CatalogService {
         }
     }
 
-    /// 使用调用方事务写入规格编辑计划，不开启嵌套事务。
-    ///
-    /// 写新商品修订与媒体、按动作写 SKU 修订/状态，更新 SPU，
-    /// 移除签名的既有 SKU 转为停用，最后写审计日志；任一步失败整体回滚。
-    ///
-    /// # 参数
-    /// * `plan` - 规格编辑计划
-    /// * `actor` - 审计操作人
-    /// * `pending_assets` - 同事务登记的附件。
-    /// * `executor` - 调用方事务执行器。
-    ///
-    /// # 返回
-    /// 返回编辑后的 SPU 实体。
-    ///
-    /// # 错误
-    /// 并发冲突（409）或事务失败时返回错误并整体回滚。
+    /// 规格全量编辑的写入阶段：在原事务中完成对象授权、版本和关联事实复验，再登记附件并写商品与 SKU 修订。
+    /// 按编辑动作创建、追加或停用 SKU，保留历史；同一事务登记来源字段的人工维护责任及审计，遇并发或写入失败交由调用方回滚。
     pub async fn write_spec_edit_plan(
         &self,
         plan: SpecEditPlan,
@@ -464,17 +370,9 @@ impl CatalogService {
         Ok(product)
     }
 
-    /// 计算某商品已有修订的最大序号 + 1。
-    ///
-    /// # 参数
-    /// * `executor` - 原授权事务或读取阶段的执行器。
-    /// * `product_id` - 商品 ID
-    ///
-    /// # 返回
-    /// 返回下一个修订序号。
-    ///
-    /// # 错误
-    /// 数据库查询失败时返回错误。
+    // 计算某商品已有修订的最大序号 + 1。返回下一个修订序号。
+    //
+    // 沿用调用方的执行器，不另开事务。
     pub(super) async fn next_product_revision_no(
         &self,
         product_id: &ProductId,

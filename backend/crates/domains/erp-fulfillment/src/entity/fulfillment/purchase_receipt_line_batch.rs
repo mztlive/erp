@@ -29,18 +29,9 @@ pub struct PurchaseReceiptLineBatch;
 
 impl PurchaseReceiptLineBatch {
     /// 按输入顺序从 1 连续编号批量构造入库行。
-    ///
-    /// # 参数
-    /// * `receipt_id` - 所属入库单主键
-    /// * `specs` - 与输入顺序一致的行规格（含 Service 注入的行 ID）
-    ///
-    /// # 返回
     /// 返回与输入顺序一致的行实体集合。
-    ///
-    /// # 错误
+    /// `receipt_id` 为所属入库单主键；`specs` 为与输入顺序一致的行规格（含 Service 注入的行 ID）。
     /// 空输入、行号溢出或数量/守恒违规时返回错误。
-    ///
-    /// # 约束
     /// 质量结果一律经 `QualityResult::from_quantities` 派生，不得接受调用方传入值。
     pub fn build(
         receipt_id: PurchaseReceiptId,
@@ -88,7 +79,7 @@ mod tests {
         }
     }
 
-    /// 正常路径：输入顺序与行号一一对应，质量按数量派生。
+    // 验证正常路径：输入顺序与行号一一对应，质量按数量派生。
     #[test]
     fn build_preserves_order_and_derives_quality() {
         let lines =
@@ -97,7 +88,7 @@ mod tests {
         assert_eq!(lines[0].quality_result, QualityResult::Partial);
     }
 
-    /// 全合格与全拒收均由实体规则派生。
+    // 验证全合格与全拒收均由实体规则派生。
     #[test]
     fn full_pass_and_full_reject_derive() {
         let pass = PurchaseReceiptLineBatch::build(
@@ -123,7 +114,7 @@ mod tests {
         assert_eq!(reject[0].quality_result, QualityResult::Rejected);
     }
 
-    /// 数量守恒违规失败；空输入失败。
+    // 验证数量守恒违规失败；空输入失败。
     #[test]
     fn quantity_conservation_and_empty_fail() {
         assert!(

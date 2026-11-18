@@ -22,13 +22,14 @@ pub struct ApprovalSourceSalesOrder {
     pub revision: RevisionView,
 }
 
-/// 在审批实例授权完成后，批量读取允许清单内的精确销售版本。
-/// # 参数
-/// 数据库、已经通过实例授权的冻结资料及原快照执行器。
-/// # 返回
-/// 采购审批允许的完整来源版本；历史未冻结来源时返回空列表。
-/// # 错误
-/// 版本缺失、跨单据、版本号或完整行数不符、子类型缺失时拒绝。
+// 读取销售审批冻结来源时，在审批实例授权完成后，批量读取允许清单内的精确销售版本。
+//
+// 调用参数：
+// 数据库、已经通过实例授权的冻结资料及原快照执行器。
+//
+// 采购审批允许的完整来源版本；历史未冻结来源时返回空列表。
+//
+// 版本缺失、跨单据、版本号或完整行数不符、子类型缺失时拒绝。
 pub(super) async fn source_sales_orders(
     db: &Database,
     materials: &ApprovalMaterialsView,
@@ -43,13 +44,14 @@ pub(super) async fn source_sales_orders(
     sources(db, allowed, executor).await
 }
 
-/// 读取已由调用方证明来源关系的精确销售版本。
-/// # 参数
-/// 数据库、允许的版本及同一读取事务。
-/// # 返回
-/// 按来源顺序返回完整版本。
-/// # 错误
-/// 版本、单据或明细不匹配时拒绝。
+// 处理销售审批冻结来源时，读取已由调用方证明来源关系的精确销售版本。
+//
+// 调用参数：
+// 数据库、允许的版本及同一读取事务。
+//
+// 按来源顺序返回完整版本。
+//
+// 版本、单据或明细不匹配时拒绝。
 pub(crate) async fn sources(
     db: &Database,
     allowed: &[ApprovalRelatedSalesSnapshot],

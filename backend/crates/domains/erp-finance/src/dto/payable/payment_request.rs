@@ -95,13 +95,10 @@ pub enum PaymentRequestSort {
 
 impl PurchasePaymentRequestQuery {
     /// 规范化列表文本与分页，拒绝过长的查询条件。
-    ///
-    /// # 参数
-    /// 消费请求查询条件。
-    /// # 返回
     /// 返回去除首尾空格、空条件和有界分页的查询。
-    /// # 错误
     /// 任一文本条件超过 200 字符时拒绝。
+    ///
+    /// 输入约定：消费请求查询条件。
     pub fn normalize(mut self) -> Result<Self> {
         for value in [
             &mut self.supplier_id,
@@ -135,12 +132,10 @@ pub struct CreatePaymentRequestBatch {
 
 impl CreatePaymentRequestBatch {
     /// 规范化批量表单并限制重复来源及批次体积。
-    /// # 参数
-    /// 消费当前批量命令。
-    /// # 返回
     /// 返回规范化后的完整批次。
-    /// # 错误
     /// 空批次、超过 50 份、重复应付来源或任一表单非法时拒绝。
+    ///
+    /// 输入约定：消费当前批量命令。
     pub fn normalize(mut self) -> Result<Self> {
         if self.requests.is_empty() || self.requests.len() > 50 {
             return Err(Error::from("每次须创建 1 至 50 份付款申请"));

@@ -50,17 +50,7 @@ pub struct SupplierDeliveryTemplate {
 
 impl SupplierDeliveryTemplate {
     /// 校验并创建模板。
-    ///
-    /// # 参数
-    /// * `id` - 模板主键
-    /// * `supplier_id` - 所属供应商
-    /// * `content` - 名称、默认标记与规则
-    /// * `actor` - 创建人
-    ///
-    /// # 返回
     /// 返回规范化后的模板。
-    ///
-    /// # 错误
     /// 名称为空或超长、规则不合法时返回错误。名称唯一与默认唯一由 Service 在事务内校验。
     pub fn new(
         id: SupplierDeliveryTemplateId,
@@ -81,15 +71,7 @@ impl SupplierDeliveryTemplate {
     }
 
     /// 整体替换模板内容。
-    ///
-    /// # 参数
-    /// * `content` - 新的名称、默认标记与规则
-    /// * `actor` - 修改人
-    ///
-    /// # 返回
     /// 内容有变化时返回 `true`。
-    ///
-    /// # 错误
     /// 名称为空或超长、规则不合法时返回错误。
     pub fn replace_content(&mut self, content: SupplierDeliveryTemplateContent, actor: &str) -> Result<bool> {
         let (name, policy) = normalize_content(content.name, content.dropship, content.bulk)?;
@@ -105,29 +87,13 @@ impl SupplierDeliveryTemplate {
     }
 
     /// 判断模板是否归该供应商所有；供给只能引用本供应商的模板。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 供给所属供应商
-    ///
-    /// # 返回
     /// 同一供应商时返回 `true`。
-    ///
-    /// # 错误
-    /// 无。
     pub fn belongs_to(&self, supplier_id: &SupplierAccountId) -> bool {
         &self.supplier_id == supplier_id
     }
 
     /// 取消默认标记，供另一模板设为默认时调用。
-    ///
-    /// # 参数
-    /// * `actor` - 修改人
-    ///
-    /// # 返回
     /// 原为默认时返回 `true`。
-    ///
-    /// # 错误
-    /// 无。
     pub fn clear_default(&mut self, actor: &str) -> bool {
         if !self.is_default {
             return false;
@@ -138,15 +104,7 @@ impl SupplierDeliveryTemplate {
     }
 
     /// 返回模板版本号，即乐观锁版本。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回当前版本号。
-    ///
-    /// # 错误
-    /// 无。
     pub fn revision_no(&self) -> u64 {
         self.base.version
     }
@@ -181,15 +139,7 @@ pub struct ResolvedDelivery {
 
 impl ResolvedDelivery {
     /// 返回界面展示的模板名称。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 指定模板返回模板名；跟随默认返回"供应商默认（模板名）"；未设置返回固定说明。
-    ///
-    /// # 错误
-    /// 无。
     pub fn display_name(&self) -> String {
         match (self.source, self.template_name.as_deref()) {
             (DeliveryTemplateSource::Assigned, Some(name)) => name.to_string(),
@@ -210,17 +160,8 @@ impl ResolvedDelivery {
 }
 
 /// 解析供给当前生效的配送政策。
-///
-/// # 参数
-/// * `offering` - 供给稳定对象
-/// * `templates` - 已加载的模板，至少包含该供应商全部未删除模板
-///
-/// # 返回
-/// 指定模板存在且属于同一供应商时取指定模板；否则取供应商默认模板；
-/// 二者都没有时返回全国配送、包邮的政策。
-///
-/// # 错误
-/// 无。
+/// 指定模板存在且属于同一供应商时取指定模板；否则取供应商默认模板；二者都没有时返回全国配送、包邮的政策。
+/// `templates`：已加载的模板，至少包含该供应商全部未删除模板。
 pub fn resolve_offering_delivery(
     offering: &SupplierOffering,
     templates: &[SupplierDeliveryTemplate],
@@ -229,17 +170,8 @@ pub fn resolve_offering_delivery(
 }
 
 /// 按供应商与指定模板解析生效配送政策。
-///
-/// # 参数
-/// * `supplier_id` - 供给所属供应商
-/// * `assigned` - 供给指定的模板
-/// * `templates` - 已加载的模板，至少包含该供应商全部未删除模板
-///
-/// # 返回
 /// 规则同 [`resolve_offering_delivery`]。
-///
-/// # 错误
-/// 无。
+/// `templates`：已加载的模板，至少包含该供应商全部未删除模板。
 pub fn resolve_delivery(
     supplier_id: &SupplierAccountId,
     assigned: Option<&SupplierDeliveryTemplateId>,

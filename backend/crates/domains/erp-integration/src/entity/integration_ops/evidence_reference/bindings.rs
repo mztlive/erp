@@ -14,19 +14,9 @@ pub struct EvidenceSubjectBindings {
 impl EvidenceSubjectBindings {
     /// 由主体身份字段构造关联绑定。
     ///
-    /// # 参数
-    /// * `message_id` - 错误任务入站消息 ID
-    /// * `business_object_id` - 任务或差异业务对象 ID
-    /// * `fact_references` - 差异两侧已持久化事实引用
-    ///
-    /// # 返回
-    /// 返回只读绑定；非法存量引用不会导致构造失败，但也不会按 token 命中。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    ///
-    /// # 约束
     /// 空白身份视为缺失；可解析引用只暴露身份 ID。
+    ///
+    /// 返回只读绑定；非法存量引用不会导致构造失败，但也不会按 token 命中。
     pub fn new(
         message_id: Option<&str>,
         business_object_id: Option<&str>,
@@ -55,17 +45,9 @@ impl EvidenceSubjectBindings {
 
     /// 判断候选 ID 是否与主体存在可验证的正式关联。
     ///
-    /// # 参数
-    /// * `ids` - 证据记录及其正式关联对象的候选 ID
-    ///
-    /// # 返回
-    /// 任一非空候选精确等于消息 ID、业务对象 ID 或事实引用身份 ID 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    ///
-    /// # 约束
     /// 不匹配类型名、版本段、状态段或分隔后的子串；空候选永不命中。
+    ///
+    /// 任一非空候选精确等于消息 ID、业务对象 ID 或事实引用身份 ID 时返回 `true`。
     pub fn associates_any<'a, I>(&self, ids: I) -> bool
     where
         I: IntoIterator<Item = &'a str>,
@@ -75,17 +57,9 @@ impl EvidenceSubjectBindings {
 
     /// 按对象类型提取第一条事实引用的身份 ID。
     ///
-    /// # 参数
-    /// * `kind` - 期望的对象类型
-    ///
-    /// # 返回
-    /// 返回首次匹配类型的身份 ID；没有该类型时返回 `None`。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    ///
-    /// # 约束
     /// 不返回 `vN` 或状态后缀，避免把 canonical 文本整段当作查找键。
+    ///
+    /// 返回首次匹配类型的身份 ID；没有该类型时返回 `None`。
     pub fn referenced_id(&self, kind: &str) -> Option<&str> {
         self.fact_identities
             .iter()
@@ -93,19 +67,11 @@ impl EvidenceSubjectBindings {
             .map(CanonicalEvidenceReference::id)
     }
 
-    /// 精确比较单个候选 ID。
-    ///
-    /// # 参数
-    /// * `id` - 候选身份
-    ///
-    /// # 返回
-    /// 精确命中时返回 `true`。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 约束
-    /// 无法解析的存量引用只允许整串精确相等，禁止 delimiter split。
+    // 精确比较单个候选 ID。
+    //
+    // 无法解析的存量引用只允许整串精确相等，禁止 delimiter split。
+    //
+    // 精确命中时返回 `true`。
     fn associates_id(&self, id: &str) -> bool {
         let id = id.trim();
         if id.is_empty() {
@@ -118,19 +84,13 @@ impl EvidenceSubjectBindings {
     }
 }
 
-/// 规范化可选身份，空白视为缺失。
-///
-/// # 参数
-/// * `value` - 原始可选身份
-///
-/// # 返回
-/// 非空时返回去空白后的身份。
-///
-/// # 错误
-/// 无。
-///
-/// # 约束
-/// 不解析 grammar，只处理主体字段。
+// 规范化可选身份，空白视为缺失。
+//
+// 不解析 grammar，只处理主体字段。
+//
+// 非空时返回去空白后的身份。
+//
+// `value` 为原始可选身份。
 fn normalize_optional_identity(value: Option<&str>) -> Option<String> {
     value.map(str::trim).filter(|value| !value.is_empty()).map(ToString::to_string)
 }

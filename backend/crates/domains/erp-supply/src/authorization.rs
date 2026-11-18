@@ -28,13 +28,7 @@ impl std::fmt::Debug for CompiledScope {
     }
 }
 impl CompiledScope {
-    /// 核对固定列表动作及原执行器，禁止挪用同资源的其他动作凭证。
-    /// # 参数
-    /// permission 为入口固定动作，executor 为原授权执行器。
-    /// # 返回
-    /// 模型、动作及执行边界一致时成功。
-    /// # 错误
-    /// 动作、资源、模型或执行边界不一致时拒绝。
+    // 仓储执行列表前核对固定动作、对象模型与原执行器。同资源的其他动作、跨阶段或已过期凭证均不能替用。
     pub(crate) fn ensure_permission(
         &self,
         permission: &Permission,
@@ -47,67 +41,32 @@ impl CompiledScope {
         Ok(())
     }
 
-    /// 返回身份域已编译的完整授权阶段。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 必须先于分页、计数与汇总执行的全部 MongoDB 阶段。
-    /// # 错误
-    /// 不执行 I/O。
+    /// 交付身份域已经编译的完整 MongoDB 授权阶段。仓储须在投影、分页或计数之前应用，不能只取其中一部分。
     pub fn stages(&self) -> &[Document] {
         self.compiled.stages()
     }
-    /// 返回当前凭证的权限策略版本。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// identity 绑定的策略版本。
-    /// # 错误
-    /// 无。
+    /// 返回签发此查询凭证时使用的权限策略版本，供范围版本比较使用；不重新查询策略。
     pub fn policy_version(&self) -> u64 {
         self.compiled.policy_version()
     }
 
-    /// 返回当前凭证的组织版本。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// identity 绑定的组织版本。
-    /// # 错误
-    /// 无。
+    /// 返回查询凭证绑定的组织版本，供调用方判断组织范围是否已经变化。
     pub fn organization_version(&self) -> u64 {
         self.compiled.organization_version()
     }
 
-    /// 返回当前凭证的授权时点。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// identity 冻结的授权时点。
-    /// # 错误
-    /// 无。
+    /// 取身份域编译本次查询时冻结的授权时点；不能把此时点用作后续请求的授权依据。
     pub fn as_of(&self) -> Instant {
         self.compiled.as_of()
     }
 
-    /// 核对仓储使用边界与有效期，不执行数据库读取。
-    /// # 参数
-    /// executor 为原读取执行器。
-    /// # 返回
-    /// 原阶段仍有效时成功。
-    /// # 错误
-    /// 跨事务、跨阶段或到期时拒绝。
+    /// 在使用查询凭证前校验原执行器、读取阶段及有效期。此处不读取数据库；跨事务、跨阶段或到期均拒绝。
     pub fn ensure_current(&self, executor: &mut dyn Executor) -> erp_identity::Result<()> {
         self.compiled.ensure_current(executor)
     }
 
-    /// 核对仓储模型及当前读取边界。
-    /// # 参数
-    /// resource 为拥有领域的固定资源，executor 为原读取执行器。
-    /// # 返回
-    /// 模型、完整对象输出及阶段均匹配时成功。
-    /// # 错误
-    /// 其他资源凭证、输出粒度错配或阶段失效时拒绝。
+    /// 仓储使用凭证前核对当前阶段、固定资源、集合、模型键和完整对象输出粒度；不允许用其他资源或行级投影
+    /// 的凭证替代。
     pub fn ensure_model(&self, resource: &str, executor: &mut dyn Executor) -> erp_identity::Result<()> {
         self.ensure_current(executor)?;
         let model = self.compiled.model();
@@ -121,13 +80,8 @@ impl CompiledScope {
         Ok(())
     }
 
-    /// 复验账号、权限、版本和有效期。
-    /// # 参数
-    /// executor 必须为原执行器。
-    /// # 返回
-    /// 凭证仍有效时成功。
-    /// # 错误
-    /// 未接线、撤权或版本变化拒绝。
+    /// 在查询结果交付前用原执行器请身份域复验账号、权限、事实版本和有效期；凭证失效或授权失败时不得返回
+    /// 旧结果。
     pub async fn validate(&self, executor: &mut dyn Executor) -> erp_identity::Result<()> {
         self.authorization.validate(&self.compiled, executor).await
     }
@@ -196,18 +150,13 @@ impl AccessFactsPort for Facts {
     }
 }
 
-/// 空的旧责任字段是已知无归属，禁止回退创建人或供应商结算主体。
-/// # 参数
-/// value 为持久化责任人或业务组织字段。
-/// # 返回
-/// 非空身份按原值返回，空字段返回 None。
-/// # 错误
-/// 不返回错误。
+// 空的旧责任字段是已知无归属，禁止回退创建人或供应商结算主体。
+// 非空身份按原值返回，空字段返回 None。
 pub(crate) fn optional_identity(value: &str) -> Option<String> {
     (!value.trim().is_empty()).then(|| value.to_owned())
 }
 
-/// 只从真实身份字段取值；缺失和空值保留为无归属，错误类型拒绝。
+// 只从真实身份字段取值；缺失和空值保留为无归属，错误类型拒绝。
 fn identity_field(row: &Document, field: &str) -> erp_identity::Result<Option<String>> {
     match row.get(field) {
         None | Some(Bson::Null) => Ok(None),
@@ -216,7 +165,7 @@ fn identity_field(row: &Document, field: &str) -> erp_identity::Result<Option<St
     }
 }
 
-/// 固定资源的责任字段由实际业务实体决定。
+// 锁定资源的责任字段由实际业务实体决定。
 fn owner_field(resource: &str) -> erp_identity::Result<&'static str> {
     match resource {
         "supplier_offering" => Ok("maintainer_user_id"),
@@ -226,7 +175,7 @@ fn owner_field(resource: &str) -> erp_identity::Result<&'static str> {
     }
 }
 
-/// 保留实际根身份、版本与责任归属，不借用往来主体填充内部组织。
+// 继续保留实际根身份、版本与责任归属，不借用往来主体填充内部组织。
 fn object_facts(resource: &str, row: &Document) -> erp_identity::Result<ObjectFacts> {
     Ok(ObjectFacts {
         resource: resource.into(),
@@ -252,13 +201,7 @@ pub(crate) struct Authorization {
 }
 
 impl Authorization {
-    /// 构造固定资源的服务及映射，不读取账号权限。
-    /// # 参数
-    /// db、rbac 为共享设施，resource 为本域固定资源。
-    /// # 返回
-    /// 可复用的固定授权目录。
-    /// # 错误
-    /// 固定目录或模型无效时返回接入错误。
+    // 为供给、履约或结算接入固定的本域资源目录及已注入的身份服务；未登记的资源拒绝，构造时不查询账号权限。
     pub(crate) fn new(service: Arc<AuthorizationService>, resource: &str) -> erp_identity::Result<Self> {
         resource_spec(resource)?;
         Ok(Self { service, resource: resource.into() })
@@ -266,13 +209,7 @@ impl Authorization {
 }
 
 impl Authorization {
-    /// 只校验资源接线，不声明动作政策或从展示目录解析权限。
-    /// # 参数
-    /// permission 为业务入口直接引用的内置权限。
-    /// # 返回
-    /// 权限资源与当前访问器一致时成功。
-    /// # 错误
-    /// 跨资源传入权限时拒绝，不读取授权设施。
+    // 调用共享身份域前先拒绝不属于本访问器资源的内置权限；只做接线校验，不读取账号或推导动作政策。
     pub(crate) fn ensure_permission(&self, permission: &Permission) -> erp_identity::Result<()> {
         if permission.resource() != self.resource {
             return Err(erp_identity::Error::ValidationError("供应权限资源与访问器不符".into()));
@@ -280,13 +217,8 @@ impl Authorization {
         Ok(())
     }
 
-    /// 编译当前资源动作的完整共享资料授权。
-    /// # 参数
-    /// actor 为当前账号，permission 为内置权限，executor 为原执行器。
-    /// # 返回
-    /// 本阶段不可伪造的编译凭证。
-    /// # 错误
-    /// 账号、功能权限、登记、编译或版本校验失败返回错误。
+    // 在调用方当前执行器内核对动作所属资源并向身份域编译查询凭证。账号、功能权限或模型校验没通过时不生成
+    // 凭证。
     pub(crate) async fn resolve(
         &self,
         actor: &AuditActor,
@@ -298,13 +230,8 @@ impl Authorization {
         Ok(CompiledScope { scope_version: compiled.version(), compiled, authorization: self.service.clone() })
     }
 
-    /// 在原事务内检查完整对象访问。
-    /// # 参数
-    /// actor 为当前账号，permission/id 为实际操作对象，executor 为原执行器。
-    /// # 返回
-    /// 身份域允许对象操作时成功。
-    /// # 错误
-    /// 缺失对象、功能权限或数据授权拒绝。
+    // 在读写对象的原执行器内，按固定资源动作和真实记录 ID 请求身份域判定；无权限或缺少对象事实时停止后续
+    // 处理。
     pub(crate) async fn require(
         &self,
         actor: &AuditActor,
@@ -317,7 +244,7 @@ impl Authorization {
     }
 }
 
-/// 固定资源目录；不从HTTP参数创建权限政策。
+// 锁定资源目录；不从HTTP参数创建权限政策。
 fn resource_spec(resource: &str) -> erp_identity::Result<&'static str> {
     match resource {
         "supplier_offering" => Ok("supplier_offerings"),
@@ -328,11 +255,7 @@ fn resource_spec(resource: &str) -> erp_identity::Result<&'static str> {
 }
 
 /// 提供共享供应资源的静态查询映射。
-/// # 参数
-/// resource 为本域资源标识。
-/// # 返回
 /// 固定集合与对象输出的 Mapping。
-/// # 错误
 /// 未知资源拒绝。
 pub fn mapping(resource: &str) -> erp_identity::Result<Arc<dyn AccessMapping>> {
     let collection = resource_spec(resource)?;
@@ -349,11 +272,7 @@ pub fn mapping(resource: &str) -> erp_identity::Result<Arc<dyn AccessMapping>> {
 }
 
 /// 提供本域持久化事实读取器。
-/// # 参数
-/// db 为业务数据库，resource 为本域资源。
-/// # 返回
 /// 不持有请求状态的共享 Facts。
-/// # 错误
 /// 未知资源拒绝。
 pub fn facts(db: Database, resource: &str) -> erp_identity::Result<Arc<dyn AccessFactsPort>> {
     let collection = resource_spec(resource)?;
@@ -372,13 +291,13 @@ mod tests {
     use persistence_core::testing::SnapshotExecutor;
 
     use super::*;
-    /// 模型构造拒绝未知资源，不从展示目录决定接入能力。
+    // 验证模型构造拒绝未知资源，不从展示目录决定接入能力。
     #[test]
     fn unknown_supplier_resource_is_rejected() {
         assert!(matches!(mapping("unknown"), Err(erp_identity::Error::ValidationError(_))));
     }
 
-    /// 直接常量接入仍拒绝其他资源，业务展示目录不参与验证。
+    // 验证直接常量接入仍拒绝其他资源，业务展示目录不参与验证。
     #[test]
     fn permission_resource_must_match_the_owned_accessor() {
         let authorization = Authorization::new(unavailable_authorization(), "supplier_offering").unwrap();
@@ -422,7 +341,7 @@ mod tests {
         assert!(list.ensure_permission(&permissions[0], &mut executor).is_err());
     }
 
-    /// 对象事实和查询谓词使用同一真实责任字段，不能借创建人或供应商授予范围。
+    // 验证对象事实和查询谓词使用同一真实责任字段，不能借创建人或供应商授予范围。
     #[test]
     fn supplier_roots_map_actual_owner_and_internal_organization() {
         for (resource, owner, permission) in [
@@ -465,7 +384,7 @@ mod tests {
         }
     }
 
-    /// 旧对象无责任归属时保留已知空值，不用创建人或往来主体填补；错误类型拒绝。
+    // 验证旧对象无责任归属时保留已知空值，不用创建人或往来主体填补；错误类型拒绝。
     #[test]
     fn absent_responsibility_is_known_empty_and_malformed_identity_is_rejected() {
         for resource in ["supplier_offering", "supplier_fulfillment_order", "supplier_settlement_statement"] {

@@ -11,17 +11,13 @@ use mongodb::bson::{Bson, Document, doc};
 use super::super::{FundsAuthorization, FundsLinkedCondition};
 use super::source_stages;
 
-/// 从分配引用读取必要的子账字段；缺失引用保持空事实。
-///
-/// # 参数
-/// * `collection` - 财务子账集合名。
-/// * `reference` - 当前分配上的账户字段表达式。
-///
-/// # 返回
-/// 只装载真实来源引用的子账关联管道。
-///
-/// # 错误
-/// 不返回错误。
+// 从分配引用取出必要的子账字段；缺失引用保持空事实。
+//
+// 调用参数：
+// * `collection` - 财务子账集合名。
+// * `reference` - 当前分配上的账户字段表达式。
+//
+// 只装载真实来源引用的子账关联管道。
 pub(super) fn account_stages(collection: &str, reference: &str) -> Vec<Document> {
     vec![
         doc! { "$lookup": { "from": collection, "let": { "account_id": reference },
@@ -35,17 +31,13 @@ pub(super) fn account_stages(collection: &str, reference: &str) -> Vec<Document>
     ]
 }
 
-/// 销项分配沿应收子账读取当前销售责任，业务条件仅收窄已授权份额。
-///
-/// # 参数
-/// * `authorization` - 已解析销售授权。
-/// * `condition` - 负责人与组织筛选。
-///
-/// # 返回
-/// 销售来源存在性与授权份额匹配管道。
-///
-/// # 错误
-/// 不返回错误。
+// 组装发票分配来源的聚合管道时，销项分配沿应收子账读取当前销售责任，业务条件仅收窄已授权份额。
+//
+// 调用参数：
+// * `authorization` - 已解析销售授权。
+// * `condition` - 负责人与组织筛选。
+//
+// 销售来源存在性与授权份额匹配管道。
 pub(super) fn sales_stages(
     authorization: &FundsAuthorization,
     condition: &FundsLinkedCondition,
@@ -69,18 +61,14 @@ pub(super) fn sales_stages(
     stages
 }
 
-/// 进项分配严格区分采购和结算来源，同主键不得跨来源串权。
-///
-/// # 参数
-/// * `authorization` - 已解析采购与结算授权。
-/// * `owners` - 负责人精确条件；`None` 表示不筛选。
-/// * `organizations` - 组织精确条件；`None` 表示不筛选。
-///
-/// # 返回
-/// 区分实际来源类型的存在性与授权份额匹配管道。
-///
-/// # 错误
-/// 不返回错误。
+// 组装发票分配来源的聚合管道时，进项分配严格区分采购和结算来源，同主键不得跨来源串权。
+//
+// 调用参数：
+// * `authorization` - 已解析采购与结算授权。
+// * `owners` - 负责人精确条件；`None` 表示不筛选。
+// * `organizations` - 组织精确条件；`None` 表示不筛选。
+//
+// 区分实际来源类型的存在性与授权份额匹配管道。
 pub(super) fn purchase_stages(
     authorization: &FundsAuthorization,
     owners: Option<&[String]>,
@@ -105,7 +93,7 @@ pub(super) fn purchase_stages(
     stages
 }
 
-/// 两个来源分别使用已经证明的领域范围，错误类型不会命中任一集合。
+// 组装发票分配来源的聚合管道时，两个来源分别使用已经证明的领域范围，错误类型不会命中任一集合。
 fn purchase_source_stages(authorization: &FundsAuthorization) -> Vec<Document> {
     let purchase =
         authorization.purchase_scope.as_ref().map(|_| doc! {}).unwrap_or_else(|| doc! { "$expr": false });
@@ -132,14 +120,14 @@ fn purchase_source_stages(authorization: &FundsAuthorization) -> Vec<Document> {
     stages
 }
 
-/// 来源类型参与引用表达式；同 ID 的另一来源不得补齐损坏引用。
+// 处理发票分配来源时，来源类型参与引用表达式；同 ID 的另一来源不得补齐损坏引用。
 fn typed_reference(source_type: &str) -> Bson {
     Bson::Document(doc! { "$cond": [
         { "$eq": ["$_account.source_type", source_type] }, "$_account.source_document_id", Bson::Null,
     ] })
 }
 
-/// 已授权来源再与负责人和组织求交，缺失事实始终失败关闭。
+// 应用发票分配来源筛选时，已授权来源再与负责人和组织求交，缺失事实始终失败关闭。
 fn matched_expression(owners: Option<&[String]>, organizations: Option<&[String]>) -> Document {
     let mut conditions = vec![
         Bson::String("$_source_allowed".into()),
@@ -154,18 +142,14 @@ fn matched_expression(owners: Option<&[String]>, organizations: Option<&[String]
     doc! { "$and": conditions }
 }
 
-/// 每个发票只读取自己的分配；关联装配不产生额外查询或第二份事实。
-///
-/// # 参数
-/// * `collection` - 分配集合名。
-/// * `stages` - 来源关联管道，接在发票匹配之后。
-/// * `output` - 关联结果字段名。
-///
-/// # 返回
-/// 读取当前发票实际分配的 `$lookup` 阶段。
-///
-/// # 错误
-/// 不返回错误。
+// 组装发票分配来源的聚合管道时，每个发票只读取自己的分配；关联装配不产生额外查询或第二份事实。
+//
+// 调用参数：
+// * `collection` - 分配集合名。
+// * `stages` - 来源关联管道，接在发票匹配之后。
+// * `output` - 关联结果字段名。
+//
+// 读取当前发票实际分配的 `$lookup` 阶段。
 pub(super) fn allocation_lookup(collection: &str, stages: Vec<Document>, output: &str) -> Document {
     let mut pipeline = vec![doc! { "$match": { "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
     "$expr": { "$eq": ["$invoice_id", "$$invoice_id"] } } }];

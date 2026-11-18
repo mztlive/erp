@@ -27,16 +27,9 @@ pub(super) struct EffectiveChangeIdentity {
 }
 
 impl EffectiveChangeIdentity {
-    /// 从生效写入中复制身份，写入随后被持久化步骤消耗。
-    ///
-    /// # 参数
-    /// * `write` - 已准备的生效写入
-    ///
-    /// # 返回
-    /// 返回变更单、销售单及单号。
-    ///
-    /// # 错误
-    /// 无。
+    // 从生效写入中复制身份，写入随后被持久化步骤消耗。
+    //
+    // `write` 为已准备的生效写入。返回变更单、销售单及单号。
     pub(super) fn of(write: &EffectiveChangeWrite) -> Self {
         Self {
             change_id: write.change_id().to_string(),
@@ -45,18 +38,11 @@ impl EffectiveChangeIdentity {
         }
     }
 
-    /// 撤回受影响的审批中采购并同步依据更新与供给分配任务。
-    ///
-    /// # 参数
-    /// * `db` - 业务数据库
-    /// * `actor` - 触发生效的审批人
-    /// * `executor` - 生效事务执行器
-    ///
-    /// # 返回
-    /// 全部联动成功时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 销售单缺失、覆盖事实不完整、撤回 CAS 冲突或写入失败时返回错误。
+    // 撤回受影响的审批中采购并同步依据更新与供给分配任务。
+    //
+    // `actor` 为触发生效的审批人；`executor` 为生效事务执行器。全部联动成功时返回 `Ok(())`。
+    //
+    // 销售单缺失、覆盖事实不完整、撤回 CAS 冲突或写入失败时返回错误。
     pub(super) async fn sync_procurement(
         &self,
         db: &Database,

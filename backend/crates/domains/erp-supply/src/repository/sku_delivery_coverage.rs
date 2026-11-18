@@ -50,15 +50,7 @@ pub struct SkuDeliveryCoverageStore<'a> {
 
 impl<'a> SkuDeliveryCoverageStore<'a> {
     /// 绑定数据库。
-    ///
-    /// # 参数
-    /// * `db` - 目标数据库
-    ///
-    /// # 返回
     /// 返回未执行 I/O 的访问器。
-    ///
-    /// # 错误
-    /// 无。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
@@ -76,15 +68,7 @@ impl<'a> SkuDeliveryCoverageStore<'a> {
     }
 
     /// 标记 SKU 待重算；尚无覆盖记录的 SKU 插入待重算占位。
-    ///
-    /// # 参数
-    /// * `sku_ids` - 公司 SKU，允许重复
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 标记完成时无返回值；空输入不写入。
-    ///
-    /// # 错误
     /// MongoDB 读写失败时返回错误。
     pub async fn mark_skus(&self, sku_ids: &[String], executor: &mut dyn Executor) -> Result<()> {
         let pending = computed_fields(&SkuDeliveryCoverage::pending(String::new()))?;
@@ -92,15 +76,7 @@ impl<'a> SkuDeliveryCoverageStore<'a> {
     }
 
     /// 标记引用了任一供应商有效供给的 SKU 待重算。
-    ///
-    /// # 参数
-    /// * `supplier_ids` - 模板发生变化的供应商
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回被标记的记录数；空输入不写入。
-    ///
-    /// # 错误
     /// MongoDB 写入失败时返回错误。
     pub async fn mark_suppliers(&self, supplier_ids: &[String], executor: &mut dyn Executor) -> Result<u64> {
         if supplier_ids.is_empty() {
@@ -111,15 +87,7 @@ impl<'a> SkuDeliveryCoverageStore<'a> {
     }
 
     /// 标记名下供给已到按日期生效或失效日的 SKU 待重算。
-    ///
-    /// # 参数
-    /// * `today` - 当前业务日期
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回被标记的记录数。
-    ///
-    /// # 错误
     /// MongoDB 写入失败时返回错误。
     pub async fn mark_due(&self, today: BusinessDate, executor: &mut dyn Executor) -> Result<u64> {
         let filter = doc! { "dirty": false, "next_change_date": { "$lte": today.to_string() } };
@@ -127,31 +95,14 @@ impl<'a> SkuDeliveryCoverageStore<'a> {
     }
 
     /// 读取一批待重算的 SKU。
-    ///
-    /// # 参数
-    /// * `limit` - 本批上限
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回 SKU 与读取时的标记序号。
-    ///
-    /// # 错误
     /// MongoDB 查询失败时返回错误。
     pub async fn dirty_batch(&self, limit: i64, executor: &mut dyn Executor) -> Result<Vec<DirtyMark>> {
         dirty_marks::dirty_batch(&self.documents(), limit, executor).await
     }
 
     /// 保存计算结果；计算期间又被标记时不清除待重算。
-    ///
-    /// # 参数
-    /// * `record` - 计算结果
-    /// * `dirty_token` - 开始计算前读取的标记序号
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 标记序号仍一致并已保存时为真；期间又被标记时为假，留待下一轮。
-    ///
-    /// # 错误
     /// 序列化或 MongoDB 写入失败时返回错误。
     pub async fn save(
         &self,
@@ -170,15 +121,7 @@ impl<'a> SkuDeliveryCoverageStore<'a> {
     }
 
     /// 批量读取覆盖记录。
-    ///
-    /// # 参数
-    /// * `sku_ids` - 公司 SKU
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回存在的记录；空输入不查询。
-    ///
-    /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
     pub async fn find_by_sku_ids(
         &self,
@@ -193,15 +136,7 @@ impl<'a> SkuDeliveryCoverageStore<'a> {
     }
 
     /// 返回满足地区筛选的全部 SKU。
-    ///
-    /// # 参数
-    /// * `query` - 地区筛选条件
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回命中的 SKU，按多键索引匹配，不逐个计算。
-    ///
-    /// # 错误
     /// MongoDB 查询失败时返回错误。
     pub async fn matching_sku_ids(
         &self,
@@ -213,14 +148,7 @@ impl<'a> SkuDeliveryCoverageStore<'a> {
     }
 
     /// 读取刷新进度。
-    ///
-    /// # 参数
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 尚未初始化时返回 `None`。
-    ///
-    /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
     pub async fn state(&self, executor: &mut dyn Executor) -> Result<Option<SkuDeliveryCoverageState>> {
         let collection = self.db.collection::<SkuDeliveryCoverageState>(STATE);
@@ -228,15 +156,6 @@ impl<'a> SkuDeliveryCoverageStore<'a> {
     }
 
     /// 推进刷新进度；进度只前进不后退，口径版本取较大值。
-    ///
-    /// # 参数
-    /// * `state` - 新进度
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 写入成功时无返回值。
-    ///
-    /// # 错误
     /// MongoDB 写入失败时返回错误。
     pub async fn advance_state(
         &self,
@@ -254,15 +173,7 @@ impl<'a> SkuDeliveryCoverageStore<'a> {
     }
 
     /// 返回时间窗内供给或可供状态有变化的 SKU，含已删除供给。
-    ///
-    /// # 参数
-    /// * `window` - 变更时间窗
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回去重后的 SKU。
-    ///
-    /// # 错误
     /// MongoDB 查询失败时返回错误。
     pub async fn changed_sku_ids(
         &self,
@@ -295,15 +206,7 @@ impl<'a> SkuDeliveryCoverageStore<'a> {
     }
 
     /// 返回时间窗内配送模板有变化（含删除、默认切换）的供应商。
-    ///
-    /// # 参数
-    /// * `window` - 变更时间窗
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回去重后的供应商。
-    ///
-    /// # 错误
     /// MongoDB 查询失败时返回错误。
     pub async fn changed_template_supplier_ids(
         &self,
@@ -317,14 +220,7 @@ impl<'a> SkuDeliveryCoverageStore<'a> {
     }
 
     /// 返回存在未删除供给的全部 SKU，供全量重建。
-    ///
-    /// # 参数
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回去重后的 SKU。
-    ///
-    /// # 错误
     /// MongoDB 查询失败时返回错误。
     pub async fn offered_sku_ids(&self, executor: &mut dyn Executor) -> Result<Vec<String>> {
         let offerings = self.db.collection::<SkuRow>(OFFERINGS);
@@ -347,7 +243,7 @@ fn window_filter(window: ChangeWindow) -> Document {
     doc! { "updated_at": { "$gte": window.from, "$lt": window.to } }
 }
 
-/// 地区筛选条件：整片模式按所选档位整片集合匹配地区自身、上级或全国标记，部分模式精确匹配。
+// 地区筛选条件：整片模式按所选档位整片集合匹配地区自身、上级或全国标记，部分模式精确匹配。
 fn match_filter(query: &DeliveryCoverageQuery) -> Document {
     let tier = query.tier_field();
     match query.extent {
@@ -356,7 +252,7 @@ fn match_filter(query: &DeliveryCoverageQuery) -> Document {
     }
 }
 
-/// 计算结果字段；不含主键与标记字段，占位插入与保存共用。
+// 求出结果字段；不含主键与标记字段，占位插入与保存共用。
 fn computed_fields(record: &SkuDeliveryCoverage) -> Result<Document> {
     Ok(doc! {
         "included": serialize_to_bson(&record.coverage.included)?,

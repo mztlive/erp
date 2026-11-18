@@ -23,11 +23,8 @@ pub struct InquirySalesBasisParams {
 }
 
 /// 在既有销售费用登记范围内读取 ERP 外费用来源。
-/// # 参数
 /// `state`、`actor` 为当前应用及财务账号，`id` 为生效来源销售。
-/// # 返回
 /// 返回费用、税率与可登记余额，不含采购收款或供应商资料。
-/// # 错误
 /// 财务登记权限、销售范围或费用来源版本失效时拒绝。
 pub async fn financial_inquiry_candidates(
     State(state): State<HttpState>,
@@ -42,11 +39,8 @@ pub async fn financial_inquiry_candidates(
 }
 
 /// 在现有费用采购来源范围内读取明确分摊的询价费用。
-/// # 参数
 /// `state`、`actor` 为当前应用及采购，`id` 为生效来源销售单。
-/// # 返回
 /// 返回本销售的费用余额与必要付款依据，已完成任务不提供任何授权。
-/// # 错误
 /// 采购创建或费用转换资格、来源范围、版本失效时拒绝。
 pub async fn expense_inquiry_candidates(
     State(state): State<HttpState>,
@@ -61,11 +55,8 @@ pub async fn expense_inquiry_candidates(
 }
 
 /// 取得当前已接受且仍有效的转销售依据，不自动使用供给价作为成交价。
-/// # 参数
 /// `state`、`actor` 为当前应用及账号，`id` 为询价，`round` 为已接受反馈轮次。
-/// # 返回
 /// 返回商品、稳定地址与来源可用数量，实际建单仍走销售创建命令。
-/// # 错误
 /// 来源状态、版本、数量、有效期或当前范围不满足时拒绝。
 pub async fn sales_basis(
     State(state): State<HttpState>,
@@ -89,11 +80,8 @@ pub async fn sales_basis(
 }
 
 /// 读取本询价已有来源关联的销售摘要供费用归属。
-/// # 参数
 /// `state`、`actor` 为当前应用及账号，`id` 为询价。
-/// # 返回
 /// 返回最小销售身份和是否可归属费用，不授予普通销售详情访问权。
-/// # 错误
 /// 当前询价销售范围失效或读取失败时拒绝。
 pub async fn fee_sales(
     State(state): State<HttpState>,
@@ -104,11 +92,8 @@ pub async fn fee_sales(
 }
 
 /// 按金额明确费用在来源销售间的分配，跨反馈版本累计核算。
-/// # 参数
 /// `state`、`actor` 为当前应用及账号，`id` 为询价，`request` 为金额归属及原命令身份。
-/// # 返回
 /// 返回已提交的询价安全状态。
-/// # 错误
 /// 范围、接受版本、分配合计、来源销售或幂等载荷不满足时拒绝。
 pub async fn allocate_fees(
     State(state): State<HttpState>,

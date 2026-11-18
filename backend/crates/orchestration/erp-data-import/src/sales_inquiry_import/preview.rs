@@ -23,12 +23,12 @@ use crate::{Error, Result};
 
 impl SalesInquiryImportProcess {
     /// 解析并持久化当前账号、询价和版本专用的校验预览。
-    /// # 参数
+    ///
     /// `actor`、`id` 为当前访问上下文，`expected_version` 为编辑版本，
     /// `file_name` 须为 xlsx，`bytes` 为最多 5 MiB 的原文件。
-    /// # 返回
+    ///
     /// 返回逐工作表行错误、合并结果和客户安全需求快照；不修改正式需求。
-    /// # 错误
+    ///
     /// 无权、版本过期、文件结构非法或存储失败时拒绝。
     pub async fn preview(
         &self,

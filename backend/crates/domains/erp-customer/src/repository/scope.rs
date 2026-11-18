@@ -13,11 +13,12 @@ use crate::entity::customer::CustomerAccount;
 use crate::{CustomerAccess, CustomerResolvedScope, Error, Result};
 
 /// 在完整授权条件内读取指定客户，缺失与不可读使用相同错误。
+///
 /// # 参数
 /// db、id 为实际客户集合与主键；context、executor 属于当前读取阶段。
-/// # 返回
+///
 /// 本次完整数据规则允许读取的客户实体。
-/// # 错误
+///
 /// 模型、阶段或有效期不符时拒绝；无可见记录返回 NotFound。
 pub async fn authorized_customer(
     db: &Database,
@@ -38,7 +39,7 @@ pub async fn authorized_customer(
     rows.into_iter().next().ok_or_else(|| Error::NotFound("客户不存在".into()))
 }
 
-/// 客户仓储只消费本集合、主键和完整对象粒度的固定查询模型。
+// 客户仓储只消费本集合、主键和完整对象粒度的固定查询模型。
 fn ensure_model(model: &QueryModel, resource: &str, collection: &str) -> Result<()> {
     if model.resource != resource
         || model.collection != collection
@@ -65,11 +66,12 @@ pub struct CustomerVersion {
 }
 
 /// 在相同完整授权管道内执行客户分页与计数。
+///
 /// # 参数
 /// db、filter 为客户仓储及业务筛选，context、port 为本阶段授权，executor 为原事务。
-/// # 返回
+///
 /// 完整授权范围内的客户页。
-/// # 错误
+///
 /// 凭证失效、数据库失败或数值越界时拒绝。
 pub async fn authorized_page(
     db: &Database,
@@ -94,11 +96,12 @@ pub async fn authorized_page(
 }
 
 /// 在业务条件收窄后读取完整授权客户身份版本。
+///
 /// # 参数
 /// db、filter 为客户仓储及筛选，context、port 为本阶段授权，executor 为原事务。
-/// # 返回
+///
 /// 有界、稳定排序的授权客户版本。
-/// # 错误
+///
 /// 数据库或凭证复验失败时拒绝；超限由调用方整体拒绝。
 pub async fn authorized_versions(
     db: &Database,

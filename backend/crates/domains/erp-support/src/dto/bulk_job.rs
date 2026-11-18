@@ -45,7 +45,7 @@ pub struct BulkSelectionSnapshotView {
 }
 
 impl From<BulkSelectionSnapshot> for BulkSelectionSnapshotView {
-    /// 从实体构造响应视图。
+    // 从实体构造响应视图。
     fn from(snapshot: BulkSelectionSnapshot) -> Self {
         Self {
             id: snapshot.base.id,
@@ -62,7 +62,7 @@ impl From<BulkSelectionSnapshot> for BulkSelectionSnapshotView {
 }
 
 impl From<crate::repository::BulkSelectionSnapshotRow> for BulkSelectionSnapshotView {
-    /// 从列表投影行构造响应视图（字段取值与实体转换一致）。
+    // 从列表投影行构造响应视图（字段取值与实体转换一致）。
     fn from(row: crate::repository::BulkSelectionSnapshotRow) -> Self {
         Self {
             id: row.id,
@@ -113,18 +113,9 @@ pub(crate) struct BulkSelectionSnapshotListQuery {
 }
 
 impl BulkSelectionSnapshotListParams {
-    /// 归一化选择快照列表查询参数。
-    ///
-    /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    // 查询选择快照列表前校验并规范化筛选和分页输入，返回独立于仓储的查询参数。
+    // 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
+    // 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<BulkSelectionSnapshotListQuery> {
         Ok(BulkSelectionSnapshotListQuery {
             selection_type: self.selection_type,
@@ -197,7 +188,7 @@ pub struct BulkSelectionItemView {
 }
 
 impl From<crate::repository::BulkSelectionItemRow> for BulkSelectionItemView {
-    /// 从列表投影行构造响应视图（字段取值与逐项查询投影一致）。
+    // 从列表投影行构造响应视图（字段取值与逐项查询投影一致）。
     fn from(row: crate::repository::BulkSelectionItemRow) -> Self {
         Self {
             id: row.id,
@@ -280,7 +271,7 @@ pub struct BackgroundJobView {
 }
 
 impl From<BackgroundJob> for BackgroundJobView {
-    /// 从实体构造响应视图。
+    // 从实体构造响应视图。
     fn from(job: BackgroundJob) -> Self {
         Self {
             id: job.base.id,
@@ -311,7 +302,7 @@ impl From<BackgroundJob> for BackgroundJobView {
 }
 
 impl From<crate::repository::BackgroundJobRow> for BackgroundJobView {
-    /// 从列表投影行构造响应视图（字段取值与实体转换一致）。
+    // 从列表投影行构造响应视图（字段取值与实体转换一致）。
     fn from(row: crate::repository::BackgroundJobRow) -> Self {
         Self {
             id: row.id,
@@ -389,18 +380,9 @@ pub(crate) struct BackgroundJobListQuery {
 }
 
 impl BackgroundJobListParams {
-    /// 归一化后台任务列表查询参数。
-    ///
-    /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    // 查询后台任务列表前校验并规范化筛选和分页输入，返回独立于仓储的查询参数。
+    // 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
+    // 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<BackgroundJobListQuery> {
         Ok(BackgroundJobListQuery {
             job_no: normalized_text(self.job_no.as_deref()),
@@ -505,7 +487,7 @@ pub struct BackgroundJobItemView {
 }
 
 impl From<crate::repository::BackgroundJobItemRow> for BackgroundJobItemView {
-    /// 从列表投影行构造响应视图（字段取值与逐项查询投影一致）。
+    // 从列表投影行构造响应视图（字段取值与逐项查询投影一致）。
     fn from(row: crate::repository::BackgroundJobItemRow) -> Self {
         Self {
             id: row.id,
@@ -566,16 +548,8 @@ pub struct CancelBackgroundJobFailure {
 
 impl CancelBackgroundJobFailure {
     /// 从任务 ID 与领域错误构造失败明细。
-    ///
-    /// # 参数
-    /// * `job_id` - 失败任务的后台任务 ID
-    /// * `error` - 取消该任务时返回的领域错误
-    ///
-    /// # 返回
     /// 返回携带稳定错误分类的失败明细。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// `job_id` 为失败任务的后台任务 ID；`error` 为取消该任务时返回的领域错误。
     pub fn from_error(job_id: String, error: &crate::error::Error) -> Self {
         use crate::error::Error;
 

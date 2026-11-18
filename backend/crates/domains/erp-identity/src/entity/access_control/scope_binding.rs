@@ -39,29 +39,23 @@ pub struct ScopeBinding {
 
 impl ScopeBinding {
     /// 校验资源动作及目标形态；适用资源和动作由服务端注册目录进一步校验。
-    ///
-    /// # 参数
-    /// * `scope_type` - 同行范围类型。
-    /// * `targets` - 已保存的范围目标。
-    ///
-    /// # 返回
     /// 版本、标识和目标形态一致时无返回值。
     ///
-    /// # 错误
     /// `schema_version` 不是 2、资源或动作不是注册标识、动作集合为空或超过 32 个时拒绝。
     /// 不需要目标的类型若携带模式、下级标记或目标则拒绝。
     /// 组织范围缺少模式、动态模式用在非内部组织、显式与动态的目标携带相反，或下级标记与模式不匹配时拒绝。
+    ///
+    /// `scope_type`：同行范围类型；`targets`：已保存的范围目标。
     pub fn validate(&self, scope_type: DataScopeType, targets: &[String]) -> Result<()> {
         self.target(scope_type, targets).map(|_| ())
     }
 
-    /// 在持久化或请求边界一次性验证绑定并返回内部目标。
-    /// # 参数
-    /// scope_type、targets 为同一条范围规则的类型和目标。
-    /// # 返回
-    /// 规范化后的目标形态。
-    /// # 错误
-    /// 版本、资源动作或范围字段组合不合法时拒绝。
+    // 在持久化或请求边界一次性验证绑定并返回内部目标。
+    // 规范化后的目标形态。
+    //
+    // 版本、资源动作或范围字段组合不合法时拒绝。
+    //
+    // scope_type、targets 为同一条范围规则的类型和目标。
     pub(crate) fn target(&self, scope_type: DataScopeType, targets: &[String]) -> Result<BoundScopeTarget> {
         if self.schema_version != 2
             || !identifier(&self.resource)
@@ -76,17 +70,10 @@ impl ScopeBinding {
         BoundScopeTarget::parse(self, scope_type, targets)
     }
 
-    /// 判断规则是否适用于当前资源与动作。
-    ///
-    /// # 参数
-    /// * `resource` - 当前业务资源。
-    /// * `action` - 当前动作。
-    ///
-    /// # 返回
+    /// 当规则适用于当前资源与动作时返回 `true`。
     /// 版本为 2、规则启用、资源相同且动作在列表中时返回 `true`。停用规则和其他资源动作返回 `false`。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// `resource`：当前业务资源；`action`：当前动作。
     pub fn applies(&self, resource: &str, action: &str) -> bool {
         self.schema_version == 2
             && self.enabled
@@ -95,14 +82,14 @@ impl ScopeBinding {
     }
 }
 
-/// 注册标识只允许小写字母、数字和下划线，禁止通配符及显示名称。
+// 校验范围登记的稳定标识，只接受 ASCII 小写字母、数字和下划线；不接受通配符或展示名。
 fn identifier(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 128
         && value.bytes().all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
 }
 
-/// 在持久化及请求解码边界拒绝不支持的模式版本。
+// 读取持久化绑定或解码外部请求时，拒绝当前实现不支持的范围模式版本。
 fn schema_version<'de, D: Deserializer<'de>>(deserializer: D) -> std::result::Result<u8, D::Error> {
     let value = u8::deserialize(deserializer)?;
     if value != 2 {

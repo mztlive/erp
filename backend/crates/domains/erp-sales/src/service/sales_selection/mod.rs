@@ -53,17 +53,10 @@ pub struct SalesSelectionService {
 }
 
 impl SalesSelectionService {
-    /// 创建服务。
+    /// 装配选品用例的数据库与共享授权服务，创建服务时不读取业务数据。
     ///
-    /// # 参数
-    /// * `db` - 数据库
-    /// * `authorization` - 已完整装配的进程共享授权服务。
-    ///
-    /// # 返回
-    /// 返回服务。
-    ///
-    /// # 错误
-    /// 无。
+    /// 输入约定：
+    /// - `authorization`：已完整装配的进程共享授权服务。
     pub fn new(db: Database, authorization: Arc<AuthorizationService>) -> Self {
         Self { db, authorization }
     }

@@ -41,11 +41,14 @@ pub struct ApprovalDocumentMaterials {
     pub latest_supplier_rating: Option<ApprovalSupplierRating>,
 }
 
-/// 在实例读取授权后装载精确销售提交，不授予普通销售单读取资格。
+/// 准备销售审批材料时，在实例读取授权后装载精确销售提交，不授予普通销售单读取资格。
+///
 /// # 参数
 /// 数据库、审批运行服务、当前账号与精确审批实例 ID。
+///
 /// # 返回
 /// 原冻结资料及完整提交明细；另列开票当前销售资料和采购最新供应商评估，不覆盖提交内容。
+///
 /// # 错误
 /// 实例未授权、原资料缺失、销售提交缺失或身份及明细不匹配时拒绝。
 pub async fn materials<A: WorkflowAuthorizationPort>(
@@ -64,7 +67,7 @@ pub async fn materials<A: WorkflowAuthorizationPort>(
         .await
 }
 
-/// 授权、冻结版本和当前核对资料均在同一调用方快照内完成。
+// 处理销售审批材料时，授权、冻结版本和当前核对资料均在同一调用方快照内完成。
 async fn materials_read<A: WorkflowAuthorizationPort>(
     db: &Database,
     runtime: &ApprovalRuntimeService<A>,
@@ -109,11 +112,14 @@ pub struct CopyDocumentDetail {
     pub materials: ApprovalDocumentMaterials,
     pub history: RuntimeHistoryPage,
 }
-/// 以精确个人收件授权读取完整冻结单据。
+/// 组装销售审批材料时，以精确个人收件授权读取完整冻结单据。
+///
 /// # 参数
 /// 数据库、运行服务、当前身份、收件 ID 和历史游标。
+///
 /// # 返回
 /// 本次提交及已冻结关联销售版本；不含当前业务余额。
+///
 /// # 错误
 /// 来源版本不匹配、账号撤权或数据读取失败。
 pub async fn copy_detail<A: WorkflowAuthorizationPort>(
@@ -132,7 +138,7 @@ pub async fn copy_detail<A: WorkflowAuthorizationPort>(
         .await
 }
 
-/// 抄送的完整业务补齐结束后，验证本次读取的原收件凭证。
+// 处理销售审批材料时，抄送的完整业务补齐结束后，验证本次读取的原收件凭证。
 async fn copy_read<A: WorkflowAuthorizationPort>(
     db: &Database,
     runtime: &ApprovalRuntimeService<A>,
@@ -204,7 +210,7 @@ async fn sales_submission(
     Ok(view)
 }
 
-/// 完整预览必须与已授权资料的单据、提交版本、业务类型及冻结总行数一致。
+// 处理销售审批材料的版本事实时，完整预览必须与已授权资料的单据、提交版本、业务类型及冻结总行数一致。
 fn validate_submission(
     materials: &ApprovalMaterialsView,
     order_id: &str,

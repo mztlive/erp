@@ -8,32 +8,20 @@ pub struct SalesSelectionRateRepository<'a> {
 }
 
 impl<'a> SalesSelectionRateRepository<'a> {
-    /// 创建限流仓储。
-    ///
-    /// # 参数
-    /// * `db` - 数据库
-    ///
-    /// # 返回
+    /// 将公开选品限流窗口仓储绑定到当前数据库，以便在验证访问前消费其配额。
     /// 返回仓储。
-    ///
-    /// # 错误
-    /// 无。
     pub fn new(db: &'a mongodb::Database) -> Self {
         Self { db }
     }
 
     /// 原子占用一分钟窗口配额。
+    /// 结果：未超限返回 `Ok(())`。
+    /// 失败条件：超限返回业务冲突由调用方映射；仓储失败返回存储错误。
     ///
-    /// # 参数
-    /// * `key` - 限流键
-    /// * `limit` - 每分钟上限
-    /// * `window_id` - 分钟窗口
-    ///
-    /// # 返回
-    /// 未超限返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 超限返回业务冲突由调用方映射；仓储失败返回存储错误。
+    /// 输入约定：
+    /// - `key`：限流键
+    /// - `limit`：每分钟上限
+    /// - `window_id`：分钟窗口
     pub async fn admit(&self, key: &str, limit: i64, window_id: i64) -> persistence_core::Result<bool> {
         let id = format!("{key}:{window_id}");
         let collection = self.db.collection::<mongodb::bson::Document>(

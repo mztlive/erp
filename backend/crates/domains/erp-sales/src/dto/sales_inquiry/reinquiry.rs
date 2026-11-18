@@ -19,13 +19,11 @@ pub struct InquiryProcurementReinquiry {
 }
 
 impl InquiryProcurementReinquiry {
-    /// 从指定业务轮次生成完整重询说明。
-    /// # 参数
-    /// 版本、轮次、截止时刻来自当前询价或已核验的历史任务快照。
-    /// # 返回
-    /// 返回最近一次匹配说明；没有匹配版本、轮次或时间时返回 None。
-    /// # 错误
-    /// 无；不回退到其他轮次或需求版本。
+    // 从指定业务轮次生成完整重询说明。
+    // 返回最近一次匹配说明；没有匹配版本、轮次或时间时返回 None。
+    // 失败条件：不回退到其他轮次或需求版本。
+    //
+    // 输入约定：版本、轮次、截止时刻来自当前询价或已核验的历史任务快照。
     pub(super) fn from_round(
         inquiry: &SalesInquiry,
         requirement_version: u32,

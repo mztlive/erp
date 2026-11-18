@@ -8,13 +8,8 @@ use crate::entity::returns::{PurchaseReturnOrder, SupplierRefund, SupplierRefund
 use crate::repository::ReturnsExt;
 
 /// 读取单张采购的已核实直退记录。
-/// # 参数
-/// * `db` - 数据库。
-/// * `purchase_id` - 已授权采购身份。
-/// * `executor` - 调用方执行器。
-/// # 返回
 /// 返回已退货或已完成且具有凭据的记录。
-/// # 错误
+/// `purchase_id` 为已授权采购身份；沿用调用方执行器 `executor`。
 /// 仓储失败时返回错误。
 pub async fn confirmed_direct_returns(
     db: &Database,
@@ -35,13 +30,8 @@ pub async fn confirmed_direct_returns(
 }
 
 /// 按全局唯一退货号读取原提交，供同载荷重放核对。
-/// # 参数
-/// * `db` - 数据库。
-/// * `number` - 原命令派生的退货号。
-/// * `executor` - 同一事务执行器。
-/// # 返回
 /// 原退货记录或空。
-/// # 错误
+/// `number` 为原命令派生的退货号；`executor` 为同一事务执行器。
 /// 仓储失败时返回错误。
 pub async fn direct_return_command(
     db: &Database,
@@ -52,13 +42,8 @@ pub async fn direct_return_command(
 }
 
 /// 查询采购处置方案已提交或已入账的款项处理记录。
-/// # 参数
-/// * `db` - 数据库。
-/// * `purchase_id` - 已授权采购。
-/// * `executor` - 原事务。
-/// # 返回
 /// 仅审批中和已过账记录占用方案金额；统一仓储自动排除软删除记录。
-/// # 错误
+/// `purchase_id` 为已授权采购；`executor` 为原事务。
 /// 仓储读取失败时返回错误。
 pub async fn purchase_settlements(
     db: &Database,
@@ -71,7 +56,7 @@ pub async fn purchase_settlements(
         .map_err(Into::into)
 }
 
-/// 采购方案额度只由审批中和已过账的真实持久化状态占用。
+// 采购方案额度只由审批中和已过账的真实持久化状态占用。
 fn purchase_settlement_filter(purchase_id: &str) -> Document {
     let statuses = SupplierRefundStatus::SETTLEMENT_OCCUPYING.map(|status| status.as_str());
     doc! { "source_purchase_order_id": purchase_id, "status": { "$in": statuses } }

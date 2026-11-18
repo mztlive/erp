@@ -20,14 +20,12 @@ pub struct ImportConfirmationTaskIdentity<'a> {
 }
 
 impl WorkItem {
-    /// 判断正式任务是否绑定指定导入批次和责任范围。
-    ///
-    /// # 参数
-    /// * `identity` - 调用方锁定的批次、责任范围、角色与组织。
-    /// # 返回
+    /// 当正式任务绑定指定导入批次和责任范围时返回 `true`。
     /// 类型、对象和责任字段一致时返回 `true`，不限制生命周期状态。
-    /// # 错误
+    ///
     /// 不返回错误；开放任务的当前责任资格须单独校验。
+    ///
+    /// `identity`：调用方锁定的批次、责任范围、角色与组织。
     pub fn matches_import_confirmation(&self, identity: ImportConfirmationTaskIdentity<'_>) -> bool {
         self.work_item_type == WorkItemType::ImportBusinessConfirmation
             && self.matches_business_object(identity.business_object_type, identity.batch_id)
@@ -36,16 +34,13 @@ impl WorkItem {
             && self.owner_organization_id == identity.owner_organization_id
     }
 
-    /// 判断任务是否保留指定导入确认的正式完成证明。
-    ///
-    /// # 参数
-    /// * `identity` - 原确认冻结的任务身份。
-    /// * `actor_id` - 原决定人与当前认证操作人。
-    /// * `decided_at` - 回执冻结的原决定时间。
-    /// # 返回
+    /// 当任务保留指定导入确认的正式完成证明时返回 `true`。
     /// 未删除任务已由原责任人在原时间完成且身份一致时返回 `true`。
-    /// # 错误
+    ///
     /// 不返回错误；本方法接受完成终态，不复用开放任务的 `is_owned_by`。
+    ///
+    /// `identity`：原确认冻结的任务身份；`actor_id`：原决定人与当前认证操作人。
+    /// `decided_at`：回执冻结的原决定时间。
     pub fn matches_completed_import_confirmation(
         &self,
         identity: ImportConfirmationTaskIdentity<'_>,

@@ -12,12 +12,7 @@ pub mod supplier_offering;
 pub mod supplier_settlement;
 
 /// 创建供应链所有原有命名索引。
-///
-/// # 参数
-/// * `db` - 目标数据库。
-/// # 返回
 /// 逐集合索引登记成功。
-/// # 错误
 /// 数据冲突或数据库失败。
 pub async fn ensure(db: &mongodb::Database) -> persistence_core::Result<()> {
     supplier_api::ensure(db).await?;

@@ -17,17 +17,13 @@ use crate::Result;
 
 const SETTLEMENT_PREFIX: &str = "supplier_settlement_statement:";
 
-/// 内部关联键包含真实来源类型，避免相同主键在采购与结算域间串权。
-///
-/// # 参数
-/// * `source` - 应付来源类型。
-/// * `id` - 来源主键。
-///
-/// # 返回
-/// 采购单返回原主键；供应商结算返回带 `supplier_settlement_statement:` 前缀的关联键。
-///
-/// # 错误
-/// 不返回错误。
+// 定位应付子账来源关联时，内部关联键包含真实来源类型，避免相同主键在采购与结算域间串权。
+//
+// 调用参数：
+// * `source` - 应付来源类型。
+// * `id` - 来源主键。
+//
+// 采购单返回原主键；供应商结算返回带 `supplier_settlement_statement:` 前缀的关联键。
 pub(in crate::finance::funds_scope) fn source_key(source: PayableSourceType, id: &str) -> String {
     match source {
         PayableSourceType::PurchaseOrder => id.to_owned(),
@@ -36,17 +32,14 @@ pub(in crate::finance::funds_scope) fn source_key(source: PayableSourceType, id:
 }
 
 impl FundsAccess {
-    /// 有界批量装载结算当前责任，加入与采购共用的关联事实集合。
-    ///
-    /// # 参数
-    /// * `ids` - 带结算前缀的来源关联键；其他键被忽略。
-    /// * `executor` - 调用方事务。
-    ///
-    /// # 返回
-    /// 返回存在的结算来源事实；缺失来源不补空事实。
-    ///
-    /// # 错误
-    /// 结算单读取失败时返回对应错误。
+    // 处理应付子账来源时，有界批量装载结算当前责任，加入与采购共用的关联事实集合。
+    //
+    // 调用参数：
+    // * `ids` - 带结算前缀的来源关联键；其他键被忽略。
+    //
+    // 返回存在的结算来源事实；缺失来源不补空事实。
+    //
+    // 结算单读取失败时返回对应错误。
     pub(in crate::finance::funds_scope) async fn settlement_fact_map(
         &self,
         ids: &[String],
@@ -79,7 +72,7 @@ impl FundsAccess {
 }
 
 impl FundsAccess {
-    /// 按当前请求的真实采购来源检查指定记录授权，结算来源仍由所属范围判定。
+    // 依据当前请求的真实采购来源检查指定记录授权，结算来源仍由所属范围判定。
     pub(in crate::finance::funds_scope) async fn payable_targets(
         &self,
         authorization: &FundsAuthorization,

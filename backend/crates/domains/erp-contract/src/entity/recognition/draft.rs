@@ -57,12 +57,9 @@ fn is_false(value: &bool) -> bool {
 
 impl ContractExtraction {
     /// 尽量转换成可编辑字段；单字段失败不阻止返回其余结果。
-    /// # 参数
-    /// * `document` - 本次 OCR 全文。
-    /// # 返回
     /// 固定字段集合；无法预填的字段显式为 null，并保留冲突提示。
-    /// # 错误
-    /// 无；原始提取证据保持不变。
+    /// `document` 为本次 OCR 全文。
+    /// 原始提取证据保持不变。
     pub fn draft(&self, document: &OcrDocument) -> RecognitionDraft {
         let mut warnings = self.conflicts.clone();
         let values = ContractValues::from(self);
@@ -119,11 +116,7 @@ impl ContractValues {
 
 impl ConfirmImport {
     /// 校验用户确认内容；不要求用户修改值逐字出现在原文中。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 可归档业务值以及用于主数据查找的用户输入。
-    /// # 错误
     /// 必填项、长度、日期或受控业务选项非法。
     pub fn validate(&self) -> Result<(ValidatedFields, ContractValues), ImportFailure> {
         if self.version == 0 || self.fields.values().flatten().any(|value| value.len() > 4096) {

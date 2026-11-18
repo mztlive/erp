@@ -1,21 +1,7 @@
 use mongodb::bson::{Document, doc};
 
-/// 写入按字面量匹配且忽略大小写的 MongoDB 正则条件。
-///
-/// 覆盖语义：`value` 为 `None` 时静默跳过（返回 `false`，不修改 `filter`）；
-/// `value` 为 `Some` 时写入（返回 `true`），已存在同名字段会被覆盖。
-/// 调用方如需区分“未传值”与“已写入”，请检查返回值。
-///
-/// # 参数
-/// * `filter` - 待写入的查询文档
-/// * `field` - 字段名
-/// * `value` - 可选字面量；`None` 表示不加条件
-///
-/// # 返回
-/// 是否写入了正则条件。
-///
-/// # 错误
-/// 不返回错误。
+/// 组装关键词查询时转义正则元字符，按字面量忽略大小写匹配。有值则写入并覆盖同名条件，返回 `true`；
+/// `None` 保留原文档并返回 `false`。
 pub fn insert_literal_regex_filter(filter: &mut Document, field: &str, value: Option<&str>) -> bool {
     let Some(value) = value else {
         return false;

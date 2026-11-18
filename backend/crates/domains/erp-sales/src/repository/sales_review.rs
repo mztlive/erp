@@ -79,18 +79,10 @@ impl Default for SalesChangeOrderFilter {
 }
 
 impl QueryFilter for SalesChangeOrderFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// 仅编译原销售单和变更状态；来源授权由仓储追加完整 identity 查询阶段。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 转换为 MongoDB 查询条件（自动追加未删除过滤）。
+    //
+    // 仅编译原销售单和变更状态；来源授权由仓储追加完整 identity 查询阶段。
+    // 返回查询条件文档。
     fn to_doc(&self) -> Document {
         change_order_filter(
             self.sales_order_id.as_ref().map(ToString::to_string).as_deref(),
@@ -100,16 +92,7 @@ impl QueryFilter for SalesChangeOrderFilter {
 }
 
 impl Pagination for SalesChangeOrderFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 向仓储分页器交付筛选中的页码与每页条数。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -119,16 +102,11 @@ impl Pagination for SalesChangeOrderFilter {
 #[allow(async_fn_in_trait)]
 pub trait SalesChangeOrderRepositoryExt {
     /// 分页检索销售变更单（投影查询）。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回当前页投影行与满足筛选条件的总数。
+    /// 传播数据库查询、游标读取或计数失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// 输入约定：
+    /// - `filter`：筛选与分页条件
     async fn search_sales_change_orders(
         &self,
         filter: &SalesChangeOrderFilter,
@@ -136,12 +114,10 @@ pub trait SalesChangeOrderRepositoryExt {
     ) -> Result<PageResult<SalesChangeOrderRow>>;
 
     /// 按实际来源销售单的完整授权查询变更分页与总数。
-    /// # 参数
-    /// filter 为业务筛选，scope 为本次销售来源凭证，executor 为原读取事务。
-    /// # 返回
-    /// 仅包含来源存在且有权的变更单及匹配总数。
-    /// # 错误
+    /// 结果：仅包含来源存在且有权的变更单及匹配总数。
     /// 授权复验、查询或解码失败时拒绝。
+    ///
+    /// 输入约定：filter 为业务筛选，scope 为本次销售来源凭证，executor 为原读取事务。
     async fn search_authorized_sales_change_orders(
         &self,
         filter: &SalesChangeOrderFilter,
@@ -150,20 +126,13 @@ pub trait SalesChangeOrderRepositoryExt {
     ) -> crate::Result<PageResult<SalesChangeOrderRow>>;
 
     /// 装载变更查询的有界身份与版本集合，用于跨页一致性校验。
+    /// 结果：最多 10001 行；调用方必须整体拒绝超限。
+    /// 传播数据库读取失败。
+    /// 业务边界：版本集合必须与列表同一授权条件和筛选快照。
     ///
-    /// # 参数
-    /// * `filter` - 变更业务筛选
-    /// * `scope` - 本次销售来源完整查询凭证
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 最多 10001 行；调用方必须整体拒绝超限。
-    ///
-    /// # 错误
-    /// 数据库读取失败时返回仓储错误。
-    ///
-    /// # 关键业务约束
-    /// 版本集合必须与列表同一授权条件和筛选快照。
+    /// 输入约定：
+    /// - `filter`：变更业务筛选
+    /// - `scope`：本次销售来源完整查询凭证
     async fn query_change_versions(
         &self,
         filter: &SalesChangeOrderFilter,
@@ -172,17 +141,12 @@ pub trait SalesChangeOrderRepositoryExt {
     ) -> crate::Result<Vec<SalesChangeVersion>>;
 
     /// 按「销售单 + 基准版本」查找进行中变更单。
-    ///
-    /// # 参数
-    /// * `sales_order_id` - 原销售单
-    /// * `base_revision_id` - 发起时当前版本
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回进行中变更单；无匹配时返回 `None`。
+    /// 传播数据库查询失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
+    /// 输入约定：
+    /// - `sales_order_id`：原销售单
+    /// - `base_revision_id`：发起时当前版本
     async fn find_in_progress_by_order_and_base(
         &self,
         sales_order_id: &SalesOrderId,
@@ -191,17 +155,12 @@ pub trait SalesChangeOrderRepositoryExt {
     ) -> Result<Option<SalesChangeOrder>>;
 
     /// 判断同一销售单基准版本是否已有进行中变更。
+    /// 结果：存在草稿、审批中或兼容历史进行中状态的变更单时返回 `true`。
+    /// 传播数据库查询失败。
     ///
-    /// # 参数
-    /// * `sales_order_id` - 原销售单
-    /// * `base_revision_id` - 发起时当前版本
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 存在草稿、审批中或兼容历史进行中状态的变更单时返回 `true`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
+    /// 输入约定：
+    /// - `sales_order_id`：原销售单
+    /// - `base_revision_id`：发起时当前版本
     async fn has_in_progress_by_order_and_base(
         &self,
         sales_order_id: &SalesOrderId,
@@ -327,13 +286,10 @@ impl SalesChangeOrderRepositoryExt for Repository<'_, SalesChangeOrder> {
 #[allow(async_fn_in_trait)]
 pub trait SalesChangeSubmissionRepositoryExt {
     /// 批量读取指定变更单的全部有效提交，供审批历史摘要使用。
-    ///
-    /// # 参数
-    /// `change_order_ids` 为父变更单身份集合；`executor` 决定事务上下文。
-    /// # 返回
     /// 返回全部未删除提交；空集合返回空结果，不扫描全表。
-    /// # 错误
-    /// MongoDB 查询失败时返回仓储错误。
+    /// 传播数据库查询失败。
+    ///
+    /// 输入约定：`change_order_ids` 为父变更单身份集合；`executor` 决定事务上下文。
     async fn list_by_change_orders(
         &self,
         change_order_ids: &[SalesChangeOrderId],
@@ -341,16 +297,11 @@ pub trait SalesChangeSubmissionRepositoryExt {
     ) -> Result<Vec<SalesChangeSubmission>>;
 
     /// 列出销售变更单提交历史，新提交在前。
-    ///
-    /// # 参数
-    /// * `sales_change_order_id` - 所属销售变更单
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回按提交序号倒序排列的全部变更提交。
+    /// 传播数据库查询或游标读取失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 输入约定：
+    /// - `sales_change_order_id`：所属销售变更单
     async fn list_by_change_order_newest_first(
         &self,
         sales_change_order_id: &SalesChangeOrderId,
@@ -358,16 +309,11 @@ pub trait SalesChangeSubmissionRepositoryExt {
     ) -> Result<Vec<SalesChangeSubmission>>;
 
     /// 读取销售变更单最新提交序号。
-    ///
-    /// # 参数
-    /// * `sales_change_order_id` - 所属销售变更单
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回最大的提交序号；尚无提交时返回 `0`。
+    /// 传播数据库查询或游标读取失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 输入约定：
+    /// - `sales_change_order_id`：所属销售变更单
     async fn latest_submission_no_by_change_order(
         &self,
         sales_change_order_id: &SalesChangeOrderId,
@@ -375,17 +321,12 @@ pub trait SalesChangeSubmissionRepositoryExt {
     ) -> Result<u32>;
 
     /// 按「变更单 + 提交序号」查找变更提交。
-    ///
-    /// # 参数
-    /// * `sales_change_order_id` - 所属销售变更单
-    /// * `submission_no` - 提交序号
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回匹配的变更提交；无匹配时返回 `None`。
+    /// 传播数据库查询失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
+    /// 输入约定：
+    /// - `sales_change_order_id`：所属销售变更单
+    /// - `submission_no`：提交序号
     async fn find_by_order_and_no(
         &self,
         sales_change_order_id: &SalesChangeOrderId,
@@ -396,19 +337,13 @@ pub trait SalesChangeSubmissionRepositoryExt {
     /// 按稳定 ID 读取销售变更岗位分离使用的提交事实。
     ///
     /// 工作项入口的历史名称；纯主键读取，直接委托基类单条查询。
-    ///
-    /// # 参数
-    /// * `id` - 销售变更提交 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回未删除销售变更提交；不存在时返回 `None`。
+    /// 传播数据库查询或反序列化失败。
+    /// 调用边界：仅查询本仓储拥有的销售变更提交集合，不访问销售变更单集合。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或反序列化失败时返回错误。
-    ///
-    /// # 约束
-    /// 仅查询本仓储拥有的销售变更提交集合，不访问销售变更单集合。
+    /// 输入约定：
+    /// - `id`：销售变更提交 ID
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn find_work_item_sales_change_submission(
         &self,
         id: &str,
@@ -488,16 +423,11 @@ impl SalesChangeSubmissionRepositoryExt for Repository<'_, SalesChangeSubmission
 #[allow(async_fn_in_trait)]
 pub trait SalesChangeSubmissionLineRepositoryExt {
     /// 批量列出多个变更提交的全部明细。
-    ///
-    /// # 参数
-    /// * `submission_ids` - 所属变更提交集合
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回全部匹配明细；调用方按提交和行号分组排序。
+    /// 传播数据库查询或游标读取失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 输入约定：
+    /// - `submission_ids`：所属变更提交集合
     async fn list_lines_by_submissions(
         &self,
         submission_ids: &[SalesChangeSubmissionId],
@@ -505,16 +435,11 @@ pub trait SalesChangeSubmissionLineRepositoryExt {
     ) -> Result<Vec<SalesChangeSubmissionLine>>;
 
     /// 列出变更提交的全部明细（按行号升序）。
-    ///
-    /// # 参数
-    /// * `submission_id` - 所属变更提交
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回按行号升序的变更提交明细列表。
+    /// 传播数据库查询或游标读取失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 输入约定：
+    /// - `submission_id`：所属变更提交
     async fn list_lines_by_submission(
         &self,
         submission_id: &SalesChangeSubmissionId,
@@ -562,33 +487,20 @@ pub struct SalesReviewRepository<'a> {
 }
 
 impl<'a> SalesReviewRepository<'a> {
-    /// 创建域专用仓储。
-    ///
-    /// # 参数
-    /// * `db` - 目标 MongoDB 数据库
-    ///
-    /// # 返回
-    /// 返回仓储实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将本领域的集合访问器绑定到当前 MongoDB 数据库，构造时不读写集合。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
 
     /// 发起销售变更影响确认：写入不可变变更提交并把变更单推进到待影响确认。
-    ///
-    /// # 参数
-    /// * `change_order` - 已迁移到待影响确认的变更单
-    /// * `submission` - 不可变变更提交头
-    /// * `lines` - 不可变变更提交明细
-    /// * `executor` - 数据访问执行器，必须位于事务中
-    ///
-    /// # 返回
-    /// 变更提交、明细写入且变更单更新成功时无返回值。
-    ///
-    /// # 错误
+    /// 结果：变更提交、明细写入且变更单更新成功时无返回值。
     /// 当唯一索引冲突、乐观锁冲突或 MongoDB 写入失败时返回错误。
+    ///
+    /// 输入约定：
+    /// - `change_order`：已迁移到待影响确认的变更单
+    /// - `submission`：不可变变更提交头
+    /// - `lines`：不可变变更提交明细
+    /// - `executor`：数据访问执行器，必须位于事务中
     pub async fn submit_sales_change(
         &self,
         change_order: &mut SalesChangeOrder,
@@ -613,14 +525,12 @@ impl<'a> SalesReviewRepository<'a> {
     }
 }
 
-/// 构建排序文档。
-///
-/// # 参数
-/// * `sort_by` - 排序字段；`None` 时默认 `created_at`
-/// * `sort_ascending` - 升序为 `true`，降序为 `false`
-///
-/// # 返回
-/// 返回排序条件文档。
+// 构建排序文档。
+// 返回排序条件文档。
+//
+// 输入约定：
+// - `sort_by`：排序字段；`None` 时默认 `created_at`
+// - `sort_ascending`：升序为 `true`，降序为 `false`
 fn sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
     doc! { sort_by.unwrap_or("created_at"): direction }
@@ -635,7 +545,7 @@ pub struct SalesChangeVersion {
     pub version: u64,
 }
 
-/// 变更单业务筛选；来源授权在分页、计数和版本上限之前执行。
+// 为变更列表构造业务条件；仓储须在计数、分页与版本扫描上限之前按实际来源授权。
 fn change_order_filter(sales_order_id: Option<&str>, status: Option<&str>) -> Document {
     let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
     if let Some(status) = status {
@@ -653,10 +563,8 @@ fn authorized_change_stages(filter: &SalesChangeOrderFilter, authorization: Vec<
     stages
 }
 
-/// 销售变更单列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
+// 限定销售变更单列表查询返回的字段，避免读出列表不需要的完整实体。
+// 返回投影条件文档。
 fn sales_change_order_projection() -> Document {
     doc! {
         "id": 1,

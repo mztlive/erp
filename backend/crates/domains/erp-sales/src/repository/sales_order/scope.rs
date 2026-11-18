@@ -25,54 +25,40 @@ impl std::fmt::Debug for SalesReadScope {
 }
 impl SalesReadScope {
     /// 绑定本次 identity 编译结果和同一服务。
-    /// # 参数
-    /// access 为完整销售模型凭证，authorization 为生成它的服务。
-    /// # 返回
-    /// 仅用于当前事务读取的执行载体。
-    /// # 错误
-    /// 无；执行前后须复验。
+    /// 结果：仅用于当前事务读取的执行载体。
+    /// 失败条件：执行前后须复验。
+    ///
+    /// 输入约定：access 为完整销售模型凭证，authorization 为生成它的服务。
     pub fn from_compiled(access: Arc<CompiledAccess>, authorization: Arc<AuthorizationService>) -> Self {
         Self { access, authorization }
     }
-    /// 返回完整授权阶段。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// identity 生成的完整阶段。
-    /// # 错误
-    /// 不执行 I/O。
+    /// 提供 identity 编译的完整授权阶段；仓储在分页或计数前应用，不能替换成业务筛选。
+    /// 结果：identity 生成的完整阶段。
     pub fn stages(&self) -> Vec<Document> {
         self.access.stages().to_vec()
     }
-    /// 将业务筛选和完整授权前置于分页。
-    /// # 参数
-    /// filter 仅包含业务筛选。
-    /// # 返回
-    /// 查询前缀。
-    /// # 错误
-    /// 无。
+    /// 组装分页查询的前置阶段，先应用业务条件和完整授权，再排序或分页。
+    /// 结果：查询前缀。
+    ///
+    /// 输入约定：filter 仅包含业务筛选。
     pub fn lookup_after(&self, filter: Document) -> Vec<Document> {
         let mut stages = vec![doc! {"$match": filter}];
         stages.extend(self.stages());
         stages
     }
     /// 按关联行的实际单个销售来源执行完整授权，不预载来源集合。
-    /// # 参数
-    /// source_field 为关联行中保存单个销售单身份的固定业务字段。
-    /// # 返回
-    /// 来源存在且完整授权命中时保留关联行，不增加根记录数量。
-    /// # 错误
-    /// 无；执行前后由调用仓储复验凭证。
+    /// 结果：来源存在且完整授权命中时保留关联行，不增加根记录数量。
+    /// 失败条件：执行前后由调用仓储复验凭证。
+    ///
+    /// 输入约定：source_field 为关联行中保存单个销售单身份的固定业务字段。
     pub fn related_stages(&self, source_field: &str) -> Vec<Document> {
         related_sales_stages(source_field, self.stages())
     }
-    /// 在仓储执行前后检查模型、原执行边界和有效期，不读取数据库。
-    /// # 参数
-    /// executor 为生成凭证时的原执行器。
-    /// # 返回
-    /// 模型、边界和期限均符合当前读取时成功。
-    /// # 错误
+    /// 查询前后用原执行器校验读取模型、执行边界和凭证有效期；此项检查不访问数据库。
+    /// 结果：模型、边界和期限均符合当前读取时成功。
     /// 模型不匹配、跨阶段或到期时拒绝。
+    ///
+    /// 输入约定：executor 为生成凭证时的原执行器。
     pub fn ensure_current(&self, executor: &mut dyn Executor) -> crate::Result<()> {
         if self.access.model().collection != Database::SALES_ORDERS
             || self.access.model().output != QueryOutput::Object
@@ -84,13 +70,11 @@ impl SalesReadScope {
         Ok(())
     }
 
-    /// 在读取用例交付结果前复验本次实际授权依赖。
-    /// # 参数
-    /// executor 为查询时的原执行器。
-    /// # 返回
-    /// 当前边界、期限及依赖仍有效时成功。
-    /// # 错误
-    /// 身份、范围或动态依赖失效时拒绝交付。
+    /// 交付读取结果前，在原执行器复查此次授权实际依赖的身份、范围及动态事实。
+    /// 结果：当前边界、期限及依赖仍有效时成功。
+    /// 失败条件：身份、范围或动态依赖失效时拒绝交付。
+    ///
+    /// 输入约定：executor 为查询时的原执行器。
     pub async fn validate(&self, executor: &mut dyn Executor) -> crate::Result<()> {
         self.ensure_current(executor)?;
         self.authorization.validate(&self.access, executor).await.map_err(Into::into)
@@ -117,15 +101,13 @@ fn related_sales_stages(source_field: &str, authorization: Vec<Document>) -> Vec
 #[allow(async_fn_in_trait)]
 pub trait SalesOrderRepositoryScopeExt {
     /// 只读取关联销售范围内的身份与版本，避免授权重验装载完整订单。
-    ///
-    /// # 参数
-    /// * `ids` - 关联销售身份，调用方按批次限制大小。
-    /// * `scope` - 已包含消费入口资格与销售来源范围的完整凭证。
-    /// * `executor` - 调用方事务执行器。
-    /// # 返回
     /// 返回完整授权范围内的身份和版本，按身份稳定排序。
-    /// # 错误
-    /// 数据库查询或反序列化失败时返回仓储错误。
+    /// 传播数据库查询或反序列化失败。
+    ///
+    /// 输入约定：
+    /// - `ids`：关联销售身份，调用方按批次限制大小。
+    /// - `scope`：已包含消费入口资格与销售来源范围的完整凭证。
+    /// - `executor`：调用方事务执行器。
     async fn scope_order_versions(
         &self,
         ids: &[String],
@@ -134,20 +116,13 @@ pub trait SalesOrderRepositoryScopeExt {
     ) -> Result<Vec<SalesVersion>>;
 
     /// 按独立授权条件读取销售单，ID 条件不能替换范围交集。
+    /// 结果：不存在或不在范围内均返回 None。
+    /// 传播数据库读取失败。
+    /// 业务边界：仓储不得按登录用户自行推断权限。
     ///
-    /// # 参数
-    /// * `id` - 销售单主键
-    /// * `scope` - 已证明的对象范围
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 不存在或不在范围内均返回 None。
-    ///
-    /// # 错误
-    /// 数据库读取失败时返回仓储错误。
-    ///
-    /// # 关键业务约束
-    /// 仓储不得按登录用户自行推断权限。
+    /// 输入约定：
+    /// - `id`：销售单主键
+    /// - `scope`：已证明的对象范围
     async fn find_authorized(
         &self,
         id: &str,

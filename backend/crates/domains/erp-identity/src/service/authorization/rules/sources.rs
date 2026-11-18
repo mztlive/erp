@@ -32,7 +32,7 @@ enum Source {
     Payable,
 }
 
-/// 实际范围依赖及其资格上下文；退款资金根使用自己的独立详情资格。
+// 登记实际来源范围及其取证入口；退款追溯到资金根时单独使用该根的详情资格。
 pub(crate) fn scope_requests(permission: &Permission) -> Result<Vec<(Permission, Permission)>> {
     let mut requests = Vec::new();
     for source in sources(permission)? {
@@ -46,7 +46,7 @@ pub(crate) fn scope_requests(permission: &Permission) -> Result<Vec<(Permission,
     Ok(requests)
 }
 
-/// 根及独立来源资格一次取证，整账资格只作为固定可选分支。
+// 同次身份取证覆盖根入口和独立来源入口，整账权限只在固定可选分支取用。
 pub(crate) fn qualifications(permission: &Permission) -> Result<Vec<Permission>> {
     let mut permissions = same_role_permissions(permission);
     permissions.push(policy_permission::FINANCE_LEDGER_READ);
@@ -60,7 +60,7 @@ pub(crate) fn qualifications(permission: &Permission) -> Result<Vec<Permission>>
     Ok(permissions)
 }
 
-/// 构造时检查所有可能执行的来源分支，不受当前账号和范围配置影响。
+// 启动验证来源 Mapping 时检查所有固定执行分支，不因当前账号或人员范围暂未启用某分支而跳过。
 pub(super) fn binding_condition(permission: &Permission, output: Output) -> Result<AccessRule> {
     let partitions =
         conditions_with(permission, &|_| true, &|_, source| super::capability_scope(source), output)?;
@@ -81,7 +81,7 @@ pub(super) struct Partition {
 }
 
 impl Source {
-    /// 来源键由固定规则选取，业务只能提供该键对应的真实关系。
+    // 由固定来源规则取得稳定关联键；业务提供该键的真实关系，不自行改选来源。
     fn relation(self) -> &'static str {
         match self {
             Self::Sales => "sales_source",
@@ -94,7 +94,7 @@ impl Source {
         }
     }
 
-    /// 独立资金源用详情资格，订单和结算条款沿当前入口资格解析。
+    // 区分来源资格上下文：独立资金来源用相应详情入口，订单和结算条款按当前入口解释。
     fn permission(self) -> Permission {
         match self {
             Self::Sales => sales_order::DETAIL,
@@ -108,7 +108,7 @@ impl Source {
     }
 }
 
-/// 每个已登记来源入口必须落到明确的来源集合，不以分类代替实际政策。
+// 为已登记的来源入口列出实际业务来源，不能只返回一个笼统分类让调用方选择规则。
 fn sources(permission: &Permission) -> Result<Vec<Source>> {
     let sources = match permission.resource() {
         "cost_entry" if permission.action() == "create" => vec![Source::Sales],
@@ -132,7 +132,7 @@ fn sources(permission: &Permission) -> Result<Vec<Source>> {
     Ok(sources)
 }
 
-/// 仅资金份额入口允许部分来源输出；命令和付款申请始终要求完整来源。
+// 只有登记为资金份额的查询才允许部分来源输出；命令和付款申请不能省略任何真实来源。
 fn allows_shares(permission: &Permission) -> bool {
     matches!(
         permission.resource(),
@@ -145,7 +145,7 @@ fn allows_shares(permission: &Permission) -> bool {
     ) && matches!(permission.action(), "list" | "detail")
 }
 
-/// 份额只来自该财务入口原有的来源方向，整账分区仍覆盖全部真实来源。
+// 复合财务入口只输出原规则登记方向的来源份额；整账过滤仍以全部真实来源为准。
 fn share_source(permission: &Permission, source: Source) -> bool {
     match permission.resource() {
         "customer_receipt" | "cost_entry" | "cost_allocation" => source == Source::Sales,
@@ -154,7 +154,7 @@ fn share_source(permission: &Permission, source: Source) -> bool {
     }
 }
 
-/// 完整资金金额要求入口与整账资格由同一角色提供，包括真实零分配记录。
+// 读取完整资金金额时要求固定入口和整账资格同角色满足；没有分配的真实记录也不能跳过这一条件。
 fn needs_ledger(permission: &Permission) -> bool {
     matches!(
         permission.resource(),
@@ -162,14 +162,14 @@ fn needs_ledger(permission: &Permission) -> bool {
     ) && matches!(permission.action(), "list" | "detail")
 }
 
-/// 本次入口具备读取完整金额所需的同角色功能资格；不证明来源记录可见。
+// 为整账分支检查完整金额的同角色功能资格；来源可见性仍须由后续范围和完整来源条件证明。
 pub(crate) fn whole_qualified(permission: &Permission, qualified: &QualifiedPermissions) -> bool {
     qualified.same_role(&same_role_permissions(permission))
         && (!needs_ledger(permission)
             || qualified.same_role(&[permission.clone(), policy_permission::FINANCE_LEDGER_READ]))
 }
 
-/// 生成固定分区；查询必须保持完整原始来源集合，不能按已获准来源选分区。
+// 按真实完整来源构造固定数据分区。不能用授权已经通过的子集选择分区，否则会把部分覆盖误作整账资格。
 #[cfg(test)]
 pub(super) fn conditions(
     permission: &Permission,
@@ -250,7 +250,7 @@ fn conditions_with(
     Ok(partitions)
 }
 
-/// 来源数据条件保留普通范围与显式读取授权的并集，不追加来源菜单权限。
+// 为实际来源保留普通范围或有效记录授权的读取分支，不再附加来源菜单功能权限。
 fn source_rule(
     entry: &Permission,
     source: Source,
@@ -281,7 +281,7 @@ fn source_rule(
     })
 }
 
-/// 每个来源范围保留授予它的入口角色；不同退款资金根不得共用范围结果。
+// 按授予来源入口的角色解析各自数据范围，退款涉及的不同资金根不能复用同一份范围结果。
 pub(crate) fn scoped_condition(
     permission: &Permission,
     qualified: &QualifiedPermissions,
@@ -304,7 +304,7 @@ pub(crate) fn scoped_condition(
     Ok(rule)
 }
 
-/// 审批管理已取得完整同角色资格；来源范围由该组资格解析，不追加来源菜单资格。
+// 审批管理取证已证明完整同角色功能组合后，只用这组合格角色解析来源范围，不额外要求来源菜单。
 pub(crate) fn management_condition(
     permission: &Permission,
     scopes: &[(Permission, ResolvedScope)],
@@ -320,7 +320,7 @@ pub(crate) fn management_condition(
     Ok(AccessRule::any(partitions.iter().map(Partition::condition).collect::<Result<_>>()?))
 }
 
-/// 来源分区和来源数据检查合并为同一表达式，供对象与查询共同执行。
+// 将来源分区与实际来源数据条件编成同一表达式，单条对象授权与列表查询使用相同语义。
 #[cfg(test)]
 pub(crate) fn data_condition(
     permission: &Permission,
@@ -338,7 +338,7 @@ pub(crate) fn data_condition(
 }
 
 impl Partition {
-    /// 每个分区保留完整关系的有无条件；不能提前按通过来源过滤根记录。
+    // 为当前分区保留原始完整关系的存在条件，不能预先剔除未获准来源后再判定根记录所属分区。
     fn condition(&self) -> Result<AccessRule> {
         let mut rules = vec![self.rule.clone()];
         for source in self.present.iter().chain(&self.absent) {
@@ -364,7 +364,7 @@ impl Partition {
         Ok(AccessRule::all(rules))
     }
 
-    /// 已知空关系才进入空分区；缺失关系、损坏引用不能伪装为无来源。
+    // 按原始关系判断来源分区。只有已确认无引用才匹配空分区，缺读或损坏不能当作无来源。
     #[cfg(test)]
     pub(super) fn matches(&self, object: &ObjectFacts) -> Result<bool> {
         let mut matches = true;
@@ -382,7 +382,7 @@ impl Partition {
     }
 }
 
-/// 退款恰有一个真实资金根；详情资格分别取证，原经办职责仍为必要条件。
+// 退款条件要求唯一真实资金根、各入口自己的详情资格，以及原经办责任，不能只凭其中一项读取。
 fn refund_conditions(
     sources: &[Source],
     qualifies: &dyn Fn(&[Permission]) -> bool,
@@ -405,7 +405,7 @@ fn refund_conditions(
 }
 
 impl Partition {
-    /// 使用相同分区规则递归核验退款资金根，完整性不能由可见来源子集替代。
+    // 递归检查退款实际资金根是否满足相同分区规则，不能只对可见来源子集完成完整性校验。
     #[cfg(test)]
     fn allows(
         &self,
@@ -678,7 +678,7 @@ mod tests {
         assert!(!check(&permission, &qualified, &object, &scopes(), &BTreeSet::new()).unwrap());
     }
 
-    /// 冲正只能由真实经办人提交，并独立取得原资金根详情及同角色整账资格。
+    // 验证：冲正只能由真实经办人提交，并独立取得原资金根详情及同角色整账资格。
     #[test]
     fn reversal_requires_handler_and_independent_full_original_funds() {
         for (permission, origin_permission, relation) in [

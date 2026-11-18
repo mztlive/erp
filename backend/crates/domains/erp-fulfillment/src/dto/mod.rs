@@ -148,7 +148,7 @@ mod tests {
         );
     }
 
-    /// 采购收货创建请求拒绝定义 ID / 审批人；视图不暴露审批区。
+    // 验证采购收货创建请求拒绝定义 ID / 审批人；视图不暴露审批区。
     #[test]
     fn purchase_receipt_create_and_view_have_no_approval_surface() {
         let valid = serde_json::json!({
@@ -196,7 +196,7 @@ mod tests {
         assert!(!object.contains_key("assignee"));
     }
 
-    /// 发货创建请求拒绝定义 ID / 审批人；视图不暴露审批区。
+    // 验证发货创建请求拒绝定义 ID / 审批人；视图不暴露审批区。
     #[test]
     fn delivery_create_and_view_have_no_approval_surface() {
         let valid = serde_json::json!({

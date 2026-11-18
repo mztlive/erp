@@ -67,11 +67,7 @@ impl From<AccountUpdate> for PortalAccountUpdate {
 }
 
 /// 查询目标供应商的具名门户账号。
-/// # 参数
-/// 内部身份、明确供应商及分页筛选。
-/// # 返回
 /// 不含凭证的账号页。
-/// # 错误
 /// 无供应商范围或查询非法时拒绝。
 pub async fn accounts(
     State(state): State<HttpState>,
@@ -83,11 +79,8 @@ pub async fn accounts(
 }
 
 /// 为已启用供应商开通具名门户账号。
-/// # 参数
 /// 独立账号资料、目标供应商与原操作号。
-/// # 返回
 /// 新账号的安全视图。
-/// # 错误
 /// 范围、身份、输入或账号唯一性不符时拒绝。
 pub async fn create_account(
     State(state): State<HttpState>,
@@ -102,11 +95,8 @@ pub async fn create_account(
 }
 
 /// 修改固定门户岗位或停用账号及绑定。
-/// # 参数
 /// 精确账号与原账号、绑定版本。
-/// # 返回
 /// 生效后的安全账号状态。
-/// # 错误
 /// 范围或版本失效时拒绝。
 pub async fn update_account(
     State(state): State<HttpState>,
@@ -121,11 +111,7 @@ pub async fn update_account(
 }
 
 /// 查询明确供应商的定向SKU报价开放记录。
-/// # 参数
-/// 供应商对象范围内的分页筛选。
-/// # 返回
 /// SKU必要展示和开放版本。
-/// # 错误
 /// 无范围或读取失败时拒绝。
 pub async fn grants(
     State(state): State<HttpState>,
@@ -136,11 +122,7 @@ pub async fn grants(
 }
 
 /// 开放或撤销精确供应商的精确SKU首次报价资格。
-/// # 参数
-/// 目标供应商、SKU与原开放版本。
-/// # 返回
 /// 当前开放事实与版本。
-/// # 错误
 /// 对象范围、目标状态或版本不符时拒绝。
 pub async fn update_grant(
     State(state): State<HttpState>,
@@ -151,11 +133,7 @@ pub async fn update_grant(
 }
 
 /// 在申请对象范围内分页查询供应商专项申请。
-/// # 参数
-/// 目标供应商和内部身份。
-/// # 返回
 /// 仅有权读取的申请及对应总数。
-/// # 错误
 /// 范围、身份或分页不符时拒绝。
 pub async fn applications(
     State(state): State<HttpState>,
@@ -166,11 +144,7 @@ pub async fn applications(
 }
 
 /// 读取可审核申请的冻结原稿、当前任务及明确复用目标。
-/// # 参数
-/// 精确申请及内部真实身份。
-/// # 返回
 /// 受对象资格保护的内部详情。
-/// # 错误
 /// 未知或越权统一404。
 pub async fn application(
     State(state): State<HttpState>,
@@ -182,11 +156,7 @@ pub async fn application(
 }
 
 /// 对当前申请及具体专项任务作确认或退回。
-/// # 参数
-/// 原申请、任务与匹配版本及明确决定。
-/// # 返回
 /// 实际正式结果或退回后的内部详情。
-/// # 错误
 /// 任一版本、范围、材料或处理资格失效时拒绝。
 pub async fn review(
     State(state): State<HttpState>,
@@ -199,11 +169,7 @@ pub async fn review(
 }
 
 /// 查询审核可用的独立字典候选。
-/// # 参数
-/// 品牌、分类或单位及必要搜索。
-/// # 返回
 /// 有效字典最小投影，不授予字典维护权限。
-/// # 错误
 /// 类型或读取无效时拒绝。
 pub async fn dictionaries(
     State(state): State<HttpState>,
@@ -224,11 +190,7 @@ pub struct DuplicateParams {
 }
 
 /// 查询精确新品申请的重复候选及已有供给版本。
-/// # 参数
-/// 受任务和对象授权保护的申请及搜索。
-/// # 返回
 /// 安全可读候选及精确冻结引用。
-/// # 错误
 /// 无申请或商品匹配资格时拒绝。
 pub async fn duplicates(
     State(state): State<HttpState>,
@@ -242,11 +204,7 @@ pub async fn duplicates(
 }
 
 /// 在真实供给及采购范围内查询未完成履约影响。
-/// # 参数
-/// 精确供给、内部身份与有界分页。
-/// # 返回
 /// 当前采购责任人及仍开放的真实履约任务，不返回财务字段。
-/// # 错误
 /// 来源、对象范围、当前任务资格或分页无效时拒绝。
 pub async fn impacts(
     State(state): State<HttpState>,

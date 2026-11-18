@@ -133,16 +133,11 @@ pub(crate) struct PurchaseReturnOrderListQuery {
 }
 
 impl PurchaseReturnOrderListParams {
-    /// 归一化采购退货单列表查询参数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    // 处理退货中心时，归一化采购退货单列表查询参数。
+    //
+    // 返回不依赖仓储类型的规范化查询参数。
+    //
+    // 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<PurchaseReturnOrderListQuery> {
         let (sort_by, sort_dir) =
             normalize_sort(&self.sort_by, &self.sort_dir, PURCHASE_RETURN_ORDER_SORT_FIELDS)?;
@@ -230,7 +225,7 @@ pub struct DocumentApprovalInstanceView {
 }
 
 impl DocumentApprovalInstanceView {
-    /// 构造运行实例只读摘要。
+    /// 用实例身份和状态初始化审批摘要；实际轮次、节点和人员由调用方按运行事实补齐。
     ///
     /// # 参数
     /// * `id` - 实例主键
@@ -238,9 +233,6 @@ impl DocumentApprovalInstanceView {
     ///
     /// # 返回
     /// 返回首轮、可选字段全空的摘要。
-    ///
-    /// # 错误
-    /// 无。
     pub fn new(id: String, status: String) -> Self {
         Self {
             id,
@@ -254,91 +246,55 @@ impl DocumentApprovalInstanceView {
         }
     }
 
-    /// 设置当前轮次。
+    /// 组装审批实例摘要时填入当前轮次。
     ///
     /// # 参数
     /// * `round_no` - 当前轮次
-    ///
-    /// # 返回
-    /// 返回更新后的摘要。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_current_round_no(mut self, round_no: u32) -> Self {
         self.current_round_no = round_no;
         self
     }
 
-    /// 设置当前节点。
+    /// 组装审批实例摘要时填入当前节点键。
     ///
     /// # 参数
     /// * `node` - 当前节点键
-    ///
-    /// # 返回
-    /// 返回更新后的摘要。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_current_node(mut self, node: Option<String>) -> Self {
         self.current_node = node;
         self
     }
 
-    /// 设置当前节点显示名。
+    /// 组装审批实例摘要时填入当前节点显示名。
     ///
     /// # 参数
     /// * `node_name` - 当前节点显示名
-    ///
-    /// # 返回
-    /// 返回更新后的摘要。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_current_node_name(mut self, node_name: Option<String>) -> Self {
         self.current_node_name = node_name;
         self
     }
 
-    /// 设置当前审批人显示名。
+    /// 组装审批实例摘要时填入当前审批人显示名。
     ///
     /// # 参数
     /// * `name` - 当前审批人显示名
-    ///
-    /// # 返回
-    /// 返回更新后的摘要。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_current_assignee_name(mut self, name: Option<String>) -> Self {
         self.current_assignee_name = name;
         self
     }
 
-    /// 设置当前审批人。
+    /// 组装审批实例摘要时填入当前审批人。
     ///
     /// # 参数
     /// * `assignee` - 当前审批人
-    ///
-    /// # 返回
-    /// 返回更新后的摘要。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_current_assignee(mut self, assignee: Option<String>) -> Self {
         self.current_assignee = assignee;
         self
     }
 
-    /// 设置最近驳回原因。
+    /// 组装审批实例摘要时填入最近驳回原因。
     ///
     /// # 参数
     /// * `reason` - 最近驳回原因
-    ///
-    /// # 返回
-    /// 返回更新后的摘要。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_latest_rejection(mut self, reason: Option<String>) -> Self {
         self.latest_rejection = reason;
         self
@@ -359,7 +315,7 @@ pub struct DocumentApprovalHistoryItemView {
 }
 
 impl DocumentApprovalHistoryItemView {
-    /// 构造有界历史项。
+    /// 初始化详情首屏的审批执行历史项，只填入调用方已提供的执行事实。
     ///
     /// # 参数
     /// * `execution_id` - 执行主键
@@ -368,23 +324,14 @@ impl DocumentApprovalHistoryItemView {
     ///
     /// # 返回
     /// 返回首轮的历史项。
-    ///
-    /// # 错误
-    /// 无。
     pub fn new(execution_id: String, node_key: String, result: String) -> Self {
         Self { execution_id, round_no: 1, node_key, result }
     }
 
-    /// 设置轮次。
+    /// 组装审批执行历史项时填入轮次。
     ///
     /// # 参数
     /// * `round_no` - 轮次
-    ///
-    /// # 返回
-    /// 返回更新后的历史项。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_round_no(mut self, round_no: u32) -> Self {
         self.round_no = round_no;
         self
@@ -426,16 +373,11 @@ pub(crate) struct CustomerRefundListQuery {
 }
 
 impl CustomerRefundListParams {
-    /// 归一化客户退款列表查询参数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    // 处理退货中心时，归一化客户退款列表查询参数。
+    //
+    // 返回不依赖仓储类型的规范化查询参数。
+    //
+    // 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<CustomerRefundListQuery> {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, CUSTOMER_REFUND_SORT_FIELDS)?;
         Ok(CustomerRefundListQuery {

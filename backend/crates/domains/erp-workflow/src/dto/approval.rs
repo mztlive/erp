@@ -105,18 +105,9 @@ pub struct ApprovalCancelBlockedCommand {
 
 impl ApprovalCancelBlockedCommand {
     /// 以必填身份构造受阻取消命令；任务版本默认为空。
-    ///
-    /// # 参数
-    /// * `approval_process_instance_id` - 实例 ID
-    /// * `reason` - 非空原因
-    /// * `idempotency_key` - 幂等键
-    /// * `actor_id` - 已认证管理员
-    ///
-    /// # 返回
     /// 返回首版的受阻取消命令。
     ///
-    /// # 错误
-    /// 无。
+    /// `reason`：非空原因；`actor_id`：已认证管理员。
     pub fn new(
         approval_process_instance_id: String,
         reason: String,

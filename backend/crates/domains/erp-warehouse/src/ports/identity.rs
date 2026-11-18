@@ -15,16 +15,7 @@ pub enum HandlerDuty {
 }
 
 impl HandlerDuty {
-    /// 返回资格错误里使用的中文操作标签。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 入库返回「入库」，仓发返回「仓发」。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 给经办资格错误提供职责对应的中文标签：入库为「入库」，仓发为「仓发」。
     pub fn label(self) -> &'static str {
         match self {
             Self::Inbound => "入库",
@@ -32,16 +23,7 @@ impl HandlerDuty {
         }
     }
 
-    /// 判断身份事实是否具备该履约责任的资格。
-    ///
-    /// # 参数
-    /// * `fact` - 经办人身份事实。
-    ///
-    /// # 返回
-    /// 入库看 `inbound_eligible`，仓发看 `outbound_eligible`；具备时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 从身份事实读取指定职责的许可，入库看 `inbound_eligible`，仓发看 `outbound_eligible`，避免用另一项资格代替。
     pub fn is_eligible(self, fact: &HandlerIdentityFact) -> bool {
         match self {
             Self::Inbound => fact.inbound_eligible,
@@ -75,35 +57,14 @@ pub struct HandlerIdentityFact {
 /// Port warehouse uses to read handler identity and permission facts.
 #[async_trait]
 pub trait IdentityFactPort: Send + Sync {
-    /// 返回一名经办人候选的身份事实。
-    ///
-    /// 账号不存在或已停用时返回 `None`。服务层把这种情况映射为含「账号不存在或已停用」的业务错误。
-    ///
-    /// # 参数
-    /// * `account_id` - 候选账号 ID。
-    /// * `executor` - 原业务授权事务或读取阶段的执行器。
-    ///
-    /// # 返回
-    /// 找到可用账号时返回身份事实；缺失或停用时返回 `None`。
-    ///
-    /// # 错误
-    /// 除账号缺失以外的身份查询失败时返回错误。
+    /// 用原业务授权事务或读取阶段的执行器查询候选账号及职责事实；不存在或停用返回 `None`，供服务提示重新选择，其他身份查询失败返回原错误。
     async fn handler_identity(
         &self,
         account_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Option<HandlerIdentityFact>>;
 
-    /// 返回全公司管理端经办人候选，不按组织过滤。
-    ///
-    /// # 参数
-    /// executor 为原授权读取事务的执行器。
-    ///
-    /// # 返回
-    /// 返回身份事实列表。
-    ///
-    /// # 错误
-    /// 身份列举或权限判断失败时返回错误。
+    /// 在原授权读取事务列举全公司管理端经办候选及权限事实，不按组织限缩；身份枚举或权限判断失败直接返回。
     async fn admin_handler_identities(&self, executor: &mut dyn Executor)
     -> Result<Vec<HandlerIdentityFact>>;
 }

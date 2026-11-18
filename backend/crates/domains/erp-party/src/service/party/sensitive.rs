@@ -60,7 +60,7 @@ pub struct SensitiveDataCodec {
 }
 
 impl SensitiveDataCodec {
-    /// 从应用启动密钥派生用途隔离的运行时密钥。
+    /// 从应用启动密钥派生用途隔离的加密、指纹和令牌签名密钥，供运行时处理主体敏感资料。
     ///
     /// 调用方必须在启动期创建一次并注入所有 Service；进程运行期间不得切换，
     /// 否则既有密文与查询指纹会变得不可用。
@@ -68,11 +68,7 @@ impl SensitiveDataCodec {
     /// # 参数
     /// * `secret` - 应用启动密钥。
     ///
-    /// # 返回
     /// 返回分别用于加密、查询指纹和揭示令牌的编解码器。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn from_secret(secret: &[u8]) -> Self {
         Self {
             encryption_key: derive_key(secret, b"erp-sensitive-encryption-v1"),
@@ -81,18 +77,11 @@ impl SensitiveDataCodec {
         }
     }
 
-    /// 返回只读查询指纹密钥。
+    /// 借用查询指纹使用的只读密钥，供需要生成同口径查重或精确查询条件的调用方使用。
     ///
     /// 该密钥仅传给实体构造函数计算 HMAC，不得持久化或输出。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回 32 字节查询指纹密钥的借用。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn fingerprint_key(&self) -> &[u8] {
         &self.fingerprint_key
     }
@@ -104,13 +93,10 @@ impl SensitiveDataCodec {
     /// # 参数
     /// * `plain` - 手机号明文
     ///
-    /// # 返回
     /// 返回预计算的查询指纹。
     ///
-    /// # 错误
     /// 不返回错误。手机号只去首尾空白，本方法不因明文内容失败。
     ///
-    /// # 关键业务约束
     /// 不得把密钥或明文交给比较 VO；仅传递本方法的 typed 结果。
     pub fn contact_mobile_fingerprint(&self, plain: &str) -> QueryFingerprint {
         self.entity_fingerprint(plain, PartyContact::mobile_fingerprint)
@@ -121,13 +107,8 @@ impl SensitiveDataCodec {
     /// # 参数
     /// * `plain` - 地址明文
     ///
-    /// # 返回
     /// 返回预计算的查询指纹。
     ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
     /// 密钥不离开本编解码器。
     pub fn address_fingerprint(&self, plain: &str) -> QueryFingerprint {
         self.entity_fingerprint(plain, PartyAddress::address_fingerprint)
@@ -138,28 +119,22 @@ impl SensitiveDataCodec {
     /// # 参数
     /// * `plain` - 账号明文
     ///
-    /// # 返回
     /// 返回预计算的查询指纹。
     ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
     /// 密钥不离开本编解码器。
     pub fn bank_account_number_fingerprint(&self, plain: &str) -> QueryFingerprint {
         self.entity_fingerprint(plain, PartyBankAccount::account_number_fingerprint)
     }
 
-    /// 用本编解码器密钥计算实体指纹并包装为强类型（erp-party-009）。
-    ///
-    /// 三个公开指纹方法仅实体指纹函数不同；密钥不出本编解码器的约束不变。
-    ///
-    /// # 参数
-    /// * `plain` - 待指纹的明文
-    /// * `fingerprint` - 实体指纹函数
-    ///
-    /// # 返回
-    /// 返回预计算的强类型查询指纹。
+    // 用本编解码器密钥计算实体指纹并包装为强类型（erp-party-009）。
+    //
+    // 三个公开指纹方法仅实体指纹函数不同；密钥不出本编解码器的约束不变。
+    //
+    // # 参数
+    // * `plain` - 待指纹的明文
+    // * `fingerprint` - 实体指纹函数
+    //
+    // 返回预计算的强类型查询指纹。
     fn entity_fingerprint(
         &self,
         plain: &str,
@@ -168,15 +143,13 @@ impl SensitiveDataCodec {
         QueryFingerprint::from_precomputed(fingerprint(plain, &self.fingerprint_key))
     }
 
-    /// 使用 AES-256-GCM 加密明文并返回带版本的 URL-safe 编码。
+    /// 保存地址、手机号等敏感资料前，用 AES-256-GCM 生成带版本的 URL 安全密文。
     ///
     /// # 参数
     /// * `plaintext` - 待加密明文。
     ///
-    /// # 返回
     /// 返回 `版本.nonce.ciphertext` 形式的 URL-safe 密文。每次调用使用新的随机 nonce。
     ///
-    /// # 错误
     /// 加密器初始化、随机数生成或 AEAD 加密失败时返回 `Internal`。
     pub fn encrypt(&self, plaintext: &str) -> Result<String> {
         let cipher = Aes256Gcm::new_from_slice(&self.encryption_key)
@@ -194,12 +167,11 @@ impl SensitiveDataCodec {
         ))
     }
 
-    /// 解密由当前版本编码器生成的密文。
+    /// 将当前编码版本的密文还原为原文本。业务入口应先完成字段访问授权，再调用解密。
     ///
     /// # 参数
     /// * `encoded` - `encrypt` 生成的版本化密文。
     ///
-    /// # 返回
     /// 返回 UTF-8 明文。
     ///
     /// # 错误
@@ -218,7 +190,7 @@ impl SensitiveDataCodec {
         String::from_utf8(plaintext).map_err(|_| sensitive_content_unavailable("敏感数据编码非法"))
     }
 
-    /// 签发限定字段、事实行和供应商的短时揭示令牌。
+    /// 为已获准揭示的敏感字段签发短期令牌，把凭证限定在该事实行、字段及供应商。
     ///
     /// `expires_at` 由调用方统一控制；令牌只表达访问范围，最终仍必须经过 HTTP
     /// RBAC 权限校验并记录揭示审计。
@@ -229,10 +201,8 @@ impl SensitiveDataCodec {
     /// * `supplier_id` - 供应商 ID。
     /// * `expires_at` - 过期秒级时间戳。
     ///
-    /// # 返回
     /// 返回 URL-safe 的 `payload.signature` 令牌。
     ///
-    /// # 错误
     /// 声明序列化失败或签名密钥初始化失败时返回 `Internal`。
     pub fn issue_reveal_token(
         &self,
@@ -249,13 +219,12 @@ impl SensitiveDataCodec {
         Ok(format!("{}.{}", URL_SAFE_NO_PAD.encode(payload), URL_SAFE_NO_PAD.encode(signature)))
     }
 
-    /// 验证短时揭示令牌并返回受限访问范围。
+    /// 在受限敏感字段读取前校验令牌签名和有效期，返回可用来匹配目标记录的访问范围。
     ///
     /// # 参数
     /// * `token` - `issue_reveal_token` 签发的令牌。
     /// * `now` - 当前秒级时间戳。
     ///
-    /// # 返回
     /// 签名有效且 `expires_at >= now` 时返回揭示范围。
     ///
     /// # 错误
@@ -291,7 +260,7 @@ impl SensitiveDataCodec {
     }
 }
 
-/// 使用用途标签从启动密钥派生固定长度子密钥。
+// 用用途标签从启动密钥导出子密钥，使加密、查询指纹和令牌签名各用独立密钥材料。
 fn derive_key(secret: &[u8], context: &[u8]) -> [u8; 32] {
     let mut digest = Sha256::new();
     digest.update(context);
@@ -305,7 +274,7 @@ fn sensitive_content_unavailable(detail: &str) -> Error {
     Error::ValidationError("无法读取这项敏感资料，请联系管理员核对资料".into())
 }
 
-/// 解析版本化密文并校验 nonce 长度。
+// 解密前拆出版本、随机数和密文，并拒绝长度异常的随机数。
 fn parse_ciphertext(encoded: &str) -> Result<([u8; NONCE_LEN], Vec<u8>)> {
     let mut segments = encoded.split('.');
     if segments.next() != Some(CIPHERTEXT_VERSION) {
@@ -328,7 +297,7 @@ fn parse_ciphertext(encoded: &str) -> Result<([u8; NONCE_LEN], Vec<u8>)> {
     Ok((nonce_bytes, ciphertext))
 }
 
-/// 为令牌正文计算 HMAC-SHA256。
+// 用 HMAC-SHA256 为揭示令牌正文生成认证码，让验证方据此识别内容是否被改动。
 fn sign(key: &[u8], payload: &[u8]) -> Result<Vec<u8>> {
     let mut mac = <HmacSha256 as KeyInit>::new_from_slice(key)
         .map_err(|_| Error::Internal("敏感字段令牌签名初始化失败".to_string()))?;
@@ -336,7 +305,7 @@ fn sign(key: &[u8], payload: &[u8]) -> Result<Vec<u8>> {
     Ok(mac.finalize().into_bytes().to_vec())
 }
 
-/// 常量时间校验令牌签名。
+// 用常量时间比较验证揭示令牌的认证码，通过后才使用令牌声明的访问范围。
 fn verify_signature(key: &[u8], payload: &[u8], signature: &[u8]) -> Result<()> {
     let mut mac = <HmacSha256 as KeyInit>::new_from_slice(key)
         .map_err(|_| Error::Internal("敏感字段令牌验签初始化失败".to_string()))?;

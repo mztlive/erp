@@ -14,22 +14,9 @@ use crate::ports::{AuthorizationPort, InventoryAuditPort, PreparedInventoryAudit
 use crate::repository::InventoryExt;
 
 impl InventoryService {
-    /// 更新库存调整单（仅草稿/驳回；乐观锁语义）。
-    ///
-    /// # 参数
-    /// * `id` - 调整单主键
-    /// * `req` - 更新请求（含期望版本）
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回更新后调整单的响应视图。
-    ///
-    /// # 错误
-    /// 请求体或明细数量非法时返回 `ValidationError`。
-    /// 调整单不存在、账号未激活、仓库不在更新范围，或明细行未命中时返回 `NotFound`。
-    /// 期望版本不一致时返回 `ConflictError`。
-    /// 状态不可编辑、文本过长、行重复或方向不一致时返回 `Error::Logic`。
-    /// 授权、审计或仓储写入失败时返回对应错误。
+    /// 修改草稿或已驳回的库存调整时，在写事务按实际调整单授权并校验期望版本，再保存表头、明细和审计。
+    /// 请求或明细数量非法返回 `ValidationError`；单据、仓库或明细不可见/缺失，以及账号未激活按 `NotFound` 处理。
+    /// 版本变化返回 `ConflictError`；状态、文案长度、行重复或方向不符返回 `Logic`，传播取证、仓储和审计错误。
     #[tracing::instrument(
         name = "inventory.stock_adjustment_update",
         skip_all,
@@ -76,7 +63,7 @@ impl InventoryService {
     }
 }
 
-/// 在原事务持久化已由调整单实体校验的明细变化。
+// 调整单修改时在原事务加载已有明细，由实体校验后只写已变更的行。某行写入未命中返回 `NotFound`。
 async fn update_adjustment_lines(
     db: &Database,
     id: &StockAdjustmentId,
@@ -96,7 +83,7 @@ async fn update_adjustment_lines(
     Ok(())
 }
 
-/// 在原更新事务加载并验证目标与期望业务版本。
+// 在原修改快照依次验证权限、加载真实调整单并比较期望版本。普通拒绝与缺单均映射 `NotFound`，失效版本返回 `ConflictError`。
 async fn adjustment_for_update(
     db: &Database,
     authorization_port: &dyn AuthorizationPort,
@@ -134,7 +121,7 @@ struct UpdateCommand {
     audit: PreparedInventoryAudit,
 }
 
-/// 更新步骤加入调用方事务，实体状态和版本检查保持原顺序。
+// 更新步骤加入调用方事务，实体状态和版本检查保持原顺序。
 async fn persist_update(
     db: &Database,
     authorization: &dyn AuthorizationPort,

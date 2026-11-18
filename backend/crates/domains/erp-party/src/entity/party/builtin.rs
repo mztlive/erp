@@ -17,7 +17,7 @@ pub(crate) struct BuiltinCompany {
 }
 
 impl BuiltinCompany {
-    /// 构造新企业；稳定编号由清单中的税号生成。
+    // 构造新企业；稳定编号由清单中的税号生成。
     pub(crate) fn new_party(&self, id: String) -> Result<Party> {
         Ok(Party::new(
             PartyId::new(id),
@@ -31,13 +31,13 @@ impl BuiltinCompany {
         )?)
     }
 
-    /// 读取编译时嵌入的权威清单。
+    // 读取编译时嵌入的权威清单。
     pub(crate) fn all() -> Result<Vec<Self>> {
         serde_json::from_str(include_str!("builtin_companies.json"))
             .map_err(|_| Error::ValidationError("内建公司清单格式错误".into()))
     }
 
-    /// 保留简称和别名，将明确提供的名称与开户行合并到公司角色。
+    // 保留简称和别名，将明确提供的名称与开户行合并到公司角色。
     pub(crate) fn profile(&self, party: &Party, revision: Option<&PartyRevision>) -> Result<CompanyProfile> {
         let short_name = party
             .company_profile
@@ -50,7 +50,7 @@ impl BuiltinCompany {
         Ok(profile)
     }
 
-    /// 计算公司资料变更；相同资料返回 None，不推进数据库版本。
+    // 计算公司资料变更；相同资料返回 None，不推进数据库版本。
     pub(crate) fn change(
         &self,
         party: &Party,
@@ -65,16 +65,14 @@ impl BuiltinCompany {
         Ok(changed.then_some((profile, name_changed)))
     }
 
-    /// 税号与完整名称必须收敛到同一可维护企业。
-    ///
-    /// # 参数
-    /// * `candidates` - 按税号与名称读取的主体；同一 ID 重复时采用首条事实
-    ///
-    /// # 返回
-    /// 无候选时返回 `None`，唯一身份且未删除时返回主体。
-    ///
-    /// # 错误
-    /// 命中多个身份或唯一主体已删除时返回原有冲突错误。
+    // 税号与完整名称必须收敛到同一可维护企业。
+    //
+    // # 参数
+    // * `candidates` - 按税号与名称读取的主体；同一 ID 重复时采用首条事实
+    //
+    // 无候选时返回 `None`，唯一身份且未删除时返回主体。
+    //
+    // 命中多个身份或唯一主体已删除时返回原有冲突错误。
     pub(crate) fn identity(&self, candidates: Vec<Party>) -> Result<Option<Party>> {
         let mut candidates = candidates.into_iter();
         let Some(candidate) = candidates.next() else {

@@ -34,10 +34,7 @@ struct ApprovalHttpErrorInner {
 }
 
 impl ApprovalHttpError {
-    /// 装箱构造审批 HTTP 错误。
-    ///
-    /// # 返回
-    /// 返回指针大小的错误，避免 clippy `result_large_err`。
+    // 为审批协议失败构造指针大小的错误，避免稳定码、提示和可选回读数据撑大 `Result`。
     fn new(
         status: StatusCode,
         code: &'static str,
@@ -59,15 +56,7 @@ impl ApprovalHttpError {
 }
 
 impl ApprovalHttpError {
-    /// 由稳定码与可选冲突回读数据构造错误。
-    ///
-    /// # 参数
-    /// * `code` - 合同冻结的 `APPROVAL_*` 码
-    /// * `correlation_id` - 请求关联 ID
-    /// * `data` - 409 可回读的安全数据；403/404 必须为空
-    ///
-    /// # 返回
-    /// 返回带 HTTP 状态的审批错误。
+    /// 由冻结的 `APPROVAL_*` 合同码确定 HTTP 状态，并保留请求关联 ID；409 可带安全回读数据，403 或 404 丢弃明细以免暴露对象。
     pub fn coded(code: ErrorCode, correlation_id: String, data: Option<Value>) -> Self {
         let status = status_of(code);
         let hide_details = matches!(status, StatusCode::FORBIDDEN | StatusCode::NOT_FOUND);
@@ -81,14 +70,7 @@ impl ApprovalHttpError {
         )
     }
 
-    /// 将服务错误映射为审批 HTTP 错误。
-    ///
-    /// # 参数
-    /// * `error` - 服务层错误
-    /// * `headers` - 用于提取关联 ID 的请求头
-    ///
-    /// # 返回
-    /// 返回稳定码、状态与关联 ID。
+    /// 审批运行时返回错误后，保留其业务分类，生成对应 HTTP 状态、稳定码和请求关联 ID。
     pub fn from_service(error: impl Into<crate::wiring::errors::Error>, headers: &HeaderMap) -> Self {
         let error = error.into();
         let correlation_id = correlation_id(headers);
@@ -98,14 +80,7 @@ impl ApprovalHttpError {
         Self::from_http(HttpError::from(error), correlation_id)
     }
 
-    /// 将通用 HTTP 错误包装为审批边界错误。
-    ///
-    /// # 参数
-    /// * `error` - 已分类的 HTTP 错误
-    /// * `correlation_id` - 请求关联 ID
-    ///
-    /// # 返回
-    /// 返回保留原状态语义的审批错误。
+    /// 把已分类的通用 HTTP 错误包装成审批信封，沿用原状态语义和本次关联 ID。
     pub fn from_http(error: HttpError, correlation_id: String) -> Self {
         let status = error.http_status();
         let code = error.error_code();
@@ -116,78 +91,45 @@ impl ApprovalHttpError {
         result
     }
 
-    /// 构造 422 协议校验错误。
-    ///
-    /// # 参数
-    /// * `message` - 面向调用方的校验说明
-    /// * `headers` - 请求头
-    ///
-    /// # 返回
-    /// 返回不泄露内部结构的 422。
+    /// 审批查询或业务命令不符合协议约束时返回带关联 ID 的 422，不公开内部结构。
     pub fn unprocessable(message: impl Into<String>, headers: &HeaderMap) -> Self {
         Self::from_http(HttpError::Unprocessable(message.into()), correlation_id(headers))
     }
 
-    /// 构造 400 请求错误。
-    ///
-    /// # 参数
-    /// * `message` - 面向调用方的参数说明
-    /// * `headers` - 请求头
-    ///
-    /// # 返回
-    /// 返回 400。
+    /// 请求字段不能解析为审批命令所需格式时生成带关联 ID 的 400。
     pub fn bad_request(message: impl Into<String>, headers: &HeaderMap) -> Self {
         Self::from_http(HttpError::BadRequest(message.into()), correlation_id(headers))
     }
 
-    /// 返回稳定错误码。
-    ///
-    /// # 返回
-    /// 返回合同码或通用 HTTP 码。
+    /// 供客户端按合同码或通用 HTTP 码识别审批错误，不依赖提示文案。
     pub fn code(&self) -> &'static str {
         self.0.code
     }
 
-    /// 返回 HTTP 状态。
-    ///
-    /// # 返回
-    /// 返回状态码。
+    /// 供协议适配读取已确定的 HTTP 状态，不从错误正文重新推断。
     pub fn status(&self) -> StatusCode {
         self.0.status
     }
 }
 
 impl From<crate::wiring::errors::Error> for ApprovalHttpError {
-    /// 在缺少请求头时用新关联 ID 映射服务错误。
-    ///
-    /// # 参数
-    /// * `error` - 服务层错误
-    ///
-    /// # 返回
-    /// 返回审批 HTTP 错误。
+    // 在缺少请求头时用新关联 ID 映射服务错误。
+    // 返回审批 HTTP 错误。
     fn from(error: crate::wiring::errors::Error) -> Self {
         Self::from_service(error, &HeaderMap::new())
     }
 }
 
 impl From<HttpError> for ApprovalHttpError {
-    /// 包装通用 HTTP 错误。
-    ///
-    /// # 参数
-    /// * `error` - 通用 HTTP 错误
-    ///
-    /// # 返回
-    /// 返回审批 HTTP 错误。
+    // 包装通用 HTTP 错误。
+    // 返回审批 HTTP 错误。
     fn from(error: HttpError) -> Self {
         Self::from_http(error, Uuid::new_v4().to_string())
     }
 }
 
 impl IntoResponse for ApprovalHttpError {
-    /// 输出稳定 JSON 信封；409 必须带稳定码与关联 ID。
-    ///
-    /// # 返回
-    /// 返回 HTTP 响应。
+    // 输出稳定 JSON 信封；409 必须带稳定码与关联 ID。
     fn into_response(self) -> Response {
         let inner = *self.0;
         tracing::warn!(
@@ -211,13 +153,7 @@ impl IntoResponse for ApprovalHttpError {
     }
 }
 
-/// 从请求头提取或生成关联 ID。
-///
-/// # 参数
-/// * `headers` - HTTP 请求头
-///
-/// # 返回
-/// 返回 `X-Trace-Id` 或新 UUID。
+/// 形成审批响应时优先沿用请求的 `X-Trace-Id`，无法取得时生成 UUID 以保留日志关联。
 pub fn correlation_id(headers: &HeaderMap) -> String {
     headers
         .get(TRACE_ID_HEADER)
@@ -227,15 +163,7 @@ pub fn correlation_id(headers: &HeaderMap) -> String {
         .unwrap_or_else(|| Uuid::new_v4().to_string())
 }
 
-/// 解析十进制版本字符串。
-///
-/// # 参数
-/// * `value` - 客户端提交的版本
-/// * `_label` - 字段中文名（仅保留调用方语义，不返回给用户）
-/// * `headers` - 请求头
-///
-/// # 错误
-/// 非正整数字符串时返回 400。
+/// 把 HTTP 中的正十进制版本字符串转成运行时版本；空值、非法数字或溢出返回 400，不使用调用方字段名定制错误正文。
 pub fn parse_version(value: &str, _label: &str, headers: &HeaderMap) -> Result<u64, ApprovalHttpError> {
     let bytes = value.as_bytes();
     if bytes.is_empty() || !matches!(bytes[0], b'1'..=b'9') || !bytes[1..].iter().all(u8::is_ascii_digit) {
@@ -244,15 +172,7 @@ pub fn parse_version(value: &str, _label: &str, headers: &HeaderMap) -> Result<u
     value.parse::<u64>().map_err(|_| ApprovalHttpError::bad_request("页面数据已失效，请刷新后重试", headers))
 }
 
-/// 解析可选版本。
-///
-/// # 参数
-/// * `value` - 可空版本
-/// * `label` - 字段中文名
-/// * `headers` - 请求头
-///
-/// # 错误
-/// 出现非法字符串时返回 400。
+/// 可缺省的版本字段未提供时保持为空；存在时执行和必填版本相同的正十进制校验，非法值返回 400。
 pub fn parse_optional_version(
     value: Option<&str>,
     label: &str,
@@ -377,7 +297,7 @@ mod tests {
         assert_eq!(body["errorMessage"], "系统暂时无法完成操作，请稍后重试；如仍失败，请联系支持人员");
     }
 
-    /// 库存调整更新的越权与不存在必须经实际 Handler 适配器保持不可区分。
+    // 通过真实库存调整更新边界比较无权和不存在的响应，防止客户端据响应区分隐藏对象。
     #[tokio::test]
     async fn stock_adjustment_update_hidden_failures_have_identical_http_projection() {
         async fn project(error: crate::wiring::errors::Error) -> (StatusCode, Value) {

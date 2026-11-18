@@ -32,11 +32,11 @@ enum PostingStep {
 
 #[async_trait]
 trait PostingSteps: Send {
-    /// 只用调用方执行器执行既有步骤之一，并在原错误处停止。
+    // 只用调用方执行器执行既有步骤之一，并在原错误处停止。
     async fn apply(&mut self, step: PostingStep, executor: &mut dyn Executor) -> Result<()>;
 }
 
-/// 按生产顺序执行各步骤；失败注入的纯测试替身也走这条顺序。
+// 按生产顺序执行各步骤；失败注入的纯测试替身也走这条顺序。
 async fn execute(steps: &mut impl PostingSteps, executor: &mut dyn Executor) -> Result<()> {
     use PostingStep::*;
     for step in [
@@ -61,17 +61,13 @@ struct MongoPosting<'a> {
 
 #[async_trait]
 impl PostingSteps for MongoPosting<'_> {
-    /// 按步骤在同一执行器写入采购、销售、应收与审计，任一步失败即停止。
-    ///
-    /// # 参数
-    /// * `step` - 当前形式化过账步骤。
-    /// * `executor` - 调用方执行器；本实现不另开事务。
-    ///
-    /// # 返回
-    /// 该步写入完成。无采购计划时跳过重验、采购任务和采购同步；业务单据不存在时跳过登记。
-    ///
-    /// # 错误
-    /// 当前步骤失败时返回原错误，后续步骤不再执行。应收步骤在客户不存在时返回 `NotFound`。
+    // 按步骤在同一执行器写入采购、销售、应收与审计，任一步失败即停止。
+    //
+    // `step` 为当前形式化过账步骤；`executor` 为调用方执行器；本实现不另开事务。
+    //
+    // 该步写入完成。无采购计划时跳过重验、采购任务和采购同步；业务单据不存在时跳过登记。
+    //
+    // 当前步骤失败时返回原错误，后续步骤不再执行。应收步骤在客户不存在时返回 `NotFound`。
     async fn apply(&mut self, step: PostingStep, executor: &mut dyn Executor) -> Result<()> {
         use PostingStep::*;
         let write = &mut self.write;
@@ -118,7 +114,7 @@ impl PostingSteps for MongoPosting<'_> {
     }
 }
 
-/// 在形式化原事务中认领冻结采购责任计划；没有采购计划时不读取或写入。
+// 在形式化原事务中认领冻结采购责任计划；没有采购计划时不读取或写入。
 async fn revalidate_procurement(
     write: &FormalizedSubmissionWrite,
     executor: &mut dyn Executor,
@@ -131,7 +127,7 @@ async fn revalidate_procurement(
     Ok(())
 }
 
-/// 在销售过账的原位置更新已存在的业务登记；缺失时继续后续步骤。
+// 在销售过账的原位置更新已存在的业务登记；缺失时继续后续步骤。
 async fn persist_registered_document(
     write: &FormalizedSubmissionWrite,
     executor: &mut dyn Executor,
@@ -143,7 +139,7 @@ async fn persist_registered_document(
     Ok(())
 }
 
-/// 归属快照与正式版本沿用同一执行器，归属失败时不写正式版本。
+// 归属快照与正式版本沿用同一执行器，归属失败时不写正式版本。
 async fn persist_sales_revision(
     write: &mut FormalizedSubmissionWrite,
     executor: &mut dyn Executor,
@@ -160,7 +156,7 @@ async fn persist_sales_revision(
     Ok(())
 }
 
-/// 在销售生效的原事务中读取客户企业身份，形成对客户的应收。
+// 在销售生效的原事务中读取客户企业身份，形成对客户的应收。
 async fn post_receivable(write: &FormalizedSubmissionWrite, executor: &mut dyn Executor) -> Result<()> {
     let order = &write.order;
     let customer = write
@@ -185,7 +181,7 @@ async fn post_receivable(write: &FormalizedSubmissionWrite, executor: &mut dyn E
     Ok(())
 }
 
-/// 将销售事实与独立读取的客户主体映射为财务输入。
+// 将销售事实与独立读取的客户主体映射为财务输入。
 fn receivable_input(
     order: &SalesOrder,
     customer_party: PartyId,
@@ -207,18 +203,11 @@ fn receivable_input(
     }
 }
 
-/// 在调用方选定的事务边界内写入销售形式化及既有供给事实，并继续写入财务、任务和审计。
-///
-/// # 参数
-/// * `write` - 已完成领域计算的销售形式化写入上下文
-/// * `audit` - 本次形式化审计记录
-/// * `executor` - 调用方根事务执行器；全部步骤复用，不开启其他事务
-///
-/// # 返回
-/// 全部写入完成后返回；销售单、正式版本与冻结时间在同一写入上下文中传递。
-///
-/// # 错误
-/// 采购责任重验、正式版本、提交或后续财务、任务、审计任一步骤失败时，保留原错误并停止执行。
+// 在调用方选定的事务边界内写入销售形式化及既有供给事实，并继续写入财务、任务和审计。
+//
+// `write` 为已完成领域计算的销售形式化写入上下文；`audit` 为本次形式化审计记录；`executor` 为调用方根事务执行器；全部步骤复用，不开启其他事务。
+//
+// 全部写入完成后返回；销售单、正式版本与冻结时间在同一写入上下文中传递。采购责任重验、正式版本、提交或后续财务、任务、审计任一步骤失败时，保留原错误并停止执行。
 pub(super) async fn post(
     write: FormalizedSubmissionWrite,
     audit: &AuditLog,

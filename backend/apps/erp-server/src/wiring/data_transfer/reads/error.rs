@@ -56,7 +56,7 @@ pub enum ReadError {
 }
 
 impl From<application_core::Error> for ReadError {
-    /// 将应用合同错误映射为应用错误。
+    // 为导入导出读取接入共享应用合同错误，沿用原业务类别供上层区分权限、校验及系统失败。
     fn from(error: application_core::Error) -> Self {
         match error {
             application_core::Error::Internal(message) => Self::Internal(message),
@@ -109,9 +109,7 @@ from_domain!(erp_supply);
 from_domain!(erp_fulfillment_execution, Rbac, Coded);
 from_domain!(erp_returns);
 impl From<erp_fulfillment::Error> for ReadError {
-    /// 将履约领域错误映射为流程边界错误。
-    /// 履约域已删除 `ReceiptDuplicate` 变体（唯一冲突按 `uk_*` 索引名细化为 `ConflictError`），故手写映射；
-    /// 分类语义不变（冲突仍归冲突）。
+    // 将履约读取错误转入导入导出边界。履约唯一键冲突已按索引归为 `ConflictError`，保留此冲突分类，不再寻找 `ReceiptDuplicate`。
     fn from(error: erp_fulfillment::Error) -> Self {
         match error {
             erp_fulfillment::Error::Internal(payload) => Self::Internal(payload),
@@ -133,9 +131,7 @@ from_domain!(erp_procurement);
 from_domain!(erp_import);
 
 impl From<erp_sales::Error> for ReadError {
-    /// 将销售领域错误映射为流程边界错误。
-    ///
-    /// 选品专用变体落到已有冲突/业务/内部分类。
+    // 传播销售读取失败时，把选品专用变体归入既有冲突、业务或内部错误分类。
     fn from(error: erp_sales::Error) -> Self {
         match error {
             erp_sales::Error::Internal(payload) => Self::Internal(payload),
@@ -161,7 +157,7 @@ impl From<erp_sales::Error> for ReadError {
 }
 
 impl From<persistence_core::Error> for ReadError {
-    /// 保留持久化分类和原错误；仅归档索引交 HTTP 的兼容分支最终形成文案。
+    // 导入导出读取失败时保留原持久化错误分类和载荷，仅将已归档索引交 HTTP 兼容层决定最终文案。
     fn from(error: persistence_core::Error) -> Self {
         match error {
             error @ persistence_core::Error::DuplicateKey(_) => {
@@ -184,7 +180,7 @@ impl From<persistence_core::Error> for ReadError {
     }
 }
 
-/// 仅识别 HTTP 持有的三个历史索引；不拥有其提示文案，也不增加命令恢复范围。
+// 筛出必须交给 HTTP 兼容层的三个归档索引；筛选不生成提示，也不扩大命令恢复范围。
 fn historical_http_index(index_name: Option<&str>) -> bool {
     matches!(
         index_name,
@@ -198,7 +194,7 @@ fn duplicate_key_conflict_message(error: &persistence_core::Error) -> String {
     duplicate_index_conflict_message(error.duplicate_index_name())
 }
 
-/// 已知提示只由实际拥有域提供。无名/未知索引保持原通用冲突提示。
+// 导入导出遇到唯一冲突时向索引拥有域取提示；未命名或无法识别的索引使用通用提示。
 fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
     index_name
         .and_then(|name| {
@@ -215,13 +211,7 @@ fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
 }
 
 impl From<validator::ValidationErrors> for ReadError {
-    /// 从给定值构建实例。
-    ///
-    /// # 参数
-    /// * `err` - 错误对象
-    ///
-    /// # 返回
-    /// 返回创建的实例。
+    // 把导入导出读取参数的验证问题转为含字段细节的 `InvalidInput`，不混入仓储或系统错误。
     fn from(err: validator::ValidationErrors) -> Self {
         ReadError::InvalidInput(err.into())
     }

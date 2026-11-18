@@ -40,7 +40,7 @@ pub struct InquiryProcurementSnapshot {
 }
 
 impl From<&InquiryRequirementSnapshot> for InquiryProcurementSnapshot {
-    /// 保留冻结需求的完整采购可见字段。
+    // 为采购处理询价构造冻结需求投影，保留采购可读字段，不把当前可编辑草稿当成需求依据。
     fn from(snapshot: &InquiryRequirementSnapshot) -> Self {
         Self {
             version: snapshot.version,
@@ -76,12 +76,10 @@ pub struct InquiryProcurementView {
 
 impl InquiryProcurementView {
     /// 生成已完成任务的历史只读结果，不带入后续需求、报价或费用办理资料。
-    /// # 参数
-    /// requirement_version 与起止时间来自已核验完成任务，inquiry 已通过对象读取授权。
-    /// # 返回
     /// 返回该任务期间发布的最后一轮完整反馈及其需求快照。
-    /// # 错误
-    /// 需求或发布记录缺失时返回 None，不使用当前需求补齐。
+    /// 失败条件：需求或发布记录缺失时返回 None，不使用当前需求补齐。
+    ///
+    /// 输入约定：requirement_version 与起止时间来自已核验完成任务，inquiry 已通过对象读取授权。
     pub fn from_completed_task(
         inquiry: &SalesInquiry,
         requirement_version: u32,
@@ -134,23 +132,18 @@ impl InquiryProcurementView {
     }
 
     /// 生成已通过询价对象读取授权的完整采购投影。
-    /// # 参数
-    /// inquiry 为已授权询价。
-    /// # 返回
-    /// 全部商品行、费用和当前有效采购工作，不包含销售参考价。
-    /// # 错误
-    /// 无。
+    /// 结果：全部商品行、费用和当前有效采购工作，不包含销售参考价。
+    ///
+    /// 输入约定：inquiry 为已授权询价。
     pub fn from_inquiry(inquiry: &SalesInquiry) -> Self {
         Self::from_inquiry_at(inquiry, Instant::now())
     }
 
     /// 按指定时刻生成完整采购资料和费用办理状态。
-    /// # 参数
-    /// inquiry 已通过询价对象读取授权，now 为业务时刻。
-    /// # 返回
     /// 返回完整采购投影；工作仅保留当前版本且未冻结的记录。
-    /// # 错误
-    /// 无；费用不可办理时逐项返回公开原因。
+    /// 失败条件：费用不可办理时逐项返回公开原因。
+    ///
+    /// 输入约定：inquiry 已通过询价对象读取授权，now 为业务时刻。
     pub fn from_inquiry_at(inquiry: &SalesInquiry, now: Instant) -> Self {
         Self {
             base: inquiry.base.clone(),

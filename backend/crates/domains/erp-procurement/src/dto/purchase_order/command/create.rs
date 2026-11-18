@@ -62,18 +62,10 @@ pub struct CreatePurchaseOrderFromBasisRequest {
 impl CreatePurchaseOrderFromBasisRequest {
     /// 规范化并校验逐行本次采购数量。
     ///
-    /// # 参数
-    /// 无。
+    /// 同一稳定销售行在一次命令中只能出现一次；字符串类型化与集合规则由`crate::entity::purchase_order::creation_basis`
+    /// 承担，本方法只负责协议错误映射。
     ///
-    /// # 返回
-    /// 返回去除首尾空白、数量已类型化且稳定行不重复的请求行。
-    ///
-    /// # 错误
-    /// 稳定行重复、数量非法或数量不大于零时返回参数验证错误。
-    ///
-    /// # 关键业务约束
-    /// 同一稳定销售行在一次命令中只能出现一次；字符串类型化与集合规则由
-    /// `crate::entity::purchase_order::creation_basis` 承担，本方法只负责协议错误映射。
+    /// 返回去除首尾空白、数量已类型化且稳定行不重复的请求行。稳定行重复、数量非法或数量不大于零时返回参数验证错误。
     pub fn normalized_lines(&self) -> Result<Vec<RequestedLine>> {
         let mut parsed = Vec::with_capacity(self.lines.len());
         for line in &self.lines {
@@ -92,18 +84,11 @@ impl CreatePurchaseOrderFromBasisRequest {
 
     /// 计算创建命令请求指纹（不含原始幂等键）。
     ///
-    /// # 参数
-    /// * `lines` - 已规范化并排序的请求行
+    /// 同一幂等键用于不同依据、范围或数量时必须冲突；摘要形态与存量收据一致，修改会破坏幂等兼容。
     ///
-    /// # 返回
     /// 返回不包含原始幂等键的 SHA-256 指纹。
     ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 同一幂等键用于不同依据、范围或数量时必须冲突；摘要形态与存量收据一致，
-    /// 修改会破坏幂等兼容。
+    /// `lines` 为已规范化并排序的请求行。
     pub fn request_fingerprint(&self, lines: &[RequestedLine]) -> String {
         let mut parts = vec![
             self.work_item_id.trim().to_string(),
@@ -143,18 +128,7 @@ pub struct CreatePurchaseOrderResult {
 }
 
 impl CreatePurchaseOrderResult {
-    /// 由必填采购单身份与业务引用构造创建结果。
-    ///
-    /// # 参数
-    /// * `purchase_order_id` - 采购单主键
-    /// * `purchase_no` - 采购单号
-    /// * `reference` - 业务引用
-    ///
-    /// # 返回
-    /// 返回零版本、非重放的创建结果。
-    ///
-    /// # 错误
-    /// 无。
+    /// 由必填采购单身份与业务引用构造创建结果。返回零版本、非重放的创建结果。
     pub fn new(
         purchase_order_id: impl Into<String>,
         purchase_no: impl Into<String>,
@@ -170,15 +144,6 @@ impl CreatePurchaseOrderResult {
     }
 
     /// 设置乐观锁版本。
-    ///
-    /// # 参数
-    /// * `lock_version` - 乐观锁版本
-    ///
-    /// # 返回
-    /// 返回更新后的创建结果。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_lock_version(mut self, lock_version: u64) -> Self {
         self.lock_version = lock_version;
         self
@@ -186,14 +151,7 @@ impl CreatePurchaseOrderResult {
 
     /// 设置是否为幂等重放。
     ///
-    /// # 参数
-    /// * `replayed` - 是否复用已有创建结果
-    ///
-    /// # 返回
-    /// 返回更新后的创建结果。
-    ///
-    /// # 错误
-    /// 无。
+    /// `replayed` 表明是否复用已有创建结果。
     pub fn with_replayed(mut self, replayed: bool) -> Self {
         self.replayed = replayed;
         self
@@ -229,19 +187,7 @@ pub struct SourcingLineAssignment {
 }
 
 impl SourcingLineAssignment {
-    /// 由必填销售行、依据、数量与预计交付日构造选源分配。
-    ///
-    /// # 参数
-    /// * `sales_order_line_id` - 销售稳定行身份
-    /// * `basis_id` - 本行选用的精确依据
-    /// * `quantity` - 本次分配数量
-    /// * `expected_delivery_date` - 预计交付日
-    ///
-    /// # 返回
-    /// 返回供应商采购来源、目标仓为空的选源分配。
-    ///
-    /// # 错误
-    /// 无。
+    /// 由必填销售行、依据、数量与预计交付日构造选源分配。返回供应商采购来源、目标仓为空的选源分配。
     pub fn new(
         sales_order_line_id: impl Into<String>,
         basis_id: impl Into<String>,
@@ -259,31 +205,13 @@ impl SourcingLineAssignment {
         }
     }
 
-    /// 设置供给来源。
-    ///
-    /// # 参数
-    /// * `source_type` - 供给来源
-    ///
-    /// # 返回
-    /// 返回更新后的选源分配。
-    ///
-    /// # 错误
-    /// 无。
+    /// 设置供给来源。返回更新后的选源分配。
     pub fn with_source_type(mut self, source_type: SupplySourceType) -> Self {
         self.source_type = source_type;
         self
     }
 
-    /// 设置采购且由仓库履约时的目标收货仓。
-    ///
-    /// # 参数
-    /// * `target_warehouse_id` - 目标收货仓
-    ///
-    /// # 返回
-    /// 返回更新后的选源分配。
-    ///
-    /// # 错误
-    /// 无。
+    /// 设置采购且由仓库履约时的目标收货仓。返回更新后的选源分配。
     pub fn with_target_warehouse_id(mut self, target_warehouse_id: impl Into<String>) -> Self {
         self.target_warehouse_id = Some(target_warehouse_id.into());
         self
@@ -311,19 +239,11 @@ pub struct CreatePurchaseOrdersFromSourcingRequest {
 impl CreatePurchaseOrdersFromSourcingRequest {
     /// 规范化并校验逐行选源分配。
     ///
-    /// # 参数
-    /// 无。
+    /// 字符串类型化与集合规则由 `crate::entity::purchase_order::sourcing_plan`承担，本方法只负责协议错误映射；
+    /// 同一销售行允许按库存与采购依据拆分。
     ///
-    /// # 返回
-    /// 返回字符串已类型化、同销售行同依据不重复且稳定排序的选源集合。
-    ///
-    /// # 错误
-    /// 销售行或依据空白、数量或预计交付日非法、现有库存另行指定目标仓、
+    /// 返回字符串已类型化、同销售行同依据不重复且稳定排序的选源集合。销售行或依据空白、数量或预计交付日非法、现有库存另行指定目标仓、
     /// 数量不大于零或同一销售行重复使用同一依据时返回参数验证错误。
-    ///
-    /// # 关键业务约束
-    /// 字符串类型化与集合规则由 `crate::entity::purchase_order::sourcing_plan`
-    /// 承担，本方法只负责协议错误映射；同一销售行允许按库存与采购依据拆分。
     pub fn sourcing_assignments(&self) -> Result<SourcingAssignmentSet> {
         let mut parsed = Vec::with_capacity(self.lines.len());
         for line in &self.lines {
@@ -349,18 +269,11 @@ impl CreatePurchaseOrdersFromSourcingRequest {
 
     /// 计算整批选源创建命令请求指纹（不含原始幂等键）。
     ///
-    /// # 参数
-    /// * `assignments` - 已规范化并排序的选源行
+    /// 同一幂等键用于不同任务、销售单、供应商或数量时必须冲突；摘要形态与存量收据一致，修改会破坏幂等兼容。
     ///
-    /// # 返回
-    /// 返回不包含原始幂等键的 SHA-256 指纹。
+    /// 返回不包含原始幂等键的 SHA-256 指纹。指纹载荷序列化失败时返回内部错误。
     ///
-    /// # 错误
-    /// 指纹载荷序列化失败时返回内部错误。
-    ///
-    /// # 关键业务约束
-    /// 同一幂等键用于不同任务、销售单、供应商或数量时必须冲突；摘要形态与
-    /// 存量收据一致，修改会破坏幂等兼容。
+    /// `assignments` 为已规范化并排序的选源行。
     pub fn request_fingerprint(&self, assignments: &[SourcingAssignment]) -> Result<String> {
         let payload = assignments
             .iter()
@@ -415,17 +328,9 @@ pub struct CreatePurchaseOrdersFromSourcingResult {
 }
 
 impl CreatePurchaseOrdersFromSourcingResult {
-    /// 由必填任务状态与业务引用构造选源确认结果。
+    /// 由必填任务状态与业务引用构造选源确认结果。返回订单与预占为空、非重放的确认结果。
     ///
-    /// # 参数
-    /// * `work_item_status` - 本次同步后的供给分配任务状态
-    /// * `reference` - 业务引用（来源销售单）
-    ///
-    /// # 返回
-    /// 返回订单与预占为空、非重放的确认结果。
-    ///
-    /// # 错误
-    /// 无。
+    /// `reference` 为业务引用（来源销售单）。
     pub fn new(work_item_status: impl Into<String>, reference: impl Into<String>) -> Self {
         Self {
             orders: Vec::new(),
@@ -437,15 +342,6 @@ impl CreatePurchaseOrdersFromSourcingResult {
     }
 
     /// 设置本次创建的采购单。
-    ///
-    /// # 参数
-    /// * `orders` - 本次创建并提交或幂等回放的采购单
-    ///
-    /// # 返回
-    /// 返回更新后的确认结果。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_orders(mut self, orders: Vec<CreatePurchaseOrderResult>) -> Self {
         self.orders = orders;
         self
@@ -453,14 +349,7 @@ impl CreatePurchaseOrdersFromSourcingResult {
 
     /// 设置是否为幂等重放。
     ///
-    /// # 参数
-    /// * `replayed` - 是否复用已有供给分配结果
-    ///
-    /// # 返回
-    /// 返回更新后的确认结果。
-    ///
-    /// # 错误
-    /// 无。
+    /// `replayed` 表明是否复用已有供给分配结果。
     pub fn with_replayed(mut self, replayed: bool) -> Self {
         self.replayed = replayed;
         self

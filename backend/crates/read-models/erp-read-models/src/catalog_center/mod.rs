@@ -30,7 +30,7 @@ pub struct CatalogCenterReadService {
 }
 
 impl CatalogCenterReadService {
-    /// 注入查询、范围与采购负责人解析；构造不读取事实。
+    /// 装配商品中心时，注入查询、范围与采购负责人解析；构造不读取事实。
     ///
     /// # 参数
     /// * `authorization` - 组合根构造并共享的统一授权服务。
@@ -41,9 +41,6 @@ impl CatalogCenterReadService {
     ///
     /// # 返回
     /// 返回未执行 I/O 的读取服务。
-    ///
-    /// # 错误
-    /// 无。
     pub fn new(
         db: Database,
         query: Arc<dyn CatalogSupplyQueryPort>,
@@ -54,10 +51,9 @@ impl CatalogCenterReadService {
         Self { db, authorization, query, access, procurement }
     }
 
-    /// 查询可售 SKU；资格日期由原商品领域逻辑确定。
+    /// 打开独立的可售 SKU 列表时，开启读取事务执行固定资格检查和分页查询，资格日期由商品领域逻辑确定。
     ///
     /// # 参数
-    /// * `actor` - 本次已认证账号。
     /// * `params` - 可售筛选
     ///
     /// # 返回
@@ -82,11 +78,10 @@ impl CatalogCenterReadService {
             .await
     }
 
-    /// 在调用方快照内查询可售 SKU，保留固定功能资格与完整分页语义。
+    /// 调用方已有快照时，沿原执行器检查商品读取资格、查询可售页并补齐供应商编号；只在原执行边界仍有效时交付。
     ///
     /// # 参数
     /// * `params` - 可售筛选，排序、分页和资格日期沿用商品领域校验。
-    /// * `actor` - 当前已认证账号。
     /// * `executor` - 调用方活动快照执行器，资格、分页、计数与展示补齐共用它。
     ///
     /// # 返回
@@ -113,7 +108,7 @@ impl CatalogCenterReadService {
     }
 }
 
-/// 商品池及配送提示只允许在活动快照中检查固定功能资格。
+// 查询商品池或配送提示前，先确认执行器处于活动快照，再核对两个入口共用的固定功能资格。
 async fn require_sellable_read(
     authorization: &AuthorizationService,
     actor: &AuditActor,
@@ -130,7 +125,7 @@ async fn require_sellable_read(
     })
 }
 
-/// 按商品领域筛选查询并投影当前可售页，保留同序供应商身份供编号补齐。
+// 可售商品读取资格确认后，按领域条件查询当前页，并另外返回同序的供应商身份供编号补齐。
 async fn sellable_sku_page(
     query: &dyn CatalogSupplyQueryPort,
     params: &SellableSkuListParams,

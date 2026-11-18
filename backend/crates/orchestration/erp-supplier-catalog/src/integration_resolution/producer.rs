@@ -15,38 +15,30 @@ use id_generator::next_id;
 use super::work_item_factory::{new_difference_work_item, new_error_work_item};
 use crate::{Error, Result};
 
-/// 构造指定到人的错误处理任务（主键与时间由服务注入）。
-///
-/// # 参数
-/// * `task` - 集成错误事实。责任人由领域政策从该事实解析，不另收参数。
-///
-/// # 返回
-/// 返回新建的开放正式责任任务。
-///
-/// # 错误
-/// 责任字段或关联字段不满足任务实体不变式时返回领域逻辑错误。
-///
-/// # 约束
-/// 责任政策归领域，本函数只做 ID/时间注入与错误透传。
+// 构造指定到人的错误处理任务（主键与时间由服务注入）。
+//
+// - `task`：集成错误事实。责任人由领域政策从该事实解析，不另收参数。
+//
+// 返回新建的开放正式责任任务。
+//
+// 责任字段或关联字段不满足任务实体不变式时返回领域逻辑错误。
+//
+// 责任政策归领域，本函数只做 ID/时间注入与错误透传。
 pub(crate) fn error_work_item(task: &IntegrationErrorTask) -> Result<WorkItem> {
     new_error_work_item(WorkItemId::new(next_id()), task, Instant::now()).map_err(Into::into)
 }
 
-/// 构造指定到人的对账差异任务（主键与时间由服务注入）。
-///
-/// # 参数
-/// * `difference` - 对账差异事实。责任人由领域政策从该事实解析，不另收参数。
-///
-/// # 返回
-/// 返回新建的开放正式责任任务。
-///
-/// # 错误
-/// 差异类型未注册责任规则时返回 `BusinessLogicError`（wire 不变），
-/// 其余不变式失败返回领域逻辑错误。注册表预检只做错误类别映射，
-/// 规则本身仍由领域工厂独占（失败关闭）。
-///
-/// # 约束
-/// 责任政策归领域，本函数只做 ID/时间注入与错误映射。
+// 构造指定到人的对账差异任务（主键与时间由服务注入）。
+//
+// - `difference`：对账差异事实。责任人由领域政策从该事实解析，不另收参数。
+//
+// 返回新建的开放正式责任任务。
+//
+// 差异类型未注册责任规则时返回 `BusinessLogicError`（wire 不变），
+// 其余不变式失败返回领域逻辑错误。注册表预检只做错误类别映射，
+// 规则本身仍由领域工厂独占（失败关闭）。
+//
+// 责任政策归领域，本函数只做 ID/时间注入与错误映射。
 pub(super) fn difference_work_item(difference: &ReconciliationDifference) -> Result<WorkItem> {
     difference_owner_role(&difference.difference_type)
         .map_err(|error| Error::BusinessLogicError(error.to_string()))?;

@@ -30,12 +30,10 @@ pub struct InquirySalesBasis {
 
 impl InquirySalesBasis {
     /// 按当前已接受反馈生成可转数量及商品报价，不返回采购内部身份。
-    /// # 参数
-    /// `inquiry` 为当前已授权聚合；`round` 为明确轮次；`now` 为服务端时间。
-    /// # 返回
     /// 返回尚有可转量的商品、地址、价格及对应来源选择。
-    /// # 错误
-    /// 未接受、需求损坏、数量溢出或全部失效时返回业务错误。
+    /// 失败条件：未接受、需求损坏、数量溢出或全部失效时返回业务错误。
+    ///
+    /// 输入约定：`inquiry` 为当前已授权聚合；`round` 为明确轮次；`now` 为服务端时间。
     pub fn from_inquiry(inquiry: &SalesInquiry, round: u32, now: Instant) -> Result<Self> {
         let feedback = inquiry.accepted_feedback(round, now)?;
         let requirement = requirement(inquiry, feedback.requirement_version)?;

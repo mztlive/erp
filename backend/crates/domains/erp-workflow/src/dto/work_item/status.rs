@@ -36,16 +36,8 @@ pub enum WorkItemScope {
 }
 
 impl WorkItemScope {
-    /// 返回稳定范围代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
+    /// 取得稳定范围代码。
     /// 返回 `mine`、`managed` 或 `history`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Mine => "mine",
@@ -73,15 +65,7 @@ pub enum WorkItemFamily {
 
 impl WorkItemFamily {
     /// 返回该任务族的服务端注册任务类型。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回 `family_of` 落在本族、且属于 `WORK_ITEM_TYPES` 的任务类型。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn work_item_types(self) -> Vec<WorkItemType> {
         WORK_ITEM_TYPES.into_iter().filter(|work_item_type| family_of(*work_item_type) == self).collect()
     }
@@ -121,15 +105,9 @@ pub struct ProcessingBlockerView {
 }
 
 /// 返回任务类型所属的固定任务族。
-///
-/// # 参数
-/// * `work_item_type` - 已登记的任务类型。
-///
-/// # 返回
 /// 按类型穷尽匹配采购、审批、财务、履约或异常族。
 ///
-/// # 错误
-/// 不返回错误。
+/// `work_item_type`：已登记的任务类型。
 pub fn family_of(work_item_type: WorkItemType) -> WorkItemFamily {
     match work_item_type {
         WorkItemType::SalesInquiryProcessing

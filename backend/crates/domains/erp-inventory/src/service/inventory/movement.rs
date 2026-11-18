@@ -19,20 +19,9 @@ use crate::repository::prelude::*;
 use crate::repository::{InventoryExt, StockMovementFilter, StockMovementRow};
 
 impl InventoryService {
-    /// 分页查询库存流水台账（W10 流水视图，正式事实）。
-    ///
-    /// # 参数
-    /// * `params` - 查询参数（仓库/SKU/类型/方向/发生时间区间/经办人筛选）
-    /// * `actor` - 当前认证操作人，用于计算库存流水读取范围
-    ///
-    /// # 返回
-    /// 返回带范围信封的分页视图。
-    ///
-    /// # 错误
-    /// 分页、时间区间、排序、人员或 `scope_version` 非法时返回 `ValidationError`。
-    /// 跨页 `scope_version` 不一致时返回 `ConflictError`。
-    /// 账号未激活时返回 `Forbidden`。
-    /// 授权、商品、仓库、入库单号或仓储查询失败时返回对应错误。
+    /// 读取正式库存流水台账时，以当前账号的完整范围分页计数，业务筛选可继续限定仓库、SKU、类型、方向、时间和经办人。
+    /// 在原快照补齐仓库和来源单号，交付前复验；参数非法返回 `ValidationError`，跨页范围变化返回 `ConflictError`，账号失效返回 `Forbidden`。
+    /// 传播授权、商品、仓库、来源单号或仓储读取错误。
     #[tracing::instrument(
         name = "inventory.stock_movement_list",
         skip_all,
@@ -56,7 +45,7 @@ impl InventoryService {
             .await
     }
 
-    /// 在原快照中读取完整列表、来源单号及仓库名称，最后检查交付。
+    // 在原快照中读取完整列表、来源单号及仓库名称，最后检查交付。
     async fn search_stock_movements(
         &self,
         mut query: StockMovementListQuery,
@@ -112,7 +101,7 @@ impl InventoryService {
     }
 }
 
-/// 将已规范化的查询字段移动到库存流水筛选条件。
+// 将已规范化的查询字段移动到库存流水筛选条件。
 fn movement_filter(
     query: StockMovementListQuery,
     search: crate::repository::InventorySearch,
@@ -134,16 +123,9 @@ fn movement_filter(
     }
 }
 
-/// 由流水投影行组装视图；仓库名和来源单号留空，由调用方另补。
-///
-/// # 参数
-/// * `row` - 流水列表投影行。
-///
-/// # 返回
-/// 返回 `warehouse_name` 与 `source_document_no` 均为 `None` 的视图。
-///
-/// # 错误
-/// 不返回错误。
+// 由流水投影行组装视图；仓库名和来源单号留空，由调用方另补。
+// 返回 `warehouse_name` 与 `source_document_no` 均为 `None` 的视图。
+// `row` 为流水列表投影行。
 pub(super) fn movement_row_view(row: StockMovementRow) -> StockMovementView {
     StockMovementView {
         warehouse_name: None,
@@ -162,21 +144,11 @@ pub(super) fn movement_row_view(row: StockMovementRow) -> StockMovementView {
     }
 }
 
-/// 批量解析流水来源单据号（按流水类型查对应单据集合，`$in` 批量避免 N+1）。
-///
-/// 当前支持库存调整单（盘盈/盘亏/损坏）与采购入库单；其余来源类型暂不解析，
-/// 由前端回退显示来源主键。
-///
-/// # 参数
-/// * `db` - 数据库实例。
-/// * `fulfillment` - 采购入库单号端口。
-/// * `movements` - 流水视图列表。
-///
-/// # 返回
-/// 返回「来源单据主键 → 单据号」映射。未解析的来源不出现在映射中。
-///
-/// # 错误
-/// 调整单查询或入库单号读取失败时返回对应错误。
+// 批量解析流水来源单据号（按流水类型查对应单据集合，`$in` 批量避免 N+1）。
+// 当前支持库存调整单（盘盈/盘亏/损坏）与采购入库单；其余来源类型暂不解析，由前端回退显示来源主键。
+// 返回「来源单据主键 → 单据号」映射。未解析的来源不出现在映射中。
+// `fulfillment` 为采购入库单号端口；`movements` 为流水视图列表。
+// 调整单查询或入库单号读取失败时返回对应错误。
 pub(super) async fn load_movement_source_document_nos(
     db: &Database,
     fulfillment: &dyn crate::ports::FulfillmentFactsPort,
@@ -216,7 +188,7 @@ pub(super) async fn load_movement_source_document_nos(
 }
 
 impl From<StockMovement> for StockMovementView {
-    /// 从流水实体构造视图。
+    // 从流水实体构造视图。
     fn from(movement: StockMovement) -> Self {
         movement_row_view(StockMovementRow {
             id: movement.base.id,
@@ -234,7 +206,7 @@ impl From<StockMovement> for StockMovementView {
     }
 }
 
-/// 补齐已授权结果页的仓库名称，不产生目录候选或扩大流水范围。
+// 补齐已授权结果页的仓库名称，不产生目录候选或扩大流水范围。
 async fn hydrate_movement_warehouses(
     warehouse: &dyn WarehouseFactsPort,
     items: &mut [StockMovementView],

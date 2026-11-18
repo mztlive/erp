@@ -38,13 +38,8 @@ pub struct ReceiptDraftWithAssets {
 
 impl ReceivableProcess {
     /// 在同一事务保存完整回款草稿、拟核销分配与幂等回执。
-    /// # 参数
-    /// * `req` - 原单版本、到账字段、分配与稳定操作号。
-    /// * `actor` - 当前已认证操作人。
-    /// # 返回
-    /// 返回原单当前状态；相同操作重试不重复创建或更新。
-    /// # 错误
-    /// 无权、异载荷重试、状态或版本冲突、非法来源时拒绝。
+    ///
+    /// `req` 为原单版本、到账字段、分配与稳定操作号。返回原单当前状态；相同操作重试不重复创建或更新。无权、异载荷重试、状态或版本冲突、非法来源时拒绝。
     pub async fn save_customer_receipt_draft(
         &self,
         req: SaveCustomerReceiptDraftRequest,
@@ -57,12 +52,8 @@ impl ReceivableProcess {
     }
 
     /// 保存草稿及新增凭证，同号重放不再次消费文件。
-    /// # 参数
-    /// 登记字段、本次上传批次和认证操作人。
-    /// # 返回
-    /// 当前草稿及本批文件是否已提交。
-    /// # 错误
-    /// 校验、授权、版本、事务或读取失败时拒绝；未知提交保持原错误。
+    ///
+    /// 登记字段、本次上传批次和认证操作人。当前草稿及本批文件是否已提交。校验、授权、版本、事务或读取失败时拒绝；未知提交保持原错误。
     pub async fn save_customer_receipt_draft_with_assets(
         &self,
         mut req: SaveCustomerReceiptDraftRequest,
@@ -228,7 +219,7 @@ impl ReceivableProcess {
     }
 }
 
-/// 草稿保存沿用已登记的新建/修改事件，不向审计写入表单原文。
+// 草稿保存沿用已登记的新建/修改事件，不向审计写入表单原文。
 fn draft_audit(actor: &AuditActor, id: &str, existing_id: Option<&str>) -> Result<AuditLog> {
     let action = if existing_id.is_some() { "customer_receipt.update" } else { "customer_receipt.create" };
     Ok(actor.clone().resource_log(action, "customer_receipt", id.to_owned())?)

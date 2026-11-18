@@ -34,16 +34,7 @@ pub enum SettlementReviewDecision {
 
 impl SupplierSettlementStatement {
     /// 校验客户端提交的复核主题与刷新截止策略快照。
-    ///
-    /// # 参数
-    /// * `subject_hash` - 客户端持有的主题摘要
-    /// * `cutoff_policy_id` - 客户端持有的刷新截止策略
-    /// * `cutoff_policy_version` - 客户端持有的策略版本
-    ///
-    /// # 返回
     /// 三项均与当前冻结值一致时返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 任一值不一致时返回领域错误。
     pub fn ensure_review_snapshot(
         &self,
@@ -60,14 +51,7 @@ impl SupplierSettlementStatement {
         Ok(())
     }
     /// 校验当前主题摘要与全部差异正式结论一致且没有待处理差异。
-    ///
-    /// # 参数
-    /// * `differences` - 当前结算单的全部差异
-    ///
-    /// # 返回
     /// 差异均已处理且主题摘要一致时返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 存在待处理差异或主题摘要过期时返回领域错误。
     pub fn ensure_resolved_subject(&self, differences: &[SupplierSettlementDifference]) -> Result<()> {
         if differences.iter().any(|difference| difference.status == SettlementDifferenceStatus::Pending) {
@@ -79,18 +63,9 @@ impl SupplierSettlementStatement {
         Ok(())
     }
     /// 计算 ERP 接受差异对应的冻结成本差额。
-    ///
-    /// 每个结算明细的 ERP 接受含税差异合计必须精确等于供应商账单与 ERP 冻结
-    /// 含税差额；不含税与税额只从冻结三元组派生，禁止按含税金额猜测。
-    ///
-    /// # 参数
-    /// * `items` - 当前结算单的冻结明细
-    /// * `differences` - 当前结算单的全部差异
-    ///
-    /// # 返回
+    /// 每个结算明细的 ERP 接受含税差异合计必须精确等于供应商账单与 ERP 冻结含税差额；不含税与税额只从冻
+    /// 结三元组派生，禁止按含税金额猜测。
     /// 返回汇总后的含税、不含税和税额差额。
-    ///
-    /// # 错误
     /// 明细重复、差异指向其他明细或金额恒等不成立时返回领域错误。
     pub fn accepted_cost_delta(
         &self,
@@ -137,15 +112,7 @@ impl SupplierSettlementStatement {
         Ok(total)
     }
     /// 校验结算单具备正式确认条件并返回成本差额。
-    ///
-    /// # 参数
-    /// * `items` - 当前结算单的冻结明细
-    /// * `differences` - 当前结算单的全部差异
-    ///
-    /// # 返回
     /// 账单身份完整、差异已解决且主题一致时返回冻结成本差额。
-    ///
-    /// # 错误
     /// 外部账单身份不完整、差异未解决、主题过期或成本差额不一致时返回错误。
     pub fn ensure_confirmable(
         &self,
@@ -162,14 +129,7 @@ impl SupplierSettlementStatement {
         self.accepted_cost_delta(items, differences)
     }
     /// 标记当前可编辑结算草稿仍存在正式差异。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 状态推进到 `HAS_DIFFERENCE` 时返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 当前结算单已提交复核或进入终态时返回领域错误。
     pub fn mark_has_difference(&mut self) -> Result<()> {
         if !self.is_editable() {
@@ -179,19 +139,9 @@ impl SupplierSettlementStatement {
         Ok(())
     }
     /// 记录强类型结算复核决定。
-    ///
-    /// 确认形成应付并进入终态；驳回必须携带结构化原因，且只能回到草稿或有差异。
-    /// 经办人与复核人岗位分离由本实体再次固化。
-    ///
-    /// # 参数
-    /// * `decision` - 确认或驳回决定
-    /// * `reviewed_by` - 复核人
-    /// * `reviewed_at` - 复核时间
-    ///
-    /// # 返回
+    /// 确认形成应付并进入终态；驳回必须携带结构化原因，且只能回到草稿或有差异。经办人与复核人岗位分离由
+    /// 本实体再次固化。
     /// 复核结果、原因和状态写回后返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 非待复核、复核人为空或超长、与经办人相同、驳回目标不是草稿或有差异，或复核说明超长时返回错误。
     pub fn record_review(
         &mut self,
@@ -241,16 +191,9 @@ impl SupplierSettlementStatement {
         self.confirmed_at = (result == SettlementReviewResult::Confirmed).then_some(reviewed_at);
         Ok(())
     }
-    /// 应用复核人更新。
-    ///
-    /// # 参数
-    /// * `reviewed_by` - 新的复核人
-    ///
-    /// # 返回
-    /// 复核人写入成功时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 复核人为空/超长或与经办人相同时返回错误。
+    // 应用复核人更新。
+    // 复核人写入成功时返回 `Ok(())`。
+    // 复核人为空/超长或与经办人相同时返回错误。
     pub(super) fn apply_reviewed_by(&mut self, reviewed_by: String) -> Result<()> {
         let reviewed_by =
             normalize_required_text(reviewed_by, "复核人不能为空", ACTOR_MAX_LEN, "复核人过长")?;

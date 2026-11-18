@@ -18,24 +18,22 @@ use super::super::dto::{
 use super::super::query;
 use super::super::repository::WarehouseRegionFact;
 use crate::Result;
-/// 构造一条精确创建依据视图。
-///
-/// # 参数
-/// * `order` - 销售稳定单
-/// * `group` - 精确依据分组
-/// * `facts` - 批量供应商结算事实
-/// * `sales_owner_name` - 销售负责人展示名
-/// * `work_item_id` - 冻结本依据责任范围的开放供给分配任务
-/// * `warehouses` - 启用仓库所在地区，用于集采入仓判定
-///
-/// # 返回
-/// 返回前端可直接选择逐行数量的依据视图。
-///
-/// # 错误
-/// 履约期限无法转换为业务日期时返回错误。
-///
-/// # 关键业务约束
-/// 预计金额按 `max_create_quantity` 逐行舍入后汇总；供应商名称只从批量事实读取。
+// 装配采购创建依据视图时，生成一条精确创建依据视图。
+//
+// 调用参数：
+// * `order` - 销售稳定单
+// * `group` - 精确依据分组
+// * `facts` - 批量供应商结算事实
+// * `sales_owner_name` - 销售负责人展示名
+// * `work_item_id` - 冻结本依据责任范围的开放供给分配任务
+// * `warehouses` - 启用仓库所在地区，用于集采入仓判定
+//
+// 返回前端可直接选择逐行数量的依据视图。
+//
+// 履约期限无法转换为业务日期时返回错误。
+//
+// 业务边界：
+// 预计金额按 `max_create_quantity` 逐行舍入后汇总；供应商名称只从批量事实读取。
 pub(super) fn build_basis_view(
     order: &SalesOrderBasisFact,
     group: &BasisGroup,
@@ -82,18 +80,14 @@ pub(super) fn build_basis_view(
     .with_lines(lines))
 }
 
-/// 按依据范围计算一条依据行的配送判定视图。
-///
-/// # 参数
-/// * `line` - 依据行
-/// * `scope` - 依据范围
-/// * `warehouses` - 启用仓库所在地区
-///
-/// # 返回
-/// 直发返回逐销售收货地区判定，集采入仓返回逐仓库判定，集采直发附带起订量。
-///
-/// # 错误
-/// 无。
+// 依据依据范围计算一条依据行的配送判定视图。
+//
+// 调用参数：
+// * `line` - 依据行
+// * `scope` - 依据范围
+// * `warehouses` - 启用仓库所在地区
+//
+// 直发返回逐销售收货地区判定，集采入仓返回逐仓库判定，集采直发附带起订量。
 fn delivery_view(
     line: &BasisLine,
     scope: &BasisScope,
@@ -147,19 +141,15 @@ fn delivery_view(
     view
 }
 
-/// 构造一个现有库存供给依据视图。
-///
-/// # 参数
-/// * `order` - 销售稳定单。
-/// * `group` - 现有库存供给分组。
-/// * `sales_owner_name` - 销售负责人展示名。
-/// * `work_item_id` - 冻结本依据责任范围的开放任务。
-///
-/// # 返回
-/// 返回现有库存供给依据视图。
-///
-/// # 错误
-/// 履约期限无法转换为业务日期时返回错误。
+// 装配采购创建依据视图时，生成一个现有库存供给依据视图。
+//
+// 调用参数：
+// * `order` - 销售稳定单。
+// * `group` - 现有库存供给分组。
+// * `sales_owner_name` - 销售负责人展示名。
+// * `work_item_id` - 冻结本依据责任范围的开放任务。
+//
+// 履约期限无法转换为业务日期时返回错误。
 pub(super) fn build_stock_basis_view(
     order: &SalesOrderBasisFact,
     group: &StockBasisGroup,
@@ -192,7 +182,7 @@ pub(super) fn build_stock_basis_view(
     .with_lines(lines))
 }
 
-/// 构造单条依据行视图。
+// 装配采购创建依据视图时，生成单条依据行视图。
 fn basis_line_view(
     line: &BasisLine,
     supplier_id: &SupplierAccountId,

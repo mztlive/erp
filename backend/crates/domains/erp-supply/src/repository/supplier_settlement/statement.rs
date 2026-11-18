@@ -175,20 +175,11 @@ pub struct SupplierSettlementStatementStatsRow {
 }
 
 impl QueryFilter for SupplierSettlementStatementFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// 供应商、状态、期间上下界与结算单号按字段写入。关键词、授权范围、对账负责人、差异处理人、
-    /// 复核人与业务组织经 `narrowing_conditions` 以 `$and` 收窄。`handler_user_ids` 为 `Some` 时
-    /// 只按 `handler_open_statement_ids` 收窄；该集合为空则条件为 `$expr: false`。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 将供应商结算单筛选条件转换为 MongoDB 谓词，供仓储取数使用。
+    // 查询仅包含未删除记录。
+    // 供应商、状态、期间上下界与结算单号按字段写入。关键词、授权范围、对账负责人、差异处理人、复核人与业
+    // 务组织经 `narrowing_conditions` 以 `$and` 收窄。`handler_user_ids` 为 `Some` 时只按
+    // `handler_open_statement_ids` 收窄；该集合为空则条件为 `$expr: false`。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(supplier_id) = &self.supplier_id {
@@ -277,16 +268,8 @@ fn handler_clause(open_ids: &[String]) -> Document {
 }
 
 impl Pagination for SupplierSettlementStatementFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。`page_size` 由 `u32` 转为 `u64`，页码不在此方法内归一。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 向通用仓储提供供应商结算单查询的页码和页长；不在此处改写页码。
+    // `page_size` 由 `u32` 转为 `u64`。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -296,20 +279,10 @@ impl Pagination for SupplierSettlementStatementFilter {
 #[allow(async_fn_in_trait)]
 pub trait SupplierSettlementStatementRepositoryExt {
     /// 按明确授权条件读取单个结算单。
-    ///
-    /// # 参数
-    /// * `id` - 结算单稳定主键
-    /// * `scope` - 已证明的授权条件
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
     /// 不存在或不在范围内均返回 `None`。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回对应错误。
-    ///
-    /// # 关键业务约束
+    /// 仓储查询失败时向上传播错误。
     /// ID 条件不能替换范围交集；空授权不得返回文档。
+    /// `scope`：已证明的授权条件。
     async fn find_authorized(
         &self,
         id: &str,
@@ -318,16 +291,9 @@ pub trait SupplierSettlementStatementRepositoryExt {
     ) -> crate::Result<Option<SupplierSettlementStatement>>;
 
     /// 按结算单 ID 集合批量读取结算单。
-    ///
-    /// # 参数
-    /// * `statement_ids` - 结算单 ID 字符串集合；空集合直接返回空结果
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回全部匹配且未删除的结算单；返回顺序不承诺与输入一致。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// `statement_ids`：空集合直接返回空结果。
     async fn find_statements_by_ids(
         &self,
         statement_ids: &[String],
@@ -335,19 +301,9 @@ pub trait SupplierSettlementStatementRepositoryExt {
     ) -> Result<Vec<SupplierSettlementStatement>>;
 
     /// 按结算单 ID 集合一次批量返回来源 ID 到结算单号的事实映射（FIN-R03）。
-    ///
-    /// 只投影 `id` 与 `statement_no`；空输入不访问数据库；仓储内去重后单次
-    /// `$in` 查询。空单号按缺失处理，不进入映射，Service 保持 `None`
-    /// 且不得回退内部 ID。
-    ///
-    /// # 参数
-    /// * `statement_ids` - 结算单 ID 字符串集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
+    /// 只投影 `id` 与 `statement_no`；空输入不访问数据库；仓储内去重后单次`$in` 查询。空单号按缺失处理，
+    /// 不进入映射，Service 保持 `None`且不得回退内部 ID。
     /// 返回来源 ID 到非空结算单号的映射；缺失来源不上表。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
     async fn statement_nos_by_ids(
         &self,
@@ -356,18 +312,9 @@ pub trait SupplierSettlementStatementRepositoryExt {
     ) -> Result<std::collections::HashMap<String, String>>;
 
     /// 分页检索供应商结算单列表（投影查询）。
-    ///
-    /// 只返回 [`SupplierSettlementStatementRow`] 所需的列表字段，不加载整文档；
-    /// 排序字段走白名单映射（`STATEMENT_SORT_FIELDS`），白名单外一律回退 `created_at`。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
+    /// 只返回 [`SupplierSettlementStatementRow`] 所需的列表字段，不加载整文档；排序字段走白名单映射
+    /// （`STATEMENT_SORT_FIELDS`），白名单外一律回退 `created_at`。
     /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
     async fn search_supplier_settlement_statements(
         &self,
@@ -376,19 +323,9 @@ pub trait SupplierSettlementStatementRepositoryExt {
     ) -> crate::Result<PageResult<SupplierSettlementStatementRow>>;
 
     /// 按 ERP 结算单号查找唯一结算单。
-    ///
-    /// 唯一性由 `uk_supplier_settlement_statements_statement_no` 唯一索引保证；
-    /// 该方法用于结算单号幂等判定与外部账单回填定位，服务层不得做
-    /// 「先查后插」的重复性判断（§6.20）。
-    ///
-    /// # 参数
-    /// * `statement_no` - ERP 结算单号
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
+    /// 唯一性由 `uk_supplier_settlement_statements_statement_no` 唯一索引保证；该方法用于结算单号幂等判
+    /// 定与外部账单回填定位，服务层不得做「先查后插」的重复性判断（§6.20）。
     /// 返回匹配的未删除结算单；无匹配时返回 `None`。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
     async fn find_by_statement_no(
         &self,
@@ -397,20 +334,9 @@ pub trait SupplierSettlementStatementRepositoryExt {
     ) -> Result<Option<SupplierSettlementStatement>>;
 
     /// 按稳定 ID 读取供应商结算岗位分离事实。
-    ///
     /// 工作项入口的历史名称；纯主键读取，直接委托基类单条查询。
-    ///
-    /// # 参数
-    /// * `id` - 供应商结算单 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回未删除结算单；不存在时返回 `None`。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询或反序列化失败时返回错误。
-    ///
-    /// # 约束
     /// 仅查询本仓储拥有的结算单集合，不访问结算明细集合。
     async fn find_work_item_supplier_settlement(
         &self,
@@ -419,19 +345,9 @@ pub trait SupplierSettlementStatementRepositoryExt {
     ) -> Result<Option<SupplierSettlementStatement>>;
 
     /// 按列表完全相同的过滤条件计算跨页状态和确认金额汇总。
-    ///
-    /// 用 `filter` 的查询文档做 `$match`，再汇总 `PENDING_RECONCILIATION`、
-    /// `HAS_DIFFERENCE`、`PENDING_REVIEW` 的笔数，以及状态为 `CONFIRMED` 的
-    /// `erp_amount`。有会话时走同一会话。
-    ///
-    /// # 参数
-    /// * `filter` - 与列表相同的筛选条件
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
+    /// 用 `filter` 的查询文档做 `$match`，再汇总 `PENDING_RECONCILIATION`、`HAS_DIFFERENCE`、
+    /// `PENDING_REVIEW` 的笔数，以及状态为 `CONFIRMED` 的`erp_amount`。有会话时走同一会话。
     /// 返回聚合的第一行；管道没有结果行时返回 `None`。
-    ///
-    /// # 错误
     /// 聚合执行、游标读取或结果反序列化失败时返回对应错误。
     async fn aggregate_supplier_settlement_statement_stats(
         &self,
@@ -440,18 +356,9 @@ pub trait SupplierSettlementStatementRepositoryExt {
     ) -> crate::Result<Option<SupplierSettlementStatementStatsRow>>;
 
     /// 按业务编号返回全部匹配身份，供跨域列表在分页前筛选。
-    ///
-    /// 对 `statement_no` 与 `external_bill_no` 做忽略大小写的字面量匹配，
-    /// 排除软删除后用 `distinct` 取 `id`。
-    ///
-    /// # 参数
-    /// * `keyword` - 业务编号字面量
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
+    /// 对 `statement_no` 与 `external_bill_no` 做忽略大小写的字面量匹配，排除软删除后用 `distinct` 取
+    /// `id`。
     /// 返回匹配到的字符串 ID；非字符串值会被丢弃。
-    ///
-    /// # 错误
     /// 查询失败时返回对应错误。
     async fn matching_ids_by_number(&self, keyword: &str, executor: &mut dyn Executor)
     -> Result<Vec<String>>;
@@ -624,15 +531,7 @@ impl SupplierSettlementStatementRepositoryExt for SupplierSettlementStatementRep
 #[allow(async_fn_in_trait)]
 pub trait SupplierSettlementSourceEvidenceRepositoryExt {
     /// 按稳定请求 ID 查找不可变来源证据批次。
-    ///
-    /// # 参数
-    /// * `request_id` - 稳定请求 ID
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回匹配批次；不存在时返回 `None`。
-    ///
-    /// # 错误
     /// 查询失败时返回对应错误。
     async fn find_by_request_id(
         &self,
@@ -641,21 +540,8 @@ pub trait SupplierSettlementSourceEvidenceRepositoryExt {
     ) -> Result<Option<SupplierSettlementSourceEvidence>>;
 
     /// 读取供应商、周期与策略版本下最新的完整来源证据批次。
-    ///
     /// 排除软删除，按 `source_version`、`created_at`、`id` 降序只取一条。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 结算供应商
-    /// * `period_start` - 结算期间开始
-    /// * `period_end` - 结算期间结束
-    /// * `period_policy_id` - 期间策略 ID
-    /// * `period_policy_version` - 期间策略版本
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回最新一条；没有匹配时返回 `None`。
-    ///
-    /// # 错误
     /// 查询失败时返回对应错误。
     async fn latest_for_period(
         &self,
@@ -668,19 +554,8 @@ pub trait SupplierSettlementSourceEvidenceRepositoryExt {
     ) -> Result<Option<SupplierSettlementSourceEvidence>>;
 
     /// 读取供应商与周期下最近登记的完整来源证据，用于创建前服务端预检。
-    ///
     /// 不按策略版本过滤。排除软删除，按 `created_at`、`source_version`、`id` 降序只取一条。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 结算供应商
-    /// * `period_start` - 结算期间开始
-    /// * `period_end` - 结算期间结束
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回最近一条；没有匹配时返回 `None`。
-    ///
-    /// # 错误
     /// 查询失败时返回对应错误。
     async fn latest_for_scope(
         &self,
@@ -691,16 +566,9 @@ pub trait SupplierSettlementSourceEvidenceRepositoryExt {
     ) -> Result<Option<SupplierSettlementSourceEvidence>>;
 
     /// 按冻结来源摘要批量读取不可变来源证据。
-    ///
-    /// # 参数
-    /// * `source_hashes` - 结算单持有的来源快照摘要
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回匹配且未软删除的来源证据批次。
-    ///
-    /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
+    /// `source_hashes`：结算单持有的来源快照摘要。
     async fn list_by_source_hashes(
         &self,
         source_hashes: &[String],
@@ -790,7 +658,7 @@ impl SupplierSettlementSourceEvidenceRepositoryExt for SupplierSettlementSourceE
     }
 }
 
-/// 固定结算统计管道，授权过滤已经由identity编译。
+// 锁定结算统计管道，授权过滤已经由identity编译。
 fn statement_stats_pipeline(
     filter: &SupplierSettlementStatementFilter,
     authorization: &[Document],
@@ -828,7 +696,7 @@ fn statement_stats_pipeline(
 mod keyword_regression_tests {
     use super::*;
 
-    /// 来源关联完成后才过滤业务条件和汇总，不能把授权管道压成单条条件。
+    // 验证来源关联完成后才过滤业务条件和汇总，不能把授权管道压成单条条件。
     #[test]
     fn statistics_preserve_related_authorization_before_grouping() {
         let authorization = vec![
@@ -849,7 +717,7 @@ mod keyword_regression_tests {
         assert!(pipeline[authorization.len() + 1].contains_key("$group"));
     }
 
-    /// 业务筛选不能丢弃身份域给出的拒绝条件。
+    // 验证业务筛选不能丢弃身份域给出的拒绝条件。
     #[test]
     fn statistics_keep_denied_authorization() {
         let authorization = vec![doc! { "$match": { "$expr": false } }];

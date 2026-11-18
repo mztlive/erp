@@ -14,19 +14,8 @@ const V1_PREFIX: &str = "sha256-v1:";
 pub struct CommandFingerprint(String);
 
 impl CommandFingerprint {
-    /// 按输入顺序对全部分量进行长度前缀编码并形成 v1 指纹。
-    ///
-    /// 本方法不使用 `Debug`、JSON Map 顺序或分隔符拼接；调用方必须显式固定
-    /// 字段顺序，集合字段必须先按其业务语义规范排序。
-    ///
-    /// # 参数
-    /// * `parts` - 按固定顺序的指纹分量
-    ///
-    /// # 返回
-    /// 返回版本化持久指纹。
-    ///
-    /// # 错误
-    /// 无。
+    /// 用按序写入的长度前缀与 SHA-256 生成可持久化的 v1 指纹，避免字段边界歧义。
+    /// 调用方须固定字段顺序并按业务语义规范化集合；不要依赖 `Debug`、JSON 对象迭代顺序或分隔符拼接。
     pub fn from_parts(parts: impl IntoIterator<Item = String>) -> Self {
         Self::hash_parts(parts)
     }
@@ -43,18 +32,7 @@ impl CommandFingerprint {
         Self(format!("{V1_PREFIX}{}", hex::encode(hasher.finalize())))
     }
 
-    /// 解析已持久化的 v1 指纹。
-    ///
-    /// 摘要统一转小写归一化，大小写输入视为同一指纹。
-    ///
-    /// # 参数
-    /// * `value` - 持久化指纹字符串
-    ///
-    /// # 返回
-    /// 返回归一化后的指纹。
-    ///
-    /// # 错误
-    /// 前缀缺失或摘要非 64 位十六进制时返回错误。
+    /// 回读持久化指纹时只接受 `sha256-v1:` 和 64 个十六进制字符，并归一化摘要大小写；版本或格式不符时不进入比对。
     pub fn parse(value: impl Into<String>) -> Result<Self> {
         let value = value.into();
         let digest = value
@@ -64,35 +42,15 @@ impl CommandFingerprint {
         Ok(Self(format!("{V1_PREFIX}{}", digest.to_ascii_lowercase())))
     }
 
-    /// 返回稳定持久化字符串。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回含版本前缀的持久化字符串。
-    ///
-    /// # 错误
-    /// 无。
+    /// 为持久化和跨层传递提供含算法版本的指纹文本，避免回读时丢失版本。
     pub fn as_str(&self) -> &str {
         &self.0
     }
 
-    /// 返回 64 位摘要部分。
-    ///
-    /// 构造器保证前缀存在并做小写归一化，正常路径恒成立。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 64 位小写十六进制摘要；release 下前缀缺失时返回空字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取出 64 个小写十六进制字符，用于拼接带领域前缀的命令 ID。
     ///
     /// # Panics
-    /// debug 构建下前缀缺失会触发断言。构造器与 `parse` 保证已验证指纹带 v1 前缀。
+    /// 构造和解析保证 v1 前缀；若内部不变式被破坏，调试构建触发断言，非调试构建返回空串。
     pub fn digest_hex(&self) -> &str {
         debug_assert!(self.0.starts_with(V1_PREFIX), "已验证指纹必须有 v1 前缀");
         self.0.strip_prefix(V1_PREFIX).unwrap_or("")
@@ -100,18 +58,7 @@ impl CommandFingerprint {
 }
 
 impl<'de> Deserialize<'de> for CommandFingerprint {
-    /// 将持久化字符串反序列化为 v1 指纹。
-    ///
-    /// 摘要按 `parse` 转成小写。
-    ///
-    /// # 参数
-    /// * `deserializer` - 提供指纹字符串的反序列化器。
-    ///
-    /// # 返回
-    /// 成功时返回归一化后的指纹。
-    ///
-    /// # 错误
-    /// 输入不是字符串，或缺少 v1 前缀、摘要不是 64 位十六进制时，返回反序列化错误。
+    // 持久化回执回读只接受合法的 v1 指纹字符串，并将摘要转为小写后再参与幂等比对。
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
         let value = String::deserialize(deserializer)?;
         Self::parse(value).map_err(serde::de::Error::custom)
@@ -125,17 +72,7 @@ pub struct CommandIdentity {
 }
 
 impl CommandIdentity {
-    /// 形成 v1 身份，仅登记当前命令 ID。
-    ///
-    /// # 参数
-    /// * `prefix` - 收据 ID 前缀
-    /// * `parts` - 当前身份分量
-    ///
-    /// # 返回
-    /// 返回当前命令身份。
-    ///
-    /// # 错误
-    /// `prefix` 去空白后为空时返回错误。
+    /// 从领域前缀和有序身份分量生成 v1 命令 ID，供新写入和相同请求的只读查证共用。前缀裁剪后不得为空。
     pub fn new(prefix: &str, parts: impl IntoIterator<Item = String>) -> Result<Self> {
         Self::from_parts(prefix, parts)
     }
@@ -150,16 +87,7 @@ impl CommandIdentity {
         Ok(Self { current_id })
     }
 
-    /// 返回新写入使用的 v1 ID。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回当前身份 ID。
-    ///
-    /// # 错误
-    /// 无。
+    /// 取新回执写入和按命令身份查证共用的 v1 ID。
     pub fn current_id(&self) -> &str {
         &self.current_id
     }
@@ -177,7 +105,7 @@ pub struct CommandReceipt {
     idempotency_key_hash: CommandFingerprint,
 }
 
-/// 去首尾空白后非空校验，幂等键与资源 ID 共用空白判定。
+// 计算回执前，幂等键和目标 ID 共用非空校验；返回裁剪后的文本，由各入口决定是否保留原文。
 fn require_non_blank<'a>(value: &'a str, message: &str) -> Result<&'a str> {
     let trimmed = value.trim();
     if trimmed.is_empty() {
@@ -186,7 +114,7 @@ fn require_non_blank<'a>(value: &'a str, message: &str) -> Result<&'a str> {
     Ok(trimmed)
 }
 
-/// 载荷序列化失败统一映射，两条序列化路径共用。
+// 把构造 JSON 值与写出规范 JSON 的失败归为同一种命令载荷错误。
 fn payload_serialize_error(error: impl Display) -> Error {
     Error::from(format!("业务命令请求序列化失败: {error}"))
 }
@@ -199,7 +127,7 @@ struct ReceiptHeader<'a> {
     idempotency_key: &'a str,
 }
 
-/// 组装收据主体，两构造入口共用身份去重与字段填充。
+// 让两类回执共用身份分量顺序，把可选目标纳入命令 ID，只留下幂等键摘要而不保存原操作号。
 fn assemble(
     prefix: &str,
     header: ReceiptHeader<'_>,
@@ -223,21 +151,9 @@ fn assemble(
 }
 
 impl CommandReceipt {
-    /// 从可序列化请求形成规范 JSON v1 收据，仅保留当前规范化身份。
-    ///
-    /// # 参数
-    /// * `prefix` - 收据 ID 前缀
-    /// * `actor_id` - 操作人身份
-    /// * `action` - 动作名称
-    /// * `resource_type` - 资源类型
-    /// * `idempotency_key` - 调用方幂等键（首尾空白忽略，不持久化原文）
-    /// * `payload` - 待规范化的请求载荷
-    ///
-    /// # 返回
-    /// 返回版本化收据。
-    ///
-    /// # 错误
-    /// `prefix` 或幂等键去空白后为空，或载荷序列化失败时返回错误。
+    /// 为不按目标资源定位的命令创建 v1 回执。操作人、动作、资源类型与去首尾空白的幂等键决定身份；
+    /// 动作、资源类型与规范 JSON 决定载荷指纹，以区分原请求重试和换载荷重提。
+    /// 前缀或幂等键为空白，以及载荷不能序列化时，均返回错误。
     pub fn from_payload<T: Serialize>(
         prefix: &str,
         actor_id: &str,
@@ -258,24 +174,8 @@ impl CommandReceipt {
         )
     }
 
-    /// 从资源定位命令的固定顺序字段形成 v1 收据。
-    ///
-    /// 身份与载荷均使用版本化摘要，不保存原始幂等键。
-    ///
-    /// # 参数
-    /// * `prefix` - 收据 ID 前缀
-    /// * `actor_id` - 操作人身份
-    /// * `action` - 动作名称
-    /// * `resource_type` - 资源类型
-    /// * `resource_id` - 目标资源 ID
-    /// * `idempotency_key` - 调用方幂等键（首尾空白忽略，不持久化原文）
-    /// * `fingerprint_parts` - 指纹分量
-    ///
-    /// # 返回
-    /// 返回版本化收据。
-    ///
-    /// # 错误
-    /// `prefix`、幂等键或资源 ID 去空白后为空时返回错误。
+    /// 为指向资源的命令创建 v1 回执，使相同操作号可按目标区分。调用方须按固定顺序提供载荷分量。
+    /// 前缀、目标 ID 和幂等键不得为空白；目标 ID 保留原文，幂等键裁剪后只保存摘要。
     pub fn from_resource_parts(
         prefix: &str,
         actor_id: &str,
@@ -301,104 +201,43 @@ impl CommandReceipt {
         )
     }
 
-    /// 返回新写入使用的收据 ID。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回当前收据 ID。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取领域写入回执及重试查证共用的稳定 ID，而非业务资源 ID。
     pub fn id(&self) -> &str {
         self.identity.current_id()
     }
 
-    /// 返回收据所属操作人。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回操作人 ID。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取请求操作人 ID，用于持久化回执身份及核对重试是否来自同一操作人。
     pub fn actor_id(&self) -> &str {
         &self.actor_id
     }
 
-    /// 返回收据动作。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回动作名称。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取命令的业务动作，用于在回执中区分同一资源类型下的不同操作。
     pub fn action(&self) -> &str {
         &self.action
     }
 
-    /// 返回收据结果资源类型。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回资源类型。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取命令对应的业务资源类型，供回执入库和查证时核对身份范围。
     pub fn resource_type(&self) -> &str {
         &self.resource_type
     }
 
-    /// 返回资源定位命令的目标资源 ID。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `Some` 目标资源 ID。`from_payload` 形成的收据没有资源定位，返回 `None`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取资源定位命令的目标 ID，供回执核对原操作对象；[`Self::from_payload`] 构造的回执无目标定位。
     pub fn scope_id(&self) -> Option<&str> {
         self.scope_id.as_deref()
     }
 
-    /// 返回规范化幂等键的版本化摘要，不暴露原始操作号。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 返回长度前缀 SHA-256 v1 摘要。
-    /// # 错误
-    /// 无。
+    /// 为持久化身份提供规范化操作号的长度前缀 SHA-256 v1 摘要，不暴露原操作号。
     pub fn idempotency_key_hash(&self) -> &CommandFingerprint {
         &self.idempotency_key_hash
     }
 
-    /// 返回当前规范化请求的版本化指纹。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回当前请求指纹。
-    ///
-    /// # 错误
-    /// 无。
+    /// 取规范请求的版本化载荷指纹；回执身份匹配后，以它区分原请求重试与不同载荷冲突。
     pub fn fingerprint(&self) -> &CommandFingerprint {
         &self.fingerprint
     }
 }
 
-/// 把载荷收成键有序的规范 JSON，避免对象字段顺序影响指纹。
+// 把可序列化请求转换为键有序的 JSON，使对象字段生成顺序不影响幂等指纹。
 fn canonical_json<T: Serialize>(payload: &T) -> Result<String> {
     let value = serde_json::to_value(payload).map_err(payload_serialize_error)?;
     let mut output = String::new();
@@ -406,14 +245,14 @@ fn canonical_json<T: Serialize>(payload: &T) -> Result<String> {
     Ok(output)
 }
 
-/// 叶子 JSON 标量序列化失败路径共用收据序列化错误。
+// 为规范 JSON 按 JSON 规则编码对象键或标量，并将失败归入命令载荷错误。
 fn write_scalar_json(value: &impl Serialize, output: &mut String) -> Result<()> {
     let raw = serde_json::to_string(value).map_err(payload_serialize_error)?;
     output.push_str(&raw);
     Ok(())
 }
 
-/// 对象键排序后写入规范 JSON，数组保持原顺序；标量序列化失败即失败。
+// 计算指纹前递归按键排序对象，保留可能表达业务差异的数组次序；任一编码失败都向上返回。
 fn write_canonical_json(value: &serde_json::Value, output: &mut String) -> Result<()> {
     match value {
         serde_json::Value::Object(map) => {

@@ -44,29 +44,11 @@ pub struct ReturnsProcess {
     rbac: ReverseFlowPorts,
 }
 impl ReturnsProcess {
-    /// 使用共享业务端口构造命令入口。
-    ///
-    /// # 参数
-    /// * `db` - 组合根数据库。
-    ///
-    /// # 返回
-    /// 返回使用给定业务端口的命令入口。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 使用共享业务端口构造命令入口。返回使用给定业务端口的命令入口。
     pub fn new(db: Database, rbac: ReverseFlowPorts) -> Self {
         Self { db, rbac }
     }
-    /// 用当前数据库构造退货退款领域服务。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回绑定当前数据库的 `ReturnsService`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 用当前数据库构造退货退款领域服务。返回绑定当前数据库的 `ReturnsService`。
     pub(super) fn domain(&self) -> ReturnsService {
         ReturnsService::new(self.db.clone())
     }
@@ -76,17 +58,10 @@ impl ReturnsProcess {
 ///
 /// 只接受 `DocumentType::CustomerRefund` 与 `DocumentType::SupplierRefund`。回款冲正和付款冲正不在此分派。
 ///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `document_type` - 退款单据类型
-/// * `business_object_id` - 业务对象 ID
-/// * `actor` - 已认证操作人
-/// * `executor` - 审批运行时持有的执行器
+/// `document_type` 为退款单据类型；`business_object_id` 为业务对象 ID；`executor` 为审批运行时持有的执行器。
 ///
-/// # 返回
 /// 领域过账、业务审计与全部关联事实写入成功时返回 `Ok(())`。
 ///
-/// # 错误
 /// 单据类型不是客户退款或供应商退款时返回 `BusinessLogicError`。领域状态、额度或持久化失败时返回对应错误。
 pub async fn finalize_approved_return(
     db: &Database,
@@ -113,19 +88,9 @@ pub async fn finalize_approved_return(
 
 /// 在审批运行时持有的事务内撤回资金纠错单审批。
 ///
-/// # 参数
-/// * `db` - 数据库。
-/// * `document_type` - 客户退款、供应商退款、回款冲正或付款冲正。
-/// * `id` - 单据主键。
-/// * `action` - 合同强类型领域动作。
-/// * `actor` - 已认证操作人。
-/// * `executor` - 审批运行时持有的执行器。
+/// `document_type` 为客户退款、供应商退款、回款冲正或付款冲正；`id` 为单据主键；`action` 为合同强类型领域动作；`executor` 为审批运行时持有的执行器。
 ///
-/// # 返回
-/// 成功时无返回值。单据已按动作写回，并追加撤回审计。
-///
-/// # 错误
-/// 单据不存在、类型与动作不匹配、状态迁移或 CAS 写入失败时返回错误。
+/// 成功时无返回值。单据已按动作写回，并追加撤回审计。单据不存在、类型与动作不匹配、状态迁移或 CAS 写入失败时返回错误。
 pub async fn cancel_approval(
     db: &Database,
     document_type: DocumentType,
@@ -150,17 +115,9 @@ pub async fn cancel_approval(
 }
 
 /// 同事务驳回退款与冲正单；资金事实仅由最终通过产生，驳回不反向写正式事实。
-/// # 参数
-/// * `db` - 数据库。
-/// * `document_type` / `id` - 原单身份。
-/// * `expected_subject_version` - 被驳回实例冻结的审批主题版本。
-/// * `action` - 对应的驳回领域动作。
-/// * `actor` - 已授权审批人。
-/// * `executor` - 审批运行时事务。
-/// # 返回
-/// 保存已驳回状态和审计。
-/// # 错误
-/// 非对应驳回动作、单据不存在或状态冲突时拒绝。
+///
+/// `document_type` / `id` 为原单身份；`expected_subject_version` 为被驳回实例冻结的审批主题版本；`action` 为对应的驳回领域动作；`actor`
+/// 为已授权审批人；`executor` 为审批运行时事务。保存已驳回状态和审计。非对应驳回动作、单据不存在或状态冲突时拒绝。
 pub async fn reject_approval(
     db: &Database,
     document_type: DocumentType,
@@ -208,7 +165,7 @@ mod boundary_tests {
 
     use super::*;
 
-    /// 运行时写步骤拒绝普通读取执行器，且检查本身保留原读取阶段。
+    // 运行时写步骤拒绝普通读取执行器，且检查本身保留原读取阶段。
     #[tokio::test]
     async fn rejection_requires_snapshot_without_revoking_read_phase() {
         let db = Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("unit_test");

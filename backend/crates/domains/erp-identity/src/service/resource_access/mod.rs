@@ -22,12 +22,11 @@ pub struct ResourceGrantService {
 }
 impl ResourceGrantService {
     /// 装配授权来源管理服务。
-    /// # 参数
-    /// db 为身份数据库，authorization 为进程共享授权服务，facts 为可信业务事实端口。
-    /// # 返回
     /// 可发布及撤销来源的服务。
-    /// # 错误
+    ///
     /// 不执行 I/O。
+    ///
+    /// db 为身份数据库，authorization 为进程共享授权服务，facts 为可信业务事实端口。
     pub fn new(
         db: Database,
         authorization: Arc<AuthorizationService>,

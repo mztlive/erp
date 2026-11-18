@@ -33,18 +33,11 @@ use super::receipt_access::ensure_receipt_edit_authorized;
 use super::start_approval::{CustomerReceiptStartPersistInput, persist_customer_receipt_start_apply};
 use crate::{Error, FinancePostingPorts, Result};
 
-/// 原回款主键、版本、幂等键与完整拟核销分配共同构成提交载荷。
-///
-/// # 参数
-/// * `id` - 原回款主键。
-/// * `req` - 提交请求，含幂等键与拟核销分配。
-/// * `actor_id` - 提交人 ID。
-///
-/// # 返回
-/// 返回绑定该原单与完整请求载荷的命令回执。
-///
-/// # 错误
-/// 幂等键为空或载荷序列化失败时返回错误。
+// 原回款主键、版本、幂等键与完整拟核销分配共同构成提交载荷。
+//
+// `id` 为原回款主键；`req` 为提交请求，含幂等键与拟核销分配；`actor_id` 为提交人 ID。返回绑定该原单与完整请求载荷的命令回执。
+//
+// 幂等键为空或载荷序列化失败时返回错误。
 pub(super) fn submit_receipt(
     id: &str,
     req: &SubmitCustomerReceiptRequest,
@@ -61,21 +54,10 @@ pub(super) fn submit_receipt(
 }
 
 impl ReceivableProcess {
-    /// 按原顺序冻结提交快照和绑定启动计划，写入留在调用方事务。
-    ///
-    /// # 参数
-    /// * `id` - 原回款主键。
-    /// * `receipt` - 已装载的回款单。
-    /// * `req` - 本次提交版本、分配与幂等键。
-    /// * `actor` - 当前提交人。
-    /// * `adapter` - 客户回款适配器，提供责任角色。
-    /// * `executor` - 原提交事务执行器。
-    ///
-    /// # 返回
-    /// 返回尚未落库的启动持久化输入。
-    ///
-    /// # 错误
-    /// 主体引用、绑定缺失、快照、责任组织或启动计划准备失败时返回错误。
+    // 按原顺序冻结提交快照和绑定启动计划，写入留在调用方事务。
+    //
+    // `id` 为原回款主键；`receipt` 为已装载的回款单；`req` 为本次提交版本、分配与幂等键；`actor` 为当前提交人；`adapter` 为客户回款适配器，提供责任角色；`executor`
+    // 为原提交事务执行器。返回尚未落库的启动持久化输入。主体引用、绑定缺失、快照、责任组织或启动计划准备失败时返回错误。
     pub(super) async fn prepare_receipt_submit_input(
         &self,
         id: &str,
@@ -122,18 +104,11 @@ impl ReceivableProcess {
         })
     }
 
-    /// 在状态和版本门禁前，以当前身份、完整来源和原登记人回放同载荷提交。
-    ///
-    /// # 参数
-    /// * `id` - 原回款主键。
-    /// * `command` - 原提交命令回执。
-    /// * `actor` - 当前已认证操作人。
-    ///
-    /// # 返回
-    /// 命中同一原单的已提交回执时返回当前视图；没有回执时返回 `None`。
-    ///
-    /// # 错误
-    /// 当前资格不足、回执与原单不一致或读取失败时返回错误。
+    // 在状态和版本门禁前，以当前身份、完整来源和原登记人回放同载荷提交。
+    //
+    // `id` 为原回款主键；`command` 为原提交命令回执。命中同一原单的已提交回执时返回当前视图；没有回执时返回 `None`。
+    //
+    // 当前资格不足、回执与原单不一致或读取失败时返回错误。
     pub(super) async fn replay_customer_receipt_submit(
         &self,
         id: &str,
@@ -156,14 +131,11 @@ impl ReceivableProcess {
             .await
     }
 
-    /// 既有事务先校验原提交资格，再查证完整命令和授权结果。
-    /// # 参数
-    /// id 为原回款主键，command 为完整命令回执，actor 为当前认证操作人，
-    /// executor 为原提交事务执行器。
-    /// # 返回
-    /// 命中时返回当前授权视图；未命中返回空值。
-    /// # 错误
-    /// 原提交资格失效、回执冲突或读取失败时拒绝。
+    // 既有事务先校验原提交资格，再查证完整命令和授权结果。
+    //
+    // id 为原回款主键，command 为完整命令回执，actor 为当前认证操作人， executor 为原提交事务执行器。命中时返回当前授权视图；未命中返回空值。
+    //
+    // 原提交资格失效、回执冲突或读取失败时拒绝。
     pub(super) async fn replay_receipt_submit(
         &self,
         id: &str,
@@ -175,20 +147,11 @@ impl ReceivableProcess {
         replay_authorized_submit(&port, id, command, executor).await
     }
 
-    /// 提交结果未知时只用完整业务收据恢复，每次 fresh 快照都重验当前资格。
-    ///
-    /// # 参数
-    /// * `id` - 原回款主键。
-    /// * `command` - 原提交命令回执。
-    /// * `actor` - 当前已认证操作人。
-    /// * `original_error` - 事务首次返回的错误。
-    ///
-    /// # 返回
-    /// 查证到原提交结果时返回当前视图。
-    ///
-    /// # 错误
-    /// 未命中时返回 `original_error`。原错误为未知提交时，查证失败也保留该错误；
-    /// 查证得到不可能已提交的明确错误时返回该错误。
+    // 提交结果未知时只用完整业务收据恢复，每次 fresh 快照都重验当前资格。
+    //
+    // `id` 为原回款主键；`command` 为原提交命令回执；`original_error` 为事务首次返回的错误。查证到原提交结果时返回当前视图。
+    //
+    // 未命中时返回 `original_error`。原错误为未知提交时，查证失败也保留该错误；查证得到不可能已提交的明确错误时返回该错误。
     pub(super) async fn recover_customer_receipt_submit(
         &self,
         id: &str,
@@ -205,7 +168,7 @@ impl ReceivableProcess {
 trait ReceiptSubmitRecoveryPort: Send + Sync {
     type Output: Send;
 
-    /// 在独立只读快照中回放原提交；没有命中回执时返回 `None`。
+    // 在独立只读快照中回放原提交；没有命中回执时返回 `None`。
     async fn probe(
         &self,
         id: &str,
@@ -230,7 +193,7 @@ impl ReceiptSubmitRecoveryPort for MongoReceiptSubmitRecovery<'_> {
     }
 }
 
-/// 有界查证只读原命令；未知提交下资格、回执或视图读取失败均保留原错误。
+// 有界查证只读原命令；未知提交下资格、回执或视图读取失败均保留原错误。
 async fn recover_authorized_submit<P: ReceiptSubmitRecoveryPort>(
     port: &P,
     id: &str,
@@ -254,19 +217,11 @@ async fn recover_authorized_submit<P: ReceiptSubmitRecoveryPort>(
     Err(original_error)
 }
 
-/// 启动事实、完整提交收据和成功审计同事务写入；竞争重试只回读既有原单。
-///
-/// # 参数
-/// * `db` - 数据库。
-/// * `rbac` - 授权源。
-/// * `input` - 原事务内已冻结的启动输入。
-/// * `command` - 原提交命令回执。
-///
-/// # 返回
-/// 返回原事务内重验提交资格并读取的视图；同载荷已提交时回读原单。
-///
-/// # 错误
-/// 资格不足、原单不存在、版本变化、历史启动缺少完整收据或事务写入失败时返回错误。
+// 启动事实、完整提交收据和成功审计同事务写入；竞争重试只回读既有原单。
+//
+// `input` 为原事务内已冻结的启动输入；`command` 为原提交命令回执。返回原事务内重验提交资格并读取的视图；同载荷已提交时回读原单。
+//
+// 资格不足、原单不存在、版本变化、历史启动缺少完整收据或事务写入失败时返回错误。
 pub(super) async fn persist_receipt_submit(
     db: &Database,
     rbac: &FinancePostingPorts,
@@ -294,7 +249,7 @@ pub(super) async fn persist_receipt_submit(
     .await
 }
 
-/// 首次提交保留原状态、版本、完整收据及审计写入顺序。
+// 首次提交保留原状态、版本、完整收据及审计写入顺序。
 async fn apply_receipt_submit(
     db: &Database,
     rbac: &FinancePostingPorts,
@@ -318,15 +273,11 @@ async fn apply_receipt_submit(
     Ok(receipt)
 }
 
-/// 资格和原登记人事实必须在当前执行器内重新取得，不能沿用缓存授权。
-/// # 参数
-/// db 为业务数据库，rbac 为共享授权及审批设施，actor 为当前认证操作人，
-/// id 为原回款主键，executor 为原命令事务执行器。
-/// # 返回
-/// 返回已通过提交资格与完整来源校验的当前回款单。
-/// # 错误
-/// 回款不存在时返回 `NotFound`；当前账号、提交资格、来源或原登记人资格失效时拒绝。
-/// 授权及仓储读取错误按原分类传播。
+// 资格和原登记人事实必须在当前执行器内重新取得，不能沿用缓存授权。
+//
+// db 为业务数据库，rbac 为共享授权及审批设施，actor 为当前认证操作人， id 为原回款主键，executor 为原命令事务执行器。
+//
+// 返回已通过提交资格与完整来源校验的当前回款单。回款不存在时返回 `NotFound`；当前账号、提交资格、来源或原登记人资格失效时拒绝。授权及仓储读取错误按原分类传播。
 pub(super) async fn authorized_receipt(
     db: &Database,
     rbac: &FinancePostingPorts,
@@ -343,7 +294,7 @@ pub(super) async fn authorized_receipt(
     Ok(receipt)
 }
 
-/// 使用相同执行器核验完整命令事实，并拒绝跨原单或损坏收据。
+// 使用相同执行器核验完整命令事实，并拒绝跨原单或损坏收据。
 async fn committed_submit(
     db: &Database,
     command: &CommandReceipt,
@@ -364,11 +315,11 @@ async fn committed_submit(
 /// 同一事务的授权资格必须先于财务回执及原结果读取。
 #[async_trait]
 trait ReceiptSubmitReplayPort: ReceiptReplayPort {
-    /// 在当前执行器重验账号、提交资格、资金来源和原登记人。
+    // 在当前执行器重验账号、提交资格、资金来源和原登记人。
     async fn authorize(&self, id: &str, executor: &mut dyn Executor) -> Result<()>;
 }
 
-/// 首错顺序沿用账号、提交资格、完整资金来源、原登记人、回执与当前视图。
+// 首错顺序沿用账号、提交资格、完整资金来源、原登记人、回执与当前视图。
 async fn replay_authorized_submit<P: ReceiptSubmitReplayPort>(
     port: &P,
     id: &str,
@@ -412,7 +363,7 @@ impl ReceiptSubmitReplayPort for MongoReceiptSubmitReplay<'_> {
     }
 }
 
-/// 以提交后的完整分配逐级解析分录、子账、销售单，不接受客户端裁剪的来源证明。
+// 以提交后的完整分配逐级解析分录、子账、销售单，不接受客户端裁剪的来源证明。
 pub(super) async fn require_allocation_sources(
     db: &Database,
     rbac: &FinancePostingPorts,
@@ -471,7 +422,7 @@ mod tests {
 
     use super::*;
 
-    /// 同一操作重试可精确恢复；改变版本、来源、核销金额或原单均不能回放。
+    // 同一操作重试可精确恢复；改变版本、来源、核销金额或原单均不能回放。
     #[test]
     fn submit_receipt_requires_the_complete_original_payload() {
         let request = SubmitCustomerReceiptRequest {

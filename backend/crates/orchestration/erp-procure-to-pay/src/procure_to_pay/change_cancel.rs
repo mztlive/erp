@@ -43,23 +43,13 @@ pub(super) struct LoadedCancelRuntime {
     pub open_tasks: Vec<WorkItem>,
 }
 
-/// 按主体加载 RUNNING/BLOCKED 实例、当前执行与开放任务，并由 BPM 形成取消计划。
-///
-/// 已 `APPROVED` 的实例必须拒绝。`RUNNING` 必须恰有一个开放任务，`BLOCKED`
-/// 时不得存在开放任务。开放任务计数与采购单一致：仅统计当前执行上的
-/// 单据审批任务，独立任务不得影响取消计划。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `binding` - 创建时冻结的定义绑定
-/// * `subject` - 业务对象引用
-/// * `subject_version` - 冻结提交版本
-///
-/// # 返回
-/// 返回定义图、实例、当前执行、取消计划与开放任务快照。
-///
-/// # 错误
-/// 实例缺失、已终态、受阻仍有开放任务或仓储失败时返回错误。
+// 按主体加载 RUNNING/BLOCKED 实例、当前执行与开放任务，并由 BPM 形成取消计划。
+//
+// 已 `APPROVED` 的实例必须拒绝。`RUNNING` 必须恰有一个开放任务，`BLOCKED` 时不得存在开放任务。开放任务计数与采购单一致：仅统计当前执行上的单据审批任务，独立任务不得影响取消计划。
+//
+// `binding` 为创建时冻结的定义绑定；`subject_version` 为冻结提交版本。返回定义图、实例、当前执行、取消计划与开放任务快照。
+//
+// 实例缺失、已终态、受阻仍有开放任务或仓储失败时返回错误。
 pub(super) async fn load_cancel_runtime(
     db: &Database,
     binding: &ApprovalDefinitionBinding,
@@ -99,27 +89,13 @@ pub(super) async fn load_cancel_runtime(
 
 /// 构造统一 `cancel_approval` 输入。
 ///
-/// 本端口为业务单据普通撤回；人员失效 blocker 走业务取消，非人员一致性
-/// blocker 由统一受阻取消端口承担。
+/// 本端口为业务单据普通撤回；人员失效 blocker 走业务取消，非人员一致性 blocker 由统一受阻取消端口承担。
 ///
-/// # 参数
-/// * `runtime` - 已加载运行事实与 BPM 取消计划
-/// * `reason` - 已校验的非空原因
-/// * `actor_id` - 撤回人
-/// * `idempotency_key` - 幂等键
-/// * `receipt` - 已存在收据
-/// * `now` - 调用方时间
+/// `runtime` 为已加载运行事实与 BPM 取消计划；`reason` 为已校验的非空原因；使用调用方提供的幂等键。
 ///
-/// # 返回
-/// 返回可交给统一 `prepare_cancel` 的取消编排输入。
+/// 返回可交给统一 `prepare_cancel` 的取消编排输入。原因/幂等键非法、审批人引用无效或端口与 blocker 不匹配时返回错误。
 ///
-/// # 错误
-/// 原因/幂等键非法、审批人引用无效或端口与 blocker 不匹配时返回错误。
-///
-/// # 关键业务约束
-/// 状态、开放任务数量与 blocker 端口分类由 BPM `plan_cancel` 计算；本端口为
-/// 业务单据普通撤回，受阻取消由统一取消端口承担。采购单与采购变更单必须
-/// 复用同一规则。
+/// 状态、开放任务数量与 blocker 端口分类由 BPM `plan_cancel` 计算；本端口为业务单据普通撤回，受阻取消由统一取消端口承担。采购单与采购变更单必须复用同一规则。
 pub fn build_purchase_change_cancel_input(
     runtime: &LoadedCancelRuntime,
     reason: &str,
@@ -160,13 +136,9 @@ pub fn build_purchase_change_cancel_input(
     })
 }
 
-/// 将取消计划错误映射为服务错误；状态与任务数量错误保持冲突语义。
-///
-/// # 参数
-/// * `error` - BPM 取消计划错误
-///
-/// # 返回
-/// 模型状态错误返回冲突，其余错误按引擎错误映射。
+// 将取消计划错误映射为服务错误；状态与任务数量错误保持冲突语义。
+//
+// `error` 为BPM 取消计划错误。模型状态错误返回冲突，其余错误按引擎错误映射。
 fn map_cancel_plan_error(error: bpm::engine::EngineError) -> Error {
     match error {
         bpm::engine::EngineError::Model(error) => Error::ConflictError(error.to_string()),
@@ -210,23 +182,13 @@ pub(super) struct PurchaseChangeCancelPersistInput {
     pub actor: application_core::AuditActor,
 }
 
-/// 在同一事务内应用取消计划、关闭任务并写回变更单。
-///
-/// # 用途
-/// 撤回审批后原子写回运行事实与变更单。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `input` - 变更单、取消计划与开放任务
-///
-/// # 返回
-/// 成功时无返回值。
-///
-/// # 错误
-/// CAS 冲突或仓储失败时返回错误，事务回滚。
-///
-/// # 关键业务约束
-/// Replay 不得重复关闭任务；Apply 必须关闭开放任务并写回草稿。
+// 在同一事务内应用取消计划、关闭任务并写回变更单。
+//
+// 撤回审批后原子写回运行事实与变更单。
+//
+// `input` 为变更单、取消计划与开放任务。CAS 冲突或仓储失败时返回错误，事务回滚。
+//
+// Replay 不得重复关闭任务；Apply 必须关闭开放任务并写回草稿。
 pub(super) async fn persist_purchase_change_cancel(
     db: &Database,
     input: PurchaseChangeCancelPersistInput,
@@ -263,10 +225,7 @@ pub(super) async fn persist_purchase_change_cancel(
     Ok(())
 }
 
-/// 将取消计划写入实例、执行、收据与任务。
-///
-/// # 错误
-/// CAS 未应用或写入失败时返回错误。
+// 将取消计划写入实例、执行、收据与任务。CAS 未应用或写入失败时返回错误。
 async fn persist_cancel_runtime(
     db: &Database,
     writes: &erp_workflow::service::approval::execution::apply_plan::PlannedWrites,
@@ -317,10 +276,7 @@ async fn persist_cancel_runtime(
     close_open_tasks(db, open_tasks, actor_id, reason, now, executor).await
 }
 
-/// 关闭当前开放审批任务。
-///
-/// # 错误
-/// 任务非开放或 CAS 失败时返回错误。
+// 关闭当前开放审批任务。任务非开放或 CAS 失败时返回错误。
 async fn close_open_tasks(
     db: &Database,
     open_tasks: &[WorkItem],
@@ -349,13 +305,9 @@ async fn close_open_tasks(
     Ok(())
 }
 
-/// 取消后的有界列表投影：不得再展示当前审批人。
-///
-/// # 参数
-/// * `now` - 状态变更时间
-///
-/// # 返回
-/// 返回清空当前节点的列表投影。
+// 取消后的有界列表投影：不得再展示当前审批人。
+//
+// `now` 为状态变更时间。返回清空当前节点的列表投影。
 fn cancel_list_projection(now: Instant) -> ApprovalInstanceListProjection {
     ApprovalInstanceListProjection {
         current_node_key: None,
@@ -368,10 +320,7 @@ fn cancel_list_projection(now: Instant) -> ApprovalInstanceListProjection {
     }
 }
 
-/// CAS 未应用时失败关闭。
-///
-/// # 错误
-/// 未找到、版本冲突或状态已变时返回冲突。
+// CAS 未应用时失败关闭。未找到、版本冲突或状态已变时返回冲突。
 fn require_cas_applied<T>(
     outcome: erp_workflow::repository::bpm::CasWriteOutcome<T>,
     label: &str,
@@ -453,7 +402,7 @@ mod tests {
         LoadedCancelRuntime { graph: two_node_graph(), instance, current, plan, open_tasks }
     }
 
-    /// 运行中撤回按 BPM 计划关闭唯一开放任务，与采购单行为一致。
+    // 运行中撤回按 BPM 计划关闭唯一开放任务，与采购单行为一致。
     #[test]
     fn purchase_change_cancel_uses_bpm_plan_for_open_task_close() {
         let input = build_purchase_change_cancel_input(
@@ -473,7 +422,7 @@ mod tests {
         assert_eq!(input.reason, "撤销重提");
     }
 
-    /// 采购变更撤回携带可命中抄送的事件；同键回放不再产生待写计划。
+    // 采购变更撤回携带可命中抄送的事件；同键回放不再产生待写计划。
     #[test]
     fn purchase_change_cancel_emits_copy_event_and_replay_has_no_writes() {
         let mut input = build_purchase_change_cancel_input(
@@ -501,7 +450,7 @@ mod tests {
         assert!(matches!(prepare_cancel(input).unwrap(), PreparedExecution::Replay { .. }));
     }
 
-    /// 人员失效 blocker 走业务取消端口。
+    // 验证人员失效 blocker 走业务取消端口。
     #[test]
     fn purchase_change_cancel_personnel_blocker_uses_business_port() {
         let input = build_purchase_change_cancel_input(
@@ -517,8 +466,8 @@ mod tests {
         assert!(!input.blocked_port);
     }
 
-    /// 非人员 blocker 不得走业务撤回端口，与采购单业务端口失败关闭一致；
-    /// 统一受阻取消端口由 `prepare_cancel` 的受阻分支承担。
+    // 非人员 blocker 不得走业务撤回端口，与采购单业务端口失败关闭一致；
+    // 统一受阻取消端口由 `prepare_cancel` 的受阻分支承担。
     #[test]
     fn purchase_change_cancel_structural_blocker_fails_closed() {
         let built = build_purchase_change_cancel_input(
@@ -539,7 +488,7 @@ mod tests {
         );
     }
 
-    /// 空白撤回原因失败关闭。
+    // 验证空白撤回原因失败关闭。
     #[test]
     fn purchase_change_cancel_rejects_empty_reason() {
         let error = build_purchase_change_cancel_input(
@@ -554,7 +503,7 @@ mod tests {
         assert!(matches!(error, Error::ValidationError(_)));
     }
 
-    /// 运行中零开放任务必须失败关闭，与采购单开放任务约束一致。
+    // 运行中零开放任务必须失败关闭，与采购单开放任务约束一致。
     #[test]
     fn purchase_change_cancel_running_without_open_task_fails_closed() {
         let current = current_execution();

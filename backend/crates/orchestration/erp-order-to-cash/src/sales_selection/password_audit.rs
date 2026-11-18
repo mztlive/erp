@@ -16,16 +16,11 @@ use crate::{Error, Result};
 const ACTION: &str = "sales_selection_booklet.set_access_password";
 const RESOURCE: &str = "sales_selection_booklet";
 
-/// 执行已授权范围内的密码维护并登记一次安全成功事件。
-///
-/// # 参数
-/// `db` 为数据库，`access` 为范围访问器，`id` 为册，`req` 为命令，`hash` 为慢哈希，`fingerprint` 为完整请求的带密钥指纹，`actor` 为已认证人。
-///
-/// # 返回
-/// 返回更新详情；重放沿领域收据恢复且不追加成功审计。
-///
-/// # 错误
-/// 授权、版本、业务或审计失败时拒绝且原子回滚。
+// 执行已授权范围内的密码维护并登记一次安全成功事件。
+//
+// `db` 为数据库，`access` 为范围访问器，`id` 为册，`req` 为命令，`hash` 为慢哈希，`fingerprint` 为完整请求的带密钥指纹，`actor` 为已认证人。
+//
+// 返回更新详情；重放沿领域收据恢复且不追加成功审计。授权、版本、业务或审计失败时拒绝且原子回滚。
 pub(super) async fn update_password(
     db: Database,
     access: SelectionAccess,

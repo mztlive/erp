@@ -17,20 +17,17 @@ pub struct FulfillmentReadService {
     domain: FulfillmentService,
 }
 impl FulfillmentReadService {
-    /// 使用入口数据库构造只读组合，不持有审批或写事务能力。
+    /// 装配客户验收时，使用入口数据库构造只读组合，不持有审批或写事务能力。
     ///
     /// # 参数
     /// * `db` - 入口数据库
     ///
     /// # 返回
     /// 返回持有该数据库与履约领域服务的只读组合，构造不执行 I/O。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { domain: FulfillmentService::new(db.clone()), db }
     }
-    /// 读取命令收据所指向的验收单及剩余资格；根事务和回放均使用原查询配置。
+    /// 生成客户验收视图时，读取命令收据所指向的验收单及剩余资格；根事务和回放均使用原查询配置。
     ///
     /// # 参数
     /// * `acceptance_id` - 已提交的客户验收单

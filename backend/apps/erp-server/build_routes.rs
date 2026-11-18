@@ -4,7 +4,7 @@ use syn::{Expr, ExprCall, ExprMethodCall, ExprPath, Lit};
 
 use crate::build_permissions::RouteHandler;
 
-/// 按源码中的注册顺序读取路由；无法识别的受保护表达式必须报错。
+// 按注册顺序从路由源码提取权限引用和处理器；受保护表达式不能识别时中止生成，不静默漏掉接口。
 pub(crate) fn parse_routes(content: &str) -> Result<Vec<RouteHandler>, String> {
     let file = syn::parse_file(content).map_err(|error| error.to_string())?;
     let mut visitor = Routes { routes: Vec::new(), error: None };

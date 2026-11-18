@@ -52,16 +52,7 @@ pub enum SourceImpactKind {
 }
 
 impl SourceImpactKind {
-    /// 判断该原因是否暂停付款。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 数量归零或减少时返回 `true`。
-    ///
-    /// # 错误
-    /// 无。
+    /// 判断该原因是否暂停付款。数量归零或减少时返回 `true`。
     pub fn blocks_payment(&self) -> bool {
         matches!(self, Self::Zeroed { .. } | Self::QuantityReduced { .. })
     }
@@ -201,16 +192,7 @@ pub struct PurchaseSourceImpact {
 }
 
 impl PurchaseSourceImpact {
-    /// 判断该采购是否因数量归零或减少暂停付款。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 任一原因暂停付款时返回 `true`。
-    ///
-    /// # 错误
-    /// 无。
+    /// 判断该采购是否因数量归零或减少暂停付款。任一原因暂停付款时返回 `true`。
     pub fn blocks_payment(&self) -> bool {
         self.reasons.iter().any(|reason| reason.kind.blocks_payment())
     }
@@ -218,18 +200,12 @@ impl PurchaseSourceImpact {
 
 /// 判定同一销售单下全部参与覆盖的采购受影响情况。
 ///
-/// # 参数
-/// * `facts` - 构造 `coverage` 所用的同一批覆盖事实，含历史销售版本行与维持基准
-/// * `coverage` - 由 `facts` 构造的当前逐行覆盖
-///
-/// # 返回
-/// 返回受影响采购，顺序与 `facts.purchase_orders` 一致；未受影响的采购不出现。
-///
-/// # 错误
-/// 采购行缺少稳定销售行、履约期限无法换算为业务日期时返回领域错误。
-///
-/// # 关键业务约束
 /// 基准行与当前行为同一版本行时该行不受影响；基准行无法确定的行不判定为受影响。
+///
+/// 返回受影响采购，顺序与 `facts.purchase_orders` 一致；未受影响的采购不出现。采购行缺少稳定销售行、履约期限无法换算为业务日期时返回领域错误。
+///
+/// - `facts`：构造 `coverage` 所用的同一批覆盖事实，含历史销售版本行与维持基准。
+/// - `coverage`：由 `facts` 构造的当前逐行覆盖。
 pub fn evaluate_source_impacts(
     facts: &ProcurementCoverageFacts,
     coverage: &SalesProcurementCoverage,
@@ -255,20 +231,13 @@ pub fn evaluate_source_impacts(
 
 /// 以待审批销售变更的拟生效内容预判受影响采购。
 ///
-/// # 参数
-/// * `facts` - 当前销售版本的覆盖事实
-/// * `proposed_revision_id` - 拟生效内容的身份，不得与当前版本相同
-/// * `proposed` - 拟生效内容的商品/服务行；新增的稳定行被忽略
+/// 第一期 §6.3“销售变更对采购的影响”第 9 条：预判仅供审批参考，生效时按当时事实重算。当前版本行转为历史行，原有采购与维持基准照常参与判定。
 ///
-/// # 返回
-/// 返回变更生效后将受影响的采购。
+/// 返回变更生效后将受影响的采购。当前版本缺失、覆盖事实不完整或履约期限无法换算时返回领域错误。
 ///
-/// # 错误
-/// 当前版本缺失、覆盖事实不完整或履约期限无法换算时返回领域错误。
-///
-/// # 关键业务约束
-/// 第一期 §6.3“销售变更对采购的影响”第 9 条：预判仅供审批参考，生效时按当时事实
-/// 重算。当前版本行转为历史行，原有采购与维持基准照常参与判定。
+/// - `facts`：当前销售版本的覆盖事实。
+/// - `proposed_revision_id`：拟生效内容的身份，不得与当前版本相同。
+/// - `proposed`：拟生效内容的商品/服务行；新增的稳定行被忽略。
 pub fn predict_source_impacts(
     facts: &ProcurementCoverageFacts,
     proposed_revision_id: &str,
@@ -361,7 +330,7 @@ struct ImpactContext<'a> {
 }
 
 impl<'a> ImpactContext<'a> {
-    /// 建立判定索引。
+    // 建立判定索引。
     fn new(facts: &'a ProcurementCoverageFacts, coverage: &'a SalesProcurementCoverage) -> Self {
         let current = coverage
             .lines
@@ -403,7 +372,7 @@ impl<'a> ImpactContext<'a> {
         }
     }
 
-    /// 返回采购行的判定基准行。
+    // 返回采购行的判定基准行。
     fn baseline(&self, order: &PurchaseOrder, line: &PurchaseLineFacts<'a>) -> Option<SalesLineView<'a>> {
         let current = self.current.get(line.stable_id).map(|current| current.view);
         if let Some(revision) = self.maintained.get(&order.base.id) {
@@ -422,7 +391,7 @@ impl<'a> ImpactContext<'a> {
         }
     }
 
-    /// 计算一条采购行的影响原因。
+    // 计算一条采购行的影响原因。
     fn line_reasons(
         &self,
         order: &PurchaseOrder,
@@ -455,7 +424,7 @@ impl<'a> ImpactContext<'a> {
     }
 }
 
-/// 基准行有数量而当前行不存在或为零时的归零原因。
+// 基准行有数量而当前行不存在或为零时的归零原因。
 fn zeroed(baseline: SalesLineView<'_>) -> Vec<SourceImpactKind> {
     if baseline.goods.quantity.to_decimal().is_zero() {
         return Vec::new();
@@ -463,7 +432,7 @@ fn zeroed(baseline: SalesLineView<'_>) -> Vec<SourceImpactKind> {
     vec![SourceImpactKind::Zeroed { baseline_quantity: baseline.goods.quantity }]
 }
 
-/// 比较基准行与当前行，返回与采购事实冲突的变化。
+// 比较基准行与当前行，返回与采购事实冲突的变化。
 fn changed_kinds(
     order: &PurchaseOrder,
     line: &PurchaseLineFacts<'_>,
@@ -497,7 +466,7 @@ fn changed_kinds(
     Ok(kinds)
 }
 
-/// 履约期限提前且早于采购预计交付日时返回原因。
+// 履约期限提前且早于采购预计交付日时返回原因。
 fn due_earlier(
     before: &SalesGoodsLineFact,
     after: &SalesGoodsLineFact,
@@ -510,7 +479,7 @@ fn due_earlier(
         .map(|expected_delivery_date| SourceImpactKind::DueEarlier { current_due, expected_delivery_date }))
 }
 
-/// 判断采购承担的收件资料是否被移除，或减量到低于各采购累计承担量。
+// 判断采购承担的收件资料是否被移除，或减量到低于各采购累计承担量。
 fn delivery_changed(
     line: &PurchaseLineFacts<'_>,
     before: &SalesGoodsLineFact,
@@ -525,12 +494,12 @@ fn delivery_changed(
     })
 }
 
-/// 汇总同一收件资料的数量。
+// 汇总同一收件资料的数量。
 fn recipient_quantity(rows: &[PurchaseDeliveryAllocation], target: &PurchaseDeliveryAllocation) -> Decimal {
     rows.iter().filter(|row| row.key() == target.key()).map(|row| row.quantity.to_decimal()).sum()
 }
 
-/// 构造收件资料累计承担键。
+// 构造收件资料累计承担键。
 fn assignment_key(stable_id: &str, row: &PurchaseDeliveryAllocation) -> AssignmentKey {
     (
         stable_id.to_string(),
@@ -541,7 +510,7 @@ fn assignment_key(stable_id: &str, row: &PurchaseDeliveryAllocation) -> Assignme
     )
 }
 
-/// 汇总全部参与覆盖采购对各收件资料的累计承担量。
+// 汇总全部参与覆盖采购对各收件资料的累计承担量。
 fn cumulative_assignments(
     purchases: &[(&PurchaseOrder, Vec<PurchaseLineFacts<'_>>)],
 ) -> HashMap<AssignmentKey, Decimal> {
@@ -555,10 +524,7 @@ fn cumulative_assignments(
     assigned
 }
 
-/// 按当前指针取出参与覆盖采购的商品行。
-///
-/// # 错误
-/// 商品行缺少稳定销售行时返回一致性错误。
+// 按当前指针取出参与覆盖采购的商品行。商品行缺少稳定销售行时返回一致性错误。
 fn participating_purchases(
     facts: &ProcurementCoverageFacts,
 ) -> Result<Vec<(&PurchaseOrder, Vec<PurchaseLineFacts<'_>>)>> {
@@ -570,7 +536,7 @@ fn participating_purchases(
         .collect()
 }
 
-/// 草稿类读当前提交行，正式类读当前版本行；其他状态不参与。
+// 草稿类读当前提交行，正式类读当前版本行；其他状态不参与。
 fn purchase_lines<'a>(
     facts: &'a ProcurementCoverageFacts,
     order: &PurchaseOrder,
@@ -621,7 +587,7 @@ fn purchase_lines<'a>(
     }
 }
 
-/// 由采购行字段构造判定事实。
+// 由采购行字段构造判定事实。
 fn line_facts<'a>(
     stable_id: Option<&'a SalesOrderLineId>,
     recorded: Option<&'a SalesOrderRevisionLineId>,
@@ -951,7 +917,7 @@ mod tests {
             .collect()
     }
 
-    /// 引用当前版本行的采购不受影响。
+    // 引用当前版本行的采购不受影响。
     #[test]
     fn purchase_on_current_line_is_not_affected() {
         let impacts = Scenario::new(&sales_line("8"))
@@ -961,7 +927,7 @@ mod tests {
         assert!(impacts.is_empty());
     }
 
-    /// 加量、改价等变化不影响采购，旧版本采购按稳定行计入覆盖。
+    // 加量、改价等变化不影响采购，旧版本采购按稳定行计入覆盖。
     #[test]
     fn quantity_increase_does_not_affect_purchase() {
         let impacts = Scenario::new(&sales_line("12"))
@@ -972,7 +938,7 @@ mod tests {
         assert!(impacts.is_empty());
     }
 
-    /// 减量后覆盖超出新数量时，该行全部采购受影响并暂停付款。
+    // 减量后覆盖超出新数量时，该行全部采购受影响并暂停付款。
     #[test]
     fn reduction_with_excess_marks_every_purchase_on_line() {
         let impacts = Scenario::new(&sales_line("8"))
@@ -991,7 +957,7 @@ mod tests {
         assert_eq!(impacts[0].reasons[0].item_name, "礼盒");
     }
 
-    /// 减量后覆盖仍不超过新数量时不受影响。
+    // 减量后覆盖仍不超过新数量时不受影响。
     #[test]
     fn reduction_within_coverage_is_not_affected() {
         let impacts = Scenario::new(&sales_line("8"))
@@ -1002,7 +968,7 @@ mod tests {
         assert!(impacts.is_empty());
     }
 
-    /// 销售行归零（含换品）时审批中采购受影响。
+    // 销售行归零（含换品）时审批中采购受影响。
     #[test]
     fn zeroed_line_affects_pending_purchase() {
         let impacts = Scenario::new(&sales_line("0"))
@@ -1017,7 +983,7 @@ mod tests {
         assert!(impacts[0].blocks_payment());
     }
 
-    /// 期限提前且早于采购预计交付日才受影响，不暂停付款。
+    // 期限提前且早于采购预计交付日才受影响，不暂停付款。
     #[test]
     fn earlier_due_affects_only_late_purchase() {
         let earlier = SalesLine { due: DUE_EARLY, ..sales_line("10") };
@@ -1038,7 +1004,7 @@ mod tests {
         assert!(!impacts[0].blocks_payment());
     }
 
-    /// 直发采购承担的收件资料被移除时受影响；入仓采购不看地址。
+    // 直发采购承担的收件资料被移除时受影响；入仓采购不看地址。
     #[test]
     fn removed_recipient_affects_direct_shipping_only() {
         let before =
@@ -1056,7 +1022,7 @@ mod tests {
         assert_eq!(kinds(&impacts), vec![("direct".to_string(), SourceImpactKind::DeliveryChanged)]);
     }
 
-    /// 维持登记在当前版本时不再受影响；维持在中间版本时以该版本为基准。
+    // 维持登记在当前版本时不再受影响；维持在中间版本时以该版本为基准。
     #[test]
     fn maintained_revision_becomes_baseline() {
         let at_current = Scenario::new(&sales_line("8"))
@@ -1075,7 +1041,7 @@ mod tests {
         assert!(at_middle.is_empty());
     }
 
-    /// 作废采购不参与判定。
+    // 作废采购不参与判定。
     #[test]
     fn voided_purchase_is_ignored() {
         let mut scenario = Scenario::new(&sales_line("0"))
@@ -1088,7 +1054,7 @@ mod tests {
         assert!(impacts.is_empty());
     }
 
-    /// 影响原因按扁平字段序列化并可无损读回。
+    // 影响原因按扁平字段序列化并可无损读回。
     #[test]
     fn reason_round_trips_through_flat_wire_shape() {
         let reason = super::SourceImpactReason {
@@ -1111,7 +1077,7 @@ mod tests {
         assert_eq!(back, reason);
     }
 
-    /// 预判以拟生效内容替换当前版本：减量超出时受影响，新增商品行被忽略。
+    // 预判以拟生效内容替换当前版本：减量超出时受影响，新增商品行被忽略。
     #[test]
     fn prediction_uses_proposed_content_as_current() {
         let scenario = Scenario::new(&sales_line("10")).effective(
@@ -1145,7 +1111,7 @@ mod tests {
         );
     }
 
-    /// 只改价格等不影响采购的内容时预判为空。
+    // 只改价格等不影响采购的内容时预判为空。
     #[test]
     fn prediction_without_purchase_relevant_change_is_empty() {
         let scenario = Scenario::new(&sales_line("10")).effective(

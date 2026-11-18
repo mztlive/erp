@@ -7,17 +7,8 @@ use crate::error::Result;
 use crate::password::resolve_password;
 use crate::runtime::AdminRuntime;
 
-/// 执行已有管理员密码重置。
-///
-/// # 参数
-/// * `source` - 文件或 Nacos 配置来源
-/// * `args` - 账号与可选密码
-///
-/// # 返回值
-/// 重置成功返回 `Ok(())`。
-///
-/// # 错误
-/// 配置、数据库、密码输入或服务编排失败时返回错误。
+/// 处理 `reset-password`，供运维人员为已有且未删除的管理员（含超级管理员）更换密码。
+/// 此命令不新建账号、不改变启用状态或角色；需要恢复超级管理员时用 `init-admin`。
 pub async fn run(source: &ConfigArgs, args: ResetPasswordArgs) -> Result<()> {
     let password = resolve_password(args.password)?;
     let runtime = AdminRuntime::connect(source).await?;
@@ -29,16 +20,7 @@ pub async fn run(source: &ConfigArgs, args: ResetPasswordArgs) -> Result<()> {
     Ok(())
 }
 
-/// 向标准输出打印重置结果，不包含密码。
-///
-/// # 参数
-/// * `result` - 密码重置结果
-///
-/// # 返回值
-/// 无。
-///
-/// # 错误
-/// 无。
+// 报告已重置的账号和当前启用状态但不输出密码；账号仍停用时提醒运维人员无法登录。
 fn print_result(result: &ResetAdminPasswordResult) {
     info!(account = %result.account, admin_id = %result.admin_id, active = result.active, "管理员密码已重置");
     println!("已重置管理员密码");

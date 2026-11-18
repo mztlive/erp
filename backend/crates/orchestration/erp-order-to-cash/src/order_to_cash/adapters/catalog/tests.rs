@@ -19,20 +19,7 @@ struct RecordingQuery {
 
 #[async_trait]
 impl CatalogSupplyQueryPort for RecordingQuery {
-    /// 销售资格复验必须继续使用精确引用查询。
-    ///
-    /// # 参数
-    /// * `_` - 未使用的商品筛选。
-    /// * `_` - 未使用的执行器。
-    ///
-    /// # 返回
-    /// 不会正常返回。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    ///
-    /// # Panics
-    /// 总是 panic，防止销售资格复验改走候选商品查询。
+    // 目录替身一旦收到候选商品查询就 panic，防止销售资格复验绕开精确修订引用查询。
     async fn product_candidate_ids(
         &self,
         _: &ProductFilter,
@@ -127,7 +114,7 @@ async fn exact_qualification_keeps_persistence_failure_without_retry() {
     assert_eq!(query.calls.load(Ordering::SeqCst), 1);
 }
 
-/// 按同一精确修订的数量边界解析自动报价，同时保留传入执行器。
+// 按同一精确修订的数量边界解析自动报价，同时保留传入执行器。
 #[tokio::test]
 async fn reference_prices_use_catalog_quantity_rule_and_exact_revision() {
     let mut executor = TestExecutor::default();
@@ -158,7 +145,7 @@ async fn reference_prices_use_catalog_quantity_rule_and_exact_revision() {
     assert_eq!(query.calls.load(Ordering::SeqCst), 1);
 }
 
-/// 自动报价读取失败保持原错误类别，且不重试供应方读取。
+// 自动报价读取失败保持原错误类别，且不重试供应方读取。
 #[tokio::test]
 async fn reference_prices_keep_provider_failure_without_retry() {
     let mut executor = TestExecutor::default();

@@ -14,14 +14,9 @@ use super::{ProgressStatus, PurchaseLineType, PurchaseOrderRevisionLine};
 
 /// 返回采购行跨版本的稳定键。
 ///
-/// # 参数
-/// * `line` - 任一版本的采购行
-///
-/// # 返回
 /// 商品行返回销售稳定行（历史数据缺失时取采购二次确认分行）；物流费用行返回版本行主键。
 ///
-/// # 错误
-/// 不返回错误。
+/// `line` 为任一版本的采购行。
 pub fn purchase_line_stable_key(line: &PurchaseOrderRevisionLine) -> String {
     if line.line_type == PurchaseLineType::ItemService
         && let Some(stable) = line
@@ -37,15 +32,7 @@ pub fn purchase_line_stable_key(line: &PurchaseOrderRevisionLine) -> String {
 
 /// 把按版本行记录的数量汇总到稳定键。
 ///
-/// # 参数
-/// * `all_lines` - 本采购全部版本的版本行
-/// * `by_revision_line` - 版本行主键到数量
-///
-/// # 返回
-/// 返回稳定键到累计数量；找不到版本行的记录按其主键单独计。
-///
-/// # 错误
-/// 累计超出数量范围时返回领域错误。
+/// 返回稳定键到累计数量；找不到版本行的记录按其主键单独计。累计超出数量范围时返回领域错误。
 pub fn rollup_by_stable_key(
     all_lines: &[PurchaseOrderRevisionLine],
     by_revision_line: &HashMap<PurchaseOrderRevisionLineId, Quantity>,
@@ -67,16 +54,9 @@ pub fn rollup_by_stable_key(
 
 /// 把跨版本累计数量归到当前版本行主键。
 ///
-/// # 参数
-/// * `current_lines` - 采购当前生效版本行
-/// * `all_lines` - 本采购全部版本的版本行
-/// * `by_revision_line` - 版本行主键到数量
+/// 返回当前版本行主键到同一稳定键的历史累计数量；没有累计的行不出现。累计超出数量范围时返回领域错误。
 ///
-/// # 返回
-/// 返回当前版本行主键到同一稳定键的历史累计数量；没有累计的行不出现。
-///
-/// # 错误
-/// 累计超出数量范围时返回领域错误。
+/// `current_lines` 为采购当前生效版本行。
 pub fn rekey_to_current_lines(
     current_lines: &[PurchaseOrderRevisionLine],
     all_lines: &[PurchaseOrderRevisionLine],
@@ -95,15 +75,10 @@ pub fn rekey_to_current_lines(
 
 /// 按当前版本数量与跨版本累计入库判断入库进度。
 ///
-/// # 参数
-/// * `current_lines` - 采购当前生效版本行
-/// * `received` - 当前版本行主键到跨版本累计合格入库数量
-///
-/// # 返回
 /// 商品数量合计为零或每行累计都达到当前数量时返回已完成；有入库但未完成返回部分；没有入库返回未开始。
 ///
-/// # 错误
-/// 不返回错误。
+/// - `current_lines`：采购当前生效版本行。
+/// - `received`：当前版本行主键到跨版本累计合格入库数量。
 pub fn receipt_progress_after_change(
     current_lines: &[PurchaseOrderRevisionLine],
     received: &HashMap<PurchaseOrderRevisionLineId, Quantity>,
@@ -186,7 +161,7 @@ mod tests {
         rows.iter().map(|(id, value)| (PurchaseOrderRevisionLineId::new(*id), qty(value))).collect()
     }
 
-    /// 改单形成新版本行后，旧版本行上的入库仍计入同一稳定行。
+    // 改单形成新版本行后，旧版本行上的入库仍计入同一稳定行。
     #[test]
     fn received_on_old_revision_counts_for_current_line() {
         let old = line("v1-a", "por-1", "sol-a", "10");
@@ -199,7 +174,7 @@ mod tests {
         assert_eq!(rekeyed.get(&PurchaseOrderRevisionLineId::new("v2-a")), Some(&qty("7")));
     }
 
-    /// 入库进度按当前数量判断：调减到已入库数量即完成；全部归零也视为完成。
+    // 入库进度按当前数量判断：调减到已入库数量即完成；全部归零也视为完成。
     #[test]
     fn progress_follows_current_quantities() {
         let partial = line("v2-a", "por-2", "sol-a", "8");

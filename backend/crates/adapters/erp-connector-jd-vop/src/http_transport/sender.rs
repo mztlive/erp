@@ -12,13 +12,8 @@ pub(super) struct ReqwestSender {
     client: Client,
 }
 impl ReqwestSender {
-    /// 创建单次 HTTP 发送边界。
-    /// # 参数
-    /// 已校验的超时秒数。
-    /// # 返回
-    /// 禁止重定向和隐藏重试的客户端。
-    /// # 错误
-    /// TLS 或客户端配置构造失败时返回无敏感正文的失败。
+    // 装配生产发送器时应用已校验的请求超时，关闭重定向和隐式重试，防止已签名的写请求被再次发送。
+    // TLS 或客户端初始化失败仅返回传输分类，不携带敏感正文。
     pub(super) fn new(timeout_seconds: u64) -> Result<Self, HttpFailure> {
         let client = Client::builder()
             .redirect(Policy::none())

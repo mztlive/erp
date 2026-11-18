@@ -68,16 +68,7 @@ pub struct CustomerReceiptFilter {
 }
 
 impl Default for CustomerReceiptFilter {
-    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回第 1 页、每页 20 条的空筛选条件。
-    ///
-    /// # 错误
-    /// 无。
+    // 未提供列表条件时，从第 1 页读取，每页 20 条，不预设可选业务筛选。
     fn default() -> Self {
         Self {
             keyword_ids: None,
@@ -95,21 +86,13 @@ impl Default for CustomerReceiptFilter {
 }
 
 impl QueryFilter for CustomerReceiptFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。有值时等值匹配 `counterparty_party_id`、`status`；
-    /// `receipt_no` 按字面量模糊匹配。`receipt_ids` 为 `Some` 且
-    /// `pending_entry_ids` 为空时按 `id` 的 `$in` 匹配；`pending_entry_ids`
-    /// 非空时改为与 `pending_allocations.receivable_entry_id` 的 `$in` 取
-    /// `$or`。`receipt_ids` 为 `None` 时不使用 `pending_entry_ids`。
-    /// `keyword_ids` 为 `Some` 时与上述条件用 `$and` 再按 `id` 取交集，空集合匹配零行。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 转换为 MongoDB 查询条件（自动追加未删除过滤）。
+    // 返回查询条件文档。有值时等值匹配 `counterparty_party_id`、`status`；
+    // `receipt_no` 按字面量模糊匹配。`receipt_ids` 为 `Some` 且
+    // `pending_entry_ids` 为空时按 `id` 的 `$in` 匹配；`pending_entry_ids`
+    // 非空时改为与 `pending_allocations.receivable_entry_id` 的 `$in` 取
+    // `$or`。`receipt_ids` 为 `None` 时不使用 `pending_entry_ids`。
+    // `keyword_ids` 为 `Some` 时与上述条件用 `$and` 再按 `id` 取交集，空集合匹配零行。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(receipt_ids) = &self.receipt_ids {
@@ -140,16 +123,7 @@ impl QueryFilter for CustomerReceiptFilter {
 }
 
 impl Pagination for CustomerReceiptFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。`page` 原样返回，`page_size` 由 `u32` 转为 `u64`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 向仓储分页器交付筛选中的页码与每页条数；页码原样保留，条数转为 `u64`。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -161,16 +135,12 @@ pub trait CustomerReceiptRepositoryExt {
     ///
     /// 只返回 [`CustomerReceiptRow`] 所需的列表字段；回款单号支持字面量
     /// 模糊匹配（复用 `regex_filter`，禁止自拼正则）。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回当前页投影行与满足筛选条件的总数。
+    /// 传播数据库查询、游标读取或计数失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// 输入约定：
+    /// - `filter`：筛选与分页条件
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn search_customer_receipts(
         &self,
         filter: &CustomerReceiptFilter,
@@ -178,16 +148,12 @@ pub trait CustomerReceiptRepositoryExt {
     ) -> Result<PageResult<CustomerReceiptRow>>;
 
     /// 按回款单号精确查找（单号全局唯一，`uk_customer_receipts_no` 保证）。
-    ///
-    /// # 参数
-    /// * `receipt_no` - 回款单号
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回匹配的回款单；无匹配时返回 `None`。
+    /// 传播数据库查询失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
+    /// 输入约定：
+    /// - `receipt_no`：回款单号
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn find_by_receipt_no(
         &self,
         receipt_no: &str,
@@ -195,16 +161,12 @@ pub trait CustomerReceiptRepositoryExt {
     ) -> Result<Option<CustomerReceipt>>;
 
     /// 批量按回款单 ID 读取活跃回款事实。
-    ///
-    /// # 参数
-    /// * `receipt_ids` - 回款单 ID 字符串集合；空集合直接返回空结果
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回全部匹配且未删除的回款单；返回顺序不承诺与输入一致。
+    /// 传播数据库查询或游标读取失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 输入约定：
+    /// - `receipt_ids`：回款单 ID 字符串集合；空集合直接返回空结果
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn find_receipts_by_ids(
         &self,
         receipt_ids: &[String],
@@ -259,16 +221,12 @@ impl CustomerReceiptRepositoryExt for persistence_core::Repository<'_, CustomerR
 #[allow(async_fn_in_trait)]
 pub trait ReceiptAllocationRepositoryExt {
     /// 批量按回款单集合取回核销分配（`$in` 一次取回，禁止 N+1）。
-    ///
-    /// # 参数
-    /// * `receipt_ids` - 回款单 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回全部匹配分配。
+    /// 传播数据库查询或游标读取失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 输入约定：
+    /// - `receipt_ids`：回款单 ID 集合
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn find_allocations_by_receipts(
         &self,
         receipt_ids: &[CustomerReceiptId],
@@ -276,16 +234,12 @@ pub trait ReceiptAllocationRepositoryExt {
     ) -> Result<Vec<ReceiptAllocation>>;
 
     /// 批量按应收分录集合取回核销分配（`$in`，用于反向核销锁定）。
-    ///
-    /// # 参数
-    /// * `entry_ids` - 应收分录 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回全部匹配分配。
+    /// 传播数据库查询或游标读取失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 输入约定：
+    /// - `entry_ids`：应收分录 ID 集合
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn find_allocations_by_entries(
         &self,
         entry_ids: &[ReceivableEntryId],
@@ -319,10 +273,8 @@ impl ReceiptAllocationRepositoryExt for persistence_core::Repository<'_, Receipt
     }
 }
 
-/// 客户回款单列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
+// 限定客户回款单列表查询返回的字段，避免读出列表不需要的完整实体。
+// 返回投影条件文档。
 fn customer_receipt_projection() -> Document {
     doc! {
         "id": 1,

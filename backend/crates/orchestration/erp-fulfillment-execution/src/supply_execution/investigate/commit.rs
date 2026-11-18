@@ -39,20 +39,10 @@ pub(super) struct InvestigationCommit {
 }
 
 impl InvestigationCommit {
-    /// 准备最终事务的不可变输入；构造过程不读取或写入数据库。
-    ///
-    /// # 参数
-    /// * `workflow` - 原应用注入的任务事实及办理能力。
-    /// * `authorization` - 原应用共享授权服务。
-    /// * `access` - 同一授权服务绑定的订单范围能力。
-    /// * `context` - 原命令及可选正式任务身份。
-    /// * `identity` - 原命令与调查证据的稳定身份。
-    /// * `prepared` - 已在事务外取得并冻结的结果。
-    /// * `actor` - 当前操作人。
-    /// # 返回
-    /// 返回最终事务步骤的输入。
-    /// # 错误
-    /// 不返回错误。
+    // 准备最终事务的不可变输入；构造过程不读取或写入数据库。
+    //
+    // `workflow` 为原应用注入的任务事实及办理能力；`authorization` 为原应用共享授权服务；`access` 为同一授权服务绑定的订单范围能力；`context` 为原命令及可选正式任务身份；
+    // `identity` 为原命令与调查证据的稳定身份；`prepared` 为已在事务外取得并冻结的结果。返回最终事务步骤的输入。
     pub(super) fn new(
         workflow: Arc<dyn FulfillmentWorkflow>,
         authorization: Arc<AuthorizationService>,
@@ -73,15 +63,9 @@ impl InvestigationCommit {
         }
     }
 
-    /// 在入口事务的同一执行器上提交事实、调查证据、任务与回执。
-    ///
-    /// # 参数
-    /// * `db` - 当前数据库。
-    /// * `executor` - 入口传入的事务执行器。
-    /// # 返回
-    /// 返回提交后的订单、证据、结果正文及可选任务版本。
-    /// # 错误
-    /// 任一步失败立即停止并返回首个错误；不重新派发供应商动作。
+    // 在入口事务的同一执行器上提交事实、调查证据、任务与回执。
+    //
+    // `executor` 为入口传入的事务执行器。返回提交后的订单、证据、结果正文及可选任务版本。任一步失败立即停止并返回首个错误；不重新派发供应商动作。
     pub(super) async fn apply(
         self,
         db: &Database,
@@ -140,7 +124,7 @@ impl InvestigationCommit {
         Ok((order, evidence, record, task_version))
     }
 
-    /// 原任务或订单资格成立后，沿同一事务拒绝 API 自动执行对象。
+    // 原任务或订单资格成立后，沿同一事务拒绝 API 自动执行对象。
     async fn authorize(&self, db: &Database, executor: &mut dyn Executor) -> Result<Option<WorkItem>> {
         authorize_investigation(
             db,
@@ -182,7 +166,7 @@ impl InvestigationCommit {
     }
 }
 
-/// 原快照核验的任务沿原 CAS 版本同步到新订单版本，不再以旧主题重验已更新订单。
+// 原快照核验的任务沿原 CAS 版本同步到新订单版本，不再以旧主题重验已更新订单。
 async fn update_task<F, Fut>(task: Option<WorkItem>, order_version: u64, write: F) -> Result<Option<u64>>
 where
     F: FnOnce(WorkItem) -> Fut,

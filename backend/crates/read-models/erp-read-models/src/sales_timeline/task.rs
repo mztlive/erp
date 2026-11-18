@@ -15,12 +15,14 @@ use crate::sales_center::access::SalesAccess;
 use crate::{Error, Result};
 
 impl SalesTimelineReadService {
-    /// 在实例阅读资格内查询已发起审批的相关动态。
+    /// 准备销售任务动态时，在实例阅读资格内查询已发起审批的相关动态。
     ///
     /// # 参数
     /// `runtime` 为应用的审批授权服务；其余参数为当前账号、实例与分页。
+    ///
     /// # 返回
     /// 返回审批对象动态，不把最新动态混入提交材料。
+    ///
     /// # 错误
     /// 读取前后资格或审批主体变化时拒绝，底层故障继续传播。
     pub async fn approval<A: WorkflowAuthorizationPort>(
@@ -61,12 +63,14 @@ impl SalesTimelineReadService {
         Ok(result)
     }
 
-    /// 以当前任务责任读取办理动态，并独立校验可打开的销售单。
+    /// 组装销售任务动态时，以当前任务责任读取办理动态，并独立校验可打开的销售单。
     ///
     /// # 参数
     /// `workbench` 使用应用当前授权器；`actor`、`id`、`query` 为账号、任务和分页。
+    ///
     /// # 返回
     /// 当前任务单据历史及另行授权的销售单入口。
+    ///
     /// # 错误
     /// 任务失效、责任越界、参数无效或数据库故障时拒绝。
     pub async fn task(

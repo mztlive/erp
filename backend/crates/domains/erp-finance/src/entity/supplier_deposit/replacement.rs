@@ -9,13 +9,12 @@ use super::{
 
 impl SupplierDepositReservation {
     /// 核对原执行资金已经消解，返回允许释放的未使用尾款。
-    /// # 参数
-    /// * `has_external_write` - 原执行已登记写动作或具有外部订单证据。
-    /// * `account` / `usages` - 同一事务读取的原账户及全部实际使用。
-    /// # 返回
-    /// 仅从未发送或具有独立风险消解证据且净使用/核销均为零时返回尾款。
-    /// # 错误
+    /// 结果：仅从未发送或具有独立风险消解证据且净使用/核销均为零时返回尾款。
     /// 未知发送、未返款、未反向核销、跨账户或对账风险时拒绝。
+    ///
+    /// 输入约定：
+    /// - `has_external_write`：原执行已登记写动作或具有外部订单证据。
+    /// - `account` / `usages`：同一事务读取的原账户及全部实际使用。
     pub fn replacement_release_amount(
         &self,
         has_external_write: bool,

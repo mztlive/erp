@@ -18,24 +18,12 @@ pub struct ResourceGrantProcess {
 }
 
 impl ResourceGrantProcess {
-    /// 装配独立授权处理器。
-    /// # 参数
-    /// db、authorization 为组合根的数据库及共享授权服务。
-    /// # 返回
-    /// 不启动循环的处理器。
-    /// # 错误
-    /// 无。
+    /// 用组合根提供的数据库和共享授权服务组装自动授权处理器，供 worker 消费和对账；构造时不启动后台循环。
     pub fn new(db: Database, authorization: Arc<AuthorizationService>) -> Self {
         Self { queue: GrantEventService::new(db.clone()), db, authorization }
     }
 
-    /// 装配可信来源发布能力。
-    /// # 参数
-    /// event 为自动发布时需要重验的事件。
-    /// # 返回
-    /// 绑定可信事实端口的来源管理服务。
-    /// # 错误
-    /// 不执行 I/O。
+    // 给身份域的来源管理服务注入业务事实端口；有自动事件时绑定原事件用于发布前重验，避免授权依据已过期。
     pub(crate) fn access(&self, event: Option<GrantEvent>) -> ResourceGrantService {
         ResourceGrantService::new(
             self.db.clone(),
@@ -44,13 +32,8 @@ impl ResourceGrantProcess {
         )
     }
 
-    /// 领取并处理一个事件；未知提交结果保持租约，恢复时先检查事件结果。
-    /// # 参数
-    /// token 为每次领取唯一令牌；now 为当前秒级时间。
-    /// # 返回
-    /// 是否领取到事件。
-    /// # 错误
-    /// 读取或发布失败返回错误，业务事务不会重放。
+    /// 用本次唯一领取令牌处理至多一条授权事件，返回是否领到事件。授权读取或发布失败时返回错误，不回放产生事件的业务事务。
+    /// 授权提交结果未知时保留租约，后续恢复先检查事件是否已处理，再决定是否发布。
     pub async fn tick(&self, token: &str, now: u64) -> Result<bool> {
         let Some(event) = self.queue.claim_event(token, now).await? else {
             return Ok(false);
@@ -94,23 +77,11 @@ impl ResourceGrantProcess {
 }
 
 impl ResourceGrantProcess {
-    /// 周期有界重验所有正式事件；游标由 worker 保留。
-    /// # 参数
-    /// after 为上次页末主键，now 为秒级时间。
-    /// # 返回
-    /// 下一页游标；空值表示本轮结束。
-    /// # 错误
-    /// 持久化失败返回错误。
+    /// 按上页游标重新排队一页正式授权事件，供后台周期性重验，不替代管理员重算。返回下一页游标，`None` 表示本轮结束。
     pub async fn reconcile(&self, after: Option<&str>, now: u64) -> Result<Option<String>> {
         self.queue.requeue(&GrantRecompute::All, after, now).await
     }
-    /// 查询授权积压与故障统计。
-    /// # 参数
-    /// now 为当前秒级时间。
-    /// # 返回
-    /// 队列状态。
-    /// # 错误
-    /// 查询失败时返回错误。
+    /// 按当前秒级时间查询授权队列积压和故障统计，供后台监控消费状态。
     pub async fn health(&self, now: u64) -> Result<GrantQueueHealth> {
         self.queue.grant_health(now).await
     }

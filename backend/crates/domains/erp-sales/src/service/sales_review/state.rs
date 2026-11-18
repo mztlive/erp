@@ -6,18 +6,14 @@ use crate::{Error, Result};
 /// 提交并启动：进入 `IN_APPROVAL`。
 ///
 /// 版本权威来源是提交记录 `submission_no`，本方法不改写该编号。
+/// 结果：状态迁移成功时返回 `Ok(())`，提交编号保持不变。
+/// 失败条件：状态不允许或指纹非法时返回冲突。
 ///
-/// # 参数
-/// * `order` - 待提交变更单
-/// * `submission_id` - 本次冻结提交
-/// * `target_content_hash` - 目标内容指纹
-/// * `updated_by` - 提交人
-///
-/// # 返回
-/// 状态迁移成功时返回 `Ok(())`，提交编号保持不变。
-///
-/// # 错误
-/// 状态不允许或指纹非法时返回冲突。
+/// 输入约定：
+/// - `order`：待提交变更单
+/// - `submission_id`：本次冻结提交
+/// - `target_content_hash`：目标内容指纹
+/// - `updated_by`：提交人
 pub fn start_sales_change_approval(
     order: &mut SalesChangeOrder,
     submission_id: erp_core::ids::SalesChangeSubmissionId,
@@ -28,30 +24,21 @@ pub fn start_sales_change_approval(
 }
 
 /// 撤回审批：回到 `DRAFT`，且提交号不回退。
+/// 结果：状态迁移成功时返回 `Ok(())`，提交编号保持不变。
+/// 失败条件：非审批中时返回冲突。
 ///
-/// # 参数
-/// * `order` - 审批中的变更单
-/// * `updated_by` - 操作人
-///
-/// # 返回
-/// 状态迁移成功时返回 `Ok(())`，提交编号保持不变。
-///
-/// # 错误
-/// 非审批中时返回冲突。
+/// 输入约定：
+/// - `order`：审批中的变更单
 pub fn cancel_sales_change_to_draft(order: &mut SalesChangeOrder, updated_by: &str) -> Result<()> {
     Ok(order.cancel_approval(updated_by)?)
 }
 
 /// 最终通过前置：仅 `IN_APPROVAL` 可进入生效。
+/// 结果：状态为审批中时返回 `Ok(())`。
+/// 失败条件：状态不是审批中时返回冲突。
 ///
-/// # 参数
-/// * `order` - 待执行最终通过动作的销售变更单。
-///
-/// # 返回
-/// 状态为审批中时返回 `Ok(())`。
-///
-/// # 错误
-/// 状态不是审批中时返回冲突。
+/// 输入约定：
+/// - `order`：待执行最终通过动作的销售变更单。
 pub fn ensure_final_approve_effective(order: &SalesChangeOrder) -> Result<()> {
     if order.stable.status != SalesChangeOrderStatus::InApproval {
         return Err(Error::ConflictError(
@@ -62,17 +49,12 @@ pub fn ensure_final_approve_effective(order: &SalesChangeOrder) -> Result<()> {
 }
 
 /// 将已按审批动作迁移的销售变更状态写入原 CAS；本接口不启动事务。
+/// 结果：乐观锁更新成功时返回 `Ok(())`。
+/// 失败条件：销售集合更新失败原样返回，跨域工作流与审计由调用方原子回滚。
 ///
-/// # 参数
-/// * `db` - 销售变更集合所在数据库。
-/// * `change` - 已完成撤回迁移的变更单。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
-/// 乐观锁更新成功时返回 `Ok(())`。
-///
-/// # 错误
-/// 销售集合更新失败原样返回，跨域工作流与审计由调用方原子回滚。
+/// 输入约定：
+/// - `db`：销售变更集合所在数据库。
+/// - `change`：已完成撤回迁移的变更单。
 pub async fn persist_cancelled_change(
     db: &mongodb::Database,
     change: &mut SalesChangeOrder,

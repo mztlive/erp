@@ -56,13 +56,12 @@ pub struct SupplierDepositAuthorization {
 
 impl SupplierDepositAuthorization {
     /// 为原指定出纳已明确提交的单执行组建立有限使用依据。
-    /// # 参数
-    /// * `id` - 稳定原命令与执行组形成的授权身份。
-    /// * `data` - 服务器核验后的任务、采购及全额预算。
-    /// # 返回
-    /// 单采购、单组全额、24小时内有效的人工执行授权。
-    /// # 错误
+    /// 结果：单采购、单组全额、24小时内有效的人工执行授权。
     /// 缺少原任务、批准依据、金额或时间越界时拒绝。
+    ///
+    /// 输入约定：
+    /// - `id`：稳定原命令与执行组形成的授权身份。
+    /// - `data`：服务器核验后的任务、采购及全额预算。
     pub fn manual(id: String, data: ManualDepositAuthorizationData) -> Result<Self> {
         positive(data.amount)?;
         if data.task_version == 0 {
@@ -91,14 +90,13 @@ impl SupplierDepositAuthorization {
     }
 
     /// 重验已占用执行的授权，不再次消费累计限额。
-    /// # 参数
-    /// * `account` / `purchase` - 原资金归属与采购来源。
-    /// * `version` - 原授权条款版本。
-    /// * `now` - 当前服务器时间。
-    /// # 返回
-    /// 有效时允许尚未发送的外部写动作。
-    /// # 错误
+    /// 结果：有效时允许尚未发送的外部写动作。
     /// 撤销、到期、条款变化或跨范围时拒绝。
+    ///
+    /// 输入约定：
+    /// - `account` / `purchase`：原资金归属与采购来源。
+    /// - `version`：原授权条款版本。
+    /// - `now`：当前服务器时间。
     pub fn ensure_active(&self, account: &str, purchase: &str, version: u64, now: Instant) -> Result<()> {
         self.validate_mode()?;
         if matches!(self.mode, DepositAuthorizationMode::Manual { .. })
@@ -119,15 +117,14 @@ impl SupplierDepositAuthorization {
         Ok(())
     }
     /// 校验有限授权并记录本次预算；授权不替代逐单付款审批。
-    /// # 参数
-    /// * `account` / `purchase` - 当前资金账号及采购来源。
-    /// * `amount` - 本次全额预算。
-    /// * `version` - 冻结授权版本。
-    /// * `now` - 服务端当前时间。
-    /// # 返回
-    /// 成功增加累计授予额度，释放资金不恢复累计自动执行额度。
-    /// # 错误
+    /// 结果：成功增加累计授予额度，释放资金不恢复累计自动执行额度。
     /// 归属、状态、时间、版本、限额或授权依据不合法时拒绝。
+    ///
+    /// 输入约定：
+    /// - `account` / `purchase`：当前资金账号及采购来源。
+    /// - `amount`：本次全额预算。
+    /// - `version`：冻结授权版本。
+    /// - `now`：服务端当前时间。
     pub fn commit(
         &mut self,
         account: &str,

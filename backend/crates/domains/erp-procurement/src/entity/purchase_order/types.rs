@@ -10,32 +10,14 @@ use serde::{Deserialize, Serialize};
 macro_rules! status_display {
     ($type:ty, { $($variant:ident => ($label:literal, $code:literal)),* $(,)? }) => {
         impl $type {
-            /// 返回中文展示名。
-            ///
-            /// # 参数
-            /// 无。
-            ///
-            /// # 返回
-            /// 返回面向用户的中文标签。
-            ///
-            /// # 错误
-            /// 不返回错误。
+            /// 将采购枚举转换成中文标签，供单据详情、列表和表单显示。
             pub fn label(&self) -> &'static str {
                 match self {
                     $(Self::$variant => $label,)*
                 }
             }
 
-            /// 返回稳定代码。
-            ///
-            /// # 参数
-            /// 无。
-            ///
-            /// # 返回
-            /// 返回用于持久化与查询的稳定字符串。
-            ///
-            /// # 错误
-            /// 不返回错误。
+            /// 取采购枚举的固定代码，使持久化数据和查询条件能够按同一值匹配。
             pub fn as_str(&self) -> &'static str {
                 match self {
                     $(Self::$variant => $code,)*
@@ -97,17 +79,9 @@ status_display!(FulfillmentResponsibility, {
 impl FulfillmentResponsibility {
     /// 返回采购单责任人后续直接执行的履约对象类型。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 供应商直发、电子交付和线下服务返回对应履约对象；入仓由仓库入库经办人负责，返回 `None`。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 业务约束
     /// 该映射只描述采购单责任人承担的履约操作，不把仓库入库错误归给采购责任人。
+    ///
+    /// 供应商直发、电子交付和线下服务返回对应履约对象；入仓由仓库入库经办人负责，返回 `None`。
     pub fn owner_fulfillment_object_type(self) -> Option<&'static str> {
         match self {
             Self::Warehouse | Self::NotApplicable => None,
@@ -151,16 +125,7 @@ status_display!(SupplyPriceBasis, {
 });
 
 impl SupplyPriceBasis {
-    /// 返回配送判定使用的供货方式。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 代发返回代发规则，集采返回集采规则。
-    ///
-    /// # 错误
-    /// 无。
+    /// 把采购单的计价依据映射为配送校验所用的供货方式，让代发价和集采价分别适用各自的配送规则。
     pub fn delivery_mode(self) -> DeliveryMode {
         match self {
             Self::Dropship => DeliveryMode::Dropship,

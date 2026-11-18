@@ -12,14 +12,7 @@ pub type ProductHandoverReceiptRepository<'a> = Repository<'a, ProductHandoverRe
 pub trait ProductHandoverReceiptExt {
     /// 独立回执集合名。
     const HANDOVER_COMMAND_RECEIPTS: &'static str = "product_handover_command_receipts";
-    /// 获取不可变回执仓储；查证须读取包含软删除的原身份。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 返回当前数据库的回执仓储。
-    /// # 错误
-    /// 无；I/O 错误由仓储操作返回。
+    /// 获取不可变回执仓储；查证须读取包含软删除的原身份。I/O 错误由仓储操作返回。
     fn product_handover_receipts(&self) -> ProductHandoverReceiptRepository<'_>;
 }
 

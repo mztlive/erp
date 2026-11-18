@@ -23,18 +23,7 @@ pub struct OfferingAccess {
 
 impl OfferingAccess {
     /// 绑定供给集合与共享身份设施。
-    ///
-    /// # 参数
-    /// * `db` - 供给集合所在数据库
-    /// * `rbac` - 共享身份设施
-    ///
-    /// # 返回
     /// 返回无授权缓存的访问服务，构造不执行 I/O。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
     /// 账号和功能资格由 identity 执行；业务组织只作为写入事实。
     pub fn new(db: Database, service: Arc<AuthorizationService>) -> Self {
         let authorization = Authorization::new(service, "supplier_offering").expect("固定资源授权目录有效");
@@ -42,36 +31,19 @@ impl OfferingAccess {
     }
 
     /// 创建尚未接线的访问器，授权调用保持失败关闭。
-    /// # 参数
-    /// db 为业务集合所在数据库。
-    /// # 返回
     /// 未绑定身份设施的访问器。
-    /// # 错误
     /// 构造不执行 I/O。
     pub fn unwired(db: Database) -> Self {
         Self { db, authorization: None }
     }
 
-    /// 取得已注入的身份设施，禁止默认扩大范围。
+    // 提供已注入的身份设施，禁止默认扩大范围。
     fn authorization(&self) -> Result<&Authorization> {
         self.authorization.as_ref().ok_or_else(|| Error::Internal("供应链授权未接线".into()))
     }
 
-    /// 在调用方事务内证明资源动作并映射供给责任条件。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证操作人
-    /// * `permission` - 内置权限
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 返回本次查询的单份授权凭证。
-    ///
-    /// # 错误
-    /// 无动作权限返回 Forbidden；未装配时拒绝。
-    ///
-    /// # 关键业务约束
-    /// 责任按显式维护人和业务组织解释；创建人不成为维护人。
+    /// 供列表或导出调用：在当前执行器内请身份域按固定供给动作编译数据范围。负责人与组织取显式事实，不以
+    /// 创建人替代维护人；动作无权或授权未装配时拒绝。
     pub async fn resolve(
         &self,
         actor: &AuditActor,
@@ -81,22 +53,8 @@ impl OfferingAccess {
         Ok(self.authorization()?.resolve(actor, permission, executor).await?)
     }
 
-    /// 在调用方事务内重验供给对象资格。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证操作人
-    /// * `permission` - 内置权限
-    /// * `id` - 供给主键
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 对象在范围内时返回供给。
-    ///
-    /// # 错误
-    /// 不可见对象返回 NotFound，不泄露存在性。
-    ///
-    /// # 关键业务约束
-    /// 写命令必须在原领域事务内调用；列表授权不替代对象重验。
+    /// 在详情、条款历史或写命令读取前，用原事务和指定动作授权真实供给，再读取实体。缺记录返回 `NotFound`；
+    /// 身份域的拒绝不绕过，列表凭证不代替对象授权。
     pub async fn require_offering(
         &self,
         actor: &AuditActor,
@@ -112,13 +70,8 @@ impl OfferingAccess {
             .ok_or_else(|| Error::NotFound("对象不存在或无权访问".into()))
     }
 
-    /// 在原事务内同时检查原供给与服务端完成交接后的归属。
-    /// # 参数
-    /// actor 为操作人，offering 为已应用领域交接规则的候选实体，executor 为原写事务。
-    /// # 返回
-    /// 原记录和拟保存的维护人、业务组织均通过当前固定政策时成功。
-    /// # 错误
-    /// 功能权限、对象或目标归属拒绝，事实缺失及执行器不是快照事务时返回错误。
+    // 写入交接前，用原事务同时检查旧供给与拟保存的维护人、业务组织；任一归属、功能权限或读取边界不满足均
+    // 拒绝。
     pub(crate) async fn require_owner_change(
         &self,
         actor: &AuditActor,
@@ -147,17 +100,9 @@ impl OfferingAccess {
     }
 
     /// 查询账号在解析时点的唯一主属组织。
-    ///
-    /// # 参数
-    /// * `user_id` - 账号
-    /// * `at` - 授权时点
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
     /// 存在唯一主属组织时返回其 ID。
-    ///
-    /// # 错误
     /// 同一时点多条主属关系时拒绝。
+    /// `at`：授权时点。
     pub async fn own_org(
         &self,
         user_id: &str,
@@ -168,20 +113,10 @@ impl OfferingAccess {
     }
 
     /// 解析拟写入的维护人及其主属组织，缺组织阻断。
-    ///
-    /// # 参数
-    /// * `requested` - 请求中的维护人；空则使用操作人
-    /// * `actor` - 已认证操作人
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
     /// 返回维护人 ID 与其主属组织。
-    ///
-    /// # 错误
     /// 维护人为空或缺少有效主属组织时拒绝。
-    ///
-    /// # 关键业务约束
     /// 不得用创建人字段回填；组织取其主属组织，不默认公司。
+    /// `requested`：空则使用操作人。
     pub async fn maintainer_org(
         &self,
         requested: Option<&str>,
@@ -200,12 +135,9 @@ impl OfferingAccess {
     }
 
     /// 检查由服务端构造的供给创建候选。
-    /// # 参数
-    /// actor、offering 为真实账号和已验证候选，executor 为创建事务。
-    /// # 返回
     /// 创建功能资格与目标归属全部通过时成功。
-    /// # 错误
     /// 资格、范围或候选不符合时拒绝。
+    /// actor、offering 为真实账号和已验证候选，executor 为创建事务。
     pub async fn require_create(
         &self,
         actor: &AuditActor,
@@ -231,17 +163,9 @@ impl OfferingAccess {
     }
 
     /// 检查共享资料当前动作的功能资格；对象操作另行检查完整目标。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证操作人
-    /// * `permission` - 内置写权限
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
     /// 当前有效账号具备动作资格时成功。
-    ///
-    /// # 错误
     /// 未接线、未登记动作或账号无操作资格时拒绝。
+    /// `permission`：内置写权限。
     pub async fn ensure_writable(
         &self,
         actor: &AuditActor,

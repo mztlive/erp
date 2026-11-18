@@ -8,20 +8,12 @@ use erp_identity::repository::OrganizationRepository;
 use mongodb::Database;
 use persistence_core::Executor;
 
-/// 在调用方事务内读取组织快照。
-///
-/// # 参数
-/// * `db` - 身份数据库
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回同一事务中的组织状态。
-///
-/// # 错误
-/// 组织集合读取失败时返回仓储错误，由调用方映射为领域错误。
-///
-/// # 关键业务约束
-/// 不得另开事务或换成 `NoTransaction`。
+// 在调用方事务内读取组织快照。
+// `executor` 为调用方执行器。
+// 返回同一事务中的组织状态。
+// 组织集合读取失败时返回仓储错误，由调用方映射为领域错误。
+//
+// 不得另开事务或换成 `NoTransaction`。
 pub(crate) async fn load_organization_state(
     db: &Database,
     executor: &mut dyn Executor,
@@ -29,21 +21,11 @@ pub(crate) async fn load_organization_state(
     OrganizationRepository::new(db).state(executor).await
 }
 
-/// 展开启用组织及其可选下级。
-///
-/// # 参数
-/// * `state` - 当前组织事实
-/// * `org_ids` - 请求中的组织 ID
-/// * `include_descendants` - 是否包含有效下级
-///
-/// # 返回
-/// 返回启用节点的组织 ID 集合。
-///
-/// # 错误
-/// 未知组织或组织树非法时返回身份域错误，由调用方映射为领域错误。
-///
-/// # 关键业务约束
-/// 筛选只能收窄授权结果，不得忽略未知组织。
+// 展开启用组织及其可选下级。
+// 返回启用节点的组织 ID 集合。
+// 未知组织或组织树非法时返回身份域错误，由调用方映射为领域错误。
+//
+// 筛选只能收窄授权结果，不得忽略未知组织。
 pub(crate) fn expand_org_ids(
     state: &OrganizationState,
     org_ids: &[String],
@@ -57,24 +39,12 @@ pub(crate) fn expand_org_ids(
     Ok(expanded)
 }
 
-/// 展开启用组织及其可选下级；快照错误由调用方映射。
-///
-/// # 参数
-/// * `db` - 身份数据库
-/// * `org_unit_ids` - 请求中的组织 ID
-/// * `include_descendants` - 是否包含有效下级
-/// * `executor` - 调用方执行器
-/// * `map_load` - 组织快照读取错误映射
-/// * `map_identity` - 组织树展开错误映射
-///
-/// # 返回
-/// 返回启用节点的组织 ID 集合。
-///
-/// # 错误
-/// 快照读取或未知组织时返回调用方映射后的领域错误。
-///
-/// # 关键业务约束
-/// 资金必须传入 `Error::RepositoryError`；其余域可传入 `Into::into`。
+// 展开启用组织及其可选下级；快照错误由调用方映射。
+// `executor` 为调用方执行器。
+// 返回启用节点的组织 ID 集合。
+// 快照读取或未知组织时返回调用方映射后的领域错误。
+//
+// 资金必须传入 `Error::RepositoryError`；其余域可传入 `Into::into`。
 pub(crate) async fn expand_org_units<E>(
     db: &Database,
     org_unit_ids: &[String],
@@ -107,7 +77,7 @@ mod tests {
         }
     }
 
-    /// 未知组织拒绝；停用节点不贡献范围。
+    // 覆盖组织范围展开的两类例外：未知组织必须报错，停用节点不得贡献权限范围。
     #[test]
     fn expand_rejects_unknown_and_skips_disabled() {
         let state = OrganizationState {

@@ -8,16 +8,7 @@ use crate::http::handler::supplier_offering;
 use crate::http::routes::permission_route;
 use crate::http::state::HttpState;
 
-/// 构建供应商供给管理路由。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回已挂载权限门禁的路由。
-///
-/// # 错误
-/// 无。
+/// 为管理端挂载供应商供给与配送模板接口，按操作登记公共权限目录信息。
 pub fn routes() -> Router<HttpState> {
     Router::new()
         .merge(read_routes())
@@ -26,7 +17,7 @@ pub fn routes() -> Router<HttpState> {
         .merge(delivery_template_routes())
 }
 
-/// 注册供应商配送模板维护与供给指定入口。
+// 把供应商配送模板的维护入口与供给分配入口一起接入管理端。
 fn delivery_template_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -66,7 +57,7 @@ fn delivery_template_routes() -> Router<HttpState> {
         )
 }
 
-/// 注册供给列表、单条资料和历史条款的读取入口。
+// 挂载供给目录、单条资料以及历史条款的只读接口，供管理端查看与核对。
 fn read_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -90,7 +81,7 @@ fn read_routes() -> Router<HttpState> {
         )
 }
 
-/// 注册独立的批量条款修订和可供更新命令。
+// 挂载批量修订条款和更新可供状态的专用写入口，不混入单项供给维护。
 fn batch_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -106,7 +97,7 @@ fn batch_routes() -> Router<HttpState> {
         )
 }
 
-/// 注册单条供给维护与任务处置命令。
+// 组装面向单条供应商供给的维护和任务处置入口。
 fn command_routes() -> Router<HttpState> {
     Router::new()
         .route(

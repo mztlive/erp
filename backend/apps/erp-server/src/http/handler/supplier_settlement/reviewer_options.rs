@@ -3,7 +3,7 @@ use erp_supply_settlement::supply_settlement::SettlementReviewerOption;
 
 use super::*;
 
-/// 返回可处理本单的复核人员；经办身份和候选资格由流程层验证。
+/// 在为结算单选择复核人前列出可处理该单的人选；流程核验当前经办身份与候选资格。
 pub async fn supplier_settlement_reviewer_options(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,

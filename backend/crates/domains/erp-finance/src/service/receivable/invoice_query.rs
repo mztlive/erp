@@ -13,17 +13,14 @@ use crate::service::receivable::mapping::zero_amount;
 use crate::{Error, Result};
 
 impl ReceivableService {
-    /// 在调用方执行器装配财务事实；访问资格由调用方先行统一授权。
-    ///
-    /// # 参数
-    /// * `id` - 发票 ID
-    /// * `executor` - 授权与当前财务事实读取使用的原执行器。
-    ///
-    /// # 返回
+    /// 调用方完成统一授权后，用原执行器读取发票及其实际分配，不在此重新判断访问范围。
     /// 返回发票视图（含分配行与未分配余额）。
-    ///
-    /// # 错误
+    /// 失败条件：
     /// * `NotFound` - 发票不存在
+    ///
+    /// 输入约定：
+    /// - `id`：发票 ID
+    /// - `executor`：授权与当前财务事实读取使用的原执行器。
     pub async fn invoice_detail_with_executor(
         &self,
         id: &str,
@@ -86,13 +83,11 @@ impl ReceivableService {
         })
     }
 }
-/// 汇总销项发票分配并装配视图（`APPLY` 加、`REVERSE` 减）。
-///
-/// # 参数
-/// * `allocations` - 销项发票分配集合
-///
-/// # 返回
-/// 返回 `(净已分配含税合计, 分配视图列表)`。
+// 装配销项发票详情时汇总分配净额，正向 `APPLY` 加入、反向 `REVERSE` 扣除。
+// 返回 `(净已分配含税合计, 分配视图列表)`。
+//
+// 输入约定：
+// - `allocations`：销项发票分配集合
 fn sales_allocation_view(
     allocations: Vec<SalesInvoiceAllocation>,
 ) -> (Amount, Vec<crate::dto::receivable::SalesInvoiceAllocationView>) {
@@ -115,13 +110,11 @@ fn sales_allocation_view(
         .collect();
     (net, views)
 }
-/// 汇总进项发票分配并转换为跨方向复用的发票分配视图。
-///
-/// # 参数
-/// * `allocations` - 进项发票分配集合
-///
-/// # 返回
-/// 返回 `(净已分配含税合计, 分配视图列表)`。
+// 装配进项发票详情时把进项分配及合计映射到进销共用的响应结构。
+// 返回 `(净已分配含税合计, 分配视图列表)`。
+//
+// 输入约定：
+// - `allocations`：进项发票分配集合
 fn purchase_allocation_view(
     allocations: Vec<PurchaseInvoiceAllocation>,
 ) -> (Amount, Vec<crate::dto::receivable::SalesInvoiceAllocationView>) {
@@ -146,7 +139,7 @@ fn purchase_allocation_view(
     (net, views)
 }
 
-/// 按票据方向计算剩余分配额；红票分配冲减以负数记账，不能再次从正票面扣减。
+// 计算发票可继续分配的余额时按票据方向处理分配净额；红票冲减已为负数，不能当正向分配再扣一次。
 fn unallocated_amount(kind: InvoiceKind, gross: Amount, allocated: Amount) -> Amount {
     match kind {
         InvoiceKind::Blue => gross.checked_sub(allocated),
@@ -160,7 +153,7 @@ mod tests {
 
     use super::{InvoiceKind, unallocated_amount};
 
-    /// 正票面与负冲减分配必须守恒，完整红冲不得产生两倍未分配额。
+    // 回归检查：正票面与负冲减分配必须守恒，完整红冲不得产生两倍未分配额。
     #[test]
     fn invoice_remainder_respects_red_allocation_direction() {
         let gross: Amount = "2576.00".parse().unwrap();

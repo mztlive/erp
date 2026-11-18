@@ -31,12 +31,9 @@ pub struct PendingShipment {
 
 impl OrderTracking {
     /// 核对全部包裹、排除已应用身份并验证累计数量不超过冻结行。
-    /// # 参数
-    /// `observation` 为当前来源观察；调用方须在同一事务保存应用凭据。
-    /// # 返回
     /// 仅返回可证明数量且尚未应用的包裹；缺少数量的包裹只用于轨迹。
-    /// # 错误
     /// 同一包裹异载荷、来源行不明、数量非正、重复或累计超发时拒绝。
+    /// `observation` 为当前来源观察；调用方须在同一事务保存应用凭据。
     pub fn pending_shipments(&self, observation: &OrderObservation) -> Result<Vec<PendingShipment>> {
         if let Some(tree) = &observation.topology {
             tree.validate_tracking(&self.source_lines)?;
@@ -72,12 +69,9 @@ impl OrderTracking {
     }
 
     /// 保存已经完成真实交付的包裹身份；不允许来源重放重复累计。
-    /// # 参数
-    /// `shipment` 为此前校验的待应用包裹；`delivery_ids` 为同事务生成的发货身份。
-    /// # 返回
     /// 追加稳定应用凭据；相同包裹及相同交付重放不产生变更。
-    /// # 错误
     /// 交付身份为空、同包裹异载荷或已应用交付冲突时拒绝。
+    /// `shipment` 为此前校验的待应用包裹；`delivery_ids` 为同事务生成的发货身份。
     pub fn record_shipment(&mut self, shipment: &PendingShipment, delivery_ids: Vec<String>) -> Result<()> {
         if delivery_ids.is_empty() || delivery_ids.iter().any(|id| id.trim().is_empty()) {
             return Err(Error::ValidationError("包裹缺少真实发货记录".into()));
@@ -103,11 +97,7 @@ impl OrderTracking {
     }
 
     /// 判断全部冻结数量是否已由真实 ERP 交付覆盖。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 每条冻结行累计应用数量恰好等于批准数量时返回 true。
-    /// # 错误
     /// 数量溢出或凭据超发时返回错误。
     pub fn quantities_fully_applied(&self) -> Result<bool> {
         let quantities = self.applied_quantities()?;
@@ -119,11 +109,7 @@ impl OrderTracking {
     }
 
     /// 核对已发货节点均有对应的已应用数量，通用流程不得自行从状态补造交付。
-    /// # 参数
-    /// `observation` 为已验证当前拓扑与身份的来源观察。
-    /// # 返回
     /// 当前已报告发货节点全部被真实数量覆盖，或尚无发货事实时成功。
-    /// # 错误
     /// 已发货节点仍缺商品数量证据时要求核对原发货凭证，未知节点不推导发货。
     pub fn ensure_dispatch_quantities(&self, observation: &OrderObservation) -> Result<()> {
         let missing = if let Some(tree) = &observation.topology {
@@ -190,11 +176,7 @@ impl OrderTracking {
 
 impl OrderShipment {
     /// 将包裹的明确数量转换为可去重的来源证据。
-    /// # 参数
-    /// `root_order_no` 为查询绑定的原始外部单号，用于无子单的旧协议。
-    /// # 返回
     /// 缺少数量返回 None；子单数量必须先由适配器根据其专属合同核验。
-    /// # 错误
     /// 稳定包裹身份、来源订单或正数量不满足时拒绝自动应用。
     pub fn quantity_evidence(&self, root_order_no: &str) -> Result<Option<PendingShipment>> {
         let Some(lines) = &self.quantity_lines else {

@@ -16,7 +16,7 @@ use crate::finance::dto::ReceivableAccountView;
 use crate::{Error, Result};
 
 impl ReceivableReadService {
-    /// 装配应收往来子账详情视图。
+    /// 生成应收子账命令结果视图时，组合应收往来子账详情视图。
     ///
     /// # 参数
     /// * `id` - 本用例已授权的实际子账 ID。
@@ -73,7 +73,7 @@ impl ReceivableReadService {
             entries: entry_views,
         })
     }
-    /// 在原快照补齐分录冲销额度并映射明细。
+    // 组装应收子账命令结果时，在原快照补齐分录冲销额度并映射明细。
     async fn account_entry_views(
         &self,
         entries: &[ReceivableEntry],

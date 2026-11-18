@@ -56,17 +56,7 @@ pub struct OfferingRevisionView {
     pub valid_to: Option<String>,
 }
 impl OfferingRevisionView {
-    /// 将存储版本映射为只读条款，不拼入实时可供情况。
-    ///
-    /// # 参数
-    /// * `revision` - 已授权供给下的不可变条款
-    /// * `current_id` - 供给的当前版本指针
-    ///
-    /// # 返回
-    /// 返回商业字段与当前版本标记。
-    ///
-    /// # 错误
-    /// 无。
+    /// 把已授权供给的不可变修订投影为历史条款并标记是否当前版；不拼接实时可供或修改历史。
     pub fn from_revision(revision: SupplierOfferingRevision, current_id: Option<&str>) -> Self {
         Self {
             source_purchase_terms: revision.source_purchase_terms,
@@ -86,16 +76,8 @@ impl OfferingRevisionView {
         }
     }
 
-    /// 清除当前调用人无权读取的采购成本字段。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 原地清除价格和税率，保留非成本条款。
-    ///
-    /// # 错误
-    /// 无。
+    /// 在调用方确认无采购成本读取权限时清除代发及集采价格、税率和来源报价上下文，保留非成本条款；此处不
+    /// 执行授权。
     pub fn redact_costs(&mut self) {
         self.dropship_supply_price_gross = None;
         self.dropship_supply_price_net = None;
@@ -109,17 +91,8 @@ impl OfferingRevisionView {
 }
 
 impl OfferingHistoryPage {
-    /// 从仓储返回的探测页构造对外条款页。
-    ///
-    /// # 参数
-    /// * `revisions` - 按版本倒序的至多 21 条记录
-    /// * `current_id` - 供给当前版本指针
-    ///
-    /// # 返回
-    /// 至多 20 条与下一页游标；尾页游标为空。
-    ///
-    /// # 错误
-    /// 无。
+    /// 把仓储的探测页裁成最多 20 条条款，并用最后一条实际返回的修订号作为续页游标；只有读到探测记录才给
+    /// 下一页。
     pub fn from_revisions(mut revisions: Vec<SupplierOfferingRevision>, current_id: Option<&str>) -> Self {
         let has_more = revisions.len() > 20;
         revisions.truncate(20);

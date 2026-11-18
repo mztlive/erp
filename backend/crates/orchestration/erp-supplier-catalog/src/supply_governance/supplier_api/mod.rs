@@ -30,16 +30,9 @@ pub struct SupplierApiGovernanceProcess {
 impl SupplierApiGovernanceProcess {
     /// 绑定应用数据库和必需授权源，未注入的引用元数据保持失败关闭。
     ///
-    /// # 参数
-    /// * `db` - 应用数据库。
-    /// * `authorization` - 应用共享的权威授权源。
-    /// * `services` - 已装配的商品和供给对象授权。
+    /// `authorization`：应用共享的权威授权源；`services`：已装配的商品和供给对象授权。
     ///
-    /// # 返回
     /// 引用注册表为不可用实现的流程。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(
         db: Database,
         authorization: Arc<AuthorizationService>,
@@ -57,25 +50,18 @@ impl SupplierApiGovernanceProcess {
     }
     /// 复用组合根的引用注册表；不创建新的外部连接器。消耗 `self`。
     ///
-    /// # 参数
-    /// * `registry` - 组合根已有的供应商引用注册表。
+    /// `registry`：组合根已有的供应商引用注册表。
     ///
-    /// # 返回
     /// 换上该注册表后的流程。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn with_reference_registry(mut self, registry: Arc<dyn SupplierReferenceRegistry>) -> Self {
         self.reference_registry = registry;
         self
     }
     /// 注入只读连接检查网关，开启自动下单时在事务外调用。
-    /// # 参数
+    ///
     /// `gateway` 为已注册的供应商技术网关。
-    /// # 返回
+    ///
     /// 绑定网关后的流程。
-    /// # 错误
-    /// 不返回错误。
     pub fn with_gateway(mut self, gateway: Arc<dyn SupplierApiGateway>) -> Self {
         self.gateway = Some(gateway);
         self

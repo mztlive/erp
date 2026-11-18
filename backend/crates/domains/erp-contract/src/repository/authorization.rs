@@ -26,11 +26,8 @@ use crate::ports::ContractParticipantPort;
 use crate::repository::ContractExt;
 
 /// 构造本域合同责任事实和查询映射，不授予功能资格。
-/// # 参数
-/// db 为合同数据库，participants 为真实历史参与端口；history_collection 为该端口的固定来源集合。
-/// # 返回
 /// 本域实现的根事实和完整对象映射；同次启动的各合同查询复用这两个实例。
-/// # 错误
+/// db 为合同数据库，participants 为真实历史参与端口；history_collection 为该端口的固定来源集合。
 /// 查询模型或历史来源集合标识非法时拒绝；构造不执行数据库读取。
 pub fn bindings(
     db: Database,
@@ -69,7 +66,7 @@ enum ContractResponsibility {
 }
 
 impl ContractResponsibility {
-    /// 对象事实只装载本次目标的参与身份，写入模型保留已知空集合。
+    // 对象事实只装载本次目标的参与身份，写入模型保留已知空集合。
     async fn history(
         self,
         participants: &dyn ContractParticipantPort,
@@ -87,7 +84,7 @@ impl ContractResponsibility {
     }
 }
 
-/// 单条合同历史参与采用存在性关联，账号其他参与记录不进入查询条件。
+// 单条合同历史参与采用存在性关联，账号其他参与记录不进入查询条件。
 fn history_predicate(collection: &str, user: &str) -> QueryFragment {
     QueryFragment::Exists {
         collection: collection.into(),
@@ -192,7 +189,7 @@ impl AccessFactsPort for ContractFacts {
     }
 }
 
-/// 将已读取合同及当前组织事实转换为identity事实。
+// 将已读取合同及当前组织事实转换为identity事实。
 fn contract_object(
     row: Document,
     context: &AccessContext,

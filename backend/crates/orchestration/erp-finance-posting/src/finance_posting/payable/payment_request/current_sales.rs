@@ -6,16 +6,9 @@ use erp_sales::repository::SalesOrderExt;
 
 use super::*;
 
-/// 同一事务复验当前正式销售与本笔采购冻结主体一致，申请归组按主体身份。
-/// # 参数
-/// * `db` / `executor` - 付款资格校验所使用的数据库和原事务执行器
-/// * `purchase_order_id` - 本笔采购单；销售版本变化时据其依据更新记录判断是否暂停付款
-/// * `frozen` - 精确采购正式版本保存的销售来源及付款主体
-/// * `request` - 已冻结付款申请的付款主体身份；表头名称不替换各来源历史名称
-/// # 返回
-/// 当前正式销售来源和主体仍满足原批准依据时返回成功。
-/// # 错误
-/// 正式来源缺失、身份或主体错配，或销售减量导致暂停付款时返回冲突，不读取可变草稿。
+// 付款前在原事务对照精确采购正式版本、当前正式销售版本和申请冻结的付款主体。
+// 申请按主体身份归组，表头名称不覆盖各来源的历史名称。销售版本推进后，按该采购单的依据更新记录核对是否暂停付款。
+// 正式来源缺失、身份或主体不匹配，或销售减量已暂停付款时返回冲突，不以可变草稿补足依据。
 pub(super) async fn revalidate(
     db: &Database,
     purchase_order_id: &str,
@@ -153,7 +146,7 @@ mod tests {
         assert_ne!(before.settlement_party_name, after.settlement_party_name);
     }
 
-    /// 销售版本推进本身不阻断付款；只有暂停付款或缺少当前版本时拒绝。
+    // 销售版本推进本身不阻断付款；只有暂停付款或缺少当前版本时拒绝。
     #[test]
     fn advanced_revision_blocks_only_when_payment_paused() {
         let mut advanced = current();

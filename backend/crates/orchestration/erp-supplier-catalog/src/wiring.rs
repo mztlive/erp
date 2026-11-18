@@ -35,21 +35,21 @@ pub struct CatalogServices {
 #[async_trait]
 pub trait CatalogWorkItems: Send + Sync {
     /// 由 identity 校验既有任务详情范围和当前分配。
-    /// # 参数
+    ///
     /// actor 为当前账号，id 为正式任务，executor 为原业务执行器。
-    /// # 返回
+    ///
     /// 任务范围和当前分配均成立时成功。
-    /// # 错误
+    ///
     /// 账号、范围、分配或身份设施失效时返回工作流原错误。
     async fn require_assigned(&self, actor: &AuditActor, id: &str, executor: &mut dyn Executor)
     -> Result<()>;
 
     /// 在当前快照检查原任务完整办理资格，允许已完成结果回放。
-    /// # 参数
+    ///
     /// actor、id 为当前账号和真实任务，executor 为原事务。
-    /// # 返回
+    ///
     /// 完整资格与真实当前指派均成立时成功。
-    /// # 错误
+    ///
     /// 资格撤销、指派变化、任务不存在或授权设施失败时拒绝。
     async fn require_result_access(
         &self,
@@ -59,11 +59,11 @@ pub trait CatalogWorkItems: Send + Sync {
     ) -> Result<()>;
 
     /// 校验当前账号、执行权限、对象范围和正式任务责任。
-    /// # 参数
+    ///
     /// 当前操作人、正式任务和业务事务执行器。
-    /// # 返回
+    ///
     /// 授权通过。
-    /// # 错误
+    ///
     /// 保留工作流领域的原始拒绝或基础设施错误。
     async fn ensure_domain_decision_access(
         &self,
@@ -72,11 +72,11 @@ pub trait CatalogWorkItems: Send + Sync {
         executor: &mut dyn Executor,
     ) -> Result<()>;
     /// 创建供应商申请的正式审核任务。
-    /// # 参数
+    ///
     /// 已冻结任务身份、申请事实和同一事务执行器。
-    /// # 返回
+    ///
     /// 已持久化的任务。
-    /// # 错误
+    ///
     /// 当前审核人不具资格或持久化失败时拒绝。
     async fn create_supplier_portal_review(
         &self,
@@ -85,11 +85,11 @@ pub trait CatalogWorkItems: Send + Sync {
         executor: &mut dyn Executor,
     ) -> Result<WorkItem>;
     /// 重验申请、主题版本、任务版本与当前处理人。
-    /// # 参数
+    ///
     /// 精确任务身份、当前操作人和同一事务执行器。
-    /// # 返回
+    ///
     /// 已核验的任务。
-    /// # 错误
+    ///
     /// 身份、版本或权限失效时拒绝。
     async fn validate_supplier_portal_review(
         &self,
@@ -98,11 +98,11 @@ pub trait CatalogWorkItems: Send + Sync {
         executor: &mut dyn Executor,
     ) -> Result<WorkItem>;
     /// 完成申请的原正式审核任务。
-    /// # 参数
+    ///
     /// 精确任务身份、当前操作人和同一事务执行器。
-    /// # 返回
+    ///
     /// 已完成的任务。
-    /// # 错误
+    ///
     /// 身份、版本、权限或写入失败时拒绝。
     async fn complete_supplier_portal_review(
         &self,
@@ -111,11 +111,11 @@ pub trait CatalogWorkItems: Send + Sync {
         executor: &mut dyn Executor,
     ) -> Result<WorkItem>;
     /// 撤回原申请的正式审核任务。
-    /// # 参数
+    ///
     /// 精确任务身份、撤回人、原原因和同一事务执行器。
-    /// # 返回
+    ///
     /// 已撤回的任务。
-    /// # 错误
+    ///
     /// 身份、版本或写入失败时拒绝。
     async fn withdraw_supplier_portal_review(
         &self,

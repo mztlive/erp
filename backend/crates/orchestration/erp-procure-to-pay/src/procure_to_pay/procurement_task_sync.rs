@@ -24,24 +24,13 @@ use rust_decimal::Decimal;
 use super::source_update_sync::SourceUpdateSync;
 use crate::{Error, Result};
 
-/// 加载当前账号可执行的开放供给分配任务。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `work_item_id` - 客户端从采购创建依据取得的任务 ID
-/// * `sales_order_id` - 本次采购依据所属销售单
-/// * `rbac` - 当前身份授权源
-/// * `actor` - 当前已认证账号
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回业务对象、任务类型、开放状态、责任人和冻结行范围均匹配的任务。
-///
-/// # 错误
-/// 任务不存在、不是当前账号开放任务、销售单不匹配、责任范围缺失或仓储失败时返回错误。
-///
-/// # 关键业务约束
-/// 采购创建权限不能只依赖页面筛选；事务内必须重新读取任务事实并校验具体责任行。
+// 加载当前账号可执行的开放供给分配任务。
+//
+// `work_item_id` 为客户端从采购创建依据取得的任务 ID；`sales_order_id` 为本次采购依据所属销售单；`rbac` 为当前身份授权源。
+//
+// 返回业务对象、任务类型、开放状态、责任人和冻结行范围均匹配的任务。任务不存在、不是当前账号开放任务、销售单不匹配、责任范围缺失或仓储失败时返回错误。
+//
+// 采购创建权限不能只依赖页面筛选；事务内必须重新读取任务事实并校验具体责任行。
 pub(super) async fn load_owned_open_procurement_task(
     db: &mongodb::Database,
     rbac: &Arc<AuthorizationService>,
@@ -60,20 +49,13 @@ pub(super) async fn load_owned_open_procurement_task(
     Ok(item)
 }
 
-/// 在 identity 已证明当前分配后校验任务来源、开放状态与冻结范围。
-///
-/// # 参数
-/// * `item` - 已按客户端任务 ID 读取的持久化任务
-/// * `sales_order_id` - 本次采购依据所属销售单
-///
-/// # 返回
-/// 任务属于目标销售单且仍可处理时返回 `Ok(())`。
-///
-/// # 错误
-/// 错单或已关闭任务返回未找到；已完成任务及冻结范围损坏时返回冲突。
-///
-/// # 关键业务约束
-/// 调用前必须由 identity 证明分配资格，不得将本函数作为权限入口。
+// 在 identity 已证明当前分配后校验任务来源、开放状态与冻结范围。
+//
+// `item` 为已按客户端任务 ID 读取的持久化任务；`sales_order_id` 为本次采购依据所属销售单。
+//
+// 任务属于目标销售单且仍可处理时返回 `Ok(())`。错单或已关闭任务返回未找到；已完成任务及冻结范围损坏时返回冲突。
+//
+// 调用前必须由 identity 证明分配资格，不得将本函数作为权限入口。
 fn validate_procurement_task_access(item: &WorkItem, sales_order_id: &SalesOrderId) -> Result<()> {
     if item.work_item_type != WorkItemType::ProcurementOrderCreation
         || item.business_object_type != "sales_order"
@@ -97,18 +79,10 @@ fn validate_procurement_task_access(item: &WorkItem, sales_order_id: &SalesOrder
 
 /// 按销售单当前统一供给覆盖同步全部供给分配任务与采购依据更新。
 ///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `sales_order_id` - 采购覆盖发生变化的来源销售单
-/// * `executor` - 与采购写入共用的数据访问执行器；写链路必须传入同一事务会话
+/// `sales_order_id` 为采购覆盖发生变化的来源销售单；`executor` 为与采购写入共用的数据访问执行器；写链路必须传入同一事务会话。
 ///
-/// # 返回
-/// 开放任务摘要、自动完成和释放后新任务均同步成功时返回 `Ok(())`。
+/// 开放任务摘要、自动完成和释放后新任务均同步成功时返回 `Ok(())`。销售单、采购覆盖、任务范围、依据更新记录或仓储写入不一致时返回错误。
 ///
-/// # 错误
-/// 销售单、采购覆盖、任务范围、依据更新记录或仓储写入不一致时返回错误。
-///
-/// # 关键业务约束
 /// 开放任务归零后进入不可逆终态；历史终态范围重新出现剩余量时创建新任务，不重开旧任务。
 pub async fn sync_procurement_tasks_for_sales_order(
     db: &mongodb::Database,
@@ -121,17 +95,9 @@ pub async fn sync_procurement_tasks_for_sales_order(
 
 /// 销售变更生效后同步供给分配任务与采购依据更新，新受影响采购记录触发的变更单。
 ///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `sales_order_id` - 已生效变更的来源销售单
-/// * `sales_change_order_id` - 生效的销售变更单
-/// * `executor` - 销售变更生效事务执行器
+/// `sales_order_id` 为已生效变更的来源销售单；`sales_change_order_id` 为生效的销售变更单；`executor` 为销售变更生效事务执行器。
 ///
-/// # 返回
-/// 同步成功时返回 `Ok(())`。
-///
-/// # 错误
-/// 销售单、采购覆盖、任务、依据更新记录或仓储写入不一致时返回错误。
+/// 同步成功时返回 `Ok(())`。销售单、采购覆盖、任务、依据更新记录或仓储写入不一致时返回错误。
 pub async fn sync_procurement_after_sales_change(
     db: &mongodb::Database,
     responsibility: &dyn FinanceResponsibilityPort,
@@ -142,21 +108,13 @@ pub async fn sync_procurement_after_sales_change(
     sync_sales_order_supply(db, responsibility, sales_order_id, Some(sales_change_order_id), executor).await
 }
 
-/// 采购状态变化但供给覆盖不变时，只对账采购依据更新记录与待办。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `sales_order_id` - 采购的来源销售单
-/// * `executor` - 与采购写入共用的数据访问执行器
-///
-/// # 返回
-/// 对账成功时返回 `Ok(())`。
-///
-/// # 错误
-/// 销售单、采购覆盖、依据更新记录或仓储写入不一致时返回错误。
-///
-/// # 关键业务约束
-/// 草稿重新提交审批后，等待提交的依据更新记录才处理完成并关闭待办。
+// 采购状态变化但供给覆盖不变时，只对账采购依据更新记录与待办。
+//
+// `sales_order_id` 为采购的来源销售单；`executor` 为与采购写入共用的数据访问执行器。对账成功时返回 `Ok(())`。
+//
+// 销售单、采购覆盖、依据更新记录或仓储写入不一致时返回错误。
+//
+// 草稿重新提交审批后，等待提交的依据更新记录才处理完成并关闭待办。
 pub(crate) async fn sync_purchase_source_updates(
     db: &mongodb::Database,
     responsibility: &dyn FinanceResponsibilityPort,
@@ -170,7 +128,7 @@ pub(crate) async fn sync_purchase_source_updates(
         .await
 }
 
-/// 读取来源销售单。
+// 同步采购责任前沿用调用方执行器读取真实来源销售单；缺失返回 `NotFound`。
 async fn load_sales_order(
     db: &mongodb::Database,
     sales_order_id: &SalesOrderId,
@@ -182,7 +140,7 @@ async fn load_sales_order(
         .ok_or_else(|| Error::NotFound("来源销售单不存在".to_string()))
 }
 
-/// 以同一批事实同步供给分配任务和采购依据更新记录。
+// 以同一批事实同步供给分配任务和采购依据更新记录。
 async fn sync_sales_order_supply(
     db: &mongodb::Database,
     responsibility: &dyn FinanceResponsibilityPort,
@@ -212,21 +170,10 @@ async fn sync_sales_order_supply(
         .await
 }
 
-/// 根据同一销售单的当前剩余量更新任务并补建释放任务。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `order` - 来源销售单
-/// * `subject_version` - 当前销售修订 ID
-/// * `remaining_by_line` - 稳定销售行到当前剩余数量的映射
-/// * `tasks` - 该销售单全部供给分配任务，按更新时间倒序
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 同步完成返回 `Ok(())`。
-///
-/// # 错误
-/// 任务责任键、范围、负责人或仓储写入不一致时返回错误。
+// 根据同一销售单的当前剩余量更新任务并补建释放任务。
+//
+// `order` 为来源销售单；`subject_version` 为当前销售修订 ID；`remaining_by_line` 为稳定销售行到当前剩余数量的映射；`tasks` 为该销售单全部供给分配任务，
+// 按更新时间倒序。同步完成返回 `Ok(())`。任务责任键、范围、负责人或仓储写入不一致时返回错误。
 async fn synchronize_tasks(
     db: &mongodb::Database,
     order: &SalesOrder,
@@ -285,17 +232,11 @@ async fn synchronize_tasks(
     Ok(())
 }
 
-/// 汇总冻结责任范围内的当前剩余数量。
-///
-/// # 参数
-/// * `scope_ids` - 任务冻结的稳定销售行 ID
-/// * `remaining_by_line` - 当前销售版本逐行剩余数量
-///
-/// # 返回
-/// 返回范围内仍存在销售行的剩余数量之和；当前版本已移除的行按零处理。
-///
-/// # 错误
-/// 责任范围为空或数量汇总无法构造为领域数量时返回错误。
+// 汇总冻结责任范围内的当前剩余数量。
+//
+// `scope_ids` 为任务冻结的稳定销售行 ID；`remaining_by_line` 为当前销售版本逐行剩余数量。
+//
+// 返回范围内仍存在销售行的剩余数量之和；当前版本已移除的行按零处理。责任范围为空或数量汇总无法构造为领域数量时返回错误。
 fn remaining_for_scope(
     scope_ids: &[String],
     remaining_by_line: &HashMap<String, Quantity>,
@@ -309,46 +250,21 @@ fn remaining_for_scope(
     Quantity::try_from(total).map_err(Error::Logic)
 }
 
-/// 生成供给分配任务当前影响摘要。
-///
-/// # 参数
-/// * `order` - 来源销售单
-/// * `line_count` - 冻结责任行数
-/// * `remaining` - 当前责任范围剩余数量
-///
-/// # 返回
-/// 返回包含销售单号、责任行数和剩余数量的稳定中文摘要。
-///
-/// # 错误
-/// 无。
+// 生成供给分配任务当前影响摘要。
+//
+// `order` 为来源销售单；`line_count` 为冻结责任行数；`remaining` 为当前责任范围剩余数量。
+//
+// 返回包含销售单号、责任行数和剩余数量的稳定中文摘要。
 fn procurement_impact_summary(order: &SalesOrder, line_count: usize, remaining: Quantity) -> String {
     format!("销售单 {} 的 {line_count} 行待分配供给，剩余数量 {remaining}", order.order_no)
 }
 
-/// 返回采购剩余数量已由并发命令推进后的稳定冲突错误。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回 HTTP 409 对应的可刷新重试错误。
-///
-/// # 错误
-/// 无。
+// 将并发采购消耗剩余量表达为 HTTP 409 对应的冲突，提示调用方刷新后重试。
 fn procurement_quantity_changed() -> Error {
     Error::ConflictError("可分配供给数量已更新，请刷新后重试".to_string())
 }
 
-/// 返回不泄露他人任务存在性的统一未找到错误。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回采购任务不可用的 `NotFound` 错误。
-///
-/// # 错误
-/// 无。
+// 对不存在和无权访问的采购任务统一使用 `NotFound`，保护他人任务的存在性。
 fn procurement_task_not_found() -> Error {
     Error::NotFound("供给分配任务不存在或不可处理".to_string())
 }

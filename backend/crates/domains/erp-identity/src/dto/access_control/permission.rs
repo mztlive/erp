@@ -33,7 +33,7 @@ pub struct PermissionView {
 }
 
 impl From<PermissionDefinition> for PermissionView {
-    /// 从实体构造响应视图。
+    // 将权限定义映射为管理接口的展示字段，保留资源、动作及启停状态。
     fn from(permission: PermissionDefinition) -> Self {
         let resource = permission.permission().resource().to_owned();
         let action = permission.permission().action().to_owned();
@@ -73,15 +73,7 @@ pub struct CreatePermissionRequest {
 
 impl CreatePermissionRequest {
     /// 转换为实体创建数据。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回实体层创建数据；没有描述时不写入描述。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn into_data(self) -> PermissionData {
         let data = PermissionData::new(self.resource, self.action, self.name).with_system(self.system);
         match self.description {
@@ -108,15 +100,8 @@ pub struct UpdatePermissionRequest {
 impl UpdatePermissionRequest {
     /// 返回本次补丁显式携带的权限字段名。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 按 `name`、`description`、`disabled` 的稳定合同顺序返回字段名；
     /// 未携带任何可更新字段时返回空集合。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn changed_field_names(&self) -> Vec<String> {
         let mut changed = Vec::new();
         if self.name.is_some() {
@@ -132,15 +117,7 @@ impl UpdatePermissionRequest {
     }
 
     /// 转换为实体更新数据。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回只含本次补丁字段的实体层更新数据。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn into_update(self) -> PermissionUpdate {
         PermissionUpdate { name: self.name, description: self.description, disabled: self.disabled }
     }
@@ -168,18 +145,13 @@ pub struct PermissionListParams {
 }
 
 impl PermissionListParams {
-    /// 归一化权限定义列表查询参数。
-    ///
-    /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回服务与仓储共用的规范化筛选条件。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    // 归一化权限定义列表查询参数。
+    //
+    // 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
+    //
+    // 返回服务与仓储共用的规范化筛选条件。
+    //
+    // 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<PermissionFilter> {
         Ok(PermissionFilter {
             resource: normalized_text(self.resource.as_deref()),

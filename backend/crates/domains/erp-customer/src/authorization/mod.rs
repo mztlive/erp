@@ -27,11 +27,12 @@ pub struct CustomerMapping {
 
 impl CustomerMapping {
     /// 构造固定客户模型。
+    ///
     /// # 参数
     /// _db 为组合根统一构造接口传入的数据库句柄，映射不保存该句柄。
-    /// # 返回
+    ///
     /// 客户主键粒度的共享映射。
-    /// # 错误
+    ///
     /// 固定模型非法时启动失败；不执行 I/O。
     pub fn shared(_db: Database) -> Arc<dyn AccessMapping> {
         Arc::new(Self::new())
@@ -131,7 +132,7 @@ impl AccessMapping for CustomerMapping {
     }
 }
 
-/// 归属按上海自然日解释，授权在下一日边界失效。
+// 归属按上海自然日解释，授权在下一日边界失效。
 fn next_day(at: Instant) -> Instant {
     let midnight = ((at.unix_secs() + 8 * 3600) / 86400 + 1) * 86400 - 8 * 3600;
     Instant::from_unix_secs(midnight)

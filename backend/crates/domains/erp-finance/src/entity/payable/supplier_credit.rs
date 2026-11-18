@@ -19,23 +19,17 @@ pub struct SupplierCredit {
 }
 impl SupplierCredit {
     /// 计算尚未抵扣余额。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 精确可用金额。
-    /// # 错误
-    /// 无。
+    /// 结果：精确可用金额。
     pub fn available(&self) -> Amount {
         self.amount.checked_sub(self.used_amount)
     }
     /// 核对主体、供应商并消费留抵；实体 CAS 与财务核销须在同一事务。
-    /// # 参数
-    /// * `supplier` / `payer` - 本次已批准付款申请主体。
-    /// * `amount` - 本次使用金额。
-    /// # 返回
     /// 成功时余额减少。
-    /// # 错误
-    /// 跨供应商、跨付款主体、非正数或超额时拒绝且不改变余额。
+    /// 失败条件：跨供应商、跨付款主体、非正数或超额时拒绝且不改变余额。
+    ///
+    /// 输入约定：
+    /// - `supplier` / `payer`：本次已批准付款申请主体。
+    /// - `amount`：本次使用金额。
     pub fn consume(&mut self, supplier: &str, payer: &str, amount: Amount) -> Result<()> {
         if supplier != self.supplier_id || payer != self.payer_party_id {
             return Err(Error::from("留抵只能用于同一供应商和同一付款主体"));

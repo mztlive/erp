@@ -11,19 +11,9 @@ use crate::{Error, Result, ReverseFlowPorts};
 
 /// 加载绑定定义并解析新申请负责人；收据回放恢复原实例指派。
 ///
-/// # 参数
-/// * `db` - 数据库
-/// * `rbac` - 调用方共享身份与审批能力。
-/// * `binding` - 创建时冻结的定义绑定
-/// * `actor` - 本次申请人
-/// * `receipt` - 已提交启动收据，可空
-/// * `executor` - 本次提交事务执行器。
+/// `rbac` 为调用方共享身份与审批能力；`binding` 为创建时冻结的定义绑定；`actor` 为本次申请人；`receipt` 为已提交启动收据，可空；沿用原事务的执行器。
 ///
-/// # 返回
-/// 返回已解析新人员或恢复原实例人员的启动图。
-///
-/// # 错误
-/// 定义不存在或仓储失败时返回冲突或仓储错误。
+/// 返回已解析新人员或恢复原实例人员的启动图。定义不存在或仓储失败时返回冲突或仓储错误。
 pub async fn load_start_graph(
     db: &Database,
     rbac: &ReverseFlowPorts,
@@ -38,16 +28,7 @@ pub async fn load_start_graph(
 
 /// 使用调用方执行器加载冻结绑定的定义图。
 ///
-/// # 参数
-/// * `db` - 数据库。
-/// * `binding` - 创建时冻结的定义绑定。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
-/// 返回引擎可消费的定义图。
-///
-/// # 错误
-/// 定义不存在时返回冲突。仓储读取失败时返回对应错误。
+/// `binding` 为创建时冻结的定义绑定。返回引擎可消费的定义图。定义不存在时返回冲突。仓储读取失败时返回对应错误。
 pub async fn load_bound_definition_graph_with_executor(
     db: &Database,
     binding: &ApprovalDefinitionBinding,
@@ -60,19 +41,9 @@ pub async fn load_bound_definition_graph_with_executor(
 
 /// 按精确单据类型依次读取当前 V3 与已知历史 StartApproval 作用域。
 ///
-/// # 参数
-/// * `db` - 数据库。
-/// * `document_type` - 退款或冲正单据类型。
-/// * `subject` - 审批主题引用。
-/// * `subject_version` - 主题版本。
-/// * `idempotency_key` - 启动幂等键。
-/// * `executor` - 本次提交事务执行器。
+/// `document_type` 为退款或冲正单据类型；`subject` 为审批主题引用；`subject_version` 为主题版本；`idempotency_key` 为启动幂等键；沿用原事务的执行器。
 ///
-/// # 返回
-/// 命中任一作用域时返回该收据；都未命中时返回 `None`。
-///
-/// # 错误
-/// 幂等键不合法、作用域构造失败或收据读取失败时返回对应错误。
+/// 命中任一作用域时返回该收据；都未命中时返回 `None`。幂等键不合法、作用域构造失败或收据读取失败时返回对应错误。
 pub async fn load_start_receipt_for_document_type(
     db: &Database,
     document_type: DocumentType,

@@ -21,16 +21,8 @@ use crate::http::upload;
 /// 上传产品报价表并登记异步导入任务。
 ///
 /// 前台只做任务投递，不直接执行；执行统一由后台任务执行器认领，避免与轮询器并发写入同一任务。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 审计操作人
-/// * `multipart` - 含 `file` 与可选 `request_id` 的表单
-///
-/// # 返回
+/// `multipart` 为含 `file` 与可选 `request_id` 的表单。
 /// 返回导入任务进度视图，可轮询任务详情与逐项结果查看执行进度。
-///
-/// # 错误
 /// 文件不是原模板、超过大小上限或解析失败时返回错误。
 pub async fn product_import_submit(
     State(state): State<HttpState>,
@@ -64,13 +56,6 @@ pub async fn product_import_submit(
 }
 
 /// 查询当前操作人的商品导入任务。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 审计操作人
-/// * `params` - 分页参数
-///
-/// # 返回
 /// 返回任务分页。
 pub async fn product_import_job_list(
     State(state): State<HttpState>,
@@ -82,13 +67,6 @@ pub async fn product_import_job_list(
 }
 
 /// 查询单个商品导入任务。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 审计操作人
-/// * `id` - 任务 ID
-///
-/// # 返回
 /// 返回任务详情。
 pub async fn product_import_job_detail(
     State(state): State<HttpState>,
@@ -100,14 +78,6 @@ pub async fn product_import_job_detail(
 }
 
 /// 查询导入任务逐项结果。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 审计操作人
-/// * `id` - 任务 ID
-/// * `params` - 分页参数
-///
-/// # 返回
 /// 返回逐项分页。
 pub async fn product_import_job_items(
     State(state): State<HttpState>,
@@ -137,16 +107,7 @@ pub struct DirectUploadAbortQuery {
 ///
 /// 大文件不再经网关上传：本接口只返回分片上传标识、对象键与分片口径，
 /// 浏览器凭分片地址直传对象存储，全程可在前端展示进度。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已认证操作人
-/// * `req` - 文件名、总字节数与幂等请求身份
-///
-/// # 返回
-/// 返回分片上传标识、对象键与分片口径。
-///
-/// # 错误
+/// `req` 为文件名、总字节数与幂等请求身份。
 /// 文件名不是 `.xlsx` 或大小越限时返回错误。
 pub async fn product_import_direct_upload_init(
     State(state): State<HttpState>,
@@ -161,18 +122,8 @@ pub async fn product_import_direct_upload_init(
 ///
 /// 地址按需获取：有效期约 2 小时，慢速网络可在上传该片前重新获取，
 /// 无需初始化时一次签发全部地址。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已认证操作人
-/// * `upload_id` - 分片上传标识
-/// * `part_number` - 分片序号（1 起）
-/// * `params` - 对象键与请求身份（须绑定）
-///
-/// # 返回
+/// `params` 为对象键与请求身份（须绑定）。
 /// 返回预签名 PUT 地址。
-///
-/// # 错误
 /// 身份、当前商品创建资格、对象键、分片序号或签名校验失败时返回错误。
 pub async fn product_import_direct_upload_part_url(
     State(state): State<HttpState>,
@@ -196,17 +147,7 @@ pub async fn product_import_direct_upload_part_url(
 /// 请求体为小 JSON（对象键、文件名、大小、请求身份与分片 ETag），
 /// 不再携带文件内容；合并后复用既有解析与落库链路，进度与结果仍在
 /// 「后台任务」查看。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 审计操作人
-/// * `upload_id` - 分片上传标识
-/// * `req` - 对象键、文件名、总字节数、请求身份与已上传分片
-///
-/// # 返回
 /// 返回导入任务进度视图。
-///
-/// # 错误
 /// 分片缺失、对象损坏或解析失败时返回错误。
 pub async fn product_import_direct_upload_complete(
     State(state): State<HttpState>,
@@ -220,17 +161,8 @@ pub async fn product_import_direct_upload_complete(
 }
 
 /// 取消分片上传并清理对象存储侧已上传的分片。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已认证操作人
-/// * `upload_id` - 分片上传标识
-/// * `params` - 对象键与请求身份（须绑定）
-///
-/// # 返回
+/// `params` 为对象键与请求身份（须绑定）。
 /// 成功无返回体；上传已不存在视为成功。
-///
-/// # 错误
 /// 身份、当前商品创建资格、对象键校验或取消失败时返回错误。
 pub async fn product_import_direct_upload_abort(
     State(state): State<HttpState>,

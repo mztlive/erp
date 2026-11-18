@@ -23,13 +23,12 @@ struct RuntimeBatchFacts {
     snapshots: HashMap<String, ApprovalSubjectSnapshot>,
 }
 
-/// 中央授权已通过后，只核对该审批任务的冻结运行主体和责任链。
-/// # 参数
-/// db 为工作流数据库，item 为同一快照已授权的任务，executor 为原读取执行器。
-/// # 返回
-/// 精确执行、实例、冻结快照及当前开放或终态责任全部一致时返回 true。
-/// # 错误
-/// 仓储、正式单据类型或冻结主体损坏时返回对应错误。
+// 中央授权已通过后，只核对该审批任务的冻结运行主体和责任链。
+// 精确执行、实例、冻结快照及当前开放或终态责任全部一致时返回 true。
+//
+// 仓储、正式单据类型或冻结主体损坏时返回对应错误。
+//
+// db 为工作流数据库，item 为同一快照已授权的任务，executor 为原读取执行器。
 pub(crate) async fn approval_task_facts_current(
     db: &Database,
     item: &WorkItem,
@@ -56,18 +55,12 @@ pub(crate) async fn approval_task_facts_current(
     task_chain_matches_subject(item, &subject, open)
 }
 
-/// 按准入任务执行引用批量读取执行、存在实例和合法类型的冻结快照。
-///
-/// # 参数
-/// * `db` - 工作流数据库
-/// * `items` - 已证明静态读取资格的任务
-/// * `executor` - 当前快照执行器
-///
-/// # 返回
-/// 返回当前批次的运行事实，缺失执行或实例不补占位值。
-///
-/// # 错误
-/// 仓储查询与反序列化失败时返回原仓储错误。
+// 按准入任务执行引用批量读取执行、存在实例和合法类型的冻结快照。
+// 返回当前批次的运行事实，缺失执行或实例不补占位值。
+//
+// 仓储查询与反序列化失败时返回原仓储错误。
+//
+// `items`：已证明静态读取资格的任务；`executor`：当前快照执行器。
 async fn load_runtime_facts(
     db: &Database,
     items: &[&WorkItem],
@@ -100,16 +93,10 @@ async fn load_runtime_facts(
     Ok(facts)
 }
 
-/// 对任务持有的执行身份去重，保留首次出现顺序。
-///
-/// # 参数
-/// * `items` - 已准入的任务集合
-///
-/// # 返回
-/// 返回非空执行引用的去重集合。
-///
-/// # 错误
-/// 无。
+// 对任务持有的执行身份去重，保留首次出现顺序。
+// 返回非空执行引用的去重集合。
+//
+// `items`：已准入的任务集合。
 fn execution_ids(items: &[&WorkItem]) -> Vec<ApprovalNodeExecutionId> {
     let mut seen = HashSet::new();
     items
@@ -120,17 +107,12 @@ fn execution_ids(items: &[&WorkItem]) -> Vec<ApprovalNodeExecutionId> {
         .collect()
 }
 
-/// 只为存在且主体类型有效的实例读取冻结快照。
-///
-/// # 参数
-/// * `items` - 原顺序的准入任务
-/// * `facts` - 已读取的执行与实例事实
-///
-/// # 返回
-/// 返回去重实例 ID；遇首个主体类型错误后不再为后续任务加载快照。
-///
-/// # 错误
-/// 类型错误由最终任务顺序的主体组装入口返回。
+// 只为存在且主体类型有效的实例读取冻结快照。
+// 返回去重实例 ID；遇首个主体类型错误后不再为后续任务加载快照。
+//
+// 类型错误由最终任务顺序的主体组装入口返回。
+//
+// `items`：原顺序的准入任务；`facts`：已读取的执行与实例事实。
 fn snapshot_instance_ids(items: &[&WorkItem], facts: &RuntimeBatchFacts) -> Vec<String> {
     let mut result = Vec::new();
     let mut seen = HashSet::new();
@@ -148,17 +130,10 @@ fn snapshot_instance_ids(items: &[&WorkItem], facts: &RuntimeBatchFacts) -> Vec<
     result
 }
 
-/// 从已加载身份链定位任务的流程实例，缺链保持不可读。
-///
-/// # 参数
-/// * `item` - 当前任务事实
-/// * `facts` - 当前批运行事实
-///
-/// # 返回
-/// 返回任务执行精确引用的实例；任一身份缺失时返回 None。
-///
-/// # 错误
-/// 无。
+// 从已加载身份链定位任务的流程实例，缺链保持不可读。
+// 返回任务执行精确引用的实例；任一身份缺失时返回 None。
+//
+// `item`：当前任务事实；`facts`：当前批运行事实。
 fn instance_for_task<'a>(
     item: &WorkItem,
     facts: &'a RuntimeBatchFacts,
@@ -168,17 +143,12 @@ fn instance_for_task<'a>(
     facts.instances.get(execution.process_instance_id.as_ref())
 }
 
-/// 对单任务沿用共同的类型与不可变冻结主体三元组校验。
-///
-/// # 参数
-/// * `item` - 已准入的任务
-/// * `facts` - 当前批次加载的运行事实
-///
-/// # 返回
-/// 返回与原单任务入口相同的精确主体，缺失执行或实例时返回 None。
-///
-/// # 错误
-/// 快照缺失或三元组损坏时返回原有冻结主体冲突。
+// 对单任务沿用共同的类型与不可变冻结主体三元组校验。
+// 返回与原单任务入口相同的精确主体，缺失执行或实例时返回 None。
+//
+// 快照缺失或三元组损坏时返回原有冻结主体冲突。
+//
+// `item`：已准入的任务；`facts`：当前批次加载的运行事实。
 fn subject_for_task(item: &WorkItem, facts: &RuntimeBatchFacts) -> Result<Option<RuntimeReadSubject>> {
     let Some(instance) = instance_for_task(item, facts) else {
         return Ok(None);
@@ -197,18 +167,12 @@ fn subject_for_task(item: &WorkItem, facts: &RuntimeBatchFacts) -> Result<Option
     }))
 }
 
-/// 只为已校验冻结主体的开放任务批量加载完整开放责任链。
-///
-/// # 参数
-/// * `db` - 工作流数据库
-/// * `items` / `subjects` - 同顺序的准入任务及主体校验结果
-/// * `executor` - 当前快照执行器
-///
-/// # 返回
-/// 返回执行 ID 到全部开放任务的映射，重复开放任务完整保留。
-///
-/// # 错误
-/// 仓储读取失败时返回原错误；主体或适配器错误留给最终有序判定。
+// 只为已校验冻结主体的开放任务批量加载完整开放责任链。
+// 返回执行 ID 到全部开放任务的映射，重复开放任务完整保留。
+//
+// 仓储读取失败时返回原错误；主体或适配器错误留给最终有序判定。
+//
+// `items` / `subjects`：同顺序的准入任务及主体校验结果；`executor`：当前快照执行器。
 async fn load_open_tasks(
     db: &Database,
     items: &[&WorkItem],
@@ -226,16 +190,12 @@ async fn load_open_tasks(
     Ok(grouped)
 }
 
-/// 先按原顺序排除主体错误与终态项，再收集需要开放唯一链证明的执行。
-///
-/// # 参数
-/// * `items` / `subjects` - 同顺序的准入任务与主体结果
-///
-/// # 返回
-/// 返回首次主体或适配器错误之前的开放执行引用，去重但不改变任务判定顺序。
-///
-/// # 错误
-/// 原错误由最终按任务顺序传播，不在本阶段提前返回。
+// 先按原顺序排除主体错误与终态项，再收集需要开放唯一链证明的执行。
+// 返回首次主体或适配器错误之前的开放执行引用，去重但不改变任务判定顺序。
+//
+// 原错误由最终按任务顺序传播，不在本阶段提前返回。
+//
+// `items` / `subjects`：同顺序的准入任务与主体结果。
 fn open_execution_ids(
     items: &[&WorkItem],
     subjects: &[Result<Option<RuntimeReadSubject>>],
@@ -269,7 +229,7 @@ mod tests {
     use crate::entity::document_registry::DocumentType;
     use crate::error::Error;
 
-    /// 将同一条真实运行夹具拆成批量 loader 消费的身份映射。
+    // 将一次测试运行的真实主体拆为批量加载器接受的身份映射，用于核对批量读取合同。
     fn facts(mut subject: RuntimeReadSubject) -> RuntimeBatchFacts {
         let execution = subject.current_execution.take().unwrap();
         RuntimeBatchFacts {
@@ -291,7 +251,7 @@ mod tests {
         assert_eq!(execution_ids(&[&task, &other]), [ApprovalNodeExecutionId::new("execution-1")]);
     }
 
-    /// 缺失执行或实例保持不可读，不把缺关联改成冻结主体冲突。
+    // 验证：缺失执行或实例保持不可读，不把缺关联改成冻结主体冲突。
     #[test]
     fn approval_task_batch_subject_preserves_missing_execution_and_instance_denial() {
         let (subject, task) = fixture();
@@ -303,7 +263,7 @@ mod tests {
         assert!(subject_for_task(&task, &loaded).unwrap().is_none());
     }
 
-    /// 冻结快照缺失或类型、身份、版本错配保持原稳定冲突。
+    // 验证：冻结快照缺失或类型、身份、版本错配保持原稳定冲突。
     #[test]
     fn approval_task_batch_subject_preserves_exact_frozen_triple_errors() {
         let changes: &[fn(&mut ApprovalSubjectSnapshot)] = &[
@@ -327,7 +287,7 @@ mod tests {
         );
     }
 
-    /// 终态无需开放链读取，首个主体错误之后的任务也不加载开放链。
+    // 验证：终态无需开放链读取，首个主体错误之后的任务也不加载开放链。
     #[test]
     fn approval_task_batch_open_ids_skip_terminal_and_post_error_tasks() {
         let (subject, task) = fixture();

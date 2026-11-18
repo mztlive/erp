@@ -18,13 +18,9 @@ use super::ReceivableProcess;
 use crate::{Error, Result};
 
 impl ReceivableProcess {
-    /// 按原命令的统一授权入口回读提交或重放结果。
-    /// # 参数
-    /// id 为回执绑定的实际发票身份，actor 为当前操作人。
-    /// # 返回
-    /// 同一事务内完成来源授权和财务读取的结果。
-    /// # 错误
-    /// 撤权、来源缺失、空来源及读取失败保持错误；不要求详情功能权限。
+    // 按原命令的统一授权入口回读提交或重放结果。
+    //
+    // id 为回执绑定的实际发票身份，actor 为当前操作人。同一事务内完成来源授权和财务读取的结果。撤权、来源缺失、空来源及读取失败保持错误；不要求详情功能权限。
     pub(super) async fn authorized_invoice_result(
         &self,
         id: &str,
@@ -68,7 +64,7 @@ impl ReceivableProcess {
     }
 }
 
-/// 请求保留其真实销售来源；实际分配全部展开，任何缺失子账整体拒绝。
+// 请求保留其真实销售来源；实际分配全部展开，任何缺失子账整体拒绝。
 async fn invoice_sources(db: &Database, id: &str, executor: &mut dyn Executor) -> Result<Vec<String>> {
     let invoice =
         db.invoices().find_by_id(id, executor).await?.ok_or_else(|| Error::NotFound("发票不存在".into()))?;

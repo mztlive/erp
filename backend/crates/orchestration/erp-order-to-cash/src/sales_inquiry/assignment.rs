@@ -14,13 +14,11 @@ use super::SalesInquiryProcess;
 use crate::{Error, Result};
 
 impl SalesInquiryProcess {
-    /// 按当前冻结需求自动解析责任，并在创建任务前核验全部采购人员。
-    /// # 参数
-    /// `inquiry` 为已授权询价；`executor` 为提交或重询的原写事务。
-    /// # 返回
-    /// 按首个负责需求行排序的责任组及已核验主属组织。
-    /// # 错误
-    /// 需求、规则、账号、组织或询价处理权限不满足时拒绝整个分派。
+    // 按当前冻结需求自动解析责任，并在创建任务前核验全部采购人员。
+    //
+    // `inquiry` 为已授权询价；`executor` 为提交或重询的原写事务。按首个负责需求行排序的责任组及已核验主属组织。
+    //
+    // 需求、规则、账号、组织或询价处理权限不满足时拒绝整个分派。
     pub(super) async fn resolve_assignments(
         &self,
         inquiry: &SalesInquiry,
@@ -30,13 +28,9 @@ impl SalesInquiryProcess {
         self.authorize_assignments(inquiry, candidates, executor).await
     }
 
-    /// 为实际新建的一轮询价任务分派责任，并在原事务中占用一次默认轮次。
-    /// # 参数
-    /// `inquiry` 为冻结需求；`executor` 为创建任务的事务。
-    /// # 返回
-    /// 返回已核验人员和组织的整单分组。
-    /// # 错误
-    /// 规则、权限、组织或轮次变化时回滚整个分派。
+    // 为实际新建的一轮询价任务分派责任，并在原事务中占用一次默认轮次。
+    //
+    // `inquiry` 为冻结需求；`executor` 为创建任务的事务。返回已核验人员和组织的整单分组。规则、权限、组织或轮次变化时回滚整个分派。
     pub(super) async fn allocate_assignments(
         &self,
         inquiry: &SalesInquiry,
@@ -47,7 +41,7 @@ impl SalesInquiryProcess {
         self.authorize_assignments(inquiry, candidates, executor).await
     }
 
-    /// 按整单冻结需求读取候选，不占用默认调度轮次。
+    // 按整单冻结需求读取候选，不占用默认调度轮次。
     pub(super) async fn assignment_candidates(
         &self,
         inquiry: &SalesInquiry,
@@ -74,7 +68,7 @@ impl SalesInquiryProcess {
             })
     }
 
-    /// 采购任务权限与主属组织均在调用方事务中核验。
+    // 采购任务权限与主属组织均在调用方事务中核验。
     async fn authorize_assignments(
         &self,
         inquiry: &SalesInquiry,
@@ -99,7 +93,7 @@ impl SalesInquiryProcess {
     }
 }
 
-/// 将规则解析结果映射为一人一组任务；完整覆盖规则仍由工作项领域校验。
+// 将规则解析结果映射为一人一组任务；完整覆盖规则仍由工作项领域校验。
 fn group_assignments(
     candidates: Vec<CandidateResolution>,
     line_ids: &[String],

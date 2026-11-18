@@ -29,13 +29,14 @@ pub struct PurchasePaymentView {
     pub receipt: Option<FinancialFileView>,
 }
 
-/// 调用方须先证明采购来源资格，并传入同一事务执行器。
-/// # 参数
-/// 数据库、已授权采购单及调用方执行器。
-/// # 返回
-/// 返回当前采购单的有效付款净核销与可读回单。
-/// # 错误
-/// 关联查询失败或回单事实缺失时拒绝。
+// 读取单笔采购付款核销时，调用方须先证明采购来源资格，并传入同一事务执行器。
+//
+// 调用参数：
+// 数据库、已授权采购单及调用方执行器。
+//
+// 返回当前采购单的有效付款净核销与可读回单。
+//
+// 关联查询失败或回单事实缺失时拒绝。
 pub(crate) async fn payment_records(
     db: &Database,
     purchase_id: &PurchaseOrderId,

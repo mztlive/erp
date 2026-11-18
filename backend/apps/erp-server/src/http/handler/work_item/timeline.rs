@@ -13,11 +13,8 @@ use crate::http::state::HttpState;
 use crate::wiring::sales_timeline_service;
 
 /// 读取当前任务的办理动态及可查看的销售单入口。
-/// # 参数
 /// `state`、`actor` 为应用与身份；`id`、`query` 为任务及分页。
-/// # 返回
 /// 返回任务动态，销售单入口另行校验详情权限。
-/// # 错误
 /// 任务资格失效或读取失败时返回统一错误。
 pub async fn task_timeline(
     State(state): State<HttpState>,

@@ -19,49 +19,36 @@ use crate::repository::SalesOrderExt;
 use crate::repository::prelude::*;
 use crate::{Error, Result};
 
-/// 提交并启动：进入 `PENDING_REVIEW` / `IN_APPROVAL`。
+/// 正式发起销售审批时按新提交推进销售单商业和审核状态，进入 `PENDING_REVIEW` / `IN_APPROVAL`。
 ///
 /// 版本权威来源是提交记录 `submission_no`，本方法不改写该编号。
 /// 更新人必须是调用方提交销售，不得回落到上次更新人。
+/// 结果：状态迁移成功时返回 `Ok(())`，提交编号保持不变。
+/// 失败条件：状态不允许时返回冲突。
 ///
-/// # 参数
-/// * `order` - 待提交销售单
-/// * `submitted_by` - 本次提交销售
-///
-/// # 返回
-/// 状态迁移成功时返回 `Ok(())`，提交编号保持不变。
-///
-/// # 错误
-/// 状态不允许时返回冲突。
+/// 输入约定：
+/// - `order`：待提交销售单
+/// - `submitted_by`：本次提交销售
 pub fn start_sales_order_approval(order: &mut SalesOrder, submitted_by: &str) -> Result<()> {
     Ok(order.start_approval_submission(submitted_by)?)
 }
 
-/// 撤回审批：回到 `DRAFT` / `NOT_SUBMITTED`，且提交号不回退。
+/// 撤回销售审批后恢复 `DRAFT` / `NOT_SUBMITTED`，但保留已用提交号给后续重提续号。
+/// 结果：状态迁移成功时返回 `Ok(())`，提交编号保持不变。
+/// 失败条件：非审批中时返回冲突。
 ///
-/// # 参数
-/// * `order` - 审批中的销售单
-/// * `updated_by` - 操作人
-///
-/// # 返回
-/// 状态迁移成功时返回 `Ok(())`，提交编号保持不变。
-///
-/// # 错误
-/// 非审批中时返回冲突。
+/// 输入约定：
+/// - `order`：审批中的销售单
 pub fn cancel_sales_order_to_draft(order: &mut SalesOrder, updated_by: &str) -> Result<()> {
     Ok(order.cancel_approval_submission(updated_by)?)
 }
 
-/// 最终通过前置：仅 `IN_APPROVAL` 可进入生效。
+/// 最终审批正式生效之前确认来源仍为 `IN_APPROVAL`；不能由旧审批或草稿直接生成正式版本。
+/// 结果：商业主状态与审核轨满足形式化前置状态时返回 `Ok(())`。
+/// 失败条件：状态不是审批中时返回冲突。
 ///
-/// # 参数
-/// * `order` - 待执行最终审批动作的销售单
-///
-/// # 返回
-/// 商业主状态与审核轨满足形式化前置状态时返回 `Ok(())`。
-///
-/// # 错误
-/// 状态不是审批中时返回冲突。
+/// 输入约定：
+/// - `order`：待执行最终审批动作的销售单
 pub fn ensure_final_approve_formalize(order: &SalesOrder) -> Result<()> {
     order.ensure_can_formalize().map_err(|_| {
         Error::ConflictError("只有审批中的销售单可以在审批通过后生效，请核对销售单状态".to_string())
@@ -90,20 +77,16 @@ pub enum SalesOrderWorkingCopyPersistPlan {
 }
 
 impl SalesOrderService {
-    /// 按已证明的客户与结算身份构造初始销售单。
-    ///
-    /// # 参数
-    /// * `req` - 建单输入及创建凭证
-    /// * `customer_id` - 已校验的客户稳定身份
-    /// * `settlement_party_id` - 已校验的结算主体
-    /// * `actor` - 当前认证建单人，同时冻结为销售责任人
-    /// * `business_org_unit_id` - 已解析的业务组织
-    ///
-    /// # 返回
+    /// 外层核实客户和结算主体后准备新销售单主记录，使用已证明身份而不是重新从请求推断关系。
     /// 返回尚未持久化的销售单，创建入口固定为 ERP。
+    /// 失败条件：销售单或创建凭证校验失败时保留领域错误分类。
     ///
-    /// # 错误
-    /// 销售单或创建凭证校验失败时保留领域错误分类。
+    /// 输入约定：
+    /// - `req`：建单输入及创建凭证
+    /// - `customer_id`：已校验的客户稳定身份
+    /// - `settlement_party_id`：已校验的结算主体
+    /// - `actor`：当前认证建单人，同时冻结为销售责任人
+    /// - `business_org_unit_id`：已解析的业务组织
     pub fn prepare_order(
         req: &CreateSalesOrderRequest,
         customer_id: CustomerAccountId,
@@ -131,49 +114,34 @@ impl SalesOrderService {
         Ok(order)
     }
 
-    /// 在调用方事务内插入已校验的销售稳定对象。
+    /// 销售建单通过前置校验后，在调用方事务写稳定主记录，供后续草稿与提交引用。
+    /// 失败条件：唯一约束冲突或仓储失败时返回对应错误。
     ///
-    /// # 参数
-    /// * `order` - 已完成领域构造和业务资格校验的销售单
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 插入成功时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 唯一约束冲突或仓储失败时返回对应错误。
+    /// 输入约定：
+    /// - `order`：已完成领域构造和业务资格校验的销售单
     pub async fn create_order(&self, order: &SalesOrder, executor: &mut dyn Executor) -> Result<()> {
         Ok(self.db.sales_orders().create(order, executor).await?)
     }
 
-    /// 在调用方执行器中以乐观锁保存销售状态迁移。
+    /// 销售状态在领域内迁移完成后，用原执行器和乐观锁更新主记录，防止覆盖并发命令。
+    /// 结果：保存成功并将新版本和时间元数据回填到 `order`。
+    /// 失败条件：版本冲突或仓储失败时返回对应错误。
     ///
-    /// # 参数
-    /// * `order` - 已完成领域状态迁移的销售单
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 保存成功并将新版本和时间元数据回填到 `order`。
-    ///
-    /// # 错误
-    /// 版本冲突或仓储失败时返回对应错误。
+    /// 输入约定：
+    /// - `order`：已完成领域状态迁移的销售单
     pub async fn persist_order(&self, order: &mut SalesOrder, executor: &mut dyn Executor) -> Result<()> {
         Ok(self.db.sales_orders().update(order, executor).await?)
     }
 
-    /// 依次插入新稳定行、工作副本及其明细，沿用调用方事务。
-    ///
-    /// # 参数
-    /// * `stable` - 尚未保存的新稳定行
-    /// * `copy` - 已校验的工作副本
-    /// * `lines` - 按请求顺序排列的工作副本行
-    /// * `executor` - 调用方事务执行器
-    ///
-    /// # 返回
-    /// 全部插入成功时返回 `Ok(())`，不写入审批或审计记录。
-    ///
-    /// # 错误
+    /// 建单或重开工作副本时用原事务依次写新增稳定行、工作副本及其明细。
+    /// 结果：全部插入成功时返回 `Ok(())`，不写入审批或审计记录。
     /// 任一唯一约束冲突或仓储失败时立即停止并返回错误。
+    ///
+    /// 输入约定：
+    /// - `stable`：尚未保存的新稳定行
+    /// - `copy`：已校验的工作副本
+    /// - `lines`：按请求顺序排列的工作副本行
+    /// - `executor`：调用方事务执行器
     pub async fn create_working_copy(
         &self,
         stable: &[SalesOrderLine],
@@ -200,18 +168,14 @@ impl SalesOrderService {
         Ok(())
     }
 
-    /// 先插入不可变提交头，再按顺序插入不可变提交行。
-    ///
-    /// # 参数
-    /// * `submission` - 已冻结的本轮提交
-    /// * `lines` - 按请求顺序排列的冻结提交行
-    /// * `executor` - 调用方事务执行器
-    ///
-    /// # 返回
-    /// 全部插入成功时返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// 首次提交或重提交时先写已冻结的提交头，再按传入顺序写与该头绑定的不可变行。
+    /// 结果：全部插入成功时返回 `Ok(())`。
     /// 唯一约束冲突或仓储失败时立即停止并返回错误。
+    ///
+    /// 输入约定：
+    /// - `submission`：已冻结的本轮提交
+    /// - `lines`：按请求顺序排列的冻结提交行
+    /// - `executor`：调用方事务执行器
     pub async fn create_submission(
         &self,
         submission: &SalesOrderSubmission,
@@ -225,23 +189,17 @@ impl SalesOrderService {
         Ok(())
     }
 
-    /// 保存草稿行后更新工作副本，保留同一稳定明细的已持久化行身份。
+    /// 保存销售草稿时先写明细再更新表头；同一稳定明细继续使用持久化行身份。
+    /// 结果：保存替换内容，并把仓储成功写入后的表头元数据回填到 `copy`。
+    /// 失败条件：行或表头版本变化、唯一约束冲突、无效明细及仓储失败时立即返回。
+    /// 业务边界：仅软删移除行；保留行更新、重新加入行恢复，不重建既有唯一键。
     ///
-    /// # 参数
-    /// * `stable` - 尚未保存的新稳定明细
-    /// * `old_lines` - 准备阶段读取的活跃行与 CAS 版本
-    /// * `lines` - 已校验并重建的本次草稿内容
-    /// * `copy` - 已完成领域修改的工作副本
-    /// * `executor` - 调用方事务执行器，全部行和表头写入共用
-    ///
-    /// # 返回
-    /// 保存替换内容，并把仓储成功写入后的表头元数据回填到 `copy`。
-    ///
-    /// # 错误
-    /// 行或表头版本变化、唯一约束冲突、无效明细及仓储失败时立即返回。
-    ///
-    /// # 关键业务约束
-    /// 仅软删移除行；保留行更新、重新加入行恢复，不重建既有唯一键。
+    /// 输入约定：
+    /// - `stable`：尚未保存的新稳定明细
+    /// - `old_lines`：准备阶段读取的活跃行与 CAS 版本
+    /// - `lines`：已校验并重建的本次草稿内容
+    /// - `copy`：已完成领域修改的工作副本
+    /// - `executor`：调用方事务执行器，全部行和表头写入共用
     pub async fn persist_saved_working_copy(
         &self,
         stable: &[SalesOrderLine],
@@ -269,24 +227,18 @@ impl SalesOrderService {
         Ok(())
     }
 
-    /// 在外层命令回执、资格与权限检查之后保存销售提交及工作副本。
+    /// 过程层验证回执、操作资格和权限后，才在同一事务保存提交与工作副本状态。
+    /// 结果：销售单、工作副本与不可变提交在同一执行器中保存。
+    /// 失败条件：工作副本行或表头版本变化、唯一约束冲突及仓储失败时立即停止。
+    /// 业务边界：工作副本行复用既有身份；提交快照仅插入，不修改工作流或审计。
     ///
-    /// # 参数
-    /// * `order` - 已进入提交状态的销售单
-    /// * `copy` - 已锁定的工作副本
-    /// * `submission` - 本轮不可变提交快照
-    /// * `lines` - 本轮不可变提交明细
-    /// * `plan` - 新建或替换工作副本的行持久化计划
-    /// * `executor` - 调用方事务执行器
-    ///
-    /// # 返回
-    /// 销售单、工作副本与不可变提交在同一执行器中保存。
-    ///
-    /// # 错误
-    /// 工作副本行或表头版本变化、唯一约束冲突及仓储失败时立即停止。
-    ///
-    /// # 关键业务约束
-    /// 工作副本行复用既有身份；提交快照仅插入，不修改工作流或审计。
+    /// 输入约定：
+    /// - `order`：已进入提交状态的销售单
+    /// - `copy`：已锁定的工作副本
+    /// - `submission`：本轮不可变提交快照
+    /// - `lines`：本轮不可变提交明细
+    /// - `plan`：新建或替换工作副本的行持久化计划
+    /// - `executor`：调用方事务执行器
     pub async fn persist_submission_start(
         &self,
         order: &mut SalesOrder,
@@ -335,18 +287,14 @@ impl SalesOrderService {
         Ok(())
     }
 
-    /// 保存已校验的作废状态及可选的已放弃首次提交工作副本。
-    ///
-    /// # 参数
-    /// * `order` - 已完成作废迁移的销售单
-    /// * `copy` - 同时需要保存的已放弃工作副本
-    /// * `executor` - 调用方事务执行器
-    ///
-    /// # 返回
-    /// 先保存销售单，再保存存在的工作副本，并回填仓储元数据。
-    ///
-    /// # 错误
+    /// 销售草稿作废校验完成后保存主单和可选的已放弃首次副本，沿用原执行器。
+    /// 结果：先保存销售单，再保存存在的工作副本，并回填仓储元数据。
     /// 任一版本冲突或仓储失败时立即停止并返回错误。
+    ///
+    /// 输入约定：
+    /// - `order`：已完成作废迁移的销售单
+    /// - `copy`：同时需要保存的已放弃工作副本
+    /// - `executor`：调用方事务执行器
     pub async fn persist_void(
         &self,
         order: &mut SalesOrder,
@@ -363,20 +311,16 @@ impl SalesOrderService {
 }
 
 impl SalesOrderService {
-    /// 从草稿请求重建工作副本行，并更新表头金额与内容指纹。
-    ///
-    /// # 参数
-    /// * `order` - 草稿所属的销售稳定对象
-    /// * `working_copy` - 准备修改的工作副本
-    /// * `stable` - 已证明归属的稳定行及新增行
-    /// * `draft` - 本次编辑请求
-    /// * `actor` - 当前认证操作人
-    ///
-    /// # 返回
+    /// 保存销售草稿时用编辑请求准备工作副本行，按新内容重算表头金额和指纹以供后续提交。
     /// 返回重建后的明细，同时修改工作副本；本方法不执行数据库写入。
+    /// 失败条件：依次校验表头快照、明细、金额和内容指纹，任一失败时返回对应错误。
     ///
-    /// # 错误
-    /// 依次校验表头快照、明细、金额和内容指纹，任一失败时返回对应错误。
+    /// 输入约定：
+    /// - `order`：草稿所属的销售稳定对象
+    /// - `working_copy`：准备修改的工作副本
+    /// - `stable`：已证明归属的稳定行及新增行
+    /// - `draft`：本次编辑请求
+    /// - `actor`：当前认证操作人
     pub fn prepare_saved_working_copy(
         order: &SalesOrder,
         working_copy: &mut SalesOrderWorkingCopy,
@@ -423,21 +367,17 @@ impl SalesOrderService {
 }
 
 impl SalesOrderService {
-    /// 准备已有工作副本替换方案或重新打开的首次提交工作副本。
-    ///
-    /// # 参数
-    /// * `order` - 本次提交的销售单
-    /// * `active_working_copy` - 当前活跃工作副本及客户端期望版本；缺省时重开首次提交副本
-    /// * `stable` - 已证明归属的稳定行及新增行
-    /// * `draft` - 本次提交的完整草稿内容
-    /// * `actor` - 当前认证提交人
-    /// * `executor` - 原提交事务执行器。
-    ///
-    /// # 返回
+    /// 准备提交时先区分有效副本替换与首次提交副本重开，返回待持久化的行及副本计划。
     /// 返回准备后的工作副本、明细和互斥持久化方案；本方法不写库。
-    ///
-    /// # 错误
     /// 已有副本先检查版本再读取旧行；版本冲突、快照或明细非法、仓储失败时返回错误。
+    ///
+    /// 输入约定：
+    /// - `order`：本次提交的销售单
+    /// - `active_working_copy`：当前活跃工作副本及客户端期望版本；缺省时重开首次提交副本
+    /// - `stable`：已证明归属的稳定行及新增行
+    /// - `draft`：本次提交的完整草稿内容
+    /// - `actor`：当前认证提交人
+    /// - `executor`：原提交事务执行器。
     pub async fn prepare_submission_copy(
         &self,
         order: &SalesOrder,
@@ -465,7 +405,7 @@ impl SalesOrderService {
         }
     }
 
-    /// 先按客户端版本拒绝过期副本，再读取旧行；行查询复用调用方事务。
+    // 再次提交已有工作副本时，先用客户端版本检查草稿是否过期，再通过原事务加载旧行供对齐。
     async fn prepare_existing_submission_copy(
         &self,
         order: &SalesOrder,
@@ -496,7 +436,7 @@ impl SalesOrderService {
         Ok((working_copy, copy_lines, plan))
     }
 
-    /// 内容指纹与再次保存草稿都使用递增后的 `draft_version`，避免与当前已保存版本重复。
+    // 保存待提交草稿时先递增 `draft_version`，以同一个新版本计算指纹和写工作副本，避免复用旧指纹身份。
     fn update_submission_copy(
         order: &SalesOrder,
         working_copy: &mut SalesOrderWorkingCopy,

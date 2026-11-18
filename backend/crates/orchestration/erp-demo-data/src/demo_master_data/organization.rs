@@ -21,18 +21,8 @@ struct OrgSnap {
 }
 
 impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
-    /// 按规格补齐部门和成员。账号已在其他部门时改到规格部门。
-    ///
-    /// # 参数
-    /// * `actor` - 当前操作人
-    /// * `user_ids` - 演示岗位与账号 ID 的映射
-    /// * `notices` - 本次组织调整的提示记录
-    ///
-    /// # 返回
-    /// 返回经编译器验证为 `Send` 的 future，完成后部门与成员符合规格。
-    ///
-    /// # 错误
-    /// 组织查询、调整或规格关系校验失败时返回错误。
+    // 按演示配置补齐部门并把岗位账号安排到对应部门。账号已在其他部门时迁入目标部门，发生调整才追加提示。
+    // 显式返回 `Send` 的 Future，供外层演示数据流程组合；组织读取、规格校验或写入失败时返回错误。
     #[expect(
         clippy::manual_async_fn,
         reason = "显式 Send 返回边界用于验证嵌套异步调用，避免调用方的高阶生命周期推导失败"
@@ -143,7 +133,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         Ok(changed)
     }
 
-    /// 按当前快照构造稳定命令；组织变化后使用新键，避免回放旧版本调整。
+    // 按当前组织快照版本提交正式调整并读取新快照，使后续部门或人员操作不沿用已经过期的组织版本。
     async fn apply_org(
         &self,
         actor: &AuditActor,
@@ -168,7 +158,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
     }
 }
 
-/// 绑定组织版本，使同一请求可重试、后续修复不与历史回执冲突。
+// 将组织版本纳入命令键，同一快照可安全重试，组织变化后的归属修复则不会回放历史调整。
 fn organization_request(key: &str, version: u64, change: OrganizationOperation) -> OrganizationChangeRequest {
     OrganizationChangeRequest {
         expected_version: version,
@@ -229,7 +219,7 @@ mod tests {
         }
     }
 
-    /// 同输入重试保持完整请求一致；人工转部门后的修复采用新键并恢复归属。
+    // 验证同版本重试请求保持一致，而人工调动后的归属修复生成新命令身份并能恢复预期部门。
     #[test]
     fn member_repair_after_org_change_uses_new_receipt_identity() {
         let target =

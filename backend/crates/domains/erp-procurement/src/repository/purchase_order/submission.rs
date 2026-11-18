@@ -33,16 +33,7 @@ pub struct PurchaseOrderSubmissionFilter {
 }
 
 impl Default for PurchaseOrderSubmissionFilter {
-    /// 返回首页空筛选（`page: 1`，`page_size: 20`）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回筛选为空、降序的首页过滤条件。
-    ///
-    /// # 错误
-    /// 无。
+    // 列表未传筛选时默认第 1 页、每页 20 条，不另加筛选条件。返回筛选为空、降序的首页过滤条件。
     fn default() -> Self {
         Self {
             purchase_order_id: None,
@@ -57,19 +48,10 @@ impl Default for PurchaseOrderSubmissionFilter {
 }
 
 impl QueryFilter for PurchaseOrderSubmissionFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// `purchase_order_id` 与 `supplier_id` 为 `Some` 时按字符串精确匹配，`status` 为 `Some`
-    /// 时写入其稳定代码；三者为 `None` 时不写入。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 将列表筛选条件编译为 MongoDB 查询，排除软删除记录。
+    //
+    // `purchase_order_id` 与 `supplier_id` 为 `Some` 时按字符串精确匹配，`status` 为 `Some`时写入其稳定代码；
+    // 三者为 `None` 时不写入。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(purchase_order_id) = &self.purchase_order_id {
@@ -86,18 +68,11 @@ impl QueryFilter for PurchaseOrderSubmissionFilter {
 }
 
 impl Pagination for PurchaseOrderSubmissionFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// `page` 原样返回，`page_size` 由 `u32` 拓宽为 `u64`。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 读取页码与单页条数。
+    //
+    // `page` 原样返回，`page_size` 由 `u32` 拓宽为 `u64`。
+    //
+    // 返回 `(page, page_size)` 元组。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -106,15 +81,9 @@ impl Pagination for PurchaseOrderSubmissionFilter {
 impl<'a> PurchaseOrderDomainRepository<'a> {
     /// 按采购单读取全部提交，并按提交序号升序返回。
     ///
-    /// # 参数
-    /// * `purchase_order_id` - 采购单稳定身份
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回匹配的采购提交。当 MongoDB 查询或游标读取失败时返回错误。
     ///
-    /// # 返回
-    /// 返回匹配的采购提交。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 沿用调用方的执行器，不另开事务。
     pub async fn list_submissions_by_order(
         &self,
         purchase_order_id: &PurchaseOrderId,
@@ -132,15 +101,11 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
 
     /// 批量读取采购提交头。
     ///
-    /// # 参数
-    /// * `submission_ids` - 采购提交稳定身份集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回已存在的采购提交头；空输入直接返回空集合。当 MongoDB 查询或游标读取失败时返回错误。
     ///
-    /// # 返回
-    /// 返回已存在的采购提交头；空输入直接返回空集合。
+    /// 沿用调用方的执行器，不另开事务。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// `submission_ids` 为采购提交稳定身份集合。
     pub async fn find_submissions_by_ids(
         &self,
         submission_ids: &[PurchaseOrderSubmissionId],
@@ -161,15 +126,9 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
 
     /// 按采购提交读取全部明细，并按行号升序返回。
     ///
-    /// # 参数
-    /// * `submission_id` - 采购提交稳定身份
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回匹配的采购提交行。当 MongoDB 查询或游标读取失败时返回错误。
     ///
-    /// # 返回
-    /// 返回匹配的采购提交行。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 沿用调用方的执行器，不另开事务。
     pub async fn list_submission_lines(
         &self,
         submission_id: &PurchaseOrderSubmissionId,
@@ -193,16 +152,9 @@ pub trait PurchaseOrderSubmissionRepositoryExt {
     ///
     /// 唯一性由 `uk_purchase_order_submissions_order_no` 唯一索引保证。
     ///
-    /// # 参数
-    /// * `purchase_order_id` - 所属采购单
-    /// * `submission_no` - 提交序号
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回匹配的提交；无匹配时返回 `None`。当 MongoDB 查询失败时返回错误。
     ///
-    /// # 返回
-    /// 返回匹配的提交；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
+    /// 沿用调用方传入的执行器。
     async fn find_by_order_and_submission_no(
         &self,
         purchase_order_id: &PurchaseOrderId,
@@ -214,18 +166,11 @@ pub trait PurchaseOrderSubmissionRepositoryExt {
     ///
     /// 工作项入口的历史名称；纯主键读取，直接委托基类单条查询。
     ///
-    /// # 参数
-    /// * `id` - 采购提交 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回未删除采购提交；不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或反序列化失败时返回错误。
-    ///
-    /// # 约束
     /// 仅查询本仓储拥有的采购提交集合，不访问采购单主表。
+    ///
+    /// 返回未删除采购提交；不存在时返回 `None`。当 MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// 沿用调用方传入的执行器。
     async fn find_work_item_purchase_submission(
         &self,
         id: &str,
@@ -236,18 +181,13 @@ pub trait PurchaseOrderSubmissionRepositoryExt {
     ///
     /// 工作项简报 hydration 入口：按采购单 `$in` 一次取回全部提交，禁止 N+1。
     ///
-    /// # 参数
-    /// * `order_ids` - 采购单稳定 ID 集合；为空时直接返回空集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回采购单命中的全部提交。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或反序列化失败时返回错误。
-    ///
-    /// # 约束
     /// 仅查询本仓储拥有的采购提交集合，按所属采购单引用过滤，不访问采购单集合。
+    ///
+    /// 返回采购单命中的全部提交。当 MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// 沿用调用方传入的执行器。
+    ///
+    /// `order_ids` 为采购单稳定 ID 集合；为空时直接返回空集合。
     async fn list_work_item_brief_submissions_by_orders(
         &self,
         order_ids: &[String],
@@ -299,15 +239,9 @@ pub trait PurchaseOrderSubmissionLineRepositoryExt {
     ///
     /// 用于提交详情页一次取回行集合；空集合直接返回空结果。
     ///
-    /// # 参数
-    /// * `submission_ids` - 提交 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回全部匹配的提交明细。当 MongoDB 查询或游标读取失败时返回错误。
     ///
-    /// # 返回
-    /// 返回全部匹配的提交明细。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 沿用调用方传入的执行器。
     async fn find_lines_by_submission_ids(
         &self,
         submission_ids: &[PurchaseOrderSubmissionId],

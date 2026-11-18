@@ -7,13 +7,12 @@ use crate::Result;
 use crate::dto::work_item::WorkItemView;
 use crate::dto::work_item::presentation::resolve_owner_display_name;
 impl WorkItemReadService {
-    /// 补齐已授权任务的处理人姓名。
-    /// # 参数
-    /// `executor` 沿用任务读取快照，`items` 已通过任务授权。
-    /// # 返回
-    /// 原地更新显示名；不改变筛选、排序或计数。
-    /// # 错误
-    /// 姓名读取失败时传播 identity 错误。
+    // 补齐已授权任务的处理人姓名。
+    // 原地更新显示名；不改变筛选、排序或计数。
+    //
+    // 姓名读取失败时传播 identity 错误。
+    //
+    // `executor` 沿用任务读取快照，`items` 已通过任务授权。
     pub(super) async fn apply_party_names_with(
         &self,
         executor: &mut dyn Executor,

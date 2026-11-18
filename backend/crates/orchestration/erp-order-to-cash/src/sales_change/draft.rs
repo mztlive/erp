@@ -18,15 +18,7 @@ use crate::{Error, Result};
 impl SalesChangeProcess {
     /// 沿来源销售单修改权限读取原变更草稿。
     ///
-    /// # 参数
-    /// * `id` - 原销售变更单身份
-    /// * `actor` - 当前认证账号
-    ///
-    /// # 返回
-    /// 返回可编辑的完整目标内容。
-    ///
-    /// # 错误
-    /// 无动作权限、不可见、缺单或尚未撤回时拒绝。
+    /// `id` 为原销售变更单身份；`actor` 为当前认证账号。返回可编辑的完整目标内容。无动作权限、不可见、缺单或尚未撤回时拒绝。
     pub async fn draft(&self, id: &str, actor: &AuditActor) -> Result<SalesChangeDraftView> {
         let this = self.clone();
         let actor = actor.clone();
@@ -40,7 +32,7 @@ impl SalesChangeProcess {
             .await
     }
 
-    /// 查询凭证覆盖来源版本核对、草稿装配和最终交付，不能刷新检查时点掩盖到期。
+    // 查询凭证覆盖来源版本核对、草稿装配和最终交付，不能刷新检查时点掩盖到期。
     async fn draft_view(
         &self,
         id: &str,
@@ -74,15 +66,8 @@ impl SalesChangeProcess {
 
     /// 在唯一事务中重验来源权限并保存原变更草稿。
     ///
-    /// # 参数
-    /// * `id` - 原销售变更单身份
-    /// * `request` - 两项期望版本与完整目标内容
-    /// * `actor` - 当前认证账号
+    /// `id` 为原销售变更单身份；`request` 为两项期望版本与完整目标内容；`actor` 为当前认证账号。返回保存后的原变更草稿，后续仍需提交审批。
     ///
-    /// # 返回
-    /// 返回保存后的原变更草稿，后续仍需提交审批。
-    ///
-    /// # 错误
     /// 权限失效、状态或版本变化、目标内容非法、商品不可售或写入失败时拒绝。
     pub async fn save_draft(
         &self,
@@ -118,7 +103,7 @@ impl SalesChangeProcess {
             .await
     }
 
-    /// 在当前执行器中沿原销售单重验编辑资格与基准版本。
+    // 在当前执行器中沿原销售单重验编辑资格与基准版本。
     async fn authorize_draft(&self, id: &str, actor: &AuditActor, executor: &mut dyn Executor) -> Result<()> {
         self.authorization
             .require(actor, &sales_review::SALES_CHANGE_DRAFT, AccessTarget::Operation, executor)

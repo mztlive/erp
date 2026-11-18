@@ -52,15 +52,7 @@ pub enum AuditEventResult {
 
 impl AuditEventResult {
     /// 返回结果的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 成功、拒绝、失败分别为「成功」「拒绝」「失败」，未知为「结果未知」。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Success => "成功",
@@ -70,16 +62,8 @@ impl AuditEventResult {
         }
     }
 
-    /// 返回结果的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
+    /// 取得结果的稳定代码。
     /// 依次为 `SUCCESS`、`DENIED`、`FAILED`、`UNKNOWN`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Success => "SUCCESS",
@@ -169,15 +153,11 @@ impl AuditEvent {
     /// 完成全部文本字段的校验与规范化（trim、非空、长度上限）；`changed_field_names`
     /// 逐项 trim、去重、保序，数量不超过上限（防审计膨胀）。
     ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::AuditEventId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
     /// 返回新建的审计事件。
     ///
-    /// # 错误
     /// 当必填字段为空/超长，或变更字段名数量越界时返回错误。
+    ///
+    /// `id`：实体主键（`erp_core::ids::AuditEventId`）。
     pub fn new(id: AuditEventId, data: AuditEventData) -> Result<Self> {
         let actor_id =
             normalize_required_text(data.actor_id, "操作者ID不能为空", ACTOR_ID_MAX_LEN, "操作者ID过长")?;
@@ -229,16 +209,12 @@ impl AuditEvent {
     }
 }
 
-/// 规范化变更字段名列表：trim、去重、保序、数量与长度上限。
-///
-/// # 参数
-/// * `field_names` - 原始字段名列表
-///
-/// # 返回
-/// 返回去重保序后的字段名列表。
-///
-/// # 错误
-/// 当数量超过上限或任一字段名为空/超长时返回错误。
+// 规范化变更字段名列表：trim、去重、保序、数量与长度上限。
+// 返回去重保序后的字段名列表。
+//
+// 当数量超过上限或任一字段名为空/超长时返回错误。
+//
+// `field_names`：原始字段名列表。
 fn normalize_field_names(field_names: Vec<String>) -> Result<Vec<String>> {
     if field_names.len() > MAX_CHANGED_FIELDS {
         return Err(Error::from(format!("变更字段名数量不能超过 {MAX_CHANGED_FIELDS}")));
@@ -284,7 +260,7 @@ mod tests {
         }
     }
 
-    /// happy path：字段 trim、字段名去重保序。
+    // 验证字段 去除首尾空白、字段名去重保序。
     #[test]
     fn new_trims_fields_and_deduplicates_field_names() {
         let event = AuditEvent::new(AuditEventId::new("ae-1"), data()).unwrap();
@@ -296,14 +272,14 @@ mod tests {
         assert_eq!(event.result, AuditEventResult::Success);
     }
 
-    /// 失败路径：必填为空被拒。
+    // 验证创建审计事件时拒绝空白动作类型。
     #[test]
     fn new_rejects_empty_action_type() {
         let payload = AuditEventData { action_type: "  ".to_string(), ..data() };
         assert!(AuditEvent::new(AuditEventId::new("ae-1"), payload).is_err());
     }
 
-    /// 失败路径：字段名数量越界被拒。
+    // 验证字段名数量越界时会被拒绝。
     #[test]
     fn new_rejects_too_many_changed_fields() {
         let payload = AuditEventData {
@@ -313,14 +289,14 @@ mod tests {
         assert!(AuditEvent::new(AuditEventId::new("ae-1"), payload).is_err());
     }
 
-    /// 失败路径：超长对象标题被拒。
+    // 验证超长对象标题时会被拒绝。
     #[test]
     fn new_rejects_overlong_object_label() {
         let payload = AuditEventData { object_label: Some("x".repeat(257)), ..data() };
         assert!(AuditEvent::new(AuditEventId::new("ae-1"), payload).is_err());
     }
 
-    /// 枚举序列化与标签稳定。
+    // 锁定审计结果枚举的持久化代码和中文展示标签。
     #[test]
     fn result_codes_and_labels_are_stable() {
         assert_eq!(serde_json::to_string(&AuditEventResult::Denied).unwrap(), "\"DENIED\"");
@@ -329,7 +305,7 @@ mod tests {
         assert_eq!(AuditEventResult::Success.label(), "成功");
     }
 
-    /// JSON 往返。
+    // 验证审计事件经 JSON 序列化再读回时保留原实体值。
     #[test]
     fn entity_roundtrips_through_bson() {
         let event = AuditEvent::new(AuditEventId::new("ae-1"), data()).unwrap();

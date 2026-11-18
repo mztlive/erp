@@ -30,14 +30,9 @@ use super::*;
 use crate::FinancePostingPorts;
 
 impl ReceivableProcess {
-    /// 原子创建或重新提交开票申请，冻结资料及额度后启动已发布流程。
-    /// # 参数
-    /// * `req` - 新申请或带版本的原申请、金额资料与幂等键。
-    /// * `actor` - 当前已认证申请人。
-    /// # 返回
-    /// 返回首次提交申请的当前视图；重放不重复占用额度或启动审批。
-    /// # 错误
-    /// 未发布流程、来源非法、重复申请超额、权限和版本冲突时整体回滚。
+    /// 首次提交开票申请，或按原申请版本重新提交时，在同一事务冻结资料、占用额度并启动已发布审批流程。
+    /// 按原幂等键和载荷重放时返回原申请的当前视图，不重复占用额度或启动流程。
+    /// 流程未发布、来源无效、重复申请超额、授权失败或版本冲突时整笔失败。
     pub async fn submit_invoice_request(
         &self,
         req: SubmitInvoiceRequest,
@@ -85,7 +80,7 @@ struct SubmitWrite<'a> {
     command: &'a CommandReceipt,
 }
 impl SubmitWrite<'_> {
-    /// 原事务内先授权或恢复回执，再冻结额度、审批与成功审计。
+    // 原事务内先授权或恢复回执，再冻结额度、审批与成功审计。
     async fn apply(&self, executor: &mut dyn Executor) -> Result<String> {
         let Self { db, rbac, req, actor, command } = *self;
         let receipts = FinanceCommandReceiptService::new(db.clone());
@@ -120,7 +115,7 @@ impl SubmitWrite<'_> {
     }
 }
 
-/// 固定销售应收来源；草稿修改必须提交版本，操作者资格由统一授权入口检查。
+// 固定销售应收来源；草稿修改必须提交版本，操作者资格由统一授权入口检查。
 async fn candidate(
     db: &Database,
     account: &ReceivableAccount,
@@ -156,24 +151,9 @@ async fn candidate(
     db.sales_invoice_requests().create(&request, executor).await?;
     Ok(request)
 }
-/// 首次提交时注册单据并绑定已发布流程；重提沿用原绑定。
-///
-/// # 参数
-/// * `db` - 数据库。
-/// * `rbac` - 共享 RBAC。
-/// * `request` - 已写入的开票申请。
-/// * `actor` - 提交人。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
-/// 已绑定的发布定义。
-///
-/// # 错误
-/// 未发布流程、绑定校验失败，或重提时注册行没有绑定时返回错误。
-///
-/// # 约束
-/// 未注册表示首次提交。`find_approval_binding` 会把 `DocumentMissing` 映射成
-/// NotFound，首次提交不得调用它；与回款单一样先算绑定再写入注册行。
+// 开票申请首次提交时先用当前提交人和已写入申请计算发布定义绑定，再写入注册行；重提须沿用原绑定。
+// 待注册时不调用 `find_approval_binding`，该方法会把 `DocumentMissing` 映射为 `NotFound`。
+// 沿用提交事务执行器；未发布流程、绑定校验失败或重提缺少原绑定时返回错误。
 async fn bind(
     db: &Database,
     rbac: &FinancePostingPorts,
@@ -211,7 +191,7 @@ async fn bind(
     db.business_documents().create(&document, executor).await?;
     Ok(binding)
 }
-/// 同一事务写入启动收据、单据守卫、申请快照和审批任务。
+// 同一事务写入启动收据、单据守卫、申请快照和审批任务。
 async fn start(
     db: &Database,
     rbac: &FinancePostingPorts,
@@ -266,7 +246,7 @@ async fn start(
     .await
 }
 
-/// 在启动收据之后认领原业务单据的精确审批绑定。
+// 在启动收据之后认领原业务单据的精确审批绑定。
 async fn mark_request_started(
     db: &Database,
     request: &SalesInvoiceRequest,
@@ -291,7 +271,7 @@ async fn mark_request_started(
     Ok(())
 }
 
-/// 启动快照固定一行，金额取申请金额，责任组织与客户取往来主体。
+// 启动快照固定一行，金额取申请金额，责任组织与客户取往来主体。
 fn request_start_snapshot(
     request: &SalesInvoiceRequest,
     actor: &AuditActor,

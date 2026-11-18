@@ -37,19 +37,13 @@ pub struct DocumentCancelRuntime {
 
 impl DocumentCancelRuntime {
     /// 使用已加载的版本和任务事实构造普通撤回输入。
-    ///
-    /// # 参数
-    /// * `reason` - 撤回原因，构造时去除首尾空白。
-    /// * `actor_id` - 当前撤回人引用。
-    /// * `idempotency_key` - 已规范化的幂等键。
-    /// * `receipt` - 当前命令的已有收据。
-    /// * `now` - 入口确定的操作时间。
-    ///
-    /// # 返回
     /// 返回沿用实例、执行与首个开放任务版本的普通撤回输入。
     ///
-    /// # 错误
     /// 原因、撤回人或当前审批人资格资料非法时返回校验错误。
+    ///
+    /// `reason`：撤回原因，构造时去除首尾空白；`actor_id`：当前撤回人引用。
+    /// `idempotency_key`：已规范化的幂等键；`receipt`：当前命令的已有收据。
+    /// `now`：入口确定的操作时间。
     pub fn cancel_input(
         &self,
         reason: &str,
@@ -91,20 +85,13 @@ impl DocumentCancelRuntime {
 }
 
 /// 在调用方执行器中按主体加载普通撤回运行事实。
-///
-/// # 参数
-/// * `db` - 工作流数据库。
-/// * `binding` - 业务单据冻结的定义绑定。
-/// * `subject` - 本次撤回的业务主体。
-/// * `subject_version` - 本次撤回的冻结提交版本。
-/// * `missing_definition` - 入口既有的定义不存在文案。
-/// * `executor` - 调用方读取或事务执行器，全程沿用。
-///
-/// # 返回
 /// 按实例、取消策略、当前执行、开放任务、定义图的顺序返回已校验事实。
 ///
-/// # 错误
 /// 实例或执行缺失、策略与任务数量不匹配、定义缺失或仓储失败时立即停止。
+///
+/// `binding`：业务单据冻结的定义绑定；`subject`：本次撤回的业务主体。
+/// `subject_version`：本次撤回的冻结提交版本；`missing_definition`：入口既有的定义不存在文案。
+/// `executor`：调用方读取或事务执行器，全程沿用。
 pub async fn document_cancel_runtime(
     db: &Database,
     binding: &ApprovalDefinitionBinding,

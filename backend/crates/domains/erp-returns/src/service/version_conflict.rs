@@ -8,17 +8,9 @@ use crate::{Error, Result};
 const STALE_VERSION_MESSAGE: &str = "数据已被其他请求修改，请刷新后重试";
 
 /// 将实体版本匹配结果映射为稳定 409 语义。
-///
-/// # 参数
-/// * `matched` - `Entity::matches_version(expected)` 的结果
-///
-/// # 返回
 /// 匹配时返回 `Ok(())`。
-///
-/// # 错误
+/// `matched` 为`Entity::matches_version(expected)` 的结果。
 /// 不匹配时返回 `ConflictError`（HTTP 409）。
-///
-/// # 约束
 /// 不比较版本号；调用方必须先调用实体 `matches_version`。
 pub fn conflict_if_stale_version(matched: bool) -> Result<()> {
     if matched {

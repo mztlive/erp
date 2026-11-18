@@ -9,17 +9,12 @@ use crate::entity::integration_ops::ResultingStatus;
 
 /// 检查组织是否仍持有开放异常或没有终态处理结论的差异。
 ///
-/// # 参数
-/// * `db` - 目标数据库
-/// * `org` - 内部组织 ID，对应 `owner_org_unit_id`
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 存在状态不是 `resolved` 或 `closed` 的错误任务，或任一差异没有处理记录、
-/// 或最新结论不是终态时返回 `true`；否则返回 `false`。
-///
-/// # 错误
+/// 存在状态不是 `resolved` 或 `closed` 的错误任务，或任一差异没有处理记录、或最新结论不是终态时返回 `true`；否则返回 `false`。
 /// 数据库读取失败时拒绝完成停用检查。
+///
+/// 沿用调用方的执行器，不另开事务。
+///
+/// `org` 为内部组织 ID，对应 `owner_org_unit_id`。
 pub async fn has_unsettled_business_org(
     db: &Database,
     org: &str,
@@ -46,7 +41,7 @@ pub async fn has_unsettled_business_org(
     Ok(ids.iter().any(|id| unsettled_difference(latest.get(id).map(|item| item.resulting_status))))
 }
 
-/// 没有处理记录，或最新结论不是终态，都视为未结。
+// 没有处理记录，或最新结论不是终态，都视为未结。
 fn unsettled_difference(status: Option<ResultingStatus>) -> bool {
     status.is_none_or(|status| !status.is_terminal())
 }

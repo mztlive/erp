@@ -198,19 +198,18 @@ fn test_rule(
     .unwrap()
 }
 
-/// 空库分页返回空页与空事实，空输入事实加载零查询短路.
-///
-/// # 参数
-/// 无，内部创建隔离库.
-///
-/// # 返回
-/// 断言总数为零、当前页为空且事实映射全空.
-///
-/// # 错误
-/// MongoDB 连接或分页加载失败时测试失败.
-///
-/// # 约束
-/// Page 空集合与 Batch 空输入维度；Aggregation/Index 标记 N/A（无聚合与新索引）.
+// 验证采购责任规则：空库分页返回空页与空事实，空输入事实加载零查询短路。
+//
+// 调用参数：
+// 无，内部创建隔离库.
+//
+// 断言总数为零、当前页为空且事实映射全空.
+//
+// 失败边界：
+// MongoDB 连接或分页加载失败时测试失败.
+//
+// 调用约束：
+// Page 空集合与 Batch 空输入维度；Aggregation/Index 标记 N/A（无聚合与新索引）.
 #[tokio::test]
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn empty_db_returns_empty_page_and_facts() {
@@ -237,19 +236,18 @@ async fn empty_db_returns_empty_page_and_facts() {
     });
 }
 
-/// 分页总数、稳定排序、去重事实与页边界语义.
-///
-/// # 参数
-/// 无，内部写入 2 负责人、1 分类、1 SKU 修订与 3 规则.
-///
-/// # 返回
-/// 断言总数为 3、页拆分无重叠、事实去重且展示完整、越界页为空但总数不变.
-///
-/// # 错误
-/// 写入或分页加载失败时测试失败.
-///
-/// # 约束
-/// Page 过滤/稳定排序/总数/边界页维度；排序为 rule_type/created_at/id；关联固定 4 次批量查询.
+// 验证采购责任规则：分页总数、稳定排序、去重事实与页边界语义。
+//
+// 调用参数：
+// 无，内部写入 2 负责人、1 分类、1 SKU 修订与 3 规则.
+//
+// 断言总数为 3、页拆分无重叠、事实去重且展示完整、越界页为空但总数不变.
+//
+// 失败边界：
+// 写入或分页加载失败时测试失败.
+//
+// 调用约束：
+// Page 过滤/稳定排序/总数/边界页维度；排序为 rule_type/created_at/id；关联固定 4 次批量查询.
 #[tokio::test]
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn page_returns_facts_with_stable_pagination() {
@@ -350,19 +348,18 @@ async fn page_returns_facts_with_stable_pagination() {
     });
 }
 
-/// 缺失与软删除引用保持稀疏，不报错.
-///
-/// # 参数
-/// 无，内部写入缺失引用规则与软删除事实.
-///
-/// # 返回
-/// 断言缺失键不在映射中，存量展示保持空语义.
-///
-/// # 错误
-/// 写入、软删除或事实加载失败时测试失败.
-///
-/// # 约束
-/// Exact 缺失与软删除维度；缺项由 Service 保留空展示.
+// 验证采购责任规则：缺失与软删除引用保持稀疏，不报错。
+//
+// 调用参数：
+// 无，内部写入缺失引用规则与软删除事实.
+//
+// 断言缺失键不在映射中，存量展示保持空语义.
+//
+// 失败边界：
+// 写入、软删除或事实加载失败时测试失败.
+//
+// 调用约束：
+// Exact 缺失与软删除维度；缺项由 Service 保留空展示.
 #[tokio::test]
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn missing_and_soft_deleted_refs_stay_sparse() {
@@ -447,19 +444,18 @@ async fn missing_and_soft_deleted_refs_stay_sparse() {
     });
 }
 
-/// 总数与分页共用同一过滤，软删除规则被排除.
-///
-/// # 参数
-/// 无，内部写入 3 规则并软删除其中 1 条.
-///
-/// # 返回
-/// 断言总数为 2，类型过滤总数一致，软删除规则不在页内.
-///
-/// # 错误
-/// 写入、软删除或分页加载失败时测试失败.
-///
-/// # 约束
-/// Page 总数/过滤维度；软删除语义与集合查询一致.
+// 验证采购责任规则：总数与分页共用同一过滤，软删除规则被排除。
+//
+// 调用参数：
+// 无，内部写入 3 规则并软删除其中 1 条.
+//
+// 断言总数为 2，类型过滤总数一致，软删除规则不在页内.
+//
+// 失败边界：
+// 写入、软删除或分页加载失败时测试失败.
+//
+// 调用约束：
+// Page 总数/过滤维度；软删除语义与集合查询一致.
 #[tokio::test]
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn total_uses_same_filter_and_excludes_soft_deleted() {
@@ -513,19 +509,18 @@ async fn total_uses_same_filter_and_excludes_soft_deleted() {
     });
 }
 
-/// 事务内分页复用调用方 executor，可见未提交写入.
-///
-/// # 参数
-/// 无，内部在事务中创建规则后即时分页.
-///
-/// # 返回
-/// 断言事务内总数包含未提交规则，提交后外部同样可见.
-///
-/// # 错误
-/// 事务或分页加载失败时测试失败.
-///
-/// # 约束
-/// Repository 不自行开启事务；事务内重验复用同一 session.
+// 验证采购责任规则：事务内分页复用调用方 executor，可见未提交写入。
+//
+// 调用参数：
+// 无，内部在事务中创建规则后即时分页.
+//
+// 断言事务内总数包含未提交规则，提交后外部同样可见.
+//
+// 失败边界：
+// 事务或分页加载失败时测试失败.
+//
+// 调用约束：
+// Repository 不自行开启事务；事务内重验复用同一 session.
 #[tokio::test]
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn transaction_reuses_caller_executor_read_your_writes() {
@@ -566,19 +561,18 @@ async fn transaction_reuses_caller_executor_read_your_writes() {
     });
 }
 
-/// 规则集合代表性查询的 explain 记录索引状态.
-///
-/// # 参数
-/// 无，内部对规则集合执行 explain.
-///
-/// # 返回
-/// 命中索引时断言 IXSCAN，否则记录 N/A 及原因.
-///
-/// # 错误
-/// explain 执行失败时测试失败.
-///
-/// # 约束
-/// Index 维度：本批不新增索引；若为 COLLSCAN 则标记 N/A 并说明依赖后续索引批次.
+// 验证采购责任规则：规则集合代表性查询的 explain 记录索引状态。
+//
+// 调用参数：
+// 无，内部对规则集合执行 explain.
+//
+// 命中索引时断言 IXSCAN，否则记录 N/A 及原因.
+//
+// 失败边界：
+// explain 执行失败时测试失败.
+//
+// 调用约束：
+// Index 维度：本批不新增索引；若为 COLLSCAN 则标记 N/A 并说明依赖后续索引批次.
 #[tokio::test]
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn explain_rule_list_query_documents_index_state() {

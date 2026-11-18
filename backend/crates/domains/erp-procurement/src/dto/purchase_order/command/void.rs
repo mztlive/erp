@@ -28,18 +28,11 @@ pub struct VoidPurchaseOrderRequest {
 impl VoidPurchaseOrderRequest {
     /// 计算作废请求指纹（不含原始幂等键）。
     ///
-    /// # 参数
-    /// * `purchase_order_id` - 当前路径采购单 ID
+    /// 作废原因按实际审计语义去除首尾空白，期望版本仍属于请求载荷；摘要形态与存量收据一致，修改会破坏幂等兼容。
     ///
-    /// # 返回
-    /// 返回不包含原始幂等键的稳定 SHA-256 指纹。
+    /// 返回不包含原始幂等键的稳定 SHA-256 指纹。指纹载荷无法序列化时返回内部错误。
     ///
-    /// # 错误
-    /// 指纹载荷无法序列化时返回内部错误。
-    ///
-    /// # 关键业务约束
-    /// 作废原因按实际审计语义去除首尾空白，期望版本仍属于请求载荷；摘要形态
-    /// 与存量收据一致，修改会破坏幂等兼容。
+    /// `purchase_order_id` 为当前路径采购单 ID。
     pub fn request_fingerprint(&self, purchase_order_id: &str) -> Result<String> {
         let payload = VoidDraftFingerprintPayload {
             expected_lock_version: self.expected_lock_version,

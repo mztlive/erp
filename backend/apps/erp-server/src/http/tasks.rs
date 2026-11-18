@@ -16,13 +16,7 @@ struct Tasks {
 #[derive(Clone, Default)]
 pub(crate) struct RequestTasks(Arc<Mutex<Tasks>>);
 impl RequestTasks {
-    /// 登记独立于请求等待方的工作。
-    /// # 参数
-    /// work 为请求取消后仍须收尾的工作。
-    /// # 返回
-    /// 任务已交由进程管理。
-    /// # 错误
-    /// 停机或管理锁不可用时拒绝登记。
+    // 把必须在客户端取消等待后仍完成的请求衍生工作登记到进程管理器；停机或管理锁不可用时不接收新工作。
     pub(crate) fn spawn(&self, work: impl Future<Output = ()> + Send + 'static) -> Result<(), Error> {
         let mut tasks = self.0.lock().map_err(|_| Error::Internal("请求任务管理不可用".into()))?;
         if tasks.closing {
@@ -34,13 +28,7 @@ impl RequestTasks {
         tasks.running.spawn(work);
         Ok(())
     }
-    /// 停止准入并排空已开始的工作。
-    /// # 参数
-    /// 无；HTTP 请求排空后调用，总超时由进程监督器控制。
-    /// # 返回
-    /// 已登记任务全部完成或记录异常。
-    /// # 错误
-    /// 管理锁中毒时恢复其中的任务集合继续收尾。
+    // 存量 HTTP 请求结束后关闭登记入口并等待已开始的衍生任务；总超时由进程控制，管理锁中毒时仍取出已有任务收尾。
     pub(crate) async fn drain(&self) {
         let mut running = {
             let mut tasks = self.0.lock().unwrap_or_else(|error| error.into_inner());

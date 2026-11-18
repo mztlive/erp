@@ -18,16 +18,9 @@ const OFFERING_COMMANDS: &str = <Database as SupplierOfferingExt>::SUPPLIER_OFFE
 const DELIVERY_TEMPLATES: &str = <Database as SupplierOfferingExt>::SUPPLIER_DELIVERY_TEMPLATES;
 const SKU_DELIVERY_COVERAGES: &str = <Database as SupplierOfferingExt>::SKU_DELIVERY_COVERAGES;
 
-/// 创建供应商供给域的幂等命名索引。
-///
-/// # 参数
-/// * `db` - 目标数据库
-///
-/// # 返回
-/// 全部索引创建成功返回 `Ok(())`。
-///
-/// # 错误
-/// 已有数据违反唯一约束或 MongoDB 失败时返回错误。
+// 创建供应商供给域的幂等命名索引。
+// 全部索引创建成功返回 `Ok(())`。
+// 已有数据违反唯一约束或 MongoDB 失败时返回错误。
 pub(crate) async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, OFFERINGS, offering_indexes()).await?;
     create_indexes(db, OFFERING_REVISIONS, revision_indexes()).await?;
@@ -116,7 +109,7 @@ fn delivery_template_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// SKU 配送覆盖：四个地区集合供商品池筛选，供应商供模板变化标记，待重算与到期日供后台刷新。
+// SKU 配送覆盖：四个地区集合供商品池筛选，供应商供模板变化标记，待重算与到期日供后台刷新。
 fn sku_delivery_coverage_indexes() -> Vec<IndexModel> {
     let mut indexes = ["included.full", "included.partial", "reachable.full", "reachable.partial"]
         .into_iter()
@@ -146,7 +139,7 @@ fn partial_index(name: &str, keys: Document, filter: Document) -> IndexModel {
 
 #[cfg(test)]
 mod tests {
-    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    // 验证按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
     #[test]
     fn collections_look_up_by_unique_stable_id() {
         let indexes = super::command_indexes();

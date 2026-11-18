@@ -55,24 +55,14 @@ pub struct BasisLine {
 
 impl BasisLine {
     /// 读取本依据实际采购成本，专项条款独立于通用价。
-    /// # 参数
-    /// `basis` 为通用采购价格口径。
-    /// # 返回
-    /// 返回专项原始采购价或通用供给价。
-    /// # 错误
-    /// 选择未支持的采购价格口径时拒绝。
+    ///
+    /// 返回专项原始采购价或通用供给价。选择未支持的采购价格口径时拒绝。
     pub fn unit_cost(&self, basis: SupplyPriceBasis) -> Result<UnitPrice> {
         self.inquiry_quote
             .as_ref()
             .map_or_else(|| supply_cost(&self.supply.revision, basis), |quote| Ok(quote.unit_cost_gross))
     }
-    /// 读取实际采用条款税率。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 返回专项税率或通用供给税率。
-    /// # 错误
-    /// 无。
+    /// 读取实际采用条款税率。返回专项税率或通用供给税率。
     pub fn tax_rate(&self) -> Rate {
         self.inquiry_quote
             .as_ref()
@@ -80,12 +70,8 @@ impl BasisLine {
             .unwrap_or(self.supply.revision.input_tax_rate)
     }
     /// 冻结通用供给身份与独立专项采用链。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 返回可持久化的实际采用来源。
-    /// # 错误
-    /// 供给归属或专项身份非法时拒绝。
+    ///
+    /// 返回可持久化的实际采用来源。供给归属或专项身份非法时拒绝。
     pub fn offering_source(&self) -> Result<super::PurchaseOfferingSource> {
         let mut source = super::PurchaseOfferingSource::from_supply(&self.supply)?;
         if let Some(quote) = &self.inquiry_quote {
@@ -167,19 +153,13 @@ pub struct CreationBasisFacts {
 impl RequestedLine {
     /// 由原始请求文本规范化并校验一条本次采购行。
     ///
-    /// # 参数
-    /// * `sales_order_line_id` - 稳定销售行原始文本
-    /// * `quantity` - 本次采购数量原始文本
-    /// * `expected_delivery_date` - 预计交付日原始文本
-    ///
-    /// # 返回
-    /// 返回去除首尾空白且数量已类型化的请求行。
-    ///
-    /// # 错误
-    /// 数量或预计交付日非法、数量不大于零时返回领域错误。
-    ///
-    /// # 关键业务约束
     /// 不做重复检查与排序，集合级规则由 [`normalize_requested_lines`] 承担。
+    ///
+    /// 返回去除首尾空白且数量已类型化的请求行。数量或预计交付日非法、数量不大于零时返回领域错误。
+    ///
+    /// - `sales_order_line_id`：稳定销售行原始文本。
+    /// - `quantity`：本次采购数量原始文本。
+    /// - `expected_delivery_date`：预计交付日原始文本。
     pub fn parse(sales_order_line_id: &str, quantity: &str, expected_delivery_date: &str) -> Result<Self> {
         let sales_order_line_id = sales_order_line_id.trim().to_string();
         let quantity = Quantity::from_str(quantity.trim()).map_err(|error| {
@@ -200,17 +180,9 @@ impl RequestedLine {
 
 /// 规范化并校验逐行本次采购数量集合。
 ///
-/// # 参数
-/// * `lines` - 已逐行解析的请求行
-///
-/// # 返回
-/// 返回稳定行不重复且按稳定行升序排列的请求行。
-///
-/// # 错误
-/// 同一稳定销售行出现多次时返回领域错误。
-///
-/// # 关键业务约束
 /// 同一稳定销售行在一次命令中只能出现一次。
+///
+/// 返回稳定行不重复且按稳定行升序排列的请求行。同一稳定销售行出现多次时返回领域错误。
 pub fn normalize_requested_lines(lines: &[RequestedLine]) -> Result<Vec<RequestedLine>> {
     let mut seen = HashSet::new();
     let mut normalized = Vec::with_capacity(lines.len());
@@ -227,21 +199,13 @@ pub fn normalize_requested_lines(lines: &[RequestedLine]) -> Result<Vec<Requeste
 
 /// 形成包含 guard、当前版本、精确范围和逐行供给事实的依据 ID。
 ///
-/// # 参数
-/// * `order` - 销售稳定单
-/// * `group` - 精确依据分组
-/// * `work_item_id` - 冻结本依据责任范围的开放任务
-/// * `target_warehouse_id` - 本张采购计划选择的目标仓库；可选择依据阶段为空
+/// guard 每次成功创建后推进，使作废释放的剩余量可形成新依据；同一范围拆向不同目标仓时身份不同。
 ///
-/// # 返回
 /// 返回 `{sales_order_id}:{sha256}` 稳定依据 ID。
 ///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// guard 每次成功创建后推进，使作废释放的剩余量可形成新依据；同一范围拆向不同
-/// 目标仓时身份不同。
+/// - `order`：销售稳定单。
+/// - `work_item_id`：冻结本依据责任范围的开放任务。
+/// - `target_warehouse_id`：本张采购计划选择的目标仓库；可选择依据阶段为空。
 pub fn basis_id_for(
     order: &SalesOrder,
     group: &BasisGroup,
@@ -263,16 +227,11 @@ pub fn basis_id_for(
 ///
 /// 目标仓只在已经完成仓库选择的采购计划中加入；可选择依据保持原有无仓库身份。
 ///
-/// # 参数
-/// * `sales_order_id` - 销售单稳定身份，作为 ID 前缀。
-/// * `parts` - 已规范化的依据片段；有目标仓时在参与摘要前追加仓库片段。
-/// * `target_warehouse_id` - 已选定的目标收货仓；`None` 保持无仓库身份。
-///
-/// # 返回
 /// 返回 `{sales_order_id}:{sha256}`。摘要按 `parts` 的传入顺序计算。
 ///
-/// # 错误
-/// 不返回错误。
+/// - `sales_order_id`：销售单稳定身份，作为 ID 前缀。
+/// - `parts`：已规范化的依据片段；有目标仓时在参与摘要前追加仓库片段。
+/// - `target_warehouse_id`：已选定的目标收货仓；`None` 保持无仓库身份。
 pub fn compose_basis_id(
     sales_order_id: &str,
     mut parts: Vec<String>,
@@ -284,19 +243,11 @@ pub fn compose_basis_id(
     format!("{sales_order_id}:{}", digest_parts(parts))
 }
 
-/// 形成单条依据行的供给与剩余量指纹。
-///
-/// # 参数
-/// * `line` - 精确依据行
-///
-/// # 返回
-/// 返回稳定行、当前版本行、数量与供给版本组成的规范化字符串。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 可供投影版本变化会使旧依据失效。
+// 形成单条依据行的供给与剩余量指纹。
+//
+// 可供投影版本变化会使旧依据失效。
+//
+// 返回稳定行、当前版本行、数量与供给版本组成的规范化字符串。
 fn basis_line_fingerprint(line: &BasisLine) -> String {
     format!(
         "{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}",
@@ -320,17 +271,9 @@ fn basis_line_fingerprint(line: &BasisLine) -> String {
 
 /// 形成精确拆分范围规范化键。
 ///
-/// # 参数
-/// * `scope` - 精确拆分范围
-///
-/// # 返回
-/// 返回供应商、采购类型、付款条件、履约责任和价格依据拼接键。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
 /// 该键只用于分组和指纹，不作为数据库自然键。
+///
+/// 返回供应商、采购类型、付款条件、履约责任和价格依据拼接键。
 pub fn basis_scope_key(scope: &BasisScope) -> String {
     format!(
         "{}|{}|{}|{}|{}{}",
@@ -345,35 +288,21 @@ pub fn basis_scope_key(scope: &BasisScope) -> String {
 
 /// 返回依据行的稳定销售行 ID。
 ///
-/// # 参数
-/// * `line` - 精确依据行
-///
-/// # 返回
-/// 返回跨销售版本稳定的销售行 ID。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
 /// 所有覆盖与请求匹配均使用稳定销售行，不按 SKU 猜测。
+///
+/// 返回跨销售版本稳定的销售行 ID。
 pub fn stable_line_id(line: &BasisLine) -> &str {
     line.coverage.revision_line.sales_order_line_id.as_ref()
 }
 
 /// 计算供应商本次最大可创建数量。
 ///
-/// # 参数
-/// * `remaining` - 销售当前版本剩余量
-/// * `available` - 供应商当前可供上限；空表示无限制
-///
-/// # 返回
-/// 返回 `min(remaining, available)` 或无上限时的 `remaining`。
-///
-/// # 错误
-/// 可供数量为负时返回一致性错误。
-///
-/// # 关键业务约束
 /// 供应不足允许形成部分数量依据。
+///
+/// 返回 `min(remaining, available)` 或无上限时的 `remaining`。可供数量为负时返回一致性错误。
+///
+/// - `remaining`：销售当前版本剩余量。
+/// - `available`：供应商当前可供上限；空表示无限制。
 pub fn maximum_create_quantity(remaining: Quantity, available: Option<Quantity>) -> Result<Quantity> {
     let Some(available) = available else {
         return Ok(remaining);
@@ -386,18 +315,11 @@ pub fn maximum_create_quantity(remaining: Quantity, available: Option<Quantity>)
 
 /// 取供给含税成本。
 ///
-/// # 参数
-/// * `revision` - 当前有效供给条款
-/// * `price_basis` - 本采购依据选择的价格依据
-///
-/// # 返回
-/// 集采返回已维护的集采价，代发返回一件代发价。
-///
-/// # 错误
-/// 供给未提供集采价格时拒绝集采取价。
-///
-/// # 关键业务约束
 /// 成本只从依据确定的当前供给修订读取；缺失集采条款不回退到代发价。
+///
+/// 集采返回已维护的集采价，代发返回一件代发价。供给未提供集采价格时拒绝集采取价。
+///
+/// `revision` 为当前有效供给条款。
 pub fn supply_cost(revision: &SupplierOfferingRevision, price_basis: SupplyPriceBasis) -> Result<UnitPrice> {
     match price_basis {
         SupplyPriceBasis::Bulk => revision
@@ -409,17 +331,9 @@ pub fn supply_cost(revision: &SupplierOfferingRevision, price_basis: SupplyPrice
 
 /// 由商品稳定业务类型确定采购类型。
 ///
-/// # 参数
-/// * `kind` - 商品稳定业务类型
-///
-/// # 返回
-/// 返回采购类型；卡券不得进入商品/服务采购路径。
-///
-/// # 错误
-/// 卡券进入商品/服务采购路径时返回业务错误。
-///
-/// # 关键业务约束
 /// 销售不得提交或覆盖采购类型。
+///
+/// 返回采购类型；卡券不得进入商品/服务采购路径。卡券进入商品/服务采购路径时返回业务错误。
 pub fn purchase_type_from_product_kind(kind: ProductKind) -> Result<PurchaseType> {
     match kind {
         ProductKind::Physical => Ok(PurchaseType::Physical),
@@ -431,18 +345,11 @@ pub fn purchase_type_from_product_kind(kind: ProductKind) -> Result<PurchaseType
 
 /// 返回商品类型允许采购选择的履约责任与价格依据组合。
 ///
-/// # 参数
-/// * `kind` - 商品稳定业务类型
+/// 实物形成集采入仓、代发直发和集采直发三种方案；虚拟商品与线下服务只按一件代发价由商品事实唯一限定履约责任。
 ///
-/// # 返回
-/// 返回稳定顺序的采购方案集合。
+/// 返回稳定顺序的采购方案集合。卡券进入商品/服务采购路径时返回业务错误。
 ///
-/// # 错误
-/// 卡券进入商品/服务采购路径时返回业务错误。
-///
-/// # 关键业务约束
-/// 实物形成集采入仓、代发直发和集采直发三种方案；虚拟商品与线下服务只按
-/// 一件代发价由商品事实唯一限定履约责任。
+/// `kind` 为商品稳定业务类型。
 pub fn purchase_options(
     kind: ProductKind,
 ) -> Result<&'static [(FulfillmentResponsibility, SupplyPriceBasis)]> {
@@ -460,22 +367,13 @@ pub fn purchase_options(
     }
 }
 
-/// 返回合法采购数量零值。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回六位精度数量零值。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 只用于边界比较，不代表缺失业务数量。
-///
-/// # Panics
-/// 数量文本 `"0"` 无法解析时 panic；零数量是合法数量，panic 只表示数量类型不变量被破坏。
+// 返回合法采购数量零值。
+//
+// 只用于边界比较，不代表缺失业务数量。
+//
+// 返回六位精度数量零值。
+//
+// 数量文本 `"0"` 无法解析时 panic；零数量是合法数量，panic 只表示数量类型不变量被破坏。
 fn zero_quantity() -> Quantity {
     Quantity::from_str("0").expect("零数量合法")
 }
@@ -643,7 +541,7 @@ mod tests {
         }
     }
 
-    /// 相同输入重复构造依据 ID 完全一致。
+    // 相同输入重复构造依据 ID 完全一致。
     #[test]
     fn basis_id_is_deterministic_for_identical_inputs() {
         let order = sales_order("so-1");
@@ -672,7 +570,7 @@ mod tests {
         assert_ne!(offering_changed, basis_id_for(&order, &group, "task", None));
     }
 
-    /// 同一范围拆向不同目标仓时必须形成不同的数据库唯一身份。
+    // 同一范围拆向不同目标仓时必须形成不同的数据库唯一身份。
     #[test]
     fn target_warehouse_scopes_creation_basis_identity() {
         let common_parts = vec!["guard-1".to_string(), "scope-1".to_string()];
@@ -685,7 +583,7 @@ mod tests {
         assert_ne!(second, selectable);
     }
 
-    /// 精确范围同时区分供应商、类型、付款条件和履约责任。
+    // 精确范围同时区分供应商、类型、付款条件和履约责任。
     #[test]
     fn basis_scope_key_contains_exact_split_dimensions() {
         let scope = BasisScope {
@@ -700,7 +598,7 @@ mod tests {
         assert_eq!(basis_scope_key(&scope), "sup-1|PHYSICAL|NET-30|WAREHOUSE|BULK");
     }
 
-    /// 不同供应商、付款条件或履约责任必须形成不同依据 ID。
+    // 不同供应商、付款条件或履约责任必须形成不同依据 ID。
     #[test]
     fn basis_id_changes_with_split_dimensions() {
         let order = sales_order("so-1");
@@ -726,7 +624,7 @@ mod tests {
         assert_ne!(base_id, basis_id_for(&order, &base, "wi-2", None));
     }
 
-    /// 商品稳定类型决定采购类型，销售字段不得参与。
+    // 商品稳定类型决定采购类型，销售字段不得参与。
     #[test]
     fn product_kind_determines_purchase_type() {
         assert_eq!(purchase_type_from_product_kind(ProductKind::Physical).unwrap(), PurchaseType::Physical);
@@ -738,7 +636,7 @@ mod tests {
         assert!(purchase_type_from_product_kind(ProductKind::Voucher).is_err());
     }
 
-    /// 实物形成集采入仓、代发直发和集采直发，其他商品类型只允许其固有路线。
+    // 实物形成集采入仓、代发直发和集采直发，其他商品类型只允许其固有路线。
     #[test]
     fn product_kind_limits_purchase_options() {
         assert_eq!(
@@ -760,7 +658,7 @@ mod tests {
         assert!(purchase_options(ProductKind::Voucher).is_err());
     }
 
-    /// 有限可供量不足销售剩余时允许形成部分数量。
+    // 有限可供量不足销售剩余时允许形成部分数量。
     #[test]
     fn limited_availability_uses_partial_quantity() {
         let remaining = Quantity::from_str("10").unwrap();
@@ -771,7 +669,7 @@ mod tests {
         assert!(maximum_create_quantity(remaining, Some(Quantity::from_str("-1").unwrap())).is_err());
     }
 
-    /// 集采取集采价，代发取一件代发价，与履约责任无关。
+    // 集采取集采价，代发取一件代发价，与履约责任无关。
     #[test]
     fn supply_cost_follows_price_basis() {
         let revision = offering_revision("offering-1", "2026-01-01", None);
@@ -795,7 +693,7 @@ mod tests {
         assert!(supply_cost(&revision, SupplyPriceBasis::Bulk).is_err());
     }
 
-    /// 请求行解析去除空白并校验数量与交付日。
+    // 请求行解析去除空白并校验数量与交付日。
     #[test]
     fn requested_line_parse_normalizes_and_validates() {
         let line = RequestedLine::parse(" sol-1 ", " 2.5 ", " 2026-08-25 ").unwrap();
@@ -813,7 +711,7 @@ mod tests {
         assert!(RequestedLine::parse("sol-1", "-1", "2026-08-25").is_err());
     }
 
-    /// 集合规范化拒绝重复稳定行并按稳定行升序稳定排序。
+    // 集合规范化拒绝重复稳定行并按稳定行升序稳定排序。
     #[test]
     fn normalize_requested_lines_dedupes_and_sorts() {
         let b = RequestedLine::parse("sol-b", "1", "2026-08-25").unwrap();
@@ -830,7 +728,7 @@ mod tests {
         assert_eq!(normalize_requested_lines(&[]).unwrap(), Vec::<RequestedLine>::new());
     }
 
-    /// 依据 ID 只接受销售单加 SHA-256 指纹形态。
+    // 依据 ID 只接受销售单加 SHA-256 指纹形态。
     #[test]
     fn basis_id_shape_is_sales_order_plus_sha256() {
         let order = sales_order("so-1");

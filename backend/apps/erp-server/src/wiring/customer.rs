@@ -22,30 +22,13 @@ pub struct MongoCustomerAudit {
 }
 
 impl MongoCustomerAudit {
-    /// 绑定审计日志所在数据库，构造时不写库。
-    ///
-    /// # 参数
-    /// * `db` - 持久化审计日志的数据库。
-    ///
-    /// # 返回
-    /// 返回未执行 I/O 的 adapter。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为 `MongoCustomerAudit` 绑定审计日志库，供后续业务审计写入；构造时不写库。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
     /// 包装为客户域可注入的共享审计 Port。
-    ///
-    /// # 参数
-    /// * `db` - 持久化审计日志的数据库。
-    ///
-    /// # 返回
     /// 返回共享的客户审计 Port。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn shared(db: Database) -> Arc<dyn CustomerAuditPort> {
         Arc::new(Self::new(db))
     }
@@ -83,29 +66,12 @@ pub struct MongoCustomerPartyFacts {
 
 impl MongoCustomerPartyFacts {
     /// 绑定主体集合所在数据库，构造时不读取。
-    ///
-    /// # 参数
-    /// * `db` - 主体集合所在数据库。
-    ///
-    /// # 返回
-    /// 返回未执行 I/O 的 adapter。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
     /// 包装为客户域可注入的主体事实 Port。
-    ///
-    /// # 参数
-    /// * `db` - 主体集合所在数据库。
-    ///
-    /// # 返回
     /// 返回共享的主体事实 Port。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn shared(db: Database) -> Arc<dyn PartyFactPort> {
         Arc::new(Self::new(db))
     }

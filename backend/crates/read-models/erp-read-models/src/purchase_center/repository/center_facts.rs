@@ -62,10 +62,9 @@ pub struct PurchaseOrderCenterFacts {
     pub payable: Option<PurchasePayableFact>,
 }
 
-/// 批量加载采购单对象中心事实。
+/// 读取采购详情关联事实时，批量加载采购单对象中心事实。
 ///
 /// # 参数
-/// * `db` - MongoDB 数据库句柄
 /// * `order_id` - 采购单主键
 /// * `executor` - 数据访问执行器，由 Service 决定事务边界；事务内重验必须复用调用方 executor
 ///
@@ -98,20 +97,17 @@ pub async fn load_purchase_order_center_facts(
     load_serial_facts(db, order, executor).await
 }
 
-/// 非事务展示查询并行装配，各分支使用独立执行器.
-///
-/// # 参数
-/// * `db` - MongoDB 数据库句柄
-/// * `order` - 已加载的采购单主表
-///
-/// # 返回
-/// 返回全部当前指针事实；语义与串行路径一致.
-///
-/// # 错误
-/// MongoDB 查询或反序列化失败时返回错误.
-///
-/// # 约束
-/// 独立事实并行 join，两条链内串行、链间并行；不读取审批运行时.
+// 读取采购详情关联事实时，非事务展示查询并行装配，各分支使用独立执行器。
+//
+// 调用参数：
+// * `order` - 已加载的采购单主表
+//
+// 返回全部当前指针事实；语义与串行路径一致.
+//
+// MongoDB 查询或反序列化失败时返回错误.
+//
+// 调用约束：
+// 独立事实并行 join，两条链内串行、链间并行；不读取审批运行时.
 async fn load_parallel_facts(db: &Database, order: PurchaseOrder) -> Result<PurchaseOrderCenterFacts> {
     let order_id = PurchaseOrderId::new(order.base.id.clone());
     let (supplier_name, sales_order_no, owner_name, changes, payable, revision_bundle, submission_bundle) = tokio::try_join!(
@@ -140,18 +136,14 @@ async fn load_parallel_facts(db: &Database, order: PurchaseOrder) -> Result<Purc
     })
 }
 
-/// 事务内串行装配，复用调用方执行器保证读己写.
-///
-/// # 参数
-/// * `db` - MongoDB 数据库句柄
-/// * `order` - 已加载的采购单主表
-/// * `executor` - 调用方数据访问执行器
-///
-/// # 返回
-/// 返回全部当前指针事实；缺失以空值表达.
-///
-/// # 错误
-/// MongoDB 查询或反序列化失败时返回错误.
+// 读取采购详情关联事实时，事务内串行装配，复用调用方执行器保证读己写。
+//
+// 调用参数：
+// * `order` - 已加载的采购单主表
+//
+// 返回全部当前指针事实；缺失以空值表达.
+//
+// MongoDB 查询或反序列化失败时返回错误.
 async fn load_serial_facts(
     db: &Database,
     order: PurchaseOrder,
@@ -185,7 +177,7 @@ async fn load_serial_facts(
     })
 }
 
-/// 加载采购单应付余额；沿用调用方执行器。
+// 为采购详情关联事实取数时，读取采购单应付余额；沿用调用方执行器。
 async fn load_payable(
     db: &Database,
     order_id: &PurchaseOrderId,
@@ -200,18 +192,14 @@ async fn load_payable(
     }))
 }
 
-/// 加载供应商法定名称，沿用调用方执行器。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库句柄
-/// * `supplier_id` - 供应商账号主键
-/// * `executor` - 调用方数据访问执行器
-///
-/// # 返回
-/// 返回当前法定名称；缺失时返回 `None`.
-///
-/// # 错误
-/// MongoDB 查询或反序列化失败时返回错误.
+// 为采购详情关联事实取数时，读取供应商法定名称，沿用调用方执行器。
+//
+// 调用参数：
+// * `supplier_id` - 供应商账号主键
+//
+// 返回当前法定名称；缺失时返回 `None`.
+//
+// MongoDB 查询或反序列化失败时返回错误.
 async fn load_supplier_name(
     db: &Database,
     supplier_id: &SupplierAccountId,
@@ -221,18 +209,14 @@ async fn load_supplier_name(
     Ok(names.remove(supplier_id.as_ref()))
 }
 
-/// 加载来源销售单号，沿用调用方执行器。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库句柄
-/// * `sales_id` - 来源销售单主键
-/// * `executor` - 调用方数据访问执行器
-///
-/// # 返回
-/// 返回业务单号；缺失时返回 `None`，由 Service 报完整性错误.
-///
-/// # 错误
-/// MongoDB 查询或反序列化失败时返回错误.
+// 为采购详情关联事实取数时，读取来源销售单号，沿用调用方执行器。
+//
+// 调用参数：
+// * `sales_id` - 来源销售单主键
+//
+// 返回业务单号；缺失时返回 `None`，由 Service 报完整性错误.
+//
+// MongoDB 查询或反序列化失败时返回错误.
 async fn load_sales_no(
     db: &Database,
     sales_id: &SalesOrderId,
@@ -242,18 +226,14 @@ async fn load_sales_no(
     Ok(orders.into_iter().find(|item| item.base.id == sales_id.as_ref()).map(|item| item.order_no))
 }
 
-/// 加载版本链，链内串行并沿用调用方执行器。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库句柄
-/// * `revision_id` - 当前生效版本指针；为空时返回空链
-/// * `executor` - 调用方数据访问执行器
-///
-/// # 返回
-/// 返回版本头、版本行与销售分配.
-///
-/// # 错误
-/// MongoDB 查询或反序列化失败时返回错误.
+// 为采购详情关联事实取数时，读取版本链，链内串行并沿用调用方执行器。
+//
+// 调用参数：
+// * `revision_id` - 当前生效版本指针；为空时返回空链
+//
+// 返回版本头、版本行与销售分配.
+//
+// MongoDB 查询或反序列化失败时返回错误.
 async fn load_revision_chain(
     db: &Database,
     revision_id: Option<&str>,
@@ -275,18 +255,14 @@ async fn load_revision_chain(
     Ok((Some(revision), lines, allocations))
 }
 
-/// 加载提交链，链内串行并沿用调用方执行器。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库句柄
-/// * `submission_id` - 当前提交指针；为空时返回空链
-/// * `executor` - 调用方数据访问执行器
-///
-/// # 返回
-/// 返回提交头与提交行.
-///
-/// # 错误
-/// MongoDB 查询或反序列化失败时返回错误.
+// 为采购详情关联事实取数时，读取提交链，链内串行并沿用调用方执行器。
+//
+// 调用参数：
+// * `submission_id` - 当前提交指针；为空时返回空链
+//
+// 返回提交头与提交行.
+//
+// MongoDB 查询或反序列化失败时返回错误.
 async fn load_submission_chain(
     db: &Database,
     submission_id: Option<&str>,
@@ -306,22 +282,20 @@ async fn load_submission_chain(
     Ok((Some(submission), lines))
 }
 
-/// 批量加载负责人展示名。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库句柄
-/// * `order` - 已加载的采购单主表
-/// * `executor` - 数据访问执行器，由 Service 决定事务边界
-///
-/// # 返回
-/// 返回负责人展示名；责任人缺失或空白时返回 `None`，由 Service 按实体校验
-/// 或约定回退解释。
-///
-/// # 错误
-/// MongoDB 查询或反序列化失败时返回错误。
-///
-/// # 约束
-/// 只查询账号集合，不做 RBAC 或跨聚合业务判断。
+// 读取采购详情关联事实时，批量加载负责人展示名。
+//
+// 调用参数：
+// * `order` - 已加载的采购单主表
+// * `executor` - 数据访问执行器，由 Service 决定事务边界
+//
+// 结果：
+// 返回负责人展示名；责任人缺失或空白时返回 `None`，由 Service 按实体校验
+// 或约定回退解释。
+//
+// MongoDB 查询或反序列化失败时返回错误。
+//
+// 调用约束：
+// 只查询账号集合，不做 RBAC 或跨聚合业务判断。
 async fn load_owner_name(
     db: &Database,
     order: &PurchaseOrder,
@@ -334,21 +308,18 @@ async fn load_owner_name(
     Ok(names.remove(owner))
 }
 
-/// 批量加载生效版本销售分配。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库句柄
-/// * `revision_lines` - 当前生效版本行
-/// * `executor` - 数据访问执行器，由 Service 决定事务边界
-///
-/// # 返回
-/// 返回当前版本行关联的全部销售分配；无版本行时返回空集合。
-///
-/// # 错误
-/// MongoDB 查询或反序列化失败时返回错误。
-///
-/// # 约束
-/// 一次 `$in` 批量取回，不得出现逐行 N+1。
+// 读取采购详情关联事实时，批量加载生效版本销售分配。
+//
+// 调用参数：
+// * `revision_lines` - 当前生效版本行
+// * `executor` - 数据访问执行器，由 Service 决定事务边界
+//
+// 返回当前版本行关联的全部销售分配；无版本行时返回空集合。
+//
+// MongoDB 查询或反序列化失败时返回错误。
+//
+// 调用约束：
+// 一次 `$in` 批量取回，不得出现逐行 N+1。
 async fn load_allocations(
     db: &Database,
     revision_lines: &[PurchaseOrderRevisionLine],
@@ -368,7 +339,7 @@ async fn load_allocations(
 mod tests {
     use super::PurchaseOrderCenterFacts;
 
-    /// 空 Bundle 默认全部为空，由 Service 映射为缺失语义。
+    // 验证采购详情关联事实：空 Bundle 默认全部为空，由 Service 映射为缺失语义。
     #[test]
     fn default_bundle_is_empty() {
         let facts = PurchaseOrderCenterFacts::default();
@@ -391,7 +362,7 @@ mod isolation_tests {
     use super::load_purchase_order_center_facts;
     use crate::test_indexes::ensure_indexes;
 
-    /// 构造最小采购单。
+    // 处理采购详情关联事实时，生成最小采购单。
     fn order(id: &str, submission: Option<&str>, revision: Option<&str>) -> PurchaseOrder {
         let mut created = PurchaseOrder::new(
             PurchaseOrderId::new(id),
@@ -417,19 +388,18 @@ mod isolation_tests {
         created
     }
 
-    /// 采购单不存在时返回空 Bundle，由 Service 映射为 NotFound。
-    ///
-    /// # 参数
-    /// 无，内部创建隔离库。
-    ///
-    /// # 返回
-    /// 断言 `order` 为空且其余事实全部为空。
-    ///
-    /// # 错误
-    /// MongoDB 连接或事实加载失败时测试失败。
-    ///
-    /// # 约束
-    /// Exact 维度：缺失事实由 Service 校验，Repository 只负责读取整形。
+    // 验证采购详情关联事实：采购单不存在时返回空 Bundle，由 Service 映射为 NotFound。
+    //
+    // 调用参数：
+    // 无，内部创建隔离库。
+    //
+    // 断言 `order` 为空且其余事实全部为空。
+    //
+    // 失败边界：
+    // MongoDB 连接或事实加载失败时测试失败。
+    //
+    // 调用约束：
+    // Exact 维度：缺失事实由 Service 校验，Repository 只负责读取整形。
     #[tokio::test]
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn missing_order_returns_empty_bundle() {
@@ -452,19 +422,18 @@ mod isolation_tests {
         });
     }
 
-    /// 只沿当前指针读取，缺失关联以空值表达。
-    ///
-    /// # 参数
-    /// 无，内部创建隔离库并写入无关联的最小采购单。
-    ///
-    /// # 返回
-    /// 断言主表存在且缺失关联为空，历史事实不进入结果。
-    ///
-    /// # 错误
-    /// MongoDB 连接、夹具写入或事实加载失败时测试失败。
-    ///
-    /// # 约束
-    /// 正式分配、应付摘要与变更历史缺失时为空集合或空值，不得失败。
+    // 验证采购详情关联事实：只沿当前指针读取，缺失关联以空值表达。
+    //
+    // 调用参数：
+    // 无，内部创建隔离库并写入无关联的最小采购单。
+    //
+    // 断言主表存在且缺失关联为空，历史事实不进入结果。
+    //
+    // 失败边界：
+    // MongoDB 连接、夹具写入或事实加载失败时测试失败。
+    //
+    // 调用约束：
+    // 正式分配、应付摘要与变更历史缺失时为空集合或空值，不得失败。
     #[tokio::test]
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn loads_order_with_missing_associations_as_empty() {
@@ -491,19 +460,18 @@ mod isolation_tests {
         });
     }
 
-    /// 事务内调用复用调用方 session，读取自身未提交写入。
-    ///
-    /// # 参数
-    /// 无，内部创建隔离库。
-    ///
-    /// # 返回
-    /// 断言事务内可读到同一 session 刚写入的采购单。
-    ///
-    /// # 错误
-    /// MongoDB 连接、事务或事实加载失败时测试失败。
-    ///
-    /// # 约束
-    /// 事务内重验必须复用调用方 executor，不得另开连接或独立事务。
+    // 验证采购详情关联事实：事务内调用复用调用方 session，读取自身未提交写入。
+    //
+    // 调用参数：
+    // 无，内部创建隔离库。
+    //
+    // 断言事务内可读到同一 session 刚写入的采购单。
+    //
+    // 失败边界：
+    // MongoDB 连接、事务或事实加载失败时测试失败。
+    //
+    // 调用约束：
+    // 事务内重验必须复用调用方 executor，不得另开连接或独立事务。
     #[tokio::test]
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
     async fn transaction_reads_own_writes_with_same_session() {

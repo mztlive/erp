@@ -54,23 +54,12 @@ impl_audit_context!(PreparedSupportAudit);
 
 impl PreparedSupportAudit {
     /// 从已校验的审计实体快照采集支撑侧字段。
-    ///
-    /// # 参数
-    /// * `base` - 已构造审计的持久化元数据
-    /// * `actor_id` - 操作人账号 ID
-    /// * `actor_account` - 操作人登录账号
-    /// * `actor_type` - 操作人种类
-    /// * `action` - 业务动作名
-    /// * `resource_type` - 资源类型
-    /// * `resource_id` - 资源 ID；缺失时为 `None`
-    /// * `success` - 是否成功
-    /// * `message` - 可选业务说明
-    ///
-    /// # 返回
     /// 返回供稍后持久化的审计事实；名称快照与请求编号初始为 `None`，事件序号为 `1`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// `base` 为已构造审计的持久化元数据；`actor_id` 为操作人账号 ID。
+    /// `actor_account` 为操作人登录账号；`actor_type` 为操作人种类。
+    /// `action` 为业务动作名；`resource_type` 为资源类型。
+    /// `resource_id` 为资源 ID；缺失时为 `None`；`success` 为是否成功。
+    /// `message` 为可选业务说明。
     #[allow(clippy::too_many_arguments)]
     pub fn from_validated(
         base: &BaseModel,
@@ -104,17 +93,8 @@ impl PreparedSupportAudit {
     }
 
     /// 由已认证操作人构造成功的资源审计。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证操作人
-    /// * `action` - 业务动作名
-    /// * `resource_type` - 资源类型
-    /// * `resource_id` - 资源 ID
-    ///
-    /// # 返回
     /// 返回成功标记为 `true`、并带上操作人名称快照与请求编号的审计事实。
-    ///
-    /// # 错误
+    /// `action` 为业务动作名，`resource_type` 为资源类型，`resource_id` 为资源 ID。
     /// `resource_id` 去空白后为空时返回 `ValidationError`。
     pub fn resource(
         actor: AuditActor,
@@ -148,17 +128,8 @@ impl PreparedSupportAudit {
 #[async_trait]
 pub trait SupportAuditPort: Send + Sync {
     /// 在事务开始前校验并准备一条成功的资源审计。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证操作人
-    /// * `action` - 业务动作名
-    /// * `resource_type` - 资源类型
-    /// * `resource_id` - 资源 ID
-    ///
-    /// # 返回
     /// 返回可交给 [`Self::persist`] 写入的审计事实。
-    ///
-    /// # 错误
+    /// `action` 为业务动作名，`resource_type` 为资源类型，`resource_id` 为资源 ID。
     /// 资源 ID 为空或实现无法准备审计时返回错误。本方法不写库。
     fn resource_log(
         &self,
@@ -169,15 +140,7 @@ pub trait SupportAuditPort: Send + Sync {
     ) -> Result<PreparedSupportAudit>;
 
     /// 把先前准备好的审计写到调用方选定的执行器。
-    ///
-    /// # 参数
-    /// * `audit` - 已准备的审计事实
-    /// * `executor` - 调用方选定的执行器
-    ///
-    /// # 返回
-    /// 写入成功时无返回值。
-    ///
-    /// # 错误
+    /// `audit` 为已准备的审计事实；`executor` 为调用方选定的执行器。
     /// 持久化失败时返回错误。
     async fn persist(&self, audit: &PreparedSupportAudit, executor: &mut dyn Executor) -> Result<()>;
 }
@@ -198,17 +161,10 @@ impl SupportAuditPort for FailClosedAuditPort {
         PreparedSupportAudit::resource(actor, action, resource_type, resource_id)
     }
 
-    /// 拒绝写入未接线的审计端口。
-    ///
-    /// # 参数
-    /// * `_audit` - 已准备的审计事实；本实现不读取
-    /// * `_executor` - 调用方执行器；本实现不写入
-    ///
-    /// # 返回
-    /// 不返回成功。
-    ///
-    /// # 错误
-    /// 始终返回 `Internal`（审计端口未接线）。
+    // 拒绝写入未接线的审计端口。
+    // 不返回成功。
+    // `_audit` 为已准备的审计事实；本实现不读取；`_executor` 为调用方执行器；本实现不写入。
+    // 始终返回 `Internal`（审计端口未接线）。
     async fn persist(&self, _audit: &PreparedSupportAudit, _executor: &mut dyn Executor) -> Result<()> {
         Err(Error::Internal("审计端口未接线".to_string()))
     }

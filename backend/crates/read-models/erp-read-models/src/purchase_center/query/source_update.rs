@@ -15,18 +15,12 @@ use crate::Result;
 use crate::purchase_center::direct_return::direct_return_plan;
 use crate::purchase_center::dto::PurchaseSourceUpdateView;
 
-/// 读取采购的来源依据提示。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库句柄
-/// * `order` - 已授权采购单
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 采购引用旧销售版本或存在未处理记录时返回提示；否则返回 `None`。
-///
-/// # 错误
-/// 仓储读取失败时返回错误。
+// 生成采购来源更新视图时，读取采购的来源依据提示。
+//
+// 调用参数：
+// * `order` - 已授权采购单
+//
+// 采购引用旧销售版本或存在未处理记录时返回提示；否则返回 `None`。
 pub(super) async fn purchase_source_update_view(
     db: &Database,
     order: &PurchaseOrder,
@@ -64,7 +58,7 @@ pub(super) async fn purchase_source_update_view(
     Ok(Some(view))
 }
 
-/// 由最近一条记录与版本信息构造提示视图。
+// 生成采购来源更新视图时，由最近一条记录与版本信息构造提示视图。
 fn source_update_view(
     latest: Option<&PurchaseSourceUpdate>,
     outdated: bool,
@@ -151,7 +145,7 @@ mod tests {
         )
     }
 
-    /// 未处理记录提供原因、版本与付款暂停。
+    // 验证采购来源更新：未处理记录提供原因、版本与付款暂停。
     #[test]
     fn open_record_is_affected_with_version_for_maintain() {
         let open = record();
@@ -166,7 +160,7 @@ mod tests {
         assert_eq!(view.last_resolution, None);
     }
 
-    /// 草稿已修改待提交时不再标记受影响，只提示提交审批。
+    // 验证采购来源更新：草稿已修改待提交时不再标记受影响，只提示提交审批。
     #[test]
     fn awaiting_record_prompts_submission() {
         let mut awaiting = record();
@@ -180,7 +174,7 @@ mod tests {
         assert_eq!(view.record_id.as_deref(), Some("psu-1"));
     }
 
-    /// 已登记维持时只展示处理结果与旧版本提示。
+    // 验证采购来源更新：已登记维持时只展示处理结果与旧版本提示。
     #[test]
     fn maintained_record_is_shown_as_last_resolution() {
         let mut maintained = record();

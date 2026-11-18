@@ -9,16 +9,11 @@ use crate::entity::catalog::{EnableStatus, Product, ProductBrand, ProductCategor
 /// 导入用品牌精确查找。
 #[allow(async_fn_in_trait)]
 pub trait ProductBrandRepositoryImportLookupExt {
-    /// 按重放身份、代码、精确名称依次查找品牌，不忽略停用记录。
-    /// # 参数
-    /// * `id` - 本次导入的稳定品牌身份
-    /// * `code` - 用户明确填写的代码；空代码不查
-    /// * `name` - 已规范化的品牌名称
-    /// * `executor` - 当前行事务执行器
-    /// # 返回
-    /// 既有记录；身份和代码查找包括软删除，名称查找仅限未删除记录。
-    /// # 错误
-    /// 数据库查询失败。
+    /// 按重放身份、代码、精确名称依次查找品牌，不忽略停用记录。既有记录；身份和代码查找包括软删除，名称查找仅限未删除记录。
+    ///
+    /// - `id`：本次导入的稳定品牌身份。
+    /// - `code`：用户明确填写的代码；空代码不查。
+    /// - `executor`：当前行事务执行器。
     async fn find_import_match(
         &self,
         id: &str,
@@ -29,15 +24,9 @@ pub trait ProductBrandRepositoryImportLookupExt {
 
     /// 按品牌名称精确查找启用中的品牌。
     ///
-    /// # 参数
-    /// * `name` - 已规范化品牌名称
-    /// * `executor` - 数据访问执行器
+    /// 命中时返回品牌实体。MongoDB 查询失败时返回错误。
     ///
-    /// # 返回
-    /// 命中时返回品牌实体。
-    ///
-    /// # 错误
-    /// MongoDB 查询失败时返回错误。
+    /// 沿用调用方传入的执行器。
     async fn find_enabled_by_exact_name(
         &self,
         name: &str,
@@ -46,15 +35,9 @@ pub trait ProductBrandRepositoryImportLookupExt {
 
     /// 按品牌代码精确查找启用中的品牌。
     ///
-    /// # 参数
-    /// * `brand_code` - 稳定品牌代码
-    /// * `executor` - 数据访问执行器
+    /// 命中时返回品牌实体。MongoDB 查询失败时返回错误。
     ///
-    /// # 返回
-    /// 命中时返回品牌实体。
-    ///
-    /// # 错误
-    /// MongoDB 查询失败时返回错误。
+    /// 沿用调用方传入的执行器。
     async fn find_enabled_by_code(
         &self,
         brand_code: &str,
@@ -122,15 +105,9 @@ impl ProductBrandRepositoryImportLookupExt for persistence_core::Repository<'_, 
 pub trait ProductCategoryRepositoryImportLookupExt {
     /// 按分类名称精确查找启用中的分类。
     ///
-    /// # 参数
-    /// * `name` - 已规范化分类名称
-    /// * `executor` - 数据访问执行器
+    /// 命中时返回分类实体。MongoDB 查询失败时返回错误。
     ///
-    /// # 返回
-    /// 命中时返回分类实体。
-    ///
-    /// # 错误
-    /// MongoDB 查询失败时返回错误。
+    /// 沿用调用方传入的执行器。
     async fn find_enabled_by_exact_name(
         &self,
         name: &str,
@@ -139,15 +116,9 @@ pub trait ProductCategoryRepositoryImportLookupExt {
 
     /// 按分类代码精确查找启用中的分类。
     ///
-    /// # 参数
-    /// * `category_code` - 稳定分类代码
-    /// * `executor` - 数据访问执行器
+    /// 命中时返回分类实体。MongoDB 查询失败时返回错误。
     ///
-    /// # 返回
-    /// 命中时返回分类实体。
-    ///
-    /// # 错误
-    /// MongoDB 查询失败时返回错误。
+    /// 沿用调用方传入的执行器。
     async fn find_enabled_by_code(
         &self,
         category_code: &str,
@@ -196,15 +167,9 @@ impl ProductCategoryRepositoryImportLookupExt for persistence_core::Repository<'
 pub trait ProductRepositoryImportLookupExt {
     /// 按商品编号精确查找未删除商品。
     ///
-    /// # 参数
-    /// * `product_no` - 商品编号
-    /// * `executor` - 数据访问执行器
+    /// 命中时返回商品实体。MongoDB 查询失败时返回错误。
     ///
-    /// # 返回
-    /// 命中时返回商品实体。
-    ///
-    /// # 错误
-    /// MongoDB 查询失败时返回错误。
+    /// 沿用调用方传入的执行器。
     async fn find_by_product_no(
         &self,
         product_no: &str,
@@ -235,15 +200,11 @@ impl ProductRepositoryImportLookupExt for persistence_core::Repository<'_, Produ
 pub trait UnitOfMeasureRepositoryImportLookupExt {
     /// 按单位代码精确查找启用中的计量单位。
     ///
-    /// # 参数
-    /// * `unit_code` - 稳定单位代码
-    /// * `executor` - 数据访问执行器
+    /// 命中时返回计量单位。MongoDB 查询失败时返回错误。
     ///
-    /// # 返回
-    /// 命中时返回计量单位。
+    /// 沿用调用方传入的执行器。
     ///
-    /// # 错误
-    /// MongoDB 查询失败时返回错误。
+    /// `unit_code` 为稳定单位代码。
     async fn find_enabled_by_code(
         &self,
         unit_code: &str,
@@ -252,15 +213,9 @@ pub trait UnitOfMeasureRepositoryImportLookupExt {
 
     /// 按单位名称精确查找启用中的计量单位。
     ///
-    /// # 参数
-    /// * `name` - 单位名称
-    /// * `executor` - 数据访问执行器
+    /// 命中时返回计量单位。MongoDB 查询失败时返回错误。
     ///
-    /// # 返回
-    /// 命中时返回计量单位。
-    ///
-    /// # 错误
-    /// MongoDB 查询失败时返回错误。
+    /// 沿用调用方传入的执行器。
     async fn find_enabled_by_exact_name(
         &self,
         name: &str,

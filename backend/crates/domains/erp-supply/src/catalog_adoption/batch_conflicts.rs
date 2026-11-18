@@ -6,12 +6,9 @@ use super::{BatchItemStatus, CatalogAdoptionBatchItem};
 use crate::{Error, Result};
 
 /// 将同一来源商品的跨规格映射冲突标记到该商品全部待处理规格。
-/// # 参数
-/// `rows` 为已完成本轮自动匹配的完整批次，不得用当前页替代。
-/// # 返回
 /// 有冲突的商品全部取消提交资格；无冲突商品、排除项和已执行结果保持原值。
-/// # 错误
 /// 完整集合包含重复来源 SKU 时拒绝，禁止以重复行建立不同公司归属。
+/// `rows` 为已完成本轮自动匹配的完整批次，不得用当前页替代。
 pub fn mark_product_mapping_conflicts(rows: &mut [CatalogAdoptionBatchItem]) -> Result<()> {
     let mut groups = HashMap::<(String, String), Vec<usize>>::new();
     let mut seen = HashSet::new();

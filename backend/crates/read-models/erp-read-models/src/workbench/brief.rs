@@ -24,16 +24,12 @@ pub(crate) struct AssembledBrief {
     pub list_summary: String,
 }
 
-/// 按原因码翻译提交来源。
-///
-/// # 参数
-/// * `reason_code` - 任务原因码
-///
-/// # 返回
-/// 已知来源返回中文；未知返回 `None`。
-///
-/// # 错误
-/// 无。
+// 生成事项简报视图时，按原因码翻译提交来源。
+//
+// 调用参数：
+// * `reason_code` - 任务原因码
+//
+// 已知来源返回中文；未知返回 `None`。
 pub(crate) fn submission_origin_label(reason_code: Option<&str>) -> Option<&'static str> {
     match reason_code.unwrap_or("").trim().replace('-', "_").to_ascii_lowercase().as_str() {
         "procurement_confirmation_dispatched" => Some("初次提交"),
@@ -43,17 +39,13 @@ pub(crate) fn submission_origin_label(reason_code: Option<&str>) -> Option<&'sta
     }
 }
 
-/// 把对象简报源和任务原因码组装成可上屏简报。
-///
-/// # 参数
-/// * `source` - 对象事实上的事项内容
-/// * `reason_code` - 任务原因码，用于提交来源
-///
-/// # 返回
-/// 返回详情键值、明细行和列表摘要。
-///
-/// # 错误
-/// 无。
+// 生成事项简报视图时，把对象简报源和任务原因码组装成可上屏简报。
+//
+// 调用参数：
+// * `source` - 对象事实上的事项内容
+// * `reason_code` - 任务原因码，用于提交来源
+//
+// 返回详情键值、明细行和列表摘要。
 pub(crate) fn assemble_brief(source: &ObjectBriefSource, reason_code: Option<&str>) -> AssembledBrief {
     let mut sections = Vec::new();
     push_section(&mut sections, "客户", source.customer.as_deref(), false);
@@ -77,34 +69,26 @@ pub(crate) fn assemble_brief(source: &ObjectBriefSource, reason_code: Option<&st
     }
 }
 
-/// 判断简报是否已有同名键值，避免任务类型专属段与默认段重复上屏。
-///
-/// # 参数
-/// * `sections` - 已组装的键值段
-/// * `label` - 要查找的标签
-///
-/// # 返回
-/// 已存在同名段时返回 `true`。
-///
-/// # 错误
-/// 无。
+// 处理事项简报时，判断简报是否已有同名键值，避免任务类型专属段与默认段重复上屏。
+//
+// 调用参数：
+// * `sections` - 已组装的键值段
+// * `label` - 要查找的标签
+//
+// 已存在同名段时返回 `true`。
 fn has_section(sections: &[BriefSection], label: &str) -> bool {
     sections.iter().any(|section| section.label == label)
 }
 
-/// 向简报追加非空键值段。关联单据请用 [`push_document_section`]。
-///
-/// # 参数
-/// * `sections` - 已组装的键值段
-/// * `label` - 标签
-/// * `value` - 待写入的值
-/// * `numeric` - 是否按数字对齐
-///
-/// # 返回
-/// 无。空值不上屏。本函数不写入跳转身份。
-///
-/// # 错误
-/// 无。
+// 处理事项简报时，向简报追加非空键值段。关联单据请用 [`push_document_section`]。
+//
+// 调用参数：
+// * `sections` - 已组装的键值段
+// * `label` - 标签
+// * `value` - 待写入的值
+// * `numeric` - 是否按数字对齐
+//
+// 无。空值不上屏。本函数不写入跳转身份。
 pub(crate) fn push_section(
     sections: &mut Vec<BriefSection>,
     label: &str,
@@ -122,19 +106,15 @@ pub(crate) fn push_section(
     });
 }
 
-/// 向简报追加可预览或跳转的关联单据段。
-///
-/// # 参数
-/// * `sections` - 已组装的键值段
-/// * `label` - 标签
-/// * `value` - 面向用户的单号
-/// * `object_id` - 关联单据稳定身份；空白不上屏为链接
-///
-/// # 返回
-/// 无。空值单号不上屏。
-///
-/// # 错误
-/// 无。
+// 处理事项简报时，向简报追加可预览或跳转的关联单据段。
+//
+// 调用参数：
+// * `sections` - 已组装的键值段
+// * `label` - 标签
+// * `value` - 面向用户的单号
+// * `object_id` - 关联单据稳定身份；空白不上屏为链接
+//
+// 无。空值单号不上屏。
 pub(crate) fn push_document_section(
     sections: &mut Vec<BriefSection>,
     label: &str,
@@ -153,31 +133,23 @@ pub(crate) fn push_document_section(
     });
 }
 
-/// 去掉首尾空白后保留非空文本。
-///
-/// # 参数
-/// * `value` - 原始文本
-///
-/// # 返回
-/// 空白返回 `None`。
-///
-/// # 错误
-/// 无。
+// 处理事项简报时，去除首尾空白后保留非空文本。
+//
+// 调用参数：
+// * `value` - 原始文本
+//
+// 空白返回 `None`。
 pub(crate) fn non_empty(value: &str) -> Option<String> {
     let text = value.trim();
     (!text.is_empty()).then(|| text.to_string())
 }
 
-/// 把非空片段拼成列表一行摘要。
-///
-/// # 参数
-/// * `parts` - 已按展示顺序排好的片段
-///
-/// # 返回
-/// 返回用间隔符连接的摘要；全空时返回空串。
-///
-/// # 错误
-/// 无。
+// 生成事项简报视图时，把非空片段拼成列表一行摘要。
+//
+// 调用参数：
+// * `parts` - 已按展示顺序排好的片段
+//
+// 返回用间隔符连接的摘要；全空时返回空串。
 pub(crate) fn join_list_summary(parts: impl IntoIterator<Item = Option<String>>) -> String {
     parts
         .into_iter()
@@ -188,17 +160,13 @@ pub(crate) fn join_list_summary(parts: impl IntoIterator<Item = Option<String>>)
         .join(" · ")
 }
 
-/// 用商品名称和规格拼简报行标题。
-///
-/// # 参数
-/// * `item_name` - 品名快照
-/// * `spec` - 规格快照；超长时丢弃以免撑爆队列行
-///
-/// # 返回
-/// 返回可读标题；名称与规格都空时回退「未命名明细」。
-///
-/// # 错误
-/// 无。
+// 处理事项简报时，用商品名称和规格拼简报行标题。
+//
+// 调用参数：
+// * `item_name` - 品名快照
+// * `spec` - 规格快照；超长时丢弃以免撑爆队列行
+//
+// 返回可读标题；名称与规格都空时回退「未命名明细」。
 pub(crate) fn line_title(item_name: &str, spec: Option<&str>) -> String {
     let name = item_name.trim();
     let spec = spec.map(str::trim).filter(|text| !text.is_empty() && text.chars().count() <= 16);
@@ -210,17 +178,13 @@ pub(crate) fn line_title(item_name: &str, spec: Option<&str>) -> String {
     }
 }
 
-/// 把数量和单位格式化为简报数量文案。
-///
-/// # 参数
-/// * `quantity` - 基础单位数量
-/// * `unit` - 单位快照
-///
-/// # 返回
-/// 有单位时返回 `20 件`；无单位时返回 `×20`。
-///
-/// # 错误
-/// 无。
+// 展示事项简报时，把数量和单位格式化为简报数量文案。
+//
+// 调用参数：
+// * `quantity` - 基础单位数量
+// * `unit` - 单位快照
+//
+// 有单位时返回 `20 件`；无单位时返回 `×20`。
 pub(crate) fn format_quantity(quantity: &Quantity, unit: Option<&str>) -> String {
     let number = quantity.to_decimal().normalize().to_string();
     match unit.map(str::trim).filter(|text| !text.is_empty()) {
@@ -229,78 +193,58 @@ pub(crate) fn format_quantity(quantity: &Quantity, unit: Option<&str>) -> String
     }
 }
 
-/// 把采购预计交期格式化为队列交期文案。
-///
-/// # 参数
-/// * `due` - 业务自然日
-///
-/// # 返回
-/// 返回 `8/20 交` 这类相对日历文案。
-///
-/// # 错误
-/// 无。
+// 展示事项简报时，把采购预计交期格式化为队列交期文案。
+//
+// 调用参数：
+// * `due` - 业务自然日
+//
+// 返回 `8/20 交` 这类相对日历文案。
 pub(crate) fn format_business_due_label(due: BusinessDate) -> String {
     let (_, month, day) = due.ymd();
     format!("{month}/{day} 交")
 }
 
-/// 业务时区：东八区。工作台简报日期按此转换，不直接上 UTC。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回固定东八区偏移。
-///
-/// # 错误
-/// 无。偏移常量合法。
-///
-/// # Panics
-/// 东八区偏移被 `FixedOffset::east_opt` 拒绝时 panic。8 小时在允许范围内，常量合法。
+// 处理事项简报时，业务时区：东八区。工作台简报日期按此转换，不直接上 UTC。
+//
+// 返回固定东八区偏移。
+//
+// 失败边界：
+// 无。偏移常量合法。
+//
+// # Panics
+// 东八区偏移被 `FixedOffset::east_opt` 拒绝时 panic。8 小时在允许范围内，常量合法。
 fn shanghai_offset() -> FixedOffset {
     FixedOffset::east_opt(8 * 3600).expect("东八区偏移必须合法")
 }
 
-/// 把时刻格式化为队列交期文案。
-///
-/// # 参数
-/// * `due` - UTC 时刻
-///
-/// # 返回
-/// 返回东八区日历的 `8/20 交`。
-///
-/// # 错误
-/// 无。
+// 展示事项简报时，把时刻格式化为队列交期文案。
+//
+// 调用参数：
+// * `due` - UTC 时刻
+//
+// 返回东八区日历的 `8/20 交`。
 pub(crate) fn format_instant_due_label(due: Instant) -> String {
     let local = due.as_utc().with_timezone(&shanghai_offset());
     format!("{}/{} 交", local.month(), local.day())
 }
 
-/// 把时刻格式化为业务日期。
-///
-/// # 参数
-/// * `at` - UTC 时刻
-///
-/// # 返回
-/// 返回东八区 `YYYY-MM-DD`。
-///
-/// # 错误
-/// 无。
+// 展示事项简报时，把时刻格式化为业务日期。
+//
+// 调用参数：
+// * `at` - UTC 时刻
+//
+// 返回东八区 `YYYY-MM-DD`。
 pub(crate) fn format_instant_date(at: Instant) -> String {
     let local = at.as_utc().with_timezone(&shanghai_offset());
     format!("{}-{:02}-{:02}", local.year(), local.month(), local.day())
 }
 
-/// 把时刻格式化为业务时区的分钟级时间。
-///
-/// # 参数
-/// * `at` - UTC 时刻
-///
-/// # 返回
-/// 返回东八区 `YYYY-MM-DD HH:mm`。
-///
-/// # 错误
-/// 无。
+// 展示事项简报时，把时刻格式化为业务时区的分钟级时间。
+//
+// 调用参数：
+// * `at` - UTC 时刻
+//
+// 返回东八区 `YYYY-MM-DD HH:mm`。
 pub(crate) fn format_instant_datetime(at: Instant) -> String {
     let local = at.as_utc().with_timezone(&shanghai_offset());
     format!(

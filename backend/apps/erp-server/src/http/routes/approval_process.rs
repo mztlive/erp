@@ -12,20 +12,12 @@ use crate::http::routes::permission_route;
 use crate::http::state::HttpState;
 
 /// 返回定义管理路由。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
 /// 返回目录、版本、详情、草稿、节点、发布、退役与定义期候选人路由。
-///
-/// # 错误
-/// 不执行 I/O，不返回错误。
 pub fn routes() -> Router<HttpState> {
     Router::new().merge(catalog_routes()).merge(definition_routes())
 }
 
-/// 审批类型、版本与候选读取路由。
+// 为父路由挂载审批类型、版本与候选读取路由。
 fn catalog_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -51,7 +43,7 @@ fn catalog_routes() -> Router<HttpState> {
         )
 }
 
-/// 审批定义草稿、发布及退役路由。
+// 为父路由挂载审批定义草稿、发布及退役路由。
 fn definition_routes() -> Router<HttpState> {
     Router::new()
         .route(

@@ -18,12 +18,10 @@ pub struct SendPurchaseEmail {
 }
 impl SendPurchaseEmail {
     /// 校验发件依据为调用人确认的已生效采购版本。
-    /// # 参数
+    ///
+    /// 状态及版本一致时允许发送。版本过期、草稿、审批中、作废或缺少生效版本时拒绝。
+    ///
     /// `status` 为采购状态，`version` 为当前版本，`has_revision` 表示完整版本内容已读取。
-    /// # 返回
-    /// 状态及版本一致时允许发送。
-    /// # 错误
-    /// 版本过期、草稿、审批中、作废或缺少生效版本时拒绝。
     pub fn validate_source(
         &self,
         status: PurchaseOrderStatus,
@@ -46,12 +44,8 @@ impl SendPurchaseEmail {
         Ok(())
     }
     /// 校验单一邮箱及命令键，拒绝邮件头注入。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 返回规范化的收件邮箱。
-    /// # 错误
-    /// 邮箱非法、命令键为空或过长时拒绝。
+    ///
+    /// 返回规范化的收件邮箱。邮箱非法、命令键为空或过长时拒绝。
     pub fn recipient(&self) -> Result<String> {
         let email = self.recipient.trim();
         let parts = email.split('@').collect::<Vec<_>>();
@@ -93,12 +87,8 @@ pub struct PurchaseEmail {
 }
 impl PurchaseEmail {
     /// 校验重试命令仍对应原发送内容。
-    /// # 参数
-    /// `fingerprint` 为订单、版本和规范化收件人的命令指纹。
-    /// # 返回
-    /// 一致时允许读取原发送状态。
-    /// # 错误
-    /// 同键异载荷返回冲突，禁止再次发送。
+    ///
+    /// 一致时允许读取原发送状态。同键异载荷返回冲突，禁止再次发送。
     pub fn validate_replay(&self, fingerprint: &str) -> ProcurementResult<()> {
         if self.fingerprint != fingerprint {
             return Err(ProcurementError::ConflictError("本次发送内容已变化，请重新发起发送".into()));

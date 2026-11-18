@@ -33,7 +33,7 @@ pub(super) struct PreparedImage {
 struct WorkbookBytes(Arc<Vec<u8>>);
 
 impl AsRef<[u8]> for WorkbookBytes {
-    /// 返回共享工作簿的完整字节切片。
+    // 返回共享工作簿的完整字节切片。
     fn as_ref(&self) -> &[u8] {
         self.0.as_slice()
     }
@@ -47,16 +47,13 @@ pub(super) struct WorkbookMedia {
 }
 
 impl WorkbookMedia {
-    /// 在阻塞任务中打开 ZIP；损坏工作簿与原逐图读取一致，图片均跳过。
-    ///
-    /// # 参数
-    /// * `bytes` - 本次提交共享的源文件字节
-    ///
-    /// # 返回
-    /// 返回拥有 ZIP 目录与有界缓存的读取状态。
-    ///
-    /// # 错误
-    /// 阻塞任务异常终止时返回内部错误。
+    // 在阻塞任务中打开 ZIP；损坏工作簿与原逐图读取一致，图片均跳过。
+    //
+    // `bytes`：本次提交共享的源文件字节。
+    //
+    // 返回拥有 ZIP 目录与有界缓存的读取状态。
+    //
+    // 阻塞任务异常终止时返回内部错误。
     pub(super) async fn open(bytes: Arc<Vec<u8>>) -> Result<Self> {
         spawn_blocking(move || Self {
             archive: ZipArchive::new(Cursor::new(WorkbookBytes(bytes))).ok(),
@@ -67,17 +64,14 @@ impl WorkbookMedia {
         .map_err(|_| Error::Internal("读取导入图片失败".into()))
     }
 
-    /// 将单个媒体解压、检测与摘要交给一个阻塞任务，完成后归还同一 ZIP 状态。
-    ///
-    /// # 参数
-    /// * `path` - 当前模板单元格对应的 ZIP 内媒体路径
-    ///
-    /// # 返回
-    /// 返回同一读取状态与该媒体；缺失、损坏或格式未知时返回空媒体。
-    ///
-    /// # 错误
-    /// 阻塞任务异常终止时返回内部错误。取消读取最多留下一个媒体的阻塞工作，
-    /// 不读取后续媒体，也不执行上传。
+    // 将单个媒体解压、检测与摘要交给一个阻塞任务，完成后归还同一 ZIP 状态。
+    //
+    // `path`：当前模板单元格对应的 ZIP 内媒体路径。
+    //
+    // 返回同一读取状态与该媒体；缺失、损坏或格式未知时返回空媒体。
+    //
+    // 阻塞任务异常终止时返回内部错误。取消读取最多留下一个媒体的阻塞工作，
+    // 不读取后续媒体，也不执行上传。
     pub(super) async fn read(mut self, path: String) -> Result<(Self, Option<Arc<PreparedImage>>)> {
         spawn_blocking(move || {
             let image = self.image(&path);
@@ -87,13 +81,13 @@ impl WorkbookMedia {
         .map_err(|_| Error::Internal("读取导入图片失败".into()))
     }
 
-    /// 测试查询实际缓存状态，以验证上传首错后没有提前读取后续媒体。
+    // 测试查询实际缓存状态，以验证上传首错后没有提前读取后续媒体。
     #[cfg(test)]
     pub(super) fn has_cached(&self, path: &str) -> bool {
         self.cache.iter().any(|(cached, _)| cached == path)
     }
 
-    /// 复用最近媒体；无法读取或格式不支持时保持逐图跳过。
+    // 复用最近媒体；无法读取或格式不支持时保持逐图跳过。
     fn image(&mut self, path: &str) -> Option<Arc<PreparedImage>> {
         if let Some((_, image)) = self.cache.iter().find(|(cached, _)| cached == path) {
             return image.clone();
@@ -107,7 +101,7 @@ impl WorkbookMedia {
         image
     }
 
-    /// 写入有限近期缓存，淘汰最早条目直至条数和解压字节数均符合上限。
+    // 写入有限近期缓存，淘汰最早条目直至条数和解压字节数均符合上限。
     fn retain_image(&mut self, path: &str, image: Option<Arc<PreparedImage>>, byte_size: usize) {
         while self.cache.len() >= MEDIA_CACHE_ENTRIES || self.cached_bytes + byte_size > MEDIA_CACHE_BYTES {
             if let Some((_, old)) = self.cache.pop_front() {
@@ -119,17 +113,11 @@ impl WorkbookMedia {
     }
 }
 
-/// 按原第 3 至第 5 列顺序解析图片目标，缺公式或缺映射时跳过。
-///
-/// # 参数
-/// * `cells` - 当前模板行的单元格
-/// * `sheet` - 工作簿解析结果中的图片路径映射
-///
-/// # 返回
-/// 返回最多 3 个按模板列序排列的图片目标。
-///
-/// # 错误
-/// 无。
+// 按原第 3 至第 5 列顺序解析图片目标，缺公式或缺映射时跳过。
+//
+// `cells`：当前模板行的单元格；`sheet`：工作簿解析结果中的图片路径映射。
+//
+// 返回最多 3 个按模板列序排列的图片目标。
 pub(super) fn row_media_targets(cells: &[String], sheet: &ParsedProductSheet) -> Vec<(usize, String)> {
     cells
         .iter()
@@ -143,7 +131,7 @@ pub(super) fn row_media_targets(cells: &[String], sheet: &ParsedProductSheet) ->
         .collect()
 }
 
-/// 从同一 ZIP 提取并识别图片，损坏条目、缺条目或未知格式均沿用跳过语义。
+// 从同一 ZIP 提取并识别图片，损坏条目、缺条目或未知格式均沿用跳过语义。
 fn prepare_image(archive: &mut ZipArchive<Cursor<WorkbookBytes>>, path: &str) -> Option<PreparedImage> {
     let mut file = archive.by_name(path).ok()?;
     let mut bytes = Vec::new();
@@ -154,7 +142,7 @@ fn prepare_image(archive: &mut ZipArchive<Cursor<WorkbookBytes>>, path: &str) ->
     Some(PreparedImage { bytes, content_type, extension, digest })
 }
 
-/// 按原文件签名识别受支持图片，不根据扩展名接受其他格式。
+// 按原文件签名识别受支持图片，不根据扩展名接受其他格式。
 fn detect_image(content: &[u8]) -> Option<(&'static str, &'static str)> {
     if content.starts_with(b"\x89PNG\r\n\x1a\n") {
         return Some(("image/png", "png"));
@@ -194,7 +182,7 @@ mod tests {
         Arc::new(writer.finish().unwrap().into_inner())
     }
 
-    /// 同路径跨单元格与跨行共享图片和摘要，不复制整份源工作簿。
+    // 验证：同路径跨单元格与跨行共享图片和摘要，不复制整份源工作簿。
     #[tokio::test]
     async fn media_reuses_archive_and_shared_paths() {
         let png = b"\x89PNG\r\n\x1a\ncontents".to_vec();
@@ -211,7 +199,7 @@ mod tests {
         assert_eq!(Arc::strong_count(&source), 1);
     }
 
-    /// 缺媒体、坏格式、坏压缩包均保持跳过，之后正常媒体继续被提取。
+    // 验证：缺媒体、坏格式、坏压缩包均保持跳过，之后正常媒体继续被提取。
     #[tokio::test]
     async fn media_skips_missing_unsupported_and_corrupt_sources() {
         let source = workbook(&[("bad", b"invalid-image".to_vec()), ("good", b"GIF89apayload".to_vec())]);
@@ -228,7 +216,7 @@ mod tests {
         assert!(invalid.is_none());
     }
 
-    /// 近期缓存始终有界，超限图片只在当前上传步骤驻留并立即允许释放。
+    // 验证：近期缓存始终有界，超限图片只在当前上传步骤驻留并立即允许释放。
     #[tokio::test]
     async fn media_cache_is_bounded_by_entries_and_bytes() {
         let mut large = b"\x89PNG\r\n\x1a\n".to_vec();
@@ -267,7 +255,7 @@ mod tests {
         assert!(reader.cached_bytes <= MEDIA_CACHE_BYTES);
     }
 
-    /// 目标采集仅保留模板图片列顺序，未知引用或其他列不进入提取批次。
+    // 验证：目标采集仅保留模板图片列顺序，未知引用或其他列不进入提取批次。
     #[test]
     fn media_targets_limit_each_row_to_three_columns() {
         let sheet = ParsedProductSheet {

@@ -183,13 +183,8 @@ impl JdVopOfferMapper {
 }
 
 impl SellPrice {
-    /// 将需要额外用户资格或促销限购核验的来源报价标记为受限。
-    /// # 参数
-    /// 无；读取本次按量报价中的促销事实。
-    /// # 返回
-    /// 普通报价返回空限制，一口价及未支持的促销分别保留限制原因。
-    /// # 错误
-    /// 已提供但无法识别的促销标记返回映射错误，不猜测为普通价格。
+    // 转换目录报价或做下单预检时，按本次按量报价区分一口价资格限制和仍待核实的促销限制。
+    // 普通报价无额外限制；促销状态无法识别时报映射错误，不按普通价格放行。
     pub(super) fn purchase_restrictions(&self) -> ConnectorResult<Vec<PurchaseRestriction>> {
         let promotional = match self.has_promotion.as_ref().map(|value| value.0.as_str()) {
             Some("true") => true,
@@ -210,13 +205,8 @@ impl SellPrice {
     }
 }
 
-/// 将详情中已经核实的来源数量限制转换为通用采购约束。
-/// # 参数
-/// `detail` 为请求了购买倍数扩展的本次商品详情。
-/// # 返回
-/// 起购量及倍数；来源缺失时分别保留未知。
-/// # 错误
-/// 来源数量不是正数或超出精度时拒绝，不猜测默认一件。
+// 转换已请求购买倍数扩展的商品详情时，把来源起购量与购买倍数写为采购约束。
+// 两个字段独立保留未知；来源值非正数或精度无效时报错，不猜测默认一件。
 pub(super) fn purchase_limits(detail: &SkuDetail) -> ConnectorResult<SourcePurchaseTerms> {
     Ok(SourcePurchaseTerms {
         minimum_quantity: quantity(detail.lowest_buy.as_ref())?,

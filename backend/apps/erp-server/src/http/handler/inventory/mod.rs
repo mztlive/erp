@@ -70,15 +70,7 @@ pub struct UpdateStockAdjustmentHttpRequest {
 }
 impl UpdateStockAdjustmentHttpRequest {
     /// 以必填版本构造更新请求；可选维度默认为空。
-    ///
-    /// # 参数
-    /// * `version` - 期望库存调整单版本
-    ///
-    /// # 返回
     /// 返回无变更内容的请求。
-    ///
-    /// # 错误
-    /// 无。
     pub fn new(version: String) -> Self {
         Self { version, reason_type: None, lines: None, note: None, occurred_at: None }
     }
@@ -179,14 +171,7 @@ impl StockAdjustmentSubmitResultHttpQuery {
 }
 
 /// 查询库存余额列表（W10 台账）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 当前认证操作人，用于服务端范围与动作投影
-/// * `query` - 分页与筛选参数（`warehouse_id`/`sku_id` 扁平传递）
-///
-/// # 返回
-/// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
+/// `query` 为分页与筛选参数（`warehouse_id`/`sku_id` 扁平传递）。
 pub async fn stock_balance_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -198,13 +183,6 @@ pub async fn stock_balance_list(
 }
 
 /// 查询库存余额详情（余额 + 最近流水 + 有效预占 + 未过账调整）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 当前认证操作人，用于服务端范围与动作投影
-/// * `id` - 余额主键
-///
-/// # 返回
 /// 返回余额详情视图。
 pub async fn stock_balance_detail(
     State(state): State<HttpState>,
@@ -217,14 +195,6 @@ pub async fn stock_balance_detail(
 }
 
 /// 查询库存流水台账（W10 流水视图）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 当前认证操作人，用于服务端库存流水读取范围
-/// * `query` - 分页与筛选参数（仓库/SKU/类型/方向/时间区间）
-///
-/// # 返回
-/// 返回契约形状的分页视图。
 pub async fn stock_movement_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -236,14 +206,6 @@ pub async fn stock_movement_list(
 }
 
 /// 查询库存预占列表（W10 销售预占视图）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 当前认证操作人，用于服务端库存预占读取范围
-/// * `query` - 分页与筛选参数（仓库/SKU/状态/销售明细）
-///
-/// # 返回
-/// 返回契约形状的分页视图。
 pub async fn stock_reservation_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -255,14 +217,6 @@ pub async fn stock_reservation_list(
 }
 
 /// 查询库存调整单列表（W10 调整记录视图）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 当前认证操作人，用于服务端对象读取范围
-/// * `query` - 分页与筛选参数（仓库/状态）
-///
-/// # 返回
-/// 返回契约形状的分页视图。
 pub async fn stock_adjustment_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -274,13 +228,6 @@ pub async fn stock_adjustment_list(
 }
 
 /// 查询库存调整单详情（表头 + 明细 + 过账流水）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 当前认证操作人，用于服务端动作投影
-/// * `id` - 调整单主键
-///
-/// # 返回
 /// 返回调整单详情视图。
 pub async fn stock_adjustment_detail(
     State(state): State<HttpState>,
@@ -298,13 +245,6 @@ pub async fn stock_adjustment_detail(
 }
 
 /// 创建库存调整单（草稿）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 创建请求（表头 + 明细）
-///
-/// # 返回
 /// 返回新建调整单的完整详情视图。
 pub async fn stock_adjustment_create(
     State(state): State<HttpState>,
@@ -324,14 +264,7 @@ pub async fn stock_adjustment_create(
 }
 
 /// 更新库存调整单（仅草稿/驳回；乐观锁冲突返回 409）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 调整单主键
-/// * `req` - 更新请求（含期望版本）
-///
-/// # 返回
+/// `req` 为更新请求（含期望版本）。
 /// 返回更新后调整单的响应视图。
 pub async fn stock_adjustment_update(
     State(state): State<HttpState>,
@@ -352,14 +285,7 @@ pub async fn stock_adjustment_update(
 }
 
 /// 提交库存调整并启动统一审批。客户端不得选择定义或审批人。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 调整单主键
-/// * `req` - 最终草稿、余额版本与幂等键
-///
-/// # 返回
+/// `req` 为最终草稿、余额版本与幂等键。
 /// 返回提交后的完整详情视图。
 pub async fn stock_adjustment_submit(
     State(state): State<HttpState>,
@@ -379,9 +305,7 @@ pub async fn stock_adjustment_submit(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 按原冻结主题版本与幂等键查询提交审批的精确收据结果。
-///
-/// 缺失或错误幂等键返回 404；不得根据库存调整单当前状态推断成功。
+/// 库存调整提交结果未知时，按原冻结主题版本和幂等键核对审批回执；键缺失或不匹配时返回 404，不能由当前单据状态推断原提交成功。
 pub async fn stock_adjustment_submit_result(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -403,14 +327,7 @@ pub async fn stock_adjustment_submit_result(
 ///
 /// Handler 只适配合同请求；Service 负责校验原提交人/运行管理员、调用统一
 /// `prepare_cancel` 并原子关闭审批运行事实与开放任务。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 库存调整单主键
-/// * `req` - 期望版本、必填原因与幂等键
-///
-/// # 返回
+/// `req` 为期望版本、必填原因与幂等键。
 /// 返回撤回后库存调整单视图。
 pub async fn stock_adjustment_cancel_approval(
     State(state): State<HttpState>,
@@ -454,21 +371,8 @@ pub struct CancelStockAdjustmentApprovalHttpRequest {
 
 impl CancelStockAdjustmentApprovalHttpRequest {
     /// 以必填版本构造撤回请求；开放任务版本默认为空。
-    ///
-    /// # 参数
-    /// * `expected_version` - 期望库存调整单版本
-    /// * `approval_process_instance_id` - 审批实例 ID
-    /// * `expected_subject_version` - 冻结提交版本
-    /// * `expected_instance_version` - 期望实例版本
-    /// * `expected_execution_version` - 期望执行版本
-    /// * `reason` - 非空撤回原因
-    /// * `idempotency_key` - 幂等键
-    ///
-    /// # 返回
+    /// `expected_subject_version` 为冻结提交版本，`reason` 为非空撤回原因。
     /// 返回无开放任务版本的请求。
-    ///
-    /// # 错误
-    /// 无。
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         expected_version: String,
@@ -515,15 +419,7 @@ impl CancelStockAdjustmentApprovalHttpRequest {
     }
 }
 
-/// 人工过账旁路已关闭。过账只允许作为审批最终通过动作。
-///
-/// # 参数
-/// * `_state` - 应用状态
-/// * `_actor` - 已通过鉴权的审计操作人
-/// * `_id` - 调整单主键
-///
-/// # 错误
-/// 始终返回冲突，防止 HTTP 旁路过账。
+/// 拒绝从 HTTP 直接过账库存调整单并返回冲突；真实过账只由审批的最终通过动作触发。
 pub async fn stock_adjustment_post(
     State(_state): State<HttpState>,
     Extension(_actor): Extension<AuditActor>,
@@ -543,7 +439,7 @@ mod tests {
         UpdateStockAdjustmentHttpRequest,
     };
 
-    /// 人工复核端点已删除，提交请求拒绝客户端选择审批人。
+    // 确认库存调整不再暴露人工复核端点，并且提交命令不接受客户端指定审批人。
     #[test]
     fn manual_approve_reject_endpoints_are_removed() {
         const REMOVED_PATHS: &[&str] = &["/stock-adjustments/{id}/approve", "/stock-adjustments/{id}/reject"];
@@ -558,7 +454,7 @@ mod tests {
         );
     }
 
-    /// 普通撤回 HTTP wire 只接受字符串版本并拒绝额外运行字段。
+    // 用普通撤回请求锁定字符串版本合同，断言额外的审批运行字段不能进入该入口。
     #[test]
     fn cancel_approval_http_versions_are_strings_and_unknown_fields_are_rejected() {
         let valid = serde_json::from_value::<CancelStockAdjustmentApprovalHttpRequest>(serde_json::json!({
@@ -615,7 +511,7 @@ mod tests {
         }
     }
 
-    /// 撤回命令的每个必填及可选版本均拒绝空白、符号、零与数值溢出。
+    // 逐项检查撤回的必填与可选版本，确保空白、符号、零和溢出值在协议层拒绝。
     #[test]
     fn cancel_http_rejects_invalid_decimal_version_strings() {
         let headers = HeaderMap::new();
@@ -689,7 +585,7 @@ mod tests {
         .expect("字符串版本创建请求")
     }
 
-    /// 创建与提交 HTTP 边界只接收十进制字符串，并在边界内精确解析。
+    // 用创建和提交请求验证十进制字符串版本能精确解析，防止客户端数值精度丢失。
     #[test]
     fn create_and_submit_http_versions_are_lossless_decimal_strings() {
         let headers = HeaderMap::new();
@@ -762,7 +658,7 @@ mod tests {
         );
     }
 
-    /// 空白、负数、溢出和超出 u32 的主题版本一律在 HTTP 边界拒绝。
+    // 覆盖提交协议的无效版本：空白、负数、数值溢出及大于 `u32` 的主题版本必须拒绝。
     #[test]
     fn submit_http_rejects_invalid_decimal_version_strings() {
         let headers = HeaderMap::new();
@@ -801,7 +697,7 @@ mod tests {
         assert!(zero_balance.into_service(&headers).is_err());
     }
 
-    /// 提交结果查询只接受规范 u32 十进制主题版本，并原样保留幂等键。
+    // 检查提交回执查询必须传规范的 `u32` 十进制主题版本，同时原样保留幂等键。
     #[test]
     fn submit_result_http_query_requires_canonical_subject_version() {
         let headers = HeaderMap::new();
@@ -838,7 +734,7 @@ mod tests {
         );
     }
 
-    /// PUT 更新边界只接受规范十进制字符串版本，禁止 JS number 与额外字段。
+    // 通过更新协议确认版本只接收规范十进制字符串，拒绝 JSON 数字与额外字段。
     #[test]
     fn update_http_version_is_lossless_and_fail_closed() {
         let headers = HeaderMap::new();

@@ -17,12 +17,10 @@ pub struct BookletSummary {
 
 impl SalesSelectionDomainRepository<'_> {
     /// 批量读取已授权选品册页的摘要。
-    /// # 参数
-    /// `ids` 为完成权限过滤的本页册 ID；`executor` 为当前执行器。
-    /// # 返回
-    /// 每册当前有效、未移除陈列数及已关联方案编号。
-    /// # 错误
+    /// 结果：每册当前有效、未移除陈列数及已关联方案编号。
     /// 聚合读取失败时返回错误。
+    ///
+    /// 输入约定：`ids` 为完成权限过滤的本页册 ID；`executor` 为当前执行器。
     pub async fn booklet_summaries(
         &self,
         ids: &[String],

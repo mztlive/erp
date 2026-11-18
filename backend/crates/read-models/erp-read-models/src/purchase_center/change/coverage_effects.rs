@@ -15,19 +15,15 @@ use super::super::change_bounds::load_change_quantity_facts;
 use super::super::dto::PurchaseChangeCoverageEffectView;
 use crate::{Error, Result};
 
-/// 读取在途改单当前提交的销售覆盖影响。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `change` - 采购变更单
-/// * `order` - 已证明可见的来源采购单
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 草稿已提交过或审批中时返回数量有变化的行；其余情况返回空列表。
-///
-/// # 错误
-/// 提交行、覆盖事实或已发生数量读取失败时返回错误。
+// 为采购变更取数时，读取在途改单当前提交的销售覆盖影响。
+//
+// 调用参数：
+// * `change` - 采购变更单
+// * `order` - 已证明可见的来源采购单
+//
+// 草稿已提交过或审批中时返回数量有变化的行；其余情况返回空列表。
+//
+// 提交行、覆盖事实或已发生数量读取失败时返回错误。
 pub(super) async fn load_coverage_effects(
     db: &Database,
     change: &PurchaseChangeOrder,
@@ -51,17 +47,15 @@ pub(super) async fn load_coverage_effects(
     coverage_effects(&facts.bounds, &target)
 }
 
-/// 由数量范围与改后数量计算变化行的覆盖影响。
-///
-/// # 参数
-/// * `bounds` - 采购当前生效版本商品行的数量范围
-/// * `target` - 改单目标中的（稳定销售行，数量）
-///
-/// # 返回
-/// 按采购行号返回数量有变化的行。
-///
-/// # 错误
-/// 数量越界时返回错误。
+// 处理采购变更时，由数量范围与改后数量计算变化行的覆盖影响。
+//
+// 调用参数：
+// * `bounds` - 采购当前生效版本商品行的数量范围
+// * `target` - 改单目标中的（稳定销售行，数量）
+//
+// 按采购行号返回数量有变化的行。
+//
+// 数量越界时返回错误。
 fn coverage_effects(
     bounds: &[ChangeQuantityBound],
     target: &[(String, Quantity)],
@@ -111,7 +105,7 @@ mod tests {
         }
     }
 
-    /// 只列出数量变化的行；改为 0 时整行需要重新供给。
+    // 验证采购变更：只列出数量变化的行；改为 0 时整行需要重新供给。
     #[test]
     fn only_changed_lines_report_gap_after_change() {
         let bounds = vec![bound("sol-a", "5", "10", "5"), bound("sol-b", "3", "3", "0")];

@@ -10,13 +10,9 @@ use persistence_core::Executor;
 
 use crate::Result;
 
-/// 检查原入口资格、任务版本及当前指定人。
-/// # 参数
-/// db为原数据库；authorization为共享服务；actor、task、executor为原事务上下文。
-/// # 返回
-/// 完整授权成立时成功。
-/// # 错误
-/// 资格、任务或指派失效时拒绝。
+// 检查原入口资格、任务版本及当前指定人。
+//
+// db为原数据库；authorization为共享服务；actor、task、executor为原事务上下文。完整授权成立时成功。资格、任务或指派失效时拒绝。
 pub(super) async fn require_assigned(
     _db: &Database,
     authorization: &Arc<AuthorizationService>,

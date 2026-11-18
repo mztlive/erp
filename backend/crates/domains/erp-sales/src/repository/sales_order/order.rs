@@ -82,16 +82,12 @@ impl SalesOrderListView {
     ///
     /// DTO 的 `my_todo`/`exception_only` 是 HTTP 线协议字段（保持 bool 形态兼容），
     /// 进入仓储前必须经本函数收敛；两者同传为非法组合，直接拒绝而非叠加过滤。
-    ///
-    /// # 参数
-    /// * `my_todo` - 是否为"待我处理"视图
-    /// * `exception_only` - 是否为"异常"视图
-    ///
-    /// # 返回
     /// 返回与输入对应的单一视图。
-    ///
-    /// # 错误
     /// 两者同时为 `true` 时返回参数验证失败。
+    ///
+    /// 输入约定：
+    /// - `my_todo`：是否为"待我处理"视图
+    /// - `exception_only`：是否为"异常"视图
     pub fn from_flags(my_todo: bool, exception_only: bool) -> crate::Result<Self> {
         match (my_todo, exception_only) {
             (false, false) => Ok(Self::All),
@@ -183,7 +179,7 @@ impl Default for SalesOrderFilter {
 }
 
 impl SalesOrderFilter {
-    /// 合同存在性与其余条件求交，空合同覆盖历史缺字段及空字符串。
+    // 按有没有合同限制销售列表时与其他条件求交；「无合同」还匹配历史缺字段及空字符串。
     fn append_contract_presence(&self, filter: &mut Document) {
         if let Some(has_contract) = self.has_contract {
             let condition = if has_contract {
@@ -195,7 +191,7 @@ impl SalesOrderFilter {
         }
     }
 
-    /// 关键词命中任一受支持身份，同时保留结构化合同筛选。
+    // 把各受支持销售标识的关键词分支合并，同时保留显式合同等结构化筛选。
     fn append_keyword(&self, filter: &mut Document) {
         if let Some(q) = &self.search.q {
             let mut number = Document::new();
@@ -209,10 +205,10 @@ impl SalesOrderFilter {
         }
     }
 
-    /// 追加一项交集条件，避免覆盖先前的关键词或合同存在性条件。
-    ///
-    /// # Panics
-    /// `$and` 只能由本方法写成数组；若该字段已是其他 BSON 类型则 panic。
+    // 叠加销售列表的业务筛选时将新条件追加到交集，避免覆盖先前的关键词或合同存在性条件。
+    //
+    // # Panics
+    // `$and` 只能由本方法写成数组；若该字段已是其他 BSON 类型则 panic。
     fn intersect(filter: &mut Document, condition: Document) {
         filter
             .entry("$and".to_string())
@@ -224,18 +220,10 @@ impl SalesOrderFilter {
 }
 
 impl QueryFilter for SalesOrderFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// 单号走字面量正则；客户、合同、来源、商业状态、审核轨、业务性质、履约/回款/开票进度、关闭状态、创建人有值时按等值追加，负责人按 `$in` 追加。合同是否存在与关键词再与上述条件求交。创建时间上下界写入 `created_at`，无法装入 `i64` 的时间戳记为 `i64::MAX`。`business_org_unit_ids` 为空集合时条件恒假。`MyTodo` 追加草稿或驳回/低毛利待审的 `$or`；`ExceptionOnly` 把审核轨限定为 `Rejected`。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 转换为 MongoDB 查询条件（自动追加未删除过滤）。
+    //
+    // 单号走字面量正则；客户、合同、来源、商业状态、审核轨、业务性质、履约/回款/开票进度、关闭状态、创建人有值时按等值追加，负责人按 `$in` 追加。合同是否存在与关键词再与上述条件求交。创建时间上下界写入 `created_at`，无法装入 `i64` 的时间戳记为 `i64::MAX`。`business_org_unit_ids` 为空集合时条件恒假。`MyTodo` 追加草稿或驳回/低毛利待审的 `$or`；`ExceptionOnly` 把审核轨限定为 `Rejected`。
+    // 返回查询条件文档。
     fn to_doc(&self) -> Document {
         let mut filter = undeleted_condition();
         insert_literal_regex_filter(&mut filter, "order_no", self.order_no.as_deref());
@@ -326,16 +314,7 @@ impl QueryFilter for SalesOrderFilter {
 }
 
 impl Pagination for SalesOrderFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 向仓储分页器交付筛选中的页码与每页条数。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -345,16 +324,12 @@ impl Pagination for SalesOrderFilter {
 #[allow(async_fn_in_trait)]
 pub trait SalesOrderRepositoryExt {
     /// 按销售单 ID 集合批量读取活跃销售单。
-    ///
-    /// # 参数
-    /// * `sales_order_ids` - 销售单稳定身份集合；空集合直接返回空结果
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回全部匹配且未删除的销售单；返回顺序不承诺与输入一致。
+    /// 传播数据库查询或游标读取失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 输入约定：
+    /// - `sales_order_ids`：销售单稳定身份集合；空集合直接返回空结果
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn find_orders_by_ids(
         &self,
         sales_order_ids: &[SalesOrderId],
@@ -362,19 +337,13 @@ pub trait SalesOrderRepositoryExt {
     ) -> Result<Vec<SalesOrder>>;
 
     /// 按销售单 ID 集合批量读取已生效且可作为采购来源的销售单。
-    ///
-    /// # 参数
-    /// * `sales_order_ids` - 销售单稳定身份集合；空集合直接返回空结果
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回全部匹配、未删除且商业状态为生效的销售单；返回顺序不承诺与输入一致。
+    /// 传播数据库查询或游标读取失败。
+    /// 调用边界：未删除过滤与 [`Self::find_orders_by_ids`] 一致，由基类 `find_many` 统一追加。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    ///
-    /// # 约束
-    /// 未删除过滤与 [`Self::find_orders_by_ids`] 一致，由基类 `find_many` 统一追加。
+    /// 输入约定：
+    /// - `sales_order_ids`：销售单稳定身份集合；空集合直接返回空结果
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn find_effective_orders_by_ids(
         &self,
         sales_order_ids: &[SalesOrderId],
@@ -384,19 +353,13 @@ pub trait SalesOrderRepositoryExt {
     /// 按稳定 ID 读取工作项当前销售单事实。
     ///
     /// 工作项入口的历史名称；纯主键读取，直接委托基类单条查询。
-    ///
-    /// # 参数
-    /// * `id` - 销售单 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回未删除销售单；不存在时返回 `None`。
+    /// 传播数据库查询或反序列化失败。
+    /// 调用边界：仅查询本仓储拥有的销售单集合，不访问应收或版本集合。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或反序列化失败时返回错误。
-    ///
-    /// # 约束
-    /// 仅查询本仓储拥有的销售单集合，不访问应收或版本集合。
+    /// 输入约定：
+    /// - `id`：销售单 ID
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn find_work_item_sales_order(
         &self,
         id: &str,
@@ -407,17 +370,13 @@ pub trait SalesOrderRepositoryExt {
     ///
     /// 只返回 [`SalesOrderRow`] 所需的列表字段，不加载整文档；排序字段由
     /// Service 层白名单校验后传入（api-contract §4）。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `scope` - 已证明的销售读取范围，与筛选求交
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回当前页投影行与满足筛选条件的总数。
+    /// 传播数据库查询、游标读取或计数失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// 输入约定：
+    /// - `filter`：筛选与分页条件
+    /// - `scope`：已证明的销售读取范围，与筛选求交
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn search_sales_orders(
         &self,
         filter: &SalesOrderFilter,
@@ -426,17 +385,12 @@ pub trait SalesOrderRepositoryExt {
     ) -> crate::Result<PageResult<SalesOrderRow>>;
 
     /// 装载查询的有界身份与版本集合，用于跨页及导出的一致性校验。
+    /// 结果：最多 10001 行；调用方必须整体拒绝超限，不得截断版本集合。
+    /// 传播数据库读取失败。
     ///
-    /// # 参数
-    /// * `filter` - 与列表相同的筛选条件
-    /// * `scope` - 已证明的销售读取范围，与筛选求交
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 最多 10001 行；调用方必须整体拒绝超限，不得截断版本集合。
-    ///
-    /// # 错误
-    /// 数据库读取失败时返回仓储错误。
+    /// 输入约定：
+    /// - `filter`：与列表相同的筛选条件
+    /// - `scope`：已证明的销售读取范围，与筛选求交
     async fn query_versions(
         &self,
         filter: &SalesOrderFilter,
@@ -445,14 +399,11 @@ pub trait SalesOrderRepositoryExt {
     ) -> crate::Result<Vec<super::scope::SalesVersion>>;
 
     /// 按销售单号字面量匹配未删除单据身份。
-    ///
-    /// # 参数
-    /// * `keyword` - 忽略大小写的单号关键词
-    /// * `executor` - 调用方执行器
-    /// # 返回
     /// 返回全部命中身份，供消费方在分页前组合筛选。
-    /// # 错误
     /// 查询或反序列化失败时返回仓储错误。
+    ///
+    /// 输入约定：
+    /// - `keyword`：忽略大小写的单号关键词
     async fn matching_ids_by_number(
         &self,
         keyword: &str,
@@ -460,16 +411,11 @@ pub trait SalesOrderRepositoryExt {
     ) -> Result<Vec<SalesOrderId>>;
 
     /// 判断组织是否仍有未作废且未关闭的销售单。
+    /// 结果：`commercial_status` 不是 `VOIDED` 且 `close_status` 不是 `CLOSED` 时返回 `true`。
+    /// 失败条件：查询失败返回仓储错误；失败不得解释为没有业务。
     ///
-    /// # 参数
-    /// * `org` - 业务组织 ID。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// `commercial_status` 不是 `VOIDED` 且 `close_status` 不是 `CLOSED` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 查询失败返回仓储错误；失败不得解释为没有业务。
+    /// 输入约定：
+    /// - `org`：业务组织 ID。
     async fn has_unsettled_business_org(
         &self,
         org: &str,
@@ -622,16 +568,12 @@ impl SalesOrderRepositoryExt for Repository<'_, SalesOrder> {
 #[allow(async_fn_in_trait)]
 pub trait SalesOrderLineRepositoryExt {
     /// 列出销售单的全部稳定明细行（按行号升序）。
-    ///
-    /// # 参数
-    /// * `sales_order_id` - 所属销售单
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回按行号升序的明细行列表。
+    /// 传播数据库查询或游标读取失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 输入约定：
+    /// - `sales_order_id`：所属销售单
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn list_lines_by_order(
         &self,
         sales_order_id: &SalesOrderId,
@@ -673,16 +615,12 @@ impl<'a> SalesOrderDomainRepository<'a> {
     /// [`Repository::find_by_id`] 一致（仅统计 `deleted_at` 为未删除标记的
     /// 销售单）。返回集合只保证是输入的子集，不承诺顺序；跨聚合报错决策
     /// （如“哪些订单缺失”）由调用方 Service 解释。
-    ///
-    /// # 参数
-    /// * `ids` - 待校验的销售单 ID；重复 ID 自动去重，结果中每个 ID 至多出现一次
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回输入中真实存在且未删除的销售单 ID 集合。
+    /// 传播数据库查询或投影反序列化失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或投影反序列化失败时返回错误。
+    /// 输入约定：
+    /// - `ids`：待校验的销售单 ID；重复 ID 自动去重，结果中每个 ID 至多出现一次
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     pub async fn find_existing_ids(
         &self,
         ids: &[SalesOrderId],
@@ -712,25 +650,18 @@ struct SalesOrderIdRow {
     id: String,
 }
 
-/// 去重销售单 ID（保持首次出现顺序）。
-///
-/// # 参数
-/// * `ids` - 输入 ID 列表，可能包含重复
-///
-/// # 返回
-/// 返回去重后的 ID 列表，顺序与首次出现一致。
-///
-/// # 错误
-/// 无。
+// 去重销售单 ID（保持首次出现顺序）。
+// 返回去重后的 ID 列表，顺序与首次出现一致。
+//
+// 输入约定：
+// - `ids`：输入 ID 列表，可能包含重复
 fn dedupe_sales_order_ids(ids: &[SalesOrderId]) -> Vec<SalesOrderId> {
     let mut seen = HashSet::with_capacity(ids.len());
     ids.iter().filter(|&id| seen.insert(id)).cloned().collect()
 }
 
-/// 销售单列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
+// 限定销售单列表查询返回的字段，避免读出列表不需要的完整实体。
+// 返回投影条件文档。
 fn sales_order_projection() -> Document {
     doc! {
         "id": 1,

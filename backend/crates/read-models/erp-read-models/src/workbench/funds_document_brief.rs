@@ -52,7 +52,7 @@ struct FundsOrigins {
     briefs: HashMap<String, FundsOriginBrief>,
 }
 impl super::WorkbenchFactsReader<'_> {
-    /// 只绑定数据库，不执行命令 load；富显示仍按原插槽逐次调用原子来源。
+    // 处理资金审批简报时，只绑定数据库，不执行命令 load；富显示仍按原插槽逐次调用原子来源。
     fn funds_reader(&self) -> super::authority::WorkItemFactsReader {
         super::authority::WorkItemFactsReader::new(self.db.clone())
     }

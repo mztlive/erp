@@ -26,16 +26,8 @@ pub struct LinkTokenCrypto {
 pub struct SelectionRequestFingerprint(String);
 
 impl SelectionRequestFingerprint {
-    /// 返回可持久化的 HMAC 指纹，不包含请求明文或无密钥密码摘要。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回指纹的版本标记与十六进制 HMAC。
-    ///
-    /// # 错误
-    /// 无。
+    // 返回可持久化的 HMAC 指纹，不包含请求明文或无密钥密码摘要。
+    // 返回指纹的版本标记与十六进制 HMAC。
     pub(crate) fn as_str(&self) -> &str {
         &self.0
     }
@@ -43,15 +35,10 @@ impl SelectionRequestFingerprint {
 
 impl LinkTokenCrypto {
     /// 从应用启动密钥派生选品链接加密密钥。
-    ///
-    /// # 参数
-    /// * `secret` - 配置中的应用密钥，不得与令牌密文同库保存
-    ///
-    /// # 返回
     /// 返回进程内编解码器。
     ///
-    /// # 错误
-    /// 无。
+    /// 输入约定：
+    /// - `secret`：配置中的应用密钥，不得与令牌密文同库保存
     pub fn from_secret(secret: &[u8]) -> Self {
         Self {
             key: derive_key(secret, b"erp-sales-selection-link-token-v1"),
@@ -60,15 +47,10 @@ impl LinkTokenCrypto {
     }
 
     /// 为完整敏感请求生成稳定幂等指纹。
-    ///
-    /// # 参数
-    /// `operation` 为幂等操作域，`payload` 为包含原密码的完整请求及其资源身份。
-    ///
-    /// # 返回
     /// 返回应用密钥与操作域共同绑定的 HMAC-SHA256 指纹。
+    /// 失败条件：请求编码或 HMAC 初始化失败时拒绝，不包含敏感载荷。
     ///
-    /// # 错误
-    /// 请求编码或 HMAC 初始化失败时拒绝，不包含敏感载荷。
+    /// 输入约定：`operation` 为幂等操作域，`payload` 为包含原密码的完整请求及其资源身份。
     pub fn request_fingerprint<T: Serialize>(
         &self,
         operation: IdempotencyOperation,
@@ -87,15 +69,8 @@ impl LinkTokenCrypto {
     }
 
     /// 生成至少 128 位安全随机令牌、查找哈希与密文。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回 `(明文令牌, SHA-256 十六进制哈希, 密文)`。明文不得落库。
-    ///
-    /// # 错误
-    /// 随机数或加密失败时返回内部错误。
+    /// 失败条件：随机数或加密失败时返回内部错误。
     pub fn issue(&self) -> Result<(String, String, String)> {
         let raw = random_bytes();
         let token = hex::encode(raw);
@@ -105,15 +80,11 @@ impl LinkTokenCrypto {
     }
 
     /// 解密内部复制接口使用的令牌密文。
-    ///
-    /// # 参数
-    /// * `ciphertext` - 本编解码器产出的密文
-    ///
-    /// # 返回
     /// 返回明文令牌。
+    /// 失败条件：密文损坏或密钥不匹配时返回内部错误，不泄漏明文。
     ///
-    /// # 错误
-    /// 密文损坏或密钥不匹配时返回内部错误，不泄漏明文。
+    /// 输入约定：
+    /// - `ciphertext`：本编解码器产出的密文
     pub fn decrypt(&self, ciphertext: &str) -> Result<String> {
         let rest = ciphertext
             .strip_prefix(&format!("{CIPHERTEXT_VERSION}."))
@@ -131,16 +102,12 @@ impl LinkTokenCrypto {
         String::from_utf8(plain).map_err(|_| Error::from("选品链接密文无效"))
     }
 
-    /// 加密明文令牌。
-    ///
-    /// # 参数
-    /// * `token` - 明文令牌
-    ///
-    /// # 返回
-    /// 返回带版本的密文。
-    ///
-    /// # 错误
-    /// 加密失败时返回内部错误。
+    // 加密明文令牌。
+    // 返回带版本的密文。
+    // 失败条件：加密失败时返回内部错误。
+    //
+    // 输入约定：
+    // - `token`：明文令牌
     pub(super) fn encrypt(&self, token: &str) -> Result<String> {
         let cipher =
             Aes256Gcm::new_from_slice(&self.key).map_err(|_| Error::from("选品链接加密初始化失败"))?;
@@ -156,30 +123,20 @@ impl LinkTokenCrypto {
 }
 
 /// 计算令牌查找哈希。
-///
-/// # 参数
-/// * `token` - 明文令牌
-///
-/// # 返回
 /// 返回 SHA-256 十六进制。
 ///
-/// # 错误
-/// 无。
+/// 输入约定：
+/// - `token`：明文令牌
 pub fn token_hash(token: &str) -> String {
     hex::encode(Sha256::digest(token.as_bytes()))
 }
 
-/// 用 SHA-256 派生 32 字节密钥。
-///
-/// # 参数
-/// * `secret` - 启动密钥
-/// * `info` - 用途隔离标签
-///
-/// # 返回
-/// 返回 32 字节密钥。
-///
-/// # 错误
-/// 无。
+// 用 SHA-256 派生 32 字节密钥。
+// 返回 32 字节密钥。
+//
+// 输入约定：
+// - `secret`：启动密钥
+// - `info`：用途隔离标签
 fn derive_key(secret: &[u8], info: &[u8]) -> [u8; 32] {
     let mut hasher = Sha256::new();
     hasher.update(secret);
@@ -187,16 +144,9 @@ fn derive_key(secret: &[u8], info: &[u8]) -> [u8; 32] {
     hasher.finalize().into()
 }
 
-/// 生成 32 字节安全随机数。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回随机字节。
-///
-/// # 错误
-/// 无。UUID v4 两次拼接提供超过 128 位熵。
+// 生成 32 字节安全随机数。
+// 返回随机字节。
+// 失败条件：UUID v4 两次拼接提供超过 128 位熵。
 fn random_bytes() -> [u8; LINK_TOKEN_BYTES] {
     let first = uuid::Uuid::new_v4();
     let second = uuid::Uuid::new_v4();

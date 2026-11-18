@@ -39,17 +39,9 @@ use super::start_approval::plan_purchase_approval_start;
 use crate::procure_to_pay::PurchaseOrderPorts;
 use crate::{Error, Result};
 
-/// 加载绑定定义图。缺失时失败关闭，不得用空图启动。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `binding` - 创建时冻结的定义绑定
-///
-/// # 返回
-/// 返回已持久化的定义图。
-///
-/// # 错误
-/// 定义不存在或仓储失败时返回冲突或仓储错误。
+// 加载绑定定义图。缺失时失败关闭，不得用空图启动。
+//
+// `binding` 为创建时冻结的定义绑定。返回已持久化的定义图。定义不存在或仓储失败时返回冲突或仓储错误。
 pub(super) async fn load_bound_definition_graph(
     db: &Database,
     binding: &ApprovalDefinitionBinding,
@@ -60,19 +52,8 @@ pub(super) async fn load_bound_definition_graph(
         .map_err(Error::from)
 }
 
-/// 读取同载荷启动收据；不存在时返回 `None`。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `subject` - 业务对象引用
-/// * `subject_version` - 冻结提交版本
-/// * `idempotency_key` - 调用方幂等键
-///
-/// # 返回
-/// 已提交收据或空。
-///
-/// # 错误
-/// 幂等键非法或仓储失败时返回错误。
+// 采购变更提交时，沿调用方执行器按主体、冻结提交版本和原幂等键查启动回执；没有原回执返回 `None`。
+// 幂等键非法或仓储查询失败时返回原错误。
 pub(super) async fn load_start_receipt(
     db: &Database,
     subject: &SubjectRef,
@@ -131,27 +112,15 @@ pub(super) struct PurchaseChangeStartInput<'a> {
     pub now: Instant,
 }
 
-/// 由定义图与单据组织构造启动输入。
-///
-/// 审批人取自已发布节点，不接受客户端选择。对象读取权失败时收敛为 BLOCKED。
-///
-/// # 用途
-/// 计算逐节点对象读取授权结果并交给 BPM 通用启动计划，再把计划组装为引擎
-/// `prepare_start` 输入。
-///
-/// # 参数
-/// * `input` - 定义图、绑定、主体与提交人
-///
-/// # 返回
-/// 返回可交给 `prepare_start` 的输入。
-///
-/// # 错误
-/// 入口缺失、审批人非法、幂等键非法或读取权校验失败时返回错误。
-///
-/// # 关键业务约束
-/// 定义版本漂移、空节点、入口缺失与办理人校验由 BPM `plan_start` 失败关闭；
-/// 对象读取权失败收敛为 BLOCKED 资格，由引擎启动校验统一拒绝。采购单与
-/// 采购变更单必须复用同一 BPM 规则。
+// 由定义图与单据组织构造启动输入。
+//
+// 审批人取自已发布节点，不接受客户端选择。对象读取权失败时收敛为 BLOCKED。
+//
+// 计算逐节点对象读取授权结果并交给 BPM 通用启动计划，再把计划组装为引擎 `prepare_start` 输入。
+//
+// `input` 为定义图、绑定、主体与提交人。返回可交给 `prepare_start` 的输入。入口缺失、审批人非法、幂等键非法或读取权校验失败时返回错误。
+//
+// 定义版本漂移、空节点、入口缺失与办理人校验由 BPM `plan_start` 失败关闭；对象读取权失败收敛为 BLOCKED 资格，由引擎启动校验统一拒绝。采购单与采购变更单必须复用同一 BPM 规则。
 pub(super) fn build_purchase_change_start_input(
     input: PurchaseChangeStartInput<'_>,
 ) -> Result<StartExecutionInput> {
@@ -240,23 +209,13 @@ pub(super) struct PurchaseChangeStartPersistInput {
     pub actor: application_core::AuditActor,
 }
 
-/// 在同一事务中写入提交快照、单据迁移、快照、BPM 运行事实与入口任务。
-///
-/// # 用途
-/// 提交启动后原子写入变更单、提交快照与运行事实。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `input` - 提交写入集合
-///
-/// # 返回
-/// 成功时无返回值。
-///
-/// # 错误
-/// 仓储写入失败或计划不完整时返回错误，事务回滚。
-///
-/// # 关键业务约束
-/// Replay 不得重复写运行事实；Apply 必须写入快照与入口任务。
+// 在同一事务中写入提交快照、单据迁移、快照、BPM 运行事实与入口任务。
+//
+// 提交启动后原子写入变更单、提交快照与运行事实。
+//
+// `input` 为提交写入集合。仓储写入失败或计划不完整时返回错误，事务回滚。
+//
+// Replay 不得重复写运行事实；Apply 必须写入快照与入口任务。
 pub(super) async fn persist_purchase_change_start(
     db: &Database,
     mut input: PurchaseChangeStartPersistInput,
@@ -312,7 +271,7 @@ pub(super) async fn persist_purchase_change_start(
     persist_change_result(db, &input, executor).await
 }
 
-/// 在同一事务检查来源采购并写入目标提交、明细及变更版本。
+// 在同一事务检查来源采购并写入目标提交、明细及变更版本。
 async fn persist_change_target(
     db: &Database,
     change: &mut PurchaseChangeOrder,
@@ -338,7 +297,7 @@ async fn persist_change_target(
     Ok(())
 }
 
-/// 保存随领域事实原子提交的首次响应；后续回放不读取当前业务状态重建结果。
+// 保存随领域事实原子提交的首次响应；后续回放不读取当前业务状态重建结果。
 async fn persist_change_result(
     db: &Database,
     input: &PurchaseChangeStartPersistInput,
@@ -365,7 +324,7 @@ async fn persist_change_result(
     Ok(result)
 }
 
-/// 在启动收据写入后以原版本执行单据守卫，冲突时不继续创建采购变更提交。
+// 在启动收据写入后以原版本执行单据守卫，冲突时不继续创建采购变更提交。
 async fn guard_change_start(
     db: &Database,
     writes: &PlannedWrites,
@@ -389,10 +348,7 @@ async fn guard_change_start(
     Ok(())
 }
 
-/// 将启动计划写入 BPM 集合、不可变快照和入口 WorkItem。
-///
-/// # 错误
-/// 计划缺少入口执行或写入失败时返回错误。
+// 将启动计划写入 BPM 集合、不可变快照和入口 WorkItem。计划缺少入口执行或写入失败时返回错误。
 async fn persist_runtime_writes(
     db: &Database,
     runtime: (&dyn ApprovalRuntimePort, &Arc<AuthorizationService>),
@@ -561,7 +517,7 @@ mod tests {
         }
     }
 
-    /// 采购变更单启动输入复用 BPM 通用计划，与采购单规则一致。
+    // 采购变更单启动输入复用 BPM 通用计划，与采购单规则一致。
     #[test]
     fn purchase_change_start_freezes_all_nodes_with_bpm_plan() {
         let graph = two_node_graph();
@@ -574,7 +530,7 @@ mod tests {
         assert_eq!(built.definition_version, 1);
     }
 
-    /// 定义版本漂移时失败关闭。
+    // 验证采购变更不能用原冻结版本启动已变化的审批定义。
     #[test]
     fn purchase_change_start_rejects_definition_version_drift() {
         let graph = two_node_graph();
@@ -584,7 +540,7 @@ mod tests {
         );
     }
 
-    /// 空节点定义不得启动。
+    // 验证空节点定义不得启动。
     #[test]
     fn purchase_change_start_rejects_empty_node_graph() {
         let error =
@@ -592,7 +548,7 @@ mod tests {
         assert!(matches!(error, Error::ConflictError(message) if message.contains("审批定义没有节点")));
     }
 
-    /// 入口键缺失时失败关闭。
+    // 验证入口键缺失时失败关闭。
     #[test]
     fn purchase_change_start_rejects_missing_entry_node() {
         let mut graph = two_node_graph();
@@ -601,7 +557,7 @@ mod tests {
         assert!(matches!(error, Error::ConflictError(message) if message.contains("审批定义缺少入口节点")));
     }
 
-    /// 对象读取失败收敛为 BLOCKED 资格，并由引擎启动校验统一拒绝。
+    // 对象读取失败收敛为 BLOCKED 资格，并由引擎启动校验统一拒绝。
     #[test]
     fn purchase_change_start_converges_read_failure_to_blocked() {
         let built = build_purchase_change_start_input(input(two_node_graph(), &binding(1), "")).unwrap();
@@ -615,7 +571,7 @@ mod tests {
         );
     }
 
-    /// 同键同载荷启动收据必须重放，不重复规划写入。
+    // 验证同键同载荷启动收据必须重放，不重复规划写入。
     #[test]
     fn purchase_change_start_replays_matching_receipt() {
         let identity = start_identity(StartIdentityParams {

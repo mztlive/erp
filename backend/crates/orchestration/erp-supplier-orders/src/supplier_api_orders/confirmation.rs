@@ -25,13 +25,13 @@ impl SupplierApiOrderProcess {
         self.persist(&mut execution).await
     }
 
-    /// 按当前原订单事实确认尚未发送的有效子单，不复用创建购买预检。
-    /// # 参数
-    /// 服务端持久化执行记录；连接及确认能力由注册表重新解析。
-    /// # 返回
-    /// 本轮明确结果或原目标待核实状态已保存。
-    /// # 错误
-    /// 采购、金额、授权、资金或持久化不满足时停止，原未知动作不重发。
+    // 原执行进入确认阶段后，按已存在订单的当前事实选择尚未发送的有效子单；不能把创建购买预检当作确认依据。
+    //
+    // 服务端持久化执行记录；连接及确认能力由注册表重新解析。
+    //
+    // 本轮明确结果或原目标待核实状态已保存。
+    //
+    // 采购、金额、授权、资金或持久化不满足时停止，原未知动作不重发。
     pub(super) async fn confirm_order(&self, execution: ApiOrderExecution) -> Result<()> {
         let connector = self.connector(&execution).await?;
         let application = MongoConfirmationApplication::new(self, connector.as_ref())?;

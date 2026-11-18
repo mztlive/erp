@@ -17,11 +17,8 @@ pub struct InquiryRecoveryParams {
 }
 
 /// 使用原命令键查询已提交结果，当前销售范围仍须有效。
-/// # 参数
 /// `state` 为应用，`actor` 为当前账号，路径为询价及原命令键，查询含原动作。
-/// # 返回
 /// 返回原安全结果；未查到返回空值，不自动重放。
-/// # 错误
 /// 动作、回执、当前授权或对象范围不成立时拒绝。
 pub async fn sales_recover(
     State(state): State<HttpState>,
@@ -35,11 +32,8 @@ pub async fn sales_recover(
 }
 
 /// 新建响应丢失后按原命令键取得由服务端登记的询价身份。
-/// # 参数
 /// `state`、`actor` 为当前应用及账号，`key` 为原创建命令键。
-/// # 返回
 /// 返回原创建结果；没有回执时返回空值。
-/// # 错误
 /// 回执或当前销售资格失效时拒绝。
 pub async fn sales_create_recover(
     State(state): State<HttpState>,
@@ -52,11 +46,8 @@ pub async fn sales_create_recover(
 }
 
 /// 查询本人采购询价命令的安全结果，不恢复历史任务操作权。
-/// # 参数
 /// `state`、`actor` 为当前应用及账号，路径限定询价和原命令，查询含动作。
-/// # 返回
 /// 仅返回原安全回执，不包含供应商或内部报价。
-/// # 错误
 /// 回执归属、当前账号或核对资格失效时拒绝。
 pub async fn procurement_recover(
     State(state): State<HttpState>,

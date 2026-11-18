@@ -66,11 +66,7 @@ pub struct OfferingApplication {
 }
 impl OfferingApplication {
     /// 核验持久化前历史前缀和稳定身份没有改写。
-    /// # 参数
-    /// `before` 是同Executor读取的现存申请。
-    /// # 返回
     /// 新状态只追加合法历史时成功。
-    /// # 错误
     /// 历史删除、原稿改写、稳定身份变化或版本冲突拒绝。
     pub fn ensure_history_preserved(&self, before: &Self) -> Result<()> {
         if self.base.id != before.base.id
@@ -110,12 +106,9 @@ impl OfferingApplication {
         Ok(())
     }
     /// 创建供应商草稿。
-    /// # 参数
-    /// `id` 为服务器主键；`supplier_id` 来自当前有效绑定。
-    /// # 返回
     /// 无正式结果的草稿。
-    /// # 错误
     /// 外部身份或必填字段无效时拒绝。
+    /// `id` 为服务器主键；`supplier_id` 来自当前有效绑定。
     pub fn new(
         id: String,
         supplier_id: &str,
@@ -140,12 +133,9 @@ impl OfferingApplication {
         })
     }
     /// 检查版本及供应商归属。
-    /// # 参数
-    /// `expected` 是客户端读取版本；绑定由服务器注入。
-    /// # 返回
     /// 当前申请可以访问时成功。
-    /// # 错误
     /// 范围外统一不存在；过期版本返回冲突。
+    /// `expected` 是客户端读取版本；绑定由服务器注入。
     pub fn ensure_owned(&self, supplier_id: &str, actor: &AuditActor, expected: u64) -> Result<()> {
         ensure_supplier(actor, supplier_id)?;
         if self.supplier_id != supplier_id || self.base.is_deleted() {
@@ -157,11 +147,7 @@ impl OfferingApplication {
         Ok(())
     }
     /// 修改未提交草稿，保留此前冻结历史。
-    /// # 参数
-    /// `snapshot` 是重新核对后的供应商原稿。
-    /// # 返回
     /// 更新当前可编辑稿。
-    /// # 错误
     /// 待确认和已生效状态不可编辑。
     pub fn edit(&mut self, snapshot: OfferingApplicationSnapshot, reason: &str) -> Result<()> {
         if !matches!(
@@ -181,12 +167,9 @@ impl OfferingApplication {
         Ok(())
     }
     /// 冻结原稿并登记具体确认任务。
-    /// # 参数
-    /// 当前供应商操作人、处理人及新任务由组合层校验。
-    /// # 返回
     /// 进入待采购确认。
-    /// # 错误
     /// 待确认/已生效、处理人或任务缺失时拒绝。
+    /// 当前供应商操作人、处理人及新任务由组合层校验。
     pub fn submit(
         &mut self,
         actor: &AuditActor,
@@ -227,12 +210,9 @@ impl OfferingApplication {
         Ok(())
     }
     /// 撤回未完成申请，保留冻结历史。
-    /// # 参数
-    /// `actor` 是有效绑定的供应商身份。
-    /// # 返回
     /// 进入已撤回。
-    /// # 错误
-    /// 当前状态不是 `Submitted` 时返回 `ConflictError`；操作人不是供应商门户身份时返回 `Forbidden`；供应商绑定为空或超长时返回 `ValidationError`。
+    /// 当前状态不是 `Submitted` 时返回 `ConflictError`；操作人不是供应商门户身份时返回 `Forbidden`；供应
+    /// 商绑定为空或超长时返回 `ValidationError`。
     pub fn withdraw(&mut self, actor: &AuditActor) -> Result<()> {
         ensure_supplier(actor, &self.supplier_id)?;
         if self.status != ApplicationStatus::Submitted {
@@ -242,12 +222,9 @@ impl OfferingApplication {
         Ok(())
     }
     /// 检查当前任务及申请仍可确认。
-    /// # 参数
-    /// 内部处理人、读取时申请版本和具体任务版本。
-    /// # 返回
     /// 对应的冻结提交。
-    /// # 错误
-    /// 操作人不是 `AccountKind::Admin` 时返回 `Forbidden`；状态不是 `Submitted`、版本不一致、任务标识不符或任务版本为 0 时返回 `ConflictError`；没有冻结提交时返回 `Internal`。
+    /// 操作人不是 `AccountKind::Admin` 时返回 `Forbidden`；状态不是 `Submitted`、版本不一致、任务标识不
+    /// 符或任务版本为 0 时返回 `ConflictError`；没有冻结提交时返回 `Internal`。
     pub fn decision_submission(
         &self,
         actor: &AuditActor,
@@ -269,12 +246,9 @@ impl OfferingApplication {
         Ok(submission)
     }
     /// 保存退回或正式生效决定。
-    /// # 参数
-    /// `result` 仅在正式业务事实同事务完成后传入。
-    /// # 返回
     /// 更新当前结果，追加不可变决定历史。
-    /// # 错误
     /// 缺少冻结记录、退回原因或重复处理时拒绝。
+    /// `result` 仅在正式业务事实同事务完成后传入。
     pub fn decide(
         &mut self,
         actor: &AuditActor,
@@ -328,11 +302,7 @@ pub struct QuoteAccessDecision {
 }
 impl QuoteAccessGrant {
     /// 创建明确归属的定向开放记录。
-    /// # 参数
-    /// 供应商、SKU 和内部操作人。
-    /// # 返回
     /// 启用的开放记录。
-    /// # 错误
     /// 空值或外部操作人拒绝。
     pub fn new(id: String, supplier_id: &str, sku_id: &str, actor: &AuditActor) -> Result<Self> {
         if actor.kind() != AccountKind::Admin {
@@ -359,11 +329,7 @@ impl QuoteAccessGrant {
         })
     }
     /// 追加资格变更并保留原开放事实。
-    /// # 参数
-    /// 新状态、真实内部操作人及处理时间。
-    /// # 返回
     /// 状态有变化时更新当前状态并追加不可变历史；状态未变时不改记录并成功。
-    /// # 错误
     /// 外部门户身份不允许变更资格。
     pub fn set_active(&mut self, active: bool, actor: &AuditActor, at: Instant) -> Result<()> {
         if actor.kind() != AccountKind::Admin {
@@ -382,34 +348,19 @@ impl QuoteAccessGrant {
         Ok(())
     }
 }
-/// 确认操作人是该供应商的门户身份。
-///
-/// # 参数
-/// * `actor` - 当前操作人。
-/// * `supplier_id` - 服务器注入的供应商绑定。
-///
-/// # 返回
-/// 身份种类与绑定均有效时成功。
-///
-/// # 错误
-/// `actor` 不是 `AccountKind::Supplier` 时返回 `Forbidden`；`supplier_id` 为空白或超过 1024 字节时返回 `ValidationError`。
+// 确认操作人是该供应商的门户身份。
+// 身份种类与绑定均有效时成功。
+// `actor` 不是 `AccountKind::Supplier` 时返回 `Forbidden`；`supplier_id` 为空白或超过 1024 字节时返回
+// `ValidationError`。
 pub(super) fn ensure_supplier(actor: &AuditActor, supplier_id: &str) -> Result<()> {
     if actor.kind() != AccountKind::Supplier {
         return Err(Error::Forbidden("供应商门户身份无效".into()));
     }
     ensure_text(supplier_id, "供应商绑定")
 }
-/// 拒绝空白或超过 1024 字节的文本。
-///
-/// # 参数
-/// * `value` - 待检查文本，长度按原始字节计算。
-/// * `name` - 写入校验错误的字段名。
-///
-/// # 返回
-/// 含非空白字符且字节长度不超过 1024 时成功。
-///
-/// # 错误
-/// 空白或超长时返回 `ValidationError`，文案为 `{name}为空或超出长度`。
+// 拒绝空白或超过 1024 字节的文本。
+// 含非空白字符且字节长度不超过 1024 时成功。
+// 空白或超长时返回 `ValidationError`，文案为 `{name}为空或超出长度`。
 pub(super) fn ensure_text(value: &str, name: &str) -> Result<()> {
     if value.trim().is_empty() || value.len() > 1024 {
         return Err(Error::ValidationError(format!("{name}为空或超出长度")));

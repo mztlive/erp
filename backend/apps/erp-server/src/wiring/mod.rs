@@ -58,15 +58,7 @@ pub use supplier_data_scope::{
 pub use warehouse::{MongoWarehouseIdentity, warehouse_service};
 
 /// 装配带审计与供应商角色 adapter 的主体服务。
-///
-/// # 参数
-/// * `db` - 主体集合所在数据库。
-///
-/// # 返回
 /// 返回已注入审计与供应商角色 Port 的主体服务。
-///
-/// # 错误
-/// 不返回错误。
 pub fn party_service(db: Database, authorization: Arc<AuthorizationService>) -> PartyService {
     PartyService::new(
         db.clone(),
@@ -77,16 +69,8 @@ pub fn party_service(db: Database, authorization: Arc<AuthorizationService>) -> 
 }
 
 /// 装配带审计、供应商角色与敏感数据编解码的主体联系人服务。
-///
-/// # 参数
-/// * `db` - 主体集合所在数据库。
-/// * `sensitive_data` - 联系人敏感字段编解码器。
-///
-/// # 返回
+/// `sensitive_data` 为联系人敏感字段编解码器。
 /// 返回主体联系人服务。
-///
-/// # 错误
-/// 不返回错误。
 pub fn party_contact_service(
     db: Database,
     sensitive_data: Arc<SensitiveDataCodec>,
@@ -102,16 +86,8 @@ pub fn party_contact_service(
 }
 
 /// 装配带审计、供应商角色与敏感数据编解码的主体地址服务。
-///
-/// # 参数
-/// * `db` - 主体集合所在数据库。
-/// * `sensitive_data` - 地址敏感字段编解码器。
-///
-/// # 返回
+/// `sensitive_data` 为地址敏感字段编解码器。
 /// 返回主体地址服务。
-///
-/// # 错误
-/// 不返回错误。
 pub fn party_address_service(
     db: Database,
     sensitive_data: Arc<SensitiveDataCodec>,
@@ -127,16 +103,8 @@ pub fn party_address_service(
 }
 
 /// 装配带审计、供应商角色与敏感数据编解码的主体银行账户服务。
-///
-/// # 参数
-/// * `db` - 主体集合所在数据库。
-/// * `sensitive_data` - 银行账户敏感字段编解码器。
-///
-/// # 返回
+/// `sensitive_data` 为银行账户敏感字段编解码器。
 /// 返回主体银行账户服务。
-///
-/// # 错误
-/// 不返回错误。
 pub fn party_bank_account_service(
     db: Database,
     sensitive_data: Arc<SensitiveDataCodec>,
@@ -152,15 +120,7 @@ pub fn party_bank_account_service(
 }
 
 /// 装配带审计与供应商角色 adapter 的主体税务档案服务。
-///
-/// # 参数
-/// * `db` - 主体集合所在数据库。
-///
-/// # 返回
 /// 返回主体税务档案服务。
-///
-/// # 错误
-/// 不返回错误。
 pub fn party_tax_profile_service(
     db: Database,
     authorization: Arc<AuthorizationService>,
@@ -174,18 +134,8 @@ pub fn party_tax_profile_service(
 }
 
 /// 构造已接入身份域公共解析器的客户服务。
-///
-/// # 参数
-/// * `db` - 客户与身份集合所在数据库
-/// * `authorization` - 进程共享的完整授权服务
-///
-/// # 返回
 /// 返回可解析客户范围的服务。
 ///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
 /// 本域访问器直接调用 identity 统一授权服务，不解释范围条款。
 pub fn scoped_customer_service(db: Database, authorization: Arc<AuthorizationService>) -> CustomerService {
     CustomerService::new(
@@ -197,18 +147,8 @@ pub fn scoped_customer_service(db: Database, authorization: Arc<AuthorizationSer
 }
 
 /// 构造已接入身份域公共解析器的客户归属服务。
-///
-/// # 参数
-/// * `db` - 客户与身份集合所在数据库
-/// * `authorization` - 进程共享的完整授权服务
-///
-/// # 返回
 /// 返回可在事务内重验客户范围的归属服务。
 ///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
 /// 归属变更必须证明 customer:update，不得只依赖入口事前检查。
 pub fn scoped_customer_assignment_service(
     db: Database,

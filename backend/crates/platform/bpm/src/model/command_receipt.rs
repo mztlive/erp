@@ -31,21 +31,8 @@ pub struct ApprovalCommandReceipt {
 }
 
 impl<'de> Deserialize<'de> for ApprovalCommandReceipt {
-    /// 兼容历史写入可能留下的两个同名 `created_at`。
-    ///
-    /// 历史模型同时展开 `BaseModel.created_at` 并显式序列化 `created_at`；MongoDB
-    /// 驱动直接序列化实体时会保留两个 BSON 键。两个值相同时按一个创建时间读取；
-    /// 值不一致时失败关闭，禁止任意选择一个时间掩盖损坏事实。
-    ///
-    /// # 参数
-    /// * `deserializer` - 命令收据映射的反序列化器
-    ///
-    /// # 返回
-    /// 必填字段齐全且重复 `created_at` 同值时返回收据。
-    ///
-    /// # 错误
-    /// 缺必填字段、同名字段除 `created_at` 外重复、`created_at` 超过两个或两个值不一致时，
-    /// 返回反序列化错误。
+    // 回读历史收据时兼容 MongoDB 驱动留下的双 `created_at`：旧模型既展开 `BaseModel`，又显式写同名字段。
+    // 仅在两个值相同时合并；缺必填字段、其他已识别字段重复、时间重复超过两次或值不一致均拒绝回读。
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -177,19 +164,8 @@ impl<'de> Deserialize<'de> for ApprovalCommandReceipt {
 }
 
 impl ApprovalCommandReceipt {
-    /// 创建命令收据。
-    ///
-    /// # 参数
-    /// * `id` - 收据主键
-    /// * `identity` - 已规范化的 v3 命令身份
-    /// * `result_ref` - 结果引用
-    /// * `at` - 创建时间
-    ///
-    /// # 返回
-    /// 返回写入身份字段与规范化结果引用的收据。
-    ///
-    /// # 错误
-    /// 结果引用非法或调用方时间无法持久化时返回错误。
+    /// 审批命令得出结果后，用已规范化的 v3 身份与裁剪后的结果引用构造收据，使同键重试能回读同一结果。
+    /// 结果引用为空或过长、调用方时间无法持久化时返回错误。
     pub fn new(
         id: ApprovalCommandReceiptId,
         identity: &ApprovalCommandIdentity,
@@ -206,17 +182,8 @@ impl ApprovalCommandReceipt {
         })
     }
 
-    /// 按完整 v3 身份回读：唯一键身份与载荷均相同才返回自身。
-    ///
-    /// # 参数
-    /// * `identity` - 本次请求的 v3 命令身份
-    ///
-    /// # 返回
-    /// 种类、作用域、幂等键与摘要都一致时返回本收据。
-    ///
-    /// # 错误
-    /// 命令种类、作用域、规范幂等键或摘要任一不一致时返回
-    /// [`ModelError::CommandReceiptConflict`]。
+    /// 拿到既有收据后以本次完整 v3 身份复核回放资格；命令种类、作用域、规范键与摘要都匹配才复用原结果。
+    /// 任一字段不同都返回 [`ModelError::CommandReceiptConflict`]。
     pub fn reconcile_identity(&self, identity: &ApprovalCommandIdentity) -> ModelResult<&Self> {
         if self.command_kind == identity.command_kind()
             && self.scope_id == identity.scope().as_str()
@@ -227,16 +194,7 @@ impl ApprovalCommandReceipt {
         Err(ModelError::CommandReceiptConflict)
     }
 
-    /// 按相同键回读：摘要相同返回自身，摘要不同冲突。
-    ///
-    /// # 参数
-    /// * `payload_digest` - 本次请求摘要
-    ///
-    /// # 返回
-    /// 摘要相同时返回本收据。
-    ///
-    /// # 错误
-    /// 摘要不同返回 [`ModelError::CommandReceiptConflict`]。
+    /// 调用方已确认命令唯一键相同时，仅比较载荷摘要；相同则可复用收据，不同返回 [`ModelError::CommandReceiptConflict`]。
     pub fn reconcile(&self, payload_digest: &str) -> ModelResult<&Self> {
         if self.payload_digest == payload_digest {
             return Ok(self);
@@ -299,7 +257,7 @@ mod tests {
         .unwrap()
     }
 
-    /// 同载荷回读，不同载荷冲突。
+    // 验证收据只允许同键同载荷回读，变更请求载荷会产生冲突而非复用旧结果。
     #[test]
     fn same_key_same_payload_reads_back() {
         let receipt = receipt();
@@ -309,7 +267,7 @@ mod tests {
         assert_eq!(receipt.reconcile_identity(&changed), Err(ModelError::CommandReceiptConflict));
     }
 
-    /// 收据只使用 BaseModel 的创建时间；BSON 不得出现同名字段反序列化冲突。
+    // 验证新收据序列化只写基础模型的一个创建时间，避免产生同名 BSON 键，并能正常回读。
     #[test]
     fn bson_round_trip_has_single_created_at_field() {
         let receipt = receipt();
@@ -322,7 +280,7 @@ mod tests {
         assert_eq!(decoded.base.created_at, 1);
     }
 
-    /// 历史 Mongo raw writer 保留的双创建时间同值时必须继续可读。
+    // 用保留重复键的原始 BSON 模拟历史写入，验证相同的两个创建时间仍能回读为一份事实。
     #[test]
     fn raw_bson_reads_matching_legacy_duplicate_created_at_fields() {
         let receipt = receipt();
@@ -350,7 +308,7 @@ mod tests {
         assert_eq!(decoded, receipt);
     }
 
-    /// 历史双创建时间若不一致必须失败关闭，禁止任意覆盖。
+    // 在原始 BSON 中写入不同的创建时间，验证回读不以任一字段掩盖冲突。
     #[test]
     fn raw_bson_rejects_conflicting_legacy_duplicate_created_at_fields() {
         let receipt = receipt();
@@ -374,7 +332,7 @@ mod tests {
         );
     }
 
-    /// 历史合法形态最多两个创建时间；第三个同值键也属于损坏文档。
+    // 即使三个创建时间同值也应拒绝，兼容只覆盖历史上双写的合法形态。
     #[test]
     fn raw_bson_rejects_more_than_two_created_at_fields() {
         let receipt = receipt();
@@ -400,7 +358,7 @@ mod tests {
         );
     }
 
-    /// 历史 scope/digest 无版本字符串继续只读兼容，幂等键仍须是规范形态。
+    // 用带规范幂等键的历史收据验证无版本作用域和摘要可原样回读，无须迁移到 v3。
     #[test]
     fn legacy_scope_and_digest_strings_remain_readable() {
         let base = receipt().base;

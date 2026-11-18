@@ -8,12 +8,9 @@ use super::{ApiOrderExecution, ApiOrderExt, for_purchase, for_sales_lines};
 use crate::{Error, Result};
 
 /// 按正式销售行唤醒既有供应商执行的独立收货核验。
-/// # 参数
-/// `sales_line_ids` 由已过账验收或冲正的原明细取得；`executor` 为根事务执行器。
-/// # 返回
 /// 原执行取得待核验标记，不发送请求或记录肯定通知。
-/// # 错误
 /// 查询、数量超限或版本竞争失败时拒绝根事务。
+/// `sales_line_ids` 由已过账验收或冲正的原明细取得；`executor` 为根事务执行器。
 pub async fn wake_sales_line_receipts(
     db: &Database,
     sales_line_ids: &[String],
@@ -23,12 +20,9 @@ pub async fn wake_sales_line_receipts(
 }
 
 /// 按实际入库或冲正的原采购身份唤醒既有执行核验。
-/// # 参数
-/// `purchase` 为原采购，`executor` 为根事务执行器。
-/// # 返回
 /// 仅唤醒原采购的独立收货核验，不改变原下单步骤。
-/// # 错误
 /// 查询、数量超限或版本竞争失败时拒绝根事务。
+/// `purchase` 为原采购，`executor` 为根事务执行器。
 pub async fn wake_purchase_receipts(
     db: &Database,
     purchase: &str,

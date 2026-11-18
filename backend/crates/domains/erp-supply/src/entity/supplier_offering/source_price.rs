@@ -8,12 +8,9 @@ use crate::{Error, Result};
 
 impl SupplierCatalogItem {
     /// 将当前目录约束绑定到服务端构造的 API 供给首版。
-    /// # 参数
-    /// `revision` 为尚未持久化的首版条款，不接受客户端采购限制。
-    /// # 返回
     /// 核验来源报价和已报告税率后，冻结真实来源条款。
-    /// # 错误
     /// 报价、来源约束或已报告税率与待建条款不一致时拒绝。
+    /// `revision` 为尚未持久化的首版条款，不接受客户端采购限制。
     pub fn bind_purchase_terms(&self, revision: &mut SupplierOfferingRevision) -> Result<()> {
         if let Some(terms) = &self.source_purchase_terms {
             terms.validate()?;
@@ -32,12 +29,9 @@ impl SupplierCatalogItem {
     }
 
     /// 读取供应商明确提供的采购报价，不允许用人工价填补缺失。
-    /// # 参数
-    /// 无；读取当前目录观察。
-    /// # 返回
     /// 非负的四位精度采购单价，保留零价。
-    /// # 错误
     /// 报价缺失、非法或为负数时拒绝。
+    /// 读取当前目录观察。
     pub fn purchase_quote(&self) -> Result<UnitPrice> {
         let price: UnitPrice = self
             .purchase_price
@@ -52,12 +46,9 @@ impl SupplierCatalogItem {
     }
 
     /// 校验当前目录支持的代发采购报价，不接受来源未提供的集采条件。
-    /// # 参数
-    /// `revision` 为待创建的供给首版条款。
-    /// # 返回
     /// 采购价一致且未编造集采条件时成功。
-    /// # 错误
     /// 报价缺失、被改写或提交来源不存在的集采条款时拒绝。
+    /// `revision` 为待创建的供给首版条款。
     pub fn ensure_supply_prices(&self, revision: &SupplierOfferingRevision) -> Result<()> {
         self.ensure_purchase_price(revision.dropship_supply_price_gross)?;
         if self.source_purchase_terms != revision.source_purchase_terms {
@@ -71,12 +62,8 @@ impl SupplierCatalogItem {
         Ok(())
     }
 
-    /// 校验采购供给价等于当前供应商报价。
-    /// # 参数
-    /// `price` 为请求中的含税采购价。
-    /// # 返回
+    /// 核对采购供给价等于当前供应商报价。
     /// 数值相同则成功，允许不同的等价小数表示。
-    /// # 错误
     /// 来源缺报价或请求改价时拒绝。
     pub fn ensure_purchase_price(&self, price: UnitPrice) -> Result<()> {
         if self.purchase_quote()? != price {
@@ -88,11 +75,7 @@ impl SupplierCatalogItem {
 
 impl SupplierOfferingRevision {
     /// 根据新的供应商采购价追加修订，保留公司补充条件及历史版本。
-    /// # 参数
-    /// `id`、`revision_no` 为新版本身份，`price` 为已核验的来源含税价。
-    /// # 返回
     /// 报价未变时返回空，否则返回重算不含税价的新修订。
-    /// # 错误
     /// 新版本号或商业条件无效时拒绝。
     pub fn with_source_price(
         &self,
@@ -109,11 +92,7 @@ impl SupplierOfferingRevision {
     }
 
     /// 按真实来源价格、税率和采购限制追加不可变修订。
-    /// # 参数
-    /// `id` 与 `revision_no` 为新版本身份，`item` 为已核验同订货身份的目录。
-    /// # 返回
     /// 实际条件不变时返回空；来源条件变化时保留历史并返回新修订。
-    /// # 错误
     /// 报价缺失、税率或来源约束无效时拒绝。
     pub fn with_source_observation(
         &self,

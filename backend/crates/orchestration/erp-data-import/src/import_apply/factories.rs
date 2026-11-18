@@ -27,20 +27,16 @@ const CONFIRMATION_REASON_CODE: &str = "IMPORT_TRIAL_CONFIRMATION";
 /// `confirmation_scope` 决定。任务 ID、主体版本与个人责任人由 Service
 /// 显式注入。
 ///
-/// # 参数
-/// * `work_item_id` - 任务主键
-/// * `batch_id` - 导入批次
-/// * `subject_version` - 确认任务对应的试算版本
-/// * `confirmation_scope` - 已注册确认范围
-/// * `owner_user_id` - 当前个人责任人
+/// - `work_item_id`：任务主键
+/// - `batch_id`：导入批次
+/// - `subject_version`：确认任务对应的试算版本
+/// - `confirmation_scope`：已注册确认范围
+/// - `owner_user_id`：当前个人责任人
 ///
-/// # 返回
 /// 返回带冻结 `responsibility_key` 的开放任务。
 ///
-/// # 错误
 /// 确认范围未注册、责任角色无法解析，或任务字段校验失败时返回错误。
 ///
-/// # 约束
 /// 纯确定性构造；不访问 MongoDB、时钟、ID 生成器或密钥。
 pub fn confirmation_work_item(
     work_item_id: WorkItemId,
@@ -77,18 +73,12 @@ pub fn confirmation_work_item(
 /// 确认映射为 `Confirm/CONFIRMED`，退回映射为 `Reject/REJECTED` 并携带
 /// 退回原因；无决策事实失败关闭。动作 ID 与操作人由 Service 显式注入。
 ///
-/// # 参数
-/// * `id` - 动作主键
-/// * `confirmation` - 已决策的确认事实
-/// * `actor_id` - 实际确认或退回人
+/// `id`：动作主键；`confirmation`：已决策的确认事实；`actor_id`：实际确认或退回人。
 ///
-/// # 返回
 /// 返回追加式工作流动作。
 ///
-/// # 错误
 /// 导入确认动作缺少领域决策或动作字段校验失败时返回错误。
 ///
-/// # 约束
 /// 纯确定性构造；不访问 MongoDB、时钟、ID 生成器或密钥。
 pub fn confirmation_workflow_action(
     id: WorkflowActionId,

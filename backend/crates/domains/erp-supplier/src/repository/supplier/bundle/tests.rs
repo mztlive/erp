@@ -4,7 +4,7 @@ use super::list::{
 };
 use super::{QualificationConstraintKind, SupplierQualificationHealthFilter};
 
-/// 资质约束分支覆盖类型、健康状态与未登记排除路径。
+// 验证资质约束分支覆盖类型、健康状态与未登记排除路径。
 #[test]
 fn qualification_constraint_kind_covers_all_branches() {
     use QualificationConstraintKind::{Excluded, Included, Unconstrained};
@@ -48,7 +48,7 @@ fn qualification_constraint_kind_covers_all_branches() {
     );
 }
 
-/// 命中集合健康状态不含 `NotRegistered`，未登记仍由排除集路径处理。
+// 验证命中集合健康状态不含 `NotRegistered`，未登记仍由排除集路径处理。
 #[test]
 fn included_qualification_health_omits_not_registered() {
     assert_eq!(included_qualification_health(None), Some(IncludedQualificationHealth::ByType));
@@ -71,7 +71,7 @@ fn included_qualification_health_omits_not_registered() {
     assert_eq!(included_qualification_health(Some(SupplierQualificationHealthFilter::NotRegistered)), None);
 }
 
-/// 到期窗口固定为起始日后第三十个自然日。
+// 验证到期窗口固定为起始日后第三十个自然日。
 #[test]
 fn supplier_list_expiry_cutoff_is_thirty_days_after_as_of() {
     assert_eq!(qualification_expiry_cutoff("2026-08-31").unwrap(), "2026-09-30");

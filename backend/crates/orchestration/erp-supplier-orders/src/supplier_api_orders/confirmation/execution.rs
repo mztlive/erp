@@ -13,40 +13,38 @@ use crate::Result;
 /// 当前原单查询、同事务资格锁定及独立发送的最小确认步骤。
 #[async_trait]
 pub(super) trait ConfirmationApplication: Sync {
-    /// 查询当前完整原单树并核对数量、实际金额及批准预算。
-    /// # 参数
-    /// 原执行快照；不得查询目录购买库存或重建创建请求。
-    /// # 返回
-    /// 更新后的当前子单及确认事实。
-    /// # 错误
-    /// 身份、数量、费用或来源事实不完整时拒绝。
+    // 查询当前完整原单树并核对数量、实际金额及批准预算。
+    //
+    // 原执行快照；不得查询目录购买库存或重建创建请求。
+    //
+    // 更新后的当前子单及确认事实。
+    //
+    // 身份、数量、费用或来源事实不完整时拒绝。
     async fn refresh(&self, execution: &mut ApiOrderExecution) -> Result<()>;
 
-    /// 原子登记未知动作，并重验采购、开关、付款批准及执行组资金覆盖。
-    /// # 参数
-    /// 已选择当前叶子且保留独立原目标的执行记录。
-    /// # 返回
-    /// 事务提交后才允许发送；资金覆盖包含本组剩余占用和已核实净扣款。
-    /// # 错误
-    /// 版本、授权、资金或持久化失败时拒绝且不发送。
+    // 原子登记未知动作，并重验采购、开关、付款批准及执行组资金覆盖。
+    //
+    // 已选择当前叶子且保留独立原目标的执行记录。
+    //
+    // 事务提交后才允许发送；资金覆盖包含本组剩余占用和已核实净扣款。
+    //
+    // 版本、授权、资金或持久化失败时拒绝且不发送。
     async fn claim(&self, execution: &mut ApiOrderExecution) -> Result<()>;
 
-    /// 对已可靠保存的原目标发送一次确认。
-    /// # 参数
-    /// 原动作身份、当前叶子及拓扑版本。
-    /// # 返回
-    /// 本次明确结果。
-    /// # 错误
-    /// 不确定结果继续调查，不隐藏重试。
+    // 对已可靠保存的原目标发送一次确认。
+    //
+    // 原动作身份、当前叶子及拓扑版本。
+    //
+    // 本次明确结果。
+    //
+    // 不确定结果继续调查，不隐藏重试。
     async fn send(&self, request: &ConfirmOrder) -> ConnectorResult<Snapshot<ConfirmationState>>;
 
-    /// 保存当前结果或阻断原因，不改变原创建载荷。
-    /// # 参数
-    /// 本轮执行记录。
-    /// # 返回
-    /// 保存成功。
-    /// # 错误
-    /// 持久化失败时返回错误，已登记未知身份保持有效。
+    // 保存当前结果或阻断原因，不改变原创建载荷。
+    //
+    // 本轮执行记录。
+    //
+    // 持久化失败时返回错误，已登记未知身份保持有效。
     async fn persist(&self, execution: &mut ApiOrderExecution) -> Result<()>;
 }
 
@@ -57,13 +55,13 @@ pub(super) struct MongoConfirmationApplication<'a> {
 }
 
 impl<'a> MongoConfirmationApplication<'a> {
-    /// 复用真实原单查询、事务资格锁定及已登记确认协议。
-    /// # 参数
-    /// 当前 Process 与已经核对技术及业务绑定的连接器。
-    /// # 返回
-    /// 不发送任何请求的确认步骤集合。
-    /// # 错误
-    /// 缺独立确认能力时拒绝。
+    // 复用真实原单查询、事务资格锁定及已登记确认协议。
+    //
+    // 当前 Process 与已经核对技术及业务绑定的连接器。
+    //
+    // 不发送任何请求的确认步骤集合。
+    //
+    // 缺独立确认能力时拒绝。
     pub(super) fn new(
         process: &'a SupplierApiOrderProcess,
         connector: &'a dyn SupplierConnector,
@@ -93,13 +91,13 @@ impl ConfirmationApplication for MongoConfirmationApplication<'_> {
     }
 }
 
-/// 仅基于刚查询的原订单事实及原执行组资金资格确认当前叶子。
-/// # 参数
-/// 实际确认步骤与服务器持久化的原执行记录。
-/// # 返回
-/// 原确认明确成功或待调查状态已保存。
-/// # 错误
-/// 当前资格不满足或事务失败时停止；已发送动作不再次发送。
+// 仅基于刚查询的原订单事实及原执行组资金资格确认当前叶子。
+//
+// 实际确认步骤与服务器持久化的原执行记录。
+//
+// 原确认明确成功或待调查状态已保存。
+//
+// 当前资格不满足或事务失败时停止；已发送动作不再次发送。
 pub(super) async fn confirm_current_order(
     application: &impl ConfirmationApplication,
     mut execution: ApiOrderExecution,

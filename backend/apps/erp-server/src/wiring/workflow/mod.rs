@@ -47,17 +47,8 @@ fn map_service(error: Error) -> WorkflowError {
 }
 
 /// 装配授权、对象事实与审计端口齐全的工作项命令服务。
-///
-/// # 参数
-/// * `db` - 工作项与身份集合所在数据库。
-/// * `rbac` - 现有 RBAC 快照服务。
-/// * `authorization` - 启动时完整绑定的共享授权服务。
-///
-/// # 返回
+/// `authorization` 为启动时完整绑定的共享授权服务。
 /// 返回已注入三个组合端口的工作项服务。
-///
-/// # 错误
-/// 不返回错误。
 pub fn work_item_service(
     db: Database,
     rbac: SharedRbacService,
@@ -70,17 +61,8 @@ pub fn work_item_service(
 }
 
 /// 为组合根构造工作流授权 adapter。
-///
-/// # 参数
-/// * `db` - 身份与业务集合所在数据库。
-/// * `rbac` - 现有 RBAC 快照服务。
-/// * `authorization` - 启动时完整绑定的共享授权服务。
-///
-/// # 返回
+/// `authorization` 为启动时完整绑定的共享授权服务。
 /// 返回未执行 I/O 的 `WorkflowAuth`。
-///
-/// # 错误
-/// 不返回错误。
 pub fn workflow_auth(
     db: Database,
     rbac: SharedRbacService,
@@ -90,29 +72,13 @@ pub fn workflow_auth(
 }
 
 /// 构造工作流审计 adapter。
-///
-/// # 参数
-/// * `db` - 审计与业务集合所在数据库。
-///
-/// # 返回
 /// 返回共享的 `WorkflowAudit`。
-///
-/// # 错误
-/// 不返回错误。
 pub fn workflow_audit(db: Database) -> Arc<WorkflowAudit> {
     Arc::new(WorkflowAudit::new(db))
 }
 
 /// 构造工作项对象事实 adapter。
-///
-/// # 参数
-/// * `db` - 业务事实集合所在数据库。
-///
-/// # 返回
 /// 返回共享的 `WorkflowObjectFacts`。
-///
-/// # 错误
-/// 不返回错误。
 pub fn workflow_object_facts(db: Database) -> Arc<WorkflowObjectFacts> {
     Arc::new(WorkflowObjectFacts::new(db))
 }
@@ -120,19 +86,8 @@ pub fn workflow_object_facts(db: Database) -> Arc<WorkflowObjectFacts> {
 /// 经组合根端口绑定已发布审批定义。
 ///
 /// 绑定沿用调用方事务。
-///
-/// # 参数
-/// * `db` - 单据与审批集合所在数据库。
-/// * `rbac` - 现有 RBAC 快照服务。
-/// * `authorization` - 当前进程共享的完整授权服务。
-/// * `command` - 绑定已发布定义的命令。
-/// * `actor` - 当前操作人。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
+/// `command` 为绑定已发布定义的命令，`executor` 为调用方执行器。
 /// 成功时返回工作流绑定函数的结果；内层为 `None` 时原样返回 `None`。
-///
-/// # 错误
 /// 工作流绑定失败时映射为流程 `Error`。
 pub async fn bind_published_definition_on_document_create(
     db: &mongodb::Database,
@@ -161,15 +116,8 @@ fn map_service_err(error: erp_workflow::Error) -> Error {
 }
 
 /// 把已算出的绑定挂到已注册业务单据上。
-///
-/// # 参数
-/// * `document` - 待写入绑定的业务单据。
-/// * `binding` - 已发布定义绑定。
-///
-/// # 返回
+/// `document` 为待写入绑定的业务单据，`binding` 为已发布定义绑定。
 /// 成功时返回工作流函数交回的绑定。
-///
-/// # 错误
 /// 工作流拒绝挂载时经 `Error::from` 返回对应流程错误。
 pub fn attach_published_binding(
     document: &mut erp_workflow::entity::document_registry::BusinessDocument,

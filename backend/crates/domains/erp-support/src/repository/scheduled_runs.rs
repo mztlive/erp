@@ -12,12 +12,7 @@ use crate::ports::scheduled_runs::ScheduledRunStore;
 pub trait ScheduledRunExt {
     const SCHEDULED_RUNS: &'static str = "scheduled_runs";
     /// 返回本域调度回执仓储。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 不发起 I/O 的仓储。
-    /// # 错误
-    /// 无。
     fn scheduled_runs(&self) -> MongoScheduledRuns;
 }
 impl ScheduledRunExt for Database {

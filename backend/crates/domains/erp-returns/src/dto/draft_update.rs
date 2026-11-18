@@ -26,7 +26,7 @@ pub struct UpdateFinancialReturnRequest {
 }
 
 impl From<UpdateFinancialReturnRequest> for CustomerRefundUpdate {
-    /// 将请求的可编辑字段映射为客户退款更新数据。
+    // 将请求的可编辑字段映射为客户退款更新数据。
     fn from(value: UpdateFinancialReturnRequest) -> Self {
         Self {
             amount: value.amount,
@@ -38,7 +38,7 @@ impl From<UpdateFinancialReturnRequest> for CustomerRefundUpdate {
 }
 
 impl From<UpdateFinancialReturnRequest> for SupplierRefundUpdate {
-    /// 将请求的可编辑字段映射为供应商退款更新数据。
+    // 将请求的可编辑字段映射为供应商退款更新数据。
     fn from(value: UpdateFinancialReturnRequest) -> Self {
         Self {
             amount: value.amount,
@@ -50,7 +50,7 @@ impl From<UpdateFinancialReturnRequest> for SupplierRefundUpdate {
 }
 
 impl From<UpdateFinancialReturnRequest> for ReceiptReversalUpdate {
-    /// 将请求的可编辑字段映射为回款冲正更新数据。
+    // 将请求的可编辑字段映射为回款冲正更新数据。
     fn from(value: UpdateFinancialReturnRequest) -> Self {
         Self {
             amount: value.amount,
@@ -62,7 +62,7 @@ impl From<UpdateFinancialReturnRequest> for ReceiptReversalUpdate {
 }
 
 impl From<UpdateFinancialReturnRequest> for PaymentReversalUpdate {
-    /// 将请求的可编辑字段映射为付款冲正更新数据。
+    // 将请求的可编辑字段映射为付款冲正更新数据。
     fn from(value: UpdateFinancialReturnRequest) -> Self {
         Self {
             amount: value.amount,
@@ -81,7 +81,7 @@ mod tests {
     use super::UpdateFinancialReturnRequest;
     use crate::entity::returns::CustomerRefundUpdate;
 
-    /// 编辑合同只接受现有可变字段与非零版本。
+    // 验证编辑合同只接受现有可变字段与非零版本。
     #[test]
     fn edit_request_rejects_fixed_fields_and_maps_mutable_fields() {
         let valid = json!({"version": 2, "amount": "20", "reason_text": "更正退款金额"});

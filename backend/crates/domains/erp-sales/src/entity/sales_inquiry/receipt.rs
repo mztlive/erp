@@ -37,12 +37,10 @@ pub struct InquiryCommandReceipt {
 
 impl InquiryCommandReceipt {
     /// 构造不保存原始幂等键的成功回执。
-    /// # 参数
-    /// `id`、`actor`、`key`、`action` 确定命令身份；`fingerprint` 为规范化载荷 SHA256；`result` 为原结果。
-    /// # 返回
     /// 返回独立强类型回执。
-    /// # 错误
     /// 身份或指纹格式不正确时拒绝。
+    ///
+    /// 输入约定：`id`、`actor`、`key`、`action` 确定命令身份；`fingerprint` 为规范化载荷 SHA256；`result` 为原结果。
     pub fn new(
         id: String,
         actor: &str,
@@ -73,12 +71,8 @@ impl InquiryCommandReceipt {
     }
 
     /// 核对独立回执的存储版本、结构和强类型结果。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 回执可安全用于恢复核对时通过。
-    /// # 错误
-    /// 未知schema、软删、损坏指纹或结果身份缺失时拒绝，不能当作未执行。
+    /// 结果：回执可安全用于恢复核对时通过。
+    /// 失败条件：未知schema、软删、损坏指纹或结果身份缺失时拒绝，不能当作未执行。
     pub fn validate(&self) -> Result<()> {
         let (id, valid_result) = match &self.result {
             InquiryCommandResult::Created { inquiry_id } => (inquiry_id, true),
@@ -114,12 +108,10 @@ impl InquiryCommandReceipt {
     }
 
     /// 验证回放命令的完整身份和载荷指纹。
-    /// # 参数
-    /// `actor`、`key`、`action`、`fingerprint` 来自本次规范化命令。
-    /// # 返回
-    /// 一致时返回原强类型结果引用。
-    /// # 错误
+    /// 结果：一致时返回原强类型结果引用。
     /// 身份不一致或同键异载荷时拒绝。
+    ///
+    /// 输入约定：`actor`、`key`、`action`、`fingerprint` 来自本次规范化命令。
     pub fn matches(
         &self,
         actor: &str,

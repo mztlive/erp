@@ -56,14 +56,7 @@ pub struct CreateExpensePurchaseRequest {
 impl CreateExpensePurchaseRequest {
     /// 计算命令载荷指纹；幂等键不参与。
     ///
-    /// # 参数
-    /// * `sales_order_id` - 来源销售单
-    ///
-    /// # 返回
-    /// 返回稳定指纹。
-    ///
-    /// # 错误
-    /// 载荷序列化失败时返回错误。
+    /// 返回稳定指纹。载荷序列化失败时返回错误。
     pub fn request_fingerprint(&self, sales_order_id: &str) -> Result<String> {
         let payload = (&self.supplier_id, self.payment_term_code.trim(), &self.lines);
         payload_fingerprint(CREATE_EXPENSE_ACTION, sales_order_id, &payload).map_err(Error::from)

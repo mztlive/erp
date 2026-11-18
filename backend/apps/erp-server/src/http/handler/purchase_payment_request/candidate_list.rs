@@ -12,11 +12,7 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
 /// 查询通过当前来源资格与独立条件的候选页。
-/// # 参数
-/// 当前账号、应用状态及分页查询条件。
-/// # 返回
 /// 返回当前页及全部匹配候选的准确总数。
-/// # 错误
 /// 参数、权限或候选读取失败时拒绝。
 pub async fn page(
     State(state): State<HttpState>,
@@ -27,11 +23,7 @@ pub async fn page(
 }
 
 /// 查询跨页全选与发起前复验所需的当前候选身份。
-/// # 参数
-/// 当前账号、应用状态及独立筛选条件。
-/// # 返回
 /// 返回全部匹配的应付身份，忽略分页。
-/// # 错误
 /// 参数、权限或候选读取失败时拒绝。
 pub async fn ids(
     State(state): State<HttpState>,

@@ -37,12 +37,10 @@ pub struct SupplierFundsInvestigationWorker {
 
 impl SupplierFundsInvestigationWorker {
     /// 复用应用数据库及实际协议注册表。
-    /// # 参数
-    /// * `db` / `registry` - 由组合根注入的同一数据源和协议实现。
-    /// # 返回
+    ///
+    /// `db` / `registry`：由组合根注入的同一数据源和协议实现。
+    ///
     /// 返回未发起外部调用的可共享worker。
-    /// # 错误
-    /// 无。
     pub fn new(
         db: Database,
         registry: Arc<SupplierConnectorRegistry>,
@@ -52,11 +50,11 @@ impl SupplierFundsInvestigationWorker {
     }
 
     /// 有界恢复资金证据及读取明细，账户停用或授权撤销仍记录既有真实事实。
-    /// # 参数
+    ///
     /// 无；连接及外部资金账号全部从服务端装配取得。
-    /// # 返回
+    ///
     /// 返回本轮实际完成财务应用的证据数。
-    /// # 错误
+    ///
     /// 连接分页读取失败时返回错误；单账号异常保留证据并继续其他账号。
     pub async fn run_once(&self) -> Result<usize> {
         let mut cursor = self.cursor.lock().await;

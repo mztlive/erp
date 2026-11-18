@@ -57,22 +57,11 @@ impl PreparedResourceAudit {
     ///
     /// 名称快照和请求标识留空，事件序号取 `NonZeroU32::MIN`，由后续 `with_*` 补上。
     ///
-    /// # 参数
-    /// * `base` - 已构造审计的持久化元数据
-    /// * `actor_id` - 操作人 ID
-    /// * `actor_account` - 操作人登录账号
-    /// * `actor_type` - 操作人种类
-    /// * `action` - 动作名称
-    /// * `resource_type` - 资源类型
-    /// * `resource_id` - 资源 ID
-    /// * `success` - 是否成功
-    /// * `message` - 可选业务说明
-    ///
-    /// # 返回
     /// 返回稍后持久化的预制审计事实。
     ///
-    /// # 错误
     /// 不返回错误；输入字段由调用方预先校验。
+    ///
+    /// `base`：已构造审计的持久化元数据。
     #[allow(clippy::too_many_arguments)]
     pub fn from_validated(
         base: &BaseModel,
@@ -110,17 +99,8 @@ impl PreparedResourceAudit {
 #[async_trait]
 pub trait IdentityAuditPort: Send + Sync {
     /// 在事务开始前校验并准备一条成功的资源审计。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证的操作人
-    /// * `action` - 业务动作名称
-    /// * `resource_type` - 资源类型
-    /// * `resource_id` - 资源 ID
-    ///
-    /// # 返回
     /// 返回可在调用方执行器上持久化的预制审计事实。
     ///
-    /// # 错误
     /// 操作人或资源字段不满足审计约束时返回错误。
     fn resource_log(
         &self,
@@ -131,15 +111,10 @@ pub trait IdentityAuditPort: Send + Sync {
     ) -> Result<PreparedResourceAudit>;
 
     /// 把事先准备好的审计写到调用方选定的执行器。
-    ///
-    /// # 参数
-    /// * `audit` - 已准备的成功资源审计
-    /// * `executor` - 调用方选定的执行器
-    ///
-    /// # 返回
     /// 写入完成时无额外返回值。
     ///
-    /// # 错误
     /// 持久化失败时返回错误。
+    ///
+    /// `audit`：已准备的成功资源审计。
     async fn persist(&self, audit: &PreparedResourceAudit, executor: &mut dyn Executor) -> Result<()>;
 }

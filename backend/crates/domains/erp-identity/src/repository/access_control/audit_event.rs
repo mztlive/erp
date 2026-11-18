@@ -74,16 +74,8 @@ pub struct AuditEventFilter {
 }
 
 impl Default for AuditEventFilter {
-    /// 返回首页空筛选（`page: 1`，`page_size: 20`）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回筛选为空、降序的首页过滤条件。
-    ///
-    /// # 错误
-    /// 无。
+    // 返回首页空筛选（`page: 1`，`page_size: 20`）。
+    // 返回筛选为空、降序的首页过滤条件。
     fn default() -> Self {
         Self {
             q: None,
@@ -103,16 +95,7 @@ impl Default for AuditEventFilter {
 }
 
 impl QueryFilter for AuditEventFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_literal_regex_filter(&mut filter, "actor_id", self.actor_id.as_deref());
@@ -133,24 +116,18 @@ impl QueryFilter for AuditEventFilter {
     }
 }
 
-/// 追加可选精确匹配条件（`None` 时不写入字段）。
-///
-/// # 参数
-/// * `filter` - 待追加的查询条件文档
-/// * `field` - 字段名
-/// * `value` - 可选精确值；`None` 表示不筛选
+// 追加可选精确匹配条件（`None` 时不写入字段）。
+// `filter`：待追加的查询条件文档；`value`：可选精确值；`None` 表示不筛选。
 fn insert_exact_match(filter: &mut Document, field: &str, value: Option<&str>) {
     if let Some(value) = value {
         filter.insert(field, value);
     }
 }
 
-/// 追加 `created_at` 时间范围条件（秒级时间戳，越界回落 `i64::MAX`）。
-///
-/// # 参数
-/// * `filter` - 待追加的查询条件文档
-/// * `from` - 区间下界（含）；`None` 表示不限制
-/// * `before` - 区间上界（不含）；`None` 表示不限制
+// 追加 `created_at` 时间范围条件（秒级时间戳，越界回落 `i64::MAX`）。
+//
+// `filter`：待追加的查询条件文档；`from`：区间下界（含）；`None` 表示不限制。
+// `before`：区间上界（不含）；`None` 表示不限制。
 fn insert_time_range(filter: &mut Document, from: Option<u64>, before: Option<u64>) {
     let mut time = Document::new();
     if let Some(from) = from {
@@ -164,12 +141,10 @@ fn insert_time_range(filter: &mut Document, from: Option<u64>, before: Option<u6
     }
 }
 
-/// 追加关键词全文子句（多字段字面量 OR）与动作标签子句。
-///
-/// # 参数
-/// * `filter` - 待追加的查询条件文档
-/// * `q` - 操作者/动作/对象/追踪号字面量关键词；`None` 表示不筛选
-/// * `keyword_actions` - 界面动作标签匹配的动作代码（逗号分隔）；`None` 表示不限制
+// 追加关键词全文子句（多字段字面量 OR）与动作标签子句。
+//
+// `filter`：待追加的查询条件文档；`q`：操作者/动作/对象/追踪号字面量关键词；`None` 表示不筛选。
+// `keyword_actions`：界面动作标签匹配的动作代码（逗号分隔）；`None` 表示不限制。
 fn insert_keyword_clauses(filter: &mut Document, q: Option<&str>, keyword_actions: Option<&str>) {
     let Some(q) = q else {
         return;
@@ -198,16 +173,7 @@ fn insert_keyword_clauses(filter: &mut Document, q: Option<&str>, keyword_action
 }
 
 impl Pagination for AuditEventFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 返回页码与单页条数。
     fn page_and_size(&self) -> (u64, u64) {
         (self.paging.page, u64::from(self.paging.page_size))
     }
@@ -223,15 +189,11 @@ pub trait AuditEventRepositoryExt {
     /// 对象/结果精确匹配覆盖 `idx_audit_events_object_created`。审计事件是
     /// 追加式留痕，本集合**不提供**软删除/恢复方法。
     ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回当前页投影行与满足筛选条件的总数。
     ///
-    /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    ///
+    /// `executor`：数据访问执行器，由 Service 决定是否位于事务中。
     async fn search_audit_events(
         &self,
         filter: &AuditEventFilter,

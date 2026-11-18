@@ -12,16 +12,7 @@ use crate::http::handler::supplier_fulfillment;
 use crate::http::routes::permission_route;
 use crate::http::state::HttpState;
 
-/// 返回本域管理端路由集合。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回声明公共权限目录信息的路由集合。
-///
-/// # 错误
-/// 不执行 I/O，不返回错误。
+/// 为管理端挂载供应商履约接口，按操作登记公共权限目录信息。
 pub fn routes() -> Router<HttpState> {
     execution_routes().merge(order_routes()).merge(order_action_routes()).merge(order_handover_routes())
 }
@@ -122,7 +113,7 @@ fn order_handover_routes() -> Router<HttpState> {
         )
 }
 
-/// 将配送补充路由单独组装，保持读写各自既有动作授权。
+// 独立组装配送补充入口；读和写维持各自原有动作权限，不因同一子路由而合并授权。
 fn execution_routes() -> Router<HttpState> {
     execution_query_routes().route(
         "/supplier-fulfillment-orders/{id}/execution-setup",

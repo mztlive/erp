@@ -19,26 +19,19 @@ use super::SalesOrderCommandProcess;
 use crate::order_to_cash::adapters::catalog::CatalogQualificationAdapter;
 use crate::{Error, Result};
 impl SalesOrderCommandProcess {
-    /// 查找有效首次提交工作副本；草稿且没有有效副本时新开一份并落库。
-    ///
-    /// # 参数
-    /// * `order` - 当前销售单
-    /// * `req_version` - 客户端乐观锁版本；仅已有有效副本时校验
-    /// * `draft` - 本次草稿；仅补开新副本时使用
-    /// * `actor` - 审计操作人
-    ///
-    /// # 返回
-    /// `Ok((working_copy, stable, opened_new))`：
-    /// - 已有有效副本时 `opened_new=false`，`stable.created` 可能含补建行号；
-    /// - 新开副本时 `opened_new=true`，调用方不得再走覆盖保存。
-    ///
-    /// # 错误
-    /// * `ConflictError` - 非草稿，或已有副本但版本不一致
-    /// * `ValidationError` - 新开副本的草稿内容非法
-    /// * 仓储错误
-    ///
-    /// # 约束
-    /// 新开副本时本方法已完成事务写入；调用方只需返回视图。
+    // 查找有效首次提交工作副本；草稿且没有有效副本时新开一份并落库。
+    //
+    // `order` 为当前销售单；`req_version` 为客户端乐观锁版本；仅已有有效副本时校验；`draft` 为本次草稿；仅补开新副本时使用。
+    //
+    // `Ok((working_copy, stable, opened_new))`：
+    //
+    // 已有有效副本时 `opened_new=false`，`stable.created` 可能含补建行号；
+    //
+    // 新开副本时 `opened_new=true`，调用方不得再走覆盖保存。`ConflictError`：非草稿，或已有副本但版本不一致。
+    //
+    // `ValidationError`：新开副本的草稿内容非法。仓储错误。
+    //
+    // 新开副本时本方法已完成事务写入；调用方只需返回视图。
     pub(super) async fn load_or_reopen_first_submission_working_copy(
         &self,
         order: &SalesOrder,
@@ -90,23 +83,12 @@ impl SalesOrderCommandProcess {
         Ok((working_copy, DraftStableLines { all: Vec::new(), created: Vec::new() }, true))
     }
 
-    /// 把新开的首次提交工作副本、明细和补建的稳定行写入同一事务。
-    ///
-    /// # 参数
-    /// * `order` - 当前销售单，用于版本重验及合同／客户 detail 重验
-    /// * `created_stable_lines` - 本次新建的稳定明细
-    /// * `working_copy` - 新开工作副本
-    /// * `working_copy_lines` - 新开工作副本行
-    /// * `actor` - 审计操作人
-    ///
-    /// # 返回
-    /// 返回已落库的工作副本。
-    ///
-    /// # 错误
-    /// 合同／客户越权、版本冲突或仓储写入失败时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 必须与旧的 `Submitted` 副本并存；handler 事前检查不能代替事务内 `related`。
+    // 把新开的首次提交工作副本、明细和补建的稳定行写入同一事务。
+    //
+    // `order` 为当前销售单，用于版本重验及合同／客户 detail 重验；`created_stable_lines` 为本次新建的稳定明细；`working_copy` 为新开工作副本；
+    // `working_copy_lines` 为新开工作副本行。返回已落库的工作副本。合同／客户越权、版本冲突或仓储写入失败时返回错误。
+    //
+    // 必须与旧的 `Submitted` 副本并存；handler 事前检查不能代替事务内 `related`。
     async fn persist_reopened_first_submission_working_copy(
         &self,
         order: &SalesOrder,

@@ -68,7 +68,7 @@ pub enum Error {
 }
 
 impl From<erp_identity::Error> for Error {
-    /// 保留身份域的拒绝、冲突和设施错误类别。
+    // 身份域授权错误进入销售用例时保留拒绝、冲突和基础设施故障各自的分类。
     fn from(error: erp_identity::Error) -> Self {
         match error {
             erp_identity::Error::Internal(v) | erp_identity::Error::Rbac(v) => Self::Internal(v),
@@ -90,12 +90,7 @@ impl From<erp_identity::Error> for Error {
 
 impl Error {
     /// 返回 HTTP 映射使用的稳定错误分类；不得解析 Display 文本。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// `ConflictError` 与 `SelectionConflict` 为 `Conflict`。
+    /// 结果：`ConflictError` 与 `SelectionConflict` 为 `Conflict`。
     /// `BusinessLogicError`、`ValidationError`、`NotFound`、`SelectionEnded`、
     /// `SelectionLimitExceeded` 与 `SelectionPrepareFailed` 为 `BusinessRule`。
     /// `Forbidden` 与 `Unauthenticated` 为 `Forbidden`。
@@ -103,9 +98,6 @@ impl Error {
     /// `RepositoryError`、`ReceiptDuplicate`、`TransientTransaction` 与
     /// `OutcomeUnknown` 按其持久化源错误分类：唯一键、乐观锁和瞬态事务冲突为
     /// `Conflict`，其余为 `Internal`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn class(&self) -> ErrorClass {
         match self {
             Self::Internal(_) | Self::Logic(_) => ErrorClass::Internal,
@@ -128,71 +120,46 @@ impl Error {
     }
 
     /// 选品版本冲突。
-    ///
-    /// # 参数
-    /// * `message` - 冲突说明
-    ///
-    /// # 返回
     /// 返回选品冲突错误。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// 输入约定：
+    /// - `message`：冲突说明
     pub fn selection_conflict(message: impl Into<String>) -> Self {
         Self::SelectionConflict(message.into())
     }
 
     /// 选品结束态。
-    ///
-    /// # 参数
-    /// * `message` - 结束说明
-    ///
-    /// # 返回
     /// 返回选品结束错误。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// 输入约定：
+    /// - `message`：结束说明
     pub fn selection_ended(message: impl Into<String>) -> Self {
         Self::SelectionEnded(message.into())
     }
 
     /// 选品超限。
-    ///
-    /// # 参数
-    /// * `message` - 超限说明
-    ///
-    /// # 返回
     /// 返回选品超限错误。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// 输入约定：
+    /// - `message`：超限说明
     pub fn selection_limit(message: impl Into<String>) -> Self {
         Self::SelectionLimitExceeded(message.into())
     }
 
     /// 选品准备失败。
-    ///
-    /// # 参数
-    /// * `message` - 失败说明
-    ///
-    /// # 返回
     /// 返回准备失败错误。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// 输入约定：
+    /// - `message`：失败说明
     pub fn selection_prepare_failed(message: impl Into<String>) -> Self {
         Self::SelectionPrepareFailed(message.into())
     }
 
     /// 选品提交结果待核对。
-    ///
-    /// # 参数
-    /// * `message` - 待核对说明
-    ///
-    /// # 返回
     /// 返回待核对错误。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// 输入约定：
+    /// - `message`：待核对说明
     pub fn selection_pending(message: impl Into<String>) -> Self {
         Self::SelectionPendingCheck(message.into())
     }
@@ -203,11 +170,11 @@ impl_repository_error!(
     duplicate = |error| { Error::ConflictError(duplicate_key_conflict_message(&error)) }
 );
 
-/// 将持久化源错误映射为稳定错误分类（唯一分类入口）。
-///
-/// 唯一键冲突、乐观锁与瞬态事务冲突为可重试/冲突语义；未知提交结果与其它
-/// 仓储失败为内部错误。`Logic(erp_core::Error)` 不经过本函数：领域基元错误
-/// 无稳定分类（字符串负载或状态迁移），保持 `Internal`。
+// 销售仓储失败映射对外错误时用同一套分类，区分并发冲突、未知提交结果和其他内部故障。
+//
+// 唯一键冲突、乐观锁与瞬态事务冲突为可重试/冲突语义；未知提交结果与其它
+// 仓储失败为内部错误。`Logic(erp_core::Error)` 不经过本函数：领域基元错误
+// 无稳定分类（字符串负载或状态迁移），保持 `Internal`。
 fn persistence_error_class(error: &persistence_core::Error) -> ErrorClass {
     match error {
         persistence_core::Error::DuplicateKey(_)
@@ -217,15 +184,15 @@ fn persistence_error_class(error: &persistence_core::Error) -> ErrorClass {
     }
 }
 
-/// 将唯一键冲突映射为面向用户的冲突提示。
+// 销售写入触发唯一键冲突时，从约束信息生成该记录对应的对外冲突提示。
 fn duplicate_key_conflict_message(error: &persistence_core::Error) -> String {
     duplicate_index_conflict_message(error.duplicate_index_name())
 }
 
-/// 将销售域唯一索引名称映射为面向用户的冲突提示。
-///
-/// 销售订单、工作副本与变更唯一索引均保持原通用冲突文案。
-/// 选品唯一索引映射为明确的选品冲突语义，不得用通用操作失败覆盖。
+// 由唯一索引名确定冲突提示；选品常见冲突精确提示原因，销售单和变更等沿用通用冲突文案。
+//
+// 销售订单、工作副本与变更唯一索引均保持原通用冲突文案。
+// 选品唯一索引映射为明确的选品冲突语义，不得用通用操作失败覆盖。
 fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
     match index_name {
         Some("uk_sales_selection_proposals_book") => "一本选品册只能关联一份销售方案".to_string(),

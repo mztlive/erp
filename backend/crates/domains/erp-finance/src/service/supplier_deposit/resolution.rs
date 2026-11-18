@@ -30,12 +30,10 @@ pub struct VerifiedDepositRelease<'a> {
 
 impl SupplierDepositService {
     /// 读取原风险释放命令的永久回执，已失效附件不阻断合法原结果查询。
-    /// # 参数
-    /// 原账户、占用、稳定操作、同内容核验依据、认证人及已授权查询执行器。
-    /// # 返回
-    /// 原命令已成功时返回原占用，否则返回空。
-    /// # 错误
+    /// 结果：原命令已成功时返回原占用，否则返回空。
     /// 跨账户或同键不同内容时拒绝。
+    ///
+    /// 输入约定：原账户、占用、稳定操作、同内容核验依据、认证人及已授权查询执行器。
     pub async fn verified_release_result(
         &self,
         account: &str,
@@ -57,13 +55,11 @@ impl SupplierDepositService {
     }
 
     /// 以完整平衡核对及核验附件结案原差异，最后一项结案才解除账户限制。
-    /// # 参数
-    /// `account`、`id`、`version` 为原账户、差异及所见版本；`resolution` 为服务器核验的命令。
-    /// `executor` 为权限、附件、资金及审计共用的事务。
-    /// # 返回
     /// 返回保留原差异和不可变结案回执的记录。
-    /// # 错误
     /// 跨账户、陈旧版本、未决资金、来源冲突、资金范围不完整或账面不守恒时拒绝。
+    ///
+    /// 输入约定：`account`、`id`、`version` 为原账户、差异及所见版本；`resolution` 为服务器核验的命令。
+    /// `executor` 为权限、附件、资金及审计共用的事务。
     pub async fn resolve_reconciliation(
         &self,
         account: &str,
@@ -101,13 +97,11 @@ impl SupplierDepositService {
     }
 
     /// 依据已经核实的执行终态和文件释放服务器计算的全部未使用尾款。
-    /// # 参数
-    /// 原账户、占用及版本、稳定操作、服务器核验依据、最后外部事实时刻及执行人。
-    /// `executor` 包含原执行版本写屏障、资金释放和审计。
-    /// # 返回
     /// 返回不可变释放回执；同操作同载荷重放不再次释放。
-    /// # 错误
     /// 原执行未结清、核对早于外部事实、未决资金、版本变化或余额不守恒时拒绝。
+    ///
+    /// 输入约定：原账户、占用及版本、稳定操作、服务器核验依据、最后外部事实时刻及执行人。
+    /// `executor` 包含原执行版本写屏障、资金释放和审计。
     pub async fn release_verified_reservation(
         &self,
         command: VerifiedDepositRelease<'_>,

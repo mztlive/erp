@@ -9,13 +9,7 @@ use crate::entity::supplier_callback::SupplierCallbackReceipt;
 
 pub trait SupplierCallbackExt {
     const SUPPLIER_CALLBACK_RECEIPTS: &'static str = "supplier_callback_receipts";
-    /// 取得供应商原始接收证据仓储。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 本域接收仓储。
-    /// # 错误
-    /// 无。
+    /// 取得供应商原始接收证据仓储。本域接收仓储。
     fn supplier_callback_receipts(&self) -> Repository<'_, SupplierCallbackReceipt>;
 }
 impl SupplierCallbackExt for Database {
@@ -27,12 +21,10 @@ impl SupplierCallbackExt for Database {
 #[allow(async_fn_in_trait)]
 pub trait SupplierCallbackRepositoryExt {
     /// 按绑定连接读取有界待核验队列；不包含其他连接。
-    /// # 参数
+    ///
+    /// 最早的最多 50 条 received 记录。仓储查询失败时保留原分类。
+    ///
     /// `connection_id` 为授权连接；`executor` 为调用方执行器。
-    /// # 返回
-    /// 最早的最多 50 条 received 记录。
-    /// # 错误
-    /// 仓储查询失败时保留原分类。
     async fn pending(
         &self,
         connection_id: &str,
@@ -55,13 +47,9 @@ impl SupplierCallbackRepositoryExt for Repository<'_, SupplierCallbackReceipt> {
     }
 }
 
-/// 读取后台订单消费者的有界队列；原始正文保持密文。
-/// # 参数
+/// 读取后台订单消费者的有界队列；原始正文保持密文。最早的至多 20 条订单回调接收记录；商品状态由独立队列处理。
+///
 /// `db` 为当前部署库，执行器由调用方提供。
-/// # 返回
-/// 最早的至多 20 条订单回调接收记录；商品状态由独立队列处理。
-/// # 错误
-/// 数据库读取失败时返回原错误。
 pub async fn pending_order_callbacks(
     db: &Database,
     executor: &mut dyn Executor,
@@ -76,13 +64,7 @@ pub async fn pending_order_callbacks(
     .await
 }
 
-/// 读取到期商品回调；与订单队列共享既有按路由和延期时间的索引。
-/// # 参数
-/// 当前数据库和调用方执行器。
-/// # 返回
-/// 最早的至多五条商品回调；实际领取还须校验记录版本。
-/// # 错误
-/// 数据库查询失败时返回原错误。
+/// 读取到期商品回调；与订单队列共享既有按路由和延期时间的索引。最早的至多五条商品回调；实际领取还须校验记录版本。
 pub async fn pending_catalog_callbacks(
     db: &Database,
     executor: &mut dyn Executor,

@@ -8,19 +8,15 @@ use super::{BookletStatus, SalesSelectionBooklet, SalesSelectionBookletData, Sal
 
 impl SalesSelectionBooklet {
     /// 为重新选择的客户复制配置和准备批次，创建独立的草稿或待发布册。
-    ///
-    /// # 参数
-    /// * `id` - 新册身份，同时派生新批次身份
-    /// * `customer_id` - 新客户身份
-    /// * `customer_no` - 新客户编号
-    /// * `customer_name` - 新客户名称
-    /// * `actor_id` - 本次复制操作人
-    ///
-    /// # 返回
     /// 返回无链接、会话或方案关联的新册；责任归属与原配置保持一致。
-    ///
-    /// # 错误
     /// 原册准备中、身份复用或新客户字段非法时拒绝。
+    ///
+    /// 输入约定：
+    /// - `id`：新册身份，同时派生新批次身份
+    /// - `customer_id`：新客户身份
+    /// - `customer_no`：新客户编号
+    /// - `customer_name`：新客户名称
+    /// - `actor_id`：本次复制操作人
     pub fn copied(
         &self,
         id: SalesSelectionBookletId,
@@ -67,17 +63,12 @@ impl SalesSelectionBooklet {
 
 impl SalesSelectionDisplayItem {
     /// 将陈列快照复制到新册新批次，保留商品、组合、价格、图片及删减标记。
-    ///
-    /// # 参数
-    /// * `id` - 新陈列身份
-    /// * `booklet_id` - 新册身份
-    /// * `batch_id` - 新批次
-    ///
-    /// # 返回
     /// 返回与原项无可变关联的独立陈列。
     ///
-    /// # 错误
-    /// 无。
+    /// 输入约定：
+    /// - `id`：新陈列身份
+    /// - `booklet_id`：新册身份
+    /// - `batch_id`：新批次
     pub fn copied(
         &self,
         id: SalesSelectionDisplayItemId,

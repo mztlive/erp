@@ -11,7 +11,7 @@ use crate::dto::sales_order::{RevisionView, SalesOrderWorkingCopyLineView, Worki
 use crate::entity::sales_order::{SalesOrderRevision, SalesOrderRevisionLine, SalesOrderWorkingCopy};
 use crate::repository::SalesOrderExt;
 use crate::repository::prelude::*;
-/// 按正式版本归组已加载的冻结行，并在每组内按行号排序。
+// 装配销售版本列表时按正式版本归组已冻结明细，各组按业务行号排序。
 fn group_revision_lines(lines: Vec<SalesOrderRevisionLine>) -> HashMap<String, Vec<SalesOrderRevisionLine>> {
     let mut grouped: HashMap<String, Vec<SalesOrderRevisionLine>> = HashMap::new();
     for line in lines {
@@ -24,7 +24,7 @@ fn group_revision_lines(lines: Vec<SalesOrderRevisionLine>) -> HashMap<String, V
     grouped
 }
 
-/// 只根据已加载的历史版本解析前一版本号；前一版本不在本次结果中则跳过，不回查当前数据。
+// 显示销售版本历史时仅从已加载结果换算上一版本号；缺失前版就略过，不用销售当前数据补齐。
 fn previous_revision_numbers(revisions: &[SalesOrderRevision]) -> HashMap<String, u32> {
     let by_id: HashMap<&str, u32> =
         revisions.iter().map(|row| (row.base.id.as_str(), row.revision.revision_no)).collect();
@@ -43,19 +43,14 @@ fn previous_revision_numbers(revisions: &[SalesOrderRevision]) -> HashMap<String
 
 impl SalesOrderService {
     /// 组装销售单正式版本历史视图（含当时表头、明细摘要与完整成交快照）。
-    ///
-    /// # 参数
-    /// * `order_id` - 稳定销售单
-    /// * `executor` - 调用方授权和业务读取使用的原执行器。
-    ///
-    /// # 返回
     /// 返回按版本号倒序的版本视图。
-    ///
-    /// # 错误
+    /// 失败条件：
     /// * `RepositoryError` - 查询正式版本或版本行失败
+    /// 业务边界：公共行按版本 ID、子类型按公共行 ID 批量取出，禁止按版本循环查询。
     ///
-    /// # 关键业务约束
-    /// 公共行按版本 ID、子类型按公共行 ID 批量取出，禁止按版本循环查询。
+    /// 输入约定：
+    /// - `order_id`：稳定销售单
+    /// - `executor`：调用方授权和业务读取使用的原执行器。
     pub async fn load_revision_views(
         &self,
         order_id: &SalesOrderId,
@@ -82,7 +77,7 @@ impl SalesOrderService {
             .collect())
     }
 
-    /// 批量读取所有版本公共行的不可变子类型，并按公共行身份组装成交明细。
+    // 显示正式版本成交明细时批量读取不可变子类型，再按实际公共行身份组装各行。
     async fn revision_commercial_lines(
         &self,
         lines: &[SalesOrderRevisionLine],
@@ -116,16 +111,12 @@ impl SalesOrderService {
     }
 
     /// 构建工作副本行视图。
-    ///
-    /// # 参数
-    /// * `copy` - 工作副本实体
-    /// * `executor` - 调用方授权和业务读取使用的原执行器。
-    ///
-    /// # 返回
     /// 返回行视图集合。
+    /// 传播数据库读取失败。
     ///
-    /// # 错误
-    /// 数据库读取失败时返回错误。
+    /// 输入约定：
+    /// - `copy`：工作副本实体
+    /// - `executor`：调用方授权和业务读取使用的原执行器。
     pub async fn working_copy_view(
         &self,
         copy: &SalesOrderWorkingCopy,

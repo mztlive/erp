@@ -36,18 +36,13 @@ pub enum ExternalIdentityResolution {
 
 impl ExternalIdentityResolution {
     /// 按有效外部身份命中数量收敛解析结果。
-    ///
-    /// # 参数
-    /// * `matches` - 仓储返回的全部当前有效外部身份
-    ///
-    /// # 返回
-    /// 零条返回 `Missing`，一条返回 `Resolved`，多条返回 `Ambiguous`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 结果：零条返回 `Missing`，一条返回 `Resolved`，多条返回 `Ambiguous`。
     ///
     /// # Panics
     /// 长度已确认为 1 时 `pop` 不应为空。若仍为空，说明长度检查已被破坏，允许 panic。
+    ///
+    /// 输入约定：
+    /// - `matches`：仓储返回的全部当前有效外部身份
     pub fn from_matches(mut matches: Vec<String>) -> Self {
         match matches.len() {
             0 => Self::Missing,
@@ -68,16 +63,7 @@ pub enum BusinessType {
 }
 
 impl BusinessType {
-    /// 返回类型的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为界面或响应展示提供销售单业务性质的中文名称；机器筛选和存储不使用该名称。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Voucher => "卡券",
@@ -85,16 +71,7 @@ impl BusinessType {
         }
     }
 
-    /// 返回类型的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将销售单业务性质转成用于持久化和查询的稳定代码，与中文展示文案分开。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Voucher => "VOUCHER",
@@ -103,29 +80,13 @@ impl BusinessType {
     }
 
     /// 判断是否为卡券销售。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 卡券销售返回 `true`，实物及服务销售返回 `false`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 结果：卡券销售返回 `true`，实物及服务销售返回 `false`。
     pub fn is_voucher(self) -> bool {
         matches!(self, Self::Voucher)
     }
 
     /// 判断是否为实物及服务销售。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 实物及服务销售返回 `true`，卡券销售返回 `false`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 结果：实物及服务销售返回 `true`，卡券销售返回 `false`。
     pub fn is_goods_service(self) -> bool {
         matches!(self, Self::GoodsService)
     }
@@ -143,16 +104,7 @@ pub enum OriginSystem {
 }
 
 impl OriginSystem {
-    /// 返回入口的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为界面或响应展示提供销售建单入口的中文名称；机器筛选和存储不使用该名称。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Mall => "商城",
@@ -160,16 +112,7 @@ impl OriginSystem {
         }
     }
 
-    /// 返回入口的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将销售建单入口转成用于持久化和查询的稳定代码，与中文展示文案分开。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Mall => "MALL",
@@ -189,16 +132,7 @@ pub enum LineType {
 }
 
 impl LineType {
-    /// 返回行类型的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为界面或响应展示提供销售明细类型的中文名称；机器筛选和存储不使用该名称。
     pub fn label(&self) -> &'static str {
         match self {
             Self::GoodsService => "实物及服务",
@@ -206,16 +140,7 @@ impl LineType {
         }
     }
 
-    /// 返回行类型的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将销售明细类型转成用于持久化和查询的稳定代码，与中文展示文案分开。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::GoodsService => "GOODS_SERVICE",
@@ -224,15 +149,10 @@ impl LineType {
     }
 
     /// 判断行类型是否属于给定业务性质。
+    /// 结果：行类型与业务性质一致时返回 `true`。
     ///
-    /// # 参数
-    /// * `business_type` - 销售单业务性质
-    ///
-    /// # 返回
-    /// 行类型与业务性质一致时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 输入约定：
+    /// - `business_type`：销售单业务性质
     pub fn belongs_to(self, business_type: BusinessType) -> bool {
         matches!(
             (self, business_type),
@@ -268,16 +188,7 @@ pub enum WelfareScenario {
 }
 
 impl WelfareScenario {
-    /// 返回场景的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为界面或响应展示提供福利销售场景的中文名称；机器筛选和存储不使用该名称。
     pub fn label(&self) -> &'static str {
         match self {
             Self::AnnualGiftBag => "礼包",
@@ -293,16 +204,7 @@ impl WelfareScenario {
         }
     }
 
-    /// 返回场景的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将福利销售场景转成用于持久化和查询的稳定代码，与中文展示文案分开。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::AnnualGiftBag => "ANNUAL_GIFT_BAG",
@@ -330,16 +232,7 @@ pub enum CardForm {
 }
 
 impl CardForm {
-    /// 返回卡形态的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为界面或响应展示提供卡券形态的中文名称；机器筛选和存储不使用该名称。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Electronic => "电子卡",
@@ -347,16 +240,7 @@ impl CardForm {
         }
     }
 
-    /// 返回卡形态的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将卡券形态转成用于持久化和查询的稳定代码，与中文展示文案分开。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Electronic => "ELECTRONIC",
@@ -396,8 +280,7 @@ pub struct GoodsLineFields {
     pub delivery_allocations: Vec<SalesDeliveryAllocation>,
 }
 
-/// 卡券行字段组创建入参（数据模型 §6.4：来源同时提供面额、单价与合计，逐项核对；
-/// `gift_rate` 缺省时按 `gift_amount / transaction_amount` 推导）。
+// 读取卡券张数时兼容无符号整数和数字字符串；非法或超出 `u32` 范围的值由反序列化拒绝。
 fn deserialize_u32_from_number_or_string<'de, D>(deserializer: D) -> std::result::Result<u32, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -472,13 +355,9 @@ pub(crate) struct BuiltLineGroups {
 }
 
 impl BuiltLineGroups {
-    /// 校验提交行的采购供给价；卡券行和数量归零的移除行不适用。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 有效商品行已填写采购供给价时返回成功。
-    /// # 错误
-    /// 有效商品行未填写时返回“请填写采购供给价”。
+    // 校验提交行的采购供给价；卡券行和数量归零的移除行不适用。
+    // 结果：有效商品行已填写采购供给价时返回成功。
+    // 失败条件：有效商品行未填写时返回“请填写采购供给价”。
     pub(crate) fn ensure_supply_price(&self) -> Result<()> {
         if self.goods.as_ref().is_some_and(|goods| {
             !goods.quantity.to_decimal().is_zero() && goods.procurement_supply_price_gross.is_none()
@@ -488,62 +367,43 @@ impl BuiltLineGroups {
         Ok(())
     }
 
-    /// 读取商品行的交付分配；卡券行返回空列表。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 独立的分配快照。
-    /// # 错误
-    /// 不返回错误。
+    // 读取商品行的交付分配；卡券行返回空列表。
+    // 结果：独立的分配快照。
     pub(crate) fn delivery_allocations(&self) -> Vec<SalesDeliveryAllocation> {
         self.goods.as_ref().map(|goods| goods.delivery_allocations.clone()).unwrap_or_default()
     }
-    /// 读取已校验字段组的成交单价。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 商品或卡券含税单价。
-    /// # 错误
-    /// 不返回错误。
+    // 读取已校验字段组的成交单价。
+    // 结果：商品或卡券含税单价。
     pub(crate) fn unit_price_gross(&self) -> Option<UnitPrice> {
         self.goods
             .as_ref()
             .map(|goods| goods.unit_price_gross)
             .or_else(|| self.voucher.as_ref().map(|voucher| voucher.unit_price_gross))
     }
-    /// 读取商品行销售填写的采购供给价。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 商品行未填写或卡券行返回 `None`。
-    /// # 错误
-    /// 不返回错误。
+    // 读取商品行销售填写的采购供给价。
+    // 结果：商品行未填写或卡券行返回 `None`。
     pub(crate) fn procurement_supply_price_gross(&self) -> Option<UnitPrice> {
         self.goods.as_ref().and_then(|goods| goods.procurement_supply_price_gross)
     }
 }
 
-/// 构建行字段组并计算行金额三元组。
-///
-/// 行类型与字段组必须一一对应：实物及服务行只允许 `goods`，卡券行只允许 `voucher`。
-/// 金额按数据模型 §4.2 铁律 1 逐行计算并舍入到分；卡券行按 §6.4 校验面额小计、
-/// 成交金额与配赠金额的一致性，成交金额为零时拒绝生效（配赠率无定义）。
-///
-/// # 参数
-/// * `line_type` - 行类型
-/// * `goods` - 实物及服务字段组
-/// * `voucher` - 卡券字段组
-/// * `sales_tax_rate` - 销项税率
-///
-/// # 返回
-/// 返回含行金额三元组的构建结果。
-///
-/// # 错误
-/// 字段组与行类型不匹配、卡张数无法换成数量、卡券金额或配赠率不一致、成交金额为零，
-/// 或基础单位、服务区域为空或超长时返回错误。
-///
-/// # Panics
-/// 实物及服务分支已确认 `goods` 为 `Some`。若此时仍为空，说明匹配条件被破坏，允许 panic。
+// 构建行字段组并计算行金额三元组。
+//
+// 行类型与字段组必须一一对应：实物及服务行只允许 `goods`，卡券行只允许 `voucher`。
+// 金额按数据模型 §4.2 铁律 1 逐行计算并舍入到分；卡券行按 §6.4 校验面额小计、
+// 成交金额与配赠金额的一致性，成交金额为零时拒绝生效（配赠率无定义）。
+// 返回含行金额三元组的构建结果。
+// 失败条件：字段组与行类型不匹配、卡张数无法换成数量、卡券金额或配赠率不一致、成交金额为零，
+// 或基础单位、服务区域为空或超长时返回错误。
+//
+// # Panics
+// 实物及服务分支已确认 `goods` 为 `Some`。若此时仍为空，说明匹配条件被破坏，允许 panic。
+//
+// 输入约定：
+// - `line_type`：行类型
+// - `goods`：实物及服务字段组
+// - `voucher`：卡券字段组
+// - `sales_tax_rate`：销项税率
 pub(crate) fn build_line_groups(
     line_type: LineType,
     goods: Option<GoodsLineFields>,
@@ -603,19 +463,15 @@ fn normalize_goods(mut fields: GoodsLineFields) -> Result<GoodsLineFields> {
     Ok(fields)
 }
 
-/// 校验草稿卡券字段组与推导金额的一致性（数据模型 §6.4）。
-///
-/// 来源同时提供面额、单价与合计时逐项核对：面额小计、成交金额、配赠金额与
-/// 配赠率必须与公式推导值一致；不一致由本实体拒绝（P3 在同步入口转为差异任务）。
-///
-/// # 参数
-/// * `draft` - 卡券字段组入参
-///
-/// # 返回
-/// 返回推导后的配赠率。
-///
-/// # 错误
-/// 卡张数为零、成交金额为零、任一金额或配赠率与推导值不一致，或金额、配赠率无法落入值对象时返回错误。
+// 校验草稿卡券字段组与推导金额的一致性（数据模型 §6.4）。
+//
+// 来源同时提供面额、单价与合计时逐项核对：面额小计、成交金额、配赠金额与
+// 配赠率必须与公式推导值一致；不一致由本实体拒绝（P3 在同步入口转为差异任务）。
+// 返回推导后的配赠率。
+// 卡张数为零、成交金额为零、任一金额或配赠率与推导值不一致，或金额、配赠率无法落入值对象时返回错误。
+//
+// 输入约定：
+// - `draft`：卡券字段组入参
 fn validate_voucher_draft(draft: &VoucherLineDraft) -> Result<Rate> {
     let amounts = derive_voucher_amounts(draft.face_value, draft.card_count, draft.unit_price_gross)?;
     if draft.face_value_total != amounts.face_value_total {
@@ -647,18 +503,14 @@ pub(crate) struct VoucherAmounts {
     pub gift_rate: Rate,
 }
 
-/// 推导卡券行金额（数据模型 §6.4：正式版本由面额、张数与成交单价直接推导）。
-///
-/// # 参数
-/// * `face_value` - 单卡面额
-/// * `card_count` - 卡张数
-/// * `unit_price_gross` - 单卡含税成交单价
-///
-/// # 返回
-/// 返回推导金额集合。
-///
-/// # 错误
-/// 卡张数为零、成交金额为零（配赠率无定义），或面额小计、成交金额、配赠金额、配赠率无法落入值对象时返回错误。
+// 推导卡券行金额（数据模型 §6.4：正式版本由面额、张数与成交单价直接推导）。
+// 返回推导金额集合。
+// 卡张数为零、成交金额为零（配赠率无定义），或面额小计、成交金额、配赠金额、配赠率无法落入值对象时返回错误。
+//
+// 输入约定：
+// - `face_value`：单卡面额
+// - `card_count`：卡张数
+// - `unit_price_gross`：单卡含税成交单价
 pub(crate) fn derive_voucher_amounts(
     face_value: Amount,
     card_count: u32,
@@ -694,20 +546,16 @@ pub(crate) struct LineSummary {
     pub line_type: LineType,
 }
 
-/// 校验行清单（数据模型 §6.4/§6.5 跨行断言）。
-///
-/// 规则：行号与稳定明细身份不重复且行号为正；卡券销售单恰好一条卡券明细；
-/// 实物及服务销售单至少一行且只能有实物及服务行。
-///
-/// # 参数
-/// * `business_type` - 销售单业务性质
-/// * `lines` - 行清单摘要
-///
-/// # 返回
-/// 全部断言通过时返回 `Ok(())`。
-///
-/// # 错误
-/// 空清单、行号越界或重复、身份重复、行类型与业务性质不一致时返回错误。
+// 校验行清单（数据模型 §6.4/§6.5 跨行断言）。
+//
+// 规则：行号与稳定明细身份不重复且行号为正；卡券销售单恰好一条卡券明细；
+// 实物及服务销售单至少一行且只能有实物及服务行。
+// 结果：全部断言通过时返回 `Ok(())`。
+// 空清单、行号越界或重复、身份重复、行类型与业务性质不一致时返回错误。
+//
+// 输入约定：
+// - `business_type`：销售单业务性质
+// - `lines`：行清单摘要
 pub(crate) fn validate_line_list(business_type: BusinessType, lines: &[LineSummary]) -> Result<()> {
     if lines.is_empty() {
         return Err(Error::from("销售单明细不能为空"));
@@ -741,21 +589,15 @@ pub(crate) fn validate_line_list(business_type: BusinessType, lines: &[LineSumma
     Ok(())
 }
 
-/// 将卡张数转换为基础单位数量（整数，满足数量精度）。
-///
-/// 行金额计算与审批快照总数量共用该换算，单位为张。
-///
-/// # 参数
-/// * `count` - 卡张数
-///
-/// # 返回
-/// 返回对应 `Quantity`。
-///
-/// # 错误
-/// 数量超出精度（理论不可达，防御性分支）时返回错误。
-///
-/// # 关键业务约束
-/// 不得把卡张数写入或读取 `quantity` 字段；调用方必须显式换算。
+// 将卡张数转换为基础单位数量（整数，满足数量精度）。
+//
+// 行金额计算与审批快照总数量共用该换算，单位为张。
+// 返回对应 `Quantity`。
+// 数量超出精度（理论不可达，防御性分支）时返回错误。
+// 业务边界：不得把卡张数写入或读取 `quantity` 字段；调用方必须显式换算。
+//
+// 输入约定：
+// - `count`：卡张数
 pub(crate) fn integer_quantity(count: u32) -> Result<Quantity> {
     Quantity::try_from(Decimal::from(count)).map_err(|error| {
         tracing::warn!(%error, "卡张数超出数量精度");
@@ -1016,7 +858,7 @@ mod tests {
         assert_eq!(built.tax_amount, amt("3.90"));
     }
 
-    /// 采购供给价不改变销售行金额：赠品与普通行均允许零价，负数拒绝。
+    // 回归检查：采购供给价不改变销售行金额：赠品与普通行均允许零价，负数拒绝。
     #[test]
     fn procurement_supply_price_is_kept_without_affecting_amounts() {
         let goods = |mode: SalesPricingMode, unit: &str, supply: Option<&str>| GoodsLineFields {

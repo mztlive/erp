@@ -31,30 +31,13 @@ pub struct MongoWarehouseAudit {
 }
 
 impl MongoWarehouseAudit {
-    /// 绑定审计日志所在数据库，构造时不写库。
-    ///
-    /// # 参数
-    /// * `db` - 持久化审计日志的数据库。
-    ///
-    /// # 返回
-    /// 返回未执行 I/O 的 adapter。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为 `MongoWarehouseAudit` 绑定审计日志库，供后续业务审计写入；构造时不写库。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
     /// 包装为仓库域可注入的共享审计 Port。
-    ///
-    /// # 参数
-    /// * `db` - 持久化审计日志的数据库。
-    ///
-    /// # 返回
     /// 返回共享的仓库审计 Port。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn shared(db: Database) -> Arc<dyn WarehouseAuditPort> {
         Arc::new(Self::new(db))
     }
@@ -111,33 +94,12 @@ pub struct MongoWarehouseIdentity {
 
 impl MongoWarehouseIdentity {
     /// 绑定身份账号数据库与共享 RBAC，构造时不查询权限。
-    ///
-    /// # 参数
-    /// * `db` - 身份账号集合所在数据库。
-    /// * `rbac` - 现有账号身份设施。
-    /// * `authorization` - 进程共享的完整授权服务。
-    ///
-    /// # 返回
-    /// 返回未执行 I/O 的 adapter。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: Database, rbac: SharedRbacService, authorization: Arc<AuthorizationService>) -> Self {
         Self { db, rbac, authorization }
     }
 
     /// 包装为仓库域可注入的身份事实 Port。
-    ///
-    /// # 参数
-    /// * `db` - 身份账号集合所在数据库。
-    /// * `rbac` - 现有账号身份设施。
-    /// * `authorization` - 进程共享的完整授权服务。
-    ///
-    /// # 返回
     /// 返回共享的身份事实 Port。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn shared(
         db: Database,
         rbac: SharedRbacService,
@@ -238,17 +200,7 @@ impl AttachmentFingerprintPort for SupportFingerprint {
 }
 
 /// 装配带身份、审计与指纹 adapter 的仓库服务。
-///
-/// # 参数
-/// * `db` - 仓库与身份集合所在数据库。
-/// * `rbac` - 现有账号身份设施。
-/// * `authorization` - 进程共享的完整授权服务。
-///
-/// # 返回
 /// 返回仓库服务。
-///
-/// # 错误
-/// 不返回错误。
 pub fn warehouse_service(
     db: Database,
     rbac: SharedRbacService,

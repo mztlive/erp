@@ -8,7 +8,7 @@ use persistence_core::Executor;
 
 use crate::{Error, Result};
 
-/// 已授权后按完整原请求回读不可变回执，拒绝同键不同版本或目标内容。
+// 已授权后按完整原请求回读不可变回执，拒绝同键不同版本或目标内容。
 pub(in crate::procure_to_pay) async fn replay_change_command(
     db: &Database,
     identity: &PurchaseCommandReceiptIdentity,

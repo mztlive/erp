@@ -43,13 +43,11 @@ pub(crate) struct DepositSettlementScope<'a> {
 }
 
 impl DepositSettlementScope<'_> {
-    /// 验证资金与采购申请、正式应付的唯一归属。
-    /// # 参数
-    /// 使用同一事务读取的当前批准修订及其原采购增加分录。
-    /// # 返回
-    /// 当前批准来源严格匹配，原增加分录可保留其历史非空修订身份。
-    /// # 错误
-    /// 跨主体、采购、账户、批准修订或缺少分录来源修订时拒绝。
+    // 验证资金与采购申请、正式应付的唯一归属。
+    // 结果：当前批准来源严格匹配，原增加分录可保留其历史非空修订身份。
+    // 跨主体、采购、账户、批准修订或缺少分录来源修订时拒绝。
+    //
+    // 输入约定：使用同一事务读取的当前批准修订及其原采购增加分录。
     pub(crate) fn validate(&self) -> Result<()> {
         self.request.require_deposit_account(&self.account.base.id)?;
         let basis = &self.reservation.basis;
@@ -95,7 +93,7 @@ impl DepositSettlementScope<'_> {
         Ok(())
     }
 
-    /// 按真实未返款金额构建来源隔离的核销账本。
+    // 核销供应商真实扣款之前，以未返还部分为基础建立只含原批准来源的账本。
     pub(crate) fn ledger(
         &self,
         existing: &[PaymentAllocation],
@@ -117,12 +115,11 @@ impl DepositSettlementScope<'_> {
 
 impl SupplierDepositUsage {
     /// 计算实际返款中可冲回的已核销部分；其余部分保留原申请锁待核实。
-    /// # 参数
-    /// * `amount` - 已到账返款金额。
-    /// # 返回
     /// 返回可冲回的正式核销金额。
-    /// # 错误
     /// 非正、超原使用或持久化累计不守恒时拒绝。
+    ///
+    /// 输入约定：
+    /// - `amount`：已到账返款金额。
     pub fn return_settlement_amount(&self, amount: Amount) -> Result<Amount> {
         positive(amount)?;
         let net_settled = subtract(self.settled_amount, self.reversed_settlement_amount)?;
@@ -136,12 +133,11 @@ impl SupplierDepositUsage {
     }
 
     /// 将返款稳定归还原使用批次，不把无来源差异伪造为充值。
-    /// # 参数
-    /// * `amount` - 实际到账返款。
-    /// # 返回
-    /// 按原使用分配顺序返回可证明的批次金额；超原批次部分仍由账户保留差异。
-    /// # 错误
+    /// 结果：按原使用分配顺序返回可证明的批次金额；超原批次部分仍由账户保留差异。
     /// 非正、超返或金额溢出时拒绝。
+    ///
+    /// 输入约定：
+    /// - `amount`：实际到账返款。
     pub fn return_batches(&self, amount: Amount) -> Result<Vec<DepositBatchAllocation>> {
         self.return_settlement_amount(amount)?;
 
@@ -165,12 +161,11 @@ impl SupplierDepositUsage {
     }
 
     /// 返回当前来源的正式净核销，核对账本和使用投影是否一致。
-    /// # 参数
-    /// * `allocations` - 同一资金使用全部核销。
-    /// # 返回
     /// 返回已核实一致的正式净额。
-    /// # 错误
     /// 来源混入、净额溢出或投影不一致时拒绝。
+    ///
+    /// 输入约定：
+    /// - `allocations`：同一资金使用全部核销。
     pub fn settlement_total(&self, allocations: &[PaymentAllocation]) -> Result<Amount> {
         let source = PaymentAllocationSource::deposit_usage(&self.base.id)?;
         let mut total = Amount::zero();
@@ -203,11 +198,7 @@ impl SupplierDepositSettlement {
 
 impl DepositTransactionEvidence {
     /// 核验真实资金证据身份完整，不依据订单状态推断到账。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 三项身份已规范化且有界时成功。
-    /// # 错误
+    /// 结果：三项身份已规范化且有界时成功。
     /// 缺稳定交易、原单或到账依据时拒绝。
     pub fn validate(&self) -> Result<()> {
         for value in [&self.external_transaction_id, &self.external_order_id, &self.evidence_reference] {

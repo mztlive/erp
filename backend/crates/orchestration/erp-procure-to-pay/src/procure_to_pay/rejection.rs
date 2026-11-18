@@ -14,16 +14,9 @@ use crate::{Error, Result};
 
 /// 驳回采购单并派生独立可编辑提交，保存原审批快照。
 ///
-/// # 参数
-/// * `db` - 业务数据库。
-/// * `id` - 已授权审批主体。
-/// * `expected_subject_version` - 当前实例冻结的审批版本。
-/// * `approval_process_instance_id` - 当前决定所属的精确审批实例。
-/// * `actor` - 审批决定人。
-/// * `executor` - 审批运行时的同一事务执行器。
-/// # 返回
-/// 状态和新编辑副本原子写入；原单草稿来源占用保留。
-/// # 错误
+/// `id` 为已授权审批主体；`expected_subject_version` 为当前实例冻结的审批版本；`approval_process_instance_id` 为当前决定所属的精确审批实例；
+/// `actor` 为审批决定人；`executor` 为审批运行时的同一事务执行器。状态和新编辑副本原子写入；原单草稿来源占用保留。
+///
 /// 主体缺失、非审批中、冻结来源错误或写入失败时返回错误。
 pub async fn reject_order_approval(
     db: &Database,
@@ -58,17 +51,8 @@ pub async fn reject_order_approval(
 
 /// 驳回采购变更，原采购生效版本及冻结目标提交保持不变。
 ///
-/// # 参数
-/// * `db` - 业务数据库。
-/// * `id` - 已授权变更单主体。
-/// * `expected_subject_version` - 当前实例冻结的审批版本。
-/// * `approval_process_instance_id` - 当前决定所属的精确审批实例。
-/// * `actor` - 审批决定人。
-/// * `executor` - 审批运行时的同一事务执行器。
-/// # 返回
-/// 变更单进入可修改的已驳回状态。
-/// # 错误
-/// 单据缺失、状态不允许或持久化失败时返回错误。
+/// `id` 为已授权变更单主体；`expected_subject_version` 为当前实例冻结的审批版本；`approval_process_instance_id` 为当前决定所属的精确审批实例；
+/// `actor` 为审批决定人；`executor` 为审批运行时的同一事务执行器。变更单进入可修改的已驳回状态。单据缺失、状态不允许或持久化失败时返回错误。
 pub async fn reject_change_approval(
     db: &Database,
     id: &str,
@@ -112,7 +96,7 @@ pub async fn reject_change_approval(
     Ok(())
 }
 
-/// 同事务核对精确审批实例的单据及冻结版本；不从最新快照推断身份。
+// 同事务核对精确审批实例的单据及冻结版本；不从最新快照推断身份。
 async fn verify_snapshot(
     db: &Database,
     document_type: DocumentType,

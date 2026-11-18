@@ -18,13 +18,9 @@ pub struct ApprovalOutboxWorker {
 }
 
 impl ApprovalOutboxWorker {
-    /// 启动通知轮询，未接入提供方时等待停止信号。
-    /// # 参数
-    /// `port` 为通知执行端口。
-    /// # 返回
-    /// 可停止和监督的循环句柄。
-    /// # 错误
-    /// 不返回错误，业务错误由轮询记录。
+    // 启动通知轮询，未接入提供方时等待停止信号。
+    // `port` 为通知执行端口。
+    // 可停止和监督的循环句柄。
     pub(crate) fn start(port: Arc<ApprovalNotificationOutboxPort>) -> Self {
         let (stop_tx, stop_rx) = watch::channel(false);
         let worker_id = format!("erp-background-{}", id_generator::next_id());
@@ -32,24 +28,15 @@ impl ApprovalOutboxWorker {
         Self { stop_tx, join }
     }
 
-    /// 查询常驻循环是否意外结束。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 后台句柄已经完成时为 true。
-    /// # 错误
-    /// 不返回错误。
+    // 查询常驻循环是否意外结束。
+    // 后台句柄已经完成时为 true。
     pub(crate) fn is_finished(&self) -> bool {
         self.join.is_finished()
     }
 
-    /// 通知停止领取；已运行轮次由 stop 等待。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 已发送停止状态。
-    /// # 错误
-    /// 接收端已退出时无需再次通知。
+    // 通知停止领取；已运行轮次由 stop 等待。
+    // 已发送停止状态。
+    // 接收端已退出时无需再次通知。
     pub(crate) fn request_stop(&self) {
         let _ = self.stop_tx.send(true);
     }
@@ -57,11 +44,7 @@ impl ApprovalOutboxWorker {
     /// 停止领取新租约并等待当前批次结束。
     ///
     /// 进程被强制终止时同样不再领取；未完成租约会到期后由其他实例接管。
-    /// # 参数
-    /// 消耗当前句柄。
-    /// # 返回
     /// 当前轮次已结束。
-    /// # 错误
     /// 循环异常记录日志，不重放业务写入。
     pub async fn stop(self) {
         if self.stop_tx.send(true).is_err() {
@@ -73,12 +56,8 @@ impl ApprovalOutboxWorker {
     }
 }
 
-/// 运行 outbox worker，直到收到停止信号。
-///
-/// # 参数
-/// * `port` - 工作流领域 outbox 端口
-/// * `worker_id` - 本进程租约持有者
-/// * `stop_rx` - 停止信号
+// 运行 outbox worker，直到收到停止信号。
+// `port` 为工作流领域 outbox 端口。
 async fn run_approval_outbox_worker(
     port: Arc<ApprovalNotificationOutboxPort>,
     worker_id: String,
@@ -110,7 +89,7 @@ async fn run_approval_outbox_worker(
     }
 }
 
-/// 未配置提供方时保持暂停，直到收到停止信号或监督器释放发送端。
+// 通知提供方未装配时不领取 outbox；等待进程请求停机或监督器关闭信号通道。
 async fn wait_for_stop(mut stop: watch::Receiver<bool>) {
     while !*stop.borrow() {
         if stop.changed().await.is_err() {

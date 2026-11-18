@@ -49,7 +49,7 @@ pub enum FinanceCommandResource {
 }
 
 impl FinanceCommandResource {
-    /// 返回结果资源的业务 ID。
+    // 从强类型财务结果中取得业务对象 ID，供回执匹配通过后回读该对象。
     fn id(&self) -> &str {
         match self {
             Self::SupplierPayment(id) => id.as_ref(),
@@ -78,16 +78,14 @@ pub struct FinanceCommandReceipt {
 }
 
 impl FinanceCommandReceipt {
-    /// 构造本次成功登记的独立财务回执。
-    ///
-    /// # 参数
-    /// * `command` - 原命令身份。
-    /// * `invoice_id` - 已登记的发票 ID。
-    /// * `audit_event_id` - 同事务关联审计 ID。
-    /// # 返回
+    /// 首次登记进项发票成功后构造与审计关联的独立回执，明确记录结果是进项发票。
     /// 返回已校验的独立回执。
-    /// # 错误
     /// 命令类型不匹配或结果/身份缺失时返回错误。
+    ///
+    /// 输入约定：
+    /// - `command`：原命令身份。
+    /// - `invoice_id`：已登记的发票 ID。
+    /// - `audit_event_id`：同事务关联审计 ID。
     pub fn purchase_invoice(
         command: &CommandReceipt,
         invoice_id: InvoiceId,
@@ -96,16 +94,14 @@ impl FinanceCommandReceipt {
         Self::assemble(StructuredCommandReceipt::from_command(command)?, invoice_id, audit_event_id)
     }
 
-    /// 按显式财务动作目录构造当前对象结果回执。
-    ///
-    /// # 参数
-    /// * `command` - 原命令身份及载荷。
-    /// * `resource_id` - 正式结果对象 ID。
-    /// * `audit_event_id` - 同事务关联审计 ID。
-    /// # 返回
+    /// 为首次成功的目录内财务命令构造回执，由动作决定结果对象类型，而非由调用方指定类型。
     /// 返回强类型结果回执。
-    /// # 错误
     /// 动作/资源不在目录内、关联缺失或结果为空时返回错误。
+    ///
+    /// 输入约定：
+    /// - `command`：原命令身份及载荷。
+    /// - `resource_id`：正式结果对象 ID。
+    /// - `audit_event_id`：同事务关联审计 ID。
     pub fn resource(command: &CommandReceipt, resource_id: String, audit_event_id: String) -> Result<Self> {
         let result = resource_for_command(command.action(), command.resource_type(), resource_id)?;
         let value = Self {
@@ -119,7 +115,7 @@ impl FinanceCommandReceipt {
         Ok(value)
     }
 
-    /// 为当前执行构造不可变实体。
+    // 为成功财务命令固定回执身份、请求定位、载荷指纹及结果引用，保存前先校验回执结构。
     fn assemble(
         command: StructuredCommandReceipt,
         invoice_id: InvoiceId,
@@ -136,14 +132,8 @@ impl FinanceCommandReceipt {
         Ok(value)
     }
 
-    /// 校验持久化身份与结果；损坏回执必须明确失败。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 合法时返回空结果。
-    /// # 错误
-    /// schema、关联、动作、资源或结果无效时返回内部错误。
+    /// 从仓储读回财务回执后校验版本、身份、关联和强类型结果，避免把损坏数据当成可回放结果。
+    /// 失败条件：schema、关联、动作、资源或结果无效时返回内部错误。
     pub fn validate(&self) -> Result<()> {
         self.command.validate().map_err(|_| corrupted_receipt())?;
         if self.result_schema_version != 1
@@ -157,7 +147,7 @@ impl FinanceCommandReceipt {
         Ok(())
     }
 
-    /// 校验动作目录及强类型对象。
+    // 按命令动作核对结果类型及资源身份，避免跨财务对象回放。
     fn validate_result(&self) -> Result<()> {
         match &self.result {
             FinanceCommandResult::PurchaseInvoiceRegistered { invoice_id }
@@ -184,14 +174,12 @@ impl FinanceCommandReceipt {
         }
     }
 
-    /// 比对请求并返回当前视图恢复所需的正式对象 ID。
-    ///
-    /// # 参数
-    /// * `command` - 原请求身份及载荷。
-    /// # 返回
+    /// 回放资金命令时核对原身份和请求指纹；匹配后返回结果 ID，供调用方读取对象当前视图。
     /// 返回命令原结果对象 ID。
-    /// # 错误
-    /// 异载荷返回稳定冲突，身份/结果损坏返回内部错误。
+    /// 失败条件：异载荷返回稳定冲突，身份/结果损坏返回内部错误。
+    ///
+    /// 输入约定：
+    /// - `command`：原请求身份及载荷。
     pub fn resource_id(&self, command: &CommandReceipt) -> Result<String> {
         self.validate()?;
         match command.match_structured(&self.command) {
@@ -206,14 +194,12 @@ impl FinanceCommandReceipt {
         }
     }
 
-    /// 比对请求并读取已登记发票的引用，调用方再读取当前授权视图。
-    ///
-    /// # 参数
-    /// * `command` - 原请求身份与载荷。
-    /// # 返回
+    /// 核对进项登记重试是否匹配原命令并引用进项发票；匹配后由调用方按当前授权读取原发票。
     /// 返回原已登记发票 ID。
-    /// # 错误
-    /// 异载荷返回稳定冲突，身份/结果损坏返回内部错误。
+    /// 失败条件：异载荷返回稳定冲突，身份/结果损坏返回内部错误。
+    ///
+    /// 输入约定：
+    /// - `command`：原请求身份与载荷。
     pub fn purchase_invoice_id(&self, command: &CommandReceipt) -> Result<InvoiceId> {
         let resource_id = self.resource_id(command)?;
         if !matches!(&self.result, FinanceCommandResult::PurchaseInvoiceRegistered { .. }) {
@@ -223,12 +209,12 @@ impl FinanceCommandReceipt {
     }
 }
 
-/// 保留现有通用回执损坏错误口径。
+// 统一回执结构或结果引用损坏时的内部错误，区别于同键异载荷冲突。
 pub(crate) fn corrupted_receipt() -> Error {
     Error::Internal("业务命令收据格式无效".to_string())
 }
 
-/// 财务动作与结果对象目录。
+// 根据原财务动作及资源类型选择回执结果种类；组装与校验回执使用同一目录。
 fn resource_for_command(action: &str, resource_type: &str, id: String) -> Result<FinanceCommandResource> {
     if id.trim().is_empty() {
         return Err(corrupted_receipt());

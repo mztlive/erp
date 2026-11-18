@@ -31,16 +31,12 @@ struct SalesOrderRevisionNoRow {
 #[allow(async_fn_in_trait)]
 pub trait SalesOrderRevisionRepositoryExt {
     /// 按销售版本 ID 集合批量读取正式版本。
-    ///
-    /// # 参数
-    /// * `revision_ids` - 销售版本 ID 集合；空集合直接返回空结果
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回全部匹配正式版本；返回顺序不承诺与输入一致。
+    /// 传播数据库查询或游标读取失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 输入约定：
+    /// - `revision_ids`：销售版本 ID 集合；空集合直接返回空结果
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn find_revisions_by_ids(
         &self,
         revision_ids: &[String],
@@ -50,17 +46,13 @@ pub trait SalesOrderRevisionRepositoryExt {
     /// 按销售单与版本号查找正式版本。
     ///
     /// 唯一性由 `uk_sales_order_revisions_order_revision_no` 唯一索引保证。
-    ///
-    /// # 参数
-    /// * `sales_order_id` - 稳定销售单
-    /// * `revision_no` - 聚合内版本号
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回匹配的正式版本；无匹配时返回 `None`。
+    /// 传播数据库查询失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
+    /// 输入约定：
+    /// - `sales_order_id`：稳定销售单
+    /// - `revision_no`：聚合内版本号
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn find_by_order_and_no(
         &self,
         sales_order_id: &SalesOrderId,
@@ -69,16 +61,12 @@ pub trait SalesOrderRevisionRepositoryExt {
     ) -> Result<Option<SalesOrderRevision>>;
 
     /// 列出销售单的版本历史（新版本在前）。
-    ///
-    /// # 参数
-    /// * `sales_order_id` - 稳定销售单
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回按版本号倒序的正式版本列表。
+    /// 传播数据库查询或游标读取失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 输入约定：
+    /// - `sales_order_id`：稳定销售单
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn list_by_order(
         &self,
         sales_order_id: &SalesOrderId,
@@ -88,16 +76,12 @@ pub trait SalesOrderRevisionRepositoryExt {
     /// 读取指定销售单的历史最大正式版本号。
     ///
     /// 查询只读取 `revision_no` 并限制一条；版本号分配与溢出校验由实体负责。
-    ///
-    /// # 参数
-    /// * `sales_order_id` - 所属销售单
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回历史最大版本号；没有正式版本时返回 `None`。
+    /// 传播数据库查询或投影反序列化失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或投影反序列化失败时返回错误。
+    /// 输入约定：
+    /// - `sales_order_id`：所属销售单
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn latest_revision_no(
         &self,
         sales_order_id: &SalesOrderId,
@@ -107,19 +91,13 @@ pub trait SalesOrderRevisionRepositoryExt {
     /// 按稳定 ID 读取工作项当前销售正式版本。
     ///
     /// 工作项入口的历史名称；纯主键读取，直接委托基类单条查询。
-    ///
-    /// # 参数
-    /// * `id` - 销售正式版本 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回未删除销售版本；不存在时返回 `None`。
+    /// 传播数据库查询或反序列化失败。
+    /// 调用边界：仅查询本仓储拥有的销售版本集合，不访问销售单主表。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或反序列化失败时返回错误。
-    ///
-    /// # 约束
-    /// 仅查询本仓储拥有的销售版本集合，不访问销售单主表。
+    /// 输入约定：
+    /// - `id`：销售正式版本 ID
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn find_work_item_sales_order_revision(
         &self,
         id: &str,
@@ -203,7 +181,7 @@ impl SalesOrderRevisionRepositoryExt for Repository<'_, SalesOrderRevision> {
     }
 }
 
-/// 构建销售单最大正式版本号查询条件。
+// 组装销售单最大正式版本号查询条件。
 fn latest_sales_order_revision_filter(sales_order_id: &SalesOrderId) -> Document {
     doc! {
         "sales_order_id": sales_order_id.to_string(),
@@ -211,7 +189,7 @@ fn latest_sales_order_revision_filter(sales_order_id: &SalesOrderId) -> Document
     }
 }
 
-/// 构建销售单最大正式版本号的最小投影与有界排序。
+// 组装销售单最大正式版本号的最小投影与有界排序。
 fn latest_sales_order_revision_options() -> FindOptions {
     FindOptions::builder()
         .sort(doc! { "revision_no": -1 })
@@ -220,7 +198,7 @@ fn latest_sales_order_revision_options() -> FindOptions {
         .build()
 }
 
-/// 从已按版本号倒序返回的零或一条投影中读取最大版本号。
+// 从有界倒序投影取得销售单最大正式版本号，供分配下一版本号时使用。
 fn sales_order_revision_no_from_rows(rows: Vec<SalesOrderRevisionNoRow>) -> Option<u32> {
     rows.into_iter().next().map(|row| row.revision_no)
 }
@@ -229,16 +207,12 @@ fn sales_order_revision_no_from_rows(rows: Vec<SalesOrderRevisionNoRow>) -> Opti
 #[allow(async_fn_in_trait)]
 pub trait SalesOrderRevisionLineRepositoryExt {
     /// 列出版本的全部公共行版本（按行号升序）。
-    ///
-    /// # 参数
-    /// * `revision_id` - 所属销售版本
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回按行号升序的公共行版本列表。
+    /// 传播数据库查询或游标读取失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 输入约定：
+    /// - `revision_id`：所属销售版本
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn list_lines_by_revision(
         &self,
         revision_id: &SalesOrderRevisionId,
@@ -246,19 +220,13 @@ pub trait SalesOrderRevisionLineRepositoryExt {
     ) -> Result<Vec<SalesOrderRevisionLine>>;
 
     /// 按销售版本 ID 集合批量取回公共行版本（`$in` 一次取回，禁止 N+1）。
-    ///
-    /// # 参数
-    /// * `revision_ids` - 销售版本 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回全部匹配公共行版本（未排序，调用方按版本分组并按行号排序）。
+    /// 传播数据库查询失败。
+    /// 业务边界：空集合直接返回空列表，不发查询。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 空集合直接返回空列表，不发查询。
+    /// 输入约定：
+    /// - `revision_ids`：销售版本 ID 集合
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn list_lines_by_revisions(
         &self,
         revision_ids: &[SalesOrderRevisionId],
@@ -308,16 +276,12 @@ impl SalesOrderRevisionLineRepositoryExt for Repository<'_, SalesOrderRevisionLi
 #[allow(async_fn_in_trait)]
 pub trait SalesOrderGoodsServiceLineRevisionRepositoryExt {
     /// 按公共行版本 ID 集合批量取回实物及服务行（`$in` 一次取回，禁止 N+1）。
-    ///
-    /// # 参数
-    /// * `revision_line_ids` - 公共行版本 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回全部匹配子类型行（未排序，调用方按需分组）。
+    /// 传播数据库查询或游标读取失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 输入约定：
+    /// - `revision_line_ids`：公共行版本 ID 集合
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn list_by_revision_line_ids(
         &self,
         revision_line_ids: &[SalesOrderRevisionLineId],
@@ -343,16 +307,12 @@ impl SalesOrderGoodsServiceLineRevisionRepositoryExt for Repository<'_, SalesOrd
 #[allow(async_fn_in_trait)]
 pub trait SalesOrderVoucherLineRevisionRepositoryExt {
     /// 按公共行版本 ID 集合批量取回卡券行（`$in` 一次取回，禁止 N+1）。
-    ///
-    /// # 参数
-    /// * `revision_line_ids` - 公共行版本 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回全部匹配子类型行（未排序，调用方按需分组）。
+    /// 传播数据库查询或游标读取失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 输入约定：
+    /// - `revision_line_ids`：公共行版本 ID 集合
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn list_by_revision_line_ids(
         &self,
         revision_line_ids: &[SalesOrderRevisionLineId],
@@ -384,21 +344,17 @@ impl<'a> SalesOrderDomainRepository<'a> {
     /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction` 时
     /// 中途失败会留下缺明细的版本或状态未推进的销售单；Service 必须通过
     /// `persistence_core::Transactional::with_transaction` 传入事务会话。
-    ///
-    /// # 参数
-    /// * `order` - 已迁移到生效态并绑定版本指针的销售单（成功后内存版本递增）
-    /// * `revision` - 待写入的正式版本头
-    /// * `revision_lines` - 待写入的公共行版本
-    /// * `goods_lines` - 待写入的实物及服务行版本
-    /// * `voucher_lines` - 待写入的卡券行版本
-    /// * `executor` - 数据访问执行器，必须位于事务中
-    ///
-    /// # 返回
-    /// 正式版本、版本行与销售单均写入成功时无返回值。
-    ///
-    /// # 错误
+    /// 结果：正式版本、版本行与销售单均写入成功时无返回值。
     /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）、乐观锁冲突或
     /// MongoDB 写入失败时返回错误。
+    ///
+    /// 输入约定：
+    /// - `order`：已迁移到生效态并绑定版本指针的销售单（成功后内存版本递增）
+    /// - `revision`：待写入的正式版本头
+    /// - `revision_lines`：待写入的公共行版本
+    /// - `goods_lines`：待写入的实物及服务行版本
+    /// - `voucher_lines`：待写入的卡券行版本
+    /// - `executor`：数据访问执行器，必须位于事务中
     #[tracing::instrument(
         name = "repository.sales_order.formalize_submission",
         skip_all,

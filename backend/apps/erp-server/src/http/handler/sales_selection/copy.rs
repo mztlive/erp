@@ -12,17 +12,7 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
 /// 为重新选择的客户复制选品册。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已认证操作人
-/// * `id` - 原册身份
-/// * `req` - 新客户与原册版本
-///
-/// # 返回
 /// 返回新册详情。
-///
-/// # 错误
 /// 原册或新客户越权、版本冲突、客户停用或复制失败时拒绝。
 pub async fn booklet_copy(
     State(state): State<HttpState>,

@@ -40,18 +40,13 @@ struct PurchaseSubmissionLineContext {
 }
 
 impl WorkbenchFactsReader<'_> {
-    /// 读取采购单身份，并按提交版本写入供应商、金额、付款条件和明细简报。
-    ///
-    /// # 参数
-    /// * `keys` - 本批任务引用的对象键
-    /// * `facts` - 输出的对象事实表
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 成功时写入采购单号；关联提交缺失时仍保留最小标题。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
+    // 为采购财务审核简报取数时，读取采购单身份，并按提交版本写入供应商、金额、付款条件和明细简报。
+    //
+    // 调用参数：
+    // * `keys` - 本批任务引用的对象键
+    // * `facts` - 输出的对象事实表
+    //
+    // 成功时写入采购单号；关联提交缺失时仍保留最小标题。
     pub(super) async fn load_purchase_order_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -68,17 +63,12 @@ impl WorkbenchFactsReader<'_> {
         Ok(())
     }
 
-    /// 按采购单批量解析提交、销售单号、提交人和简报。
-    ///
-    /// # 参数
-    /// * `orders` - 本批采购单
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回提交 ID 到展示字段的映射。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
+    // 依据采购单批量解析提交、销售单号、提交人和简报。
+    //
+    // 调用参数：
+    // * `orders` - 本批采购单
+    //
+    // 返回提交 ID 到展示字段的映射。
     async fn purchase_review_displays(
         &self,
         orders: &[PurchaseOrder],
@@ -103,17 +93,12 @@ impl WorkbenchFactsReader<'_> {
         ))
     }
 
-    /// 读取本批采购单来源销售单号。
-    ///
-    /// # 参数
-    /// * `orders` - 本批采购单
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回销售单 ID 到单号的映射。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
+    // 处理采购财务审核简报时，读取本批采购单来源销售单号。
+    //
+    // 调用参数：
+    // * `orders` - 本批采购单
+    //
+    // 返回销售单 ID 到单号的映射。
     async fn sales_order_numbers_for_orders(
         &self,
         orders: &[PurchaseOrder],
@@ -132,17 +117,12 @@ impl WorkbenchFactsReader<'_> {
             .collect())
     }
 
-    /// 读取本批采购提交行并转成按提交分组的简报行。
-    ///
-    /// # 参数
-    /// * `submissions` - 本批采购提交
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回提交 ID 到已按行号排序的简报行和稳定比较状态。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
+    // 处理采购财务审核简报的版本事实时，读取本批采购提交行并转成按提交分组的简报行。
+    //
+    // 调用参数：
+    // * `submissions` - 本批采购提交
+    //
+    // 返回提交 ID 到已按行号排序的简报行和稳定比较状态。
     async fn purchase_submission_brief_lines(
         &self,
         submissions: &[PurchaseOrderSubmission],

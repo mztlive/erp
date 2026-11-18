@@ -11,12 +11,10 @@ use crate::service::sales_inquiry::SalesInquiryService;
 use crate::{Error, Result};
 
 /// 按完整草稿或提交重算原来源数量；后台刷新及价格编辑不产生重复占用。
-/// # 参数
-/// `order_id`、`customer` 为当前销售身份，`lines` 为即将保存的完整行，`executor` 为原事务。
-/// # 返回
-/// 无来源订单保持原行为；变更的来源数量与销售写入原子提交。
-/// # 错误
+/// 结果：无来源订单保持原行为；变更的来源数量与销售写入原子提交。
 /// 来源损坏、客户/SKU/地址/交期变化或增加超过已接受范围时拒绝。
+///
+/// 输入约定：`order_id`、`customer` 为当前销售身份，`lines` 为即将保存的完整行，`executor` 为原事务。
 pub async fn reconcile(
     db: &Database,
     order_id: &str,
@@ -48,12 +46,10 @@ pub async fn reconcile(
 }
 
 /// 草稿作废仅释放未消耗占用，不以撤回或驳回状态释放。
-/// # 参数
-/// `order_id` 为作废销售，`executor` 为原事务。
-/// # 返回
-/// 无来源或已释放时幂等成功。
-/// # 错误
-/// 正式消耗不可凭草稿状态释放；仓储失败时整单回滚。
+/// 结果：无来源或已释放时幂等成功。
+/// 失败条件：正式消耗不可凭草稿状态释放；仓储失败时整单回滚。
+///
+/// 输入约定：`order_id` 为作废销售，`executor` 为原事务。
 pub async fn release(db: &Database, order_id: &str, executor: &mut dyn Executor) -> Result<()> {
     let Some(mut source) = inquiry_sources(db).find_by_id(order_id, executor).await? else {
         return Ok(());
@@ -71,12 +67,10 @@ pub async fn release(db: &Database, order_id: &str, executor: &mut dyn Executor)
 }
 
 /// 销售首次生效将原占用转为消耗，不重复扣减且不受询价后续关闭影响。
-/// # 参数
-/// `order_id` 为生效销售，`executor` 为审批持有的原事务。
-/// # 返回
-/// 无来源或已消耗时幂等成功。
-/// # 错误
-/// 原占用不存在或已释放时拒绝，不能凭状态重建来源。
+/// 结果：无来源或已消耗时幂等成功。
+/// 失败条件：原占用不存在或已释放时拒绝，不能凭状态重建来源。
+///
+/// 输入约定：`order_id` 为生效销售，`executor` 为审批持有的原事务。
 pub async fn consume(db: &Database, order_id: &str, executor: &mut dyn Executor) -> Result<()> {
     let Some(mut source) = inquiry_sources(db).find_by_id(order_id, executor).await? else {
         return Ok(());
@@ -94,12 +88,10 @@ pub async fn consume(db: &Database, order_id: &str, executor: &mut dyn Executor)
 }
 
 /// 正式改单验证需求来源；减量不恢复已消耗余额，保留原快照和下游处理链。
-/// # 参数
-/// `customer`、`lines`、`goods` 为将生效的新正式版本，`executor` 为变更事务。
-/// # 返回
-/// 无来源保持原行为；来源商品仅允许原身份、原地址及已消耗量内变更。
-/// # 错误
-/// 来源不完整、正式增量、换客户/SKU/地址/交期时拒绝，须另行完成询价。
+/// 结果：无来源保持原行为；来源商品仅允许原身份、原地址及已消耗量内变更。
+/// 失败条件：来源不完整、正式增量、换客户/SKU/地址/交期时拒绝，须另行完成询价。
+///
+/// 输入约定：`customer`、`lines`、`goods` 为将生效的新正式版本，`executor` 为变更事务。
 pub async fn ensure_formal_change(
     db: &Database,
     order_id: &str,

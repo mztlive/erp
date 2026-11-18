@@ -12,21 +12,12 @@ use crate::http::handler::inventory;
 use crate::http::routes::permission_route;
 use crate::http::state::HttpState;
 
-/// 返回本域管理端路由集合。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回声明公共权限目录信息的路由集合。
-///
-/// # 错误
-/// 不执行 I/O，不返回错误。
+/// 为管理端挂载库存与库存调整接口，按操作登记公共权限目录信息。
 pub fn routes() -> Router<HttpState> {
     Router::new().merge(stock_routes()).merge(adjustment_routes()).merge(adjustment_command_routes())
 }
 
-/// 库存余额、流水与预留路由。
+// 为父路由挂载库存余额、流水与预留路由。
 fn stock_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -56,7 +47,7 @@ fn stock_routes() -> Router<HttpState> {
         )
 }
 
-/// 库存调整单查询与草稿路由。
+// 为父路由挂载库存调整单查询与草稿路由。
 fn adjustment_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -89,7 +80,7 @@ fn adjustment_routes() -> Router<HttpState> {
         )
 }
 
-/// 库存调整提交、撤回与记账路由。
+// 为父路由挂载库存调整提交、撤回与记账路由。
 fn adjustment_command_routes() -> Router<HttpState> {
     Router::new()
         .route(

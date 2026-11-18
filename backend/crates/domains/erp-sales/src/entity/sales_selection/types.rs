@@ -14,16 +14,7 @@ pub enum SelectionForm {
 }
 
 impl SelectionForm {
-    /// 返回稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回持久化使用的代码。
-    ///
-    /// # 错误
-    /// 无。
+    /// 将选品陈列形态转成用于持久化和查询的稳定代码，与中文展示文案分开。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::SingleSku => "SINGLE_SKU",
@@ -31,16 +22,7 @@ impl SelectionForm {
         }
     }
 
-    /// 返回面向销售的名称。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回「单品」或「套餐」。
-    ///
-    /// # 错误
-    /// 无。
+    /// 为界面或响应展示提供选品陈列形态的中文名称；机器筛选和存储不使用该名称。
     pub fn label(self) -> &'static str {
         match self {
             Self::SingleSku => "单品",
@@ -49,15 +31,7 @@ impl SelectionForm {
     }
 
     /// 判断是否为套餐形态。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 套餐形态返回 `true`。
-    ///
-    /// # 错误
-    /// 无。
+    /// 结果：套餐形态返回 `true`。
     pub fn is_package(self) -> bool {
         matches!(self, Self::Package)
     }
@@ -76,16 +50,7 @@ pub enum SubmitMode {
 }
 
 impl SubmitMode {
-    /// 返回稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回持久化使用的代码。
-    ///
-    /// # 错误
-    /// 无。
+    /// 将选品提交方式转成用于持久化和查询的稳定代码，与中文展示文案分开。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::ByQuantity => "BY_QUANTITY",
@@ -94,16 +59,7 @@ impl SubmitMode {
         }
     }
 
-    /// 返回面向销售的名称。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回「按份采购」或「商城兑换」。
-    ///
-    /// # 错误
-    /// 无。
+    /// 为界面或响应展示提供选品提交方式的中文名称；机器筛选和存储不使用该名称。
     pub fn label(self) -> &'static str {
         match self {
             Self::ByQuantity => "按份采购",
@@ -113,15 +69,7 @@ impl SubmitMode {
     }
 
     /// 判断是否要求份数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 按份采购返回 `true`。
-    ///
-    /// # 错误
-    /// 无。
+    /// 结果：按份采购返回 `true`。
     pub fn requires_quantity(self) -> bool {
         matches!(self, Self::ByQuantity | Self::PickupVoucher)
     }
@@ -138,16 +86,7 @@ pub enum PoolSourceKind {
 }
 
 impl PoolSourceKind {
-    /// 返回稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回持久化使用的代码。
-    ///
-    /// # 错误
-    /// 无。
+    /// 将选品商品池来源转成用于持久化和查询的稳定代码，与中文展示文案分开。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Filter => "FILTER",
@@ -172,29 +111,13 @@ pub enum PrepareKind {
 
 impl PrepareKind {
     /// 判断是否沿用当前批次商品池。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 按档或整册重生成返回 `true`；首次准备与整册重新准备返回 `false`。
-    ///
-    /// # 错误
-    /// 无。
+    /// 结果：按档或整册重生成返回 `true`；首次准备与整册重新准备返回 `false`。
     pub fn reuses_current_batch(self) -> bool {
         matches!(self, Self::RegeneratedTiers | Self::RegeneratedAll)
     }
 
     /// 判断失败时是否应回到草稿。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 仅首次准备失败回草稿。
-    ///
-    /// # 错误
-    /// 无。
+    /// 结果：仅首次准备失败回草稿。
     pub fn restores_draft_on_failure(self) -> bool {
         matches!(self, Self::FirstPrepare)
     }
@@ -218,15 +141,7 @@ pub enum PrepareStage {
 
 impl PrepareStage {
     /// 返回面向销售的阶段名称。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回阶段文案。
-    ///
-    /// # 错误
-    /// 无。
     pub fn label(self) -> &'static str {
         match self {
             Self::Queued => "排队",
@@ -254,15 +169,7 @@ pub enum PrepareTaskStatus {
 
 impl PrepareTaskStatus {
     /// 判断任务是否仍占用册上的活动任务槽。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 排队或运行中返回 `true`。
-    ///
-    /// # 错误
-    /// 无。
+    /// 结果：排队或运行中返回 `true`。
     pub fn is_active(self) -> bool {
         matches!(self, Self::Queued | Self::Running)
     }
@@ -284,15 +191,7 @@ pub enum SearchStopReason {
 
 impl SearchStopReason {
     /// 返回面向销售的停止说明。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回说明文案。不得把预算耗尽说成无解。
-    ///
-    /// # 错误
-    /// 无。
     pub fn label(self) -> &'static str {
         match self {
             Self::ReachedExpected => "已达到期望数量",
@@ -302,15 +201,7 @@ impl SearchStopReason {
     }
 
     /// 判断是否允许宣称无合法组合。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 仅完整搜索或可证明无解时返回 `true`。
-    ///
-    /// # 错误
-    /// 无。
+    /// 结果：仅完整搜索或可证明无解时返回 `true`。
     pub fn allows_no_solution_claim(self) -> bool {
         matches!(self, Self::ExhaustedSpace)
     }
@@ -325,31 +216,18 @@ pub enum ProposalSource {
 }
 
 impl ProposalSource {
-    /// 返回稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回持久化代码。
-    ///
-    /// # 错误
-    /// 无。
+    /// 将选品方案来源转成用于持久化和查询的稳定代码，与中文展示文案分开。
     pub fn as_str(self) -> &'static str {
         "PUBLIC_LINK"
     }
 }
 
 /// 校验幂等键。
-///
-/// # 参数
-/// * `key` - 原始幂等键
-///
-/// # 返回
 /// 返回去空白后的非空键。
+/// 失败条件：为空或超长时返回领域错误。
 ///
-/// # 错误
-/// 为空或超长时返回领域错误。
+/// 输入约定：
+/// - `key`：原始幂等键
 pub fn normalize_idempotency_key(key: &str) -> Result<String> {
     let trimmed = key.trim();
     if trimmed.is_empty() {
@@ -362,15 +240,11 @@ pub fn normalize_idempotency_key(key: &str) -> Result<String> {
 }
 
 /// 校验原始访问密码，不改变用户输入的空白。
-///
-/// # 参数
-/// * `password` - 原始密码
-///
-/// # 返回
-/// 8 到 64 个字符时通过。
-///
-/// # 错误
+/// 结果：8 到 64 个字符时通过。
 /// 长度不足或超长时拒绝。
+///
+/// 输入约定：
+/// - `password`：原始密码
 pub fn validate_access_password(password: &str) -> Result<()> {
     if !(8..=64).contains(&password.chars().count()) {
         return Err(Error::from("访问密码必须是 8 到 64 个字符"));

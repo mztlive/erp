@@ -4,11 +4,8 @@ use lopdf::{Document as PdfDocument, LoadOptions};
 use super::ImportFailure;
 
 /// 独立解析原 PDF 的真实页数。
-/// # 参数
-/// * `pdf` - 受控大小的原文件字节。
-/// # 返回
 /// 1 至 200 页。
-/// # 错误
+/// `pdf` 为受控大小的原文件字节。
 /// 损坏、加密、空文档或超限。
 pub fn pdf_page_count(pdf: &[u8]) -> Result<u32, ImportFailure> {
     let document = PdfDocument::load_mem_with_options(

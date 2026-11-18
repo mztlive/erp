@@ -165,18 +165,9 @@ pub(crate) struct DeliveryListQuery {
 }
 
 impl DeliveryListParams {
-    /// 归一化发货单列表查询参数。
-    ///
-    /// 分页取默认值、排序字段过白名单校验。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    // 查询发货单列表前校验并规范化筛选和分页输入，返回独立于仓储的查询参数。
+    // 分页取默认值、排序字段过白名单校验。
+    // 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<DeliveryListQuery> {
         Ok(DeliveryListQuery {
             sales_order_id: self.sales_order_id.clone(),
@@ -196,7 +187,7 @@ impl DeliveryListParams {
 mod tests {
     use super::{PostDeliveryRequest, UpdateDeliveryRequest};
 
-    /// 物流编辑只接受完整明细包裹关联，旧表头物流字段不接受。
+    // 验证物流编辑只接受完整明细包裹关联，旧表头物流字段不接受。
     #[test]
     fn delivery_tracking_requests_reject_unknown_legacy_fields() {
         for field in ["tracking_numbers", "tracking_no", "carrier"] {
@@ -207,7 +198,7 @@ mod tests {
         }
     }
 
-    /// 缺省保持现状与显式空数组清空包裹有独立语义。
+    // 验证缺省保持现状与显式空数组清空包裹有独立语义。
     #[test]
     fn preserves_omitted_entries_and_explicit_empty_clear() {
         let omitted: UpdateDeliveryRequest =

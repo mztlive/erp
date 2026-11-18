@@ -15,17 +15,7 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
 /// 查询供给资料，复用列表动作和供给自身的数据范围。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `subject` - 成本权限主体
-/// * `actor` - 范围授权操作人
-/// * `id` - 供给稳定 ID
-///
-/// # 返回
 /// 返回已按权限脱敏的当前供给资料。
-///
-/// # 错误
 /// 无动作权限返回 Forbidden；越权对象与缺失对象返回 NotFound。
 pub async fn detail(
     State(state): State<HttpState>,
@@ -46,18 +36,7 @@ pub async fn detail(
 }
 
 /// 查询供给历史条款，每次重新校验对象范围与成本权限。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `subject` - 成本权限主体
-/// * `actor` - 范围授权操作人
-/// * `id` - 供给稳定 ID
-/// * `params` - 历史版本游标
-///
-/// # 返回
 /// 返回脱敏后的条款历史页，不包含实时可供数量。
-///
-/// # 错误
 /// 游标非法、权限不足、对象不可见或存储失败时返回统一错误。
 pub async fn history(
     State(state): State<HttpState>,

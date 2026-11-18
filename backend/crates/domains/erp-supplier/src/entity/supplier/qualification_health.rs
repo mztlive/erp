@@ -23,10 +23,8 @@ pub enum QualificationHealth {
 }
 
 impl QualificationHealth {
-    /// 返回列表展示优先级；数值越大越需要处理。
-    ///
-    /// # 返回
-    /// 返回稳定的严重程度，用于多份资质折叠时取最差状态。
+    // 返回列表展示优先级；数值越大越需要处理。
+    // 返回稳定的严重程度，用于多份资质折叠时取最差状态。
     fn severity(self) -> u8 {
         match self {
             Self::Expired => 4,
@@ -40,18 +38,10 @@ impl QualificationHealth {
 
 impl SupplierQualification {
     /// 按业务日判断单份资质落入的列表健康状态。
-    ///
-    /// 停用且日期已核实、或尚未到生效日的资质不参与折叠。未核实日期优先于
-    /// 启停状态，与列表筛选「有效期未核实」口径一致。
-    ///
-    /// # 参数
-    /// * `as_of` - 判定所用业务日
-    ///
-    /// # 返回
+    /// 停用且日期已核实、或尚未到生效日的资质不参与折叠。未核实日期优先于启停状态，与列表筛选「有效期未
+    /// 核实」口径一致。
     /// 可参与折叠时返回对应状态；应忽略时返回 `None`。
-    ///
-    /// # 错误
-    /// 无。到期窗口溢出时不把该份资质标为即将到期。
+    /// 到期窗口溢出时不把该份资质标为即将到期。
     pub fn health_on(&self, as_of: BusinessDate) -> Option<QualificationHealth> {
         if !self.validity_verified() {
             return Some(QualificationHealth::Unverified);
@@ -78,19 +68,9 @@ impl SupplierQualification {
     }
 
     /// 将一组资质折叠为列表展示用的健康状态。
-    ///
-    /// 空集合为未登记。多份资质取严重程度最高者；全部被忽略（仅停用或未到
-    /// 生效日）时仍视为未登记，避免把不可用资料显示为有效。
-    ///
-    /// # 参数
-    /// * `qualifications` - 同一供应商的资质集合
-    /// * `as_of` - 判定所用业务日
-    ///
-    /// # 返回
+    /// 空集合为未登记。多份资质取严重程度最高者；全部被忽略（仅停用或未到生效日）时仍视为未登记，避免把
+    /// 不可用资料显示为有效。
     /// 返回折叠后的健康状态。
-    ///
-    /// # 错误
-    /// 无。
     pub fn rollup_health<'a, I>(qualifications: I, as_of: BusinessDate) -> QualificationHealth
     where
         I: IntoIterator<Item = &'a Self>,
@@ -108,17 +88,8 @@ impl SupplierQualification {
     }
 
     /// 返回已登记资质类型的去重稳定序列。
-    ///
     /// 含停用与过期记录，供列表副行展示「有哪些资料」，不表示当前可用。
-    ///
-    /// # 参数
-    /// * `qualifications` - 同一供应商的资质集合
-    ///
-    /// # 返回
     /// 按稳定代码排序、去重后的类型列表。
-    ///
-    /// # 错误
-    /// 无。
     pub fn registered_types<'a, I>(qualifications: I) -> Vec<QualificationType>
     where
         I: IntoIterator<Item = &'a Self>,
@@ -179,14 +150,14 @@ mod tests {
         BusinessDate::from_ymd(2026, 8, 31).unwrap()
     }
 
-    /// 空集合折叠为未登记。
+    // 验证空集合折叠为未登记。
     #[test]
     fn rollup_empty_is_not_registered() {
         let none: &[SupplierQualification] = &[];
         assert_eq!(SupplierQualification::rollup_health(none, as_of()), QualificationHealth::NotRegistered);
     }
 
-    /// 合同缺日期为未核实；停用且日期已核实时不参与折叠。
+    // 验证合同缺日期为未核实；停用且日期已核实时不参与折叠。
     #[test]
     fn unverified_outranks_disabled() {
         let unverified =
@@ -207,7 +178,7 @@ mod tests {
         );
     }
 
-    /// 状态失效或截止日期已过均视为已过期，且优先于有效资质。
+    // 验证状态失效或截止日期已过均视为已过期，且优先于有效资质。
     #[test]
     fn expired_outranks_valid() {
         let expired_status = qualification(
@@ -240,7 +211,7 @@ mod tests {
         );
     }
 
-    /// 窗口内到期标为即将到期；长期有效或窗口外截止日期标为有效。
+    // 验证窗口内到期标为即将到期；长期有效或窗口外截止日期标为有效。
     #[test]
     fn expiring_and_valid_windows() {
         let expiring = qualification(
@@ -279,7 +250,7 @@ mod tests {
         );
     }
 
-    /// 已登记类型按稳定代码去重排序，停用记录仍计入类型摘要。
+    // 验证已登记类型按稳定代码去重排序，停用记录仍计入类型摘要。
     #[test]
     fn registered_types_are_stable() {
         let contract = qualification(

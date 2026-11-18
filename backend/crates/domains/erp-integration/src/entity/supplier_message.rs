@@ -68,12 +68,8 @@ pub struct SupplierMessageData {
 
 impl SupplierPulledMessage {
     /// 构造待补查或隔离的拉取证据，不赋予回调认证语义。
-    /// # 参数
-    /// `data` 为绑定账号、来源消息身份、密文及刷新意图。
-    /// # 返回
-    /// 可以单文档原子保存的证据和处理意图。
-    /// # 错误
-    /// 身份、正文或意图不满足接收边界时拒绝。
+    ///
+    /// 可以单文档原子保存的证据和处理意图。身份、正文或意图不满足接收边界时拒绝。
     pub fn received(data: SupplierMessageData) -> Result<Self> {
         validate_data(&data)?;
 
@@ -102,12 +98,10 @@ impl SupplierPulledMessage {
     }
 
     /// 校验重复接收，异载荷保留证据并隔离，不覆盖原消息。
-    /// # 参数
+    ///
+    /// 同载荷返回 true；异载荷保存冲突并返回 false。身份或连接不一致时拒绝，禁止借此转移消息归属。
+    ///
     /// `incoming` 为同一账号消息号的另一次接收。
-    /// # 返回
-    /// 同载荷返回 true；异载荷保存冲突并返回 false。
-    /// # 错误
-    /// 身份或连接不一致时拒绝，禁止借此转移消息归属。
     pub fn observe_replay(&mut self, incoming: &Self) -> Result<bool> {
         if self.account_scope != incoming.account_scope
             || self.connection_id != incoming.connection_id
@@ -131,13 +125,8 @@ impl SupplierPulledMessage {
         Ok(false)
     }
 
-    /// 在补查前持久化正在处理状态；恢复时仍须按稳定消息身份幂等应用。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 允许 Received 或崩溃遗留的 Applying 进入补查。
-    /// # 错误
-    /// 已结束、未知删除或隔离记录不允许重新应用。
+    /// 补查前把新接收或崩溃遗留的 `Applying` 消息置于应用阶段，由调用方保存后再补查。
+    /// 恢复时沿稳定消息身份幂等应用；终态、删除结果未知或隔离记录不能重进本阶段。
     pub fn begin_apply(&mut self) -> Result<()> {
         if !matches!(self.state, SupplierMessageState::Received | SupplierMessageState::Applying) {
             return Err(Error::BusinessLogicError("供应商消息不允许重新执行业务补查".into()));
@@ -147,12 +136,10 @@ impl SupplierPulledMessage {
     }
 
     /// 所有补查意图已经应用后登记待确认，尚未删除远端消息。
-    /// # 参数
+    ///
+    /// 状态变更为 AckPending。非 Applying 状态不允许绕过业务处理。
+    ///
     /// `at` 是本地应用完成时间。
-    /// # 返回
-    /// 状态变更为 AckPending。
-    /// # 错误
-    /// 非 Applying 状态不允许绕过业务处理。
     pub fn applied(&mut self, at: Instant) -> Result<()> {
         self.require(SupplierMessageState::Applying)?;
         self.state = SupplierMessageState::AckPending;
@@ -162,26 +149,16 @@ impl SupplierPulledMessage {
         Ok(())
     }
 
-    /// 在远端删除调用之前持久化已经开始发送，崩溃恢复必须按未知处理。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 状态变更为 AckSending。
-    /// # 错误
-    /// 非待确认状态拒绝重复删除。
+    /// 向供应商删除消息前，将 `AckPending` 推进为 `AckSending`，由调用方先持久化发送边界。
+    /// 非待确认状态不能进入；崩溃恢复按删除结果未知处理，不据此重发删除。
     pub fn begin_acknowledge(&mut self) -> Result<()> {
         self.require(SupplierMessageState::AckPending)?;
         self.state = SupplierMessageState::AckSending;
         Ok(())
     }
 
-    /// 保存已发送删除的结果，未知结果不能回到可重发状态。
-    /// # 参数
-    /// `confirmed` 为供应商明确确认；`at` 为本地观察时间。
-    /// # 返回
-    /// 明确结果变为 Acknowledged，其他结果保留 AckUnknown。
-    /// # 错误
-    /// 未发送删除的记录不能直接结束。
+    /// 记录已经发出的远端删除结果：供应商明确确认时置为 `Acknowledged`，否则置为 `AckUnknown`。
+    /// 保留本地观察时间；未进入发送阶段不能直接结束，结果未知也不返回可重发阶段。
     pub fn acknowledged(&mut self, confirmed: bool, at: Instant) -> Result<()> {
         self.require(SupplierMessageState::AckSending)?;
         self.state =
@@ -192,12 +169,10 @@ impl SupplierPulledMessage {
     }
 
     /// 补查失败后保留处理意图并安排下一次补查。
-    /// # 参数
+    ///
+    /// 维持 Applying，稳定消息身份保证恢复不制造第二次业务事实。删除阶段不允许回到应用阶段。
+    ///
     /// `next_attempt_at` 为有界退避后的时间；`code` 仅允许脱敏错误码。
-    /// # 返回
-    /// 维持 Applying，稳定消息身份保证恢复不制造第二次业务事实。
-    /// # 错误
-    /// 删除阶段不允许回到应用阶段。
     pub fn defer_application(&mut self, next_attempt_at: Instant, code: String) -> Result<()> {
         self.require(SupplierMessageState::Applying)?;
         self.processing_error = Some(normalize_required_text(code, "错误码不能为空", 128, "错误码过长")?);

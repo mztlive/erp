@@ -9,15 +9,12 @@ use crate::access_control::ScopeDimension;
 #[async_trait]
 pub trait ScopeTargetPort: Send + Sync {
     /// 批量核验显式目标。
-    ///
-    /// # 参数
-    /// * `dimension` - 已注册的目标身份维度
-    /// * `ids` - 不超过模型上限的目标 ID
-    /// * `executor` - 范围配置原事务
-    /// # 返回
     /// 全部目标在所属领域存在时成功。
-    /// # 错误
+    ///
     /// 目标缺失、维度未接线及仓储错误必须拒绝配置。
+    ///
+    /// `dimension`：已注册的目标身份维度；`ids`：不超过模型上限的目标 ID。
+    /// `executor`：范围配置原事务。
     async fn validate_targets(
         &self,
         dimension: ScopeDimension,

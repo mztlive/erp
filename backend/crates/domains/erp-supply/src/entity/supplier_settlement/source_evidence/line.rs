@@ -89,17 +89,8 @@ pub struct SupplierSettlementSourceEvidenceLine {
 
 impl SupplierSettlementSourceEvidenceLine {
     /// 由正式事实和金额三元组构造来源证据行。
-    ///
-    /// ERP 金额统一由订单、运费、服务费和退款三元组逐项派生，调用方不得自行
-    /// 拼装 `erp_gross/net/tax`。
-    ///
-    /// # 参数
-    /// * `data` - 已完成跨域事实查询的行构造数据
-    ///
-    /// # 返回
+    /// ERP 金额统一由订单、运费、服务费和退款三元组逐项派生，调用方不得自行拼装 `erp_gross/net/tax`。
     /// 返回已规范化事实类别、证据引用和 ERP 金额的来源证据行。
-    ///
-    /// # 错误
     /// 退款超过订单加费用、数量/证据非法或金额恒等不成立时返回领域错误。
     pub fn from_components(data: SupplierSettlementSourceEvidenceLineData) -> Result<Self> {
         let erp = data
@@ -137,15 +128,9 @@ impl SupplierSettlementSourceEvidenceLine {
     }
 
     /// 校验逐行身份、证据与金额恒等式。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 数量、事实、证据和金额恒等成立时返回 `Ok(())`；同时就地排序去重事实类别并规范化证据引用。
-    ///
-    /// # 错误
-    /// 数量不大于零、缺少事实或证据、引用为空、超长或超限、金额为负，或 `gross = net + tax` 与 ERP 构成恒等不成立时返回错误。
+    /// 数量不大于零、缺少事实或证据、引用为空、超长或超限、金额为负，或 `gross = net + tax` 与 ERP 构成
+    /// 恒等不成立时返回错误。
     pub fn validate(&mut self) -> Result<()> {
         if self.quantity.to_decimal() <= Decimal::ZERO {
             return Err(Error::from("来源证据行数量必须大于零"));

@@ -11,12 +11,8 @@ use crate::http::extractor::Query;
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
-/// 查询独立目录。
-/// # 参数
-/// 状态、已认证身份与目录条件。
-/// # 返回
+/// 按请求条件查询独立目录。
 /// 目录页。
-/// # 错误
 /// 参数、目录版本或读取失败时传播；后台身份由认证中间件校验。
 pub async fn list(
     State(state): State<HttpState>,
@@ -28,11 +24,8 @@ pub async fn list(
 }
 
 /// 回显当前可读的已选对象。
-/// # 参数
 /// 状态、已认证身份与最多100个已选ID。
-/// # 返回
 /// 当前可读对象页。
-/// # 错误
 /// 参数、目录版本或读取失败时传播；后台身份由认证中间件校验。
 pub async fn selected(
     State(state): State<HttpState>,

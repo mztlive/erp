@@ -27,11 +27,7 @@ impl<S: Send + Sync> FromRequest<S> for TokenJson {
 }
 
 /// 保存同账号同应用的外部授权令牌，复用京东授权权限及供应商数据范围。
-/// # 参数
-/// 当前应用、操作人、连接及短生命周期令牌输入。
-/// # 返回
 /// 脱敏状态和保存操作回执。
-/// # 错误
 /// 格式、权限、绑定、版本或并发不符时返回固定错误。
 pub async fn configure(
     State(state): State<HttpState>,

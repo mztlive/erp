@@ -73,7 +73,7 @@ pub struct ExternalConnectorReadiness {
 }
 
 impl ExternalConnectorReadiness {
-    /// 全部强依赖连接器是否已配置。
+    /// 供 API 就绪探针判定是否全部必需的外部端口均已配置；配置就绪不是外部调用成功的证明。
     pub const fn is_ready(self) -> bool {
         matches!(self.supplier_api, ConnectorMode::Configured)
             && matches!(self.supplier_reference_registry, ConnectorMode::Configured)
@@ -94,7 +94,7 @@ pub struct ExternalConnectorPorts {
 }
 
 impl ExternalConnectorPorts {
-    /// 构造显式配置的连接器集合；生产实现与测试替身均通过此入口注入。
+    /// 将显式提供的外部端口及就绪状态注入组合根，生产连接器与单测替身使用同一入口。
     pub fn configured(
         supplier_api: Arc<dyn SupplierApiGateway>,
         supplier_reference_registry: Arc<dyn SupplierReferenceRegistry>,
@@ -115,7 +115,7 @@ impl ExternalConnectorPorts {
         }
     }
 
-    /// 构造失败关闭集合；仅用于尚未接入真实连接器的部署。
+    /// 为接入真实协议前的部署提供失败关闭端口，不把未配置的外部能力报告为可用。
     pub fn fail_closed() -> Self {
         Self {
             supplier_api: Arc::new(UnavailableSupplierApiGateway),
@@ -151,40 +151,22 @@ pub struct Application {
 
 impl Application {
     /// 返回进程共享的统一授权服务。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 进程启动时通过完整绑定校验构造的 `Arc<AuthorizationService>`。
-    /// # 错误
-    /// 不执行 I/O。
     pub fn authorization(&self) -> Arc<AuthorizationService> {
         Arc::clone(&self.authorization)
     }
 
     /// 返回启动时装配的蛋糕叔叔连接，缺省配置保持关闭。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 已配置协议运行时，或 None。
-    /// # 错误
-    /// 无。
     pub fn dangaoshushu_runtime(&self) -> Option<Arc<DangaoshushuRuntime>> {
         self.external_connectors.dangaoshushu.clone()
     }
-    /// 创建 Application 实例。
-    ///
-    /// # 参数
-    /// * `db` - 应用启动时建立的数据库连接
-    /// * `config` - 配置数据
-    /// * `storage` - 启动时已构建的 S3 存储客户端
-    ///
-    /// # 返回
-    /// 返回创建的实例。
+    /// 用已建立的数据库、配置和对象存储创建组合根；未显式提供外部连接器时使用失败关闭实现。
     pub fn new(db: Database, config: SafeConfig, storage: S3Storage) -> Self {
         Self::new_with_connectors(db, config, storage, ExternalConnectorPorts::fail_closed())
     }
 
-    /// 使用组合根选定的外部连接器创建应用状态。
+    /// 在进程启动时用选定的外部连接器和共享基础资源装配应用，API 与 Worker 从同一组合根获取业务端口。
     pub fn new_with_connectors(
         db: Database,
         config: SafeConfig,
@@ -233,55 +215,37 @@ impl Application {
     }
 
     /// 获取统一通知入口；首期未配置站外渠道。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 使用应用共享数据库的通知服务。
-    /// # 错误
-    /// 不执行 I/O。
     pub fn notifications(&self) -> NotificationService {
         self.notifications.clone()
     }
 
     /// 订阅配置变更通知。
-    ///
-    /// # 返回
     /// 返回配置变更的接收器。
     pub fn subscribe_config(&self) -> watch::Receiver<Config> {
         self.config.subscribe()
     }
 
     /// 获取当前配置快照。
-    ///
-    /// # 返回
     /// 返回当前不可变配置副本。
     pub fn config_snapshot(&self) -> Config {
         self.config.snapshot()
     }
 
     /// 返回数据库实例。
-    ///
-    /// # 返回
     /// 返回数据库实例的克隆。
     pub fn db(&self) -> Database {
         self.db.clone()
     }
 
     /// 返回共享 Casbin RBAC 服务。
-    ///
-    /// # 返回
     /// 返回共享 RBAC 服务。
     pub fn rbac(&self) -> SharedRbacService {
         Arc::clone(&self.rbac)
     }
 
     /// 装配询价命令及当前授权依赖。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 返回共享业务库与当前权限服务的询价流程。
-    /// # 错误
-    /// 不执行 I/O，不返回错误。
     pub fn sales_inquiry_process(&self) -> SalesInquiryProcess {
         SalesInquiryProcess::new(
             self.db(),
@@ -290,7 +254,7 @@ impl Application {
         )
     }
 
-    /// Support-domain file asset service with audit and document-registry adapters.
+    /// 为文件资产登记与读取装配共享授权、审计及关联业务单据的适配器。
     pub fn file_asset_service(&self) -> FileAssetService {
         FileAssetService::new(
             self.db(),
@@ -301,11 +265,7 @@ impl Application {
     }
 
     /// 装配带统一后台任务授权、审计和业务单据事实的批量任务服务。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 使用应用共享身份设施的任务服务。
-    /// # 错误
     /// 不执行 I/O；固定授权目录非法时启动失败。
     pub fn bulk_job_service(&self) -> BulkJobService {
         BulkJobService::new(
@@ -316,7 +276,7 @@ impl Application {
         )
     }
 
-    /// Support-domain source registry service with the audit adapter.
+    /// 为登记和读取业务来源装配支持域服务，注入进程共享授权及审计端口。
     pub fn source_registry_service(&self) -> SourceRegistryService {
         SourceRegistryService::new(
             self.db(),
@@ -325,31 +285,18 @@ impl Application {
         )
     }
 
-    /// 返回进程内注入的目标审批运行服务。
-    ///
-    /// 本波次只交付注入点；Handler 改走本访问器归 P3-HTTP owns，不得在此越权改 Handler。
-    ///
-    /// # 返回
-    /// 返回启动时构造的真实 [`ApprovalRuntimeService`]；未 cut-over 类型必须失败关闭。
+    /// 取出进程启动时装配的共享审批运行时，供 HTTP 及业务编排复用；未切换到该运行时的类型仍须拒绝执行。
     pub fn approval_runtime_service(&self) -> Arc<ApprovalRuntimeService<WorkflowAuth>> {
         Arc::clone(&self.approval_runtime_service)
     }
 
-    /// 返回进程内注入的通知 outbox 应用端口。
-    ///
-    /// # 返回
-    /// 返回工作流领域 outbox 端口；HTTP 不得直连审批仓储。
+    /// 取出共享审批通知 outbox 端口，供调用方使用工作流合同而非直接访问审批仓储。
     pub fn approval_outbox_port(&self) -> Arc<ApprovalNotificationOutboxPort> {
         Arc::clone(&self.approval_outbox)
     }
 
     /// 装配共享权威证据与本域统一授权的集成治理命令。
-    /// # 参数
-    /// 无；使用应用共享设施。
-    /// # 返回
     /// 保留独立任务身份工厂的集成治理流程。
-    /// # 错误
-    /// 构造不执行 I/O。
     pub fn integration_resolution(&self) -> IntegrationResolutionProcess {
         let work_items = integration_work_items(self.db(), self.rbac(), self.authorization());
         IntegrationResolutionProcess::new(
@@ -362,12 +309,7 @@ impl Application {
     }
 
     /// 装配共享权威证据与本域统一授权的集成详情读取。
-    /// # 参数
-    /// 无；使用应用共享设施。
-    /// # 返回
     /// 在原读取阶段执行授权与复验的集成读取服务。
-    /// # 错误
-    /// 构造不执行 I/O。
     pub fn integration_center(&self) -> IntegrationCenterReadService {
         IntegrationCenterReadService::new(
             self.db(),
@@ -376,12 +318,12 @@ impl Application {
         )
     }
 
-    /// 返回仅处理本域事实的供应商 API 服务。
+    /// 为供应商连接与 API 事实提供本域服务；外部执行和跨域治理使用独立 Process。
     pub fn supplier_api_service(&self) -> SupplierApiService {
         SupplierApiService::new(self.db())
     }
 
-    /// 注入原引用注册表和 RBAC，执行连接治理命令。
+    /// 为供应商连接治理命令装配共享授权、商品服务、连接引用注册和外部网关。
     pub fn supplier_api_governance_process(
         &self,
     ) -> erp_supplier_catalog::supply_governance::SupplierApiGovernanceProcess {
@@ -394,7 +336,7 @@ impl Application {
         .with_gateway(Arc::clone(&self.external_connectors.supplier_api))
     }
 
-    /// 读取按原权限与引用配置投影的供应商连接详情。
+    /// 为供应商连接详情装配带授权的读模型；引用解析和能力投影使用同一批运行时连接器。
     pub fn supplier_api_read_service(
         &self,
     ) -> erp_read_models::supplier_center::supplier_api::SupplierApiReadService {
@@ -406,7 +348,7 @@ impl Application {
         .with_gateway(Arc::clone(&self.external_connectors.supplier_api))
     }
 
-    /// 注入实际任务授权读取，构造不执行授权或查询。
+    /// 为需要任务授权事实的用例绑定工作流适配器；构造时不读取数据或进行授权判断。
     pub fn work_item_authorization(
         &self,
     ) -> crate::wiring::workflow::work_item_authorization::WorkItemAuthorizationAdapter {
@@ -418,12 +360,7 @@ impl Application {
     }
 
     /// 商品列表和销售资格复用查询提供方与本域授权能力。
-    /// # 参数
-    /// 无；使用应用共享设施。
-    /// # 返回
     /// 已装配商品统一授权的读取服务。
-    /// # 错误
-    /// 构造不执行 I/O。
     pub fn catalog_center(&self) -> erp_read_models::catalog_center::CatalogCenterReadService {
         erp_read_models::catalog_center::CatalogCenterReadService::new(
             self.db(),
@@ -434,7 +371,7 @@ impl Application {
         )
     }
 
-    /// 返回保留意图提交与外部调用分离的供应商连接执行入口。
+    /// 为供应商连接执行装配网关、商品事实及共享授权；调用方通过此流程分开登记意图和发起外部调用。
     pub fn supplier_connection_execution_process(
         &self,
     ) -> erp_supplier_catalog::supplier_connection_execution::SupplierConnectionExecutionProcess {
@@ -447,12 +384,7 @@ impl Application {
     }
 
     /// 返回正式采购的真实供应商 API 分步执行入口。
-    /// # 参数
-    /// 无；使用应用当前协议运行时及加密器。
-    /// # 返回
     /// 已配置协议返回流程，未配置返回 None。
-    /// # 错误
-    /// 不返回错误。
     pub fn supplier_api_order_process(
         &self,
     ) -> Option<erp_supplier_orders::supplier_api_orders::SupplierApiOrderProcess> {
@@ -468,12 +400,7 @@ impl Application {
     }
 
     /// 装配统一退款与结算处理器。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 已配置运行时返回处理器。
-    /// # 错误
-    /// 无。
     pub fn supplier_after_sales_process(
         &self,
     ) -> Option<erp_supplier_orders::supplier_after_sales::SupplierAfterSalesProcess> {
@@ -486,12 +413,7 @@ impl Application {
     }
 
     /// 返回供应商订单的真实协议补查与履约应用入口。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 已配置协议返回流程，未配置返回 None。
-    /// # 错误
-    /// 不返回错误。
     pub fn supplier_order_tracking_process(
         &self,
     ) -> Option<erp_supplier_orders::supplier_order_tracking::SupplierOrderTrackingProcess> {
@@ -505,12 +427,8 @@ impl Application {
     }
 
     /// 返回按账号独立领取的供应商资金调查入口。
-    /// # 参数
     /// 无；账号、真实资金来源及处理权限来自服务端绑定。
-    /// # 返回
     /// 已登记协议时返回共享调查器；缺失实际资金能力的连接不会发起请求。
-    /// # 错误
-    /// 不执行 I/O，不返回错误。
     pub fn supplier_funds_worker(&self) -> Option<Arc<SupplierFundsInvestigationWorker>> {
         self.external_connectors.order_connectors.as_ref().map(|registry| {
             Arc::new(SupplierFundsInvestigationWorker::new(
@@ -522,12 +440,7 @@ impl Application {
     }
 
     /// 返回拉取消息调度入口；只按实际消息能力领取账号，不推导回调身份。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 已注册协议返回调度器；未配置时返回 None。
-    /// # 错误
-    /// 不执行 I/O，不返回错误。
     pub fn supplier_message_worker(&self) -> Option<SupplierMessageWorker> {
         self.external_connectors.order_connectors.as_ref().map(|registry| {
             SupplierMessageWorker::new(
@@ -539,19 +452,14 @@ impl Application {
         })
     }
 
-    /// 返回供应商履约的本域查询与持久化服务。
+    /// 为订单履约查询和持久化装配供应商履约领域服务；需要协议调用时走单独的执行入口。
     pub fn supplier_fulfillment_service(&self) -> SupplierFulfillmentService {
         crate::wiring::scoped_fulfillment_service(self.db(), self.authorization())
             .with_registry(Arc::clone(&self.external_connectors.supplier_reference_registry))
     }
 
     /// 装配原网关、统一授权与异常处理事实的供应商履约流程。
-    /// # 参数
-    /// 无；使用应用共享设施。
-    /// # 返回
     /// 保留任务事实端口和身份工厂的跨域执行入口。
-    /// # 错误
-    /// 构造不执行 I/O。
     pub fn supplier_fulfillment_process(
         &self,
     ) -> erp_fulfillment_execution::supply_execution::SupplierFulfillmentProcess {
@@ -565,63 +473,59 @@ impl Application {
         .with_registry(Arc::clone(&self.external_connectors.supplier_reference_registry))
     }
 
-    /// 返回连接器配置状态，供 readiness 暴露。
+    /// 从当前组合根读取各外部连接器的配置状态，供 HTTP `/ready` 使用。
     pub const fn external_connector_readiness(&self) -> ExternalConnectorReadiness {
         self.external_connectors.readiness
     }
 
     /// 返回启动时固定的 S3 存储客户端。
-    ///
-    /// # 返回
     /// 返回所有上传 handler 共享的单例客户端；S3 配置变更需重启后生效。
     pub fn storage(&self) -> &S3Storage {
         self.storage.as_ref()
     }
 
     /// 返回启动时固定的敏感数据编解码器。
-    ///
-    /// # 返回
     /// 返回敏感资料 Service 共享的进程内单例；启动密钥变化后必须先迁移既有密文。
     pub fn sensitive_data(&self) -> Arc<SensitiveDataCodec> {
         Arc::clone(&self.sensitive_data)
     }
 
-    /// Party identity service with audit and supplier-role adapters.
+    /// 为主体档案维护装配带审计和供应商角色适配的领域服务。
     pub fn party_service(&self) -> erp_party::PartyService {
         crate::wiring::party_service(self.db(), self.authorization())
     }
 
-    /// Party contact service with composition adapters.
+    /// 在读取或维护主体联系人时构造主体域用例，复用应用层装配的身份与审计能力。
     pub fn party_contact_service(&self) -> erp_party::PartyContactService {
         crate::wiring::party_contact_service(self.db(), self.sensitive_data(), self.authorization())
     }
 
-    /// Party address service with composition adapters.
+    /// 为主体地址查询和维护构造主体域用例，复用组合层适配器。
     pub fn party_address_service(&self) -> erp_party::PartyAddressService {
         crate::wiring::party_address_service(self.db(), self.sensitive_data(), self.authorization())
     }
 
-    /// Party bank-account service with composition adapters.
+    /// 为主体银行账户维护构造业务服务，注入共享敏感数据编解码器及组合层端口。
     pub fn party_bank_account_service(&self) -> erp_party::PartyBankAccountService {
         crate::wiring::party_bank_account_service(self.db(), self.sensitive_data(), self.authorization())
     }
 
-    /// Party tax-profile service with composition adapters.
+    /// 为主体税务资料读写构造领域服务，复用组合层端口。
     pub fn party_tax_profile_service(&self) -> erp_party::PartyTaxProfileService {
         crate::wiring::party_tax_profile_service(self.db(), self.authorization())
     }
 
-    /// Customer account service with composition adapters.
+    /// 为客户账号查询和维护装配客户域服务，复用应用共享授权。
     pub fn customer_service(&self) -> erp_customer::CustomerService {
         crate::wiring::scoped_customer_service(self.db(), self.authorization())
     }
 
-    /// Customer assignment service with composition adapters.
+    /// 为查看及维护客户责任归属构造领域服务，复用同一授权源。
     pub fn customer_assignment_service(&self) -> erp_customer::CustomerAssignmentService {
         crate::wiring::scoped_customer_assignment_service(self.db(), self.authorization())
     }
 
-    /// Customer profile root process.
+    /// 为完整客户档案的跨域办理装配 Process，统一接入主体及客户授权事实。
     pub fn customer_profile_process(&self) -> erp_master_data::CustomerProfileProcess {
         erp_master_data::CustomerProfileProcess::new(
             self.db(),
@@ -632,12 +536,7 @@ impl Application {
     }
 
     /// 装配客户、主体及账号名称的授权详情读模型。
-    /// # 参数
-    /// 无；复用应用共享数据库与敏感数据设施。
-    /// # 返回
     /// 不缓存授权结果的客户资料读取入口。
-    /// # 错误
-    /// 构造不执行 I/O。
     pub fn customer_profile_read_service(&self) -> CustomerProfileReadService {
         let authorization = self.authorization();
         CustomerProfileReadService::new(
@@ -649,17 +548,12 @@ impl Application {
     }
 
     /// 装配履约订单、账号姓名与当前 W26 处理人的授权列表。
-    /// # 参数
-    /// 无；复用已装配的供应链领域服务。
-    /// # 返回
     /// 不缓存范围结果的履约列表读模型。
-    /// # 错误
-    /// 构造不执行 I/O。
     pub fn supplier_fulfillment_list_read_service(&self) -> SupplierFulfillmentListReadService {
         SupplierFulfillmentListReadService::new(self.db(), Arc::new(self.supplier_fulfillment_service()))
     }
 
-    /// Supplier list/detail service with party facts and reveal tokens.
+    /// 为供应商列表和详情装配授权、主体事实及敏感字段揭示能力。
     pub fn supplier_service(&self) -> erp_supplier::SupplierService {
         crate::wiring::scoped_supplier_service_with_sensitive(
             self.db(),
@@ -668,7 +562,7 @@ impl Application {
         )
     }
 
-    /// Supplier profile root process.
+    /// 为供应商完整档案的跨域修订装配流程，使用共享授权、供应商范围和敏感数据编解码器。
     pub fn supplier_profile_process(&self) -> erp_master_data::SupplierProfileProcess {
         erp_master_data::SupplierProfileProcess::new(
             self.db(),
@@ -678,19 +572,17 @@ impl Application {
         )
     }
 
-    /// Catalog domain service with audit and file-asset adapters.
+    /// 为商品及 SKU 领域操作装配带授权、审计和文件资产适配的业务服务。
     pub fn catalog_service(&self) -> erp_catalog::CatalogService {
         crate::wiring::scoped_catalog_service(self.db(), self.authorization())
     }
 
-    /// Warehouse domain service with identity, audit and fingerprint adapters.
+    /// 为仓库档案和策略维护装配领域服务，接入身份、审计及指纹能力。
     pub fn warehouse_service(&self) -> erp_warehouse::WarehouseService {
         crate::wiring::warehouse_service(self.db(), self.rbac(), self.authorization())
     }
 
     /// 演示主数据服务。是否允许写入由配置 `demo.master_data` 决定。
-    ///
-    /// # 返回
     /// 返回绑定当前数据库和授权快照的服务。
     pub fn demo_master_data_process(
         &self,
@@ -706,17 +598,13 @@ impl Application {
         )
     }
 
-    /// 装配现有合同查询与终止服务。
+    /// 在查询或终止现有合同时构造合同域服务，使用进程共享授权源。
     pub fn contract_service(&self) -> erp_contract::ContractService {
         crate::wiring::scoped_contract_service(self.db(), self.authorization())
     }
 
     /// 在同一快照装配合同授权、修订文件关联与文件资产读取。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 合同附件元数据及预览读取用例。
-    /// # 错误
     /// 构造不执行I/O。
     pub fn contract_attachments(&self) -> ContractAttachmentReadService {
         ContractAttachmentReadService::new(
@@ -727,27 +615,22 @@ impl Application {
     }
 
     /// 装配合同模板和领号服务。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 本域服务及公司、审计 Port。
-    /// # 错误
-    /// 无。
     pub fn contract_template_service(&self) -> ContractTemplateService {
         contract_template_service(self.db(), self.authorization())
     }
 
-    /// Import-domain query service with bulk-job identity adapter.
+    /// 为历史导入查询装配导入域服务，接入批量任务身份适配器和共享授权。
     pub fn legacy_import_service(&self) -> erp_import::LegacyImportService {
         crate::wiring::legacy_import_service(self.db(), self.authorization())
     }
 
-    /// Inventory query service with authorization and foreign-fact adapters.
+    /// 为库存查询装配领域服务，复用共享授权和仓库、商品等外域事实适配器。
     pub fn inventory_service(&self) -> erp_inventory::InventoryService {
         crate::wiring::inventory_service(self.db(), self.authorization())
     }
 
-    /// Inventory-adjustment process that owns approval submit/cancel/post.
+    /// 为库存调整单提交、撤回及过账装配编排流程，使用共享 RBAC 与授权服务。
     pub fn inventory_adjustment_process(&self) -> erp_fulfillment_execution::InventoryAdjustmentProcess {
         crate::wiring::inventory_adjustment_process(self.db(), self.rbac(), self.authorization())
     }

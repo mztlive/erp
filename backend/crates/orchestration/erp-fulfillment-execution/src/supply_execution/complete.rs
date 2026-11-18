@@ -34,22 +34,11 @@ use crate::{Error, Result};
 const COMPLETION_COMMAND_PREFIX: &str = "w26-completion-";
 
 impl SupplierFulfillmentProcess {
-    /// 以服务端可验证终态证据完成 W26 正式任务。
+    /// 服务端取得可验证的订单终态证据后，由当前责任人完成 W26。事务内重验任务、主体和订单版本，
+    /// 以及当前责任、角色资格、证据身份和业务终态，再追加确认动作、完成原任务并保存独立命令回执。
     ///
-    /// 命令在一个事务中重验任务/主体/订单版本、当前责任、角色资格、证据身份和
-    /// 当前业务终态，追加正式确认动作后完成原任务并写入独立命令回执。证据仍
-    /// 未知或任务误派时保持原任务开放。
-    ///
-    /// # 参数
-    /// * `command` - W26 任务完成命令。
-    /// * `actor` - 当前任务责任人。
-    ///
-    /// # 返回
-    /// 返回任务完成结果；同一命令重放返回原结果。证据仍未知或任务误派时保持原任务开放。
-    ///
-    /// # 错误
-    /// 任一任务、责任、版本、证据或终态不变量不成立，以及幂等键复用不同命令时
-    /// 失败关闭。
+    /// 用原操作人、任务、幂等键和载荷回读原完成结果。键被不同命令复用，或任务、责任、版本、证据及终态不符时拒绝；
+    /// 证据仍未知或任务误派时保持原任务开放。
     pub async fn complete_order_task(
         &self,
         command: SupplierOrderTaskCompletionCommand,
@@ -103,7 +92,7 @@ impl SupplierFulfillmentProcess {
         .await
     }
 
-    /// 沿当前账号完整执行资格回读精确成功回执，不要求已完成任务仍开放。
+    // 沿当前账号完整执行资格回读精确成功回执，不要求已完成任务仍开放。
     async fn replay_task_completion(
         &self,
         command_id: &str,
@@ -140,7 +129,7 @@ struct CompletionReplay {
 }
 
 impl CompletionReplay {
-    /// 当前完整功能资格、原回执和业务终态证据均沿调用方同一快照读取。
+    // 当前完整功能资格、原回执和业务终态证据均沿调用方同一快照读取。
     async fn load(
         &self,
         db: &Database,
@@ -178,7 +167,7 @@ impl CompletionReplay {
         Ok(Some(completion_result(&self.work_item_id, receipt)))
     }
 
-    /// 只接收原操作人、任务、幂等键及载荷完全匹配的终态回执。
+    // 只接收原操作人、任务、幂等键及载荷完全匹配的终态回执。
     fn receipt(&self, stored: SupplyCommandReceipt) -> Result<(String, CompletionReceipt)> {
         stored.verify_identity(
             &self.command_id,
@@ -335,7 +324,7 @@ struct CompletionWrite<'a> {
     fingerprint: &'a str,
 }
 
-/// 使用调用方的执行器写入完成结果，不改变失败停止边界。
+// 使用调用方的执行器写入完成结果，不改变失败停止边界。
 async fn persist_completed_task(
     input: CompletionWrite<'_>,
     executor: &mut dyn Executor,
@@ -375,7 +364,7 @@ async fn persist_completed_task(
     Ok(receipt)
 }
 
-/// 先以精确任务目标授权，再核对正式任务、冻结版本及业务责任。
+// 先以精确任务目标授权，再核对正式任务、冻结版本及业务责任。
 async fn load_completion_task(
     db: &Database,
     command: &SupplierOrderTaskCompletionCommand,

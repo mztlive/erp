@@ -14,14 +14,13 @@ use crate::{Error, Result};
 
 impl SupplierDepositService {
     /// 将已保存真实扣款按原批准和全部来源开放分录自动核销。
-    /// # 参数
-    /// * `usage_id` / `operation_key` - 原真实使用及稳定自动核销命令。
-    /// * `actor` - 实际系统执行身份，不冒充人工出纳。
-    /// * `executor` - 使用、原申请和正式核销共同事务。
-    /// # 返回
     /// 返回完整核销后的使用；重放原命令直接恢复原回执。
-    /// # 错误
-    /// 原扣款、批准、专属额度或完整开放金额不足时拒绝，原扣款不被删除。
+    /// 失败条件：原扣款、批准、专属额度或完整开放金额不足时拒绝，原扣款不被删除。
+    ///
+    /// 输入约定：
+    /// - `usage_id` / `operation_key`：原真实使用及稳定自动核销命令。
+    /// - `actor`：实际系统执行身份，不冒充人工出纳。
+    /// - `executor`：使用、原申请和正式核销共同事务。
     pub async fn settle_verified_usage(
         &self,
         usage_id: &str,

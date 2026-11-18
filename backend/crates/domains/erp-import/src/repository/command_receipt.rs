@@ -7,16 +7,7 @@ use crate::entity::command_receipt::ImportCommandReceipt;
 /// 命令回执访问器，不依赖展示审计集合。
 pub trait ImportCommandReceiptExt {
     const IMPORT_COMMAND_RECEIPTS: &'static str = "import_command_receipts";
-    /// 返回本域独立命令回执仓储。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回复用调用方 Executor 的仓储。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得独立命令回执仓储，在调用方的执行器上保存或恢复正式结果，不从展示审计恢复。
     fn import_command_receipts(&self) -> Repository<'_, ImportCommandReceipt>;
 }
 

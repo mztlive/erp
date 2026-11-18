@@ -17,19 +17,18 @@ use crate::approval_runtime::load_document_runtime;
 use crate::sales_center::access::SalesAccess;
 use crate::{Error, Result};
 
-/// 读取已授权销售变更的实际实例、历史和当前操作者允许动作。
-///
-/// # 参数
-/// * `db` - 原业务读取数据库
-/// * `rbac` - 当前共享权限服务
-/// * `change` - 已沿来源销售单 detail 授权的变更单
-/// * `binding` - 原单冻结的审批定义绑定
-/// * `actor` - 当前已认证操作人
-/// * `executor` - 原授权和详情读取执行器
-/// # 返回
-/// 返回真实运行摘要，只有当前责任、静态权限和运行规则均允许时带出操作。
-/// # 错误
-/// 运行事实损坏、当前资格读取或仓储失败时拒绝。
+// 查询已授权销售变更的实际实例、历史和当前操作者允许动作。
+//
+// 调用参数：
+// * `db` - 原业务读取数据库
+// * `rbac` - 当前共享权限服务
+// * `change` - 已沿来源销售单 detail 授权的变更单
+// * `binding` - 原单冻结的审批定义绑定
+// * `executor` - 原授权和详情读取执行器
+//
+// 返回真实运行摘要，只有当前责任、静态权限和运行规则均允许时带出操作。
+//
+// 运行事实损坏、当前资格读取或仓储失败时拒绝。
 pub(super) async fn load_change_document_approval(
     db: &Database,
     rbac: &Arc<AuthorizationService>,
@@ -56,7 +55,7 @@ pub(super) async fn load_change_document_approval(
     Ok(view)
 }
 
-/// 当前提交动作沿静态 submit 权限与来源销售写范围独立解释。
+// 投影销售变更字段时，当前提交动作沿静态 submit 权限与来源销售写范围独立解释。
 async fn change_actions(
     db: &Database,
     rbac: &Arc<AuthorizationService>,

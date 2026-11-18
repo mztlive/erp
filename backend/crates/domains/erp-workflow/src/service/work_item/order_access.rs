@@ -7,17 +7,13 @@ use crate::error::{Error, Result};
 use crate::ports::{ObjectFact, ObjectKind, OrderTaskSource, TaskReadAction, WorkflowAuthorizationPort};
 
 /// 重验供应商申请任务的内部账号及独立对象读取范围。
-///
-/// # 参数
-/// * `auth` - 已装配的工作流授权 Port。
-/// * `actor` - 同一执行器内已经验证的操作人或候选人身份。
-/// * `kind` - 固定任务关系中的对象种类。
-/// * `object_id` - 权威对象主键，不从展示字段推断。
-/// * `executor` - 调用方事务或查询执行器。
-/// # 返回
 /// 供应商申请详情范围满足时返回成功；其他任务沿各自授权政策继续执行。
-/// # 错误
+///
 /// 内部身份失效、范围越界或适配器未装配时失败关闭。
+///
+/// `auth`：已装配的工作流授权 Port；`actor`：同一执行器内已经验证的操作人或候选人身份。
+/// `kind`：固定任务关系中的对象种类；`object_id`：权威对象主键，不从展示字段推断。
+/// `executor`：调用方事务或查询执行器。
 pub async fn require_supplier_portal_task_read(
     auth: &impl WorkflowAuthorizationPort,
     actor: &AuditActor,
@@ -34,16 +30,10 @@ pub async fn require_supplier_portal_task_read(
     Err(Error::Forbidden("当前账号不具备供应商申请读取范围".into()))
 }
 
-/// 隐藏不可见对象的存在性，保留配置、版本及基础设施错误供调用方处理。
-///
-/// # 参数
-/// * `error` - 对象读取或参与校验返回的错误
-///
-/// # 返回
-/// 读取拒绝统一为 Forbidden，其他错误原样返回，不得伪装成候选不合格。
-///
-/// # 错误
-/// 不返回错误。
+// 隐藏不可见对象的存在性，保留配置、版本及基础设施错误供调用方处理。
+// 读取拒绝统一为 Forbidden，其他错误原样返回，不得伪装成候选不合格。
+//
+// `error`：对象读取或参与校验返回的错误。
 pub(super) fn task_read_error(error: Error) -> Error {
     match error {
         Error::Forbidden(_) | Error::NotFound(_) => {
@@ -54,18 +44,13 @@ pub(super) fn task_read_error(error: Error) -> Error {
 }
 
 /// 按权威订单来源重验当前账号的业务对象读取范围。
-///
-/// # 参数
-/// * `auth` - 已装配的工作流授权 Port。
-/// * `actor` - 同一执行器内已经验证的操作人或候选接收人身份。
-/// * `kind` - 任务注册表固定的对象种类。
-/// * `fact` - 同一执行器读取的业务对象事实。
-/// * `action` - 原用例要求的任务读取入口。
-/// * `executor` - 调用方查询或任务事务执行器。
-/// # 返回
 /// 订单来源通过原入口的独立授权时成功；其他对象仍执行其所属阶段的授权。
-/// # 错误
+///
 /// 必需来源缺失、账号失效、未装配或详情范围越界时拒绝。
+///
+/// `auth`：已装配的工作流授权 Port；`actor`：同一执行器内已经验证的操作人或候选接收人身份。
+/// `kind`：任务注册表固定的对象种类；`fact`：同一执行器读取的业务对象事实。
+/// `action`：原用例要求的任务读取入口；`executor`：调用方查询或任务事务执行器。
 pub async fn require_order_task_read(
     auth: &impl WorkflowAuthorizationPort,
     actor: &AuditActor,

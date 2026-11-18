@@ -9,18 +9,11 @@ use crate::entity::supplier_settlement::*;
 use crate::{Error, Result};
 impl SupplierSettlementService {
     /// 在原执行器授权后准备作废；已作废回放仍核验同一作废资格。
-    ///
-    /// # 参数
-    /// * `id` - 结算单主键。
-    /// * `req` - 作废请求，含期望版本。
-    /// * `actor` - 当前真实账号。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 返回结算单和是否已经作废。`true` 表示进入函数时已作废，本次不再改状态；`false` 表示已在内存中作废，本函数不写回。
-    ///
-    /// # 错误
-    /// 作废资格不满足时返回 `Forbidden`。结算单不存在时返回 `NotFound`。草稿不可编辑时返回 `BusinessLogicError`。版本不一致时返回 `ConflictError`。参数校验、状态迁移或仓储读取失败时返回对应错误。
+    /// 返回结算单和是否已经作废。`true` 表示进入函数时已作废，本次不再改状态；`false` 表示已在内存中作废，
+    /// 本函数不写回。
+    /// 作废资格不满足时返回 `Forbidden`。结算单不存在时返回 `NotFound`。草稿不可编辑时返回
+    /// `BusinessLogicError`。版本不一致时返回 `ConflictError`。参数校验、状态迁移或仓储读取失败时返回对
+    /// 应错误。
     pub async fn prepare_void(
         &self,
         id: &str,

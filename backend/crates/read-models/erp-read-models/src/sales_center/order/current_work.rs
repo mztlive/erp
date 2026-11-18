@@ -47,13 +47,14 @@ pub struct SalesOrderCurrentWork {
 }
 
 impl SalesOrderReadService {
-    /// 在销售详情授权内汇总开放责任，只返回该销售单及其直接来源对象的办理摘要。
-    /// # 参数
-    /// `order` 为已授权销售单。
-    /// # 返回
-    /// 返回按环节与责任人合并的待办摘要；终结任务与关联单据明细不进入结果。
-    /// # 错误
-    /// 关联读取、责任读取或姓名查询失败时返回错误，不伪装成无人处理。
+    // 读取销售当前办理时，在销售详情授权内汇总开放责任，只返回该销售单及其直接来源对象的办理摘要。
+    //
+    // 调用参数：
+    // `order` 为已授权销售单。
+    //
+    // 返回按环节与责任人合并的待办摘要；终结任务与关联单据明细不进入结果。
+    //
+    // 关联读取、责任读取或姓名查询失败时返回错误，不伪装成无人处理。
     pub(super) async fn current_work(
         &self,
         order: &SalesOrder,
@@ -91,7 +92,7 @@ impl SalesOrderReadService {
 }
 
 impl SalesOrderCurrentWork {
-    /// 按事项、当前节点与责任人合并，业务身份只在内存中用于去重。
+    // 依据事项、当前节点与责任人合并，业务身份只在内存中用于去重。
     fn summarize(rows: Vec<Self>) -> Vec<Self> {
         let mut positions = HashMap::new();
         let mut summaries: Vec<(Self, HashSet<String>)> = Vec::new();
@@ -113,7 +114,7 @@ impl SalesOrderCurrentWork {
         summaries.into_iter().map(|(row, _)| row).collect()
     }
 
-    /// 从开放任务映射有限展示信息，不使用自由文本摘要或历史责任人。
+    // 从开放任务投影有限展示信息，不使用自由文本摘要或历史责任人。
     fn from_task(task: &WorkItem, names: &HashMap<String, String>) -> Option<Self> {
         if task.status != WorkItemStatus::Open {
             return None;
@@ -136,7 +137,7 @@ impl SalesOrderCurrentWork {
     }
 }
 
-/// 固定任务类型与对象对应的中文环节、岗位及动作；未知关系不作推断。
+// 处理销售当前办理时，固定任务类型与对象对应的中文环节、岗位及动作；未知关系不作推断。
 fn task_copy(task: &WorkItem) -> Option<(&'static str, &'static str, &'static str, &'static str)> {
     use WorkItemType::*;
     match (task.work_item_type, task.business_object_type.as_str()) {
@@ -171,7 +172,7 @@ fn task_copy(task: &WorkItem) -> Option<(&'static str, &'static str, &'static st
     }
 }
 
-/// 履约岗位以任务冻结角色为准，未知角色不替换为采购。
+// 处理销售当前办理时，履约岗位以任务冻结角色为准，未知角色不替换为采购。
 fn fulfillment_copy(task: &WorkItem) -> Option<(&'static str, &'static str, &'static str, &'static str)> {
     use WorkItemType::FulfillmentOperation;
     match (task.work_item_type, task.business_object_type.as_str()) {

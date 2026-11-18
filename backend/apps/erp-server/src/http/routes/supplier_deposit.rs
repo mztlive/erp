@@ -7,12 +7,7 @@ use crate::http::handler::supplier_deposit;
 use crate::http::routes::permission_route;
 use crate::http::state::HttpState;
 /// 装配已明确授权的财务账户与资金命令。
-/// # 参数
-/// 无。
-/// # 返回
-/// 返回逐动作权限保护的路由。
-/// # 错误
-/// 不执行I/O，不返回错误。
+/// 按操作声明公共权限目录信息。
 pub fn routes() -> Router<HttpState> {
     reads().merge(recharge()).merge(authorizations()).merge(execution()).merge(resolution())
 }

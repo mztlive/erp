@@ -59,11 +59,14 @@ pub struct RelatedInvoiceRequest {
     pub created_at: u64,
 }
 
-/// 先执行审批实例授权，再读取唯一来源当前票款；不授予台账读取资格。
+/// 处理开票核对时，先执行审批实例授权，再读取唯一来源当前票款；不授予台账读取资格。
+///
 /// # 参数
 /// 数据库、审批运行服务、当前账号及审批实例身份。
+///
 /// # 返回
 /// 同一事务快照下的额度、回款、销售来源与最近申请。
+///
 /// # 错误
 /// 未授权、非开票审批、申请已重提或来源不一致时拒绝。
 pub async fn invoice_approval_review<A: WorkflowAuthorizationPort>(
@@ -82,7 +85,7 @@ pub async fn invoice_approval_review<A: WorkflowAuthorizationPort>(
         .await
 }
 
-/// 实例资格和完整当前票款在原快照读取，不以新授权认可先前结果。
+// 处理开票核对时，实例资格和完整当前票款在原快照读取，不以新授权认可先前结果。
 async fn review_read<A: WorkflowAuthorizationPort>(
     db: &Database,
     runtime: &ApprovalRuntimeService<A>,
@@ -156,7 +159,7 @@ async fn owner_name(db: &Database, user_id: &str, executor: &mut dyn Executor) -
         .map(|row| row.name))
 }
 
-/// 仅返回真实占用额度的申请，未提交草稿不构成审批依据。
+// 处理开票核对时，仅返回真实占用额度的申请，未提交草稿不构成审批依据。
 fn related_requests(
     request: &SalesInvoiceRequest,
     reserved: &[SalesInvoiceRequest],
@@ -218,13 +221,14 @@ fn warnings(
     warnings
 }
 
-/// 在提交事务中锁定销售版本及其允许附件，不补写旧审批。
-/// # 参数
-/// 数据库、本次开票审批快照及原提交事务。
-/// # 返回
-/// 唯一来源销售快照与该版本的材料清单。
-/// # 错误
-/// 申请版本或来源不匹配时拒绝；材料不可用时明确记录，基础设施错误继续传播。
+// 读取开票核对时，在提交事务中锁定销售版本及其允许附件，不补写旧审批。
+//
+// 调用参数：
+// 数据库、本次开票审批快照及原提交事务。
+//
+// 唯一来源销售快照与该版本的材料清单。
+//
+// 申请版本或来源不匹配时拒绝；材料不可用时明确记录，基础设施错误继续传播。
 pub(super) async fn capture(
     db: &Database,
     snapshot: &ApprovalSubjectSnapshot,

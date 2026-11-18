@@ -110,13 +110,11 @@ type DeliveryGroup<'a> = (&'a str, &'a str, &'a str);
 
 impl InquiryImportValidation {
     /// 按精确编码、交期和交付条件建立需求，并显式记录重复配送行合并。
-    /// # 参数
-    /// `products`、`deliveries` 为原始行，`skus` 仅含当前授权可售商品，
-    /// `current` 为保持稳定身份的原草稿，`new_id` 只在新增身份时调用。
-    /// # 返回
     /// 返回可展示的需求、逐行错误及待销售确认的合并结果。
-    /// # 错误
-    /// 全部业务错误收集在 `errors`，不执行任何写入。
+    /// 失败条件：全部业务错误收集在 `errors`，不执行任何写入。
+    ///
+    /// 输入约定：`products`、`deliveries` 为原始行，`skus` 仅含当前授权可售商品，
+    /// `current` 为保持稳定身份的原草稿，`new_id` 只在新增身份时调用。
     pub fn build(
         products: &[InquiryImportProduct],
         deliveries: &[InquiryImportDelivery],
@@ -247,7 +245,7 @@ fn group_deliveries<'a>(
     groups
 }
 
-/// 区分必填缺失和无法可靠还原的数字电话；解析层已将明确的数字手机号转为文本。
+// 导入询价配送信息时分别报告电话缺失与数字格式不可还原；明确的数字手机号应已由上游解析为文本。
 fn check_phone(row: &InquiryImportDelivery, physical: bool, errors: &mut Vec<InquiryImportIssue>) {
     let message = if row.phone.is_empty() && physical {
         "请填写联系电话"
@@ -586,12 +584,10 @@ pub struct InquiryImportReceipt {
 
 impl InquiryImportReceipt {
     /// 核对命令身份、请求指纹及强类型结果后恢复首次确认结果。
-    /// # 参数
-    /// `command_id`、`actor`、`inquiry`、`preview_id` 与 `fingerprint` 为当前命令身份。
-    /// # 返回
     /// 返回首次成功确认冻结的结果，不依赖仍然存在的临时预览。
-    /// # 错误
-    /// 回执结构损坏时拒绝恢复；同一操作号的对象或载荷不同时返回冲突。
+    /// 失败条件：回执结构损坏时拒绝恢复；同一操作号的对象或载荷不同时返回冲突。
+    ///
+    /// 输入约定：`command_id`、`actor`、`inquiry`、`preview_id` 与 `fingerprint` 为当前命令身份。
     pub fn recover(
         &self,
         command_id: &str,
@@ -629,12 +625,10 @@ impl InquiryImportReceipt {
 
 impl InquiryImportPreview {
     /// 核对未创建询价的客户专用预览。
-    /// # 参数
-    /// `customer`、`fingerprint` 为请求绑定，`merge` 为合并确认，`now` 为当前秒。
-    /// # 返回
     /// 返回可一次性创建的已校验需求。
-    /// # 错误
     /// 客户或用途不符、已处理、过期、文件错误及未确认合并时拒绝。
+    ///
+    /// 输入约定：`customer`、`fingerprint` 为请求绑定，`merge` 为合并确认，`now` 为当前秒。
     pub fn ensure_creatable(&self, customer: &str, fingerprint: &str, merge: bool, now: i64) -> Result<()> {
         if self.creation_customer_id.as_deref() != Some(customer) || !self.inquiry_id.is_empty() {
             return Err(Error::NotFound("客户导入预览不存在或不可用".into()));
@@ -647,13 +641,11 @@ impl InquiryImportPreview {
     }
 
     /// 核对预览绑定及确认前置条件。
-    /// # 参数
-    /// `inquiry_id`、`version` 和 `fingerprint` 为当前请求上下文，
+    /// 结果：全部匹配且预览没有错误时返回空结果。
+    /// 失败条件：绑定不符、过期、错误未修正或重复行未经确认时拒绝导入。
+    ///
+    /// 输入约定：`inquiry_id`、`version` 和 `fingerprint` 为当前请求上下文，
     /// `confirm_merge` 为销售明确确认，`now` 为服务端 Unix 秒。
-    /// # 返回
-    /// 全部匹配且预览没有错误时返回空结果。
-    /// # 错误
-    /// 绑定不符、过期、错误未修正或重复行未经确认时拒绝导入。
     pub fn ensure_confirmable(
         &self,
         inquiry_id: &str,

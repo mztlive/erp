@@ -61,23 +61,18 @@ pub struct InquirySalesView {
 
 impl InquirySalesView {
     /// 从聚合生成确定性销售白名单响应。
-    /// # 参数
-    /// `inquiry` 是通过当前销售数据范围校验的询价。
-    /// # 返回
     /// 返回只含销售公开事实的独立结构。
-    /// # 错误
-    /// 无。
+    ///
+    /// 输入约定：`inquiry` 是通过当前销售数据范围校验的询价。
     pub fn from_inquiry(inquiry: &SalesInquiry) -> Self {
         Self::from_inquiry_at(inquiry, Instant::now())
     }
 
     /// 按明确业务时刻生成销售白名单及已接受费用资格。
-    /// # 参数
-    /// `inquiry` 为已授权询价；`now` 为业务时刻。
-    /// # 返回
     /// 返回独立销售响应，不暴露采购内部信息。
-    /// # 错误
-    /// 无；费用受影响时在逐项状态中说明。
+    /// 失败条件：费用受影响时在逐项状态中说明。
+    ///
+    /// 输入约定：`inquiry` 为已授权询价；`now` 为业务时刻。
     pub fn from_inquiry_at(inquiry: &SalesInquiry, now: Instant) -> Self {
         Self {
             base: inquiry.base.clone(),

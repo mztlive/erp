@@ -13,7 +13,7 @@ use persistence_core::Executor;
 
 use crate::{Error, Result};
 
-/// 保留无附件旧命令指纹，上传内容摘要参与带附件命令身份。
+// 保留无附件旧命令指纹，上传内容摘要参与带附件命令身份。
 pub(super) fn receipt(
     req: &SaveCustomerReceiptDraftRequest,
     actor: &AuditActor,
@@ -43,7 +43,7 @@ pub(super) fn receipt(
     )?)
 }
 
-/// 只解析本批临时文件，不允许将任意已有资产挂接到回款。
+// 只解析本批临时文件，不允许将任意已有资产挂接到回款。
 pub(super) fn resolve(ids: &mut [FileAssetId], pending: &dyn PendingAttachmentBatch) -> Result<()> {
     let mut used = HashSet::new();
     let mut unique = HashSet::new();
@@ -60,7 +60,7 @@ pub(super) fn resolve(ids: &mut [FileAssetId], pending: &dyn PendingAttachmentBa
     Ok(())
 }
 
-/// 本单累计凭证不得超出上传上限。
+// 追加回款凭证前合计已有与新增文件；总数超过 32 个返回 `ValidationError`。
 fn check_count(existing: usize, added: usize) -> Result<()> {
     if existing + added > 32 {
         return Err(Error::ValidationError("每笔回款最多保存 32 个凭证文件".into()));
@@ -68,7 +68,7 @@ fn check_count(existing: usize, added: usize) -> Result<()> {
     Ok(())
 }
 
-/// 与草稿共用执行器登记本批资产和附件，旧凭证保留。
+// 与草稿共用执行器登记本批资产和附件，旧凭证保留。
 pub(super) async fn persist(
     db: &Database,
     id: &str,

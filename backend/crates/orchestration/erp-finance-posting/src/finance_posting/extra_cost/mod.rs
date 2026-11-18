@@ -55,33 +55,17 @@ pub struct SalesExtraCostProcess {
 impl SalesExtraCostProcess {
     /// 绑定数据库与当前授权服务。
     ///
-    /// # 参数
-    /// * `db` - 应用数据库
-    /// * `rbac` - 应用共享授权服务，用于事务内重验销售单对象范围
-    ///
-    /// # 返回
-    /// 返回流程实例，构造不执行 I/O。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// `rbac` 为应用共享授权服务，用于事务内重验销售单对象范围。
     pub fn new(db: Database, rbac: Arc<AuthorizationService>) -> Self {
         Self { db, rbac }
     }
 
     /// 财务按凭证登记一笔附加费用，直接形成实际发生成本。
     ///
-    /// # 参数
-    /// * `sales_order_id` - 归属销售单
-    /// * `req` - 登记命令；凭证须为本次上传文件
-    /// * `assets` - 本次已写入对象存储的凭证文件
-    /// * `actor` - 已通过 `cost_entry:create` 鉴权的操作人
+    /// `sales_order_id` 为归属销售单；`req` 为登记命令；凭证须为本次上传文件；`assets` 为本次已写入对象存储的凭证文件；`actor` 为已通过 `cost_entry:create`
+    /// 鉴权的操作人。返回成本事实主键；同一幂等键同一载荷重放时返回原事实。
     ///
-    /// # 返回
-    /// 返回成本事实主键；同一幂等键同一载荷重放时返回原事实。
-    ///
-    /// # 错误
-    /// 输入非法、凭证缺失、销售单不可见或不可登记、归属明细或供应商无效、
-    /// 幂等键已用于不同登记、写入失败时返回错误。
+    /// 输入非法、凭证缺失、销售单不可见或不可登记、归属明细或供应商无效、幂等键已用于不同登记、写入失败时返回错误。
     pub async fn register(
         &self,
         sales_order_id: &str,
@@ -131,19 +115,10 @@ impl SalesExtraCostProcess {
 
     /// 冲减一笔财务登记的附加费用；累计冲减不得超过原费用。
     ///
-    /// # 参数
-    /// * `sales_order_id` - 原费用归属销售单
-    /// * `cost_entry_id` - 原附加费用成本事实
-    /// * `req` - 冲减命令；凭证须为本次上传文件
-    /// * `assets` - 本次已写入对象存储的凭证文件
-    /// * `actor` - 已通过 `cost_entry:create` 鉴权的操作人
+    /// `sales_order_id` 为原费用归属销售单；`cost_entry_id` 为原附加费用成本事实；`req` 为冲减命令；凭证须为本次上传文件；`assets` 为本次已写入对象存储的凭证文件；
+    /// `actor` 为已通过 `cost_entry:create` 鉴权的操作人。返回冲减成本事实主键；同一幂等键同一载荷重放时返回原事实。
     ///
-    /// # 返回
-    /// 返回冲减成本事实主键；同一幂等键同一载荷重放时返回原事实。
-    ///
-    /// # 错误
-    /// 原费用不存在或不属于该销售单、不是财务登记费用、冲减超额、并发冲减冲突、
-    /// 幂等键已用于不同冲减或写入失败时返回错误。
+    /// 原费用不存在或不属于该销售单、不是财务登记费用、冲减超额、并发冲减冲突、幂等键已用于不同冲减或写入失败时返回错误。
     pub async fn reduce(
         &self,
         sales_order_id: &str,
@@ -186,7 +161,7 @@ impl SalesExtraCostProcess {
         }
     }
 
-    /// 在一个事务内执行命令；唯一来源冲突沿用统一冲突分类。
+    // 在一个事务内执行命令；唯一来源冲突沿用统一冲突分类。
     async fn transact(
         &self,
         actor: &AuditActor,
@@ -216,7 +191,7 @@ impl SalesExtraCostProcess {
     }
 }
 
-/// 固定成本入口同时校验完整销售来源和同角色资格。
+// 固定成本入口同时校验完整销售来源和同角色资格。
 async fn require_cost_source(
     authorization: &AuthorizationService,
     actor: &AuditActor,
@@ -325,7 +300,7 @@ impl ReduceCommand {
     }
 }
 
-/// 读取当前操作人可见且可登记附加费用的销售单。
+// 读取当前操作人可见且可登记附加费用的销售单。
 async fn load_order(
     db: &Database,
     order_id: &SalesOrderId,
@@ -340,7 +315,7 @@ async fn load_order(
     Ok(order)
 }
 
-/// 读取属于本销售单的财务登记附加费用及其唯一分配。
+// 读取属于本销售单的财务登记附加费用及其唯一分配。
 async fn load_original(
     db: &Database,
     order_id: &SalesOrderId,
@@ -364,7 +339,7 @@ async fn load_original(
     Ok((original, allocation))
 }
 
-/// 选填的收款供应商必须存在。
+// 附加费用填写了收款供应商时，沿原执行器核对该账号是否存在；未填写则跳过。
 async fn ensure_supplier(
     db: &Database,
     supplier_id: Option<&SupplierAccountId>,
@@ -380,7 +355,7 @@ async fn ensure_supplier(
     Ok(())
 }
 
-/// 登记凭证、写入成本事实与分配并写审计。
+// 登记凭证、写入成本事实与分配并写审计。
 async fn write(
     db: &Database,
     entry: CostEntry,
@@ -397,7 +372,7 @@ async fn write(
     Ok(audit.base.id)
 }
 
-/// 把凭证临时引用替换为正式资产；附加费用凭证必须随命令上传。
+// 把凭证临时引用替换为正式资产；附加费用凭证必须随命令上传。
 fn resolve_evidence(id: &mut FileAssetId, pending: &dyn PendingAttachmentBatch) -> Result<()> {
     let mut used = HashSet::new();
     if !pending.resolve_id(id, &mut used)? {
@@ -457,7 +432,7 @@ impl Expected {
     }
 }
 
-/// 同一幂等键已写入时按原载荷重放；载荷不同则拒绝。
+// 同一幂等键已写入时按原载荷重放；载荷不同则拒绝。
 async fn replay(
     db: &Database,
     entry_id: &CostEntryId,

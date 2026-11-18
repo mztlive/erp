@@ -23,23 +23,9 @@ use crate::repository::prelude::*;
 use crate::repository::{InventoryExt, StockBalanceFilter, StockBalanceRow, StockMovementFilter};
 
 impl InventoryService {
-    /// 分页查询库存余额列表（W10 余额视图）。
-    ///
-    /// 列表行按页批量投影仓库与 SKU 基础信息（D11/D10 跨域只读），
-    /// 不做逐行查询（禁止 N+1）。
-    ///
-    /// # 参数
-    /// * `params` - 查询参数（`warehouse_id`/`sku_id` 扁平筛选）
-    /// * `actor` - 当前认证操作人，用于计算余额范围与调整动作
-    ///
-    /// # 返回
-    /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
-    ///
-    /// # 错误
-    /// 分页、排序或 `scope_version` 非法时返回 `ValidationError`。
-    /// 跨页范围版本不一致时返回 `ConflictError`。
-    /// 账号未激活时返回 `Forbidden`。
-    /// 授权、商品事实或仓储查询失败时返回对应错误。
+    /// 打开库存余额列表时，以当前账号的完整库存授权条件分页并计数，仓库和 SKU 筛选仅收窄候选。
+    /// 按当前页批量补齐仓库和商品事实，复验主读取阶段后再检查本页仓库的创建调整按钮资格。
+    /// 非法参数、排序或范围版本返回 `ValidationError`，跨页范围变化返回 `ConflictError`，账号未激活返回 `Forbidden`；传播授权及读取错误。
     #[tracing::instrument(
         name = "inventory.stock_balance_list",
         skip_all,
@@ -87,7 +73,7 @@ impl InventoryService {
         ))
     }
 
-    /// 在同一快照依次完成主列表读取和独立按钮资格。
+    // 在同一快照依次完成主列表读取和独立按钮资格。
     async fn balance_page(&self, query: StockBalanceListQuery, actor: &AuditActor) -> Result<BalancePage> {
         let service = self.clone();
         let actor = actor.clone();
@@ -99,7 +85,7 @@ impl InventoryService {
             .await
     }
 
-    /// 主查询补齐完成后关闭读取阶段，再开始当前页创建按钮检查。
+    // 在本次余额快照中先以读权限分页并批量补齐；复验该阶段后，仅对结果页的仓库检查创建调整按钮。
     async fn read_balance_page(
         &self,
         query: StockBalanceListQuery,
@@ -141,18 +127,8 @@ impl InventoryService {
         })
     }
 
-    /// 查询库存余额详情（W10 详情：余额 + 最近流水 + 有效预占 + 未过账调整）。
-    ///
-    /// # 参数
-    /// * `id` - 余额主键
-    /// * `actor` - 当前认证操作人，用于验证余额范围与调整动作
-    ///
-    /// # 返回
-    /// 返回余额详情视图。
-    ///
-    /// # 错误
-    /// 余额不存在、账号未激活或仓库不在详情范围时返回 `NotFound`。
-    /// 授权、展示事实或仓储查询失败时返回对应错误。
+    /// 按余额 ID 读取余额、最近流水、有效预占和有权查看的未过账调整；授权与业务读取使用同一快照。
+    /// 余额缺失、账号未激活或仓库无详情权限时按 `NotFound` 处理；传播授权、展示事实和仓储错误。
     #[tracing::instrument(
         name = "inventory.stock_balance_detail",
         skip_all,
@@ -170,7 +146,7 @@ impl InventoryService {
             .await
     }
 
-    /// 主余额阶段交付后，独立核对附属调整读取和创建按钮资格。
+    // 主余额阶段交付后，独立核对附属调整读取和创建按钮资格。
     async fn read_balance_detail(
         &self,
         id: &str,
@@ -210,7 +186,7 @@ impl InventoryService {
         Ok(read.view)
     }
 
-    /// 完成余额、最近流水、预占和展示补齐的唯一主查询阶段。
+    // 完成余额、最近流水、预占和展示补齐的唯一主查询阶段。
     async fn balance_detail_core(
         &self,
         id: &str,
@@ -237,7 +213,7 @@ impl InventoryService {
         Ok(BalanceDetailRead { balance, view, has_warehouse })
     }
 
-    /// 展示补齐只在主查询阶段内读取；独立动作不得复用此阶段凭证。
+    // 展示补齐只在主查询阶段内读取；独立动作不得复用此阶段凭证。
     async fn enriched_balance_detail(
         &self,
         balance: &StockBalance,
@@ -269,7 +245,7 @@ impl InventoryService {
     }
 }
 
-/// 主结果已经完成补齐，关闭凭证后才允许进入独立按钮阶段。
+// 主结果已经完成补齐，关闭凭证后才允许进入独立按钮阶段。
 async fn finish_balance_page(
     authorization: &InventoryAuthorization,
     port: &dyn AuthorizationPort,
@@ -420,18 +396,10 @@ struct BalanceEnrichments {
     movements: HashMap<String, StockMovement>,
 }
 
-/// 批量取页内余额维度上是否存在有效预占（禁止 N+1）。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `warehouse_ids` - 页内仓库主键集合
-/// * `sku_ids` - 页内 SKU 主键集合
-///
-/// # 返回
-/// 返回「(仓库, SKU)」有效预占维度集合。
-///
-/// # 错误
-/// 批量查询失败时返回 `RepositoryError`。
+// 批量取页内余额维度上是否存在有效预占（禁止 N+1）。
+// 返回「(仓库, SKU)」有效预占维度集合。
+// `warehouse_ids` 为页内仓库主键集合；`sku_ids` 为页内 SKU 主键集合。
+// 批量查询失败时返回 `RepositoryError`。
 async fn active_reservation_dims(
     db: &Database,
     warehouse_ids: &[String],
@@ -446,17 +414,10 @@ async fn active_reservation_dims(
         .collect())
 }
 
-/// 按主键集合批量取回库存流水（`$in`，禁止 N+1）。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `ids` - 流水主键集合
-///
-/// # 返回
-/// 返回按主键索引的流水映射。
-///
-/// # 错误
-/// 查询失败时返回 `RepositoryError`。
+// 按主键集合批量取回库存流水（`$in`，禁止 N+1）。
+// 返回按主键索引的流水映射。
+// `ids` 为流水主键集合。
+// 查询失败时返回 `RepositoryError`。
 async fn load_movements_by_ids(
     db: &Database,
     ids: &[String],
@@ -490,7 +451,7 @@ struct StockBalanceRef {
 }
 
 impl From<StockBalanceRow> for StockBalanceRef {
-    /// 由列表投影行组装最小余额事实。
+    // 由列表投影行组装最小余额事实。
     fn from(row: StockBalanceRow) -> Self {
         Self {
             id: row.id,
@@ -506,7 +467,7 @@ impl From<StockBalanceRow> for StockBalanceRef {
 }
 
 impl From<&StockBalance> for StockBalanceRef {
-    /// 由余额实体组装最小余额事实（详情与列表共用同一视图组装）。
+    // 由余额实体组装最小余额事实（详情与列表共用同一视图组装）。
     fn from(balance: &StockBalance) -> Self {
         Self {
             id: balance.base.id.clone(),
@@ -520,16 +481,10 @@ impl From<&StockBalance> for StockBalanceRef {
         }
     }
 }
-/// 由余额事实与基础信息投影组装余额视图（列表与详情共用）。
-///
-/// # 参数
-/// * `balance` - 最小余额事实
-/// * `enrichments` - 仓库/SKU/流水基础信息投影
-/// * `has_active_reservation` - 是否存在有效预占
-/// * `can_create_adjustment` - 调用人是否可在该仓库创建调整
-///
-/// # 返回
-/// 返回契约形状的余额视图。
+// 由余额事实与基础信息投影组装余额视图（列表与详情共用）。
+// 返回契约形状的余额视图。
+// `balance` 为最小余额事实；`enrichments` 为仓库/SKU/流水基础信息投影。
+// `has_active_reservation` 为是否存在有效预占；`can_create_adjustment` 为调用人是否可在该仓库创建调整。
 fn enrich_balance_view(
     balance: StockBalanceRef,
     enrichments: &BalanceEnrichments,

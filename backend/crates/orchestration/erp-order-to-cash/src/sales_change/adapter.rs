@@ -55,26 +55,14 @@ pub(super) struct SalesChangeOrderAdapter {
     pub read_scope: AdapterReadScope,
 }
 
-/// 返回销售变更单的完整适配器登记。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回已校验完整性的规格与显式字段声明。
-///
-/// # 错误
-/// 政策缺失或三类动作不互异时返回部署不变量错误。字段与合同签署值不一致时返回内部错误。
+// 装配销售变更单的审批适配器，启动、通过和撤回时按已登记的动作分派。政策缺失或动作重复时拒绝装配。字段与合同签署值不一致时返回内部错误。
 pub(super) fn sales_change_order_adapter() -> Result<SalesChangeOrderAdapter> {
     let spec = adapter_spec_of(DocumentType::SalesChangeOrder)?;
     ensure_adapter_spec_complete(&spec)?;
     adapter_from_spec(spec)
 }
 
-/// 由政策规格填充显式 Adapter 字段。
-///
-/// # 错误
-/// 字段与合同签署值不一致时返回错误。
+// 由政策规格填充显式 Adapter 字段。字段与合同签署值不一致时返回错误。
 fn adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<SalesChangeOrderAdapter> {
     if spec.document_type != DocumentType::SalesChangeOrder
         || spec.process_kind != process_kind_of(DocumentType::SalesChangeOrder)
@@ -106,16 +94,9 @@ fn adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<SalesChangeOrderAdapte
     })
 }
 
-/// 为销售变更单构造唯一 `bpm::SubjectRef`。
-///
-/// # 参数
-/// * `business_object_id` - 变更单主键
-///
-/// # 返回
-/// 销售变更单的 `SubjectRef`。
-///
-/// # 错误
-/// 主键为空或超长时返回校验错误。
+// 为销售变更单构造唯一 `bpm::SubjectRef`。
+//
+// `business_object_id` 为变更单主键。销售变更单的 `SubjectRef`。主键为空或超长时返回校验错误。
 pub(super) fn sales_change_order_subject_ref(business_object_id: &str) -> Result<SubjectRef> {
     erp_workflow::entity::approval_integration::subject_ref_for(
         DocumentType::SalesChangeOrder,
@@ -124,34 +105,18 @@ pub(super) fn sales_change_order_subject_ref(business_object_id: &str) -> Result
     .map_err(|error| Error::ValidationError(error.to_string()))
 }
 
-/// 无已绑定定义的必须审批单据不得提交。
-///
-/// # 参数
-/// * `binding` - 创建时冻结的定义绑定；缺失时为 `None`。
-///
-/// # 返回
-/// 已存在的绑定。
-///
-/// # 错误
-/// 绑定缺失时返回冲突。
+// 无已绑定定义的必须审批单据不得提交。
+//
+// `binding` 为创建时冻结的定义绑定；缺失时为 `None`。已存在的绑定。绑定缺失时返回冲突。
 pub(super) fn require_frozen_binding(
     binding: Option<&ApprovalDefinitionBinding>,
 ) -> Result<&ApprovalDefinitionBinding> {
     binding.ok_or_else(|| Error::ConflictError("无有效审批绑定的销售变更单不得提交".to_string()))
 }
 
-/// 执行签署的销售变更单领域动作。
-///
-/// # 参数
-/// * `order` - 业务实体
-/// * `action` - 合同强类型动作
-/// * `updated_by` - 操作人
-///
-/// # 返回
-/// 无返回值。生效动作只校验可生效；撤回动作把单据改回草稿。
-///
-/// # 错误
-/// 动作不属于本类型或状态不允许时返回错误。
+// 执行签署的销售变更单领域动作。
+//
+// `action` 为合同强类型动作。生效动作只校验可生效；撤回动作把单据改回草稿。动作不属于本类型或状态不允许时返回错误。
 pub(super) fn execute_sales_change_domain_action(
     order: &mut SalesChangeOrder,
     action: ApprovalDomainAction,
@@ -168,10 +133,7 @@ pub(super) fn execute_sales_change_domain_action(
     }
 }
 
-/// 履约影响确认与财务复核不得充当审批流程节点。
-///
-/// # 错误
-/// 恒返回冲突。
+/// 履约影响确认与财务复核不得充当审批流程节点。恒返回冲突。
 #[cfg(test)]
 pub fn reject_legacy_change_review_node() -> Result<()> {
     Err(Error::ConflictError("销售变更履约影响确认与财务复核不得充当审批流程节点".to_string()))
@@ -181,29 +143,14 @@ pub fn reject_legacy_change_review_node() -> Result<()> {
 ///
 /// 未提供组织或审批人时失败关闭，不得默认放行。
 ///
-/// # 参数
-/// * `organization_id` - 单据责任组织
-/// * `assignee_user_id` - 指定审批人
-///
-/// # 返回
-/// 组织与审批人均非空时允许读取。
-///
-/// # 错误
-/// 组织或审批人为空时返回校验错误。
+/// `organization_id` 为单据责任组织。组织与审批人均非空时允许读取。组织或审批人为空时返回校验错误。
 pub fn sales_change_order_object_readable(organization_id: &str, assignee_user_id: &str) -> Result<bool> {
     document_object_readable(organization_id, assignee_user_id).map_err(Into::into)
 }
 
-/// 责任组织取结算主体，不得用空串或当前登录人组织补位。
-///
-/// # 参数
-/// * `settlement_party_id` - 原销售单结算主体。空值不能当作责任组织。
-///
-/// # 返回
-/// 返回非空责任组织。
-///
-/// # 错误
-/// 结算主体为空时返回校验错误。
+// 责任组织取结算主体，不得用空串或当前登录人组织补位。
+//
+// `settlement_party_id` 为原销售单结算主体。空值不能当作责任组织。返回非空责任组织。结算主体为空时返回校验错误。
 pub(super) fn sales_change_responsible_org_id(
     settlement_party_id: &erp_core::ids::PartyId,
 ) -> Result<String> {
@@ -214,23 +161,13 @@ pub(super) fn sales_change_responsible_org_id(
     Ok(org)
 }
 
-/// 按合同 §4.4.5 冻结销售变更单快照。
-///
-/// 对手方为客户；金额与数量合计必填。`document_no` 取变更单主键。
-///
-/// # 参数
-/// * `change_order` - 变更单
-/// * `sales_order` - 原销售单
-/// * `submission` - 已冻结提交
-/// * `lines` - 提交明细
-/// * `submitted_by` - 提交人
-/// * `submitted_at` - 提交时间
-///
-/// # 返回
-/// 按当前变更单、原销售单和冻结提交构成的审批主体快照。
-///
-/// # 错误
-/// 明细为空、金额/数量非法或组织为空时返回校验错误。
+// 按合同 §4.4.5 冻结销售变更单快照。
+//
+// 对手方为客户；金额与数量合计必填。`document_no` 取变更单主键。
+//
+// `change_order` 为变更单；`sales_order` 为原销售单；`submission` 为已冻结提交；`lines` 为提交明细。
+//
+// 按当前变更单、原销售单和冻结提交构成的审批主体快照。明细为空、金额/数量非法或组织为空时返回校验错误。
 pub(super) fn build_sales_change_snapshot(
     change_order: &SalesChangeOrder,
     sales_order: &SalesOrder,
@@ -258,10 +195,7 @@ pub(super) fn build_sales_change_snapshot(
     })
 }
 
-/// 汇总提交明细数量。
-///
-/// # 错误
-/// 无数量或合计超出标度时返回错误。
+// 汇总提交明细数量。无数量或合计超出标度时返回错误。
 fn sum_line_quantity(lines: &[SalesChangeSubmissionLine]) -> Result<Quantity> {
     let mut quantities = lines.iter().filter_map(|line| line.quantity);
     let Some(first) = quantities.next() else {
@@ -403,7 +337,7 @@ mod tests {
         .expect("提交行必须可构造")
     }
 
-    /// 适配器必须显式声明合同要求的全部字段。
+    // 验证销售单审批适配器逐项声明合同规定的字段。
     #[test]
     fn adapter_declares_all_required_fields() {
         let adapter = sales_change_order_adapter().expect("销售变更单必须可登记");
@@ -429,7 +363,7 @@ mod tests {
         assert_ne!(adapter.on_approval_start, adapter.cancel_action);
     }
 
-    /// 提交进入审批中；撤回不回退提交号，且切断 REJECTED。
+    // 提交进入审批中；撤回不回退提交号，且切断 REJECTED。
     #[test]
     fn submit_enters_in_approval_and_cancel_returns_draft() {
         let mut order = draft_order();
@@ -453,7 +387,7 @@ mod tests {
         assert_eq!(order.current_submission_id, Some(SalesChangeSubmissionId::new("cs-1")));
     }
 
-    /// 非草稿不得提交；非审批中不得撤回或生效。
+    // 非草稿不得提交；非审批中不得撤回或生效。
     #[test]
     fn illegal_status_transitions_fail_closed() {
         let mut effective = draft_order();
@@ -474,13 +408,13 @@ mod tests {
         assert!(reject_legacy_change_review_node().is_err());
     }
 
-    /// 缺少冻结审批定义时拒绝提交。
+    // 验证销售单缺少冻结审批定义时不能提交。
     #[test]
     fn missing_frozen_binding_is_rejected() {
         assert!(require_frozen_binding(None).is_err());
     }
 
-    /// 快照冻结客户对手方、金额与数量合计。
+    // 快照冻结客户对手方、金额与数量合计。
     #[test]
     fn snapshot_freezes_customer_amount_and_quantity() {
         let payload = build_sales_change_snapshot(
@@ -512,7 +446,7 @@ mod tests {
         );
     }
 
-    /// 对象读取权空组织或空审批人失败关闭。
+    // 验证销售单审批读取缺少责任组织或办理人时不放行。
     #[test]
     fn object_read_fails_closed_on_empty_identity() {
         assert!(sales_change_order_object_readable("party-1", "u1").unwrap());
@@ -520,7 +454,7 @@ mod tests {
         assert!(sales_change_order_object_readable("party-1", "").is_err());
     }
 
-    /// 领域动作分派只接受签署的最终通过与撤回动作。
+    // 领域动作分派只接受签署的最终通过与撤回动作。
     #[test]
     fn domain_action_dispatch_rejects_foreign_actions() {
         let mut order = draft_order();

@@ -138,13 +138,9 @@ pub struct WorkItemFilter {
 
 impl WorkItemFilter {
     /// 把当前处理人筛选与既有责任范围求交，保留历史参与和管理条件。
-    ///
-    /// # 参数
-    /// * `handler_ids` - 已规范化的当前处理人筛选；空集合表示不过滤。
-    /// # 返回
     /// 原地写入仓储独立 AND 条件；交集为空时保持空查询。
-    /// # 错误
-    /// 无。
+    ///
+    /// `handler_ids`：已规范化的当前处理人筛选；空集合表示不过滤。
     pub fn narrow_current_handlers(&mut self, handler_ids: &[String]) {
         if handler_ids.is_empty() {
             return;
@@ -158,16 +154,8 @@ impl WorkItemFilter {
 }
 
 impl QueryFilter for WorkItemFilter {
-    /// 构造与责任队列索引一致的 MongoDB 查询条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回包含软删除约束的查询文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 构造与责任队列索引一致的 MongoDB 查询条件。
+    // 返回包含软删除约束的查询文档。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_enum_filter(&mut filter, "status", &self.statuses, WorkItemStatus::as_str);
@@ -199,7 +187,7 @@ impl QueryFilter for WorkItemFilter {
     }
 }
 
-/// 来源维度之间取交集；每个引用的类型和 ID 必须命中同一数组元素。
+// 查询队列时按来源销售单和采购单收窄候选，不授予单据权限。不同来源维度求交，每个类型与 ID 须在同一链接元素命中。
 fn source_link_filters(sales: &[String], purchases: &[String]) -> Vec<Document> {
     [("sales_order", sales), ("purchase_order", purchases)].into_iter()
         .filter(|(_, ids)| !ids.is_empty())
@@ -208,29 +196,17 @@ fn source_link_filters(sales: &[String], purchases: &[String]) -> Vec<Document> 
 }
 
 impl Pagination for WorkItemFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 返回页码与单页条数。
+    // 返回 `(page, page_size)`。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
 }
 
-/// 过滤已退役的历史任务类型；显式仅选旧类型时返回空集，禁止扩大查询范围。
-///
-/// # 参数
-/// * `filter` - 工作项查询文档
-/// * `types` - 请求的类型；空集合表示全部当前任务
-///
-/// # 返回
-/// 原地写入类型约束，不访问存储。
+// 过滤已退役的历史任务类型；显式仅选旧类型时返回空集，禁止扩大查询范围。
+// 原地写入类型约束，不访问存储。
+//
+// `types`：请求的类型；空集合表示全部当前任务。
 fn insert_active_type_filter(filter: &mut Document, types: &[WorkItemType]) {
     let active_types = types
         .iter()
@@ -276,7 +252,7 @@ fn insert_due_range(filter: &mut Document, due_from: Option<Instant>, due_before
     }
 }
 
-/// 将检索串按字面量转义后，在对象、原因和影响摘要上做忽略大小写匹配。
+// 将队列检索词转义为字面量，在业务对象、任务原因与影响摘要上按不区分大小写匹配。
 fn literal_query_filter(query: &str) -> Document {
     let literal = regex::escape(query.trim());
     doc! {
@@ -290,7 +266,7 @@ fn literal_query_filter(query: &str) -> Document {
     }
 }
 
-/// 空对象形状失败关闭；否则按任务类型与对象类型成对匹配。
+// 基于服务端登记的任务类型和业务对象类型对提供查询条件；空集合不匹配任何任务，不降级为无筛选。
 fn object_access_shape_filter(shapes: &[(WorkItemType, String)]) -> Document {
     if shapes.is_empty() {
         return doc! { "id": { "$exists": false } };
@@ -307,7 +283,7 @@ fn object_access_shape_filter(shapes: &[(WorkItemType, String)]) -> Document {
     doc! { "$or": alternatives }
 }
 
-/// 按本人曾负责、完成或关闭的事实收窄历史任务。
+// 以真实历史责任、完成人或关闭人事实收窄 History 视图；该筛选不替代工作项统一列表授权。
 fn history_scope_filter(actor_id: &str) -> Document {
     doc! { "$or": [
         { "responsibility_actor_ids": actor_id },
@@ -325,7 +301,7 @@ mod tests {
     use super::WorkItemFilter;
     use crate::entity::work_item::{WorkItemPriority, WorkItemStatus, WorkItemType};
 
-    /// 处理人条件与个人、管理和历史责任求交，空交集失败关闭而空筛选保持原范围。
+    // 验证：处理人条件与个人、管理和历史责任求交，空交集失败关闭而空筛选保持原范围。
     #[test]
     fn handler_candidates_intersect_without_widening_scope() {
         let handlers = vec!["handler-a".to_string(), "handler-b".to_string()];
@@ -490,7 +466,7 @@ mod retired_review_tests {
 
     use super::*;
 
-    /// 默认队列和显式类型筛选均不得重新暴露已退役任务。
+    // 验证：默认队列和显式类型筛选均不得重新暴露已退役任务。
     #[test]
     fn retired_review_types_are_excluded_from_queues() {
         let default = WorkItemFilter::default().to_doc();

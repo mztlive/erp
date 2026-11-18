@@ -67,17 +67,12 @@ impl fmt::Debug for SalesSelectionSession {
 }
 
 impl SalesSelectionSession {
-    /// 首次发布建立空会话。
-    ///
-    /// # 参数
-    /// * `id` - 会话身份
-    /// * `booklet_id` - 选品册
-    ///
-    /// # 返回
+    /// 受理首次发布时为共享或独立参与人创建版本为 1 的空选择会话。
     /// 返回版本为 1 的空会话。
     ///
-    /// # 错误
-    /// 无。
+    /// 输入约定：
+    /// - `id`：会话身份
+    /// - `booklet_id`：选品册
     pub fn new(id: SalesSelectionSessionId, booklet_id: SalesSelectionBookletId) -> Self {
         Self {
             base: BaseModel::new(id.to_string()),
@@ -94,19 +89,15 @@ impl SalesSelectionSession {
     }
 
     /// 为一张提货券建立独立空会话。
-    ///
-    /// # 参数
-    /// * `id` - 会话身份
-    /// * `booklet_id` - 所属选品册
-    /// * `participant_id` - 参与人稳定身份
-    /// * `voucher_code_hash` - 券码哈希
-    /// * `voucher_code_ciphertext` - 券码密文
-    ///
-    /// # 返回
     /// 返回版本为 1 的个人会话。
-    ///
-    /// # 错误
     /// 参与人身份为空、超长或券码哈希、密文为空时拒绝。
+    ///
+    /// 输入约定：
+    /// - `id`：会话身份
+    /// - `booklet_id`：所属选品册
+    /// - `participant_id`：参与人稳定身份
+    /// - `voucher_code_hash`：券码哈希
+    /// - `voucher_code_ciphertext`：券码密文
     pub fn new_participant(
         id: SalesSelectionSessionId,
         booklet_id: SalesSelectionBookletId,
@@ -128,18 +119,14 @@ impl SalesSelectionSession {
     }
 
     /// 保存完整选择集合。
-    ///
-    /// # 参数
-    /// * `expected_version` - 预期会话版本
-    /// * `choices` - 完整选择
-    /// * `submit_mode` - 册的提交方式
-    /// * `allowed_ids` - 本册允许选择的陈列项
-    ///
-    /// # 返回
     /// 成功后递增版本并替换选择。
-    ///
-    /// # 错误
     /// 版本冲突、冻结、重复项、非法份数或不属于本册的项使整次失败。
+    ///
+    /// 输入约定：
+    /// - `expected_version`：预期会话版本
+    /// - `choices`：完整选择
+    /// - `submit_mode`：册的提交方式
+    /// - `allowed_ids`：本册允许选择的陈列项
     pub fn save(
         &mut self,
         expected_version: u64,
@@ -154,15 +141,11 @@ impl SalesSelectionSession {
     }
 
     /// 提交前校验版本并冻结。
-    ///
-    /// # 参数
-    /// * `expected_version` - 确认清单上的会话版本
-    ///
-    /// # 返回
-    /// 冻结会话。
-    ///
-    /// # 错误
+    /// 结果：冻结会话。
     /// 版本冲突、已冻结或未选任何项时拒绝。
+    ///
+    /// 输入约定：
+    /// - `expected_version`：确认清单上的会话版本
     pub fn freeze_for_submit(&mut self, expected_version: u64) -> Result<()> {
         self.ensure_writable(expected_version)?;
         if self.choices.is_empty() {
@@ -173,16 +156,12 @@ impl SalesSelectionSession {
     }
 
     /// 按份采购重算金额合计。
-    ///
-    /// # 参数
-    /// * `submit_mode` - 提交方式
-    /// * `price_of` - 由陈列项身份取售价
-    ///
-    /// # 返回
-    /// 商城兑换返回 `None`；按份采购返回合计。
-    ///
-    /// # 错误
+    /// 结果：商城兑换返回 `None`；按份采购返回合计。
     /// 缺份数、缺售价或溢出时拒绝。
+    ///
+    /// 输入约定：
+    /// - `submit_mode`：提交方式
+    /// - `price_of`：由陈列项身份取售价
     pub fn quantity_total<F>(&self, submit_mode: SubmitMode, mut price_of: F) -> Result<Option<Amount>>
     where
         F: FnMut(&SalesSelectionDisplayItemId) -> Option<Amount>,
@@ -200,16 +179,12 @@ impl SalesSelectionSession {
         Ok(Some(total))
     }
 
-    /// 校验可写且版本匹配。
-    ///
-    /// # 参数
-    /// * `expected_version` - 预期版本
-    ///
-    /// # 返回
-    /// 通过时允许写入。
-    ///
-    /// # 错误
-    /// 已冻结或版本冲突时拒绝。
+    // 校验可写且版本匹配。
+    // 结果：通过时允许写入。
+    // 已冻结或版本冲突时拒绝。
+    //
+    // 输入约定：
+    // - `expected_version`：预期版本
     fn ensure_writable(&self, expected_version: u64) -> Result<()> {
         if self.frozen {
             return Err(Error::from("选品已提交，不能再修改"));
@@ -222,17 +197,13 @@ impl SalesSelectionSession {
 }
 
 /// 规范化完整选择集合。
-///
-/// # 参数
-/// * `choices` - 原始选择
-/// * `submit_mode` - 提交方式
-/// * `allowed_ids` - 允许的陈列项
-///
-/// # 返回
 /// 返回通过校验的选择。重复项整次拒绝，不会合并。
-///
-/// # 错误
 /// 重复、越权、份数非法或混用时整次失败。
+///
+/// 输入约定：
+/// - `choices`：原始选择
+/// - `submit_mode`：提交方式
+/// - `allowed_ids`：允许的陈列项
 pub fn normalize_choices(
     choices: Vec<SessionChoice>,
     submit_mode: SubmitMode,
@@ -257,17 +228,13 @@ pub fn normalize_choices(
     Ok(normalized)
 }
 
-/// 按提交方式校验份数。
-///
-/// # 参数
-/// * `quantity` - 请求份数
-/// * `submit_mode` - 提交方式
-///
-/// # 返回
-/// 按份采购返回 1–100000；商城兑换返回 `None`。
-///
-/// # 错误
-/// 缺份数、携带份数或超出范围时拒绝。
+// 按提交方式校验份数。
+// 结果：按份采购返回 1–100000；商城兑换返回 `None`。
+// 缺份数、携带份数或超出范围时拒绝。
+//
+// 输入约定：
+// - `quantity`：请求份数
+// - `submit_mode`：提交方式
 fn normalize_quantity(quantity: Option<u32>, submit_mode: SubmitMode) -> Result<Option<u32>> {
     match submit_mode {
         SubmitMode::ByQuantity | SubmitMode::PickupVoucher => {

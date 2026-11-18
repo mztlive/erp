@@ -35,13 +35,11 @@ pub(super) struct PlaceDispatch {
 }
 
 impl SupplierFulfillmentProcess {
-    /// 在原快照中检查幂等结果或授权新候选，再写入完整下单意图。
-    /// # 参数
-    /// req、actor 为当前请求和真实操作人，executor 为创建入口的事务执行器。
-    /// # 返回
-    /// 已授权的原订单或等待事务提交后派发的新意图。
-    /// # 错误
-    /// 当前资格不足、目标越权、来源无效、版本冲突或写入失败时拒绝。
+    // 在原快照中检查幂等结果或授权新候选，再写入完整下单意图。
+    //
+    // req、actor 为当前请求和真实操作人，executor 为创建入口的事务执行器。已授权的原订单或等待事务提交后派发的新意图。
+    //
+    // 当前资格不足、目标越权、来源无效、版本冲突或写入失败时拒绝。
     pub(super) async fn prepare_place_intent(
         &self,
         req: &PlaceFulfillmentOrderRequest,
@@ -91,7 +89,7 @@ impl SupplierFulfillmentProcess {
     }
 }
 
-/// 候选责任只取服务端解析的正式跟进人与主属组织，不携带已有记录版本。
+// 候选责任只取服务端解析的正式跟进人与主属组织，不携带已有记录版本。
 fn place_candidate(order: &SupplierFulfillmentOrder) -> AccessTarget {
     AccessTarget::Candidate(ObjectFacts {
         resource: supplier_fulfillment::ORDER_SUBMIT.resource().into(),
@@ -115,7 +113,7 @@ mod tests {
 
     use super::*;
 
-    /// 创建候选必须先满足快照边界，再保留真实授权设施的错误，不能降级为功能资格查询。
+    // 创建候选必须先满足快照边界，再保留真实授权设施的错误，不能降级为功能资格查询。
     #[tokio::test]
     async fn place_candidate_requires_snapshot_and_propagates_authorization_failure() {
         let order = SupplierFulfillmentOrder::new(

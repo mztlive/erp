@@ -19,20 +19,16 @@ use crate::{Error, Result};
 impl SalesSelectionService {
     /// 复制已授权原册，所有读写使用调用方同一事务。
     /// 调用方须在同一执行器核验原册、新客户及创建候选；actor_id 只用于领域留痕。
-    ///
-    /// # 参数
-    /// * `source` - 事务内完成对象授权的原册
-    /// * `req` - 原册版本、新客户与幂等键
-    /// * `customer` - 已授权新客户事实
-    /// * `actor_id` - 复制操作人
-    /// * `fingerprint` - 绑定原册身份和完整请求的指纹
-    /// * `executor` - 调用方事务执行器
-    ///
-    /// # 返回
     /// 返回新册详情；同键同请求重放返回同一本新册。
-    ///
-    /// # 错误
     /// 客户停用、原册版本变化、准备中、幂等冲突或持久化失败时拒绝。
+    ///
+    /// 输入约定：
+    /// - `source`：事务内完成对象授权的原册
+    /// - `req`：原册版本、新客户与幂等键
+    /// - `customer`：已授权新客户事实
+    /// - `actor_id`：复制操作人
+    /// - `fingerprint`：绑定原册身份和完整请求的指纹
+    /// - `executor`：调用方事务执行器
     pub async fn copy(
         &self,
         source: &SalesSelectionBooklet,

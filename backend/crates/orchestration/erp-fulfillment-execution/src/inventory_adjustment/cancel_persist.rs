@@ -54,14 +54,11 @@ pub(crate) struct StockAdjustmentCancelPersistInput {
     pub(crate) document_no: String,
     pub(crate) now: Instant,
 }
-/// 在同一事务内应用取消计划、关闭全部开放任务并写回库存调整单。
-/// # 参数
-/// * `db` - 组合层数据库句柄。
-/// * `input` - 已准备的领域变更、审批计划及认证操作人。
-/// # 返回
-/// 返回全部事实和成功事件共同提交后的调整单。
-/// # 错误
-/// 事务内授权、版本或终态验证失败，或任一持久化步骤失败。
+// 在同一事务内应用取消计划、关闭全部开放任务并写回库存调整单。
+//
+// `db` 为组合层数据库句柄；`input` 为已准备的领域变更、审批计划及认证操作人。返回全部事实和成功事件共同提交后的调整单。
+//
+// 事务内授权、版本或终态验证失败，或任一持久化步骤失败。
 pub(crate) async fn persist_stock_adjustment_cancel(
     db: &Database,
     input: StockAdjustmentCancelPersistInput,
@@ -75,7 +72,7 @@ pub(crate) async fn persist_stock_adjustment_cancel(
         .await
 }
 
-/// 重验原目标并构造不可变取消事实，沿用调用方的唯一事务。
+// 重验原目标并构造不可变取消事实，沿用调用方的唯一事务。
 async fn persist_cancel_step(
     db: &Database,
     input: StockAdjustmentCancelPersistInput,
@@ -104,7 +101,7 @@ async fn persist_cancel_step(
     apply_cancel_writes(db, input, authorization, closed_tasks, fact, audit, executor).await
 }
 
-/// 决定写入的单据与实例读取必须仍处于同一事务快照。
+// 决定写入的单据与实例读取必须仍处于同一事务快照。
 async fn revalidate_cancel_source(
     db: &Database,
     input: &StockAdjustmentCancelPersistInput,
@@ -142,7 +139,7 @@ async fn revalidate_cancel_source(
     input.workflow.as_ref().authorize_stock_adjustment_cancel(&instance, &input.actor, executor).await
 }
 
-/// 从原命令和全部历史任务形成库存领域拥有的事实。
+// 从原命令和全部历史任务形成库存领域拥有的事实。
 async fn prepare_cancellation_fact(
     db: &Database,
     input: &StockAdjustmentCancelPersistInput,
@@ -178,7 +175,7 @@ async fn prepare_cancellation_fact(
     })?)
 }
 
-/// 保持审批回执为首笔物理写；业务、事实、通知和审计缺一即整体失败。
+// 保持审批回执为首笔物理写；业务、事实、通知和审计缺一即整体失败。
 async fn apply_cancel_writes(
     db: &Database,
     mut input: StockAdjustmentCancelPersistInput,
@@ -224,7 +221,7 @@ async fn apply_cancel_writes(
     Ok(input.adjustment)
 }
 
-/// 取消成功事件仅记录安全的中文说明；事件 ID 由业务事实保存关联。
+// 取消成功事件仅记录安全的中文说明；事件 ID 由业务事实保存关联。
 fn cancel_audit(
     input: &StockAdjustmentCancelPersistInput,
     authorization: &CancelAuthorization,
@@ -241,21 +238,12 @@ fn cancel_audit(
         .map_err(Into::into)
 }
 
-/// 在同一事务快照内重读并校验普通撤回需要关闭的开放任务。
-///
-/// # 参数
-/// * `db` - 执行与任务所在数据库。
-/// * `instance` - 待撤回的审批实例。
-/// * `expected_execution` - 事务外加载的当前执行。
-/// * `expected_tasks` - 事务外加载的开放任务。
-/// * `authorization` - 已证明的撤回授权，提供责任组织。
-/// * `executor` - 当前事务执行器。
-///
-/// # 返回
-/// 返回事务内重读且与预期身份、版本一致的开放任务。
-///
-/// # 错误
-/// 取消策略、当前执行、任务数量或任务身份变化，或适配器登记不完整时返回冲突或下层错误。仓储读取失败时返回对应错误。
+// 在同一事务快照内重读并校验普通撤回需要关闭的开放任务。
+//
+// `db` 为执行与任务所在数据库；`instance` 为待撤回的审批实例；`expected_execution` 为事务外加载的当前执行；`expected_tasks` 为事务外加载的开放任务；
+// `authorization` 为已证明的撤回授权，提供责任组织。返回事务内重读且与预期身份、版本一致的开放任务。
+//
+// 取消策略、当前执行、任务数量或任务身份变化，或适配器登记不完整时返回冲突或下层错误。仓储读取失败时返回对应错误。
 pub(crate) async fn revalidate_cancel_open_tasks(
     db: &Database,
     instance: &ApprovalProcessInstance,
@@ -320,21 +308,13 @@ pub(crate) struct StockAdjustmentCancelNotificationInput<'a> {
     now: Instant,
 }
 
-/// 在普通撤回事务内追加唯一通知 outbox。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `input` - 取消通知意图、授权与收件人上下文
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 唯一取消通知写入 outbox 时返回 `Ok(())`。
-///
-/// # 错误
-/// 通知意图不唯一或与持久化合同不一致，或仓储写入失败时返回错误。
-///
-/// # 关键业务约束
-/// 普通撤回必须产生唯一 `Cancelled` 通知；运行时管理员撤回时操作人也在收件人内。
+// 在普通撤回事务内追加唯一通知 outbox。
+//
+// `input` 为取消通知意图、授权与收件人上下文。唯一取消通知写入 outbox 时返回 `Ok(())`。
+//
+// 通知意图不唯一或与持久化合同不一致，或仓储写入失败时返回错误。
+//
+// 普通撤回必须产生唯一 `Cancelled` 通知；运行时管理员撤回时操作人也在收件人内。
 pub(crate) async fn persist_stock_adjustment_cancel_notifications(
     db: &Database,
     input: StockAdjustmentCancelNotificationInput<'_>,
@@ -386,17 +366,9 @@ pub(crate) async fn persist_stock_adjustment_cancel_notifications(
 
 /// 在审批运行时持有的事务内撤回库存调整审批。
 ///
-/// # 参数
-/// * `db` - 调整单与运行事实所在数据库。
-/// * `context` - 审批运行时冻结的受阻取消上下文。
-/// * `action` - 合同强类型领域动作。
-/// * `actor` - 已认证的运行时操作人。
-/// * `executor` - 审批运行时持有的事务执行器。
+/// `db` 为调整单与运行事实所在数据库；`context` 为审批运行时冻结的受阻取消上下文；`action` 为合同强类型领域动作；`actor` 为已认证的运行时操作人；`executor`
+/// 为审批运行时持有的事务执行器。调整单已撤回并写入审计时无返回值。
 ///
-/// # 返回
-/// 调整单已撤回并写入审计时无返回值。
-///
-/// # 错误
 /// 缺少事务会话、上下文或受阻运行事实不匹配、调整单不存在、主题版本变化、动作不允许，或单据与审计写入失败时返回对应错误。
 pub async fn cancel_stock_adjustment_approval_apply(
     db: &Database,
@@ -442,20 +414,12 @@ pub async fn cancel_stock_adjustment_approval_apply(
     Ok(())
 }
 
-/// 校验受阻取消动作仍精确指向同一 BLOCKED 实例、执行和无任务事实。
-///
-/// # 参数
-/// * `db` - 实例、绑定、快照与任务所在数据库。
-/// * `context` - 审批运行时冻结的受阻取消上下文。
-/// * `actor` - 已认证的运行时操作人。
-/// * `subject_version` - 已从上下文解析的主题版本。
-/// * `executor` - 当前事务执行器。
-///
-/// # 返回
-/// 实例、执行、绑定、快照一致且没有开放任务时无返回值。
-///
-/// # 错误
-/// 执行缺失、实例或执行不存在、绑定或快照不一致、状态不是阻塞、操作人不一致，或仍有开放任务时返回 `ConflictError`。仓储读取失败时返回对应错误。
+// 校验受阻取消动作仍精确指向同一 BLOCKED 实例、执行和无任务事实。
+//
+// `db` 为实例、绑定、快照与任务所在数据库；`context` 为审批运行时冻结的受阻取消上下文；`actor` 为已认证的运行时操作人；`subject_version` 为已从上下文解析的主题版本；
+// 沿用原事务的执行器。实例、执行、绑定、快照一致且没有开放任务时无返回值。
+//
+// 执行缺失、实例或执行不存在、绑定或快照不一致、状态不是阻塞、操作人不一致，或仍有开放任务时返回 `ConflictError`。仓储读取失败时返回对应错误。
 pub(crate) async fn validate_blocked_cancel_runtime_context(
     db: &Database,
     context: &ApprovalActionContext,
@@ -508,7 +472,7 @@ pub(crate) async fn validate_blocked_cancel_runtime_context(
     validate_blocked_execution(db, context, actor, &instance, execution_id, executor).await
 }
 
-/// 实例和冻结快照校验通过后，读取受阻执行并确认不存在开放任务。
+// 实例和冻结快照校验通过后，读取受阻执行并确认不存在开放任务。
 async fn validate_blocked_execution(
     db: &Database,
     context: &ApprovalActionContext,

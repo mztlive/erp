@@ -34,21 +34,13 @@ impl FulfillmentProcess {
     ///
     /// 门槛、采购销售分配、凭证资产、履约记录、任务完成和审计位于同一事务。
     ///
-    /// # 参数
-    /// * `id` - 记录主键
-    /// * `req` - 现场事实、乐观锁版本与图片凭证
-    /// * `pending_assets` - 本次待登记的图片凭证批次
-    /// * `actor` - 已通过鉴权的审计操作人
+    /// `id` 为记录主键；`req` 为现场事实、乐观锁版本与图片凭证；`pending_assets` 为本次待登记的图片凭证批次。返回确认后的记录视图。
     ///
-    /// # 返回
-    /// 返回确认后的记录视图。
+    /// `ValidationError`：地点、时间、说明、数量或图片不合法。`NotFound`：记录/采购单/分配/凭证不存在。
     ///
-    /// # 错误
-    /// * `ValidationError` - 地点、时间、说明、数量或图片不合法
-    /// * `NotFound` - 记录/采购单/分配/凭证不存在
-    /// * `ConflictError` - 状态不允许确认或版本已变化
-    /// * `BusinessLogicError` - 门槛未满足或分配无效
-    /// * `OutcomeUnknown` - 提交结果无法确认
+    /// `ConflictError`：状态不允许确认或版本已变化。`BusinessLogicError`：门槛未满足或分配无效。
+    ///
+    /// `OutcomeUnknown`：提交结果无法确认。
     #[tracing::instrument(
         name = "fulfillment.service_fulfillment_confirm",
         skip_all,
@@ -83,20 +75,11 @@ impl FulfillmentProcess {
     }
 }
 
-/// 在事务内写入现场事实、凭证资产并确认服务履约。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `target` - 服务履约主键及调用方看到的乐观锁版本
-/// * `confirmation` - 已规范化的确认现场事实
-/// * `pending_assets` - 本次待登记图片凭证
-/// * `actor` - 已通过鉴权的审计操作人
-///
-/// # 返回
-/// 返回确认后的记录视图。
-///
-/// # 错误
-/// 记录不存在、版本冲突、门槛失败或事务提交失败时返回错误。
+// 在事务内写入现场事实、凭证资产并确认服务履约。
+//
+// `target` 为服务履约主键及调用方看到的乐观锁版本；`confirmation` 为已规范化的确认现场事实；`pending_assets` 为本次待登记图片凭证。
+//
+// 返回确认后的记录视图。记录不存在、版本冲突、门槛失败或事务提交失败时返回错误。
 async fn persist_confirmed_service_fulfillment(
     db: &Database,
     task_identity: &Arc<AuthorizationService>,
@@ -150,21 +133,10 @@ struct ServiceConfirmationTarget<'a> {
     version: u64,
 }
 
-/// 在调用方事务内完成门槛校验、凭证登记与状态迁移。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `target` - 服务履约主键及调用方看到的乐观锁版本
-/// * `confirmation` - 已规范化的确认现场事实
-/// * `pending_assets` - 本次待登记图片凭证
-/// * `identity` - 写入前已验证的操作人与审计上下文
-/// * `session` - 事务会话
-///
-/// # 返回
-/// 返回确认后的实体。
-///
-/// # 错误
-/// 记录不存在、版本冲突、门槛失败或凭证不合法时返回错误。
+// 在调用方事务内完成门槛校验、凭证登记与状态迁移。
+//
+// `target` 为服务履约主键及调用方看到的乐观锁版本；`confirmation` 为已规范化的确认现场事实；`pending_assets` 为本次待登记图片凭证；`identity`
+// 为写入前已验证的操作人与审计上下文；`session` 为事务会话。返回确认后的实体。记录不存在、版本冲突、门槛失败或凭证不合法时返回错误。
 async fn confirm_service_fulfillment_apply(
     db: &Database,
     task_identity: &Arc<AuthorizationService>,
@@ -191,17 +163,9 @@ async fn confirm_service_fulfillment_apply(
     .await
 }
 
-/// 把确认命令中的临时凭证引用替换为本批次正式资产 ID。
-///
-/// # 参数
-/// * `req` - 确认命令
-/// * `pending_assets` - 本次待登记图片凭证
-///
-/// # 返回
-/// 返回正式凭证主键。
-///
-/// # 错误
-/// 引用了未上传文件或存在未被引用的上传文件时返回校验错误。
+// 把确认命令中的临时凭证引用替换为本批次正式资产 ID。
+//
+// `pending_assets` 为本次待登记图片凭证。返回正式凭证主键。引用了未上传文件或存在未被引用的上传文件时返回校验错误。
 fn resolve_service_evidence_id(
     req: &mut ConfirmServiceFulfillmentRequest,
     pending_assets: &dyn PendingAttachmentBatch,
@@ -212,22 +176,13 @@ fn resolve_service_evidence_id(
     Ok(req.evidence_attachment_id.clone())
 }
 
-/// 在确认事务内校验正式或本批次待登记的现场图片凭证。
-///
-/// 本批次待登记资产在事务前已按 [`ServiceEvidencePolicy`] 完成元数据校验，
-/// 此处只识别其属于本批次；正式资产按同一策略校验持久化元数据。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `asset_id` - 正式凭证主键
-/// * `pending_assets` - 本次待登记图片凭证
-/// * `session` - 事务会话
-///
-/// # 返回
-/// 凭证可用时返回 `Ok(())`。
-///
-/// # 错误
-/// 凭证不存在、已销毁或元数据不合法时返回错误。
+// 在确认事务内校验正式或本批次待登记的现场图片凭证。
+//
+// 本批次待登记资产在事务前已按 [`ServiceEvidencePolicy`] 完成元数据校验，此处只识别其属于本批次；正式资产按同一策略校验持久化元数据。
+//
+// `asset_id` 为正式凭证主键；`pending_assets` 为本次待登记图片凭证；`session` 为事务会话。凭证可用时返回 `Ok(())`。
+//
+// 凭证不存在、已销毁或元数据不合法时返回错误。
 pub(super) async fn ensure_service_evidence_asset(
     db: &Database,
     asset_id: &FileAssetId,
@@ -267,7 +222,7 @@ trait ServiceConfirmationPort: Send + Sync {
     async fn confirm(&self, record: &mut Self::Record, executor: &mut dyn Executor) -> Result<()>;
     async fn task(&self, record: &Self::Record, executor: &mut dyn Executor) -> Result<()>;
     fn is_acceptance_eligible(&self, record: &Self::Record) -> bool;
-    /// 在成功确认后记录整笔实际成本，失败确认不得执行此步骤。
+    // 在成功确认后记录整笔实际成本，失败确认不得执行此步骤。
     async fn cost(
         &self,
         record: &Self::Record,
@@ -278,7 +233,7 @@ trait ServiceConfirmationPort: Send + Sync {
     fn audit_content(&self, record: &Self::Record) -> BusinessEventContent;
 }
 
-/// 依次确认事实、完成任务、记录成功履约实际成本并创建验收任务。
+// 依次确认事实、完成任务、记录成功履约实际成本并创建验收任务。
 async fn execute_confirmation<P: ServiceConfirmationPort, S: AuditEventSink>(
     port: &P,
     context: &BusinessEventContext,
@@ -310,7 +265,7 @@ impl<P: ServiceConfirmationPort> AuditedCommand for ServiceConfirmationCommand<'
     }
 }
 
-/// 业务规则与写入顺序由服务确认流程维护，统一边界负责事件构造和持久化。
+// 业务规则与写入顺序由服务确认流程维护，统一边界负责事件构造和持久化。
 async fn execute_confirmation_steps<P: ServiceConfirmationPort>(
     port: &P,
     executor: &mut dyn Executor,
@@ -430,18 +385,11 @@ impl ServiceConfirmationPort for MongoServiceConfirmation<'_> {
         record.is_acceptance_eligible()
     }
 
-    /// 实际服务成本与首次确认、任务和验收可用事实共享同一 Executor。
-    ///
-    /// # 参数
-    /// * `record` - 已确认的服务履约。数量、分配、销售行和证据取自该记录；发生时间优先用 `service_ended_at`。
-    /// * `purchase` - 成本所属采购单。
-    /// * `executor` - 与确认共用的执行器。
-    ///
-    /// # 返回
-    /// 实际成本及销售明细分配写入成功。
-    ///
-    /// # 错误
-    /// 采购销售分配或采购版本明细不存在时返回 `NotFound`；成本准备或成本写入失败时返回对应错误。
+    // 实际服务成本与首次确认、任务和验收可用事实共享同一 Executor。
+    //
+    // `record` 为已确认的服务履约。数量、分配、销售行和证据取自该记录；发生时间优先用 `service_ended_at`；`purchase` 为成本所属采购单；`executor` 为与确认共用的执行器。
+    //
+    // 实际成本及销售明细分配写入成功。采购销售分配或采购版本明细不存在时返回 `NotFound`；成本准备或成本写入失败时返回对应错误。
     async fn cost(
         &self,
         record: &Self::Record,
@@ -491,7 +439,7 @@ mod tests {
 
     use super::{ConfirmServiceFulfillmentRequest, ServiceCryptoAdapter, service_confirmation_from_request};
 
-    /// 确认边界只持久化密文，并以同一份规范化明文计算查询指纹。
+    // 确认边界只持久化密文，并以同一份规范化明文计算查询指纹。
     #[test]
     fn confirmation_encrypts_normalized_service_location() {
         let sensitive_data = SensitiveDataCodec::from_secret(b"test-secret-that-is-at-least-32-bytes");

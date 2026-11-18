@@ -24,16 +24,14 @@ const SALES_ORDERS: &str = <Database as SalesOrderExt>::SALES_ORDERS;
 const WAREHOUSES: &str = <Database as WarehouseExt>::WAREHOUSES;
 const WAREHOUSE_REVISIONS: &str = <Database as WarehouseExt>::WAREHOUSE_REVISIONS;
 
-/// 构造履约责任队列聚合管道。
-///
-/// # 参数
-/// * `filter` - 已由 Service 校验的筛选和分页
-///
-/// # 返回
-/// 返回从开放 WorkItem 出发、筛选后一次性分页的聚合阶段。
-///
-/// # 错误
-/// 分页偏移超出 MongoDB 可表示范围时返回错误。
+// 生成履约责任队列聚合管道。
+//
+// 调用参数：
+// * `filter` - 已由 Service 校验的筛选和分页
+//
+// 返回从开放 WorkItem 出发、筛选后一次性分页的聚合阶段。
+//
+// 分页偏移超出 MongoDB 可表示范围时返回错误。
 pub(super) fn fulfillment_queue_pipeline(filter: &FulfillmentQueueFilter) -> Result<Vec<Document>> {
     let access = filter.authorization.as_ref().ok_or(Error::UnsupportedDeployment("履约队列缺少任务授权"))?;
     if access.model().resource != "work_item"
@@ -46,7 +44,7 @@ pub(super) fn fulfillment_queue_pipeline(filter: &FulfillmentQueueFilter) -> Res
     page_pipeline(filter, access.stages())
 }
 
-/// 授权阶段先于来源关联、指标和分页执行。
+// 组装履约责任队列的聚合管道时，授权阶段先于来源关联、指标和分页执行。
 fn page_pipeline(filter: &FulfillmentQueueFilter, authorization: &[Document]) -> Result<Vec<Document>> {
     let offset = i64::try_from(filter.offset)
         .map_err(|_| Error::EntityMetadataOutOfRange("fulfillment_queue_offset"))?;
@@ -60,14 +58,14 @@ fn page_pipeline(filter: &FulfillmentQueueFilter, authorization: &[Document]) ->
     Ok(pipeline)
 }
 
-/// 复用任务身份校验、冻结付款条件和实付净额，调用方必须先限定授权任务范围。
-///
-/// # 参数
-/// `matched` 为已经限定到授权责任范围或当前页任务 ID 的匹配条件。
-/// # 返回
-/// 返回核验草稿身份、责任组织并计算付款门槛的聚合阶段。
-/// # 错误
-/// 不返回错误；数据读取失败由仓储执行入口返回。
+// 组装履约责任队列的聚合管道时，复用任务身份校验、冻结付款条件和实付净额，调用方必须先限定授权任务范围。
+//
+// 调用参数：
+// `matched` 为已经限定到授权责任范围或当前页任务 ID 的匹配条件。
+//
+// 返回核验草稿身份、责任组织并计算付款门槛的聚合阶段。
+//
+// 数据读取失败由仓储执行入口返回。
 pub(super) fn fulfillment_facts_pipeline(matched: Document) -> Vec<Document> {
     let mut stages = operation_stages(matched);
     stages.extend(source_stages());
@@ -75,7 +73,7 @@ pub(super) fn fulfillment_facts_pipeline(matched: Document) -> Vec<Document> {
     stages
 }
 
-/// 关联履约草稿并核验冻结任务身份。
+// 组装履约责任队列的聚合管道时，关联履约草稿并核验冻结任务身份。
 fn operation_stages(matched: Document) -> Vec<Document> {
     vec![
         doc! { "$match": matched },
@@ -116,7 +114,7 @@ fn operation_stages(matched: Document) -> Vec<Document> {
     ]
 }
 
-/// 读取来源采购、销售、仓库及付款门槛事实。
+// 组装履约责任队列的聚合管道时，读取来源采购、销售、仓库及付款门槛事实。
 fn source_stages() -> Vec<Document> {
     vec![
         purchase_order_lookup(),
@@ -139,7 +137,7 @@ fn source_stages() -> Vec<Document> {
     ]
 }
 
-/// 核验责任组织并计算付款放行与排序字段。
+// 组装履约责任队列的聚合管道时，核验责任组织并计算付款放行与排序字段。
 fn context_stages() -> Vec<Document> {
     vec![
         doc! {

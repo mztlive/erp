@@ -21,16 +21,7 @@ pub enum QualityResult {
 }
 
 impl QualityResult {
-    /// 返回结果的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回采购收货质检结果的中文名称，供业务界面展示，不作为持久化代码。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Qualified => "合格",
@@ -38,16 +29,7 @@ impl QualityResult {
         }
     }
 
-    /// 返回结果的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回采购收货质检结果的稳定代码，供持久化与查询匹配使用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Qualified => "qualified",
@@ -110,18 +92,9 @@ pub struct SalesReturnLine {
 
 impl SalesReturnLine {
     /// 创建销售退货明细。
-    ///
-    /// 完成申请数量正数校验与「验收信息」一致性校验：实际退回数量不得超过申请
-    /// 数量；可重新入库数量不得超过实际退回数量且必须验收合格。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::SalesReturnLineId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
+    /// 完成申请数量正数校验与「验收信息」一致性校验：实际退回数量不得超过申请数量；可重新入库数量不得超过实际退回数量且必须验收合格。
     /// 返回新建的明细实体。
-    ///
-    /// # 错误
+    /// `id` 为实体主键（`erp_core::ids::SalesReturnLineId`）。
     /// 当申请数量非正或验收信息不一致时返回错误。
     pub fn new(id: SalesReturnLineId, data: SalesReturnLineData) -> Result<Self> {
         if data.requested_quantity.to_decimal().is_sign_negative()
@@ -148,16 +121,7 @@ impl SalesReturnLine {
     }
 
     /// 更新退货明细的验收信息。
-    ///
     /// 复用 `new` 的验收一致性校验；申请数量与原销售明细是固定字段。
-    ///
-    /// # 参数
-    /// * `update` - 更新数据
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 当验收信息不一致时返回错误。
     pub fn update(&mut self, update: SalesReturnLineUpdate) -> Result<()> {
         let received = update.received_quantity.or(self.received_quantity);
@@ -172,36 +136,18 @@ impl SalesReturnLine {
     }
 
     /// 判断验收是否合格。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 验收结果为合格时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn is_qualified(&self) -> bool {
         self.quality_result == Some(QualityResult::Qualified)
     }
 }
 
-/// 校验验收信息一致性。
-///
-/// 规则（数据模型 §6.11）：实际退回数量不得超过申请数量；可重新入库数量不得
-/// 超过实际退回数量，且必须验收合格；验收不合格不得重新入库。
-///
-/// # 参数
-/// * `received` - 实际退回数量
-/// * `quality` - 验收结果
-/// * `restockable` - 可重新入库数量
-/// * `requested` - 申请退回数量
-///
-/// # 返回
-/// 一致返回 `Ok(())`。
-///
-/// # 错误
-/// 验收信息不完整或数量关系矛盾时返回错误。
+// 校验验收信息一致性。
+// 规则（数据模型 §6.11）：实际退回数量不得超过申请数量；可重新入库数量不得超过实际退回数量，且必须验收合格；验收不合格不得重新入库。
+// 一致返回 `Ok(())`。
+// `received` 为实际退回数量；`quality` 为验收结果。
+// `restockable` 为可重新入库数量；`requested` 为申请退回数量。
+// 验收信息不完整或数量关系矛盾时返回错误。
 fn validate_receiving(
     received: Option<Quantity>,
     quality: Option<QualityResult>,

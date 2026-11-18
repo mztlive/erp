@@ -15,34 +15,13 @@ pub struct CreationBasisSupplierAdapter {
     verified: Option<(SupplierAccountId, Option<SupplierRoleFact>)>,
 }
 impl CreationBasisSupplierAdapter {
-    /// 绑定数据库，供应商事实仍在调用方执行器中读取。
-    ///
-    /// # 参数
-    /// * `db` - 组合根数据库。
-    ///
-    /// # 返回
-    /// 不持有已读取事实的供应商端口。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 绑定数据库，供应商事实仍在调用方执行器中读取。不持有已读取事实的供应商端口。
     pub fn new(db: Database) -> Self {
         Self { db, verified: None }
     }
 
-    /// 复用 guard 后原事务批量取得的指定供应商事实，冻结草稿时不重复查询。
-    ///
-    /// 只能用于此事实取得后的同一事务阶段；任何供应商事实写入后必须重新取证。
-    ///
-    /// # 参数
-    /// * `db` - 组合根数据库。
-    /// * `supplier` - 本阶段指定的供应商。
-    /// * `facts` - 已验证的创建依据事实。
-    ///
-    /// # 返回
-    /// 指定供应商的窄事实端口；其他供应商仍通过原执行器读取。
-    ///
-    /// # 错误
-    /// 不返回错误。缺失供应商及商务指针仍由采购草稿构造报告原有错误。
+    /// 冻结采购草稿时，复用原事务在供给 guard 后批量读取的指定供应商事实；其他供应商仍走原执行器。
+    /// 仅在当前事务阶段复用，任何供应商事实写入后都须重新取证。供应商或商务指针缺失仍由草稿构造报原错误。
     pub fn from_facts(db: Database, supplier: &SupplierAccountId, facts: &CreationBasisFacts) -> Self {
         Self { db, verified: Some((supplier.clone(), facts.suppliers.get(supplier.as_ref()).cloned())) }
     }
@@ -73,17 +52,13 @@ impl CreationBasisSupplierPort for CreationBasisSupplierAdapter {
         .await
         .map_err(map_supplier_error)
     }
-    /// 指定供应商复用原事务批量事实，缺键和缺商务指针保持原样；其他身份仍查库。
-    ///
-    /// # 参数
-    /// * `id` - 供应商账号。
-    /// * `executor` - 未命中缓存时使用的执行器。
-    ///
-    /// # 返回
-    /// 命中构造时缓存则原样返回缓存的 `Option`。否则按库中账号映射当前商务修订；账号不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// 未命中缓存且供应商账号读取失败时返回对应错误。命中缓存不访问数据库。
+    // 指定供应商复用原事务批量事实，缺键和缺商务指针保持原样；其他身份仍查库。
+    //
+    // `id` 为供应商账号；`executor` 为未命中缓存时使用的执行器。
+    //
+    // 命中构造时缓存则原样返回缓存的 `Option`。否则按库中账号映射当前商务修订；账号不存在时返回 `None`。
+    //
+    // 未命中缓存且供应商账号读取失败时返回对应错误。命中缓存不访问数据库。
     async fn supplier_role(
         &self,
         id: &SupplierAccountId,
@@ -106,7 +81,7 @@ impl CreationBasisSupplierPort for CreationBasisSupplierAdapter {
     }
 }
 
-/// 跨域错误保留业务拒绝、仓储错误与事务冲突类别。
+// 跨域错误保留业务拒绝、仓储错误与事务冲突类别。
 fn map_supplier_error(error: erp_supplier::Error) -> erp_procurement::Error {
     use erp_procurement::Error as Target;
     use erp_supplier::Error as Source;

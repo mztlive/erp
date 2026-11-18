@@ -41,31 +41,21 @@ pub struct CostService {
 }
 
 impl CostService {
-    /// 创建成本服务实例。
+    /// 在组装成本入账和分摊用例时绑定本域数据库句柄，实际查询或写入由各用例方法执行。
     ///
-    /// # 参数
-    /// * `db` - 数据库实例
-    ///
-    /// # 返回
-    /// 返回服务实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 输入约定：
+    /// - `db`：数据库实例
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
     /// 在已授权命令的原快照中装配成本事实与全部分配行。
-    ///
-    /// # 参数
-    /// * `id` - 原命令创建的成本事实身份。
-    /// * `executor` - 已完成命令授权和写入的活动快照事务执行器。
-    ///
-    /// # 返回
     /// 返回原事务可见的登记结果，不追加成本详情功能资格。
-    ///
-    /// # 错误
     /// 缺少活动快照证明、成本事实缺失或任一事实读取失败时拒绝。
+    ///
+    /// 输入约定：
+    /// - `id`：原命令创建的成本事实身份。
+    /// - `executor`：已完成命令授权和写入的活动快照事务执行器。
     pub async fn cost_entry_detail_with_executor(
         &self,
         id: &str,
@@ -114,15 +104,11 @@ impl CostService {
 }
 
 /// 校验并形成成本事实列表仓储筛选条件。
-///
-/// # 参数
-/// * `params` - HTTP 契约复用的列表查询参数
-///
-/// # 返回
 /// 返回白名单排序且分页已归一化的仓储筛选条件。
+/// 失败条件：分页参数或排序字段非法时返回验证错误。
 ///
-/// # 错误
-/// 分页参数或排序字段非法时返回验证错误。
+/// 输入约定：
+/// - `params`：HTTP 契约复用的列表查询参数
 pub fn cost_entry_filter(params: &CostEntryListParams) -> Result<CostEntryFilter> {
     params.validate()?;
     let query = params.normalized()?;
@@ -143,16 +129,11 @@ pub fn cost_entry_filter(params: &CostEntryListParams) -> Result<CostEntryFilter
 ///
 /// 金额字段均直接复制持久化金额（`erp_core::money::Amount`）；分配缺失时保持
 /// 既有空列表语义。
-///
-/// # 参数
-/// * `row` - 当前页成本事实持久化投影
-/// * `allocations` - 属于该成本事实的持久化分配事实
-///
-/// # 返回
 /// 返回完整成本事实列表视图。
 ///
-/// # 错误
-/// 不返回错误。
+/// 输入约定：
+/// - `row`：当前页成本事实持久化投影
+/// - `allocations`：属于该成本事实的持久化分配事实
 pub fn cost_entry_row_view(row: CostEntryRow, allocations: Vec<CostAllocation>) -> CostEntryView {
     CostEntryView {
         id: row.id,
@@ -176,16 +157,14 @@ pub fn cost_entry_row_view(row: CostEntryRow, allocations: Vec<CostAllocation>) 
     }
 }
 
-/// 将持久化成本分配事实无损映射为服务响应视图。
-///
-/// 金额字段直接复制原始金额（`erp_core::money::Amount`），不得在读取路径归一化、
-/// 重算或改变小数位。
-///
-/// # 参数
-/// * `allocation` - 仓储读取的成本分配事实
-///
-/// # 返回
-/// 返回字段一一对应的成本分配响应视图。
+// 将持久化成本分配事实无损映射为服务响应视图。
+//
+// 金额字段直接复制原始金额（`erp_core::money::Amount`），不得在读取路径归一化、
+// 重算或改变小数位。
+// 返回字段一一对应的成本分配响应视图。
+//
+// 输入约定：
+// - `allocation`：仓储读取的成本分配事实
 fn cost_allocation_entity_view(allocation: CostAllocation) -> CostAllocationView {
     CostAllocationView {
         id: allocation.base.id,
@@ -201,31 +180,21 @@ fn cost_allocation_entity_view(allocation: CostAllocation) -> CostAllocationView
 /// 去重销售单 ID（保持首次出现顺序）。
 ///
 /// 批量存在性读取前先去重，保证同一销售订单只查询一次。
-///
-/// # 参数
-/// * `ids` - 分配行销售单 ID 列表，可能包含重复
-///
-/// # 返回
 /// 返回去重后的销售单 ID，顺序与首次出现一致。
 ///
-/// # 错误
-/// 无。
+/// 输入约定：
+/// - `ids`：分配行销售单 ID 列表，可能包含重复
 pub fn dedupe_order_ids(ids: &[SalesOrderId]) -> Vec<SalesOrderId> {
     let mut seen = HashSet::with_capacity(ids.len());
     ids.iter().filter(|&id| seen.insert(id)).cloned().collect()
 }
 
 /// 按输入顺序返回第一个缺失的销售单 ID。
+/// 结果：全部存在时返回 `None`；否则返回输入顺序中第一个缺失的 ID。
 ///
-/// # 参数
-/// * `requested` - 去重后的请求销售单 ID（保持输入顺序）
-/// * `existing` - 仓储批量返回的已存在销售单 ID
-///
-/// # 返回
-/// 全部存在时返回 `None`；否则返回输入顺序中第一个缺失的 ID。
-///
-/// # 错误
-/// 无。
+/// 输入约定：
+/// - `requested`：去重后的请求销售单 ID（保持输入顺序）
+/// - `existing`：仓储批量返回的已存在销售单 ID
 pub fn missing_order_id(requested: &[SalesOrderId], existing: &[SalesOrderId]) -> Option<SalesOrderId> {
     let existing = existing.iter().collect::<HashSet<_>>();
     for id in requested {
@@ -244,15 +213,11 @@ pub struct PreparedCostEntry {
     pub allocations: Vec<CostAllocation>,
 }
 /// 校验请求和已停用的商城范围；必须在外域存在性查询之前调用。
+/// 结果：校验通过时无返回值。
+/// 失败条件：请求字段校验失败时返回 `ValidationError`；`cost_scope` 为 `MallConsumption` 时返回 `BusinessLogicError`。
 ///
-/// # 参数
-/// * `req` - 待创建的成本事实请求。
-///
-/// # 返回
-/// 校验通过时无返回值。
-///
-/// # 错误
-/// 请求字段校验失败时返回 `ValidationError`；`cost_scope` 为 `MallConsumption` 时返回 `BusinessLogicError`。
+/// 输入约定：
+/// - `req`：待创建的成本事实请求。
 pub fn validate_create_cost_entry(req: &CreateCostEntryRequest) -> Result<()> {
     req.validate()?;
     // 商城已移除：拒绝商城消费范围的新增写入口；历史数据仅可读。
@@ -262,15 +227,11 @@ pub fn validate_create_cost_entry(req: &CreateCostEntryRequest) -> Result<()> {
     Ok(())
 }
 /// 在销售存在事实确认后构建金额守恒的成本事实与分配，不开始事务。
-///
-/// # 参数
-/// * `req` - 已通过前置校验的创建请求。
-///
-/// # 返回
 /// 返回尚未持久化的成本事实与分配。
+/// 失败条件：分配金额不守恒或成本实体构造失败时返回对应错误。
 ///
-/// # 错误
-/// 分配金额不守恒或成本实体构造失败时返回对应错误。
+/// 输入约定：
+/// - `req`：已通过前置校验的创建请求。
 pub fn prepare_cost_entry(mut req: CreateCostEntryRequest) -> Result<PreparedCostEntry> {
     // 金额守恒与尾差归属由计划 VO 一次性验证与解析，失败不产生部分计划；
     // Service 只注入已确认的销售事实并编排事务。
@@ -307,7 +268,7 @@ pub fn prepare_cost_entry(mut req: CreateCostEntryRequest) -> Result<PreparedCos
     }
     Ok(PreparedCostEntry { entry, allocations })
 }
-/// 由已消费分配行的创建请求形成成本事实数据。
+// 分配行已由成本计划消费后，从剩余登记字段装配待写入的成本事实数据。
 fn entry_data(req: CreateCostEntryRequest) -> CostEntryData {
     CostEntryData {
         cost_type: req.cost_type,
@@ -332,17 +293,13 @@ fn entry_data(req: CreateCostEntryRequest) -> CostEntryData {
 }
 
 /// 用调用方的 Executor 原子写入成本与分配；审计由组合层随后执行。
+/// 结果：写入成功时无返回值。
+/// 失败条件：仓储写入失败时返回对应错误。
 ///
-/// # 参数
-/// * `db` - 财务领域数据库。
-/// * `prepared` - 已构建的成本事实与分配。
-/// * `executor` - 调用方事务执行器；本函数不另开事务。
-///
-/// # 返回
-/// 写入成功时无返回值。
-///
-/// # 错误
-/// 仓储写入失败时返回对应错误。
+/// 输入约定：
+/// - `db`：财务领域数据库。
+/// - `prepared`：已构建的成本事实与分配。
+/// - `executor`：调用方事务执行器；本函数不另开事务。
 pub async fn persist_cost_entry(
     db: &Database,
     prepared: PreparedCostEntry,

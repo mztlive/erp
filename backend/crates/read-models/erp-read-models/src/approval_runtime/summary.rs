@@ -31,18 +31,16 @@ pub struct DocumentApprovalInstanceSummaryView {
 }
 
 impl DocumentApprovalInstanceSummaryView {
-    /// 从持久化实例和当前执行构造只读摘要，不推导缺失的节点与人员。
-    ///
-    /// # 参数
-    /// * `instance` - 最新审批实例。
-    /// * `current` - 当前执行；缺失时保留空值。
-    /// * `latest_rejection` - 调用方按原历史范围取得的最近驳回原因。
-    ///
-    /// # 返回
-    /// 返回保留轮次、定义版本、受阻代码及人员名称快照的摘要。
-    ///
-    /// # 错误
-    /// 不返回错误；空白人员快照转换为空值。
+    // 从持久化实例和当前执行组装只读摘要，不推导缺失的节点与人员。
+    //
+    // 调用参数：
+    // * `instance` - 最新审批实例。
+    // * `current` - 当前执行；缺失时保留空值。
+    // * `latest_rejection` - 调用方按原历史范围取得的最近驳回原因。
+    //
+    // 返回保留轮次、定义版本、受阻代码及人员名称快照的摘要。
+    //
+    // 空白人员快照转换为空值。
     pub(crate) fn from_runtime(
         instance: &ApprovalProcessInstance,
         current: Option<&ApprovalNodeExecution>,
@@ -61,7 +59,7 @@ impl DocumentApprovalInstanceSummaryView {
             .with_blocker_code(instance.blocker_code.map(|code| code.as_str().to_string()))
     }
 
-    /// 构造运行实例只读摘要。
+    /// 用实例身份和状态初始化审批摘要；实际轮次、节点和人员由调用方按运行事实补齐。
     ///
     /// # 参数
     /// * `id` - 实例主键
@@ -69,9 +67,6 @@ impl DocumentApprovalInstanceSummaryView {
     ///
     /// # 返回
     /// 返回首轮、可选字段全空的摘要。
-    ///
-    /// # 错误
-    /// 无。
     pub fn new(id: String, status: String) -> Self {
         Self {
             id,
@@ -87,121 +82,73 @@ impl DocumentApprovalInstanceSummaryView {
         }
     }
 
-    /// 设置当前轮次。
+    /// 组装审批实例摘要时填入当前轮次。
     ///
     /// # 参数
     /// * `round_no` - 当前轮次
-    ///
-    /// # 返回
-    /// 返回更新后的摘要。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_current_round_no(mut self, round_no: u32) -> Self {
         self.current_round_no = round_no;
         self
     }
 
-    /// 设置当前节点。
+    /// 组装审批实例摘要时填入当前节点键。
     ///
     /// # 参数
     /// * `node` - 当前节点键
-    ///
-    /// # 返回
-    /// 返回更新后的摘要。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_current_node(mut self, node: Option<String>) -> Self {
         self.current_node = node;
         self
     }
 
-    /// 设置当前节点名称。
+    /// 组装审批实例摘要时填入当前节点名称。
     ///
     /// # 参数
     /// * `node_name` - 当前节点名称
-    ///
-    /// # 返回
-    /// 返回更新后的摘要。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_current_node_name(mut self, node_name: Option<String>) -> Self {
         self.current_node_name = node_name;
         self
     }
 
-    /// 设置当前审批人。
+    /// 组装审批实例摘要时填入当前审批人。
     ///
     /// # 参数
     /// * `assignee` - 当前审批人
-    ///
-    /// # 返回
-    /// 返回更新后的摘要。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_current_assignee(mut self, assignee: Option<String>) -> Self {
         self.current_assignee = assignee;
         self
     }
 
-    /// 设置当前审批人显示名。
+    /// 组装审批实例摘要时填入当前审批人显示名。
     ///
     /// # 参数
     /// * `assignee_name` - 当前审批人显示名
-    ///
-    /// # 返回
-    /// 返回更新后的摘要。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_current_assignee_name(mut self, assignee_name: Option<String>) -> Self {
         self.current_assignee_name = assignee_name;
         self
     }
 
-    /// 设置最近驳回原因。
+    /// 组装审批实例摘要时填入最近驳回原因。
     ///
     /// # 参数
     /// * `reason` - 最近驳回原因
-    ///
-    /// # 返回
-    /// 返回更新后的摘要。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_latest_rejection(mut self, reason: Option<String>) -> Self {
         self.latest_rejection = reason;
         self
     }
 
-    /// 设置绑定定义业务版本。
+    /// 组装审批实例摘要时填入绑定定义业务版本。
     ///
     /// # 参数
     /// * `version` - 绑定定义业务版本
-    ///
-    /// # 返回
-    /// 返回更新后的摘要。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_process_version(mut self, version: Option<u32>) -> Self {
         self.process_version = version;
         self
     }
 
-    /// 设置受阻代码。
+    /// 组装审批实例摘要时填入受阻代码。
     ///
     /// # 参数
     /// * `code` - 受阻代码
-    ///
-    /// # 返回
-    /// 返回更新后的摘要。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_blocker_code(mut self, code: Option<String>) -> Self {
         self.blocker_code = code;
         self
@@ -234,16 +181,12 @@ pub struct DocumentApprovalHistorySummaryItemView {
 }
 
 impl DocumentApprovalHistorySummaryItemView {
-    /// 从工作流历史事实构造详情历史条目。
-    ///
-    /// # 参数
-    /// * `item` - 已按原范围和顺序读取的历史事实。
-    ///
-    /// # 返回
-    /// 返回完整保留执行身份、轮次、人员、原因和时间的历史条目。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 生成审批实例或历史摘要视图时，从工作流历史事实构造详情历史条目。
+    //
+    // 调用参数：
+    // * `item` - 已按原范围和顺序读取的历史事实。
+    //
+    // 返回完整保留执行身份、轮次、人员、原因和时间的历史条目。
     pub(crate) fn from_runtime(item: &RuntimeHistoryItem) -> Self {
         Self::new(
             item.execution_id.clone(),
@@ -259,7 +202,7 @@ impl DocumentApprovalHistorySummaryItemView {
         .with_decided_at(item.decided_at)
     }
 
-    /// 构造有界历史项。
+    /// 初始化详情首屏的审批执行历史项，只填入调用方已提供的执行事实。
     ///
     /// # 参数
     /// * `execution_id` - 执行主键
@@ -269,9 +212,6 @@ impl DocumentApprovalHistorySummaryItemView {
     ///
     /// # 返回
     /// 返回首轮、可选字段全空的历史项。
-    ///
-    /// # 错误
-    /// 无。
     pub fn new(execution_id: String, node_key: String, node_name: String, result: String) -> Self {
         Self {
             execution_id,
@@ -287,91 +227,55 @@ impl DocumentApprovalHistorySummaryItemView {
         }
     }
 
-    /// 设置轮次。
+    /// 组装审批执行历史项时填入轮次。
     ///
     /// # 参数
     /// * `round_no` - 轮次
-    ///
-    /// # 返回
-    /// 返回更新后的历史项。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_round_no(mut self, round_no: u32) -> Self {
         self.round_no = round_no;
         self
     }
 
-    /// 设置实例内执行序号。
+    /// 组装审批执行历史项时填入实例内执行序号。
     ///
     /// # 参数
     /// * `execution_no` - 实例内执行序号
-    ///
-    /// # 返回
-    /// 返回更新后的历史项。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_execution_no(mut self, execution_no: u32) -> Self {
         self.execution_no = execution_no;
         self
     }
 
-    /// 设置审批人显示名。
+    /// 组装审批执行历史项时填入审批人显示名。
     ///
     /// # 参数
     /// * `name` - 审批人显示名
-    ///
-    /// # 返回
-    /// 返回更新后的历史项。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_assignee_name(mut self, name: Option<String>) -> Self {
         self.assignee_name = name;
         self
     }
 
-    /// 设置决定人。
+    /// 组装审批执行历史项时填入决定人。
     ///
     /// # 参数
     /// * `decided_by` - 决定人
-    ///
-    /// # 返回
-    /// 返回更新后的历史项。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_decided_by(mut self, decided_by: Option<String>) -> Self {
         self.decided_by = decided_by;
         self
     }
 
-    /// 设置决定原因。
+    /// 组装审批执行历史项时填入决定原因。
     ///
     /// # 参数
     /// * `reason` - 决定原因
-    ///
-    /// # 返回
-    /// 返回更新后的历史项。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_decision_reason(mut self, reason: Option<String>) -> Self {
         self.decision_reason = reason;
         self
     }
 
-    /// 设置决定时间。
+    /// 组装审批执行历史项时填入决定时间（unix 秒）。
     ///
     /// # 参数
     /// * `decided_at` - 决定时间（unix 秒）
-    ///
-    /// # 返回
-    /// 返回更新后的历史项。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_decided_at(mut self, decided_at: Option<i64>) -> Self {
         self.decided_at = decided_at;
         self
@@ -421,7 +325,7 @@ mod tests {
         .unwrap()
     }
 
-    /// 实例摘要读取当前执行的节点名与审批人显示名。
+    // 验证审批实例或历史摘要：实例摘要读取当前执行的节点名与审批人显示名。
     #[test]
     fn instance_view_uses_current_execution_snapshot() {
         let view = DocumentApprovalInstanceSummaryView::from_runtime(
@@ -440,7 +344,7 @@ mod tests {
         assert!(view.blocker_code.is_none());
     }
 
-    /// 受阻实例带出 blocker 代码；无当前执行时不得补节点。
+    // 验证审批实例或历史摘要：受阻实例带出 blocker 代码；无当前执行时不得补节点。
     #[test]
     fn instance_view_omits_node_when_execution_missing() {
         let mut instance = running_instance();
@@ -457,7 +361,7 @@ mod tests {
         assert!(view.current_assignee_name.is_none());
     }
 
-    /// 历史项字段完整复制，空白审批人不上屏。
+    // 验证审批实例或历史摘要：历史项字段完整复制，空白审批人不上屏。
     #[test]
     fn history_item_view_copies_runtime_fields() {
         let item = RuntimeHistoryItem {

@@ -23,7 +23,7 @@ pub struct IntegrationCenterReadService {
 }
 
 impl IntegrationCenterReadService {
-    /// 绑定数据库、权威证据和授权服务。
+    /// 装配集成异常与对账差异时，绑定数据库、权威证据和授权服务。
     ///
     /// # 参数
     /// * `db` - 集成集合所在数据库
@@ -32,9 +32,6 @@ impl IntegrationCenterReadService {
     ///
     /// # 返回
     /// 返回未执行 I/O 的详情读取服务。
-    ///
-    /// # 错误
-    /// 无。
     ///
     /// # 关键业务约束
     /// HTTP 详情使用组合根装配的授权服务。
@@ -100,7 +97,7 @@ mod testing {
         }
     }
 
-    /// 创建不连接数据库的拒绝式服务；业务读取一旦执行便无法成功。
+    // 处理集成异常与对账差异时，创建不连接数据库的拒绝式服务；业务读取一旦执行便无法成功。
     pub(super) async fn service() -> IntegrationCenterReadService {
         let client = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
             .await

@@ -44,29 +44,13 @@ pub use status::SettlementStatus;
 use self::hash::normalize_sha256;
 
 /// 结算主题与来源快照共用的长度前缀摘要（消除字符串拼接歧义）。
-///
-/// # 参数
-/// * `parts` - 按业务语义排序后的字段集合
-///
-/// # 返回
 /// 返回 64 位小写 SHA-256 十六进制摘要。
-///
-/// # 错误
-/// 不返回错误。
 pub fn statement_digest_parts(parts: &[String]) -> String {
     self::hash::digest_parts(parts)
 }
 
 /// 规范化服务端生成的 SHA-256 十六进制摘要。
-///
-/// # 参数
-/// * `value` - 待规范化的摘要文本
-/// * `field` - 错误消息使用的业务字段名称
-///
-/// # 返回
 /// 返回小写 64 位十六进制摘要。
-///
-/// # 错误
 /// 非 64 位十六进制时返回领域错误。
 pub fn normalize_statement_sha256(value: String, field: &str) -> Result<String> {
     normalize_sha256(value, field)
@@ -218,22 +202,11 @@ pub struct SupplierSettlementStatement {
 
 impl SupplierSettlementStatement {
     /// 创建供应商周期结算单。
-    ///
-    /// 完成单号、外部账单身份与经办/复核人的校验和规范化，并强制四条不变式：
-    /// 期间结束不早于开始；外部账单号与版本成对出现；双方金额非负且
-    /// `difference_amount = supplier_amount − erp_amount` 恒等；已确认状态必须携带
-    /// 确认时间与应付账户且两者成对。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::SupplierSettlementStatementId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
+    /// 完成单号、外部账单身份与经办/复核人的校验和规范化，并强制四条不变式：期间结束不早于开始；外部账单
+    /// 号与版本成对出现；双方金额非负且`difference_amount = supplier_amount − erp_amount` 恒等；已确认状
+    /// 态必须携带确认时间与应付账户且两者成对。
     /// 返回新建的结算单实体。
-    ///
-    /// # 错误
-    /// 单号为空/超长、期间倒挂、账单身份不完整、经办复核相同、金额为负或
-    /// 确认状态字段不一致时返回错误。
+    /// 单号为空/超长、期间倒挂、账单身份不完整、经办复核相同、金额为负或确认状态字段不一致时返回错误。
     pub fn new(id: SupplierSettlementStatementId, data: SupplierSettlementStatementData) -> Result<Self> {
         let (prepared_by, business_org_unit_id, difference_handler_user_id) = normalize_ownership(&data)?;
         let statement_no = normalize_required_text(
@@ -325,14 +298,7 @@ impl SupplierSettlementStatement {
         })
     }
     /// 校验调用方持有的结算单版本仍是当前版本。
-    ///
-    /// # 参数
-    /// * `expected` - 调用方读取到的结算单版本
-    ///
-    /// # 返回
     /// 版本一致时返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 版本不一致时返回领域错误。
     pub fn ensure_version(&self, expected: u64) -> Result<()> {
         if self.base.version != expected {
@@ -341,29 +307,13 @@ impl SupplierSettlementStatement {
         Ok(())
     }
     /// 判断指定账号是否为当前对账负责人。
-    ///
-    /// # 参数
-    /// * `actor_id` - 当前账号标识
-    ///
-    /// # 返回
     /// 对账负责人一致时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn is_prepared_by(&self, actor_id: &str) -> bool {
         self.prepared_by == actor_id
     }
 
     /// 返回当前差异处理人；存量空值回退对账负责人。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回差异处理人 ID。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn difference_handler(&self) -> &str {
         if self.difference_handler_user_id.is_empty() {
             &self.prepared_by
@@ -373,28 +323,15 @@ impl SupplierSettlementStatement {
     }
 
     /// 判断指定账号是否为当前差异处理人。
-    ///
-    /// # 参数
-    /// * `actor_id` - 当前账号标识
-    ///
-    /// # 返回
     /// 差异处理人一致时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn is_difference_handler(&self, actor_id: &str) -> bool {
         self.difference_handler() == actor_id
     }
     /// 使用新的服务端来源证据批次替换尚未提交复核的草稿快照。
-    ///
-    /// # 参数
-    /// * `update` - 服务端来源快照更新
-    ///
-    /// # 返回
     /// 账单身份、金额、摘要和可编辑状态写回后返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 已提交复核或进入终态，或外部账单号、版本、金额、来源摘要非法时返回错误。本方法不改供应商、期间与期间策略。
+    /// 已提交复核或进入终态，或外部账单号、版本、金额、来源摘要非法时返回错误。本方法不改供应商、期间与
+    /// 期间策略。
+    /// `update`：服务端来源快照更新。
     pub fn refresh_snapshot(&mut self, update: SupplierSettlementSnapshotUpdate) -> Result<()> {
         if !matches!(
             self.status,
@@ -437,18 +374,8 @@ impl SupplierSettlementStatement {
         Ok(())
     }
     /// 更新结算单。
-    ///
-    /// 复用 `new` 的校验规则并强制状态守卫（已作废终态、已确认只能作废）；
-    /// 金额变更按恒等式重算 `difference_amount`；推进到已确认时必须提供应付账户，
-    /// 缺失时补记确认时间。
-    ///
-    /// # 参数
-    /// * `update` - 更新数据
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// 复用 `new` 的校验规则并强制状态守卫（已作废终态、已确认只能作废）；金额变更按恒等式重算
+    /// `difference_amount`；推进到已确认时必须提供应付账户，缺失时补记确认时间。
     /// 状态迁移非法、金额为负、复核人为空/超长或与经办人相同、确认缺少应付账户时返回错误。
     pub fn update(&mut self, update: SupplierSettlementStatementUpdate) -> Result<()> {
         let target_status = update.status.unwrap_or(self.status);
@@ -479,7 +406,7 @@ impl SupplierSettlementStatement {
     }
 }
 
-/// 规范化结算单责任字段，未指定差异处理人时采用对账负责人。
+// 规范化结算单责任字段，未指定差异处理人时采用对账负责人。
 fn normalize_ownership(data: &SupplierSettlementStatementData) -> Result<(String, String, String)> {
     let prepared_by = normalize_required_text_ref(
         &data.prepared_by,
@@ -508,14 +435,8 @@ fn normalize_ownership(data: &SupplierSettlementStatementData) -> Result<(String
     };
     Ok((prepared_by, business_org_unit_id, difference_handler_user_id))
 }
-/// 校验金额非负。
-///
-/// # 参数
-/// * `value` - 金额
-/// * `message` - 失败时的错误信息
-///
-/// # 错误
-/// 金额为负时返回错误。
+// 核对金额非负。
+// 金额为负时返回错误。
 fn ensure_amount_non_negative(value: Amount, message: &str) -> Result<()> {
     if value.to_decimal() < Decimal::ZERO {
         return Err(Error::from(message));

@@ -66,7 +66,7 @@ pub struct LogisticsExpenseFact {
     pub sales_order_line_id: Option<String>,
 }
 
-/// 从运费另计采购商品中剔除已有物流费用采购覆盖的条目。
+/// 组装采购运费补录时，从运费另计采购商品中剔除已有物流费用采购覆盖的条目。
 ///
 /// # 参数
 /// * `freight_lines` - 未标记供应商不收运费的运费另计采购商品
@@ -74,9 +74,6 @@ pub struct LogisticsExpenseFact {
 ///
 /// # 返回
 /// 返回仍待追加运费的采购商品，保持输入顺序。
-///
-/// # 错误
-/// 无。
 pub fn pending_freight_lines(
     freight_lines: Vec<FreightLineFact>,
     expenses: &[LogisticsExpenseFact],
@@ -93,12 +90,10 @@ pub fn pending_freight_lines(
         .collect()
 }
 
-/// 批量读取一组销售单仍待追加运费的采购商品。
+/// 处理采购运费补录时，批量读取一组销售单仍待追加运费的采购商品。
 ///
 /// # 参数
-/// * `db` - 数据库
 /// * `sales_order_ids` - 销售单
-/// * `executor` - 执行器
 ///
 /// # 返回
 /// 以销售单主键索引的待跟进条目；没有待跟进的销售单不出现。
@@ -157,7 +152,7 @@ struct CurrentLine {
     positive: bool,
 }
 
-/// 读取采购单当前内容：已生效取当前版本，否则取当前提交。
+// 处理采购运费补录时，读取采购单当前内容：已生效取当前版本，否则取当前提交。
 async fn current_lines<'a>(
     db: &Database,
     orders: impl Iterator<Item = &'a PurchaseOrder>,

@@ -32,8 +32,6 @@ impl SalesOrderDomainRepository<'_> {
     ///
     /// 优先使用有明细的有效首次工作副本，否则使用提交序号最大的快照。
     /// 已有正式版本或没有任一金额来源的单据不出现在结果中。
-    ///
-    /// # Errors
     /// 聚合查询或结果解码失败时返回仓储错误。
     pub async fn pending_amounts(
         &self,

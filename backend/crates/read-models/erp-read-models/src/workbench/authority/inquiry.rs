@@ -11,14 +11,14 @@ use super::{ObjectFact, ObjectFactMap, ObjectKind, object_ids};
 use crate::Result;
 
 impl super::WorkItemFactsReader {
-    /// 装载询价当前任务可用的需求版本与稳定业务行白名单。
-    ///
-    /// # 参数
-    /// `keys` 为精确对象集合，`facts` 为输出，`executor` 为调用方快照。
-    /// # 返回
-    /// 当前待处理需求的安全身份事实；草稿和终态不形成任务授权。
-    /// # 错误
-    /// 仓储读取或需求版本损坏时返回错误。
+    // 为询价工作项事实取数时，读取询价当前任务可用的需求版本与稳定业务行白名单。
+    //
+    // 调用参数：
+    // `keys` 为精确对象集合，`facts` 为输出，`executor` 为调用方快照。
+    //
+    // 当前待处理需求的安全身份事实；草稿和终态不形成任务授权。
+    //
+    // 仓储读取或需求版本损坏时返回错误。
     pub(in crate::workbench) async fn load_inquiry_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,

@@ -6,11 +6,7 @@ use persistence_core::Result;
 
 use super::PortalSupplyExt;
 /// 登记供应门户拥有的命名索引。
-/// # 参数
-/// `db` 为目标数据库。
-/// # 返回
 /// 索引登记成功。
-/// # 错误
 /// 数据冲突或数据库失败。
 pub async fn ensure(db: &Database) -> Result<()> {
     db.collection::<Document>(<Database as PortalSupplyExt>::PORTAL_APPLICATIONS)

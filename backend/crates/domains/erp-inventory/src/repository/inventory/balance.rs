@@ -61,16 +61,7 @@ pub struct StockBalanceFilter {
 }
 
 impl Default for StockBalanceFilter {
-    /// 返回首页空筛选（`page: 1`，`page_size: 20`）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回筛选为空、降序的首页过滤条件。
-    ///
-    /// # 错误
-    /// 无。
+    // 初始化库存余额筛选：第一页、每页 20 条，业务筛选默认留空，默认降序排序。
     fn default() -> Self {
         Self {
             search: super::InventorySearch::default(),
@@ -85,19 +76,9 @@ impl Default for StockBalanceFilter {
 }
 
 impl QueryFilter for StockBalanceFilter {
-    /// 转换为 MongoDB 查询条件（余额不设业务软删除，恒为未删除）。
-    ///
-    /// 基底来自 `scoped_base_filter`（未删除，以及 `warehouse_ids`：`None` 不限仓库，空集合保持空 `$in`）。
-    /// 有值时精确匹配 `sku_id`，最后并入 `search`。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 转换为 MongoDB 查询条件（余额不设业务软删除，恒为未删除）。
+    // 基底来自 `scoped_base_filter`（未删除，以及 `warehouse_ids`：`None` 不限仓库，空集合保持空 `$in`）。有值时精确匹配 `sku_id`，
+    // 最后并入 `search`。
     fn to_doc(&self) -> Document {
         let mut filter = scoped_base_filter(self.warehouse_ids.as_deref());
         if let Some(sku_id) = &self.sku_id {
@@ -109,18 +90,8 @@ impl QueryFilter for StockBalanceFilter {
 }
 
 impl Pagination for StockBalanceFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// 原样返回 `page`，并把 `page_size` 从 `u32` 拓宽为 `u64`；不在此处把小于 1 的页码归一。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 向仓储分页传递页码与单页条数。
+    // 原样返回 `page`，并把 `page_size` 从 `u32` 拓宽为 `u64`；不在此处把小于 1 的页码归一。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -130,26 +101,11 @@ impl Pagination for StockBalanceFilter {
 #[allow(async_fn_in_trait)]
 pub trait StockBalanceRepositoryExt {
     /// 分页检索库存余额列表（投影查询）。
-    ///
-    /// 只返回 [`StockBalanceRow`] 所需的列表字段，不加载整文档；排序字段走
-    /// 白名单映射（`sku_id`/`created_at`）。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
+    /// 只返回 [`StockBalanceRow`] 所需的列表字段，不加载整文档；排序字段走白名单映射（`sku_id`/`created_at`）。
     /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    /// 按统一库存模型凭证分页查询；候选条件只收窄结果。
-    /// # 参数
-    /// filter 为业务筛选，access 为当前动作凭证，executor 为原读取执行器。
-    /// # 返回
     /// 完整授权条件下的页与总数；缺资格返回空页。
-    /// # 错误
-    /// 模型错配、复验或数据库失败返回错误。
+    /// `executor` 为数据访问执行器，由 Service 决定是否位于事务中 filter 为业务筛选，access 为当前动作凭证，executor 为原读取执行器。
+    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。按统一库存模型凭证分页查询；候选条件只收窄结果。模型错配、复验或数据库失败返回错误。
     async fn search_authorized_stock_balances(
         &self,
         filter: &StockBalanceFilter,
@@ -157,18 +113,7 @@ pub trait StockBalanceRepositoryExt {
         executor: &mut dyn Executor,
     ) -> InventoryResult<PageResult<StockBalanceRow>>;
 
-    /// 按库存维度查找余额（`(warehouse_id, sku_id)` 全局唯一）。
-    ///
-    /// # 参数
-    /// * `warehouse_id` - 仓库
-    /// * `sku_id` - SKU
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的余额；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
+    /// 读写仓库库存前，以全局唯一的仓库/SKU 组合读取余额。找不到返回 `None`；传播 MongoDB 查询错误。
     async fn find_by_dimensions(
         &self,
         warehouse_id: &WarehouseId,
@@ -176,22 +121,8 @@ pub trait StockBalanceRepositoryExt {
         executor: &mut dyn Executor,
     ) -> Result<Option<StockBalance>>;
 
-    /// ★原子条件写★：入库增加账面现存（`on_hand += q`、`available += q`）。
-    ///
-    /// 以 `id` 定位的单文档原子 `$inc`，不读取旧值；写入条件只要求余额行存在。
-    /// 维护恒等式 `available = on_hand - reserved`（§6.7）。本方法不更新内存
-    /// 实体，调用方需要最新余额时重新读取。
-    ///
-    /// # 参数
-    /// * `id` - 余额主键
-    /// * `quantity` - 正数入库数量
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 命中并完成增加返回 `true`；余额行不存在时返回 `false`（文档不变）。
-    ///
-    /// # 错误
-    /// 当 MongoDB 写入失败时返回错误。
+    /// 入库时对指定余额原子增加正数现存量和可用量，维持 `available = on_hand - reserved`；不先读旧量。
+    /// 余额不存在返回 `false`，传播 MongoDB 写入错误。需要更新后的内存实体时重新读取。
     async fn increase_on_hand(
         &self,
         id: &str,
@@ -199,22 +130,8 @@ pub trait StockBalanceRepositoryExt {
         executor: &mut dyn Executor,
     ) -> Result<bool>;
 
-    /// ★原子条件写★：预占可用量（`reserved += q`、`available -= q`）。
-    ///
-    /// 写条件内联 `available_quantity >= q`（§6.7 可用量守恒），可用量不足时
-    /// **直接拒绝**：返回 `Ok(false)` 且文档不变，不是「先读后写」的判断。
-    /// 本方法不更新内存实体，调用方需要最新余额时重新读取。
-    ///
-    /// # 参数
-    /// * `id` - 余额主键
-    /// * `quantity` - 正数预占数量
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 可用量充足且命中时返回 `true`；可用量不足或余额行不存在时返回 `false`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 写入失败时返回错误。
+    /// 登记正数预占时，用单文档条件写检查 `available_quantity >= q`，再增加预占并等量减少可用量。
+    /// 余额不存在或数量不足时返回 `false`，不修改文档；传播写入错误，不同步调用方的内存实体。
     async fn reserve_quantity(
         &self,
         id: &str,
@@ -222,22 +139,8 @@ pub trait StockBalanceRepositoryExt {
         executor: &mut dyn Executor,
     ) -> Result<bool>;
 
-    /// ★原子条件写★：扣减可用量（`on_hand -= q`、`available -= q`）。
-    ///
-    /// 写条件内联 `available_quantity >= q`（§6.7 不产生负库存），可用量不足
-    /// 时**直接拒绝**：返回 `Ok(false)` 且文档不变，不是「先读后写」的判断。
-    /// 本方法不更新内存实体，调用方需要最新余额时重新读取。
-    ///
-    /// # 参数
-    /// * `id` - 余额主键
-    /// * `quantity` - 正数出库数量
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 可用量充足且命中时返回 `true`；可用量不足或余额行不存在时返回 `false`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 写入失败时返回错误。
+    /// 出库或盘亏时用单文档条件写检查 `available_quantity >= q`，再等量扣减正数现存量和可用量。
+    /// 余额不存在或数量不足返回 `false`，不修改文档；传播写入错误，不同步调用方的内存实体。
     async fn deduct_available(
         &self,
         id: &str,
@@ -245,22 +148,8 @@ pub trait StockBalanceRepositoryExt {
         executor: &mut dyn Executor,
     ) -> Result<bool>;
 
-    /// ★原子条件写★：释放预占（`reserved -= q`、`available += q`）。
-    ///
-    /// 写条件内联 `reserved_quantity >= q`（不允许释放超过已预占），不足时
-    /// **直接拒绝**：返回 `Ok(false)` 且文档不变。本方法不更新内存实体，
-    /// 调用方需要最新余额时重新读取。
-    ///
-    /// # 参数
-    /// * `id` - 余额主键
-    /// * `quantity` - 正数释放数量
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 预占充足且命中时返回 `true`；预占不足或余额行不存在时返回 `false`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 写入失败时返回错误。
+    /// 释放正数预占时原子检查 `reserved_quantity >= q`，再从预占转回可用量。
+    /// 余额不存在或预占不足返回 `false`，不修改文档；传播写入错误，不同步调用方的内存实体。
     async fn release_reserved(
         &self,
         id: &str,
@@ -268,20 +157,8 @@ pub trait StockBalanceRepositoryExt {
         executor: &mut dyn Executor,
     ) -> Result<bool>;
 
-    /// 登记余额「已应用最后流水」（台账最后变动列）。
-    ///
-    /// 与数量增减同事务调用；行不存在或已软删除时返回 `false`。
-    ///
-    /// # 参数
-    /// * `id` - 余额主键
-    /// * `movement_id` - 刚应用的正式流水主键
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 命中并更新返回 `true`；余额行不存在时返回 `false`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 写入失败时返回错误。
+    /// 余额增减成功后沿同一执行器登记本次正式流水 ID，供台账展示最后变动。
+    /// 余额不存在或已删除时返回 `false`；传播 MongoDB 写入错误。
     async fn apply_last_movement(
         &self,
         id: &str,
@@ -475,7 +352,7 @@ impl StockBalanceRepositoryExt for Repository<'_, StockBalance> {
     }
 }
 
-/// 为余额分页追加唯一主键 tie-breaker，避免相同主排序值跨页重复或遗漏。
+// 为余额分页追加唯一主键 tie-breaker，避免相同主排序值跨页重复或遗漏。
 fn stock_balance_sort(filter: &StockBalanceFilter) -> Document {
     with_id_tie_breaker(
         sort_doc(filter.sort_by.as_deref(), filter.sort_ascending, &["sku_id", "created_at"]),
@@ -485,15 +362,8 @@ fn stock_balance_sort(filter: &StockBalanceFilter) -> Document {
 
 impl<'a> InventoryRepository<'a> {
     /// 在调用方执行器上批量读取未删除的库存余额。
-    ///
-    /// # 参数
-    /// * `ids` - 余额主键集合；空集合不执行查询
-    /// * `executor` - 调用方事务或非事务执行器
-    ///
-    /// # 返回
     /// 返回匹配的未删除余额；结果顺序不代表调用方校验顺序。
-    ///
-    /// # 错误
+    /// `ids` 为余额主键集合；空集合不执行查询；`executor` 为调用方事务或非事务执行器。
     /// MongoDB 查询或反序列化失败时返回错误。
     pub async fn stock_balances_by_ids(
         &self,
@@ -504,28 +374,17 @@ impl<'a> InventoryRepository<'a> {
     }
 
     /// 按主键读取未删除的库存余额。
-    ///
-    /// # 参数
-    /// * `id` - 库存余额主键
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回匹配余额；不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// MongoDB 查询失败时返回错误。
+    /// `id` 为库存余额主键；沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询错误。
     pub async fn stock_balance(&self, id: &str, executor: &mut dyn Executor) -> Result<Option<StockBalance>> {
         self.db.stock_balances().find_by_id(id, executor).await
     }
 
-    /// 按详情凭证读取完整余额，缺资格不访问业务集合。
-    ///
-    /// # 参数
-    /// id 为真实余额身份，access 为当前详情凭证，executor 为原快照执行器。
-    /// # 返回
-    /// 返回授权范围内的余额；不存在或无资格时返回 None。
-    /// # 错误
-    /// 模型错配、凭证失效及数据库读取失败时返回错误。
+    // 按详情凭证读取完整余额，缺资格不访问业务集合。
+    // 返回授权范围内的余额；不存在或无资格时返回 None。
+    // id 为真实余额身份，access 为当前详情凭证，executor 为原快照执行器。
+    // 模型错配、凭证失效及数据库读取失败时返回错误。
     pub(crate) async fn authorized_stock_balance(
         &self,
         id: &str,
@@ -549,16 +408,9 @@ impl<'a> InventoryRepository<'a> {
     }
 
     /// 按 SKU 集合批量读取存在可用量的库存余额。
-    ///
-    /// # 参数
-    /// * `sku_ids` - SKU 主键集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回可用数量大于零的全部余额，按仓库与 SKU 稳定排序。
-    ///
-    /// # 错误
-    /// MongoDB 查询或游标读取失败时返回错误。
+    /// `sku_ids` 为 SKU 主键集合；沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询或游标读取错误。
     #[tracing::instrument(
         name = "repository.inventory.available_balances_for_skus",
         skip_all,
@@ -592,10 +444,7 @@ impl<'a> InventoryRepository<'a> {
     }
 }
 
-/// 库存余额列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
+// 库存余额列表投影字段。
 fn stock_balance_projection() -> Document {
     doc! {
         "id": 1,

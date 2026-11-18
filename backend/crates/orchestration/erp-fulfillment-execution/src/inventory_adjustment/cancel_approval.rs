@@ -34,21 +34,12 @@ use crate::{Error, Result};
 impl InventoryAdjustmentProcess {
     /// 撤回审批中的库存调整单，回到草稿且保持审批主题版本不变。
     ///
-    /// 本方法是合同 §4.4.4 签署的普通撤回端口。它以审批实例作为稳定幂等
-    /// 作用域，先回读收据，再校验完整运行时 CAS 和业务撤回规则。新命令在单一
-    /// MongoDB 事务内写回业务单据、实例、执行、收据、全部开放任务和审计。
+    /// 本方法是合同 §4.4.4 签署的普通撤回端口。它以审批实例作为稳定幂等作用域，先回读收据，再校验完整运行时 CAS 和业务撤回规则。新命令在单一 MongoDB 事务内写回业务单据、实例、执行、收据、
+    /// 全部开放任务和审计。
     ///
-    /// # 参数
-    /// * `id` - 库存调整单主键
-    /// * `req` - 单据/运行事实期望版本、原因和幂等键
-    /// * `actor` - 已通过鉴权的审计操作人
+    /// `req` 为单据/运行事实期望版本、原因和幂等键。返回调用人当前可读的最新库存调整单视图；同载荷回放不重复写入。
     ///
-    /// # 返回
-    /// 返回调用人当前可读的最新库存调整单视图；同载荷回放不重复写入。
-    ///
-    /// # 错误
-    /// 非原提交人或无范围运行管理员、动作/对象范围不足、版本变化、非审批中、
-    /// 原因或幂等键非法，或任一事务写入失败时返回错误。
+    /// 非原提交人或无范围运行管理员、动作/对象范围不足、版本变化、非审批中、原因或幂等键非法，或任一事务写入失败时返回错误。
     #[tracing::instrument(
         name = "inventory.stock_adjustment_cancel_approval",
         skip_all,
@@ -82,7 +73,7 @@ impl InventoryAdjustmentProcess {
     }
 }
 
-/// 在独立准备快照中先授权，再加载全部取消计划事实。
+// 在独立准备快照中先授权，再加载全部取消计划事实。
 async fn load_cancel_target(
     service: &InventoryAdjustmentProcess,
     id: &str,
@@ -103,7 +94,7 @@ async fn load_cancel_target(
         .await
 }
 
-/// 准备计划只使用本阶段的当前授权；写事务仍须重新证明授权与业务版本。
+// 准备计划只使用本阶段的当前授权；写事务仍须重新证明授权与业务版本。
 async fn load_cancel_target_step(
     service: &InventoryAdjustmentProcess,
     id: &str,
@@ -139,7 +130,7 @@ async fn load_cancel_target_step(
     Ok(LoadedCancelTarget { adjustment, binding, runtime })
 }
 
-/// 事务外构图取消计划、执行领域动作并组装持久化输入。
+// 事务外构图取消计划、执行领域动作并组装持久化输入。
 fn build_cancel_persist_input(
     service: &InventoryAdjustmentProcess,
     target: LoadedCancelTarget,

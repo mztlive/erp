@@ -27,16 +27,8 @@ pub enum DeliveryReach {
     NotDeliverable,
 }
 
-/// 合并各供给对同一地区的代发、集采判定。
-///
-/// # 参数
-/// * `terms` - 逐供给的（代发判定，集采判定）
-///
-/// # 返回
-/// 任一代发配送或集采包邮为包邮可送；否则任一集采运费另计为需另付运费；其余不配送。
-///
-/// # 错误
-/// 无。
+// 把同一地区的各供给合成一档：任一代发可送或集采包邮即为包邮可送；
+// 否则存在集采运费另计才算可送，无有效判定则不配送。
 fn merge_reach(terms: impl IntoIterator<Item = (DeliveryTerm, DeliveryTerm)>) -> DeliveryReach {
     let mut freight_extra = false;
     for (dropship, bulk) in terms {
@@ -49,17 +41,8 @@ fn merge_reach(terms: impl IntoIterator<Item = (DeliveryTerm, DeliveryTerm)>) ->
     if freight_extra { DeliveryReach::FreightExtra } else { DeliveryReach::NotDeliverable }
 }
 
-/// 按全部有效供给的配送政策判定一个地区的可送程度。
-///
-/// # 参数
-/// * `policies` - 该 SKU 全部有效且可供供给的生效政策
-/// * `region` - 收货或筛选地区
-///
-/// # 返回
-/// 返回合并后的可送程度；没有政策时为不配送。
-///
-/// # 错误
-/// 无。
+/// 实时提示某个收货或筛选地区的配送情况时，传入该 SKU 所有有效且可供的生效政策。
+/// 合并代发及集采后优先认定包邮，否则判断是否只能另付运费；无政策则不配送。
 pub fn delivery_reach(policies: &[&DeliveryPolicy], region: &RegionCode) -> DeliveryReach {
     merge_reach(policies.iter().map(|policy| {
         (policy.judge(DeliveryMode::Dropship, region), policy.judge(DeliveryMode::Bulk, region))
@@ -76,44 +59,18 @@ pub struct RegionCoverage {
 }
 
 impl RegionCoverage {
-    /// 判断地区是否整片可送。
-    ///
-    /// # 参数
-    /// * `region` - 任一级地区
-    ///
-    /// # 返回
-    /// 全国标记、地区自身或任一上级在整片集合中时为真。
-    ///
-    /// # 错误
-    /// 无。
+    /// 从预计算覆盖判断所选地区是否全域可送；本级、任一上级或全国标记进入整片集合均算命中。
     pub fn covers_fully(&self, region: &RegionCode) -> bool {
         full_match_codes(region).iter().any(|code| self.full.contains(code))
     }
 
-    /// 判断地区是否部分可送（有可送也有不可送的下级）。
-    ///
-    /// # 参数
-    /// * `region` - 任一级地区
-    ///
-    /// # 返回
-    /// 地区在部分可送集合中时为真；整片可送或完全不可送时为假。
-    ///
-    /// # 错误
-    /// 无。
+    /// 用于严格筛选有可送和不可送下级的地区，只匹配本级部分集合；全域可送和完全不可送都不命中。
     pub fn covers_partly(&self, region: &RegionCode) -> bool {
         self.partial.iter().any(|code| code == region.as_str())
     }
 
-    /// 统计地区内可送的最末级地区数量。
-    ///
-    /// # 参数
-    /// * `region` - 任一级地区
-    ///
-    /// # 返回
-    /// 整片可送时为该地区全部最末级数量；否则累加落在该地区内的整片代码的最末级数量。
-    ///
-    /// # 错误
-    /// 无。
+    /// 计算选定地区内可送的最末级数量，供比较两档覆盖。整片命中取该地区的全部末级数量，
+    /// 否则累加区域内压缩后的整片子树。
     pub fn leaf_count_within(&self, region: &RegionCode) -> usize {
         if self.covers_fully(region) {
             return TREE.leaf_count(region.as_str());
@@ -138,47 +95,20 @@ pub struct DeliveryCoverage {
 }
 
 impl DeliveryCoverage {
-    /// 没有有效供给时的覆盖：任何地区都不可送。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回两档均为空的覆盖。
-    ///
-    /// # 错误
-    /// 无。
+    /// SKU 无有效供给时用空覆盖，使包邮档与含另计运费档都不会匹配任何地区。
     pub fn none() -> Self {
         Self::default()
     }
 
-    /// 不受配送范围限制的覆盖，用于虚拟商品与线下服务。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回两档均为全国整片包邮可送的覆盖。
-    ///
-    /// # 错误
-    /// 无。
+    /// 虚拟商品和线下服务不受配送范围限制，两档都用全国标记表示全域可送。
     pub fn unrestricted() -> Self {
         let nationwide =
             RegionCoverage { full: vec![NATIONWIDE_REGION_CODE.to_string()], partial: Vec::new() };
         Self { included: nationwide.clone(), reachable: nationwide }
     }
 
-    /// 按全部有效供给的配送政策逐个最末级地区判定并压缩。
-    ///
-    /// # 参数
-    /// * `policies` - 该 SKU 全部有效且可供供给的生效政策
-    ///
-    /// # 返回
-    /// 返回两档覆盖；没有政策时任何地区都不可送。逐地区判定与
-    /// [`delivery_reach`] 一致。
-    ///
-    /// # 错误
-    /// 无。
+    /// 刷新实体 SKU 的检索投影时，用全部有效且可供的生效政策判定每个最末级地区，
+    /// 再压缩为包邮档与含另计运费档以便索引查询。单地区口径与 [`delivery_reach`] 一致；无政策则两档都为空。
     pub fn from_policies(policies: &[&DeliveryPolicy]) -> Self {
         if policies.is_empty() {
             return Self::none();
@@ -197,16 +127,7 @@ impl DeliveryCoverage {
         Self { included: TREE.summarize(&included), reachable: TREE.summarize(&reachable) }
     }
 
-    /// 判断覆盖是否满足筛选条件。
-    ///
-    /// # 参数
-    /// * `query` - 地区筛选条件
-    ///
-    /// # 返回
-    /// 整片模式要求所选档位整片可送；部分模式要求所选档位部分可送。
-    ///
-    /// # 错误
-    /// 无。
+    /// 对预计算覆盖应用商品池筛选：先决定是否计入集采运费另计，再按条件只匹配整片或只匹配部分可送。
     pub fn matches(&self, query: &DeliveryCoverageQuery) -> bool {
         let tier = if query.include_freight_extra { &self.reachable } else { &self.included };
         match query.extent {
@@ -215,16 +136,7 @@ impl DeliveryCoverage {
         }
     }
 
-    /// 判断地区内是否有需另付运费才能送到的地方。
-    ///
-    /// # 参数
-    /// * `region` - 任一级地区
-    ///
-    /// # 返回
-    /// 地区内可送的最末级多于包邮可送的最末级时为真。
-    ///
-    /// # 错误
-    /// 无。
+    /// 当所选地区的可送末级数多于包邮末级数时，提示其中有地址只能走集采运费另计。
     pub fn freight_extra_within(&self, region: &RegionCode) -> bool {
         self.reachable.leaf_count_within(region) > self.included.leaf_count_within(region)
     }
@@ -253,30 +165,12 @@ pub struct DeliveryCoverageQuery {
 }
 
 impl DeliveryCoverageQuery {
-    /// 返回所选档位在覆盖文档中的字段名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 含运费另计时为 `reachable`，否则为 `included`。
-    ///
-    /// # 错误
-    /// 无。
+    /// 构造覆盖索引查询时选取文档字段：包含运费另计用 `reachable`，仅包邮用 `included`。
     pub fn tier_field(&self) -> &'static str {
         if self.include_freight_extra { "reachable" } else { "included" }
     }
 
-    /// 返回整片可送命中所需的任一代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回地区自身、各级上级与全国标记。
-    ///
-    /// # 错误
-    /// 无。
+    /// 为整片筛选生成索引匹配候选：本级、各上级或全国标记任一出现，均可证明所选地区整片可送。
     pub fn full_match_codes(&self) -> Vec<String> {
         full_match_codes(&self.region)
     }
@@ -302,7 +196,7 @@ impl<'a> IndexedRuleSet<'a> {
         }
     }
 
-    /// 与 [`DeliveryRuleSet::judge`] 相同：由具体到宽泛取第一条命中的例外。
+    // 全国预计算使用索引取由近及远的首个例外，否则用默认项，保持与 `DeliveryRuleSet::judge` 的实时判定一致。
     fn judge(&self, chain: &[RegionCode]) -> DeliveryTerm {
         chain.iter().find_map(|code| self.rules.get(code.as_str()).copied()).unwrap_or(self.default_term)
     }
@@ -381,7 +275,7 @@ impl RegionTree {
         self.leaf_counts.get(code).copied().unwrap_or_default()
     }
 
-    /// 把逐最末级的可送标记压缩为整片与部分可送集合。
+    // 将一档逐末级判定压缩成有序的整片和部分集合；所有省均整片可送时，只存全国代码供索引匹配。
     fn summarize(&self, covered: &[bool]) -> RegionCoverage {
         let mut coverage = RegionCoverage::default();
         let extents =
@@ -398,7 +292,7 @@ impl RegionTree {
     }
 }
 
-/// 计算子树状态；部分可送的节点记入部分集合，并把整片可送的下级记入整片集合。
+// 递归汇总子树；全可送和全不可送交由父级继续合并，混合节点进部分集合，其全可送子级进整片集合。
 fn walk(node: &TreeNode, covered: &[bool], coverage: &mut RegionCoverage) -> Extent {
     if let Some(index) = node.leaf_index {
         return if covered[index] { Extent::All } else { Extent::None };
@@ -534,7 +428,7 @@ mod tests {
         assert_eq!(coverage.included.leaf_count_within(&code("110000")), TREE.leaf_count("110000"));
     }
 
-    /// 全国逐最末级的索引判定必须与单地区判定完全一致，保证预算与实时提示同一口径。
+    // 逐一比较全国末级地区的两档索引判定与实时判定，防止商品池筛选与单地址提示口径分叉。
     #[test]
     fn precomputed_coverage_agrees_with_single_region_reach() {
         let mixed = policy(

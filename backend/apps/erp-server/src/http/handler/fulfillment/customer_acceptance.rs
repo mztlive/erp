@@ -23,7 +23,7 @@ use crate::http::state::HttpState;
 use crate::wiring::approval_runtime;
 use crate::wiring::workflow::work_item_service;
 
-/// 装配客户验收命令入口，沿用对象读取授权与 RBAC 服务。
+// 为验收草稿和过账命令装配跨域入口，复用真实对象读取授权及 RBAC。
 fn acceptance_process(state: &HttpState) -> CustomerAcceptanceProcess {
     CustomerAcceptanceProcess::new(
         state.application().db(),
@@ -44,16 +44,7 @@ fn acceptance_process(state: &HttpState) -> CustomerAcceptanceProcess {
 }
 
 /// 查询客户验收单列表（W06 验收历史视图）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `query` - 分页与筛选参数（`sales_order_id`/`status` 扁平传递）
-///
-/// # 返回
-/// 返回契约形状的分页视图。
-///
-/// # 错误
-/// 业务处理或数据读取失败时返回对应错误。
+/// `query` 为分页与筛选参数（`sales_order_id`/`status` 扁平传递）。
 pub async fn customer_acceptance_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -67,16 +58,7 @@ pub async fn customer_acceptance_list(
 }
 
 /// 查询客户验收单详情（表头 + 行 + 分配）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `id` - 验收单主键
-///
-/// # 返回
 /// 返回验收单详情视图。
-///
-/// # 错误
-/// 业务处理或数据读取失败时返回对应错误。
 pub async fn customer_acceptance_detail(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -90,17 +72,7 @@ pub async fn customer_acceptance_detail(
 }
 
 /// 创建客户验收单（草稿；分配在过账时校验并写入）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 创建请求（表头 + 行）
-///
-/// # 返回
 /// 返回新建验收单的响应视图。
-///
-/// # 错误
-/// 业务处理或数据读取失败时返回对应错误。
 pub async fn customer_acceptance_create(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -112,17 +84,8 @@ pub async fn customer_acceptance_create(
 }
 
 /// 原子创建或替换客户验收草稿并立即过账。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 最终表头、行、履约分配和乐观锁版本
-///
-/// # 返回
+/// `req` 为最终表头、行、履约分配和乐观锁版本。
 /// 返回已过账验收单和过账后的剩余可验收事实。
-///
-/// # 错误
-/// 业务处理或数据读取失败时返回对应错误。
 pub async fn customer_acceptance_commit(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -134,18 +97,7 @@ pub async fn customer_acceptance_commit(
 }
 
 /// 过账客户验收（验收行锁定 + 履约分配守恒 + 净验收上限校验同事务，§8.2 第 5 条）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 验收单主键
-/// * `req` - 过账请求（逐行分配）
-///
-/// # 返回
 /// 返回过账后的验收单视图。
-///
-/// # 错误
-/// 业务处理或数据读取失败时返回对应错误。
 pub async fn customer_acceptance_post(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -158,18 +110,8 @@ pub async fn customer_acceptance_post(
 }
 
 /// 冲正客户验收（误录时新增反向验收与反向分配，不覆盖原事实）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 待冲正验收单主键
-/// * `req` - 冲正请求（期望版本 + 原因）
-///
-/// # 返回
+/// `req` 为冲正请求（期望版本 + 原因）。
 /// 返回新建反向验收单的视图。
-///
-/// # 错误
-/// 业务处理或数据读取失败时返回对应错误。
 pub async fn customer_acceptance_reverse(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -182,16 +124,8 @@ pub async fn customer_acceptance_reverse(
 }
 
 /// 查询客户验收工作台（W06：销售行 + 可验收事实 + 验收历史）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `query` - 销售单（`sales_order_id` 必填）
-///
-/// # 返回
+/// `query` 为销售单（`sales_order_id` 必填）。
 /// 返回验收工作台视图。
-///
-/// # 错误
-/// 业务处理或数据读取失败时返回对应错误。
 pub async fn customer_acceptance_eligible(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,

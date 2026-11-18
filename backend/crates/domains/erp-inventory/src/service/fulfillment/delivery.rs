@@ -32,23 +32,9 @@ pub struct WarehouseShipmentLine {
     pub quantity: Quantity,
 }
 
-/// 过账单条仓发行（预占消耗 + 出库流水 + 余额，位于调用方事务内）。
-///
-/// # 参数
-/// * `db` - 库存数据库实例
-/// * `executor` - 调用方事务执行器，不得另开事务
-/// * `input` - 当前发货行的最小库存消费事实
-/// * `occurred_at` - 原发货流程在读取全部发货行后取得的业务时间
-/// * `actor_id` - 已认证操作人的记录身份
-///
-/// # 返回
-/// 无返回值；写入失败时返回错误。
-///
-/// # 错误
-/// 预占不存在/归属不符/数量不足、余额缺失或写入失败时返回原错误。
-///
-/// # 关键业务约束
-/// 调用方逐行调用，不预校验后续行；释放预占余额必须先于扣减可用量。
+/// 履约流程逐行调用，沿原事务校验发货行的预占、销售行和仓库归属，消费预占并登记出库流水和余额。
+/// 先释放余额中的预占量，再扣减可用量；不提前校验后续行。时间沿用流程读取发货行后取得的发生时间，记录人用已认证操作人。
+/// 预占缺失、归属不符、数量不足、余额缺失或写入失败时返回原错误。
 pub async fn post_warehouse_ship_line(
     db: &Database,
     executor: &mut dyn Executor,
@@ -59,7 +45,7 @@ pub async fn post_warehouse_ship_line(
     post_with_store(&mut MongoInventoryStore(db), executor, input, occurred_at, actor_id).await
 }
 
-/// 实际逐行过账算法；库存仓储和失败注入替身均从此入口执行。
+// 仓发入口和单测替身共用这条逐行写入路径，确保能验证失败处停止且所有读写沿用原执行器。
 async fn post_with_store(
     store: &mut impl InventoryWriteStore,
     executor: &mut dyn Executor,
@@ -360,7 +346,7 @@ mod tests {
         ]
     }
 
-    /// 从可用量为零的已预占余额出发，生产算法必须先释放再扣减，并保留源引用、时间和操作人。
+    // 验证从可用量为零的已预占余额出发，生产算法必须先释放再扣减，并保留源引用、时间和操作人。
     #[tokio::test]
     async fn shipment_releases_reserved_before_deducting_and_keeps_frozen_facts() {
         let mut executor = ReadExecutor::default();
@@ -394,7 +380,7 @@ mod tests {
         assert_ne!(movement.base.id, entry.base.id);
     }
 
-    /// 实际仓储入口的每个读取或写入失败均保留原错，停止后续读写。
+    // 验证实际仓储入口的每个读取或写入失败均保留原错，停止后续读写。
     #[tokio::test]
     async fn shipment_stops_after_each_repository_failure_with_same_executor() {
         let expected = sequence();
@@ -411,7 +397,7 @@ mod tests {
         }
     }
 
-    /// 四个条件写入返回 false 时保持原业务错误，不合并释放与扣减步骤。
+    // 验证四个条件写入返回 false 时保持原业务错误，不合并释放与扣减步骤。
     #[tokio::test]
     async fn shipment_keeps_conditional_write_failure_messages_and_stops() {
         for (call, message) in [
@@ -434,7 +420,7 @@ mod tests {
         }
     }
 
-    /// 缺少预占引用优先于仓库与其他行事实，不触发任何仓储读取。
+    // 验证缺少预占引用优先于仓库与其他行事实，不触发任何仓储读取。
     #[tokio::test]
     async fn shipment_requires_reservation_before_any_read() {
         let mut executor = ReadExecutor::default();
@@ -449,7 +435,7 @@ mod tests {
         assert!(store.calls.is_empty());
     }
 
-    /// 销售归属、预占数量、仓库存在与仓库归属按原顺序失败，之后才允许读取余额。
+    // 验证销售归属、预占数量、仓库存在与仓库归属按原顺序失败，之后才允许读取余额。
     #[tokio::test]
     async fn shipment_preserves_reservation_quantity_and_warehouse_first_error_order() {
         for (case, message) in [
@@ -483,7 +469,7 @@ mod tests {
         }
     }
 
-    /// 缺失预占与余额使用原业务错误，缺失后不进入消耗。
+    // 验证缺失预占与余额使用原业务错误，缺失后不进入消耗。
     #[tokio::test]
     async fn shipment_preserves_missing_stock_fact_errors() {
         for missing_reservation in [true, false] {

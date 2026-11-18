@@ -26,7 +26,7 @@ function auditLimit(name, fallback, maximum) {
 const auditMaxRows = auditLimit("ERP_JD_AUDIT_MAX_ROWS", 1000, 10000);
 const auditBatchSize = auditLimit("ERP_JD_AUDIT_BATCH_SIZE", 100, 500);
 
-// 定点数只经字符串和BigInt解释，不经浮点转换；支持BSON Decimal128的科学计数形式。
+// 核对京东采购数量限制与报价税率时，将字符串或 Decimal128 科学计数转为百万分位的 BigInt，避免浮点舍入掩盖无效值。
 function auditFixed(value) {
     if (typeof value === "number" || value === null || value === undefined) return null;
     const raw = typeof value === "string" ? value : value.toString();

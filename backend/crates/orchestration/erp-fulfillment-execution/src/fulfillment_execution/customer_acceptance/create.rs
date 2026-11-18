@@ -20,22 +20,12 @@ use crate::workflow::FulfillmentWorkflow;
 impl CustomerAcceptanceProcess {
     /// 创建客户验收单（草稿，跨集合：表头 + 行 + 审计）。
     ///
-    /// 同一事务注册 `BusinessDocument` 并调用统一绑定端口。客户验收为
-    /// `NO_APPROVAL`：返回空绑定，不查询已发布定义，不启动审批实例，
-    /// 不创建审批任务。创建阶段不写验收分配；分配在过账时按行守恒与履约
-    /// 事实上限校验后写入。
+    /// 同一事务注册 `BusinessDocument` 并调用统一绑定端口。客户验收为 `NO_APPROVAL`：返回空绑定，不查询已发布定义，不启动审批实例，不创建审批任务。创建阶段不写验收分配；
+    /// 分配在过账时按行守恒与履约事实上限校验后写入。
     ///
-    /// # 参数
-    /// * `req` - 创建请求（表头 + 行）
-    /// * `actor` - 已通过鉴权的审计操作人
+    /// `req` 为创建请求（表头 + 行）。返回新建验收单的响应视图。`ValidationError`：请求体校验失败。
     ///
-    /// # 返回
-    /// 返回新建验收单的响应视图。
-    ///
-    /// # 错误
-    /// * `ValidationError` - 请求体校验失败
-    /// * `ConflictError` - 单号重复（唯一索引透出）
-    /// * `RepositoryError` - 数据库写入失败
+    /// `ConflictError`：单号重复（唯一索引透出）。`RepositoryError`：数据库写入失败。
     #[tracing::instrument(
         name = "fulfillment.customer_acceptance_create",
         skip_all,
@@ -87,10 +77,7 @@ impl CustomerAcceptanceProcess {
             .await
     }
 }
-/// 在创建事务内写入客户验收草稿并登记无绑定单据。
-///
-/// # 错误
-/// 绑定、注册或验收单写入失败时返回错误，调用方必须视作整体回滚。
+// 在创建事务内写入客户验收草稿并登记无绑定单据。绑定、注册或验收单写入失败时返回错误，调用方必须视作整体回滚。
 async fn persist_created_customer_acceptance(
     db: &Database,
     workflow: &dyn FulfillmentWorkflow,

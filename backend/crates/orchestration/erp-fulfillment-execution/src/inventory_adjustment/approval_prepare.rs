@@ -51,18 +51,11 @@ use crate::{Error, Result};
 
 const STOCK_ADJUSTMENT_SUBMIT_FORBIDDEN: &str = "当前账号不可提交该库存调整单";
 
-/// 在调用方数据库快照内加载冻结绑定对应的定义图。
-///
-/// # 参数
-/// * `db` - 审批定义所在数据库。
-/// * `binding` - 创建时冻结的定义绑定。
-/// * `executor` - 调用方数据库快照。
-///
-/// # 返回
-/// 返回已持久化并转成引擎形状的定义图。
-///
-/// # 错误
-/// 定义不存在时返回 `ConflictError`；仓储读取失败时返回对应错误。
+// 在调用方数据库快照内加载冻结绑定对应的定义图。
+//
+// `db` 为审批定义所在数据库；`binding` 为创建时冻结的定义绑定；`executor` 为调用方数据库快照。返回已持久化并转成引擎形状的定义图。
+//
+// 定义不存在时返回 `ConflictError`；仓储读取失败时返回对应错误。
 pub(super) async fn load_bound_definition_graph_with_executor(
     db: &Database,
     binding: &ApprovalDefinitionBinding,
@@ -75,14 +68,8 @@ pub(super) async fn load_bound_definition_graph_with_executor(
 
 /// 使用完整库存提交身份规划启动；禁止调用方在规划后覆盖 receipt digest。
 ///
-/// # 参数
-/// * `input` - 已构造的启动执行输入。
-/// * `req` - 库存调整提交载荷，用于计算命令身份。
+/// `input` 为已构造的启动执行输入；`req` 为库存调整提交载荷，用于计算命令身份。返回引擎规划后的 `PreparedExecution`。
 ///
-/// # 返回
-/// 返回引擎规划后的 `PreparedExecution`。
-///
-/// # 错误
 /// 启动输入与提交载荷不一致、命令身份无法构造，或 `prepare_start_with_identity` 失败时返回对应错误。
 pub fn prepare_stock_adjustment_start(
     input: StartExecutionInput,
@@ -106,7 +93,7 @@ pub fn prepare_stock_adjustment_start(
     prepare_start_with_identity(input, identity).map_err(Error::from)
 }
 
-/// 按当前 V3、历史无前缀作用域顺序读取规范幂等键对应的启动收据。
+// 按当前 V3、历史无前缀作用域顺序读取规范幂等键对应的启动收据。
 async fn find_stock_adjustment_start_receipt(
     db: &Database,
     scopes: &[String],
@@ -118,18 +105,9 @@ async fn find_stock_adjustment_start_receipt(
 
 /// 在同一数据库快照内先按稳定作用域解析启动收据，再重验当前权限与结果事实。
 ///
-/// # 参数
-/// * `db` - 收据、实例与调整单所在数据库。
-/// * `rbac` - 重验提交权限使用的 RBAC。
-/// * `adjustment_id` - 库存调整单主键。
-/// * `req` - 原提交载荷，含期望主题版本与幂等键。
-/// * `actor` - 当前认证操作人。
-/// * `executor` - 调用方数据库快照。
+/// `db` 为收据、实例与调整单所在数据库；`rbac` 为重验提交权限使用的 RBAC；`adjustment_id` 为库存调整单主键；`req` 为原提交载荷，含期望主题版本与幂等键；`executor`
+/// 为调用方数据库快照。同一载荷的启动收据已存在时返回审批实例 ID；没有收据时返回 `None`。
 ///
-/// # 返回
-/// 同一载荷的启动收据已存在时返回审批实例 ID；没有收据时返回 `None`。
-///
-/// # 错误
 /// 幂等键或作用域非法、收据与实例、快照或绑定不一致、操作人不是原提交人、载荷冲突、调整单不存在，或当前提交授权失败时返回对应错误。仓储失败原样传播。
 pub async fn reconcile_stock_adjustment_start_receipt(
     db: &Database,
@@ -184,7 +162,7 @@ pub async fn reconcile_stock_adjustment_start_receipt(
     Ok(Some(instance.base.id))
 }
 
-/// 核对旧通用身份；带重提说明的请求不得退回缺少说明的历史载荷。
+// 核对旧通用身份；带重提说明的请求不得退回缺少说明的历史载荷。
 fn legacy_standard_receipt_matches(
     adjustment_id: &str,
     req: &SubmitStockAdjustmentRequest,
@@ -206,7 +184,7 @@ fn legacy_standard_receipt_matches(
     Ok(matches!(identity.classify(Some(receipt)), ReceiptBranch::SamePayload(_)))
 }
 
-/// 在收据身份校验后，按原顺序读取实例、冻结快照和绑定。
+// 在收据身份校验后，按原顺序读取实例、冻结快照和绑定。
 async fn load_start_receipt_facts(
     db: &Database,
     receipt: &ApprovalCommandReceipt,
@@ -270,19 +248,11 @@ async fn load_start_receipt_facts(
 ///
 /// 收据是第一读；不存在时必须返回 `None`，不得根据当前单据状态推断命令成功。
 ///
-/// # 参数
-/// * `db` - 收据与实例所在数据库。
-/// * `rbac` - 重验提交权限使用的 RBAC。
-/// * `adjustment_id` - 库存调整单主键。
-/// * `expected_subject_version` - 原命令冻结的主题版本。
-/// * `idempotency_key` - 原命令幂等键。
-/// * `actor` - 当前认证操作人。
-/// * `executor` - 调用方数据库快照。
+/// `db` 为收据与实例所在数据库；`rbac` 为重验提交权限使用的 RBAC；`adjustment_id` 为库存调整单主键；`expected_subject_version` 为原命令冻结的主题版本；
+/// `idempotency_key` 为原命令幂等键；`executor` 为调用方数据库快照。
 ///
-/// # 返回
 /// 收据通过身份、快照、绑定与当前授权校验时返回实例 ID；没有收据时返回 `None`。
 ///
-/// # 错误
 /// 幂等键或作用域非法、收据身份或实例事实不一致、原提交人不是当前操作人、缺少快照或绑定、调整单不存在或版本早于结果，或当前提交授权失败时返回对应错误。仓储失败原样传播。
 pub async fn find_stock_adjustment_start_result(
     db: &Database,
@@ -337,7 +307,7 @@ pub async fn find_stock_adjustment_start_result(
     Ok(Some(instance.base.id))
 }
 
-/// 只读结果查询按实例读取冻结快照与绑定，禁止以当前定义代替冻结事实。
+// 只读结果查询按实例读取冻结快照与绑定，禁止以当前定义代替冻结事实。
 async fn validate_start_result_snapshot(
     db: &Database,
     instance: &ApprovalProcessInstance,
@@ -379,10 +349,10 @@ async fn validate_start_result_snapshot(
     Ok(())
 }
 
-/// 对无版本前缀的历史收据，从未再修改的成功结果重建完整提交载荷。
-///
-/// 历史 generic digest 不含库存草稿、明细和余额版本；只有业务版本恰好推进一次、
-/// 当前仍为该次审批结果，且所有可重建事实逐字段相等时才允许只读兼容回放。
+// 对无版本前缀的历史收据，从未再修改的成功结果重建完整提交载荷。
+//
+// 历史 generic digest 不含库存草稿、明细和余额版本；只有业务版本恰好推进一次、
+// 当前仍为该次审批结果，且所有可重建事实逐字段相等时才允许只读兼容回放。
 async fn legacy_start_payload_matches_result(
     db: &Database,
     adjustment: &StockAdjustment,
@@ -438,7 +408,7 @@ async fn legacy_start_payload_matches_result(
     legacy_balance_versions_match(db, adjustment, &persisted_lines, &req.balances, executor).await
 }
 
-/// 历史回放只在余额版本仍与原命令完全相等且一一覆盖明细维度时成立。
+// 历史回放只在余额版本仍与原命令完全相等且一一覆盖明细维度时成立。
 async fn legacy_balance_versions_match(
     db: &Database,
     adjustment: &StockAdjustment,
@@ -453,13 +423,11 @@ async fn legacy_balance_versions_match(
     Ok(StockAdjustmentBalanceVersions::new(&balances).matches_legacy_result(adjustment, lines, &expected))
 }
 
-/// 在原快照事务中检查库存调整提交的固定资格及当前对象。
-/// # 参数
-/// identity_service为共享授权服务，adjustment为真实单据，actor和executor沿用原用例。
-/// # 返回
-/// 当前提交条件成立时成功。
-/// # 错误
-/// 账号、范围、对象状态或执行边界失效时返回原错误。
+// 在原快照事务中检查库存调整提交的固定资格及当前对象。
+//
+// identity_service为共享授权服务，adjustment为真实单据，actor和executor沿用原用例。当前提交条件成立时成功。
+//
+// 账号、范围、对象状态或执行边界失效时返回原错误。
 pub(crate) async fn authorize_submit_with(
     identity_service: &Arc<AuthorizationService>,
     _db: &Database,
@@ -514,22 +482,12 @@ pub struct StockAdjustmentStartInput<'a> {
 ///
 /// 审批人取自已发布节点，不接受客户端选择。
 ///
-/// # 用途
 /// 把启动参数收敛为引擎 `prepare_start` 输入。
 ///
-/// # 参数
-/// * `db` - 账号与授权所在数据库。
-/// * `rbac` - 候选人权限使用的 RBAC。
-/// * `input` - 定义图、绑定、主体、提交人与幂等键。
-/// * `executor` - 调用方数据库快照。
+/// `db` 为账号与授权所在数据库；`rbac` 为候选人权限使用的 RBAC；`input` 为定义图、绑定、主体、提交人与幂等键；`executor` 为调用方数据库快照。
 ///
-/// # 返回
-/// 返回可交给 `prepare_start` 的输入。
+/// 返回可交给 `prepare_start` 的输入。定义版本与冻结绑定不一致、幂等键或提交人非法、候选人重验失败、入口节点或入口绑定缺失时返回对应错误。
 ///
-/// # 错误
-/// 定义版本与冻结绑定不一致、幂等键或提交人非法、候选人重验失败、入口节点或入口绑定缺失时返回对应错误。
-///
-/// # 关键业务约束
 /// 定义版本必须与冻结绑定一致。
 pub async fn build_stock_adjustment_start_input(
     db: &Database,
@@ -575,21 +533,12 @@ pub async fn build_stock_adjustment_start_input(
     )?)
 }
 
-/// 为定义全部节点冻结启动绑定，并重验候选人账号、权限与职责分离。
-///
-/// # 参数
-/// * `db` - 账号与授权所在数据库。
-/// * `rbac` - 候选人权限使用的 RBAC。
-/// * `graph` - 定义图。
-/// * `initiator_id` - 启动人，用于职责分离。
-/// * `organization_id` - 单据责任组织；这里只校验非空。
-/// * `executor` - 调用方数据库快照。
-///
-/// # 返回
-/// 返回与节点一一对应的绑定。
-///
-/// # 错误
-/// 责任组织为空、职责分离或候选人账号与权限不通过、定义为空、审批人引用或显示名非法时返回校验或冲突错误。读取失败时返回对应错误。
+// 为定义全部节点冻结启动绑定，并重验候选人账号、权限与职责分离。
+//
+// `db` 为账号与授权所在数据库；`rbac` 为候选人权限使用的 RBAC；`graph` 为定义图；`initiator_id` 为启动人，用于职责分离；`organization_id` 为单据责任组织；
+// 这里只校验非空；`executor` 为调用方数据库快照。返回与节点一一对应的绑定。
+//
+// 责任组织为空、职责分离或候选人账号与权限不通过、定义为空、审批人引用或显示名非法时返回校验或冲突错误。读取失败时返回对应错误。
 async fn start_bindings_from_graph(
     db: &Database,
     rbac: &dyn FulfillmentWorkflow,
@@ -603,21 +552,12 @@ async fn start_bindings_from_graph(
     Ok(start_bindings(graph, |_| None, "审批定义没有节点，无法启动库存调整审批")?)
 }
 
-/// 在调用方快照内重验责任组织非空、职责分离，以及候选人是有效后台账号且具备审批读取和决定权限。
-///
-/// # 参数
-/// * `db` - 账号与授权所在数据库。
-/// * `rbac` - 候选人权限使用的 RBAC。
-/// * `graph` - 已加载的审批定义图。
-/// * `initiator_id` - 启动人，用于职责分离。
-/// * `organization_id` - 单据责任组织；只校验非空。
-/// * `executor` - 调用方数据库快照。
-///
-/// # 返回
-/// 全部候选人通过时无返回值。
-///
-/// # 错误
-/// 责任组织为空、职责分离不满足、审批人账号无效或缺少审批读取和决定权限、定义为空时返回校验或冲突错误。账号与权限读取失败时返回对应错误。
+// 在调用方快照内重验责任组织非空、职责分离，以及候选人是有效后台账号且具备审批读取和决定权限。
+//
+// `db` 为账号与授权所在数据库；`rbac` 为候选人权限使用的 RBAC；`graph` 为已加载的审批定义图；`initiator_id` 为启动人，用于职责分离；`organization_id`
+// 为单据责任组织；只校验非空；`executor` 为调用方数据库快照。全部候选人通过时无返回值。
+//
+// 责任组织为空、职责分离不满足、审批人账号无效或缺少审批读取和决定权限、定义为空时返回校验或冲突错误。账号与权限读取失败时返回对应错误。
 pub(crate) async fn revalidate_stock_adjustment_start_candidates(
     _db: &Database,
     rbac: &dyn FulfillmentWorkflow,
@@ -629,13 +569,9 @@ pub(crate) async fn revalidate_stock_adjustment_start_candidates(
     rbac.revalidate_stock_adjustment_candidates(graph, initiator_id, organization_id, executor).await
 }
 
-/// 在原事务重读审批候选并检查完整同角色资格。
-/// # 参数
-/// identity_service、db为共享设施；graph为发布图，其余参数为申请人与真实责任组织。
-/// # 返回
-/// 全部候选仍合格时成功。
-/// # 错误
-/// 账号、角色、职责分离或定义失效时拒绝。
+// 在原事务重读审批候选并检查完整同角色资格。
+//
+// identity_service、db为共享设施；graph为发布图，其余参数为申请人与真实责任组织。全部候选仍合格时成功。账号、角色、职责分离或定义失效时拒绝。
 pub(crate) async fn revalidate_candidates_with(
     identity_service: &Arc<AuthorizationService>,
     db: &Database,
@@ -684,7 +620,7 @@ pub(crate) async fn revalidate_candidates_with(
     Ok(())
 }
 
-/// 仅在调用方事务快照内批读候选账号；非事务检查仍逐节点读取当前事实。
+// 仅在调用方事务快照内批读候选账号；非事务检查仍逐节点读取当前事实。
 async fn stock_adjustment_candidate_accounts(
     db: &Database,
     assignee_ids: &[String],

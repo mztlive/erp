@@ -7,12 +7,11 @@ use super::{ASSIGNEES, BpmWorkflowRepository, DefinitionGraph};
 
 impl BpmWorkflowRepository<'_> {
     /// 读取绑定定义及实例全部节点指派，恢复动态节点的启动快照。
-    /// # 参数
-    /// 精确实例与调用方执行器。
-    /// # 返回
     /// 定义不存在返回空；存在时返回完整运行图。
-    /// # 错误
+    ///
     /// 来源或版本不一致、指派缺失或数据库错误时拒绝。
+    ///
+    /// 精确实例与调用方执行器。
     pub async fn load_instance_graph(
         &self,
         instance: &ApprovalProcessInstance,

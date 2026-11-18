@@ -39,16 +39,7 @@ use crate::http::state::HttpState;
 use crate::http::upload;
 
 /// 查询文件资产列表（列表不暴露敏感对象存储键）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已认证操作人
-/// * `query` - 分页与筛选参数（`file_name`/`security_scan_status` 等）
-///
-/// # 返回
-/// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
-///
-/// # 错误
+/// `query` 为分页与筛选参数（`file_name`/`security_scan_status` 等）。
 /// 无文件列表资格、参数非法或读取失败时拒绝。
 pub async fn file_asset_list(
     State(state): State<HttpState>,
@@ -61,16 +52,7 @@ pub async fn file_asset_list(
 }
 
 /// 查询文件资产详情；敏感资产不返回对象存储键或公开 URL。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已认证操作人
-/// * `id` - 文件资产 ID
-///
-/// # 返回
 /// 返回完整资产视图。
-///
-/// # 错误
 /// 无文件详情资格、资产缺失或读取失败时拒绝。
 pub async fn file_asset_detail(
     State(state): State<HttpState>,
@@ -85,6 +67,7 @@ pub async fn file_asset_detail(
 /// 在鉴权与审计后以内联内容响应返回文件资产；对象存储键不进入响应。
 ///
 /// # Errors
+///
 /// 文件不存在、已拒绝/隔离、审计失败或对象存储读取失败时返回错误。
 pub async fn file_asset_preview(
     State(state): State<HttpState>,
@@ -116,20 +99,8 @@ pub async fn file_asset_preview(
     Ok(response)
 }
 
-/// 上传文件并登记文件资产。
-///
-/// Multipart 表单：`file` 文件字段 + `sensitivity_class`/`retention_class`/
-/// `expires_at`（可选）/`document_id`（可选，携带时同事务建立附件关联）/
-/// `usage`（可选）。文件保存到启动时注入的 `storage::S3Storage`，
-/// 内容指纹为带密钥 HMAC-SHA256（密钥取 `app.secret`，见最终报告协调事项）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `multipart` - Multipart 表单数据
-///
-/// # 返回
-/// 返回新建的资产详情视图。
+/// 上传通用文件资产时先预检业务资格，再读取 `file` 和治理字段 `sensitivity_class`、`retention_class`、可选 `expires_at`。可选 `document_id` 需另验对象资格，附件关系与资产登记同事务；`usage` 可选。
+/// 文件写入共享 S3，内容指纹使用 `app.secret` 计算 HMAC-SHA256；只在确认允许补偿时删除对象，提交结果未知时保留。
 pub async fn file_asset_upload(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -177,14 +148,7 @@ pub async fn file_asset_upload(
     Ok(ApiResponse::ok_with_data(asset))
 }
 
-/// 用存储层公开 URL 拼接规则生成对象访问地址。
-///
-/// # 参数
-/// * `state` - 应用状态（提供 S3 存储客户端）
-/// * `storage_object_key` - 对象存储键
-///
-/// # 返回
-/// 返回浏览器可访问的公开 URL。
+// 仅在生成普通资产响应时按存储配置拼接公开 URL；拼接失败记录错误并沿用对象键。
 fn build_public_url(state: &HttpState, storage_object_key: &str) -> String {
     match state.application().storage().public_url(storage_object_key) {
         Ok(url) => url,
@@ -199,7 +163,7 @@ fn build_public_url(state: &HttpState, storage_object_key: &str) -> String {
     }
 }
 
-/// 仅普通资产暴露公开访问信息；敏感资产的底层对象键不进入 HTTP 响应。
+// 交付文件元数据前，只为普通资产补公开 URL；敏感资产清除对象键、内容指纹和公开地址。
 pub(crate) fn prepare_asset_response(state: &HttpState, view: &mut FileAssetView) {
     if view.sensitivity_class == erp_support::SensitivityClass::General {
         view.public_url = Some(build_public_url(state, &view.storage_object_key));
@@ -211,14 +175,6 @@ pub(crate) fn prepare_asset_response(state: &HttpState, view: &mut FileAssetView
 }
 
 /// 登记文件资产（元数据登记；文件已由调用方落盘到受控对象存储）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 登记请求（`{ storage_object_key, file_name, content_type, byte_size,
-///   content_hmac, sensitivity_class, retention_class, expires_at }`）
-///
-/// # 返回
 /// 返回新建的资产详情视图。
 pub async fn file_asset_register(
     State(state): State<HttpState>,
@@ -232,19 +188,10 @@ pub async fn file_asset_register(
 }
 
 /// 建立单据附件关联（安全检查、保留期与销毁状态不阻断关联）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 关联请求（`{ document_id, file_asset_id, usage }`）
-///
-/// # 返回
+/// `req` 为关联请求（`{ document_id, file_asset_id, usage }`）。
 /// 返回新建的附件关联视图。
-///
-/// # 错误
 /// 销售单据或销售变更单不可见时拒绝。
 ///
-/// # 关键业务约束
 /// 销售附件必须独立重验来源销售单范围。
 pub async fn document_attachment_create(
     State(state): State<HttpState>,
@@ -267,19 +214,9 @@ pub async fn document_attachment_create(
 }
 
 /// 按业务单据查询附件关联。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已认证操作人
-/// * `id` - 业务单据 ID
-///
-/// # 返回
 /// 返回附件关联视图列表。
-///
-/// # 错误
 /// 销售单据或销售变更单不可见时拒绝。
 ///
-/// # 关键业务约束
 /// 列表已授权不能作为附件凭证；销售附件独立重验来源销售单。
 pub async fn document_attachment_list(
     State(state): State<HttpState>,
@@ -299,14 +236,7 @@ pub async fn document_attachment_list(
 }
 
 /// 记录安全检查结果（通过/拒绝/隔离；隔离后经人工复核可放行或拒绝）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 文件资产 ID
-/// * `req` - 更新请求（含期望版本与检查结果）
-///
-/// # 返回
+/// `req` 为更新请求（含期望版本与检查结果）。
 /// 返回更新后的资产视图。
 pub async fn file_asset_scan_result(
     State(state): State<HttpState>,
@@ -321,14 +251,7 @@ pub async fn file_asset_scan_result(
 }
 
 /// 销毁文件资产（销毁审计只记录一次；已销毁资产不得再用于业务关联）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 文件资产 ID
-/// * `req` - 销毁请求（含期望版本）
-///
-/// # 返回
+/// `req` 为销毁请求（含期望版本）。
 /// 返回销毁后的资产视图。
 pub async fn file_asset_destroy(
     State(state): State<HttpState>,
@@ -362,10 +285,7 @@ pub(crate) struct PendingAssetFile {
     pub file: AssetFile,
 }
 
-/// 一次解析 multipart 中的 JSON 命令和全部具名文件。
-///
-/// 字段顺序不构成协议；`command` 是唯一 JSON 字段，其余带文件名的字段名均
-/// 作为临时文件引用。单文件沿用 5 MiB 上限，单次命令最多携带 32 个文件。
+// 从复合上传中读取唯一的 `command` JSON 字段，并将每个具名文件字段作为临时引用。解析不依赖字段顺序；文件上限为每个 5 MiB、每次 32 个。
 pub(crate) async fn extract_command_with_asset_files<T: DeserializeOwned>(
     multipart: &mut Multipart,
 ) -> std::result::Result<(T, Vec<PendingAssetFile>), Error> {
@@ -419,9 +339,7 @@ pub(crate) async fn extract_command_with_asset_files<T: DeserializeOwned>(
     Ok((command, files))
 }
 
-/// 把一组已校验文件写入对象存储，并形成尚未登记的文件资产事务载荷。
-///
-/// 任一对象写入失败时删除本批次此前已经写入的对象。
+// 业务事务前逐个保存已校验文件并生成待登记载荷；若某个对象写入失败，尝试清理同批此前已保存对象。
 pub(crate) async fn store_pending_asset_files(
     state: &HttpState,
     files: Vec<PendingAssetFile>,
@@ -449,31 +367,16 @@ pub(crate) async fn store_pending_asset_files(
     Ok(requests)
 }
 
-/// 提取 Multipart 表单中的第一个文件字段并校验大小与 MIME。
-///
-/// # 参数
-/// * `multipart` - Multipart 表单数据
-///
-/// # 返回
-/// 返回校验通过的文件。
-///
-/// # 错误
-/// 无文件字段、文件超过 5 MiB 或缺少 MIME 类型时返回错误。
+// 提取 Multipart 表单中的第一个文件字段并校验大小与 MIME。
+// 返回校验通过的文件。
+// 无文件字段、文件超过 5 MiB 或缺少 MIME 类型时返回错误。
 pub(crate) async fn extract_asset_file(multipart: &mut Multipart) -> std::result::Result<AssetFile, Error> {
     extract_asset_file_with_limit(multipart, upload::MAX_UPLOAD_FILE_BYTES).await
 }
 
-/// 按调用方业务上限提取首个文件，并继续执行扩展名、MIME 与真实文件头校验。
-///
-/// # 参数
-/// * `multipart` - Multipart 表单数据
-/// * `max_file_bytes` - 当前业务允许的单文件最大字节数
-///
-/// # 返回
-/// 返回校验通过的文件。
-///
-/// # 错误
-/// 无文件字段、文件超过业务上限或文件类型不受支持时返回错误。
+// 按调用方业务上限提取首个文件，并继续执行扩展名、MIME 与真实文件头校验。
+// 返回校验通过的文件。
+// 无文件字段、文件超过业务上限或文件类型不受支持时返回错误。
 pub(crate) async fn extract_asset_file_with_limit(
     multipart: &mut Multipart,
     max_file_bytes: usize,
@@ -506,9 +409,8 @@ pub(crate) async fn extract_asset_file_with_limit(
     Err(Error::BadRequest("未上传文件".to_string()))
 }
 
-/// 把已校验文件写入对象存储并构造尚未落库的文件资产登记命令。
-///
-/// 数据库登记由调用方服务事务负责；调用方失败时必须删除返回命令中的对象键。
+// 在业务登记事务前将已校验字节及内容类型写入 S3，生成携带真实大小及带密钥指纹的待登记命令。
+// 调用方负责按提交结果处理补偿；结果未知时不能删除对象。
 pub(crate) async fn store_asset_file(
     state: &HttpState,
     file: AssetFile,
@@ -543,7 +445,7 @@ pub(crate) async fn store_asset_file(
     })
 }
 
-/// 校验附件扩展名、声明 MIME 与真实文件头一致；支持受控图片和 PDF。
+// 登记附件前验证支持的图片或 PDF；只接受扩展名、声明 MIME 和实际文件头一致的非空内容。
 pub(crate) fn validate_asset_file(file: AssetFile) -> std::result::Result<AssetFile, Error> {
     if file.content.is_empty() {
         return Err(Error::BadRequest("上传文件不能为空".to_string()));
@@ -585,7 +487,7 @@ pub(crate) struct FileAssetFormFields {
 }
 
 impl Default for FileAssetFormFields {
-    /// 提供安全默认值（表单未携带治理字段时兜底；业务侧由调用方保证显式指定）。
+    // 通用上传省略治理字段时使用安全默认值；需要特定治理策略的业务应显式传入。
     fn default() -> Self {
         Self {
             sensitivity_class: erp_support::SensitivityClass::General,
@@ -598,16 +500,9 @@ impl Default for FileAssetFormFields {
 }
 
 impl FileAssetFormFields {
-    /// 从 Multipart 表单读取治理与关联字段。
-    ///
-    /// # 参数
-    /// * `multipart` - Multipart 表单数据
-    ///
-    /// # 返回
-    /// 返回解析后的表单字段。
-    ///
-    /// # 错误
-    /// 表单字段解析失败或枚举值非法时返回错误。
+    // 从 Multipart 表单读取治理与关联字段。
+    // 返回解析后的表单字段。
+    // 表单字段解析失败或枚举值非法时返回错误。
     pub(crate) async fn from_multipart(multipart: &mut Multipart) -> std::result::Result<Self, Error> {
         let mut fields = Self::default();
         while let Some(field) =
@@ -645,13 +540,8 @@ impl FileAssetFormFields {
     }
 }
 
-/// 计算内容的 SHA-256 十六进制摘要（作为 HMAC 的明文形态）。
-///
-/// # 参数
-/// * `content` - 文件内容
-///
-/// # 返回
-/// 返回小写十六进制摘要。
+// 计算内容的 SHA-256 十六进制摘要（作为 HMAC 的明文形态）。
+// 返回小写十六进制摘要。
 fn sha256_hex(content: &[u8]) -> String {
     use jwt_sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
@@ -659,17 +549,7 @@ fn sha256_hex(content: &[u8]) -> String {
     hasher.finalize().iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
-/// 生成对象存储键：对受支持图片追加小写扩展名，便于 CDN 和浏览器识别资源类型。
-///
-/// 对象的 `Content-Type` 由 S3 `PutObject` 元数据明确写入；扩展名只作为 URL 可读性与
-/// CDN 兼容性辅助，非图片文件保持原有无扩展名键。
-///
-/// # 参数
-/// * `id` - 不可猜测的唯一对象标识
-/// * `file_name` - 上传文件展示名
-///
-/// # 返回
-/// 返回对象存储键。
+// 上传时以服务端生成的对象 ID 为键；受支持的图片追加小写扩展名方便浏览器及 CDN 识别，不靠扩展名代替设置 S3 的 `Content-Type`。非图片保留无扩展名键。
 fn storage_key_with_extension(id: String, file_name: &str) -> String {
     let extension = upload::normalized_extension(file_name)
         .filter(|extension| upload::expected_mime(extension).is_some());

@@ -82,26 +82,12 @@ struct DecisionServices<'a, A> {
 }
 
 impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
-    /// 提交当前开放任务的通过或驳回。
+    /// 提交当前开放审批任务的 `APPROVE` 或 `REJECT`。按期望任务版本和幂等键识别命令；原因空白按未提供处理。
     ///
-    /// 加载任务、执行、实例与定义图，重验三方责任与写时资格，调用
-    /// `prepare_decision` 规划，并在一个 MongoDB 事务中应用：最终通过先登记
-    /// 领域动作（单据生效），再写实例推进（CAS）、执行结束/插入、审批人绑定、
-    /// 命令收据、任务完成/关闭/新建、通知 outbox 与审计。
+    /// 新决定在同一事务核对任务、执行和冻结实例的责任链及当前资格，应用引擎计划。
+    /// 最终通过先执行领域动作，再写审批 CAS、任务、收据、通知 outbox 和审计。
     ///
-    /// # 参数
-    /// * `actor` - 当前决定人
-    /// * `work_item_id` - 当前开放单据审批任务 ID
-    /// * `decision` - `APPROVE` 或 `REJECT`
-    /// * `reason` - 可选决定原因；空白按未提供处理
-    /// * `expected_task_version` - 调用方持有的任务版本
-    /// * `idempotency_key` - 本次决定命令幂等键
-    ///
-    /// # 返回
-    /// 返回回放或实际应用后的审批命令视图。
-    ///
-    /// # 错误
-    /// 任务不存在、责任不一致、版本冲突或仓储失败时返回错误。
+    /// 终态重放仍须验证原决定身份和当前权限；任务缺失、责任不符、版本冲突或设施故障时拒绝。若资格失效触发受阻并成功提交事实，对调用方返回受阻错误。
     pub async fn submit_decision(
         &self,
         actor: &AuditActor,
@@ -139,7 +125,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         Ok(outcome.view)
     }
 
-    /// 在唯一 MongoDB 事务中先查收据，再执行决定前置、授权与全部写入。
+    // 用单一写事务处理决定命令：先判断是否可回放，确属新决定才重验任务前置与当前权限，再应用全部写入。
     async fn commit_decision(
         &self,
         actor: &AuditActor,
@@ -173,7 +159,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             .await
     }
 
-    /// 并发唯一键或提交结果未知后，必须使用新的事务会话只读胜者收据。
+    // 唯一键竞争或提交结果不确定时，在新事务会话仅尝试重验并读取胜者收据，不重新执行决定写入。
     async fn recover_decision_after_competing_commit(
         &self,
         actor: &AuditActor,
@@ -210,18 +196,12 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     }
 }
 
-/// 执行与 Fresh 相同的任务前置；只有 `NotOpen` 才可继续证明终态回放。
-///
-/// # 参数
-/// * `item` - 已加载的审批任务。
-/// * `actor_id` - 当前操作人。
-/// * `expected_task_version` - 调用方持有的任务版本。
-///
-/// # 返回
-/// 任务仍开放且前置通过时返回 `Fresh`；已终结且仍有执行引用时返回 `Terminal`。
-///
-/// # 错误
-/// 非当前责任人、版本冲突、任务类型或执行引用不合法，或已终结但没有执行引用时返回稳定任务错误。
+// 执行与 Fresh 相同的任务前置；只有 `NotOpen` 才可继续证明终态回放。
+// 任务仍开放且前置通过时返回 `Fresh`；已终结且仍有执行引用时返回 `Terminal`。
+//
+// 非当前责任人、版本冲突、任务类型或执行引用不合法，或已终结但没有执行引用时返回稳定任务错误。
+//
+// `item`：已加载的审批任务；`expected_task_version`：调用方持有的任务版本。
 pub(super) fn decision_receipt_lookup_gate(
     item: &WorkItem,
     actor_id: &str,
@@ -238,21 +218,13 @@ pub(super) fn decision_receipt_lookup_gate(
     }
 }
 
-/// 终态任务的 Fresh 语义固定为稳定 `APPROVAL_TASK_NOT_OPEN`，不得暴露收据或授权差异。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回 `ApprovalTaskNotOpen`。
-///
-/// # 错误
-/// 不返回错误。
+// 终态任务的 Fresh 语义固定为稳定 `APPROVAL_TASK_NOT_OPEN`，不得暴露收据或授权差异。
+// 返回 `ApprovalTaskNotOpen`。
 pub(super) fn decision_terminal_fresh_error() -> Error {
     Error::from_approval_code(ErrorCode::ApprovalTaskNotOpen)
 }
 
-/// 决定回放先执行与 Fresh 相同的任务前置和当前授权，再允许查询和比较收据。
+// 先从真实任务区分新决定与终态。终态回放必须证明当前认证主体就是实际原决定人并复验其权限，之后才能查收据和比较载荷。
 async fn replay_decision(
     authorization: &AuthorizationService,
     identity_service: &SharedRbacService,
@@ -303,10 +275,10 @@ async fn replay_decision(
     replay_terminal_receipt_view(db, actor, command, &item, &execution_id, executor).await
 }
 
-/// 终态决定在身份证明后按收据回放；缺失或不匹配时失败，不得当作未执行。
-///
-/// # Panics
-/// 已加载收据被分类为 `Fresh` 时 `unreachable!`，表示分类器与查询结果矛盾。
+// 终态决定在身份证明后按收据回放；缺失或不匹配时失败，不得当作未执行。
+//
+// 触发 panic 的条件：
+// 已加载收据被分类为 `Fresh` 时 `unreachable!`，表示分类器与查询结果矛盾。
 async fn replay_terminal_receipt_view(
     db: &Database,
     actor: &AuditActor,
@@ -356,7 +328,7 @@ async fn replay_terminal_receipt_view(
     }))
 }
 
-/// 在同一事务内执行决定的完整前置、授权、领域动作与运行时写入。
+// 在一个事务中执行决定的完整前置、授权、领域动作与运行时写入。
 // 决定事务 8 参数：与受阻取消/恢复入口同形以便统一分派，顺序由调用点锚定；告警逐项压制。
 #[allow(clippy::too_many_arguments)]
 async fn submit_decision_apply(
@@ -409,7 +381,7 @@ async fn submit_decision_apply(
     .await
 }
 
-/// 唯一收据先仲裁，领域动作、实例推进、指派授权及抄送沿原事务原子保存。
+// 新决定由唯一收据先仲裁；领域动作、审批实例推进、指派授权及抄送在同一事务应用，不允许回放重复写入。
 async fn persist_open_decision(
     services: &DecisionServices<'_, impl WorkflowAuthorizationPort>,
     ports: (&dyn ApprovalDomainActionPort, &dyn crate::ports::WorkflowAuditPort),
@@ -442,7 +414,7 @@ async fn persist_open_decision(
     Ok(decision_outcome(prepared, command))
 }
 
-/// 从已经持久化的决定计划形成既有返回视图，不再查询或选择授权规则。
+// 将已持久化的决定计划转换成命令响应与受阻标记，此步不再读取对象或选择授权规则。
 fn decision_outcome(
     prepared: &PreparedOpenDecision,
     command: &RuntimeDecisionCommand,
@@ -492,7 +464,7 @@ fn persist_decision_input<'a>(
     }
 }
 
-/// 收据作用域只能来自同一命令身份的当前 V3 或精确历史候选。
+// 决定回放仅接受完整命令身份的 V3 作用域或对应历史候选，不能跨不同执行身份匹配收据。
 fn ensure_decision_receipt_scope(
     receipt: &ApprovalCommandReceipt,
     identity: &PreparedCommandIdentity,
@@ -503,7 +475,7 @@ fn ensure_decision_receipt_scope(
     Ok(())
 }
 
-/// 在 legacy 摘要双读前验证收据、任务执行、实例、流程类型与冻结主体属于同一运行身份。
+// 对历史摘要进行双读前，核对收据、任务执行、实例、运行类型和提交快照均指向同一精确运行身份。
 async fn verify_decision_receipt_runtime_identity(
     db: &Database,
     receipt: &ApprovalCommandReceipt,
@@ -545,17 +517,11 @@ async fn verify_decision_receipt_runtime_identity(
     Ok(execution)
 }
 
-/// 从任务不可逆终态与执行事实提取原决定人；不得把当前 owner 投影作为回放授权。
-///
-/// # 参数
-/// * `item` - 已终结或仍开放的任务。
-/// * `execution` - 任务所属执行。
-///
-/// # 返回
-/// 完成态要求决定人、决定与结束时间一致；关闭态要求受阻关闭人与当前审批人一致。不满足或任务仍开放时返回 `None`。
-///
-/// # 错误
-/// 不返回错误。
+// 从任务不可逆终态与执行事实提取原决定人；不得把当前 owner 投影作为回放授权。
+//
+// 完成态要求决定人、决定与结束时间一致；关闭态要求受阻关闭人与当前审批人一致。不满足或任务仍开放时返回 `None`。
+//
+// `item`：已终结或仍开放的任务。
 pub(super) fn decision_terminal_actor<'a>(
     item: &'a WorkItem,
     execution: &'a ApprovalNodeExecution,
@@ -592,19 +558,10 @@ pub(super) fn decision_terminal_actor<'a>(
     }
 }
 
-/// legacy 决定摘要只有在不可变终态执行与任务完整证明原命令时才允许回放。
-///
-/// # 参数
-/// * `item` - 终态任务。
-/// * `execution` - 终态执行。
-/// * `command` - 本次决定命令。
-/// * `actor_id` - 当前操作人，必须是原完成人。
-///
-/// # 返回
-/// 任务版本、决定、原因、决定人和结束时间全部一致时返回 `true`；期望版本溢出时返回 `false`。
-///
-/// # 错误
-/// 不返回错误。
+// legacy 决定摘要只有在不可变终态执行与任务完整证明原命令时才允许回放。
+// 任务版本、决定、原因、决定人和结束时间全部一致时返回 `true`；期望版本溢出时返回 `false`。
+//
+// `actor_id`：当前操作人，必须是原完成人。
 pub(super) fn legacy_decision_terminal_facts_match(
     item: &WorkItem,
     execution: &ApprovalNodeExecution,
@@ -631,18 +588,10 @@ pub(super) fn legacy_decision_terminal_facts_match(
         && execution.ended_at.is_some()
 }
 
-/// 终态回放绑定原始任务与冻结主体，不要求该执行仍为实例当前节点。
-///
-/// # 参数
-/// * `item` - 原始任务。
-/// * `execution` - 该任务的执行。
-/// * `snapshot` - 冻结主体。
-///
-/// # 返回
-/// 任务类型、执行、单据、版本、责任组织和审批人都与快照一致时返回 `true`。
-///
-/// # 错误
-/// 不返回错误。
+// 终态回放绑定原始任务与冻结主体，不要求该执行仍为实例当前节点。
+// 任务类型、执行、单据、版本、责任组织和审批人都与快照一致时返回 `true`。
+//
+// `item`：原始任务；`snapshot`：冻结主体。
 pub(super) fn terminal_task_subject_matches(
     item: &WorkItem,
     execution: &ApprovalNodeExecution,
@@ -659,7 +608,7 @@ pub(super) fn terminal_task_subject_matches(
         && item.owner_user_id.as_deref().is_some_and(|id| execution.has_participant(id))
 }
 
-/// 回放只使用冻结运行事实证明原决定人当前仍具备动作权限，不信任收据或 WorkItem owner 投影。
+// 终态回放使用冻结运行事实证明实际决定人仍有动作权限，收据内容和任务当前 owner 投影都不能替代原决定身份。
 async fn authorize_decision_terminal_replay(
     services: &DecisionServices<'_, impl WorkflowAuthorizationPort>,
     actor: &AuditActor,
@@ -700,7 +649,7 @@ async fn authorize_decision_terminal_replay(
     Ok(())
 }
 
-/// 终态回放只接受与执行同实例的冻结主体和节点审批人，缺失时隐藏存在性。
+// 决定回放按原执行加载同实例冻结主体和节点审批人；事实缺失时不暴露具体实例或参与情况。
 async fn load_decision_terminal_replay_facts(
     db: &Database,
     execution: &ApprovalNodeExecution,
@@ -750,19 +699,14 @@ async fn load_decision_terminal_replay_facts(
     Ok((snapshot, adapter_spec_of(document_type)?, assignee, document_type))
 }
 
-/// 将单据审批任务前置校验映射为稳定的 Service 错误。
-///
-/// # 参数
-/// * `error` - WorkItem 返回的决定前置失败原因
-///
-/// # 返回
-/// 返回权限拒绝或稳定冲突错误。
-///
-/// # 错误
-/// 无；本方法只执行错误分类转换。
-///
-/// # 关键业务约束
-/// 非当前责任人必须保持禁止语义，任务状态、版本和执行引用失败必须保持冲突语义。
+// 将单据审批任务前置校验映射为稳定的 Service 错误。
+// 非当前责任人必须保持禁止语义，任务状态、版本和执行引用失败必须保持冲突语义。
+//
+// 返回权限拒绝或稳定冲突错误。
+//
+// 本方法只执行错误分类转换。
+//
+// `error`：WorkItem 返回的决定前置失败原因。
 pub(super) fn map_approval_task_error(error: ApprovalDecisionTaskError) -> Error {
     match error {
         ApprovalDecisionTaskError::NotCurrentOwner => Error::Forbidden("无权执行该审批动作".to_string()),
@@ -775,19 +719,14 @@ pub(super) fn map_approval_task_error(error: ApprovalDecisionTaskError) -> Error
     }
 }
 
-/// 将 BPM 决定连线错误映射为运行时冲突。
-///
-/// # 参数
-/// * `error` - BPM 图模型返回的决定连线错误
-///
-/// # 返回
-/// 返回失败关闭的运行时冲突错误。
-///
-/// # 错误
-/// 无；本方法只执行错误分类转换。
-///
-/// # 关键业务约束
-/// 持久化图缺失或重复决定连线时不得继续推导下一审批人。
+// 将 BPM 决定连线错误映射为运行时冲突。
+// 持久化图缺失或重复决定连线时不得继续推导下一审批人。
+//
+// 返回失败关闭的运行时冲突错误。
+//
+// 本方法只执行错误分类转换。
+//
+// `error`：BPM 图模型返回的决定连线错误。
 pub(super) fn map_runtime_graph_error(error: ModelError) -> Error {
     tracing::debug!(%error, "无法读取后续审批节点");
     Error::ConflictError("审批流程设置不完整，无法确定下一环节，请联系审批管理员".into())
@@ -860,7 +799,7 @@ mod rejection_replay_tests {
     }
 }
 
-/// 仅将当前精确审批来源的正式分配延迟转换为可重试状态，不替代统一对象授权。
+// 只有当前真实审批来源的正式分配尚未生效才转成可重试状态；保留中央对象授权，不能因此放行任务。
 async fn decision_source_readiness(
     port: &impl WorkflowAuthorizationPort,
     actor: &AuditActor,

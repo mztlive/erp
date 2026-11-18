@@ -28,24 +28,11 @@ pub struct CancelPlan {
     pub blocked_port_required: bool,
 }
 
-/// 构造统一取消计划。
+/// 撤回用例加载当前执行并统计开放任务后，用本计划确定关闭策略和取消端口。
+/// 运行中的单人节点须有一个开放任务，或签节点须有至少一个且不超过冻结人数；受阻节点不得有开放任务。
+/// 人员失效仍走业务取消，其他阻塞走受阻取消。终态、缺少当前执行引用或任务数量不符时拒绝规划。
 ///
-/// 终态或缺少当前执行的实例失败关闭；运行中必须恰有一个开放任务，受阻必须
-/// 没有开放任务；人员失效类 blocker 走业务取消端口，其余 blocker 必须走受阻
-/// 取消端口。
-///
-/// # 参数
-/// * `input` - 实例、当前执行与开放任务数量
-///
-/// # 返回
-/// 返回任务关闭策略与取消端口分类。
-///
-/// # 错误
-/// 实例已终态、缺少当前执行或开放任务数量与状态不一致时返回模型状态错误。
-///
-/// # 关键业务约束
-/// 取消与并发审批写入的仲裁继续由调用方按实例、执行与任务版本 CAS 保证；
-/// 本计划只计算纯规则，不读取仓储。
+/// 本函数不查仓储；调用方提交时仍须以实例、执行和任务版本做 CAS，与并发审批仲裁。
 pub fn plan_cancel(input: CancelPlanInput<'_>) -> EngineResult<CancelPlan> {
     let task_policy = input.instance.cancellation_task_policy()?;
     input.current.ensure_cancellation_tasks(task_policy, input.open_task_count)?;
@@ -111,7 +98,7 @@ mod tests {
         .expect("当前执行夹具")
     }
 
-    /// 运行中实例恰有一个开放任务：关闭任务并走业务取消端口。
+    // 验证待审节点只有一条开放任务时，业务撤回会同时安排关闭该任务。
     #[test]
     fn running_with_single_open_task_plans_close_and_business_port() {
         let plan = plan_cancel(CancelPlanInput {
@@ -125,7 +112,7 @@ mod tests {
         assert_eq!(plan.task_policy, crate::model::ApprovalCancellationTaskPolicy::CloseOpenTask);
     }
 
-    /// 运行中实例零开放任务表示运行事实不一致，必须失败关闭。
+    // 运行中的单人节点不应无待办；缺任务时撤回不能掩盖这项不一致。
     #[test]
     fn running_without_open_task_fails_closed() {
         let error = plan_cancel(CancelPlanInput {
@@ -140,7 +127,7 @@ mod tests {
         );
     }
 
-    /// 运行中实例重复开放任务同样失败关闭。
+    // 单人节点出现多条开放任务时应拒绝撤回，而非随意选择一条关闭。
     #[test]
     fn running_with_multiple_open_tasks_fails_closed() {
         let error = plan_cancel(CancelPlanInput {
@@ -155,7 +142,7 @@ mod tests {
         );
     }
 
-    /// 受阻实例必须证明没有开放任务；人员失效 blocker 仍走业务取消端口。
+    // 人员受阻且任务已关闭时，撤回仍走业务端口，不会重复关闭任务。
     #[test]
     fn blocked_without_open_task_plans_no_close() {
         let plan = plan_cancel(CancelPlanInput {
@@ -169,7 +156,7 @@ mod tests {
         assert_eq!(plan.task_policy, crate::model::ApprovalCancellationTaskPolicy::NoOpenTask);
     }
 
-    /// 受阻实例仍持有开放任务时失败关闭。
+    // 验证受阻节点遗留开放任务时不会生成撤回计划。
     #[test]
     fn blocked_with_open_task_fails_closed() {
         let error = plan_cancel(CancelPlanInput {
@@ -181,7 +168,7 @@ mod tests {
         assert_eq!(error, EngineError::Model(ModelError::InvalidStatus("受阻审批实例不得存在开放任务")));
     }
 
-    /// 人员失效 blocker 只允许业务取消端口。
+    // 以职责分离冲突为例，验证可原人恢复的阻塞仍走业务撤回，而不是受阻取消端口。
     #[test]
     fn personnel_blocker_uses_business_cancel_port() {
         let plan = plan_cancel(CancelPlanInput {
@@ -201,7 +188,7 @@ mod tests {
         );
     }
 
-    /// 非人员 blocker 必须走受阻取消端口。
+    // 以开放任务冲突为例，验证一致性阻塞必须走受阻取消端口，不能按普通撤回处理。
     #[test]
     fn structural_blocker_requires_blocked_cancel_port() {
         let plan = plan_cancel(CancelPlanInput {
@@ -213,7 +200,7 @@ mod tests {
         assert!(plan.blocked_port_required);
     }
 
-    /// 最终通过实例不得撤回。
+    // 最终通过后，即使提供先前执行也不能生成撤回计划。
     #[test]
     fn approved_instance_fails_closed() {
         let mut approved = running_instance();
@@ -227,7 +214,7 @@ mod tests {
         assert_eq!(error, EngineError::Model(ModelError::InvalidStatus("已最终通过的审批实例不得撤回")));
     }
 
-    /// 已取消实例不得重复撤回。
+    // 已取消实例不会再次得到撤回计划，避免重复处理任务。
     #[test]
     fn cancelled_instance_fails_closed() {
         let mut cancelled = running_instance();
@@ -241,7 +228,7 @@ mod tests {
         assert_eq!(error, EngineError::Model(ModelError::InvalidStatus("已取消的审批实例不得重复撤回")));
     }
 
-    /// 可撤回实例缺少当前执行引用时失败关闭。
+    // 即使传入执行和任务数量，实例没有当前令牌也不能规划撤回。
     #[test]
     fn missing_current_execution_fails_closed() {
         let fresh = ApprovalProcessInstance::start_running(crate::model::NewProcessInstance {

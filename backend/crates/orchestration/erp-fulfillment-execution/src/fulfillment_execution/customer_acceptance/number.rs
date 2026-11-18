@@ -41,13 +41,9 @@ pub(super) struct CreationNumber<'a> {
 }
 
 impl CreationNumber<'_> {
-    /// 在调用方事务完成全部创建授权，再按既有永不回收合同独立取号。
-    /// # 参数
-    /// executor 为原创建事务执行器。
-    /// # 返回
-    /// 返回已独立消费的客户验收编号。
-    /// # 错误
-    /// 创建、销售来源、凭证资格拒绝或计数器分配失败时返回错误。
+    // 在调用方事务完成全部创建授权，再按既有永不回收合同独立取号。
+    //
+    // executor 为原创建事务执行器。返回已独立消费的客户验收编号。创建、销售来源、凭证资格拒绝或计数器分配失败时返回错误。
     pub(super) async fn allocate(&self, executor: &mut dyn Executor) -> Result<String> {
         authorized_number(self, executor).await
     }

@@ -26,20 +26,13 @@ use crate::{Error, Result};
 type WriteFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T>> + Send + 'a>>;
 
 impl SupplierPortalProcess {
-    /// 在门户会话事务中执行一次命令；已有回执时只返回原结果。
-    ///
-    /// # 参数
-    /// * `actor` - 当前门户身份。
-    /// * `action` - 命令动作。
-    /// * `key` - 幂等键。
-    /// * `payload` - 纳入命令指纹的载荷。
-    /// * `write` - 尚无回执时执行的业务写入。
-    ///
-    /// # 返回
-    /// 返回本次写入或原回执解码后的结果。
-    ///
-    /// # 错误
-    /// 门户身份不可写、会话失效、命令构造失败、回执损坏或业务写入失败时返回对应错误。事务失败原样传播。
+    // 门户写入口以原键和载荷绑定当前门户账号、供应商及动作；会话重验后，已有回执时只恢复原结果。
+    //
+    // `actor`：当前门户身份；`action`：命令动作；`key`：幂等键；`payload`：纳入命令指纹的载荷；`write`：尚无回执时执行的业务写入。
+    //
+    // 返回本次写入或原回执解码后的结果。
+    //
+    // 门户身份不可写、会话失效、命令构造失败、回执损坏或业务写入失败时返回对应错误。事务失败原样传播。
     pub(super) async fn portal_command<T, P, F>(
         &self,
         actor: &PortalActor,
@@ -58,20 +51,13 @@ impl SupplierPortalProcess {
         Ok(self.portal_command_outcome(actor, action, key, payload, write).await?.0)
     }
 
-    /// 与 `portal_command` 相同，并标明结果是本次新写入还是回放。
-    ///
-    /// # 参数
-    /// * `actor` - 当前门户身份。
-    /// * `action` - 命令动作。
-    /// * `key` - 幂等键。
-    /// * `payload` - 纳入命令指纹的载荷。
-    /// * `write` - 尚无回执时执行的业务写入。
-    ///
-    /// # 返回
-    /// 返回结果，以及是否本次新写入。回放原回执时第二个值为 `false`。
-    ///
-    /// # 错误
-    /// 与 `portal_command` 相同。
+    // 门户调用方需要区分首次写入和重放时使用此入口；事务内复验可写会话，只在没有回执时调用业务写入。
+    //
+    // `actor`：当前门户身份；`action`：命令动作；`key`：幂等键；`payload`：纳入命令指纹的载荷；`write`：尚无回执时执行的业务写入。
+    //
+    // 返回结果，以及是否本次新写入。回放原回执时第二个值为 `false`。
+    //
+    // 与 `portal_command` 相同。
     pub(super) async fn portal_command_outcome<T, P, F>(
         &self,
         actor: &PortalActor,
@@ -119,21 +105,18 @@ impl SupplierPortalProcess {
             .await
     }
 
-    /// 在内部账号事务中执行一次命令；已有回执时只解码原结果。
-    ///
-    /// # 参数
-    /// * `actor` - 内部操作人。
-    /// * `supplier_id` - 命令作用域中的供应商。
-    /// * `action` - 审计动作、供应商来源权限及门户入口权限。
-    /// * `key` - 幂等键。
-    /// * `payload` - 纳入命令指纹的载荷。
-    /// * `write` - 尚无回执时执行的业务写入。
-    ///
-    /// # 返回
-    /// 返回本次写入或原回执解码后的结果。
-    ///
-    /// # 错误
-    /// 供应商范围、内部权限、命令构造、回执解码或业务写入失败时返回对应错误。事务失败原样传播。
+    // 内部操作人代办门户业务时，在原事务检查门户功能与供应商范围，再按原键和载荷回放结果或执行写入。
+    //
+    // - `actor`：内部操作人。
+    // - `supplier_id`：命令作用域中的供应商。
+    // - `action`：审计动作、供应商来源权限及门户入口权限。
+    // - `key`：幂等键。
+    // - `payload`：纳入命令指纹的载荷。
+    // - `write`：尚无回执时执行的业务写入。
+    //
+    // 返回本次写入或原回执解码后的结果。
+    //
+    // 供应商范围、内部权限、命令构造、回执解码或业务写入失败时返回对应错误。事务失败原样传播。
     pub(super) async fn internal_command<T, P, F>(
         &self,
         actor: &AuditActor,
@@ -161,13 +144,13 @@ impl SupplierPortalProcess {
         .await
     }
 
-    /// 固定入口资格、真实目标解析、供应商授权、回放和写入共用原事务。
-    /// # 参数
-    /// actor、action 为认证人及固定动作；resolve 只读取真实目标并构造原命令，write 执行业务写入。
-    /// # 返回
-    /// 本次写入或当前仍有资格读取的原命令结果。
-    /// # 错误
-    /// 入口资格、目标范围、幂等指纹或业务执行失败时拒绝。
+    // 固定入口资格、真实目标解析、供应商授权、回放和写入共用原事务。
+    //
+    // actor、action 为认证人及固定动作；resolve 只读取真实目标并构造原命令，write 执行业务写入。
+    //
+    // 本次写入或当前仍有资格读取的原命令结果。
+    //
+    // 入口资格、目标范围、幂等指纹或业务执行失败时拒绝。
     pub(super) async fn internal_target_command<T, R, F>(
         &self,
         actor: &AuditActor,
@@ -200,7 +183,7 @@ impl SupplierPortalProcess {
             .await
     }
 
-    /// 原事务内的内部命令步骤；组合调用不得另开事务或跳过目标解析。
+    // 原事务内的内部命令步骤；组合调用不得另开事务或跳过目标解析。
     async fn internal_target_stage<T, R, F>(
         &self,
         actor: &AuditActor,
@@ -338,20 +321,13 @@ fn decode<T: DeserializeOwned>(value: serde_json::Value) -> Result<T> {
     serde_json::from_value(value).map_err(|error| Error::Internal(format!("门户命令回执结果损坏: {error}")))
 }
 
-/// 构造绑定操作人、供应商、动作和载荷指纹的门户命令回执身份。
-///
-/// # 参数
-/// * `actor_id` - 操作人账号 ID。
-/// * `supplier_id` - 供应商角色 ID，作为资源范围。
-/// * `action` - 命令动作。
-/// * `key` - 幂等键。
-/// * `payload` - 纳入指纹的载荷。
-///
-/// # 返回
-/// 返回尚未落库的 `CommandReceipt`。
-///
-/// # 错误
-/// 载荷或命令身份无法构造时返回对应错误。
+// 门户写命令进入回执查找前，按操作人、供应商、动作和原幂等键构造身份，载荷用于计算匹配指纹。
+//
+// `supplier_id`：供应商角色 ID，作为资源范围；`action`：命令动作；`key`：幂等键；`payload`：纳入指纹的载荷。
+//
+// 返回尚未落库的 `CommandReceipt`。
+//
+// 载荷或命令身份无法构造时返回对应错误。
 pub(super) fn scoped_command<P: Serialize>(
     actor_id: &str,
     supplier_id: &str,

@@ -40,12 +40,7 @@ impl Default for InquiryListFilter {
 
 impl InquiryListFilter {
     /// 组装授权与业务筛选的交集，禁止关键字覆盖责任范围。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 返回未删除、授权及查询条件交集。
-    /// # 错误
-    /// 无。
     pub fn document(&self) -> Document {
         let mut parts = vec![doc! { "deleted_at": 0_i64 }];
         if let Some(ids) = &self.owner_user_ids {
@@ -79,7 +74,7 @@ impl InquiryListFilter {
     }
 }
 
-/// 保持与领域 serde 的 snake_case 状态一致。
+// 生成询价仓储条件前取与领域序列化一致的 `snake_case` 状态值，避免条件使用错误的字符串。
 fn status_string(status: InquiryStatus) -> &'static str {
     match status {
         InquiryStatus::Draft => "draft",
@@ -99,23 +94,18 @@ pub struct SalesInquiryRepository<'a> {
 
 impl<'a> SalesInquiryRepository<'a> {
     /// 绑定本域数据库。
-    /// # 参数
-    /// `db` 为目标数据库。
-    /// # 返回
     /// 返回仓储。
-    /// # 错误
-    /// 无。
+    ///
+    /// 输入约定：`db` 为目标数据库。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
 
     /// 创建有界询价聚合，不截断冻结历史。
-    /// # 参数
-    /// `inquiry` 为已验证聚合；`executor` 为同一事务。
-    /// # 返回
-    /// 创建成功时返回空结果。
-    /// # 错误
+    /// 结果：创建成功时返回空结果。
     /// 序列化后超过 14 MiB 或数据库写入失败时拒绝。
+    ///
+    /// 输入约定：`inquiry` 为已验证聚合；`executor` 为同一事务。
     pub async fn create(&self, inquiry: &SalesInquiry, executor: &mut dyn Executor) -> SalesResult<()> {
         ensure_document_size(inquiry)?;
         self.db.sales_inquiries().create(inquiry, executor).await?;
@@ -123,12 +113,10 @@ impl<'a> SalesInquiryRepository<'a> {
     }
 
     /// 按版本条件更新有界询价聚合。
-    /// # 参数
-    /// `inquiry` 为同执行器内读取后修改的聚合。
-    /// # 返回
-    /// 更新成功时同步内存中的版本。
-    /// # 错误
+    /// 结果：更新成功时同步内存中的版本。
     /// 版本过期、聚合超过 14 MiB 或数据库失败时拒绝。
+    ///
+    /// 输入约定：`inquiry` 为同执行器内读取后修改的聚合。
     pub async fn update(&self, inquiry: &mut SalesInquiry, executor: &mut dyn Executor) -> SalesResult<()> {
         ensure_document_size(inquiry)?;
         self.db.sales_inquiries().update(inquiry, executor).await?;
@@ -136,12 +124,10 @@ impl<'a> SalesInquiryRepository<'a> {
     }
 
     /// 按已授权范围稳定分页。
-    /// # 参数
-    /// `filter` 包含授权文档及分页；`executor` 为事务执行器。
-    /// # 返回
     /// 返回当前页和使用同一条件的总数。
-    /// # 错误
-    /// 查询失败时返回存储错误。
+    /// 失败条件：查询失败时返回存储错误。
+    ///
+    /// 输入约定：`filter` 包含授权文档及分页；`executor` 为事务执行器。
     pub async fn inquiry_list(
         &self,
         filter: &InquiryListFilter,
@@ -174,12 +160,10 @@ impl<'a> SalesInquiryRepository<'a> {
     }
 
     /// 按有界稳定身份集合读取询价，不从历史任务推断访问权。
-    /// # 参数
-    /// `ids` 为调用方当前任务或来源证明的身份；`executor` 为同一执行器。
-    /// # 返回
     /// 返回全部匹配的未删除聚合，空输入不查库。
-    /// # 错误
     /// 超过 10000 个身份或数据库读取失败时拒绝。
+    ///
+    /// 输入约定：`ids` 为调用方当前任务或来源证明的身份；`executor` 为同一执行器。
     pub async fn by_ids(
         &self,
         ids: &[String],
@@ -192,12 +176,10 @@ impl<'a> SalesInquiryRepository<'a> {
     }
 
     /// 查询同一费用单据关联的所有询价；单据费用最多 50 行。
-    /// # 参数
-    /// `source_document_id` 是采购或财务事实身份；`executor` 为同一事务。
-    /// # 返回
     /// 返回关联聚合，含已释放来源供幂等核对。
-    /// # 错误
-    /// 查询失败时返回存储错误。
+    /// 失败条件：查询失败时返回存储错误。
+    ///
+    /// 输入约定：`source_document_id` 是采购或财务事实身份；`executor` 为同一事务。
     pub async fn fee_sources(
         &self,
         source_document_id: &str,
@@ -213,7 +195,7 @@ impl<'a> SalesInquiryRepository<'a> {
     }
 }
 
-/// 留出 MongoDB 文档元数据余量，不截断任何已发布历史。
+// 写入询价聚合前检查 BSON 大小，给 MongoDB 元数据留出空间，不能通过截断已发布历史完成保存。
 fn ensure_document_size(inquiry: &SalesInquiry) -> SalesResult<()> {
     let bytes = serialize_to_vec(inquiry).map_err(|_| Error::Internal("询价资料无法持久化".into()))?;
     if bytes.len() > 14 * 1024 * 1024 {

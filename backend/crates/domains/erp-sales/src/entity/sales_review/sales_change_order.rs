@@ -40,16 +40,7 @@ pub enum SalesChangeType {
 }
 
 impl SalesChangeType {
-    /// 返回类型的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为界面或响应展示提供销售变更类型的中文名称；机器筛选和存储不使用该名称。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Goods => "商品",
@@ -62,16 +53,7 @@ impl SalesChangeType {
         }
     }
 
-    /// 返回类型的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将销售变更类型转成用于持久化和查询的稳定代码，与中文展示文案分开。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Goods => "GOODS",
@@ -110,16 +92,7 @@ pub enum SalesChangeOrderStatus {
 }
 
 impl SalesChangeOrderStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为界面或响应展示提供销售变更单状态的中文名称；机器筛选和存储不使用该名称。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Draft => "草稿",
@@ -132,16 +105,7 @@ impl SalesChangeOrderStatus {
         }
     }
 
-    /// 返回状态的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将销售变更单状态转成用于持久化和查询的稳定代码，与中文展示文案分开。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Draft => "DRAFT",
@@ -156,18 +120,12 @@ impl SalesChangeOrderStatus {
 }
 
 impl DocumentState for SalesChangeOrderStatus {
-    /// 合同 §4.4.1 / §4.4.2：草稿可提交进入审批或作废；审批中可最终生效或
-    /// 撤回回草稿或驳回；已驳回可重新提交或作废。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// `Draft` 的后继为 `InApproval`、`Voided`；`InApproval` 的后继为 `Effective`、`Draft`。
-    /// `Rejected` 的后继为 `InApproval`、`Voided`；已生效、已作废及残留确认态无后继。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 校验销售变更单状态迁移时查本状态可直接到达的后继状态；无后继即不能再迁移。
+    //
+    // 合同 §4.4.1 / §4.4.2：草稿可提交进入审批或作废；审批中可最终生效或
+    // 撤回回草稿或驳回；已驳回可重新提交或作废。
+    // 结果：`Draft` 的后继为 `InApproval`、`Voided`；`InApproval` 的后继为 `Effective`、`Draft`。
+    // `Rejected` 的后继为 `InApproval`、`Voided`；已生效、已作废及残留确认态无后继。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Draft => &[Self::InApproval, Self::Voided],
@@ -230,7 +188,7 @@ pub struct SalesChangeOrder {
 }
 
 impl PartialEq for SalesChangeOrder {
-    /// 全字段语义相等。
+    // 比较两份销售变更单是否完全一致，业务字段和持久化元数据都参与比较。
     fn eq(&self, other: &Self) -> bool {
         self.base == other.base
             && self.stable.status == other.stable.status
@@ -253,17 +211,12 @@ impl SalesChangeOrder {
     /// 创建销售变更单（初始 `Draft`；目标提交在提交审批时形成）。
     ///
     /// 完成变更原因的校验与规范化（trim、非空、长度上限）。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::SalesChangeOrderId`）
-    /// * `data` - 创建数据
-    /// * `created_by` - 创建人
-    ///
-    /// # 返回
     /// 返回新建的变更单实体。
-    ///
-    /// # 错误
     /// 变更原因为空或超长时返回错误。
+    ///
+    /// 输入约定：
+    /// - `id`：实体主键（`erp_core::ids::SalesChangeOrderId`）
+    /// - `created_by`：创建人
     pub fn new(
         id: SalesChangeOrderId,
         data: SalesChangeOrderData,
@@ -284,52 +237,33 @@ impl SalesChangeOrder {
         })
     }
 
-    /// 判断乐观锁版本是否与调用方期望一致。
+    /// 写入前核对实体版本是否仍等于调用方读到的版本，用于识别过期修改。
+    /// 结果：当前版本与期望版本一致时返回 `true`。
     ///
-    /// # 参数
-    /// * `expected_version` - 调用方读取到的实体版本
-    ///
-    /// # 返回
-    /// 当前版本与期望版本一致时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 输入约定：
+    /// - `expected_version`：调用方读取到的实体版本
     pub fn matches_version(&self, expected_version: u64) -> bool {
         self.base.version == expected_version
     }
 
     /// 判断变更单是否处于可提交或可作废的草稿态。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 状态为 `Draft` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 结果：状态为 `Draft` 时返回 `true`。
     pub fn is_draft(&self) -> bool {
         self.stable.status == SalesChangeOrderStatus::Draft
     }
 
     /// 判断原变更内容是否允许编辑、重提或放弃。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 草稿或已驳回返回 true。
-    /// # 错误
-    /// 无。
+    /// 结果：草稿或已驳回返回 true。
     pub fn is_editable(&self) -> bool {
         matches!(self.stable.status, SalesChangeOrderStatus::Draft | SalesChangeOrderStatus::Rejected)
     }
 
     /// 终态驳回本次变更，保留原提交与生效销售版本。
-    /// # 参数
-    /// * `updated_by` - 审批决定人。
-    /// # 返回
-    /// 变更单标记已驳回。
-    /// # 错误
+    /// 结果：变更单标记已驳回。
     /// 非审批中状态拒绝。
+    ///
+    /// 输入约定：
+    /// - `updated_by`：审批决定人。
     pub fn reject_approval(&mut self, updated_by: impl Into<String>) -> Result<()> {
         if self.stable.status != SalesChangeOrderStatus::InApproval {
             return Err(Error::from("只有审批中的销售变更单可以驳回"));
@@ -340,43 +274,22 @@ impl SalesChangeOrder {
     }
 
     /// 返回当前冻结的变更提交身份。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回当前提交 ID。
-    ///
-    /// # 错误
     /// 变更单尚未提交审批时返回错误。
     pub fn required_current_submission_id(&self) -> Result<&SalesChangeSubmissionId> {
         self.current_submission_id.as_ref().ok_or_else(|| Error::from("变更单尚未提交审批"))
     }
 
     /// 判断销售单当前版本是否仍等于变更基准版本。
+    /// 结果：当前版本与变更单冻结基准版本一致时返回 `true`。
     ///
-    /// # 参数
-    /// * `current_revision_id` - 原销售单当前版本
-    ///
-    /// # 返回
-    /// 当前版本与变更单冻结基准版本一致时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 输入约定：
+    /// - `current_revision_id`：原销售单当前版本
     pub fn base_revision_matches(&self, current_revision_id: &str) -> bool {
         self.base_revision_id.as_ref() == current_revision_id
     }
 
     /// 更新变更单（仅 `Draft` 状态允许修改变更类型与原因）。
-    ///
-    /// # 参数
-    /// * `update` - 更新数据
-    /// * `updated_by` - 本次更新执行人
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 状态非 `Draft`，或变更原因为空、超长时返回错误。
     pub fn update(&mut self, update: SalesChangeOrderUpdate, updated_by: impl Into<String>) -> Result<()> {
         if !self.is_editable() {
@@ -400,17 +313,11 @@ impl SalesChangeOrder {
     ///
     /// 目标提交与内容指纹必须同时提供。`subject_version` 取提交序号，本方法
     /// 不回退已绑定的提交引用。
-    ///
-    /// # 参数
-    /// * `submission_id` - 不可变目标变更提交
-    /// * `target_content_hash` - 目标完整内容指纹
-    /// * `updated_by` - 操作人
-    ///
-    /// # 返回
-    /// 迁移成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 状态非法，或指纹为空、超长时返回错误。
+    ///
+    /// 输入约定：
+    /// - `submission_id`：不可变目标变更提交
+    /// - `target_content_hash`：目标完整内容指纹
     pub fn start_approval(
         &mut self,
         submission_id: SalesChangeSubmissionId,
@@ -440,16 +347,10 @@ impl SalesChangeOrder {
     }
 
     /// 最终通过并生效（`InApproval → Effective`）。
+    /// 失败条件：状态非法时返回 [`Error::InvalidStateTransition`]。
     ///
-    /// # 参数
-    /// * `effective_revision_id` - 生效后生成的新销售版本
-    /// * `updated_by` - 操作人
-    ///
-    /// # 返回
-    /// 迁移成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 状态非法时返回 [`Error::InvalidStateTransition`]。
+    /// 输入约定：
+    /// - `effective_revision_id`：生效后生成的新销售版本
     pub fn apply_effective(
         &mut self,
         effective_revision_id: SalesOrderRevisionId,
@@ -465,15 +366,7 @@ impl SalesChangeOrder {
     /// 撤回或受阻取消（`InApproval → Draft`）。
     ///
     /// 成功后回到可修正草稿；已冻结的提交引用与 `subject_version` 不回退。
-    ///
-    /// # 参数
-    /// * `updated_by` - 操作人
-    ///
-    /// # 返回
-    /// 迁移成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 非审批中时返回 [`Error::InvalidStateTransition`]。
+    /// 失败条件：非审批中时返回 [`Error::InvalidStateTransition`]。
     pub fn cancel_approval(&mut self, updated_by: impl Into<String>) -> Result<()> {
         ensure_transition(self.stable.status, SalesChangeOrderStatus::Draft)?;
         self.stable.status = SalesChangeOrderStatus::Draft;
@@ -482,15 +375,7 @@ impl SalesChangeOrder {
     }
 
     /// 作废变更（`Draft | Rejected → Voided`）。
-    ///
-    /// # 参数
-    /// * `updated_by` - 操作人
-    ///
-    /// # 返回
-    /// 迁移成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 非草稿态时返回 [`Error::InvalidStateTransition`]。
+    /// 失败条件：非草稿态时返回 [`Error::InvalidStateTransition`]。
     pub fn void(&mut self, updated_by: impl Into<String>) -> Result<()> {
         ensure_transition(self.stable.status, SalesChangeOrderStatus::Voided)?;
         self.stable.status = SalesChangeOrderStatus::Voided;

@@ -10,13 +10,13 @@ use erp_supply::ports::connector::address::{
 
 use crate::{Error, Result};
 
-/// 接收连接级地址更新提示后，核实实时地址查询可用才允许完成消息处理。
-/// # 参数
-/// `source` 为原连接实时地址能力，`hint` 为已保存的来源提示，`received_at` 为收件时间。
-/// # 返回
-/// 已重新读取有效省级入口；原目标编码仅保留为变更线索，不作为省级查询参数。
-/// # 错误
-/// 提示归属类型不符、来源不可读、缺项或观察早于收件时返回错误，保持消息待处理。
+// 接收连接级地址更新提示后，核实实时地址查询可用才允许完成消息处理。
+//
+// `source` 为原连接实时地址能力，`hint` 为已保存的来源提示，`received_at` 为收件时间。
+//
+// 已重新读取有效省级入口；原目标编码仅保留为变更线索，不作为省级查询参数。
+//
+// 提示归属类型不符、来源不可读、缺项或观察早于收件时返回错误，保持消息待处理。
 pub(super) async fn refresh_address_notice(
     source: &dyn SupplierAddressSource,
     hint: &SupplierRefreshHint,

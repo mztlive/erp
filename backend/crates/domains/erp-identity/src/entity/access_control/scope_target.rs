@@ -22,13 +22,12 @@ pub(crate) enum BoundScopeTarget {
     ManagedOrgs,
 }
 impl BoundScopeTarget {
-    /// 校验原始字段组合并规范化显式身份。
-    /// # 参数
-    /// binding、kind、targets 为持久化或请求中的原始字段。
-    /// # 返回
-    /// 已验证的内部目标形态。
-    /// # 错误
-    /// 非法模式组合、目标身份或数量拒绝。
+    // 校验原始字段组合并规范化显式身份。
+    // 已验证的内部目标形态。
+    //
+    // 非法模式组合、目标身份或数量拒绝。
+    //
+    // binding、kind、targets 为持久化或请求中的原始字段。
     pub(crate) fn parse(binding: &ScopeBinding, kind: DataScopeType, targets: &[String]) -> Result<Self> {
         if !kind.requires_targets() {
             if binding.target_mode.is_some() || binding.include_descendants.is_some() || !targets.is_empty() {
@@ -58,7 +57,7 @@ impl BoundScopeTarget {
         Self::from_shape(binding, kind, targets, mode)
     }
 
-    /// 从已通过模式组合检查的字段构造目标。
+    // 范围字段已通过模式组合检查后，将其封装为绑定目标；不在此接受任意字段组合。
     fn from_shape(
         binding: &ScopeBinding,
         kind: DataScopeType,
@@ -85,13 +84,8 @@ impl BoundScopeTarget {
     }
 }
 impl ScopeTarget {
-    /// 返回显式目标身份；动态与隐式范围不携带静态目标。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 已验证的静态目标切片。
-    /// # 错误
-    /// 不返回错误。
+    // 返回显式目标身份；动态与隐式范围不携带静态目标。
+    // 已验证的静态目标切片。
     pub(crate) fn ids(&self) -> &[String] {
         match self {
             Self::OrgExplicit { ids, .. } | Self::SettlementParties(ids) | Self::Warehouses(ids) => ids,

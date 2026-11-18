@@ -13,20 +13,16 @@ use crate::repository::sales_order::{SalesOrderFilter, SalesOrderListView, Sales
 use crate::{Error, Result};
 
 impl SalesOrderService {
-    /// 在调用方授权快照中读取列表页和全部匹配版本。
-    ///
-    /// # 参数
-    /// * `params` - 原始列表参数
-    /// * `search` - 已解析的关键词关联事实
-    /// * `scope` - 已证明的销售授权范围
-    /// * `business_org_unit_ids` - 已展开的组织筛选
-    /// * `executor` - 调用方事务执行器
-    ///
-    /// # 返回
-    /// 当前页、总数及同口径的版本集合。
-    ///
-    /// # 错误
+    /// 按调用方已证明的授权快照读取销售列表，同时保留同筛选口径的全部匹配版本，供交付前复验。
+    /// 结果：当前页、总数及同口径的版本集合。
     /// 参数非法、匹配集合超过一万条或仓储失败时拒绝。
+    ///
+    /// 输入约定：
+    /// - `params`：原始列表参数
+    /// - `search`：已解析的关键词关联事实
+    /// - `scope`：已证明的销售授权范围
+    /// - `business_org_unit_ids`：已展开的组织筛选
+    /// - `executor`：调用方事务执行器
     pub async fn list_rows(
         &self,
         params: &SalesOrderListParams,
@@ -44,20 +40,16 @@ impl SalesOrderService {
         ))
     }
 
-    /// 仅重验版本集合，不重复加载列表行和总数。
-    ///
-    /// # 参数
-    /// * `params` - 与首次读取相同的列表参数
-    /// * `search` - 与首次读取相同的关键词关联事实
-    /// * `scope` - 本次重新证明的销售授权范围
-    /// * `business_org_unit_ids` - 本次重新展开的组织筛选
-    /// * `executor` - 调用方事务执行器
-    ///
-    /// # 返回
-    /// 与列表查询同口径、按身份稳定排序的版本集合。
-    ///
-    /// # 错误
+    /// 交付销售列表前只重读匹配版本以检查范围或数据变化，不重取列表行及总数。
+    /// 结果：与列表查询同口径、按身份稳定排序的版本集合。
     /// 参数非法、匹配集合超过一万条或仓储失败时拒绝。
+    ///
+    /// 输入约定：
+    /// - `params`：与首次读取相同的列表参数
+    /// - `search`：与首次读取相同的关键词关联事实
+    /// - `scope`：本次重新证明的销售授权范围
+    /// - `business_org_unit_ids`：本次重新展开的组织筛选
+    /// - `executor`：调用方事务执行器
     pub async fn list_versions(
         &self,
         params: &SalesOrderListParams,
@@ -70,7 +62,7 @@ impl SalesOrderService {
         self.filtered_versions(&filter, scope, executor).await
     }
 
-    /// 从已授权的筛选读取版本并执行与列表相同的规模上限。
+    // 交付受保护销售列表前读取当前筛选下的版本集合，授权范围与候选规模限制和原列表一致。
     async fn filtered_versions(
         &self,
         filter: &SalesOrderFilter,
@@ -85,7 +77,7 @@ impl SalesOrderService {
     }
 }
 
-/// 复用领域 DTO 规范化，统一构造列表和版本重验的全部业务筛选。
+// 构造销售列表及交付前版本复验共用的业务筛选，沿用领域 DTO 的归一化规则。
 fn list_filter(
     params: &SalesOrderListParams,
     search: SalesOrderSearch,
@@ -127,7 +119,7 @@ mod tests {
 
     use super::*;
 
-    /// 翻页和排序不得改变版本集合；责任人、组织、期间和关键词仍保持相同筛选。
+    // 回归检查：翻页和排序不得改变版本集合；责任人、组织、期间和关键词仍保持相同筛选。
     #[test]
     fn paging_changes_preserve_the_normalized_business_filter() {
         let mut params: SalesOrderListParams = serde_json::from_value(json!({
@@ -159,7 +151,7 @@ mod tests {
         assert_eq!(next.search.q.as_deref(), Some("客户"));
     }
 
-    /// 共享筛选工厂保留排序白名单、期间、组织和互斥视图的拒绝规则。
+    // 回归检查：共享筛选工厂保留排序白名单、期间、组织和互斥视图的拒绝规则。
     #[test]
     fn invalid_filters_are_rejected_before_querying_versions() {
         for value in [

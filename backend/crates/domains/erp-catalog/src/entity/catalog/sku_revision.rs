@@ -113,20 +113,12 @@ pub struct SkuRevision {
 impl SkuRevision {
     /// 创建 SKU 修订。
     ///
-    /// 完成 name/description/specification/barcode 的校验与规范化（去首尾空白、
-    /// 非空、长度上限），校验修订序号从 1 开始、生效区间不倒挂，
-    /// 并要求重量、体积及三种含税销售参考价均为非负定点数。
+    /// 完成 name/description/specification/barcode 的校验与规范化（去首尾空白、非空、长度上限），校验修订序号从 1 开始、
+    /// 生效区间不倒挂，并要求重量、体积及三种含税销售参考价均为非负定点数。
     ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::SkuRevisionId`）
-    /// * `data` - 创建数据
+    /// 当 name 为空/超长、revision_no 为 0、生效区间倒挂、物流属性/价格为负数，或已维护的集采起订数量不大于零时返回错误。
     ///
-    /// # 返回
-    /// 返回新建的 SKU 修订实体。
-    ///
-    /// # 错误
-    /// 当 name 为空/超长、revision_no 为 0、生效区间倒挂、物流属性/价格为负数，
-    /// 或已维护的集采起订数量不大于零时返回错误。
+    /// `id` 为实体主键（`erp_core::ids::SkuRevisionId`）。
     pub fn new(id: SkuRevisionId, data: SkuRevisionData) -> Result<Self> {
         let name = normalize_required_text(data.name, "SKU名称不能为空", NAME_MAX_LEN, "SKU名称过长")?;
         let description = normalize_optional_text(data.description, "SKU描述", DESCRIPTION_MAX_LEN)?;
@@ -167,21 +159,13 @@ impl SkuRevision {
 
     /// 从当前快照派生一份改名或改描述的后继修订。
     ///
-    /// 规格、条码、主图、物流属性、价格与状态沿用当前不可变快照，只替换名称、
-    /// 描述和生效区间。
+    /// 规格、条码、主图、物流属性、价格与状态沿用当前不可变快照，只替换名称、描述和生效区间。
     ///
-    /// # 参数
-    /// * `id` - 新修订主键
-    /// * `revision_no` - 同一 SKU 内的下一修订序号
-    /// * `name` - 新 SKU 名称
-    /// * `description` - 新 SKU 描述
-    /// * `effective_from` / `effective_to` - 新修订生效区间
+    /// 返回经完整实体校验的新 SKU 修订。名称、描述、修订序号或生效区间违反实体不变式时返回错误。
     ///
-    /// # 返回
-    /// 返回经完整实体校验的新 SKU 修订。
+    /// * `effective_from` / `effective_to` - 新修订生效区间。
     ///
-    /// # 错误
-    /// 名称、描述、修订序号或生效区间违反实体不变式时返回错误。
+    /// `revision_no` 为同一 SKU 内的下一修订序号。
     pub fn content_successor(
         &self,
         id: SkuRevisionId,
@@ -214,30 +198,12 @@ impl SkuRevision {
         )
     }
 
-    /// 判断修订是否处于启用状态。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 状态为 `Active` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 读取SKU 修订快照的启用标记，不判断生效日期。
     pub fn is_active(&self) -> bool {
         self.status.is_active()
     }
 
-    /// 读取当前修订按数量选择销售参考价所需的独立价格事实。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回一件代发价、集采价与集采起订数量；不读取供应商成本。
-    ///
-    /// # 错误
-    /// 无。
+    /// 读取当前修订按数量选择销售参考价所需的独立价格事实。返回一件代发价、集采价与集采起订数量；不读取供应商成本。
     pub fn sales_prices(&self) -> SkuSalesPrices {
         SkuSalesPrices {
             sales_visible_price_gross: self.sales_visible_price_gross,
@@ -247,17 +213,11 @@ impl SkuRevision {
     }
 }
 
-/// 校验已维护的集采起订数量严格大于零。
-///
-/// # 参数
-/// * `value` - 可选集采起订数量
-/// * `label` - 字段说明
-///
-/// # 返回
-/// 缺省或正数时返回 `Ok(())`。
-///
-/// # 错误
-/// 已维护的数量小于或等于零时返回错误。
+// 校验已维护的集采起订数量严格大于零。
+//
+// 缺省或正数时返回 `Ok(())`。已维护的数量小于或等于零时返回错误。
+//
+// `value` 为可选集采起订数量。
 fn ensure_positive_quantity(value: Option<Quantity>, label: &str) -> Result<()> {
     if value.is_some_and(|quantity| quantity.to_decimal() <= 0.into()) {
         return Err(Error::from(format!("{label}必须大于零")));
@@ -265,17 +225,9 @@ fn ensure_positive_quantity(value: Option<Quantity>, label: &str) -> Result<()> 
     Ok(())
 }
 
-/// 校验物流属性为非负定点数量。
-///
-/// # 参数
-/// * `value` - 重量或体积
-/// * `label` - 字段说明
-///
-/// # 返回
-/// 非负时返回 `Ok(())`。
-///
-/// # 错误
-/// 为负数时返回错误。
+// 校验物流属性为非负定点数量。
+//
+// 非负时返回 `Ok(())`。为负数时返回错误。
 fn ensure_non_negative_quantity(value: Option<Quantity>, label: &str) -> Result<()> {
     if value.is_some_and(|v| v.to_decimal().is_sign_negative()) {
         return Err(Error::from(format!("{label}不能为负数")));
@@ -283,17 +235,9 @@ fn ensure_non_negative_quantity(value: Option<Quantity>, label: &str) -> Result<
     Ok(())
 }
 
-/// 校验价格为非负定点金额。
-///
-/// # 参数
-/// * `value` - 三种含税销售参考价中的任意一项
-/// * `label` - 字段说明
-///
-/// # 返回
-/// 非负时返回 `Ok(())`。
-///
-/// # 错误
-/// 为负数时返回错误。
+// 校验价格为非负定点金额。
+//
+// 非负时返回 `Ok(())`。为负数时返回错误。
 fn ensure_non_negative_amount(value: Option<Amount>, label: &str) -> Result<()> {
     if value.is_some_and(|v| v.to_decimal().is_sign_negative()) {
         return Err(Error::from(format!("{label}不能为负数")));
@@ -333,7 +277,7 @@ mod tests {
         }
     }
 
-    /// happy path：快照字段 trim 规范化，价格与物流属性落位。
+    // 快照字段 去除首尾空白，价格与物流属性按请求保存。
     #[test]
     fn new_trims_and_normalizes_fields() {
         let revision = SkuRevision::new(SkuRevisionId::new("rev-1"), data()).unwrap();
@@ -349,7 +293,7 @@ mod tests {
         assert!(revision.is_active());
     }
 
-    /// 失败路径：必填空与超长各一条。
+    // SKU 修订的必填字段为空或超长时均应拒绝创建。
     #[test]
     fn new_rejects_empty_and_overlong_name() {
         let empty = SkuRevisionData { name: "  ".to_string(), ..data() };
@@ -359,7 +303,7 @@ mod tests {
         assert!(SkuRevision::new(SkuRevisionId::new("rev-1"), overlong).is_err());
     }
 
-    /// 失败路径：越界（修订序号为 0）与关联不一致（生效区间倒挂）各一条。
+    // 越界（修订序号为 0）与关联不一致（生效区间倒挂）均应拒绝。
     #[test]
     fn new_rejects_zero_revision_no_and_reversed_window() {
         let zero_revision = SkuRevisionData { revision_no: 0, ..data() };
@@ -379,7 +323,7 @@ mod tests {
         );
     }
 
-    /// 金额：价格与物流属性为负数时被拒绝（定点类型仍可带负号，需实体校验）。
+    // 金额：价格与物流属性为负数时被拒绝（定点类型仍可带负号，需实体校验）。
     #[test]
     fn new_rejects_negative_prices_and_logistics() {
         let negative_price =
@@ -405,7 +349,7 @@ mod tests {
         assert!(SkuRevision::new(SkuRevisionId::new("rev-1"), negative_weight).is_err());
     }
 
-    /// 已维护的集采起订量必须为正数，缺省不触发集采价。
+    // 已维护的集采起订量必须为正数，缺省不触发集采价。
     #[test]
     fn new_rejects_non_positive_bulk_minimum() {
         for minimum in ["0.000000", "-1.000000"] {
@@ -428,7 +372,7 @@ mod tests {
         );
     }
 
-    /// 三价可独立缺省，零元价格与已有市场价不改变其他参考价。
+    // 三价可独立缺省，零元价格与已有市场价不改变其他参考价。
     #[test]
     fn new_keeps_independent_missing_and_zero_reference_prices() {
         let revision = SkuRevision::new(
@@ -445,7 +389,7 @@ mod tests {
         assert_eq!(revision.market_price, data().market_price);
     }
 
-    /// 后继修订只替换文案与生效区间并保留价格、物流和条码快照。
+    // 后继修订只替换文案与生效区间并保留价格、物流和条码快照。
     #[test]
     fn content_successor_preserves_commercial_snapshot() {
         let current = SkuRevision::new(SkuRevisionId::new("rev-1"), data()).unwrap();
@@ -471,7 +415,7 @@ mod tests {
         assert_eq!(successor.status, current.status);
     }
 
-    /// 金额三元组：一件代发价参与逐行舍入计算时满足 gross = net + tax 恒等。
+    // 金额三元组：一件代发价参与逐行舍入计算时满足 gross = net + tax 恒等。
     #[test]
     fn sales_price_follows_line_amounts_consistency() {
         let revision = SkuRevision::new(SkuRevisionId::new("rev-1"), data()).unwrap();
@@ -487,7 +431,7 @@ mod tests {
         assert_eq!(gross.to_decimal().scale(), 2);
     }
 
-    /// 金额：定点类型拒绝超位小数（禁止静默舍入），JSON 形态为字符串。
+    // 金额：定点类型拒绝超位小数（禁止静默舍入），JSON 形态为字符串。
     #[test]
     fn prices_are_fixed_point_with_string_wire_shape() {
         assert!(Amount::from_str("99.9").is_ok());
@@ -506,7 +450,7 @@ mod tests {
         assert_eq!(back, revision);
     }
 
-    /// 历史不可变修订缺少新字段时按未维护读取，保留原一件代发价。
+    // 历史不可变修订缺少新字段时按未维护读取，保留原一件代发价。
     #[test]
     fn legacy_revision_defaults_new_prices_and_bulk_minimum() {
         let revision = SkuRevision::new(SkuRevisionId::new("rev-1"), data()).unwrap();
@@ -526,7 +470,7 @@ mod tests {
         );
     }
 
-    /// 历史修订仍带已停用的出厂价时照常读取，且不再随修订写出。
+    // 历史修订仍带已停用的出厂价时照常读取，且不再随修订写出。
     #[test]
     fn stored_revision_with_retired_factory_price_still_reads() {
         let revision = SkuRevision::new(SkuRevisionId::new("rev-1"), data()).unwrap();
@@ -539,7 +483,7 @@ mod tests {
         assert!(serde_json::to_value(&stored).unwrap().get("factory_price_gross").is_none());
     }
 
-    /// 状态机：合法迁移通过，邻接矩阵对称闭合。
+    // 锁定SKU 修订启停的正向、反向与幂等迁移，防止状态表缺边。
     #[test]
     fn status_transitions_follow_document_state() {
         assert!(ensure_transition(EnableStatus::Active, EnableStatus::Disabled).is_ok());

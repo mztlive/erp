@@ -15,15 +15,7 @@ pub struct TimelineTarget {
 /// 按业务对象读取成功事件，供跨域时间线归集。
 #[allow(async_fn_in_trait)]
 pub trait AuditTimelineRepositoryExt {
-    /// 读取已授权目标的下一批历史记录。
-    ///
-    /// # 参数
-    /// `targets` 是已授权对象；`before` 是时间与原始事件 ID；`limit` 为批次大小。
-    /// `executor` 沿用调用方的读取事务。
-    /// # 返回
-    /// 按记录时间、ID 倒序返回，不读取失败尝试或未结构化的旧消息。
-    /// # 错误
-    /// 数据库查询失败时返回错误。
+    /// 用调用方的读取事务查询已授权对象的下一批结构化审计，以记录时间和原事件 ID 作倒序游标。失败尝试和未结构化旧消息不进入时间线，查询失败返回仓储错误。
     async fn timeline_events(
         &self,
         targets: &[TimelineTarget],

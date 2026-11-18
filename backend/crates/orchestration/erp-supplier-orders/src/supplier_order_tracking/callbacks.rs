@@ -13,13 +13,13 @@ use super::{SupplierOrderTrackingProcess, later};
 use crate::{Error, Result};
 
 impl SupplierOrderTrackingProcess {
-    /// 将已认证订单回调转换为已登记订单的立即补查意图。
-    /// # 参数
-    /// 无；身份限定在回调绑定连接内。
-    /// # 返回
-    /// 仅提前安排查询，不把接收报文直接用于业务写入。
-    /// # 错误
-    /// 接收或调度数据无法可靠读取、保存时返回错误。
+    // 将已认证订单回调转换为已登记订单的立即补查意图。
+    //
+    // 无；身份限定在回调绑定连接内。
+    //
+    // 仅提前安排查询，不把接收报文直接用于业务写入。
+    //
+    // 接收或调度数据无法可靠读取、保存时返回错误。
     pub(super) async fn refresh_callbacks(&self) -> Result<()> {
         let receipts = pending_order_callbacks(&self.db, &mut NoTransaction).await?;
         for receipt in receipts {
@@ -55,13 +55,11 @@ impl SupplierOrderTrackingProcess {
         Ok::<(), Error>(())
     }
 
-    /// 仅对已取得新查询且完成领域应用的回调确认处理完成。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 完成记录标记 applied，未完成记录保留 received 并退避。
-    /// # 错误
-    /// 接收记录冲突或持久化失败时拒绝确认。
+    // 仅对已取得新查询且完成领域应用的回调确认处理完成。
+    //
+    // 完成记录标记 applied，未完成记录保留 received 并退避。
+    //
+    // 接收记录冲突或持久化失败时拒绝确认。
     pub(super) async fn finish_callbacks(&self) -> Result<()> {
         let receipts = pending_order_callbacks(&self.db, &mut NoTransaction).await?;
         for receipt in receipts {

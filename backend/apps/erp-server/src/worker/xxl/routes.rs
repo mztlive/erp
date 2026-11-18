@@ -16,13 +16,7 @@ use subtle::ConstantTimeEq;
 use super::XxlExecutor;
 use super::protocol::{JobParam, LogParam, Reply, Trigger};
 
-/// 仅 Worker 装配这些协议路由。
-/// # 参数
-/// executor 为固定启动配置的共享执行器。
-/// # 返回
-/// 带 token 校验和请求体限制的协议路由。
-/// # 错误
-/// 无。
+// 只在 Worker 挂载 XXL 执行器接口，固定协议体上限为 16 KiB，且先验 token 再解析正文。
 pub(crate) fn router(executor: Arc<XxlExecutor>) -> Router {
     Router::new()
         .route("/beat", post(beat))
@@ -35,7 +29,7 @@ pub(crate) fn router(executor: Arc<XxlExecutor>) -> Router {
         .with_state(executor)
 }
 
-/// 不回显请求头；停止后所有协议拒绝新请求。
+// 在任何 XXL 请求读体或访问持久化之前以常量时间比较 token；不回显头，执行器停止后拒绝新请求。
 async fn authenticate(State(executor): State<Arc<XxlExecutor>>, request: Request, next: Next) -> Response {
     let token = request.headers().get("XXL-JOB-ACCESS-TOKEN").map(|v| v.as_bytes()).unwrap_or_default();
     if !bool::from(token.ct_eq(executor.config.access_token.as_bytes())) {
@@ -47,12 +41,12 @@ async fn authenticate(State(executor): State<Arc<XxlExecutor>>, request: Request
     next.run(request).await
 }
 
-/// 认证后的协议存活检查。
+// 调度中心通过协议认证后可用此接口检查执行器存活，不用它推断任务运行成功。
 async fn beat() -> Json<Reply> {
     Json(Reply::ok(None))
 }
 
-/// 接收成功仅表示回执已持久化。
+// 校验固定触发协议后接收本次调度并保存回执；成功只确认已持久化，任务仍由执行循环认领。
 async fn run(
     State(executor): State<Arc<XxlExecutor>>,
     body: Result<Json<Trigger>, JsonRejection>,
@@ -70,7 +64,7 @@ async fn run(
     }
 }
 
-/// 查询固定任务槽位，数据库不可用不能伪报空闲。
+// 调度中心准备分派时查询指定任务槽位是否忙；任务 ID 无效或数据库不可查时返回失败，不能伪报空闲。
 async fn idle(
     State(executor): State<Arc<XxlExecutor>>,
     body: Result<Json<JobParam>, JsonRejection>,
@@ -86,12 +80,12 @@ async fn idle(
     }
 }
 
-/// 不强制中断业务写入，不伪报取消成功。
+// 执行器不支持远程强停业务写入；收到强停请求时返回失败并提示核对原业务记录。
 async fn kill() -> Json<Reply> {
     Json(Reply::fail("不支持强制终止，请等待当前轮次完成并查询 ERP 原业务记录"))
 }
 
-/// 仅返回两行脱敏状态摘要，支持调度中心增量读取。
+// 根据原调度回执及日志时间提供最多两行脱敏摘要，支持按行增量查询；不是远端业务日志，也不代替核对 ERP 原记录。
 async fn log(
     State(executor): State<Arc<XxlExecutor>>,
     body: Result<Json<LogParam>, JsonRejection>,

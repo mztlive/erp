@@ -19,13 +19,7 @@ pub struct InquiryExpenseSource {
 }
 
 impl InquiryExpenseSource {
-    /// 比较跨反馈版本保持不变的费用来源身份。
-    /// # 参数
-    /// `other` 为新旧采购内容中的来源引用。
-    /// # 返回
-    /// 询价、费用和销售分摊身份一致时返回真；反馈轮次由采用事务另行核验。
-    /// # 错误
-    /// 不返回错误。
+    /// 比较跨反馈版本保持不变的费用来源身份。询价、费用和销售分摊身份一致时返回真；反馈轮次由采用事务另行核验。
     pub fn same_identity(&self, other: &Self) -> bool {
         self.inquiry_id == other.inquiry_id
             && self.fee_id == other.fee_id
@@ -33,12 +27,7 @@ impl InquiryExpenseSource {
     }
     /// 校验来源身份；实际资格与额度由事务内流程重验。
     ///
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 返回规范化的来源引用。
-    /// # 错误
-    /// 身份为空、超长或反馈轮次为零时拒绝。
+    /// 返回规范化的来源引用。身份为空、超长或反馈轮次为零时拒绝。
     pub fn normalized(&self) -> Result<Self> {
         if self.feedback_round == 0 {
             return Err(Error::from("询价反馈轮次无效"));

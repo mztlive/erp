@@ -15,18 +15,9 @@ pub trait QualificationPort: Send + Sync {
         + From<validator::ValidationErrors>
         + Send;
     /// 在调用方执行器上校验SKU及供应商当前能力；不创建事务。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 供应商账号。
-    /// * `sku_id` - 公司 SKU。
-    /// * `on_date` - 校验所用业务日。
-    /// * `executor` - 调用方执行器，本方法不创建事务。
-    ///
-    /// # 返回
     /// 当前能力满足时成功。
-    ///
-    /// # 错误
     /// 校验未通过或沿 `executor` 读取失败时返回 `Self::Error`。
+    /// `executor`：调用方执行器，本方法不创建事务。
     async fn ensure_qualified(
         &self,
         supplier_id: &SupplierAccountId,
@@ -40,12 +31,9 @@ pub trait QualificationPort: Send + Sync {
 #[async_trait]
 pub trait PortalQuoteQualificationPort: QualificationPort {
     /// 读取当前启用 SKU、所属启用商品、有效修订与启用基础单位的版本。
-    /// # 参数
-    /// `sku_id` 是供应商实际选择目标；`executor` 是当前写事务。
-    /// # 返回
     /// 返回引用归属已核对的当前正式依据。
-    /// # 错误
     /// 任一正式事实缺失、停用或引用归属不符时拒绝。
+    /// `sku_id` 是供应商实际选择目标；`executor` 是当前写事务。
     async fn quote_target(
         &self,
         sku_id: &SkuId,
@@ -53,11 +41,7 @@ pub trait PortalQuoteQualificationPort: QualificationPort {
     ) -> std::result::Result<QuoteTargetVersion, Self::Error>;
 
     /// 按原报价依据重验当前公司商品，不自动替换原版本。
-    /// # 参数
-    /// 精确 SKU、供应商已核对的版本和当前执行器。
-    /// # 返回
     /// 版本与引用全部一致时成功。
-    /// # 错误
     /// 目标失效或已变化时拒绝继续提交或确认。
     async fn ensure_quote_target(
         &self,

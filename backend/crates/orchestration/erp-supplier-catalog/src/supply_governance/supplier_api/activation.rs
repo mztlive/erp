@@ -13,13 +13,13 @@ use super::deployment::Deployment;
 use crate::{Error, Result};
 
 impl SupplierApiGovernanceProcess {
-    /// 在事务外验证目标版本、协议能力与当前配置的鉴权。
-    /// # 参数
-    /// `id` 为连接，`version` 为请求版本，`actor` 为已授权操作人。
-    /// # 返回
-    /// 通过检查的部署配置；提交事务再次校验连接版本和身份。
-    /// # 错误
-    /// 版本冲突、缺少下单能力、配置或鉴权失败时拒绝。
+    // 在事务外验证目标版本、协议能力与当前配置的鉴权。
+    //
+    // `id` 为连接，`version` 为请求版本，`actor` 为已授权操作人。
+    //
+    // 通过检查的部署配置；提交事务再次校验连接版本和身份。
+    //
+    // 版本冲突、缺少下单能力、配置或鉴权失败时拒绝。
     pub(super) async fn checked_deployment(
         &self,
         id: &str,

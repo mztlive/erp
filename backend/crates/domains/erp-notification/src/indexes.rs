@@ -5,13 +5,7 @@ use persistence_core::indexes::{named_index, unique_index};
 
 use crate::repository::COLLECTION;
 
-/// 创建通知身份、去重、个人时间线及未读计数索引。
-/// # 参数
-/// db 为目标数据库。
-/// # 返回
-/// 全部索引已创建。
-/// # 错误
-/// 数据冲突或索引创建失败时返回仓储错误。
+/// 注册消息 ID、收件人与事件去重键的唯一索引，以及个人时间线和未读计数用的索引。数据冲突或索引创建失败时返回仓储错误。
 pub async fn ensure(db: &Database) -> Result<()> {
     db.collection::<Document>(COLLECTION)
         .create_indexes([

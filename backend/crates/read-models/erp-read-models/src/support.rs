@@ -12,47 +12,38 @@ use rust_decimal::Decimal;
 
 use crate::{Error, Result};
 
-/// 深分页必须携带范围版本，禁止不同授权页拼接。
-///
-/// # 参数
-/// * `page` - 请求页码（已规整为从 1 起）
-/// * `scope_version` - 调用方回传的范围版本
-///
-/// # 返回
-/// 首页或携带非空版本时成功。
-///
-/// # 错误
-/// * `ConflictError` - 后续页缺失范围版本时拒绝，要求从第一页刷新
+// 核对读模型通用查询边界时，深分页必须携带范围版本，禁止不同授权页拼接。
+//
+// 调用参数：
+// * `page` - 请求页码（已规整为从 1 起）
+// * `scope_version` - 调用方回传的范围版本
+//
+// 首页或携带非空版本时成功。
+//
+// 失败边界：
+// * `ConflictError` - 后续页缺失范围版本时拒绝，要求从第一页刷新
 pub(crate) fn ensure_deep_page(page: u64, scope_version: Option<&str>) -> Result<()> {
     ScopeVersion::new(scope_version, EmptyScopeVersion::Missing)
         .require_for_page(page)
         .map_err(|error| data_scope_changed(error.detail()))
 }
 
-/// 以统一前缀构造范围变化冲突错误。
-///
-/// # 参数
-/// * `detail` - `DATA_SCOPE_CHANGED：` 之后的具体说明
-///
-/// # 返回
-/// 返回带统一前缀的 `ConflictError`。
-///
-/// # 错误
-/// 无。
+// 组装读模型通用查询时，以统一前缀构造范围变化冲突错误。
+//
+// 调用参数：
+// * `detail` - `DATA_SCOPE_CHANGED：` 之后的具体说明
+//
+// 返回带统一前缀的 `ConflictError`。
 pub(crate) fn data_scope_changed(detail: &str) -> Error {
     Error::ConflictError(format!("DATA_SCOPE_CHANGED：{detail}"))
 }
 
-/// 保序去重，保留首次出现顺序。
-///
-/// # 参数
-/// * `values` - 待去重的迭代器
-///
-/// # 返回
-/// 返回按首次出现顺序去重后的集合。
-///
-/// # 错误
-/// 无。
+// 整理读模型关联键时去除重复项，保留每项首次出现的位置。
+//
+// 调用参数：
+// * `values` - 待去重的迭代器
+//
+// 返回按首次出现顺序去重后的集合。
 pub(crate) fn dedup_ordered<T>(values: impl IntoIterator<Item = T>) -> Vec<T>
 where
     T: Hash + Eq + Clone,
@@ -67,16 +58,12 @@ where
     unique
 }
 
-/// 排序去重，供跨域批量 `$in` 候选稳定生成。
-///
-/// # 参数
-/// * `values` - 待去重的迭代器
-///
-/// # 返回
-/// 返回按升序稳定排序的唯一集合。
-///
-/// # 错误
-/// 无。
+// 为跨域仓储准备批量 `$in` 键时排序并去重，保证候选顺序稳定。
+//
+// 调用参数：
+// * `values` - 待去重的迭代器
+//
+// 返回按升序稳定排序的唯一集合。
 pub(crate) fn dedup_sorted<T>(values: impl IntoIterator<Item = T>) -> Vec<T>
 where
     T: Ord,
@@ -87,16 +74,12 @@ where
     values
 }
 
-/// 去空白并保序去重账号 ID。
-///
-/// # 参数
-/// * `values` - 原始账号 ID 引用迭代器，允许空白与重复
-///
-/// # 返回
-/// 返回去空白、去重后按首次出现顺序排列的账号 ID。
-///
-/// # 错误
-/// 无。
+// 整理关联账号 ID 时去除首尾空白及空键，并按首次出现顺序去重。
+//
+// 调用参数：
+// * `values` - 原始账号 ID 引用迭代器，允许空白与重复
+//
+// 返回去空白、去重后按首次出现顺序排列的账号 ID。
 pub(crate) fn dedup_trimmed_nonempty<'a>(values: impl IntoIterator<Item = &'a str>) -> Vec<String> {
     let mut seen = HashSet::new();
     let mut unique = Vec::new();
@@ -110,16 +93,12 @@ pub(crate) fn dedup_trimmed_nonempty<'a>(values: impl IntoIterator<Item = &'a st
     unique
 }
 
-/// 编码报表 CSV 行，危险文本加单引号，合法十进制数值保留原文。
-///
-/// # 参数
-/// * `values` - 按报表列顺序排列的原始单元格。
-///
-/// # 返回
-/// 返回各单元格加双引号、内部引号转义后以逗号连接的行。
-///
-/// # 错误
-/// 不返回错误。
+// 生成读模型通用查询导出内容时，编码报表 CSV 行，危险文本加单引号，合法十进制数值保留原文。
+//
+// 调用参数：
+// * `values` - 按报表列顺序排列的原始单元格。
+//
+// 返回各单元格加双引号、内部引号转义后以逗号连接的行。
 pub(crate) fn csv_record(values: &[&str]) -> String {
     values.iter().map(|value| csv_cell(value)).collect::<Vec<_>>().join(",")
 }

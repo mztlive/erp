@@ -28,12 +28,14 @@ use crate::Result;
 /// 由组合层接入各拥有领域的详情权限；不以销售单可见替代财务整单权限。
 #[async_trait]
 pub trait TimelineAccessPort: Send + Sync {
-    /// 重验精确单据的详情范围。
+    /// 处理销售全流程动态时，重验精确单据的详情范围。
     ///
     /// # 参数
     /// `actor` 为认证账号，`document` 为通过正式外键发现的单据，`executor` 为原事务。
+    ///
     /// # 返回
     /// 单据全部来源可读时返回 true。
+    ///
     /// # 错误
     /// 授权配置及基础设施故障继续传播。
     async fn readable(
@@ -53,13 +55,14 @@ pub struct SalesTimelineReadService {
 }
 
 impl SalesTimelineReadService {
-    /// 装配数据库与各领域授权入口，不缓存授权结论。
+    /// 装配销售全流程动态时，接入数据库与各领域授权入口，不缓存授权结论。
     ///
     /// # 参数
     /// `db`、`rbac`、`access` 由组合根提供。
+    ///
     /// # 返回
     /// 返回只读服务。
-    /// # 错误
+    ///
     /// 构造不执行 I/O。
     pub fn new(db: Database, rbac: Arc<AuthorizationService>, access: Arc<dyn TimelineAccessPort>) -> Self {
         Self { db, rbac, access }

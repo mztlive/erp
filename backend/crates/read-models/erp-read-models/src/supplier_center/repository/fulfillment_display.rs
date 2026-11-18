@@ -28,14 +28,14 @@ pub(crate) struct SkuRevisionName {
     pub(crate) name: String,
 }
 
-/// 读取已授权履约明细关联的当前展示资料。
-///
-/// # 参数
-/// `db` 为领域仓储入口，`items` 为当前订单明细，`executor` 沿用调用方查询上下文。
-/// # 返回
-/// 返回按冻结修订与 SKU 关联链索引的名称资料，缺失关联保留空值。
-/// # 错误
-/// 关联仓储读取失败时返回错误。
+// 生成供应商履约明细展示展示时，读取已授权履约明细关联的当前展示资料。
+//
+// 调用参数：
+// `db` 为领域仓储入口，`items` 为当前订单明细，`executor` 沿用调用方查询上下文。
+//
+// 返回按冻结修订与 SKU 关联链索引的名称资料，缺失关联保留空值。
+//
+// 关联仓储读取失败时返回错误。
 pub(crate) async fn item_names(
     db: &Database,
     items: &[SupplierFulfillmentItem],

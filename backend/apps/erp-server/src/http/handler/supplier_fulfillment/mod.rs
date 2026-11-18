@@ -29,14 +29,8 @@ use crate::http::extractor::{Json, Query};
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
-/// 查询供应商履约订单列表。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `query` - 分页与筛选参数（`supplier_id`/三条状态/`external_order_no` 扁平传递）
-///
-/// # 返回
-/// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
+/// 按请求条件查询供应商履约订单列表。
+/// `query` 为分页与筛选参数（`supplier_id`/三条状态/`external_order_no` 扁平传递）。
 pub async fn supplier_fulfillment_order_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -51,15 +45,7 @@ pub async fn supplier_fulfillment_order_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-/// 查询供应商履约订单详情。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的当前操作人
-/// * `id` - 供应商子订单 ID
-/// * `params` - W26 正式任务入口参数
-///
-/// # 返回
+/// 查询供应商履约订单详情，将认证操作人与路径对象交给读模型校验。
 /// 返回订单详情视图（订单 + 明细 + 状态历史 + 动作 + 退款事实）。
 pub async fn supplier_fulfillment_order_detail(
     State(state): State<HttpState>,
@@ -83,7 +69,7 @@ pub async fn supplier_fulfillment_order_detail(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 从普通订单入口查询原结果或执行已证明安全的重放。
+/// 普通供应商订单结果待核实时走订单调查流程；只有证据确认可安全重放时才执行重放。
 pub async fn supplier_fulfillment_order_investigation(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -94,7 +80,7 @@ pub async fn supplier_fulfillment_order_investigation(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 从 W26 正式任务入口查询原结果或执行已证明安全的重放。
+/// 在 W26 正式任务上下文核实供应商订单原结果；原结果未定时也只执行已证明安全的重放。
 pub async fn supplier_fulfillment_order_task_investigation(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -106,7 +92,7 @@ pub async fn supplier_fulfillment_order_task_investigation(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 以服务端可验证终态证据完成 W26 正式任务。
+/// 在 W26 正式任务结案时提交完成命令；流程只用服务端可验证的终态证据判定是否能完成。
 pub async fn supplier_fulfillment_order_task_completion(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -119,13 +105,6 @@ pub async fn supplier_fulfillment_order_task_completion(
 }
 
 /// 向供应商提交下单（幂等键：`fulfillment_order_no`）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 下单请求
-///
-/// # 返回
 /// 返回下单后订单的响应视图。
 pub async fn supplier_fulfillment_order_submit(
     State(state): State<HttpState>,
@@ -138,14 +117,6 @@ pub async fn supplier_fulfillment_order_submit(
 }
 
 /// 向供应商提交取消（幂等键：「订单号 + CANCEL + 售后申请 ID」）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 供应商子订单 ID
-/// * `req` - 取消动作提交请求
-///
-/// # 返回
 /// 返回动作与动作后订单视图。
 pub async fn supplier_fulfillment_order_cancel(
     State(state): State<HttpState>,
@@ -171,14 +142,6 @@ pub async fn supplier_fulfillment_order_cancel(
 }
 
 /// 向供应商提交退款（幂等键：「订单号 + REFUND + 售后申请 ID」）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 供应商子订单 ID
-/// * `req` - 退款动作提交请求
-///
-/// # 返回
 /// 返回动作与动作后订单视图。
 pub async fn supplier_fulfillment_order_refund(
     State(state): State<HttpState>,
@@ -204,14 +167,6 @@ pub async fn supplier_fulfillment_order_refund(
 }
 
 /// 登记供应商拒单结果（回调幂等键 `(connection_id, external_event_id)`）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 供应商子订单 ID
-/// * `req` - 拒单结果请求
-///
-/// # 返回
 /// 返回新增的状态历史视图。
 pub async fn supplier_fulfillment_order_reject(
     State(state): State<HttpState>,
@@ -226,14 +181,6 @@ pub async fn supplier_fulfillment_order_reject(
 
 /// 登记供应商退款成功结果（幂等键 `(connection_id, external_refund_no,
 /// external_refund_version)`）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 供应商子订单 ID
-/// * `req` - 退款成功结果请求
-///
-/// # 返回
 /// 返回退款事实视图（含分配行）。
 pub async fn supplier_refund_fact_post(
     State(state): State<HttpState>,
@@ -259,7 +206,7 @@ pub async fn supplier_refund_fact_post(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 显式交接内部跟进人；是否转交开放 W26 任务由命令声明。
+/// 在内部跟进责任变化时执行显式交接；是否同时转交开放的 W26 任务由此次命令明确指定。
 pub async fn supplier_fulfillment_order_handover(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -274,7 +221,7 @@ pub async fn supplier_fulfillment_order_handover(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 查询当前订单可交接的合格内部人员。
+/// 开始供应商履约交接前查询该订单可选择的合格内部人员，供交接时选定目标。
 pub async fn supplier_fulfillment_order_handover_candidates(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -297,7 +244,7 @@ mod tests {
     use super::*;
     use crate::http::routes;
 
-    // 只构造本地客户端；请求在认证边界结束，不访问数据库或对象存储。
+    // 为供应商履约路由认证单测构造本地 HTTP 状态；请求应在任何数据库或对象存储访问前被拒绝。
     fn state() -> HttpState {
         let settings = Config::from_toml_str(
             r#"

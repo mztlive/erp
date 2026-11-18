@@ -35,19 +35,12 @@ pub enum PreparedWriteBackOutcome {
 impl PreparedWriteBackOutcome {
     /// 从回写请求生成规范化决定（时间由调用方注入）。
     ///
-    /// # 参数
-    /// * `request` - 已反序列化的回写请求
-    /// * `now` - 调用方当前时间，用于缺省处理完成时间与尝试时间
-    ///
-    /// # 返回
-    /// 返回 tagged 的已处理或失败决定。
-    ///
-    /// # 错误
-    /// 请求边界校验失败、`processed` 携带错误分类或尝试摘要、`failed`
-    /// 缺少错误分类时返回 `ValidationError`。
-    ///
-    /// # 约束
     /// 不读取全局时钟；`processed` 禁止 error 信息是对旧静默忽略的收紧。
+    ///
+    /// 返回 tagged 的已处理或失败决定。请求边界校验失败、`processed` 携带错误分类或尝试摘要、`failed`缺少错误分类时返回
+    /// `ValidationError`。
+    ///
+    /// `now` 为调用方当前时间，用于缺省处理完成时间与尝试时间。
     pub fn prepare(request: &WriteBackInboxResultRequest, now: Instant) -> Result<Self> {
         request.validate()?;
 

@@ -30,20 +30,16 @@ struct Prepared {
 }
 
 impl SalesSelectionService {
-    /// 原子建立排队任务和准备中状态，立即返回，不在请求内执行外部 I/O。
-    ///
-    /// # 参数
-    /// * `req` - 完整准备命令。
-    /// * `actor` - 当前已认证操作人。
-    /// * `_catalog` - 本方法不读取；后台任务另行取得商品池。
-    /// * `_images` - 本方法不读取；后台任务另行取得图片。
-    /// * `_generator` - 本方法不使用；后台计算另行选择套餐图生成器。
-    ///
-    /// # 返回
+    /// 选品册发起准备时只在事务内登记可轮询任务并转入准备中；商品池访问与计算留给后台任务。
     /// 返回可轮询的准备中详情；同请求重试返回已建立的任务事实。
-    ///
-    /// # 错误
     /// 旧版本、非法规则或事务失败时整次拒绝。
+    ///
+    /// 输入约定：
+    /// - `req`：完整准备命令。
+    /// - `actor`：当前已认证操作人。
+    /// - `_catalog`：本方法不读取；后台任务另行取得商品池。
+    /// - `_images`：本方法不读取；后台任务另行取得图片。
+    /// - `_generator`：本方法不使用；后台计算另行选择套餐图生成器。
     pub async fn start_prepare(
         &self,
         req: PrepareSalesSelectionRequest,
@@ -72,18 +68,13 @@ impl SalesSelectionService {
             .await
     }
 
-    /// 在当前事务内占用册版本并写入排队任务，不执行商品池 I/O。
-    ///
-    /// # 参数
-    /// * `req` - 完整准备命令
-    /// * `actor` - 操作人
-    /// * `tx` - 当前事务执行器
-    ///
-    /// # 返回
-    /// 返回可轮询的准备中详情；同请求重试返回已建立的任务事实。
-    ///
-    /// # 错误
-    /// 旧版本、非法规则或写入失败时整次拒绝。
+    // 在入口持有的事务内以册版本竞争准备资格并登记排队任务，不在持锁期间访问商品池。
+    // 返回可轮询的准备中详情；同请求重试返回已建立的任务事实。
+    // 旧版本、非法规则或写入失败时整次拒绝。
+    //
+    // 输入约定：
+    // - `req`：完整准备命令
+    // - `tx`：当前事务执行器
     pub(super) async fn enqueue_prepare(
         &self,
         req: PrepareSalesSelectionRequest,
@@ -113,7 +104,7 @@ impl SalesSelectionService {
         self.queued_view(&book, &task, tx).await
     }
 
-    /// 将可轮询详情和原请求的幂等结果一起持久化。
+    // 准备任务已排队后装配供调用方轮询的当前册详情，并在同一事务保存原请求的幂等结果。
     async fn queued_view(
         &self,
         book: &SalesSelectionBooklet,
@@ -137,17 +128,13 @@ impl SalesSelectionService {
         Ok(view)
     }
 
-    /// 领取排队任务并执行；运行中任务在重启后于截止时间明确失败，不重新取得商品快照。
+    /// 后台轮询并领取可执行的排队任务；重启遗留的运行中任务只在截止后失败结案，不以新商品快照续跑。
+    /// 结果：本次处理的任务和到期关闭数量。
+    /// 失败条件：仓储错误返回给 worker；单任务计算失败会原子记录并恢复业务状态。
     ///
-    /// # 参数
-    /// * `catalog` - 商品池端口。
-    /// * `images` - 图片端口。
-    ///
-    /// # 返回
-    /// 本次处理的任务和到期关闭数量。
-    ///
-    /// # 错误
-    /// 仓储错误返回给 worker；单任务计算失败会原子记录并恢复业务状态。
+    /// 输入约定：
+    /// - `catalog`：商品池端口。
+    /// - `images`：图片端口。
     pub async fn run_due_prepare_tasks(
         &self,
         catalog: &dyn SelectionCatalogPort,
@@ -162,7 +149,7 @@ impl SalesSelectionService {
         Ok(count)
     }
 
-    /// 过期先失败；乐观锁只允许一个 worker 领取排队任务。
+    // 后台开始准备前先淘汰过期任务，再以任务版本条件更新竞争领取，避免重复执行同一队列项。
     async fn run_queued_task(
         &self,
         mut task: SalesSelectionPrepareTask,
@@ -188,7 +175,7 @@ impl SalesSelectionService {
         Ok(true)
     }
 
-    /// 外部 I/O 和 CPU 计算位于事务之外，deadline 包含排队耗时。
+    // 任务领取后在事务外读取外部数据并计算陈列；总截止时间包含先前排队耗时。
     async fn execute_task(
         &self,
         task: SalesSelectionPrepareTask,
@@ -218,7 +205,7 @@ impl SalesSelectionService {
         Ok(())
     }
 
-    /// 用任务保存的命令和当前有效批次计算，不覆盖原规则。
+    // 根据排队时保存的准备命令与当前有效批次计算结果；完成前不把新规则写回选品册。
     async fn calculate_task(
         &self,
         task: &SalesSelectionPrepareTask,
@@ -247,18 +234,14 @@ impl SalesSelectionService {
         Ok(Prepared { book, batch, items, members, reports })
     }
 
-    /// 阶段更新也校验任务仍活动且册版本未漂移。
-    ///
-    /// # 参数
-    /// * `book` - 正在准备的选品册。
-    /// * `stage` - 当前准备阶段。
-    /// * `completed` - 已完成档位数。
-    ///
-    /// # 返回
-    /// 心跳写回成功时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 没有活动任务、任务不存在、任务不可写、册与任务不匹配或仓储更新失败时返回对应错误。
+    // 对外更新计算阶段前确认任务仍活动且册版本一致，避免旧任务覆盖新进度。
+    // 结果：心跳写回成功时返回 `Ok(())`。
+    // 失败条件：没有活动任务、任务不存在、任务不可写、册与任务不匹配或仓储更新失败时返回对应错误。
+    //
+    // 输入约定：
+    // - `book`：正在准备的选品册。
+    // - `stage`：当前准备阶段。
+    // - `completed`：已完成档位数。
     pub(super) async fn prepare_progress(
         &self,
         book: &SalesSelectionBooklet,
@@ -283,7 +266,7 @@ impl SalesSelectionService {
         Ok(())
     }
 
-    /// 迟到、重复或过期结果均不能替换有效结果。
+    // 计算结束时只接受仍然有效的任务结果；迟到、重复或过期结果不能替换当前陈列。
     async fn commit_task(&self, run: &SalesSelectionPrepareTask, prepared: Prepared) -> Result<()> {
         let service = self.clone();
         let run = run.clone();
@@ -295,7 +278,7 @@ impl SalesSelectionService {
             .await
     }
 
-    /// 在同一事务重新校验当前任务和册，再替换目标范围。
+    // 提交准备结果时在同一事务重验任务及册的版本，再替换目标批次或档位。
     async fn commit_task_in(
         &self,
         run: &SalesSelectionPrepareTask,
@@ -319,7 +302,7 @@ impl SalesSelectionService {
         Ok(())
     }
 
-    /// 失败恢复与任务结束共同提交。
+    // 准备无法完成时以同一事务结束任务并恢复选品册，使轮询不会看到一半更新。
     async fn fail_task(&self, run: &SalesSelectionPrepareTask, reason: &str) -> Result<()> {
         let service = self.clone();
         let (run, reason) = (run.clone(), reason.to_string());
@@ -331,7 +314,7 @@ impl SalesSelectionService {
             .await
     }
 
-    /// 已完成或被替代的任务不再触碰册，历史任务使用系统操作人。
+    // 为失败任务执行册状态恢复前确认它仍拥有当前准备工作；已完成或已被替代的任务不得改册。
     async fn fail_task_in(
         &self,
         run: &SalesSelectionPrepareTask,
@@ -368,7 +351,7 @@ fn prepare_failure_message(error: &Error) -> &str {
     }
 }
 
-/// 创建前校验任务类型、档位范围与新规则；失败不占用册。
+// 占用册版本之前校验任务类型、档位范围和新准备规则，非法请求不建队列项。
 fn validate_prepare_request(book: &SalesSelectionBooklet, req: &PrepareSalesSelectionRequest) -> Result<()> {
     if req.kind == PrepareKind::RegeneratedTiers
         && (req.tier_ids.is_empty()
@@ -387,7 +370,7 @@ fn validate_prepare_request(book: &SalesSelectionBooklet, req: &PrepareSalesSele
     Ok(())
 }
 
-/// 任务身份和启动后的册版本共同构成写入权限。
+// 任务写进度或结果前核对活动任务身份和进入准备中后的册版本，阻止过期结果写入目标册。
 fn ensure_task_book(task: &SalesSelectionPrepareTask, book: &SalesSelectionBooklet) -> Result<()> {
     if book.active_task_id.as_deref() != Some(task.base.id.as_str())
         || book.base.version != task.booklet_version
@@ -397,7 +380,7 @@ fn ensure_task_book(task: &SalesSelectionPrepareTask, book: &SalesSelectionBookl
     Ok(())
 }
 
-/// 构造完整可恢复命令；册版本必须是进入准备中之后的版本。
+// 用进入准备中后的册版本和完整命令构造队列记录，供后台执行及提交时重验。
 fn queued_task(
     id: SalesSelectionPrepareTaskId,
     book: &SalesSelectionBooklet,
@@ -426,7 +409,7 @@ fn queued_task(
 }
 
 impl Prepared {
-    /// 重生成保留原冻结时点，重新准备采用本次时点；成功才提交新规则。
+    // 成功准备后才落新规则；按档重生成沿用商品冻结时点，整册重新准备使用本次时点。
     fn finish(&mut self, task: &mut SalesSelectionPrepareTask) -> Result<()> {
         let date = self
             .book
@@ -462,7 +445,7 @@ mod tests {
         );
     }
 
-    /// 构造无外部依赖的有效单品册。
+    // 组装无外部依赖的有效单品册。
     fn book() -> SalesSelectionBooklet {
         SalesSelectionBooklet::new(
             SalesSelectionBookletId::new("book"),
@@ -490,7 +473,7 @@ mod tests {
         .unwrap()
     }
 
-    /// 任务命令的初始版本来自用户实际读取的册。
+    // 为准备队列测试构造操作请求，客户端期望版本取自实际读到的册。
     fn request() -> PrepareSalesSelectionRequest {
         serde_json::from_value(serde_json::json!({"booklet_id":"book","idempotency_key":"key","expected_version":1,"kind":"FIRST_PREPARE"})).unwrap()
     }

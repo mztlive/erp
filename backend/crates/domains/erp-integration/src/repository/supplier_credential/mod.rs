@@ -18,13 +18,7 @@ use crate::{Error, Result};
 pub trait SupplierCredentialExt {
     const SUPPLIER_CREDENTIALS: &'static str = "supplier_credentials";
 
-    /// 取得本域技术凭据窄仓储，不交付任意集合写入能力。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 与当前应用数据库绑定的凭据仓储。
-    /// # 错误
-    /// 不返回错误。
+    /// 取得本域技术凭据窄仓储，不交付任意集合写入能力。与当前应用数据库绑定的凭据仓储。
     fn supplier_credentials(&self) -> SupplierCredentialRepository<'_>;
 }
 
@@ -40,12 +34,8 @@ pub struct SupplierCredentialRepository<'a> {
 
 impl SupplierCredentialRepository<'_> {
     /// 读取固定引用及同账号应用的密文凭据，不返回其他绑定的记录。
-    /// # 参数
-    /// 稳定引用、部署绑定及调用方执行器。
-    /// # 返回
-    /// 当前密文及刷新状态；仅原引用不存在时返回None。
-    /// # 错误
-    /// 身份非法、固定引用绑定不符或数据库失败时返回脱敏错误。
+    ///
+    /// 当前密文及刷新状态；仅原引用不存在时返回None。身份非法、固定引用绑定不符或数据库失败时返回脱敏错误。
     pub async fn load(
         &self,
         id: &str,
@@ -61,12 +51,10 @@ impl SupplierCredentialRepository<'_> {
     }
 
     /// 新建或按所见版本普通导入，禁止借此覆盖发送未知或授权失效。
-    /// # 参数
+    ///
+    /// 新记录或CAS更新后的原记录；None版本只允许新建。身份变化、缺少所见版本、状态冲突、唯一冲突或持久化失败时拒绝。
+    ///
     /// 原引用、绑定、受控密文、可选原版本、当前时间及执行器。
-    /// # 返回
-    /// 新记录或CAS更新后的原记录；None版本只允许新建。
-    /// # 错误
-    /// 身份变化、缺少所见版本、状态冲突、唯一冲突或持久化失败时拒绝。
     pub async fn import(
         &self,
         id: &str,
@@ -96,12 +84,8 @@ impl SupplierCredentialRepository<'_> {
     }
 
     /// 原子领取一个尚未发送的刷新，发送未知永不参加到期竞争。
-    /// # 参数
-    /// 原引用和绑定、所见版本、唯一领取命令及执行器。
-    /// # 返回
-    /// 胜出的领取记录；状态不允许或CAS竞争失败返回None。
-    /// # 错误
-    /// 非法命令、版本不符或数据库失败时拒绝。
+    ///
+    /// 胜出的领取记录；状态不允许或CAS竞争失败返回None。非法命令、版本不符或数据库失败时拒绝。
     pub async fn claim_refresh(
         &self,
         id: &str,
@@ -122,13 +106,8 @@ impl SupplierCredentialRepository<'_> {
         self.replace(filters::claim(&current, expected_version, &claim)?, &next, executor).await
     }
 
-    /// HTTP前登记原操作可能已经发送；返回成功记录之后才允许一次远端调用。
-    /// # 参数
-    /// 原领取快照、服务器当前时间及执行器。
-    /// # 返回
-    /// 版本和所有者仍匹配的发送未知记录；竞争失败返回None。
-    /// # 错误
-    /// 未领取、租期已到或持久化失败时拒绝，调用方不得发送HTTP。
+    /// 发送刷新 HTTP 请求前，按原领取版本和所有者 CAS 登记发送结果未知。
+    /// 只有取得更新后的记录才允许本轮发送一次；竞争失败返回 `None`，状态、租期或持久化出错时同样不得发送。
     pub async fn mark_refresh_sent(
         &self,
         claimed: &SupplierCredential,
@@ -141,12 +120,10 @@ impl SupplierCredentialRepository<'_> {
     }
 
     /// 按原发送身份原子保存成功令牌，不覆盖期间已经重新授权的新版本。
-    /// # 参数
+    ///
+    /// 新密文及完成操作回执；原CAS失效返回None。状态、密文或持久化失败时拒绝；保存未知须按原操作读取回执。
+    ///
     /// 原发送快照、核实成功的新密文、当前时间及执行器。
-    /// # 返回
-    /// 新密文及完成操作回执；原CAS失效返回None。
-    /// # 错误
-    /// 状态、密文或持久化失败时拒绝；保存未知须按原操作读取回执。
     pub async fn complete_refresh(
         &self,
         sent: &SupplierCredential,
@@ -160,12 +137,10 @@ impl SupplierCredentialRepository<'_> {
     }
 
     /// 保存已由协议层核实的授权失效，不用网络错误推断InvalidGrant。
-    /// # 参数
+    ///
+    /// 同身份CAS成功后的重新授权要求；旧版本返回None。非发送未知或持久化失败时拒绝。
+    ///
     /// 原发送快照、服务器当前时间和执行器。
-    /// # 返回
-    /// 同身份CAS成功后的重新授权要求；旧版本返回None。
-    /// # 错误
-    /// 非发送未知或持久化失败时拒绝。
     pub async fn invalidate_refresh(
         &self,
         sent: &SupplierCredential,
@@ -178,12 +153,10 @@ impl SupplierCredentialRepository<'_> {
     }
 
     /// 仅释放未发送且仍由原所有者持有的领取。
-    /// # 参数
+    ///
+    /// CAS成功返回真；被替代返回假。已发送、已到期或持久化失败时拒绝。
+    ///
     /// 原领取快照、当前时间及执行器。
-    /// # 返回
-    /// CAS成功返回真；被替代返回假。
-    /// # 错误
-    /// 已发送、已到期或持久化失败时拒绝。
     pub async fn release_claim(
         &self,
         claimed: &SupplierCredential,
@@ -196,12 +169,10 @@ impl SupplierCredentialRepository<'_> {
     }
 
     /// 使用显式新授权恢复原引用，并以CAS使原HTTP响应失去覆盖资格。
-    /// # 参数
+    ///
+    /// 同身份新授权或同操作原回执，不创建第二份凭据。原发送尚未到期、版本变化、证据不完整或持久化失败时拒绝。
+    ///
     /// 原引用及绑定、新密文、含所见版本和核验人的恢复命令、当前时间及执行器。
-    /// # 返回
-    /// 同身份新授权或同操作原回执，不创建第二份凭据。
-    /// # 错误
-    /// 原发送尚未到期、版本变化、证据不完整或持久化失败时拒绝。
     pub async fn reauthorize(
         &self,
         id: &str,

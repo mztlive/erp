@@ -61,12 +61,8 @@ where
 
 impl<T: DeserializeOwned> Query<T> {
     /// 从 URI 解码查询条件。
-    ///
-    /// # 参数
     /// `uri` 为当前请求 URI。
-    /// # 返回
     /// 强类型查询条件。
-    /// # 错误
     /// 参数格式错误返回统一协议错误。
     pub fn try_from_uri(uri: &Uri) -> Result<Self, RequestError> {
         axum::extract::Query::<T>::try_from_uri(uri).map(|value| Self(value.0)).map_err(RequestError::query)
@@ -84,13 +80,7 @@ pub struct RequestError {
 
 impl RequestError {
     /// 获取请求拒绝的 HTTP 状态。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 与响应信封一致的状态码。
-    /// # 错误
-    /// 无。
     pub fn status(&self) -> StatusCode {
         self.status
     }

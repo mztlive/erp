@@ -12,14 +12,7 @@ use crate::http::state::HttpState;
 use crate::wiring::purchase_ports;
 
 /// 读取可原单修改重提的采购变更完整目标。
-///
-/// # 参数
-/// * `state` - 应用状态。
-/// * `actor` - 已认证操作人。
-/// * `id` - 原采购变更单主键。
-/// # 返回
 /// 返回当前版本、付款条件和全部冻结目标行及稳定行键。
-/// # 错误
 /// 来源更新和提交资格不足、非草稿、基准变化或冻结内容缺失时拒绝。
 pub async fn purchase_change_draft(
     State(state): State<HttpState>,
@@ -41,15 +34,8 @@ pub async fn purchase_change_draft(
 }
 
 /// 保存采购变更的编辑内容，保留当前草稿或已驳回状态。
-///
-/// # 参数
-/// * `state` - 应用状态。
-/// * `actor` - 已认证操作人。
-/// * `id` - 原采购变更单主键。
-/// * `req` - 当前版本、完整编辑目标和请求幂等键。
-/// # 返回
+/// `req` 为当前版本、完整编辑目标和请求幂等键。
 /// 返回已保存的采购变更草稿。
-/// # 错误
 /// 权限、版本、编辑资格或输入校验失败时返回错误。
 pub async fn purchase_change_save_draft(
     State(state): State<HttpState>,

@@ -37,11 +37,14 @@ pub struct AllocationProduct {
     pub unit: Option<String>,
 }
 impl FundsAccess {
-    /// 根据实际应收目标返回已授权的办理资料。
+    /// 处理财务分配办理资料时，根据实际应收目标返回已授权的办理资料。
+    ///
     /// # 参数
     /// actor 为当前账号；kind、id 为本次分配的应收目标。
+    ///
     /// # 返回
     /// 应收绑定版本中的客户、合同、项目和商品资料。
+    ///
     /// # 错误
     /// 功能失效、来源越界、目标或版本错配拒绝。
     pub async fn allocation_source(
@@ -84,7 +87,7 @@ impl FundsAccess {
         Ok(result)
     }
 
-    /// 仅在详情功能资格成立后，把精确分录转换为它的真实应收子账。
+    // 只在详情功能资格成立后，把精确分录转换为它的真实应收子账。
     async fn allocation_account_id(
         &self,
         kind: AllocationSourceKind,
@@ -105,7 +108,7 @@ impl FundsAccess {
         Ok(account_id)
     }
 
-    /// 根子账已经过原查询过滤后，只装配该来源的固定商业字段。
+    // 生成财务分配办理资料视图时，根子账已经过原查询过滤后，只装配该来源的固定商业字段。
     async fn allocation_source_view(
         &self,
         account: &ReceivableAccount,
@@ -176,7 +179,7 @@ mod tests {
 
     use super::*;
 
-    /// 两类来源都必须先完成统一资格检查，拒绝时不读取分录或子账。
+    // 验证财务分配办理资料：两类来源都必须先完成统一资格检查，拒绝时不读取分录或子账。
     #[tokio::test]
     async fn allocation_sources_require_qualification_before_business_reads() {
         let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")

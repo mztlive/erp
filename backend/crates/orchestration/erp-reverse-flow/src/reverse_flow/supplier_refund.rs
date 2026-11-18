@@ -63,18 +63,9 @@ impl ReturnsProcess {
 
     /// 登记供应商退款草稿，并在同一事务绑定已发布审批定义。
     ///
-    /// 退款单号全局唯一（唯一索引）构成幂等去重。经办人与复核人必须不同。
-    /// 绑定失败必须回滚业务实体，不得把绑定推迟到提交。
+    /// 退款单号全局唯一（唯一索引）构成幂等去重。经办人与复核人必须不同。绑定失败必须回滚业务实体，不得把绑定推迟到提交。返回新建退款单视图。
     ///
-    /// # 参数
-    /// * `req` - 创建请求
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回新建退款单视图。
-    ///
-    /// # 错误
-    /// * `ConflictError` - 退款单号重复或流程未配置
+    /// `ConflictError`：退款单号重复或流程未配置。
     pub async fn create_supplier_refund(
         &self,
         req: CreateSupplierRefundRequest,
@@ -90,7 +81,7 @@ impl ReturnsProcess {
             .await
     }
 
-    /// 原创建事务内先授权，再读取真实往来主体、绑定定义并原子登记。
+    // 单独创建供应商退款草稿时，在原事务先重验授权，再读取真实往来主体、绑定发布定义并登记。
     async fn create_supplier_refund_stage(
         &self,
         req: CreateSupplierRefundRequest,
@@ -124,20 +115,11 @@ impl ReturnsProcess {
 
     /// 提交供应商退款并调用统一 `start_approval`。
     ///
-    /// 按合同 §4.4.1 冻结 `approval_subject_version` 与 `subject_snapshot`，
-    /// 单据进入 `IN_APPROVAL`。定义与审批人取自已绑定事实，不接受客户端选择。
+    /// 按合同 §4.4.1 冻结 `approval_subject_version` 与 `subject_snapshot`，单据进入 `IN_APPROVAL`。定义与审批人取自已绑定事实，不接受客户端选择。
     ///
-    /// # 参数
-    /// * `id` - 退款单主键
-    /// * `req` - 提交请求（版本与幂等键）
-    /// * `actor` - 已通过鉴权的审计操作人
+    /// `id` 为退款单主键；`req` 为提交请求（版本与幂等键）。返回提交后的退款单视图。`NotFound`：退款单或供应商不存在。
     ///
-    /// # 返回
-    /// 返回提交后的退款单视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 退款单或供应商不存在
-    /// * `ConflictError` - 非草稿、无绑定或并发冲突
+    /// `ConflictError`：非草稿、无绑定或并发冲突。
     pub async fn submit_supplier_refund(
         &self,
         id: &str,
@@ -174,7 +156,7 @@ impl ReturnsProcess {
         .map_err(reversal_result_read_error)
     }
 
-    /// 原提交事务先授权与匹配收据，再读取版本、来源、定义和人员并写入。
+    // 提交已有供应商退款时，在原事务先授权并匹配收据，未重放时才校验版本、来源、定义与人员并写入。
     async fn submit_supplier_refund_stage(
         &self,
         req: SubmitSupplierRefundRequest,
@@ -205,17 +187,9 @@ impl ReturnsProcess {
     ///
     /// 作为合同 `cancel_action`，供业务撤回与管理员受阻取消共用。
     ///
-    /// # 参数
-    /// * `id` - 退款单主键
-    /// * `req` - 撤回请求（原因必填）
-    /// * `actor` - 已通过鉴权的审计操作人
+    /// `id` 为退款单主键；`req` 为撤回请求（原因必填）。返回撤回后的退款单视图。`NotFound`：退款单不存在。
     ///
-    /// # 返回
-    /// 返回撤回后的退款单视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 退款单不存在
-    /// * `ConflictError` - 非审批中、已最终通过或并发冲突
+    /// `ConflictError`：非审批中、已最终通过或并发冲突。
     pub async fn cancel_supplier_refund_approval(
         &self,
         id: &str,
@@ -235,7 +209,7 @@ impl ReturnsProcess {
             .await
     }
 
-    /// 原撤回事务内先授权，再读取精确版本及审批事实并写入。
+    // 撤回供应商退款审批时，在原事务先重验授权，再检查精确版本和审批运行事实后写入撤回。
     async fn cancel_supplier_refund_approval_stage(
         &self,
         id: &str,
@@ -268,10 +242,7 @@ impl ReturnsProcess {
         .await
     }
 
-    /// 从绑定读取定义并持久化启动事实。
-    ///
-    /// # 错误
-    /// 无绑定、定义缺失或写入失败时返回错误。
+    // 从绑定读取定义并持久化启动事实。无绑定、定义缺失或写入失败时返回错误。
     async fn dispatch_supplier_refund_start(
         &self,
         refund: SupplierRefund,
@@ -335,10 +306,7 @@ impl ReturnsProcess {
         .await
     }
 
-    /// 加载撤回运行事实并写回草稿。
-    ///
-    /// # 错误
-    /// 无绑定、实例终态或写入失败时返回错误。
+    // 加载撤回运行事实并写回草稿。无绑定、实例终态或写入失败时返回错误。
     async fn persist_cancelled_supplier_refund(
         &self,
         id: &str,
@@ -392,12 +360,9 @@ impl ReturnsProcess {
     }
 }
 
-/// 在创建事务内写入退款单、绑定发布定义并登记单据。
-///
-/// 绑定失败必须回滚业务实体，不得留下以后补流程的单据。
-///
-/// # 错误
-/// 无发布定义、人员重验失败或写入失败时返回错误。
+// 在创建事务内写入退款单、绑定发布定义并登记单据。
+//
+// 绑定失败必须回滚业务实体，不得留下以后补流程的单据。无发布定义、人员重验失败或写入失败时返回错误。
 async fn persist_created_supplier_refund(
     db: &Database,
     rbac: &ReverseFlowPorts,
@@ -428,10 +393,7 @@ async fn persist_created_supplier_refund(
     Ok(())
 }
 
-/// 查询供应商往来主体作为责任组织。
-///
-/// # 错误
-/// 供应商不存在或往来主体为空时返回错误。
+// 查询供应商往来主体作为责任组织。供应商不存在或往来主体为空时返回错误。
 async fn load_supplier_refund_org_id(
     db: &Database,
     supplier_id: &SupplierAccountId,
@@ -445,10 +407,10 @@ async fn load_supplier_refund_org_id(
     supplier_refund_responsible_org_id(supplier.party_id.as_ref())
 }
 
-/// 在创建退款的同一事务中重读并校验原供应商付款事实。
-///
-/// 原事实必须仍为调用前读取的版本且已经过账，避免从草稿、审批中或已冲正付款
-/// 派生无法最终执行的退款审批。
+// 在创建退款的同一事务中重读并校验原供应商付款事实。
+//
+// 原事实必须仍为调用前读取的版本且已经过账，避免从草稿、审批中或已冲正付款
+// 派生无法最终执行的退款审批。
 async fn validate_supplier_refund_source(
     db: &Database,
     source_fact_id: &SupplierPaymentId,
@@ -468,10 +430,7 @@ async fn validate_supplier_refund_source(
     )?)
 }
 
-/// 查询发布定义、写入绑定并持久化注册行。
-///
-/// # 错误
-/// 无发布定义或绑定失败时返回错误。
+// 查询发布定义、写入绑定并持久化注册行。无发布定义或绑定失败时返回错误。
 async fn persist_bound_supplier_refund_document(
     db: &Database,
     rbac: &ReverseFlowPorts,
@@ -491,15 +450,11 @@ async fn persist_bound_supplier_refund_document(
     Ok(binding)
 }
 
-/// 先证明账号和提交资格，再读取退款并核验资金来源，沿用调用方事务。
-/// # 参数
-/// * `db` / `rbac` - 数据库与审批授权端口。
-/// * `actor` / `refund_id` - 当前操作人与退款单主键。
-/// * `executor` - 同一事务执行器。
-/// # 返回
-/// 返回完成原来源授权重验的退款单。
-/// # 错误
-/// 原单或往来主体不存在、来源无权限或提交资格失效时返回错误。
+// 先证明账号和提交资格，再读取退款并核验资金来源，沿用调用方事务。
+//
+// `db` / `rbac` 为数据库与审批授权端口；`actor` / `refund_id` 为当前操作人与退款单主键。返回完成原来源授权重验的退款单。
+//
+// 原单或往来主体不存在、来源无权限或提交资格失效时返回错误。
 pub(super) async fn authorized_supplier_refund(
     db: &Database,
     rbac: &ReverseFlowPorts,

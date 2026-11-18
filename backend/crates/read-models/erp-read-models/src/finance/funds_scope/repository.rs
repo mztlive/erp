@@ -48,7 +48,7 @@ pub(super) mod tests {
         }
     }
 
-    /// 未登记销售来源时保留真实来源事实，但不得交付销售授权份额。
+    // 验证财务来源范围：未登记销售来源时保留真实来源事实，但不得交付销售授权份额。
     #[test]
     fn missing_sales_source_preserves_facts_and_denies_shares() {
         use mongodb::bson::{Bson, doc};

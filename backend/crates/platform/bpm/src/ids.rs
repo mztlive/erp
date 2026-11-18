@@ -38,7 +38,7 @@ mod tests {
         }};
     }
 
-    /// 7 个 BPM Core ID 均透明序列化，且彼此类型隔离。
+    // 检查七类流程主键仍以原字符串序列化，且不会因底层值相同而混用不同领域类型。
     #[test]
     fn bpm_core_ids_are_transparent_and_type_isolated() {
         let value = "00112233445566778899aabbccddeeff";

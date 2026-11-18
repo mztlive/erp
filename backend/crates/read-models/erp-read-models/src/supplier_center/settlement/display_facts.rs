@@ -21,15 +21,13 @@ use crate::purchase_center::repository::supplier_names::current_legal_names_by_a
 use crate::support::dedup_trimmed_nonempty;
 
 impl SupplierSettlementReadService {
-    /// 为已完成命令读取附加名称，不改变命令成功结果。
-    ///
-    /// # 参数
-    /// * `statements` - 当前命令已授权的结算单事实。
-    /// * `extra_user_ids` - 同一结果引用的补证或任务人员。
-    /// # 返回
-    /// 返回稀疏名称映射；附加读取失败时为空。
-    /// # 错误
-    /// 不返回错误。
+    // 为已完成命令取得附加名称，不改变命令成功结果。
+    //
+    // 调用参数：
+    // * `statements` - 当前命令已授权的结算单事实。
+    // * `extra_user_ids` - 同一结果引用的补证或任务人员。
+    //
+    // 返回稀疏名称映射；附加读取失败时为空。
     pub(super) async fn command_display_facts(
         &self,
         statements: &[&SupplierSettlementStatementView],
@@ -44,16 +42,16 @@ impl SupplierSettlementReadService {
         }
     }
 
-    /// 按当前授权结果的精确身份批量读取名称。
-    ///
-    /// # 参数
-    /// * `statements` - 当前结算单页或详情。
-    /// * `extra_user_ids` - 同一详情引用的补证或任务人员。
-    /// * `executor` - 当前结果读取使用的原执行器。
-    /// # 返回
-    /// 返回供应商及人员名称映射。
-    /// # 错误
-    /// 任一拥有领域读取失败时返回仓储错误。
+    // 组装供应商结算时，按当前授权结果的精确身份批量读取名称。
+    //
+    // 调用参数：
+    // * `statements` - 当前结算单页或详情。
+    // * `extra_user_ids` - 同一详情引用的补证或任务人员。
+    // * `executor` - 当前结果读取使用的原执行器。
+    //
+    // 返回供应商及人员名称映射。
+    //
+    // 任一拥有领域读取失败时返回仓储错误。
     pub(super) async fn statement_display_facts(
         &self,
         statements: &[&SupplierSettlementStatementView],
@@ -88,15 +86,15 @@ impl SupplierSettlementReadService {
         Ok(StatementDisplayFacts { supplier_names, user_names })
     }
 
-    /// 对当前结算明细集合补齐订单和商品名称。
-    ///
-    /// # 参数
-    /// * `items` - 当前授权查询返回的明细。
-    /// * `executor` - 当前结果读取使用的原执行器。
-    /// # 返回
-    /// 返回同一顺序的名称视图。
-    /// # 错误
-    /// 关联事实读取失败时返回仓储错误。
+    // 生成供应商结算展示时，对当前结算明细集合补齐订单和商品名称。
+    //
+    // 调用参数：
+    // * `items` - 当前授权查询返回的明细。
+    // * `executor` - 当前结果读取使用的原执行器。
+    //
+    // 返回同一顺序的名称视图。
+    //
+    // 关联事实读取失败时返回仓储错误。
     pub(super) async fn item_display_views(
         &self,
         items: Vec<SupplierSettlementItemView>,
@@ -112,7 +110,7 @@ impl SupplierSettlementReadService {
         Ok(items.into_iter().map(|item| facts.item(item)).collect())
     }
 
-    /// 沿原读取执行器补齐供应商履约订单的业务单号。
+    // 为已授权结算结果补充供应商履约单号时，只沿原执行器读取这些真实订单引用。
     async fn settlement_order_labels(
         &self,
         items: &[SupplierSettlementItemView],
@@ -132,7 +130,7 @@ impl SupplierSettlementReadService {
             .collect())
     }
 
-    /// 沿原读取执行器核对履约明细和供给修订的商品关联。
+    // 装配结算明细名称时，沿原执行器核对履约明细及冻结供给修订的商品关联。
     async fn settlement_item_names(
         &self,
         items: &[SupplierSettlementItemView],
@@ -167,7 +165,7 @@ impl SupplierSettlementReadService {
             .collect())
     }
 
-    /// 沿原读取执行器取得 SKU 当前修订中的可读名称。
+    // 装配结算的商品显示名称时，沿原执行器读取所引用 SKU 的当前修订名称。
     async fn settlement_sku_names(
         &self,
         sku_ids: Vec<SkuId>,

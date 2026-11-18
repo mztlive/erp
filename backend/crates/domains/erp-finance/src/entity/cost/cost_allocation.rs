@@ -49,20 +49,15 @@ pub struct CostAllocation {
 }
 
 impl CostAllocation {
-    /// 创建成本分配。
+    /// 为成本入账建立一条金额归属，把单笔成本关联到承担该份额的销售单或明细。
     ///
     /// 完成销售单归属校验、金额正数与
     /// 含税 ≥ 不含税校验。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::CostAllocationId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
     /// 返回新建的分配实体。
-    ///
-    /// # 错误
     /// 当销售单归属缺失、金额非正或含税金额小于不含税金额时返回错误。
+    ///
+    /// 输入约定：
+    /// - `id`：实体主键（`erp_core::ids::CostAllocationId`）
     pub fn new(id: CostAllocationId, data: CostAllocationData) -> Result<Self> {
         validate_target(&data.sales_order_id, &data.sales_order_line_id)?;
         if data.allocated_gross_amount.to_decimal().is_sign_negative()
@@ -87,38 +82,22 @@ impl CostAllocation {
         })
     }
 
-    /// 更新成本分配。
-    ///
-    /// 分配行过账后不可更新或删除（数据模型 §6.9 末尾），任何修改都被拒绝。
-    ///
-    /// # 参数
-    /// * `update` - 更新数据（恒被拒绝）
-    /// * `updated_by` - 更新执行人（恒被拒绝）
-    ///
-    /// # 返回
-    /// 恒返回错误。
-    ///
-    /// # 错误
-    /// 任何调用都返回错误：正式事实过账后不可更新或删除。
+    /// 拒绝改写或删除已过账成本分配，防止历史成本归属被覆盖。
     pub fn update(&mut self, update: CostAllocationData, updated_by: impl Into<String>) -> Result<()> {
         let _ = (update, updated_by);
         Err(Error::from("正式事实过账后不可更新或删除"))
     }
 }
 
-/// 校验成本归属目标。
-///
-/// 规则（数据模型 §6.10）：非卡券成本必须落到销售单或销售明细。
-///
-/// # 参数
-/// * `sales_order_id` - 销售单归属
-/// * `sales_order_line_id` - 销售明细归属
-///
-/// # 返回
-/// 归属成立返回 `Ok(())`。
-///
-/// # 错误
-/// 销售单归属缺失时返回错误。
+// 校验成本归属目标。
+//
+// 规则（数据模型 §6.10）：非卡券成本必须落到销售单或销售明细。
+// 结果：归属成立返回 `Ok(())`。
+// 销售单归属缺失时返回错误。
+//
+// 输入约定：
+// - `sales_order_id`：销售单归属
+// - `sales_order_line_id`：销售明细归属
 fn validate_target(
     sales_order_id: &Option<SalesOrderId>,
     sales_order_line_id: &Option<SalesOrderLineId>,

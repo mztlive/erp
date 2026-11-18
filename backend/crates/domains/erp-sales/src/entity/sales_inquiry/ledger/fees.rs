@@ -11,12 +11,10 @@ use crate::{Error, Result};
 
 impl SalesInquiry {
     /// 对一张销售明确分摊已接受的费用金额。
-    /// # 参数
-    /// `allocation_id` 是稳定分摊身份，其余参数指定销售、轮次、费用及金额。
-    /// # 返回
-    /// 追加分摊，完全相同重放不重复登记。
-    /// # 错误
+    /// 结果：追加分摊，完全相同重放不重复登记。
     /// 未接受、范围或金额超出费用总额时拒绝。
+    ///
+    /// 输入约定：`allocation_id` 是稳定分摊身份，其余参数指定销售、轮次、费用及金额。
     pub fn allocate_fee(
         &mut self,
         allocation_id: &str,
@@ -55,12 +53,10 @@ impl SalesInquiry {
     }
 
     /// 占用明确销售归属下的费用，用于采购或财务直接登记。
-    /// # 参数
-    /// `reservation` 必须包含稳定分摊及实际单据/行身份；`now` 为操作时刻。
-    /// # 返回
-    /// 写入 Reserved 来源占用；完全相同重放无新增。
-    /// # 错误
+    /// 结果：写入 Reserved 来源占用；完全相同重放无新增。
     /// 暂估、含价、来源身份重复、未分摊或余额不足时拒绝。
+    ///
+    /// 输入约定：`reservation` 必须包含稳定分摊及实际单据/行身份；`now` 为操作时刻。
     pub fn reserve_fee(&mut self, reservation: InquiryFeeReservation, now: Instant) -> Result<()> {
         for (value, name) in [
             (&reservation.reservation_id, "费用占用身份"),
@@ -94,12 +90,10 @@ impl SalesInquiry {
     }
 
     /// 调整未发生费用占用；减少允许在询价关闭或重询后执行。
-    /// # 参数
-    /// `reservation_id` 为原来源；`amount` 为完整新金额；`now` 为操作时刻。
-    /// # 返回
     /// 成功后修改保留额度，金额为零时释放。
-    /// # 错误
-    /// 已发生/财务登记不允许直接调整；增额须重验最新接受与余额。
+    /// 失败条件：已发生/财务登记不允许直接调整；增额须重验最新接受与余额。
+    ///
+    /// 输入约定：`reservation_id` 为原来源；`amount` 为完整新金额；`now` 为操作时刻。
     pub fn adjust_fee(&mut self, reservation_id: &str, amount: Amount, now: Instant) -> Result<()> {
         let round = self
             .fee_ledger
@@ -111,12 +105,10 @@ impl SalesInquiry {
     }
 
     /// 使用明确已接受轮次调整来源占用，保留原正式单据引用由调用方冻结。
-    /// # 参数
-    /// `reservation_id` 为稳定占用；`amount` 为目标金额；`round` 为明确采用轮次；`now` 为操作时刻。
-    /// # 返回
-    /// 更新金额、采用轮次及占用状态；已释放零额来源可显式重新占用。
-    /// # 错误
-    /// 已发生来源的任何实质修改被拒绝；增加或换轮必须重新校验当前接受与余额。
+    /// 结果：更新金额、采用轮次及占用状态；已释放零额来源可显式重新占用。
+    /// 失败条件：已发生来源的任何实质修改被拒绝；增加或换轮必须重新校验当前接受与余额。
+    ///
+    /// 输入约定：`reservation_id` 为稳定占用；`amount` 为目标金额；`round` 为明确采用轮次；`now` 为操作时刻。
     pub fn adjust_fee_for_round(
         &mut self,
         reservation_id: &str,
@@ -160,12 +152,10 @@ impl SalesInquiry {
     }
 
     /// 将实际发生或财务登记的费用保留为不可直接释放事实。
-    /// # 参数
-    /// `reservation_id` 为费用来源占用。
-    /// # 返回
-    /// 进入 Handled，重复调用不重复扣减。
-    /// # 错误
-    /// 不存在或已释放的来源不得登记。
+    /// 结果：进入 Handled，重复调用不重复扣减。
+    /// 失败条件：不存在或已释放的来源不得登记。
+    ///
+    /// 输入约定：`reservation_id` 为费用来源占用。
     pub fn register_fee(&mut self, reservation_id: &str) -> Result<()> {
         let entry = self
             .fee_ledger
@@ -180,12 +170,10 @@ impl SalesInquiry {
     }
 
     /// 依据正式作废/减少业务事实释放未发生费用。
-    /// # 参数
-    /// `reservation_id` 为原占用；业务资格由调用方 Process 校验。
-    /// # 返回
-    /// 进入 Released，重复释放保持不变。
-    /// # 错误
-    /// 已发生、已付款或已登记来源不得直接释放。
+    /// 结果：进入 Released，重复释放保持不变。
+    /// 失败条件：已发生、已付款或已登记来源不得直接释放。
+    ///
+    /// 输入约定：`reservation_id` 为原占用；业务资格由调用方 Process 校验。
     pub fn release_fee(&mut self, reservation_id: &str) -> Result<()> {
         let entry = self
             .fee_ledger
@@ -269,23 +257,19 @@ impl SalesInquiry {
     }
 
     /// 核对费用公开结果是否可用于新增办理。
-    /// # 参数
-    /// `round`、`fee_id` 为明确公开来源；`now` 为当前时刻。
-    /// # 返回
-    /// 当前已接受、有效、金额大于零时通过。
-    /// # 错误
-    /// 未接受、重询、关闭、零额时返回公开业务原因。
+    /// 结果：当前已接受、有效、金额大于零时通过。
+    /// 失败条件：未接受、重询、关闭、零额时返回公开业务原因。
+    ///
+    /// 输入约定：`round`、`fee_id` 为明确公开来源；`now` 为当前时刻。
     pub fn ensure_fee_available(&self, round: u32, fee_id: &str, now: Instant) -> Result<()> {
         self.available_fee(round, fee_id, now).map(|_| ())
     }
 
     /// 计算当前有效费用和明确销售分摊的共同可办理余额。
-    /// # 参数
-    /// `fee_id`、`allocation_id` 为稳定来源；`round` 为当前接受轮次；`now` 为业务时刻。
-    /// # 返回
     /// 返回费用余额与分摊余额的较小值，已占用及已办理均扣除，耗尽返回零。
-    /// # 错误
     /// 未接受、失效、暂估、含价、分摊不匹配或金额溢出时拒绝。
+    ///
+    /// 输入约定：`fee_id`、`allocation_id` 为稳定来源；`round` 为当前接受轮次；`now` 为业务时刻。
     pub fn fee_available_amount(
         &self,
         fee_id: &str,

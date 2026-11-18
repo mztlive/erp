@@ -15,13 +15,6 @@ const OUTBOX: &str = <mongodb::Database as ApprovalIntegrationExt>::APPROVAL_NOT
 ///
 /// 命令收据属于 BPM 持久化边界，其全部索引只允许由 `indexes::bpm` 声明。
 ///
-/// # 参数
-/// * `db` - 目标 MongoDB 数据库
-///
-/// # 返回
-/// 无返回值。
-///
-/// # 错误
 /// 既有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub async fn ensure(db: &Database) -> Result<()> {
     ensure_copy_indexes(db).await?;
@@ -39,7 +32,7 @@ pub async fn ensure(db: &Database) -> Result<()> {
     Ok(())
 }
 
-/// 为单个集合创建一组幂等命名索引。
+// 为指定集合注册命名索引；使用相同定义重复注册时沿用已有索引。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
     db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())

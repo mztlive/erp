@@ -118,28 +118,22 @@ pub(super) struct PreparedUpdate {
 }
 
 impl PreparedUpdate {
-    /// 构造修订结果、幂等记录与根审计。
-    ///
-    /// # 用途
-    /// 由已构造主体与变更集合生成幂等命令、审计与稳定结果。
-    ///
-    /// # 参数
-    /// * `context` - Party/供应商根与变更集合
-    /// * `idempotency_key` - 客户端幂等键
-    /// * `request_fingerprint` - 请求摘要
-    /// * `effective_from` - 生效起始日
-    /// * `change_reason` - 变更原因
-    /// * `actor` - 审计操作人
-    /// * `pending_assets` - 同一次命令待登记的资质文件
-    ///
-    /// # 返回
-    /// 返回可落库的修订事务载荷。
-    ///
-    /// # 错误
-    /// 命令字段非法时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 供应商版本按当前根版本加一写入命令。
+    // 构造修订结果、幂等记录与根审计。
+    //
+    // 由已构造主体与变更集合生成幂等命令、审计与稳定结果。
+    //
+    // - `context`：Party/供应商根与变更集合
+    // - `idempotency_key`：客户端幂等键
+    // - `request_fingerprint`：请求摘要
+    // - `effective_from`：生效起始日
+    // - `change_reason`：变更原因
+    // - `pending_assets`：同一次命令待登记的资质文件
+    //
+    // 返回可落库的修订事务载荷。
+    //
+    // 命令字段非法时返回错误。
+    //
+    // 供应商版本按当前根版本加一写入命令。
     pub(super) fn new(
         context: PreparedUpdateContext,
         idempotency_key: String,
@@ -198,17 +192,13 @@ impl PreparedUpdate {
         })
     }
 
-    /// 消耗本载荷，把完整资料修订与幂等结果写入同一事务。
-    ///
-    /// # 参数
-    /// * `db` - 数据库。
-    /// * `executor` - 修订事务执行器。
-    ///
-    /// # 返回
-    /// 无返回值。待登记文件、主体、从属事实、能力、资质、评级、幂等命令和审计都写入后完成。
-    ///
-    /// # 错误
-    /// 任一步写入失败时返回该错误并停止后续写入。
+    // 消耗本载荷，把完整资料修订与幂等结果写入同一事务。
+    //
+    // `executor`：修订事务执行器。
+    //
+    // 待登记文件、主体、从属事实、能力、资质、评级、幂等命令和审计都写入后完成。
+    //
+    // 任一步写入失败时返回该错误并停止后续写入。
     pub(super) async fn persist(mut self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
         self.pending_assets.persist(db, executor).await?;
         self.persist_roots(db, executor).await?;
@@ -222,7 +212,7 @@ impl PreparedUpdate {
         Ok(())
     }
 
-    /// 写入 Party/Supplier 根及新修订。
+    // 写入 Party/Supplier 根及新修订。
     async fn persist_roots(&mut self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
         ensure_identity_available(db, &self.party, &self.party_revision, executor).await?;
 
@@ -236,7 +226,7 @@ impl PreparedUpdate {
 }
 
 impl PartyFactChanges {
-    /// 写入从属事实的停用与新事实行。
+    // 写入从属事实的停用与新事实行。
     async fn persist(mut self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
         for item in &mut self.contacts {
             db.party_contacts().update(item, executor).await?;
@@ -273,7 +263,7 @@ impl PartyFactChanges {
 }
 
 impl CapabilityChanges {
-    /// 写入能力快照及当前实体变更。
+    // 写入能力快照及当前实体变更。
     async fn persist(mut self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
         for revision in &self.revisions {
             db.supplier_capability_revisions().create(revision, executor).await?;
@@ -289,7 +279,7 @@ impl CapabilityChanges {
 }
 
 impl QualificationChanges {
-    /// 写入资质快照、当前实体和整体替换后的能力关联。
+    // 写入资质快照、当前实体和整体替换后的能力关联。
     async fn persist(mut self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
         for revision in &self.revisions {
             db.supplier_qualification_revisions().create(revision, executor).await?;
@@ -309,7 +299,7 @@ impl QualificationChanges {
 }
 
 impl RatingChanges {
-    /// 关闭上一开放区间并写入下一评级版本。
+    // 关闭上一开放区间并写入下一评级版本。
     async fn persist(mut self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
         if let Some(current) = self.current.as_mut() {
             db.supplier_rating_revisions().update(current, executor).await?;

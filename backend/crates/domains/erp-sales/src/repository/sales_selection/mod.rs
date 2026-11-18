@@ -91,18 +91,10 @@ impl Default for SelectionBookFilter {
 }
 
 impl QueryFilter for SelectionBookFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// 未删除条件始终放入 `$and`。负责人、业务组织有值时按 `$in` 追加；客户、形态、状态、提交方式有值时按等值追加。客户名称关键字去空白后按字面量正则匹配 `customer_name`。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 转换为 MongoDB 查询条件（自动追加未删除过滤）。
+    //
+    // 未删除条件始终放入 `$and`。负责人、业务组织有值时按 `$in` 追加；客户、形态、状态、提交方式有值时按等值追加。客户名称关键字去空白后按字面量正则匹配 `customer_name`。
+    // 返回查询条件文档。
     fn to_doc(&self) -> Document {
         let mut and: Vec<Document> = Vec::new();
         push_undeleted(&mut and);
@@ -134,16 +126,7 @@ impl QueryFilter for SelectionBookFilter {
 }
 
 impl Pagination for SelectionBookFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 向仓储分页器交付筛选中的页码与每页条数。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -167,18 +150,10 @@ pub struct SelectionProposalFilter {
 }
 
 impl QueryFilter for SelectionProposalFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// 写入未删除条件；授权客户有值时按 `customer_id` 的 `$in` 追加，客户与选品册有值时按等值追加。`owner_user_ids`、`org_unit_ids` 不进入文档。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 转换为 MongoDB 查询条件（自动追加未删除过滤）。
+    //
+    // 写入未删除条件；授权客户有值时按 `customer_id` 的 `$in` 追加，客户与选品册有值时按等值追加。`owner_user_ids`、`org_unit_ids` 不进入文档。
+    // 返回查询条件文档。
     fn to_doc(&self) -> Document {
         let mut and: Vec<Document> = Vec::new();
         push_undeleted(&mut and);
@@ -194,32 +169,19 @@ impl QueryFilter for SelectionProposalFilter {
 }
 
 impl Pagination for SelectionProposalFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 向仓储分页器交付筛选中的页码与每页条数。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
 }
 
 /// 校验列表排序字段白名单。
-///
-/// # 参数
-/// * `sort_by` - 可选排序字段；空白视为未提供
-/// * `sort_ascending` - 是否升序
-///
-/// # 返回
 /// 返回 `(字段, 升序)`；未提供时默认 `("created_at", false)`。
-///
-/// # 错误
 /// 字段不在白名单时返回参数验证失败。
+///
+/// 输入约定：
+/// - `sort_by`：可选排序字段；空白视为未提供
+/// - `sort_ascending`：是否升序
 pub fn validate_book_sort(sort_by: Option<&str>, sort_ascending: bool) -> crate::Result<(String, bool)> {
     let field = sort_by.map(str::trim).filter(|value| !value.is_empty());
     let Some(field) = field else {
@@ -237,16 +199,7 @@ pub struct SalesSelectionDomainRepository<'a> {
 }
 
 impl<'a> SalesSelectionDomainRepository<'a> {
-    /// 创建域专用仓储。
-    ///
-    /// # 参数
-    /// * `db` - 目标数据库
-    ///
-    /// # 返回
-    /// 返回仓储实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将本领域的集合访问器绑定到当前 MongoDB 数据库，构造时不读写集合。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
@@ -254,16 +207,11 @@ impl<'a> SalesSelectionDomainRepository<'a> {
     /// 分页检索选品册（整文档，供管理端列表）。
     ///
     /// 调用方必须先经 [`validate_book_sort`] 校验排序字段；本方法信任传入值。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回当前页与总数。
-    ///
-    /// # 错误
     /// 查询或计数失败时返回仓储错误。
+    ///
+    /// 输入约定：
+    /// - `filter`：筛选与分页条件
     pub async fn search_booklets(
         &self,
         filter: &SelectionBookFilter,
@@ -305,16 +253,11 @@ impl<'a> SalesSelectionDomainRepository<'a> {
     }
 
     /// 分页检索方案（整文档）；计数与取数使用同一授权条件。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回当前页与总数，稳定排序含 ID。
-    ///
-    /// # 错误
     /// 查询或计数失败时返回仓储错误。
+    ///
+    /// 输入约定：
+    /// - `filter`：筛选与分页条件
     pub async fn search_proposals(
         &self,
         filter: &SelectionProposalFilter,
@@ -325,17 +268,12 @@ impl<'a> SalesSelectionDomainRepository<'a> {
     }
 
     /// 列出某批次当前有效陈列。
-    ///
-    /// # 参数
-    /// * `booklet_id` - 选品册
-    /// * `batch_id` - 准备批次
-    /// * `executor` - 执行器
-    ///
-    /// # 返回
     /// 返回有效且未删除的陈列项。
-    ///
-    /// # 错误
     /// 查询失败时返回仓储错误。
+    ///
+    /// 输入约定：
+    /// - `booklet_id`：选品册
+    /// - `batch_id`：准备批次
     pub async fn list_effective_items(
         &self,
         booklet_id: &str,
@@ -349,17 +287,12 @@ impl<'a> SalesSelectionDomainRepository<'a> {
     }
 
     /// 列出某批次冻结的商品池成员。
-    ///
-    /// # 参数
-    /// * `booklet_id` - 选品册
-    /// * `batch_id` - 准备批次
-    /// * `executor` - 执行器
-    ///
-    /// # 返回
     /// 返回该批次全部成员。
-    ///
-    /// # 错误
     /// 查询失败时返回仓储错误。
+    ///
+    /// 输入约定：
+    /// - `booklet_id`：选品册
+    /// - `batch_id`：准备批次
     pub async fn list_pool_members(
         &self,
         booklet_id: &str,
@@ -373,17 +306,13 @@ impl<'a> SalesSelectionDomainRepository<'a> {
     }
 
     /// 按本册参与人稳定身份读取独立会话。
-    ///
-    /// # 参数
-    /// * `booklet_id` - 选品册身份
-    /// * `participant_id` - 参与人身份；普通模式为空
-    /// * `executor` - 当前事务执行器
-    ///
-    /// # 返回
     /// 返回匹配的个人会话。
+    /// 传播数据库查询失败。
     ///
-    /// # 错误
-    /// 数据库查询失败时返回仓储错误。
+    /// 输入约定：
+    /// - `booklet_id`：选品册身份
+    /// - `participant_id`：参与人身份；普通模式为空
+    /// - `executor`：当前事务执行器
     pub async fn session_by_participant(
         &self,
         booklet_id: &str,
@@ -398,17 +327,13 @@ impl<'a> SalesSelectionDomainRepository<'a> {
     }
 
     /// 按所属册与提货券代码哈希读取独立会话。
-    ///
-    /// # 参数
-    /// * `booklet_id` - 选品册身份
-    /// * `voucher_hash` - 券码哈希
-    /// * `executor` - 当前事务执行器
-    ///
-    /// # 返回
     /// 返回本册对应券码的个人会话。
+    /// 传播数据库查询失败。
     ///
-    /// # 错误
-    /// 数据库查询失败时返回仓储错误。
+    /// 输入约定：
+    /// - `booklet_id`：选品册身份
+    /// - `voucher_hash`：券码哈希
+    /// - `executor`：当前事务执行器
     pub async fn session_by_voucher_hash(
         &self,
         booklet_id: &str,
@@ -422,16 +347,11 @@ impl<'a> SalesSelectionDomainRepository<'a> {
     }
 
     /// 读取指定册的全部独立会话。
-    ///
-    /// # 参数
-    /// * `booklet_id` - 已由调用方完成授权的选品册
-    /// * `executor` - 执行器
-    ///
-    /// # 返回
     /// 返回普通会话或该册所有个人会话。
+    /// 传播数据库查询失败。
     ///
-    /// # 错误
-    /// 数据库查询失败时返回仓储错误。
+    /// 输入约定：
+    /// - `booklet_id`：已由调用方完成授权的选品册
     pub async fn sessions_for_booklet(
         &self,
         booklet_id: &str,
@@ -441,16 +361,11 @@ impl<'a> SalesSelectionDomainRepository<'a> {
     }
 
     /// 读取指定册全部已提交方案。
-    ///
-    /// # 参数
-    /// * `booklet_id` - 已由调用方完成授权的选品册
-    /// * `executor` - 执行器
-    ///
-    /// # 返回
     /// 返回本册普通方案或所有个人方案。
+    /// 传播数据库查询失败。
     ///
-    /// # 错误
-    /// 数据库查询失败时返回仓储错误。
+    /// 输入约定：
+    /// - `booklet_id`：已由调用方完成授权的选品册
     pub async fn proposals_for_booklet(
         &self,
         booklet_id: &str,
@@ -460,16 +375,11 @@ impl<'a> SalesSelectionDomainRepository<'a> {
     }
 
     /// 按选品册读取方案。
-    ///
-    /// # 参数
-    /// * `booklet_id` - 选品册
-    /// * `executor` - 执行器
-    ///
-    /// # 返回
-    /// 存在时返回方案；一册最多一份由唯一索引保证。
-    ///
-    /// # 错误
+    /// 结果：存在时返回方案；一册最多一份由唯一索引保证。
     /// 查询失败时返回仓储错误。
+    ///
+    /// 输入约定：
+    /// - `booklet_id`：选品册
     pub async fn find_proposal_by_booklet(
         &self,
         booklet_id: &str,
@@ -482,19 +392,15 @@ impl<'a> SalesSelectionDomainRepository<'a> {
     }
 
     /// 持久化一次同步准备的全部结果。
+    /// 结果：成功写入全部结果。
+    /// 失败条件：唯一冲突或写入失败时返回仓储错误，调用方回滚。
     ///
-    /// # 参数
-    /// * `task` - 已标记成功的任务
-    /// * `booklet` - 已完成准备的选品册
-    /// * `members` - 冻结的商品池成员
-    /// * `items` - 生成的陈列项
-    /// * `executor` - 执行器，必须位于事务中
-    ///
-    /// # 返回
-    /// 成功写入全部结果。
-    ///
-    /// # 错误
-    /// 唯一冲突或写入失败时返回仓储错误，调用方回滚。
+    /// 输入约定：
+    /// - `task`：已标记成功的任务
+    /// - `booklet`：已完成准备的选品册
+    /// - `members`：冻结的商品池成员
+    /// - `items`：生成的陈列项
+    /// - `executor`：执行器，必须位于事务中
     pub async fn persist_prepare_success(
         &self,
         task: &SalesSelectionPrepareTask,
@@ -529,18 +435,14 @@ impl<'a> SalesSelectionDomainRepository<'a> {
         self.insert_members_and_items(members, items, executor).await
     }
 
-    /// 插入商品池成员与陈列项。
-    ///
-    /// # 参数
-    /// * `members` - 成员
-    /// * `items` - 陈列项
-    /// * `executor` - 执行器，必须位于事务中
-    ///
-    /// # 返回
-    /// 成功插入。
-    ///
-    /// # 错误
-    /// 写入失败时返回仓储错误。
+    // 插入商品池成员与陈列项。
+    // 结果：成功插入。
+    // 写入失败时返回仓储错误。
+    //
+    // 输入约定：
+    // - `members`：成员
+    // - `items`：陈列项
+    // - `executor`：执行器，必须位于事务中
     pub(crate) async fn insert_members_and_items(
         &self,
         members: &[SalesSelectionPoolMember],

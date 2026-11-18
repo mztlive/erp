@@ -11,7 +11,7 @@ use crate::Result;
 use crate::entity::authorization::ResourceTargets;
 use crate::entity::resource_access::{GrantTarget, ResourceKind, SourceKey};
 
-/// 对指定业务主键构造存在性读取授权关联，不丢弃未命中的根记录。
+// 为根业务主键构造有效读取授权的存在性关联；未命中授权的根记录仍保留给其他合法分支判断。
 pub(crate) fn grant_lookup(user: &str, resource: ResourceKind, key: Bson) -> Document {
     let mut filter = grant_filter(user, resource);
     filter.insert("$expr", doc! { "$eq": ["$resource_id", "$$identity_key"] });
@@ -21,13 +21,12 @@ pub(crate) fn grant_lookup(user: &str, resource: ResourceKind, key: Bson) -> Doc
     doc! { "from": GRANTS, "let": { "identity_key": key }, "pipeline": pipeline }
 }
 
-/// 只读取本次目标的有效授权；数据库关联来源并按目标去重。
-/// # 参数
-/// user、resource 为可信入口身份；targets 为已校验目标；executor 为调用事务。
-/// # 返回
-/// 至多与目标数相等的有效 ID 集合，空目标不访问数据库。
-/// # 错误
-/// 数据库读取或反序列化失败时拒绝。
+// 只读取本次目标的有效授权；数据库关联来源并按目标去重。
+// 至多与目标数相等的有效 ID 集合，空目标不访问数据库。
+//
+// 数据库读取或反序列化失败时拒绝。
+//
+// user、resource 为可信入口身份；targets 为已校验目标；executor 为调用事务。
 pub(crate) async fn target_ids(
     db: &Database,
     user: &str,
@@ -43,13 +42,12 @@ pub(crate) async fn target_ids(
     Ok(rows.into_iter().map(|row| row.id).collect())
 }
 
-/// 在同一事务中核验精确来源、当前来源版本和真实目标；不接纳其他实例授权。
-/// # 参数
-/// db为身份数据库，source为当前真实审批实例来源，target为真实订单，executor为原快照。
-/// # 返回
-/// 存在接收人、来源身份、当前来源版本与真实目标均匹配的有效读取行时返回true。
-/// # 错误
-/// 来源身份非法、数据库读取或反序列化失败时返回错误。
+// 在同一事务中核验精确来源、当前来源版本和真实目标；不接纳其他实例授权。
+// 存在接收人、来源身份、当前来源版本与真实目标均匹配的有效读取行时返回true。
+//
+// 来源身份非法、数据库读取或反序列化失败时返回错误。
+//
+// db为身份数据库，source为当前真实审批实例来源，target为真实订单，executor为原快照。
 pub(crate) async fn source_target(
     db: &Database,
     source: &SourceKey,
@@ -72,7 +70,7 @@ struct TargetId {
     id: String,
 }
 
-/// 精确命中账号、资源及本次 ID，关联校验后在数据库去重。
+// 单条或批量对象授权仅检查本次账号、资源和精确 ID，关联后由数据库去重，不返回历史授权全集。
 fn target_pipeline(user: &str, resource: ResourceKind, targets: &ResourceTargets) -> Vec<Document> {
     let mut filter = grant_filter(user, resource);
     filter.insert("resource_id", doc! { "$in": targets.ids().iter().cloned().collect::<Vec<_>>() });
@@ -85,12 +83,12 @@ fn target_pipeline(user: &str, resource: ResourceKind, targets: &ResourceTargets
     pipeline
 }
 
-/// 精确限定读取授权，不接纳其他账号、资源、动作及失效行。
+// 按账号、资源、读动作及有效状态限定候选授权行，不允许其他主体或失效行参与读取判断。
 fn grant_filter(user: &str, resource: ResourceKind) -> Document {
     doc! { "recipient": user, "resource": resource.code(), "action": "read", "active": true, "deleted_at": 0 }
 }
 
-/// 列表与目标查询共用来源校验；存在其他有效来源时仍可读取。
+// 对象和列表共用有效来源关联，撤销或失效来源不能放行；同一记录仍可由另一有效来源证明可读。
 fn valid_source(user: &str, resource: ResourceKind, source: Option<&SourceKey>) -> Vec<Document> {
     let mut filter = doc! {
         "key.recipient": user, "terminated": false, "deleted_at": 0,

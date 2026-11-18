@@ -23,13 +23,14 @@ pub(super) struct SalesInquiryAccess {
 }
 
 impl SalesInquiryAccess {
-    /// 按可信候选对象和额外功能资格执行统一授权。
-    /// # 参数
-    /// actor 为当前认证操作人，permission 为服务端固定权限，inquiry 为业务事实，executor 为原事务。
-    /// # 返回
-    /// 完整对象授权成立时成功。
-    /// # 错误
-    /// 账号、资格或范围失效时拒绝。
+    // 依据可信候选对象和额外功能资格执行统一授权。
+    //
+    // 调用参数：
+    // actor 为当前认证操作人，permission 为服务端固定权限，inquiry 为业务事实，executor 为原事务。
+    //
+    // 完整对象授权成立时成功。
+    //
+    // 账号、资格或范围失效时拒绝。
     pub(super) async fn require(
         &self,
         actor: &AuditActor,
@@ -40,25 +41,24 @@ impl SalesInquiryAccess {
         authorization::require(&self.authorization, actor, permission, inquiry, executor).await
     }
 
-    /// 绑定身份与询价事实来源，不进行预授权。
-    ///
-    /// # 参数
-    /// `db` 为业务库，`authorization` 为当前授权源。
-    /// # 返回
-    /// 无授权缓存的当前事实访问器。
-    /// # 错误
-    /// 无。
+    // 装配销售与采购询价时，绑定身份与询价事实来源，不进行预授权。
+    //
+    // 调用参数：
+    // `db` 为业务库，`authorization` 为当前授权源。
+    //
+    // 无授权缓存的当前事实访问器。
     pub(super) fn new(db: Database, authorization: Arc<AuthorizationService>) -> Self {
         Self { db, authorization }
     }
 
-    /// 编译当前询价查询约束，调用仓储前后复验。
-    /// # 参数
-    /// actor 为当前认证操作人，permission 为服务端固定权限，executor 为原事务执行器。
-    /// # 返回
-    /// 查询凭证和生成它的授权服务。
-    /// # 错误
-    /// 账号、动作或编译失败时拒绝。
+    // 确定销售与采购询价的适用条件时，编译当前询价查询约束，调用仓储前后复验。
+    //
+    // 调用参数：
+    // actor 为当前认证操作人，permission 为服务端固定权限，executor 为原事务执行器。
+    //
+    // 查询凭证和生成它的授权服务。
+    //
+    // 账号、动作或编译失败时拒绝。
     pub(super) async fn resolve_sales(
         &self,
         actor: &AuditActor,
@@ -68,14 +68,14 @@ impl SalesInquiryAccess {
         authorization::query(&self.authorization, actor, permission, executor).await
     }
 
-    /// 在当前动作范围内读取询价，销售接口不得调用采购内部报价读取。
-    ///
-    /// # 参数
-    /// `actor` 为当前认证操作人，`permission` 为销售入口固定权限，`id` 为询价 ID，`executor` 为原事务。
-    /// # 返回
-    /// 当前可操作的询价事实。
-    /// # 错误
-    /// 不存在或越范围统一返回不存在；授权源失效时拒绝。
+    // 确定销售与采购询价的适用条件时，在当前动作范围内读取询价，销售接口不得调用采购内部报价读取。
+    //
+    // 调用参数：
+    // `actor` 为当前认证操作人，`permission` 为销售入口固定权限，`id` 为询价 ID，`executor` 为原事务。
+    //
+    // 当前可操作的询价事实。
+    //
+    // 不存在或越范围统一返回不存在；授权源失效时拒绝。
     pub(super) async fn require_sales(
         &self,
         actor: &AuditActor,
@@ -88,15 +88,15 @@ impl SalesInquiryAccess {
         Ok(inquiry)
     }
 
-    /// 按当前开放责任任务读取对应询价的可信事实。
-    ///
-    /// # 参数
-    /// `actor` 为当前认证操作人，`permission` 为采购入口固定权限，`id`、`task_id` 为精确对象身份，
-    /// `task_version` 为写命令预期任务版本（仅读可为空），`executor` 为原事务。
-    /// # 返回
-    /// 当前询价和包含办理责任行的任务；写命令仍按责任行校验。
-    /// # 错误
-    /// 任务终态、改派、版本或范围损坏、账号或权限失效时拒绝。
+    // 依据当前开放责任任务读取对应询价的可信事实。
+    //
+    // 调用参数：
+    // `actor` 为当前认证操作人，`permission` 为采购入口固定权限，`id`、`task_id` 为精确对象身份，
+    // `task_version` 为写命令预期任务版本（仅读可为空），`executor` 为原事务。
+    //
+    // 当前询价和包含办理责任行的任务；写命令仍按责任行校验。
+    //
+    // 任务终态、改派、版本或范围损坏、账号或权限失效时拒绝。
     pub(super) async fn require_task(
         &self,
         actor: &AuditActor,
@@ -114,14 +114,15 @@ impl SalesInquiryAccess {
         Ok((inquiry, item))
     }
 
-    /// 读取当前责任任务或本人已完成任务；完成任务只能交给历史投影使用。
-    /// # 参数
-    /// `actor` 为当前认证操作人，`permission` 为固定读取权限，`id`、`task_id` 为精确对象身份，
-    /// `executor` 为原事务执行器。
-    /// # 返回
-    /// 已核验的询价与任务；写动作及内部资料仍须使用 `require_task`。
-    /// # 错误
-    /// 非读取动作、非本人完成、关闭、改派、快照缺失或权限失效时拒绝。
+    // 确定销售与采购询价的适用条件时，读取当前责任任务或本人已完成任务；完成任务只能交给历史投影使用。
+    //
+    // 调用参数：
+    // `actor` 为当前认证操作人，`permission` 为固定读取权限，`id`、`task_id` 为精确对象身份，
+    // `executor` 为原事务执行器。
+    //
+    // 已核验的询价与任务；写动作及内部资料仍须使用 `require_task`。
+    //
+    // 非读取动作、非本人完成、关闭、改派、快照缺失或权限失效时拒绝。
     pub(super) async fn require_read_task(
         &self,
         actor: &AuditActor,
@@ -158,7 +159,7 @@ impl SalesInquiryAccess {
         Ok((inquiry, task))
     }
 
-    /// 在原执行器装载任务并由 identity 一次证明动作与当前分配资格。
+    // 检查销售与采购询价资格时，在原执行器装载任务并由 identity 一次证明动作与当前分配资格。
     async fn authorized_task(
         &self,
         actor: &AuditActor,
@@ -171,7 +172,7 @@ impl SalesInquiryAccess {
         Ok(item)
     }
 
-    /// 按已授权任务核对当前询价需求版本与完整责任行。
+    // 依据已授权任务核对当前询价需求版本与完整责任行。
     async fn current_task_inquiry(
         &self,
         id: &str,

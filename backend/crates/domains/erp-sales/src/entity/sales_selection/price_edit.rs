@@ -23,15 +23,10 @@ pub enum SelectionPriceChange {
 
 impl SelectionPriceChange {
     /// 原子计算册内客户售价与套餐合计。
-    ///
-    /// # 参数
-    /// `status` 为册状态，`pool` 为本批次商品池，`items` 为本批次有效陈列。
-    ///
-    /// # 返回
     /// 成功后整体替换内存快照；商品身份、修订及图片保持原值。
+    /// 失败条件：非待发布、商品不存在、价格非正或溢出时拒绝，输入保持原值。
     ///
-    /// # 错误
-    /// 非待发布、商品不存在、价格非正或溢出时拒绝，输入保持原值。
+    /// 输入约定：`status` 为册状态，`pool` 为本批次商品池，`items` 为本批次有效陈列。
     pub fn apply(
         &self,
         status: BookletStatus,

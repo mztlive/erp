@@ -9,13 +9,15 @@ use super::InquiryTemplateProduct;
 use crate::{Error, Result};
 
 impl InquiryTemplateProduct {
-    /// 将当前可选商品转换为完整模板，按勾选顺序定位不可用项。
-    /// # 参数
-    /// `ids` 为已校验的唯一勾选身份，`rows` 为经过当前授权及可售资格重验的行。
-    /// # 返回
-    /// 全部商品的客户安全字段，顺序与勾选一致。
-    /// # 错误
-    /// 不可选、卡券或缺少单位时整批拒绝；不可选项不泄露主数据。
+    // 生成客户询价模板视图时，将当前可选商品转换为完整模板，按勾选顺序定位不可用项。
+    //
+    // 调用参数：
+    // `ids` 为已校验的唯一勾选身份，`rows` 为经过当前授权及可售资格重验的行。
+    //
+    // 全部商品的客户安全字段，顺序与勾选一致。
+    //
+    // 失败边界：
+    // 不可选、卡券或缺少单位时整批拒绝；不可选项不泄露主数据。
     pub(super) fn from_selection(ids: &[String], rows: Vec<SellableSkuRow>) -> Result<Vec<Self>> {
         let mut rows = rows.into_iter().map(|row| (row.sku_id.clone(), row)).collect::<BTreeMap<_, _>>();
         let mut products = Vec::with_capacity(ids.len());

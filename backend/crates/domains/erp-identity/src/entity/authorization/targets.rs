@@ -9,7 +9,7 @@ use crate::{Error, Result};
 #[derive(Debug, Clone)]
 pub struct ResourceTargets(BTreeSet<String>);
 impl ResourceTargets {
-    /// 对象读取必须覆盖完整根目标；不存在、重复及额外对象均拒绝。
+    // 对象端口返回后按本次请求核对完整根身份集合，缺失、重复或额外对象均拒绝，不按部分结果判断权限。
     pub(crate) fn ensure_objects(&self, resource: &str, objects: &[ObjectFacts]) -> Result<()> {
         let found = objects.iter().map(|object| object.id.clone()).collect::<BTreeSet<_>>();
         if self.0.is_empty()
@@ -22,12 +22,11 @@ impl ResourceTargets {
         Ok(())
     }
     /// 校验目标身份并去重；数量只受本次操作规模约束。
-    /// # 参数
-    /// ids 为服务端确定的完整操作目标，最多 1000 项。
-    /// # 返回
     /// 排序后的唯一目标，空集不查询授权集合。
-    /// # 错误
+    ///
     /// 超限、空白、超长或未规范化身份拒绝。
+    ///
+    /// ids 为服务端确定的完整操作目标，最多 1000 项。
     pub fn new(ids: &[&str]) -> Result<Self> {
         if ids.len() > 1000 {
             return Err(Error::ValidationError("单次最多检查 1000 个目标".into()));
@@ -42,12 +41,7 @@ impl ResourceTargets {
         Ok(Self(targets))
     }
     /// 取得已校验的目标集合。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 不可变、去重后的目标 ID。
-    /// # 错误
-    /// 不返回错误。
     pub fn ids(&self) -> &BTreeSet<String> {
         &self.0
     }

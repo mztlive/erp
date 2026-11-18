@@ -15,17 +15,13 @@ type ElectronicDeliveryFilter = <mongodb::Database as FulfillmentExt>::Electroni
 impl FulfillmentService {
     // ----------------------------------------------------------- electronic_delivery
 
-    /// 分页查询电子交付记录列表（W01 履约任务作业面）。
-    ///
-    /// # 参数
-    /// * `params` - 查询参数（`sales_order_line_id`/`status` 扁平筛选）
-    ///
-    /// # 返回
-    /// 返回契约形状的分页视图。
-    ///
-    /// # 错误
-    /// * `ValidationError` - 分页参数非法或排序字段不在白名单
-    /// * `RepositoryError` - 数据库查询失败
+    // 分页查询电子交付记录列表（W01 履约任务作业面）。
+    // 返回契约形状的分页视图。
+    // `params` 为查询参数（`sales_order_line_id`/`status` 扁平筛选）。
+    //
+    // 失败条件：
+    // * `ValidationError` - 分页参数非法或排序字段不在白名单
+    // * `RepositoryError` - 数据库查询失败
     #[tracing::instrument(
         name = "fulfillment.electronic_delivery_list",
         skip_all,
@@ -69,20 +65,13 @@ impl FulfillmentService {
     }
 
     /// 按主键查询电子交付记录。
-    ///
     /// W01 履约任务以工作项冻结的业务对象主键精确读取，不经列表分页扫描。
-    ///
-    /// # 参数
-    /// * `id` - 电子交付记录主键
-    ///
-    /// # 返回
     /// 返回电子交付记录视图。
+    /// `id` 为电子交付记录主键。
     ///
-    /// # 错误
+    /// 失败条件：
     /// * `NotFound` - 电子交付记录不存在
     /// * `RepositoryError` - 数据库查询失败
-    ///
-    /// # 关键业务约束
     /// 调用方必须已完成所属业务授权，并传入原读取阶段执行器。
     #[tracing::instrument(
         name = "fulfillment.electronic_delivery_detail",
@@ -104,7 +93,7 @@ impl FulfillmentService {
 }
 
 impl From<ElectronicDelivery> for ElectronicDeliveryView {
-    /// 从电子交付记录实体构造视图。
+    // 从电子交付记录实体构造视图。
     fn from(record: ElectronicDelivery) -> Self {
         Self {
             id: record.base.id,
@@ -124,16 +113,8 @@ impl From<ElectronicDelivery> for ElectronicDeliveryView {
 
 impl FulfillmentService {
     /// 在调用方事务中写入已准备的电子交付草稿；不创建第二事务。
-    ///
-    /// # 参数
-    /// * `record` - 已准备的电子交付草稿
-    /// * `executor` - 调用方事务执行器
-    ///
-    /// # 返回
-    /// 写入成功时无返回值。
-    ///
-    /// # 错误
-    /// 仓储写入失败时返回对应错误。
+    /// `record` 为已准备的电子交付草稿；沿用调用方当前事务的执行器 `executor`。
+    /// 传播仓储写入错误。
     pub async fn persist_created_electronic_delivery(
         &self,
         record: &ElectronicDelivery,
@@ -146,15 +127,8 @@ impl FulfillmentService {
 
 impl FulfillmentService {
     /// 同一事务中读取待确认电子交付并执行原草稿状态守卫。
-    ///
-    /// # 参数
-    /// * `record_id` - 电子交付记录主键
-    /// * `executor` - 调用方事务执行器
-    ///
-    /// # 返回
     /// 返回仍可确认的电子交付记录。
-    ///
-    /// # 错误
+    /// `record_id` 为电子交付记录主键；沿用调用方当前事务的执行器 `executor`。
     /// 记录不存在时返回 `NotFound`；不是可确认草稿时返回 `ConflictError`；查询失败时返回对应错误。
     pub async fn prepare_electronic_confirmation(
         &self,
@@ -172,15 +146,8 @@ impl FulfillmentService {
     }
 
     /// 采购资格与分配检查成功后确认本域电子交付事实；不发送外部消息。
-    ///
-    /// # 参数
-    /// * `record` - 待确认的电子交付记录
-    /// * `executor` - 调用方事务执行器
-    ///
-    /// # 返回
     /// 确认并写回成功时无返回值。
-    ///
-    /// # 错误
+    /// `record` 为待确认的电子交付记录；沿用调用方当前事务的执行器 `executor`。
     /// 已冲正不能确认，或仓储写入失败时返回对应错误。
     pub async fn persist_electronic_confirmation(
         &self,

@@ -6,14 +6,8 @@ pub trait ServiceLocationCryptoPort {
     type Error: From<crate::Error>;
 
     /// 加密已通过地点规则的明文；密钥与明文不得进入日志或错误。
-    ///
-    /// # 参数
-    /// * `plaintext` - 已通过地点规则的明文。
-    ///
-    /// # 返回
     /// 返回密文。
-    ///
-    /// # 错误
+    /// `plaintext` 为已通过地点规则的明文。
     /// 提供方加密失败时返回 `Self::Error`。
     fn encrypt(&self, plaintext: &str) -> std::result::Result<String, Self::Error>;
 }

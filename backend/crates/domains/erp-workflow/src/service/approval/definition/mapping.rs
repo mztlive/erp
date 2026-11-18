@@ -18,18 +18,11 @@ use crate::error::Result;
 use crate::repository::approval_copy::ApprovalCopyExt;
 use crate::repository::bpm::DefinitionCatalogStatusFact;
 
-/// 配置状态。
-///
-/// # 参数
-/// * `requirement` - 审批要求
-/// * `published` - 已发布版本；没有时为空
-/// * `draft` - 活动草稿版本；没有时为空
-///
-/// # 返回
-/// 无需审批返回不适用；有发布版本返回已发布；仅有草稿返回草稿；否则返回缺失配置。
-///
-/// # 错误
-/// 不返回错误。
+// 配置状态。
+// 无需审批返回不适用；有发布版本返回已发布；仅有草稿返回草稿；否则返回缺失配置。
+//
+// `requirement`：审批要求；`published`：已发布版本；没有时为空。
+// `draft`：活动草稿版本；没有时为空。
 pub(super) fn configuration_status(
     requirement: ApprovalRequirement,
     published: Option<u32>,
@@ -45,22 +38,13 @@ pub(super) fn configuration_status(
     }
 }
 
-/// 组装单行目录。
-///
-/// # 参数
-/// * `document_type` - 固定单据类型
-/// * `policy` - 该类型审批政策
-/// * `visibility` - 当前用户类型级可见范围
-/// * `by_kind` - 批量目录查询返回的发布/草稿版本
-///
-/// # 返回
-/// 返回非敏感目录行，含正确的草稿/发布配置状态。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 必须同时消费 published 与 draft 事实；仅有草稿时不得报缺失配置。
+// 组装单行目录。
+// 必须同时消费 published 与 draft 事实；仅有草稿时不得报缺失配置。
+//
+// 返回非敏感目录行，含正确的草稿/发布配置状态。
+//
+// `policy`：该类型审批政策；`visibility`：当前用户类型级可见范围。
+// `by_kind`：批量目录查询返回的发布/草稿版本。
 pub(super) fn catalog_item(
     document_type: DocumentType,
     policy: &DocumentApprovalPolicy,
@@ -84,20 +68,12 @@ pub(super) fn catalog_item(
     }
 }
 
-/// 从批量目录事实读取某政策的发布与草稿版本。
-///
-/// # 参数
-/// * `policy` - 单据审批政策
-/// * `by_kind` - 按流程种类索引的目录事实
-///
-/// # 返回
-/// 无审批类型两个版本均为空；必须审批类型取对应事实，缺失种类视为双空。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 不得再按类型逐次查询仓储。
+// 从批量目录事实读取某政策的发布与草稿版本。
+// 不得再按类型逐次查询仓储。
+//
+// 无审批类型两个版本均为空；必须审批类型取对应事实，缺失种类视为双空。
+//
+// `policy`：单据审批政策；`by_kind`：按流程种类索引的目录事实。
 pub(super) fn catalog_versions_from_facts(
     policy: &DocumentApprovalPolicy,
     by_kind: &HashMap<bpm::ProcessKind, DefinitionCatalogStatusFact>,
@@ -111,38 +87,23 @@ pub(super) fn catalog_versions_from_facts(
     }
 }
 
-/// 按流程种类索引目录事实。
-///
-/// # 参数
-/// * `facts` - 仓储一次查询返回的目录投影
-///
-/// # 返回
-/// 返回以流程种类为键的映射。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 仓储已对重复状态失败关闭，本函数不再挑选版本。
+// 按流程种类索引目录事实。
+// 仓储已对重复状态失败关闭，本函数不再挑选版本。
+//
+// 返回以流程种类为键的映射。
+//
+// `facts`：仓储一次查询返回的目录投影。
 pub(super) fn catalog_facts_by_kind(
     facts: Vec<DefinitionCatalogStatusFact>,
 ) -> HashMap<bpm::ProcessKind, DefinitionCatalogStatusFact> {
     facts.into_iter().map(|fact| (fact.process_kind, fact)).collect()
 }
 
-/// 类型级定义允许动作（与工作项 `access::allowed_actions` 按语义区分命名）。
-///
-/// # 参数
-/// * `requirement` - 审批要求
-/// * `can_define` - 是否具备该类型定义管理权
-/// * `published` - 已发布版本
-/// * `draft` - 活动草稿版本
-///
-/// # 返回
-/// 无权或无需审批时返回空；无草稿时允许创建；有草稿时允许替换与发布；有发布版本时另允许退役。
-///
-/// # 错误
-/// 不返回错误。
+// 类型级定义允许动作（与工作项 `access::allowed_actions` 按语义区分命名）。
+// 无权或无需审批时返回空；无草稿时允许创建；有草稿时允许替换与发布；有发布版本时另允许退役。
+//
+// `requirement`：审批要求；`can_define`：是否具备该类型定义管理权。
+// `published`：已发布版本；`draft`：活动草稿版本。
 pub(super) fn definition_allowed_actions(
     requirement: ApprovalRequirement,
     can_define: bool,
@@ -165,7 +126,7 @@ pub(super) fn definition_allowed_actions(
     actions
 }
 
-/// 审批要求视图。
+// 将审批政策的必须审批或无需审批要求映射为配置界面使用的展示值。
 fn requirement_view(requirement: ApprovalRequirement) -> ApprovalRequirementView {
     match requirement {
         ApprovalRequirement::NoApproval => ApprovalRequirementView::NoApproval,
@@ -173,16 +134,8 @@ fn requirement_view(requirement: ApprovalRequirement) -> ApprovalRequirementView
     }
 }
 
-/// 构造详情视图。
-///
-/// # 参数
-/// * `graph` - 定义图
-///
-/// # 返回
-/// 返回按展示顺序排列节点的详情。
-///
-/// # 错误
-/// 不返回错误。
+// 构造详情视图。
+// 返回按展示顺序排列节点的详情。
 pub(super) fn detail_view(graph: &DefinitionGraph) -> Result<DefinitionDetailView> {
     let document_type = document_type_of(graph.definition.process_kind);
     let mut nodes = graph.nodes.iter().collect::<Vec<_>>();
@@ -207,16 +160,8 @@ pub(super) fn detail_view(graph: &DefinitionGraph) -> Result<DefinitionDetailVie
     })
 }
 
-/// 构造节点视图。
-///
-/// # 参数
-/// * `node` - 定义节点
-///
-/// # 返回
-/// 返回节点标识、名称、用途、顺序与审批人快照。
-///
-/// # 错误
-/// 不返回错误。
+// 构造节点视图。
+// 返回节点标识、名称、用途、顺序与审批人快照。
 pub(super) fn node_view(node: &ApprovalNodeDefinition) -> Result<DefinitionNodeView> {
     Ok(DefinitionNodeView {
         node_id: node.base.id.clone(),
@@ -235,16 +180,8 @@ pub(super) fn node_view(node: &ApprovalNodeDefinition) -> Result<DefinitionNodeV
     })
 }
 
-/// 构造版本摘要。
-///
-/// # 参数
-/// * `definition` - 流程定义
-///
-/// # 返回
-/// 返回定义 ID、版本、状态、名称与锁版本。
-///
-/// # 错误
-/// 不返回错误。
+// 构造版本摘要。
+// 返回定义 ID、版本、状态、名称与锁版本。
 pub(super) fn version_item(definition: &ApprovalProcessDefinition) -> DefinitionVersionItem {
     DefinitionVersionItem {
         definition_id: definition.base.id.clone(),
@@ -255,13 +192,12 @@ pub(super) fn version_item(definition: &ApprovalProcessDefinition) -> Definition
     }
 }
 
-/// 加载同一版本抄送规则并组装详情。
-/// # 参数
-/// 数据库、定义图和执行器。
-/// # 返回
-/// 包含完整配置的定义详情。
-/// # 错误
-/// 仓储失败。
+// 加载同一版本抄送规则并组装详情。
+// 包含完整配置的定义详情。
+//
+// 仓储失败。
+//
+// 数据库、定义图和执行器。
 pub(super) async fn detail_with_copies(
     db: &Database,
     graph: &DefinitionGraph,
@@ -283,7 +219,7 @@ mod tests {
     use super::super::test_support::two_node_publish_graph;
     use super::*;
 
-    /// 目录状态必须同时消费 published/draft：仅草稿为 Draft，退役且无草稿为缺失。
+    // 验证：目录状态必须同时消费 published/draft：仅草稿为 Draft，退役且无草稿为缺失。
     #[test]
     fn catalog_status_consumes_published_and_draft_facts() {
         assert_eq!(
@@ -328,7 +264,7 @@ mod tests {
         assert_eq!(catalog_versions_from_facts(&purchase, &by_kind), (None, None));
     }
 
-    /// 详情按 display_order 排序；版本摘要带状态、名称和锁。
+    // 验证：详情按 display_order 排序；版本摘要带状态、名称和锁。
     #[test]
     fn detail_and_version_views_assemble_sorted_nodes_and_audit() {
         let mut graph = two_node_publish_graph();

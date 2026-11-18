@@ -27,16 +27,9 @@ pub struct EvidenceSubject {
 }
 
 impl EvidenceSubject {
-    /// 以必填业务项构造证据上下文；关联维度默认为空。
+    /// 以必填业务项构造证据上下文；关联维度默认为空。返回无关联的证据上下文。
     ///
-    /// # 参数
-    /// * `item_id` - W29 业务项 ID
-    ///
-    /// # 返回
-    /// 返回无关联的证据上下文。
-    ///
-    /// # 错误
-    /// 无。
+    /// `item_id` 为 W29 业务项 ID。
     pub fn new(item_id: String) -> Self {
         Self {
             item_id,
@@ -47,16 +40,7 @@ impl EvidenceSubject {
         }
     }
 
-    /// 从错误任务构造证据上下文。
-    ///
-    /// # 参数
-    /// * `task` - 集成错误任务
-    ///
-    /// # 返回
-    /// 业务项 ID 取任务主键；消息与业务对象按任务字段填入，对象类型与事实引用为空。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 从错误任务构造证据上下文。业务项 ID 取任务主键；消息与业务对象按任务字段填入，对象类型与事实引用为空。
     pub fn error(task: &IntegrationErrorTask) -> Self {
         Self {
             item_id: task.base.id.clone(),
@@ -69,14 +53,7 @@ impl EvidenceSubject {
 
     /// 从对账差异构造证据上下文。
     ///
-    /// # 参数
-    /// * `difference` - 对账差异
-    ///
-    /// # 返回
     /// 业务项 ID、对象类型与对象 ID 取差异字段；两侧事实引用按左、右顺序收集，缺侧跳过。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn difference(difference: &ReconciliationDifference) -> Self {
         Self {
             item_id: difference.base.id.clone(),
@@ -122,15 +99,11 @@ pub type EvidenceFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T>> + Send +
 pub trait IntegrationEvidenceAuthority: Send + Sync {
     /// 查询原动作的当前结果。
     ///
-    /// # 参数
-    /// * `subject` - 当前业务项证据上下文
-    /// * `executor` - 调用方事务执行器
+    /// 返回终态事实、确认无结果或无法判断。实现无法完成权威查询时返回对应错误。
     ///
-    /// # 返回
-    /// 成功时返回终态事实、确认无结果或无法判断。
+    /// 复用调用方事务的执行器。
     ///
-    /// # 错误
-    /// 实现无法完成权威查询时返回对应错误。
+    /// `subject` 为当前业务项证据上下文。
     fn query_original<'a>(
         &'a self,
         subject: &'a EvidenceSubject,
@@ -139,15 +112,11 @@ pub trait IntegrationEvidenceAuthority: Send + Sync {
 
     /// 沿服务器锁定的入站消息身份重新排队。
     ///
-    /// # 参数
-    /// * `subject` - 当前业务项证据上下文
-    /// * `executor` - 调用方事务执行器
+    /// 返回实现给出的重放结果。实现无法完成重放时返回对应错误。
     ///
-    /// # 返回
-    /// 成功时返回实现给出的重放结果。
+    /// 复用调用方事务的执行器。
     ///
-    /// # 错误
-    /// 实现无法完成重放时返回对应错误。
+    /// `subject` 为当前业务项证据上下文。
     fn replay_original<'a>(
         &'a self,
         subject: &'a EvidenceSubject,
@@ -156,15 +125,11 @@ pub trait IntegrationEvidenceAuthority: Send + Sync {
 
     /// 验证既有归集事实已经进入终态。
     ///
-    /// # 参数
-    /// * `subject` - 当前业务项证据上下文
-    /// * `executor` - 调用方事务执行器
+    /// 返回实现确认终态后的结果。实现无法确认归集终态时返回对应错误。
     ///
-    /// # 返回
-    /// 成功时返回实现确认终态后的结果。
+    /// 复用调用方事务的执行器。
     ///
-    /// # 错误
-    /// 实现无法确认归集终态时返回对应错误。
+    /// `subject` 为当前业务项证据上下文。
     fn verify_reattribution<'a>(
         &'a self,
         subject: &'a EvidenceSubject,
@@ -173,17 +138,11 @@ pub trait IntegrationEvidenceAuthority: Send + Sync {
 
     /// 重验单条受控证据的类型、存在性、终态与业务关联。
     ///
-    /// # 参数
-    /// * `subject` - 当前业务项证据上下文
-    /// * `evidence` - 客户端提交的受控证据引用
-    /// * `actor_id` - 当前操作人
-    /// * `executor` - 调用方事务执行器
+    /// 返回归一化引用与可持久化的稳定引用。类型、存在性、终态或业务关联不满足时返回对应错误。
     ///
-    /// # 返回
-    /// 成功时返回归一化引用与可持久化的稳定引用。
+    /// 复用调用方事务的执行器。
     ///
-    /// # 错误
-    /// 类型、存在性、终态或业务关联不满足时返回对应错误。
+    /// `subject` 为当前业务项证据上下文。
     fn verify_evidence<'a>(
         &'a self,
         subject: &'a EvidenceSubject,
@@ -194,15 +153,11 @@ pub trait IntegrationEvidenceAuthority: Send + Sync {
 
     /// 发现当前对象已经存在且可安全投影的权威证据。
     ///
-    /// # 参数
-    /// * `subject` - 当前业务项证据上下文
-    /// * `executor` - 调用方事务执行器
+    /// 返回可投影的受控证据引用。实现无法完成发现时返回对应错误。
     ///
-    /// # 返回
-    /// 成功时返回可投影的受控证据引用。
+    /// 复用调用方事务的执行器。
     ///
-    /// # 错误
-    /// 实现无法完成发现时返回对应错误。
+    /// `subject` 为当前业务项证据上下文。
     fn discover_evidence<'a>(
         &'a self,
         subject: &'a EvidenceSubject,

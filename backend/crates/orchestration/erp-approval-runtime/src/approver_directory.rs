@@ -92,13 +92,7 @@ impl ApproverDirectory for OrganizationApprovers<'_> {
     }
 }
 
-/// 为本次提交构造动态人员图；只解析内存副本。
-/// # 参数
-/// 数据库、共享身份服务、定义图、本次申请人及原执行器。
-/// # 返回
-/// 已解析的图。
-/// # 错误
-/// 任一动态节点不可用时拒绝。
+/// 按申请人和当前组织事实解析定义图中的动态审批人，供新提交生成正式指派。只修改内存副本并沿用原执行器，任一动态节点无法解析时拒绝提交。
 pub async fn resolve_approvers(
     db: &Database,
     identity: &Arc<AuthorizationService>,
@@ -109,13 +103,7 @@ pub async fn resolve_approvers(
     Ok(resolve_graph(&OrganizationApprovers { db, identity }, graph, applicant, Instant::now(), ex).await?)
 }
 
-/// 写入运行实例前在原事务中重验来源与资格。
-/// # 参数
-/// 数据库、共享身份服务、待写计划及原事务。
-/// # 返回
-/// 全部动态指派有效时成功。
-/// # 错误
-/// 负责人变化、权限撤销或查询错误时拒绝整次提交。
+/// 写入审批实例前，在原事务核对计划中的动态指派是否仍符合当前组织来源和权限，避免负责人变更或撤权后仍创建任务。复验或读取失败时中止提交。
 pub async fn revalidate_approvers(
     db: &Database,
     identity: &Arc<AuthorizationService>,
@@ -132,13 +120,8 @@ pub async fn revalidate_approvers(
     .await?)
 }
 
-/// 已提交请求只恢复原实例人员；新请求才解析当前组织负责人。
-/// # 参数
-/// 数据库、共享身份服务、定义图、申请人、已找到的启动收据和调用方执行器。
-/// # 返回
-/// 回放使用原实例图，新命令使用当前来源解析结果。
-/// # 错误
-/// 收据实例或申请人不匹配时拒绝；命令摘要仍由后续统一启动入口核验。
+/// 新命令才解析当前组织负责人；有启动回执时读取原实例的人员和定义图，避免组织调整改变历史分派。
+/// 原实例或审批图缺失、申请人或绑定定义版本不符时拒绝；命令摘要由后续统一启动入口核验。
 pub async fn resolve_start_approvers(
     db: &Database,
     identity: &Arc<AuthorizationService>,

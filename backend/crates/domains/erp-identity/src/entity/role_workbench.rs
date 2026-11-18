@@ -18,12 +18,11 @@ pub enum RoleWorkbench {
 }
 impl RoleWorkbench {
     /// 为显式生成的内建角色提供推荐映射。
-    /// # 参数
-    /// `role_id` 为内建角色稳定编号，禁止按展示名称推断。
-    /// # 返回
     /// 首批岗位的推荐集合；其他角色为空。
-    /// # 错误
-    /// 无；调用方仅在新建角色时持久化，不覆盖现有配置。
+    ///
+    /// 调用方仅在新建角色时持久化，不覆盖现有配置。
+    ///
+    /// `role_id` 为内建角色稳定编号，禁止按展示名称推断。
     pub fn recommended(role_id: &str) -> BTreeSet<Self> {
         match role_id {
             "role-sales" => BTreeSet::from([Self::Sales]),
@@ -34,12 +33,11 @@ impl RoleWorkbench {
     }
 
     /// 核验岗位核心模块的入口条件。
-    /// # 参数
-    /// `permissions` 为当前账号的有效权限。
-    /// # 返回
     /// 全部核心入口权限满足时返回 true。
-    /// # 错误
-    /// 无；不授予业务范围或任务执行资格。
+    ///
+    /// 不授予业务范围或任务执行资格。
+    ///
+    /// `permissions` 为当前账号的有效权限。
     pub fn accessible(self, permissions: &[Permission]) -> bool {
         let required: &[&str] = match self {
             Self::Sales => &["sales_order:list", "sales_inquiry:list", "work_item:list"],
@@ -52,12 +50,11 @@ impl RoleWorkbench {
         })
     }
     /// 从启用角色的显式映射解析可用岗位。
-    /// # 参数
-    /// `roles` 为账号实际绑定的角色；`permissions` 为有效权限。
-    /// # 返回
     /// 去重、稳定排序且满足核心权限的模板。
-    /// # 错误
-    /// 无；没有显式映射时返回空集合。
+    ///
+    /// 没有显式映射时返回空集合。
+    ///
+    /// `roles` 为账号实际绑定的角色；`permissions` 为有效权限。
     pub fn available(roles: &[Role], permissions: &[Permission]) -> BTreeSet<Self> {
         roles
             .iter()

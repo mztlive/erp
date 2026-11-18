@@ -35,21 +35,9 @@ use crate::repository::BpmExt;
 use crate::service::approval::ApprovalResumeCommand;
 
 impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
-    /// 在原审批人重新合格后恢复当前受阻执行。
+    /// 原审批人恢复资格后，对可恢复的受阻执行提交恢复命令。新命令按实例、当前执行、绑定及历史任务的期望版本，在同一事务重验管理者与原审批人。
     ///
-    /// # 参数
-    /// * `actor` - 当前认证且具备恢复权限的审计主体
-    /// * `command` - 实例、执行、审批人和已关闭任务的期望版本及幂等键
-    ///
-    /// # 返回
-    /// 返回恢复后的审批命令视图；幂等回放返回已持久化视图。
-    ///
-    /// # 错误
-    /// 主体不一致、实例缺失、权限不足、版本冲突、快照不一致或事务写入失败时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 回放重验当前授权；新命令在同一事务执行器内重验管理者和原审批人，
-    /// 再按收据、实例、执行、任务、通知 outbox 和审计的顺序写入。
+    /// 核验通过后依次保存收据、实例、执行、任务、通知 outbox 与审计；同命令回放仍重验当前授权。主体、快照、版本、授权或持久化错误均拒绝。
     pub async fn resume_current_approver(
         &self,
         actor: &AuditActor,
@@ -96,7 +84,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         .await
     }
 
-    /// 恢复回放、计划准备、写入与回包始终共用入口事务。
+    // 在入口事务内依次判断授权回放、准备新恢复及持久化，不跨快照拼装命令结果。
     async fn resume_stage(
         &self,
         actor: &AuditActor,
@@ -119,7 +107,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         apply_resume(self, actor, &prepared, executor).await
     }
 
-    /// 提交竞争或结果未知后，仅在新的只读快照中查证既有收据，禁止重执行业务写入。
+    // 提交竞争或结果未知时，在新只读快照用当前授权和原命令查证收据，不重新执行恢复写入。
     async fn prove_resume_commit(
         &self,
         actor: &AuditActor,
@@ -141,7 +129,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             .await
     }
 
-    /// 唯一键竞争、瞬态事务错误或提交结果未知后，以新会话有限回读胜者。
+    // 恢复遇到唯一键竞争、瞬态事务失败或提交结果未知时，在新会话有限回读胜者，不使用失败会话中的事实。
     async fn recover_resume_after_competing_commit(
         &self,
         actor: &AuditActor,
@@ -152,7 +140,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         recover_by_replay(original_error, || self.prove_resume_commit(actor, &instance_id, &identity)).await
     }
 
-    /// 无需写入时，在入口事务中授权并交付既有恢复结果。
+    // 恢复已执行且不需要再写时，仍在入口事务完成当前授权后再交付原恢复结果。
     async fn persisted_resume_view(
         &self,
         actor: &AuditActor,
@@ -171,7 +159,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             .await
     }
 
-    /// 实例缺失时隐藏存在性；当前 blocker 不允许该动作时返回冲突。
+    // 恢复准备时检查当前 blocker 允许请求动作；实例不存在使用隐藏结果，状态不接受动作时返回冲突。
     async fn require_recovery_action(
         &self,
         instance_id: &str,
@@ -192,7 +180,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     }
 }
 
-/// 授权重验、全部写入及视图组装共用调用方的同一事务执行器。
+// 恢复任务写入、授权重验和最终命令视图沿用同一执行器，不换事务提交部分结果。
 async fn apply_resume(
     service: &ApprovalRuntimeService<impl WorkflowAuthorizationPort>,
     actor: &AuditActor,
@@ -244,7 +232,7 @@ async fn apply_resume(
     ))
 }
 
-/// 管理者已经授权后，在原写事务中重验待创建任务的原审批人。
+// 新任务写入之前，在已授权的原恢复事务里重验要重新指派的原审批人。
 async fn revalidate_resume_with_executor(
     authorization: &AuthorizationService,
     db: &Database,
@@ -258,10 +246,10 @@ async fn revalidate_resume_with_executor(
     ensure_resume_approver_recovered(&eligibility)
 }
 
-/// 原审批人恢复回放先按当前账号与责任组织授权，再允许读取和比较收据。
-///
-/// # Panics
-/// 已加载收据被分类为 `Fresh` 时 `unreachable!`，表示分类器与查询结果矛盾。
+// 原审批人恢复回放先按当前账号与责任组织授权，再允许读取和比较收据。
+//
+// 触发 panic 的条件：
+// 已加载收据被分类为 `Fresh` 时 `unreachable!`，表示分类器与查询结果矛盾。
 async fn replay_resume_apply(
     authorization: &AuthorizationService,
     db: &Database,
@@ -291,7 +279,7 @@ async fn replay_resume_apply(
         .map(Some)
 }
 
-/// 恢复端口只接受已重新满足全部资格的原审批人。
+// 引擎恢复只接收已重新满足全部资格条件的原审批人；仍受阻时不生成替代任务。
 fn ensure_resume_approver_recovered(eligibility: &Eligibility) -> Result<()> {
     if eligibility.blocked_code().is_some() {
         return Err(Error::from_approval_code(ErrorCode::ApprovalCurrentApproverNotRecovered));

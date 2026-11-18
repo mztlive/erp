@@ -22,11 +22,11 @@ use crate::{Error, Result};
 
 impl SalesInquiryImportProcess {
     /// 上传客户文件并生成新建预览，不创建询价草稿。
-    /// # 参数
+    ///
     /// `actor`、`customer` 绑定当前销售与客户，文件为有界 XLSX。
-    /// # 返回
+    ///
     /// 客户专用预览、逐行错误及待确认的合并明细。
-    /// # 错误
+    ///
     /// 权限、客户、文件或持久化无效时拒绝。
     pub async fn preview_creation(
         &self,

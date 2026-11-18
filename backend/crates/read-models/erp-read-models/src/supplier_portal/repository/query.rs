@@ -19,7 +19,7 @@ pub(in crate::supplier_portal) struct PortalQuery {
 }
 
 impl PortalQuery {
-    /// 拒绝非法尺寸及溢出，不让搜索打开其他供应商范围。
+    /// 装配供应商门户时，拒绝非法尺寸及溢出，不让搜索打开其他供应商范围。
     ///
     /// # 参数
     /// * `params` - 外部列表参数。不含供应商身份。
@@ -70,18 +70,16 @@ impl PortalQuery {
     }
 }
 
-/// 聚合始终复用读取执行器，避免授权与结果跨越事务快照。
-///
-/// # 参数
-/// * `collection` - 要聚合的集合。
-/// * `pipeline` - 聚合阶段。
-/// * `executor` - 读取执行器；有会话时聚合进入该会话。
-///
-/// # 返回
-/// 返回反序列化后的阶段结果。
-///
-/// # 错误
-/// 聚合失败时返回对应持久化错误。文档无法反序列化时返回 `Internal`。
+// 处理供应商门户时，聚合始终复用读取执行器，避免授权与结果跨越事务快照。
+//
+// 调用参数：
+// * `collection` - 要聚合的集合。
+// * `pipeline` - 聚合阶段。
+// * `executor` - 读取执行器；有会话时聚合进入该会话。
+//
+// 返回反序列化后的阶段结果。
+//
+// 聚合失败时返回对应持久化错误。文档无法反序列化时返回 `Internal`。
 pub(in crate::supplier_portal) async fn aggregate<T: DeserializeOwned>(
     collection: Collection<Document>,
     pipeline: Vec<Document>,

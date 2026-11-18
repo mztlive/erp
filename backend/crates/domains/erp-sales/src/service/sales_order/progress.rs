@@ -16,21 +16,16 @@ use crate::{Error, Result};
 /// 回款/开票进度从子账开放余额派生；关闭状态按 §9.3 判定：全部明细履约完成
 /// 且客户应收结清后自动结案（开票完成不参与关闭判定）。任一字段变化时更新
 /// 销售单并写版本触及；无变化时不写。
+/// 失败条件：销售单不存在、销售读取、财务事实读取或仓储写入失败时返回原错误。
 ///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `port` - 保留逐应收子账余额的财务事实端口
-/// * `session` - 事务会话执行器
-/// * `sales_order_id` - 销售单
-/// * `actor_id` - 审计操作人
-/// * `fulfillment` - 外部已算好的履约进度；`None` 表示不修改履约进度，
+/// 输入约定：
+/// - `db`：数据库实例
+/// - `port`：保留逐应收子账余额的财务事实端口
+/// - `session`：事务会话执行器
+/// - `sales_order_id`：销售单
+/// - `actor_id`：审计操作人
+/// - `fulfillment`：外部已算好的履约进度；`None` 表示不修改履约进度，
 ///   关闭状态按销售单当前履约进度推导
-///
-/// # 返回
-/// 无返回值。
-///
-/// # 错误
-/// 销售单不存在、销售读取、财务事实读取或仓储写入失败时返回原错误。
 pub async fn update_sales_order_money_progress(
     db: &Database,
     port: &dyn SalesMoneyProgressPort,
@@ -54,10 +49,10 @@ pub async fn update_sales_order_money_progress(
 /// 资金进度刷新所需的销售存储合同；执行器由原根事务提供。
 #[async_trait]
 trait SalesProgressStore: Send + Sync {
-    /// 读取销售稳定单；不存在保留为 `None`，由用例产生原销售错误。
+    // 加载销售稳定单；不存在保留为 `None`，由用例产生原销售错误。
     async fn load(&self, id: &SalesOrderId, executor: &mut dyn Executor) -> Result<Option<SalesOrder>>;
 
-    /// 写入已发生变化的销售进度；仓储错误必须按原分类传播。
+    // 刷新计算得出销售进度变化后才持久化；仓储失败按原错误分类交回调用方。
     async fn update(&self, order: &mut SalesOrder, executor: &mut dyn Executor) -> Result<()>;
 }
 
@@ -78,10 +73,10 @@ impl SalesProgressStore for DatabaseProgressStore<'_> {
     }
 }
 
-/// 执行真实刷新顺序：销售存在性、逐账户财务事实、取时与实体刷新、条件写入。
-///
-/// `now` 必须延迟至两次读取完成后调用；任何读取失败均不得刷新或写回销售。
-/// 所有存储调用复用同一个执行器，无变化时保留原实体与版本。
+// 收款或开票事实变化后先确认销售单存在并读取逐账户事实，再取当前时间刷新进度，只在确有变化时写回。
+//
+// `now` 必须延迟至两次读取完成后调用；任何读取失败均不得刷新或写回销售。
+// 所有存储调用复用同一个执行器，无变化时保留原实体与版本。
 async fn refresh_money_progress(
     store: &dyn SalesProgressStore,
     port: &dyn SalesMoneyProgressPort,

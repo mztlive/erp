@@ -3,18 +3,7 @@ use serde::Serialize;
 
 use super::*;
 use crate::repository::supplier_offering::write::{self as repository_write, OfferingWritePort};
-/// 原同域写入顺序；每步使用同一调用方Executor。
-///
-/// # 参数
-/// * `port` - 供给写入端口。
-/// * `prepared` - 已准备的供给、首版、可供和命令。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
-/// 无返回值。先写供给三元组，再写命令。
-///
-/// # 错误
-/// 任一步写入失败时返回对应错误。
+// 用调用方事务执行器先写供给、首版条款和实时可供，再保存创建回执；前面的业务写失败时不登记成功命令。
 pub(super) async fn created<P: OfferingWritePort>(
     port: &P,
     prepared: &PreparedCreate,
@@ -32,18 +21,8 @@ pub(super) async fn created<P: OfferingWritePort>(
     port.command(&prepared.command, executor).await?;
     Ok(())
 }
-/// 原同域写入顺序；每步使用同一调用方Executor。
-///
-/// # 参数
-/// * `port` - 供给写入端口。
-/// * `prepared` - 已准备的修订；响应在修订写入后构造。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
-/// 返回修订身份、修订号、状态和写入前的期望版本。
-///
-/// # 错误
-/// 修订写入、命令构造或命令写入失败时返回对应错误。
+// 在原事务追加条款并 CAS 更新供给指针后，构造包含新修订、关系状态和预期落库版本的原结果并写入命令回执；
+// 首次失败即向上传播。
 pub(super) async fn revised<P: OfferingWritePort>(
     port: &P,
     prepared: &mut PreparedRevision,
@@ -71,7 +50,7 @@ pub(super) async fn revised<P: OfferingWritePort>(
     Ok(result)
 }
 
-/// 修订与可供写入共用原命令构造与落盘顺序；命令ID保留原生成时点。
+// 业务写成功后分配命令 ID，将成功响应和请求指纹写入原执行器，用于日后同键同载荷恢复。
 async fn store_command<P: OfferingWritePort, T: Serialize>(
     port: &P,
     idempotency_key: &str,
@@ -85,18 +64,8 @@ async fn store_command<P: OfferingWritePort, T: Serialize>(
     port.command(&command, executor).await?;
     Ok(())
 }
-/// 原同域写入顺序；每步使用同一调用方Executor。
-///
-/// # 参数
-/// * `port` - 供给写入端口。
-/// * `prepared` - 已准备的可供更新；响应在 CAS 后构造。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
-/// 返回可供状态、结果版本和来源更新时间。
-///
-/// # 错误
-/// 可供更新、命令构造或命令写入失败时返回对应错误。
+// 先用原执行器 CAS 更新实时可供，再构造含状态、版本和来源时间的原结果并写入命令回执；更新或保存回执失败
+// 时向上传播。
 pub(super) async fn availability<P: OfferingWritePort>(
     port: &P,
     prepared: &mut PreparedAvailability,

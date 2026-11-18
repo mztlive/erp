@@ -68,19 +68,10 @@ pub struct SupplierProfileCommand {
 
 impl SupplierProfileCommand {
     /// 创建已成功根级命令的去重记录。
-    ///
-    /// # 参数
-    /// * `id` - 命令记录主键
-    /// * `data` - 幂等键、操作、指纹与结果身份
-    ///
-    /// # 返回
     /// 返回已校验的去重记录；请求指纹按传入原样保存。
-    ///
-    /// # 错误
     /// 幂等键、结果身份、请求指纹或变更原因为空，或幂等键过长、指纹格式非法时返回校验错误。
-    ///
-    /// # 约束
     /// 请求指纹接受 `sha256-v1:<64hex>` 或历史裸 `64hex`；存储按传入原样保留，比较时按摘要兼容。
+    /// `data`：幂等键、操作、指纹与结果身份。
     pub fn new(id: impl Into<String>, data: SupplierProfileCommandData) -> Result<Self> {
         let idempotency_key = normalize_required_text(
             data.idempotency_key,
@@ -114,20 +105,10 @@ impl SupplierProfileCommand {
     }
 
     /// 校验幂等重放的操作、目标与指纹一致性。
-    ///
-    /// # 参数
-    /// * `operation` - 期望操作类型（`create` 或 `update`）
-    /// * `supplier_id` - 仅 `update` 时校验目标供应商 ID，`create` 传入 `None`
-    /// * `request_fingerprint` - 当前请求指纹（接受 `sha256-v1:<hex>` 或历史裸 `64hex`）
-    ///
-    /// # 返回
     /// 操作、目标与指纹均一致时返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 操作、指纹或目标任一不一致时返回校验错误。
-    ///
-    /// # 约束
     /// 纯内存校验，不触及 MongoDB 或时钟；兼容版本前缀与裸摘要，摘要大小写不敏感。
+    /// `supplier_id`：仅 `update` 时校验目标供应商 ID，`create` 传入 `None`。
     pub fn ensure_replayable(
         &self,
         operation: &str,
@@ -144,19 +125,9 @@ impl SupplierProfileCommand {
         Ok(())
     }
 
-    /// 校验乐观锁版本。
-    ///
-    /// # 参数
-    /// * `actual` - 当前持久化版本
-    /// * `expected` - 客户端期望版本
-    ///
-    /// # 返回
+    /// 核对乐观锁版本。
     /// 版本一致时返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 版本不一致时返回校验错误。
-    ///
-    /// # 约束
     /// 纯内存比较，不触及外部状态。
     pub fn ensure_version(actual: u64, expected: u64) -> Result<()> {
         if actual != expected {
@@ -166,37 +137,19 @@ impl SupplierProfileCommand {
     }
 
     /// 读取更新场景必填版本号。
-    ///
-    /// # 参数
-    /// * `value` - 可空版本输入
-    /// * `object` - 业务对象名，用于错误文案
-    ///
-    /// # 返回
     /// 存在时返回版本号。
-    ///
-    /// # 错误
     /// `value` 为 `None` 时返回校验错误。
-    ///
-    /// # 约束
     /// 仅做存在性校验，不触及持久化。
+    /// `value`：可空版本输入。
     pub fn required_update_version(value: Option<u64>, object: &str) -> Result<u64> {
         value.ok_or_else(|| Error::from(format!("修订供应商时{object}版本不能为空")))
     }
 
     /// 校验创建场景必填的稳定业务编号。
-    ///
-    /// # 参数
-    /// * `value` - 可空输入
-    /// * `field` - 字段中文名，用于错误文案
-    ///
-    /// # 返回
     /// 去首尾空白后非空时返回规范化编号。
-    ///
-    /// # 错误
     /// 输入为空或全空白时返回校验错误。
-    ///
-    /// # 约束
     /// 仅做空白与存在性校验，不触及唯一性查询。
+    /// `value`：可空输入。
     pub fn required_create_identity(value: Option<&str>, field: &str) -> Result<String> {
         value
             .map(str::trim)
@@ -210,7 +163,7 @@ impl SupplierProfileCommand {
 struct ProfileFingerprint<'a>(&'a str);
 
 impl<'a> ProfileFingerprint<'a> {
-    /// 在创建或历史回执读取边界解析一次，内部比较直接使用合法摘要。
+    // 在创建或历史回执读取边界解析一次，内部比较直接使用合法摘要。
     fn parse(value: &'a str) -> Result<Self> {
         let digest = value.strip_prefix(FINGERPRINT_V1_PREFIX).unwrap_or(value);
         if digest.len() != FINGERPRINT_HEX_LEN
@@ -223,7 +176,7 @@ impl<'a> ProfileFingerprint<'a> {
     }
 }
 
-/// 持久化记录和当前请求分别解析后，按大小写不敏感的摘要比较。
+// 持久化记录和当前请求分别解析后，按大小写不敏感的摘要比较。
 fn fingerprints_match(a: &str, b: &str) -> bool {
     let Ok(stored) = ProfileFingerprint::parse(a) else { return false };
     let Ok(requested) = ProfileFingerprint::parse(b) else { return false };
@@ -260,7 +213,7 @@ mod tests {
         assert!(SupplierProfileCommand::new("command-2", invalid).is_err());
     }
 
-    /// 覆盖重放一致性：同键同载荷可重放，操作、目标或指纹任一不同必须冲突。
+    // 验证同键同载荷可重放，操作、目标或指纹任一不同必须冲突。
     #[test]
     fn replay_is_bound_to_operation_target_and_fingerprint() {
         let command = SupplierProfileCommand::new("command-1", command_data()).unwrap();
@@ -278,7 +231,7 @@ mod tests {
         assert!(create.ensure_replayable("create", None, ZERO_DIGEST).is_ok());
     }
 
-    /// 覆盖指纹版本化与历史裸摘要兼容：前带 `sha256-v1:` 与裸摘要按摘要兼容。
+    // 验证前带 `sha256-v1:` 与裸摘要按摘要兼容。
     #[test]
     fn fingerprint_versioned_and_legacy_are_compatible() {
         let bare = SupplierProfileCommand::new("cmd-bare", bare_data(ZERO_DIGEST)).unwrap();
@@ -308,7 +261,7 @@ mod tests {
         assert_eq!(roundtrip2.request_fingerprint, format!("{FINGERPRINT_V1_PREFIX}{ZERO_DIGEST}"));
     }
 
-    /// 覆盖指纹格式校验：非法长度或非十六进制拒绝。
+    // 验证非法长度或非十六进制拒绝。
     #[test]
     fn fingerprint_format_rejects_invalid() {
         let bad =
@@ -355,7 +308,7 @@ mod tests {
         assert!(historical.ensure_replayable("update", Some("supplier-1"), &digest).is_err());
     }
 
-    /// 覆盖版本与身份合同：版本一致通过，不一致或缺失时失败。
+    // 验证版本一致通过，不一致或缺失时失败。
     #[test]
     fn version_and_identity_contracts() {
         assert!(SupplierProfileCommand::ensure_version(5, 5).is_ok());

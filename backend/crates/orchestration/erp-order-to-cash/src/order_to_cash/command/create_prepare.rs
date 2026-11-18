@@ -26,15 +26,11 @@ pub(super) struct PreparedSalesCreation {
 }
 
 impl SalesOrderCommandProcess {
-    /// 在命令重放检查之后按原顺序准备创建对象。
-    ///
-    /// # 参数
-    /// * `req` / `actor` / `access` - 当前完整命令及其认证授权
-    /// * `executor` - 调用方读取事务执行器
-    /// # 返回
-    /// 返回保持相同行顺序的稳定销售、单据注册及工作副本。
-    /// # 错误
-    /// 关系、行资格、业务组织或构造规则失败时按原顺序返回。
+    // 在命令重放检查之后按原顺序准备创建对象。
+    //
+    // `req` / `actor` / `access` 为当前完整命令及其认证授权；`executor` 为调用方读取事务执行器。
+    //
+    // 返回保持相同行顺序的稳定销售、单据注册及工作副本。关系、行资格、业务组织或构造规则失败时按原顺序返回。
     pub(super) async fn prepare_sales_creation(
         &self,
         req: &CreateSalesOrderRequest,

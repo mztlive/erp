@@ -53,14 +53,9 @@ impl VoucherSkuInput {
     ///
     /// 默认单位 ID 必须由 Service 先从字典解析后再注入；本方法不访问数据库。
     ///
-    /// # 参数
-    /// * `base_unit_id` - 已解析出的默认基础单位
-    ///
-    /// # 返回
     /// 返回无条码、物流属性和价格的最小 SKU 输入。
     ///
-    /// # 错误
-    /// 无。
+    /// `base_unit_id` 为已解析出的默认基础单位。
     pub fn default_for_unit(base_unit_id: UnitOfMeasureId) -> Self {
         Self {
             base_unit_id,
@@ -78,15 +73,9 @@ impl VoucherSkuInput {
     ///
     /// 转换结果固定：无既有身份、无规格、无主图且 `reenable=false`。
     ///
-    /// # 参数
-    /// * `voucher_no` - 同时作为商品编号与 SKU 编号的卡券编号
-    /// * `name` - 商品与 SKU 当前名称
-    ///
-    /// # 返回
     /// 返回不携带既有身份、无规格和无主图的通用 SKU 输入。
     ///
-    /// # 错误
-    /// 无。
+    /// `name` 为商品与 SKU 当前名称。
     pub fn into_product_sku(self, voucher_no: String, name: String) -> ProductSkuInput {
         ProductSkuInput {
             sku_id: None,
@@ -219,13 +208,7 @@ pub struct VoucherCategoryProfileView {
 }
 
 impl From<VoucherCategoryProfileRevision> for VoucherCategoryProfileView {
-    /// 从实体构造响应视图（关联字段由列表/更新服务后续补齐）。
-    ///
-    /// # 参数
-    /// * `revision` - 卡券类目扩展修订实体
-    ///
-    /// # 返回
-    /// 返回响应视图。
+    // 从实体构造响应视图（关联字段由列表/更新服务后续补齐）。
     fn from(revision: VoucherCategoryProfileRevision) -> Self {
         Self {
             id: revision.base.id,
@@ -244,13 +227,7 @@ impl From<VoucherCategoryProfileRevision> for VoucherCategoryProfileView {
 }
 
 impl From<VoucherCategoryProfileRevisionRow> for VoucherCategoryProfileView {
-    /// 从投影行构造响应视图，与 `From<VoucherCategoryProfileRevision>` 同语义（erp-catalog-002）。
-    ///
-    /// # 参数
-    /// * `row` - 已装配关联展示字段的投影行
-    ///
-    /// # 返回
-    /// 返回响应视图。
+    // 从投影行构造响应视图，与 `From<VoucherCategoryProfileRevision>` 同语义（erp-catalog-002）。
     fn from(row: VoucherCategoryProfileRevisionRow) -> Self {
         Self {
             id: row.id,
@@ -299,18 +276,11 @@ pub(crate) struct VoucherCategoryProfileListQuery {
 }
 
 impl VoucherCategoryProfileListParams {
-    /// 归一化卡券类目扩展修订列表查询参数。
-    ///
-    /// 分页取默认值、排序字段过白名单校验。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    // 归一化卡券类目扩展修订列表查询参数。
+    //
+    // 分页取默认值、排序字段过白名单校验。
+    //
+    // 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<VoucherCategoryProfileListQuery> {
         Ok(VoucherCategoryProfileListQuery {
             sku_id: self.sku_id.as_ref().map(|id| id.to_string()),
@@ -328,7 +298,7 @@ impl VoucherCategoryProfileListParams {
 
 #[cfg(test)]
 mod tests {
-    /// 旧客户端省略启停字段时保持兼容，显式状态只接受既定枚举。
+    // 旧客户端省略启停字段时保持兼容，显式状态只接受既定枚举。
     #[test]
     fn voucher_update_accepts_optional_status_and_rejects_invalid_input() {
         let base = serde_json::json!({ "version": 1, "name": "体验卡", "description": "体验卡描述" });
@@ -362,7 +332,7 @@ mod tests {
 
     use super::VoucherSkuInput;
 
-    /// 缺省 SKU 只有已注入的单位，其余字段为空且转换后无身份/规格/主图。
+    // 缺省 SKU 只有已注入的单位，其余字段为空且转换后无身份/规格/主图。
     #[test]
     fn default_voucher_sku_converts_without_identity_or_spec() {
         let input = VoucherSkuInput::default_for_unit(UnitOfMeasureId::new("unit-sheet"));
@@ -385,7 +355,7 @@ mod tests {
         assert_eq!(sku.name, "体验卡");
     }
 
-    /// 完整 SKU 的条码、单位、重量、体积和价格在转换中不得丢失。
+    // 完整 SKU 的条码、单位、重量、体积和价格在转换中不得丢失。
     #[test]
     fn complete_voucher_sku_preserves_measurable_fields() {
         let input = VoucherSkuInput {

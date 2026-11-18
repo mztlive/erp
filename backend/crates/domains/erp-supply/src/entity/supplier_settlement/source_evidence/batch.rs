@@ -56,18 +56,9 @@ pub struct SupplierSettlementSourceEvidenceData {
 
 impl SupplierSettlementSourceEvidenceData {
     /// 计算覆盖批次身份、策略、账单与全部冻结行的稳定来源摘要。
-    ///
-    /// 摘要排除请求 ID、幂等键、记录人和记录时间，只覆盖可复核的业务事实；行、
-    /// 事实类别和证据引用均按稳定顺序编码，调用顺序不影响结果。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
+    /// 摘要排除请求 ID、幂等键、记录人和记录时间，只覆盖可复核的业务事实；行、事实类别和证据引用均按稳定
+    /// 顺序编码，调用顺序不影响结果。
     /// 返回 64 位小写 SHA-256 十六进制摘要。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn canonical_source_hash(&self) -> String {
         let mut parts = vec![
             "supplier-settlement-authoritative-source-v1".to_string(),
@@ -119,14 +110,7 @@ pub struct SupplierSettlementSourceEvidence {
 
 impl SupplierSettlementSourceEvidence {
     /// 校验来源命令没有重复提交同一履约明细。
-    ///
-    /// # 参数
-    /// * `item_ids` - 客户端来源行中的履约明细主键
-    ///
-    /// # 返回
     /// 全部明细主键唯一时返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 存在重复履约明细时返回领域错误。
     pub fn ensure_unique_item_ids(item_ids: &[SupplierFulfillmentItemId]) -> Result<()> {
         let mut unique = HashSet::with_capacity(item_ids.len());
@@ -136,15 +120,8 @@ impl SupplierSettlementSourceEvidence {
         Ok(())
     }
 
-    /// 校验候选来源版本严格高于当前批次。
-    ///
-    /// # 参数
-    /// * `candidate` - 新来源批次声明的版本
-    ///
-    /// # 返回
+    /// 核对候选来源版本严格高于当前批次。
     /// 候选版本更高时返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 候选版本小于等于当前版本时返回领域错误。
     pub fn ensure_newer_source_version(&self, candidate: u64) -> Result<()> {
         if candidate <= self.source_version {
@@ -154,29 +131,13 @@ impl SupplierSettlementSourceEvidence {
     }
 
     /// 判断幂等请求指纹是否与当前不可变批次一致。
-    ///
-    /// # 参数
-    /// * `request_hash` - 当前命令计算出的稳定指纹
-    ///
-    /// # 返回
     /// 指纹一致时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn matches_request_hash(&self, request_hash: &str) -> bool {
         self.request_hash == request_hash
     }
 
     /// 创建并完整校验一个不可变来源证据批次。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键
-    /// * `data` - 来源证据批次创建数据
-    ///
-    /// # 返回
     /// 返回校验通过的不可变来源证据批次。
-    ///
-    /// # 错误
     /// 身份、周期、策略、账单、行数、逐行配对唯一性或摘要不合法时返回错误。
     pub fn new(id: impl Into<String>, data: SupplierSettlementSourceEvidenceData) -> Result<Self> {
         SettlementPeriod::new(data.period_start, data.period_end, &data.timezone)?;
@@ -277,14 +238,8 @@ impl SupplierSettlementSourceEvidence {
     }
 }
 
-/// 将一条冻结来源行按稳定字段顺序加入摘要输入。
-///
-/// # 参数
-/// * `parts` - 待追加的长度前缀摘要字段
-/// * `line` - 冻结来源证据行
-///
-/// # 返回
-/// 无；事实类别和证据引用会先排序，保证摘要与集合输入顺序无关。
+// 将一条冻结来源行按稳定字段顺序加入摘要输入。
+// 事实类别和证据引用会先排序，保证摘要与集合输入顺序无关。
 fn append_line_digest_parts(parts: &mut Vec<String>, line: &SupplierSettlementSourceEvidenceLine) {
     let mut fact_types = line.source_fact_types.iter().map(|value| value.as_str()).collect::<Vec<_>>();
     fact_types.sort_unstable();

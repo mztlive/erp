@@ -29,11 +29,11 @@ use crate::{Error, Result};
 
 impl SupplierDepositManagementProcess {
     /// 结案原资金差异，完整账户核验通过后恢复新增使用。
-    /// # 参数
+    ///
     /// 原账户、差异记录、所见版本与核验文件及当前认证财务人员。
-    /// # 返回
+    ///
     /// 返回保留原差异、后续核对与核验人依据的记录。
-    /// # 错误
+    ///
     /// 越范围、附件不可用、未决资金或记录变化时整体拒绝。
     pub async fn resolve_reconciliation(
         &self,
@@ -55,11 +55,11 @@ impl SupplierDepositManagementProcess {
     }
 
     /// 按核实终态释放本执行全部未使用尾款，不扩大或改写原付款批准。
-    /// # 参数
+    ///
     /// 原账户、占用、所见版本及原核对/文件依据和认证操作人。
-    /// # 返回
+    ///
     /// 返回带稳定回执的原占用，账户账面金额保持不变。
-    /// # 错误
+    ///
     /// 未知外部动作、未结清使用、陈旧核对、越范围或文件不可用时拒绝。
     pub async fn release_reservation(
         &self,

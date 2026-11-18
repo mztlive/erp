@@ -7,12 +7,10 @@ use persistence_core::Result;
 use crate::repository::sales_order::inquiry_source::SALES_INQUIRY_SOURCES;
 
 /// 为销售来源登记唯一销售身份及询价追溯索引。
-/// # 参数
-/// `db` 为目标数据库。
-/// # 返回
-/// 索引已存在或创建完成时成功。
-/// # 错误
+/// 结果：索引已存在或创建完成时成功。
 /// 数据冲突或数据库失败时返回错误。
+///
+/// 输入约定：`db` 为目标数据库。
 pub async fn ensure(db: &Database) -> Result<()> {
     let indexes = [
         IndexModel::builder()

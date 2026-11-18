@@ -18,26 +18,8 @@ pub(crate) const WAREHOUSE_REVISIONS: &str = <mongodb::Database as WarehouseExt>
 /// `warehouse_sku_policy` 集合名。
 pub(crate) const WAREHOUSE_SKU_POLICIES: &str = <mongodb::Database as WarehouseExt>::WAREHOUSE_SKU_POLICIES;
 
-/// 创建本域集合的幂等命名索引。
-///
-/// 逐条落地数据模型 §6.3「必需约束与索引」：`warehouse_code` 使用**全局唯一
-/// 索引**（与 accounts 的 code 处理一致）：软删除后仍保留身份，避免复用破坏
-/// 恢复语义；修订表聚合内 `(warehouse_id, revision_no)` 唯一。
-///
-/// 「同一仓库有效期不得重叠」「同一仓库和 SKU 的启用区间不得重叠」无法由
-/// MongoDB 普通唯一索引完整表达（重叠窗口起止日不同）；这里以「生效开始日
-/// 相同 = 必然重叠」的保守子集落地唯一索引（`uk_*_effective_from`），
-/// 非法组合在写路径即被拒绝；完整区间重叠校验由 P3 Service 在事务内以
-/// 范围查询完成，两者共同覆盖 §6.3 约束。
-///
-/// # 参数
-/// * `db` - 目标 MongoDB 数据库
-///
-/// # 返回
-/// 无返回值。三个集合的命名索引已创建或已存在。
-///
-/// # 错误
-/// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
+// 注册仓库、修订和 SKU 策略的命名索引。仓库代码全局唯一，软删除后仍占用；修订序号在仓库内唯一。同维度相同生效开始日由唯一索引先行拒绝，不能替代起始日不同的完整区间冲突检查。
+// 同仓库修订有效期及同仓同 SKU 启用区间的完整重叠约束须在写入用例事务中核查。现存数据冲突或 MongoDB 创建失败时返回错误。
 pub(crate) async fn ensure(db: &Database) -> Result<()> {
     for (collection, indexes) in [
         (WAREHOUSES, warehouse_indexes()),
@@ -49,7 +31,7 @@ pub(crate) async fn ensure(db: &Database) -> Result<()> {
     Ok(())
 }
 
-/// 返回 `warehouse` 的身份约束与启停查询索引。
+// 定义仓库 ID 和稳定代码的全局唯一索引，以及支持启停筛选的索引。
 fn warehouse_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_warehouses_id", doc! { "id": 1 }),
@@ -58,7 +40,7 @@ fn warehouse_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `warehouse_revision` 的聚合修订唯一约束与查询索引。
+// 定义修订 ID、仓库内修订序号和生效开始日的唯一约束，支持稳定定位历史快照。
 fn warehouse_revision_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_warehouse_revisions_id", doc! { "id": 1 }),
@@ -72,7 +54,7 @@ fn warehouse_revision_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `warehouse_sku_policy` 的启用区间唯一子集与查询索引。
+// 定义策略身份和同仓同 SKU 相同开始日的唯一约束，并建立按维度、区间及启停查询的索引。
 fn warehouse_sku_policy_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_warehouse_sku_policies_id", doc! { "id": 1 }),
@@ -98,7 +80,7 @@ fn warehouse_sku_policy_indexes() -> Vec<IndexModel> {
 
 #[cfg(test)]
 mod tests {
-    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    // 验证三个集合均有 `id` 唯一索引，使稳定身份查询及乐观锁更新不用扫描集合。
     #[test]
     fn collections_look_up_by_unique_stable_id() {
         for indexes in [

@@ -46,24 +46,18 @@ pub struct SupplierAddressCandidate {
 #[async_trait]
 pub trait SupplierAddressSource: Send + Sync {
     /// 读取一个明确层级的全部候选，不把地址转换结果冒充已确认地址。
-    /// # 参数
-    /// `query` 为层级及供应商父编码；连接身份在适配器实例中绑定。
-    /// # 返回
     /// 可供人工逐级选择的来源候选及读取证据。
-    /// # 错误
     /// 父级缺失、编码混用、授权不足或读取失败时返回分类错误。
+    /// `query` 为层级及供应商父编码；连接身份在适配器实例中绑定。
     async fn candidates(
         &self,
         query: &AddressCandidateQuery,
     ) -> ConnectorResult<Snapshot<Vec<SupplierAddressCandidate>>>;
 
     /// 使用来源接口重新核验已经由用户确认的四级地址。
-    /// # 参数
-    /// `address` 为原加密执行快照中与本连接绑定的地址。
-    /// # 返回
     /// 来源明确有效或失效的当前证据，不修改已确认地址。
-    /// # 错误
     /// 连接不符、资料不完整、来源状态未知或读取失败时拒绝。
+    /// `address` 为原加密执行快照中与本连接绑定的地址。
     async fn validate(&self, address: &ConfirmedSupplierAddress) -> ConnectorResult<Snapshot<bool>>;
 }
 
@@ -89,12 +83,9 @@ pub struct ConfirmedSupplierAddress {
 
 impl ConfirmedSupplierAddress {
     /// 校验已确认地址绑定本连接、原执行快照和收件地址。
-    /// # 参数
-    /// 连接身份、快照引用和地址指纹均由服务端从原执行取得。
-    /// # 返回
     /// 四级资料完整且精确匹配时允许后续只读核验。
-    /// # 错误
     /// 缺失层级、版本无效或绑定变化时阻断，不能复用旧转换结果。
+    /// 连接身份、快照引用和地址指纹均由服务端从原执行取得。
     pub fn validate_binding(&self, connection: &str, snapshot: &str, fingerprint: &str) -> Result<()> {
         if self.version == 0
             || self.connection_id.is_empty()

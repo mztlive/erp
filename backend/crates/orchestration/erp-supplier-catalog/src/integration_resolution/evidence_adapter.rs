@@ -24,14 +24,9 @@ pub struct MongoIntegrationEvidenceAuthority {
 impl MongoIntegrationEvidenceAuthority {
     /// 保存组合根数据库；方法不自开事务或外发请求。
     ///
-    /// # 参数
-    /// * `db` - 组合根数据库。
+    /// `db`：组合根数据库。
     ///
-    /// # 返回
     /// 证据适配器。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
@@ -473,22 +468,15 @@ fn push_compensation_refs(
     Ok(())
 }
 
-/// 由权威对象类型与记录 ID 构造客户端证据引用。
-///
-/// # 参数
-/// * `evidence_kind` - 受控证据类型
-/// * `record_kind` - 权威对象类型
-/// * `id` - 记录身份 ID
-/// * `label` - 展示标签
-///
-/// # 返回
-/// 返回 `type:id` 记录引用。
-///
-/// # 错误
-/// 对象类型或 ID 不符合精确 grammar 时返回校验错误。
-///
-/// # 约束
-/// 语法由 [`EvidenceRecordRef`] 独占；本函数只做 Service DTO 装配。
+// 由权威对象类型与记录 ID 构造客户端证据引用。
+//
+// `evidence_kind`：受控证据类型；`record_kind`：权威对象类型；`id`：记录身份 ID；`label`：展示标签。
+//
+// 返回 `type:id` 记录引用。
+//
+// 对象类型或 ID 不符合精确 grammar 时返回校验错误。
+//
+// 语法由 [`EvidenceRecordRef`] 独占；本函数只做 Service DTO 装配。
 pub(super) fn controlled_ref(
     evidence_kind: ControlledEvidenceKind,
     record_kind: &str,
@@ -514,22 +502,18 @@ fn ensure_association(subject: &EvidenceSubject, ids: &[String]) -> Result<()> {
     Err(Error::ConflictError("证据记录与当前业务项没有可验证的正式关联".to_string()))
 }
 
-/// 由权威仓储事实构造 canonical 证据引用。
-///
-/// # 参数
-/// * `kind` - 对象类型
-/// * `id` - 记录身份 ID
-/// * `version` - 正式版本；无版本形态传 `None`
-/// * `status` - 终态或核验状态
-///
-/// # 返回
-/// 返回可写入终态证据字段的 canonical 引用。
-///
-/// # 错误
-/// 身份段不符合精确 grammar 时返回校验错误。
-///
-/// # 约束
-/// 编码规则由 [`CanonicalEvidenceReference::verified`] 独占。
+// 由权威仓储事实构造 canonical 证据引用。
+//
+// - `kind`：对象类型
+// - `id`：记录身份 ID
+// - `version`：正式版本；无版本形态传 `None`
+// - `status`：终态或核验状态
+//
+// 返回可写入终态证据字段的 canonical 引用。
+//
+// 身份段不符合精确 grammar 时返回校验错误。
+//
+// 编码规则由 [`CanonicalEvidenceReference::verified`] 独占。
 pub(super) fn canonical_verified(
     kind: &str,
     id: &str,

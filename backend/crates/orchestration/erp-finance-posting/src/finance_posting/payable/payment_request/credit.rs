@@ -17,13 +17,8 @@ use crate::finance_posting::task_access::{TaskPurpose, require_task};
 
 impl PurchasePaymentRequestProcess {
     /// 查询当前付款任务可选择的供应商留抵。
-    /// # 参数
-    /// * `id` - 付款申请。
-    /// * `actor` - 指定出纳。
-    /// # 返回
-    /// 同主体、同供应商的可用余额。
-    /// # 错误
-    /// 任务不开放、责任或权限不符时拒绝。
+    ///
+    /// `id` 为付款申请；`actor` 为指定出纳。同主体、同供应商的可用余额。任务不开放、责任或权限不符时拒绝。
     pub async fn supplier_credits(&self, id: &str, actor: &AuditActor) -> Result<Vec<SupplierCredit>> {
         let db = self.db.clone();
         let rbac = self.rbac.clone();
@@ -61,13 +56,9 @@ impl PurchasePaymentRequestProcess {
             .await
     }
     /// 在批准额度内抵扣留抵，并按同一请求键返回原结果。
-    /// # 参数
-    /// * `id` - 付款申请。
-    /// * `req` - 本次抵扣金额、来源、任务版本及请求键。
-    /// * `actor` - 指定出纳。
-    /// # 返回
-    /// 抵扣记录身份，不产生新的银行付款。
-    /// # 错误
+    ///
+    /// `id` 为付款申请；`req` 为本次抵扣金额、来源、任务版本及请求键；`actor` 为指定出纳。抵扣记录身份，不产生新的银行付款。
+    ///
     /// 非本人任务、版本变化、主体不符、超额或异载荷重放时拒绝。
     pub async fn use_supplier_credit(
         &self,

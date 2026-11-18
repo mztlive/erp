@@ -30,11 +30,10 @@ pub struct CustomerProfileProcess {
 impl CustomerProfileProcess {
     /// 创建具备完整授权能力的客户资料服务。
     ///
-    /// # 参数
     /// db 为业务数据库，sensitive_data 为敏感数据编解码器；access 和 authorization 来自同次共享授权装配。
-    /// # 返回
+    ///
     /// 可在原事务中重验客户访问资格的服务。
-    /// # 错误
+    ///
     /// 构造不执行 I/O。
     pub fn new(
         db: Database,

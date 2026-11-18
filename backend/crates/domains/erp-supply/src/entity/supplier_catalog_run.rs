@@ -7,12 +7,7 @@ use crate::{Error, Result};
 
 impl SupplierCatalogRun {
     /// 判断检查点格式及适配器版本能否由当前执行器继续处理。
-    /// # 参数
-    /// `config_version`、`mapping_version` 为当前连接及适配器版本。
-    /// # 返回
     /// 当前格式和两个版本全部匹配时为 true。
-    /// # 错误
-    /// 不返回错误。
     pub fn compatible(&self, config_version: u64, mapping_version: u32) -> bool {
         self.checkpoint_version == CATALOG_CHECKPOINT_VERSION
             && self.technical_config_version == config_version
@@ -20,12 +15,7 @@ impl SupplierCatalogRun {
     }
 
     /// 仅恢复同连接、同技术配置及同映射版本的未完成扫描。
-    /// # 参数
-    /// `previous` 为调用方已核验属于最近失败任务的检查点。
-    /// # 返回
     /// 兼容时沿用原窗口、游标、数量与异常；不兼容时保留新任务全量初态。
-    /// # 错误
-    /// 不返回错误。
     pub fn resume(&mut self, previous: &Self) {
         if previous.connection_id != self.connection_id
             || !previous.compatible(self.technical_config_version, self.mapping_version)
@@ -49,11 +39,7 @@ impl SupplierCatalogRun {
     }
 
     /// 标记扫描已成功结算；由调用方与任务成功状态同事务保存。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 完成扫描的检查点成为可查询的成功记录。
-    /// # 错误
     /// 尚未提交末页时拒绝，不能制造不完整成功基线。
     pub fn complete(&mut self) -> Result<()> {
         if !self.finished {
@@ -65,12 +51,8 @@ impl SupplierCatalogRun {
     }
 
     /// 在首轮读取前按适配器策略选择增量；恢复中的扫描保持原窗口。
-    /// # 参数
-    /// `latest` 为当前配置最近成功检查点，`full` 为最近无跳过项的成功全量检查点。
-    /// # 返回
     /// 满足完整基线时设定增量窗口，其余保持全量。
-    /// # 错误
-    /// 不返回错误；非法周期或基线保守执行全量。
+    /// 非法周期或基线保守执行全量。
     pub fn plan(&mut self, policy: CatalogSyncPolicy, latest: Option<&Self>, full: Option<&Self>) {
         if self.restart_required
             || self.pages != 0

@@ -28,16 +28,8 @@ pub(super) enum EnsureOutcome {
 }
 
 impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
-    /// 读取单位种子并创建或恢复已登记记录。
-    ///
-    /// # 参数
-    /// `actor` - 操作人；`step` - 种子身份；`request` - 单位创建输入。
-    ///
-    /// # 返回
-    /// 返回创建、恢复或已存在结果。
-    ///
-    /// # 错误
-    /// 编号归属不符、领域校验或持久化失败时返回错误。
+    // 按稳定编号准备商品种子引用的计量单位：不存在则创建并登记，已存在时仅在登记归属一致后复用或恢复。
+    // 归属、校验或写入失败时停止。
     pub(super) async fn ensure_unit(
         &self,
         actor: &AuditActor,
@@ -59,16 +51,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         Ok(EnsureOutcome::Created)
     }
 
-    /// 读取品牌种子并创建或恢复已登记记录。
-    ///
-    /// # 参数
-    /// `actor` - 操作人；`step` - 种子身份；`request` - 品牌创建输入。
-    ///
-    /// # 返回
-    /// 返回创建、恢复或已存在结果。
-    ///
-    /// # 错误
-    /// 编号归属不符、领域校验或持久化失败时返回错误。
+    // 按种子编号创建品牌或恢复同一已登记品牌，供后续商品解析品牌引用；不认领撞号的非演示记录，领域校验及持久化错误向上返回。
     pub(super) async fn ensure_brand(
         &self,
         actor: &AuditActor,
@@ -84,16 +67,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         Ok(EnsureOutcome::Created)
     }
 
-    /// 读取分类种子并创建或恢复已登记记录。
-    ///
-    /// # 参数
-    /// `actor` - 操作人；`step` - 种子身份；`request` - 分类创建输入。
-    ///
-    /// # 返回
-    /// 返回创建、恢复或已存在结果。
-    ///
-    /// # 错误
-    /// 编号归属不符、领域校验或持久化失败时返回错误。
+    // 为商品种子准备可引用的分类，按编号核对登记归属后复用或恢复，缺失时走正式创建；归属不符、校验或写入错误时停止。
     pub(super) async fn ensure_category(
         &self,
         actor: &AuditActor,
@@ -118,7 +92,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         Ok(EnsureOutcome::Created)
     }
 
-    /// 校验实际 ID 归属后恢复已有字典。
+    // 比对种子键对应的实际 ID 后才恢复或复用字典，避免把同编号的真实资料登记为演示数据。
     async fn adopt_coded(
         &self,
         actor: &AuditActor,
@@ -137,7 +111,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
     }
 }
 
-/// 按稳定编号读取含软删除的字典记录，并返回恢复所需的身份与状态。
+// 按固定编号查字典并保留软删除项，返回实际 ID 和删除状态，使后续能区分创建、复用与恢复。
 async fn lookup_coded<T>(
     repository: Repository<'_, T>,
     field: &str,

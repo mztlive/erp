@@ -19,13 +19,12 @@ use crate::repository::{PayableExt, SupplierDepositExt};
 use crate::{Error, Result};
 
 /// 在账户范围内取得最近一百项证据；不扫描其他账户。
-/// # 参数
-/// * `repository` - 当前财务记录类型的拥有仓储。
-/// * `account` / `executor` - 已授权账户及原执行器。
-/// # 返回
 /// 返回按创建时间和身份倒序的最近记录。
-/// # 错误
 /// 查询或反序列化失败时拒绝。
+///
+/// 输入约定：
+/// - `repository`：当前财务记录类型的拥有仓储。
+/// - `account` / `executor`：已授权账户及原执行器。
 pub async fn latest_account_records<T: Serialize + DeserializeOwned + Send + Sync>(
     repository: Repository<'_, T>,
     account: &str,
@@ -41,15 +40,14 @@ pub async fn latest_account_records<T: Serialize + DeserializeOwned + Send + Syn
 }
 
 /// 先执行 identity 编译的完整授权条件，再装载一页资金账户。
-/// # 参数
-/// * `db` / `executor` - 财务数据源和执行器。
-/// * `supplier` / `payer` - 仅收窄账户候选的筛选。
-/// * `skip` / `size` - 已规范化分页位置与上限。
-/// * `access` - 当前读取阶段由 identity 编译并复验的授权聚合阶段。
-/// # 返回
-/// 最多size加一条账户，额外一条用于继续分页。
-/// # 错误
+/// 结果：最多size加一条账户，额外一条用于继续分页。
 /// 查询模型错配、凭证跨边界、分页非法或读取失败时拒绝。
+///
+/// 输入约定：
+/// - `db` / `executor`：财务数据源和执行器。
+/// - `supplier` / `payer`：仅收窄账户候选的筛选。
+/// - `skip` / `size`：已规范化分页位置与上限。
+/// - `access`：当前读取阶段由 identity 编译并复验的授权聚合阶段。
 pub async fn account_page(
     db: &Database,
     supplier: Option<&str>,
@@ -65,7 +63,7 @@ pub async fn account_page(
     Ok(rows)
 }
 
-/// 固定账户模型、当前边界和业务过滤通过后才交付可执行阶段。
+// 供应商预存款账户查询先核对固定模型、原读取边界及业务条件，再输出可执行聚合阶段。
 fn account_pipeline(
     supplier: Option<&str>,
     payer: Option<&str>,
@@ -98,7 +96,7 @@ fn account_pipeline(
     Ok(pipeline)
 }
 
-/// 完整账户读取只接受本域固定资源、集合、行身份和对象粒度。
+// 定义预存款全量账户查询可使用的固定资源、集合、行身份及对象粒度，供校验凭证与模型是否匹配。
 fn account_model(model: &QueryModel) -> Result<()> {
     if model.resource != "supplier_deposit"
         || model.collection != <Database as SupplierDepositExt>::SUPPLIER_DEPOSIT_ACCOUNTS
@@ -111,12 +109,11 @@ fn account_model(model: &QueryModel) -> Result<()> {
 }
 
 /// 按真实到账时间和稳定身份装载可分配批次。
-/// # 参数
-/// * `db` / `account` / `executor` - 数据源、资金账户和占用事务。
-/// # 返回
 /// 返回有剩余额度的FIFO批次，超过一万候选时明确拒绝。
-/// # 错误
-/// 超限或读取失败时拒绝，不能跳过早期批次。
+/// 失败条件：超限或读取失败时拒绝，不能跳过早期批次。
+///
+/// 输入约定：
+/// - `db` / `account` / `executor`：数据源、资金账户和占用事务。
 pub async fn allocatable_batches(
     db: &Database,
     account: &str,
@@ -137,12 +134,11 @@ pub async fn allocatable_batches(
 }
 
 /// 读取执行组唯一原占用，不按根单或供应商名称猜测。
-/// # 参数
-/// * `db` / `execution` / `executor` - 数据源、冻结执行组与执行器。
-/// # 返回
 /// 返回原占用或缺失。
-/// # 错误
 /// 查询失败时拒绝。
+///
+/// 输入约定：
+/// - `db` / `execution` / `executor`：数据源、冻结执行组与执行器。
 pub async fn reservation_for_execution(
     db: &Database,
     execution: &str,
@@ -155,12 +151,11 @@ pub async fn reservation_for_execution(
 }
 
 /// 读取原占用全部资金使用记录，按稳定身份排序。
-/// # 参数
-/// * `db` / `reservation` / `executor` - 数据源、原占用与执行器。
-/// # 返回
 /// 返回相同执行组的使用记录。
-/// # 错误
 /// 读取失败时拒绝。
+///
+/// 输入约定：
+/// - `db` / `reservation` / `executor`：数据源、原占用与执行器。
 pub async fn usages_for_reservation(
     db: &Database,
     reservation: &str,
@@ -173,12 +168,11 @@ pub async fn usages_for_reservation(
 }
 
 /// 返回批准采购同主体、同供应商的可选账户身份，不读取余额作为批准资格。
-/// # 参数
-/// * `db` / `payer` / `supplier` / `executor` - 原采购批准来源及执行器。
-/// # 返回
 /// 返回已启用人民币账户候选。
-/// # 错误
 /// 读取失败时拒绝。
+///
+/// 输入约定：
+/// - `db` / `payer` / `supplier` / `executor`：原采购批准来源及执行器。
 pub async fn eligible_accounts(
     db: &Database,
     payer: &str,
@@ -193,12 +187,11 @@ pub async fn eligible_accounts(
 }
 
 /// 防止历史银行付款的同一流水再次登记为充值现金来源。
-/// # 参数
-/// * `db` / `payer` / `reference` / `executor` - 原主体、银行流水及同一财务事务。
-/// # 返回
-/// 相同主体已存在该银行流水时返回真，包括历史普通采购付款。
-/// # 错误
-/// 查询失败时拒绝，不将未知当作不存在。
+/// 结果：相同主体已存在该银行流水时返回真，包括历史普通采购付款。
+/// 失败条件：查询失败时拒绝，不将未知当作不存在。
+///
+/// 输入约定：
+/// - `db` / `payer` / `reference` / `executor`：原主体、银行流水及同一财务事务。
 pub async fn bank_source_exists(
     db: &Database,
     payer: &str,
@@ -212,14 +205,13 @@ pub async fn bank_source_exists(
 }
 
 /// 读取原人工命令的永久执行组占用，当前采购退役不影响原结果恢复。
-/// # 参数
-/// * `db` / `account` / `request` - 原财务范围。
-/// * `prefix` - 服务器命令身份形成的完整操作前缀。
-/// * `executor` - 原恢复执行器。
-/// # 返回
 /// 返回最多一千项原命令占用，按稳定身份排序。
-/// # 错误
 /// 前缀无效、超限或读取失败时拒绝。
+///
+/// 输入约定：
+/// - `db` / `account` / `request`：原财务范围。
+/// - `prefix`：服务器命令身份形成的完整操作前缀。
+/// - `executor`：原恢复执行器。
 pub async fn reservations_for_manual_command(
     db: &Database,
     account: &str,
@@ -249,12 +241,11 @@ pub async fn reservations_for_manual_command(
 }
 
 /// 读取当前账户有效期限内的自动授权；人工单次授权不进入自动候选。
-/// # 参数
-/// * `db` / `account` / `now` / `executor` - 账户、服务器时间和原执行器。
-/// # 返回
 /// 返回稳定排序的有限自动授权候选，业务限额仍由授权实体校验。
-/// # 错误
 /// 超过一千候选或读取失败时拒绝。
+///
+/// 输入约定：
+/// - `db` / `account` / `now` / `executor`：账户、服务器时间和原执行器。
 pub async fn automatic_authorizations(
     db: &Database,
     account: &str,
@@ -278,12 +269,11 @@ struct LedgerBalanceRow {
     amount: Amount,
 }
 /// 从真实不可变资金流水重建截止时点余额，拒绝客户端自报本地余额。
-/// # 参数
-/// * `db` / `account` / `cutoff` / `executor` - 原账户、截止时点和对账事务。
-/// # 返回
 /// 返回已保存实际资金来源形成的定点余额。
-/// # 错误
 /// 未知资金方向、金额溢出或聚合失败时拒绝。
+///
+/// 输入约定：
+/// - `db` / `account` / `cutoff` / `executor`：原账户、截止时点和对账事务。
 pub async fn ledger_balance_at(
     db: &Database,
     account: &str,

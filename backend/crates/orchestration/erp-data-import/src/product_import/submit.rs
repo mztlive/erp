@@ -25,20 +25,10 @@ use super::views::job_view;
 use crate::{Error, Result};
 
 impl ProductImportProcess {
-    /// 解析报价表并创建异步导入任务。
+    /// 表单上传商品报价表后，先证明当前账号有商品创建资格，再解析原模板并按原请求身份登记异步任务。
+    /// 文件须已写入对象存储；仍需原字节来解析和准备行媒体，并用登记请求创建资产事实。
     ///
-    /// # 参数
-    /// * `file_name` - 原始文件名
-    /// * `bytes` - 已写入对象存储前的文件内容（用于解析）
-    /// * `registration` - 已写入对象存储的文件资产登记命令
-    /// * `request_id` - 幂等请求身份
-    /// * `actor` - 审计操作人
-    ///
-    /// # 返回
-    /// 返回新建或幂等回放的导入任务。
-    ///
-    /// # 错误
-    /// 当前账号无商品创建资格、文件不是原模板、没有数据行或写入失败时返回错误。
+    /// 返回新任务或幂等回放的既有任务。资格不足、文件不是原模板、没有数据行或登记失败时返回错误。
     pub async fn submit(
         &self,
         file_name: String,
@@ -60,24 +50,10 @@ impl ProductImportProcess {
         self.create_job_from_parsed(file_asset, parsed, file_name, request_id, actor, shared_bytes).await
     }
 
-    /// 由已解析工作表创建导入任务（表单上传与浏览器直传共用）。
-    ///
-    /// 提交时预提各行图片；小清单与任务一起原子提交，较大清单仍存对象存储。
-    ///
-    /// # 参数
-    /// * `file_asset` - 已落对象存储的文件资产
-    /// * `parsed` - 已解析报价表
-    /// * `file_name` - 原始文件名
-    /// * `request_id` - 幂等请求身份
-    /// * `actor` - 审计操作人
-    /// * `xlsx` - 源文件字节（仅本次预提使用）
-    ///
-    /// # 返回
-    /// 返回新建或幂等回放的导入任务。
-    ///
-    /// # 错误
-    /// 任务装配、清单构建、清单写入或任务登记失败时返回对应错误。
-    /// 清单或登记失败会删除本次已上传对象；`OutcomeUnknown` 不执行对象补偿。
+    // 表单上传和浏览器直传共用此入口：解析完成后，沿用原请求身份从本次源字节预提各行图片并登记任务。
+    // 源文件须已存入对象存储；小清单随任务原子提交，较大清单存对象存储。返回新任务或原幂等结果。
+    //
+    // 装配、清单或登记失败按原错误返回；清单或登记失败时尝试删除本次已上传对象，但 `OutcomeUnknown` 不补偿。
     pub(super) async fn create_job_from_parsed(
         &self,
         file_asset: FileAsset,
@@ -111,21 +87,18 @@ impl ProductImportProcess {
         }
     }
 
-    /// 原子登记源文件资产、任务、逐行结果表和可选私有清单。
-    ///
-    /// # 参数
-    /// * `file_asset` - 已落对象存储的文件资产。
-    /// * `job` - 待登记的导入任务。
-    /// * `items` - 逐行明细。
-    /// * `file_name` - 原始文件名。
-    /// * `input` - 已通过容量校验的可选私有清单。
-    /// * `actor` - 提交人，任务登记前重验当前商品创建资格。
-    ///
-    /// # 返回
-    /// 返回新任务或既有幂等回放任务。
-    /// # 错误
-    /// 当前账号失效或缺少商品创建资格时拒绝；事务、唯一键或异载荷冲突按原分类传播。
-    /// 未知提交不执行对象补偿。
+    // 媒体及源文件已准备后，在同一登记事务重验提交人的商品创建资格，再保存文件资产、导入任务、逐行明细及可选私有清单。
+    //
+    // - `file_asset`：已落对象存储的文件资产。
+    // - `job`：待登记的导入任务。
+    // - `items`：逐行明细。
+    // - `input`：已通过容量校验的可选私有清单。
+    // - `actor`：提交人，任务登记前重验当前商品创建资格。
+    //
+    // 返回新任务或既有幂等回放任务。
+    //
+    // 当前账号失效或缺少商品创建资格时拒绝；事务、唯一键或异载荷冲突按原分类传播。
+    // 未知提交不执行对象补偿。
     pub(super) async fn persist_job(
         &self,
         file_asset: FileAsset,
@@ -177,17 +150,13 @@ impl ProductImportProcess {
         }
     }
 
-    /// 按请求身份回放已存在的导入任务。
-    ///
-    /// # 参数
-    /// * `request_id` - 幂等请求身份。
-    /// * `actor` - 提交人，回放前重验当前商品创建资格。
-    ///
-    /// # 返回
-    /// 返回已存在任务的视图；文件名不随回放恢复。
-    ///
-    /// # 错误
-    /// 当前账号失效、缺少商品创建资格或查询失败时拒绝。找不到任务时返回 `ConflictError`。
+    // 商品导入登记遇到唯一键竞争时，以原请求身份查证既有任务；查证前仍要重验提交人的商品创建资格。
+    //
+    // `request_id`：幂等请求身份；`actor`：提交人，回放前重验当前商品创建资格。
+    //
+    // 返回已存在任务的视图；文件名不随回放恢复。
+    //
+    // 当前账号失效、缺少商品创建资格或查询失败时拒绝。找不到任务时返回 `ConflictError`。
     pub(super) async fn replay_existing_job(
         &self,
         request_id: &str,
@@ -215,11 +184,11 @@ impl ProductImportProcess {
     }
 
     /// 在短快照内证明当前入口资格；解析与对象存储操作在该快照成功后执行。
-    /// # 参数
+    ///
     /// actor 为已认证提交人。
-    /// # 返回
+    ///
     /// 当前账号具有商品创建功能资格时返回成功。
-    /// # 错误
+    ///
     /// 身份、资格取证或快照事务失败时拒绝后续处理。
     pub async fn prepare_attachment_upload(&self, actor: &AuditActor) -> Result<()> {
         let authorization = self.job_access.service.clone();
@@ -233,7 +202,7 @@ impl ProductImportProcess {
     }
 }
 
-/// 导入入口只检查功能资格；商品候选范围由后台逐行创建重新验证。
+// 导入入口只检查功能资格；商品候选范围由后台逐行创建重新验证。
 async fn authorize(
     authorization: &AuthorizationService,
     actor: &AuditActor,
@@ -243,7 +212,7 @@ async fn authorize(
     Ok(())
 }
 
-/// 保留唯一键竞争的类型，交给登记入口回读；其余持久化错误沿用统一分类。
+// 保留唯一键竞争的类型，交给登记入口回读；其余持久化错误沿用统一分类。
 fn registration_error(error: PersistenceError) -> Error {
     match error {
         error @ PersistenceError::DuplicateKey(_) => Error::RepositoryError(error),
@@ -251,7 +220,7 @@ fn registration_error(error: PersistenceError) -> Error {
     }
 }
 
-/// 用原模板行顺序构造任务明细，保留行号、名称与独立明细身份。
+// 用原模板行顺序构造任务明细，保留行号、名称与独立明细身份。
 fn import_item_drafts(parsed: &ParsedProductSheet) -> Vec<BackgroundJobItemDraft> {
     parsed
         .rows
@@ -275,7 +244,7 @@ fn import_item_drafts(parsed: &ParsedProductSheet) -> Vec<BackgroundJobItemDraft
         .collect()
 }
 
-/// 由原领域聚合构造任务及明细，业务校验仍由后台任务实体执行。
+// 由原领域聚合构造任务及明细，业务校验仍由后台任务实体执行。
 fn import_job(
     parsed: &ParsedProductSheet,
     file_asset: &FileAsset,

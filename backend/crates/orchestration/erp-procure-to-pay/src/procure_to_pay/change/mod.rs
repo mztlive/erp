@@ -28,7 +28,7 @@ mod tests {
 
     use super::{execute_purchase_change_domain_action, start_purchase_change_approval};
 
-    /// 客户端直接生效必须失败关闭。
+    // 验证采购变更不给客户端直接生效的旁路。
     #[test]
     fn client_effect_fails_closed() {
         let error = erp_procurement::service::purchase_order::PurchaseOrderService::reject_client_effect()
@@ -36,19 +36,9 @@ mod tests {
         assert!(error.to_string().contains("客户端不得直接生效"));
     }
 
-    /// 销售 guard 乐观锁与事务冲突必须映射为稳定 HTTP 409 服务错误。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 无；任一并发错误未映射为稳定冲突类型时测试失败。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 采购变更生效不得把数据库 CAS 或 MongoDB 瞬态事务冲突泄露为 500。
+    // 销售 guard 乐观锁与事务冲突必须映射为稳定 HTTP 409 服务错误。任一并发错误未映射为稳定冲突类型时测试失败。
+    //
+    // 采购变更生效不得把数据库 CAS 或 MongoDB 瞬态事务冲突泄露为 500。
     #[test]
     fn effect_concurrency_errors_map_to_stable_conflicts() {
         let optimistic = crate::Error::from(persistence_core::Error::OptimisticLockingError);
@@ -67,7 +57,7 @@ mod tests {
         ));
     }
 
-    /// 生效只接受当前冻结提交；错误提交或缺失提交失败关闭。
+    // 生效只接受当前冻结提交；错误提交或缺失提交失败关闭。
     #[test]
     fn effect_rejects_mismatched_or_missing_submission() {
         let mut change = PurchaseChangeOrder::new(
@@ -87,7 +77,7 @@ mod tests {
         assert!(change.submission_id_for_effect(Some("pcs-old")).is_err());
     }
 
-    /// 非审批中不得走最终通过动作；撤回不回退 subject_version。
+    // 非审批中不得走最终通过动作；撤回不回退 subject_version。
     #[test]
     fn cancel_keeps_subject_version_and_effect_requires_in_approval() {
         let mut change = PurchaseChangeOrder::new(

@@ -51,17 +51,6 @@ pub struct ReconciliationDifferenceData {
 }
 impl ReconciliationDifferenceData {
     /// 以必填三元组构造差异创建数据；证据引用默认为空。
-    ///
-    /// # 参数
-    /// * `business_object_type` - 差异对象类型
-    /// * `business_object_id` - 差异对象 ID
-    /// * `difference_type` - 差异分类
-    ///
-    /// # 返回
-    /// 返回无证据引用的创建数据。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(business_object_type: String, business_object_id: String, difference_type: String) -> Self {
         Self {
             business_object_type,
@@ -103,20 +92,12 @@ pub struct ReconciliationDifference {
 impl ReconciliationDifference {
     /// 创建对账差异。
     ///
-    /// 完成对象类型、对象 ID 与差异分类的校验和规范化（去首尾空白、非空、长度上限），
-    /// 并强制不变式：差异必须至少引用一侧不可变证据（来源缺失侧允许为空）。
+    /// 完成对象类型、对象 ID 与差异分类的校验和规范化（去首尾空白、非空、长度上限），并强制不变式：差异必须至少引用一侧不可变证据（来源缺失侧允许为空）。
     /// 差异发现时间由 `BaseModel.created_at` 承载，创建后不可修改、不设业务软删除。
     ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::ReconciliationDifferenceId`）
-    /// * `data` - 创建数据
+    /// 对象类型、对象 ID 或差异分类为空或超长，证据引用超长，两侧证据都为空，或处理人/组织为空、为 `me`/`company` 占位或超长时返回领域校验错误。
     ///
-    /// # 返回
-    /// 返回新建的对账差异实体。
-    ///
-    /// # 错误
-    /// 对象类型、对象 ID 或差异分类为空或超长，证据引用超长，两侧证据都为空，
-    /// 或处理人/组织为空、为 `me`/`company` 占位或超长时返回领域校验错误。
+    /// `id` 为实体主键（`erp_core::ids::ReconciliationDifferenceId`）。
     pub fn new(id: ReconciliationDifferenceId, data: ReconciliationDifferenceData) -> Result<Self> {
         let business_object_type = normalize_required_text(
             data.business_object_type,
@@ -160,17 +141,9 @@ impl ReconciliationDifference {
         })
     }
 
-    /// 改派当前处理人，并同步其有效内部组织。
+    /// 改派当前处理人，并同步其有效内部组织。处理人或组织为空、为 `me`/`company` 占位或超长时返回错误。
     ///
-    /// # 参数
-    /// * `owner_user_id` - 合格内部处理人
-    /// * `owner_org_unit_id` - 处理人当前有效内部组织
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 处理人或组织为空、为 `me`/`company` 占位或超长时返回错误。
+    /// `owner_org_unit_id` 为处理人当前有效内部组织。
     pub fn reassign_handler(&mut self, owner_user_id: String, owner_org_unit_id: String) -> Result<()> {
         self.owner_user_id = require_handler_user_id(owner_user_id)?;
         self.owner_org_unit_id = require_handler_org_unit_id(owner_org_unit_id)?;
@@ -179,17 +152,9 @@ impl ReconciliationDifference {
 
     /// 判断差异分类是否表示潜在资金影响。
     ///
-    /// 固定关键词覆盖金额、资金、支付、退款、余额、应收和应付差异；匹配
-    /// 不区分大小写，供终态证据策略选择财务补偿要求。
+    /// 固定关键词覆盖金额、资金、支付、退款、余额、应收和应付差异；匹配不区分大小写，供终态证据策略选择财务补偿要求。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 差异分类包含任一固定资金关键词时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn has_financial_impact(&self) -> bool {
         let value = self.difference_type.to_ascii_lowercase();
         ["amount", "fund", "payment", "refund", "balance", "receivable", "payable"]
@@ -198,7 +163,7 @@ impl ReconciliationDifference {
     }
 }
 
-/// 规范化并拒绝 `"me"` 占位的处理人 ID。
+// 规范化并拒绝 `"me"` 占位的处理人 ID。
 fn require_handler_user_id(raw: String) -> Result<String> {
     let owner = normalize_required_text(raw, "处理人不能为空", OWNER_USER_ID_MAX_LEN, "处理人过长")?;
     reject_me_handler(&owner)?;

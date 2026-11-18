@@ -12,14 +12,10 @@ use crate::{Error, Result};
 impl SupplierImportProcess {
     /// 返回任务中失败、待确认或停止后尚未执行的行，供修正重导。
     ///
-    /// # 参数
-    /// * `id` - 导入任务主键。
-    /// * `actor` - 当前操作人，必须是原提交人。
+    /// `id`：导入任务主键；`actor`：当前操作人，必须是原提交人。
     ///
-    /// # 返回
     /// 返回尚未成功或跳过的源行，以及对应的失败说明。
     ///
-    /// # 错误
     /// 任务不存在、不是原提交人或不是供应商导入、任务尚未结束、源数据不可读或不完整，或仓储失败时返回错误。
     pub async fn failures(&self, id: &str, actor: &AuditActor) -> Result<SupplierImportFailures> {
         let job = self.job_access.snapshot(id, actor).await?;
@@ -47,7 +43,7 @@ impl SupplierImportProcess {
     }
 }
 
-/// 已授权任务仅在终态允许下载。
+// 已授权任务仅在终态允许下载。
 fn ensure_download(job: &BackgroundJob) -> Result<()> {
     if job.finished_at.is_none() {
         return Err(Error::ConflictError("请等待任务结束后下载待处理行".into()));
@@ -55,7 +51,7 @@ fn ensure_download(job: &BackgroundJob) -> Result<()> {
     Ok(())
 }
 
-/// 仅输出尚未成功或跳过的源行。
+// 仅输出尚未成功或跳过的源行。
 fn failure_rows(
     source: &SupplierImportJobRequest,
     items: Vec<BackgroundJobItem>,

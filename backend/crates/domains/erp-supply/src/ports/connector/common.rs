@@ -46,13 +46,8 @@ pub enum SourceRevision {
 
 impl SourceRevision {
     /// 比较同一连接、对象及字段组的来源版本；调用方必须先核对这三个边界。
-    ///
-    /// # 参数
-    /// `previous` 为同一比较边界内已保存的来源版本。
-    /// # 返回
     /// 可证明的新旧/相等关系；无版本、不同 scope 或不等令牌返回 None，必须补查或转人工。
-    /// # 错误
-    /// 不返回错误；None 不得解释为更新。
+    /// None 不得解释为更新。
     pub fn compare(&self, previous: &Self) -> Option<Ordering> {
         match (self, previous) {
             (Self::Sequence { scope, value }, Self::Sequence { scope: old_scope, value: old })

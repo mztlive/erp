@@ -71,12 +71,9 @@ pub struct SupplierDeploymentConfig {
 /// 服务端不透明引用注册表端口。
 pub trait SupplierReferenceRegistry: Send + Sync {
     /// 读取当前部署提供的完整能力描述，未知不能用空能力对象冒充。
-    /// # 参数
-    /// `target` 为服务端连接身份；不要求开启自动下单。
-    /// # 返回
     /// 无敏感资料的实际接口与执行要求。
-    /// # 错误
     /// 未装配或描述不可用时明确拒绝。
+    /// `target` 为服务端连接身份；不要求开启自动下单。
     fn description(
         &self,
         _target: &SupplierReferenceTarget,
@@ -88,11 +85,7 @@ pub trait SupplierReferenceRegistry: Send + Sync {
         })
     }
     /// 读取适配器实际提供的操作，不以历史数据库能力记录为依据。
-    /// # 参数
-    /// `target` 为服务端读取的连接身份。
-    /// # 返回
     /// 适配器的只读能力清单。
-    /// # 错误
     /// 未装配适配器时返回明确错误。
     fn capabilities(
         &self,
@@ -102,11 +95,7 @@ pub trait SupplierReferenceRegistry: Send + Sync {
     }
 
     /// 按后台身份取得当前部署配置，无需用户选择地址或凭据。
-    /// # 参数
-    /// `target` 是服务器读取的连接身份。
-    /// # 返回
     /// 仅供后端绑定及失效检测的配置引用。
-    /// # 错误
     /// 配置未登记或类型不支持时明确拒绝。
     fn deployment_config(
         &self,
@@ -120,23 +109,11 @@ pub trait SupplierReferenceRegistry: Send + Sync {
     }
 
     /// 判断当前进程是否已注入权威注册表。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 已注入权威注册表时为 `true`，否则为 `false`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     fn is_available(&self) -> bool;
 
     /// 列出适用于当前后台连接的可绑定配置。
-    /// # 参数
-    /// `kind` 为配置种类，`target` 来自本次读取的后台连接记录。
-    /// # 返回
     /// 安全别名及短时票据；未装配目录时返回空列表。
-    /// # 错误
     /// 配置目录不可用或票据签发失败时返回分类错误。
     fn options<'a>(
         &'a self,
@@ -148,16 +125,7 @@ pub trait SupplierReferenceRegistry: Send + Sync {
     }
 
     /// 解析服务端签发的短时引用；实现必须校验目标身份、种类、用途和有效期。
-    ///
-    /// # 参数
-    /// * `kind` - 引用种类。
-    /// * `payload_reference` - 服务端签发的短时引用。
-    /// * `target` - 本次命令预检的目标连接及供应商。
-    ///
-    /// # 返回
     /// 校验通过时返回仅供后端配置写入的 `ResolvedSupplierReference`。
-    ///
-    /// # 错误
     /// 目标身份、种类、用途或有效期不通过时返回 `ClassifiedError`。
     fn resolve<'a>(
         &'a self,

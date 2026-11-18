@@ -26,20 +26,15 @@ use crate::repository::sales_selection::{
 use crate::{Error, Result};
 
 impl SalesSelectionService {
-    /// 查询方案列表（执行器与已解析范围注入）。
+    /// 在调用方已解析的授权范围和读取边界内查询方案列表，分页不绕开来源限制。
     ///
     /// 调用方先通过统一授权查询生成范围；计数与取数使用同一条件，交付前由调用方复验。
-    ///
-    /// # 参数
-    /// * `params` - 筛选
-    /// * `authorized_scope` - 已解析的方案责任范围
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回分页。
-    ///
-    /// # 错误
     /// 查询失败。
+    ///
+    /// 输入约定：
+    /// - `params`：筛选
+    /// - `authorized_scope`：已解析的方案责任范围
     pub async fn proposal_list_with(
         &self,
         params: &SalesSelectionProposalListParams,
@@ -66,20 +61,15 @@ impl SalesSelectionService {
         })
     }
 
-    /// 分页列出选品册（执行器与已解析范围注入）。
+    /// 用注入的执行器和已解析责任范围分页读取选品册，保持授权与业务筛选在同一次查询。
     ///
     /// 调用方先通过统一授权查询生成范围；本方法只执行条件，交付前由调用方复验。
-    ///
-    /// # 参数
-    /// * `params` - 筛选与分页参数
-    /// * `authorized_scope` - 已解析的选品责任范围
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回列表页。
-    ///
-    /// # 错误
     /// 排序非法或查询失败时拒绝。
+    ///
+    /// 输入约定：
+    /// - `params`：筛选与分页参数
+    /// - `authorized_scope`：已解析的选品责任范围
     pub async fn list_booklets_with(
         &self,
         params: &SalesSelectionBookletListParams,
@@ -114,20 +104,14 @@ impl SalesSelectionService {
         })
     }
 
-    /// 组装详情视图。
+    /// 组装册详情前加载有效陈列和对应准备任务，以便在同一执行器返回当前结果和准备状态。
     ///
     /// 组合层授权快照与写命令经本入口复用同一映射；公开页不走本入口。
-    ///
-    /// # 参数
-    /// * `booklet` - 选品册
-    /// * `batch_id` - 指定批次；为空使用当前批次
-    /// * `executor` - 执行器
-    ///
-    /// # 返回
-    /// 返回详情视图。
-    ///
-    /// # 错误
     /// 无可预览批次时拒绝。
+    ///
+    /// 输入约定：
+    /// - `booklet`：选品册
+    /// - `batch_id`：指定批次；为空使用当前批次
     pub async fn detail_view(
         &self,
         booklet: &SalesSelectionBooklet,
@@ -153,17 +137,12 @@ impl SalesSelectionService {
         Ok(view)
     }
 
-    /// 读取活动任务。
-    ///
-    /// # 参数
-    /// * `booklet` - 选品册
-    /// * `executor` - 执行器
-    ///
-    /// # 返回
-    /// 有活动任务时返回该任务。没有活动任务且当前结果批次没有可汇总任务，或活动任务已不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// 查询失败时返回仓储错误。
+    // 查询册详情时定位正在运行或排队的准备任务，供前台轮询进度。
+    // 结果：有活动任务时返回该任务。没有活动任务且当前结果批次没有可汇总任务，或活动任务已不存在时返回 `None`。
+    // 查询失败时返回仓储错误。
+    //
+    // 输入约定：
+    // - `booklet`：选品册
     pub(super) async fn active_task_of(
         &self,
         booklet: &SalesSelectionBooklet,
@@ -180,19 +159,14 @@ impl SalesSelectionService {
         Ok(self.db.sales_selection_prepare_tasks().find_by_id(task_id, executor).await?)
     }
 
-    /// 读取内部会话快照。
+    /// 管理端需要内部选择快照时，用当前执行器读取该册会话及其已保存选择。
     ///
     /// 组合层已在调用方事务内完成对象重验；本方法只组装视图。
-    ///
-    /// # 参数
-    /// * `booklet_id` - 选品册
-    /// * `executor` - 执行器
-    ///
-    /// # 返回
     /// 返回当前会话选择。
+    /// 失败条件：无会话时返回未找到。
     ///
-    /// # 错误
-    /// 无会话时返回未找到。
+    /// 输入约定：
+    /// - `booklet_id`：选品册
     pub async fn session_of(
         &self,
         booklet_id: &str,
@@ -224,19 +198,13 @@ impl SalesSelectionService {
         })
     }
 
-    /// 组装方案视图。
+    /// 查询单份选品方案时加载冻结陈列行和 SKU 行，再投影为详情响应。
     ///
     /// 组合层授权快照与写命令经本入口复用同一映射。
-    ///
-    /// # 参数
-    /// * `proposal` - 方案表头
-    /// * `executor` - 执行器
-    ///
-    /// # 返回
-    /// 返回方案视图。
-    ///
-    /// # 错误
     /// 查询失败时返回仓储错误。
+    ///
+    /// 输入约定：
+    /// - `proposal`：方案表头
     pub async fn proposal_view_of(
         &self,
         proposal: &SalesSelectionProposal,
@@ -251,17 +219,13 @@ impl SalesSelectionService {
     }
 }
 
-/// 由列表参数与已解析范围构造仓储过滤。
-///
-/// # 参数
-/// * `params` - 列表参数
-/// * `authorized_scope` - 调用方事务内已证明的责任范围
-///
-/// # 返回
-/// 返回仓储过滤，排序默认创建时间倒序。
-///
-/// # 错误
-/// 排序字段非法时拒绝。
+// 由列表参数与已解析范围构造仓储过滤。
+// 返回仓储过滤，排序默认创建时间倒序。
+// 排序字段非法时拒绝。
+//
+// 输入约定：
+// - `params`：列表参数
+// - `authorized_scope`：调用方事务内已证明的责任范围
 fn booklet_filter(params: &SalesSelectionBookletListParams) -> Result<SelectionBookFilter> {
     let (sort_by, ascending) = validate_book_sort(None, false)?;
     Ok(SelectionBookFilter {
@@ -279,7 +243,7 @@ fn booklet_filter(params: &SalesSelectionBookletListParams) -> Result<SelectionB
     })
 }
 
-/// 当前批次按每档最近成功任务汇总报告，按档重生成不丢失其他档结果。
+// 组装当前批次档位报告时逐档取最近成功结果，保证某档重生成不抹掉其他档位的报告。
 fn merge_task_reports(mut tasks: Vec<SalesSelectionPrepareTask>) -> Option<SalesSelectionPrepareTask> {
     tasks.sort_by(|a, b| b.finished_at.cmp(&a.finished_at).then_with(|| b.base.id.cmp(&a.base.id)));
     let mut tasks = tasks.into_iter();

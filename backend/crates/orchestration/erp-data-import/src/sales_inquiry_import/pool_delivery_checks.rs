@@ -5,13 +5,13 @@ use erp_sales::entity::sales_inquiry_pool::{POOL_DELIVERY_HEADERS, PoolTemplateV
 
 use super::parse::{DELIVERY_SHEET, Row, issue};
 
-/// 校验并移除不参与业务写入的数量核对列。
-/// # 参数
-/// `rows` 为配送页原始行，`version` 决定已发布辅助列，`errors` 接收格式错误。
-/// # 返回
-/// 原地保留既有十二列配送明细。
-/// # 错误
-/// 非约定表头或额外字段登记逐行错误，阻止后续确认；辅助公式不参与校验。
+// 校验并移除不参与业务写入的数量核对列。
+//
+// `rows` 为配送页原始行，`version` 决定已发布辅助列，`errors` 接收格式错误。
+//
+// 原地保留既有十二列配送明细。
+//
+// 非约定表头或额外字段登记逐行错误，阻止后续确认；辅助公式不参与校验。
 pub(super) fn strip_checks(
     rows: &mut [Row],
     version: PoolTemplateVersion,

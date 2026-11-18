@@ -57,16 +57,7 @@ pub struct ProductCategoryFilter {
 }
 
 impl Default for ProductCategoryFilter {
-    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回第 1 页、每页 20 条的空筛选条件。
-    ///
-    /// # 错误
-    /// 无。
+    // 商品分类列表未传筛选时默认第 1 页、每页 20 条，不另加筛选条件。
     fn default() -> Self {
         let (page, page_size, sort_by, sort_ascending) = default_paging();
         Self {
@@ -84,20 +75,12 @@ impl Default for ProductCategoryFilter {
 }
 
 impl QueryFilter for ProductCategoryFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。始终写入未删除的 `deleted_at`。`category_code` 有值时精确匹配；
-    /// `name` 有值时按字面量正则匹配；`status` 有值时按稳定代码精确匹配。
-    /// `parent_category_id` 为 `Some(Some(id))` 时匹配该父节点，为 `Some(None)` 时匹配 BSON `null`，
-    /// 为 `None` 时不加父节点条件。`q` 为 `Some` 时对 `category_code` 与 `name` 各写字面量正则，
-    /// 再以 `$or` 并入。分页与排序字段不进入条件。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 将商品分类筛选条件编译为 MongoDB 查询，排除软删除记录。
+    //
+    // 始终写入未删除的 `deleted_at`。`category_code` 有值时精确匹配；`name` 有值时按字面量正则匹配；`status`
+    // 有值时按稳定代码精确匹配。`parent_category_id` 为 `Some(Some(id))` 时匹配该父节点，为 `Some(None)` 时匹配
+    // BSON `null`，为 `None` 时不加父节点条件。`q` 为 `Some` 时对 `category_code` 与 `name` 各写字面量正则，再以
+    // `$or` 并入。分页与排序字段不进入条件。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(code) = &self.category_code {
@@ -132,16 +115,7 @@ impl QueryFilter for ProductCategoryFilter {
 }
 
 impl Pagination for ProductCategoryFilter {
-    /// 返回商品分类列表的页码与单页条数，不做页码归一或条数钳制。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组：第一项为 `page`，第二项为 `page_size` 转成的 `u64`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 读取商品分类列表的页码与单页条数，不做页码归一或条数限制。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -152,31 +126,20 @@ impl Pagination for ProductCategoryFilter {
 pub trait ProductCategoryRepositoryExt {
     /// 判断指定分类是否存在未删除的直接子分类。
     ///
-    /// 查询使用存在性投影并在首条命中后停止；通用 Repository 会自动追加
-    /// 未删除条件，避免为删除前置校验加载完整子分类集合。
+    /// 查询使用存在性投影并在首条命中后停止；通用 Repository 会自动追加未删除条件，避免为删除前置校验加载完整子分类集合。
     ///
-    /// # 参数
-    /// * `parent_category_id` - 待检查的父分类 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 存在至少一个未删除直接子分类时返回 `true`。当 MongoDB 查询失败时返回错误。
     ///
-    /// # 返回
-    /// 存在至少一个未删除直接子分类时返回 `true`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
+    /// 沿用调用方传入的执行器。
     async fn has_children(&self, parent_category_id: &str, executor: &mut dyn Executor) -> Result<bool>;
 
     /// 按稳定主键批量查询商品分类。
     ///
-    /// # 参数
-    /// * `ids` - 商品分类稳定 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回匹配的未删除商品分类实体；输入为空时返回空集合。当 MongoDB 查询或反序列化失败时返回错误。
     ///
-    /// # 返回
-    /// 返回匹配的未删除商品分类实体；输入为空时返回空集合。
+    /// 沿用调用方传入的执行器。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    /// `ids` 为商品分类稳定 ID 集合。
     async fn find_by_ids(
         &self,
         ids: &[ProductCategoryId],
@@ -185,18 +148,11 @@ pub trait ProductCategoryRepositoryExt {
 
     /// 批量读取采购责任解析或规则展示引用的商品分类。
     ///
-    /// 采购责任展示入口的历史名称，语义与 [`Self::find_by_ids`] 完全一致；
-    /// 保留本方法以避免展示层调用方改名，仅委托属主批量查询，不重复实现查询。
+    /// 采购责任展示入口的历史名称，语义与 [`Self::find_by_ids`] 完全一致；保留本方法以避免展示层调用方改名，仅委托属主批量查询，不重复实现查询。
     ///
-    /// # 参数
-    /// * `category_ids` - 商品分类 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回全部匹配且未删除的商品分类；输入为空时返回空集合。当 MongoDB 查询或反序列化失败时返回错误。
     ///
-    /// # 返回
-    /// 返回全部匹配且未删除的商品分类；输入为空时返回空集合。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    /// 沿用调用方传入的执行器。
     async fn list_procurement_responsibility_categories(
         &self,
         category_ids: &[ProductCategoryId],
@@ -207,15 +163,9 @@ pub trait ProductCategoryRepositoryExt {
     ///
     /// 只封装存在性事实，不判断规则引用合法性。
     ///
-    /// # 参数
-    /// * `category_id` - 商品分类稳定 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 存在且未删除时返回 `true`。当 MongoDB 查询失败时返回错误。
     ///
-    /// # 返回
-    /// 存在且未删除时返回 `true`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
+    /// 沿用调用方传入的执行器。
     async fn has_procurement_responsibility_category(
         &self,
         category_id: &ProductCategoryId,
@@ -227,15 +177,9 @@ pub trait ProductCategoryRepositoryExt {
     /// 只返回 [`ProductCategoryRow`] 所需的列表字段，不加载整文档；
     /// 排序字段白名单化（`created_at`/`category_code`/`name`）。
     ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回当前页投影行与满足筛选条件的总数。当 MongoDB 查询、游标读取或计数失败时返回错误。
     ///
-    /// # 返回
-    /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// 沿用调用方传入的执行器。
     async fn search_product_categories(
         &self,
         filter: &ProductCategoryFilter,
@@ -244,15 +188,11 @@ pub trait ProductCategoryRepositoryExt {
 
     /// 查询指定父分类的直接子节点（投影行，按分类代码升序）。
     ///
-    /// # 参数
-    /// * `parent_category_id` - 父分类；`None` 表示查询根分类
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回子分类投影行集合。当 MongoDB 查询失败时返回错误。
     ///
-    /// # 返回
-    /// 返回子分类投影行集合。
+    /// 沿用调用方传入的执行器。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
+    /// `parent_category_id` 为父分类；`None` 表示查询根分类。
     async fn find_children(
         &self,
         parent_category_id: Option<&str>,
@@ -317,7 +257,7 @@ impl ProductCategoryRepositoryExt for persistence_core::Repository<'_, ProductCa
     }
 }
 
-/// 层序批量查询一批父分类的直接子节点（`$in`，一次取回）。
+// 层序批量查询一批父分类的直接子节点（`$in`，一次取回）。
 async fn find_children_of(
     repo: &persistence_core::Repository<'_, ProductCategory>,
     parent_ids: &[String],
@@ -355,17 +295,9 @@ pub struct ProductCategoryAttributeFilter {
 }
 
 impl QueryFilter for ProductCategoryAttributeFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。始终写入未删除的 `deleted_at`；`category_id` 有值时精确匹配。
-    /// 分页与排序字段不进入条件。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 将分类规格关系筛选条件编译为 MongoDB 查询，排除软删除记录。
+    //
+    // 始终写入未删除的 `deleted_at`；`category_id` 有值时精确匹配。分页与排序字段不进入条件。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(category_id) = &self.category_id {
@@ -376,34 +308,21 @@ impl QueryFilter for ProductCategoryAttributeFilter {
 }
 
 impl Pagination for ProductCategoryAttributeFilter {
-    /// 返回分类与属性适用关系列表的页码与单页条数，不做页码归一或条数钳制。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组：第一项为 `page`，第二项为 `page_size` 转成的 `u64`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 读取分类与属性适用关系列表的页码与单页条数，不做页码归一或条数限制。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
 }
 
-/// 构建商品分类排序文档（白名单：`created_at`/`category_code`/`name`）。
-///
-/// # 参数
-/// * `sort_by` - 排序字段；非法或缺失时默认 `created_at`
-/// * `sort_ascending` - 升序为 `true`，降序为 `false`
-///
-/// # 返回
-/// 返回排序条件文档。
+// 构建商品分类排序文档（白名单：`created_at`/`category_code`/`name`）。
+//
+// - `sort_by`：排序字段；非法或缺失时默认 `created_at`。
+// - `sort_ascending`：升序为 `true`，降序为 `false`。
 fn product_category_sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
     sort_doc(whitelisted_sort(sort_by, PRODUCT_CATEGORY_SORT_FIELDS), sort_ascending)
 }
 
-/// 商品分类列表投影字段。
+// 商品分类列表投影字段。
 fn product_category_projection() -> Document {
     doc! {
         "id": 1,

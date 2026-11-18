@@ -10,15 +10,15 @@ pub enum ProcessRole {
 }
 
 impl ProcessRole {
-    /// 判断是否启动 HTTP 业务路由。
+    // 供启动装配识别 Web API 角色，只有该角色挂载业务 HTTP 路由。
     pub(crate) fn serves_api(self) -> bool {
         self == Self::Api
     }
-    /// 判断是否启动常驻任务。
+    // 供启动和调度配置校验识别独立 Worker，避免 API 进程领取后台工作。
     pub(crate) fn runs_workers(self) -> bool {
         self == Self::Worker
     }
-    /// 返回默认 telemetry 服务标识。
+    // 按二进制角色选择默认 telemetry 服务名，便于区分 API 和 Worker 的日志与追踪。
     pub(crate) fn service_name(self) -> &'static str {
         match self {
             Self::Api => "erp-web-api",

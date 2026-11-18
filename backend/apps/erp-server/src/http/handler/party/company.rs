@@ -10,9 +10,10 @@ use crate::http::extractor::{Json, Query};
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
-/// 查询公司列表。
+/// 按请求条件查询公司列表。
 ///
 /// # Errors
+///
 /// 查询失败时返回统一错误。
 pub async fn company_list(
     State(state): State<HttpState>,
@@ -25,6 +26,7 @@ pub async fn company_list(
 /// 回显指定公司。
 ///
 /// # Errors
+///
 /// 公司不存在或查询失败时返回统一错误。
 pub async fn company_detail(
     State(state): State<HttpState>,
@@ -37,6 +39,7 @@ pub async fn company_detail(
 /// 创建公司身份及名称修订。
 ///
 /// # Errors
+///
 /// 校验、冲突或事务错误按标准合同返回。
 pub async fn company_create(
     State(state): State<HttpState>,
@@ -49,6 +52,7 @@ pub async fn company_create(
 /// 更新公司身份与启停状态。
 ///
 /// # Errors
+///
 /// 校验、版本冲突或事务错误按标准合同返回。
 pub async fn company_update(
     State(state): State<HttpState>,

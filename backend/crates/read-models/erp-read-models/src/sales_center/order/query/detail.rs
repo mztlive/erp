@@ -40,11 +40,14 @@ struct DetailPresentation {
 }
 
 impl SalesOrderReadService {
-    /// 在同一授权快照中读取销售单及完整关联详情。
+    /// 准备销售详情时，在同一授权快照中读取销售单及完整关联详情。
+    ///
     /// # 参数
     /// id 为销售身份；actor 必须是当前已认证账号。
+    ///
     /// # 返回
     /// 完整详情，所有数据库事实均来自同一快照。
+    ///
     /// # 错误
     /// 缺少身份、无详情资格、事实读取或交付检查失败时拒绝。
     pub async fn sales_order_detail(
@@ -87,12 +90,15 @@ impl SalesOrderReadService {
             .await
     }
 
-    /// 在调用方快照中按实际命令资格重新授权并读取结果。
+    /// 读取销售详情时，在调用方快照中按实际命令资格重新授权并读取结果。
+    ///
     /// # 参数
     /// id、actor 为真实销售单和当前账号；permission 为该命令固定的记录权限，
     /// 创建回包使用 SALES_CREATED_RESULT_READ；executor 为活动快照执行器。
+    ///
     /// # 返回
     /// 同一快照的完整结果；不会追加详情菜单资格。
+    ///
     /// # 错误
     /// 非快照执行器、非销售权限、记录无权、读取或最终授权失败时拒绝。
     pub async fn command_detail(
@@ -123,7 +129,7 @@ impl SalesOrderReadService {
         Ok(view)
     }
 
-    /// 全部投影共用调用方快照；子查询在各自阶段完成交付。
+    // 生成销售详情视图时，全部投影共用调用方快照；子查询在各自阶段完成交付。
     async fn detail_view(
         &self,
         order: SalesOrder,
@@ -141,7 +147,7 @@ impl SalesOrderReadService {
         Ok(view)
     }
 
-    /// 仅读取已授权销售单自身凭证的安全元数据。
+    // 处理销售详情时，仅读取已授权销售单自身凭证的安全元数据。
     async fn evidence_files(
         &self,
         order: &SalesOrder,
@@ -159,7 +165,7 @@ impl SalesOrderReadService {
             .collect())
     }
 
-    /// 按原顺序读取采购资格、审批工作面、责任人、变更资格和审批结构。
+    // 依据原顺序读取采购资格、审批工作面、责任人、变更资格和审批结构。
     async fn detail_presentation(
         &self,
         order: &SalesOrder,
@@ -216,7 +222,7 @@ impl SalesOrderReadService {
         })
     }
 
-    /// 批量补齐负责销售与阶段责任人姓名，保留原阶段与时限计算。
+    // 处理销售详情时，批量补齐负责销售与阶段责任人姓名，保留原阶段与时限计算。
     async fn detail_stage(
         &self,
         order: &SalesOrder,
@@ -249,7 +255,7 @@ impl SalesOrderReadService {
         ))
     }
 
-    /// 只按当前生效版本查询进行中的销售变更；无当前版本时保持无变更。
+    // 处理销售详情时，只按当前生效版本查询进行中的销售变更；无当前版本时保持无变更。
     async fn has_active_sales_change(&self, order: &SalesOrder, executor: &mut dyn Executor) -> Result<bool> {
         let Some(revision_id) = order.current_revision_id() else {
             return Ok(false);
@@ -267,7 +273,7 @@ impl SalesOrderReadService {
 }
 
 impl SalesOrderDetailView {
-    /// 将已授权事实映射为原详情合同，金额和结案资格继续由原领域事实计算。
+    // 生成销售详情视图时，将已授权事实映射为原详情合同，金额和结案资格继续由原领域事实计算。
     fn from_facts(order: SalesOrder, facts: DetailFacts, presentation: DetailPresentation) -> Self {
         let close_eligibility = close_eligibility_view(order.closure_facts().assess(
             facts.receivable_summary.has_accounts(),
@@ -329,7 +335,7 @@ mod tests {
 
     use super::*;
 
-    /// 不可用数据库仅用于证明拒绝路径不会触发业务读取。
+    // 处理销售详情时，不可用数据库仅用于证明拒绝路径不会触发业务读取。
     async fn service() -> SalesOrderReadService {
         let client = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
             .await

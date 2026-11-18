@@ -54,18 +54,10 @@ impl Default for WorkingCopyFilter {
 }
 
 impl QueryFilter for WorkingCopyFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// 有销售单时按 `sales_order_id` 等值过滤；有编辑目的或草稿状态时写入对应稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 转换为 MongoDB 查询条件（自动追加未删除过滤）。
+    //
+    // 有销售单时按 `sales_order_id` 等值过滤；有编辑目的或草稿状态时写入对应稳定代码。
+    // 返回查询条件文档。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(sales_order_id) = &self.sales_order_id {
@@ -82,16 +74,7 @@ impl QueryFilter for WorkingCopyFilter {
 }
 
 impl Pagination for WorkingCopyFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 向仓储分页器交付筛选中的页码与每页条数。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -104,17 +87,13 @@ pub trait SalesOrderWorkingCopyRepositoryExt {
     ///
     /// 「同一销售单和编辑目的同时最多一个有效工作副本」由部分唯一索引
     /// `uk_sales_order_working_copies_active_per_purpose` 保证（数据模型 §6.5）。
-    ///
-    /// # 参数
-    /// * `sales_order_id` - 稳定销售单
-    /// * `working_purpose` - 编辑目的
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回有效工作副本；无匹配时返回 `None`。
+    /// 传播数据库查询失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
+    /// 输入约定：
+    /// - `sales_order_id`：稳定销售单
+    /// - `working_purpose`：编辑目的
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn find_active_by_order_and_purpose(
         &self,
         sales_order_id: &SalesOrderId,
@@ -123,16 +102,12 @@ pub trait SalesOrderWorkingCopyRepositoryExt {
     ) -> Result<Option<SalesOrderWorkingCopy>>;
 
     /// 按销售变更单查找其绑定的工作副本。
-    ///
-    /// # 参数
-    /// * `sales_change_order_id` - 销售变更单
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回绑定的销售变更工作副本；无匹配时返回 `None`。
+    /// 传播数据库查询失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
+    /// 输入约定：
+    /// - `sales_change_order_id`：销售变更单
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn find_by_sales_change_order(
         &self,
         sales_change_order_id: &SalesChangeOrderId,
@@ -143,17 +118,13 @@ pub trait SalesOrderWorkingCopyRepositoryExt {
     ///
     /// 优先返回仍处于有效编辑态的副本；撤回后无有效副本时回退到该变更单已绑定的
     /// 已提交副本，以保持提交序号递增而不复制草稿。
-    ///
-    /// # 参数
-    /// * `sales_order_id` - 原销售单
-    /// * `sales_change_order_id` - 销售变更单
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回可再次提交的工作副本；两种来源均不存在时返回 `None`。
+    /// 传播数据库查询失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
+    /// 输入约定：
+    /// - `sales_order_id`：原销售单
+    /// - `sales_change_order_id`：销售变更单
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn find_resubmittable_sales_change_copy(
         &self,
         sales_order_id: &SalesOrderId,
@@ -235,16 +206,12 @@ pub(super) fn active_copy_filter(purpose: WorkingPurpose) -> Document {
 #[allow(async_fn_in_trait)]
 pub trait SalesOrderWorkingCopyLineRepositoryExt {
     /// 列出工作副本的全部明细行（按行号升序）。
-    ///
-    /// # 参数
-    /// * `working_copy_id` - 所属工作副本
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回按行号升序的明细行列表。
+    /// 传播数据库查询或游标读取失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 输入约定：
+    /// - `working_copy_id`：所属工作副本
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn list_lines_by_working_copy(
         &self,
         working_copy_id: &SalesOrderWorkingCopyId,
@@ -288,19 +255,15 @@ impl<'a> SalesOrderDomainRepository<'a> {
     /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction` 时
     /// 中途失败会留下没有提交头的明细或未锁定的草稿；Service 必须通过
     /// `persistence_core::Transactional::with_transaction` 传入事务会话。
-    ///
-    /// # 参数
-    /// * `working_copy` - 已迁移到 `Submitted` 的工作副本（成功后内存版本递增）
-    /// * `submission` - 不可变提交快照头
-    /// * `lines` - 不可变提交快照明细
-    /// * `executor` - 数据访问执行器，必须位于事务中
-    ///
-    /// # 返回
-    /// 提交头、明细写入且工作副本锁定成功时无返回值。
-    ///
-    /// # 错误
+    /// 结果：提交头、明细写入且工作副本锁定成功时无返回值。
     /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）、乐观锁冲突或
     /// MongoDB 写入失败时返回错误。
+    ///
+    /// 输入约定：
+    /// - `working_copy`：已迁移到 `Submitted` 的工作副本（成功后内存版本递增）
+    /// - `submission`：不可变提交快照头
+    /// - `lines`：不可变提交快照明细
+    /// - `executor`：数据访问执行器，必须位于事务中
     #[tracing::instrument(
         name = "repository.sales_order.submit_working_copy",
         skip_all,

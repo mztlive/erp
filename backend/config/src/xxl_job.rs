@@ -26,13 +26,8 @@ impl fmt::Debug for XxlJobConfig {
 }
 
 impl XxlJobConfig {
-    /// 校验调度连接与执行器身份。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 配置合法时成功。
-    /// # 错误
-    /// 缺少凭据、地址或执行器身份时拒绝。
+    /// 加载已提供的 XXL-JOB 配置时，检查调度中心和执行器地址、执行器应用名及访问令牌，
+    /// 在 Worker 尝试注册前发现无效配置。API 可省略这段配置，但提供时执行同样校验。
     pub fn validate(&self) -> Result<()> {
         validate_url(&self.admin_url, false)?;
         validate_url(&self.executor_url, true)?;
@@ -56,7 +51,8 @@ impl XxlJobConfig {
     }
 }
 
-/// 拒绝含凭据、查询和 fragment 的配置地址，执行器必须使用根路径。
+// 校验调度地址有主机、使用 HTTP(S) 且不含凭据、查询参数或片段；执行器必须用根路径，
+// 只有调度中心可带路径前缀。
 fn validate_url(value: &str, executor: bool) -> Result<()> {
     let invalid = || {
         Error::Invalid(

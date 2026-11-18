@@ -12,11 +12,10 @@ use crate::supplier_center::repository::offering::SupplierOfferingListQuery;
 use crate::{Error, Result};
 
 impl SupplierOfferingReadService {
-    /// 读取授权范围内一条供给的完整当前资料。
+    /// 处理供应商供给时，读取授权范围内一条供给的完整当前资料。
     ///
     /// # 参数
     /// * `id` - 供给稳定 ID
-    /// * `actor` - 已认证操作人
     ///
     /// # 返回
     /// 返回与列表同口径的当前资料，成本脱敏由 HTTP 边界执行。
@@ -36,7 +35,7 @@ impl SupplierOfferingReadService {
             .await
     }
 
-    /// 详情资格、根读取、展示补齐与原凭证交付检查共享同一快照。
+    // 处理供应商供给时，详情资格、根读取、展示补齐与原凭证交付检查共享同一快照。
     async fn detail_snapshot(
         &self,
         id: &str,

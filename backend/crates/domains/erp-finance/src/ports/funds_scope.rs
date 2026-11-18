@@ -11,20 +11,14 @@ use crate::{Error, Result};
 #[async_trait]
 pub trait FundsDataScopePort: Send + Sync {
     /// 展开请求中的组织及其可选下级。
-    ///
-    /// # 参数
-    /// * `org_unit_ids` - 请求中的组织 ID
-    /// * `include_descendants` - 是否包含有效下级
-    /// * `executor` - 与授权相同的执行器
-    ///
-    /// # 返回
     /// 返回启用节点的组织 ID 集合。
+    /// 失败条件：未知组织拒绝，不得忽略后查询全部组织。
+    /// 业务边界：筛选只能收窄授权结果；不得把完整组织树交给资金域自行重建。
     ///
-    /// # 错误
-    /// 未知组织拒绝，不得忽略后查询全部组织。
-    ///
-    /// # 关键业务约束
-    /// 筛选只能收窄授权结果；不得把完整组织树交给资金域自行重建。
+    /// 输入约定：
+    /// - `org_unit_ids`：请求中的组织 ID
+    /// - `include_descendants`：是否包含有效下级
+    /// - `executor`：与授权相同的执行器
     async fn expand_org_units(
         &self,
         org_unit_ids: &[String],
@@ -38,12 +32,7 @@ pub trait FundsDataScopePort: Send + Sync {
 pub struct FailClosedFundsDataScopePort;
 impl FailClosedFundsDataScopePort {
     /// 返回未装配的共享组织事实端口。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 所有事实读取均失败的端口。
-    /// # 错误
-    /// 不执行 I/O。
+    /// 结果：所有事实读取均失败的端口。
     pub fn shared() -> Arc<dyn FundsDataScopePort> {
         Arc::new(Self)
     }

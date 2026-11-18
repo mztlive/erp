@@ -11,13 +11,8 @@ use serde::de::DeserializeOwned;
 use crate::executor::session;
 use crate::{Executor, Result};
 
-/// 执行聚合并解码目标投影。
-/// # 参数
-/// collection 为集合；pipeline 为完整管道；executor 为当前事务。
-/// # 返回
-/// 数据库聚合结果。
-/// # 错误
-/// 查询或解码失败时返回错误。
+/// 用调用方的执行器运行仓储组装的完整聚合管道，收集并解码所有结果。事务游标继续借原会话，不结束当前读取阶段；
+/// 查询、取数或解码失败向上返回。
 pub async fn rows<T: DeserializeOwned + Send + Sync>(
     collection: &Collection<T>,
     pipeline: Vec<Document>,
@@ -30,13 +25,8 @@ pub async fn rows<T: DeserializeOwned + Send + Sync>(
     })
 }
 
-/// 先执行关联和筛选，再执行排序、分页和投影。
-/// # 参数
-/// collection、filter、options 为仓储查询；prefix 为筛选前关联阶段；executor 为原事务。
-/// # 返回
-/// 最终条件内的结果。
-/// # 错误
-/// 数值超限、数据库或解码失败返回错误。
+/// 在仓储提供的关联阶段之后依次追加筛选、排序、分页和投影，让过滤看到关联后的数据且只分页最终匹配项。
+/// 沿用本次读取执行器；偏移超出 `i64` 或查询、解码失败时返回错误。
 pub async fn find<T: DeserializeOwned + Send + Sync>(
     collection: &Collection<T>,
     filter: Document,
@@ -67,13 +57,7 @@ struct Count {
     count: u64,
 }
 
-/// 在完整关联和筛选后计数。
-/// # 参数
-/// collection 为集合；filter 为最终条件；prefix 为关联阶段；executor 为原事务。
-/// # 返回
-/// 全部匹配记录数量。
-/// # 错误
-/// 数据库或解码失败返回错误。
+/// 为关联查询的分页统计复用同一前置管道和最终筛选，不应用分页；用原执行器计数，没有结果时返回零。
 pub async fn count<T: Send + Sync>(
     collection: &Collection<T>,
     filter: Document,

@@ -6,13 +6,8 @@ use persistence_core::{connect, ensure_transaction_support};
 
 use crate::error::Result;
 
-/// 登记四个新增集合及其唯一约束，不改历史合同、不回退流水。
-/// # 参数
-/// * `source` - 目标文件或 Nacos 配置来源。
-/// # 返回
-/// 迁移成功返回空值。
-/// # 错误
-/// 配置、事务能力或索引登记失败时返回非零。
+/// 开放合同申请前，先确认目标 MongoDB 支持事务，再调用合同域入口登记模板、主体编号绑定、
+/// 年度流水与申请记录的索引（含唯一约束）。本命令不修改历史合同或已有流水。
 pub async fn run(source: &ConfigArgs) -> Result<()> {
     let config = source.load().await?;
     let (_, db) = connect(&config.database.uri, &config.database.db_name).await?;

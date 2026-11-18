@@ -82,7 +82,8 @@ struct CommandIdentity<'a> {
     fingerprint: &'a str,
 }
 
-/// 已知路径目标先授权；创建回执先查资格，再按原结果定位真实供给授权。
+// 修订和可供更新先授权路径目标，再查命令；创建先检查当前创建资格，读取回执后按原结果 ID 另行授权真实供给。
+// 用同一执行器比对操作、指纹和目标；同键异载荷冲突，损坏或错目标回执不得返回成功。
 async fn replay<T: OfferingResult, P: CommandResultPort>(
     port: &P,
     actor: &AuditActor,
@@ -115,7 +116,7 @@ async fn replay<T: OfferingResult, P: CommandResultPort>(
     Ok(Replay::Stored(result))
 }
 
-/// 创建预检及提交结果恢复共用当前资格和原供给授权。
+// 供创建预检和提交结果未知后的恢复共用：先验证当前创建资格，再确认原创建结果对应的供给仍在当前范围内。
 pub(super) async fn created(
     service: &SupplierOfferingService,
     request: &CreateSupplierOfferingRequest,
@@ -137,7 +138,7 @@ pub(super) async fn created(
     .await
 }
 
-/// 修订预检及结果恢复均在读取回执前核验真实对象。
+// 修订预检和结果恢复都先按固定修订动作授权路径供给，再匹配原命令；未登记时把已授权供给交给后续准备步骤。
 pub(super) async fn revised(
     service: &SupplierOfferingService,
     id: &str,
@@ -160,7 +161,7 @@ pub(super) async fn revised(
     .await
 }
 
-/// 可供更新使用身份域固定的完整入口，不在业务层组合权限。
+// 使用身份域登记的可供更新动作授权路径供给，再恢复同一命令的原结果；不在领域代码内组合允许的权限。
 pub(super) async fn availability(
     service: &SupplierOfferingService,
     id: &str,
@@ -204,7 +205,7 @@ mod tests {
     }
 
     impl Recorder {
-        /// 所有资格、回执和对象读取均使用调用方原执行器。
+        // 所有资格、回执和对象读取均使用调用方原执行器。
         fn record(&self, name: String, executor: &mut dyn Executor) {
             assert_eq!(executor as *mut dyn Executor as *mut () as usize, self.pointer);
             self.calls.lock().unwrap().push(name);
@@ -277,7 +278,7 @@ mod tests {
         }
     }
 
-    /// 生产回放编排验证资格和对象授权，未执行写入。
+    // 生产回放编排验证资格和对象授权，未执行写入。
     async fn invoke(
         recorder: &Recorder,
         actor: &str,
@@ -300,7 +301,7 @@ mod tests {
         .await
     }
 
-    /// 当前创建资格撤销时，不读取命令回执或实际业务对象。
+    // 验证当前创建资格撤销时，不读取命令回执或实际业务对象。
     #[tokio::test]
     async fn create_replay_rejects_revoked_qualification_before_receipt_read() {
         let mut executor = ReadExecutor::default();
@@ -311,7 +312,7 @@ mod tests {
         assert_eq!(*recorder.calls.lock().unwrap(), ["qualify:actor"]);
     }
 
-    /// 创建回放定位原供给后核验当前对象范围，不能仅凭原载荷回包。
+    // 验证创建回放定位原供给后核验当前对象范围，不能仅凭原载荷回包。
     #[tokio::test]
     async fn create_replay_requires_the_persisted_offering_current_scope() {
         let mut executor = ReadExecutor::default();
@@ -325,7 +326,7 @@ mod tests {
         );
     }
 
-    /// 已知目标在读取回执前授权；未获授权的其他账号不能借用相同命令资料。
+    // 验证已知目标在读取回执前授权；未获授权的其他账号不能借用相同命令资料。
     #[tokio::test]
     async fn existing_target_replay_stops_before_receipt_for_unauthorized_actor() {
         let mut executor = ReadExecutor::default();
@@ -338,7 +339,7 @@ mod tests {
         );
     }
 
-    /// 已授权原结果可返回，回执目标必须与实际路径目标一致。
+    // 验证已授权原结果可返回，回执目标必须与实际路径目标一致。
     #[tokio::test]
     async fn current_authorized_replay_keeps_the_result_and_rejects_mismatched_target() {
         let mut executor = ReadExecutor::default();
@@ -358,7 +359,7 @@ mod tests {
             Err(Error::Internal(reason)) if reason == "供给命令回执与目标不匹配"));
     }
 
-    /// 没有回执时复用已授权对象，不再次解析相同快照中的资格和事实。
+    // 验证没有回执时复用已授权对象，不再次解析相同快照中的资格和事实。
     #[tokio::test]
     async fn missing_receipt_preserves_the_authorized_object_for_normal_write_preparation() {
         let mut executor = ReadExecutor::default();

@@ -7,19 +7,10 @@ use super::statement::{ACTOR_MAX_LEN, SupplierSettlementStatement};
 
 impl SupplierSettlementStatement {
     /// 显式交接对账负责人及可选业务组织；不改派开放复核任务。
-    ///
-    /// # 参数
-    /// * `target_user_id` - 目标对账负责人
-    /// * `target_org_unit_id` - 显式目标组织；省略则保留原组织
-    ///
-    /// # 返回
     /// 交接成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 目标为空、与当前复核人相同、组织为空或与当前责任完全一致时拒绝。
-    ///
-    /// # 关键业务约束
     /// 经办≠复核保持；差异处理人独立，不随对账负责人隐式改派；组织不随接收人部门变化。
+    /// `target_org_unit_id`：显式目标组织；省略则保留原组织。
     pub fn handover(&mut self, target_user_id: String, target_org_unit_id: Option<String>) -> Result<()> {
         let target = normalize_required_text(
             target_user_id,
@@ -50,17 +41,8 @@ impl SupplierSettlementStatement {
     }
 
     /// 独立改派差异处理人，不改对账负责人或复核人。
-    ///
-    /// # 参数
-    /// * `target_user_id` - 目标差异处理人
-    ///
-    /// # 返回
     /// 改派成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 目标为空、超长或与当前差异处理人相同时拒绝。
-    ///
-    /// # 关键业务约束
     /// 不得把 `resolved_by` 强制写成对账负责人；本命令只改单据差异处理人。
     pub fn reassign_difference_handler(&mut self, target_user_id: String) -> Result<()> {
         let target = normalize_required_text(

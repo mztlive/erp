@@ -51,7 +51,7 @@ pub struct CustomerRefundListFacts {
 }
 
 impl From<CustomerRefundRow> for CustomerRefundListFacts {
-    /// 从仓储实际投影构造列表事实，保留金额、来源及版本。
+    // 从仓储实际投影组装列表事实，保留金额、来源及版本。
     fn from(row: CustomerRefundRow) -> Self {
         Self {
             id: row.id,
@@ -74,16 +74,13 @@ impl From<CustomerRefundRow> for CustomerRefundListFacts {
 }
 
 impl CustomerRefundListFacts {
-    /// 从客户退款实体抽取列表/详情共用事实。
+    /// 生成客户退款列表视图时，从客户退款实体抽取列表/详情共用事实。
     ///
     /// # 参数
     /// * `refund` - 已加载的客户退款实体
     ///
     /// # 返回
     /// 返回与列表投影对齐的退款事实。
-    ///
-    /// # 错误
-    /// 不返回错误。
     ///
     /// # 约束
     /// 不含审批绑定；绑定由调用方批量装载后注入。
@@ -111,7 +108,7 @@ impl CustomerRefundListFacts {
     }
 }
 
-/// 将批量注册行按单据 ID 建索引。
+/// 组装客户退款列表时，将批量注册行按单据 ID 建索引。
 ///
 /// # 参数
 /// * `documents` - `find_documents_by_ids` 返回的乱序注册行
@@ -119,9 +116,6 @@ impl CustomerRefundListFacts {
 /// # 返回
 /// 返回 `document_id -> approval_binding` 映射；缺行不出现在结果中。
 /// 值为 `None` 表示该注册行没有冻结绑定。
-///
-/// # 错误
-/// 不返回错误。
 ///
 /// # 约束
 /// 不把缺注册行解释为业务失败；调用方对缺键映射只读列表缺省审批摘要。
@@ -131,7 +125,7 @@ pub fn index_document_bindings(
     documents.into_iter().map(|document| (document.base.id.clone(), document.approval_binding)).collect()
 }
 
-/// 由本页退款事实与批量注册行装配列表视图。
+/// 由本页退款事实与批量注册行组装列表视图。
 ///
 /// # 参数
 /// * `facts` - 当前页退款投影事实，顺序即列表顺序
@@ -139,9 +133,6 @@ pub fn index_document_bindings(
 ///
 /// # 返回
 /// 返回与详情字段一致的视图列表；缺注册行保留退款行。
-///
-/// # 错误
-/// 不返回错误。
 ///
 /// # 约束
 /// 缺注册行映射 `requirement=PROCESS_REQUIRED`、`definition=None`，
@@ -160,7 +151,7 @@ pub fn map_customer_refund_list_page(
         .collect()
 }
 
-/// 由退款事实与可选绑定装配客户退款视图。
+/// 处理客户退款列表时，由退款事实与可选绑定装配客户退款视图。
 ///
 /// # 参数
 /// * `facts` - 列表投影或详情实体抽取的退款事实
@@ -168,9 +159,6 @@ pub fn map_customer_refund_list_page(
 ///
 /// # 返回
 /// 返回与详情字段一致的客户退款视图。
-///
-/// # 错误
-/// 不返回错误。
 ///
 /// # 约束
 /// 缺绑定仍保留退款行，`requirement=PROCESS_REQUIRED`、`definition=None`，

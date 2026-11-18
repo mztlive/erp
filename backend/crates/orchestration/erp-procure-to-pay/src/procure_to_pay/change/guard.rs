@@ -32,21 +32,11 @@ const EFFECT_STALE_PREFIX: &str = "改单审批期间来源销售或履约事实
 /// 生效时来源事实已变化的提示后缀。
 const EFFECT_STALE_SUFFIX: &str = "。请撤回改单，按最新情况修改后重新提交";
 
-/// 提交前预检改单目标的数量与交付安排。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `order` - 已证明可写的来源采购单
-/// * `inputs` - 改单目标行
-/// * `new_gross` - 改后含税总额
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 金额、数量和交付安排均合规时返回 `Ok(())`。
-///
-/// # 错误
-/// 改后金额低于已付款或已收票、新增或遗漏原商品行、数量越界、交付日或收件分配不合规、
-/// 事实读取失败时返回错误。
+// 提交前预检改单目标的数量与交付安排。
+//
+// `order` 为已证明可写的来源采购单；`inputs` 为改单目标行；`new_gross` 为改后含税总额；沿用调用方的执行器。
+//
+// 金额、数量和交付安排均合规时返回 `Ok(())`。改后金额低于已付款或已收票、新增或遗漏原商品行、数量越界、交付日或收件分配不合规、事实读取失败时返回错误。
 pub(super) async fn check_change_inputs(
     db: &Database,
     order: &PurchaseOrder,
@@ -74,19 +64,11 @@ pub(super) async fn check_change_inputs(
     validate_change_input_delivery(db, order, inputs, &facts.base_lines, &recheck, executor).await
 }
 
-/// 生效事务内按当时事实复核新版本行，并返回应写入的入库进度。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `order` - 尚未切换版本的来源采购单
-/// * `lines` - 即将写入的新版本行
-/// * `executor` - 生效事务执行器
-///
-/// # 返回
-/// 仓库履约采购返回按新数量重算的入库进度；其他履约方式返回空。
-///
-/// # 错误
-/// 来源销售或履约事实已变化导致目标不再合规，或事实读取失败时返回错误。
+// 生效事务内按当时事实复核新版本行，并返回应写入的入库进度。
+//
+// `order` 为尚未切换版本的来源采购单；`lines` 为即将写入的新版本行；`executor` 为生效事务执行器。
+//
+// 仓库履约采购返回按新数量重算的入库进度；其他履约方式返回空。来源销售或履约事实已变化导致目标不再合规，或事实读取失败时返回错误。
 pub(super) async fn check_effective_lines(
     db: &Database,
     order: &PurchaseOrder,
@@ -114,7 +96,7 @@ pub(super) async fn check_effective_lines(
     receipt_progress(db, order, lines, executor).await.map(Some)
 }
 
-/// 按跨版本累计合格入库与新数量重算入库进度。
+// 按跨版本累计合格入库与新数量重算入库进度。
 async fn receipt_progress(
     db: &Database,
     order: &PurchaseOrder,
@@ -133,7 +115,7 @@ async fn receipt_progress(
     Ok(receipt_progress_after_change(lines, &rekeyed))
 }
 
-/// 本采购因履约期限提前受影响、须复验预计交付日的稳定销售行。
+// 本采购因履约期限提前受影响、须复验预计交付日的稳定销售行。
 fn due_recheck_lines(facts: &ChangeQuantityFacts, order: &PurchaseOrder) -> HashSet<String> {
     facts
         .state
@@ -145,7 +127,7 @@ fn due_recheck_lines(facts: &ChangeQuantityFacts, order: &PurchaseOrder) -> Hash
         .collect()
 }
 
-/// 本采购单已确认发生的费用行身份。
+// 本采购单已确认发生的费用行身份。
 async fn occurred_expense_lines(
     db: &Database,
     order: &PurchaseOrder,
@@ -158,7 +140,7 @@ async fn occurred_expense_lines(
         .collect())
 }
 
-/// 版本行中的费用行比对内容。
+// 复验已发生费用时，从采购版本行提取物流费用、含税金额和进项税率作为比较依据。
 fn revision_expenses(lines: &[PurchaseOrderRevisionLine]) -> Vec<ExpenseLineState<'_>> {
     lines
         .iter()
@@ -171,7 +153,7 @@ fn revision_expenses(lines: &[PurchaseOrderRevisionLine]) -> Vec<ExpenseLineStat
         .collect()
 }
 
-/// 改单目标中的费用行比对内容；缺少金额的行按 0 比对，由行校验另行拒绝。
+// 改单目标中的费用行比对内容；缺少金额的行按 0 比对，由行校验另行拒绝。
 fn input_expenses(inputs: &[PurchaseLineInput]) -> Vec<ExpenseLineState<'_>> {
     inputs
         .iter()
@@ -184,7 +166,7 @@ fn input_expenses(inputs: &[PurchaseLineInput]) -> Vec<ExpenseLineState<'_>> {
         .collect()
 }
 
-/// 改单目标中的商品行（稳定销售行，数量）。
+// 改单目标中的商品行（稳定销售行，数量）。
 fn input_quantities(inputs: &[PurchaseLineInput]) -> Vec<(String, Quantity)> {
     inputs
         .iter()
@@ -193,7 +175,7 @@ fn input_quantities(inputs: &[PurchaseLineInput]) -> Vec<(String, Quantity)> {
         .collect()
 }
 
-/// 新版本商品行（稳定销售行，数量）。
+// 新版本商品行（稳定销售行，数量）。
 fn revision_quantities(lines: &[PurchaseOrderRevisionLine]) -> Vec<(String, Quantity)> {
     lines
         .iter()
@@ -202,12 +184,12 @@ fn revision_quantities(lines: &[PurchaseOrderRevisionLine]) -> Vec<(String, Quan
         .collect()
 }
 
-/// 把生效时的领域校验失败改写为撤回重提提示。
+// 把生效时的领域校验失败改写为撤回重提提示。
 fn stale(error: erp_core::Error) -> Error {
     Error::ConflictError(format!("{EFFECT_STALE_PREFIX}{error}{EFFECT_STALE_SUFFIX}"))
 }
 
-/// 把生效时的交付复验失败改写为撤回重提提示；读取失败保持原错误。
+// 把生效时的交付复验失败改写为撤回重提提示；读取失败保持原错误。
 fn stale_process(error: Error) -> Error {
     match error {
         Error::Logic(error) => stale(error),
@@ -222,7 +204,7 @@ fn stale_process(error: Error) -> Error {
 mod tests {
     use super::*;
 
-    /// 生效时数量或交付不再合规必须提示撤回重提，读取失败保持原分类。
+    // 生效时数量或交付不再合规必须提示撤回重提，读取失败保持原分类。
     #[test]
     fn effect_failures_ask_to_withdraw_and_resubmit() {
         let quantity = stale(erp_core::Error::from("第 1 行 礼盒 最多可采购 3"));

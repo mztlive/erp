@@ -20,24 +20,12 @@ pub struct AuditLogReadService {
 }
 
 impl AuditLogReadService {
-    /// 创建审计读取服务。
-    /// # 参数
-    /// db 为审计数据库，authorization 为进程共享的完整授权服务。
-    /// # 返回
-    /// 绑定同一数据库及授权设施的服务。
-    /// # 错误
-    /// 不执行 I/O，不返回错误。
+    /// 绑定审计数据库和共享授权服务，供列表查询在同一读取快照中验权及取数；构造时不访问数据库。
     pub fn new(db: Database, authorization: Arc<AuthorizationService>) -> Self {
         Self { db, authorization }
     }
 
-    /// 在快照事务中检查读取资格并查询分页审计日志。
-    /// # 参数
-    /// params 为列表条件，actor 为已认证的当前账号。
-    /// # 返回
-    /// 经授权、输入校验和文本归一化后的展示分页，计数使用同一执行器。
-    /// # 错误
-    /// 身份无效、缺少 audit_log:list、参数非法或数据库失败时返回对应错误。
+    /// 在同一快照内检查 `audit_log:list` 权限、校验并归一化输入、查询审计分页及总数。身份无效、没有读取资格、非法参数和仓储失败分别按原分类返回。
     pub async fn audit_log_list(
         &self,
         params: &AuditLogListParams,
@@ -54,7 +42,7 @@ impl AuditLogReadService {
             .await
     }
 
-    /// 授权及查询沿用当前快照，拒绝时不读取审计记录。
+    // 复用当前快照做授权、分页和计数；账号有读取资格且条件通过校验后，才查询审计记录。
     async fn page(
         &self,
         params: &AuditLogListParams,
@@ -66,7 +54,7 @@ impl AuditLogReadService {
         Ok(Page::new(page.items.into_iter().map(Into::into).collect(), page.total))
     }
 
-    /// 成功取证后构造仓储条件，避免无资格账号探测查询输入。
+    // 先验证读取资格，再检查分页输入并生成仓储条件，避免无资格账号探测查询参数。
     async fn filter(
         &self,
         params: &AuditLogListParams,

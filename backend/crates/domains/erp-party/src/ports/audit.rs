@@ -65,10 +65,8 @@ impl PreparedPartyAudit {
     /// * `success` - 是否成功。
     /// * `message` - 可选说明。
     ///
-    /// # 返回
     /// 返回稍后持久化的预制审计事实。
     ///
-    /// # 错误
     /// 不返回错误；输入字段由调用方预先校验。
     #[allow(clippy::too_many_arguments)]
     pub fn from_validated(
@@ -110,10 +108,8 @@ impl PreparedPartyAudit {
     /// * `resource_type` - 资源类型。
     /// * `resource_id` - 业务资源 ID。
     ///
-    /// # 返回
     /// 返回保留发生时名称的预制审计事实。
     ///
-    /// # 错误
     /// 资源 ID 为空时返回校验错误。
     pub fn resource(
         actor: AuditActor,
@@ -154,10 +150,8 @@ pub trait PartyAuditPort: Send + Sync {
     /// * `resource_type` - 资源类型。
     /// * `resource_id` - 业务资源 ID。
     ///
-    /// # 返回
     /// 返回可交给 [`Self::persist`] 的预制审计事实。
     ///
-    /// # 错误
     /// 无法形成该审计事实时返回对应错误。
     fn resource_log(
         &self,
@@ -173,10 +167,8 @@ pub trait PartyAuditPort: Send + Sync {
     /// * `audit` - 已准备的审计事实。
     /// * `executor` - 调用方选定的数据访问执行器。
     ///
-    /// # 返回
     /// 写入完成后返回 `Ok(())`。
     ///
-    /// # 错误
     /// 持久化失败时返回对应错误。
     async fn persist(&self, audit: &PreparedPartyAudit, executor: &mut dyn Executor) -> Result<()>;
 }
@@ -197,17 +189,15 @@ impl PartyAuditPort for FailClosedAuditPort {
         PreparedPartyAudit::resource(actor, action, resource_type, resource_id)
     }
 
-    /// 组合根未注入适配器时拒绝写入。
-    ///
-    /// # 参数
-    /// * `_audit` - 已准备的审计事实；本实现不读取。
-    /// * `_executor` - 调用方执行器；本实现不使用。
-    ///
-    /// # 返回
-    /// 不返回成功。
-    ///
-    /// # 错误
-    /// 始终返回 `Internal`，提示审计端口未接线。
+    // 组合根未注入适配器时拒绝写入。
+    //
+    // # 参数
+    // * `_audit` - 已准备的审计事实；本实现不读取。
+    // * `_executor` - 调用方执行器；本实现不使用。
+    //
+    // 不返回成功。
+    //
+    // 失败条件：始终返回 `Internal`，提示审计端口未接线。
     async fn persist(&self, _audit: &PreparedPartyAudit, _executor: &mut dyn Executor) -> Result<()> {
         Err(Error::Internal("审计端口未接线".to_string()))
     }

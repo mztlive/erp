@@ -54,12 +54,10 @@ pub struct SalesInquiry {
 
 impl SalesInquiry {
     /// 创建只包含可编辑需求的询价。
-    /// # 参数
-    /// `id`、`inquiry_no` 为稳定身份；`data` 为已授权的客户和负责人资料。
-    /// # 返回
     /// 返回尚未产生任何业务副作用的草稿。
-    /// # 错误
     /// 身份、负责人、客户或需求非法时拒绝。
+    ///
+    /// 输入约定：`id`、`inquiry_no` 为稳定身份；`data` 为已授权的客户和负责人资料。
     pub fn create(id: String, inquiry_no: String, mut data: InquiryCreateData) -> Result<Self> {
         validate_text(&id, "询价身份", 128)?;
         validate_text(&inquiry_no, "询价单号", 64)?;
@@ -97,12 +95,10 @@ impl SalesInquiry {
     }
 
     /// 核对写入持有的聚合版本。
-    /// # 参数
-    /// `expected_version` 为读取或编辑时的版本。
-    /// # 返回
-    /// 版本匹配且未删除时通过；持久化时仍须执行 CAS。
-    /// # 错误
-    /// 版本过期、已删除时返回冲突。
+    /// 结果：版本匹配且未删除时通过；持久化时仍须执行 CAS。
+    /// 失败条件：版本过期、已删除时返回冲突。
+    ///
+    /// 输入约定：`expected_version` 为读取或编辑时的版本。
     pub fn ensure_version(&self, expected_version: u64) -> Result<()> {
         if self.base.is_deleted() || self.base.version != expected_version {
             return Err(Error::ConflictError("询价已发生变化，请刷新后重试".into()));
@@ -111,23 +107,17 @@ impl SalesInquiry {
     }
 
     /// 读取当前冻结的需求。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 返回当前需求快照。
-    /// # 错误
     /// 尚未提交时拒绝。
     pub fn current_requirement(&self) -> Result<&InquiryRequirementSnapshot> {
         self.requirements.last().ok_or_else(|| Error::BusinessLogicError("询价需求尚未提交".into()))
     }
 
     /// 核对内部报价维护要求的当前版本和处理状态。
-    /// # 参数
-    /// `expected_version` 为调用方持有的聚合版本。
-    /// # 返回
-    /// 当前采购处理中且版本一致时通过。
-    /// # 错误
+    /// 结果：当前采购处理中且版本一致时通过。
     /// 版本过期或状态不允许时拒绝。
+    ///
+    /// 输入约定：`expected_version` 为调用方持有的聚合版本。
     pub fn ensure_processing(&self, expected_version: u64) -> Result<()> {
         self.ensure_version(expected_version)?;
         // 历史待采购记录与已分配任务同属处理阶段，无需额外接手。
@@ -135,11 +125,7 @@ impl SalesInquiry {
     }
 
     /// 读取尚在采购处理阶段的冻结需求，残留任务不得取得关闭后的授权。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 返回当前有效采购任务对应需求。
-    /// # 错误
     /// 非待采购/采购处理中或尚无冻结需求时拒绝。
     pub fn current_procurement_requirement(&self) -> Result<&InquiryRequirementSnapshot> {
         self.ensure_state(&[InquiryStatus::AwaitingProcurement, InquiryStatus::ProcurementProcessing])?;
@@ -147,12 +133,10 @@ impl SalesInquiry {
     }
 
     /// 读取当前责任范围内的单条需求。
-    /// # 参数
-    /// `scope` 为已重验任务责任行；`line_id` 为请求行。
-    /// # 返回
     /// 返回该行冻结需求。
-    /// # 错误
     /// 状态、范围或需求版本不满足时拒绝。
+    ///
+    /// 输入约定：`scope` 为已重验任务责任行；`line_id` 为请求行。
     pub fn responsibility_line(&self, scope: &[String], line_id: &str) -> Result<&InquiryRequirementLine> {
         if !scope.iter().any(|id| id == line_id) {
             return Err(Error::Forbidden("内部报价超出当前责任行".into()));
@@ -166,12 +150,10 @@ impl SalesInquiry {
     }
 
     /// 读取当前责任采购自己保存的未发布费用。
-    /// # 参数
-    /// `actor`、`scope` 为当前处理人和任务责任；`fee_id` 为稳定费用身份。
-    /// # 返回
     /// 返回当前工作片段中的费用。
-    /// # 错误
     /// 非处理阶段、缺少当前工作或费用越权时拒绝。
+    ///
+    /// 输入约定：`actor`、`scope` 为当前处理人和任务责任；`fee_id` 为稳定费用身份。
     pub fn responsibility_fee(&self, actor: &str, scope: &[String], fee_id: &str) -> Result<&InquiryFee> {
         self.current_procurement_requirement()?;
         let work = self

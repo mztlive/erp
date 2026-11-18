@@ -102,16 +102,7 @@ pub struct LegacyImportBatchFilter {
 }
 
 impl Default for LegacyImportBatchFilter {
-    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回第 1 页、每页 20 条的空筛选条件。
-    ///
-    /// # 错误
-    /// 无。
+    // 为未指定过滤的批次列表提供第 `1` 页、每页 `20` 条的起始条件。
     fn default() -> Self {
         Self {
             batch_no: None,
@@ -128,21 +119,7 @@ impl Default for LegacyImportBatchFilter {
 }
 
 impl QueryFilter for LegacyImportBatchFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// `batch_no` 按字面量、忽略大小写匹配；`source_system_id` 与 `status` 精确匹配。
-    /// `baseline_date_from`、`baseline_date_to` 都有时把 `baseline_date` 写成含端点的
-    /// `$gte`/`$lte`，只给一端时只写对应比较；日期使用 `YYYY-MM-DD`。
-    /// 为 `None` 的筛选项不写入；分页与排序字段不进入条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 构造未删除批次的查询谓词：批次号使用忽略大小写的字面量匹配，来源系统和状态精确匹配。基准日期按 `YYYY-MM-DD` 使用含端点的 `$gte`/`$lte`，只给一端则只写对应边界；缺省字段及分页、排序不进入谓词。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_literal_regex_filter(&mut filter, "batch_no", self.batch_no.as_deref());
@@ -170,18 +147,7 @@ impl QueryFilter for LegacyImportBatchFilter {
 }
 
 impl Pagination for LegacyImportBatchFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// 原样返回 `page`，并把 `page_size` 从 `u32` 展成 `u64`；不在此处把 `0` 归一成第一页。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 将仓储列表的页码原样交给分页层，条数扩为 `u64`，不把 `0` 归一为第一页。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -190,41 +156,14 @@ impl Pagination for LegacyImportBatchFilter {
 /// 导入批次集合仓储扩展：投影列表与按批次号定位。
 #[allow(async_fn_in_trait)]
 pub trait LegacyImportBatchRepositoryExt {
-    /// 分页检索导入批次列表（投影查询）。
-    ///
-    /// 只返回 [`LegacyImportBatchRow`] 所需的列表字段，不加载整文档
-    /// （资产引用等内部字段不进入列表投影）；排序字段经白名单映射，
-    /// 非法字段回退默认 `created_at`。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// 用调用方执行器按相同条件取批次列表投影及总数，不加载资产引用等内部字段。排序字段按白名单映射，默认 `created_at`；查询、游标或计数失败返回仓储错误。
     async fn search_legacy_import_batches(
         &self,
         filter: &LegacyImportBatchFilter,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<LegacyImportBatchRow>>;
 
-    /// 按批次号精确查找导入批次。
-    ///
-    /// 唯一性由 `uk_legacy_import_batches_batch_no` 唯一索引保证
-    /// （§6.12：`batch_no` 唯一），本方法用于重跑定位与幂等判定。
-    ///
-    /// # 参数
-    /// * `batch_no` - 导入批次号
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的未删除批次；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
+    /// 用全局唯一批次号精确查找未删除批次，供重跑定位和幂等判断；无匹配返回 `None`，MongoDB 查询失败时返回对应错误。
     async fn find_by_batch_no(
         &self,
         batch_no: &str,
@@ -318,19 +257,7 @@ pub struct LegacyImportRowFilter {
 }
 
 impl QueryFilter for LegacyImportRowFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// `batch_id`、`parse_status`、`mapping_status` 与 `import_status` 有值时精确匹配。
-    /// `source_row_key` 按字面量、忽略大小写匹配。为 `None` 的筛选项不写入；分页与排序字段不进入条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 构造未删除行的 MongoDB 条件：批次和解析、映射、导入状态精确匹配，来源行键使用忽略大小写的字面量匹配；缺省、分页和排序项不进入谓词。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(batch_id) = &self.batch_id {
@@ -351,18 +278,7 @@ impl QueryFilter for LegacyImportRowFilter {
 }
 
 impl Pagination for LegacyImportRowFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// 原样返回 `page`，并把 `page_size` 从 `u32` 展成 `u64`；不在此处把 `0` 归一成第一页。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 为导入行列表交出保存的页码和转为 `u64` 的条数；不改写 `0` 页码。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -371,37 +287,14 @@ impl Pagination for LegacyImportRowFilter {
 /// 导入行集合仓储扩展：投影列表与按批次批量读取。
 #[allow(async_fn_in_trait)]
 pub trait LegacyImportRowRepositoryExt {
-    /// 分页检索导入行列表（投影查询）。
-    ///
-    /// 只返回 [`LegacyImportRowRow`] 所需的列表字段；规范化载荷
-    /// （`normalized_payload_reference`，最大 64KB）不进入列表投影。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// 返回导入行分页投影及同条件总数，不加载最大 64 KB 的 `normalized_payload_reference`。查询、游标或计数失败时返回仓储错误。
     async fn search_legacy_import_rows(
         &self,
         filter: &LegacyImportRowFilter,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<LegacyImportRowRow>>;
 
-    /// 按批次 ID 批量取回导入行（`$in` 一次取回，避免 N+1）。
-    ///
-    /// # 参数
-    /// * `batch_ids` - 目标批次 ID 列表
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回全部匹配的未删除导入行。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 用一次 `$in` 查询取得多个批次中未删除的导入行，避免逐批加载；查询或游标读取失败直接返回。
     async fn find_rows_by_batch_ids(
         &self,
         batch_ids: &[LegacyImportBatchId],
@@ -497,19 +390,7 @@ pub struct LegacyImportConfirmationFilter {
 }
 
 impl QueryFilter for LegacyImportConfirmationFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// `batch_id`、`confirmation_scope` 与 `status` 有值时精确匹配。
-    /// 为 `None` 的筛选项不写入；分页与排序字段不进入条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 构造确认列表的 MongoDB 条件，只读未删除记录；批次、责任范围和状态按传入值精确匹配，缺省值及分页、排序字段不参与匹配。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(batch_id) = &self.batch_id {
@@ -526,18 +407,7 @@ impl QueryFilter for LegacyImportConfirmationFilter {
 }
 
 impl Pagination for LegacyImportConfirmationFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// 原样返回 `page`，并把 `page_size` 从 `u32` 展成 `u64`；不在此处把 `0` 归一成第一页。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 向确认列表分页交出原页码和扩为 `u64` 的条数，不把 `0` 改写为第一页。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -546,65 +416,21 @@ impl Pagination for LegacyImportConfirmationFilter {
 /// 导入确认集合仓储扩展：投影列表与确认事实定位。
 #[allow(async_fn_in_trait)]
 pub trait LegacyImportConfirmationRepositoryExt {
-    /// 分页检索导入确认事实列表（投影查询）。
-    ///
-    /// 只返回 [`LegacyImportConfirmationRow`] 所需的列表字段；确认事实
-    /// append-only（§4.5/§6.12），本查询不设业务软删除过滤语义之外的
-    /// 任何删除入口。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// 只读确认列表所需的投影字段和同条件总数，不改变追加式确认事实或增加删除入口；查询、游标或计数失败时返回仓储错误。
     async fn search_legacy_import_confirmations(
         &self,
         filter: &LegacyImportConfirmationFilter,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<LegacyImportConfirmationRow>>;
 
-    /// 按正式任务查找确认事实。
-    ///
-    /// 唯一性由 `uk_legacy_import_confirmations_work_item` 唯一索引保证
-    /// （§6.12：`work_item_id` 唯一）。
-    ///
-    /// # 参数
-    /// * `work_item_id` - 对应 `IMPORT_BUSINESS_CONFIRMATION` 正式任务
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的确认事实；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
+    /// 用唯一 `work_item_id` 定位 `IMPORT_BUSINESS_CONFIRMATION` 正式任务对应的确认事实；没有匹配返回 `None`，读失败则返回仓储错误。
     async fn find_by_work_item(
         &self,
         work_item_id: &erp_core::ids::WorkItemId,
         executor: &mut dyn Executor,
     ) -> Result<Option<LegacyImportConfirmation>>;
 
-    /// 按「批次 + 责任范围 + 试算版本」精确查找确认事实。
-    ///
-    /// 唯一性由 `uk_legacy_import_confirmations_scope_trial` 唯一索引保证
-    /// （§6.12：`(batch_id, confirmation_scope, trial_version)` 唯一），
-    /// 用于确认矩阵幂等判定与「RETURN_FOR_FIX 后产生新 trial_version」
-    /// 的新事实创建前查重。
-    ///
-    /// # 参数
-    /// * `batch_id` - 所属导入批次
-    /// * `confirmation_scope` - 责任范围
-    /// * `trial_version` - 试算版本
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的确认事实；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
+    /// 凭 `(batch_id, confirmation_scope, trial_version)` 的唯一组合定位确认，供矩阵幂等检查及退回后创建新试算确认时查重。无记录返回 `None`，查询失败直接返回。
     async fn find_by_batch_scope_trial(
         &self,
         batch_id: &LegacyImportBatchId,
@@ -613,17 +439,7 @@ pub trait LegacyImportConfirmationRepositoryExt {
         executor: &mut dyn Executor,
     ) -> Result<Option<LegacyImportConfirmation>>;
 
-    /// 按批次读取全部确认事实，按创建顺序稳定返回。
-    ///
-    /// # 参数
-    /// * `batch_id` - 所属导入批次
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回该批次全部未删除确认事实。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 按创建顺序稳定读取批次的全部未删除确认，以便组装矩阵；查询或游标读取失败时返回仓储错误。
     async fn list_by_batch(
         &self,
         batch_id: &LegacyImportBatchId,
@@ -700,39 +516,12 @@ pub struct LegacyImportRepository<'a> {
 }
 
 impl<'a> LegacyImportRepository<'a> {
-    /// 创建域专用仓储。
-    ///
-    /// # 参数
-    /// * `db` - 目标 MongoDB 数据库
-    ///
-    /// # 返回
-    /// 返回仓储实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 绑定导入领域仓储所用数据库，供批次与行的跨集合写入共用。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
 
-    /// 创建导入批次并写入全部导入行（跨集合多步骤写入）。
-    ///
-    /// 依次写入 `legacy_import_batches` 与 `legacy_import_rows`。本方法自身不构成原子边界
-    /// （数据模型 §6.12：重跑使用原批次或明确的修复批次并保持来源行幂等）。
-    /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction`
-    /// 时两笔写入各自自动提交，行唯一索引冲突会留下只有批次没有行的
-    /// 半成品；Service 必须通过 `persistence_core::Transactional::with_transaction`
-    /// 传入事务会话。
-    ///
-    /// # 参数
-    /// * `batch` - 待写入的导入批次
-    /// * `rows` - 待写入的导入行（调用方须保证属于 `batch`；本方法不校验归属）
-    /// * `executor` - 数据访问执行器，必须位于事务中
-    ///
-    /// # 返回
-    /// 批次与全部行写入完成后无返回值。
-    ///
-    /// # 错误
-    /// 批次或行写入失败时返回对应仓储错误，包括唯一索引冲突 [`persistence_core::Error::DuplicateKey`]。
+    /// 先写批次再批量写导入行。调用方须保证行属于该批次，并通过 `Transactional::with_transaction` 传入原事务执行器；使用 `NoTransaction` 时，行写入失败可能留下只有批次的半成品。批次或行写入失败返回对应仓储错误，包括 [`persistence_core::Error::DuplicateKey`]。
     pub async fn create_batch_with_rows(
         &self,
         batch: &LegacyImportBatch,

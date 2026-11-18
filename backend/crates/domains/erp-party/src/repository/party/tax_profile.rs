@@ -54,19 +54,10 @@ pub struct PartyTaxProfileFilter {
 }
 
 impl QueryFilter for PartyTaxProfileFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// `party_id`、`status`、`is_default` 为 `None` 时不写入；否则分别按主体 ID
-    /// 字符串、`status` 的稳定代码和布尔值精确匹配。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 把主体税务资料筛选转换为 MongoDB 查询条件，并排除软删除记录，供列表和计数共用。
+    //
+    // `party_id`、`status`、`is_default` 为 `None` 时不写入；否则分别按主体 ID
+    // 字符串、`status` 的稳定代码和布尔值精确匹配。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(party_id) = &self.party_id {
@@ -83,16 +74,9 @@ impl QueryFilter for PartyTaxProfileFilter {
 }
 
 impl Pagination for PartyTaxProfileFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。`page` 原样取出，`page_size` 由 `u32` 转为 `u64`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 提供主体税务资料列表的页码和每页条数，供分页查询计算读取窗口。
+    //
+    // 返回 `(page, page_size)` 元组。`page` 原样取出，`page_size` 由 `u32` 转为 `u64`。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -110,10 +94,8 @@ pub trait PartyTaxProfileRepositoryExt {
     /// * `filter` - 筛选与分页条件
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回
     /// 返回当前页投影行与满足筛选条件的总数。
     ///
-    /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
     async fn search_party_tax_profiles(
         &self,
@@ -128,10 +110,8 @@ pub trait PartyTaxProfileRepositoryExt {
     /// * `as_of` - 业务日期
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回
     /// 返回该日期处于启用有效期的税务资料。
     ///
-    /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
     async fn list_active_on(
         &self,
@@ -147,10 +127,8 @@ pub trait PartyTaxProfileRepositoryExt {
     /// * `as_of` - 业务日期
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回
     /// 返回默认税务资料优先、同组内最新创建优先的当前事实。
     ///
-    /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
     async fn list_current_on(
         &self,
@@ -164,12 +142,9 @@ pub trait PartyTaxProfileRepositoryExt {
     /// # 参数
     /// * `party_ids` - 往来主体 ID 集合
     /// * `as_of` - 业务日期
-    /// * `executor` - 数据访问执行器
     ///
-    /// # 返回
     /// 返回按主体、默认标记和创建时间稳定排序的启用税务资料。
     ///
-    /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
     async fn list_current_for_parties_on(
         &self,
@@ -187,10 +162,8 @@ pub trait PartyTaxProfileRepositoryExt {
     /// * `exclude_id` - 保留默认标记的税务资料 ID
     /// * `executor` - 数据访问执行器，必须位于调用方事务中
     ///
-    /// # 返回
     /// 全部冲突默认标记清除后返回 `Ok(())`。
     ///
-    /// # 错误
     /// 当 MongoDB 查询、游标读取或 CAS 更新失败时返回错误。
     async fn clear_other_default_marks(
         &self,
@@ -205,10 +178,8 @@ pub trait PartyTaxProfileRepositoryExt {
     /// * `party_id` - 所属主体 ID
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回
     /// 返回默认税务资料优先、同组内最新创建优先的完整实体。
     ///
-    /// # 错误
     /// 当 MongoDB 查询或反序列化失败时返回错误。
     async fn list_by_party(
         &self,
@@ -290,10 +261,9 @@ impl PartyTaxProfileRepositoryExt for Repository<'_, PartyTaxProfile> {
         self.find_many_sorted(doc! { "party_id": party_id.to_string() }, default_first_sort(), executor).await
     }
 }
-/// 税务资料列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
+// 列出税务资料列表查询需要读取的字段。
+//
+// 返回投影条件文档。
 fn party_tax_profile_projection() -> Document {
     doc! {
         "id": 1,

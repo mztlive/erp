@@ -21,17 +21,14 @@ use crate::sales_center::access::{SalesAccess, SalesReadContext};
 use crate::{Error, Result};
 
 impl SalesChangeReadService {
-    /// 在同一事务读取列表页、总数、来源授权和完整匹配版本。
-    ///
-    /// # 参数
-    /// * `params` - 已通过 HTTP 边界验证的列表参数
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 返回原有分页响应及其范围版本。
-    ///
-    /// # 错误
-    /// 权限、筛选、版本规模或仓储读取失败时拒绝。
+    // 准备销售变更时，在同一事务读取列表页、总数、来源授权和完整匹配版本。
+    //
+    // 调用参数：
+    // * `params` - 已通过 HTTP 边界验证的列表参数
+    //
+    // 返回原有分页响应及其范围版本。
+    //
+    // 权限、筛选、版本规模或仓储读取失败时拒绝。
     pub(super) async fn change_list_snapshot(
         &self,
         params: &SalesChangeOrderListParams,
@@ -66,20 +63,17 @@ impl SalesChangeReadService {
             .await
     }
 
-    /// 在新事务重新证明来源授权，仅读取完整匹配身份与版本。
-    ///
-    /// # 参数
-    /// * `params` - 与首次快照相同的列表参数
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 返回与完整快照采用相同授权、筛选和哈希算法的范围版本。
-    ///
-    /// # 错误
-    /// 权限、筛选、版本规模或仓储读取失败时拒绝。
-    ///
-    /// # 关键业务约束
-    /// 不复用首次授权来源，也不以当前页或计数代替完整版本集合。
+    // 为销售变更绑定范围版本时，在新事务重新证明来源授权，仅读取完整匹配身份与版本。
+    //
+    // 调用参数：
+    // * `params` - 与首次快照相同的列表参数
+    //
+    // 返回与完整快照采用相同授权、筛选和哈希算法的范围版本。
+    //
+    // 权限、筛选、版本规模或仓储读取失败时拒绝。
+    //
+    // 业务边界：
+    // 不复用首次授权来源，也不以当前页或计数代替完整版本集合。
     pub(super) async fn change_scope_fingerprint(
         &self,
         params: &SalesChangeOrderListParams,
@@ -108,7 +102,7 @@ impl SalesChangeReadService {
     }
 }
 
-/// 每次快照独立解析动作范围与合法来源，筛选只收窄授权结果。
+// 处理销售变更时，每次快照独立解析动作范围与合法来源，筛选只收窄授权结果。
 async fn change_list_query(
     access: &SalesAccess,
     authorization: &AuthorizationService,
@@ -123,7 +117,7 @@ async fn change_list_query(
     Ok((context, scope, change_list_filter(params)?))
 }
 
-/// 列表和版本复核使用相同的来源、状态、分页与排序规范化。
+// 应用销售变更筛选时，列表和版本复核使用相同的来源、状态、分页与排序规范化。
 fn change_list_filter(params: &SalesChangeOrderListParams) -> Result<SalesChangeOrderFilter> {
     let (_, sort_dir) = normalize_sort(&params.sort_by, &params.sort_dir, &["created_at"])?;
     Ok(SalesChangeOrderFilter {
@@ -136,7 +130,7 @@ fn change_list_filter(params: &SalesChangeOrderListParams) -> Result<SalesChange
     })
 }
 
-/// 沿用对完整有序版本集合的哈希，超过上限整体拒绝。
+// 沿用对完整有序版本集合的哈希，超过上限整体不接受。
 fn change_scope_version(base: &str, versions: &[SalesChangeVersion]) -> Result<String> {
     if versions.len() > 10_000 {
         return Err(Error::ValidationError("销售变更查询超过上限，请收窄原销售单条件".into()));
@@ -146,7 +140,7 @@ fn change_scope_version(base: &str, versions: &[SalesChangeVersion]) -> Result<S
     Ok(format!("{base}:{:x}", fingerprint.finish()))
 }
 
-/// 只映射首次快照的当前页，保留响应字段、总数及空范围语义。
+// 生成销售变更视图时，只映射首次快照的当前页，保留响应字段、总数及空范围语义。
 fn change_list_view(
     page: PageResult<SalesChangeOrderRow>,
     context: SalesReadContext,
@@ -212,7 +206,7 @@ mod tests {
         assert!(matches!(result, Err(Error::Internal(message)) if message == "测试授权设施不可用"));
     }
 
-    /// 翻页和排序不改变业务来源与状态，非法排序拒绝。
+    // 验证销售变更：翻页和排序不改变业务来源与状态，非法排序拒绝。
     #[test]
     fn change_filters_keep_authorization_and_business_conditions_across_pages() {
         let mut params = SalesChangeOrderListParams {
@@ -239,7 +233,7 @@ mod tests {
         assert!(matches!(change_list_filter(&params), Err(Error::ValidationError(_))));
     }
 
-    /// 指纹保持原完整集合算法，非当前页版本、身份和授权变化均被检测。
+    // 验证销售变更：指纹保持原完整集合算法，非当前页版本、身份和授权变化均被检测。
     #[test]
     fn change_fingerprint_keeps_full_identity_and_version_binding() {
         let mut versions = vec![
@@ -262,7 +256,7 @@ mod tests {
         assert_ne!(first, change_scope_version("scope", &[]).unwrap());
     }
 
-    /// 恰好上限保持可查询，超限不得截断成功。
+    // 验证销售变更：恰好上限保持可查询，超限不得截断成功。
     #[test]
     fn change_fingerprint_rejects_over_limit() {
         let mut versions: Vec<_> = (0..10_000)

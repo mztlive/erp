@@ -17,12 +17,10 @@ pub struct SalesSelectionSource {
 
 impl SalesSelectionSource {
     /// 核验来源模式、客户和销售业务性质。
-    /// # 参数
-    /// `proposal` 为已授权方案；`customer_id`、`business_type` 为目标销售单事实。
-    /// # 返回
     /// 返回方案来源快照。
-    /// # 错误
     /// 非按份采购、客户不一致或非实物与服务销售时拒绝。
+    ///
+    /// 输入约定：`proposal` 为已授权方案；`customer_id`、`business_type` 为目标销售单事实。
     pub fn from_proposal(
         proposal: &SalesSelectionProposal,
         customer_id: &CustomerAccountId,

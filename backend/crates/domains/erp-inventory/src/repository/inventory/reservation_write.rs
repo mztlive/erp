@@ -7,15 +7,8 @@ use crate::{InventoryExt, StockReservation, StockReservationEntry};
 
 impl InventoryRepository<'_> {
     /// 按输入顺序批量保存预占；不另开事务。
-    ///
-    /// # 参数
-    /// * `reservations` - 已构造并校验的预占实体
-    /// * `executor` - 调用方事务执行器
-    ///
-    /// # 返回
     /// 空输入直接成功，否则保存全部预占。
-    ///
-    /// # 错误
+    /// `reservations` 为已构造并校验的预占实体；沿用调用方当前事务的执行器 `executor`。
     /// 唯一键冲突或数据库写入失败时返回仓储错误。
     pub async fn create_reservations(
         &self,
@@ -26,15 +19,8 @@ impl InventoryRepository<'_> {
     }
 
     /// 按输入顺序批量保存预占分录；与预占写入复用同一执行器。
-    ///
-    /// # 参数
-    /// * `entries` - 与预占对应的已校验分录
-    /// * `executor` - 调用方事务执行器
-    ///
-    /// # 返回
     /// 空输入直接成功，否则保存全部分录。
-    ///
-    /// # 错误
+    /// `entries` 为与预占对应的已校验分录；沿用调用方当前事务的执行器 `executor`。
     /// 唯一键冲突或数据库写入失败时返回仓储错误。
     pub async fn create_reservation_entries(
         &self,

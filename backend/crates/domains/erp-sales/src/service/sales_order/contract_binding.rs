@@ -19,14 +19,12 @@ pub struct ContractBindingBasis {
 
 impl SalesOrderService {
     /// 按当前商业状态加载补合同依据，禁止用本次请求的新条款参与核对。
-    ///
-    /// # 参数
-    /// * `order` - 当前事务已授权读取的销售单
-    /// * `executor` - 原命令执行器
-    /// # 返回
-    /// 生效单取当前版本，草稿取有效副本，审批中取最新冻结提交。
-    /// # 错误
+    /// 结果：生效单取当前版本，草稿取有效副本，审批中取最新冻结提交。
     /// 来源缺失、归属冲突、作废或审批状态冲突时拒绝。
+    ///
+    /// 输入约定：
+    /// - `order`：当前事务已授权读取的销售单
+    /// - `executor`：原命令执行器
     pub async fn contract_binding_basis(
         &self,
         order: &SalesOrder,
@@ -65,7 +63,7 @@ impl SalesOrderService {
         }
     }
 
-    /// 只采用归属本单的当前生效版本条款；版本缺失或串单时拒绝补录。
+    // 为已生效销售单补合同前，读取归属本单的当前正式条款；正式版本缺失或串单则拒绝。
     async fn contract_revision_basis(
         &self,
         order: &SalesOrder,
@@ -91,7 +89,7 @@ impl SalesOrderService {
         })
     }
 
-    /// 审批中只接受仍在审的最新提交，并核对客户与结算主体仍与销售单一致。
+    // 审批中的销售单补合同只能比对正在审批的最新提交，并要求客户和结算主体与主单仍一致。
     async fn contract_submission_basis(
         &self,
         order: &SalesOrder,

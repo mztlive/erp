@@ -25,71 +25,31 @@ pub struct BackofficeAuthResult {
 
 impl BackofficeAuthResult {
     /// 返回账号 ID。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回认证成功的账号 ID。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn account_id(&self) -> &str {
         self.account_id.as_str()
     }
 
     /// 返回规范化后的登录账号。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回认证成功的登录账号。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn account(&self) -> &str {
         self.account.as_str()
     }
 
     /// 返回本次认证已读取的账号名称，不增加额外账号查询。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回认证成功时的名称。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn name(&self) -> &str {
         &self.name
     }
 
     /// 返回后台账号类型。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回认证成功的账号类型。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn account_kind(&self) -> DomainAccountKind {
         self.account_kind
     }
 
     /// 返回签发身份时的账号持久化版本。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回用于撤销旧 token 的账号版本。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn account_version(&self) -> u64 {
         self.account_version
     }
@@ -117,15 +77,7 @@ pub struct BackofficeAuthService {
 
 impl BackofficeAuthService {
     /// 创建后台账号认证服务。
-    ///
-    /// # 参数
-    /// * `db` - 数据库实例
-    ///
-    /// # 返回
     /// 返回认证服务实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
@@ -136,14 +88,11 @@ impl BackofficeAuthService {
     /// 避免对外泄露账号状态。旧 MD5 摘要只有在验证成功并完成持久化升级后
     /// 才会返回认证成功；升级失败时不会签发登录身份。
     ///
-    /// # 参数
-    /// * `request` - 账号、密码和后台账号类型
-    ///
-    /// # 返回
     /// 返回不含密码哈希的后台身份信息。
     ///
-    /// # 错误
     /// 当凭证无效、账号不可登录、数据库访问或旧哈希升级失败时返回错误。
+    ///
+    /// `request`：账号、密码和后台账号类型。
     pub async fn authenticate(&self, request: &crate::dto::AuthRequest) -> Result<BackofficeAuthResult> {
         request.validate()?;
         let stored_account = self.find_account(&request.account).await?;
@@ -179,17 +128,12 @@ impl BackofficeAuthService {
     /// 每次受保护请求都从持久化层读取账号，确保软删除、停用、账号改名或
     /// 类型变化能够立即撤销既有 token，而不是等到 token 自然过期。
     ///
-    /// # 参数
-    /// * `account_id` - token 中的账号 ID
-    /// * `account` - token 中的登录账号
-    /// * `account_kind` - token 中的后台账号类型
-    /// * `account_version` - token 签发时的账号版本
-    ///
-    /// # 返回
     /// 当前身份仍可使用时返回最小后台身份信息。
     ///
-    /// # 错误
     /// 账号不存在或身份状态不匹配时返回统一认证错误；数据库失败时返回仓储错误。
+    ///
+    /// `account_id`：token 中的账号 ID；`account`：token 中的登录账号。
+    /// `account_kind`：token 中的后台账号类型；`account_version`：token 签发时的账号版本。
     pub async fn validate_session(
         &self,
         account_id: &str,
@@ -209,7 +153,7 @@ impl BackofficeAuthService {
         Ok(BackofficeAuthResult::from(stored_account))
     }
 
-    /// 规范化账号并查询记录；无效账号按不存在处理，由后续统一执行 dummy work。
+    // 登录先用规范化账号查找后台记录。账号格式无效按未找到处理，由凭证验证统一执行占位工作，避免提前暴露身份是否存在。
     async fn find_account(&self, account: &str) -> Result<Option<AccountCore>> {
         let Ok(account) = LoginAccount::new(account) else {
             return Ok(None);
@@ -219,12 +163,12 @@ impl BackofficeAuthService {
     }
 }
 
-/// 构造不泄露具体失败原因的凭证错误。
+// 统一生成后台凭证错误，不区分账号不存在、状态不允许或密码不匹配。
 fn invalid_credentials() -> Error {
     Error::Unauthenticated("用户名或密码错误".to_string())
 }
 
-/// 后台入口固定要求内部身份，不受客户端账号类型选择影响。
+// 从后台登录请求生成内部账号凭证，入口类型固定，客户端所选账号类型不会切换身份域。
 fn backoffice_secret(account: &AccountCore, requested_kind: DomainAccountKind) -> Option<&Secret> {
     (requested_kind == DomainAccountKind::Admin)
         .then(|| account.authentication_secret_for(DomainAccountKind::Admin))
@@ -253,7 +197,7 @@ mod login_failure_class_tests {
     }
 }
 
-/// 构造不泄露账号状态的会话失效错误。
+// 后台会话不能继续时返回统一错误，不将账号当前状态作为对外原因。
 fn invalid_session() -> Error {
     Error::Unauthenticated("认证已失效".to_string())
 }

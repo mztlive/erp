@@ -29,7 +29,7 @@ pub use supplier::delete_supplier;
 pub use supplier_profile::{SupplierProfileProcess, SupplierProfileWithAssetsResult};
 pub use warehouse::create_warehouse_sku_policy;
 
-/// 只有命令唯一键冲突允许按已提交回执执行只读恢复。
+// 记录主数据命令回执时，只把回执唯一键冲突标成可按原命令只读查证；其他持久化错误沿用原分类。
 fn command_insert_error(error: PersistenceError) -> Error {
     match error {
         error @ PersistenceError::DuplicateKey(_) => Error::ReceiptDuplicate(error),

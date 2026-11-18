@@ -61,25 +61,12 @@ pub struct SupplierProfileChangePlan {
 
 impl SupplierProfileChangePlan {
     /// 从已加载事实与根资料请求计算变更计划。
-    ///
-    /// # 参数
-    /// * `capabilities` - 已加载的供应商既有能力集合，按仓储返回顺序传入
-    /// * `qualifications` - 已加载的供应商既有资质集合
-    /// * `linked_capabilities` - 资质 ID 到适用能力 ID 集合的映射，由仓储批量读取
-    /// * `capability_ids` - 请求能力代码到稳定能力 ID 的映射，用于资质关联一致性校验
-    /// * `requested_capability_codes` - 根资料请求中的能力代码集合
-    /// * `requested_qualifications` - 根资料请求中的资质输入视图
-    ///
-    /// # 返回
     /// 返回仅含需变更项的精简计划；无变化时对应向量为空。
-    ///
-    /// # 错误
     /// 资质适用能力不存在或关联不一致时返回校验错误。
-    ///
-    /// # 约束
-    /// 纯内存计算，不触及 MongoDB、全局 ID 或时钟；判定逻辑与 `profile.rs` 原 Service
-    /// helper 完全一致（`wanted == is_active` 能力跳过，`matches_profile_fields` 与
-    /// `current_links == desired_links` 资质跳过），便于单测锁定。
+    /// 纯内存计算，不触及 MongoDB、全局 ID 或时钟；判定逻辑与 `profile.rs` 原 Service helper 完全一致
+    /// （`wanted == is_active` 能力跳过，`matches_profile_fields` 与`current_links == desired_links` 资
+    /// 质跳过），便于单测锁定。
+    /// `linked_capabilities`：资质 ID 到适用能力 ID 集合的映射，由仓储批量读取。
     pub fn from_loaded(
         capabilities: &[SupplierCapability],
         qualifications: &[SupplierQualification],
@@ -114,14 +101,8 @@ impl SupplierProfileChangePlan {
     }
 }
 
-/// 计算能力启停切换项：请求包含与当前启停不一致时才需切换。
-///
-/// # 参数
-/// * `capabilities` - 已加载的既有能力集合
-/// * `requested_set` - 请求能力代码集合
-///
-/// # 返回
-/// 返回需切换状态的既有能力。
+// 计算能力启停切换项：请求包含与当前启停不一致时才需切换。
+// 返回需切换状态的既有能力。
 fn plan_capability_toggles(
     capabilities: &[SupplierCapability],
     requested_set: &std::collections::HashSet<CapabilityCode>,
@@ -142,14 +123,8 @@ fn plan_capability_toggles(
     toggles
 }
 
-/// 计算需新建的能力代码：请求中有、既有中无且去重后保留。
-///
-/// # 参数
-/// * `requested_capability_codes` - 根资料请求中的能力代码集合
-/// * `existing_codes` - 既有能力代码集合
-///
-/// # 返回
-/// 返回需新建的能力代码。
+// 计算需新建的能力代码：请求中有、既有中无且去重后保留。
+// 返回需新建的能力代码。
 fn plan_capability_creates(
     requested_capability_codes: &[CapabilityCode],
     existing_codes: &std::collections::HashSet<CapabilityCode>,
@@ -163,22 +138,10 @@ fn plan_capability_creates(
     creates
 }
 
-/// 计算资质字段/关联更新项与停用项。
-///
-/// 既有资质命中请求但字段或适用能力关联不一致时需更新；
-/// 未命中请求且状态仍为 `Active` 时需停用。
-///
-/// # 参数
-/// * `qualifications` - 已加载的既有资质集合
-/// * `requested_map` - 请求资质按稳定身份键的索引
-/// * `linked_capabilities` - 资质 ID 到适用能力 ID 集合的映射
-/// * `capability_ids` - 请求能力代码到稳定能力 ID 的映射
-///
-/// # 返回
-/// 返回 `(需更新的稳定身份键, 需停用的稳定身份键)`。
-///
-/// # 错误
-/// 资质适用能力不存在时返回校验错误。
+// 计算资质字段/关联更新项与停用项。
+// 既有资质命中请求但字段或适用能力关联不一致时需更新；未命中请求且状态仍为 `Active` 时需停用。
+// 返回 `(需更新的稳定身份键, 需停用的稳定身份键)`。
+// 资质适用能力不存在时返回校验错误。
 fn plan_qualification_updates(
     qualifications: &[SupplierQualification],
     requested_map: &std::collections::HashMap<String, &PlannedQualificationInput>,
@@ -222,14 +185,8 @@ fn plan_qualification_updates(
     Ok((updates, disables))
 }
 
-/// 计算需新建的资质输入：请求中有、既有中无稳定身份键时需新建。
-///
-/// # 参数
-/// * `requested_qualifications` - 根资料请求中的资质输入视图
-/// * `existing_keys` - 既有资质的稳定身份键集合
-///
-/// # 返回
-/// 返回需新建的资质输入。
+// 计算需新建的资质输入：请求中有、既有中无稳定身份键时需新建。
+// 返回需新建的资质输入。
 fn plan_qualification_creates(
     requested_qualifications: &[PlannedQualificationInput],
     existing_keys: &std::collections::HashSet<String>,

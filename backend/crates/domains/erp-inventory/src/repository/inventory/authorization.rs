@@ -20,11 +20,8 @@ pub struct InventoryMapping {
 }
 impl InventoryMapping {
     /// 绑定拥有领域提供的仓库映射。
-    /// # 参数
-    /// action 为实际列表动作；warehouse 为仓库拥有领域的固定映射。
-    /// # 返回
     /// 与库存集合和权限绑定的查询映射。
-    /// # 错误
+    /// action 为实际列表动作；warehouse 为仓库拥有领域的固定映射。
     /// 非列表动作或非法模型标识拒绝。
     pub fn shared(
         action: InventoryAction,

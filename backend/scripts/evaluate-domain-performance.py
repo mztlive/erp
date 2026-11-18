@@ -30,8 +30,8 @@ ENV_FIELDS = ("rustc_verbose", "cargo_verbose", "toolchain_channel", "profile", 
 PROOF_FIELDS = ("host_id", "hardware_id", "physical_device_id", "build_jobs", "measurement_script_sha256", "build_configuration_sha256", "third_party_versions_sha256")
 
 
+# 将报告转为 JSON，把精确的 `Decimal` 写成字符串，避免序列化改动已用于性能阈值判定的数值。
 def encode(value):
-    """Serialize exact Decimal outputs as strings without rounding gate operands."""
     return json.dumps(value, ensure_ascii=False, indent=2, default=str)
 
 
@@ -46,16 +46,16 @@ def resolve(base, value):
     return (path if path.is_absolute() else base / path).resolve()
 
 
+# 将样本中的正有限数字解析为 `Decimal`，拒绝布尔值与字符串，供原始耗时和中位数核验。
 def number(value):
-    """Accept positive finite raw numeric values; reject bool and string."""
     if isinstance(value, bool) or not isinstance(value, (int, float, Decimal)):
         return None
     result = Decimal(str(value))
     return result if result.is_finite() and result > 0 else None
 
 
+# 按测量工具相同的规则从 Cargo 包 ID 提取包名，供评估器核对原始编译消息与单元清单。
 def package_name(value):
-    """Match measure-incremental.py package-id normalization."""
     if value.startswith("path+file://"):
         return Path(value.split("#", 1)[0][len("path+file://"):]).name
     if "#" in value:
@@ -64,13 +64,13 @@ def package_name(value):
     return value.split(" ", 1)[0]
 
 
+# 只移除 rustup 因 worktree 不同附加的覆盖路径说明，使基线和候选的实际工具链仍按原值比较。
 def toolchain(value):
-    """Normalize only rustup's worktree-specific override annotation."""
     return re.sub(r" \(overridden by '[^']+'\)$", "", value) if isinstance(value, str) else None
 
 
+# 提取记录中的 `df` 设备和挂载点，供基线与候选核对测量存储，不把变化的可用空间当作设备差异。
 def filesystem(value):
-    """Compare captured df device and mount, excluding changing free space."""
     if not isinstance(value, str):
         return None
     lines = value.strip().splitlines()
@@ -337,7 +337,7 @@ class Audit:
 
 
 def evaluate(manifest_path):
-    """Apply validity, comparability, isolation and independent check/build gates."""
+    """按清单核验基线与候选的样本、环境可比性和目标目录隔离，再分别判定 check 与 build 是否达标。"""
     manifest_path = manifest_path.resolve()
     audit = Audit()
     manifest = audit.doc(manifest_path, "manifest")
@@ -415,8 +415,8 @@ def evaluate(manifest_path):
             "sample_policy": "Exactly five original timed samples per group; no filtering; original order and exact median checked."}
 
 
+# 返回证据清单与绑定提交的对比记录格式，供 `--schema` 告知操作者如何关联两端原始测量。
 def schema():
-    """Emit the manifest and commit-bound comparison record contract."""
     return {"manifest": {"schema_version": 1, "commits": {r: "full lowercase 40-hex commit" for r in REVISIONS},
                          "groups": {s: {m: {"baseline": f"/evidence/baseline-{s}-{m}", "candidate": f"/evidence/candidate-{s}-{m}",
                                              "comparison_evidence": f"/evidence/comparison-{s}-{m}.json"} for m in MODES} for s in SCENARIOS}},
@@ -505,8 +505,8 @@ def fixture(root):
     return path
 
 
+# 供 `--self-test` 核验阈值边界，确认缺失、伪造或非 Fresh 的证据无法通过正式判定。
 def self_test():
-    """Exercise thresholds and rejection of omitted, forged or non-Fresh evidence."""
     results = []
     with tempfile.TemporaryDirectory(prefix="domain-performance-selftest-") as temporary:
         root = Path(temporary)

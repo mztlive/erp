@@ -32,12 +32,10 @@ pub struct SupplierMessageWorker {
 
 impl SupplierMessageWorker {
     /// 复用应用数据库、实际协议注册表与敏感证据加密器。
-    /// # 参数
+    ///
     /// `db`、`registry`、`codec` 均由应用组合根注入。
-    /// # 返回
+    ///
     /// 未发起外部请求的消息worker。
-    /// # 错误
-    /// 不返回错误。
     pub fn new(
         db: Database,
         registry: Arc<SupplierConnectorRegistry>,
@@ -55,24 +53,24 @@ impl SupplierMessageWorker {
         }
     }
 
-    /// 注入财务资金调查实现，缺失时退款及支付异常消息保持待核实。
-    /// # 参数
+    /// 组合根接入真实资金调查后，消息 worker 才能交付退款和支付异常的财务线索；未装配时保持待核实。
+    ///
     /// `funds` 由组合根绑定真实账号及资金证据应用流程。
-    /// # 返回
+    ///
     /// 带资金调查能力的消息worker。
-    /// # 错误
+    ///
     /// 不返回错误，不执行查询或记账。
     pub fn with_funds_investigation(mut self, funds: Arc<dyn SupplierMessageFundsInvestigation>) -> Self {
         self.funds = Some(funds);
         self
     }
 
-    /// 有界读取20个连接，每个具有实际消息能力的账号最多接收20条消息。
-    /// # 参数
+    /// 消息 worker 每轮有界扫描 20 个服务端连接；每个实际支持消息的账号最多接收 20 条消息。
+    ///
     /// 无；账号和消息能力只从服务端注册适配器取得。
-    /// # 返回
+    ///
     /// 本轮完成远端确认的消息数；隔离与未知结果保留记录并告警。
-    /// # 错误
+    ///
     /// 连接分页失败时返回错误；单连接错误保留消息且不阻断其余连接。
     pub async fn run_once(&self) -> Result<usize> {
         let mut cursor = self.cursor.lock().await;

@@ -21,13 +21,15 @@ pub struct PurchaseSalesMaterialReference {
 }
 
 impl PurchaseOrderReadService {
-    /// 在同一事务中证明采购详情及关联销售版本的精确材料资格。
+    /// 确定采购关联销售来源的适用条件时，在同一事务中证明采购详情及关联销售版本的精确材料资格。
     ///
     /// # 参数
     /// * `actor` / `order_id` - 已认证账号及其有权读取的采购单。
     /// * `asset_id` - 只能来自本采购关联销售版本材料清单的文件引用。
+    ///
     /// # 返回
     /// 返回冻结文件与关系版本，供存储读取前后比对；不要求普通销售或合同读取权限。
+    ///
     /// # 错误
     /// 采购不可见、跨采购材料、版本关系缺失、文件内容变化或治理关闭时拒绝。
     pub async fn require_sales_material(
@@ -73,7 +75,7 @@ impl PurchaseOrderReadService {
     }
 }
 
-/// 文件资格沿采购页面实际展示的版本 > 提交内容优先级解释，不取当前销售草稿。
+// 处理采购关联销售来源时，文件资格沿采购页面实际展示的版本 > 提交内容优先级解释，不取当前销售草稿。
 fn displayed_lines(facts: &PurchaseOrderCenterFacts) -> Vec<PurchaseOrderLineView> {
     if facts.current_revision.is_some() {
         facts.revision_lines.iter().map(PurchaseOrderLineView::from_revision).collect()

@@ -54,13 +54,8 @@ pub struct JdVopHttpTransport {
 }
 
 impl JdVopHttpTransport {
-    /// 构造可供协议运行时显式注入的 HTTP 客户端，不发起网络。
-    /// # 参数
-    /// `settings/tokens` 来自受控装配；渠道取自配置，时间按本应用固定 UTC+8 政策编码。
-    /// # 返回
-    /// 禁止重定向且每次调用仅一次发送的客户端，不代表真实账号验收。
-    /// # 错误
-    /// 配置、渠道或 HTTP 客户端构造无效时拒绝。
+    /// 应用可用受控配置和令牌提供者装配京东协议传输：业务渠道取自配置，签名时间固定按 UTC+8 编码，发送不跟随重定向、不重试。
+    /// 构造时检查配置、渠道与 HTTP 客户端是否有效，不发请求，也不能代替真实账号验收。
     pub fn new(settings: JdVopConfig, tokens: Arc<dyn JdVopTokenProvider>) -> ConnectorResult<Self> {
         settings.validate().map_err(|_| mapping("京东连接设置不完整，请联系管理员核对接入配置"))?;
         if !settings.enabled {

@@ -40,7 +40,7 @@ pub struct PurchaseOrderReadService {
     rbac: Arc<AuthorizationService>,
 }
 impl PurchaseOrderReadService {
-    /// 装配采购读取所需的数据库、身份设施和对象范围。
+    /// 装配采购中心时，接入采购读取所需的数据库、身份设施和对象范围。
     ///
     /// # 参数
     /// * `db` - 采购事实数据库。
@@ -50,7 +50,6 @@ impl PurchaseOrderReadService {
     /// # 返回
     /// 不缓存授权结论的采购读取服务。
     ///
-    /// # 错误
     /// 构造不执行 I/O。
     pub fn new(
         db: mongodb::Database,
@@ -60,19 +59,12 @@ impl PurchaseOrderReadService {
         Self { db, rbac, data_scope }
     }
 
-    /// 构造绑定当前 Port 的采购访问器。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回无授权缓存的访问器。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 不得在此回退构造身份域 Service。
+    // 处理采购中心时，生成绑定当前 Port 的采购访问器。
+    //
+    // 返回无授权缓存的访问器。
+    //
+    // 业务边界：
+    // 不得在此回退构造身份域 Service。
     fn access(&self) -> access::PurchaseAccess {
         access::PurchaseAccess::new(self.db.clone(), Arc::clone(&self.data_scope))
     }

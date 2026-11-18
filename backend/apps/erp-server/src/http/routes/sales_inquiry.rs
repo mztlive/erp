@@ -9,12 +9,7 @@ use crate::http::routes::permission_route;
 use crate::http::state::HttpState;
 
 /// 装配询价路由。
-/// # 参数
-/// 无。
-/// # 返回
 /// 返回销售与采购独立入口。
-/// # 错误
-/// 不执行 I/O，不返回错误。
 pub fn routes() -> Router<HttpState> {
     Router::new()
         .merge(sales_reads())

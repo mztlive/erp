@@ -9,19 +9,11 @@ use persistence_core::Executor;
 
 use crate::{Error, Result};
 
-/// 读取采购引用的正式销售版本并保留其主体身份和名称。
-///
-/// # 参数
-/// * `db` - 数据库。
-/// * `sales_order_id` - 真实来源销售单。
-/// * `revision_id` - 采购引用的精确正式版本。
-/// * `executor` - 当前事务执行器。
-///
-/// # 返回
-/// 返回正式销售来源证明完整的采购主体快照。
-///
-/// # 错误
-/// 版本不存在、来源身份错配或正式主体资料缺失时拒绝。
+// 读取采购引用的正式销售版本并保留其主体身份和名称。
+//
+// `sales_order_id` 为真实来源销售单；`revision_id` 为采购引用的精确正式版本；沿用原事务的执行器。返回正式销售来源证明完整的采购主体快照。
+//
+// 版本不存在、来源身份错配或正式主体资料缺失时拒绝。
 pub(super) async fn load_payment_subject(
     db: &Database,
     sales_order_id: &SalesOrderId,
@@ -56,18 +48,9 @@ fn subject_from_revision(
     )?)
 }
 
-/// 复验已冻结采购主体，禁止用当前销售资料补写历史依据。
-///
-/// # 参数
-/// * `db` - 数据库。
-/// * `frozen` - 已冻结采购主体与正式销售来源。
-/// * `executor` - 当前事务执行器。
-///
-/// # 返回
-/// 精确正式来源仍与冻结值一致时成功。
-///
-/// # 错误
-/// 来源缺失或任一冻结字段发生变化时拒绝执行。
+// 复验已冻结采购主体，禁止用当前销售资料补写历史依据。
+//
+// `frozen` 为已冻结采购主体与正式销售来源；沿用原事务的执行器。精确正式来源仍与冻结值一致时成功。来源缺失或任一冻结字段发生变化时拒绝执行。
 pub(super) async fn revalidate_payment_subject(
     db: &Database,
     frozen: &PaymentSubjectSnapshot,

@@ -39,27 +39,12 @@ use super::FulfillmentProcess;
 use super::purchase_context::{ensure_po_fulfillable, load_po_current_revision};
 use crate::{Error, Result};
 impl FulfillmentProcess {
-    /// 过账采购入库（草稿 → 已过账；§8.2 第 1 条跨集合事务）。
+    /// 采购实际到货时按最终草稿和期望版本过账（§8.2 第 1 条）。付款不阻止收货；事务内验证采购可履约且累计有效收货不超过当前有效采购量。
+    /// 同事务写入入库流水、更新或新建库存余额、按采购销售分配建立销售预占及流水，并推进采购履约进度、更新入库状态和审计。
     ///
-    /// 在同一事务内：校验采购单可履约（付款不阻止收货）、校验累计
-    /// 有效收货不超当前有效采购数量、写入库行对应的库存增加流水、更新/创建
-    /// 库存余额、沿采购销售分配自动建立销售预占（含预占流水）、推进采购履约
-    /// 进度、迁移入库单状态、写审计。重复过账由状态守卫（仅草稿）与流水唯一
-    /// 索引双重防护。
-    ///
-    /// # 参数
-    /// * `id` - 入库单主键
-    /// * `req` - 最终草稿与期望版本
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回过账后的入库单视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 入库单/采购单/生效版本不存在
-    /// * `ConflictError` - 状态不允许过账或重复过账
-    /// * `BusinessLogicError` - 门槛未满足、超收或采购单不可履约
-    /// * `OutcomeUnknown` - 提交结果无法确认
+    /// 返回已过账入库视图。草稿状态和流水唯一索引防止重复过账。入库单、采购单或生效版本缺失返回 `NotFound`；
+    /// 状态错误或重复过账返回 `ConflictError`；门槛不符、超收或采购不可履约返回 `BusinessLogicError`；
+    /// 提交无法确认返回 `OutcomeUnknown`。
     #[tracing::instrument(
         name = "fulfillment.purchase_receipt_post",
         skip_all,
@@ -88,7 +73,7 @@ impl FulfillmentProcess {
     }
 }
 
-/// 按原查询顺序准备入库事实，并在根事务内执行过账。
+// 按原查询顺序准备入库事实，并在根事务内执行过账。
 async fn post_receipt(
     db: &Database,
     task_identity: &Arc<AuthorizationService>,
@@ -144,7 +129,7 @@ struct PurchasePostingFacts {
     received: HashMap<PurchaseOrderRevisionLineId, Quantity>,
 }
 
-/// 沿原事务执行器依次读取采购主表、履约门槛、有效版本行和累计收货。
+// 沿原事务执行器依次读取采购主表、履约门槛、有效版本行和累计收货。
 async fn load_purchase_posting_facts(
     db: &Database,
     receipt: &PurchaseReceipt,
@@ -173,21 +158,11 @@ async fn load_purchase_posting_facts(
     Ok(PurchasePostingFacts { po, revision_lines, received })
 }
 
-/// 把各版本行上的累计合格收货归到当前版本行：采购改单形成新版本后，原版本行的
-/// 收货仍计入同一稳定销售行，不得因版本行主键变化而清零。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `purchase_order_id` - 采购单
-/// * `current` - 当前生效版本行
-/// * `received` - 按版本行记录的累计合格收货
-/// * `executor` - 调用方事务执行器
-///
-/// # 返回
-/// 返回当前版本行主键到跨版本累计合格收货。
-///
-/// # 错误
-/// 版本读取失败或累计越界时返回错误。
+// 把各版本行上的累计合格收货归到当前版本行：采购改单形成新版本后，原版本行的收货仍计入同一稳定销售行，不得因版本行主键变化而清零。
+//
+// `purchase_order_id` 为采购单；`current` 为当前生效版本行；`received` 为按版本行记录的累计合格收货；沿用原事务的执行器。
+//
+// 返回当前版本行主键到跨版本累计合格收货。版本读取失败或累计越界时返回错误。
 async fn received_on_current_lines(
     db: &Database,
     purchase_order_id: &PurchaseOrderId,
@@ -204,7 +179,7 @@ async fn received_on_current_lines(
     Ok(rekey_to_current_lines(current, &all_lines, &received)?)
 }
 
-/// 建立借用 ID 索引；重复 ID 保留原线性查找的首个命中，不改变输入顺序。
+// 建立借用 ID 索引；重复 ID 保留原线性查找的首个命中，不改变输入顺序。
 fn first_by_id<'a, T>(rows: &'a [T], id: impl Fn(&'a T) -> &'a str) -> HashMap<&'a str, &'a T> {
     let mut rows_by_id = HashMap::with_capacity(rows.len());
     for row in rows {
@@ -213,7 +188,7 @@ fn first_by_id<'a, T>(rows: &'a [T], id: impl Fn(&'a T) -> &'a str) -> HashMap<&
     rows_by_id
 }
 
-/// 读取索引中的首个采购版本行，缺失时保留原业务错误。
+// 读取索引中的首个采购版本行，缺失时保留原业务错误。
 fn purchase_line<'a>(
     lines_by_id: &HashMap<&str, &'a PurchaseOrderRevisionLine>,
     id: &PurchaseOrderRevisionLineId,
@@ -224,7 +199,7 @@ fn purchase_line<'a>(
         .ok_or_else(|| Error::BusinessLogicError("采购明细不存在".to_string()))
 }
 
-/// 从首个销售版本行读取稳定明细身份，缺失时保留原分配归属错误。
+// 从首个销售版本行读取稳定明细身份，缺失时保留原分配归属错误。
 fn sales_line_id(
     lines_by_id: &HashMap<&str, &SalesOrderRevisionLine>,
     id: &SalesOrderRevisionLineId,
@@ -247,10 +222,10 @@ enum ReceiptPostingStep {
 }
 #[async_trait::async_trait]
 trait ReceiptPostingSteps: Send {
-    /// 沿根事务执行器执行指定步骤，失败时保留原错误。
+    // 沿根事务执行器执行指定步骤，失败时保留原错误。
     async fn apply(&mut self, step: ReceiptPostingStep, executor: &mut dyn Executor) -> Result<()>;
 }
-/// 按原入库行和后续领域步骤的顺序过账，任一步失败即停止。
+// 按原入库行和后续领域步骤的顺序过账，任一步失败即停止。
 async fn execute_posting(
     steps: &mut impl ReceiptPostingSteps,
     line_count: usize,
@@ -286,17 +261,11 @@ struct MongoReceiptPosting<'a> {
 }
 #[async_trait::async_trait]
 impl ReceiptPostingSteps for MongoReceiptPosting<'_> {
-    /// 执行指定过账步骤；所有数据库操作继续复用调用方事务。
-    ///
-    /// # 参数
-    /// * `step` - 入库行下标，或入库标记、任务、采购进度、仓发草稿、审计之一。
-    /// * `session` - 调用方事务执行器；本步不另开事务。
-    ///
-    /// # 返回
-    /// 该步写入完成。
-    ///
-    /// # 错误
-    /// 行过账、入库标记、履约任务、采购进度、仓发草稿或审计失败时返回原错误。
+    // 执行指定过账步骤；所有数据库操作继续复用调用方事务。
+    //
+    // `step` 为入库行下标，或入库标记、任务、采购进度、仓发草稿、审计之一；`session` 为调用方事务执行器；本步不另开事务。该步写入完成。
+    //
+    // 行过账、入库标记、履约任务、采购进度、仓发草稿或审计失败时返回原错误。
     async fn apply(&mut self, step: ReceiptPostingStep, session: &mut dyn Executor) -> Result<()> {
         let db = self.db;
         let receipt = &mut *self.receipt;
@@ -341,7 +310,7 @@ impl ReceiptPostingSteps for MongoReceiptPosting<'_> {
 }
 
 impl MongoReceiptPosting<'_> {
-    /// 定位一次当前采购版本行，依次校验、过账并更新累计合格数量。
+    // 定位一次当前采购版本行，依次校验、过账并更新累计合格数量。
     async fn post_line(&mut self, index: usize, session: &mut dyn Executor) -> Result<()> {
         let line = &self.lines[index];
         let revision_line = purchase_line(&self.revision_lines_by_id, &line.purchase_order_revision_line_id)?;
@@ -375,7 +344,7 @@ impl MongoReceiptPosting<'_> {
         Ok(())
     }
 
-    /// 从原版本行顺序计算采购履约进度，再沿原执行器更新主表。
+    // 从原版本行顺序计算采购履约进度，再沿原执行器更新主表。
     async fn update_purchase_progress(&mut self, session: &mut dyn Executor) -> Result<()> {
         let revision_facts =
             self.revision_lines.iter().map(super::purchase_context::revision_line_fact).collect::<Vec<_>>();
@@ -388,25 +357,12 @@ impl MongoReceiptPosting<'_> {
         Ok(())
     }
 }
-/// 过账单条入库行（流水 + 余额 + 预占，位于调用方事务内）。
-///
-/// 仅合格数量形成库存入账和销售预占（§6.7）；预占沿采购销售分配按比例
-/// 分摊回原销售明细，最后一个分配吸收舍入尾差。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `session` - 事务会话执行器
-/// * `receipt` - 入库单表头
-/// * `line` - 入库行
-/// * `revision_line` - 已定位并校验的采购生效版本行
-/// * `occurred_at` - 过账业务时间
-/// * `actor` - 审计操作人（记录人身份）
-///
-/// # 返回
-/// 无返回值；写入失败时返回错误。
-///
-/// # 错误
-/// 采购明细缺失、余额写入失败或预占建立失败时返回错误。
+// 过账单条入库行（流水 + 余额 + 预占，位于调用方事务内）。
+//
+// 仅合格数量形成库存入账和销售预占（§6.7）；预占沿采购销售分配按比例分摊回原销售明细，最后一个分配吸收舍入尾差。
+//
+// `session` 为事务会话执行器；`receipt` 为入库单表头；`line` 为入库行；`revision_line` 为已定位并校验的采购生效版本行；`occurred_at` 为过账业务时间；
+// `actor` 为审计操作人（记录人身份）。无返回值；写入失败时返回错误。采购明细缺失、余额写入失败或预占建立失败时返回错误。
 async fn post_receipt_line(
     db: &Database,
     session: &mut dyn Executor,
@@ -442,25 +398,13 @@ async fn post_receipt_line(
     establish_reservations(db, session, receipt, line, revision_line, &sku_id, &balance_id).await
 }
 
-/// 沿采购销售分配自动建立销售预占（§8.2 第 1 条，位于调用方事务内）。
-///
-/// 预占数量按「分配数量 / 采购行数量」比例分摊本次合格入库，最后一个分配
-/// 吸收舍入尾差；每个（入库行, 分配）的建立动作唯一由唯一索引保证。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `session` - 事务会话执行器
-/// * `receipt` - 入库单表头
-/// * `line` - 入库行
-/// * `revision_line` - 采购生效版本行
-/// * `sku_id` - SKU
-/// * `balance_id` - 余额主键
-///
-/// # 返回
-/// 无返回值；写入失败时返回错误。
-///
-/// # 错误
-/// 分配缺失/无销售归属、可用量不足或写入失败时返回错误。
+// 沿采购销售分配自动建立销售预占（§8.2 第 1 条，位于调用方事务内）。
+//
+// 预占数量按「分配数量 / 采购行数量」比例分摊本次合格入库，最后一个分配吸收舍入尾差；每个（入库行, 分配）的建立动作唯一由唯一索引保证。
+//
+// `session` 为事务会话执行器；`receipt` 为入库单表头；`line` 为入库行；`revision_line` 为采购生效版本行；`sku_id` 为SKU；`balance_id` 为余额主键。
+//
+// 无返回值；写入失败时返回错误。分配缺失/无销售归属、可用量不足或写入失败时返回错误。
 async fn establish_reservations(
     db: &Database,
     session: &mut dyn Executor,
@@ -523,19 +467,12 @@ async fn establish_reservations(
     Ok(())
 }
 
-/// 入库过账后按销售单与仓库创建或补充仓发草稿。
-///
-/// 仓发草稿行引用本次入库沿采购销售分配建立的预占：`delivery_line` 的
-/// `stock_reservation_id` 指向预占，数量取预占数量。同一销售单同一仓库只复用
-/// 一个草稿；不同仓库必须分别建草稿，现有库存分配与后续采购入库可以共同补行。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `session` - 事务会话执行器
-/// * `receipt_lines` - 本次过账的入库行
-///
-/// # 返回
-/// 无返回值；查询或写入失败时返回错误。
+// 入库过账后按销售单与仓库创建或补充仓发草稿。
+//
+// 仓发草稿行引用本次入库沿采购销售分配建立的预占：`delivery_line` 的 `stock_reservation_id` 指向预占，数量取预占数量。同一销售单同一仓库只复用一个草稿；
+// 不同仓库必须分别建草稿，现有库存分配与后续采购入库可以共同补行。
+//
+// `session` 为事务会话执行器；`receipt_lines` 为本次过账的入库行。无返回值；查询或写入失败时返回错误。
 async fn create_warehouse_ship_drafts(
     db: &Database,
     task_identity: &Arc<AuthorizationService>,
@@ -593,7 +530,7 @@ async fn create_warehouse_ship_drafts(
     Ok(())
 }
 
-/// 将本次采购入库预占合并到同销售单同仓库的仓发草稿。
+// 将本次采购入库预占合并到同销售单同仓库的仓发草稿。
 async fn ensure_receipt_stock_delivery(
     db: &Database,
     task_identity: &Arc<AuthorizationService>,
@@ -636,7 +573,7 @@ async fn ensure_receipt_stock_delivery(
     Ok(())
 }
 
-/// 在原仓发构造位置按库存预占顺序投影消费事实。
+// 在原仓发构造位置按库存预占顺序投影消费事实。
 fn reservation_line_facts(
     reservations: &[&StockReservation],
 ) -> Vec<erp_fulfillment::entity::facts::ReceiptReservationLineFact> {
@@ -711,7 +648,7 @@ mod posting_contract_tests {
         }
     }
 
-    /// 采购索引与原首命中查找一致，且不移动或克隆版本行。
+    // 采购索引与原首命中查找一致，且不移动或克隆版本行。
     #[test]
     fn receipt_purchase_index_preserves_first_match_and_requested_order() {
         let rows = [purchase_revision("b", "2"), purchase_revision("a", "3"), purchase_revision("b", "99")];
@@ -733,7 +670,7 @@ mod posting_contract_tests {
         ));
     }
 
-    /// 销售身份映射仍沿调用方分配顺序执行，并保留重复版本行的首个稳定身份。
+    // 销售身份映射仍沿调用方分配顺序执行，并保留重复版本行的首个稳定身份。
     #[test]
     fn receipt_sales_index_preserves_allocation_order_first_match_and_error() {
         let rows = [
@@ -754,7 +691,7 @@ mod posting_contract_tests {
         ));
     }
 
-    /// 空索引保持两种缺失关联的既有业务错误。
+    // 空索引保持两种缺失关联的既有业务错误。
     #[test]
     fn receipt_empty_indexes_keep_missing_reference_errors() {
         let purchase_index = first_by_id(&[], |line: &PurchaseOrderRevisionLine| line.base.id.as_str());

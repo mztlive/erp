@@ -13,11 +13,7 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
 /// 由当前付款任务出纳明确占用本次全部执行组资金。
-/// # 参数
-/// 原付款申请、当前指定任务及稳定原命令身份。
-/// # 返回
 /// 返回资金占用；不增加正式已付，不提前关闭付款任务。
-/// # 错误
 /// 任务失效、越批准来源、账户或余额不合格时拒绝。
 pub async fn execute(
     State(state): State<HttpState>,

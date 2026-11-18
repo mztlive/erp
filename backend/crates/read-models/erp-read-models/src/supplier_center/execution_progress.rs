@@ -63,23 +63,26 @@ pub struct SupplierExecutionProgressReadModel {
 }
 
 impl SupplierExecutionProgressReadModel {
-    /// 装配只读执行进度查询。
+    /// 装配供应商执行进度时，接入只读执行进度查询。
+    ///
     /// # 参数
     /// `db` 为应用数据库。
+    ///
     /// # 返回
     /// 不执行查询的读模型。
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
-    /// 读取原采购商品标签及供应商订单树和多运单。
+    /// 处理供应商执行进度时，读取原采购商品标签及供应商订单树和多运单。
+    ///
     /// # 参数
     /// `execution` 已经服务端授权；`external_skus` 为同执行加密快照中的外部身份映射。
     /// `executor` 为原授权读取阶段的执行器，所有关联事实共用它。
+    ///
     /// # 返回
     /// 去除成本、内部明细身份及个人资料的业务视图。
+    ///
     /// # 错误
     /// 原采购明细缺失、观察归属不符或查询失败时拒绝。
     pub async fn for_execution(

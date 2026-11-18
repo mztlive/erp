@@ -46,12 +46,8 @@ struct ConfirmCommand {
 
 impl PurchaseOrderProcess {
     /// 在上传费用凭证前检查确认费用发生的功能资格。
-    /// # 参数
-    /// actor 为已认证账号。
-    /// # 返回
-    /// 当前快照具有功能资格时成功；不证明采购单范围或费用行可办理。
-    /// # 错误
-    /// 身份失效、缺少功能资格或快照失败时拒绝外部上传。
+    ///
+    /// actor 为已认证账号。当前快照具有功能资格时成功；不证明采购单范围或费用行可办理。身份失效、缺少功能资格或快照失败时拒绝外部上传。
     pub async fn prepare_attachment_upload(&self, actor: &AuditActor) -> Result<()> {
         let authorization = self.authorization.clone();
         let actor = actor.clone();
@@ -76,19 +72,10 @@ impl PurchaseOrderProcess {
 
     /// 采购确认一条费用行已发生，形成实际发生成本。
     ///
-    /// # 参数
-    /// * `purchase_order_id` - 采购单
-    /// * `expense_line_id` - 稳定费用行身份
-    /// * `req` - 发生日期与凭证引用
-    /// * `assets` - 本次已写入对象存储的凭证文件
-    /// * `actor` - 已认证操作人；确认资格与采购更新范围由原事务统一校验
+    /// `purchase_order_id` 为采购单；`expense_line_id` 为稳定费用行身份；`req` 为发生日期与凭证引用；`assets` 为本次已写入对象存储的凭证文件；`actor`
+    /// 为已认证操作人；确认资格与采购更新范围由原事务统一校验。返回费用行身份与实际成本事实主键。
     ///
-    /// # 返回
-    /// 返回费用行身份与实际成本事实主键。
-    ///
-    /// # 错误
-    /// 凭证缺失、采购单不可见或未生效、费用行不在当前版本或金额为 0、已确认发生、
-    /// 发生日期晚于今天或写入失败时返回错误。
+    /// 凭证缺失、采购单不可见或未生效、费用行不在当前版本或金额为 0、已确认发生、发生日期晚于今天或写入失败时返回错误。
     pub async fn confirm_expense_occurrence(
         &self,
         purchase_order_id: &str,
@@ -123,7 +110,7 @@ impl PurchaseOrderProcess {
     }
 }
 
-/// 事务内校验并写入确认事实、实际成本、凭证与审计。
+// 事务内校验并写入确认事实、实际成本、凭证与审计。
 async fn apply_confirm(
     db: &Database,
     ports: &PurchaseOrderPorts,
@@ -176,7 +163,7 @@ async fn apply_confirm(
     })
 }
 
-/// 读取已生效采购单的当前版本行。
+// 确认采购费用发生前，只从已生效、部分执行或已完成的采购单读取当前版本和明细。
 async fn current_lines(
     db: &Database,
     order: &PurchaseOrder,
@@ -201,7 +188,7 @@ async fn current_lines(
     Ok((revision_id, lines))
 }
 
-/// 同一费用行只能确认一次；并发确认由唯一索引兜底。
+// 同一费用行只能确认一次；并发确认由唯一索引兜底。
 async fn ensure_not_confirmed(
     db: &Database,
     command: &ConfirmCommand,
@@ -262,7 +249,7 @@ fn cost_fact(occurrence: &PurchaseExpenseOccurrence, entry_id: CostEntryId) -> P
     }
 }
 
-/// 费用采购单按已确认发生的费用行推进履约进度；商品采购单的进度由入库与交付决定。
+// 费用采购单按已确认发生的费用行推进履约进度；商品采购单的进度由入库与交付决定。
 async fn refresh_expense_progress(
     db: &Database,
     order: &mut PurchaseOrder,
@@ -286,7 +273,7 @@ async fn refresh_expense_progress(
     Ok(())
 }
 
-/// 金额为正的费用行全部确认发生为已完成，部分确认为部分，否则未开始。
+// 金额为正的费用行全部确认发生为已完成，部分确认为部分，否则未开始。
 pub(crate) fn expense_progress(
     lines: &[PurchaseOrderRevisionLine],
     occurred: &HashSet<String>,
@@ -304,7 +291,7 @@ pub(crate) fn expense_progress(
     }
 }
 
-/// 把凭证临时引用替换为正式资产；确认发生的凭证必须随命令上传。
+// 把凭证临时引用替换为正式资产；确认发生的凭证必须随命令上传。
 fn resolve_evidence(id: &mut FileAssetId, pending: &dyn PendingAttachmentBatch) -> Result<()> {
     let mut used = HashSet::new();
     if !pending.resolve_id(id, &mut used)? {

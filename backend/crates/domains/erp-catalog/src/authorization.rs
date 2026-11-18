@@ -29,62 +29,38 @@ impl std::fmt::Debug for CompiledScope {
     }
 }
 impl CompiledScope {
-    /// 读取当前凭证的策略版本。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// identity 绑定的策略版本。
-    /// # 错误
-    /// 无。
+    /// 读取当前凭证的策略版本。identity 绑定的策略版本。
     pub fn policy_version(&self) -> u64 {
         self.compiled.policy_version()
     }
 
-    /// 读取当前凭证的组织版本。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// identity 绑定的组织版本。
-    /// # 错误
-    /// 无。
+    /// 读取当前凭证的组织版本。identity 绑定的组织版本。
     pub fn organization_version(&self) -> u64 {
         self.compiled.organization_version()
     }
 
-    /// 读取本次授权时点。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// identity 绑定的授权时点。
-    /// # 错误
-    /// 无。
+    /// 读取本次授权时点。identity 绑定的授权时点。
     pub fn as_of(&self) -> Instant {
         self.compiled.as_of()
     }
 
     /// 返回身份域编译的完整授权阶段。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 必须在分页、计数与投影前完整执行的聚合阶段。
-    /// # 错误
-    /// 不执行 I/O。
+    ///
+    /// 必须在分页、计数与投影前完整执行的聚合阶段。不执行 I/O。
     pub fn stages(&self) -> &[Document] {
         self.compiled.stages()
     }
     /// 核验当前事务、读取阶段及有效期，不读取数据库。
-    /// # 参数
+    ///
+    /// 凭证仍属于当前阶段时成功。跨事务、跨阶段或已经到期时拒绝。
+    ///
     /// executor 为原读取执行器。
-    /// # 返回
-    /// 凭证仍属于当前阶段时成功。
-    /// # 错误
-    /// 跨事务、跨阶段或已经到期时拒绝。
     pub fn ensure_current(&self, executor: &mut dyn Executor) -> erp_identity::Result<()> {
         Self::ensure_model(self.compiled.model())?;
         self.compiled.ensure_current(executor)
     }
 
-    /// 商品仓储只接受真实商品集合的完整对象凭证。
+    // 商品仓储只接受真实商品集合的完整对象凭证。
     fn ensure_model(model: &QueryModel) -> erp_identity::Result<()> {
         if model.resource != "product"
             || model.collection != <Database as CatalogExt>::PRODUCTS
@@ -97,12 +73,10 @@ impl CompiledScope {
     }
 
     /// 复验账号、权限、版本和有效期。
-    /// # 参数
+    ///
+    /// 凭证仍有效时成功。未接线、撤权或版本变化拒绝。
+    ///
     /// executor 必须为原执行器。
-    /// # 返回
-    /// 凭证仍有效时成功。
-    /// # 错误
-    /// 未接线、撤权或版本变化拒绝。
     pub async fn validate(&self, executor: &mut dyn Executor) -> erp_identity::Result<()> {
         self.authorization.validate(&self.compiled, executor).await
     }
@@ -170,7 +144,7 @@ impl AccessFactsPort for Facts {
     }
 }
 
-/// 直接翻译真实维护人与业务组织；历史无值保持已知空，不以创建人回填。
+// 直接翻译真实维护人与业务组织；历史无值保持已知空，不以创建人回填。
 fn object(resource: &str, row: Document) -> erp_identity::Result<ObjectFacts> {
     Ok(ObjectFacts {
         resource: resource.into(),
@@ -184,7 +158,7 @@ fn object(resource: &str, row: Document) -> erp_identity::Result<ObjectFacts> {
         ..Default::default()
     })
 }
-/// 缺值与无有效值均表示已知无归属，损坏类型必须拒绝。
+// 缺值与无有效值均表示已知无归属，损坏类型必须拒绝。
 fn responsibility_text(row: &Document, field: &str) -> erp_identity::Result<Option<String>> {
     match row.get(field) {
         None | Some(Bson::Null) => Ok(None),
@@ -194,12 +168,8 @@ fn responsibility_text(row: &Document, field: &str) -> erp_identity::Result<Opti
 }
 
 /// 构造真实对象事实与静态查询映射，供统一授权装配复用。
-/// # 参数
-/// db 为拥有领域的数据库。
-/// # 返回
-/// 不包含授权政策的事实读取器与映射。
-/// # 错误
-/// 固定查询模型非法时返回错误，构造不执行 I/O。
+///
+/// 不包含授权政策的事实读取器与映射。固定查询模型非法时返回错误，构造不执行 I/O。
 pub fn bindings(db: Database) -> erp_identity::Result<(Arc<dyn AccessFactsPort>, Arc<dyn AccessMapping>)> {
     let facts = Arc::new(Facts { db, resource: "product".into(), collection: "products".into() });
     let mapping = Arc::new(Mapping {
@@ -278,7 +248,7 @@ mod tests {
         assert!(mapping.predicate(&AccessFact::HistoryParticipant, &context, None).is_err());
         assert!(mapping.relation(&RelationKey::parse("source").unwrap(), &context, None).is_err());
     }
-    /// 真实维护人与组织在对象及查询两端一致；创建人不能补负责人，历史缺值保持已知空。
+    // 真实维护人与组织在对象及查询两端一致；创建人不能补负责人，历史缺值保持已知空。
     #[test]
     fn real_responsibility_and_legacy_empty_values_match_object_and_query_checks() {
         use erp_identity::entity::access_control::{ScopeClause, ScopedObject};

@@ -29,16 +29,7 @@ pub(super) enum SeedRequest {
 }
 
 impl SeedRequest {
-    /// 返回种类及跨版本稳定的种子键。
-    ///
-    /// # 参数
-    /// 无；读取当前种子。
-    ///
-    /// # 返回
-    /// 返回种类和稳定种子键。
-    ///
-    /// # 错误
-    /// 无。
+    // 生成可跨版本复用的种类及种子键，供清单登记和命令重试识别同一条演示记录。
     pub(super) fn identity(&self) -> (DemoKind, &str) {
         match self {
             Self::Unit(row) => (DemoKind::Unit, &row.unit_code),
@@ -51,16 +42,7 @@ impl SeedRequest {
         }
     }
 
-    /// 返回领域输入中的显示名称。
-    ///
-    /// # 参数
-    /// 无；读取当前种子。
-    ///
-    /// # 返回
-    /// 返回领域创建请求中的显示名称。
-    ///
-    /// # 错误
-    /// 无。
+    // 取领域创建输入中的显示名称，供登记清单展示，不以名称替代稳定种子键。
     pub(super) fn label(&self) -> &str {
         match self {
             Self::Unit(row) => &row.name,
@@ -73,7 +55,7 @@ impl SeedRequest {
         }
     }
 
-    /// 在任何写入前验证领域输入及引用顺序。
+    // 按种类调用正式字段和前置引用校验，确保演示批次不会在开始写入后才发现模板不合法。
     fn validate(&self, previous: &HashMap<String, DemoKind>) -> Result<()> {
         let validation = match self {
             Self::Unit(row) => row.validate(),
@@ -104,16 +86,7 @@ impl SeedRequest {
     }
 }
 
-/// 解析全量清单，拒绝重复身份、非法字段和前置引用缺失。
-///
-/// # 参数
-/// `json` - 完整种子 JSON 文本。
-///
-/// # 返回
-/// 返回按依赖顺序校验完成的种子。
-///
-/// # 错误
-/// 解析失败、字段非法、身份重复或引用缺失时返回错误。
+// 解析并校验整份主数据 JSON 后才返回执行步骤；身份重复、领域字段无效或前置引用缺失时阻断，不生成部分清单。
 pub(super) fn load(json: &str) -> Result<Vec<DemoStep>> {
     let requests: Vec<SeedRequest> = serde_json::from_str(json)
         .map_err(|error| Error::ValidationError(format!("演示种子 JSON 无效：{error}")))?;
@@ -143,7 +116,7 @@ pub(super) fn load(json: &str) -> Result<Vec<DemoStep>> {
     Ok(steps)
 }
 
-/// 商品只允许引用前面已声明的字典种子。
+// 在商品写入前检查字典引用只能指向同清单中先声明的正确种类，确保执行到商品时可以解析实际主键。
 fn validate_product(row: &CreateProductRequest, previous: &HashMap<String, DemoKind>) -> Result<()> {
     if row.product_kind == ProductKind::Voucher {
         super::voucher::voucher_request(row)?;
@@ -162,7 +135,7 @@ fn validate_product(row: &CreateProductRequest, previous: &HashMap<String, DemoK
     Ok(())
 }
 
-/// 校验供应商占位引用及嵌套输入合同。
+// 校验供应商的环境占位引用及嵌套领域输入，防止生成时才发现岗位、公司或商务资料不符合合同。
 fn validate_supplier(row: &SaveSupplierProfileRequest) -> Result<()> {
     row.validate_contract()?;
     placeholder(row.signing_entity_party_id.as_ref(), "$company")?;
@@ -174,7 +147,7 @@ fn validate_supplier(row: &SaveSupplierProfileRequest) -> Result<()> {
     Ok(())
 }
 
-/// 拒绝意外写入某个环境的真实账号或公司 ID。
+// 限定环境相关主键必须使用声明的占位值，避免种子把某个环境的真实账号或公司 ID 带到其他环境。
 fn placeholder(value: &str, expected: &str) -> Result<()> {
     if value != expected {
         return Err(Error::ValidationError(format!("演示种子运行时引用必须为 {expected}")));
@@ -182,7 +155,7 @@ fn placeholder(value: &str, expected: &str) -> Result<()> {
     Ok(())
 }
 
-/// 引用必须存在、种类匹配且先于使用方出现。
+// 确认引用已声明、种类匹配且先于使用方出现，让生成按清单顺序处理时依赖已准备。
 fn reference(previous: &HashMap<String, DemoKind>, key: &str, kind: DemoKind) -> Result<()> {
     if previous.get(key) != Some(&kind) {
         return Err(Error::ValidationError(format!("演示种子引用未定义或种类不匹配：{key}")));
@@ -223,7 +196,7 @@ mod tests {
         assert!(steps.iter().all(|step| !step.request.label().is_empty()));
     }
 
-    /// 两个规格均维护完整参考价；门槛由公司 SKU 决定，不采用供应商 MOQ。
+    // 验证多规格商品的两个 SKU 均保留完整公司三价及集采门槛，不以供应商 MOQ 替代公司起订量。
     #[test]
     fn demo_multispec_prices_cover_bulk_threshold() {
         let steps = load(include_str!("master-data.json")).unwrap();
@@ -288,7 +261,7 @@ mod tests {
         assert_eq!(count, 29);
     }
 
-    /// 每条供应商输入均须通过真实商务版本工厂，并覆盖全部固定条件与自然周期。
+    // 用正式商务版本工厂验证每个供应商种子，确保固定付款条件和自然周期均有可用业务样本。
     #[test]
     fn demo_suppliers_cover_payment_terms_with_valid_commercial_revisions() {
         let steps = load(include_str!("master-data.json")).unwrap();
@@ -356,7 +329,7 @@ mod tests {
         assert!(load("[]").unwrap().is_empty());
     }
 
-    /// SKU 编号跨商品唯一，不能因供给集合按编号归组而漏验重复规格。
+    // 验证跨商品重复的 SKU 编号在写入前被拒绝，避免供给按编号归组时掩盖规格冲突。
     #[test]
     fn duplicate_sku_number_across_products_fails_before_execution() {
         let mut rows: Value = serde_json::from_str(include_str!("master-data.json")).unwrap();

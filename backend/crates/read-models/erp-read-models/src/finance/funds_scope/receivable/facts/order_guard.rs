@@ -6,18 +6,17 @@ use rust_decimal::Decimal;
 /// Decimal 可用的最大无符号 96 位尾数。
 const MAX_MANTISSA: i128 = (1_i128 << 96) - 1;
 
-/// 证明这组金额在任意正反排列下均可按两位小数精确折叠。
-///
-/// # 参数
-/// * `amounts` - 单个子账的全部核销金额；包含正向与反向，不按动作合并
-///
-/// # 返回
-/// 所有金额可精确换成分币整数且绝对系数总和不超过 96 位尾数时返回 true。
-/// 此界覆盖任意中间净额，保证 Decimal 无需降到两位以下或舍入。
-/// 空集合及零金额返回 true；false 要求调用方回读原单账查询并按原流运算。
-///
-/// # 错误
-/// 不返回错误；换算不精确、整数运算溢出或超过尾数上界均返回 false。
+// 处理应收子账时，证明这组金额在任意正反排列下均可按两位小数精确折叠。
+//
+// 调用参数：
+// * `amounts` - 单个子账的全部核销金额；包含正向与反向，不按动作合并
+//
+// 结果：
+// 所有金额可精确换成分币整数且绝对系数总和不超过 96 位尾数时返回 true。
+// 此界覆盖任意中间净额，保证 Decimal 无需降到两位以下或舍入。
+// 空集合及零金额返回 true；false 要求调用方回读原单账查询并按原流运算。
+//
+// 换算不精确、整数运算溢出或超过尾数上界均返回 false。
 pub(super) fn order_independent(amounts: impl IntoIterator<Item = Amount>) -> bool {
     let mut absolute_total = 0_i128;
     for amount in amounts {
@@ -35,7 +34,7 @@ pub(super) fn order_independent(amounts: impl IntoIterator<Item = Amount>) -> bo
     true
 }
 
-/// 以 primitive checked 运算精确换成两位系数，不能用 Decimal 加法证明其上界。
+// 组装应收子账时，以 primitive checked 运算精确换成两位系数，不能用 Decimal 加法证明其上界。
 fn cent_coefficient(decimal: Decimal) -> Option<i128> {
     let mantissa = decimal.mantissa();
     let scale = decimal.scale();
@@ -55,13 +54,13 @@ mod tests {
 
     use super::*;
 
-    /// 使用真实金额解析路径，避免测试中以自定义系数替代金额合同。
+    // 使用真实金额确定路径，避免测试中以自定义系数替代金额合同。
     fn amount(value: &str) -> Amount {
         Amount::from_str(value).unwrap()
     }
 
     #[test]
-    /// 常规正反金额、负值、零和空集合在任意排列下均保持精确净额。
+    // 计算应收子账金额时，常规正反金额、负值、零和空集合在任意排列下均保持精确净额。
     fn ordinary_signed_amounts_are_order_independent() {
         assert!(order_independent([]));
         assert!(order_independent([Amount::zero(), amount("-0.00")]));
@@ -76,7 +75,7 @@ mod tests {
     }
 
     #[test]
-    /// Decimal::MAX 和交错正反极值在执行任何金额运算前要求原流回退。
+    // 检查应收子账资格时，Decimal::MAX 和交错正反极值在执行任何金额运算前要求原流回退。
     fn decimal_maximum_and_cancelling_extremes_require_original_order() {
         let maximum = Amount::try_from(Decimal::MAX).unwrap();
         assert!(!order_independent([maximum]));
@@ -86,7 +85,7 @@ mod tests {
     }
 
     #[test]
-    /// 恰好 96 位的两位系数允许，任何非零附加绝对金额都必须回退。
+    // 处理应收子账时，恰好 96 位的两位系数允许，任何非零附加绝对金额都必须回退。
     fn exact_cent_mantissa_boundary_is_inclusive() {
         let boundary = amount("792281625142643375935439503.35");
         let negative = amount("-792281625142643375935439503.35");
@@ -98,7 +97,7 @@ mod tests {
     }
 
     #[test]
-    /// 真实金额的尾零和归一化 scale 0/1/2 保持相同分币值，不依赖 Decimal 求和。
+    // 计算应收子账金额时，真实金额的尾零和归一化 scale 0/1/2 保持相同分币值，不依赖 Decimal 求和。
     fn normalized_amount_scales_and_trailing_zeros_keep_exact_cent_values() {
         for (value, expected, normalized_scale) in
             [("123.0000", 12300, 0), ("12.3000", 1230, 1), ("12.3400", 1234, 2), ("-12.3000", -1230, 1)]

@@ -20,19 +20,10 @@ use crate::{Error, Result};
 impl PurchaseOrderProcess {
     /// 作废采购改单草稿；原采购单当前版本保持不变，之后可重新发起改单。
     ///
-    /// # 参数
-    /// * `id` - 变更单主键
-    /// * `req` - 作废请求（期望版本）
-    /// * `actor` - 已认证操作人
+    /// `id` 为变更单主键；`req` 为作废请求（期望版本）。返回作废后的变更单视图。`NotFound`：变更单不存在或来源采购单不可写。
     ///
-    /// # 返回
-    /// 返回作废后的变更单视图。
+    /// `ConflictError`：版本已变化，或变更单不是草稿（审批中须先撤回）。
     ///
-    /// # 错误
-    /// * `NotFound` - 变更单不存在或来源采购单不可写
-    /// * `ConflictError` - 版本已变化，或变更单不是草稿（审批中须先撤回）
-    ///
-    /// # 关键业务约束
     /// 必须先证明变更作废资格及来源采购单更新范围，再校验版本与状态；全部使用原事务。
     pub async fn void_change(
         &self,
@@ -57,7 +48,7 @@ impl PurchaseOrderProcess {
         self.change_view(id, actor, &internal::PURCHASE_CHANGE_VOIDED_RESULT_READ).await
     }
 
-    /// 使用原事务先检查完整作废资格，再校验版本并写入作废、报价恢复和审计。
+    // 使用原事务先检查完整作废资格，再校验版本并写入作废、报价恢复和审计。
     async fn void_change_apply(
         &self,
         id: &str,

@@ -31,32 +31,17 @@ pub struct ApprovalDefinitionService {
 
 impl ApprovalDefinitionService {
     /// 创建定义管理服务。
-    ///
-    /// # 参数
-    /// * `db` - MongoDB 数据库
-    /// * `identity` - 共享身份与权限服务
-    ///
-    /// # 返回
     /// 返回尚未接线 HTTP 的应用端口。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// `identity`：共享身份与权限服务。
     pub fn new(db: Database, identity: SharedRbacService, authorization: Arc<AuthorizationService>) -> Self {
         Self { db, identity, authorization, audit: Arc::new(FailClosedAuditPort) }
     }
 
     /// 创建注入审计端口的定义管理服务。
-    ///
-    /// # 参数
-    /// * `db` - MongoDB 数据库
-    /// * `identity` - 共享身份与权限服务
-    /// * `audit` - 审计写入端口
-    ///
-    /// # 返回
     /// 返回使用给定审计端口的服务。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// `identity`：共享身份与权限服务。
     pub fn with_audit(
         db: Database,
         identity: SharedRbacService,
@@ -105,11 +90,8 @@ pub(super) mod test_support {
     }
 
     /// 创建必须在任何业务或审计访问之前拒绝的定义服务。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 不可用授权设施与当前认证账号。
-    /// # 错误
+    ///
     /// 不执行 I/O。
     pub async fn unavailable_service() -> (ApprovalDefinitionService, AuditActor) {
         let client = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1").await.unwrap();
@@ -166,7 +148,7 @@ mod tests {
     use super::super::policy::{ALL_DOCUMENT_TYPES, policy_of};
     use super::super::process_kind::{document_type_of, process_kind_of};
 
-    /// 政策与 ProcessKind 映射穷尽。
+    // 验证：政策与 ProcessKind 映射穷尽。
     #[test]
     fn policy_mapping_is_exhaustive() {
         for document_type in ALL_DOCUMENT_TYPES {

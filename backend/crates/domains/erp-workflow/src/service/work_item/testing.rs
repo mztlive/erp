@@ -32,7 +32,7 @@ impl IdentityAuditPort for NoAudit {
     }
 }
 
-/// 构造只允许验证授权拒绝顺序的任务服务，不连接数据库。
+// 构造不连接数据库的任务服务，用于断言授权拒绝发生在业务事实读取之前。
 pub(super) fn unavailable_service() -> WorkItemService<FailClosedWorkflowAuthorizationPort> {
     let options = ClientOptions::builder()
         .hosts(vec![ServerAddress::Tcp { host: "127.0.0.1".into(), port: Some(1) }])

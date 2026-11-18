@@ -87,19 +87,12 @@ pub(super) struct PreparedOpenDecision {
     pub(super) runtime_admin_ids: Vec<String>,
 }
 
-/// 加载仍开放的决定运行时：任务、执行、实例、快照与节点审批人。
-///
-/// # 参数
-/// * `db` - 数据库。
-/// * `actor` - 当前决定人。
-/// * `command` - 决定命令。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
-/// 返回已通过当前任务责任链的开放运行时。
-///
-/// # 错误
-/// 任务或执行缺失、任务前置失败、主体不一致、责任冲突、开放任务不含当前任务或缺少节点审批人时返回错误；仓储失败时返回对应错误。
+// 加载仍开放的决定运行时：任务、执行、实例、快照与节点审批人。
+// 返回已通过当前任务责任链的开放运行时。
+//
+// 任务或执行缺失、任务前置失败、主体不一致、责任冲突、开放任务不含当前任务或缺少节点审批人时返回错误；仓储失败时返回对应错误。
+//
+// `actor`：当前决定人。
 pub(super) async fn load_open_decision_runtime(
     db: &Database,
     actor: &AuditActor,
@@ -110,7 +103,7 @@ pub(super) async fn load_open_decision_runtime(
     load_open_decision_subject(db, actor, command, execution, executor).await
 }
 
-/// 按任务前置取出执行；任务不存在、不是当前决定人或执行缺失时失败。
+// 新决定准备时先由任务校验当前决定人，再取其精确开放执行；缺任务、当前人不符或无执行时不继续。
 async fn load_open_decision_execution(
     db: &Database,
     actor: &AuditActor,
@@ -135,7 +128,7 @@ async fn load_open_decision_execution(
     Ok(OpenDecisionExecution { item, execution_id, execution, expected_execution_version })
 }
 
-/// 把已授权执行补齐为实例、快照、开放任务和节点审批人齐全的运行时。
+// 补齐已验任务执行对应的实例、提交快照、全部开放责任及节点绑定，供决定资格重验使用。
 async fn load_open_decision_subject(
     db: &Database,
     actor: &AuditActor,
@@ -162,7 +155,7 @@ async fn load_open_decision_subject(
     })
 }
 
-/// 加载实例与冻结快照；种类或主体不一致时失败关闭。
+// 新决定按当前执行加载实例及冻结提交快照；其中任一单据种类或主体身份不一致时拒绝。
 async fn load_open_decision_instance(
     db: &Database,
     execution: &ApprovalNodeExecution,
@@ -203,7 +196,7 @@ async fn load_open_decision_instance(
     })
 }
 
-/// 责任链不成立、开放任务不含当前任务或缺少节点审批人时失败。
+// 构造决定输入前证明当前开放责任链完整；查询结果必须含本任务并找到节点审批人，否则拒绝准备决定。
 async fn load_open_decision_tasks(
     db: &Database,
     actor: &AuditActor,
@@ -290,20 +283,13 @@ fn ensure_or_sign_tasks(
     Ok(())
 }
 
-/// 重验当前与下一节点资格，并形成尚未写库的决定计划。
-///
-/// # 参数
-/// * `services` - 共用数据库、账号目录、统一授权与来源读取端口。
-/// * `actor` - 当前决定人。
-/// * `command` - 决定命令。
-/// * `loaded` - 已加载的开放运行时。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
-/// 返回待写入的计划、动作上下文、任务身份和审计。
-///
-/// # 错误
-/// 定义或目标节点缺失、资格重验失败、执行序号溢出、规划失败，或新命令落入回放分支时返回错误。
+// 重验当前与下一节点资格，并形成尚未写库的决定计划。
+// 返回待写入的计划、动作上下文、任务身份和审计。
+//
+// 定义或目标节点缺失、资格重验失败、执行序号溢出、规划失败，或新命令落入回放分支时返回错误。
+//
+// `services`：共用数据库、账号目录、统一授权与来源读取端口；`actor`：当前决定人。
+// `loaded`：已加载的开放运行时。
 pub(super) async fn prepare_open_decision(
     services: &DecisionServices<'_, impl crate::ports::WorkflowAuthorizationPort>,
     actor: &AuditActor,
@@ -322,7 +308,7 @@ pub(super) async fn prepare_open_decision(
     finish_prepared_open_decision(actor, command, loaded, writes, now, runtime_admin_ids)
 }
 
-/// 重验当前与下一节点资格；定义或目标节点缺失时失败。
+// 应用决定计划之前重验当前审批人与下一节点审批人的资格。无法找到定义或目标节点时不继续推进。
 async fn revalidate_decision_eligibilities(
     services: &DecisionServices<'_, impl crate::ports::WorkflowAuthorizationPort>,
     actor: &AuditActor,
@@ -425,7 +411,7 @@ async fn load_frozen_definition_graph(
         .ok_or_else(|| Error::ConflictError("找不到该审批使用的流程，请联系审批管理员核对".to_string()))
 }
 
-/// 调用决定规划器；新命令落入回放分支时按内部错误失败。
+// 将已核验的开放任务事实交给决定规划器；新决定意外被分类为回放时按内部不变式错误拒绝。
 fn plan_open_decision(
     actor: &AuditActor,
     command: &RuntimeDecisionCommand,
@@ -473,7 +459,7 @@ fn plan_open_decision(
     Ok(*writes)
 }
 
-/// 计划成功后冻结动作上下文、任务身份、列表投影与审计。
+// 决定计划成立后分配待建任务身份，并冻结领域动作输入、列表投影与审计供原事务写入。
 fn finish_prepared_open_decision(
     actor: &AuditActor,
     command: &RuntimeDecisionCommand,
@@ -516,7 +502,7 @@ fn finish_prepared_open_decision(
     })
 }
 
-/// 仅当计划含受阻通知时解析运行管理员收件人。
+// 决定计划含受阻通知时才读取运行管理员收件人；不发送该事件的计划不取此资格。
 async fn blocked_runtime_admin_ids(
     authorization: &AuthorizationService,
     identity_service: &SharedRbacService,
@@ -540,7 +526,7 @@ async fn blocked_runtime_admin_ids(
     }
 }
 
-/// 由已加载运行事实构造领域决定动作上下文。
+// 从已核对的任务、实例及冻结主体构造领域决定动作的强类型输入。
 fn decision_action_context(
     command: &RuntimeDecisionCommand,
     loaded: &OpenDecisionRuntime,
@@ -561,7 +547,7 @@ fn decision_action_context(
     })
 }
 
-/// 构造决定审计；资源标识取自实例。
+// 为审批决定写入准备安全审计，资源身份必须取实际运行实例，而非请求显示信息。
 fn decision_audit(
     actor: &AuditActor,
     command: &RuntimeDecisionCommand,

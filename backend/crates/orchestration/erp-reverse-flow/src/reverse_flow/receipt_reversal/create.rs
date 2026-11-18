@@ -25,19 +25,9 @@ use crate::{Result, ReverseFlowPorts};
 impl ReturnsProcess {
     /// 登记回款冲正草稿，并在同一事务绑定已发布审批定义。
     ///
-    /// 冲正单号全局唯一（唯一索引）构成幂等去重。经办人与复核人必须不同。
-    /// 绑定失败必须回滚业务实体，不得把绑定推迟到提交。
+    /// 冲正单号全局唯一（唯一索引）构成幂等去重。经办人与复核人必须不同。绑定失败必须回滚业务实体，不得把绑定推迟到提交。返回新建冲正单视图。
     ///
-    /// # 参数
-    /// * `req` - 创建请求
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回新建冲正单视图。
-    ///
-    /// # 错误
-    /// * `ConflictError` - 冲正单号重复或流程未配置
-    /// * `NotFound` - 原回款不存在
+    /// `ConflictError`：冲正单号重复或流程未配置。`NotFound`：原回款不存在。
     pub async fn create_receipt_reversal(
         &self,
         req: CreateReceiptReversalRequest,
@@ -53,7 +43,7 @@ impl ReturnsProcess {
             .await
     }
 
-    /// 原创建事务内先授权，再读取真实往来主体、绑定定义并原子登记。
+    // 原创建事务内先授权，再读取真实往来主体、绑定定义并原子登记。
     async fn create_receipt_reversal_stage(
         &self,
         req: CreateReceiptReversalRequest,
@@ -86,12 +76,9 @@ impl ReturnsProcess {
     }
 }
 
-/// 在创建事务内写入冲正单、绑定发布定义并登记单据。
-///
-/// 绑定失败必须回滚业务实体，不得留下以后补流程的单据。
-///
-/// # 错误
-/// 无发布定义、人员重验失败或写入失败时返回错误。
+// 在创建事务内写入冲正单、绑定发布定义并登记单据。
+//
+// 绑定失败必须回滚业务实体，不得留下以后补流程的单据。无发布定义、人员重验失败或写入失败时返回错误。
 async fn persist_created_receipt_reversal(
     db: &Database,
     rbac: &ReverseFlowPorts,

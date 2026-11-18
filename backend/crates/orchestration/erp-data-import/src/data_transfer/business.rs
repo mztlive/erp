@@ -25,19 +25,19 @@ use crate::{Error, Result};
 #[async_trait]
 pub trait TransferReader: Send + Sync {
     /// 读取与业务页面同口径的一页。
-    /// # 参数
+    ///
     /// 固定任务类型、服务端分页参数与认证人。
-    /// # 返回
+    ///
     /// 原接口 JSON 分页视图。
-    /// # 错误
+    ///
     /// 原业务权限、版本和查询错误原样保留。
     async fn page(&self, kind: TransferKind, input: &Value, actor: &AuditActor) -> Result<Value>;
     /// 在原功能授权快照中读取商品池或报价来源页。
-    /// # 参数
+    ///
     /// kind、input 为固定商品池或报价任务，actor 为当前身份，executor 为原事务。
-    /// # 返回
+    ///
     /// 与业务页面相同的已授权分页视图。
-    /// # 错误
+    ///
     /// 不支持的任务、原业务授权或数据库失败时返回错误，不切换执行器。
     async fn page_with(
         &self,
@@ -47,11 +47,11 @@ pub trait TransferReader: Send + Sync {
         executor: &mut dyn Executor,
     ) -> Result<Value>;
     /// 读取原报表的完整 CSV。
-    /// # 参数
+    ///
     /// 固定报表类型、条件与认证人。
-    /// # 返回
+    ///
     /// 原报表导出结果。
-    /// # 错误
+    ///
     /// 原报表错误原样保留。
     async fn report(&self, kind: TransferKind, input: &Value, actor: &AuditActor) -> Result<Value>;
 }
@@ -75,12 +75,10 @@ pub struct BusinessTransfers {
 }
 impl BusinessTransfers {
     /// 装配当前身份源及固定业务查询适配器。
-    /// # 参数
+    ///
     /// 数据库、RBAC、原业务查询适配器。
-    /// # 返回
+    ///
     /// 未执行 I/O 的任务处理器。
-    /// # 错误
-    /// 无。
     pub fn new(
         db: Database,
         authorization: Arc<AuthorizationService>,
@@ -90,13 +88,13 @@ impl BusinessTransfers {
     ) -> Self {
         Self { db, authorization, reader, storage, services }
     }
-    /// 在独立快照中预检当前功能或门户会话资格。
-    /// # 参数
-    /// kind、input 为固定任务，actor 为当前身份。
-    /// # 返回
-    /// 本次预检通过时完成；实际业务读取和写入仍重新授权。
-    /// # 错误
-    /// 事务、资格或身份读取失败时返回错误。
+    // 在独立快照中预检当前功能或门户会话资格。
+    //
+    // kind、input 为固定任务，actor 为当前身份。
+    //
+    // 本次预检通过时完成；实际业务读取和写入仍重新授权。
+    //
+    // 事务、资格或身份读取失败时返回错误。
     pub(super) async fn access(&self, kind: TransferKind, input: &Value, actor: &AuditActor) -> Result<()> {
         let service = self.clone();
         let input = input.clone();
@@ -108,13 +106,13 @@ impl BusinessTransfers {
             })
             .await
     }
-    /// 在调用方执行器核验本任务原有功能资格，目标条件由所属业务入口执行。
-    /// # 参数
-    /// kind、input 为固定业务任务，actor 为当前身份，executor 为本次原执行器。
-    /// # 返回
-    /// 原功能权限或门户写资格成立时成功。
-    /// # 错误
-    /// 任务类型、身份或功能资格无效时拒绝。
+    // 在调用方执行器核验本任务原有功能资格，目标条件由所属业务入口执行。
+    //
+    // kind、input 为固定业务任务，actor 为当前身份，executor 为本次原执行器。
+    //
+    // 原功能权限或门户写资格成立时成功。
+    //
+    // 任务类型、身份或功能资格无效时拒绝。
     pub(super) async fn access_with(
         &self,
         kind: TransferKind,
@@ -187,13 +185,13 @@ impl BusinessTransfers {
         }
         Err(Error::ValidationError("导出超过十万行，请缩小范围".into()))
     }
-    /// 商品池及报价页的附加资格与实际业务读取使用同一快照。
-    /// # 参数
-    /// kind、query 为固定业务分页，actor 为当前身份。
-    /// # 返回
-    /// 原业务已完成授权的分页结果。
-    /// # 错误
-    /// 功能资格、数据授权或业务读取失败时拒绝交付。
+    // 商品池及报价页的附加资格与实际业务读取使用同一快照。
+    //
+    // kind、query 为固定业务分页，actor 为当前身份。
+    //
+    // 原业务已完成授权的分页结果。
+    //
+    // 功能资格、数据授权或业务读取失败时拒绝交付。
     pub(super) async fn export_page(
         &self,
         kind: TransferKind,
@@ -371,7 +369,7 @@ impl TransferHandler for BusinessTransfers {
         Ok(())
     }
 }
-/// 固定任务资格只通过统一授权服务检查，不在文件任务中组合政策。
+// 固定任务资格只通过统一授权服务检查，不在文件任务中组合政策。
 async fn function_access(
     authorization: &AuthorizationService,
     kind: TransferKind,
@@ -387,7 +385,7 @@ async fn function_access(
     Ok(())
 }
 
-/// 读取前在原快照核对全部功能资格，再委托实际业务数据授权。
+// 读取前在原快照核对全部功能资格，再委托实际业务数据授权。
 async fn authorized_page(
     authorization: &AuthorizationService,
     reader: &dyn TransferReader,
@@ -403,7 +401,7 @@ async fn authorized_page(
     reader.page_with(kind, query, actor, executor).await
 }
 
-/// 需要与附加功能资格共用读取事务的固定任务类型。
+// 需要与附加功能资格共用读取事务的固定任务类型。
 fn snapshot_page(kind: TransferKind, input: &Value) -> bool {
     matches!(
         kind,
@@ -421,7 +419,7 @@ pub(super) fn is_report(kind: TransferKind) -> bool {
             | TransferKind::CustomerQualityHistory
     )
 }
-/// 选择固定任务入口；完整功能资格由 identity 定义，业务输入只选择既有用例。
+// 选择固定任务入口；完整功能资格由 identity 定义，业务输入只选择既有用例。
 fn transfer_permission(kind: TransferKind, input: &Value) -> Result<Permission> {
     use TransferKind::*;
     Ok(match kind {

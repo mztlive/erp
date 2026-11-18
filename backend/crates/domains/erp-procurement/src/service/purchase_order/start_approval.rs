@@ -6,23 +6,8 @@ use crate::Result;
 use crate::entity::purchase_order::{PurchaseOrder, PurchaseOrderSubmission, PurchaseOrderSubmissionLine};
 use crate::repository::PurchaseOrderExt;
 
-/// 在调用方事务内写入冻结提交、提交行和采购单当前提交指针。
-///
-/// # 参数
-/// * `db` - 采购数据库
-/// * `order` - 已带期望版本和新提交指针的采购单
-/// * `submission` - 待写入的冻结提交
-/// * `lines` - 待写入的提交行
-/// * `executor` - 调用方事务执行器
-///
-/// # 返回
-/// 写入成功时无返回值。
-///
-/// # 错误
-/// 新提交或提交行写入、采购单版本 CAS 失败时返回原错误。
-///
-/// # 关键业务约束
-/// 审批收据、正式编号守卫和采购覆盖校验由组合层先行完成；本方法不得新开事务。
+/// 组合层完成审批回执、正式编号守卫和采购覆盖校验后，写入冻结提交及明细，并以乐观锁切换采购单当前提交指针。
+/// 三处写入复用调用方事务；任一步失败立即返回原错误。
 pub async fn persist_started_submission(
     db: &mongodb::Database,
     order: &mut PurchaseOrder,
@@ -34,18 +19,8 @@ pub async fn persist_started_submission(
     Ok(())
 }
 
-/// 在已写入冻结提交之后，使用同一执行器将原草稿标记为已失效。
-///
-/// # 参数
-/// * `db` - 采购数据库
-/// * `draft` - 已改为失效状态、带期望版本的旧草稿
-/// * `executor` - 与冻结提交相同的执行器
-///
-/// # 返回
-/// 更新成功时无返回值。
-///
-/// # 错误
-/// 旧草稿版本 CAS 或仓储写入失败时返回原错误；不得推进后续审批运行事实。
+/// 冻结提交已写入后，用同一执行器按期望版本保存已标为失效的原草稿，保留其历史明细。
+/// 遇到版本冲突或持久化失败即返回，调用方不能继续推进审批运行事实。
 pub async fn persist_superseded_draft(
     db: &mongodb::Database,
     draft: &mut PurchaseOrderSubmission,

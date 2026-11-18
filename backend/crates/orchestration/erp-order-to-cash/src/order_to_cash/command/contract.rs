@@ -22,16 +22,11 @@ use super::super::authorization::SalesCommandAccess;
 use crate::{Error, Result};
 
 impl SalesOrderCommandProcess {
-    /// 在原草稿事务内持久化首次合同绑定及本次明确选择的结算主体。
-    ///
-    /// # 参数
-    /// * `db` / `access` / `executor` - 当前授权与草稿事务
-    /// * `order` - 服务端准备完成的稳定关系
-    /// * `revision_id` - 本次工作副本引用的合同修订
-    /// # 返回
-    /// 合同或结算主体发生有效变更时更新稳定对象，历史提交及版本保持不变。
-    /// # 错误
-    /// 版本变化、已有合同变化或更新失败时拒绝。
+    // 在原草稿事务内持久化首次合同绑定及本次明确选择的结算主体。
+    //
+    // `db` / `access` / `executor` 为当前授权与草稿事务；`order` 为服务端准备完成的稳定关系；`revision_id` 为本次工作副本引用的合同修订。
+    //
+    // 合同或结算主体发生有效变更时更新稳定对象，历史提交及版本保持不变。版本变化、已有合同变化或更新失败时拒绝。
     pub(in crate::order_to_cash) async fn persist_first_contract_binding(
         db: &Database,
         access: &SalesCommandAccess,
@@ -60,13 +55,8 @@ impl SalesOrderCommandProcess {
 
     /// 给未关联合同的销售单首次补录合同，保持原单客户、结算主体和商业快照。
     ///
-    /// # 参数
-    /// * `id` - 销售单稳定身份
-    /// * `req` - 当前单据版本及合同当前有效修订
-    /// * `actor` - 当前具有原单 update 范围的修改人
-    /// # 返回
-    /// 返回更新后的销售单详情。
-    /// # 错误
+    /// `id` 为销售单稳定身份；`req` 为当前单据版本及合同当前有效修订；`actor` 为当前具有原单 update 范围的修改人。返回更新后的销售单详情。
+    ///
     /// 越权、版本冲突、合同无效、已有合同或关系不一致时拒绝。
     pub async fn bind_sales_order_contract(
         &self,
@@ -107,12 +97,8 @@ impl SalesOrderCommandProcess {
 impl SalesOrderCommandProcess {
     /// 核对后补合同条款，供确认前展示差异。
     ///
-    /// # 参数
-    /// * `id` / `req` - 原单身份、版本及所选合同修订
-    /// * `actor` - 具有原单修改权限的当前用户
-    /// # 返回
-    /// 返回条款来源及逐项核对结果。
-    /// # 错误
+    /// `id` / `req` 为原单身份、版本及所选合同修订；`actor` 为具有原单修改权限的当前用户。返回条款来源及逐项核对结果。
+    ///
     /// 越权、关系冲突、来源缺失或版本变化时拒绝。
     pub async fn check_sales_order_contract(
         &self,
@@ -149,16 +135,10 @@ impl SalesOrderCommandProcess {
         Ok(check)
     }
 
-    /// 保存、补开草稿及提交事务内的首次绑定准入。
-    ///
-    /// # 参数
-    /// * `db` / `access` / `executor` - 原命令数据库、授权与事务
-    /// * `current` / `prepared` - 持久化原单与本次准备的稳定关系
-    /// * `revision_id` - 本次草稿实际引用的合同修订
-    /// # 返回
-    /// 无首次绑定或全部条款一致时通过；由调用方继续写入草稿及原单。
-    /// # 错误
-    /// 条款不同、合同修订漂移或缺少依据时拒绝。
+    // 保存、补开草稿及提交事务内的首次绑定准入。
+    //
+    // `db` / `access` / `executor` 为原命令数据库、授权与事务；`current` / `prepared` 为持久化原单与本次准备的稳定关系；`revision_id`
+    // 为本次草稿实际引用的合同修订。无首次绑定或全部条款一致时通过；由调用方继续写入草稿及原单。条款不同、合同修订漂移或缺少依据时拒绝。
     pub(in crate::order_to_cash) async fn check_first_contract_binding(
         db: &Database,
         access: &SalesCommandAccess,
@@ -187,7 +167,7 @@ impl SalesOrderCommandProcess {
     }
 }
 
-/// 在原事务重验关联和已保存条款；写回草稿以串行化并发编辑。
+// 在原事务重验关联和已保存条款；写回草稿以串行化并发编辑。
 async fn verify_and_bind_contract(
     db: &Database,
     access: &SalesCommandAccess,
@@ -206,7 +186,7 @@ async fn verify_and_bind_contract(
     Ok(())
 }
 
-/// 与最终写入共用同一校验入口，预检只返回差异，不产生业务写入。
+// 与最终写入共用同一校验入口，预检只返回差异，不产生业务写入。
 async fn contract_binding_check(
     db: &Database,
     access: &SalesCommandAccess,

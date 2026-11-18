@@ -8,13 +8,12 @@ use crate::Result;
 use crate::dto::work_item::WorkItemView;
 
 impl WorkItemReadService {
-    /// 将正式办理资格回填为查询事实。
-    /// # 参数
-    /// `fields` 为已授权事项，`scope`、`actor`、`access` 为查询范围及身份，`executor` 为同一事务。
-    /// # 返回
-    /// 原地写入受阻标志，保持原有排序与显示资料。
-    /// # 错误
-    /// 审批上下文或负责人资格读取失败时中止查询。
+    // 将正式办理资格回填为查询事实。
+    // 原地写入受阻标志，保持原有排序与显示资料。
+    //
+    // 审批上下文或负责人资格读取失败时中止查询。
+    //
+    // `fields` 为已授权事项，`scope`、`actor`、`access` 为查询范围及身份，`executor` 为同一事务。
     pub(in crate::service::work_item::read) async fn search_blockers(
         &self,
         fields: &mut [WorkItemFields],

@@ -21,20 +21,10 @@ use super::{
 use crate::{Error, Result};
 
 impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
-    /// 从服务端最新的不可变来源批次创建结算草稿。
+    /// 从服务端最新的不可变来源批次试算并创建供应商结算草稿，客户端不提供逐行金额。
+    /// 草稿、明细、差异和审计同事务保存，并返回明细和差异计数。
     ///
-    /// 请求不接收金额明细。服务端逐行构造结算项与差异，并把单头、明细、差异和
-    /// 幂等审计置于同一事务中；缺少来源批次时整单失败。
-    ///
-    /// # 参数
-    /// * `req` - 创建草稿命令，不含金额明细。
-    /// * `actor` - 当前经办人。
-    ///
-    /// # 返回
-    /// 返回已创建的结算草稿及明细、差异计数；幂等重放返回既有创建结果。
-    ///
-    /// # 错误
-    /// 范围不足、来源批次缺失、准备失败或事务写入失败时返回对应错误。未知提交会按原创建键查证一次。
+    /// 没有来源批次或无权在当前范围创建时拒绝；同一命令返回原创建结果，未知提交按原创建键查证一次。
     pub async fn create_statement(
         &self,
         req: CreateSettlementStatementRequest,
@@ -69,7 +59,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         recover_command(error, recovered)
     }
 
-    /// 在入口事务内完成授权、准备、重放与持久化。
+    // 在创建事务内核验创建范围并准备试算；已命中回放则返回原草稿，否则重验范围并原子写入草稿、明细、差异和审计。
     async fn create_statement_apply(
         &self,
         req: CreateSettlementStatementRequest,
@@ -116,21 +106,10 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         Ok(self.domain().prepare_statement(req, actor.id(), &org, executor).await?)
     }
 
-    /// 使用同一供应商、期间和冻结策略下的最新来源批次刷新可编辑草稿。
+    /// 为未提交复核的草稿按同一供应商、期间和冻结策略拉取最新来源，先核对路径、单据版本及旧来源摘要。
     ///
-    /// 命令要求结算单 CAS 与来源摘要同时匹配。相同来源为受审计的 no-op；新来源
-    /// 则在事务内物理替换尚未提交复核的试算明细和差异。
-    ///
-    /// # 参数
-    /// * `id` - 路径中的结算单 ID。
-    /// * `req` - 刷新命令。
-    /// * `actor` - 当前经办人。
-    ///
-    /// # 返回
-    /// 来源未变时返回原版本的刷新结果；来源更新时返回替换后的草稿。同一命令重放返回原结果。
-    ///
-    /// # 错误
-    /// 请求校验失败、路径与载荷身份不一致、结算单不可更新、准备失败或事务写入失败时返回对应错误。
+    /// 来源相同只登记幂等结果和审计，不改变版本；来源更新则在同一事务中物理替换原试算明细和差异。
+    /// 同一命令只在草稿版本和来源仍匹配时重放，校验或写入失败不提交本次更新。
     pub async fn refresh_statement(
         &self,
         id: &str,
@@ -165,7 +144,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         recover_command(error, recovered)
     }
 
-    /// 恢复与首次刷新复用真实操作人、命令资格及原执行器。
+    // 写入失败后使用恢复事务，按原操作人、原命令资格和幂等身份查询已提交刷新结果，不重新替换明细。
     async fn recover_refresh(
         &self,
         id: &str,
@@ -178,7 +157,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         self.replay_refresh(&audit_id, &fingerprint, id, (actor, &req.idempotency_key), executor).await
     }
 
-    /// 在入口事务内完成授权、准备、重放与持久化。
+    // 在原事务重验草稿刷新权限并优先查回执，再按新旧来源摘要区分保留原版与替换试算结果，防止重复刷新。
     async fn refresh_statement_apply(
         &self,
         id: &str,
@@ -243,7 +222,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         Ok(refresh_result(statement, receipt, "REFRESHED", "已按最新结算来源资料更新试算"))
     }
 
-    /// 相同来源仍保存原版本、明细计数及同事务审计结果。
+    // 来源相同时保留草稿原版本，记录明细和差异计数及审计，使不改业务数据的刷新也能恢复原结果。
     async fn finish_unchanged_refresh(
         &self,
         identity: (String, String),
@@ -261,7 +240,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         Ok(refresh_result(statement, receipt, "UNCHANGED", "结算试算已使用最新来源资料，无需更新"))
     }
 
-    /// 来源未变化时仍以同一事务登记不可变回执和单次业务事件。
+    // 用当前执行器先保存不可变刷新回执再写审计；来源无变化时也记录本次刷新，供幂等重试查证。
     async fn persist_refresh_audit(
         &self,
         identity: (String, String),
@@ -294,7 +273,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         Ok(())
     }
 
-    /// 首次执行与重放均先证明真实账号的刷新资格，再读取同一执行器中的回执。
+    // 检查真实账号当前是否可刷新该单，然后核对回执身份、请求指纹、结算版本和来源摘要；已推进到新快照时不返回旧结果。
     async fn replay_refresh(
         &self,
         audit_id: &str,
@@ -375,7 +354,7 @@ fn refresh_result(
     }
 }
 
-/// 刷新回执只恢复同一版本与来源快照。
+// 只接受仍与回执版本和来源摘要一致的草稿，避免把再次刷新后的草稿误当作原刷新结果。
 fn ensure_refresh_replay(statement: &SupplierSettlementStatement, receipt: &RefreshReceipt) -> Result<()> {
     if statement.base.version != receipt.statement_version
         || statement.source_snapshot_hash != receipt.source_snapshot_hash
@@ -385,7 +364,7 @@ fn ensure_refresh_replay(statement: &SupplierSettlementStatement, receipt: &Refr
     Ok(())
 }
 
-/// 以已准备的结算单保存本次编号和独立命令关联。
+// 用新草稿的编号和稳定命令身份构造创建审计，便于按单据和原操作追溯。
 fn create_statement_audit(
     actor: &AuditActor,
     command_id: String,
@@ -405,7 +384,7 @@ fn create_statement_audit(
     Ok(audit)
 }
 
-/// 验证刷新动作与路径身份，错误顺序与命令入口一致。
+// 先确认请求动作为刷新，再检查路径与载荷是否指向同一结算单，保持入口错误顺序并防止更新错单。
 fn validate_refresh_identity(id: &str, req: &RefreshSettlementStatementRequest) -> Result<()> {
     if req.action != SettlementDraftAction::Refresh {
         return Err(Error::ValidationError("请在结算草稿详情中选择刷新试算".to_string()));

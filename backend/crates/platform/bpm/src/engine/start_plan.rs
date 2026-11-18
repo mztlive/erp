@@ -43,23 +43,11 @@ pub struct StartPlan {
     pub entry_eligibility: Eligibility,
 }
 
-/// 构造通用启动计划：定义版本漂移、空节点、办理人非法与入口缺失均失败关闭。
-///
-/// 采购单、采购变更单及后续单据类型复用本规则，禁止在各业务 Service 复制。
-///
-/// # 参数
-/// * `input` - 定义图、冻结定义版本与逐节点资格
-///
-/// # 返回
-/// 返回与定义节点一一对应的启动绑定、入口节点键与入口资格。
+/// 调用方收集逐节点资格后，按定义顺序将绑定与冻结版本对齐，得到可交给 [`start`](fn@super::start) 的绑定以及入口键和入口资格。
+/// 允许读取失败收敛出的 `Blocked` 资格随计划传递，是否拒绝启动由引擎统一判断。调用方仍须用命令收据和事务 CAS 防止并发启动多个实例。
 ///
 /// # 错误
-/// 定义版本与冻结绑定不一致、定义没有节点、绑定缺失或重复、资格不属于定义
-/// 审批人、绑定主键重复或入口节点缺失时返回命令无效错误。
-///
-/// # 关键业务约束
-/// 本计划接受 BLOCKED 资格（读取失败收敛结果），是否允许启动由引擎 `start`
-/// 统一拒绝；启动并发单实例继续由调用方命令收据与事务 CAS 保证。
+/// 版本漂移、空图、绑定缺失或重复、绑定主键重复、人员资格归属不匹配或入口缺失时返回命令错误。
 pub fn plan_start(input: StartPlanInput<'_>) -> EngineResult<StartPlan> {
     let StartPlanInput { graph, expected_definition_version, bindings } = input;
     if graph.definition.definition_version != expected_definition_version {
@@ -93,18 +81,7 @@ pub fn plan_start(input: StartPlanInput<'_>) -> EngineResult<StartPlan> {
     Ok(StartPlan { bindings: frozen, entry_node_key: entry.node_key.clone(), entry_eligibility })
 }
 
-/// 移动节点绑定，保持缺失、资格归属与重复主键的原校验顺序。
-///
-/// # 参数
-/// * `node` - 定义节点
-/// * `by_node` - 尚未冻结的拥有型绑定索引
-/// * `frozen` - 已冻结绑定，供重复定义节点校验复用
-///
-/// # 返回
-/// 返回已移动身份与资格的绑定。
-///
-/// # 错误
-/// 绑定缺失、资格不属于定义审批人或主键重复时返回命令错误。
+// 按定义节点取走一个待匹配的绑定，先核对资格归属再检查主键唯一性；遇到重复定义节点时仍按这一顺序报错。
 fn freeze_binding(
     node: &ApprovalNodeDefinition,
     by_node: &mut HashMap<String, (ApprovalInstanceAssigneeId, Eligibility)>,
@@ -193,7 +170,7 @@ mod tests {
         }
     }
 
-    /// 通用计划逐节点冻结绑定，并解析入口资格。
+    // 验证准备计划不只绑定入口，还为后继节点保留一一对应的身份和资格。
     #[test]
     fn start_plan_freezes_all_nodes_and_entry_eligibility() {
         let graph = two_node_graph();
@@ -215,7 +192,7 @@ mod tests {
         assert_eq!(plan.bindings[1].participant, participant("u2"));
     }
 
-    /// 绑定输入乱序时仍按节点键匹配，结果与节点顺序一致。
+    // 打乱调用方绑定顺序，验证匹配以节点键为准，输出仍跟随定义节点顺序。
     #[test]
     fn start_plan_matches_bindings_by_node_key_regardless_of_order() {
         let graph = two_node_graph();
@@ -233,7 +210,7 @@ mod tests {
         assert_eq!(plan.bindings[1].node_key, "n2");
     }
 
-    /// 定义版本漂移必须失败关闭，禁止用旧冻结绑定启动新图。
+    // 用旧冻结版本搭配当前图，验证计划不会跨版本复用审批人绑定。
     #[test]
     fn start_plan_rejects_definition_version_drift() {
         let graph = two_node_graph();
@@ -249,7 +226,7 @@ mod tests {
         assert_eq!(error, EngineError::InvalidCommand("定义版本与冻结绑定不一致"));
     }
 
-    /// 空节点定义不得启动。
+    // 验证无节点的定义即使接收空绑定集也不能规划启动。
     #[test]
     fn start_plan_rejects_empty_node_set() {
         let at = at(1);
@@ -274,7 +251,7 @@ mod tests {
         assert_eq!(error, EngineError::InvalidCommand("审批定义没有节点，无法启动"));
     }
 
-    /// 节点缺少绑定或同一节点出现重复绑定均失败关闭。
+    // 验证输入总量看似正确也不能掩盖一个节点重复绑定、另一个节点缺绑定的问题。
     #[test]
     fn start_plan_rejects_missing_or_duplicate_binding() {
         let graph = two_node_graph();
@@ -301,7 +278,7 @@ mod tests {
         assert_eq!(duplicated, EngineError::InvalidCommand("节点审批人绑定缺失或重复"));
     }
 
-    /// 绑定数量与节点数量不一致时失败关闭。
+    // 绑定条数少于节点数时立即拒绝，避免生成不完整的实例绑定。
     #[test]
     fn start_plan_rejects_binding_count_mismatch() {
         let graph = two_node_graph();
@@ -314,7 +291,7 @@ mod tests {
         assert_eq!(error, EngineError::InvalidCommand("启动绑定必须与定义节点一一对应"));
     }
 
-    /// 资格主体不得伪装成定义责任人。
+    // 传入与定义责任人不同的资格身份，验证准备计划不接受替代审批人。
     #[test]
     fn start_plan_rejects_eligibility_for_another_participant() {
         let graph = two_node_graph();
@@ -330,7 +307,7 @@ mod tests {
         assert_eq!(error, EngineError::InvalidCommand("资格结果必须属于定义审批人"));
     }
 
-    /// 绑定主键重复时失败关闭，禁止同一审批人快照被复用。
+    // 为不同节点复用绑定主键，验证计划会拒绝无法独立保存的快照。
     #[test]
     fn start_plan_rejects_duplicate_assignee_ids() {
         let graph = two_node_graph();
@@ -346,7 +323,7 @@ mod tests {
         assert_eq!(error, EngineError::InvalidCommand("实例审批人绑定主键不得重复"));
     }
 
-    /// 图中重复节点仍先检查资格归属，再报告重复绑定主键。
+    // 构造重复定义节点，验证它的资格归属错误不会被重复主键错误掩盖。
     #[test]
     fn start_plan_preserves_validation_order_for_duplicate_definition_nodes() {
         let mut graph = two_node_graph();
@@ -373,7 +350,7 @@ mod tests {
         }
     }
 
-    /// 入口键缺失时失败关闭，禁止无入口启动。
+    // 验证逐节点绑定齐全仍不足以启动：定义入口必须实际命中节点。
     #[test]
     fn start_plan_rejects_missing_entry_node() {
         let at = at(1);
@@ -401,7 +378,7 @@ mod tests {
         assert_eq!(error, EngineError::InvalidCommand("审批定义缺少入口节点"));
     }
 
-    /// 对象读取失败收敛的 BLOCKED 资格必须原样进入计划，由引擎启动校验统一拒绝。
+    // 验证读取失败收敛的阻塞资格原样传递，是否允许启动由后续引擎判断。
     #[test]
     fn start_plan_carries_blocked_eligibility_for_read_failure() {
         let graph = two_node_graph();
@@ -425,7 +402,7 @@ mod tests {
         assert_eq!(plan.bindings[1].eligibility, eligible("u2", "李四"));
     }
 
-    /// 计划冻结的绑定可直接交给引擎 `start` 使用。
+    // 把计划生成的绑定交给启动入口，验证准备阶段与进入引擎使用同一份人员事实。
     #[test]
     fn start_plan_bindings_feed_engine_start() {
         let graph = two_node_graph();

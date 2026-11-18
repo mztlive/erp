@@ -15,24 +15,12 @@ macro_rules! approval_actions {
             /// 全部已登记审批领域动作的稳定穷尽集合。
             pub const ALL: [Self; 52] = [$($(Self::$action,)+)+];
 
-            /// 返回动作所属的唯一 ERP 单据类型。
-            /// # 参数
-            /// 无。
-            /// # 返回
-            /// 返回该动作唯一对应的 `DocumentType`。
-            /// # 错误
-            /// 不返回错误。
+            /// 从同一政策登记取出动作唯一所属的 ERP 单据类型，用于核对动作与单据是否匹配。
             pub fn document_type(self) -> DocumentType {
                 match self { $($(Self::$action => DocumentType::$document,)+)+ }
             }
 
-            /// 返回稳定动作代码。
-            /// # 参数
-            /// 无。
-            /// # 返回
-            /// 返回形如 `Service::method` 的稳定动作代码。
-            /// # 错误
-            /// 不返回错误。
+            /// 取出政策登记的 `Service::method` 形式动作码，供审计稳定识别该领域动作。
             pub fn as_str(self) -> &'static str {
                 match self { $($(Self::$action => $code,)+)+ }
             }
@@ -123,17 +111,7 @@ approval_actions! {
 
 impl ApprovalDomainAction {
     /// 三类审批动作两两互异时返回 `true`。
-    ///
-    /// # 参数
-    /// * `first` - 第一个待比较动作
-    /// * `second` - 第二个待比较动作
-    /// * `third` - 第三个待比较动作
-    ///
-    /// # 返回
     /// 三个动作互不相同时返回 `true`，任两个相同时返回 `false`。
-    ///
-    /// # 错误
-    /// 无。
     pub fn are_distinct(first: Self, second: Self, third: Self) -> bool {
         first != second && first != third && second != third
     }

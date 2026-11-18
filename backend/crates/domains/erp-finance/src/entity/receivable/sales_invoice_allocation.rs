@@ -61,20 +61,15 @@ pub struct SalesInvoiceAllocation {
 }
 
 impl SalesInvoiceAllocation {
-    /// 创建销项发票分配。
+    /// 销项登记或红冲时记录票据对指定应收的分配，为开票进度及追溯提供依据。
     ///
     /// 完成金额恒等（gross = net + tax）与正数、序号从 1 起与「动作 ↔ 原分配
     /// 引用」一致性校验。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::SalesInvoiceAllocationId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
     /// 返回新建的分配实体。
-    ///
-    /// # 错误
     /// 当金额恒等不成立/非正、序号为 0 或动作与引用不一致时返回错误。
+    ///
+    /// 输入约定：
+    /// - `id`：实体主键（`erp_core::ids::SalesInvoiceAllocationId`）
     pub fn new(id: SalesInvoiceAllocationId, data: SalesInvoiceAllocationData) -> Result<Self> {
         validate_invoice_amounts(
             data.allocated_gross_amount,
@@ -99,19 +94,7 @@ impl SalesInvoiceAllocation {
         })
     }
 
-    /// 更新销项发票分配。
-    ///
-    /// 分配行过账后不可更新或删除（数据模型 §6.9 末尾），任何修改都被拒绝。
-    ///
-    /// # 参数
-    /// * `update` - 更新数据（恒被拒绝）
-    /// * `updated_by` - 更新执行人（恒被拒绝）
-    ///
-    /// # 返回
-    /// 恒返回错误。
-    ///
-    /// # 错误
-    /// 任何调用都返回错误：正式事实过账后不可更新或删除。
+    /// 拒绝改写或删除正式销项发票分配，保留原开票及红冲追溯记录。
     pub fn update(
         &mut self,
         update: SalesInvoiceAllocationData,

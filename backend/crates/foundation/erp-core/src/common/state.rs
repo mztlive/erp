@@ -14,33 +14,12 @@ use crate::errors::{Error, Result};
 /// 实现者必须在 [`DocumentState::allowed_next`] 中返回全部合法后继状态；
 /// `from == to` 的幂等迁移恒合法（见 [`ensure_transition`]），无需写入后继列表。
 pub trait DocumentState: Sized + Copy + Eq + Debug {
-    /// 返回当前状态的全部合法后继状态。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 后继状态切片（不含自身）。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 由领域枚举返回当前状态的全部合法后继，供统一迁移校验查询；不要列出当前状态，同状态迁移由校验器直接放行。
     fn allowed_next(self) -> &'static [Self];
 }
 
-/// 校验一次状态迁移。
-///
-/// # 参数
-/// * `from` - 迁移前状态
-/// * `to` - 目标状态
-///
-/// # 返回
-/// 目标在 `from.allowed_next()` 中，或 `from == to`（幂等）时返回 `Ok(())`。
-///
-/// # 错误
-/// 目标不在后继列表中且 `from != to` 时返回 [`Error::InvalidStateTransition`]。
-///
-/// `S: 'static` 来自 `allowed_next` 返回 `&'static [Self]` 的要求，
-/// 业务状态枚举均为 `'static`，不受影响。
+/// 领域修改单据状态前核对固定邻接关系。重复写入同一状态视为幂等；
+/// 其他目标不在后继列表时返回 [`Error::InvalidStateTransition`]。`'static` 对应后继切片的生命周期。
 pub fn ensure_transition<S: DocumentState + 'static>(from: S, to: S) -> Result<()> {
     if from == to {
         return Ok(());
@@ -51,29 +30,12 @@ pub fn ensure_transition<S: DocumentState + 'static>(from: S, to: S) -> Result<(
     Err(Error::InvalidStateTransition { from: format!("{from:?}"), to: format!("{to:?}") })
 }
 
-/// 断言状态机邻接矩阵对称闭合（测试辅助）。
-///
-/// # 参数
-/// * `states` - 该状态机的全部状态变体（顺序不限）。需要显式传入状态列表是因为
-///   Rust 泛型无法在编译期枚举枚举变体。
-///
-/// 断言三条不变量：
-/// 1. 自反：对每个 `s`，`ensure_transition(s, s)` 恒为 `Ok`（`from == to` 不视为非法）；
-/// 2. 悬空目标：`allowed_next()` 引用的每个目标都出现在 `states` 中；
-/// 3. 对称闭合：对任意 `from != to`，若 `to ∈ from.allowed_next()`，则必须存在
-///    `from ∈ to.allowed_next()` —— 每条迁移都成对出现，任一状态都能沿原路返回自身。
-///
-/// 说明：含不可逆终态（如 `CLOSED`、`VOIDED`、`REVERSED`）的状态机不满足
-/// 「对称闭合」，不应调用本辅助；这类状态机应在域内对逐条边做定向断言。
-///
-/// # 返回
-/// 无返回值。三条不变量全部成立时正常返回。
-///
-/// # 错误
-/// 不返回错误。
+/// 单测中检查要求可逆的固定状态机；请传入全部状态，泛型无法枚举其变体。
+/// 逐项验证同状态幂等、目标没有遗漏、每条跨状态边都有反向边。
+/// 含 `CLOSED`、`VOIDED` 或 `REVERSED` 等不可逆终态时，应在领域测试里逐条断言有向边。
 ///
 /// # Panics
-/// 任一不变量被违反时 panic，并给出具体状态名。
+/// 发现违反规则的边或状态时 panic，并指出相关状态。
 pub fn assert_adjacency_closed<S: DocumentState + 'static>(states: &[S]) {
     for &from in states {
         ensure_transition(from, from).expect("幂等迁移必须合法");
@@ -116,7 +78,7 @@ mod tests {
     const ALL_STATES: &[SourceSystemStatus] =
         &[SourceSystemStatus::Active, SourceSystemStatus::Disabled, SourceSystemStatus::Maintenance];
 
-    /// 合法迁移（含幂等）全部放行。
+    // 覆盖来源系统的合法状态切换与同状态重提，确保固定迁移校验不误拒。
     #[test]
     fn allowed_transitions_pass() {
         assert!(ensure_transition(SourceSystemStatus::Active, SourceSystemStatus::Active).is_ok());
@@ -125,7 +87,7 @@ mod tests {
         assert!(ensure_transition(SourceSystemStatus::Maintenance, SourceSystemStatus::Disabled).is_ok());
     }
 
-    /// 非法迁移返回统一错误变体，且保留 from/to 名称。
+    // 用跳过禁用状态的请求验证拒绝迁移，并检查统一错误保留起点与目标名称。
     #[test]
     fn forbidden_transitions_fail_with_unified_error() {
         let error =
@@ -139,13 +101,13 @@ mod tests {
         }
     }
 
-    /// 邻接矩阵对称闭合：全部状态在 allowed_next 中成对出现。
+    // 确认来源系统的可逆状态机已枚举全部边，且每条跨状态边都能返回。
     #[test]
     fn adjacency_is_symmetrically_closed() {
         assert_adjacency_closed(ALL_STATES);
     }
 
-    /// 反例状态机（单向边）应触发闭包断言失败。
+    // 用单向迁移确认对称闭合检查不会把不可逆状态机当作可逆状态机接受。
     #[test]
     #[should_panic(expected = "邻接矩阵不对称")]
     fn one_way_edge_fails_closure() {

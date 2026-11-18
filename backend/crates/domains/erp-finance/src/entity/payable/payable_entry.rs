@@ -33,16 +33,7 @@ pub enum PayableEntryType {
 }
 
 impl PayableEntryType {
-    /// 返回类型的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为界面或响应展示提供应付分录类型的中文名称；机器筛选和存储不使用该名称。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Original => "原始应付",
@@ -53,16 +44,7 @@ impl PayableEntryType {
         }
     }
 
-    /// 返回类型的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将应付分录类型转成用于持久化和查询的稳定代码，与中文展示文案分开。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Original => "original",
@@ -85,16 +67,7 @@ pub enum EntryDirection {
 }
 
 impl EntryDirection {
-    /// 返回方向的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为界面或响应展示提供应付分录方向的中文名称；机器筛选和存储不使用该名称。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Increase => "增加",
@@ -102,16 +75,7 @@ impl EntryDirection {
         }
     }
 
-    /// 返回方向的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将应付分录方向转成用于持久化和查询的稳定代码，与中文展示文案分开。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Increase => "increase",
@@ -178,20 +142,15 @@ pub struct PayableEntry {
 }
 
 impl PayableEntry {
-    /// 创建应付分录。
+    /// 新增或纠正应付事实时构造一条分录，来源和方向必须符合业务类型。
     ///
     /// 完成来源文本的 trim/非空/长度校验、金额正数校验与「类型 ↔ 方向」一致性
     /// 校验（原始应付必须是增加，供应商退款/冲正是减少，差额类双向均可）。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::PayableEntryId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
     /// 返回新建的分录实体。
-    ///
-    /// # 错误
     /// 当来源字段为空/超长、金额非正、来源序号为 0 或类型与方向矛盾时返回错误。
+    ///
+    /// 输入约定：
+    /// - `id`：实体主键（`erp_core::ids::PayableEntryId`）
     pub fn new(id: PayableEntryId, data: PayableEntryData) -> Result<Self> {
         let source_fact_type = normalize_required_text(
             data.source_fact_type,
@@ -235,40 +194,23 @@ impl PayableEntry {
         })
     }
 
-    /// 更新应付分录。
-    ///
-    /// 正式事实过账后不可更新（数据模型 §4.5、§6.9「不改写已确认应付」），
-    /// 任何字段的修改都被拒绝，纠错必须追加反向分录。
-    ///
-    /// # 参数
-    /// * `update` - 更新数据（恒被拒绝）
-    /// * `updated_by` - 更新执行人（恒被拒绝）
-    ///
-    /// # 返回
-    /// 恒返回错误。
-    ///
-    /// # 错误
-    /// 任何调用都返回错误：正式事实过账后不可更新，纠错须追加反向分录。
+    /// 拒绝改写正式应付分录；纠错须追加反向分录，保留原入账来源。
     pub fn update(&mut self, update: PayableEntryData, updated_by: impl Into<String>) -> Result<()> {
         let _ = (update, updated_by);
         Err(Error::from("正式事实过账后不可更新，纠错请追加反向分录"))
     }
 }
 
-/// 校验分录类型与方向的一致性。
-///
-/// 规则（数据模型 §6.9）：原始应付形成正向增加；供应商退款、冲正是冲减类，
-/// 必须是减少；变更差额与结算差额根据方向可增可减。
-///
-/// # 参数
-/// * `entry_type` - 分录类型
-/// * `direction` - 分录方向
-///
-/// # 返回
-/// 一致返回 `Ok(())`。
-///
-/// # 错误
-/// 类型与方向矛盾时返回错误。
+// 校验分录类型与方向的一致性。
+//
+// 规则（数据模型 §6.9）：原始应付形成正向增加；供应商退款、冲正是冲减类，
+// 必须是减少；变更差额与结算差额根据方向可增可减。
+// 结果：一致返回 `Ok(())`。
+// 类型与方向矛盾时返回错误。
+//
+// 输入约定：
+// - `entry_type`：分录类型
+// - `direction`：分录方向
 fn validate_direction_consistency(entry_type: PayableEntryType, direction: EntryDirection) -> Result<()> {
     let fixed = match entry_type {
         PayableEntryType::Original => Some(EntryDirection::Increase),

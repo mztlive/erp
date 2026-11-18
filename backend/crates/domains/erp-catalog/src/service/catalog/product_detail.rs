@@ -20,17 +20,9 @@ use crate::repository::CatalogExt;
 use crate::repository::prelude::*;
 
 impl CatalogService {
-    /// 读取指定商品的全部修订（强制路径商品，倒序）。
+    /// 读取指定商品的全部修订（强制路径商品，倒序）。商品不存在或不在范围内时返回 `NotFound`。
     ///
-    /// # 参数
-    /// * `product_id` - 路径商品稳定 ID
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 返回带媒体装配的修订分页视图。
-    ///
-    /// # 错误
-    /// 商品不存在或不在范围内时返回 `NotFound`。
+    /// `product_id` 为路径商品稳定 ID。
     pub async fn product_detail_revisions(
         &self,
         product_id: &str,
@@ -65,15 +57,9 @@ impl CatalogService {
 
     /// 读取指定商品的全部 SKU。
     ///
-    /// # 参数
-    /// * `product_id` - 路径商品稳定 ID
-    /// * `actor` - 已认证操作人
+    /// 返回带当前修订名称的 SKU 分页视图。商品不存在或不在范围内时返回 `NotFound`。
     ///
-    /// # 返回
-    /// 返回带当前修订名称的 SKU 分页视图。
-    ///
-    /// # 错误
-    /// 商品不存在或不在范围内时返回 `NotFound`。
+    /// `product_id` 为路径商品稳定 ID。
     pub async fn product_detail_skus(
         &self,
         product_id: &str,
@@ -111,16 +97,10 @@ impl CatalogService {
 
     /// 读取指定商品下的 SKU 修订。
     ///
-    /// # 参数
-    /// * `product_id` - 路径商品稳定 ID
-    /// * `sku_id` - 可选 SKU 过滤；提供时必须属于路径商品
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 返回按修订号倒序的 SKU 修订分页视图。
-    ///
-    /// # 错误
     /// 商品或 SKU 不存在或不在范围内、SKU 不属于路径商品时返回 `NotFound`。
+    ///
+    /// - `product_id`：路径商品稳定 ID。
+    /// - `sku_id`：可选 SKU 过滤；提供时必须属于路径商品。
     pub async fn product_detail_sku_revisions(
         &self,
         product_id: &str,
@@ -151,7 +131,7 @@ impl CatalogService {
             .await
     }
 
-    /// 在原读取阶段过滤真实商品；调用方须在完整子资源读取后核验返回的凭证。
+    // 在原读取阶段过滤真实商品；调用方须在完整子资源读取后核验返回的凭证。
     async fn visible_product_scope(
         &self,
         actor: &AuditActor,

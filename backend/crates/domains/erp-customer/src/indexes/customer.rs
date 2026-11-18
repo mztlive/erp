@@ -20,25 +20,20 @@ pub(crate) const CUSTOMER_ASSIGNMENTS: &str = <mongodb::Database as CustomerExt>
 pub(crate) const CUSTOMER_PROFILE_COMMANDS: &str =
     <mongodb::Database as CustomerExt>::CUSTOMER_PROFILE_COMMANDS;
 
-/// 创建本域集合的幂等命名索引。
-///
-/// 逐条落地数据模型 §6.2「必需约束与索引」：一个 `party` 至多一个客户角色
-/// （`party_id` 全局唯一）；客户编号全局唯一。
-///
-/// 身份类字段使用**全局唯一索引**（与 accounts 的处理一致）：`customer_account`
-/// 软删除后仍保留身份（编号/主体归属），避免复用破坏恢复与历史单据追溯语义。
-/// 「同一客户、用户、角色的有效期不得重叠」是跨行业务约束，由 P3 事务在写入
-/// 前校验；本层用 `(customer_id, user_id, assignment_role, valid_from)`
-/// 唯一索引兜底拒绝**完全相同**的重复归属行（数据治理，防止重复事实行）。
-///
-/// # 参数
-/// * `db` - 目标 MongoDB 数据库
-///
-/// # 返回
-/// 三个集合的命名索引创建完成。
-///
-/// # 错误
-/// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
+// 创建本域集合的幂等命名索引。
+//
+// 逐条落地数据模型 §6.2「必需约束与索引」：一个 `party` 至多一个客户角色
+// （`party_id` 全局唯一）；客户编号全局唯一。
+//
+// 身份类字段使用**全局唯一索引**（与 accounts 的处理一致）：`customer_account`
+// 软删除后仍保留身份（编号/主体归属），避免复用破坏恢复与历史单据追溯语义。
+// 「同一客户、用户、角色的有效期不得重叠」是跨行业务约束，由 P3 事务在写入
+// 前校验；本层用 `(customer_id, user_id, assignment_role, valid_from)`
+// 唯一索引兜底拒绝**完全相同**的重复归属行（数据治理，防止重复事实行）。
+//
+// 三个集合的命名索引创建完成。
+//
+// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub(crate) async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, CUSTOMER_ACCOUNTS, customer_account_indexes()).await?;
     create_indexes(db, CUSTOMER_ASSIGNMENTS, customer_assignment_indexes()).await?;
@@ -46,13 +41,13 @@ pub(crate) async fn ensure(db: &Database) -> Result<()> {
     Ok(())
 }
 
-/// 为单个集合创建一组幂等命名索引。
+// 将一组命名索引注册到指定集合，供服务启动时重复执行同一套索引定义。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
     db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
-/// 返回 `customer_account` 的身份约束和列表查询索引。
+// 返回 `customer_account` 的身份约束和列表查询索引。
 fn customer_account_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_customer_accounts_id", doc! { "id": 1 }),
@@ -62,7 +57,7 @@ fn customer_account_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `customer_assignment` 的重复行约束与「我的客户」查询索引。
+// 返回 `customer_assignment` 的重复行约束与「我的客户」查询索引。
 fn customer_assignment_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_customer_assignments_id", doc! { "id": 1 }),
@@ -83,7 +78,7 @@ fn customer_assignment_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回客户资料根级保存命令的幂等唯一约束。
+// 返回客户资料根级保存命令的幂等唯一约束。
 fn customer_profile_command_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_customer_profile_commands_id", doc! { "id": 1 }),
@@ -93,7 +88,7 @@ fn customer_profile_command_indexes() -> Vec<IndexModel> {
 
 #[cfg(test)]
 mod tests {
-    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    // 验证集合的稳定业务 ID 具有唯一索引，使按 ID 查找和按版本更新能使用索引。
     #[test]
     fn collections_look_up_by_unique_stable_id() {
         for indexes in [

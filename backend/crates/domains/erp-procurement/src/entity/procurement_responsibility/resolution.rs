@@ -25,15 +25,9 @@ pub struct ProcurementResponsibilityResolutionLine {
 impl ProcurementResponsibilityResolutionLine {
     /// 创建规范化的单行解析输入。
     ///
-    /// # 参数
-    /// * `line_key` - 调用方稳定行键
-    /// * `sku_id` - 精确 SKU
+    /// 返回行键已规范化的解析输入。行键为空或过长时返回错误。
     ///
-    /// # 返回
-    /// 返回行键已规范化的解析输入。
-    ///
-    /// # 错误
-    /// 行键为空或过长时返回错误。
+    /// `line_key` 为调用方稳定行键。
     pub fn new(line_key: String, sku_id: SkuId) -> Result<Self> {
         Ok(Self {
             line_key: normalize_required_text(
@@ -56,14 +50,9 @@ pub struct ProcurementResponsibilityResolutionBatch<'a> {
 impl<'a> ProcurementResponsibilityResolutionBatch<'a> {
     /// 校验并借用一批采购责任解析行。
     ///
-    /// # 参数
-    /// * `lines` - 待解析的稳定业务行
+    /// 返回保持原始顺序的只读批量输入。行数不在 1 至 200、行键为空/过长或出现重复行键时返回错误。
     ///
-    /// # 返回
-    /// 返回保持原始顺序的只读批量输入。
-    ///
-    /// # 错误
-    /// 行数不在 1 至 200、行键为空/过长或出现重复行键时返回错误。
+    /// `lines` 为待解析的稳定业务行。
     pub fn new(lines: &'a [ProcurementResponsibilityResolutionLine]) -> Result<Self> {
         if lines.is_empty() || lines.len() > RESOLUTION_BATCH_MAX_LINES {
             return Err(Error::from("采购责任解析行数必须在1-200之间"));
@@ -87,16 +76,7 @@ impl<'a> ProcurementResponsibilityResolutionBatch<'a> {
         Ok(Self { lines })
     }
 
-    /// 返回保持调用方顺序的解析行。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回批量输入的只读切片。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 借用按请求顺序排列的采购责任解析行，方便调用方逐行匹配原输入。
     pub fn lines(self) -> &'a [ProcurementResponsibilityResolutionLine] {
         self.lines
     }
@@ -112,14 +92,9 @@ pub struct EligibleProcurementOwner {
 impl EligibleProcurementOwner {
     /// 从统一账号事实形成采购负责人值对象。
     ///
-    /// # 参数
-    /// * `account` - 当前账号主数据
+    /// 身份域确认账号为启用后台账号时返回负责人身份与姓名。账号不可登录或不是后台管理员时返回 `LogicError`。
     ///
-    /// # 返回
-    /// 身份域确认账号为启用后台账号时返回负责人身份与姓名。
-    ///
-    /// # 错误
-    /// 账号不可登录或不是后台管理员时返回 `LogicError`。
+    /// `account` 为当前账号主数据。
     pub fn from_account(account: &AccountSummary) -> Result<Self> {
         if !account.is_active_backoffice() {
             return Err(Error::from("采购负责人必须为可登录后台账号"));
@@ -127,30 +102,12 @@ impl EligibleProcurementOwner {
         Ok(Self { user_id: account.id.clone(), name: account.display_name.clone() })
     }
 
-    /// 返回负责人账号 ID。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回稳定账号 ID。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 借用解析出的负责人账号 ID，供分配结果和后续责任校验使用。
     pub fn user_id(&self) -> &str {
         &self.user_id
     }
 
-    /// 返回负责人展示姓名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回账号主数据中的当前姓名。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 借用账号主数据里的当前姓名，供采购责任解析结果展示。
     pub fn name(&self) -> &str {
         &self.name
     }
@@ -172,17 +129,9 @@ pub struct ProcurementResponsibilityResolutionIdentity {
 impl ProcurementResponsibilityResolutionIdentity {
     /// 创建用于计划重验的稳定责任身份。
     ///
-    /// # 参数
-    /// * `line_key` - 调用方稳定行键
-    /// * `owner_user_id` - 具体负责人账号 ID
-    /// * `rule_id` - 命中规则 ID
-    /// * `rule_type` - 命中规则类型
+    /// 返回忽略展示姓名的稳定责任身份。行键、负责人或规则 ID 为空时返回错误。
     ///
-    /// # 返回
-    /// 返回忽略展示姓名的稳定责任身份。
-    ///
-    /// # 错误
-    /// 行键、负责人或规则 ID 为空时返回错误。
+    /// `line_key` 为调用方稳定行键。
     pub fn new(
         line_key: String,
         owner_user_id: String,
@@ -220,18 +169,9 @@ pub struct ProcurementResponsibilityContext {
 }
 
 impl ProcurementResponsibilityContext {
-    /// 创建规范化责任解析上下文。
+    /// 创建规范化责任解析上下文。分类链为空或重复时返回错误。
     ///
-    /// # 参数
-    /// * `sku_id` - 精确 SKU
-    /// * `category_chain` - 当前分类到根分类的有序链
-    /// * `product_kind` - 商品业务类型
-    ///
-    /// # 返回
-    /// 返回解析上下文。
-    ///
-    /// # 错误
-    /// 分类链为空或重复时返回错误。
+    /// `category_chain` 为当前分类到根分类的有序链。
     pub fn new(
         sku_id: SkuId,
         category_chain: Vec<ProductCategoryId>,
@@ -248,30 +188,18 @@ pub struct ProcurementResponsibilityRuleSet<'a> {
 }
 
 impl<'a> ProcurementResponsibilityRuleSet<'a> {
-    /// 从规则实体构造只包含启用规则的解析集合。
+    /// 从规则实体构造只包含启用规则的解析集合。返回保持输入顺序但解析结果不依赖该顺序的规则集合。
     ///
-    /// # 参数
-    /// * `rules` - 当前可见规则实体
-    ///
-    /// # 返回
-    /// 返回保持输入顺序但解析结果不依赖该顺序的规则集合。
-    ///
-    /// # 错误
-    /// 无。
+    /// `rules` 为当前可见规则实体。
     pub fn new(rules: &'a [ProcurementResponsibilityRule]) -> Self {
         Self { rules: rules.iter().filter(|rule| rule.is_active()).collect() }
     }
 
     /// 按合同优先级解析唯一具体责任规则。
     ///
-    /// # 参数
-    /// * `context` - SKU、分类链与 ProductKind 事实
+    /// 返回唯一命中的规则引用。任一同层多命中、分类链非法或最终没有默认调度人时返回错误；高层零命中才继续低层。
     ///
-    /// # 返回
-    /// 返回唯一命中的规则引用。
-    ///
-    /// # 错误
-    /// 任一同层多命中、分类链非法或最终没有默认调度人时返回错误；高层零命中才继续低层。
+    /// `context` 为 SKU、分类链与 ProductKind 事实。
     pub fn resolve(
         &self,
         context: &ProcurementResponsibilityContext,
@@ -297,12 +225,8 @@ impl<'a> ProcurementResponsibilityRuleSet<'a> {
     }
 
     /// 询价整单优先选择询价池；未配置时沿用商品规则与通用兜底。
-    /// # 参数
-    /// `context` 为商品上下文。
-    /// # 返回
-    /// 唯一启用询价规则，或常规规则解析结果。
-    /// # 错误
-    /// 询价规则多命中或常规解析失败时拒绝。
+    ///
+    /// 唯一启用询价规则，或常规规则解析结果。询价规则多命中或常规解析失败时拒绝。
     pub fn resolve_inquiry(
         &self,
         context: &ProcurementResponsibilityContext,
@@ -313,16 +237,11 @@ impl<'a> ProcurementResponsibilityRuleSet<'a> {
         self.resolve(context)
     }
 
-    /// 按当前分类到父分类的顺序逐级解析分类规则。
-    ///
-    /// # 参数
-    /// * `category_chain` - 当前分类到根分类的有序链
-    ///
-    /// # 返回
-    /// 返回首个层级的唯一命中；全链零命中返回 `None`。
-    ///
-    /// # 错误
-    /// 任一分类层多命中时返回错误。
+    // 按当前分类到父分类的顺序逐级解析分类规则。
+    //
+    // 返回首个层级的唯一命中；全链零命中返回 `None`。任一分类层多命中时返回错误。
+    //
+    // `category_chain` 为当前分类到根分类的有序链。
     fn resolve_category_chain(
         &self,
         category_chain: &[ProductCategoryId],
@@ -338,17 +257,11 @@ impl<'a> ProcurementResponsibilityRuleSet<'a> {
         Ok(None)
     }
 
-    /// 在一个规则层内要求零或唯一命中。
-    ///
-    /// # 参数
-    /// * `rule_type` - 当前规则层
-    /// * `predicate` - 选择器匹配条件
-    ///
-    /// # 返回
-    /// 零命中返回 `None`，唯一命中返回规则。
-    ///
-    /// # 错误
-    /// 同层多命中时返回失败关闭错误。
+    // 在一个规则层内要求零或唯一命中。
+    //
+    // 零命中返回 `None`，唯一命中返回规则。同层多命中时返回失败关闭错误。
+    //
+    // `rule_type` 为当前规则层。
     fn unique_match<F>(
         &self,
         rule_type: ProcurementResponsibilityRuleType,
@@ -370,16 +283,11 @@ impl<'a> ProcurementResponsibilityRuleSet<'a> {
     }
 }
 
-/// 校验分类链非空且不重复。
-///
-/// # 参数
-/// * `category_chain` - 当前分类到根分类的有序链
-///
-/// # 返回
-/// 分类链可用于父级回退时返回 `Ok(())`。
-///
-/// # 错误
-/// 分类链为空或出现重复节点时返回错误。
+// 校验分类链非空且不重复。
+//
+// 分类链可用于父级回退时返回 `Ok(())`。分类链为空或出现重复节点时返回错误。
+//
+// `category_chain` 为当前分类到根分类的有序链。
 fn ensure_category_chain(category_chain: &[ProductCategoryId]) -> Result<()> {
     if category_chain.is_empty() {
         return Err(Error::from("采购责任解析缺少商品分类"));

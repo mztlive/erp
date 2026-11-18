@@ -16,21 +16,17 @@ use crate::{CatalogService, Error, Result};
 #[async_trait]
 pub trait PortalSupplyTermsPort: Send + Sync {
     /// 校验已提交的商务快照，不复制供给规则。
-    /// # 参数
+    ///
+    /// 条款合法时成功。非法金额、税率、数量或供货规则返回错误。
+    ///
     /// `snapshot` 是供应商原始报价，`executor` 是当前事务。
-    /// # 返回
-    /// 条款合法时成功。
-    /// # 错误
-    /// 非法金额、税率、数量或供货规则返回错误。
     async fn validate(&self, snapshot: &Value, executor: &mut dyn Executor) -> Result<()>;
 
     /// 通过供给域校验原包装报价。
-    /// # 参数
+    ///
+    /// 原价符合供给金额规则时成功，不自动计算基础单位价格。非法原价或供给规则失败。
+    ///
     /// `packaging` 为供应商确认保留的原始包装报价，`executor` 为当前事务。
-    /// # 返回
-    /// 原价符合供给金额规则时成功，不自动计算基础单位价格。
-    /// # 错误
-    /// 非法原价或供给规则失败。
     async fn validate_packaging(&self, packaging: &PackagingInput, executor: &mut dyn Executor)
     -> Result<()>;
 }
@@ -51,24 +47,18 @@ pub struct CatalogDraftSubmitCommand {
 }
 
 impl CatalogPortalService {
-    /// 绑定与内部维护相同的商品授权来源。
-    /// # 参数
+    /// 绑定与内部维护相同的商品授权来源。不缓存授权的提报服务。
+    ///
     /// `db` 是目标数据库，`catalog` 必须注入商品范围授权。
-    /// # 返回
-    /// 不缓存授权的提报服务。
-    /// # 错误
-    /// 无。
     pub fn new(db: Database, catalog: CatalogService) -> Self {
         Self { db, catalog }
     }
 
     /// 保存未完成的提报，不创建正式主数据。
-    /// # 参数
+    ///
+    /// 已保存草稿。输入非法、身份重复或数据库错误。
+    ///
     /// `id` 为预生成身份，其余参数为服务端供应商、真实操作人、草稿和事务。
-    /// # 返回
-    /// 已保存草稿。
-    /// # 错误
-    /// 输入非法、身份重复或数据库错误。
     pub async fn create(
         &self,
         id: String,
@@ -83,12 +73,8 @@ impl CatalogPortalService {
     }
 
     /// 只更新已认证供应商仍可编辑的草稿。
-    /// # 参数
-    /// `id`、`supplier_id`、`version` 为对象边界和版本；`input` 为新草稿。
-    /// # 返回
-    /// 新草稿及持久化版本。
-    /// # 错误
-    /// 不可见、已冻结、版本冲突或非法输入。
+    ///
+    /// 新草稿及持久化版本。不可见、已冻结、版本冲突或非法输入。
     pub async fn update(
         &self,
         id: &str,
@@ -104,12 +90,10 @@ impl CatalogPortalService {
     }
 
     /// 冻结完整提交，并绑定具体的内部审核任务。
-    /// # 参数
+    ///
+    /// 已冻结待确认申请。未填写必要原始值、条款非法、版本冲突或数据库错误。
+    ///
     /// `draft` 必须已由当前供应商读取；标识、版本、提交人及Port由Process提供。
-    /// # 返回
-    /// 已冻结待确认申请。
-    /// # 错误
-    /// 未填写必要原始值、条款非法、版本冲突或数据库错误。
     pub async fn submit(
         &self,
         mut draft: NewProductDraft,
@@ -132,12 +116,10 @@ impl CatalogPortalService {
     }
 
     /// 批量写入前只读核对本组输入，并在正式提交事务中复用同一规则。
-    /// # 参数
+    ///
+    /// 资料、已选字典和原始包装报价均合法时返回空结果。任一原始资料、商务规则、字典资格或版本失效时拒绝。
+    ///
     /// `input` 为当前商品组原稿，`terms` 为供给域校验Port，`executor` 为调用方执行器。
-    /// # 返回
-    /// 资料、已选字典和原始包装报价均合法时返回空结果。
-    /// # 错误
-    /// 任一原始资料、商务规则、字典资格或版本失效时拒绝。
     pub async fn validate_for_submission(
         &self,
         input: &NewProductInput,
@@ -157,12 +139,10 @@ impl CatalogPortalService {
     }
 
     /// 撤回供应商待审核的提交，并保留其历史。
-    /// # 参数
+    ///
+    /// 已撤回申请。越界、已生效、版本冲突或数据库错误。
+    ///
     /// 标识、供应商、版本、真实操作人及调用方事务。
-    /// # 返回
-    /// 已撤回申请。
-    /// # 错误
-    /// 越界、已生效、版本冲突或数据库错误。
     pub async fn withdraw(
         &self,
         id: &str,
@@ -179,12 +159,10 @@ impl CatalogPortalService {
     }
 
     /// 在原审核事务中记录供应商可见的退回决定。
-    /// # 参数
+    ///
+    /// 已退回申请。空原因、非法状态、版本冲突或数据库错误。
+    ///
     /// 对象、版本、退回原因、内部真实操作人及事务。
-    /// # 返回
-    /// 已退回申请。
-    /// # 错误
-    /// 空原因、非法状态、版本冲突或数据库错误。
     pub async fn return_to_supplier(
         &self,
         id: &str,
@@ -201,12 +179,10 @@ impl CatalogPortalService {
     }
 
     /// 仅在正式商品、供给和任务写入成功后保存最终结果。
-    /// # 参数
+    ///
+    /// 已生效申请。缺核对说明、行结果缺失、状态或版本冲突、数据库错误。
+    ///
     /// `command` 含对象版本、内部映射、全部正式结果、内部操作人及真实核对说明。
-    /// # 返回
-    /// 已生效申请。
-    /// # 错误
-    /// 缺核对说明、行结果缺失、状态或版本冲突、数据库错误。
     pub async fn mark_effective(
         &self,
         command: CatalogDraftEffectiveCommand,
@@ -222,12 +198,10 @@ impl CatalogPortalService {
     }
 
     /// 保存独立的内部映射，并保留已冻结的供应商输入。
-    /// # 参数
+    ///
+    /// 已保存映射的待确认申请。实质改写、映射非法、版本冲突或数据库错误。
+    ///
     /// 精确对象版本、内部规范化映射及当前审核事务。
-    /// # 返回
-    /// 已保存映射的待确认申请。
-    /// # 错误
-    /// 实质改写、映射非法、版本冲突或数据库错误。
     pub async fn map(
         &self,
         id: &str,
@@ -243,12 +217,10 @@ impl CatalogPortalService {
     }
 
     /// 按已认证供应商边界读取提报。
-    /// # 参数
+    ///
+    /// 该供应商的申请。未知和范围外对象统一返回不存在。
+    ///
     /// `supplier_id` 只能取自已校验会话。
-    /// # 返回
-    /// 该供应商的申请。
-    /// # 错误
-    /// 未知和范围外对象统一返回不存在。
     pub async fn detail(
         &self,
         id: &str,
@@ -263,12 +235,10 @@ impl CatalogPortalService {
     }
 
     /// 读取内部审核对象；流程必须自行校验任务与权限。
-    /// # 参数
+    ///
+    /// 原始申请及历史。未知对象或数据库错误。
+    ///
     /// `id` 为精确申请标识，`executor` 为当前事务。
-    /// # 返回
-    /// 原始申请及历史。
-    /// # 错误
-    /// 未知对象或数据库错误。
     pub async fn load(&self, id: &str, executor: &mut dyn Executor) -> Result<NewProductDraft> {
         self.db
             .new_product_drafts()
@@ -278,12 +248,10 @@ impl CatalogPortalService {
     }
 
     /// 只列出已认证服务端上下文选定的供应商。
-    /// # 参数
+    ///
+    /// 有界提报页。分页非法或数据库错误。
+    ///
     /// `filter` 必须使用服务端供应商，分页上限100。
-    /// # 返回
-    /// 有界提报页。
-    /// # 错误
-    /// 分页非法或数据库错误。
     pub async fn list(
         &self,
         filter: &CatalogDraftFilter,

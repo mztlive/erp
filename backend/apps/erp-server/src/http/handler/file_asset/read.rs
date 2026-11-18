@@ -10,7 +10,7 @@ use persistence_core::ReadExecutor;
 use crate::http::errors::Error;
 use crate::http::state::HttpState;
 use crate::http::upload::detect_image_mime;
-/// 治理检查和敏感读取审计后在事务外读取存储字节。
+// 业务来源资格由调用方证明；在治理检查与敏感读取审计后出事务读取对象，并核对字节与已登记内容一致。
 pub(crate) async fn read_asset(
     state: &HttpState,
     actor: &AuditActor,
@@ -32,15 +32,7 @@ pub(crate) async fn read_asset(
     Ok((view, bytes))
 }
 
-/// 存储真实字节必须匹配登记内容；可预览类型额外校验 MIME。
-///
-/// # 参数
-/// * `view` - 已经通过业务来源授权的当前文件元数据。
-/// * `bytes` / `key` - 存储读取结果及应用内容指纹密钥。
-/// # 返回
-/// 文件大小、内容指纹及支持预览类型的 MIME 均匹配时成功。
-/// # 错误
-/// 内容被替换或大小、类型不符时拒绝；其他类型仍须由调用方限制为下载。
+// 拿到对象存储字节后，核对登记大小、内容指纹以及支持预览类型的真实 MIME；发现内容替换或记录不匹配时拒绝。其他类型仍须由调用方限制为仅下载。
 pub(crate) fn verify_content(
     view: &FileAssetView,
     bytes: &[u8],
@@ -62,7 +54,7 @@ pub(crate) fn verify_content(
     Ok(())
 }
 
-/// 存储读取后重验文件版本和当前治理状态。
+// 对象读取之后、响应发出之前重新读取文件治理状态并比对版本和指纹；中途变更时拒绝交付。
 pub(crate) async fn revalidate_asset(
     state: &HttpState,
     original: &FileAssetView,
@@ -79,7 +71,7 @@ pub(crate) async fn revalidate_asset(
     Ok(())
 }
 
-/// 只允许未被销毁或安全检查拒绝的图片与 PDF。
+// 为业务附件读取挡住已销毁、已拒绝或隔离的文件，并只允许 PDF、JPEG、PNG 和 WebP 类型。
 fn ensure_readable(view: &FileAssetView) -> std::result::Result<(), Error> {
     if view.destroyed_at.is_some()
         || matches!(view.security_scan_status, SecurityScanStatus::Rejected | SecurityScanStatus::Quarantined)
@@ -93,7 +85,7 @@ fn ensure_readable(view: &FileAssetView) -> std::result::Result<(), Error> {
     Ok(())
 }
 
-/// 下载保留内容类型并禁止缓存、嗅探及存储地址泄露。
+// 以登记 MIME 发送已经重验的附件字节，强制下载、不缓存也不嗅探；不交付底层存储地址。
 pub(crate) fn asset_download_response(
     view: &FileAssetView,
     bytes: Vec<u8>,

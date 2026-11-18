@@ -28,31 +28,13 @@ pub struct PaymentReversalProcess {
 impl PaymentReversalProcess {
     /// 绑定组合根数据库；审批运行时已完成授权。
     ///
-    /// # 参数
-    /// * `db` - 组合根数据库。
-    /// * `restoration` - 应用装配的原付款申请恢复端口。
-    ///
-    /// # 返回
-    /// 返回付款冲正最终过账流程。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// `restoration` 为应用装配的原付款申请恢复端口。返回付款冲正最终过账流程。
     pub fn new(db: Database, restoration: Arc<dyn PaymentRequestRestorationPort<Error = Error>>) -> Self {
         Self { db, restoration }
     }
 
-    /// 在审批最终通过持有的唯一事务内执行付款冲正。
-    ///
-    /// # 参数
-    /// * `id` - 冲正单 ID。
-    /// * `actor` - 已通过鉴权的审计操作人。
-    /// * `executor` - 审批最终通过持有的执行器；本函数不再开启事务。
-    ///
-    /// # 返回
-    /// 成功时无返回值。冲正过账已写入该执行器。
-    ///
-    /// # 错误
-    /// 非审批中、原付款不存在、累计冲正超额或仓储写入失败时返回错误。
+    /// 付款冲正审批最终通过时，在同一审批执行器校验原付款及累计冲正额度，再写反向结算、任务、财务事实、冲正状态和审计。
+    /// 不另开事务；非审批中、原付款缺失、累计超额或仓储写入失败时返回错误并停止后续步骤。
     pub async fn post_payment_reversal_apply(
         &self,
         id: &str,
@@ -71,10 +53,7 @@ impl PaymentReversalProcess {
     }
 }
 
-/// 在最终通过事务内执行过账副作用并写回冲正单。
-///
-/// # 错误
-/// 非审批中、原付款不存在或仓储失败时返回错误。
+// 在最终通过事务内执行过账副作用并写回冲正单。非审批中、原付款不存在或仓储失败时返回错误。
 async fn apply_payment_reversal_final_post(
     db: &Database,
     restoration: &dyn PaymentRequestRestorationPort<Error = Error>,

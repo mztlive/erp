@@ -36,7 +36,7 @@ pub(super) fn difference_type_label(kind: &str) -> &'static str {
     }
 }
 
-/// 仅解释已存引用的类别，不证明引用存在或已通过权威核验。
+// 处理集成异常与对账简报时，仅解释已存引用的类别，不证明引用存在或已通过权威核验。
 pub(super) fn evidence_category(value: Option<&str>) -> Option<String> {
     let value = value?.trim();
     if value.is_empty() {
@@ -71,7 +71,7 @@ pub(super) fn evidence_category(value: Option<&str>) -> Option<String> {
     )
 }
 
-/// 已完成错误任务的说明只投影终态证据，操作与账号身份不进入显示值。
+// 处理集成异常与对账简报时，已完成错误任务的说明只投影终态证据，操作与账号身份不进入显示值。
 fn completion_evidence(value: &str) -> Option<&str> {
     let value = value.strip_prefix("operation=")?;
     let (_, value) = value.split_once(";reason_code=")?;
@@ -80,7 +80,7 @@ fn completion_evidence(value: &str) -> Option<&str> {
     Some(evidence)
 }
 
-/// 商城尚无仓储可查；只保留该类型中明显有业务结构的外部单号。
+// 处理集成异常与对账简报时，商城尚无仓储可查；只保留该类型中明显有业务结构的外部单号。
 pub(super) fn external_reference(kind: &str, id: &str) -> Option<String> {
     let id = id.trim();
     let opaque = matches!(id.len(), 24 | 32) && id.chars().all(|ch| ch.is_ascii_hexdigit());

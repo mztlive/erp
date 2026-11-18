@@ -7,20 +7,12 @@ use crate::entity::approval_copy::ApprovalCopyRule;
 use crate::error::{Error, Result};
 use crate::service::approval::definition_dto::DefinitionNodeRequest;
 
-/// 整组节点替换的 v3 身份；Create/Replace 即使资源文本相同也使用不同 domain。
-///
-/// # 参数
-/// * `key` - 规范幂等键
-/// * `definition_id` - 定义主键
-/// * `expected_lock` - 期望的定义锁版本
-/// * `nodes` - 整组节点请求
-/// * `actor_id` - 操作人 ID
-///
-/// # 返回
-/// 返回不含历史候选的当前 V3 身份。
-///
-/// # 错误
-/// 身份构造失败时返回内部错误。
+// 整组节点替换的 v3 身份；Create/Replace 即使资源文本相同也使用不同 domain。
+// 返回不含历史候选的当前 V3 身份。
+//
+// 身份构造失败时返回内部错误。
+//
+// `expected_lock`：期望的定义锁版本。
 pub(in crate::service::approval::definition) fn replace_nodes_identity(
     key: IdempotencyKey,
     definition_id: &str,

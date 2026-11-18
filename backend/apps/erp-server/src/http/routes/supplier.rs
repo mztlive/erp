@@ -13,21 +13,12 @@ use crate::http::routes::permission_route;
 use crate::http::state::HttpState;
 use crate::http::upload;
 
-/// 返回本域管理端路由集合。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回声明公共权限目录信息的路由集合。
-///
-/// # 错误
-/// 不执行 I/O，不返回错误。
+/// 为管理端挂载供应商档案接口，按操作登记公共权限目录信息；文件入口保留对应的上传限制。
 pub fn routes() -> Router<HttpState> {
     Router::new().merge(import_routes()).merge(profile_routes()).merge(supplier_routes())
 }
 
-/// 供应商资料导入路由。
+// 为父路由挂载供应商资料导入路由。
 fn import_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -54,7 +45,7 @@ fn import_routes() -> Router<HttpState> {
         )
 }
 
-/// 供应商资料与敏感字段维护路由。
+// 为父路由挂载供应商资料与敏感字段维护路由。
 fn profile_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -101,7 +92,7 @@ fn profile_routes() -> Router<HttpState> {
         )
 }
 
-/// 供应商档案与责任交接路由。
+// 为父路由挂载供应商档案与责任交接路由。
 fn supplier_routes() -> Router<HttpState> {
     Router::new()
         .route("/suppliers", permission_route(get(supplier::supplier_list), &permissions::supplier::LIST))

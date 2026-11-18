@@ -9,7 +9,7 @@ use super::super::dto::{
 };
 /// 详情首屏审批历史最多八项。
 pub(in crate::purchase_center) const RECENT_HISTORY_LIMIT: usize = 8;
-/// 由绑定与可选实例事实构造只读审批结构。
+/// 为采购单审批组装审批视图时，只使用冻结的定义绑定与实际读到的可选实例。
 ///
 /// 创建后未提交只返回绑定定义；客户端不得据此选择定义或审批人。
 ///
@@ -20,9 +20,6 @@ pub(in crate::purchase_center) const RECENT_HISTORY_LIMIT: usize = 8;
 ///
 /// # 返回
 /// 返回有界只读审批结构。
-///
-/// # 错误
-/// 不返回错误。
 pub fn document_approval_view(
     binding: Option<&ApprovalDefinitionBinding>,
     instance: Option<DocumentApprovalInstanceView>,
@@ -31,7 +28,7 @@ pub fn document_approval_view(
     document_approval_view_with_definition(binding, None, instance, status)
 }
 
-/// 由绑定、定义图与可选实例构造只读审批结构。
+/// 由绑定、定义图与可选实例生成只读审批结构。
 ///
 /// # 参数
 /// * `binding` - 创建时冻结的定义绑定
@@ -41,9 +38,6 @@ pub fn document_approval_view(
 ///
 /// # 返回
 /// 返回含流程名与有序节点的只读审批结构。
-///
-/// # 错误
-/// 无。
 ///
 /// # 关键业务约束
 /// 节点只投影名称与顺序，不展开审批人。
@@ -63,17 +57,13 @@ pub fn document_approval_view_with_definition(
     }
 }
 
-/// 由冻结绑定与可选定义图投影定义摘要。
-///
-/// # 参数
-/// * `binding` - 创建时冻结的定义绑定
-/// * `graph` - 绑定定义图；缺省时名称与节点为空
-///
-/// # 返回
-/// 返回定义 id、名称、版本与有序节点。
-///
-/// # 错误
-/// 不返回错误。
+// 处理采购单审批时，由冻结绑定与可选定义图投影定义摘要。
+//
+// 调用参数：
+// * `binding` - 创建时冻结的定义绑定
+// * `graph` - 绑定定义图；缺省时名称与节点为空
+//
+// 返回定义 id、名称、版本与有序节点。
 pub(in crate::purchase_center) fn definition_view_from_binding(
     binding: &ApprovalDefinitionBinding,
     graph: Option<&DefinitionGraph>,
@@ -88,7 +78,7 @@ pub(in crate::purchase_center) fn definition_view_from_binding(
     .with_nodes(nodes.into_iter().map(DocumentApprovalNodeView::from_node).collect())
 }
 
-/// 单据详情允许的审批相关动作。不含选择定义或审批人。
+// 为采购单审批计算详情可展示的审批动作，不允许借此选择流程定义或审批人。
 fn allowed_document_actions(status: PurchaseOrderStatus) -> Vec<String> {
     match status {
         PurchaseOrderStatus::Draft | PurchaseOrderStatus::Rejected => vec!["SUBMIT".to_string()],
@@ -108,7 +98,7 @@ mod tests {
     use erp_workflow::service::approval::binding::binding_from_published;
 
     use super::*;
-    /// 详情只读审批结构；允许动作不含选择定义或审批人。
+    // 验证采购单审批：详情只读审批结构；允许动作不含选择定义或审批人。
     #[test]
     fn detail_approval_is_read_only_and_has_history_cap() {
         let binding =

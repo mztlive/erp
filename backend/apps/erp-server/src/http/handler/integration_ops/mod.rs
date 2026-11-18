@@ -23,14 +23,7 @@ use crate::http::extractor::{Json, Query};
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
-/// 查询入站消息列表。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `query` - 分页与筛选参数（扁平传递）
-///
-/// # 返回
-/// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
+/// 按请求条件查询入站消息列表。
 pub async fn inbox_message_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -47,12 +40,6 @@ pub async fn inbox_message_list(
 }
 
 /// 查询入站消息详情（含规范化内容引用）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `id` - 消息 ID
-///
-/// # 返回
 /// 返回消息详情视图。
 pub async fn inbox_message_detail(
     State(state): State<HttpState>,
@@ -70,13 +57,6 @@ pub async fn inbox_message_detail(
 }
 
 /// 登记入站消息（消息层与业务事实层幂等由唯一索引保证，重复投递返回 409）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 登记请求
-///
-/// # 返回
 /// 返回新建消息的详情视图。
 pub async fn inbox_message_register(
     State(state): State<HttpState>,
@@ -89,14 +69,7 @@ pub async fn inbox_message_register(
 }
 
 /// 回写入站消息处理结果（`processed` 标记已处理；`failed` 同事务登记错误任务）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 消息 ID
-/// * `req` - 回写请求（含期望版本）
-///
-/// # 返回
+/// `req` 为回写请求（含期望版本）。
 /// 返回回写后的消息详情视图。
 pub async fn inbox_message_write_back(
     State(state): State<HttpState>,
@@ -109,14 +82,7 @@ pub async fn inbox_message_write_back(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 查询集成错误任务列表。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `query` - 分页与筛选参数（扁平传递）
-///
-/// # 返回
-/// 返回契约形状的分页视图。
+/// 按请求条件查询集成错误任务列表。
 pub async fn error_task_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -128,13 +94,6 @@ pub async fn error_task_list(
 }
 
 /// 查询集成错误任务详情（含解决/关闭证据文本）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 任务 ID
-///
-/// # 返回
 /// 返回任务详情视图。
 pub async fn error_task_detail(
     State(state): State<HttpState>,
@@ -147,13 +106,6 @@ pub async fn error_task_detail(
 }
 
 /// 登记集成错误任务（同一消息与错误分类只允许一个进行中任务）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 登记请求
-///
-/// # 返回
 /// 返回新建任务的视图。
 pub async fn error_task_create(
     State(state): State<HttpState>,
@@ -165,7 +117,7 @@ pub async fn error_task_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 执行 W29 非终结任务动作；任务保持 `OPEN`。
+/// 在 W29 正式任务办理中执行不终结任务的动作；领域用例返回后，任务仍保持 `OPEN`。
 pub async fn integration_task_action(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -175,7 +127,7 @@ pub async fn integration_task_action(
     Ok(ApiResponse::ok_with_data(result))
 }
 
-/// 以 W29 强命令形成领域结论并完成正式任务。
+/// 完成 W29 正式任务时走强命令，把领域处理结论与任务完成交给同一编排入口。
 pub async fn integration_task_completion(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -186,13 +138,6 @@ pub async fn integration_task_completion(
 }
 
 /// 查询对账差异列表（`status` 由最新处理记录派生）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `query` - 分页与筛选参数（扁平传递）
-///
-/// # 返回
-/// 返回契约形状的分页视图。
 pub async fn difference_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -204,13 +149,6 @@ pub async fn difference_list(
 }
 
 /// 查询对账差异详情（含处理记录时间线）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 差异 ID
-///
-/// # 返回
 /// 返回差异详情视图。
 pub async fn difference_detail(
     State(state): State<HttpState>,
@@ -223,13 +161,6 @@ pub async fn difference_detail(
 }
 
 /// 登记对账差异（正式差异事实，创建后不可修改；重复登记返回 409）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 登记请求
-///
-/// # 返回
 /// 返回新建差异的视图。
 pub async fn difference_create(
     State(state): State<HttpState>,
@@ -241,7 +172,7 @@ pub async fn difference_create(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 对未关联正式任务的差异提交 decision-only 命令。
+/// 只对没有关联正式任务的对账差异办理独立决策，不用该入口替代 W29 任务结案。
 pub async fn difference_decision(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,

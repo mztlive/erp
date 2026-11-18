@@ -7,13 +7,9 @@ use erp_finance::repository::PurchasePaymentRequestSnapshotExt;
 
 use super::*;
 
-/// 沿原申请提交读取不可变依据，不以当前来源或关闭状态替代历史关系。
-/// # 参数
-/// 原付款、当前申请、真实反向分配及原冲正事务执行器。
-/// # 返回
-/// 原付款和本次逐采购冲正金额均属于冻结授权时成功。
-/// # 错误
-/// 缺少申请、快照、主体或逐行关系错配时返回冲突。
+// 沿原申请提交读取不可变依据，不以当前来源或关闭状态替代历史关系。
+//
+// 原付款、当前申请、真实反向分配及原冲正事务执行器。原付款和本次逐采购冲正金额均属于冻结授权时成功。缺少申请、快照、主体或逐行关系错配时返回冲突。
 pub(super) async fn revalidate(
     db: &Database,
     payment: &SupplierPayment,
@@ -52,13 +48,9 @@ fn validate_reversal_allocations(
     Ok(())
 }
 
-/// 校验原付款与不可变提交的完整身份、主体、账户及逐行批准金额。
-/// # 参数
-/// 已正式付款和原申请不可变提交。
-/// # 返回
-/// 所有原授权事实一致时成功，不校验当前来源是否仍可付款。
-/// # 错误
-/// 任何必填依据缺失、主体、账户或逐行金额错配时返回冲突。
+// 校验原付款与不可变提交的完整身份、主体、账户及逐行批准金额。
+//
+// 已正式付款和原申请不可变提交。所有原授权事实一致时成功，不校验当前来源是否仍可付款。任何必填依据缺失、主体、账户或逐行金额错配时返回冲突。
 pub(super) fn validate_snapshot(
     payment: &SupplierPayment,
     snapshot: &PurchasePaymentRequestSubmissionSnapshot,

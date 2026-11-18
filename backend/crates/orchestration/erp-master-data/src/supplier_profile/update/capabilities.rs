@@ -16,18 +16,13 @@ use super::persist::CapabilityChanges;
 use crate::{Error, Result};
 
 impl SupplierProfileProcess {
-    /// 将能力代码集合解析为新增、启停与不可变快照。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 供应商角色 ID
-    /// * `req` - 已校验的根资料命令
-    /// * `actor_id` - 执行变更的账号 ID
-    ///
-    /// # 返回
-    /// 返回待事务持久化的能力实体、修订和稳定 ID 映射。
-    ///
-    /// # 错误
-    /// 仓储查询、状态迁移、修订号生成或实体构造失败时返回错误。
+    // 将能力代码集合解析为新增、启停与不可变快照。
+    //
+    // `supplier_id`：供应商角色 ID；`req`：已校验的根资料命令。
+    //
+    // 返回待事务持久化的能力实体、修订和稳定 ID 映射。
+    //
+    // 仓储查询、状态迁移、修订号生成或实体构造失败时返回错误。
     pub(super) async fn prepare_capability_changes(
         &self,
         supplier_id: &SupplierAccountId,
@@ -89,7 +84,7 @@ impl SupplierProfileProcess {
         Ok(changes)
     }
 
-    /// 逐能力生成启停修订；修订号读取失败后不再准备后续能力。
+    // 逐能力生成启停修订；修订号读取失败后不再准备后续能力。
     async fn prepare_capability_toggles(
         &self,
         toggles: Vec<CapabilityToggle>,

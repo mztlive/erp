@@ -23,16 +23,7 @@ pub const DIFFERENCE_WORK_ITEM_OBJECT_TYPE: &str = "reconciliation_difference";
 /// 对账差异任务的初始业务主题版本（尚无追加式决定时为 0）。
 pub const DIFFERENCE_INITIAL_SUBJECT_VERSION: &str = "0";
 
-/// 返回错误分类对应的固定责任角色。
-///
-/// # 参数
-/// * `error_class` - 集成错误分类
-///
-/// # 返回
-/// 返回固定的责任角色代码，全矩阵覆盖，无失败分支。
-///
-/// # 错误
-/// 不返回错误。
+/// 返回错误分类对应的固定责任角色。返回固定的责任角色代码，全矩阵覆盖，无失败分支。
 pub fn error_owner_role(error_class: ErrorClass) -> &'static str {
     match error_class {
         ErrorClass::CapabilityGap | ErrorClass::MappingError => W29_OPERATIONS_ROLE,
@@ -45,16 +36,7 @@ pub fn error_owner_role(error_class: ErrorClass) -> &'static str {
     }
 }
 
-/// 返回错误分类对应的固定任务类型。
-///
-/// # 参数
-/// * `error_class` - 集成错误分类
-///
-/// # 返回
-/// 结果未知使用结果未知任务类型，其余使用业务异常任务类型。
-///
-/// # 错误
-/// 不返回错误。
+/// 返回错误分类对应的固定任务类型。结果未知使用结果未知任务类型，其余使用业务异常任务类型。
 pub fn error_work_item_type(error_class: ErrorClass) -> IntegrationResponsibilityKind {
     if error_class == ErrorClass::ResultUnknown {
         IntegrationResponsibilityKind::IntegrationResultUnknown
@@ -63,16 +45,7 @@ pub fn error_work_item_type(error_class: ErrorClass) -> IntegrationResponsibilit
     }
 }
 
-/// 返回错误分类对应的固定优先级。
-///
-/// # 参数
-/// * `error_class` - 集成错误分类
-///
-/// # 返回
-/// 返回固定的任务优先级，全矩阵覆盖，无失败分支。
-///
-/// # 错误
-/// 不返回错误。
+/// 返回错误分类对应的固定优先级。返回固定的任务优先级，全矩阵覆盖，无失败分支。
 pub fn error_priority(error_class: ErrorClass) -> IntegrationResponsibilityPriority {
     match error_class {
         ErrorClass::AuthSignature | ErrorClass::ResultUnknown => IntegrationResponsibilityPriority::Urgent,
@@ -87,17 +60,11 @@ pub fn error_priority(error_class: ErrorClass) -> IntegrationResponsibilityPrior
 
 /// 从固定注册表解析对账差异责任角色。
 ///
-/// # 参数
-/// * `difference_type` - 对账差异分类（允许首尾空白与大小写差异）
-///
-/// # 返回
-/// 返回固定的责任角色代码。
-///
-/// # 错误
-/// 差异类型未注册固定责任规则时返回错误，调用方不得创建无责任任务。
-///
-/// # 约束
 /// 未注册分类失败关闭；通用 BPM 不得复用本注册表。
+///
+/// 返回固定的责任角色代码。差异类型未注册固定责任规则时返回错误，调用方不得创建无责任任务。
+///
+/// `difference_type` 为对账差异分类（允许首尾空白与大小写差异）。
 pub fn difference_owner_role(difference_type: &str) -> Result<&'static str> {
     match difference_type.trim().to_ascii_lowercase().as_str() {
         "mall_missing"
@@ -167,14 +134,9 @@ pub struct IntegrationResponsibilitySpec {
 ///
 /// 处理人及其内部组织必须已写入错误任务；本层不再写入公司占位。
 ///
-/// # 参数
-/// * `task` - 已登记的集成错误任务。
-///
-/// # 返回
 /// 返回固定责任事实。处理人缺失时 `owner_user_id` 为空字符串，不在此失败。
 ///
-/// # 错误
-/// 不返回错误。
+/// `task` 为已登记的集成错误任务。
 pub fn error_responsibility(task: &IntegrationErrorTask) -> IntegrationResponsibilitySpec {
     IntegrationResponsibilitySpec {
         task_kind: error_work_item_type(task.error_class),
@@ -192,14 +154,9 @@ pub fn error_responsibility(task: &IntegrationErrorTask) -> IntegrationResponsib
 
 /// 从差异事实提取固定责任；仅保留原固定责任注册校验，初始主题版本为 0。
 ///
-/// # 参数
-/// * `difference` - 已登记的对账差异。
+/// 返回任务类型为业务异常、优先级为高、主题版本为 `0` 的固定责任事实。差异类型未注册固定责任规则时返回原错误。
 ///
-/// # 返回
-/// 返回任务类型为业务异常、优先级为高、主题版本为 `0` 的固定责任事实。
-///
-/// # 错误
-/// 差异类型未注册固定责任规则时返回原错误。
+/// `difference` 为已登记的对账差异。
 pub fn difference_responsibility(
     difference: &ReconciliationDifference,
 ) -> Result<IntegrationResponsibilitySpec> {

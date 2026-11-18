@@ -126,7 +126,7 @@ pub(crate) fn find_action(resource: &str, action: &str) -> Option<&'static Scope
         .find(|spec| spec.permission.resource() == resource && spec.permission.action() == action)
 }
 
-/// 已接入但没有范围定义时说明原因；完全未知的动作保持原接入错误。
+// 查询动作范围规格时，区分已接入但不定义独立范围与完全未知的动作；前者给出业务原因，后者保留接入错误。
 pub(crate) fn require_scope(permission: &Permission) -> Result<&'static ScopeSpec> {
     let _ = specs();
     if let Some(spec) = find(permission) {
@@ -152,7 +152,7 @@ pub(crate) fn require_action(resource: &str, action: &str) -> Result<&'static Sc
     Err(scope_unavailable(resource, action))
 }
 
-/// 运行时直接解析的来源：本权限配置或公司范围。来源复用必须先跳到 `Current`。
+// 加载可直接用于解析的动作规格，只接受本权限配置或公司范围。复用来源的规格必须先解析到 `Current`。
 pub(crate) fn require_runtime(permission: &Permission) -> Result<&'static ScopeSpec> {
     let spec = require_scope(permission)?;
     runtime_only(spec)
@@ -169,7 +169,7 @@ fn runtime_only(spec: &'static ScopeSpec) -> Result<&'static ScopeSpec> {
     }
 }
 
-/// 解析实际读取人员配置或公司范围的定义。来源必须是 `Current`，且不能成环。
+// 沿动作登记找到真正读取人员配置或公司范围的来源。复用只指向 `Current`，不得形成循环。
 pub(crate) fn runtime_source(spec: &ScopeSpec) -> Result<&'static ScopeSpec> {
     match &spec.source {
         ScopeSource::Current | ScopeSource::Company => find(&spec.permission)
@@ -231,7 +231,7 @@ pub(crate) fn actions(resource: &str) -> Vec<&'static Permission> {
     actions
 }
 
-/// 人员范围界面只展示公共目录动作，内部固定入口不参与配置候选。
+// 为人员范围配置页枚举公共目录动作；固定内部入口不成为可编辑候选。
 pub(crate) fn display_actions(resource: &str) -> Vec<&'static Permission> {
     actions(resource)
         .into_iter()
@@ -302,7 +302,7 @@ pub(crate) fn validate_binding(binding: &ScopeBinding) -> Result<()> {
     Ok(())
 }
 
-/// 公司范围不加载组织；治理委派需要全员关系，其余只加载操作人目录。
+// 按范围解析需求选择组织取证规模：公司范围不取组织，治理委派读取全员关系，其余只加载操作人目录。
 pub(crate) fn organization_load(spec: &ScopeSpec) -> OrganizationLoad {
     if matches!(&spec.source, ScopeSource::Company) {
         return OrganizationLoad::None;
@@ -357,7 +357,7 @@ pub(crate) fn validate_catalog() -> Result<()> {
     validate_sources_acyclic(raw_specs())
 }
 
-/// 校验单项范围定义的维度、读取补充与来源合同。
+// 启动校验时逐动作核对范围维度、记录读取补充及复用来源是否符合登记合同。
 fn validate_scope(spec: &ScopeSpec) -> Result<()> {
     if spec.supported_dimensions.is_empty() || spec.scope_types.is_empty() {
         return Err(Error::ValidationError(format!("{} 缺少范围维度或类型", spec.permission)));
@@ -404,7 +404,7 @@ fn validate_scope(spec: &ScopeSpec) -> Result<()> {
     validate_scope_types(spec)
 }
 
-/// 同资源的范围类型保持一致，逐动作维度仍独立校验。
+// 启动时检查同一资源提供一致的范围类型；各动作能配置的维度仍分别校验。
 fn validate_scope_types(spec: &ScopeSpec) -> Result<()> {
     let siblings =
         raw_specs().iter().filter(|other| other.permission.resource() == spec.permission.resource());

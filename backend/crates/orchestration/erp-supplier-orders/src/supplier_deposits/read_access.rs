@@ -20,12 +20,10 @@ pub struct SupplierDepositReadAccess {
 
 impl SupplierDepositReadAccess {
     /// 绑定应用数据库及当前RBAC服务，不缓存账号授权。
-    /// # 参数
+    ///
     /// `db`、`authorization` 由应用组合根提供。
-    /// # 返回
+    ///
     /// 可注入采购只读查询的财务权限适配器。
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: Database, authorization: Arc<AuthorizationService>) -> Self {
         Self { db, authorization }
     }
@@ -46,13 +44,11 @@ impl PurchaseDepositAccessPort for SupplierDepositReadAccess {
 }
 
 impl From<Error> for ReadError {
-    /// 保留供应商流程与采购读取边界共有的错误类别及载荷。
-    /// # 参数
-    /// `error` 为财务账号授权返回的流程错误。
-    /// # 返回
-    /// 返回同类别的读取错误，不改写字段校验明细、稳定码或持久化错误。
-    /// # 错误
-    /// 不返回错误。
+    // 保留供应商流程与采购读取边界共有的错误类别及载荷。
+    //
+    // `error` 为财务账号授权返回的流程错误。
+    //
+    // 返回同类别的读取错误，不改写字段校验明细、稳定码或持久化错误。
     fn from(error: Error) -> Self {
         match error {
             Error::Internal(payload) => Self::Internal(payload),

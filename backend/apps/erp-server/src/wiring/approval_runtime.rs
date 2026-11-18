@@ -7,15 +7,7 @@ use mongodb::Database;
 
 use super::workflow::{workflow_audit, workflow_auth};
 
-/// 为当前数据库与授权源装配共有审批执行合同。
-/// # 参数
-/// * `db` - 审批材料、工作流与业务事实所在数据库。
-/// * `rbac` - 当前应用共享的 RBAC 快照服务。
-/// * `authorization` - 启动时完整绑定的共享授权服务。
-/// # 返回
-/// 返回只公开材料、绑定、启动与取消拷贝窄步骤的动态合同。
-/// # 错误
-/// 不返回错误；业务资格与持久化错误由实际调用点返回。
+/// 为业务 Process 注入审批运行时的窄合同：材料准备、定义绑定、启动与取消抄送。构造复用共享授权和 RBAC，资格及持久化错误在实际调用时返回。
 pub fn approval_runtime(
     db: Database,
     rbac: SharedRbacService,

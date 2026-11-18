@@ -14,16 +14,8 @@ use super::{DemoMasterDataProcess, lifecycle, record};
 use crate::{Error, Result};
 
 impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
-    /// 解析仓储岗位后创建或恢复登记仓库。
-    ///
-    /// # 参数
-    /// `actor` - 操作人；`step` - 种子身份；`template` - 仓库创建输入；`handler_user_id` - 仓储经办人 ID。
-    ///
-    /// # 返回
-    /// 返回仓库创建、恢复、已存在或缺少岗位的提示。
-    ///
-    /// # 错误
-    /// 编号归属不符、仓库停用、收发责任不可用或持久化失败时返回错误。
+    // 使用真实仓储岗位创建或恢复已登记仓库，读回并核验收、发责任，供后续仓储演示使用。
+    // 缺少岗位时返回提示；撞号、仓库停用、责任失效或写入失败时拒绝。
     pub(super) async fn ensure_warehouse(
         &self,
         actor: &AuditActor,
@@ -74,7 +66,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         Ok(EnsureOutcome::Created)
     }
 
-    /// 读取现行仓库并通过正式身份事实核对两项收发责任。
+    // 读取正式仓库并核验两项收发责任，确保登记存在不等于仓库已经可用。
     async fn verify_warehouse_ready(&self, id: &str) -> Result<()> {
         let mut executor = ReadExecutor::default();
         let warehouse = self
@@ -87,7 +79,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
     }
 }
 
-/// 将仓储岗位占位引用替换为当前账号 ID。
+// 用真实仓储账号 ID 替换模板的收货及发货占位值，以便正式建仓时核验责任人身份。
 fn warehouse_request(template: &CreateWarehouseRequest, handler_user_id: &str) -> CreateWarehouseRequest {
     let mut request = template.clone();
     request.inbound_handler_user_id = handler_user_id.to_string();
@@ -95,7 +87,7 @@ fn warehouse_request(template: &CreateWarehouseRequest, handler_user_id: &str) -
     request
 }
 
-/// 使用领域责任解析与身份端口验证现行经办人，不调整仓库状态或负责人。
+// 通过仓库领域责任解析和身份端口核对当前收发经办人；只判断可用性，不更改仓库状态或接管原负责人。
 async fn warehouse_ready(
     warehouse: &Warehouse,
     identity: &dyn IdentityFactPort,

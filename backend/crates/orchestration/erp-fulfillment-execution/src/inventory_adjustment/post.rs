@@ -20,23 +20,11 @@ use super::adapter::{require_frozen_binding, stock_adjustment_adapter};
 use crate::{Error, Result};
 
 impl InventoryAdjustmentProcess {
-    /// 在审批运行时持有的唯一事务内过账库存调整单。
+    /// 库存调整审批最终通过时，由 §4.4.4 约定的端口过账。复用决定事务，按冻结的实例、执行、任务、业务对象和主题版本
+    /// 核对运行上下文后，写入单据、库存流水、余额和审计，返回事务内的已过账视图。
     ///
-    /// 本方法是合同 §4.4.4 签署的最终通过端口。调用方必须传入审批决定
-    /// 事务的执行器；`NoTransaction` 会失败关闭，防止脱离 BPM 终态写入
-    /// 单据、库存流水、余额和审计。
-    ///
-    /// # 参数
-    /// * `context` - 审批运行时冻结的实例、执行、任务、业务对象与主题版本
-    /// * `actor` - 已认证的审批决定操作人
-    /// * `executor` - 审批运行时持有的事务执行器
-    ///
-    /// # 返回
-    /// 返回事务内已过账的库存调整单视图。
-    ///
-    /// # 错误
-    /// 缺少事务会话、非审批中、明细/余额不完整、库存不足、重复过账或任一
-    /// 写入失败时返回错误；事务由审批运行时整体提交或回滚。
+    /// 拒绝无事务执行器或非审批中单据。明细或余额不完整、库存不足、重复过账及写入失败均返回错误；
+    /// 由审批运行时整体提交或回滚。
     pub async fn post_stock_adjustment(
         &self,
         context: &ApprovalActionContext,
@@ -51,19 +39,11 @@ impl InventoryAdjustmentProcess {
     }
 }
 
-/// 在审批运行时持有的事务内过账库存调整单。
-///
-/// # 参数
-/// * `db` - 数据库实例。
-/// * `context` - 审批运行时冻结的最终通过上下文。
-/// * `actor` - 已认证操作人。
-/// * `executor` - 审批运行时持有的事务执行器。
-///
-/// # 返回
-/// 返回事务内已推进到过账状态的调整单。
-///
-/// # 错误
-/// 运行上下文不匹配、调整单或明细不存在、方向或库存不变量失败、任一写入失败时返回错误。
+// 在审批运行时持有的事务内过账库存调整单。
+//
+// `context` 为审批运行时冻结的最终通过上下文；`executor` 为审批运行时持有的事务执行器。返回事务内已推进到过账状态的调整单。
+//
+// 运行上下文不匹配、调整单或明细不存在、方向或库存不变量失败、任一写入失败时返回错误。
 async fn post_stock_adjustment_write(
     db: &Database,
     context: &ApprovalActionContext,
@@ -91,11 +71,7 @@ async fn post_stock_adjustment_write(
     Ok(adjustment)
 }
 
-/// 逐项验证最终通过动作仍对应当前运行实例、执行、任务和冻结主题版本。
-///
-/// # 错误
-/// 任一运行身份缺失、漂移，或当前处理人与开放任务责任不一致时返回冲突，
-/// 禁止写入任何库存事实。
+// 逐项验证最终通过动作仍对应当前运行实例、执行、任务和冻结主题版本。任一运行身份缺失、漂移，或当前处理人与开放任务责任不一致时返回冲突，禁止写入任何库存事实。
 async fn validate_post_runtime_context(
     db: &Database,
     context: &ApprovalActionContext,
@@ -151,7 +127,7 @@ async fn validate_post_runtime_context(
     Ok(())
 }
 
-/// 依次读取运行实例、冻结绑定、快照和当前执行，沿用审批决定事务快照。
+// 依次读取运行实例、冻结绑定、快照和当前执行，沿用审批决定事务快照。
 async fn load_post_runtime_snapshot(
     db: &Database,
     context: &ApprovalActionContext,

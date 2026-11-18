@@ -49,22 +49,20 @@ pub struct ImportAttempt {
 
 impl ContractImportProcess {
     /// 装配供应商无关流程。
-    /// # 参数
-    /// * `db` / `services` / `providers` - 数据库、已装配范围能力的领域服务和识别端口。
-    /// # 返回
+    ///
+    /// `db` / `services` / `providers`：数据库、已装配范围能力的领域服务和识别端口。
+    ///
     /// 完整流程实例。
-    /// # 错误
-    /// 无。
     pub fn new(db: Database, services: ContractImportServices, providers: RecognitionProviders) -> Self {
         Self { db, services, providers }
     }
 
     /// 领取本人任务；后台执行器必须独立持有本调用至识别结果保存。
-    /// # 参数
-    /// * `id` / `actor` - 任务与认证人。
-    /// # 返回
+    ///
+    /// `id` / `actor`：任务与认证人。
+    ///
     /// 当前视图与待执行工作；成功重放不产生工作。
-    /// # 错误
+    ///
     /// 无权、源文件不可用、版本竞争或数据库失败。
     pub async fn claim(&self, id: &str, actor: &AuditActor) -> Result<(ImportView, Option<ImportAttempt>)> {
         let process = self.clone();
@@ -78,7 +76,7 @@ impl ContractImportProcess {
             .await
     }
 
-    /// 功能资格、本人任务及版本更新使用同一个领取事务。
+    // 功能资格、本人任务及版本更新使用同一个领取事务。
     async fn claim_stage(
         &self,
         id: &str,
@@ -95,11 +93,11 @@ impl ContractImportProcess {
     }
 
     /// 完成已领取任务；调用方必须在独立后台任务中等待收尾。
-    /// # 参数
-    /// * `attempt` / `actor` / `pdf` - 已领取工作、认证人及原文件。
-    /// # 返回
+    ///
+    /// `attempt` / `actor` / `pdf`：已领取工作、认证人及原文件。
+    ///
     /// 成功或带失败原因的持久任务。
-    /// # 错误
+    ///
     /// 版本竞争、持久化失败或提交结果未知。
     pub async fn execute(
         &self,
@@ -145,11 +143,11 @@ impl ContractImportProcess {
     }
 
     /// 登记读取原文件失败，任务可在原记录重试。
-    /// # 参数
-    /// * `attempt` - 已领取且尚未执行识别的工作。
-    /// # 返回
+    ///
+    /// `attempt`：已领取且尚未执行识别的工作。
+    ///
     /// 持久失败任务。
-    /// # 错误
+    ///
     /// 版本竞争或持久化失败。
     pub async fn source_failed(&self, attempt: ImportAttempt) -> Result<ImportView> {
         self.fail(
@@ -172,7 +170,7 @@ impl ContractImportProcess {
     }
 }
 
-/// 事务外识别的进度或结果只在重新授权后提交，外部服务不进入事务。
+// 事务外识别的进度或结果只在重新授权后提交，外部服务不进入事务。
 async fn save_task(
     db: &Database,
     access: &ContractAccess,

@@ -135,12 +135,10 @@ impl Pagination for CandidateFilter {
 
 impl CatalogPortalService {
     /// 管理端审核人员在快照中读取独立字典候选。
-    /// # 参数
+    ///
+    /// 已通过审核功能资格检查的安全字典候选。身份无效、缺少审核权限、搜索非法或数据库失败时返回对应错误。
+    ///
     /// kind 为字典类型，q 为搜索，product_kind 为分类约束，actor 为当前账号。
-    /// # 返回
-    /// 已通过审核功能资格检查的安全字典候选。
-    /// # 错误
-    /// 身份无效、缺少审核权限、搜索非法或数据库失败时返回对应错误。
     pub async fn admin_dictionary_candidates(
         &self,
         kind: DictionaryKind,
@@ -163,7 +161,7 @@ impl CatalogPortalService {
             .await
     }
 
-    /// 管理端资格先于字典输入校验和读取，门户原入口保留自身认证合同。
+    // 管理端资格先于字典输入校验和读取，门户原入口保留自身认证合同。
     async fn review_dictionary_candidates(
         &self,
         kind: DictionaryKind,
@@ -181,12 +179,8 @@ impl CatalogPortalService {
     }
 
     /// 独立于商品结果列表，查询已启用的字典值。
-    /// # 参数
-    /// `kind` 为字典类型，`q` 为字面搜索；分类可按商品类型收窄。
-    /// # 返回
-    /// 至多100个不含内部经营事实的候选。
-    /// # 错误
-    /// 搜索过长、分类树非法或数据库错误。
+    ///
+    /// 至多100个不含内部经营事实的候选。搜索过长、分类树非法或数据库错误。
     pub async fn dictionary_candidates(
         &self,
         kind: DictionaryKind,
@@ -255,17 +249,11 @@ impl CatalogPortalService {
         Ok(candidates)
     }
 
-    /// 拼接当前分类从根到自身的路径文本。
-    ///
-    /// # 参数
-    /// * `category` - 目标分类
-    /// * `executor` - 当前读取执行器
-    ///
-    /// # 返回
-    /// 返回完整分类路径。
-    ///
-    /// # 错误
-    /// 目标或祖先停用、缺失、类型不一致、路径循环或数据库错误时返回对应错误。
+    // 拼接当前分类从根到自身的路径文本。
+    //
+    // 返回完整分类路径。目标或祖先停用、缺失、类型不一致、路径循环或数据库错误时返回对应错误。
+    //
+    // 沿用调用方的执行器，不另开事务。
     pub(super) async fn category_path(
         &self,
         category: &ProductCategory,
@@ -274,13 +262,11 @@ impl CatalogPortalService {
         Ok(hierarchy_path(&self.category_hierarchy(category, executor).await?))
     }
 
-    /// 读取当前完整有效分类链，保留每一级身份、名称、父级和版本。
-    /// # 参数
-    /// `category` 为目标分类，`executor` 为当前读取执行器。
-    /// # 返回
-    /// 从根分类到目标的完整核对链。
-    /// # 错误
-    /// 目标或祖先停用、缺失、类型不一致、路径循环或数据库错误时拒绝。
+    // 读取当前完整有效分类链，保留每一级身份、名称、父级和版本。
+    //
+    // 从根分类到目标的完整核对链。目标或祖先停用、缺失、类型不一致、路径循环或数据库错误时拒绝。
+    //
+    // `category` 为目标分类，`executor` 为当前读取执行器。
     pub(super) async fn category_hierarchy(
         &self,
         category: &ProductCategory,
@@ -318,13 +304,12 @@ impl CatalogPortalService {
     }
 
     /// 仅在商品对象授权通过后返回内部重复提示。
-    /// # 参数
-    /// `q` 为商品、型号、SKU规格或条码的字面搜索，`actor` 为当前内部审核人，
+    ///
+    /// 可读取商品及精确SKU版本；供应商不得调用本入口。非快照执行器、缺少商品读取资格、搜索非法或数据库错误。
+    ///
+    /// `q` 为商品、型号、SKU规格或条码的字面搜索，`actor` 为当前内部审核人，。
+    ///
     /// `executor` 为覆盖授权和全部候选读取的同一快照事务执行器。
-    /// # 返回
-    /// 可读取商品及精确SKU版本；供应商不得调用本入口。
-    /// # 错误
-    /// 非快照执行器、缺少商品读取资格、搜索非法或数据库错误。
     pub async fn duplicate_candidates(
         &self,
         q: &str,
@@ -489,7 +474,7 @@ impl DuplicateReader for CatalogPortalService {
     }
 }
 
-/// 在同一快照中完成读取资格、候选读取及交付前复验。
+// 在同一快照中完成读取资格、候选读取及交付前复验。
 async fn read_duplicates(
     reader: &dyn DuplicateReader,
     access: &CatalogAccess,

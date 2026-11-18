@@ -11,36 +11,16 @@ pub trait InquirySupplyExt {
     const INQUIRY_QUOTES: &'static str = "sales_inquiry_internal_quotes";
     const INQUIRY_FEE_BASES: &'static str = "sales_inquiry_internal_fee_bases";
     /// 取得稳定报价累计余额仓储。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 同一事务内CAS更新的余额仓储。
-    /// # 错误
-    /// 无。
     fn inquiry_quote_balances(&self) -> Repository<'_, InquiryQuoteBalance>;
     /// 取得具体采购行的不可变采用记录。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 采用记录仓储。
-    /// # 错误
-    /// 无。
     fn inquiry_quote_reservations(&self) -> Repository<'_, InquiryQuoteReservation>;
     /// 取得不可变报价仓储。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 调用方执行器驱动的报价仓储。
-    /// # 错误
-    /// 无。
     fn inquiry_quotes(&self) -> Repository<'_, InquiryQuote>;
     /// 取得费用内部依据仓储。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 调用方执行器驱动的费用仓储。
-    /// # 错误
-    /// 无。
     fn inquiry_fee_bases(&self) -> Repository<'_, InquiryFeeBasis>;
 }
 impl InquirySupplyExt for Database {
@@ -66,12 +46,8 @@ use persistence_core::{Executor, Result};
 #[async_trait]
 pub trait InquiryQuoteRepositoryExt {
     /// 读取指定需求版本的报价历史。
-    /// # 参数
-    /// 询价、需求版本和调用方执行器。
-    /// # 返回
     /// 按需求行及稳定报价版本排序的内部报价。
-    /// # 错误
-    /// 数据库查询或反序列化失败时拒绝。
+    /// 数据库查询或反序列化失败时向上传播错误。
     async fn for_requirement(
         &self,
         inquiry_id: &str,
@@ -79,12 +55,8 @@ pub trait InquiryQuoteRepositoryExt {
         executor: &mut dyn Executor,
     ) -> Result<Vec<InquiryQuote>>;
     /// 读取已接受反馈准确轮次的报价历史。
-    /// # 参数
-    /// 询价、需求版本、反馈轮次及执行器。
-    /// # 返回
     /// 只属于本轮次的报价历史。
-    /// # 错误
-    /// 数据库查询或反序列化失败时拒绝。
+    /// 数据库查询或反序列化失败时向上传播错误。
     async fn for_feedback(
         &self,
         inquiry_id: &str,
@@ -93,12 +65,9 @@ pub trait InquiryQuoteRepositoryExt {
         executor: &mut dyn Executor,
     ) -> Result<Vec<InquiryQuote>>;
     /// 读取一个稳定报价的修订历史。
-    /// # 参数
-    /// 稳定报价ID及当前事务执行器。
-    /// # 返回
     /// 最新修订在前的不可变历史。
-    /// # 错误
-    /// 数据库读取失败时拒绝。
+    /// 数据库读取失败时向上传播错误。
+    /// 稳定报价ID及当前事务执行器。
     async fn history(&self, quote_id: &str, executor: &mut dyn Executor) -> Result<Vec<InquiryQuote>>;
 }
 #[async_trait]
@@ -134,11 +103,7 @@ impl InquiryQuoteRepositoryExt for Repository<'_, InquiryQuote> {
 #[async_trait]
 pub trait InquiryFeeBasisRepositoryExt {
     /// 读取准确费用的内部依据。
-    /// # 参数
-    /// 询价、需求版本、反馈轮次、稳定费用身份及执行器。
-    /// # 返回
     /// 返回精确费用依据；缺失时为None。
-    /// # 错误
     /// 数据读取失败时返回错误。
     async fn for_fee(
         &self,
@@ -149,11 +114,7 @@ pub trait InquiryFeeBasisRepositoryExt {
         executor: &mut dyn Executor,
     ) -> Result<Option<InquiryFeeBasis>>;
     /// 读取本轮费用内部依据。
-    /// # 参数
-    /// 精确询价、需求、反馈轮次及执行器。
-    /// # 返回
     /// 当前轮次费用的收款依据。
-    /// # 错误
     /// 数据读取失败时返回错误。
     async fn for_feedback(
         &self,
@@ -189,12 +150,9 @@ impl InquiryFeeBasisRepositoryExt for Repository<'_, InquiryFeeBasis> {
 #[async_trait]
 pub trait InquiryQuoteReservationRepositoryExt {
     /// 读取采购未释放的专项采用。
-    /// # 参数
-    /// 已授权采购单与调用方执行器。
-    /// # 返回
     /// 当前有效采用记录。
-    /// # 错误
     /// 数据读取失败时返回错误。
+    /// 已授权采购单与调用方执行器。
     async fn active_for_order(
         &self,
         order_id: &str,
@@ -215,11 +173,7 @@ impl InquiryQuoteReservationRepositoryExt for Repository<'_, InquiryQuoteReserva
 #[async_trait]
 pub trait InquiryQuoteBalanceRepositoryExt {
     /// 批量读取稳定报价采用余额。
-    /// # 参数
-    /// 稳定报价集合及调用方执行器。
-    /// # 返回
     /// 已存在的报价余额；缺失不伪造零余额。
-    /// # 错误
     /// 数据读取失败时返回错误。
     async fn for_quotes(
         &self,

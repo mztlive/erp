@@ -51,26 +51,16 @@ struct ReferenceTicket {
 }
 
 impl DangaoshushuRuntime {
-    /// 登记 SafeConfig 技术参数，不选择 ERP 供应商或连接，不发送请求。
-    /// # 参数
-    /// `settings` 为技术配置启动快照。
-    /// # 返回
-    /// 可供后台连接绑定的配置注册表。
-    /// # 错误
-    /// 关闭或无效配置、HTTP 客户端创建失败时返回分类错误。
+    /// 应用启动时用 SafeConfig 快照装配蛋糕叔叔运行时，供后续连接共享 HTTP 连接池和渠道限流。
+    /// 此时不选择 ERP 供应商或连接，也不发请求；配置未启用、配置无效或 HTTP 客户端构建失败时返回分类错误。
     pub fn new(settings: DangaoshushuConfig) -> ConnectorResult<Self> {
         validate_settings(&settings)?;
         let transport = Arc::new(HttpTransport::new(&settings)?);
         Ok(Self { settings, transport })
     }
 
-    /// 使用明确的通信提供者装配同一套配置绑定和真实协议。
-    /// # 参数
-    /// `settings` 为技术配置快照；`transport` 负责受控单次通信。
-    /// # 返回
-    /// 返回仍执行原连接绑定、能力分派和协议解析的运行时。
-    /// # 错误
-    /// 关闭或无效配置时返回与默认构造入口相同的分类错误。
+    /// 需要由调用方提供通信实现时，用注入的传输替代默认 HTTP 客户端，仍按真实协议绑定连接、分派能力和解析响应。
+    /// 传输须保证一次调用只发送一次；配置关闭或无效仍按默认入口的规则拒绝。
     pub fn with_transport(
         settings: DangaoshushuConfig,
         transport: Arc<dyn Transport>,
@@ -79,13 +69,8 @@ impl DangaoshushuRuntime {
         Ok(Self { settings, transport })
     }
 
-    /// 为已启用的后台连接取得协议客户端；连接身份、供应商均来自记录。
-    /// # 参数
-    /// `connection` 为本次从后台连接仓储读取的记录。
-    /// # 返回
-    /// 与该记录及已绑定技术引用一致的客户端，共享渠道限流。
-    /// # 错误
-    /// 停用、删除或技术绑定不符时拒绝业务调用。
+    /// 新增下单前，按本次从后台仓储加载的连接记录取得客户端，沿用其供应商身份并共享渠道限流。
+    /// 自动下单停用、健康检查不适用于当前配置、连接已删除或技术引用不符时拒绝。
     pub fn connector(&self, connection: &SupplierApiConnection) -> ConnectorResult<DangaoshushuConnector> {
         if connection.stable.status != SupplierApiConnectionStatus::Active {
             return Err(error(
@@ -105,13 +90,8 @@ impl DangaoshushuRuntime {
         Ok(connector)
     }
 
-    /// 为已有订单跟踪、回调及后续履约提供客户端，不受新增下单开关限制。
-    /// # 参数
-    /// `connection` 为服务端读取的连接。
-    /// # 返回
-    /// 当前配置绑定的客户端。
-    /// # 错误
-    /// 删除、身份不符或配置绑定陈旧时拒绝。
+    /// 已有订单跟踪、回调与后续履约使用原连接的客户端，即使自动下单已停用也可继续处理。
+    /// 删除、供应商协议不符或端点和凭据引用缺失、陈旧时不发请求。
     pub fn tracking_connector(
         &self,
         connection: &SupplierApiConnection,
@@ -125,13 +105,8 @@ impl DangaoshushuRuntime {
         })
     }
 
-    /// 按已登记订单原身份只读补查，连接停用不停止既有订单跟踪。
-    /// # 参数
-    /// `connection` 为服务器加载的绑定连接，`key` 为已持久化订单号。
-    /// # 返回
-    /// 核对渠道及原单号后的真实订单观察，或明确暂不可见。
-    /// # 错误
-    /// 技术绑定失效、协议类型不符或供应商查询失败时返回分类错误。
+    /// 已登记订单需要核对外部结果时，用服务端加载的原绑定连接和持久化订单号只读补查；停用自动下单不影响跟踪。
+    /// 返回核对渠道和原单号后的观察结果或明确的暂不可见；绑定、协议或上游查询失败仍按原分类返回。
     pub async fn observe_order(
         &self,
         connection: &SupplierApiConnection,
@@ -140,13 +115,8 @@ impl DangaoshushuRuntime {
         self.tracking_connector(connection)?.order(key).await
     }
 
-    /// 按当前后台连接读取协议目录；停用连接仍允许显式诊断查询。
-    /// # 参数
-    /// `connection` 为授权连接，`query` 为固定白名单查询。
-    /// # 返回
-    /// 未应用到业务实体的供应商原始资料。
-    /// # 错误
-    /// 未绑定、配置失效或上游读取失败时返回分类错误。
+    /// 后台针对已授权连接诊断目录时，通过原技术绑定执行白名单查询，停用自动下单也可显式查询。
+    /// 只返回供应商原始资料，不应用到业务实体；引用未绑定或已失效时不访问上游。
     pub async fn read(
         &self,
         connection: &SupplierApiConnection,
@@ -155,13 +125,8 @@ impl DangaoshushuRuntime {
         self.tracking_connector(connection)?.read(query).await
     }
 
-    /// 核对后台记录及其技术引用；不要求配置文件重复登记 ERP 身份。
-    /// # 参数
-    /// `connection` 为后台连接；`references_required` 指示是否须完成技术绑定。
-    /// # 返回
-    /// 当前记录与所选技术配置一致时返回 Ok。
-    /// # 错误
-    /// 删除或引用陈旧、跨连接复制时返回绑定错误。
+    /// 校验后台连接时先核对接口类型、身份及删除状态；ERP 连接和供应商身份无需在配置文件重复登记。
+    /// 启用 `references_required` 时再核对端点和凭据引用，拒绝过期配置或从其他连接复制来的引用。
     pub fn validate_binding(
         &self,
         connection: &SupplierApiConnection,
@@ -220,13 +185,8 @@ impl DangaoshushuRuntime {
         Ok(())
     }
 
-    /// 为后台连接签发五分钟技术引用票据，无需手填内部 ID。
-    /// # 参数
-    /// `connection` 为授权连接记录，`now` 为签发时间。
-    /// # 返回
-    /// 绑定连接、供应商及当前配置的两个票据。
-    /// # 错误
-    /// 连接不可用或编码失败时返回分类错误。
+    /// 后台选择接入资料时，以 `now` 为签发时间生成有效期五分钟的端点和凭据票据，免于手填内部引用。
+    /// 两个票据均绑定当前连接、供应商和配置；连接不可用或票据编码失败时返回分类错误。
     pub fn reference_tickets(
         &self,
         connection: &SupplierApiConnection,
@@ -817,7 +777,7 @@ mod tests {
         assert!(changed.tracking_connector(&connection).is_err());
     }
 
-    /// 专用入口也检查接口类型；旧连接即使持有正确引用也不得绕过类型分派。
+    // 模拟旧连接仍持有有效引用却没有接口类型，验证专用入口拒绝处理，且不会发出供应商请求。
     #[tokio::test]
     async fn direct_adapter_entries_reject_untyped_connection_without_external_calls() {
         let (_, transport) = recording_connector(vec![]);

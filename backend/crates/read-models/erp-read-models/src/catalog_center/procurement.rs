@@ -31,7 +31,7 @@ pub(crate) use category_chain::CategoryChainCache;
 /// 在授权商品集合内按采购规则解析负责人。
 #[async_trait]
 pub trait ProductProcurementOwners: Send + Sync {
-    /// 返回采购负责人落在请求集合内的商品 ID。
+    /// 应用商品采购负责人筛选时，给出采购负责人落在请求集合内的商品 ID。
     ///
     /// # 参数
     /// * `authorized_ids` - 已授权商品；`None` 表示公司范围需先列举
@@ -57,30 +57,18 @@ pub struct MongoProductProcurementOwners {
 }
 
 impl MongoProductProcurementOwners {
-    /// 绑定采购规则与商品集合。
-    ///
-    /// # 参数
-    /// * `db` - 数据库
+    /// 装配商品采购负责人筛选时，绑定采购规则与商品集合。
     ///
     /// # 返回
     /// 返回未执行 I/O 的解析器。
-    ///
-    /// # 错误
-    /// 无。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
-    /// 包装为共享 Port。
-    ///
-    /// # 参数
-    /// * `db` - 数据库
+    /// 将商品采购负责人筛选的规则解析器包装为可注入的共享端口。
     ///
     /// # 返回
     /// 返回商品列表可注入的采购负责人解析器。
-    ///
-    /// # 错误
-    /// 无。
     pub fn shared(db: Database) -> Arc<dyn ProductProcurementOwners> {
         Arc::new(Self::new(db))
     }
@@ -160,7 +148,7 @@ impl ProductProcurementOwners for MapProductProcurementOwners {
     }
 }
 
-/// 两种列表均在候选超限时整体拒绝，不截断后继续解析。
+// 核对商品采购负责人筛选边界时，两种列表均在候选超限时整体拒绝，不截断后继续解析。
 pub(crate) fn ensure_authorized_count(count: usize) -> Result<()> {
     if count > AUTHORIZED_ID_LIMIT {
         return Err(Error::ValidationError("采购负责人筛选超过上限，请收窄组织或维护人条件".into()));
@@ -179,7 +167,7 @@ pub(crate) async fn prefetch_category_chains<'a>(
     categories
 }
 
-/// 仅返回命中 SKU 所属商品的 ID；缺失关联或解析失败均不命中。
+// 应用商品采购负责人筛选时，仅返回命中 SKU 所属商品的 ID；缺失关联或解析失败均不命中。
 pub(crate) async fn match_sku_owner<'a>(
     categories: &mut CategoryChainCache<'_>,
     products: &'a HashMap<String, ProcurementProductFact>,
@@ -197,7 +185,7 @@ pub(crate) async fn match_sku_owner<'a>(
         .then_some(product.id.as_str())
 }
 
-/// 批量读取商品类型和当前修订指针，不装载商品完整实体。
+// 读取商品采购负责人筛选时，批量读取商品类型和当前修订指针，不装载商品完整实体。
 pub(crate) async fn load_products(
     db: &Database,
     ids: &[String],
@@ -207,7 +195,7 @@ pub(crate) async fn load_products(
     Ok(products.into_iter().map(|product| (product.id.clone(), product)).collect())
 }
 
-/// 只读取稳定商品当前指针所引用修订的分类，不读取历史修订和全文。
+// 读取商品采购负责人筛选时，仅读取稳定商品当前指针所引用修订的分类，不读取历史修订和全文。
 pub(crate) async fn load_revisions(
     db: &Database,
     products: &HashMap<String, ProcurementProductFact>,
@@ -218,20 +206,19 @@ pub(crate) async fn load_revisions(
     Ok(revisions.into_iter().map(|revision| (revision.id.clone(), revision)).collect())
 }
 
-/// 以现行规则判定单个 SKU 的负责人是否命中，分类顺序由读取链保持。
-///
-/// # 参数
-/// * `kind` - 商品类型
-/// * `sku_id` - SKU 身份
-/// * `chain` - 从当前分类到根的链，含读取时缺失的末节点
-/// * `rule_set` - 本次请求读取的采购责任规则
-/// * `wanted` - 请求的负责人集合
-///
-/// # 返回
-/// 返回负责人是否命中；无规则或上下文非法时返回 `false`。
-///
-/// # 错误
-/// 无；不改变列表对非法关联的跳过策略。
+// 应用商品采购负责人筛选时，以现行规则判定单个 SKU 的负责人是否命中，分类顺序由读取链保持。
+//
+// 调用参数：
+// * `kind` - 商品类型
+// * `sku_id` - SKU 身份
+// * `chain` - 从当前分类到根的链，含读取时缺失的末节点
+// * `rule_set` - 本次请求读取的采购责任规则
+// * `wanted` - 请求的负责人集合
+//
+// 返回负责人是否命中；无规则或上下文非法时返回 `false`。
+//
+// 失败边界：
+// 无；不改变列表对非法关联的跳过策略。
 fn matches_procurement_owner(
     kind: ProductKind,
     sku_id: &str,
@@ -247,7 +234,7 @@ fn matches_procurement_owner(
         .is_ok_and(|rule| rule.owner_user_ids.iter().any(|owner| wanted.contains(owner.as_str())))
 }
 
-/// 穷尽映射商品类型，保留采购责任规则原来的类型选择器。
+// 生成商品采购负责人筛选视图时，穷尽映射商品类型，保留采购责任规则原来的类型选择器。
 fn map_kind(kind: ProductKind) -> ProcurementProductKind {
     match kind {
         ProductKind::Physical => ProcurementProductKind::Physical,
@@ -281,7 +268,7 @@ mod tests {
         }
     }
 
-    /// 创建用于实际负责人匹配的现行规则。
+    // 处理商品采购负责人筛选时，创建用于实际负责人匹配的现行规则。
     fn rule(
         id: &str,
         rule_type: ProcurementResponsibilityRuleType,
@@ -306,13 +293,13 @@ mod tests {
         .unwrap()
     }
 
-    /// 构造当前分类与祖先分类顺序。
+    // 处理商品采购负责人筛选时，生成当前分类与祖先分类顺序。
     fn chain() -> Vec<ProductCategoryId> {
         ["leaf", "parent"].map(ProductCategoryId::new).to_vec()
     }
 
     #[test]
-    /// 商品类型均保持对应的采购类型规则，防止跨类型命中。
+    // 应用商品采购负责人筛选时，商品类型均保持对应的采购类型规则，防止跨类型命中。
     fn procurement_owner_matching_preserves_product_kind_mapping() {
         for (kind, procurement_kind) in [
             (ProductKind::Physical, ProcurementProductKind::Physical),
@@ -335,7 +322,7 @@ mod tests {
     }
 
     #[test]
-    /// 继续按 SKU、当前分类、父分类、类型、默认负责人优先级匹配。
+    // 应用商品采购负责人筛选时，继续按 SKU、当前分类、父分类、类型、默认负责人优先级匹配。
     fn procurement_owner_matching_preserves_rule_priority_and_nearest_category() {
         let rules = [
             rule(
@@ -394,7 +381,7 @@ mod tests {
     }
 
     #[test]
-    /// 缺失规则、同层歧义和非法上下文仍跳过，不扩大负责人匹配范围。
+    // 应用商品采购负责人筛选时，缺失规则、同层歧义和非法上下文仍跳过，不扩大负责人匹配范围。
     fn procurement_owner_matching_skips_missing_ambiguous_or_invalid_rules() {
         let wanted = HashSet::from(["owner"]);
         let empty = ProcurementResponsibilityRuleSet::new(&[]);

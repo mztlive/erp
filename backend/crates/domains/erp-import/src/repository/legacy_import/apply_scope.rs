@@ -26,26 +26,8 @@ pub struct LegacyImportApplyScope {
 /// 导入行集合仓储扩展：按请求行 ID 读取批次约束下的应用范围。
 #[allow(async_fn_in_trait)]
 pub trait LegacyImportRowApplyScopeExt {
-    /// 按请求行 ID 读取目标批次内的导入行，并返回缺失集合。
-    ///
-    /// 查询同时约束 `id ∈ requested` 与 `batch_id`，软删除行视为缺失。
-    /// 请求 ID 在仓储内按首次出现去重；空集合不访问数据库。
-    /// 第二次读取统计同一批次中未包含在请求内的待导入行数，供 Service
-    /// 判断是否全部终态。本方法不自行开启或提交事务。
-    ///
-    /// # 参数
-    /// * `batch_id` - 目标导入批次
-    /// * `row_ids` - 请求中的行 ID（可含重复）
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回命中行映射、按请求顺序的缺失 ID，以及请求外待导入行数。
-    ///
-    /// # 错误
-    /// MongoDB 查询或计数失败时返回错误。
-    ///
-    /// # 约束
-    /// 不返回 services DTO、HTTP View 或授权结论；不裁决未知 ID 是否失败关闭。
+    /// 对请求行 ID 保序去重后，只查指定批次内未删除的命中行，同时返回按请求顺序排列的缺失 ID；空请求不访问数据库。再统计请求外仍待导入的行，供调用方判断批次是否可结束。
+    /// 复用调用方执行器，不开事务或裁决未知 ID 是否拒绝，也不返回展示 DTO 或授权结论；查询或计数失败直接返回。
     async fn apply_row_scope(
         &self,
         batch_id: &LegacyImportBatchId,
@@ -93,13 +75,7 @@ fn pending_outside_filter(batch_id: &LegacyImportBatchId, excluded_ids: Vec<Bson
     }
 }
 
-/// 按首次出现顺序去重行 ID。
-///
-/// # 参数
-/// * `row_ids` - 原始 ID 切片（可含重复）
-///
-/// # 返回
-/// 返回去重后的行 ID 列表。
+// 按原始行 ID 保留第一次出现，供后续查库和按请求顺序报告缺失项。
 fn unique_row_ids(row_ids: &[LegacyImportRowId]) -> Vec<LegacyImportRowId> {
     let mut seen = HashSet::new();
     row_ids.iter().filter(|id| seen.insert(*id)).cloned().collect()

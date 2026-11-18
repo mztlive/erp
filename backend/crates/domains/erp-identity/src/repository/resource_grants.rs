@@ -19,43 +19,33 @@ use crate::{Error, Result};
 pub(crate) const GRANTS: &str = "resource_grants";
 pub(crate) const SOURCES: &str = "resource_grant_sources";
 pub(crate) const EVENTS: &str = "resource_grant_events";
-/// 取得来源集合仓储。
-/// # 参数
-/// 数据库及函数声明中的身份或查询事实；异步访问复用调用方执行器。
-/// # 返回
-/// 对应集合仓储、查询结果或成功的持久化结果。
-/// # 错误
-/// 构造仓储不执行 I/O；异步操作传播持久化、规模上限及事务约束错误。
+// 取得来源集合仓储。
+// 构造仓储不执行 I/O；异步操作传播持久化、规模上限及事务约束错误。
+//
+// 数据库及函数声明中的身份或查询事实；异步访问复用调用方执行器。
 pub(crate) fn sources(db: &Database) -> Repository<'_, GrantSource> {
     Repository::new(db, SOURCES)
 }
-/// 取得指定记录授权集合仓储。
-/// # 参数
-/// 数据库及函数声明中的身份或查询事实；异步访问复用调用方执行器。
-/// # 返回
-/// 对应集合仓储、查询结果或成功的持久化结果。
-/// # 错误
-/// 构造仓储不执行 I/O；异步操作传播持久化、规模上限及事务约束错误。
+// 取得指定记录授权集合仓储。
+// 构造仓储不执行 I/O；异步操作传播持久化、规模上限及事务约束错误。
+//
+// 数据库及函数声明中的身份或查询事实；异步访问复用调用方执行器。
 pub(crate) fn grants(db: &Database) -> Repository<'_, ResourceGrant> {
     Repository::new(db, GRANTS)
 }
-/// 取得正式分配事件集合仓储。
-/// # 参数
-/// 数据库及函数声明中的身份或查询事实；异步访问复用调用方执行器。
-/// # 返回
-/// 对应集合仓储、查询结果或成功的持久化结果。
-/// # 错误
-/// 构造仓储不执行 I/O；异步操作传播持久化、规模上限及事务约束错误。
+// 取得正式分配事件集合仓储。
+// 构造仓储不执行 I/O；异步操作传播持久化、规模上限及事务约束错误。
+//
+// 数据库及函数声明中的身份或查询事实；异步访问复用调用方执行器。
 pub(crate) fn events(db: &Database) -> Repository<'_, GrantEvent> {
     Repository::new(db, EVENTS)
 }
-/// 按业务幂等键读取正式事件，不依赖候选事件的新记录 ID。
-/// # 参数
-/// db 为身份数据库；dedup_key 为业务幂等键；executor 为调用方事务。
-/// # 返回
-/// 已持久化事件，缺失返回空值。
-/// # 错误
-/// 数据库读取失败时返回错误。
+// 按业务幂等键读取正式事件，不依赖候选事件的新记录 ID。
+// 已持久化事件，缺失返回空值。
+//
+// 数据库读取失败时返回错误。
+//
+// db 为身份数据库；dedup_key 为业务幂等键；executor 为调用方事务。
 pub(crate) async fn event_by_key(
     db: &Database,
     dedup_key: &str,
@@ -64,13 +54,12 @@ pub(crate) async fn event_by_key(
     Ok(events(db).find_one(doc! { "dedup_key": dedup_key }, executor).await?)
 }
 
-/// 管理列表按稳定主键分页，保留终止来源供审计。
-/// # 参数
-/// user 为接收人；after 为上一页游标；executor 为调用执行器。
-/// # 返回
-/// 最多 100 个来源及下一页游标。
-/// # 错误
-/// 数据库读取失败时拒绝。
+// 管理列表按稳定主键分页，保留终止来源供审计。
+// 最多 100 个来源及下一页游标。
+//
+// 数据库读取失败时拒绝。
+//
+// user 为接收人；after 为上一页游标；executor 为调用执行器。
 pub(crate) async fn for_recipient(
     db: &Database,
     user: &str,
@@ -92,13 +81,12 @@ pub(crate) async fn for_recipient(
     Ok(GrantSourcePage { items, next_cursor })
 }
 
-/// 读取单个来源的一页授权行；更新方通过主键游标继续，不装载历史全集。
-/// # 参数
-/// source_id 为唯一来源；after 为已处理的最后一个主键；executor 为发布事务。
-/// # 返回
-/// 最多 200 行，空页表示结束。
-/// # 错误
-/// 数据库读取失败时拒绝。
+// 读取单个来源的一页授权行；更新方通过主键游标继续，不装载历史全集。
+// 最多 200 行，空页表示结束。
+//
+// 数据库读取失败时拒绝。
+//
+// source_id 为唯一来源；after 为已处理的最后一个主键；executor 为发布事务。
 pub(crate) async fn source_rows(
     db: &Database,
     source_id: &str,
@@ -112,7 +100,7 @@ pub(crate) async fn source_rows(
     page(db, GRANTS, filter, 200, executor).await
 }
 
-/// 调用方必须提供索引限定条件；本方法仅读取一页，不表达完整授权集合。
+// 管理记录授权行时按调用方提供的索引限定条件读取一页，分页结果不能当作完整授权集合。
 async fn page<T: DeserializeOwned + Unpin + Send + Sync>(
     db: &Database,
     collection: &str,
@@ -124,23 +112,17 @@ async fn page<T: DeserializeOwned + Unpin + Send + Sync>(
     let options = FindOptions::builder().sort(doc! { "id": 1 }).limit(limit).build();
     Ok(mongo_ops::find_many(&collection, filter, options, executor).await?)
 }
-/// 授权行身份使用结构化编码，避免任意分隔符碰撞。
-/// # 参数
-/// 数据库及函数声明中的身份或查询事实；异步访问复用调用方执行器。
-/// # 返回
-/// 对应集合仓储、查询结果或成功的持久化结果。
-/// # 错误
-/// 构造仓储不执行 I/O；异步操作传播持久化、规模上限及事务约束错误。
+// 授权行身份使用结构化编码，避免任意分隔符碰撞。
+// 构造仓储不执行 I/O；异步操作传播持久化、规模上限及事务约束错误。
+//
+// 数据库及函数声明中的身份或查询事实；异步访问复用调用方执行器。
 pub(crate) fn row_id(source: &str, resource: ResourceKind, id: &str) -> Result<String> {
     Ok(serde_json::to_string(&(source, resource, id))?)
 }
-/// 在授权事务中追加不可变来源审计快照。
-/// # 参数
-/// 数据库及函数声明中的身份或查询事实；异步访问复用调用方执行器。
-/// # 返回
-/// 对应集合仓储、查询结果或成功的持久化结果。
-/// # 错误
-/// 构造仓储不执行 I/O；异步操作传播持久化、规模上限及事务约束错误。
+// 在授权事务中追加不可变来源审计快照。
+// 构造仓储不执行 I/O；异步操作传播持久化、规模上限及事务约束错误。
+//
+// 数据库及函数声明中的身份或查询事实；异步访问复用调用方执行器。
 pub(crate) async fn audit_source(
     db: &Database,
     source: &GrantSource,

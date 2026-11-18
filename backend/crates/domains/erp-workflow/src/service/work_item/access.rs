@@ -16,13 +16,12 @@ use crate::repository::work_item::authorization::WorkItemAuthorizationExt;
 use crate::service::approval::execution::runtime_service::approval_task_facts_current;
 
 impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
-    /// 任务详情已在本阶段授权后，计算展示动作资格。
-    /// # 参数
-    /// actor、item 为已授权账号及任务，read 为原读取凭证，executor 沿用原事务。
-    /// # 返回
-    /// 返回同角色执行、审批决定和任务管理的展示资格。
-    /// # 错误
-    /// 身份失效、功能取证或管理授权设施失败时返回错误。
+    // 任务详情已在本阶段授权后，计算展示动作资格。
+    // 返回同角色执行、审批决定和任务管理的展示资格。
+    //
+    // 身份失效、功能取证或管理授权设施失败时返回错误。
+    //
+    // actor、item 为已授权账号及任务，read 为原读取凭证，executor 沿用原事务。
     pub(super) async fn task_actions(
         &self,
         actor: &AuditActor,
@@ -48,12 +47,11 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     }
 
     /// 证明精确任务及实际来源的读取资格，随后只检查业务事实。
-    /// # 参数
-    /// item、actor 为当前任务及真实账号，executor 沿用原事务。
-    /// # 返回
     /// identity 授权及冻结业务事实均成立时成功。
-    /// # 错误
+    ///
     /// 权限、来源缺失、冻结版本或责任行不匹配时拒绝。
+    ///
+    /// item、actor 为当前任务及真实账号，executor 沿用原事务。
     pub async fn ensure_item_access_with_executor(
         &self,
         item: &WorkItem,
@@ -64,13 +62,12 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         self.ensure_task_current(item, executor).await
     }
 
-    /// 统一任务及来源授权完成后，只读取业务版本与冻结责任，不开始新的授权阶段。
-    /// # 参数
-    /// item 为同阶段已授权任务，executor 为整个读取用例的原执行器。
-    /// # 返回
-    /// 精确任务的业务版本、冻结责任及审批运行链全部匹配时成功。
-    /// # 错误
-    /// 来源业务事实缺失、冻结版本不匹配或仓储失败时拒绝。
+    // 统一任务及来源授权完成后，只读取业务版本与冻结责任，不开始新的授权阶段。
+    // 精确任务的业务版本、冻结责任及审批运行链全部匹配时成功。
+    //
+    // 来源业务事实缺失、冻结版本不匹配或仓储失败时拒绝。
+    //
+    // item 为同阶段已授权任务，executor 为整个读取用例的原执行器。
     pub(super) async fn ensure_task_current(
         &self,
         item: &WorkItem,
@@ -97,12 +94,11 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     }
 
     /// 在业务决定事务证明同角色完整执行资格及精确任务访问。
-    /// # 参数
-    /// actor、item 为实际账号和任务，executor 为原写事务。
-    /// # 返回
     /// 统一资格及业务版本均通过时成功。
-    /// # 错误
+    ///
     /// 失效身份、完整资格不足、对象授权或业务事实错误透传。
+    ///
+    /// actor、item 为实际账号和任务，executor 为原写事务。
     pub async fn ensure_domain_decision_access(
         &self,
         actor: &AuditActor,
@@ -112,13 +108,12 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         self.ensure_decision_access(actor, item, executor).await
     }
 
-    /// 在原执行器核验完整办理资格、指定任务事实和真实业务来源。
-    /// # 参数
-    /// actor、item 为账号与真实任务；executor 为原事务。
-    /// # 返回
-    /// 同角色资格、任务范围、冻结事实和业务确认资格均成立时成功。
-    /// # 错误
-    /// 身份失效、范围或真实来源无权、版本变化时拒绝。
+    // 在原执行器核验完整办理资格、指定任务事实和真实业务来源。
+    // 同角色资格、任务范围、冻结事实和业务确认资格均成立时成功。
+    //
+    // 身份失效、范围或真实来源无权、版本变化时拒绝。
+    //
+    // actor、item 为账号与真实任务；executor 为原事务。
     pub(super) async fn ensure_decision_access(
         &self,
         actor: &AuditActor,
@@ -140,12 +135,11 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
 }
 
 /// 验证已授权任务的业务版本与冻结询价责任，不执行访问授权。
-/// # 参数
-/// item 为已授权任务，facts 为当前业务事实。
-/// # 返回
 /// 根事实存在且冻结版本和责任仍一致时为 true。
-/// # 错误
-/// 无；缺事实或版本损坏返回 false。
+///
+/// 缺事实或版本损坏返回 false。
+///
+/// item 为已授权任务，facts 为当前业务事实。
 pub fn task_facts_current(item: &WorkItem, facts: &ObjectFactMap) -> bool {
     let Some(policy) = item.work_item_type.brief_relation(&item.business_object_type) else { return false };
     let Some(fact) = facts.get(&(policy.object_kind, item.business_object_id.clone())) else { return false };
@@ -166,12 +160,11 @@ pub fn task_facts_current(item: &WorkItem, facts: &ObjectFactMap) -> bool {
 }
 
 /// 验证转派候选使用的业务版本与冻结责任行，不决定账号权限。
-/// # 参数
-/// item 为待转派任务、facts 为当前业务事实。
-/// # 返回
 /// 任务状态及冻结责任完整且业务版本匹配时为 true。
-/// # 错误
-/// 无；缺事实或责任不完整返回 false。
+///
+/// 缺事实或责任不完整返回 false。
+///
+/// item 为待转派任务、facts 为当前业务事实。
 pub fn candidate_facts_current(item: &WorkItem, facts: &ObjectFactMap) -> bool {
     if item.work_item_type == WorkItemType::ProcurementOrderCreation && !item.is_open_procurement_task() {
         return false;
@@ -190,15 +183,11 @@ pub fn candidate_facts_current(item: &WorkItem, facts: &ObjectFactMap) -> bool {
 }
 
 /// 将实体对审批任务的通用责任变更禁令映射为稳定审批错误码。
-///
-/// # 参数
-/// * `item` - 待变更责任的工作项
-///
-/// # 返回
 /// 实体允许通用责任变更时无返回值。
 ///
-/// # 错误
 /// 实体拒绝时返回 `ApprovalGenericWorkItemMutationForbidden`。
+///
+/// `item`：待变更责任的工作项。
 pub fn ensure_generic_work_item_mutation(item: &WorkItem) -> Result<()> {
     if item.work_item_type == WorkItemType::SalesInquiryProcessing {
         return Err(Error::Forbidden("询价责任变更必须使用询价专用命令".into()));

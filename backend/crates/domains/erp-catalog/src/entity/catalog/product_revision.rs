@@ -82,18 +82,11 @@ pub struct ProductRevision {
 impl ProductRevision {
     /// 创建商品修订。
     ///
-    /// 完成 name/description/specification 的校验与规范化（去首尾空白、非空、
-    /// 长度上限），校验修订序号从 1 开始、生效区间不倒挂。
+    /// 完成 name/description/specification 的校验与规范化（去首尾空白、非空、长度上限），校验修订序号从 1 开始、生效区间不倒挂。
     ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::ProductRevisionId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
-    /// 返回新建的商品修订实体。
-    ///
-    /// # 错误
     /// 当 name 为空/超长、revision_no 为 0，或生效区间倒挂时返回错误。
+    ///
+    /// `id` 为实体主键（`erp_core::ids::ProductRevisionId`）。
     pub fn new(id: ProductRevisionId, data: ProductRevisionData) -> Result<Self> {
         let name = normalize_required_text(data.name, "商品名称不能为空", NAME_MAX_LEN, "商品名称过长")?;
         let description = normalize_optional_text(data.description, "商品描述", DESCRIPTION_MAX_LEN)?;
@@ -121,18 +114,11 @@ impl ProductRevision {
     ///
     /// 分类、品牌、规格与状态沿用当前不可变快照，只替换展示文案和生效区间。
     ///
-    /// # 参数
-    /// * `id` - 新修订主键
-    /// * `revision_no` - 同一商品内的下一修订序号
-    /// * `name` - 新商品名称
-    /// * `description` - 新商品描述
-    /// * `effective_from` / `effective_to` - 新修订生效区间
+    /// 返回经完整实体校验的新商品修订。名称、描述、修订序号或生效区间违反实体不变式时返回错误。
     ///
-    /// # 返回
-    /// 返回经完整实体校验的新商品修订。
+    /// * `effective_from` / `effective_to` - 新修订生效区间。
     ///
-    /// # 错误
-    /// 名称、描述、修订序号或生效区间违反实体不变式时返回错误。
+    /// `revision_no` 为同一商品内的下一修订序号。
     pub fn content_successor(
         &self,
         id: ProductRevisionId,
@@ -161,19 +147,11 @@ impl ProductRevision {
 
     /// 从当前快照派生一份停用后继修订。
     ///
-    /// 名称、描述、规格、分类、品牌与原结束日保持不变，仅把状态切为停用并设置
-    /// 新修订的生效开始日。
+    /// 名称、描述、规格、分类、品牌与原结束日保持不变，仅把状态切为停用并设置新修订的生效开始日。
     ///
-    /// # 参数
-    /// * `id` - 新修订主键
-    /// * `revision_no` - 同一商品内的下一修订序号
-    /// * `effective_from` - 停用修订生效开始日
+    /// 返回经完整实体校验的停用商品修订。修订序号或生效区间违反实体不变式时返回错误。
     ///
-    /// # 返回
-    /// 返回经完整实体校验的停用商品修订。
-    ///
-    /// # 错误
-    /// 修订序号或生效区间违反实体不变式时返回错误。
+    /// `revision_no` 为同一商品内的下一修订序号。
     pub fn disabled_successor(
         &self,
         id: ProductRevisionId,
@@ -197,16 +175,7 @@ impl ProductRevision {
         )
     }
 
-    /// 判断修订是否处于启用状态。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 状态为 `Active` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 读取商品修订快照的启用标记，不判断生效日期。
     pub fn is_active(&self) -> bool {
         self.status.is_active()
     }
@@ -234,7 +203,7 @@ mod tests {
         }
     }
 
-    /// happy path：快照字段 trim 规范化，修订序号与生效区间落位。
+    // 快照字段 去除首尾空白，修订序号与生效区间按请求保存。
     #[test]
     fn new_trims_and_normalizes_fields() {
         let revision = ProductRevision::new(ProductRevisionId::new("rev-1"), data()).unwrap();
@@ -246,7 +215,7 @@ mod tests {
         assert!(revision.is_active());
     }
 
-    /// 失败路径：必填空、超长各一条。
+    // 商品修订的必填字段为空或超长时均应拒绝创建。
     #[test]
     fn new_rejects_empty_and_overlong_name() {
         let empty = ProductRevisionData { name: "  ".to_string(), ..data() };
@@ -256,7 +225,7 @@ mod tests {
         assert!(ProductRevision::new(ProductRevisionId::new("rev-1"), overlong).is_err());
     }
 
-    /// 失败路径：越界（修订序号为 0）与关联不一致（生效区间倒挂）各一条。
+    // 越界（修订序号为 0）与关联不一致（生效区间倒挂）均应拒绝。
     #[test]
     fn new_rejects_zero_revision_no_and_reversed_window() {
         let zero_revision = ProductRevisionData { revision_no: 0, ..data() };
@@ -283,7 +252,7 @@ mod tests {
         );
     }
 
-    /// 后继修订只替换允许变化的内容并保留稳定快照字段。
+    // 后继修订只替换允许变化的内容并保留稳定快照字段。
     #[test]
     fn content_successor_preserves_stable_snapshot_fields() {
         let current = ProductRevision::new(ProductRevisionId::new("rev-1"), data()).unwrap();
@@ -305,7 +274,7 @@ mod tests {
         assert_eq!(successor.status, current.status);
     }
 
-    /// 停用后继修订保留当前快照并只切换状态。
+    // 停用后继修订保留当前快照并只切换状态。
     #[test]
     fn disabled_successor_preserves_content_and_disables_status() {
         let current = ProductRevision::new(ProductRevisionId::new("rev-1"), data()).unwrap();
@@ -323,7 +292,7 @@ mod tests {
         assert_eq!(successor.revision.revision_no, 2);
     }
 
-    /// 状态机：合法迁移通过，邻接矩阵对称闭合。
+    // 锁定商品修订启停的正向、反向与幂等迁移，防止状态表缺边。
     #[test]
     fn status_transitions_follow_document_state() {
         assert!(ensure_transition(EnableStatus::Active, EnableStatus::Disabled).is_ok());
@@ -331,7 +300,7 @@ mod tests {
         assert_adjacency_closed(&[EnableStatus::Active, EnableStatus::Disabled]);
     }
 
-    /// 实体 JSON 往返。
+    // 实体 JSON 往返。
     #[test]
     fn revision_roundtrips_through_json() {
         let revision = ProductRevision::new(ProductRevisionId::new("rev-1"), data()).unwrap();

@@ -24,7 +24,7 @@ pub struct SettlementReviewerOption {
     pub account: String,
 }
 
-/// 任务形成前仅由统一任务入口核验固定结算复核执行资格。
+// 任务建立前通过统一任务授权入口查询固定结算复核资格，供候选筛选和正式复验使用。
 async fn qualified_reviewer(
     authorization: &AuthorizationService,
     actor: &AuditActor,
@@ -52,15 +52,9 @@ async fn qualified_reviewer(
 }
 
 impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
-    /// 列出当前经办人可选的结算复核人；不可编辑或非本人经办的单据拒绝查询。
+    /// 为可编辑且由本人经办的结算单列出财务复核候选，按姓名和账号排序；排除不满足资格或岗位分离的人员。
     ///
-    /// # 参数
-    /// `id` 为结算单身份，`actor` 为当前经办人；复用已注入的 RBAC 服务。
-    /// # 返回
-    /// 返回按姓名及账号排序的合格候选；提交仍独立重新验证资格。
-    /// # 错误
-    /// 非当前经办人或单据不可编辑时返回 `Forbidden`。账号或权限读取失败时返回对应错误。
-    /// 岗位分离或资格不足的人员被排除，不因此失败。
+    /// 非本人经办或不可编辑时拒绝，读取失败直接返回；提交复核时仍需重新校验所选人员。
     pub async fn reviewer_options(
         &self,
         id: &str,
@@ -77,7 +71,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             .await
     }
 
-    /// 在同一读取快照内检查结算资格并返回合格复核人。
+    // 在同一读取快照确认经办人对结算单的资格并筛选可执行复核的人员，避免候选基于不同版本的事实。
     async fn reviewer_options_apply(
         &self,
         id: &str,
@@ -113,21 +107,8 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
     }
 }
 
-/// 在调用方事务内重验岗位分离、真实账号及固定结算复核执行资格。
-///
-/// # 参数
-/// * `authorization` - 当前统一任务资格服务。
-/// * `identity_service` - 同一应用注入的共享身份与权限服务。
-/// * `reviewer_id` - 复核人账号。
-/// * `preparer_id` - 经办人账号。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
-/// 资格成立时无返回值。
-///
-/// # 错误
-/// 复核人不存在时返回 `ValidationError`。账号或任务资格不满足时返回 `Forbidden`。
-/// 账号或权限读取失败时返回对应错误。
+// 用原事务核验所选复核人是真实账号、并非制单人且具有固定任务执行资格，供提交和决定前把关。
+// 账号不存在返回 `ValidationError`，岗位或任务资格不符返回 `Forbidden`，读取错误原样向上返回。
 pub(super) async fn ensure_reviewer(
     authorization: &AuthorizationService,
     identity_service: &SharedRbacService,

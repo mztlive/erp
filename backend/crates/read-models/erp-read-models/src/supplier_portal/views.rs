@@ -49,12 +49,14 @@ pub struct PortalApplicationView {
 }
 
 impl PortalApplicationView {
-    /// 装配本供应商报价或供给修订申请。
+    /// 生成门户申请展示视图时，组合本供应商报价或供给修订申请。
     ///
     /// # 参数
     /// `app` 为已完成供应商归属校验的正式申请事实。
+    ///
     /// # 返回
     /// 供应商原稿及允许的历史，不包含任务配置。
+    ///
     /// # 错误
     /// 领域快照序列化失败时返回错误。
     pub fn from_offering(app: &OfferingApplication) -> Result<Self> {
@@ -110,12 +112,14 @@ impl PortalApplicationView {
         })
     }
 
-    /// 装配新品原始提报及实际建档结果。
+    /// 生成门户申请展示视图时，组合新品原始提报及实际建档结果。
     ///
     /// # 参数
     /// `app` 为当前供应商可见的新品暂存。
+    ///
     /// # 返回
     /// 保留原始字典资料及所有 SKU，剥离内部规范化和匹配配置。
+    ///
     /// # 错误
     /// 原稿或结果序列化失败时返回错误。
     pub fn from_new_product(app: &NewProductDraft) -> Result<Self> {
@@ -169,12 +173,14 @@ impl PortalApplicationView {
         })
     }
 
-    /// 装配供应商商务档案合作条款申请。
+    /// 生成门户申请展示视图时，组合供应商商务档案合作条款申请。
     ///
     /// # 参数
     /// `app` 为当前供应商已授权申请。
+    ///
     /// # 返回
     /// 仅付款条件原稿、历次提交和决定，剥离采购处理人与任务标识。
+    ///
     /// # 错误
     /// 快照或结果序列化失败时返回错误。
     pub fn from_cooperation(app: &CooperationApplication) -> Result<Self> {
@@ -231,21 +237,19 @@ impl PortalApplicationView {
     }
 }
 
-/// 只将已声明允许的值送入输出；不序列化整个领域根对象。
-///
-/// # 参数
-/// * `value` - 已声明允许进入输出的值。
-///
-/// # 返回
-/// 返回对应的 JSON 值。
-///
-/// # 错误
-/// 序列化失败时返回 `Internal`。
+// 处理门户申请展示时，只将已声明允许的值送入输出；不序列化整个领域根对象。
+//
+// 调用参数：
+// * `value` - 已声明允许进入输出的值。
+//
+// 返回对应的 JSON 值。
+//
+// 序列化失败时返回 `Internal`。
 pub(super) fn value<T: Serialize>(value: T) -> Result<Value> {
     serde_json::to_value(value).map_err(|error| Error::Internal(error.to_string()))
 }
 
-/// 统一外部报价业务名称。
+// 投影门户申请展示字段时，统一外部报价业务名称。
 fn offering_kind(kind: ApplicationKind) -> &'static str {
     match kind {
         ApplicationKind::ExistingQuote => "EXISTING_QUOTE",
@@ -253,7 +257,7 @@ fn offering_kind(kind: ApplicationKind) -> &'static str {
         ApplicationKind::StopSupply => "STOP_SUPPLY",
     }
 }
-/// 统一供给申请的展示状态。
+// 投影门户申请展示字段时，统一供给申请的展示状态。
 fn offering_status(status: ApplicationStatus) -> &'static str {
     match status {
         ApplicationStatus::Draft => "DRAFT",
@@ -263,7 +267,7 @@ fn offering_status(status: ApplicationStatus) -> &'static str {
         ApplicationStatus::Effective => "EFFECTIVE",
     }
 }
-/// 新品待审核与单人确认待处理采用同一对外状态。
+// 投影门户申请展示字段时，新品待审核与单人确认待处理采用同一对外状态。
 fn draft_status(status: DraftStatus) -> &'static str {
     match status {
         DraftStatus::Draft => "DRAFT",
@@ -273,7 +277,7 @@ fn draft_status(status: DraftStatus) -> &'static str {
         DraftStatus::Effective => "EFFECTIVE",
     }
 }
-/// 合作申请与供给申请统一展示状态。
+// 投影门户申请展示字段时，合作申请与供给申请统一展示状态。
 fn cooperation_status(status: CooperationStatus) -> &'static str {
     match status {
         CooperationStatus::Draft => "DRAFT",

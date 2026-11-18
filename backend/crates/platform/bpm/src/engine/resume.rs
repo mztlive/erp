@@ -23,21 +23,11 @@ pub struct ResumeCommand {
     pub now: Timestamp,
 }
 
-/// 将旧 `BLOCKED` 执行置为 `SUPERSEDED`，并以 `ASSIGNEE_RECOVERY` 进入同一节点。
-///
-/// # 参数
-/// * `instance` - 受阻流程实例
-/// * `current` - 当前受阻执行
-/// * `assignee` - 该节点的实例审批人绑定
-/// * `graph` - 与实例冻结定义一致的定义图
-/// * `command` - 新执行身份、已恢复资格与调用方时间
-///
-/// # 返回
-/// 返回旧执行已替换、并在同一轮同一节点进入新活动执行的迁移计划。
+/// 原审批人资格恢复后结束旧受阻执行，并以 `ASSIGNEE_RECOVERY` 在同一轮、同一节点创建活动执行和任务意图。
+/// 恢复沿用实例冻结的定义与审批人绑定，不允许换人、换节点或重新打开旧执行。
 ///
 /// # 错误
-/// 实例或执行不是人员失效受阻、绑定或资格不属于原审批人、定义图与冻结事实不一致、
-/// 新执行序号未递增或主键重复、资格仍失效，或进入节点失败时返回错误。
+/// 非人员失效阻塞、实例与执行或冻结归属不符、资格仍失效、新 ID 与旧 ID 相同、新序号未递增或无法进入节点时返回错误。
 pub fn resume(
     instance: ApprovalProcessInstance,
     mut current: ApprovalNodeExecution,
@@ -92,7 +82,7 @@ pub fn resume(
     Ok(plan)
 }
 
-/// 恢复前校验实例、执行、定义绑定和资格属于同一原审批人。
+// 替换旧执行前，依次核对阻塞、实例与执行归属、冻结人员与资格，确保恢复只作用于原人原节点。
 fn ensure_assignee_recovery_state(
     instance: &ApprovalProcessInstance,
     current: &ApprovalNodeExecution,
@@ -106,7 +96,7 @@ fn ensure_assignee_recovery_state(
     Ok(())
 }
 
-/// 校验 blocker 一致性：受阻态、人员类别与实例-执行投影一致。
+// 先确认实例和执行都处于可原人恢复的受阻态，且阻塞码一致；结构或投影不一致不能靠重派任务解决。
 fn ensure_blocker_allows_recovery(
     instance: &ApprovalProcessInstance,
     current: &ApprovalNodeExecution,
@@ -129,7 +119,7 @@ fn ensure_blocker_allows_recovery(
     Ok(())
 }
 
-/// 校验实例-执行归属：同一实例、当前令牌、当前轮次与冻结定义一致。
+// 恢复前核对绑定和旧执行都属于当前实例，并确认令牌、轮次和冻结定义版本仍匹配，避免恢复过期执行。
 fn ensure_instance_execution_affinity(
     instance: &ApprovalProcessInstance,
     current: &ApprovalNodeExecution,
@@ -157,7 +147,7 @@ fn ensure_instance_execution_affinity(
     Ok(())
 }
 
-/// 校验绑定-资格归属：绑定未变、节点一致、资格属于原审批人且与定义快照一致。
+// 用冻结绑定校验节点、旧执行及资格都指向原审批人和同一或签名单，不让恢复变成改派。
 fn ensure_binding_eligibility_affinity(
     current: &ApprovalNodeExecution,
     assignee: &ApprovalInstanceAssignee,

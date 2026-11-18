@@ -47,7 +47,7 @@ macro_rules! quote_line {
 }
 quote_line!(PurchaseOrderSubmissionLine, PurchaseOrderRevisionLine, PurchaseChangeSubmissionLine);
 
-/// 新采购采用和专项供应余额写入必须与订单、审批、命令回执共用原事务。
+// 新采购采用和专项供应余额写入必须与订单、审批、命令回执共用原事务。
 pub(super) async fn reserve_selected_quotes(
     db: &Database,
     order: &PurchaseOrder,
@@ -85,7 +85,7 @@ pub(super) async fn reserve_selected_quotes(
     Ok(())
 }
 
-/// 提交及重提只核验原采购对应的准确采用记录，不重新消费数量或切换报价。
+// 提交及重提只核验原采购对应的准确采用记录，不重新消费数量或切换报价。
 pub(super) async fn revalidate_quote(
     db: &Database,
     order_id: &str,
@@ -192,7 +192,7 @@ async fn adoption_addresses<L: InquiryPurchaseLine>(
         .collect())
 }
 
-/// 入仓单仅保存目标仓；报价内部按销售稳定地址及报价剩余范围验证，不泄露给供应商。
+// 入仓单仅保存目标仓；报价内部按销售稳定地址及报价剩余范围验证，不泄露给供应商。
 async fn warehouse_source_addresses<L: InquiryPurchaseLine>(
     db: &Database,
     order: &PurchaseOrder,

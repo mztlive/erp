@@ -63,7 +63,7 @@ pub struct SupplierView {
 }
 
 impl From<SupplierAccount> for SupplierView {
-    /// 从实体构造响应视图。
+    // 将 `SupplierAccount` 转换为 API 响应字段，调用方可直接使用投影而不必序列化整个实体。
     fn from(account: SupplierAccount) -> Self {
         Self {
             id: account.base.id,
@@ -164,7 +164,8 @@ pub struct CommercialProfileView {
 }
 
 impl From<SupplierCommercialProfileRevision> for CommercialProfileView {
-    /// 从实体构造响应视图。
+    // 将 `SupplierCommercialProfileRevision` 转换为 API 响应字段，调用方可直接使用投影而不必序列化整个实
+    // 体。
     fn from(revision: SupplierCommercialProfileRevision) -> Self {
         let payment_term_snapshot = revision.effective_payment_term_code();
         let business_category = revision.effective_business_category();
@@ -191,18 +192,9 @@ impl From<SupplierCommercialProfileRevision> for CommercialProfileView {
 }
 
 impl CommercialProfileView {
-    /// 回填签约/付款主体的当前法定名称。
-    ///
-    /// 列表装配与详情装配共用本实现；缺失当前名称时保持 `None`。
-    ///
-    /// # 参数
-    /// * `names` - 主体 ID 到法定名称
-    ///
-    /// # 返回
-    /// 无返回值；视图在原地更新。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 回填签约/付款主体的当前法定名称。
+    // 列表装配与详情装配共用本实现；缺失当前名称时保持 `None`。
+    // 视图在原地更新。
     pub(crate) fn fill_entity_names(&mut self, names: &HashMap<String, String>) {
         self.signing_entity_name =
             self.signing_entity_party_id.as_ref().and_then(|party_id| names.get(party_id)).cloned();
@@ -241,7 +233,7 @@ pub struct SupplierCapabilityView {
 }
 
 impl From<SupplierCapability> for SupplierCapabilityView {
-    /// 从实体构造响应视图。
+    // 将 `SupplierCapability` 转换为 API 响应字段，调用方可直接使用投影而不必序列化整个实体。
     fn from(capability: SupplierCapability) -> Self {
         Self {
             id: capability.base.id,
@@ -292,7 +284,7 @@ pub struct SupplierQualificationView {
 }
 
 impl From<SupplierQualification> for SupplierQualificationView {
-    /// 从实体构造响应视图。
+    // 将 `SupplierQualification` 转换为 API 响应字段，调用方可直接使用投影而不必序列化整个实体。
     fn from(qualification: SupplierQualification) -> Self {
         let validity_verified = qualification.validity_verified();
         Self {
@@ -341,7 +333,7 @@ pub struct SupplierRatingView {
 }
 
 impl From<SupplierRatingRevision> for SupplierRatingView {
-    /// 从实体构造响应视图。
+    // 将 `SupplierRatingRevision` 转换为 API 响应字段，调用方可直接使用投影而不必序列化整个实体。
     fn from(revision: SupplierRatingRevision) -> Self {
         Self {
             id: revision.base.id,

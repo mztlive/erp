@@ -53,7 +53,7 @@ impl FundsAccess {
     }
 }
 
-/// 工作项处理人采用负责人优先、缺负责人时回退完成人，与展示事实保持一致。
+// 应用开票申请筛选时，工作项处理人采用负责人优先、缺负责人时回退完成人，与展示事实保持一致。
 fn handler_filter(ids: &[String]) -> Document {
     doc! { "deleted_at": 0, "$expr": { "$in": [
         { "$ifNull": ["$owner_user_id", "$completed_by"] }, ids,
@@ -66,7 +66,7 @@ mod tests {
 
     use super::*;
 
-    /// 负责人优先；仅空值或缺失才回退完成人，不把两人同时当作处理人。
+    // 验证开票申请：负责人优先；仅空值或缺失才回退完成人，不把两人同时当作处理人。
     #[test]
     fn handler_condition_keeps_owner_precedence_and_completed_fallback() {
         let filter = handler_filter(&["handler".into()]);

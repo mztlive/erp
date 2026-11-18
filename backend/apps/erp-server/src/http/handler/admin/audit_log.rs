@@ -8,17 +8,8 @@ use crate::http::extractor::Query;
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
-/// 查询审计日志列表。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已认证操作人
-/// * `query` - 查询参数
-///
-/// # 返回
+/// 按请求条件查询审计日志列表。
 /// 返回分页审计日志列表。
-///
-/// # 错误
 /// 无审计日志查询资格、参数非法或读取失败时拒绝。
 pub async fn list_audit_logs(
     State(state): State<HttpState>,

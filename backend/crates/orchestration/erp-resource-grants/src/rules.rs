@@ -22,13 +22,7 @@ pub(crate) struct InvoiceEvidence<'a> {
     pub historical_recipient: bool,
 }
 impl InvoiceEvidence<'_> {
-    /// 核验正式业务事实的完整关联。
-    /// # 参数
-    /// 无；使用当前事实快照。
-    /// # 返回
-    /// 全部关联一致时成功。
-    /// # 错误
-    /// 审批、分配或关联不一致时返回冲突。
+    // 核对开票审批、申请版本、应收待办、销售关联和历史接收人；任一关联错配即返回冲突，不能作为开票读取授权证据。
     pub(crate) fn validate(&self) -> Result<()> {
         if !self.approved
             || !self.request_approved
@@ -63,13 +57,7 @@ pub(crate) struct AssignmentEvidence<'a> {
     pub participant: bool,
 }
 impl AssignmentEvidence<'_> {
-    /// 核验正式业务事实的完整关联。
-    /// # 参数
-    /// 无；使用当前事实快照。
-    /// # 返回
-    /// 全部关联一致时成功。
-    /// # 错误
-    /// 审批、分配或关联不一致时返回冲突。
+    // 核对销售或采购订单与审批实例、节点执行及参与人是否一致；不接受受阻节点或未实际分派的人，避免生成错误的订单读取授权。
     pub(crate) fn validate(&self) -> Result<()> {
         if self.subject_kind != self.resource.code()
             || self.subject_id != self.target_id

@@ -10,7 +10,7 @@ use persistence_core::{Executor, PageResult, Result};
 use super::CatalogSupplyRepository;
 
 impl CatalogSupplyRepository<'_> {
-    /// 分页查询销售可用的公司 SKU。
+    /// 处理公司商品池时，分页查询销售可用的公司 SKU。
     ///
     /// 资格业务日为今天且预算投影已就绪时，先追平少量待处理变化再按投影查询；
     /// 否则按实时资格聚合查询。两路筛选、排序与分页口径一致。
@@ -20,7 +20,6 @@ impl CatalogSupplyRepository<'_> {
     /// * `filter` - 业务筛选、配送地区、勾选范围、排序与分页
     /// * `restrict` - 调用方先加载的配送与勾选交集；为空集合时直接返回空页。
     /// * `projection_ready` - 调用方已确认当日投影就绪并完成追平。
-    /// * `executor` - 数据访问执行器
     ///
     /// # 返回
     /// 返回当前页可售行及总数；按配送地区且含运费另计时标出需另付运费的行。
@@ -50,7 +49,7 @@ impl CatalogSupplyRepository<'_> {
         Ok(page)
     }
 
-    /// 读取配送地区命中与勾选范围的交集；保持读取前的短路和错误顺序。
+    /// 处理公司商品池时，读取配送地区命中与勾选范围的交集；保持读取前的短路和错误顺序。
     ///
     /// # 参数
     /// * `filter` - 已规范化的配送与勾选筛选。
@@ -73,7 +72,7 @@ impl CatalogSupplyRepository<'_> {
         Ok(intersect(filter.sku_ids.as_deref(), delivery))
     }
 
-    /// 标出所选地区内有需另付运费才能送到的地方的当前页商品。
+    // 处理公司商品池时，标出所选地区内有需另付运费才能送到的地方的当前页商品。
     async fn mark_freight_extra(
         &self,
         items: &mut [SellableSkuRow],
@@ -93,7 +92,7 @@ impl CatalogSupplyRepository<'_> {
     }
 }
 
-/// 勾选范围与配送地区命中的交集，保持勾选顺序；只指定一侧时取该侧。
+// 处理公司商品池时，勾选范围与配送地区命中的交集，保持勾选顺序；只指定一侧时取该侧。
 fn intersect(requested: Option<&[String]>, delivery: Option<Vec<String>>) -> Option<Vec<String>> {
     match (requested, delivery) {
         (None, None) => None,

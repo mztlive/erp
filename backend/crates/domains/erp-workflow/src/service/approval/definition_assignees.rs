@@ -37,15 +37,11 @@ impl ApprovalDefinitionService {
     ///
     /// 只按后台有效账号与检索串过滤，不复用运行期单据上下文。
     ///
-    /// # 参数
-    /// * `actor` - 已认证操作人
-    /// * `query` - 类型、检索串与页大小
-    ///
-    /// # 返回
     /// 返回 Repository 已按有效后台账号范围过滤的候选人页。
     ///
-    /// # 错误
     /// 无定义管理权或类型不适用时返回错误。
+    ///
+    /// `query`：类型、检索串与页大小。
     pub async fn eligible_assignees(
         &self,
         actor: &AuditActor,

@@ -152,16 +152,12 @@ pub struct SupplierOfferingListView {
 }
 
 impl SupplierOfferingView {
-    /// 由供给行初始化稳定身份，关联资料留给跨域装配。
-    ///
-    /// # 参数
-    /// * `row` - 已授权的供给稳定身份
-    ///
-    /// # 返回
-    /// 返回仅填充身份、责任与状态的视图。
-    ///
-    /// # 错误
-    /// 无。
+    // 由供给行初始化稳定身份，关联资料留给跨域组装。
+    //
+    // 调用参数：
+    // * `row` - 已授权的供给稳定身份
+    //
+    // 返回仅填充身份、责任与状态的视图。
     pub(super) fn from_row(row: SupplierOfferingRow) -> Self {
         Self {
             id: row.id,
@@ -204,16 +200,12 @@ impl SupplierOfferingView {
         }
     }
 
-    /// 仅映射当前商业修订，不改稳定身份或可供状态。
-    ///
-    /// # 参数
-    /// * `revision` - 当前指针所引用的修订
-    ///
-    /// # 返回
-    /// 原地填充商业字段。
-    ///
-    /// # 错误
-    /// 无。
+    // 组装供应商供给时，仅映射当前商业修订，不改稳定身份或可供状态。
+    //
+    // 调用参数：
+    // * `revision` - 当前指针所引用的修订
+    //
+    // 原地填充商业字段。
     pub(super) fn apply_revision(&mut self, revision: SupplierOfferingRevision) {
         self.source_purchase_terms = revision.source_purchase_terms;
         self.current_revision_no = Some(revision.revision.revision_no);
@@ -229,16 +221,10 @@ impl SupplierOfferingView {
         self.valid_to = revision.valid_to.map(|value| value.to_string());
     }
 
-    /// 清除采购成本与税率字段。
-    ///
-    /// # 参数
-    /// 无。
+    /// 处理供应商供给时，清除采购成本与税率字段。
     ///
     /// # 返回
-    /// 无返回值。原地清空含税价、不含税价与进项税率。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 原地清空含税价、不含税价与进项税率。
     pub fn redact_costs(&mut self) {
         self.dropship_supply_price_gross = None;
         self.dropship_supply_price_net = None;
@@ -252,7 +238,7 @@ impl SupplierOfferingView {
 }
 
 impl SupplierOfferingListParams {
-    /// 返回规整后的公司 SKU 主键。
+    /// 定位供应商供给关联时，给出规整后的公司 SKU 主键。
     ///
     /// # 参数
     /// 无，读取 `self.sku_id`。
@@ -269,7 +255,7 @@ impl SupplierOfferingListParams {
         typed_id(self.sku_id.as_deref(), SkuId::new)
     }
 
-    /// 返回规整后的供应商主键。
+    /// 定位供应商供给关联时，给出规整后的供应商主键。
     ///
     /// # 参数
     /// 无，读取 `self.supplier_id`。
@@ -287,20 +273,19 @@ impl SupplierOfferingListParams {
     }
 }
 
-/// 规整可选 ID 字符串。
-///
-/// # 参数
-/// * `value` - 原始字符串
-/// * `constructor` - 类型化主键构造器
-///
-/// # 返回
-/// 去空白后非空时返回类型化主键，否则返回 `None`。
-///
-/// # 错误
-/// 永不失败。
-///
-/// # 约束
-/// 纯内存转换，不触碰 I/O、时钟或密钥。
+// 定位供应商供给关联时，规整可选 ID 字符串。
+//
+// 调用参数：
+// * `value` - 原始字符串
+// * `constructor` - 类型化主键构造器
+//
+// 去空白后非空时返回类型化主键，否则返回 `None`。
+//
+// 失败边界：
+// 永不失败。
+//
+// 调用约束：
+// 纯内存转换，不触碰 I/O、时钟或密钥。
 fn typed_id<T>(value: Option<&str>, constructor: impl Fn(String) -> T) -> Option<T> {
     value.map(str::trim).filter(|value| !value.is_empty()).map(|value| constructor(value.to_string()))
 }

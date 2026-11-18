@@ -37,16 +37,7 @@ pub enum MovementDirection {
 }
 
 impl MovementDirection {
-    /// 返回方向的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回库存变动方向的中文名称，供业务界面展示，不作为持久化代码。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Increase => "增加",
@@ -54,16 +45,7 @@ impl MovementDirection {
         }
     }
 
-    /// 返回方向的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回库存变动方向的稳定代码，供持久化与查询匹配使用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Increase => "INCREASE",
@@ -98,16 +80,7 @@ pub enum MovementType {
 }
 
 impl MovementType {
-    /// 返回类型的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回库存流水类型的中文名称，供业务界面展示，不作为持久化代码。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Initial => "期初",
@@ -122,16 +95,7 @@ impl MovementType {
         }
     }
 
-    /// 返回类型的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回库存流水类型的稳定代码，供持久化与查询匹配使用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Initial => "INITIAL",
@@ -147,17 +111,8 @@ impl MovementType {
     }
 
     /// 返回类型在库存余额上的方向语义。
-    ///
     /// 冲正的方向由原流水决定（跨聚合，返回 `None` 由 P3 判定）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 增加类返回 `Increase`，减少类返回 `Decrease`，冲正返回 `None`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn inherent_direction(self) -> Option<MovementDirection> {
         match self {
             Self::Initial | Self::PurchaseReceiptIn | Self::SalesReturnIn | Self::StockGain => {
@@ -239,7 +194,7 @@ pub struct StockMovement {
 }
 
 impl PartialEq for StockMovement {
-    /// 全字段语义相等（`FactBase` 未派生 `PartialEq`，手工实现）。
+    // 全字段语义相等（`FactBase` 未派生 `PartialEq`，手工实现）。
     fn eq(&self, other: &Self) -> bool {
         self.base == other.base
             && self.fact.fact_no == other.fact.fact_no
@@ -265,22 +220,11 @@ impl Eq for StockMovement {}
 
 impl StockMovement {
     /// 创建库存流水（正式事实，创建后不可变）。
-    ///
-    /// 完成数量正数校验、来源引用规范化与方向语义校验（§6.7：期初/采购入库/
-    /// 销售退回入库/盘盈为增加，仓发出库/采购退货出库/盘亏/损坏为减少；
-    /// 冲正方向随原流水，由 P3 判定）；校验 `recorded_at` 不早于
-    /// `occurred_at`、冲正流水不引用自身。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::StockMovementId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
+    /// 完成数量正数校验、来源引用规范化与方向语义校验（§6.7：期初/采购入库/销售退回入库/盘盈为增加，仓发出库/采购退货出库/盘亏/损坏为减少；冲正方向随原流水，由 P3 判定）；
+    /// 校验 `recorded_at` 不早于 `occurred_at`、冲正流水不引用自身。
     /// 返回新建的库存流水实体。
-    ///
-    /// # 错误
-    /// 数量非正、方向与类型不一致、来源单据标识或记录人为空或超长、来源行标识规范化失败、
-    /// 记录时间早于发生时间，或冲正引用自身时返回错误。
+    /// `id` 为实体主键（`erp_core::ids::StockMovementId`）。
+    /// 数量非正、方向与类型不一致、来源单据标识或记录人为空或超长、来源行标识规范化失败、记录时间早于发生时间，或冲正引用自身时返回错误。
     pub fn new(id: StockMovementId, data: StockMovementData) -> Result<Self> {
         ensure_positive_quantity(data.quantity, "库存流水数量必须为正数")?;
         if let Some(expected) = data.movement_type.inherent_direction()
@@ -371,7 +315,7 @@ mod tests {
         }
     }
 
-    /// happy path：字段规范化、方向语义与 FactBase 组合。
+    // 验证字段规范化、方向语义与 FactBase 组合。
     #[test]
     fn new_normalizes_fields_and_validates_direction() {
         let movement = StockMovement::new(StockMovementId::new("m-1"), data()).unwrap();
@@ -383,7 +327,7 @@ mod tests {
         assert_eq!(movement.movement_type.inherent_direction(), Some(MovementDirection::Increase));
     }
 
-    /// 失败路径：方向与类型不一致、数量越界、引用自身、时间倒挂。
+    // 验证方向与类型不一致、数量越界、引用自身、时间倒挂。
     #[test]
     fn new_rejects_invalid_inputs() {
         let wrong_direction = StockMovementData { direction: MovementDirection::Decrease, ..data() };
@@ -404,7 +348,7 @@ mod tests {
         assert!(StockMovement::new(StockMovementId::new("m-6"), reversed_time).is_err());
     }
 
-    /// 方向语义：全部类型的固有方向与冲正自由方向。
+    // 验证方向语义：全部类型的固有方向与冲正自由方向。
     #[test]
     fn movement_type_direction_semantics() {
         assert_eq!(MovementType::Initial.inherent_direction(), Some(MovementDirection::Increase));
@@ -427,7 +371,7 @@ mod tests {
         assert!(StockMovement::new(StockMovementId::new("m-7"), reversal_increase).is_ok());
     }
 
-    /// 序列化：枚举稳定代码；枚举稳定代码（不可变事实无 update）。
+    // 验证枚举稳定代码；枚举稳定代码（不可变事实无 update）。
     #[test]
     fn serde_shapes_and_bson_roundtrip() {
         assert_eq!(serde_json::to_string(&MovementType::WarehouseShipOut).unwrap(), "\"WAREHOUSE_SHIP_OUT\"");

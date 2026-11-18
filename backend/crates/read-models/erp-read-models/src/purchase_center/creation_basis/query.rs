@@ -23,11 +23,10 @@ use super::mapping::{build_basis_view, build_stock_basis_view};
 use crate::sales_center::prices::revision_line_prices;
 use crate::{Error, Result};
 impl PurchaseOrderReadService {
-    /// 查询当前账号开放采购任务范围内仍有剩余量的精确采购创建依据。
+    /// 读取当前账号开放采购任务范围内仍有剩余量的精确采购创建依据。
     ///
     /// # 参数
     /// * `params` - 可选销售单与供给分配任务筛选
-    /// * `actor` - 当前已认证账号
     ///
     /// # 返回
     /// 返回按具体开放任务、销售单和精确拆分维度形成的创建依据。
@@ -59,7 +58,7 @@ impl PurchaseOrderReadService {
             .await
     }
 
-    /// 在单个授权阶段内完成任务、业务事实和价格读取后再交付。
+    // 读取采购创建依据时，在单个授权阶段内完成任务、业务事实和价格读取后再交付。
     async fn creation_basis_views(
         &self,
         actor: &AuditActor,
@@ -80,7 +79,7 @@ impl PurchaseOrderReadService {
         Ok(views)
     }
 
-    /// 价格仅按当前授权任务已产出的销售行读取。
+    // 采购创建依据的可见行确定后，只为这些授权任务产出的销售行读取价格，避免扩大展示范围。
     async fn fill_basis_prices(
         &self,
         views: &mut [CreationBasisView],
@@ -115,7 +114,7 @@ struct BasisList {
 }
 
 impl BasisList {
-    /// 按已授权任务批量装载销售、覆盖及供给，不按行重复查询供给。
+    // 依据已授权任务批量装载销售、覆盖及供给，不按行重复查询供给。
     async fn load(
         service: &PurchaseOrderReadService,
         tasks: Vec<WorkItem>,
@@ -139,7 +138,7 @@ impl BasisList {
         Ok(Self { tasks, orders, owner_names, task_indexes, coverages, facts, warehouses })
     }
 
-    /// 每张销售单加载一次询价来源，交由全部所属任务复用。
+    // 处理采购创建依据时，每张销售单加载一次询价来源，交由全部所属任务复用。
     async fn views(mut self, db: &Database, executor: &mut dyn Executor) -> Result<Vec<CreationBasisView>> {
         let mut views = Vec::new();
         for (order_id, indexes) in &self.task_indexes {
@@ -187,7 +186,7 @@ impl BasisList {
     }
 }
 
-/// 校验已授权任务的开放状态及冻结责任范围，保持任务原有顺序。
+// 按来源销售单归集创建采购的已授权任务前，核对任务仍开放且冻结责任范围有效；维持输入任务顺序。
 fn group_tasks(tasks: &[WorkItem]) -> Result<Vec<(String, Vec<usize>)>> {
     let mut grouped: Vec<(String, Vec<usize>)> = Vec::new();
     for (index, task) in tasks.iter().enumerate() {
@@ -203,7 +202,7 @@ fn group_tasks(tasks: &[WorkItem]) -> Result<Vec<(String, Vec<usize>)>> {
     Ok(grouped)
 }
 
-/// 每张销售单读取一次覆盖，只为任务范围内尚待分配的 SKU 加载供给。
+// 读取采购创建依据时，每张销售单读取一次覆盖，只为任务范围内尚待分配的 SKU 加载供给。
 async fn load_coverages(
     db: &Database,
     orders: &HashMap<String, SalesOrder>,
@@ -232,16 +231,12 @@ async fn load_coverages(
     Ok((coverages, sku_ids.into_iter().collect()))
 }
 
-/// 将可选查询文本规范化为空或去除首尾空白后的值。
-///
-/// # 参数
-/// * `value` - 可选原始查询文本
-///
-/// # 返回
-/// 空白值返回 `None`，否则返回规范化字符串。
-///
-/// # 错误
-/// 无。
+// 应用采购创建依据筛选时，将可选查询文本规范化为空或去除首尾空白后的值。
+//
+// 调用参数：
+// * `value` - 可选原始查询文本
+//
+// 空白值返回 `None`，否则返回规范化字符串。
 fn normalized_optional_filter(value: Option<&str>) -> Option<String> {
     value.map(str::trim).filter(|value| !value.is_empty()).map(str::to_string)
 }

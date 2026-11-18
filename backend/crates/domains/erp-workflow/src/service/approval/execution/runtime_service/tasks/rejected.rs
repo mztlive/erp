@@ -12,13 +12,12 @@ use crate::repository::prelude::*;
 use crate::repository::{BpmExt, WorkItemExt};
 use crate::{Error, Result};
 
-/// 在驳回原事务中关闭本实例各执行的所有剩余开放任务。
-/// # 参数
-/// 数据库、已驳回实例、决定人、时间和原事务执行器。
-/// # 返回
-/// 当前已完成任务保持不变，其余开放审批任务全部关闭。
-/// # 错误
-/// 实例非驳回终态、执行归属损坏、任务身份冲突或 CAS 失败时回滚。
+// 在驳回原事务中关闭本实例各执行的所有剩余开放任务。
+// 当前已完成任务保持不变，其余开放审批任务全部关闭。
+//
+// 实例非驳回终态、执行归属损坏、任务身份冲突或 CAS 失败时回滚。
+//
+// 数据库、已驳回实例、决定人、时间和原事务执行器。
 pub(in crate::service::approval::execution::runtime_service) async fn close_rejected_tasks(
     db: &Database,
     instance: &ApprovalProcessInstance,
@@ -75,7 +74,7 @@ impl RejectionTasks for MongoRejectionTasks<'_> {
     }
 }
 
-/// 逐页处理完整实例历史，不能用单页上限截断残留任务。
+// 审批驳回清理残留任务须遍历该实例的全部执行历史，不能把第一批查询范围当完整关闭范围。
 async fn close_instance_tasks(
     store: &impl RejectionTasks,
     instance_id: &ApprovalProcessInstanceId,
@@ -101,7 +100,7 @@ async fn close_instance_tasks(
     }
 }
 
-/// 证明本页执行归属与游标严格递增，防止跨实例关闭或坏数据无限分页。
+// 关闭本批任务前确认每个执行都属于原实例且严格推进历史游标，防止关闭其他实例任务或重复扫描坏数据。
 fn page_execution_ids(
     executions: &[ApprovalNodeExecution],
     instance_id: &ApprovalProcessInstanceId,
@@ -119,7 +118,7 @@ fn page_execution_ids(
     Ok(ids)
 }
 
-/// 按精确执行分组并调用 WorkItem 生命周期，不接收页外任务。
+// 按本页的精确执行分组，调用任务生命周期关闭驳回实例的残留任务；出现不属于本页的任务时拒绝。
 fn close_page_tasks(
     mut tasks: Vec<WorkItem>,
     execution_ids: &[ApprovalNodeExecutionId],

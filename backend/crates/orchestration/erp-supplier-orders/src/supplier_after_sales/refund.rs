@@ -27,11 +27,11 @@ use crate::{Error, Result};
 
 impl SupplierAfterSalesProcess {
     /// 将正式 API 订单退款接入公共处理器，原非 API 订单仍由原入口处理。
-    /// # 参数
+    ///
     /// 原履约订单、申请、已认证操作人及原数据范围授权。
-    /// # 返回
+    ///
     /// 已持久化动作；缺少能力返回待人工动作而非伪成功。
-    /// # 错误
+    ///
     /// 越权、范围、金额或幂等冲突时拒绝，不执行外部调用。
     pub async fn submit_refund_if_api(
         &self,
@@ -218,11 +218,9 @@ impl SupplierAfterSalesProcess {
     }
 
     /// 有界恢复退款动作；失败不重放已发送请求。
-    /// # 参数
-    /// 无。
-    /// # 返回
+    ///
     /// 本轮检查的动作数量。
-    /// # 错误
+    ///
     /// 队列读取失败时返回错误；单动作错误保留原状态。
     pub async fn run_refunds_once(&self) -> Result<usize> {
         let rows = refunds_due(&self.db, &mut NoTransaction).await?;

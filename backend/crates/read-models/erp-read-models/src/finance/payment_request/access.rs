@@ -27,12 +27,14 @@ impl PaymentReadScope {
 }
 
 impl PurchasePaymentRequestReadService {
-    /// 在时间线原读取事务内重验申请全部来源。
+    /// 组装采购付款申请时，在时间线原读取事务内重验申请全部来源。
     ///
     /// # 参数
     /// `actor` 为认证账号，`request` 为申请，`executor` 为原事务。
+    ///
     /// # 返回
     /// 当前详情范围覆盖全部来源时返回 true。
+    ///
     /// # 错误
     /// 权限配置及数据库故障继续传播。
     pub async fn timeline_readable(

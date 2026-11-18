@@ -7,22 +7,18 @@ use erp_sales::entity::sales_order::{
 
 use super::dto;
 
-/// 销售单当前阶段 `(code, label, tone)`（服务端权威计算）。
-///
-/// 商业草稿可处于未提交或已驳回审核状态；已驳回保留独立展示。
-/// 关闭、作废及已生效状态优先于审核轨状态。
-///
-/// # 参数
-/// * `commercial` - 商业主状态。
-/// * `review` - 审核轨状态。
-/// * `close` - 结案状态。
-/// * `fulfillment` - 履约进度。
-///
-/// # 返回
-/// 返回当前阶段的 `(code, label, tone)`。关闭和作废优先于商业与审核状态。
-///
-/// # 错误
-/// 不返回错误。
+// 补齐销售处理阶段的展示名称时，销售单当前阶段 `(code, label, tone)`（服务端权威计算）。
+//
+// 商业草稿可处于未提交或已驳回审核状态；已驳回保留独立展示。
+// 关闭、作废及已生效状态优先于审核轨状态。
+//
+// 调用参数：
+// * `commercial` - 商业主状态。
+// * `review` - 审核轨状态。
+// * `close` - 结案状态。
+// * `fulfillment` - 履约进度。
+//
+// 返回当前阶段的 `(code, label, tone)`。关闭和作废优先于商业与审核状态。
 pub(super) fn stage_code_label_tone(
     commercial: CommercialStatus,
     review: ReviewStatus,
@@ -55,22 +51,16 @@ pub(super) fn stage_code_label_tone(
     }
 }
 
-/// 把实体结案事实映射为中文结案资格视图。
-///
-/// 规则（W05 §5.3/§12）由 `SalesOrderClosureFacts` 承载；本函数只负责阻断原因
-/// 与说明文案。开票进度永不阻断。
-///
-/// # 参数
-/// * `assessment` - 实体结案资格纯事实
-///
-/// # 返回
-/// 返回结案资格视图。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 不得在本函数内比较应收金额或解释终态；无子账零额比较已由实体拒绝。
+// 生成销售处理阶段视图时，把实体结案事实映射为中文结案资格视图。
+//
+// 规则（W05 §5.3/§12）由 `SalesOrderClosureFacts` 承载；本函数只负责阻断原因
+// 与说明文案。开票进度永不阻断。
+//
+// 调用参数：
+// * `assessment` - 实体结案资格纯事实
+//
+// 业务边界：
+// 不得在本函数内比较应收金额或解释终态；无子账零额比较已由实体拒绝。
 pub(super) fn close_eligibility_view(assessment: SalesOrderClosureAssessment) -> dto::CloseEligibilityView {
     let (blockers, note) = match assessment.terminal {
         Some(SalesOrderClosureTerminal::Closed) => {
@@ -119,22 +109,18 @@ pub(super) fn close_eligibility_view(assessment: SalesOrderClosureAssessment) ->
     }
 }
 
-/// 是否可以发起销售变更单（服务端权威；移植自 close-eligibility.ts::canStartSalesChange）。
-///
-/// 已生效单不可直接编辑；ERP 开单的已生效单可发起销售变更。历史商城来源单据
-/// （卡券同步遗留）、尚在确认/审批中的单据、已有进行中变更单的单据均不可发起。
-///
-/// # 参数
-/// * `origin_system` - 开单来源。
-/// * `stage_code` - `stage_code_label_tone` 给出的阶段码。
-/// * `stage_label` - 同一阶段的中文名，只用于阻断说明。
-/// * `has_active_change_order` - 是否已有进行中的销售变更单。
-///
-/// # 返回
-/// 第一项为是否可以发起。可以发起时第二项为 `None`；否则为阻断说明。
-///
-/// # 错误
-/// 不返回错误。
+// 生成销售单操作资格时，按开单来源、处理阶段和并行变更状态判断能否发起销售变更；已生效单不允许直接编辑。
+//
+// 已生效单不可直接编辑；ERP 开单的已生效单可发起销售变更。历史商城来源单据
+// （卡券同步遗留）、尚在确认/审批中的单据、已有进行中变更单的单据均不可发起。
+//
+// 调用参数：
+// * `origin_system` - 开单来源。
+// * `stage_code` - `stage_code_label_tone` 给出的阶段码。
+// * `stage_label` - 同一阶段的中文名，只用于阻断说明。
+// * `has_active_change_order` - 是否已有进行中的销售变更单。
+//
+// 第一项为是否可以发起。可以发起时第二项为 `None`；否则为阻断说明。
 pub(super) fn compute_can_start_sales_change(
     origin_system: OriginSystem,
     stage_code: &str,

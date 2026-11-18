@@ -41,12 +41,10 @@ pub struct DepositReleaseVerification {
 
 impl SupplierDepositReconciliation {
     /// 核对原资金风险完整发生范围和最后核验时刻已被平衡依据覆盖。
-    /// # 参数
-    /// `since`、`through` 为原资金风险起止，`observed_at` 为最后原始来源或记账观察。
-    /// # 返回
-    /// 所选平衡依据覆盖完整风险且不早于最后观察时成功。
-    /// # 错误
+    /// 结果：所选平衡依据覆盖完整风险且不早于最后观察时成功。
     /// 用旧平衡记录或缩小范围的记录解除较新风险时拒绝。
+    ///
+    /// 输入约定：`since`、`through` 为原资金风险起止，`observed_at` 为最后原始来源或记账观察。
     pub fn ensure_risk_coverage(&self, since: Instant, through: Instant, observed_at: Instant) -> Result<()> {
         if since > through
             || self.covered_from > since
@@ -59,12 +57,10 @@ impl SupplierDepositReconciliation {
     }
 
     /// 核对用于结案或释放的后续平衡记录覆盖原范围。
-    /// # 参数
-    /// `basis` 为同一事务加载的平衡核对，`now` 为服务器时刻。
-    /// # 返回
-    /// 同账号、范围不缩小且余额一致、无未决交易时成功。
-    /// # 错误
+    /// 结果：同账号、范围不缩小且余额一致、无未决交易时成功。
     /// 跨账号、陈旧/未来证据、缩小范围或仍有差异时拒绝。
+    ///
+    /// 输入约定：`basis` 为同一事务加载的平衡核对，`now` 为服务器时刻。
     pub fn ensure_resolution_basis(&self, basis: &Self, now: Instant) -> Result<()> {
         if self.account_id != basis.account_id
             || basis.covered_from > self.covered_from
@@ -83,12 +79,10 @@ impl SupplierDepositReconciliation {
     }
 
     /// 保存不可覆盖的结案回执，同操作只恢复原结果。
-    /// # 参数
-    /// `resolution` 来自已核验身份、文件和资金状态的服务端命令。
-    /// # 返回
-    /// 首次结案返回真，同键同载荷重放返回假。
-    /// # 错误
+    /// 结果：首次结案返回真，同键同载荷重放返回假。
     /// 缺失依据或用新内容覆盖原结案时拒绝。
+    ///
+    /// 输入约定：`resolution` 来自已核验身份、文件和资金状态的服务端命令。
     pub fn resolve(&mut self, resolution: DepositReconciliationResolution) -> Result<bool> {
         for value in [
             &resolution.operation_key,
@@ -122,12 +116,10 @@ impl SupplierDepositReconciliation {
 
 impl FundsEvidenceInbox {
     /// 重核前核对原交易、原流水和关联占用的完整时间范围。
-    /// # 参数
-    /// 已保存平衡核对、由原稳定交易取得的真实流水及可选原占用。
-    /// # 返回
-    /// 原资金风险全部落在平衡依据范围且来源观察不更新时成功。
-    /// # 错误
+    /// 结果：原资金风险全部落在平衡依据范围且来源观察不更新时成功。
     /// 跨账号、原占用缺失、未解释来源、陈旧平衡或缩小范围时拒绝。
+    ///
+    /// 输入约定：已保存平衡核对、由原稳定交易取得的真实流水及可选原占用。
     pub fn ensure_review_coverage(
         &self,
         basis: &SupplierDepositReconciliation,
@@ -167,12 +159,10 @@ fn timestamp(value: u64) -> Result<Instant> {
 
 impl SupplierDepositReservation {
     /// 核对原执行全部净扣款已核销，取消/失败场景须没有剩余资金使用。
-    /// # 参数
-    /// `usages` 为原占用所有使用，`reason` 为已核验订单终态对应的释放原因。
-    /// # 返回
     /// 返回服务器计算的未使用尾款，不接受客户端指定释放金额。
-    /// # 错误
     /// 跨占用、批次不守恒、核销未完成、退款未完成或无尾款时拒绝。
+    ///
+    /// 输入约定：`usages` 为原占用所有使用，`reason` 为已核验订单终态对应的释放原因。
     pub fn verified_release_amount(
         &self,
         usages: &[SupplierDepositUsage],

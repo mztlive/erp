@@ -6,12 +6,11 @@ use super::{WorkItem, WorkItemType};
 use crate::entity::work_item::payment_due_at;
 impl WorkItem {
     /// 当前负责人登记下一次付款跟进日，保留开放责任。
-    /// # 参数
-    /// 跟进日期、业务当天及活动时间；调用方已证明当前任务分配。
-    /// # 返回
     /// 保存跟进时间；当天起在工作台到期筛选中出现。
-    /// # 错误
+    ///
     /// 非付款安排任务、任务非开放或日期早于当天时拒绝。
+    ///
+    /// 跟进日期、业务当天及活动时间；调用方已证明当前任务分配。
     pub fn schedule_payment_follow_up(
         &mut self,
         date: BusinessDate,
@@ -27,17 +26,16 @@ impl WorkItem {
         Ok(())
     }
     /// 全部余额已申请、结清或采购终止时结束本轮安排。
-    /// # 参数
-    /// 系统确认时间。
-    /// # 返回
     /// 记录完成状态及系统处理人。
-    /// # 错误
+    ///
     /// 非开放付款安排任务时拒绝。
+    ///
+    /// 系统确认时间。
     pub fn complete_payment_arrangement(&mut self, now: Instant) -> Result<()> {
         self.ensure_payment_arrangement()?;
         self.complete_open_by_system(now)
     }
-    /// 防止一般任务或审批任务使用付款安排命令。
+    // 执行付款安排专用生命周期前核对任务类型，不能将一般任务或审批任务按付款安排处理。
     fn ensure_payment_arrangement(&self) -> Result<()> {
         self.ensure_generic_mutation()?;
         if self.work_item_type != WorkItemType::PurchasePaymentArrangement
@@ -56,7 +54,7 @@ mod tests {
     use super::super::{WorkItemData, WorkItemStatus, direct_data};
     use super::*;
 
-    /// 使用正式构造器生成采购经办人任务。
+    // 用生产任务构造入口生成采购经办人任务，供付款安排生命周期测试直接使用。
     fn task() -> WorkItem {
         WorkItem::new_with_responsibility_key(
             WorkItemId::new("arrangement"),

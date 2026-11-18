@@ -67,15 +67,11 @@ pub struct SkuSnapshot {
 
 impl SkuSnapshot {
     /// 规范化并校验一份 SKU 快照。
-    ///
-    /// # 参数
-    /// * `self` - 待规范化快照
-    ///
-    /// # 返回
     /// 返回身份、名称、单位与价格均有效的快照。
-    ///
-    /// # 错误
     /// 名称、单位或商品类型为空或超长，或销售可见含税价不大于 0 时拒绝。
+    ///
+    /// 输入约定：
+    /// - `self`：待规范化快照
     pub fn normalize(self) -> Result<Self> {
         let name = normalize_required_text(self.name, "SKU 名称不能为空", 256, "SKU 名称过长")?;
         let unit = normalize_required_text(self.unit, "SKU 单位不能为空", 64, "SKU 单位过长")?;
@@ -103,58 +99,33 @@ impl SkuSnapshot {
     }
 
     /// 返回稳定 SKU 身份字符串。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回 `sku_id` 文本。
-    ///
-    /// # 错误
-    /// 无。
     pub fn sku_id_str(&self) -> &str {
         self.sku_id.as_ref()
     }
 
     /// 构造供生成端口使用的图片 URL 占位。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 有图时返回受控 `asset:` URL；无图返回 `None`。
-    ///
-    /// # 错误
-    /// 无。
+    /// 结果：有图时返回受控 `asset:` URL；无图返回 `None`。
     pub fn image_port_url(&self) -> Option<String> {
         self.image.as_ref().map(|image| format!("asset:{}", image.file_asset_id))
     }
 }
 
 /// 按稳定 SKU 身份升序排列快照。
+/// 结果：原地按 `sku_id` 升序排列。
 ///
-/// # 参数
-/// * `items` - 待排序快照
-///
-/// # 返回
-/// 原地按 `sku_id` 升序排列。
-///
-/// # 错误
-/// 无。
+/// 输入约定：
+/// - `items`：待排序快照
 pub fn sort_by_sku_id(items: &mut [SkuSnapshot]) {
     items.sort_by(|left, right| left.sku_id_str().cmp(right.sku_id_str()));
 }
 
 /// 由成员快照计算套餐售价。
-///
-/// # 参数
-/// * `members` - 有序成员
-///
-/// # 返回
 /// 返回销售可见含税价之和。
-///
-/// # 错误
 /// 成员为空或金额溢出时拒绝。
+///
+/// 输入约定：
+/// - `members`：有序成员
 pub fn package_price(members: &[SkuSnapshot]) -> Result<Amount> {
     if members.is_empty() {
         return Err(Error::from("套餐必须包含成员 SKU"));

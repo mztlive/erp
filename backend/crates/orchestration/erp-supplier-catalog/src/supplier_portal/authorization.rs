@@ -26,12 +26,10 @@ pub struct PortalReadAuthorization {
 }
 impl PortalReadAuthorization {
     /// 装配内部门户申请读权限。
-    /// # 参数
+    ///
     /// 当前数据库与RBAC快照。
-    /// # 返回
+    ///
     /// 返回未缓存对象授权的适配器。
-    /// # 错误
-    /// 无。
     pub fn new(
         db: Database,
         authorization: Arc<AuthorizationService>,
@@ -104,11 +102,11 @@ fn map_read_error(error: Error) -> ReadError {
 }
 
 /// 证明内部账号可读取当前精确申请对应的供应商及供给。
-/// # 参数
+///
 /// 数据库、内部权限来源、真实内部账号、精确申请与调用方执行器。
-/// # 返回
+///
 /// 对象在范围内为真；不存在或禁止为假。
-/// # 错误
+///
 /// 授权漂移、配置或基础设施错误保持失败关闭。
 pub async fn request_readable(
     db: &Database,

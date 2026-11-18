@@ -18,14 +18,7 @@ pub struct CatalogQualificationAdapter {
 impl CatalogQualificationAdapter {
     /// 绑定目录查询，不加载当前目录事实。
     ///
-    /// # 参数
-    /// * `query` - 应用已装配的当前目录资格读取 Port。
-    ///
-    /// # 返回
-    /// 返回未发起查询的适配器。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// `query` 为应用已装配的当前目录资格读取 Port。返回未发起查询的适配器。
     pub fn new(query: Arc<dyn CatalogSupplyQueryPort>) -> Self {
         Self { query }
     }

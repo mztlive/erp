@@ -38,13 +38,9 @@ pub struct ActionFact {
 }
 
 impl ActionFact {
-    /// 仅结果代码的事实（无业务引用、无证据）。
-    ///
-    /// # 参数
-    /// * `outcome` - 本次动作的稳定结果代码
-    ///
-    /// # 返回
-    /// 返回无引用无证据的动作事实。
+    // 仅结果代码的事实（无业务引用、无证据）。返回无引用无证据的动作事实。
+    //
+    // `outcome` 为本次动作的稳定结果代码。
     fn outcome_only(outcome: IntegrationActionOutcome) -> Self {
         Self {
             outcome,
@@ -54,29 +50,19 @@ impl ActionFact {
         }
     }
 
-    /// 携带业务结果引用的事实（无证据）。
-    ///
-    /// # 参数
-    /// * `outcome` - 本次动作的稳定结果代码
-    /// * `reference` - 权威业务结果引用
-    ///
-    /// # 返回
-    /// 返回带业务引用的动作事实。
+    // 携带业务结果引用的事实（无证据）。返回带业务引用的动作事实。
+    //
+    // `outcome` 为本次动作的稳定结果代码。
     fn with_reference(outcome: IntegrationActionOutcome, reference: String) -> Self {
         Self { business_result_reference: Some(reference), ..Self::outcome_only(outcome) }
     }
 
-    /// 携带已验证证据的事实（业务引用取证据集合引用）。
-    ///
-    /// # 参数
-    /// * `outcome` - 本次动作的稳定结果代码
-    /// * `verified` - 已验证证据（保持请求顺序）
-    ///
-    /// # 返回
-    /// 返回带证据引用列表的动作事实。
-    ///
-    /// # 错误
-    /// 证据集合引用语法非法时返回校验错误。
+    // 携带已验证证据的事实（业务引用取证据集合引用）。
+    //
+    // 返回带证据引用列表的动作事实。证据集合引用语法非法时返回校验错误。
+    //
+    // - `outcome`：本次动作的稳定结果代码。
+    // - `verified`：已验证证据（保持请求顺序）。
     fn with_verified(outcome: IntegrationActionOutcome, verified: Vec<VerifiedEvidence>) -> Result<Self> {
         let business_result_reference = Some(verified_reference(&verified)?);
         Ok(Self {
@@ -87,33 +73,14 @@ impl ActionFact {
     }
 }
 
-/// 把已验证证据投影为引用列表（保持请求顺序）。
-///
-/// # 参数
-/// * `verified` - 已验证证据
-///
-/// # 返回
-/// 返回引用列表。
+// 把已验证证据投影为引用列表（保持请求顺序）。
 fn verified_refs(verified: Vec<VerifiedEvidence>) -> Vec<ControlledEvidenceRef> {
     verified.into_iter().map(|evidence| evidence.reference).collect()
 }
 
-/// 执行已绑定正式任务的本域动作，所有读写和证据均使用传入执行器。
-///
-/// # 参数
-/// * `db` - 目标数据库
-/// * `authority` - 权威证据端口
-/// * `command` - 非终结任务动作命令
-/// * `receipt_id` - 命令回执 ID；差异分支用作决定记录主键
-/// * `actor_id` - 当前操作人
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回本域动作事实；`next_subject_version` 为写入后的主题版本。
-///
-/// # 错误
-/// 对象不存在、已终结、版本或开放状态不符、重放前置不满足、证据或补偿校验失败、
-/// 权威端口失败、决定序号溢出或仓储写入失败时返回对应错误。
+/// 正式任务关联由调用方确认后，按错误任务或对账差异执行本域非终结动作。
+/// 用原执行器核验主题版本、开放状态和证据并完成写入；差异以命令回执 ID 作为追加决定的主键。
+/// 返回动作事实及写入后的主题版本，不在本入口写正式任务活动或命令回执。
 pub async fn execute_task_action(
     db: &Database,
     authority: &dyn IntegrationEvidenceAuthority,
@@ -217,7 +184,7 @@ async fn query_action_fact(
 /// 动作证据摘要上限（字节口径；摘要为 ASCII 固定前缀 + 紧凑证据编码，字节 == 字符）。
 const ACTION_SUMMARY_MAX_BYTES: usize = 512;
 
-/// 组装动作摘要；紧凑证据非法或结果超过 512 字节时失败。
+// 组装动作摘要；紧凑证据非法或结果超过 512 字节时失败。
 fn error_action_summary(action: &IntegrationNonTerminalTaskAction, fact: &ActionFact) -> Result<String> {
     let evidence = compact_evidence(&action.evidence_refs)?;
     let summary = format!(
@@ -261,15 +228,10 @@ async fn execute_difference_task_action(
     })
 }
 
-/// 开放态差异决定事实（结果状态 `Open`）。
-///
-/// # 参数
-/// * `action` - 不可变决定记录使用的领域动作
-/// * `fact` - 同动作的本域动作事实（结果与引用透传）
-/// * `evidence_reference` - 决定记录中的已验证证据引用
-///
-/// # 返回
-/// 返回结果状态为开放的差异决定事实。
+// 开放态差异决定事实（结果状态 `Open`）。返回结果状态为开放的差异决定事实。
+//
+// - `fact`：同动作的本域动作事实（结果与引用透传）。
+// - `evidence_reference`：决定记录中的已验证证据引用。
 fn open_direct_fact(
     action: ResolutionAction,
     fact: ActionFact,
@@ -285,17 +247,11 @@ fn open_direct_fact(
     }
 }
 
-/// 待证差异决定事实（结果状态 `EvidencePending`）。
-///
-/// # 参数
-/// * `action` - 不可变决定记录使用的领域动作
-/// * `evidence_reference` - 决定记录中的已验证证据引用
-/// * `outcome` - 本次动作的稳定结果代码
-/// * `business_result_reference` - 权威业务结果的稳定引用
-/// * `verified_evidence` - 已逐条验证的受控证据
-///
-/// # 返回
-/// 返回结果状态为待证的差异决定事实。
+// 待证差异决定事实（结果状态 `EvidencePending`）。返回结果状态为待证的差异决定事实。
+//
+// - `evidence_reference`：决定记录中的已验证证据引用。
+// - `outcome`：本次动作的稳定结果代码。
+// - `business_result_reference`：权威业务结果的稳定引用。
 fn pending_direct_fact(
     action: ResolutionAction,
     evidence_reference: Option<String>,
@@ -313,21 +269,11 @@ fn pending_direct_fact(
     }
 }
 
-/// 按非终结动作种类构造差异决定事实，不在此写入决定记录。
-///
-/// # 参数
-/// * `authority` - 权威证据端口
-/// * `difference` - 对账差异
-/// * `action` - 非终结动作
-/// * `receipt_id` - 查询原结果分支写入的命令回执 ID
-/// * `actor_id` - 当前操作人
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回尚未持久化的 `DirectFact`。
-///
-/// # 错误
-/// 权威查询、重放、归集或证据验证失败，补偿证据缺失，或回执引用 grammar 非法时返回对应错误。
+// 按非终结动作种类构造差异决定事实，不在此写入决定记录。
+//
+// 返回尚未持久化的 `DirectFact`。权威查询、重放、归集或证据验证失败，补偿证据缺失，或回执引用 grammar 非法时返回对应错误。
+//
+// 沿用调用方的执行器，不另开事务。
 pub(super) async fn difference_action_fact(
     authority: &dyn IntegrationEvidenceAuthority,
     difference: &ReconciliationDifference,
@@ -356,7 +302,7 @@ pub(super) async fn difference_action_fact(
     }
 }
 
-/// 差异查询原结果分支（门禁 50 行内拆分）。
+// 执行差异的“查询原结果”动作：读取权威结果，用本次命令回执作为决定证据，差异仍保持开放。
 async fn difference_query_fact(
     authority: &dyn IntegrationEvidenceAuthority,
     subject: &EvidenceSubject,
@@ -368,7 +314,7 @@ async fn difference_query_fact(
     Ok(open_direct_fact(ResolutionAction::QueryOriginalResult, fact, evidence_reference))
 }
 
-/// 差异补证分支（门禁 50 行内拆分）。
+// 在差异补证时逐条重验提交的引用并生成可持久化证据；本次决定保持待证，不终结差异。
 async fn difference_add_evidence_fact(
     authority: &dyn IntegrationEvidenceAuthority,
     subject: &EvidenceSubject,
@@ -388,7 +334,7 @@ async fn difference_add_evidence_fact(
     ))
 }
 
-/// 差异重放分支（门禁 50 行内拆分）。
+// 沿原差异证据上下文请求权威端口重放；返回受理引用，不把重放受理视为问题已解决。
 async fn difference_replay_fact(
     authority: &dyn IntegrationEvidenceAuthority,
     subject: &EvidenceSubject,
@@ -402,7 +348,7 @@ async fn difference_replay_fact(
     ))
 }
 
-/// 差异重新归集分支（门禁 50 行内拆分）。
+// 由权威端口核验已归集结果并补齐可见证据，供差异追加待证决定。
 async fn difference_reattribute_fact(
     authority: &dyn IntegrationEvidenceAuthority,
     subject: &EvidenceSubject,
@@ -418,7 +364,7 @@ async fn difference_reattribute_fact(
     ))
 }
 
-/// 差异关联补偿分支（门禁 50 行内拆分）。
+// 关联差异补偿时，先要求补偿结果证据，再逐条交权威端口重验；可记录关联，但不在此终结差异。
 async fn difference_link_compensation_fact(
     authority: &dyn IntegrationEvidenceAuthority,
     subject: &EvidenceSubject,
@@ -439,16 +385,9 @@ async fn difference_link_compensation_fact(
     ))
 }
 
-/// 关联补偿必须携带补偿结果证据（两处决定入口共用，见 [`super::direct`]）。
-///
-/// # 参数
-/// * `refs` - 客户端证据引用
-///
-/// # 返回
-/// 至少一条为 `CompensationResult` 时成功。
-///
-/// # 错误
-/// 没有任何补偿结果证据时返回 `ValidationError`。
+// 关联补偿必须携带补偿结果证据（两处决定入口共用，见 [`super::direct`]）。
+//
+// 至少一条为 `CompensationResult` 时成功。没有任何补偿结果证据时返回 `ValidationError`。
 pub(super) fn ensure_compensation_evidence(refs: &[ControlledEvidenceRef]) -> Result<()> {
     if refs.iter().any(|evidence| evidence.kind == ControlledEvidenceKind::CompensationResult) {
         Ok(())
@@ -459,17 +398,9 @@ pub(super) fn ensure_compensation_evidence(refs: &[ControlledEvidenceRef]) -> Re
 
 /// 由收据 ID 构造 `integration_command_receipt:id` 证据记录引用。
 ///
-/// # 参数
-/// * `receipt_id` - 命令收据 ID
-///
-/// # 返回
-/// 返回精确 `type:id` 编码。
-///
-/// # 错误
-/// 收据 ID 不符合证据记录 grammar 时返回校验错误。
-///
-/// # 约束
 /// 语法由 [`EvidenceRecordRef`] 独占，禁止 `format!` 拼接。
+///
+/// 返回精确 `type:id` 编码。收据 ID 不符合证据记录 grammar 时返回校验错误。
 pub fn command_receipt_reference(receipt_id: &str) -> Result<String> {
     EvidenceRecordRef::new("integration_command_receipt", receipt_id)
         .map(|reference| reference.to_string())
@@ -477,16 +408,6 @@ pub fn command_receipt_reference(receipt_id: &str) -> Result<String> {
 }
 
 /// 推导单次动作后的下一开放动作代码（推导规则归领域，此处只做代码映射）。
-///
-/// # 参数
-/// * `item_type` - 业务项类型
-/// * `outcome` - 本次动作结果
-///
-/// # 返回
-/// 返回下一开放动作代码。
-///
-/// # 错误
-/// 不返回错误。
 pub fn next_allowed_actions(
     item_type: IntegrationItemType,
     outcome: IntegrationActionOutcome,
@@ -503,19 +424,11 @@ pub fn next_allowed_actions(
     next_actions_after_outcome(subject, projected).iter().map(|action| action.as_str().to_string()).collect()
 }
 
-/// 将动作证据引用规范化为可写入摘要的紧凑集合。
-///
-/// # 参数
-/// * `refs` - 客户端提交的受控证据引用
-///
-/// # 返回
-/// 空集合返回 `Ok(None)`；否则返回排序去重后的紧凑编码。
-///
-/// # 错误
-/// 记录 ID 非法或编码超过 512 字节时返回校验错误。
-///
-/// # 约束
-/// grammar、排序、去重与长度由 [`CompactEvidenceSet`] 独占。
+// 将动作证据引用规范化为可写入摘要的紧凑集合。
+//
+// grammar、排序、去重与长度由 [`CompactEvidenceSet`] 独占。
+//
+// 空集合返回 `Ok(None)`；否则返回排序去重后的紧凑编码。记录 ID 非法或编码超过 512 字节时返回校验错误。
 fn compact_evidence(refs: &[ControlledEvidenceRef]) -> Result<Option<String>> {
     CompactEvidenceSet::try_from_pairs(
         refs.iter().map(|evidence| (evidence.kind.as_str(), evidence.record_id.as_str())),

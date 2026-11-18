@@ -15,14 +15,9 @@ use persistence_core::Executor;
 
 use crate::{Error, Result};
 
-/// 从审批回执精确投影库存领域消费的命令身份。
-/// # 参数
-/// * `receipt` - 同事务写入的原审批命令回执。
-/// # 返回
-/// 返回库存领域验证回放所需的完整命令身份。
-///
-/// # 错误
-/// 不返回错误。
+// 从审批回执精确投影库存领域消费的命令身份。
+//
+// `receipt` 为同事务写入的原审批命令回执。返回库存领域验证回放所需的完整命令身份。
 pub(super) fn cancellation_identity(receipt: &ApprovalCommandReceipt) -> CancellationCommandIdentity {
     CancellationCommandIdentity {
         receipt_id: receipt.base.id.clone(),
@@ -32,15 +27,11 @@ pub(super) fn cancellation_identity(receipt: &ApprovalCommandReceipt) -> Cancell
     }
 }
 
-/// 同事务读取不可变撤回事实，缺失事实不得退回审计恢复。
-/// # 参数
-/// * `db` - 组合层数据库句柄。
-/// * `instance` - 原已取消审批实例。
-/// * `executor` - 当前事务的唯一执行器。
-/// # 返回
-/// 返回已证明原执行和全部历史任务的库存撤回事实。
-/// # 错误
-/// 事实缺失、终态不匹配或仓储读取失败时拒绝回放。
+// 同事务读取不可变撤回事实，缺失事实不得退回审计恢复。
+//
+// `db` 为组合层数据库句柄；`instance` 为原已取消审批实例；`executor` 为当前事务的唯一执行器。返回已证明原执行和全部历史任务的库存撤回事实。
+//
+// 事实缺失、终态不匹配或仓储读取失败时拒绝回放。
 pub(super) async fn cancellation_fact(
     db: &Database,
     instance: &ApprovalProcessInstance,
@@ -64,7 +55,7 @@ pub(super) async fn cancellation_fact(
     Ok(fact)
 }
 
-/// 证明保存的取消事实与实例、执行和原任务均为同一次提交。
+// 证明保存的取消事实与实例、执行和原任务均为同一次提交。
 fn ensure_terminal(
     fact: &StockAdjustmentCancellation,
     instance: &ApprovalProcessInstance,
@@ -99,7 +90,7 @@ fn ensure_terminal(
     Ok(())
 }
 
-/// 开放任务关闭后版本增一；阻塞前已经关闭的任务必须保持原版本。
+// 开放任务关闭后版本增一；阻塞前已经关闭的任务必须保持原版本。
 fn tasks_match(fact: &StockAdjustmentCancellation, tasks: &[WorkItem]) -> bool {
     let data = &fact.data;
     let mut actual = tasks
@@ -135,13 +126,9 @@ fn tasks_match(fact: &StockAdjustmentCancellation, tasks: &[WorkItem]) -> bool {
     }
 }
 
-/// 原任务关闭时版本增一；已关闭的阻塞历史任务保持原版本。
-/// # 参数
-/// * `tasks` - 本次取消执行关联的全部历史任务。
-/// # 返回
-/// 返回按任务身份排序的预期持久化版本。
-/// # 错误
-/// 开放任务版本不能递增时拒绝构造事实。
+// 原任务关闭时版本增一；已关闭的阻塞历史任务保持原版本。
+//
+// `tasks` 为本次取消执行关联的全部历史任务。返回按任务身份排序的预期持久化版本。开放任务版本不能递增时拒绝构造事实。
 pub(super) fn historical_task_facts(tasks: &[WorkItem]) -> Result<Vec<StockCancellationTask>> {
     let mut facts = tasks
         .iter()
@@ -158,14 +145,11 @@ pub(super) fn historical_task_facts(tasks: &[WorkItem]) -> Result<Vec<StockCance
     Ok(facts)
 }
 
-/// 原独立审批回执和库存事实必须指向相同命令。
-/// # 参数
-/// * `fact` - 库存领域拥有的撤回事实。
-/// * `receipt` - 同执行器读取的原独立审批回执。
-/// # 返回
-/// 两者命令身份完全一致时返回空值。
-/// # 错误
-/// 回执已删除或命令类型、结果、身份不匹配时拒绝回放。
+// 原独立审批回执和库存事实必须指向相同命令。
+//
+// `fact` 为库存领域拥有的撤回事实；`receipt` 为同执行器读取的原独立审批回执。两者命令身份完全一致时返回空值。
+//
+// 回执已删除或命令类型、结果、身份不匹配时拒绝回放。
 pub(super) fn ensure_receipt(
     fact: &StockAdjustmentCancellation,
     receipt: &ApprovalCommandReceipt,
@@ -180,7 +164,7 @@ pub(super) fn ensure_receipt(
     Ok(())
 }
 
-/// 回执或取消终态不一致的稳定冲突。
+// 回执或取消终态不一致的稳定冲突。
 fn invalid_terminal() -> Error {
     Error::ConflictError("原撤回记录与库存调整单当前的审批状态不符，请核对撤回结果".into())
 }

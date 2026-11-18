@@ -18,7 +18,7 @@ use super::{AdoptionResolution, SupplierCatalogAdoptionProcess};
 use crate::{Error, Result};
 
 impl SupplierCatalogAdoptionProcess {
-    /// 从完整冻结范围提取真实已有 SKU 的公司商品依据，不接受外部目标参数。
+    // 从完整冻结范围提取真实已有 SKU 的公司商品依据，不接受外部目标参数。
     pub(super) async fn preview_group_anchor_candidates(
         &self,
         rows: &[CatalogAdoptionBatchItem],
@@ -58,7 +58,7 @@ impl SupplierCatalogAdoptionProcess {
         Ok(anchors)
     }
 
-    /// 每个匹配候选在短快照中读取资格与目标版本；续租在快照外进行。
+    // 每个匹配候选在短快照中读取资格与目标版本；续租在快照外进行。
     async fn anchor_candidate(
         &self,
         row: &CatalogAdoptionBatchItem,
@@ -77,7 +77,7 @@ impl SupplierCatalogAdoptionProcess {
         .await
     }
 
-    /// 将经当前事务重验的同源依据传给正常自动匹配，不绕过身份或授权。
+    // 将经当前事务重验的同源依据传给正常自动匹配，不绕过身份或授权。
     pub(super) async fn resolve_batch_item(
         &self,
         item: &SupplierCatalogItem,
@@ -154,7 +154,7 @@ impl SupplierCatalogAdoptionProcess {
         })
     }
 
-    /// 执行已确认的批次行；依据规格即使未勾选执行也必须在真正写事务内重验。
+    // 执行已确认的批次行；依据规格即使未勾选执行也必须在真正写事务内重验。
     pub(super) async fn confirm_batch_row(
         &self,
         batch: &CatalogAdoptionBatch,

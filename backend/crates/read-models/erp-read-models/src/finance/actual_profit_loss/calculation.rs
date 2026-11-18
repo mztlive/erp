@@ -22,10 +22,7 @@ pub(super) struct OrderResult {
     pub attribution_path: Vec<erp_sales::entity::sales_order::AttributionOrgNode>,
 }
 impl OrderResult {
-    /// 把实际金额与完整性证据同时投影，完整性由全行实际供货成本和履约完成决定。
-    ///
-    /// # 参数
-    /// 无。
+    /// 组装实际盈亏报表时，把实际金额与完整性证据同时投影，完整性由全行实际供货成本和履约完成决定。
     ///
     /// # 返回
     /// 无返回值；写入覆盖状态与汇总金额。完整时写入利润，否则利润为空。
@@ -52,45 +49,35 @@ impl OrderResult {
         Ok(())
     }
 }
-/// 金额严格累计；异常大金额整体失败。
-///
-/// # 参数
-/// * `target` - 被累加的金额。
-/// * `amount` - 本次增加额。
-///
-/// # 返回
-/// 无返回值；成功时 `target` 已加上 `amount`。
-///
-/// # 错误
-/// 累加超出范围时返回 `ValidationError`。
+// 处理实际盈亏报表时，金额严格累计；异常大金额整体失败。
+//
+// 调用参数：
+// * `target` - 被累加的金额。
+// * `amount` - 本次增加额。
+//
+// 无返回值；成功时 `target` 已加上 `amount`。
+//
+// 累加超出范围时返回 `ValidationError`。
 pub(super) fn add(target: &mut Decimal, amount: Decimal) -> Result<()> {
     *target = target.checked_add(amount).ok_or_else(|| Error::ValidationError("统计金额超出范围".into()))?;
     Ok(())
 }
-/// 金额保留分，财务值已由正式行完成舍入。
-///
-/// # 参数
-/// * `value` - 已按分舍入的金额。
-///
-/// # 返回
-/// 返回保留两位小数的字符串。
-///
-/// # 错误
-/// 不返回错误。
+// 处理实际盈亏报表时，金额保留分，财务值已由正式行完成舍入。
+//
+// 调用参数：
+// * `value` - 已按分舍入的金额。
+//
+// 返回保留两位小数的字符串。
 pub(super) fn money(value: Decimal) -> String {
     format!("{value:.2}")
 }
-/// 比率按百分数展示，零分母不伪造比率。
-///
-/// # 参数
-/// * `numerator` - 分子。
-/// * `denominator` - 分母。
-///
-/// # 返回
-/// 返回百分数字符串；分母不大于零或乘除超出范围时返回 `None`。
-///
-/// # 错误
-/// 不返回错误。
+// 处理实际盈亏报表时，比率按百分数展示，零分母不伪造比率。
+//
+// 调用参数：
+// * `numerator` - 分子。
+// * `denominator` - 分母。
+//
+// 返回百分数字符串；分母不大于零或乘除超出范围时返回 `None`。
 pub(super) fn percent(numerator: Decimal, denominator: Decimal) -> Option<String> {
     if denominator <= Decimal::ZERO {
         return None;
@@ -100,19 +87,15 @@ pub(super) fn percent(numerator: Decimal, denominator: Decimal) -> Option<String
         .and_then(|n| n.checked_mul(Decimal::from(100)))
         .map(|n| format!("{n:.2}%"))
 }
-/// 汇总字段只承载服务端计算结果，零收入利润仍可存在但利润率不可用。
-///
-/// # 参数
-/// * `revenue` - 不含税收入。
-/// * `costs` - 已归集成本。
-/// * `profit` - 完整覆盖时的利润；不完整时为 `None`。
-/// * `profit_revenue` - 计算利润率的收入分母。
-///
-/// # 返回
-/// 返回汇总字段；利润缺失或收入不大于零时不给出利润率。
-///
-/// # 错误
-/// 不返回错误。
+// 计算实际盈亏报表金额时，汇总字段只承载服务端计算结果，零收入利润仍可存在但利润率不可用。
+//
+// 调用参数：
+// * `revenue` - 不含税收入。
+// * `costs` - 已归集成本。
+// * `profit` - 完整覆盖时的利润；不完整时为 `None`。
+// * `profit_revenue` - 计算利润率的收入分母。
+//
+// 返回汇总字段；利润缺失或收入不大于零时不给出利润率。
 pub(super) fn totals(
     revenue: Decimal,
     costs: &ProfitLossAmounts,
@@ -142,7 +125,7 @@ struct SalesIndex<'a> {
     scenarios: HashMap<&'a str, String>,
 }
 impl<'a> SalesIndex<'a> {
-    /// 各集合只扫描一次；同一正式版本的所有行保持聚合。
+    // 装配实际盈亏报表时，各集合只扫描一次；同一正式版本的所有行保持聚合。
     fn new(source: &'a Sources) -> Self {
         let revisions = source.revisions.iter().map(|r| (r.base.id.as_str(), r)).collect();
         let mut lines: HashMap<&str, Vec<_>> = HashMap::new();
@@ -161,14 +144,14 @@ impl<'a> SalesIndex<'a> {
             .collect();
         Self { revisions, lines, scenarios }
     }
-    /// 使用当前正式版本的明细；缺失时由金额及覆盖校验拒绝可信利润。
+    // 使用当前正式版本的明细；缺失时由金额及覆盖校验不接受可信利润。
     fn lines(
         &self,
         order: &ProfitLossOrder,
     ) -> &[&'a erp_sales::entity::sales_order::SalesOrderRevisionLine] {
         self.lines.get(order.current_revision_id.as_deref().unwrap_or("")).map(Vec::as_slice).unwrap_or(&[])
     }
-    /// 当前版本必须属于该销售单；禁止回退到其他订单或草稿。
+    // 生成实际盈亏报表展示时，当前版本必须属于该销售单；禁止回退到其他订单或草稿。
     fn result(&self, order: &ProfitLossOrder, drill: bool) -> Result<OrderResult> {
         let revision = self
             .revisions
@@ -200,7 +183,7 @@ impl<'a> SalesIndex<'a> {
         })
     }
 }
-/// 订单展示身份只来自正式客户快照和销售单号。
+// 生成实际盈亏报表视图时，订单展示身份只来自正式客户快照和销售单号。
 fn order_row(
     order: &ProfitLossOrder,
     customer: &str,
@@ -224,18 +207,16 @@ pub(super) const EXTRA_COST_PENDING: &str = "EXTRA_COST_PENDING";
 /// 存在运费另计尚未追加物流费用采购或标记供应商不收运费的采购商品。
 pub(super) const FREIGHT_PENDING: &str = "FREIGHT_PENDING";
 
-/// 按订单和版本索引归集，数据库读取次数及内存遍历不随单据数平方增长。
-///
-/// # 参数
-/// * `source` - 同一快照中的销售与成本事实。
-/// * `as_of` - 查询时点的 UTC 秒；更晚发生的成本不计入。
-/// * `drill` - 为真时行上保留成本下钻动作。
-///
-/// # 返回
-/// 返回每张授权销售单的经营结果。
-///
-/// # 错误
-/// 正式版本缺失或不属于该单、表头与明细收入不一致、缺少生效日期、金额超出范围，或覆盖与利润计算失败时返回对应错误。
+// 依据订单和版本索引归集，数据库读取次数及内存遍历不随单据数平方增长。
+//
+// 调用参数：
+// * `source` - 同一快照中的销售与成本事实。
+// * `as_of` - 查询时点的 UTC 秒；更晚发生的成本不计入。
+// * `drill` - 为真时行上保留成本下钻动作。
+//
+// 返回每张授权销售单的经营结果。
+//
+// 正式版本缺失或不属于该单、表头与明细收入不一致、缺少生效日期、金额超出范围，或覆盖与利润计算失败时返回对应错误。
 pub(super) fn calculate(source: &Sources, as_of: i64, drill: bool) -> Result<Vec<OrderResult>> {
     let sales = SalesIndex::new(source);
     let entries: HashMap<_, _> = source.entries.iter().map(|e| (e.base.id.as_str(), e)).collect();
@@ -278,7 +259,7 @@ pub(super) fn calculate(source: &Sources, as_of: i64, drill: bool) -> Result<Vec
         })
         .collect()
 }
-/// 只消费非卡券范围的分配金额；未来发生的事实不进入查询时点。
+// 组装实际盈亏报表时，只消费非卡券范围的分配金额；未来发生的事实不进入查询时点。
 fn apply_cost(
     result: &mut OrderResult,
     allocation: &CostAllocation,
@@ -302,7 +283,7 @@ fn apply_cost(
     }
     record_actual_cost(result, allocation, entry, amount, covered)
 }
-/// 保存已发生费用的来源及净费用构成，冲减只反向一次。
+// 生成实际盈亏报表展示时，保存已发生费用的来源及净费用构成，冲减只反向一次。
 fn record_actual_cost(
     result: &mut OrderResult,
     allocation: &CostAllocation,
@@ -321,7 +302,7 @@ fn record_actual_cost(
     }
     Ok(())
 }
-/// 原始费用来源按稳定身份去重；发生日期只读取正式事实。
+// 生成实际盈亏报表展示时，原始费用来源按稳定身份去重；发生日期只读取正式事实。
 fn record_cost_source(row: &mut ProfitLossRow, entry: &CostEntry) {
     if !row.cost_entry_ids.contains(&entry.base.id) {
         row.cost_entry_ids.push(entry.base.id.clone());
@@ -331,7 +312,7 @@ fn record_cost_source(row: &mut ProfitLossRow, entry: &CostEntry) {
         row.latest_cost_occurred_at = Some(time);
     }
 }
-/// 覆盖率为整单收入覆盖；部分交付和缺任何销售行供货成本均不得宣称整单利润。
+// 核对实际盈亏报表边界时，覆盖率为整单收入覆盖；部分交付和缺任何销售行供货成本均不得宣称整单利润。
 fn check_coverage(
     result: &mut OrderResult,
     lines: &[&erp_sales::entity::sales_order::SalesOrderRevisionLine],
@@ -349,7 +330,7 @@ fn check_coverage(
     }
     Ok(())
 }
-/// 相同缺口仅展示一次。
+// 处理实际盈亏报表时，相同缺口仅展示一次。
 fn blocker(result: &mut OrderResult, code: &str, message: &str) {
     if !result.row.coverage_blockers.iter().any(|b| b.code == code) {
         result.row.coverage_blockers.push(CoverageBlocker { code: code.into(), message: message.into() });

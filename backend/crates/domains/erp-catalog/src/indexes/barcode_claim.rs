@@ -7,13 +7,9 @@ use persistence_core::Result;
 
 use crate::repository::CatalogExt;
 
-/// 注册条码身份争用的唯一索引。
-/// # 参数
-/// `db` 为目标数据库。
-/// # 返回
-/// 占用事实的稳定主键及条码唯一约束建立。
-/// # 错误
-/// 已有占用冲突或数据库索引登记错误。
+// 注册条码身份争用的唯一索引。
+//
+// 占用事实的稳定主键及条码唯一约束建立。已有占用冲突或数据库索引登记错误。
 pub(super) async fn ensure(db: &Database) -> Result<()> {
     let indexes = [
         IndexModel::builder()

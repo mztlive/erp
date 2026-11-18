@@ -11,16 +11,9 @@ use crate::service::purchase_order::PurchaseOrderService;
 use crate::{Error, Result};
 
 impl PurchaseOrderService {
-    /// 恢复原采购变更目标，已提交过的草稿优先采用最后冻结提交。
-    ///
-    /// # 参数
-    /// * `change` - 同执行器加载的变更单。
-    /// * `order` - 已证明完整更新、提交资格的来源采购单。
-    /// * `executor` - 调用方授权快照使用的执行器。
-    /// # 返回
-    /// 返回可原单重提的完整付款条件和全部行。
-    /// # 错误
-    /// 非草稿、基准失效、冻结提交缺失或来源内容不一致时拒绝。
+    /// 在原授权快照内恢复可编辑的采购变更目标。
+    /// 没有当前目标时读取冻结的基准版本；否则用当前提交指针恢复已保存的编辑副本或冻结提交，保留付款条件及明细。
+    /// 仅接受草稿或已驳回；基准失效、当前目标缺失或来源错配时拒绝。
     pub async fn change_draft(
         &self,
         change: &PurchaseChangeOrder,
@@ -42,7 +35,8 @@ impl PurchaseOrderService {
         Ok(view.with_base(&revision, &base_lines))
     }
 
-    /// 恢复当前冻结目标；尚未提交时恢复基准版本。
+    // 按当前提交指针恢复已保存的编辑副本或冻结目标；只有未设置该指针时才从基准版本初始化。
+    // 指针已设置但提交缺失时拒绝，不回退到基准。
     async fn change_target_view(
         &self,
         change: &PurchaseChangeOrder,

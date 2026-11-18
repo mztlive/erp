@@ -12,14 +12,13 @@ use crate::entity::supplier_deposit::{DepositAccountIdentity, DepositReservation
 use crate::{Error as FinanceError, Result as FinanceResult};
 
 impl PurchasePaymentRequest {
-    /// 核对原预存款占用对应的批准主体、提交版本及采购修订。
-    /// # 参数
-    /// * `account_id` / `identity` - 当前资金账户及真实归属。
-    /// * `basis` - 原执行组冻结的付款与采购依据。
-    /// # 返回
-    /// 冻结依据与当前申请一致时成功；已付申请仍可核验原执行。
-    /// # 错误
-    /// 账户依据缺失、申请关闭或冻结归属变化时保留原分类与首错。
+    // 预存款执行前核对占用与原批准主体、提交版本及采购修订，禁止把已批额度转给不同账户或来源。
+    // 结果：冻结依据与当前申请一致时成功；已付申请仍可核验原执行。
+    // 失败条件：账户依据缺失、申请关闭或冻结归属变化时保留原分类与首错。
+    //
+    // 输入约定：
+    // - `account_id` / `identity`：当前资金账户及真实归属。
+    // - `basis`：原执行组冻结的付款与采购依据。
     pub(crate) fn ensure_deposit_reservation(
         &self,
         account_id: &str,
@@ -61,13 +60,12 @@ impl PurchasePaymentRequest {
         Ok(())
     }
 
-    /// 返回未被预存款占用且未支付的批准额度。
-    /// # 参数
-    /// * `account_id` - 原申请采购应付身份。
-    /// # 返回
+    /// 准备银行付款、留抵或新预存款占用时，从逐采购剩余额度中扣除已有预存款占用，得出可执行金额。
     /// 返回银行、留抵及新占用共同适用的可执行额度。
-    /// # 错误
     /// 不在申请内、投影异常或金额溢出时拒绝。
+    ///
+    /// 输入约定：
+    /// - `account_id`：原申请采购应付身份。
     pub fn available_to_execute(&self, account_id: &str) -> Result<Amount> {
         let line = self
             .lines
@@ -85,16 +83,15 @@ impl PurchasePaymentRequest {
         Ok(line.remaining().checked_sub(locked))
     }
 
-    /// 在原逐单审批范围内锁定执行组额度。
-    /// # 参数
-    /// * `reservation_id` - 稳定资金占用身份。
-    /// * `account_id` - 原申请采购应付。
-    /// * `version` - 冻结审批提交版本。
-    /// * `amount` - 全额预算。
-    /// # 返回
-    /// 成功增加专属占用，净已付不变。
-    /// # 错误
+    /// 已批准通过预存款执行时锁定指定采购的全额预算，登记独立占用但不增加已付款。
+    /// 结果：成功增加专属占用，净已付不变。
     /// 未批准、版本漂移、重复占用或不足时拒绝。
+    ///
+    /// 输入约定：
+    /// - `reservation_id`：稳定资金占用身份。
+    /// - `account_id`：原申请采购应付。
+    /// - `version`：冻结审批提交版本。
+    /// - `amount`：全额预算。
     pub fn reserve_deposit(
         &mut self,
         reservation_id: &str,
@@ -126,14 +123,13 @@ impl PurchasePaymentRequest {
         Ok(())
     }
 
-    /// 释放明确无外部风险的原执行额度。
-    /// # 参数
-    /// * `reservation_id` - 原资金占用身份。
-    /// * `amount` - 经资金服务证明可释放的金额。
-    /// # 返回
-    /// 该金额可再次经正式执行使用。
-    /// # 错误
+    /// 处理确认可解除风险的预存款执行时释放原占用额度，不把释放误计为已付款。
+    /// 结果：该金额可再次经正式执行使用。
     /// 身份缺失、非正或超出原占用时拒绝。
+    ///
+    /// 输入约定：
+    /// - `reservation_id`：原资金占用身份。
+    /// - `amount`：经资金服务证明可释放的金额。
     pub fn release_deposit(&mut self, reservation_id: &str, amount: Amount) -> Result<()> {
         positive(amount)?;
         let item = self
@@ -152,14 +148,13 @@ impl PurchasePaymentRequest {
         Ok(())
     }
 
-    /// 将真实扣款对应的额度从占用切换为正式已付。
-    /// # 参数
-    /// * `reservation_id` - 原执行组占用。
-    /// * `amount` - 与本次正式核销完全相同的金额。
-    /// # 返回
-    /// 原占用同额减少、净已付增加，调用方须原子写入核销。
-    /// # 错误
-    /// 原占用不足或申请失效时拒绝，内存实体保持原值。
+    /// 真实扣款核销时，将对应逐采购额度从原占用计入正式已付，而不重新申请批准额度。
+    /// 结果：原占用同额减少、净已付增加，调用方须原子写入核销。
+    /// 失败条件：原占用不足或申请失效时拒绝，内存实体保持原值。
+    ///
+    /// 输入约定：
+    /// - `reservation_id`：原执行组占用。
+    /// - `amount`：与本次正式核销完全相同的金额。
     pub fn settle_deposit(&mut self, reservation_id: &str, amount: Amount) -> Result<()> {
         if !matches!(self.data.execution_method, PaymentRequestExecutionMethod::SupplierDeposit { .. }) {
             return Err(Error::from("原付款申请未批准预存款执行方式"));

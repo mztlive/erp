@@ -54,25 +54,13 @@ impl_audit_context!(PreparedInventoryAudit);
 
 impl PreparedInventoryAudit {
     /// 从已校验的审计实体快照抄录库存侧字段。
-    ///
     /// 不读取账号，名称快照与请求关联留空，事件序号取 `NonZeroU32::MIN`。
-    ///
-    /// # 参数
-    /// * `base` - 已生成的持久化元数据。
-    /// * `actor_id` - 操作者账号标识。
-    /// * `actor_account` - 操作者登录账号。
-    /// * `actor_type` - 操作者账号类型。
-    /// * `action` - 业务动作名称。
-    /// * `resource_type` - 资源类型。
-    /// * `resource_id` - 资源标识；可空。
-    /// * `success` - 是否成功。
-    /// * `message` - 可选业务说明。
-    ///
-    /// # 返回
     /// 返回尚未携带名称快照和请求关联的审计事实。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// `base` 为已生成的持久化元数据；`actor_id` 为操作者账号标识。
+    /// `actor_account` 为操作者登录账号；`actor_type` 为操作者账号类型。
+    /// `action` 为业务动作名称；`resource_type` 为资源类型。
+    /// `resource_id` 为资源标识；可空；`success` 为是否成功。
+    /// `message` 为可选业务说明。
     #[allow(clippy::too_many_arguments)]
     pub fn from_validated(
         base: &BaseModel,
@@ -106,18 +94,10 @@ impl PreparedInventoryAudit {
     }
 
     /// 由已认证操作者构造一条成功的资源审计。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证的审计操作者；消耗后拆出账号字段。
-    /// * `action` - 业务动作名称。
-    /// * `resource_type` - 资源类型。
-    /// * `resource_id` - 资源标识，去空白后不得为空。
-    /// * `message` - 可选业务说明。
-    ///
-    /// # 返回
     /// 返回 `success` 为真、并带上操作者名称快照与请求关联的审计事实。
-    ///
-    /// # 错误
+    /// `actor` 为已认证的审计操作者；消耗后拆出账号字段；`action` 为业务动作名称。
+    /// `resource_type` 为资源类型；`resource_id` 为资源标识，去空白后不得为空。
+    /// `message` 为可选业务说明。
     /// `resource_id` 去空白后为空时返回 `Error::ValidationError`。
     pub fn resource(
         actor: AuditActor,
@@ -152,17 +132,8 @@ impl PreparedInventoryAudit {
 #[async_trait]
 pub trait InventoryAuditPort: Send + Sync {
     /// 在事务开始前校验并准备一条成功的资源审计。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证的审计操作者。
-    /// * `action` - 业务动作名称。
-    /// * `resource_type` - 资源类型。
-    /// * `resource_id` - 资源标识。
-    ///
-    /// # 返回
     /// 返回可在同一执行器上持久化的审计事实。
-    ///
-    /// # 错误
+    /// `action` 为业务动作名称，`resource_type` 为资源类型，`resource_id` 为资源标识。
     /// 准备失败时返回对应错误。
     fn resource_log(
         &self,
@@ -173,16 +144,9 @@ pub trait InventoryAuditPort: Send + Sync {
     ) -> Result<PreparedInventoryAudit>;
 
     /// 把先前准备好的审计写到调用方选择的执行器上。
-    ///
-    /// # 参数
-    /// * `audit` - 已准备的审计事实。
-    /// * `executor` - 调用方选择的数据访问执行器。
-    ///
-    /// # 返回
     /// 持久化完成。
-    ///
-    /// # 错误
-    /// 写入失败时返回对应错误。
+    /// `audit` 为已准备的审计事实；沿用调用方执行器 `executor`。
+    /// 传播写入错误。
     async fn persist(&self, audit: &PreparedInventoryAudit, executor: &mut dyn Executor) -> Result<()>;
 }
 

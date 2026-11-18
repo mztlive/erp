@@ -16,13 +16,8 @@ pub struct ApprovalParticipant {
 }
 
 impl ApprovalParticipant {
-    /// 构造参与人快照。
-    /// # 参数
-    /// `participant_id` 为身份，`name` 为显示名。
-    /// # 返回
-    /// 返回规范化快照。
-    /// # 错误
-    /// 显示名为空或超长时失败。
+    /// 把调用方已确定的审批人和显示名冻结为节点参与人快照，供后续执行展示，不再按实时账号名回查。
+    /// 显示名去除首尾空白后不得为空，且不能超过 `LABEL_MAX_LEN` 个 UTF-8 字节。
     pub fn new(participant_id: ParticipantId, name: impl Into<String>) -> ModelResult<Self> {
         Ok(Self {
             participant_id,

@@ -84,18 +84,11 @@ struct ExpectedAdapterContracts {
     mismatch_message: &'static str,
 }
 
-/// 由政策规格填充共用 Adapter 字段，差异部分只取期望声明。
-///
-/// # 参数
-/// * `spec` - 政策登记的适配器规格
-/// * `subject_ref_builder` - 主体引用构造器标识
-/// * `expected` - 随单据种类变化的期望登记值
-///
-/// # 返回
-/// 返回已校验完整性的共用适配器。
-///
-/// # 错误
-/// 共用字段或期望字段与合同签署值不一致时返回部署不变量错误。
+// 由政策规格填充共用 Adapter 字段，差异部分只取期望声明。
+//
+// `spec` 为政策登记的适配器规格；`subject_ref_builder` 为主体引用构造器标识；`expected` 为随单据种类变化的期望登记值。
+//
+// 返回已校验完整性的共用适配器。共用字段或期望字段与合同签署值不一致时返回部署不变量错误。
 fn build_approval_adapter(
     spec: ApprovalAdapterSpec,
     subject_ref_builder: &'static str,
@@ -131,16 +124,9 @@ fn build_approval_adapter(
     })
 }
 
-/// 由共用适配器提取两类销售单提交/撤回/正式化共用的已登记端口。
-///
-/// # 参数
-/// * `adapter` - 已校验的共用销售单适配器
-///
-/// # 返回
-/// 返回该类型已登记的单据类型、三类动作与责任角色。
-///
-/// # 错误
-/// 无。
+// 由共用适配器提取两类销售单提交/撤回/正式化共用的已登记端口。
+//
+// `adapter` 为已校验的共用销售单适配器。返回该类型已登记的单据类型、三类动作与责任角色。
 fn ports_of_adapter(adapter: &SalesOrderApprovalAdapter) -> SalesApprovalPorts {
     SalesApprovalPorts {
         document_type: adapter.document_type,
@@ -151,16 +137,7 @@ fn ports_of_adapter(adapter: &SalesOrderApprovalAdapter) -> SalesApprovalPorts {
     }
 }
 
-/// 返回实物及服务销售单的完整适配器登记。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回已校验完整性的规格与显式字段声明。
-///
-/// # 错误
-/// 政策缺失或三类动作不互异时返回部署不变量错误。
+/// 装配实物及服务销售单的审批适配器，启动、通过和撤回时按已登记的动作分派。政策缺失或动作重复时拒绝装配。
 pub fn sales_order_adapter() -> Result<SalesOrderAdapter> {
     let spec = adapter_spec_of(DocumentType::SalesOrder)?;
     ensure_adapter_spec_complete(&spec)?;
@@ -178,16 +155,7 @@ pub fn sales_order_adapter() -> Result<SalesOrderAdapter> {
     )
 }
 
-/// 返回卡券销售单的完整适配器登记。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回已校验完整性的规格与显式字段声明。
-///
-/// # 错误
-/// 政策缺失或三类动作不互异时返回部署不变量错误。
+/// 装配卡券销售单的审批适配器，启动、通过和撤回时按已登记的动作分派。政策缺失或动作重复时拒绝装配。
 pub fn voucher_sales_order_adapter() -> Result<VoucherSalesOrderAdapter> {
     let spec = adapter_spec_of(DocumentType::VoucherSalesOrder)?;
     ensure_adapter_spec_complete(&spec)?;
@@ -222,14 +190,7 @@ pub struct SalesApprovalPorts {
 
 /// 按 `BusinessType` 返回对应独立 Adapter 的强类型端口。
 ///
-/// # 参数
-/// * `business_type` - 销售单业务性质
-///
-/// # 返回
-/// 返回该类型已登记的单据类型、三类动作与责任角色。
-///
-/// # 错误
-/// 适配器登记不完整时返回部署不变量错误。
+/// `business_type` 为销售单业务性质。返回该类型已登记的单据类型、三类动作与责任角色。适配器登记不完整时返回部署不变量错误。
 pub fn sales_approval_ports(business_type: BusinessType) -> Result<SalesApprovalPorts> {
     match business_type {
         BusinessType::GoodsService => {
@@ -245,14 +206,7 @@ pub fn sales_approval_ports(business_type: BusinessType) -> Result<SalesApproval
 
 /// 无已绑定定义的必须审批单据不得提交。
 ///
-/// # 参数
-/// * `binding` - 创建时冻结的审批定义绑定。
-///
-/// # 返回
-/// 绑定存在时返回其引用。
-///
-/// # 错误
-/// 绑定缺失时返回冲突。
+/// `binding` 为创建时冻结的审批定义绑定。绑定存在时返回其引用。绑定缺失时返回冲突。
 pub fn require_frozen_binding(
     binding: Option<&ApprovalDefinitionBinding>,
 ) -> Result<&ApprovalDefinitionBinding> {
@@ -281,18 +235,10 @@ pub struct SalesOrderStartCommand {
 
 /// 由冻结提交构造目标启动命令。客户端不得提交定义或审批人。
 ///
-/// # 参数
-/// * `document_type` - 按业务性质分派的独立单据类型
-/// * `sales_order_id` - 销售单主键
-/// * `subject_version` - `sales_order_submission.submission_no`
-/// * `actor_id` - 提交人
-/// * `idempotency_key` - 幂等键
+/// `document_type` 为按业务性质分派的独立单据类型；`sales_order_id` 为销售单主键；`subject_version`
+/// 为 `sales_order_submission.submission_no`；`actor_id` 为提交人；使用调用方提供的幂等键。
 ///
-/// # 返回
 /// 返回不含定义 ID 或审批人的目标启动命令。
-///
-/// # 错误
-/// 不返回错误。
 pub fn sales_order_start_command(
     document_type: DocumentType,
     sales_order_id: &str,
@@ -311,16 +257,7 @@ pub fn sales_order_start_command(
 
 /// 执行签署的销售单领域动作。
 ///
-/// # 参数
-/// * `order` - 业务实体
-/// * `action` - 合同强类型动作
-/// * `updated_by` - 操作人
-///
-/// # 返回
-/// 匹配的领域动作已应用到 `order` 时返回。最终通过只校验可形式化，不在此写入正式版本。
-///
-/// # 错误
-/// 动作不属于本类型或状态不允许时返回错误。
+/// `action` 为合同强类型动作。匹配的领域动作已应用到 `order` 时返回。最终通过只校验可形式化，不在此写入正式版本。动作不属于本类型或状态不允许时返回错误。
 pub fn execute_sales_order_domain_action(
     order: &mut SalesOrder,
     action: ApprovalDomainAction,
@@ -342,30 +279,14 @@ pub fn execute_sales_order_domain_action(
     )))
 }
 
-/// 卡券专用决定路径新写立即失败关闭。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 不返回成功值。
-///
-/// # 错误
-/// 恒返回冲突，不得回退 `CARD_SALES_APPROVAL` 或专用决定端口。
+/// 旧卡券专用决定写入口固定返回冲突；不得回退 `CARD_SALES_APPROVAL` 或专用决定端口。
 pub fn reject_legacy_card_sales_decision() -> Result<()> {
     Err(Error::ConflictError("卡券销售单请从统一审批待办办理".to_string()))
 }
 
 /// `CardSalesManagerApproval` / `CardSalesOperationApproval` 新写立即失败关闭。
 ///
-/// # 参数
-/// * `work_item_type` - 待写入的工作项类型稳定码
-///
-/// # 返回
-/// 非卡券专用类型时返回。
-///
-/// # 错误
-/// 命中卡券专用类型时返回冲突。
+/// `work_item_type` 为待写入的工作项类型稳定码。非卡券专用类型时返回。命中卡券专用类型时返回冲突。
 pub fn reject_legacy_card_sales_work_item(work_item_type: &str) -> Result<()> {
     match work_item_type {
         "CARD_SALES_MANAGER_APPROVAL" | "CARD_SALES_OPERATION_APPROVAL" => {
@@ -379,29 +300,12 @@ pub fn reject_legacy_card_sales_work_item(work_item_type: &str) -> Result<()> {
 ///
 /// 未提供组织或审批人时失败关闭，不得默认放行。
 ///
-/// # 参数
-/// * `organization_id` - 单据责任组织
-/// * `assignee_user_id` - 指定审批人
-///
-/// # 返回
-/// 组织与审批人均非空时允许读取。
-///
-/// # 错误
-/// 组织或审批人为空时返回校验错误。
+/// `organization_id` 为单据责任组织。组织与审批人均非空时允许读取。组织或审批人为空时返回校验错误。
 pub fn sales_order_object_readable(organization_id: &str, assignee_user_id: &str) -> Result<bool> {
     document_object_readable(organization_id, assignee_user_id).map_err(Into::into)
 }
 
-/// 责任组织取结算主体，不得用空串或当前登录人组织补位。
-///
-/// # 参数
-/// * `order` - 销售单
-///
-/// # 返回
-/// 返回非空责任组织。
-///
-/// # 错误
-/// 结算主体为空时返回校验错误。
+/// 责任组织取结算主体，不得用空串或当前登录人组织补位。返回非空责任组织。结算主体为空时返回校验错误。
 pub fn sales_order_responsible_org_id(order: &SalesOrder) -> Result<String> {
     let org = order.settlement_party_id.to_string();
     if org.trim().is_empty() {
@@ -414,17 +318,8 @@ pub fn sales_order_responsible_org_id(order: &SalesOrder) -> Result<String> {
 ///
 /// 对手方为客户；金额与数量合计必填。
 ///
-/// # 参数
-/// * `order` - 销售单
-/// * `submission` - 已冻结提交
-/// * `lines` - 提交明细
-/// * `submitted_by` - 提交销售
-/// * `submitted_at` - 提交时间
+/// `submission` 为已冻结提交；`lines` 为提交明细；`submitted_by` 为提交销售。返回冻结了单号、责任组织、客户、金额、数量和行数的快照。
 ///
-/// # 返回
-/// 返回冻结了单号、责任组织、客户、金额、数量和行数的快照。
-///
-/// # 错误
 /// 明细为空、金额/数量非法或组织为空时返回校验错误。
 pub fn build_sales_order_snapshot(
     order: &SalesOrder,
@@ -634,7 +529,7 @@ mod tests {
         .expect("卡券提交行必须可构造")
     }
 
-    /// 适配器必须显式声明合同要求的全部字段。
+    // 验证销售单审批适配器逐项声明合同规定的字段。
     #[test]
     fn adapter_declares_all_required_fields() {
         let adapter = sales_order_adapter().expect("销售单必须可登记");
@@ -674,7 +569,7 @@ mod tests {
         assert!(matches!(BusinessType::Voucher, BusinessType::Voucher));
     }
 
-    /// 卡券适配器必须独立登记合同签署字段，且不得复用 SalesOrder ProcessKind。
+    // 卡券适配器必须独立登记合同签署字段，且不得复用 SalesOrder ProcessKind。
     #[test]
     fn voucher_adapter_declares_independent_fields() {
         let adapter = voucher_sales_order_adapter().expect("卡券销售单必须可登记");
@@ -706,7 +601,7 @@ mod tests {
         assert_eq!(ports.owner_role, "voucher_sales_order_approver");
     }
 
-    /// 提交进入审批中；撤回不回退提交号，且切断 REJECTED。
+    // 提交进入审批中；撤回不回退提交号，且切断 REJECTED。
     #[test]
     fn submit_enters_in_approval_and_cancel_returns_draft() {
         let mut order = draft_order();
@@ -731,7 +626,7 @@ mod tests {
         assert_eq!(order.review_status, ReviewStatus::NotSubmitted);
     }
 
-    /// 非草稿不得提交；非审批中不得撤回或形式化。
+    // 非草稿不得提交；非审批中不得撤回或形式化。
     #[test]
     fn illegal_status_transitions_fail_closed() {
         let mut effective = draft_order();
@@ -748,7 +643,7 @@ mod tests {
         assert_eq!(voucher.review_status, ReviewStatus::InApproval);
     }
 
-    /// 启动命令不含定义 ID 或审批人。
+    // 启动命令不含定义 ID 或审批人。
     #[test]
     fn start_command_omits_definition_and_assignee() {
         let command = sales_order_start_command(DocumentType::SalesOrder, "so-1", 1, "user-1", "key-1");
@@ -766,7 +661,7 @@ mod tests {
         assert!(require_frozen_binding(None).is_err());
     }
 
-    /// 快照冻结客户对手方、金额与数量合计。
+    // 快照冻结客户对手方、金额与数量合计。
     #[test]
     fn snapshot_freezes_customer_amount_and_quantity() {
         let order = draft_order();
@@ -791,7 +686,7 @@ mod tests {
         );
     }
 
-    /// 卡券审批快照必须冻结卡张数，不得因 `quantity` 为空而漏量。
+    // 卡券审批快照必须冻结卡张数，不得因 `quantity` 为空而漏量。
     #[test]
     fn voucher_snapshot_freezes_card_count_quantity() {
         let mut order = draft_order();
@@ -811,7 +706,7 @@ mod tests {
         assert_eq!(payload.total_quantity.unwrap().to_string(), "3");
     }
 
-    /// 对象读取权空组织或空审批人失败关闭。
+    // 验证销售单审批读取缺少责任组织或办理人时不放行。
     #[test]
     fn object_read_fails_closed_on_empty_identity() {
         assert!(sales_order_object_readable("party-1", "u1").unwrap());
@@ -819,7 +714,7 @@ mod tests {
         assert!(sales_order_object_readable("party-1", "").is_err());
     }
 
-    /// 领域动作分派只接受三类签署动作。
+    // 领域动作分派只接受三类签署动作。
     #[test]
     fn domain_action_dispatch_is_exhaustive_for_sales_order() {
         let mut order = draft_order();
@@ -860,7 +755,7 @@ mod tests {
         );
     }
 
-    /// 卡券领域动作只接受本类型三类签署动作；驳回不改业务状态。
+    // 卡券领域动作只接受本类型三类签署动作；驳回不改业务状态。
     #[test]
     fn voucher_domain_action_dispatch_and_reject_does_not_mutate() {
         let mut order = draft_order();
@@ -902,7 +797,7 @@ mod tests {
         );
     }
 
-    /// 卡券专用决定与专用工作项新写必须失败关闭。
+    // 卡券专用决定与专用工作项新写必须失败关闭。
     #[test]
     fn legacy_card_sales_writes_fail_closed() {
         assert!(reject_legacy_card_sales_decision().is_err());

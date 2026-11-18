@@ -11,12 +11,11 @@ use crate::{Result, WorkflowAuthorizationPort};
 #[async_trait]
 pub trait FinanceResponsibilityPort: Send + Sync {
     /// 在调用方事务内匹配财务负责人并推进一次轮次。
-    /// # 参数
-    /// `operation`、`counterparty` 与 `executor` 为原操作、往来方和执行器。
-    /// # 返回
     /// 返回已经冻结的负责人及责任键。
-    /// # 错误
+    ///
     /// 零或多条规则、资格失效、版本冲突或持久化失败时返回原错误。
+    ///
+    /// `operation`、`counterparty` 与 `executor` 为原操作、往来方和执行器。
     async fn resolve_finance_responsibility(
         &self,
         operation: FinanceResponsibilityOperation,
@@ -25,12 +24,11 @@ pub trait FinanceResponsibilityPort: Send + Sync {
     ) -> Result<ResolvedFinanceResponsibility>;
 
     /// 按退货任务类型核验财务负责人及退货处理权限。
-    /// # 参数
-    /// `kind`、`counterparty` 与 `executor` 为原任务类型、往来方及执行器。
-    /// # 返回
     /// 返回已核验退货资格的负责人和责任键。
-    /// # 错误
+    ///
     /// 责任解析或退货处理权限失败时返回原错误。
+    ///
+    /// `kind`、`counterparty` 与 `executor` 为原任务类型、往来方及执行器。
     async fn resolve_return_finance_responsibility(
         &self,
         kind: WorkItemType,

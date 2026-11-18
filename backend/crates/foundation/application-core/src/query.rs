@@ -36,63 +36,24 @@ pub struct PageParams {
 }
 
 impl PageParams {
-    /// 返回仓储筛选使用的排序字段。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回排序字段的 owned 副本。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为需要自有字符串的仓储筛选器复制已规范化的排序字段。
     pub fn sort_field(&self) -> String {
         self.sort_by.to_string()
     }
 
-    /// 返回排序方向是否为升序。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 升序返回 `true`，降序返回 `false`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 把应用层排序方向换成仓储筛选器使用的布尔值，只有升序为 `true`。
     pub fn sort_ascending(&self) -> bool {
         matches!(self.sort_dir, SortDir::Asc)
     }
 
-    /// 返回采用可选排序字段的仓储筛选参数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回始终为 `Some` 的排序字段和是否升序。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为接收可选排序字段的仓储筛选器组装参数；规范化后总有排序字段，因此始终为 `Some`。
     pub fn sort_selection(&self) -> (Option<String>, bool) {
         (Some(self.sort_field()), self.sort_ascending())
     }
 }
 
-/// 规范化分页与排序参数，业务筛选和排序白名单由调用方拥有。
-///
-/// # 参数
-/// * `sort_by` - 可选排序字段，空白按缺省处理。
-/// * `sort_dir` - 可选排序方向，空白按降序处理。
-/// * `page` - 可选页码，缺省为首页。
-/// * `page_size` - 可选单页条数，缺省为 20 并夹紧至 1–100。
-/// * `allowed_fields` - 调用方允许的排序字段。
-///
-/// # 返回
-/// 返回可交给仓储的分页排序参数；显式零页码原样保留。
-///
-/// # 错误
-/// 排序字段或方向不合法时返回校验错误；字段错误优先于方向错误。
+/// 执行列表查询前，按领域白名单校验排序并补齐分页缺省值。缺省按创建时间降序查首页，单页默认 20 条，
+/// 传入值限制为 1–100；显式零页码保留给入口校验。字段和方向均不合法时先报字段错误。
 pub fn normalize_paging(
     sort_by: &Option<String>,
     sort_dir: &Option<String>,
@@ -109,17 +70,17 @@ pub fn normalize_paging(
     })
 }
 
-/// 空白判定：去首尾空白后为空即空白，三处查询规范化入口共用。
+// 供请求字段校验识别仅含空白的值，避免把空格当作有效输入。
 fn is_blank(value: &str) -> bool {
     value.trim().is_empty()
 }
 
-/// 去首尾空白的可选查询条件，三处查询规范化入口共用。
+// 查询词和排序选项共用裁剪规则，避免空白输入触发筛选或报告未知选项。
 fn trimmed_query(value: Option<&str>) -> Option<&str> {
     value.map(str::trim).filter(|value| !value.is_empty())
 }
 
-/// 按领域白名单归一化排序字段，未提供时回退默认字段。
+// 为仓储排序取白名单中的静态字段；只校验显式字段，缺省或空白直接用默认字段。
 fn resolve_sort_field(
     sort_by: Option<&str>,
     allowed_fields: &'static [&'static str],
@@ -134,7 +95,7 @@ fn resolve_sort_field(
     }
 }
 
-/// 归一化排序方向，缺省与显式降序统一为默认方向。
+// 把方向文本转成应用层枚举；缺省、空白和 `desc` 取默认降序，其余非 `asc` 输入报错。
 fn resolve_sort_dir(sort_dir: Option<&str>) -> Result<SortDir> {
     match trimmed_query(sort_dir) {
         Some("asc") => Ok(SortDir::Asc),
@@ -143,20 +104,8 @@ fn resolve_sort_dir(sort_dir: Option<&str>) -> Result<SortDir> {
     }
 }
 
-/// 按领域白名单归一化列表排序字段与方向。
-///
-/// 未提供或空白的排序字段直接使用 `DEFAULT_SORT_FIELD`，不再查白名单。
-///
-/// # 参数
-/// * `sort_by` - 请求中的排序字段。
-/// * `sort_dir` - 请求中的排序方向；去掉首尾空白后，空白、未提供或 `desc` 视为 `DEFAULT_SORT_DIR`。
-/// * `allowed_fields` - 领域允许的排序字段，与去空白后的 `sort_by` 精确匹配。
-///
-/// # 返回
-/// 返回静态字段名和 `SortDir`。显式 `asc` 为 `SortDir::Asc`。
-///
-/// # 错误
-/// `sort_by` 不在白名单时返回 `Error::ValidationError`。`sort_dir` 不是 `asc` 或 `desc` 时同样返回 `Error::ValidationError`。
+/// 构造列表查询前解析排序：裁剪字段并与领域白名单精确匹配，缺省或空白直接用 [`DEFAULT_SORT_FIELD`]。
+/// 方向仅接受 `asc` 或 `desc`，缺省或空白时降序；未知字段或方向返回校验错误。
 pub fn normalize_sort(
     sort_by: &Option<String>,
     sort_dir: &Option<String>,
@@ -184,31 +133,13 @@ pub struct PageView<T> {
 }
 
 impl<T> Default for PageView<T> {
-    /// 返回首屏空页（`page: 1`，`page_size: 20`）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回条目为空、总数为零的首页视图。
-    ///
-    /// # 错误
-    /// 无。
+    // 为无需保留请求分页参数的无结果场景提供空首页：总数为零，每页 20 条。
     fn default() -> Self {
         Self { items: Vec::new(), total: 0, page: DEFAULT_PAGE, page_size: DEFAULT_PAGE_SIZE }
     }
 }
 
-/// 校验文本去除首尾空白后非空。
-///
-/// # 参数
-/// * `value` - 待校验文本。
-///
-/// # 返回
-/// 非空白时无返回值。
-///
-/// # 错误
-/// 去首尾空白后为空时返回 `validator::ValidationError`，代码为「不能为空白」。
+/// 在 validator 校验中拒绝纯空白的必填文本；裁剪后为空时返回代码「不能为空白」，不修改输入。
 pub fn non_blank(value: &str) -> std::result::Result<(), validator::ValidationError> {
     if is_blank(value) {
         return Err(validator::ValidationError::new("不能为空白"));
@@ -216,44 +147,17 @@ pub fn non_blank(value: &str) -> std::result::Result<(), validator::ValidationEr
     Ok(())
 }
 
-/// 归一化可选的文本查询条件。
-///
-/// # 参数
-/// * `value` - 原始查询文本。
-///
-/// # 返回
-/// 去掉首尾空白后仍非空时返回该文本；未提供或空白时返回 `None`。
-///
-/// # 错误
-/// 不返回错误。
+/// 组装筛选条件前去掉查询文本两端空白；缺省或全空白时不添加条件。
 pub fn normalized_text(value: Option<&str>) -> Option<String> {
     trimmed_query(value).map(str::to_string)
 }
 
-/// 返回页码；未提供时使用第一页。
-///
-/// # 参数
-/// * `page` - 请求页码。
-///
-/// # 返回
-/// 已提供时原样返回，包括 `0`；未提供时返回 `DEFAULT_PAGE`。
-///
-/// # 错误
-/// 不返回错误。
+/// 补齐列表的缺省首页页码，但不纠正显式传入的 `0`，合法性仍由入口决定。
 pub fn page_or_default(page: Option<u64>) -> u64 {
     page.unwrap_or(DEFAULT_PAGE)
 }
 
-/// 返回分页大小；未提供时使用默认大小，并夹紧到允许区间。
-///
-/// # 参数
-/// * `page_size` - 请求的分页大小。
-///
-/// # 返回
-/// 未提供时返回 `DEFAULT_PAGE_SIZE`。已提供时夹紧到 `1..=MAX_PAGE_SIZE`。
-///
-/// # 错误
-/// 不返回错误。
+/// 进入仓储前统一限制单页开销：缺省为 20，显式值裁剪到 `1..=MAX_PAGE_SIZE`。
 pub fn page_size_or_default(page_size: Option<u32>) -> u32 {
     page_size.unwrap_or(DEFAULT_PAGE_SIZE).clamp(1, MAX_PAGE_SIZE)
 }

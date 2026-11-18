@@ -59,26 +59,9 @@ pub(super) struct RevalidateDecisionApproverInput<'a> {
     pub(super) separation_policy: SeparationOfDutiesPolicy,
 }
 
-/// 按冻结快照重验审批人账号、同角色静态读写权限与岗位分离。
-///
-/// # 用途
-/// 将审批人资格收敛为 BPM 可消费的 Eligible/Blocked。
-///
-/// # 参数
-/// * `identity_service` - 同一应用注入的共享身份与权限服务。
-/// * `db` - 数据库
-/// * `rbac` - 共享 RBAC 服务
-/// * `input` - 审批人、快照与分离政策
-/// * `executor` - 调用方持有的数据库执行器
-///
-/// # 返回
-/// 返回有效或结构化受阻资格。
-///
-/// # 错误
-/// Repository、权限解析、RBAC 或对象读取适配器失败时返回错误。
-///
-/// # 关键业务约束
-/// 任一资格失败必须收敛为 blocker，不得回滚为空。
+// 执行审批决定前，以冻结提交快照和原执行器重验原审批人的有效账号、同角色静态权限及岗位分离。
+//
+// 资格丢失返回 BPM 可消费的结构化 blocker，不转为空值；快照类型不一致或取证故障仍返回错误。
 pub(super) async fn revalidate_decision_approver(
     authorization: &AuthorizationService,
     db: &Database,
@@ -126,16 +109,7 @@ pub(super) async fn revalidate_decision_approver(
     converge_eligibility(assignee_id, assignee_name, failure)
 }
 
-/// 读取必须审批政策唯一签署的岗位分离规则。
-///
-/// # 参数
-/// * `document_type` - 正式单据类型。
-///
-/// # 返回
-/// 返回该类型必须审批政策中的岗位分离规则。
-///
-/// # 错误
-/// 政策未登记，或该类型不需要审批时返回 `ApprovalPolicyNotRegistered`。
+// 决定或恢复前读取该单据固定必须审批政策的岗位分离规则；政策未登记或为无审批类型时拒绝。
 pub(super) fn process_required_separation_policy(
     document_type: DocumentType,
 ) -> Result<SeparationOfDutiesPolicy> {
@@ -147,17 +121,7 @@ pub(super) fn process_required_separation_policy(
     }
 }
 
-/// 校验当前执行与实例持有的运行令牌完全一致。
-///
-/// # 参数
-/// * `instance` - 审批实例。
-/// * `current` - 当前执行；实例没有当前执行时为空。
-///
-/// # 返回
-/// 两边都没有当前执行，或执行 ID、实例 ID 都一致时返回 `true`。
-///
-/// # 错误
-/// 不返回错误。
+// 核对实例当前执行令牌及执行的实例归属。仅两边都无当前执行，或执行 ID 与所属实例均精确匹配时成立。
 pub(super) fn current_execution_matches_instance(
     instance: &ApprovalProcessInstance,
     current: Option<&ApprovalNodeExecution>,
@@ -172,20 +136,7 @@ pub(super) fn current_execution_matches_instance(
     }
 }
 
-/// 当前开放审批任务是否精确证明 actor 对运行实例的当前责任。
-///
-/// # 参数
-/// * `task` - 开放审批任务。
-/// * `execution` - 当前节点执行。
-/// * `subject` - 已对齐的运行主体。
-/// * `actor_id` - 被证明的责任人。
-/// * `expected_owner_role` - 该单据类型要求的责任岗位。
-///
-/// # 返回
-/// 任务、执行、实例、快照、岗位和组织全部一致时返回 `true`。
-///
-/// # 错误
-/// 不返回错误。
+// 办理审批前证明开放任务是当前操作人在此实例和冻结提交版本上的现行责任。任务、运行实例、开放执行、轮次、参与人、责任岗位、组织和对象身份均须一致。
 pub(crate) fn task_proves_current_responsibility(
     task: &WorkItem,
     execution: &ApprovalNodeExecution,
@@ -225,20 +176,14 @@ pub(crate) fn task_proves_current_responsibility(
         && !execution.node_key.is_empty()
 }
 
-/// Mine 页的 WorkItem、当前 execution 与实例摘要是否构成同一当前责任链。
-///
-/// # 参数
-/// * `task` - 当前页任务。
-/// * `execution` - 任务所属执行。
-/// * `summary` - 实例摘要。
-/// * `snapshot` - 冻结快照；缺失时责任链不成立。
-/// * `actor_id` - 当前读者。
-///
-/// # 返回
-/// 运行链与快照责任组织都一致时返回 `Ok(true)`；任一事实不一致时返回 `Ok(false)`。
-///
-/// # 错误
-/// 主体种类无法解析，或单据适配规格不存在时隐藏为不存在或返回适配错误。
+// Mine 页的 WorkItem、当前 execution 与实例摘要是否构成同一当前责任链。
+//
+// 运行链与快照责任组织都一致时返回 `Ok(true)`；任一事实不一致时返回 `Ok(false)`。
+//
+// 主体种类无法解析，或单据适配规格不存在时隐藏为不存在或返回适配错误。
+//
+// `task`：当前页任务；`snapshot`：冻结快照；缺失时责任链不成立。
+// `actor_id`：当前读者。
 pub(super) fn mine_runtime_chain_matches(
     task: &WorkItem,
     execution: &ApprovalNodeExecution,
@@ -292,19 +237,16 @@ pub(super) fn mine_runtime_chain_matches(
     Ok(snapshot_owner_matches)
 }
 
-/// 提取 Mine 当前页的 execution ID，并在服务边界拒绝重复责任投影。
-///
-/// 不得依赖唯一索引或静默去重；重复 WorkItem 会同时污染当前页行与
-/// Repository 返回的 total，因此必须按隐藏实例存在性的稳定语义整页失败。
-///
-/// # 参数
-/// * `tasks` - 当前页任务，顺序保留。
-///
-/// # 返回
-/// 返回与任务顺序一致且互不重复的执行 ID。
-///
-/// # 错误
-/// 任务没有执行引用或执行 ID 重复时隐藏为不存在。
+// 提取 Mine 当前页的 execution ID，并在服务边界拒绝重复责任投影。
+//
+// 不得依赖唯一索引或静默去重；重复 WorkItem 会同时污染当前页行与
+// Repository 返回的 total，因此必须按隐藏实例存在性的稳定语义整页失败。
+//
+// 返回与任务顺序一致且互不重复的执行 ID。
+//
+// 任务没有执行引用或执行 ID 重复时隐藏为不存在。
+//
+// `tasks`：当前页任务，顺序保留。
 pub(super) fn mine_execution_ids(tasks: &[WorkItem]) -> Result<Vec<ApprovalNodeExecutionId>> {
     let mut seen = HashSet::with_capacity(tasks.len());
     let mut execution_ids = Vec::with_capacity(tasks.len());
@@ -318,16 +260,12 @@ pub(super) fn mine_execution_ids(tasks: &[WorkItem]) -> Result<Vec<ApprovalNodeE
     Ok(execution_ids)
 }
 
-/// 把 Repository 在完整过滤集合中发现的责任链冲突映射为隐藏式拒绝。
-///
-/// # 参数
-/// * `conflict_count` - 仓储报告的责任链冲突数。
-///
-/// # 返回
-/// 没有冲突时无返回值。
-///
-/// # 错误
-/// 冲突数大于 0 时隐藏为不存在。
+// 把 Repository 在完整过滤集合中发现的责任链冲突映射为隐藏式拒绝。
+// 没有冲突时无返回值。
+//
+// 冲突数大于 0 时隐藏为不存在。
+//
+// `conflict_count`：仓储报告的责任链冲突数。
 pub(super) fn ensure_mine_page_integrity(conflict_count: usize) -> Result<()> {
     if conflict_count == 0 {
         return Ok(());
@@ -335,19 +273,15 @@ pub(super) fn ensure_mine_page_integrity(conflict_count: usize) -> Result<()> {
     Err(hidden_not_found())
 }
 
-/// 由 Mine 当前页 execution 解析实例 ID，并拒绝两个执行指向同一实例。
-///
-/// 执行结果缺失或实例重复均表示当前责任链不能形成唯一列表行，整页失败关闭。
-///
-/// # 参数
-/// * `execution_ids` - 当前页执行 ID。
-/// * `execution_by_id` - 已按执行 ID 建表的执行。
-///
-/// # 返回
-/// 返回与执行顺序一致且互不重复的实例 ID。
-///
-/// # 错误
-/// 执行缺失或两个执行指向同一实例时隐藏为不存在。
+// 由 Mine 当前页 execution 解析实例 ID，并拒绝两个执行指向同一实例。
+//
+// 执行结果缺失或实例重复均表示当前责任链不能形成唯一列表行，整页失败关闭。
+//
+// 返回与执行顺序一致且互不重复的实例 ID。
+//
+// 执行缺失或两个执行指向同一实例时隐藏为不存在。
+//
+// `execution_ids`：当前页执行 ID；`execution_by_id`：已按执行 ID 建表的执行。
 pub(super) fn mine_instance_ids(
     execution_ids: &[ApprovalNodeExecutionId],
     execution_by_id: &HashMap<String, ApprovalNodeExecution>,
@@ -367,17 +301,12 @@ pub(super) fn mine_instance_ids(
     Ok(instance_ids)
 }
 
-/// 将批量读取结果按稳定 ID 建表；重复 ID 按持久化身份损坏失败关闭。
-///
-/// # 参数
-/// * `items` - 批量读取结果。
-/// * `key_of` - 从单项取出稳定 ID。
-///
-/// # 返回
-/// 返回以稳定 ID 为键的表。
-///
-/// # 错误
-/// 同一 ID 出现多次时隐藏为不存在。
+// 将批量读取结果按稳定 ID 建表；重复 ID 按持久化身份损坏失败关闭。
+// 返回以稳定 ID 为键的表。
+//
+// 同一 ID 出现多次时隐藏为不存在。
+//
+// `key_of`：从单项取出稳定 ID。
 pub(super) fn unique_by_id<T, F>(items: Vec<T>, key_of: F) -> Result<HashMap<String, T>>
 where
     F: Fn(&T) -> String,
@@ -392,13 +321,10 @@ where
     Ok(by_id)
 }
 
-/// 校验同节点开放任务的人员归属及每人唯一性。
-/// # 参数
-/// `execution` 为冻结节点执行，`tasks` 为该执行全部开放任务。
-/// # 返回
-/// 非空、人数不超出冻结集合且每人恰有一项时返回 true。
-/// # 错误
-/// 无。
+// 校验同节点开放任务的人员归属及每人唯一性。
+// 非空、人数不超出冻结集合且每人恰有一项时返回 true。
+//
+// `execution` 为冻结节点执行，`tasks` 为该执行全部开放任务。
 pub(crate) fn open_tasks_match(execution: &ApprovalNodeExecution, tasks: &[WorkItem]) -> bool {
     let mut owners = HashSet::new();
     !tasks.is_empty()

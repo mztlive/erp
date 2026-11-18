@@ -67,18 +67,9 @@ pub struct SupplierCapabilityRevision {
 
 impl SupplierCapabilityRevision {
     /// 创建能力修订。
-    ///
-    /// 完成负责人必填校验与全部文本字段的规范化（去首尾空白、长度
-    /// 上限）；强制 `valid_to` 晚于 `valid_from`。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::SupplierCapabilityRevisionId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
+    /// 完成负责人必填校验与全部文本字段的规范化（去首尾空白、长度上限）；强制 `valid_to` 晚于
+    /// `valid_from`。
     /// 返回新建的修订实体。
-    ///
-    /// # 错误
     /// 当负责人为空/超长、其他文本超长或生效区间倒挂时返回错误。
     pub fn new(id: SupplierCapabilityRevisionId, data: SupplierCapabilityRevisionData) -> Result<Self> {
         let service_region =
@@ -130,7 +121,7 @@ mod tests {
         }
     }
 
-    /// happy path：快照字段去空白，修订序号落库。
+    // 验证快照字段去空白，修订序号落库。
     #[test]
     fn new_trims_and_normalizes() {
         let revision =
@@ -143,7 +134,7 @@ mod tests {
         assert_eq!(revision.capability_code, CapabilityCode::Api);
     }
 
-    /// 失败路径：负责人为空/超长、区间倒挂。
+    // 验证负责人为空/超长、区间倒挂。
     #[test]
     fn new_rejects_invalid_inputs() {
         let blank_owner =
@@ -159,7 +150,7 @@ mod tests {
         assert!(SupplierCapabilityRevision::new(SupplierCapabilityRevisionId::new("r"), reversed,).is_err());
     }
 
-    /// 修订内联快照与稳定能力身份一致（快照字段不派生自其他域）。
+    // 验证修订内联快照与稳定能力身份一致（快照字段不派生自其他域）。
     #[test]
     fn snapshot_is_self_contained() {
         let revision =
@@ -169,7 +160,7 @@ mod tests {
         assert_eq!(revision.capability_code.as_str(), "api", "快照字段携带稳定能力代码，不引用能力实体");
     }
 
-    /// 实体 BSON 往返。
+    // 验证供应商能力修订写成 BSON 后能还原成原实体。
     #[test]
     fn bson_roundtrip() {
         let revision =

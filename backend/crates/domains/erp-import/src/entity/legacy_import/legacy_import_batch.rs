@@ -49,16 +49,7 @@ pub enum LegacyImportBatchStatus {
 }
 
 impl LegacyImportBatchStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 提供批次处理状态的中文文案，供进度展示和业务错误提示。
     pub fn label(&self) -> &'static str {
         match self {
             Self::PendingValidation => "待校验",
@@ -72,16 +63,7 @@ impl LegacyImportBatchStatus {
         }
     }
 
-    /// 返回状态的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 提供批次状态的稳定代码，确保存储和按状态查询采用同一口径。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::PendingValidation => "pending_validation",
@@ -180,21 +162,7 @@ pub struct LegacyImportBatch {
 }
 
 impl LegacyImportBatch {
-    /// 创建导入批次。
-    ///
-    /// 完成批次号、对象集合、规则版本等文本字段的校验与规范化
-    /// （去首尾空白、非空、长度上限），并强制处理统计不变式
-    /// `success_rows + failed_rows <= total_rows`。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::LegacyImportBatchId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
-    /// 返回新建的导入批次实体。
-    ///
-    /// # 错误
-    /// 当必填文本为空或超长，或处理统计不一致时返回错误。
+    /// 构造导入批次，清理并校验批次号、来源对象集、规则版本等必填文本。文本为空或超长、成功与失败行数之和超过总行数时拒绝，以免保存不一致的批次统计。
     pub fn new(id: erp_core::ids::LegacyImportBatchId, data: LegacyImportBatchData) -> Result<Self> {
         let batch_no =
             normalize_required_text(data.batch_no, "批次号不能为空", BATCH_NO_MAX_LEN, "批次号过长")?;
@@ -239,30 +207,12 @@ impl LegacyImportBatch {
         })
     }
 
-    /// 返回批次对象集要求的固定确认范围。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回去重、稳定排序的必要确认范围。
-    ///
-    /// # 错误
-    /// 对象类型未注册，或对象集为空、无法解析出确认范围时，返回 [`ConfirmationScope::required_for_object_set`] 的错误。
+    /// 由批次来源对象集推导必须确认的责任范围，按稳定顺序去重；对象未登记、集合为空或解析不出范围时沿用 [`ConfirmationScope::required_for_object_set`] 的错误。
     pub fn required_confirmation_scopes(&self) -> Result<std::collections::BTreeSet<ConfirmationScope>> {
         ConfirmationScope::required_for_object_set(&self.source_object_set)
     }
 
-    /// 判断批次是否已进入不可继续应用的结果终态。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 完成、部分失败或失败时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 识别本轮应用已经完成、部分失败或失败的结果状态；这三种状态不继续本轮应用，失败类状态仍可经重试返回待应用。
     pub fn is_terminal(&self) -> bool {
         matches!(
             self.status,
@@ -272,47 +222,17 @@ impl LegacyImportBatch {
         )
     }
 
-    /// 判断乐观锁版本是否与命令期望一致。
-    ///
-    /// # 参数
-    /// * `expected` - 客户端冻结版本
-    ///
-    /// # 返回
-    /// 版本一致时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 核对批次乐观锁是否仍与客户端冻结版本一致，供命令识别过时提交。
     pub fn has_version(&self, expected: u64) -> bool {
         self.base.version == expected
     }
 
-    /// 判断规则版本是否与试算冻结值一致。
-    ///
-    /// # 参数
-    /// * `expected` - 试算冻结的规则版本
-    ///
-    /// # 返回
-    /// 规范化后与当前批次规则版本一致时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将试算冻结的规则版本去首尾空白后与批次当前值比较，避免应用已失效的试算。
     pub fn has_rule_version(&self, expected: &str) -> bool {
         self.import_rule_version == expected.trim()
     }
 
-    /// 推进到待确认阶段。
-    ///
-    /// 待校验批次依次经过校验中后进入待确认；校验中直接进入待确认；
-    /// 已在待确认时幂等返回。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 推进成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 批次已离开可确认阶段时返回 `erp_core::Error::LogicError`。中间的固定迁移失败时返回 `InvalidStateTransition`。
+    /// 让批次进入可登记确认的阶段：待校验须先进入校验中，校验中直接推进，已待确认则幂等成功。已离开该阶段返回 `erp_core::Error::LogicError`；固定路径上的非法迁移返回 `InvalidStateTransition`。
     pub fn prepare_confirmation(&mut self) -> Result<()> {
         match self.status {
             LegacyImportBatchStatus::PendingValidation => {
@@ -325,87 +245,32 @@ impl LegacyImportBatch {
         }
     }
 
-    /// 判断批次是否处于逐行应用阶段。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 状态为导入中时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 识别批次是否正在逐行应用，供处理结果的入口核对阶段。
     pub fn is_importing(&self) -> bool {
         self.status == LegacyImportBatchStatus::Importing
     }
 
-    /// 判断批次是否接受责任范围确认决策。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 状态为待确认时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 仅待确认时允许接收责任范围的决定，避免更晚阶段改写确认结果。
     pub fn accepts_confirmation_decision(&self) -> bool {
         self.status == LegacyImportBatchStatus::PendingConfirmation
     }
 
-    /// 判断批次是否已完成确认并等待启动应用。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 状态为待应用时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 确认批次已到待应用阶段，供启动正式导入前检查。
     pub fn is_ready_to_apply(&self) -> bool {
         self.status == LegacyImportBatchStatus::ReadyToApply
     }
 
-    /// 判断批次是否允许取消尚未应用的项目。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 待应用或导入中状态返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 仅待应用或导入中允许取消尚未应用的项目，已结束的批次不得再取消。
     pub fn accepts_pending_cancellation(&self) -> bool {
         matches!(self.status, LegacyImportBatchStatus::ReadyToApply | LegacyImportBatchStatus::Importing)
     }
 
-    /// 判断批次是否允许重新准备失败项目。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 部分失败或失败状态返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 仅部分失败或失败的批次允许重新准备失败行，不把成功或未开始的批次当作重试对象。
     pub fn accepts_failed_retry(&self) -> bool {
         matches!(self.status, LegacyImportBatchStatus::PartialFailed | LegacyImportBatchStatus::Failed)
     }
 
-    /// 根据待处理与失败行数派生应用后的批次状态。
-    ///
-    /// # 参数
-    /// * `pending_rows` - 尚未进入终态的行数
-    /// * `failed_rows` - 已失败行数
-    ///
-    /// # 返回
-    /// 全部完成且无失败返回完成；全部完成但有失败返回部分失败；否则保持导入中。不会返回 `Failed`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 由剩余待导入行与失败行数推导当前批次状态：还有待处理则保持导入中；处理完毕后无失败为完成，否则为部分失败。本规则不产生 `Failed`。
     pub fn application_outcome(pending_rows: u64, failed_rows: u64) -> LegacyImportBatchStatus {
         if pending_rows > 0 {
             LegacyImportBatchStatus::Importing
@@ -416,36 +281,14 @@ impl LegacyImportBatch {
         }
     }
 
-    /// 推进批次状态。
-    ///
-    /// 只允许数据模型 §6.12 固定邻接中的迁移。`Completed` 无后继；`Failed` 与 `PartialFailed` 只可回到 `ReadyToApply`，不是终态。
-    ///
-    /// # 参数
-    /// * `to` - 目标状态
-    ///
-    /// # 返回
-    /// 迁移合法返回 `Ok(())`。目标与当前状态相同也返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 目标既不是当前状态，也不在 `allowed_next` 中时返回 `InvalidStateTransition`。
+    /// 按业务状态图推进批次，同状态重复调用成功。`Completed` 无后续迁移，`Failed` 和 `PartialFailed` 只可重试回 `ReadyToApply`；其它非法迁移返回 `InvalidStateTransition`。
     pub fn advance(&mut self, to: LegacyImportBatchStatus) -> Result<()> {
         ensure_transition(self.status, to)?;
         self.status = to;
         Ok(())
     }
 
-    /// 更新处理统计。
-    ///
-    /// # 参数
-    /// * `total_rows` - 处理总行数
-    /// * `success_rows` - 成功行数
-    /// * `failed_rows` - 失败行数
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 当 `success_rows + failed_rows > total_rows` 时返回错误。
+    /// 在落入批次汇总前校验并更新总行数、成功数和失败数；成功与失败之和超过总数时拒绝更新。
     pub fn update_counts(&mut self, total_rows: u64, success_rows: u64, failed_rows: u64) -> Result<()> {
         Self::ensure_counts(total_rows, success_rows, failed_rows)?;
         self.total_rows = total_rows;
@@ -454,20 +297,7 @@ impl LegacyImportBatch {
         Ok(())
     }
 
-    /// 登记成功对象的独立资产（成功数为零时可空）。
-    ///
-    /// 成功白名单包与失败诊断包必须生成独立 `file_asset`，不得混用
-    /// 保留期（数据模型 §4.5.7）。
-    ///
-    /// # 参数
-    /// * `sanitized_file_asset_id` - 成功白名单包资产
-    /// * `manifest_file_asset_id` - manifest 资产
-    ///
-    /// # 返回
-    /// 登记成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 函数体没有失败路径，总是返回 `Ok(())`。
+    /// 关联成功对象的白名单包和清单资产，成功数为零时可不设；两者不得复用失败诊断包的文件资产和保留期。
     pub fn attach_success_assets(
         &mut self,
         sanitized_file_asset_id: FileAssetId,
@@ -478,35 +308,13 @@ impl LegacyImportBatch {
         Ok(())
     }
 
-    /// 登记失败对象的合规诊断包资产（按 30 天销毁）。
-    ///
-    /// # 参数
-    /// * `file_asset_id` - 失败诊断包资产
-    ///
-    /// # 返回
-    /// 登记成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 函数体没有失败路径，总是返回 `Ok(())`。
+    /// 关联失败对象专用的合规诊断包，供按 30 天销毁的保留策略追踪。
     pub fn attach_failure_diagnostic_asset(&mut self, file_asset_id: FileAssetId) -> Result<()> {
         self.failure_diagnostic_file_asset_id = Some(file_asset_id);
         Ok(())
     }
 
-    /// 更新脱敏错误码摘要与确认状态摘要。
-    ///
-    /// 两个摘要均为派生值：错误码摘要不含原值和行列明细，确认状态摘要
-    /// 不保存单个确认人作为多范围事实源（§6.12）。
-    ///
-    /// # 参数
-    /// * `failure_code_summary` - 脱敏错误码及计数
-    /// * `confirmation_status_summary` - 各必要确认的派生摘要
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 摘要文本超长时返回错误。
+    /// 保存供展示的派生摘要：错误码及计数不含原值和行列明细，确认摘要不以单一确认人替代多范围确认事实。任一摘要超长时返回错误。
     pub fn update_summaries(
         &mut self,
         failure_code_summary: Option<String>,
@@ -519,15 +327,7 @@ impl LegacyImportBatch {
         Ok(())
     }
 
-    /// 校验处理统计不变式。
-    ///
-    /// # 参数
-    /// * `total_rows` - 处理总行数
-    /// * `success_rows` - 成功行数
-    /// * `failed_rows` - 失败行数
-    ///
-    /// # 错误
-    /// 当成功行与失败行之和超过总行数时返回错误。
+    // 拒绝成功与失败行数之和大于总量的统计，保证批次创建与更新遵循同一不变式。
     fn ensure_counts(total_rows: u64, success_rows: u64, failed_rows: u64) -> Result<()> {
         if success_rows + failed_rows > total_rows {
             return Err(Error::from("成功行与失败行之和不能超过总行数"));

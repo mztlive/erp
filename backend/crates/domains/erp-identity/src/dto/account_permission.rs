@@ -17,15 +17,11 @@ pub struct AccountPermissionCandidate {
 
 impl AccountPermissionCandidate {
     /// 从已通过资格检查的账号提取候选展示字段。
-    ///
-    /// # 参数
-    /// * `account` - 已校验状态与所需功能权限的账号。
-    ///
-    /// # 返回
     /// 返回不含密码及联系方式的候选信息。
     ///
-    /// # 错误
     /// 不返回错误；本转换不代替调用方资格检查。
+    ///
+    /// `account`：已校验状态与所需功能权限的账号。
     pub fn from_account(account: &AccountCore) -> Self {
         Self {
             user_id: account.base.id.clone(),

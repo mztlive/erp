@@ -10,13 +10,8 @@ use erp_supply::ports::connector::order_tree::OrderTree;
 use super::mapping;
 use super::wire_order::JdOrder;
 
-/// 将已验证的最终子单声明转换为一次性数量事实。
-/// # 参数
-/// 完整且已通过冻结行、价格校验的订单树，以及同次查询的来源详情。
-/// # 返回
-/// 以子单为稳定身份的发货事实，不携带或伪造运单号。
-/// # 错误
-/// 拒收、退回、相互冲突的运输状态或未支持的发货订单类型要求核实。
+// 用已通过完整拓扑、冻结行和价格校验的订单树及同次查询详情，把最终子单的发货声明转成一次性行数量事实。
+// 事实以子单为稳定身份，不附运单号；拒收、退回、状态冲突或未支持的发货类型必须先核实。
 pub(super) fn shipments(
     tree: &OrderTree,
     orders: &BTreeMap<String, JdOrder>,

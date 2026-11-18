@@ -23,16 +23,12 @@ use crate::entity::sales_order::{
 use crate::{Error, Result};
 
 /// 构建稳定明细行（订单创建时按草稿行号建立）。
-///
-/// # 参数
-/// * `order_id` - 所属销售单
-/// * `lines` - 草稿行请求
-///
-/// # 返回
 /// 返回稳定明细行清单（行号升序）。
-///
-/// # 错误
 /// 行号重复时返回错误。
+///
+/// 输入约定：
+/// - `order_id`：所属销售单
+/// - `lines`：草稿行请求
 pub fn build_stable_lines(
     order_id: &SalesOrderId,
     lines: &[SalesOrderDraftLineRequest],
@@ -56,19 +52,14 @@ pub fn build_stable_lines(
 ///
 /// 行金额由实体 `new` 逐行舍入计算，表头金额由服务端汇总已舍入的行金额
 /// （§4.2 铁律 2）。
-///
-/// # 参数
-/// * `order` - 所属销售单实体（已建）
-/// * `stable_lines` - 稳定明细行（已建，行号与草稿行一一对应）
-/// * `draft` - 草稿表头与明细请求
-/// * `draft_version` - 初始草稿版本
-/// * `actor` - 操作人
-///
-/// # 返回
 /// 返回 `(工作副本实体, 工作副本行清单)`。
-///
-/// # 错误
 /// 表头快照、行字段组或金额三元组校验失败时返回错误。
+///
+/// 输入约定：
+/// - `order`：所属销售单实体（已建）
+/// - `stable_lines`：稳定明细行（已建，行号与草稿行一一对应）
+/// - `draft`：草稿表头与明细请求
+/// - `draft_version`：初始草稿版本
 pub fn build_working_copy(
     order: &SalesOrder,
     stable_lines: &[SalesOrderLine],
@@ -117,17 +108,13 @@ pub fn build_working_copy(
     Ok((working_copy, lines))
 }
 
-/// 将草稿行请求映射为工作副本行创建数据（稳定行号 → 稳定明细身份）。
-///
-/// # 参数
-/// * `stable_lines` - 稳定明细行（行号与草稿行一一对应）
-/// * `lines` - 草稿行请求
-///
-/// # 返回
-/// 返回工作副本行创建数据清单。
-///
-/// # 错误
-/// 行号无对应稳定明细时返回错误。
+// 将草稿行请求映射为工作副本行创建数据（稳定行号 → 稳定明细身份）。
+// 返回工作副本行创建数据清单。
+// 行号无对应稳定明细时返回错误。
+//
+// 输入约定：
+// - `stable_lines`：稳定明细行（行号与草稿行一一对应）
+// - `lines`：草稿行请求
 fn build_working_copy_line_datas(
     stable_lines: &[SalesOrderLine],
     lines: &[SalesOrderDraftLineRequest],
@@ -163,17 +150,13 @@ fn build_working_copy_line_datas(
     Ok(datas)
 }
 
-/// 由行创建数据物化工作副本行实体。
-///
-/// # 参数
-/// * `working_copy_id` - 所属工作副本 ID
-/// * `line_datas` - 行创建数据
-///
-/// # 返回
-/// 返回工作副本行实体清单（金额由实体逐行舍入计算）。
-///
-/// # 错误
-/// 行字段组与行类型不一致、金额非法时返回错误。
+// 由行创建数据物化工作副本行实体。
+// 返回工作副本行实体清单（金额由实体逐行舍入计算）。
+// 行字段组与行类型不一致、金额非法时返回错误。
+//
+// 输入约定：
+// - `working_copy_id`：所属工作副本 ID
+// - `line_datas`：行创建数据
 fn materialize_working_copy_lines(
     working_copy_id: &SalesOrderWorkingCopyId,
     line_datas: impl IntoIterator<Item = SalesOrderWorkingCopyLineData>,
@@ -191,18 +174,14 @@ fn materialize_working_copy_lines(
 }
 
 /// 构建工作副本行实体（草稿保存路径复用：稳定行 + 草稿请求 → 行实体）。
-///
-/// # 参数
-/// * `_order_id` - 所属销售单（预留，稳定行 ID 由建单实体产生）
-/// * `working_copy_id` - 所属工作副本 ID
-/// * `stable_lines` - 稳定明细行（行号与草稿行一一对应）
-/// * `lines` - 草稿行请求
-///
-/// # 返回
 /// 返回工作副本行清单（金额由实体逐行舍入计算）。
-///
-/// # 错误
 /// 行字段组与行类型不一致、金额非法时返回错误。
+///
+/// 输入约定：
+/// - `_order_id`：所属销售单（预留，稳定行 ID 由建单实体产生）
+/// - `working_copy_id`：所属工作副本 ID
+/// - `stable_lines`：稳定明细行（行号与草稿行一一对应）
+/// - `lines`：草稿行请求
 pub fn build_working_copy_lines(
     _order_id: &SalesOrderId,
     working_copy_id: &SalesOrderWorkingCopyId,
@@ -214,15 +193,11 @@ pub fn build_working_copy_lines(
 }
 
 /// 构建表头快照入参。
-///
-/// # 参数
-/// * `draft` - 草稿表头请求
-///
-/// # 返回
 /// 返回表头快照入参。
+/// 失败条件：字段复制不失败，始终返回 `Ok`。
 ///
-/// # 错误
-/// 字段复制不失败，始终返回 `Ok`。
+/// 输入约定：
+/// - `draft`：草稿表头请求
 pub fn header_snapshot(
     draft: &SalesOrderDraftRequest,
 ) -> Result<crate::entity::sales_order::HeaderSnapshotData> {
@@ -240,18 +215,14 @@ pub fn header_snapshot(
 /// 从工作副本构建提交快照。
 ///
 /// 字段、快照、金额和字段组复制由实体工厂完成；本方法只注入 ID、提交时间与提交人。
-///
-/// # 参数
-/// * `working_copy` - 已迁移到 `Submitted` 的工作副本
-/// * `lines` - 工作副本行
-/// * `submission_no` - 提交序号
-/// * `actor` - 提交人
-///
-/// # 返回
 /// 返回提交快照实体。
-///
-/// # 错误
 /// 提交字段校验失败时返回错误。
+///
+/// 输入约定：
+/// - `working_copy`：已迁移到 `Submitted` 的工作副本
+/// - `lines`：工作副本行
+/// - `submission_no`：提交序号
+/// - `actor`：提交人
 pub fn build_submission(
     working_copy: &SalesOrderWorkingCopy,
     lines: &[SalesOrderWorkingCopyLine],
@@ -271,16 +242,12 @@ pub fn build_submission(
 /// 从工作副本行构建提交快照明细。
 ///
 /// 行字段组复制由实体工厂完成；本方法只注入提交行 ID。
-///
-/// # 参数
-/// * `submission` - 提交快照
-/// * `lines` - 工作副本行
-///
-/// # 返回
 /// 返回提交快照明细清单。
-///
-/// # 错误
 /// 行字段组缺失或非法时返回错误。
+///
+/// 输入约定：
+/// - `submission`：提交快照
+/// - `lines`：工作副本行
 pub fn build_submission_lines(
     submission: &SalesOrderSubmission,
     lines: &[SalesOrderWorkingCopyLine],
@@ -297,16 +264,11 @@ pub fn build_submission_lines(
 }
 
 /// 构造提交历史视图。
-///
-/// # 参数
-/// * `submission` - 提交快照实体
-/// * `lines` - 该提交下的明细行
-///
-/// # 返回
 /// 返回视图。
 ///
-/// # 错误
-/// 不返回错误。
+/// 输入约定：
+/// - `submission`：提交快照实体
+/// - `lines`：该提交下的明细行
 pub fn submission_view(
     submission: SalesOrderSubmission,
     lines: Vec<SalesOrderSubmissionLine>,
@@ -340,21 +302,14 @@ pub fn submission_view(
 }
 
 /// 构造销售版本历史视图（含当时表头快照与公共行摘要）。
-///
-/// # 参数
-/// * `revision` - 正式销售版本实体
-/// * `lines` - 该版本下的公共行；调用方须已按行号升序
-/// * `previous_revision_no` - 前一生效版本号；无法在本单版本列表解析时为空
-/// * `commercial_lines` - 同版公共行与子类型快照组装的完整成交明细
-///
-/// # 返回
 /// 返回详情「版本」分区使用的视图。
+/// 业务边界：快照字段只读正式版本内联值，不得用当前客户/合同主数据回填。
 ///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 快照字段只读正式版本内联值，不得用当前客户/合同主数据回填。
+/// 输入约定：
+/// - `revision`：正式销售版本实体
+/// - `lines`：该版本下的公共行；调用方须已按行号升序
+/// - `previous_revision_no`：前一生效版本号；无法在本单版本列表解析时为空
+/// - `commercial_lines`：同版公共行与子类型快照组装的完整成交明细
 pub fn revision_view(
     revision: SalesOrderRevision,
     lines: Vec<SalesOrderRevisionLine>,
@@ -393,19 +348,12 @@ pub fn revision_view(
     }
 }
 
-/// 把公共行版本收成详情页一行摘要。
-///
-/// # 参数
-/// * `line` - 公共行版本实体
-///
-/// # 返回
-/// 返回行号、名称、规格、单位与含税金额。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 不展开实物/卡券子类型字段，版本列表只展示公共行快照。
+// 把公共行版本收成详情页一行摘要。
+// 返回行号、名称、规格、单位与含税金额。
+// 业务边界：不展开实物/卡券子类型字段，版本列表只展示公共行快照。
+//
+// 输入约定：
+// - `line`：公共行版本实体
 fn revision_line_view(line: SalesOrderRevisionLine) -> RevisionLineView {
     RevisionLineView {
         line_no: line.line_no,
@@ -416,19 +364,12 @@ fn revision_line_view(line: SalesOrderRevisionLine) -> RevisionLineView {
     }
 }
 
-/// 把版本公共行收成一条可读摘要。
-///
-/// # 参数
-/// * `lines` - 已按行号排序的公共行
-///
-/// # 返回
-/// 无行时返回空串；有行时返回「名称、名称 共 N 项」。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 名称顺序与传入行顺序一致，调用方须先按行号排序。
+// 把版本公共行收成一条可读摘要。
+// 结果：无行时返回空串；有行时返回「名称、名称 共 N 项」。
+// 业务边界：名称顺序与传入行顺序一致，调用方须先按行号排序。
+//
+// 输入约定：
+// - `lines`：已按行号排序的公共行
 fn revision_line_summary(lines: &[SalesOrderRevisionLine]) -> String {
     if lines.is_empty() {
         return String::new();
@@ -537,7 +478,7 @@ mod tests {
         assert_eq!(revision_line_summary(&[]), "");
     }
 
-    /// 构造用于草稿身份映射的行请求，不执行金额物化。
+    // 组装用于草稿身份映射的行请求，不执行金额物化。
     fn draft_line(line_no: u32) -> SalesOrderDraftLineRequest {
         SalesOrderDraftLineRequest {
             line_no,
@@ -551,7 +492,7 @@ mod tests {
         }
     }
 
-    /// 重复稳定行取第一条；输出保持请求顺序及重复请求，不按索引顺序输出。
+    // 回归检查：重复稳定行取第一条；输出保持请求顺序及重复请求，不按索引顺序输出。
     #[test]
     fn draft_mapping_uses_first_matching_identity_and_preserves_request_order() {
         let requests = [draft_line(2), draft_line(1), draft_line(2)];
@@ -569,7 +510,7 @@ mod tests {
         assert!(build_working_copy_line_datas(&stable, &[]).unwrap().is_empty());
     }
 
-    /// 构造带成交模式和采购供给价的实物草稿行，覆盖映射后的金额校验。
+    // 组装带成交模式和采购供给价的实物草稿行，覆盖映射后的金额校验。
     fn priced_draft_line(mode: &str, price: &str) -> SalesOrderDraftLineRequest {
         let mut line = draft_line(1);
         line.goods = Some(
@@ -584,7 +525,7 @@ mod tests {
         line
     }
 
-    /// 赠品保持零价及供给成本；普通成交价保留，旧自动模式转为手工模式。
+    // 回归检查：赠品保持零价及供给成本；普通成交价保留，旧自动模式转为手工模式。
     #[test]
     fn working_copy_mapping_preserves_gifts_and_entered_prices() {
         for (mode, price, expected_mode, gross) in [
@@ -609,7 +550,7 @@ mod tests {
         }
     }
 
-    /// 映射不能放宽成交规则：非赠品零价及赠品非零价仍须拒绝。
+    // 回归检查：映射不能放宽成交规则：非赠品零价及赠品非零价仍须拒绝。
     #[test]
     fn working_copy_mapping_rejects_price_mode_mismatches() {
         for (mode, price, message) in [
@@ -638,7 +579,7 @@ mod tests {
             if message == "行号 9 无对应稳定明细"));
     }
 
-    /// 大批草稿行按请求顺序匹配稳定身份。
+    // 回归检查：大批草稿行按请求顺序匹配稳定身份。
     #[test]
     fn large_draft_mapping_sample() {
         let mut lines = (1..=2000).map(draft_line).collect::<Vec<_>>();

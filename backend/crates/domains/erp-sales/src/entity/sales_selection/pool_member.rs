@@ -21,19 +21,14 @@ pub struct SalesSelectionPoolMember {
 }
 
 impl SalesSelectionPoolMember {
-    /// 创建批次成员。
-    ///
-    /// # 参数
-    /// * `id` - 成员身份
-    /// * `booklet_id` - 选品册
-    /// * `batch_id` - 批次
-    /// * `sku` - 已规范化快照
-    ///
-    /// # 返回
+    /// 冻结商品池时建立批次成员，供本批次生成和重生成陈列使用。
     /// 返回成员实体。
     ///
-    /// # 错误
-    /// 无。
+    /// 输入约定：
+    /// - `id`：成员身份
+    /// - `booklet_id`：选品册
+    /// - `batch_id`：批次
+    /// - `sku`：已规范化快照
     pub fn new(
         id: SalesSelectionPoolMemberId,
         booklet_id: SalesSelectionBookletId,

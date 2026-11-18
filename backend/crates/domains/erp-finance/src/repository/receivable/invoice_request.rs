@@ -46,16 +46,12 @@ impl Pagination for RequestFilter<'_> {
 #[allow(async_fn_in_trait)]
 pub trait SalesInvoiceRequestRepositoryExt {
     /// 有界装载范围查询的完整候选，不执行分页 skip 或重复 count。
-    ///
-    /// # 参数
-    /// * `query` - 与普通列表相同的来源、状态和字面量关键词条件
-    /// * `executor` - 调用方本次快照事务
-    ///
-    /// # 返回
-    /// 按创建时间及主键倒序返回最多 10001 条；调用方必须拒绝超过 10000 条。
-    ///
-    /// # 错误
+    /// 结果：按创建时间及主键倒序返回最多 10001 条；调用方必须拒绝超过 10000 条。
     /// 查询或反序列化失败时返回仓储错误。
+    ///
+    /// 输入约定：
+    /// - `query`：与普通列表相同的来源、状态和字面量关键词条件
+    /// - `executor`：调用方本次快照事务
     async fn scope_candidates(
         &self,
         query: &InvoiceRequestQuery,
@@ -64,16 +60,11 @@ pub trait SalesInvoiceRequestRepositoryExt {
     ) -> Result<Vec<SalesInvoiceRequest>>;
 
     /// 查找与财务任务一一关联的申请；缺失表示任务没有申请授权。
-    ///
-    /// # 参数
-    /// * `task_id` - 财务任务身份，对应 `work_item_id`。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
     /// 返回关联申请；不存在时返回 `None`。
+    /// 传播数据库读取或反序列化失败。
     ///
-    /// # 错误
-    /// 仓储读取或反序列化失败时返回错误。
+    /// 输入约定：
+    /// - `task_id`：财务任务身份，对应 `work_item_id`。
     async fn find_for_task(
         &self,
         task_id: &str,
@@ -81,16 +72,11 @@ pub trait SalesInvoiceRequestRepositoryExt {
     ) -> Result<Option<SalesInvoiceRequest>>;
 
     /// 按相同过滤条件读取列表和总数；固定时间及主键排序。
-    ///
-    /// # 参数
-    /// * `query` - 与普通列表相同的过滤与分页条件。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
     /// 返回按 `created_at`、`id` 倒序的当前页与总数。
+    /// 传播数据库或分页读取失败。
     ///
-    /// # 错误
-    /// 仓储或分页读取失败时返回错误。
+    /// 输入约定：
+    /// - `query`：与普通列表相同的过滤与分页条件。
     async fn page(
         &self,
         query: &InvoiceRequestQuery,
@@ -98,16 +84,11 @@ pub trait SalesInvoiceRequestRepositoryExt {
     ) -> Result<PageResult<SalesInvoiceRequest>>;
 
     /// 查询占用当前应收额度的申请，供同一应收写锁内计算可用额度。
-    ///
-    /// # 参数
-    /// * `id` - 应收子账身份。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
     /// 返回该子账上状态为 `in_approval` 或 `approved` 的申请；没有时返回空列表。
+    /// 传播数据库读取失败。
     ///
-    /// # 错误
-    /// 仓储读取失败时返回错误。
+    /// 输入约定：
+    /// - `id`：应收子账身份。
     async fn reserved_for_account(
         &self,
         id: &str,
@@ -116,17 +97,12 @@ pub trait SalesInvoiceRequestRepositoryExt {
 }
 
 impl SalesInvoiceRequestRepositoryExt for persistence_core::Repository<'_, SalesInvoiceRequest> {
-    /// 使用普通列表的过滤合同，仅装载有界候选并保留稳定排序。
-    ///
-    /// # 参数
-    /// * `query` - 与普通列表相同的来源、状态和字面量关键词条件；分页字段不参与过滤。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 按 `created_at`、`id` 倒序返回最多 10001 条；没有匹配时返回空列表。
-    ///
-    /// # 错误
-    /// 查询或反序列化失败时返回仓储错误。
+    // 使用普通列表的过滤合同，仅装载有界候选并保留稳定排序。
+    // 结果：按 `created_at`、`id` 倒序返回最多 10001 条；没有匹配时返回空列表。
+    // 查询或反序列化失败时返回仓储错误。
+    //
+    // 输入约定：
+    // - `query`：与普通列表相同的来源、状态和字面量关键词条件；分页字段不参与过滤。
     async fn scope_candidates(
         &self,
         query: &InvoiceRequestQuery,
@@ -180,7 +156,7 @@ impl SalesInvoiceRequestRepositoryExt for persistence_core::Repository<'_, Sales
     }
 }
 
-/// 候选上限额外装载一条哨兵，不受最终展示页码影响。
+// 为授权候选查询多取一条判断是否超过规模上限，不使用最终展示页的偏移量。
 fn candidate_options() -> FindOptions {
     FindOptions::builder().sort(doc! {"created_at": -1, "id": -1}).limit(10_001).build()
 }
@@ -190,7 +166,7 @@ mod tests {
     use super::*;
     use crate::entity::receivable::InvoiceRequestStatus;
 
-    /// 完整候选入口保留稳定排序，额外一条哨兵可判定既有拒绝上限。
+    // 回归检查：完整候选入口保留稳定排序，额外一条哨兵可判定既有拒绝上限。
     #[test]
     fn scope_candidates_options_are_bounded_sorted_and_do_not_skip() {
         let options = candidate_options();
@@ -199,7 +175,7 @@ mod tests {
         assert_eq!(options.sort, Some(doc! { "created_at": -1, "id": -1 }));
     }
 
-    /// 业务条件及软删除沿用普通列表，最终分页不参与候选过滤。
+    // 回归检查：业务条件及软删除沿用普通列表，最终分页不参与候选过滤。
     #[test]
     fn scope_candidates_filters_keep_business_constraints_independent_of_paging() {
         let mut query = InvoiceRequestQuery {

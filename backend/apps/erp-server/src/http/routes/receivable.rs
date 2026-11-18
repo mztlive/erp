@@ -13,16 +13,7 @@ use crate::http::routes::permission_route;
 use crate::http::state::HttpState;
 use crate::http::upload;
 
-/// 返回本域管理端路由集合。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回声明公共权限目录信息的路由集合。
-///
-/// # 错误
-/// 不执行 I/O，不返回错误。
+/// 为管理端挂载应收子账、回款与发票接口，按操作登记公共权限目录信息；文件入口保留对应的上传限制。
 pub fn routes() -> Router<HttpState> {
     receipt_file_routes()
         .merge(additional_document_routes())
@@ -34,7 +25,7 @@ pub fn routes() -> Router<HttpState> {
         .merge(invoice_command_routes())
 }
 
-/// 应收子账与财务来源资料保留逐路由公共权限目录信息。
+// 组装应收子账和财务来源资料入口，为每项读写声明各自的公共权限元数据。
 fn account_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -67,7 +58,7 @@ fn account_routes() -> Router<HttpState> {
         )
 }
 
-/// 回款列表、详情与草稿保留逐路由公共权限目录信息。
+// 挂载回款查询、详情和草稿读取以支持定位待办单据，保留各路由的权限目录引用。
 fn receipt_query_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -100,7 +91,7 @@ fn receipt_query_routes() -> Router<HttpState> {
         )
 }
 
-/// 回款正式办理命令保留逐路由公共权限目录信息。
+// 挂载回款正式命令入口，将各命令与原公共权限定义关联。
 fn receipt_command_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -133,7 +124,7 @@ fn receipt_command_routes() -> Router<HttpState> {
         )
 }
 
-/// 发票与开票申请查询保留逐路由公共权限目录信息。
+// 组装发票、开票申请及其查询入口，逐操作声明使用的公共权限。
 fn invoice_query_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -171,7 +162,7 @@ fn invoice_query_routes() -> Router<HttpState> {
         )
 }
 
-/// 发票登记与红票命令保留逐路由公共权限目录信息。
+// 为发票登记和红票办理挂载写命令，按实际动作保留各自的公共权限引用。
 fn invoice_command_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -191,14 +182,8 @@ fn invoice_command_routes() -> Router<HttpState> {
         )
 }
 
-/// 发票文件上传路由。
-///
-/// # 参数
-/// 无。
-/// # 返回
-/// 返回逐操作声明权限目录信息并保留上传限制的路由集合。
-/// # 错误
-/// 无；业务错误由各处理器返回。
+// 为父路由挂载发票文件上传路由。
+// 对 multipart 方法保留独立的准入及请求体上限。
 fn additional_document_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -247,7 +232,7 @@ fn additional_document_routes() -> Router<HttpState> {
         )
 }
 
-/// 回款草稿凭证沿用提交权限和统一上传限制。
+// 挂载回款草稿凭证相关接口，继续沿用回款提交资格及统一上传限制。
 fn receipt_file_routes() -> Router<HttpState> {
     Router::new().route(
         "/customer-receipts/drafts/with-files",

@@ -18,13 +18,7 @@ use crate::http::tasks::RequestTasks;
 type Result<T> = std::result::Result<T, Error>;
 static CAPACITY: OnceLock<Arc<Semaphore>> = OnceLock::new();
 
-/// 启动有界后台工作，立即返回已领取或已成功的任务。
-/// # 参数
-/// * `state` / `actor` / `id` - 应用、认证人与本人任务。
-/// # 返回
-/// 持久任务状态；响应被取消后后台仍继续执行。
-/// # 错误
-/// 并发容量不足、权限、文件状态或任务领取失败。
+// 启动或重试合同识别时，把领取与识别交给有并发上限的后台任务，返回已领取或已成功的持久状态；掉线不取消识别。容量、权限、文件状态或领取失败时返回错误。
 pub(crate) async fn start(state: HttpState, actor: AuditActor, id: String) -> Result<ImportView> {
     let permit = CAPACITY
         .get_or_init(|| Arc::new(Semaphore::new(4)))
@@ -94,7 +88,7 @@ fn log_outcome(result: ProcessResult<ImportView>, elapsed: Duration) {
     }
 }
 
-/// 领取和工作都归独立任务所有，丢弃响应接收端不得取消任何已启动步骤。
+// 在独立任务中领取合同识别工作并继续执行，响应接收端离开后仍完成已启动的步骤。
 async fn launch<R, W, C, F, Run>(
     tasks: &RequestTasks,
     permit: OwnedSemaphorePermit,

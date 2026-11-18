@@ -22,12 +22,7 @@ pub struct ScheduledRequest {
 }
 impl ScheduledRequest {
     /// 构造确定性回执主键。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// app 与日志号组成的稳定键；app 由配置限制为字母、数字和连字符。
-    /// # 错误
-    /// 无。
     pub fn key(&self) -> String {
         format!("{}:{}", self.app, self.log_id)
     }
@@ -58,12 +53,8 @@ pub struct ScheduledRun {
 }
 impl ScheduledRun {
     /// 创建尚未执行业务的回执。
-    /// # 参数
-    /// `request` 为协议层已校验身份。
-    /// # 返回
     /// 占用该 Job ID 活动槽位的 accepted 回执。
-    /// # 错误
-    /// 无。
+    /// `request` 为协议层已校验身份。
     pub fn accepted(request: ScheduledRequest) -> Self {
         Self {
             base: BaseModel::new(request.key()),

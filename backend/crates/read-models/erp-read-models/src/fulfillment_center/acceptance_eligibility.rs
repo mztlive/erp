@@ -15,7 +15,7 @@ use super::dto::{AcceptanceEligibilityView, AcceptanceSalesLineGroupView, Eligib
 use crate::{Error, Result};
 
 impl FulfillmentReadService {
-    /// 查询客户验收工作台（W06：销售行 + 可验收事实 + 验收历史）。
+    /// 读取客户验收工作台（W06：销售行 + 可验收事实 + 验收历史）。
     ///
     /// 客户验收签署为 `NO_APPROVAL`：工作台只计算可验收事实，不得查询审批
     /// 定义、不得展示或创建审批任务。
@@ -41,17 +41,14 @@ impl FulfillmentReadService {
         self.load_acceptance_eligibility(sales_order_id, &mut NoTransaction).await
     }
 
-    /// 沿用调用方授权事务读取剩余验收事实。
-    ///
-    /// # 参数
-    /// * `sales_order_id` - 销售单身份
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 返回销售行分组与验收历史。
-    ///
-    /// # 错误
-    /// 销售单不存在、没有生效版本或生效版本不存在时返回 `NotFound`。销售、履约仓储读取失败，或行资格投影失败时返回对应错误。
+    // 读取客户验收工作台时，沿用调用方授权事务读取剩余验收事实。
+    //
+    // 调用参数：
+    // * `sales_order_id` - 销售单身份
+    //
+    // 返回销售行分组与验收历史。
+    //
+    // 销售单不存在、没有生效版本或生效版本不存在时返回 `NotFound`。销售、履约仓储读取失败，或行资格投影失败时返回对应错误。
     pub(super) async fn load_acceptance_eligibility(
         &self,
         sales_order_id: &str,
@@ -160,16 +157,10 @@ impl FulfillmentReadService {
     }
 }
 
-/// 取当前生效版本行涉及的销售稳定明细 ID 集合。
-///
-/// # 参数
-/// * `revision_lines` - 销售版本公共行
-///
-/// # 返回
-/// 返回销售稳定明细 ID 集合。
-///
-/// # 错误
-/// 不返回错误。
+// 定位客户验收工作台关联时，取当前生效版本行涉及的销售稳定明细 ID 集合。
+//
+// 调用参数：
+// * `revision_lines` - 销售版本公共行
 pub(crate) fn so_line_ids(
     revision_lines: &[erp_sales::entity::sales_order::SalesOrderRevisionLine],
 ) -> Vec<SalesOrderLineId> {
@@ -214,16 +205,14 @@ pub(crate) struct EligibilityGroupSources<'a> {
     pub(crate) service_allocations: &'a [AcceptanceFulfillmentAllocation],
 }
 
-/// 将外域销售实体明确映射为履约消费的最小事实，复用唯一数量规则。
-///
-/// # 参数
-/// * `sources` - 版本行、履约集合与分配
-///
-/// # 返回
-/// 返回按销售稳定明细组织的行级资格投影。
-///
-/// # 错误
-/// 下层行资格投影失败时返回对应错误。
+// 生成客户验收工作台视图时，将外域销售实体明确映射为履约消费的最小事实，复用唯一数量规则。
+//
+// 调用参数：
+// * `sources` - 版本行、履约集合与分配
+//
+// 返回按销售稳定明细组织的行级资格投影。
+//
+// 下层行资格投影失败时返回对应错误。
 pub(crate) fn build_line_eligibilities(
     sources: &EligibilityGroupSources<'_>,
 ) -> Result<Vec<AcceptanceLineEligibility>> {
@@ -257,18 +246,16 @@ pub(crate) fn build_line_eligibilities(
     })?)
 }
 
-/// 把销售行资格投影映射为验收工作台分组视图。
-///
-/// # 用途
-/// 仅做展示字段映射：数量字段全部取自领域投影，展示字段（行号/品名/单位/
-/// 单号/时间/物流）按来源事实与版本行组装，分组按行号稳定排序。
-///
-/// # 参数
-/// * `sources` - 版本行、履约集合与分配（展示字段来源）
-/// * `lines` - 领域行级资格投影
-///
-/// # 返回
-/// 返回按行号稳定排序的工作台分组视图。
+// 生成客户验收工作台视图时，把销售行资格投影映射为验收工作台分组视图。
+//
+// 仅做展示字段映射：数量字段全部取自领域投影，展示字段（行号/品名/单位/
+// 单号/时间/物流）按来源事实与版本行组装，分组按行号稳定排序。
+//
+// 调用参数：
+// * `sources` - 版本行、履约集合与分配（展示字段来源）
+// * `lines` - 领域行级资格投影
+//
+// 返回按行号稳定排序的工作台分组视图。
 fn build_eligibility_views(
     sources: &EligibilityGroupSources<'_>,
     lines: &[AcceptanceLineEligibility],
@@ -321,7 +308,7 @@ fn build_eligibility_views(
     groups
 }
 
-/// 保持事实行身份；同商品发往不同地址时只附上该行包裹。
+// 生成客户验收工作台视图时，保持事实行身份；同商品发往不同地址时只附上该行包裹。
 fn delivery_fact_view(
     sources: &EligibilityGroupSources<'_>,
     line: &DeliveryLine,
@@ -347,7 +334,7 @@ fn delivery_fact_view(
     }
 }
 
-/// 电子交付和服务事实保持原资格规则，不附加实体物流。
+// 生成客户验收工作台视图时，电子交付和服务事实保持原资格规则，不附加实体物流。
 fn non_delivery_fact_view(
     sources: &EligibilityGroupSources<'_>,
     line: &AcceptanceLineEligibility,
@@ -389,8 +376,8 @@ fn non_delivery_fact_view(
     })
 }
 
-/// 只投影当前销售稳定明细的物流条目，不跨明细推断或去重。
-/// 新发货事实按真实发货行过滤包裹，旧事实保留已记录的销售行物流。
+// 处理客户验收工作台时，只投影当前销售稳定明细的物流条目，不跨明细推断或去重。
+// 新发货事实按真实发货行过滤包裹，旧事实保留已记录的销售行物流。
 fn exact_delivery_tracking(delivery: Option<&Delivery>, line: &DeliveryLine) -> Vec<DeliveryTrackingEntry> {
     let Some(delivery) = delivery else {
         return Vec::new();
@@ -458,7 +445,7 @@ mod acceptance_eligibility_rule_source_tests {
         delivery_tracking_entries, exact_delivery_tracking,
     };
 
-    /// 构造销售版本公共行（实物服务行）。
+    // 处理客户验收工作台时，生成销售版本公共行（实物服务行）。
     fn revision_line(id: &str, line_no: u32, sales_order_line_id: &str) -> SalesOrderRevisionLine {
         SalesOrderRevisionLine::new(
             SalesOrderRevisionLineId::new(id),
@@ -479,7 +466,7 @@ mod acceptance_eligibility_rule_source_tests {
         .unwrap()
     }
 
-    /// 构造与公共行一对一的实物服务子行。
+    // 处理客户验收工作台时，生成与公共行一对一的实物服务子行。
     fn goods_line(
         revision_line_id: &str,
         quantity: &str,
@@ -505,7 +492,7 @@ mod acceptance_eligibility_rule_source_tests {
         .unwrap()
     }
 
-    /// 构造已发货的仓发发货单。
+    // 处理客户验收工作台时，生成已发货的仓发发货单。
     fn delivery(id: &str, delivery_no: &str) -> Delivery {
         let mut delivery = Delivery::new(
             DeliveryId::new(id),
@@ -542,7 +529,7 @@ mod acceptance_eligibility_rule_source_tests {
         delivery
     }
 
-    /// 构造仓发发货行。
+    // 处理客户验收工作台时，生成仓发发货行。
     fn delivery_line(
         id: &str,
         delivery_id: &str,
@@ -565,7 +552,7 @@ mod acceptance_eligibility_rule_source_tests {
         .unwrap()
     }
 
-    /// 构造已确认的电子交付记录。
+    // 处理客户验收工作台时，生成已确认的电子交付记录。
     fn electronic_delivery(
         id: &str,
         fulfillment_no: &str,
@@ -602,7 +589,7 @@ mod acceptance_eligibility_rule_source_tests {
         record
     }
 
-    /// 构造已确认的线下服务履约记录。
+    // 处理客户验收工作台时，生成已确认的线下服务履约记录。
     fn service_fulfillment(
         id: &str,
         fulfillment_no: &str,
@@ -648,7 +635,7 @@ mod acceptance_eligibility_rule_source_tests {
         record
     }
 
-    /// 构造一条 APPLY 验收分配。
+    // 组装客户验收工作台时，生成一条 APPLY 验收分配。
     fn apply_allocation(
         fact_type: FulfillmentFactType,
         line_id: &str,
@@ -668,7 +655,7 @@ mod acceptance_eligibility_rule_source_tests {
         .unwrap()
     }
 
-    /// 同号关联多个销售明细时，投影保留每个明细自身的完整条目。
+    // 验证客户验收工作台：同号关联多个销售明细时，投影保留每个明细自身的完整条目。
     #[test]
     fn logistics_projection_keeps_shared_package_in_each_sales_line() {
         let delivery = delivery("dlv-1", "DLV-2026-001");
@@ -683,8 +670,8 @@ mod acceptance_eligibility_rule_source_tests {
         assert!(delivery_tracking_entries(None, "so-line-1").is_empty());
     }
 
-    /// 三类履约事实（发货/电子交付/服务履约）按稳定销售明细分组，净验收与
-    /// 剩余可验收守恒；工作台视图保持行号稳定排序与展示字段。
+    // 验证客户验收工作台：三类履约事实（发货/电子交付/服务履约）按稳定销售明细分组，净验收与。
+    // 剩余可验收守恒；工作台视图保持行号稳定排序与展示字段。
     #[test]
     fn three_fact_types_group_per_stable_line_with_stable_sort_and_display_fields() {
         // 版本行故意乱序传入：行号 2 在前、行号 1 在后，视图必须按行号稳定排序。
@@ -787,7 +774,7 @@ mod acceptance_eligibility_rule_source_tests {
         assert!(progress.has_remaining_eligible);
     }
 
-    /// 同一销售商品分到不同地址后，验收不得看到另一地址的包裹。
+    // 验证客户验收工作台：同一销售商品分到不同地址后，验收不得看到另一地址的包裹。
     #[test]
     fn acceptance_tracking_is_scoped_to_actual_delivery_line() {
         use erp_fulfillment::entity::fulfillment::{DeliveryPackage, DeliveryPacking, PackingItem};
@@ -828,9 +815,9 @@ mod acceptance_eligibility_rule_source_tests {
         );
     }
 
-    /// 已确认但失败的线下服务履约不得影响派生进度与剩余可验收：工作台与过账
-    /// 进入规则源前必须剔除该事实，否则全部验收后 `has_remaining_eligible`
-    /// 仍为真，验收任务不会关闭。
+    // 验证客户验收工作台：已确认但失败的线下服务履约不得影响派生进度与剩余可验收：工作台与过账。
+    // 进入规则源前必须剔除该事实，否则全部验收后 `has_remaining_eligible`
+    // 仍为真，验收任务不会关闭。
     #[test]
     fn confirmed_failed_service_fact_has_no_effect_on_derived_progress() {
         let revision_lines = vec![revision_line("rl-1", 1, "so-line-1")];
@@ -905,7 +892,7 @@ mod acceptance_eligibility_rule_source_tests {
         assert!(raw_progress.has_remaining_eligible);
     }
 
-    /// 净验收超过成功履约数量时错误向上传递，禁止静默回退为零。
+    // 验证客户验收工作台：净验收超过成功履约数量时错误向上传递，禁止静默回退为零。
     #[test]
     fn net_over_acceptance_error_propagates_from_rule_source() {
         let revision_lines = vec![revision_line("rl-1", 1, "so-line-1")];
@@ -930,9 +917,9 @@ mod acceptance_eligibility_rule_source_tests {
         assert!(error.to_string().contains("超过其净成功履约数量"));
     }
 
-    /// 剩余可验收数量驱动过账后的任务关闭：无剩余 → 任务完成；有剩余或未
-    /// 开始 → 任务保持开放（`persist_customer_acceptance_task_after_posting`
-    /// 仅在 `!has_remaining_eligible` 时完成 WorkItem）。
+    // 验证客户验收工作台：剩余可验收数量驱动过账后的任务关闭：无剩余 → 任务完成；有剩余或未。
+    // 开始 → 任务保持开放（`persist_customer_acceptance_task_after_posting`
+    // 仅在 `!has_remaining_eligible` 时完成 WorkItem）。
     #[test]
     fn has_remaining_eligible_drives_acceptance_task_completion() {
         let revision_lines = vec![revision_line("rl-1", 1, "so-line-1")];

@@ -17,7 +17,7 @@ REQUIRED = {"bpm", "erp-workflow", "erp-core", "entity-macros", "cli", "erp-serv
 
 
 def dependency_errors(metadata) -> list[str]:
-    """Include renamed, optional, target-specific and all dependency-kind edges."""
+    """检查 BPM、工作流与应用入口的依赖方向，供门禁阻断越界路径，覆盖重命名、可选、目标特定及各依赖类别。"""
     errors = []
     packages = metadata.get("packages", [])
     graph = {}

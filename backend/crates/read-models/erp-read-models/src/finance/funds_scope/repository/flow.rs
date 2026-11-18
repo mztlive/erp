@@ -89,10 +89,7 @@ pub(in crate::finance::funds_scope) struct SummaryLink {
 }
 
 impl<T> FlowPage<T> {
-    /// 读取数据库真实总数；计数达到完整版本上限时拒绝，不做截断。
-    ///
-    /// # 参数
-    /// 无。
+    /// 处理多来源资金单据时，读取数据库真实总数；计数达到完整版本上限时拒绝，不做截断。
     ///
     /// # 返回
     /// 计数分支的 `count`；计数分支为空时为零。
@@ -108,17 +105,13 @@ impl<T> FlowPage<T> {
     }
 }
 
-/// 按原候选顺序把授权版本、主表身份和来源版本收成跨页指纹。
-///
-/// # 参数
-/// * `scope` - 授权范围版本。
-/// * `rows` - 全部匹配主表及其来源版本。
-///
-/// # 返回
-/// 十六进制指纹。内容为授权版本、每条主表 `id` 与 `version`，以及按来源 `id` 排序后的来源 `version`。
-///
-/// # 错误
-/// 不返回错误。
+// 依据原候选顺序把授权版本、主表身份和来源版本收成跨页指纹。
+//
+// 调用参数：
+// * `scope` - 授权范围版本。
+// * `rows` - 全部匹配主表及其来源版本。
+//
+// 十六进制指纹。内容为授权版本、每条主表 `id` 与 `version`，以及按来源 `id` 排序后的来源 `version`。
 pub(in crate::finance::funds_scope) fn version(scope: &str, rows: &[FlowVersion]) -> String {
     let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
     scope.hash(&mut fingerprint);
@@ -137,17 +130,15 @@ pub(in crate::finance::funds_scope) fn version(scope: &str, rows: &[FlowVersion]
     format!("{:x}", fingerprint.finish())
 }
 
-/// 沿用金额逐笔折叠与人员归组，把每行份额按原动作方向归并。
-///
-/// # 参数
-/// * `rows` - 已按父单归组的金额与份额。
-/// * `version` - 本次范围版本。
-///
-/// # 返回
-/// 归并后的授权份额视图。任一行 `whole` 为 false 时不带整单合计，并标记权限受限。
-///
-/// # 错误
-/// 份额动作不是 `apply` 或 `reverse` 时返回 `Internal`，文案为核销分配动作非法。
+// 汇总多来源资金单据时，沿用金额逐笔折叠与人员归组，把每行份额按原动作方向归并。
+//
+// 调用参数：
+// * `rows` - 已按父单归组的金额与份额。
+// * `version` - 本次范围版本。
+//
+// 归并后的授权份额视图。任一行 `whole` 为 false 时不带整单合计，并标记权限受限。
+//
+// 份额动作不是 `apply` 或 `reverse` 时返回 `Internal`，文案为核销分配动作非法。
 pub(in crate::finance::funds_scope) fn summary(
     rows: &[FlowSummary],
     version: &str,
@@ -175,7 +166,7 @@ pub(in crate::finance::funds_scope) fn summary(
     Ok(summary)
 }
 
-/// 固定动作转换复用原正负方向；持久化非法动作整体拒绝。
+// 处理多来源资金单据时，固定动作转换复用原正负方向；持久化非法动作整体拒绝。
 fn signed(link: &SummaryLink) -> Result<Amount> {
     match link.action.as_str() {
         "apply" => Ok(link.amount),
@@ -184,16 +175,9 @@ fn signed(link: &SummaryLink) -> Result<Amount> {
     }
 }
 
-/// 来源版本按身份去重并稳定排序，与 Rust BTreeSet 的旧口径一致。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 聚合表达式：从已匹配的 `scope_links` 取出 `order` 与 `source_version`，去重后按 `id` 排序。
-///
-/// # 错误
-/// 不返回错误。
+// 处理多来源资金单据的版本事实时，来源版本按身份去重并稳定排序，与 Rust BTreeSet 的旧口径一致。
+//
+// 聚合表达式：从已匹配的 `scope_links` 取出 `order` 与 `source_version`，去重后按 `id` 排序。
 pub(super) fn source_versions() -> Bson {
     doc! { "$sortArray": { "input": { "$setUnion": [{ "$map": {
         "input": { "$filter": { "input": "$scope_links", "as": "link", "cond": "$$link.matched" } },
@@ -202,30 +186,19 @@ pub(super) fn source_versions() -> Bson {
     .into()
 }
 
-/// 完整责任版本投影不包含金额、分配视图和附件。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 只含 `id`、`version` 和 `sources` 的投影。
-///
-/// # 错误
-/// 不返回错误。
+// 组装多来源资金单据的聚合管道时，完整责任版本投影不包含金额、分配视图和附件。
+//
+// 只含 `id`、`version` 和 `sources` 的投影。
 pub(super) fn version_projection() -> Document {
     doc! { "_id": 0, "id": 1, "version": 1, "sources": source_versions() }
 }
 
-/// 首拍只保留逐行主表金额及已经匹配的来源责任人。
-///
-/// # 参数
-/// * `sort` - 主表稳定排序。
-///
-/// # 返回
-/// 排序、最多 10000 条，再投影版本、金额、整单标记和已匹配来源责任人。
-///
-/// # 错误
-/// 不返回错误。
+// 组装多来源资金单据的聚合管道时，首拍只保留逐行主表金额及已经匹配的来源责任人。
+//
+// 调用参数：
+// * `sort` - 主表稳定排序。
+//
+// 排序、最多 10000 条，再投影版本、金额、整单标记和已匹配来源责任人。
 pub(super) fn header_stages(sort: Document) -> Vec<Document> {
     let mut projection = version_projection();
     projection.insert("amount", 1);
@@ -241,34 +214,28 @@ pub(super) fn header_stages(sort: Document) -> Vec<Document> {
     vec![doc! { "$sort": sort }, doc! { "$limit": 10_000_i64 }, doc! { "$project": projection }]
 }
 
-/// 页面分支只包含当前页与完整计数；金额和责任版本使用独立游标。
-///
-/// # 参数
-/// * `page` - 页码，从 1 起。
-/// * `size` - 页大小。
-/// * `projection` - 当前页投影。
-/// * `sort` - 稳定排序。
-///
-/// # 返回
-/// 只含 `items` 与 `total` 的 `$facet`。页偏移无法用 `i64` 表示时，页面分支是恒假匹配。
-///
-/// # 错误
-/// 不返回错误。本函数始终返回 `Ok`。
+// 生成多来源资金单据分页时，页面分支只包含当前页与完整计数；金额和责任版本使用独立游标。
+//
+// 调用参数：
+// * `page` - 页码，从 1 起。
+// * `size` - 页大小。
+// * `projection` - 当前页投影。
+// * `sort` - 稳定排序。
+//
+// 只含 `items` 与 `total` 的 `$facet`。页偏移无法用 `i64` 表示时，页面分支是恒假匹配。
+//
+// 本函数始终返回 `Ok`。
 pub(super) fn facet(page: u64, size: u32, projection: Document, sort: Document) -> Result<Document> {
     Ok(super::page_only_facet(page, size, sort, projection))
 }
 
-/// 原父单集合 find 流按父单归组；保留父单内顺序及实际来源类型。
-///
-/// # 参数
-/// * `headers` - 首拍逐行版本、金额和已匹配来源责任人。
-/// * `links` - 按父单返回的金额流。
-///
-/// # 返回
-/// 与 `headers` 同序的版本列表，以及只保留同拍已匹配来源的汇总行。父单没有金额流时份额为空。
-///
-/// # 错误
-/// 不返回错误。
+// 计算多来源资金单据金额时，原父单集合 find 流按父单归组；保留父单内顺序及实际来源类型。
+//
+// 调用参数：
+// * `headers` - 首拍逐行版本、金额和已匹配来源责任人。
+// * `links` - 按父单返回的金额流。
+//
+// 与 `headers` 同序的版本列表，以及只保留同拍已匹配来源的汇总行。父单没有金额流时份额为空。
 pub(in crate::finance::funds_scope) fn summaries(
     headers: Vec<FlowHeader>,
     links: Vec<FinancialSummaryLink>,
@@ -299,7 +266,7 @@ pub(in crate::finance::funds_scope) fn summaries(
     (versions, summary)
 }
 
-/// 来源身份保持采购与结算区分，只有同拍已匹配来源可以进入汇总。
+// 汇总多来源资金单据时，来源身份保持采购与结算区分，只有同拍已匹配来源可以进入汇总。
 fn summary_link(link: FinancialSummaryLink, owners: &HashMap<String, Option<String>>) -> Option<SummaryLink> {
     let order = link.source_document_id.map(|id| match link.source_type {
         Some(PayableSourceType::SupplierSettlement) => format!("supplier_settlement_statement:{id}"),
@@ -322,31 +289,23 @@ fn summary_link(link: FinancialSummaryLink, owners: &HashMap<String, Option<Stri
     })
 }
 
-/// 重新授权只返回完整窄版本，不装配第二份页面及金额。
-///
-/// # 参数
-/// * `sort` - 主表稳定排序。
-///
-/// # 返回
-/// 排序、最多 10000 条，再投影 `version_projection`。
-///
-/// # 错误
-/// 不返回错误。
+// 交付多来源资金单据结果前，重新授权只返回完整窄版本，不装配第二份页面及金额。
+//
+// 调用参数：
+// * `sort` - 主表稳定排序。
+//
+// 排序、最多 10000 条，再投影 `version_projection`。
 pub(super) fn recheck_stages(sort: Document) -> Vec<Document> {
     vec![doc! { "$sort": sort }, doc! { "$limit": 10_000_i64 }, doc! { "$project": version_projection() }]
 }
 
-/// 核销单据可见性沿用完整来源存在、匹配份额和整账资格的交集。
-///
-/// # 参数
-/// * `ledger` - 是否具备整账读取资格。
-/// * `require_source` - 为 true 时必须至少有一条已匹配来源；为 false 时整账资格或任一匹配来源即可。
-///
-/// # 返回
-/// 先写入 `scope_whole`，再要求每条关联都存在，并按 `require_source` 决定可见条件。
-///
-/// # 错误
-/// 不返回错误。
+// 处理多来源资金单据时，核销单据可见性沿用完整来源存在、匹配份额和整账资格的交集。
+//
+// 调用参数：
+// * `ledger` - 是否具备整账读取资格。
+// * `require_source` - 为 true 时必须至少有一条已匹配来源；为 false 时整账资格或任一匹配来源即可。
+//
+// 先写入 `scope_whole`，再要求每条关联都存在，并按 `require_source` 决定可见条件。
 pub(super) fn visibility(require_source: bool) -> Vec<Document> {
     let matched = doc! { "$anyElementTrue": [{ "$map": { "input": "$scope_links", "as": "link", "in": "$$link.matched" } }] };
     let visible = if require_source {
@@ -359,21 +318,17 @@ pub(super) fn visibility(require_source: bool) -> Vec<Document> {
     ] } } }]
 }
 
-/// 对关联身份执行拥有领域的明确过滤，不在仓储推断登录权限。
-///
-/// # 参数
-/// * `collection` - 关联集合名。
-/// * `field` - 当前文档上的引用字段。
-/// * `target` - 关联集合上的匹配字段。
-/// * `output` - 关联结果字段名。
-/// * `extra` - 追加到关联匹配的条件。
-/// * `projection` - 关联结果投影。
-///
-/// # 返回
-/// 按引用字段等值关联，并套上 `extra` 与 `projection` 的 `$lookup`。
-///
-/// # 错误
-/// 不返回错误。
+// 处理多来源资金单据时，对关联身份执行拥有领域的明确过滤，不在仓储推断登录权限。
+//
+// 调用参数：
+// * `collection` - 关联集合名。
+// * `field` - 当前文档上的引用字段。
+// * `target` - 关联集合上的匹配字段。
+// * `output` - 关联结果字段名。
+// * `extra` - 追加到关联匹配的条件。
+// * `projection` - 关联结果投影。
+//
+// 按引用字段等值关联，并套上 `extra` 与 `projection` 的 `$lookup`。
 pub(super) fn lookup(
     collection: &str,
     field: &str,
@@ -388,31 +343,23 @@ pub(super) fn lookup(
     ], "as": output } }
 }
 
-/// 取关联结果首值；缺失引用保持 null，不能当成零分配。
-///
-/// # 参数
-/// * `path` - 关联数组字段名。
-///
-/// # 返回
-/// 该数组的首元素；数组为空时为 `null`。
-///
-/// # 错误
-/// 不返回错误。
+// 处理多来源资金单据时，取关联结果首值；缺失引用保持 null，不能当成零分配。
+//
+// 调用参数：
+// * `path` - 关联数组字段名。
+//
+// 该数组的首元素；数组为空时为 `null`。
 pub(super) fn first(path: &str) -> Bson {
     doc! { "$ifNull": [{ "$arrayElemAt": [format!("${path}"), 0] }, Bson::Null] }.into()
 }
 
-/// 排序继承原主表字段及身份尾键，方向同时作用于尾键。
-///
-/// # 参数
-/// * `field` - 主排序字段。
-/// * `ascending` - 为 true 时升序。
-///
-/// # 返回
-/// `field` 与 `id` 使用同一方向的排序文档。
-///
-/// # 错误
-/// 不返回错误。
+// 生成多来源资金单据分页时，排序继承原主表字段及身份尾键，方向同时作用于尾键。
+//
+// 调用参数：
+// * `field` - 主排序字段。
+// * `ascending` - 为 true 时升序。
+//
+// `field` 与 `id` 使用同一方向的排序文档。
 pub(super) fn sort(field: &str, ascending: bool) -> Document {
     let direction = if ascending { 1 } else { -1 };
     let mut result = Document::new();
@@ -425,7 +372,7 @@ pub(super) fn sort(field: &str, ascending: bool) -> Document {
 mod tests {
     use super::*;
 
-    /// 构造首拍逐行轻事实，匹配来源与归属均来自同拍授权关联。
+    // 处理多来源资金单据时，生成首拍逐行轻事实，匹配来源与归属均来自同拍授权关联。
     fn header(id: &str, sources: &[(&str, Option<&str>)]) -> FlowHeader {
         FlowHeader {
             version: FlowVersion {
@@ -446,7 +393,7 @@ mod tests {
         }
     }
 
-    /// 构造拥有领域原 find 返回的必要金额，不加入排序字段。
+    // 计算多来源资金单据金额时，生成拥有领域原 find 返回的必要金额，不加入排序字段。
     fn amount_link(
         id: &str,
         parent: &str,

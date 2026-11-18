@@ -18,20 +18,8 @@ use crate::repository::prelude::*;
 use crate::repository::{InventoryExt, StockAdjustmentFilter, StockAdjustmentRow};
 
 impl InventoryService {
-    /// 分页查询库存调整单列表（W10 调整记录视图）。
-    ///
-    /// # 参数
-    /// * `params` - 查询参数（仓库/状态/经办/申请人/当前审批人筛选）
-    /// * `actor` - 当前认证操作人，用于计算对象读取范围
-    ///
-    /// # 返回
-    /// 返回带范围信封的分页视图，投影经办、申请人与当前审批人。
-    ///
-    /// # 错误
-    /// 分页、排序、人员筛选或 `scope_version` 非法时返回 `ValidationError`。
-    /// 跨页 `scope_version` 不一致时返回 `ConflictError`。
-    /// 账号未激活时返回 `Forbidden`。
-    /// 授权、商品、人员或仓储查询失败时返回对应错误。
+    /// 查询库存调整台账时，以当前账号的完整对象范围裁剪分页和计数，再按页补齐经办人、申请人和当前审批人，交付前复验。
+    /// 仓库、状态及人员筛选只收窄结果。参数非法返回 `ValidationError`，跨页范围变化返回 `ConflictError`，账号未激活返回 `Forbidden`；传播取证和仓储错误。
     #[tracing::instrument(
         name = "inventory.stock_adjustment_list",
         skip_all,
@@ -56,7 +44,7 @@ impl InventoryService {
             .await
     }
 
-    /// 在原快照完成过滤、分页、投影及姓名补齐，最后复验读取凭证。
+    // 在原快照完成过滤、分页、投影及姓名补齐，最后复验读取凭证。
     async fn search_stock_adjustments(
         &self,
         mut query: StockAdjustmentListQuery,
@@ -112,15 +100,8 @@ impl InventoryService {
     }
 
     /// 按主键批量读取调整单申请人与当前审批人，详情与列表同一口径。
-    ///
-    /// # 参数
-    /// * `ids` - 调整单主键
-    /// * `executor` - 调用方读取快照。
-    ///
-    /// # 返回
     /// 返回人员事实映射。
-    ///
-    /// # 错误
+    /// `ids` 为调整单主键；`executor` 为调用方读取快照。
     /// 端口未接线或读取失败。
     pub async fn adjustment_people_by_ids(
         &self,
@@ -131,18 +112,9 @@ impl InventoryService {
     }
 
     /// 在同一快照先验证完整对象授权再加载表头；拒绝结果隐藏资源存在性。
-    ///
-    /// # 参数
-    /// * `id` - 调整单主键。
-    /// * `actor` - 当前认证操作人。
-    /// * `executor` - 调用方读取快照，不开启嵌套事务。
-    ///
-    /// # 返回
     /// 返回未删除且落在读取范围内的调整单。
-    ///
-    /// # 错误
-    /// 调整单不存在、账号未激活或仓库不在读取范围时返回 `Error::NotFound`。
-    /// 授权或仓储查询失败时返回对应错误。
+    /// `id` 为调整单主键；`executor` 为调用方读取快照，不开启嵌套事务。
+    /// 调整单不存在、账号未激活或仓库不在读取范围时返回 `Error::NotFound`。授权或仓储查询失败时返回对应错误。
     pub async fn readable_stock_adjustment(
         &self,
         id: &str,
@@ -161,15 +133,8 @@ impl InventoryService {
     }
 
     /// 按主键读取库存调整单，不做仓库范围校验。
-    ///
-    /// # 参数
-    /// * `id` - 调整单主键。
-    /// * `executor` - 调用方已授权的原事务或读取阶段执行器。
-    ///
-    /// # 返回
     /// 返回未删除的调整单。
-    ///
-    /// # 错误
+    /// `id` 为调整单主键；`executor` 为调用方已授权的原事务或读取阶段执行器。
     /// 不存在时返回 `Error::NotFound`。仓储查询失败时返回对应错误。
     pub async fn load_stock_adjustment(
         &self,
@@ -184,15 +149,8 @@ impl InventoryService {
     }
 
     /// 按调整单主键读取全部明细。
-    ///
-    /// # 参数
-    /// * `adjustment_id` - 调整单主键
-    /// * `executor` - 调用方读取快照。
-    ///
-    /// # 返回
     /// 返回该调整单的明细集合。
-    ///
-    /// # 错误
+    /// `adjustment_id` 为调整单主键；`executor` 为调用方读取快照。
     /// 数据库查询失败时返回仓储错误。
     pub async fn load_adjustment_lines(
         &self,
@@ -208,15 +166,8 @@ impl InventoryService {
     }
 
     /// 按来源单据读取过账流水。
-    ///
-    /// # 参数
-    /// * `document_id` - 来源单据主键
-    /// * `executor` - 调用方读取快照。
-    ///
-    /// # 返回
     /// 返回该来源单据产生的库存流水。
-    ///
-    /// # 错误
+    /// `document_id` 为来源单据主键；`executor` 为调用方读取快照。
     /// 数据库查询失败时返回仓储错误。
     pub async fn load_movements_for_source_document(
         &self,
@@ -227,7 +178,7 @@ impl InventoryService {
     }
 }
 
-/// 申请人与当前审批人按 AND 求交；任一侧未筛选则不收窄该侧。
+// 申请人与当前审批人按 AND 求交；任一侧未筛选则不收窄该侧。
 async fn people_object_ids(
     people: &dyn crate::ports::AdjustmentPeopleFactsPort,
     query: &StockAdjustmentListQuery,
@@ -244,7 +195,7 @@ async fn people_object_ids(
     Ok(intersect_object_ids(applicants, handlers))
 }
 
-/// 将已规范化的查询字段移动到库存调整筛选条件。
+// 将已规范化的查询字段移动到库存调整筛选条件。
 fn adjustment_filter(
     query: StockAdjustmentListQuery,
     search: crate::repository::InventorySearch,
@@ -291,7 +242,7 @@ fn adjustment_row_view(
 }
 
 impl From<StockAdjustment> for StockAdjustmentView {
-    /// 从调整单实体构造视图；申请人与当前审批人须另按快照/开放任务投影。
+    // 从调整单实体构造视图；申请人与当前审批人须另按快照/开放任务投影。
     fn from(adjustment: StockAdjustment) -> Self {
         Self {
             id: adjustment.base.id,
@@ -317,15 +268,8 @@ impl From<StockAdjustment> for StockAdjustmentView {
 
 impl StockAdjustmentView {
     /// 用审批快照申请人与当前开放审批人覆盖列表/详情投影。
-    ///
-    /// # 参数
-    /// * `fact` - 人员事实；缺字段保持为空，不得填入 `created_by`。
-    ///
-    /// # 返回
     /// 无返回值。用事实覆盖 `submitted_by` 与 `current_assignee`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// `fact` 为人员事实；缺字段保持为空，不得填入 `created_by`。
     pub fn apply_people(&mut self, fact: &AdjustmentPeopleFact) {
         self.submitted_by = fact.submitted_by.clone();
         self.current_assignee = fact.current_assignee.clone();
@@ -333,7 +277,7 @@ impl StockAdjustmentView {
 }
 
 impl From<StockAdjustmentLine> for StockAdjustmentLineView {
-    /// 从调整明细实体构造视图。
+    // 从调整明细实体构造视图。
     fn from(line: StockAdjustmentLine) -> Self {
         Self {
             id: line.base.id,

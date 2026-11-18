@@ -23,16 +23,8 @@ pub enum CommandOptionalField {
 }
 
 impl CommandOptionalField {
-    /// 返回字段的中文说明。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
+    /// 为 `CommandOptionalField` 提供中文展示名；界面展示时使用，不以文案作为稳定标识。
     /// 返回面向用户的字段标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn label(self) -> &'static str {
         match self {
             Self::PayloadReference => "不透明引用",
@@ -65,16 +57,9 @@ pub enum SupplierCommandShapeRejection {
 }
 
 impl std::fmt::Display for SupplierCommandShapeRejection {
-    /// 返回与历史 Service 内联校验一致的中文说明。
-    ///
-    /// # 参数
-    /// * `f` - 格式化目标
-    ///
-    /// # 返回
-    /// 写入用户可读的拒绝说明。
-    ///
-    /// # 错误
-    /// 写入格式化目标失败时返回 `fmt::Error`。
+    // 返回与历史 Service 内联校验一致的中文说明。
+    // 写入用户可读的拒绝说明。
+    // 写入格式化目标失败时返回 `fmt::Error`。
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::TechnicalReferenceOnCreate => {
@@ -104,16 +89,8 @@ impl std::fmt::Display for SupplierCommandShapeRejection {
 impl std::error::Error for SupplierCommandShapeRejection {}
 
 impl From<SupplierCommandShapeRejection> for erp_core::Error {
-    /// 将形态拒绝转换为实体层通用错误（保留展示文本）。
-    ///
-    /// # 参数
-    /// * `rejection` - 形态校验拒绝原因
-    ///
-    /// # 返回
-    /// 携带同文本的实体层错误。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 将形态拒绝转换为实体层通用错误（保留展示文本）。
+    // 携带同文本的实体层错误。
     fn from(rejection: SupplierCommandShapeRejection) -> Self {
         Self::from(rejection.to_string())
     }
@@ -128,22 +105,14 @@ pub struct PreparedSupplierConnectionCreate {
 
 impl PreparedSupplierConnectionCreate {
     /// 预检创建请求的技术引用、初始状态与初始能力限制。
-    ///
-    /// # 参数
-    /// * `endpoint_reference` - 地址配置引用；创建时必须为空
-    /// * `credential_reference` - 密钥管理系统引用；创建时必须为空
-    /// * `status` - 请求状态；缺省或停用通过，其余拒绝
-    /// * `capability_count` - 初始能力条数；必须为零
-    ///
-    /// # 返回
     /// 返回起始状态恒为停用的已预检创建形态。
-    ///
-    /// # 错误
-    /// 当携带技术引用、状态非停用或携带初始能力时返回
-    /// [`SupplierCommandShapeRejection`]。
-    ///
-    /// # 约束
+    /// 当携带技术引用、状态非停用或携带初始能力时返回[`SupplierCommandShapeRejection`]。
     /// 纯内存校验；不访问 MongoDB、时钟、ID 生成器或密钥。
+    ///
+    /// `endpoint_reference`：创建时必须为空。
+    /// `credential_reference`：创建时必须为空。
+    /// `status`：缺省或停用通过，其余拒绝。
+    /// `capability_count`：必须为零。
     pub fn try_new(
         endpoint_reference: Option<&str>,
         credential_reference: Option<&str>,
@@ -163,15 +132,7 @@ impl PreparedSupplierConnectionCreate {
     }
 
     /// 返回新连接起始状态（恒为停用）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回停用状态。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn status(self) -> SupplierApiConnectionStatus {
         self.status
     }
@@ -229,27 +190,16 @@ pub enum PreparedSupplierConnectionCommand {
 
 impl PreparedSupplierConnectionCommand {
     /// 按七类动作的 required/forbidden 矩阵预检扁平命令字段。
-    ///
-    /// 引用类动作要求不透明引用；健康检查要求检查类型；停用要求原因代码；
-    /// 各动作不接受的多余字段一律拒绝，不再静默忽略。幂等键的形态校验仍由
-    /// 命令身份在 Service 侧完成，本方法不解释幂等语义。
-    ///
-    /// # 参数
-    /// * `action` - 固定治理动作
-    /// * `expected_version` - 期望连接版本（必须大于 `0`）
-    /// * `payload_reference` - 不透明引用（引用类动作必填，其余禁止）
-    /// * `reason_code` - 业务原因代码（停用必填，其余禁止）
-    /// * `check_type` - 健康检查类型（健康检查必填，其余禁止）
-    ///
-    /// # 返回
+    /// 引用类动作要求不透明引用；健康检查要求检查类型；停用要求原因代码；各动作不接受的多余字段一律拒绝，
+    /// 不再静默忽略。幂等键的形态校验仍由命令身份在 Service 侧完成，本方法不解释幂等语义。
     /// 返回只携带本动作字段的 tagged 命令变体。
-    ///
-    /// # 错误
-    /// 当版本为零、必填字段缺失或携带多余字段时返回
-    /// [`SupplierCommandShapeRejection`]。
-    ///
-    /// # 约束
+    /// 当版本为零、必填字段缺失或携带多余字段时返回[`SupplierCommandShapeRejection`]。
     /// 纯内存校验；不访问 MongoDB、时钟、ID 生成器、密钥或外部注册表。
+    ///
+    /// `expected_version`：期望连接版本（必须大于 `0`）
+    /// `payload_reference`：不透明引用（引用类动作必填，其余禁止）
+    /// `reason_code`：业务原因代码（停用必填，其余禁止）
+    /// `check_type`：健康检查类型（健康检查必填，其余禁止）
     pub fn try_from_parts(
         action: SupplierConnectionAction,
         expected_version: u64,
@@ -305,15 +255,7 @@ impl PreparedSupplierConnectionCommand {
     }
 
     /// 返回命令的固定治理动作。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回本变体对应的治理动作。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn action(&self) -> SupplierConnectionAction {
         match self {
             Self::UpdateBusinessProfile { .. } => SupplierConnectionAction::UpdateBusinessProfile,
@@ -327,15 +269,7 @@ impl PreparedSupplierConnectionCommand {
     }
 
     /// 返回命令携带的期望连接版本。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回大于 `0` 的期望版本。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn expected_version(&self) -> u64 {
         match self {
             Self::UpdateBusinessProfile { expected_version, .. }
@@ -349,7 +283,7 @@ impl PreparedSupplierConnectionCommand {
     }
 }
 
-/// 引用类命令按引用、原因、检查类型的既定顺序校验。
+// 引用类命令按引用、原因、检查类型的既定顺序校验。
 fn prepare_reference(
     action: SupplierConnectionAction,
     payload_reference: Option<&str>,
@@ -362,7 +296,7 @@ fn prepare_reference(
     Ok(reference)
 }
 
-/// 必填文本统一去除首尾空白，缺失错误保留各自字段身份。
+// 必填文本统一去除首尾空白，缺失错误保留各自字段身份。
 fn require_text(
     value: Option<&str>,
     field: CommandOptionalField,
@@ -374,18 +308,11 @@ fn require_text(
         .ok_or(SupplierCommandShapeRejection::MissingField(field))
 }
 
-/// 拒绝指定动作不接受的可选字段（`Some` 即拒绝，`None` 通过）。
-///
-/// # 参数
-/// * `action` - 目标治理动作
-/// * `field` - 被检查的可选字段
-/// * `value` - 字段取值；`None` 表示未携带
-///
-/// # 返回
-/// 未携带时返回 `Ok(())`。
-///
-/// # 错误
-/// 当字段被携带时返回禁止拒绝。
+// 拒绝指定动作不接受的可选字段（`Some` 即拒绝，`None` 通过）。
+// 未携带时返回 `Ok(())`。
+// 当字段被携带时返回禁止拒绝。
+// `field`：被检查的可选字段。
+// `value`：字段取值；`None` 表示未携带。
 fn forbid<T>(
     action: SupplierConnectionAction,
     field: CommandOptionalField,

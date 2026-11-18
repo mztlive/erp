@@ -54,18 +54,8 @@ pub struct SupplierService {
 }
 
 impl SupplierService {
-    /// 创建供应商服务实例。
-    ///
-    /// # 参数
-    /// * `db` - 数据库实例
-    /// * `party` - 主体只读事实端口
-    /// * `data_scope` - 已装配的供应商授权能力
-    ///
-    /// # 返回
-    /// 返回服务实例。
-    ///
-    /// # 错误
-    /// 无；授权依赖由构造参数提供。
+    /// 组合数据库、主体只读事实端口和授权访问器，供供应商列表及详情读取使用；此构造不接入敏感字段揭示令
+    /// 牌。
     pub fn new(db: Database, party: Arc<dyn PartyFactsPort>, data_scope: SupplierAccess) -> Self {
         Self {
             db: db.clone(),
@@ -76,19 +66,8 @@ impl SupplierService {
         }
     }
 
-    /// 创建可签发敏感字段短时揭示令牌的详情查询服务。
-    ///
-    /// # 参数
-    /// * `db` - 数据库实例
-    /// * `party` - 主体只读事实端口
-    /// * `data_scope` - 已装配的供应商授权能力
-    /// * `sensitive_data` - 敏感字段令牌签发端口
-    ///
-    /// # 返回
-    /// 返回具备令牌签发和完整授权能力的服务。
-    ///
-    /// # 错误
-    /// 无；构造过程不读取业务事实。
+    /// 在供应商读取服务上接入短时敏感字段令牌端口，供授权详情展示可按字段揭示的引用；构造不读取业务事实，
+    /// 也不签发令牌。
     pub fn with_sensitive_data(
         db: Database,
         party: Arc<dyn PartyFactsPort>,
@@ -104,33 +83,13 @@ impl SupplierService {
         }
     }
 
-    /// 构造供应商对象访问器。
-    ///
-    /// # 参数
-    /// 无额外参数；复用服务已注入的数据库与授权能力。
-    ///
-    /// # 返回
-    /// 返回执行供应商对象权限与责任范围校验的访问器。
-    ///
-    /// # 错误
-    /// 无；权限校验在访问器执行查询时进行。
+    /// 复用服务已接入的供应商授权访问器，供调用方按各入口的固定动作核验资格；取得访问器不等于已授权。
     pub fn access(&self) -> SupplierAccess {
         self.data_scope.clone()
     }
 
-    /// 查询供应商角色详情（供应商 + 当前商务结算版本 + 主体编号）。
-    ///
-    /// # 参数
-    /// * `id` - 供应商角色 ID
-    /// * `actor` - 当前操作人，用于装载前后重验对象访问范围
-    ///
-    /// # 返回
-    /// 返回供应商详情视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 供应商角色不存在
-    /// * `Forbidden` - 操作人无权访问供应商
-    /// * 范围版本变化或关联事实读取失败时传播相应错误。
+    /// 在同一事务内先以供应商详情权限核验对象，再装配当前商务资料、主体、能力、资质与评级；缺供应商或关
+    /// 联主体时返回 `NotFound`，授权、读取或签发令牌失败时向上传播错误。
     pub async fn supplier_detail(&self, id: &str, actor: &AuditActor) -> Result<SupplierDetailView> {
         let service = self.clone();
         let actor = actor.clone();
@@ -149,17 +108,8 @@ impl SupplierService {
             .await
     }
 
-    /// 装载详情展示字段，不解释数据范围。
-    ///
-    /// # 参数
-    /// * `id` - 供应商角色 ID；调用方须自行完成对象授权
-    /// * `executor` - 原授权读取事务
-    ///
-    /// # 返回
-    /// 返回账户、主体、商务资料、能力、资质与评级组成的详情视图。
-    ///
-    /// # 错误
-    /// 供应商或关联主体缺失时返回 `NotFound`，其余事实读取或令牌签发错误向上传播。
+    // 在调用方已授权的原读取事务内读取并装配供应商详情，不重新解释数据范围。缺供应商或关联主体时返回
+    // `NotFound`，其余读库或令牌签发错误向上传播。
     async fn load_supplier_detail(
         &self,
         id: &str,
@@ -170,16 +120,8 @@ impl SupplierService {
         self.finish_detail_view(loaded, account).await
     }
 
-    /// 一次性装载详情所需的事实束与主体事实（erp-supplier-003）。
-    ///
-    /// # 参数
-    /// * `id` - 供应商角色 ID
-    ///
-    /// # 返回
-    /// 返回未经装配的详情事实束。
-    ///
-    /// # 错误
-    /// 供应商或关联主体缺失时返回 `NotFound`；事实束或主体查询失败时返回对应错误。
+    // 为供应商详情加载本域事实束、关联企业主体及其联系人、地址、税务、账户和商务主体名称。使用原执行器；
+    // 供应商或关联主体缺失时返回 `NotFound`。
     async fn load_detail_facts(&self, id: &str, executor: &mut dyn Executor) -> Result<LoadedSupplierDetail> {
         let supplier_id = SupplierAccountId::new(id);
         let bundle = self
@@ -216,16 +158,8 @@ impl SupplierService {
         })
     }
 
-    /// 装配详情账户视图（erp-supplier-003）。
-    ///
-    /// # 参数
-    /// * `loaded` - 已装载的详情事实
-    ///
-    /// # 返回
-    /// 返回账户投影；当前商务资料由详情历史视图回填。
-    ///
-    /// # 错误
-    /// 装配结果为空时返回 `NotFound`。
+    // 把详情事实束的账户按列表相同口径投影，并补维护人名称。商务历史由后续详情步骤回填；装配无结果时返回
+    // `NotFound`。
     async fn assemble_detail_account(
         &self,
         loaded: &LoadedSupplierDetail,
@@ -253,17 +187,9 @@ impl SupplierService {
         .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))
     }
 
-    /// 完成资质/评级/商务与敏感字段装配（erp-supplier-003）。
-    ///
-    /// # 参数
-    /// * `loaded` - 已装载的详情事实
-    /// * `account` - 已装配的账户视图
-    ///
-    /// # 返回
-    /// 返回完整详情视图。
-    ///
-    /// # 错误
-    /// 敏感令牌签发失败时返回错误。
+    // 完成资质/评级/商务与敏感字段装配（erp-supplier-003）。
+    // 返回完整详情视图。
+    // 敏感令牌签发失败时返回错误。
     async fn finish_detail_view(
         &self,
         loaded: LoadedSupplierDetail,
@@ -343,7 +269,7 @@ struct LoadedSupplierDetail {
 }
 
 impl SupplierService {
-    /// 为当前默认敏感事实签发一分钟有效的字段级令牌。
+    // 为当前默认敏感事实签发一分钟有效的字段级令牌。
     fn sensitive_field_views(
         &self,
         supplier_id: &str,
@@ -404,7 +330,7 @@ impl SupplierService {
     }
 }
 
-/// 将详情事实束中的资质与适用能力关联装配为视图（纯 View 映射）。
+// 把详情事实束中的资质与适用能力关联装配为视图（纯 View 映射）。
 fn assemble_qualification_views(
     qualifications: Vec<SupplierQualification>,
     links: Vec<SupplierQualificationCapability>,
@@ -424,7 +350,7 @@ fn assemble_qualification_views(
         .collect()
 }
 
-/// 构造带短时揭示令牌的敏感字段视图。
+// 组装带短时揭示令牌的敏感字段视图。
 fn sensitive_field(
     codec: &dyn SensitiveTokenPort,
     kind: SensitiveFieldKindFact,

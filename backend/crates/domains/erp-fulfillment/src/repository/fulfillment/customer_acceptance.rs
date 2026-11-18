@@ -56,18 +56,8 @@ pub struct CustomerAcceptanceFilter {
 }
 
 impl QueryFilter for CustomerAcceptanceFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// 有值时写入 `sales_order_id` 与 `status`；两者皆空时只保留未删除条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 转换为 MongoDB 查询条件（自动追加未删除过滤）。
+    // 有值时写入 `sales_order_id` 与 `status`；两者皆空时只保留未删除条件。
     fn to_doc(&self) -> Document {
         let mut filter = super::active_filter();
         if let Some(sales_order_id) = &self.sales_order_id {
@@ -81,16 +71,7 @@ impl QueryFilter for CustomerAcceptanceFilter {
 }
 
 impl Pagination for CustomerAcceptanceFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组；`page_size` 由 `u32` 加宽为 `u64`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 向仓储分页传递页码与单页条数。
     fn page_and_size(&self) -> (u64, u64) {
         super::page_and_size(self.page, self.page_size)
     }
@@ -100,16 +81,9 @@ impl Pagination for CustomerAcceptanceFilter {
 #[allow(async_fn_in_trait)]
 pub trait CustomerAcceptanceRepositoryExt {
     /// 按客户验收单号查询未删除验收单。
-    ///
-    /// # 参数
-    /// * `acceptance_no` - 客户验收单号
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回匹配的未删除验收单；不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
+    /// `acceptance_no` 为客户验收单号；沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询错误。
     async fn find_by_acceptance_no(
         &self,
         acceptance_no: &str,
@@ -117,19 +91,10 @@ pub trait CustomerAcceptanceRepositoryExt {
     ) -> Result<Option<CustomerAcceptance>>;
 
     /// 分页检索客户验收单列表（投影查询）。
-    ///
-    /// 只返回 [`CustomerAcceptanceRow`] 所需的列表字段，不加载整文档；排序
-    /// 字段走白名单映射（`accepted_at`/`created_at`）。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
+    /// 只返回 [`CustomerAcceptanceRow`] 所需的列表字段，不加载整文档；排序字段走白名单映射（`accepted_at`/`created_at`）。
     /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// 沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询、游标读取或计数错误。
     async fn search_customer_acceptances(
         &self,
         filter: &CustomerAcceptanceFilter,
@@ -177,15 +142,7 @@ impl CustomerAcceptanceRepositoryExt for persistence_core::Repository<'_, Custom
 
 impl CustomerAcceptanceRow {
     /// 客户验收单列表投影字段。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 仅包含验收列表行字段的投影文档。
-    ///
-    /// # 错误
-    /// 无。
     pub fn projection() -> Document {
         doc! {
             "id": 1,

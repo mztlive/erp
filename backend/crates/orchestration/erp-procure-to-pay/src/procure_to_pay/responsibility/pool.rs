@@ -16,13 +16,9 @@ use crate::procure_to_pay::responsibility::eligibility::ProcurementInquiryEligib
 use crate::{Error, Result};
 
 impl ProcurementResponsibilityProcess {
-    /// 在调用方执行器中重验全部成员的账号；询价池同时重验询价权限和组织。
-    /// # 参数
-    /// `data` 为待维护的规则，`executor` 为当前执行器。
-    /// # 返回
-    /// 全部成员满足对应业务资格时返回空值。
-    /// # 错误
-    /// 任一成员失效、缺少权限或组织时拒绝整个规则维护。
+    // 在调用方执行器中重验全部成员的账号；询价池同时重验询价权限和组织。
+    //
+    // `data` 为待维护的规则，`executor` 为当前执行器。全部成员满足对应业务资格时返回空值。任一成员失效、缺少权限或组织时拒绝整个规则维护。
     pub(super) async fn validate_pool(
         &self,
         data: &ProcurementResponsibilityRuleData,
@@ -55,13 +51,11 @@ impl ProcurementResponsibilityProcess {
 }
 
 impl ProcurementResponsibilityProcess {
-    /// 按指定场景只读预览，询价候选使用询价执行资格。
-    /// # 参数
-    /// `inputs` 为整单商品；`purpose` 区分普通采购与询价，`executor` 为原预览事务。
-    /// # 返回
-    /// 返回已检查人员资格的逐行预览，不推进任何池。
-    /// # 错误
-    /// 配置、目录、账号或业务权限不足时返回对应错误。
+    // 按指定场景只读预览，询价候选使用询价执行资格。
+    //
+    // `inputs` 为整单商品；`purpose` 区分普通采购与询价，`executor` 为原预览事务。返回已检查人员资格的逐行预览，不推进任何池。
+    //
+    // 配置、目录、账号或业务权限不足时返回对应错误。
     pub(super) async fn preview_batch(
         &self,
         inputs: &[ResolutionInput],

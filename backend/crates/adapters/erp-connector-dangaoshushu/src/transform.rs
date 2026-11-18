@@ -59,7 +59,7 @@ impl OfferTransform<DangaoshushuOffer<'_>> for DangaoshushuConnector {
     }
 }
 
-/// 展示名称允许供应商附带首尾空白，身份和金额继续使用严格解析。
+// 转成来源报价时裁去商品标题和规格展示名的首尾空白；这种宽松处理不适用于编号和金额。
 fn display_field(value: &Value, key: &str) -> ConnectorResult<String> {
     let result = match value[key].as_str() {
         Some(value) if !value.trim().is_empty() => Ok(value.trim().to_owned()),

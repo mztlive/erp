@@ -38,22 +38,19 @@ struct SellableSkuTotal {
 }
 
 impl CatalogSupplyRepository<'_> {
-    /// 按实时资格聚合分页查询公司商品池。
-    ///
-    /// 资格固定为：稳定 SKU 启用、当前 SKU 修订启用且处于生效区间并已配置
-    /// 销售可见价、至少一条启用且当前修订可供并处于有效区间的供给。结果不含
-    /// 采购成本、进项税率或供给起订量；供应商身份仅用于补齐业务编号。
-    ///
-    /// # 参数
-    /// * `filter` - 业务筛选、排序与分页
-    /// * `restrict` - 只在这些 SKU 中查询；`None` 表示不限
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回当前页资格投影及资格结果总数。
-    ///
-    /// # 错误
-    /// MongoDB 聚合、游标读取或结果反序列化失败时返回错误。
+    // 组装可售 SKU 时，按实时资格聚合分页查询公司商品池。
+    //
+    // 资格固定为：稳定 SKU 启用、当前 SKU 修订启用且处于生效区间并已配置
+    // 销售可见价、至少一条启用且当前修订可供并处于有效区间的供给。结果不含
+    // 采购成本、进项税率或供给起订量；供应商身份仅用于补齐业务编号。
+    //
+    // 调用参数：
+    // * `filter` - 业务筛选、排序与分页
+    // * `restrict` - 只在这些 SKU 中查询；`None` 表示不限
+    //
+    // 返回当前页资格投影及资格结果总数。
+    //
+    // MongoDB 聚合、游标读取或结果反序列化失败时返回错误。
     pub(super) async fn search_live(
         &self,
         filter: &SellableSkuFilter,
@@ -70,12 +67,11 @@ impl CatalogSupplyRepository<'_> {
         Ok(PageResult { items: facet.items, total: facet.total.first().map_or(0, |row| row.count) })
     }
 
-    /// 批量校验销售单引用的精确公司 SKU 修订是否仍具备销售资格。
+    /// 读取可售 SKU 时，批量校验销售单引用的精确公司 SKU 修订是否仍具备销售资格。
     ///
     /// # 参数
     /// * `refs` - 销售单锁定的稳定 SKU 与修订 ID 集合
     /// * `eligibility_as_of` - 服务端解释的销售资格业务日期
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
     /// # 返回
     /// 返回仍符合资格的精确引用；调用方必须与请求集合逐项比对并 fail-closed。
@@ -98,12 +94,11 @@ impl CatalogSupplyRepository<'_> {
         Ok(self.aggregate_sellable_skus(pipeline, executor).await?.items)
     }
 
-    /// 按稳定 SKU 身份取出当前可售修订。
+    /// 读取可售 SKU 时，按稳定 SKU 身份取出当前可售修订。
     ///
     /// # 参数
     /// * `sku_ids` - 稳定 SKU 身份
     /// * `eligibility_as_of` - 资格业务日期
-    /// * `executor` - 执行器
     ///
     /// # 返回
     /// 返回仍具备资格的行；缺失项不出现在结果中。
@@ -127,7 +122,7 @@ impl CatalogSupplyRepository<'_> {
         Ok(self.aggregate_sellable_skus(pipeline, executor).await?.items)
     }
 
-    /// 执行公司商品池类型化聚合并收集唯一的 facet 结果。
+    // 处理可售 SKU 时，执行公司商品池类型化聚合并收集唯一的 facet 结果。
     async fn aggregate_sellable_skus(
         &self,
         pipeline: Vec<Document>,
@@ -167,36 +162,31 @@ fn sellable_sku_match(refs: &[(String, String)]) -> Document {
     filter
 }
 
-/// 把可序列化枚举转换为 BSON 标量。
+// 组装可售 SKU 时，把可序列化枚举转换为 BSON 标量。
 fn bson_for<T: Serialize>(value: T) -> Bson {
     mongodb::bson::serialize_to_bson(&value).expect("域枚举必须可序列化为 BSON")
 }
 
-/// 把查询金额转换为与库内价格一致的 BSON Decimal128。
-///
-/// # 参数
-/// * `amount` - 已通过服务层校验的非负金额
-///
-/// # 返回
-/// 返回可直接写入 `$match` 区间的 Decimal128 BSON。
-///
-/// # 错误
-/// 无；合法 `Amount` 必须可转换为 Decimal128，否则在测试阶段即失败。
+// 应用可售 SKU 筛选时，把查询金额转换为与库内价格一致的 BSON Decimal128。
+//
+// 调用参数：
+// * `amount` - 已通过服务层校验的非负金额
+//
+// 返回可直接写入 `$match` 区间的 Decimal128 BSON。
+//
+// 失败边界：
+// 无；合法 `Amount` 必须可转换为 Decimal128，否则在测试阶段即失败。
 fn amount_filter_bson(amount: Amount) -> Bson {
     Bson::Decimal128(amount.to_string().parse().expect("合法 Amount 必须可转换为 MongoDB Decimal128"))
 }
 
-/// 将单一价格口径的闭区间加入查询；缺价不命中。
-///
-/// # 参数
-/// * `pipeline` - 当前聚合阶段
-/// * `filter` - 价格口径与区间
-///
-/// # 返回
-/// 原地追加价格条件；无上下限时不追加。
-///
-/// # 错误
-/// 无。
+// 组装可售 SKU 时，将单一价格口径的闭区间加入查询；缺价不命中。
+//
+// 调用参数：
+// * `pipeline` - 当前聚合阶段
+// * `filter` - 价格口径与区间
+//
+// 原地追加价格条件；无上下限时不追加。
 fn append_price_filter(pipeline: &mut Vec<Document>, filter: &SellableSkuFilter) {
     if filter.sales_price_min.is_some() || filter.sales_price_max.is_some() {
         let field = match filter.price_kind {
@@ -217,17 +207,13 @@ fn append_price_filter(pipeline: &mut Vec<Document>, filter: &SellableSkuFilter)
     }
 }
 
-/// 在资格聚合完成后追加可选业务筛选。
-///
-/// # 参数
-/// * `pipeline` - 已完成资格 lookup 的聚合阶段列表
-/// * `filter` - 调用方可选筛选
-///
-/// # 返回
-/// 无；就地追加 `$match` 阶段。
-///
-/// # 错误
-/// 无。
+// 组装可售 SKU 时，在资格聚合完成后追加可选业务筛选。
+//
+// 调用参数：
+// * `pipeline` - 已完成资格 lookup 的聚合阶段列表
+// * `filter` - 调用方可选筛选
+//
+// 无；就地追加 `$match` 阶段。
 fn append_sellable_optional_filters(pipeline: &mut Vec<Document>, filter: &SellableSkuFilter) {
     if let Some(kind) = filter.product_kind {
         pipeline.push(doc! { "$match": { "product.product_kind": bson_for(kind) } });
@@ -276,18 +262,14 @@ fn append_sellable_optional_filters(pipeline: &mut Vec<Document>, filter: &Sella
     }
 }
 
-/// 构造公司商品池资格与只读投影聚合管道。
-///
-/// # 参数
-/// * `initial_match` - 稳定 SKU 初始匹配（含可选精确修订引用）
-/// * `filter` - 可选业务筛选与资格业务日
-/// * `paging` - 分页；`None` 表示返回全部匹配行（资格复核路径）
-///
-/// # 返回
-/// 返回含 facet 分页与总数的聚合管道。
-///
-/// # 错误
-/// 无。
+// 组装可售 SKU 的聚合管道时，生成公司商品池资格与只读投影聚合管道。
+//
+// 调用参数：
+// * `initial_match` - 稳定 SKU 初始匹配（含可选精确修订引用）
+// * `filter` - 可选业务筛选与资格业务日
+// * `paging` - 分页；`None` 表示返回全部匹配行（资格复核路径）
+//
+// 返回含 facet 分页与总数的聚合管道。
 fn sellable_sku_pipeline(
     initial_match: Document,
     filter: &SellableSkuFilter,
@@ -322,17 +304,13 @@ fn sellable_sku_pipeline(
     pipeline
 }
 
-/// 构造商品池 facet 当前页的稳定排序、分页与三价投影阶段。
-///
-/// # 参数
-/// * `paging` - 页码与每页条数；缺省只保留原零偏移，不限制条数
-/// * `sort` - 排序字段与方向
-///
-/// # 返回
-/// 返回按所选排序、同值按 SKU 编号排列的当前页聚合阶段。
-///
-/// # 错误
-/// 无。
+// 装配可售 SKU 分页时，生成商品池 facet 当前页的稳定排序、分页与三价投影阶段。
+//
+// 调用参数：
+// * `paging` - 页码与每页条数；缺省只保留原零偏移，不限制条数
+// * `sort` - 排序字段与方向
+//
+// 返回按所选排序、同值按 SKU 编号排列的当前页聚合阶段。
 fn sellable_sku_item_stages(paging: Option<(u64, u32)>, sort: SellableSort) -> Vec<Document> {
     let (skip, limit) = paging.map_or((0_i64, i64::MAX), |(page, page_size)| {
         (((page.saturating_sub(1)) * u64::from(page_size)) as i64, i64::from(page_size))
@@ -346,7 +324,7 @@ fn sellable_sku_item_stages(paging: Option<(u64, u32)>, sort: SellableSort) -> V
     stages
 }
 
-/// 排序字段在资格聚合中的路径；同值按 SKU 编号与 SKU 稳定排序。
+// 处理可售 SKU 时，排序字段在资格聚合中的路径；同值按 SKU 编号与 SKU 稳定排序。
 fn pipeline_sort(sort: SellableSort) -> Document {
     let path = match sort.field {
         SellableSortField::SkuNo => "sku_no",
@@ -364,16 +342,9 @@ fn pipeline_sort(sort: SellableSort) -> Document {
     keys
 }
 
-/// 投影公司 SKU 的三种含税参考价、集采起订量与内部供应商身份。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回保持既有字段与资格条件的聚合阶段。
-///
-/// # 错误
-/// 无。
+// 组装可售 SKU 的聚合管道时，投影公司 SKU 的三种含税参考价、集采起订量与内部供应商身份。
+//
+// 返回保持既有字段与资格条件的聚合阶段。
 fn sellable_sku_projection() -> Document {
     doc! {
         "$project": {
@@ -409,17 +380,13 @@ fn sellable_sku_projection() -> Document {
     }
 }
 
-/// 关联已启用、已维护一件代发价且在业务日期生效的当前 SKU 修订。
-///
-/// # 参数
-/// * `as_of` - 资格业务日期
-/// * `not_deleted` - 未软删除标记
-///
-/// # 返回
-/// 返回保持既有字段与资格条件的聚合阶段。
-///
-/// # 错误
-/// 无。
+// 组装可售 SKU 的聚合管道时，关联已启用、已维护一件代发价且在业务日期生效的当前 SKU 修订。
+//
+// 调用参数：
+// * `as_of` - 资格业务日期
+// * `not_deleted` - 未软删除标记
+//
+// 返回保持既有字段与资格条件的聚合阶段。
 fn sellable_sku_revision_lookup(as_of: &str, not_deleted: i64) -> Document {
     doc! {
         "$lookup": {
@@ -443,16 +410,12 @@ fn sellable_sku_revision_lookup(as_of: &str, not_deleted: i64) -> Document {
     }
 }
 
-/// 关联启用且具有当前修订的公司商品。
-///
-/// # 参数
-/// * `not_deleted` - 未软删除标记
-///
-/// # 返回
-/// 返回保持既有字段与资格条件的聚合阶段。
-///
-/// # 错误
-/// 无。
+// 组装可售 SKU 的聚合管道时，关联启用且具有当前修订的公司商品。
+//
+// 调用参数：
+// * `not_deleted` - 未软删除标记
+//
+// 返回保持既有字段与资格条件的聚合阶段。
 fn sellable_product_lookup(not_deleted: i64) -> Document {
     doc! {
         "$lookup": {
@@ -471,17 +434,13 @@ fn sellable_product_lookup(not_deleted: i64) -> Document {
     }
 }
 
-/// 关联业务日期有效且已启用的当前商品修订。
-///
-/// # 参数
-/// * `as_of` - 资格业务日期
-/// * `not_deleted` - 未软删除标记
-///
-/// # 返回
-/// 返回保持既有字段与资格条件的聚合阶段。
-///
-/// # 错误
-/// 无。
+// 组装可售 SKU 的聚合管道时，关联业务日期有效且已启用的当前商品修订。
+//
+// 调用参数：
+// * `as_of` - 资格业务日期
+// * `not_deleted` - 未软删除标记
+//
+// 返回保持既有字段与资格条件的聚合阶段。
 fn sellable_product_revision_lookup(as_of: &str, not_deleted: i64) -> Document {
     doc! {
         "$lookup": {
@@ -504,16 +463,12 @@ fn sellable_product_revision_lookup(as_of: &str, not_deleted: i64) -> Document {
     }
 }
 
-/// 关联未软删除的基础计量单位。
-///
-/// # 参数
-/// * `not_deleted` - 未软删除标记
-///
-/// # 返回
-/// 返回保持既有字段与资格条件的聚合阶段。
-///
-/// # 错误
-/// 无。
+// 组装可售 SKU 的聚合管道时，关联未软删除的基础计量单位。
+//
+// 调用参数：
+// * `not_deleted` - 未软删除标记
+//
+// 返回保持既有字段与资格条件的聚合阶段。
 fn sellable_unit_lookup(not_deleted: i64) -> Document {
     doc! {
         "$lookup": {
@@ -530,17 +485,13 @@ fn sellable_unit_lookup(not_deleted: i64) -> Document {
     }
 }
 
-/// 关联业务日期有效的当前供应商供给条款修订。
-///
-/// # 参数
-/// * `as_of` - 资格业务日期
-/// * `not_deleted` - 未软删除标记
-///
-/// # 返回
-/// 返回保持既有字段与资格条件的聚合阶段。
-///
-/// # 错误
-/// 无。
+// 组装可售 SKU 的聚合管道时，关联业务日期有效的当前供应商供给条款修订。
+//
+// 调用参数：
+// * `as_of` - 资格业务日期
+// * `not_deleted` - 未软删除标记
+//
+// 返回保持既有字段与资格条件的聚合阶段。
 fn sellable_offering_revision_lookup(as_of: &str, not_deleted: i64) -> Document {
     doc! {
         "$lookup": {
@@ -562,16 +513,12 @@ fn sellable_offering_revision_lookup(as_of: &str, not_deleted: i64) -> Document 
     }
 }
 
-/// 关联当前可供且可供数量为空或大于零的供给状态。
-///
-/// # 参数
-/// * `not_deleted` - 未软删除标记
-///
-/// # 返回
-/// 返回保持既有字段与资格条件的聚合阶段。
-///
-/// # 错误
-/// 无。
+// 组装可售 SKU 的聚合管道时，关联当前可供且可供数量为空或大于零的供给状态。
+//
+// 调用参数：
+// * `not_deleted` - 未软删除标记
+//
+// 返回保持既有字段与资格条件的聚合阶段。
 fn sellable_availability_lookup(not_deleted: i64) -> Document {
     let zero_quantity = Bson::Decimal128("0".parse().expect("零必须可转换为 MongoDB Decimal128"));
     doc! {
@@ -598,17 +545,13 @@ fn sellable_availability_lookup(not_deleted: i64) -> Document {
     }
 }
 
-/// 按原顺序关联启用供给、有效条款与实时可供状态。
-///
-/// # 参数
-/// * `as_of` - 资格业务日期
-/// * `not_deleted` - 未软删除标记
-///
-/// # 返回
-/// 返回保持既有字段与资格条件的聚合阶段。
-///
-/// # 错误
-/// 无。
+// 依据原顺序关联启用供给、有效条款与实时可供状态。
+//
+// 调用参数：
+// * `as_of` - 资格业务日期
+// * `not_deleted` - 未软删除标记
+//
+// 返回保持既有字段与资格条件的聚合阶段。
 fn sellable_offering_lookup(as_of: &str, not_deleted: i64) -> Document {
     doc! {
         "$lookup": {
@@ -634,16 +577,9 @@ fn sellable_offering_lookup(as_of: &str, not_deleted: i64) -> Document {
     }
 }
 
-/// 从已符合资格的供给中汇总去重供应商。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回保持既有字段与资格条件的聚合阶段。
-///
-/// # 错误
-/// 无。
+// 生成可售 SKU 视图时，从已符合资格的供给中汇总去重供应商。
+//
+// 返回保持既有字段与资格条件的聚合阶段。
 fn sellable_supply_summary() -> Document {
     doc! {
         "$set": {
@@ -695,7 +631,7 @@ mod tests {
         }
     }
 
-    /// 公司商品池管道同时约束 SKU 已上架、当前修订与有效供给，并禁止投影采购成本。
+    // 验证可售 SKU：公司商品池管道同时约束 SKU 已上架、当前修订与有效供给，并禁止投影采购成本。
     #[test]
     fn sellable_sku_pipeline_is_fail_closed_and_cost_safe() {
         let date = BusinessDate::from_ymd(2026, 8, 8).unwrap();
@@ -741,7 +677,7 @@ mod tests {
         assert!(!json.contains("input_tax_rate"));
     }
 
-    /// 实时聚合与预算投影按相同字段排序，同值按 SKU 编号与 SKU 稳定排序。
+    // 验证可售 SKU：实时聚合与预算投影按相同字段排序，同值按 SKU 编号与 SKU 稳定排序。
     #[test]
     fn live_sort_matches_projection_fields() {
         use erp_catalog::repository::{SellableSort, SellableSortField};
@@ -758,7 +694,7 @@ mod tests {
         assert_eq!(fields.get_str("product_name").unwrap(), "$product_revision.name");
     }
 
-    /// 销售单资格复核按稳定 SKU 与当前修订成对匹配，禁止只按 SKU 猜修订。
+    // 验证可售 SKU：销售单资格复核按稳定 SKU 与当前修订成对匹配，禁止只按 SKU 猜修订。
     #[test]
     fn sellable_sku_reference_filter_matches_exact_pair() {
         let refs = vec![

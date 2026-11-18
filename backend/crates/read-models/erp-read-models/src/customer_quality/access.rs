@@ -24,27 +24,19 @@ pub struct QualityAccess {
 }
 
 impl QualityAccess {
-    /// 绑定身份事实来源与组合层注入的客户授权服务。
+    /// 装配客户经营质量范围时，绑定身份事实来源与组合层注入的客户授权服务。
     ///
     /// # 参数
-    /// * `db` - 应用数据库
     /// * `rbac` - 当前 RBAC 快照服务
     /// * `customer_scope` - 已装配的客户授权服务
     ///
     /// # 返回
     /// 返回无授权缓存的解析器，构造不执行 I/O。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: Database, rbac: Arc<AuthorizationService>, _customer_scope: CustomerAccess) -> Self {
         Self { db, rbac }
     }
 
-    /// 在调用方事务内证明历史口径的销售范围及独立客户列表资格。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证操作人
-    /// * `executor` - 调用方执行器
+    /// 确定客户经营质量范围的适用条件时，在调用方事务内证明历史口径的销售范围及独立客户列表资格。
     ///
     /// # 返回
     /// 返回销售授权上下文与读取范围；冻结归属不参与授权。

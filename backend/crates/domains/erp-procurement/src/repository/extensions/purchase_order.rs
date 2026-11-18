@@ -36,124 +36,49 @@ pub trait PurchaseOrderExt: Sized {
     /// `purchase_change_submission_line` 集合名。
     const PURCHASE_CHANGE_SUBMISSION_LINES: &'static str = "purchase_change_submission_lines";
 
-    /// 获取 `purchase_order` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `PurchaseOrderRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 绑定 `purchase_order` 集合仓储，供领域查询或写入步骤复用。返回 `PurchaseOrderRepository<'_>`。
     fn purchase_orders(&self) -> PurchaseOrderRepository<'_>;
 
-    /// 获取 `purchase_order_submission` 集合的 Repository。
+    /// 绑定 `purchase_order_submission` 集合仓储，供领域查询或写入步骤复用。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回 `PurchaseOrderSubmissionRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     fn purchase_order_submissions(&self) -> PurchaseOrderSubmissionRepository<'_>;
 
-    /// 获取 `purchase_order_submission_line` 集合的 Repository。
+    /// 绑定 `purchase_order_submission_line` 集合仓储，供领域查询或写入步骤复用。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回 `PurchaseOrderSubmissionLineRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     fn purchase_order_submission_lines(&self) -> PurchaseOrderSubmissionLineRepository<'_>;
 
-    /// 获取 `purchase_order_revision` 集合的 Repository。
+    /// 绑定 `purchase_order_revision` 集合仓储，供领域查询或写入步骤复用。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回 `PurchaseOrderRevisionRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     fn purchase_order_revisions(&self) -> PurchaseOrderRevisionRepository<'_>;
 
-    /// 获取 `purchase_order_revision_line` 集合的 Repository。
+    /// 绑定 `purchase_order_revision_line` 集合仓储，供领域查询或写入步骤复用。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回 `PurchaseOrderRevisionLineRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     fn purchase_order_revision_lines(&self) -> PurchaseOrderRevisionLineRepository<'_>;
 
-    /// 获取 `purchase_line_sales_allocation` 集合的 Repository。
+    /// 绑定 `purchase_line_sales_allocation` 集合仓储，供领域查询或写入步骤复用。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回 `PurchaseLineSalesAllocationRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     fn purchase_line_sales_allocations(&self) -> PurchaseLineSalesAllocationRepository<'_>;
 
-    /// 获取 `purchase_change_order` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `PurchaseChangeOrderRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 绑定 `purchase_change_order` 集合仓储，供领域查询或写入步骤复用。返回
+    /// `PurchaseChangeOrderRepository<'_>`。
     fn purchase_change_orders(&self) -> PurchaseChangeOrderRepository<'_>;
 
-    /// 获取 `purchase_change_submission` 集合的 Repository。
+    /// 绑定 `purchase_change_submission` 集合仓储，供领域查询或写入步骤复用。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回 `PurchaseChangeSubmissionRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     fn purchase_change_submissions(&self) -> PurchaseChangeSubmissionRepository<'_>;
 
-    /// 获取 `purchase_change_submission_line` 集合的 Repository。
+    /// 绑定 `purchase_change_submission_line` 集合仓储，供领域查询或写入步骤复用。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回 `PurchaseChangeSubmissionLineRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     fn purchase_change_submission_lines(&self) -> PurchaseChangeSubmissionLineRepository<'_>;
 
-    /// 获取承载跨集合事务写入的域专用仓储。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `PurchaseOrderDomainRepository` 实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 绑定本域跨集合用例的仓储；读写和事务边界仍由调用方传入的执行器决定。返回 `PurchaseOrderDomainRepository` 实例。
     fn purchase_order(&self) -> PurchaseOrderDomainRepository<'_>;
 }
 

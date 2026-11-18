@@ -35,10 +35,9 @@ pub struct ChangeQuantityFacts {
     pub bounds: Vec<ChangeQuantityBound>,
 }
 
-/// 读取采购当前生效版本商品行的改单数量范围。
+/// 为采购变更数量边界取数时，读取采购当前生效版本商品行的改单数量范围。
 ///
 /// # 参数
-/// * `db` - 数据库
 /// * `order` - 已证明可见的已生效采购单
 /// * `executor` - 调用方执行器；生效事务内必须传入同一会话
 ///
@@ -78,12 +77,10 @@ pub async fn load_change_quantity_facts(
     Ok(ChangeQuantityFacts { state, base_lines, bounds })
 }
 
-/// 汇总本采购在各稳定销售行已发生的入库、发货与交付数量。
+/// 读取采购变更数量边界时，汇总本采购在各稳定销售行已发生的入库、发货与交付数量。
 ///
 /// # 参数
-/// * `db` - 数据库
 /// * `order` - 采购单
-/// * `executor` - 调用方执行器
 ///
 /// # 返回
 /// 返回稳定销售行到已发生数量；没有事实的行不出现。
@@ -136,13 +133,15 @@ pub async fn load_purchase_fulfilled_quantities(
     Ok(totals)
 }
 
-/// 本采购全部版本的版本行，供已授权的改单和详情数量跨版本归集。
-/// # 参数
-/// `db`、`order_id` 为已经核验的采购范围；执行器由调用方提供。
-/// # 返回
-/// 仅属于本采购各版本的有效行。
-/// # 错误
-/// 仓储读取失败返回原错误。
+// 处理采购变更数量边界的版本事实时，本采购全部版本的版本行，供已授权的改单和详情数量跨版本归集。
+//
+// 调用参数：
+// `db`、`order_id` 为已经核验的采购范围；执行器由调用方提供。
+//
+// 仅属于本采购各版本的有效行。
+//
+// 失败边界：
+// 仓储读取失败返回原错误。
 pub(crate) async fn all_revision_lines(
     db: &Database,
     order_id: &PurchaseOrderId,
@@ -153,7 +152,7 @@ pub(crate) async fn all_revision_lines(
     Ok(db.purchase_order_revision_lines().find_lines_by_revision_ids(&ids, executor).await?)
 }
 
-/// 本采购供应商直发已发货或已签收的发货行。
+// 处理采购变更数量边界时，本采购供应商直发已发货或已签收的发货行。
 pub(crate) async fn shipped_rows(
     db: &Database,
     order: &PurchaseOrder,
@@ -179,7 +178,7 @@ pub(crate) async fn shipped_rows(
         .collect())
 }
 
-/// 采购各版本商品行引用的稳定销售行。
+// 定位采购变更数量边界关联时，采购各版本商品行引用的稳定销售行。
 fn stable_line_ids(lines: &[PurchaseOrderRevisionLine]) -> Vec<SalesOrderLineId> {
     let mut ids = lines
         .iter()
@@ -191,7 +190,7 @@ fn stable_line_ids(lines: &[PurchaseOrderRevisionLine]) -> Vec<SalesOrderLineId>
     ids
 }
 
-/// 按稳定销售行累加数量。
+// 计算采购变更数量边界金额时，按稳定销售行累加数量。
 fn sum_by_line(rows: impl IntoIterator<Item = (String, Quantity)>) -> Result<HashMap<String, Quantity>> {
     let mut totals: HashMap<String, Decimal> = HashMap::new();
     for (line, value) in rows {
@@ -217,7 +216,7 @@ mod tests {
         Quantity::from_str(value).unwrap()
     }
 
-    /// 入库、发货与交付按稳定销售行合并累计。
+    // 验证采购变更数量边界：入库、发货与交付按稳定销售行合并累计。
     #[test]
     fn rows_are_summed_per_stable_line() {
         let totals = sum_by_line([

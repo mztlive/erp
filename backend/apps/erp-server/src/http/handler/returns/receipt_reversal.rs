@@ -18,17 +18,8 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 use crate::wiring::local_reverse_flow_ports;
 
-/// 查询回款冲正详情。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `id` - 冲正单 ID
-///
-/// # 返回
+/// 查询回款冲正详情，将认证操作人与路径对象交给读模型校验。
 /// 返回冲正单视图。
-///
-/// # 错误
-/// 业务处理或数据读取失败时返回对应错误。
 pub async fn receipt_reversal_detail(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -42,17 +33,7 @@ pub async fn receipt_reversal_detail(
 }
 
 /// 登记回款冲正草稿（冲正单号唯一构成幂等去重；经办/复核分离）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 创建请求
-///
-/// # 返回
 /// 返回新建冲正单视图。
-///
-/// # 错误
-/// 业务处理或数据读取失败时返回对应错误。
 pub async fn receipt_reversal_create(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -69,17 +50,7 @@ pub async fn receipt_reversal_create(
 }
 
 /// 按原回款一次创建回款冲正并启动审批。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已认证的当前操作人
-/// * `req` - 业务命令与期望版本
-///
-/// # 返回
-/// 返回处理后的单据视图。
-///
-/// # 错误
-/// 业务处理或数据读取失败时返回对应错误。
+/// `req` 为业务命令与期望版本。
 pub async fn receipt_reversal_commit(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -95,18 +66,8 @@ pub async fn receipt_reversal_commit(
 }
 
 /// 提交回款冲正并启动统一审批。客户端不得选择定义或审批人。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 冲正单 ID
-/// * `req` - 提交请求（版本与幂等键）
-///
-/// # 返回
+/// `req` 为提交请求（版本与幂等键）。
 /// 返回提交后的冲正单视图。
-///
-/// # 错误
-/// 业务处理或数据读取失败时返回对应错误。
 pub async fn receipt_reversal_submit(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -124,18 +85,8 @@ pub async fn receipt_reversal_submit(
 }
 
 /// 撤回尚未最终通过的回款冲正审批。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 冲正单 ID
-/// * `req` - 撤回请求（原因必填）
-///
-/// # 返回
+/// `req` 为撤回请求（原因必填）。
 /// 返回撤回后的冲正单视图。
-///
-/// # 错误
-/// 业务处理或数据读取失败时返回对应错误。
 pub async fn receipt_reversal_cancel_approval(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -152,19 +103,7 @@ pub async fn receipt_reversal_cancel_approval(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 客户端直接过账失败关闭。过账只允许作为审批最终通过动作。
-///
-/// # 参数
-/// * `_state` - 应用状态
-/// * `_actor` - 已通过鉴权的审计操作人
-/// * `_id` - 冲正单 ID
-/// * `_req` - 过账请求（客户端不得据此形成资金事实）
-///
-/// # 错误
-/// 始终返回冲突，防止 HTTP 旁路过账。
-///
-/// # 返回
-/// 无成功返回；始终拒绝客户端直接过账。
+/// 旧回款冲正直接过账入口始终返回冲突；审批运行时仅在最终通过时生成冲正资金事实。
 pub async fn receipt_reversal_post(
     State(_state): State<HttpState>,
     Extension(_actor): Extension<AuditActor>,

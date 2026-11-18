@@ -5,15 +5,15 @@ use crate::entity::fingerprint::Fingerprint;
 
 /// 持久化值到稳定指纹的适配，仅在仓储层依赖 BSON。
 pub(crate) trait BsonFingerprint {
-    /// 编码任意 BSON 值，保留值类型与有序结构。
+    // 为指纹写入 BSON 值，编码区分原始类型并保留有序容器的结构。
     fn bson(&mut self, value: &Bson);
-    /// 编码 BSON 文档，保留字段顺序。
+    // 按原字段排列写入 BSON 文档指纹，不能把有序文档按无序键集合处理。
     fn document(&mut self, document: &Document);
 }
 
 impl BsonFingerprint for Fingerprint {
-    /// BSON 容器使用独立标记；文档保持字段顺序，数组保持元素顺序。
-    /// 标量采用 BSON Canonical Extended JSON 的类型表示，再按稳定 JSON 规则编码。
+    // 处理 BSON 指纹值时为容器加独立标记，并保留文档字段和数组元素原有的先后顺序。
+    // 标量通过 BSON Canonical Extended JSON 保留类型，再按稳定 JSON 规则编码。
     fn bson(&mut self, value: &Bson) {
         match value {
             Bson::Document(document) => self.document(document),
@@ -33,7 +33,7 @@ impl BsonFingerprint for Fingerprint {
         }
     }
 
-    /// 文档按原顺序编码键值，避免改变 MongoDB 中有序文档的查询含义。
+    // 按原顺序逐对写入 BSON 文档的键和值，避免规范化改写 MongoDB 有序文档的匹配含义。
     fn document(&mut self, document: &Document) {
         self.text("document");
         self.sequence(document, |hash, (key, value)| {
@@ -44,7 +44,7 @@ impl BsonFingerprint for Fingerprint {
 }
 
 impl Fingerprint {
-    /// JSON 固定类型标记；对象键排序，数字采用 JSON 十进制表示。
+    // 将动态事实的 JSON 值写入摘要：使用固定类型标记，按键排序对象，以 JSON 十进制形式编码数字。
     pub(crate) fn json(&mut self, value: &Value) {
         match value {
             Value::Null => self.text("null"),
@@ -78,7 +78,7 @@ mod tests {
 
     use super::*;
 
-    /// BSON 类型及有序结构不可被规范化为同一摘要。
+    // 验证：BSON 类型及有序结构不可被规范化为同一摘要。
     #[test]
     fn bson_types_and_document_order_remain_distinct() {
         let hash = |value: Bson| {

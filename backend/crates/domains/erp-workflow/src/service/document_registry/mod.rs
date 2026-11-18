@@ -44,16 +44,12 @@ use crate::repository::{ApprovalBindingLookup, DocumentRegistryExt};
 ///
 /// 稳定 `document_id` 与业务实体主键一致；草稿尚未分配正式号时 `document_no` 可为空。
 ///
-/// # 参数
-/// * `document_id` - 与业务实体相同的稳定主键
-/// * `document_type` - 合同固定单据类型
-/// * `document_no` - 正式编号；草稿传空
-///
-/// # 返回
 /// 返回尚未正式化、尚未绑定的注册实体。
 ///
-/// # 错误
 /// 编号超长时返回校验错误。
+///
+/// `document_id`：与业务实体相同的稳定主键；`document_type`：合同固定单据类型。
+/// `document_no`：正式编号；草稿传空。
 pub fn new_registered_document(
     document_id: impl AsRef<str>,
     document_type: DocumentType,
@@ -67,17 +63,11 @@ pub fn new_registered_document(
 }
 
 /// 在调用方事务内持久化单据注册行。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `document` - 已构造的注册行
-/// * `executor` - 调用方执行器
-///
-/// # 返回
 /// 注册行写入完成时无返回值。
 ///
-/// # 错误
 /// 唯一键冲突或仓储失败时返回错误。
+///
+/// `document`：已构造的注册行。
 pub async fn persist_registered_document(
     db: &mongodb::Database,
     document: &BusinessDocument,
@@ -88,16 +78,8 @@ pub async fn persist_registered_document(
 }
 
 /// 按执行器查询注册行。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `document_id` - 业务单据 ID
-/// * `executor` - 调用方执行器
-///
-/// # 返回
 /// 找到时返回注册行；不存在时返回 `None`。
 ///
-/// # 错误
 /// 仓储读取失败时返回错误。
 pub async fn find_registered_document(
     db: &mongodb::Database,
@@ -108,16 +90,8 @@ pub async fn find_registered_document(
 }
 
 /// 按执行器查询单据审批绑定。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `document_id` - 业务单据 ID
-/// * `executor` - 调用方执行器
-///
-/// # 返回
 /// 已绑定返回绑定；单据已注册但未绑定时返回 `None`。
 ///
-/// # 错误
 /// 单据不存在或仓储失败时返回错误。
 pub async fn find_approval_binding(
     db: &mongodb::Database,
@@ -149,33 +123,13 @@ pub struct DocumentRegistryService {
 
 impl DocumentRegistryService {
     /// 创建单据注册服务实例。
-    ///
-    /// # 参数
-    /// * `db` - 数据库实例
-    /// * `authorization` - 应用共享授权服务
-    ///
-    /// # 返回
     /// 返回服务实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: Database, authorization: Arc<AuthorizationService>) -> Self {
         Self::with_ports(db, authorization, Arc::new(FailClosedAuditPort), Arc::new(FailClosedObjectFactPort))
     }
 
     /// 创建注入审计与对象事实端口的单据注册服务。
-    ///
-    /// # 参数
-    /// * `db` - 数据库
-    /// * `authorization` - 应用共享授权服务
-    /// * `audit` - 审计写入端口
-    /// * `facts` - 对象事实端口
-    ///
-    /// # 返回
     /// 返回使用给定端口的服务。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn with_ports(
         db: Database,
         authorization: Arc<AuthorizationService>,
@@ -191,14 +145,9 @@ impl DocumentRegistryService {
     /// 同身份不同 ID 透出唯一索引冲突（409）。外部来源单据可携带 D01 来源身份
     /// 映射 ID，提供时必须已登记（跨域读取对方仓储）。
     ///
-    /// # 参数
-    /// * `req` - 创建请求
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
     /// 返回注册行视图（幂等命中时返回已存在行）。
     ///
-    /// # 错误
+    /// 失败情形：
     /// * `ValidationError` - 请求体校验失败
     /// * `NotFound` - 外部身份映射不存在
     /// * `ConflictError` - 同身份不同 ID 的重复注册（唯一索引透出）
@@ -266,16 +215,13 @@ impl DocumentRegistryService {
     ///
     /// 排序字段白名单在 Service 层校验（api-contract §4），禁止任意字段透传。
     ///
-    /// # 参数
-    /// * `actor` - 需要具备对应管理功能权限的操作人
-    /// * `params` - 查询参数
-    ///
-    /// # 返回
     /// 在同一快照事务内授权并返回分页视图（`items`/`total`/`page`/`page_size`）。
     ///
-    /// # 错误
+    /// 失败情形：
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
     /// * `RepositoryError` - 数据库查询失败
+    ///
+    /// `actor`：需要具备对应管理功能权限的操作人。
     pub async fn business_document_list(
         &self,
         params: &BusinessDocumentListParams,
@@ -293,19 +239,14 @@ impl DocumentRegistryService {
     }
 
     /// 在调用方原快照事务中查询单据注册列表，不开启事务。
-    ///
-    /// # 参数
-    /// * `actor` - 需要具备对应管理功能权限的操作人
-    /// * `params` - 查询参数
-    /// * `executor` - 调用方当前活动的快照事务执行器
-    ///
-    /// # 返回
     /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
     ///
-    /// # 错误
+    /// 失败情形：
     /// * `ValidationError` - 执行器没有当前活动的快照事务
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
     /// * `RepositoryError` - 数据库查询失败
+    ///
+    /// `actor`：需要具备对应管理功能权限的操作人；`executor`：调用方当前活动的快照事务执行器。
     pub async fn business_document_list_with(
         &self,
         params: &BusinessDocumentListParams,
@@ -344,16 +285,12 @@ impl DocumentRegistryService {
     }
 
     /// 查询单据注册详情。
-    ///
-    /// # 参数
-    /// * `actor` - 需要具备对应管理功能权限的操作人
-    /// * `id` - 单据注册 ID
-    ///
-    /// # 返回
     /// 经功能授权后返回注册行视图。
     ///
-    /// # 错误
+    /// 失败情形：
     /// * `NotFound` - 单据注册不存在
+    ///
+    /// `actor`：需要具备对应管理功能权限的操作人。
     pub async fn business_document_detail(
         &self,
         id: &str,
@@ -371,18 +308,13 @@ impl DocumentRegistryService {
     }
 
     /// 在调用方原快照事务中查询单据注册详情，不开启事务。
-    ///
-    /// # 参数
-    /// * `actor` - 需要具备对应管理功能权限的操作人
-    /// * `id` - 单据注册 ID
-    /// * `executor` - 调用方当前活动的快照事务执行器
-    ///
-    /// # 返回
     /// 返回注册行视图。
     ///
-    /// # 错误
+    /// 失败情形：
     /// * `ValidationError` - 执行器没有当前活动的快照事务
     /// * `NotFound` - 单据注册不存在
+    ///
+    /// `actor`：需要具备对应管理功能权限的操作人；`executor`：调用方当前活动的快照事务执行器。
     pub async fn business_document_detail_with(
         &self,
         id: &str,
@@ -405,14 +337,9 @@ impl DocumentRegistryService {
     /// 目标单据必须已注册。责任角色取操作人账号类型（后台账号当前只有 admin；
     /// 业务角色由单据域自己的事务注入）。
     ///
-    /// # 参数
-    /// * `req` - 追加请求
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
     /// 返回新建的动作视图。
     ///
-    /// # 错误
+    /// 失败情形：
     /// * `NotFound` - 目标单据未注册
     /// * `ValidationError` - 请求体校验失败
     pub async fn append_workflow_action(
@@ -451,17 +378,13 @@ impl DocumentRegistryService {
     }
 
     /// 分页查询工作流动作列表。
-    ///
-    /// # 参数
-    /// * `actor` - 需要具备对应管理功能权限的操作人
-    /// * `params` - 查询参数（`document_id`/`actor_id`/`action_type` 扁平筛选）
-    ///
-    /// # 返回
     /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
     ///
-    /// # 错误
+    /// 失败情形：
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
     /// * `RepositoryError` - 数据库查询失败
+    ///
+    /// `actor`：需要具备对应管理功能权限的操作人；`params`：查询参数（`document_id`/`actor_id`/`action_type` 扁平筛选）。
     pub async fn workflow_action_list(
         &self,
         params: &WorkflowActionListParams,
@@ -479,19 +402,15 @@ impl DocumentRegistryService {
     }
 
     /// 在调用方原快照事务中查询工作流动作列表，不开启事务。
-    ///
-    /// # 参数
-    /// * `actor` - 需要具备对应管理功能权限的操作人
-    /// * `params` - 查询参数（`document_id`/`actor_id`/`action_type` 扁平筛选）
-    /// * `executor` - 调用方当前活动的快照事务执行器
-    ///
-    /// # 返回
     /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
     ///
-    /// # 错误
+    /// 失败情形：
     /// * `ValidationError` - 执行器没有当前活动的快照事务
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
     /// * `RepositoryError` - 数据库查询失败
+    ///
+    /// `actor`：需要具备对应管理功能权限的操作人；`params`：查询参数（`document_id`/`actor_id`/`action_type` 扁平筛选）。
+    /// `executor`：调用方当前活动的快照事务执行器。
     pub async fn workflow_action_list_with(
         &self,
         params: &WorkflowActionListParams,
@@ -532,16 +451,12 @@ impl DocumentRegistryService {
     }
 
     /// 查询单据的全部关系（出向 + 入向）。
-    ///
-    /// # 参数
-    /// * `actor` - 需要具备对应管理功能权限的操作人
-    /// * `document_id` - 业务单据 ID
-    ///
-    /// # 返回
     /// 经功能授权后返回出向与入向关系的合并视图。
     ///
-    /// # 错误
+    /// 失败情形：
     /// * `RepositoryError` - 数据库查询失败
+    ///
+    /// `actor`：需要具备对应管理功能权限的操作人。
     pub async fn document_relation_list(
         &self,
         document_id: &BusinessDocumentId,
@@ -561,18 +476,13 @@ impl DocumentRegistryService {
     }
 
     /// 在调用方原快照事务中查询单据全部关系，不开启事务。
-    ///
-    /// # 参数
-    /// * `actor` - 需要具备对应管理功能权限的操作人
-    /// * `document_id` - 业务单据 ID
-    /// * `executor` - 调用方当前活动的快照事务执行器
-    ///
-    /// # 返回
     /// 返回出向与入向关系的合并视图。
     ///
-    /// # 错误
+    /// 失败情形：
     /// * `ValidationError` - 执行器没有当前活动的快照事务
     /// * `RepositoryError` - 数据库查询失败
+    ///
+    /// `actor`：需要具备对应管理功能权限的操作人；`executor`：调用方当前活动的快照事务执行器。
     pub async fn document_relation_list_with(
         &self,
         document_id: &BusinessDocumentId,
@@ -588,14 +498,9 @@ impl DocumentRegistryService {
     ///
     /// 两端单据必须均已注册；关系方向与类型语义由实体层校验（禁止自关联）。
     ///
-    /// # 参数
-    /// * `req` - 创建请求
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
     /// 返回新建的关系视图。
     ///
-    /// # 错误
+    /// 失败情形：
     /// * `NotFound` - 任一单据未注册
     /// * `ConflictError` - 同向关系重复（唯一索引透出）
     pub async fn create_document_relation(
@@ -633,17 +538,13 @@ impl DocumentRegistryService {
     }
 
     /// 按参与人查询其参与过的全部单据（“我的参与单据”）。
-    ///
-    /// # 参数
-    /// * `actor` - 需要具备对应管理功能权限的操作人
-    /// * `user_id` - 参与人用户 ID
-    ///
-    /// # 返回
     /// 经功能授权后返回按参与时间倒序排列的参与记录视图。
     ///
-    /// # 错误
+    /// 失败情形：
     /// * `ValidationError` - 用户 ID 为空白
     /// * `RepositoryError` - 数据库查询失败
+    ///
+    /// `actor`：需要具备对应管理功能权限的操作人。
     pub async fn document_participant_list(
         &self,
         user_id: &str,
@@ -663,19 +564,14 @@ impl DocumentRegistryService {
     }
 
     /// 在调用方原快照事务中查询参与人的全部单据，不开启事务。
-    ///
-    /// # 参数
-    /// * `actor` - 需要具备对应管理功能权限的操作人
-    /// * `user_id` - 参与人用户 ID
-    /// * `executor` - 调用方当前活动的快照事务执行器
-    ///
-    /// # 返回
     /// 返回按参与时间倒序排列的参与记录视图。
     ///
-    /// # 错误
+    /// 失败情形：
     /// * `ValidationError` - 执行器没有当前活动的快照事务
     /// * `ValidationError` - 用户 ID 为空白
     /// * `RepositoryError` - 数据库查询失败
+    ///
+    /// `actor`：需要具备对应管理功能权限的操作人；`executor`：调用方当前活动的快照事务执行器。
     pub async fn document_participant_list_with(
         &self,
         user_id: &str,
@@ -690,7 +586,7 @@ impl DocumentRegistryService {
         Ok(items.into_iter().map(Into::into).collect())
     }
 
-    /// 纯功能读取只能沿活动快照事务授权，后续业务读取继续复用原执行器。
+    // 单据登记的纯功能读取仅在活动快照中授权，实际仓储读取仍用这一个执行器，不能先授权再跨事务取数。
     async fn require_read_access(
         &self,
         actor: &AuditActor,
@@ -712,14 +608,9 @@ impl DocumentRegistryService {
     /// 参与记录只追加不删除（§4.6 客户历史参与者查看权依据）；目标单据必须
     /// 已注册；记录人取操作人账号 ID。
     ///
-    /// # 参数
-    /// * `req` - 创建请求
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
     /// 返回新建的参与人视图。
     ///
-    /// # 错误
+    /// 失败情形：
     /// * `NotFound` - 目标单据未注册
     /// * `ValidationError` - 请求体校验失败
     pub async fn create_document_participant(
@@ -765,16 +656,14 @@ impl DocumentRegistryService {
         Ok(participant.into())
     }
 
-    /// 在单个事务中执行业务写入并追加审计日志（TRANSACTIONS.md「基本用法」）。
-    ///
-    /// 事务闭包内不做外部 HTTP / 文件 I/O；提交结果未知由
-    /// `persistence_core::Error::CommitOutcomeUnknown` → `services::Error::OutcomeUnknown` 映射。
-    ///
-    /// # 参数
-    /// * `transaction` - 业务写入闭包（收到执行器）
-    ///
-    /// # 返回
-    /// 返回事务闭包的结果。
+    // 在单个事务中执行业务写入并追加审计日志（TRANSACTIONS.md「基本用法」）。
+    //
+    // 事务闭包内不做外部 HTTP / 文件 I/O；提交结果未知由
+    // `persistence_core::Error::CommitOutcomeUnknown` → `services::Error::OutcomeUnknown` 映射。
+    //
+    // 返回事务闭包的结果。
+    //
+    // `transaction`：业务写入闭包（收到执行器）。
     async fn write_with_audit<T, F>(
         &self,
         actor: &AuditActor,

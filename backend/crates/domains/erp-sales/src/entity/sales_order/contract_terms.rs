@@ -9,13 +9,10 @@ use serde::Serialize;
 use super::{InvoiceRequirementSnapshot, PaymentTermSnapshot};
 
 /// 核对销售客户与合同对方身份；兼容旧客户端省略客户的请求。
+/// 结果：未声明客户或身份相同时通过。
+/// 失败条件：身份不同时拒绝，禁止按合同静默更换已选择的客户。
 ///
-/// # 参数
-/// `expected` 为合同权威客户，`selected` 为销售命令或已保存销售单的客户。
-/// # 返回
-/// 未声明客户或身份相同时通过。
-/// # 错误
-/// 身份不同时拒绝，禁止按合同静默更换已选择的客户。
+/// 输入约定：`expected` 为合同权威客户，`selected` 为销售命令或已保存销售单的客户。
 pub fn ensure_contract_customer(
     expected: &CustomerAccountId,
     selected: Option<&CustomerAccountId>,
@@ -53,14 +50,12 @@ pub struct ContractBindingCheck {
 
 impl ContractTerms {
     /// 逐项比较付款代码、开票类型和百分数税点。
-    ///
-    /// # 参数
-    /// * `contract` - 合同当前有效修订的条款
-    /// * `basis` - 原销售单条款来源说明
-    /// # 返回
     /// 返回完整核对结果；空值及无法解析的税点均不匹配。
-    /// # 错误
-    /// 无；差异记录在返回值中。
+    /// 失败条件：差异记录在返回值中。
+    ///
+    /// 输入约定：
+    /// - `contract`：合同当前有效修订的条款
+    /// - `basis`：原销售单条款来源说明
     pub fn compare(&self, contract: &Self, basis: String) -> ContractBindingCheck {
         let items = vec![
             ContractTermCheck {
@@ -92,13 +87,10 @@ impl ContractTerms {
 
 impl ContractBindingCheck {
     /// 拒绝任一不一致条款，不允许补录命令覆盖原单。
+    /// 结果：全部一致时返回成功。
+    /// 失败条件：返回每项差异及后续处理指引。
     ///
-    /// # 参数
-    /// 无；使用本次核对结果。
-    /// # 返回
-    /// 全部一致时返回成功。
-    /// # 错误
-    /// 返回每项差异及后续处理指引。
+    /// 输入约定：无；使用本次核对结果。
     pub fn ensure_matches(&self) -> Result<()> {
         if self.matches {
             return Ok(());
@@ -122,7 +114,7 @@ fn same_text(left: &str, right: &str) -> bool {
     !left.trim().is_empty() && left.trim() == right.trim()
 }
 
-// 税点按百分数比较；6、6.00、6% 等价，0.06 不推断为 6%。
+// 比对合同税点时按百分数解释：`6`、`6.00` 与 `6%` 等价，不把 `0.06` 自动放大成 `6%`。
 fn tax_percent(raw: &str) -> Option<Decimal> {
     let text = raw.trim().strip_suffix('%').unwrap_or(raw.trim()).trim();
     if text.is_empty() || !text.bytes().all(|byte| byte.is_ascii_digit() || byte == b'.') {

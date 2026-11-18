@@ -27,11 +27,8 @@ pub enum QueryOutput {
 
 impl QueryModel {
     /// 校验服务端查询模型。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 标识和路径可用于权限编译时成功。
-    /// # 错误
+    ///
     /// 拒绝非法模型或字段、缺少行主键的受限输出，以及包含额外字段的存在性输出。
     pub fn validate(&self) -> Result<()> {
         for value in [&self.resource, &self.collection, &self.id_field] {
@@ -59,7 +56,7 @@ impl QueryModel {
     }
 }
 
-/// 路径不能为空或占用编译器的临时字段。
+// 登记字段路径时拒绝空片段或占用授权编译器临时字段的片段，避免业务字段和聚合中间值冲突。
 fn valid_segment(value: &str) -> bool {
     !value.is_empty()
         && !value.starts_with("__identity_")
@@ -77,12 +74,11 @@ pub struct MappingFacts {
 
 impl MappingFacts {
     /// 核验事实是否具有本执行方式所需的一致性证据。
-    /// # 参数
-    /// transactional 表示使用调用方事务；now 为复验时间。
-    /// # 返回
     /// 事实可继续使用时成功。
-    /// # 错误
+    ///
     /// 无版本的非事务读取、空版本或已经到期拒绝。
+    ///
+    /// transactional 表示使用调用方事务；now 为复验时间。
     pub fn validate(&self, transactional: bool, now: Instant) -> Result<()> {
         if self.version.as_ref().is_some_and(|value| value.is_empty())
             || (!transactional && self.version.is_none())

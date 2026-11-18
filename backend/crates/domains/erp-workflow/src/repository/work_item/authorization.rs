@@ -27,7 +27,7 @@ pub(crate) struct WorkItemMapping {
 }
 
 impl WorkItemMapping {
-    /// 固定模型读取当前负责人、主属组织及真实历次责任，协作关系明确为空。
+    // 装配固定工作项模型，映射当前负责人、主属组织和真实历次责任；协作关系明确不命中。
     pub(crate) fn shared() -> Arc<dyn AccessMapping> {
         Arc::new(Self {
             model: QueryModel {
@@ -95,7 +95,7 @@ impl AccessMapping for WorkItemMapping {
     }
 }
 
-/// 按查询模型检查约束后，供任务仓储拼接数据库阶段。
+// 任务仓储有授权过滤时，先核对凭证的固定工作项模型、原读取阶段和有效期，再取聚合阶段；未提供授权过滤时不附加阶段。
 pub(super) fn prefix(
     filter: &WorkItemFilter,
     executor: &mut dyn Executor,
@@ -112,7 +112,7 @@ pub(super) fn prefix(
     }
 }
 
-/// 禁止将其他模型的授权结果用于任务集合。
+// 仓储拼装任务查询前核对凭证的资源、集合、固定模型标识及完整对象粒度，拒绝将其他资源或份额凭证用于工作项集合。
 fn check_model(access: &CompiledAccess) -> RepositoryResult<()> {
     let model = access.model();
     if model.resource != "work_item"
@@ -132,13 +132,12 @@ struct TaskId {
 
 #[allow(async_fn_in_trait)]
 pub(crate) trait WorkItemAuthorizationExt {
-    /// 在完整授权条件内读取当前批次的任务 ID。
-    /// # 参数
-    /// ids 为当前展示批次，access 为原读取凭证及其固定管理过滤，executor 为原事务。
-    /// # 返回
-    /// 本批允许管理的实际任务 ID。
-    /// # 错误
-    /// 模型错配、批次超限或数据库失败时返回错误。
+    // 在完整授权条件内读取当前批次的任务 ID。
+    // 本批允许管理的实际任务 ID。
+    //
+    // 模型错配、批次超限或数据库失败时返回错误。
+    //
+    // ids 为当前展示批次，access 为原读取凭证及其固定管理过滤，executor 为原事务。
     async fn authorized_ids(
         &self,
         ids: &[String],

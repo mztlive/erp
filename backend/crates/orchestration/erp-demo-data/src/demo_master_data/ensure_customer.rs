@@ -17,16 +17,8 @@ use super::{DemoMasterDataProcess, lifecycle, record, spec};
 use crate::{Error, Result};
 
 impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
-    /// 以销售岗位读取并执行客户种子。
-    ///
-    /// # 参数
-    /// `actor` - 操作人；`step` - 种子身份；`request` - 客户创建输入；`notices` - 跳过原因集合。
-    ///
-    /// # 返回
-    /// 返回客户创建、恢复或跳过结果。
-    ///
-    /// # 错误
-    /// 命令回执失效、领域写入或清单登记失败时返回错误。
+    // 按种子键优先恢复原客户命令；无回执时以启用的销售岗位创建客户，并登记客户与主体 ID。
+    // 缺少岗位或业务拒绝时返回提示，回执失效、写入或登记失败时停止。
     pub(super) async fn ensure_customer(
         &self,
         actor: &AuditActor,
@@ -67,7 +59,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         Ok(if created { EnsureOutcome::Created } else { EnsureOutcome::Restored })
     }
 
-    /// 恢复命令回执绑定的客户并对齐销售负责人。
+    // 恢复原命令绑定的客户和主体，按演示销售岗位对齐归属后登记真实主键，避免重试创建第二个客户。
     async fn adopt_customer(
         &self,
         actor: &AuditActor,
@@ -94,7 +86,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         Ok(if live { EnsureOutcome::Skipped } else { EnsureOutcome::Restored })
     }
 
-    /// 按稳定幂等键定位此前创建的客户。
+    // 用稳定种子幂等键查客户创建回执，让重试继续使用首次命令绑定的客户，而不是按名称认领记录。
     async fn customer_command(&self, key: &str) -> Result<Option<String>> {
         let command = self
             .db
@@ -104,7 +96,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         Ok(command.map(|command| command.customer_id))
     }
 
-    /// 通过领域分配入口对齐演示客户的销售负责人。
+    // 通过正式客户分配用例对齐销售负责人，使恢复的客户可由演示销售岗位继续经办。
     async fn align_customer_owner(
         &self,
         actor: &AuditActor,
@@ -148,7 +140,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
     }
 }
 
-/// 合并不重复的业务提示。
+// 将客户准备提示追加到批次报告，同一原因只记一次，便于定位真正阻断生成的问题。
 fn push_unique(notices: &mut Vec<String>, text: &str) {
     if !notices.iter().any(|item| item == text) {
         notices.push(text.to_string());

@@ -42,19 +42,10 @@ pub struct InventoryListPage<T> {
 
 impl<T> InventoryListPage<T> {
     /// 用授权元信息包装分页结果。
-    ///
-    /// # 参数
-    /// * `page` - 已按仓库与人员条件求交的分页
-    /// * `meta` - 对应资源动作的授权元信息
-    /// * `no_scope` - 缺仓库维或空范围
-    /// * `scope_summary` - 范围摘要
-    /// * `ownership_basis` - 所有人口径
-    ///
-    /// # 返回
     /// 返回带范围信封的列表页。`no_scope` 为真时 `empty_reason` 为 `no_scope`，否则为 `None`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// `page` 为已按仓库与人员条件求交的分页；`meta` 为对应资源动作的授权元信息。
+    /// `no_scope` 为缺仓库维或空范围；`scope_summary` 为范围摘要。
+    /// `ownership_basis` 为所有人口径。
     pub fn from_page(
         page: PageView<T>,
         meta: &InventoryScopeMeta,
@@ -75,16 +66,7 @@ impl<T> InventoryListPage<T> {
     }
 }
 
-/// 规范化人员 ID 列表。
-///
-/// # 参数
-/// * `ids` - 查询参数中的人员 ID。
-///
-/// # 返回
-/// 未提供时返回 `None`；否则按原切片返回 ID，不去重。
-///
-/// # 错误
-/// 任一项忽略大小写等于 `me` 时返回 `Error::ValidationError`。空集合不拒绝。
+/// 处理库存经办人筛选时保留缺省与空集合的区别，返回原 ID 顺序，不去重。任何不区分大小写的 `me` 都返回 `ValidationError`。
 pub fn normalized_user_ids(ids: Option<&QueryIds>) -> Result<Option<Vec<String>>> {
     let Some(ids) = ids else {
         return Ok(None);
@@ -95,16 +77,7 @@ pub fn normalized_user_ids(ids: Option<&QueryIds>) -> Result<Option<Vec<String>>
     Ok(Some(ids.as_slice().to_vec()))
 }
 
-/// 规范化跨页范围版本。
-///
-/// # 参数
-/// * `value` - 原始 `scope_version`
-///
-/// # 返回
-/// 空白视为未提供。
-///
-/// # 错误
-/// 超长时返回 `ValidationError`。
+/// 处理库存分页请求时将空白 `scope_version` 视为缺省，过长则返回 `ValidationError`，再由分页过程检查指纹是否匹配。
 pub fn normalized_scope_version(value: Option<&str>) -> Result<Option<String>> {
     let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
         return Ok(None);
@@ -115,19 +88,8 @@ pub fn normalized_scope_version(value: Option<&str>) -> Result<Option<String>> {
     Ok(Some(value.to_string()))
 }
 
-/// 第二页起必须携带与当前授权指纹一致的 `scope_version`。
-///
-/// # 参数
-/// * `page` - 请求页码。
-/// * `expected` - 客户端回传版本。
-/// * `current` - 当前授权指纹。
-///
-/// # 返回
-/// 版本满足跨页约束时成功。
-///
-/// # 错误
-/// `page` 大于 1 且 `expected` 为 `None`，或 `expected` 为 `Some` 且不等于 `current` 时，
-/// 返回 `Error::ConflictError`，文案带 `DATA_SCOPE_CHANGED`。
+/// 跨页读取库存列表时比较客户端的 `scope_version` 和当前授权指纹，避免翻页继续使用已变化的范围。
+/// 第二页起缺少该值，或任意页提交的值不同于当前指纹时，返回带 `DATA_SCOPE_CHANGED` 的 `ConflictError`。
 pub fn ensure_scope_version(page: u64, expected: Option<&str>, current: &str) -> Result<()> {
     let version = ScopeVersion::new(expected, EmptyScopeVersion::Provided);
     version

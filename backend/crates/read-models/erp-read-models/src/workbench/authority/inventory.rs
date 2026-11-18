@@ -16,18 +16,13 @@ struct SettlementFactContext {
 }
 
 impl super::WorkItemFactsReader {
-    /// 装载库存调整单的身份与影响。
-    ///
-    /// # 参数
-    /// * `keys` - 本批对象键；没有库存调整键时不读取。
-    /// * `facts` - 输出事实表。
-    /// * `executor` - 数据访问执行器。
-    ///
-    /// # 返回
-    /// 成功时写入读到的调整单。
-    ///
-    /// # 错误
-    /// 仓储读取失败时返回错误。
+    // 为库存调整与结算工作项事实取数时，读取库存调整单的身份与影响。
+    //
+    // 调用参数：
+    // * `keys` - 本批对象键；没有库存调整键时不读取。
+    // * `facts` - 输出事实表。
+    //
+    // 成功时写入读到的调整单。
     pub(in crate::workbench) async fn load_stock_adjustment_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -46,18 +41,15 @@ impl super::WorkItemFactsReader {
         Ok(())
     }
 
-    /// 装载供应商结算单的身份、往来方与影响。
-    ///
-    /// # 参数
-    /// * `keys` - 本批对象键；没有结算单键时不读取。
-    /// * `facts` - 输出事实表。
-    /// * `executor` - 数据访问执行器。
-    ///
-    /// # 返回
-    /// 成功时写入结算单，往来方取供应商显示名，影响按差异总数与未决数生成。
-    ///
-    /// # 错误
-    /// 结算单、明细、差异或供应商名称读取失败时返回错误。
+    // 为库存调整与结算工作项事实取数时，读取供应商结算单的身份、往来方与影响。
+    //
+    // 调用参数：
+    // * `keys` - 本批对象键；没有结算单键时不读取。
+    // * `facts` - 输出事实表。
+    //
+    // 成功时写入结算单，往来方取供应商显示名，影响按差异总数与未决数生成。
+    //
+    // 结算单、明细、差异或供应商名称读取失败时返回错误。
     pub(in crate::workbench) async fn load_supplier_settlement_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -113,16 +105,12 @@ impl super::WorkItemFactsReader {
     }
 }
 
-/// 按结算单分组冻结明细。
-///
-/// # 参数
-/// * `items` - 已读结算明细。
-///
-/// # 返回
-/// 返回结算单 ID 到其明细的映射；不排序。
-///
-/// # 错误
-/// 不返回错误。
+// 汇总库存调整与结算工作项事实时，按结算单分组冻结明细。
+//
+// 调用参数：
+// * `items` - 已读结算明细。
+//
+// 返回结算单 ID 到其明细的映射；不排序。
 pub(in crate::workbench) fn group_settlement_items(
     items: Vec<SupplierSettlementItem>,
 ) -> HashMap<String, Vec<SupplierSettlementItem>> {
@@ -133,16 +121,12 @@ pub(in crate::workbench) fn group_settlement_items(
     grouped
 }
 
-/// 按结算明细分组正式差异。
-///
-/// # 参数
-/// * `differences` - 已读结算差异。
-///
-/// # 返回
-/// 返回结算明细 ID 到其差异的映射；不排序。
-///
-/// # 错误
-/// 不返回错误。
+// 汇总库存调整与结算工作项事实时，按结算明细分组正式差异。
+//
+// 调用参数：
+// * `differences` - 已读结算差异。
+//
+// 返回结算明细 ID 到其差异的映射；不排序。
 pub(in crate::workbench) fn group_settlement_differences(
     differences: Vec<SupplierSettlementDifference>,
 ) -> HashMap<String, Vec<SupplierSettlementDifference>> {
@@ -153,17 +137,13 @@ pub(in crate::workbench) fn group_settlement_differences(
     grouped
 }
 
-/// 返回供应商结算复核的服务端判断条件。
-///
-/// # 参数
-/// * `total` - 差异总数。
-/// * `pending` - 尚未形成正式结论的差异数。
-///
-/// # 返回
-/// `pending` 大于 0 时说明不得确认；否则在有差异或金额一致两种文案中选择。
-///
-/// # 错误
-/// 不返回错误。
+// 处理库存调整与结算工作项事实时，给出供应商结算复核的服务端判断条件。
+//
+// 调用参数：
+// * `total` - 差异总数。
+// * `pending` - 尚未形成正式结论的差异数。
+//
+// `pending` 大于 0 时说明不得确认；否则在有差异或金额一致两种文案中选择。
 pub(in crate::workbench) fn settlement_review_instruction(total: usize, pending: usize) -> String {
     if pending > 0 {
         format!("仍有 {pending} 项差异未形成正式结论，不得确认结算")
@@ -174,16 +154,12 @@ pub(in crate::workbench) fn settlement_review_instruction(total: usize, pending:
     }
 }
 
-/// 从已读取的 stock_adjustment 来源构造唯一权威字段。
-///
-/// # 参数
-/// * `adjustment` - 库存调整单。
-///
-/// # 返回
-/// 返回调整单号标题与编制人，影响为不审批则不能入账。
-///
-/// # 错误
-/// 不返回错误。
+// 从已读取的 stock_adjustment 来源组装唯一权威字段。
+//
+// 调用参数：
+// * `adjustment` - 库存调整单。
+//
+// 返回调整单号标题与编制人，影响为不审批则不能入账。
 pub(in crate::workbench) fn stock_adjustment_fact(adjustment: &erp_inventory::StockAdjustment) -> ObjectFact {
     let mut fact = ObjectFact::new(
         adjustment.base.id.clone(),
@@ -194,19 +170,15 @@ pub(in crate::workbench) fn stock_adjustment_fact(adjustment: &erp_inventory::St
     fact
 }
 
-/// 从已读取的 settlement 来源构造唯一权威字段。
-///
-/// # 参数
-/// * `statement` - 供应商结算单。
-/// * `supplier` - 供应商显示名；缺失时往来方为空。
-/// * `difference_count` - 差异总数。
-/// * `pending_count` - 未决差异数。
-///
-/// # 返回
-/// 返回结算单号标题与编制人，影响由 `settlement_review_instruction` 生成。
-///
-/// # 错误
-/// 不返回错误。
+// 从已读取的 settlement 来源组装唯一权威字段。
+//
+// 调用参数：
+// * `statement` - 供应商结算单。
+// * `supplier` - 供应商显示名；缺失时往来方为空。
+// * `difference_count` - 差异总数。
+// * `pending_count` - 未决差异数。
+//
+// 返回结算单号标题与编制人，影响由 `settlement_review_instruction` 生成。
 pub(in crate::workbench) fn settlement_fact(
     statement: &erp_supply::entity::supplier_settlement::SupplierSettlementStatement,
     supplier: Option<String>,

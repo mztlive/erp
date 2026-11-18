@@ -540,7 +540,7 @@ fn deposit_release_updates_original_reservation_and_removes_only_after_full_rele
     assert_eq!(request.available_to_execute("account-1").unwrap(), amount("100"));
 }
 
-/// 驳回后保存修改不再清除驳回状态，也不重新取得付款额度。
+// 回归检查：驳回后保存修改不再清除驳回状态，也不重新取得付款额度。
 #[test]
 fn rejected_request_edit_preserves_rejection_and_releases_authority() {
     let mut request = draft(&[("account-1", "100")]);

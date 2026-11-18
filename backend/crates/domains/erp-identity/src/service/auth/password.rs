@@ -15,30 +15,14 @@ pub(crate) enum PasswordCheck {
 }
 
 impl PasswordCheck {
-    /// 判断密码是否匹配当前或已迁移凭证。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
+    /// 当密码匹配当前或已迁移凭证时返回 `true`。
     /// 当前密码有效时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn is_match(&self) -> bool {
         !matches!(self, Self::Mismatch)
     }
 
     /// 消费结果并取出由 legacy MD5 迁移得到的新凭证。
-    ///
-    /// # 参数
-    /// 消耗 `self`。
-    ///
-    /// # 返回
     /// legacy 凭证匹配时返回升级后的凭证，否则返回 `None`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn into_upgraded_secret(self) -> Option<Secret> {
         match self {
             Self::Upgraded(secret) => Some(secret),
@@ -53,15 +37,11 @@ impl PasswordCheck {
 /// async 栈上的敏感数据。信号量许可随阻塞任务生命周期持有，即使请求取消，
 /// 仍不会突破并发上限。
 ///
-/// # 参数
-/// * `secret` - 已加载凭证；不可认证或不存在时传入 `None`
-/// * `password` - 待校验的明文密码
-///
-/// # 返回
 /// 返回密码匹配状态及可选升级凭证。
 ///
-/// # 错误
 /// 当阻塞任务或密码处理失败时返回错误。
+///
+/// `secret`：已加载凭证；不可认证或不存在时传入 `None`。
 pub async fn verify_password(secret: Option<Secret>, password: String) -> Result<PasswordCheck> {
     run_password_work(
         move || verify_password_sync(secret, password),
@@ -71,16 +51,11 @@ pub async fn verify_password(secret: Option<Secret>, password: String) -> Result
 }
 
 /// 在有界阻塞任务中为账号生成 Argon2 凭证。
-///
-/// # 参数
-/// * `account` - 已规范化登录账号
-/// * `password` - 明文密码
-///
-/// # 返回
 /// 返回已生成 Argon2 哈希的凭证。
 ///
-/// # 错误
 /// 当密码或阻塞任务处理失败时返回错误。
+///
+/// `account`：已规范化登录账号。
 pub async fn hash_secret(account: LoginAccount, password: String) -> Result<Secret> {
     run_hashing(move || Secret::new(account, password)).await
 }
@@ -90,14 +65,11 @@ pub async fn hash_secret(account: LoginAccount, password: String) -> Result<Secr
 /// 调用方负责在闭包中保留所属领域的不变式；该函数只负责 Argon2 的资源
 /// 隔离、并发上限与领域错误传播。
 ///
-/// # 参数
-/// * `work` - 拥有全部输入且可能执行密码哈希的同步领域工作
-///
-/// # 返回
 /// 返回同步领域工作生成的值。
 ///
-/// # 错误
 /// 当领域校验或阻塞任务处理失败时返回错误。
+///
+/// `work`：拥有全部输入且可能执行密码哈希的同步领域工作。
 pub async fn run_hashing<T, Work>(work: Work) -> Result<T>
 where
     T: Send + 'static,
@@ -106,9 +78,8 @@ where
     run_password_work(work, Error::from).await
 }
 
-/// 统一持有密码工作许可并等待阻塞任务完成。
-///
-/// 信号量许可被移动到阻塞任务中，请求取消后仍会保留到实际计算结束。
+// 在线程池执行密码哈希或验证时，将信号量许可交给实际的阻塞任务。
+// 即使调用请求已取消，许可仍由该工作持有，直到计算结束。
 async fn run_password_work<T, Work, MapError>(work: Work, map_error: MapError) -> Result<T>
 where
     T: Send + 'static,
@@ -125,7 +96,7 @@ where
     result.map_err(map_error)
 }
 
-/// 完成单次同步密码工作；仅在 legacy 匹配时生成新 Argon2 哈希。
+// 执行单次同步密码验证。只有旧格式凭证匹配时才派生替换用的 Argon2 哈希。
 fn verify_password_sync(secret: Option<Secret>, password: String) -> erp_core::Result<PasswordCheck> {
     let Some(mut secret) = secret else {
         Secret::verify_password_or_dummy(None, password.as_str());

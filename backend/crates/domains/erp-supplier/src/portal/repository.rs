@@ -20,26 +20,13 @@ pub struct CooperationRepository<'a> {
 
 impl<'a> CooperationRepository<'a> {
     /// 创建本域仓储。
-    ///
-    /// # 参数
-    /// * `db` - MongoDB 数据库。
-    /// # 返回
-    /// 返回仓储。
-    /// # 错误
-    /// 无。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
 
     /// 读取内部审核指定的申请；调用方必须执行 DataScope 与当前任务资格验证。
-    ///
-    /// # 参数
-    /// * `id` - 内部任务指向的精确申请标识。
-    /// * `executor` - 调用方执行器。
-    /// # 返回
     /// 返回未删除申请；没有未删除申请时返回 `None`。
-    /// # 错误
-    /// 数据库读取失败时拒绝。
+    /// 数据库读取失败时向上传播错误。
     pub async fn find_any(
         &self,
         id: &str,
@@ -49,15 +36,10 @@ impl<'a> CooperationRepository<'a> {
     }
 
     /// 统计当前供应商的同一筛选范围。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 服务器授权供应商。
-    /// * `status` - 同列表的可选状态。
-    /// * `executor` - 调用方执行器。
-    /// # 返回
     /// 返回未删除申请总数。
-    /// # 错误
     /// 范围或数据库读取失败时拒绝。
+    /// `supplier_id`：服务器授权供应商。
+    /// `status`：同列表的可选状态。
     pub async fn count(
         &self,
         supplier_id: &str,
@@ -74,14 +56,8 @@ impl<'a> CooperationRepository<'a> {
     }
 
     /// 按工作台已收窄的精确申请 ID 获取正式任务事实。
-    ///
-    /// # 参数
-    /// * `ids` - 已由内部工作项限定的申请标识。
-    /// * `executor` - 调用方执行器。
-    /// # 返回
     /// 返回未删除申请；对象责任与任务资格仍由内部调用方校验。
-    /// # 错误
-    /// 数据库读取失败时拒绝。
+    /// 数据库读取失败时向上传播错误。
     pub async fn list_active_by_ids(
         &self,
         ids: &[String],
@@ -91,15 +67,9 @@ impl<'a> CooperationRepository<'a> {
     }
 
     /// 按当前授权供应商读取申请，范围外与不存在统一为空。
-    ///
-    /// # 参数
-    /// * `id` - 申请标识。
-    /// * `supplier_id` - 服务器授权供应商。
-    /// * `executor` - 调用方执行器。
-    /// # 返回
     /// 返回当前供应商可见的未删除申请；范围外、已删除或不存在时返回 `None`。
-    /// # 错误
     /// 数据库错误时拒绝。
+    /// `supplier_id`：服务器授权供应商。
     pub async fn get(
         &self,
         id: &str,
@@ -112,17 +82,9 @@ impl<'a> CooperationRepository<'a> {
     }
 
     /// 读取供应商申请列表，采用稳定排序和有界分页。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 已鉴权范围。
-    /// * `status` - 可选申请状态。
-    /// * `offset` - 列表偏移。
-    /// * `limit` - 页大小，范围 1 至 100。
-    /// * `executor` - 调用方执行器。
-    /// # 返回
     /// 返回可见申请集合。
-    /// # 错误
     /// 分页非法或数据库读取失败时拒绝。
+    /// `status`：可选申请状态。
     pub async fn list(
         &self,
         supplier_id: &str,
@@ -146,13 +108,7 @@ impl<'a> CooperationRepository<'a> {
     }
 
     /// 插入尚未提交的供应商草稿。
-    ///
-    /// # 参数
-    /// * `application` - 通过实体构造的草稿。
-    /// * `executor` - 调用方事务执行器。
-    /// # 返回
     /// 返回空结果。
-    /// # 错误
     /// 草稿状态非法、重复身份或数据库错误时拒绝。
     pub async fn create(
         &self,
@@ -170,13 +126,7 @@ impl<'a> CooperationRepository<'a> {
     }
 
     /// 保存申请并以持久化版本进行 CAS，保护既有冻结历史。
-    ///
-    /// # 参数
-    /// * `application` - 实体动作产生的申请。
-    /// * `executor` - 调用方事务执行器。
-    /// # 返回
     /// 成功后原地更新持久化版本。
-    /// # 错误
     /// 历史被改写、状态不存在或并发更新时拒绝。
     pub async fn update(
         &self,
@@ -193,15 +143,9 @@ impl<'a> CooperationRepository<'a> {
     }
 
     /// 读取原命令实际结果并校验身份及载荷。
-    ///
-    /// # 参数
-    /// * `command` - 当前规范命令。
-    /// * `supplier_id` - 当前授权范围。
-    /// * `executor` - 调用方事务执行器。
-    /// # 返回
     /// 返回通过身份与载荷校验的回执；没有匹配回执时返回 `None`。
-    /// # 错误
     /// 回执与当前命令的范围、身份或载荷不一致，或数据库读取失败时拒绝。
+    /// `supplier_id`：当前授权范围。
     pub async fn receipt(
         &self,
         command: &CommandReceipt,
@@ -222,13 +166,7 @@ impl<'a> CooperationRepository<'a> {
     }
 
     /// 同业务状态、任务及审计事务写入成功回执。
-    ///
-    /// # 参数
-    /// * `receipt` - 原命令结果。
-    /// * `executor` - 调用方事务执行器。
-    /// # 返回
     /// 返回空结果。
-    /// # 错误
     /// 重复命令或数据库失败时拒绝。
     pub async fn record_receipt(
         &self,
@@ -239,17 +177,10 @@ impl<'a> CooperationRepository<'a> {
     }
 
     /// 原子切换正式商务指针并插入商务修订；不自行开启事务。
-    ///
-    /// # 参数
-    /// * `before` - 同执行器读取的旧供应商。
-    /// * `plan` - 纯规则生成的确认计划。
-    /// * `executor` - 必須由 Process 传入当前事务执行器。
-    /// # 返回
     /// 成功后 plan supplier 更新为实际写入版本。
-    /// # 错误
-    /// 未传入事务执行器时返回 `Internal`；计划身份不一致或确认时间超限时返回
-    /// `ValidationError`；供应商版本超限，或当前版本、状态、指针已变时返回
-    /// `ConflictError`；更新或写入商务修订失败时返回对应错误。
+    /// 未传入事务执行器时返回 `Internal`；计划身份不一致或确认时间超限时返回`ValidationError`；供应商版
+    /// 本超限，或当前版本、状态、指针已变时返回`ConflictError`；更新或写入商务修订失败时返回对应错误。
+    /// `executor`：必須由 Process 传入当前事务执行器。
     pub async fn apply_confirmed(
         &self,
         before: &SupplierAccount,
@@ -291,7 +222,7 @@ impl<'a> CooperationRepository<'a> {
     }
 }
 
-/// 正式计划的供应商、商务修订与版本增量必须和已读取账户一致。
+// 正式计划的供应商、商务修订与版本增量必须和已读取账户一致。
 fn ensure_confirmed_plan(before: &SupplierAccount, plan: &ConfirmedCooperation) -> Result<()> {
     if plan.supplier.base.id != before.base.id
         || plan.profile.supplier_id.to_string() != before.base.id
@@ -310,7 +241,7 @@ fn scoped_filter(supplier_id: &str) -> Document {
     doc! { "supplier_id": supplier_id, "deleted_at": NOT_DELETED_TIMESTAMP_BSON }
 }
 
-/// 空供应商绑定拒绝；有状态时写入序列化后的状态条件。
+// 空供应商绑定拒绝；有状态时写入序列化后的状态条件。
 fn list_filter(supplier_id: &str, status: Option<CooperationStatus>) -> Result<Document> {
     if supplier_id.trim().is_empty() {
         return Err(Error::Forbidden("所选供应商与当前登录账号的合作关系不符，请重新选择".into()));
@@ -326,12 +257,7 @@ fn list_filter(supplier_id: &str, status: Option<CooperationStatus>) -> Result<D
 }
 
 /// 注册门户申请及回执唯一身份、范围与稳定分页索引。
-///
-/// # 参数
-/// * `db` - 当前数据库。
-/// # 返回
 /// 返回空结果。
-/// # 错误
 /// 唯一性冲突或建索引失败时拒绝启动。
 pub async fn ensure_indexes(db: &Database) -> persistence_core::Result<()> {
     for (collection, indexes) in [

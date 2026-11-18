@@ -30,88 +30,40 @@ pub trait PartyExt {
     /// `party_bank_account` 集合名。
     const PARTY_BANK_ACCOUNTS: &'static str = "party_bank_accounts";
 
-    /// 获取 `party` 集合的 Repository。
+    /// 取得 `party` 集合访问入口，供业务服务共享数据库和执行器。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回 `PartyRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     fn parties(&self) -> PartyRepository<'_>;
 
-    /// 获取 `party_revision` 集合的 Repository（追加式修订，无软删除）。
+    /// 取得 `party_revision` 集合访问入口，供业务服务共享数据库和执行器。
+    /// 追加式修订，无软删除。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回 `PartyRevisionRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     fn party_revisions(&self) -> PartyRevisionRepository<'_>;
 
-    /// 获取 `party_contact` 集合的 Repository。
+    /// 取得 `party_contact` 集合访问入口，供业务服务共享数据库和执行器。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回 `PartyContactRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     fn party_contacts(&self) -> PartyContactRepository<'_>;
 
-    /// 获取 `party_address` 集合的 Repository。
+    /// 取得 `party_address` 集合访问入口，供业务服务共享数据库和执行器。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回 `PartyAddressRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     fn party_addresses(&self) -> PartyAddressRepository<'_>;
 
-    /// 获取 `party_tax_profile` 集合的 Repository。
+    /// 取得 `party_tax_profile` 集合访问入口，供业务服务共享数据库和执行器。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回 `PartyTaxProfileRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     fn party_tax_profiles(&self) -> PartyTaxProfileRepository<'_>;
 
-    /// 获取 `party_bank_account` 集合的 Repository。
+    /// 取得 `party_bank_account` 集合访问入口，供业务服务共享数据库和执行器。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回 `PartyBankAccountRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     fn party_bank_accounts(&self) -> PartyBankAccountRepository<'_>;
 
     /// 获取承载跨集合事务写入的域专用仓储。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回 `PartyDomainRepository` 实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
     fn party(&self) -> PartyDomainRepository<'_>;
 }
 

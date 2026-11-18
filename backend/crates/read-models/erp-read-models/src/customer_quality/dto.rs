@@ -53,27 +53,27 @@ pub struct HistoryQualityQuery {
     pub page_size: usize,
 }
 
-/// 默认当前口径按客户逐行展示。
+// 客户经营质量报表未指定现任分组维度时，默认当前口径按客户逐行展示。
 fn default_current_dimension() -> String {
     "customer".into()
 }
 
-/// 默认历史口径按冻结人员分组展示。
+// 客户经营质量报表未指定历史分组维度时，默认历史口径按冻结人员分组展示。
 fn default_history_dimension() -> String {
     "attribution_user".into()
 }
 
-/// 默认按订单数降序，同值按稳定键排序。
+// 客户经营质量报表未指定排序时，默认按订单数降序，同值按稳定键排序。
 fn default_sort() -> String {
     "orderCount:desc".into()
 }
 
-/// 默认页码。
+// 客户经营质量报表请求未指定页码时从首页开始。
 fn default_page() -> usize {
     1
 }
 
-/// 默认页大小。
+// 客户经营质量报表请求未指定页大小时每页取 20 条。
 fn default_page_size() -> usize {
     20
 }
@@ -125,7 +125,7 @@ pub struct CurrentQualityRow {
 }
 
 impl CurrentQualityRow {
-    /// 构造当前口径行。
+    /// 初始化当前口径行，供客户经营质量报表使用。
     ///
     /// # 参数
     /// * `row_id` - 行稳定身份
@@ -134,9 +134,6 @@ impl CurrentQualityRow {
     ///
     /// # 返回
     /// 返回订单数为零、可选字段全空的行。
-    ///
-    /// # 错误
-    /// 无。
     pub fn new(row_id: String, kind: String, gross_total: String) -> Self {
         Self {
             row_id,
@@ -159,18 +156,12 @@ impl CurrentQualityRow {
         }
     }
 
-    /// 设置客户身份。
+    /// 组装客户经营质量报表时补充客户身份。
     ///
     /// # 参数
     /// * `customer_id` - 客户身份
     /// * `customer_no` - 客户编号
     /// * `customer_name` - 客户名称
-    ///
-    /// # 返回
-    /// 返回更新后的行。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_customer(
         mut self,
         customer_id: Option<String>,
@@ -183,19 +174,13 @@ impl CurrentQualityRow {
         self
     }
 
-    /// 设置现任归属。
+    /// 组装客户经营质量报表时补充现任归属。
     ///
     /// # 参数
     /// * `owner_user_id` - 现任负责人
     /// * `owner_user_name` - 负责人姓名
     /// * `owner_org_unit_id` - 现任组织
     /// * `owner_org_unit_name` - 组织名称
-    ///
-    /// # 返回
-    /// 返回更新后的行。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_ownership(
         mut self,
         owner_user_id: Option<String>,
@@ -210,18 +195,12 @@ impl CurrentQualityRow {
         self
     }
 
-    /// 设置分组身份。
+    /// 组装客户经营质量报表时补充分组身份。
     ///
     /// # 参数
     /// * `group_id` - 分组身份
     /// * `label` - 分组展示名
     /// * `customer_count` - 分组客户数
-    ///
-    /// # 返回
-    /// 返回更新后的行。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_group(
         mut self,
         group_id: Option<String>,
@@ -234,34 +213,22 @@ impl CurrentQualityRow {
         self
     }
 
-    /// 设置订单计数与缺版本数。
+    /// 组装客户经营质量报表时补充订单计数与缺版本数。
     ///
     /// # 参数
     /// * `order_count` - 订单数
     /// * `unpriced_count` - 缺版本数
-    ///
-    /// # 返回
-    /// 返回更新后的行。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_counts(mut self, order_count: usize, unpriced_count: usize) -> Self {
         self.order_count = order_count;
         self.unpriced_count = unpriced_count;
         self
     }
 
-    /// 设置生效区间。
+    /// 组装客户经营质量报表时补充生效区间。
     ///
     /// # 参数
     /// * `first_effective_at` - 首次生效
     /// * `latest_effective_at` - 最近生效
-    ///
-    /// # 返回
-    /// 返回更新后的行。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_effective_range(
         mut self,
         first_effective_at: Option<String>,
@@ -311,7 +278,7 @@ pub struct HistoryQualityRow {
 }
 
 impl HistoryQualityRow {
-    /// 构造历史口径行。
+    /// 初始化历史口径行，供客户经营质量报表使用。
     ///
     /// # 参数
     /// * `row_id` - 行稳定身份
@@ -320,9 +287,6 @@ impl HistoryQualityRow {
     ///
     /// # 返回
     /// 返回可选字段全空的行。
-    ///
-    /// # 错误
-    /// 无。
     pub fn new(row_id: String, kind: String, gross_total: String) -> Self {
         Self {
             row_id,
@@ -345,24 +309,18 @@ impl HistoryQualityRow {
         }
     }
 
-    /// 设置分组身份。
+    /// 组装客户经营质量报表时补充分组身份。
     ///
     /// # 参数
     /// * `group_id` - 分组身份
     /// * `label` - 分组展示名
-    ///
-    /// # 返回
-    /// 返回更新后的行。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_group(mut self, group_id: Option<String>, label: Option<String>) -> Self {
         self.group_id = group_id;
         self.label = label;
         self
     }
 
-    /// 设置冻结人员归属。
+    /// 组装客户经营质量报表时补充冻结人员归属。
     ///
     /// # 参数
     /// * `user_id` - 冻结人员
@@ -370,12 +328,6 @@ impl HistoryQualityRow {
     /// * `org_unit_id` - 冻结组织
     /// * `org_unit_name` - 组织名称
     /// * `path` - 组织祖先路径
-    ///
-    /// # 返回
-    /// 返回更新后的行。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_attribution(
         mut self,
         user_id: Option<String>,
@@ -392,7 +344,7 @@ impl HistoryQualityRow {
         self
     }
 
-    /// 设置归属订单。
+    /// 组装客户经营质量报表时补充归属订单。
     ///
     /// # 参数
     /// * `order_id` - 订单身份
@@ -400,12 +352,6 @@ impl HistoryQualityRow {
     /// * `customer_id` - 客户身份
     /// * `customer_name` - 客户名称
     /// * `effective_at` - 生效时间
-    ///
-    /// # 返回
-    /// 返回更新后的行。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_order(
         mut self,
         order_id: Option<String>,
@@ -422,17 +368,11 @@ impl HistoryQualityRow {
         self
     }
 
-    /// 设置订单计数与缺版本数。
+    /// 组装客户经营质量报表时补充订单计数与缺版本数。
     ///
     /// # 参数
     /// * `order_count` - 订单数
     /// * `unpriced_count` - 缺版本数
-    ///
-    /// # 返回
-    /// 返回更新后的行。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_counts(mut self, order_count: Option<usize>, unpriced_count: usize) -> Self {
         self.order_count = order_count;
         self.unpriced_count = unpriced_count;
@@ -458,32 +398,20 @@ pub struct QualityScope {
 }
 
 impl QualityScope {
-    /// 构造响应范围摘要。
+    /// 初始化响应范围摘要，供客户经营质量报表使用。
     ///
     /// # 参数
     /// * `id` - 范围身份
     /// * `label` - 范围展示名
     /// * `permission_version` - 权限版本
-    ///
-    /// # 返回
-    /// 返回范围摘要。
-    ///
-    /// # 错误
-    /// 无。
     pub fn new(id: String, label: String, permission_version: String) -> Self {
         Self { id, label, permission_version }
     }
 
-    /// 设置范围展示名。
+    /// 组装客户经营质量报表时填入范围展示名。
     ///
     /// # 参数
     /// * `label` - 范围展示名
-    ///
-    /// # 返回
-    /// 返回更新后的摘要。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_label(mut self, label: String) -> Self {
         self.label = label;
         self

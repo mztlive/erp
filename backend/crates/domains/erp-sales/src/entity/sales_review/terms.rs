@@ -25,15 +25,10 @@ pub struct SalesChangeTerms {
 
 impl SalesChangeTerms {
     /// 读取工作副本的可编辑条款。
-    ///
-    /// # 参数
-    /// * `copy` - 已授权的销售变更工作副本。
-    ///
-    /// # 返回
     /// 返回完整条款。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// 输入约定：
+    /// - `copy`：已授权的销售变更工作副本。
     pub fn from_copy(copy: &SalesOrderWorkingCopy) -> Self {
         Self {
             project_name: copy.project_name.clone().unwrap_or_default(),
@@ -45,16 +40,12 @@ impl SalesChangeTerms {
     }
 
     /// 通过实体快照校验更新条款，不接收客户或主体身份。
-    ///
-    /// # 参数
-    /// * `copy` - 已证明可编辑的工作副本。
-    /// * `actor_id` - 编辑人。
-    ///
-    /// # 返回
-    /// 更新成功返回空结果。
-    ///
-    /// # 错误
+    /// 结果：更新成功返回空结果。
     /// 必填、长度或工作副本状态校验失败时拒绝。
+    ///
+    /// 输入约定：
+    /// - `copy`：已证明可编辑的工作副本。
+    /// - `actor_id`：编辑人。
     pub fn apply(self, copy: &mut SalesOrderWorkingCopy, actor_id: &str) -> Result<()> {
         let tax: Rate = self.tax_point.parse()?;
         if !(Decimal::ZERO..=Decimal::from(100)).contains(&tax.to_decimal()) {

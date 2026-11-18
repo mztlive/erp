@@ -17,8 +17,8 @@ CLIENT_OUTPUT = BACKEND.parent / "erp-client/lib"
 GENERATED_FILES = ("permissions.generated.ts", "audit-actions.generated.ts")
 
 
+# 为独立目录生成构造临时 Cargo 清单，复用工作区依赖和服务端 `build.rs`，不编译业务 crate。
 def tool_manifest() -> str:
-    """复用 workspace 的版本声明，以临时构建入口执行原 build.rs。"""
     workspace = tomllib.loads((BACKEND / "Cargo.toml").read_text())["workspace"]["dependencies"]
     versions = {name: workspace[name] if isinstance(workspace[name], str) else workspace[name]["version"]
                 for name in ("syn", "serde_json")}
@@ -39,8 +39,8 @@ serde_json = {{ version = {json.dumps(versions["serde_json"])} }}
 '''
 
 
+# 在指定目录编译并运行服务端的实际目录生成器，按需再运行内联单测；任何命令失败都阻断后续交付。
 def run_generator(directory: Path, output: Path, test: bool) -> None:
-    """编译并执行实际生成器或其内联单元测试；失败时不交付结果。"""
     manifest = directory / "Cargo.toml"
     manifest.write_text(tool_manifest())
     shutil.copyfile(BACKEND / "Cargo.lock", directory / "Cargo.lock")
@@ -68,7 +68,7 @@ def run_generator(directory: Path, output: Path, test: bool) -> None:
 
 
 def main() -> int:
-    """生成目录、检查已保存文件，或运行生成器单元测试。"""
+    """按命令行模式生成权限与审计目录、逐字节检查客户端生成物，或验证生成器内联单测，避免发布过期目录。"""
     parser = argparse.ArgumentParser(description=__doc__)
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--check", action="store_true", help="生成到临时目录并逐字节检查，不修改生成物")

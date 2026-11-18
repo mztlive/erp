@@ -12,14 +12,8 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
 /// 调整当前准备批次的客户售价。
-///
-/// # 参数
 /// `state` 为应用状态，`actor` 为已认证人，`id` 为册，`req` 为改价命令。
-///
-/// # 返回
 /// 返回更新详情。
-///
-/// # 错误
 /// 权限、范围、状态、版本、批次或金额无效时拒绝。
 pub async fn booklet_update_prices(
     State(state): State<HttpState>,

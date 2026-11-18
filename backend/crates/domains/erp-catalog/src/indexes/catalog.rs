@@ -47,23 +47,14 @@ pub(crate) const SKU_REVISION_ATTRIBUTE_VALUES: &str =
 pub(crate) const VOUCHER_CATEGORY_PROFILE_REVISIONS: &str =
     <mongodb::Database as CatalogExt>::VOUCHER_CATEGORY_PROFILE_REVISIONS;
 
-/// 创建本域集合的幂等命名索引。
-///
-/// 逐条落地数据模型 §6.3「必需约束与索引」：字典与身份类代码使用**全局唯一
-/// 索引**（与 accounts 的 code 处理一致）：软删除后仍保留身份，避免复用破坏
-/// 恢复语义；`(product_id, specification_signature)` 在全部生命周期记录上永久
-/// 唯一，不实现为仅约束启用行的 partial unique index（停用后会产生第二个同签名
-/// 稳定 SKU）；修订条码保留非唯一查询索引以支持同 SKU 的历次修订。
-/// 实际条码的唯一归属由 `sku_barcode_claims` 共同事务写入点阻止并发重复建档。
-///
-/// # 参数
-/// * `db` - 目标 MongoDB 数据库
-///
-/// # 返回
-/// 各集合命名索引幂等创建成功时无返回值。
-///
-/// # 错误
-/// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
+// 创建本域集合的幂等命名索引。
+//
+// 逐条落地数据模型 §6.3「必需约束与索引」：字典与身份类代码使用**全局唯一索引**（与 accounts 的 code 处理一致）：软删除后仍保留身份，
+// 避免复用破坏恢复语义；`(product_id, specification_signature)` 在全部生命周期记录上永久唯一，不实现为仅约束启用行的 partial
+// unique index（停用后会产生第二个同签名稳定 SKU）；修订条码保留非唯一查询索引以支持同 SKU 的历次修订。实际条码的唯一归属由
+// `sku_barcode_claims` 共同事务写入点阻止并发重复建档。
+//
+// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub(crate) async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, PRODUCT_CATEGORIES, product_category_indexes()).await?;
     create_indexes(db, PRODUCT_BRANDS, product_brand_indexes()).await?;
@@ -85,18 +76,17 @@ pub(crate) async fn ensure(db: &Database) -> Result<()> {
     Ok(())
 }
 
-/// 为单个集合创建一组幂等命名索引。
+// 为单个集合创建一组幂等命名索引。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
     db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
-/// 返回 `product_category` 的身份约束与树形/启停查询索引。
-///
-/// `uk_product_categories_id` 是稳定主键唯一索引，祖先链 `$match`/`$graphLookup`
-/// 的 `connectToField: id` 依赖它。前向：`ensure_indexes` 幂等创建；已有重复
-/// `id` 时创建失败（重复值门禁）。回滚：删除该索引后按 `id` 查询退化为集合扫描。
-/// `idx_product_categories_tree` 覆盖子节点按 `parent_category_id` 展开。
+// 返回 `product_category` 的身份约束与树形/启停查询索引。
+//
+// `uk_product_categories_id` 是稳定主键唯一索引，祖先链 `$match`/`$graphLookup`的
+// `connectToField: id` 依赖它。前向：`ensure_indexes` 幂等创建；已有重复`id` 时创建失败（重复值门禁）。回滚：删除该索引后按
+// `id` 查询退化为集合扫描。`idx_product_categories_tree` 覆盖子节点按 `parent_category_id` 展开。
 fn product_category_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_product_categories_id", doc! { "id": 1 }),
@@ -106,7 +96,7 @@ fn product_category_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `product_brand` 的身份约束与启停查询索引。
+// 返回 `product_brand` 的身份约束与启停查询索引。
 fn product_brand_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_product_brands_id", doc! { "id": 1 }),
@@ -116,7 +106,7 @@ fn product_brand_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `unit_of_measure` 的身份约束与启停查询索引。
+// 返回 `unit_of_measure` 的身份约束与启停查询索引。
 fn unit_of_measure_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_unit_of_measures_id", doc! { "id": 1 }),
@@ -127,7 +117,7 @@ fn unit_of_measure_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `sku_attribute` 的身份约束与组合查询索引。
+// 返回 `sku_attribute` 的身份约束与组合查询索引。
 fn sku_attribute_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_sku_attributes_id", doc! { "id": 1 }),
@@ -136,7 +126,7 @@ fn sku_attribute_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `sku_attribute_value` 的身份约束与按属性查询索引。
+// 返回 `sku_attribute_value` 的身份约束与按属性查询索引。
 fn sku_attribute_value_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_sku_attribute_values_id", doc! { "id": 1 }),
@@ -145,7 +135,7 @@ fn sku_attribute_value_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `product_category_attribute` 的组合唯一约束与分类查询索引。
+// 返回 `product_category_attribute` 的组合唯一约束与分类查询索引。
 fn product_category_attribute_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_product_category_attributes_id", doc! { "id": 1 }),
@@ -162,7 +152,7 @@ fn product_category_attribute_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `product` 的身份约束与组合查询索引。
+// 返回 `product` 的身份约束与组合查询索引。
 fn product_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_products_id", doc! { "id": 1 }),
@@ -176,7 +166,7 @@ fn product_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `product_revision` 的聚合修订唯一约束。
+// 返回 `product_revision` 的聚合修订唯一约束。
 fn product_revision_indexes() -> Vec<IndexModel> {
     vec![
         named_index("idx_product_revisions_match_name", doc! { "match_name": 1, "brand_id": 1 }),
@@ -186,7 +176,7 @@ fn product_revision_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `product_revision_media` 的组合唯一约束与按修订查询索引。
+// 返回 `product_revision_media` 的组合唯一约束与按修订查询索引。
 fn product_revision_media_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_product_revision_medias_id", doc! { "id": 1 }),
@@ -201,7 +191,7 @@ fn product_revision_media_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `sku` 的身份约束与全生命周期签名唯一约束。
+// 返回 `sku` 的身份约束与全生命周期签名唯一约束。
 fn sku_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_skus_id", doc! { "id": 1 }),
@@ -214,7 +204,7 @@ fn sku_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `sku_revision` 的聚合修订唯一约束、条码精确查询与搜索索引。
+// 返回 `sku_revision` 的聚合修订唯一约束、条码精确查询与搜索索引。
 fn sku_revision_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_sku_revisions_id", doc! { "id": 1 }),
@@ -227,7 +217,7 @@ fn sku_revision_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `sku_revision_attribute_value` 的关系唯一约束与正反向查询索引。
+// 返回 `sku_revision_attribute_value` 的关系唯一约束与正反向查询索引。
 fn sku_revision_attribute_value_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_sku_revision_attribute_values_id", doc! { "id": 1 }),
@@ -247,7 +237,7 @@ fn sku_revision_attribute_value_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `voucher_category_profile_revision` 的聚合修订唯一约束。
+// 返回 `voucher_category_profile_revision` 的聚合修订唯一约束。
 fn voucher_category_profile_revision_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_voucher_category_profile_revisions_id", doc! { "id": 1 }),
@@ -258,10 +248,9 @@ fn voucher_category_profile_revision_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 构建命名普通索引。
-/// 公司商品池预算投影：可售行按 SKU 编号分页，常用筛选字段单列索引，待重算部分索引。
-///
-/// 可售行索引均以 `row` 为对象作部分过滤，不可售占位不进入索引。
+// 构建命名普通索引。公司商品池预算投影：可售行按 SKU 编号分页，常用筛选字段单列索引，待重算部分索引。
+//
+// 可售行索引均以 `row` 为对象作部分过滤，不可售占位不进入索引。
 fn sellable_sku_projection_indexes() -> Vec<IndexModel> {
     let sellable = doc! { "row": { "$type": "object" } };
     let mut indexes = [
@@ -291,7 +280,7 @@ fn partial_index(name: &str, keys: Document, filter: Document) -> IndexModel {
 
 #[cfg(test)]
 mod tests {
-    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    // 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
     #[test]
     fn collections_look_up_by_unique_stable_id() {
         for indexes in [
@@ -321,7 +310,7 @@ mod tests {
         indexes.iter().filter_map(|index| index.options.as_ref()?.name.clone()).collect()
     }
 
-    /// 商品池资格聚合按稳定主键关联 SKU、修订、商品与单位，缺少主键索引会退化为逐行集合扫描。
+    // 商品池资格聚合按稳定主键关联 SKU、修订、商品与单位，缺少主键索引会退化为逐行集合扫描。
     #[test]
     fn sellable_projection_indexes_skip_unsellable_placeholders() {
         let indexes = super::sellable_sku_projection_indexes();

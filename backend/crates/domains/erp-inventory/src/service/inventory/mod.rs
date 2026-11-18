@@ -41,11 +41,8 @@ pub struct InventoryService {
 
 impl InventoryService {
     /// 在原命令执行器证明目标仓库的完整动作资格。
-    /// # 参数
-    /// actor、action、warehouse 为可信账号、固定动作和实际仓库；executor 为原事务。
-    /// # 返回
     /// 账号、同角色功能资格和仓库范围均成立时成功。
-    /// # 错误
+    /// actor、action、warehouse 为可信账号、固定动作和实际仓库；executor 为原事务。
     /// 对象、范围或功能资格不足拒绝；设施错误透传。
     pub async fn require_warehouse(
         &self,
@@ -58,21 +55,9 @@ impl InventoryService {
     }
 
     /// 创建库存服务实例。
-    ///
-    /// # 参数
-    /// * `db` - 数据库实例
-    /// * `authorization` - 仓库范围授权端口
-    /// * `warehouse_facts` - 仓库展示事实端口
-    /// * `catalog_facts` - SKU 展示事实端口
-    /// * `fulfillment_facts` - 入库单据号事实端口
-    /// * `audit` - 审计持久化端口
-    /// * `people_facts` - 调整单申请人与当前审批人事实验口
-    ///
-    /// # 返回
-    /// 返回服务实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// `authorization` 为仓库范围授权端口；`warehouse_facts` 为仓库展示事实端口。
+    /// `catalog_facts` 为 SKU 展示事实端口；`fulfillment_facts` 为入库单据号事实端口。
+    /// `audit` 为审计持久化端口；`people_facts` 为调整单申请人与当前审批人事实验口。
     pub fn new(
         db: Database,
         authorization: Arc<dyn AuthorizationPort>,
@@ -86,7 +71,7 @@ impl InventoryService {
     }
 }
 
-/// 只把普通对象拒绝转换为当前入口的不可见结果，设施错误继续失败。
+// 只把普通对象拒绝转换为当前入口的不可见结果，设施错误继续失败。
 async fn warehouse_allowed(
     port: &dyn AuthorizationPort,
     actor: &AuditActor,

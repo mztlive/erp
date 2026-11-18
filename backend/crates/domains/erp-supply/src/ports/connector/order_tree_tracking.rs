@@ -12,23 +12,16 @@ use crate::{Error, Result};
 
 impl OrderTree {
     /// 使用跟踪冻结数量核对完整树结构；不生成订单、报价或资金依据。
-    /// # 参数
-    /// `sources` 为原执行持久化且不可变的采购数量映射。
-    /// # 返回
     /// 当前根及全部子节点结构和数量守恒时成功。
-    /// # 错误
     /// 原树缺失根、冻结行缺失/重复或数量与树不符时拒绝。
     pub fn validate_tracking(&self, sources: &[TrackingSourceLine]) -> Result<()> {
         self.validate(&self.tracking_lines(sources)?)
     }
 
     /// 以原树的订货身份验证新树，保留历次拆单和已确认事实。
-    /// # 参数
-    /// `next` 为本次完整新观察；`sources` 为原执行冻结数量。
-    /// # 返回
     /// 验证通过的新树。
-    /// # 错误
     /// 新树改变原 SKU、数量、根、历史节点或版本时拒绝。
+    /// `next` 为本次完整新观察；`sources` 为原执行冻结数量。
     pub fn merge_tracking(&self, next: Self, sources: &[TrackingSourceLine]) -> Result<Self> {
         let lines = self.tracking_lines(sources)?;
         self.validate(&lines)?;
@@ -43,12 +36,8 @@ impl OrderTree {
     }
 
     /// 比较根、父子关系及逐行映射，不将查询遗漏的独立状态轨道当成拓扑变化。
-    /// # 参数
-    /// `other` 为已经验证结构和数量的同一执行组观察。
-    /// # 返回
     /// 所有节点身份、角色及数量分配完全一致时返回 true。
-    /// # 错误
-    /// 无；用于比较前须分别完成 validate 校验。
+    /// 用于比较前须分别完成 validate 校验。
     pub fn same_topology(&self, other: &Self) -> bool {
         self.root_order_no == other.root_order_no
             && self.nodes.len() == other.nodes.len()

@@ -17,16 +17,14 @@ use persistence_core::Executor;
 
 use crate::{Error, Result};
 
-/// 加载指定申请，不存在时返回可处理的业务错误。
+// 加载指定申请，不存在时返回可处理的业务错误。
 async fn load(db: &Database, id: &str, executor: &mut dyn Executor) -> Result<SalesInvoiceRequest> {
     db.sales_invoice_requests()
         .find_by_id(id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("开票申请不存在".into()))
 }
-/// 写锁应收并加载占用额度；所有竞争写入在同一账户上产生写冲突。
-/// # 错误
-/// 应收缺失或 CAS 写入失败时整笔业务事务回滚。
+// 写锁应收并加载占用额度；所有竞争写入在同一账户上产生写冲突。应收缺失或 CAS 写入失败时整笔业务事务回滚。
 async fn lock_account(db: &Database, id: &str, executor: &mut dyn Executor) -> Result<ReceivableAccount> {
     let mut account = db
         .receivable_accounts()
@@ -36,7 +34,7 @@ async fn lock_account(db: &Database, id: &str, executor: &mut dyn Executor) -> R
     db.receivable_accounts().update(&mut account, executor).await?;
     Ok(account)
 }
-/// 查询在审及已批准未开的占用额度，不读取历史已完成申请。
+// 查询在审及已批准未开的占用额度，不读取历史已完成申请。
 async fn reserved(db: &Database, account_id: &str, executor: &mut dyn Executor) -> Result<Amount> {
     Ok(db
         .sales_invoice_requests()
@@ -45,18 +43,11 @@ async fn reserved(db: &Database, account_id: &str, executor: &mut dyn Executor) 
         .iter()
         .fold(Amount::zero(), |sum, request| sum.checked_add(request.reserved())))
 }
-/// 已占用的申请额度不得超过当前可开票金额。
-///
-/// # 参数
-/// * `db` - 数据库。
-/// * `account` - 当前应收子账，以其 `open_invoiceable_total` 为上限。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
-/// 占用不超过可开票额度时无返回值。
-///
-/// # 错误
-/// 占用额度读取失败时返回该错误；已占用额度大于 `open_invoiceable_total` 时返回冲突。
+// 已占用的申请额度不得超过当前可开票金额。
+//
+// `account` 为当前应收子账，以其 `open_invoiceable_total` 为上限；沿用调用方的执行器。占用不超过可开票额度时无返回值。
+//
+// 占用额度读取失败时返回该错误；已占用额度大于 `open_invoiceable_total` 时返回冲突。
 pub(crate) async fn ensure_reserved_capacity(
     db: &Database,
     account: &ReceivableAccount,

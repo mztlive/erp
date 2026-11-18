@@ -20,19 +20,15 @@ use crate::workbench::authority::funds::origins::{
     receivable_entry_counterparties,
 };
 
-/// 组装付款执行任务的应付对象事实。
-///
-/// # 参数
-/// * `account` - 应付子账
-/// * `supplier` - 供应商展示名
-/// * `purchase_no` - 来源采购单号
-/// * `due_date` - 计划付款日文案
-///
-/// # 返回
-/// 返回带权威事实和结构化简报的对象事实。
-///
-/// # 错误
-/// 不返回错误。
+// 处理资金审批简报时，组装付款执行任务的应付对象事实。
+//
+// 调用参数：
+// * `account` - 应付子账
+// * `supplier` - 供应商展示名
+// * `purchase_no` - 来源采购单号
+// * `due_date` - 计划付款日文案
+//
+// 返回带权威事实和结构化简报的对象事实。
 pub(super) fn payable_account_fact(
     account: PayableAccount,
     supplier: Option<String>,
@@ -47,19 +43,15 @@ pub(super) fn payable_account_fact(
     fact
 }
 
-/// 组装付款执行任务的结构化应付简报。
-///
-/// # 参数
-/// * `account` - 应付子账，提供未付与已付金额
-/// * `supplier` - 供应商展示名
-/// * `purchase_no` - 来源采购单号
-/// * `due_date` - 计划付款日文案
-///
-/// # 返回
-/// 返回供应商、采购单、金额和计划付款日键值，以及由这些字段拼成的列表摘要。
-///
-/// # 错误
-/// 不返回错误。
+// 处理资金审批简报时，组装付款执行任务的结构化应付简报。
+//
+// 调用参数：
+// * `account` - 应付子账，提供未付与已付金额
+// * `supplier` - 供应商展示名
+// * `purchase_no` - 来源采购单号
+// * `due_date` - 计划付款日文案
+//
+// 返回供应商、采购单、金额和计划付款日键值，以及由这些字段拼成的列表摘要。
 pub(super) fn payable_brief_source(
     account: &PayableAccount,
     supplier: Option<String>,
@@ -93,18 +85,14 @@ pub(super) fn payable_brief_source(
     }
 }
 
-/// 组装回款单简报。
-///
-/// # 参数
-/// * `receipt` - 回款单
-/// * `counterparty` - 往来主体名称
-/// * `lines` - 待核销销售单行
-///
-/// # 返回
-/// 返回可上屏的对象简报源。
-///
-/// # 错误
-/// 无。
+// 工作台展示回款单时，将到账日、银行流水等回款事实和有界的待核销行组织成简报。
+//
+// 调用参数：
+// * `receipt` - 回款单
+// * `counterparty` - 往来主体名称
+// * `lines` - 待核销销售单行
+//
+// 返回可上屏的对象简报源。
 pub(super) fn receipt_brief_source(
     receipt: &CustomerReceipt,
     counterparty: Option<&str>,
@@ -145,17 +133,13 @@ pub(super) fn receipt_brief_source(
     }
 }
 
-/// 把冻结卡券版本行转成卡券票款专属简报行。
-///
-/// # 参数
-/// * `line` - 销售版本公共行
-/// * `voucher` - 与公共行一一对应的卡券版本行
-///
-/// # 返回
-/// 返回品名、面值、张数、成交金额和配赠金额。
-///
-/// # 错误
-/// 无。
+// 组装资金审批简报时，把冻结卡券版本行转成卡券票款专属简报行。
+//
+// 调用参数：
+// * `line` - 销售版本公共行
+// * `voucher` - 与公共行一一对应的卡券版本行
+//
+// 返回品名、面值、张数、成交金额和配赠金额。
 pub(super) fn voucher_account_line(
     line: &SalesOrderRevisionLine,
     voucher: &SalesOrderVoucherLineRevision,
@@ -171,16 +155,12 @@ pub(super) fn voucher_account_line(
     }
 }
 
-/// 格式化当前开票抬头税务资料状态。
-///
-/// # 参数
-/// * `tax_no` - 当前业务日生效的税号
-///
-/// # 返回
-/// 有有效税号时返回可核对文案；缺失时返回明确阻断提示。
-///
-/// # 错误
-/// 无。
+// 生成资金审批简报视图时，格式化当前开票抬头税务资料状态。
+//
+// 调用参数：
+// * `tax_no` - 当前业务日生效的税号
+//
+// 有有效税号时返回可核对文案；缺失时返回明确阻断提示。
 pub(super) fn invoice_tax_profile_label(tax_no: Option<&str>) -> String {
     match tax_no.and_then(non_empty) {
         Some(tax_no) => format!("税务资料有效 · 税号 {tax_no}"),
@@ -188,19 +168,15 @@ pub(super) fn invoice_tax_profile_label(tax_no: Option<&str>) -> String {
     }
 }
 
-/// 把待过账核销转成简报行。
-///
-/// # 参数
-/// * `allocations` - 待过账核销
-/// * `entries` - 分录 ID 到分录
-/// * `accounts` - 子账 ID 到子账
-/// * `sales_nos` - 销售单 ID 到单号
-///
-/// # 返回
-/// 返回销售单号和核销金额。
-///
-/// # 错误
-/// 无。
+// 组装资金审批简报时，把待过账核销转成简报行。
+//
+// 调用参数：
+// * `allocations` - 待过账核销
+// * `entries` - 分录 ID 到分录
+// * `accounts` - 子账 ID 到子账
+// * `sales_nos` - 销售单 ID 到单号
+//
+// 返回销售单号和核销金额。
 pub(super) fn receipt_brief_lines(
     allocations: &[PendingReceiptAllocation],
     entries: &HashMap<String, ReceivableEntry>,
@@ -224,19 +200,15 @@ pub(super) fn receipt_brief_lines(
         .collect()
 }
 
-/// 把已过账付款核销事实转成采购单号、动作与金额。
-///
-/// # 参数
-/// * `allocations` - 已过账付款核销事实
-/// * `entries` - 应付分录 ID 到分录
-/// * `accounts` - 应付子账 ID 到子账
-/// * `purchase_nos` - 采购单 ID 到单号
-///
-/// # 返回
-/// 返回采购单号和核销金额；业务单号缺失时使用明确占位。
-///
-/// # 错误
-/// 无。
+// 组装资金审批简报时，把已过账付款核销事实转成采购单号、动作与金额。
+//
+// 调用参数：
+// * `allocations` - 已过账付款核销事实
+// * `entries` - 应付分录 ID 到分录
+// * `accounts` - 应付子账 ID 到子账
+// * `purchase_nos` - 采购单 ID 到单号
+//
+// 返回采购单号和核销金额；业务单号缺失时使用明确占位。
 pub(super) fn payment_brief_lines(
     allocations: &[PaymentAllocation],
     entries: &HashMap<String, PayableEntry>,
@@ -262,19 +234,15 @@ pub(super) fn payment_brief_lines(
         .collect()
 }
 
-/// 把原资金事实与核销影响追加到退款或冲正简报。
-///
-/// # 参数
-/// * `brief` - 待补充的金额原因简报
-/// * `origin` - 原回款、付款、应收或应付上下文
-/// * `has_evidence` - 当前退款或冲正是否已上传凭证
-/// * `impact` - 通过后的正式核销影响
-///
-/// # 返回
-/// 无。原事实读取失败时显示业务单号待补全，不回退内部 ID。
-///
-/// # 错误
-/// 无。
+// 组装资金审批简报时，把原资金事实与核销影响追加到退款或冲正简报。
+//
+// 调用参数：
+// * `brief` - 待补充的金额原因简报
+// * `origin` - 原回款、付款、应收或应付上下文
+// * `has_evidence` - 当前退款或冲正是否已上传凭证
+// * `impact` - 通过后的正式核销影响
+//
+// 无。原事实读取失败时显示业务单号待补全，不回退内部 ID。
 pub(super) fn append_funds_origin(
     brief: &mut ObjectBriefSource,
     origin: Option<&FundsOriginBrief>,
@@ -317,19 +285,15 @@ pub(super) fn append_funds_origin(
         join_list_summary([Some(brief.list_summary.clone()), Some(original_document.to_string())]);
 }
 
-/// 金额加原因类资金单据的共用简报。
-///
-/// # 参数
-/// * `amount_title` - 退款或冲正金额名称
-/// * `amount_label` - 金额展示
-/// * `fields` - 额外键值
-/// * `list_summary` - 列表一行摘要
-///
-/// # 返回
-/// 返回可上屏的对象简报源。
-///
-/// # 错误
-/// 无。
+// 生成资金审批简报视图时，金额加原因类资金单据的共用简报。
+//
+// 调用参数：
+// * `amount_title` - 退款或冲正金额名称
+// * `amount_label` - 金额展示
+// * `fields` - 额外键值
+// * `list_summary` - 列表一行摘要
+//
+// 返回可上屏的对象简报源。
 pub(super) fn amount_reason_brief(
     amount_title: &str,
     amount_label: String,
@@ -352,18 +316,14 @@ pub(super) fn amount_reason_brief(
     }
 }
 
-/// 同一来源行分别投影命令名称与富简报；富简报保留名称缺失的原始单据。
-///
-/// # 参数
-/// * `receipts` - 回款单
-/// * `party_names` - 主体 ID 到往来名称
-/// * `lines` - 回款单 ID 到简报行
-///
-/// # 返回
-/// 返回命令用往来名称，以及按回款单 ID 索引的富简报。名称缺失时简报仍保留原单。
-///
-/// # 错误
-/// 不返回错误。
+// 处理资金审批简报时，同一来源行分别投影命令名称与富简报；富简报保留名称缺失的原始单据。
+//
+// 调用参数：
+// * `receipts` - 回款单
+// * `party_names` - 主体 ID 到往来名称
+// * `lines` - 回款单 ID 到简报行
+//
+// 返回命令用往来名称，以及按回款单 ID 索引的富简报。名称缺失时简报仍保留原单。
 pub(super) fn receipt_origins_from_rows(
     receipts: Vec<CustomerReceipt>,
     party_names: HashMap<String, String>,
@@ -395,18 +355,14 @@ pub(super) fn receipt_origins_from_rows(
     FundsOrigins { counterparties, briefs }
 }
 
-/// 同一来源行分别投影命令名称与富简报；富简报保留名称缺失的原始单据。
-///
-/// # 参数
-/// * `payments` - 付款单
-/// * `supplier_names` - 供应商 ID 到展示名
-/// * `lines` - 付款单 ID 到核销简报行
-///
-/// # 返回
-/// 返回命令用往来名称，以及按付款单 ID 索引的富简报。名称缺失时简报仍保留原单。
-///
-/// # 错误
-/// 不返回错误。
+// 处理资金审批简报时，同一来源行分别投影命令名称与富简报；富简报保留名称缺失的原始单据。
+//
+// 调用参数：
+// * `payments` - 付款单
+// * `supplier_names` - 供应商 ID 到展示名
+// * `lines` - 付款单 ID 到核销简报行
+//
+// 返回命令用往来名称，以及按付款单 ID 索引的富简报。名称缺失时简报仍保留原单。
 pub(super) fn payment_origins_from_rows(
     payments: Vec<SupplierPayment>,
     supplier_names: HashMap<String, String>,
@@ -439,19 +395,15 @@ pub(super) fn payment_origins_from_rows(
     FundsOrigins { counterparties, briefs }
 }
 
-/// 同一来源行分别投影命令名称与富简报；富简报保留名称缺失的原始单据。
-///
-/// # 参数
-/// * `entries` - 应收分录
-/// * `accounts` - 子账 ID 到应收子账
-/// * `party_names` - 主体 ID 到往来名称
-/// * `sales_nos` - 销售单 ID 到单号
-///
-/// # 返回
-/// 返回分录往来名称，以及按分录 ID 索引的富简报。销售单号缺失时原单文案为「销售单号待补全」。
-///
-/// # 错误
-/// 不返回错误。
+// 处理资金审批简报时，同一来源行分别投影命令名称与富简报；富简报保留名称缺失的原始单据。
+//
+// 调用参数：
+// * `entries` - 应收分录
+// * `accounts` - 子账 ID 到应收子账
+// * `party_names` - 主体 ID 到往来名称
+// * `sales_nos` - 销售单 ID 到单号
+//
+// 返回分录往来名称，以及按分录 ID 索引的富简报。销售单号缺失时原单文案为「销售单号待补全」。
 pub(super) fn receivable_origins_from_rows(
     entries: Vec<ReceivableEntry>,
     accounts: HashMap<String, ReceivableAccount>,
@@ -489,19 +441,15 @@ pub(super) fn receivable_origins_from_rows(
     FundsOrigins { counterparties, briefs }
 }
 
-/// 同一来源行分别投影命令名称与富简报；富简报保留名称缺失的原始单据。
-///
-/// # 参数
-/// * `entries` - 应付分录
-/// * `accounts` - 子账 ID 到应付子账
-/// * `supplier_names` - 供应商 ID 到展示名
-/// * `purchase_nos` - 来源单据 ID 到采购单号
-///
-/// # 返回
-/// 返回分录往来名称，以及按分录 ID 索引的富简报。采购单号缺失时原单文案为「采购单号待补全」。
-///
-/// # 错误
-/// 不返回错误。
+// 处理资金审批简报时，同一来源行分别投影命令名称与富简报；富简报保留名称缺失的原始单据。
+//
+// 调用参数：
+// * `entries` - 应付分录
+// * `accounts` - 子账 ID 到应付子账
+// * `supplier_names` - 供应商 ID 到展示名
+// * `purchase_nos` - 来源单据 ID 到采购单号
+//
+// 返回分录往来名称，以及按分录 ID 索引的富简报。采购单号缺失时原单文案为「采购单号待补全」。
 pub(super) fn payable_origins_from_rows(
     entries: Vec<PayableEntry>,
     accounts: HashMap<String, PayableAccount>,
@@ -538,17 +486,13 @@ pub(super) fn payable_origins_from_rows(
         .collect();
     FundsOrigins { counterparties, briefs }
 }
-/// 富显示明确覆盖往来字段；`None` 是原结果，不回退 authority 名称。
-///
-/// # 参数
-/// * `authority` - 命令权威对象事实
-/// * `counterparty` - 要写入的往来展示名；`None` 会把展示名置空
-///
-/// # 返回
-/// 返回把 `counterparty_label` 设为 `counterparty` 的工作台事实。
-///
-/// # 错误
-/// 不返回错误。
+// 生成资金审批简报视图时，富显示明确覆盖往来字段；`None` 是原结果，不回退 authority 名称。
+//
+// 调用参数：
+// * `authority` - 命令权威对象事实
+// * `counterparty` - 要写入的往来展示名；`None` 会把展示名置空
+//
+// 返回把 `counterparty_label` 设为 `counterparty` 的工作台事实。
 pub(super) fn funds_fact_display(
     authority: erp_workflow::ports::ObjectFact,
     counterparty: Option<String>,
@@ -557,17 +501,13 @@ pub(super) fn funds_fact_display(
     fact.display.counterparty_label = counterparty;
     fact
 }
-/// 卡券富显示可由券行扩充，其 predicate 不得覆盖命令 authority。
-///
-/// # 参数
-/// * `authority` - 命令权威对象事实
-/// * `display_voucher` - 是否按卡券应收影响文案展示
-///
-/// # 返回
-/// 返回权威事实，并把 `impact_summary` 设为 `receivable_account_impact` 的结果。
-///
-/// # 错误
-/// 不返回错误。
+// 生成资金审批简报视图时，卡券富显示可由券行扩充，其 predicate 不得覆盖命令 authority。
+//
+// 调用参数：
+// * `authority` - 命令权威对象事实
+// * `display_voucher` - 是否按卡券应收影响文案展示
+//
+// 返回权威事实，并把 `impact_summary` 设为 `receivable_account_impact` 的结果。
 pub(super) fn receivable_fact_display(
     authority: erp_workflow::ports::ObjectFact,
     display_voucher: bool,
@@ -577,19 +517,15 @@ pub(super) fn receivable_fact_display(
         Some(crate::workbench::authority::funds::mapping::receivable_account_impact(display_voucher));
     fact
 }
-/// 富来源优先存在的原单条目，即使该条目名称为空也不落到分录。
-///
-/// # 参数
-/// * `primary_id` - 原回款或付款单 ID
-/// * `primary` - 原单富简报
-/// * `entry_id` - 分录 ID
-/// * `entries` - 分录富简报
-///
-/// # 返回
-/// 原单 ID 在 `primary` 中有条目时返回该条目；否则返回分录条目。两者都没有时返回 `None`。
-///
-/// # 错误
-/// 不返回错误。
+// 处理资金审批简报时，富来源优先存在的原单条目，即使该条目名称为空也不落到分录。
+//
+// 调用参数：
+// * `primary_id` - 原回款或付款单 ID
+// * `primary` - 原单富简报
+// * `entry_id` - 分录 ID
+// * `entries` - 分录富简报
+//
+// 原单 ID 在 `primary` 中有条目时返回该条目；否则返回分录条目。两者都没有时返回 `None`。
 pub(super) fn select_funds_origin<'a, P: ToString, E: ToString>(
     primary_id: Option<&P>,
     primary: &'a FundsOrigins,

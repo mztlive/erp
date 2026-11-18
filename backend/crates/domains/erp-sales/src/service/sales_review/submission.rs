@@ -27,55 +27,26 @@ pub struct SalesChangeSubmissionWrite {
 }
 impl SalesChangeSubmissionWrite {
     /// 已进入审批中、尚未写入的变更事实。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回内存中的变更单。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn change(&self) -> &SalesChangeOrder {
         &self.change_order
     }
     /// 不可变提交头，供审批主体版本和快照映射。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回尚未写入的提交头。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn submission(&self) -> &SalesChangeSubmission {
         &self.submission
     }
     /// 不可变提交行，供审批金额/数量快照映射。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回尚未写入的提交行。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn lines(&self) -> &[SalesChangeSubmissionLine] {
         &self.submission_lines
     }
-    /// receipt 与业务单据守卫成功后，写入提交头、行、变更状态，再更新工作副本。
+    /// 原命令回执及业务守卫检查完成后，在调用方事务内依次落冻结提交头与行、变更状态和工作副本。
+    /// 结果：提交与工作副本都写入成功时返回 `Ok(())`。
+    /// 失败条件：销售集合或 CAS 失败时原样返回；本方法不启动事务。
     ///
-    /// # 参数
-    /// * `db` - 销售集合所在数据库。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 提交与工作副本都写入成功时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 销售集合或 CAS 失败时原样返回；本方法不启动事务。
+    /// 输入约定：
+    /// - `db`：销售集合所在数据库。
     pub async fn persist(&mut self, db: &mongodb::Database, executor: &mut dyn Executor) -> Result<()> {
         db.sales_review()
             .submit_sales_change(&mut self.change_order, &self.submission, &self.submission_lines, executor)
@@ -85,18 +56,14 @@ impl SalesChangeSubmissionWrite {
     }
 }
 impl SalesReviewService {
-    /// 在冻结审批绑定读取之后，按原读取时点准备下一不可变提交。
-    ///
-    /// # 参数
-    /// * `change_order` - 冻结审批绑定读取之后的变更单。
-    /// * `actor` - 当前提交人。
-    /// * `executor` - 原用例事务执行器。
-    ///
-    /// # 返回
+    /// 冻结审批绑定读取完成后，从当前变更草稿准备下一份不可变提交，供外层启动审批。
     /// 返回尚未写入的提交计划；变更单已在内存中进入审批中。
-    ///
-    /// # 错误
     /// 副本、版本、状态或快照不符合销售规则时失败。
+    ///
+    /// 输入约定：
+    /// - `change_order`：冻结审批绑定读取之后的变更单。
+    /// - `actor`：当前提交人。
+    /// - `executor`：原用例事务执行器。
     pub async fn prepare_submission(
         &self,
         mut change_order: SalesChangeOrder,
@@ -120,20 +87,16 @@ impl SalesReviewService {
     }
 }
 
-/// 从变更工作副本构建变更提交快照。
-///
-/// # 参数
-/// * `change_order` - 变更单
-/// * `working_copy` - 变更工作副本
-/// * `lines` - 工作副本行
-/// * `submission_no` - 本次提交序号
-/// * `actor` - 提交人
-///
-/// # 返回
-/// 返回 `(变更提交实体, 变更提交行清单)`。
-///
-/// # 错误
-/// 工作副本关系、字段映射或提交实体校验失败时返回错误。
+// 提交销售变更时按指定序号冻结工作副本及其明细，供本轮审批而非后续草稿读取。
+// 返回 `(变更提交实体, 变更提交行清单)`。
+// 工作副本关系、字段映射或提交实体校验失败时返回错误。
+//
+// 输入约定：
+// - `change_order`：变更单
+// - `working_copy`：变更工作副本
+// - `lines`：工作副本行
+// - `submission_no`：本次提交序号
+// - `actor`：提交人
 fn build_change_submission_with_no(
     change_order: &SalesChangeOrder,
     working_copy: &crate::entity::sales_order::SalesOrderWorkingCopy,
@@ -164,12 +127,10 @@ fn build_change_submission_with_no(
     Ok((submission, submission_lines))
 }
 
-/// 加载变更工作副本及其明细。
-///
-/// 先取可编辑副本；撤回后再提交时按变更单定位已提交副本。
-///
-/// # 错误
-/// 工作副本不存在时返回 `NotFound`。
+// 冻结变更提交前加载变更所绑定的工作副本与行，供同一准备阶段构建快照。
+//
+// 先取可编辑副本；撤回后再提交时按变更单定位已提交副本。
+// 失败条件：工作副本不存在时返回 `NotFound`。
 async fn load_change_working_copy(
     db: &mongodb::Database,
     change_order: &SalesChangeOrder,
@@ -193,18 +154,13 @@ async fn load_change_working_copy(
     Ok((working_copy, copy_lines))
 }
 
-/// 计算下一次变更提交序号。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `change_order_id` - 销售变更单 ID
-/// * `executor` - 原用例事务执行器
-///
-/// # 返回
-/// 返回严格递增的下一提交序号。
-///
-/// # 错误
-/// 仓储失败或提交序号溢出时返回错误。
+// 重新提交变更时从最新冻结序号推导下一号，避免回退或重用旧审批版本。
+// 返回严格递增的下一提交序号。
+// 仓储失败或提交序号溢出时返回错误。
+//
+// 输入约定：
+// - `change_order_id`：销售变更单 ID
+// - `executor`：原用例事务执行器
 async fn next_change_submission_no(
     db: &mongodb::Database,
     change_order_id: &str,
@@ -216,17 +172,12 @@ async fn next_change_submission_no(
 }
 
 /// 读取已冻结的最大提交序号；尚无提交时返回 0。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `change_order_id` - 销售变更单 ID
-/// * `executor` - 原用例事务执行器
-///
-/// # 返回
 /// 返回当前最大提交序号。
-///
-/// # 错误
 /// 仓储失败时返回错误。
+///
+/// 输入约定：
+/// - `change_order_id`：销售变更单 ID
+/// - `executor`：原用例事务执行器
 pub async fn latest_change_submission_no(
     db: &mongodb::Database,
     change_order_id: &str,

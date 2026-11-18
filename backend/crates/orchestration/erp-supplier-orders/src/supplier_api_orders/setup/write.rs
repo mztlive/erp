@@ -24,11 +24,11 @@ enum SetupStart {
 
 impl SupplierApiOrderProcess {
     /// 保存经采购确认的配送资料，后台继续执行。
-    /// # 参数
+    ///
     /// id 为原订单；request 携带预期执行版本及操作号；actor 为当前操作人。
-    /// # 返回
+    ///
     /// 原命令资格下的完整结果；同载荷回放不执行外部验证或重复写入。
-    /// # 错误
+    ///
     /// 当前资格、旧版本、外部地址、旧选项或异载荷重试无效时拒绝。
     pub async fn save_execution_setup(
         &self,

@@ -61,21 +61,8 @@ pub struct SupplierFulfillmentProcess {
     handlers: Arc<dyn FulfillmentExceptionHandlerPort>,
 }
 impl SupplierFulfillmentProcess {
-    /// 创建供应商履约流程实例。
-    ///
-    /// # 参数
-    /// * `db` - 数据库实例
-    /// * `gateway` - 供应商动作派发网关（真实 Connector 接入点，只在事务外调用）
-    /// * `data_scope` - 履约订单授权能力
-    /// * `handlers` - 当前开放 W26 处理人 Port
-    /// * `identity` - 固定共享的授权、任务和范围能力。
-    ///
-    /// # 返回
-    /// 返回流程实例。
-    /// 构造时不读取、授权或调用供应商。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 应用装配供应商履约流程时，注入共享身份和范围检查、W26 处理人能力及真实派发网关。
+    /// 构造不读取数据、不执行授权或调用供应商；后续网关派发只在事务外执行。
     pub fn new(
         db: Database,
         gateway: Arc<dyn SupplierGateway>,
@@ -85,13 +72,7 @@ impl SupplierFulfillmentProcess {
     ) -> Self {
         Self { identity, db, gateway, data_scope, handlers, registry: None }
     }
-    /// 注入实际适配器能力来源。
-    /// # 参数
-    /// `registry` 为组合根共享注册表。
-    /// # 返回
-    /// 绑定后的流程。
-    /// # 错误
-    /// 不返回错误。
+    /// 组合根通过共享注册表为后续领域用例提供实际供应商适配器能力，不在此调用供应商。
     pub fn with_registry(mut self, registry: Arc<dyn SupplierReferenceRegistry>) -> Self {
         self.registry = Some(registry);
         self
@@ -109,7 +90,7 @@ impl SupplierFulfillmentProcess {
         }
     }
 
-    /// 先重验订单范围，再排除由采购 API 流程执行的订单。
+    // 先重验订单范围，再排除由采购 API 流程执行的订单。
     async fn require_legacy_order(
         &self,
         id: &str,

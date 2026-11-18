@@ -19,30 +19,14 @@ pub struct MongoSupportAudit {
 }
 
 impl MongoSupportAudit {
-    /// 绑定审计日志所在数据库，构造时不写库。
-    ///
-    /// # 参数
-    /// * `db` - 持久化审计日志的数据库。
-    ///
-    /// # 返回
+    /// 为 `MongoSupportAudit` 绑定审计日志库，供后续业务审计写入；构造时不写库。
     /// 返回未执行 I/O 的 adapter，而不是共享 Port。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
     /// 包装为支持域可注入的共享审计 Port。
-    ///
-    /// # 参数
-    /// * `db` - 持久化审计日志的数据库。
-    ///
-    /// # 返回
     /// 返回实现 `SupportAuditPort` 的共享 Port。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn shared(db: Database) -> Arc<dyn SupportAuditPort> {
         Arc::new(Self::new(db))
     }

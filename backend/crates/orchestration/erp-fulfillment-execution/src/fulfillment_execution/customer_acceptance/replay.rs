@@ -105,7 +105,7 @@ impl AcceptanceReplay for ReplayReader {
 }
 
 impl ReplayReader {
-    /// 有明确任务时读取当前持久化版本；旧请求只接受唯一真实验收任务。
+    // 有明确任务时读取当前持久化版本；旧请求只接受唯一真实验收任务。
     async fn result_task(
         &self,
         sales: &str,
@@ -133,7 +133,7 @@ impl ReplayReader {
     }
 }
 
-/// 回放使用当前真实任务版本，不用已经消费的输入任务版本重新办理。
+// 回放使用当前真实任务版本，不用已经消费的输入任务版本重新办理。
 pub(super) async fn committed(
     reader: &impl AcceptanceReplay,
     req: &CommitCustomerAcceptanceRequest,
@@ -159,7 +159,7 @@ pub(super) async fn committed(
     Ok(Some(acceptance))
 }
 
-/// 冲正功能资格先于原单及回执读取；结果必须仍指向原单的真实销售来源。
+// 冲正功能资格先于原单及回执读取；结果必须仍指向原单的真实销售来源。
 pub(super) async fn reversed(
     reader: &impl AcceptanceReplay,
     id: &str,
@@ -184,7 +184,7 @@ pub(super) async fn reversed(
     Ok(Some(result))
 }
 
-/// 确定失败直接返回；未知提交仅查证持久化结果，查证失败仍保留原错误。
+// 确定失败直接返回；未知提交仅查证持久化结果，查证失败仍保留原错误。
 pub(super) async fn recover<T>(error: Error, lookup: impl Future<Output = Result<Option<T>>>) -> Result<T> {
     if !matches!(error, Error::OutcomeUnknown(_)) {
         return Err(error);

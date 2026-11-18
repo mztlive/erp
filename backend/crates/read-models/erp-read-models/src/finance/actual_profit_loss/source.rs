@@ -38,14 +38,12 @@ pub(super) struct Sources {
     pub pending_freight_orders: HashSet<String>,
 }
 impl Sources {
-    /// 限制查询规模；超限必须缩小日期/客户范围，不返回不完整汇总。
+    /// 读取实际盈亏报表时，限制查询规模；超限必须缩小日期/客户范围，不返回不完整汇总。
     ///
     /// # 参数
-    /// * `db` - 目标数据库。
     /// * `query` - 盈亏筛选。
     /// * `bounds` - 已校验的期间边界。
     /// * `authorized_scope` - 销售读取范围。
-    /// * `executor` - 调用方执行器。
     ///
     /// # 返回
     /// 返回同一事务快照中的订单、销售版本与成本事实。
@@ -82,7 +80,7 @@ impl Sources {
         }
         Ok(result)
     }
-    /// 以批次读取当前正式销售版本；不回退到草稿或过期版本。
+    // 读取实际盈亏报表时，以批次读取当前正式销售版本；不回退到草稿或过期版本。
     async fn load_sales(&mut self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
         let ids: Vec<_> = self.orders.iter().filter_map(|o| o.current_revision_id.clone()).collect();
         for chunk in ids.chunks(500) {
@@ -102,7 +100,7 @@ impl Sources {
         }
         Ok(())
     }
-    /// 按分配引用找成本，预计采购原始事实没有分配时不猜测销售归属。
+    // 依据分配引用找成本，预计采购原始事实没有分配时不猜测销售归属。
     async fn load_costs(&mut self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
         let ids: Vec<_> = self.orders.iter().map(|o| o.id.clone()).collect();
         for chunk in ids.chunks(500) {
@@ -126,20 +124,16 @@ impl Sources {
     }
 }
 
-/// 有界装载销售责任版本；用于首次查询及返回前撤权、责任交接复核。
-///
-/// # 参数
-/// * `db` - 目标数据库。
-/// * `query` - 盈亏筛选；只使用客户和销售单身份。
-/// * `bounds` - 已校验的期间边界。
-/// * `authorized_scope` - 销售读取范围。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
-/// 返回授权范围内的销售责任版本。
-///
-/// # 错误
-/// 销售单仓储读取失败，或匹配销售单超过 10000 单时返回错误。
+// 检查实际盈亏报表资格时，有界装载销售责任版本；用于首次查询及返回前撤权、责任交接复核。
+//
+// 调用参数：
+// * `query` - 盈亏筛选；只使用客户和销售单身份。
+// * `bounds` - 已校验的期间边界。
+// * `authorized_scope` - 销售读取范围。
+//
+// 返回授权范围内的销售责任版本。
+//
+// 销售单仓储读取失败，或匹配销售单超过 10000 单时返回错误。
 pub(super) async fn authorized_orders(
     db: &Database,
     query: &ProfitLossQuery,
@@ -160,17 +154,13 @@ pub(super) async fn authorized_orders(
     Ok(orders)
 }
 
-/// 查询版本包含完整授权订单集合及责任版本，不返回订单身份集合。
-///
-/// # 参数
-/// * `scope_version` - 授权范围版本。
-/// * `orders` - 完整授权订单集合。
-///
-/// # 返回
-/// 返回由范围版本与订单身份、责任版本哈希组成的查询版本，不包含订单身份明文。
-///
-/// # 错误
-/// 不返回错误。
+// 处理实际盈亏报表时，查询版本包含完整授权订单集合及责任版本，不返回订单身份集合。
+//
+// 调用参数：
+// * `scope_version` - 授权范围版本。
+// * `orders` - 完整授权订单集合。
+//
+// 返回由范围版本与订单身份、责任版本哈希组成的查询版本，不包含订单身份明文。
 pub(super) fn version(scope_version: &str, orders: &[ProfitLossOrder]) -> String {
     use std::hash::{Hash, Hasher};
     let mut fingerprint = std::collections::hash_map::DefaultHasher::new();

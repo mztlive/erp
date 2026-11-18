@@ -49,14 +49,8 @@ pub struct DecisionExecutionInput {
 }
 
 /// 规划决定。当前责任人失效时返回可提交的 blocked 计划。
-///
-/// # 参数
-/// * `input` - 决定输入
-///
-/// # 返回
 /// 同载荷返回 `PreparedExecution::Replay`；否则返回待应用的决定或阻塞计划。
 ///
-/// # 错误
 /// 命令身份不合法、责任不一致、异载荷冲突、引擎失败或收据构造失败时返回错误。
 pub fn prepare_decision(input: DecisionExecutionInput) -> Result<PreparedExecution> {
     let identity = decision_identity(
@@ -123,7 +117,7 @@ fn decision_domain_action(plan: &TransitionPlan, terminal_reject: bool) -> Optio
     }
 }
 
-/// 收据构造失败时返回校验错误。
+// 从决定计划中的身份和结果构造待保存收据；收据合同不成立时返回校验错误。
 fn receipt_from_plan(
     id: ApprovalCommandReceiptId,
     identity: &ApprovalCommandIdentity,
@@ -134,20 +128,14 @@ fn receipt_from_plan(
         .map_err(approval_receipt_error)
 }
 
-/// 同一执行存在多个 OPEN 任务时规划标准结构阻塞。
-///
-/// # 参数
-/// * `input` - 已完成幂等与三重责任重验的决定输入
-/// * `identity` - 已验证的当前命令身份
-///
-/// # 返回
-/// 返回包含收据、标准 `InstanceBlocked` 事件与任务关闭意图的可提交计划。
-///
-/// # 错误
-/// BPM 无法为当前令牌形成阻塞快照，或收据构造失败时返回错误。
-///
-/// # 关键业务约束
-/// 实例、执行、任务意图与中性事件必须全部来自 BPM 标准阻塞入口。
+// 同一执行存在多个 OPEN 任务时规划标准结构阻塞。
+// 实例、执行、任务意图与中性事件必须全部来自 BPM 标准阻塞入口。
+//
+// 返回包含收据、标准 `InstanceBlocked` 事件与任务关闭意图的可提交计划。
+//
+// BPM 无法为当前令牌形成阻塞快照，或收据构造失败时返回错误。
+//
+// `input`：已完成幂等与三重责任重验的决定输入；`identity`：已验证的当前命令身份。
 fn prepare_open_task_conflict(
     input: DecisionExecutionInput,
     identity: &ApprovalCommandIdentity,
@@ -160,15 +148,7 @@ fn prepare_open_task_conflict(
 }
 
 /// 当前责任人失效的决定必须作为可提交 blocked 结果，不得回滚。
-///
-/// # 参数
-/// * `prepared` - 编排结果
-///
-/// # 返回
 /// blocked 提交返回 `true`。
-///
-/// # 错误
-/// 不返回错误。
 pub fn decision_commits_blocked(prepared: &PreparedExecution) -> bool {
     match prepared {
         PreparedExecution::Apply(writes) => writes.commit == bpm::engine::CommitRequired::Blocked,

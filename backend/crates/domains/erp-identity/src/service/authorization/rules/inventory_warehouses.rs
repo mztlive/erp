@@ -3,7 +3,7 @@ use erp_permissions::{internal, inventory};
 
 use crate::Permission;
 
-/// 返回仓库内部入口固定复用的原库存动作。
+// 给仓库专用内部入口选用登记的原库存动作，沿用已有功能资格与范围口径。
 pub(super) fn source(permission: &Permission) -> Option<Permission> {
     [
         (internal::INVENTORY_BALANCE_WAREHOUSES, inventory::STOCK_BALANCE_LIST),

@@ -11,20 +11,8 @@ use crate::entity::fulfillment::{
 };
 use crate::{Error, Result};
 
-/// 在 Service/crypto port 计算交付对象快照指纹。
-///
-/// # 参数
-/// * `plain` - 交付对象原文（不透明快照的上游明文）
-/// * `key` - 查询指纹密钥字节
-///
-/// # 返回
-/// 返回强类型指纹（算法 `HMAC-SHA256-v1`，密钥版本由调用方注入的 key 决定）。
-///
-/// # 错误
-/// 指纹格式非法时返回错误。
-///
-/// # 约束
-/// 密钥与明文不得进入实体、错误、日志或持久化。
+/// 电子交付草稿需要查询指纹时，使用调用方注入的密钥对交付对象原文计算 `HMAC-SHA256-v1`，并转换为电子交付专用强类型指纹。
+/// 指纹格式错误映射为 `Logic`；密钥与明文不得进入实体、日志、错误或持久化。
 pub fn electronic_recipient_fingerprint(plain: &str, key: &[u8]) -> Result<ElectronicRecipientFingerprint> {
     ElectronicRecipientFingerprint::from_precomputed(ElectronicDelivery::recipient_snapshot_fingerprint(
         plain, key,
@@ -33,16 +21,8 @@ pub fn electronic_recipient_fingerprint(plain: &str, key: &[u8]) -> Result<Elect
 }
 
 /// 由创建请求构造电子交付草稿（来源默认 `Erp` 由领域工厂负责）。
-///
-/// # 参数
-/// * `req` - 已通过校验的创建请求
-/// * `actor_id` - 已通过鉴权的操作人 ID
-/// * `fingerprint_key` - 查询指纹密钥
-///
-/// # 返回
 /// 返回新建草稿实体。
-///
-/// # 错误
+/// `actor_id` 为已通过鉴权的操作人 ID；`fingerprint_key` 为查询指纹密钥。
 /// 指纹计算或实体规范化失败时返回错误。
 pub fn electronic_delivery_draft_from_request(
     req: CreateElectronicDeliveryRequest,
@@ -78,7 +58,7 @@ pub fn electronic_delivery_draft_from_request(
 mod tests {
     use super::electronic_recipient_fingerprint;
 
-    /// 指纹 golden：固定算法（HMAC-SHA256）与密钥版本，密钥轮换则指纹变化。
+    // 验证固定密钥与交付对象产生稳定 64 位指纹；轮换密钥或更换交付对象时指纹不同。
     #[test]
     fn recipient_fingerprint_golden_pins_algorithm_and_key_version() {
         let first =

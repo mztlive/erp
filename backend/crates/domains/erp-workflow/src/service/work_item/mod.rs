@@ -69,17 +69,9 @@ pub struct WorkItemService<A> {
 
 impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     /// 创建服务。
-    ///
-    /// # 参数
-    /// * `db` - MongoDB 数据库
-    /// * `rbac` - 与读取入口共享的 identity 服务
-    /// * `auth` - 注入的业务授权 Port
-    ///
-    /// # 返回
     /// 返回绑定当前应用授权源的服务。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// `rbac`：与读取入口共享的 identity 服务；`auth`：注入的业务授权 Port。
     pub fn new(db: Database, rbac: SharedRbacService, service: Arc<AuthorizationService>, auth: A) -> Self {
         Self::with_ports(
             db,
@@ -92,19 +84,9 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     }
 
     /// 创建注入对象事实与审计端口的任务服务。
-    ///
-    /// # 参数
-    /// * `db` - MongoDB 数据库
-    /// * `rbac` - 与读取入口共享的 identity 服务
-    /// * `auth` - 注入的业务授权 Port
-    /// * `facts` - 对象事实端口
-    /// * `audit` - 审计写入端口
-    ///
-    /// # 返回
     /// 返回使用给定端口的服务。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// `rbac`：与读取入口共享的 identity 服务；`auth`：注入的业务授权 Port。
     pub fn with_ports(
         db: Database,
         rbac: SharedRbacService,
@@ -351,7 +333,7 @@ mod tests {
         );
     }
 
-    /// 类型标记或 execution 关联任一成立时，新鲜与回放分支都映射同一稳定错误。
+    // 验证：类型标记或 execution 关联任一成立时，新鲜与回放分支都映射同一稳定错误。
     #[test]
     fn approval_generic_mutation_guard_is_stable_for_fresh_and_replay() {
         let mut type_bound = WorkItem::new_document_approval(
@@ -646,7 +628,7 @@ mod tests {
 mod retired_review_tests {
     use crate::entity::work_item::WorkItemType;
 
-    /// 旧任务可解码，但不得通过通用工作台获得业务对象参与权。
+    // 验证：旧任务可解码，但不得通过通用工作台获得业务对象参与权。
     #[test]
     fn retired_review_has_no_object_policy() {
         for kind in [WorkItemType::CardFundsReview, WorkItemType::CardFundsDeltaReview] {

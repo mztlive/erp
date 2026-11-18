@@ -58,26 +58,17 @@ fn invalid_body(status: StatusCode) -> Response {
 pub struct AuthorizationHttpError(AuthorizationError);
 
 impl From<AuthorizationError> for AuthorizationHttpError {
-    /// 保留授权分类，不复制任何底层错误正文。
-    /// # 参数
-    /// `error` 为只有固定分类的授权用例错误。
-    /// # 返回
-    /// 可转换为固定HTTP状态及错误码的错误。
-    /// # 错误
-    /// 不返回错误。
+    // 保留授权分类，不复制任何底层错误正文。
+    // `error` 为只有固定分类的授权用例错误。
+    // 可转换为固定HTTP状态及错误码的错误。
     fn from(error: AuthorizationError) -> Self {
         Self(error)
     }
 }
 
 impl IntoResponse for AuthorizationHttpError {
-    /// 将授权错误转换为脱敏业务信封。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 固定HTTP状态、错误码及静态提示。
-    /// # 错误
-    /// 不返回错误。
+    // 将授权错误转换为脱敏业务信封。
+    // 固定HTTP状态、错误码及静态提示。
     fn into_response(self) -> Response {
         let (status, code) = match self.0 {
             AuthorizationError::InvalidInput => (StatusCode::BAD_REQUEST, "JD_VOP_AUTH_INPUT_INVALID"),
@@ -113,13 +104,7 @@ fn rejection(status: StatusCode, code: &str, message: &str) -> Response {
     .into_response()
 }
 
-/// 在敏感JSON读取前安装授权准入及48 KiB累计正文上限。
-/// # 参数
-/// `route` 为已经附加独立授权权限的POST方法。
-/// # 返回
-/// 每人5次/分钟、进程总20次/分钟、并发4的受保护方法。
-/// # 错误
-/// 缺少认证、配额耗尽或正文超限时由静态HTTP信封拒绝。
+// 在读取敏感 JSON 前实施授权准入：每人 5 次/分钟、进程总 20 次/分钟、并发 4、累计正文最多 48 KiB。缺少认证、配额耗尽或正文超限时返回固定错误。
 pub(crate) fn authorize_route<S: Clone + Send + Sync + 'static>(route: MethodRouter<S>) -> MethodRouter<S> {
     route.layer(DefaultBodyLimit::max(48 * 1024)).route_layer(middleware::from_fn_with_state(
         RateLimiter::new(5, 20, Duration::from_secs(60), 4),
@@ -127,13 +112,7 @@ pub(crate) fn authorize_route<S: Clone + Send + Sync + 'static>(route: MethodRou
     ))
 }
 
-/// 在查询参数提取前安装独立状态查询准入。
-/// # 参数
-/// `route` 为已经附加连接详情权限的GET方法。
-/// # 返回
-/// 每人60次/分钟、进程总1000次/分钟、并发20的受保护方法。
-/// # 错误
-/// 缺少认证或配额耗尽时返回静态HTTP信封。
+// 为授权状态查询设置独立配额，在解析查询参数前按账号准入：每人 60 次/分钟、进程总 1000 次/分钟、并发 20；无身份或超额时拒绝。
 pub(crate) fn status_route<S: Clone + Send + Sync + 'static>(route: MethodRouter<S>) -> MethodRouter<S> {
     route.route_layer(middleware::from_fn_with_state(
         RateLimiter::new(60, 1000, Duration::from_secs(60), 20),
@@ -152,13 +131,7 @@ async fn enforce_admission(State(limiter): State<RateLimiter>, request: Request,
     next.run(request).await
 }
 
-/// 查询指定京东连接及可选原授权操作的脱敏状态。
-/// # 参数
-/// 应用状态、当前认证人员、连接ID与可选operation_id。
-/// # 返回
-/// 当前凭据状态及指定操作回执；不执行授权或健康检查。
-/// # 错误
-/// 读取权限、连接范围、查询格式或限流不符时拒绝。
+/// 查询指定京东连接的脱敏凭据状态，可用 `operation_id` 核对原授权回执；只读，不发起授权或健康检查。读取资格、对象范围、格式或配额不符时拒绝。
 pub async fn status(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -171,13 +144,7 @@ pub async fn status(
     Ok(ApiResponse::ok_with_data(status))
 }
 
-/// 受理一次京东账号授权，后台保存令牌，响应只交付脱敏pending或原操作状态。
-/// # 参数
-/// 当前连接、已认证操作人及仅本次使用的账号密码、私钥和回调地址。
-/// # 返回
-/// 授权操作状态；不会返回token、授权码或私钥。
-/// # 错误
-/// 独立授权权限、供应商范围、输入、版本、账号或准入限制不符时返回静态错误。
+/// 当操作人发起京东页面授权时，将连接、原操作身份和本次所需凭据交给授权流程。保存由后台任务完成，响应只返回脱敏状态；权限、范围或准入不符时使用固定错误。
 pub async fn authorize(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,

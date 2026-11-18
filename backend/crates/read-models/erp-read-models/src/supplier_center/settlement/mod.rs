@@ -20,17 +20,13 @@ pub struct SupplierSettlementReadService {
     identity: Arc<AuthorizationService>,
 }
 impl SupplierSettlementReadService {
-    /// 使用原数据库构造结算读模型。
+    /// 装配供应商结算时，使用原数据库构造结算读模型。
     ///
     /// # 参数
-    /// * `db` - 数据库。
     /// * `identity` - 共享身份设施。
     ///
     /// # 返回
     /// 返回结算读模型。构造不执行查询。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: Database, identity: Arc<AuthorizationService>) -> Self {
         Self { db, identity }
     }

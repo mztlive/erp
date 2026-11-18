@@ -4,13 +4,7 @@ use std::{env, fs, io};
 
 use crate::build_permissions::PermissionGroup;
 
-/// 同一注册来源同时生成后端文件校验目录，避免维护第二份权限白名单。
-/// # 参数
-/// groups 为路由及领域政策构建的统一权限目录。
-/// # 返回
-/// 后端校验目录写入 OUT_DIR 成功。
-/// # 错误
-/// 目录文件不能写入时返回 I/O 错误。
+// 用路由和领域政策共用的权限分组生成 `OUT_DIR` 后端白名单；写入失败时返回 I/O 错误，不从另一份清单兜底。
 pub(crate) fn write_policy_catalog(groups: &[(String, PermissionGroup)]) -> io::Result<()> {
     let mut codes = groups
         .iter()

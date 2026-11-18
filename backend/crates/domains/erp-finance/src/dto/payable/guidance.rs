@@ -24,20 +24,16 @@ pub struct PaymentGuidanceView {
 
 impl PaymentGuidanceView {
     /// 从冻结采购依据及当前财务余额装配付款建议。
+    /// 结果：先款按缺口建议，缺口已满足但余额未清时不建议自动付尾款。
+    /// 建议始终限制在非负开放余额内。
     ///
-    /// # 参数
-    /// * `term_label` - 可读条款名称。
-    /// * `purchase_total` - 采购生效版本含税总额。
-    /// * `paid_total` - 有效净付款。
-    /// * `open_total` - 该应付可核销余额。
-    /// * `prepay_gate` - 是否为先款条件。
-    /// * `required_prepayment` - 已计算的冻结门槛，缺失时为空。
-    ///
-    /// # 返回
-    /// 先款按缺口建议，缺口已满足但余额未清时不建议自动付尾款。
-    ///
-    /// # 错误
-    /// 不返回错误；建议始终限制在非负开放余额内。
+    /// 输入约定：
+    /// - `term_label`：可读条款名称。
+    /// - `purchase_total`：采购生效版本含税总额。
+    /// - `paid_total`：有效净付款。
+    /// - `open_total`：该应付可核销余额。
+    /// - `prepay_gate`：是否为先款条件。
+    /// - `required_prepayment`：已计算的冻结门槛，缺失时为空。
     pub fn from_requirement(
         term_label: String,
         purchase_total: Amount,

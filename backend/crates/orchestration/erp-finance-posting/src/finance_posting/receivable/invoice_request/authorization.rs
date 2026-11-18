@@ -18,7 +18,7 @@ pub(super) enum RequestAction {
     Cancel,
 }
 impl RequestAction {
-    /// 从持久化命令目录识别动作，未知目录失败关闭。
+    // 从持久化命令目录识别动作，未知目录失败关闭。
     pub(super) fn from_command(command: &CommandReceipt) -> Result<Self> {
         match command.action() {
             "sales_invoice_request.submit" => Ok(Self::Submit),
@@ -110,7 +110,7 @@ impl RequestAccess for MongoAccess<'_> {
     }
 }
 
-/// 当前账号及动作资格先于命令回执和业务对象读取。
+// 当前账号及动作资格先于命令回执和业务对象读取。
 async fn actor_access<P: RequestAccess>(
     port: &P,
     actor: &AuditActor,
@@ -122,7 +122,7 @@ async fn actor_access<P: RequestAccess>(
     }
     Ok(())
 }
-/// 当前完整来源范围由统一授权入口检查，不依赖单据可编辑状态。
+// 当前完整来源范围由统一授权入口检查，不依赖单据可编辑状态。
 async fn object_access<P: RequestAccess>(
     port: &P,
     actor: &AuditActor,
@@ -135,7 +135,7 @@ async fn object_access<P: RequestAccess>(
     }
     Ok(())
 }
-/// 写事务在业务状态、额度或绑定修改之前重验当前资格。
+// 写事务在业务状态、额度或绑定修改之前重验当前资格。
 pub(super) async fn authorize(
     port: &MongoAccess<'_>,
     actor: &AuditActor,
@@ -145,7 +145,7 @@ pub(super) async fn authorize(
 ) -> Result<()> {
     authorize_request(port, actor, id, action, executor).await
 }
-/// 所有写入和已完成结果沿同一资格顺序，不根据旧绑定或单据状态短路。
+// 所有写入和已完成结果沿同一资格顺序，不根据旧绑定或单据状态短路。
 async fn authorize_request<P: RequestAccess>(
     port: &P,
     actor: &AuditActor,
@@ -156,7 +156,7 @@ async fn authorize_request<P: RequestAccess>(
     actor_access(port, actor, action, executor).await?;
     object_access(port, actor, id, action, executor).await
 }
-/// 命令回放和未知结果恢复共用只读分支，旧回执不得替代当前对象资格。
+// 命令回放和未知结果恢复共用只读分支，旧回执不得替代当前对象资格。
 async fn replay<P: RequestAccess>(
     port: &P,
     actor: &AuditActor,
@@ -175,7 +175,7 @@ async fn replay<P: RequestAccess>(
 }
 
 impl MongoAccess<'_> {
-    /// 在原事务中校验完整回执并读取同快照授权视图。
+    // 在原事务中校验完整回执并读取同快照授权视图。
     pub(super) async fn replay(
         &self,
         actor: &AuditActor,
@@ -184,7 +184,7 @@ impl MongoAccess<'_> {
     ) -> Result<Option<InvoiceRequestView>> {
         replay(self, actor, command, executor).await
     }
-    /// 当前命令完成后重新确认操作资格及来源范围，再读取同事务详情。
+    // 当前命令完成后重新确认操作资格及来源范围，再读取同事务详情。
     pub(super) async fn result(
         &self,
         actor: &AuditActor,

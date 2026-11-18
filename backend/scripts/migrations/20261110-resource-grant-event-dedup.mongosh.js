@@ -10,7 +10,7 @@
   }
   const events = db.getCollection("resource_grant_events");
   const missing = {dedup_key: {$exists: false}};
-  // 先校验所有待回填记录，拒绝把未知格式或随机 ID 当作业务幂等键。
+  // 回填前按授权事件的业务证据重建幂等键并与旧 ID 核对，避免把未知事件或任意 ID 写入唯一键字段。
   function legacyKey(row) {
     const payload = row.evidence?.payload;
     let identity;

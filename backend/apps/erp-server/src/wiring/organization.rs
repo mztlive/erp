@@ -39,17 +39,8 @@ impl OrganizationBusinessPort for OrganizationBusinessFacts {
 }
 
 /// 装配组织管理与销售、采购、供应及集成未结业务检查。
-///
-/// # 参数
-/// * `db` - 各域未结业务集合所在数据库。
-/// * `rbac` - 组织服务使用的 RBAC 服务。
-/// * `authorization` - 完整绑定的共享授权服务。
-///
-/// # 返回
+/// `authorization` 为完整绑定的共享授权服务。
 /// 返回必须通过真实业务事实核验才可停用组织的服务。
-///
-/// # 错误
-/// 不返回错误。
 pub fn organization_service(
     db: Database,
     rbac: SharedRbacService,

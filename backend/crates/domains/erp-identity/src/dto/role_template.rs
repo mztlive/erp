@@ -41,7 +41,7 @@ pub struct GeneratedBuiltinRole {
 mod tests {
     use super::*;
 
-    /// 客户端不能注入权限或省略预览版本。
+    // 验证：客户端不能注入权限或省略预览版本。
     #[test]
     fn generation_request_rejects_permission_injection_and_missing_version() {
         assert!(

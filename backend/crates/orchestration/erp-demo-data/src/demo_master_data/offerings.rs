@@ -31,14 +31,7 @@ use super::seed::SeedRequest;
 use super::{DemoMasterDataProcess, spec};
 use crate::{Error, Result};
 
-/// 在任何主数据写入前校验供给字段、种子引用和每个 SKU 的覆盖。
-///
-/// # 参数
-/// `steps` 为已校验的主数据清单。
-/// # 返回
-/// 返回正式供给创建请求模板。
-/// # 错误
-/// 非法条款、重复身份、缺失引用或未覆盖 SKU 时返回错误。
+// 在写入主数据前解析并校验供给模板的条款、重复身份、种子引用及 SKU 覆盖，避免商品生成后才发现不能配置供给。
 pub(super) fn load(steps: &[DemoStep]) -> Result<Vec<CreateSupplierOfferingRequest>> {
     let rows: Vec<CreateSupplierOfferingRequest> = serde_json::from_str(include_str!("offerings.json"))
         .map_err(|error| Error::ValidationError(format!("演示供给 JSON 无效：{error}")))?;
@@ -46,7 +39,7 @@ pub(super) fn load(steps: &[DemoStep]) -> Result<Vec<CreateSupplierOfferingReque
     Ok(rows)
 }
 
-/// 校验供给使用领域模型可接受的条款和完整的种子引用。
+// 核验供给模板符合正式领域条款且能引用已声明种子，保证每个待上架 SKU 都有可供记录。
 fn validate(rows: &[CreateSupplierOfferingRequest], steps: &[DemoStep]) -> Result<()> {
     let skus = steps
         .iter()
@@ -102,7 +95,7 @@ fn validate(rows: &[CreateSupplierOfferingRequest], steps: &[DemoStep]) -> Resul
     Ok(())
 }
 
-/// 与正式创建入口共用供给、条款与可供实体的不变式，防止字段解析成功后才写入失败。
+// 用正式的供给、条款和可供实体规则验证模板，让反序列化通过但违反业务约束的数据在写入前失败。
 fn validate_request(row: &CreateSupplierOfferingRequest) -> Result<SupplierOfferingRevision> {
     row.validate().map_err(|error| Error::ValidationError(format!("演示供给字段无效：{error}")))?;
 
@@ -126,7 +119,7 @@ fn validate_request(row: &CreateSupplierOfferingRequest) -> Result<SupplierOffer
     Ok(revision)
 }
 
-/// 只检查种子跨文件关联；所需能力和合同有效政策由供应商领域执行。
+// 核对供给和供应商种子之间声明的能力及合同关联；实际经营能力与合同有效性仍由供应商领域判定。
 fn validate_qualification(
     kind: ProductKind,
     supplier: &SaveSupplierProfileRequest,
@@ -153,7 +146,7 @@ fn validate_qualification(
     Ok(())
 }
 
-/// 按已声明能力关联还原合同实体，不推断或补造未登记合同。
+// 仅从已声明的能力到合同关联构造正式合同资料，用于供给校验，不替缺少声明的种子补造合同。
 fn linked_contracts(
     supplier: &SaveSupplierProfileRequest,
     capability: CapabilityCode,
@@ -185,7 +178,7 @@ fn linked_contracts(
         .collect()
 }
 
-/// 返回当前 SKU 的全部声明供给，缺失时拒绝继续上架。
+// 为当前 SKU 找齐模板声明的全部供给，没有匹配时拒绝继续上架，避免出现无可售供给的商品。
 fn sku_offerings<'a>(
     rows: &'a [CreateSupplierOfferingRequest],
     sku_no: &str,
@@ -198,14 +191,7 @@ fn sku_offerings<'a>(
 }
 
 impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
-    /// 通过采购身份登记供给并上架已登记商品；失败停止当前批次，可用原游标重试。
-    ///
-    /// # 参数
-    /// `step` 为当前商品，`rows` 为已校验模板，`records` 为最新实际 ID 登记。
-    /// # 返回
-    /// 当前商品完成供给登记与上架。
-    /// # 错误
-    /// 岗位、登记、SKU、资格或正式写入失败时返回错误。
+    // 以采购岗位为已登记商品创建正式供给并上架，随后核验每个 SKU 的可售性。岗位、登记或写入失败即停止本批，调用方可用原游标继续。
     pub(super) async fn ensure_sellable(
         &self,
         step: &DemoStep,
@@ -251,7 +237,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         self.verify_sellable(&expected).await
     }
 
-    /// 使用销售开单共用的资格查询核对真实 SKU，拒绝已停供或失效的历史回放。
+    // 复用销售开单的资格查询检查实际 SKU，防止把已停供或过期的历史命令结果误认为现在仍可销售。
     async fn verify_sellable(&self, ids: &[String]) -> Result<()> {
         let rows = self
             .ports
@@ -265,7 +251,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         Ok(())
     }
 
-    /// 实际 ID 参与命令键，删除重建后不回放旧供给；已有命令保留人工修订。
+    // 用当前实际主键派生创建命令身份，使删除重建不会回放旧供给；同一命令已有结果时保留人工修改。
     async fn ensure_offering(
         &self,
         template: &CreateSupplierOfferingRequest,
@@ -280,7 +266,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
     }
 }
 
-/// 将种子身份解析为真实主键；不认领未登记或已删除记录。
+// 将种子键映射为种类一致且未删除的实际主键，防止供给关联认领未登记记录。
 fn registered_id(records: &HashMap<String, DemoMasterRecord>, key: &str, kind: DemoKind) -> Result<String> {
     records
         .get(key)
@@ -289,7 +275,7 @@ fn registered_id(records: &HashMap<String, DemoMasterRecord>, key: &str, kind: D
         .ok_or_else(|| Error::ValidationError(format!("请先完成演示主数据：{key}")))
 }
 
-/// 保持声明条款不变，只解析环境引用和命令身份。
+// 把供给模板中的引用换成真实主键并构造命令身份，保留模板中的价格、可供及商务条款。
 fn resolve(
     template: &CreateSupplierOfferingRequest,
     sku: &str,
@@ -329,7 +315,7 @@ mod tests {
         assert_eq!(first.supplier_id, "supplier-one");
     }
 
-    /// 专用样本的所有付款条件必须形成可选择供给，成本与公司三价保持独立。
+    // 验证专用样本为每种声明付款条件提供可选供给，且供应商成本不覆盖公司的三种参考价。
     #[test]
     fn dedicated_demo_offers_every_declared_payment_term_and_separate_costs() {
         let steps = demo_steps().unwrap();

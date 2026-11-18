@@ -26,16 +26,7 @@ pub enum AllocationAction {
 }
 
 impl AllocationAction {
-    /// 返回动作的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为界面或响应展示提供付款核销分配动作的中文名称；机器筛选和存储不使用该名称。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Apply => "核销",
@@ -43,16 +34,7 @@ impl AllocationAction {
         }
     }
 
-    /// 返回动作的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将付款核销分配动作转成用于持久化和查询的稳定代码，与中文展示文案分开。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Apply => "apply",
@@ -65,29 +47,22 @@ impl AllocationAction {
     /// 与回款侧 [`crate::entity::receivable::AllocationAction::apply_to_net`] 同语义；
     /// 两枚举经 [`From`] 双向转换后复用同一求和，溢出语义与 [`Amount::checked_add`] /
     /// [`Amount::checked_sub`] 一致。
-    ///
-    /// # 参数
-    /// * `total` - 当前净额
-    /// * `amount` - 本次分配金额（正数）
-    ///
-    /// # 返回
     /// 返回更新后的净额。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// 输入约定：
+    /// - `total`：当前净额
+    /// - `amount`：本次分配金额（正数）
     pub fn apply_to_net(self, total: Amount, amount: Amount) -> Amount {
         crate::entity::receivable::AllocationAction::from(self).apply_to_net(total, amount)
     }
 }
 
 impl From<crate::entity::receivable::AllocationAction> for AllocationAction {
-    /// 将回款分配动作转为付款分配动作（变体逐一对应，枚举定义本身不动）。
-    ///
-    /// # 参数
-    /// * `action` - 回款侧分配动作
-    ///
-    /// # 返回
-    /// 返回语义相同的付款侧分配动作。
+    // 将回款分配动作转为付款分配动作（变体逐一对应，枚举定义本身不动）。
+    // 返回语义相同的付款侧分配动作。
+    //
+    // 输入约定：
+    // - `action`：回款侧分配动作
     fn from(action: crate::entity::receivable::AllocationAction) -> Self {
         match action {
             crate::entity::receivable::AllocationAction::Apply => Self::Apply,
@@ -143,20 +118,15 @@ pub struct PaymentAllocation {
 }
 
 impl PaymentAllocation {
-    /// 创建付款核销分配。
+    /// 把付款过账或冲正中的核销金额关联到具体应付分录，以便追溯金额和次序。
     ///
     /// 完成金额正数、序号从 1 起与「动作 ↔ 原分配引用」一致性校验：
     /// `REVERSE` 必填 `reverses_allocation_id`，`APPLY` 不得携带。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::PaymentAllocationId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
     /// 返回新建的分配实体。
-    ///
-    /// # 错误
     /// 当金额非正、序号为 0 或动作与引用不一致时返回错误。
+    ///
+    /// 输入约定：
+    /// - `id`：实体主键（`erp_core::ids::PaymentAllocationId`）
     pub fn new(id: PaymentAllocationId, data: PaymentAllocationData) -> Result<Self> {
         data.source.validate()?;
         if data.allocated_amount.to_decimal().is_sign_negative()
@@ -181,19 +151,7 @@ impl PaymentAllocation {
         })
     }
 
-    /// 更新付款核销分配。
-    ///
-    /// 分配行过账后不可更新或删除（数据模型 §6.9 末尾），任何修改都被拒绝。
-    ///
-    /// # 参数
-    /// * `update` - 更新数据（恒被拒绝）
-    /// * `updated_by` - 更新执行人（恒被拒绝）
-    ///
-    /// # 返回
-    /// 恒返回错误。
-    ///
-    /// # 错误
-    /// 任何调用都返回错误：正式事实过账后不可更新或删除。
+    /// 拒绝改写或删除已过账付款核销分配，保留原付款和应付分录之间的账务证据。
     pub fn update(&mut self, update: PaymentAllocationData, updated_by: impl Into<String>) -> Result<()> {
         let _ = (update, updated_by);
         Err(Error::from("正式事实过账后不可更新或删除"))
@@ -224,18 +182,12 @@ pub struct PaymentReverseChunk {
 
 impl PaymentAllocation {
     /// 计算下一可用分配序号（SALES-E17，应付侧镜像）。
-    ///
-    /// # 参数
-    /// * `allocations` - 同一付款单已持久化分配集合
-    ///
-    /// # 返回
     /// 返回 `max(allocation_seq) + 1`，空集合返回 `1`。
-    ///
-    /// # 错误
     /// 当最大序号已为 `u32::MAX` 时返回错误。
+    /// 调用边界：仅基于传入切片计算，不读取持久化；并发唯一性仍由唯一索引保证。
     ///
-    /// # 约束
-    /// 仅基于传入切片计算，不读取持久化；并发唯一性仍由唯一索引保证。
+    /// 输入约定：
+    /// - `allocations`：同一付款单已持久化分配集合
     pub fn next_allocation_seq(allocations: &[Self]) -> Result<u32> {
         let max = allocations.iter().map(|a| a.allocation_seq).max();
         match max {
@@ -246,19 +198,13 @@ impl PaymentAllocation {
     }
 
     /// 为批量反向分配分配连续序号区间（SALES-E17）。
-    ///
-    /// # 参数
-    /// * `allocations` - 同一付款单已持久化分配集合
-    /// * `count` - 本次需新增的反向行数
-    ///
-    /// # 返回
     /// 返回长度为 `count` 的连续序号向量，起点为 `next_allocation_seq`。
-    ///
-    /// # 错误
     /// 当 `count == 0` 返回空向量；当区间末值超过 `u32::MAX` 时返回错误。
+    /// 调用边界：不触及持久化或全局 ID 生成器；调用方需在同一事务内写入并依赖唯一索引检测并发冲突。
     ///
-    /// # 约束
-    /// 不触及持久化或全局 ID 生成器；调用方需在同一事务内写入并依赖唯一索引检测并发冲突。
+    /// 输入约定：
+    /// - `allocations`：同一付款单已持久化分配集合
+    /// - `count`：本次需新增的反向行数
     pub fn next_allocation_seq_range(allocations: &[Self], count: usize) -> Result<Vec<u32>> {
         if count == 0 {
             return Ok(Vec::new());
@@ -274,19 +220,13 @@ impl PaymentAllocation {
     /// 按原付款核销分配规划反向核销（SALES-E16，§8.3-3，应付侧镜像）。
     ///
     /// 按 `allocation_seq` 确定性排序并预聚合既有 `REVERSE`，逐笔有效 `APPLY` 扣除已反向后再分摊；金额不足时拒绝。
-    ///
-    /// # 参数
-    /// * `allocations` - 原付款核销分配（任意顺序）
-    /// * `amount` - 本次反向金额
-    ///
-    /// # 返回
     /// 返回 `(反向分配行计划, 冲减块计划)`，两者一一对应且按序号顺序排列。
-    ///
-    /// # 错误
     /// 当有效 `APPLY` 净额不足时返回 `BusinessLogicError`。
+    /// 调用边界：纯内存计算，不依赖 MongoDB 自然顺序或外部 I/O；调用方负责在同一事务内持久化并通过条件更新保证并发正确性。
     ///
-    /// # 约束
-    /// 纯内存计算，不依赖 MongoDB 自然顺序或外部 I/O；调用方负责在同一事务内持久化并通过条件更新保证并发正确性。
+    /// 输入约定：
+    /// - `allocations`：原付款核销分配（任意顺序）
+    /// - `amount`：本次反向金额
     pub fn plan_reverse(
         allocations: &[Self],
         amount: Amount,

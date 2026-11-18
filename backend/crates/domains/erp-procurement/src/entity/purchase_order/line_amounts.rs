@@ -89,21 +89,14 @@ pub enum LineAmountViolation {
 impl PurchaseLineInput {
     /// 计算单行金额三元组。
     ///
-    /// 商品行按 `line_amounts(含税单价, 数量, 税率)` 复算；物流费用行按
-    /// `gross − round(gross × 税率) = net` 拆算（§4.2 铁律 4）。金额与税率均
-    /// 为类型化输入，未提供进项税率时按 0 计税。
+    /// 商品行按 `line_amounts(含税单价, 数量, 税率)` 复算；物流费用行按`gross − round(gross × 税率) = net`
+    /// 拆算（§4.2 铁律 4）。金额与税率均为类型化输入，未提供进项税率时按 0 计税。
     ///
-    /// # 参数
-    /// 无（读自身字段）。
-    ///
-    /// # 返回
-    /// 返回 `(gross, net, tax)` 三元组，恒等式 `gross = net + tax` 精确成立。
-    ///
-    /// # 错误
-    /// 商品行缺少数量或含税单价、物流费用行缺少含税金额时返回对应
-    /// [`LineAmountViolation`]。
+    /// 返回 `(gross, net, tax)` 三元组，恒等式 `gross = net + tax` 精确成立。商品行缺少数量或含税单价、
+    /// 物流费用行缺少含税金额时返回对应[`LineAmountViolation`]。
     ///
     /// # Panics
+    ///
     /// 物流行税额按分舍入后，税额与含税减税额都必须能构成 [`Amount`]。
     /// 舍入结果超出金额精度时 panic；这是舍入不变量，不是调用方输入错误。
     pub fn compute_amounts(&self) -> std::result::Result<(Amount, Amount, Amount), LineAmountViolation> {
@@ -127,19 +120,12 @@ impl PurchaseLineInput {
 
     /// 转换为采购提交行创建数据。
     ///
-    /// 内部先计算金额三元组，再复用提交行字段工厂填充全部行字典字段；快照文本
-    /// 规范化与字段归属校验由 `PurchaseOrderSubmissionLine::new` 完成。
+    /// 内部先计算金额三元组，再复用提交行字段工厂填充全部行字典字段；快照文本规范化与字段归属校验由 `PurchaseOrderSubmissionLine::new`
+    /// 完成。
     ///
-    /// # 参数
-    /// * `purchase_order_submission_id` - 所属提交稳定身份
-    /// * `line_no` - 行号（从 1 递增）
+    /// 商品行缺少数量或含税单价、物流费用行缺少含税金额时返回对应[`LineAmountViolation`]。
     ///
-    /// # 返回
-    /// 返回已填充金额与全部字段的提交行创建数据。
-    ///
-    /// # 错误
-    /// 商品行缺少数量或含税单价、物流费用行缺少含税金额时返回对应
-    /// [`LineAmountViolation`]。
+    /// `line_no` 为行号（从 1 递增）。
     pub fn into_submission_line_data(
         self,
         purchase_order_submission_id: PurchaseOrderSubmissionId,
@@ -175,19 +161,13 @@ impl PurchaseLineInput {
 
     /// 转换为采购变更提交行创建数据。
     ///
-    /// 内部先计算金额三元组，再复用变更提交行字段工厂填充全部行字典字段；快照
-    /// 文本规范化与字段归属校验由 `PurchaseChangeSubmissionLine::new` 完成。
+    /// 内部先计算金额三元组，再复用变更提交行字段工厂填充全部行字典字段；快照文本规范化与字段归属校验由
+    /// `PurchaseChangeSubmissionLine::new` 完成。
     ///
-    /// # 参数
-    /// * `purchase_change_submission_id` - 所属变更提交稳定身份
-    /// * `line_no` - 行号（从 1 递增）
+    /// 商品行缺少数量或含税单价、物流费用行缺少含税金额时返回对应[`LineAmountViolation`]。
     ///
-    /// # 返回
-    /// 返回已填充金额与全部字段的变更提交行创建数据。
-    ///
-    /// # 错误
-    /// 商品行缺少数量或含税单价、物流费用行缺少含税金额时返回对应
-    /// [`LineAmountViolation`]。
+    /// - `purchase_change_submission_id`：所属变更提交稳定身份。
+    /// - `line_no`：行号（从 1 递增）。
     pub fn into_change_submission_line_data(
         self,
         purchase_change_submission_id: PurchaseChangeSubmissionId,
@@ -224,18 +204,11 @@ impl PurchaseLineInput {
 
 /// 汇总表头金额三元组。
 ///
-/// 逐行计算金额后精确相加（`Amount` 加法不触发舍入），与
-/// `PurchaseOrderSubmission::ensure_line_totals` 的汇总算法一致。
+/// 逐行计算金额后精确相加（`Amount` 加法不触发舍入），与`PurchaseOrderSubmission::ensure_line_totals` 的汇总算法一致。
 ///
-/// # 参数
-/// * `lines` - 类型化行输入集合；空集合返回零三元组
+/// 返回 `(gross, net, tax)` 表头汇总。任一行金额计算失败（缺数量/单价/物流金额）时返回对应[`LineAmountViolation`]。
 ///
-/// # 返回
-/// 返回 `(gross, net, tax)` 表头汇总。
-///
-/// # 错误
-/// 任一行金额计算失败（缺数量/单价/物流金额）时返回对应
-/// [`LineAmountViolation`]。
+/// `lines` 为类型化行输入集合；空集合返回零三元组。
 pub fn compute_header_totals(
     lines: &[PurchaseLineInput],
 ) -> std::result::Result<(Amount, Amount, Amount), LineAmountViolation> {
@@ -251,7 +224,7 @@ pub fn compute_header_totals(
     Ok((gross, net, tax))
 }
 
-/// 表头金额须非负，且含税金额等于净额与税额之和。
+// 表头金额须非负，且含税金额等于净额与税额之和。
 pub(super) fn ensure_header_triple(
     gross_amount: Amount,
     net_amount: Amount,
@@ -268,36 +241,16 @@ pub(super) fn ensure_header_triple(
     Ok(())
 }
 
-/// 零金额（crate 内金额汇总的唯一规范零值）。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回金额零值。
-///
-/// # 错误
-/// 不返回错误。
-///
-/// # Panics
-/// 金额类型拒绝零值时 panic；零金额是合法金额，panic 只表示金额类型不变量被破坏。
+// 零金额（crate 内金额汇总的唯一规范零值）。返回金额零值。
+//
+// 金额类型拒绝零值时 panic；零金额是合法金额，panic 只表示金额类型不变量被破坏。
 pub(crate) fn zero_amount() -> Amount {
     Amount::try_from(rust_decimal::Decimal::ZERO).expect("零金额合法")
 }
 
-/// 零税率（缺省计税的唯一规范零值）。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回税率零值。
-///
-/// # 错误
-/// 不返回错误。
-///
-/// # Panics
-/// 税率类型拒绝零值时 panic；零税率是合法税率，panic 只表示税率类型不变量被破坏。
+// 零税率（缺省计税的唯一规范零值）。返回税率零值。
+//
+// 税率类型拒绝零值时 panic；零税率是合法税率，panic 只表示税率类型不变量被破坏。
 pub(crate) fn zero_rate() -> Rate {
     Rate::try_from(rust_decimal::Decimal::ZERO).expect("零税率合法")
 }
@@ -365,7 +318,7 @@ mod tests {
         }
     }
 
-    /// 商品行金额必须与既有样例一致（9.9900 × 3，13% 进项税）。
+    // 商品行金额必须与既有样例一致（9.9900 × 3，13% 进项税）。
     #[test]
     fn goods_line_amounts_match_locked_samples() {
         let (gross, net, tax) = goods_input().compute_amounts().unwrap();
@@ -374,7 +327,7 @@ mod tests {
         assert_eq!(tax, Amount::from_str("3.90").unwrap());
     }
 
-    /// 物流费用行金额必须与既有样例一致（100.00，13% 进项税）。
+    // 物流费用行金额必须与既有样例一致（100.00，13% 进项税）。
     #[test]
     fn logistics_line_amounts_match_locked_samples() {
         let (gross, net, tax) = logistics_input().compute_amounts().unwrap();
@@ -383,7 +336,7 @@ mod tests {
         assert_eq!(tax, Amount::from_str("13.00").unwrap());
     }
 
-    /// 分舍入按银行家规则锁定：0.005 边界取偶数分，非边界正常舍入。
+    // 分舍入按银行家规则锁定：0.005 边界取偶数分，非边界正常舍入。
     #[test]
     fn cent_rounding_is_locked() {
         let goods = PurchaseLineInput {
@@ -417,7 +370,7 @@ mod tests {
         assert_eq!(tax, Amount::from_str("0.00").unwrap());
     }
 
-    /// 商品行缺数量/单价、物流行缺金额分别返回对应违规。
+    // 商品行缺数量/单价、物流行缺金额分别返回对应违规。
     #[test]
     fn missing_required_amount_inputs_are_rejected() {
         let input = PurchaseLineInput { quantity: None, ..goods_input() };
@@ -430,7 +383,7 @@ mod tests {
         assert_eq!(input.compute_amounts().unwrap_err(), LineAmountViolation::MissingGrossAmount);
     }
 
-    /// 未提供进项税率时按 0 计税。
+    // 未提供进项税率时按 0 计税。
     #[test]
     fn missing_tax_rate_taxes_at_zero() {
         let input = PurchaseLineInput { input_tax_rate: None, ..goods_input() };
@@ -440,7 +393,7 @@ mod tests {
         assert_eq!(tax, Amount::from_str("0.00").unwrap());
     }
 
-    /// 表头汇总逐行精确相加，空集合为零三元组。
+    // 表头汇总逐行精确相加，空集合为零三元组。
     #[test]
     fn header_totals_sum_lines_and_handle_empty() {
         let (gross, net, tax) = compute_header_totals(&[goods_input(), logistics_input()]).unwrap();
@@ -454,7 +407,7 @@ mod tests {
         assert_eq!(tax, Amount::from_str("0.00").unwrap());
     }
 
-    /// 提交行数据工厂逐字段映射，行号透传且金额由领域计算。
+    // 提交行数据工厂逐字段映射，行号透传且金额由领域计算。
     #[test]
     fn submission_line_data_maps_all_fields_and_computes_amounts() {
         let data =
@@ -475,7 +428,7 @@ mod tests {
         assert_eq!(data.expected_delivery_date, Some(BusinessDate::from_ymd(2026, 8, 6).unwrap()));
     }
 
-    /// 空白可选字段在数据工厂中原样保留为 `None`。
+    // 空白可选字段在数据工厂中原样保留为 `None`。
     #[test]
     fn blank_optional_fields_stay_none_in_line_data() {
         let data = logistics_input()

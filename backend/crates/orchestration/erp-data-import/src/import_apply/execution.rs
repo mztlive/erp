@@ -36,13 +36,11 @@ fn ensure_executor_available(action: ImportExecutionAction) -> Result<()> {
 
 impl ImportApplyProcess {
     /// 执行 W18 应用阶段命令，行、批次、后台任务、独立回执及事件原子提交。
-    /// # 参数
-    /// * `batch_id` - 路径导入批次身份。
-    /// * `command` - 完整版本化执行命令。
-    /// * `actor` - 当前认证操作人。
-    /// # 返回
+    ///
+    /// `batch_id`：路径导入批次身份；`command`：完整版本化执行命令。
+    ///
     /// 返回命令原提交结果；后台进度可以继续推进。
-    /// # 错误
+    ///
     /// 命令、版本、状态或同键载荷冲突时拒绝执行。
     pub async fn execute_import_command(
         &self,
@@ -80,7 +78,7 @@ impl ImportApplyProcess {
         }
     }
 
-    /// 同一只读事务核对领域回执、批次和后台任务身份。
+    // 同一只读事务核对领域回执、批次和后台任务身份。
     async fn replay_import_execution(
         &self,
         identity: &StructuredCommandReceipt,
@@ -105,7 +103,7 @@ impl ImportApplyProcess {
             .await
     }
 
-    /// 在原事务内执行类型化边界，不启动外部任务或改变后台生命周期。
+    // 在原事务内执行类型化边界，不启动外部任务或改变后台生命周期。
     async fn commit_import_execution(
         &self,
         identity: &StructuredCommandReceipt,
@@ -175,7 +173,7 @@ impl AuditedCommand for ImportExecutionWrite<'_> {
     }
 }
 
-/// 只读恢复命令原结果；版本进展不能被误判为收据损坏。
+// 只读恢复命令原结果；版本进展不能被误判为收据损坏。
 async fn replay_execution_step(
     db: &Database,
     identity: &StructuredCommandReceipt,
@@ -219,7 +217,7 @@ struct ImportExecutionActionOutcome {
     affected_items: u64,
 }
 
-/// 在一个持久化事务内执行导入应用强命令。
+// 在一个持久化事务内执行导入应用强命令。
 async fn execute_import_command_transaction(
     db: &Database,
     prepared: &PreparedImportExecution,
@@ -271,7 +269,7 @@ async fn execute_import_command_transaction(
     Ok(ImportExecutionTransactionResult { batch, job, receipt })
 }
 
-/// 核对批次与后台任务的稳定关联和计数。
+// 核对批次与后台任务的稳定关联和计数。
 fn validate_import_background_job(batch: &LegacyImportBatch, job: &BackgroundJob) -> Result<()> {
     let matches = job.job_type == erp_support::JobType::Import
         && job.domain_job_type.as_deref() == Some(erp_support::LEGACY_IMPORT_DOMAIN_JOB_TYPE)
@@ -284,7 +282,7 @@ fn validate_import_background_job(batch: &LegacyImportBatch, job: &BackgroundJob
     Err(Error::BusinessLogicError("导入批次与后台任务关联不一致".to_string()))
 }
 
-/// 核对执行命令锁定的当前试算和全部必要确认。
+// 核对执行命令锁定的当前试算和全部必要确认。
 fn validate_import_execution_trial(
     prepared: &PreparedImportExecution,
     batch: &LegacyImportBatch,
@@ -305,7 +303,7 @@ fn validate_import_execution_trial(
     Ok(Some(current_trial))
 }
 
-/// 确保当前试算的全部必要责任范围均已确认。
+// 确保当前试算的全部必要责任范围均已确认。
 fn ensure_import_trial_confirmed(
     batch: &LegacyImportBatch,
     confirmations: &[LegacyImportConfirmation],
@@ -323,7 +321,7 @@ fn ensure_import_trial_confirmed(
     Ok(())
 }
 
-/// 仅在内存中应用执行动作，持久化由外层事务统一完成。
+// 仅在内存中应用执行动作，持久化由外层事务统一完成。
 fn apply_import_execution_action(
     prepared: &PreparedImportExecution,
     batch: &mut LegacyImportBatch,
@@ -337,7 +335,7 @@ fn apply_import_execution_action(
     }
 }
 
-/// 显式启动导入应用和关联后台任务。
+// 显式开始导入时，只有待应用批次和等待执行任务且仍有待应用项才推进；两者随后进入运行态。
 fn start_import_application(
     batch: &mut LegacyImportBatch,
     job: &mut BackgroundJob,
@@ -362,7 +360,7 @@ fn start_import_application(
     })
 }
 
-/// 取消尚未应用项，已处理计数和行事实原样保留。
+// 取消尚未应用项，已处理计数和行事实原样保留。
 fn cancel_pending_import(
     batch: &mut LegacyImportBatch,
     job: &mut BackgroundJob,
@@ -394,22 +392,17 @@ fn cancel_pending_import(
     })
 }
 
-/// 仅重新准备失败行，保留已导入、已跳过与未处理行。
-///
-/// 调用方事务已按 `list_failed_by_batch` 只装载失败子集；成功计数沿用批次
-/// 已提交值，失败计数清零。子集行数必须与批次失败计数一致，否则失败关闭，
-/// 避免用子集重算把成功计数归零。并发重试依赖每行 `id + version` 乐观锁。
-///
-/// # 参数
-/// * `batch` - 失败或部分失败批次
-/// * `job` - 后台任务
-/// * `rows` - 失败行子集（调用方已按批次过滤）
-///
-/// # 返回
-/// 返回重试影响项数与重试行 ID。
-///
-/// # 错误
-/// 批次状态不允许、子集为空、子集与批次失败计数不一致或状态迁移失败时返回错误。
+// 仅重新准备失败行，保留已导入、已跳过与未处理行。
+//
+// 调用方事务已按 `list_failed_by_batch` 只装载失败子集；成功计数沿用批次
+// 已提交值，失败计数清零。子集行数必须与批次失败计数一致，否则失败关闭，
+// 避免用子集重算把成功计数归零。并发重试依赖每行 `id + version` 乐观锁。
+//
+// `batch`：失败或部分失败批次；`rows`：失败行子集（调用方已按批次过滤）。
+//
+// 返回重试影响项数与重试行 ID。
+//
+// 批次状态不允许、子集为空、子集与批次失败计数不一致或状态迁移失败时返回错误。
 fn prepare_failed_import_retry(
     batch: &mut LegacyImportBatch,
     job: &mut BackgroundJob,
@@ -444,7 +437,7 @@ fn prepare_failed_import_retry(
     })
 }
 
-/// 组装导入执行命令的稳定结果信封。
+// 导入执行命令提交或回放后，按回执中的状态、版本与影响项数组织结果，并关联原审计。
 fn import_execution_result(
     result: ImportExecutionTransactionResult,
     audit_receipt: String,
@@ -465,15 +458,11 @@ fn import_execution_result(
     }
 }
 
-/// 构造导入执行命令的领域幂等身份。
-///
-/// # 参数
-/// * `actor_id` - 当前操作人
-/// * `action` - 稳定命令动作
-/// * `command` - 已解析并规范化的执行命令
-///
-/// # 返回
-/// 返回不暴露原始请求 ID 的命令 ID 与完整命令指纹。
+// 构造导入执行命令的领域幂等身份。
+//
+// `actor_id`：当前操作人；`action`：稳定命令动作；`command`：已解析并规范化的执行命令。
+//
+// 返回不暴露原始请求 ID 的命令 ID 与完整命令指纹。
 fn import_execution_command_identity(
     actor_id: &str,
     action: &str,
@@ -498,10 +487,10 @@ fn import_execution_command_identity(
     )
 }
 
-/// 核对幂等收据与当前批次/后台任务的稳定身份关联。
-///
-/// 当前版本与状态可能已被后台进度继续推进，重放必须返回收据记录的
-/// 原始结果，不能要求当前快照仍停留在命令提交时刻。
+// 核对幂等收据与当前批次/后台任务的稳定身份关联。
+//
+// 当前版本与状态可能已被后台进度继续推进，重放必须返回收据记录的
+// 原始结果，不能要求当前快照仍停留在命令提交时刻。
 fn validate_import_execution_replay(
     fact: &ImportCommandReceipt,
     batch: &LegacyImportBatch,
@@ -526,7 +515,7 @@ fn validate_import_execution_replay(
     Ok(())
 }
 
-/// 解析后台任务状态稳定码。
+// 生成导入执行结果时，把通用后台任务状态逐一映射成导入域的稳定状态。
 fn import_job_status(status: JobStatus) -> erp_import::ImportJobStatus {
     match status {
         JobStatus::Pending => erp_import::ImportJobStatus::Pending,

@@ -32,12 +32,10 @@ pub struct SalesInquiryImportProcess {
 
 impl SalesInquiryImportProcess {
     /// 绑定数据库及授权源。
-    /// # 参数
+    ///
     /// `db` 为业务数据库，`authorization` 为当前权限服务，`supply` 为目录事实 Port，`inquiry` 为已装配的询价编排。
-    /// # 返回
+    ///
     /// 未读取业务事实的导入流程。
-    /// # 错误
-    /// 无。
     pub fn new(
         db: Database,
         authorization: Arc<AuthorizationService>,

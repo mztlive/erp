@@ -31,16 +31,7 @@ pub enum InvoiceDirection {
 }
 
 impl InvoiceDirection {
-    /// 返回方向的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为界面或响应展示提供发票进销项方向的中文名称；机器筛选和存储不使用该名称。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Sales => "销项",
@@ -48,16 +39,7 @@ impl InvoiceDirection {
         }
     }
 
-    /// 返回方向的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将发票进销项方向转成用于持久化和查询的稳定代码，与中文展示文案分开。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Sales => "sales",
@@ -77,16 +59,7 @@ pub enum InvoiceKind {
 }
 
 impl InvoiceKind {
-    /// 返回类型的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为界面或响应展示提供发票种类的中文名称；机器筛选和存储不使用该名称。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Blue => "蓝票",
@@ -94,16 +67,7 @@ impl InvoiceKind {
         }
     }
 
-    /// 返回类型的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将发票种类转成用于持久化和查询的稳定代码，与中文展示文案分开。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Blue => "blue",
@@ -125,16 +89,7 @@ pub enum AccountingDirection {
 }
 
 impl AccountingDirection {
-    /// 返回方向的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为界面或响应展示提供发票记账方向的中文名称；机器筛选和存储不使用该名称。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Increase => "增加",
@@ -142,16 +97,7 @@ impl AccountingDirection {
         }
     }
 
-    /// 返回方向的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将发票记账方向转成用于持久化和查询的稳定代码，与中文展示文案分开。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Increase => "increase",
@@ -174,16 +120,7 @@ pub enum InvoiceStatus {
 }
 
 impl InvoiceStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为界面或响应展示提供发票登记状态的中文名称；机器筛选和存储不使用该名称。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Draft => "草稿",
@@ -192,16 +129,7 @@ impl InvoiceStatus {
         }
     }
 
-    /// 返回状态的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将发票登记状态转成用于持久化和查询的稳定代码，与中文展示文案分开。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Draft => "draft",
@@ -316,7 +244,7 @@ pub struct Invoice {
 }
 
 impl PartialEq for Invoice {
-    /// 全字段语义相等。
+    // 比较两份发票是否完全一致，业务字段和持久化元数据都参与比较。
     fn eq(&self, other: &Self) -> bool {
         self.base == other.base
             && self.stable.status == other.stable.status
@@ -344,22 +272,17 @@ impl PartialEq for Invoice {
 impl Eq for Invoice {}
 
 impl Invoice {
-    /// 创建发票。
+    /// 登记或红冲前构造草稿发票，校验金额、方向和红蓝票关系，并归一化号码供查重。
     ///
     /// 完成金额恒等（gross = net + tax）、蓝红与 `original_invoice_id` 一致性
     /// （红票必填、蓝票禁填）、发票代码/号码的 trim/非空/长度校验，并派生
     /// `accounting_direction` 与规范化号码。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::InvoiceId`）
-    /// * `data` - 创建数据
-    /// * `created_by` - 创建人（账号或系统身份）
-    ///
-    /// # 返回
     /// 返回新建的发票实体（状态为草稿）。
-    ///
-    /// # 错误
     /// 当金额三元组不一致、蓝红与引用关系矛盾或代码/号码为空/超长时返回错误。
+    ///
+    /// 输入约定：
+    /// - `id`：实体主键（`erp_core::ids::InvoiceId`）
+    /// - `created_by`：创建人（账号或系统身份）
     pub fn new(id: InvoiceId, data: InvoiceData, created_by: impl Into<String>) -> Result<Self> {
         validate_amounts(data.gross_amount, data.net_amount, data.tax_amount)?;
         match data.invoice_kind {
@@ -406,15 +329,6 @@ impl Invoice {
     ///
     /// 复用 `new` 的校验规则并重新派生规范化号码；发票方向、蓝红类型、往来
     /// 主体与红票原票引用是固定字段，不允许修改。
-    ///
-    /// # 参数
-    /// * `update` - 更新数据
-    /// * `updated_by` - 本次更新执行人
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 当状态非草稿或金额三元组不一致/字段超长时返回错误。
     pub fn update(&mut self, update: InvoiceUpdate, updated_by: impl Into<String>) -> Result<()> {
         if self.stable.status() != InvoiceStatus::Draft {
@@ -463,14 +377,7 @@ impl Invoice {
     }
 
     /// 登记发票（草稿 → 已登记）。
-    ///
-    /// # 参数
-    /// * `updated_by` - 本次更新执行人
-    ///
-    /// # 返回
-    /// 登记成功返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// 结果：登记成功返回 `Ok(())`。
     /// 状态非草稿时返回错误。
     pub fn mark_registered(&mut self, updated_by: impl Into<String>) -> Result<()> {
         if self.stable.status() != InvoiceStatus::Draft {
@@ -482,14 +389,7 @@ impl Invoice {
     }
 
     /// 标记红票已红冲（已登记 → 已红冲，仅蓝票）。
-    ///
-    /// # 参数
-    /// * `updated_by` - 本次更新执行人
-    ///
-    /// # 返回
-    /// 标记成功返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// 结果：标记成功返回 `Ok(())`。
     /// 状态非已登记或发票不是蓝票时返回错误。
     pub fn mark_red_invoiced(&mut self, updated_by: impl Into<String>) -> Result<()> {
         if self.stable.status() != InvoiceStatus::Registered {
@@ -504,34 +404,22 @@ impl Invoice {
     }
 
     /// 判断发票是否已登记。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 状态为 `Registered` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 结果：状态为 `Registered` 时返回 `true`。
     pub fn is_registered(&self) -> bool {
         self.stable.status() == InvoiceStatus::Registered
     }
 }
 
-/// 校验发票金额三元组恒等。
-///
-/// 规则（数据模型 §4.2）：含税金额必须精确等于不含税金额加税额，各分量非负。
-///
-/// # 参数
-/// * `gross` - 含税金额
-/// * `net` - 不含税金额
-/// * `tax` - 税额
-///
-/// # 返回
-/// 恒等成立返回 `Ok(())`。
-///
-/// # 错误
-/// 分量为负或恒等不成立时返回错误。
+// 校验发票金额三元组恒等。
+//
+// 规则（数据模型 §4.2）：含税金额必须精确等于不含税金额加税额，各分量非负。
+// 结果：恒等成立返回 `Ok(())`。
+// 分量为负或恒等不成立时返回错误。
+//
+// 输入约定：
+// - `gross`：含税金额
+// - `net`：不含税金额
+// - `tax`：税额
 fn validate_amounts(gross: Amount, net: Amount, tax: Amount) -> Result<()> {
     if gross.to_decimal().is_sign_negative()
         || net.to_decimal().is_sign_negative()
@@ -545,13 +433,11 @@ fn validate_amounts(gross: Amount, net: Amount, tax: Amount) -> Result<()> {
     Ok(())
 }
 
-/// 由蓝红类型派生记账方向。
-///
-/// # 参数
-/// * `kind` - 蓝红类型
-///
-/// # 返回
-/// 蓝票为增加，红票为减少。
+// 由蓝红类型派生记账方向。
+// 结果：蓝票为增加，红票为减少。
+//
+// 输入约定：
+// - `kind`：蓝红类型
 fn derive_accounting_direction(kind: InvoiceKind) -> AccountingDirection {
     match kind {
         InvoiceKind::Blue => AccountingDirection::Increase,

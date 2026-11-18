@@ -7,15 +7,7 @@ use crate::{
 };
 
 impl LegacyImportConfirmation {
-    /// 判断待决定确认是否与规范化命令及已解析责任范围一致。
-    ///
-    /// # 参数
-    /// * `command` - 当前规范化确认命令。
-    /// * `scope` - 在原校验顺序中解析的责任范围。
-    /// # 返回
-    /// 任务、批次、范围、角色及待确认状态一致时返回 `true`。
-    /// # 错误
-    /// 不返回错误；不验证外部任务或批次事实。
+    /// 核对待决定记录与规范化命令的任务、批次、范围和责任角色，仅记录仍待确认且各项匹配时允许完成。此处不验证外部任务或批次事实。
     pub fn matches_pending_completion(
         &self,
         command: &PreparedConfirmationCompletion,
@@ -28,17 +20,7 @@ impl LegacyImportConfirmation {
             && self.is_pending()
     }
 
-    /// 用确认自身事实证明回执冻结的原决定。
-    ///
-    /// # 参数
-    /// * `outcome` - 原命令冻结的正式结果。
-    /// * `command` - 当前规范化原命令。
-    /// * `actor_id` - 当前认证操作人。
-    /// * `scope` - 已解析的责任范围。
-    /// # 返回
-    /// 确认身份、版本、决定、操作人与时间全部一致时返回 `true`。
-    /// # 错误
-    /// 不返回错误；不要求确认仍待处理，也不依赖后续批次推进。
+    /// 回放前用确认自身核验回执冻结的身份、版本、原决定、时间、操作人及原因和意见；不要求记录仍待确认，也不依赖批次后续进度。
     pub fn matches_completed_decision(
         &self,
         outcome: &ImportConfirmationOutcome,

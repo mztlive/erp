@@ -48,21 +48,11 @@ pub struct StartAssigneeBinding {
     pub eligibility: Eligibility,
 }
 
-/// 创建 `RUNNING` 第 1 轮实例、全部节点审批人快照，并进入入口。
-///
-/// 任一人资格无效时不得创建实例或执行。入口进入必须是有效资格。
-///
-/// # 参数
-/// * `command` - 启动命令
-/// * `graph` - 定义图
-/// * `bindings` - 与定义节点一一对应的审批人绑定
-///
-/// # 返回
-/// 返回第 1 轮运行实例、全部节点审批人快照，以及入口执行和启动事件。
+/// 调用方准备好运行图、各节点绑定和资格后，创建第 1 轮实例，冻结整条审批链的人员，再进入入口节点。
+/// 计划包含入口执行、启动与进入事件及任务意图；ID 和时间都由调用方提供。
 ///
 /// # 错误
-/// 入口缺失、绑定数量或主键或节点键不匹配、资格不属于定义审批人、任一人失效，
-/// 或模型不变式失败时返回错误。
+/// 绑定未与节点一一对应、审批人归属或资格不符（包括非入口人员失效）、入口缺失或模型校验失败时，不产生可提交的启动计划。
 pub fn start(
     command: StartCommand,
     graph: &DefinitionGraph,
@@ -109,7 +99,7 @@ pub fn start(
     Ok(plan)
 }
 
-/// 按节点键建立绑定索引，一次完成数量、重复主键、重复节点与缺失校验。
+// 启动时先按节点键建立借用索引，拒绝数量不符及重复主键或键；后续逐节点冻结时据此发现缺失绑定。
 fn indexed_bindings<'a>(
     graph: &DefinitionGraph,
     bindings: &'a [StartAssigneeBinding],
@@ -131,7 +121,7 @@ fn indexed_bindings<'a>(
     Ok(by_node)
 }
 
-/// 校验启动绑定并冻结实例审批人，复用调用方已建好的索引，一次遍历定义节点。
+// 启动进入入口前把每个节点的人员与来源冻结到实例，并检查全部参与人的资格及动态来源是否属于本次申请人；不创建起步即受阻的实例。
 fn freeze_assignees(
     instance: &ApprovalProcessInstance,
     graph: &DefinitionGraph,

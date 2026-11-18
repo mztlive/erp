@@ -18,16 +18,12 @@ use super::{SUPPLIER_IMPORT_DOMAIN, SupplierImportProcess};
 use crate::{Error, Result};
 
 impl SupplierImportProcess {
-    /// 加密保存输入并原子登记任务及行明细，不执行供应商写入。
+    /// 提交供应商批量导入时，把提交人与完整输入纳入来源指纹；加密保存源文件后再原子登记任务和行，不在提交请求内建档。
     ///
-    /// # 参数
-    /// * `request` - 已解析的导入请求。
-    /// * `actor` - 提交人，参与源内容指纹。
+    /// `actor`：提交人，参与源内容指纹。
     ///
-    /// # 返回
     /// 返回新建任务；同一提交身份且载荷相同则返回已有任务。
     ///
-    /// # 错误
     /// 请求校验失败、内容超过 10 MB、编码或保存失败、事务失败，或同一提交身份对应不同载荷时返回错误。
     pub async fn submit(
         &self,
@@ -65,7 +61,7 @@ impl SupplierImportProcess {
         self.persist(job, items, actor).await
     }
 
-    /// 查询原提交并验证操作者与完整内容；旧记录无指纹时拒绝重放。
+    // 查询原提交并验证操作者与完整内容；旧记录无指纹时拒绝重放。
     async fn replay(&self, proposed: &BackgroundJob, actor: &AuditActor) -> Result<Option<BackgroundJob>> {
         let db = self.db.clone();
         let authorization = self.job_access.service.clone();
@@ -81,7 +77,7 @@ impl SupplierImportProcess {
             .await
     }
 
-    /// 任务与行明细在同一事务内落库；唯一竞争和未知提交结果回读原任务。
+    // 源文件保存后登记供应商导入任务及明细；唯一键竞争或提交结果未知时，按原提交身份和指纹查证，不重复登记。
     async fn persist(
         &self,
         job: BackgroundJob,
@@ -119,7 +115,7 @@ impl SupplierImportProcess {
     }
 }
 
-/// 回放前重验当前入口资格，批次身份与结果读取共用原事务。
+// 回放前重验当前入口资格，批次身份与结果读取共用原事务。
 async fn replay_registration(
     db: &Database,
     authorization: &AuthorizationService,
@@ -137,7 +133,7 @@ async fn replay_registration(
     Ok(existing)
 }
 
-/// S3 写入完成后，在原登记事务重新授权并创建任务及明细。
+// S3 写入完成后，在原登记事务重新授权并创建任务及明细。
 async fn register_job(
     db: &Database,
     authorization: &AuthorizationService,
@@ -152,32 +148,22 @@ async fn register_job(
     Ok(db.bulk_job().create_job_with_items(job, items, executor).await?)
 }
 
-/// 用服务端生成的摘要组成加密对象路径，不接受客户端路径。
-///
-/// # 参数
-/// * `source` - 源内容摘要的十六进制文本。
-///
-/// # 返回
-/// 返回 `supplier-import/{source}.enc`。
-///
-/// # 错误
-/// 不返回错误。
+// 用服务端生成的摘要组成加密对象路径，不接受客户端路径。
+//
+// `source`：源内容摘要的十六进制文本。
+//
+// 返回 `supplier-import/{source}.enc`。
 pub(super) fn source_key(source: &str) -> String {
     format!("supplier-import/{source}.enc")
 }
 
-/// 构造有界任务聚合；源内容摘要写入任务身份，行明细覆盖全部模板行。
-///
-/// # 参数
-/// * `request` - 已校验的导入请求。
-/// * `actor` - 提交人账号。
-/// * `source` - 源内容摘要。
-///
-/// # 返回
-/// 返回待落库的任务和行明细。
-///
-/// # 错误
-/// 任务聚合构造失败时返回错误。
+// 构造有界任务聚合；源内容摘要写入任务身份，行明细覆盖全部模板行。
+//
+// `actor`：提交人账号；`source`：源内容摘要。
+//
+// 返回待落库的任务和行明细。
+//
+// 任务聚合构造失败时返回错误。
 pub(super) fn build_job(
     request: &SupplierImportJobRequest,
     actor: &str,
@@ -224,17 +210,13 @@ pub(super) fn build_job(
     .into_parts())
 }
 
-/// 同一提交身份不得切换操作者、业务类型或源数据；旧记录没有指纹时也拒绝。
-///
-/// # 参数
-/// * `existing` - 已落库的任务。
-/// * `proposed` - 本次请求构造的任务。
-///
-/// # 返回
-/// 操作者、业务类型和请求指纹都一致时返回。
-///
-/// # 错误
-/// 任一字段不一致或已有任务没有指纹时返回冲突。
+// 同一提交身份不得切换操作者、业务类型或源数据；旧记录没有指纹时也拒绝。
+//
+// `existing`：已落库的任务；`proposed`：本次请求构造的任务。
+//
+// 操作者、业务类型和请求指纹都一致时返回。
+//
+// 任一字段不一致或已有任务没有指纹时返回冲突。
 pub(super) fn ensure_replay(existing: &BackgroundJob, proposed: &BackgroundJob) -> Result<()> {
     if existing.requested_by != proposed.requested_by
         || existing.domain_job_type != proposed.domain_job_type
@@ -270,7 +252,7 @@ pub(super) mod tests {
         };
         build_job(&request, "actor-1", &"a".repeat(64)).unwrap()
     }
-    /// 授权设施拒绝后，回放不读取任务，登记不写入任务或明细。
+    // 验证：授权设施拒绝后，回放不读取任务，登记不写入任务或明细。
     #[tokio::test]
     async fn authorization_failure_stops_registration_and_replay_before_database_access() {
         use erp_core::AccountKind;

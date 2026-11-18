@@ -18,14 +18,7 @@ pub enum SourcingTaskStatus {
     Completed,
 }
 impl SourcingTaskStatus {
-    /// 返回客户端合同状态文本。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 返回首次提交时冻结的状态代码。
-    /// # 错误
-    /// 无。
+    /// 读取首次提交时冻结的采购状态代码，供客户端和重放回包沿用原结果。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Open => "OPEN",
@@ -47,16 +40,6 @@ pub struct CreationReceipt {
 impl CreationReceipt {
     /// 转换为采购创建响应。
     ///
-    /// # 参数
-    /// * `replayed` - 是否来自幂等收据回放
-    ///
-    /// # 返回
-    /// 返回 API 创建结果。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
     /// 业务引用恒为原采购单 ID。
     pub fn into_result(self, replayed: bool) -> CreatePurchaseOrderResult {
         CreatePurchaseOrderResult::new(
@@ -89,20 +72,12 @@ pub struct SaveDraftReceipt {
 impl SaveDraftReceipt {
     /// 从已持久化采购单和新草稿金额构造稳定收据。
     ///
-    /// # 参数
-    /// * `order` - Repository 更新后带新版本的采购单
-    /// * `gross` - 首次保存含税金额
-    /// * `net` - 首次保存不含税金额
-    /// * `tax` - 首次保存税额
+    /// 版本和业务引用必须与首次成功响应完全一致。
     ///
-    /// # 返回
     /// 返回可持久化并稳定回放的保存结果载荷。
     ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 版本和业务引用必须与首次成功响应完全一致。
+    /// - `order`：Repository 更新后带新版本的采购单。
+    /// - `net`：首次保存不含税金额。
     pub fn from_saved(order: &PurchaseOrder, gross: String, net: String, tax: String) -> Self {
         Self {
             purchase_order_id: order.base.id.clone(),
@@ -116,17 +91,9 @@ impl SaveDraftReceipt {
 
     /// 转换为保存草稿 API 结果。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回首次执行与后续回放共享的原始结果。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
     /// 回放不得使用采购单当前版本或重新计算金额覆盖收据结果。
+    ///
+    /// 返回首次执行与后续回放共享的原始结果。
     pub fn into_result(self) -> SavePurchaseOrderDraftResult {
         SavePurchaseOrderDraftResult {
             lock_version: self.lock_version,
@@ -154,18 +121,11 @@ pub struct VoidDraftReceipt {
 impl VoidDraftReceipt {
     /// 从已持久化的作废采购单构造稳定收据。
     ///
-    /// # 参数
-    /// * `order` - Repository 更新后带新版本的已作废采购单
-    /// * `reason` - 首次请求中的作废原因
+    /// 状态、版本和业务引用必须与首次成功响应一致，独立回执保留规范化作废原因。
     ///
-    /// # 返回
     /// 返回可持久化并稳定回放的作废结果载荷。
     ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 状态、版本和业务引用必须与首次成功响应一致，独立回执保留规范化作废原因。
+    /// `order` 为 Repository 更新后带新版本的已作废采购单。
     pub fn from_voided(order: &PurchaseOrder, reason: &str) -> Self {
         Self {
             purchase_order_id: order.base.id.clone(),
@@ -178,16 +138,6 @@ impl VoidDraftReceipt {
 
     /// 转换为采购草稿作废 API 结果。
     ///
-    /// # 参数
-    /// * `replayed` - 是否来自匹配命令收据的回放
-    ///
-    /// # 返回
-    /// 返回首次执行或幂等回放结果。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
     /// 只有读取并校验匹配收据后才能传入 `true`。
     pub fn into_result(self, replayed: bool) -> VoidPurchaseOrderResult {
         VoidPurchaseOrderResult {
@@ -242,20 +192,7 @@ pub struct PurchaseSubmitReceipt {
 }
 
 impl PurchaseSubmitReceipt {
-    /// 构造采购提交命令收据。
-    ///
-    /// # 参数
-    /// * `purchase_no` - 采购单号
-    /// * `submission_id` - 形成的不可变提交
-    /// * `submission_no` - 提交序号
-    /// * `work_item_id` - 审核待办
-    /// * `subject_version` - 待办锁定的不可变采购提交版本
-    ///
-    /// # 返回
-    /// 返回任务版本为零的收据。
-    ///
-    /// # 错误
-    /// 无。
+    /// 构造采购提交命令收据。返回任务版本为零的收据。
     pub fn new(
         purchase_no: String,
         submission_id: String,
@@ -274,17 +211,9 @@ impl PurchaseSubmitReceipt {
         }
     }
 
-    /// 设置审核待办乐观锁版本与采购单版本。
+    /// 设置审核待办乐观锁版本与采购单版本。返回更新后的收据。
     ///
-    /// # 参数
-    /// * `task_version` - 审核待办乐观锁版本
-    /// * `lock_version` - 采购单新乐观锁版本
-    ///
-    /// # 返回
-    /// 返回更新后的收据。
-    ///
-    /// # 错误
-    /// 无。
+    /// `lock_version` 为采购单新乐观锁版本。
     pub fn with_versions(mut self, task_version: u64, lock_version: u64) -> Self {
         self.task_version = task_version;
         self.lock_version = lock_version;
@@ -292,17 +221,11 @@ impl PurchaseSubmitReceipt {
     }
     /// 回填首个入口任务身份，保证回放与首次响应一致。
     ///
-    /// # 参数
-    /// * `first_task` - 事务内写入的首个入口任务身份；无任务时为空
+    /// 只能在独立回执持久化前调用一次；同一命令首次响应与回放必须返回相同的任务身份。
     ///
-    /// # 返回
     /// 返回携带真实任务身份（或无任务时保持空占位）的收据。
     ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 只能在独立回执持久化前调用一次；同一命令首次响应与回放必须返回相同的任务身份。
+    /// `first_task` 为事务内写入的首个入口任务身份；无任务时为空。
     pub fn with_first_task(mut self, first_task: Option<&(String, u64)>) -> Self {
         if let Some((work_item_id, task_version)) = first_task {
             self.work_item_id = work_item_id.clone();

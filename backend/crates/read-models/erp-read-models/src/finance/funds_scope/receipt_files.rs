@@ -7,11 +7,14 @@ use crate::finance::document_files::{FinancialFileView, financial_document_files
 use crate::{Error, Result};
 
 impl FundsAccess {
-    /// 在同一读取事务验证整单权限并列出回款凭证。
+    /// 准备客户回款凭证时，在同一读取事务验证整单权限并列出回款凭证。
+    ///
     /// # 参数
     /// 回款身份与当前操作人。
+    ///
     /// # 返回
     /// 可读取的回款凭证。
+    ///
     /// # 错误
     /// 部分份额授权、单据不可见或读取失败时拒绝。
     pub async fn customer_receipt_files_scoped(
@@ -42,7 +45,7 @@ impl FundsAccess {
     }
 }
 
-/// 凭证不能按核销份额裁剪。
+// 核对客户回款凭证边界时，凭证不能按核销份额裁剪。
 fn ensure_whole_receipt(limited: bool) -> Result<()> {
     if limited {
         return Err(Error::Forbidden("当前仅可查看部分核销份额，不能下载整笔回款凭证".into()));

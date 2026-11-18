@@ -9,15 +9,8 @@ use crate::entity::work_item::{
 #[allow(async_fn_in_trait)]
 pub trait WorkItemRepositoryFinanceExt {
     /// 查询应付子账全部付款执行任务并把最新任务排在前面。
-    ///
-    /// # 参数
-    /// * `payable_account_id` - 应付子账稳定身份
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回按更新时间、创建时间倒序排列的全部生命周期任务。
     ///
-    /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
     async fn list_payment_execution_by_payable_newest_first(
         &self,
@@ -26,20 +19,13 @@ pub trait WorkItemRepositoryFinanceExt {
     ) -> Result<Vec<WorkItem>>;
 
     /// 按应付子账集合与责任人读取开放付款执行任务。
+    /// 只返回数据事实，不判断供应商是否相同或任务是否可合并。
     ///
-    /// # 参数
-    /// * `payable_account_ids` - 候选应付子账 ID；空集合不访问数据库
-    /// * `owner_user_id` - 当前付款责任人
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回匹配的开放付款执行任务，不保证顺序。
     ///
-    /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
     ///
-    /// # 约束
-    /// 只返回数据事实，不判断供应商是否相同或任务是否可合并。
+    /// `payable_account_ids`：候选应付子账 ID；空集合不访问数据库；`owner_user_id`：当前付款责任人。
     async fn list_open_payment_execution_by_payables_and_owner(
         &self,
         payable_account_ids: &[String],
@@ -48,14 +34,11 @@ pub trait WorkItemRepositoryFinanceExt {
     ) -> Result<Vec<WorkItem>>;
 
     /// 查询付款申请的全部执行任务，最新生命周期任务在前。
-    ///
-    /// # 参数
-    /// * `request_id` - 采购付款申请主键。
-    /// * `executor` - 同一事务的执行器。
-    /// # 返回
     /// 返回只绑定本申请的付款任务。
-    /// # 错误
+    ///
     /// 查询或解码失败时返回持久化错误。
+    ///
+    /// `executor`：同一事务的执行器。
     async fn list_payment_execution_by_request_newest_first(
         &self,
         request_id: &str,
@@ -63,15 +46,8 @@ pub trait WorkItemRepositoryFinanceExt {
     ) -> Result<Vec<WorkItem>>;
 
     /// 查询应收子账全部销项开票执行任务并把最新任务排在前面。
-    ///
-    /// # 参数
-    /// * `receivable_account_id` - 应收子账稳定身份
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回按更新时间、创建时间倒序排列的全部生命周期任务。
     ///
-    /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
     async fn list_sales_invoice_execution_by_receivable_newest_first(
         &self,
@@ -159,14 +135,8 @@ impl WorkItemRepositoryFinanceExt for Repository<'_, WorkItem> {
 #[allow(async_fn_in_trait)]
 pub trait FinanceResponsibilityRuleRepositoryExt {
     /// 查询全部未删除财务责任规则。
-    ///
-    /// # 参数
-    /// * `executor` - 数据访问执行器。
-    ///
-    /// # 返回
     /// 返回按业务、匹配层级和创建时间稳定排序的规则。
     ///
-    /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
     async fn list_finance_responsibility_rules(
         &self,
@@ -174,16 +144,11 @@ pub trait FinanceResponsibilityRuleRepositoryExt {
     ) -> Result<Vec<FinanceResponsibilityRule>>;
 
     /// 查询指定业务全部启用财务责任规则。
-    ///
-    /// # 参数
-    /// * `operation` - 供应商付款或销项开票
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回当前未删除且启用的规则。
     ///
-    /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// `operation`：供应商付款或销项开票。
     async fn list_active_finance_responsibility_rules(
         &self,
         operation: FinanceResponsibilityOperation,

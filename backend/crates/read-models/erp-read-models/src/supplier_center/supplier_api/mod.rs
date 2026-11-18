@@ -26,42 +26,35 @@ pub struct SupplierApiReadService {
 }
 
 impl SupplierApiReadService {
-    /// 复用应用数据库与权威身份服务。
+    /// 装配供应连接时，复用应用数据库与权威身份服务。
     ///
     /// # 参数
-    /// * `db` - 应用数据库。
     /// * `authorization` - 当前共享授权服务。
     ///
     /// # 返回
     /// 返回已绑定身份服务的读取服务。构造不执行查询。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: Database, authorization: Arc<AuthorizationService>) -> Self {
         Self { db, authorization, reference_registry: None, gateway: None }
     }
 
-    /// 复用组合根的引用注册表；不创建新的外部连接器。
+    /// 组装供应连接时填入组合根的引用注册表。
     ///
     /// # 参数
     /// * `registry` - 组合根的引用注册表。
     ///
     /// # 返回
     /// 消耗当前服务并返回已写入注册表的同一服务。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn with_reference_registry(mut self, registry: Arc<dyn SupplierReferenceRegistry>) -> Self {
         self.reference_registry = Some(registry);
         self
     }
-    /// 注入与执行器相同的协议能力读取网关。
+    /// 生成供应连接视图时，注入与执行器相同的协议能力读取网关。
+    ///
     /// # 参数
     /// `gateway` 为组合根注册表，不执行外部网络请求。
+    ///
     /// # 返回
     /// 能力展示使用适配器策略的读取服务。
-    /// # 错误
-    /// 不返回错误。
     pub fn with_gateway(mut self, gateway: Arc<dyn SupplierApiGateway>) -> Self {
         self.gateway = Some(gateway);
         self

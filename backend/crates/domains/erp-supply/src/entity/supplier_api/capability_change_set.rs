@@ -73,16 +73,9 @@ pub enum CapabilityChangeSetRejection {
 }
 
 impl std::fmt::Display for CapabilityChangeSetRejection {
-    /// 返回与历史 Service 内联校验一致的中文说明。
-    ///
-    /// # 参数
-    /// * `f` - 格式化目标
-    ///
-    /// # 返回
-    /// 写入用户可读的拒绝说明。
-    ///
-    /// # 错误
-    /// 写入格式化目标失败时返回 `fmt::Error`。
+    // 返回与历史 Service 内联校验一致的中文说明。
+    // 写入用户可读的拒绝说明。
+    // 写入格式化目标失败时返回 `fmt::Error`。
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::EmptyOrTooMany => write!(f, "能力变更必须为1到10条"),
@@ -102,16 +95,8 @@ impl std::fmt::Display for CapabilityChangeSetRejection {
 impl std::error::Error for CapabilityChangeSetRejection {}
 
 impl From<CapabilityChangeSetRejection> for erp_core::Error {
-    /// 将集合拒绝转换为实体层通用错误（保留展示文本）。
-    ///
-    /// # 参数
-    /// * `rejection` - 集合校验拒绝原因
-    ///
-    /// # 返回
-    /// 携带同文本的实体层错误。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 将集合拒绝转换为实体层通用错误（保留展示文本）。
+    // 携带同文本的实体层错误。
     fn from(rejection: CapabilityChangeSetRejection) -> Self {
         Self::from(rejection.to_string())
     }
@@ -138,24 +123,13 @@ pub struct ClassifiedCapabilityChangeSet {
 
 impl CapabilityChangeSet {
     /// 校验变更清单形态与版本 map keys 精确相等。
-    ///
-    /// 依次固定：清单非空且不超过上限、code 唯一、版本 map keys 与变更 code
-    /// 精确相等（缺 key 与多余 key 均拒绝）。新能力规则与实时版本冲突仍待
-    /// [`CapabilityChangeSet::classify`] 与 Service 判定，本方法不读取数据库。
-    ///
-    /// # 参数
-    /// * `inputs` - 待校验的单条变更输入（保持调用方顺序）
-    /// * `expected_versions` - 以能力代码字符串为 key 的期望版本映射
-    ///
-    /// # 返回
+    /// 依次固定：清单非空且不超过上限、code 唯一、版本 map keys 与变更 code精确相等（缺 key 与多余 key
+    /// 均拒绝）。新能力规则与实时版本冲突仍待[`CapabilityChangeSet::classify`] 与 Service 判定，本方法不
+    /// 读取数据库。
     /// 返回保持输入顺序的形态已校验变更集。
-    ///
-    /// # 错误
-    /// 当清单为空/超限、code 重复、版本 map 缺 key 或多余 key 时返回
-    /// [`CapabilityChangeSetRejection`]。
-    ///
-    /// # 约束
+    /// 当清单为空/超限、code 重复、版本 map 缺 key 或多余 key 时返回[`CapabilityChangeSetRejection`]。
     /// 纯内存校验；不访问 MongoDB、时钟、ID 生成器或密钥。
+    /// `inputs`：待校验的单条变更输入（保持调用方顺序）
     pub fn new(
         inputs: Vec<CapabilityChangeInput>,
         expected_versions: &BTreeMap<String, u64>,
@@ -190,22 +164,12 @@ impl CapabilityChangeSet {
     }
 
     /// 按连接下既有能力确认新增/更新分类并校验新能力规则。
-    ///
-    /// 新能力要求期望版本为 `0` 且以停用状态登记；既有能力的实时版本冲突与
-    /// 采购确认覆盖仍由 Service 在调用方事务内判定。
-    ///
-    /// # 参数
-    /// * `existing` - 连接下既有能力声明（调用方事务视图，仅读取代码集合）
-    ///
-    /// # 返回
+    /// 新能力要求期望版本为 `0` 且以停用状态登记；既有能力的实时版本冲突与采购确认覆盖仍由 Service 在调
+    /// 用方事务内判定。
     /// 返回保持输入顺序的已分类变更集。
-    ///
-    /// # 错误
-    /// 当新能力版本不为 `0` 或新能力要求启用时返回
-    /// [`CapabilityChangeSetRejection`]。
-    ///
-    /// # 约束
+    /// 当新能力版本不为 `0` 或新能力要求启用时返回[`CapabilityChangeSetRejection`]。
     /// 纯内存校验；不访问 MongoDB、时钟、ID 生成器或密钥。
+    /// `existing`：连接下既有能力声明（调用方事务视图，仅读取代码集合）
     pub fn classify(
         self,
         existing: &[SupplierApiCapability],
@@ -234,43 +198,19 @@ impl CapabilityChangeSet {
     }
 
     /// 返回形态已校验变更（与输入顺序一致）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回逐条形态已校验变更的只读视图。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn changes(&self) -> &[PendingCapabilityChange] {
         &self.changes
     }
 
     /// 返回变更条数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回已校验变更的数量。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn len(&self) -> usize {
         self.changes.len()
     }
 
     /// 判断变更集是否为空（构造器保证恒为 `false`）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 变更集为空时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn is_empty(&self) -> bool {
         self.changes.is_empty()
     }
@@ -278,43 +218,19 @@ impl CapabilityChangeSet {
 
 impl ClassifiedCapabilityChangeSet {
     /// 返回已分类变更（与输入顺序一致）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回逐条已分类变更的只读视图。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn changes(&self) -> &[ValidatedCapabilityChange] {
         &self.changes
     }
 
     /// 返回变更条数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回已分类变更的数量。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn len(&self) -> usize {
         self.changes.len()
     }
 
     /// 判断变更集是否为空（分类器保证恒为 `false`）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 变更集为空时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn is_empty(&self) -> bool {
         self.changes.is_empty()
     }
@@ -414,7 +330,7 @@ mod tests {
         );
     }
 
-    /// 缺失版本按输入顺序优先；多余版本按映射键顺序返回首个错误。
+    // 验证缺失版本按输入顺序优先；多余版本按映射键顺序返回首个错误。
     #[test]
     fn version_key_errors_keep_input_and_map_order() {
         let missing = CapabilityChangeSet::new(
@@ -435,7 +351,7 @@ mod tests {
         assert_eq!(unexpected, CapabilityChangeSetRejection::UnexpectedExpectedVersion("a-extra".into()));
     }
 
-    /// 重复的既有事实仍只代表能力已存在，分类不得依赖集合是否已去重。
+    // 验证重复的既有事实仍只代表能力已存在，分类不得依赖集合是否已去重。
     #[test]
     fn classification_accepts_duplicate_existing_capability_facts() {
         let existing = vec![

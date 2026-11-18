@@ -55,126 +55,36 @@ pub trait FulfillmentExt {
     /// 客户验收单列表筛选条件类型（定义见 `repository::fulfillment`）。
     type CustomerAcceptanceFilter;
 
-    /// 获取 `purchase_receipt` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `PurchaseReceiptRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得 `purchase_receipt` 集合的仓储，供采购收货表头的读写；由调用方提供执行器。
     fn purchase_receipts(&self) -> PurchaseReceiptRepository<'_>;
 
-    /// 获取 `purchase_receipt_line` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `persistence_core::Repository<'_, crate::entity::fulfillment::PurchaseReceiptLine>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得 `purchase_receipt_line` 集合的仓储，供采购收货明细的读写；由调用方提供执行器。
     fn purchase_receipt_lines(&self) -> persistence_core::Repository<'_, PurchaseReceiptLine>;
 
-    /// 获取 `delivery` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `DeliveryRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得 `delivery` 集合的仓储，供实物发货表头的读写；由调用方提供执行器。
     fn deliveries(&self) -> DeliveryRepository<'_>;
 
-    /// 获取 `delivery_line` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `persistence_core::Repository<'_, crate::entity::fulfillment::DeliveryLine>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得 `delivery_line` 集合的仓储，供实物发货明细的读写；由调用方提供执行器。
     fn delivery_lines(&self) -> persistence_core::Repository<'_, DeliveryLine>;
 
-    /// 获取 `electronic_delivery` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `ElectronicDeliveryRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得 `electronic_delivery` 集合的仓储，供电子交付记录的读写；由调用方提供执行器。
     fn electronic_deliveries(&self) -> ElectronicDeliveryRepository<'_>;
 
-    /// 获取 `service_fulfillment` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `ServiceFulfillmentRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得 `service_fulfillment` 集合的仓储，供服务履约记录的读写；由调用方提供执行器。
     fn service_fulfillments(&self) -> ServiceFulfillmentRepository<'_>;
 
-    /// 获取 `customer_acceptance` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `CustomerAcceptanceRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得 `customer_acceptance` 集合的仓储，供客户验收表头的读写；由调用方提供执行器。
     fn customer_acceptances(&self) -> CustomerAcceptanceRepository<'_>;
 
-    /// 获取 `customer_acceptance_line` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `persistence_core::Repository<'_, crate::entity::fulfillment::CustomerAcceptanceLine>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得 `customer_acceptance_line` 集合的仓储，供客户验收明细的读写；由调用方提供执行器。
     fn customer_acceptance_lines(&self) -> persistence_core::Repository<'_, CustomerAcceptanceLine>;
 
-    /// 获取 `acceptance_fulfillment_allocation` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `persistence_core::Repository<'_, crate::entity::fulfillment::AcceptanceFulfillmentAllocation>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得 `acceptance_fulfillment_allocation` 集合的仓储，供验收分配与反向分配的读写；由调用方提供执行器。
     fn acceptance_fulfillment_allocations(
         &self,
     ) -> persistence_core::Repository<'_, AcceptanceFulfillmentAllocation>;
 
-    /// 获取承载跨集合写入的域专用仓储。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `FulfillmentRepository` 实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得履约表头、明细和验收分配的跨集合操作入口；原子写入沿用用例事务，不在仓储内开启事务。
     fn fulfillment(&self) -> FulfillmentRepository<'_>;
 }
 

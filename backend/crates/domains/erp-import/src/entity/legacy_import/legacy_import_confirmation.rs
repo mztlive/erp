@@ -42,16 +42,7 @@ pub enum ConfirmationStatus {
 }
 
 impl ConfirmationStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 提供确认状态的中文文案，区分等待决定、确认、退回及失效等情况。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Pending => "待确认",
@@ -61,16 +52,7 @@ impl ConfirmationStatus {
         }
     }
 
-    /// 返回状态的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 提供确认状态的稳定代码，供持久化、筛选和矩阵汇总复用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Pending => "PENDING",
@@ -101,16 +83,7 @@ pub enum ConfirmationDecision {
 }
 
 impl ConfirmationDecision {
-    /// 返回决策的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 提供业务决定的中文文案，供责任范围确认和退回修复的展示使用。
     pub fn label(&self) -> &'static str {
         match self {
             Self::ConfirmScope => "确认本范围",
@@ -118,16 +91,7 @@ impl ConfirmationDecision {
         }
     }
 
-    /// 返回决策的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 提供业务决定的稳定代码，确保命令及持久化使用同一含义。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::ConfirmScope => "CONFIRM_SCOPE",
@@ -179,28 +143,13 @@ const OBJECT_TYPE_SCOPE_TABLE: &[(&str, ConfirmationScope)] = &[
     ("期初应收", ConfirmationScope::Finance),
 ];
 
-/// 按对照表查找对象类型对应的确认范围（未注册时返回 `None`）。
-///
-/// # 参数
-/// * `object` - 已大写去空白的对象类型
-///
-/// # 返回
-/// 返回对应的确认范围；未注册时返回 `None`。
+// 用清理并转为大写的来源对象类型查固定对照表；未登记时返回 `None`，由调用方拒绝无法派责的批次。
 fn lookup_confirmation_scope(object: &str) -> Option<ConfirmationScope> {
     OBJECT_TYPE_SCOPE_TABLE.iter().find(|(name, _)| *name == object).map(|(_, scope)| *scope)
 }
 
 impl ConfirmationScope {
-    /// 解析固定确认范围代码。
-    ///
-    /// # 参数
-    /// * `value` - 客户端或持久化范围代码
-    ///
-    /// # 返回
-    /// 返回已注册确认范围。
-    ///
-    /// # 错误
-    /// 范围未注册时返回错误。
+    /// 将请求或存储中的范围代码解析为已登记的确认范围；未知范围返回错误，不允许进入责任矩阵。
     pub fn parse(value: &str) -> Result<Self> {
         match value.trim().to_ascii_uppercase().as_str() {
             "SALES" => Ok(Self::Sales),
@@ -212,16 +161,7 @@ impl ConfirmationScope {
         }
     }
 
-    /// 返回固定范围代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于确认矩阵与持久化的稳定大写代码。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 提供大写的稳定责任范围代码，供矩阵比较和持久化使用。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Sales => "SALES",
@@ -232,16 +172,7 @@ impl ConfirmationScope {
         }
     }
 
-    /// 返回固定责任角色。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回该确认范围唯一对应的 RBAC 责任角色。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回该范围唯一绑定的 RBAC 责任角色，供任务派责和资格核验。
     pub fn owner_role(self) -> &'static str {
         match self {
             Self::Sales => "role-sales",
@@ -252,16 +183,7 @@ impl ConfirmationScope {
         }
     }
 
-    /// 从批次对象集派生全部必要确认范围。
-    ///
-    /// # 参数
-    /// * `source_object_set` - 批次来源对象集合
-    ///
-    /// # 返回
-    /// 返回去重、稳定排序的必要确认范围。
-    ///
-    /// # 错误
-    /// 对象类型未注册或集合为空时返回错误。
+    /// 将批次来源对象集映射为去重、稳定排序的必确认范围；集合为空或包含未登记对象时拒绝生成矩阵。
     pub fn required_for_object_set(source_object_set: &str) -> Result<BTreeSet<Self>> {
         let mut scopes = BTreeSet::new();
         for raw in source_object_set.split(OBJECT_SET_SEPARATORS) {
@@ -353,20 +275,7 @@ pub struct LegacyImportConfirmation {
 }
 
 impl LegacyImportConfirmation {
-    /// 创建待确认确认事实。
-    ///
-    /// 完成确认范围、责任角色、规则版本的校验与规范化（去首尾空白、
-    /// 非空、长度上限）；创建即 `PENDING`，决策与审计字段为空。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::LegacyImportConfirmationId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
-    /// 返回新建的确认事实实体。
-    ///
-    /// # 错误
-    /// 当必填文本为空或超长时返回错误。
+    /// 创建处于 `PENDING` 的确认事实，冻结该任务的责任范围、角色和规则版本，决定与审计字段保持空。必填文本去首尾空白后为空或超长时拒绝。
     pub fn new(
         id: erp_core::ids::LegacyImportConfirmationId,
         data: LegacyImportConfirmationData,
@@ -406,34 +315,12 @@ impl LegacyImportConfirmation {
         })
     }
 
-    /// 生成任务冻结的试算主题版本。
-    ///
-    /// # 参数
-    /// * `batch_version` - 批次业务版本
-    /// * `trial_version` - 试算版本
-    /// * `rule_version` - 导入规则版本
-    ///
-    /// # 返回
-    /// 返回稳定的 `batch/trial/rule` 组合版本。`rule_version` 会先去首尾空白。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将批次、试算和去空白后的规则版本拼成 `batch/trial/rule` 主题版本，用于任务冻结和后续核对。
     pub fn subject_version(batch_version: u32, trial_version: u32, rule_version: &str) -> String {
         format!("batch:{batch_version};trial:{trial_version};rule:{}", rule_version.trim())
     }
 
-    /// 判断确认事实是否属于指定试算快照。
-    ///
-    /// # 参数
-    /// * `batch_version` - 批次业务版本
-    /// * `trial_version` - 试算版本
-    /// * `rule_version` - 导入规则版本
-    ///
-    /// # 返回
-    /// 三项版本一致且确认未失效时返回 `true`。规则版本按原文字比较，不去空白。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 按批次、试算与规则版本核对确认是否属于指定快照，且确认不能已失效；规则直接比较原文，不清理空白。
     pub fn belongs_to_snapshot(&self, batch_version: u32, trial_version: u32, rule_version: &str) -> bool {
         self.batch_version == batch_version
             && self.trial_version == trial_version
@@ -441,31 +328,12 @@ impl LegacyImportConfirmation {
             && self.status != ConfirmationStatus::Invalidated
     }
 
-    /// 判断确认事实是否仍等待责任人决策。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 状态为待确认时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 检查确认事实仍在等待责任人决定，供完成与替换流程识别未处理记录。
     pub fn is_pending(&self) -> bool {
         self.status == ConfirmationStatus::Pending
     }
 
-    /// 返回指定规则版本下最新的有效试算版本。
-    ///
-    /// # 参数
-    /// * `confirmations` - 批次全部确认事实
-    /// * `rule_version` - 当前导入规则版本
-    ///
-    /// # 返回
-    /// 返回未失效确认中的最大试算版本；没有匹配事实时返回 `None`。`rule_version` 先去首尾空白再比较。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 在规则版本匹配且未失效的确认中取最大试算版本，便于选中当前有效矩阵；规则先去首尾空白，无匹配返回 `None`。
     pub fn latest_active_trial(confirmations: &[Self], rule_version: &str) -> Option<u32> {
         confirmations
             .iter()
@@ -477,19 +345,7 @@ impl LegacyImportConfirmation {
             .max()
     }
 
-    /// 返回指定试算快照的确认矩阵。
-    ///
-    /// # 参数
-    /// * `confirmations` - 批次全部确认事实
-    /// * `batch_version` - 批次业务版本
-    /// * `trial_version` - 试算版本
-    /// * `rule_version` - 导入规则版本
-    ///
-    /// # 返回
-    /// 返回属于该快照且未失效的确认事实副本。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 筛出指定批次、试算和规则版本中尚未失效的确认并返回副本，供计算当前确认矩阵。
     pub fn current_matrix(
         confirmations: &[Self],
         batch_version: u32,
@@ -503,19 +359,7 @@ impl LegacyImportConfirmation {
             .collect()
     }
 
-    /// 校验新确认事实对应试算版本的单调性与一致性。
-    ///
-    /// # 参数
-    /// * `confirmations` - 批次已有确认事实
-    /// * `batch_version` - 新确认冻结的批次版本
-    /// * `trial_version` - 新确认冻结的试算版本
-    /// * `rule_version` - 新确认冻结的规则版本
-    ///
-    /// # 返回
-    /// 试算快照合法时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 版本同时达到上限、新试算倒退、同一试算版本字段不一致或当前试算已退回时返回错误。
+    /// 创建确认前校验试算单调性和快照一致性；批次与试算版本同时到上限、试算倒退、同一试算的批次或规则版本不一致，或该试算已退回时拒绝。
     pub fn ensure_trial_snapshot(
         confirmations: &[Self],
         batch_version: u32,
@@ -547,18 +391,7 @@ impl LegacyImportConfirmation {
         Ok(())
     }
 
-    /// 计算确认决策后的唯一下一步。
-    ///
-    /// # 参数
-    /// * `decision` - 本次确认决策
-    /// * `confirmations` - 本试算当前确认矩阵
-    /// * `required_scopes` - 批次必要责任范围
-    ///
-    /// # 返回
-    /// 返回等待其他确认、开始应用或修复重验之一。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 由本次决定和矩阵确定流程去向：退回则修复重验；未退回且所有必确认范围通过即可启动应用，否则等待其他确认。
     pub fn matrix_decision(
         decision: ConfirmationDecision,
         confirmations: &[Self],
@@ -574,20 +407,7 @@ impl LegacyImportConfirmation {
         }
     }
 
-    /// 判断试算矩阵是否已完成全部必要范围确认。
-    ///
-    /// 任一退回事实都会阻断应用；否则全部必要范围必须各有一条已确认事实。
-    /// 未注册范围不会被计入确认集合。
-    ///
-    /// # 参数
-    /// * `confirmations` - 本试算当前确认矩阵
-    /// * `required_scopes` - 批次必要责任范围
-    ///
-    /// # 返回
-    /// 无退回且全部必要范围均已确认时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 只有本轮矩阵没有任何退回且每个必需范围均已有确认时才允许应用；未登记范围不计入确认覆盖。
     pub fn is_matrix_confirmed(
         confirmations: &[Self],
         required_scopes: &BTreeSet<ConfirmationScope>,
@@ -595,22 +415,7 @@ impl LegacyImportConfirmation {
         Self::matrix_confirmed(confirmations.iter(), required_scopes)
     }
 
-    /// 判断指定规则和试算版本是否完成全部必要确认。
-    ///
-    /// 仅纳入当前规则、当前试算且未失效的确认事实；任一退回或必要范围
-    /// 缺失都会阻断应用。
-    ///
-    /// # 参数
-    /// * `confirmations` - 批次全部确认事实
-    /// * `trial_version` - 待应用试算版本
-    /// * `rule_version` - 当前导入规则版本
-    /// * `required_scopes` - 批次必要责任范围
-    ///
-    /// # 返回
-    /// 当前试算矩阵完整且全部确认时返回 `true`。`rule_version` 先去首尾空白再比较。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 只用该规则与试算版本下未失效的事实核对确认覆盖；规则先去首尾空白，存在退回或缺少必确认范围均不得应用。
     pub fn is_trial_confirmed(
         confirmations: &[Self],
         trial_version: u32,
@@ -627,17 +432,7 @@ impl LegacyImportConfirmation {
         )
     }
 
-    /// 从确认事实引用中判定必要范围是否全部已确认。
-    ///
-    /// # 参数
-    /// * `confirmations` - 已按调用场景筛选的确认事实
-    /// * `required_scopes` - 必须完成的责任范围
-    ///
-    /// # 返回
-    /// 任一退回时返回 `false`；否则按已确认范围判定完整性。
-    ///
-    /// # 错误
-    /// 无；未注册范围不会计入确认集合。
+    // 汇总调用方已筛选的确认引用；遇到退回立即否决，否则只用合法范围的已确认记录检查是否覆盖所有责任范围。
     fn matrix_confirmed<'a>(
         confirmations: impl Iterator<Item = &'a Self>,
         required_scopes: &BTreeSet<ConfirmationScope>,
@@ -657,17 +452,7 @@ impl LegacyImportConfirmation {
         required_scopes.iter().all(|scope| confirmed.contains(scope))
     }
 
-    /// 生成不含个人身份的确认矩阵摘要。
-    ///
-    /// # 参数
-    /// * `trial_version` - 试算版本
-    /// * `confirmations` - 本试算确认事实
-    ///
-    /// # 返回
-    /// 返回按范围稳定排序的状态摘要。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 生成带试算版本、按范围稳定排序的状态摘要，供批次展示，不公开确认人身份。
     pub fn matrix_summary(trial_version: u32, confirmations: &[Self]) -> String {
         let states = confirmations
             .iter()
@@ -681,39 +466,13 @@ impl LegacyImportConfirmation {
         format!("trial={trial_version};{encoded}")
     }
 
-    /// 判断本确认是否应被更高试算版本取代。
-    ///
-    /// # 参数
-    /// * `replacement_trial_version` - 新确认事实的试算版本
-    ///
-    /// # 返回
-    /// 当前仍待确认且试算版本更低时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 判断现有记录是否应被较高试算版本替代；只替换尚待确认的旧记录，已完成决定保持原事实。
     pub fn is_replaced_by(&self, replacement_trial_version: u32) -> bool {
         self.status == ConfirmationStatus::Pending && self.trial_version < replacement_trial_version
     }
 
-    /// 完成一次业务确认或退回。
-    ///
-    /// 仅待确认事实可操作；退回（`RETURN_FOR_FIX`）原因代码必填，
-    /// 确认（`CONFIRM_SCOPE`）意见可选（§6.12）。同一事务内由
-    /// `COMPLETE_IMPORT_BUSINESS_CONFIRMATION` 动作命令联动写入
-    /// `workflow_action` 与任务 `COMPLETED`（P3 职责）。
-    ///
-    /// # 参数
-    /// * `decision` - 确认本范围或退回修复
-    /// * `decided_by` - 实际确认或退回人
-    /// * `decided_at` - 实际确认或退回时间
-    /// * `reason_code` - 退回原因代码（退回时必填）
-    /// * `comment` - 意见说明（可为空）
-    ///
-    /// # 返回
-    /// 完成操作返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 非待确认状态、退回缺少原因代码、确认人或说明文本超长时返回错误。
+    /// 为待确认事实登记同意或退回、实际操作人和时间。`RETURN_FOR_FIX` 必须有原因代码，`CONFIRM_SCOPE` 意见可选；非待确认、退回缺原因或确认人和说明文本不合法时返回错误。
+    /// 正式 `COMPLETE_IMPORT_BUSINESS_CONFIRMATION` 命令须在同一事务写入 `workflow_action` 并完成任务（`COMPLETED`），实体方法不负责联动。
     pub fn decide(
         &mut self,
         decision: ConfirmationDecision,
@@ -753,21 +512,8 @@ impl LegacyImportConfirmation {
         Ok(())
     }
 
-    /// 使待确认事实失效并登记替代关系。
-    ///
-    /// 新试算、规则或 manifest 变化后，尚未完成的待确认任务由系统关闭
-    /// （§6.12）：`RETURN_FOR_FIX` 后不转交、不创建后继任务，修复并产生新
-    /// `trial_version` 后才创建新的确认事实和任务，本事实随即失效。
-    ///
-    /// # 参数
-    /// * `replacement_confirmation_id` - 替代确认事实
-    /// * `invalidated_at` - 失效时间
-    ///
-    /// # 返回
-    /// 失效操作返回 `Ok(())`。当前已是 `Invalidated` 时幂等成功，并覆盖失效时间与替代事实。
-    ///
-    /// # 错误
-    /// 当前是 `Confirmed` 或 `Rejected` 时，`ensure_transition` 返回 `InvalidStateTransition`。
+    /// 在新试算、规则或清单替换后，使未完成确认失效并记录替代者及失效时间。退回后不转派或立即创建后继任务，须修复并生成新 `trial_version` 才建立新确认和任务。
+    /// 已失效时可重复写入并覆盖替代者与时间；已确认或已退回则返回 `InvalidStateTransition`。
     pub fn invalidate(
         &mut self,
         replacement_confirmation_id: erp_core::ids::LegacyImportConfirmationId,

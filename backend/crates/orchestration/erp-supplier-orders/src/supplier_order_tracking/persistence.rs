@@ -17,13 +17,13 @@ use super::{SupplierOrderTrackingProcess, later};
 use crate::{Error, Result};
 
 impl SupplierOrderTrackingProcess {
-    /// 在事务中取得单个订单的有期查询权。
-    /// # 参数
-    /// `id` 为已经登记的跟踪身份。
-    /// # 返回
-    /// 到期且没有活跃查询时返回当前检查点，否则返回 None。
-    /// # 错误
-    /// 检查点缺失或并发写入失败时拒绝。
+    // 在事务中取得单个订单的有期查询权。
+    //
+    // `id` 为已经登记的跟踪身份。
+    //
+    // 到期且没有活跃查询时返回当前检查点，否则返回 None。
+    //
+    // 检查点缺失或并发写入失败时拒绝。
     pub(super) async fn claim(&self, id: &str) -> Result<Option<OrderTracking>> {
         let (db, id) = (self.db.clone(), id.to_owned());
         self.db
@@ -58,13 +58,13 @@ impl SupplierOrderTrackingProcess {
             .await
     }
 
-    /// 保存来源证据后再尝试原子应用，冲突和失败也保留真实来源观察。
-    /// # 参数
-    /// 已取得租约的跟踪记录和已核验身份的查询结果。
-    /// # 返回
-    /// 已成为当前应用目标的观察号。
-    /// # 错误
-    /// 租约失效、来源版本冲突、业务状态冲突或保存失败时拒绝应用。
+    // 保存来源证据后再尝试原子应用，冲突和失败也保留真实来源观察。
+    //
+    // 已取得租约的跟踪记录和已核验身份的查询结果。
+    //
+    // 已成为当前应用目标的观察号。
+    //
+    // 租约失效、来源版本冲突、业务状态冲突或保存失败时拒绝应用。
     pub(super) async fn persist_observation(
         &self,
         claimed: &OrderTracking,
@@ -137,24 +137,24 @@ impl SupplierOrderTrackingProcess {
             .await
     }
 
-    /// 释放尚未取得外部单号的检查点，创建恢复由发单流程处理。
-    /// # 参数
-    /// `claimed` 为本轮取得的查询权。
-    /// # 返回
-    /// 将下次查询安排到一分钟后。
-    /// # 错误
-    /// 查询权已变化或保存失败时拒绝。
+    // 释放尚未取得外部单号的检查点，创建恢复由发单流程处理。
+    //
+    // `claimed` 为本轮取得的查询权。
+    //
+    // 将下次查询安排到一分钟后。
+    //
+    // 查询权已变化或保存失败时拒绝。
     pub(super) async fn release_uncreated(&self, claimed: &OrderTracking) -> Result<()> {
         self.release(claimed, None, false).await
     }
 
-    /// 保存安全错误摘要并释放查询权，保持后续只读补查。
-    /// # 参数
-    /// `claimed` 为本轮查询权；`error` 为已脱敏的业务提示。
-    /// # 返回
-    /// 登记人工关注状态并按五分钟退避。
-    /// # 错误
-    /// 检查点已被接管或写入失败时拒绝。
+    // 保存安全错误摘要并释放查询权，保持后续只读补查。
+    //
+    // `claimed` 为本轮查询权；`error` 为已脱敏的业务提示。
+    //
+    // 登记人工关注状态并按五分钟退避。
+    //
+    // 检查点已被接管或写入失败时拒绝。
     pub(super) async fn finish_failure(&self, claimed: &OrderTracking, error: &str) -> Result<()> {
         self.release(claimed, Some(error.chars().take(500).collect()), true).await
     }
@@ -183,13 +183,13 @@ impl SupplierOrderTrackingProcess {
     }
 }
 
-/// 在写入事务内重验本轮查询权，禁止旧执行者覆盖新执行者。
-/// # 参数
-/// 数据库、本轮检查点及调用方事务执行器。
-/// # 返回
-/// 当前仍持有相同查询权的最新检查点。
-/// # 错误
-/// 检查点缺失或查询权变化时拒绝。
+// 在写入事务内重验本轮查询权，禁止旧执行者覆盖新执行者。
+//
+// 数据库、本轮检查点及调用方事务执行器。
+//
+// 当前仍持有相同查询权的最新检查点。
+//
+// 检查点缺失或查询权变化时拒绝。
 pub(super) async fn load_claimed(
     db: &Database,
     claimed: &OrderTracking,
@@ -209,13 +209,13 @@ pub(super) async fn load_claimed(
     Ok(current)
 }
 
-/// 读取同一执行身份的权威退役事实；缺少关联不冒充已退役。
-/// # 参数
-/// 当前业务库、原供应商执行身份和调用方执行器。
-/// # 返回
-/// 执行存在且携带替代采购版本时返回 true。
-/// # 错误
-/// 数据库读取失败时返回原错误。
+// 读取同一执行身份的权威退役事实；缺少关联不冒充已退役。
+//
+// 当前业务库、原供应商执行身份和调用方执行器。
+//
+// 执行存在且携带替代采购版本时返回 true。
+//
+// 数据库读取失败时返回原错误。
 pub(super) async fn is_superseded(db: &Database, id: &str, executor: &mut dyn Executor) -> Result<bool> {
     Ok(db
         .supplier_api_order_executions()

@@ -25,19 +25,8 @@ pub(super) struct PreparedAccounts {
 }
 
 impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
-    /// 按规格补齐岗位账号，并汇总新建、已有和改名数量。
-    ///
-    /// 已有账号不改密码。缺角色时补上，姓名与演示人名不一致时同步。
-    ///
-    /// # 参数
-    /// * `actor` - 当前操作人。
-    /// * `report` - 累计账号数量和提示；本函数会改写其中的账号计数与提示。
-    ///
-    /// # 返回
-    /// 返回规格键和登录名到账号 ID 的映射。
-    ///
-    /// # 错误
-    /// 账号创建、改名、角色补齐或按登录名读取失败时返回对应错误。
+    // 按演示岗位规格创建账号，给已有账号补角色、同步姓名但不改密码。
+    // 返回规格键和登录名到真实 ID 的映射，并记录创建、复用和改名统计；读写失败即停止。
     pub(super) async fn ensure_accounts(
         &self,
         actor: &AuditActor,
@@ -122,7 +111,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         Ok(())
     }
 
-    // 账号 id 不变，审批链、责任规则和部门引用保持有效；不改密码和角色。
+    // 只同步既有账号的显示姓名，保留账号 ID、密码和角色，使审批链、责任规则及部门引用继续有效。
     async fn sync_account_name(&self, actor: &AuditActor, spec: &AccountSpec) -> Result<bool> {
         let Some(existing) =
             self.db.accounts().find_by_account(&spec.account, &mut ReadExecutor::default()).await?
@@ -150,13 +139,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         Ok(true)
     }
 
-    /// 仅把可登录的后台账号解析为演示岗位身份。
-    /// # 参数
-    /// `login` 为固定演示登录名。
-    /// # 返回
-    /// 有效后台身份；不存在或停用时为 None。
-    /// # 错误
-    /// 账号查询失败时返回错误。
+    // 将固定登录名解析为当前启用的后台操作人，供销售或采购步骤以真实岗位身份调用；账号缺失或不可用返回 `None`，读取失败返回错误。
     pub(super) async fn role_actor(&self, login: &str) -> Result<Option<AuditActor>> {
         let found = self.db.accounts().find_by_account(login, &mut ReadExecutor::default()).await?;
         Ok(found
@@ -164,13 +147,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
             .map(|account| AuditActor::new(account.base.id, login.to_string(), AccountKind::Admin)))
     }
 
-    /// 返回有效后台账号 ID，停用账号不得进入审批和默认责任规则。
-    /// # 参数
-    /// `account` 为固定演示登录名。
-    /// # 返回
-    /// 当前可用后台账号的真实 ID。
-    /// # 错误
-    /// 账号不可用或查询失败时返回错误。
+    // 为演示审批和默认责任规则取得可用后台账号的真实 ID；缺失、停用或不是后台账号时拒绝，不把登录名当作主键使用。
     pub(super) async fn account_id(&self, account: &str) -> Result<String> {
         self.db
             .accounts()

@@ -15,12 +15,8 @@ pub struct SigningCompanyFact {
 #[async_trait]
 pub trait SigningCompanyPort: Send + Sync {
     /// 读取签约主体。
-    /// # 参数
-    /// * `id` - 我方公司 ID。
-    /// * `executor` - 用例执行器。
-    /// # 返回
     /// 公司名称与启停状态；非公司或已删除主体为 None。
-    /// # 错误
+    /// `id` 为我方公司 ID；`executor` 为用例执行器。
     /// 事实读取失败。
     async fn company(&self, id: &str, executor: &mut dyn Executor) -> Result<Option<SigningCompanyFact>>;
 }

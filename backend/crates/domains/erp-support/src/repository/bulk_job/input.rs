@@ -20,14 +20,7 @@ pub struct BackgroundJobInput {
 }
 
 impl BackgroundJobInput {
-    /// 构造仅供任务执行使用的有界私有输入。
-    ///
-    /// # 参数
-    /// 格式标识及已序列化字节；格式版本由拥有业务的 Process 解释。
-    /// # 返回
-    /// 返回不执行 I/O 的输入记录。
-    /// # 错误
-    /// 格式为空、过长或字节达到独立容量边界时拒绝。
+    /// 任务登记前构造仅执行端可见的私有输入。格式标识由所属业务流程解释，须非空且最多 128 字节；内容达到 1 MiB 时拒绝，不截断。
     pub fn new(format: impl Into<String>, bytes: Vec<u8>) -> Result<Self> {
         let format = format.into();
         if format.is_empty() || format.len() > 128 || bytes.len() >= BACKGROUND_JOB_INPUT_LIMIT {
@@ -38,13 +31,7 @@ impl BackgroundJobInput {
 }
 
 impl BulkJobRepository<'_> {
-    /// 严格读取已有私有记录；损坏或格式不符时明确失败。
-    /// # 参数
-    /// 任务身份、固定版本格式及当前执行器。
-    /// # 返回
-    /// 没有记录时返回空；有效记录返回完整有界字节。
-    /// # 错误
-    /// 数据库失败或已有记录格式、类型及容量损坏时返回错误。
+    /// 执行任务时按任务 ID 和预期格式沿当前执行器严格读取提交时的私有资料。没有记录返回 `None`；格式、BSON 二进制类型或容量损坏，以及读取失败均返回错误。
     pub async fn strict_job_input(
         &self,
         job_id: &BackgroundJobId,
@@ -66,14 +53,8 @@ impl BulkJobRepository<'_> {
             .transpose()
     }
 
-    /// 在任务登记的原事务中保存私有输入，不另开事务或覆盖既有记录。
-    ///
-    /// # 参数
-    /// 任务身份、已校验输入以及创建任务和明细使用的同一执行器。
-    /// # 返回
-    /// 输入与任务、明细一起提交时可见；由 `_id` 唯一索引保护一任务一输入。
-    /// # 错误
-    /// 唯一键竞争、事务或数据库写入失败时保留仓储错误。
+    /// 登记任务和明细时沿原事务插入私有输入，以任务 ID 作 `_id`，不另开事务或覆盖旧记录。
+    /// 唯一键竞争、事务失败或数据库写入失败时保留仓储错误。
     pub async fn create_job_input(
         &self,
         job_id: &BackgroundJobId,
@@ -89,14 +70,8 @@ impl BulkJobRepository<'_> {
         .await
     }
 
-    /// 读取指定任务的私有有界输入；不通过普通任务列表、详情或导出暴露内容。
-    ///
-    /// # 参数
-    /// 任务身份、期望格式以及调用方执行器。
-    /// # 返回
-    /// 格式及二进制容量有效时返回字节；无记录或损坏记录返回 `None`，供旧任务回退。
-    /// # 错误
-    /// 数据库读取失败时保留仓储错误，不把持久化失败解释为不存在。
+    /// 有兼容存储链路的任务恢复时，按任务 ID 和预期格式读取私有字节，不向列表、详情、明细或导出返回。
+    /// 无记录或记录损坏返回 `None` 供旧链路回退；数据库读取失败原样传播，不能视为缺记录。
     pub async fn job_input(
         &self,
         job_id: &BackgroundJobId,
@@ -113,13 +88,13 @@ impl BulkJobRepository<'_> {
     }
 }
 
-/// 二进制 BSON 保持字节内容与独立容量上限，不复制成逐字节数组。
+// 登记私有输入时用任务 ID 作物理主键、用 Generic BSON Binary 保存有效载荷，避免把字节编码成普通数组。
 fn input_document(job_id: &BackgroundJobId, input: &BackgroundJobInput) -> Document {
     doc! { "_id": job_id.as_ref(), "format": &input.format,
     "payload": Bson::Binary(Binary { subtype: BinarySubtype::Generic, bytes: input.bytes.clone() }) }
 }
 
-/// 私有格式、二进制类型或容量损坏时不尝试解释为业务输入。
+// 解包私有输入时核对版本格式、BSON 二进制类型和容量；任一不匹配即返回 `None`，由对应读取入口决定报错或回退。
 fn input_bytes(mut record: Document, format: &str) -> Option<Vec<u8>> {
     if record.get_str("format").ok()? != format {
         return None;
@@ -139,7 +114,7 @@ fn input_bytes(mut record: Document, format: &str) -> Option<Vec<u8>> {
 mod tests {
     use super::*;
 
-    /// BSON 记录按任务物理主键存储二进制，格式和内容往返保持原样。
+    // 验证BSON 记录按任务物理主键存储二进制，格式和内容往返保持原样。
     #[test]
     fn private_input_roundtrips_binary_with_task_identity() {
         let input = BackgroundJobInput::new("format-v1", vec![0, 255, 7]).unwrap();
@@ -149,7 +124,7 @@ mod tests {
         assert_eq!(input_bytes(record, "format-v1"), Some(vec![0, 255, 7]));
     }
 
-    /// 容量界限前一字节允许私有输入，达到界限整体拒绝，不截断内容。
+    // 验证容量界限前一字节允许私有输入，达到界限整体拒绝，不截断内容。
     #[test]
     fn private_input_capacity_and_format_are_bounded() {
         assert!(BackgroundJobInput::new("format", vec![0; BACKGROUND_JOB_INPUT_LIMIT - 1]).is_ok());
@@ -159,7 +134,7 @@ mod tests {
         assert!(BackgroundJobInput::new("f".repeat(129), vec![]).is_err());
     }
 
-    /// 旧记录无格式、异格式、错误字节类型和超限损坏均返回兼容回退标记。
+    // 验证旧记录无格式、异格式、错误字节类型和超限损坏均返回兼容回退标记。
     #[test]
     fn legacy_and_corrupt_inputs_are_unavailable() {
         assert!(input_bytes(doc! { "_id": "job" }, "format-v1").is_none());

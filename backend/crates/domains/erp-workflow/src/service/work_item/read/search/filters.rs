@@ -30,12 +30,11 @@ pub struct WorkspaceFilters {
 
 impl WorkspaceFilters {
     /// 解析并校验查询边界。
-    /// # 参数
-    /// `raw` 为可选 JSON 条件。
-    /// # 返回
     /// 返回去重后的合法条件。
-    /// # 错误
+    ///
     /// 非法字段、日期、类型或过长条件返回校验错误。
+    ///
+    /// `raw` 为可选 JSON 条件。
     pub fn parse(raw: Option<&str>) -> Result<Self> {
         let mut value: Self = match raw {
             Some(raw) if raw.len() <= 32000 => serde_json::from_str(raw)
@@ -78,7 +77,7 @@ impl WorkspaceFilters {
         Ok(value)
     }
 
-    /// 校验日期字段与含首尾日的区间。
+    // 规范化队列筛选时检查日期格式及含首尾的区间是否有效，不把非法日期当成无筛选。
     fn validate_dates(&self) -> Result<()> {
         if self.date_field.as_deref().is_some_and(|v| !["created", "due", "completed"].contains(&v)) {
             return Err(Error::ValidationError("时间类型不支持".into()));
@@ -95,12 +94,9 @@ impl WorkspaceFilters {
     }
 
     /// 返回当前维度的已选值，用于保留候选标签。
-    /// # 参数
-    /// `key` 为筛选字段名。
-    /// # 返回
     /// 该字段的已选值；未知字段返回空切片。
-    /// # 错误
-    /// 无。
+    ///
+    /// `key` 为筛选字段名。
     pub fn selected(&self, key: &str) -> &[String] {
         match key {
             "item_types" => &self.item_types,
@@ -116,12 +112,11 @@ impl WorkspaceFilters {
     }
 
     /// 判断全部结构化条件；同维度 OR，不同维度 AND。
-    /// # 参数
-    /// `document` 为已授权事项检索资料。
-    /// # 返回
     /// 全部条件成立时返回 true。
-    /// # 错误
-    /// 无；输入条件须先经过 parse 校验。
+    ///
+    /// 输入条件须先经过 parse 校验。
+    ///
+    /// `document` 为已授权事项检索资料。
     pub fn matches(&self, document: &SearchDocument) -> bool {
         let facets = [
             (&self.item_types, "item_types"),

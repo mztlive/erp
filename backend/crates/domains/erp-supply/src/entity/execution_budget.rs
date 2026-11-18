@@ -74,12 +74,9 @@ pub struct ApprovedExecutionBudget {
 
 impl ApprovedExecutionBudget {
     /// 从完整采购修订与全部执行组冻结本组金额预算。
-    /// # 参数
-    /// `revision` 为不可变采购修订，`execution` 为当前组，商品、费用和执行组必须完整。
-    /// # 返回
     /// 数量及金额守恒的本组预算和运费来源分配。
-    /// # 错误
     /// 重复来源、数量不守恒、手工供给混入、跨连接或未支持收费时拒绝。
+    /// `revision` 为不可变采购修订，`execution` 为当前组，商品、费用和执行组必须完整。
     pub fn freeze(
         revision: &str,
         execution: &str,

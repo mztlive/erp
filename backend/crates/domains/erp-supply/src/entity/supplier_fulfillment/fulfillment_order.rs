@@ -72,27 +72,10 @@ pub struct SupplierFulfillmentOrderData {
 
 impl SupplierFulfillmentOrderData {
     /// 构造已进入提交中的供应商子订单数据。
-    ///
-    /// 初始三条状态与提交时间由领域规则统一设置，调用方只提供稳定身份和地址
-    /// 快照，不得自行组合不一致的初始状态。
-    ///
-    /// # 参数
-    /// * `fulfillment_order_no` - ERP 供应商子订单号
-    /// * `supplier_id` - 固定供应商
-    /// * `connection_id` - 供应商 API 连接
-    /// * `split_no` - 确定性拆单序号
-    /// * `submitted_at` - 提交供应商的时间
-    /// * `address_snapshot_encrypted` - 地址快照密文
-    /// * `address_snapshot_fingerprint` - 地址查询指纹
-    ///
-    /// # 返回
+    /// 初始三条状态与提交时间由领域规则统一设置，调用方只提供稳定身份和地址快照，不得自行组合不一致的初
+    /// 始状态。
     /// 返回主线为提交中、取消与退款均为无的创建数据。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 约束
-    /// 无。
+    /// `address_snapshot_encrypted`：地址快照密文。
     pub fn submitting(
         fulfillment_order_no: impl Into<String>,
         supplier_id: SupplierAccountId,
@@ -122,16 +105,8 @@ impl SupplierFulfillmentOrderData {
     }
 
     /// 写入创建时解析出的内部跟进人及其主属组织。
-    ///
-    /// # 参数
-    /// * `follow_up_user_id` - 合格内部人员
-    /// * `business_org_unit_id` - 该人员主属组织
-    ///
-    /// # 返回
     /// 返回带责任事实的创建数据。
-    ///
-    /// # 错误
-    /// 无；空值由 `SupplierFulfillmentOrder::new` 与创建命令阻断。
+    /// 空值由 `SupplierFulfillmentOrder::new` 与创建命令阻断。
     pub fn with_follow_up(
         mut self,
         follow_up_user_id: impl Into<String>,
@@ -194,18 +169,9 @@ pub struct SupplierFulfillmentOrder {
 
 impl SupplierFulfillmentOrder {
     /// 创建供应商子订单。
-    ///
-    /// 完成单号/地址快照的校验与规范化，并按状态机校验里程碑时间（§6.19：
-    /// 提交后 `submitted_at` 必填、接单后 `accepted_at` 必填、完成后 `completed_at` 必填）。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::SupplierFulfillmentOrderId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
+    /// 完成单号/地址快照的校验与规范化，并按状态机校验里程碑时间（§6.19：提交后 `submitted_at` 必填、接
+    /// 单后 `accepted_at` 必填、完成后 `completed_at` 必填）。
     /// 返回新建的子订单实体。
-    ///
-    /// # 错误
     /// 单号/地址快照为空或超长、状态与里程碑时间不一致时返回错误。
     pub fn new(id: SupplierFulfillmentOrderId, data: SupplierFulfillmentOrderData) -> Result<Self> {
         let fulfillment_order_no = normalize_required_text(
@@ -266,17 +232,8 @@ impl SupplierFulfillmentOrder {
     }
 
     /// 更新供应商子订单。
-    ///
-    /// 复用 `new` 的校验规则；单号、来源、供应商、连接、拆单序号与三条状态是
-    /// 关键字段，状态只能通过 `advance_*` 系列方法推进。
-    ///
-    /// # 参数
-    /// * `update` - 更新数据
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
+    /// 复用 `new` 的校验规则；单号、来源、供应商、连接、拆单序号与三条状态是关键字段，状态只能通过
+    /// `advance_*` 系列方法推进。
     /// 外部订单号为空或超长时返回错误。
     pub fn update(&mut self, update: SupplierFulfillmentOrderUpdate) -> Result<()> {
         if let Some(external_order_no) = update.external_order_no {
@@ -291,19 +248,9 @@ impl SupplierFulfillmentOrder {
     }
 
     /// 推进履约主线状态。
-    ///
-    /// 按 §7.6 固化邻接矩阵校验迁移；进入 `SUBMITTING`/`ACCEPTED`/`COMPLETED` 时
-    /// 补填缺失的里程碑时间，重复回调（幂等迁移）不覆盖已记录时间。
-    ///
-    /// # 参数
-    /// * `to` - 目标状态
-    ///
-    /// # 返回
-    /// 迁移成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 目标不在合法后继中（含从高状态回低状态）时返回
-    /// [`erp_core::Error::InvalidStateTransition`]。
+    /// 按 §7.6 固化邻接矩阵校验迁移；进入 `SUBMITTING`/`ACCEPTED`/`COMPLETED` 时补填缺失的里程碑时间，重
+    /// 复回调（幂等迁移）不覆盖已记录时间。
+    /// 目标不在合法后继中（含从高状态回低状态）时返回[`erp_core::Error::InvalidStateTransition`]。
     pub fn advance_fulfillment(&mut self, to: FulfillmentStatus) -> Result<()> {
         ensure_transition(self.fulfillment_status, to)?;
 
@@ -329,14 +276,6 @@ impl SupplierFulfillmentOrder {
     }
 
     /// 推进取消进度状态。
-    ///
-    /// # 参数
-    /// * `to` - 目标状态
-    ///
-    /// # 返回
-    /// 迁移成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 目标不在合法后继中时返回 [`erp_core::Error::InvalidStateTransition`]。
     pub fn advance_cancel(&mut self, to: CancelStatus) -> Result<()> {
         ensure_transition(self.cancel_status, to)?;
@@ -345,14 +284,6 @@ impl SupplierFulfillmentOrder {
     }
 
     /// 推进退款进度状态。
-    ///
-    /// # 参数
-    /// * `to` - 目标状态
-    ///
-    /// # 返回
-    /// 迁移成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 目标不在合法后继中时返回 [`erp_core::Error::InvalidStateTransition`]。
     pub fn advance_refund(&mut self, to: RefundStatus) -> Result<()> {
         ensure_transition(self.refund_status, to)?;
@@ -361,12 +292,9 @@ impl SupplierFulfillmentOrder {
     }
 
     /// 核对本地订单尚无已发送或外部创建结果。
-    /// # 参数
-    /// 无；使用当前履约状态与外部订单号。
-    /// # 返回
     /// 本地接收且没有外部订单号时允许随未发采购执行退役。
-    /// # 错误
     /// 已发送、结果未知或已保存外部订单时拒绝。
+    /// 使用当前履约状态与外部订单号。
     pub fn ensure_unsubmitted(&self) -> Result<()> {
         if self.external_order_no.is_some() || self.fulfillment_status != FulfillmentStatus::Received {
             return Err(Error::from(
@@ -377,14 +305,7 @@ impl SupplierFulfillmentOrder {
     }
 
     /// 校验调用方持有的订单版本仍是当前版本。
-    ///
-    /// # 参数
-    /// * `expected` - 调用方读取到的订单版本
-    ///
-    /// # 返回
     /// 版本一致时返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 版本不一致时返回领域错误。
     pub fn ensure_version(&self, expected: u64) -> Result<()> {
         if self.base.version != expected {
@@ -394,28 +315,13 @@ impl SupplierFulfillmentOrder {
     }
 
     /// 判断订单是否属于指定供应商。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 待校验供应商
-    ///
-    /// # 返回
     /// 供应商一致时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn belongs_to_supplier(&self, supplier_id: &SupplierAccountId) -> bool {
         self.supplier_id == *supplier_id
     }
 
     /// 返回与履约完成状态一致的正式完成时间。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 已完成订单返回完成时间；尚未完成且没有完成时间时返回 `None`。
-    ///
-    /// # 错误
     /// 完成状态缺少完成时间，或未完成状态携带完成时间时返回领域错误。
     pub fn confirmed_completed_at(&self) -> Result<Option<Instant>> {
         match (self.fulfillment_status, self.completed_at) {
@@ -426,15 +332,8 @@ impl SupplierFulfillmentOrder {
         }
     }
 
-    /// 校验订单已经到达取消完成终态。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
+    /// 核对订单已经到达取消完成终态。
     /// 取消状态为 `CANCELED` 时返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 订单尚未取消完成时返回领域错误。
     pub fn ensure_canceled(&self) -> Result<()> {
         if self.cancel_status != CancelStatus::Canceled {
@@ -444,15 +343,7 @@ impl SupplierFulfillmentOrder {
     }
 
     /// 根据订单状态与原供应商动作状态判定已验证业务终态。
-    ///
-    /// # 参数
-    /// * `action` - 与订单关联的原下单、取消或退款动作
-    ///
-    /// # 返回
     /// 订单与动作共同证明终态时返回对应结果；关系或状态不足时返回 `None`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn verified_resolution(
         &self,
         action: &SupplierOrderAction,
@@ -494,15 +385,7 @@ impl SupplierFulfillmentOrder {
     }
 
     /// 判断原下单动作是否处于可由明确无结果证据重放的状态。
-    ///
-    /// # 参数
-    /// * `action` - 待重放的原动作
-    ///
-    /// # 返回
     /// 订单与动作均为结果未知的原下单请求时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn can_replay_place_action(&self, action: &SupplierOrderAction) -> bool {
         action.supplier_fulfillment_order_id.as_ref() == self.base.id
             && action.action_type == SupplierOrderActionType::Place
@@ -511,15 +394,7 @@ impl SupplierFulfillmentOrder {
     }
 
     /// 判断订单是否已具备内部跟进人与非公司业务组织。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 跟进人与业务组织均已写入且组织不是公司根时为 true。
-    ///
-    /// # 错误
-    /// 无。
     pub fn has_follow_up(&self) -> bool {
         !self.follow_up_user_id.trim().is_empty()
             && !self.business_org_unit_id.trim().is_empty()
@@ -527,14 +402,7 @@ impl SupplierFulfillmentOrder {
     }
 
     /// 创建或写命令前阻断缺少跟进人的订单。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 责任事实完整时成功。
-    ///
-    /// # 错误
     /// 缺跟进人或业务组织为公司根时拒绝。
     pub fn ensure_follow_up(&self) -> Result<()> {
         if self.has_follow_up() {
@@ -544,18 +412,10 @@ impl SupplierFulfillmentOrder {
     }
 
     /// 显式交接内部跟进人与可选业务组织。
-    ///
     /// 业务组织不随接收人部门隐式变化；`None` 表示保留原组织。
-    ///
-    /// # 参数
-    /// * `target_user_id` - 目标跟进人
-    /// * `target_org_unit_id` - 显式目标组织；`None` 保留原组织
-    ///
-    /// # 返回
     /// 责任确有变化时返回 `true`。
-    ///
-    /// # 错误
     /// 目标为空、组织为公司根或与当前完全一致时拒绝。
+    /// `target_org_unit_id`：显式目标组织；`None` 保留原组织。
     pub fn handover(&mut self, target_user_id: String, target_org_unit_id: Option<String>) -> Result<bool> {
         let target = normalize_required_text(
             target_user_id,
@@ -582,8 +442,7 @@ impl SupplierFulfillmentOrder {
 }
 
 impl fmt::Debug for SupplierFulfillmentOrder {
-    /// 脱敏调试输出：地址快照加密值与查询指纹只输出 `<redacted>`，
-    /// 禁止在日志中泄漏敏感值（数据模型 §4.5.5）。
+    // 脱敏调试输出：地址快照加密值与查询指纹只输出 `<redacted>`，禁止在日志中泄漏敏感值（数据模型 §4.5.5）。
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("SupplierFulfillmentOrder")
@@ -607,16 +466,8 @@ impl fmt::Debug for SupplierFulfillmentOrder {
     }
 }
 
-/// 校验状态与里程碑时间的一致性（§6.19：到达该状态后对应时间必填）。
-///
-/// # 参数
-/// * `status` - 履约主线状态
-/// * `submitted_at` - 提交时间
-/// * `accepted_at` - 接单时间
-/// * `completed_at` - 完成时间
-///
-/// # 错误
-/// 状态已越过提交/接单/完成节点但对应时间为空时返回错误。
+// 校验状态与里程碑时间的一致性（§6.19：到达该状态后对应时间必填）。
+// 状态已越过提交/接单/完成节点但对应时间为空时返回错误。
 fn ensure_timestamp_consistency(
     status: FulfillmentStatus,
     submitted_at: Option<Instant>,
@@ -636,7 +487,7 @@ fn ensure_timestamp_consistency(
     Ok(())
 }
 
-/// 规范化业务组织；公司根一律拒绝。
+// 规范化业务组织；公司根一律拒绝。
 fn normalize_org_unit(value: String) -> Result<String> {
     let org = normalize_optional_text(
         Some(value).filter(|item| !item.trim().is_empty()),
@@ -650,23 +501,17 @@ fn normalize_org_unit(value: String) -> Result<String> {
     Ok(org)
 }
 
-/// 判断组织 ID 是否为禁止写入的公司根。
+// 检查组织 ID 是否为禁止写入的公司根。
 fn is_company_org(org: &str) -> bool {
     org.eq_ignore_ascii_case("company")
 }
 
 /// 计算敏感值的带密钥 HMAC 查询指纹（数据模型 §4.5.5，禁止裸摘要）。
-///
-/// # 参数
-/// * `plain` - 敏感明文（如履约地址快照原文，仅取首尾去空白后的内容）
-/// * `key` - 密钥字节
-///
-/// # 返回
 /// 返回 64 字符十六进制 HMAC-SHA256 摘要；同一明文与密钥恒等，不同密钥产生不同指纹。
-///
-/// # 说明
-/// 仅在测试环境编译：`hmac`/`sha2` 目前是 dev-dependencies（P0 冻结）；生产路径如需
-/// 生成指纹，需经 `chore/erp-p0-amend-*` 地基修订把依赖提升为正式依赖（列为地基修订候选）。
+/// 仅在测试环境编译：`hmac`/`sha2` 目前是 dev-dependencies（P0 冻结）；生产路径如需生成指纹，需经
+/// `chore/erp-p0-amend-*` 地基修订把依赖提升为正式依赖（列为地基修订候选）。
+/// `plain`：敏感明文（如履约地址快照原文，仅取首尾去空白后的内容）
+/// `key`：密钥字节。
 #[cfg(test)]
 pub fn fingerprint(plain: &str, key: &[u8]) -> String {
     use hmac::{Hmac, KeyInit, Mac};

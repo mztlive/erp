@@ -21,7 +21,7 @@ pub struct ParsedProductSheet {
 }
 
 impl ParsedProductSheet {
-    /// 新提交必须携带供给列；历史任务仍由解析器按旧布局恢复。
+    // 新提交必须携带供给列；历史任务仍由解析器按旧布局恢复。
     pub(super) fn ensure_supply_template(&self) -> Result<()> {
         if self.rows.iter().any(|row| row.cells.len() != PRODUCT_IMPORT_HEADERS.len()) {
             return Err(invalid(
@@ -43,11 +43,10 @@ pub struct ParsedProductRow {
 
 /// 解析产品报价表字节。
 ///
-/// # 参数
-/// * `bytes` - 不超过商品上传限制的 XLSX 原文。
-/// # 返回
+/// `bytes`：不超过商品上传限制的 XLSX 原文。
+///
 /// 「对内」工作表数据行与图片映射。
-/// # 错误
+///
 /// ZIP/XML 损坏、解压超限、模板缺失或表头不匹配时返回校验错误。
 pub fn parse_product_quote_xlsx(bytes: &[u8]) -> Result<ParsedProductSheet> {
     if bytes.is_empty()
@@ -94,7 +93,7 @@ pub fn parse_product_quote_xlsx(bytes: &[u8]) -> Result<ParsedProductSheet> {
     Ok(ParsedProductSheet { rows: data_rows, image_targets })
 }
 
-/// 先匹配完整旧表头，再严格校验新模板，避免将历史售价解释为供给成本。
+// 先匹配完整旧表头，再严格校验新模板，避免将历史售价解释为供给成本。
 fn template_width(headers: &[String]) -> Result<usize> {
     for layout in [legacy::HEADERS, legacy::COMPACT_HEADERS] {
         if headers.iter().take(layout.len()).map(|cell| cell.trim()).eq(layout.iter().copied()) {
@@ -115,7 +114,7 @@ fn template_width(headers: &[String]) -> Result<usize> {
     Ok(PRODUCT_IMPORT_HEADERS.len())
 }
 
-/// 模板后的附加列继续忽略；DISPIMG 保留公式，其余单元格使用缓存值。
+// 模板后的附加列继续忽略；DISPIMG 保留公式，其余单元格使用缓存值。
 fn parse_sheet_rows(xml: &str, shared: &[String]) -> Result<Vec<ParsedProductRow>> {
     let limits = SheetLimits { columns: 16_384, rows: 10_000, retained_columns: legacy::HEADERS.len() };
     let sheet = xlsx::rows(xml, shared, limits)?;
@@ -289,7 +288,7 @@ mod tests {
         assert_eq!(row3.cells[8], "名称B");
     }
 
-    /// 旧版报价表第 25 列（含出厂价列）只被忽略，不影响原 24 列取价。
+    // 验证：旧版报价表第 25 列（含出厂价列）只被忽略，不影响原 24 列取价。
     #[test]
     fn columns_after_the_template_are_ignored() {
         for header in ["备注", "出厂价（含税）"] {
@@ -365,7 +364,7 @@ mod tests {
         assert_eq!(parsed.rows[0].cells[7], "inline&lt;");
     }
 
-    /// 新旧模板都映射到同一建品输入；旧成本价与模板外附加内容不得串入参考售价。
+    // 验证：新旧模板都映射到同一建品输入；旧成本价与模板外附加内容不得串入参考售价。
     #[test]
     fn compact_and_legacy_workbooks_preserve_product_fields() {
         for (headers, positions) in [
@@ -403,7 +402,7 @@ mod tests {
         }
     }
 
-    /// 表头调换必须明确拒绝，不能按近似布局读入错误业务字段。
+    // 验证：表头调换必须明确拒绝，不能按近似布局读入错误业务字段。
     #[test]
     fn reordered_headers_are_rejected() {
         for original in [PRODUCT_IMPORT_HEADERS, super::legacy::HEADERS] {
@@ -414,7 +413,7 @@ mod tests {
         }
     }
 
-    /// 新列全部保留并进入供给 DTO；成本与起订量不得写入公司参考售价。
+    // 验证：新列全部保留并进入供给 DTO；成本与起订量不得写入公司参考售价。
     #[test]
     fn supply_template_preserves_supplier_columns_and_separates_prices() {
         let values = [
@@ -477,7 +476,7 @@ mod tests {
         assert_eq!(sku.bulk_min_quantity.unwrap().to_string(), "30");
     }
 
-    /// 旧文件可恢复既有任务，但不能作为新的联合导入提交。
+    // 验证：旧文件可恢复既有任务，但不能作为新的联合导入提交。
     #[test]
     fn historical_templates_are_recovery_only() {
         for headers in [super::legacy::HEADERS, super::legacy::COMPACT_HEADERS, &PRODUCT_IMPORT_HEADERS[..16]]

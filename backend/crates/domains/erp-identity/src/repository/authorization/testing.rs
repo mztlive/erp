@@ -169,7 +169,7 @@ pub(crate) fn inquiry_members(access: &CompiledAccess) -> Vec<String> {
     rows.into_iter().map(|row| row.get_str("id").unwrap().to_owned()).collect()
 }
 
-/// 用固定真实来源样本执行生产管理列表条件；缺失和无权来源不能进入结果。
+// 用真实来源样本运行生产管理列表的授权条件，验证无权或缺失来源的记录被过滤。
 pub(crate) fn management_members(access: &CompiledAccess) -> Vec<String> {
     let rows = vec![
         doc! {"id":"sales", "deleted_at":0, "management_sales_order_sales_order":["sale"]},

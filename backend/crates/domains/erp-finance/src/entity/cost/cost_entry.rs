@@ -46,16 +46,7 @@ pub enum CostType {
 }
 
 impl CostType {
-    /// 返回类型的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为界面或响应展示提供成本类型的中文名称；机器筛选和存储不使用该名称。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Product => "商品",
@@ -70,16 +61,7 @@ impl CostType {
         }
     }
 
-    /// 返回类型的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将成本类型转成用于持久化和查询的稳定代码，与中文展示文案分开。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Product => "product",
@@ -113,16 +95,7 @@ pub enum CostStage {
 }
 
 impl CostStage {
-    /// 返回阶段的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为界面或响应展示提供成本阶段的中文名称；机器筛选和存储不使用该名称。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Expected => "预计",
@@ -132,16 +105,7 @@ impl CostStage {
         }
     }
 
-    /// 返回阶段的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将成本阶段转成用于持久化和查询的稳定代码，与中文展示文案分开。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Expected => "expected",
@@ -152,15 +116,7 @@ impl CostStage {
     }
 
     /// 判断是否进入一期实际盈亏。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 阶段为 `Actual` 或 `Reduction` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 结果：阶段为 `Actual` 或 `Reduction` 时返回 `true`。
     pub fn is_profit_relevant(&self) -> bool {
         matches!(self, Self::Actual | Self::Reduction)
     }
@@ -181,16 +137,7 @@ pub enum CostScope {
 }
 
 impl CostScope {
-    /// 返回范围的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为界面或响应展示提供成本归属范围的中文名称；机器筛选和存储不使用该名称。
     pub fn label(&self) -> &'static str {
         match self {
             Self::NonVoucherFulfillment => "非卡券履约",
@@ -200,16 +147,7 @@ impl CostScope {
         }
     }
 
-    /// 返回范围的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将成本归属范围转成用于持久化和查询的稳定代码，与中文展示文案分开。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::NonVoucherFulfillment => "non_voucher_fulfillment",
@@ -236,16 +174,7 @@ pub enum CostBasis {
 }
 
 impl CostBasis {
-    /// 返回基础的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为界面或响应展示提供成本金额依据的中文名称；机器筛选和存储不使用该名称。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Actual => "实际",
@@ -254,16 +183,7 @@ impl CostBasis {
         }
     }
 
-    /// 返回基础的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将成本金额依据转成用于持久化和查询的稳定代码，与中文展示文案分开。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Actual => "actual",
@@ -366,22 +286,17 @@ pub struct CostEntry {
 }
 
 impl CostEntry {
-    /// 创建成本事实。
+    /// 准备入账时校验来源和金额，形成可追溯且可分配的成本事实。
     ///
     /// 完成来源文本的 trim/非空/长度校验、金额恒等（gross = net + tax）与非负
     /// 校验、进项税率非负校验，并执行二期取值规则：商城消费范围必填
     /// `cost_basis`，且 `NONE` 不得作为成本事实入表。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::CostEntryId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
     /// 返回新建的成本事实实体。
-    ///
-    /// # 错误
     /// 当来源字段为空/超长、金额恒等不成立或为负、税率为负、商城消费缺
     /// `cost_basis` 或使用 `NONE` 取值时返回错误。
+    ///
+    /// 输入约定：
+    /// - `id`：实体主键（`erp_core::ids::CostEntryId`）
     pub fn new(id: CostEntryId, data: CostEntryData) -> Result<Self> {
         validate_amounts(data.gross_amount, data.net_amount, data.tax_amount)?;
         if data.input_tax_rate.to_decimal().is_sign_negative() {
@@ -420,20 +335,7 @@ impl CostEntry {
         })
     }
 
-    /// 更新成本事实。
-    ///
-    /// 正式事实过账后不可更新（数据模型 §4.5），任何字段的修改都被拒绝，
-    /// 差额或冲减必须追加新阶段成本事实。
-    ///
-    /// # 参数
-    /// * `update` - 更新数据（恒被拒绝）
-    /// * `updated_by` - 更新执行人（恒被拒绝）
-    ///
-    /// # 返回
-    /// 恒返回错误。
-    ///
-    /// # 错误
-    /// 任何调用都返回错误：正式事实过账后不可更新，须追加差额成本事实。
+    /// 拒绝改写已过账成本事实，差额或冲减应追加对应阶段的成本记录。
     pub fn update(&mut self, update: CostEntryData, updated_by: impl Into<String>) -> Result<()> {
         let _ = (update, updated_by);
         Err(Error::from("正式事实过账后不可更新，请追加差额成本事实"))
@@ -444,15 +346,7 @@ impl CostEntry {
     /// 规则（数据模型 §6.10）：一期「订单实际经营盈亏」只汇总
     /// `cost_scope = NON_VOUCHER_FULFILLMENT` 且 `cost_stage IN (ACTUAL,
     /// REDUCTION)` 的不含税净额。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 满足一期实际盈亏口径时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 结果：满足一期实际盈亏口径时返回 `true`。
     pub fn is_phase1_profit_relevant(&self) -> bool {
         self.cost_scope == CostScope::NonVoucherFulfillment && self.cost_stage.is_profit_relevant()
     }
@@ -467,7 +361,7 @@ struct SourceKey {
 }
 
 impl SourceKey {
-    /// trim、非空与长度校验来源唯一键。
+    // 登记成本来源前清理唯一键两端空白，并拒绝空键或超长键，避免同一来源用不同拼写入账。
     fn normalize(fact_type: String, document_id: String, line_id: String, version: String) -> Result<Self> {
         Ok(Self {
             fact_type: normalize_required_text(
@@ -488,20 +382,16 @@ impl SourceKey {
     }
 }
 
-/// 校验成本金额三元组恒等且非负。
-///
-/// 规则（数据模型 §4.2）：含税金额必须精确等于不含税金额加税额。
-///
-/// # 参数
-/// * `gross` - 含税金额
-/// * `net` - 不含税金额
-/// * `tax` - 税额
-///
-/// # 返回
-/// 恒等成立返回 `Ok(())`。
-///
-/// # 错误
-/// 分量为负或恒等不成立时返回错误。
+// 校验成本金额三元组恒等且非负。
+//
+// 规则（数据模型 §4.2）：含税金额必须精确等于不含税金额加税额。
+// 结果：恒等成立返回 `Ok(())`。
+// 分量为负或恒等不成立时返回错误。
+//
+// 输入约定：
+// - `gross`：含税金额
+// - `net`：不含税金额
+// - `tax`：税额
 fn validate_amounts(gross: Amount, net: Amount, tax: Amount) -> Result<()> {
     if gross.to_decimal().is_sign_negative()
         || net.to_decimal().is_sign_negative()
@@ -515,20 +405,16 @@ fn validate_amounts(gross: Amount, net: Amount, tax: Amount) -> Result<()> {
     Ok(())
 }
 
-/// 校验二期取值规则。
-///
-/// 规则（数据模型 §6.10）：商城消费范围必填 `cost_basis`；`NONE` 不保存伪造的
-/// 零成本金额，只在消费归集对象上标记。
-///
-/// # 参数
-/// * `scope` - 成本归属范围
-/// * `basis` - 成本取值基础
-///
-/// # 返回
-/// 合法返回 `Ok(())`。
-///
-/// # 错误
-/// 商城消费缺 `cost_basis` 或 `cost_basis` 为 `NONE` 时返回错误。
+// 校验二期取值规则。
+//
+// 规则（数据模型 §6.10）：商城消费范围必填 `cost_basis`；`NONE` 不保存伪造的
+// 零成本金额，只在消费归集对象上标记。
+// 结果：合法返回 `Ok(())`。
+// 商城消费缺 `cost_basis` 或 `cost_basis` 为 `NONE` 时返回错误。
+//
+// 输入约定：
+// - `scope`：成本归属范围
+// - `basis`：成本取值基础
 fn validate_basis(scope: CostScope, basis: Option<CostBasis>) -> Result<()> {
     match basis {
         Some(CostBasis::None) => Err(Error::from("NONE 不保存伪造的零成本金额，只在消费归集对象上标记")),

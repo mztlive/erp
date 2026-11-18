@@ -38,22 +38,9 @@ pub struct StartTaskContext<'a> {
     pub now: Instant,
 }
 
-/// 复验人员并写入运行态，随后构造尚未冻结附件的提交快照。
-///
-/// # 参数
-/// * `db` - 业务与审批数据库。
-/// * `identity` - 应用共享身份服务。
-/// * `writes` - 已写入启动收据对应的计划。
-/// * `payload` - 已冻结的业务提交载荷。
-/// * `now` - 调用方状态变更时间。
-/// * `missing_entry` - 入口既有的缺少执行错误。
-/// * `executor` - 业务提交使用的同一执行器。
-///
-/// # 返回
-/// 返回可由入口补充专有展示资料的快照。
-///
-/// # 错误
-/// 缺少入口执行、人员复验、运行态写入或快照构造失败时立即停止。
+/// 在业务提交的执行器上重验动态审批人，按已登记回执的计划写入审批实例、入口执行和列表投影。
+/// 返回尚未冻结附件的快照，供业务入口补充专有展示资料。
+/// 缺少入口执行时使用调用方提供的错误；人员复验、运行态写入或快照构造失败时停止。
 pub async fn persist_start_runtime(
     db: &Database,
     identity: &Arc<AuthorizationService>,
@@ -121,20 +108,8 @@ async fn apply_runtime_steps(steps: &impl StartRuntimeSteps, executor: &mut dyn 
     steps.create_runtime(executor).await
 }
 
-/// 冻结附件并保存提交快照，沿用入口的写入顺序。
-///
-/// # 参数
-/// * `identity_service` - 同一应用注入的共享身份与权限服务。
-/// * `db` - 业务与审批数据库。
-/// * `snapshot` - 入口已补充专有展示资料的快照。
-/// * `executor` - 同一业务提交执行器。
-/// * `auth` - 材料来源的业务授权端口。
-///
-/// # 返回
-/// 冻结资料和快照保存完成时返回空值。
-///
-/// # 错误
-/// 附件冻结或快照写入失败时立即返回，调用方不得继续创建任务。
+/// 在原提交事务内复验附件转授资格并冻结附件与重提展示资料。
+/// 先保存不可变快照，再保存启动抄送，供后续任务引用同一份提交资料；任一步失败都不得继续创建任务。
 pub async fn persist_start_snapshot<A: WorkflowAuthorizationPort>(
     identity_service: &Arc<AuthorizationService>,
     rbac: &SharedRbacService,
@@ -151,19 +126,8 @@ pub async fn persist_start_snapshot<A: WorkflowAuthorizationPort>(
     Ok(())
 }
 
-/// 依计划顺序创建入口人工任务，并返回首个任务回执。
-///
-/// # 参数
-/// * `db` - 工作项数据库。
-/// * `writes` - 启动计划；非人工任务意图跳过。
-/// * `context` - 入口确定的单据类型、责任与时间。
-/// * `executor` - 同一业务提交执行器。
-///
-/// # 返回
-/// 返回首个任务的 ID 与版本；无人工任务时返回 `None`。
-///
-/// # 错误
-/// 任一任务构造或保存失败时停止，不继续后续任务。
+/// 从同事务已保存的快照继承审批关联，按计划创建人工入口任务，再追加对应的订单读取授权事件。
+/// 跟随计划顺序返回首项任务的 ID 和版本；无人工任务返回 `None`，任务构造或保存失败即停止。
 pub async fn persist_start_tasks(
     db: &Database,
     writes: &PlannedWrites,

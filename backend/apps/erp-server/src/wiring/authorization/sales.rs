@@ -53,13 +53,9 @@ impl AccessFactsPort for SalesObjects {
     }
 }
 
-/// 复用销售与客户实现绑定固定销售查询入口。
-/// # 参数
-/// db、customers、customer_mapping 为共享业务设施。
-/// # 返回
-/// 根事实、固定查询绑定及供资金来源复用的销售 Mapping。
-/// # 错误
-/// 查询模型或真实来源描述不匹配时拒绝。
+// 复用销售与客户实现绑定固定销售查询入口。
+// 根事实、固定查询绑定及供资金来源复用的销售 Mapping。
+// 查询模型或真实来源描述不匹配时拒绝。
 pub(super) fn bindings(
     db: Database,
     customers: Arc<dyn AccessFactsPort>,

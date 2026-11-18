@@ -4,15 +4,11 @@ use erp_core::{Error, Result};
 use sha2::{Digest, Sha256};
 
 /// 为稳定销售行集合构造采购任务责任键。
-///
-/// # 参数
-/// * `line_ids` - 已按稳定身份排序去重的销售行 ID
-///
-/// # 返回
 /// 返回长度边界安全的 `sales-lines:<sha256>` 责任键。
+/// 失败条件：行集合为空时返回领域错误。
 ///
-/// # 错误
-/// 行集合为空时返回领域错误。
+/// 输入约定：
+/// - `line_ids`：已按稳定身份排序去重的销售行 ID
 pub fn procurement_responsibility_key(line_ids: &[String]) -> Result<String> {
     if line_ids.is_empty() {
         return Err(Error::from("供给分配任务责任行不能为空"));

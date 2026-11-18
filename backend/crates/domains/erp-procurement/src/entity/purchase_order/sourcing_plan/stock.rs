@@ -17,16 +17,7 @@ pub struct StockBasisLine {
 }
 
 impl StockBasisLine {
-    /// 判断本行是否覆盖指定稳定销售行。
-    ///
-    /// # 参数
-    /// * `sales_order_line_id` - 稳定销售行
-    ///
-    /// # 返回
-    /// 覆盖行匹配时返回 `true`。
-    ///
-    /// # 错误
-    /// 无。
+    // 判断本行是否覆盖指定稳定销售行。覆盖行匹配时返回 `true`。
     fn covers(&self, sales_order_line_id: &str) -> bool {
         self.coverage.revision_line.sales_order_line_id.as_ref() == sales_order_line_id
     }
@@ -46,16 +37,7 @@ pub struct StockBasisGroup {
 }
 
 impl StockBasisGroup {
-    /// 查找余额依据中的稳定销售行。
-    ///
-    /// # 参数
-    /// * `sales_order_line_id` - 稳定销售行
-    ///
-    /// # 返回
-    /// 命中时返回该行，否则返回 `None`。
-    ///
-    /// # 错误
-    /// 无。
+    /// 查找余额依据中的稳定销售行。命中时返回该行，否则返回 `None`。
     pub fn line_for(&self, sales_order_line_id: &str) -> Option<&StockBasisLine> {
         self.lines.iter().find(|line| line.covers(sales_order_line_id))
     }
@@ -63,20 +45,12 @@ impl StockBasisGroup {
 
 /// 形成绑定销售 guard、库存余额版本与逐行剩余量的现有库存依据 ID。
 ///
-/// # 参数
-/// * `order` - 销售稳定单
-/// * `group` - 现有库存余额依据
-/// * `work_item_id` - 冻结本依据责任范围的开放任务
+/// guard 每次成功创建后推进，使作废释放的剩余量可形成新依据；余额版本、可用量与逐行剩余量任一变化都会改变依据身份。
 ///
-/// # 返回
 /// 返回 `{sales_order_id}:{sha256}` 稳定依据 ID。
 ///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// guard 每次成功创建后推进，使作废释放的剩余量可形成新依据；余额版本、
-/// 可用量与逐行剩余量任一变化都会改变依据身份。
+/// - `order`：销售稳定单。
+/// - `work_item_id`：冻结本依据责任范围的开放任务。
 pub fn stock_basis_id_for(order: &SalesOrder, group: &StockBasisGroup, work_item_id: &str) -> String {
     let mut parts = vec![
         order.base.id.clone(),

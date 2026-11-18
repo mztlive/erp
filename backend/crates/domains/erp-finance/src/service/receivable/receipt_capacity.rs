@@ -12,18 +12,14 @@ use crate::repository::ReceivableExt;
 use crate::repository::prelude::*;
 use crate::{Error, Result};
 
-/// 读取已授权子账的当前核销额度，不写入也不另开事务。
-///
-/// # 参数
-/// * `db` - 财务数据库。
-/// * `account_ids` - 调用方已授权的子账。
-/// * `executor` - 调用方快照事务。
-///
-/// # 返回
-/// 扣除已核销、冲减、审批占用并受子账余额限制的项目额度。
-///
-/// # 错误
+/// 向已授权调用方提供应收子账此刻的可核销额度，供校验分配；沿用原执行器，不写入或另开事务。
+/// 结果：扣除已核销、冲减、审批占用并受子账余额限制的项目额度。
 /// 查询或金额运算失败时返回错误。
+///
+/// 输入约定：
+/// - `db`：财务数据库。
+/// - `account_ids`：调用方已授权的子账。
+/// - `executor`：调用方快照事务。
 pub async fn receipt_capacity(
     db: &Database,
     account_ids: &[String],
@@ -33,18 +29,14 @@ pub async fn receipt_capacity(
     load(db, accounts, None, executor).await
 }
 
-/// 写锁全部来源子账后重验额度；新提交及最终核销共用本入口。
-///
-/// # 参数
-/// * `db` - 财务数据库。
-/// * `receipt` - 当前回款及本次全部拟核销明细。
-/// * `executor` - 调用方写事务，失败须整体回滚。
-///
-/// # 返回
-/// 锁定子账并确认扣除其他回款占用后仍足额时成功。
-///
-/// # 错误
+/// 回款提交或者最终核销前锁定全部来源子账并重验额度，防止两个命令按同一旧余额占用。
+/// 结果：锁定子账并确认扣除其他回款占用后仍足额时成功。
 /// 来源缺失、主体不符、余额不足或并发写冲突时返回错误。
+///
+/// 输入约定：
+/// - `db`：财务数据库。
+/// - `receipt`：当前回款及本次全部拟核销明细。
+/// - `executor`：调用方写事务，失败须整体回滚。
 pub async fn reserve_receipt(
     db: &Database,
     receipt: &CustomerReceipt,
@@ -54,16 +46,14 @@ pub async fn reserve_receipt(
     load(db, accounts, Some(&receipt.base.id), executor).await?.validate(receipt)
 }
 
-/// 释放审批占用前锁定原来源子账，不要求旧分配仍可重新占用。
-///
-/// # 参数
-/// * `db` - 财务数据库。
-/// * `receipt` - 尚保留原分配的回款单。
-/// * `executor` - 同一驳回事务执行器。
-/// # 返回
-/// 原来源子账已锁定；调用方须在同一事务将回款移出审批中。
-/// # 错误
+/// 撤销回款审批占用时先锁定原来源子账；释放旧占用不要求原分配还能作为新占用通过校验。
+/// 结果：原来源子账已锁定；调用方须在同一事务将回款移出审批中。
 /// 来源子账缺失或并发写入冲突时返回错误。
+///
+/// 输入约定：
+/// - `db`：财务数据库。
+/// - `receipt`：尚保留原分配的回款单。
+/// - `executor`：同一驳回事务执行器。
 pub async fn release_receipt(
     db: &Database,
     receipt: &CustomerReceipt,

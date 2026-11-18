@@ -3,13 +3,9 @@
 use super::{WorkItem, WorkItemStatus, WorkItemType};
 
 impl WorkItem {
-    /// 判断任务是否具有有效的开放供给分配责任范围。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
+    /// 当任务具有有效的开放供给分配责任范围时返回 `true`。
     /// 未删除、开放、对象为销售单且冻结责任完整时返回 `true`。
-    /// # 错误
+    ///
     /// 不返回错误；不完整任务返回 `false`。
     pub fn is_open_procurement_task(&self) -> bool {
         !self.base.is_deleted()

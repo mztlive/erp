@@ -11,57 +11,39 @@ use crate::Result;
 /// 导入行的业务写入与结果保存；单行保存必须原子推进明细和任务版本。
 #[async_trait]
 pub(super) trait ImportRowExecution: Send {
-    /// 执行前重验取消状态与当前任务版本。
-    ///
-    /// # 参数
-    /// * `job` - 当前切片持有的任务版本。
-    ///
-    /// # 返回
-    /// 仍可推进时返回 true；取消、完成或版本变化时返回 false。
-    ///
-    /// # 错误
-    /// 读取任务失败时返回错误。
+    // 执行前重验取消状态与当前任务版本。
+    //
+    // `job`：当前切片持有的任务版本。
+    //
+    // 仍可推进时返回 true；取消、完成或版本变化时返回 false。
+    //
+    // 读取任务失败时返回错误。
     async fn prepare(&mut self, job: &BackgroundJob) -> Result<bool>;
 
-    /// 执行一行并返回可持久化的业务结果；失败行也必须带上结果，而不是中断整批。
-    ///
-    /// # 参数
-    /// * `row_number` - 源表行号。
-    ///
-    /// # 返回
-    /// 返回该行的状态、错误码、摘要和可选商品身份。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 执行一行并返回可持久化的业务结果；失败行也必须带上结果，而不是中断整批。
+    //
+    // 返回该行的状态、错误码、摘要和可选商品身份。
     async fn import(&mut self, row_number: u32) -> RecordedOutcome;
 
-    /// 保存当前行和任务进度；取消或其他执行器写入必须通过版本冲突拒绝。
-    ///
-    /// # 参数
-    /// * `job` - 当前导入任务，保存成功后反映新进度。
-    /// * `item` - 已写入本行结果的明细。
-    ///
-    /// # 返回
-    /// 明细与任务版本已原子推进。
-    ///
-    /// # 错误
-    /// 仓储失败时返回对应错误。
+    // 保存当前行和任务进度；取消或其他执行器写入必须通过版本冲突拒绝。
+    //
+    // `job`：当前导入任务，保存成功后反映新进度；`item`：已写入本行结果的明细。
+    //
+    // 明细与任务版本已原子推进。
+    //
+    // 仓储失败时返回对应错误。
     async fn persist(&mut self, job: &mut BackgroundJob, item: BackgroundJobItem) -> Result<()>;
 }
 
-/// 跳过已有结果，只逐行执行未完成项；保存失败时禁止继续执行后续行。
-///
-/// # 参数
-/// * `execution` - 单行导入与进度保存。
-/// * `job` - 当前导入任务。
-/// * `items` - 任务明细；已有 `status` 的行跳过。
-/// * `budget` - 本任务的行数与时间预算。
-///
-/// # 返回
-/// 一个切片已执行并保存，或取消、并发认领后停止；未处理行留待下轮。
-///
-/// # 错误
-/// 行结果无法写入明细，或保存失败且不是并发认领时返回对应错误。
+// 每次商品导入轮询只处理无结果行；行结果保存后才处理下一行，达到切片预算时留下未处理行供恢复。
+//
+// - `execution`：单行导入与进度保存。
+// - `items`：任务明细；已有 `status` 的行跳过。
+// - `budget`：本任务的行数与时间预算。
+//
+// 一个切片已执行并保存，或取消、并发认领后停止；未处理行留待下轮。
+//
+// 行结果无法写入明细，或保存失败且不是并发认领时返回对应错误。
 pub(super) async fn execute_rows(
     execution: &mut impl ImportRowExecution,
     job: &mut BackgroundJob,
@@ -151,7 +133,7 @@ mod tests {
             Ok(self.cancel_at != Some(job.processed_count))
         }
 
-        /// 第二行模拟业务失败，其他行返回成功及对应商品身份。
+        // 第二行模拟业务失败，其他行返回成功及对应商品身份。
         async fn import(&mut self, row_number: u32) -> RecordedOutcome {
             self.events.push(("import", row_number));
             let status = if row_number == 2 { ItemStatus::Failed } else { ItemStatus::Success };
@@ -163,7 +145,7 @@ mod tests {
             )
         }
 
-        /// 仅成功保存的任务和明细进入恢复快照。
+        // 仅成功保存的任务和明细进入恢复快照。
         async fn persist(&mut self, job: &mut BackgroundJob, item: BackgroundJobItem) -> Result<()> {
             self.events.push(("persist", item.item_no));
             if self.fail_at == Some(item.item_no) {
@@ -220,7 +202,7 @@ mod tests {
         (job, items)
     }
 
-    /// 超过原分片大小的任务也必须逐行提交，失败行计数与混合终态保持正确。
+    // 验证超过分片规模的商品任务也交替执行和保存各行，并正确累计失败行及生成混合终态。
     #[tokio::test]
     async fn each_row_is_saved_before_the_next_row_runs() {
         let (mut job, items) = fixture(105);
@@ -236,7 +218,7 @@ mod tests {
         assert!(job.finished_at.is_some());
     }
 
-    /// 取消或其他执行器造成进度版本冲突时，当前行之后不得继续创建商品。
+    // 验证取消或其他执行器写入造成进度版本冲突时，当前行之后不再创建商品。
     #[tokio::test]
     async fn concurrent_progress_change_stops_before_the_next_business_write() {
         let (mut job, items) = fixture(105);
@@ -247,7 +229,7 @@ mod tests {
         assert_eq!(execution.saved_job.unwrap().processed_count, 1);
     }
 
-    /// 保存失败只留下当前未提交行；恢复时保留之前的成功和失败结果，不再导入这些行。
+    // 验证保存出错后从未提交行恢复；已记录的成功和失败都保留，不再次执行这些行。
     #[tokio::test]
     async fn recovery_keeps_previously_saved_outcomes_and_runs_only_unfinished_rows() {
         let (mut job, items) = fixture(4);

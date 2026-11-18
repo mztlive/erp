@@ -20,22 +20,14 @@ use persistence_core::Executor;
 use crate::repository::IntegrationOpsExt;
 
 /// 构造本域固定授权目录与查询映射。
-/// # 参数
-/// db 为事实仓储所在数据库。
-/// # 返回
-/// 完整目录和按资源登记的列表映射。
-/// # 错误
-/// 固定登记非法时启动失败；构造不执行 I/O。
+///
+/// 完整目录和按资源登记的列表映射。固定登记非法时启动失败；构造不执行 I/O。
 pub fn facts(db: Database) -> Arc<dyn AccessFactsPort> {
     Arc::new(IntegrationFacts { db })
 }
 /// 返回固定集成资源查询映射。
-/// # 参数
-/// resource 为本域资源标识。
-/// # 返回
-/// 原始集合及真实归属字段的静态映射。
-/// # 错误
-/// 未知资源返回接入错误。
+///
+/// 原始集合及真实归属字段的静态映射。未知资源返回接入错误。
 pub fn mapping(resource: &str) -> IdentityResult<Arc<dyn AccessMapping>> {
     let collection = match resource {
         "integration_error_task" => Database::INTEGRATION_ERROR_TASKS,

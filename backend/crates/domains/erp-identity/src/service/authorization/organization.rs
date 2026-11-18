@@ -28,13 +28,12 @@ impl Deref for OrganizationScope {
 }
 
 impl OrganizationScope {
-    /// 组织预览、交付及首次写入前核验原快照和全部范围期限。
-    /// # 参数
-    /// executor 为取得组织范围的原事务执行器。
-    /// # 返回
-    /// 原快照阶段与组织范围有效期均满足时成功。
-    /// # 错误
-    /// 跨事务、跨阶段或关系到期时拒绝。
+    // 组织预览、交付及首次写入前核验原快照和全部范围期限。
+    // 原快照阶段与组织范围有效期均满足时成功。
+    //
+    // 跨事务、跨阶段或关系到期时拒绝。
+    //
+    // executor 为取得组织范围的原事务执行器。
     pub(crate) fn ensure_current(&self, executor: &mut dyn Executor) -> Result<()> {
         if !self.boundary.is_current(executor) {
             return Err(Error::ValidationError("组织范围不能跨事务或读取阶段使用".into()));
@@ -47,13 +46,12 @@ impl OrganizationScope {
 }
 
 impl AuthorizationService {
-    /// 为组织配置的固定域内入口取得单次范围。
-    /// # 参数
-    /// actor 为当前身份，permission 为固定组织入口，executor 为原快照事务。
-    /// # 返回
-    /// 同一次完整资格、组织范围及边界；不向业务域开放政策选择。
-    /// # 错误
-    /// 入口不支持、资格不完整、非快照或组织设施失败时拒绝。
+    // 为组织配置的固定域内入口取得单次范围。
+    // 同一次完整资格、组织范围及边界；不向业务域开放政策选择。
+    //
+    // 入口不支持、资格不完整、非快照或组织设施失败时拒绝。
+    //
+    // actor 为当前身份，permission 为固定组织入口，executor 为原快照事务。
     pub(crate) async fn organization_scope(
         &self,
         actor: &AuditActor,

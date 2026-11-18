@@ -58,11 +58,7 @@ struct CreateInput<'a> {
 }
 impl PortalOfferingService {
     /// 对提交快照建立或修订正式供给；所有读取写入使用审核Executor。
-    /// # 参数
-    /// 审核上下文、当前资格Port及执行器。
-    /// # 返回
     /// 唯一正式结果及是否首次新增。
-    /// # 错误
     /// 非法身份、版本、开放资格、API来源或条款失效时拒绝。
     pub async fn apply_application<P: PortalQuoteQualificationPort + ?Sized>(
         &self,
@@ -119,12 +115,9 @@ impl PortalOfferingService {
         }
     }
     /// 新品审核复用的首版供给步骤；不要求新品先有定向开放记录。
-    /// # 参数
-    /// 新品SKU已由同事务正式建档，上下文保留原申请及内部责任。
-    /// # 返回
     /// 供给三元组结果。
-    /// # 错误
     /// 身份、资格、订货编码冲突或条款非法拒绝。
+    /// 新品SKU已由同事务正式建档，上下文保留原申请及内部责任。
     pub async fn create_for_new_product<P: QualificationPort + ?Sized>(
         &self,
         input: ConfirmedOfferingInput<'_>,
@@ -158,7 +151,7 @@ impl PortalOfferingService {
 
         self.create_confirmed(CreateInput::from_context(&input)?, qualification, executor).await
     }
-    /// 校验条款与资格后写入供给、首版修订和可供投影；订货身份已存在则冲突。
+    // 核验条款与资格后写入供给、首版修订和可供投影；订货身份已存在则冲突。
     async fn create_confirmed<P: QualificationPort + ?Sized>(
         &self,
         input: CreateInput<'_>,
@@ -197,7 +190,7 @@ impl PortalOfferingService {
             .await?;
         Ok(ConfirmedOfferingResult { result: formal_result(&offering, &revision, "CREATED"), created: true })
     }
-    /// 有新条款时追加修订，无差异则复用当前修订；无条款时把供给标为停止。
+    // 有新条款时追加修订，无差异则复用当前修订；无条款时把供给标为停止。
     async fn revise_confirmed<P: QualificationPort + ?Sized>(
         &self,
         revision: RevisionInput<'_>,
@@ -246,7 +239,7 @@ impl PortalOfferingService {
             })
         }
     }
-    /// 读取本供应商可写供给，并拒绝版本漂移、条款号变化或已停止供给。
+    // 查询本供应商可写供给，并拒绝版本漂移、条款号变化或已停止供给。
     async fn confirmation_target(
         &self,
         input: &ConfirmedOfferingInput<'_>,
@@ -275,13 +268,10 @@ impl PortalOfferingService {
         }
         Ok(offering)
     }
-    /// 在当前执行器加载正式条款指针，缺失引用失败关闭。
-    /// # 参数
-    /// 当前已授权供给及执行器。
-    /// # 返回
-    /// 当前不可变正式条款。
-    /// # 错误
-    /// 引用缺失或数据库失败。
+    // 在当前执行器加载正式条款指针，缺失引用失败关闭。
+    // 当前不可变正式条款。
+    // 引用缺失或数据库失败。
+    // 当前已授权供给及执行器。
     pub(super) async fn current_revision(
         &self,
         offering: &SupplierOffering,
@@ -304,7 +294,7 @@ impl PortalOfferingService {
         Ok(revision)
     }
 }
-/// 确认人须为内部账号，申请仍为已提交，且当前快照等于最后一次冻结提交。
+// 核实人须为内部账号，申请仍为已提交，且当前快照等于最后一次冻结提交。
 fn ensure_confirmation(input: &ConfirmedOfferingInput<'_>) -> Result<()> {
     if input.actor.kind() != AccountKind::Admin {
         return Err(Error::Forbidden("仅内部人员可确认供给".into()));
@@ -328,7 +318,7 @@ fn ensure_confirmation(input: &ConfirmedOfferingInput<'_>) -> Result<()> {
     ensure_text(input.maintainer_user_id, "供给内部维护人")?;
     ensure_text(input.business_org_unit_id, "供给业务组织")
 }
-/// 没有调用方事务会话时拒绝正式供给写入。
+// 没有调用方事务会话时拒绝正式供给写入。
 fn ensure_transaction(executor: &mut dyn Executor) -> Result<()> {
     if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
         return Err(Error::Internal("门户正式供给写入必须使用调用方事务".into()));
@@ -350,7 +340,7 @@ fn formal_result(
 }
 
 impl<'a> CreateInput<'a> {
-    /// 只从首次报价快照组装创建输入，其它申请类型返回校验错误。
+    // 只从首次报价快照组装创建输入，其它申请类型返回校验错误。
     fn from_context(context: &'a ConfirmedOfferingInput<'a>) -> Result<Self> {
         let OfferingApplicationSnapshot::ExistingQuote {
             sku_id,
@@ -395,7 +385,7 @@ impl<'a> CreateInput<'a> {
             self.context.actor.id(),
         )?)
     }
-    /// 校验填报时间与数量后构造可供投影，更新人取最后一次提交人。
+    // 核验填报时间与数量后构造可供投影，更新人取最后一次提交人。
     fn availability(&self, id: SupplierOfferingId) -> Result<SupplierOfferingAvailability> {
         let received_at = Instant::now();
         validate_portal_reported_at(self.availability_reported_at, received_at)?;

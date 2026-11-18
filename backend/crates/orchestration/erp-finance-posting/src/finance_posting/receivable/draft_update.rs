@@ -21,15 +21,8 @@ use crate::{Error, Result};
 impl ReceivableProcess {
     /// 保存原回款草稿的到账字段，保留单号、来源与原登记人。
     ///
-    /// # 参数
-    /// * `id` - 原回款单主键
-    /// * `req` - 原单当前版本与可编辑字段
-    /// * `actor` - 当前已认证登记人
+    /// `id` 为原回款单主键；`req` 为原单当前版本与可编辑字段；`actor` 为当前已认证登记人。返回保存后的回款详情，含新乐观锁版本。
     ///
-    /// # 返回
-    /// 返回保存后的回款详情，含新乐观锁版本。
-    ///
-    /// # 错误
     /// 无提交或完整资金源读取资格、非原登记人、非草稿、版本变化或字段非法时拒绝。
     pub async fn update_customer_receipt(
         &self,
@@ -65,7 +58,7 @@ impl ReceivableProcess {
     }
 }
 
-/// 在当前事务重读原单，执行资格、版本和字段校验，再保存原单 CAS。
+// 在当前事务重读原单，执行资格、版本和字段校验，再保存原单 CAS。
 async fn persist_receipt_draft(
     db: &Database,
     id: &str,

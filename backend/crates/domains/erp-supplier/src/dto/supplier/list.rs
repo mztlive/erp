@@ -70,17 +70,9 @@ pub(crate) struct SupplierListQuery {
 }
 
 impl SupplierListParams {
-    /// 归一化供应商角色列表查询参数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单、排序方向非法，或供应能力、资质类型代码无法识别时
-    /// 返回 `ValidationError`。
+    // 将客户端输入规整为可用于筛选的供应商角色列表查询参数。
+    // 返回不依赖仓储类型的规范化查询参数。
+    // 排序字段不在白名单、排序方向非法，或供应能力、资质类型代码无法识别时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<SupplierListQuery> {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, SUPPLIER_SORT_FIELDS)?;
         Ok(SupplierListQuery {
@@ -122,16 +114,10 @@ pub enum SupplierQualificationHealth {
 }
 
 impl From<QualificationHealth> for SupplierQualificationHealth {
-    /// 将实体折叠结果映射为列表响应枚举。
-    ///
-    /// DTO→仓储的同名单向转换见 [`SupplierQualificationHealth::to_repository_filter`]
-    /// （erp-supplier-008）；调用处只剩一句转换，映射关系集中一处维护。
-    ///    ///
-    /// # 参数
-    /// * `health` - 实体层资质健康状态
-    ///
-    /// # 返回
-    /// 返回同名的 HTTP 契约枚举值。
+    // 将实体折叠结果映射为列表响应枚举。
+    // DTO→仓储的同名单向转换见 [`SupplierQualificationHealth::to_repository_filter`]（erp-supplier-008）；
+    // 调用处只剩一句转换，映射关系集中一处维护。   ///。
+    // 返回同名的 HTTP 契约枚举值。
     fn from(health: QualificationHealth) -> Self {
         match health {
             QualificationHealth::Unverified => Self::Unverified,
@@ -144,19 +130,9 @@ impl From<QualificationHealth> for SupplierQualificationHealth {
 }
 
 impl SupplierQualificationHealth {
-    /// 映射为仓储侧健康筛选（erp-supplier-008）。
-    ///
-    /// 两枚举变体一一对应；新增健康态时只改此处与上方的 `From`，
-    /// 调用处的 5 分支 `match` 已收敛为一句转换。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回仓储侧同名筛选枚举。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 映射为仓储侧健康筛选（erp-supplier-008）。
+    // 两枚举变体一一对应；新增健康态时只改此处与上方的 `From`，调用处的 5 分支 `match` 已收敛为一句转换。
+    // 返回仓储侧同名筛选枚举。
     pub(crate) fn to_repository_filter(self) -> crate::repository::SupplierQualificationHealthFilter {
         type HealthFilter = crate::repository::SupplierQualificationHealthFilter;
         match self {
@@ -169,17 +145,17 @@ impl SupplierQualificationHealth {
     }
 }
 
-/// 归一化逗号分隔的供应能力代码。
+// 归一化逗号分隔的供应能力代码。
 fn normalize_capability_codes(value: Option<&str>) -> Result<Vec<CapabilityCode>> {
     normalize_code_list(value, "供应能力", CapabilityCode::from_code)
 }
 
-/// 归一化逗号分隔的资质类型代码。
+// 归一化逗号分隔的资质类型代码。
 fn normalize_qualification_types(value: Option<&str>) -> Result<Vec<QualificationType>> {
     normalize_code_list(value, "资质类型", QualificationType::from_code)
 }
 
-/// 清理、去重并校验逗号分隔的固定枚举代码。
+// 清理、去重并校验逗号分隔的固定枚举代码。
 fn normalize_code_list<T: Copy + Eq>(
     value: Option<&str>,
     field: &str,

@@ -11,11 +11,8 @@ use crate::http::state::HttpState;
 use crate::wiring::sales_timeline_service;
 
 /// 沿实例阅读授权返回相关业务动态。
-/// # 参数
 /// `state`、`actor` 为应用与身份；`id`、`query` 为实例及分页。
-/// # 返回
 /// 返回经前后授权重验的动态。
-/// # 错误
 /// 实例不可见、来源变化或读取失败时返回统一错误。
 pub async fn approval_timeline(
     State(state): State<HttpState>,

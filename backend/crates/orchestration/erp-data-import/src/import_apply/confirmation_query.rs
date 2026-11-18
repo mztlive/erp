@@ -25,18 +25,13 @@ use crate::{Error, Result};
 impl ImportApplyProcess {
     /// 分页查询导入确认事实列表。
     ///
-    /// # 参数
-    /// * `params` - 查询参数（`batch_id` 为主要筛选）。
-    /// * `actor` - 当前查询人，用于任务授权投影。
-    ///
+    /// - `params`：查询参数（`batch_id` 为主要筛选）。
+    /// - `actor`：当前查询人，用于任务授权投影。
     /// 工作项授权使用构造时注入的应用授权服务。
     ///
-    /// # 返回
     /// 返回契约形状的分页视图。无权或不存在的任务降级为只读投影，不因此失败。
     ///
-    /// # 错误
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单。
-    ///
     /// 确认或任务查询失败、责任目的地解析失败，以及除 `Forbidden` 与 `NotFound` 以外的任务授权失败，返回对应错误。
     pub async fn confirmation_list(
         &self,
@@ -55,7 +50,7 @@ impl ImportApplyProcess {
             .await
     }
 
-    /// 入口、确认事实、姓名与工作项投影使用同一授权快照。
+    // 入口、确认事实、姓名与工作项投影使用同一授权快照。
     async fn confirmation_list_stage(
         &self,
         params: &LegacyImportConfirmationListParams,
@@ -86,7 +81,7 @@ impl ImportApplyProcess {
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
-    /// 已授权确认页的工作项与姓名在同一快照补齐。
+    // 已授权确认页的工作项与姓名在同一快照补齐。
     async fn confirmation_views(
         &self,
         rows: Vec<LegacyImportConfirmationRow>,
@@ -155,18 +150,13 @@ fn confirmation_row_view(
     }
 }
 
-/// 把任务实体映射为 W18 真实任务投影。
-///
-/// 处理状态固定为 `READY`，不附带领域动作。
-///
-/// # 参数
-/// * `item` - 导入确认任务。
-///
-/// # 返回
-/// 返回保留真实任务类型、状态与责任字段的投影。
-///
-/// # 错误
-/// 不返回错误。
+// 把任务实体映射为 W18 真实任务投影。
+//
+// 处理状态固定为 `READY`，不附带领域动作。
+//
+// `item`：导入确认任务。
+//
+// 返回保留真实任务类型、状态与责任字段的投影。
 pub(super) fn work_item_view(item: &WorkItem) -> ImportBusinessConfirmationWorkItemView {
     ImportBusinessConfirmationWorkItemView {
         work_item_id: item.base.id.clone(),
@@ -185,16 +175,11 @@ pub(super) fn work_item_view(item: &WorkItem) -> ImportBusinessConfirmationWorkI
     }
 }
 
-/// 为不在当前责任范围的查询人返回最小只读任务投影。
-///
-/// # 参数
-/// * `item` - 导入确认任务。
-///
-/// # 返回
-/// 返回隐藏 `owner_user_id` 的投影；开放任务追加仅可查看的阻断说明。
-///
-/// # 错误
-/// 不返回错误。
+// 为不在当前责任范围的查询人返回最小只读任务投影。
+//
+// `item`：导入确认任务。
+//
+// 返回隐藏 `owner_user_id` 的投影；开放任务追加仅可查看的阻断说明。
 pub(super) fn read_only_work_item_view(item: &WorkItem) -> ImportBusinessConfirmationWorkItemView {
     let mut view = work_item_view(item);
     view.owner_user_id = None;
@@ -204,7 +189,7 @@ pub(super) fn read_only_work_item_view(item: &WorkItem) -> ImportBusinessConfirm
     view
 }
 
-/// 把统一待办的 actor 安全投影合并为 W18 责任与领域动作。
+// 把统一待办的 actor 安全投影合并为 W18 责任与领域动作。
 fn authorized_work_item_view(
     item: erp_workflow::service::work_item::AuthorizedWorkItem,
     confirmation_status: ConfirmationStatus,
@@ -245,18 +230,13 @@ fn authorized_work_item_view(
     })
 }
 
-/// 只有当前责任人且确认事实仍待处理时，才追加 W18 正式领域动作。
-///
-/// # 参数
-/// * `actions` - 待追加的动作码列表。
-/// * `confirmation_status` - 确认事实状态。
-/// * `responsibility_actions` - 当前责任人被允许的统一待办动作。
-///
-/// # 返回
-/// 条件满足时向 `actions` 追加 `CONFIRM_SCOPE` 与 `RETURN_FOR_FIX`；否则不修改列表。
-///
-/// # 错误
-/// 不返回错误。
+// 只有当前责任人且确认事实仍待处理时，才追加 W18 正式领域动作。
+//
+// - `actions`：待追加的动作码列表。
+// - `confirmation_status`：确认事实状态。
+// - `responsibility_actions`：当前责任人被允许的统一待办动作。
+//
+// 条件满足时向 `actions` 追加 `CONFIRM_SCOPE` 与 `RETURN_FOR_FIX`；否则不修改列表。
 pub(super) fn append_confirmation_actions(
     actions: &mut Vec<String>,
     confirmation_status: ConfirmationStatus,
@@ -271,7 +251,7 @@ pub(super) fn append_confirmation_actions(
     actions.push("RETURN_FOR_FIX".to_string());
 }
 
-/// 返回统一责任动作的稳定 wire code。
+// 返回统一责任动作的稳定 wire code。
 fn work_item_action_code(action: WorkItemAllowedAction) -> &'static str {
     match action {
         WorkItemAllowedAction::View => "VIEW",
@@ -284,7 +264,7 @@ fn work_item_action_code(action: WorkItemAllowedAction) -> &'static str {
     }
 }
 
-/// 返回统一处理状态的稳定 wire code。
+// 返回统一处理状态的稳定 wire code。
 fn processing_state_code(state: ProcessingState) -> &'static str {
     match state {
         ProcessingState::Ready => "READY",
@@ -293,17 +273,11 @@ fn processing_state_code(state: ProcessingState) -> &'static str {
     }
 }
 
-/// 合并确认事实与对应任务投影。
-///
-/// # 参数
-/// * `confirmation` - 确认事实。
-/// * `work_item` - 对应任务。
-///
-/// # 返回
-/// 返回带任务投影的确认视图。
-///
-/// # 错误
-/// 不返回错误。
+// 合并确认事实与对应任务投影。
+//
+// `confirmation`：确认事实；`work_item`：对应任务。
+//
+// 返回带任务投影的确认视图。
 pub(super) fn confirmation_view(
     confirmation: LegacyImportConfirmation,
     work_item: &WorkItem,

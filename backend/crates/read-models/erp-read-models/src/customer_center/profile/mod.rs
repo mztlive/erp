@@ -18,13 +18,13 @@ pub struct CustomerProfileReadService {
     authorization: Arc<AuthorizationService>,
 }
 impl CustomerProfileReadService {
-    /// 绑定客户详情读取所需的共享设施。
+    /// 装配客户资料详情时，绑定客户详情读取所需的共享设施。
+    ///
     /// # 参数
     /// db 为业务库；sensitive_data 为令牌编码器；access 与 authorization 来自同次授权装配。
+    ///
     /// # 返回
     /// 不缓存授权结果的客户资料读模型。
-    /// # 错误
-    /// 无。
     pub fn new(
         db: Database,
         sensitive_data: Arc<SensitiveDataCodec>,

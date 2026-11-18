@@ -11,27 +11,7 @@ use crate::entity::legacy_import::{ConfirmationStatus, LegacyImportConfirmation}
 /// 导入确认集合仓储扩展：确认取代批量写回。
 #[allow(async_fn_in_trait)]
 pub trait LegacyImportConfirmationSupersedeBatchExt {
-    /// 批量写回本轮已失效的确认事实（INT-R28 批量写）。
-    ///
-    /// 调用方先经实体 `invalidate` 完成 `Pending → Invalidated` 迁移，
-    /// 本方法只对 `replacement_confirmation_id` 等于本轮替代者的行执行
-    /// 逐项 CAS 写回；空集合或无匹配行时零写，不访问数据库。
-    /// 任一项版本冲突或写入失败时返回错误，由调用方事务整体回滚，
-    /// 不产生部分提交。
-    ///
-    /// # 参数
-    /// * `confirmations` - 调用方矩阵（就地更新版本号）
-    /// * `replacement_id` - 本轮替代确认事实 ID
-    /// * `executor` - 调用方事务执行器，必须位于同一事务中
-    ///
-    /// # 返回
-    /// 返回执行结果，`Ok` 表示全部写回成功。
-    ///
-    /// # 错误
-    /// 当任一行 CAS 未命中或 MongoDB 写入失败时返回错误。
-    ///
-    /// # 约束
-    /// 不自行开启或提交事务；不做业务取代裁决，只持久化已失效行。
+    /// 用原事务逐项按版本写回已由 `invalidate` 置为失效且替代者为本轮确认 ID 的记录；空集合或无匹配时不访问数据库。不裁决哪些事实应取代，也不开事务；CAS 未命中或写入失败须由调用方整体回滚。
     async fn persist_invalidated_confirmations(
         &self,
         confirmations: &mut [LegacyImportConfirmation],

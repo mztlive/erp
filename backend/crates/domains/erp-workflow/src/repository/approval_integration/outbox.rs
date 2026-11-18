@@ -14,15 +14,8 @@ const MAX_OUTBOX_BATCH: i64 = 50;
 #[allow(async_fn_in_trait)]
 pub trait ApprovalNotificationOutboxRepositoryExt {
     /// 追加一条通知 outbox 记录。
-    ///
-    /// # 参数
-    /// * `item` - 待写入的通知记录。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
     /// 写入成功时无返回值。
     ///
-    /// # 错误
     /// 去重键冲突或 MongoDB 写入失败时返回错误。
     async fn enqueue_outbox(
         &self,
@@ -31,19 +24,11 @@ pub trait ApprovalNotificationOutboxRepositoryExt {
     ) -> Result<()>;
 
     /// 以原子条件更新领取一批可投递消息；两个 worker 不得同时取得同一条。
-    ///
-    /// # 参数
-    /// * `worker_id` - 取得租约的 worker。
-    /// * `now` - 本次领取时间。
-    /// * `lease_until` - 租约到期时间。
-    /// * `limit` - 请求条数；`0` 按 1 条，且不超过 50。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
     /// 返回本次实际领取的消息；没有可投递消息时为空向量。
     ///
-    /// # 错误
     /// MongoDB 更新或反序列化失败时返回错误。
+    ///
+    /// `worker_id`：取得租约的 worker；`limit`：请求条数；`0` 按 1 条，且不超过 50。
     async fn lease_outbox_batch(
         &self,
         worker_id: &str,
@@ -54,18 +39,11 @@ pub trait ApprovalNotificationOutboxRepositoryExt {
     ) -> Result<Vec<ApprovalNotificationOutbox>>;
 
     /// 以当前租约持有者为条件标记投递成功。
-    ///
-    /// # 参数
-    /// * `outbox_id` - outbox 记录 ID。
-    /// * `expected_lease_owner` - 当前租约持有者。
-    /// * `delivered_at` - 投递完成时间。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
     /// 条件命中时返回更新后的记录；持有者不匹配或不存在时返回 `None`。
     ///
-    /// # 错误
     /// MongoDB 更新或反序列化失败时返回错误。
+    ///
+    /// `outbox_id`：outbox 记录 ID；`expected_lease_owner`：当前租约持有者。
     async fn mark_outbox_delivered(
         &self,
         outbox_id: &str,
@@ -75,20 +53,11 @@ pub trait ApprovalNotificationOutboxRepositoryExt {
     ) -> Result<Option<ApprovalNotificationOutbox>>;
 
     /// 以当前租约持有者为条件重排下次尝试。
-    ///
-    /// # 参数
-    /// * `outbox_id` - outbox 记录 ID。
-    /// * `expected_lease_owner` - 当前租约持有者。
-    /// * `next_attempt_at` - 下次尝试时间。
-    /// * `failed_at` - 本次实际失败时间。
-    /// * `error_kind` - 本次失败分类。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
     /// 条件命中时返回更新后的记录；持有者不匹配或不存在时返回 `None`。
     ///
-    /// # 错误
     /// MongoDB 更新或反序列化失败时返回错误。
+    ///
+    /// `outbox_id`：outbox 记录 ID；`expected_lease_owner`：当前租约持有者。
     async fn reschedule_outbox(
         &self,
         outbox_id: &str,
@@ -100,19 +69,11 @@ pub trait ApprovalNotificationOutboxRepositoryExt {
     ) -> Result<Option<ApprovalNotificationOutbox>>;
 
     /// 以当前租约持有者为条件将消息转入死信。
-    ///
-    /// # 参数
-    /// * `outbox_id` - outbox 记录 ID。
-    /// * `expected_lease_owner` - 当前租约持有者。
-    /// * `failed_at` - 本次实际失败时间。
-    /// * `error_kind` - 死信失败分类。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
     /// 条件命中时返回更新后的记录；持有者不匹配或不存在时返回 `None`。
     ///
-    /// # 错误
     /// MongoDB 更新或反序列化失败时返回错误。
+    ///
+    /// `outbox_id`：outbox 记录 ID；`expected_lease_owner`：当前租约持有者。
     async fn dead_letter_outbox(
         &self,
         outbox_id: &str,
@@ -205,7 +166,7 @@ impl ApprovalNotificationOutboxRepositoryExt for Repository<'_, ApprovalNotifica
     }
 }
 
-/// 原子领取一条到期或租约过期的 outbox 消息。
+// 投递者竞争领取时，用一次原子更新取得一条已到投递时点或旧租约已到期的 outbox 消息。
 async fn lease_one_outbox(
     collection: &Collection<ApprovalNotificationOutbox>,
     worker_id: &str,
@@ -223,20 +184,13 @@ async fn lease_one_outbox(
     .await
 }
 
-/// 构造竞争取租约成功时的 `$set` 管道。
-///
-/// 将消息标为 `IN_FLIGHT`，写入 `lease_owner`/`lease_until`，并递增版本。
-///
-/// # 参数
-/// * `worker_id` - 取得租约的 worker
-/// * `now` - 本次领取时间，写入 `updated_at`
-/// * `lease_until` - 租约到期时间
-///
-/// # 返回
-/// 返回单步 `$set` 管道。
-///
-/// # 错误
-/// 无。
+// 构造竞争取租约成功时的 `$set` 管道。
+//
+// 将消息标为 `IN_FLIGHT`，写入 `lease_owner`/`lease_until`，并递增版本。
+//
+// 返回单步 `$set` 管道。
+//
+// `worker_id`：取得租约的 worker；`now`：本次领取时间，写入 `updated_at`。
 fn lease_take_pipeline(worker_id: &str, now: Instant, lease_until: Instant) -> Vec<Document> {
     vec![doc! {
         "$set": {
@@ -249,18 +203,13 @@ fn lease_take_pipeline(worker_id: &str, now: Instant, lease_until: Instant) -> V
     }]
 }
 
-/// 返回取租约扫描顺序：先到期者优先，同时间按 `id` 升序。
-///
-/// # 返回
-/// 返回 `{ next_attempt_at: 1, id: 1 }`。
-///
-/// # 错误
-/// 无。
+// 返回取租约扫描顺序：先到期者优先，同时间按 `id` 升序。
+// 返回 `{ next_attempt_at: 1, id: 1 }`。
 fn lease_take_sort() -> Document {
     doc! { "next_attempt_at": 1, "id": 1 }
 }
 
-/// 领取未删除且已到期待投，或 `InFlight` 租约已到期的消息。
+// 构造投递者领取条件：排除已删除记录，只接受到期待投消息或租约到期的 `InFlight` 消息。
 fn outbox_lease_filter(now: Instant) -> Document {
     let now = now.unix_secs();
     doc! {
@@ -278,7 +227,7 @@ fn outbox_lease_filter(now: Instant) -> Document {
     }
 }
 
-/// 只匹配未删除、处于 `InFlight` 且租约持有者等于预期值的记录。
+// 写回投递结果前，只匹配未删除、仍处于 `InFlight` 且持有预期令牌的消息，避免覆盖接管者结果。
 fn lease_owner_filter(outbox_id: &str, expected_lease_owner: &str) -> Document {
     doc! {
         "id": outbox_id,
@@ -288,13 +237,8 @@ fn lease_owner_filter(outbox_id: &str, expected_lease_owner: &str) -> Document {
     }
 }
 
-/// 构造投递成功的 `$set` 管道：写 `Delivered` 并清空租约。
-///
-/// # 参数
-/// * `delivered_at` - 投递完成时间
-///
-/// # 返回
-/// 返回单步 `$set` 管道。
+// 构造投递成功的 `$set` 管道：写 `Delivered` 并清空租约。
+// 返回单步 `$set` 管道。
 fn mark_outbox_delivered_pipeline(delivered_at: Instant) -> Vec<Document> {
     vec![doc! {
         "$set": {
@@ -308,15 +252,8 @@ fn mark_outbox_delivered_pipeline(delivered_at: Instant) -> Vec<Document> {
     }]
 }
 
-/// 构造重试回 `Pending` 的 `$set` 管道，并递增 `attempt_count`。
-///
-/// # 参数
-/// * `next_attempt_at` - 下次尝试时间
-/// * `failed_at` - 本次实际失败时间
-/// * `error_kind` - 本次失败分类
-///
-/// # 返回
-/// 返回单步 `$set` 管道。
+// 构造重试回 `Pending` 的 `$set` 管道，并递增 `attempt_count`。
+// 返回单步 `$set` 管道。
 fn reschedule_outbox_pipeline(
     next_attempt_at: Instant,
     failed_at: Instant,
@@ -336,14 +273,8 @@ fn reschedule_outbox_pipeline(
     }]
 }
 
-/// 构造转入死信的 `$set` 管道。
-///
-/// # 参数
-/// * `failed_at` - 本次实际失败时间
-/// * `error_kind` - 死信失败分类
-///
-/// # 返回
-/// 返回单步 `$set` 管道；递增本次尝试，死信与更新时间均取实际失败时间。
+// 构造转入死信的 `$set` 管道。
+// 返回单步 `$set` 管道；递增本次尝试，死信与更新时间均取实际失败时间。
 fn dead_letter_outbox_pipeline(failed_at: Instant, error_kind: &str) -> Vec<Document> {
     vec![doc! {
         "$set": {
@@ -359,7 +290,7 @@ fn dead_letter_outbox_pipeline(failed_at: Instant, error_kind: &str) -> Vec<Docu
     }]
 }
 
-/// `limit` 为 0 时按 1 条，否则不超过 `MAX_OUTBOX_BATCH`。
+// 规范化通知领取批大小，零取一条，非零请求也不能超过 `MAX_OUTBOX_BATCH`。
 fn clamp_outbox_limit(limit: u32) -> i64 {
     if limit == 0 {
         return 1;
@@ -367,7 +298,7 @@ fn clamp_outbox_limit(limit: u32) -> i64 {
     i64::from(limit).min(MAX_OUTBOX_BATCH)
 }
 
-/// 带排序的单文档更新管道，供竞争取租约使用。
+// 通知工作者竞争租约时用带排序的单文档更新选出并更新同一条记录，避免分开读取和抢占。
 async fn find_one_and_update_sorted<T>(
     collection: &Collection<T>,
     filter: Document,

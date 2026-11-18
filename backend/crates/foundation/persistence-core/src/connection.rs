@@ -6,33 +6,16 @@ use crate::{Error, Result};
 const MIN_REPLICA_SET_TRANSACTION_WIRE_VERSION: i64 = 7;
 const MIN_SHARDED_TRANSACTION_WIRE_VERSION: i64 = 8;
 
-/// 连接 MongoDB 并返回共享客户端及目标数据库句柄。
-///
-/// # 参数
-/// * `uri` - MongoDB 连接地址。
-/// * `db_name` - 目标数据库名。
-///
-/// # 返回
-/// 成功时返回共享的 `Client`，以及名为 `db_name` 的 `Database`。
-///
-/// # 错误
-/// 当客户端创建或连接参数解析失败时返回错误。
+/// 应用装配时从 URI 创建共享客户端并选定数据库句柄；成功只表示句柄可创建，不证明连接健康或支持事务，
+/// 启动时另用 [`ensure_transaction_support`] 验证。
 pub async fn connect(uri: &str, db_name: &str) -> Result<(Client, Database)> {
     let client = mongodb::Client::with_uri_str(uri).await?;
     let database = client.database(db_name);
     Ok((client, database))
 }
 
-/// 验证当前 MongoDB 部署支持本项目依赖的多文档事务。
-///
-/// # 参数
-/// * `database` - 已配置的目标数据库
-///
-/// # 返回
-/// 无返回值。副本集或支持事务的分片集群校验通过。
-///
-/// # 错误
-/// 连接、命令执行失败，或目标为 standalone/不支持会话与事务时返回错误。
+/// 启动时用 `hello` 检查会话和事务所需的部署能力。仅支持相应版本的副本集或分片集群；
+/// standalone、会话不可用或命令失败时拒绝继续。
 pub async fn ensure_transaction_support(database: &Database) -> Result<()> {
     let hello = database.run_command(doc! { "hello": 1 }).await?;
     if topology_supports_transactions(&hello) {
@@ -41,26 +24,23 @@ pub async fn ensure_transaction_support(database: &Database) -> Result<()> {
     Err(Error::UnsupportedDeployment("a replica set or transaction-capable sharded cluster is required"))
 }
 
-/// 会话是否可用（`logicalSessionTimeoutMinutes` 为非负整数）。
+// 事务部署检查以非负整数的 `logicalSessionTimeoutMinutes` 判断逻辑会话可用，缺少该字段或格式异常时不放行。
 fn sessions_enabled(hello: &Document) -> bool {
     hello.get("logicalSessionTimeoutMinutes").and_then(bson_integer).is_some_and(|minutes| minutes >= 0)
 }
 
-/// 当前拓扑是否为分片集群（`mongos` 以 `msg: isdbgrid` 标识）。
+// 按 `hello` 的 `msg: isdbgrid` 识别 `mongos`，以便应用分片事务的版本门槛。
 fn is_sharded_cluster(hello: &Document) -> bool {
     hello.get_str("msg").is_ok_and(|value| value == "isdbgrid")
 }
 
-/// 当前拓扑是否为副本集（`setName` 非空）。
+// 以 `hello` 中非空的 `setName` 识别副本集，区别于无法运行多文档事务的 standalone。
 fn is_replica_set(hello: &Document) -> bool {
     hello.get_str("setName").is_ok_and(|value| !value.trim().is_empty())
 }
 
-/// 判断 `hello` 响应描述的拓扑是否具备事务所需的会话和 wire version。
-///
-/// 副本集要求 wire version 不低于 `MIN_REPLICA_SET_TRANSACTION_WIRE_VERSION`
-/// （MongoDB 4.0 引入多文档事务），分片集群要求不低于
-/// `MIN_SHARDED_TRANSACTION_WIRE_VERSION`（MongoDB 4.2 起支持分片事务）。
+// 应用的多文档事务要求会话已启用。副本集需 wire version 至少为 7（MongoDB 4.0），分片集群至少为 8（4.2）；
+// 响应缺少关键信息时拒绝。
 fn topology_supports_transactions(hello: &Document) -> bool {
     if !sessions_enabled(hello) {
         return false;
@@ -73,7 +53,7 @@ fn topology_supports_transactions(hello: &Document) -> bool {
         || (is_sharded_cluster(hello) && max_wire_version >= MIN_SHARDED_TRANSACTION_WIRE_VERSION)
 }
 
-/// 将 BSON 的两种有符号整数表示统一为 `i64`。
+// 读取 `hello` 的数值字段时兼容 BSON Int32 和 Int64，不接受浮点或字符串冒充整数。
 fn bson_integer(value: &Bson) -> Option<i64> {
     match value {
         Bson::Int32(value) => Some(i64::from(*value)),

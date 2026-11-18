@@ -24,11 +24,7 @@ use crate::http::state::HttpState;
 use crate::wiring::finance_posting_ports;
 
 /// 原子登记付款、回单、逐行核销、占用扣减、任务进度及命令结果。
-/// # 参数
-/// 当前出纳、批准申请身份及带银行回单的付款命令。
-/// # 返回
 /// 已过账付款单；详情读取失败仍保留已提交事实与回单。
-/// # 错误
 /// 无执行资格、账户或来源变化、金额越界时拒绝；未知结果保持原命令身份。
 pub async fn pay(
     State(state): State<HttpState>,
@@ -69,11 +65,7 @@ pub async fn pay(
 }
 
 /// 仅在敏感揭示权限、当前任务和冻结账户版本全部有效时交付完整账号。
-/// # 参数
-/// 当前账号、申请身份、任务及账户所见版本。
-/// # 返回
 /// 完整账号；每次成功读取记录敏感审计。
-/// # 错误
 /// 任务责任、账户归属、状态或版本变化时拒绝。
 pub async fn reveal_account(
     State(state): State<HttpState>,

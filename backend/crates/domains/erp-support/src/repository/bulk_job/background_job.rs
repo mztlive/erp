@@ -93,13 +93,9 @@ pub struct BackgroundJobFilter {
 }
 
 impl BackgroundJobFilter {
-    /// 将本人任务入口固定到认证发起人，保留其余业务筛选。
-    /// # 参数
-    /// query 为归一化查询，requester 为入口已认证的账号。
-    /// # 返回
-    /// 发起人固定为认证账号的列表筛选。
-    /// # 错误
-    /// 无。
+    // 将本人任务入口固定到认证发起人，保留其余业务筛选。
+    // 发起人固定为认证账号的列表筛选。
+    // query 为归一化查询，requester 为入口已认证的账号。
     pub(crate) fn for_requester(query: BackgroundJobListQuery, requester: &str) -> Self {
         Self { requested_by: Some(requester.to_owned()), ..Self::from(query) }
     }
@@ -124,11 +120,8 @@ impl From<BackgroundJobListQuery> for BackgroundJobFilter {
 }
 
 /// 在完整授权条件内完成任务分页、计数及前后复验。
-/// # 参数
-/// db、filter 为任务仓储与业务筛选；authorization、access 为本阶段凭证；executor 为原事务。
-/// # 返回
 /// 同一授权条件内的任务页与总数。
-/// # 错误
+/// db、filter 为任务仓储与业务筛选；authorization、access 为本阶段凭证；executor 为原事务。
 /// 授权模型不是完整后台任务、凭证失效、数量越界或数据库失败时拒绝。
 pub async fn authorized_background_page(
     db: &Database,
@@ -171,16 +164,7 @@ pub async fn authorized_background_page(
 }
 
 impl Default for BackgroundJobFilter {
-    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回第 1 页、每页 20 条的空筛选条件。
-    ///
-    /// # 错误
-    /// 无。
+    // 初始化后台任务筛选：第一页、每页 20 条，业务筛选默认留空。
     fn default() -> Self {
         Self {
             job_no: None,
@@ -198,20 +182,8 @@ impl Default for BackgroundJobFilter {
 }
 
 impl QueryFilter for BackgroundJobFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// `job_no` 为 `Some` 时按转义后的字面量、忽略大小写匹配。`job_type` 与
-    /// `status` 为 `Some` 时写入 `as_str()`；`domain_job_type` 与 `requested_by`
-    /// 为 `Some` 时精确匹配。分页与排序字段不进入条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 转换为 MongoDB 查询条件（自动追加未删除过滤）。
+    // `job_no` 为 `Some` 时按转义后的字面量、忽略大小写匹配。`job_type` 与 `status` 为 `Some` 时写入 `as_str()`；`domain_job_type` 与 `requested_by` 为 `Some` 时精确匹配。分页与排序字段不进入条件。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_literal_regex_filter(&mut filter, "job_no", self.job_no.as_deref());
@@ -242,16 +214,7 @@ impl QueryFilter for BackgroundJobFilter {
 }
 
 impl Pagination for BackgroundJobFilter {
-    /// 返回后台任务筛选保存的页码与单页条数，不把小于 1 的页码归一成第一页。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组；`page_size` 由 `u32` 转为 `u64`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 返回后台任务筛选保存的页码与单页条数，不把小于 1 的页码归一成第一页。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -261,15 +224,8 @@ impl Pagination for BackgroundJobFilter {
 #[allow(async_fn_in_trait)]
 pub trait BackgroundJobRepositoryExt {
     /// 批量回读指定任务的当前未删除事实。
-    ///
-    /// # 参数
-    /// * `ids` - 当前页任务 ID；空集合不访问数据库
-    /// * `executor` - 调用方的数据访问执行器
-    ///
-    /// # 返回
     /// 返回匹配任务，顺序由调用方按原分页结果恢复。
-    ///
-    /// # 错误
+    /// `ids` 为当前页任务 ID；空集合不访问数据库；`executor` 为调用方的数据访问执行器。
     /// 数据库读取或游标读取失败时返回错误。
     async fn find_by_ids(
         &self,
@@ -278,20 +234,11 @@ pub trait BackgroundJobRepositoryExt {
     ) -> Result<Vec<BackgroundJob>>;
 
     /// 分页检索后台任务列表（投影查询，任务中心）。
-    ///
-    /// 只返回 [`BackgroundJobRow`] 所需的进度字段，不加载整文档；
-    /// `job_no` 按字面量忽略大小写模糊匹配（复用 `repository::regex_filter`），
+    /// 只返回 [`BackgroundJobRow`] 所需的进度字段，不加载整文档；`job_no` 按字面量忽略大小写模糊匹配（复用 `repository::regex_filter`），
     /// 状态/发起人精确匹配覆盖 `idx_background_jobs_status_created`。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// 沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询、游标读取或计数错误。
     async fn search_background_jobs(
         &self,
         filter: &BackgroundJobFilter,
@@ -299,18 +246,10 @@ pub trait BackgroundJobRepositoryExt {
     ) -> Result<PageResult<BackgroundJobRow>>;
 
     /// 按任务编号查找后台任务。
-    ///
     /// 查询覆盖 `uk_background_jobs_no` 唯一索引；任务中心按编号精确路由。
-    ///
-    /// # 参数
-    /// * `job_no` - 任务编号
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回匹配的未删除任务；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
+    /// `job_no` 为任务编号；沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询错误。
     async fn find_by_job_no(
         &self,
         job_no: &str,
@@ -318,19 +257,10 @@ pub trait BackgroundJobRepositoryExt {
     ) -> Result<Option<BackgroundJob>>;
 
     /// 按请求幂等身份查找后台任务。
-    ///
-    /// 查询覆盖 `uk_background_jobs_request_id` 唯一索引；幂等重试按
-    /// `request_id` 定位既有任务（§6.1：涉及资金的变更必须具备幂等键）。
-    ///
-    /// # 参数
-    /// * `request_id` - 请求幂等身份
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
+    /// 查询覆盖 `uk_background_jobs_request_id` 唯一索引；幂等重试按 `request_id` 定位既有任务（§6.1：涉及资金的变更必须具备幂等键）。
     /// 返回匹配的未删除任务；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
+    /// `request_id` 为请求幂等身份；沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询错误。
     async fn find_by_request_id(
         &self,
         request_id: &str,
@@ -339,20 +269,11 @@ pub trait BackgroundJobRepositoryExt {
 }
 
 impl BackgroundJobRepositoryExt for persistence_core::Repository<'_, BackgroundJob> {
-    /// 按业务 `id` 做 `$in` 批量读取，未删除过滤沿用通用仓储 `find_many`。
-    ///
-    /// 空 `ids` 直接返回空向量，不访问数据库。非空时用各 `BackgroundJobId` 的
-    /// `as_ref()` 组成 `$in`，本实现不附加排序。
-    ///
-    /// # 参数
-    /// * `ids` - 后台任务 ID；空切片不访问数据库
-    /// * `executor` - 传给 `find_many` 的数据访问执行器
-    ///
-    /// # 返回
-    /// 返回匹配且未删除的后台任务；顺序不保证与输入一致。空输入返回空向量。
-    ///
-    /// # 错误
-    /// 空输入不失败。否则返回 `find_many` 的错误，即 MongoDB 查询或游标读取失败。
+    // 按业务 `id` 做 `$in` 批量读取，未删除过滤沿用通用仓储 `find_many`。
+    // 空 `ids` 直接返回空向量，不访问数据库。非空时用各 `BackgroundJobId` 的 `as_ref()` 组成 `$in`，本实现不附加排序。
+    // 返回匹配且未删除的后台任务；顺序不保证与输入一致。空输入返回空向量。
+    // `ids` 为后台任务 ID；空切片不访问数据库；`executor` 传给 `find_many` 的数据访问执行器。
+    // 空输入不失败。否则返回 `find_many` 的错误，即 MongoDB 查询或游标读取失败。
     async fn find_by_ids(
         &self,
         ids: &[BackgroundJobId],
@@ -396,10 +317,7 @@ impl BackgroundJobRepositoryExt for persistence_core::Repository<'_, BackgroundJ
     }
 }
 
-/// 后台任务列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
+// 后台任务列表投影字段。
 fn background_job_projection() -> Document {
     doc! {
         "id": 1,

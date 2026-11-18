@@ -30,11 +30,7 @@ pub struct SupplierConnectorRegistry {
 
 impl SupplierConnectorRegistry {
     /// 解析通知消费连接，不把订单资金准入当作商品通知准入。
-    /// # 参数
-    /// connection 为服务端加载的原连接。
-    /// # 返回
     /// 技术身份已核验的通知适配器。
-    /// # 错误
     /// 协议或技术绑定无效时拒绝。
     pub fn notification_connector(
         &self,
@@ -48,22 +44,13 @@ impl SupplierConnectorRegistry {
     }
 
     /// 返回所有已登记协议，不依赖目录能力筛选通知消费者。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 有序协议清单。
-    /// # 错误
-    /// 不返回错误。
     pub fn connector_types(&self) -> Vec<SupplierConnectorType> {
         self.adapters.keys().copied().collect()
     }
 
     /// 以服务端连接及路由协议取得回调能力。
-    /// # 参数
-    /// connection 为持久化连接，kind 为路由协议。
-    /// # 返回
     /// 绑定同一连接且提供回调能力的适配器。
-    /// # 错误
     /// 协议、连接身份或回调能力不符时拒绝。
     pub fn callback_connector(
         &self,
@@ -86,13 +73,8 @@ impl SupplierConnectorRegistry {
         Ok(connector)
     }
 
-    /// 将同一协议运行时登记为技术网关及配置目录。
-    /// # 参数
-    /// `kind` 为协议类型，`runtime` 为当前部署构造的共享运行时。
-    /// # 返回
-    /// 登记成功返回 `Ok(())`。
-    /// # 错误
-    /// 相同协议重复登记时拒绝覆盖。
+    /// 将实际实现按唯一协议类型登记为运行时，供后续连接绑定使用。重复登记或协议声明与实现不一致时拒绝，
+    /// 不覆盖既有适配器。
     pub fn register<T>(&mut self, kind: SupplierConnectorType, runtime: Arc<T>) -> Result<(), ClassifiedError>
     where
         T: SupplierRuntime + 'static,
@@ -116,13 +98,8 @@ impl SupplierConnectorRegistry {
         Ok(())
     }
 
-    /// 为新建或未发送的确认动作解析当前连接协议。
-    /// # 参数
-    /// `connection` 为服务端读取的连接，不接受前端指定协议归属。
-    /// # 返回
-    /// 实际实现的已绑定窄接口。
-    /// # 错误
-    /// 缺少类型、运行时或写操作资格时返回明确分类错误。
+    /// 为新增订单或尚未发送的确认步骤按 `Creation` 用途绑定服务端连接；缺协议、适配器或新增写入资格时返
+    /// 回分类错误。
     pub fn creation_connector(
         &self,
         connection: &SupplierApiConnection,
@@ -134,13 +111,8 @@ impl SupplierConnectorRegistry {
         )
     }
 
-    /// 为原请求调查、跟踪及取消解析当前连接协议。
-    /// # 参数
-    /// `connection` 为原订单所属的服务端连接。
-    /// # 返回
-    /// 已绑定能力集合；新增下单关闭不影响此入口。
-    /// # 错误
-    /// 缺少类型、运行时或账号绑定失效时返回分类错误。
+    /// 为原订单调查、履约跟踪及取消按 `Fulfillment` 用途绑定原连接，不受新增下单开关影响；协议或账号绑定
+    /// 无效时拒绝。
     pub fn fulfillment_connector(
         &self,
         connection: &SupplierApiConnection,
@@ -152,13 +124,8 @@ impl SupplierConnectorRegistry {
         )
     }
 
-    /// 为退款及结算绑定原技术连接，不借用新增下单或付款准入。
-    /// # 参数
-    /// `connection` 为服务端原连接。
-    /// # 返回
-    /// 已验证身份的可选能力集合。
-    /// # 错误
-    /// 技术身份或协议不一致时拒绝。
+    /// 给单笔退款恢复和结算采集按 `AfterSales` 用途绑定原连接技术身份，不授予新增下单或付款资格；协议或
+    /// 连接不匹配时拒绝。
     pub fn after_sales_connector(
         &self,
         connection: &SupplierApiConnection,
@@ -171,11 +138,7 @@ impl SupplierConnectorRegistry {
     }
 
     /// 按原订单身份只读调查，不受新增下单开关影响。
-    /// # 参数
-    /// `connection` 为原连接，`key` 为已持久化商户或供应商单号。
-    /// # 返回
     /// 供应商原始订单观察或明确暂不可见。
-    /// # 错误
     /// 协议、绑定、读取能力缺失或供应商查询失败时拒绝。
     pub async fn observe_order(
         &self,
@@ -186,11 +149,7 @@ impl SupplierConnectorRegistry {
     }
 
     /// 按原冻结行查询订单并解析可逆的子单数量关联。
-    /// # 参数
-    /// `connection` 为原连接，`key` 为原单号，`frozen` 为服务端冻结的本执行组行。
-    /// # 返回
     /// 与原明细身份精确对应的订单观察；无映射证据不得补造行归属。
-    /// # 错误
     /// 绑定、能力或供应商读取失败时返回分类错误。
     pub async fn observe_order_with_lines(
         &self,

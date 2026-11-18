@@ -11,13 +11,9 @@ pub(crate) struct ValidatedPortalAsset {
 }
 
 impl FormFile {
-    /// 校验门户文件的协议类型，PDF 仅允许作为资料。
-    /// # 参数
-    /// 使用累计不超过 5 MiB 的原始 multipart 文件。
-    /// # 返回
-    /// 返回需进一步完成完整图像解码或严格 PDF 检查的文件。
-    /// # 错误
-    /// 空内容、扩展名、MIME 或内容头不匹配时拒绝。
+    // 校验门户文件的协议类型，PDF 仅允许作为资料。
+    // 返回需进一步完成完整图像解码或严格 PDF 检查的文件。
+    // 空内容、扩展名、MIME 或内容头不匹配时拒绝。
     pub(crate) fn validate_portal_asset(self) -> Result<ValidatedPortalAsset, Error> {
         if self.content.is_empty() || self.content.len() > MAX_UPLOAD_FILE_BYTES {
             return Err(Error::BadRequest("文件须为 5 MiB 内的有效图片或 PDF".into()));
@@ -44,17 +40,17 @@ impl FormFile {
 }
 
 impl ValidatedPortalAsset {
-    /// 返回经过大小和协议类型校验的原始字节。
+    // 为门户完整内容检查提供已通过大小和协议校验的原始字节；不能把初筛当作完整解码。
     pub(crate) fn content(&self) -> &[u8] {
         &self.content
     }
 
-    /// 返回与已验证扩展名一致的内容类型。
+    // 供门户内容检查选择与通过初筛的扩展名一致的解析器。
     pub(crate) fn content_type(&self) -> &'static str {
         self.content_type
     }
 
-    /// 服务端按安全扩展名生成独立对象名。
+    // 在保存门户附件时用服务端 ID 和经过校验的扩展名组成独立对象名。
     pub(crate) fn unique_name(&self) -> String {
         format!("{}.{}", id_generator::next_id(), self.extension)
     }

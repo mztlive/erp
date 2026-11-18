@@ -23,24 +23,7 @@ pub(crate) const LEGACY_IMPORT_ROWS: &str = <mongodb::Database as LegacyImportEx
 pub(crate) const LEGACY_IMPORT_CONFIRMATIONS: &str =
     <mongodb::Database as LegacyImportExt>::LEGACY_IMPORT_CONFIRMATIONS;
 
-/// 创建本域集合的幂等命名索引。
-///
-/// 逐条落地数据模型 §6.12「必需约束与索引」；身份类字段使用**全局唯一索引**
-/// （与 accounts 的 code 处理一致）：软删除后仍保留身份，避免复用破坏
-/// 来源追溯与恢复语义。
-///
-/// TTL（`ttl_legacy_import_rows_diagnostics_30d`）：失败行诊断（规范化载荷、
-/// 错误明细）与 `failure_diagnostic_file_asset_id` 按 30 天清理（§4.5.7/§6.12）。
-/// 批次元数据、汇总计数、成功结果行与映射审计长期保留，**不建 TTL**。
-///
-/// # 参数
-/// * `db` - 目标 MongoDB 数据库。
-///
-/// # 返回
-/// 批次、行与确认三个集合的索引都建立完成后无返回值。
-///
-/// # 错误
-/// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
+// 幂等注册批次、行、确认三类集合索引。身份采用全局唯一约束，软删除仍占用原身份以维持来源追溯与恢复；失败诊断及独立诊断资产遵循 30 天保留约定，批次元数据、计数、成功结果和映射审计长期保留。数据冲突或 MongoDB 创建失败时返回错误。
 pub(crate) async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, LEGACY_IMPORT_BATCHES, legacy_import_batch_indexes()).await?;
     create_indexes(db, LEGACY_IMPORT_ROWS, legacy_import_row_indexes()).await?;
@@ -48,13 +31,13 @@ pub(crate) async fn ensure(db: &Database) -> Result<()> {
     Ok(())
 }
 
-/// 为单个集合创建一组幂等命名索引。
+// 对单一导入集合注册一组幂等命名索引，供批次、行和确认复用相同创建逻辑。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
     db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
-/// 返回 `legacy_import_batch` 的身份约束和查询索引。
+// 声明批次 ID、批次号唯一性和列表查询索引，支持稳定定位和筛选批次。
 fn legacy_import_batch_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_legacy_import_batches_id", doc! { "id": 1 }),
@@ -66,17 +49,8 @@ fn legacy_import_batch_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `legacy_import_row` 的身份约束、处理队列与 TTL 索引。
-///
-/// `ttl_legacy_import_rows_diagnostics_30d`：按数据模型 §4.5.7/§6.12 落地
-/// 失败诊断 30 天清理契约。注意两个平台约束（P0 冻结）：
-/// 1. MongoDB TTL 索引要求字段为 BSON Date，而 P0 固定的公共时间基元
-///    （`BaseModel.created_at` u64、`Instant` i64）以秒级 int64 持久化，
-///    驱动不会据此清理文档，真正清理需归档任务兜底；
-/// 2. TTL 索引不支持 `partialFilterExpression`，无法只对失败行生效，而
-///    成功结果行必须长期保留（§6.12），因此本索引建在公共 `created_at` 上，
-///    仅声明保留期契约；按行精确清理需要地基修订引入 BSON Date 的失败
-///    时间字段后调整（见 P2 报告偏差）。
+// 声明行身份、处理队列与 30 天保留期的索引。`ttl_legacy_import_rows_diagnostics_30d` 建在公共 `created_at` 上，但 `BaseModel.created_at`（`u64`）和 `Instant`（`i64`）均以秒级整数保存，MongoDB 不会按 BSON Date TTL 清理这些记录。
+// 当前公共 `created_at` TTL 不做状态筛选，只声明保留期；成功行须长期保留，失败诊断由归档任务清理。若要按失败行精确过期，须先引入 BSON Date 失败时间字段。
 fn legacy_import_row_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_legacy_import_rows_id", doc! { "id": 1 }),
@@ -101,7 +75,7 @@ fn legacy_import_row_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `legacy_import_confirmation` 的身份约束与矩阵查询索引。
+// 声明确认记录、任务与范围试算的身份约束及批次矩阵查询索引。
 fn legacy_import_confirmation_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_legacy_import_confirmations_id", doc! { "id": 1 }),
@@ -118,7 +92,7 @@ fn legacy_import_confirmation_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 构建命名 TTL 索引（`expire_after_seconds` 秒后过期）。
+// 构造指定过期秒数的命名 TTL 索引，统一声明诊断数据保留期。
 fn ttl_index(name: impl Into<String>, keys: Document, expire_after_seconds: i64) -> IndexModel {
     IndexModel::builder()
         .keys(keys)
@@ -133,7 +107,7 @@ fn ttl_index(name: impl Into<String>, keys: Document, expire_after_seconds: i64)
 
 #[cfg(test)]
 mod tests {
-    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    // 验证各集合都有 `id` 唯一索引，保证按稳定主键读取与乐观锁更新不用扫描集合。
     #[test]
     fn collections_look_up_by_unique_stable_id() {
         for indexes in [

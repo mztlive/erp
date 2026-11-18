@@ -25,12 +25,9 @@ pub enum CopyTrigger {
 
 impl CopyTrigger {
     /// 从已接受的 BPM 事件提取抄送时机。
-    /// # 参数
-    /// `event` 为原事务内的事件。
-    /// # 返回
     /// 恢复、受阻及节点进入不触发抄送。
-    /// # 错误
-    /// 无。
+    ///
+    /// `event` 为原事务内的事件。
     pub fn from_event(event: &BpmEvent) -> Option<Self> {
         match event.kind {
             BpmEventKind::InstanceStarted => Some(Self::Started),
@@ -42,12 +39,7 @@ impl CopyTrigger {
         }
     }
     /// 返回面向读者的抄送原因。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 固定中文原因。
-    /// # 错误
-    /// 无。
     pub fn label(self) -> &'static str {
         match self {
             Self::Started => "提交审批后抄送",
@@ -70,12 +62,11 @@ pub struct ApprovalCopyRule {
 
 impl ApprovalCopyRule {
     /// 验证本规则所有接收人均为有效内部账号。
-    /// # 参数
-    /// accounts 为当前执行器读取的账号事实。
-    /// # 返回
     /// 全部接收人有效时成功，不要求角色或审批权限。
-    /// # 错误
+    ///
     /// 任一账号缺失、停用或类型不符时拒绝。
+    ///
+    /// accounts 为当前执行器读取的账号事实。
     pub fn validate_accounts(&self, accounts: &[AccountSummary]) -> Result<()> {
         for id in &self.recipient_user_ids {
             if !accounts.iter().any(|account| account.id == *id && account.is_active_backoffice()) {
@@ -86,12 +77,11 @@ impl ApprovalCopyRule {
     }
 
     /// 规范化整组规则并校验人员、节点和规模。
-    /// # 参数
-    /// `rules` 为完整规则，`node_count` 为同一请求的节点数。
-    /// # 返回
     /// 返回去重排序后的规则。
-    /// # 错误
+    ///
     /// 空人员、重复规则、非法节点及超限时拒绝。
+    ///
+    /// `rules` 为完整规则，`node_count` 为同一请求的节点数。
     pub fn prepare(mut rules: Vec<Self>, node_count: usize) -> Result<Vec<Self>> {
         if rules.len() > 54 {
             return Err(Error::ValidationError("最多配置 54 条抄送规则".into()));
@@ -130,13 +120,10 @@ impl ApprovalCopyRule {
         Ok(rules)
     }
 
-    /// 判断规则是否命中一次事件。
-    /// # 参数
-    /// `event` 和 `node_order` 来自实例绑定的定义。
-    /// # 返回
+    /// 当规则命中一次事件时返回 `true`。
     /// 时机和节点同时匹配时返回 true。
-    /// # 错误
-    /// 无。
+    ///
+    /// `event` 和 `node_order` 来自实例绑定的定义。
     pub fn matches(&self, event: &BpmEvent, node_order: Option<u32>) -> bool {
         CopyTrigger::from_event(event) == Some(self.trigger)
             && (self.trigger != CopyTrigger::NodeApproved || self.node_order == node_order)
@@ -178,12 +165,11 @@ pub struct ApprovalCopyReceipt {
 
 impl ApprovalCopyReceipt {
     /// 已授权的收件记录必须与同一实例和精确提交快照闭合。
-    /// # 参数
-    /// 仓储读取的快照及实例；收件人资格由 identity 预先核验。
-    /// # 返回
     /// 全部业务身份和版本匹配时为 true。
-    /// # 错误
-    /// 无；非法运行类型失败关闭。
+    ///
+    /// 非法运行类型失败关闭。
+    ///
+    /// 仓储读取的快照及实例；收件人资格由 identity 预先核验。
     pub fn matches_subject(
         &self,
         snapshot: &ApprovalSubjectSnapshot,

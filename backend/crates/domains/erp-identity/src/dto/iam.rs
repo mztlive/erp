@@ -44,15 +44,9 @@ impl RoleItem {
     ///
     /// 系统标记取角色的 `system`，或角色 ID 等于 `ROOT_ROLE_ID`。
     ///
-    /// # 参数
-    /// * `role` - 角色实体
-    /// * `permissions` - 直接权限策略
-    ///
-    /// # 返回
     /// 返回不暴露内部持久化字段的角色响应项。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// `permissions`：直接权限策略。
     pub fn from_role(role: Role, permissions: Vec<Permission>) -> Self {
         Self {
             system: role.system || role.base.id == crate::ROOT_ROLE_ID,
@@ -92,7 +86,7 @@ mod tests {
         assert!(payload.permissions.is_none());
     }
 
-    /// 系统角色及保留根角色身份均向客户端声明删除保护。
+    // 验证：系统角色及保留根角色身份均向客户端声明删除保护。
     #[test]
     fn role_item_exposes_builtin_protection() {
         use crate::entity::role::{Role, RoleData};

@@ -16,7 +16,7 @@ use crate::wiring::CatalogServices;
 use crate::{Error, Result};
 
 impl SupplierPortalProcess {
-    /// 执行固定申请审核政策，拒绝时补查身份以保留原认证错误。
+    // 执行固定申请审核政策，拒绝时补查身份以保留原认证错误。
     async fn require_request_review(
         &self,
         actor: &AuditActor,
@@ -31,18 +31,13 @@ impl SupplierPortalProcess {
         result
     }
 
-    /// 用申请维护人充当批量供给审核人，并重验其审核与查看权限。
-    ///
-    /// # 参数
-    /// * `app` - 供给申请。
-    /// * `actor` - 当前门户身份，用于解析既有供给归属。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 维护人仍可登录且具备审核、查看和对象范围时无返回值。
-    ///
-    /// # 错误
-    /// 维护人无效、缺少门户权限，或供给对象范围不足时返回对应错误。
+    // 用申请维护人充当批量供给审核人，并重验其审核与查看权限。
+    //
+    // `app`：供给申请；`actor`：当前门户身份，用于解析既有供给归属；`executor`：调用方执行器。
+    //
+    // 维护人仍可登录且具备审核、查看和对象范围时无返回值。
+    //
+    // 维护人无效、缺少门户权限，或供给对象范围不足时返回对应错误。
     pub(super) async fn batch_offering_reviewer(
         &self,
         app: &OfferingApplication,
@@ -60,17 +55,13 @@ impl SupplierPortalProcess {
         self.require_request_review(&reviewer, RequestTarget::offering(app), executor).await
     }
 
-    /// 用供应商当前维护人充当批量新品审核人，并重验其审核与查看权限。
-    ///
-    /// # 参数
-    /// * `draft` - 新品草稿。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 维护人仍可登录且具备新品审核、查看和创建资格时无返回值。
-    ///
-    /// # 错误
-    /// 供应商停用、维护人无效、缺少门户权限，或商品与供给创建资格不足时返回对应错误。
+    // 用供应商当前维护人充当批量新品审核人，并重验其审核与查看权限。
+    //
+    // `draft`：新品草稿；`executor`：调用方执行器。
+    //
+    // 维护人仍可登录且具备新品审核、查看和创建资格时无返回值。
+    //
+    // 供应商停用、维护人无效、缺少门户权限，或商品与供给创建资格不足时返回对应错误。
     pub(super) async fn batch_new_product_reviewer(
         &self,
         draft: &NewProductDraft,
@@ -87,18 +78,13 @@ impl SupplierPortalProcess {
         self.require_request_review(&reviewer, RequestTarget::new_product(draft), executor).await
     }
 
-    /// 在供给维护人资格之外，再证明其可更新商品目录。
-    ///
-    /// # 参数
-    /// * `owner` - 指定的内部维护人账号 ID。
-    /// * `actor` - 当前内部操作人。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 返回已验证的维护人账号 ID 和业务组织 ID。
-    ///
-    /// # 错误
-    /// 维护人无效、供给维护组织无法解析，或商品更新资格不足时返回对应错误。
+    // 在供给维护人资格之外，再证明其可更新商品目录。
+    //
+    // `owner`：指定的内部维护人账号 ID；`actor`：当前内部操作人；`executor`：调用方执行器。
+    //
+    // 返回已验证的维护人账号 ID 和业务组织 ID。
+    //
+    // 维护人无效、供给维护组织无法解析，或商品更新资格不足时返回对应错误。
     pub(super) async fn new_product_maintainer(
         &self,
         owner: &str,
@@ -112,18 +98,13 @@ impl SupplierPortalProcess {
         Ok((owner, org))
     }
 
-    /// 证明指定维护人仍可登录，并能更新解析出的供给维护组织。
-    ///
-    /// # 参数
-    /// * `owner` - 指定的内部维护人账号 ID。
-    /// * `actor` - 当前内部操作人。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 返回维护人账号 ID 和业务组织 ID。
-    ///
-    /// # 错误
-    /// 维护人无效、维护组织无法解析，或供给更新资格不足时返回对应错误。
+    // 证明指定维护人仍可登录，并能更新解析出的供给维护组织。
+    //
+    // `owner`：指定的内部维护人账号 ID；`actor`：当前内部操作人；`executor`：调用方执行器。
+    //
+    // 返回维护人账号 ID 和业务组织 ID。
+    //
+    // 维护人无效、维护组织无法解析，或供给更新资格不足时返回对应错误。
     pub(super) async fn offering_maintainer(
         &self,
         owner: &str,
@@ -140,11 +121,10 @@ impl SupplierPortalProcess {
 
 /// 为任务创建、转交和工作台提供同一具体申请业务处理资格。
 ///
-/// # 参数
 /// 组合层数据库、权限来源、当前内部处理人、精确申请及调用方执行器。
-/// # 返回
+///
 /// 实际领域动作和对象范围均满足时为真；不存在或权限拒绝为假。
-/// # 错误
+///
 /// 身份、权限版本、配置或持久化错误保持失败关闭。
 pub async fn request_reviewable(
     db: &Database,

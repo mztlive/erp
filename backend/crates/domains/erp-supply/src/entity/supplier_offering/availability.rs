@@ -63,15 +63,7 @@ pub struct SupplierOfferingAvailability {
 
 impl SupplierOfferingAvailability {
     /// 创建实时可供投影。
-    ///
-    /// # 参数
-    /// * `id` - 投影主键
-    /// * `data` - 当前可供事实
-    ///
-    /// # 返回
     /// 返回规范化后的投影。
-    ///
-    /// # 错误
     /// 数量为负、来源版本过长或更新人为空时返回错误。
     pub fn new(id: SupplierOfferingAvailabilityId, data: SupplierOfferingAvailabilityData) -> Result<Self> {
         let source_revision_token =
@@ -92,16 +84,8 @@ impl SupplierOfferingAvailability {
         })
     }
 
-    /// 应用不早于当前来源时间的新可供事实。
-    ///
-    /// # 参数
-    /// * `data` - 新可供事实；所属供给必须保持一致
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 来源时间倒退、所属供给变化或字段非法时返回错误。
+    /// 把不早于当前来源时间的新观察写入同一供给的实时可供投影，不改商业条款。所属供给变化、传入来源时间
+    /// 倒退或字段非法时返回错误。
     pub fn apply(&mut self, data: SupplierOfferingAvailabilityData) -> Result<()> {
         if data.supplier_offering_id != self.supplier_offering_id {
             return Err(Error::from("可供状态只能更新到原供给记录，请核对所选供给"));
@@ -130,14 +114,7 @@ impl SupplierOfferingAvailability {
     }
 
     /// 校验调用方持有的乐观锁版本仍是当前版本。
-    ///
-    /// # 参数
-    /// * `expected` - 调用方读取到的投影版本
-    ///
-    /// # 返回
     /// 版本一致时返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 版本不一致时返回领域错误。
     pub fn ensure_version(&self, expected: u64) -> Result<()> {
         if self.base.version != expected {
@@ -147,14 +124,7 @@ impl SupplierOfferingAvailability {
     }
 
     /// 返回下一次成功持久化后的投影版本。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回当前乐观锁版本加一。
-    ///
-    /// # 错误
     /// 当前版本已达到 `u64` 上限时返回领域错误。
     pub fn next_persisted_version(&self) -> Result<u64> {
         self.base
@@ -164,15 +134,7 @@ impl SupplierOfferingAvailability {
     }
 
     /// 返回当前可供事实对应的销售安全中断原因。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 明确停止、不可供、过期或零库存时返回领域原因；正常可供时返回 `None`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn interruption_reason(&self) -> Option<AvailabilityInterruptionReason> {
         if self.valid_until.is_some_and(|until| until <= Instant::now()) {
             return Some(AvailabilityInterruptionReason::AvailabilityStale);
@@ -189,15 +151,7 @@ impl SupplierOfferingAvailability {
     }
 
     /// 判断当前投影是否可参与采购且数量未耗尽。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 状态为可供且数量为空或大于零时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn is_available(&self) -> bool {
         self.valid_until.is_none_or(|until| Instant::now() < until)
             && self.availability_status == AvailabilityStatus::Available

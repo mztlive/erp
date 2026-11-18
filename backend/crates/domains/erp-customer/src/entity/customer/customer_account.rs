@@ -30,16 +30,7 @@ pub enum CustomerAccountStatus {
 }
 
 impl CustomerAccountStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 把客户账户状态转换为中文展示名称，供详情、列表或业务提示显示。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Active => "启用",
@@ -47,16 +38,7 @@ impl CustomerAccountStatus {
         }
     }
 
-    /// 返回状态的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回客户账户状态的固定代码，供持久化值和查询条件使用同一口径。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Active => "active",
@@ -66,14 +48,7 @@ impl CustomerAccountStatus {
 
     /// 判断是否处于启用状态。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 处于 `Active` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn is_active(&self) -> bool {
         matches!(self, Self::Active)
     }
@@ -83,14 +58,7 @@ impl CustomerAccountStatus {
     /// 阻断口径的权威实现：DTO 的 `customer_status_blockers` 只负责组装
     /// 展示文案，动作集合以此处为准。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 启用时为空；停用时返回禁止新合同与新销售单的动作代码。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn blocked_actions(&self) -> &'static [&'static str] {
         match self {
             Self::Active => &[],
@@ -100,16 +68,9 @@ impl CustomerAccountStatus {
 }
 
 impl DocumentState for CustomerAccountStatus {
-    /// 返回合法后继：启用 ⇄ 停用。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// `Active` 的后继只有 `Disabled`，`Disabled` 的后继只有 `Active`。切片不含当前状态。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 返回合法后继：启用 ⇄ 停用。
+    //
+    // `Active` 的后继只有 `Disabled`，`Disabled` 的后继只有 `Active`。切片不含当前状态。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Active => &[Self::Disabled],
@@ -164,7 +125,7 @@ pub struct CustomerAccount {
 }
 
 impl PartialEq for CustomerAccount {
-    /// 全字段语义相等。
+    // 比较两条客户账户的全部持久化字段，判断其业务内容和存储状态是否完全一致。
     fn eq(&self, other: &Self) -> bool {
         self.base == other.base
             && self.stable.status == other.stable.status
@@ -180,20 +141,17 @@ impl PartialEq for CustomerAccount {
 impl Eq for CustomerAccount {}
 
 impl CustomerAccount {
-    /// 创建客户角色。
+    /// 以稳定编号关联现有主体并初始化客户账户，供新建客户关系时使用。
     ///
     /// 完成 customer_no 的必填校验与规范化（去首尾空白、非空、长度
     /// 上限），付款条件引用规范化。
     ///
     /// # 参数
     /// * `id` - 实体主键（`erp_core::ids::CustomerAccountId`）
-    /// * `data` - 创建数据
     /// * `created_by` - 创建人（账号或系统身份）
     ///
-    /// # 返回
     /// 返回新建的客户角色实体。
     ///
-    /// # 错误
     /// 当 `customer_no` 为空或超长，或付款条件引用超长时返回错误。
     pub fn new(
         id: CustomerAccountId,
@@ -217,19 +175,16 @@ impl CustomerAccount {
         })
     }
 
-    /// 更新客户角色。
+    /// 维护客户默认付款条件和账户状态，保留既有单据引用的编号和主体关系。
     ///
     /// `customer_no` 与 `party_id` 是稳定身份，不允许在通用更新中修改；
     /// 状态迁移按固定状态机校验（§13.3）。
     ///
     /// # 参数
-    /// * `update` - 更新数据
     /// * `updated_by` - 本次更新执行人
     ///
-    /// # 返回
     /// 更新成功返回 `Ok(())`。
     ///
-    /// # 错误
     /// 当付款条件引用非法或状态迁移非法时返回错误。
     pub fn update(&mut self, update: CustomerAccountUpdate, updated_by: impl Into<String>) -> Result<()> {
         self.apply_payment_term(update.default_payment_term_id)?;
@@ -238,41 +193,31 @@ impl CustomerAccount {
         Ok(())
     }
 
-    /// 判断客户角色是否处于启用状态。
+    /// 判断客户账户是否启用，供合同和销售单据检查客户能否参与新的业务。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 状态为 `Active` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn is_active(&self) -> bool {
         self.stable.status().is_active()
     }
 
-    /// 校验客户角色乐观锁版本。
+    /// 写入前确认客户账户仍是调用方读取的版本，发现并发修改时返回版本冲突。
     ///
     /// # 参数
     /// * `expected` - 客户端期望版本
     ///
-    /// # 返回
     /// 版本一致时返回 `Ok(())`。
     ///
-    /// # 错误
     /// 当前版本与期望版本不一致时返回错误。
     pub fn ensure_version(&self, expected: u64) -> Result<()> {
         super::ensure_entity_version(self.base.version, expected)
     }
 
-    /// 应用默认付款条件更新。
-    ///
-    /// # 参数
-    /// * `update` - 付款条件更新意图
-    ///
-    /// # 错误
-    /// 当引用超长时返回错误。
+    // 在写入客户账户前，把设置、清空或保留付款条件转换成对应的字段更新。
+    //
+    // # 参数
+    // * `update` - 付款条件更新意图
+    //
+    // 当引用超长时返回错误。
     fn apply_payment_term(&mut self, update: FieldUpdate<String>) -> Result<()> {
         match update {
             FieldUpdate::Unchanged => {},
@@ -282,13 +227,12 @@ impl CustomerAccount {
         Ok(())
     }
 
-    /// 应用状态更新。
-    ///
-    /// # 参数
-    /// * `status` - 可选目标状态
-    ///
-    /// # 错误
-    /// 目标状态不在固定状态机后继中时返回错误。
+    // 核对客户账户状态能否切换，再应用新的启停状态供后续业务检查使用。
+    //
+    // # 参数
+    // * `status` - 可选目标状态
+    //
+    // 目标状态不在固定状态机后继中时返回错误。
     fn apply_status(&mut self, status: Option<CustomerAccountStatus>) -> Result<()> {
         if let Some(to) = status {
             ensure_transition(self.stable.status, to)?;
@@ -298,21 +242,19 @@ impl CustomerAccount {
     }
 }
 
-/// 规范化付款条件引用。
-///
-/// 空值规范化为 `None`；非空值去首尾空白并校验长度上限。
-/// 付款条件是跨域受控码表字典（`default_payment_term_id` 解析），
-/// 实体层只保存引用不校验码表内容（**地基修订候选**：共享
-/// `PaymentTermId` newtype 与付款条件值对象下沉到 `common/`）。
-///
-/// # 参数
-/// * `value` - 原始输入
-///
-/// # 返回
-/// 返回规范化后的引用或 `None`。
-///
-/// # 错误
-/// 当引用超长时返回错误。
+// 校验并清理默认付款条件标识，将空值归为未配置，供客户建档和更新共用。
+//
+// 空值规范化为 `None`；非空值去首尾空白并校验长度上限。
+// 付款条件是跨域受控码表字典（`default_payment_term_id` 解析），
+// 实体层只保存引用不校验码表内容（**地基修订候选**：共享
+// `PaymentTermId` newtype 与付款条件值对象下沉到 `common/`）。
+//
+// # 参数
+// * `value` - 原始输入
+//
+// 返回规范化后的引用或 `None`。
+//
+// 当引用超长时返回错误。
 fn normalize_payment_term_id(value: Option<String>) -> Result<Option<String>> {
     let Some(value) = value else {
         return Ok(None);
@@ -344,7 +286,7 @@ mod tests {
         }
     }
 
-    /// happy path：编号去空白，付款条件引用规范化。
+    // 验证：编号去空白，付款条件引用规范化。
     #[test]
     fn new_trims_and_normalizes() {
         let account =
@@ -355,7 +297,7 @@ mod tests {
         assert_eq!(account.stable.created_by, "admin-1");
     }
 
-    /// 失败路径：编号为空/超长、引用超长。
+    // 验证：编号为空/超长、引用超长。
     #[test]
     fn new_rejects_invalid_inputs() {
         let blank = CustomerAccountData { customer_no: "   ".to_string(), ..account_data() };
@@ -369,7 +311,7 @@ mod tests {
         assert!(CustomerAccount::new(CustomerAccountId::new("c"), overlong_term, "admin-1").is_err());
     }
 
-    /// 状态机：邻接矩阵闭包完整，合法迁移通过。
+    // 状态机：邻接矩阵闭包完整，合法迁移通过。
     #[test]
     fn status_transitions_follow_fixed_matrix() {
         assert_adjacency_closed(&[CustomerAccountStatus::Active, CustomerAccountStatus::Disabled]);
@@ -390,7 +332,7 @@ mod tests {
         assert_eq!(account.stable.updated_by, "admin-2");
     }
 
-    /// 更新：编号与主体不可修改（不在更新面），付款条件可设置。
+    // 更新：编号与主体不可修改（不在更新面），付款条件可设置。
     #[test]
     fn update_keeps_stable_identity() {
         let mut account =
@@ -409,7 +351,7 @@ mod tests {
         assert_eq!(account.party_id, PartyId::new("party-1"));
     }
 
-    /// 版本校验接受当前版本并拒绝过期版本。
+    // 版本校验接受当前版本并拒绝过期版本。
     #[test]
     fn version_check_rejects_stale_expected_version() {
         let account =
@@ -419,7 +361,7 @@ mod tests {
         assert!(account.ensure_version(2).is_err());
     }
 
-    /// 阻断口径：启用无阻断，停用阻断新合同与新销售单。
+    // 阻断口径：启用无阻断，停用阻断新合同与新销售单。
     #[test]
     fn blocked_actions_follow_status() {
         assert!(CustomerAccountStatus::Active.blocked_actions().is_empty());
@@ -429,11 +371,11 @@ mod tests {
         );
     }
 
-    /// 手工 `PartialEq` 的字段覆盖约束（erp-customer-010）。
-    ///
-    /// 经 `serde_json::Value` 枚举全部持久化字段；新增字段未同步 `eq`
-    /// 实现时，本测试因对象差异未被比对而失败。
-    /// `base`/`stable` 以整体比较覆盖其全部子字段。
+    // 手工 `PartialEq` 的字段覆盖约束（erp-customer-010）。
+    //
+    // 经 `serde_json::Value` 枚举全部持久化字段；新增字段未同步 `eq`
+    // 实现时，本测试因对象差异未被比对而失败。
+    // `base`/`stable` 以整体比较覆盖其全部子字段。
     #[test]
     fn manual_partial_eq_covers_all_persisted_fields() {
         let left =

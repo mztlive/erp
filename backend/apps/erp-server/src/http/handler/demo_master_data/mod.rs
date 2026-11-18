@@ -12,11 +12,6 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
 /// 查看演示主数据是否开放，以及各类还剩多少。
-///
-/// # 参数
-/// * `state` - 应用状态
-///
-/// # 返回
 /// 返回计划数量和当前数量。
 pub async fn demo_master_data_status(
     State(state): State<HttpState>,
@@ -27,15 +22,7 @@ pub async fn demo_master_data_status(
 }
 
 /// 补齐演示用的岗位账号、尚未发布的审批流程，以及缺失的默认责任规则。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的操作人
-///
-/// # 返回
 /// 返回新建和已存在的数量。已有账号不改密码，但姓名会同步为演示人名。已启用的默认责任规则保留现有负责人。
-///
-/// # 错误
 /// 演示功能未开放、授权不足或基础数据准备失败时返回错误。
 pub async fn demo_master_data_foundation(
     State(state): State<HttpState>,
@@ -46,13 +33,6 @@ pub async fn demo_master_data_foundation(
 }
 
 /// 生成或恢复下一批演示主数据。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的操作人
-/// * `req` - 清单继续位置
-///
-/// # 返回
 /// 返回本批写入结果。
 pub async fn demo_master_data_apply(
     State(state): State<HttpState>,
@@ -64,15 +44,7 @@ pub async fn demo_master_data_apply(
 }
 
 /// 一次清空数据库，只保留 admin 账号和必要超管授权。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的操作人
-///
-/// # 返回
 /// 返回事务删除的文档总数。
-///
-/// # 错误
 /// 非 admin 超管、环境未开放或事务失败时拒绝清空。
 pub async fn demo_master_data_remove(
     State(state): State<HttpState>,

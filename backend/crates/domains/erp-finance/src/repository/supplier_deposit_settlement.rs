@@ -10,12 +10,11 @@ use crate::repository::PayableExt;
 use crate::{Error, Result};
 
 /// 读取原采购应付的完整增加分录，不截断后继续核销。
-/// # 参数
-/// * `db` / `payable_account` / `executor` - 财务数据、原应付和核销事务。
-/// # 返回
 /// 返回最多一千条稳定排序的增加分录。
-/// # 错误
 /// 候选超过上限或数据库失败时拒绝。
+///
+/// 输入约定：
+/// - `db` / `payable_account` / `executor`：财务数据、原应付和核销事务。
 pub async fn automatic_settlement_entries(
     db: &Database,
     payable_account: &str,
@@ -35,12 +34,11 @@ pub async fn automatic_settlement_entries(
 }
 
 /// 读取候选分录全部来源核销，防止忽略普通付款或其他使用而重复分配。
-/// # 参数
-/// * `db` / `entries` / `executor` - 数据源、完整分录和当前事务。
-/// # 返回
 /// 返回最多一万条正反向核销；空分录不查询。
-/// # 错误
-/// 超限或数据库失败时拒绝，不使用部分结果。
+/// 失败条件：超限或数据库失败时拒绝，不使用部分结果。
+///
+/// 输入约定：
+/// - `db` / `entries` / `executor`：数据源、完整分录和当前事务。
 pub async fn automatic_settlement_allocations(
     db: &Database,
     entries: &[PayableEntry],
@@ -64,12 +62,11 @@ pub async fn automatic_settlement_allocations(
 }
 
 /// 读取候选增加分录的全部正式抵销，防止将已冲减应付再次核销。
-/// # 参数
-/// * `db` / `entries` / `executor` - 原数据、完整分录及当前事务。
-/// # 返回
 /// 返回最多一万条抵销；空分录不查询。
-/// # 错误
 /// 超限或数据库失败时拒绝。
+///
+/// 输入约定：
+/// - `db` / `entries` / `executor`：原数据、完整分录及当前事务。
 pub async fn automatic_settlement_offsets(
     db: &Database,
     entries: &[PayableEntry],

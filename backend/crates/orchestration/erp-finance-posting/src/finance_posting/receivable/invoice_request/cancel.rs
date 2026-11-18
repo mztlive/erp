@@ -27,13 +27,8 @@ use crate::FinancePostingPorts;
 impl ReceivableProcess {
     /// 当前经办人按统一授权撤回审批；独立财务回执命中时只回读原申请。
     ///
-    /// # 参数
-    /// * `id` - 当前开票申请身份。
-    /// * `req` - 精确版本、撤回原因与幂等键。
-    /// * `actor` - 具备撤回和完整来源资格的当前经办人。
-    /// # 返回
-    /// 返回首次撤回申请的当前视图。
-    /// # 错误
+    /// `id` 为当前开票申请身份；`req` 为精确版本、撤回原因与幂等键；`actor` 为具备撤回和完整来源资格的当前经办人。返回首次撤回申请的当前视图。
+    ///
     /// 操作无权、版本冲突、审批已完成或任务状态变化时拒绝；查证失败保留未知结果。
     pub async fn cancel_invoice_request(
         &self,
@@ -70,7 +65,7 @@ impl ReceivableProcess {
         }
     }
 
-    /// 校验版本、审批绑定与运行时，实际撤回事务重验操作和完整来源资格。
+    // 校验版本、审批绑定与运行时，实际撤回事务重验操作和完整来源资格。
     async fn prepare_invoice_request_cancel(
         &self,
         request: &SalesInvoiceRequest,
@@ -125,7 +120,7 @@ struct InvoiceCancellation {
 }
 
 impl InvoiceCancellation {
-    /// 授权、精确重放、取消准备和结果读取共用原事务。
+    // 授权、精确重放、取消准备和结果读取共用原事务。
     async fn execute(
         self,
         evidence: &ReplayEvidence,
@@ -187,7 +182,7 @@ struct PreparedInvoiceRequestCancel {
     closed: Vec<WorkItem>,
 }
 
-/// 将对象 ID 固定在命令作用域中；不同申请允许分别使用同一个调用方幂等键。
+// 将对象 ID 固定在命令作用域中；不同申请允许分别使用同一个调用方幂等键。
 fn cancel_receipt(id: &str, req: &CancelInvoiceRequest, actor: &AuditActor) -> Result<CommandReceipt> {
     Ok(CommandReceipt::from_resource_parts(
         "invoice-request-cancel-",
@@ -201,20 +196,15 @@ fn cancel_receipt(id: &str, req: &CancelInvoiceRequest, actor: &AuditActor) -> R
 }
 
 /// 撤回及管理员受阻取消的唯一业务动作；必须在审批运行时事务内调用。
-/// # 参数
-/// * `db` - 当前用例数据库。
-/// * `id` - 开票申请 ID。
-/// * `actor` - 已授权的取消操作人。
-/// * `executor` - 审批运行时使用的同一事务执行器。
-/// # 返回
-/// 申请撤回及安全业务事件保存成功时返回空结果。
-/// # 错误
-/// 申请、应收锁、状态迁移或持久化失败时停止执行。
+///
+/// `db` 为当前用例数据库；`id` 为开票申请 ID；`actor` 为已授权的取消操作人；`executor` 为审批运行时使用的同一事务执行器。
+///
+/// 申请撤回及安全业务事件保存成功时返回空结果。申请、应收锁、状态迁移或持久化失败时停止执行。
 pub async fn cancel(db: &Database, id: &str, actor: &AuditActor, executor: &mut dyn Executor) -> Result<()> {
     cancel_and_record(db, id, actor, None, executor).await.map(|_| ())
 }
 
-/// 锁应收、撤回申请并写审计；返回本次审计事件 ID。
+// 锁应收、撤回申请并写审计；返回本次审计事件 ID。
 async fn cancel_and_record(
     db: &Database,
     id: &str,
@@ -234,16 +224,9 @@ async fn cancel_and_record(
 
 /// 在审批事务内驳回申请并释放申请额度。
 ///
-/// # 参数
-/// * `db` - 当前数据库。
-/// * `id` - 开票申请身份。
-/// * `expected_subject_version` - 当前被决定的审批实例主题版本。
-/// * `actor` - 已授权审批人。
-/// * `executor` - 审批运行时使用的同一事务。
-/// # 返回
-/// 申请已驳回、额度不再占用且审计保存成功。
-/// # 错误
-/// 申请缺失、状态无效、应收锁冲突或保存失败时返回错误。
+/// `id` 为开票申请身份；`expected_subject_version` 为当前被决定的审批实例主题版本；`actor` 为已授权审批人；`executor` 为审批运行时使用的同一事务。
+///
+/// 申请已驳回、额度不再占用且审计保存成功。申请缺失、状态无效、应收锁冲突或保存失败时返回错误。
 pub async fn reject(
     db: &Database,
     id: &str,

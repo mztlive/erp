@@ -13,18 +13,13 @@ pub trait ReceivableAccountInvoicingExt {
     /// 销项蓝票 `APPLY` 的原子写入口：以写条件保证
     /// `invoiced_total + 本次开票 <= invoiceable_total`，不满足时整个更新不生效，
     /// 返回 `false`。同时重算 `open_invoiceable_total`，不会产生负可开票余额。
+    /// 结果：开票在额度内并已生效时返回 `true`；超过剩余可开票额度被拒绝时返回 `false`。
+    /// 传播数据库更新失败。
     ///
-    /// # 参数
-    /// * `id` - 应收往来子账 ID
-    /// * `amount` - 本次开票含税金额（正数）
-    /// * `updated_by` - 本次更新执行人
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 开票在额度内并已生效时返回 `true`；超过剩余可开票额度被拒绝时返回 `false`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 更新失败时返回错误。
+    /// 输入约定：
+    /// - `id`：应收往来子账 ID
+    /// - `amount`：本次开票含税金额（正数）
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn apply_invoicing(
         &self,
         id: &str,
@@ -39,21 +34,14 @@ pub trait ReceivableAccountInvoicingExt {
     /// 保证 `invoiced_total + delta <= invoiceable_total`），并按输入顺序
     /// 报告每个账户的命中情况；调用方（Service）负责将 `rejected` 转译为
     /// 业务错误，失败时整个事务回滚，不产生部分写入。
-    ///
-    /// # 参数
-    /// * `deltas` - 按子账聚合的开票增量（已去重、首次出现顺序，同一账户只出现一次）
-    /// * `updated_by` - 本次更新执行人
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回按账户报告命中情况的 [`InvoicingBatchResult`]。
-    ///
-    /// # 错误
-    /// 当 MongoDB 更新失败时返回错误。
-    ///
-    /// # 约束
-    /// 聚合口径（同一账户增量求和、同一账户只更新一次）由 Service 经领域
+    /// 传播数据库更新失败。
+    /// 调用边界：聚合口径（同一账户增量求和、同一账户只更新一次）由 Service 经领域
     /// 计划保证；本方法不自行开启事务、不决定跨账户业务结论。
+    ///
+    /// 输入约定：
+    /// - `deltas`：按子账聚合的开票增量（已去重、首次出现顺序，同一账户只出现一次）
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn apply_invoicings_many(
         &self,
         deltas: &[(ReceivableAccountId, Amount)],
@@ -66,18 +54,13 @@ pub trait ReceivableAccountInvoicingExt {
     /// 销项红票 `REVERSE` 的原子写入口：以写条件保证 `本次红冲 <= invoiced_total`，
     /// 不满足时整个更新不生效，返回 `false`。累计红冲由 P3 登记事务结合
     /// `reverses_allocation_id` 校验，本方法防止已开票进度被冲成负数。
+    /// 结果：红冲在已开票额度内并已生效时返回 `true`；超过已开票金额被拒绝时返回 `false`。
+    /// 传播数据库更新失败。
     ///
-    /// # 参数
-    /// * `id` - 应收往来子账 ID
-    /// * `amount` - 本次红冲含税金额（正数）
-    /// * `updated_by` - 本次更新执行人
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 红冲在已开票额度内并已生效时返回 `true`；超过已开票金额被拒绝时返回 `false`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 更新失败时返回错误。
+    /// 输入约定：
+    /// - `id`：应收往来子账 ID
+    /// - `amount`：本次红冲含税金额（正数）
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn revert_invoicing(
         &self,
         id: &str,
@@ -92,22 +75,15 @@ pub trait ReceivableAccountInvoicingExt {
     /// `本次红冲 <= invoiced_total`），并按输入顺序报告每个账户的命中情况；
     /// 调用方（Service）负责将 `rejected` 转译为业务错误，失败时整个事务回滚，
     /// 不产生部分写入。本方法只执行计划，不判断红票业务资格。
-    ///
-    /// # 参数
-    /// * `deltas` - 按子账聚合的红冲增量（已去重、首次出现顺序，同一账户只出现一次）
-    /// * `updated_by` - 本次更新执行人
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回按账户报告命中情况的 [`InvoicingBatchResult`]（`applied` 为命中，
     /// `rejected` 为超过已开票进度被拒绝）。
-    ///
-    /// # 错误
-    /// 当 MongoDB 更新失败时返回错误。
-    ///
-    /// # 约束
-    /// 聚合口径（同一账户增量求和、同一账户只更新一次）由 Service 经领域
+    /// 传播数据库更新失败。
+    /// 调用边界：聚合口径（同一账户增量求和、同一账户只更新一次）由 Service 经领域
     /// 计划保证；本方法不自行开启事务、不决定跨账户业务结论。
+    ///
+    /// 输入约定：
+    /// - `deltas`：按子账聚合的红冲增量（已去重、首次出现顺序，同一账户只出现一次）
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn revert_invoicings_many(
         &self,
         deltas: &[(ReceivableAccountId, Amount)],

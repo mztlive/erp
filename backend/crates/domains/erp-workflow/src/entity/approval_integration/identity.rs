@@ -18,18 +18,13 @@ pub enum SalesBusinessKind {
 }
 
 /// 将 ERP 单据类型映射为 BPM 流程种类。
+/// 不得使用可缺项映射表，也不得接受未登记字符串推导种类。
 ///
-/// # 参数
-/// * `document_type` - 合同固定的 22 种单据类型之一
-///
-/// # 返回
 /// 返回与该单据类型一一对应的流程种类。
 ///
-/// # 错误
 /// 不返回错误；穷尽匹配已覆盖全部登记类型。
 ///
-/// # 关键业务约束
-/// 不得使用可缺项映射表，也不得接受未登记字符串推导种类。
+/// `document_type`：合同固定的 22 种单据类型之一。
 pub fn process_kind_of(document_type: DocumentType) -> ProcessKind {
     match document_type {
         DocumentType::SalesOrder => ProcessKind::SalesOrder,
@@ -58,18 +53,13 @@ pub fn process_kind_of(document_type: DocumentType) -> ProcessKind {
 }
 
 /// 将 BPM 流程种类映射回 ERP 单据类型。
+/// 稳定代码必须与 [`DocumentType::as_str`] 一致，禁止把卡券销售并入实物销售。
 ///
-/// # 参数
-/// * `process_kind` - 已冻结的流程种类
-///
-/// # 返回
 /// 返回与该流程种类一一对应的单据类型。
 ///
-/// # 错误
 /// 不返回错误；穷尽匹配已覆盖全部冻结种类。
 ///
-/// # 关键业务约束
-/// 稳定代码必须与 [`DocumentType::as_str`] 一致，禁止把卡券销售并入实物销售。
+/// `process_kind`：已冻结的流程种类。
 pub fn document_type_of(process_kind: ProcessKind) -> DocumentType {
     match process_kind {
         ProcessKind::SalesOrder => DocumentType::SalesOrder,
@@ -98,19 +88,12 @@ pub fn document_type_of(process_kind: ProcessKind) -> DocumentType {
 }
 
 /// 将销售单业务性质穷尽分派到独立单据类型。
+/// 卡券与实物必须使用独立 `DocumentType` / `ProcessKind`，不得二次分流。
 ///
-/// # 参数
-/// * `business_type` - 销售单业务性质
-///
-/// # 返回
 /// `GoodsService` 映射 [`DocumentType::SalesOrder`]，`Voucher` 映射
 /// [`DocumentType::VoucherSalesOrder`]。
 ///
-/// # 错误
 /// 不返回错误；枚举已穷尽。
-///
-/// # 关键业务约束
-/// 卡券与实物必须使用独立 `DocumentType` / `ProcessKind`，不得二次分流。
 pub fn document_type_of_sales_business(business_type: SalesBusinessKind) -> DocumentType {
     match business_type {
         SalesBusinessKind::GoodsService => DocumentType::SalesOrder,
@@ -119,37 +102,27 @@ pub fn document_type_of_sales_business(business_type: SalesBusinessKind) -> Docu
 }
 
 /// 由 BPM 主体种类解析已登记单据类型。
+/// 精确代码规则由 [`DocumentType::try_from_code`] 拥有，本函数不裁剪、不折叠。
 ///
-/// # 参数
-/// * `kind` - BPM 主体持有的稳定种类代码
-///
-/// # 返回
 /// 精确命中登记代码时返回对应单据类型。
 ///
-/// # 错误
 /// 空值、未登记种类、大小写变化或前后空白均返回错误，不得回落默认类型。
 ///
-/// # 关键业务约束
-/// 精确代码规则由 [`DocumentType::try_from_code`] 拥有，本函数不裁剪、不折叠。
+/// `kind`：BPM 主体持有的稳定种类代码。
 pub fn document_type_from_subject_kind(kind: &str) -> Result<DocumentType> {
     DocumentType::try_from_code(kind)
 }
 
 /// 由 BPM 主体种类与流程种类联合解析已登记单据类型。
 ///
-/// # 参数
-/// * `subject_kind` - BPM 主体持有的稳定种类代码
-/// * `process_kind` - 实例冻结的流程种类
-///
-/// # 返回
-/// 种类代码已登记且与流程种类一一对应时返回对应单据类型。
-///
-/// # 错误
-/// 未登记种类，或种类与流程种类不一致时返回错误；调用方按读写路径映射为隐藏式拒绝或冲突。
-///
-/// # 关键业务约束
 /// 精确代码规则由 [`DocumentType::try_from_code`] 拥有，种类与流程的对应关系由
 /// [`process_kind_of`] 拥有，本函数只做联合判定，不接受缺省回落。
+///
+/// 种类代码已登记且与流程种类一一对应时返回对应单据类型。
+///
+/// 未登记种类，或种类与流程种类不一致时返回错误；调用方按读写路径映射为隐藏式拒绝或冲突。
+///
+/// `subject_kind`：BPM 主体持有的稳定种类代码；`process_kind`：实例冻结的流程种类。
 pub fn resolve_runtime_document_type(subject_kind: &str, process_kind: ProcessKind) -> Result<DocumentType> {
     let document_type = document_type_from_subject_kind(subject_kind)?;
     if process_kind_of(document_type) != process_kind {
@@ -159,38 +132,22 @@ pub fn resolve_runtime_document_type(subject_kind: &str, process_kind: ProcessKi
 }
 
 /// 为单据类型与业务主键构造唯一 `SubjectRef`。
+/// 主体种类必须来自 [`process_kind_of`]，禁止调用方传入任意字符串。
 ///
-/// # 参数
-/// * `document_type` - 固定单据类型
-/// * `business_object_id` - 业务对象主键
-///
-/// # 返回
 /// `subject_kind` 取流程种类稳定码，`subject_id` 取去空白后的业务主键。
 ///
-/// # 错误
 /// 主键为空、仅空白或超长时返回错误。
-///
-/// # 关键业务约束
-/// 主体种类必须来自 [`process_kind_of`]，禁止调用方传入任意字符串。
 pub fn subject_ref_for(document_type: DocumentType, business_object_id: &str) -> Result<SubjectRef> {
     SubjectRef::new(process_kind_of(document_type).as_str(), business_object_id)
         .map_err(|error| Error::from(error.to_string()))
 }
 
 /// 按销售业务性质构造唯一主体引用。
+/// 必须先经 [`document_type_of_sales_business`] 分派，再构造引用。
 ///
-/// # 参数
-/// * `business_type` - 销售单业务性质
-/// * `business_object_id` - 销售单主键
-///
-/// # 返回
 /// 返回对应独立单据类型的主体引用。
 ///
-/// # 错误
 /// 主键为空、仅空白或超长时返回错误。
-///
-/// # 关键业务约束
-/// 必须先经 [`document_type_of_sales_business`] 分派，再构造引用。
 pub fn subject_ref_for_sales_business(
     business_type: SalesBusinessKind,
     business_object_id: &str,
@@ -234,7 +191,7 @@ mod tests {
         ProcessKind::PurchaseReturnOrder,
     ];
 
-    /// 22 种单据类型与流程种类双向一一对应，稳定代码一致。
+    // 验证：22 种单据类型与流程种类双向一一对应，稳定代码一致。
     #[test]
     fn document_type_and_process_kind_round_trip() {
         assert_eq!(DocumentType::ALL.len(), 22);
@@ -253,7 +210,7 @@ mod tests {
         }
     }
 
-    /// 实物及服务固定映射销售单，卡券固定映射卡券销售单。
+    // 验证：实物及服务固定映射销售单，卡券固定映射卡券销售单。
     #[test]
     fn sales_business_type_dispatches_to_independent_document_types() {
         assert_eq!(
@@ -270,7 +227,7 @@ mod tests {
         );
     }
 
-    /// 非法种类与空主键必须失败关闭，不得回落默认类型。
+    // 验证：非法种类与空主键必须失败关闭，不得回落默认类型。
     #[test]
     fn illegal_kind_and_empty_id_are_rejected() {
         assert!(document_type_from_subject_kind("unknown").is_err());
@@ -282,7 +239,7 @@ mod tests {
         assert!(subject_ref_for_sales_business(SalesBusinessKind::Voucher, "").is_err());
     }
 
-    /// 每个单据类型都能构造唯一主体引用，销售业务性质不得共用种类。
+    // 验证：每个单据类型都能构造唯一主体引用，销售业务性质不得共用种类。
     #[test]
     fn subject_ref_uses_process_kind_code_and_rejects_collision() {
         let mut kinds = std::collections::BTreeSet::new();
@@ -301,7 +258,7 @@ mod tests {
         assert_ne!(sales.subject_kind(), voucher.subject_kind());
     }
 
-    /// 联合判定接受已登记且一致的种类/流程组合，拒绝未登记或错配组合。
+    // 验证：联合判定接受已登记且一致的种类/流程组合，拒绝未登记或错配组合。
     #[test]
     fn resolve_runtime_document_type_accepts_only_consistent_pairs() {
         for document_type in DocumentType::ALL {

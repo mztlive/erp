@@ -16,11 +16,7 @@ pub struct CatalogPoolScope {
 
 impl CatalogPoolScope {
     /// 规范化一个完整的来源授权范围。
-    /// # 参数
-    /// `account_scope` 为部署账号命名空间，`pool_ids` 为完整商品池列表。
-    /// # 返回
     /// 排序且去重的范围，空池集合保留为来源明确的空范围。
-    /// # 错误
     /// 账号、池身份或范围大小无效时拒绝。
     pub fn new(account_scope: String, mut pool_ids: Vec<String>) -> Result<Self> {
         pool_ids.sort();
@@ -31,11 +27,7 @@ impl CatalogPoolScope {
     }
 
     /// 核对已经规范化的完整授权范围。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 账号与严格递增池集合满足边界时成功。
-    /// # 错误
     /// 未排序、重复、空身份或超限时拒绝。
     pub fn validate(&self) -> Result<()> {
         if !identifier(&self.account_scope)
@@ -64,11 +56,7 @@ pub struct CatalogMembershipPage {
 
 impl CatalogMembershipPage {
     /// 核对单页来源证据，不把本地任务结束当作外部扫描完成。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 范围、来源池和成员身份满足边界时成功。
-    /// # 错误
     /// 不完整翻页事实、越范围池或成员身份无效时拒绝。
     pub fn validate(&self) -> Result<()> {
         self.scope.validate()?;
@@ -134,11 +122,7 @@ pub struct CatalogMembershipScan {
 
 impl CatalogMembershipScan {
     /// 核对扫描永久绑定的连接、供应商和账号范围。
-    /// # 参数
-    /// 所有期望身份来自服务端当前任务及已绑定连接。
-    /// # 返回
     /// 归属与完整范围精确匹配时成功。
-    /// # 错误
     /// 跨连接、跨供应商或账号范围变化时拒绝复用。
     pub fn validate_binding(&self, connection: &str, supplier: &str, scope: &CatalogPoolScope) -> Result<()> {
         if self.connection_id != connection || self.supplier_id != supplier || &self.scope != scope {
@@ -148,11 +132,7 @@ impl CatalogMembershipScan {
     }
 
     /// 建立账号及连接专属的扫描证据，不修改任何旧成员状态。
-    /// # 参数
-    /// 身份均来自服务端任务和已绑定连接，`scope` 来自首次完整池列表。
-    /// # 返回
     /// 从首池零偏移开始的扫描记录。
-    /// # 错误
     /// 任务、归属或范围无效时拒绝。
     pub fn new(job: &str, connection: &str, supplier: &str, scope: CatalogPoolScope) -> Result<Self> {
         scope.validate()?;
@@ -175,11 +155,7 @@ impl CatalogMembershipScan {
     }
 
     /// 按冻结池顺序及来源偏移应用单页；失败不改变原扫描进度。
-    /// # 参数
-    /// `page` 为适配器本页证据，`at` 为成功观察时刻。
-    /// # 返回
     /// 更新下一池及偏移，末页范围不一致时保留为 Uncertain。
-    /// # 错误
     /// 跳页、重复页、范围变化或未完整闭合的完成声明时拒绝。
     pub fn observe_page(&mut self, page: &CatalogMembershipPage, at: Instant) -> Result<()> {
         page.validate()?;
@@ -220,12 +196,8 @@ impl CatalogMembershipScan {
     }
 
     /// 仅在完整扫描与上一确认授权范围一致时允许负向核对。
-    /// # 参数
-    /// `previous` 为同账号连接最近已完成核对的完整范围，首次可缺失。
-    /// # 返回
     /// 保持完整或转为授权范围待核实；不修改成员或目录。
-    /// # 错误
-    /// 不返回错误，不完整范围永远不能授权撤回。
+    /// 不完整范围永远不能授权撤回。
     pub fn authorize_reconciliation(&mut self, previous: Option<&CatalogPoolScope>) {
         self.negative_allowed = self.state == CatalogMembershipState::Complete
             && previous.is_none_or(|scope| scope == &self.scope);
@@ -236,12 +208,7 @@ impl CatalogMembershipScan {
     }
 
     /// 判定本扫描是否具备负向核对资格。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 完整且已核对授权范围时返回真。
-    /// # 错误
-    /// 不返回错误。
     pub fn can_reconcile(&self) -> bool {
         !self.base.is_deleted()
             && self.active
@@ -250,12 +217,9 @@ impl CatalogMembershipScan {
     }
 
     /// 完成本轮负向核对，建立下一轮可比较的明确基线。
-    /// # 参数
-    /// 无；调用方须在同一事务证明没有剩余待核对成员。
-    /// # 返回
     /// 状态变为 Reconciled。
-    /// # 错误
     /// 无完整范围资格时拒绝。
+    /// 调用方须在同一事务证明没有剩余待核对成员。
     pub fn finish_reconciliation(&mut self) -> Result<()> {
         if !self.can_reconcile() {
             return Err(Error::ConflictError("商品池范围未核实，不能完成负向核对".into()));
@@ -266,12 +230,9 @@ impl CatalogMembershipScan {
     }
 
     /// 放弃失败扫描，仅解除本地推进围栏，不撤回已观察成员。
-    /// # 参数
-    /// 无；发布交接后计划恢复的任务不得调用此方法。
-    /// # 返回
     /// 未完成核对的扫描变为 Uncertain 并保留全部页面证据。
-    /// # 错误
-    /// 不返回错误，已建立的 Reconciled 基线保持不变。
+    /// 已建立的 Reconciled 基线保持不变。
+    /// 发布交接后计划恢复的任务不得调用此方法。
     pub fn abort(&mut self) {
         if self.state != CatalogMembershipState::Reconciled {
             self.state = CatalogMembershipState::Uncertain;
@@ -297,12 +258,8 @@ pub struct CatalogPoolMember {
 
 impl CatalogPoolMember {
     /// 取得同账号连接、池与订货规格的稳定成员身份。
-    /// # 参数
-    /// 账号、连接、池与规格均为已经校验的来源身份。
-    /// # 返回
     /// 用于持久化及唯一去重的固定标识，不使用商品名称。
-    /// # 错误
-    /// 不返回错误；构造入口仍负责身份校验。
+    /// 构造入口仍负责身份校验。
     pub fn identity(connection: &str, account: &str, pool: &str, spec: &str) -> String {
         let mut hash = Sha256::new();
         for value in [connection, account, pool, spec] {
@@ -313,11 +270,7 @@ impl CatalogPoolMember {
     }
 
     /// 建立本页明确观察到的正向成员事实。
-    /// # 参数
-    /// `scan` 为本页所属扫描，`pool` 为已核实池，`sku` 为订货身份。
-    /// # 返回
     /// 当前可见且归属唯一的成员记录。
-    /// # 错误
     /// 成员越范围或来源身份无效时拒绝。
     pub fn observed(scan: &CatalogMembershipScan, pool: &str, sku: SupplierSku, at: Instant) -> Result<Self> {
         if !scan.scope.pool_ids.iter().any(|id| id == pool)
@@ -345,12 +298,8 @@ impl CatalogPoolMember {
     }
 
     /// 判断成员是否属于完整范围内本轮未见的旧记录。
-    /// # 参数
-    /// `scan` 为完成范围复核的当前扫描。
-    /// # 返回
     /// 满足同账号、连接、范围及未观察条件时为真。
-    /// # 错误
-    /// 不返回错误；未知范围一律为假。
+    /// 未知范围一律为假。
     pub fn retirement_candidate(&self, scan: &CatalogMembershipScan) -> bool {
         !self.base.is_deleted()
             && scan.can_reconcile()
@@ -363,12 +312,8 @@ impl CatalogPoolMember {
     }
 
     /// 判断同订货规格是否在本轮任一授权池明确观察到。
-    /// # 参数
-    /// `scan` 为已冻结的当前账号范围，`spec_id` 为待核对订货身份。
-    /// # 返回
     /// 本轮正向成员归属和池范围均一致时为真。
-    /// # 错误
-    /// 不返回错误；其他账号、旧轮次及失活成员不能提供当前覆盖。
+    /// 其他账号、旧轮次及失活成员不能提供当前覆盖。
     pub fn observed_in(&self, scan: &CatalogMembershipScan, spec_id: &str) -> bool {
         !self.base.is_deleted()
             && self.active

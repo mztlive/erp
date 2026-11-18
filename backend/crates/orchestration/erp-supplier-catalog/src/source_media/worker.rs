@@ -26,22 +26,20 @@ pub struct SourceMediaWorker {
 
 impl SourceMediaWorker {
     /// 创建独立媒体处理器。
-    /// # 参数
+    ///
     /// 数据库、受控素材准备器及已装配的商品领域服务。
-    /// # 返回
+    ///
     /// 不发起请求的处理器。
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: Database, preparer: Arc<SourceMediaPreparer>, catalog: CatalogService) -> Self {
         Self { db, preparer, catalog }
     }
 
-    /// 顺序处理媒体，收到停止通知后在条目边界退出。
-    /// # 参数
+    /// 来源媒体 worker 按条目顺序执行；收到停止通知时先完成当前条目的写入和收尾，再退出。
+    ///
     /// `stop` 为进程停止通知。
-    /// # 返回
+    ///
     /// 当前媒体处理和收尾已结束。
-    /// # 错误
+    ///
     /// 处理失败记录日志并在后续轮次重试。
     pub async fn run(&self, stop: watch::Receiver<bool>) {
         periodic(stop.clone(), Duration::from_secs(5), || async {
@@ -52,7 +50,7 @@ impl SourceMediaWorker {
         .await;
     }
 
-    /// 在持久化条目边界检查停机，不取消媒体写入。
+    // 在持久化条目边界检查停机，不取消媒体写入。
     async fn run_due(&self, stop: &watch::Receiver<bool>) -> Result<()> {
         let rows =
             supplier_catalog::due_media(&self.db, Instant::now().unix_secs(), &mut NoTransaction).await?;

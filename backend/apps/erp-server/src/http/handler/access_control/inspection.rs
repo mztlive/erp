@@ -11,13 +11,7 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
 /// 只读检查指定人员的业务访问条件。
-/// # 参数
-/// * `state` - 服务装配。
-/// * `actor` - 已认证检查人。
-/// * `request` - 检查目标，不接受客户端提供的授权事实。
-/// # 返回
 /// 分层检查报告。
-/// # 错误
 /// 越权、参数错误或存储故障返回统一错误信封。
 pub async fn inspect(
     State(state): State<HttpState>,

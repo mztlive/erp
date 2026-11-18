@@ -26,13 +26,9 @@ impl AdminService {
     /// 已绑定 `role-root` 的超级管理员不能走普通账号更新入口，因此本方法只更新
     /// `accounts` 集合中的密码哈希。账号不存在、类型不符或已软删除时失败，不会创建或提升账号。
     ///
-    /// # 参数
-    /// * `params` - 登录账号与新密码
-    ///
-    /// # 返回
     /// 返回被重置账号的 ID、登录名与当前启用状态。
     ///
-    /// # 错误
+    /// 失败情形：
     /// * `ValidationError` - 账号或密码不合法
     /// * `NotFound` - 管理员不存在或账号类型不是管理员
     /// * `BusinessLogicError` - 账号已软删除
@@ -62,16 +58,12 @@ impl AdminService {
     }
 }
 
-/// 将仓储结果收窄为可重置密码的未删除管理员。
-///
-/// # 参数
-/// * `account` - 按登录账号查出的可选账号，包含软删除记录
-///
-/// # 返回值
-/// 返回类型匹配且未删除的管理员账号。
-///
-/// # 错误
-/// 账号缺失或类型不符时返回 `NotFound`；已软删除时返回业务错误。
+// 将仓储结果收窄为可重置密码的未删除管理员。
+// 返回类型匹配且未删除的管理员账号。
+//
+// 账号缺失或类型不符时返回 `NotFound`；已软删除时返回业务错误。
+//
+// `account`：按登录账号查出的可选账号，包含软删除记录。
 fn existing_admin_for_password_reset(account: Option<AccountCore>) -> Result<AccountCore> {
     let account = account_of_kind(account, AccountKind::Admin, "管理员不存在")?;
     if account.base.is_deleted() {
@@ -88,7 +80,7 @@ mod tests {
     use super::existing_admin_for_password_reset;
     use crate::entity::{AccountCore, AccountStatus, LoginAccount, Secret};
 
-    /// 构造指定删除状态的最小管理员账号。
+    // 以指定的软删除状态构造最小后台管理员，用于密码重置边界的单测。
     fn account(deleted: bool) -> AccountCore {
         let secret = Secret::new(LoginAccount::new("admin01").unwrap(), "password123").unwrap();
         AccountCore {

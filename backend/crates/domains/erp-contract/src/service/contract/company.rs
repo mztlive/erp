@@ -6,18 +6,10 @@ use persistence_core::Executor;
 use crate::ports::SigningCompanyPort;
 use crate::{Error, Result};
 
-/// 在当前执行器内证明主体具有启用的我方公司身份。
-///
-/// # 参数
-/// * `companies` - 公司事实端口。
-/// * `id` - 请求明确选择的我方主体。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
-/// 启用公司及名称事实完整时成功。
-///
-/// # 错误
-/// 主体不是公司、停用、名称缺失或读取失败时拒绝。
+// 在当前执行器内证明主体具有启用的我方公司身份。
+// 启用公司及名称事实完整时成功。
+// `companies` 为公司事实端口，`id` 为请求明确选择的我方主体，沿用调用方执行器 `executor`。
+// 主体不是公司、停用、名称缺失或读取失败时拒绝。
 pub(super) async fn require_signing_company(
     companies: &dyn SigningCompanyPort,
     id: &PartyId,
@@ -33,16 +25,10 @@ pub(super) async fn require_signing_company(
     Ok(())
 }
 
-/// 要求归档请求明确指定我方结算主体。
-///
-/// # 参数
-/// * `id` - 请求中的主体身份。
-///
-/// # 返回
-/// 返回非空的明确主体身份。
-///
-/// # 错误
-/// 请求省略主体或身份为空时拒绝，不从客户事实推断。
+// 要求归档请求明确指定我方结算主体。
+// 返回非空的明确主体身份。
+// `id` 为请求中的主体身份。
+// 请求省略主体或身份为空时拒绝，不从客户事实推断。
 pub(super) fn required_settlement(id: Option<&PartyId>) -> Result<PartyId> {
     id.filter(|id| !id.as_ref().trim().is_empty())
         .cloned()

@@ -50,7 +50,7 @@ impl From<&ApprovalDefinitionBinding> for DocumentApprovalDefinitionView {
 }
 
 impl DocumentApprovalDefinitionView {
-    /// 构造绑定定义只读摘要。
+    /// 初始化单据审批所用的定义摘要，版本和节点由调用方按绑定事实填入。
     ///
     /// # 参数
     /// * `id` - 定义主键
@@ -58,38 +58,23 @@ impl DocumentApprovalDefinitionView {
     ///
     /// # 返回
     /// 返回版本为零、节点为空的摘要。
-    ///
-    /// # 错误
-    /// 无。
     pub fn new(id: String, name: String) -> Self {
         Self { id, name, version: 0, nodes: Vec::new() }
     }
 
-    /// 设置定义业务版本。
+    /// 组装绑定定义摘要时填入定义业务版本。
     ///
     /// # 参数
     /// * `version` - 定义业务版本
-    ///
-    /// # 返回
-    /// 返回更新后的摘要。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_version(mut self, version: u32) -> Self {
         self.version = version;
         self
     }
 
-    /// 设置节点摘要。
+    /// 组装绑定定义摘要时填入节点摘要。
     ///
     /// # 参数
     /// * `nodes` - 节点摘要
-    ///
-    /// # 返回
-    /// 返回更新后的摘要。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_nodes(mut self, nodes: Vec<DocumentApprovalNodeView>) -> Self {
         self.nodes = nodes;
         self

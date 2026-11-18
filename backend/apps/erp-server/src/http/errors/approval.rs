@@ -1,13 +1,8 @@
 use erp_workflow::ErrorCode;
 
-/// 将审批稳定码转换为各 HTTP 入口共用的公开说明。
-///
-/// # 参数
-/// `code` 为工作流领域声明的稳定码。
-/// # 返回
-/// 不含内部数据、可指导下一步操作的说明。
-/// # 错误
-/// 无。
+// 将审批稳定码转换为各 HTTP 入口共用的公开说明。
+// `code` 为工作流领域声明的稳定码。
+// 不含内部数据、可指导下一步操作的说明。
 pub(crate) fn approval_message(code: ErrorCode) -> &'static str {
     match code {
         ErrorCode::ResourceAuthorizationNotReady => "资料授权正在处理，请稍后刷新",

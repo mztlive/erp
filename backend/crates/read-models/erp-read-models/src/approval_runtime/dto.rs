@@ -46,15 +46,14 @@ pub struct DocumentApprovalInstanceView {
 }
 
 impl DocumentApprovalInstanceView {
-    /// 构造没有附加运行事实的摘要；实际加载后补齐权威版本。
+    /// 用实例身份和状态初始化审批摘要；实际轮次、节点和人员由调用方按运行事实补齐。
     ///
     /// # 参数
     /// * `id` - 实例主键
     /// * `status` - 实例状态
+    ///
     /// # 返回
     /// 返回首轮摘要，未取得的事实保持为空。
-    /// # 错误
-    /// 无。
     pub fn new(id: String, status: String) -> Self {
         Self {
             id,
@@ -79,61 +78,49 @@ impl DocumentApprovalInstanceView {
         }
     }
 
-    /// 复制实际当前轮次，不推断审批路线。
+    /// 组装审批实例摘要时填入实际当前轮次；复制实际当前轮次，不推断审批路线。
     ///
     /// # 参数
     /// * `round_no` - 实际当前轮次
     ///
     /// # 返回
     /// 返回写入 `current_round_no` 后的摘要。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn with_current_round_no(mut self, round_no: u32) -> Self {
         self.current_round_no = round_no;
         self
     }
 
-    /// 复制实际当前节点。
+    /// 组装审批实例摘要时填入实际当前节点键；没有则为 `None`。
     ///
     /// # 参数
     /// * `node` - 实际当前节点键；没有则为 `None`
     ///
     /// # 返回
     /// 返回写入 `current_node` 后的摘要，不改节点名称。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn with_current_node(mut self, node: Option<String>) -> Self {
         self.current_node = node;
         self
     }
 
-    /// 复制实际当前审批人。
+    /// 组装审批实例摘要时填入实际当前审批人；没有则为 `None`。
     ///
     /// # 参数
     /// * `assignee` - 实际当前审批人；没有则为 `None`
     ///
     /// # 返回
     /// 返回写入 `current_assignee` 后的摘要，不改显示名。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn with_current_assignee(mut self, assignee: Option<String>) -> Self {
         self.current_assignee = assignee;
         self
     }
 
-    /// 复制最近驳回原因。
+    /// 组装审批实例摘要时填入最近驳回原因；没有则为 `None`。
     ///
     /// # 参数
     /// * `reason` - 最近驳回原因；没有则为 `None`
     ///
     /// # 返回
     /// 返回写入 `latest_rejection` 后的摘要，不改驳回人。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn with_latest_rejection(mut self, reason: Option<String>) -> Self {
         self.latest_rejection = reason;
         self
@@ -166,7 +153,7 @@ pub struct DocumentApprovalHistoryItemView {
 }
 
 impl DocumentApprovalHistoryItemView {
-    /// 沿既有详情构造入口保留历史必填身份，未读取的决定保持为空。
+    /// 初始化详情首屏的审批执行历史项，只填入调用方已提供的执行事实。
     ///
     /// # 参数
     /// * `execution_id` - 节点执行主键
@@ -175,9 +162,6 @@ impl DocumentApprovalHistoryItemView {
     ///
     /// # 返回
     /// 返回轮次与执行序号为 1、节点名为空、决定字段为 `None` 的历史项。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(execution_id: String, node_key: String, result: String) -> Self {
         Self {
             execution_id,
@@ -193,16 +177,13 @@ impl DocumentApprovalHistoryItemView {
         }
     }
 
-    /// 复制真实执行轮次。
+    /// 组装审批执行历史项时填入实际执行轮次。
     ///
     /// # 参数
     /// * `round_no` - 实际执行轮次
     ///
     /// # 返回
     /// 返回写入 `round_no` 后的历史项。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn with_round_no(mut self, round_no: u32) -> Self {
         self.round_no = round_no;
         self
@@ -212,7 +193,7 @@ impl DocumentApprovalHistoryItemView {
 impl From<erp_workflow::service::approval::execution::RuntimeHistoryItem>
     for DocumentApprovalHistoryItemView
 {
-    /// 直接复制持久化历史投影字段，不转换 JSON 或推断决定人。
+    // 生成审批运行详情视图时，直接复制持久化历史投影字段，不转换 JSON 或推断决定人。
     fn from(item: erp_workflow::service::approval::execution::RuntimeHistoryItem) -> Self {
         Self {
             execution_id: item.execution_id,

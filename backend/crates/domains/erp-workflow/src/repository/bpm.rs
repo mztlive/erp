@@ -240,15 +240,7 @@ pub struct BpmWorkflowRepository<'a> {
 
 impl<'a> BpmWorkflowRepository<'a> {
     /// 创建 BPM 聚合仓储。
-    ///
-    /// # 参数
-    /// * `db` - 目标 MongoDB 数据库
-    ///
-    /// # 返回
     /// 返回不自行开事务的聚合仓储。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
@@ -309,7 +301,7 @@ fn merge_documents(target: &mut Document, extra: Document) {
     }
 }
 
-/// `limit` 为 0 时返回 1，否则不超过 `max`。
+// 在有界 BPM 查询中规范化请求条数，零降为一条，过大请求截到仓储上限。
 fn clamp_limit(limit: u32, max: i64) -> i64 {
     if limit == 0 {
         return 1;
@@ -317,7 +309,7 @@ fn clamp_limit(limit: u32, max: i64) -> i64 {
     i64::from(limit).min(max)
 }
 
-/// 版本无法落入 BSON `i64` 时返回元数据越界。
+// 写入或查询 BSON 乐观锁前将领域版本转换为 `i64`；不可表示时返回元数据越界。
 fn i64_version(version: u64) -> Result<i64> {
     i64::try_from(version).map_err(|_| Error::EntityMetadataOutOfRange("version"))
 }

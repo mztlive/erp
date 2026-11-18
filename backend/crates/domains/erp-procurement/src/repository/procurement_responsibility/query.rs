@@ -10,15 +10,9 @@ use crate::entity::procurement_responsibility::{EnableStatus, ProcurementRespons
 pub trait ProcurementResponsibilityRuleRepositoryExt {
     /// 分页查询采购责任规则。
     ///
-    /// # 参数
-    /// * `filter` - 规则列表筛选与分页条件
-    /// * `executor` - 数据访问执行器
+    /// 返回按 `rule_type`、`created_at`、`id` 升序排列的当前页规则及总数。MongoDB 查询、计数或反序列化失败时返回错误。
     ///
-    /// # 返回
-    /// 返回按 `rule_type`、`created_at`、`id` 升序排列的当前页规则及总数。
-    ///
-    /// # 错误
-    /// MongoDB 查询、计数或反序列化失败时返回错误。
+    /// 沿用调用方传入的执行器。
     async fn search_procurement_responsibility_rules(
         &self,
         filter: &ProcurementResponsibilityRuleFilter,
@@ -27,14 +21,9 @@ pub trait ProcurementResponsibilityRuleRepositoryExt {
 
     /// 读取全部启用采购责任规则。
     ///
-    /// # 参数
-    /// * `executor` - 数据访问执行器
+    /// 返回全部未删除且启用规则。MongoDB 查询或反序列化失败时返回错误。
     ///
-    /// # 返回
-    /// 返回全部未删除且启用规则。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
+    /// 沿用调用方传入的执行器。
     async fn list_active_procurement_responsibility_rules(
         &self,
         executor: &mut dyn Executor,
@@ -42,15 +31,9 @@ pub trait ProcurementResponsibilityRuleRepositoryExt {
 
     /// 按稳定 ID 读取采购责任规则。
     ///
-    /// # 参数
-    /// * `id` - 采购责任规则 ID
-    /// * `executor` - 数据访问执行器
+    /// 返回未删除规则；不存在时返回 `None`。MongoDB 查询或反序列化失败时返回错误。
     ///
-    /// # 返回
-    /// 返回未删除规则；不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
+    /// 沿用调用方传入的执行器。
     async fn find_procurement_responsibility_rule(
         &self,
         id: &str,

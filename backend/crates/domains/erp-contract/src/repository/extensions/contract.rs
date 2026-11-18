@@ -20,40 +20,13 @@ pub trait ContractExt {
     /// 合同列表筛选条件类型（定义见 `repository::contract`）。
     type ContractFilter;
 
-    /// 获取 `contract` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `ContractRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得 `contract` 集合的仓储，供稳定合同身份与当前修订指针的读写；由调用方提供执行器。
     fn contracts(&self) -> ContractRepository<'_>;
 
-    /// 获取 `contract_revision` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `ContractRevisionRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得 `contract_revision` 集合的仓储，供不可变修订及 PDF 关联的读取和追加；由调用方提供执行器。
     fn contract_revisions(&self) -> ContractRevisionRepository<'_>;
 
-    /// 获取承载跨集合事务写入的域专用仓储。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `ContractDomainRepository` 实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得合同身份与不可变修订的跨集合操作入口；原子写入沿用用例事务，不在仓储内开启事务。
     fn contract(&self) -> ContractDomainRepository<'_>;
 }
 

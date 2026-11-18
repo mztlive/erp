@@ -14,13 +14,7 @@ pub(crate) struct RoutePresentation {
     pub(crate) catalog_permission: Option<&'static Permission>,
 }
 
-/// 取得接口的展示差异。
-/// # 参数
-/// method 和 path 为实际管理端方法及不含 /admin 的路径。
-/// # 返回
-/// 仅包含显式登记字段的差异。
-/// # 错误
-/// 不返回错误；登记完整性在生成前校验。
+// 生成权限目录时，按实际 HTTP 方法及不含 `/admin` 的路径查找显式登记的展示差异；不改变鉴权权限。
 pub(crate) fn presentation(method: &str, path: &str) -> RoutePresentation {
     RoutePresentation {
         description: DESCRIPTIONS.iter().find(|row| (row.0, row.1) == (method, path)).map(|row| row.2),
@@ -32,20 +26,14 @@ pub(crate) fn presentation(method: &str, path: &str) -> RoutePresentation {
     }
 }
 
-/// 校验展示差异只引用实际存在的接口，且同一字段不重复登记。
-/// # 参数
-/// routes 为本次完整管理端路由集合。
-/// # 返回
-/// 各差异均匹配真实接口时成功。
-/// # 错误
-/// 引用了不存在的接口或字段重复登记时返回错误。
+// 生成前核对展示差异引用的接口真实存在，且同一字段只登记一次；登记失配时拒绝生成。
 pub(crate) fn validate(routes: &[RouteHandler]) -> Result<(), String> {
     validate_keys(DESCRIPTIONS.iter().map(|row| (row.0, row.1)), routes)?;
     validate_keys(GROUPS.iter().map(|row| (row.0, row.1)), routes)?;
     validate_keys(CATALOG_PERMISSIONS.iter().map(|row| (row.0, row.1)), routes)
 }
 
-/// 每类展示字段分别校验，允许同一接口同时覆盖说明和分组。
+// 逐类校验展示字段的路由键，允许同一接口分别覆盖说明和分组，但同类覆盖不能重复。
 fn validate_keys<'a>(
     keys: impl IntoIterator<Item = (&'a str, &'a str)>,
     routes: &[RouteHandler],

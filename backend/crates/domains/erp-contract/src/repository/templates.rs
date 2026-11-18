@@ -20,36 +20,12 @@ pub const COMPANY_NUMBERING: &str = "contract_company_numbering";
 /// 模板相关集合只由合同领域访问。
 pub trait ContractTemplateExt {
     /// 获取模板仓储。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 集合仓储。
-    /// # 错误
-    /// 无。
     fn contract_templates(&self) -> Repository<'_, ContractTemplate>;
     /// 获取年度流水仓储。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 集合仓储。
-    /// # 错误
-    /// 无。
     fn contract_counters(&self) -> Repository<'_, ContractCounter>;
     /// 获取申请仓储。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 集合仓储。
-    /// # 错误
-    /// 无。
     fn contract_applications(&self) -> Repository<'_, ContractApplication>;
     /// 获取主体编号绑定仓储。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 集合仓储。
-    /// # 错误
-    /// 无。
     fn contract_company_numbering(&self) -> Repository<'_, CompanyNumbering>;
 }
 
@@ -68,16 +44,10 @@ impl ContractTemplateExt for Database {
     }
 }
 
-/// 按申请人与稳定请求键读取原申请。
-/// # 参数
-/// * `db` - 合同库。
-/// * `applicant` - 申请人。
-/// * `command` - 稳定请求键。
-/// * `executor` - 执行器。
-/// # 返回
-/// 原记录或 None。
-/// # 错误
-/// 查询失败。
+// 按申请人与稳定请求键读取原申请。
+// 原记录或 None。
+// `db` 为合同库，`applicant` 为申请人，`command` 为稳定请求键。
+// 传播查询错误。
 pub(crate) async fn application_by_command(
     db: &Database,
     applicant: &str,
@@ -90,16 +60,10 @@ pub(crate) async fn application_by_command(
         .await?)
 }
 
-/// 只读取当前申请人的指定记录。
-/// # 参数
-/// * `db` - 合同库。
-/// * `id` - 申请 ID。
-/// * `applicant` - 申请人。
-/// * `executor` - 执行器。
-/// # 返回
-/// 本人记录或 None。
-/// # 错误
-/// 查询失败。
+// 只读取当前申请人的指定记录。
+// 本人记录或 None。
+// `db` 为合同库，`id` 为申请 ID，`applicant` 为申请人。
+// 传播查询错误。
 pub(crate) async fn owned_application(
     db: &Database,
     id: &str,
@@ -109,15 +73,10 @@ pub(crate) async fn owned_application(
     Ok(db.contract_applications().find_one(doc! { "id": id, "applicant_id": applicant }, executor).await?)
 }
 
-/// 按目录条件在数据库分页。
-/// # 参数
-/// * `db` - 合同库。
-/// * `params` - 分页与启停条件。
-/// * `executor` - 执行器。
-/// # 返回
-/// 模板页。
-/// # 错误
-/// 查询失败。
+// 按目录条件在数据库分页。
+// 模板页。
+// `db` 为合同库；`params` 为分页与启停条件。
+// 传播查询错误。
 pub(crate) async fn templates_page(
     db: &Database,
     params: &TemplateListParams,
@@ -131,16 +90,10 @@ pub(crate) async fn templates_page(
     page(db.contract_templates(), filter, params.pagination(), executor).await
 }
 
-/// 按本人范围在数据库分页。
-/// # 参数
-/// * `db` - 合同库。
-/// * `applicant` - 申请人。
-/// * `params` - 分页。
-/// * `executor` - 执行器。
-/// # 返回
-/// 本人申请页。
-/// # 错误
-/// 查询失败。
+// 按本人范围在数据库分页。
+// 本人申请页。
+// `db` 为合同库，`applicant` 为申请人，`params` 为分页。
+// 传播查询错误。
 pub(crate) async fn applications_page(
     db: &Database,
     applicant: &str,
@@ -150,16 +103,11 @@ pub(crate) async fn applications_page(
     page(db.contract_applications(), doc! { "applicant_id": applicant }, params.pagination(), executor).await
 }
 
-/// 稳定排序后在数据库分页，禁止无界加载。
-/// # 参数
-/// * `repository` - 集合仓储。
-/// * `filter` - 业务及申请人限制。
-/// * `pagination` - 已规范化的页码与容量。
-/// * `executor` - 调用方执行器。
-/// # 返回
-/// 当前页与匹配总数。
-/// # 错误
-/// 查询或反序列化失败。
+// 稳定排序后在数据库分页，禁止无界加载。
+// 当前页与匹配总数。
+// `repository` 为集合仓储；`filter` 为业务及申请人限制。
+// `pagination` 为已规范化的页码与容量；沿用调用方执行器 `executor`。
+// 查询或反序列化失败。
 pub(crate) async fn page<T>(
     repository: Repository<'_, T>,
     mut filter: Document,

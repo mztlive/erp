@@ -16,13 +16,12 @@ use crate::repository::authorization::binding::{FrozenMapping, validate_rule};
 use crate::service::access_control::resolve::{AuthorizedDataScope, DataScopeFacts};
 use crate::{AccessFactsPort, AccessMapping, Permission, QualifiedPermissions, Result};
 
-/// 组装有限测试绑定；不调用或放宽生产 Builder 的完整性校验。
-/// # 参数
-/// permissions、scope、objects 为固定身份事实；mappings 为测试消费的实际查询映射。
-/// # 返回
-/// 执行生产 require/query/validate 的共享服务。
-/// # 错误
-/// 模型、资源、重复映射或固定规则能力校验失败时拒绝构造。
+// 组装有限测试绑定；不调用或放宽生产 Builder 的完整性校验。
+// 执行生产 require/query/validate 的共享服务。
+//
+// 模型、资源、重复映射或固定规则能力校验失败时拒绝构造。
+//
+// permissions、scope、objects 为固定身份事实；mappings 为测试消费的实际查询映射。
 pub(crate) fn authorization(
     permissions: &[Permission],
     scope: ResolvedScope,

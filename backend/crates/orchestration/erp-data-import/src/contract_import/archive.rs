@@ -19,13 +19,8 @@ use super::audit::{ArchiveImport, context};
 use crate::{Error, Result};
 
 impl ContractImportProcess {
-    /// 确认用户编辑后的草稿并归档；识别本身不产生合同。
-    /// # 参数
-    /// * `id` / `command` / `actor` - 本人任务、确认值及认证人。
-    /// # 返回
-    /// 归档结果；相同确认命令重放返回原结果。
-    /// # 错误
-    /// 并发、输入、主数据、权限或事务失败。
+    /// 人工编辑识别草稿后，由操作人确认自己的导入任务并进入审计归档；识别本身不创建合同。
+    /// 相同确认重放返回原归档结果。并发、输入、主数据、权限或事务校验失败时拒绝。
     pub async fn confirm(&self, id: &str, command: ConfirmImport, actor: &AuditActor) -> Result<ImportView> {
         let task = self.task(id, actor).await?;
         task.check_confirmation(&command)?;
@@ -37,19 +32,16 @@ impl ContractImportProcess {
         .await
     }
 
-    /// 在归档事务内重读任务并写入合同；相同确认按已有结果重放。
-    ///
-    /// # 参数
-    /// * `task` - 调用方持有的导入任务；确认仍有效时改用事务内当前记录。
-    /// * `actor` - 当前认证人，用于归属与权限。
-    /// * `command` - 用户确认命令。
-    /// * `executor` - 归档事务执行器。
-    ///
-    /// # 返回
-    /// 归档视图，以及本次是否新写入。第二项为 `false` 时表示确认已处理。
-    ///
-    /// # 错误
-    /// 任务不归属当前人、确认或源文件不可用、字段或主数据不合法、合同或客户权限不足、追加版本冲突，或仓储写入失败时返回对应错误。
+    // 正式归档时，在调用方事务重读本人任务与原确认，重验源文件、客户和合同权限；相同确认只回放已有结果。
+    //
+    // - `task`：调用方持有的导入任务；确认仍有效时改用事务内当前记录。
+    // - `actor`：当前认证人，用于归属与权限。
+    // - `command`：用户确认命令。
+    // - `executor`：归档事务执行器。
+    //
+    // 归档视图，以及本次是否新写入。第二项为 `false` 时表示确认已处理。
+    //
+    // 任务不归属当前人、确认或源文件不可用、字段或主数据不合法、合同或客户权限不足、追加版本冲突，或仓储写入失败时返回对应错误。
     pub(super) async fn persist_archive(
         &self,
         mut task: ContractImport,

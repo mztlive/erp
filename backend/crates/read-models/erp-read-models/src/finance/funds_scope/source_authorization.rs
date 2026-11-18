@@ -12,13 +12,15 @@ use super::repository::whole_access::WholeAccess;
 use super::{FundsAccess, FundsAuthorization};
 use crate::Result;
 impl FundsAccess {
-    /// 用同一次解析取得固定根及全部来源计划。
-    /// # 参数
-    /// actor 为账号；resource/action 为固定业务入口，purchase/dual 只决定业务读取方向。
-    /// # 返回
-    /// 共享单一凭证的查询元信息和各来源只读计划。
-    /// # 错误
-    /// 入口、绑定或授权失败原样返回。
+    // 确定财务来源范围的适用条件时，用同一次解析取得固定根及全部来源计划。
+    //
+    // 调用参数：
+    // actor 为账号；resource/action 为固定业务入口，purchase/dual 只决定业务读取方向。
+    //
+    // 共享单一凭证的查询元信息和各来源只读计划。
+    //
+    // 失败边界：
+    // 入口、绑定或授权失败原样返回。
     pub(super) async fn resolve_sources(
         &self,
         actor: &AuditActor,
@@ -60,13 +62,15 @@ impl FundsAccess {
 }
 
 impl FundsAuthorization {
-    /// 仓储只核验边界和期限；交付时由读取用例统一复验根凭证。
-    /// # 参数
-    /// executor 为原读取执行器。
-    /// # 返回
-    /// 所有来源仍属于同一阶段时成功。
-    /// # 错误
-    /// 跨阶段、事务失效或到期拒绝。
+    // 校验财务来源范围时，仓储只核验边界和期限；交付时由读取用例统一复验根凭证。
+    //
+    // 调用参数：
+    // executor 为原读取执行器。
+    //
+    // 所有来源仍属于同一阶段时成功。
+    //
+    // 失败边界：
+    // 跨阶段、事务失效或到期拒绝。
     pub(super) async fn validate(&self, executor: &mut dyn Executor) -> Result<()> {
         if let Some(access) = &self.access {
             access.ensure_current(executor)?;
@@ -74,13 +78,15 @@ impl FundsAuthorization {
         Ok(())
     }
 
-    /// 完成所有仓储读取后执行一次结果交付检查。
-    /// # 参数
-    /// executor 为本次原执行器。
-    /// # 返回
-    /// 当前模式的边界、期限和必要依赖都有效时成功。
-    /// # 错误
-    /// 任一授权依赖变化或阶段失效即丢弃结果。
+    // 处理财务来源范围时，完成所有仓储读取后执行一次结果交付检查。
+    //
+    // 调用参数：
+    // executor 为本次原执行器。
+    //
+    // 当前模式的边界、期限和必要依赖都有效时成功。
+    //
+    // 失败边界：
+    // 任一授权依赖变化或阶段失效即丢弃结果。
     pub(crate) async fn deliver(&self, executor: &mut dyn Executor) -> Result<()> {
         if let (Some(access), Some(service)) = (&self.access, &self.service) {
             service.validate(access, executor).await?;

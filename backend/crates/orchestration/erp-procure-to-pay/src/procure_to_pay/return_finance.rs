@@ -25,13 +25,9 @@ use crate::procure_to_pay::sync_payment_arrangement;
 use crate::{Error, Result};
 
 /// 在原业务事务内按退货、净付款及净票额交接或完成财务任务。
-/// # 参数
-/// * `db` - 数据库。
-/// * `purchase_id` - 已由入口授权或财务事实关联的采购。
-/// * `executor` - 原命令事务。
-/// # 返回
-/// 无重复开放任务；未完成的任务保留原责任人。
-/// # 错误
+///
+/// `purchase_id` 为已由入口授权或财务事实关联的采购；`executor` 为原命令事务。无重复开放任务；未完成的任务保留原责任人。
+///
 /// 缺失责任配置、关联记录或事务冲突时拒绝整个命令。
 pub async fn sync_return_finance(
     db: &Database,
@@ -149,14 +145,8 @@ async fn create_task(
 }
 
 /// 按财务分配涉及的应付子账同步对应采购；供应商结算子账不派采购任务。
-/// # 参数
-/// * `db` - 数据库。
-/// * `account_ids` - 发生退款或红冲的应付子账。
-/// * `executor` - 原过账事务。
-/// # 返回
-/// 全部关联采购完成同步。
-/// # 错误
-/// 查询或任务写入失败时整体回滚。
+///
+/// `account_ids` 为发生退款或红冲的应付子账；`executor` 为原过账事务。全部关联采购完成同步。查询或任务写入失败时整体回滚。
 pub async fn sync_return_accounts(
     db: &Database,
     responsibility: &dyn FinanceResponsibilityPort,

@@ -23,13 +23,9 @@ use persistence_core::Executor;
 
 use super::{FactsBindings, MappingBindings};
 
-/// 建立采购、选品与库存的全部实现绑定，供统一 Builder 校验。
-/// # 参数
-/// db 为共享业务库，customer 与 warehouse 参数为拥有领域提供的共享事实和映射。
-/// # 返回
-/// 按资源唯一的 Facts，以及按固定查询权限绑定的 Mapping。
-/// # 错误
-/// 固定模型标识或来源模型不匹配时拒绝；构造不执行 I/O。
+// 建立采购、选品与库存的全部实现绑定，供统一 Builder 校验。
+// 按资源唯一的 Facts，以及按固定查询权限绑定的 Mapping。
+// 固定模型标识或来源模型不匹配时拒绝；构造不执行 I/O。
 pub(super) fn bindings(
     db: Database,
     customer_facts: Arc<dyn AccessFactsPort>,
@@ -63,13 +59,9 @@ pub(super) fn bindings(
     Ok((facts, mappings, purchase))
 }
 
-/// 构造完整采购来源映射，供单次组合根装配共享。
-/// # 参数
-/// 无；采购集合、历史参与关系和模型均为固定描述。
-/// # 返回
-/// 可供采购入口与财务来源复用的共享静态 Mapping。
-/// # 错误
-/// 固定采购模型不满足接入合同时返回错误。
+// 构造完整采购来源映射，供单次组合根装配共享。
+// 可供采购入口与财务来源复用的共享静态 Mapping。
+// 固定采购模型不满足接入合同时返回错误。
 pub(super) fn purchase_mapping() -> Result<Arc<dyn AccessMapping>> {
     PurchaseHistoryMapping::shared()
 }

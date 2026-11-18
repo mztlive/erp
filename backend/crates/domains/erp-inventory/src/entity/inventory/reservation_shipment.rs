@@ -21,18 +21,11 @@ pub(crate) struct ReservationFact {
 }
 
 impl ReservationFact {
-    /// 按销售行归属、剩余数量、发货仓存在性及仓库归属的顺序确定发货仓。
-    ///
-    /// # 参数
-    /// * `sales_order_line_id` - 当前仓发行归属的销售明细。
-    /// * `quantity` - 当前仓发行数量，流水构造仍负责数量正数约束。
-    /// * `warehouse_id` - 发货单指定的仓库。
-    ///
-    /// # 返回
-    /// 归属与剩余数量满足时返回发货仓。
-    ///
-    /// # 错误
-    /// 销售行不匹配、数量不足、缺少发货仓或仓库不匹配时返回原业务错误。
+    // 按销售行归属、剩余数量、发货仓存在性及仓库归属的顺序确定发货仓。
+    // 归属与剩余数量满足时返回发货仓。
+    // `sales_order_line_id` 为当前仓发行归属的销售明细；`quantity` 为当前仓发行数量，流水构造仍负责数量正数约束。
+    // `warehouse_id` 为发货单指定的仓库。
+    // 销售行不匹配、数量不足、缺少发货仓或仓库不匹配时返回原业务错误。
     pub(crate) fn shipment_warehouse(
         &self,
         sales_order_line_id: &SalesOrderLineId,

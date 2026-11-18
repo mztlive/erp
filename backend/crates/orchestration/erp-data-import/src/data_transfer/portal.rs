@@ -23,13 +23,13 @@ impl BusinessTransfers {
         self.portal_actor_with(input, actor, &mut ReadExecutor::default()).await
     }
 
-    /// 门户会话按原提交事务取证，不把事务外身份检查当作登记资格。
-    /// # 参数
-    /// input 含服务器冻结的会话版本，actor 为原身份，executor 为当前业务执行器。
-    /// # 返回
-    /// 当前有效的门户身份。
-    /// # 错误
-    /// 非门户身份、会话版本无效或取证失败时拒绝。
+    // 门户会话按原提交事务取证，不把事务外身份检查当作登记资格。
+    //
+    // input 含服务器冻结的会话版本，actor 为原身份，executor 为当前业务执行器。
+    //
+    // 当前有效的门户身份。
+    //
+    // 非门户身份、会话版本无效或取证失败时拒绝。
     pub(super) async fn portal_actor_with(
         &self,
         input: &Value,

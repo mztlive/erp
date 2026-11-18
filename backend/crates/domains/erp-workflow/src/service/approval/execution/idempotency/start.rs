@@ -13,17 +13,11 @@ const START_DOMAIN: &str = "APPROVAL_EXECUTION_START";
 ///
 /// 此函数供必须先查 receipt、尚未加载定义绑定与 digest 字段的业务端口使用。
 ///
-/// # 参数
-/// * `process_kind` - 流程种类。
-/// * `subject_kind` - 主体种类。
-/// * `subject_id` - 主体主键。
-/// * `subject_version` - 冻结主体版本。
-///
-/// # 返回
 /// 返回当前 V3 scope 在前、历史无前缀 scope 在后的两段候选。
 ///
-/// # 错误
 /// V3 scope 编码失败时返回校验错误。
+///
+/// `subject_version`：冻结主体版本。
 pub fn start_scope_candidates(
     process_kind: &str,
     subject_kind: &str,
@@ -79,21 +73,15 @@ pub struct StartIdentityParams<'a> {
 }
 
 /// 形成启动命令的当前 V3 身份与历史无前缀身份。
+/// 专属启动命令应走 [`specialized_start_identity`]，不得复用 STANDARD digest。
 ///
-/// # 用途
 /// 构造通用 Start 命令的 V3 身份并登记历史 STANDARD writer 候选。
 ///
-/// # 参数
-/// * `params` - 启动命令 scope/digest 字段
-///
-/// # 返回
 /// 当前 V3 身份与精确 legacy 候选。
 ///
-/// # 错误
 /// 幂等键或载荷字段非法时返回校验错误。
 ///
-/// # 关键业务约束
-/// 专属启动命令应走 [`specialized_start_identity`]，不得复用 STANDARD digest。
+/// `params`：启动命令 scope/digest 字段。
 pub fn start_identity(params: StartIdentityParams<'_>) -> Result<PreparedCommandIdentity> {
     let StartIdentityParams {
         resubmission_reason,
@@ -146,20 +134,12 @@ pub fn start_identity(params: StartIdentityParams<'_>) -> Result<PreparedCommand
 /// scope 协议，避免专属 digest 破坏 receipt-first 查询。历史 writer 必须由
 /// 调用方显式追加精确成对候选。
 ///
-/// # 参数
-/// * `idempotency_key` - 已规范化幂等键。
-/// * `process_kind` - 流程种类。
-/// * `subject_kind` - 主体种类。
-/// * `subject_id` - 主体主键。
-/// * `subject_version` - 冻结主体版本。
-/// * `variant` - 摘要变体；必须非空且不得带首尾空白。
-/// * `digest_fields` - 按固定顺序追加到变体之后的摘要字段。
-///
-/// # 返回
 /// 返回只含当前 V3 身份、不含历史候选的命令身份。
 ///
-/// # 错误
 /// 变体空白，或幂等键与载荷字段非法时返回校验错误。
+///
+/// `idempotency_key`：已规范化幂等键；`subject_version`：冻结主体版本。
+/// `variant`：摘要变体；必须非空且不得带首尾空白；`digest_fields`：按固定顺序追加到变体之后的摘要字段。
 pub fn specialized_start_identity<'a>(
     idempotency_key: IdempotencyKey,
     process_kind: &str,
@@ -186,19 +166,9 @@ pub fn specialized_start_identity<'a>(
 }
 
 /// 为已知历史启动 writer 形成 scope/digest 精确候选。
-///
-/// # 参数
-/// * `process_kind` - 流程种类。
-/// * `subject_kind` - 主体种类。
-/// * `subject_id` - 主体主键。
-/// * `subject_version` - 冻结主体版本。
-/// * `legacy_digest` - 调用方已按该历史 writer 算出的摘要。
-///
-/// # 返回
 /// 返回旧 scope 与给定摘要成对的候选。
 ///
-/// # 错误
-/// 不返回错误。
+/// `subject_version`：冻结主体版本；`legacy_digest`：调用方已按该历史 writer 算出的摘要。
 pub fn legacy_start_receipt_identity(
     process_kind: &str,
     subject_kind: &str,
@@ -213,21 +183,9 @@ pub fn legacy_start_receipt_identity(
 }
 
 /// 为历史通用 Start writer 形成旧 scope 与旧 digest 的精确成对候选。
-///
-/// # 参数
-/// * `process_kind` - 流程种类。
-/// * `subject_kind` - 主体种类。
-/// * `subject_id` - 主体主键。
-/// * `subject_version` - 冻结主体版本。
-/// * `binding_id` - 定义绑定 ID。
-/// * `definition_version` - 定义版本。
-/// * `actor_participant_id` - 启动人。
-///
-/// # 返回
 /// 返回历史无前缀 scope 与 STANDARD digest 成对的候选。
 ///
-/// # 错误
-/// 不返回错误。
+/// `subject_version`：冻结主体版本；`definition_version`：定义版本。
 pub fn legacy_standard_start_receipt_identity(
     process_kind: &str,
     subject_kind: &str,

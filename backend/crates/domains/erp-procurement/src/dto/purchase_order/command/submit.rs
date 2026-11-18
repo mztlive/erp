@@ -32,18 +32,11 @@ pub struct SubmitPurchaseOrderRequest {
 impl SubmitPurchaseOrderRequest {
     /// 计算提交请求指纹（不含原始幂等键）。
     ///
-    /// # 参数
-    /// * `purchase_order_id` - 当前路径采购单 ID
+    /// 同一幂等键用于不同期望版本或草稿补丁时必须冲突；形态文本按字段顺序显式编码（不依赖 Debug 派生），摘要形态与存量收据一致，修改会破坏幂等兼容。
     ///
-    /// # 返回
     /// 返回不包含原始幂等键的稳定 SHA-256 指纹。
     ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 同一幂等键用于不同期望版本或草稿补丁时必须冲突；形态文本按字段顺序显式
-    /// 编码（不依赖 Debug 派生），摘要形态与存量收据一致，修改会破坏幂等兼容。
+    /// `purchase_order_id` 为当前路径采购单 ID。
     pub fn request_fingerprint(&self, purchase_order_id: &str) -> String {
         let original = digest_parts([
             purchase_order_id.to_string(),
@@ -58,21 +51,15 @@ impl SubmitPurchaseOrderRequest {
     }
 }
 
-/// 构造提交请求的稳定形态文本。
-///
-/// 历史提交指纹直接使用 Rust Debug 派生输出（`format!("{:?}|{:?}", ...)`），
-/// DTO 字段改名会静默改变指纹并破坏存量收据回放；本函数按字段顺序显式重放
-/// 同一字节形态，字段改名不再影响指纹。
-///
-/// # 参数
-/// * `payment_term_code` - 付款条件；按 `Debug` 编码进形态文本。
-/// * `line_patches` - 草稿行补丁；按字段顺序拼成历史 Debug 形态。
-///
-/// # 返回
-/// 返回付款条件的 `Debug` 文本、竖线，以及方括号包裹的补丁列表。
-///
-/// # 错误
-/// 不返回错误。
+// 构造提交请求的稳定形态文本。
+//
+// 历史提交指纹直接使用 Rust Debug 派生输出（`format!("{:?}|{:?}", ...)`），DTO 字段改名会静默改变指纹并破坏存量收据回放；
+// 本函数按字段顺序显式重放同一字节形态，字段改名不再影响指纹。
+//
+// 返回付款条件的 `Debug` 文本、竖线，以及方括号包裹的补丁列表。
+//
+// - `payment_term_code`：付款条件；按 `Debug` 编码进形态文本。
+// - `line_patches`：草稿行补丁；按字段顺序拼成历史 Debug 形态。
 pub(crate) fn submit_request_shape(
     payment_term_code: &Option<String>,
     line_patches: &[SavePurchaseOrderLinePatch],
@@ -95,16 +82,7 @@ pub(crate) fn submit_request_shape(
     format!("{:?}|[{}]", payment_term_code, patches)
 }
 
-/// 返回交付调整字段的形态文本；未调整时为空，保持存量指纹不变。
-///
-/// # 参数
-/// * `patch` - 草稿行补丁
-///
-/// # 返回
-/// 有预计交付日或交付安排时返回追加片段；否则返回空串。
-///
-/// # 错误
-/// 无。
+// 返回交付调整字段的形态文本；未调整时为空，保持存量指纹不变。有预计交付日或交付安排时返回追加片段；否则返回空串。
 fn delivery_patch_shape(patch: &SavePurchaseOrderLinePatch) -> String {
     if patch.expected_delivery_date.is_none() && patch.delivery_allocations.is_none() {
         return String::new();
@@ -113,19 +91,11 @@ fn delivery_patch_shape(patch: &SavePurchaseOrderLinePatch) -> String {
     format!(", expected_delivery_date: {:?}, delivery_allocations: {rows}", patch.expected_delivery_date)
 }
 
-/// 返回行类型的历史 Debug 派生字节形态。
-///
-/// # 参数
-/// * `line_type` - 采购行类型
-///
-/// # 返回
-/// 返回与历史 Debug 派生输出一致的固定字符串。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 输出必须与提交指纹存量形态逐字节一致，禁止改名或改变大小写。
+// 返回行类型的历史 Debug 派生字节形态。
+//
+// 输出必须与提交指纹存量形态逐字节一致，禁止改名或改变大小写。
+//
+// 返回与历史 Debug 派生输出一致的固定字符串。
 fn submit_line_type_shape(line_type: PurchaseLineType) -> &'static str {
     match line_type {
         PurchaseLineType::ItemService => "ItemService",

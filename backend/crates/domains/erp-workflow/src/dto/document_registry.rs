@@ -93,7 +93,7 @@ pub struct BusinessDocumentView {
 }
 
 impl From<BusinessDocument> for BusinessDocumentView {
-    /// 从实体构造响应视图。
+    // 将单据登记记录映射为列表或详情使用的响应项。
     fn from(doc: BusinessDocument) -> Self {
         Self {
             id: doc.base.id,
@@ -137,18 +137,13 @@ pub(crate) struct BusinessDocumentListQuery {
 }
 
 impl BusinessDocumentListParams {
-    /// 归一化单据注册列表查询参数。
-    ///
-    /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    // 归一化单据注册列表查询参数。
+    //
+    // 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
+    //
+    // 返回不依赖仓储类型的规范化查询参数。
+    //
+    // 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<BusinessDocumentListQuery> {
         let (sort_by, sort_dir) =
             normalize_sort(&self.sort_by, &self.sort_dir, BUSINESS_DOCUMENT_SORT_FIELDS)?;
@@ -185,17 +180,10 @@ pub struct AppendWorkflowActionRequest {
 }
 
 impl AppendWorkflowActionRequest {
-    /// 转换为实体创建数据（责任角色由服务层按业务规则注入）。
-    ///
-    /// # 参数
-    /// * `actor_role` - 动作发生时的责任角色
-    /// * `actor_id` - 实际操作者
-    ///
-    /// # 返回
-    /// 返回实体层创建数据。消耗 `self`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 转换为实体创建数据（责任角色由服务层按业务规则注入）。
+    // 返回实体层创建数据。消耗 `self`。
+    //
+    // `actor_role`：动作发生时的责任角色。
     pub(crate) fn into_data(self, actor_role: &str, actor_id: &str) -> WorkflowActionData {
         WorkflowActionData {
             document_id: self.document_id,
@@ -233,7 +221,7 @@ pub struct WorkflowActionView {
 }
 
 impl From<WorkflowAction> for WorkflowActionView {
-    /// 从实体构造响应视图。
+    // 将已登记的单据状态变更映射为动作历史响应项。
     fn from(action: WorkflowAction) -> Self {
         Self {
             id: action.base.id,
@@ -284,18 +272,13 @@ pub(crate) struct WorkflowActionListQuery {
 }
 
 impl WorkflowActionListParams {
-    /// 归一化工作流动作列表查询参数。
-    ///
-    /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    // 归一化工作流动作列表查询参数。
+    //
+    // 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
+    //
+    // 返回不依赖仓储类型的规范化查询参数。
+    //
+    // 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<WorkflowActionListQuery> {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, WORKFLOW_ACTION_SORT_FIELDS)?;
         Ok(WorkflowActionListQuery {
@@ -324,16 +307,8 @@ pub struct CreateDocumentRelationRequest {
 }
 
 impl CreateDocumentRelationRequest {
-    /// 转换为实体创建数据。
-    ///
-    /// # 参数
-    /// 无。消耗 `self`。
-    ///
-    /// # 返回
-    /// 返回实体层创建数据。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 转换为实体创建数据。
+    // 无。消耗 `self`。
     pub(crate) fn into_data(self) -> DocumentRelationData {
         DocumentRelationData {
             from_document_id: self.from_document_id,
@@ -359,7 +334,7 @@ pub struct DocumentRelationView {
 }
 
 impl From<DocumentRelation> for DocumentRelationView {
-    /// 从实体构造响应视图。
+    // 将已登记的单据关系映射为响应项，保留关系方向和类型。
     fn from(relation: DocumentRelation) -> Self {
         Self {
             id: relation.base.id,
@@ -388,16 +363,10 @@ pub struct CreateDocumentParticipantRequest {
 }
 
 impl CreateDocumentParticipantRequest {
-    /// 转换为实体创建数据（记录人由服务层注入）。
-    ///
-    /// # 参数
-    /// * `recorded_by` - 记录人（账号或系统身份）
-    ///
-    /// # 返回
-    /// 返回实体层创建数据。消耗 `self`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 转换为实体创建数据（记录人由服务层注入）。
+    // 返回实体层创建数据。消耗 `self`。
+    //
+    // `recorded_by`：记录人（账号或系统身份）。
     pub(crate) fn into_data(self, recorded_by: &str) -> DocumentParticipantData {
         DocumentParticipantData {
             document_id: self.document_id,
@@ -429,7 +398,7 @@ pub struct DocumentParticipantView {
 }
 
 impl From<DocumentParticipant> for DocumentParticipantView {
-    /// 从实体构造响应视图。
+    // 将人员在单据中的参与记录映射为响应项，保留岗位和姓名快照。
     fn from(participant: DocumentParticipant) -> Self {
         Self {
             id: participant.base.id,

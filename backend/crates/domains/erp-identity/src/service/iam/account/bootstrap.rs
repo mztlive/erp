@@ -23,14 +23,11 @@ impl AdminService {
     /// 账号已存在时直接返回，不修改密码、状态或角色。并发启动抢到唯一索引时
     /// 也按已存在处理，避免另一个副本把已写入的密码覆盖掉。
     ///
-    /// # 参数
-    /// * `params` - 账号、初始密码与名称
-    ///
-    /// # 返回
     /// 创建完成或已有账号无需改动时返回成功。
     ///
-    /// # 错误
     /// 参数不合法、同名账号不是系统管理员，或创建过程中的非重复冲突失败时返回错误。
+    ///
+    /// `params`：账号、初始密码与名称。
     pub async fn bootstrap_super_admin_if_absent(&self, params: InitializeSuperAdminParams) -> Result<()> {
         let (account, password, name) = params.into_validated_parts()?;
         ensure_root_role(&self.rbac).await?;
@@ -57,7 +54,7 @@ impl AdminService {
         }
     }
 
-    /// 查询包含已删除记录在内的同名账号，并标出它是不是系统管理员。
+    // 初始化按账号名读取包括软删除在内的记录，并辨别是否已有系统管理员，避免用同名普通账号冒充。
     async fn load_account(&self, account: &LoginAccount) -> Result<Option<bool>> {
         Ok(self
             .db
@@ -68,7 +65,7 @@ impl AdminService {
     }
 }
 
-/// 没有账号时创建；已是系统管理员时保持原样。
+// 根据已读取的账号分类生成系统初始化步骤：缺少时创建，已是系统管理员时进入现有账号处理。
 fn plan_super_admin_bootstrap(existing_is_admin: Option<bool>) -> Result<SuperAdminBootstrapPlan> {
     match existing_is_admin {
         None => Ok(SuperAdminBootstrapPlan::Create),
@@ -79,7 +76,7 @@ fn plan_super_admin_bootstrap(existing_is_admin: Option<bool>) -> Result<SuperAd
     }
 }
 
-/// 创建撞上唯一索引后，再看账号是否已经由其他实例写好。
+// 初始化创建遇到账号唯一冲突后重新读取，判断是否由并发初始化先写入该账号。
 fn finish_bootstrap_create_conflict(
     existing_is_admin: Option<bool>,
     conflict: Error,

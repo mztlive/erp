@@ -15,23 +15,17 @@ use crate::ports::WorkflowAuditPort;
 use crate::repository::prelude::*;
 use crate::repository::{BpmExt, WorkItemExt};
 
-/// 在调用方唯一事务内保存正式事实，旧关闭任务始终保持不可变。
-///
-/// # 参数
-/// * `db` - 工作流数据库
-/// * `prepared` - 恢复计划、CAS 版本和冻结任务、通知及审计元数据
-/// * `audit_port` - 写入同一事务的审计端口
-/// * `executor` - 调用方持有的事务执行器
-///
-/// # 返回
-/// 全部恢复事实写入时返回 `Ok(())`。
-///
-/// # 错误
-/// 历史任务守卫、CAS、计划不变式、唯一索引或写入失败时立即停止并由调用方回滚。
-///
-/// # 关键业务约束
-/// 收据是只读验证后的第一笔物理写；其后依次推进实例、结束旧执行、
-/// 创建新执行及任务、写通知 outbox，最后记录审计。
+// 在调用方唯一事务内保存正式事实，旧关闭任务始终保持不可变。
+//
+// 收据是只读验证后的第一笔物理写；其后依次推进实例、结束旧执行、
+// 创建新执行及任务、写通知 outbox，最后记录审计。
+//
+// 全部恢复事实写入时返回 `Ok(())`。
+//
+// 历史任务守卫、CAS、计划不变式、唯一索引或写入失败时立即停止并由调用方回滚。
+//
+// `prepared`：恢复计划、CAS 版本和冻结任务、通知及审计元数据；`audit_port`：写入同一事务的审计端口。
+// `executor`：调用方持有的事务执行器。
 pub(super) async fn persist_resume_writes(
     db: &Database,
     prepared: &PreparedResume,
@@ -74,7 +68,7 @@ pub(super) async fn persist_resume_writes(
     Ok(())
 }
 
-/// 原关闭任务的状态、版本与所属执行必须仍匹配准备阶段。
+// 写入新恢复任务前重新核对被替换节点的原任务仍关闭，且版本与所属执行仍是准备阶段的事实。
 async fn verify_closed_resume_task(
     db: &Database,
     guard: Option<&ClosedTaskGuard>,
@@ -97,7 +91,7 @@ async fn verify_closed_resume_task(
     Ok(())
 }
 
-/// 保持实例 CAS 的原执行指针和列表投影一致。
+// 推进恢复后的实例时，用 CAS 核对原执行指针并同步写列表投影，使原运行责任与展示一致。
 async fn advance_resume_instance(
     db: &Database,
     prepared: &PreparedResume,
@@ -119,7 +113,7 @@ async fn advance_resume_instance(
     )
 }
 
-/// 只允许按客户端期望版本结束原受阻执行。
+// 恢复创建新执行前按客户端持有的期望版本关闭被替换的受阻执行，不能无条件改写。
 async fn end_replaced_execution(
     db: &Database,
     prepared: &PreparedResume,
@@ -139,7 +133,7 @@ async fn end_replaced_execution(
     Ok(())
 }
 
-/// 新任务仅绑定新执行，业务责任及版本全部取自冻结主体。
+// 恢复产生的新开放任务只关联新执行，责任组织、角色和业务版本仍取原冻结主体。
 async fn persist_resume_tasks(
     db: &Database,
     prepared: &PreparedResume,

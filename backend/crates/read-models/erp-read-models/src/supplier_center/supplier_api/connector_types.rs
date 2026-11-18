@@ -10,7 +10,7 @@ use super::SupplierApiReadService;
 use crate::Result;
 
 impl SupplierApiReadService {
-    /// 返回当前程序已实现的连接类型。
+    /// 处理供应连接类型时，给出当前程序已实现的连接类型。
     ///
     /// # 参数
     /// `actor` 为当前已认证的内部账号。
@@ -32,7 +32,7 @@ impl SupplierApiReadService {
             .await
     }
 
-    /// 验证创建资格后返回本程序固定支持的协议，不读取外部服务。
+    // 处理供应连接类型时，检查创建资格后返回本程序固定支持的协议，不读取外部服务。
     async fn connector_types_snapshot(
         &self,
         actor: &AuditActor,

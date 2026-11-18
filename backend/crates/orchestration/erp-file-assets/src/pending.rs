@@ -31,17 +31,8 @@ pub struct PendingFileAssets {
 }
 
 impl PendingFileAssets {
-    /// 校验临时引用和登记元数据，再分配正式文件身份。对象字节应已写入存储。
-    ///
-    /// # 参数
-    /// * `requests` - 已存储对象的登记请求。
-    /// * `actor` - 已认证的审计操作人。
-    ///
-    /// # 返回
-    /// 返回尚未落库的文件资产、审计和引用集合。
-    ///
-    /// # 错误
-    /// 临时引用无法解析、登记校验失败、正式资产或审计构造失败，或临时引用与正式资产 ID 重复时返回错误。
+    /// 将已写入对象存储的附件登记请求整理为待落库批次，校验元数据，分配正式资产 ID 并预备审计。业务命令随后负责解析引用并同事务写入。
+    /// 临时引用无法识别、登记或审计构造失败，以及引用或资产 ID 重复时拒绝整个批次。
     pub fn prepare(requests: Vec<PendingFileAssetRequest>, actor: &AuditActor) -> Result<Self> {
         let mut manifest = Vec::with_capacity(requests.len());
         let mut assets = Vec::with_capacity(requests.len());
@@ -77,13 +68,7 @@ impl PendingFileAssets {
         Ok(Self { assets, references, audits, manifest })
     }
 
-    /// 为已完成真实内容核验的服务端文件准备资产，不登记恶意内容扫描通过。
-    /// # 参数
-    /// 已保存对象字节且完成解码或格式校验的请求，以及实际审计操作人。
-    /// # 返回
-    /// 内容已检查、等待业务事务提交的文件批次。
-    /// # 错误
-    /// 登记数据非法或状态不允许基础内容检查时返回错误。
+    /// 将已完成解码或格式核验的服务端文件整理为待提交批次，并登记基础内容已检查状态；该状态不表示恶意内容扫描通过。登记校验或状态转换失败时拒绝。
     pub fn prepare_content_checked(
         requests: Vec<PendingFileAssetRequest>,
         actor: &AuditActor,
@@ -95,21 +80,12 @@ impl PendingFileAssets {
         Ok(pending)
     }
 
-    /// 消耗本批次，包装成 `'static` 的消费端口。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回可交给业务命令在同一事务中持久化的端口。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将批次移入可共享的附件端口，供业务命令解析引用并在自身事务中保存资产和审计；包装时不写数据库。
     pub fn shared(self) -> Arc<dyn PendingAttachmentBatch> {
         Arc::new(self)
     }
 
-    /// 消耗本批次，作为商品命令的事务内附件端口。
+    /// 将批次移入商品领域的附件端口，供商品命令消费上传引用，并将资产及审计写入同一商品命令事务。
     pub fn into_catalog_batch(self) -> Arc<dyn erp_catalog::PendingAttachmentBatch> {
         Arc::new(self)
     }

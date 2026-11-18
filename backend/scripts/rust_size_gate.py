@@ -50,16 +50,16 @@ class Finding:
     extra: int = 0
 
 
+# 越过 Unicode 空白，供可见性、属性和条目扫描从下一个有效 Rust 记号继续。
 def skip_ws(code: str, index: int) -> int:
-    """Advance past Unicode whitespace."""
     length = len(code)
     while index < length and code[index].isspace():
         index += 1
     return index
 
 
+# 跨过成对且可嵌套的定界符，返回闭合符后一位，供属性、可见性和函数体扫描定位边界。
 def skip_balanced(code: str, index: int, opener: str, closer: str) -> int:
-    """Return the index after a nested opener/closer pair starting at index."""
     if index >= len(code) or code[index] != opener:
         raise ValueError(f"期望 {opener!r}，实际 {code[index:index + 8]!r}")
     depth = 1
@@ -79,8 +79,8 @@ def skip_balanced(code: str, index: int, opener: str, closer: str) -> int:
     return pos
 
 
+# 跳过 `pub`、`pub(crate)`、`pub(super)` 或 `pub(in path)`，供测试条目扫描定位真实的声明起点。
 def skip_vis(code: str, index: int) -> int:
-    """Skip `pub`, `pub(crate)`, `pub(super)` and `pub(in path)`."""
     match = PUB_RE.match(code, index)
     if not match:
         return index
@@ -90,8 +90,8 @@ def skip_vis(code: str, index: int) -> int:
     return index
 
 
+# 读取当前位置的 `#[...]` 或 `#![...]`，返回起止偏移、文本和内部属性标志，供扫描区分文件级与条目级测试标记。
 def parse_attr(code: str, index: int) -> tuple[int, int, str, bool] | None:
-    """Parse `#[...]` or `#![...]` at index; return start, end, text, inner."""
     if index >= len(code) or code[index] != "#":
         return None
     start = index
@@ -107,8 +107,8 @@ def parse_attr(code: str, index: int) -> tuple[int, int, str, bool] | None:
     return start, end, code[start:end], inner
 
 
+# 收集连续的外部属性并返回后续偏移，供测试范围检查将标记归属到紧随其后的条目；不消费内部属性。
 def consume_attrs(code: str, index: int) -> tuple[list[str], int]:
-    """Consume a run of outer attributes. Inner attributes are not included."""
     attrs: list[str] = []
     while True:
         index = skip_ws(code, index)
@@ -119,13 +119,13 @@ def consume_attrs(code: str, index: int) -> tuple[list[str], int]:
         index = parsed[1]
 
 
+# 根据属性判断后续条目是否仅用于测试，避免把测试方法或模块计入生产源码上限。
 def is_test_only_attrs(attrs: list[str]) -> bool:
-    """True when any attribute makes the following item test-only."""
     return any(CFG_TEST.match(attr) or TEST_ATTR.match(attr) for attr in attrs)
 
 
 def find_block_or_semi(code: str, index: int) -> tuple[int, bool]:
-    """Find the item `{` or `;` after a keyword, ignoring nested `<>()[]` and const-generic `{}`."""
+    """定位声明的顶层 `{` 或 `;`，忽略嵌套 `<>()[]` 及 const 泛型块，供体积与审计门禁区分定义和无体声明。"""
     angle = paren = square = brace = 0
     length = len(code)
     while index < length:
@@ -155,12 +155,12 @@ def find_block_or_semi(code: str, index: int) -> tuple[int, bool]:
 
 
 def block_end(code: str, start: int) -> int:
-    """Return the index after a balanced `{...}` starting at start."""
+    """返回配对 `{...}` 的闭合符后一位，供测试区间、方法行数和审计调用扫描截取原始正文。"""
     return skip_balanced(code, start, "{", "}")
 
 
+# 跳过属性后的完整条目；遇到 `mod name;` 时还返回模块名，供门禁排除外置测试源码。
 def consume_item(code: str, index: int) -> tuple[int, str | None]:
-    """Skip one item after its attributes. Semicolon `mod name;` yields the name."""
     index = skip_vis(code, skip_ws(code, index))
     index = skip_ws(code, index)
     mod = MOD_NAME.match(code, index)
@@ -176,8 +176,8 @@ def consume_item(code: str, index: int) -> tuple[int, str | None]:
     return pos + 1, None
 
 
+# 判断文件开头的内部 `#![cfg(test)]` 是否令整个文件仅用于测试，供体积门禁整文件排除。
 def crate_cfg_test(code: str) -> bool:
-    """True when an inner `#![cfg(test)]` applies to the whole file."""
     index = skip_ws(code, 0)
     while True:
         parsed = parse_attr(code, index)
@@ -192,7 +192,7 @@ def crate_cfg_test(code: str) -> bool:
 
 
 def find_test_ranges(code: str) -> tuple[list[tuple[int, int]], list[str]]:
-    """Locate test-only items. Offsets match the original source."""
+    """返回测试专用条目的原始偏移和外置模块名，供体积与审计门禁排除测试且保留生产诊断位置。"""
     if crate_cfg_test(code):
         return [(0, len(code))], []
     ranges: list[tuple[int, int]] = []
@@ -229,7 +229,7 @@ def find_test_ranges(code: str) -> tuple[list[tuple[int, int]], list[str]]:
 
 
 def mask_ranges(code: str, ranges: list[tuple[int, int]]) -> str:
-    """Replace non-newline characters in ranges with spaces; keep line numbers."""
+    """将指定范围内的非换行字符替换为空格，使体积和审计扫描忽略测试内容而不移动诊断行号。"""
     if not ranges:
         return code
     chunks: list[str] = []
@@ -248,8 +248,8 @@ def mask_ranges(code: str, ranges: list[tuple[int, int]]) -> str:
     return "".join(chunks)
 
 
+# 按物理行统计生产文件大小，只去掉完全落在测试区间内的行，避免漏计同行生产源码。
 def production_line_count(source: str, ranges: list[tuple[int, int]]) -> int:
-    """Count physical lines that are not entirely inside a test item."""
     if not source:
         return 0
     marked = bytearray(len(source))
@@ -268,20 +268,20 @@ def production_line_count(source: str, ranges: list[tuple[int, int]]) -> int:
     return count
 
 
+# 在注释已屏蔽后统计非空行，供方法体积检查只计入实际有效行。
 def effective_lines(text: str) -> int:
-    """Count non-blank lines; comments must already be masked to spaces."""
     return sum(1 for line in text.splitlines() if line.strip())
 
 
 def submodule_paths(parent: str, name: str) -> list[str]:
-    """Resolve `mod name;` to the files Rust would load next to parent."""
+    """将 `mod name;` 解析为两个可能的 Rust 源文件路径，供体积与审计门禁排除外置测试模块。"""
     path = Path(parent)
     base = path.parent if path.name in LIB_ENTRY else path.parent / path.stem
     return [(base / f"{name}.rs").as_posix(), (base / name / "mod.rs").as_posix()]
 
 
 def is_excluded_path(path: str) -> bool:
-    """True for tests, benches, examples, and conventional `tests.rs` modules."""
+    """识别测试、基准、示例与常规测试模块路径，供生产源码门禁跳过非生产文件。"""
     parts = Path(path).parts
     stem = Path(path).stem
     return (
@@ -294,13 +294,13 @@ def is_excluded_path(path: str) -> bool:
     )
 
 
+# 识别仅免除方法行数限制的 `build.rs` 和过程宏实现，供文件扫描继续检查其文件体积。
 def skip_fn_check(path: str) -> bool:
-    """`build.rs` and proc-macro implementations are exempt from the method cap."""
     return Path(path).name == "build.rs" or path.startswith(MACRO_IMPL_PREFIXES)
 
 
+# 提取有正文函数的 `(name, line, effective_body_lines)`，供门禁按原始位置报告超限方法。
 def functions(code: str) -> list[tuple[str, int, int]]:
-    """Return `(name, line, effective_body_lines)` for functions with a body."""
     found: list[tuple[str, int, int]] = []
     for match in FN_NAME.finditer(code):
         try:
@@ -325,7 +325,7 @@ def scan_source(
     max_file: int = MAX_FILE_LINES,
     max_fn: int = MAX_FN_LINES,
 ) -> tuple[list[Finding], list[str]]:
-    """Check one file. Returns findings and `#[cfg(test)] mod name;` names."""
+    """检查单个 Rust 文件的生产物理行和方法有效行，返回诊断及 `#[cfg(test)] mod name;` 声明的模块名。"""
     code, _ = _code_and_literals(source)
     try:
         ranges, submods = find_test_ranges(code)
@@ -355,8 +355,8 @@ def scan_source(
     return findings, submods
 
 
+# 从 Cargo 活动成员读取源码供体积门禁扫描；清单为空视为工具错误而非通过。
 def workspace_sources(backend: Path) -> dict[str, str]:
-    """Read active member sources; empty inventory is a tool error."""
     metadata = cargo_metadata(backend)
     sources: dict[str, str] = {}
     for path in active_source_paths(metadata):
@@ -373,7 +373,7 @@ def scan_workspace(
     max_file: int = MAX_FILE_LINES,
     max_fn: int = MAX_FN_LINES,
 ) -> list[Finding]:
-    """Scan every production source; skip test files declared by their parent."""
+    """汇总各文件的体积诊断，并根据父模块标记排除外置测试文件，避免将测试代码误报为生产超限。"""
     scanned: dict[str, tuple[list[Finding], list[str]]] = {}
     test_files: set[str] = set()
     for path, source in sources.items():
@@ -389,8 +389,8 @@ def scan_workspace(
     return findings
 
 
+# 先验证体积阈值及测试排除规则的正反夹具，防止门禁自身失效时继续评估生产源码。
 def self_tests() -> bool:
-    """Run mandatory positive/negative fixtures before judging any workspace."""
     import test_rust_size_gate
 
     suite = unittest.defaultTestLoader.loadTestsFromModule(test_rust_size_gate)
@@ -399,8 +399,8 @@ def self_tests() -> bool:
     return unittest.TextTestRunner(stream=sys.stderr, verbosity=1).run(suite).wasSuccessful()
 
 
+# 按先定位违规、后汇总阈值和状态的顺序生成文本，供非 JSON 模式和 CI 日志阅读。
 def format_report(findings: list[Finding], file_count: int, max_file: int, max_fn: int) -> str:
-    """Human-readable summary; findings first, then status."""
     lines = [f"[{item.rule}] {item.path}:{item.line}: {item.message}" for item in findings]
     files = sum(item.rule == "SIZE-FILE" for item in findings)
     functions_hit = sum(item.rule == "SIZE-FN" for item in findings)
@@ -420,7 +420,7 @@ def format_report(findings: list[Finding], file_count: int, max_file: int, max_f
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Return 0 when clean, 1 when blocked, 2 on tool/self-test errors."""
+    """按命令行选项自检并检查 Rust 源码体积；通过返回 `0`，有阻断项返回 `1`，工具或自检失败返回 `2`。"""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--backend", required=True, type=Path)
     parser.add_argument("--self-test-only", action="store_true", help="仅验证门禁夹具，不检查业务代码")

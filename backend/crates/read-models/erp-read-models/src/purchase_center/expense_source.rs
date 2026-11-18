@@ -66,13 +66,13 @@ pub struct ExpenseSourceReadService {
 }
 
 impl ExpenseSourceReadService {
-    /// 绑定来源数据与当前授权服务。
+    /// 装配采购附加费用来源时，绑定来源数据与当前授权服务。
+    ///
     /// # 参数
     /// `db` 为业务库，`rbac` 为当前授权服务。
+    ///
     /// # 返回
     /// 不执行查询的读取器。
-    /// # 错误
-    /// 无。
     pub fn new(db: Database, rbac: Arc<AuthorizationService>) -> Self {
         Self { db, rbac }
     }
@@ -88,11 +88,14 @@ impl ExpenseSourceReadService {
         Ok((access, scope))
     }
 
-    /// 分页搜索可追加费用的销售单摘要。
+    /// 读取采购附加费用来源时，分页搜索可追加费用的销售单摘要。
+    ///
     /// # 参数
     /// `params` 为关键词、页码及范围版本，`actor` 为当前采购人员。
+    ///
     /// # 返回
     /// 已授权、已生效的实物服务单；已关闭单仍可选。
+    ///
     /// # 错误
     /// 权限、范围版本、参数或读取失败时拒绝。
     pub async fn list(&self, params: &ExpenseSourceParams, actor: &AuditActor) -> Result<ExpenseSourceList> {
@@ -163,11 +166,14 @@ impl ExpenseSourceReadService {
         })
     }
 
-    /// 在调用方执行器内重验来源资格；写命令必须传原事务。
+    /// 确定采购附加费用来源的适用条件时，在调用方执行器内重验来源资格；写命令必须传原事务。
+    ///
     /// # 参数
     /// `id` 为来源销售单，`actor` 为操作人，`executor` 为调用方执行器。
+    ///
     /// # 返回
     /// 已授权且适用费用采购的销售单。
+    ///
     /// # 错误
     /// 不可见与不存在统一拒绝；状态不适用时返回业务错误。
     pub async fn require_order(
@@ -182,7 +188,7 @@ impl ExpenseSourceReadService {
         Ok(order)
     }
 
-    /// 在已经签发的同一查询阶段读取来源，不另开授权阶段。
+    // 检查采购附加费用来源资格时，在已经签发的同一查询阶段读取来源，不另开授权阶段。
     async fn authorized_order(
         &self,
         id: &str,
@@ -199,11 +205,14 @@ impl ExpenseSourceReadService {
         Ok(order)
     }
 
-    /// 读取当前生效版本中可归属费用的明细，不返回销售价格或审批资料。
+    /// 处理采购附加费用来源时，读取当前生效版本中可归属费用的明细，不返回销售价格或审批资料。
+    ///
     /// # 参数
     /// `id` 为候选销售单，`actor` 为当前操作人。
+    ///
     /// # 返回
     /// 来源摘要及数量大于零的实物服务明细。
+    ///
     /// # 错误
     /// 来源不可选、版本缺失、读取失败或期间授权变化时拒绝。
     pub async fn detail(&self, id: &str, actor: &AuditActor) -> Result<ExpenseSourceDetail> {
@@ -245,7 +254,7 @@ impl ExpenseSourceReadService {
         })
     }
 
-    /// 仅从本次授权快照的当前版本读取可归属费用的业务行。
+    // 处理采购附加费用来源时，仅从本次授权快照的当前版本读取可归属费用的业务行。
     async fn detail_lines(
         &self,
         order: &SalesOrder,

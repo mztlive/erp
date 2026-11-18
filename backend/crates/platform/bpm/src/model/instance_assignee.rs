@@ -42,32 +42,14 @@ pub struct ApprovalInstanceAssignee {
 }
 
 impl ApprovalInstanceAssignee {
-    /// 判断身份是否属于实例冻结的审批人集合。
-    /// # 参数
-    /// `id` 为参与人身份。
-    /// # 返回
-    /// 已冻结成员返回 true。
-    /// # 错误
-    /// 无。
+    /// 用实例冻结的首位审批人和其他或签成员比对身份，供调用方校验参与范围，不读取当前负责人。
     pub fn has_participant(&self, id: &str) -> bool {
         self.current_assignee_participant_id.as_str() == id
             || self.additional_assignees.iter().any(|item| item.participant_id.as_str() == id)
     }
 
-    /// 从定义审批人冻结实例绑定。
-    ///
-    /// # 参数
-    /// * `id` - 绑定主键
-    /// * `process_instance_id` - 所属实例
-    /// * `node_key` - 节点键
-    /// * `definition_assignee` - 定义审批人
-    /// * `at` - 调用方时间
-    ///
-    /// # 返回
-    /// 返回来源为定义、当前责任人等于定义审批人、变更审计为空的绑定。
-    ///
-    /// # 错误
-    /// 节点键为空或超长，或调用方时间无法持久化时返回错误。
+    /// 启动时为节点冻结实例绑定，以同一个定义审批人作为当前责任人，不写改派审计字段。
+    /// 基本构造不带其他或签成员和动态来源，由启动引擎补齐；节点键非法或时间无法持久化时返回错误。
     pub fn from_definition(
         id: ApprovalInstanceAssigneeId,
         process_instance_id: ApprovalProcessInstanceId,
@@ -90,16 +72,8 @@ impl ApprovalInstanceAssignee {
         })
     }
 
-    /// 校验实例绑定仍是启动时从定义冻结的原始事实。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 绑定仍是定义快照时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 来源、当前责任人或保留审计字段发生变化时返回 [`ModelError::InvalidStatus`]。
+    /// 运行时还原指派或原人恢复前，确认绑定仍来自定义、当前责任人未变，且没有历史改派审计值。
+    /// 任一事实发生漂移时返回 [`ModelError::InvalidStatus`]，不能继续用该绑定推进。
     pub fn ensure_unchanged_from_definition(&self) -> ModelResult<()> {
         if self.assignment_source != ApprovalAssigneeBindingSource::Definition
             || self.current_assignee_participant_id != self.definition_assignee_participant_id
@@ -131,7 +105,7 @@ mod tests {
         .unwrap()
     }
 
-    /// 定义冻结绑定的责任人与保留审计字段必须保持不变。
+    // 确认新冻结绑定的当前责任人与定义一致，且没有应为空的历史改派信息。
     #[test]
     fn definition_binding_is_unchanged() {
         let assignee = binding();
@@ -143,7 +117,7 @@ mod tests {
         assert!(assignee.ensure_unchanged_from_definition().is_ok());
     }
 
-    /// 当前责任或任一保留审计字段漂移时失败关闭。
+    // 逐项改动当前责任人和保留审计字段，验证恢复前的冻结绑定校验不会放行漂移。
     #[test]
     fn changed_definition_binding_is_rejected() {
         let expected = Err(ModelError::InvalidStatus("实例审批人绑定必须保持定义快照不变"));

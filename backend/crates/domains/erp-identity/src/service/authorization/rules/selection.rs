@@ -9,7 +9,7 @@ use crate::entity::access_control::ResolvedScope;
 use crate::entity::authorization::{AccessFact, AccessRule, FactKind, RelationKey, RelationMatch};
 use crate::{Error, Permission, QualifiedPermissions, Result};
 
-/// 额外读取资格独立取证，不要求与选品入口来自同一角色。
+// 选品授权同时取证登记的附加读取权限，各入口可以由不同启用角色提供。
 pub(crate) fn qualifications(permission: &Permission) -> Vec<Permission> {
     let mut requested = Vec::new();
     if is_list(permission) {
@@ -23,7 +23,7 @@ pub(crate) fn qualifications(permission: &Permission) -> Vec<Permission> {
     requested
 }
 
-/// 范围请求显式保留独立入口，不能沿用选品角色解析客户或详情范围。
+// 把客户和详情的范围分别绑定到自身入口，解析时不借用选品资格的角色集合。
 pub(crate) fn scope_requests(permission: &Permission) -> Vec<(Permission, Permission)> {
     if is_list(permission) {
         return vec![(customer::LIST, customer::LIST)];
@@ -38,7 +38,7 @@ pub(crate) fn scope_requests(permission: &Permission) -> Vec<(Permission, Permis
     requested
 }
 
-/// 将本入口范围与固定的客户/详情前提组合；缺资格或范围时拒绝。
+// 选品根范围须与固定客户或详情前提同时成立；缺少任一入口资格或范围时不放行。
 pub(crate) fn condition(
     permission: &Permission,
     qualified: &QualifiedPermissions,
@@ -69,7 +69,7 @@ pub(crate) fn condition(
     Ok(AccessRule::all(conditions))
 }
 
-/// 启动时验证所有可能出现的客户来源和详情范围能力。
+// 校验选品接入时列全可能的客户来源和详情范围维度，不靠当前请求覆盖某个分支。
 pub(crate) fn binding_condition(permission: &Permission, base: AccessRule) -> Result<AccessRule> {
     if is_list(permission) {
         let scope = capability_scope(&customer::LIST)?;

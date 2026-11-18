@@ -16,14 +16,8 @@ pub struct PendingFileReference(String);
 
 impl PendingFileReference {
     /// 解析临时文件引用并校验非空 token。
-    ///
-    /// # 参数
-    /// * `value` - 待解析的完整临时引用
-    ///
-    /// # 返回
     /// 返回去除首尾空白后的强类型引用。
-    ///
-    /// # 错误
+    /// `value` 为待解析的完整临时引用。
     /// 前缀错误或前缀后的 token 为空时返回领域校验错误。
     pub fn parse(value: impl AsRef<str>) -> Result<Self> {
         let value = value.as_ref().trim();
@@ -37,14 +31,8 @@ impl PendingFileReference {
     }
 
     /// 当文件 ID 使用临时引用前缀时解析该引用。
-    ///
-    /// # 参数
-    /// * `id` - 业务 DTO 中的文件资产 ID
-    ///
-    /// # 返回
     /// 普通正式 ID 返回 `Ok(None)`；临时引用返回已验证值对象。
-    ///
-    /// # 错误
+    /// `id` 为业务 DTO 中的文件资产 ID。
     /// 临时引用使用固定前缀但 token 非法时返回领域校验错误。
     pub fn from_file_asset_id(id: &FileAssetId) -> Result<Option<Self>> {
         let value = id.as_ref();
@@ -54,16 +42,7 @@ impl PendingFileReference {
         Self::parse(value).map(Some)
     }
 
-    /// 返回稳定字符串表示。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回已保留前缀的临时引用字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回当前取值的稳定代码，供持久化与查询匹配使用。
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -78,14 +57,8 @@ pub struct PendingFileReferenceSet {
 
 impl PendingFileReferenceSet {
     /// 由 Service 已生成的正式身份构造引用集合。
-    ///
-    /// # 参数
-    /// * `entries` - 临时引用、正式资产 ID 与敏感级别三元组
-    ///
-    /// # 返回
     /// 返回可执行解析和完整消费校验的集合。
-    ///
-    /// # 错误
+    /// `entries` 为临时引用、正式资产 ID 与敏感级别三元组。
     /// 同一临时引用或正式资产 ID 重复登记时返回领域校验错误。
     pub fn new(entries: Vec<(PendingFileReference, FileAssetId, SensitivityClass)>) -> Result<Self> {
         let mut targets = HashMap::with_capacity(entries.len());
@@ -103,15 +76,8 @@ impl PendingFileReferenceSet {
     }
 
     /// 把临时引用替换为正式资产 ID，并登记一次消费。
-    ///
-    /// # 参数
-    /// * `id` - 待解析的业务文件 ID
-    /// * `used` - 本命令已经消费的临时引用集合
-    ///
-    /// # 返回
     /// 发生临时引用替换时返回 `true`，普通正式 ID 返回 `false`。
-    ///
-    /// # 错误
+    /// `id` 为待解析的业务文件 ID；`used` 为本命令已经消费的临时引用集合。
     /// 引用了未上传文件，或同一临时文件被重复消费时返回领域校验错误。
     pub fn resolve_id(&self, id: &mut FileAssetId, used: &mut HashSet<String>) -> Result<bool> {
         let Some(reference) = PendingFileReference::from_file_asset_id(id)? else {
@@ -127,16 +93,7 @@ impl PendingFileReferenceSet {
         Ok(true)
     }
 
-    /// 校验全部已上传文件恰好被业务命令消费一次。
-    ///
-    /// # 参数
-    /// * `used` - 本命令已经消费的临时引用字符串
-    ///
-    /// # 返回
-    /// 已消费集合与登记引用一一对应时无返回值。
-    ///
-    /// # 错误
-    /// 存在未消费引用或调用方传入未知引用时返回领域校验错误。
+    /// 解析完命令的所有附件字段后，核对已消费临时引用与本批次登记集合完全一致。漏用或出现未知引用均返回领域校验错误。
     pub fn ensure_all_used(&self, used: &HashSet<String>) -> Result<()> {
         if used.len() != self.targets.len()
             || self.targets.keys().any(|reference| !used.contains(reference.as_str()))
@@ -146,30 +103,12 @@ impl PendingFileReferenceSet {
         Ok(())
     }
 
-    /// 判断正式资产 ID 是否属于本集合。
-    ///
-    /// # 参数
-    /// * `id` - 正式文件资产 ID
-    ///
-    /// # 返回
-    /// 该 ID 已登记敏感级别时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 判定正式资产 ID 是否由本批次登记，使用随登记建立的敏感级别索引，不读取已持久化的文件。
     pub fn contains_id(&self, id: &FileAssetId) -> bool {
         self.sensitivity_by_id.contains_key(id.as_ref())
     }
 
-    /// 返回本集合中正式资产 ID 的敏感级别。
-    ///
-    /// # 参数
-    /// * `id` - 正式文件资产 ID
-    ///
-    /// # 返回
-    /// 已登记时返回敏感级别；ID 不属于本集合时返回 `None`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 查询正式资产 ID 在本批次登记的敏感级别；不属于批次则返回 `None`。
     pub fn sensitivity(&self, id: &FileAssetId) -> Option<SensitivityClass> {
         self.sensitivity_by_id.get(id.as_ref()).copied()
     }

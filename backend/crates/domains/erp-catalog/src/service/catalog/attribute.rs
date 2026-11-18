@@ -20,15 +20,9 @@ impl CatalogService {
     // ---------- 规格属性 ----------
 
     /// 分页查询规格属性列表。
-    ///
-    /// # 参数
-    /// * `params` - 查询参数（`attribute_code`/`name`/`value_type`/`status` 扁平筛选）
-    ///
-    /// # 返回
-    /// 返回契约形状的分页视图。
-    ///
-    /// # 错误
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
+    ///
+    /// `params` 为查询参数（`attribute_code`/`name`/`value_type`/`status` 扁平筛选）。
     pub async fn sku_attribute_list(
         &self,
         actor: &AuditActor,
@@ -46,7 +40,7 @@ impl CatalogService {
             .await
     }
 
-    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    // 分页查询SKU 规格属性，沿用公开入口提供的授权快照完成查询。
     async fn sku_attribute_list_snapshot(
         &self,
         actor: &AuditActor,
@@ -78,17 +72,11 @@ impl CatalogService {
 
     /// 更新规格属性（乐观锁语义）。
     ///
-    /// # 参数
-    /// * `id` - 属性 ID
-    /// * `req` - 更新请求（含期望版本）
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回更新后属性的响应视图。
-    ///
-    /// # 错误
+    /// 失败情形如下：
     /// * `NotFound` - 属性不存在
     /// * `ConflictError` - 期望版本与当前版本不一致
+    ///
+    /// `req` 为更新请求（含期望版本）。
     pub async fn sku_attribute_update(
         &self,
         id: &str,
@@ -106,7 +94,7 @@ impl CatalogService {
             .await
     }
 
-    /// 在原授权快照内读取版本与关联事实，完成修改和审计。
+    // 更新SKU 规格属性，在原事务内完成授权、关联事实核对和写入与审计。
     async fn sku_attribute_update_stage(
         &self,
         id: &str,
@@ -140,14 +128,7 @@ impl CatalogService {
 
     /// 删除规格属性（软删除，乐观锁语义）。
     ///
-    /// # 参数
-    /// * `id` - 属性 ID
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回删除结果。
-    ///
-    /// # 错误
+    /// 失败情形如下：
     /// * `NotFound` - 属性不存在
     /// * `ConflictError` - 并发修改（CAS 冲突）
     pub async fn sku_attribute_delete(&self, id: &str, actor: &AuditActor) -> Result<()> {
@@ -162,7 +143,7 @@ impl CatalogService {
             .await
     }
 
-    /// 在原授权快照内读取版本与关联事实，完成修改和审计。
+    // 删除SKU 规格属性，在原事务内完成授权、关联事实核对和写入与审计。
     async fn sku_attribute_delete_stage(
         &self,
         id: &str,
@@ -189,15 +170,9 @@ impl CatalogService {
     // ---------- 规格属性值 ----------
 
     /// 分页查询规格属性值列表。
-    ///
-    /// # 参数
-    /// * `params` - 查询参数（`attribute_id`/`value_code`/`display_value`/`status` 扁平筛选）
-    ///
-    /// # 返回
-    /// 返回契约形状的分页视图。
-    ///
-    /// # 错误
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
+    ///
+    /// `params` 为查询参数（`attribute_id`/`value_code`/`display_value`/`status` 扁平筛选）。
     pub async fn sku_attribute_value_list(
         &self,
         actor: &AuditActor,
@@ -217,7 +192,7 @@ impl CatalogService {
             .await
     }
 
-    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    // 分页查询SKU 规格属性值，沿用公开入口提供的授权快照完成查询。
     async fn sku_attribute_value_list_snapshot(
         &self,
         actor: &AuditActor,
@@ -249,17 +224,11 @@ impl CatalogService {
 
     /// 更新规格属性值（乐观锁语义）。
     ///
-    /// # 参数
-    /// * `id` - 属性值 ID
-    /// * `req` - 更新请求（含期望版本）
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回更新后属性值的响应视图。
-    ///
-    /// # 错误
+    /// 失败情形如下：
     /// * `NotFound` - 属性值不存在
     /// * `ConflictError` - 期望版本与当前版本不一致
+    ///
+    /// `req` 为更新请求（含期望版本）。
     pub async fn sku_attribute_value_update(
         &self,
         id: &str,
@@ -279,7 +248,7 @@ impl CatalogService {
             .await
     }
 
-    /// 在原授权快照内读取版本与关联事实，完成修改和审计。
+    // 更新SKU 规格属性值，在原事务内完成授权、关联事实核对和写入与审计。
     async fn sku_attribute_value_update_stage(
         &self,
         id: &str,
@@ -317,14 +286,7 @@ impl CatalogService {
 
     /// 删除规格属性值（软删除，乐观锁语义）。
     ///
-    /// # 参数
-    /// * `id` - 属性值 ID
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回删除结果。
-    ///
-    /// # 错误
+    /// 失败情形如下：
     /// * `NotFound` - 属性值不存在
     /// * `ConflictError` - 并发修改（CAS 冲突）
     pub async fn sku_attribute_value_delete(&self, id: &str, actor: &AuditActor) -> Result<()> {
@@ -339,7 +301,7 @@ impl CatalogService {
             .await
     }
 
-    /// 在原授权快照内读取版本与关联事实，完成修改和审计。
+    // 删除SKU 规格属性值，在原事务内完成授权、关联事实核对和写入与审计。
     async fn sku_attribute_value_delete_stage(
         &self,
         id: &str,
@@ -363,17 +325,9 @@ impl CatalogService {
         Ok(())
     }
 
-    /// 按 ID 加载未删除规格属性。
+    /// 按 ID 加载未删除规格属性。属性不存在时返回 `NotFound`。
     ///
-    /// # 参数
-    /// * `id` - 属性 ID
-    /// * `executor` - 调用方读取或写入事务的原执行器
-    ///
-    /// # 返回
-    /// 返回属性实体。
-    ///
-    /// # 错误
-    /// 属性不存在时返回 `NotFound`。
+    /// 使用调用方读取或写入事务的原执行器。
     pub async fn load_attribute(&self, id: &str, executor: &mut dyn Executor) -> Result<SkuAttribute> {
         self.db
             .sku_attributes()
@@ -382,16 +336,7 @@ impl CatalogService {
             .ok_or_else(|| Error::NotFound("规格属性不存在".to_string()))
     }
 
-    /// 按 ID 加载未删除规格属性值。
-    ///
-    /// # 参数
-    /// * `id` - 属性值 ID
-    ///
-    /// # 返回
-    /// 返回属性值实体。
-    ///
-    /// # 错误
-    /// 属性值不存在时返回 `NotFound`。
+    // 按 ID 加载未删除规格属性值。属性值不存在时返回 `NotFound`。
     async fn load_attribute_value(&self, id: &str, executor: &mut dyn Executor) -> Result<SkuAttributeValue> {
         self.db
             .sku_attribute_values()

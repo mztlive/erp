@@ -19,13 +19,8 @@ pub struct PurchaseInquiryAddress {
 }
 
 impl PurchaseInquiryAddress {
-    /// 对收件身份生成固定字段顺序的摘要，数量与地区名称不参与身份。
-    /// # 参数
-    /// `recipient`、`phone`、`region_code`、`address` 为冻结需求的真实收件字段。
-    /// # 返回
-    /// 返回64位SHA256摘要。
-    /// # 错误
-    /// 无。
+    /// 为专项报价的地址匹配生成 64 位十六进制 SHA-256 摘要，按收件人、联系电话、地区代码、详细地址的固定次序编码。
+    /// 采购数量与地区名称不参与地址身份。
     pub fn fingerprint(recipient: &str, phone: &str, region_code: &str, address: &str) -> String {
         CommandFingerprint::from_parts([
             recipient.to_string(),
@@ -36,13 +31,8 @@ impl PurchaseInquiryAddress {
         .digest_hex()
         .to_string()
     }
-    /// 按当前采购承担地址匹配准确的询价稳定地址，禁止伪造分配身份。
-    /// # 参数
-    /// `rows` 为本次采购地址，`limits` 为服务器读取的专项范围。
-    /// # 返回
-    /// 返回对应的稳定地址与本次数量。
-    /// # 错误
-    /// 任一地址不属于报价范围或身份不唯一时拒绝。
+    /// 直送采用专项报价时，按本次交付地址的收件指纹匹配服务端的稳定询价地址，保留请求行顺序及数量。
+    /// 任一地址不在专项范围内或身份不唯一时拒绝，不接受客户端自行指定分配身份。
     pub fn from_delivery(rows: &[PurchaseDeliveryAllocation], limits: &[Self]) -> Result<Vec<Self>> {
         rows.iter()
             .map(|row| {
@@ -82,13 +72,8 @@ pub struct PurchaseInquiryQuoteSource {
     pub valid_to: Option<BusinessDate>,
 }
 impl PurchaseInquiryQuoteSource {
-    /// 校验冻结专项依据的身份及商业条件，不接受缺失版本的历史伪来源。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 作用域及条件完整时成功。
-    /// # 错误
-    /// 缺失身份、非法金额税率、数量或期限时拒绝。
+    /// 冻结或读取专项报价来源时，核验询价、需求版本、反馈轮次、报价和报价修订身份，以及原含税成本、进项税率和可供量。
+    /// 有指定地址范围时，各地址须可追溯，且合计足以覆盖报价可供量；不以缺失版本的历史值当作有效专项来源。
     pub fn validate(&self) -> Result<()> {
         if [&self.inquiry_id, &self.inquiry_line_id, &self.quote_id, &self.quote_revision_id]
             .iter()
@@ -108,13 +93,8 @@ impl PurchaseInquiryQuoteSource {
         validate_addresses(&self.address_limits, self.available_quantity)
     }
 
-    /// 按入仓采购承担量选择内部需求范围，客户地址不写入采购交付资料。
-    /// # 参数
-    /// `bindings`为销售冻结需求，`held`为报价已占地址，`own`为本采购原占用，`quantity`为新目标。
-    /// # 返回
-    /// 返回数量守恒的稳定地址采用范围。
-    /// # 错误
-    /// 账损坏或合法剩余地址不足时拒绝。
+    /// 入仓采购采用专项报价时，按销售冻结需求在合法地址范围内分配本次承担量，但不把客户地址写入采购交付资料。
+    /// 计算可用量时扣除其他采购占用、保留本单原占用的可用份额；余额损坏或不能覆盖目标数量时拒绝。
     pub fn warehouse_allocations(
         &self,
         bindings: &[PurchaseInquiryAddress],

@@ -9,13 +9,8 @@ use persistence_core::Executor;
 
 use crate::{Error, Result};
 
-/// 为实际创建的销售、采购审批任务追加读取授权事件。
-/// # 参数
-/// db 为数据库；writes 为正式计划；executor 为保存节点与任务的原事务。
-/// # 返回
-/// 全部对应事件写入成功。
-/// # 错误
-/// 缺失节点证据、类型关联错误或事件写入失败时回滚原事务。
+/// 为销售、采购审批的正式人工任务追加读取授权事件，供后台按实际分派计算单据读取权限。
+/// 节点、任务与事件同事务写入；证据缺失、错配或事件写入失败时，调用方不得提交。
 pub async fn append_assignments(
     db: &Database,
     writes: &PlannedWrites,
@@ -40,7 +35,7 @@ pub async fn append_assignments(
     Ok(())
 }
 
-/// 将已创建的节点与实际任务接收人映射为稳定事件，不接受错配执行。
+// 用实例、节点执行和实际接收人构造订单读取授权证据；拒绝跨实例或非节点参与人的分派，避免把读取权限发给无关人员。
 fn assignment_evidence(
     instance: &ApprovalProcessInstance,
     execution: &ApprovalNodeExecution,

@@ -78,19 +78,10 @@ pub struct WorkItemView {
 }
 
 impl WorkItemView {
-    /// 设置服务端完成的处理状态与动作判断。
-    ///
-    /// # 参数
-    /// * `processing_state` - 处理状态
-    /// * `processing_blocker` - 整体阻断；没有阻断时为 `None`
-    /// * `allowed_actions` - 允许动作
-    /// * `action_blockers` - 动作级阻断
-    ///
-    /// # 返回
-    /// 返回写入上述字段后的投影。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 设置服务端完成的处理状态与动作判断。
+    // 返回写入上述字段后的投影。
+    //
+    // `processing_blocker`：整体阻断；没有阻断时为 `None`；`allowed_actions`：允许动作。
     pub(crate) fn with_access(
         mut self,
         processing_state: ProcessingState,
@@ -105,31 +96,18 @@ impl WorkItemView {
         self
     }
 
-    /// 设置与本任务审批节点严格绑定的运行上下文。
-    ///
-    /// # 参数
-    /// * `approval_context` - 服务层按节点执行批量解析的有界运行事实
-    ///
-    /// # 返回
-    /// 无返回值。已写入 `approval_context`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 设置与本任务审批节点严格绑定的运行上下文。
+    // `approval_context`：服务层按节点执行批量解析的有界运行事实。
     pub(crate) fn set_approval_context(&mut self, approval_context: WorkItemApprovalContextView) {
         self.approval_context = Some(approval_context);
     }
 
-    /// 由已授权字段生成队列安全投影。
-    ///
-    /// # 参数
-    /// * `fields` - 已通过对象授权的任务字段
-    /// * `queue_context_id` - 当前队列上下文
-    ///
-    /// # 返回
-    /// 返回原因、影响和下一步均已翻译成业务语言的投影；处理人姓名仍可能是占位，由服务层补齐。
-    ///
-    /// # 错误
-    /// 任务类型已退役、业务对象或责任角色未登记处理面、单据审批缺少已签署页面映射时返回 `Error::ValidationError`。
+    // 由已授权字段生成队列安全投影。
+    // 返回原因、影响和下一步均已翻译成业务语言的投影；处理人姓名仍可能是占位，由服务层补齐。
+    //
+    // 任务类型已退役、业务对象或责任角色未登记处理面、单据审批缺少已签署页面映射时返回 `Error::ValidationError`。
+    //
+    // `fields`：已通过对象授权的任务字段；`queue_context_id`：当前队列上下文。
     pub(crate) fn from_fields(fields: WorkItemFields, queue_context_id: String) -> Result<Self> {
         let WorkItemFields { inner, .. } = fields;
         let route = handler_route(inner.work_item_type, &inner.business_object_type, &inner.owner_role)?;
@@ -202,13 +180,10 @@ pub(crate) struct WorkItemFields {
 }
 
 impl WorkItemFields {
-    /// 本人待办只由持久化的当前负责人和开放状态决定，不使用业务权限或历史参与。
-    /// # 参数
-    /// `actor_id` 为当前已认证账号；字段来自已排除软删除的仓储结果。
-    /// # 返回
-    /// 任务开放且当前负责人是该账号时返回 `true`。
-    /// # 错误
-    /// 无。
+    // 本人待办只由持久化的当前负责人和开放状态决定，不使用业务权限或历史参与。
+    // 任务开放且当前负责人是该账号时返回 `true`。
+    //
+    // `actor_id` 为当前已认证账号；字段来自已排除软删除的仓储结果。
     pub(crate) fn is_pending_for(&self, actor_id: &str) -> bool {
         self.status == WorkItemStatus::Open && self.owner_user_id.as_deref() == Some(actor_id)
     }
@@ -229,7 +204,7 @@ impl DerefMut for WorkItemFields {
 }
 
 impl From<WorkItem> for WorkItemFields {
-    /// 从完整任务保留驳回实例关联；其他任务不产生实例读取入口。
+    // 详情投影保留驳回返工任务指向的原审批实例；其他任务不借该字段开放实例读取入口。
     fn from(item: WorkItem) -> Self {
         let rework_instance_id = rework_instance_id(item.work_item_type, item.responsibility_key());
         Self {
@@ -242,7 +217,7 @@ impl From<WorkItem> for WorkItemFields {
 }
 
 impl From<crate::WorkItemRow> for WorkItemFields {
-    /// 列表与详情从同一持久化责任键提取原审批实例。
+    // 列表从持久化责任键提取返工任务的原审批实例，与详情使用同一来源。
     fn from(item: crate::WorkItemRow) -> Self {
         let rework_instance_id = rework_instance_id(item.work_item_type, item.responsibility_key.as_deref());
         Self {
@@ -254,7 +229,7 @@ impl From<crate::WorkItemRow> for WorkItemFields {
     }
 }
 
-/// 只从驳回任务自身的固定关联读取原审批实例。
+// 仅从驳回任务自身的固定关联读取原审批实例。
 fn rework_instance_id(work_item_type: WorkItemType, responsibility_key: Option<&str>) -> Option<String> {
     responsibility_key
         .filter(|_| work_item_type == WorkItemType::ApprovalRework)
@@ -267,16 +242,11 @@ fn rework_instance_id(work_item_type: WorkItemType, responsibility_key: Option<&
 ///
 /// 保留该规则对任务类型、业务对象和责任角色的验证及失败分类；不返回路由上下文。
 ///
-/// # 参数
-/// * `work_item_type` - 任务类型
-/// * `business_object_type` - 业务对象稳定代码
-/// * `owner_role` - 责任角色码
-///
-/// # 返回
 /// 成功时返回处理器键和目标工作面 ID。
 ///
-/// # 错误
 /// 对象未登记、导入确认责任角色未映射、单据审批缺少已签署页面映射或任务类型已退役时返回 `Error::ValidationError`。
+///
+/// `owner_role`：责任角色码。
 pub fn work_item_destination(
     work_item_type: WorkItemType,
     business_object_type: &str,
@@ -292,18 +262,12 @@ pub(crate) struct HandlerRoute {
     pub(super) route_context: Option<WorkItemRouteContext>,
 }
 
-/// 按任务类型、业务对象和责任角色解析处理面与路由上下文。
-///
-/// # 参数
-/// * `work_item_type` - 任务类型
-/// * `business_object_type` - 业务对象稳定代码
-/// * `owner_role` - 责任角色码；只参与导入确认范围
-///
-/// # 返回
-/// 返回处理器键、目标工作面，以及导入确认范围或单据类型路由上下文。其他任务类型的上下文为 `None`。
-///
-/// # 错误
-/// 对象与固定处理面不符、异常来源未登记、单据审批缺少已签署页面映射、导入确认责任角色未登记或任务类型已退役时返回 `Error::ValidationError`。
+// 按任务类型、业务对象和责任角色解析处理面与路由上下文。
+// 返回处理器键、目标工作面，以及导入确认范围或单据类型路由上下文。其他任务类型的上下文为 `None`。
+//
+// 对象与固定处理面不符、异常来源未登记、单据审批缺少已签署页面映射、导入确认责任角色未登记或任务类型已退役时返回 `Error::ValidationError`。
+//
+// `owner_role`：责任角色码；只参与导入确认范围。
 pub(crate) fn handler_route(
     work_item_type: WorkItemType,
     business_object_type: &str,
@@ -425,7 +389,7 @@ const FIXED_TASK_ROUTES: &[FixedRoute] = &[
     ),
 ];
 
-/// 按任务类型选择固定处理面，未知业务对象维持原拒绝原因。
+// 展示任务时根据登记类型选择固定处理面；对象类型未知时保留拒绝原因，不猜业务入口。
 fn handler_destination(kind: WorkItemType, object: &str) -> Result<(&'static str, &'static str)> {
     if let Some((_, expected, handler, workspace, error)) = FIXED_TASK_ROUTES.iter().find(|row| row.0 == kind)
     {
@@ -452,7 +416,7 @@ fn handler_destination(kind: WorkItemType, object: &str) -> Result<(&'static str
     }
 }
 
-/// 固定业务对象合同只接受明确登记的类型，不推断处理面。
+// 处理面只与显式登记的业务对象类型绑定，未知类型不从其他任务字段推断。
 fn fixed_destination(
     object: &str,
     expected: &[&str],
@@ -467,7 +431,7 @@ fn fixed_destination(
     }
 }
 
-/// 集成异常沿来源类型选择调查处理面。
+// 为集成异常从其真实来源类型选择对应调查处理面，不沿普通审批任务路由。
 fn exception_destination(kind: WorkItemType, object: &str) -> Result<(&'static str, &'static str)> {
     match (kind, object) {
         (_, "SUPPLIER_FULFILLMENT_ORDER") => Ok(("supplier_fulfillment_investigation", "W26")),
@@ -493,16 +457,12 @@ fn w18_confirmation_scope(owner_role: &str) -> Option<&'static str> {
     }
 }
 
-/// 按已签署页面映射单据审批目标工作面。缺少映射失败关闭，不得回落 W05。
-///
-/// # 参数
-/// * `business_object_type` - WorkItem 中的 DocumentType 稳定代码
-///
-/// # 返回
-/// 返回 handler 与目标 workspace。
-///
-/// # 错误
-/// 未签署映射时返回稳定错误，不得回落默认工作面。
+// 按已签署页面映射单据审批目标工作面。缺少映射失败关闭，不得回落 W05。
+// 返回 handler 与目标 workspace。
+//
+// 未签署映射时返回稳定错误，不得回落默认工作面。
+//
+// `business_object_type`：WorkItem 中的 DocumentType 稳定代码。
 fn document_approval_route(business_object_type: &str) -> Result<(&'static str, &'static str)> {
     match business_object_type {
         "sales_order" | "voucher_sales_order" | "sales_change_order" => Ok(("document_approval", "W05")),
@@ -534,7 +494,7 @@ mod payment_request_tests {
         new_approved_purchase_payment_request_task,
     };
 
-    /// 每类审批驳回均进入同一个处理器，并保留原单据工作面。
+    // 验证：每类审批驳回均进入同一个处理器，并保留原单据工作面。
     #[test]
     fn rejected_documents_share_rework_handler_and_preserve_document_routes() {
         let documents = [
@@ -562,7 +522,7 @@ mod payment_request_tests {
         assert!(handler_destination(WorkItemType::ApprovalRework, "unregistered").is_err());
     }
 
-    /// 正式付款申请审批任务进入队列时保留精确执行和路由。
+    // 验证：正式付款申请审批任务进入队列时保留精确执行和路由。
     #[test]
     fn payment_request_approval_has_registered_queue_route() {
         let at = Instant::now();
@@ -597,7 +557,7 @@ mod payment_request_tests {
         assert_eq!(view.processing_state, ProcessingState::Ready);
     }
 
-    /// 批准申请产生的真实付款任务在队列中保留申请身份。
+    // 验证：批准申请产生的真实付款任务在队列中保留申请身份。
     #[test]
     fn approved_payment_request_execution_has_registered_queue_route() {
         let fields = approved_execution_fields();
@@ -615,7 +575,7 @@ mod payment_request_tests {
         assert_eq!(view.processing_state, ProcessingState::Ready);
     }
 
-    /// 旧应付子账付款任务不得绕过批准申请进入办理页面。
+    // 验证：旧应付子账付款任务不得绕过批准申请进入办理页面。
     #[test]
     fn legacy_payable_execution_has_no_registered_queue_route() {
         let mut fields = approved_execution_fields();
@@ -653,14 +613,9 @@ mod payment_request_tests {
 /// 组织角色与审批责任角色（`approval/policy.rs` 的 `owner_role`）都会落到 `owner_role`
 /// 字段。未覆盖的码不得原样上屏——界面禁止展示实现标识符，回退到通用「责任人」。
 ///
-/// # 参数
-/// * `role` - 责任角色码
-///
-/// # 返回
 /// 返回中文角色名；未覆盖的码返回「责任人」。
 ///
-/// # 错误
-/// 不返回错误。
+/// `role`：责任角色码。
 pub fn role_label(role: &str) -> String {
     match role {
         "role-sales" | "sales" => "销售",

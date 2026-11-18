@@ -21,16 +21,7 @@ pub enum PartyStatusFact {
 }
 
 impl PartyStatusFact {
-    /// 主体是否启用。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// `Active` 时返回 `true`，`Disabled` 时返回 `false`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 检查企业主体状态是否启用；此处仅检查启停标记，不代表业务资格已经通过。
     pub fn is_active(self) -> bool {
         matches!(self, Self::Active)
     }
@@ -48,16 +39,7 @@ pub enum EffectiveRecordStatusFact {
 }
 
 impl EffectiveRecordStatusFact {
-    /// 事实行是否启用。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// `Active` 时返回 `true`，`Disabled` 时返回 `false`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 检查主体事实行状态是否启用；此处仅检查启停标记，不代表业务资格已经通过。
     pub fn is_active(self) -> bool {
         matches!(self, Self::Active)
     }
@@ -95,16 +77,7 @@ pub struct PartyListFact {
 /// 主体当前修订的法定名称事实。
 impl PartyListFact {
     /// 以必填身份构造主体稳定事实；可选维度默认为空。
-    ///
-    /// # 参数
-    /// * `id` - 主体稳定 ID
-    /// * `party_no` - 主体编号
-    ///
-    /// # 返回
     /// 返回启用状态的事实。
-    ///
-    /// # 错误
-    /// 无。
     pub fn new(id: String, party_no: String) -> Self {
         Self {
             id,
@@ -162,19 +135,7 @@ pub struct PartyContactFact {
 
 impl PartyContactFact {
     /// 以必填身份构造联系人事实；可选维度默认为空。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键
-    /// * `party_id` - 所属企业主体 ID
-    /// * `contact_name` - 联系人姓名
-    /// * `mobile_masked` - 手机号掩码
-    /// * `valid_from` - 生效开始日期
-    ///
-    /// # 返回
     /// 返回启用状态的联系人事实。
-    ///
-    /// # 错误
-    /// 无。
     pub fn new(
         id: String,
         party_id: String,
@@ -280,17 +241,7 @@ pub struct PartyBankAccountFact {
 }
 
 /// 选择当前默认且启用的事实行；无默认时回落到第一条启用记录。
-///
-/// # 参数
-/// * `items` - 已加载事实行
-/// * `is_default` - 默认标记
-/// * `is_active` - 启用判定
-///
-/// # 返回
 /// 返回当前默认且启用的行；没有默认时返回第一条启用行；全部停用时返回 `None`。
-///
-/// # 错误
-/// 不返回错误。
 pub fn select_current_default<T>(
     items: &[T],
     is_default: impl Fn(&T) -> bool,
@@ -308,15 +259,7 @@ pub fn select_current_default<T>(
 #[async_trait]
 pub trait PartyFactsPort: Send + Sync {
     /// 按当前法定名称模糊匹配未删除主体 ID。
-    ///
-    /// # 参数
-    /// * `keyword` - 已规范化的名称关键词
-    /// * `executor` - 调用方选择的执行器
-    ///
-    /// # 返回
     /// 返回命中的主体 ID；无命中时为空集合。
-    ///
-    /// # 错误
     /// 主体查询失败时返回仓储或映射错误。
     async fn matching_current_party_ids_by_name(
         &self,
@@ -325,15 +268,7 @@ pub trait PartyFactsPort: Send + Sync {
     ) -> Result<Vec<PartyId>>;
 
     /// 按主体 ID 批量读取主体及其当前修订。
-    ///
-    /// # 参数
-    /// * `party_ids` - 主体 ID
-    /// * `executor` - 调用方选择的执行器
-    ///
-    /// # 返回
     /// 返回主体稳定事实与当前修订事实。
-    ///
-    /// # 错误
     /// 主体查询失败时返回仓储或映射错误。
     async fn list_with_current_revisions(
         &self,
@@ -342,15 +277,7 @@ pub trait PartyFactsPort: Send + Sync {
     ) -> Result<(Vec<PartyListFact>, Vec<PartyRevisionFact>)>;
 
     /// 读取主体及其当前修订。
-    ///
-    /// # 参数
-    /// * `party_id` - 主体 ID
-    /// * `executor` - 调用方选择的执行器
-    ///
-    /// # 返回
     /// 主体不存在时返回 `None`。
-    ///
-    /// # 错误
     /// 主体查询失败时返回仓储或映射错误。
     async fn find_with_current_revision(
         &self,
@@ -359,15 +286,7 @@ pub trait PartyFactsPort: Send + Sync {
     ) -> Result<Option<(PartyListFact, Option<PartyRevisionFact>)>>;
 
     /// 读取主体联系人历史。
-    ///
-    /// # 参数
-    /// * `party_id` - 主体 ID
-    /// * `executor` - 调用方选择的执行器
-    ///
-    /// # 返回
     /// 返回该主体的联系人历史；没有记录时为空集合。
-    ///
-    /// # 错误
     /// 主体查询失败时返回仓储或映射错误。
     async fn list_contacts(
         &self,
@@ -376,15 +295,7 @@ pub trait PartyFactsPort: Send + Sync {
     ) -> Result<Vec<PartyContactFact>>;
 
     /// 读取主体地址历史。
-    ///
-    /// # 参数
-    /// * `party_id` - 主体 ID
-    /// * `executor` - 调用方选择的执行器
-    ///
-    /// # 返回
     /// 返回该主体的地址历史；没有记录时为空集合。
-    ///
-    /// # 错误
     /// 主体查询失败时返回仓储或映射错误。
     async fn list_addresses(
         &self,
@@ -393,15 +304,7 @@ pub trait PartyFactsPort: Send + Sync {
     ) -> Result<Vec<PartyAddressFact>>;
 
     /// 读取主体税务资料历史。
-    ///
-    /// # 参数
-    /// * `party_id` - 主体 ID
-    /// * `executor` - 调用方选择的执行器
-    ///
-    /// # 返回
     /// 返回该主体的税务资料历史；没有记录时为空集合。
-    ///
-    /// # 错误
     /// 主体查询失败时返回仓储或映射错误。
     async fn list_tax_profiles(
         &self,
@@ -410,15 +313,7 @@ pub trait PartyFactsPort: Send + Sync {
     ) -> Result<Vec<PartyTaxProfileFact>>;
 
     /// 读取主体银行账户历史。
-    ///
-    /// # 参数
-    /// * `party_id` - 主体 ID
-    /// * `executor` - 调用方选择的执行器
-    ///
-    /// # 返回
     /// 返回该主体的银行账户历史；没有记录时为空集合。
-    ///
-    /// # 错误
     /// 主体查询失败时返回仓储或映射错误。
     async fn list_bank_accounts(
         &self,
@@ -427,15 +322,7 @@ pub trait PartyFactsPort: Send + Sync {
     ) -> Result<Vec<PartyBankAccountFact>>;
 
     /// 按主体 ID 批量读取当前法定名称。
-    ///
-    /// # 参数
-    /// * `party_ids` - 主体 ID
-    /// * `executor` - 调用方选择的执行器
-    ///
-    /// # 返回
     /// 返回主体 ID 字符串到法定名称的映射；缺少当前修订时无键。
-    ///
-    /// # 错误
     /// 主体查询失败时返回仓储或映射错误。
     async fn current_legal_names_by_party_ids(
         &self,

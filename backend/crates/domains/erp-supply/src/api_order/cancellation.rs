@@ -40,12 +40,9 @@ pub struct CancellationAction {
 
 impl CancellationAction {
     /// 构造已经冻结范围的整叶取消请求。
-    /// # 参数
-    /// 无；只读取服务器保存的原动作。
-    /// # 返回
     /// 本叶整单取消，不把 ERP 行或金额改成供应商部分取消参数。
-    /// # 错误
-    /// 不返回错误；发送资格须先由执行组方法原子登记。
+    /// 发送资格须先由执行组方法原子登记。
+    /// 只读取服务器保存的原动作。
     pub fn request(&self) -> CancelOrder {
         CancelOrder {
             action: self.action.clone(),
@@ -65,12 +62,9 @@ pub struct CancellationScope {
 
 impl CancellationScope {
     /// 校验取消范围恰好覆盖原冻结组，不接受没有子单选择依据的任意部分数量。
-    /// # 参数
-    /// `request` 为原履约入口请求，`frozen` 为加密快照中的真实采购行。
-    /// # 返回
     /// 原因、行顺序规范化后的稳定载荷摘要。
-    /// # 错误
     /// 缺行、重复、数量不同、原因缺失及过长文本时拒绝；兼容金额不参与范围判断。
+    /// `request` 为原履约入口请求，`frozen` 为加密快照中的真实采购行。
     pub fn new(request: &SubmitAfterSalesActionRequest, frozen: &[OrderLine]) -> Result<Self> {
         let reason = request.reason_code.as_deref().unwrap_or_default().trim();
         if reason.is_empty()
@@ -112,11 +106,7 @@ impl CancellationScope {
     }
 
     /// 从已校验冻结采购计算动作记载金额，不消费客户端兼容金额。
-    /// # 参数
-    /// `request` 为同一范围请求，`frozen` 为服务器真实冻结行。
-    /// # 返回
     /// 保留取消范围、按原采购计算金额的服务器动作数据；不建立任何资金核销。
-    /// # 错误
     /// 原范围变化或定点金额溢出时拒绝。
     pub fn canonical_request(
         &self,
@@ -153,12 +143,9 @@ impl CancellationScope {
 
 impl ApiOrderExecution {
     /// 核验取消关联的原履约订单、连接和根单身份。
-    /// # 参数
-    /// `order` 为同一事务内服务器读取的原履约订单。
-    /// # 返回
     /// 原订单、供应商、连接和已保存根单均相同时成功。
-    /// # 错误
     /// 任一归属或根单不一致时拒绝，不使用请求中的归属。
+    /// `order` 为同一事务内服务器读取的原履约订单。
     pub fn ensure_cancellation_order(&self, order: &SupplierFulfillmentOrder) -> Result<()> {
         if order.base.id != self.base.id
             || order.connection_id.as_ref() != self.connection_id
@@ -173,11 +160,7 @@ impl ApiOrderExecution {
     }
 
     /// 为完整当前叶子冻结取消意图；重复请求不得重新开放发送。
-    /// # 参数
-    /// `scope` 为服务器已核对的原范围，`root_action_id` 为现有取消动作头。
-    /// # 返回
     /// 首次冻结返回真，同载荷返回假。
-    /// # 错误
     /// 同操作异载荷、无可信拓扑或原确认未知时拒绝。
     pub fn prepare_cancellations(&mut self, scope: &CancellationScope, root_action_id: &str) -> Result<bool> {
         if let Some(original) = &self.cancellation_payload_hash {
@@ -231,11 +214,7 @@ impl ApiOrderExecution {
     }
 
     /// 原子保存一次取消发送意图，原子提交后才能调用供应商。
-    /// # 参数
-    /// `target` 为已经刷新核实的当前叶子订单号。
-    /// # 返回
     /// 仅 Ready 首次返回请求，已发送或受理的动作返回空且不重发。
-    /// # 错误
     /// 当前叶子身份、数量或原取消范围变化时拒绝。
     pub fn begin_cancellation(&mut self, target: &str) -> Result<Option<CancelOrder>> {
         let Some(request) = self.cancellation_request(target)? else { return Ok(None) };
@@ -247,11 +226,7 @@ impl ApiOrderExecution {
     }
 
     /// 读取尚未发送的稳定原取消请求，供只读资格核验。
-    /// # 参数
-    /// `target` 为已经持久化的真实预占根单或当前叶子身份。
-    /// # 返回
     /// 未发送且当前数量范围不变时返回原请求；已发送返回空。
-    /// # 错误
     /// 目标已拆分、身份丢失或范围改变时拒绝，不替换原动作目标。
     pub fn cancellation_request(&self, target: &str) -> Result<Option<CancelOrder>> {
         let action = self
@@ -278,11 +253,7 @@ impl ApiOrderExecution {
     }
 
     /// 保存原动作的受理回执，不登记取消完成。
-    /// # 参数
-    /// `target` 为原叶子，`accepted` 为本次唯一写调用返回值。
-    /// # 返回
     /// 原动作进入受理后调查状态。
-    /// # 错误
     /// 身份不同、原动作未发送或已存在冲突终态时拒绝。
     pub fn accept_cancellation(&mut self, target: &str, accepted: ActionAccepted) -> Result<()> {
         let action = self
@@ -300,12 +271,9 @@ impl ApiOrderExecution {
     }
 
     /// 采用原目标的查询结果更新取消动作；没有最终证据时保持原状态。
-    /// # 参数
-    /// 无；当前拓扑必须已按原根单完整核实。
-    /// # 返回
     /// 只把明确取消或失败应用到原目标，不传播给新子单。
-    /// # 错误
     /// 已确认终态发生冲突时拒绝。
+    /// 当前拓扑必须已按原根单完整核实。
     pub fn observe_cancellations(&mut self) -> Result<()> {
         let tree = self
             .order_tree
@@ -340,12 +308,9 @@ impl ApiOrderExecution {
     }
 
     /// 汇总下一步，只为尚未发送的独立目标保留发送资格。
-    /// # 参数
-    /// 无；仅使用本组持久化取消状态。
-    /// # 返回
     /// 有未发动作时继续逐单取消，有未知/受理时仅查询，否则停止新写并保留跟踪。
-    /// # 错误
-    /// 不返回错误；停止不表示供应商全量取消或资金已经返还。
+    /// 停止不表示供应商全量取消或资金已经返还。
+    /// 仅使用本组持久化取消状态。
     pub fn refresh_cancellation_stage(&mut self) {
         self.stage = if self
             .cancellation_actions
@@ -363,12 +328,9 @@ impl ApiOrderExecution {
     }
 
     /// 核验全部当前有效叶子的取消终态，不以历史父单完成代替新子单。
-    /// # 参数
-    /// 无；读取已核验当前关系及各原目标动作。
-    /// # 返回
     /// 每个当前叶子均有取消完成的原动作和当前查询事实时为真。
-    /// # 错误
-    /// 不返回错误；缺单和再次拆单均保持未完成。
+    /// 缺单和再次拆单均保持未完成。
+    /// 读取已核验当前关系及各原目标动作。
     pub fn all_cancellations_confirmed(&self) -> bool {
         self.order_tree.as_ref().is_some_and(|tree| {
             let leaves = tree.action_targets();

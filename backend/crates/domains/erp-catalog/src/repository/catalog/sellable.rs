@@ -45,16 +45,9 @@ pub struct SellableSkuFilter {
 }
 
 impl SellableSkuFilter {
-    /// 构造仅携带资格业务日、无业务筛选的空条件（用于精确修订复核）。
+    /// 构造仅携带资格业务日、无业务筛选的空条件（用于精确修订复核）。返回无可选筛选、分页占位为 1 的过滤条件。
     ///
-    /// # 参数
-    /// * `eligibility_as_of` - 资格业务日期
-    ///
-    /// # 返回
-    /// 返回无可选筛选、分页占位为 1 的过滤条件。
-    ///
-    /// # 错误
-    /// 无。
+    /// `eligibility_as_of` 为资格业务日期。
     pub fn as_of(eligibility_as_of: BusinessDate) -> Self {
         Self {
             keyword: None,
@@ -164,16 +157,7 @@ pub enum SellableSortField {
 }
 
 impl SellableSortField {
-    /// 返回排序字段在商品池行中的字段名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 [`SellableSkuRow`] 的序列化字段名。
-    ///
-    /// # 错误
-    /// 无。
+    /// 将商品池排序项映射为 [`SellableSkuRow`] 的序列化字段名，供数据库按同一列排序。
     pub fn row_field(self) -> &'static str {
         match self {
             Self::SkuNo => "sku_no",

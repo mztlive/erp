@@ -54,21 +54,9 @@ pub struct PurchaseReviewResult {
 }
 
 impl PurchaseReviewResult {
-    /// 由必填待办身份、版本与审核结论构造财务审核结果。
+    /// 由必填待办身份、版本与审核结论构造财务审核结果。返回生效版本与应付分录为空、零锁版本的审核结果。
     ///
-    /// # 参数
-    /// * `work_item_id` - 已完成的审核待办
-    /// * `work_item_status` - 待办终态
-    /// * `task_version` - 完成后的待办版本
-    /// * `subject_version` - 本次审核锁定的采购提交版本
-    /// * `review_result` - 审核结论（`APPROVED`/`REJECTED`）
-    /// * `reference` - 业务引用
-    ///
-    /// # 返回
-    /// 返回生效版本与应付分录为空、零锁版本的审核结果。
-    ///
-    /// # 错误
-    /// 无。
+    /// `review_result` 为审核结论（`APPROVED`/`REJECTED`）。
     pub fn new(
         work_item_id: impl Into<String>,
         work_item_status: impl Into<String>,
@@ -92,60 +80,24 @@ impl PurchaseReviewResult {
     }
 
     /// 设置通过时形成的生效版本。
-    ///
-    /// # 参数
-    /// * `revision_id` - 生效版本 ID
-    ///
-    /// # 返回
-    /// 返回更新后的审核结果。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_revision_id(mut self, revision_id: impl Into<String>) -> Self {
         self.revision_id = Some(revision_id.into());
         self
     }
 
     /// 设置通过时形成的版本号。
-    ///
-    /// # 参数
-    /// * `revision_no` - 版本号
-    ///
-    /// # 返回
-    /// 返回更新后的审核结果。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_revision_no(mut self, revision_no: u32) -> Self {
         self.revision_no = Some(revision_no);
         self
     }
 
     /// 设置通过时形成的应付分录。
-    ///
-    /// # 参数
-    /// * `payable_entry_id` - 应付分录 ID
-    ///
-    /// # 返回
-    /// 返回更新后的审核结果。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_payable_entry_id(mut self, payable_entry_id: impl Into<String>) -> Self {
         self.payable_entry_id = Some(payable_entry_id.into());
         self
     }
 
     /// 设置新乐观锁版本。
-    ///
-    /// # 参数
-    /// * `lock_version` - 新乐观锁版本
-    ///
-    /// # 返回
-    /// 返回更新后的审核结果。
-    ///
-    /// # 错误
-    /// 无。
     pub fn with_lock_version(mut self, lock_version: u64) -> Self {
         self.lock_version = lock_version;
         self

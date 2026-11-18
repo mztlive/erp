@@ -50,13 +50,9 @@ pub struct AuthorizationService {
 }
 
 impl AuthorizationService {
-    /// 查询单个功能资格；不能作为对象访问或写入凭证。
-    /// # 参数
-    /// actor 为当前账号，permission 为具体权限，executor 为原执行器。
-    /// # 返回
-    /// 有效账号的启用角色授予权限时为 true，否则为 false。
-    /// # 错误
-    /// 非法权限或身份设施取证失败原样传播。
+    /// 为按钮展示或可选字段检查单项功能权限。有效账号有启用角色授予该权限时返回 `true`；非法权限和取证故障不降级为 `false`。
+    ///
+    /// 业务读取或写入仍须通过 `query` 或 `require`，不能复用此结果作为对象凭证。
     pub async fn has_permission(
         &self,
         actor: &AuditActor,
@@ -69,13 +65,9 @@ impl AuthorizationService {
             .is_some_and(|qualified| qualified.same_role(slice::from_ref(permission))))
     }
 
-    /// 批量读取功能资格，不加载业务事实或数据范围。
-    /// # 参数
-    /// actor、permissions 为真实账号与具体权限集合；executor 为原执行器。
-    /// # 返回
-    /// 账号失效返回 None；有效账号返回逐项独立授权结果，允许零权限。
-    /// # 错误
-    /// 非法权限或身份设施取证失败原样传播。
+    /// 批量检查当前账号的功能资格，不读取对象事实或数据范围。失效账号返回 `None`，非法权限及取证错误原样传播。
+    ///
+    /// 若多项权限必须来自同一启用角色，使用 `QualifiedPermissions::same_role`；各项独立命中并不能证明同角色资格。
     pub async fn permissions(
         &self,
         actor: &AuditActor,
@@ -85,13 +77,10 @@ impl AuthorizationService {
         self.facilities.permissions(actor, permissions, executor).await
     }
 
-    /// 按固定权限选择查询入口并生成完整数据库授权条件。
-    /// # 参数
-    /// actor 为认证账号，permission 为查询权限，executor 为同一读取阶段执行器。
-    /// # 返回
-    /// 仓储可执行的 CompiledAccess；交付业务结果前仍须调用 validate。
-    /// # 错误
-    /// 未知权限、缺少绑定、完整资格不足、动态依赖或执行边界错误均拒绝。
+    /// 在列表、总数、汇总或查询式导出之前，按固定权限和已登记 Mapping 编译完整数据库授权条件。
+    ///
+    /// 仓储在分页或统计之前执行条件；用例须沿原执行器调用 `validate` 后才能交付结果。
+    /// 未知或不支持的权限、缺少绑定、资格不足以及依赖或执行边界错误均拒绝。
     pub async fn query(
         &self,
         actor: &AuditActor,

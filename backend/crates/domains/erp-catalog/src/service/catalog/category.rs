@@ -21,15 +21,13 @@ impl CatalogService {
 
     /// 分页查询商品分类列表。
     ///
-    /// # 参数
-    /// * `params` - 查询参数（`category_code`/`name`/`parent_category_id`/`status` 扁平筛选）
-    ///
-    /// # 返回
-    /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
-    ///
-    /// # 错误
+    /// 失败情形如下：
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
     /// * `RepositoryError` - 数据库查询失败
+    ///
+    /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
+    ///
+    /// `params` 为查询参数（`category_code`/`name`/`parent_category_id`/`status` 扁平筛选）。
     pub async fn product_category_list(
         &self,
         actor: &AuditActor,
@@ -49,7 +47,7 @@ impl CatalogService {
             .await
     }
 
-    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    // 分页查询商品分类，沿用公开入口提供的授权快照完成查询。
     async fn product_category_list_snapshot(
         &self,
         actor: &AuditActor,
@@ -82,17 +80,11 @@ impl CatalogService {
 
     /// 更新商品分类（乐观锁语义；名称、类型、状态与可选父级变更原子提交）。
     ///
-    /// # 参数
-    /// * `id` - 分类 ID
-    /// * `req` - 更新请求（含期望版本）
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回更新后分类的响应视图。
-    ///
-    /// # 错误
+    /// 失败情形如下：
     /// * `NotFound` - 分类不存在
     /// * `ConflictError` - 期望版本与当前版本不一致
+    ///
+    /// `req` 为更新请求（含期望版本）。
     pub async fn product_category_update(
         &self,
         id: &str,
@@ -112,7 +104,7 @@ impl CatalogService {
             .await
     }
 
-    /// 在原授权快照内读取版本与关联事实，完成修改和审计。
+    // 更新商品分类，在原事务内完成授权、关联事实核对和写入与审计。
     async fn product_category_update_stage(
         &self,
         id: &str,
@@ -160,18 +152,12 @@ impl CatalogService {
     ///
     /// 沿新父分类的祖先链上溯，命中本节点即拒绝；`None` 表示提升为根分类。
     ///
-    /// # 参数
-    /// * `id` - 分类 ID
-    /// * `req` - 移动请求（含期望版本与新父分类）
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回移动后分类的响应视图。
-    ///
-    /// # 错误
+    /// 失败情形如下：
     /// * `NotFound` - 分类或新父分类不存在
     /// * `ConflictError` - 期望版本与当前版本不一致
     /// * `BusinessLogicError` - 移动将形成环
+    ///
+    /// `req` 为移动请求（含期望版本与新父分类）。
     pub async fn product_category_move(
         &self,
         id: &str,
@@ -189,7 +175,7 @@ impl CatalogService {
             .await
     }
 
-    /// 在原授权快照内读取版本与关联事实，完成修改和审计。
+    // 移动商品分类，在原事务内完成授权、关联事实核对和写入与审计。
     async fn product_category_move_stage(
         &self,
         id: &str,
@@ -223,14 +209,7 @@ impl CatalogService {
     ///
     /// 存在子分类时拒绝删除（数据模型 §6.3：树形维护页不允许留下孤儿子树）。
     ///
-    /// # 参数
-    /// * `id` - 分类 ID
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回删除结果。
-    ///
-    /// # 错误
+    /// 失败情形如下：
     /// * `NotFound` - 分类不存在
     /// * `BusinessLogicError` - 分类下存在子分类
     /// * `ConflictError` - 并发修改（CAS 冲突）
@@ -246,7 +225,7 @@ impl CatalogService {
             .await
     }
 
-    /// 在原授权快照内读取版本与关联事实，完成修改和审计。
+    // 删除商品分类，在原事务内完成授权、关联事实核对和写入与审计。
     async fn product_category_delete_stage(
         &self,
         id: &str,
@@ -276,20 +255,8 @@ impl CatalogService {
     }
 
     // ---------- 商品品牌 ----------
-    /// 校验新父分类的祖先链不包含本节点（成环检测）。
-    ///
-    /// 祖先链投影由 Repository 一次取回；本方法只解释缺失、命中自身、成环和截断。
-    ///
-    /// # 参数
-    /// * `id` - 本节点 ID
-    /// * `parent_id` - 新父分类（`None` 为根）
-    /// * `executor` - 调用方读取或写入事务的原执行器
-    ///
-    /// # 返回
-    /// 合法时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 父分类不存在或沿祖先链命中本节点、成环、过深时返回错误。
+    /// 新建或移动分类前，在原读取或写事务内检查新父分类的完整祖先链；`None` 表示根分类。
+    /// 仓储一次返回链路事实；父级缺失、命中当前节点、成环或超过查询深度均拒绝。
     pub async fn ensure_parent_chain_ok(
         &self,
         id: &str,
@@ -304,18 +271,11 @@ impl CatalogService {
     }
 }
 
-/// 把祖先链持久化事实适配为分类树业务错误。
-///
-/// # 参数
-/// * `self_id` - 正在创建或移动的分类 ID
-/// * `fact` - Repository 返回的 ID/父 ID、缺失、成环与截断事实
-///
-/// # 返回
-/// 根节点或合法多级链返回 `Ok(())`。
-///
-/// # 错误
-/// 命中自身或成环返回 `BusinessLogicError`；父节点缺失返回 `NotFound`；
-/// 过深截断失败关闭。
+// 把祖先链持久化事实适配为分类树业务错误。
+//
+// 根节点或合法多级链返回 `Ok(())`。命中自身或成环返回 `BusinessLogicError`；父节点缺失返回 `NotFound`；过深截断失败关闭。
+//
+// `fact` 为 Repository 返回的 ID/父 ID、缺失、成环与截断事实。
 fn interpret_parent_chain(self_id: &str, fact: &CategoryParentChainFact) -> Result<()> {
     if fact.start_parent_id.is_none() {
         return Ok(());
@@ -350,7 +310,7 @@ mod tests {
         )
     }
 
-    /// 根节点与正常多级链通过；缺失、命中自身、成环和截断失败关闭。
+    // 根节点与正常多级链通过；缺失、命中自身、成环和截断失败关闭。
     #[test]
     fn interpret_parent_chain_covers_root_valid_missing_and_cycles() {
         assert!(interpret_parent_chain("child", &CategoryParentChainFact::root()).is_ok());

@@ -24,29 +24,12 @@ pub struct DeliveryTemplateService {
 
 impl DeliveryTemplateService {
     /// 创建服务。
-    ///
-    /// # 参数
-    /// * `db` - 数据库
-    ///
-    /// # 返回
-    /// 返回服务实例。
-    ///
-    /// # 错误
-    /// 无。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
     /// 查询供应商全部模板。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 供应商
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 按名称排序的模板。
-    ///
-    /// # 错误
     /// 查询失败时返回错误。
     pub async fn supplier_templates(
         &self,
@@ -62,19 +45,9 @@ impl DeliveryTemplateService {
     }
 
     /// 新建模板；设为默认时取消原默认模板。
-    ///
-    /// # 参数
-    /// * `id` - 调用方预先生成的模板主键
-    /// * `supplier_id` - 已由调用方确认存在的供应商
-    /// * `content` - 模板内容
-    /// * `actor` - 操作人
-    /// * `executor` - 调用方事务执行器
-    ///
-    /// # 返回
     /// 返回已保存模板。
-    ///
-    /// # 错误
     /// 内容不合法、名称重复或写入失败时返回错误。
+    /// `id`：调用方预先生成的模板主键。
     pub async fn create(
         &self,
         id: SupplierDeliveryTemplateId,
@@ -94,18 +67,7 @@ impl DeliveryTemplateService {
     }
 
     /// 整体保存模板内容。
-    ///
-    /// # 参数
-    /// * `id` - 模板主键
-    /// * `expected_version` - 调用方持有的版本
-    /// * `content` - 新内容
-    /// * `actor` - 操作人
-    /// * `executor` - 调用方事务执行器
-    ///
-    /// # 返回
     /// 返回保存后的模板；内容未变化时原样返回。
-    ///
-    /// # 错误
     /// 模板不存在、版本不一致、内容不合法、名称重复或写入失败时返回错误。
     pub async fn update(
         &self,
@@ -130,16 +92,7 @@ impl DeliveryTemplateService {
     }
 
     /// 删除未被供给引用的模板。
-    ///
-    /// # 参数
-    /// * `id` - 模板主键
-    /// * `expected_version` - 调用方持有的版本
-    /// * `executor` - 调用方事务执行器
-    ///
-    /// # 返回
     /// 返回删除前的模板。
-    ///
-    /// # 错误
     /// 模板不存在、版本不一致、仍被供给引用或写入失败时返回错误。
     pub async fn delete(
         &self,
@@ -159,18 +112,9 @@ impl DeliveryTemplateService {
     }
 
     /// 为已通过访问校验的供给指定模板或改回跟随默认。
-    ///
-    /// # 参数
-    /// * `offerings` - 调用方已逐条校验写访问的供给
-    /// * `template_id` - 目标模板；`None` 表示跟随供应商默认模板
-    /// * `actor` - 操作人
-    /// * `executor` - 调用方事务执行器
-    ///
-    /// # 返回
     /// 返回实际发生变化的供给数。
-    ///
-    /// # 错误
     /// 模板不存在、模板与供给不属于同一供应商或写入失败时返回错误。
+    /// `template_id`：目标模板；`None` 表示跟随供应商默认模板。
     pub async fn assign(
         &self,
         offerings: Vec<SupplierOffering>,
@@ -199,15 +143,7 @@ impl DeliveryTemplateService {
     }
 
     /// 批量解析供给当前生效的配送政策。
-    ///
-    /// # 参数
-    /// * `offerings` - 供给
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 以供给主键索引的生效政策；查询次数与供给数量无关。
-    ///
-    /// # 错误
     /// 查询失败时返回错误。
     pub async fn resolve_for_offerings(
         &self,

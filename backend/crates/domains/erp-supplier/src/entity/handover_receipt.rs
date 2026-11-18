@@ -35,15 +35,9 @@ pub struct SupplierHandoverReceipt {
 
 impl SupplierHandoverReceipt {
     /// 构造与正式业务事实同事务提交的交接回执。
-    ///
-    /// # 参数
-    /// * `command` - 当前请求的稳定身份及摘要。
-    /// * `result` - 供应商或能力的已提交结果。
-    /// * `audit_event_id` - 同事务成功事件编号。
-    /// # 返回
     /// 返回已校验的领域回执。
-    /// # 错误
     /// 身份、目标类型、结果或版本不合法时返回错误。
+    /// `audit_event_id`：同事务成功事件编号。
     pub fn new(
         command: &CommandReceipt,
         result: SupplierHandoverResult,
@@ -61,12 +55,7 @@ impl SupplierHandoverReceipt {
     }
 
     /// 校验目标类型、原结果和完整身份，禁止损坏回执继续执行。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 合法时成功。
-    /// # 错误
     /// schema、原结果、身份或展示关联缺失时返回内部错误。
     pub fn validate(&self) -> Result<()> {
         self.command.validate().map_err(|_| corrupted())?;
@@ -107,12 +96,7 @@ impl SupplierHandoverReceipt {
     }
 
     /// 按结构化身份和指纹恢复原命令，不读取审计正文。
-    ///
-    /// # 参数
-    /// * `command` - 本次请求身份和指纹。
-    /// # 返回
     /// 同键同载荷时成功，调用方继续重验当前权限及目标归属。
-    /// # 错误
     /// 异载荷返回原交接冲突文案；身份或结果损坏返回内部错误。
     pub fn ensure_matches(&self, command: &CommandReceipt) -> Result<()> {
         self.validate()?;
@@ -130,7 +114,7 @@ impl SupplierHandoverReceipt {
     }
 }
 
-/// 领域回执损坏的统一分类。
+// 领域回执损坏的统一分类。
 fn corrupted() -> Error {
     Error::Internal("供应商交接命令回执无效".into())
 }

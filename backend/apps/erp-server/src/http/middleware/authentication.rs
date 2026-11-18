@@ -18,10 +18,7 @@ use crate::http::tracing::RequestId;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RbacSubject(pub String);
 
-/// 验证 JWT，并向请求扩展写入账号身份与 Casbin 主体。
-///
-/// # 返回值
-/// 认证成功时继续执行后续处理器，否则返回统一错误响应。
+/// 在进入后台处理器前验证 JWT 和当前账号状态；通过后注入账号及 Casbin 主体，身份无效与读取失败使用各自统一错误。
 pub async fn authenticate(State(state): State<HttpState>, mut request: Request, next: Next) -> Response {
     let engine = match state.jwt_engine().await {
         Ok(engine) => engine,
@@ -49,7 +46,7 @@ pub async fn authenticate(State(state): State<HttpState>, mut request: Request, 
     next.run(request).await
 }
 
-/// 校验 token 中的后台身份仍与当前账号记录一致且处于可用状态。
+// 在 JWT 验签后用后台主体、账号类型和版本重验仍有效的会话；门户令牌、缺少版本及账号停用均不能通过。
 async fn validate_current_identity(
     state: &HttpState,
     payload: &TokenPayload,
@@ -80,13 +77,7 @@ async fn validate_current_identity(
     }
 }
 
-/// 长连接在每次发送前复验 JWT 与当前会话；失效后不得继续发送。
-/// # 参数
-/// state 为 HTTP 状态，token 为请求头中原始 Bearer 值。
-/// # 返回
-/// 当前会话仍可用时成功。
-/// # 错误
-/// 无效、过期、账号停用或认证读取失败时返回认证响应。
+// 向长连接发送下一条消息前，用当前 JWT 引擎和账号版本复验原 Bearer 凭证；会话失效或读取失败即停止交付。
 pub(crate) async fn revalidate_session(state: &HttpState, token: &str) -> Result<(), ApiResponse<()>> {
     let engine = state.jwt_engine().await.map_err(|_| ApiResponse::system_error())?;
     let payload = engine.verify_token(token).map_err(|_| ApiResponse::unauthorized())?;
@@ -94,7 +85,7 @@ pub(crate) async fn revalidate_session(state: &HttpState, token: &str) -> Result
     Ok(())
 }
 
-/// 从标准 Authorization 头提取非空 Bearer token。
+// 认证入口只从标准 `Authorization` 头读取 Bearer 凭证；值为空、含空白或方案不符时视为无凭证。
 pub(crate) fn bearer_token(headers: &HeaderMap) -> Option<&str> {
     let value = headers.get(AUTHORIZATION)?.to_str().ok()?;
     let (scheme, token) = value.split_once(' ')?;
@@ -104,7 +95,7 @@ pub(crate) fn bearer_token(headers: &HeaderMap) -> Option<&str> {
     .then_some(token)
 }
 
-/// 校验 token 身份边界并写入后续 Handler 所需的扩展。
+// 把已校验的后台身份、当前显示名和请求关联冻结到请求扩展中，供 Handler、RBAC 和审计共用；拒绝非后台主体。
 fn attach_identity(
     request: &mut Request,
     payload: TokenPayload,
@@ -224,7 +215,7 @@ mod tests {
         }
     }
 
-    /// 本次会话名称进入真实工厂并冻结，不依赖后续账号查询或名称变化。
+    // 验证认证时附加的显示名进入真实审计工厂，账号随后改名不会改变已冻结的名称。
     #[test]
     fn attached_current_name_is_frozen_in_real_audit_factory() {
         use erp_audit::{AuditActorLogs, prepare_business_log};
@@ -244,7 +235,7 @@ mod tests {
         assert!(frozen.message.as_deref().unwrap().contains("周晓彤"));
     }
 
-    /// 原 HTTP 中间件关联经真实身份附加和事件工厂进入事件、尝试，并冻结为同一值。
+    // 经追踪中间件、身份扩展和审计工厂验证：业务事件与审计尝试保存同一请求关联 ID。
     #[tokio::test]
     async fn traced_request_id_is_frozen_in_events_and_attempts() {
         use axum::body::to_bytes;

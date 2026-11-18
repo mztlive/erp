@@ -66,22 +66,7 @@ pub struct DemoStatus {
 }
 
 impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
-    /// 创建演示主数据服务。
-    ///
-    /// # 参数
-    /// * `db` - 目标数据库
-    /// * `ports` - 演示入口实际消费的已装配领域与编排合同
-    /// * `identity` - 账号、角色和演示数据重置的身份管理设施
-    /// * `authorization` - 进程共享授权服务
-    /// * `enabled` - 配置是否允许写入
-    /// * `storage` - 演示商品图片使用的受控对象存储
-    /// * `image_secret` - 内容指纹密钥
-    ///
-    /// # 返回
-    /// 返回未执行任何写入的服务。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 绑定目标数据库、已装配的业务端口、共享授权、演示配置及受控图片存储和指纹密钥，供应用注入演示入口；构造不执行写入。
     pub fn new(
         db: mongodb::Database,
         ports: DemoRuntimePorts<A>,
@@ -94,16 +79,8 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         Self { db, ports, identity, authorization, enabled, storage, image_secret: image_secret.to_vec() }
     }
 
-    /// 返回各类演示主数据的计划数量和当前数量。
-    ///
-    /// # 参数
-    /// actor 为当前认证账号，必须具有演示状态读取权限。
-    ///
-    /// # 返回
-    /// 环境关闭时仍返回数量，`enabled` 为 false。
-    ///
-    /// # 错误
-    /// 身份或权限失效、授权交付检查失败、清单查询或种子校验失败时返回错误。
+    /// 在授权快照中统计计划、有效和已删除数量，供调用方展示演示准备进度。
+    /// 关闭演示功能时仍可查询，`enabled` 为 `false`；权限、读取或种子校验失败时返回错误。
     pub async fn status(&self, actor: &AuditActor) -> Result<DemoStatus> {
         let db = self.db.clone();
         let authorization = self.authorization.clone();
@@ -117,17 +94,9 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
             .await
     }
 
-    /// 生成或恢复下一批演示主数据。
+    /// 按固定清单游标生成或恢复下一批主数据；商品步骤补齐默认图片及价格、登记供给并核验可售性。返回本批结果和下一游标。
     ///
-    /// # 参数
-    /// * `actor` - 当前操作人
-    /// * `cursor` - 固定清单下标
-    ///
-    /// # 返回
-    /// 返回本批结果和下一次下标。
-    ///
-    /// # 错误
-    /// 环境未开放或某条主数据写入失败时返回错误。已写入的条数会留在清单里。
+    /// 配置未开启、无权或某一步失败时停止，已完成并登记的记录保留，重试可从原游标继续。
     pub async fn apply_chunk(&self, actor: &AuditActor, cursor: u32) -> Result<DemoChunkReport> {
         self.ensure_enabled()?;
         self.authorize_apply(actor).await?;
@@ -164,13 +133,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         Ok(report)
     }
 
-    /// 在生成步骤开始前核对演示入口资格，领域写入和恢复继续执行各自的事务授权。
-    /// # 参数
-    /// actor 为发起演示生成的当前账号。
-    /// # 返回
-    /// 当前快照中的账号具备演示生成权限时成功。
-    /// # 错误
-    /// 身份失效、缺少功能权限或事务取证失败时拒绝。
+    // 在启动任何生成步骤前核验当前账号的演示入口权限，防止未授权执行；各领域写入和恢复仍各自在自己的事务内授权。
     pub(super) async fn authorize_apply(&self, actor: &AuditActor) -> Result<()> {
         let authorization = self.authorization.clone();
         let actor = actor.clone();
@@ -187,16 +150,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
             .await
     }
 
-    /// 拒绝在未开放演示功能的环境执行写入。
-    ///
-    /// # 参数
-    /// 无；读取当前环境开关。
-    ///
-    /// # 返回
-    /// 开放时返回空结果。
-    ///
-    /// # 错误
-    /// 未开放时返回禁止操作错误。
+    // 检查环境演示开关，生成和清理即使已授权也不能在关闭配置时写入。
     pub(super) fn ensure_enabled(&self) -> Result<()> {
         if self.enabled {
             Ok(())
@@ -205,7 +159,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         }
     }
 
-    /// 按 JSON 请求种类调用对应领域写入入口。
+    // 根据种子的领域请求类型分派创建或恢复步骤，传入已准备的真实依赖，不绕过各领域的正式命令。
     async fn create_record(
         &self,
         actor: &AuditActor,
@@ -230,13 +184,13 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         }
     }
 
-    /// 按稳定种子键索引实际 ID 清单。
+    // 按稳定种子键索引实际登记主键，供当步生成解析已完成的前置引用。
     async fn record_map(&self) -> Result<HashMap<String, DemoMasterRecord>> {
         let records = record::load_all(&self.db).await?;
         Ok(records.into_iter().map(|record| (record.key.clone(), record)).collect())
     }
 
-    /// 复用公司主体，缺失时读取基础 JSON 创建。
+    // 优先复用启用的公司主体；没有时按基础规格正式创建，为供应商输入提供真实公司的主键，创建冲突或校验失败转为阻断提示。
     async fn company_party_id(
         &self,
         actor: &AuditActor,
@@ -256,7 +210,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         }
     }
 
-    /// 读取已有启用公司主体。
+    // 以当前操作人权限查询一个启用公司主体，供供应商步骤复用而不是无条件新建公司。
     async fn active_company_id(&self, actor: &AuditActor) -> Result<Option<String>> {
         let page = self
             .ports
@@ -274,7 +228,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         Ok(page.items.first().map(|company| company.id.clone()))
     }
 
-    /// 解析基础 JSON 指定的仓储岗位账号。
+    // 把基础规格声明的仓储登录名解析为实际账号 ID，交给仓库创建和责任资格检查使用。
     async fn warehouse_handler_id(&self) -> Result<Option<String>> {
         let login = super::spec::foundation_spec().warehouse_handler_account.as_str();
         let account = self.db.accounts().find_by_account(login, &mut ReadExecutor::default()).await?;
@@ -282,7 +236,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
     }
 }
 
-/// 状态资格和完整清单统计使用公开入口提供的同一事务快照。
+// 用同一执行器校验状态读取权限并统计完整清单，确保向调用方交付的计数与授权来自同一事务快照。
 async fn status_snapshot(
     db: &mongodb::Database,
     authorization: &AuthorizationService,
@@ -303,7 +257,7 @@ async fn status_snapshot(
     Ok(view)
 }
 
-/// 累计本批主数据创建或恢复结果。
+// 累计本批创建、恢复及跳过的数量；遇到业务提示则作为失败返回，不把有阻断项的批次计为完成。
 fn tally(report: &mut DemoChunkReport, outcome: EnsureOutcome) -> Result<()> {
     match outcome {
         EnsureOutcome::Created => report.created += 1,
@@ -318,14 +272,14 @@ fn tally(report: &mut DemoChunkReport, outcome: EnsureOutcome) -> Result<()> {
     Ok(())
 }
 
-/// 去重合并生成提示。
+// 只追加尚未记录的生成提示，避免重复内容掩盖批次的实际阻断原因。
 fn push_notice(notices: &mut Vec<String>, text: String) {
     if !notices.iter().any(|item| item == &text) {
         notices.push(text);
     }
 }
 
-/// 初始化分批处理结果。
+// 按本轮结束下标初始化计数、续跑游标及完成标记，供后续逐条汇总本批结果。
 fn empty_report(next_cursor: usize, total: usize) -> DemoChunkReport {
     DemoChunkReport {
         next_cursor: next_cursor as u32,

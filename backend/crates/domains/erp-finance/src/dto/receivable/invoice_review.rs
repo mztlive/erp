@@ -16,12 +16,10 @@ pub struct InvoiceReviewAmounts {
 
 impl InvoiceReviewAmounts {
     /// 从同一应收的有效申请计算额度；已开票金额已由开放额度扣除。
-    /// # 参数
-    /// `open` 为未开票额度，`current_id` 为本次申请，`requests` 为同一应收申请。
-    /// # 返回
-    /// 本次占用、其他占用、可申请余额及超占金额。
-    /// # 错误
-    /// 无；金额按领域定点数计算。
+    /// 结果：本次占用、其他占用、可申请余额及超占金额。
+    /// 失败条件：金额按领域定点数计算。
+    ///
+    /// 输入约定：`open` 为未开票额度，`current_id` 为本次申请，`requests` 为同一应收申请。
     pub fn from_requests(open: Amount, current_id: &str, requests: &[SalesInvoiceRequest]) -> Self {
         Self::from_entries(
             open,

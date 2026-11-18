@@ -54,16 +54,10 @@ impl From<erp_core::Error> for WorkItemWriteError {
     }
 }
 
-/// 只把任务实体自身的 CAS 未命中归类为任务版本冲突。
-///
-/// # 参数
-/// * `error` - 工作项更新返回的持久化错误
-///
-/// # 返回
-/// `OptimisticLockingError` 返回版本冲突；其它错误包进服务错误。
-///
-/// # 错误
-/// 不返回错误。
+// 只把任务实体自身的 CAS 未命中归类为任务版本冲突。
+// `OptimisticLockingError` 返回版本冲突；其它错误包进服务错误。
+//
+// `error`：工作项更新返回的持久化错误。
 pub(super) fn work_item_update_error(error: persistence_core::Error) -> WorkItemWriteError {
     match error {
         persistence_core::Error::OptimisticLockingError => WorkItemWriteError::VersionConflict,
@@ -71,18 +65,8 @@ pub(super) fn work_item_update_error(error: persistence_core::Error) -> WorkItem
     }
 }
 
-/// 原事务已结束后记录安全尝试；持久化失败不覆盖业务错误。
-///
-/// # 参数
-/// * `audit` - 审计端口
-/// * `prepared` - 已准备的审计
-/// * `error` - 原命令错误
-///
-/// # 返回
-/// 无返回值。未知结果记为未知，内部错误记为失败，其余记为拒绝。审计写入失败只记录警告。
-///
-/// # 错误
-/// 不返回错误。
+// 原事务已结束后记录安全尝试；持久化失败不覆盖业务错误。
+// `prepared`：已准备的审计；`error`：原命令错误。
 pub(super) async fn record_command_attempt(
     audit: &dyn WorkflowAuditPort,
     prepared: &PreparedWorkflowAudit,
@@ -98,17 +82,12 @@ pub(super) async fn record_command_attempt(
     }
 }
 
-/// 查证失败不得替换首次未知提交的来源；其他恢复冲突沿原幂等合同。
-///
-/// # 参数
-/// * `original` - 首次写入返回的错误
-/// * `recovery` - 回读结果；`None` 表示尚未找到胜者
-///
-/// # 返回
-/// 回读到值时返回该值。
-///
-/// # 错误
-/// 没有胜者时返回 `original`。首次错误是 `OutcomeUnknown` 时，查证失败仍返回 `original`；其它查证失败返回查证错误。
+// 查证失败不得替换首次未知提交的来源；其他恢复冲突沿原幂等合同。
+// 回读到值时返回该值。
+//
+// 没有胜者时返回 `original`。首次错误是 `OutcomeUnknown` 时，查证失败仍返回 `original`；其它查证失败返回查证错误。
+//
+// `recovery`：回读结果；`None` 表示尚未找到胜者。
 pub(super) fn recover_command_error<T>(original: Error, recovery: Result<Option<T>>) -> Result<T> {
     match recovery {
         Ok(Some(value)) => Ok(value),
@@ -119,18 +98,12 @@ pub(super) fn recover_command_error<T>(original: Error, recovery: Result<Option<
 }
 
 impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
-    /// 读取已完成的同一幂等命令，并拒绝相同键混用不同请求。
-    ///
-    /// # 参数
-    /// * `receipt` - 本次命令收据
-    /// * `item` - 同一事务中已证明管理资格的真实任务
-    /// * `executor` - 原事务执行器
-    ///
-    /// # 返回
-    /// 没有已提交收据时返回 `None`；同载荷且任务仍可管理时返回该任务。
-    ///
-    /// # 错误
-    /// 收据资源或版本与任务不一致时返回内部错误；任务不可做通用责任变更、不在管理范围或对象不可访问时返回对应错误。
+    // 读取已完成的同一幂等命令，并拒绝相同键混用不同请求。
+    // 没有已提交收据时返回 `None`；同载荷且任务仍可管理时返回该任务。
+    //
+    // 收据资源或版本与任务不一致时返回内部错误；任务不可做通用责任变更、不在管理范围或对象不可访问时返回对应错误。
+    //
+    // `item`：同一事务中已证明管理资格的真实任务；`executor`：原事务执行器。
     pub(super) async fn idempotent_replay(
         &self,
         receipt: &CommandReceipt,
@@ -153,13 +126,12 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         Ok(Some(item.clone()))
     }
 
-    /// 在原事务中先授权，再读取决定写入或回放的任务。
-    /// # 参数
-    /// id、actor 为目标和管理人，executor 为原活动快照事务。
-    /// # 返回
-    /// 当前可管理且允许通用责任变更的任务。
-    /// # 错误
-    /// 无资格、目标缺失、任务类型禁止或数据库读取失败时拒绝。
+    // 在原事务中先授权，再读取决定写入或回放的任务。
+    // 当前可管理且允许通用责任变更的任务。
+    //
+    // 无资格、目标缺失、任务类型禁止或数据库读取失败时拒绝。
+    //
+    // id、actor 为目标和管理人，executor 为原活动快照事务。
     pub(super) async fn managed_item(
         &self,
         id: &str,
@@ -177,13 +149,12 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         Ok(item)
     }
 
-    /// 原写事务退出后记录尝试，并按原幂等合同恢复结果。
-    /// # 参数
-    /// receipt、actor、audit 为原命令上下文，result 为已经结束的写事务结果。
-    /// # 返回
-    /// 已提交的真实结果或安全的版本冲突响应。
-    /// # 错误
-    /// 保留原业务错误；对并发冲突和结果未明的存储失败执行只读查证。
+    // 原写事务退出后记录尝试，并按原幂等合同恢复结果。
+    // 已提交的真实结果或安全的版本冲突响应。
+    //
+    // 保留原业务错误；对并发冲突和结果未明的存储失败执行只读查证。
+    //
+    // receipt、actor、audit 为原命令上下文，result 为已经结束的写事务结果。
     pub(super) async fn finish_command(
         &self,
         receipt: &CommandReceipt,
@@ -229,7 +200,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         }
     }
 
-    /// 失败事务结束后用新的只读快照取证原命令，禁止重放写入。
+    // 工作项写事务失败后用新的只读快照证明相同命令是否已经提交，不重执行业务写入。
     async fn recover_command(
         &self,
         receipt: &CommandReceipt,
@@ -246,7 +217,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             .await
     }
 
-    /// 原回放读取先证明当前管理资格，再核对精确任务与命令回执。
+    // 工作项命令回放先对真实任务重验当前管理资格，再核对精确任务、命令身份与已保存回执。
     async fn replay_command(
         &self,
         receipt: &CommandReceipt,
@@ -258,18 +229,12 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         self.idempotent_replay(receipt, &item, executor).await
     }
 
-    /// 冲突后返回任务 ID，供 HTTP 向 read-models 投影。
-    ///
-    /// # 参数
-    /// * `item_id` - 工作项 ID
-    /// * `kind` - 冲突类别
-    /// * `actor` - 当前操作人；本函数不读取
-    ///
-    /// # 返回
-    /// 返回冲突结果。任务仍存在时带上 ID，否则 ID 为空。
-    ///
-    /// # 错误
-    /// 存在性查询失败时返回对应错误。
+    // 冲突后返回任务 ID，供 HTTP 向 read-models 投影。
+    // 返回冲突结果。任务仍存在时带上 ID，否则 ID 为空。
+    //
+    // 存在性查询失败时返回对应错误。
+    //
+    // `actor`：当前操作人；本函数不读取。
     pub(super) async fn conflict_outcome(
         &self,
         item_id: &str,
@@ -297,15 +262,8 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     }
 
     /// 为其余领域调用方授权工作项，不返回 HTTP 视图。
-    ///
-    /// # 参数
-    /// * `id` - 工作项 ID
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
     /// 返回任务、允许动作、处理状态和阻塞说明。
     ///
-    /// # 错误
     /// 任务不存在、无权查看、对象不可访问或授权读取失败时返回错误。
     pub async fn authorize_work_item(&self, id: &str, actor: &AuditActor) -> Result<AuthorizedWorkItem> {
         let service = self.clone();
@@ -323,12 +281,11 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     }
 
     /// 任务、业务事实和完整授权沿调用方的同一事务快照读取。
-    /// # 参数
-    /// id 为真实任务主键，actor 为当前账号，executor 为调用方的原快照事务。
-    /// # 返回
     /// 返回任务、允许动作与处理状态。
-    /// # 错误
+    ///
     /// 非事务执行器、任务缺失、无权或事实读取失败时拒绝。
+    ///
+    /// id 为真实任务主键，actor 为当前账号，executor 为调用方的原快照事务。
     pub async fn authorize_work_item_with_executor(
         &self,
         id: &str,
@@ -341,12 +298,11 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     }
 
     /// 读取任务及办理展示事实，保留原凭证供调用方完成业务补齐后交付检查。
-    /// # 参数
-    /// id 为真实任务主键，actor 为当前账号，executor 为整个读取用例的原快照事务。
-    /// # 返回
     /// 任务投影及尚未交付的完整读取凭证；调用方必须在所有展示读取完成后 validate。
-    /// # 错误
+    ///
     /// 非事务执行器、目标非法、无权、任务缺失或业务事实读取失败时拒绝。
+    ///
+    /// id 为真实任务主键，actor 为当前账号，executor 为整个读取用例的原快照事务。
     pub async fn work_item_read(
         &self,
         id: &str,
@@ -404,17 +360,12 @@ pub struct AuthorizedWorkItem {
     pub action_blockers: Vec<String>,
 }
 
-/// 去掉空白后要求文本非空。
-///
-/// # 参数
-/// * `value` - 原始文本
-/// * `message` - 为空时的校验说明
-///
-/// # 返回
-/// 返回去掉首尾空白的文本。
-///
-/// # 错误
-/// 空值或仅空白时返回校验错误，说明使用 `message`。
+// 去掉空白后要求文本非空。
+// 返回去掉首尾空白的文本。
+//
+// 空值或仅空白时返回校验错误，说明使用 `message`。
+//
+// `value`：原始文本；`message`：为空时的校验说明。
 pub(super) fn required_text(value: &str, message: &str) -> Result<String> {
     let value = value.trim();
     if value.is_empty() {
@@ -424,15 +375,11 @@ pub(super) fn required_text(value: &str, message: &str) -> Result<String> {
 }
 
 /// 将 HTTP 任务版本解析为正整数乐观锁版本。
-///
-/// # 参数
-/// * `value` - HTTP 提交的任务版本
-///
-/// # 返回
 /// 返回大于零的版本。
 ///
-/// # 错误
 /// 不是十进制 `u64`，或值为 0 时返回校验错误。
+///
+/// `value`：HTTP 提交的任务版本。
 pub fn expected_task_version(value: &str) -> Result<u64> {
     let value = value.trim();
     let version =

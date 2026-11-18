@@ -197,18 +197,10 @@ pub(crate) struct SupplierApiConnectionListQuery {
 }
 
 impl SupplierApiConnectionListParams {
-    /// 归一化连接列表查询参数。
-    ///
-    /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    // 将客户端输入规整为可用于筛选的连接列表查询参数。
+    // 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
+    // 返回不依赖仓储类型的规范化查询参数。
+    // 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<SupplierApiConnectionListQuery> {
         let (sort_by, sort_dir) =
             normalize_sort(&self.sort_by, &self.sort_dir, SUPPLIER_API_CONNECTION_SORT_FIELDS)?;
@@ -339,15 +331,7 @@ pub struct SafeReferenceView {
 }
 impl SafeReferenceView {
     /// 以必填状态构造安全引用投影；别名与版本默认为空。
-    ///
-    /// # 参数
-    /// * `state` - 引用绑定状态
-    ///
-    /// # 返回
     /// 返回不可见的引用投影。
-    ///
-    /// # 错误
-    /// 无。
     pub fn new(state: &'static str) -> Self {
         Self { state, alias: None, version: None, visible: false }
     }
@@ -405,12 +389,8 @@ pub struct SupplierApiConnectionView {
 
 impl SupplierApiConnectionView {
     /// 将列表投影转换为脱敏连接视图，不读取完整凭据或推断治理动作。
-    /// # 参数
-    /// row 为已经通过统一查询过滤的最小列表投影。
-    /// # 返回
     /// 保留列表事实，引用只展示绑定状态，动作和内部配置保持空值。
-    /// # 错误
-    /// 不返回错误；无效的负健康检查时间不进入无符号响应。
+    /// 无效的负健康检查时间不进入无符号响应。
     pub fn from_row(row: SupplierApiConnectionRow) -> Self {
         Self {
             id: row.id,
@@ -602,13 +582,8 @@ pub struct HealthCheckView {
 }
 
 impl From<SupplierApiConnection> for SupplierApiConnectionView {
-    /// 从实体构造响应视图（省略密钥管理系统引用）。
-    ///
-    /// # 参数
-    /// * `connection` - 连接实体
-    ///
-    /// # 返回
-    /// 返回响应视图。
+    // 将 `SupplierApiConnection` 转换为 API 响应字段，调用方可直接使用投影而不必序列化整个实体。
+    // 从实体构造响应视图（省略密钥管理系统引用）。
     fn from(connection: SupplierApiConnection) -> Self {
         Self {
             id: connection.base.id,
@@ -647,16 +622,9 @@ impl From<SupplierApiConnection> for SupplierApiConnectionView {
 }
 
 impl RateLimitPolicyRequest {
-    /// 转换为实体限流策略值对象。
-    ///
-    /// # 参数
-    /// * `request` - 请求值对象
-    ///
-    /// # 返回
-    /// 返回实体值对象。
-    ///
-    /// # 错误
-    /// `max_requests` 或 `window_secs` 为零时，`RateLimitPolicy::new` 失败并经 `Into` 转为 `Error::Logic`。
+    // 转换为实体限流策略值对象。
+    // 返回实体值对象。
+    // `max_requests` 或 `window_secs` 为零时，`RateLimitPolicy::new` 失败并经 `Into` 转为 `Error::Logic`。
     pub(crate) fn into_policy(request: RateLimitPolicyRequest) -> Result<RateLimitPolicy> {
         RateLimitPolicy::new(request.max_requests, request.window_secs).map_err(Into::into)
     }
@@ -703,7 +671,7 @@ mod tests {
         assert!(view.last_health_at.is_none());
     }
 
-    /// 创建请求不要求环境；旧调用方的环境参数不改变当前部署的连接身份。
+    // 验证创建请求不要求环境；旧调用方的环境参数不改变当前部署的连接身份。
     #[test]
     fn create_request_uses_supplier_and_code_without_environment() {
         let payload = json!({
@@ -724,7 +692,7 @@ mod tests {
         assert!(from_value::<CreateSupplierApiConnectionRequest>(missing_supplier).is_err());
     }
 
-    /// 新建连接必须显式选择已实现协议，不接受缺失、空值或未知协议。
+    // 验证新建连接必须显式选择已实现协议，不接受缺失、空值或未知协议。
     #[test]
     fn create_request_rejects_missing_or_unsupported_connector_type() {
         let mut payload = json!({"supplier_id":"sup-1", "connection_code":"DGSS", "capabilities":[]});

@@ -44,33 +44,14 @@ pub struct CategoryParentChainFact {
 }
 
 impl CategoryParentChainFact {
-    /// 构造根节点事实：新节点没有父分类，不访问数据库。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回空链且无缺失/成环/截断的根事实。
-    ///
-    /// # 错误
-    /// 无。
+    /// 构造根节点事实：新节点没有父分类，不访问数据库。返回空链且无缺失/成环/截断的根事实。
     pub fn root() -> Self {
         Self::from_projection(None, None, false, false)
     }
 
-    /// 装配已投影的祖先链事实。
+    /// 装配已投影的祖先链事实。返回不含业务错误的投影事实；`links` 由仓储装配，调用方可留空。
     ///
-    /// # 参数
-    /// * `start_parent_id` - 起始父分类；`None` 表示根
-    /// * `missing_parent_id` - 缺失或已软删除的父分类
-    /// * `cycle_detected` - 沿父指针回访已出现节点
-    /// * `truncated` - 达到最大深度仍未结束
-    ///
-    /// # 返回
-    /// 返回不含业务错误的投影事实；`links` 由仓储装配，调用方可留空。
-    ///
-    /// # 错误
-    /// 无。
+    /// `start_parent_id` 为起始父分类；`None` 表示根。
     pub fn from_projection(
         start_parent_id: Option<String>,
         missing_parent_id: Option<String>,
@@ -80,31 +61,17 @@ impl CategoryParentChainFact {
         Self { start_parent_id, links: Vec::new(), missing_parent_id, cycle_detected, truncated }
     }
 
-    /// 判断投影链是否包含指定分类 ID。
+    /// 判断投影链是否包含指定分类 ID。起始父 ID 或任一投影节点 ID 等于该值时返回 `true`。
     ///
-    /// # 参数
-    /// * `id` - 待检查的分类稳定主键
-    ///
-    /// # 返回
-    /// 起始父 ID 或任一投影节点 ID 等于该值时返回 `true`。
-    ///
-    /// # 错误
-    /// 无。
+    /// `id` 为待检查的分类稳定主键。
     pub fn hits_id(&self, id: &str) -> bool {
         self.start_parent_id.as_deref() == Some(id) || self.links.iter().any(|link| link.id == id)
     }
 
-    /// 追加一条 ID/父 ID 投影。
+    /// 追加一条 ID/父 ID 投影。返回追加投影后的事实。
     ///
-    /// # 参数
-    /// * `id` - 节点稳定主键
-    /// * `parent_id` - 父分类稳定主键；空表示根
-    ///
-    /// # 返回
-    /// 返回追加投影后的事实。
-    ///
-    /// # 错误
-    /// 无。
+    /// - `id`：节点稳定主键。
+    /// - `parent_id`：父分类稳定主键；空表示根。
     pub fn with_link(mut self, id: impl Into<String>, parent_id: Option<String>) -> Self {
         self.links.push(CategoryParentLink { id: id.into(), parent_id });
         self
@@ -132,22 +99,14 @@ struct ParentChainAggregateRow {
 pub trait ProductCategoryRepositoryParentChainExt {
     /// 投影新父分类的祖先链事实。
     ///
-    /// 根节点不访问数据库。非根时以一次 `$match` + `$graphLookup` 取回起始父
-    /// 节点及祖先的 ID/父 ID，查询次数不随树深度增长。本方法不开启事务，使用
-    /// 调用方执行器。
+    /// 根节点不访问数据库。非根时以一次 `$match` + `$graphLookup` 取回起始父节点及祖先的 ID/父 ID，查询次数不随树深度增长。
+    /// 本方法不开启事务，使用调用方执行器。
     ///
-    /// # 参数
-    /// * `parent_id` - 新父分类；`None` 表示提升为根
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回 ID/父 ID 投影及缺失、成环、截断事实。
-    ///
-    /// # 错误
-    /// MongoDB 聚合或反序列化失败时返回错误。
-    ///
-    /// # 约束
     /// 单次校验固定 0 或 1 次查询；历史断链、成环或过深必须标出，不得无限遍历。
+    ///
+    /// 返回 ID/父 ID 投影及缺失、成环、截断事实。MongoDB 聚合或反序列化失败时返回错误。
+    ///
+    /// `parent_id` 为新父分类；`None` 表示提升为根。
     async fn parent_chain(
         &self,
         parent_id: Option<&ProductCategoryId>,
@@ -158,14 +117,9 @@ pub trait ProductCategoryRepositoryParentChainExt {
     ///
     /// 调用方不得附加 hint；执行计划必须能命中稳定主键索引。
     ///
-    /// # 参数
-    /// * `start_parent_id` - 起始父分类稳定主键
-    ///
-    /// # 返回
     /// 返回与 [`Self::parent_chain`] 相同的聚合管道。
     ///
-    /// # 错误
-    /// 无。
+    /// `start_parent_id` 为起始父分类稳定主键。
     fn parent_chain_aggregation_pipeline(&self, start_parent_id: &str) -> Vec<Document>;
 }
 
@@ -188,18 +142,13 @@ impl ProductCategoryRepositoryParentChainExt for persistence_core::Repository<'_
     }
 }
 
-/// 执行祖先链聚合并收集至多一行结果。
-///
-/// # 参数
-/// * `collection` - 商品分类集合
-/// * `start_parent_id` - 起始父分类稳定主键
-/// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-///
-/// # 返回
-/// 起始父分类存在时返回其投影行；缺失或已软删除时返回 `None`。
-///
-/// # 错误
-/// MongoDB 聚合、游标读取或反序列化失败时返回错误。
+// 执行祖先链聚合并收集至多一行结果。
+//
+// 起始父分类存在时返回其投影行；缺失或已软删除时返回 `None`。MongoDB 聚合、游标读取或反序列化失败时返回错误。
+//
+// 沿用调用方的执行器，不另开事务。
+//
+// `start_parent_id` 为起始父分类稳定主键。
 async fn aggregate_parent_chain(
     collection: &mongodb::Collection<ProductCategory>,
     start_parent_id: &str,
@@ -210,16 +159,11 @@ async fn aggregate_parent_chain(
     Ok(aggregate::rows(&collection, pipeline, executor).await?.into_iter().next())
 }
 
-/// 构造祖先链聚合管道：按稳定主键精确匹配起始父节点，再 `$graphLookup` 上溯。
-///
-/// # 参数
-/// * `start_parent_id` - 起始父分类稳定主键
-///
-/// # 返回
-/// 返回固定两段管道（`$match` + `$graphLookup`/`$project`），查询次数与深度无关。
-///
-/// # 错误
-/// 无。
+// 构造祖先链聚合管道：按稳定主键精确匹配起始父节点，再 `$graphLookup` 上溯。
+//
+// 返回固定两段管道（`$match` + `$graphLookup`/`$project`），查询次数与深度无关。
+//
+// `start_parent_id` 为起始父分类稳定主键。
 fn parent_chain_pipeline(start_parent_id: &str) -> Vec<Document> {
     vec![
         doc! {
@@ -261,17 +205,10 @@ fn parent_chain_pipeline(start_parent_id: &str) -> Vec<Document> {
     ]
 }
 
-/// 把聚合行装配为祖先链事实；空行视为起始父节点缺失。
-///
-/// # 参数
-/// * `start_parent_id` - 起始父分类稳定主键
-/// * `row` - 聚合投影行；`None` 表示起始父分类不存在或已软删除
-///
-/// # 返回
-/// 返回 ID/父 ID 链及缺失、成环、截断事实。
-///
-/// # 错误
-/// 无。
+// 把聚合行装配为祖先链事实；空行视为起始父节点缺失。返回 ID/父 ID 链及缺失、成环、截断事实。
+//
+// - `start_parent_id`：起始父分类稳定主键。
+// - `row`：聚合投影行；`None` 表示起始父分类不存在或已软删除。
 fn assemble_parent_chain_fact(
     start_parent_id: &str,
     row: Option<ParentChainAggregateRow>,
@@ -299,19 +236,12 @@ fn assemble_parent_chain_fact(
     inspect_parent_links(start_parent_id, links, graph_lookup_saturated)
 }
 
-/// 沿父指针检查缺失、成环和深度截断，不把业务错误下沉到仓储。
-///
-/// # 参数
-/// * `start_parent_id` - 起始父分类稳定主键
-/// * `links` - 聚合得到的 ID/父 ID 投影
-/// * `graph_lookup_saturated` - 祖先 `$graphLookup` 已达到 `maxDepth`
-///
-/// # 返回
-/// 返回带异常标记的祖先链事实；正常链的 `missing_parent_id` 为空且不成环、不截断。
-/// 达到 `maxDepth` 仍有未取回的父指针时标 `truncated`，不得记为缺失父节点。
-///
-/// # 错误
-/// 无。
+// 沿父指针检查缺失、成环和深度截断，不把业务错误下沉到仓储。
+//
+// 返回带异常标记的祖先链事实；正常链的 `missing_parent_id` 为空且不成环、不截断。达到 `maxDepth` 仍有未取回的父指针时标
+// `truncated`，不得记为缺失父节点。
+//
+// `start_parent_id` 为起始父分类稳定主键。
 fn inspect_parent_links(
     start_parent_id: &str,
     links: Vec<CategoryParentLink>,
@@ -392,7 +322,7 @@ mod tests {
         }
     }
 
-    /// 祖先链管道固定一次 `$match` + `$graphLookup`，查询次数不随深度增长。
+    // 祖先链管道固定一次 `$match` + `$graphLookup`，查询次数不随深度增长。
     #[test]
     fn parent_chain_pipeline_is_single_graph_lookup() {
         let pipeline = parent_chain_pipeline("parent-1");
@@ -409,7 +339,7 @@ mod tests {
         assert_eq!(json.matches("$match").count(), 1);
     }
 
-    /// 根节点（无父分类）不产生投影链，也不标记缺失或成环。
+    // 根节点（无父分类）不产生投影链，也不标记缺失或成环。
     #[test]
     fn root_parent_is_empty_fact() {
         let fact = CategoryParentChainFact::root();
@@ -422,7 +352,7 @@ mod tests {
         assert!(!fact.hits_id("child-1"));
     }
 
-    /// 正常多级链按父指针上溯到根，不标记异常。
+    // 正常多级链按父指针上溯到根，不标记异常。
     #[test]
     fn normal_multi_level_chain_reaches_root() {
         let fact = assemble_parent_chain_fact(
@@ -442,7 +372,7 @@ mod tests {
         assert!(!fact.hits_id("moving-node"));
     }
 
-    /// 起始父节点缺失时标出缺失 ID，供 Service 适配 NotFound。
+    // 起始父节点缺失时标出缺失 ID，供 Service 适配 NotFound。
     #[test]
     fn missing_start_parent_is_fail_closed() {
         let fact = assemble_parent_chain_fact("ghost", None);
@@ -453,7 +383,7 @@ mod tests {
         assert!(fact.hits_id("ghost"));
     }
 
-    /// 中段父节点缺失视为历史断链，失败关闭。
+    // 中段父节点缺失视为历史断链，失败关闭。
     #[test]
     fn broken_mid_chain_is_missing() {
         let fact =
@@ -464,7 +394,7 @@ mod tests {
         assert!(!fact.truncated);
     }
 
-    /// 直接自环：父指针指向自身。
+    // 直接自环：父指针指向自身。
     #[test]
     fn direct_cycle_is_detected() {
         let fact = assemble_parent_chain_fact("loop", Some(row("loop", Some("loop"), Vec::new())));
@@ -474,7 +404,7 @@ mod tests {
         assert!(fact.hits_id("loop"));
     }
 
-    /// 间接环：A→B→A，图遍历必须停止且标出成环。
+    // 间接环：A→B→A，图遍历必须停止且标出成环。
     #[test]
     fn indirect_cycle_is_detected() {
         let fact =
@@ -486,7 +416,7 @@ mod tests {
         assert!(fact.hits_id("b"));
     }
 
-    /// 达到最大深度仍未结束时截断，避免无限遍历。
+    // 达到最大深度仍未结束时截断，避免无限遍历。
     #[test]
     fn overlong_chain_is_truncated() {
         let mut links = Vec::new();
@@ -504,7 +434,7 @@ mod tests {
         assert!(fact.missing_parent_id.is_none());
     }
 
-    /// `$graphLookup` 达到 maxDepth 且末端仍指向未取回父节点时标截断，不得记为缺失。
+    // `$graphLookup` 达到 maxDepth 且末端仍指向未取回父节点时标截断，不得记为缺失。
     #[test]
     fn assemble_max_depth_onward_parent_is_truncated_not_missing() {
         let mut ids: Vec<String> =

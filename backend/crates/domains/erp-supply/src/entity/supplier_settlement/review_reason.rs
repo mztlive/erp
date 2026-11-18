@@ -20,22 +20,12 @@ pub enum SettlementReviewRejectReason {
 
 impl SettlementReviewRejectReason {
     /// 从线上传输字符串解析驳回原因。
-    ///
-    /// 依次执行 trim、前后空白去除后的大写规范化、非空/超长拒绝、受控字符集
-    /// 校验与三元 allowlist 匹配；任意一步失败都返回领域错误。
-    ///
-    /// # 参数
-    /// * `value` - 线上传输的原始原因代码（含大小写与空白变体）
-    ///
-    /// # 返回
+    /// 依次执行 trim、前后空白去除后的大写规范化、非空/超长拒绝、受控字符集校验与三元 allowlist 匹配；任
+    /// 意一步失败都返回领域错误。
     /// 返回规范化后的强类型驳回原因。
-    ///
-    /// # 错误
     /// 空白、超长、非法字符或未知代码时返回错误。
-    ///
-    /// # 约束
-    /// 稳定代码与持久化/JSON 保持 `NEEDS_MORE_EVIDENCE`、`AMOUNT_MISMATCH`、
-    /// `OTHER` 三元集合；不得接受其他字符串。
+    /// 稳定代码与持久化/JSON 保持 `NEEDS_MORE_EVIDENCE`、`AMOUNT_MISMATCH`、`OTHER` 三元集合；不得接受其
+    /// 他字符串。
     pub fn parse(value: &str) -> Result<Self> {
         let normalized = value.trim().to_ascii_uppercase();
         if normalized.is_empty() {
@@ -58,18 +48,8 @@ impl SettlementReviewRejectReason {
         }
     }
 
-    /// 返回稳定持久化/传输代码。
-    ///
-    /// # 参数
-    /// 无显式参数（方法接收者为已解析的原因值）。
-    ///
-    /// # 返回
-    /// 返回与既有数据库及 JSON 兼容的稳定代码字符串。
-    ///
-    /// # 错误
+    /// 取得 `SettlementReviewRejectReason` 的稳定标识，供需要按代码而非展示文案识别取值的调用方使用。
     /// 本方法不失败。
-    ///
-    /// # 约束
     /// 输出恒为三元集合成员；往返解析保持稳定。
     pub fn as_str(&self) -> &'static str {
         match self {

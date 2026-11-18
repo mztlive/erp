@@ -12,7 +12,7 @@ use crate::entity::authorization::{AccessTarget, FactValue};
 use crate::entity::resource_access::ResourceKind;
 use crate::{AuthorizationService, Error};
 
-/// 明确业务入口与来源动作，测试执行真实固定规则而非检查规则声明。
+// 枚举要验证的采购入口及实际来源动作，使断言运行真实固定规则而非只读规则表。
 fn entries() -> Vec<(Permission, Vec<Permission>, Permission)> {
     vec![
         (
@@ -48,7 +48,7 @@ fn entries() -> Vec<(Permission, Vec<Permission>, Permission)> {
     ]
 }
 
-/// 将真实采购事实接入完整生产 Builder，设施不访问数据库。
+// 测试中将采购真实事实形状接入生产 Builder，身份设施由不访问数据库的替身提供。
 fn service(identity: Arc<Identity>, facts: Arc<Facts>) -> AuthorizationService {
     let mut builder = complete();
     builder.facilities = identity;

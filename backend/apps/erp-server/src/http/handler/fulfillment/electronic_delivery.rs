@@ -22,16 +22,7 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
 /// 查询电子交付记录列表（W01 履约任务聚合视图）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `query` - 分页与筛选参数（`sales_order_line_id`/`status` 扁平传递）
-///
-/// # 返回
-/// 返回契约形状的分页视图。
-///
-/// # 错误
-/// 业务处理或数据读取失败时返回对应错误。
+/// `query` 为分页与筛选参数（`sales_order_line_id`/`status` 扁平传递）。
 pub async fn electronic_delivery_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -43,16 +34,7 @@ pub async fn electronic_delivery_list(
 }
 
 /// 按主键查询电子交付记录。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `id` - 电子交付记录主键
-///
-/// # 返回
 /// 返回电子交付记录视图。
-///
-/// # 错误
-/// 业务处理或数据读取失败时返回对应错误。
 pub async fn electronic_delivery_detail(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -64,17 +46,6 @@ pub async fn electronic_delivery_detail(
 }
 
 /// 创建电子交付记录（草稿；交付对象快照由边界传入，服务端计算查询指纹）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 创建请求
-///
-/// # 返回
-/// 返回新建记录的响应视图。
-///
-/// # 错误
-/// 业务处理或数据读取失败时返回对应错误。
 pub async fn electronic_delivery_create(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -86,17 +57,6 @@ pub async fn electronic_delivery_create(
 }
 
 /// 确认电子交付（草稿 → 已确认；门槛与分配有效性校验同事务）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 记录主键
-///
-/// # 返回
-/// 返回确认后的记录视图。
-///
-/// # 错误
-/// 业务处理或数据读取失败时返回对应错误。
 pub async fn electronic_delivery_confirm(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,

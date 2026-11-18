@@ -18,20 +18,13 @@ use super::super::adapters::current_revision_lines;
 use super::super::payment_subject::load_payment_subject;
 use crate::{Error, Result};
 impl PurchaseOrderProcess {
-    /// 将采购变更目标行绑定到来源销售单当前版本行。
-    ///
-    /// # 参数
-    /// * `order` - 原采购单，用于定位来源销售单
-    /// * `lines` - 变更目标完整行请求
-    ///
-    /// # 返回
-    /// 返回稳定销售行与销售当前版本行均已刷新的目标行。
-    ///
-    /// # 错误
-    /// 来源销售单、当前销售版本或稳定销售行缺失，以及仓储查询失败时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 不再沿历史采购提交反查销售提交行；分配数量固定等于变更后的采购数量。
+    // 将采购变更目标行绑定到来源销售单当前版本行。
+    //
+    // `order` 为原采购单，用于定位来源销售单；`lines` 为变更目标完整行请求。返回稳定销售行与销售当前版本行均已刷新的目标行。
+    //
+    // 来源销售单、当前销售版本或稳定销售行缺失，以及仓储查询失败时返回错误。
+    //
+    // 不再沿历史采购提交反查销售提交行；分配数量固定等于变更后的采购数量。
     pub(super) async fn enrich_change_lines_with_current_sales_revision(
         &self,
         order: &PurchaseOrder,
@@ -66,20 +59,10 @@ impl PurchaseOrderProcess {
             .collect::<HashMap<_, _>>();
         Ok(enrich_change_lines(lines, &by_stable_id)?)
     }
-    /// 保留原行校验/金额、付款代码解析、提交序号查询及 ID 分配的顺序。
-    ///
-    /// # 参数
-    /// * `change` - 待提交的采购变更单。
-    /// * `order` - 来源采购单。
-    /// * `base_revision` - 变更基准版本。
-    /// * `_supplier_name` - 调用方传入的供应商名称；本函数不读取。
-    /// * `req` - 变更提交请求。
-    ///
-    /// # 返回
-    /// 返回已冻结的采购变更提交。
-    ///
-    /// # 错误
-    /// 行或金额校验失败、付款条件无法解析，或提交构造失败时返回对应错误。
+    // 保留原行校验/金额、付款代码解析、提交序号查询及 ID 分配的顺序。
+    //
+    // `change` 为待提交的采购变更单；`order` 为来源采购单；`base_revision` 为变更基准版本；`_supplier_name` 为调用方传入的供应商名称；本函数不读取；`req`
+    // 为变更提交请求。返回已冻结的采购变更提交。行或金额校验失败、付款条件无法解析，或提交构造失败时返回对应错误。
     pub(super) async fn build_change_submission(
         &self,
         change: &PurchaseChangeOrder,

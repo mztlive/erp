@@ -67,13 +67,9 @@ impl From<AdoptionResult> for AdoptionRowResult {
 }
 
 impl SupplierCatalogAdoptionProcess {
-    /// 分批确认冻结选品，每行独立事务，失败不留下半成品商品或供给。
-    /// # 参数
-    /// 连接、预览身份、原始操作号和逐行公司映射及采购条款。
-    /// # 返回
-    /// 每行真实成功结果或明确失败原因。
-    /// # 错误
-    /// 批次越权、过期、异载荷或非法选择直接拒绝；行错误逐项返回。
+    /// 按连接、冻结预览、原操作号及逐行公司映射和采购条款确认选品，每行独立事务写商品和供给。
+    /// 逐项返回结果；提交未知的行用 `retry_original` 提醒查证原操作。批次越权、异载荷或选择不合法时拒绝。
+    /// 预览已过期时仅回放已提交行，存在未完成项则要求重新预览。
     pub async fn confirm(
         &self,
         connection: &str,
@@ -111,7 +107,7 @@ impl SupplierCatalogAdoptionProcess {
         Ok(AdoptionBatchResult { rows })
     }
 
-    /// 同一快照核验预览归属及连接范围，再冻结幂等操作。
+    // 同一快照核验预览归属及连接范围，再冻结幂等操作。
     async fn confirmation_snapshot(
         &self,
         connection: &str,
@@ -130,7 +126,7 @@ impl SupplierCatalogAdoptionProcess {
         )
     }
 
-    /// 首次确认在快照中检查并冻结原操作，不在失败事务中恢复。
+    // 首次确认在快照中检查并冻结原操作，不在失败事务中恢复。
     async fn confirmation_attempt(
         &self,
         connection: &str,
@@ -152,7 +148,7 @@ impl SupplierCatalogAdoptionProcess {
         .await
     }
 
-    /// 新快照只回读精确原操作，不重放尚不明确的写入。
+    // 首次确认的提交状态有疑问时，用新快照查证精确原操作；仍核验归属和连接范围，不重做业务写入。
     async fn confirmation_replay(
         &self,
         connection: &str,
@@ -175,7 +171,7 @@ impl SupplierCatalogAdoptionProcess {
         .await
     }
 
-    /// 原操作恢复仍核验当前预览归属与来源，不在失败事务内回读。
+    // 原操作恢复仍核验当前预览归属与来源，不在失败事务内回读。
     async fn confirmation_preview(
         &self,
         connection: &str,
@@ -218,7 +214,7 @@ impl SupplierCatalogAdoptionProcess {
         .await
     }
 
-    /// 同一事务读取并创建原操作；并发重复由入口在新快照中恢复。
+    // 确认入口在同一事务核对并登记原操作；唯一键并发由外层在新快照按原操作查证。
     async fn freeze_command(
         &self,
         command: &CatalogAdoptionCommand,
@@ -307,7 +303,7 @@ impl SupplierCatalogAdoptionProcess {
         }
     }
 
-    /// 预执行和逐项写事务使用相同的预览归属与来源供应商授权。
+    // 预执行和逐项写事务使用相同的预览归属与来源供应商授权。
     async fn require_execution_access(
         &self,
         execution: &AdoptionExecution,
@@ -473,7 +469,7 @@ impl SupplierCatalogAdoptionProcess {
     }
 }
 
-/// 原操作身份固定连接、账号与全部请求载荷。
+// 原操作身份固定连接、账号与全部请求载荷。
 fn confirmation_command(
     connection: &str,
     preview_id: &str,
@@ -490,7 +486,7 @@ fn confirmation_command(
     })
 }
 
-/// 精确核验原操作，软删除或异载荷不能作为幂等成功返回。
+// 查证选品确认时必须匹配原操作身份和指纹；已软删除或异载荷的记录都不能当作成功回执。
 fn command_identity(stored: &CatalogAdoptionCommand, expected: &CatalogAdoptionCommand) -> Result<String> {
     if stored.base.is_deleted()
         || stored.base.id != expected.base.id
@@ -524,7 +520,7 @@ mod command_tests {
         .unwrap()
     }
 
-    /// 相同操作的并发回读使用原身份；业务版本差异不改变操作身份。
+    // 验证：相同操作的并发回读使用原身份；业务版本差异不改变操作身份。
     #[test]
     fn concurrent_confirmation_recovery_preserves_original_operation() {
         let expected = command();
@@ -533,7 +529,7 @@ mod command_tests {
         assert_eq!(command_identity(&stored, &expected).unwrap(), expected.base.id);
     }
 
-    /// 任何身份、载荷或软删除差异均拒绝，不能接受其他确认回执。
+    // 验证：任何身份、载荷或软删除差异均拒绝，不能接受其他确认回执。
     #[test]
     fn recovery_rejects_deleted_or_mismatched_confirmation() {
         let expected = command();

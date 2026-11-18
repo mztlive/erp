@@ -27,12 +27,9 @@ pub struct BatchMatchAnchor {
 
 impl BatchMatchAnchor {
     /// 核验传播依据仍来自当前来源商品及当前供应商，允许单独建立供给关联。
-    /// # 参数
-    /// `candidate` 为待新增规格，`current` 为事务内重读的依据来源。
-    /// # 返回
     /// 同源商品且来源内容没有变化时成功。
-    /// # 错误
     /// 跨连接、供应商、来源商品、规格或来源资料变化时拒绝。
+    /// `candidate` 为待新增规格，`current` 为事务内重读的依据来源。
     pub fn ensure_source(
         &self,
         candidate: &SupplierCatalogItem,
@@ -64,11 +61,7 @@ impl BatchMatchAnchor {
     }
 
     /// 核验实际匹配目标；本操作追加规格可改变父商品版本，不能改变资料修订。
-    /// # 参数
-    /// `current` 为当前自动匹配的目标，`same_operation_product` 证明本操作已写入该商品回执。
-    /// # 返回
     /// 目标身份、SKU 版本及父商品资料仍一致时成功。
-    /// # 错误
     /// 换 SKU、换商品、资料修订变化或无本操作证据的版本变化时拒绝。
     pub fn ensure_target(&self, current: &BatchAnchorTarget, same_operation_product: bool) -> Result<()> {
         let stable = self.target.product_id == current.product_id

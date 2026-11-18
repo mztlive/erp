@@ -29,16 +29,8 @@ pub struct ReqwestAuthorizationHttp {
 }
 
 impl ReqwestAuthorizationHttp {
-    /// 以当前启动配置创建有界授权通信与连接绑定核验器。
-    ///
-    /// # 参数
-    /// `settings` 为同一部署的京东配置快照。
-    ///
-    /// # 返回
-    /// 供应用注入编排的授权技术实现。
-    ///
-    /// # 错误
-    /// 构造不返回错误；通信错误由 `ensure_available` 返回，绑定核验保持独立。
+    /// 应用装配京东页面授权流程时，用同一份启动配置创建限时、不重定向也不重试的 HTTP 客户端，并建立连接绑定核验器。
+    /// 构造不发请求；通过 `ensure_available` 单独检查客户端初始化结果，不以它代替连接绑定核验。
     pub fn new(settings: &JdVopConfig) -> Self {
         let client = Client::builder()
             .redirect(Policy::none())

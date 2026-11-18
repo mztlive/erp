@@ -4,14 +4,9 @@ use url::Url;
 
 use crate::{Error, Result};
 
-/// 仅为 COS 图片对象添加原图参数；由 SDK 在请求签名前调用。
-///
-/// # 参数
-/// * `uri` - SDK 已完成端点与对象键编码的读取地址。
-/// # 返回
-/// COS 图片返回带原图参数的地址；其他对象返回 `None`，保留原请求。
-/// # 错误
-/// 地址无法解析时返回存储错误，不发送未经处理的请求。
+// SDK 在签名前传入已编码的 GET URL，仅为 COS 标准域名上的 JPG、JPEG、PNG、GIF、WebP
+// 追加原图参数，防止自动压缩改变文件大小或指纹。其他 URL 返回 None 以保留原请求，
+// 无法解析的 URL 返回存储错误，避免发送未检查的读取请求。
 pub(crate) fn original_image_uri(uri: &str) -> Result<Option<String>> {
     let mut url = Url::parse(uri).map_err(|_| Error::S3("对象读取地址无效".into()))?;
     let host = url.host_str().unwrap_or_default();

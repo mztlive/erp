@@ -60,15 +60,7 @@ pub enum WorkflowActionType {
 
 impl WorkflowActionType {
     /// 返回动作类型的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Submit => "提交",
@@ -91,16 +83,8 @@ impl WorkflowActionType {
         }
     }
 
-    /// 返回动作类型的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
+    /// 取得动作类型的稳定代码。
     /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Submit => "submit",
@@ -124,15 +108,7 @@ impl WorkflowActionType {
     }
 
     /// 判断是否属于审批审计动作。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 11 个审批动作返回 `true`，提交、通过、驳回、确认、作废和完成返回 `false`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn is_approval_action(self) -> bool {
         matches!(
             self,
@@ -150,16 +126,8 @@ impl WorkflowActionType {
         )
     }
 
-    /// 判断动作是否必须引用已经存在的审批运行实例与节点执行。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
+    /// 当动作必须引用已经存在的审批运行实例与节点执行时返回 `true`。
     /// 启动、节点决定、轮次重启、受阻、恢复、取消和完成返回 `true`；定义绑定变更及其他动作返回 `false`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn requires_approval_runtime_context(self) -> bool {
         matches!(
             self,
@@ -175,16 +143,8 @@ impl WorkflowActionType {
         )
     }
 
-    /// 判断动作是否必须携带审批定义绑定变更事实。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
+    /// 当动作必须携带审批定义绑定变更事实时返回 `true`。
     /// 绑定或升级审批定义时返回 `true`，其余动作返回 `false`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn requires_approval_binding_context(self) -> bool {
         matches!(self, Self::ApprovalDefinitionBound | Self::ApprovalDefinitionUpgraded)
     }
@@ -277,31 +237,21 @@ impl WorkflowAction {
     /// 完成 from_status/to_status/actor 的校验与规范化：状态代码去首尾空白、
     /// 非空、上限长度、只含大写字母/数字/下划线；动作类字段非空。
     ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::WorkflowActionId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
     /// 返回新建的动作记录。
     ///
-    /// # 错误
     /// 当状态代码为空/超长/含非法字符，或操作者/角色为空/超长时返回错误。
+    ///
+    /// `id`：实体主键（`erp_core::ids::WorkflowActionId`）。
     pub fn new(id: WorkflowActionId, data: WorkflowActionData) -> Result<Self> {
         Self::construct(id, data, None, None)
     }
 
     /// 创建带审批结构化引用的动作。
-    ///
-    /// # 参数
-    /// * `id` - 动作主键
-    /// * `data` - 创建数据
-    /// * `approval_context` - 实例、轮次与节点执行
-    ///
-    /// # 返回
     /// 返回带运行时审批上下文、且不含绑定上下文的动作。
     ///
-    /// # 错误
     /// 状态、操作者、角色或意见非法，动作不要求运行时上下文，轮次为 0，或同时携带绑定上下文时返回错误。
+    ///
+    /// `approval_context`：实例、轮次与节点执行。
     pub fn new_with_approval_context(
         id: WorkflowActionId,
         data: WorkflowActionData,
@@ -311,17 +261,11 @@ impl WorkflowAction {
     }
 
     /// 创建带审批定义绑定前后值的不可变动作。
-    ///
-    /// # 参数
-    /// * `id` - 动作主键。
-    /// * `data` - 创建数据。
-    /// * `approval_binding_context` - 定义与绑定版本的前后值。
-    ///
-    /// # 返回
     /// 返回带绑定上下文、且不含运行时上下文的动作。
     ///
-    /// # 错误
     /// 状态、操作者、角色或意见非法，动作不要求绑定上下文，携带了运行时上下文，或绑定版本未严格加一时返回错误。
+    ///
+    /// `approval_binding_context`：定义与绑定版本的前后值。
     pub fn new_with_approval_binding_context(
         id: WorkflowActionId,
         data: WorkflowActionData,
@@ -362,10 +306,8 @@ impl WorkflowAction {
     }
 }
 
-/// 审批动作必须携带结构化上下文，不得把身份拼入意见。
-///
-/// # 错误
-/// 运行时动作缺少上下文、轮次为 0 或带了绑定上下文，绑定动作缺少上下文、带了运行时上下文或版本未严格加一，以及其他动作携带任一上下文时返回错误。
+// 审批动作必须携带结构化上下文，不得把身份拼入意见。
+// 运行时动作缺少上下文、轮次为 0 或带了绑定上下文，绑定动作缺少上下文、带了运行时上下文或版本未严格加一，以及其他动作携带任一上下文时返回错误。
 fn validate_approval_contexts(
     action_type: WorkflowActionType,
     approval_context: Option<ApprovalActionContext>,
@@ -404,20 +346,16 @@ fn validate_approval_contexts(
     }
 }
 
-/// 规范化状态代码：trim + 非空 + 上限 + 大写代码形态校验。
-///
-/// 状态代码是各单据域 `as_str()` 的稳定输出（如 `EFFECTIVE`、`PENDING_REVIEW`），
-/// 这里只校验形态不校验取值，取值与目标单据状态机的核对在 P5。
-///
-/// # 参数
-/// * `value` - 状态代码
-/// * `label` - 字段说明（错误信息用）
-///
-/// # 返回
-/// 返回规范化后的状态代码。
-///
-/// # 错误
-/// 当代码为空、超长或含大写字母/数字/下划线以外字符时返回错误。
+// 规范化状态代码：trim + 非空 + 上限 + 大写代码形态校验。
+//
+// 状态代码是各单据域 `as_str()` 的稳定输出（如 `EFFECTIVE`、`PENDING_REVIEW`），
+// 这里只校验形态不校验取值，取值与目标单据状态机的核对在 P5。
+//
+// 返回规范化后的状态代码。
+//
+// 当代码为空、超长或含大写字母/数字/下划线以外字符时返回错误。
+//
+// `label`：字段说明（错误信息用）。
 fn normalize_status_code(value: String, label: &str) -> Result<String> {
     let value = normalize_required_text(
         value,
@@ -452,7 +390,7 @@ mod tests {
         }
     }
 
-    /// happy path：状态代码转大写形态并去空白，意见 trim。
+    // 验证状态代码转大写形态并去空白，意见 去除首尾空白。
     #[test]
     fn new_normalizes_status_codes_and_comment() {
         let action = WorkflowAction::new(WorkflowActionId::new("wa-1"), data()).unwrap();
@@ -463,14 +401,14 @@ mod tests {
         assert_eq!(action.comment.as_deref(), Some("同意"));
     }
 
-    /// 失败路径：状态代码为空被拒。
+    // 验证状态代码为空时会被拒绝。
     #[test]
     fn new_rejects_empty_status_code() {
         let payload = WorkflowActionData { from_status: "  ".to_string(), ..data() };
         assert!(WorkflowAction::new(WorkflowActionId::new("wa-1"), payload).is_err());
     }
 
-    /// 失败路径：状态代码含非法字符（非大写代码形态）被拒。
+    // 验证状态代码含非法字符（非大写代码形态）时会被拒绝。
     #[test]
     fn new_rejects_invalid_status_code_shape() {
         let payload = WorkflowActionData { from_status: "effective".to_string(), ..data() };
@@ -478,14 +416,14 @@ mod tests {
         assert!(normalize_status_code("PENDING_REVIEW".to_string(), "状态").is_ok());
     }
 
-    /// 失败路径：超长状态代码被拒。
+    // 验证超长状态代码时会被拒绝。
     #[test]
     fn new_rejects_overlong_status_code() {
         let payload = WorkflowActionData { to_status: "S".repeat(65), ..data() };
         assert!(WorkflowAction::new(WorkflowActionId::new("wa-1"), payload).is_err());
     }
 
-    /// 枚举序列化与标签稳定。
+    // 锁定工作流动作类型的序列化代码和中文展示标签。
     #[test]
     fn action_type_codes_and_labels_are_stable() {
         assert_eq!(serde_json::to_string(&WorkflowActionType::Void).unwrap(), "\"void\"");
@@ -498,7 +436,7 @@ mod tests {
         assert!(serde_json::from_str::<WorkflowActionType>("\"approval_reassigned\"").is_err());
     }
 
-    /// 审批动作必须带结构化上下文，身份不得只写在意见里。
+    // 验证：审批动作必须带结构化上下文，身份不得只写在意见里。
     #[test]
     fn approval_action_requires_structured_context() {
         let missing = WorkflowActionData { action_type: WorkflowActionType::ApprovalStarted, ..data() };
@@ -552,7 +490,7 @@ mod tests {
         );
     }
 
-    /// BSON 往返。
+    // 验证工作流动作记录经 BSON 往返后仍保留原实体值。
     #[test]
     fn entity_roundtrips_through_bson() {
         let action = WorkflowAction::new(WorkflowActionId::new("wa-1"), data()).unwrap();

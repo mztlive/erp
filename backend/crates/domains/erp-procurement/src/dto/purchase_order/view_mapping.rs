@@ -50,44 +50,21 @@ macro_rules! purchase_line_view {
 impl PurchaseOrderLineView {
     /// 从不可变采购版本行生成展示视图。
     ///
-    /// # 参数
-    /// * `line` - 已保存的采购版本行
-    ///
-    /// # 返回
-    /// 保留版本行身份、精确数值字符串与销售版本关联的视图；历史销售提交行为空。
-    ///
-    /// # 错误
-    /// 无；只投影已类型化实体，不读取当前主数据。
+    /// 保留版本行身份、精确数值字符串与销售版本关联的视图；历史销售提交行为空。只投影已类型化实体，不读取当前主数据。
     pub fn from_revision(line: &PurchaseOrderRevisionLine) -> Self {
         purchase_line_view!(line, None)
     }
 
     /// 从采购冻结提交行生成展示视图。
     ///
-    /// # 参数
-    /// * `line` - 已保存的采购提交行
-    ///
-    /// # 返回
-    /// 保留提交行身份、精确数值字符串与冻结销售关联的视图。
-    ///
-    /// # 错误
-    /// 无；只投影已类型化实体，不读取当前主数据。
+    /// 保留提交行身份、精确数值字符串与冻结销售关联的视图。只投影已类型化实体，不读取当前主数据。
     pub fn from_submission(line: &PurchaseOrderSubmissionLine) -> Self {
         purchase_line_view!(line, line.sales_order_submission_line_id.as_ref().map(ToString::to_string))
     }
 }
 
 impl TotalsView {
-    /// 从不可变采购版本生成表头汇总视图。
-    ///
-    /// # 参数
-    /// * `revision` - 已保存的采购版本
-    ///
-    /// # 返回
-    /// 返回版本内保存的含税、未税和税额字符串，不重新聚合行金额。
-    ///
-    /// # 错误
-    /// 无。
+    /// 从不可变采购版本生成表头汇总视图。返回版本内保存的含税、未税和税额字符串，不重新聚合行金额。
     pub fn from_revision(revision: &PurchaseOrderRevision) -> Self {
         Self {
             gross: revision.gross_amount.to_string(),

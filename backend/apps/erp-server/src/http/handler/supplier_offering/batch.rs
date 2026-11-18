@@ -14,16 +14,7 @@ use crate::http::state::HttpState;
 use crate::wiring::scoped_offering_process;
 
 /// 批量校验或追加商业条款修订。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 当前主体
-/// * `request` - 目标供给与修订参数
-///
-/// # 返回
 /// 返回逐行结果。
-///
-/// # 错误
 /// 无权执行或批容器非法时返回错误。
 pub async fn revise(
     State(state): State<HttpState>,
@@ -38,16 +29,7 @@ pub async fn revise(
 }
 
 /// 批量校验或更新可供状态与数量。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 当前主体
-/// * `request` - 目标供给与可供参数
-///
-/// # 返回
 /// 返回逐行结果。
-///
-/// # 错误
 /// 无权执行或批容器非法时返回错误。
 pub async fn availability(
     State(state): State<HttpState>,

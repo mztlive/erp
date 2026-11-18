@@ -15,22 +15,12 @@ use crate::repository::FulfillmentExt;
 use crate::{Error, Result};
 
 /// 把确认命令写成已规范化的现场事实。
-///
-/// 地点占位值与空白规则由领域值对象 [`ActualServiceLocation`] 独占；本函数
-/// 只负责把已校验明文交给 Service 的加密编解码器与查询指纹函数。
-///
-/// # 参数
-/// * `req` - 已通过校验的确认命令
-/// * `evidence_attachment_id` - 已解析的正式凭证主键
-/// * `fingerprint_key` - 服务地点查询指纹密钥
-/// * `sensitive_data` - 服务地点加密编解码器
-///
-/// # 返回
+/// 地点占位值与空白规则由领域值对象 [`ActualServiceLocation`] 独占；本函数只负责把已校验明文交给 Service 的加密编解码器与查询指纹函数。
 /// 返回可写入草稿的确认事实。
-///
-/// # 错误
-/// 地点无法规范化时把 `ValidationError` 转为 `C::Error`；确认事实构造失败时经
-/// `Error::from` 转为 `C::Error`；加密失败时返回提供方的 `C::Error`。
+/// `req` 为已通过校验的确认命令；`evidence_attachment_id` 为已解析的正式凭证主键。
+/// `fingerprint_key` 为服务地点查询指纹密钥；`sensitive_data` 为服务地点加密编解码器。
+/// 地点无法规范化时把 `ValidationError` 转为 `C::Error`；确认事实构造失败时经 `Error::from` 转为 `C::Error`；
+/// 加密失败时返回提供方的 `C::Error`。
 pub fn service_confirmation_from_request<C: ServiceLocationCryptoPort>(
     req: &ConfirmServiceFulfillmentRequest,
     evidence_attachment_id: FileAssetId,
@@ -58,16 +48,9 @@ pub fn service_confirmation_from_request<C: ServiceLocationCryptoPort>(
 
 impl FulfillmentService {
     /// 在调用方事务中读取并锁定服务草稿版本，保留状态与版本首错。
-    ///
-    /// # 参数
-    /// * `record_id` - 服务履约记录主键
-    /// * `expected_version` - 期望的乐观锁版本
-    /// * `executor` - 调用方事务执行器
-    ///
-    /// # 返回
     /// 返回版本匹配的草稿服务履约记录。
-    ///
-    /// # 错误
+    /// `record_id` 为服务履约记录主键；`expected_version` 为期望的乐观锁版本。
+    /// 沿用调用方当前事务的执行器 `executor`。
     /// 记录不存在时返回 `NotFound`；不是草稿或版本不一致时返回 `ConflictError`；查询失败时返回对应错误。
     pub async fn prepare_service_confirmation(
         &self,
@@ -88,16 +71,9 @@ impl FulfillmentService {
     }
 
     /// 在附件资格与登记完成之后应用现场事实、确认并写入同一服务记录。
-    ///
-    /// # 参数
-    /// * `record` - 待确认的服务履约草稿
-    /// * `confirmation` - 已规范化的确认现场事实
-    /// * `executor` - 调用方事务执行器
-    ///
-    /// # 返回
     /// 确认并写回成功时无返回值。
-    ///
-    /// # 错误
+    /// `record` 为待确认的服务履约草稿；`confirmation` 为已规范化的确认现场事实。
+    /// 沿用调用方当前事务的执行器 `executor`。
     /// 现场事实不能写入、状态不允许确认或仓储写入失败时返回对应错误。
     pub async fn persist_service_confirmation(
         &self,

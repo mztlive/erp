@@ -7,12 +7,12 @@ use super::{AuthorizationService, rules};
 use crate::entity::authorization::{AccessContext, AccessRule, RelationKey, RelationMatch};
 use crate::{QualifiedPermissions, Result};
 
-/// 门户材料的固定操作均使用已冻结的真实来源关系。
+// 识别使用已冻结真实来源关系的固定门户材料操作，不为其他操作启用这条来源规则。
 pub(super) fn supports(permission: &Permission) -> bool {
     permission.resource() == "supplier_portal_material"
 }
 
-/// 每个来源的范围使用该来源独立合格角色；创建资格只按既有功能要求取证。
+// 为门户材料逐个声明独立来源的合格角色范围。创建资格仍按既有功能权限检查，不套用读取范围。
 fn sources(permission: &Permission) -> Vec<(&'static str, Permission)> {
     let supplier =
         if permission.action() == "review_cooperation" { supplier::PROFILE_UPDATE } else { supplier::DETAIL };
@@ -25,7 +25,7 @@ fn sources(permission: &Permission) -> Vec<(&'static str, Permission)> {
     sources
 }
 
-/// 启动绑定验证沿同一固定来源清单，不能把缺少维度的材料事实当成无数据条件。
+// 为门户材料登记校验构造完整来源条件；所需事实维度未接入时拒绝，不视作无数据限制。
 pub(super) fn binding_condition(permission: &Permission) -> Result<AccessRule> {
     let rules = sources(permission)
         .into_iter()
@@ -43,7 +43,7 @@ pub(super) fn binding_condition(permission: &Permission) -> Result<AccessRule> {
 }
 
 impl AuthorizationService {
-    /// 恢复材料原有的独立来源范围；不把门户任务角色拼成来源角色。
+    // 在材料读取时恢复各真实来源的独立范围，门户任务资格不能替代来源角色的资格。
     pub(super) async fn material_condition(
         &self,
         context: &AccessContext,

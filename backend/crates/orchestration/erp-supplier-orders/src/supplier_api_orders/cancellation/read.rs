@@ -16,22 +16,22 @@ pub(super) struct MongoCancellationRead {
 
 #[async_trait]
 pub(super) trait CancellationRead: Sync {
-    /// 在原事务中证明当前账号有权取消该订单。
-    /// # 参数
-    /// actor/id 为原入口身份和订单，executor 为快照事务。
-    /// # 返回
-    /// 当前取消资格成立时成功。
-    /// # 错误
-    /// 身份、范围、对象或事务无效时拒绝。
+    // 在原事务中证明当前账号有权取消该订单。
+    //
+    // actor/id 为原入口身份和订单，executor 为快照事务。
+    //
+    // 当前取消资格成立时成功。
+    //
+    // 身份、范围、对象或事务无效时拒绝。
     async fn authorize(&self, actor: &AuditActor, id: &str, executor: &mut dyn Executor) -> Result<()>;
 
-    /// 在已经授权的同一事务中识别 API 执行。
-    /// # 参数
-    /// id 为原订单，executor 为完成对象授权的原执行器。
-    /// # 返回
-    /// 当前 API 执行，或非 API 订单的 None。
-    /// # 错误
-    /// 仓储读取失败时返回原错误。
+    // 在已经授权的同一事务中识别 API 执行。
+    //
+    // id 为原订单，executor 为完成对象授权的原执行器。
+    //
+    // 当前 API 执行，或非 API 订单的 None。
+    //
+    // 仓储读取失败时返回原错误。
     async fn execution(&self, id: &str, executor: &mut dyn Executor) -> Result<Option<ApiOrderExecution>>;
 }
 
@@ -47,13 +47,13 @@ impl CancellationRead for MongoCancellationRead {
     }
 }
 
-/// 在调用方快照中授权并识别 API 取消，拒绝时不读取执行记录。
-/// # 参数
-/// port 为原订单授权和执行读取设施，actor/id 为当前身份与订单，executor 为入口事务。
-/// # 返回
-/// API 执行或已授权非 API 订单的 None。
-/// # 错误
-/// 对象授权或执行读取失败时立即终止，不交给非 API 回退处理。
+// 在调用方快照中授权并识别 API 取消，拒绝时不读取执行记录。
+//
+// port 为原订单授权和执行读取设施，actor/id 为当前身份与订单，executor 为入口事务。
+//
+// API 执行或已授权非 API 订单的 None。
+//
+// 对象授权或执行读取失败时立即终止，不交给非 API 回退处理。
 pub(super) async fn authorized_execution(
     port: &impl CancellationRead,
     actor: &AuditActor,

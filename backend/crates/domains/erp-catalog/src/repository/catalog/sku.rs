@@ -62,16 +62,7 @@ pub struct SkuFilter {
 }
 
 impl Default for SkuFilter {
-    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回第 1 页、每页 20 条的空筛选条件。
-    ///
-    /// # 错误
-    /// 无。
+    // SKU列表未传筛选时默认第 1 页、每页 20 条，不另加筛选条件。
     fn default() -> Self {
         let (page, page_size, sort_by, sort_ascending) = default_paging();
         Self {
@@ -89,19 +80,11 @@ impl Default for SkuFilter {
 }
 
 impl QueryFilter for SkuFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。始终写入未删除的 `deleted_at`。`sku_no` 有值时按字面量正则匹配；
-    /// `ids` 为 `Some` 时写入 `id` 的 `$in`（空数组也写入）；`product_id` 有值时精确匹配；
-    /// `status` 有值时按稳定代码精确匹配。`listing_status` 为 `Listed` 时匹配 `listed` 或 `null`，
-    /// 为 `Unlisted` 时只精确匹配 `unlisted`。分页与排序字段不进入条件。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 将SKU筛选条件编译为 MongoDB 查询，排除软删除记录。
+    //
+    // 始终写入未删除的 `deleted_at`。`sku_no` 有值时按字面量正则匹配；`ids` 为 `Some` 时写入 `id` 的 `$in`（空数组也写入）
+    // ；`product_id` 有值时精确匹配；`status` 有值时按稳定代码精确匹配。`listing_status` 为 `Listed` 时匹配
+    // `listed` 或 `null`，为 `Unlisted` 时只精确匹配 `unlisted`。分页与排序字段不进入条件。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_literal_regex_filter(&mut filter, "sku_no", self.sku_no.as_deref());
@@ -126,16 +109,7 @@ impl QueryFilter for SkuFilter {
 }
 
 impl Pagination for SkuFilter {
-    /// 返回 SKU 列表的页码与单页条数，不做页码归一或条数钳制。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组：第一项为 `page`，第二项为 `page_size` 转成的 `u64`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 读取 SKU 列表的页码与单页条数，不做页码归一或条数限制。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -144,30 +118,18 @@ impl Pagination for SkuFilter {
 /// SKU 集合上的域查询。
 #[allow(async_fn_in_trait)]
 pub trait SkuRepositoryExt {
-    /// 按稳定主键批量查询 SKU。
+    /// 按稳定主键批量查询 SKU。MongoDB 查询或反序列化失败时返回错误。
     ///
-    /// # 参数
-    /// * `ids` - SKU 稳定 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定事务边界
+    /// 沿用调用方传入的执行器。
     ///
-    /// # 返回
-    /// 返回匹配的未删除 SKU 实体。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
+    /// `ids` 为 SKU 稳定 ID 集合。
     async fn find_by_ids(&self, ids: &[SkuId], executor: &mut dyn Executor) -> Result<Vec<Sku>>;
 
-    /// 批量查询一组商品下的全部 SKU。
+    /// 批量查询一组商品下的全部 SKU。MongoDB 查询或反序列化失败时返回错误。
     ///
-    /// # 参数
-    /// * `product_ids` - 商品稳定 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定事务边界
+    /// 沿用调用方传入的执行器。
     ///
-    /// # 返回
-    /// 返回匹配的未删除 SKU 实体。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
+    /// `product_ids` 为商品稳定 ID 集合。
     async fn find_by_product_ids(
         &self,
         product_ids: &[ProductId],
@@ -176,18 +138,13 @@ pub trait SkuRepositoryExt {
 
     /// 批量读取采购责任解析或规则展示引用的 SKU。
     ///
-    /// 采购责任展示入口的历史名称，语义与 [`Self::find_by_ids`] 完全一致；
-    /// 保留本方法以避免展示层调用方改名，仅委托属主批量查询，不重复实现查询。
+    /// 采购责任展示入口的历史名称，语义与 [`Self::find_by_ids`] 完全一致；保留本方法以避免展示层调用方改名，仅委托属主批量查询，不重复实现查询。
     ///
-    /// # 参数
-    /// * `sku_ids` - SKU 稳定 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定事务边界
+    /// 返回全部匹配且未删除的 SKU；输入为空时返回空集合。MongoDB 查询或反序列化失败时返回错误。
     ///
-    /// # 返回
-    /// 返回全部匹配且未删除的 SKU；输入为空时返回空集合。
+    /// 沿用调用方传入的执行器。
     ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
+    /// `sku_ids` 为 SKU 稳定 ID 集合。
     async fn list_procurement_responsibility_skus(
         &self,
         sku_ids: &[SkuId],
@@ -198,15 +155,9 @@ pub trait SkuRepositoryExt {
     ///
     /// 只封装存在性事实，不判断规则引用合法性。
     ///
-    /// # 参数
-    /// * `sku_id` - SKU 稳定 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定事务边界
+    /// 存在且未删除时返回 `true`。MongoDB 查询失败时返回错误。
     ///
-    /// # 返回
-    /// 存在且未删除时返回 `true`。
-    ///
-    /// # 错误
-    /// MongoDB 查询失败时返回错误。
+    /// 沿用调用方传入的执行器。
     async fn has_procurement_responsibility_sku(
         &self,
         sku_id: &SkuId,
@@ -215,18 +166,11 @@ pub trait SkuRepositoryExt {
 
     /// 分页检索 SKU 列表（投影查询）。
     ///
-    /// 只返回 [`SkuRow`] 所需的列表字段；排序字段白名单化
-    /// （`created_at`/`sku_no`）。
+    /// 只返回 [`SkuRow`] 所需的列表字段；排序字段白名单化（`created_at`/`sku_no`）。
     ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回当前页投影行与满足筛选条件的总数。当 MongoDB 查询、游标读取或计数失败时返回错误。
     ///
-    /// # 返回
-    /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// 沿用调用方传入的执行器。
     async fn search_skus(
         &self,
         filter: &SkuFilter,
@@ -285,31 +229,15 @@ impl SkuRepositoryExt for persistence_core::Repository<'_, Sku> {
     }
 }
 
-/// 构建 SKU 排序文档（白名单：`created_at`/`sku_no`）。
-///
-/// # 参数
-/// * `sort_by` - 请求的排序字段；不在白名单时回退 `created_at`
-/// * `sort_ascending` - 升序为 `true`，降序为 `false`
-///
-/// # 返回
-/// 返回排序文档；同一方向同时作用于排序字段与 `id`。
-///
-/// # 错误
-/// 不返回错误。
+// 构建 SKU 排序文档（白名单：`created_at`/`sku_no`）。返回排序文档；同一方向同时作用于排序字段与 `id`。
+//
+// - `sort_by`：请求的排序字段；不在白名单时回退 `created_at`。
+// - `sort_ascending`：升序为 `true`，降序为 `false`。
 pub(super) fn sku_sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
     sort_doc(whitelisted_sort(sort_by, SKU_SORT_FIELDS), sort_ascending)
 }
 
-/// SKU 列表投影字段。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回包含身份、状态、当前修订指针、版本与创建时间的投影文档。
-///
-/// # 错误
-/// 不返回错误。
+// SKU 列表投影字段。返回包含身份、状态、当前修订指针、版本与创建时间的投影文档。
 pub(super) fn sku_projection() -> Document {
     doc! {
         "id": 1,

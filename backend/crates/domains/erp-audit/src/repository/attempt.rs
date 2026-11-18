@@ -8,13 +8,7 @@ use crate::entity::AuditAttempt;
 /// 尝试记录仓储访问器；不能用于命令恢复。
 pub trait AuditAttemptExt {
     const AUDIT_ATTEMPTS: &'static str = "audit_attempts";
-    /// 返回保留失败、拒绝和未知分类的尝试仓储。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 返回当前数据库中的尝试记录仓储。
-    /// # 错误
-    /// 不返回错误。
+    /// 取得当前数据库的独立尝试仓储，供事务结束后持久化失败、拒绝及结果未知的安全留痕。
     fn audit_attempts(&self) -> Repository<'_, AuditAttempt>;
 }
 impl AuditAttemptExt for Database {

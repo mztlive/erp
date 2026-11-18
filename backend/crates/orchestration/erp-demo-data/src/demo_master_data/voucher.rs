@@ -8,13 +8,7 @@ use super::{DemoMasterDataProcess, spec};
 use crate::{Error, Result};
 
 impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
-    /// 按类型选择正式创建入口，返回可登记的商品 ID。
-    /// # 参数
-    /// `request` 已解析字典 ID，`actor` 为初始化操作人。
-    /// # 返回
-    /// 商品真实 ID。
-    /// # 错误
-    /// 字段、岗位或领域创建失败时返回错误。
+    // 按普通商品或卡券类型选择正式创建入口，读取实际商品 ID 供演示清单登记，保留对应领域的校验与岗位限制。
     pub(super) async fn create_demo_product(
         &self,
         request: CreateProductRequest,
@@ -32,13 +26,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
     }
 }
 
-/// 转换卡券种子，拒绝正式入口不能保持的编号及多 SKU 输入。
-/// # 参数
-/// `request` 为卡券商品模板或已解析请求。
-/// # 返回
-/// 正式卡券原子创建请求。
-/// # 错误
-/// SKU 编号、数量、描述或字段不符合卡券合同时拒绝。
+// 把卡券种子转换为正式原子创建请求；编号、描述或多 SKU 输入不能按正式合同保留时拒绝，不静默丢弃模板字段。
 pub(super) fn voucher_request(request: &CreateProductRequest) -> Result<CreateVoucherCategoryRequest> {
     let [sku] = request.skus.as_slice() else {
         return Err(Error::ValidationError("演示卡券必须只有一个 SKU".into()));
@@ -96,7 +84,7 @@ mod tests {
         assert!(voucher_request(&invalid).is_err());
     }
 
-    /// 卡券原子创建保留完整公司三价和集采门槛，不用面额或供给成本覆盖参考价。
+    // 验证卡券原子创建保留公司三价和集采门槛，不把面额或供给成本用作公司参考价。
     #[test]
     fn voucher_preserves_company_prices_and_bulk_minimum() {
         let steps = plan::demo_steps().unwrap();

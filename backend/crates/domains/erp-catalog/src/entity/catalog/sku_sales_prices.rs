@@ -18,15 +18,10 @@ pub struct SkuSalesPrices {
 impl SkuSalesPrices {
     /// 按销售数量选择一件代发价或集采价。
     ///
-    /// # 参数
-    /// * `quantity` - 当前销售明细数量
+    /// 数量达到正数集采起订数量且已维护集采价时返回集采价；其他情况返回一件代发价。一件代发价缺失且未满足集采条件时返回 `None`，零金额保持为已维护价格。
+    /// 数量与价格的输入合法性由拥有领域的写入边界校验。
     ///
-    /// # 返回
-    /// 数量达到正数集采起订数量且已维护集采价时返回集采价；其他情况返回一件代发价。
-    /// 一件代发价缺失且未满足集采条件时返回 `None`，零金额保持为已维护价格。
-    ///
-    /// # 错误
-    /// 无；数量与价格的输入合法性由拥有领域的写入边界校验。
+    /// `quantity` 为当前销售明细数量。
     pub fn reference_price(&self, quantity: Quantity) -> Option<Amount> {
         let qualifies = self
             .bulk_min_quantity
@@ -45,7 +40,7 @@ mod tests {
 
     use super::*;
 
-    /// 带小数的销售数量在达到阈值时切换集采价。
+    // 带小数的销售数量在达到阈值时切换集采价。
     #[test]
     fn selects_bulk_price_at_and_above_minimum() {
         let prices = SkuSalesPrices {
@@ -61,7 +56,7 @@ mod tests {
         assert_eq!(prices.reference_price(Quantity::from_str("10.500001").unwrap()), prices.bulk_price_gross);
     }
 
-    /// 缺省起订量、未维护集采价或无效历史阈值时使用一件代发价。
+    // 缺省起订量、未维护集采价或无效历史阈值时使用一件代发价。
     #[test]
     fn falls_back_to_dropship_when_bulk_conditions_are_missing() {
         let quantity = Quantity::from_str("100.000000").unwrap();
@@ -83,7 +78,7 @@ mod tests {
         assert_eq!(missing_bulk.reference_price(quantity), prices.sales_visible_price_gross);
     }
 
-    /// 零元集采价是有效的独立价格，缺省价格不从其他字段推导。
+    // 零元集采价是有效的独立价格，缺省价格不从其他字段推导。
     #[test]
     fn preserves_zero_price_and_missing_dropship_price() {
         let prices = SkuSalesPrices {

@@ -32,17 +32,9 @@ struct Confirmation {
 impl FulfillmentProcess {
     /// 确认电子交付；原始对象仅用于加密与指纹，不进入日志或响应。
     ///
-    /// # 参数
-    /// * `id` - 草稿身份
-    /// * `req` - 当前版本、实际交付事实和凭证引用
-    /// * `pending` - 本次待登记文件
-    /// * `actor` - 当前认证用户
+    /// `id` 为草稿身份；`req` 为当前版本、实际交付事实和凭证引用；`pending` 为本次待登记文件；`actor` 为当前认证用户。
     ///
-    /// # 返回
-    /// 返回已确认交付事实，不携带审批绑定。
-    ///
-    /// # 错误
-    /// 版本、数量、凭证、采购资格无效时回滚整个事务。
+    /// 返回已确认交付事实，不携带审批绑定。版本、数量、凭证、采购资格无效时回滚整个事务。
     pub async fn confirm_electronic_delivery(
         &self,
         id: &str,
@@ -75,7 +67,7 @@ impl FulfillmentProcess {
     }
 }
 
-/// 在新事务中确认电子交付；任一步失败则整体回滚。
+// 在新事务中确认电子交付；任一步失败则整体回滚。
 async fn persist(
     db: &Database,
     task_identity: &Arc<AuthorizationService>,
@@ -97,7 +89,7 @@ async fn persist(
     Ok(record.into())
 }
 
-/// 版本、采购资格和凭证通过后才写入确认事实并完成后继。
+// 版本、采购资格和凭证通过后才写入确认事实并完成后继。
 async fn confirm(
     db: &Database,
     task_identity: &Arc<AuthorizationService>,
@@ -140,7 +132,7 @@ async fn confirm(
     Ok(record)
 }
 
-/// 采购单须可履约，且分配仍指向本销售明细；付款不阻止登记交付。
+// 采购单须可履约，且分配仍指向本销售明细；付款不阻止登记交付。
 async fn purchase_context(
     db: &Database,
     record: &ElectronicDelivery,
@@ -163,7 +155,7 @@ async fn purchase_context(
     Ok(order)
 }
 
-/// 完成任务并在成功交付时追加实际成本及验收可用事实。
+// 完成任务并在成功交付时追加实际成本及验收可用事实。
 async fn finish(
     db: &Database,
     task_identity: &Arc<AuthorizationService>,

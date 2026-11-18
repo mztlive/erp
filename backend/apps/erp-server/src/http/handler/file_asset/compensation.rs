@@ -11,20 +11,8 @@ use tracing::error;
 use crate::http::state::HttpState;
 use crate::wiring::errors::{Error, Result};
 
-/// 根据数据库命令结果完成本次上传，保持原成功值及错误分类。
-///
-/// # 参数
-/// * `state` - 提供对象存储客户端的应用状态
-/// * `requests` - 仅属于本次请求的新上传对象
-/// * `result` - 数据库命令结果；提交后的读取错误须放在成功载荷中，保留附件消费事实
-/// * `assets_committed` - 成功结果是否消费了本次上传；普通成功固定返回 `true`
-///
-/// # 返回
-/// 完成必要的对象补偿后，原样返回命令结果；调用方随后展开载荷中的详情读取结果。
-///
-/// # 错误
-/// 保留原命令错误；提交结果未知时不删除对象。已确认提交后的读取错误不得转换为
-/// 外层失败而触发补偿。清理失败只记日志，不覆盖命令结果或载荷中的读取错误。
+// 完成带附件的命令时，只清理由本次请求上传且已知未消费的对象。成功回放未使用新对象或事务确认失败时清理；结果未知时保留。
+// 已确认写入后的详情读取故障须留在成功载荷中，不能触发补偿。清理故障仅记录，不覆盖原命令或详情读取结果。
 pub(crate) async fn finish_asset_command<T, E: Into<Error>>(
     state: &HttpState,
     requests: &[PendingFileAssetRequest],
@@ -56,17 +44,7 @@ where
     result
 }
 
-/// 删除本次尚未登记或已确定回滚的上传批次，作为对象存储补偿。
-///
-/// # 参数
-/// * `state` - 提供对象存储客户端的应用状态
-/// * `requests` - 仅属于本次请求、允许删除的对象
-///
-/// # 返回
-/// 无；逐个尝试删除本批对象。
-///
-/// # 错误
-/// 清理失败只记日志，继续清理剩余对象，不覆盖业务命令结果。
+// 补偿时仅删除本次未登记或已确认回滚的上传对象，逐个尝试；清理失败只写日志，不改变业务命令结果。
 pub(crate) async fn delete_pending_asset_objects(state: &HttpState, requests: &[PendingFileAssetRequest]) {
     for request in requests {
         if let Err(storage_error) =
@@ -81,16 +59,7 @@ pub(crate) async fn delete_pending_asset_objects(state: &HttpState, requests: &[
     }
 }
 
-/// 判断数据库失败是否已确定没有提交，可以删除本次上传对象。
-///
-/// # 参数
-/// * `error` - 遵循事务提交结果分类的命令错误
-///
-/// # 返回
-/// 提交结果未知时返回 `false`；其余失败按事务合同允许补偿。
-///
-/// # 错误
-/// 无。
+// 在命令失败后根据提交结果分类决定能否清理新上传对象；提交结果未知时不得补偿。
 pub(crate) fn should_compensate_pending_assets(error: &impl AuditFailure) -> bool {
     !error.outcome_unknown()
 }

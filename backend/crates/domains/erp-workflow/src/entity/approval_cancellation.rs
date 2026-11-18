@@ -42,18 +42,14 @@ pub struct ApprovalCancellationFact {
 
 impl ApprovalCancellationFact {
     /// 从计划提交的取消终态及原历史任务形成不可变事实。
-    /// # 参数
-    /// * `receipt` - 同事务第一笔写入的审批命令回执。
-    /// * `instance` - 取消后的实例。
-    /// * `execution` - 取消后的唯一执行。
-    /// * `actor_id` - 当前已授权操作人。
-    /// * `reason` - 已规范化取消原因。
-    /// * `tasks` - 原执行关联的全部历史任务。
-    /// * `audit_event_id` - 同事务成功事件 ID，仅用于关联。
-    /// # 返回
     /// 返回按实例唯一定位的取消事实。
-    /// # 错误
+    ///
     /// 回执、终态、blocker 或任务不一致。
+    ///
+    /// `receipt`：同事务第一笔写入的审批命令回执；`instance`：取消后的实例。
+    /// `execution`：取消后的唯一执行；`actor_id`：当前已授权操作人。
+    /// `reason`：已规范化取消原因；`tasks`：原执行关联的全部历史任务。
+    /// `audit_event_id`：同事务成功事件 ID，仅用于关联。
     pub fn new(
         receipt: ApprovalCommandReceipt,
         instance: &ApprovalProcessInstance,
@@ -84,14 +80,12 @@ impl ApprovalCancellationFact {
     }
 
     /// 同时证明保存身份、取消实例、执行及全部历史任务。
-    /// # 参数
-    /// * `instance` - 同执行器读取的实例终态。
-    /// * `execution` - 同执行器读取的原执行终态。
-    /// * `tasks` - 同执行器读取的历史任务。
-    /// # 返回
     /// 全部相互匹配返回空值。
-    /// # 错误
+    ///
     /// 缺失或损坏事实、终态或任务不匹配；不得回退审计。
+    ///
+    /// `instance`：同执行器读取的实例终态；`execution`：同执行器读取的原执行终态。
+    /// `tasks`：同执行器读取的历史任务。
     pub fn ensure_runtime(
         &self,
         instance: &ApprovalProcessInstance,
@@ -141,7 +135,7 @@ impl ApprovalCancellationFact {
         Ok(())
     }
 
-    /// 原执行的历史任务必须完整、唯一且保持业务主体引用。
+    // 回放受阻取消时比对原执行全部历史任务；任务必须完整、唯一且仍指向保存的同一业务主体。
     fn matches_tasks(&self, tasks: &[WorkItem]) -> bool {
         self.tasks == task_facts(tasks)
             && !self.tasks.windows(2).any(|pair| pair[0].task_id >= pair[1].task_id)
@@ -159,7 +153,7 @@ impl ApprovalCancellationFact {
     }
 }
 
-/// 保存任务 ID 与版本的确定排序。
+// 构造不可变取消证明时按确定顺序记录任务 ID 与版本，避免回读时受返回排列影响。
 fn task_facts(tasks: &[WorkItem]) -> Vec<CancellationTaskFact> {
     let mut facts = tasks
         .iter()
@@ -169,7 +163,7 @@ fn task_facts(tasks: &[WorkItem]) -> Vec<CancellationTaskFact> {
     facts
 }
 
-/// 结构化取消证明失败时的稳定拒绝。
+// 终态回读无法证明同一取消结果时返回稳定业务错误，不将损坏事实当作命令未执行。
 fn invalid_fact() -> Error {
     Error::ConflictError("审批取消结构化事实与终态不一致".into())
 }

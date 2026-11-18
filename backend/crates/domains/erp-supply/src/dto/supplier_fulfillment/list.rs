@@ -129,18 +129,11 @@ pub struct FulfillmentOrderListQuery {
 }
 
 impl SupplierFulfillmentOrderListParams {
-    /// 归一化供应商履约订单列表查询参数。
-    ///
+    /// 将客户端输入规整为可用于筛选的供应商履约订单列表查询参数。
     /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单、排序方向非法，或 `view` 不是 `actionable`、`all`、`recent_completed` 时返回 `ValidationError`。
+    /// 排序字段不在白名单、排序方向非法，或 `view` 不是 `actionable`、`all`、`recent_completed` 时返回
+    /// `ValidationError`。
     pub fn normalized(&self) -> Result<FulfillmentOrderListQuery> {
         let (sort_by, sort_dir) =
             normalize_sort(&self.sort_by, &self.sort_dir, FULFILLMENT_ORDER_SORT_FIELDS)?;
@@ -167,7 +160,7 @@ impl SupplierFulfillmentOrderListParams {
     }
 }
 
-/// 规范化列表视图参数；未提供视为全部。
+// 规范化列表视图参数；未提供视为全部。
 fn normalize_list_view(raw: Option<&str>) -> Result<Option<String>> {
     let Some(value) = normalized_text(raw) else {
         return Ok(None);
@@ -221,13 +214,8 @@ pub struct SupplierFulfillmentOrderView {
 }
 
 impl From<SupplierFulfillmentOrder> for SupplierFulfillmentOrderView {
-    /// 从实体构造响应视图。
-    ///
-    /// # 参数
-    /// * `order` - 供应商履约订单实体
-    ///
-    /// # 返回
-    /// 返回响应视图（不暴露地址快照敏感值）。
+    // 将 `SupplierFulfillmentOrder` 转换为 API 响应字段，调用方可直接使用投影而不必序列化整个实体。
+    // 返回响应视图（不暴露地址快照敏感值）。
     fn from(order: SupplierFulfillmentOrder) -> Self {
         Self {
             id: order.base.id,
@@ -335,13 +323,7 @@ pub struct SupplierOrderStatusHistoryView {
 }
 
 impl From<SupplierOrderStatusHistory> for SupplierOrderStatusHistoryView {
-    /// 从实体构造响应视图。
-    ///
-    /// # 参数
-    /// * `history` - 状态历史实体
-    ///
-    /// # 返回
-    /// 返回响应视图。
+    // 将 `SupplierOrderStatusHistory` 转换为 API 响应字段，调用方可直接使用投影而不必序列化整个实体。
     fn from(history: SupplierOrderStatusHistory) -> Self {
         Self {
             id: history.base.id,
@@ -381,13 +363,8 @@ pub struct SupplierOrderActionView {
 }
 
 impl From<SupplierOrderAction> for SupplierOrderActionView {
-    /// 从实体构造响应视图。
-    ///
-    /// # 参数
-    /// * `action` - 供应商动作实体
-    ///
-    /// # 返回
-    /// 返回响应视图（不暴露完整幂等键，只透出动作身份与状态）。
+    // 将 `SupplierOrderAction` 转换为 API 响应字段，调用方可直接使用投影而不必序列化整个实体。
+    // 返回响应视图（不暴露完整幂等键，只透出动作身份与状态）。
     fn from(action: SupplierOrderAction) -> Self {
         Self {
             id: action.base.id,

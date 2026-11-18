@@ -85,24 +85,15 @@ pub struct ContractFilter {
 
 impl ContractFilter {
     /// 返回identity完整授权阶段。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 当前查询阶段。
-    /// # 错误
     /// 不执行I/O。
     pub fn stages(&self) -> Vec<Document> {
         self.access.as_ref().map_or_else(Vec::new, |scope| scope.stages())
     }
 
     /// 将已授权候选客户与仍存在的来源客户求交，历史参与不得扩张来源边界。
-    ///
-    /// # 参数
-    /// * `existing` - 同一执行器按候选合同引用 ID 查询的未删除客户
-    /// # 返回
     /// 原地收窄客户条件；空集合保持空结果。
-    /// # 错误
-    /// 无。
+    /// `existing` 为同一执行器按候选合同引用 ID 查询的未删除客户。
     pub fn require_existing_customers(&mut self, existing: Vec<String>) {
         self.customer_ids = Some(
             existing
@@ -114,16 +105,7 @@ impl ContractFilter {
 }
 
 impl Default for ContractFilter {
-    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回第 1 页、每页 20 条的空筛选条件。
-    ///
-    /// # 错误
-    /// 无。
+    // 初始化合同筛选：第一页、每页 20 条，业务筛选默认留空。
     fn default() -> Self {
         Self {
             access: None,
@@ -142,19 +124,8 @@ impl Default for ContractFilter {
 }
 
 impl QueryFilter for ContractFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// `customer_id` 与 `customer_ids` 同时存在时按交集收窄：请求客户不在集合内
-    /// 时写入空 `$in`，保证分页总数为 0 而不是退回全量合同。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 转换为 MongoDB 查询条件（自动追加未删除过滤）。
+    // `customer_id` 与 `customer_ids` 同时存在时按交集收窄：请求客户不在集合内时写入空 `$in`，保证分页总数为 0 而不是退回全量合同。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_literal_regex_filter(&mut filter, "contract_no", self.contract_no.as_deref());
@@ -191,18 +162,8 @@ impl QueryFilter for ContractFilter {
 }
 
 impl Pagination for ContractFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// 读取筛选条件上的 `page`，并把 `page_size` 从 `u32` 拓宽为 `u64`。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 向仓储分页传递页码与单页条数。
+    // 读取筛选条件上的 `page`，并把 `page_size` 从 `u32` 拓宽为 `u64`。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -212,19 +173,10 @@ impl Pagination for ContractFilter {
 #[allow(async_fn_in_trait)]
 pub trait ContractRepositoryExt {
     /// 分页检索合同列表（投影查询）。
-    ///
-    /// 只返回 [`ContractRow`] 所需的列表字段，不加载整文档；排序字段由 Service
-    /// 层白名单校验后传入（api-contract §4）。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
+    /// 只返回 [`ContractRow`] 所需的列表字段，不加载整文档；排序字段由 Service 层白名单校验后传入（api-contract §4）。
     /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// 沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询、游标读取或计数错误。
     async fn search_contracts(
         &self,
         filter: &ContractFilter,
@@ -232,19 +184,10 @@ pub trait ContractRepositoryExt {
     ) -> crate::Result<PageResult<ContractRow>>;
 
     /// 查找当前客户范围内指向指定结算主体的生效合同。
-    ///
-    /// # 参数
-    /// * `customer_ids` - 当前操作人可参与的客户 ID 集合
-    /// * `settlement_party_id` - 目标结算主体 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回任一客户范围内的生效合同；客户集合为空或无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    ///
-    /// # 约束
+    /// `customer_ids` 为当前操作人可参与的客户 ID 集合；`settlement_party_id` 为目标结算主体 ID。
+    /// 沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询错误。
     /// 仅查询本仓储拥有的 `contracts` 集合，不访问结算主体或客户集合。
     async fn find_effective_for_settlement_party(
         &self,
@@ -254,15 +197,8 @@ pub trait ContractRepositoryExt {
     ) -> Result<Option<Contract>>;
 
     /// 返回匹配条件的未删除对象 ID，供跨域列表在分页前组合筛选。
-    ///
-    /// # 参数
-    /// * `keyword` - 合同编号的字面量关键词。
-    /// * `executor` - 数据访问执行器。
-    ///
-    /// # 返回
     /// 未删除且编号匹配的合同 ID。空命中为空集合，不扩大范围。非字符串 ID 略过。
-    ///
-    /// # 错误
+    /// `keyword` 为合同编号的字面量关键词；沿用调用方执行器 `executor`。
     /// 数据库查询失败时返回错误。
     async fn matching_ids_by_number(&self, keyword: &str, executor: &mut dyn Executor)
     -> Result<Vec<String>>;
@@ -352,16 +288,9 @@ impl ContractRepositoryExt for persistence_core::Repository<'_, Contract> {
 #[allow(async_fn_in_trait)]
 pub trait ContractRevisionRepositoryExt {
     /// 按修订 ID 集合批量读取不可变合同版本。
-    ///
-    /// # 参数
-    /// * `revision_ids` - 修订主键。空集合不查询。
-    /// * `executor` - 数据访问执行器。
-    ///
-    /// # 返回
     /// 命中的版本。空 ID 集合返回空向量，未命中的 ID 不出现。
-    ///
-    /// # 错误
-    /// MongoDB 查询失败时返回错误。
+    /// `revision_ids` 为修订主键。空集合不查询；沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询错误。
     async fn find_by_ids(
         &self,
         revision_ids: &[String],
@@ -369,16 +298,9 @@ pub trait ContractRevisionRepositoryExt {
     ) -> Result<Vec<ContractRevision>>;
 
     /// 列出合同的全部版本（新版本在前）。
-    ///
-    /// # 参数
-    /// * `contract_id` - 所属合同
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回按版本号倒序的合同版本列表。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// `contract_id` 为所属合同；沿用调用方执行器 `executor`。
+    /// 传播 MongoDB 查询或游标读取错误。
     async fn list_by_contract(
         &self,
         contract_id: &ContractId,
@@ -386,17 +308,9 @@ pub trait ContractRevisionRepositoryExt {
     ) -> Result<Vec<ContractRevision>>;
 
     /// 读取指定合同的历史最大修订序号。
-    ///
     /// 查询只读取 `revision_no` 并限制一条；修订号分配与溢出校验由实体负责。
-    ///
-    /// # 参数
-    /// * `contract_id` - 所属合同
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回历史最大修订序号；没有历史修订时返回 `None`。
-    ///
-    /// # 错误
+    /// `contract_id` 为所属合同；沿用调用方执行器 `executor`。
     /// 当 MongoDB 查询或投影反序列化失败时返回错误。
     async fn latest_revision_no(
         &self,
@@ -456,38 +370,18 @@ pub struct ContractDomainRepository<'a> {
 
 impl<'a> ContractDomainRepository<'a> {
     /// 创建域专用仓储。
-    ///
-    /// # 参数
-    /// * `db` - 目标 MongoDB 数据库
-    ///
-    /// # 返回
-    /// 返回仓储实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
 
     /// 首次归档合同（创建合同 + 首个不可变版本 + 绑定当前版本指针）。
-    ///
-    /// 依次写入 `contract`、`contract_revision` 并 CAS 更新合同当前版本指针，
-    /// 保证「合同身份 + 首个不可变版本 + PDF 关联」原子可见（数据模型 §6.4）。
-    /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction` 时各
-    /// 步自动提交，中途失败会留下没有版本的合同半成品；Service 必须通过
-    /// `persistence_core::Transactional::with_transaction` 传入事务会话。
-    ///
-    /// # 参数
-    /// * `contract` - 待写入的合同（成功后内存中绑定首个版本指针并递增版本）
-    /// * `revision` - 首个不可变合同版本
-    /// * `executor` - 数据访问执行器，必须位于事务中
-    ///
-    /// # 返回
+    /// 依次写入 `contract`、`contract_revision` 并 CAS 更新合同当前版本指针，保证「合同身份 + 首个不可变版本 + PDF 关联」原子可见（数据模型 §6.4）。
+    /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction` 时各步自动提交，中途失败会留下没有版本的合同半成品；
+    /// Service 必须通过 `persistence_core::Transactional::with_transaction` 传入事务会话。
     /// 无返回值。合同与首个不可变版本写入完成。
-    ///
-    /// # 错误
-    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）、乐观锁冲突或
-    /// MongoDB 写入失败时返回错误。
+    /// `contract` 为待写入的合同（成功后内存中绑定首个版本指针并递增版本）；`revision` 为首个不可变合同版本。
+    /// 沿用调用方当前事务的执行器 `executor`。
+    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）、乐观锁冲突或 MongoDB 写入失败时返回错误。
     pub async fn create_contract_with_revision(
         &self,
         contract: &mut Contract,
@@ -499,21 +393,10 @@ impl<'a> ContractDomainRepository<'a> {
     }
 
     /// 归档合同新版本（插入版本 + 绑定当前版本指针）。
-    ///
-    /// 依次写入 `contract_revision` 并 CAS 更新合同当前版本指针；同一合同允许
-    /// 追加更高序号的版本（数据模型 §4.3）。**必须收到事务执行器**：传入
-    /// `NoTransaction` 时两笔写入各自自动提交，中途失败会留下没有绑定指针的
-    /// 版本；Service 必须通过 `with_transaction` 传入事务会话。
-    ///
-    /// # 参数
-    /// * `contract` - 待绑定新版本的合同（成功后内存中切换版本指针并递增版本）
-    /// * `revision` - 新不可变合同版本
-    /// * `executor` - 数据访问执行器，必须位于事务中
-    ///
-    /// # 返回
+    /// 依次写入 `contract_revision` 并 CAS 更新合同当前版本指针；同一合同允许追加更高序号的版本（数据模型 §4.3）。**必须收到事务执行器**：传入 `NoTransaction` 时两笔写入各自自动提交，中途失败会留下没有绑定指针的版本；Service 必须通过 `with_transaction` 传入事务会话。
     /// 无返回值。新版本写入完成并已绑定当前版本指针。
-    ///
-    /// # 错误
+    /// `contract` 为待绑定新版本的合同（成功后内存中切换版本指针并递增版本）；`revision` 为新不可变合同版本。
+    /// 沿用调用方当前事务的执行器 `executor`。
     /// 当唯一索引冲突、乐观锁冲突或 MongoDB 写入失败时返回错误。
     pub async fn archive_contract_revision(
         &self,
@@ -524,15 +407,10 @@ impl<'a> ContractDomainRepository<'a> {
         self.attach_revision(contract, revision, executor).await
     }
 
-    /// 落不可变版本并切换合同当前版本指针（两方法共用后半段）。
-    ///
-    /// # 参数
-    /// * `contract` - 待绑定版本的合同（成功后内存中切换版本指针并递增版本）
-    /// * `revision` - 新不可变合同版本
-    /// * `executor` - 数据访问执行器，必须位于事务中
-    ///
-    /// # 错误
-    /// 当唯一索引冲突、乐观锁冲突或 MongoDB 写入失败时返回错误。
+    // 落不可变版本并切换合同当前版本指针（两方法共用后半段）。
+    // `contract` 为待绑定版本的合同（成功后内存中切换版本指针并递增版本）；`revision` 为新不可变合同版本。
+    // 沿用调用方当前事务的执行器 `executor`。
+    // 当唯一索引冲突、乐观锁冲突或 MongoDB 写入失败时返回错误。
     async fn attach_revision(
         &self,
         contract: &mut Contract,
@@ -550,23 +428,14 @@ impl<'a> ContractDomainRepository<'a> {
     }
 }
 
-/// 构建排序文档。
-///
-/// # 参数
-/// * `sort_by` - 排序字段；`None` 时默认 `created_at`
-/// * `sort_ascending` - 升序为 `true`，降序为 `false`
-///
-/// # 返回
-/// 返回排序条件文档。
+// 构建排序文档。
+// `sort_by` 为排序字段；`None` 时默认 `created_at`；`sort_ascending` 为升序为 `true`，降序为 `false`。
 fn sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
     doc! { sort_by.unwrap_or("created_at"): direction }
 }
 
-/// 合同列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
+// 合同列表投影字段。
 fn contract_projection() -> Document {
     doc! {
         "sales_owner_user_id": 1,
@@ -582,7 +451,7 @@ fn contract_projection() -> Document {
     }
 }
 
-/// 构建合同最大修订号查询条件。
+// 构建合同最大修订号查询条件。
 fn latest_contract_revision_filter(contract_id: &ContractId) -> Document {
     doc! {
         "contract_id": contract_id.to_string(),
@@ -590,7 +459,7 @@ fn latest_contract_revision_filter(contract_id: &ContractId) -> Document {
     }
 }
 
-/// 构建合同最大修订号的最小投影与有界排序。
+// 构建合同最大修订号的最小投影与有界排序。
 fn latest_contract_revision_options() -> FindOptions {
     FindOptions::builder()
         .sort(doc! { "revision_no": -1 })
@@ -599,7 +468,7 @@ fn latest_contract_revision_options() -> FindOptions {
         .build()
 }
 
-/// 从已按修订号倒序返回的零或一条投影中读取最大修订号。
+// 从已按修订号倒序返回的零或一条投影中读取最大修订号。
 fn contract_revision_no_from_rows(rows: Vec<ContractRevisionNoRow>) -> Option<u32> {
     rows.into_iter().next().map(|row| row.revision_no)
 }

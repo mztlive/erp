@@ -13,16 +13,7 @@ use crate::http::handler::{access_control, organization};
 use crate::http::routes::permission_route;
 use crate::http::state::HttpState;
 
-/// 返回本域管理端路由集合。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回声明公共权限目录信息的路由集合。
-///
-/// # 错误
-/// 不执行 I/O，不返回错误。
+/// 为管理端挂载人员与访问控制接口，按操作登记公共权限目录信息；文件入口保留对应的上传限制。
 pub fn routes() -> Router<HttpState> {
     Router::new()
         .merge(organization_routes())
@@ -35,7 +26,7 @@ pub fn routes() -> Router<HttpState> {
         .merge(resource_grant_routes())
 }
 
-/// 文件入口复用认证链路，应用仍要求底层角色和范围配置资格。
+// 挂载权限配置文件入口并复用后台认证；应用配置时还需通过角色及范围维护资格校验。
 fn policy_bundle_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -69,7 +60,7 @@ fn policy_bundle_routes() -> Router<HttpState> {
         .layer(DefaultBodyLimit::max(2 * 1024 * 1024))
 }
 
-/// 组织结构及人员查询资格路由。
+// 为父路由挂载组织结构及人员查询资格路由。
 fn organization_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -97,7 +88,7 @@ fn organization_routes() -> Router<HttpState> {
         )
 }
 
-/// 权限目录管理路由。
+// 为父路由挂载权限目录管理路由。
 fn permission_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -130,7 +121,7 @@ fn permission_routes() -> Router<HttpState> {
         )
 }
 
-/// 用户角色绑定及撤销路由。
+// 为父路由挂载用户角色绑定及撤销路由。
 fn binding_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -156,7 +147,7 @@ fn binding_routes() -> Router<HttpState> {
         )
 }
 
-/// 访问检查与审计查询路由。
+// 为父路由挂载访问检查与审计查询路由。
 fn inspection_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -175,7 +166,7 @@ fn inspection_routes() -> Router<HttpState> {
         )
 }
 
-/// 按类别读取业务人员的目录路由。
+// 为父路由挂载按类别读取业务人员的目录路由。
 fn people_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -222,7 +213,7 @@ fn people_routes() -> Router<HttpState> {
         )
 }
 
-/// 人员业务扩展授权使用现有范围配置动作，并在领域层重验公司配置边界。
+// 挂载人员业务扩展授权入口，复用范围配置动作；领域层在命令中重验公司边界。
 fn person_scope_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -241,7 +232,7 @@ fn person_scope_routes() -> Router<HttpState> {
         )
 }
 
-/// 指定记录授权管理沿用范围维护入口，领域服务再次核验全公司管理资格。
+// 把指定记录授权挂到范围维护入口；业务服务确认当前人具备全公司管理资格后才执行。
 fn resource_grant_routes() -> Router<HttpState> {
     Router::new()
         .route(

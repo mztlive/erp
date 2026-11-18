@@ -30,15 +30,7 @@ pub enum SupplierGovernanceJobKind {
 
 impl SupplierGovernanceJobKind {
     /// 返回领域任务类型代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回健康检查或目录同步的稳定类型代码。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn domain_job_type(self) -> &'static str {
         match self {
             Self::HealthCheck => SUPPLIER_HEALTH_CHECK_JOB_TYPE,
@@ -47,15 +39,7 @@ impl SupplierGovernanceJobKind {
     }
 
     /// 返回任务编号前缀。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回健康检查 `W20-HC` 或目录同步 `W20-CS` 前缀。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn job_no_prefix(self) -> &'static str {
         match self {
             Self::HealthCheck => "W20-HC",
@@ -81,12 +65,9 @@ pub struct SupplierGovernanceJobSpec {
 
 impl BackgroundJob {
     /// 判断目录任务是否进入下个同步周期。
-    /// # 参数
-    /// now 为当前 Unix 秒，interval 为同步间隔秒数。
-    /// # 返回
     /// 已达到同步间隔时为 true。
-    /// # 错误
-    /// 无；非法或早于创建时间的时钟不会启动新周期。
+    /// now 为当前 Unix 秒，interval 为同步间隔秒数。
+    /// 非法或早于创建时间的时钟不会启动新周期。
     pub fn catalog_schedule_due(&self, now: i64, interval: u64) -> bool {
         u64::try_from(now).is_ok_and(|now| {
             now >= self.base.created_at && now.saturating_sub(self.base.created_at) >= interval
@@ -94,11 +75,8 @@ impl BackgroundJob {
     }
 
     /// 结束失联目录任务，等待中任务取消，执行中任务失败并保留进度。
-    /// # 参数
-    /// `now` 为服务器判定和结束任务的时间。
-    /// # 返回
     /// 旧任务进入终态，新任务可重新开始或恢复检查点。
-    /// # 错误
+    /// `now` 为服务器判定和结束任务的时间。
     /// 非失联目录任务或状态不允许结束时拒绝。
     pub fn close_stalled_catalog(&mut self, now: Instant) -> Result<()> {
         if !self.catalog_stalled(now) {
@@ -115,12 +93,8 @@ impl BackgroundJob {
     }
 
     /// 判断目录任务是否超过五分钟没有推进；不把其他任务当作可恢复目录。
-    /// # 参数
-    /// `now` 为服务器当前时间。
-    /// # 返回
     /// 未结束的目录任务在五分钟无心跳后返回 true。
-    /// # 错误
-    /// 不返回错误。
+    /// `now` 为服务器当前时间。
     pub fn catalog_stalled(&self, now: Instant) -> bool {
         if self.domain_job_type.as_deref() != Some(SUPPLIER_CATALOG_SYNC_JOB_TYPE) || self.is_terminal() {
             return false;
@@ -133,22 +107,10 @@ impl BackgroundJob {
     }
 
     /// 为 W20 连接治理构造后台任务（健康检查或目录同步）。
-    ///
-    /// 任务编号为 `{W20-HC|W20-CS}-{幂等摘要前 16 字符}`，请求身份为
-    /// `w20:{完整幂等摘要}`，目标总数恒为 `1`；初始状态与计数由
-    /// [`BackgroundJob::new`] 按统一口径形成。
-    ///
-    /// # 参数
-    /// * `spec` - 任务构造规格（ID、连接、种类、发起人与幂等摘要均由调用方注入）
-    ///
-    /// # 返回
+    /// 任务编号为 `{W20-HC|W20-CS}-{幂等摘要前 16 字符}`，请求身份为 `w20:{完整幂等摘要}`，目标总数恒为 `1`；初始状态与计数由 [`BackgroundJob::new`] 按统一口径形成。
     /// 返回待持久化的后台任务实体。
-    ///
-    /// # 错误
-    /// 当幂等摘要过短、连接 ID/发起人为空或超长时返回错误；旧 `build_job` 的
-    /// 无检查切片改为失败关闭，不再 panic。
-    ///
-    /// # 约束
+    /// `spec` 为任务构造规格（ID、连接、种类、发起人与幂等摘要均由调用方注入）。
+    /// 当幂等摘要过短、连接 ID/发起人为空或超长时返回错误；旧 `build_job` 的无检查切片改为失败关闭，不再 panic。
     /// 确定性构造；不访问 MongoDB、时钟、全局 ID 生成器、密钥或外部网关。
     pub fn for_supplier_governance(spec: SupplierGovernanceJobSpec) -> Result<Self> {
         if spec.connection_id.trim().is_empty() {
@@ -218,7 +180,7 @@ mod tests {
         assert_eq!(job.status, JobStatus::Failed);
     }
 
-    /// 构造 W20 任务规格测试夹具。
+    // 构造 W20 任务规格测试夹具。
     fn job_spec(kind: SupplierGovernanceJobKind, hash: &str) -> SupplierGovernanceJobSpec {
         SupplierGovernanceJobSpec {
             job_id: BackgroundJobId::new("job-1"),

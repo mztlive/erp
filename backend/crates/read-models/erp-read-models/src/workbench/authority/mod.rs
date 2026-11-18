@@ -22,16 +22,13 @@ pub struct WorkItemFactsReader {
     pub(super) db: Database,
 }
 impl WorkItemFactsReader {
-    /// 绑定与调用流程相同的数据库句柄。
+    /// 装配工作项授权事实时，绑定与调用流程相同的数据库句柄。
     ///
     /// # 参数
     /// * `db` - 数据库句柄；构造不执行 I/O。
     ///
     /// # 返回
     /// 返回尚未发起读取的事实读取器。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }

@@ -27,32 +27,14 @@ pub enum PartyKind {
 }
 
 impl PartyKind {
-    /// 返回类型的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 把主体类型转换为中文展示名称，供详情、列表或业务提示显示。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Enterprise => "企业组织",
         }
     }
 
-    /// 返回类型的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回主体类型的固定代码，供持久化值和查询条件使用同一口径。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Enterprise => "enterprise",
@@ -72,78 +54,39 @@ pub enum PartyStatus {
 }
 
 impl PartyStatus {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 把主体状态转换为中文展示名称，供详情、列表或业务提示显示。
     pub fn label(&self) -> &'static str {
         SymmetricActiveStatus::status_label(self)
     }
 
-    /// 返回状态的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回主体状态的固定代码，供持久化值和查询条件使用同一口径。
     pub fn as_str(&self) -> &'static str {
         SymmetricActiveStatus::status_code(self)
     }
 
     /// 判断是否处于启用状态。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 处于 `Active` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn is_active(&self) -> bool {
         SymmetricActiveStatus::is_enabled(self)
     }
 }
 
 impl SymmetricActiveStatus for PartyStatus {
-    /// 是否处于启用状态。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 处于 `Active` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 是否处于启用状态。
+    //
+    // 处于 `Active` 时返回 `true`。
     fn is_enabled(&self) -> bool {
         matches!(self, Self::Active)
     }
 }
 
 impl DocumentState for PartyStatus {
-    /// 返回合法后继：启用 ⇄ 停用。
-    ///
-    /// 主体启停是对称状态机，没有终态；与自身相同的幂等迁移不在切片中。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// `Active` 返回只含 `Disabled` 的静态切片，`Disabled` 返回只含 `Active` 的静态切片。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 返回合法后继：启用 ⇄ 停用。
+    //
+    // 主体启停是对称状态机，没有终态；与自身相同的幂等迁移不在切片中。
+    //
+    // `Active` 返回只含 `Disabled` 的静态切片，`Disabled` 返回只含 `Active` 的静态切片。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Active => &[Self::Disabled],
@@ -198,7 +141,7 @@ pub struct Party {
 }
 
 impl PartialEq for Party {
-    /// 全字段语义相等。
+    // 比较两条往来主体的全部持久化字段，判断其业务内容和存储状态是否完全一致。
     fn eq(&self, other: &Self) -> bool {
         self.base == other.base
             && self.stable.status == other.stable.status
@@ -215,20 +158,17 @@ impl PartialEq for Party {
 impl Eq for Party {}
 
 impl Party {
-    /// 创建企业主体。
+    /// 以稳定编号和可选统一社会信用代码构造企业主体，供建档事务关联首版法定资料。
     ///
     /// 完成 party_no 的校验与规范化（去首尾空白、非空、长度上限），
     /// 统一社会信用代码按规范化为大写并校验 18 位字母数字（允许为空）。
     ///
     /// # 参数
     /// * `id` - 实体主键（`erp_core::ids::PartyId`）
-    /// * `data` - 创建数据
     /// * `created_by` - 创建人（账号或系统身份）
     ///
-    /// # 返回
     /// 返回新建的主体实体。
     ///
-    /// # 错误
     /// 当 party_no 为空/超长，或统一社会信用代码非空但不是 18 位字母数字时返回错误。
     pub fn new(id: PartyId, data: PartyData, created_by: impl Into<String>) -> Result<Self> {
         let party_no =
@@ -245,19 +185,16 @@ impl Party {
         })
     }
 
-    /// 更新企业主体。
+    /// 维护主体的统一社会信用代码、状态和可编辑资料，业务引用继续使用原主体身份。
     ///
     /// `party_no` 与 `party_kind` 是稳定身份，不允许在通用更新中修改；
     /// 状态迁移按固定状态机校验（§13.3）。
     ///
     /// # 参数
-    /// * `update` - 更新数据
     /// * `updated_by` - 本次更新执行人
     ///
-    /// # 返回
     /// 更新成功返回 `Ok(())`。
     ///
-    /// # 错误
     /// 当统一社会信用代码格式非法或状态迁移非法时返回错误。
     pub fn update(&mut self, update: PartyUpdate, updated_by: impl Into<String>) -> Result<()> {
         self.apply_credit_code(update.unified_credit_code)?;
@@ -266,35 +203,26 @@ impl Party {
         Ok(())
     }
 
-    /// 判断主体是否处于启用状态。
+    /// 判断主体在当前状态下是否启用，供新业务关联主体时筛选。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 状态为 `Active` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn is_active(&self) -> bool {
         self.stable.status().is_active()
     }
 
-    /// 校验主体乐观锁版本。
+    /// 写入前确认往来主体仍是调用方读取的版本，发现并发修改时返回版本冲突。
     ///
     /// # 参数
     /// * `expected` - 客户端期望版本
     ///
-    /// # 返回
     /// 版本一致时返回 `Ok(())`。
     ///
-    /// # 错误
     /// 当前版本与期望版本不一致时返回错误。
     pub fn ensure_version(&self, expected: u64) -> Result<()> {
         super::ensure_base_version(&self.base, expected)
     }
 
-    /// 从已加载修订中解析当前生效修订。
+    /// 用主体指向的修订 ID 解析当前法定资料，并校验修订归属，防止引用另一主体的资料。
     ///
     /// 当前指针必须存在、命中修订 ID，且修订必须属于当前 Party；这些
     /// 条件共同保护稳定主体与不可变修订链的一致性。
@@ -302,10 +230,8 @@ impl Party {
     /// # 参数
     /// * `revisions` - 已加载的主体修订集合
     ///
-    /// # 返回
     /// 返回当前生效修订引用。
     ///
-    /// # 错误
     /// 当前修订指针缺失、目标修订不存在或修订属于其他 Party 时返回错误。
     pub fn current_revision<'a>(&self, revisions: &'a [PartyRevision]) -> Result<&'a PartyRevision> {
         let revision_id = self
@@ -321,13 +247,12 @@ impl Party {
         Ok(revision)
     }
 
-    /// 应用统一社会信用代码更新。
-    ///
-    /// # 参数
-    /// * `update` - 代码更新意图
-    ///
-    /// # 错误
-    /// 当代码非空但不是 18 位字母数字时返回错误。
+    // 应用统一社会信用代码更新。
+    //
+    // # 参数
+    // * `update` - 代码更新意图
+    //
+    // 当代码非空但不是 18 位字母数字时返回错误。
     fn apply_credit_code(&mut self, update: FieldUpdate<String>) -> Result<()> {
         match update {
             FieldUpdate::Unchanged => {},
@@ -337,13 +262,12 @@ impl Party {
         Ok(())
     }
 
-    /// 应用状态更新。
-    ///
-    /// # 参数
-    /// * `status` - 可选目标状态
-    ///
-    /// # 错误
-    /// 目标状态不在固定状态机后继中时返回错误。
+    // 应用状态更新。
+    //
+    // # 参数
+    // * `status` - 可选目标状态
+    //
+    // 目标状态不在固定状态机后继中时返回错误。
     fn apply_status(&mut self, status: Option<PartyStatus>) -> Result<()> {
         if let Some(to) = status {
             ensure_transition(self.stable.status, to)?;
@@ -353,19 +277,17 @@ impl Party {
     }
 }
 
-/// 规范化统一社会信用代码。
-///
-/// 空值（含全空白）规范化为 `None`；非空值去首尾空白、转大写后必须为
-/// 18 位字母数字（GB 32100-2015）。
-///
-/// # 参数
-/// * `value` - 原始输入
-///
-/// # 返回
-/// 返回规范化后的代码或 `None`。
-///
-/// # 错误
-/// 当非空值不是 18 位字母数字时返回错误。
+// 规范化统一社会信用代码。
+//
+// 空值（含全空白）规范化为 `None`；非空值去首尾空白、转大写后必须为
+// 18 位字母数字（GB 32100-2015）。
+//
+// # 参数
+// * `value` - 原始输入
+//
+// 返回规范化后的代码或 `None`。
+//
+// 当非空值不是 18 位字母数字时返回错误。
 fn normalize_credit_code(value: Option<String>) -> Result<Option<String>> {
     let Some(value) = value else {
         return Ok(None);
@@ -398,7 +320,7 @@ mod tests {
         }
     }
 
-    /// happy path：编号去空白，信用代码规范化为大写 18 位。
+    // 验证：编号去空白，信用代码规范化为大写 18 位。
     #[test]
     fn new_trims_and_normalizes() {
         let party = Party::new(PartyId::new("party-1"), party_data(), "admin-1").unwrap();
@@ -409,7 +331,7 @@ mod tests {
         assert_eq!(party.stable.created_by, "admin-1");
     }
 
-    /// 失败路径：编号为空/超长，信用代码非法格式。
+    // 验证：编号为空/超长，信用代码非法格式。
     #[test]
     fn new_rejects_invalid_inputs() {
         let blank_no = PartyData { party_no: "   ".to_string(), ..party_data() };
@@ -422,7 +344,7 @@ mod tests {
         assert!(Party::new(PartyId::new("p"), bad_code, "admin-1").is_err());
     }
 
-    /// 信用代码允许为空（历史数据），全空白规范化为 None。
+    // 信用代码允许为空（历史数据），全空白规范化为 None。
     #[test]
     fn credit_code_may_be_empty() {
         assert_eq!(normalize_credit_code(None).unwrap(), None);
@@ -436,7 +358,7 @@ mod tests {
         assert_eq!(party.unified_credit_code, None);
     }
 
-    /// 状态机：合法迁移（启用→停用）通过，非法迁移不存在（单一后继）。
+    // 状态机：合法迁移（启用→停用）通过，非法迁移不存在（单一后继）。
     #[test]
     fn status_transitions_follow_fixed_matrix() {
         assert_adjacency_closed(&[PartyStatus::Active, PartyStatus::Disabled]);
@@ -455,7 +377,7 @@ mod tests {
         assert_eq!(party.stable.updated_by, "admin-2");
     }
 
-    /// 更新：信用代码可设置/清除/保留，编号与类型不可修改（不在更新面）。
+    // 更新：信用代码可设置/清除/保留，编号与类型不可修改（不在更新面）。
     #[test]
     fn update_applies_credit_code_and_status_only() {
         let mut party = Party::new(PartyId::new("party-4"), party_data(), "admin-1").unwrap();
@@ -480,7 +402,7 @@ mod tests {
         assert!(party.update(invalid, "admin-4").is_err());
     }
 
-    /// 版本校验接受当前版本并拒绝过期版本。
+    // 版本校验接受当前版本并拒绝过期版本。
     #[test]
     fn version_check_rejects_stale_expected_version() {
         let party = Party::new(PartyId::new("party-version"), party_data(), "admin-1").unwrap();
@@ -488,7 +410,7 @@ mod tests {
         assert!(party.ensure_version(2).is_err());
     }
 
-    /// 当前修订必须由指针命中且归属于当前 Party。
+    // 当前修订必须由指针命中且归属于当前 Party。
     #[test]
     fn current_revision_enforces_pointer_and_party_ownership() {
         let mut party = Party::new(PartyId::new("party-1"), party_data(), "admin-1").unwrap();
@@ -522,7 +444,7 @@ mod tests {
         assert!(party.current_revision(&[foreign]).is_err());
     }
 
-    /// 实体 JSON 往返（含 ID 与 StableBase）。
+    // 实体 JSON 往返（含 ID 与 StableBase）。
     #[test]
     fn entity_roundtrips_through_json() {
         let party = Party::new(PartyId::new("party-5"), party_data(), "admin-1").unwrap();

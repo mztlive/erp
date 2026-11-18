@@ -9,22 +9,7 @@ use crate::dto::{
     LEGACY_IMPORT_BATCH_SORT_FIELDS, LEGACY_IMPORT_CONFIRMATION_SORT_FIELDS, LEGACY_IMPORT_ROW_SORT_FIELDS,
 };
 
-/// 执行通用筛选分页投影查询（三类列表共用；查询语义与返回形状不变）。
-///
-/// # 参数
-/// * `base` - 基集合句柄（用于计数）
-/// * `filter` - 查询条件文档
-/// * `sort` - 排序文档
-/// * `skip` - 跳过行数
-/// * `limit` - 单页条数
-/// * `projection` - 投影文档
-/// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-///
-/// # 返回
-/// 返回当前页投影行与满足筛选条件的总数。
-///
-/// # 错误
-/// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+// 用同一执行器和筛选条件完成批次、行、确认列表的投影分页与计数；查询、游标或计数任一步失败即返回，不交付不完整分页。
 pub(super) async fn search_projected_page<Entity, Row>(
     base: &mongodb::Collection<Entity>,
     filter: Document,
@@ -46,24 +31,7 @@ where
     Ok(PageResult { items, total: total as i64 })
 }
 
-/// 构建排序文档（排序字段白名单映射，非法字段回退 `created_at`）。
-///
-/// 非法字段回退保留：DTO 层已做白名单校验，仓储层回退只为直接调用提供
-/// 确定性排序；`debug_assert` 在测试中暴露误传。
-///
-/// # 参数
-/// * `sort_by` - 排序字段；`None` 或不在白名单时默认 `created_at`
-/// * `sort_ascending` - 升序为 `true`，降序为 `false`
-///
-/// # 返回
-/// 返回排序条件文档。
-///
-/// # 错误
-/// 不返回错误。
-///
-/// # Panics
-/// 调试构建下，`sort_by` 有值且不在三类列表排序白名单并集中时 `debug_assert` 会 panic。
-/// 发布构建不 panic，并回退 `created_at`。
+// 按白名单构造 MongoDB 排序，未指定时用 `created_at`。DTO 会先校验；直接调用若传非法字段，调试构建触发 `debug_assert`，发布构建回退 `created_at`。
 pub(super) fn sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
     debug_assert!(sort_by.is_none_or(is_allowed_sort_field), "非法排序字段已回退 created_at：{sort_by:?}");
     let direction = if sort_ascending { 1 } else { -1 };
@@ -71,23 +39,14 @@ pub(super) fn sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document 
     doc! { field: direction }
 }
 
-/// 三类列表 DTO 排序白名单的并集；仓储层非法字段仍回退 `created_at`。
+// 核对字段是否在批次、行或确认的排序白名单中，避免仓储接收任意字段。
 fn is_allowed_sort_field(field: &str) -> bool {
     LEGACY_IMPORT_BATCH_SORT_FIELDS.contains(&field)
         || LEGACY_IMPORT_ROW_SORT_FIELDS.contains(&field)
         || LEGACY_IMPORT_CONFIRMATION_SORT_FIELDS.contains(&field)
 }
 
-/// 导入批次列表投影字段。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回投影条件文档。
-///
-/// # 错误
-/// 不返回错误。
+// 仅选取批次列表展示所需字段，避免加载内部资产关联及整份批次文档。
 pub(super) fn legacy_import_batch_projection() -> Document {
     doc! {
         "id": 1,
@@ -107,16 +66,7 @@ pub(super) fn legacy_import_batch_projection() -> Document {
     }
 }
 
-/// 导入行列表投影字段。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回投影条件文档。
-///
-/// # 错误
-/// 不返回错误。
+// 限制导入行列表的展示字段，不返回规范化载荷。
 pub(super) fn legacy_import_row_projection() -> Document {
     doc! {
         "id": 1,
@@ -134,16 +84,7 @@ pub(super) fn legacy_import_row_projection() -> Document {
     }
 }
 
-/// 导入确认列表投影字段。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回投影条件文档。
-///
-/// # 错误
-/// 不返回错误。
+// 只投影确认列表所需的任务、范围及决定字段，避免取回整条确认文档。
 pub(super) fn legacy_import_confirmation_projection() -> Document {
     doc! {
         "id": 1,

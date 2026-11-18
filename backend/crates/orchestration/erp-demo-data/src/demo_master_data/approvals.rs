@@ -20,13 +20,7 @@ use super::{DemoFoundationReport, DemoMasterDataProcess};
 use crate::{Error, Result};
 
 impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
-    /// 按当前工作流权限发布全部缺失定义，已有发布版本只核对。
-    /// # 参数
-    /// 操作人、已准备账号及基础准备报告。
-    /// # 返回
-    /// 缺失定义完成发布，已有定义差异写入报告。
-    /// # 错误
-    /// 岗位资格、定义管理或发布失败时返回错误。
+    // 先校验演示审批人资格，再用正式工作流入口发布缺失定义。已有发布版只核对并报告差异，不覆盖人工配置；权限、定义操作或发布失败时停止。
     pub(super) async fn ensure_approvals(
         &self,
         actor: &AuditActor,
@@ -59,7 +53,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         Ok(())
     }
 
-    /// 保留人工发布版本，报告与演示链条的差异。
+    // 对照演示节点记录现有发布版一致或不一致，让基础准备能阻断不匹配的审批链，而不改写已发布定义。
     async fn note_published(
         &self,
         definitions: &ApprovalDefinitionService,
@@ -78,7 +72,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         Ok(())
     }
 
-    /// 读取当前已发布版本，不受并存草稿影响。
+    // 只读取指定单据的当前已发布定义详情，避免拿并存草稿判断实际生效的审批链。
     async fn published_detail(
         &self,
         definitions: &ApprovalDefinitionService,
@@ -93,7 +87,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         Ok(Some(definitions.definition_detail(&published.definition_id, actor).await?))
     }
 
-    /// 命令键绑定定义 ID 与锁版本，重试和退役后重建不回放旧定义。
+    // 将草稿配置为演示审批链并走正式发布命令；用定义 ID 和锁版本派生命令键，防止重试或退役后重建回放旧定义。
     async fn publish_approval(
         &self,
         definitions: &ApprovalDefinitionService,
@@ -133,7 +127,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         Ok(())
     }
 
-    /// 复用活动草稿；新草稿键包含下一个业务版本，避免命中退役定义的旧回执。
+    // 优先复用仍活动的草稿；新建命令键绑定下一个业务版本，避免退役后的新草稿命中旧回执。
     async fn draft_id(
         &self,
         definitions: &ApprovalDefinitionService,
@@ -161,7 +155,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         Ok(created.definition_id)
     }
 
-    /// 所有指定审批人须具有同一启用角色授予的读取与决定资格。
+    // 逐个检查演示审批人是否由同一启用角色同时取得读取和决定资格，避免发布后出现不能办理的节点。
     async fn validate_approval_accounts(&self, accounts: &PreparedAccounts) -> Result<()> {
         for spec in &spec::foundation_spec().approvals {
             approval_nodes(spec, accounts)?;
@@ -196,7 +190,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
     }
 }
 
-/// 按真实账号 ID 验证岗位分离后构造有序节点。
+// 用真实账号 ID 验证该单据的岗位分离规则，再按演示顺序构造节点请求，防止不同岗位别名指向同一人时漏验。
 fn approval_nodes(spec: &ApprovalSpec, accounts: &PreparedAccounts) -> Result<Vec<DefinitionNodeRequest>> {
     let submitter = accounts
         .by_key
@@ -233,7 +227,7 @@ fn approval_nodes(spec: &ApprovalSpec, accounts: &PreparedAccounts) -> Result<Ve
         .collect()
 }
 
-/// 名称、顺序与真实账号均一致才视为匹配。
+// 比较已发布节点的名称、顺序及真实审批人，只有三者一致才把生效流程视为已按演示配置。
 fn nodes_match(detail: &DefinitionDetailView, spec: &ApprovalSpec, accounts: &PreparedAccounts) -> bool {
     let mut live = detail.nodes.clone();
     live.sort_by_key(|node| node.display_order);

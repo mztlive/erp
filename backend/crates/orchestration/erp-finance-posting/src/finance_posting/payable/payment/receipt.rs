@@ -10,7 +10,7 @@ use persistence_core::Executor;
 use super::CommitSupplierPaymentRequest;
 use crate::{Error, Result};
 
-/// 解析并恰好消费本批次回单，拒绝把既有正式资产挂入新的付款关系。
+// 解析并恰好消费本批次回单，拒绝把既有正式资产挂入新的付款关系。
 pub(super) fn resolve_payment_receipt(
     req: &mut CommitSupplierPaymentRequest,
     pending_assets: &dyn PendingAttachmentBatch,
@@ -24,7 +24,7 @@ pub(super) fn resolve_payment_receipt(
     Ok(())
 }
 
-/// 在同一事务内确认新持久化回单属于本批次，并执行领域证据政策。
+// 在同一事务内确认新持久化回单属于本批次，并执行领域证据政策。
 pub(super) async fn ensure_bank_receipt_asset(
     db: &Database,
     asset_id: &FileAssetId,

@@ -38,19 +38,13 @@ pub struct PurchasePaymentRequestProcess {
 }
 
 impl PurchasePaymentRequestProcess {
-    /// 绑定本流程数据库与授权实例。
-    /// # 参数
-    /// * `db` - 应用数据库。
-    /// # 返回
-    /// 返回绑定共享财务业务端口的流程。
-    /// # 错误
-    /// 不返回错误。
+    /// 绑定本流程数据库与授权实例。返回绑定共享财务业务端口的流程。
     pub fn new(db: Database, rbac: FinancePostingPorts) -> Self {
         Self { rbac, db }
     }
 }
 
-/// 重放和写入均先证明原动作资格，再读取完整来源与当前结果。
+// 重放和写入均先证明原动作资格，再读取完整来源与当前结果。
 async fn authorized_request(
     db: &Database,
     authorization: &AuthorizationService,
@@ -149,7 +143,7 @@ async fn require_sources(
     Ok(orders)
 }
 
-/// 只构造服务端完整来源候选；授权规则始终由 identity 选择。
+// 只构造服务端完整来源候选；授权规则始终由 identity 选择。
 fn request_target(
     request: &PurchasePaymentRequest,
     action: &str,
@@ -182,12 +176,8 @@ fn request_target(
 }
 
 /// 校验回调仍属于当前冻结提交及审批实例。
-/// # 参数
-/// * `db` / `context` / `executor` - 当前运行时上下文与审批事务。
-/// # 返回
-/// 当前提交身份一致时成功。
-/// # 错误
-/// 已结束、旧实例或旧版本的回调拒绝写入。
+///
+/// `db` / `context` / `executor` 为当前运行时上下文与审批事务。当前提交身份一致时成功。已结束、旧实例或旧版本的回调拒绝写入。
 pub async fn validate_approval_context(
     db: &Database,
     context: &ApprovalActionContext,
@@ -211,7 +201,7 @@ mod command_access_tests {
 
     use super::*;
 
-    /// 提交、撤回和关闭均须先取得原动作授权；取证失败不得连接单据仓储。
+    // 提交、撤回和关闭均须先取得原动作授权；取证失败不得连接单据仓储。
     #[tokio::test]
     async fn command_access_stops_before_document_read_when_authorization_fails() {
         let db = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1")

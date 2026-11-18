@@ -7,16 +7,7 @@ use persistence_core::indexes::{named_index, unique_index};
 
 use crate::repository::{AuditAttemptExt, AuditExt};
 
-/// 为 `audit_logs` 与 `audit_attempts` 创建幂等命名索引。
-///
-/// # 参数
-/// * `db` - 目标 MongoDB 数据库。
-///
-/// # 返回
-/// 两个集合的索引都创建完成时返回 `Ok(())`。
-///
-/// # 错误
-/// 已有数据违反唯一约束，或 MongoDB 无法创建索引时返回错误。
+/// 幂等注册日志和独立尝试的命名索引，保障 ID 唯一并支持时间线及命令追溯。现有数据违反唯一约束或 MongoDB 创建索引失败时返回原错误。
 pub async fn ensure(db: &Database) -> Result<()> {
     db.collection::<Document>(<Database as AuditExt>::AUDIT_LOGS).create_indexes(audit_log_indexes()).await?;
     db.collection::<Document>(<Database as AuditAttemptExt>::AUDIT_ATTEMPTS)
@@ -28,7 +19,7 @@ pub async fn ensure(db: &Database) -> Result<()> {
     Ok(())
 }
 
-/// 返回审计日志身份约束及时间倒序列表索引。
+// 声明审计日志 ID 唯一索引及时间倒序、按资源查时间线所用的索引，供启动注册。
 fn audit_log_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_audit_logs_id", doc! { "id": 1 }),

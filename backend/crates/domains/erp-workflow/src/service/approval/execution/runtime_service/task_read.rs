@@ -13,17 +13,12 @@ pub(crate) use batch::approval_task_facts_current;
 #[cfg(test)]
 mod tests;
 
-/// 对单任务和批量任务共用同一开放唯一链及实际完成链规则。
-///
-/// # 参数
-/// * `item` / `subject` - 精确任务和冻结主体
-/// * `open_tasks` - 当前执行的全部开放任务，终态时不使用
-///
-/// # 返回
-/// 同一任务责任、岗位、组织、节点与冻结提交主体成立时返回 true。
-///
-/// # 错误
-/// 业务审批适配器未登记时保持原错误。
+// 对单任务和批量任务共用同一开放唯一链及实际完成链规则。
+// 同一任务责任、岗位、组织、节点与冻结提交主体成立时返回 true。
+//
+// 业务审批适配器未登记时保持原错误。
+//
+// `item` / `subject`：精确任务和冻结主体；`open_tasks`：当前执行的全部开放任务，终态时不使用。
 fn task_chain_matches_subject(
     item: &WorkItem,
     subject: &RuntimeReadSubject,
@@ -43,18 +38,11 @@ fn task_chain_matches_subject(
     })
 }
 
-/// 已完成任务只承认同一次实际决定与冻结提交主体。
-///
-/// # 参数
-/// * `item` / `subject` - 完成任务与冻结运行事实
-/// * `execution` - 责任链校验入口已确认存在的执行事实
-/// * `owner` / `owner_role` - 实际执行人及业务规定岗位
-///
-/// # 返回
-/// 原终态、完成人、决定事实与主体均相同时返回 true。
-///
-/// # 错误
-/// 无。
+// 已完成任务只承认同一次实际决定与冻结提交主体。
+// 原终态、完成人、决定事实与主体均相同时返回 true。
+//
+// `item` / `subject`：完成任务与冻结运行事实；`execution`：责任链校验入口已确认存在的执行事实。
+// `owner` / `owner_role`：实际执行人及业务规定岗位。
 fn terminal_task_matches_subject(
     item: &WorkItem,
     subject: &RuntimeReadSubject,

@@ -15,12 +15,11 @@ use crate::repository::organization::ORG_UNITS;
 use crate::{Error, Result, SharedRbacService};
 
 /// 查询申请人主属组织到根的完整有效路径，按最近同类组织取得负责人。
-/// # 参数
-/// 数据库、申请人、团队或部门类型、同一解析时点及调用方执行器。
-/// # 返回
 /// 返回含唯一负责人及生效依据的组织节点。
-/// # 错误
+///
 /// 主属缺失或重复、组织失效、循环、层级超限、负责人缺失或读取失败时拒绝。
+///
+/// 数据库、申请人、团队或部门类型、同一解析时点及调用方执行器。
 pub async fn applicant_leader(
     db: &Database,
     applicant: &str,
@@ -59,12 +58,11 @@ pub struct LeaderPreview {
 }
 
 /// 在同一只读事务内预览当前内部账号的负责人及审批资格。
-/// # 参数
-/// 数据库、共享身份服务、认证账号和组织类型；不接受其他人员身份。
-/// # 返回
 /// 负责人姓名和来源组织。
-/// # 错误
+///
 /// 非内部账号、组织缺失、负责人或审批资格失效时拒绝。
+///
+/// 数据库、共享身份服务、认证账号和组织类型；不接受其他人员身份。
 pub async fn own_leader_preview(
     db: Database,
     identity: SharedRbacService,

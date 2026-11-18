@@ -22,13 +22,11 @@ use crate::{Error, FinancePostingPorts, Result};
 
 impl ReceivableProcess {
     /// 上传附件并按剩余批准金额完成一次开票。
-    /// # 参数
-    /// req 为任务、申请版本及附件命令，pending 为待登记附件批次，actor 为当前认证操作人。
-    /// # 返回
-    /// 已登记记录及本批上传是否消费；相同命令重放返回原结果。
-    /// # 错误
-    /// 附件缺失或请求非法时返回 `InvalidInput` 或 `ValidationError`；权限、任务、版本、额度或事务错误按原分类传播。
-    /// 提交结果无法查证或附件已提交后读取失败时返回 `OutcomeUnknown`，调用方须保留附件。
+    ///
+    /// req 为任务、申请版本及附件命令，pending 为待登记附件批次，actor 为当前认证操作人。已登记记录及本批上传是否消费；相同命令重放返回原结果。
+    ///
+    /// 附件缺失或请求非法时返回 `InvalidInput` 或 `ValidationError`；权限、任务、版本、额度或事务错误按原分类传播。提交结果无法查证或附件已提交后读取失败时返回
+    /// `OutcomeUnknown`，调用方须保留附件。
     pub async fn complete_invoice_with_assets(
         &self,
         req: CompleteInvoiceRequest,
@@ -106,7 +104,7 @@ impl EvidenceCommand {
         self.execute_fresh(executor).await
     }
 
-    /// 首次提交才解析上传并写入发票，沿用入口的授权执行器。
+    // 首次提交才解析上传并写入发票，沿用入口的授权执行器。
     async fn execute_fresh(mut self, executor: &mut dyn Executor) -> Result<(String, bool)> {
         let db = &self.db;
         invoice_attachments::resolve(&mut self.req.attachment_asset_ids, self.pending.as_ref())?;

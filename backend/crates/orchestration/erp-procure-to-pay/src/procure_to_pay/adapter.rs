@@ -59,26 +59,14 @@ pub struct PurchaseOrderAdapter {
     pub read_scope: AdapterReadScope,
 }
 
-/// 返回采购单的完整适配器登记。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回已校验完整性的规格与显式字段声明。
-///
-/// # 错误
-/// 政策缺失或三类动作不互异时返回部署不变量错误；签署字段与合同不一致时返回内部错误。
+/// 返回采购单的完整适配器登记。返回已校验完整性的规格与显式字段声明。政策缺失或三类动作不互异时返回部署不变量错误；签署字段与合同不一致时返回内部错误。
 pub fn purchase_order_adapter() -> Result<PurchaseOrderAdapter> {
     let spec = adapter_spec_of(DocumentType::PurchaseOrder)?;
     ensure_adapter_spec_complete(&spec)?;
     adapter_from_spec(spec)
 }
 
-/// 由政策规格填充显式 Adapter 字段。
-///
-/// # 错误
-/// 字段与合同签署值不一致时返回错误。
+// 由政策规格填充显式 Adapter 字段。字段与合同签署值不一致时返回错误。
 fn adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<PurchaseOrderAdapter> {
     if spec.document_type != DocumentType::PurchaseOrder
         || spec.process_kind != process_kind_of(DocumentType::PurchaseOrder)
@@ -114,14 +102,7 @@ fn adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<PurchaseOrderAdapter> 
 
 /// 为采购单构造唯一 `bpm::SubjectRef`。
 ///
-/// # 参数
-/// * `business_object_id` - 采购单主键
-///
-/// # 返回
-/// 返回采购单的 `SubjectRef`。
-///
-/// # 错误
-/// 主键为空或超长时返回校验错误。
+/// `business_object_id` 为采购单主键。返回采购单的 `SubjectRef`。主键为空或超长时返回校验错误。
 pub fn purchase_order_subject_ref(business_object_id: &str) -> Result<SubjectRef> {
     erp_workflow::entity::approval_integration::subject_ref_for(
         DocumentType::PurchaseOrder,
@@ -132,14 +113,7 @@ pub fn purchase_order_subject_ref(business_object_id: &str) -> Result<SubjectRef
 
 /// 无已绑定定义的必须审批单据不得提交。
 ///
-/// # 参数
-/// * `binding` - 单据上已冻结的审批定义绑定。
-///
-/// # 返回
-/// 返回已存在的绑定。
-///
-/// # 错误
-/// 绑定缺失时返回冲突。
+/// `binding` 为单据上已冻结的审批定义绑定。返回已存在的绑定。绑定缺失时返回冲突。
 pub fn require_frozen_binding(
     binding: Option<&ApprovalDefinitionBinding>,
 ) -> Result<&ApprovalDefinitionBinding> {
@@ -150,16 +124,8 @@ pub fn require_frozen_binding(
 
 /// 执行签署的采购单领域动作。
 ///
-/// # 参数
-/// * `order` - 业务实体
-/// * `action` - 合同强类型动作
-/// * `submission_id` - 提交时的冻结提交；其它动作忽略
-/// * `updated_by` - 操作人
+/// `action` 为合同强类型动作；`submission_id` 为提交时的冻结提交；其它动作忽略。领域动作已写入 `order`。
 ///
-/// # 返回
-/// 领域动作已写入 `order`。
-///
-/// # 错误
 /// 动作不属于本类型或状态不允许时返回错误。
 pub fn execute_purchase_order_domain_action(
     order: &mut PurchaseOrder,
@@ -185,10 +151,7 @@ pub fn execute_purchase_order_domain_action(
     }
 }
 
-/// 财务审核待办不得充当审批流程节点。
-///
-/// # 错误
-/// 恒返回冲突。
+/// 财务审核待办不得充当审批流程节点。恒返回冲突。
 #[cfg(test)]
 pub fn reject_legacy_finance_review_node() -> Result<()> {
     Err(Error::ConflictError("采购财务审核不得充当审批流程节点".to_string()))
@@ -198,29 +161,12 @@ pub fn reject_legacy_finance_review_node() -> Result<()> {
 ///
 /// 未提供组织或审批人时失败关闭，不得默认放行。
 ///
-/// # 参数
-/// * `organization_id` - 单据责任组织
-/// * `assignee_user_id` - 指定审批人
-///
-/// # 返回
-/// 组织与审批人均非空时允许读取。
-///
-/// # 错误
-/// 组织或审批人为空时返回校验错误。
+/// `organization_id` 为单据责任组织。组织与审批人均非空时允许读取。组织或审批人为空时返回校验错误。
 pub fn purchase_order_object_readable(organization_id: &str, assignee_user_id: &str) -> Result<bool> {
     document_object_readable(organization_id, assignee_user_id).map_err(Into::into)
 }
 
-/// 采购审批责任组织使用采购单冻结的业务部门。
-///
-/// # 参数
-/// * `order` - 采购单
-///
-/// # 返回
-/// 返回非空责任组织。
-///
-/// # 错误
-/// 业务部门为空时返回校验错误。
+/// 采购审批责任组织使用采购单冻结的业务部门。返回非空责任组织。业务部门为空时返回校验错误。
 pub fn purchase_order_responsible_org_id(order: &PurchaseOrder) -> Result<String> {
     let org = order.business_org_unit_id.clone();
     if org.trim().is_empty() {
@@ -233,19 +179,9 @@ pub fn purchase_order_responsible_org_id(order: &PurchaseOrder) -> Result<String
 ///
 /// 对手方为供应商；金额与数量合计必填。`document_no` 取已分配正式号。
 ///
-/// # 参数
-/// * `order` - 已分配正式号的采购单
-/// * `sales_order` - 来源销售单
-/// * `submission` - 已冻结提交
-/// * `lines` - 提交明细
-/// * `submitted_by` - 提交人
-/// * `submitted_at` - 提交时间
+/// `order` 为已分配正式号的采购单；`sales_order` 为来源销售单；`submission` 为已冻结提交；`lines` 为提交明细。
 ///
-/// # 返回
-/// 返回冻结的审批主体快照。
-///
-/// # 错误
-/// 正式号为空、明细为空、金额或数量非法、明细行数溢出或组织为空时返回校验错误。
+/// 返回冻结的审批主体快照。正式号为空、明细为空、金额或数量非法、明细行数溢出或组织为空时返回校验错误。
 pub fn build_purchase_order_snapshot(
     order: &PurchaseOrder,
     _sales_order: &SalesOrder,
@@ -276,10 +212,7 @@ pub fn build_purchase_order_snapshot(
     })
 }
 
-/// 汇总提交明细数量；只有费用行的费用采购单冻结数量合计为 0。
-///
-/// # 错误
-/// 含商品行却缺少数量，或合计超出标度时返回错误。
+// 汇总提交明细数量；只有费用行的费用采购单冻结数量合计为 0。含商品行却缺少数量，或合计超出标度时返回错误。
 fn sum_line_quantity(lines: &[PurchaseOrderSubmissionLine]) -> Result<Quantity> {
     if lines.iter().all(|line| line.line_type == PurchaseLineType::LogisticsFee) {
         return Quantity::try_from(rust_decimal::Decimal::ZERO)
@@ -425,7 +358,7 @@ mod tests {
         .expect("提交行必须可构造")
     }
 
-    /// 适配器必须显式声明合同要求的全部字段。
+    // 验证采购单审批适配器逐项声明合同规定的字段。
     #[test]
     fn adapter_declares_all_required_fields() {
         let adapter = purchase_order_adapter().expect("采购单必须可登记");
@@ -456,7 +389,7 @@ mod tests {
         assert_ne!(adapter.on_approval_start, adapter.cancel_action);
     }
 
-    /// 提交进入审批中；撤回不回退版本，且切断财务审核旁路。
+    // 提交进入审批中；撤回不回退版本，且切断财务审核旁路。
     #[test]
     fn submit_enters_in_approval_and_cancel_returns_draft() {
         let mut order = draft_order();
@@ -477,7 +410,7 @@ mod tests {
         assert_eq!(order.current_submission_id.as_deref(), Some("sub-1"));
     }
 
-    /// 非草稿不得提交；非审批中不得撤回或生效。
+    // 非草稿不得提交；非审批中不得撤回或生效。
     #[test]
     fn illegal_status_transitions_fail_closed() {
         let mut effective = draft_order();
@@ -489,13 +422,13 @@ mod tests {
         assert!(reject_legacy_finance_review_node().is_err());
     }
 
-    /// 缺少冻结审批定义时拒绝提交。
+    // 验证采购单缺少冻结审批定义时不能提交。
     #[test]
     fn missing_frozen_binding_is_rejected() {
         assert!(require_frozen_binding(None).is_err());
     }
 
-    /// 快照冻结供应商对手方、正式号、金额与数量合计。
+    // 快照冻结供应商对手方、正式号、金额与数量合计。
     #[test]
     fn snapshot_freezes_supplier_amount_and_quantity() {
         let mut order = draft_order();
@@ -539,7 +472,7 @@ mod tests {
         );
     }
 
-    /// 对象读取权空组织或空审批人失败关闭。
+    // 验证采购单审批读取缺少责任组织或办理人时不放行。
     #[test]
     fn object_read_fails_closed_on_empty_identity() {
         assert!(purchase_order_object_readable("party-1", "u1").unwrap());
@@ -547,7 +480,7 @@ mod tests {
         assert!(purchase_order_object_readable("party-1", "").is_err());
     }
 
-    /// 领域动作分派只接受签署的三类动作。
+    // 领域动作分派只接受签署的三类动作。
     #[test]
     fn domain_action_dispatch_rejects_foreign_actions() {
         let mut order = draft_order();

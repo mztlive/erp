@@ -35,15 +35,8 @@ pub struct OpenAiContractExtractor {
 }
 
 impl OpenAiContractExtractor {
-    /// 装配提取端，不执行外部请求。
-    /// # 参数
-    /// * `provider_id` - 已由 SafeConfig 校验的非敏感供应商/网关标识，冻结到提取证据。
-    /// * `base_url` / `api_key` / `model` - 已由 SafeConfig 校验的兼容服务配置。
-    /// * `timeout_seconds` / `max_output_tokens` - 已校验的超时与输出 token 上限。
-    /// # 返回
-    /// 实现 ContractExtractor 的适配器。
-    /// # 错误
-    /// 无；客户端构造与请求失败由任务记录。
+    /// 应用装配合同字段提取器时传入 SafeConfig 已校验的兼容服务地址、凭据、模型、超时和输出 token 上限。
+    /// 非敏感的 `provider_id` 随提取证据保留；这里不创建客户端或发请求，相关失败由识别任务报告。
     pub fn new(
         provider_id: String,
         base_url: String,

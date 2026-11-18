@@ -33,14 +33,7 @@ pub(crate) const PURCHASE_INVOICE_ALLOCATIONS: &str =
 /// 逐条落地数据模型 §6.9「必需约束与索引」。应付子账与付款单的身份类字段使用
 /// **全局唯一索引**（与 accounts 的 code 处理一致）：软删除后仍保留身份，避免
 /// 复用破坏来源追溯与恢复语义。
-///
-/// # 参数
-/// * `db` - 目标 MongoDB 数据库
-///
-/// # 返回
-/// 本域索引全部幂等创建成功时无返回值。
-///
-/// # 错误
+/// 结果：本域索引全部幂等创建成功时无返回值。
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, PAYABLE_ACCOUNTS, payable_account_indexes()).await?;
@@ -76,13 +69,13 @@ pub async fn ensure(db: &Database) -> Result<()> {
     Ok(())
 }
 
-/// 为单个集合创建一组幂等命名索引。
+// 安装本模块定义的命名索引；服务启动时按集合注册，重复注册沿用现有定义。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
     db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
-/// 返回 `payable_account` 的来源唯一与账龄索引。
+// 为 `payable_account` 注册来源唯一与账龄索引，供所在领域的索引安装入口使用。
 fn payable_account_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_payable_accounts_id", doc! { "id": 1 }),
@@ -91,7 +84,7 @@ fn payable_account_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `payable_entry` 的业务幂等与账龄索引。
+// 为 `payable_entry` 注册业务幂等与账龄索引，供所在领域的索引安装入口使用。
 fn payable_entry_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_payable_entries_id", doc! { "id": 1 }),
@@ -115,7 +108,7 @@ fn payable_entry_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `payable_entry_offset` 的抵销序号与累计冲减索引。
+// 为 `payable_entry_offset` 注册抵销序号与累计冲减索引，供所在领域的索引安装入口使用。
 fn payable_entry_offset_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_payable_entry_offsets_id", doc! { "id": 1 }),
@@ -127,7 +120,7 @@ fn payable_entry_offset_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `supplier_payment` 的单号唯一与往来列表索引。
+// 为 `supplier_payment` 注册单号唯一与往来列表索引，供所在领域的索引安装入口使用。
 fn supplier_payment_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_supplier_payments_id", doc! { "id": 1 }),
@@ -150,7 +143,7 @@ fn supplier_payment_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `payment_allocation` 的分配序号与双向追溯索引。
+// 为 `payment_allocation` 注册分配序号与双向追溯索引，供所在领域的索引安装入口使用。
 fn payment_allocation_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_payment_allocations_id", doc! { "id": 1 }),
@@ -169,13 +162,13 @@ fn payment_allocation_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `purchase_invoice_allocation` 的分配序号与账户追溯索引。
-///
-/// `idx_purchase_invoice_allocations_account_page` 与
-/// `idx_purchase_invoice_allocations_invoice_page` 为 FIN-R06 服务端分页的
-/// 复合索引：等值条件前缀 + `(created_at, id)` 稳定排序。同秒记录跨页
-/// 无重复、无遗漏。迁移经 `ensure` 幂等创建；回滚按索引名执行
-/// `drop_index`（先回滚应用代码再移除索引）。
+// 为 `purchase_invoice_allocation` 注册分配序号与账户追溯索引，供所在领域的索引安装入口使用。
+//
+// `idx_purchase_invoice_allocations_account_page` 与
+// `idx_purchase_invoice_allocations_invoice_page` 为 FIN-R06 服务端分页的
+// 复合索引：等值条件前缀 + `(created_at, id)` 稳定排序。同秒记录跨页
+// 无重复、无遗漏。迁移经 `ensure` 幂等创建；回滚按索引名执行
+// `drop_index`（先回滚应用代码再移除索引）。
 fn purchase_invoice_allocation_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_purchase_invoice_allocations_id", doc! { "id": 1 }),
@@ -198,7 +191,7 @@ fn purchase_invoice_allocation_indexes() -> Vec<IndexModel> {
 
 #[cfg(test)]
 mod tests {
-    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    // 检查各集合是否声明稳定 `id` 的唯一索引，防止主键读取和乐观锁写入退化为集合扫描。
     #[test]
     fn collections_look_up_by_unique_stable_id() {
         for indexes in [

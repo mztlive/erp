@@ -16,11 +16,7 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
 /// 读取本人最近消息。
-/// # 参数
-/// state 为共享状态，actor 为会话账号。
-/// # 返回
 /// 个人消息和未读数。
-/// # 错误
 /// 仓储失败返回统一 HTTP 错误。
 pub async fn inbox(
     State(state): State<HttpState>,
@@ -32,11 +28,7 @@ pub async fn inbox(
 }
 
 /// 标记本人消息已读。
-/// # 参数
-/// state 为共享状态，actor 为会话账号，id 为消息 ID。
-/// # 返回
 /// 空成功响应。
-/// # 错误
 /// 不存在或非本人消息均为 404。
 pub async fn mark_read(
     State(state): State<HttpState>,

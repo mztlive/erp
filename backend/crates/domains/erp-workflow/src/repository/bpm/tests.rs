@@ -57,9 +57,7 @@ fn probe(version: u64, status_ok: bool) -> LockProbe {
     LockProbe { base, status_ok }
 }
 
-/// 验证最高定义版本查询保留未删除过滤、降序、单条限制和最小投影。
-///
-/// 测试只断言构造出的过滤与选项，不连接 MongoDB；任一查询约束漂移时失败。
+// 在不连接 MongoDB 的情况下验证最高定义版本查询：只搜未删除记录，按版本倒序取一条，只投影必要字段。
 #[test]
 fn latest_definition_version_query_is_minimal_and_bounded() {
     assert_eq!(
@@ -76,7 +74,7 @@ fn latest_definition_version_query_is_minimal_and_bounded() {
     assert_eq!(options.projection, Some(doc! { "definition_version": 1, "_id": 0 }));
 }
 
-/// 目录批量查询保留软删除、草稿/发布状态、种类 `$in` 与固定上限。
+// 验证：目录批量查询保留软删除、草稿/发布状态、种类 `$in` 与固定上限。
 #[test]
 fn definition_catalog_query_is_bounded_and_filters_retired() {
     assert!(unique_process_kinds(&[]).is_empty());
@@ -113,7 +111,7 @@ fn definition_catalog_query_is_bounded_and_filters_retired() {
     assert_eq!(published_filter.get_i64("deleted_at").unwrap(), 0);
 }
 
-/// 目录归组覆盖 published-only、draft-only、并存、缺失，并拒绝重复状态与退役投影。
+// 验证：目录归组覆盖 published-only、draft-only、并存、缺失，并拒绝重复状态与退役投影。
 #[test]
 fn definition_catalog_grouping_covers_status_matrix_and_duplicate_fail_closed() {
     let kinds = [
@@ -233,9 +231,7 @@ fn dummy_definition(id: &str) -> bpm::model::ApprovalProcessDefinition {
     .unwrap()
 }
 
-/// 验证最高版本投影读取首条记录，并在没有历史定义时返回空边界。
-///
-/// 测试覆盖命中与空历史两条纯映射路径，不执行数据库访问。
+// 用纯投影测试覆盖首行存在及空历史两种输入；空历史不得伪造版本。
 #[test]
 fn latest_definition_version_projection_handles_hit_and_empty_history() {
     assert_eq!(latest_definition_version_from_rows(Vec::new()), None);
@@ -256,9 +252,9 @@ fn non_terminal_subject_filter_excludes_definition_id() {
     assert_eq!(filter.get_document("status").unwrap(), &doc! { "$in": ["RUNNING", "BLOCKED"] });
 }
 
-/// 取消候选查询保留提交版本但不得预先过滤实例状态。
-///
-/// 终态实例也必须交给 BPM 模型给出确定的不可取消结果。
+// 验证：取消候选查询保留提交版本但不得预先过滤实例状态。
+//
+// 终态实例也必须交给 BPM 模型给出确定的不可取消结果。
 #[test]
 fn cancellation_subject_filter_defers_status_rule_to_model() {
     let subject = SubjectRef::new("sales_order", "so-1").unwrap();
@@ -270,7 +266,7 @@ fn cancellation_subject_filter_defers_status_rule_to_model() {
     assert!(filter.contains_key("deleted_at"));
 }
 
-/// 详情投影按主体查最近实例，不得附带状态或提交版本。
+// 验证：详情投影按主体查最近实例，不得附带状态或提交版本。
 #[test]
 fn latest_subject_filter_omits_status_and_version() {
     let subject = SubjectRef::new("sales_order", "so-1").unwrap();
@@ -300,9 +296,9 @@ fn instance_and_execution_cas_filters_include_token_and_status() {
     assert_eq!(current.get_document("status").unwrap(), &doc! { "$in": ["ACTIVE", "BLOCKED"] });
 }
 
-/// 取消执行 CAS 同时允许活动和受阻状态，并保持版本与软删除约束。
-///
-/// 其他结束状态不得进入取消写入过滤条件。
+// 验证：取消执行 CAS 同时允许活动和受阻状态，并保持版本与软删除约束。
+//
+// 其他结束状态不得进入取消写入过滤条件。
 #[test]
 fn cancellable_execution_filter_accepts_current_states_only() {
     let filter = cancellable_execution_end_filter("exec-1", 2).unwrap();
@@ -311,9 +307,9 @@ fn cancellable_execution_filter_accepts_current_states_only() {
     assert_eq!(filter.get_i64("deleted_at").unwrap(), 0);
 }
 
-/// 取消投影清空当前节点与审批人，并使用实例终态时间。
-///
-/// 版本反推和 CAS 分类在非应用结果上统一失败关闭。
+// 验证：取消投影清空当前节点与审批人，并使用实例终态时间。
+//
+// 版本反推和 CAS 分类在非应用结果上统一失败关闭。
 #[test]
 fn cancelled_projection_and_write_guards_are_deterministic() {
     let mut instance = ApprovalProcessInstance::start_running(NewProcessInstance {
@@ -640,7 +636,7 @@ fn started_view_fail_closes_without_started_by_and_allows_optional_filters() {
     assert_eq!(instance_list_sort(&status_only), doc! { "started_at": -1, "id": -1 });
 }
 
-/// 字面量检索转义正则，并与游标 `$or` 用 `$and` 组合。
+// 验证：字面量检索转义正则，并与游标 `$or` 用 `$and` 组合。
 #[test]
 fn instance_list_text_query_is_literal_and_composes_with_cursor() {
     let text_query = ApprovalInstanceTextQuery { query: "SO.[1]".to_string() };

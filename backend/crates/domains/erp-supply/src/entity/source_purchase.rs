@@ -22,12 +22,9 @@ pub struct SourceQuoteContext {
 
 impl SourceQuoteContext {
     /// 校验报价的真实数量及来源证据边界。
-    /// # 参数
-    /// 无；读取当前报价上下文。
-    /// # 返回
     /// 数量为正、税率及证据长度合法时成功。
-    /// # 错误
     /// 非法数量、税率或不完整地址摘要时拒绝。
+    /// 读取当前报价上下文。
     pub fn validate(&self) -> Result<()> {
         if self.quantity.to_decimal() <= Decimal::ZERO
             || self
@@ -45,12 +42,8 @@ impl SourceQuoteContext {
     }
 
     /// 判断来源报价是否属于本次真实数量和地址范围。
-    /// # 参数
-    /// `quantity` 为订购数量，`address_fingerprint` 为本次已确认地址摘要。
-    /// # 返回
     /// 真实数量相同且来源地址限制满足时返回真；否则必须重新询价。
-    /// # 错误
-    /// 不返回错误；不会把目录数量外推到其他采购数量。
+    /// 不会把目录数量外推到其他采购数量。
     pub fn applies_to(&self, quantity: Quantity, address_fingerprint: Option<&str>) -> bool {
         self.quantity == quantity
             && self.address_fingerprint.as_deref().is_none_or(|scope| Some(scope) == address_fingerprint)
@@ -83,12 +76,9 @@ pub struct SourcePurchaseTerms {
 
 impl SourcePurchaseTerms {
     /// 取得用于版本比较的来源条件，排除本地重复采样时间。
-    /// # 参数
-    /// 无；读取当前来源条款。
-    /// # 返回
     /// 保留数量、税率与地址范围，将报价观察时间归一为固定值。
-    /// # 错误
-    /// 不返回错误；原始证据中的观察时间保持不变。
+    /// 原始证据中的观察时间保持不变。
+    /// 读取当前来源条款。
     pub fn version_content(&self) -> Self {
         let mut content = self.clone();
         if let Some(context) = &mut content.quote_context {
@@ -98,12 +88,9 @@ impl SourcePurchaseTerms {
     }
 
     /// 验证来源约束，不接受非正起购量、倍数或倒置区间。
-    /// # 参数
-    /// 无；读取当前来源条款。
-    /// # 返回
     /// 已报告维度均合法时成功。
-    /// # 错误
     /// 数量范围、重复限制、来源代码或报价上下文无效时拒绝。
+    /// 读取当前来源条款。
     pub fn validate(&self) -> Result<()> {
         if [self.minimum_quantity, self.maximum_quantity, self.quantity_multiple]
             .into_iter()
@@ -131,11 +118,7 @@ impl SourcePurchaseTerms {
     }
 
     /// 按本次真实订购数量核验来源数量限制。
-    /// # 参数
-    /// `quantity` 为本执行组实际订购的基础单位数量。
-    /// # 返回
     /// 正数量同时满足已报告的起购、限购和整倍数时成功。
-    /// # 错误
     /// 来源条款无效、数量不满足或计算超限时拒绝。
     pub fn ensure_quantity(&self, quantity: Quantity) -> Result<()> {
         self.validate()?;
@@ -143,11 +126,7 @@ impl SourcePurchaseTerms {
     }
 
     /// 核验本次数量是否满足普通商品自动下单条件。
-    /// # 参数
-    /// `quantity` 为本执行组实际订购的基础单位数量。
-    /// # 返回
     /// 来源条款合法、实际数量满足限制且无需附加履约流程时成功。
-    /// # 错误
     /// 依次返回来源条款、实际数量或不支持的附加履约流程错误。
     pub fn ensure_orderable_quantity(&self, quantity: Quantity) -> Result<()> {
         self.validate()?;
@@ -156,12 +135,9 @@ impl SourcePurchaseTerms {
     }
 
     /// 核验当前系统可执行普通实物商品自动履约。
-    /// # 参数
-    /// 无；读取供应商要求的附加流程。
-    /// # 返回
     /// 无附加履约要求时成功。
-    /// # 错误
     /// 尚未支持的附加服务或个性资格价格存在时阻断自动发单。
+    /// 读取供应商要求的附加流程。
     pub fn ensure_automatic_order(&self) -> Result<()> {
         self.validate()?;
         self.ensure_supported_processes()

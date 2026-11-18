@@ -13,12 +13,8 @@ pub struct CatalogCallbackProgress {
 
 impl SupplierCallbackReceipt {
     /// 校验目录消费者可处理的路由与提示，禁止误收订单。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 全部提示与目录路由一致时成功。
-    /// # 错误
-    /// 混合、未知或损坏的提示拒绝处理。
+    ///
+    /// 全部提示与目录路由一致时成功。混合、未知或损坏的提示拒绝处理。
     pub fn ensure_catalog(&self) -> Result<()> {
         if self.route_kind == "catalog" {
             return self.ensure_generic_catalog();
@@ -61,13 +57,8 @@ impl SupplierCallbackReceipt {
         Ok(())
     }
 
-    /// 领取到期记录；延期时间同时作为可恢复的短租约。
-    /// # 参数
-    /// `now` 为当前服务器时间。
-    /// # 返回
-    /// 到期且仍待处理返回 true，完成或租约内返回 false。
-    /// # 错误
-    /// 非商品回调或检查点异常时拒绝。
+    /// 后台消费者处理商品回调前尝试领取到期记录，将下一次处理时间推迟五分钟作为可恢复租约。
+    /// 已完成或租约未到期返回 `false`；路由或检查点不合法时拒绝。
     pub fn claim_catalog(&mut self, now: Instant) -> Result<bool> {
         self.ensure_catalog()?;
         if self.status != "received" || self.next_attempt_at.is_some_and(|at| at > now) {
@@ -78,24 +69,15 @@ impl SupplierCallbackReceipt {
     }
 
     /// 取得当前尚未完成的目录提示。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 全部完成返回 None。
-    /// # 错误
-    /// 路由或检查点不一致时拒绝。
+    ///
+    /// 全部完成返回 None。路由或检查点不一致时拒绝。
     pub fn catalog_hint(&self) -> Result<Option<&SupplierRefreshHint>> {
         self.ensure_catalog()?;
         Ok(self.refresh_hints.get(self.catalog_progress.hint_index))
     }
 
-    /// 保存已应用规格游标；SKU 单项提示可同时完成。
-    /// # 参数
-    /// `id` 为已应用目录主键，`single` 表示单个 SKU 提示。
-    /// # 返回
-    /// 逐规格推进，不跳过尚未保存的对象。
-    /// # 错误
-    /// 已结束提示、空身份或游标倒退时拒绝。
+    /// 每个目录规格已完成应用后推进检查点，记录已应用目录主键；单 SKU 提示同时进入下一条。
+    /// 拒绝空主键、游标倒退、提示已完成或调用模式与提示类型不符。
     pub fn advance_catalog(&mut self, id: &str, single: bool) -> Result<()> {
         let hint = self.catalog_hint()?.ok_or_else(|| Error::ConflictError("商品提示已处理".into()))?;
         if id.is_empty()
@@ -112,13 +94,8 @@ impl SupplierCallbackReceipt {
         Ok(())
     }
 
-    /// 分组已无下一规格时结束当前提示，空基线不能记成功。
-    /// # 参数
-    /// 无，调用方已核实没有剩余目标。
-    /// # 返回
-    /// 进入下一个提示。
-    /// # 错误
-    /// 没有应用任何规格或提示已结束时拒绝。
+    /// 只有调用方已确认分组没有剩余规格且至少应用过一项时，才结束当前目录提示并清空游标。
+    /// 未建立目录基线或提示已结束时拒绝，不能将空分组记作处理成功。
     pub fn finish_catalog_hint(&mut self) -> Result<()> {
         if self.catalog_hint()?.is_none() || self.catalog_progress.after_id.is_none() {
             return Err(Error::ValidationError("回调目标尚无目录基线，请先同步目录".into()));
@@ -128,13 +105,8 @@ impl SupplierCallbackReceipt {
         Ok(())
     }
 
-    /// 全部规格完成后结算回调，或让下一有界批次继续。
-    /// # 参数
-    /// `now` 为本次应用时间。
-    /// # 返回
-    /// 全部完成为 true，同时清理历史错误。
-    /// # 错误
-    /// 路由和检查点异常时拒绝。
+    /// 一个有界目录处理批次结束时清理历史处理错误；全部提示完成才写入应用完成时间及 `applied` 状态。
+    /// 尚有提示时将下一次处理时间设为当前时刻，供下一批继续；路由或检查点异常时拒绝。
     pub fn settle_catalog(&mut self, now: Instant) -> Result<bool> {
         let complete = self.catalog_hint()?.is_none();
         self.processing_error = None;

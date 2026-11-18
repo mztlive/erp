@@ -52,22 +52,17 @@ pub struct CustomerAssignmentRequest {
 }
 
 impl CustomerAssignmentRequest {
-    /// 将外部请求一次转换为强类型归属命令。
+    /// 按新增或结束动作解析请求并校验字段组合，交给归属服务处理对应的领域命令。
     ///
     /// 完成动作字段组合校验与输入规范化；客户/账号存在性、重叠查询、
     /// 事务和审计仍由 Service 负责。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回不含非法状态的 `Assign` 或 `End` 命令。
     ///
     /// # 错误
     /// 必填字段缺失、错误字段组合、空白文本、倒序窗口或版本小于 1 时返回
     /// `ValidationError` 或领域逻辑错误。
     ///
-    /// # 关键业务约束
     /// 外部 JSON 形状保持兼容；内部命令按动作拆开，不得同时持有另一动作字段。
     pub fn into_command(self) -> Result<CustomerAssignmentCommand> {
         match self.action {
@@ -76,16 +71,13 @@ impl CustomerAssignmentRequest {
         }
     }
 
-    /// 把 `assign` 请求转换为建立归属命令。
-    ///
-    /// # 返回
-    /// 返回已规范化的建立命令。
-    ///
-    /// # 错误
-    /// 缺少销售人员/角色/开始日期，或携带结束动作字段时返回 `ValidationError`。
-    ///
-    /// # 关键业务约束
-    /// 不得把目标归属 ID 或乐观锁版本带入建立命令。
+    // 把 `assign` 请求转换为建立归属命令。
+    //
+    // 返回已规范化的建立命令。
+    //
+    // 缺少销售人员/角色/开始日期，或携带结束动作字段时返回 `ValidationError`。
+    //
+    // 不得把目标归属 ID 或乐观锁版本带入建立命令。
     fn into_assign_command(self) -> Result<CustomerAssignmentCommand> {
         reject_present(self.assignment_id, "Assign 不得携带目标归属 ID")?;
         reject_present(self.version, "Assign 不得携带乐观锁版本")?;
@@ -102,16 +94,13 @@ impl CustomerAssignmentRequest {
         )?))
     }
 
-    /// 把 `end` 请求转换为结束归属命令。
-    ///
-    /// # 返回
-    /// 返回已规范化的结束命令。
-    ///
-    /// # 错误
-    /// 缺少归属 ID/结束日期/版本，或携带建立动作字段时返回 `ValidationError`。
-    ///
-    /// # 关键业务约束
-    /// 不得把销售人员、归属角色或开始日期带入结束命令；版本必须大于 0。
+    // 把 `end` 请求转换为结束归属命令。
+    //
+    // 返回已规范化的结束命令。
+    //
+    // 缺少归属 ID/结束日期/版本，或携带建立动作字段时返回 `ValidationError`。
+    //
+    // 不得把销售人员、归属角色或开始日期带入结束命令；版本必须大于 0。
     fn into_end_command(self) -> Result<CustomerAssignmentCommand> {
         reject_present(self.user_id, "End 不得携带销售人员")?;
         reject_present(self.assignment_role, "End 不得携带归属角色")?;
@@ -129,32 +118,28 @@ impl CustomerAssignmentRequest {
     }
 }
 
-/// 提取动作必填字段。
-///
-/// # 参数
-/// * `value` - 请求可选值
-/// * `message` - 缺失时的稳定校验文案
-///
-/// # 返回
-/// 字段存在时返回内部值。
-///
-/// # 错误
-/// 字段缺失时返回 `ValidationError`。
+// 提取动作必填字段。
+//
+// # 参数
+// * `value` - 请求可选值
+// * `message` - 缺失时的稳定校验文案
+//
+// 字段存在时返回内部值。
+//
+// 字段缺失时返回 `ValidationError`。
 fn require_field<T>(value: Option<T>, message: &str) -> Result<T> {
     value.ok_or_else(|| Error::ValidationError(message.to_string()))
 }
 
-/// 拒绝当前动作不应出现的字段。
-///
-/// # 参数
-/// * `value` - 请求可选值
-/// * `message` - 错误字段组合文案
-///
-/// # 返回
-/// 字段未携带时返回 `Ok(())`。
-///
-/// # 错误
-/// 字段存在时返回 `ValidationError`。
+// 拒绝当前动作不应出现的字段。
+//
+// # 参数
+// * `value` - 请求可选值
+// * `message` - 错误字段组合文案
+//
+// 字段未携带时返回 `Ok(())`。
+//
+// 字段存在时返回 `ValidationError`。
 fn reject_present<T>(value: Option<T>, message: &str) -> Result<()> {
     if value.is_some() {
         return Err(Error::ValidationError(message.to_string()));
@@ -188,7 +173,7 @@ pub struct CustomerAssignmentView {
 }
 
 impl From<CustomerAssignment> for CustomerAssignmentView {
-    /// 从实体构造响应视图。
+    // 将客户归属的内部字段转换成外部响应格式，供接口展示。
     fn from(assignment: CustomerAssignment) -> Self {
         let user_name = assignment.user_id.clone();
         Self {

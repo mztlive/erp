@@ -13,18 +13,11 @@ use crate::repository::prelude::*;
 use crate::{Error, Result};
 impl SupplierFulfillmentService {
     /// 加载该订单最近一次 `PLACE` 动作。
-    ///
-    /// # 参数
-    /// * `id` - 供应商子订单 ID
-    /// * `executor` - 原拒单命令授权及写入的事务执行器。
-    ///
-    /// # 返回
     /// 返回 `PLACE` 动作实体。
-    ///
-    /// # 错误
+    /// 失败条件：
     /// * `NotFound` - 不存在 `PLACE` 动作
-    ///
-    /// 仓储查询失败时返回对应错误。
+    /// 仓储查询失败时向上传播错误。
+    /// `executor`：原拒单命令授权及写入的事务执行器。
     pub async fn latest_place_action(
         &self,
         id: &str,
@@ -41,18 +34,10 @@ impl SupplierFulfillmentService {
             .ok_or_else(|| Error::NotFound("该订单不存在下单动作".to_string()))
     }
     /// 原订单拒单推进后构造历史，再查最近PLACE并标记结果。
-    ///
-    /// # 参数
-    /// * `id` - 供应商子订单主键，用于查找最近的 `PLACE` 动作。
-    /// * `order` - 就地推进为拒单的子订单。
-    /// * `req` - 供应商拒单回调请求。
-    /// * `executor` - 原拒单命令授权及写入的事务执行器。
-    ///
-    /// # 返回
     /// 返回尚未写入的状态历史，以及已标为失败的最近下单动作。
-    ///
-    /// # 错误
-    /// 状态迁移、历史构造或动作更新失败时返回对应错误。不存在 `PLACE` 动作时返回 `NotFound`。仓储读取失败时返回对应错误。
+    /// 状态迁移、历史构造或动作更新失败时返回对应错误。不存在 `PLACE` 动作时返回 `NotFound`。仓储读取失
+    /// 败时返回对应错误。
+    /// `executor`：原拒单命令授权及写入的事务执行器。
     pub async fn prepare_reject(
         &self,
         id: &str,
@@ -87,19 +72,10 @@ impl SupplierFulfillmentService {
     }
 }
 /// 保持订单CAS、状态历史、动作CAS的顺序与执行器。
-///
-/// # 参数
-/// * `db` - 履约集合所在数据库。
-/// * `order` - 待按 CAS 写回的子订单。
-/// * `history` - 待创建的状态历史。
-/// * `action` - 待按 CAS 写回的下单动作。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
-/// 无返回值。写入顺序为订单、状态历史、动作。
-///
-/// # 错误
+/// 写入顺序为订单、状态历史、动作。
 /// 任一步仓储写入失败时返回对应错误。
+/// `order`：待按 CAS 写回的子订单。
+/// `action`：待按 CAS 写回的下单动作。
 pub async fn persist_reject(
     db: &Database,
     order: &mut SupplierFulfillmentOrder,

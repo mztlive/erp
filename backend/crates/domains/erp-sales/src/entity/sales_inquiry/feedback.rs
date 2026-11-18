@@ -90,12 +90,10 @@ pub struct InquiryFeedbackWork {
 
 impl InquiryFeedbackData {
     /// 校验完整反馈，逐需求行和地址保留明确最终供给结论。
-    /// # 参数
-    /// `requirement` 为当前冻结需求；`now` 为发布时刻。
-    /// # 返回
-    /// 所有行与费用合法且反馈完整时通过。
-    /// # 错误
+    /// 结果：所有行与费用合法且反馈完整时通过。
     /// 缺行、待确认、供给数量、地址、价格非法时拒绝。
+    ///
+    /// 输入约定：`requirement` 为当前冻结需求；`now` 为发布时刻。
     pub fn validate(&self, requirement: &InquiryRequirementData, now: Instant) -> Result<()> {
         if self.lines.len() != requirement.lines.len() || self.fees.len() > 100 {
             return Err(Error::ValidationError("反馈必须覆盖全部需求行且费用不得超过 100 行".into()));
@@ -125,11 +123,7 @@ impl InquiryFeedbackData {
     }
 
     /// 汇总独立于商品价格的额外成本。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 返回本轮反馈的含税额外成本。
-    /// # 错误
     /// 金额溢出时拒绝。
     pub fn extra_cost_total(&self) -> Result<Amount> {
         Ok(Amount::try_from(sum_decimal(self.fees.iter().map(|fee| fee.amount_gross.to_decimal()))?)?)

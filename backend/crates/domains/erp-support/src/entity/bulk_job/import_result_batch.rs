@@ -10,30 +10,13 @@ use super::background_job::{BackgroundJob, JobStatus, add_progress_counts};
 
 impl BackgroundJob {
     /// 记录一批导入行结果并在全部终态时选择唯一终态。
-    ///
-    /// 先按 `success + skipped + failed` 累加进度（零增量不写计数）；
-    /// 尚未全部结束时，累计失败数大于 0 则进入 `PartiallySucceeded` 并保持可继续
-    /// 记录进度。全部结束后按累计计数选择唯一终态：无失败为 `Succeeded`，
-    /// 仅失败为 `Failed`，成功/跳过与失败混合为已完成的 `PartiallySucceeded`
-    ///（写入 `finished_at`，禁止再累加进度，且不得落到纯 `Succeeded`）。
-    ///
-    /// # 参数
-    /// * `success` - 本批成功数
-    /// * `skipped` - 本批跳过数
-    /// * `failed` - 本批失败数
-    /// * `all_terminal` - 批次全部行是否已离开待导入
-    /// * `at` - 进度或完成时刻
-    ///
-    /// # 返回
-    /// 迁移成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 任务状态不允许记录导入结果、计数溢出、已处理数超过目标总数，
-    /// 或全部终态时已处理数不等于目标总数时返回错误。
-    ///
-    /// # 约束
-    /// 终态只由本方法一次判定；失败或混合结果不得落到纯 `Succeeded`。
-    /// 不访问数据库或全局时钟。
+    /// 先按 `success + skipped + failed` 累加进度（零增量不写计数）；尚未全部结束时，累计失败数大于 0 则进入 `PartiallySucceeded` 并保持可继续记录进度。
+    /// 全部结束后按累计计数选择唯一终态：无失败为 `Succeeded`，仅失败为 `Failed`，成功/跳过与失败混合为已完成的 `PartiallySucceeded` （写入 `finished_at`，禁止再累加进度，且不得落到纯 `Succeeded`）。
+    /// `success` 为本批成功数；`skipped` 为本批跳过数。
+    /// `failed` 为本批失败数；`all_terminal` 为批次全部行是否已离开待导入。
+    /// `at` 为进度或完成时刻。
+    /// 任务状态不允许记录导入结果、计数溢出、已处理数超过目标总数，或全部终态时已处理数不等于目标总数时返回错误。
+    /// 终态只由本方法一次判定；失败或混合结果不得落到纯 `Succeeded`。不访问数据库或全局时钟。
     pub fn record_import_result_batch(
         &mut self,
         success: u64,
@@ -63,13 +46,9 @@ impl BackgroundJob {
         self.complete_import_terminal(at)
     }
 
-    /// 累计已有失败且仍在执行中时进入部分成功。
-    ///
-    /// # 返回
-    /// 无需迁移或迁移成功时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 状态不允许进入部分成功时返回错误。
+    // 累计已有失败且仍在执行中时进入部分成功。
+    // 无需迁移或迁移成功时返回 `Ok(())`。
+    // 状态不允许进入部分成功时返回错误。
     fn mark_partial_if_failed(&mut self) -> Result<()> {
         if self.failed_count > 0 && self.status == JobStatus::Running {
             self.mark_partially_succeeded()?;
@@ -77,16 +56,10 @@ impl BackgroundJob {
         Ok(())
     }
 
-    /// 按累计计数选择导入完成终态。
-    ///
-    /// # 参数
-    /// * `at` - 完成时刻
-    ///
-    /// # 返回
-    /// 终态迁移成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 状态不允许完成或失败时返回错误。
+    // 按累计计数选择导入完成终态。
+    // 终态迁移成功返回 `Ok(())`。
+    // `at` 为完成时刻。
+    // 状态不允许完成或失败时返回错误。
     fn complete_import_terminal(&mut self, at: Instant) -> Result<()> {
         if self.failed_count == 0 {
             return self.mark_succeeded(at);

@@ -28,13 +28,7 @@ pub struct ImportListQuery {
     pub revision_contract_id: Option<String>,
 }
 
-/// 上传只登记导入任务，后续识别预填并由用户确认业务字段。
-/// # 参数
-/// * `state` / `actor` / `multipart` - 应用、认证人及文件与控制命令。
-/// # 返回
-/// 持久导入任务。
-/// # 错误
-/// 文件、未知字段、请求键或权限非法；事务未知时保留对象。
+/// 上传合同 PDF 只登记持久导入任务，不从上传请求产生正式合同。文件、字段、请求键或资格不符时拒绝；提交结果未知时保留对象，之后由识别预填并由用户确认字段。
 pub async fn upload(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -91,12 +85,7 @@ fn decode_command(bytes: &[u8]) -> std::result::Result<ImportCommand, Error> {
 }
 
 /// 分页查看本人的导入任务。
-/// # 参数
-/// * `state` / `actor` / `query` - 应用、认证人与页码。
-/// # 返回
 /// 本人任务页。
-/// # 错误
-/// 查询失败。
 pub async fn list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -111,13 +100,7 @@ pub async fn list(
     ))
 }
 
-/// 读取本人导入结果。
-/// # 参数
-/// * `state` / `actor` / `id` - 应用、认证人与任务。
-/// # 返回
-/// 可编辑草稿、原文依据与失败原因。
-/// # 错误
-/// 越权或查询失败。
+/// 解析结果可读时，通过本人任务返回可编辑草稿、原文依据和失败原因；越权或查询失败时不交付。
 pub async fn detail(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -126,13 +109,7 @@ pub async fn detail(
     Ok(ApiResponse::ok_with_data(state.application().contract_import_process().detail(&id, &actor).await?))
 }
 
-/// 执行或重试；请求不接受业务字段。
-/// # 参数
-/// * `state` / `actor` / `id` / `body` - 应用、认证人、任务与必须为空的正文。
-/// # 返回
-/// 已领取的任务状态；识别在独立后台任务中继续执行，归档由确认接口触发。
-/// # 错误
-/// 文件、并发、权限或数据库失败。
+/// 开始或重试已登记合同的识别时，正文必须为空。先返回任务领取状态，识别由后台继续；只有确认接口才归档。文件、并发、权限或数据库失败时拒绝。
 pub async fn run(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -145,13 +122,7 @@ pub async fn run(
     Ok(ApiResponse::ok_with_data(import_execution::start(state, actor, id).await?))
 }
 
-/// 接收用户补充或修改的字段并归档。
-/// # 参数
-/// * `state` / `actor` / `id` / `command` - 应用、认证人、任务及确认命令。
-/// # 返回
-/// 已归档任务。
-/// # 错误
-/// 业务字段、主数据、权限、并发或事务错误。
+/// 用户核对识别结果后提交补充或修正字段，将本人任务交给归档流程；业务字段、主数据、权限、并发或事务校验失败时不归档。
 pub async fn confirm(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -163,13 +134,7 @@ pub async fn confirm(
     ))
 }
 
-/// 只通过本人任务提供原文件，禁止仅凭附件 ID 下载。
-/// # 参数
-/// * `state` / `actor` / `id` - 应用、认证人与任务。
-/// # 返回
-/// PDF 字节流。
-/// # 错误
-/// 无权、隔离或文件缺失。
+/// 核对导入结果时从本人任务预览源 PDF，而不是按附件 ID 直接读取；无权、隔离或文件缺失时拒绝。
 pub async fn preview(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -189,7 +154,7 @@ pub async fn preview(
     Ok(response)
 }
 
-/// 识别接口拒绝文件前的任意业务字段，避免通用上传器跳过未知字段。
+// 解析识别上传时先要求文件字段，不让通用上传解析器跳过置于文件前的未知业务字段。
 async fn read_file(multipart: &mut Multipart) -> std::result::Result<AssetFile, Error> {
     let mut field = multipart
         .next_field()

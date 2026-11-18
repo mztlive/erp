@@ -50,16 +50,7 @@ pub enum DeliveryState {
 }
 
 impl DeliveryState {
-    /// 返回状态的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回发货单状态的中文名称，供业务界面展示，不作为持久化代码。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Draft => "草稿",
@@ -69,16 +60,7 @@ impl DeliveryState {
         }
     }
 
-    /// 返回状态的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回发货单状态的稳定代码，供持久化与查询匹配使用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Draft => "DRAFT",
@@ -88,61 +70,27 @@ impl DeliveryState {
         }
     }
 
-    /// 判断是否可编辑（仅草稿）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 草稿状态返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 编辑入口据此判断是否能继续修改当前记录；仅草稿状态允许。
     pub fn is_editable(&self) -> bool {
         matches!(self, Self::Draft)
     }
 
     /// 返回可作为客户验收依据的发货状态集合。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 固定返回已发货与已签收状态。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn acceptance_eligible_states() -> &'static [Self] {
         &[Self::Shipped, Self::Signed]
     }
 
     /// 判断当前状态能否作为客户验收履约事实。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 已发货或已签收时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn is_acceptance_eligible(self) -> bool {
         Self::acceptance_eligible_states().contains(&self)
     }
 }
 
 impl DocumentState for DeliveryState {
-    /// 固定邻接矩阵（§7.5 定向链，`REVERSED` 为不可逆终态）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// `Draft` 只允许进入 `Shipped`；`Shipped` 允许进入 `Signed` 或 `Reversed`；
-    /// `Signed` 只允许进入 `Reversed`；`Reversed` 没有后继。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 固定邻接矩阵（§7.5 定向链，`REVERSED` 为不可逆终态）。
+    // `Draft` 只允许进入 `Shipped`；`Shipped` 允许进入 `Signed` 或 `Reversed`；`Signed` 只允许进入 `Reversed`；`Reversed` 没有后继。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Draft => &[Self::Shipped],
@@ -164,16 +112,7 @@ pub enum DeliveryType {
 }
 
 impl DeliveryType {
-    /// 返回类型的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回发货单类型的中文名称，供业务界面展示，不作为持久化代码。
     pub fn label(&self) -> &'static str {
         match self {
             Self::WarehouseShip => "仓发",
@@ -181,16 +120,7 @@ impl DeliveryType {
         }
     }
 
-    /// 返回类型的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回发货单类型的稳定代码，供持久化与查询匹配使用。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::WarehouseShip => "WAREHOUSE_SHIP",
@@ -267,7 +197,7 @@ pub struct Delivery {
 }
 
 impl fmt::Debug for Delivery {
-    /// 脱敏调试输出：履约地址的密文与指纹一律以 `<redacted>` 呈现。
+    // 脱敏调试输出：履约地址的密文与指纹一律以 `<redacted>` 呈现。
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("Delivery")
@@ -287,7 +217,7 @@ impl fmt::Debug for Delivery {
 }
 
 impl PartialEq for Delivery {
-    /// 全字段语义相等（`Debug` 脱敏不影响比较）。
+    // 全字段语义相等（`Debug` 脱敏不影响比较）。
     fn eq(&self, other: &Self) -> bool {
         self.base == other.base
             && self.delivery_no == other.delivery_no
@@ -309,39 +239,18 @@ impl Eq for Delivery {}
 
 impl Delivery {
     /// 生成履约地址查询指纹。
-    ///
-    /// 对规范化后的履约地址原文字符串计算带密钥 HMAC-SHA256（§4.5.5，
-    /// 禁止裸摘要）；密钥不持久化，精确查询时用同一密钥比对指纹。
-    ///
-    /// # 参数
-    /// * `plain` - 履约地址原文字符串
-    /// * `key` - 查询指纹密钥字节
-    ///
-    /// # 返回
+    /// 对规范化后的履约地址原文字符串计算带密钥 HMAC-SHA256（§4.5.5，禁止裸摘要）；密钥不持久化，精确查询时用同一密钥比对指纹。
     /// 返回 64 位小写十六进制指纹。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// `plain` 为履约地址原文字符串；`key` 为查询指纹密钥字节。
     pub fn address_snapshot_fingerprint(plain: &str, key: &[u8]) -> String {
         hmac_sha256_hex(key, plain.as_bytes())
     }
 
     /// 创建履约发货单（初始状态为草稿）。
-    ///
-    /// 完成单号/物流字段规范化，并按发货类型校验来源归属：
-    /// 仓发必填 `warehouse_id` 且采购来源为空；供应商直发必填
-    /// `purchase_order_id` 且仓库为空（§6.7）。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::DeliveryId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
+    /// 完成单号/物流字段规范化，并按发货类型校验来源归属：仓发必填 `warehouse_id` 且采购来源为空；供应商直发必填 `purchase_order_id` 且仓库为空（§6.7）。
     /// 返回新建的发货单实体。
-    ///
-    /// # 错误
-    /// 单号为空或超长、包裹关联超过 100 条、明细身份或物流单号为空或超长、
-    /// 地址加密值超长、仓发或直发归属与字典不一致，或指纹格式非法时返回错误。
+    /// `id` 为实体主键（`erp_core::ids::DeliveryId`）。
+    /// 单号为空或超长、包裹关联超过 100 条、明细身份或物流单号为空或超长、地址加密值超长、仓发或直发归属与字典不一致，或指纹格式非法时返回错误。
     pub fn new(id: DeliveryId, data: DeliveryData) -> Result<Self> {
         let delivery_no = normalize_required_text(
             data.delivery_no,
@@ -385,14 +294,7 @@ impl Delivery {
     }
 
     /// 返回单据注册与无审批绑定重验使用的组织上下文。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回所属销售单稳定主键。
-    ///
-    /// # 错误
     /// 销售单主键为空时返回错误。
     pub fn registration_context_id(&self) -> Result<&str> {
         let id = self.sales_order_id.as_ref();
@@ -403,16 +305,9 @@ impl Delivery {
     }
 
     /// 校验发货行可作为指定验收行的履约事实并返回成功数量。
-    ///
-    /// # 参数
-    /// * `line` - 已加载的发货行
-    /// * `sales_order_id` - 验收单所属销售单
-    /// * `sales_order_line_id` - 验收行所属销售稳定明细
-    ///
-    /// # 返回
     /// 状态与两级关联一致时返回发货行数量。
-    ///
-    /// # 错误
+    /// `line` 已加载的发货行；`sales_order_id` 为验收单所属销售单。
+    /// `sales_order_line_id` 为验收行所属销售稳定明细。
     /// 发货状态无效，或表头、发货行、销售单、销售明细关联不一致时返回错误。
     pub fn acceptance_quantity(
         &self,
@@ -433,16 +328,7 @@ impl Delivery {
     }
 
     /// 更新履约发货单（仅草稿）。
-    ///
     /// 复用 `new` 的物流字段规范化规则；发货类型与来源归属创建后不可修改。
-    ///
-    /// # 参数
-    /// * `update` - 更新数据
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 状态不可编辑，或包裹关联超过 100 条、明细身份或物流单号为空、字段超长时返回错误。
     pub fn update(&mut self, update: DeliveryUpdate) -> Result<()> {
         self.ensure_editable()?;
@@ -453,29 +339,17 @@ impl Delivery {
     }
 
     /// 验证包裹关联只包含本发货单实际销售明细。
-    ///
-    /// # 参数
-    /// * `lines` - 同执行器读取或创建的实际发货行。
-    /// # 返回
     /// 所有包裹关联均命中本发货行时成功。
-    /// # 错误
+    /// `lines` 为同执行器读取或创建的实际发货行。
     /// 销售明细不在本发货单实际行集合中时拒绝。
     pub fn ensure_tracking_lines(&self, lines: &[DeliveryLine]) -> Result<()> {
         DeliveryTrackingEntries::ensure_lines(&self.tracking_entries, &self.base.id, lines)
     }
 
     /// 登记发货（草稿 → 已发货）。
-    ///
-    /// 记录发货时间；仓发的预占消耗、出库流水与余额更新由 P3 在过账事务中
-    /// 完成（§8.2 第 2 条）。
-    ///
-    /// # 参数
-    /// * `shipped_at` - 发货时间
-    ///
-    /// # 返回
+    /// 记录发货时间；仓发的预占消耗、出库流水与余额更新由 P3 在过账事务中完成（§8.2 第 2 条）。
     /// 迁移成功返回 `Ok(())`。已发货再次登记按幂等成功，并覆盖 `shipped_at`。
-    ///
-    /// # 错误
+    /// `shipped_at` 为发货时间。
     /// 已签收或已冲正不能改为已发货时返回错误。
     pub fn mark_shipped(&mut self, shipped_at: Instant) -> Result<()> {
         ensure_transition(self.status, DeliveryState::Shipped)?;
@@ -485,11 +359,8 @@ impl Delivery {
     }
 
     /// 记录已核验外部全量发货，来源没有发货时间时保持未知。
-    /// # 参数
-    /// `source_shipped_at` 仅接受供应商明确提供的发货时间。
-    /// # 返回
     /// 将草稿推进已发货，不生成签收或客户验收事实。
-    /// # 错误
+    /// `source_shipped_at` 仅接受供应商明确提供的发货时间。
     /// 已签收或已冲正等非法状态拒绝应用。
     pub fn mark_observed_shipped(&mut self, source_shipped_at: Option<Instant>) -> Result<()> {
         ensure_transition(self.status, DeliveryState::Shipped)?;
@@ -499,11 +370,8 @@ impl Delivery {
     }
 
     /// 合并真实来源包裹，不清除内部已经登记的包裹关联。
-    /// # 参数
-    /// `entries` 为经过来源行映射的包裹关联；真实发货行须由用例继续核验。
-    /// # 返回
     /// 校验并保存去重后的完整关联。
-    /// # 错误
+    /// `entries` 为经过来源行映射的包裹关联；真实发货行须由用例继续核验。
     /// 已冲正、包裹字段非法或累计数量超限时拒绝。
     pub fn merge_observed_tracking(&mut self, entries: Vec<DeliveryTrackingEntry>) -> Result<()> {
         if self.status == DeliveryState::Reversed {
@@ -522,14 +390,7 @@ impl Delivery {
     }
 
     /// 登记签收（已发货 → 已签收）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 迁移成功返回 `Ok(())`。已签收再次签收按幂等成功。
-    ///
-    /// # 错误
     /// 草稿或已冲正不能签收时返回错误。
     pub fn mark_signed(&mut self) -> Result<()> {
         ensure_transition(self.status, DeliveryState::Signed)?;
@@ -538,17 +399,8 @@ impl Delivery {
     }
 
     /// 冲正发货单（已发货或已签收 → 已冲正，终态）。
-    ///
-    /// `REVERSED` 表示存在正式反向事实（冲正出库流水/退货），不删除原事实
-    /// （§4.5.1、§7.5）；反向事实由 P3 形成。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
+    /// `REVERSED` 表示存在正式反向事实（冲正出库流水/退货），不删除原事实（§4.5.1、§7.5）；反向事实由 P3 形成。
     /// 迁移成功返回 `Ok(())`。已冲正再次冲正按幂等成功。
-    ///
-    /// # 错误
     /// 草稿不能冲正时返回错误。
     pub fn reverse(&mut self) -> Result<()> {
         ensure_transition(self.status, DeliveryState::Reversed)?;
@@ -557,40 +409,19 @@ impl Delivery {
     }
 
     /// 返回供应商直发的采购来源引用。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 直发且携带采购来源时返回引用。
-    ///
-    /// # 错误
     /// 仓发或缺少采购来源时返回业务错误。
     pub fn supplier_purchase_source(&self) -> Result<erp_core::ids::PurchaseOrderId> {
         self.purchase_order_id.clone().ok_or_else(|| Error::from("供应商直发缺少采购来源"))
     }
 
-    /// 判断当前状态是否可编辑。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 草稿状态返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 编辑入口据此判断是否能继续修改当前记录；仅草稿状态允许。
     pub fn is_editable(&self) -> bool {
         self.status.is_editable()
     }
 
-    /// 校验当前状态可编辑。
-    ///
-    /// # 返回
-    /// 可编辑返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 已发货/已签收/已冲正不可编辑时返回错误。
+    // 校验当前状态可编辑。
+    // 已发货/已签收/已冲正不可编辑时返回错误。
     fn ensure_editable(&self) -> Result<()> {
         if !self.is_editable() {
             return Err(Error::from("已发货、已签收或已冲正的发货单不可编辑"));
@@ -642,20 +473,10 @@ pub struct DeliveryLine {
 
 impl DeliveryLine {
     /// 创建发货行。
-    ///
-    /// 完成行号与数量校验，并按发货类型校验行级归属（仓发/直发与表头一致，
-    /// 见 [`DeliveryLineData`]）。行不可独立于表头状态变更，已发货事实不因
-    /// 销售或采购变更被删除（§6.7），行变更由 P3 按表头状态把关。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::DeliveryLineId`）
-    /// * `data` - 创建数据
-    /// * `delivery_type` - 所属发货单的发货类型（决定行级归属校验）
-    ///
-    /// # 返回
+    /// 完成行号与数量校验，并按发货类型校验行级归属（仓发/直发与表头一致，见 [`DeliveryLineData`]）。行不可独立于表头状态变更，已发货事实不因销售或采购变更被删除（§6.7），
+    /// 行变更由 P3 按表头状态把关。
     /// 返回新建的发货行实体。
-    ///
-    /// # 错误
+    /// `id` 为实体主键（`erp_core::ids::DeliveryLineId`）；`delivery_type` 为所属发货单的发货类型（决定行级归属校验）。
     /// 行号小于 1、发货数量非正，或行级归属与发货类型不一致时返回错误。
     pub fn new(id: DeliveryLineId, data: DeliveryLineData, delivery_type: DeliveryType) -> Result<Self> {
         if data.line_no < 1 {
@@ -696,18 +517,10 @@ impl DeliveryLine {
     }
 }
 
-/// 校验仓发/直发的表头来源归属。
-///
-/// # 参数
-/// * `delivery_type` - 发货类型
-/// * `warehouse_id` - 仓库
-/// * `purchase_order_id` - 采购来源
-///
-/// # 返回
-/// 通过返回 `Ok(())`。
-///
-/// # 错误
-/// 仓发缺少仓库或携带采购来源、直发缺少采购来源或携带仓库时返回错误。
+// 校验仓发/直发的表头来源归属。
+// `delivery_type` 为发货类型；`warehouse_id` 为仓库。
+// `purchase_order_id` 为采购来源。
+// 仓发缺少仓库或携带采购来源、直发缺少采购来源或携带仓库时返回错误。
 fn validate_source_ownership(
     delivery_type: DeliveryType,
     warehouse_id: &Option<WarehouseId>,
@@ -745,7 +558,7 @@ pub(crate) mod tests {
     const PLAINTEXT_ADDRESS: &str = "上海市浦东新区世纪大道100号 张三 13800000000";
     const FINGERPRINT_KEY: &[u8] = b"test-fingerprint-key";
 
-    /// 构造包含明细包裹关联的仓发测试草稿。
+    // 构造包含明细包裹关联的仓发测试草稿。
     pub(crate) fn delivery_data() -> DeliveryData {
         DeliveryData {
             delivery_no: " DV-2026-001 ".to_string(),
@@ -762,7 +575,7 @@ pub(crate) mod tests {
         }
     }
 
-    /// 构造本次发货包含的真实销售明细。
+    // 构造本次发货包含的真实销售明细。
     fn line_data() -> DeliveryLineData {
         DeliveryLineData {
             delivery_id: DeliveryId::new("delivery-1"),
@@ -774,7 +587,7 @@ pub(crate) mod tests {
         }
     }
 
-    /// 构造某销售明细的包裹关联。
+    // 构造某销售明细的包裹关联。
     fn tracking_entry(number: &str, carrier: &str) -> DeliveryTrackingEntry {
         DeliveryTrackingEntry {
             sales_order_line_id: SalesOrderLineId::new("so-line-1"),
@@ -783,7 +596,7 @@ pub(crate) mod tests {
         }
     }
 
-    /// happy path：单号/物流字段规范化、仓发归属、指纹生成与状态机全链路。
+    // 验证单号/物流字段规范化、仓发归属、指纹生成与状态机全链路。
     #[test]
     fn new_normalizes_fields_and_drives_state_machine() {
         let mut delivery = Delivery::new(DeliveryId::new("delivery-1"), delivery_data()).unwrap();
@@ -801,7 +614,7 @@ pub(crate) mod tests {
         assert_eq!(delivery.status, DeliveryState::Reversed);
     }
 
-    /// 多包裹关联完整持久化，每包裹可使用不同承运商。
+    // 验证多包裹关联完整持久化，每包裹可使用不同承运商。
     #[test]
     fn multiple_packages_preserve_per_entry_carriers_and_sales_line() {
         let delivery = Delivery::new(
@@ -822,7 +635,7 @@ pub(crate) mod tests {
         assert_eq!(serialized["tracking_entries"][1]["carrier"], "顺丰");
     }
 
-    /// 重复保存保持同一结果，缺省不修改，显式空数组清空全部包裹。
+    // 验证重复保存保持同一结果，缺省不修改，显式空数组清空全部包裹。
     #[test]
     fn tracking_update_replay_omission_and_explicit_clear_are_consistent() {
         let mut delivery = Delivery::new(DeliveryId::new("delivery-update"), delivery_data()).unwrap();
@@ -842,7 +655,7 @@ pub(crate) mod tests {
         assert!(delivery.tracking_entries.is_empty());
     }
 
-    /// 包裹更新失败时保留全部原始事实，不产生部分修改。
+    // 验证包裹更新失败时保留全部原始事实，不产生部分修改。
     #[test]
     fn failed_package_update_preserves_all_original_facts() {
         let mut original = Delivery::new(DeliveryId::new("delivery-update"), delivery_data()).unwrap();
@@ -859,7 +672,7 @@ pub(crate) mod tests {
         assert_eq!(original, before);
     }
 
-    /// 失败路径：必填空（单号空白）、超长、仓发/直发归属不一致。
+    // 验证必填空（单号空白）、超长、仓发/直发归属不一致。
     #[test]
     fn new_rejects_invalid_inputs() {
         let blank_no = DeliveryData { delivery_no: "   ".to_string(), ..delivery_data() };
@@ -896,7 +709,7 @@ pub(crate) mod tests {
         assert!(Delivery::new(DeliveryId::new("d7"), bad_fingerprint).is_err());
     }
 
-    /// 状态机：草稿不可冲正、已发货不可重发、已冲正终态不可再迁移。
+    // 验证草稿不可冲正、已发货不可重发、已冲正终态不可再迁移。
     #[test]
     fn state_machine_directed_edges() {
         let mut delivery = Delivery::new(DeliveryId::new("delivery-2"), delivery_data()).unwrap();
@@ -916,7 +729,7 @@ pub(crate) mod tests {
         assert!(delivery.mark_signed().is_err(), "REVERSED 是终态，不能签收");
     }
 
-    /// 验收事实要求已发货状态且表头、行与销售归属一致。
+    // 验证验收事实要求已发货状态且表头、行与销售归属一致。
     #[test]
     fn acceptance_fact_checks_status_and_associations() {
         let mut delivery = Delivery::new(DeliveryId::new("delivery-1"), delivery_data()).unwrap();
@@ -980,7 +793,7 @@ pub(crate) mod tests {
         assert!(missing_context.registration_context_id().is_err());
     }
 
-    /// 状态机：固定邻接矩阵的合法/非法迁移（幂等合法）。
+    // 验证固定邻接矩阵的合法/非法迁移（幂等合法）。
     #[test]
     fn state_machine_transition_matrix() {
         assert!(ensure_transition(DeliveryState::Draft, DeliveryState::Shipped).is_ok());
@@ -994,7 +807,7 @@ pub(crate) mod tests {
         assert!(ensure_transition(DeliveryState::Reversed, DeliveryState::Reversed).is_ok());
     }
 
-    /// 敏感字段：指纹稳定且带密钥；Debug 不泄漏明文/密文/指纹。
+    // 验证敏感字段：指纹稳定且带密钥；Debug 不泄漏明文/密文/指纹。
     #[test]
     fn sensitive_address_fingerprint_and_redacted_debug() {
         let a = Delivery::address_snapshot_fingerprint(PLAINTEXT_ADDRESS, FINGERPRINT_KEY);
@@ -1015,7 +828,7 @@ pub(crate) mod tests {
         assert!(debug.contains("<redacted>"));
     }
 
-    /// happy path：仓发行创建成功；直发行创建成功。
+    // 验证仓发行创建成功；直发行创建成功。
     #[test]
     fn line_new_succeeds_for_both_types() {
         let warehouse_line =
@@ -1035,7 +848,7 @@ pub(crate) mod tests {
         assert_eq!(direct_line.purchase_line_sales_allocation_id.as_ref().unwrap().as_ref(), "pla-1");
     }
 
-    /// 失败路径：行级归属不一致与数量越界。
+    // 验证行级归属不一致与数量越界。
     #[test]
     fn line_rejects_ownership_and_quantity_violations() {
         let no_reservation = DeliveryLineData { stock_reservation_id: None, ..line_data() };
@@ -1071,7 +884,7 @@ pub(crate) mod tests {
         );
     }
 
-    /// 采购来源提取纯规则：直发携带采购来源通过，缺失失败。
+    // 验证采购来源提取纯规则：直发携带采购来源通过，缺失失败。
     #[test]
     fn supplier_source_extraction_covers_present_and_missing() {
         let direct = Delivery::new(

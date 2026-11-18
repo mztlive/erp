@@ -10,16 +10,10 @@ pub struct PayableReadService {
     db: Database,
 }
 impl PayableReadService {
-    /// 为同一个数据库创建应付读取服务。
-    ///
-    /// # 参数
-    /// * `db` - 目标数据库。
+    /// 装配供应商应付与付款时，为同一个数据库创建应付读取服务。
     ///
     /// # 返回
     /// 返回应付读取服务；构造不执行 I/O。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }

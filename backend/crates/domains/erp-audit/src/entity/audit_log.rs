@@ -57,16 +57,7 @@ pub struct AuditLog {
 }
 
 impl AuditLog {
-    /// 保存同一命令内已预检的写入序号，不改变事件身份和发生时间。
-    ///
-    /// # 参数
-    /// * `sequence` - 从 1 开始的事件序号。
-    ///
-    /// # 返回
-    /// 返回已写入序号的审计日志，不改变 `base` 与 `message`。
-    ///
-    /// # 错误
-    /// 序号为零或缺少结构化事件时返回 `Error::ValidationError`。
+    /// 给同一命令的结构化日志补上从 `1` 开始的写入序号，供还原批次顺序；不改变事件身份、时间或摘要。序号为零或日志没有结构化事件时返回 `Error::ValidationError`。
     pub fn with_event_sequence(mut self, sequence: u32) -> AuditResult<Self> {
         let sequence = NonZeroU32::new(sequence)
             .ok_or_else(|| AuditError::ValidationError("审计事件序号必须为正整数".into()))?;
@@ -74,64 +65,28 @@ impl AuditLog {
         Ok(self)
     }
 
-    /// 关联入口已经捕获的安全请求编号，内部命令不生成请求号。
-    ///
-    /// # 参数
-    /// * `request_id` - 当前请求的追踪编号；无请求或空白时保持缺失。
-    ///
-    /// # 返回
-    /// 返回带请求关联的审计日志，不改变 `base` 与 `message`。
-    ///
-    /// # 错误
-    /// 编号超长时返回 `Error::Logic`。缺少结构化事件或编号含控制字符时返回 `Error::ValidationError`。
+    /// 沿用入口捕获的请求号关联调用链；内部命令、空白值或没有请求时保持缺失，不改事件身份、时间或摘要。编号超长返回 `Error::Logic`；缺少结构化事件或编号含控制字符返回 `Error::ValidationError`。
     pub fn with_request_id(self, request_id: Option<String>) -> AuditResult<Self> {
         self.update_snapshot(request_id, "请求编号", false, |event, value| {
             event.request_id = value;
         })
     }
 
-    /// 保存认证时已取得的安全操作人名称，不读取当前账户补齐快照。
-    ///
-    /// # 参数
-    /// * `name` - 发生时的操作人名称；未知或空白保持缺失。
-    ///
-    /// # 返回
-    /// 返回保留名称快照、并按该快照重写 `message` 的审计日志。
-    ///
-    /// # 错误
-    /// 名称超长时返回 `Error::Logic`。缺少结构化事件或名称含控制字符时返回 `Error::ValidationError`。
+    /// 写入认证时取得的操作人名称，并按快照刷新摘要，避免展示历史日志时查当前账号回填；未知或空白保持缺失。名称超长返回 `Error::Logic`；缺少结构化事件或名称含控制字符返回 `Error::ValidationError`。
     pub fn with_actor_name_snapshot(self, name: Option<String>) -> AuditResult<Self> {
         self.update_snapshot(name, "操作人名称", true, |event, value| {
             event.actor_name_snapshot = value;
         })
     }
 
-    /// 关联独立命令身份，不将幂等键或指纹写入展示事件。
-    ///
-    /// # 参数
-    /// * `command_id` - 服务端稳定命令编号；空白保持缺失。
-    ///
-    /// # 返回
-    /// 返回带命令关联的审计日志，不改变 `base` 与 `message`。
-    ///
-    /// # 错误
-    /// 编号超长时返回 `Error::Logic`。缺少结构化事件或编号含控制字符时返回 `Error::ValidationError`。
+    /// 写入服务端稳定命令号以关联回执，不把幂等键或指纹写进展示事件；空白保持缺失，日志身份、时间和摘要不变。编号超长返回 `Error::Logic`；缺少结构化事件或编号含控制字符返回 `Error::ValidationError`。
     pub fn with_command_id(self, command_id: Option<String>) -> AuditResult<Self> {
         self.update_snapshot(command_id, "命令编号", false, |event, value| {
             event.command_id = value;
         })
     }
 
-    /// 保存发生时已明确的安全业务编号，不查询当前对象补齐快照。
-    ///
-    /// # 参数
-    /// * `number` - 当时的业务编号；未知或空白保持缺失。
-    ///
-    /// # 返回
-    /// 返回带编号快照、并按该编号重写 `message` 的审计日志。
-    ///
-    /// # 错误
-    /// 编号超长时返回 `Error::Logic`。缺少结构化事件或编号含控制字符时返回 `Error::ValidationError`。
+    /// 冻结事件发生时已知的业务编号并刷新摘要，不查询当前对象补齐；未知或空白保持缺失。编号超长返回 `Error::Logic`；缺少结构化事件或编号含控制字符返回 `Error::ValidationError`。
     pub fn with_resource_number(self, number: Option<String>) -> AuditResult<Self> {
         self.update_snapshot(number, "业务编号", true, |event, value| {
             event.resource_number_snapshot = value;
@@ -154,22 +109,7 @@ impl AuditLog {
         Ok(self)
     }
 
-    /// 由已鉴权操作人构造成功资源审计的数据。
-    ///
-    /// `resource_id` 去掉首尾空白后若为空则拒绝，否则按原文放入 `Some`，不会把空白写成缺失目标。不校验动作是否已登记。
-    ///
-    /// # 参数
-    /// * `actor` - 已通过鉴权的审计操作人。只取身份三元组，不保留名称快照和请求号。
-    /// * `action` - 审计动作代码。
-    /// * `resource_type` - 资源类型稳定代码。
-    /// * `resource_id` - 资源业务 ID。
-    /// * `message` - 可选业务说明，原样放入创建数据。
-    ///
-    /// # 返回
-    /// 返回 `success` 为真的 `AuditLogData`。
-    ///
-    /// # 错误
-    /// `resource_id` 去空白后为空时返回 `Error::ValidationError`。
+    /// 从已鉴权操作人提取 ID、账号和类型，准备成功资源日志的原始数据；不保留操作人名称或请求号，不验证动作登记，说明原样带入。资源 ID 去空白后为空时返回 `Error::ValidationError`，否则按原文保存为 `Some`。
     pub fn success_resource_data(
         actor: AuditActor,
         action: &str,
@@ -193,20 +133,8 @@ impl AuditLog {
         })
     }
 
-    /// 创建尚未附带结构化事件的审计日志。
-    ///
-    /// 必填文本会去掉首尾空白。可选文本空白视为缺失。
-    ///
-    /// # 参数
-    /// * `id` - 审计日志 ID，原样写入 `BaseModel`。
-    /// * `data` - 审计日志创建数据。
-    ///
-    /// # 返回
-    /// 返回 `structured_event` 为 `None` 的审计日志。
-    ///
-    /// # 错误
-    /// 操作人 ID、操作人账号、动作或资源类型去空白后为空或超长，或资源 ID、消息超长时返回 `erp_core::Error::LogicError`。
-    /// 字符数上限分别为操作人 ID 128、账号 64、动作 128、资源类型 64、资源 ID 64、消息 8192。
+    /// 用给定 ID 建立尚无结构化事件的审计日志，供内部日志写入或后续事件封装。必填文本去首尾空白，可选空白转为缺失；ID 原样写入 `BaseModel`。
+    /// 必填项为空或任一受限字段超长时返回 `erp_core::Error::LogicError`。操作人 ID、账号、动作、资源类型、资源 ID 和消息的字符上限依次为 128、64、128、64、64、8192。
     pub fn new(id: String, data: AuditLogData) -> Result<Self> {
         let (actor_id, actor_account) = normalized_actor_identity(data.actor_id, data.actor_account)?;
         let action =

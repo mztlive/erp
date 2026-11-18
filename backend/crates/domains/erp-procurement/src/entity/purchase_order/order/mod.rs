@@ -122,7 +122,7 @@ pub struct PurchaseOrder {
 }
 
 impl PartialEq for PurchaseOrder {
-    /// 全字段语义相等。
+    // 逐字段比较采购单，仅持有相同标识不视为内容相等。
     fn eq(&self, other: &Self) -> bool {
         self.base == other.base
             && self.business_org_unit_id == other.business_org_unit_id
@@ -155,20 +155,14 @@ impl Eq for PurchaseOrder {}
 impl PurchaseOrder {
     /// 创建采购单。
     ///
-    /// 草稿允许空 `purchase_no`；付款条件必须非空。初始主状态为 `Draft`，
-    /// `approval_subject_version` 为 0。不得预分配正式号。
+    /// 草稿允许空 `purchase_no`；付款条件必须非空。初始主状态为 `Draft`，`approval_subject_version` 为 0。
+    /// 不得预分配正式号。
     ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::PurchaseOrderId`）
-    /// * `data` - 创建数据
-    /// * `created_by` - 创建人（账号或系统身份）
-    /// * `resolve_term` - 供应商提供方的纯解析回调，在代码规范化后、依据校验前调用一次
-    ///
-    /// # 返回
-    /// 返回新建的采购单实体。
-    ///
-    /// # 错误
     /// 采购单号超长或付款条件为空/超长时返回错误。
+    ///
+    /// - `id`：实体主键（`erp_core::ids::PurchaseOrderId`）。
+    /// - `created_by`：创建人（账号或系统身份）。
+    /// - `resolve_term`：供应商提供方的纯解析回调，在代码规范化后、依据校验前调用一次。
     pub fn new(
         id: PurchaseOrderId,
         data: PurchaseOrderData,
@@ -231,14 +225,9 @@ impl PurchaseOrder {
 
     /// 校验调用方持有的乐观锁版本。
     ///
-    /// # 参数
-    /// * `expected` - 调用方读取到的期望版本
+    /// 版本一致时返回 `Ok(())`。期望版本与实体当前版本不一致时返回领域错误。
     ///
-    /// # 返回
-    /// 版本一致时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 期望版本与实体当前版本不一致时返回领域错误。
+    /// `expected` 为调用方读取到的期望版本。
     pub fn ensure_expected_version(&self, expected: u64) -> Result<()> {
         if self.base.version != expected {
             return Err(Error::from("采购单版本已变化"));
@@ -248,28 +237,14 @@ impl PurchaseOrder {
 
     /// 校验采购单仍可冻结新的审批提交。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 草稿状态返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 非草稿状态返回领域错误。
+    /// 草稿状态返回 `Ok(())`。非草稿状态返回领域错误。
     pub fn ensure_draft_for_submission(&self) -> Result<()> {
         self.ensure_draft()
     }
 
     /// 取得可提交审批的当前草稿提交。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 采购单处于草稿且已挂接草稿提交时，返回类型化提交 ID。
-    ///
-    /// # 错误
-    /// 采购单不是草稿，或缺少当前草稿提交时返回领域错误。
+    /// 采购单处于草稿且已挂接草稿提交时，返回类型化提交 ID。采购单不是草稿，或缺少当前草稿提交时返回领域错误。
     pub fn draft_submission_id(&self) -> Result<PurchaseOrderSubmissionId> {
         self.ensure_draft()?;
         self.current_submission_id
@@ -280,17 +255,9 @@ impl PurchaseOrder {
 
     /// 校验采购单主状态是否允许最终通过动作生效。
     ///
-    /// # 参数
-    /// * `self` - 待读取主状态的采购单聚合
-    ///
-    /// # 返回
-    /// 主状态为 `IN_APPROVAL` 时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 主状态不是审批中时返回领域错误。
-    ///
-    /// # 关键约束
     /// 本守卫只检查生命周期状态，不检查冻结提交指针，也不修改聚合。
+    ///
+    /// 主状态为 `IN_APPROVAL` 时返回 `Ok(())`。主状态不是审批中时返回领域错误。
     pub fn ensure_can_formalize(&self) -> Result<()> {
         if self.stable.status != PurchaseOrderStatus::InApproval {
             return Err(Error::from("只有审批中的采购单可以在审批通过后生效，请核对采购单状态"));
@@ -300,14 +267,7 @@ impl PurchaseOrder {
 
     /// 取得可正式化的冻结提交。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 采购单处于审批中且已冻结提交时，返回类型化提交 ID。
-    ///
-    /// # 错误
-    /// 采购单不是审批中，或缺少冻结提交时返回领域错误。
+    /// 采购单处于审批中且已冻结提交时，返回类型化提交 ID。采购单不是审批中，或缺少冻结提交时返回领域错误。
     pub fn submission_id_for_formalization(&self) -> Result<PurchaseOrderSubmissionId> {
         if self.stable.status != PurchaseOrderStatus::InApproval {
             return Err(Error::from("只有审批中的采购单可以正式化"));
@@ -320,14 +280,7 @@ impl PurchaseOrder {
 
     /// 取得发起采购变更所需的当前生效版本。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 采购单已生效或部分执行且存在当前版本时，返回类型化版本 ID。
-    ///
-    /// # 错误
-    /// 主状态不允许变更，或缺少当前生效版本时返回领域错误。
+    /// 采购单已生效或部分执行且存在当前版本时，返回类型化版本 ID。主状态不允许变更，或缺少当前生效版本时返回领域错误。
     pub fn revision_id_for_change(&self) -> Result<PurchaseOrderRevisionId> {
         if !self.stable.status.allows_change() {
             return Err(Error::from("只有已生效或部分执行的采购单可以发起变更"));
@@ -339,16 +292,9 @@ impl PurchaseOrder {
             .ok_or_else(|| Error::from("采购单没有生效版本，不能发起变更"))
     }
 
-    /// 挂接创建采购单时形成的首个草稿提交。
+    /// 挂接创建采购单时形成的首个草稿提交。采购单不是草稿，或已经挂接提交时返回领域错误。
     ///
-    /// # 参数
-    /// * `submission_id` - 新建草稿提交稳定身份
-    ///
-    /// # 返回
-    /// 挂接成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 采购单不是草稿，或已经挂接提交时返回领域错误。
+    /// `submission_id` 为新建草稿提交稳定身份。
     pub fn attach_draft_submission(&mut self, submission_id: PurchaseOrderSubmissionId) -> Result<()> {
         self.ensure_draft()?;
         if self.current_submission_id.is_some() {
@@ -358,17 +304,7 @@ impl PurchaseOrder {
         Ok(())
     }
 
-    /// 最终通过并切换当前生效版本。
-    ///
-    /// # 参数
-    /// * `revision_id` - 本次正式化形成的采购版本
-    /// * `updated_by` - 最终通过执行人
-    ///
-    /// # 返回
-    /// 状态和版本指针更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 采购单不是审批中时返回领域错误。
+    /// 最终通过并切换当前生效版本。采购单不是审批中时返回领域错误。
     pub fn formalize_with_revision(
         &mut self,
         revision_id: PurchaseOrderRevisionId,
@@ -379,17 +315,7 @@ impl PurchaseOrder {
         Ok(())
     }
 
-    /// 在采购变更生效后切换当前版本。
-    ///
-    /// # 参数
-    /// * `revision_id` - 采购变更形成的新生效版本
-    /// * `updated_by` - 最终通过执行人
-    ///
-    /// # 返回
-    /// 当前版本指针更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 采购单主状态不允许发起变更时返回领域错误。
+    /// 在采购变更生效后切换当前版本。采购单主状态不允许发起变更时返回领域错误。
     pub fn apply_change_revision(
         &mut self,
         revision_id: PurchaseOrderRevisionId,
@@ -407,13 +333,6 @@ impl PurchaseOrder {
     ///
     /// 仅允许空号草稿调用；成功后不得再改写。
     ///
-    /// # 参数
-    /// * `purchase_no` - 正式采购单号
-    ///
-    /// # 返回
-    /// 正式采购单号写入成功时返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 已有正式号、编号为空或超长时返回错误。
     pub fn assign_purchase_no(&mut self, purchase_no: impl Into<String>) -> Result<()> {
         if !self.purchase_no.is_empty() {
@@ -430,19 +349,12 @@ impl PurchaseOrder {
 
     /// 更新采购单内容。
     ///
-    /// 只允许在 `Draft` 状态执行（§7.4：生效后变化走采购变更单）；
-    /// `purchase_no`/`sales_order_id`/`supplier_id` 是拆单关键字段，不允许修改。
+    /// 只允许在 `Draft` 状态执行（§7.4：生效后变化走采购变更单）；`purchase_no`/`sales_order_id`/`supplier_id`
+    /// 是拆单关键字段，不允许修改。
     ///
-    /// # 参数
-    /// * `update` - 更新数据
-    /// * `updated_by` - 本次更新执行人
-    /// * `resolve_term` - 供应商提供方的纯解析回调，仅更新付款条件时在代码规范化后调用
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 状态不是草稿，或更新字段校验失败时返回错误。
+    ///
+    /// `resolve_term` 为供应商提供方的纯解析回调，仅更新付款条件时在代码规范化后调用。
     pub fn update(
         &mut self,
         update: PurchaseOrderUpdate,
@@ -464,15 +376,9 @@ impl PurchaseOrder {
 
     /// 禁止草稿编辑修改创建依据冻结的付款条件。
     ///
-    /// # 参数
-    /// * `requested` - 客户端可选付款条件
+    /// 未提供或与当前值一致时返回 `Ok(())`。请求试图修改付款条件时返回[`DraftLineEditViolation::PaymentTermChanged`]。
     ///
-    /// # 返回
-    /// 未提供或与当前值一致时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 请求试图修改付款条件时返回
-    /// [`DraftLineEditViolation::PaymentTermChanged`]。
+    /// `requested` 为客户端可选付款条件。
     pub fn ensure_payment_term_unchanged(
         &self,
         requested: Option<&str>,
@@ -485,15 +391,10 @@ impl PurchaseOrder {
 
     /// 旧财务审核提交入口。审批改造后不可达。
     ///
-    /// # 参数
-    /// * `_current_submission_id` - 旧入口传入的提交身份，不读取。
-    /// * `_updated_by` - 旧入口传入的操作人，不读取。
+    /// 无成功返回值；调用必然失败。恒返回冲突，不得进入 `PENDING_FINANCE_REVIEW`。
     ///
-    /// # 返回
-    /// 无成功返回值；调用必然失败。
-    ///
-    /// # 错误
-    /// 恒返回冲突，不得进入 `PENDING_FINANCE_REVIEW`。
+    /// - `_current_submission_id`：旧入口传入的提交身份，不读取。
+    /// - `_updated_by`：旧入口传入的操作人，不读取。
     pub fn submit_for_review(
         &mut self,
         _current_submission_id: impl Into<String>,
@@ -502,19 +403,8 @@ impl PurchaseOrder {
         Err(Error::from("采购单必须走统一审批提交，禁止写入待财务审核"))
     }
 
-    /// 提交并启动审批：冻结 `approval_subject_version` 并进入 `IN_APPROVAL`。
-    ///
-    /// 版本使用 checked add，成功后不回退。不得改写 `PurchaseReviewStatus`。
-    ///
-    /// # 参数
-    /// * `current_submission_id` - 本次冻结提交
-    /// * `updated_by` - 提交人
-    ///
-    /// # 返回
-    /// 返回冻结后的提交版本。
-    ///
-    /// # 错误
-    /// 非草稿或版本溢出时返回冲突。
+    /// 采购草稿提交时关联本次冻结提交，递增审批主题版本并进入审批中。
+    /// 返回供审批实例绑定的版本；非草稿或版本溢出时拒绝，不在实体内启动审批运行时。
     pub fn start_approval(
         &mut self,
         current_submission_id: impl Into<String>,
@@ -531,16 +421,8 @@ impl PurchaseOrder {
         Ok(next)
     }
 
-    /// 撤回审批：回到草稿，且 `approval_subject_version` 不回退。
-    ///
-    /// # 参数
-    /// * `updated_by` - 撤回人
-    ///
-    /// # 返回
-    /// 审批中采购单回到草稿时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 非审批中时返回冲突。
+    /// 撤回当前采购审批时，将审批中采购单退回草稿，保留审批主题版本。
+    /// 非审批中不能撤回；调用方负责恢复独立编辑副本及保存运行事实。
     pub fn cancel_approval(&mut self, updated_by: impl Into<String>) -> Result<()> {
         if self.stable.status != PurchaseOrderStatus::InApproval {
             return Err(Error::from("只有审批中的采购单可以撤回审批"));
@@ -550,15 +432,8 @@ impl PurchaseOrder {
         Ok(())
     }
 
-    /// 终止本次审批并保留可编辑的已驳回状态。
-    ///
-    /// # 参数
-    /// * `expected_subject_version` - 当前实例冻结的审批提交版本。
-    /// * `updated_by` - 当前审批决定人。
-    /// # 返回
-    /// 状态改为已驳回，提交版本保持不变。
-    /// # 错误
-    /// 非审批中状态拒绝，重复释放由外层审批回执阻断。
+    /// 审批运行时驳回采购单时，仅接受当前审批实例冻结的主题版本，并将审批中采购单置为已驳回。
+    /// 不改写冻结提交或递减版本；历史实例或非审批中状态不能作此决定。
     pub fn reject_approval(
         &mut self,
         expected_subject_version: u32,
@@ -580,17 +455,9 @@ impl PurchaseOrder {
     ///
     /// 不改写 `PurchaseReviewStatus`，审批结果取实例投影。
     ///
-    /// # 参数
-    /// * `updated_by` - 最终通过执行人
-    ///
-    /// # 返回
-    /// 主状态迁移到 `EFFECTIVE` 并更新审计人后返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 状态不是审批中时返回领域错误。
-    ///
-    /// # 关键约束
     /// 复用非变更状态守卫；不检查提交指针，也不改写财务审核状态。
+    ///
+    /// 主状态迁移到 `EFFECTIVE` 并更新审计人后返回 `Ok(())`。状态不是审批中时返回领域错误。
     pub fn formalize_approved(&mut self, updated_by: impl Into<String>) -> Result<()> {
         self.ensure_can_formalize()?;
         self.stable.status = PurchaseOrderStatus::Effective;
@@ -600,29 +467,16 @@ impl PurchaseOrder {
 
     /// 旧财务审核结论入口。审批改造后不可达。
     ///
-    /// # 参数
-    /// * `_approved` - 旧财务审核结论，不读取。
-    /// * `_updated_by` - 旧入口传入的操作人，不读取。
+    /// 无成功返回值；调用必然失败。恒返回冲突，不得经 `PurchaseReviewStatus` 分支。
     ///
-    /// # 返回
-    /// 无成功返回值；调用必然失败。
-    ///
-    /// # 错误
-    /// 恒返回冲突，不得经 `PurchaseReviewStatus` 分支。
+    /// - `_approved`：旧财务审核结论，不读取。
+    /// - `_updated_by`：旧入口传入的操作人，不读取。
     pub fn apply_finance_review(&mut self, _approved: bool, _updated_by: impl Into<String>) -> Result<()> {
         Err(Error::from("采购财务审核不得作为审批动作"))
     }
 
     /// 推进主状态（§7.4 固定状态机）。
     ///
-    /// # 参数
-    /// * `to` - 目标状态
-    /// * `updated_by` - 本次操作执行人
-    ///
-    /// # 返回
-    /// 迁移成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 目标不是当前状态，且不在邻接矩阵中（含终态）时返回 [`Error::InvalidStateTransition`]。
     pub fn transition(&mut self, to: PurchaseOrderStatus, updated_by: impl Into<String>) -> Result<()> {
         ensure_transition(self.stable.status, to)?;
@@ -631,49 +485,19 @@ impl PurchaseOrder {
         Ok(())
     }
 
-    /// 更新付款进度。
-    ///
-    /// # 参数
-    /// * `progress` - 最新付款进度
-    /// * `updated_by` - 本次操作执行人
-    ///
-    /// # 返回
-    /// 无返回值；进度是下游付款事实的投影，由 P3 维护。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 更新付款进度。无返回值；进度是下游付款事实的投影，由 P3 维护。
     pub fn set_payment_progress(&mut self, progress: ProgressStatus, updated_by: impl Into<String>) {
         self.payment_progress = progress;
         self.stable.touch(updated_by);
     }
 
-    /// 更新收票进度。
-    ///
-    /// # 参数
-    /// * `progress` - 最新收票进度
-    /// * `updated_by` - 本次操作执行人
-    ///
-    /// # 返回
-    /// 无返回值；进度是下游发票事实的投影，由 P3 维护。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 更新收票进度。无返回值；进度是下游发票事实的投影，由 P3 维护。
     pub fn set_invoice_progress(&mut self, progress: ProgressStatus, updated_by: impl Into<String>) {
         self.invoice_progress = progress;
         self.stable.touch(updated_by);
     }
 
-    /// 更新履约进度。
-    ///
-    /// # 参数
-    /// * `progress` - 最新履约进度
-    /// * `updated_by` - 本次操作执行人
-    ///
-    /// # 返回
-    /// 无返回值；进度是入库/直发/电子交付/服务履约的投影，由 P3 维护。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 更新履约进度。无返回值；进度是入库/直发/电子交付/服务履约的投影，由 P3 维护。
     pub fn set_fulfillment_progress(&mut self, progress: ProgressStatus, updated_by: impl Into<String>) {
         self.fulfillment_progress = progress;
         self.stable.touch(updated_by);
@@ -681,14 +505,7 @@ impl PurchaseOrder {
 
     /// 返回采购单当前责任人。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 显式责任人存在时返回账号 ID。
-    ///
-    /// # 错误
-    /// 存量数据缺少责任人时返回错误；调用方必须先补齐责任，不得回退创建人。
+    /// 显式责任人存在时返回账号 ID。存量数据缺少责任人时返回错误；调用方必须先补齐责任，不得回退创建人。
     pub fn current_owner_user_id(&self) -> Result<&str> {
         self.owner_user_id
             .as_deref()
@@ -698,14 +515,7 @@ impl PurchaseOrder {
 
     /// 取得入库任务必须使用的目标仓库。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 入仓采购且已指定目标仓库时返回仓库 ID。
-    ///
-    /// # 错误
-    /// 非入仓采购或旧数据缺少目标仓库时返回错误，调用方不得选择任意默认仓库。
+    /// 入仓采购且已指定目标仓库时返回仓库 ID。非入仓采购或旧数据缺少目标仓库时返回错误，调用方不得选择任意默认仓库。
     pub fn target_warehouse_for_receipt(&self) -> Result<&WarehouseId> {
         if self.fulfillment_responsibility != FulfillmentResponsibility::Warehouse {
             return Err(Error::from("当前采购单不属于入仓履约"));
@@ -713,17 +523,7 @@ impl PurchaseOrder {
         self.target_warehouse_id.as_ref().ok_or_else(|| Error::from("采购单未指定目标仓库，请先补齐后再生效"))
     }
 
-    /// 变更采购单当前责任人。
-    ///
-    /// # 参数
-    /// * `owner_user_id` - 已由应用层验证资格的具体账号
-    /// * `updated_by` - 本次责任变更操作人
-    ///
-    /// # 返回
-    /// 责任人更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 目标账号为空或过长时返回错误；已完成、已作废采购单禁止变更责任。
+    /// 变更采购单当前责任人。目标账号为空或过长时返回错误；已完成、已作废采购单禁止变更责任。
     pub fn reassign_owner(
         &mut self,
         owner_user_id: impl Into<String>,
@@ -744,13 +544,9 @@ impl PurchaseOrder {
         Ok(())
     }
 
-    /// 校验当前状态为草稿。
-    ///
-    /// # 返回
-    /// 草稿状态返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 非草稿状态时返回错误。
+    // 校验当前状态为草稿。
+    //
+    // 草稿状态返回 `Ok(())`。非草稿状态时返回错误。
     fn ensure_draft(&self) -> Result<()> {
         if !matches!(self.stable.status, PurchaseOrderStatus::Draft | PurchaseOrderStatus::Rejected) {
             return Err(Error::from("只有草稿状态的采购单可以编辑"));
@@ -758,14 +554,10 @@ impl PurchaseOrder {
         Ok(())
     }
 
-    /// 应用付款条件更新。
-    ///
-    /// # 参数
-    /// * `payment_term_code` - 可选付款条件；`None` 表示不修改。
-    /// * `resolve_term` - 代码规范化后解析付款条件；其失败会原样返回。
-    ///
-    /// # 错误
-    /// 付款条件为空、超长，或 `resolve_term` 返回错误时失败。
+    // 应用付款条件更新。付款条件为空、超长，或 `resolve_term` 返回错误时失败。
+    //
+    // - `payment_term_code`：可选付款条件；`None` 表示不修改。
+    // - `resolve_term`：代码规范化后解析付款条件；其失败会原样返回。
     fn apply_payment_term(
         &mut self,
         payment_term_code: Option<String>,
@@ -784,7 +576,7 @@ impl PurchaseOrder {
     }
 }
 
-/// 入仓履约必须带目标仓，其他履约责任不得带目标仓。
+// 入仓履约必须带目标仓，其他履约责任不得带目标仓。
 fn ensure_target_warehouse(
     responsibility: FulfillmentResponsibility,
     target_warehouse_id: Option<&WarehouseId>,
@@ -838,7 +630,7 @@ mod tests {
         .unwrap()
     }
 
-    /// 驳回保留版本与来源，编辑后仍已驳回，重提创建更高版本。
+    // 驳回保留版本与来源，编辑后仍已驳回，重提创建更高版本。
     #[test]
     fn rejected_order_remains_editable_until_resubmission() {
         let mut order = new_order();
@@ -862,7 +654,7 @@ mod tests {
         assert_eq!(order.stable.status, PurchaseOrderStatus::InApproval);
     }
 
-    /// 旧审批实例不得驳回新提交，失败不改变单据及当前提交。
+    // 旧审批实例不得驳回新提交，失败不改变单据及当前提交。
     #[test]
     fn rejection_refuses_previous_approval_version() {
         let mut order = new_order();
@@ -1020,19 +812,11 @@ mod tests {
         );
     }
 
-    /// 验证最终生效守卫只读取审批状态且不会修改聚合。
-    ///
-    /// # 参数
-    /// 无；测试使用本模块采购单夹具。
-    ///
-    /// # 返回
-    /// 无；全部断言通过即测试成功。
-    ///
-    /// # 错误
-    /// 守卫意外检查提交指针或修改聚合时测试失败。
-    ///
-    /// # 关键约束
-    /// `IN_APPROVAL` 且缺少提交指针仍通过这个状态专用守卫。
+    // 验证最终生效守卫只读取审批状态且不会修改聚合。
+    //
+    // `IN_APPROVAL` 且缺少提交指针仍通过这个状态专用守卫。
+    //
+    // 守卫意外检查提交指针或修改聚合时测试失败。
     #[test]
     fn ensure_can_formalize_is_state_only_and_non_mutating() {
         let mut order = new_order();
@@ -1045,19 +829,9 @@ mod tests {
         assert!(order.submission_id_for_formalization().is_err());
     }
 
-    /// 验证最终生效守卫拒绝审批中之外的生命周期状态。
-    ///
-    /// # 参数
-    /// 无；测试覆盖草稿和已生效采购单。
-    ///
-    /// # 返回
-    /// 无；全部断言通过即测试成功。
-    ///
-    /// # 错误
-    /// 非审批中状态被接受或错误文本漂移时测试失败。
-    ///
-    /// # 关键约束
-    /// 守卫必须保持最终通过动作既有的领域错误文本。
+    // 验证最终生效守卫拒绝审批中之外的生命周期状态。
+    //
+    // 守卫必须保持最终通过动作既有的领域错误文本。
     #[test]
     fn ensure_can_formalize_rejects_non_approval_states() {
         let draft_error = new_order().ensure_can_formalize().unwrap_err();
@@ -1156,7 +930,7 @@ mod tests {
         assert_eq!(ProgressStatus::None.label(), "未开始");
     }
 
-    /// 付款条件在依据创建后保持不可变：缺省或同值放行，改写拒绝。
+    // 付款条件在依据创建后保持不可变：缺省或同值放行，改写拒绝。
     #[test]
     fn payment_term_stays_immutable_after_basis_creation() {
         let order = new_order();
@@ -1169,7 +943,7 @@ mod tests {
         );
     }
 
-    /// 解析提供方只在原付款条件校验位置运行，不能提前到采购字段校验前。
+    // 解析提供方只在原付款条件校验位置运行，不能提前到采购字段校验前。
     #[test]
     fn payment_resolver_preserves_creation_validation_order() {
         use std::cell::Cell;
@@ -1194,7 +968,7 @@ mod tests {
         assert!(called.get());
     }
 
-    /// 未修改付款条件时不访问解析提供方；非草稿状态仍先拒绝更新。
+    // 未修改付款条件时不访问解析提供方；非草稿状态仍先拒绝更新。
     #[test]
     fn payment_resolver_skips_unchanged_term_and_non_draft_update() {
         let mut order = new_order();

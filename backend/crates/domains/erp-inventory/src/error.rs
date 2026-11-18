@@ -60,14 +60,14 @@ impl_repository_error!(
     duplicate = |error| { Error::ConflictError(duplicate_key_conflict_message(&error)) }
 );
 
-/// 将唯一键冲突映射为面向用户的冲突提示。
+// 将唯一键冲突映射为面向用户的冲突提示。
 fn duplicate_key_conflict_message(error: &persistence_core::Error) -> String {
     duplicate_index_conflict_message(error.duplicate_index_name())
 }
 
-/// 将库存域唯一索引名称映射为面向用户的冲突提示。
-///
-/// 未知索引回落通用文案；错误分类保持 `Conflict` 不变。
+// 将库存域唯一索引名称映射为面向用户的冲突提示。
+//
+// 未知索引回落通用文案；错误分类保持 `Conflict` 不变。
 fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
     match index_name {
         Some("uk_stock_movements_source") => "库存流水来源重复，请勿重复提交".to_string(),

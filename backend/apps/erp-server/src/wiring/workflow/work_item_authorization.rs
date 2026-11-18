@@ -19,17 +19,8 @@ pub struct WorkItemAuthorizationAdapter {
 
 impl WorkItemAuthorizationAdapter {
     /// 装配原工作流服务；构造时不查询、不授权或写入。
-    ///
-    /// # 参数
-    /// * `db` - 工作项集合所在数据库。
-    /// * `rbac` - 现有 RBAC 快照服务。
-    /// * `authorization` - 启动时完整绑定的共享授权服务。
-    ///
-    /// # 返回
+    /// `authorization` 为启动时完整绑定的共享授权服务。
     /// 返回只向外暴露授权事实的 adapter。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: Database, rbac: SharedRbacService, authorization: Arc<AuthorizationService>) -> Self {
         Self { service: work_item_service(db, rbac, authorization) }
     }
@@ -37,18 +28,10 @@ impl WorkItemAuthorizationAdapter {
 
 #[async_trait]
 impl WorkItemAuthorizationReadPort for WorkItemAuthorizationAdapter {
-    /// 在调用方原时点执行完整工作流授权，再投影消费字段。
-    ///
-    /// # 参数
-    /// * `id` - 工作项编号。
-    /// * `actor` - 当前操作人。
-    /// * `executor` - 详情用例的原快照事务执行器。
-    ///
-    /// # 返回
-    /// 返回类型、业务对象、对象版本、允许动作与未交付的原读取凭证。
-    ///
-    /// # 错误
-    /// 原工作流错误直接透传，不按字符串重新分类。
+    // 在调用方原时点执行完整工作流授权，再投影消费字段。
+    // `executor` 为详情用例的原快照事务执行器。
+    // 返回类型、业务对象、对象版本、允许动作与未交付的原读取凭证。
+    // 原工作流错误直接透传，不按字符串重新分类。
     async fn authorize(
         &self,
         id: &str,

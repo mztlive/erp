@@ -53,12 +53,8 @@ enum EmailReservation {
 }
 
 /// 下载当前持久化采购内容，沿用采购详情授权。
-/// # 参数
-/// `db`、`rbac`、`scope` 为应用能力，`id` 为采购单，`actor` 为当前操作人。
-/// # 返回
-/// 独立可打印采购文件。
-/// # 错误
-/// 不可见、无详情资格或读取失败时拒绝。
+///
+/// `db`、`rbac`、`scope` 为应用能力，`id` 为采购单，`actor` 为当前操作人。独立可打印采购文件。不可见、无详情资格或读取失败时拒绝。
 pub async fn download(
     db: Database,
     rbac: Arc<AuthorizationService>,
@@ -70,11 +66,9 @@ pub async fn download(
 }
 
 /// 发出已生效采购版本邮件；同键永久去重，结果未知时只返回原状态。
-/// # 参数
-/// `config` 为发件配置，`req` 为期望版本、邮箱和重试键，其余为应用及身份上下文。
-/// # 返回
-/// 发件服务受理、明确失败或结果未知的状态。
-/// # 错误
+///
+/// `config` 为发件配置，`req` 为期望版本、邮箱和重试键，其余为应用及身份上下文。发件服务受理、明确失败或结果未知的状态。
+///
 /// 未配置、无发送权限、范围拒绝、版本变化或同键异载荷时拒绝。
 pub async fn send(
     db: Database,
@@ -111,7 +105,7 @@ pub async fn send(
     Ok(result)
 }
 
-/// 原发件事务内占用唯一记录；只有可能已提交的错误才进入只读查证。
+// 原发件事务内占用唯一记录；只有可能已提交的错误才进入只读查证。
 async fn reserve_email(
     db: &Database,
     authorization: Arc<AuthorizationService>,
@@ -138,7 +132,7 @@ async fn reserve_email(
     }
 }
 
-/// 授权、真实采购版本核验与唯一占用使用同一执行器。
+// 授权、真实采购版本核验与唯一占用使用同一执行器。
 async fn create_intent(
     db: &Database,
     source: &PurchaseOrderReadService,
@@ -160,7 +154,7 @@ async fn create_intent(
     Ok(EmailReservation::Created(Box::new(email)))
 }
 
-/// 固定发件入口只检查发送资格和实际采购对象。
+// 固定发件入口只检查发送资格和实际采购对象。
 async fn require_email(
     authorization: &AuthorizationService,
     command: &EmailIntent,
@@ -177,7 +171,7 @@ async fn require_email(
     Ok(())
 }
 
-/// 只渲染原发送事务内读取的已生效采购版本。
+// 只渲染原发送事务内读取的已生效采购版本。
 fn prepare_email(command: &EmailIntent, order: &PurchaseOrderCenterView) -> Result<PreparedEmail> {
     command.request.validate_source(
         order.status,
@@ -193,7 +187,7 @@ fn prepare_email(command: &EmailIntent, order: &PurchaseOrderCenterView) -> Resu
     })
 }
 
-/// 并发占用或提交未知后只授权并读取原键，不写记录、不再次发送。
+// 并发占用或提交未知后只授权并读取原键，不写记录、不再次发送。
 async fn recover_intent(
     db: &Database,
     authorization: Arc<AuthorizationService>,
@@ -215,7 +209,7 @@ async fn recover_intent(
         .await
 }
 
-/// 只接受同一操作人、采购单和确定性主键的原发送结果。
+// 只接受同一操作人、采购单和确定性主键的原发送结果。
 fn replay_intent(command: &EmailIntent, record: &PurchaseEmail) -> Result<PurchaseEmailResult> {
     if record.base.id != command.key
         || record.actor_id != command.actor.id()
@@ -226,7 +220,7 @@ fn replay_intent(command: &EmailIntent, record: &PurchaseEmail) -> Result<Purcha
     replay(record, &command.fingerprint)
 }
 
-/// 保存当前已渲染生效修订的审计内容。
+// 保存当前已渲染生效修订的审计内容。
 fn prepare_record(order: &PurchaseOrderCenterView, command: &EmailIntent, html: String) -> PurchaseEmail {
     PurchaseEmail {
         base: BaseModel::new(command.key.clone()),
@@ -268,12 +262,8 @@ pub struct PurchaseEmailHistory {
     pub created_at: u64,
 }
 /// 读取本采购单最近 20 次邮件发送结果。
-/// # 参数
-/// `db`、`authorization` 为应用能力，`id` 为采购单，`actor` 为认证人。
-/// # 返回
-/// 已授权的最近发送记录。
-/// # 错误
-/// 不可见、无详情权限或读取失败时拒绝。
+///
+/// `db`、`authorization` 为应用能力，`id` 为采购单，`actor` 为认证人。已授权的最近发送记录。不可见、无详情权限或读取失败时拒绝。
 pub async fn history(
     db: Database,
     authorization: Arc<AuthorizationService>,

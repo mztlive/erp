@@ -17,7 +17,7 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 use crate::wiring::customer_access;
 
-/// 当前负责口径使用同一客户授权服务完成查询和复验。
+// 为客户经营质量查询注入共享客户授权适配器，确保当前归属的取数和交付前复验使用同一授权源。
 fn read_model(state: &HttpState) -> CustomerQualityReadModel {
     CustomerQualityReadModel::new(
         state.application().db(),
@@ -26,7 +26,7 @@ fn read_model(state: &HttpState) -> CustomerQualityReadModel {
     )
 }
 
-/// 当前负责客户的经营情况：现任主责分组与汇总。
+/// 按现任主责归集当前负责客户的经营数据，用于查看当前负责口径的分组和汇总。
 pub async fn quality_current(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -35,7 +35,7 @@ pub async fn quality_current(
     Ok(ApiResponse::ok_with_data(read_model(&state).view_current(query, &actor).await?))
 }
 
-/// 历史负责订单的贡献：冻结归属分组与汇总，不用现任回填。
+/// 按订单冻结时的责任归属统计历史贡献，不能用现任客户负责人补填历史记录。
 pub async fn quality_history(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -44,7 +44,7 @@ pub async fn quality_history(
     Ok(ApiResponse::ok_with_data(read_model(&state).view_history(query, &actor).await?))
 }
 
-/// 当前口径全量导出：版本绑定首个响应，返回前重验授权。
+/// 从当前负责视图导出完整匹配数据；导出绑定首个响应版本，交付前重验授权。
 pub async fn quality_current_export(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -53,7 +53,7 @@ pub async fn quality_current_export(
     Ok(ApiResponse::ok_with_data(read_model(&state).export_current(query, &actor).await?))
 }
 
-/// 历史口径全量导出：冻结归属列随行导出，不使用客户端金额。
+/// 导出按历史贡献口径筛选的全部明细，携带冻结归属并以服务端结果计算金额。
 pub async fn quality_history_export(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -62,7 +62,7 @@ pub async fn quality_history_export(
     Ok(ApiResponse::ok_with_data(read_model(&state).export_history(query, &actor).await?))
 }
 
-/// 独立历史候选；只接受期间与客户上下文，不接受报表结果条件。
+/// 构造历史贡献筛选时查独立候选，只接受期间和客户条件，不用报表结果作为筛选输入。
 pub async fn quality_history_directory(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,

@@ -29,39 +29,15 @@ pub struct CostProcess {
     authorization: Arc<AuthorizationService>,
 }
 impl CostProcess {
-    /// 创建成本登记流程，复用入口数据库。
-    ///
-    /// # 参数
-    /// * `db` - 入口数据库。
-    /// * `authorization` - 应用共享的完整授权服务。
-    ///
-    /// # 返回
-    /// 返回尚未执行登记的流程实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 应用装配手工成本登记时复用业务数据库和完整授权服务；构造本身不登记成本。
     pub fn new(db: Database, authorization: Arc<AuthorizationService>) -> Self {
         Self { db, authorization }
     }
-    /// 手工登记成本事实与分配行（跨集合事务写入）。
+    /// 手工登记销售成本时，在同一事务授权并核对归属销售单，校验含税和不含税两侧分配合计，
+    /// 一并保存成本事实、分配行和审计，返回新建成本详情（数据模型 §6.10）。
     ///
-    /// 事务内校验归属销售单存在，分配合计必须等于成本事实金额（含税与
-    /// 不含税双侧）；事务内写入成本事实、分配行与审计，保证「事实 +
-    /// 分配行」原子可见（数据模型 §6.10）。业务幂等唯一
-    /// `(source_fact_type, source_document_id, source_line_id, source_version,
-    /// cost_stage, cost_type)` 由唯一索引保证，重复提交落入 409。
-    ///
-    /// # 参数
-    /// * `req` - 创建请求
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回新建成本事实的响应视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 归属销售单不存在
-    /// * `ConflictError` - 业务唯一键重复
-    /// * `Logic` - 分配合计与事实金额不一致
+    /// 以 `(source_fact_type, source_document_id, source_line_id, source_version, cost_stage, cost_type)`
+    /// 为唯一键，重复登记返回 `ConflictError`（409）；销售单不存在返回 `NotFound`，分配不守恒返回 `Logic`。
     pub async fn create_cost_entry(
         &self,
         req: CreateCostEntryRequest,
@@ -100,7 +76,7 @@ impl CostProcess {
     }
 }
 
-/// 先检查创建及真实来源资格，再解释业务来源缺失；全部读取共用原事务。
+// 先检查创建及真实来源资格，再解释业务来源缺失；全部读取共用原事务。
 async fn authorize_cost_sources(
     db: &Database,
     authorization: &AuthorizationService,

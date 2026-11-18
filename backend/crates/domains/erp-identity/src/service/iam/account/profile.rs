@@ -41,30 +41,16 @@ pub struct AccountProfileService {
 
 impl AccountProfileService {
     /// 使用共享 RBAC 服务创建账号信息服务实例。
-    ///
-    /// # 参数
-    /// * `db` - 数据库实例
-    /// * `rbac` - 共享 Casbin RBAC 服务
-    ///
-    /// # 返回
     /// 返回账号信息服务实例。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// `rbac`：共享 Casbin RBAC 服务。
     pub fn new(db: Database, rbac: SharedRbacService) -> Self {
         Self { db, rbac }
     }
 
     /// 获取当前账号信息。
-    ///
-    /// # 参数
-    /// * `user_id` - 账号ID
-    /// * `account_kind` - 账号类型
-    ///
-    /// # 返回
     /// 返回当前账号的资料、角色、权限以及策略和组织版本。
     ///
-    /// # 错误
     /// 账号不存在或类型不符时返回 `NotFound`；账号已失效时返回 `Forbidden`；读取期间策略版本变化时返回 `ConflictError`。数据库、角色或组织版本读取失败时返回对应错误。
     pub async fn account_profile(&self, user_id: &str, account_kind: AccountKind) -> Result<AccountProfile> {
         let policy_version = self.rbac.current_policy_revision().await?;
@@ -103,17 +89,10 @@ impl AccountProfileService {
         Ok(profile)
     }
 
-    /// 构建统一账号资料响应。
-    ///
-    /// # 参数
-    /// * `account` - 账号实体
-    /// * `role_ids` - 角色ID集合
-    /// * `permissions` - 权限集合
-    /// * `avatar` - 已规范化的头像
-    ///
-    /// # 返回值
-    /// 返回统一账号资料响应
-    ///
+    // 构建统一账号资料响应。
+    // 返回统一账号资料响应。
+    //
+    // `permissions`：权限集合；`avatar`：已规范化的头像。
     fn build_profile(
         account: AccountCore,
         role_ids: Vec<String>,
@@ -138,13 +117,10 @@ impl AccountProfileService {
         }
     }
 
-    /// 归一化头像地址。
-    ///
-    /// # 参数
-    /// * `avatar` - 原始头像地址
-    ///
-    /// # 返回值
-    /// 返回有效头像地址；空值返回 `None`
+    // 归一化头像地址。
+    // 返回有效头像地址；空值返回 `None`。
+    //
+    // `avatar`：原始头像地址。
     fn normalized_avatar(avatar: Option<&str>) -> Option<String> {
         avatar.map(|value| value.trim().to_string()).filter(|value| !value.is_empty())
     }

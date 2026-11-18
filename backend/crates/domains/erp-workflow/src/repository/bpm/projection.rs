@@ -7,16 +7,9 @@ use super::ApprovalInstanceListProjection;
 
 impl ApprovalInstanceListProjection {
     /// 由入口执行构造启动列表投影，不读取当前账号或定义资料。
-    ///
-    /// # 参数
-    /// * `execution` - 本次启动创建的入口执行及其冻结人员。
-    /// * `now` - 调用方的状态变更时间。
-    ///
-    /// # 返回
     /// 返回入口节点和冻结审批人的有界投影；启动时不含驳回记录。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// `execution`：本次启动创建的入口执行及其冻结人员；`now`：调用方的状态变更时间。
     pub fn from_entry_execution(execution: &ApprovalNodeExecution, now: Instant) -> Self {
         Self {
             current_node_key: Some(execution.node_key.clone()),

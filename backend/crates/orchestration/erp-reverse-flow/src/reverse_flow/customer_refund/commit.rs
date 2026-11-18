@@ -39,21 +39,11 @@ use crate::reverse_flow::command_recovery::{CommitApproval, commit_audits, save_
 use crate::{Error, Result, ReverseFlowPorts};
 
 impl ReturnsProcess {
-    /// 按原回款一次创建客户退款并启动审批。
+    /// 需从原客户回款发起退款审批时，一次创建并提交退款单。在同一事务核验原来源，写单据注册、定义绑定、
+    /// 退款实体、冻结快照、审批运行事实、入口任务和两条审计。
     ///
-    /// 单据注册、定义绑定、退款实体、审批快照、运行事实、入口任务和两类审计
-    /// 全部在同一 MongoDB 事务内写入。
-    ///
-    /// # 参数
-    /// * `req` - 一次创建并提交的请求。
-    /// * `actor` - 已通过鉴权的审计操作人。
-    ///
-    /// # 返回
-    /// 返回新建退款单视图；同载荷命令已提交时返回已有退款单视图。
-    ///
-    /// # 错误
-    /// 请求校验、命令收据、原回款、发布定义、审批启动或仓储写入失败时返回对应错误。
-    /// 提交结果未知时按同一命令回读，未确认则保留原错误。视图读取失败时返回对应错误。
+    /// 按原幂等键和相同载荷查证已提交命令，回读原退款视图，不再次启动审批。请求或回执校验、原回款、
+    /// 发布定义、审批启动或仓储失败时返回对应错误。未知提交未能查证时保留原错误；结果视图回读失败按读取错误返回。
     pub async fn commit_customer_refund(
         &self,
         req: CommitCustomerRefundRequest,
@@ -106,7 +96,7 @@ impl ReturnsProcess {
         .await
     }
 
-    /// 原事务先授权服务端候选，再读取收据、准备来源并完成全部写入。
+    // 客户退款的创建并提交事务先授权服务端候选，再查原回执；只有未命中才准备来源并执行新写入。
     async fn commit_customer_refund_snapshot(
         &self,
         req: &CommitCustomerRefundRequest,
@@ -128,7 +118,7 @@ impl ReturnsProcess {
         Ok(id)
     }
 
-    /// 按既有顺序准备原资金事实、冻结快照、单据绑定和两条业务审计。
+    // 客户退款首次提交时依次准备原资金事实、冻结快照、登记及定义绑定所需信息，再生成两条业务审计。
     async fn prepare_customer_refund_commit(
         &self,
         req: &CommitCustomerRefundRequest,
@@ -190,7 +180,7 @@ struct CommitPreparation {
     audits: (AuditLog, AuditLog),
 }
 
-/// 已授权且未命中收据后，在原事务校验来源业务状态并执行写入。
+// 客户退款候选已授权且没有原回执时，在原事务核验来源状态后进入创建提交写入。
 async fn apply_commit(
     db: &Database,
     rbac: &ReverseFlowPorts,
@@ -203,7 +193,7 @@ async fn apply_commit(
     write_commit(db, rbac, input, command, actor, executor).await
 }
 
-/// 绑定、审批准备、实体、运行事实、审计及回执严格按原顺序写入。
+// 首次创建并提交客户退款时，依次写入绑定、审批准备后的实体、运行事实、审计和回执。
 async fn write_commit(
     db: &Database,
     rbac: &ReverseFlowPorts,
@@ -254,7 +244,7 @@ async fn write_commit(
     save_commit(db, command, &input.refund.base.id, (&input.audits.0, &input.audits.1), executor).await
 }
 
-/// 在调用方事务中读取绑定图、重验审批人并准备启动写集合。
+// 生成客户退款启动计划前，在调用方事务读取冻结绑定的定义图并重验审批人资格。
 async fn prepare_commit_start(
     db: &Database,
     rbac: &ReverseFlowPorts,

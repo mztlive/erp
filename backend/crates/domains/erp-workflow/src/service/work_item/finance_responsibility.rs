@@ -172,15 +172,11 @@ pub struct ResolvedFinanceResponsibility {
 
 impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     /// 查询全部财务责任规则。
-    ///
-    /// # 参数
-    /// * `actor` - 需要具备财务责任管理功能权限的操作人。
-    ///
-    /// # 返回
     /// 返回除卡资金复核以外的规则视图。
     ///
-    /// # 错误
     /// 规则、账号或往来方读取失败时返回错误。
+    ///
+    /// `actor`：需要具备财务责任管理功能权限的操作人。
     pub async fn finance_responsibility_rule_list(
         self,
         actor: &AuditActor,
@@ -195,7 +191,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             .await
     }
 
-    /// 规则、人员姓名和往来方编号全部读取同一授权快照。
+    // 为规则管理页装配展示数据时，规则、账号姓名和往来方编号沿同一授权快照读取。
     async fn finance_rule_views(
         &self,
         actor: &AuditActor,
@@ -220,16 +216,11 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     }
 
     /// 创建财务责任规则并记录审计。
-    ///
-    /// # 参数
-    /// * `request` - 规则匹配范围与负责人
-    /// * `actor` - 当前操作人
-    ///
-    /// # 返回
     /// 返回经编译器验证为 `Send` 的 future，完成后取得新规则视图。
     ///
-    /// # 错误
     /// 匹配范围、往来方、负责人资格、唯一性或事务写入不满足时返回错误。
+    ///
+    /// `request`：规则匹配范围与负责人。
     #[expect(
         clippy::manual_async_fn,
         reason = "显式 Send 返回边界用于验证嵌套异步调用，避免调用方的高阶生命周期推导失败"
@@ -292,17 +283,11 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     }
 
     /// 整项更新财务责任规则并记录审计。
-    ///
-    /// # 参数
-    /// * `id` - 规则 ID
-    /// * `request` - 预期版本与完整规则配置
-    /// * `actor` - 当前操作人
-    ///
-    /// # 返回
     /// 返回经编译器验证为 `Send` 的 future，完成后取得更新后的规则视图。
     ///
-    /// # 错误
     /// 规则不存在、版本冲突、往来方或负责人资格不满足时返回错误。
+    ///
+    /// `request`：预期版本与完整规则配置。
     #[expect(
         clippy::manual_async_fn,
         reason = "显式 Send 返回边界用于验证嵌套异步调用，避免调用方的高阶生命周期推导失败"
@@ -364,10 +349,8 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         }
     }
 
-    /// 在调用方事务内重验版本与资格，并更新财务责任规则。
-    ///
-    /// # 错误
-    /// 规则不存在、版本冲突、资格校验或仓储更新失败时返回错误。
+    // 在调用方事务内重验版本与资格，并更新财务责任规则。
+    // 规则不存在、版本冲突、资格校验或仓储更新失败时返回错误。
     async fn update_finance_rule(
         &self,
         id: &str,
@@ -411,15 +394,11 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     }
 
     /// 列出可作为付款或销项开票负责人的有效管理账号。
-    ///
-    /// # 参数
-    /// * `actor` - 需要具备财务责任管理功能权限的操作人。
-    ///
-    /// # 返回
     /// 返回至少具备付款或销项开票所需权限的有效管理账号，按显示名与账号 ID 排序。
     ///
-    /// # 错误
     /// 账号或权限数据读取失败时返回错误。
+    ///
+    /// `actor`：需要具备财务责任管理功能权限的操作人。
     pub async fn finance_responsibility_owner_options(
         self,
         actor: &AuditActor,
@@ -434,7 +413,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             .await
     }
 
-    /// 候选账号及逐人的完整功能资格使用原读取事务。
+    // 财务规则管理查询在原授权快照逐人检查完整功能资格，再返回候选账号，不把候选结果作为任务创建资格。
     async fn finance_owner_options(
         &self,
         actor: &AuditActor,
@@ -479,17 +458,11 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     }
 
     /// 在任务创建事务内匹配负责人池、重验选中人员并推进一次轮次。
-    ///
-    /// # 参数
-    /// * `operation` - 财务责任操作
-    /// * `counterparty_id` - 往来方 ID
-    /// * `executor` - 业务事务执行器
-    ///
-    /// # 返回
     /// 返回冻结的负责人账号与责任键；后续失败由调用方回滚原事务。
     ///
-    /// # 错误
     /// 往来方失效、规则零/多命中、账号不可用或权限不足时失败关闭。
+    ///
+    /// `operation`：财务责任操作；`executor`：业务事务执行器。
     pub async fn resolve_finance_responsibility(
         &self,
         operation: FinanceResponsibilityOperation,
@@ -522,14 +495,12 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     }
 
     /// 沿用供应商付款或来源客户开票责任，重验退货财务完整权限。
-    /// # 参数
-    /// * `task_type` - 退款或进项红票任务。
-    /// * `counterparty_id` - 退款用供应商，红票用来源客户。
-    /// * `executor` - 原业务事务。
-    /// # 返回
     /// 已冻结且可执行本任务的个人责任。
-    /// # 错误
+    ///
     /// 规则缺失、账号失效或缺少退货执行权限时拒绝。
+    ///
+    /// `task_type`：退款或进项红票任务；`counterparty_id`：退款用供应商，红票用来源客户。
+    /// `executor`：原业务事务。
     pub async fn resolve_return_finance_responsibility(
         &self,
         task_type: WorkItemType,
@@ -603,7 +574,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         }
     }
 
-    /// 沿用任务写入执行器核验账号及完整财务权限，资格失败不得推进轮次。
+    // 创建财务任务时沿业务写执行器重验选中账号及完整财务资格；未通过时不消费责任池轮次。
     async fn ensure_finance_owner_eligible(
         &self,
         operation: FinanceResponsibilityOperation,
@@ -629,7 +600,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         Ok(())
     }
 
-    /// 将财务操作的真实任务身份交由固定入口判断功能资格。
+    // 以财务操作对应的真实任务类型和业务来源向固定入口检查负责人功能资格，不依赖可见性投影。
     async fn finance_owner_qualified(
         &self,
         operation: FinanceResponsibilityOperation,
@@ -641,7 +612,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         self.execution_qualified(actor, kind, source, executor).await
     }
 
-    /// 资格拒绝只影响候选标记；接入及仓储错误保持失败。
+    // 候选账号没有完整执行资格时只标记为不合格；接入或仓储错误不能当成普通资格拒绝继续。
     async fn execution_qualified(
         &self,
         actor: &AuditActor,

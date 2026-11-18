@@ -22,16 +22,13 @@ use super::ImportApplyProcess;
 use crate::{Error, Result};
 
 impl ImportApplyProcess {
-    /// 构造导入批次详情视图，并补上同请求号的后台任务关联。
-    ///
-    /// # 参数
-    /// * `batch` - 已存在的导入批次。
-    ///
-    /// # 返回
-    /// 返回批次视图；找不到后台任务时 `background_job_id` 为空。
-    ///
-    /// # 错误
-    /// 按批次号查询后台任务失败时返回仓储错误。
+    // 构造导入批次详情视图，并补上同请求号的后台任务关联。
+    //
+    // `batch`：已存在的导入批次。
+    //
+    // 返回批次视图；找不到后台任务时 `background_job_id` 为空。
+    //
+    // 按批次号查询后台任务失败时返回仓储错误。
     pub(super) async fn batch_view_of(
         &self,
         batch: LegacyImportBatch,
@@ -49,14 +46,10 @@ impl ImportApplyProcess {
     /// 资产引用（成功包/manifest/失败诊断包）存在性经 D05 仓储校验，
     /// 后台任务经 D04 仓储与批次同一事务登记。
     ///
-    /// # 参数
-    /// * `req` - 创建请求（批次头 + 来源行）
-    /// * `actor` - 已通过鉴权的审计操作人
+    /// `req`：创建请求（批次头 + 来源行）。
     ///
-    /// # 返回
     /// 返回新建（或既有）批次的响应视图。
     ///
-    /// # 错误
     /// * `NotFound` - 资产引用不存在
     /// * `ValidationError` - 请求体校验失败
     /// * `RepositoryError` - 数据库写入失败
@@ -76,7 +69,7 @@ impl ImportApplyProcess {
             .await
     }
 
-    /// 创建与幂等回包均使用同一授权及业务事务。
+    // 创建与幂等回包均使用同一授权及业务事务。
     async fn create_batch_stage(
         &self,
         req: CreateLegacyImportBatchRequest,
@@ -120,16 +113,12 @@ impl ImportApplyProcess {
         Ok(view)
     }
 
-    /// 批量校验批次引用的资产存在（D05 仓储读取，INT-R27）。
-    ///
-    /// 单次 `$in` 取回全部可选资产事实并按输入顺序报告首个缺失标签；
-    /// 空可选字段不访问数据库，重复 ID 只查询一次，软删除视为缺失。
-    ///
-    /// # 参数
-    /// * `req` - 创建请求
-    ///
-    /// # 错误
-    /// * `NotFound` - 资产引用不存在
+    // 批量校验批次引用的资产存在（D05 仓储读取，INT-R27）。
+    //
+    // 单次 `$in` 取回全部可选资产事实并按输入顺序报告首个缺失标签；
+    // 空可选字段不访问数据库，重复 ID 只查询一次，软删除视为缺失。
+    //
+    // * `NotFound` - 资产引用不存在
     async fn ensure_file_assets_exist(
         &self,
         req: &CreateLegacyImportBatchRequest,
@@ -153,20 +142,16 @@ impl ImportApplyProcess {
         Err(Error::NotFound(format!("{label}资产不存在")))
     }
 
-    /// 经领域行工厂装配导入行实体（INT-E24）。
-    ///
-    /// Process 只预分配行 ID 并注入批次，字符串规范化与批内唯一判定由
-    /// `erp_import::import_row_factory` 独占。
-    ///
-    /// # 参数
-    /// * `req` - 创建请求
-    /// * `batch_id` - 所属导入批次
-    ///
-    /// # 返回
-    /// 返回新建的导入行实体列表。
-    ///
-    /// # 错误
-    /// 行字段校验失败或批内来源身份重复时返回错误。
+    // 经领域行工厂装配导入行实体（INT-E24）。
+    //
+    // Process 只预分配行 ID 并注入批次，字符串规范化与批内唯一判定由
+    // `erp_import::import_row_factory` 独占。
+    //
+    // `batch_id`：所属导入批次。
+    //
+    // 返回新建的导入行实体列表。
+    //
+    // 行字段校验失败或批内来源身份重复时返回错误。
     fn build_rows(
         &self,
         req: &CreateLegacyImportBatchRequest,
@@ -210,23 +195,16 @@ fn new_batch(
     )?)
 }
 
-/// 按输入顺序定位首个缺失资产的字段标签（INT-R27 纯映射）。
-///
-/// 保持 `ensure_file_assets_exist` 的字段标签化错误语义：重复 ID 只报告
-/// 首次出现位置的标签，全部存在时返回 `None`。
-///
-/// # 参数
-/// * `labeled` - 按请求字段顺序排列的标签与可选资产 ID
-/// * `missing` - 仓储返回的缺失 ID（已去重，不保证顺序）
-///
-/// # 返回
-/// 返回首个缺失资产的字段标签；无缺失时返回 `None`。
-///
-/// # 错误
-/// 不返回错误。
-///
-/// # 约束
-/// 纯内存映射，不访问数据库；不解释软删除与缺失的区分（由仓储决定）。
+// 按输入顺序定位首个缺失资产的字段标签（INT-R27 纯映射）。
+//
+// 保持 `ensure_file_assets_exist` 的字段标签化错误语义：重复 ID 只报告
+// 首次出现位置的标签，全部存在时返回 `None`。
+//
+// `labeled`：按请求字段顺序排列的标签与可选资产 ID；`missing`：仓储返回的缺失 ID（已去重，不保证顺序）。
+//
+// 返回首个缺失资产的字段标签；无缺失时返回 `None`。
+//
+// 纯内存映射，不访问数据库；不解释软删除与缺失的区分（由仓储决定）。
 fn first_missing_asset_label(
     labeled: &[(&str, Option<&FileAssetId>); 3],
     missing: &[FileAssetId],
@@ -249,7 +227,7 @@ mod tests {
 
     use super::first_missing_asset_label;
 
-    /// 创建和幂等读取必须先通过写事务授权，不能先探测批次。
+    // 验证：创建和幂等读取必须先通过写事务授权，不能先探测批次。
     #[tokio::test]
     async fn create_batch_rejects_unproven_transaction_before_database_reads() {
         let (service, actor) = super::super::testing::fixture().await;

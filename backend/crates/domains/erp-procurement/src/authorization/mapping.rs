@@ -16,12 +16,10 @@ pub struct PurchaseMapping {
 
 impl PurchaseMapping {
     /// 为服务端固定入口建立采购集合映射。
-    /// # 参数
+    ///
+    /// 返回以采购单为每行粒度的对象模型。资源或模型标识非法时拒绝。
+    ///
     /// resource 为组合根登记的入口资源，不接受 HTTP 参数。
-    /// # 返回
-    /// 返回以采购单为每行粒度的对象模型。
-    /// # 错误
-    /// 资源或模型标识非法时拒绝。
     pub fn new(resource: &str) -> Result<Self> {
         let model = QueryModel {
             key: QueryModelKey::parse(format!("{resource}_purchase"))?,

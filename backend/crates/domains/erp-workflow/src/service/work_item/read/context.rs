@@ -37,17 +37,10 @@ pub(crate) fn queue_context_id(
 }
 
 /// 完整结果使用有界滚动指纹；页码不进入版本，跨页共享同一授权锚点。
-///
-/// # 参数
-/// * `identity` - 写入指纹的 `identity` 标量
-/// * `query` - 写入指纹的 `query` 标量
-/// * `result` - 写入指纹的 `result` 标量
-///
-/// # 返回
 /// 返回前缀为 `work-item-scope` 的上下文标识。
 ///
-/// # 错误
-/// 不返回错误。
+/// `identity`：写入指纹的 `identity` 标量；`query`：写入指纹的 `query` 标量。
+/// `result`：写入指纹的 `result` 标量。
 pub fn queue_scope_version(identity: &str, query: &str, result: &str) -> String {
     QueueContextIdentity::new(
         "work-item-scope",
@@ -61,17 +54,11 @@ pub fn queue_scope_version(identity: &str, query: &str, result: &str) -> String 
 }
 
 /// 后续页无版本或版本漂移必须失败关闭，禁止拼接不同范围结果。
-///
-/// # 参数
-/// * `page` - 请求页码
-/// * `provided` - 客户端回传的范围版本
-/// * `expected` - 服务端重算的范围版本
-///
-/// # 返回
 /// 页码不大于 1 且未回传版本，或回传值与重算值一致时无返回值。
 ///
-/// # 错误
 /// `page` 大于 1 且未回传版本，或回传值与 `expected` 不同时，返回 `Error::ConflictError`，详情前缀为 `DATA_SCOPE_CHANGED：`。
+///
+/// `provided`：客户端回传的范围版本；`expected`：服务端重算的范围版本。
 pub fn ensure_scope_version(page: u64, provided: Option<&str>, expected: &str) -> Result<()> {
     let version = ScopeVersion::new(provided, EmptyScopeVersion::Provided);
     version
@@ -81,16 +68,7 @@ pub fn ensure_scope_version(page: u64, provided: Option<&str>, expected: &str) -
 }
 
 /// 为单条任务详情生成队列上下文标识。
-///
-/// # 参数
-/// * `actor_id` - 操作人 ID
-/// * `work_item_id` - 工作项稳定 ID
-///
-/// # 返回
 /// 返回前缀为 `work-item-single` 的上下文标识。
-///
-/// # 错误
-/// 不返回错误。
 pub fn single_item_context_id(actor_id: &str, work_item_id: &str) -> String {
     QueueContextIdentity::new(
         "work-item-single",
@@ -100,16 +78,11 @@ pub fn single_item_context_id(actor_id: &str, work_item_id: &str) -> String {
 }
 
 /// 校验客户端回传的队列上下文；缺省视为当前查询。
-///
-/// # 参数
-/// * `provided` - 客户端回传的队列上下文
-/// * `expected` - 服务端按当前查询重算的上下文
-///
-/// # 返回
 /// 未回传或与重算值相同时无返回值。
 ///
-/// # 错误
 /// 回传值与 `expected` 不同时返回 `Error::ConflictError`，详情为 `DATA_SCOPE_CHANGED：队列范围已变化，请从第一页刷新`。
+///
+/// `provided`：客户端回传的队列上下文；`expected`：服务端按当前查询重算的上下文。
 pub fn ensure_queue_context(provided: &Option<String>, expected: &str) -> Result<()> {
     if provided.as_deref().is_none_or(|provided| provided == expected) {
         return Ok(());
@@ -133,16 +106,11 @@ pub struct AuthorizedPageCollector<T> {
 
 impl<T> AuthorizedPageCollector<T> {
     /// 按页码和页大小计算本页半开区间。
-    ///
-    /// # 参数
-    /// * `page` - 页码；小于 1 时按 1 处理
-    /// * `page_size` - 单页条数
-    ///
-    /// # 返回
     /// 返回起点为 `(page - 1) * page_size`、终点为起点加页大小的收集器。
     ///
-    /// # 错误
     /// 起点或终点溢出时返回 `Error::ValidationError`。
+    ///
+    /// `page`：页码；小于 1 时按 1 处理。
     pub fn new(page: u64, page_size: u32) -> Result<Self> {
         let start = page
             .max(1)
@@ -156,15 +124,6 @@ impl<T> AuthorizedPageCollector<T> {
     }
 
     /// 按出现顺序计入授权行，只保留落在本页区间内的行。
-    ///
-    /// # 参数
-    /// * `authorized` - 本批新授权的行
-    ///
-    /// # 返回
-    /// 无返回值。总数饱和累加，区间外的行不进入 `items`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn extend(&mut self, authorized: impl IntoIterator<Item = T>) {
         for item in authorized {
             let position = self.total;
@@ -176,15 +135,7 @@ impl<T> AuthorizedPageCollector<T> {
     }
 
     /// 结束收集并交出本页行与授权总数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回本页 `items`。总数能放入 `i64` 时原样返回，否则为 `i64::MAX`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn finish(self) -> AuthorizedPage<T> {
         AuthorizedPage { items: self.items, total: i64::try_from(self.total).unwrap_or(i64::MAX) }
     }

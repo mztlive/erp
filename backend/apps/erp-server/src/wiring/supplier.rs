@@ -24,29 +24,12 @@ pub struct MongoSupplierPartyFacts {
 
 impl MongoSupplierPartyFacts {
     /// 绑定主体集合所在数据库，构造时不读取。
-    ///
-    /// # 参数
-    /// * `db` - 主体集合所在数据库。
-    ///
-    /// # 返回
-    /// 返回未执行 I/O 的 adapter。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
     /// 包装为供应商域可注入的主体事实 Port。
-    ///
-    /// # 参数
-    /// * `db` - 主体集合所在数据库。
-    ///
-    /// # 返回
     /// 返回共享的主体事实 Port。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn shared(db: Database) -> Arc<dyn PartyFactsPort> {
         Arc::new(Self::new(db))
     }
@@ -190,15 +173,8 @@ pub struct MongoSupplierSensitiveTokens {
 
 impl MongoSupplierSensitiveTokens {
     /// 把敏感数据编解码器包装为供应商令牌 Port。
-    ///
-    /// # 参数
-    /// * `codec` - 主体敏感字段编解码器。
-    ///
-    /// # 返回
+    /// `codec` 为主体敏感字段编解码器。
     /// 返回共享的敏感令牌 Port。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn shared(codec: Arc<SensitiveDataCodec>) -> Arc<dyn SensitiveTokenPort> {
         Arc::new(Self { codec })
     }
@@ -226,29 +202,12 @@ pub struct MongoSupplierFileAssets {
 
 impl MongoSupplierFileAssets {
     /// 绑定文件资产集合所在数据库，构造时不读取。
-    ///
-    /// # 参数
-    /// * `db` - 文件资产集合所在数据库。
-    ///
-    /// # 返回
-    /// 返回未执行 I/O 的 adapter。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
     /// 包装为供应商域可注入的文件资产事实 Port。
-    ///
-    /// # 参数
-    /// * `db` - 文件资产集合所在数据库。
-    ///
-    /// # 返回
     /// 返回共享的文件资产事实 Port。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn shared(db: Database) -> Arc<dyn FileAssetFactsPort> {
         Arc::new(Self::new(db))
     }

@@ -8,17 +8,13 @@ use erp_finance::dto::cost::{
 
 use super::{Error, Result, page_offset};
 
-/// 成本列表金额排序使用可见分配份额，稳定次序以成本身份收尾。
-///
-/// # 参数
-/// * `rows` - 已授权的成本行。
-/// * `paging` - 排序与分页。
-///
-/// # 返回
-/// 返回排序后的当前页；总数是排序前的完整行数。
-///
-/// # 错误
-/// 不返回错误。
+// 调用此入口时，成本列表金额排序使用可见分配份额，稳定次序以成本身份收尾。
+//
+// 调用参数：
+// * `rows` - 已授权的成本行。
+// * `paging` - 排序与分页。
+//
+// 返回排序后的当前页；总数是排序前的完整行数。
 pub(super) fn costs(mut rows: Vec<ScopedCostEntryView>, paging: PageParams) -> PageView<ScopedCostEntryView> {
     rows.sort_by(|a, b| {
         let order = match paging.sort_by {
@@ -36,18 +32,16 @@ pub(super) fn costs(mut rows: Vec<ScopedCostEntryView>, paging: PageParams) -> P
     page(rows, paging)
 }
 
-/// 先对授权分配应用业务条件，再用分配本身的持久化时间排序和分页。
-///
-/// # 参数
-/// * `rows` - 已授权的分配行。
-/// * `created` - 分配身份到持久化创建时间。
-/// * `query` - 分配列表条件。
-///
-/// # 返回
-/// 返回按创建时间与身份排序后的当前页。
-///
-/// # 错误
-/// 分配缺少持久化创建时间时返回 `Internal`。
+// 处理成本列表时，先对授权分配应用业务条件，再用分配本身的持久化时间排序和分页。
+//
+// 调用参数：
+// * `rows` - 已授权的分配行。
+// * `created` - 分配身份到持久化创建时间。
+// * `query` - 分配列表条件。
+//
+// 返回按创建时间与身份排序后的当前页。
+//
+// 分配缺少持久化创建时间时返回 `Internal`。
 pub(super) fn allocations(
     rows: Vec<CostAllocationView>,
     created: &HashMap<String, u64>,
@@ -75,7 +69,7 @@ pub(super) fn allocations(
     Ok(page(rows.into_iter().map(|(_, row)| row).collect(), query.paging))
 }
 
-/// 总数取完整授权且匹配条件的集合，分页不得影响汇总或溢出页码。
+// 生成成本列表分页时，总数取完整授权且匹配条件的集合，分页不得影响汇总或溢出页码。
 fn page<T>(rows: Vec<T>, paging: PageParams) -> PageView<T> {
     let total = rows.len() as i64;
     PageView {

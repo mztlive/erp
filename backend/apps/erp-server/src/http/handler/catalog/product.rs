@@ -34,12 +34,6 @@ use crate::http::state::HttpState;
 use crate::wiring::catalog_access;
 
 /// 查询符合销售资格的公司 SKU 只读投影。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `params` - 搜索、商品类型、资格业务日期与分页参数
-///
-/// # 返回
 /// 返回公司商品池分页视图，不包含采购成本与供应商身份。
 pub async fn sellable_sku_list(
     State(state): State<HttpState>,
@@ -50,14 +44,7 @@ pub async fn sellable_sku_list(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 查询商品（SPU）列表。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `query` - 商品、当前修订与当前启用 SKU 的分页筛选参数
-///
-/// # 返回
-/// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
+/// 按请求条件查询商品（SPU）列表。
 pub async fn product_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -69,13 +56,6 @@ pub async fn product_list(
 }
 
 /// 创建商品（SPU + 首个商品修订 + 媒体 + 全部 SKU 行，跨集合事务）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 创建请求（商品身份 + 修订快照 + SKU 规格行）
-///
-/// # 返回
 /// 返回新建商品的响应视图。
 pub async fn product_create(
     State(state): State<HttpState>,
@@ -91,16 +71,7 @@ pub async fn product_create(
 ///
 /// 对象存储不具备 MongoDB 事务能力；数据库事务失败时删除本请求刚写入的
 /// 对象作为补偿；提交结果未知时保留对象。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 当前认证账号
-/// * `multipart` - 商品 JSON 命令和具名媒体文件
-///
-/// # 返回
 /// 返回新建商品视图。
-///
-/// # 错误
 /// 文件校验、权限、业务校验或事务失败时返回原分类错误。
 pub async fn product_create_with_assets(
     State(state): State<HttpState>,
@@ -117,14 +88,7 @@ pub async fn product_create_with_assets(
 }
 
 /// 规格编辑商品（按规范化签名分类保留/新增/重新启用/移除，跨集合事务）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 商品 ID
-/// * `req` - 规格编辑请求（含期望版本与修订后全部 SKU 行）
-///
-/// # 返回
+/// `req` 为规格编辑请求（含期望版本与修订后全部 SKU 行）。
 /// 返回编辑后商品的响应视图。
 pub async fn product_update(
     State(state): State<HttpState>,
@@ -141,17 +105,7 @@ pub async fn product_update(
 ///
 /// 对象存储不具备 MongoDB 事务能力；数据库事务失败时删除本请求刚写入的
 /// 对象作为补偿；提交结果未知时保留对象。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 当前认证账号
-/// * `id` - 商品稳定 ID
-/// * `multipart` - 商品修订 JSON 命令和具名媒体文件
-///
-/// # 返回
 /// 返回修订后的商品视图。
-///
-/// # 错误
 /// 文件校验、权限、版本或事务失败时返回原分类错误。
 pub async fn product_update_with_assets(
     State(state): State<HttpState>,
@@ -170,14 +124,7 @@ pub async fn product_update_with_assets(
 }
 
 /// 停用商品；当前修订和媒体由后端读取并在跨集合事务内复制。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 商品稳定 ID
-/// * `req` - 停用意图（已见版本、原因和生效日）
-///
-/// # 返回
+/// `req` 为停用意图（已见版本、原因和生效日）。
 /// 返回停用后的商品视图。
 pub async fn product_disable(
     State(state): State<HttpState>,
@@ -191,14 +138,6 @@ pub async fn product_disable(
 }
 
 /// 一次切换商品下全部当前启用 SKU 的上架状态。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 商品稳定 ID
-/// * `req` - 全部 SKU 的目标上架状态
-///
-/// # 返回
 /// 返回 SPU 从当前启用 SKU 继承得到的上架状态与数量。
 pub async fn product_listing_update(
     State(state): State<HttpState>,
@@ -210,14 +149,8 @@ pub async fn product_listing_update(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 查询商品修订列表。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `query` - 分页与筛选参数（`product_id`/`status` 扁平传递）
-///
-/// # 返回
-/// 返回契约形状的分页视图。
+/// 按请求条件查询商品修订列表。
+/// `query` 为分页与筛选参数（`product_id`/`status` 扁平传递）。
 pub async fn product_revision_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -228,14 +161,8 @@ pub async fn product_revision_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-/// 查询 SKU 列表。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `query` - 分页与筛选参数（`sku_no`/`product_id`/`status`/`listing_status` 扁平传递）
-///
-/// # 返回
-/// 返回契约形状的分页视图。
+/// 按请求条件查询 SKU 列表。
+/// `query` 为分页与筛选参数（`sku_no`/`product_id`/`status`/`listing_status` 扁平传递）。
 pub async fn sku_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -247,14 +174,7 @@ pub async fn sku_list(
 }
 
 /// 切换单个 SKU 的上架状态。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - SKU 稳定 ID
-/// * `req` - 期望版本与目标上架状态
-///
-/// # 返回
+/// `req` 为期望版本与目标上架状态。
 /// 返回更新后的 SKU 视图。
 pub async fn sku_listing_update(
     State(state): State<HttpState>,
@@ -266,14 +186,8 @@ pub async fn sku_listing_update(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 查询 SKU 修订列表。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `query` - 分页与筛选参数（`sku_id`/`name`/`barcode`/`status` 扁平传递）
-///
-/// # 返回
-/// 返回契约形状的分页视图。
+/// 按请求条件查询 SKU 修订列表。
+/// `query` 为分页与筛选参数（`sku_id`/`name`/`barcode`/`status` 扁平传递）。
 pub async fn sku_revision_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -284,14 +198,8 @@ pub async fn sku_revision_list(
     Ok(ApiResponse::ok_with_data(page))
 }
 
-/// 查询卡券类目扩展修订列表。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `query` - 分页与筛选参数（`sku_id`/`status` 扁平传递）
-///
-/// # 返回
-/// 返回契约形状的分页视图。
+/// 按请求条件查询卡券类目扩展修订列表。
+/// `query` 为分页与筛选参数（`sku_id`/`status` 扁平传递）。
 pub async fn voucher_category_profile_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
@@ -304,14 +212,7 @@ pub async fn voucher_category_profile_list(
 
 /// 原子创建卡券类目（商品 + 首个修订 + 唯一 SKU + [可选内联新建分类] + 卡券类目
 /// 扩展修订，跨集合事务）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 创建请求（`voucher_no` 同时作为 `product_no`/`sku_no`；
-///   `category_id` 与 `new_category` 二选一）
-///
-/// # 返回
+/// `req` 为创建请求（`voucher_no` 同时作为 `product_no`/`sku_no` `category_id` 与 `new_category` 二选一）。
 /// 返回新建卡券类目扩展修订的响应视图。
 pub async fn voucher_category_create(
     State(state): State<HttpState>,
@@ -324,14 +225,7 @@ pub async fn voucher_category_create(
 }
 
 /// 更新卡券类目名称与描述（按 SKU 稳定身份定位，追加商品/SKU/扩展修订）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `sku_id` - 卡券类目对应的 VOUCHER SKU 稳定 ID
-/// * `req` - 更新请求（含商品乐观锁版本）
-///
-/// # 返回
+/// `req` 为更新请求（含商品乐观锁版本）。
 /// 返回新建卡券类目扩展修订的响应视图。
 pub async fn voucher_category_update(
     State(state): State<HttpState>,
@@ -352,12 +246,6 @@ pub struct ProductDetailSkuRevisionQuery {
 }
 
 /// 按稳定 ID 查询单个商品，与列表共用同一聚合计数口径。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `id` - 商品稳定 ID
-///
-/// # 返回
 /// 返回与列表同构的单个商品视图。
 pub async fn product_detail(
     State(state): State<HttpState>,
@@ -370,14 +258,7 @@ pub async fn product_detail(
 }
 
 /// 显式交接商品维护人与可选业务组织。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 商品稳定 ID
-/// * `req` - 交接请求（目标、原因、版本与幂等键）
-///
-/// # 返回
+/// `req` 为交接请求（目标、原因、版本与幂等键）。
 /// 返回交接后的维护人、组织与版本。
 pub async fn product_handover(
     State(state): State<HttpState>,
@@ -401,13 +282,6 @@ pub async fn product_handover(
 }
 
 /// 查询合格有效的商品维护人交接候选。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 商品稳定 ID
-///
-/// # 返回
 /// 返回有效且具备 `product:update` 的账号。
 pub async fn product_handover_candidates(
     State(state): State<HttpState>,
@@ -429,13 +303,6 @@ pub async fn product_handover_candidates(
 }
 
 /// 查询指定商品的全部修订（强制路径商品过滤）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 路径商品稳定 ID
-///
-/// # 返回
 /// 返回该商品全部修订分页视图。
 pub async fn product_detail_revisions(
     State(state): State<HttpState>,
@@ -448,13 +315,6 @@ pub async fn product_detail_revisions(
 }
 
 /// 查询指定商品的全部 SKU（强制路径商品过滤）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 路径商品稳定 ID
-///
-/// # 返回
 /// 返回该商品全部 SKU 分页视图。
 pub async fn product_detail_skus(
     State(state): State<HttpState>,
@@ -467,14 +327,7 @@ pub async fn product_detail_skus(
 }
 
 /// 查询指定商品下的 SKU 修订（可选过滤到单个 SKU）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 路径商品稳定 ID
-/// * `query` - 可选 SKU 过滤
-///
-/// # 返回
+/// `query` 为可选 SKU 过滤。
 /// 返回该商品下 SKU 修订分页视图。
 pub async fn product_detail_sku_revisions(
     State(state): State<HttpState>,

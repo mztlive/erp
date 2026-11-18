@@ -121,7 +121,7 @@ pub struct PartyBankAccount {
 }
 
 impl fmt::Debug for PartyBankAccount {
-    /// 脱敏 `Debug`：不输出账号密文与指纹（明文字段永不进入 `Debug` 输出）。
+    // 格式化银行账户调试信息时隐藏密文和查询指纹，避免账户数据随日志输出。
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("PartyBankAccount")
@@ -144,7 +144,7 @@ impl fmt::Debug for PartyBankAccount {
 }
 
 impl fmt::Debug for PartyBankAccountData {
-    /// 脱敏 `Debug`：账号明文不进入任何输出。
+    // 在录入数据的调试输出中遮蔽账号明文，降低排查问题时记录敏感内容的风险。
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("PartyBankAccountData")
@@ -164,7 +164,7 @@ impl fmt::Debug for PartyBankAccountData {
 }
 
 impl PartyBankAccount {
-    /// 生成账号查询指纹。
+    /// 先按账号匹配规则去掉分隔符，再生成带密钥的查询指纹，供同一主体的账户查重和定位使用。
     ///
     /// 规范化规则：去首尾空白并移除空格、连字符与下划线后，以带密钥
     /// HMAC-SHA256 计算并输出 64 位小写 hex（§6.2：查询和重复校验只能
@@ -174,16 +174,12 @@ impl PartyBankAccount {
     /// * `plain` - 账号明文
     /// * `key` - 查询密钥
     ///
-    /// # 返回
     /// 返回指纹字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn account_number_fingerprint(plain: &str, key: &[u8]) -> String {
         hmac_sha256_hex(key, normalize_account_number(plain).as_bytes())
     }
 
-    /// 创建银行账户。
+    /// 根据开户资料构造账户及账号查询指纹，供新开户档案写入；明文账号由调用方另行加密。
     ///
     /// 完成编号、户名、银行名称的必填校验与文本规范化，账号明文
     /// 校验非空与长度；以 `fingerprint_key` 从明文账号生成查询指纹，
@@ -195,10 +191,8 @@ impl PartyBankAccount {
     /// * `fingerprint_key` - 查询指纹密钥
     /// * `created_by` - 创建人（账号或系统身份）
     ///
-    /// # 返回
     /// 返回新建的银行账户实体。
     ///
-    /// # 错误
     /// 当必填字段为空/超长、账号为空/超长或生效区间倒挂时返回错误。
     pub fn new(
         id: PartyBankAccountId,
@@ -247,7 +241,7 @@ impl PartyBankAccount {
         })
     }
 
-    /// 校验期望版本与当前版本一致（erp-party-008）。
+    /// 修改账户资料前核对调用方看到的版本，避免覆盖已提交的更新。
     ///
     /// 冲突文案与主体 `ensure_version` 同源（见 [`super::ensure_base_version`]），
     /// Service 层只做错误类映射。
@@ -255,28 +249,23 @@ impl PartyBankAccount {
     /// # 参数
     /// * `expected` - 调用方持有的期望版本
     ///
-    /// # 返回
     /// 版本一致返回 `Ok(())`。
     ///
-    /// # 错误
     /// 版本不一致时返回版本冲突错误。
     pub fn ensure_version(&self, expected: u64) -> Result<()> {
         super::ensure_base_version(&self.base, expected)
     }
 
-    /// 更新银行账户（仅限生命周期字段）。
+    /// 维护既有账户的启停、结束日及默认标记，保留开户资料和账号身份。
     ///
     /// 账户内容变更必须通过新的有效期事实行追加/结束（W03）；原地
     /// 更新只允许切换启停状态（固定状态机）、结束有效期与调整默认标记。
     ///
     /// # 参数
-    /// * `update` - 更新数据
     /// * `updated_by` - 本次更新执行人
     ///
-    /// # 返回
     /// 更新成功返回 `Ok(())`。
     ///
-    /// # 错误
     /// 当状态迁移非法或 `valid_to` 不晚于 `valid_from` 时返回错误。
     pub fn update(&mut self, update: PartyBankAccountUpdate, updated_by: impl Into<String>) -> Result<()> {
         if let Some(to) = update.status {
@@ -298,9 +287,9 @@ impl PartyBankAccount {
     /// # 参数
     /// * `value` - 联行号，空白清空。
     /// * `updated_by` - 当前维护人。
-    /// # 返回
+    ///
     /// 更新账户路由资料。
-    /// # 错误
+    ///
     /// 非十二位数字时拒绝。
     pub fn set_routing_number(&mut self, value: Option<String>, updated_by: impl Into<String>) -> Result<()> {
         self.bank_routing_number = normalize_routing_number(value)?;
@@ -308,21 +297,14 @@ impl PartyBankAccount {
         Ok(())
     }
 
-    /// 判断账户是否处于启用状态。
+    /// 判断账户是否处于启用状态，供选择有效银行账户的流程使用。有效期由调用方另行检查。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 状态为 `Active` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn is_active(&self) -> bool {
         self.status.is_active()
     }
 
-    /// 从已装载的账户事实中解析主体当前唯一的默认收款账户（FIN-E04）。
+    /// 从指定主体的当前有效账户中选出唯一默认收款账户，供资金流程冻结收款身份。
     ///
     /// 入参必须是仓储按业务日期过滤后的「当前有效」账户集合：有效期窗口、
     /// 启停状态与业务日期读取由 Repository 负责（`list_current_on`），本方法
@@ -333,10 +315,8 @@ impl PartyBankAccount {
     /// # 参数
     /// * `accounts` - 同一主体在指定时点当前有效的银行账户事实集合
     ///
-    /// # 返回
     /// 返回唯一默认账户引用；未配置默认账户时返回 `None`。
     ///
-    /// # 错误
     /// 集合中存在多个默认账户（主数据损坏）时返回错误。
     ///
     /// # 约束
@@ -351,7 +331,7 @@ impl PartyBankAccount {
         Ok(found)
     }
 
-    /// 校验账户身份与版本是否与页面所见期望一致（FIN-E04）。
+    /// 核对页面确认时的收款账户 ID 和版本，供后续操作判断其是否仍能使用。
     ///
     /// 只做纯身份匹配：真实 ID 与版本同时相等才返回 `true`；任一漂移返回
     /// `false`，由 Service 映射为「请刷新并重新核对」的冲突结论。
@@ -360,20 +340,15 @@ impl PartyBankAccount {
     /// * `expected_id` - 页面提交时展示的收款账户 ID
     /// * `expected_version` - 页面提交时展示的收款账户版本
     ///
-    /// # 返回
     /// 身份与版本均一致时返回 `true`；任一不一致时返回 `false`。
     ///
-    /// # 错误
-    /// 不返回错误。
-    ///
-    /// # 约束
     /// 不执行 I/O；CAS 写入与冲突错误到 API 的映射仍由 Service 负责。
     pub fn matches_expected(&self, expected_id: &PartyBankAccountId, expected_version: u64) -> bool {
         self.base.id == expected_id.as_ref() && self.base.version == expected_version
     }
 }
 
-/// 联行号保留前导零，空白视为未维护；有效值必须为十二位数字。
+// 维护联行号时把空白视作未填写；录入值须为十二位数字，并保留参与路由匹配的前导零。
 fn normalize_routing_number(value: Option<String>) -> Result<Option<String>> {
     let value = value.map(|value| value.trim().to_owned()).filter(|value| !value.is_empty());
     if value
@@ -450,7 +425,7 @@ mod tests {
         assert!(PartyBankAccount::new(PartyBankAccountId::new("bank"), invalid, KEY, "creator").is_err());
     }
 
-    /// happy path：编号/户名去空白，账号移除分隔符后生成指纹，实体不含明文。
+    // 验证：编号/户名去空白，账号移除分隔符后生成指纹，实体不含明文。
     #[test]
     fn new_normalizes_and_fingerprints() {
         let account =
@@ -474,7 +449,7 @@ mod tests {
         assert!(account.is_default);
     }
 
-    /// 失败路径：必填为空/超长、账号为空/超长、区间倒挂。
+    // 验证：必填为空/超长、账号为空/超长、区间倒挂。
     #[test]
     fn new_rejects_invalid_inputs() {
         let blank_no = PartyBankAccountData { bank_account_no: "   ".to_string(), ..bank_account_data() };
@@ -493,7 +468,7 @@ mod tests {
         assert!(PartyBankAccount::new(PartyBankAccountId::new("b"), reversed, KEY, "admin-1").is_err());
     }
 
-    /// 状态机：启停切换经固定矩阵校验，非法目标被拒。
+    // 状态机：启停切换经固定矩阵校验，非法目标被拒。
     #[test]
     fn status_transitions_are_validated() {
         let mut account =
@@ -527,7 +502,7 @@ mod tests {
         assert_eq!(account.updated_by, "admin-3");
     }
 
-    /// 敏感字段：Debug 与 Debug(Data) 均不泄漏账号明文与指纹。
+    // 敏感字段：Debug 与 Debug(Data) 均不泄漏账号明文与指纹。
     #[test]
     fn debug_never_leaks_plaintext() {
         let data = bank_account_data();
@@ -545,7 +520,7 @@ mod tests {
         assert!(debug_data.contains("[REDACTED]"));
     }
 
-    /// 敏感字段：指纹稳定（同密钥同明文）且带密钥（换密钥指纹不同）。
+    // 敏感字段：指纹稳定（同密钥同明文）且带密钥（换密钥指纹不同）。
     #[test]
     fn fingerprint_is_stable_and_keyed() {
         let a = PartyBankAccount::account_number_fingerprint("6225880212345678", b"key-a");
@@ -557,7 +532,7 @@ mod tests {
         assert_ne!(a, "6225880212345678", "指纹不得等于明文");
     }
 
-    /// 实体 BSON 往返（密文与指纹保持原样，不出现明文）。
+    // 实体 BSON 往返（密文与指纹保持原样，不出现明文）。
     #[test]
     fn entity_roundtrips_through_json() {
         let account =
@@ -569,7 +544,7 @@ mod tests {
         assert_eq!(roundtrip.account_number_query_hmac, account.account_number_query_hmac);
     }
 
-    /// 收款账户解析：无默认账户时返回 `Ok(None)`（含空集合与全部非默认两种形态）。
+    // 收款账户解析：无默认账户时返回 `Ok(None)`（含空集合与全部非默认两种形态）。
     #[test]
     fn resolve_current_default_returns_none_without_default() {
         let accounts = vec![
@@ -600,7 +575,7 @@ mod tests {
         assert!(PartyBankAccount::resolve_current_default(&accounts).unwrap().is_none());
     }
 
-    /// 收款账户解析：恰一个默认账户时返回该账户（与输入顺序无关）。
+    // 收款账户解析：恰一个默认账户时返回该账户（与输入顺序无关）。
     #[test]
     fn resolve_current_default_returns_unique_default() {
         let default = PartyBankAccount::new(
@@ -633,7 +608,7 @@ mod tests {
         assert!(resolved.is_default);
     }
 
-    /// 收款账户解析：多个默认账户（主数据损坏）必须失败关闭，禁止静默取首项。
+    // 收款账户解析：多个默认账户（主数据损坏）必须失败关闭，禁止静默取首项。
     #[test]
     fn resolve_current_default_rejects_multiple_defaults() {
         let accounts = vec![
@@ -663,7 +638,7 @@ mod tests {
         assert!(PartyBankAccount::resolve_current_default(&accounts).is_err());
     }
 
-    /// expected 身份匹配：ID 与版本同时一致才通过，任一漂移必须拒绝。
+    // expected 身份匹配：ID 与版本同时一致才通过，任一漂移必须拒绝。
     #[test]
     fn matches_expected_accepts_only_exact_identity_and_version() {
         let account =

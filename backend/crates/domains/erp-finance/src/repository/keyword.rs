@@ -42,15 +42,7 @@ pub struct FinanceKeywordRepository<'a> {
 
 impl<'a> FinanceKeywordRepository<'a> {
     /// 构造只读仓储；不执行数据库访问。
-    ///
-    /// # 参数
-    /// * `db` - 目标数据库。
-    ///
-    /// # 返回
     /// 返回尚未访问数据库的仓储。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
@@ -58,17 +50,12 @@ impl<'a> FinanceKeywordRepository<'a> {
     /// 返回完整的关键词命中身份，后续必须与列表结构化条件取交集。
     ///
     /// 未命中返回空集合，查询失败返回错误，禁止截取部分候选充当完整结果。
-    ///
-    /// # 参数
-    /// * `target` - 搜索返回对象，决定沿哪一侧财务关系匹配。
-    /// * `facts` - 外域给出的关键词命中事实。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
     /// 返回完整命中身份；未命中时返回空列表。
-    ///
-    /// # 错误
     /// 任一集合查询失败时返回仓储错误。
+    ///
+    /// 输入约定：
+    /// - `target`：搜索返回对象，决定沿哪一侧财务关系匹配。
+    /// - `facts`：外域给出的关键词命中事实。
     pub async fn matching_ids(
         &self,
         target: FinanceSearchTarget,
@@ -104,7 +91,7 @@ impl<'a> FinanceKeywordRepository<'a> {
         }
     }
 
-    /// 按财务集合读取去重字段；所有读取均排除软删除。
+    // 为财务关键词查找收集匹配字段的唯一值，只从未软删除的记录取数。
     async fn ids(
         &self,
         collection: &str,
@@ -121,7 +108,7 @@ impl<'a> FinanceKeywordRepository<'a> {
             .collect())
     }
 
-    /// 空关联身份直接短路；不得去掉空集合条件扩大范围。
+    // 沿关联身份查询之前检查输入是否为空；无身份直接短路，不能移除过滤条件扩大范围。
     async fn related(
         &self,
         collection: &str,
@@ -136,7 +123,7 @@ impl<'a> FinanceKeywordRepository<'a> {
         self.ids(collection, doc! { key: { "$in": ids } }, field, executor).await
     }
 
-    /// 沿付款/回款的正式分配及回款待审批分配定位账户。
+    // 收付款单需要按来源检索时，通过正式分配及待审批回款分配找到所属应收或应付账户。
     async fn fund_accounts(
         &self,
         side: &Side,
@@ -154,7 +141,7 @@ impl<'a> FinanceKeywordRepository<'a> {
         self.related(side.entries, "id", &entries, side.account_key, executor).await
     }
 
-    /// 按自身编号/主体或关联账户匹配收付款单，其他同主体单据不参与扩展。
+    // 为收付款检索合并自身编号、主体及关联子账命中，不将同主体的其他单据作为关联来源。
     async fn funds(
         &self,
         side: &Side,
@@ -175,7 +162,7 @@ impl<'a> FinanceKeywordRepository<'a> {
         self.ids(side.funds, doc! { "$or": clauses }, "id", executor).await
     }
 
-    /// 发票号/主体 OR 同一账户的指定来源单据，方向始终限制在当前财务侧。
+    // 发票检索可命中票号、主体或同子账的指定来源，但所有分支都受进销项方向限制。
     async fn invoices(
         &self,
         side: &Side,
@@ -206,7 +193,7 @@ struct Side {
     party_key: &'static str,
 }
 impl Side {
-    /// 按返回对象选择应收或应付关系，保持集合归属一致。
+    // 按待检索的财务对象选择应收或应付的集合与关联规则，避免跨方向使用来源关系。
     fn for_target(target: FinanceSearchTarget) -> Self {
         if matches!(
             target,
@@ -244,7 +231,7 @@ impl Side {
             party_key: "supplier_id",
         }
     }
-    /// 名称搜索在应收侧使用主体身份，在应付侧使用供应商身份。
+    // 按主体名称搜索时，将应收匹配到结算主体身份、应付匹配到供应商身份。
     fn parties<'a>(&self, facts: &'a FinanceKeyword) -> &'a [String] {
         if self.sales {
             return &facts.party_ids;
@@ -252,13 +239,13 @@ impl Side {
         &facts.supplier_ids
     }
 }
-/// 字面量正则与现有仓储一致，元字符不执行为表达式。
+// 把关键词转成字面量正则，和现有仓储的匹配方式一致，不解释用户输入的元字符。
 fn literal(field: &str, q: &str) -> Document {
     let mut filter = Document::new();
     insert_literal_regex_filter(&mut filter, field, Some(q));
     filter
 }
-/// 来源类型必须与来源 ID 配对，避免不同类型的身份碰撞。
+// 按业务单据关联账户时将来源类型与来源 ID 配对，避免不同单据类型的同名 ID 串联。
 fn source_filter(side: &Side, facts: &FinanceKeyword) -> Document {
     if side.sales {
         return doc! { "sales_order_id": { "$in": &facts.sales_order_ids } };
@@ -268,7 +255,7 @@ fn source_filter(side: &Side, facts: &FinanceKeyword) -> Document {
         { "source_type": "supplier_settlement", "source_document_id": { "$in": &facts.statement_ids } }
     ] }
 }
-/// 账户按名称及显式单据关联匹配，应收保留原接口对内部身份的兼容检索。
+// 构造名称及显式业务单据关联的账户筛选；应收侧仍允许按历史接口支持的内部身份匹配。
 fn account_filter(side: &Side, facts: &FinanceKeyword, accounts: &[String]) -> Document {
     let mut clauses =
         vec![doc! { "id": { "$in": accounts } }, doc! { side.party_key: { "$in": side.parties(facts) } }];
@@ -282,13 +269,13 @@ fn account_filter(side: &Side, facts: &FinanceKeyword, accounts: &[String]) -> D
     doc! { "$or": clauses }
 }
 
-/// 发票方向限制与字面量编号条件共同执行。
+// 生成发票关键词筛选时将固定的进销方向与按字面量匹配的票号请求合并。
 fn invoice_filter(side: &Side, facts: &FinanceKeyword) -> Document {
     let mut filter = literal("invoice_no", &facts.q);
     filter.insert("invoice_direction", side.direction);
     filter
 }
-/// 合并关联身份并去重，避免相同账户多次参与后续查询。
+// 合并各关键词匹配路径找到的来源身份并去重，供后续按身份查询使用。
 fn joined(a: &[String], b: &[String]) -> Vec<String> {
     let mut ids = a.iter().chain(b).cloned().collect::<Vec<_>>();
     ids.sort();

@@ -14,12 +14,14 @@ use super::{
 use crate::{Error, Result};
 
 impl SupplierPortalReadService {
-    /// 混合读取当前供应商的报价、新品和合作条款申请。
+    /// 处理门户供应商申请时，混合读取当前供应商的报价、新品和合作条款申请。
     ///
     /// # 参数
     /// `actor` 是可信绑定；`params` 只收窄当前供应商。
+    ///
     /// # 返回
     /// 按创建时间及身份稳定排序的允许列表分页。
+    ///
     /// # 错误
     /// 供应商失效、输入非法或查询失败时拒绝。
     pub async fn applications(
@@ -36,12 +38,14 @@ impl SupplierPortalReadService {
         Ok(PageView { items, total, page: query.page, page_size: query.page_size })
     }
 
-    /// 在绑定供应商范围内精确读取任一申请。
+    /// 组装门户供应商申请时，在绑定供应商范围内精确读取任一申请。
     ///
     /// # 参数
     /// `actor` 是可信绑定；`id` 是请求的申请身份。
+    ///
     /// # 返回
     /// 可见的原稿、提交、决定及实际结果。
+    ///
     /// # 错误
     /// 未知与其他供应商目标统一返回 `NotFound`。供应商认证失效、查询或序列化失败时也会拒绝。
     pub async fn application(&self, actor: &PortalActor, id: &str) -> Result<PortalApplicationView> {
@@ -52,12 +56,14 @@ impl SupplierPortalReadService {
             .external()
     }
 
-    /// 内部读取指定供应商的申请并逐对象证明真实读取资格。
+    /// 处理门户供应商申请时，内部读取指定供应商的申请并逐对象证明真实读取资格。
     ///
     /// # 参数
     /// `actor` 为内部账号；`params` 必须指定目标供应商。
+    ///
     /// # 返回
     /// 仅包含可读申请的页与总数，不用供应商可见性替代供给范围。
+    ///
     /// # 错误
     /// 非内部身份或未装配授权时返回 `Forbidden`。目标供应商为空或不可读时返回 `NotFound`。
     /// 分页非法时返回 `ValidationError`。查询或序列化失败时返回对应错误。
@@ -77,7 +83,7 @@ impl SupplierPortalReadService {
             .await
     }
 
-    /// 在原快照内过滤全部可读申请，再读取分页与计数。
+    // 读取门户供应商申请时，在原快照内过滤全部可读申请，再读取分页与计数。
     async fn admin_application_page(
         &self,
         actor: &AuditActor,
@@ -110,12 +116,14 @@ impl SupplierPortalReadService {
         Ok(PageView { items, total, page: query.page, page_size: query.page_size })
     }
 
-    /// 内部精确申请读取，先执行任务及对象读取合同。
+    /// 处理门户供应商申请时，内部精确申请读取，先执行任务及对象读取合同。
     ///
     /// # 参数
     /// `actor` 为真实内部账号；`id` 是精确申请身份。
+    ///
     /// # 返回
     /// 同一快照中的完整原稿、当前正式事实、既有供给候选及统一协议字段。
+    ///
     /// # 错误
     /// 未知或越权统一返回 `NotFound`。非内部身份或未注入授权时返回 `Forbidden`。
     /// 查询或序列化失败时返回对应错误。
@@ -131,7 +139,7 @@ impl SupplierPortalReadService {
             .await
     }
 
-    /// 精确申请授权与完整响应始终在同一个快照内读取。
+    // 处理门户供应商申请时，精确申请授权与完整响应始终在同一个快照内读取。
     async fn admin_application_detail(
         &self,
         actor: &AuditActor,
@@ -159,16 +167,14 @@ impl SupplierPortalReadService {
         Ok(data)
     }
 
-    /// 取得组合层装配的正式对象授权端口。
-    ///
-    /// # 参数
-    /// 无；调用对象授权时传入真实身份和原执行器。
-    ///
-    /// # 返回
-    /// 已装配的授权端口；账号资格及数据范围由 identity 检查。
-    ///
-    /// # 错误
-    /// 未装配授权时返回 `Forbidden`。
+    // 处理门户供应商申请时，取得组合层装配的正式对象授权端口。
+    //
+    // 调用参数：
+    // 无；调用对象授权时传入真实身份和原执行器。
+    //
+    // 已装配的授权端口；账号资格及数据范围由 identity 检查。
+    //
+    // 未装配授权时返回 `Forbidden`。
     pub(super) fn internal_authorization(&self) -> Result<&dyn PortalReadAuthorizationPort> {
         self.authorization
             .as_deref()
@@ -176,7 +182,7 @@ impl SupplierPortalReadService {
     }
 }
 
-/// 不存在或范围外目标使用一致错误。
+// 处理门户供应商申请时，不存在或范围外目标使用一致错误。
 fn hidden_target() -> Error {
     Error::NotFound("申请不存在或无权查看".into())
 }

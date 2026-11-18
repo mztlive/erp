@@ -36,19 +36,10 @@ pub(crate) const RECONCILIATION_DIFFERENCE_RESOLUTIONS: &str =
 
 /// 创建本域集合的幂等命名索引。
 ///
-/// 逐条落地数据模型 §6.21「必需约束与索引」；身份类字段使用全局唯一索引
-/// （消息身份、业务事实键、差异对象键均不可复用，与 accounts 的 code 处理一致）。
-/// `integration_error_task` 的「进行中唯一」使用部分唯一索引，理由见
-/// [`integration_error_task_indexes`] 注释。
+/// 逐条落地数据模型 §6.21「必需约束与索引」；身份类字段使用全局唯一索引（消息身份、业务事实键、差异对象键均不可复用，与 accounts 的 code 处理一致）。
+/// `integration_error_task` 的「进行中唯一」使用部分唯一索引，理由见[`integration_error_task_indexes`] 注释。
 ///
-/// # 参数
-/// * `db` - 目标 MongoDB 数据库
-///
-/// # 返回
-/// 成功时四个事实集合的命名索引与命令回执 `id` 唯一索引已创建。
-///
-/// # 错误
-/// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
+/// 成功时四个事实集合的命名索引与命令回执 `id` 唯一索引已创建。当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, INBOX_MESSAGES, inbox_message_indexes()).await?;
     create_indexes(db, INTEGRATION_ERROR_TASKS, integration_error_task_indexes()).await?;
@@ -76,17 +67,16 @@ pub async fn ensure(db: &Database) -> Result<()> {
     Ok(())
 }
 
-/// 为单个集合创建一组幂等命名索引。
+// 为单个集合创建一组幂等命名索引。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
     db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
-/// 返回 `inbox_message` 的消息去重与积压扫描索引（§6.21）。
-///
-/// `business_fact_key` 在实体层强制非空（`InboxMessage::new` 校验），
-/// 「非空业务事实键在对应事实类型内唯一」因此等价于
-/// `(message_type, business_fact_key)` 全局唯一索引，无需部分索引。
+// 返回 `inbox_message` 的消息去重与积压扫描索引（§6.21）。
+//
+// `business_fact_key` 在实体层强制非空（`InboxMessage::new` 校验），
+// 「非空业务事实键在对应事实类型内唯一」因此等价于`(message_type, business_fact_key)` 全局唯一索引，无需部分索引。
 fn inbox_message_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_inbox_messages_id", doc! { "id": 1 }),
@@ -96,19 +86,19 @@ fn inbox_message_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `integration_error_task` 的进行中唯一约束与工作队列索引（§6.21）。
-///
-/// §6.21「`(message_id, error_class)` 唯一」与「同一消息和错误分类只允许一个
-/// 进行中错误任务」合起来表达：同一消息与错误分类**进行中**（未解决/未关闭）
-/// 唯一；终态任务关闭后可再开新任务，且业务对象类失败（无 `message_id`）
-/// 不属于消息去重域。因此使用**部分唯一索引**（P2 §2.2 允许，须写明理由）：
-/// - 部分过滤条件要求 `message_id` 存在（`$type: "string"`），否则 MongoDB 会
-///   把缺省字段视为 `null`，导致不同业务对象任务的 `null` 键互相冲突；
-/// - 部分过滤条件只纳入三个进行中状态（`$in`，MongoDB 部分索引不支持 `$nin`/
-///   `$not`），终态任务不再占用唯一键，重试可重新开单。
-///
-/// 回滚方式：若后续业务确认需要「消息 + 分类」全局唯一（终态不释放键），
-/// 改为 `unique_index("uk_integration_error_tasks_message_class", ...)` 全量唯一即可。
+// 返回 `integration_error_task` 的进行中唯一约束与工作队列索引（§6.21）。
+//
+// §6.21「`(message_id, error_class)` 唯一」与「同一消息和错误分类只允许一个
+// 进行中错误任务」合起来表达：同一消息与错误分类**进行中**（未解决/未关闭）
+// 唯一；终态任务关闭后可再开新任务，且业务对象类失败（无 `message_id`）
+// 不属于消息去重域。因此使用**部分唯一索引**（P2 §2.2 允许，须写明理由）：
+// - 部分过滤条件要求 `message_id` 存在（`$type: "string"`），否则 MongoDB 会
+//   把缺省字段视为 `null`，导致不同业务对象任务的 `null` 键互相冲突；
+// - 部分过滤条件只纳入三个进行中状态（`$in`，MongoDB 部分索引不支持 `$nin`/
+//   `$not`），终态任务不再占用唯一键，重试可重新开单。
+//
+// 回滚方式：若后续业务确认需要「消息 + 分类」全局唯一（终态不释放键），改为 `unique_index("uk_integration_error_tasks_message_class", ...)`
+// 全量唯一即可。
 fn integration_error_task_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_integration_error_tasks_id", doc! { "id": 1 }),
@@ -135,7 +125,7 @@ fn integration_error_task_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `reconciliation_difference` 的对象唯一约束与差异查询索引（§6.21）。
+// 返回 `reconciliation_difference` 的对象唯一约束与差异查询索引（§6.21）。
 fn reconciliation_difference_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_reconciliation_differences_id", doc! { "id": 1 }),
@@ -162,10 +152,10 @@ fn reconciliation_difference_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `reconciliation_difference_resolution` 的追加唯一约束与历史查询索引（§6.21）。
-///
-/// 处理记录不可更新或删除，只追加；`reconciliation_difference_id` 单独建普通索引
-/// 支撑「读取某差异全部处理记录」与「取最后一条派生当前状态」的历史查询。
+// 返回 `reconciliation_difference_resolution` 的追加唯一约束与历史查询索引（§6.21）。
+//
+// 处理记录不可更新或删除，只追加；`reconciliation_difference_id`
+// 单独建普通索引支撑「读取某差异全部处理记录」与「取最后一条派生当前状态」的历史查询。
 fn reconciliation_difference_resolution_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_reconciliation_difference_resolutions_id", doc! { "id": 1 }),
@@ -184,7 +174,7 @@ fn reconciliation_difference_resolution_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 构建命名部分唯一索引（仅匹配 `partial_filter` 的文档参与唯一约束）。
+// 构建命名部分唯一索引（仅匹配 `partial_filter` 的文档参与唯一约束）。
 fn partial_unique_index(name: impl Into<String>, keys: Document, partial_filter: Document) -> IndexModel {
     IndexModel::builder()
         .keys(keys)
@@ -200,7 +190,7 @@ fn partial_unique_index(name: impl Into<String>, keys: Document, partial_filter:
 
 #[cfg(test)]
 mod tests {
-    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    // 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
     #[test]
     fn collections_look_up_by_unique_stable_id() {
         for indexes in [

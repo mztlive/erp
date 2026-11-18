@@ -17,13 +17,11 @@ pub struct ApprovalMaterialFile {
 
 impl ApprovalMaterialFile {
     /// 校验冻结材料的有界元数据与内容指纹。
-    ///
-    /// # 参数
-    /// 无；读取自身冻结字段。
-    /// # 返回
     /// 材料可用于版本绑定时成功。
-    /// # 错误
+    ///
     /// 空白身份、超长元数据或非法内容指纹时拒绝。
+    ///
+    /// 读取自身冻结字段。
     pub fn validate(&self) -> Result<()> {
         let id: &str = self.file_asset_id.as_ref();
         if id.is_empty()
@@ -42,13 +40,11 @@ impl ApprovalMaterialFile {
     }
 
     /// 比较当前文件事实是否仍是审批提交时冻结的同一内容。
-    ///
-    /// # 参数
-    /// * `current` - 文件领域当前读取并投影的元数据。
-    /// # 返回
     /// 身份、版本、类型、大小和内容指纹全部一致时返回 true。
-    /// # 错误
-    /// 无；无效或变化的事实返回 false。
+    ///
+    /// 无效或变化的事实返回 false。
+    ///
+    /// `current`：文件领域当前读取并投影的元数据。
     pub fn matches_current(&self, current: &Self) -> bool {
         self.validate().is_ok() && current.validate().is_ok() && self == current
     }

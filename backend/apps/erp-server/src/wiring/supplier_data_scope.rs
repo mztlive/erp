@@ -9,31 +9,13 @@ use mongodb::Database;
 use super::{MongoSupplierPartyFacts, MongoSupplierSensitiveTokens};
 
 /// 构造绑定身份数据库的供应商访问器。
-///
-/// # 参数
-/// * `db` - 供应商与身份集合所在数据库
-/// * `authorization` - 进程共享统一授权服务
-///
-/// # 返回
 /// 返回未缓存授权的供应商访问器。
-///
-/// # 错误
-/// 无。
 pub fn supplier_access(db: Database, authorization: Arc<AuthorizationService>) -> SupplierAccess {
     SupplierAccess::new(db, authorization)
 }
 
 /// 构造已接入身份域公共解析器的供应商服务。
-///
-/// # 参数
-/// * `db` - 供应商与身份集合所在数据库
-/// * `authorization` - 进程共享统一授权服务
-///
-/// # 返回
 /// 返回可解析供应商范围的服务。
-///
-/// # 错误
-/// 无。
 pub fn scoped_supplier_service(db: Database, authorization: Arc<AuthorizationService>) -> SupplierService {
     SupplierService::new(
         db.clone(),
@@ -43,17 +25,7 @@ pub fn scoped_supplier_service(db: Database, authorization: Arc<AuthorizationSer
 }
 
 /// 构造可签发敏感字段短时揭示令牌且已接入范围的供应商服务。
-///
-/// # 参数
-/// * `db` - 供应商与身份集合所在数据库
-/// * `authorization` - 进程共享统一授权服务
-/// * `sensitive_data` - 敏感字段编解码
-///
-/// # 返回
 /// 返回可解析供应商范围并签发揭示令牌的服务。
-///
-/// # 错误
-/// 无。
 pub fn scoped_supplier_service_with_sensitive(
     db: Database,
     authorization: Arc<AuthorizationService>,

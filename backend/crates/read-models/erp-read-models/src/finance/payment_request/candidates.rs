@@ -30,12 +30,14 @@ use crate::purchase_center::source_impact::payment_paused_by_source_update;
 use crate::{Error, Result};
 
 impl PurchasePaymentRequestReadService {
-    /// 返回当前账号具备申请资格的采购与供应商有效脱敏账户候选。
+    /// 准备付款申请采购候选候选时，给出当前账号具备申请资格的采购与供应商有效脱敏账户候选。
     ///
     /// # 参数
     /// * `actor` / `supplier_id` - 当前账号与可选供应商过滤。
+    ///
     /// # 返回
     /// 返回已生效、有正可申请额度且主体可证明的候选。
+    ///
     /// # 错误
     /// 动作拒绝、查询超限、主体或仓储完整性错误时拒绝。
     pub async fn candidates(

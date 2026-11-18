@@ -91,14 +91,7 @@ pub struct FulfillmentHandoverCandidateView {
 }
 
 /// 校验交接请求必填字段。
-///
-/// # 参数
-/// * `req` - 交接请求
-///
-/// # 返回
 /// 校验通过时成功。
-///
-/// # 错误
 /// 目标、原因、版本或幂等键非法时拒绝。
 pub fn validate_handover_request(req: &HandoverFulfillmentOrderRequest) -> Result<()> {
     req.validate()?;

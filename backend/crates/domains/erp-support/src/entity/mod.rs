@@ -16,32 +16,14 @@ pub mod source_registry;
 macro_rules! enum_str {
     ($name:ident { $($variant:ident => ($code:literal, $label:literal)),* $(,)? }) => {
         impl $name {
-            /// 返回枚举的中文展示名。
-            ///
-            /// # 参数
-            /// 无。
-            ///
-            /// # 返回
-            /// 返回面向用户的中文标签。
-            ///
-            /// # 错误
-            /// 不返回错误。
+            /// 返回当前取值的中文名称，供业务界面展示，不作为持久化代码。
             pub fn label(&self) -> &'static str {
                 match self {
                     $(Self::$variant => $label,)*
                 }
             }
 
-            /// 返回枚举的稳定代码。
-            ///
-            /// # 参数
-            /// 无。
-            ///
-            /// # 返回
-            /// 返回用于持久化与查询的稳定字符串。
-            ///
-            /// # 错误
-            /// 不返回错误。
+            /// 返回当前取值的稳定代码，供持久化与查询匹配使用。
             pub fn as_str(&self) -> &'static str {
                 match self {
                     $(Self::$variant => $code,)*
@@ -53,22 +35,12 @@ macro_rules! enum_str {
 
 pub(crate) use enum_str;
 
-/// 校验两个可选字段必须同时提供或同时省略。
-///
-/// 成对出现是本域多个实体的共有不变式（映射时间/责任人、确认时间/确认人、
-/// 对象类型/对象 ID、预期版本/内容摘要等）；调用方只传入存在性布尔值，
-/// 避免移动原值，错误文案由调用方指定以保持既有合同。
-///
-/// # 参数
-/// * `first_present` - 第一个字段是否存在（`is_some()` 结果）
-/// * `second_present` - 第二个字段是否存在（`is_some()` 结果）
-/// * `message` - 不成对时返回的错误文案（保持既有合同文案不变）
-///
-/// # 返回
-/// 成对时返回 `Ok(())`。
-///
-/// # 错误
-/// 一个存在另一个缺失时返回 `LogicError`。
+// 校验两个可选字段必须同时提供或同时省略。
+// 成对出现是本域多个实体的共有不变式（映射时间/责任人、确认时间/确认人、对象类型/对象 ID、预期版本/内容摘要等）；调用方只传入存在性布尔值，避免移动原值，错误文案由调用方指定以保持既有合同。
+// 成对时返回 `Ok(())`。
+// `first_present` 为第一个字段是否存在（`is_some()` 结果）；`second_present` 为第二个字段是否存在（`is_some()` 结果）。
+// `message` 为不成对时返回的错误文案（保持既有合同文案不变）。
+// 一个存在另一个缺失时返回 `LogicError`。
 pub(crate) fn ensure_paired(
     first_present: bool,
     second_present: bool,

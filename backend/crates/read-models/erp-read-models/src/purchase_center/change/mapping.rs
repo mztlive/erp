@@ -5,17 +5,11 @@ use erp_workflow::entity::document_registry::business_document::ApprovalDefiniti
 use super::super::approval::change::document_approval_view;
 use super::super::dto::PurchaseChangeOrderView;
 
-/// 由变更单构造列表/详情视图。
-///
-/// # 参数
-/// * `change` - 变更单
-/// * `binding` - 详情时的冻结绑定；列表为空
-///
-/// # 返回
-/// 返回视图。
-///
-/// # 错误
-/// 不返回错误。
+// 生成采购变更视图时，由变更单构造列表/详情视图。
+//
+// 调用参数：
+// * `change` - 变更单
+// * `binding` - 详情时的冻结绑定；列表为空
 pub(super) fn change_list_view(
     change: PurchaseChangeOrder,
     binding: Option<ApprovalDefinitionBinding>,

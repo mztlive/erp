@@ -17,16 +17,15 @@ use super::display::enrich_payment_allocation_views_batched_with_executor;
 use super::dto::{PayableEntryView, PaymentAllocationView, PaymentRecipientView};
 use crate::{Error, Result};
 
-/// 读取已授权应付分录的全部来源核销，保留原始来源并补全业务展示字段。
-///
-/// # 参数
-/// * `db` - 数据库实例。
-/// * `entries` - 已通过原应付详情范围授权的真实分录。
-/// * `executor` - 读取授权与分录时使用的同一执行器。
-/// # 返回
-/// 返回按核销时间、身份稳定升序排列的正反向流水；空分录返回空集合。
-/// # 错误
-/// 分配或来源读取失败时返回错误。
+// 处理应付视图与金额时，读取已授权应付分录的全部来源核销，保留原始来源并补全业务展示字段。
+//
+// 调用参数：
+// * `entries` - 已通过原应付详情范围授权的真实分录。
+// * `executor` - 读取授权与分录时使用的同一执行器。
+//
+// 返回按核销时间、身份稳定升序排列的正反向流水；空分录返回空集合。
+//
+// 分配或来源读取失败时返回错误。
 pub(crate) async fn payment_allocations_for_entries(
     db: &Database,
     entries: &[PayableEntryView],
@@ -43,15 +42,10 @@ pub(crate) async fn payment_allocations_for_entries(
     Ok(enriched.into_iter().flatten().collect())
 }
 
-/// 解析供应商在当前业务日唯一生效的默认收款账户。
+/// 确定应付视图与金额的适用条件时，解析供应商在当前业务日唯一生效的默认收款账户。
 ///
 /// # 参数
-/// * `db` - 数据库实例。
 /// * `supplier_id` - 供应商账号身份。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
-/// 返回当前业务日唯一生效的默认收款账户。
 ///
 /// # 错误
 /// 供应商不存在、未配置默认账户、出现多个默认账户或仓储读取失败时返回错误。
@@ -68,10 +62,9 @@ pub async fn resolve_current_payment_recipient(
     resolve_current_party_payment_recipient(db, &supplier.party_id, executor).await
 }
 
-/// 在供应商已由当前 Executor 校验后解析其主体唯一默认收款账户。
+/// 确定应付视图与金额的适用条件时，在供应商已由当前 Executor 校验后解析其主体唯一默认收款账户。
 ///
 /// # 参数
-/// * `db` - 数据库实例
 /// * `party_id` - 同一执行阶段已经读取的供应商主体身份
 /// * `executor` - 读取供应商事实时使用的调用方执行器
 ///
@@ -92,15 +85,13 @@ pub async fn resolve_current_party_payment_recipient(
     })
 }
 
-/// 为只读任务/详情投影解析供应商当前默认收款账户。
+/// 为只读任务/详情投影确定供应商当前默认收款账户。
 ///
 /// 供应商已软删除或缺失时返回空，保证历史应付仍可读取；付款执行必须调用
 /// [`resolve_current_payment_recipient`] 并严格校验活跃供应商。
 ///
 /// # 参数
-/// * `db` - 数据库实例。
 /// * `supplier_id` - 供应商账号身份。
-/// * `executor` - 调用方执行器。
 ///
 /// # 返回
 /// 返回当前默认收款账户；供应商缺失或未配置默认账户时返回 `None`。
@@ -118,14 +109,13 @@ pub async fn resolve_optional_payment_recipient_for_read(
     resolve_optional_party_payment_recipient(db, &supplier.party_id, executor).await
 }
 
-/// 解析主体当前唯一默认收款账户；未配置时返回空。
-///
-/// 当前有效账户集合由 Repository 按业务日期过滤（有效期窗口与启停状态），
-/// 唯一默认值解析与主数据损坏判定由 [`PartyBankAccount::resolve_current_default`]
-/// 完成，本函数只负责日期读取、错误到 API 的映射与所有权转换。
-///
-/// # 错误
-/// 出现多个默认账户或仓储读取失败时返回错误。
+// 确定应付视图与金额的适用条件时，解析主体当前唯一默认收款账户；未配置时返回空。
+//
+// 当前有效账户集合由 Repository 按业务日期过滤（有效期窗口与启停状态），
+// 唯一默认值解析与主数据损坏判定由 [`PartyBankAccount::resolve_current_default`]
+// 完成，本函数只负责日期读取、错误到 API 的映射与所有权转换。
+//
+// 出现多个默认账户或仓储读取失败时返回错误。
 async fn resolve_optional_party_payment_recipient(
     db: &Database,
     party_id: &PartyId,
@@ -140,16 +130,13 @@ async fn resolve_optional_party_payment_recipient(
     })
 }
 
-/// 构造不含敏感明文的收款账户摘要。
+/// 装配应付视图与金额视图时，生成不含敏感明文的收款账户摘要。
 ///
 /// # 参数
 /// * `account` - 主体银行账户。
 ///
 /// # 返回
 /// 返回掩码后的收款账户摘要。
-///
-/// # 错误
-/// 不返回错误。
 pub fn payment_recipient_view(account: &PartyBankAccount) -> PaymentRecipientView {
     PaymentRecipientView {
         bank_account_id: account.base.id.clone(),
@@ -161,31 +148,22 @@ pub fn payment_recipient_view(account: &PartyBankAccount) -> PaymentRecipientVie
     }
 }
 
-/// 使用账号末四位构造不可恢复的工作台掩码。
+/// 使用账号末四位生成不可恢复的工作台掩码。
 ///
 /// # 参数
 /// * `last4` - 账号末四位；空白时不拼入掩码。
 ///
 /// # 返回
 /// 返回 `********` 加末四位；末四位为空白时只返回 `********`。
-///
-/// # 错误
-/// 不返回错误。
 pub fn masked_bank_account_number(last4: &str) -> String {
     let last4 = last4.trim();
     if last4.is_empty() { "********".to_string() } else { format!("********{last4}") }
 }
 
-/// 返回固定零金额。
-///
-/// # 参数
-/// 无。
+/// 金额折叠需要零初值时，返回与财务金额类型一致的 `0.00`。
 ///
 /// # 返回
 /// 返回金额 `0.00`。
-///
-/// # 错误
-/// 不返回错误。
 ///
 /// # Panics
 /// `Amount::from_str("0.00")` 失败时 panic；该固定字面量在金额格式不变时应可解析。

@@ -20,19 +20,14 @@ const BOOTSTRAP_REASON: &str = "初始化默认主属组织";
 const BOOTSTRAP_RECEIPT_ID: &str = "system:org-home-bootstrap-v1";
 const BOOTSTRAP_IDEMPOTENCY: &str = "org-home-bootstrap-v1";
 
-/// 组织树为空时创建默认部门，并为当前有效后台账号写入主属关系。
-///
-/// # 参数
-/// * `db` - 身份与组织集合所在数据库
-///
-/// # 返回
-/// 已有组织、已有引导回执或引导完成后返回 `Ok`。
-///
-/// # 错误
-/// 账号读取、组织校验或事务写入失败时拒绝。
-///
-/// # 关键业务约束
-/// 不得在已有组织树上自动调岗；不得把系统账号映射成销售人员。
+// 组织树为空时创建默认部门，并为当前有效后台账号写入主属关系。
+// 不得在已有组织树上自动调岗；不得把系统账号映射成销售人员。
+//
+// 已有组织、已有引导回执或引导完成后返回 `Ok`。
+//
+// 账号读取、组织校验或事务写入失败时拒绝。
+//
+// `db`：身份与组织集合所在数据库。
 pub(crate) async fn ensure_home_department(db: Database) -> Result<()> {
     let stored = db.clone();
     db.client()
@@ -43,17 +38,10 @@ pub(crate) async fn ensure_home_department(db: Database) -> Result<()> {
         .await
 }
 
-/// 在调用方事务内读取组织事实并按需持久化默认主属部门。
-///
-/// # 参数
-/// * `db` - 身份数据库
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 已引导、无需引导或写入完成后返回 `Ok`。
-///
-/// # 错误
-/// 组织校验或写入失败时拒绝。
+// 在调用方事务内读取组织事实并按需持久化默认主属部门。
+// 已引导、无需引导或写入完成后返回 `Ok`。
+//
+// 组织校验或写入失败时拒绝。
 async fn persist_home_department(db: &Database, executor: &mut dyn Executor) -> Result<()> {
     let repository = OrganizationRepository::new(db);
     if repository.receipt(BOOTSTRAP_RECEIPT_ID, executor).await?.is_some() {
@@ -92,18 +80,13 @@ async fn persist_home_department(db: &Database, executor: &mut dyn Executor) -> 
     Ok(())
 }
 
-/// 计算空组织树的默认部门与主属关系；已有节点时不改派。
-///
-/// # 参数
-/// * `state` - 当前组织事实
-/// * `account_ids` - 需要写入主属关系的有效后台账号
-/// * `at` - 主属关系生效时点
-///
-/// # 返回
-/// 无需引导返回 `None`；需要引导时返回变更后的组织事实。
-///
-/// # 错误
-/// 组织名称或主属关系校验失败时拒绝。
+// 计算空组织树的默认部门与主属关系；已有节点时不改派。
+// 无需引导返回 `None`；需要引导时返回变更后的组织事实。
+//
+// 组织名称或主属关系校验失败时拒绝。
+//
+// `state`：当前组织事实；`account_ids`：需要写入主属关系的有效后台账号。
+// `at`：主属关系生效时点。
 fn plan_home_department(
     state: &OrganizationState,
     account_ids: &[String],

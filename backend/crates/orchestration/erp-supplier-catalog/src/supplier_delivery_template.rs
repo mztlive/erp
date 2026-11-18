@@ -23,16 +23,10 @@ const TEMPLATE_RESOURCE: &str = "supplier_delivery_template";
 
 /// 查询供应商全部配送模板。
 ///
-/// # 参数
-/// * `db` - 数据库
-/// * `authorization` - 进程共享的统一授权服务。
-/// * `supplier_id` - 供应商
-/// * `actor` - 当前认证操作人。
+/// `supplier_id`：供应商。
 ///
-/// # 返回
 /// 按名称排序的模板视图。
 ///
-/// # 错误
 /// 查询失败时返回错误。
 pub async fn supplier_delivery_templates(
     db: Database,
@@ -50,7 +44,7 @@ pub async fn supplier_delivery_templates(
         .await
 }
 
-/// 原快照先检查固定读取资格，再读取并投影完整模板集合。
+// 原快照先检查固定读取资格，再读取并投影完整模板集合。
 async fn template_list(
     db: &Database,
     authorization: &AuthorizationService,
@@ -69,17 +63,10 @@ async fn template_list(
 
 /// 为供应商新建配送模板。
 ///
-/// # 参数
-/// * `db` - 数据库
-/// * `authorization` - 进程共享的统一授权服务。
-/// * `supplier_id` - 供应商
-/// * `req` - 模板内容
-/// * `actor` - 操作人
+/// `supplier_id`：供应商；`req`：模板内容。
 ///
-/// # 返回
 /// 返回新模板视图。
 ///
-/// # 错误
 /// 供应商不存在、内容不合法、名称重复或写入失败时返回错误。
 pub async fn create_delivery_template(
     db: Database,
@@ -117,17 +104,10 @@ pub async fn create_delivery_template(
 
 /// 整体保存配送模板。
 ///
-/// # 参数
-/// * `db` - 数据库
-/// * `authorization` - 进程共享的统一授权服务。
-/// * `id` - 模板主键
-/// * `req` - 模板内容与期望版本
-/// * `actor` - 操作人
+/// `id`：模板主键；`req`：模板内容与期望版本。
 ///
-/// # 返回
 /// 返回保存后的模板视图。
 ///
-/// # 错误
 /// 缺少期望版本、版本冲突、内容不合法、名称重复或写入失败时返回错误。
 pub async fn update_delivery_template(
     db: Database,
@@ -161,17 +141,10 @@ pub async fn update_delivery_template(
 
 /// 删除未被供给使用的配送模板。
 ///
-/// # 参数
-/// * `db` - 数据库
-/// * `authorization` - 进程共享的统一授权服务。
-/// * `id` - 模板主键
-/// * `req` - 期望版本
-/// * `actor` - 操作人
+/// `id`：模板主键；`req`：期望版本。
 ///
-/// # 返回
 /// 删除成功返回 `Ok(())`。
 ///
-/// # 错误
 /// 版本冲突、仍被供给使用或写入失败时返回错误。
 pub async fn delete_delivery_template(
     db: Database,
@@ -196,16 +169,10 @@ pub async fn delete_delivery_template(
 
 /// 为同一供应商的供给批量指定模板或改回跟随默认模板。
 ///
-/// # 参数
-/// * `db` - 数据库
-/// * `access` - 共享供给对象授权访问器
-/// * `req` - 供给与目标模板
-/// * `actor` - 操作人
+/// `access`：共享供给对象授权访问器；`req`：供给与目标模板。
 ///
-/// # 返回
 /// 返回实际变化的供给数。
 ///
-/// # 错误
 /// 任一供给不可见或不可维护、模板不属于供给的供应商或写入失败时整体拒绝。
 pub async fn assign_offering_delivery_template(
     db: Database,

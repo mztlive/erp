@@ -98,13 +98,7 @@ pub enum JdVopReadRequest {
 }
 
 impl JdVopReadRequest {
-    /// 返回请求对应的官方方法名。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 固定白名单内的方法名。
-    /// # 错误
-    /// 不返回错误。
+    /// 在签名发送和解析响应时使用同一个只读白名单方法名，由请求变体决定，不接受外部传入的方法字符串。
     pub fn method(&self) -> &'static str {
         match self {
             Self::Pools => "jingdong.vop.goods.getSkuPoolInfo",
@@ -144,26 +138,15 @@ pub enum JdVopWriteRequest {
 }
 
 impl JdVopWriteRequest {
-    /// 返回该写方法在官方示例中的 RPC 响应封装键。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 创建和消息删除使用 vopOrderRpcResult，确认、取消及确认收货使用 openRpcResult。
-    /// # 错误
-    /// 不返回错误；新增方法必须显式选择其响应封装。
+    /// 按官方封装解码写回执：创建和消息删除读 `vopOrderRpcResult`，确认、取消及确认收货读 `openRpcResult`。
+    /// 新增写动作时须明确选择对应的响应键。
     pub fn response_key(&self) -> &'static str {
         match self {
             Self::Submit { .. } | Self::DeleteMessages { .. } => "vopOrderRpcResult",
             Self::Confirm { .. } | Self::ConfirmReceipt { .. } | Self::Cancel { .. } => "openRpcResult",
         }
     }
-    /// 返回写动作的固定官方方法名。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 创建、确认或取消方法名。
-    /// # 错误
-    /// 不返回错误。
+    /// 按已冻结的写动作选定签名和解析回执所用的官方方法名，覆盖创建、确认、确认收货、取消和消息删除。
     pub fn method(&self) -> &'static str {
         match self {
             Self::Submit { .. } => "jingdong.vop.order.submitOrder",
@@ -178,13 +161,8 @@ impl JdVopWriteRequest {
 /// 通过 G0 验收后注入的单次写传输；任何可能已送达的失败必须返回 ResultUnknown。
 #[async_trait]
 pub trait JdVopWriteTransport: Send + Sync {
-    /// 发送一次已冻结动作，不自动重试、拆单、确认其他订单或变更单价。
-    /// # 参数
-    /// `request` 为当前唯一动作的类型化载荷。
-    /// # 返回
-    /// 方法完整响应；不把HTTP成功视为业务成功。
-    /// # 错误
-    /// 传输分类只用于诊断；未取得账号级未写入证明时，客户端统一保留结果未知。
+    /// 按唯一持久化的写意图发送一次请求，不重试、不拆单、不改价格或另行确认其他订单。
+    /// 交付完整方法响应供适配器解码，HTTP 成功不等于业务成功；无账号级证据证明未写入时保留结果未知。
     async fn write(&self, request: &JdVopWriteRequest) -> ConnectorResult<Vec<u8>>;
 }
 
@@ -194,13 +172,8 @@ pub(super) struct WriteClient {
 }
 
 impl WriteClient {
-    /// 只接受明确的 true 应答，不把业务失败当作未发送证明。
-    /// # 参数
-    /// `request` 为当前已持久化的原写动作。
-    /// # 返回
-    /// 单次发送且应答为 true 时成功。
-    /// # 错误
-    /// 传输、解码或非 true 应答保持原写结果未知分类。
+    // 用于明确以 true 回执表示成功的写动作：发送一次已持久化的请求，且仅在解码得到 true 时确认成功。
+    // 传输失败、无法解码或其他回执均不能证明未写入，保持原动作结果未知。
     pub(super) async fn send_true(&self, request: JdVopWriteRequest) -> ConnectorResult<()> {
         let result: WireText = self.send(request).await?;
         if result.0 != "true" {
@@ -246,13 +219,8 @@ fn unknown_after_write(failure: ConnectorError) -> ConnectorError {
 /// 已完成账号认证协议验收的传输实现；不得将密钥或原始错误正文写入摘要。
 #[async_trait]
 pub trait JdVopReadTransport: Send + Sync {
-    /// 执行一次白名单读取，负责已验签名和 HTTP/网关失败分类，不隐藏写入或重试。
-    /// # 参数
-    /// `request` 为类型化读取参数；认证、sourceType 及令牌由已验收实现负责。
-    /// # 返回
-    /// 官方方法完整响应字节，由适配器按方法解码。
-    /// # 错误
-    /// HTTP、鉴权、配额和读取失败返回脱敏分类错误。
+    /// 按已验收的签名、渠道及令牌规则执行一次类型化白名单查询，将完整响应字节交由适配器按方法解码。
+    /// 不附带写操作或重试；HTTP、网关、鉴权、配额及读取失败须返回脱敏分类错误。
     async fn read(&self, request: &JdVopReadRequest) -> ConnectorResult<Vec<u8>>;
 }
 

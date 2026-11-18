@@ -10,13 +10,13 @@ use crate::Result;
 /// 行事务和认领释放的执行边界。
 #[async_trait]
 pub(super) trait BrandRowExecution: Send {
-    /// 提交一整行，取消或已被接管时返回 false。
+    // 在行事务中写完品牌行及其结果；任务已取消或认领被接管时返回 `false`，不执行行写入。
     async fn commit(&mut self, job: &mut BackgroundJob, item: BackgroundJobItem) -> Result<bool>;
-    /// 达到预算后释放认领，已保存结果不受影响。
+    // 达到预算后释放认领，已保存结果不受影响。
     async fn release(&mut self, job: &mut BackgroundJob) -> Result<()>;
 }
 
-/// 执行有界切片，失败必须停止后续业务写入。
+// worker 只处理还没有结果的品牌行，在整行提交后检查预算；事务失败立即停止，取消或失去认领时不再执行后续行。
 pub(super) async fn execute_rows(
     execution: &mut impl BrandRowExecution,
     job: &mut BackgroundJob,
@@ -34,7 +34,7 @@ pub(super) async fn execute_rows(
     execution.release(job).await
 }
 
-/// 将领域结果映射到任务行，并更新同一事务内的任务计数。
+// 将领域结果映射到任务行，并更新同一事务内的任务计数。
 pub(super) fn record(
     job: &mut BackgroundJob,
     item: &mut BackgroundJobItem,

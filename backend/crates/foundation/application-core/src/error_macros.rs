@@ -14,14 +14,7 @@
 macro_rules! impl_application_error_conversions {
     ($error:ty) => {
         impl From<$crate::Error> for $error {
-            /// 保留应用合同错误的分类、消息和字段明细。
-            ///
-            /// # 参数
-            /// * `error` - 应用合同错误。
-            /// # 返回
-            /// 对应的领域错误。
-            /// # 错误
-            /// 不返回错误。
+            // 应用合同错误进入领域时逐变体转换，避免丢失原分类、消息或结构化字段明细。
             fn from(error: $crate::Error) -> Self {
                 match error {
                     $crate::Error::Internal(message) => Self::Internal(message),
@@ -32,14 +25,7 @@ macro_rules! impl_application_error_conversions {
         }
 
         impl From<::validator::ValidationErrors> for $error {
-            /// 将字段校验失败转换为保留字段路径的领域错误。
-            ///
-            /// # 参数
-            /// * `errors` - validator 字段错误。
-            /// # 返回
-            /// 包含安全字段明细的 `InvalidInput`。
-            /// # 错误
-            /// 不返回错误。
+            // 将 validator 错误交给共享规则转换，供领域返回保留字段路径但不含原始输入的明细。
             fn from(errors: ::validator::ValidationErrors) -> Self {
                 Self::InvalidInput(errors.into())
             }
@@ -61,15 +47,8 @@ macro_rules! impl_application_error_conversions {
 macro_rules! impl_domain_error_class {
     ($error:ty) => {
         impl $error {
-            /// 返回协议层使用的稳定错误类别。
-            ///
-            /// # 参数
-            /// 无。
-            /// # 返回
-            /// 通用冲突为 `Conflict`，业务与字段错误为 `BusinessRule`，
-            /// 权限错误为 `Forbidden`，内部失败及提交结果未知为 `Internal`。
-            /// # 错误
-            /// 不返回错误；`OutcomeUnknown` 不归为可重试冲突。
+            /// 让协议层按领域错误变体区分内部故障、冲突、业务条件和权限失败；
+            /// 提交结果未知仍是内部故障，不当成可重试冲突。
             pub fn class(&self) -> $crate::ErrorClass {
                 match self {
                     Self::Internal(_)

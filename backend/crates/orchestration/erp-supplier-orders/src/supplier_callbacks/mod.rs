@@ -18,12 +18,12 @@ use store::MongoCallbackReceipts;
 
 use crate::{Error, Result};
 
-/// 按服务端连接绑定选择协议并持久化回调。
-/// # 参数
+/// 收到供应商 HTTP 回调后，用服务端连接绑定选择协议；只有回调证据可靠持久化或核实原回执后才返回协议应答。
+///
 /// 数据库、注册表、加密器来自组合根；kind 仅用于核对路由与连接协议。
-/// # 返回
+///
 /// 可靠保存证据后返回供应商协议应答。
-/// # 错误
+///
 /// 协议不符、能力缺失、验签或持久化失败时拒绝成功应答。
 pub async fn receive(
     db: &Database,
@@ -36,12 +36,12 @@ pub async fn receive(
     receive_from(&MongoCallbackReceipts(db), registry, codec, kind, connection_id, request).await
 }
 
-/// 使用持久化边界执行完整回调接收，保留协议绑定、验签、去重和保存后应答顺序。
-/// # 参数
+/// 处理首次或重复回调时，按服务端绑定选择协议并验签，以原消息身份核对回执；只在证据可靠后生成应答。
+///
 /// `store` 提供服务端连接与可靠回执；其余参数与 HTTP 接收入口一致。
-/// # 返回
+///
 /// 首次回执已保存或原回执证据已核实后返回原协议应答。
-/// # 错误
+///
 /// 绑定、验签、保存或重放证据核验失败时拒绝成功应答。
 pub async fn receive_from(
     store: &dyn CallbackReceiptStore,

@@ -19,16 +19,8 @@ use crate::{Error, Result};
 impl IntegrationOpsService {
     /// 分页查询对账差异，并按最新决定派生状态与版本。
     ///
-    /// # 参数
-    /// * `params` - 列表查询参数
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 返回带范围元数据的分页视图；无决定的差异状态为 `None`、版本为 0。
-    /// 完整授权条件无匹配记录时返回空页。
-    ///
-    /// # 错误
-    /// 查询参数非法、范围版本变化、授权或组织展开失败、仓储查询或事务失败时返回对应错误。
+    /// 返回带范围元数据的分页视图；无决定的差异状态为 `None`、版本为 0。完整授权条件无匹配记录时返回空页。查询参数非法、范围版本变化、授权或组织展开失败、
+    /// 仓储查询或事务失败时返回对应错误。
     pub async fn difference_list(
         &self,
         params: &DifferenceListParams,
@@ -52,14 +44,10 @@ impl IntegrationOpsService {
 
     /// 在调用方读取阶段取得完整授权分页及待交付的原查询凭证。
     ///
-    /// # 参数
+    /// 分页视图及查询凭证；调用方必须补齐展示后通过 `IntegrationAccess::validate` 才能交付。参数非法、资格不足、
+    /// 范围变化或分页读取失败时拒绝。
+    ///
     /// `params` 为原列表筛选，`actor` 为当前账号，`executor` 为用例原执行器。
-    ///
-    /// # 返回
-    /// 分页视图及查询凭证；调用方必须补齐展示后通过 `IntegrationAccess::validate` 才能交付。
-    ///
-    /// # 错误
-    /// 参数非法、资格不足、范围变化或分页读取失败时拒绝。
     pub async fn difference_list_read(
         &self,
         params: &DifferenceListParams,
@@ -95,17 +83,8 @@ impl IntegrationOpsService {
         Ok((difference_list_view(total, items, &filter, scope.meta), scope.read_scope))
     }
 
-    /// 把历史处理人筛选解析为差异 ID 集合。
-    ///
-    /// # 参数
-    /// * `operator_user_ids` - 已规范化的历史处理人 ID
-    /// * `executor` - 与列表查询相同的执行器
-    ///
-    /// # 返回
-    /// 未筛选时返回 `None`；否则返回处理过的差异 ID。
-    ///
-    /// # 错误
-    /// 仓储读取失败时返回错误。
+    // 将历史处理人筛选转换为曾由这些用户处理的差异 ID，复用列表读取的执行器。
+    // 未指定处理人时返回 `None`，与指定了处理人但没有匹配记录区分。
     async fn operator_difference_ids(
         &self,
         operator_user_ids: &[String],
@@ -124,15 +103,9 @@ impl IntegrationOpsService {
 }
 /// 构造差异并把实体不变量失败映射为 `ValidationError`。
 ///
-/// # 参数
-/// * `req` - 差异登记请求
-/// * `owner_org_unit_id` - 处理人当前内部组织
+/// 返回新建的对账差异。对象身份、证据引用或处理人不满足实体规则时返回 `ValidationError`，文案来自领域错误。
 ///
-/// # 返回
-/// 返回新建的对账差异。
-///
-/// # 错误
-/// 对象身份、证据引用或处理人不满足实体规则时返回 `ValidationError`，文案来自领域错误。
+/// `owner_org_unit_id` 为处理人当前内部组织。
 pub fn prepare_difference(
     req: &CreateDifferenceRequest,
     owner_org_unit_id: String,
@@ -153,7 +126,7 @@ pub fn prepare_difference(
     Ok(difference)
 }
 
-/// 把已规范化查询与授权条件装配为差异仓储筛选。
+// 把已规范化查询与授权条件装配为差异仓储筛选。
 fn difference_filter(
     query: dto::DifferenceListQuery,
     owner_org_unit_ids: Vec<String>,
@@ -176,7 +149,7 @@ fn difference_filter(
     }
 }
 
-/// 装配带范围元数据的差异列表响应。
+// 组装对账差异分页响应，供调用方返回当前筛选及授权范围的摘要。
 fn difference_list_view(
     total: i64,
     items: Vec<DifferenceView>,
@@ -193,7 +166,7 @@ fn difference_list_view(
     }
 }
 
-/// 无最新决定的差异状态为 `None`、版本为 0。
+// 用每条差异的最新决定派生列表状态和版本；无决定的差异保留空状态和版本 0。
 async fn project_difference_rows(
     service: &IntegrationOpsService,
     rows: Vec<crate::repository::integration_ops::ReconciliationDifferenceRow>,
@@ -231,18 +204,7 @@ async fn project_difference_rows(
     Ok(items)
 }
 
-/// 在调用方事务内保存不可变差异事实。
-///
-/// # 参数
-/// * `db` - 目标数据库
-/// * `difference` - 待写入的对账差异
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 成功时差异已写入。
-///
-/// # 错误
-/// 仓储写入失败时返回对应错误。
+/// 在调用方事务内保存不可变差异事实。成功时差异已写入。
 pub async fn persist_difference(
     db: &Database,
     difference: &ReconciliationDifference,

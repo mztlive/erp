@@ -45,25 +45,18 @@ enum Kind {
 
 impl<'a> FundsSummaryRepository<'a> {
     /// 绑定财务集合数据库。
+    /// 结果：只读事实仓储。
     ///
-    /// # 参数
-    /// 财务数据库。
-    /// # 返回
-    /// 只读事实仓储。
-    /// # 错误
-    /// 无。
+    /// 输入约定：财务数据库。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
 
     /// 沿原回款 ID 集合一次 find 读取必要金额，保持分配返回流。
+    /// 结果：原流顺序的分配金额与本域来源引用。
+    /// 失败条件：查询或必要引用字段损坏时拒绝；缺失关联仍保留 None 由消费方处理。
     ///
-    /// # 参数
-    /// 原最终匹配回款 ID 顺序与原快照执行器。
-    /// # 返回
-    /// 原流顺序的分配金额与本域来源引用。
-    /// # 错误
-    /// 查询或必要引用字段损坏时拒绝；缺失关联仍保留 None 由消费方处理。
+    /// 输入约定：原最终匹配回款 ID 顺序与原快照执行器。
     pub async fn receipt_links(
         &self,
         ids: &[String],
@@ -73,13 +66,10 @@ impl<'a> FundsSummaryRepository<'a> {
     }
 
     /// 沿原付款 ID 集合一次 find 读取必要金额，保留采购与结算实际类型。
-    ///
-    /// # 参数
-    /// 原最终匹配付款 ID 顺序与原事务执行器。
-    /// # 返回
-    /// 原流顺序的分配事实。
-    /// # 错误
+    /// 结果：原流顺序的分配事实。
     /// 数据读取或必要字段损坏时拒绝。
+    ///
+    /// 输入约定：原最终匹配付款 ID 顺序与原事务执行器。
     pub async fn payment_links(
         &self,
         ids: &[String],
@@ -88,7 +78,7 @@ impl<'a> FundsSummaryRepository<'a> {
         self.links(Kind::Payment, ids, executor).await
     }
 
-    /// 主查询仍与旧 find 使用同一父单条件；仅减少传输字段。
+    // 为收付款摘要按原父单条件查询分配，仅加载组装来源及金额摘要需要的字段。
     async fn links(
         &self,
         kind: Kind,
@@ -122,7 +112,7 @@ impl<'a> FundsSummaryRepository<'a> {
         assemble_links(kind, rows, &entries, &accounts)
     }
 
-    /// 仅投影分录与子账引用，批次不会改变金额主查询返回顺序。
+    // 为收付款分配补齐分录到子账的引用，只读取相关字段；批次顺序不影响原金额流。
     async fn entries(
         &self,
         kind: Kind,
@@ -161,7 +151,7 @@ impl<'a> FundsSummaryRepository<'a> {
         Ok(mapped)
     }
 
-    /// 子账事实只绑定实际来源，不读取销售、采购或结算集合。
+    // 按应收或应付的实际子账确定摘要来源，不额外查询销售、采购或结算单据。
     async fn accounts<'b>(
         &self,
         kind: Kind,
@@ -217,7 +207,7 @@ struct AmountRow {
 }
 
 impl AmountRow {
-    /// 必要父单和分录字段损坏时拒绝，不把字段缺失当成未分配。
+    // 组装回款或付款摘要前提取必需的父单与分录标识；损坏字段不能解释成无分配。
     fn required_ids(&self, kind: Kind) -> Result<(&String, &String)> {
         let parent = match kind {
             Kind::Receipt => self.customer_receipt_id.as_ref(),
@@ -226,7 +216,7 @@ impl AmountRow {
         parent.zip(self.entry(kind)).ok_or_else(|| Error::Internal("核销分配必要引用缺失".into()))
     }
 
-    /// 返回对应资源的真实分录引用。
+    // 提供对应资源的真实分录引用。
     fn entry(&self, kind: Kind) -> Option<&String> {
         match kind {
             Kind::Receipt => self.receivable_entry_id.as_ref(),
@@ -250,7 +240,7 @@ struct AccountRow {
     source_type: Option<PayableSourceType>,
 }
 
-/// 关联映射不排序、去重或归并金额，保留原返回流及缺失来源标记。
+// 将实际子账来源补入收付款分配流，保留原顺序、每笔金额与缺失来源标记，不合并或去重。
 fn assemble_links(
     kind: Kind,
     rows: Vec<AmountRow>,
@@ -286,7 +276,7 @@ fn assemble_links(
 mod tests {
     use super::*;
 
-    /// 生产关联函数保持交错正反原流，采购和结算同 ID 的类型仍独立。
+    // 回归检查：生产关联函数保持交错正反原流，采购和结算同 ID 的类型仍独立。
     #[test]
     fn amount_facts_keep_original_flow_and_real_source_type() {
         let rows: Vec<AmountRow> = serde_json::from_value(serde_json::json!([

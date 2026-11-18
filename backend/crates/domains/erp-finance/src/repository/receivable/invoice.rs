@@ -84,16 +84,7 @@ pub struct InvoiceFilter {
 }
 
 impl Default for InvoiceFilter {
-    /// 缺省分页从第一页、每页二十条开始，其余筛选保持空条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回第 1 页、每页 20 条的空筛选条件。
-    ///
-    /// # 错误
-    /// 无。
+    // 未提供列表条件时，从第 1 页读取，每页 20 条，不预设可选业务筛选。
     fn default() -> Self {
         Self {
             keyword_ids: None,
@@ -112,19 +103,11 @@ impl Default for InvoiceFilter {
 }
 
 impl QueryFilter for InvoiceFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。有值时等值匹配 `invoice_direction`、`invoice_kind`、
-    /// `party_id`、`status`；`invoice_ids` 按 `id` 的 `$in` 匹配；`invoice_no`
-    /// 按字面量模糊匹配。`keyword_ids` 为 `Some` 时与上述条件用 `$and` 再按
-    /// `id` 取交集，空集合匹配零行。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 转换为 MongoDB 查询条件（自动追加未删除过滤）。
+    // 返回查询条件文档。有值时等值匹配 `invoice_direction`、`invoice_kind`、
+    // `party_id`、`status`；`invoice_ids` 按 `id` 的 `$in` 匹配；`invoice_no`
+    // 按字面量模糊匹配。`keyword_ids` 为 `Some` 时与上述条件用 `$and` 再按
+    // `id` 取交集，空集合匹配零行。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(invoice_ids) = &self.invoice_ids {
@@ -153,16 +136,7 @@ impl QueryFilter for InvoiceFilter {
 }
 
 impl Pagination for InvoiceFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。`page` 原样返回，`page_size` 由 `u32` 转为 `u64`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 向仓储分页器交付筛选中的页码与每页条数；页码原样保留，条数转为 `u64`。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -174,16 +148,12 @@ pub trait InvoiceRepositoryExt {
     ///
     /// 只返回 [`InvoiceRow`] 所需的列表字段；发票号码支持字面量模糊匹配。
     /// D19 的进项发票查询经本方法按 `invoice_direction = Purchase` 复用。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回当前页投影行与满足筛选条件的总数。
+    /// 传播数据库查询、游标读取或计数失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// 输入约定：
+    /// - `filter`：筛选与分页条件
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn search_invoices(
         &self,
         filter: &InvoiceFilter,
@@ -195,17 +165,13 @@ pub trait InvoiceRepositoryExt {
     /// 唯一性由 `uk_invoices_uncoded` 部分唯一索引保证（有代码发票走
     /// `uk_invoices_coded`）；本方法用于登记前幂等判定与 D19 进项发票引用，
     /// 服务层不得做「先查后插」的重复性判断。
-    ///
-    /// # 参数
-    /// * `invoice_direction` - 发票方向
-    /// * `normalized_no` - 规范化发票号码（去空白转大写）
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回匹配的发票；无匹配时返回 `None`。
+    /// 传播数据库查询失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
+    /// 输入约定：
+    /// - `invoice_direction`：发票方向
+    /// - `normalized_no`：规范化发票号码（去空白转大写）
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn find_by_direction_and_normalized_no(
         &self,
         invoice_direction: InvoiceDirection,
@@ -214,16 +180,12 @@ pub trait InvoiceRepositoryExt {
     ) -> Result<Option<Invoice>>;
 
     /// 批量按发票 ID 读取活跃发票事实。
-    ///
-    /// # 参数
-    /// * `invoice_ids` - 发票 ID 字符串集合；空集合直接返回空结果
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回全部匹配且未删除的发票；返回顺序不承诺与输入一致。
+    /// 传播数据库查询或游标读取失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 输入约定：
+    /// - `invoice_ids`：发票 ID 字符串集合；空集合直接返回空结果
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn find_invoices_by_ids(
         &self,
         invoice_ids: &[String],
@@ -286,16 +248,12 @@ impl InvoiceRepositoryExt for persistence_core::Repository<'_, Invoice> {
 #[allow(async_fn_in_trait)]
 pub trait SalesInvoiceAllocationRepositoryExt {
     /// 批量按发票集合取回销项发票分配（`$in` 一次取回，禁止 N+1）。
-    ///
-    /// # 参数
-    /// * `invoice_ids` - 发票 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回全部匹配分配。
+    /// 传播数据库查询或游标读取失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 输入约定：
+    /// - `invoice_ids`：发票 ID 集合
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn find_allocations_by_invoices(
         &self,
         invoice_ids: &[InvoiceId],
@@ -303,16 +261,12 @@ pub trait SalesInvoiceAllocationRepositoryExt {
     ) -> Result<Vec<SalesInvoiceAllocation>>;
 
     /// 批量按应收子账集合取回销项发票分配（`$in`，用于开票进度校验）。
-    ///
-    /// # 参数
-    /// * `account_ids` - 应收往来子账 ID 集合
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回全部匹配分配。
+    /// 传播数据库查询或游标读取失败。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 输入约定：
+    /// - `account_ids`：应收往来子账 ID 集合
+    /// - `executor`：数据访问执行器，由 Service 决定是否位于事务中
     async fn find_allocations_by_accounts(
         &self,
         account_ids: &[ReceivableAccountId],
@@ -346,10 +300,8 @@ impl SalesInvoiceAllocationRepositoryExt for persistence_core::Repository<'_, Sa
     }
 }
 
-/// 发票列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
+// 限定发票列表查询返回的字段，避免读出列表不需要的完整实体。
+// 返回投影条件文档。
 fn invoice_projection() -> Document {
     doc! {
         "id": 1,

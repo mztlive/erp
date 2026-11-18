@@ -40,14 +40,11 @@ struct DetailPresentation {
 }
 
 impl SupplierSettlementReadService {
-    /// 查询供应商结算单详情（结算单 + 全部明细 + 全部差异）。
+    /// 读取供应商结算单详情（结算单 + 全部明细 + 全部差异）。
     ///
     /// # 参数
     /// * `id` - 结算单 ID。
     /// * `actor` - 已认证操作人，用于复核任务的岗位分离与动作投影。
-    ///
-    /// # 返回
-    /// 返回详情视图。
     ///
     /// # 错误
     /// * `NotFound` - 结算单不存在
@@ -100,7 +97,7 @@ impl SupplierSettlementReadService {
         self.detail_read(id, actor, presentation, executor).await
     }
 
-    /// 业务动作只形成展示结果；所有会推进阶段的动作检查在最终根查询之前完成。
+    // 投影供应商结算字段时，业务动作只形成展示结果；所有会推进阶段的动作检查在最终根查询之前完成。
     async fn detail_actions(
         &self,
         id: &str,
@@ -147,7 +144,7 @@ impl SupplierSettlementReadService {
         })
     }
 
-    /// 最终根查询之后重新读取交付数据，展示补齐后验证这一原查询。
+    // 处理供应商结算时，最终根查询之后重新读取交付数据，展示补齐后验证这一原查询。
     async fn detail_read(
         &self,
         id: &str,
@@ -189,7 +186,7 @@ impl SupplierSettlementReadService {
         Ok(view)
     }
 
-    /// 为详情返回当前 actor 的 W27 领域动作，不把领域动作塞进通用责任注册表。
+    // 为详情给出当前 actor 的 W27 领域动作，不把领域动作塞进通用责任注册表。
     async fn settlement_review_work_item_view(
         &self,
         statement: &SupplierSettlementStatement,
@@ -251,7 +248,7 @@ impl SupplierSettlementReadService {
         ))
     }
 
-    /// 复核资格由 identity 检查；岗位分离沿用结算领域规则。
+    // 投影供应商结算字段时，复核资格由 identity 检查；岗位分离沿用结算领域规则。
     async fn review_actions(
         &self,
         statement: &SupplierSettlementStatement,
@@ -346,7 +343,7 @@ mod tests {
 
     use super::*;
 
-    /// 详情入口资格失败时，主表及关联名称都不得先行读取。
+    // 验证供应商结算：详情入口资格失败时，主表及关联名称都不得先行读取。
     #[tokio::test]
     async fn detail_stops_before_statement_or_display_reads_when_authorization_fails() {
         let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")

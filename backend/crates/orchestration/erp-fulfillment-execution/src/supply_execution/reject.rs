@@ -17,21 +17,11 @@ use crate::{Error, Result};
 impl SupplierFulfillmentProcess {
     /// 登记供应商拒单结果（回调幂等键 `(connection_id, external_event_id)`，§6.19）。
     ///
-    /// 同事务推进履约主线到 `REJECTED`、追加状态历史并把原 `PLACE` 动作标记为
-    /// 明确失败。重复回调（同一事件 ID）返回原状态历史，不重复推进。
+    /// 同事务推进履约主线到 `REJECTED`、追加状态历史并把原 `PLACE` 动作标记为明确失败。重复回调（同一事件 ID）返回原状态历史，不重复推进。
     ///
-    /// # 参数
-    /// * `id` - 供应商子订单 ID
-    /// * `req` - 拒单结果请求
-    /// * `actor` - 已通过鉴权的审计操作人
+    /// `id` 为供应商子订单 ID；`req` 为拒单结果请求。返回新增的状态历史视图。`NotFound`：订单不存在。
     ///
-    /// # 返回
-    /// 返回新增的状态历史视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 订单不存在
-    /// * `BusinessLogicError` - 当前履约状态不可拒单
-    /// * `ConflictError` - 事件 ID 冲突（事务注入失败时全部不可见）
+    /// `BusinessLogicError`：当前履约状态不可拒单。`ConflictError`：事件 ID 冲突（事务注入失败时全部不可见）。
     pub async fn record_reject(
         &self,
         id: &str,

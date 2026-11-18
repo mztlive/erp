@@ -64,19 +64,12 @@ pub use filters::{
 pub trait InboxMessageRepositoryExt {
     /// 按「来源系统 + 来源事件 ID」查找已接收消息（消息层去重判定）。
     ///
-    /// 消息层唯一性由 `uk_inbox_messages_identity` 唯一索引保证；本方法用于
-    /// 去重判定与幂等读取，服务层不得做「先查后插」的重复性判断（§8.4 第 3 条）。
+    /// 消息层唯一性由 `uk_inbox_messages_identity` 唯一索引保证；本方法用于去重判定与幂等读取，
+    /// 服务层不得做「先查后插」的重复性判断（§8.4 第 3 条）。
     ///
-    /// # 参数
-    /// * `source_system_id` - 来源系统 ID
-    /// * `source_event_id` - 来源事件 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回匹配的已接收消息；无匹配时返回 `None`。当 MongoDB 查询失败时返回错误。
     ///
-    /// # 返回
-    /// 返回匹配的已接收消息；无匹配时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
+    /// 沿用调用方传入的执行器。
     async fn find_by_identity(
         &self,
         source_system_id: &SourceSystemId,
@@ -86,20 +79,14 @@ pub trait InboxMessageRepositoryExt {
 
     /// 按「消息类型 + 业务事实键」查找已接收消息（业务事实去重判定）。
     ///
-    /// 业务事实键幂等由 `uk_inbox_messages_business_fact` 唯一索引保证：同一事实
-    /// 来自实时与回填时只形成一份正式记录（§6.21）；`business_fact_key` 实体层
-    /// 强制非空，唯一索引可直接建在字段上。
+    /// 业务事实键幂等由 `uk_inbox_messages_business_fact` 唯一索引保证：同一事实来自实时与回填时只形成一份正式记录（§6.21）；
+    /// `business_fact_key` 实体层强制非空，唯一索引可直接建在字段上。
     ///
-    /// # 参数
-    /// * `message_type` - 消息类型（事实类型）
-    /// * `business_fact_key` - 业务事实键
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回匹配的已接收消息；无匹配时返回 `None`。当 MongoDB 查询失败时返回错误。
     ///
-    /// # 返回
-    /// 返回匹配的已接收消息；无匹配时返回 `None`。
+    /// 沿用调用方传入的执行器。
     ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
+    /// `message_type` 为消息类型（事实类型）。
     async fn find_by_business_fact_key(
         &self,
         message_type: MessageType,
@@ -109,19 +96,12 @@ pub trait InboxMessageRepositoryExt {
 
     /// 分页检索已接收消息列表（投影查询）。
     ///
-    /// 只返回 [`InboxMessageRow`] 所需的列表字段，不加载整文档
-    /// （内容引用 `payload_reference` 不进入列表投影）；排序字段走白名单
-    /// （P2 §2.3，白名单外字段回退 `created_at` 降序）。
+    /// 只返回 [`InboxMessageRow`] 所需的列表字段，不加载整文档（内容引用 `payload_reference` 不进入列表投影）；
+    /// 排序字段走白名单（P2 §2.3，白名单外字段回退 `created_at` 降序）。
     ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回当前页投影行与满足筛选条件的总数。当 MongoDB 查询、游标读取或计数失败时返回错误。
     ///
-    /// # 返回
-    /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// 沿用调用方传入的执行器。
     async fn search_inbox_messages(
         &self,
         filter: &InboxMessageFilter,
@@ -189,18 +169,11 @@ pub trait IntegrationErrorTaskRepositoryExt {
     ///
     /// 工作项入口的历史名称；纯主键读取，直接委托基类单条查询。
     ///
-    /// # 参数
-    /// * `id` - 集成异常任务 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回未删除集成异常对象；不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或反序列化失败时返回错误。
-    ///
-    /// # 约束
     /// 仅查询本仓储拥有的集成错误任务集合，不访问入站消息集合。
+    ///
+    /// 返回未删除集成异常对象；不存在时返回 `None`。当 MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// 沿用调用方传入的执行器。
     async fn find_work_item_integration_error_task(
         &self,
         id: &str,
@@ -209,18 +182,12 @@ pub trait IntegrationErrorTaskRepositoryExt {
 
     /// 分页检索错误任务列表（投影查询）。
     ///
-    /// 只返回 [`IntegrationErrorTaskRow`] 所需的列表字段，不加载整文档
-    /// （解决证据文本 `resolution` 不进入列表投影）；排序字段走白名单。
+    /// 只返回 [`IntegrationErrorTaskRow`] 所需的列表字段，不加载整文档（解决证据文本 `resolution` 不进入列表投影）；
+    /// 排序字段走白名单。
     ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回当前页投影行与满足筛选条件的总数。当 MongoDB 查询、游标读取或计数失败时返回错误。
     ///
-    /// # 返回
-    /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// 沿用调用方传入的执行器。
     async fn search_error_tasks(
         &self,
         filter: &IntegrationErrorTaskFilter,
@@ -276,18 +243,11 @@ pub trait ReconciliationDifferenceRepositoryExt {
     ///
     /// 工作项入口的历史名称；纯主键读取，直接委托基类单条查询。
     ///
-    /// # 参数
-    /// * `id` - 对账差异 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回未删除对账差异；不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或反序列化失败时返回错误。
-    ///
-    /// # 约束
     /// 仅查询本仓储拥有的对账差异集合，不访问解决记录集合。
+    ///
+    /// 返回未删除对账差异；不存在时返回 `None`。当 MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// 沿用调用方传入的执行器。
     async fn find_work_item_reconciliation_difference(
         &self,
         id: &str,
@@ -296,18 +256,12 @@ pub trait ReconciliationDifferenceRepositoryExt {
 
     /// 分页检索对账差异列表（投影查询）。
     ///
-    /// 只返回 [`ReconciliationDifferenceRow`] 所需的列表字段，不加载整文档；
-    /// 排序字段走白名单（仅 `created_at`，差异发现时间）。
+    /// 只返回 [`ReconciliationDifferenceRow`] 所需的列表字段，不加载整文档；排序字段走白名单（仅 `created_at`，差异发现时间）
+    /// 。
     ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回当前页投影行与满足筛选条件的总数。当 MongoDB 查询、游标读取或计数失败时返回错误。
     ///
-    /// # 返回
-    /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// 沿用调用方传入的执行器。
     async fn search_differences(
         &self,
         filter: &ReconciliationDifferenceFilter,
@@ -361,18 +315,12 @@ impl ReconciliationDifferenceRepositoryExt for Repository<'_, ReconciliationDiff
 pub trait ReconciliationDifferenceResolutionRepositoryExt {
     /// 按差异 ID 读取全部解决记录（不可变追加历史，按处理序号升序）。
     ///
-    /// 处理记录不可更新或删除（§6.21），只提供追加与只读查询；
-    /// 查询走 `(reconciliation_difference_id, resolution_no)` 唯一索引。
+    /// 处理记录不可更新或删除（§6.21），只提供追加与只读查询；查询走 `(reconciliation_difference_id, resolution_no)`
+    /// 唯一索引。
     ///
-    /// # 参数
-    /// * `difference_id` - 所属对账差异 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回该差异的全部解决记录投影行，按 `resolution_no` 升序。当 MongoDB 查询或游标读取失败时返回错误。
     ///
-    /// # 返回
-    /// 返回该差异的全部解决记录投影行，按 `resolution_no` 升序。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 沿用调用方传入的执行器。
     async fn search_resolutions(
         &self,
         difference_id: &ReconciliationDifferenceId,
@@ -381,15 +329,11 @@ pub trait ReconciliationDifferenceResolutionRepositoryExt {
 
     /// 按历史处理人读取其参与过的差异 ID；不删除处理留痕。
     ///
-    /// # 参数
-    /// * `handled_by` - 历史处理人稳定 ID
-    /// * `executor` - 调用方执行器
+    /// 返回去重后的差异 ID。MongoDB 查询失败时返回错误。
     ///
-    /// # 返回
-    /// 返回去重后的差异 ID。
+    /// 沿用调用方传入的执行器。
     ///
-    /// # 错误
-    /// MongoDB 查询失败时返回错误。
+    /// `handled_by` 为历史处理人稳定 ID。
     async fn find_difference_ids_handled_by(
         &self,
         handled_by: &[String],
@@ -400,15 +344,9 @@ pub trait ReconciliationDifferenceResolutionRepositoryExt {
     ///
     /// 按处理序号降序取首条，当前处理状态由最后一条处理动作派生（§6.21）。
     ///
-    /// # 参数
-    /// * `difference_id` - 所属对账差异 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 返回最新解决记录；尚无处理记录时返回 `None`。当 MongoDB 查询或游标读取失败时返回错误。
     ///
-    /// # 返回
-    /// 返回最新解决记录；尚无处理记录时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    /// 沿用调用方传入的执行器。
     async fn find_latest_by_difference(
         &self,
         difference_id: &ReconciliationDifferenceId,
@@ -485,16 +423,7 @@ pub struct IntegrationOpsRepository<'a> {
 }
 
 impl<'a> IntegrationOpsRepository<'a> {
-    /// 创建域专用仓储。
-    ///
-    /// # 参数
-    /// * `db` - 目标 MongoDB 数据库
-    ///
-    /// # 返回
-    /// 返回仓储实例。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 创建域专用仓储。返回仓储实例。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
@@ -508,18 +437,12 @@ impl<'a> IntegrationOpsRepository<'a> {
     /// 失败标记的半成品；Service 必须通过 `persistence_core::Transactional::with_transaction`
     /// 传入事务会话。
     ///
-    /// # 参数
-    /// * `task` - 待写入的错误任务（消息类失败必填 `message_id`）
-    /// * `message` - 待置为失败的消息实体（调用方须先经 `InboxMessage::update`
-    ///   把状态改为 `InboxMessageStatus::Failed`）
-    /// * `executor` - 数据访问执行器，必须位于事务中
+    /// 成功时错误任务已插入，且消息已按调用方给定状态写回。当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）、
+    /// 消息版本冲突（透出 [`persistence_core::Error::OptimisticLockingError`]）或 MongoDB 写入失败时返回错误。
     ///
-    /// # 返回
-    /// 成功时错误任务已插入，且消息已按调用方给定状态写回。
-    ///
-    /// # 错误
-    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）、消息版本冲突
-    /// （透出 [`persistence_core::Error::OptimisticLockingError`]）或 MongoDB 写入失败时返回错误。
+    /// - `task`：待写入的错误任务（消息类失败必填 `message_id`）。
+    /// - `message`：待置为失败的消息实体（调用方须先经 `InboxMessage::update`把状态改为 `InboxMessageStatus::Failed`）。
+    /// - `executor`：数据访问执行器，必须位于事务中。
     pub async fn create_error_task_with_message_failure(
         &self,
         task: &IntegrationErrorTask,
@@ -537,25 +460,18 @@ impl<'a> IntegrationOpsRepository<'a> {
     }
 }
 
-/// 构建排序文档（P2 §2.3：排序字段白名单化）。
-///
-/// # 参数
-/// * `sort_by` - 排序字段；`None` 或不在白名单内时回退 `created_at`
-/// * `sort_ascending` - 升序为 `true`，降序为 `false`
-/// * `allowed` - 本列表查询允许的排序字段白名单
-///
-/// # 返回
-/// 返回排序条件文档。
+// 构建排序文档（P2 §2.3：排序字段白名单化）。
+//
+// - `sort_by`：排序字段；`None` 或不在白名单内时回退 `created_at`。
+// - `sort_ascending`：升序为 `true`，降序为 `false`。
+// - `allowed`：本列表查询允许的排序字段白名单。
 fn sort_doc(sort_by: Option<&str>, sort_ascending: bool, allowed: &[&str]) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
     let field = sort_by.filter(|field| allowed.contains(field)).unwrap_or("created_at");
     doc! { field: direction, "id": direction }
 }
 
-/// 入站消息列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
+// 入站消息列表投影字段。
 fn inbox_message_projection() -> Document {
     doc! {
         "id": 1,
@@ -573,10 +489,7 @@ fn inbox_message_projection() -> Document {
     }
 }
 
-/// 错误任务列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
+// 错误任务列表投影字段。
 fn integration_error_task_projection() -> Document {
     doc! {
         "id": 1,
@@ -598,10 +511,7 @@ fn integration_error_task_projection() -> Document {
     }
 }
 
-/// 对账差异列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
+// 对账差异列表投影字段。
 fn reconciliation_difference_projection() -> Document {
     doc! {
         "id": 1,
@@ -617,10 +527,7 @@ fn reconciliation_difference_projection() -> Document {
     }
 }
 
-/// 解决记录历史投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
+// 解决记录历史投影字段。
 fn resolution_history_projection() -> Document {
     doc! {
         "id": 1,
@@ -633,7 +540,7 @@ fn resolution_history_projection() -> Document {
     }
 }
 
-/// 只接受当前阶段、当前仓储固定模型的授权查询计划。
+// 只接受当前阶段、当前仓储固定模型的授权查询计划。
 fn ensure_authorized_model(
     access: &CompiledAccess,
     resource: &str,

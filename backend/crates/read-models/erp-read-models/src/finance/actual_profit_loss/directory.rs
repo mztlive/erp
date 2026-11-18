@@ -8,11 +8,14 @@ use crate::historical_directory::{HistoricalDirectoryView, ProfitLossDirectoryQu
 use crate::{Error, Result};
 
 impl ActualProfitLossReadModel {
-    /// 独立读取冻结归属目录，沿用报表同角色销售与成本权限证明。
+    /// 准备实际盈亏历史归属目录候选时，独立读取冻结归属目录，沿用报表同角色销售与成本权限证明。
+    ///
     /// # 参数
     /// `input` 只含期间口径和客户上下文；`actor` 为认证人。
+    ///
     /// # 返回
     /// 完整冻结身份候选，不携带金额或当前人员信息。
+    ///
     /// # 错误
     /// 非法期间、权限不足、超限、来源或授权版本变化时拒绝。
     pub async fn history_directory(

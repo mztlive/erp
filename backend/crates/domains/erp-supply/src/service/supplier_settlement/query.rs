@@ -24,20 +24,8 @@ use crate::repository::supplier_settlement::{
 use crate::{Error, Result};
 
 impl SupplierSettlementService {
-    /// 使用原执行器已解析的列表动作凭证分页查询结算单。
-    ///
-    /// # 参数
-    /// * `params` - 查询参数
-    /// * `keyword_supplier_ids` - 关键词命中的供应商身份
-    /// * `context` - 原执行器已解析的列表授权凭证
-    /// * `handler_open_statement_ids` - 当前开放复核任务命中的结算单
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 返回带范围版本的列表；空范围返回空集。
-    ///
-    /// # 错误
-    /// 参数非法、后续页缺少范围版本或范围版本已变化时返回对应错误。范围解析、组织展开或仓储查询失败时返回对应错误。
+    /// 用原执行器校验固定列表动作和范围版本，将授权、组织及工作项条件用于同一分页和统计。后续页缺版本或
+    /// 版本失效时拒绝；交付前由身份域复验凭证。范围为空返回空集，组织展开或数据库异常不当作空结果。
     pub async fn statement_list_scoped(
         &self,
         params: &SupplierSettlementStatementListParams,
@@ -73,14 +61,14 @@ impl SupplierSettlementService {
     }
 }
 
-/// 后续页必须携带当前范围版本。
+// 后续页必须携带当前范围版本。
 fn ensure_page(page: u64, version: Option<&str>) -> Result<()> {
     ScopeVersion::new(version, EmptyScopeVersion::Missing)
         .require_for_page(page)
         .map_err(|error| Error::ConflictError(format!("DATA_SCOPE_CHANGED：{}", error.detail())))
 }
 
-/// 客户端回传的范围版本必须与当前快照一致。
+// 客户端回传的范围版本必须与当前快照一致。
 fn ensure_scope_version(expected: Option<&str>, actual: &str) -> Result<()> {
     ScopeVersion::new(expected, EmptyScopeVersion::Provided)
         .verify(actual)
@@ -122,7 +110,7 @@ impl SupplierSettlementService {
     }
 }
 
-/// 消费列表投影构造视图，仅缺省差异处理人时复制对账负责人。
+// 消费列表投影构造视图，仅缺省差异处理人时复制对账负责人。
 fn statement_row_view(row: SupplierSettlementStatementRow) -> SupplierSettlementStatementView {
     let difference_handler_user_id = if row.difference_handler_user_id.is_empty() {
         row.prepared_by.clone()
@@ -203,7 +191,7 @@ fn list_view(
     }
 }
 
-/// 构建结算单列表筛选条件。
+// 构建结算单列表筛选条件。
 fn statement_filter(query: &StatementListQuery) -> SupplierSettlementStatementFilter {
     SupplierSettlementStatementFilter {
         q: query.q.clone(),
@@ -227,15 +215,6 @@ fn statement_filter(query: &StatementListQuery) -> SupplierSettlementStatementFi
 }
 
 /// 从结算明细实体构造响应视图。
-///
-/// # 参数
-/// * `item` - 结算明细实体
-///
-/// # 返回
-/// 返回响应视图。
-///
-/// # 错误
-/// 不返回错误。
 pub fn settlement_item_view(item: SupplierSettlementItem) -> SupplierSettlementItemView {
     SupplierSettlementItemView {
         id: item.base.id,
@@ -258,17 +237,7 @@ pub fn settlement_item_view(item: SupplierSettlementItem) -> SupplierSettlementI
 }
 
 /// 由服务端状态、责任人与差异事实投影当前对象动作和处理态。
-///
-/// # 参数
-/// * `statement` - 当前结算单。
-/// * `differences` - 结算明细上的正式差异。
-/// * `access` - identity 对各具体命令核验的完整对象资格。
-///
-/// # 返回
 /// 返回允许的动作名、阻塞原因，以及处理态文本。
-///
-/// # 错误
-/// 不返回错误。
 pub fn settlement_object_actions(
     statement: &SupplierSettlementStatement,
     differences: &[SupplierSettlementDifference],

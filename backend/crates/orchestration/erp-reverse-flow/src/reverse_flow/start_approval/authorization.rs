@@ -10,13 +10,11 @@ use persistence_core::Executor;
 use super::financial_access::require_submission;
 use crate::{Error, Result, ReverseFlowPorts};
 
-/// 在读取退款数据前使用真实单据身份执行固定完整提交规则。
-/// # 参数
-/// rbac 为共享设施，actor 为当前账号，kind、id 为真实退款或冲正单据，executor 为原事务。
-/// # 返回
-/// 固定提交资格、完整来源与原经办职责成立时成功。
-/// # 错误
-/// 类型未登记、非事务执行器、缺少资格、来源不完整或越权时拒绝。
+// 在读取退款数据前使用真实单据身份执行固定完整提交规则。
+//
+// rbac 为共享设施，actor 为当前账号，kind、id 为真实退款或冲正单据，executor 为原事务。固定提交资格、完整来源与原经办职责成立时成功。
+//
+// 类型未登记、非事务执行器、缺少资格、来源不完整或越权时拒绝。
 pub(in crate::reverse_flow) async fn ensure_submit_permission(
     rbac: &ReverseFlowPorts,
     actor: &AuditActor,
@@ -27,7 +25,7 @@ pub(in crate::reverse_flow) async fn ensure_submit_permission(
     require_submission(&rbac.identity, actor, kind, id, executor).await
 }
 
-/// 原事务读取真实单据，保留经办人与复核人的业务岗位分离。
+// 原事务读取真实单据，保留经办人与复核人的业务岗位分离。
 async fn ensure_financial_separation(
     db: &Database,
     kind: DocumentType,
@@ -57,14 +55,11 @@ async fn ensure_financial_separation(
     Ok(())
 }
 
-/// 同一事务使用固定完整规则重验回放单据，并保留业务岗位分离。
-/// # 参数
-/// db、rbac 为共享设施，actor 为当前账号，kind、id 为真实单据。
-/// 提交权限由真实单据类型固定选择，executor 为原事务。
-/// # 返回
-/// 真实单据仍满足固定提交规则及岗位分离时成功。
-/// # 错误
-/// 类型未登记、缺少资格、来源无权或业务职责冲突时拒绝。
+// 同一事务使用固定完整规则重验回放单据，并保留业务岗位分离。
+//
+// db、rbac 为共享设施，actor 为当前账号，kind、id 为真实单据。提交权限由真实单据类型固定选择，executor 为原事务。
+//
+// 真实单据仍满足固定提交规则及岗位分离时成功。类型未登记、缺少资格、来源无权或业务职责冲突时拒绝。
 pub(in crate::reverse_flow) async fn ensure_replay_authorized(
     db: &Database,
     rbac: &ReverseFlowPorts,

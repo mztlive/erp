@@ -54,21 +54,11 @@ struct DraftVoidServices<'a> {
 impl PurchaseOrderProcess {
     /// 作废当前账号创建的采购草稿并释放销售采购覆盖。
     ///
-    /// # 参数
-    /// * `id` - 采购单 ID
-    /// * `req` - 期望版本、作废原因和幂等键
-    /// * `actor` - 已通过鉴权的审计操作人
+    /// `req` 为期望版本、作废原因和幂等键。首次执行返回作废状态；同键同载荷返回原结果并标记为幂等回放。
     ///
-    /// # 返回
-    /// 首次执行返回作废状态；同键同载荷返回原结果并标记为幂等回放。
+    /// 采购单不存在、不是当前账号创建、状态或版本冲突、提交已冻结、同键异载荷、事务写入失败或提交结果仍无法确认时返回错误。
     ///
-    /// # 错误
-    /// 采购单不存在、不是当前账号创建、状态或版本冲突、提交已冻结、同键异载荷、
-    /// 事务写入失败或提交结果仍无法确认时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 作废、销售采购 guard 推进、任务恢复和命令收据必须同事务提交；已作废但没有
-    /// 匹配收据的任意新请求必须冲突，不能仅凭当前状态标记为回放。
+    /// 作废、销售采购 guard 推进、任务恢复和命令收据必须同事务提交；已作废但没有匹配收据的任意新请求必须冲突，不能仅凭当前状态标记为回放。
     pub async fn void_draft(
         &self,
         id: &str,
@@ -99,25 +89,14 @@ impl PurchaseOrderProcess {
     }
 }
 
-/// 执行作废草稿事务并在失败后回读命令收据。
-///
-/// # 参数
-/// * `context` - 原采购单服务及此前已取得的应用能力
-/// * `purchase_order_id` - 当前路径采购单 ID
-/// * `request` - 已通过 DTO 校验的作废请求
-/// * `receipt_id` - 稳定命令收据 ID
-/// * `fingerprint` - 请求载荷指纹
-/// * `actor` - 已认证审计操作人
-///
-/// # 返回
-/// 返回首次事务结果或提交成功后回读到的原结果。
-///
-/// # 错误
-/// 事务失败且没有匹配收据，或回读发现同键异载荷时返回错误。
-///
-/// # 关键业务约束
-/// 任意事务错误都必须执行一次无事务收据回读，以覆盖提交响应丢失。
-/// 写事务必须重验采购对象范围，历史参与不授予作废。
+// 执行作废草稿事务并在失败后回读命令收据。
+//
+// `context` 为原采购单服务及此前已取得的应用能力；`purchase_order_id` 为当前路径采购单 ID；`request` 为已通过 DTO 校验的作废请求；`receipt_id`
+// 为稳定命令收据 ID；`fingerprint` 为请求载荷指纹；`actor` 为已认证审计操作人。返回首次事务结果或提交成功后回读到的原结果。
+//
+// 事务失败且没有匹配收据，或回读发现同键异载荷时返回错误。
+//
+// 任意事务错误都必须执行一次无事务收据回读，以覆盖提交响应丢失。写事务必须重验采购对象范围，历史参与不授予作废。
 async fn execute_void_draft_transaction(
     context: DraftVoidServices<'_>,
     purchase_order_id: &str,
@@ -155,21 +134,11 @@ async fn execute_void_draft_transaction(
     recover_void_draft(transaction_result, service, &receipt_id, &fingerprint, purchase_order_id, actor).await
 }
 
-/// 在 MongoDB 事务内校验并作废采购草稿。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `command` - 作废请求、收据身份和操作人上下文
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回首次作废结果或事务内命中的原收据结果。
-///
-/// # 错误
-/// 目标、版本、状态、草稿提交、销售 guard 或持久化失败时返回错误。
-///
-/// # 关键业务约束
-/// 事务内先查收据；收据未命中时，`Voided` 状态只能返回冲突，不能返回回放。
+// 在 MongoDB 事务内校验并作废采购草稿。
+//
+// `command` 为作废请求、收据身份和操作人上下文。返回首次作废结果或事务内命中的原收据结果。目标、版本、状态、草稿提交、销售 guard 或持久化失败时返回错误。
+//
+// 事务内先查收据；收据未命中时，`Voided` 状态只能返回冲突，不能返回回放。
 async fn void_draft_apply(
     db: &mongodb::Database,
     ports: &PurchaseOrderPorts,
@@ -202,22 +171,13 @@ async fn void_draft_apply(
     void_order_and_persist(db, ports, &mut order, command, executor).await
 }
 
-/// 推进来源销售 guard、作废采购单并持久化命令收据。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `order` - 已完成目标和草稿提交校验的采购单
-/// * `command` - 作废请求、收据身份和操作人上下文
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回首次成功响应中需要稳定回放的作废结果。
-///
-/// # 错误
-/// 来源销售单、guard、状态迁移、仓储写入、任务同步或收据写入失败时返回错误。
-///
-/// # 关键业务约束
-/// Repository 更新后的作废版本必须写入同事务命令收据。
+// 推进来源销售 guard、作废采购单并持久化命令收据。
+//
+// `order` 为已完成目标和草稿提交校验的采购单；`command` 为作废请求、收据身份和操作人上下文。返回首次成功响应中需要稳定回放的作废结果。
+//
+// 来源销售单、guard、状态迁移、仓储写入、任务同步或收据写入失败时返回错误。
+//
+// Repository 更新后的作废版本必须写入同事务命令收据。
 async fn void_order_and_persist(
     db: &mongodb::Database,
     ports: &PurchaseOrderPorts,
@@ -238,13 +198,13 @@ enum VoidStep {
 
 #[async_trait]
 trait VoidSteps: Send {
-    /// 用原执行器执行一个写入步骤，保持首个错误。
+    // 用原执行器执行一个写入步骤，保持首个错误。
     async fn apply(&mut self, step: VoidStep, executor: &mut dyn Executor) -> Result<()>;
-    /// 在先前写入均成功后构造并持久化原响应收据。
+    // 在先前写入均成功后构造并持久化原响应收据。
     async fn receipt(&mut self, executor: &mut dyn Executor) -> Result<VoidPurchaseOrderResult>;
 }
 
-/// 生产作废写序；收据必须在销售 guard、采购版本和任务同步全部成功后写入。
+// 生产作废写序；收据必须在销售 guard、采购版本和任务同步全部成功后写入。
 async fn execute_void_steps(
     steps: &mut impl VoidSteps,
     executor: &mut dyn Executor,
@@ -327,24 +287,13 @@ impl VoidSteps for VoidPosting<'_, '_> {
     }
 }
 
-/// 查询并校验采购草稿作废命令收据。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `receipt_id` - 稳定命令收据 ID
-/// * `expected_fingerprint` - 当前请求载荷指纹
-/// * `purchase_order_id` - 当前路径采购单 ID
-/// * `actor` - 当前操作人
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 收据不存在返回 `None`；身份与载荷一致时返回原结果并标记回放。
-///
-/// # 错误
-/// 同键异载荷、收据身份不一致、收据损坏、采购单缺失或状态不一致时返回错误。
-///
-/// # 关键业务约束
-/// 只有匹配稳定收据且当前采购单确为已作废时才能返回 `replayed = true`。
+// 查询并校验采购草稿作废命令收据。
+//
+// `receipt_id` 为稳定命令收据 ID；`expected_fingerprint` 为当前请求载荷指纹；`purchase_order_id` 为当前路径采购单 ID。
+//
+// 收据不存在返回 `None`；身份与载荷一致时返回原结果并标记回放。同键异载荷、收据身份不一致、收据损坏、采购单缺失或状态不一致时返回错误。
+//
+// 只有匹配稳定收据且当前采购单确为已作废时才能返回 `replayed = true`。
 async fn replay_void_draft(
     db: &mongodb::Database,
     receipt_id: &PurchaseCommandReceiptIdentity,
@@ -387,24 +336,12 @@ async fn replay_void_draft(
     Ok(Some(receipt.into_payload().into_result(true)))
 }
 
-/// 在事务错误后回读作废草稿收据并决定最终响应。
-///
-/// # 参数
-/// * `transaction_result` - MongoDB 事务返回结果
-/// * `db` - MongoDB 数据库
-/// * `receipt_id` - 稳定命令收据 ID
-/// * `fingerprint` - 当前请求载荷指纹
-/// * `purchase_order_id` - 当前路径采购单 ID
-/// * `actor` - 当前操作人
-///
-/// # 返回
-/// 事务成功返回原结果；事务失败但收据存在时返回已提交结果。
-///
-/// # 错误
-/// 事务失败且没有匹配收据，或回读收据冲突、损坏时返回错误。
-///
-/// # 关键业务约束
-/// 回读只执行一次，没有收据时必须保留原事务错误。
+// 在事务错误后回读作废草稿收据并决定最终响应。
+//
+// `transaction_result` 为MongoDB 事务返回结果；`receipt_id` 为稳定命令收据 ID；`fingerprint` 为当前请求载荷指纹；`purchase_order_id`
+// 为当前路径采购单 ID。事务成功返回原结果；事务失败但收据存在时返回已提交结果。事务失败且没有匹配收据，或回读收据冲突、损坏时返回错误。
+//
+// 回读只执行一次，没有收据时必须保留原事务错误。
 async fn recover_void_draft(
     transaction_result: Result<VoidPurchaseOrderResult>,
     service: &PurchaseOrderProcess,
@@ -462,16 +399,7 @@ mod tests {
         }
     }
 
-    /// 验证作废请求指纹排除幂等键并按实际原因语义规范化。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 无。
-    ///
-    /// # 错误
-    /// 幂等键或原因空白改变指纹，或真实原因变化未改变指纹时测试失败。
+    // 验证作废请求指纹排除幂等键并按实际原因语义规范化。幂等键或原因空白改变指纹，或真实原因变化未改变指纹时测试失败。
     #[test]
     fn void_fingerprint_is_payload_stable_and_key_independent() {
         let first = void_request(" 重复采购 ");
@@ -484,16 +412,7 @@ mod tests {
         assert_ne!(fingerprint(&first), fingerprint(&different_payload));
     }
 
-    /// 验证只有收据转换路径能够显式标记作废结果为回放。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 无。
-    ///
-    /// # 错误
-    /// 收据回放未保留原结果或未设置回放标记时测试失败。
+    // 验证只有收据转换路径能够显式标记作废结果为回放。收据回放未保留原结果或未设置回放标记时测试失败。
     #[test]
     fn void_receipt_replays_original_result() {
         let result = VoidDraftReceipt {
@@ -566,7 +485,7 @@ mod tests {
         }
     }
 
-    /// 销售 guard、采购 CAS、任务同步和命令审计按原顺序共用执行器。
+    // 销售 guard、采购 CAS、任务同步和命令审计按原顺序共用执行器。
     #[tokio::test]
     async fn void_posting_keeps_original_order_and_executor() {
         let mut executor = TestExecutor::default();
@@ -584,7 +503,7 @@ mod tests {
         assert!(!result.replayed);
     }
 
-    /// 销售 guard、采购 CAS、任务同步或回执任一步失败均保留原错并停止。
+    // 销售 guard、采购 CAS、任务同步或回执任一步失败均保留原错并停止。
     #[tokio::test]
     async fn void_posting_stops_at_each_failure() {
         for index in 0..4 {

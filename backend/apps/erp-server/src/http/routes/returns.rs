@@ -13,16 +13,7 @@ use crate::http::handler::returns;
 use crate::http::routes::permission_route;
 use crate::http::state::HttpState;
 
-/// 返回本域管理端路由集合。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回声明公共权限目录信息的路由集合。
-///
-/// # 错误
-/// 不执行 I/O，不返回错误。
+/// 为管理端挂载退货、退款和冲正接口，按操作登记公共权限目录信息。
 pub fn routes() -> Router<HttpState> {
     Router::new()
         .merge(sales_return_routes())
@@ -34,7 +25,7 @@ pub fn routes() -> Router<HttpState> {
         .merge(payment_reversal_routes())
 }
 
-/// 销售退货与草稿维护路由。
+// 为父路由挂载销售退货与草稿维护路由。
 fn sales_return_routes() -> Router<HttpState> {
     Router::new()
         .merge(draft_update_routes())
@@ -61,7 +52,7 @@ fn sales_return_routes() -> Router<HttpState> {
         )
 }
 
-/// 采购退货查询与确认路由。
+// 为父路由挂载采购退货查询与确认路由。
 fn purchase_return_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -101,7 +92,7 @@ fn purchase_return_routes() -> Router<HttpState> {
         )
 }
 
-/// 客户退款查询、创建与确认路由。
+// 为父路由挂载客户退款查询、创建与确认路由。
 fn customer_refund_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -134,7 +125,7 @@ fn customer_refund_routes() -> Router<HttpState> {
         )
 }
 
-/// 客户退款提交、撤回与记账路由。
+// 为父路由挂载客户退款提交、撤回与记账路由。
 fn customer_refund_command_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -160,7 +151,7 @@ fn customer_refund_command_routes() -> Router<HttpState> {
         )
 }
 
-/// 供应商退款读取与办理路由。
+// 为父路由挂载供应商退款读取与办理路由。
 fn supplier_refund_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -207,7 +198,7 @@ fn supplier_refund_routes() -> Router<HttpState> {
         )
 }
 
-/// 收款冲销读取与办理路由。
+// 为父路由挂载收款冲销读取与办理路由。
 fn receipt_reversal_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -254,7 +245,7 @@ fn receipt_reversal_routes() -> Router<HttpState> {
         )
 }
 
-/// 付款冲销读取与办理路由。
+// 为父路由挂载付款冲销读取与办理路由。
 fn payment_reversal_routes() -> Router<HttpState> {
     Router::new()
         .route(
@@ -301,14 +292,7 @@ fn payment_reversal_routes() -> Router<HttpState> {
         )
 }
 
-/// 退换退款单据草稿修改路由。
-///
-/// # 参数
-/// 无。
-/// # 返回
-/// 返回逐操作声明权限目录信息并保留上传限制的路由集合。
-/// # 错误
-/// 无；业务错误由各处理器返回。
+// 为父路由挂载退换退款单据草稿修改路由。
 fn draft_update_routes() -> Router<HttpState> {
     Router::new()
         .route(

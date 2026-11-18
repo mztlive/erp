@@ -83,35 +83,28 @@ pub(super) struct BuiltRowManifest {
     pub uploaded_object_keys: Vec<String>,
 }
 
-/// 由请求身份推导行级清单对象键。
-///
-/// # 参数
-/// * `request_id` - 幂等请求身份。
-///
-/// # 返回
-/// 返回 `product-import-rows/{request_id}.json`。
-///
-/// # 错误
-/// `request_id` 为空、超过 64 字符或含非字母数字、`-`、`_` 以外的字符时返回 `ValidationError`。
+// 由请求身份推导行级清单对象键。
+//
+// `request_id`：幂等请求身份。
+//
+// 返回 `product-import-rows/{request_id}.json`。
+//
+// `request_id` 为空、超过 64 字符或含非字母数字、`-`、`_` 以外的字符时返回 `ValidationError`。
 pub(super) fn manifest_object_key(request_id: &str) -> Result<String> {
     validate_manifest_request_id(request_id)?;
     Ok(format!("{ROW_MANIFEST_KEY_PREFIX}/{request_id}.json"))
 }
 
-/// 提交时预提各行图片并构建行级清单（图片即时上传，执行阶段只登记）。
-///
-/// # 参数
-/// * `storage` - 对象存储
-/// * `secret` - 内容指纹密钥
-/// * `request_id` - 幂等请求身份（推导清单与图片对象键）
-/// * `parsed` - 已解析报价表
-/// * `xlsx` - 源文件字节（仅本次读取，执行阶段不再需要）
-///
-/// # 返回
-/// 返回行级清单与已上传对象键（调用方负责写清单与失败补偿）。
-///
-/// # 错误
-/// 请求身份非法时返回错误；单行图片上传失败记入该行，不阻断其他行。
+// 提交时预提各行图片并构建行级清单（图片即时上传，执行阶段只登记）。
+//
+// - `secret`：内容指纹密钥
+// - `request_id`：幂等请求身份（推导清单与图片对象键）
+// - `parsed`：已解析报价表
+// - `xlsx`：源文件字节（仅本次读取，执行阶段不再需要）
+//
+// 返回行级清单与已上传对象键（调用方负责写清单与失败补偿）。
+//
+// 请求身份非法时返回错误；单行图片上传失败记入该行，不阻断其他行。
 pub(super) async fn build_row_manifest(
     storage: &S3Storage,
     secret: &[u8],
@@ -152,17 +145,13 @@ pub(super) async fn build_row_manifest(
     })
 }
 
-/// 准备行级清单；小清单返回私有输入，达到独立容量边界时写入原对象存储。
-///
-/// # 参数
-/// * `storage` - 对象存储
-/// * `manifest` - 行级清单
-///
-/// # 返回
-/// 返回私有输入及对象键，两者恰一项有值；对象键由调用方纳入原失败补偿。
-///
-/// # 错误
-/// 请求身份非法或写入失败时返回错误。
+// 准备行级清单；小清单返回私有输入，达到独立容量边界时写入原对象存储。
+//
+// `manifest`：行级清单。
+//
+// 返回私有输入及对象键，两者恰一项有值；对象键由调用方纳入原失败补偿。
+//
+// 请求身份非法或写入失败时返回错误。
 pub(super) async fn prepare_row_manifest(
     storage: &S3Storage,
     manifest: &RowManifest,
@@ -186,7 +175,7 @@ enum ManifestPayload {
     Object(Vec<u8>),
 }
 
-/// 小清单仍经过拥有领域的私有容量校验，大清单保留相同完整 JSON 字节。
+// 小清单仍经过拥有领域的私有容量校验，大清单保留相同完整 JSON 字节。
 fn manifest_payload(manifest: &RowManifest) -> Result<ManifestPayload> {
     validate_manifest_request_id(&manifest.request_id)?;
     let bytes = serde_json::to_vec(manifest).map_err(|_| Error::Internal("行清单序列化失败".into()))?;
@@ -197,17 +186,13 @@ fn manifest_payload(manifest: &RowManifest) -> Result<ManifestPayload> {
     }
 }
 
-/// 读取行级清单；缺失或版本不一致时由调用方回退到源文件链路。
-///
-/// # 参数
-/// * `storage` - 对象存储
-/// * `request_id` - 幂等请求身份
-///
-/// # 返回
-/// 返回行级清单。
-///
-/// # 错误
-/// 清单缺失、损坏或版本不一致时返回错误（调用方回退，不直接失败任务）。
+// 读取行级清单；缺失或版本不一致时由调用方回退到源文件链路。
+//
+// `request_id`：幂等请求身份。
+//
+// 返回行级清单。
+//
+// 清单缺失、损坏或版本不一致时返回错误（调用方回退，不直接失败任务）。
 pub(super) async fn read_row_manifest(storage: &S3Storage, request_id: &str) -> Result<RowManifest> {
     let key = manifest_object_key(request_id)?;
     let bytes =
@@ -215,16 +200,13 @@ pub(super) async fn read_row_manifest(storage: &S3Storage, request_id: &str) -> 
     decode_row_manifest(&bytes, request_id)
 }
 
-/// 私有输入和旧对象清单采用相同解析及绑定校验，错误由执行器回退到下一来源。
-///
-/// # 参数
-/// * `bytes` - 已读取的清单字节。
-/// * `request_id` - 任务当前的请求身份。
-///
-/// # 返回
-/// 返回绑定同一请求的输入，按原列数保留公司售价与供应商成本的独立语义。
-/// # 错误
-/// JSON 损坏、请求身份不符或版本不一致时拒绝该来源。
+// 私有输入和旧对象清单采用相同解析及绑定校验，错误由执行器回退到下一来源。
+//
+// `bytes`：已读取的清单字节；`request_id`：任务当前的请求身份。
+//
+// 返回绑定同一请求的输入，按原列数保留公司售价与供应商成本的独立语义。
+//
+// JSON 损坏、请求身份不符或版本不一致时拒绝该来源。
 pub(super) fn decode_row_manifest(bytes: &[u8], request_id: &str) -> Result<RowManifest> {
     let mut manifest: RowManifest =
         serde_json::from_slice(bytes).map_err(|_| Error::Internal("行清单损坏".to_string()))?;
@@ -241,47 +223,31 @@ pub(super) fn decode_row_manifest(bytes: &[u8], request_id: &str) -> Result<RowM
     Ok(manifest)
 }
 
-/// 尽力删除已上传的清单相关对象（失败补偿，忽略单个删除错误）。
-///
-/// # 参数
-/// * `storage` - 对象存储。
-/// * `keys` - 待删除对象键。
-///
-/// # 返回
-/// 无返回值。单个删除失败被忽略。
-///
-/// # 错误
-/// 不返回错误。
+// 尽力删除已上传的清单相关对象（失败补偿，忽略单个删除错误）。
+//
+// `keys`：待删除对象键。
+//
+// 单个删除失败被忽略。
 pub(super) async fn delete_manifest_objects(storage: &S3Storage, keys: &[String]) {
     for key in keys {
         let _ = storage.delete(key).await;
     }
 }
 
-/// 按行号索引清单行。
-///
-/// # 参数
-/// * `manifest` - 行级清单
-///
-/// # 返回
-/// 返回行号到清单行的映射。重复行号时后出现的行覆盖先前映射。
-///
-/// # 错误
-/// 不返回错误。
+// 按行号索引清单行。
+//
+// `manifest`：行级清单。
+//
+// 返回行号到清单行的映射。重复行号时后出现的行覆盖先前映射。
 pub(super) fn row_entries_by_number(manifest: &RowManifest) -> HashMap<u32, &RowManifestRow> {
     manifest.rows.iter().map(|row| (row.row_number, row)).collect()
 }
 
-/// 由清单行构造行媒体（对象已在存储中，不产生上传）。
-///
-/// # 参数
-/// * `entry` - 清单行
-///
-/// # 返回
-/// 返回可直接用于产品命令的行媒体。
-///
-/// # 错误
-/// 不返回错误。
+// 由清单行构造行媒体（对象已在存储中，不产生上传）。
+//
+// `entry`：清单行。
+//
+// 返回可直接用于产品命令的行媒体。
 pub(super) fn row_media_from_entry(entry: &RowManifestRow) -> RowMedia {
     let mut media = RowMedia::default();
     let mut pending = Vec::new();
@@ -303,7 +269,7 @@ pub(super) fn row_media_from_entry(entry: &RowManifestRow) -> RowMedia {
     media
 }
 
-/// 校验请求身份可安全推导对象键。
+// 校验请求身份可安全推导对象键。
 fn validate_manifest_request_id(request_id: &str) -> Result<()> {
     if request_id.is_empty()
         || request_id.len() > 64
@@ -317,7 +283,7 @@ fn validate_manifest_request_id(request_id: &str) -> Result<()> {
 /// 行媒体上传边界；提交编排按单元格与对象槽位串行调用。
 #[async_trait]
 trait ManifestImageWriter: Sync {
-    /// 上传一个槽位并返回引用、登记命令和补偿对象键。
+    // 上传一个槽位并返回引用、登记命令和补偿对象键。
     async fn put(
         &self,
         row_number: u32,
@@ -335,21 +301,16 @@ struct StoredManifestImages<'a> {
 
 #[async_trait]
 impl ManifestImageWriter for StoredManifestImages<'_> {
-    /// 上传独立对象；主图和轮播首图保留各自对象键和登记命令。
-    ///
-    /// # 参数
-    /// * `row_number` - 工作表行号，写入对象键。
-    /// * `slot` - 图片槽位，写入对象键与待登记引用。
-    /// * `image` - 已准备的图片字节、扩展名、内容类型和摘要。
-    ///
-    /// # 返回
-    /// 返回待登记引用、文件登记命令和对象键。
-    ///
-    /// # 错误
-    /// 对象存储保存失败时返回 `Internal`。
-    ///
-    /// # Panics
-    /// 图片字节数无法表示为 `u64` 时 panic；正常图片长度不会触发。
+    // 上传独立对象；主图和轮播首图保留各自对象键和登记命令。
+    //
+    // `row_number`：工作表行号，写入对象键；`slot`：图片槽位，写入对象键与待登记引用；`image`：已准备的图片字节、扩展名、内容类型和摘要。
+    //
+    // 返回待登记引用、文件登记命令和对象键。
+    //
+    // 对象存储保存失败时返回 `Internal`。
+    //
+    // 触发 panic 的条件：
+    // 图片字节数无法表示为 `u64` 时 panic；正常图片长度不会触发。
     async fn put(
         &self,
         row_number: u32,
@@ -378,7 +339,7 @@ impl ManifestImageWriter for StoredManifestImages<'_> {
     }
 }
 
-/// 保留轮播、主图和后续图片的写入顺序；首个上传失败后停止当前行。
+// 保留轮播、主图和后续图片的写入顺序；首个上传失败后停止当前行。
 async fn upload_manifest_row(
     writer: &impl ManifestImageWriter,
     entry: &mut RowManifestRow,
@@ -415,7 +376,7 @@ pub(super) fn media_failure_message(row_number: u32) -> String {
     format!("第 {row_number} 行图片未能保存，请检查图片后重新上传；如仍失败，请联系管理员")
 }
 
-/// 记录成功对象以供失败补偿；失败时只保存可公开的说明。
+// 记录成功对象以供失败补偿；失败时只保存可公开的说明。
 fn record_manifest_upload(
     entry: &mut RowManifestRow,
     result: Result<(String, RegisterFileAssetRequest, String)>,
@@ -472,7 +433,7 @@ mod tests {
         manifest
     }
 
-    /// 小清单在容量界限前一字节使用私有输入，达到界限和超限保留完整对象 JSON。
+    // 验证：小清单在容量界限前一字节使用私有输入，达到界限和超限保留完整对象 JSON。
     #[test]
     fn manifest_payload_routes_exact_capacity_without_truncation() {
         let manifest = manifest_with_size(BACKGROUND_JOB_INPUT_LIMIT - 1);
@@ -488,7 +449,7 @@ mod tests {
         }
     }
 
-    /// 私有输入和旧对象使用同一解析器；请求或版本不符及损坏 JSON 必须回退。
+    // 验证：私有输入和旧对象使用同一解析器；请求或版本不符及损坏 JSON 必须回退。
     #[test]
     fn manifest_decode_rejects_mismatched_bindings_and_corruption() {
         let original = serde_json::json!({"version":1,"request_id":"req-1","rows":[]});
@@ -507,7 +468,7 @@ mod tests {
         }
     }
 
-    /// 旧版对象清单和已登记媒体不要求新增任务输入字段，额外历史字段继续兼容。
+    // 验证：旧版对象清单和已登记媒体不要求新增任务输入字段，额外历史字段继续兼容。
     #[test]
     fn legacy_manifest_remains_readable_without_private_metadata() {
         let bytes = serde_json::to_vec(&serde_json::json!({
@@ -525,7 +486,7 @@ mod tests {
         assert!(parsed.rows[0].carousel.is_empty());
     }
 
-    /// 版本 2 的 13 列继续解释为公司售价，不得扩成新供给模板。
+    // 验证：版本 2 的 13 列继续解释为公司售价，不得扩成新供给模板。
     #[test]
     fn compact_manifest_keeps_legacy_price_semantics() {
         let mut cells = vec![String::new(); 13];
@@ -548,7 +509,7 @@ mod tests {
         assert_eq!(row.bulk_min_quantity.unwrap().to_string(), "10");
     }
 
-    /// 历史联合任务不把供应商成本当售价，新任务恢复三个公司参考价字段。
+    // 验证：历史联合任务不把供应商成本当售价，新任务恢复三个公司参考价字段。
     #[test]
     fn joint_manifests_preserve_separate_price_columns() {
         for (version, width) in [(3, 16), (ROW_MANIFEST_VERSION, 19)] {
@@ -661,7 +622,7 @@ mod tests {
         );
     }
 
-    /// 已提交旧任务在解码时转换列位，已上传图片引用与行错误保持原样。
+    // 验证：已提交旧任务在解码时转换列位，已上传图片引用与行错误保持原样。
     #[test]
     fn legacy_manifest_converts_columns_without_changing_media() {
         let manifest = RowManifest {
@@ -707,21 +668,16 @@ mod tests {
 
     #[async_trait]
     impl ManifestImageWriter for RecordingImages {
-        /// 记录槽位并按指定对象注入上传失败。
-        ///
-        /// # 参数
-        /// * `row_number` - 工作表行号。
-        /// * `slot` - 图片槽位。
-        /// * `_image` - 未使用的已准备图片。
-        ///
-        /// # 返回
-        /// 未注入失败时返回引用、登记命令和槽位键。
-        ///
-        /// # 错误
-        /// 槽位键与预设失败键相同时返回 `Internal`。
-        ///
-        /// # Panics
-        /// 调用记录锁中毒时 panic。
+        // 记录槽位并按指定对象注入上传失败。
+        //
+        // `row_number`：工作表行号；`slot`：图片槽位；`_image`：未使用的已准备图片。
+        //
+        // 未注入失败时返回引用、登记命令和槽位键。
+        //
+        // 槽位键与预设失败键相同时返回 `Internal`。
+        //
+        // 触发 panic 的条件：
+        // 调用记录锁中毒时 panic。
         async fn put(
             &self,
             row_number: u32,
@@ -755,7 +711,7 @@ mod tests {
         (2..5).map(|column| (column, format!("image-{column}"))).collect()
     }
 
-    /// 主图与轮播首图独立登记，全部上传顺序和轮播排序保持原合同。
+    // 验证：主图与轮播首图独立登记，全部上传顺序和轮播排序保持原合同。
     #[tokio::test]
     async fn manifest_upload_preserves_slot_order_and_distinct_registrations() {
         let writer = RecordingImages { calls: Mutex::new(Vec::new()), failure: None };
@@ -774,7 +730,7 @@ mod tests {
         assert!(entry.media_error.is_none());
     }
 
-    /// 首错停止当前行并保留成功对象用于补偿，随后行仍继续执行。
+    // 验证：首错停止当前行并保留成功对象用于补偿，随后行仍继续执行。
     #[tokio::test]
     async fn manifest_upload_stops_on_first_error_and_retains_compensation_keys() {
         let writer = RecordingImages { calls: Mutex::new(Vec::new()), failure: Some("2-main".into()) };
@@ -801,7 +757,7 @@ mod tests {
         assert_eq!(keys.len(), 5);
     }
 
-    /// 轮播首图上传失败时既不尝试主图也不登记成功对象。
+    // 验证：轮播首图上传失败时既不尝试主图也不登记成功对象。
     #[tokio::test]
     async fn manifest_upload_first_carousel_failure_has_no_followup_uploads() {
         let writer = RecordingImages { calls: Mutex::new(Vec::new()), failure: Some("2-carousel-0".into()) };

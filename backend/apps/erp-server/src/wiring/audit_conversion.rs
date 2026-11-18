@@ -17,28 +17,10 @@ use erp_warehouse::PreparedWarehouseAudit;
 
 /// 保留原事件身份、元数据与安全关联的领域审计快照转换。
 pub(super) trait PreparedAudit: Sized {
-    /// 从已构造的审计实体复制消费领域需要的快照。
-    ///
-    /// # 参数
-    /// * `log` - 已构造的审计实体，包含原始事件元数据。
-    ///
-    /// # 返回
-    /// 返回领域快照；历史事件缺少序号时使用首个事件序号。
-    ///
-    /// # 错误
-    /// 不返回错误；还原时重新验证快照中的安全字段。
+    // 创建消费领域的预制审计快照时保留原事件元数据；历史记录缺少事件序号时使用首个序号，安全字段在还原时重验。
     fn from_log(log: &AuditLog) -> Self;
 
-    /// 使用原始元数据还原并校验安全业务审计。
-    ///
-    /// # 参数
-    /// * `self` - 待持久化的消费领域快照。
-    ///
-    /// # 返回
-    /// 返回沿用原始 ID、版本、时间戳及事件关联的审计实体。
-    ///
-    /// # 错误
-    /// 审计字段、操作人名称或请求编号非法时返回审计领域错误。
+    // 持久化预制快照前还原原事件 ID、版本、时间戳和关联，重新校验审计安全字段；非法字段、操作人名称或请求编号返回审计领域错误。
     fn to_log(&self) -> AuditResult<AuditLog>;
 }
 
@@ -122,16 +104,7 @@ impl_prepared_audit!(
 /// 不返回错误；特殊领域映射不得使用本宏。
 macro_rules! map_audit_error {
     ($visibility:vis fn $name:ident -> $domain:ident) => {
-        /// 将审计错误原样映射为消费领域对应变体。
-        ///
-        /// # 参数
-        /// * `error` - 审计领域错误。
-        ///
-        /// # 返回
-        /// 返回保留原始载荷和错误分类的消费领域错误。
-        ///
-        /// # 错误
-        /// 不返回错误。
+        // 将审计写入失败传播到消费领域时保留原变体和载荷，包括事务提交结果未知的分类。
         $visibility fn $name(error: erp_audit::Error) -> $domain::Error {
             match error {
                 erp_audit::Error::Internal(payload) => $domain::Error::Internal(payload),

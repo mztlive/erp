@@ -24,11 +24,8 @@ use crate::http::state::HttpState;
 use crate::wiring::purchase_ports;
 
 /// 查询费用采购可选的来源销售单。
-/// # 参数
 /// `state` 为应用，`actor` 为当前账号，`params` 为搜索与分页。
-/// # 返回
 /// 返回授权范围内的来源摘要。
-/// # 错误
 /// 权限、参数或查询失败时返回错误。
 pub async fn expense_sources(
     State(state): State<HttpState>,
@@ -41,12 +38,9 @@ pub async fn expense_sources(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 读取可归属费用的销售明细。
-/// # 参数
+/// 读取可归属费用的销售明细，将认证操作人与路径对象交给读模型校验。
 /// `state` 为应用，`actor` 为当前账号，`id` 为来源销售单。
-/// # 返回
 /// 返回来源摘要和当前可选明细。
-/// # 错误
 /// 来源无权访问、状态不适用或读取失败时返回错误。
 pub async fn expense_source_detail(
     State(state): State<HttpState>,
@@ -60,17 +54,8 @@ pub async fn expense_source_detail(
 }
 
 /// 从已生效销售单追加费用采购单并提交审批。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 来源销售单
-/// * `req` - 收款供应商、付款条件、费用行与幂等键
-///
-/// # 返回
+/// `id` 为来源销售单，`req` 为收款供应商、付款条件、费用行与幂等键。
 /// 返回已提交审批的采购单结果。
-///
-/// # 错误
 /// 业务校验、审批绑定或写入失败时返回错误。
 pub async fn expense_purchase_create(
     State(state): State<HttpState>,
@@ -96,17 +81,8 @@ pub async fn expense_purchase_create(
 ///
 /// 命令与凭证一次 multipart 提交：`command` 为 JSON，凭证字段名须与
 /// `evidence_attachment_id` 的 `pending-file:` 临时引用一致。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `path` - 采购单与稳定费用行身份
-/// * `multipart` - 确认命令与凭证文件
-///
-/// # 返回
+/// `multipart` 为确认命令与凭证文件。
 /// 返回费用行身份与实际成本事实主键。
-///
-/// # 错误
 /// 凭证缺失或类型不符、业务校验或写入失败时返回错误。
 pub async fn expense_occurrence_confirm(
     State(state): State<HttpState>,
@@ -141,7 +117,7 @@ pub async fn expense_occurrence_confirm(
     }
 }
 
-/// 校验费用凭证：恰好一个与命令引用一致的图片或 PDF。
+// 采购费用附件入库前，只接受一个与命令临时引用精确匹配的受控图片或 PDF。
 fn validate_expense_evidence(reference: &str, files: &[PendingAssetFile]) -> std::result::Result<(), Error> {
     let [file] = files else {
         return Err(Error::BadRequest("请上传一个费用发生凭证文件".to_string()));

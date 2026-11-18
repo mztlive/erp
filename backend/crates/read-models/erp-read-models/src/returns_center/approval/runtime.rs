@@ -17,11 +17,10 @@ use super::{RECENT_HISTORY_LIMIT, optional_approval_binding};
 use crate::Result;
 use crate::approval_runtime::{binding_route, read_subject_ref};
 
-/// 为已授权单据详情补齐真实实例、当前执行和有界历史。
+/// 读取退货退款审批时，为已授权单据详情补齐真实实例、当前执行和有界历史。
 ///
 /// # 参数
 /// * `executor` - 与单据读取共用的原执行器。
-/// * `db` - 数据库
 /// * `document_type` - 原业务单据类型
 /// * `id` - 原业务单据主键
 /// * `view` - 冻结绑定和业务状态生成的只读摘要
@@ -75,7 +74,7 @@ pub async fn load_runtime(
     Ok(view)
 }
 
-/// 从当前执行快照投影显示名和稳定标识，不从角色推导审批人。
+// 生成退货退款审批视图时，从当前执行快照投影显示名和稳定标识，不从角色推导审批人。
 fn instance_view(
     instance: &ApprovalProcessInstance,
     current: Option<&ApprovalNodeExecution>,
@@ -133,7 +132,7 @@ mod tests {
         .unwrap()
     }
 
-    /// 退款详情必须同时提供稳定标识和当前执行显示名。
+    // 验证退货退款审批：退款详情必须同时提供稳定标识和当前执行显示名。
     #[test]
     fn refund_runtime_preserves_execution_identity_and_names() {
         let view =

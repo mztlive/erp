@@ -35,18 +35,11 @@ impl ResponsibilityPolicy for RbacPolicy<'_> {
     }
 }
 
-/// 按负责人去重校验建单权限，并冻结原执行器中的策略版本。
-///
-/// # 参数
-/// * `rbac` - 共享授权服务。
-/// * `candidates` - 待授权的采购负责人候选。
-/// * `executor` - 候选解析使用的原执行器。
-///
-/// # 返回
-/// 返回带策略版本的授权计划。
-///
-/// # 错误
-/// 负责人缺少 `purchase_order:create`、策略版本在校验期间变化，或授权读取失败时返回错误。
+// 按负责人去重校验建单权限，并冻结原执行器中的策略版本。
+//
+// `rbac` 为共享授权服务；`candidates` 为待授权的采购负责人候选；`executor` 为候选解析使用的原执行器。返回带策略版本的授权计划。
+//
+// 负责人缺少 `purchase_order:create`、策略版本在校验期间变化，或授权读取失败时返回错误。
 pub(super) async fn authorize_candidates(
     db: &Database,
     rbac: &Arc<AuthorizationService>,
@@ -56,19 +49,11 @@ pub(super) async fn authorize_candidates(
     authorize(&RbacPolicy(rbac, db), candidates, executor).await
 }
 
-/// 在调用方事务内重验候选身份与已冻结的策略版本。
-///
-/// # 参数
-/// * `rbac` - 共享授权服务。
-/// * `candidates` - 当前解析出的负责人候选。
-/// * `expected` - 先前冻结的授权计划。
-/// * `executor` - 读取策略版本的事务执行器。
-///
-/// # 返回
-/// 身份与策略版本均未变化。
-///
-/// # 错误
-/// 候选身份与冻结计划不一致，或事务内策略版本已变化时返回冲突；策略读取失败时返回对应错误。
+// 在调用方事务内重验候选身份与已冻结的策略版本。
+//
+// `rbac` 为共享授权服务；`candidates` 为当前解析出的负责人候选；`expected` 为先前冻结的授权计划；`executor` 为读取策略版本的事务执行器。
+//
+// 身份与策略版本均未变化。候选身份与冻结计划不一致，或事务内策略版本已变化时返回冲突；策略读取失败时返回对应错误。
 pub(super) async fn revalidate_candidates(
     db: &Database,
     rbac: &Arc<AuthorizationService>,
@@ -79,7 +64,7 @@ pub(super) async fn revalidate_candidates(
     revalidate(&RbacPolicy(rbac, db), candidates, expected, executor).await
 }
 
-/// 按负责人去重校验建单权限，前后策略版本不一致则拒绝。
+// 按负责人去重校验建单权限，前后策略版本不一致则拒绝。
 async fn authorize(
     policy: &dyn ResponsibilityPolicy,
     candidates: Vec<CandidateResolution>,
@@ -110,7 +95,7 @@ async fn authorize(
     Ok(AuthorizedResolutionPlan { lines, policy_revision })
 }
 
-/// 在调用方执行器内核对候选身份与冻结策略版本，变化则返回冲突。
+// 在调用方执行器内核对候选身份与冻结策略版本，变化则返回冲突。
 async fn revalidate(
     policy: &dyn ResponsibilityPolicy,
     candidates: &[CandidateResolution],

@@ -36,26 +36,30 @@ pub struct PortalCatalogSku {
 }
 
 impl PortalCatalogSku {
-    /// 将当前规范规格签名和已核对当前商品图映射成外部展示字段。
-    /// # 参数
-    /// `self` 为仓储沿精确当前修订读取的允许列表事实。
-    /// # 返回
-    /// 返回可区分规格、优先使用SKU图片的外部视图。
-    /// # 错误
-    /// 无；非法历史规格保持空显示，不使用旧修订规格兜底。
+    // 组装门户定向开放目录时，将当前规范规格签名和已核对当前商品图映射成外部展示字段。
+    //
+    // 调用参数：
+    // `self` 为仓储沿精确当前修订读取的允许列表事实。
+    //
+    // 返回可区分规格、优先使用SKU图片的外部视图。
+    //
+    // 失败边界：
+    // 无；非法历史规格保持空显示，不使用旧修订规格兜底。
     pub(super) fn freeze_current(mut self) -> Self {
         self.specification = Self::specification_text(&self.specification_signature);
         self.image_asset_id = self.image_asset_id.or(self.product_image_asset_id.take());
         self
     }
 
-    /// 复用正式目录解析器；空规格或非法历史签名不冒充其他规格。
-    /// # 参数
-    /// `signature` 为稳定SKU保存的规范规格签名。
-    /// # 返回
-    /// 返回规范顺序的规格名和值；空规格或非法签名返回空。
-    /// # 错误
-    /// 无；解析政策由正式目录拥有领域提供。
+    // 投影门户定向开放目录字段时，复用正式目录解析器；空规格或非法历史签名不冒充其他规格。
+    //
+    // 调用参数：
+    // `signature` 为稳定SKU保存的规范规格签名。
+    //
+    // 返回规范顺序的规格名和值；空规格或非法签名返回空。
+    //
+    // 失败边界：
+    // 无；解析政策由正式目录拥有领域提供。
     pub(crate) fn specification_text(signature: &str) -> Option<String> {
         let SpecificationSignatureRead::Canonical(entries) = read_specification_signature(signature) else {
             return None;
@@ -71,11 +75,14 @@ impl PortalCatalogSku {
 }
 
 impl SupplierPortalReadService {
-    /// 读取当前供应商定向开放且仍有效的公司 SKU。
+    /// 处理门户定向开放目录时，读取当前供应商定向开放且仍有效的公司 SKU。
+    ///
     /// # 参数
     /// `actor` 为可信供应商绑定；`params` 仅收窄开放目录。
+    ///
     /// # 返回
     /// 同一资格过滤下的分页及总数，不包含销售价格或其他供应商。
+    ///
     /// # 错误
     /// 分页非法、供应商失效或事实查询失败时拒绝。
     pub async fn catalog(

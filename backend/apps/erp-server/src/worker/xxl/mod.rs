@@ -32,13 +32,9 @@ pub(crate) struct XxlExecutor {
     stopping: AtomicBool,
 }
 impl XxlExecutor {
-    /// 完成恢复后才允许注册、监听和认领。
-    /// # 参数
-    /// state 为应用组合根，config 为固定配置，catalog 为共享目录消费适配器。
-    /// # 返回
-    /// 已恢复旧回执的执行器。
-    /// # 错误
-    /// 能力未装配、HTTP 客户端或持久化恢复失败时拒绝启动。
+    // 完成恢复后才允许注册、监听和认领。
+    // 已恢复旧回执的执行器。
+    // 能力未装配、HTTP 客户端或持久化恢复失败时拒绝启动。
     pub(crate) async fn new(
         state: &Application,
         config: XxlJobConfig,
@@ -59,35 +55,22 @@ impl XxlExecutor {
         Ok(Arc::new(Self { config, process, admin, stopping: AtomicBool::new(false) }))
     }
 
-    /// 返回仅用于内部 Service 的协议路由。
-    /// # 参数
-    /// self 为共享执行器。
-    /// # 返回
-    /// 带 token 校验的固定协议路由。
-    /// # 错误
-    /// 无。
+    // 返回仅用于内部 Service 的协议路由。
+    // self 为共享执行器。
+    // 带 token 校验的固定协议路由。
     pub(crate) fn router(self: &Arc<Self>) -> Router {
         routes::router(self.clone())
     }
 
-    /// 同时停止接收；轮次通过共享 stop 通知在边界排空。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 新协议请求开始被拒绝。
-    /// # 错误
-    /// 无。
+    // 同时停止接收；轮次通过共享 stop 通知在边界排空。
+    // 新协议请求开始被拒绝。
     pub(crate) fn request_stop(&self) {
         self.stopping.store(true, Ordering::Release);
     }
 
-    /// 启动独立注册、执行和回报循环，避免长业务阻塞心跳。
-    /// # 参数
-    /// stop 为进程共享停止通知。
-    /// # 返回
-    /// 由 Worker 监督和排空的三个句柄。
-    /// # 错误
-    /// 后台存储错误由监督器处理。
+    // 启动独立注册、执行和回报循环，避免长业务阻塞心跳。
+    // 由 Worker 监督和排空的三个句柄。
+    // 后台存储错误由监督器处理。
     pub(crate) fn spawn(self: &Arc<Self>, stop: watch::Receiver<bool>) -> Vec<JoinHandle<()>> {
         let registration = self.clone();
         let registry_stop = stop.clone();
@@ -120,7 +103,7 @@ impl XxlExecutor {
         ]
     }
 
-    /// 保存执行结果失败后退出，由监督器重启并核实原 running 回执。
+    // 领取并执行持久化调度回执；停止信号到来时不再领新工作。保存失败导致循环退出并触发进程监督，后续核对原运行回执而不是自动重放业务。
     async fn execute(&self, mut stop: watch::Receiver<bool>) {
         loop {
             if *stop.borrow() || stop.has_changed().is_err() {

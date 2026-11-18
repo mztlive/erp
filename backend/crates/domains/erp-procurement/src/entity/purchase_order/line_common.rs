@@ -51,17 +51,12 @@ pub(super) struct PurchaseLineFields {
 }
 
 impl PurchaseLineFields {
-    /// 先规范化快照，再按行类型校验字段归属与金额守恒。
-    ///
-    /// # 参数
-    /// * `line_no` - 从 1 开始的行号
-    /// * `allow_zero_quantity` - 仅变更提交行和版本行允许零数量表示已移除
-    ///
-    /// # 返回
-    /// 校验成功时保留规范化后的快照。
-    ///
-    /// # 错误
-    /// 行号为零、快照超长、字段归属错误或金额不守恒时返回领域错误。
+    // 先规范化快照，再按行类型校验字段归属与金额守恒。
+    //
+    // 校验成功时保留规范化后的快照。行号为零、快照超长、字段归属错误或金额不守恒时返回领域错误。
+    //
+    // - `line_no`：从 1 开始的行号。
+    // - `allow_zero_quantity`：仅变更提交行和版本行允许零数量表示已移除。
     pub(super) fn normalize_and_validate(&mut self, line_no: u32, allow_zero_quantity: bool) -> Result<()> {
         if line_no == 0 {
             return Err(Error::from("行号必须从 1 开始"));
@@ -80,17 +75,9 @@ impl PurchaseLineFields {
     }
 }
 
-/// 按行类型校验并规范化费用行内容。
-///
-/// # 参数
-/// * `line_type` - 行类型
-/// * `expense` - 行携带的费用内容
-///
-/// # 返回
-/// 费用行返回规范化内容（历史费用行可为空），商品行返回 `None`。
-///
-/// # 错误
-/// 商品行携带费用内容或费用内容非法时返回错误。
+// 按行类型校验并规范化费用行内容。
+//
+// 费用行返回规范化内容（历史费用行可为空），商品行返回 `None`。商品行携带费用内容或费用内容非法时返回错误。
 pub(super) fn normalize_expense(
     line_type: PurchaseLineType,
     expense: Option<PurchaseExpenseDetail>,
@@ -102,14 +89,9 @@ pub(super) fn normalize_expense(
     }
 }
 
-/// 校验商品/服务成本行。
-///
-/// # 参数
-/// * `fields` - 一行采购明细的共享字段组
-/// * `allow_zero_quantity` - 是否允许零数量
-///
-/// # 错误
-/// 必填字段缺失、数量为负或（不允许零时）为零、含税单价或进项税率为负，或金额三元组不守恒时返回错误。
+// 校验商品/服务成本行。
+//
+// 必填字段缺失、数量为负或（不允许零时）为零、含税单价或进项税率为负，或金额三元组不守恒时返回错误。
 fn validate_item_service_line(fields: &PurchaseLineFields, allow_zero_quantity: bool) -> Result<()> {
     if fields.procurement_confirmation_line_id.is_none() {
         return Err(Error::from("商品/服务行必须引用采购二次确认分行"));
@@ -147,13 +129,7 @@ fn validate_item_service_line(fields: &PurchaseLineFields, allow_zero_quantity: 
     Ok(())
 }
 
-/// 校验物流费用行。
-///
-/// # 参数
-/// * `fields` - 一行采购明细的共享字段组
-///
-/// # 错误
-/// 携带商品行字段、缺少进项税率、税率或金额为负，或金额三元组不守恒时返回错误。
+// 校验物流费用行。携带商品行字段、缺少进项税率、税率或金额为负，或金额三元组不守恒时返回错误。
 fn validate_logistics_fee_line(fields: &PurchaseLineFields) -> Result<()> {
     if fields.procurement_confirmation_line_id.is_some() {
         return Err(Error::from("物流费用行不得引用采购二次确认分行"));

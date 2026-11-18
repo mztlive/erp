@@ -6,11 +6,8 @@ use super::{BackgroundJob, JobStatus};
 
 impl BackgroundJob {
     /// 按已核实的原命令回执调整终态结果计数。
-    /// # 参数
-    /// `confirmed` 为本次从待确认项核实的成功数，`at` 为核对时间。
-    /// # 返回
     /// 计数守恒，保留原完成时间，按剩余失败数更新终态。
-    /// # 错误
+    /// `confirmed` 为本次从待确认项核实的成功数，`at` 为核对时间。
     /// 非文件任务、尚未完成、计数不完整或确认数超过原失败数时拒绝。
     pub fn confirm_unknown_successes(&mut self, confirmed: u64, at: Instant) -> Result<()> {
         if self.domain_job_type.as_deref() != Some("DATA_TRANSFER")

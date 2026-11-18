@@ -8,7 +8,7 @@ use erp_workflow::service::approval::policy::ApprovalRequirement;
 
 pub const RECENT_HISTORY_LIMIT: usize = 8;
 
-/// 由绑定、运行摘要、历史和调用人提交/撤回令牌构造只读审批结构。
+/// 由绑定、运行摘要、历史和调用人提交/撤回令牌生成只读审批结构。
 ///
 /// # 参数
 /// * `binding` - 冻结定义绑定；为空时定义摘要为空。
@@ -21,9 +21,6 @@ pub const RECENT_HISTORY_LIMIT: usize = 8;
 ///
 /// # 返回
 /// 返回只读 `DocumentApprovalView`。允许动作只在对应令牌存在时包含提交或撤回。
-///
-/// # 错误
-/// 不返回错误。
 pub fn document_approval_view_with_history(
     binding: Option<&ApprovalDefinitionBinding>,
     instance: Option<DocumentApprovalInstanceView>,
@@ -51,7 +48,7 @@ pub fn document_approval_view_with_history(
     }
 }
 
-/// 由冻结绑定投影定义摘要。节点详情不在单据详情展开。
+// 处理库存调整详情时，由冻结绑定投影定义摘要。节点详情不在单据详情展开。
 fn definition_view_from_binding(binding: &ApprovalDefinitionBinding) -> DocumentApprovalDefinitionView {
     DocumentApprovalDefinitionView {
         id: binding.approval_process_definition_id.as_ref().to_string(),
@@ -61,7 +58,7 @@ fn definition_view_from_binding(binding: &ApprovalDefinitionBinding) -> Document
     }
 }
 
-/// 单据详情允许的审批相关动作。不含选择定义或审批人。
+// 为库存调整详情计算详情可展示的审批动作，不允许借此选择流程定义或审批人。
 fn allowed_document_actions(status: StockAdjustmentState, can_submit: bool, can_cancel: bool) -> Vec<String> {
     match status {
         StockAdjustmentState::Draft | StockAdjustmentState::Rejected if can_submit => {
@@ -85,7 +82,7 @@ mod tests {
 
     use super::*;
 
-    /// 详情只读审批结构；允许动作不含选择定义或审批人。
+    // 验证库存调整详情：详情只读审批结构；允许动作不含选择定义或审批人。
     #[test]
     fn detail_approval_is_read_only_and_has_history_cap() {
         let binding =

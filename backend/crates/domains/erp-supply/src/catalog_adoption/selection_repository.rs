@@ -20,12 +20,8 @@ pub struct SelectionPage {
 }
 
 /// 查找原操作已登记的批次，用于受理超时后的重试恢复。
-/// # 参数
-/// `request_key` 为由连接、账号及原操作号组成的稳定身份。
-/// # 返回
 /// 原批次，未登记时为空；调用方仍须验证当前权限和载荷摘要。
-/// # 错误
-/// 数据库读取失败。
+/// 数据库读取失败时向上传播错误。
 pub async fn selection_by_request(
     db: &Database,
     request_key: &str,
@@ -35,12 +31,9 @@ pub async fn selection_by_request(
 }
 
 /// 批量保存固定成员分块，必须与批次登记共用事务。
-/// # 参数
-/// `pages` 为同一批次的完整成员清单，`executor` 为受理事务。
-/// # 返回
 /// 全部分块写入成功。
-/// # 错误
 /// 数据库写入或唯一身份冲突时失败。
+/// `pages` 为同一批次的完整成员清单，`executor` 为受理事务。
 pub async fn insert_selection_pages(
     db: &Database,
     pages: &[SelectionPage],
@@ -50,12 +43,9 @@ pub async fn insert_selection_pages(
 }
 
 /// 读取下一块已冻结成员，禁止重新运行原筛选条件。
-/// # 参数
-/// `batch` 为已授权批次，`page` 为原子进度对应分块。
-/// # 返回
 /// 对应固定成员，不存在时为空。
-/// # 错误
-/// 数据库读取失败。
+/// 数据库读取失败时向上传播错误。
+/// `batch` 为已授权批次，`page` 为原子进度对应分块。
 pub async fn selection_page(
     db: &Database,
     batch: &str,
@@ -71,12 +61,9 @@ pub async fn selection_page(
 }
 
 /// 一次写入一块草稿，调用方须同时保存准备进度。
-/// # 参数
-/// `rows` 为当前分块草稿，`executor` 为同一短事务。
-/// # 返回
 /// 整块写入成功。
-/// # 错误
 /// 数据库错误、重复来源身份或重复行身份时拒绝。
+/// `rows` 为当前分块草稿，`executor` 为同一短事务。
 pub async fn insert_prepared_items(
     db: &Database,
     rows: &[CatalogAdoptionBatchItem],
@@ -91,11 +78,7 @@ pub async fn insert_prepared_items(
 }
 
 /// 登记成员分块唯一索引与准备任务扫描索引。
-/// # 参数
-/// `db` 为当前数据库。
-/// # 返回
 /// 索引全部建立。
-/// # 错误
 /// 数据库失败或存量唯一冲突时失败。
 pub async fn ensure_preparation_indexes(db: &Database) -> Result<()> {
     db.collection::<Document>(SELECTIONS)

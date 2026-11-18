@@ -26,17 +26,13 @@ struct PurchaseSubmissionComparison<'a> {
     changed_line_count: Option<usize>,
 }
 
-/// 把采购单上的来源销售单身份改成按采购单 ID 查找。
-///
-/// # 参数
-/// * `orders` - 本批采购单
-/// * `sales_order_nos` - 销售单 ID 到单号
-///
-/// # 返回
-/// 返回采购单 ID 到「销售单 ID + 单号」。缺单号时整条丢弃，避免把内部 ID 上屏。
-///
-/// # 错误
-/// 无。
+// 组装采购财务审核简报时，把采购单上的来源销售单身份改成按采购单 ID 查找。
+//
+// 调用参数：
+// * `orders` - 本批采购单
+// * `sales_order_nos` - 销售单 ID 到单号
+//
+// 返回采购单 ID 到「销售单 ID + 单号」。缺单号时整条丢弃，避免把内部 ID 上屏。
 pub(super) fn source_sales_orders_by_purchase_order(
     orders: &[PurchaseOrder],
     sales_order_nos: &HashMap<String, String>,
@@ -53,20 +49,16 @@ pub(super) fn source_sales_orders_by_purchase_order(
         .collect()
 }
 
-/// 把提交、销售单号和行明细组装成按提交 ID 索引的展示包。
-///
-/// # 参数
-/// * `submissions` - 本批采购提交
-/// * `source_sales_orders` - 采购单 ID 到来源销售单 ID 与单号
-/// * `lines_by_submission` - 提交 ID 到简报行
-/// * `line_states` - 提交 ID 到按稳定来源行分组的比较状态
-/// * `submitter_names` - 账号 ID 到姓名
-///
-/// # 返回
-/// 返回提交 ID 到供应商、影响和简报的映射。
-///
-/// # 错误
-/// 无。
+// 生成采购财务审核简报视图时，把提交、销售单号和行明细组装成按提交 ID 索引的展示包。
+//
+// 调用参数：
+// * `submissions` - 本批采购提交
+// * `source_sales_orders` - 采购单 ID 到来源销售单 ID 与单号
+// * `lines_by_submission` - 提交 ID 到简报行
+// * `line_states` - 提交 ID 到按稳定来源行分组的比较状态
+// * `submitter_names` - 账号 ID 到姓名
+//
+// 返回提交 ID 到供应商、影响和简报的映射。
 pub(super) fn assemble_purchase_review_displays(
     submissions: &[PurchaseOrderSubmission],
     source_sales_orders: &HashMap<String, (String, String)>,
@@ -110,22 +102,16 @@ pub(super) fn assemble_purchase_review_displays(
         .collect()
 }
 
-/// 把采购单事实和按提交准备好的简报写入对象事实表。
-///
-/// # 参数
-/// * `facts` - 输出的对象事实表
-/// * `orders` - 本批采购单
-/// * `displays` - 提交 ID 到展示字段
-/// * `authority` - 权威对象事实
-///
-/// # 返回
-/// 无。
-///
-/// # 错误
-/// 无。
-///
-/// # Panics
-/// `authority` 缺少对应采购单时 panic；调用方须已为每张已读取采购单放入权威映射。
+// 组装采购财务审核简报时，把采购单事实和按提交准备好的简报写入对象事实表。
+//
+// 调用参数：
+// * `facts` - 输出的对象事实表
+// * `orders` - 本批采购单
+// * `displays` - 提交 ID 到展示字段
+// * `authority` - 权威对象事实
+//
+// # Panics
+// `authority` 缺少对应采购单时 panic；调用方须已为每张已读取采购单放入权威映射。
 pub(super) fn insert_purchase_order_facts(
     facts: &mut WorkbenchObjectFactMap,
     orders: &[PurchaseOrder],
@@ -147,18 +133,14 @@ pub(super) fn insert_purchase_order_facts(
     }
 }
 
-/// 为单张采购单生成对象事实，并按提交版本挂上简报。
-///
-/// # 参数
-/// * `order` - 采购单
-/// * `displays` - 提交 ID 到展示字段
-/// * `authority` - 权威对象事实
-///
-/// # 返回
-/// 返回带最小标题和提交级简报的对象事实。
-///
-/// # 错误
-/// 无。
+// 处理采购财务审核简报时，为单张采购单生成对象事实，并按提交版本挂上简报。
+//
+// 调用参数：
+// * `order` - 采购单
+// * `displays` - 提交 ID 到展示字段
+// * `authority` - 权威对象事实
+//
+// 返回带最小标题和提交级简报的对象事实。
 fn purchase_order_fact(
     order: &PurchaseOrder,
     displays: &HashMap<String, PurchaseReviewDisplay>,
@@ -187,16 +169,12 @@ fn purchase_order_fact(
     fact
 }
 
-/// 按采购单正式提交序号判断初次提交或再次提交。
-///
-/// # 参数
-/// * `submissions` - 本批采购提交
-///
-/// # 返回
-/// 返回提交 ID 到来源文案的映射。
-///
-/// # 错误
-/// 无。
+// 依据采购单正式提交序号判断初次提交或再次提交。
+//
+// 调用参数：
+// * `submissions` - 本批采购提交
+//
+// 返回提交 ID 到来源文案的映射。
 fn submission_origins(submissions: &[PurchaseOrderSubmission]) -> HashMap<String, &'static str> {
     submissions
         .iter()
@@ -208,22 +186,18 @@ fn submission_origins(submissions: &[PurchaseOrderSubmission]) -> HashMap<String
         .collect()
 }
 
-/// 用单条提交和已解析展示字段生成队列简报。
-///
-/// # 参数
-/// * `submission` - 不可变采购提交
-/// * `source_sales_order` - 来源销售单 ID 与单号
-/// * `lines` - 已按行号排好的简报行
-/// * `submitter_name` - 已解析的提交人姓名
-/// * `origin` - 初次提交或再次提交
-/// * `previous` - 同一采购单的上一次正式提交
-/// * `changed_line_count` - 与上次提交相比发生变化的明细行数
-///
-/// # 返回
-/// 返回供应商、影响和事项简报。
-///
-/// # 错误
-/// 无。
+// 生成采购财务审核简报视图时，用单条提交和已解析展示字段生成队列简报。
+//
+// 调用参数：
+// * `submission` - 不可变采购提交
+// * `source_sales_order` - 来源销售单 ID 与单号
+// * `lines` - 已按行号排好的简报行
+// * `submitter_name` - 已解析的提交人姓名
+// * `origin` - 初次提交或再次提交
+// * `previous` - 同一采购单的上一次正式提交
+// * `changed_line_count` - 与上次提交相比发生变化的明细行数
+//
+// 返回供应商、影响和事项简报。
 fn purchase_review_display(
     submission: &PurchaseOrderSubmission,
     source_sales_order: Option<(&str, &str)>,
@@ -264,22 +238,18 @@ fn purchase_review_display(
     }
 }
 
-/// 组装采购审核事项简报键值和列表一行摘要。
-///
-/// # 参数
-/// * `supplier` - 供应商名称
-/// * `source_sales_order` - 来源销售单 ID 与单号
-/// * `submission` - 不可变采购提交
-/// * `lines` - 截断后的简报行
-/// * `more_count` - 未展开的商品行数
-/// * `submitter_name` - 提交人姓名
-/// * `comparison` - 提交来源、上次正式提交与行级差异数量
-///
-/// # 返回
-/// 返回可上屏的对象简报源。
-///
-/// # 错误
-/// 无。
+// 采购财务审核工作项需要展示时，从本次采购提交组装详情键值段及列表一行摘要。
+//
+// 调用参数：
+// * `supplier` - 供应商名称
+// * `source_sales_order` - 来源销售单 ID 与单号
+// * `submission` - 不可变采购提交
+// * `lines` - 截断后的简报行
+// * `more_count` - 未展开的商品行数
+// * `submitter_name` - 提交人姓名
+// * `comparison` - 提交来源、上次正式提交与行级差异数量
+//
+// 返回可上屏的对象简报源。
 fn purchase_review_brief_source(
     supplier: Option<String>,
     source_sales_order: Option<(&str, &str)>,
@@ -316,22 +286,18 @@ fn purchase_review_brief_source(
     }
 }
 
-/// 生成采购审核简报键值，空值不上屏。
-///
-/// # 参数
-/// * `supplier` - 供应商名称
-/// * `source_sales_order` - 来源销售单 ID 与单号
-/// * `submission` - 不可变采购提交
-/// * `payment` - 已翻译的付款条件
-/// * `origin` - 提交来源
-/// * `previous` - 上一次正式提交
-/// * `changed_line_count` - 行级差异数量
-///
-/// # 返回
-/// 返回供应商、销售单、金额三元组、付款条件、经营类目和提交号等段。销售单段携带可跳转身份。
-///
-/// # 错误
-/// 无。
+// 处理采购财务审核简报时，生成采购审核简报键值，空值不上屏。
+//
+// 调用参数：
+// * `supplier` - 供应商名称
+// * `source_sales_order` - 来源销售单 ID 与单号
+// * `submission` - 不可变采购提交
+// * `payment` - 已翻译的付款条件
+// * `origin` - 提交来源
+// * `previous` - 上一次正式提交
+// * `changed_line_count` - 行级差异数量
+//
+// 返回供应商、销售单、金额三元组、付款条件、经营类目和提交号等段。销售单段携带可跳转身份。
 fn purchase_review_sections(
     supplier: Option<&str>,
     source_sales_order: Option<(&str, &str)>,
@@ -377,7 +343,7 @@ fn purchase_review_sections(
     sections
 }
 
-/// 追加采购再次提交相对上一正式提交的表头与行级差异结论。
+// 处理采购财务审核简报时，追加采购再次提交相对上一正式提交的表头与行级差异结论。
 fn push_resubmission_comparisons(
     sections: &mut Vec<BriefSection>,
     previous: &PurchaseOrderSubmission,
@@ -444,7 +410,7 @@ fn push_resubmission_comparisons(
     push_section(sections, "重提差异", Some(&summary), false);
 }
 
-/// 值发生变化时追加“前→后”段并返回 `true`。
+// 处理采购财务审核简报时，值发生变化时追加“前→后”段并返回 `true`。
 fn push_changed_section(
     sections: &mut Vec<BriefSection>,
     label: &str,
@@ -466,21 +432,17 @@ fn push_changed_section(
     true
 }
 
-/// 生成采购审核队列一行摘要。
-///
-/// # 参数
-/// * `supplier` - 供应商名称
-/// * `gross` - 含税金额
-/// * `tax` - 税额
-/// * `payment` - 付款条件
-/// * `lines` - 已截断的简报行
-/// * `more_count` - 未展开行数
-///
-/// # 返回
-/// 返回供应商、金额、付款条件和首行货品组成的摘要。
-///
-/// # 错误
-/// 无。
+// 装配采购财务审核简报视图时，生成采购审核队列一行摘要。
+//
+// 调用参数：
+// * `supplier` - 供应商名称
+// * `gross` - 含税金额
+// * `tax` - 税额
+// * `payment` - 付款条件
+// * `lines` - 已截断的简报行
+// * `more_count` - 未展开行数
+//
+// 返回供应商、金额、付款条件和首行货品组成的摘要。
 fn purchase_review_list_summary(
     supplier: Option<&str>,
     gross: &Amount,
@@ -506,17 +468,13 @@ fn purchase_review_list_summary(
     parts.join(" · ")
 }
 
-/// 把含税金额和税额拼成列表摘要中的金额段。
-///
-/// # 参数
-/// * `gross` - 含税金额
-/// * `tax` - 税额
-///
-/// # 返回
-/// 有税额时返回 `¥12,800 / 税 ¥1,470`，否则只返回含税金额。
-///
-/// # 错误
-/// 无。
+// 生成采购财务审核简报视图时，把含税金额和税额拼成列表摘要中的金额段。
+//
+// 调用参数：
+// * `gross` - 含税金额
+// * `tax` - 税额
+//
+// 有税额时返回 `¥12,800 / 税 ¥1,470`，否则只返回含税金额。
 fn amount_with_tax_label(gross: &Amount, tax: &Amount) -> String {
     let gross_label = format_yuan(gross);
     if tax.to_decimal().is_zero() {
@@ -525,16 +483,12 @@ fn amount_with_tax_label(gross: &Amount, tax: &Amount) -> String {
     format!("{gross_label} / 税 {}", format_yuan(tax))
 }
 
-/// 把首行品名和数量压成列表摘要片段。
-///
-/// # 参数
-/// * `line` - 第一条简报行
-///
-/// # 返回
-/// 返回品名，有数量时追加数量。
-///
-/// # 错误
-/// 无。
+// 生成采购财务审核简报视图时，把首行品名和数量压成列表摘要片段。
+//
+// 调用参数：
+// * `line` - 第一条简报行
+//
+// 返回品名，有数量时追加数量。
 fn first_line_summary(line: &BriefLine) -> String {
     match line.quantity.as_deref() {
         Some(quantity) => format!("{} {quantity}", line.title),
@@ -542,16 +496,12 @@ fn first_line_summary(line: &BriefLine) -> String {
     }
 }
 
-/// 商品行保留前 3 条，物流费用始终单独列出。
-///
-/// # 参数
-/// * `lines` - 已按行号排好的简报行
-///
-/// # 返回
-/// 返回可见行和未展开的商品行数。
-///
-/// # 错误
-/// 无。
+// 处理采购财务审核简报时，商品行保留前 3 条，物流费用始终单独列出。
+//
+// 调用参数：
+// * `lines` - 已按行号排好的简报行
+//
+// 返回可见行和未展开的商品行数。
 fn split_purchase_brief_lines(lines: Vec<BriefLine>) -> (Vec<BriefLine>, u32) {
     let (items, fees): (Vec<_>, Vec<_>) =
         lines.into_iter().partition(|line| line.title != PurchaseLineType::LogisticsFee.label());
@@ -562,32 +512,24 @@ fn split_purchase_brief_lines(lines: Vec<BriefLine>) -> (Vec<BriefLine>, u32) {
     (visible, more_count)
 }
 
-/// 把采购提交行转成队列简报行。
-///
-/// # 参数
-/// * `lines` - 同一提交内已按行号排序的明细
-///
-/// # 返回
-/// 返回品名、数量/金额和交期。
-///
-/// # 错误
-/// 无。
+// 组装采购财务审核简报时，把采购提交行转成队列简报行。
+//
+// 调用参数：
+// * `lines` - 同一提交内已按行号排序的明细
+//
+// 返回品名、数量/金额和交期。
 pub(super) fn purchase_brief_lines(
     lines: impl IntoIterator<Item = PurchaseOrderSubmissionLine>,
 ) -> Vec<BriefLine> {
     lines.into_iter().map(purchase_brief_line).collect()
 }
 
-/// 把单条采购提交行转成简报行。
-///
-/// # 参数
-/// * `line` - 采购提交行
-///
-/// # 返回
-/// 商品行展示品名、数量和交期；物流费用行展示类型和含税金额。
-///
-/// # 错误
-/// 无。
+// 组装采购财务审核简报时，把单条采购提交行转成简报行。
+//
+// 调用参数：
+// * `line` - 采购提交行
+//
+// 商品行展示品名、数量和交期；物流费用行展示类型和含税金额。
 fn purchase_brief_line(line: PurchaseOrderSubmissionLine) -> BriefLine {
     if line.line_type == PurchaseLineType::LogisticsFee {
         return BriefLine {
@@ -610,18 +552,14 @@ fn purchase_brief_line(line: PurchaseOrderSubmissionLine) -> BriefLine {
     }
 }
 
-/// 商品行数量带上含税小计，方便财务扫一眼规模。
-///
-/// # 参数
-/// * `quantity` - 基础单位数量
-/// * `unit` - 单位
-/// * `gross` - 行含税金额
-///
-/// # 返回
-/// 有数量时返回 `20 件 · ¥1,600`；否则只返回金额。
-///
-/// # 错误
-/// 无。
+// 处理采购财务审核简报时，商品行数量带上含税小计，方便财务扫一眼规模。
+//
+// 调用参数：
+// * `quantity` - 基础单位数量
+// * `unit` - 单位
+// * `gross` - 行含税金额
+//
+// 有数量时返回 `20 件 · ¥1,600`；否则只返回金额。
 fn purchase_item_quantity(quantity: Option<&Quantity>, unit: Option<&str>, gross: &Amount) -> Option<String> {
     let amount = format_yuan(gross);
     Some(match quantity {
@@ -630,17 +568,14 @@ fn purchase_item_quantity(quantity: Option<&Quantity>, unit: Option<&str>, gross
     })
 }
 
-/// 把受控付款条件代码翻译成财务可读文案。
-///
-/// # 参数
-/// * `snapshot` - 提交时付款条件快照
-///
-/// # 返回
-/// 返回先款比例、货到天数或合同约定；未知代码提示待核对，先款门禁单独补「先款后货」。
-/// 历史把经营类目编进付款条件代码时，只展示付款条件本身。
-///
-/// # 错误
-/// 无。
+// 生成采购财务审核简报视图时，把受控付款条件代码翻译成财务可读文案。
+//
+// 调用参数：
+// * `snapshot` - 提交时付款条件快照
+//
+// 结果：
+// 返回先款比例、货到天数或合同约定；未知代码提示待核对，先款门禁单独补「先款后货」。
+// 历史把经营类目编进付款条件代码时，只展示付款条件本身。
 fn payment_term_label(snapshot: &PaymentTermSnapshot) -> Option<String> {
     let code = split_encoded_payment_term_snapshot(&snapshot.payment_term_code).payment_term_code;
     if code.is_empty() {
@@ -656,19 +591,15 @@ fn payment_term_label(snapshot: &PaymentTermSnapshot) -> Option<String> {
     }
 }
 
-/// 向简报追加非空键值段。
-///
-/// # 参数
-/// * `sections` - 已组装的键值段
-/// * `label` - 标签
-/// * `value` - 待写入的值
-/// * `numeric` - 是否按数字对齐
-///
-/// # 返回
-/// 无。空值不上屏。
-///
-/// # 错误
-/// 无。
+// 处理采购财务审核简报时，向简报追加非空键值段。
+//
+// 调用参数：
+// * `sections` - 已组装的键值段
+// * `label` - 标签
+// * `value` - 待写入的值
+// * `numeric` - 是否按数字对齐
+//
+// 无。空值不上屏。
 fn push_section(sections: &mut Vec<BriefSection>, label: &str, value: Option<&str>, numeric: bool) {
     let Some(value) = value.map(str::trim).filter(|text| !text.is_empty()) else {
         return;
@@ -681,16 +612,12 @@ fn push_section(sections: &mut Vec<BriefSection>, label: &str, value: Option<&st
     });
 }
 
-/// 去掉首尾空白后保留非空文本。
-///
-/// # 参数
-/// * `value` - 原始文本
-///
-/// # 返回
-/// 空白返回 `None`。
-///
-/// # 错误
-/// 无。
+// 处理采购财务审核简报时，去除首尾空白后保留非空文本。
+//
+// 调用参数：
+// * `value` - 原始文本
+//
+// 空白返回 `None`。
 fn non_empty(value: &str) -> Option<String> {
     let text = value.trim();
     (!text.is_empty()).then(|| text.to_string())
@@ -699,7 +626,7 @@ fn non_empty(value: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use erp_procurement::entity::purchase_order::PaymentSubjectSnapshot;
-    /// 将供应商受控付款规则映射为采购测试使用的消费事实。
+    // 确定采购财务审核简报的适用条件时，将供应商受控付款规则映射为采购测试使用的消费事实。
     fn resolve_procurement_payment_term(
         code: &str,
     ) -> erp_core::Result<erp_procurement::entity::facts::PaymentTermFact> {

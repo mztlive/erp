@@ -33,22 +33,15 @@ pub struct CustomerCenterReceivableRow {
 #[allow(async_fn_in_trait)]
 pub trait ReceivableAccountCustomerCenterExt {
     /// 查询指定客户的应收跨账户汇总。
-    ///
-    /// # 参数
-    /// * `customer_id` - 已授权客户 ID
-    /// * `account_ids` - 已按应收来源范围证明的子账 ID，空集不得查询全客户
-    /// * `today` - 服务端业务日期；逾期上界不接受客户端输入
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回余额、逾期和可开票汇总；无账户时返回全零汇总。
-    ///
-    /// # 错误
-    /// MongoDB 聚合或定点数值反序列化失败时返回错误。
-    ///
-    /// # 约束
-    /// 仅查询本域拥有的 `receivable_accounts`、`receivable_entries` 与
+    /// 传播数据库聚合或定点数值反序列化失败。
+    /// 调用边界：仅查询本域拥有的 `receivable_accounts`、`receivable_entries` 与
     /// `receivable_entry_offsets` 集合，不访问客户集合；调用方负责客户及子账授权。
+    ///
+    /// 输入约定：
+    /// - `customer_id`：已授权客户 ID
+    /// - `account_ids`：已按应收来源范围证明的子账 ID，空集不得查询全客户
+    /// - `today`：服务端业务日期；逾期上界不接受客户端输入
     async fn customer_center_receivable(
         &self,
         customer_id: &str,
@@ -88,7 +81,7 @@ fn zero_summary() -> Result<CustomerCenterReceivableRow> {
     })
 }
 
-/// 按客户汇总未删除子账的开放余额与可开票余额，并扣减冲销后计算逾期未核销额。
+// 为客户中心汇总未删除子账的开放余额、可开票余额和扣减冲销后的逾期未核销额。
 fn receivable_pipeline(customer_id: &str, account_ids: &[String], today: &str) -> Vec<Document> {
     let zero = zero_decimal();
     vec![
@@ -106,7 +99,7 @@ fn receivable_pipeline(customer_id: &str, account_ids: &[String], today: &str) -
     ]
 }
 
-/// 只从已授权子账展开逾期分录并扣除其核销额。
+// 计算客户逾期金额时，只展开已授权子账的到期分录并扣除已核销部分。
 fn overdue_pipeline(today: &str, zero: &Bson) -> Vec<Document> {
     vec![
         overdue_entries(today),

@@ -82,16 +82,7 @@ enum AuditValueInput {
 }
 
 impl<'de> Deserialize<'de> for AuditValue {
-    /// 从封闭的安全值变体反序列化，拒绝未知字段和任意文本值。
-    ///
-    /// # 参数
-    /// * `deserializer` - serde 反序列化器。
-    ///
-    /// # 返回
-    /// 返回对应的 `AuditValue`。`Changed` 只接受空对象。
-    ///
-    /// # 错误
-    /// `kind` 未知、字段类型不匹配、出现未知字段，或 `Changed` 附带字段时返回反序列化错误。
+    // 通过封闭的安全值结构读取审计投影，防止旧记录或外来输入带入不受控数据。未知 `kind`、未知字段、类型不符或给 `Changed` 附带值都会导致反序列化失败。
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
         Ok(match AuditValueInput::deserialize(deserializer)? {
             AuditValueInput::Code { code, label } => Self::Code { code, label },
@@ -196,16 +187,7 @@ pub struct BusinessEventContext {
 }
 
 impl AuditAction {
-    /// 校验领域登记的稳定动作、中文标签及安全字段白名单。
-    ///
-    /// # 参数
-    /// 无额外参数。
-    ///
-    /// # 返回
-    /// 元数据有效时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 代码、中文标签、版本、字段类型或字段/枚举代码重复时返回校验错误。
+    /// 在业务写入前验证审计动作目录，保证展示只使用合法的稳定代码、中文标签和白名单。动作版本为零、字段数量超限、字段或枚举代码重复、代码或标签格式不合规等均返回校验错误。
     pub fn validate(&self) -> Result<()> {
         validate_code(self.code)?;
         validate_code(self.resource_type)?;
@@ -229,7 +211,7 @@ impl AuditAction {
         Ok(())
     }
 
-    /// 未登记字段不能进入审计投影。
+    // 按代码找出动作允许记录的字段；白名单未登记的字段直接拒绝，不能进入事件。
     fn field(&self, code: &str) -> Result<&AuditField> {
         self.allowed_fields
             .iter()
@@ -239,18 +221,7 @@ impl AuditAction {
 }
 
 impl BusinessEventContext {
-    /// 在业务写入前验证操作人和动作，并生成可供回执关联的事件编号。
-    ///
-    /// # 参数
-    /// * `actor` - 已通过调用入口鉴权的操作人。
-    /// * `action` - 由领域显式登记的稳定动作及安全字段。
-    ///
-    /// # 返回
-    /// 返回已完成静态元数据校验的事件上下文。
-    ///
-    /// # 错误
-    /// 操作人 ID 或账号去空白后为空或超长，或名称快照、请求号超长时返回 `Error::Logic`。
-    /// 身份含控制字符，或动作代码、标签、版本、字段白名单无效时返回 `Error::ValidationError`。
+    /// 在正式写入前校验操作人 ID、账号及审计动作，并预生成可与回执关联的事件 ID；名称和请求号沿用已鉴权身份中的预校验快照。ID 或账号为空或超长返回 `Error::Logic`；身份含控制字符或动作配置不合法返回 `Error::ValidationError`。
     pub fn new(actor: AuditActor, action: AuditAction) -> Result<Self> {
         action.validate()?;
 
@@ -275,27 +246,14 @@ impl BusinessEventContext {
         })
     }
 
-    /// 登记执行前已经明确的对象身份，供独立尝试记录使用。
-    /// # 参数
-    /// * `target_id` - 业务对象身份；未知明确保持缺失。
-    /// * `target_number` - 执行前已取得的安全编号快照。
-    /// # 返回
-    /// 返回带安全目标的上下文。
-    /// # 错误
-    /// 目标或业务编号超长时返回 `Error::Logic`。含控制字符时返回 `Error::ValidationError`。空白视为缺失，不报错。
+    /// 登记执行前已经知道的资源 ID 和业务编号，供事务外尝试追溯。空白表示缺失；超长返回 `Error::Logic`，含控制字符返回 `Error::ValidationError`。
     pub fn with_target(mut self, target_id: Option<String>, target_number: Option<String>) -> Result<Self> {
         self.target_id = normalized_snapshot(target_id, "业务对象编号")?;
         self.target_number = normalized_snapshot(target_number, "业务编号")?;
         Ok(self)
     }
 
-    /// 为已完成事务的失败、拒绝或未知结果建立独立尝试快照。
-    /// # 参数
-    /// * `result` - 结构化错误分类，不能填写成功。
-    /// # 返回
-    /// 返回新身份的安全尝试实体，目标缺失保持缺失。
-    /// # 错误
-    /// 不返回错误。上下文已在写入前完成校验。
+    /// 根据失败、拒绝或结果未知的分类生成独立尝试记录，供事务结束后留痕。尝试使用新 ID，未知目标不补值。
     pub fn attempt(&self, result: AuditAttemptResult) -> AuditAttempt {
         AuditAttempt {
             base: BaseModel::new(next_id()),
@@ -317,90 +275,38 @@ impl BusinessEventContext {
         }
     }
 
-    /// 返回本次新鲜执行所关联的审计事件编号。
-    ///
-    /// # 参数
-    /// 无额外参数。
-    ///
-    /// # 返回
-    /// 返回事件编号的借用，可同事务保存于独立命令回执。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 提供预分配的事件 ID，供拥有领域在同一事务中写进独立命令回执。
     pub fn event_id(&self) -> &str {
         &self.event_id
     }
 
-    /// 登记同一命令内按原写入顺序分配的事件序号。
-    /// # 参数
-    /// * `sequence` - 从1开始的已预检序号。
-    /// # 返回
-    /// 返回保留稳定事件身份的上下文。
-    /// # 错误
-    /// 序号为零时拒绝，批次溢出由调用方在首个业务写入前拒绝。
+    /// 设置同一命令内按业务写入顺序分配的序号，保留原事件 ID。序号从 `1` 开始，传零会被拒绝；调用方必须在首次业务写入前检查批次是否溢出。
     pub fn with_event_sequence(mut self, sequence: u32) -> Result<Self> {
         self.event_sequence =
             NonZeroU32::new(sequence).ok_or_else(|| validation_error("审计事件序号必须为正整数"))?;
         Ok(self)
     }
 
-    /// 登记发生时已知的安全操作人名称快照。
-    ///
-    /// # 参数
-    /// * `name` - 当时的显示名；未知保持 `None`。
-    ///
-    /// # 返回
-    /// 返回保存名称快照的上下文。
-    ///
-    /// # 错误
-    /// 名称超长时返回 `Error::Logic`。含控制字符时返回 `Error::ValidationError`。空白视为缺失，不报错。
+    /// 冻结本次操作的显示名，供历史事件和失败尝试展示。未知或空白保持缺失，超长返回 `Error::Logic`，含控制字符返回 `Error::ValidationError`。
     pub fn with_actor_name_snapshot(mut self, name: Option<String>) -> Result<Self> {
         self.actor_name_snapshot = normalized_snapshot(name, "操作人名称")?;
         Ok(self)
     }
 
-    /// 登记独立业务命令的稳定关联编号。
-    ///
-    /// # 参数
-    /// * `command_id` - 独立命令编号；无命令合同的入口保持 `None`。
-    ///
-    /// # 返回
-    /// 返回保存命令关联的上下文。
-    ///
-    /// # 错误
-    /// 编号超长时返回 `Error::Logic`。含控制字符时返回 `Error::ValidationError`。空白视为缺失，不报错。
+    /// 记录独立业务命令的稳定编号，供事件与领域回执关联；无命令合同或传入空白时保持缺失。超长返回 `Error::Logic`，含控制字符返回 `Error::ValidationError`。
     pub fn with_command_id(mut self, command_id: Option<String>) -> Result<Self> {
         self.command_id = normalized_snapshot(command_id, "命令编号")?;
         Ok(self)
     }
 
-    /// 登记调用入口提供的请求关联编号。
-    ///
-    /// # 参数
-    /// * `request_id` - 请求追踪号；非请求入口可以保持 `None`。
-    ///
-    /// # 返回
-    /// 返回保存请求关联的上下文。
-    ///
-    /// # 错误
-    /// 编号超长时返回 `Error::Logic`。含控制字符时返回 `Error::ValidationError`。空白视为缺失，不报错。
+    /// 沿用入口提供的请求追踪号关联同一次调用，非请求入口或传入空白时保持缺失。超长返回 `Error::Logic`，含控制字符返回 `Error::ValidationError`。
     pub fn with_request_id(mut self, request_id: Option<String>) -> Result<Self> {
         self.request_id = normalized_snapshot(request_id, "请求编号")?;
         Ok(self)
     }
 
-    /// 在业务执行后、事务提交前校验安全投影并构造中文审计。
-    ///
-    /// # 参数
-    /// * `content` - 明确的目标、业务结果和安全字段变化/事实。
-    ///
-    /// # 返回
-    /// 返回兼容旧字段并附带结构化事件的审计日志。
-    ///
-    /// # 错误
-    /// 目标为空、超长或含控制字符，业务编号超长或含控制字符，投影超过上限、字段重复或未登记，
-    /// 字段值不符合登记类型，或审计消息等文本无法通过 `AuditLog::new` 时返回错误。
-    /// 文本超长映射为 `Error::Logic`，其余校验为 `Error::ValidationError`。
+    /// 在业务完成后、事务提交前将明确的目标、结果和白名单投影转成结构化中文审计，同时保留兼容旧日志的字段。
+    /// 目标为空、目标或编号含控制字符、投影超限、字段重复或未登记、字段类型不符时返回 `Error::ValidationError`；目标、编号或日志文本超长返回 `Error::Logic`，实体构造仍须通过 `AuditLog::new` 校验。
     pub fn log(&self, content: BusinessEventContent) -> Result<AuditLog> {
         let event = self.event(content)?;
         let mut log = AuditLog::new(
@@ -423,7 +329,7 @@ impl BusinessEventContext {
         Ok(log)
     }
 
-    /// 持久化前先收紧目标和编号，避免自由文本进入结构化事件。
+    // 校验并归一化资源身份、业务编号与投影，再组装结构化事件，避免任意文本混入目标快照。
     fn event(&self, content: BusinessEventContent) -> Result<BusinessAuditEvent> {
         let resource_id = normalize_required_text(
             content.target_id,
@@ -457,7 +363,7 @@ impl BusinessEventContext {
         })
     }
 
-    /// 限制投影规模，并阻止重复或未登记字段进入事件。
+    // 按动作白名单校验事实和前后值，再补上登记的展示标签；两类投影共享数量上限和字段去重，防止同一字段被重复记录。
     fn projection(
         &self,
         changes: Vec<AuditFieldChange>,
@@ -494,7 +400,7 @@ impl BusinessEventContext {
         Ok((projected_changes, projected_facts))
     }
 
-    /// 同一事件里每个字段代码只能出现一次。
+    // 取出白名单字段并登记本次使用；已经作为事实或变更出现的代码不能再次进入同一事件。
     fn checked_field<'a>(&'a self, code: &str, used: &mut HashSet<&'static str>) -> Result<&'a AuditField> {
         let field = self.action.field(code)?;
         if !used.insert(field.code) {
@@ -505,13 +411,7 @@ impl BusinessEventContext {
 }
 
 impl BusinessAuditEvent {
-    /// 按事件发生时的安全快照生成中文展示说明。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 返回稳定中文动作、执行结果及已登记字段事实。
-    /// # 错误
-    /// 不返回错误。
+    /// 用事件发生时的安全快照生成中文摘要，供列表及时间线展示；没有名称或业务编号时分别回退为账号和资源 ID，只拼接登记过的事实与变化。
     pub fn message(&self) -> String {
         let actor = self.actor_name_snapshot.as_deref().unwrap_or(&self.actor_account);
         let target = self.resource_number_snapshot.as_deref().unwrap_or(&self.resource_id);
@@ -539,7 +439,7 @@ impl BusinessAuditEvent {
 }
 
 impl AuditValue {
-    /// 展示只使用登记过的中文标签和安全值，金额保留两位小数。
+    // 将安全值转成摘要用文本：枚举用登记中文、数量去尾零、金额固定两位小数，敏感值只显示「已变更」。
     fn display(&self) -> String {
         match self {
             Self::Code { label, .. } => label.clone(),
@@ -550,7 +450,7 @@ impl AuditValue {
     }
 }
 
-/// 枚举字段必须有不重复的合法状态，避免空白名单或重复代码。
+// 拒绝空的、超限的或含重复代码的枚举白名单，确保审计状态均有有效且唯一的代码与中文标签。
 fn validate_field_kind(kind: AuditFieldKind) -> Result<()> {
     let AuditFieldKind::Code(values) = kind else {
         return Ok(());
@@ -569,7 +469,7 @@ fn validate_field_kind(kind: AuditFieldKind) -> Result<()> {
     Ok(())
 }
 
-/// 拒绝与登记类型不符的值，避免任意文本入库。
+// 按登记类型校验每个投影值；枚举必须同时匹配已登记的代码和标签，防止自由文本或错型值落库。
 fn validate_value(kind: AuditFieldKind, value: &AuditValue) -> Result<()> {
     let allowed = match (kind, value) {
         (AuditFieldKind::Code(values), AuditValue::Code { code, label }) => {
@@ -587,7 +487,7 @@ fn validate_value(kind: AuditFieldKind, value: &AuditValue) -> Result<()> {
     }
 }
 
-/// 稳定代码限制为有限字符集，避免自由文本充当动作或字段身份。
+// 将稳定动作、资源和字段代码限制在定长以内的 ASCII 字母、数字及 `._:-`，防止自由文本被当成身份。
 fn validate_code(code: &str) -> Result<()> {
     if code.is_empty()
         || code.len() > CODE_MAX_LEN
@@ -598,7 +498,7 @@ fn validate_code(code: &str) -> Result<()> {
     Ok(())
 }
 
-/// 展示标签必须是有限长度的中文，避免空白或控制字符。
+// 校验展示标签至少含一个中文字符、不超长、没有首尾空白或控制字符，保证事件摘要使用可读且安全的目录文案。
 fn validate_label(label: &str) -> Result<()> {
     if label.trim() != label
         || label.chars().count() > DISPLAY_MAX_LEN
@@ -609,7 +509,7 @@ fn validate_label(label: &str) -> Result<()> {
     validate_plain_text(label)
 }
 
-/// 快照只保留有限安全文本，空白表示当时未知。
+// 清理名称与关联号等事件快照，只保留限长且无控制字符的文本；空白表示事件发生时未知。
 fn normalized_snapshot(value: Option<String>, field: &str) -> Result<Option<String>> {
     normalized_snapshot_with_message(value, field, "审计字段不能包含控制字符")
 }
@@ -683,7 +583,7 @@ mod tests {
         }
     }
 
-    /// 构造器直接捕获当次鉴权名称，成功事件与独立尝试保留同一冻结快照。
+    // 验证构建上下文时冻结当次鉴权取得的操作人名称，成功事件和独立尝试均使用该快照。
     #[test]
     fn context_captures_current_actor_name_for_events_and_attempts() {
         let actor = actor().with_actor_name_snapshot(Some("  林晓燕  ".into())).unwrap();

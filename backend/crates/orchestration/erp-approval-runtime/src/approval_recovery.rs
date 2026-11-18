@@ -7,30 +7,15 @@ use tokio::time::sleep;
 
 /// 消费方保留审批命令的未知结果与回执竞争分类。
 pub trait ApprovalCommandFailure {
-    /// 判断原命令是否需要只读查证。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 回执竞争、瞬态事务或未知提交时为 `true`。
-    /// # 错误
-    /// 不返回错误。
+    /// 判断失败是否需要只读查证原审批命令；回执竞争、瞬态事务冲突或提交结果未知时继续查证，不据此重放写入。
     fn command_may_have_committed(&self) -> bool;
 }
 
 const RECOVERY_ATTEMPTS: usize = 8;
 
-/// 在失败写事务退出后，有界查证同一审批命令的已提交结果。
-///
-/// # 参数
-/// * `original_error` - 首次写事务错误；查证耗尽时原样返回。
-/// * `probe` - 一次只读查证；每次调用须建立独立执行上下文并核对原命令身份。
-///
-/// # 返回
-/// 首次查证命中时返回原命令的已提交结果。
-///
-/// # 错误
-/// 回执竞争、瞬态事务和提交结果未知继续查证，其他查证错误立即返回；
-/// 八次均未确认时返回首次错误。此策略不适用于所有查证错误均须保留未知提交的入口。
+/// 原写事务退出后，最多八次只读查证同一审批命令，命中即返回已提交结果；每次查证必须使用独立执行上下文并核对原命令身份。
+/// 未查到结果或遇到回执竞争、瞬态事务冲突、未知提交时继续查证，耗尽后返回首次写入错误；其他查证错误立即返回。
+/// 要求始终保留未知提交错误的入口不能使用此策略。
 pub async fn recover_approval_command<T, E: ApprovalCommandFailure, F, Fut>(
     original_error: E,
     probe: F,
@@ -42,7 +27,7 @@ where
     recover_with_wait(original_error, probe, |attempt| sleep(command_recovery_delay(attempt))).await
 }
 
-/// 执行同一有界查证状态机；等待注入仅替换计时，不替换结果和错误判定。
+// 按同一套规则处理未命中、可继续查证和终止错误；测试可注入等待函数覆盖退避行为，不改变结果判定。
 async fn recover_with_wait<T, E: ApprovalCommandFailure, F, Fut, W, Wait>(
     original_error: E,
     mut probe: F,

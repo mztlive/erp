@@ -19,14 +19,14 @@ use super::{WorkbenchFactsReader, WorkbenchObjectFact, WorkbenchObjectFactMap, o
 use crate::Result;
 
 impl WorkItemFactsReader {
-    /// 批量装载付款申请命令与任务授权共用的精确事实。
-    ///
-    /// # 参数
-    /// * `keys` / `facts` / `executor` - 当前对象集合、输出与原执行器。
-    /// # 返回
-    /// 写入申请身份、申请人和提交版本约束。
-    /// # 错误
-    /// 仓储失败或版本不能证明时拒绝。
+    // 读取付款申请工作台时，批量装载付款申请命令与任务授权共用的精确事实。
+    //
+    // 调用参数：
+    // * `keys` / `facts` / `executor` - 当前对象集合、输出与原执行器。
+    //
+    // 写入申请身份、申请人和提交版本约束。
+    //
+    // 仓储失败或版本不能证明时拒绝。
     pub(in crate::workbench) async fn load_purchase_payment_request_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -49,14 +49,14 @@ impl WorkItemFactsReader {
 }
 
 impl WorkbenchFactsReader<'_> {
-    /// 工作台直接显示希望付款日、主体、脱敏账户和逐采购批准金额。
-    ///
-    /// # 参数
-    /// * `keys` / `facts` / `executor` - 本批对象、输出和原读取事务。
-    /// # 返回
-    /// 写入资金申请摘要；审批队列另由不可变提交快照覆盖。
-    /// # 错误
-    /// 申请或主体版本读取失败时拒绝。
+    // 读取付款申请工作台时，工作台直接显示希望付款日、主体、脱敏账户和逐采购批准金额。
+    //
+    // 调用参数：
+    // * `keys` / `facts` / `executor` - 本批对象、输出和原读取事务。
+    //
+    // 写入资金申请摘要；审批队列另由不可变提交快照覆盖。
+    //
+    // 申请或主体版本读取失败时拒绝。
     pub(super) async fn load_purchase_payment_request_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -87,7 +87,7 @@ impl WorkbenchFactsReader<'_> {
     }
 }
 
-/// 历史任务仅引用当前付款申请已冻结的实例及提交版本，不读取当前草稿替代历史。
+// 处理付款申请工作台的版本事实时，历史任务仅引用当前付款申请已冻结的实例及提交版本，不读取当前草稿替代历史。
 async fn request_history(
     db: &mongodb::Database,
     ids: &[String],

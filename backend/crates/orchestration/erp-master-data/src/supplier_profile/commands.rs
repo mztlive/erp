@@ -19,7 +19,7 @@ pub(super) enum SupplierCommandTarget {
 }
 
 impl SupplierCommandTarget {
-    /// 原命令操作类型不得由回执内容选择。
+    // 原命令操作类型不得由回执内容选择。
     fn operation(&self) -> &str {
         match self {
             Self::Create(_) => "create",
@@ -27,7 +27,7 @@ impl SupplierCommandTarget {
         }
     }
 
-    /// 创建未分配供应商 ID，修订必须校验原请求对象。
+    // 创建未分配供应商 ID，修订必须校验原请求对象。
     fn supplier_id(&self) -> Option<&str> {
         match self {
             Self::Create(_) => None,
@@ -35,7 +35,7 @@ impl SupplierCommandTarget {
         }
     }
 
-    /// 将原请求与同快照组织事实映射为既有写入口的权限及目标。
+    // 将原请求与同快照组织事实映射为既有写入口的权限及目标。
     fn authorization(&self, org: Option<String>) -> Result<(Permission, AccessTarget)> {
         match self {
             Self::Create(maintainer) => Ok((
@@ -56,11 +56,11 @@ impl SupplierCommandTarget {
 
 impl SupplierProfileProcess {
     /// 在同一快照检查资料详情功能资格与关联供应商详情范围后查询命令结果。
-    /// # 参数
+    ///
     /// idempotency_key 为命令键，actor 为当前操作人。
-    /// # 返回
+    ///
     /// 已授权的稳定结果，缺少记录时返回 None。
-    /// # 错误
+    ///
     /// 详情功能资格、关联供应商详情范围或数据库读取失败时拒绝。
     pub async fn command_result(
         &self,
@@ -78,7 +78,7 @@ impl SupplierProfileProcess {
             .await
     }
 
-    /// 独立结果查询先核对既有详情功能资格，再核对回执关联供应商范围。
+    // 独立结果查询先核对既有详情功能资格，再核对回执关联供应商范围。
     async fn command_result_snapshot(
         &self,
         key: &str,
@@ -94,7 +94,7 @@ impl SupplierProfileProcess {
         self.command_result_view(command, actor, executor).await
     }
 
-    /// 回执必须通过关联供应商的当前详情授权后才映射结果。
+    // 回执必须通过关联供应商的当前详情授权后才映射结果。
     async fn command_result_view(
         &self,
         command: Option<SupplierProfileCommand>,
@@ -109,13 +109,13 @@ impl SupplierProfileProcess {
         Ok(Some(command_view(command)))
     }
 
-    /// 导入重试先按原创建命令授权，再读取同快照回执。
-    /// # 参数
-    /// key 为导入命令键，actor 为原创建候选的维护人及当前操作人。
-    /// # 返回
-    /// 导入候选和回执供应商的维护候选均通过原创建命令授权后返回稳定结果，否则返回 None。
-    /// # 错误
-    /// 原创建候选授权、操作类型核对或回执读取失败时拒绝。
+    // 导入重试先按原创建命令授权，再读取同快照回执。
+    //
+    // key 为导入命令键，actor 为原创建候选的维护人及当前操作人。
+    //
+    // 导入候选和回执供应商的维护候选均通过原创建命令授权后返回稳定结果，否则返回 None。
+    //
+    // 原创建候选授权、操作类型核对或回执读取失败时拒绝。
     pub(super) async fn imported_result(
         &self,
         key: &str,
@@ -145,7 +145,7 @@ impl SupplierProfileProcess {
             .await
     }
 
-    /// 导入键按名称共享；禁止用当前导入人的候选资格读取其他责任范围的既有结果。
+    // 导入键按名称共享；禁止用当前导入人的候选资格读取其他责任范围的既有结果。
     async fn authorize_imported_supplier(
         &self,
         supplier_id: &str,
@@ -162,7 +162,7 @@ impl SupplierProfileProcess {
         self.authorize_command(&target, actor, executor).await
     }
 
-    /// 对原命令使用完整授权服务；候选不得替换成回执关联对象。
+    // 对原命令使用完整授权服务；候选不得替换成回执关联对象。
     async fn command_qualified(
         &self,
         target: &SupplierCommandTarget,
@@ -174,7 +174,7 @@ impl SupplierProfileProcess {
         Ok(self.authorization.rbac.require(actor, &permission, target, executor).await?)
     }
 
-    /// 命令记录必须加入当前事务。
+    // 命令记录必须加入当前事务。
     async fn command_record(
         &self,
         key: &str,
@@ -183,7 +183,7 @@ impl SupplierProfileProcess {
         Ok(self.db.supplier().profile_command(key, executor).await?)
     }
 
-    /// 原创建维护人与其当前有效组织、原修订供应商均在命令读取前授权。
+    // 原创建维护人与其当前有效组织、原修订供应商均在命令读取前授权。
     async fn authorize_command(
         &self,
         target: &SupplierCommandTarget,
@@ -201,13 +201,13 @@ impl SupplierProfileProcess {
         self.command_qualified(target, org, actor, executor).await
     }
 
-    /// 同执行器核对原请求并授权回放，不执行写入。
-    /// # 参数
-    /// key、fingerprint 为原请求的幂等身份，target 为原写命令目标；actor、executor 为当前身份及快照。
-    /// # 返回
-    /// 原命令授权通过且已成功时返回稳定结果，否则返回 None。
-    /// # 错误
-    /// 原命令授权失败、同键异参或读取失败时拒绝。
+    // 同执行器核对原请求并授权回放，不执行写入。
+    //
+    // key、fingerprint 为原请求的幂等身份，target 为原写命令目标；actor、executor 为当前身份及快照。
+    //
+    // 原命令授权通过且已成功时返回稳定结果，否则返回 None。
+    //
+    // 原命令授权失败、同键异参或读取失败时拒绝。
     pub(super) async fn replay_command(
         &self,
         key: &str,

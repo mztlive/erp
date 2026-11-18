@@ -19,64 +19,23 @@ use crate::error::Result;
 pub trait PendingAttachmentBatch: Send + Sync {
     /// 把临时文件引用替换为本批次的正式资产 ID。
     ///
-    /// # 参数
-    /// * `id` - 待解析的文件 ID；属于本批次临时引用时就地改为正式 ID
-    /// * `used` - 本命令已消费的临时引用集合
+    /// 完成临时引用替换时返回 `true`；该 ID 不是临时引用时返回 `false`。临时引用无效或不能消费时返回 `erp_core::Error`。
     ///
-    /// # 返回
-    /// 完成临时引用替换时返回 `true`；该 ID 不是临时引用时返回 `false`。
-    ///
-    /// # 错误
-    /// 临时引用无效或不能消费时返回 `erp_core::Error`。
+    /// `id` 为待解析的文件 ID；属于本批次临时引用时就地改为正式 ID。
     fn resolve_id(&self, id: &mut FileAssetId, used: &mut HashSet<String>) -> erp_core::Result<bool>;
 
     /// 拒绝业务命令未消费的已上传文件。
     ///
-    /// # 参数
-    /// * `used` - 命令实际消费的临时引用
-    ///
-    /// # 返回
-    /// 没有遗留文件时无返回值。
-    ///
-    /// # 错误
-    /// 存在未消费的上传文件时返回 `erp_core::Error`。
+    /// 没有遗留文件时无返回值。存在未消费的上传文件时返回 `erp_core::Error`。
     fn ensure_all_used(&self, used: &HashSet<String>) -> erp_core::Result<()>;
 
-    /// 判断正式资产 ID 是否属于本批次。
-    ///
-    /// # 参数
-    /// * `id` - 正式资产 ID
-    ///
-    /// # 返回
-    /// 属于本批次时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 判断正式资产 ID 是否属于本批次。属于本批次时返回 `true`。
     fn contains_id(&self, id: &FileAssetId) -> bool;
 
-    /// 在调用方选定的执行器上持久化已准备的文件元数据。
-    ///
-    /// # 参数
-    /// * `db` - 目标数据库
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 写入完成时无返回值。
-    ///
-    /// # 错误
-    /// 持久化失败时返回商品领域错误。
+    /// 在调用方选定的执行器上持久化已准备的文件元数据。持久化失败时返回商品领域错误。
     async fn persist(&self, db: &Database, executor: &mut dyn Executor) -> Result<()>;
 
-    /// 判断本批次是否没有待持久化的文件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 没有待写入文件时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 判断本批次是否没有待持久化的文件。没有待写入文件时返回 `true`。
     fn is_empty(&self) -> bool;
 }
 

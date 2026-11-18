@@ -13,16 +13,7 @@ use crate::dto::purchase_order::SavePurchaseOrderLine;
 use crate::entity::purchase_order::{PaymentSubjectSnapshot, PurchaseLineType, SalesProcurementCoverage};
 use crate::{Error, Result};
 
-/// 移除数量填为零的商品行，表示刷新时不再采购该行。
-///
-/// # 参数
-/// * `lines` - 已合并补丁的完整请求行
-///
-/// # 返回
-/// 返回保留的请求行；非商品行与数量无法解析的行原样保留，交由后续校验报错。
-///
-/// # 错误
-/// 无。
+/// 移除数量填为零的商品行，表示刷新时不再采购该行。返回保留的请求行；非商品行与数量无法解析的行原样保留，交由后续校验报错。
 pub fn drop_cleared_item_lines(lines: Vec<SavePurchaseOrderLine>) -> Vec<SavePurchaseOrderLine> {
     lines
         .into_iter()
@@ -37,17 +28,9 @@ pub fn drop_cleared_item_lines(lines: Vec<SavePurchaseOrderLine>) -> Vec<SavePur
         .collect()
 }
 
-/// 把保留的商品行绑定到当前销售版本行。
+/// 把保留的商品行绑定到当前销售版本行。当前版本缺少对应销售行时返回冲突。
 ///
-/// # 参数
-/// * `lines` - 已通过刷新校验的请求行
-/// * `coverage` - 当前销售版本覆盖
-///
-/// # 返回
-/// 绑定成功时返回 `Ok(())`。
-///
-/// # 错误
-/// 当前版本缺少对应销售行时返回冲突。
+/// `coverage` 为当前销售版本覆盖。
 pub fn rebind_draft_lines(
     lines: &mut [SavePurchaseOrderLine],
     coverage: &SalesProcurementCoverage,
@@ -66,15 +49,7 @@ pub fn rebind_draft_lines(
 
 /// 以当前销售版本替换付款主体中的销售来源。
 ///
-/// # 参数
-/// * `subject` - 原草稿付款主体
-/// * `revision_id` - 当前销售版本
-///
-/// # 返回
-/// 返回我方主体不变、销售版本已更新的付款主体。
-///
-/// # 错误
-/// 主体字段非法时返回校验错误。
+/// 返回我方主体不变、销售版本已更新的付款主体。主体字段非法时返回校验错误。
 pub fn rebased_payment_subject(
     subject: &PaymentSubjectSnapshot,
     revision_id: &str,
@@ -188,7 +163,7 @@ mod tests {
         }
     }
 
-    /// 数量填零的商品行被移除，其余行保留。
+    // 数量填零的商品行被移除，其余行保留。
     #[test]
     fn cleared_item_lines_are_dropped() {
         let kept = drop_cleared_item_lines(vec![request("0", None, None), request("3", None, None)]);
@@ -196,7 +171,7 @@ mod tests {
         assert_eq!(kept[0].quantity.as_deref(), Some("3"));
     }
 
-    /// 刷新后商品行指向当前销售版本行。
+    // 刷新后商品行指向当前销售版本行。
     #[test]
     fn rebind_points_lines_to_current_revision() {
         let mut lines = vec![request("3", Some("2026-10-19"), Some(vec![address("张三", "3")]))];
@@ -204,7 +179,7 @@ mod tests {
         assert_eq!(lines[0].sales_order_revision_line_id.as_deref(), Some("cur-1"));
     }
 
-    /// 当前版本已移除来源行时拒绝刷新；交期与地址留给保存流程统一校验。
+    // 当前版本已移除来源行时拒绝刷新；交期与地址留给保存流程统一校验。
     #[test]
     fn rebind_rejects_removed_source_line() {
         let mut removed = vec![request("3", None, None)];
@@ -215,7 +190,7 @@ mod tests {
         assert!(rebind_draft_lines(&mut late, &coverage(vec![address("李四", "8")])).is_ok());
     }
 
-    /// 付款主体只替换销售版本。
+    // 付款主体只替换销售版本。
     #[test]
     fn payment_subject_keeps_party_and_updates_revision() {
         let subject = PaymentSubjectSnapshot::new(

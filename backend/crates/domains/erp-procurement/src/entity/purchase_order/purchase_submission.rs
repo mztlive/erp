@@ -161,18 +161,12 @@ pub struct PurchaseOrderSubmission {
 impl PurchaseOrderSubmission {
     /// 创建采购提交。
     ///
-    /// 完成 `submission_no` 校验与规范化，并强制表头金额守恒
-    /// （`gross = net + tax`，§4.2 铁律 4；行汇总只汇总已舍入的行金额，由 P3 提供）。
+    /// 完成 `submission_no` 校验与规范化，并强制表头金额守恒（`gross = net + tax`，§4.2 铁律 4；行汇总只汇总已舍入的行金额，由
+    /// P3 提供）。
     ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::PurchaseOrderSubmissionId`）
-    /// * `data` - 创建数据
+    /// 返回新建的提交实体（初始状态 `Draft`）。提交序号为空/超长，或表头金额三元组不守恒时返回错误。
     ///
-    /// # 返回
-    /// 返回新建的提交实体（初始状态 `Draft`）。
-    ///
-    /// # 错误
-    /// 提交序号为空/超长，或表头金额三元组不守恒时返回错误。
+    /// `id` 为实体主键（`erp_core::ids::PurchaseOrderSubmissionId`）。
     pub fn new(id: PurchaseOrderSubmissionId, data: PurchaseOrderSubmissionData) -> Result<Self> {
         let submission_no = normalize_required_text(
             data.submission_no,
@@ -210,17 +204,11 @@ impl PurchaseOrderSubmission {
 
     /// 计算同一采购单的下一个正式提交序号。
     ///
-    /// 仅识别 `SUB-{n}` 形态的历史提交，忽略草稿或旧格式编号；新编号固定为
-    /// 六位十进制序号。
+    /// 仅识别 `SUB-{n}` 形态的历史提交，忽略草稿或旧格式编号；新编号固定为六位十进制序号。
     ///
-    /// # 参数
-    /// * `existing` - 同一采购单的既有提交
+    /// 返回下一个 `SUB-000001` 形态的提交序号。最大合法序号已经达到 `u32::MAX` 时返回领域错误。
     ///
-    /// # 返回
-    /// 返回下一个 `SUB-000001` 形态的提交序号。
-    ///
-    /// # 错误
-    /// 最大合法序号已经达到 `u32::MAX` 时返回领域错误。
+    /// `existing` 为同一采购单的既有提交。
     pub fn next_submission_no(existing: &[Self]) -> Result<String> {
         let max_no = existing.iter().filter_map(Self::formal_sequence).max().unwrap_or(0);
         let next = max_no.checked_add(1).ok_or_else(|| Error::from("采购提交序号溢出"))?;
@@ -229,35 +217,20 @@ impl PurchaseOrderSubmission {
 
     /// 返回正式提交号中的递增序号。
     ///
-    /// 仅识别 `SUB-{n}`；`DRAFT-*` 草稿和其它旧格式不属于正式提交，返回
-    /// `None`。该序号用于区分首次提交与撤回后的再次提交，不表达审批轮次。
+    /// 仅识别 `SUB-{n}`；`DRAFT-*` 草稿和其它旧格式不属于正式提交，返回`None`。该序号用于区分首次提交与撤回后的再次提交，不表达审批轮次。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 正式提交号中的 `u32` 序号，或 `None`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn formal_sequence(&self) -> Option<u32> {
         parse_sequence(&self.submission_no, "SUB-")
     }
 
     /// 从可编辑草稿派生并冻结一个新的正式提交。
     ///
-    /// # 参数
-    /// * `id` - 新正式提交稳定身份
-    /// * `submission_no` - 聚合内下一个正式提交序号
-    /// * `draft` - 当前可编辑草稿提交
-    /// * `submitted_at` - 冻结时间
-    /// * `submitted_by` - 提交人
+    /// 返回内容与草稿一致、状态为待审核的新提交。草稿状态非法、提交序号非法、金额不守恒或提交人非法时返回领域错误。
     ///
-    /// # 返回
-    /// 返回内容与草稿一致、状态为待审核的新提交。
-    ///
-    /// # 错误
-    /// 草稿状态非法、提交序号非法、金额不守恒或提交人非法时返回领域错误。
+    /// - `id`：新正式提交稳定身份。
+    /// - `draft`：当前可编辑草稿提交。
+    /// - `submitted_at`：冻结时间。
     pub fn freeze_from_draft(
         id: PurchaseOrderSubmissionId,
         submission_no: String,
@@ -290,16 +263,8 @@ impl PurchaseOrderSubmission {
 
     /// 更新提交内容。
     ///
-    /// 只允许在 `Draft` 状态编辑（§6.6：进入待审核时头、行冻结）；
-    /// `submission_no` 与拆单维度字段创建后不可修改。
+    /// 只允许在 `Draft` 状态编辑（§6.6：进入待审核时头、行冻结）；`submission_no` 与拆单维度字段创建后不可修改。
     ///
-    /// # 参数
-    /// * `update` - 更新数据
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 状态不是草稿时返回错误。
     pub fn update(&mut self, update: PurchaseOrderSubmissionUpdate) -> Result<()> {
         self.ensure_draft()?;
@@ -319,14 +284,6 @@ impl PurchaseOrderSubmission {
     ///
     /// 从草稿进入待审核并写入提交审计；提交后头行冻结。
     ///
-    /// # 参数
-    /// * `submitted_at` - 提交时间
-    /// * `submitted_by` - 提交人
-    ///
-    /// # 返回
-    /// 提交成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 状态不是草稿，或提交人为空、超长时返回错误。
     pub fn submit(&mut self, submitted_at: Instant, submitted_by: impl Into<String>) -> Result<()> {
         self.ensure_draft()?;
@@ -345,15 +302,6 @@ impl PurchaseOrderSubmission {
     ///
     /// 只能对待审核提交执行；通过 → `Approved`，驳回 → `Rejected`。
     ///
-    /// # 参数
-    /// * `decision` - 强类型审核结论
-    /// * `reviewed_at` - 审核时间
-    /// * `reviewed_by` - 审核人
-    ///
-    /// # 返回
-    /// 记录成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 状态不是待审核，审核人或驳回原因代码为空或超长，或审核说明超长时返回错误。
     pub fn record_review(
         &mut self,
@@ -395,14 +343,7 @@ impl PurchaseOrderSubmission {
 
     /// 校验提交仍处于待审核状态。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 待审核状态返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 提交已处理、失效或仍是草稿时返回领域错误。
+    /// 待审核状态返回 `Ok(())`。提交已处理、失效或仍是草稿时返回领域错误。
     pub fn ensure_pending(&self) -> Result<()> {
         if self.status != SubmissionStatus::Pending {
             return Err(Error::from("提交已审核或已失效，请勿重复生效"));
@@ -410,46 +351,26 @@ impl PurchaseOrderSubmission {
         Ok(())
     }
 
-    /// 判断审核人与提交人是否满足职责分离。
+    /// 判断审核人与提交人是否满足职责分离。审核人与已记录提交人不同时返回 `true`；未记录提交人也返回 `true`。
     ///
-    /// # 参数
-    /// * `reviewer_id` - 当前审核人账号 ID
-    ///
-    /// # 返回
-    /// 审核人与已记录提交人不同时返回 `true`；未记录提交人也返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// `reviewer_id` 为当前审核人账号 ID。
     pub fn reviewer_is_separated(&self, reviewer_id: &str) -> bool {
         self.submitted_by.as_deref() != Some(reviewer_id)
     }
 
-    /// 返回当前提交在对象中心使用的内容来源代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 草稿返回 `DRAFT`，其他不可变提交状态返回 `SUBMISSION`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 返回当前提交在对象中心使用的内容来源代码。草稿返回 `DRAFT`，其他不可变提交状态返回 `SUBMISSION`。
     pub fn content_source(&self) -> &'static str {
         if self.status == SubmissionStatus::Draft { "DRAFT" } else { "SUBMISSION" }
     }
 
     /// 校验提交表头金额等于冻结明细汇总。
     ///
-    /// # 参数
-    /// * `lines` - 属于本提交的冻结明细
+    /// 三项表头金额均与逐行汇总一致时返回 `Ok(())`。任一行不属于本提交，或含税、不含税、税额任一汇总不一致时返回领域错误。
     ///
-    /// # 返回
-    /// 三项表头金额均与逐行汇总一致时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 任一行不属于本提交，或含税、不含税、税额任一汇总不一致时返回领域错误。
+    /// `lines` 为属于本提交的冻结明细。
     ///
     /// # Panics
+    ///
     /// 金额零值无法构造时 panic；零金额是合法金额，panic 只表示金额类型不变量被破坏。
     pub fn ensure_line_totals(&self, lines: &[PurchaseOrderSubmissionLine]) -> Result<()> {
         let mut gross = Amount::try_from(rust_decimal::Decimal::ZERO).expect("零金额合法");
@@ -472,13 +393,6 @@ impl PurchaseOrderSubmission {
 
     /// 标记因重新提交失效（§6.6：修改内容必须新建提交并使旧复核失效）。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 标记成功返回 `Ok(())`。
-    ///
-    /// # 错误
     /// 状态已是 `Approved` 时返回领域错误。本方法不检查是否已经形成下游正式事实。
     pub fn mark_superseded(&mut self) -> Result<()> {
         if self.status == SubmissionStatus::Approved {
@@ -490,14 +404,7 @@ impl PurchaseOrderSubmission {
 
     /// 校验当前状态为草稿。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 草稿状态返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 非草稿状态时返回错误。
+    /// 草稿状态返回 `Ok(())`。非草稿状态时返回错误。
     pub fn ensure_draft(&self) -> Result<()> {
         if self.status != SubmissionStatus::Draft {
             return Err(Error::from("只有草稿状态的提交可以编辑"));
@@ -506,14 +413,7 @@ impl PurchaseOrderSubmission {
     }
 }
 
-/// 解析带固定前缀的十进制序号。
-///
-/// # 参数
-/// * `value` - 完整编号
-/// * `prefix` - 固定编号前缀
-///
-/// # 返回
-/// 编号匹配前缀且后缀可解析为 `u32` 时返回序号，否则返回 `None`。
+// 解析带固定前缀的十进制序号。编号匹配前缀且后缀可解析为 `u32` 时返回序号，否则返回 `None`。
 fn parse_sequence(value: &str, prefix: &str) -> Option<u32> {
     value.strip_prefix(prefix)?.parse().ok()
 }

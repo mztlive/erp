@@ -5,13 +5,14 @@ use super::*;
 use crate::dto::party::{PARTY_REVISION_SORT_FIELDS, PartyListQuery, normalize_paging};
 
 impl PartyService {
-    /// 证明列表读取资格后规范化筛选条件。
-    /// # 参数
-    /// actor 为读取账号，params 为原始筛选，executor 为原读取快照。
-    /// # 返回
-    /// 通过授权和输入校验的列表条件。
-    /// # 错误
-    /// 缺少资格、非快照或筛选非法时拒绝。
+    // 证明列表读取资格后规范化筛选条件。
+    //
+    // # 参数
+    // actor 为读取账号，params 为原始筛选，executor 为原读取快照。
+    //
+    // 通过授权和输入校验的列表条件。
+    //
+    // 缺少资格、非快照或筛选非法时拒绝。
     pub(super) async fn list_query(
         &self,
         actor: &AuditActor,
@@ -23,13 +24,14 @@ impl PartyService {
         params.normalized()
     }
 
-    /// 证明详情读取资格后返回仓储使用的主体编号。
-    /// # 参数
-    /// actor 为读取账号，id 为目标主体，executor 为原读取快照。
-    /// # 返回
-    /// 授权通过后返回详情仓储使用的编号。
-    /// # 错误
-    /// 缺少资格或非快照时拒绝。
+    // 证明详情读取资格后返回仓储使用的主体编号。
+    //
+    // # 参数
+    // actor 为读取账号，id 为目标主体，executor 为原读取快照。
+    //
+    // 授权通过后返回详情仓储使用的编号。
+    //
+    // 缺少资格或非快照时拒绝。
     pub(super) async fn detail_id(
         &self,
         actor: &AuditActor,
@@ -40,13 +42,14 @@ impl PartyService {
         Ok(PartyId::new(id))
     }
 
-    /// 证明修订读取资格后构造分页筛选。
-    /// # 参数
-    /// actor 为读取账号，party_id 为目标主体，params 为原始筛选，executor 为原读取快照。
-    /// # 返回
-    /// 通过授权和输入校验的修订分页条件。
-    /// # 错误
-    /// 缺少资格、非快照或筛选非法时拒绝。
+    // 证明修订读取资格后构造分页筛选。
+    //
+    // # 参数
+    // actor 为读取账号，party_id 为目标主体，params 为原始筛选，executor 为原读取快照。
+    //
+    // 通过授权和输入校验的修订分页条件。
+    //
+    // 缺少资格、非快照或筛选非法时拒绝。
     pub(super) async fn revision_filter(
         &self,
         actor: &AuditActor,

@@ -23,16 +23,9 @@ pub struct DefinitionManagementVisibility {
 
 impl DefinitionManagementVisibility {
     /// 由已判定的类型级权限构造可见范围。
-    ///
-    /// # 参数
-    /// * `definition_admin_types` - 具备定义管理权的类型
-    /// * `runtime_admin_types` - 具备运行管理权的类型
-    ///
-    /// # 返回
     /// 返回类型级可见范围，不含单据 对象范围。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// `definition_admin_types`：具备定义管理权的类型；`runtime_admin_types`：具备运行管理权的类型。
     pub fn from_type_permissions(
         definition_admin_types: Vec<DocumentType>,
         runtime_admin_types: Vec<DocumentType>,
@@ -41,57 +34,25 @@ impl DefinitionManagementVisibility {
     }
 
     /// 判断是否具备该类型的定义管理权。
-    ///
-    /// # 参数
-    /// * `document_type` - 固定单据类型
-    ///
-    /// # 返回
     /// 拥有 `definition_admin_permission` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn can_define(&self, document_type: DocumentType) -> bool {
         self.definition_admin_types.contains(&document_type)
     }
 
     /// 判断是否可读取该类型定义版本与详情。
-    ///
-    /// # 参数
-    /// * `document_type` - 固定单据类型
-    ///
-    /// # 返回
     /// 拥有定义管理或运行管理权限时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn can_read_detail(&self, document_type: DocumentType) -> bool {
         self.can_define(document_type) || self.runtime_admin_types.contains(&document_type)
     }
 
     /// 返回具备定义管理权的类型切片。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回类型级管理范围。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn definition_admin_types(&self) -> &[DocumentType] {
         &self.definition_admin_types
     }
 
     /// 返回具备运行管理权的类型切片。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回类型级运行管理范围。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn runtime_admin_types(&self) -> &[DocumentType] {
         &self.runtime_admin_types
     }
@@ -104,15 +65,11 @@ impl DefinitionManagementVisibility {
 /// 账号绑定的停用角色即使仍残留 Casbin `g/p` 事实也不参与授权；必须由
 /// 同一个仍启用的角色实际授予目标类型权限。
 ///
-/// # 参数
-/// * `identity_service` - 同一应用注入的共享身份与权限服务。
-/// * `actor` - 已认证操作人
-///
-/// # 返回
 /// 返回仅由启用且实际授权角色形成的类型级可见范围。
 ///
-/// # 错误
 /// 角色、政策读取或 RBAC 判定失败时返回服务错误。
+///
+/// `identity_service`：同一应用注入的共享身份与权限服务。
 pub async fn definition_management_visibility(
     authorization: &AuthorizationService,
     db: &Database,
@@ -130,17 +87,11 @@ pub async fn definition_management_visibility(
 }
 
 /// 在调用方执行器的同一数据库快照内计算定义与运行管理的类型级可见范围。
-///
-/// # 参数
-/// * `identity_service` - 同一应用注入的共享身份与权限服务。
-/// * `actor` - 已认证操作人
-/// * `executor` - 调用方持有的事务或非事务执行器
-///
-/// # 返回
 /// 返回仅由事务快照内仍启用角色形成的类型级可见范围。
 ///
-/// # 错误
 /// 角色、政策读取或 RBAC 判定失败时返回服务错误。
+///
+/// `executor`：调用方持有的事务或非事务执行器。
 pub async fn definition_management_visibility_with_executor(
     authorization: &AuthorizationService,
     _db: &Database,
@@ -178,13 +129,10 @@ pub async fn definition_management_visibility_with_executor(
     Ok(visibility_from_enforced_permissions(enforced))
 }
 
-/// 按各类型 enforce 结果构造可见范围，不把系统管理员角色当成全部类型管理权。
-///
-/// # 参数
-/// * `rows` - `(单据类型, 定义管理, 运行管理)` 判定结果
-///
-/// # 返回
-/// 返回仅包含已判定为真的类型集合。
+// 按各类型 enforce 结果构造可见范围，不把系统管理员角色当成全部类型管理权。
+// 返回仅包含已判定为真的类型集合。
+//
+// `rows`：`(单据类型, 定义管理, 运行管理)` 判定结果。
 fn visibility_from_enforced_permissions(
     rows: impl IntoIterator<Item = (DocumentType, bool, bool)>,
 ) -> DefinitionManagementVisibility {
@@ -201,15 +149,12 @@ fn visibility_from_enforced_permissions(
     DefinitionManagementVisibility::from_type_permissions(definition_admin_types, runtime_admin_types)
 }
 
-/// 校验候选审批人同一启用角色同时授予审批读取与决定能力。
-///
-/// # 参数
-/// * `identity_service` - 同一应用注入的共享身份与权限服务。
-/// * `identity_service` / `actor` / `executor` - 当前授权事实及事务快照。
-/// # 返回
+/// 核验候选审批人同一启用角色同时授予审批读取与决定能力。
 /// 资格成立时返回 true；该结果不授予任何具体单据读取权。
-/// # 错误
+///
 /// 账号或策略读取失败时拒绝。
+///
+/// `identity_service`：同一应用注入的共享身份与权限服务；`identity_service` / `actor` / `executor`：当前授权事实及事务快照。
 pub async fn approval_participant_permissions_with_executor(
     authorization: &AuthorizationService,
     db: &Database,
@@ -223,13 +168,12 @@ pub async fn approval_participant_permissions_with_executor(
     ))
 }
 
-/// 统一读取审批资格，保留账号失效与权限不足的区别供各用例处理。
-/// # 参数
-/// identity_service 为共享身份服务，actor 为待核验审批人，executor 沿用原执行器。
-/// # 返回
-/// 返回账号失效、同角色权限不足或携带账号摘要的合格结果。
-/// # 错误
-/// 身份、策略和数据库错误保持原类别。
+// 统一读取审批资格，保留账号失效与权限不足的区别供各用例处理。
+// 返回账号失效、同角色权限不足或携带账号摘要的合格结果。
+//
+// 身份、策略和数据库错误保持原类别。
+//
+// identity_service 为共享身份服务，actor 为待核验审批人，executor 沿用原执行器。
 pub(super) async fn approver_qualification(
     authorization: &AuthorizationService,
     _db: &Database,
@@ -246,14 +190,13 @@ pub(super) async fn approver_qualification(
 }
 
 /// 使用固定管理入口检查真实审批实例、冻结类型和完整业务来源。
-/// # 参数
+/// identity 固定的功能资格、实际类型管理和来源读取条件均成立时成功。
+///
+/// 缺少资格、冻结事实、完整来源或执行边界时拒绝。
+///
 /// authorization 为共享服务；actor 为当前管理者；permission 为固定管理操作。
 /// document_type 为调用方已加载的类型上下文；instance_id 必须是真实审批实例主键。
 /// executor 为本次读取阶段或原写事务。
-/// # 返回
-/// identity 固定的功能资格、实际类型管理和来源读取条件均成立时成功。
-/// # 错误
-/// 缺少资格、冻结事实、完整来源或执行边界时拒绝。
 pub async fn require_approval_management_with_executor(
     authorization: &AuthorizationService,
     actor: &AuditActor,
@@ -273,14 +216,13 @@ pub(crate) struct ApprovalBindingUpgradeAuthorization {
     pub(crate) actor_role: String,
 }
 
-/// 在原事务授权未启动单据的升级候选，并选择定义管理角色作为审计来源。
-/// # 参数
-/// authorization 为共享服务，actor 为当前管理者，facts 为拥有领域读取的强业务事实。
-/// executor 为同一原业务事务。
-/// # 返回
-/// 完整授权通过后返回定义管理角色；角色只用于审计。
-/// # 错误
-/// 资格、真实来源、强主体或审计角色缺失时拒绝。
+// 在原事务授权未启动单据的升级候选，并选择定义管理角色作为审计来源。
+// 完整授权通过后返回定义管理角色；角色只用于审计。
+//
+// 资格、真实来源、强主体或审计角色缺失时拒绝。
+//
+// authorization 为共享服务，actor 为当前管理者，facts 为拥有领域读取的强业务事实。
+// executor 为同一原业务事务。
 pub(crate) async fn approval_binding_upgrade_authorization_with_executor(
     authorization: &AuthorizationService,
     actor: &AuditActor,
@@ -305,7 +247,7 @@ pub(crate) async fn approval_binding_upgrade_authorization_with_executor(
     Ok(ApprovalBindingUpgradeAuthorization { actor_role })
 }
 
-/// 使用强业务来源构造升级候选，不把未启动的业务单据伪装成审批实例。
+// 为未启动审批的单据绑定升级构造强业务候选；不存在运行实例时不捏造实例身份。
 fn binding_upgrade_target(facts: &ApprovalUpgradeSubjectFacts) -> Result<AccessTarget> {
     let ids = ResourceTargets::new(&[facts.source_id.as_str()])?;
     let candidate = ObjectFacts {
@@ -342,7 +284,7 @@ mod tests {
         assert!(!account("guessed-user", true).matches_actor(&actor));
     }
 
-    /// 类型级可见范围只认已登记权限，不把系统管理员角色当成全部类型管理权。
+    // 验证：类型级可见范围只认已登记权限，不把系统管理员角色当成全部类型管理权。
     #[test]
     fn definition_visibility_is_type_level_not_role_name() {
         let visibility = super::visibility_from_enforced_permissions([

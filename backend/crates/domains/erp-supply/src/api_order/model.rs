@@ -91,12 +91,8 @@ pub struct ApiOrderExecution {
 
 impl ApiOrderExecution {
     /// 判断是否存在只能调查原结果的外部订单动作。
-    /// # 参数
-    /// 无；仅检查持久化动作和订单证据，不接受人工下单成功声明。
-    /// # 返回
     /// 已登记创建、确认或有订单关系证据时允许唤醒查询。
-    /// # 错误
-    /// 不返回错误。
+    /// 仅检查持久化动作和订单证据，不接受人工下单成功声明。
     pub fn original_result_query_allowed(&self) -> bool {
         self.action_hashes.contains_key("create")
             || self.order_tree.is_some()
@@ -115,11 +111,7 @@ impl ApiOrderExecution {
     }
 
     /// 唤醒已经持久化的原结果调查，不推进尚未发送的写步骤。
-    /// # 参数
-    /// `now` 为请求时刻。
-    /// # 返回
     /// 仅未知创建、确认、通知及订单发现步骤提前查询；原动作与阶段保持不变。
-    /// # 错误
     /// 没有原订单证据时拒绝，不建立新的订单或确认意图。
     pub fn wake_original_result_query(&mut self, now: Instant) -> Result<()> {
         if !self.original_result_query_allowed() {
@@ -138,12 +130,9 @@ impl ApiOrderExecution {
         Ok(())
     }
     /// 为正式采购建立尚未发送任何外部请求的执行意图。
-    /// # 参数
-    /// 身份由正式采购版本、连接与地址分组决定；明细来自冻结采购行。
-    /// # 返回
     /// 待执行记录，创建后由后台逐步处理。
-    /// # 错误
-    /// 不返回错误；调用方须先核验正式采购事实。
+    /// 调用方须先核验正式采购事实。
+    /// 身份由正式采购版本、连接与地址分组决定；明细来自冻结采购行。
     pub fn queued(
         id: String,
         purchase_order_id: String,
@@ -182,24 +171,17 @@ impl ApiOrderExecution {
     }
 
     /// 标记等待人工补充或核查；不自动重放可能已送达的远端写入。
-    /// # 参数
-    /// `reason` 为不含地址、电话或协议密钥的业务提示。
-    /// # 返回
     /// 当前步骤保留，后续定时读取使用有界退避。
-    /// # 错误
-    /// 不返回错误。
+    /// `reason` 为不含地址、电话或协议密钥的业务提示。
     pub fn defer(&mut self, reason: impl Into<String>) {
         self.blocker = Some(reason.into());
         self.next_run_at = Instant::from_unix_secs(Instant::now().unix_secs().saturating_add(60));
     }
 
     /// 核对当前执行尚未进入可能创建供应商订单的步骤。
-    /// # 参数
-    /// 无；仅使用已持久化的步骤及动作指纹。
-    /// # 返回
     /// 未发送创建动作时允许采购变更停止此执行。
-    /// # 错误
     /// 创建动作已经登记、结果未知或进入后续履约步骤时拒绝。
+    /// 仅使用已持久化的步骤及动作指纹。
     pub fn ensure_unsent_for_purchase_change(&self) -> Result<()> {
         let unsent_stage = matches!(
             self.stage,
@@ -226,24 +208,17 @@ impl ApiOrderExecution {
     }
 
     /// 在采购变更事务内停止未发送的旧执行，保留原请求与来源。
-    /// # 参数
-    /// `replacement_revision` 为将要生效的采购修订；调用方仍须核对没有外部单号。
-    /// # 返回
     /// 原意图进入停止状态，不再被后台执行器领取。
-    /// # 错误
     /// 已登记创建动作或状态不能证明未发单时拒绝。
+    /// `replacement_revision` 为将要生效的采购修订；调用方仍须核对没有外部单号。
     pub fn stop_for_purchase_change(&mut self, replacement_revision: &str) -> Result<()> {
         self.ensure_unsent_for_purchase_change()?;
         self.mark_superseded(replacement_revision)
     }
 
-    /// 记录已经通过未发或可信取消核验的执行替代关系。
-    /// # 参数
-    /// `replacement_revision` 为已核验的新采购修订身份。
-    /// # 返回
-    /// 同修订重放不重复改变，首次记录后停止后台执行。
-    /// # 错误
-    /// 无效修订或已由其他修订替代时拒绝。
+    // 记录已经通过未发或可信取消核验的执行替代关系。
+    // 同修订重放不重复改变，首次记录后停止后台执行。
+    // 无效修订或已由其他修订替代时拒绝。
     pub(super) fn mark_superseded(&mut self, replacement_revision: &str) -> Result<()> {
         if replacement_revision.trim().is_empty() || replacement_revision == self.purchase_order_revision_id {
             return Err(Error::ValidationError("替代采购版本无效".into()));

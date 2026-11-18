@@ -72,17 +72,10 @@ pub struct PurchaseExpenseDetail {
 impl PurchaseExpenseDetail {
     /// 构造并规范化费用内容。
     ///
-    /// # 参数
-    /// * `expense_line_id` - 稳定费用行身份
-    /// * `category` - 费用类别
-    /// * `description` - 费用说明
-    /// * `sales_order_line_id` - 归属销售明细
+    /// 返回说明已去除首尾空白的费用内容。身份或说明为空、超长时返回错误。
     ///
-    /// # 返回
-    /// 返回说明已去除首尾空白的费用内容。
-    ///
-    /// # 错误
-    /// 身份或说明为空、超长时返回错误。
+    /// - `expense_line_id`：稳定费用行身份。
+    /// - `sales_order_line_id`：归属销售明细。
     pub fn new(
         expense_line_id: String,
         category: PurchaseExpenseCategory,
@@ -96,14 +89,7 @@ impl PurchaseExpenseDetail {
 
     /// 校验并返回规范化的费用内容。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回规范化后的副本。
-    ///
-    /// # 错误
-    /// 身份或说明为空、超长时返回错误。
+    /// 返回规范化后的副本。身份或说明为空、超长时返回错误。
     pub fn normalized(&self) -> Result<Self> {
         Ok(Self {
             expense_line_id: normalize_required_text(
@@ -190,16 +176,7 @@ pub struct PurchaseExpenseOccurrence {
 impl PurchaseExpenseOccurrence {
     /// 记录费用行确认发生。
     ///
-    /// # 参数
-    /// * `id` - 事实主键
-    /// * `data` - 确认内容
-    /// * `today` - 业务当日
-    ///
-    /// # 返回
-    /// 返回确认发生事实。
-    ///
-    /// # 错误
-    /// 金额不为正、金额不守恒、发生日期晚于当日或费用内容非法时返回错误。
+    /// 返回确认发生事实。金额不为正、金额不守恒、发生日期晚于当日或费用内容非法时返回错误。
     pub fn new(id: String, data: PurchaseExpenseOccurrenceData, today: BusinessDate) -> Result<Self> {
         if data.gross_amount.to_decimal() <= rust_decimal::Decimal::ZERO {
             return Err(Error::from("金额为 0 的费用行不能确认发生，请先移除"));
@@ -247,7 +224,7 @@ pub struct ExpenseLineState<'a> {
 }
 
 impl ExpenseLineState<'_> {
-    /// 改单是否改变了本行的金额、税率、说明或归属。
+    // 改单是否改变了本行的金额、税率、说明或归属。
     fn differs_from(&self, other: &Self) -> bool {
         let (Some(left), Some(right)) = (self.expense, other.expense) else {
             return true;
@@ -262,16 +239,9 @@ impl ExpenseLineState<'_> {
 
 /// 校验改单目标中的费用行：不能新增、不能遗漏、类别不变，已确认发生的行不可修改。
 ///
-/// # 参数
-/// * `base` - 当前生效版本的费用行
-/// * `requested` - 改单目标中的费用行
-/// * `occurred` - 已确认发生的费用行身份
+/// 费用行合规时返回 `Ok(())`。历史费用行（无费用内容）不参与比对。新增或重复费用行、遗漏原费用行、改变类别或修改已确认发生的费用行时返回错误。
 ///
-/// # 返回
-/// 费用行合规时返回 `Ok(())`。历史费用行（无费用内容）不参与比对。
-///
-/// # 错误
-/// 新增或重复费用行、遗漏原费用行、改变类别或修改已确认发生的费用行时返回错误。
+/// `base` 为当前生效版本的费用行。
 pub fn validate_change_expenses(
     base: &[ExpenseLineState<'_>],
     requested: &[ExpenseLineState<'_>],

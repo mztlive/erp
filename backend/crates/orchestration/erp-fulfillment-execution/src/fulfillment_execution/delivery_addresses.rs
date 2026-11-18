@@ -24,12 +24,8 @@ use crate::{Error, Result};
 
 impl FulfillmentProcess {
     /// 在已有发货详情权限下读取地址和包裹，正式记录只使用冻结快照。
-    /// # 参数
-    /// id为真实发货单身份，actor为已认证账号。
-    /// # 返回
-    /// 表头、真实行、地址分配及包裹；无可信地址时返回空分配。
-    /// # 错误
-    /// 来源缺失、快照损坏或数据库读取失败时拒绝。
+    ///
+    /// id为真实发货单身份，actor为已认证账号。表头、真实行、地址分配及包裹；无可信地址时返回空分配。来源缺失、快照损坏或数据库读取失败时拒绝。
     pub async fn delivery_packing_detail(&self, id: &str, actor: &AuditActor) -> Result<DeliveryDetailView> {
         let process = self.clone();
         let id = id.to_owned();
@@ -42,7 +38,7 @@ impl FulfillmentProcess {
             .await
     }
 
-    /// 发货详情资格、来源资料和解密地址沿用同一个快照执行器。
+    // 发货详情资格、来源资料和解密地址沿用同一个快照执行器。
     async fn delivery_packing_snapshot(
         &self,
         id: &str,
@@ -225,7 +221,7 @@ async fn collect_destinations(
     }))
 }
 
-/// 从真实采购销售分配提取已经审核的地址数量。
+// 从真实采购销售分配提取已经审核的地址数量。
 fn purchase_rows<'a>(
     allocation_id: &str,
     allocations: &[erp_procurement::entity::purchase_order::PurchaseLineSalesAllocation],
@@ -297,7 +293,7 @@ fn append_destinations(
     Ok(true)
 }
 
-/// API 子单使用供应商冻结地址和独立观察流程，不接受整张采购的地址推断。
+// API 子单使用供应商冻结地址和独立观察流程，不接受整张采购的地址推断。
 pub(super) async fn external_delivery(
     db: &Database,
     delivery: &Delivery,
@@ -308,7 +304,7 @@ pub(super) async fn external_delivery(
     Ok(executions.iter().any(|execution| format!("{}-delivery", execution.base.id) == delivery.base.id))
 }
 
-/// 在确认事务内写入来源版本锁，使并发改地址与发货确认不能各自提交。
+// 在确认事务内写入来源版本锁，使并发改地址与发货确认不能各自提交。
 pub(super) async fn guard_sources(
     db: &Database,
     delivery: &Delivery,

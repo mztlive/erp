@@ -37,15 +37,9 @@ pub enum VoucherCategorySelection<T> {
 impl<T> VoucherCategorySelection<T> {
     /// 从可选已有分类与可选新分类构造互斥选择。
     ///
-    /// # 参数
-    /// * `category_id` - 已有分类稳定 ID
-    /// * `new_category` - 内联新建分类数据
+    /// 返回已有分类、新分类或默认根分类三种确定性选择之一。两种显式来源同时给出时返回领域错误，避免创建语义含糊。
     ///
-    /// # 返回
-    /// 返回已有分类、新分类或默认根分类三种确定性选择之一。
-    ///
-    /// # 错误
-    /// 两种显式来源同时给出时返回领域错误，避免创建语义含糊。
+    /// `category_id` 为已有分类稳定 ID。
     pub fn from_options(category_id: Option<ProductCategoryId>, new_category: Option<T>) -> Result<Self> {
         match (category_id, new_category) {
             (Some(category_id), None) => Ok(Self::Existing(category_id)),
@@ -62,15 +56,9 @@ pub struct VoucherCatalogDefaults;
 impl VoucherCatalogDefaults {
     /// 构造共用卡券根分类实体。
     ///
-    /// # 参数
-    /// * `id` - 新分类稳定 ID
-    /// * `created_by` - 创建人身份
+    /// 返回代码 `VOUCHER`、名称“卡券”且商品类型为卡券的启用根分类。默认值违反分类实体不变式时返回领域错误。
     ///
-    /// # 返回
-    /// 返回代码 `VOUCHER`、名称“卡券”且商品类型为卡券的启用根分类。
-    ///
-    /// # 错误
-    /// 默认值违反分类实体不变式时返回领域错误。
+    /// `id` 为新分类稳定 ID。
     pub fn root_category(id: ProductCategoryId, created_by: impl Into<String>) -> Result<ProductCategory> {
         ProductCategory::new(
             id,
@@ -87,14 +75,9 @@ impl VoucherCatalogDefaults {
 
     /// 校验已存在的共用根分类仍保持卡券类型。
     ///
-    /// # 参数
-    /// * `category` - 按默认稳定代码查询到的分类
+    /// 商品类型为卡券时返回 `Ok(())`。稳定代码被错误地用于其他商品类型时返回领域错误。
     ///
-    /// # 返回
-    /// 商品类型为卡券时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 稳定代码被错误地用于其他商品类型时返回领域错误。
+    /// `category` 为按默认稳定代码查询到的分类。
     pub fn ensure_root_category_compatible(category: &ProductCategory) -> Result<()> {
         if category.product_kind != ProductKind::Voucher {
             return Err(Error::from("系统卡券根分类的商品类型不是卡券"));
@@ -104,15 +87,9 @@ impl VoucherCatalogDefaults {
 
     /// 构造卡券默认品牌实体。
     ///
-    /// # 参数
-    /// * `id` - 新品牌稳定 ID
-    /// * `created_by` - 创建人身份
+    /// 返回代码 `FSY`、名称“福尚云”的启用品牌。默认值违反品牌实体不变式时返回领域错误。
     ///
-    /// # 返回
-    /// 返回代码 `FSY`、名称“福尚云”的启用品牌。
-    ///
-    /// # 错误
-    /// 默认值违反品牌实体不变式时返回领域错误。
+    /// `id` 为新品牌稳定 ID。
     pub fn brand(id: ProductBrandId, created_by: impl Into<String>) -> Result<ProductBrand> {
         ProductBrand::new(
             id,
@@ -128,15 +105,9 @@ impl VoucherCatalogDefaults {
 
     /// 构造卡券默认基础单位实体。
     ///
-    /// # 参数
-    /// * `id` - 新计量单位稳定 ID
-    /// * `created_by` - 创建人身份
+    /// 返回代码、名称和符号均为“张”，且数量精度为整数的启用单位。默认值违反计量单位实体不变式时返回领域错误。
     ///
-    /// # 返回
-    /// 返回代码、名称和符号均为“张”，且数量精度为整数的启用单位。
-    ///
-    /// # 错误
-    /// 默认值违反计量单位实体不变式时返回领域错误。
+    /// `id` 为新计量单位稳定 ID。
     pub fn unit(id: UnitOfMeasureId, created_by: impl Into<String>) -> Result<UnitOfMeasure> {
         UnitOfMeasure::new(
             id,
@@ -151,14 +122,9 @@ impl VoucherCatalogDefaults {
 
     /// 校验已存在的默认基础单位可继续用于创建卡券类目。
     ///
-    /// # 参数
-    /// * `unit` - 按默认稳定代码查询到的计量单位
+    /// 单位处于启用状态时返回 `Ok(())`。默认单位已停用时返回领域错误。
     ///
-    /// # 返回
-    /// 单位处于启用状态时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 默认单位已停用时返回领域错误。
+    /// `unit` 为按默认稳定代码查询到的计量单位。
     pub fn ensure_unit_active(unit: &UnitOfMeasure) -> Result<()> {
         if !unit.is_active() {
             return Err(Error::from("默认单位“张”已停用"));
@@ -173,7 +139,7 @@ mod tests {
     use crate::entity::catalog::product_category::ProductCategoryData;
     use crate::entity::catalog::unit_of_measure::UnitOfMeasureUpdate;
 
-    /// 分类来源接受已有、新建和缺省三种互斥形态。
+    // 分类来源接受已有、新建和缺省三种互斥形态。
     #[test]
     fn category_selection_accepts_each_unambiguous_source() {
         assert!(matches!(
@@ -191,7 +157,7 @@ mod tests {
         ));
     }
 
-    /// 分类来源同时给出已有与新建时被拒绝。
+    // 分类来源同时给出已有与新建时被拒绝。
     #[test]
     fn category_selection_rejects_ambiguous_sources() {
         assert!(
@@ -203,7 +169,7 @@ mod tests {
         );
     }
 
-    /// 默认字典工厂生成稳定代码、启用状态和固定数量精度。
+    // 默认字典工厂生成稳定代码、启用状态和固定数量精度。
     #[test]
     fn default_factories_produce_canonical_entities() {
         let category =
@@ -220,7 +186,7 @@ mod tests {
         assert!(unit.is_active());
     }
 
-    /// 默认根分类类型漂移和默认单位停用均被领域规则拒绝。
+    // 默认根分类类型漂移和默认单位停用均被领域规则拒绝。
     #[test]
     fn default_compatibility_rules_reject_drift() {
         let wrong_category = ProductCategory::new(

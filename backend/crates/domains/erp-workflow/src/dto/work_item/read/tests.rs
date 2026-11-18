@@ -236,7 +236,7 @@ fn document_approval_maps_to_signed_workspace_and_approval_family() {
     assert!(WORK_ITEM_TYPES.contains(&WorkItemType::DocumentApproval));
 }
 
-/// 已退役的历史复核任务不得恢复工作面路由。
+// 验证：已退役的历史复核任务不得恢复工作面路由。
 #[test]
 fn retired_funds_review_has_no_handler() {
     for kind in [WorkItemType::CardFundsReview, WorkItemType::CardFundsDeltaReview] {
@@ -244,7 +244,7 @@ fn retired_funds_review_has_no_handler() {
     }
 }
 
-/// 驳回任务列表和详情均保留精确旧实例与提交版本。
+// 验证：驳回任务列表和详情均保留精确旧实例与提交版本。
 #[test]
 fn rework_list_and_detail_expose_the_same_bound_instance() {
     use erp_core::common::time::Instant;

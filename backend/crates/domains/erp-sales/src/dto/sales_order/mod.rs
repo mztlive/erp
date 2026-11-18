@@ -461,21 +461,14 @@ pub(crate) struct SalesOrderListQuery {
 }
 
 impl SalesOrderListParams {
-    /// 归一化销售单列表查询参数。
-    ///
-    /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
-    ///
-    /// # 参数
-    /// 无；读取 `self` 的原始查询字段。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单、排序方向非法、时间区间倒置，或包含下级但未提供组织时返回 `ValidationError`。
-    ///
-    /// # 关键业务约束
-    /// `include_descendants=true` 必须同时提供 `org_unit_ids`，不得忽略后查全量。
+    // 归一化销售单列表查询参数。
+    //
+    // 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
+    // 返回不依赖仓储类型的规范化查询参数。
+    // 失败条件：排序字段不在白名单、排序方向非法、时间区间倒置，或包含下级但未提供组织时返回 `ValidationError`。
+    // 业务边界：`include_descendants=true` 必须同时提供 `org_unit_ids`，不得忽略后查全量。
+    //
+    // 输入约定：无；读取 `self` 的原始查询字段。
     pub(crate) fn normalized(&self) -> Result<SalesOrderListQuery> {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, SALES_ORDER_SORT_FIELDS)?;
         if matches!((self.created_from, self.created_to), (Some(from), Some(to)) if from > to) {

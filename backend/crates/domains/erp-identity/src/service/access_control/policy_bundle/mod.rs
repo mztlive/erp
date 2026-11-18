@@ -23,23 +23,21 @@ pub struct PolicyBundleService {
 
 impl PolicyBundleService {
     /// 装配统一授权用例。
-    /// # 参数
-    /// access 为已装配目标校验的范围服务；catalog 为运行版本生成的权限目录。
-    /// # 返回
     /// 复用身份仓储及授权事务的配置服务。
-    /// # 错误
-    /// 无；缺少依赖或权限目录错误在调用入口拒绝。
+    ///
+    /// 缺少依赖或权限目录错误在调用入口拒绝。
+    ///
+    /// access 为已装配目标校验的范围服务；catalog 为运行版本生成的权限目录。
     pub fn new(access: AccessControlService, catalog: Vec<Permission>) -> Self {
         Self { access, catalog }
     }
 
     /// 只读生成可提交的配置计划；不持久化预览。
-    /// # 参数
-    /// document 为完整文件，actor 为已认证后台身份。
-    /// # 返回
     /// 规范化文件、版本、审核摘要和逐项差异。
-    /// # 错误
+    ///
     /// 越权、未知权限、目标失效、复杂旧配置或读取失败时拒绝。
+    ///
+    /// document 为完整文件，actor 为已认证后台身份。
     pub async fn preview(&self, document: PolicyDocument, actor: AuditActor) -> Result<PolicyPreview> {
         let document = document.normalized()?;
         document.validate_catalog(&self.catalog)?;
@@ -70,7 +68,7 @@ impl PolicyBundleService {
             .await
     }
 
-    /// 读取真实事实，复用目标校验，编译批次最终权限。
+    // 为预览或应用按真实目标事实重新编译批次最终权限，复用范围目标存在性校验，不信任文件自报资格。
     async fn plan(
         &self,
         document: PolicyDocument,

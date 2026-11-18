@@ -10,12 +10,10 @@ use crate::{Error, Result};
 
 impl SalesOrderEditableDraftRequest {
     /// 从已接受需求复制商品、数量和地址，保留销售明确填写的成交价与税率。
-    /// # 参数
-    /// `inquiry` 为已授权询价，`source` 为本次来源选择，`now` 为服务端时间。
-    /// # 返回
     /// 返回以冻结需求为依据的完整可编辑销售草稿。
-    /// # 错误
     /// 未明确成交价、来源不匹配、价格档位或适用范围失效时拒绝。
+    ///
+    /// 输入约定：`inquiry` 为已授权询价，`source` 为本次来源选择，`now` 为服务端时间。
     pub fn with_inquiry_source(
         &self,
         inquiry: &SalesInquiry,

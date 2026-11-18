@@ -20,20 +20,8 @@ pub struct StartReplayErrors {
     pub identity_mismatch: &'static str,
 }
 
-/// 使用调用方执行器回读审批启动结果，保留首个候选命中语义。
-///
-/// # 参数
-/// * `db` - 审批数据库。
-/// * `expected` - 入口冻结的预期运行身份。
-/// * `idempotency_key` - 调用方原始幂等键。
-/// * `errors` - 入口既有冲突文案。
-/// * `executor` - 入口授权及恢复查询使用的同一执行器。
-///
-/// # 返回
-/// 无回执返回 `None`；同载荷且冻结身份一致时返回回执指定的实例 ID。
-///
-/// # 错误
-/// 保留幂等键错误、载荷冲突、仓储错误及入口的冻结事实冲突。
+/// 用原幂等键和冻结命令身份按顺序查找启动回执，供提交入口恢复原审批实例。沿用调用方的授权执行器，只检查首个命中的候选回执。
+/// 无回执返回 `None`；载荷冲突、回执指定的实例缺失或冻结身份不一致时拒绝，不改用其他实例或回执。
 pub async fn replay_start(
     db: &Database,
     expected: ApprovalStartIdentity<'_>,

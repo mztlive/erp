@@ -60,9 +60,7 @@ impl_repository_error!(
         |error| { Error::ConflictError(duplicate_index_conflict_message(error.duplicate_index_name())) }
 );
 
-/// 将导入域唯一索引名称映射为面向用户的冲突提示。
-///
-/// 未知索引回落通用文案；错误分类保持 `Conflict` 不变。
+// 按导入唯一索引名称提供可读的冲突原因，未知索引使用通用提示，仍保留 `Conflict` 分类。
 fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
     match index_name {
         Some("uk_legacy_import_batches_batch_no") => "导入批次号重复，请勿重复提交".to_string(),

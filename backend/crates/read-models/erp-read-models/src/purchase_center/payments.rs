@@ -9,11 +9,14 @@ use crate::Result;
 use crate::finance::purchase_payments::{PurchasePaymentView, payment_records};
 
 impl PurchaseOrderReadService {
-    /// 读取已核销到当前采购单的付款及回单展示字段。
+    /// 处理采购付款明细时，读取已核销到当前采购单的付款及回单展示字段。
+    ///
     /// # 参数
     /// `actor` 为当前账号，`id` 为采购单身份。
+    ///
     /// # 返回
     /// 按付款时间倒序返回本单有效净核销，合并付款不暴露其他采购分配。
+    ///
     /// # 错误
     /// 采购详情资格失效、来源不可见或文件事实读取失败时拒绝。
     pub async fn payment_records(&self, actor: &AuditActor, id: &str) -> Result<Vec<PurchasePaymentView>> {

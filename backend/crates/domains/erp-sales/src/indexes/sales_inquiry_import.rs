@@ -10,12 +10,10 @@ use persistence_core::Result;
 use crate::repository::extensions::SalesInquiryImportExt;
 
 /// 为预览及确认回执登记稳定身份唯一索引。
-/// # 参数
-/// `db` 为目标数据库。
-/// # 返回
-/// 索引已存在或创建成功时返回空结果。
-/// # 错误
-/// 重复身份或 MongoDB 失败时返回存储错误。
+/// 结果：索引已存在或创建成功时返回空结果。
+/// 失败条件：重复身份或 MongoDB 失败时返回存储错误。
+///
+/// 输入约定：`db` 为目标数据库。
 pub async fn ensure(db: &Database) -> Result<()> {
     for collection in [Database::INQUIRY_IMPORT_PREVIEWS, Database::INQUIRY_IMPORT_RECEIPTS] {
         let index = IndexModel::builder()

@@ -35,12 +35,9 @@ pub struct SelectionView {
 }
 
 /// 从已授权且准备完成的批次读取轻量选择集合。
-/// # 参数
-/// `batch` 为调用方已验证权限及完成状态的批次，执行器沿用读取事务。
-/// # 返回
 /// 固定成员身份及排除项展示资料，不返回完整草稿。
-/// # 错误
-/// 数据库读取失败。
+/// 数据库读取失败时向上传播错误。
+/// `batch` 为调用方已验证权限及完成状态的批次，执行器沿用读取事务。
 pub async fn selection_view(
     db: &Database,
     batch: CatalogAdoptionBatch,

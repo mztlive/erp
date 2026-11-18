@@ -34,15 +34,10 @@ use persist::*;
 impl SupplierProfileProcess {
     /// 修订完整供应商资料；全部写入与幂等结果原子提交。
     ///
-    /// # 参数
-    /// * `supplier_id` - 待修订的供应商。
-    /// * `req` - 根资料修订请求。
-    /// * `actor` - 当前操作人。
+    /// `supplier_id`：待修订的供应商；`req`：根资料修订请求。
     ///
-    /// # 返回
     /// 修订或同键重放的资料变更视图。
     ///
-    /// # 错误
     /// 输入无效、乐观锁冲突、引用失效、附件不存在或敏感级别不匹配时返回错误。
     pub async fn update(
         &self,
@@ -55,16 +50,10 @@ impl SupplierProfileProcess {
 
     /// 修订完整供应商资料，并把同一次 multipart 命令携带的资质文件原子登记。
     ///
-    /// # 参数
-    /// * `supplier_id` - 待修订的供应商。
-    /// * `req` - 根资料修订请求。
-    /// * `pending_assets` - 同一次命令待登记的资质文件。
-    /// * `actor` - 当前操作人。
+    /// `supplier_id`：待修订的供应商；`req`：根资料修订请求；`pending_assets`：同一次命令待登记的资质文件。
     ///
-    /// # 返回
     /// 业务视图，以及本次上传对象是否已随事务登记。同键重放时 `assets_committed` 为 `false`。
     ///
-    /// # 错误
     /// 输入无效、同键异参、文件引用或敏感级别不匹配、乐观锁冲突或事务失败时返回错误。
     pub async fn update_with_assets(
         &self,
@@ -101,7 +90,7 @@ impl SupplierProfileProcess {
         .await
     }
 
-    /// 对象授权、回放和修订事实准备均留在原事务。
+    // 修订事务先按原供应商和指纹查证回执；只有未命中时才解析新附件和引用、准备并保存资料变更。
     #[allow(clippy::too_many_arguments)]
     async fn update_snapshot(
         &self,
@@ -134,7 +123,7 @@ impl SupplierProfileProcess {
         Ok(SupplierProfileWithAssetsResult { view, assets_committed: true })
     }
 
-    /// 加载当前聚合并构造修订事务载荷。
+    // 修订命令已授权且未命中回执时，在原事务加载当前主体和供应商版本，计算从属变更并组装待写载荷。
     async fn prepare_update(
         &self,
         supplier_id: &str,
@@ -176,7 +165,7 @@ impl SupplierProfileProcess {
         )
     }
 
-    /// 按既有读取与 ID 分配顺序准备主体、供应商根和不可变修订。
+    // 按既有读取与 ID 分配顺序准备主体、供应商根和不可变修订。
     async fn prepare_update_roots(
         &self,
         supplier_id: &str,
@@ -228,17 +217,13 @@ impl SupplierProfileProcess {
         Ok(UpdateRoots { party, party_revision, supplier, commercial_profile })
     }
 
-    /// 加载并校验供应商资料修订门禁。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 待修订供应商角色 ID
-    /// * `req` - 携带期望供应商版本的根资料命令
-    ///
-    /// # 返回
-    /// 版本一致且启用的供应商实体。
-    ///
-    /// # 错误
-    /// 供应商不存在、版本冲突、已停用或仓储查询失败时返回错误。
+    // 加载并校验供应商资料修订门禁。
+    //
+    // `supplier_id`：待修订供应商角色 ID；`req`：携带期望供应商版本的根资料命令。
+    //
+    // 版本一致且启用的供应商实体。
+    //
+    // 供应商不存在、版本冲突、已停用或仓储查询失败时返回错误。
     async fn load_supplier_for_update(
         &self,
         supplier_id: &str,
@@ -269,17 +254,13 @@ impl SupplierProfileProcess {
         }
     }
 
-    /// 加载并校验供应商关联主体乐观锁与启停状态。
-    ///
-    /// # 参数
-    /// * `supplier` - 已通过修订门禁的供应商实体
-    /// * `req` - 携带期望主体版本的根资料命令
-    ///
-    /// # 返回
-    /// 版本一致且启用的关联主体实体。
-    ///
-    /// # 错误
-    /// 主体不存在、版本冲突、已停用或仓储查询失败时返回错误。
+    // 加载并校验供应商关联主体乐观锁与启停状态。
+    //
+    // `supplier`：已通过修订门禁的供应商实体；`req`：携带期望主体版本的根资料命令。
+    //
+    // 版本一致且启用的关联主体实体。
+    //
+    // 主体不存在、版本冲突、已停用或仓储查询失败时返回错误。
     async fn load_party_for_update(
         &self,
         supplier: &SupplierAccount,
@@ -301,30 +282,24 @@ impl SupplierProfileProcess {
         Ok(party)
     }
 
-    /// 查询下一主体修订号。
-    ///
-    /// # 参数
-    /// * `party_id` - 稳定主体 ID
-    ///
-    /// # 返回
-    /// 返回无历史时为一、否则为当前最大值加一的修订号。
-    ///
-    /// # 错误
-    /// 仓储查询、反序列化或修订号溢出时返回错误。
+    // 查询下一主体修订号。
+    //
+    // `party_id`：稳定主体 ID。
+    //
+    // 返回无历史时为一、否则为当前最大值加一的修订号。
+    //
+    // 仓储查询、反序列化或修订号溢出时返回错误。
     async fn next_party_revision_no(&self, party_id: &PartyId, executor: &mut dyn Executor) -> Result<u32> {
         Ok(self.db.party_revisions().next_revision_no(party_id, executor).await?)
     }
 
-    /// 查询下一商务资料修订号。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 供应商角色 ID
-    ///
-    /// # 返回
-    /// 返回无历史时为一、否则为当前最大值加一的修订号。
-    ///
-    /// # 错误
-    /// 仓储查询、反序列化或修订号溢出时返回错误。
+    // 查询下一商务资料修订号。
+    //
+    // `supplier_id`：供应商角色 ID。
+    //
+    // 返回无历史时为一、否则为当前最大值加一的修订号。
+    //
+    // 仓储查询、反序列化或修订号溢出时返回错误。
     async fn next_profile_revision_no(
         &self,
         supplier_id: &SupplierAccountId,
@@ -333,18 +308,13 @@ impl SupplierProfileProcess {
         Ok(self.db.supplier().next_commercial_profile_revision_no(supplier_id, executor).await?)
     }
 
-    /// 构造联系人、地址、税务与银行账户事实的追加或停用变更。
-    ///
-    /// # 参数
-    /// * `party_id` - 供应商关联主体 ID
-    /// * `req` - 根资料命令中的事实替换与清空意图
-    /// * `actor_id` - 执行变更的账号 ID
-    ///
-    /// # 返回
-    /// 返回待在同一事务中持久化的主体事实变更集合。
-    ///
-    /// # 错误
-    /// 仓储查询、事实状态迁移、加密或实体构造失败时返回错误。
+    // 构造联系人、地址、税务与银行账户事实的追加或停用变更。
+    //
+    // `party_id`：供应商关联主体 ID；`req`：根资料命令中的事实替换与清空意图。
+    //
+    // 返回待在同一事务中持久化的主体事实变更集合。
+    //
+    // 仓储查询、事实状态迁移、加密或实体构造失败时返回错误。
     async fn prepare_party_facts(
         &self,
         party_id: &PartyId,
@@ -389,17 +359,13 @@ impl SupplierProfileProcess {
         Ok(changes)
     }
 
-    /// 构造评级开放区间关闭与下一评级版本。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 供应商角色 ID
-    /// * `req` - 可选携带评级输入的根资料命令
-    ///
-    /// # 返回
-    /// 无评级或评级未变化时返回空变更，否则返回待关闭版本与新版本。
-    ///
-    /// # 错误
-    /// 历史查询、修订号溢出、区间关闭或实体构造失败时返回错误。
+    // 构造评级开放区间关闭与下一评级版本。
+    //
+    // `supplier_id`：供应商角色 ID；`req`：可选携带评级输入的根资料命令。
+    //
+    // 无评级或评级未变化时返回空变更，否则返回待关闭版本与新版本。
+    //
+    // 历史查询、修订号溢出、区间关闭或实体构造失败时返回错误。
     async fn prepare_rating_changes(
         &self,
         supplier_id: &SupplierAccountId,

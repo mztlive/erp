@@ -14,44 +14,17 @@ use crate::entity::integration_ops::{
 use crate::ports::evidence::{EvidenceSubject, IntegrationEvidenceAuthority, VerifiedEvidence};
 use crate::{Error, Result};
 
-/// 返回错误任务当前固定证据策略视图（规则归领域，此处只做 view 映射）。
-///
-/// # 参数
-/// * `task` - 集成错误任务
-///
-/// # 返回
-/// 返回响应视图；策略身份、资金影响与类型要求来自领域策略。
-///
-/// # 错误
-/// 不返回错误。
+/// 返回错误任务当前固定证据策略视图（规则归领域，此处只做 view 映射）。返回响应视图；策略身份、资金影响与类型要求来自领域策略。
 pub fn error_evidence_policy(task: &IntegrationErrorTask) -> ResolutionEvidencePolicyView {
     policy_view(error_terminal_policy(task))
 }
 
-/// 返回对账差异当前固定证据策略视图（规则归领域，此处只做 view 映射）。
-///
-/// # 参数
-/// * `difference` - 对账差异
-///
-/// # 返回
-/// 返回响应视图；策略身份、资金影响与类型要求来自领域策略。
-///
-/// # 错误
-/// 不返回错误。
+/// 返回对账差异当前固定证据策略视图（规则归领域，此处只做 view 映射）。返回响应视图；策略身份、资金影响与类型要求来自领域策略。
 pub fn difference_evidence_policy(difference: &ReconciliationDifference) -> ResolutionEvidencePolicyView {
     policy_view(difference_terminal_policy(difference))
 }
 
-/// 返回无任务直接对账固定原因注册表视图（注册表归领域，此处只做 view 映射）。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回响应视图；原因、结论与类型要求来自领域注册表。
-///
-/// # 错误
-/// 不返回错误。
+/// 返回无任务直接对账固定原因注册表视图（注册表归领域，此处只做 view 映射）。返回响应视图；原因、结论与类型要求来自领域注册表。
 pub fn reconciliation_reason_registry() -> ReconciliationReasonRegistryView {
     let registry = domain_reason_registry();
     ReconciliationReasonRegistryView {
@@ -75,16 +48,11 @@ pub fn reconciliation_reason_registry() -> ReconciliationReasonRegistryView {
     }
 }
 
-/// 将领域终态证据策略映射为响应视图。
-///
-/// # 参数
-/// * `policy` - 领域终态证据策略
-///
-/// # 返回
-/// 返回响应视图；岗位分离要求恒为无（领域当前无复核分离规则）。
-///
-/// # 约束
-/// 只做词汇映射，不维护第二份类型要求。
+// 将领域终态证据策略映射为响应视图。
+//
+// 只做词汇映射，不维护第二份类型要求。
+//
+// 返回响应视图；岗位分离要求恒为无（领域当前无复核分离规则）。
 fn policy_view(policy: TerminalEvidencePolicy) -> ResolutionEvidencePolicyView {
     ResolutionEvidencePolicyView {
         evidence_policy_id: policy.policy_id.to_string(),
@@ -102,30 +70,14 @@ fn policy_view(policy: TerminalEvidencePolicy) -> ResolutionEvidencePolicyView {
     }
 }
 
-/// 将受控证据引用投影为领域证据类型集合。
+/// 将受控证据引用投影为领域证据类型集合。返回领域证据类型集合（顺序保留提交顺序，不去重）。
 ///
-/// # 参数
-/// * `refs` - 客户端提交或服务端发现的受控证据引用
-///
-/// # 返回
-/// 返回领域证据类型集合（顺序保留提交顺序，不去重）。
-///
-/// # 错误
-/// 不返回错误。
+/// `refs` 为客户端提交或服务端发现的受控证据引用。
 pub fn domain_kinds(refs: &[ControlledEvidenceRef]) -> Vec<RequiredEvidenceKind> {
     refs.iter().map(|evidence| RequiredEvidenceKind::from(evidence.kind)).collect()
 }
 
-/// 将领域动作阻断映射为响应视图。
-///
-/// # 参数
-/// * `blocker` - 领域动作阻断
-///
-/// # 返回
-/// 返回阻断响应视图；稳定代码与说明来自领域。
-///
-/// # 错误
-/// 不返回错误。
+/// 将领域动作阻断映射为响应视图。返回阻断响应视图；稳定代码与说明来自领域。
 pub fn blocker_view(blocker: &crate::entity::integration_ops::ActionBlocker) -> ActionBlockerView {
     ActionBlockerView {
         action: blocker.action.as_str().to_string(),
@@ -134,13 +86,7 @@ pub fn blocker_view(blocker: &crate::entity::integration_ops::ActionBlocker) -> 
     }
 }
 
-/// 将领域终态结论映射为服务 DTO 结论。
-///
-/// # 参数
-/// * `conclusion` - 领域终态结论
-///
-/// # 返回
-/// 返回一一对应的服务 DTO 结论。
+// 将领域终态结论映射为服务 DTO 结论。返回一一对应的服务 DTO 结论。
 fn dto_conclusion(conclusion: DirectConclusion) -> DirectReconciliationConclusion {
     match conclusion {
         DirectConclusion::ConfirmNoError => DirectReconciliationConclusion::ConfirmNoError,
@@ -155,13 +101,7 @@ fn dto_conclusion(conclusion: DirectConclusion) -> DirectReconciliationConclusio
 macro_rules! evidence_kind_table {
     ($($variant:ident),*) => {
         impl From<ControlledEvidenceKind> for RequiredEvidenceKind {
-            /// 将服务受控证据类型转换为领域证据类型。
-            ///
-            /// # 参数
-            /// * `kind` - 服务受控证据类型
-            ///
-            /// # 返回
-            /// 返回一一对应的领域证据类型。
+            // 将服务受控证据类型转换为领域证据类型。返回一一对应的领域证据类型。
             fn from(kind: ControlledEvidenceKind) -> Self {
                 match kind {
                     $(ControlledEvidenceKind::$variant => Self::$variant,)*
@@ -170,13 +110,7 @@ macro_rules! evidence_kind_table {
         }
 
         impl From<RequiredEvidenceKind> for ControlledEvidenceKind {
-            /// 将领域证据类型转换为服务受控证据类型。
-            ///
-            /// # 参数
-            /// * `kind` - 领域证据类型
-            ///
-            /// # 返回
-            /// 返回一一对应的服务受控证据类型。
+            // 将领域证据类型转换为服务受控证据类型。返回一一对应的服务受控证据类型。
             fn from(kind: RequiredEvidenceKind) -> Self {
                 match kind {
                     $(RequiredEvidenceKind::$variant => Self::$variant,)*
@@ -196,19 +130,10 @@ evidence_kind_table!(
 
 /// 校验任务完成命令引用的策略身份、键与证据类型集合。
 ///
-/// # 参数
-/// * `submitted_id` - 命令中的证据策略 ID
-/// * `submitted_version` - 命令中的策略版本
-/// * `submitted_key` - 命令中的策略键
-/// * `submitted_refs` - 命令中的证据引用
-/// * `expected` - 当前业务项的固定策略视图
+/// 身份、版本、键一致且提交类型覆盖全部必需类型时成功。策略身份、版本或键不一致时返回 `ConflictError`；必需证据类型未覆盖时返回
+/// `BusinessLogicError`。
 ///
-/// # 返回
-/// 身份、版本、键一致且提交类型覆盖全部必需类型时成功。
-///
-/// # 错误
-/// 策略身份、版本或键不一致时返回 `ConflictError`；
-/// 必需证据类型未覆盖时返回 `BusinessLogicError`。
+/// `expected` 为当前业务项的固定策略视图。
 pub fn ensure_completion_policy(
     submitted_id: &str,
     submitted_version: u64,
@@ -237,21 +162,8 @@ pub fn ensure_completion_policy(
 ///
 /// 注册原因与结论映射归领域，此处只做请求校验与错误映射。
 ///
-/// # 参数
-/// * `registry_id` - 命令中的原因注册表 ID
-/// * `registry_version` - 命令中的注册表版本
-/// * `registered_reason_id` - 命令中的注册原因 ID
-/// * `reason_code` - 固定原因代码
-/// * `conclusion` - 终态结论
-/// * `evidence_refs` - 待核对的证据引用
-///
-/// # 返回
-/// 注册表、原因、结论与证据类型一致时成功。
-///
-/// # 错误
-/// 注册表身份或版本变化时返回 `ConflictError`；
-/// 原因未注册、原因 ID 与代码不一致或结论不一致时返回 `ValidationError`；
-/// 必需证据类型未覆盖时返回 `BusinessLogicError`。
+/// 注册表、原因、结论与证据类型一致时成功。注册表身份或版本变化时返回 `ConflictError`；原因未注册、原因 ID 与代码不一致或结论不一致时返回
+/// `ValidationError`；必需证据类型未覆盖时返回 `BusinessLogicError`。
 pub fn ensure_direct_reason(
     registry_id: &str,
     registry_version: u64,
@@ -278,17 +190,9 @@ pub fn ensure_direct_reason(
     kinds_subset(&domain_kinds(evidence_refs), reason.required)
 }
 
-/// 校验已提交证据类型覆盖全部必需类型（纯集合逻辑，类型要求归领域）。
-///
-/// # 参数
-/// * `submitted` - 已提交的证据类型
-/// * `required` - 必需的证据类型
-///
-/// # 返回
-/// 全覆盖返回 `Ok(())`，否则返回业务错误。
-///
-/// # 错误
-/// 存在未覆盖的必需类型时返回 `BusinessLogicError`。
+// 校验已提交证据类型覆盖全部必需类型（纯集合逻辑，类型要求归领域）。
+//
+// 全覆盖返回 `Ok(())`，否则返回业务错误。存在未覆盖的必需类型时返回 `BusinessLogicError`。
 fn kinds_subset(submitted: &[RequiredEvidenceKind], required: &[RequiredEvidenceKind]) -> Result<()> {
     if required.iter().all(|kind| submitted.contains(kind)) {
         return Ok(());
@@ -296,21 +200,8 @@ fn kinds_subset(submitted: &[RequiredEvidenceKind], required: &[RequiredEvidence
     Err(Error::BusinessLogicError("终态证据尚未满足固定策略要求".to_string()))
 }
 
-/// 逐条调用权威端口重验证据，并返回可持久化的稳定引用。
-///
-/// # 参数
-/// * `authority` - 权威证据端口
-/// * `subject` - 当前业务项证据上下文
-/// * `refs` - 客户端证据引用，按原顺序验证
-/// * `actor_id` - 当前操作人
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回与请求顺序一致的已验证证据。
-///
-/// # 错误
-/// 引用为空时返回 `ValidationError`，且不调用端口；
-/// 任一条验证失败时立即返回该错误，不再验证后续引用。
+/// 提交决定或补证前，在调用方执行器上按请求顺序逐条重验受控引用。
+/// 拒绝空证据集合或不可验证引用；成功时返回原顺序的已验证证据及其可持久化引用。
 pub async fn verify_evidence_refs(
     authority: &dyn IntegrationEvidenceAuthority,
     subject: &EvidenceSubject,
@@ -331,14 +222,9 @@ pub async fn verify_evidence_refs(
 
 /// 从验证结果派生单一稳定证据引用；多条以分号连接。
 ///
-/// # 参数
-/// * `verified` - 已验证证据
+/// 返回领域证据集合的 wire 编码。领域证据集合构造失败时经 [`evidence_reference_grammar`] 返回 `ValidationError`。
 ///
-/// # 返回
-/// 返回领域证据集合的 wire 编码。
-///
-/// # 错误
-/// 领域证据集合构造失败时经 [`evidence_reference_grammar`] 返回 `ValidationError`。
+/// `verified` 为已验证证据。
 pub fn verified_reference(verified: &[VerifiedEvidence]) -> Result<String> {
     evidence_reference_grammar(EvidenceReferenceSet::try_from_canonical(
         verified.iter().map(|evidence| evidence.canonical_reference.clone()),
@@ -348,17 +234,9 @@ pub fn verified_reference(verified: &[VerifiedEvidence]) -> Result<String> {
 
 /// 把领域证据 grammar 错误映射为既有 HTTP 400 校验错误。
 ///
-/// # 参数
-/// * `result` - 领域引用解析或集合构造结果
-///
-/// # 返回
-/// 成功时返回领域值。
-///
-/// # 错误
-/// 非法 grammar、空集合或超过 512 字节时返回 [`Error::ValidationError`]。
-///
-/// # 约束
 /// 不重复实现 grammar；仅保留 wire 错误类别。
+///
+/// 返回领域值。非法 grammar、空集合或超过 512 字节时返回 [`Error::ValidationError`]。
 pub fn evidence_reference_grammar<T>(result: erp_core::Result<T>) -> Result<T> {
     result.map_err(|error| Error::ValidationError(error.to_string()))
 }

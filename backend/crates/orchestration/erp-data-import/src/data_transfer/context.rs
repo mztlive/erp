@@ -19,11 +19,11 @@ use crate::{Error, Result};
 
 impl DataTransferProcess {
     /// 读取可访问任务类型；导出可由当前获授权账号读取分类信息。
-    /// # 参数
+    ///
     /// `id` 为任务号，`actor` 为当前认证身份。
-    /// # 返回
+    ///
     /// 当前权限下的续办状态及取消能力。
-    /// # 错误
+    ///
     /// 非本人读取导入、历史输入不可恢复或当前授权失效时拒绝；过期上下文返回明确过期状态。
     pub async fn context(&self, id: &str, actor: &AuditActor) -> Result<TransferContext> {
         let reader = self.reader_snapshot(id, actor, true).await?;
@@ -51,13 +51,13 @@ impl DataTransferProcess {
         Ok(view)
     }
 
-    /// 在已完成资格检查的原执行器读取文件任务。
-    /// # 参数
-    /// id 为真实任务，executor 为原授权快照。
-    /// # 返回
-    /// 当前未删除且属于数据转移的完整任务。
-    /// # 错误
-    /// 不存在、任务类型不符或读取失败时拒绝。
+    // 在已完成资格检查的原执行器读取文件任务。
+    //
+    // id 为真实任务，executor 为原授权快照。
+    //
+    // 当前未删除且属于数据转移的完整任务。
+    //
+    // 不存在、任务类型不符或读取失败时拒绝。
     pub(super) async fn transfer_job(&self, id: &str, executor: &mut dyn Executor) -> Result<BackgroundJob> {
         let job = self
             .db
@@ -201,7 +201,7 @@ impl BusinessTransfers {
     }
 }
 
-/// 恢复用到的询价、预览及确认结果共用同一快照。
+// 恢复用到的询价、预览及确认结果共用同一快照。
 async fn inquiry_context_read(
     db: &Database,
     service: &SalesInquiryImportProcess,

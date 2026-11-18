@@ -25,18 +25,11 @@ use crate::repository::prelude::*;
 use crate::{Error, Result};
 
 impl SalesSelectionService {
-    /// 将已到期且未提交的已发布选品册置为已关闭。
-    ///
-    /// 公开请求仍以服务端到期即时拒绝为准，本方法只同步业务状态。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回关闭条数。
-    ///
-    /// # 错误
-    /// 仓储失败。
+    // 将已到期且未提交的已发布选品册置为已关闭。
+    //
+    // 公开请求仍以服务端到期即时拒绝为准，本方法只同步业务状态。
+    // 返回关闭条数。
+    // 仓储失败。
     pub(super) async fn close_expired_published(&self) -> Result<u32> {
         let mut executor = NoTransaction;
         let now = Instant::now();
@@ -68,17 +61,12 @@ impl SalesSelectionService {
         Ok(handled)
     }
 
-    /// 解析目标批次。
-    ///
-    /// # 参数
-    /// * `booklet` - 选品册
-    /// * `kind` - 准备种类
-    ///
-    /// # 返回
-    /// 重生成沿用当前批次，否则返回新批次。
-    ///
-    /// # 错误
-    /// 无。
+    // 开始准备前确定此次计算所针对的批次，按任务类型重用当前批次或为新商品池分配身份。
+    // 结果：重生成沿用当前批次，否则返回新批次。
+    //
+    // 输入约定：
+    // - `booklet`：选品册
+    // - `kind`：准备种类
     pub(super) fn resolve_batch_id(&self, booklet: &SalesSelectionBooklet, kind: PrepareKind) -> String {
         if kind.reuses_current_batch() {
             return booklet.current_batch_id.clone().unwrap_or_else(next_id);
@@ -86,20 +74,16 @@ impl SalesSelectionService {
         next_id()
     }
 
-    /// 冻结商品池快照。
-    ///
-    /// # 参数
-    /// * `booklet` - 选品册
-    /// * `batch_id` - 目标批次
-    /// * `kind` - 准备种类；重生成沿用当前批次
-    /// * `catalog` - 商品池端口
-    /// * `images` - 图片端口
-    ///
-    /// # 返回
-    /// 返回按 SKU 升序的快照。
-    ///
-    /// # 错误
-    /// 勾选任一失效、筛选空或超限时整批失败。
+    // 后台准备陈列前获取确定的 SKU 快照；按档重生成复用原批次，其余准备按当前供给事实重新冻结。
+    // 返回按 SKU 升序的快照。
+    // 勾选任一失效、筛选空或超限时整批失败。
+    //
+    // 输入约定：
+    // - `booklet`：选品册
+    // - `batch_id`：目标批次
+    // - `kind`：准备种类；重生成沿用当前批次
+    // - `catalog`：商品池端口
+    // - `images`：图片端口
     pub(super) async fn freeze_pool(
         &self,
         booklet: &SalesSelectionBooklet,
@@ -120,16 +104,12 @@ impl SalesSelectionService {
         self.snapshot_facts(facts, &booklet.base.id, batch_id, images).await
     }
 
-    /// 读取当前批次已冻结快照。
-    ///
-    /// # 参数
-    /// * `booklet` - 选品册
-    ///
-    /// # 返回
-    /// 返回同一读取边界内的快照。
-    ///
-    /// # 错误
-    /// 查询失败时返回仓储错误。
+    // 按档重生成时从当前批次读取原冻结商品池，并按 SKU 排序以便复用原次序。
+    // 返回同一读取边界内的快照。
+    // 查询失败时返回仓储错误。
+    //
+    // 输入约定：
+    // - `booklet`：选品册
     async fn load_batch_pool(&self, booklet: &SalesSelectionBooklet) -> Result<Vec<SkuSnapshot>> {
         let mut executor = NoTransaction;
         let domain = crate::repository::sales_selection::SalesSelectionDomainRepository::new(&self.db);
@@ -140,18 +120,14 @@ impl SalesSelectionService {
         Ok(snapshots)
     }
 
-    /// 按来源取出供给事实。
-    ///
-    /// # 参数
-    /// * `booklet` - 选品册
-    /// * `catalog` - 商品池端口
-    /// * `as_of` - 资格业务日期
-    ///
-    /// # 返回
-    /// 返回具备资格的事实。
-    ///
-    /// # 错误
-    /// 勾选任一失效整批失败并列明项。
+    // 构建新商品池时按册配置选择手动勾选或筛选取数，以指定业务日期查询可售资格。
+    // 返回具备资格的事实。
+    // 失败条件：勾选任一失效整批失败并列明项。
+    //
+    // 输入约定：
+    // - `booklet`：选品册
+    // - `catalog`：商品池端口
+    // - `as_of`：资格业务日期
     async fn collect_facts(
         &self,
         booklet: &SalesSelectionBooklet,
@@ -166,18 +142,14 @@ impl SalesSelectionService {
         catalog.collect_by_filter(filter, as_of).await
     }
 
-    /// 按勾选取出并复验资格。
-    ///
-    /// # 参数
-    /// * `booklet` - 选品册
-    /// * `catalog` - 商品池端口
-    /// * `as_of` - 资格业务日期
-    ///
-    /// # 返回
-    /// 返回全部仍具备资格的事实。
-    ///
-    /// # 错误
-    /// 任一勾选失效整批失败并列明项。
+    // 按手工勾选的 SKU 取得供给事实，并确认每个勾选仍有效；不得悄悄略过失效项。
+    // 返回全部仍具备资格的事实。
+    // 失败条件：任一勾选失效整批失败并列明项。
+    //
+    // 输入约定：
+    // - `booklet`：选品册
+    // - `catalog`：商品池端口
+    // - `as_of`：资格业务日期
     async fn collect_picked(
         &self,
         booklet: &SalesSelectionBooklet,
@@ -191,19 +163,15 @@ impl SalesSelectionService {
         Ok(facts)
     }
 
-    /// 快照图片并规范化 SKU。
-    ///
-    /// # 参数
-    /// * `facts` - 供给事实
-    /// * `booklet_id` - 选品册
-    /// * `batch_id` - 批次
-    /// * `images` - 图片端口
-    ///
-    /// # 返回
-    /// 返回升序快照。
-    ///
-    /// # 错误
-    /// 快照非法时拒绝。
+    // 生成新商品池时为每个 SKU 规范化并冻结快照及图片，再按 SKU 排序交给陈列生成。
+    // 返回升序快照。
+    // 快照非法时拒绝。
+    //
+    // 输入约定：
+    // - `facts`：供给事实
+    // - `booklet_id`：选品册
+    // - `batch_id`：批次
+    // - `images`：图片端口
     async fn snapshot_facts(
         &self,
         facts: Vec<SelectionSkuFact>,
@@ -219,20 +187,16 @@ impl SalesSelectionService {
         Ok(snapshots)
     }
 
-    /// 生成陈列与成员实体。
-    ///
-    /// # 参数
-    /// * `booklet` - 选品册
-    /// * `batch_id` - 目标批次
-    /// * `snapshots` - 冻结快照
-    /// * `req` - 准备请求
-    /// * `generator` - 套餐图端口
-    ///
-    /// # 返回
-    /// 返回陈列、成员与逐档报告。
-    ///
-    /// # 错误
-    /// 任一档为零或图片失败致零时整次失败。
+    // 用冻结商品池生成单品或套餐陈列；仅新批次生成商品池成员，按档重生成继续使用原成员。
+    // 返回陈列、成员与逐档报告。
+    // 任一档为零或图片失败致零时整次失败。
+    //
+    // 输入约定：
+    // - `booklet`：选品册
+    // - `batch_id`：目标批次
+    // - `snapshots`：冻结快照
+    // - `req`：准备请求
+    // - `generator`：套餐图端口
     pub(super) async fn build_displays(
         &self,
         booklet: &SalesSelectionBooklet,
@@ -258,19 +222,15 @@ impl SalesSelectionService {
     }
 }
 
-/// 将整册重新准备请求中的筛选、勾选或档位应用到内存中的选品册。
-///
-/// 未提交的字段沿用原规则。来源类型不得改变。
-///
-/// # 参数
-/// * `booklet` - 选品册。
-/// * `req` - 准备请求。
-///
-/// # 返回
-/// 成功时更新内存规则。
-///
-/// # 错误
-/// 来源类型或档位非法时拒绝。
+// 将整册重新准备请求中的筛选、勾选或档位应用到内存中的选品册。
+//
+// 未提交的字段沿用原规则。来源类型不得改变。
+// 成功时更新内存规则。
+// 来源类型或档位非法时拒绝。
+//
+// 输入约定：
+// - `booklet`：选品册。
+// - `req`：准备请求。
 pub(super) fn apply_reprepare_request(
     booklet: &mut SalesSelectionBooklet,
     req: &PrepareSalesSelectionRequest,
@@ -305,16 +265,12 @@ pub(super) fn apply_reprepare_request(
     Ok(booklet.apply_reprepare_rules(pool_source, tiers)?)
 }
 
-/// 校验商品池数量。
-///
-/// # 参数
-/// * `facts` - 供给事实
-///
-/// # 返回
-/// 落在 1 到 500 返回 `Ok(())`。
-///
-/// # 错误
-/// 为空或超限时整次失败。
+// 生成陈列前限制商品池规模，空候选或超限时不进入后续快照和组合计算。
+// 结果：落在 1 到 500 返回 `Ok(())`。
+// 为空或超限时整次失败。
+//
+// 输入约定：
+// - `facts`：供给事实
 fn ensure_pool_size(facts: &[SelectionSkuFact]) -> Result<()> {
     if facts.is_empty() {
         return Err(Error::selection_limit("筛选结果为空，不能准备选品册"));
@@ -325,17 +281,13 @@ fn ensure_pool_size(facts: &[SelectionSkuFact]) -> Result<()> {
     Ok(())
 }
 
-/// 校验勾选覆盖。
-///
-/// # 参数
-/// * `requested` - 去重后的勾选身份
-/// * `facts` - 仍具备资格的事实
-///
-/// # 返回
-/// 全覆盖返回 `Ok(())`。
-///
-/// # 错误
-/// 任一失效整批失败并列明项。
+// 手动勾选重新取数后检查返回的供给事实是否覆盖全部请求 SKU，不能用部分结果继续准备。
+// 结果：全覆盖返回 `Ok(())`。
+// 失败条件：任一失效整批失败并列明项。
+//
+// 输入约定：
+// - `requested`：去重后的勾选身份
+// - `facts`：仍具备资格的事实
 fn ensure_picked_coverage(requested: &[String], facts: &[SelectionSkuFact]) -> Result<()> {
     let found: HashSet<&str> = facts.iter().map(|fact| fact.sku_id.as_str()).collect();
     let missing: Vec<&str> = requested.iter().map(String::as_str).filter(|id| !found.contains(id)).collect();
@@ -345,19 +297,15 @@ fn ensure_picked_coverage(requested: &[String], facts: &[SelectionSkuFact]) -> R
     Err(Error::ValidationError(format!("以下勾选已失效: {}", missing.join("、"))))
 }
 
-/// 快照单个 SKU。
-///
-/// # 参数
-/// * `fact` - 供给事实
-/// * `booklet_id` - 选品册
-/// * `batch_id` - 批次
-/// * `images` - 图片端口
-///
-/// # 返回
-/// 返回规范化快照。
-///
-/// # 错误
-/// 事实非法时拒绝。
+// 生成新批次时把单个 SKU 的供给字段及图片引用规范化为选品快照。
+// 返回规范化快照。
+// 事实非法时拒绝。
+//
+// 输入约定：
+// - `fact`：供给事实
+// - `booklet_id`：选品册
+// - `batch_id`：批次
+// - `images`：图片端口
 async fn snapshot_one_fact(
     fact: SelectionSkuFact,
     booklet_id: &str,
@@ -382,19 +330,14 @@ async fn snapshot_one_fact(
     .map_err(|error| Error::ValidationError(error.to_string()))
 }
 
-/// 构造商品池成员实体。
-///
-/// # 参数
-/// * `booklet_id` - 选品册
-/// * `batch_id` - 批次
-/// * `snapshots` - 快照
-/// * `booklet` - 选品册（占位未用，保持调用一致）
-///
-/// # 返回
-/// 返回成员实体。
-///
-/// # 错误
-/// 无。
+// 为新批次的每份冻结 SKU 快照组装成员记录，供后续按批次重用商品池。
+// 返回成员实体。
+//
+// 输入约定：
+// - `booklet_id`：选品册
+// - `batch_id`：批次
+// - `snapshots`：快照
+// - `booklet`：选品册（占位未用，保持调用一致）
 fn pool_members_of(
     booklet_id: &str,
     batch_id: &str,
@@ -415,18 +358,14 @@ fn pool_members_of(
         .collect()
 }
 
-/// 构造单品陈列。
-///
-/// # 参数
-/// * `booklet` - 选品册
-/// * `batch_id` - 批次
-/// * `snapshots` - 快照
-///
-/// # 返回
-/// 返回单品陈列。
-///
-/// # 错误
-/// 快照非法时拒绝。
+// 单品册准备时按冻结的 SKU 快照生成可展示单品，不运行套餐组合搜索。
+// 返回单品陈列。
+// 快照非法时拒绝。
+//
+// 输入约定：
+// - `booklet`：选品册
+// - `batch_id`：批次
+// - `snapshots`：快照
 fn single_items(
     booklet: &SalesSelectionBooklet,
     batch_id: &str,
@@ -447,21 +386,17 @@ fn single_items(
         .collect()
 }
 
-/// 构造套餐陈列。
-///
-/// # 参数
-/// * `booklet` - 选品册
-/// * `batch_id` - 批次
-/// * `snapshots` - 快照
-/// * `req` - 准备请求
-/// * `generator` - 套餐图端口
-/// * `service` - 共享选品服务，用于读取未重生成档位占用并写回进度。
-///
-/// # 返回
-/// 返回套餐陈列与逐档报告。
-///
-/// # 错误
-/// 任一档为零时整次失败。
+// 套餐册准备时按目标档位搜索组合并生成陈列，汇总每档搜索报告。
+// 返回套餐陈列与逐档报告。
+// 任一档为零时整次失败。
+//
+// 输入约定：
+// - `booklet`：选品册
+// - `batch_id`：批次
+// - `snapshots`：快照
+// - `req`：准备请求
+// - `generator`：套餐图端口
+// - `service`：共享选品服务，用于读取未重生成档位占用并写回进度。
 async fn package_items(
     booklet: &SalesSelectionBooklet,
     batch_id: &str,
@@ -512,17 +447,12 @@ async fn package_items(
     Ok((items, reports))
 }
 
-/// 确定本次搜索的档位范围。
-///
-/// # 参数
-/// * `booklet` - 选品册
-/// * `req` - 准备请求
-///
-/// # 返回
-/// 按档重生成仅返回指定档，否则返回全部档。
-///
-/// # 错误
-/// 无。
+// 计算套餐陈列之前解析本次处理档位，重生成时只搜索指定范围。
+// 结果：按档重生成仅返回指定档，否则返回全部档。
+//
+// 输入约定：
+// - `booklet`：选品册
+// - `req`：准备请求
 fn scoped_tiers(
     booklet: &SalesSelectionBooklet,
     req: &PrepareSalesSelectionRequest,
@@ -533,19 +463,14 @@ fn scoped_tiers(
     booklet.tiers.iter().filter(|tier| req.tier_ids.contains(&tier.tier_id)).cloned().collect()
 }
 
-/// 读取未重生成档位的已占用组合。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `booklet` - 选品册
-/// * `batch_id` - 批次
-/// * `req` - 准备请求
-///
-/// # 返回
-/// 返回已占用组合键。
-///
-/// # 错误
-/// 查询失败时返回仓储错误。
+// 按档重生成时从保留陈列提取既有组合键，避免和未替换档位重复。
+// 返回已占用组合键。
+// 查询失败时返回仓储错误。
+//
+// 输入约定：
+// - `booklet`：选品册
+// - `batch_id`：批次
+// - `req`：准备请求
 async fn current_occupied(
     db: &mongodb::Database,
     booklet: &SalesSelectionBooklet,
@@ -561,17 +486,12 @@ async fn current_occupied(
     Ok(occupied_of(&items, Some(&req.tier_ids)))
 }
 
-/// 计算已占用组合键。
-///
-/// # 参数
-/// * `items` - 有效陈列
-/// * `exclude_tiers` - 排除的重生成档位
-///
-/// # 返回
-/// 返回组合键集合。
-///
-/// # 错误
-/// 无。
+// 把保留套餐转换成组合搜索的占用键集合，用于排除重复结果。
+// 返回组合键集合。
+//
+// 输入约定：
+// - `items`：有效陈列
+// - `exclude_tiers`：排除的重生成档位
 fn occupied_of(items: &[SalesSelectionDisplayItem], exclude_tiers: Option<&[String]>) -> HashSet<String> {
     let mut occupied = HashSet::new();
     for item in items {
@@ -583,17 +503,12 @@ fn occupied_of(items: &[SalesSelectionDisplayItem], exclude_tiers: Option<&[Stri
     occupied
 }
 
-/// 判断陈列是否属于重生成范围。
-///
-/// # 参数
-/// * `item` - 陈列项
-/// * `exclude_tiers` - 重生成档位
-///
-/// # 返回
-/// 属于时返回 `true`。
-///
-/// # 错误
-/// 无。
+// 比较陈列的档位与本次重生成范围，区分保留陈列和待替换陈列。
+// 结果：属于时返回 `true`。
+//
+// 输入约定：
+// - `item`：陈列项
+// - `exclude_tiers`：重生成档位
 fn excluded_item(item: &SalesSelectionDisplayItem, exclude_tiers: Option<&[String]>) -> bool {
     let Some(tiers) = exclude_tiers else {
         return false;
@@ -604,16 +519,11 @@ fn excluded_item(item: &SalesSelectionDisplayItem, exclude_tiers: Option<&[Strin
     }
 }
 
-/// 计算单项组合键。
-///
-/// # 参数
-/// * `item` - 陈列项
-///
-/// # 返回
-/// 返回成员升序连接键。
-///
-/// # 错误
-/// 无。
+// 按套餐成员组成生成供跨档去重的组合键；不把单品计为套餐占用。
+// 返回成员升序连接键。
+//
+// 输入约定：
+// - `item`：陈列项
 fn item_combo_key(item: &SalesSelectionDisplayItem) -> String {
     match &item.kind {
         crate::entity::sales_selection::DisplayKind::SingleSku { sku } => sku.sku_id.to_string(),
@@ -667,12 +577,12 @@ mod tests {
         }
     }
 
-    /// 按 SKU 升序校验快照顺序（测试断言用）。
+    // 断言商品池测试结果是否按 SKU 升序，便于核对冻结顺序稳定。
     fn is_sorted_snapshots(snapshots: &[SkuSnapshot]) -> bool {
         snapshots.windows(2).all(|pair| pair[0].sku_id.as_ref() <= pair[1].sku_id.as_ref())
     }
 
-    /// 统计各 SPU 成员数（测试断言用）。
+    // 按 SPU 计数，供单测断言商品池成员分布。
     fn spu_counts(snapshots: &[SkuSnapshot]) -> BTreeMap<String, usize> {
         let mut counts = BTreeMap::new();
         for snapshot in snapshots {

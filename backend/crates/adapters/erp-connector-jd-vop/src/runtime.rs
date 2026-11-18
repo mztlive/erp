@@ -44,23 +44,13 @@ pub struct JdVopRuntime {
 }
 
 impl JdVopRuntime {
-    /// 核对页面授权使用当前部署账号绑定的原京东连接，不执行供应商调用。
-    /// # 参数
-    /// `connection` 为按当前操作人范围加载的连接。
-    /// # 返回
-    /// 固定供应商协议及部署引用一致时成功。
-    /// # 错误
-    /// 连接删除、协议或技术绑定不符时拒绝，不转移账号身份。
+    /// 发起页面授权前，应用应传入已按操作人权限加载的原连接，离线核对京东接口类型及当前部署的端点和凭据引用。
+    /// 连接已删除或绑定不符时拒绝，不访问供应商，也不把授权转给其他账号。
     pub fn verify_authorization_binding(&self, connection: &SupplierApiConnection) -> ConnectorResult<()> {
         self.validate_binding(connection)
     }
-    /// 登记有效技术配置，不猜测认证协议、不发送请求、不启用京东写操作。
-    /// # 参数
-    /// `settings` 为 SafeConfig 启动快照。
-    /// # 返回
-    /// 未注入已验收认证实现的运行时，能力清单为空。
-    /// # 错误
-    /// 配置无效或尚未开启技术登记时返回分类错误。
+    /// 启动时登记 SafeConfig 中已启用的京东技术配置，供后续绑定账号和接入传输。
+    /// 配置关闭或无效时报错；未注入已验收传输的运行时不发请求，也不声明远端读写能力。
     pub fn new(settings: JdVopConfig) -> ConnectorResult<Self> {
         settings.validate().map_err(|_| mapping("京东接入设置不完整，请联系管理员核对连接配置"))?;
         if !settings.enabled {
@@ -80,13 +70,8 @@ impl JdVopRuntime {
         })
     }
 
-    /// 注入已完成 G0 固定向量及账号授权验收的只读认证实现。
-    /// # 参数
-    /// `settings` 为技术快照，`transport` 为服务端受信认证实现；禁止从用户载荷构造。
-    /// # 返回
-    /// 可独立读取目录的运行时，仍不提供下单、确认、消息删除或资金操作。
-    /// # 错误
-    /// 配置无效或关闭时拒绝登记；本构造不执行网络验收。
+    /// 组合根在 G0 固定向量和账号授权验收完成后，注入受信的读取实现供目录等查询使用。
+    /// 不得从用户载荷构造传输；此处校验并登记配置，不发请求验收，也不开放下单、确认、消息删除或资金操作。
     pub fn with_verified_transport(
         settings: JdVopConfig,
         transport: Arc<dyn JdVopReadTransport>,
@@ -101,13 +86,8 @@ impl JdVopRuntime {
         Ok(runtime)
     }
 
-    /// 注入已完成 G0 的账号执行资料及一次发送传输，不由部署布尔开关自行启用。
-    /// # 参数
-    /// 技术快照、已验读写认证实现及财务核实的账号发票资料。
-    /// # 返回
-    /// 已注入传输的运行时；缺少确认资金规则时仅保留原单查询、取消及调查。
-    /// # 错误
-    /// 缺失验收引用、发票资料或技术参数时拒绝，构造过程不发网络请求。
+    /// 组合根取得 G0 验收的账号执行资料、财务核实的发票资料和单次发送传输后，装配订单执行及证据处理能力。
+    /// 构造不访问网络，缺失必要资料时报错。未配置确认资金规则时，不开放新增下单及原单确认，仍可查询、取消和调查原单。
     pub fn with_verified_execution(
         settings: JdVopConfig,
         read: Arc<dyn JdVopReadTransport>,
@@ -124,13 +104,8 @@ impl JdVopRuntime {
         Ok(runtime)
     }
 
-    /// 装配独立消息通道，不把消息确认传输暴露为订单写能力。
-    /// # 参数
-    /// 受控写传输、已核实类型、调用渠道及轮询间隔。
-    /// # 返回
-    /// 消息通道已登记。
-    /// # 错误
-    /// 缺少读取传输时拒绝。
+    // 启用独立轮询时，用已有读取客户端及传输登记已核实的消息类型、渠道和轮询间隔。
+    // 没有读取客户端则拒绝；消息删除所需的发送器不赋予订单写能力。
     pub(super) fn configure_messages(
         &mut self,
         transport: Arc<dyn JdVopWriteTransport>,
@@ -148,13 +123,8 @@ impl JdVopRuntime {
         Ok(())
     }
 
-    /// 按当前连接资格取得允许新增业务调用的协议客户端。
-    /// # 参数
-    /// `connection` 为服务端加载的连接记录。
-    /// # 返回
-    /// 连接身份及技术引用已核对的客户端。
-    /// # 错误
-    /// 自动下单关闭、健康检查过期、配置绑定失效或确认资金规则未核实时拒绝。
+    /// 新增下单或履约前，从服务端加载的连接取得已核对技术绑定的京东客户端。
+    /// 自动下单关闭、当前配置健康检查未通过、绑定失效或未核实确认资金规则时拒绝。
     pub fn connector(&self, connection: &SupplierApiConnection) -> ConnectorResult<JdVopConnector> {
         let connector = self.tracking_connector(connection)?;
         if connection.stable.status != SupplierApiConnectionStatus::Active
@@ -170,13 +140,8 @@ impl JdVopRuntime {
         Ok(connector)
     }
 
-    /// 取得既有订单调查客户端；自动下单关闭不改变原账号身份。
-    /// # 参数
-    /// `connection` 为服务端加载的原连接。
-    /// # 返回
-    /// 与部署账号及业务连接绑定的客户端。
-    /// # 错误
-    /// 已删除、协议不匹配、技术引用缺失或陈旧时拒绝。
+    /// 调查既有订单时按原连接和部署账号取客户端，不因关闭自动下单而换账号或中断跟踪。
+    /// 连接删除、协议不符或技术引用缺失、陈旧时拒绝。
     pub fn tracking_connector(&self, connection: &SupplierApiConnection) -> ConnectorResult<JdVopConnector> {
         self.validate_binding(connection)?;
         self.connector_for_target(&SupplierReferenceTarget::from(connection))

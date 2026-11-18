@@ -52,7 +52,7 @@ pub(in crate::procure_to_pay) async fn resize_quotes<L: InquiryPurchaseLine>(
     }
     Ok(())
 }
-/// 变更终态驳回或作废时恢复原生效数量的采用余额，释放本次变更增加占用。
+// 变更终态驳回或作废时恢复原生效数量的采用余额，释放本次变更增加占用。
 pub(in crate::procure_to_pay) async fn restore_current_quotes(
     db: &Database,
     order_id: &str,

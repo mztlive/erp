@@ -14,14 +14,13 @@ use crate::{Error, Result};
 
 impl SupplierDepositService {
     /// 保存稳定交易对应的真实扣款，不因超批丢弃资金事实。
-    /// # 参数
-    /// * `reservation_id` / `operation_key` - 原占用及独立资金操作身份。
-    /// * `amount` / `evidence` - 已核实扣款与原单关联证据。
-    /// * `actor` / `executor` - 核验人和当前资金事务。
-    /// # 返回
     /// 返回原资金使用回执；不自动伪造银行付款。
-    /// # 错误
     /// 缺稳定交易/订单证据、异载荷、原占用缺失或写入失败时拒绝。
+    ///
+    /// 输入约定：
+    /// - `reservation_id` / `operation_key`：原占用及独立资金操作身份。
+    /// - `amount` / `evidence`：已核实扣款与原单关联证据。
+    /// - `actor` / `executor`：核验人和当前资金事务。
     pub async fn record_debit(
         &self,
         reservation_id: &str,

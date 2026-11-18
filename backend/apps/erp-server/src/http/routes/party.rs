@@ -12,16 +12,7 @@ use crate::http::handler::party;
 use crate::http::routes::permission_route;
 use crate::http::state::HttpState;
 
-/// 返回本域管理端路由集合。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回声明公共权限目录信息的路由集合。
-///
-/// # 错误
-/// 不执行 I/O，不返回错误。
+/// 为管理端挂载公司及往来主体档案接口，按操作登记公共权限目录信息。
 pub fn routes() -> Router<HttpState> {
     Router::new()
         .merge(directory())
@@ -33,7 +24,7 @@ pub fn routes() -> Router<HttpState> {
         .merge(bank_accounts())
 }
 
-/// 结算主体候选和回显继续使用上层认证。
+// 为结算主体选择及已选项回显挂载目录接口，身份由父路由认证。
 fn directory() -> Router<HttpState> {
     Router::new()
         // 上层 admin 路由统一认证；结算主体候选与回显不设置独立权限。
@@ -41,7 +32,7 @@ fn directory() -> Router<HttpState> {
         .route("/settlement-parties/selected", get(party::directory::selected))
 }
 
-/// 公司档案路由。
+// 为父路由挂载公司档案路由。
 fn companies() -> Router<HttpState> {
     Router::new()
         .route(
@@ -71,7 +62,7 @@ fn companies() -> Router<HttpState> {
         )
 }
 
-/// 主体档案路由。
+// 为父路由挂载主体档案路由。
 fn records() -> Router<HttpState> {
     Router::new()
         .route("/parties", permission_route(get(party::party_list), &permissions::party::LIST))
@@ -85,7 +76,7 @@ fn records() -> Router<HttpState> {
         )
 }
 
-/// 主体联系人路由。
+// 为父路由挂载主体联系人路由。
 fn contacts() -> Router<HttpState> {
     Router::new()
         .route(
@@ -102,7 +93,7 @@ fn contacts() -> Router<HttpState> {
         )
 }
 
-/// 主体地址路由。
+// 为父路由挂载主体地址路由。
 fn addresses() -> Router<HttpState> {
     Router::new()
         .route(
@@ -119,7 +110,7 @@ fn addresses() -> Router<HttpState> {
         )
 }
 
-/// 主体税务资料路由。
+// 为父路由挂载主体税务资料路由。
 fn tax_profiles() -> Router<HttpState> {
     Router::new()
         .route(
@@ -136,7 +127,7 @@ fn tax_profiles() -> Router<HttpState> {
         )
 }
 
-/// 主体银行账户路由。
+// 为父路由挂载主体银行账户路由。
 fn bank_accounts() -> Router<HttpState> {
     Router::new()
         .route(
@@ -172,7 +163,7 @@ mod tests {
     use super::*;
     use crate::http::routes::admin;
 
-    /// 只构造客户端；用例在认证或参数边界返回，不访问 MongoDB 或 S3。
+    // 为主体路由单测初始化惰性客户端；测试只覆盖认证与参数边界，不访问 MongoDB 或 S3。
     fn state() -> HttpState {
         let config = Config::from_toml_str(
             r#"

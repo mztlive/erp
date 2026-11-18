@@ -10,16 +10,12 @@ use crate::error::{Error, Result};
 use crate::repository::BpmExt;
 
 impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
-    /// 为销售类审批首页读取完整冻结路线。
-    ///
-    /// # 参数
-    /// * `subject` - 已通过实例读取授权的主体。
-    ///
-    /// # 返回
-    /// 销售单、卡券销售单和销售变更单返回本轮完整链条，其它类型返回空。
-    ///
-    /// # 错误
-    /// 冻结运行图缺失、不一致或数据库查询失败时返回错误。
+    // 为销售类审批首页读取完整冻结路线。
+    // 销售单、卡券销售单和销售变更单返回本轮完整链条，其它类型返回空。
+    //
+    // 冻结运行图缺失、不一致或数据库查询失败时返回错误。
+    //
+    // `subject`：已通过实例读取授权的主体。
     pub(super) async fn sales_approval_route(
         &self,
         subject: &RuntimeReadSubject,

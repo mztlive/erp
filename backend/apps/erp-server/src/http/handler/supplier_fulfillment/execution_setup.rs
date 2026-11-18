@@ -14,11 +14,7 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
 /// 读取真实接口执行阶段和可补充资料。
-/// # 参数
-/// 当前账号和路径订单通过同一订单数据范围核验。
-/// # 返回
 /// 后台真实执行资料。
-/// # 错误
 /// 越权、非自动订单或未配置协议时拒绝。
 pub async fn supplier_order_execution_setup(
     State(state): State<HttpState>,
@@ -33,11 +29,7 @@ pub async fn supplier_order_execution_setup(
 }
 
 /// 保存经核验的配送补充资料，后台负责后续执行。
-/// # 参数
-/// 当前账号须具备订单 submit 权限与对象写范围。
-/// # 返回
 /// 保存后的执行资料，不能解释为已下单成功。
-/// # 错误
 /// 版本冲突、无效坐标或不允许编辑时拒绝。
 pub async fn save_supplier_order_execution_setup(
     State(state): State<HttpState>,
@@ -54,11 +46,7 @@ pub async fn save_supplier_order_execution_setup(
 }
 
 /// 按原执行地址返回下一层供应商候选，前端不能指定外部编码。
-/// # 参数
-/// 订单路径与当前账号执行 submit 数据范围核验。
-/// # 返回
 /// 与当前版本绑定的候选及加密选择凭据。
-/// # 错误
 /// 越权、父级不符、版本变化或来源读取失败时拒绝。
 pub async fn supplier_order_execution_address_candidates(
     State(state): State<HttpState>,
@@ -74,11 +62,8 @@ pub async fn supplier_order_execution_address_candidates(
 }
 
 /// 请求查询原订单及确认结果，不重新发送下单或确认。
-/// # 参数
 /// 原订单及预期执行版本，权限在服务端事务内重新校验。
-/// # 返回
 /// 原调查和跟踪已唤醒后的执行资料。
-/// # 错误
 /// 越权、版本变化或没有原请求证据时拒绝。
 pub async fn query_supplier_order_execution_result(
     State(state): State<HttpState>,

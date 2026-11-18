@@ -20,14 +20,11 @@ use erp_support::authorization::files::require_owned;
 
 use super::*;
 
-/// 按付款申请动作已授权的采购来源冻结申请依据，不再要求采购提交权限。
-/// # 参数
-/// db、executor 为原事务；sources 为本次申请动作已授权对象，request、actor 为申请及操作人。
-/// reserve 控制是否原子占用应付金额。
-/// # 返回
-/// 返回已校验当前生效版本、金额、付款主体和账户的完整申请依据。
-/// # 错误
-/// 来源不在授权结果中、业务事实变化、余额不足、附件或账户无效时拒绝。
+// 按付款申请动作已授权的采购来源冻结申请依据，不再要求采购提交权限。
+//
+// db、executor 为原事务；sources 为本次申请动作已授权对象，request、actor 为申请及操作人。 reserve 控制是否原子占用应付金额。
+//
+// 返回已校验当前生效版本、金额、付款主体和账户的完整申请依据。来源不在授权结果中、业务事实变化、余额不足、附件或账户无效时拒绝。
 pub(super) async fn prepare_submission(
     db: &Database,
     authorization: &AuthorizationService,
@@ -93,7 +90,7 @@ pub(super) async fn prepare_submission(
     })
 }
 
-/// 只复用本次申请动作已授权的精确采购对象，不以其他来源或默认对象回退。
+// 只复用本次申请动作已授权的精确采购对象，不以其他来源或默认对象回退。
 fn authorized_source<'a>(sources: &'a [PurchaseOrder], id: &str) -> Result<&'a PurchaseOrder> {
     sources
         .iter()
@@ -246,7 +243,7 @@ async fn validate_attachments(
     Ok(())
 }
 
-/// 审批及付款重验冻结来源和账户；不读取可变销售草稿。
+// 审批及付款重验冻结来源和账户；不读取可变销售草稿。
 pub(super) async fn revalidate(
     db: &Database,
     request: &PurchasePaymentRequest,

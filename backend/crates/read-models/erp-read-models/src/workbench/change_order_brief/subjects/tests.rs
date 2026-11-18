@@ -3,14 +3,14 @@ use serde_json::json;
 
 use super::*;
 
-/// 由真实实体的持久化形状构造两次提交，避免以展示 DTO 自证版本正确。
+// 由真实实体的持久化形状生成两次提交，避免以展示 DTO 自证版本正确。
 fn entity<T: DeserializeOwned>(id: &str, fields: serde_json::Value) -> T {
     let mut value = serde_json::to_value(entity_core::BaseModel::new(id.to_string())).unwrap();
     value.as_object_mut().unwrap().extend(fields.as_object().unwrap().clone());
     serde_json::from_value(value).unwrap()
 }
 
-/// 为不同提交建立可区分的商品与金额。
+// 处理销售与采购变更简报时，为不同提交建立可区分的商品与金额。
 fn target(title: &str, amount: &str) -> LineStateMap {
     HashMap::from([(
         "line-1".into(),
@@ -18,7 +18,7 @@ fn target(title: &str, amount: &str) -> LineStateMap {
     )])
 }
 
-/// 销售变更的旧金额、客户与明细按提交读取，当前草稿原因和类型不得混入。
+// 验证销售与采购变更简报：销售变更的旧金额、客户与明细按提交读取，当前草稿原因和类型不得混入。
 #[test]
 fn sales_change_history_keeps_frozen_customer_amount_and_lines() {
     let change: SalesChangeOrder = entity(
@@ -59,7 +59,7 @@ fn sales_change_history_keeps_frozen_customer_amount_and_lines() {
     assert_versions(&fact, "原客户", "新客户");
 }
 
-/// 采购变更的正式 CS 序号和提交 ID 均指向同一冻结内容。
+// 验证销售与采购变更简报：采购变更的正式 CS 序号和提交 ID 均指向同一冻结内容。
 #[test]
 fn purchase_change_history_keeps_frozen_supplier_amount_and_lines() {
     let mut change: PurchaseChangeOrder = entity(
@@ -110,7 +110,7 @@ fn purchase_change_history_keeps_frozen_supplier_amount_and_lines() {
     assert!(fact.display.subject_briefs.contains_key("s1"));
 }
 
-/// 两种变更必须提供相同的版本隔离与缺失规则。
+// 核对销售与采购变更简报边界时，两种变更必须提供相同的版本隔离与缺失规则。
 fn assert_versions(fact: &WorkbenchObjectFact, old_party: &str, new_party: &str) {
     for (version, party, amount) in [("1", old_party, "100"), ("2", new_party, "200")] {
         let display = &fact.display.subject_briefs[version];
@@ -167,7 +167,7 @@ fn rejected_purchase() -> (PurchaseChangeOrder, PurchaseChangeBriefContext) {
     (change, context)
 }
 
-/// 模拟独立保存完成后的真实持久化头，使用生产实体的编辑副本及更新动作。
+// 处理销售与采购变更简报时，模拟独立保存完成后的真实持久化头，使用生产实体的编辑副本及更新动作。
 fn save_purchase_target(
     change: &mut PurchaseChangeOrder,
     context: &mut PurchaseChangeBriefContext,

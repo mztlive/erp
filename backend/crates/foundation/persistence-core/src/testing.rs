@@ -16,13 +16,7 @@ impl Default for SnapshotExecutor {
 }
 
 impl SnapshotExecutor {
-    /// 模拟同一会话结束事务后开启下一事务。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 无；此前签发的所有边界失效。
-    /// # 错误
-    /// 无。
+    /// 在测试中模拟切换到下一笔快照事务，验证旧事务签发的边界凭证全部失效。
     pub fn restart(&mut self) {
         self.scope = Some(ExecutionScope::snapshot());
     }

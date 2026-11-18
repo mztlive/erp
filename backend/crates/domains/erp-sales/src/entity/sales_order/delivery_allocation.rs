@@ -31,12 +31,10 @@ impl fmt::Debug for SalesDeliveryAllocation {
 
 impl SalesDeliveryAllocation {
     /// 规范化收货资料并校验逐行数量守恒。
-    /// # 参数
-    /// `allocations` 为完整分配列表；`quantity` 为销售行基础单位数量。
-    /// # 返回
     /// 返回规范化列表；空列表表示尚未指定交付地址。
-    /// # 错误
     /// 超过 100 个地址、资料缺失、地区不是最末级、数量非正、溢出或合计不等于行数量时拒绝。
+    ///
+    /// 输入约定：`allocations` 为完整分配列表；`quantity` 为销售行基础单位数量。
     pub fn validate_all(mut allocations: Vec<Self>, quantity: Quantity) -> Result<Vec<Self>> {
         if allocations.is_empty() {
             return Ok(allocations);
@@ -83,15 +81,7 @@ impl SalesDeliveryAllocation {
     }
 
     /// 返回"省市区 + 详细地址"的完整地址。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回拼接后的完整地址。
-    ///
-    /// # 错误
-    /// 无。
     pub fn full_address(&self) -> String {
         format!("{}{}", self.region_name, self.address)
     }

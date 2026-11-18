@@ -17,15 +17,10 @@ use persistence_core::Executor;
 use super::mapping::{sales_order_basis_fact, stock_balance_fact};
 use super::{InquiryBasis, load_creation_basis_facts, load_sales_procurement_coverage};
 use crate::{Error, Result};
-/// 加载可作为采购来源的已生效销售单。
+/// 为采购创建依据来源取数时，读取可作为采购来源的已生效销售单。
 ///
 /// # 参数
-/// * `db` - MongoDB 数据库
 /// * `sales_order_id` - 销售单主键
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回已生效销售单。
 ///
 /// # 错误
 /// 销售单不存在、未生效或仓储读取失败时返回错误。
@@ -48,13 +43,11 @@ pub async fn load_effective_sales_order(
     Ok(order)
 }
 
-/// 由销售当前版本、当前覆盖和批量供给事实形成精确依据集合。
+/// 处理采购创建依据来源时，由销售当前版本、当前覆盖和批量供给事实形成精确依据集合。
 ///
 /// # 参数
-/// * `db` - MongoDB 数据库
 /// * `order` - 已生效销售单
 /// * `responsibility_scope_ids` - 当前采购任务冻结的稳定销售行 ID
-/// * `executor` - 数据访问执行器
 ///
 /// # 返回
 /// 返回任务责任范围内按精确拆分维度分组并稳定排序的依据。
@@ -74,10 +67,9 @@ pub async fn basis_groups_for_order(
     Ok(basis_groups_and_facts(db, order, responsibility_scope_ids, executor).await?.0)
 }
 
-/// 由销售当前版本、当前覆盖和批量供给事实形成精确依据集合，并返回本次事实。
+/// 由销售当前版本、当前覆盖和批量供给事实形成精确依据集合，并给出本次事实。
 ///
 /// # 参数
-/// * `db` - MongoDB 数据库
 /// * `order` - 已生效销售单
 /// * `responsibility_scope_ids` - 当前采购任务冻结的稳定销售行 ID
 /// * `executor` - 数据访问执行器；事务内重验必须复用调用方 executor
@@ -105,7 +97,7 @@ pub async fn basis_groups_and_facts(
     basis_groups_and_facts_from_coverage(db, order, responsibility_scope_ids, &coverage, executor).await
 }
 
-/// 已读取的同阶段覆盖只用于当前依据组装，不能替代 guard 后或库存写入后的重验。
+// 处理采购创建依据来源时，已读取的同阶段覆盖只用于当前依据组装，不能替代 guard 后或库存写入后的重验。
 async fn basis_groups_and_facts_from_coverage(
     db: &mongodb::Database,
     order: &SalesOrder,
@@ -120,11 +112,14 @@ async fn basis_groups_and_facts_from_coverage(
     Ok((groups, facts))
 }
 
-/// 同一读取阶段按原顺序形成采购与现有库存依据，共用一次完整覆盖读取。
+/// 处理采购创建依据来源时，同一读取阶段按原顺序形成采购与现有库存依据，共用一次完整覆盖读取。
+///
 /// # 参数
 /// 数据库、已生效销售单、任务责任行及调用方事务执行器。
+///
 /// # 返回
 /// 精确采购依据和库存依据；非生效销售单返回两份空集合。
+///
 /// # 错误
 /// 覆盖、采购供给、库存或仓库读取失败时按采购先于库存的顺序返回错误。
 ///
@@ -148,23 +143,19 @@ pub async fn sourcing_groups_for_order(
     Ok((groups, stock))
 }
 
-/// 批量加载任务责任范围内销售目标行的供给与供应商结算事实。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `coverage` - 当前销售版本采购覆盖
-/// * `responsibility_scope_ids` - 当前采购任务冻结的稳定销售行 ID
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回涉及 SKU 的 ACTIVE 供给、当前修订、可供投影、供应商结算事实与法定名称。
-///
-/// # 错误
-/// 仓储批量读取失败时返回错误。
-///
-/// # 关键业务约束
-/// 只收集任务冻结范围内仍有剩余量的目标行 SKU；查询次数与任务数、销售行数及
-/// 供给数无关。
+// 处理采购创建依据来源时，批量加载任务责任范围内销售目标行的供给与供应商结算事实。
+//
+// 调用参数：
+// * `coverage` - 当前销售版本采购覆盖
+// * `responsibility_scope_ids` - 当前采购任务冻结的稳定销售行 ID
+//
+// 返回涉及 SKU 的 ACTIVE 供给、当前修订、可供投影、供应商结算事实与法定名称。
+//
+// 仓储批量读取失败时返回错误。
+//
+// 业务边界：
+// 只收集任务冻结范围内仍有剩余量的目标行 SKU；查询次数与任务数、销售行数及
+// 供给数无关。
 async fn creation_basis_facts_for_order(
     db: &mongodb::Database,
     coverage: &SalesProcurementCoverage,
@@ -184,13 +175,11 @@ async fn creation_basis_facts_for_order(
     load_creation_basis_facts(db, &sku_ids, executor).await.map_err(Into::into)
 }
 
-/// 由销售当前版本、统一覆盖与公司可用库存形成现有库存供给依据。
+/// 处理采购创建依据来源时，由销售当前版本、统一覆盖与公司可用库存形成现有库存供给依据。
 ///
 /// # 参数
-/// * `db` - 目标数据库。
 /// * `order` - 销售单。
 /// * `responsibility_scope_ids` - 任务冻结的销售行身份。
-/// * `executor` - 调用方执行器。
 ///
 /// # 返回
 /// 销售单未生效时返回空集合；否则返回现有库存供给依据分组。
@@ -210,7 +199,7 @@ pub async fn stock_basis_groups_for_order(
     stock_groups_from_coverage(db, responsibility_scope_ids, &coverage, executor).await
 }
 
-/// 仅从原阶段覆盖补充库存和仓库事实，不重新装载销售与采购覆盖。
+// 处理采购创建依据来源时，仅从原阶段覆盖补充库存和仓库事实，不重新装载销售与采购覆盖。
 async fn stock_groups_from_coverage(
     db: &mongodb::Database,
     responsibility_scope_ids: &[String],
@@ -261,7 +250,7 @@ async fn stock_groups_from_coverage(
     ))
 }
 
-/// 库存依据以仓库名称展示；缺少当前修订时使用稳定业务编号。
+// 生成采购创建依据来源视图时，库存依据以仓库名称展示；缺少当前修订时使用稳定业务编号。
 fn warehouse_display(name: Option<&str>, warehouse_code: &str) -> String {
     name.map(str::trim)
         .filter(|name| !name.is_empty())

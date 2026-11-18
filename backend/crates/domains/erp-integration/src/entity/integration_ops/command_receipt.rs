@@ -34,21 +34,9 @@ pub enum IntegrationCommandResult {
 
 /// 仅领域登记的三类强类型结果可以进入回执集合。
 pub trait IntegrationReceiptPayload: Clone + Send + Sync {
-    /// 将领域强类型结果放入明确的持久化枚举。
-    /// # 参数
-    /// 无；消费本次结果。
-    /// # 返回
-    /// 返回领域登记的结果种类。
-    /// # 错误
-    /// 不返回错误。
+    /// 将领域强类型结果放入明确的持久化枚举。返回领域登记的结果种类。
     fn into_result(self) -> IntegrationCommandResult;
-    /// 从领域枚举恢复相应种类的完整结果。
-    /// # 参数
-    /// * `result` - 已保存的结果枚举。
-    /// # 返回
-    /// 返回原结果。
-    /// # 错误
-    /// 结果种类不一致时返回内部错误。
+    /// 从领域枚举恢复相应种类的完整结果。结果种类不一致时返回内部错误。
     fn from_result(result: IntegrationCommandResult) -> Result<Self>;
 }
 impl IntegrationReceiptPayload for ActionReceiptResult {
@@ -103,15 +91,8 @@ pub struct IntegrationCommandReceipt {
 }
 impl IntegrationCommandReceipt {
     /// 从已成功执行的命令及强类型结果构造回执。
-    /// # 参数
-    /// * `identity` - 原稳定命令身份。
-    /// * `actor_id` - 当前认证操作人。
-    /// * `result` - 原执行结果。
-    /// * `audit_event_id` - 同事务业务事件关联。
-    /// # 返回
-    /// 返回已校验的领域回执。
-    /// # 错误
-    /// 身份或schema不合法时返回错误。
+    ///
+    /// 返回已校验的领域回执。身份或schema不合法时返回错误。
     pub fn new(
         identity: &IntegrationCommandIdentity,
         actor_id: &str,
@@ -145,7 +126,7 @@ impl IntegrationCommandReceipt {
         }
         Ok(value)
     }
-    /// 回执版本、动作与结果种类、指纹和必填字段必须同时成立，否则失败关闭。
+    // 回执版本、动作与结果种类、指纹和必填字段必须同时成立，否则失败关闭。
     fn validate(&self) -> Result<()> {
         let expected_action = match &self.result {
             IntegrationCommandResult::TaskAction(_) => "integration.task_action",
@@ -187,14 +168,8 @@ impl IntegrationCommandReceipt {
         }
         Ok(())
     }
-    /// 校验原身份后恢复完整强类型结果，不读当前任务状态。
-    /// # 参数
-    /// * `identity` - 当前请求身份及载荷。
-    /// * `actor_id` - 当前认证操作人。
-    /// # 返回
-    /// 返回原命令结果。
-    /// # 错误
-    /// 身份/载荷冲突优先于结果错误；损坏schema明确失败。
+    /// 重试集成命令时，先核对当前命令身份及载荷，再从原回执恢复完整强类型结果，不读任务当前状态。
+    /// 身份或载荷不符按冲突处理；未知或损坏的回执格式不能视作没有回执。
     pub fn recover<T: IntegrationReceiptPayload>(
         &self,
         identity: &IntegrationCommandIdentity,

@@ -13,11 +13,8 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
 /// 校验客户绑定的新建文件，不创建空草稿。
-/// # 参数
 /// multipart 必须包含一个 customer_id 和一个 file，身份取当前账号。
-/// # 返回
 /// 返回逐行校验预览。
-/// # 错误
 /// 文件、字段、客户或创建与导入权限无效时拒绝。
 pub async fn creation_preview(
     State(state): State<HttpState>,
@@ -35,11 +32,8 @@ pub async fn creation_preview(
 }
 
 /// 从原预览一次性创建询价和配送需求。
-/// # 参数
 /// `request` 仅包含客户、预览、指纹、合并确认及稳定命令号。
-/// # 返回
 /// 返回草稿身份和版本；重放返回首次结果。
-/// # 错误
 /// 预览、权限、商品或客户失效时整体拒绝。
 pub async fn creation_confirm(
     State(state): State<HttpState>,

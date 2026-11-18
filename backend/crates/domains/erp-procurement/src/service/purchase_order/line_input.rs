@@ -15,18 +15,9 @@ use crate::{Error, Result};
 
 /// 从类型化输入构建采购提交行。
 ///
-/// Service 仅分配行 ID 与行号；金额由领域方法计算，行实体构造完成快照规范化、
-/// 字段归属与金额三元组守恒校验。
+/// Service 仅分配行 ID 与行号；金额由领域方法计算，行实体构造完成快照规范化、字段归属与金额三元组守恒校验。
 ///
-/// # 参数
-/// * `submission_id` - 所属提交稳定身份
-/// * `inputs` - 类型化行输入集合
-///
-/// # 返回
-/// 返回行号从 1 递增的提交行实体集合。
-///
-/// # 错误
-/// 行金额输入非法或行实体校验失败时返回对应错误。
+/// 返回行号从 1 递增的提交行实体集合。行金额输入非法或行实体校验失败时返回对应错误。
 pub fn build_submission_lines(
     submission_id: &PurchaseOrderSubmissionId,
     inputs: &[PurchaseLineInput],
@@ -42,18 +33,11 @@ pub fn build_submission_lines(
 
 /// 从类型化输入构建采购变更提交行。
 ///
-/// Service 仅分配行 ID 与行号；金额由领域方法计算，行实体构造完成快照规范化、
-/// 字段归属与金额三元组守恒校验。
+/// Service 仅分配行 ID 与行号；金额由领域方法计算，行实体构造完成快照规范化、字段归属与金额三元组守恒校验。
 ///
-/// # 参数
-/// * `submission_id` - 所属变更提交稳定身份（字符串形态）
-/// * `inputs` - 类型化行输入集合
+/// 返回行号从 1 递增的变更提交行实体集合。行金额输入非法或行实体校验失败时返回对应错误。
 ///
-/// # 返回
-/// 返回行号从 1 递增的变更提交行实体集合。
-///
-/// # 错误
-/// 行金额输入非法或行实体校验失败时返回对应错误。
+/// `submission_id` 为所属变更提交稳定身份（字符串形态）。
 pub fn build_change_submission_lines(
     submission_id: &str,
     inputs: &[PurchaseLineInput],
@@ -70,7 +54,7 @@ pub fn build_change_submission_lines(
     })
 }
 
-/// 按请求顺序为类型化输入分配行号并逐行构造实体。
+// 按请求顺序为类型化输入分配行号并逐行构造实体。
 fn build_lines<Line>(
     inputs: &[PurchaseLineInput],
     mut make: impl FnMut(PurchaseLineInput, u32) -> Result<Line>,
@@ -84,28 +68,18 @@ fn build_lines<Line>(
 
 /// 计算请求行的表头金额汇总。
 ///
-/// # 参数
-/// * `inputs` - 类型化行输入集合；空集合返回零三元组
+/// 返回 `(gross, net, tax)` 表头汇总。任一行金额输入非法（缺数量/单价/物流金额）时返回 `ValidationError`。
 ///
-/// # 返回
-/// 返回 `(gross, net, tax)` 表头汇总。
-///
-/// # 错误
-/// 任一行金额输入非法（缺数量/单价/物流金额）时返回 `ValidationError`。
+/// `inputs` 为类型化行输入集合；空集合返回零三元组。
 pub fn compute_request_totals(inputs: &[PurchaseLineInput]) -> Result<(Amount, Amount, Amount)> {
     compute_header_totals(inputs).map_err(map_line_amount_violation)
 }
 
 /// 映射行金额领域校验失败为服务错误。
 ///
-/// # 参数
-/// * `violation` - 领域金额校验失败原因
+/// 返回保持稳定文案的参数验证错误。本方法只转换错误分类。
 ///
-/// # 返回
-/// 返回保持稳定文案的参数验证错误。
-///
-/// # 错误
-/// 无；本方法只转换错误分类。
+/// `violation` 为领域金额校验失败原因。
 pub fn map_line_amount_violation(violation: LineAmountViolation) -> Error {
     Error::ValidationError(violation.to_string())
 }

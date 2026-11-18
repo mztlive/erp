@@ -30,11 +30,11 @@ impl JdVopAuthorizationTasks {
     }
 
     /// 停止受理新授权，并等待已经开始的有界授权任务完成保存或保留未知状态。
-    /// # 参数
+    ///
     /// 无；由应用停机生命周期调用。
-    /// # 返回
+    ///
     /// 已开始任务均已退出，不新发授权请求。
-    /// # 错误
+    ///
     /// 任务准入边界不可用时返回固定脱敏错误。
     pub async fn shutdown(&self) -> Result<()> {
         self.closing.store(true, Ordering::SeqCst);

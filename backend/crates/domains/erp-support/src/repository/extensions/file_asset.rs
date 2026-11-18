@@ -20,28 +20,10 @@ pub trait FileAssetExt {
     /// 文件资产列表筛选条件类型（定义见 `repository::file_asset`）。
     type FileAssetFilter;
 
-    /// 获取 `file_asset` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `FileAssetRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得 `file_asset` 集合的仓储，供文件身份、扫描与保留状态的读写；由调用方提供执行器。
     fn file_assets(&self) -> FileAssetRepository<'_>;
 
-    /// 获取 `document_attachment` 集合的 Repository。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `DocumentAttachmentRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 取得 `document_attachment` 集合的仓储，供文件与业务单据关联的读写；由调用方提供执行器。
     fn document_attachments(&self) -> DocumentAttachmentRepository<'_>;
 }
 

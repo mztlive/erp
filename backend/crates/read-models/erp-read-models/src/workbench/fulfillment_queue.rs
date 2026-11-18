@@ -106,14 +106,15 @@ pub enum FulfillmentQueueGateState {
 }
 
 impl FulfillmentQueueGateState {
-    /// 解析共享的仓储放行码；未登记值不授予放行状态。
-    ///
-    /// # 参数
-    /// `value` 为仓储返回的稳定状态码。
-    /// # 返回
-    /// 已登记状态或 `None`。
-    /// # 错误
-    /// 不返回错误，调用方必须拒绝未知状态。
+    // 规范化履约责任队列输入时，解析共享的仓储放行码；未登记值不授予放行状态。
+    //
+    // 调用参数：
+    // `value` 为仓储返回的稳定状态码。
+    //
+    // 已登记状态或 `None`。
+    //
+    // 失败边界：
+    // 不返回错误，调用方必须拒绝未知状态。
     pub(super) fn parse(value: &str) -> Option<Self> {
         match value {
             "SATISFIED" => Some(Self::Satisfied),
@@ -316,11 +317,10 @@ pub struct FulfillmentQueuePageView {
 }
 
 impl WorkbenchReadService {
-    /// 查询当前个人责任范围内的 W09 履约队列。
+    /// 处理履约责任队列时，查询当前个人责任范围内的 W09 履约队列。
     ///
     /// # 参数
     /// * `params` - 履约筛选与分页参数
-    /// * `actor` - 已认证操作人
     ///
     /// # 返回
     /// 返回单次 MongoDB 聚合形成的分页、指标和仓库选项。
@@ -349,7 +349,7 @@ impl WorkbenchReadService {
         })
     }
 
-    /// 授权快照、聚合读取、指标和分页共享原事务快照，并在返回前复验身份版本。
+    // 处理履约责任队列时，授权快照、聚合读取、指标和分页共享原事务快照，并在返回前复验身份版本。
     async fn fulfillment_queue_page(
         &self,
         mut query: FulfillmentQueueQuery,
@@ -408,7 +408,7 @@ impl WorkbenchReadService {
     }
 }
 
-/// 按原首错顺序校验分页和日期，再移动仓储专用筛选字段；保留页面及版本字段供返回复验。
+// 依据原首错顺序校验分页和日期，再移动仓储专用筛选字段；保留页面及版本字段供返回复验。
 fn fulfillment_repository_filter(
     query: &mut FulfillmentQueueQuery,
     actor_id: &str,

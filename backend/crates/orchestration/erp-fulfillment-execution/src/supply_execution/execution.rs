@@ -5,17 +5,11 @@ use erp_audit::execution::recover_command;
 
 use crate::Result;
 
-/// 原意图失败时禁止进入供应商步骤，保留最先返回的错误。
-///
-/// # 参数
-/// * `intent` - 必须先成功的原意图。
-/// * `next` - 接收已提交意图，成功后才执行的供应商步骤。
-///
-/// # 返回
-/// 返回 `next` 的成功结果。
-///
-/// # 错误
-/// `intent` 失败时返回该错误且不调用 `next`。`next` 失败时返回其错误。
+// 原意图失败时禁止进入供应商步骤，保留最先返回的错误。
+//
+// `intent` 为必须先成功的原意图；`next` 为接收已提交意图，成功后才执行的供应商步骤。返回 `next` 的成功结果。
+//
+// `intent` 失败时返回该错误且不调用 `next`。`next` 失败时返回其错误。
 pub(super) async fn after_intent<I, N, F, U, T>(intent: I, next: N) -> Result<T>
 where
     I: Future<Output = Result<U>>,
@@ -25,17 +19,11 @@ where
     next(intent.await?).await
 }
 
-/// 已冻结的供应商结果直接复用；外呼及持久化只在不存在结果时执行。
-///
-/// # 参数
-/// * `prepared` - 已冻结的结果；`Some` 时不再调用 `fresh`。
-/// * `fresh` - 没有冻结结果时执行的外呼或持久化。
-///
-/// # 返回
-/// 返回已冻结结果，或 `fresh` 的成功结果。
-///
-/// # 错误
-/// 仅 `fresh` 失败时返回其错误。
+// 已冻结的供应商结果直接复用；外呼及持久化只在不存在结果时执行。
+//
+// `prepared` 为已冻结的结果；`Some` 时不再调用 `fresh`；`fresh` 为没有冻结结果时执行的外呼或持久化。
+//
+// 返回已冻结结果，或 `fresh` 的成功结果。仅 `fresh` 失败时返回其错误。
 pub(super) async fn reuse_or_prepare<T, N, F>(prepared: Option<T>, fresh: N) -> Result<T>
 where
     N: FnOnce() -> F,
@@ -46,17 +34,8 @@ where
         None => fresh().await,
     }
 }
-/// 仅接收最终事务结果；任意事务错误后只查证一次并保留首次未知提交来源。
-///
-/// # 参数
-/// * `result` - 最终事务结果。
-/// * `replay` - 事务失败后只调用一次的查证。
-///
-/// # 返回
-/// 事务成功时返回该结果；查证找到原结果时返回原结果。
-///
-/// # 错误
-/// 事务成功时不查证。查证或恢复失败时保留 `recover_command` 的首次错误。
+// 供应执行的最终写事务成功时直接交付结果。失败后只执行一次原命令的只读查证，命中则返回原结果；
+// 不能恢复时按 `recover_command` 保留首次错误和未知提交来源。
 pub(super) async fn recover_final_result<T, N, F>(result: Result<T>, replay: N) -> Result<T>
 where
     N: FnOnce() -> F,

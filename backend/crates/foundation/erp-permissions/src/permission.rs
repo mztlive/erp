@@ -28,30 +28,19 @@ pub struct Permission {
 }
 
 impl Permission {
-    /// 使用已经规范化的静态文本定义内置权限。
+    /// 用规范化的静态资源和动作定义内置权限，可直接用于目录常量。两部分均须为小写且无首尾空白；
+    /// 动态输入应使用 [`Self::parse`]。
     ///
-    /// # 参数
-    /// resource 为资源标识，action 为动作；均须小写且无首尾空白。
-    /// # 返回
-    /// 借用静态文本的权限，可用于 const 初始化。
-    /// # 错误
-    /// 不返回错误；非法常量在编译期失败。
     /// # Panics
-    /// 在运行时调用时，非法静态文本触发 panic；动态输入必须使用 parse。
+    /// 非法文本在常量求值时导致编译失败，在运行时调用则触发 panic。
     pub const fn new(resource: &'static str, action: &'static str) -> Self {
         assert!(validate_part(resource, "权限资源", true).is_ok(), "非法的内置权限资源");
         assert!(validate_part(action, "权限动作", false).is_ok(), "非法的内置权限动作");
         Self { resource: Cow::Borrowed(resource), action: Cow::Borrowed(action) }
     }
 
-    /// 解析权限文本，去除整体首尾空白并转换为 ASCII 小写。
-    ///
-    /// # 参数
-    /// value 为外部 resource:action 文本。
-    /// # 返回
-    /// 已规范化且通过校验的权限。
-    /// # 错误
-    /// 格式错误、空值、部分超过 128 字节或含非法字符时返回解析错误。
+    /// 从配置等运行时输入解析 `resource:action`，裁剪整串首尾空白并转成 ASCII 小写，
+    /// 使动态权限可直接与内置常量比较。只允许一个冒号，每部分限 128 字节；空段和非法字符会报错。
     pub fn parse(value: impl AsRef<str>) -> Result<Self, ParsePermissionError> {
         let normalized = value.as_ref().trim().to_ascii_lowercase();
         let (resource, action) = normalized.split_once(':').ok_or(ParsePermissionError::InvalidFormat)?;
@@ -64,42 +53,25 @@ impl Permission {
         Ok(Self { resource: Cow::Owned(resource.into()), action: Cow::Owned(action.into()) })
     }
 
-    /// 取得资源标识。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 已规范化的资源文本。
-    /// # 错误
-    /// 不返回错误。
+    /// 借用规范化的资源标识，供调用方按业务对象归类权限。
     pub fn resource(&self) -> &str {
         &self.resource
     }
 
-    /// 取得动作标识。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 已规范化的动作文本。
-    /// # 错误
-    /// 不返回错误。
+    /// 借用规范化的动作标识，供调用方区分同一资源的读取、修改等操作。
     pub fn action(&self) -> &str {
         &self.action
     }
 
-    /// 判断当前权限是否覆盖目标权限。
-    /// # 参数
-    /// required 为需要检查的目标权限。
-    /// # 返回
-    /// 资源与动作分别相等或当前部分为完整通配符时为 true。
-    /// # 错误
-    /// 不返回错误。
+    /// 判断授予的权限能否满足指定权限。资源与动作分别精确匹配，只有授予方的整个分量为 `*` 时才通配；
+    /// 资源路径前缀不覆盖子路径。
     pub fn covers(&self, required: &Self) -> bool {
         (self.resource == "*" || self.resource == required.resource)
             && (self.action == "*" || self.action == required.action)
     }
 }
 
-/// 常量与动态输入共用的格式约束；斜杠只分隔非空资源路径段。
+// 让静态常量和动态输入共用编码约束：只有资源能用 `/` 分隔非空路径段，`*` 必须独占一个分量。
 const fn validate_part(
     value: &str,
     label: &'static str,
@@ -135,39 +107,21 @@ const fn validate_part(
 }
 
 impl fmt::Display for Permission {
-    /// 输出稳定的 resource:action 编码。
-    /// # 参数
-    /// formatter 为目标格式化器。
-    /// # 返回
-    /// 文本写入结果。
-    /// # 错误
-    /// 目标写入失败时返回格式化错误。
+    // 统一显示与持久化使用的 `resource:action` 编码，使动态值和静态值输出一致。
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(formatter, "{}:{}", self.resource, self.action)
     }
 }
 
 impl Serialize for Permission {
-    /// 将权限编码为字符串。
-    /// # 参数
-    /// serializer 为目标序列化器。
-    /// # 返回
-    /// resource:action 文本的编码结果。
-    /// # 错误
-    /// 序列化器拒绝写入时返回其错误。
+    // 序列化沿用显示格式，把权限写为单个字符串而非两字段对象。
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         serializer.collect_str(self)
     }
 }
 
 impl<'de> Deserialize<'de> for Permission {
-    /// 在解码边界解析并校验权限。
-    /// # 参数
-    /// deserializer 为输入反序列化器。
-    /// # 返回
-    /// 已规范化的权限值。
-    /// # 错误
-    /// 非字符串或非法权限文本返回解码错误。
+    // 配置或持久化数据回读时走动态解析，不让非字符串或非法编码进入授权判断。
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         Self::parse(String::deserialize(deserializer)?).map_err(serde::de::Error::custom)
     }

@@ -20,40 +20,20 @@ pub trait CustomerExt {
     /// `customer_profile_command` 根级命令去重结果集合名。
     const CUSTOMER_PROFILE_COMMANDS: &'static str = "customer_profile_commands";
 
-    /// 获取 `customer_account` 集合的 Repository。
+    /// 取得 `customer_account` 集合访问入口，供业务服务共享数据库和执行器。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回 `CustomerAccountRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     fn customer_accounts(&self) -> CustomerAccountRepository<'_>;
 
-    /// 获取 `customer_assignment` 集合的 Repository（按有效期的归属事实行）。
+    /// 取得 `customer_assignment` 集合访问入口，供业务服务共享数据库和执行器。
+    /// 按有效期的归属事实行。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回 `CustomerAssignmentRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     fn customer_assignments(&self) -> CustomerAssignmentRepository<'_>;
 
     /// 获取客户资料根级命令去重仓储。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回 `CustomerProfileCommandRepository<'_>`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     fn customer_profile_commands(&self) -> CustomerProfileCommandRepository<'_>;
 }
 

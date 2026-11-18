@@ -27,14 +27,8 @@ pub struct PersonDirectoryQuery {
 
 impl PersonDirectoryQuery {
     /// 转成目录服务使用的规范化条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回校验后的查询条件。
     ///
-    /// # 错误
     /// 搜索、分页、组织筛选或版本不合法时返回校验错误。
     pub fn into_request(self) -> Result<DirectoryListRequest> {
         let org_unit_ids = self.org_unit_ids.as_ref().map_or(&[][..], QueryIds::as_slice);
@@ -100,20 +94,11 @@ pub struct PersonDirectoryPage {
 
 impl PersonDirectoryPage {
     /// 由分页结果和授权元信息组装目录响应。
-    ///
-    /// # 参数
-    /// * `page` - 已按授权过滤的人员页
-    /// * `scope_version` - 目录版本
-    /// * `policy_version` - 策略版本
-    /// * `organization_version` - 组织版本
-    /// * `as_of` - 授权时点
-    /// * `empty_reason` - 空结果原因
-    ///
-    /// # 返回
     /// 返回目录页。
     ///
-    /// # 错误
-    /// 不返回错误。
+    /// `page`：已按授权过滤的人员页；`scope_version`：目录版本。
+    /// `policy_version`：策略版本；`organization_version`：组织版本。
+    /// `as_of`：授权时点；`empty_reason`：空结果原因。
     pub fn from_page(
         page: PageView<PersonDirectoryItem>,
         scope_version: String,

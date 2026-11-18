@@ -13,11 +13,7 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
 /// 核实并结案原账户差异。
-/// # 参数
-/// 当前认证人员、原账户与对账路径以及完整核验命令。
-/// # 返回
 /// 返回保留原差异的结案记录。
-/// # 错误
 /// 越范围、版本变化或证据不足时拒绝。
 pub async fn resolve(
     State(state): State<HttpState>,
@@ -31,11 +27,7 @@ pub async fn resolve(
 }
 
 /// 核实原执行风险后释放未使用尾款。
-/// # 参数
-/// 当前认证人员、原账户与占用路径及完整核验命令。
-/// # 返回
 /// 返回带不可变释放回执的原占用。
-/// # 错误
 /// 未知结果、越范围、版本变化或证据不足时拒绝。
 pub async fn release(
     State(state): State<HttpState>,
@@ -61,7 +53,7 @@ mod tests {
     use super::*;
     use crate::http::routes;
 
-    // 只构造本地客户端；请求在认证边界结束，不访问数据库或对象存储。
+    // 给认证边界单测提供 HTTP 状态与本地客户端配置；未认证请求在进入 MongoDB 或对象存储前结束。
     fn state() -> HttpState {
         let settings = Config::from_toml_str(
             r#"

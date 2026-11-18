@@ -13,13 +13,7 @@ use crate::repository::policy_receipt::receipts;
 use crate::{AccessControlExt, Error, Result};
 
 impl PolicyBundleService {
-    /// 根据原审核摘要原子应用文件。
-    /// # 参数
-    /// request 为文件、版本、摘要及操作号；actor 为认证身份。
-    /// # 返回
-    /// 本次或原提交结果；重放不重写授权。
-    /// # 错误
-    /// 版本漂移、同键异载荷、越权、目标失效或任一写入失败时拒绝。
+    /// 按审核时的摘要和策略版本在原子事务应用授权文件。重放返回原结果，不重新写授权；异载荷、目标失效、权限或审核事实变化均拒绝。任一写入失败不能留下部分变更。
     pub async fn apply(
         &self,
         mut request: ApplyPolicyRequest,
@@ -51,7 +45,7 @@ impl PolicyBundleService {
             .await
     }
 
-    /// 完整重验先于写入；回执查询仍在当前权限证明之后。
+    // 沿策略事务先重新证明实际文件权限，再查询幂等回执；新命令还须核对策略版本及审核摘要，完成全部校验后才写入。
     async fn apply_steps(
         &self,
         request: ApplyPolicyRequest,
@@ -101,7 +95,7 @@ impl PolicyBundleService {
         Ok((result, changed))
     }
 
-    /// 全部写入共享原授权执行器；不调用独立事务入口。
+    // 沿本次授权使用的事务保存计划变更及审计，不调用自行开启事务的入口，避免部分提交授权文件。
     async fn persist(
         &self,
         plan: PolicyPlan,

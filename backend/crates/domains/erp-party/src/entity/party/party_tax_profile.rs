@@ -75,20 +75,17 @@ pub struct PartyTaxProfile {
 }
 
 impl PartyTaxProfile {
-    /// 创建税务资料。
+    /// 按税号和有效期构造主体税务资料，供开票资料维护入口保存。
     ///
     /// 完成税号的必填校验与规范化（去首尾空白、转大写、字母数字、
     /// 长度上限）；强制 `valid_to` 晚于 `valid_from`。
     ///
     /// # 参数
     /// * `id` - 实体主键（`erp_core::ids::PartyTaxProfileId`）
-    /// * `data` - 创建数据
     /// * `created_by` - 创建人（账号或系统身份）
     ///
-    /// # 返回
     /// 返回新建的税务资料实体。
     ///
-    /// # 错误
     /// 当税号为空/超长/含非法字符或生效区间倒挂时返回错误。
     pub fn new(
         id: PartyTaxProfileId,
@@ -112,7 +109,7 @@ impl PartyTaxProfile {
         })
     }
 
-    /// 校验期望版本与当前版本一致（erp-party-008）。
+    /// 以请求中的版本核对当前税务资料，防止并发维护时覆盖他人的修改。
     ///
     /// 冲突文案与主体 `ensure_version` 同源（见 [`super::ensure_base_version`]），
     /// Service 层只做错误类映射。
@@ -120,28 +117,23 @@ impl PartyTaxProfile {
     /// # 参数
     /// * `expected` - 调用方持有的期望版本
     ///
-    /// # 返回
     /// 版本一致返回 `Ok(())`。
     ///
-    /// # 错误
     /// 版本不一致时返回版本冲突错误。
     pub fn ensure_version(&self, expected: u64) -> Result<()> {
         super::ensure_base_version(&self.base, expected)
     }
 
-    /// 更新税务资料（仅限生命周期字段）。
+    /// 维护税务资料的有效期、启停和默认标记，保持已用于开票的税务身份。
     ///
     /// 税号变更必须通过新的有效期事实行追加；原地更新只允许切换
     /// 启停状态（固定状态机）、结束有效期与调整默认标记。
     ///
     /// # 参数
-    /// * `update` - 更新数据
     /// * `updated_by` - 本次更新执行人
     ///
-    /// # 返回
     /// 更新成功返回 `Ok(())`。
     ///
-    /// # 错误
     /// 当状态迁移非法或 `valid_to` 不晚于 `valid_from` 时返回错误。
     pub fn update(&mut self, update: PartyTaxProfileUpdate, updated_by: impl Into<String>) -> Result<()> {
         if let Some(to) = update.status {
@@ -160,29 +152,20 @@ impl PartyTaxProfile {
 
     /// 判断税务资料是否处于启用状态。
     ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 状态为 `Active` 时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn is_active(&self) -> bool {
         self.status.is_active()
     }
 }
 
-/// 规范化税号：去首尾空白、转大写并校验字母数字与长度。
-///
-/// # 参数
-/// * `value` - 原始输入
-///
-/// # 返回
-/// 返回规范化后的税号。
-///
-/// # 错误
-/// 税号为空、超长或含非字母数字字符时返回错误。
+// 规范化税号：去首尾空白、转大写并校验字母数字与长度。
+//
+// # 参数
+// * `value` - 原始输入
+//
+// 返回规范化后的税号。
+//
+// 税号为空、超长或含非字母数字字符时返回错误。
 fn normalize_tax_no(value: String) -> Result<String> {
     let value = value.trim().to_uppercase();
     if value.is_empty() {
@@ -217,7 +200,7 @@ mod tests {
         }
     }
 
-    /// happy path：税号去空白并转大写。
+    // 验证：税号去空白并转大写。
     #[test]
     fn new_trims_and_uppercases_tax_no() {
         let profile =
@@ -227,7 +210,7 @@ mod tests {
         assert!(profile.is_active());
     }
 
-    /// 失败路径：税号为空/超长/含非法字符、区间倒挂。
+    // 验证：税号为空/超长/含非法字符、区间倒挂。
     #[test]
     fn new_rejects_invalid_inputs() {
         let blank = PartyTaxProfileData { tax_no: "   ".to_string(), ..tax_profile_data() };
@@ -246,7 +229,7 @@ mod tests {
         assert!(PartyTaxProfile::new(PartyTaxProfileId::new("t"), reversed, "admin-1").is_err());
     }
 
-    /// 状态机与生命周期更新：启停切换、结束有效期。
+    // 状态机与生命周期更新：启停切换、结束有效期。
     #[test]
     fn lifecycle_updates_are_validated() {
         let mut profile =
@@ -273,7 +256,7 @@ mod tests {
         assert!(profile.update(reversed, "admin-3").is_err());
     }
 
-    /// 实体 BSON 往返。
+    // 实体 BSON 往返。
     #[test]
     fn entity_roundtrips_through_json() {
         let profile =

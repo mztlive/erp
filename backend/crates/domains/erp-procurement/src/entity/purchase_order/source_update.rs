@@ -32,16 +32,7 @@ pub enum PurchaseSourceUpdateStatus {
 }
 
 impl PurchaseSourceUpdateStatus {
-    /// 返回持久化代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回与序列化一致的 `SCREAMING_SNAKE_CASE` 代码。
-    ///
-    /// # 错误
-    /// 无。
+    /// 将来源更新的处理方式转换成与序列化一致的大写下划线代码，供保存和识别选择结果。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Open => "OPEN",
@@ -67,16 +58,7 @@ pub enum PurchaseSourceResolution {
 }
 
 impl PurchaseSourceResolution {
-    /// 返回处理方式中文名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回稳定中文展示名。
-    ///
-    /// # 错误
-    /// 无。
+    /// 把来源更新的处理方式转换成中文名称，供采购变更页面展示。
     pub fn label(self) -> &'static str {
         match self {
             Self::Resubmitted => "已按新销售版本修改原单",
@@ -146,15 +128,7 @@ pub struct SourceUpdateOpening<'a> {
 impl PurchaseSourceUpdate {
     /// 为受影响采购开立依据更新记录。
     ///
-    /// # 参数
-    /// * `id` - 记录主键
-    /// * `opening` - 受影响采购、判定与触发来源
-    ///
-    /// # 返回
-    /// 返回开放状态的记录。
-    ///
-    /// # 错误
-    /// 无。
+    /// `opening` 为受影响采购、判定与触发来源。
     pub fn open(id: String, opening: SourceUpdateOpening<'_>) -> Self {
         Self {
             base: BaseModel::new(id),
@@ -180,16 +154,9 @@ impl PurchaseSourceUpdate {
 
     /// 用最新判定刷新开放记录。
     ///
-    /// # 参数
-    /// * `impact` - 最新判定
-    /// * `sales_order_revision_id` - 销售当前版本
-    /// * `trigger` - 新的触发销售变更单；为空时保留原值
+    /// 原因、付款暂停、版本或触发来源有变化时返回 `true`。记录已处理完成时返回错误。
     ///
-    /// # 返回
-    /// 原因、付款暂停、版本或触发来源有变化时返回 `true`。
-    ///
-    /// # 错误
-    /// 记录已处理完成时返回错误。
+    /// `trigger` 为新的触发销售变更单；为空时保留原值。
     pub fn refresh(
         &mut self,
         impact: &PurchaseSourceImpact,
@@ -215,18 +182,9 @@ impl PurchaseSourceUpdate {
 
     /// 草稿已不再受影响时转为等待重新提交，保留最近一次影响原因。
     ///
-    /// # 参数
-    /// * `sales_order_revision_id` - 销售当前版本
+    /// 第一期 §6.3“销售变更对采购的影响”第 5、11 条：草稿及被撤回的采购须重新提交才算处理完成，期间待办保持开放。
     ///
-    /// # 返回
-    /// 首次转入等待提交或销售版本变化时返回 `true`。
-    ///
-    /// # 错误
-    /// 记录已处理完成时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 第一期 §6.3“销售变更对采购的影响”第 5、11 条：草稿及被撤回的采购须重新提交
-    /// 才算处理完成，期间待办保持开放。
+    /// 首次转入等待提交或销售版本变化时返回 `true`。记录已处理完成时返回错误。
     pub fn await_submission(&mut self, sales_order_revision_id: &str) -> Result<bool> {
         self.ensure_open()?;
         let changed = !self.awaiting_submission || self.sales_order_revision_id != sales_order_revision_id;
@@ -237,31 +195,13 @@ impl PurchaseSourceUpdate {
     }
 
     /// 关联采购负责人的待办。
-    ///
-    /// # 参数
-    /// * `work_item_id` - 待办主键
-    ///
-    /// # 返回
-    /// 无返回值。
-    ///
-    /// # 错误
-    /// 无。
     pub fn attach_work_item(&mut self, work_item_id: String) {
         self.work_item_id = Some(work_item_id);
     }
 
-    /// 按事实判定处理完成。
+    /// 按事实判定处理完成。记录已处理完成，或以本方法登记维持原采购时返回错误。
     ///
-    /// # 参数
-    /// * `resolution` - 处理方式，不得为维持原采购
-    /// * `document_id` - 处理所形成的单据
-    /// * `at` - 完成时间
-    ///
-    /// # 返回
-    /// 无返回值。
-    ///
-    /// # 错误
-    /// 记录已处理完成，或以本方法登记维持原采购时返回错误。
+    /// `resolution` 为处理方式，不得为维持原采购。
     pub fn resolve(
         &mut self,
         resolution: PurchaseSourceResolution,
@@ -277,18 +217,7 @@ impl PurchaseSourceUpdate {
         Ok(())
     }
 
-    /// 登记维持原采购，以本记录的销售版本作为后续判定基准。
-    ///
-    /// # 参数
-    /// * `note` - 无法调整的原因
-    /// * `actor_id` - 登记人
-    /// * `at` - 登记时间
-    ///
-    /// # 返回
-    /// 无返回值。
-    ///
-    /// # 错误
-    /// 记录已处理完成、草稿已修改待提交、原因为空或超过 500 字时返回错误。
+    /// 登记维持原采购，以本记录的销售版本作为后续判定基准。记录已处理完成、草稿已修改待提交、原因为空或超过 500 字时返回错误。
     pub fn maintain(&mut self, note: &str, actor_id: &str, at: Instant) -> Result<()> {
         self.ensure_open()?;
         if self.awaiting_submission {
@@ -306,32 +235,16 @@ impl PurchaseSourceUpdate {
         Ok(())
     }
 
-    /// 返回仍然有效的维持基准。
+    /// 返回仍然有效的维持基准。已登记维持且采购此后未换到新销售版本时，返回维持时的销售版本。
     ///
-    /// # 参数
-    /// * `purchase_sales_revision_id` - 采购当前引用的销售版本
-    ///
-    /// # 返回
-    /// 已登记维持且采购此后未换到新销售版本时，返回维持时的销售版本。
-    ///
-    /// # 错误
-    /// 无。
+    /// `purchase_sales_revision_id` 为采购当前引用的销售版本。
     pub fn maintained_baseline(&self, purchase_sales_revision_id: &str) -> Option<&str> {
         (self.resolution == Some(PurchaseSourceResolution::Maintained)
             && self.purchase_sales_revision_id == purchase_sales_revision_id)
             .then_some(self.sales_order_revision_id.as_str())
     }
 
-    /// 生成待办影响摘要。
-    ///
-    /// # 参数
-    /// * `sales_order_no` - 来源销售单号
-    ///
-    /// # 返回
-    /// 返回“销售单号 + 逐行原因”的中文摘要；等待重新提交时提示提交审批。
-    ///
-    /// # 错误
-    /// 无。
+    /// 生成待办影响摘要。返回“销售单号 + 逐行原因”的中文摘要；等待重新提交时提示提交审批。
     pub fn impact_summary(&self, sales_order_no: &str) -> String {
         if self.awaiting_submission {
             return format!("销售单 {sales_order_no} 已变更，采购已按新销售版本修改，请提交审批");
@@ -340,7 +253,7 @@ impl PurchaseSourceUpdate {
         format!("销售单 {sales_order_no} 已变更：{reasons}")
     }
 
-    /// 确认记录仍为开放状态。
+    // 确认记录仍为开放状态。
     fn ensure_open(&self) -> Result<()> {
         if self.status != PurchaseSourceUpdateStatus::Open {
             return Err(Error::from("采购依据已处理，请刷新后查看"));
@@ -348,7 +261,7 @@ impl PurchaseSourceUpdate {
         Ok(())
     }
 
-    /// 写入完成状态。
+    // 写入完成状态。
     fn finish(&mut self, resolution: PurchaseSourceResolution, actor_id: &str, at: Instant) {
         self.status = PurchaseSourceUpdateStatus::Resolved;
         self.resolution = Some(resolution);
@@ -357,17 +270,9 @@ impl PurchaseSourceUpdate {
     }
 }
 
-/// 汇总仍然有效的维持基准。
+/// 汇总仍然有效的维持基准。返回采购单 ID 到维持时销售版本的映射；同一采购取最后一次维持登记。
 ///
-/// # 参数
-/// * `orders` - 参与覆盖的采购单
-/// * `updates` - 同一销售单的依据更新记录，按创建顺序
-///
-/// # 返回
-/// 返回采购单 ID 到维持时销售版本的映射；同一采购取最后一次维持登记。
-///
-/// # 错误
-/// 无。
+/// `updates` 为同一销售单的依据更新记录，按创建顺序。
 pub fn maintained_baselines(
     orders: &[PurchaseOrder],
     updates: &[PurchaseSourceUpdate],
@@ -386,16 +291,7 @@ pub fn maintained_baselines(
         .collect()
 }
 
-/// 描述一行影响原因。
-///
-/// # 参数
-/// * `reason` - 影响原因
-///
-/// # 返回
-/// 返回用户可读的中文描述，不含内部代码。
-///
-/// # 错误
-/// 无。
+/// 描述一行影响原因。返回用户可读的中文描述，不含内部代码。
 pub fn describe_reason(reason: &SourceImpactReason) -> String {
     let line = format!("第 {} 行 {}", reason.line_no, reason.item_name);
     match &reason.kind {
@@ -415,7 +311,7 @@ pub fn describe_reason(reason: &SourceImpactReason) -> String {
     }
 }
 
-/// 去掉数量尾随零。
+// 去掉数量尾随零。
 fn plain(quantity: Quantity) -> String {
     quantity.to_decimal().normalize().to_string()
 }
@@ -498,7 +394,7 @@ mod tests {
         )
     }
 
-    /// 开立时冻结采购引用版本、触发变更、原因与付款暂停。
+    // 开立时冻结采购引用版本、触发变更、原因与付款暂停。
     #[test]
     fn open_freezes_sources_and_payment_block() {
         let update = opened();
@@ -511,7 +407,7 @@ mod tests {
         assert_eq!(update.impact_summary("SO-9"), "销售单 SO-9 已变更：第 2 行 礼盒 数量 10 → 8，超出 2");
     }
 
-    /// 刷新只在事实变化时报告变化，未提供新触发时保留原触发变更。
+    // 刷新只在事实变化时报告变化，未提供新触发时保留原触发变更。
     #[test]
     fn refresh_reports_changes_and_keeps_trigger() {
         let mut update = opened();
@@ -528,7 +424,7 @@ mod tests {
         assert!(update.impact_summary("SO-9").contains("履约期限提前到 2026-10-10，早于预计交付 2026-10-15"));
     }
 
-    /// 明确传入原触发单号不算变化；新触发单号生效后省略仍保留。
+    // 明确传入原触发单号不算变化；新触发单号生效后省略仍保留。
     #[test]
     fn refresh_distinguishes_unchanged_and_replaced_triggers() {
         let mut update = opened();
@@ -545,7 +441,7 @@ mod tests {
         assert_eq!(update.trigger_sales_change_order_id.as_deref(), Some("sco-3"));
     }
 
-    /// 草稿修改后转为等待提交：解除付款暂停、拒绝维持登记；再次受影响时恢复待处理。
+    // 草稿修改后转为等待提交：解除付款暂停、拒绝维持登记；再次受影响时恢复待处理。
     #[test]
     fn await_submission_keeps_record_open_until_affected_again() {
         let mut update = opened();
@@ -563,7 +459,7 @@ mod tests {
         assert!(update.blocks_payment);
     }
 
-    /// 系统判定完成后不得再次处理或刷新，也不得由系统登记维持。
+    // 系统判定完成后不得再次处理或刷新，也不得由系统登记维持。
     #[test]
     fn resolve_is_terminal_and_rejects_maintained() {
         let mut update = opened();
@@ -584,7 +480,7 @@ mod tests {
         assert_eq!(update.maintained_baseline("rev-1"), None);
     }
 
-    /// 同一采购取最后一次维持登记；采购换版本后维持基准失效。
+    // 同一采购取最后一次维持登记；采购换版本后维持基准失效。
     #[test]
     fn maintained_baselines_use_latest_registration_for_current_source() {
         let mut first = opened();
@@ -602,7 +498,7 @@ mod tests {
         assert!(after_rebase.is_empty());
     }
 
-    /// 维持登记要求原因，并在采购未换版本前提供判定基准。
+    // 维持登记要求原因，并在采购未换版本前提供判定基准。
     #[test]
     fn maintain_requires_note_and_provides_baseline_until_rebased() {
         let mut update = opened();

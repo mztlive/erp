@@ -29,17 +29,12 @@ pub struct SalesOrderLine {
 
 impl SalesOrderLine {
     /// 创建稳定明细行（初始 `Active`）。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::SalesOrderLineId`）
-    /// * `sales_order_id` - 所属销售单
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
     /// 返回新建的明细行实体。
-    ///
-    /// # 错误
     /// 行号为零（越界）时返回错误。
+    ///
+    /// 输入约定：
+    /// - `id`：实体主键（`erp_core::ids::SalesOrderLineId`）
+    /// - `sales_order_id`：所属销售单
     pub fn new(id: SalesOrderLineId, sales_order_id: SalesOrderId, data: SalesOrderLineData) -> Result<Self> {
         if data.line_no == 0 {
             return Err(Error::from("行号必须为正整数"));
@@ -53,15 +48,7 @@ impl SalesOrderLine {
     }
 
     /// 将行标记为被后续版本移除（终态）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 迁移成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 行状态不能迁到 `Removed` 时返回 [`Error::InvalidStateTransition`]。已是 `Removed` 时幂等成功。
+    /// 失败条件：行状态不能迁到 `Removed` 时返回 [`Error::InvalidStateTransition`]。已是 `Removed` 时幂等成功。
     pub fn remove(&mut self) -> Result<()> {
         ensure_transition(self.line_status, LineStatus::Removed)?;
         self.line_status = LineStatus::Removed;

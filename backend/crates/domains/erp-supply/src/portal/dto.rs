@@ -14,16 +14,9 @@ pub enum PortalAvailabilityStatus {
     OutOfStock,
 }
 impl From<PortalAvailabilityStatus> for AvailabilityStatus {
-    /// 将门户可供状态映射为正式可供状态。
-    ///
-    /// # 参数
-    /// * `value` - 门户报告的可供状态。
-    ///
-    /// # 返回
-    /// `Available` 映射为 `AvailabilityStatus::Available`；`OutOfStock` 映射为 `AvailabilityStatus::Unavailable`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 将门户可供状态映射为正式可供状态。
+    // `Available` 映射为 `AvailabilityStatus::Available`；`OutOfStock` 映射为
+    // `AvailabilityStatus::Unavailable`。
     fn from(value: PortalAvailabilityStatus) -> Self {
         match value {
             PortalAvailabilityStatus::Available => Self::Available,
@@ -51,12 +44,8 @@ pub struct PortalAvailabilityFact {
 }
 impl PortalAvailabilityFact {
     /// 从正式投影生成审计快照。
-    /// # 参数
-    /// 当前已授权可供投影。
-    /// # 返回
     /// 无内部组织和其他商务字段的事实。
-    /// # 错误
-    /// 无。
+    /// 当前已授权可供投影。
     pub fn from_availability(value: &SupplierOfferingAvailability) -> Self {
         Self {
             availability_status: value.availability_status,
@@ -119,12 +108,7 @@ pub struct PortalQuoteInput {
 }
 impl OfferingApplicationSnapshot {
     /// 返回申请类型。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 稳定业务类型。
-    /// # 错误
-    /// 无。
     pub fn kind(&self) -> ApplicationKind {
         match self {
             Self::ExistingQuote { .. } => ApplicationKind::ExistingQuote,
@@ -133,12 +117,7 @@ impl OfferingApplicationSnapshot {
         }
     }
     /// 返回已有目标；首次报价没有正式供给版本。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 已有供给标识及冻结版本。
-    /// # 错误
-    /// 无。
     pub fn target(&self) -> Option<(&str, u64, u32)> {
         match self {
             Self::ExistingQuote { .. } => None,

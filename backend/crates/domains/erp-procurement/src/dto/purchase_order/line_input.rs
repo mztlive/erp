@@ -25,18 +25,10 @@ struct ParsedLineValues {
 impl SavePurchaseOrderLine {
     /// 类型化转换为领域行输入。
     ///
-    /// 按约定顺序完成文本类型化：先税率，再按行类型解析数量/含税单价
-    /// （商品行）或含税金额（物流行），随后解析数量与单价（物流行）、预计交期与
-    /// 分配数量。必填字段缺失与解析失败均返回 `ValidationError`，保留稳定错误文案；金额计算不在此处进行。
+    /// 按约定顺序完成文本类型化：先税率，再按行类型解析数量/含税单价（商品行）或含税金额（物流行），随后解析数量与单价（物流行）、预计交期与分配数量。
+    /// 必填字段缺失与解析失败均返回 `ValidationError`，保留稳定错误文案；金额计算不在此处进行。
     ///
-    /// # 参数
-    /// 无（读自身字段）。
-    ///
-    /// # 返回
-    /// 返回字符串已类型化、金额字段仍为请求形态的 [`PurchaseLineInput`]。
-    ///
-    /// # 错误
-    /// 税率、数量、含税单价、物流金额或业务日期非法，或商品行缺数量/含税单价、
+    /// 返回字符串已类型化、金额字段仍为请求形态的 [`PurchaseLineInput`]。税率、数量、含税单价、物流金额或业务日期非法，或商品行缺数量/含税单价、
     /// 物流行缺含税金额时返回 `ValidationError`。
     pub fn to_line_input(&self) -> Result<PurchaseLineInput> {
         let input_tax_rate = parse_optional::<Rate>(self.input_tax_rate.as_deref(), "税率")?;
@@ -113,20 +105,13 @@ impl SavePurchaseOrderLine {
     ///
     /// 保持请求行顺序；任一行转换失败立即返回，首错语义与逐行转换一致。
     ///
-    /// # 参数
-    /// * `lines` - 待转换的请求行
-    ///
-    /// # 返回
-    /// 返回与输入顺序一致的类型化行输入集合。
-    ///
-    /// # 错误
-    /// 任一行文本非法或必填字段缺失时返回 `ValidationError`。
+    /// 返回与输入顺序一致的类型化行输入集合。任一行文本非法或必填字段缺失时返回 `ValidationError`。
     pub fn to_line_inputs(lines: &[Self]) -> Result<Vec<PurchaseLineInput>> {
         lines.iter().map(Self::to_line_input).collect()
     }
 }
 
-/// 空白可选数值视为缺省；错误保留未经 trim 的原始输入。
+// 空白可选数值视为缺省；错误保留未经 trim 的原始输入。
 fn parse_optional<T: FromStr>(value: Option<&str>, field: &str) -> Result<Option<T>> {
     value
         .filter(|value| !value.trim().is_empty())
@@ -136,7 +121,7 @@ fn parse_optional<T: FromStr>(value: Option<&str>, field: &str) -> Result<Option
         .transpose()
 }
 
-/// 解析业务日期；失败文案保留未经 trim 的原始输入。
+// 解析业务日期；失败文案保留未经 trim 的原始输入。
 fn parse_business_date(value: &str) -> Result<BusinessDate> {
     BusinessDate::from_str(value.trim()).map_err(|_| Error::ValidationError(format!("非法业务日期: {value}")))
 }
@@ -200,7 +185,7 @@ mod tests {
         }
     }
 
-    /// 完整商品行完成类型化：ID、数量、单价、税率与业务日期。
+    // 完整商品行完成类型化：ID、数量、单价、税率与业务日期。
     #[test]
     fn goods_line_converts_to_typed_input() {
         let input = goods_line().to_line_input().unwrap();
@@ -220,7 +205,7 @@ mod tests {
         assert_eq!(input.gross_amount, None);
     }
 
-    /// 物流行把含税金额类型化，其余字段保持空。
+    // 物流行把含税金额类型化，其余字段保持空。
     #[test]
     fn logistics_line_converts_with_gross_amount() {
         let input = logistics_line().to_line_input().unwrap();
@@ -229,7 +214,7 @@ mod tests {
         assert_eq!(input.gross_amount, Some(Amount::from_str("100.00").unwrap()));
     }
 
-    /// 空白可选字段转换为 `None`，不视为非法。
+    // 空白可选字段转换为 `None`，不视为非法。
     #[test]
     fn blank_optional_fields_become_none() {
         let line = SavePurchaseOrderLine {
@@ -246,7 +231,7 @@ mod tests {
         assert_eq!(input.expected_delivery_date, None);
     }
 
-    /// 非法数量、单价、税率、金额与业务日期返回既有文案。
+    // 非法数量、单价、税率、金额与业务日期返回既有文案。
     #[test]
     fn illegal_values_keep_exact_messages() {
         let line = SavePurchaseOrderLine { quantity: Some("abc".to_string()), ..goods_line() };
@@ -266,7 +251,7 @@ mod tests {
         assert_eq!(line.to_line_input().unwrap_err().to_string(), "参数验证失败: 非法业务日期: not-a-date");
     }
 
-    /// 首错优先级：税率最先，商品行数量在单价前，物流金额在数量前。
+    // 首错优先级：税率最先，商品行数量在单价前，物流金额在数量前。
     #[test]
     fn first_error_priority_keeps_contract_order() {
         let line = SavePurchaseOrderLine {
@@ -302,7 +287,7 @@ mod tests {
         assert_eq!(line.to_line_input().unwrap_err().to_string(), "参数验证失败: 非法金额: z");
     }
 
-    /// 表头汇总与逐行领域计算一致。
+    // 表头汇总与逐行领域计算一致。
     #[test]
     fn request_totals_match_domain_computation() {
         let inputs = SavePurchaseOrderLine::to_line_inputs(&[goods_line(), logistics_line()]).unwrap();
@@ -312,7 +297,7 @@ mod tests {
         assert_eq!(tax, Amount::from_str("16.90").unwrap());
     }
 
-    /// 转换失败时返回 `ValidationError` 分类（HTTP 400 语义）。
+    // 转换失败时返回 `ValidationError` 分类（HTTP 400 语义）。
     #[test]
     fn conversion_errors_are_validation_errors() {
         let line = SavePurchaseOrderLine { quantity: None, ..goods_line() };

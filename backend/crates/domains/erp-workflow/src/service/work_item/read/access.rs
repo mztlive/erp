@@ -19,16 +19,10 @@ pub struct QueueAccess {
 }
 
 impl QueueAccess {
-    /// 把列表查询和授权快照收成仓储过滤条件。
-    ///
-    /// # 参数
-    /// * `query` - 工作项列表查询。
-    ///
-    /// # 返回
-    /// 所有视图先应用 list 授权；Mine 和 History 只追加本人及历史筛选。
-    ///
-    /// # 错误
-    /// 缺少列表权限时返回 `Error::Forbidden`。
+    // 把列表查询和授权快照收成仓储过滤条件。
+    // 所有视图先应用 list 授权；Mine 和 History 只追加本人及历史筛选。
+    //
+    // 缺少列表权限时返回 `Error::Forbidden`。
     pub(super) fn scope_filter(&self, query: &dto::WorkItemListQuery) -> Result<WorkItemFilter> {
         if self.read.permission() != &work_item::LIST.clone() {
             return Err(Error::Forbidden("没有待办列表权限".into()));
@@ -55,36 +49,25 @@ impl QueueAccess {
         Ok(filter)
     }
 
-    /// 从已编译读取凭证构造队列上下文，不接受缺少授权的中间状态。
-    /// # 参数
-    /// read 为本服务已核验的任务读取凭证。
-    /// # 返回
-    /// 返回绑定凭证身份与入口权限的队列上下文。
-    /// # 错误
-    /// 无。
+    // 从已编译读取凭证构造队列上下文，不接受缺少授权的中间状态。
+    // 返回绑定凭证身份与入口权限的队列上下文。
+    //
+    // read 为本服务已核验的任务读取凭证。
     pub(super) fn new(read: Arc<CompiledAccess>) -> Self {
         let task = TaskAccess::new(read.actor().id().to_owned());
         Self { task, read }
     }
 
     /// 取得已编译的任务读取约束。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 当前读取动作绑定的完整授权结果。
-    /// # 错误
-    /// 无；构造时必须提供读取凭证。
+    ///
+    /// 构造时必须提供读取凭证。
     pub fn read_access(&self) -> &Arc<CompiledAccess> {
         &self.read
     }
 
     /// 读取包含管理动作依赖的队列版本。
-    /// # 参数
-    /// 无。
-    /// # 返回
     /// 当前读取和可用管理授权的完整版本。
-    /// # 错误
-    /// 无。
     pub fn version(&self) -> String {
         self.read.version()
     }
@@ -92,12 +75,11 @@ impl QueueAccess {
 
 impl WorkItemReadService {
     /// 一次编译读取及固定管理动作条件，操作权限缺失不影响读取。
-    /// # 参数
-    /// `actor` 为真实账号，`permission` 为固定读取权限，`executor` 为同一执行器。
-    /// # 返回
     /// 返回相互独立的读取范围和管理范围。
-    /// # 错误
+    ///
     /// 当前读取动作拒绝或基础设施故障时失败关闭。
+    ///
+    /// `actor` 为真实账号，`permission` 为固定读取权限，`executor` 为同一执行器。
     pub async fn task_access(
         &self,
         actor: &AuditActor,

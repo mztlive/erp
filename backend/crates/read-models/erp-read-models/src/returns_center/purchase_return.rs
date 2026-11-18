@@ -50,7 +50,7 @@ pub struct PurchaseReturnListView {
 }
 
 impl ReturnsReadService {
-    /// 按采购退货创建命令的固定资格读取精确结果，不追加详情菜单资格。
+    /// 依据采购退货创建命令的固定资格读取精确结果，不追加详情菜单资格。
     ///
     /// # 参数
     /// * `id` - 原创建命令生成的采购退货主键。
@@ -87,11 +87,7 @@ impl ReturnsReadService {
         purchase_return_order_with_lines(&self.db, order, executor).await
     }
 
-    /// 分页查询采购退货单列表。
-    ///
-    /// # 参数
-    /// * `params` - 查询参数
-    /// * `actor` - 已认证操作人
+    /// 调用此入口时，分页查询采购退货单列表。
     ///
     /// # 返回
     /// 返回带范围版本的分页视图。
@@ -122,11 +118,10 @@ impl ReturnsReadService {
         Ok(snapshot)
     }
 
-    /// 查询采购退货单详情（退货单 + 明细行）。
+    /// 读取采购退货单详情（退货单 + 明细行）。
     ///
     /// # 参数
     /// * `id` - 退货单 ID
-    /// * `actor` - 已认证操作人
     ///
     /// # 返回
     /// 返回完整退货单视图。
@@ -152,20 +147,14 @@ impl ReturnsReadService {
         Ok(first.0)
     }
 
-    /// 授权、总数与退货单版本全部在同一个事务读取。
-    ///
-    /// # 参数
-    /// * `params` - 原始查询
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 返回带范围版本的列表快照。
-    ///
-    /// # 错误
-    /// 范围变化、筛选非法或仓储失败时拒绝。
-    ///
-    /// # 关键业务约束
-    /// 筛选只能收窄授权结果；缺范围保持空集。
+    // 处理采购退货时，授权、总数与退货单版本全部在同一个事务读取。
+    //
+    // 返回带范围版本的列表快照。
+    //
+    // 范围变化、筛选非法或仓储失败时拒绝。
+    //
+    // 业务边界：
+    // 筛选只能收窄授权结果；缺范围保持空集。
     async fn purchase_return_list_snapshot(
         &self,
         params: &PurchaseReturnOrderListParams,
@@ -215,20 +204,17 @@ impl ReturnsReadService {
             .await
     }
 
-    /// 独立重验采购来源授权与全部匹配退货版本，不重复加载页行或明细。
-    ///
-    /// # 参数
-    /// * `params` - 与首拍相同的列表参数
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 返回当前授权来源与完整匹配退货版本构成的范围版本。
-    ///
-    /// # 错误
-    /// 权限、筛选、来源或退货查询超限以及仓储读取失败时拒绝。
-    ///
-    /// # 关键业务约束
-    /// 独立事务重新解析授权与历史参与，并重新生成来源采购单限制。
+    // 为采购退货绑定范围版本时，独立重验采购来源授权与全部匹配退货版本，不重复加载页行或明细。
+    //
+    // 调用参数：
+    // * `params` - 与首拍相同的列表参数
+    //
+    // 返回当前授权来源与完整匹配退货版本构成的范围版本。
+    //
+    // 权限、筛选、来源或退货查询超限以及仓储读取失败时拒绝。
+    //
+    // 业务边界：
+    // 独立事务重新解析授权与历史参与，并重新生成来源采购单限制。
     async fn purchase_return_scope_fingerprint(
         &self,
         params: &PurchaseReturnOrderListParams,
@@ -254,20 +240,17 @@ impl ReturnsReadService {
             .await
     }
 
-    /// 在独立事务中重验来源采购单后装配退货详情。
-    ///
-    /// # 参数
-    /// * `id` - 退货单主键
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 返回视图和范围版本绑定。
-    ///
-    /// # 错误
-    /// 退货单不存在或来源采购单不可见时返回 NotFound。
-    ///
-    /// # 关键业务约束
-    /// 不泄露越权退货单的存在性。
+    // 读取采购退货时，在独立事务中重验来源采购单后装配退货详情。
+    //
+    // 调用参数：
+    // * `id` - 退货单主键
+    //
+    // 返回视图和范围版本绑定。
+    //
+    // 退货单不存在或来源采购单不可见时返回 NotFound。
+    //
+    // 业务边界：
+    // 不泄露越权退货单的存在性。
     async fn load_authorized_purchase_return(
         &self,
         id: &str,
@@ -287,7 +270,7 @@ impl ReturnsReadService {
     }
 }
 
-/// 同一快照内先证明实际采购来源，再装载采购退货业务字段和明细。
+// 调用此入口时，同一快照内先证明实际采购来源，再装载采购退货业务字段和明细。
 async fn purchase_return_detail(
     db: &Database,
     access: &PurchaseAccess,
@@ -311,19 +294,16 @@ async fn purchase_return_detail(
     Ok((view, version))
 }
 
-/// 在当前快照解析采购授权来源及相同的列表筛选。
-///
-/// # 参数
-/// * `access` - 来源采购单授权访问器
-/// * `params` - 原始列表查询参数
-/// * `actor` - 已认证操作人
-/// * `executor` - 当前快照执行器
-///
-/// # 返回
-/// 返回完整授权上下文和列表业务筛选。
-///
-/// # 错误
-/// 授权、来源查询或筛选归一化失败时拒绝。
+// 读取采购退货时，在当前快照解析采购授权来源及相同的列表筛选。
+//
+// 调用参数：
+// * `access` - 来源采购单授权访问器
+// * `params` - 原始列表查询参数
+// * `executor` - 当前快照执行器
+//
+// 返回完整授权上下文和列表业务筛选。
+//
+// 授权、来源查询或筛选归一化失败时拒绝。
 async fn list_query(
     access: &PurchaseAccess,
     params: &PurchaseReturnOrderListParams,
@@ -345,17 +325,15 @@ async fn list_query(
     Ok((context, scope, filter))
 }
 
-/// 对完整匹配退货身份版本绑定授权版本，保持原哈希协议和上限。
-///
-/// # 参数
-/// * `scope_version` - 本次解析的采购授权版本
-/// * `versions` - 按稳定 ID 排序的全部匹配采购退货版本
-///
-/// # 返回
-/// 返回跨页和返回前重验使用的完整版本。
-///
-/// # 错误
-/// 超过 10000 行时返回原有查询上限错误。
+// 为采购退货绑定范围版本时，对完整匹配退货身份版本绑定授权版本，保持原哈希协议和上限。
+//
+// 调用参数：
+// * `scope_version` - 本次解析的采购授权版本
+// * `versions` - 按稳定 ID 排序的全部匹配采购退货版本
+//
+// 返回跨页和返回前重验使用的完整版本。
+//
+// 超过 10000 行时返回原有查询上限错误。
 fn list_scope_version(scope_version: &str, versions: &[PurchaseReturnVersion]) -> Result<String> {
     if versions.len() > 10_000 {
         return Err(Error::ValidationError("采购退货查询超过上限，请收窄原采购单条件".into()));
@@ -365,17 +343,16 @@ fn list_scope_version(scope_version: &str, versions: &[PurchaseReturnVersion]) -
     Ok(format!("{scope_version}:{:x}", fingerprint.finish()))
 }
 
-/// 使用首拍的主单投影装配退货视图，保留当前单明细读取的数组顺序。
-///
-/// # 参数
-/// * `row` - 同一授权快照下当前页主单投影
-/// * `lines` - 原单 ID 查询按原游标顺序返回的明细
-///
-/// # 返回
-/// 返回原字段与顺序的完整列表行；无明细时返回空数组。
-///
-/// # 错误
-/// 无；主单与明细查询错误由调用方传播。
+// 使用首拍的主单投影装配退货视图，保留当前单明细取得的数组顺序。
+//
+// 调用参数：
+// * `row` - 同一授权快照下当前页主单投影
+// * `lines` - 原单 ID 查询按原游标顺序返回的明细
+//
+// 返回原字段与顺序的完整列表行；无明细时返回空数组。
+//
+// 失败边界：
+// 无；主单与明细查询错误由调用方传播。
 fn purchase_return_row_view(
     row: PurchaseReturnOrderRow,
     lines: Vec<PurchaseReturnLine>,
@@ -393,16 +370,12 @@ fn purchase_return_row_view(
     }
 }
 
-/// 沿明细查询结果顺序逐行映射展示字段。
-///
-/// # 参数
-/// * `lines` - 单张退货单的明细事实
-///
-/// # 返回
-/// 返回不排序、不去重的明细展示数组。
-///
-/// # 错误
-/// 无。
+// 处理采购退货时，沿明细查询结果顺序逐行映射展示字段。
+//
+// 调用参数：
+// * `lines` - 单张退货单的明细事实
+//
+// 返回不排序、不去重的明细展示数组。
 fn purchase_return_line_views(lines: Vec<PurchaseReturnLine>) -> Vec<PurchaseReturnLineView> {
     lines
         .into_iter()
@@ -415,21 +388,18 @@ fn purchase_return_line_views(lines: Vec<PurchaseReturnLine>) -> Vec<PurchaseRet
         .collect()
 }
 
-/// 装配采购退货单视图。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `id` - 退货单 ID
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回完整退货单视图。
-///
-/// # 错误
-/// * `NotFound` - 退货单不存在
-///
-/// # 关键业务约束
-/// 明细必须与主单同一执行器读取。
+// 组合采购退货单视图。
+//
+// 调用参数：
+// * `id` - 退货单 ID
+//
+// 返回完整退货单视图。
+//
+// 失败边界：
+// * `NotFound` - 退货单不存在
+//
+// 业务边界：
+// 明细必须与主单同一执行器读取。
 async fn purchase_return_order_view(
     db: &Database,
     id: String,
@@ -443,7 +413,7 @@ async fn purchase_return_order_view(
     purchase_return_order_with_lines(db, order, executor).await
 }
 
-/// 使用已读取的精确主单装配明细，维持调用方的同一执行器。
+// 使用已取得的精确主单装配明细，维持调用方的同一执行器。
 async fn purchase_return_order_with_lines(
     db: &Database,
     order: PurchaseReturnOrder,
@@ -484,7 +454,7 @@ mod tests {
 
     use super::*;
 
-    /// 详情实际读取路径必须先检查固定 DETAIL 资格，列表资格不能触发业务读取。
+    // 验证采购退货：详情实际读取路径必须先检查固定 DETAIL 资格，列表资格不能触发业务读取。
     #[tokio::test]
     async fn purchase_return_detail_denies_missing_detail_permission_before_loading_facts() {
         let client =
@@ -518,7 +488,7 @@ mod tests {
         assert!(matches!(error, Error::Internal(reason) if reason == "采购范围端口未接线"));
     }
 
-    /// 原命令回包先核对快照和原创建来源资格，不得先读取退货单或明细。
+    // 验证采购退货：原命令回包先核对快照和原创建来源资格，不得先读取退货单或明细。
     #[tokio::test]
     async fn created_result_requires_original_snapshot_and_source_authorization_before_loading() {
         let client =
@@ -542,7 +512,7 @@ mod tests {
         assert!(matches!(error, Error::Internal(reason) if reason == "测试授权设施不可用"));
     }
 
-    /// 构造已授权页行，主单字段必须完整映射。
+    // 装配采购退货展示时，生成已授权页行，主单字段必须完整映射。
     fn row() -> PurchaseReturnOrderRow {
         PurchaseReturnOrderRow {
             id: "return-1".into(),
@@ -556,7 +526,7 @@ mod tests {
         }
     }
 
-    /// 构造明确输入顺序的明细，包含有仓库与无仓库情况。
+    // 处理采购退货时，生成明确输入顺序的明细，包含有仓库与无仓库情况。
     fn line(id: &str, source: &str, quantity: &str, warehouse: Option<&str>) -> PurchaseReturnLine {
         PurchaseReturnLine {
             base: BaseModel { id: id.into(), ..BaseModel::fake() },
@@ -567,7 +537,7 @@ mod tests {
         }
     }
 
-    /// 主单投影映射不得丢字段，明细不得按 ID 排序或去重。
+    // 验证采购退货：主单投影映射不得丢字段，明细不得按 ID 排序或去重。
     #[test]
     fn purchase_return_projection_preserves_fields_and_line_order() {
         let view = purchase_return_row_view(
@@ -594,7 +564,7 @@ mod tests {
         assert_eq!(view.lines[1].warehouse_id, None);
     }
 
-    /// 无明细或无客户侧依据时保留空数组及原始可选值。
+    // 验证采购退货：无明细或无客户侧依据时保留空数组及原始可选值。
     #[test]
     fn purchase_return_projection_keeps_empty_lines_and_optional_source() {
         let mut input = row();
@@ -606,7 +576,7 @@ mod tests {
         assert_eq!(view.return_mode, ReturnMode::DirectToSupplier);
     }
 
-    /// 完整匹配 Vec 的原哈希协议不变，空集合仍绑定来源授权版本。
+    // 验证采购退货：完整匹配 Vec 的原哈希协议不变，空集合仍绑定来源授权版本。
     #[test]
     fn purchase_return_fingerprint_preserves_full_hash_and_empty_scope() {
         let versions = vec![
@@ -619,7 +589,7 @@ mod tests {
         assert_ne!(list_scope_version("scope", &[]).unwrap(), list_scope_version("new-scope", &[]).unwrap());
     }
 
-    /// 后续页以外的单据变化、删除或授权变化均改变完整匹配指纹。
+    // 验证采购退货：后续页以外的单据变化、删除或授权变化均改变完整匹配指纹。
     #[test]
     fn purchase_return_fingerprint_detects_versions_membership_and_authorization() {
         let mut versions = vec![
@@ -638,7 +608,7 @@ mod tests {
         assert_ne!(first, list_scope_version("scope", &versions).unwrap());
     }
 
-    /// 恰好上限允许完整哈希，超限整体拒绝并保持原错误文案。
+    // 验证采购退货：恰好上限允许完整哈希，超限整体拒绝并保持原错误文案。
     #[test]
     fn purchase_return_fingerprint_rejects_over_limit() {
         let mut versions: Vec<_> = (0..10_000)

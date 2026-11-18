@@ -7,14 +7,9 @@ pub(super) struct RecoveredResource {
     pub original_unknown: Option<Error>,
 }
 
-/// 解释原事务错误后的独立回执查询结果。
-/// # 参数
-/// * `original` - 首次事务失败或未知提交错误。
-/// * `receipt_result` - 针对原命令的独立财务回执查询结果。
-/// # 返回
-/// 返回原对象 ID 及后续原视图读取必须保留的未知错误。
-/// # 错误
-/// 未执行时保留原错误；查证失败时保留首次未知错误或正常查询错误。
+// 财务写事务报错后，解释按原命令查到的独立回执。确认已提交时交出原对象 ID，
+// 并保留首次未知提交错误供结果回读使用。没有回执则返回原错误；回执查询失败时，
+// 未知提交仍返回首次错误，其他情况返回查询错误。
 pub(super) fn recovered_resource(
     original: Error,
     receipt_result: Result<Option<String>>,
@@ -28,14 +23,8 @@ pub(super) fn recovered_resource(
     }
 }
 
-/// 完成原视图查证，禁止以新的读取错误覆盖首次未知提交错误。
-/// # 参数
-/// * `view` - 原结果对象的实际读取结果。
-/// * `original_unknown` - 回执恢复时保留的首次未知提交错误。
-/// # 返回
-/// 成功时返回原视图。
-/// # 错误
-/// 视图读取失败时返回首次未知错误；普通失败沿用具体读取错误。
+// 查到原财务回执后，以实际回读成功作为结果交付边界。回读失败时优先保留首次未知提交错误；
+// 没有未知提交错误时，返回具体的读取错误。
 pub(super) fn recovered_view<T>(view: Result<T>, original_unknown: Option<Error>) -> Result<T> {
     match (view, original_unknown) {
         (Ok(value), _) => Ok(value),

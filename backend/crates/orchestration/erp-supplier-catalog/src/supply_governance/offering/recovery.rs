@@ -12,7 +12,7 @@ use persistence_core::Transactional;
 use super::SupplierOfferingProcess;
 use crate::Result;
 
-/// 确定失败保持原错误；未知结果只尝试一次已授权回执读取，不重试写入。
+// 确定失败保持原错误；未知结果只尝试一次已授权回执读取，不重试写入。
 pub(super) async fn resolve<T, F, R>(transaction: Result<T>, read: F) -> Result<T>
 where
     F: FnOnce() -> R,
@@ -26,13 +26,13 @@ where
 }
 
 impl SupplierOfferingProcess {
-    /// 创建回执与当前创建资格、真实供给读取使用新快照。
-    /// # 参数
-    /// 原目标、请求与当前身份。
-    /// # 返回
-    /// 当前授权通过的原回执；没有回执时返回 None。
-    /// # 错误
-    /// 当前授权、回执指纹、事务或读取失败时拒绝。
+    // 创建回执与当前创建资格、真实供给读取使用新快照。
+    //
+    // 原目标、请求与当前身份。
+    //
+    // 当前授权通过的原回执；没有回执时返回 None。
+    //
+    // 当前授权、回执指纹、事务或读取失败时拒绝。
     pub(super) async fn created_result(
         &self,
         request: CreateSupplierOfferingRequest,
@@ -47,13 +47,13 @@ impl SupplierOfferingProcess {
             .await
     }
 
-    /// 修订回执与当前对象授权使用新快照。
-    /// # 参数
-    /// 原目标、请求与当前身份。
-    /// # 返回
-    /// 当前授权通过的原回执；没有回执时返回 None。
-    /// # 错误
-    /// 当前授权、回执指纹、事务或读取失败时拒绝。
+    // 修订回执与当前对象授权使用新快照。
+    //
+    // 原目标、请求与当前身份。
+    //
+    // 当前授权通过的原回执；没有回执时返回 None。
+    //
+    // 当前授权、回执指纹、事务或读取失败时拒绝。
     pub(super) async fn revised_result(
         &self,
         id: String,
@@ -69,13 +69,13 @@ impl SupplierOfferingProcess {
             .await
     }
 
-    /// 可供回执与完整可供更新授权使用新快照。
-    /// # 参数
-    /// 原目标、请求与当前身份。
-    /// # 返回
-    /// 当前授权通过的原回执；没有回执时返回 None。
-    /// # 错误
-    /// 当前授权、回执指纹、事务或读取失败时拒绝。
+    // 可供回执与完整可供更新授权使用新快照。
+    //
+    // 原目标、请求与当前身份。
+    //
+    // 当前授权通过的原回执；没有回执时返回 None。
+    //
+    // 当前授权、回执指纹、事务或读取失败时拒绝。
     pub(super) async fn availability_result(
         &self,
         id: String,
@@ -104,7 +104,7 @@ mod tests {
     use super::*;
     use crate::Error;
 
-    /// 已成功及确定失败均不得读取旧回执覆盖原结果。
+    // 验证：已成功及确定失败均不得读取旧回执覆盖原结果。
     #[tokio::test]
     async fn successful_and_definite_failures_do_not_recover_receipts() {
         let calls = AtomicUsize::new(0);
@@ -135,7 +135,7 @@ mod tests {
         assert_eq!(calls.load(Ordering::SeqCst), 0);
     }
 
-    /// 已确认可恢复的失败必须继续接受新快照中的授权拒绝。
+    // 验证：已确认可恢复的失败必须继续接受新快照中的授权拒绝。
     #[tokio::test]
     async fn unknown_commit_requires_current_authorization_and_preserves_missing_receipt() {
         let original =

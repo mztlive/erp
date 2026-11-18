@@ -40,17 +40,8 @@ pub struct PlanCommercialProfileRevisionParams<'a> {
 }
 
 /// 创建商务资料新修订并推进供应商当前指针。
-///
-/// # 参数
-/// * `params` - 供应商、商务条款与修订身份
-///
-/// # 返回
 /// 返回新建的商务资料修订，并已推进 `supplier` 指针。
-///
-/// # 错误
 /// 付款条件、税点或变更原因非法时返回错误。
-///
-/// # 约束
 /// 纯内存，不触及外部 I/O；不分配新 ID，需 Service 注入。
 pub fn plan_commercial_profile_revision(
     params: PlanCommercialProfileRevisionParams<'_>,

@@ -11,27 +11,13 @@ use mongodb::Database;
 use persistence_core::Executor;
 
 use crate::{Error, Result};
-/// 在调用方事务内写入付款核销、应付余额与审计。
-///
-/// 数据面职责归位（FIN-E02/FIN-R05）：分录/子账事实一次批量装载并去重，
-/// 核销净额、逐分录开放余额、连续序号与分配实体构造由
-/// [`erp_finance::entity::payable::PaymentAllocationLedger`] 完成；子账进度按账户聚合后批量条件更新，
-/// 分配行批量插入。
-///
-/// # 参数
-/// * `db` - 数据库。
-/// * `payment` - 待过账的供应商付款。
-/// * `pending` - 本次付款的待核销分配。
-/// * `facts` - 已装载的付款结算事实。
-/// * `audit` - 过账业务事件上下文。
-/// * `actor` - 已认证操作人。
-/// * `session` - 调用方事务执行器，各步骤共用。
-///
-/// # 返回
-/// 余额、付款与审计全部写入成功时无返回值。
-///
-/// # 错误
-/// 付款状态、供应商、应付开放余额、分配金额或仓储写入不合法时返回错误。
+// 在调用方事务内写入付款核销、应付余额与审计。
+//
+// 数据面职责归位（FIN-E02/FIN-R05）：分录/子账事实一次批量装载并去重，核销净额、逐分录开放余额、连续序号与分配实体构造由
+// [`erp_finance::entity::payable::PaymentAllocationLedger`] 完成；子账进度按账户聚合后批量条件更新，分配行批量插入。
+//
+// `payment` 为待过账的供应商付款；`pending` 为本次付款的待核销分配；`facts` 为已装载的付款结算事实；`audit` 为过账业务事件上下文；`session` 为调用方事务执行器，
+// 各步骤共用。余额、付款与审计全部写入成功时无返回值。付款状态、供应商、应付开放余额、分配金额或仓储写入不合法时返回错误。
 pub(super) async fn post_supplier_payment(
     db: &Database,
     payment: &mut SupplierPayment,
@@ -48,15 +34,15 @@ pub(super) async fn post_supplier_payment(
 /// 根事务的付款步骤合同；实现只执行本步骤，不创建新事务。
 #[async_trait]
 trait PaymentPostingSteps: Send {
-    /// 按同一执行器写入财务余额。
+    // 付款核销的首个写入步骤，沿根事务执行器更新应付余额。
     async fn settle_accounts(&mut self, executor: &mut dyn Executor) -> Result<()>;
-    /// 写入付款状态和核销分配。
+    // 余额更新后，同事务写入付款状态与本次核销分配。
     async fn persist_payment(&mut self, executor: &mut dyn Executor) -> Result<()>;
-    /// 在付款事实写入后记录过账审计。
+    // 付款与分配写入成功后，才在原事务保存本次过账审计。
     async fn write_audit(&mut self, executor: &mut dyn Executor) -> Result<()>;
 }
 
-/// 保持余额更新、付款及分配写入、审计顺序；所有步骤使用同一 Executor。
+// 保持余额更新、付款及分配写入、审计顺序；所有步骤使用同一 Executor。
 async fn execute_posting(steps: &mut impl PaymentPostingSteps, executor: &mut dyn Executor) -> Result<()> {
     steps.settle_accounts(executor).await?;
     steps.persist_payment(executor).await?;
@@ -75,16 +61,9 @@ struct MongoPaymentPosting<'a> {
 
 #[async_trait]
 impl PaymentPostingSteps for MongoPaymentPosting<'_> {
-    /// 复用付款任务事实执行财务领域原核销规则及条件写入。
-    ///
-    /// # 参数
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 核销结果留在 `settlement`，供后续步骤读取。
-    ///
-    /// # 错误
-    /// 核销规则或条件写入失败时返回对应错误，且不留下核销结果。
+    // 复用付款任务事实执行财务领域原核销规则及条件写入。
+    //
+    // 沿用调用方的执行器。核销结果留在 `settlement`，供后续步骤读取。核销规则或条件写入失败时返回对应错误，且不留下核销结果。
     async fn settle_accounts(&mut self, executor: &mut dyn Executor) -> Result<()> {
         self.settlement = Some(
             settle_supplier_payment_with_facts(
@@ -100,16 +79,9 @@ impl PaymentPostingSteps for MongoPaymentPosting<'_> {
         Ok(())
     }
 
-    /// 在余额更新成功后登记付款状态与核销行。
-    ///
-    /// # 参数
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 付款状态与核销分配已写入。
-    ///
-    /// # 错误
-    /// 尚无核销结果时返回 `Internal`。付款状态或核销行写入失败时返回对应错误。
+    // 在余额更新成功后登记付款状态与核销行。
+    //
+    // 沿用调用方的执行器。付款状态与核销分配已写入。尚无核销结果时返回 `Internal`。付款状态或核销行写入失败时返回对应错误。
     async fn persist_payment(&mut self, executor: &mut dyn Executor) -> Result<()> {
         let settlement = self
             .settlement
@@ -119,16 +91,9 @@ impl PaymentPostingSteps for MongoPaymentPosting<'_> {
         Ok(())
     }
 
-    /// 为成功过账记录最后一条业务审计。
-    ///
-    /// # 参数
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 成功过账的审计已写入。
-    ///
-    /// # 错误
-    /// 审计内容构造或日志保存失败时返回对应错误。
+    // 为成功过账记录最后一条业务审计。
+    //
+    // 沿用调用方的执行器。成功过账的审计已写入。审计内容构造或日志保存失败时返回对应错误。
     async fn write_audit(&mut self, executor: &mut dyn Executor) -> Result<()> {
         let audit = self.audit.log(BusinessEventContent {
             target_id: self.payment.base.id.clone(),

@@ -37,17 +37,12 @@ pub struct StartInputContext<'a> {
 }
 
 /// 按定义顺序冻结节点绑定，使用调用方提供的对象读取资格。
-///
-/// # 参数
-/// * `graph` - 本次启动使用的定义图。
-/// * `check` - 各节点参与人的专属资格失败原因；调用方负责外部事实读取。
-/// * `empty_definition` - 入口既有的空定义冲突提示。
-///
-/// # 返回
 /// 返回保留定义顺序、审批人与资格的节点绑定。
 ///
-/// # 错误
 /// 节点审批人或显示名非法时返回校验错误；空定义返回入口约定的冲突错误。
+///
+/// `graph`：本次启动使用的定义图；`check`：各节点参与人的专属资格失败原因；调用方负责外部事实读取。
+/// `empty_definition`：入口既有的空定义冲突提示。
 pub fn start_bindings(
     graph: &DefinitionGraph,
     mut check: impl FnMut(&str) -> Option<AuthorizationFailure>,
@@ -69,17 +64,12 @@ pub fn start_bindings(
 }
 
 /// 从已完成业务校验的绑定构造启动输入。
-///
-/// # 参数
-/// * `graph` - 调用方核对冻结版本后的定义图。
-/// * `bindings` - 调用方完成专属资格检查后的节点绑定。
-/// * `context` - 已验证的命令身份、冻结业务引用与时间。
-///
-/// # 返回
 /// 返回入口资格一致的启动输入；仅在入口及其绑定有效后分配实例、执行与收据 ID。
 ///
-/// # 错误
 /// 定义缺少入口或入口缺少审批人绑定时返回既有冲突错误。
+///
+/// `graph`：调用方核对冻结版本后的定义图；`bindings`：调用方完成专属资格检查后的节点绑定。
+/// `context`：已验证的命令身份、冻结业务引用与时间。
 pub fn assemble_start_input(
     graph: DefinitionGraph,
     bindings: Vec<StartAssigneeBinding>,

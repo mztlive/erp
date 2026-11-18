@@ -20,14 +20,13 @@ pub struct SalesChangeSubmissionCommand {
 
 impl SalesChangeSubmissionCommand {
     /// 绑定已认证人、原单、操作号以及请求版本和重提说明。
-    /// # 参数
-    /// * `change_id` / `actor_id` - 已认证操作人与变更单。
-    /// * `source_version` - 原请求的变更单锁版本。
-    /// * `key` / `reason` - 原请求操作号和可选重提说明。
-    /// # 返回
     /// 返回与当前审批版本无关、可精确回放的命令身份。
-    /// # 错误
     /// 身份空白、版本为零、操作号或说明超长时拒绝。
+    ///
+    /// 输入约定：
+    /// - `change_id` / `actor_id`：已认证操作人与变更单。
+    /// - `source_version`：原请求的变更单锁版本。
+    /// - `key` / `reason`：原请求操作号和可选重提说明。
     pub fn new(
         change_id: &str,
         actor_id: &str,
@@ -99,14 +98,13 @@ pub struct SalesChangeSubmissionReceipt {
 }
 impl SalesChangeSubmissionReceipt {
     /// 冻结原请求对应的精确提交及审批实例，供任何后续版本中回放。
-    /// # 参数
-    /// * `command` - 完整原请求身份。
-    /// * `submission` - 本次事务实际创建的不可变提交。
-    /// * `instance_id` / `audit_event_id` - 同事务创建的实例和成功审计。
-    /// # 返回
     /// 返回经过原请求版本及归属验证的独立回执。
-    /// # 错误
     /// 请求与提交的版本、归属、提交人不一致或结果身份缺失时拒绝。
+    ///
+    /// 输入约定：
+    /// - `command`：完整原请求身份。
+    /// - `submission`：本次事务实际创建的不可变提交。
+    /// - `instance_id` / `audit_event_id`：同事务创建的实例和成功审计。
     pub fn new(
         command: SalesChangeSubmissionCommand,
         submission: SalesChangeSubmissionFact,
@@ -127,13 +125,12 @@ impl SalesChangeSubmissionReceipt {
     }
 
     /// 校验完整原请求和按回执主键读取的冻结提交，拒绝以当前提交代替。
-    /// # 参数
-    /// * `expected` - 本次请求形成的命令身份。
-    /// * `persisted` - 按回执 submission_id 读取的真实冻结提交。
-    /// # 返回
-    /// 全部身份和请求载荷一致时成功。
-    /// # 错误
+    /// 结果：全部身份和请求载荷一致时成功。
     /// 损坏回执、异载荷、旧记录缺原请求版本或冻结事实不一致均拒绝。
+    ///
+    /// 输入约定：
+    /// - `expected`：本次请求形成的命令身份。
+    /// - `persisted`：按回执 submission_id 读取的真实冻结提交。
     pub fn validate(
         &self,
         expected: &SalesChangeSubmissionCommand,

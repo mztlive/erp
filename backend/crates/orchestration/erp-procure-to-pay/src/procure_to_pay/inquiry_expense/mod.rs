@@ -70,14 +70,11 @@ pub(crate) struct PurchaseExpenseTarget<'a> {
     pub rate: Option<Rate>,
 }
 
-/// 保存或正式变更费用时同步明确采用的反馈轮次和完整目标条件。
-/// # 参数
-/// `order` 为当前采购与收款条件，`targets` 为完整目标费用，`actor_id` 为确认人，
-/// `executor` 为原事务。
-/// # 返回
-/// 同事务保存跨轮次余额；原轮次减少和不变内容不依赖报价继续有效。
-/// # 错误
-/// 来源新增、遗漏、替换、税率不符、已办理修改或新采用条件失效时拒绝。
+// 保存或正式变更费用时同步明确采用的反馈轮次和完整目标条件。
+//
+// `order` 为当前采购与收款条件，`targets` 为完整目标费用，`actor_id` 为确认人， `executor` 为原事务。
+//
+// 同事务保存跨轮次余额；原轮次减少和不变内容不依赖报价继续有效。来源新增、遗漏、替换、税率不符、已办理修改或新采用条件失效时拒绝。
 pub(crate) async fn resize_purchase(
     db: &Database,
     order: &PurchaseOrder,
@@ -207,14 +204,9 @@ fn validate_target_identity(
     Ok(())
 }
 
-/// 作废费用采购仅释放尚未办理来源；驳回及撤回不得调用。
-///
-/// # 参数
-/// `document_id` 为已通过业务作废守卫的采购单。
-/// # 返回
-/// 对应未办理来源已释放，历史事实保留。
-/// # 错误
-/// 存在已办理金额或保存冲突时拒绝。
+// 作废费用采购仅释放尚未办理来源；驳回及撤回不得调用。
+//
+// `document_id` 为已通过业务作废守卫的采购单。对应未办理来源已释放，历史事实保留。存在已办理金额或保存冲突时拒绝。
 pub(crate) async fn release_purchase(
     db: &Database,
     document_id: &str,
@@ -238,14 +230,9 @@ pub(crate) async fn release_purchase(
     Ok(())
 }
 
-/// 确认发生时将已占用费用标记为已办理；不再扣减第二次。
-///
-/// # 参数
-/// `document_id`、`line_id` 为本次实际发生的稳定费用身份。
-/// # 返回
-/// 来源为空时保持原流程；有关联时禁止后续释放。
-/// # 错误
-/// 台账损坏、已释放或 CAS 失败时拒绝。
+// 确认发生时将已占用费用标记为已办理；不再扣减第二次。
+//
+// `document_id`、`line_id` 为本次实际发生的稳定费用身份。来源为空时保持原流程；有关联时禁止后续释放。台账损坏、已释放或 CAS 失败时拒绝。
 pub(crate) async fn mark_occurred(
     db: &Database,
     document_id: &str,
@@ -271,14 +258,8 @@ pub(crate) async fn mark_occurred(
     Ok(())
 }
 
-/// 财务直接登记与费用采购消费同一来源，不产生应付。
-///
-/// # 参数
-/// `reference` 为可选稳定费用来源；`entry` 为已校验的实际登记事实。
-/// # 返回
-/// 来源占用并登记为已办理，和成本事实共用事务。
-/// # 错误
-/// 来源金额、税率或额度非法、重复办理时拒绝。
+/// 财务从询价费用来源直接登记成本时，与费用采购竞争同一份来源额度，不另建应付。
+/// 有稳定来源引用时在成本事务内按已校验的实际登记事实占用来源并标记已办理；金额、税率或额度无效，或来源已办理时拒绝。
 pub async fn register_finance(
     db: &Database,
     reference: Option<&InquiryFeeReference>,
@@ -311,14 +292,7 @@ pub async fn register_finance(
     Ok(())
 }
 
-/// 核对财务原结果的询价来源，阻止同键切换来源或去掉来源后重放。
-///
-/// # 参数
-/// `entry_id` 为原成本事实，`reference` 为本次声明的可选来源。
-/// # 返回
-/// 只有原来源与本次完全相同时允许返回原结果。
-/// # 错误
-/// 来源被替换、移除或损坏时拒绝。
+/// 重放财务已登记的成本时，按原成本事实核对本次声明的可选询价来源。只有来源完全一致才交付原结果；变更、移除或来源损坏时拒绝。
 pub async fn check_finance_source(
     db: &Database,
     entry_id: &str,

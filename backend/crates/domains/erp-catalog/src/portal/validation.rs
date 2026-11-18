@@ -19,12 +19,10 @@ const MAX_ASSETS: usize = 100;
 
 impl NewProductInput {
     /// 正式提报每条 SKU 必须有自身图片或可共同引用的商品公共图片。
-    /// # 参数
+    ///
+    /// 每条 SKU 均有明确可追溯图片来源时成功。图片标识无效、缺 SKU 或任一 SKU 无自身及公共图时拒绝。
+    ///
     /// 无；原始图片标识保持不变，实际素材归属由文件 Port 重验。
-    /// # 返回
-    /// 每条 SKU 均有明确可追溯图片来源时成功。
-    /// # 错误
-    /// 图片标识无效、缺 SKU 或任一 SKU 无自身及公共图时拒绝。
     pub fn ensure_submission_images(&self) -> Result<()> {
         validate_assets(&self.image_asset_ids)?;
         if self.skus.is_empty() {
@@ -41,12 +39,7 @@ impl NewProductInput {
 
     /// 校验提交完整性，允许充分的未匹配字典原始资料。
     ///
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 完整且无重复规格或订货编码时返回空结果。
-    /// # 错误
-    /// 缺失、非法、重复或超长资料时返回验证错误；商务条款另由供给 Port 校验。
+    /// 完整且无重复规格或订货编码时返回空结果。缺失、非法、重复或超长资料时返回验证错误；商务条款另由供给 Port 校验。
     pub fn validate_submission(&self) -> Result<()> {
         self.validate_storage()?;
         required(&self.name, "商品名称", NAME_MAX_LEN)?;
@@ -71,12 +64,7 @@ impl NewProductInput {
 
     /// 核对内部映射与本次原始提交严格对应。
     ///
-    /// # 参数
-    /// * `normalized` - 内部明确确认的字典及已有 SKU 映射。
-    /// # 返回
-    /// 每行完整对应且仅整理名称首尾空白时返回空结果。
-    /// # 错误
-    /// 改变名称含义、遗漏或重复行、替换已选择字典或版本不一致时返回错误。
+    /// 每行完整对应且仅整理名称首尾空白时返回空结果。改变名称含义、遗漏或重复行、替换已选择字典或版本不一致时返回错误。
     pub fn ensure_normalized(&self, normalized: &NormalizedProduct) -> Result<()> {
         self.validate_submission()?;
         ensure_name(&self.name, &normalized.name)?;
@@ -108,16 +96,10 @@ impl NewProductInput {
         Ok(())
     }
 
-    /// 草稿存储校验只检查边界，允许尚未填写的必填资料。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 文本、附件和 SKU 行都未越界且行标识不重复时返回空结果。
-    ///
-    /// # 错误
-    /// 文本或标识超长、附件重复或过多、SKU 超过 100 个、行标识重复或 SKU 存储字段非法时返回 `ValidationError`。
+    // 草稿存储校验只检查边界，允许尚未填写的必填资料。
+    //
+    // 文本、附件和 SKU 行都未越界且行标识不重复时返回空结果。文本或标识超长、附件重复或过多、SKU 超过 100 个、行标识重复或 SKU 存储字段非法时返回
+    // `ValidationError`。
     pub(super) fn validate_storage(&self) -> Result<()> {
         bounded(&self.name, "商品名称", NAME_MAX_LEN)?;
         self.brand.validate_storage("品牌")?;
@@ -143,16 +125,9 @@ impl NewProductInput {
 }
 
 impl DictionaryInput {
-    /// 所选 ID 与版本必须同时存在，原稿不做 trim 写回。
-    ///
-    /// # 参数
-    /// * `field` - 拼进错误文案的字段名
-    ///
-    /// # 返回
-    /// 未选择，或标识与正版本成对且标识合法时返回空结果。
-    ///
-    /// # 错误
-    /// 原文超长、标识与版本缺一、版本不为正或标识含首尾空白时返回 `ValidationError`。
+    // 所选 ID 与版本必须同时存在，原稿不做 trim 写回。
+    //
+    // 未选择，或标识与正版本成对且标识合法时返回空结果。原文超长、标识与版本缺一、版本不为正或标识含首尾空白时返回 `ValidationError`。
     pub(super) fn validate_storage(&self, field: &str) -> Result<()> {
         bounded(&self.raw_name, field, DESCRIPTION_MAX_LEN)?;
         match (&self.selected_id, self.expected_version) {
@@ -162,14 +137,14 @@ impl DictionaryInput {
         }
     }
 
-    /// 未匹配字典使用明确原始资料提交，不默认成未知或无品牌。
+    // 未匹配字典使用明确原始资料提交，不默认成未知或无品牌。
     fn validate_required(&self, field: &str) -> Result<()> {
         self.validate_storage(field)?;
         required(&self.raw_name, field, DESCRIPTION_MAX_LEN)?;
         Ok(())
     }
 
-    /// 明确选择的字典不得通过改映射绕过提交时版本。
+    // 明确选择的字典不得通过改映射绕过提交时版本。
     fn ensure_resolved(&self, id: &str, version: u64, field: &str) -> Result<()> {
         validate_id(id, field)?;
         if version == 0 {
@@ -185,16 +160,10 @@ impl DictionaryInput {
 }
 
 impl DraftSku {
-    /// 保存时只验证输入尺寸及显式引用的结构。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 行标识、文本、规格、包装、数量和填报时间都在允许范围内时返回空结果。
-    ///
-    /// # 错误
-    /// 标识非法、文本超长、规格过多、可供数量为负、填报时间无效或包装存储校验失败时返回 `ValidationError`。
+    // 保存时只验证输入尺寸及显式引用的结构。
+    //
+    // 行标识、文本、规格、包装、数量和填报时间都在允许范围内时返回空结果。标识非法、文本超长、规格过多、可供数量为负、填报时间无效或包装存储校验失败时返回
+    // `ValidationError`。
     pub(super) fn validate_storage(&self) -> Result<()> {
         validate_id(&self.row_id, "SKU 行标识")?;
         bounded(&self.name, "SKU 名称", NAME_MAX_LEN)?;
@@ -224,7 +193,7 @@ impl DraftSku {
         Ok(())
     }
 
-    /// 条款仅检查为对象，其商务校验归供给领域。
+    // 条款仅检查为对象，其商务校验归供给领域。
     fn validate_submission(&self) -> Result<()> {
         required(&self.name, "SKU 名称", NAME_MAX_LEN)?;
         self.unit.validate_required("单位")?;
@@ -251,7 +220,7 @@ impl DraftSku {
         Ok(())
     }
 
-    /// 映射不能替代原始规格、单位含义或商务输入。
+    // 映射不能替代原始规格、单位含义或商务输入。
     fn ensure_normalized(&self, mapping: &NormalizedSku) -> Result<()> {
         ensure_name(&self.name, &mapping.name)?;
         self.unit.ensure_resolved(&mapping.unit_id, mapping.unit_version, "单位")?;
@@ -271,13 +240,11 @@ impl DraftSku {
 }
 
 impl UnitSynonymConfirmation {
-    /// 同义核对只接受完整原稿的明确确认，不允许换算或改写原文。
-    /// # 参数
-    /// `original_unit` 为本行供应商原始基础单位文本。
-    /// # 返回
-    /// 明确同义确认和完整核对依据有效时成功。
-    /// # 错误
-    /// 原文变化、未明确确认或核对依据为空及过长时拒绝。
+    // 同义核对只接受完整原稿的明确确认，不允许换算或改写原文。
+    //
+    // 明确同义确认和完整核对依据有效时成功。原文变化、未明确确认或核对依据为空及过长时拒绝。
+    //
+    // `original_unit` 为本行供应商原始基础单位文本。
     pub(crate) fn ensure_for(&self, original_unit: &str) -> Result<()> {
         if self.original_unit != original_unit || !self.same_unit_meaning_confirmed {
             return Err(validation("单位同义映射须明确确认本行原始基础单位含义"));
@@ -287,7 +254,7 @@ impl UnitSynonymConfirmation {
     }
 }
 
-/// 审核证据必须包含从根到选中叶的完整同类型链。
+// 审核证据必须包含从根到选中叶的完整同类型链。
 fn ensure_category_hierarchy(normalized: &NormalizedProduct, kind: ProductKind) -> Result<()> {
     let nodes = &normalized.category_hierarchy;
     if nodes.is_empty() || nodes.len() > 32 {
@@ -311,7 +278,7 @@ fn ensure_category_hierarchy(normalized: &NormalizedProduct, kind: ProductKind) 
     Ok(())
 }
 
-/// 每级节点均须是可追溯且类型一致的核对事实。
+// 每级节点均须是可追溯且类型一致的核对事实。
 fn ensure_category_node(node: &CategoryHierarchyNode, kind: ProductKind) -> Result<()> {
     validate_id(&node.id, "分类路径节点")?;
     required(&node.name, "分类路径名称", NAME_MAX_LEN)?;
@@ -321,17 +288,10 @@ fn ensure_category_node(node: &CategoryHierarchyNode, kind: ProductKind) -> Resu
     Ok(())
 }
 
-/// 核对最终结果与全部映射行及复用目标一致。
-///
-/// # 参数
-/// * `normalized` - 内部确认的 SKU 映射
-/// * `result` - 本次建档结果
-///
-/// # 返回
-/// 每个映射行都有不重复的 SKU、修订和供给，且与复用决定一致时返回空结果。
-///
-/// # 错误
-/// 结果标识非法、行数不一致、SKU 重复、缺少供给，或新建与复用目标和映射不符时返回 `ValidationError`。
+// 核对最终结果与全部映射行及复用目标一致。
+//
+// 每个映射行都有不重复的 SKU、修订和供给，且与复用决定一致时返回空结果。结果标识非法、行数不一致、SKU 重复、缺少供给，或新建与复用目标和映射不符时返回
+// `ValidationError`。
 pub(super) fn ensure_result(normalized: &NormalizedProduct, result: &CatalogDraftResult) -> Result<()> {
     validate_id(&result.product_id, "结果商品")?;
     if result.skus.len() != normalized.sku_mappings.len() {
@@ -359,7 +319,7 @@ pub(super) fn ensure_result(normalized: &NormalizedProduct, result: &CatalogDraf
     Ok(())
 }
 
-/// 新建 SKU 明确未上架，已存在 SKU 仅能返回明确匹配的身份。
+// 新建 SKU 明确未上架，已存在 SKU 仅能返回明确匹配的身份。
 fn ensure_sku_result(
     mapping: &NormalizedSku,
     result: &CatalogDraftSkuResult,
@@ -382,19 +342,11 @@ fn ensure_sku_result(
     }
 }
 
-/// 构造决定时验证实际操作人，禁止失败后才发现缺失事实。
-///
-/// # 参数
-/// * `status` - 本次决定后的提报状态
-/// * `reason` - 可选决定原因；本函数不检查是否为空
-/// * `actor_id` - 实际操作人标识
-/// * `at` - 决定时间
-///
-/// # 返回
-/// 返回尚未填入映射和建档结果的 `DraftDecision`。
-///
-/// # 错误
-/// 操作人标识为空、超长或含首尾空白时返回 `ValidationError`。
+// 构造决定时验证实际操作人，禁止失败后才发现缺失事实。
+//
+// 返回尚未填入映射和建档结果的 `DraftDecision`。操作人标识为空、超长或含首尾空白时返回 `ValidationError`。
+//
+// `reason` 为可选决定原因；本函数不检查是否为空。
 pub(super) fn decision(
     status: DraftStatus,
     reason: Option<String>,
@@ -412,7 +364,7 @@ pub(super) fn decision(
     })
 }
 
-/// 重用公司商品规格的唯一实现，不另建门户签名算法。
+// 重用公司商品规格的唯一实现，不另建门户签名算法。
 fn signature_entries(entries: &[SpecEntryInput]) -> Vec<SpecSignatureEntry> {
     entries
         .iter()
@@ -423,7 +375,7 @@ fn signature_entries(entries: &[SpecEntryInput]) -> Vec<SpecSignatureEntry> {
         .collect()
 }
 
-/// 名称格式整理仅去首尾空白，实质名称修改须重新提交。
+// 名称格式整理仅去首尾空白，实质名称修改须重新提交。
 fn ensure_name(raw: &str, normalized: &str) -> Result<()> {
     if raw.trim() != normalized || normalized.is_empty() {
         return Err(validation("内部名称只允许整理首尾空白，实质变化须退回供应商确认"));
@@ -431,18 +383,11 @@ fn ensure_name(raw: &str, normalized: &str) -> Result<()> {
     Ok(())
 }
 
-/// 必填文本只返回规范值供判断，不改写供应商原稿。
-///
-/// # 参数
-/// * `value` - 原始文本
-/// * `field` - 拼进错误文案的字段名
-/// * `max_len` - 按字符计的最大长度
-///
-/// # 返回
-/// 返回去掉首尾空白后的非空文本借用，不分配或改写原稿。
-///
-/// # 错误
-/// 去掉空白后为空或超过 `max_len` 时返回 `ValidationError`。
+// 必填文本只返回规范值供判断，不改写供应商原稿。
+//
+// 返回去掉首尾空白后的非空文本借用，不分配或改写原稿。去掉空白后为空或超过 `max_len` 时返回 `ValidationError`。
+//
+// `value` 为原始文本。
 pub(super) fn required<'a>(value: &'a str, field: &str, max_len: usize) -> Result<&'a str> {
     let normalized = value.trim();
     if normalized.is_empty() {
@@ -452,18 +397,11 @@ pub(super) fn required<'a>(value: &'a str, field: &str, max_len: usize) -> Resul
     Ok(normalized)
 }
 
-/// 统一文本长度检查。
-///
-/// # 参数
-/// * `value` - 待检查文本，不裁剪
-/// * `field` - 拼进错误文案的字段名
-/// * `max_len` - 按字符计的最大长度
-///
-/// # 返回
-/// 未超过长度时返回空结果。
-///
-/// # 错误
-/// 字符数超过 `max_len` 时返回 `ValidationError`。
+// 统一文本长度检查。
+//
+// 未超过长度时返回空结果。字符数超过 `max_len` 时返回 `ValidationError`。
+//
+// `value` 为待检查文本，不裁剪。
 pub(super) fn bounded(value: &str, field: &str, max_len: usize) -> Result<()> {
     if value.chars().count() > max_len {
         return Err(validation(&format!("{field}过长")));
@@ -471,7 +409,7 @@ pub(super) fn bounded(value: &str, field: &str, max_len: usize) -> Result<()> {
     Ok(())
 }
 
-/// 可空文本仍受明确的长度约束。
+// 可空文本仍受明确的长度约束。
 fn optional_text(value: Option<&str>, field: &str, max_len: usize) -> Result<()> {
     if let Some(value) = value {
         bounded(value, field, max_len)?;
@@ -479,17 +417,9 @@ fn optional_text(value: Option<&str>, field: &str, max_len: usize) -> Result<()>
     Ok(())
 }
 
-/// 稳定标识非空、长度有限且不包含首尾空白。
-///
-/// # 参数
-/// * `value` - 待检查标识
-/// * `field` - 拼进错误文案的字段名
-///
-/// # 返回
-/// 标识本身已是规范值时返回空结果。
-///
-/// # 错误
-/// 为空、超过长度上限或去掉首尾空白后与原文不同时返回 `ValidationError`。
+// 稳定标识非空、长度有限且不包含首尾空白。
+//
+// 标识本身已是规范值时返回空结果。为空、超过长度上限或去掉首尾空白后与原文不同时返回 `ValidationError`。
 pub(super) fn validate_id(value: &str, field: &str) -> Result<()> {
     let normalized = required(value, field, ID_MAX_LEN)?;
     if normalized != value {
@@ -498,7 +428,7 @@ pub(super) fn validate_id(value: &str, field: &str) -> Result<()> {
     Ok(())
 }
 
-/// 可选关联存在时仍必须提供有效标识。
+// 可选关联存在时仍必须提供有效标识。
 fn optional_id(value: Option<&str>, field: &str) -> Result<()> {
     if let Some(value) = value {
         validate_id(value, field)?;
@@ -506,7 +436,7 @@ fn optional_id(value: Option<&str>, field: &str) -> Result<()> {
     Ok(())
 }
 
-/// 一组媒体引用不能重复或超过允许数量；访问权由文件 Port 重验。
+// 一组媒体引用不能重复或超过允许数量；访问权由文件 Port 重验。
 fn validate_assets(ids: &[String]) -> Result<()> {
     if ids.len() > MAX_ASSETS {
         return Err(validation("新品图片或附件数量过多"));
@@ -521,16 +451,9 @@ fn validate_assets(ids: &[String]) -> Result<()> {
     Ok(())
 }
 
-/// 门户纯规则错误使用验证分类，不按内部错误返回。
-///
-/// # 参数
-/// * `message` - 验证失败说明
-///
-/// # 返回
-/// 返回 `Error::ValidationError`。
-///
-/// # 错误
-/// 不返回错误。
+// 门户纯规则错误使用验证分类，不按内部错误返回。返回 `Error::ValidationError`。
+//
+// `message` 为验证失败说明。
 pub(super) fn validation(message: &str) -> Error {
     Error::ValidationError(message.to_string())
 }

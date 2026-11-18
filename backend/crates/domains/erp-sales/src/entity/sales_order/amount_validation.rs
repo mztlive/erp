@@ -8,19 +8,15 @@ use std::str::FromStr;
 use erp_core::money::Amount;
 use erp_core::{Error, Result};
 
-/// 汇总已经逐行舍入的金额三元组。
-///
-/// # 参数
-/// * `amounts` - 行含税额、不含税额、税额组成的迭代器
-///
-/// # 返回
-/// 返回 `(含税合计, 不含税合计, 税额合计)`；空集合返回保留两位小数的 `0.00`。
-///
-/// # 错误
-/// 不返回错误。金额值对象负责保持精度和范围。
-///
-/// # Panics
-/// 静态字面量 `0.00` 无法解析为金额时 panic。该字面量由代码固定，用于构造零金额。
+// 汇总已经逐行舍入的金额三元组。
+// 返回 `(含税合计, 不含税合计, 税额合计)`；空集合返回保留两位小数的 `0.00`。
+// 金额值对象负责保持精度和范围。
+//
+// # Panics
+// 静态字面量 `0.00` 无法解析为金额时 panic。该字面量由代码固定，用于构造零金额。
+//
+// 输入约定：
+// - `amounts`：行含税额、不含税额、税额组成的迭代器
 pub(crate) fn sum_line_amounts(
     amounts: impl IntoIterator<Item = (Amount, Amount, Amount)>,
 ) -> (Amount, Amount, Amount) {
@@ -30,18 +26,14 @@ pub(crate) fn sum_line_amounts(
     })
 }
 
-/// 校验表头金额三元组恒等式（§4.2 规则 2：表头只汇总已舍入的行金额）。
-///
-/// # 参数
-/// * `gross_amount` - 含税合计
-/// * `net_amount` - 不含税合计
-/// * `tax_amount` - 税额合计
-///
-/// # 返回
-/// 恒等式成立时返回 `Ok(())`。
-///
-/// # 错误
-/// `gross != net + tax` 时返回错误。
+// 校验表头金额三元组恒等式（§4.2 规则 2：表头只汇总已舍入的行金额）。
+// 结果：恒等式成立时返回 `Ok(())`。
+// `gross != net + tax` 时返回错误。
+//
+// 输入约定：
+// - `gross_amount`：含税合计
+// - `net_amount`：不含税合计
+// - `tax_amount`：税额合计
 pub(crate) fn validate_amount_triple(
     gross_amount: Amount,
     net_amount: Amount,
@@ -53,18 +45,13 @@ pub(crate) fn validate_amount_triple(
     Ok(())
 }
 
-/// 校验销售提交表头金额：恒等式成立且含税合计大于 0（§4.4.4：不得只含赠品明细）。
-///
-/// # 参数
-/// * `gross_amount` - 含税合计
-/// * `net_amount` - 不含税合计
-/// * `tax_amount` - 税额合计
-///
-/// # 返回
-/// 校验通过时返回 `Ok(())`。
-///
-/// # 错误
-/// 恒等式不成立或含税合计不大于 0 时返回错误。
+// 校验销售提交表头金额：恒等式成立且含税合计大于 0（§4.4.4：不得只含赠品明细）。
+// 恒等式不成立或含税合计不大于 0 时返回错误。
+//
+// 输入约定：
+// - `gross_amount`：含税合计
+// - `net_amount`：不含税合计
+// - `tax_amount`：税额合计
 pub(crate) fn validate_submission_amounts(
     gross_amount: Amount,
     net_amount: Amount,

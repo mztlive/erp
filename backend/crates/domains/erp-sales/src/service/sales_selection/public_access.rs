@@ -19,15 +19,10 @@ use crate::{Error, Result};
 
 impl SalesSelectionService {
     /// 读取慢哈希验证所需的当前密码事实。
-    ///
-    /// # 参数
-    /// `token` 为公开链接，`executor` 为读取边界。
-    ///
-    /// # 返回
     /// 返回当前哈希；历史未配置密码返回空。
-    ///
-    /// # 错误
     /// 无效链接或读取失败时拒绝。
+    ///
+    /// 输入约定：`token` 为公开链接，`executor` 为读取边界。
     pub async fn public_password_hash(
         &self,
         token: &str,
@@ -37,15 +32,10 @@ impl SalesSelectionService {
     }
 
     /// 已通过密码校验后，再重验当前密码并绑定个人会话。
-    ///
-    /// # 参数
-    /// `token` 为链接，`verified_hash` 为刚验证的哈希，`voucher_code` 为提货码，`now` 为当前时间，`crypto` 为编解码器，`executor` 为读取边界。
-    ///
-    /// # 返回
     /// 返回个人授权凭证与页面。
-    ///
-    /// # 错误
     /// 密码变化、结束、缺提货码或提货码不属于本册时拒绝。
+    ///
+    /// 输入约定：`token` 为链接，`verified_hash` 为刚验证的哈希，`voucher_code` 为提货码，`now` 为当前时间，`crypto` 为编解码器，`executor` 为读取边界。
     pub async fn public_unlock(
         &self,
         token: &str,
@@ -70,15 +60,10 @@ impl SalesSelectionService {
     }
 
     /// 在密码慢验证前确定限流作用域；不返回任何个人视图。
-    ///
-    /// # 参数
-    /// `token` 为链接，`voucher_code` 为个人提货码，`executor` 为读取边界。
-    ///
-    /// # 返回
-    /// 提货券返回个人会话身份，普通册返回共享会话身份。
-    ///
-    /// # 错误
+    /// 结果：提货券返回个人会话身份，普通册返回共享会话身份。
     /// 链接或提货码无效时拒绝。
+    ///
+    /// 输入约定：`token` 为链接，`voucher_code` 为个人提货码，`executor` 为读取边界。
     pub async fn public_unlock_scope(
         &self,
         token: &str,
@@ -111,15 +96,10 @@ impl SalesSelectionService {
 
     /// 在调用方授权事务内更新访问密码并保存幂等结果。
     /// 调用方须在同一执行器核验册维护资格；actor 只用于领域留痕和幂等作用域。
-    ///
-    /// # 参数
-    /// `id` 为册，`req` 为密码命令，`password_hash` 为慢哈希，`fingerprint` 为完整原请求的带密钥指纹，`actor` 为操作人，`executor` 必须为事务。
-    ///
-    /// # 返回
     /// 返回详情和是否首次执行标记；旧公开授权立即失效。
-    ///
-    /// # 错误
     /// 旧版本、幂等异载荷或非法状态时原子拒绝。
+    ///
+    /// 输入约定：`id` 为册，`req` 为密码命令，`password_hash` 为慢哈希，`fingerprint` 为完整原请求的带密钥指纹，`actor` 为操作人，`executor` 必须为事务。
     pub async fn set_access_password(
         &self,
         id: &str,
@@ -163,15 +143,10 @@ impl SalesSelectionService {
     }
 
     /// 读取当前册所有提货码及提交状态。
-    ///
-    /// # 参数
-    /// `id` 为已授权册，`crypto` 为内部码编解码器，`executor` 为读取边界。
-    ///
-    /// # 返回
     /// 返回个人提货码；普通册返回空列表。
-    ///
-    /// # 错误
     /// 密文损坏或读取失败时拒绝。
+    ///
+    /// 输入约定：`id` 为已授权册，`crypto` 为内部码编解码器，`executor` 为读取边界。
     pub async fn vouchers(
         &self,
         id: &str,
@@ -196,15 +171,10 @@ impl SalesSelectionService {
     }
 
     /// 读取已授权册的全部个人提交明细和收件信息。
-    ///
-    /// # 参数
-    /// `id` 为已授权册，`crypto` 为内部码编解码器，`executor` 为读取边界。
-    ///
-    /// # 返回
     /// 返回每人完整 SKU 行及冻结地址，供管理端导出。
-    ///
-    /// # 错误
     /// 明细读取或密文解码失败时拒绝。
+    ///
+    /// 输入约定：`id` 为已授权册，`crypto` 为内部码编解码器，`executor` 为读取边界。
     pub async fn selection_details(
         &self,
         id: &str,

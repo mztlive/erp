@@ -22,21 +22,16 @@ use crate::{Error, Result};
 /// 保持发票创建、必要时更新原票状态、账户差额与分配的原顺序。
 /// 返回受影响的应收账户身份，供流程与销售后续步骤使用。
 /// 全部操作使用传入的执行器，本函数不开启事务。
-///
-/// # 参数
-/// * `db` - 财务领域数据库。
-/// * `red_invoice` - 待创建的红字发票。
-/// * `original_invoice` - 原票；全额冲减时就地标为已红冲。
-/// * `allocation_plan` - 已校验的红冲分配计划。
-/// * `actor_id` - 执行人。
-/// * `executor` - 调用方事务执行器。
-///
-/// # 返回
-/// 销项时返回受影响的应收账户 ID；进项时返回空列表。
-///
-/// # 错误
-/// 红冲金额超过已开票或已收票进度时返回 `BusinessLogicError`；
+/// 结果：销项时返回受影响的应收账户 ID；进项时返回空列表。
+/// 失败条件：红冲金额超过已开票或已收票进度时返回 `BusinessLogicError`；
 /// 分配实体构造失败或仓储写入失败时返回对应错误。
+///
+/// 输入约定：
+/// - `db`：财务领域数据库。
+/// - `red_invoice`：待创建的红字发票。
+/// - `original_invoice`：原票；全额冲减时就地标为已红冲。
+/// - `allocation_plan`：已校验的红冲分配计划。
+/// - `executor`：调用方事务执行器。
 pub async fn persist_red_invoice(
     db: &Database,
     red_invoice: &Invoice,

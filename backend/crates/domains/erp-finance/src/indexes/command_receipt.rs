@@ -10,19 +10,14 @@ use crate::repository::FinanceCommandExt;
 /// 财务回执主 ID 唯一索引。
 pub const FINANCE_COMMAND_ID_INDEX: &str = "uk_finance_command_receipts_id";
 /// 创建财务回执 ID 唯一索引。
-///
-/// # 参数
-/// * `db` - 目标数据库。
-/// # 返回
-/// 索引创建成功时返回空结果。
-/// # 错误
+/// 结果：索引创建成功时返回空结果。
 /// 存量身份冲突或 MongoDB 无法创建索引时返回错误。
 pub async fn ensure(db: &Database) -> Result<()> {
     db.collection::<Document>(Database::FINANCE_COMMAND_RECEIPTS).create_indexes(receipt_indexes()).await?;
     Ok(())
 }
 
-/// 回执没有 TTL 或软删除限定；其生命周期覆盖命令重试与追溯期限。
+// 安装财务命令身份索引时不配置 TTL 或软删除过滤，命令重试及追溯必须还能查到原回执。
 fn receipt_indexes() -> Vec<IndexModel> {
     vec![
         IndexModel::builder()

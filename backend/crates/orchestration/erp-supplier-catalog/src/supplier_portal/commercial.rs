@@ -19,11 +19,11 @@ use crate::{Error, Result};
 
 impl SupplierPortalProcess {
     /// 保存当前供应商付款条件及合作条款草稿。
-    /// # 参数
+    ///
     /// 可选草稿ID、合作资料快照与真实门户身份。
-    /// # 返回
+    ///
     /// 返回未生效的草稿版本。
-    /// # 错误
+    ///
     /// 归属、版本或商务规则不符时拒绝。
     pub async fn cooperation_save(
         &self,
@@ -75,11 +75,11 @@ impl SupplierPortalProcess {
     }
 
     /// 冻结合作条款并登记供应商当前维护人的确认任务。
-    /// # 参数
+    ///
     /// 精确申请、版本命令及真实门户身份。
-    /// # 返回
+    ///
     /// 返回待确认申请。
-    /// # 错误
+    ///
     /// 归属、版本或具体处理资格失效时拒绝。
     pub async fn cooperation_submit(
         &self,
@@ -138,11 +138,11 @@ impl SupplierPortalProcess {
     }
 
     /// 撤回待确认合作申请并关闭其采购任务。
-    /// # 参数
+    ///
     /// 精确申请、版本命令及真实门户身份。
-    /// # 返回
+    ///
     /// 返回已撤回申请。
-    /// # 错误
+    ///
     /// 越界、版本变化或已处理时拒绝。
     pub async fn cooperation_withdraw(
         &self,
@@ -190,11 +190,11 @@ impl SupplierPortalProcess {
     }
 
     /// 当前采购确认人通过或退回合作条款。
-    /// # 参数
+    ///
     /// 精确申请、任务和读取版本及内部真实身份。
-    /// # 返回
+    ///
     /// 返回新商务档案结果或原稿退回原因。
-    /// # 错误
+    ///
     /// 资格、原商务档案、任务或申请版本失效时拒绝。
     pub async fn cooperation_review(
         &self,
@@ -298,16 +298,13 @@ impl SupplierPortalProcess {
     }
 }
 
-/// 用最近一次提交编号构造合作申请任务主题。
-///
-/// # 参数
-/// * `app` - 合作申请。
-///
-/// # 返回
-/// 返回 `cooperation:` 加最近提交编号。
-///
-/// # 错误
-/// 没有任何提交时返回 `ConflictError`。
+// 用最近一次提交编号构造合作申请任务主题。
+//
+// `app`：合作申请。
+//
+// 返回 `cooperation:` 加最近提交编号。
+//
+// 没有任何提交时返回 `ConflictError`。
 pub(super) fn cooperation_subject(app: &CooperationApplication) -> Result<String> {
     app.submissions
         .last()

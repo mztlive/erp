@@ -43,7 +43,7 @@ impl Default for SupplierQualificationFilter {
     }
 }
 
-/// 可核实日期的资质；合同不能把未知截止日期当作长期有效。
+// 可核实日期的资质；合同不能把未知截止日期当作长期有效。
 fn verified_window_filter() -> Document {
     doc! { "valid_from": { "$type": "string" }, "$or": [
         { "qualification_type": { "$ne": "contract" } }, { "valid_to": { "$type": "string" } }
@@ -51,18 +51,9 @@ fn verified_window_filter() -> Document {
 }
 
 impl QueryFilter for SupplierQualificationFilter {
-    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回查询条件文档。始终写入未删除的 `deleted_at`。
-    /// `supplier_id`、`qualification_type`、`status` 为 `Some` 时分别按字符串或 `as_str()` 精确写入；
-    /// 为 `None` 时不筛选。分页与排序字段不进入条件。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 将供应商资质筛选条件转换为 MongoDB 谓词，供仓储取数使用。
+    // 始终写入未删除的 `deleted_at`。`supplier_id`、`qualification_type`、`status` 为 `Some` 时分别按字
+    // 符串或 `as_str()` 精确写入；为 `None` 时不筛选。分页与排序字段不进入条件。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(supplier_id) = &self.supplier_id {
@@ -79,16 +70,8 @@ impl QueryFilter for SupplierQualificationFilter {
 }
 
 impl Pagination for SupplierQualificationFilter {
-    /// 返回页码与单页条数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `(page, page_size)` 元组。`page_size` 由 `u32` 展成 `u64`，不把 `0` 归一成第一页。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    // 向通用仓储提供供应商资质查询的页码和页长；不在此处改写页码。
+    // `page_size` 由 `u32` 展成 `u64`。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -97,16 +80,8 @@ impl Pagination for SupplierQualificationFilter {
 /// 供应商资质集合上的域查询。
 #[allow(async_fn_in_trait)]
 pub trait SupplierQualificationRepositoryExt {
-    /// 检索资质的到期预警列表（§6.2：`valid_to + status` 到期预警索引），
-    /// 按 `valid_to` 升序。
-    ///
-    /// # 参数
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
+    /// 检索资质的到期预警列表（§6.2：`valid_to + status` 到期预警索引），按 `valid_to` 升序。
     /// 返回全部有效资质（含已到期记录，由调用方按业务日期过滤）。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
     async fn list_active_for_expiry_warning(
         &self,
@@ -114,16 +89,9 @@ pub trait SupplierQualificationRepositoryExt {
     ) -> Result<Vec<SupplierQualification>>;
 
     /// 查询已登记任一指定资质类型的供应商角色 ID。
-    ///
-    /// # 参数
-    /// * `qualification_types` - 资质类型；空集合表示不限制类型
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回去重、稳定排序后的供应商角色 ID。
-    ///
-    /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
+    /// `qualification_types`：空集合表示不限制类型。
     async fn list_supplier_ids_by_qualification_types(
         &self,
         qualification_types: &[QualificationType],
@@ -131,17 +99,9 @@ pub trait SupplierQualificationRepositoryExt {
     ) -> Result<Vec<SupplierAccountId>>;
 
     /// 查询当前有效的供应商资质对应的供应商角色 ID。
-    ///
-    /// # 参数
-    /// * `qualification_types` - 资质类型；空集合表示不限制类型
-    /// * `as_of` - 当前业务日，格式为 `YYYY-MM-DD`
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回去重、稳定排序后的供应商角色 ID。
-    ///
-    /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
+    /// `qualification_types`：空集合表示不限制类型。
     async fn list_supplier_ids_by_valid_qualifications(
         &self,
         qualification_types: &[QualificationType],
@@ -150,18 +110,9 @@ pub trait SupplierQualificationRepositoryExt {
     ) -> Result<Vec<SupplierAccountId>>;
 
     /// 查询将在指定日期前到期且当前仍有效的供应商资质对应的供应商角色 ID。
-    ///
-    /// # 参数
-    /// * `qualification_types` - 资质类型；空集合表示不限制类型
-    /// * `as_of` - 当前业务日，格式为 `YYYY-MM-DD`
-    /// * `expires_by` - 到期窗口的结束业务日，格式为 `YYYY-MM-DD`
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回去重、稳定排序后的供应商角色 ID。
-    ///
-    /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
+    /// `qualification_types`：空集合表示不限制类型。
     async fn list_supplier_ids_by_expiring_qualifications(
         &self,
         qualification_types: &[QualificationType],
@@ -171,17 +122,9 @@ pub trait SupplierQualificationRepositoryExt {
     ) -> Result<Vec<SupplierAccountId>>;
 
     /// 查询已失效供应商资质对应的供应商角色 ID。
-    ///
-    /// # 参数
-    /// * `qualification_types` - 资质类型；空集合表示不限制类型
-    /// * `as_of` - 当前业务日，格式为 `YYYY-MM-DD`
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回去重、稳定排序后的供应商角色 ID。
-    ///
-    /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
+    /// `qualification_types`：空集合表示不限制类型。
     async fn list_supplier_ids_by_expired_qualifications(
         &self,
         qualification_types: &[QualificationType],
@@ -190,16 +133,7 @@ pub trait SupplierQualificationRepositoryExt {
     ) -> Result<Vec<SupplierAccountId>>;
 
     /// 读取指定供应商能力已经关联的合同，沿用调用方执行器。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 供应商角色 ID
-    /// * `capability_id` - 能力 ID
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
     /// 返回该能力关联、且属于该供应商的合同资质；没有关联时为空集合。
-    ///
-    /// # 错误
     /// 关联或资质读取失败时返回错误，不将读取失败当作没有合同。
     async fn linked_contracts(
         &self,
@@ -304,16 +238,9 @@ impl SupplierQualificationRepositoryExt for Repository<'_, SupplierQualification
 #[allow(async_fn_in_trait)]
 pub trait SupplierQualificationCapabilityRepositoryExt {
     /// 批量读取指定资质的适用能力关联。
-    ///
-    /// # 参数
-    /// * `qualification_ids` - 资质 ID；空集合不访问数据库
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回命中的关联行；入参为空时为空集合。
-    ///
-    /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
+    /// `qualification_ids`：空集合不访问数据库。
     async fn list_by_qualification_ids(
         &self,
         qualification_ids: &[SupplierQualificationId],
@@ -335,17 +262,10 @@ impl SupplierQualificationCapabilityRepositoryExt for Repository<'_, SupplierQua
     }
 }
 
-/// 构建有效资质窗口的公共前缀条件。
-///
-/// 资质类型范围、启用状态、日期核实与生效日上限在有效/窗口内到期两条
-/// 查询中共用；调用方只追加各自的失效日窗口。
-///
-/// # 参数
-/// * `qualification_types` - 允许命中的资质类型集合
-/// * `as_of` - 当前业务日，格式为 `YYYY-MM-DD`
-///
-/// # 返回
-/// 返回已含类型、状态、核实与生效日条件的查询文档。
+// 构建有效资质窗口的公共前缀条件。
+// 资质类型范围、启用状态、日期核实与生效日上限在有效/窗口内到期两条查询中共用；调用方只追加各自的失效日
+// 窗口。
+// 返回已含类型、状态、核实与生效日条件的查询文档。
 fn active_window_filter(qualification_types: &[QualificationType], as_of: &str) -> Document {
     let mut filter = qualification_type_filter(qualification_types);
     filter.insert("status", QualificationStatus::Active.as_str());
@@ -354,13 +274,8 @@ fn active_window_filter(qualification_types: &[QualificationType], as_of: &str) 
     filter
 }
 
-/// 构建资质类型范围条件；空集合表示不限制类型。
-///
-/// # 参数
-/// * `qualification_types` - 允许命中的资质类型集合
-///
-/// # 返回
-/// 非空时返回 `$in` 条件，空集合时返回空文档。
+// 构建资质类型范围条件；空集合表示不限制类型。
+// 非空时返回 `$in` 条件，空集合时返回空文档。
 fn qualification_type_filter(qualification_types: &[QualificationType]) -> Document {
     if qualification_types.is_empty() {
         return Document::new();
@@ -371,18 +286,10 @@ fn qualification_type_filter(qualification_types: &[QualificationType]) -> Docum
 
 impl<'a> SupplierRepository<'a> {
     /// 查询已登记但日期不完整的合同所属供应商。
-    ///
     /// 只查合同。类型列表非空且不含合同时直接返回空集合，不把其他类型或未登记资质算进来。
-    ///
-    /// # 参数
-    /// * `qualification_types` - 资质类型；空集合表示不按类型排除合同
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
     /// 返回去重、稳定排序后的供应商角色 ID；类型范围排除合同时为空集合。
-    ///
-    /// # 错误
     /// 数据库读取失败时返回错误；不与未登记资质混淆。
+    /// `qualification_types`：空集合表示不按类型排除合同。
     pub async fn list_supplier_ids_by_unverified_qualifications(
         &self,
         qualification_types: &[QualificationType],
@@ -397,16 +304,9 @@ impl<'a> SupplierRepository<'a> {
     }
 
     /// 查询已登记任一指定资质类型的供应商角色 ID。
-    ///
-    /// # 参数
-    /// * `qualification_types` - 资质类型；空集合表示不限制类型
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回去重、稳定排序后的供应商角色 ID。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询或反序列化失败时返回错误。
+    /// `qualification_types`：空集合表示不限制类型。
     pub async fn list_supplier_ids_by_qualification_types(
         &self,
         qualification_types: &[QualificationType],
@@ -418,17 +318,9 @@ impl<'a> SupplierRepository<'a> {
     }
 
     /// 查询当前有效资质对应的供应商角色 ID。
-    ///
-    /// # 参数
-    /// * `qualification_types` - 资质类型；空集合表示不限制类型
-    /// * `as_of` - 当前业务日，格式为 `YYYY-MM-DD`
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回去重、稳定排序后的供应商角色 ID。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询或反序列化失败时返回错误。
+    /// `qualification_types`：空集合表示不限制类型。
     pub async fn list_supplier_ids_by_valid_qualifications(
         &self,
         qualification_types: &[QualificationType],
@@ -441,18 +333,9 @@ impl<'a> SupplierRepository<'a> {
     }
 
     /// 查询将在窗口内到期且当前仍有效的资质对应的供应商角色 ID。
-    ///
-    /// # 参数
-    /// * `qualification_types` - 资质类型；空集合表示不限制类型
-    /// * `as_of` - 当前业务日，格式为 `YYYY-MM-DD`
-    /// * `expires_by` - 到期窗口结束业务日
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回去重、稳定排序后的供应商角色 ID。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询或反序列化失败时返回错误。
+    /// `qualification_types`：空集合表示不限制类型。
     pub async fn list_supplier_ids_by_expiring_qualifications(
         &self,
         qualification_types: &[QualificationType],
@@ -466,17 +349,9 @@ impl<'a> SupplierRepository<'a> {
     }
 
     /// 查询已失效资质对应的供应商角色 ID。
-    ///
-    /// # 参数
-    /// * `qualification_types` - 资质类型；空集合表示不限制类型
-    /// * `as_of` - 当前业务日，格式为 `YYYY-MM-DD`
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回去重、稳定排序后的供应商角色 ID。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询或反序列化失败时返回错误。
+    /// `qualification_types`：空集合表示不限制类型。
     pub async fn list_supplier_ids_by_expired_qualifications(
         &self,
         qualification_types: &[QualificationType],
@@ -489,16 +364,9 @@ impl<'a> SupplierRepository<'a> {
     }
 
     /// 按当前页供应商角色 ID 批量读取资质。
-    ///
-    /// # 参数
-    /// * `supplier_ids` - 当前页供应商角色 ID；空集合时不访问数据库
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回这些供应商的全部未删除资质，不按页大小之外的供应商扩展。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询或反序列化失败时返回错误。
+    /// `supplier_ids`：空集合时不访问数据库。
     pub async fn list_qualifications_by_supplier_ids(
         &self,
         supplier_ids: &[SupplierAccountId],
@@ -514,15 +382,7 @@ impl<'a> SupplierRepository<'a> {
     }
 
     /// 按创建时间倒序读取供应商全部资质。
-    ///
-    /// # 参数
-    /// * `supplier_id` - 供应商角色 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
     /// 返回该供应商的全部未删除资质。
-    ///
-    /// # 错误
     /// 当 MongoDB 查询或反序列化失败时返回错误。
     pub async fn list_qualifications(
         &self,

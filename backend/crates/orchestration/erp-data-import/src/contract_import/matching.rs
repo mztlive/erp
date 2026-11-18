@@ -14,14 +14,13 @@ use super::ContractImportProcess;
 use crate::{Error, Result};
 
 impl ContractImportProcess {
-    /// 按已确认身份匹配或建档，固定合同默认结算为我方主体。
-    /// # 参数
-    /// * `task` / `values` / `allow_create` - 本人任务、确认内容及建档选择。
-    /// * `actor` / `executor` - 当前操作人及归档事务。
-    /// # 返回
-    /// 包含原识别依据与当前主数据版本的归档证明。
-    /// # 错误
-    /// 主体冲突、客户不一致、权限或数据库失败。
+    // 按已确认身份匹配或建档，固定合同默认结算为我方主体。
+    //
+    // `task` / `values` / `allow_create`：本人任务、确认内容及建档选择；`actor` / `executor`：当前操作人及归档事务。
+    //
+    // 包含原识别依据与当前主数据版本的归档证明。
+    //
+    // 主体冲突、客户不一致、权限或数据库失败。
     pub(super) async fn match_all(
         &self,
         task: &ContractImport,
@@ -147,13 +146,13 @@ impl ContractImportProcess {
     }
 }
 
-/// 将精确候选转换为当前身份；保留停用、删除和资料损坏的拒绝语义。
-/// # 参数
-/// * `name` / `credit` / `candidates` - 确认身份及当前候选。
-/// # 返回
-/// 唯一可用身份；只有零候选返回 `None`。
-/// # 错误
-/// 身份冲突、歧义或当前主数据不可用。
+// 将精确候选转换为当前身份；保留停用、删除和资料损坏的拒绝语义。
+//
+// `name` / `credit` / `candidates`：确认身份及当前候选。
+//
+// 唯一可用身份；只有零候选返回 `None`。
+//
+// 身份冲突、歧义或当前主数据不可用。
 pub(super) fn identity_from_candidates(
     name: &str,
     credit: Option<&str>,

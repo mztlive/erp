@@ -21,14 +21,7 @@ use crate::{Error, Result};
 
 /// 校验采购单处于可履约状态（§6.6：生效或部分执行）。
 ///
-/// # 参数
-/// * `po` - 采购单实体
-///
-/// # 返回
-/// 可履约返回 `Ok(())`。
-///
-/// # 错误
-/// 采购单不在生效/部分执行状态时返回 `BusinessLogicError`。
+/// `po` 为采购单实体。可履约返回 `Ok(())`。采购单不在生效/部分执行状态时返回 `BusinessLogicError`。
 pub fn ensure_po_fulfillable(po: &PurchaseOrder) -> Result<()> {
     PurchaseFulfillmentEligibility::ensure_order_fulfillable(match po.stable.status {
         erp_procurement::entity::purchase_order::PurchaseOrderStatus::Effective => {
@@ -44,19 +37,11 @@ pub fn ensure_po_fulfillable(po: &PurchaseOrder) -> Result<()> {
 
 /// 校验供应商 API 下单前的 `PREPAY` 资金条件；履约事实确认不得调用。
 ///
-/// 按采购单当前生效版本的付款条件快照判定是否先款后货；门槛开启时重算
-/// 有效已过账付款净核销金额（D19：应付子账 → 分录 → 付款核销分配，`APPLY −
-/// REVERSE` 净额），达到冻结的金额或比例门槛才允许供应商 API 下单。
+/// 按采购单当前生效版本的付款条件快照判定是否先款后货；门槛开启时重算有效已过账付款净核销金额（D19：应付子账 → 分录 → 付款核销分配，`APPLY − REVERSE` 净额），
+/// 达到冻结的金额或比例门槛才允许供应商 API 下单。
 ///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `session` - 事务会话执行器
-/// * `po` - 采购单实体
+/// `session` 为事务会话执行器；`po` 为采购单实体。门槛满足返回 `Ok(())`。
 ///
-/// # 返回
-/// 门槛满足返回 `Ok(())`。
-///
-/// # 错误
 /// 生效版本缺失、或有效付款未达门槛时返回 `BusinessLogicError`。
 pub async fn ensure_prepay_gate(db: &Database, session: &mut dyn Executor, po: &PurchaseOrder) -> Result<()> {
     let revision = load_po_current_revision(db, session, po).await?;
@@ -76,18 +61,9 @@ pub async fn ensure_prepay_gate(db: &Database, session: &mut dyn Executor, po: &
     .map_err(|error| Error::BusinessLogicError(error.to_string()))
 }
 
-/// 取采购单当前生效版本。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `session` - 事务会话执行器
-/// * `po` - 采购单实体
-///
-/// # 返回
-/// 返回生效版本实体。
-///
-/// # 错误
-/// 生效版本缺失时返回 `BusinessLogicError`。
+// 取采购单当前生效版本。
+//
+// `session` 为事务会话执行器；`po` 为采购单实体。返回生效版本实体。生效版本缺失时返回 `BusinessLogicError`。
 pub(super) async fn load_po_current_revision(
     db: &Database,
     session: &mut dyn Executor,
@@ -104,21 +80,11 @@ pub(super) async fn load_po_current_revision(
         .ok_or_else(|| Error::NotFound("采购生效版本不存在".to_string()))
 }
 
-/// 重算采购单的有效已过账付款净核销金额（D19 跨域只读）。
-///
-/// 路径：应付往来子账（来源单据 = 采购单）→ 应付分录 → 付款核销分配，
-/// `APPLY − REVERSE` 净额求和。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `session` - 事务会话执行器
-/// * `po_id` - 采购单
-///
-/// # 返回
-/// 返回净核销金额（未付款为 0）。
-///
-/// # 错误
-/// 任一步查询失败时返回 `RepositoryError`。
+// 重算采购单的有效已过账付款净核销金额（D19 跨域只读）。
+//
+// 路径：应付往来子账（来源单据 = 采购单）→ 应付分录 → 付款核销分配， `APPLY − REVERSE` 净额求和。
+//
+// `session` 为事务会话执行器；`po_id` 为采购单。返回净核销金额（未付款为 0）。任一步查询失败时返回 `RepositoryError`。
 async fn effective_paid_amount(
     db: &Database,
     session: &mut dyn Executor,
@@ -145,21 +111,11 @@ async fn effective_paid_amount(
     Ok(net)
 }
 
-/// 校验采购销售分配有效（§6.7：采购行归属当前生效版本、销售行归属本明细）。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `session` - 事务会话执行器
-/// * `po` - 采购单实体
-/// * `allocation_id` - 采购销售分配
-/// * `sales_order_line_id` - 销售稳定明细
-///
-/// # 返回
-/// 有效返回 `Ok(())`。
-///
-/// # 错误
-/// 分配不存在、采购行不属于当前生效版本或销售行不属于本明细时返回
-/// `BusinessLogicError`。
+// 校验采购销售分配有效（§6.7：采购行归属当前生效版本、销售行归属本明细）。
+//
+// `session` 为事务会话执行器；`po` 为采购单实体；`allocation_id` 为采购销售分配；`sales_order_line_id` 为销售稳定明细。
+//
+// 有效返回 `Ok(())`。分配不存在、采购行不属于当前生效版本或销售行不属于本明细时返回 `BusinessLogicError`。
 pub(super) async fn ensure_allocation_valid(
     db: &Database,
     session: &mut dyn Executor,
@@ -205,16 +161,9 @@ pub(super) async fn ensure_allocation_valid(
     .map_err(|error| Error::BusinessLogicError(error.to_string()))
 }
 
-/// 显式投影当前采购版本行的履约消费事实；不得提前检查后续收货行。
-///
-/// # 参数
-/// * `line` - 当前采购版本行。
-///
-/// # 返回
-/// 返回该行标识和数量。
-///
-/// # 错误
-/// 不返回错误。
+// 显式投影当前采购版本行的履约消费事实；不得提前检查后续收货行。
+//
+// `line` 为当前采购版本行。返回该行标识和数量。
 pub(super) fn revision_line_fact(
     line: &erp_procurement::entity::purchase_order::PurchaseOrderRevisionLine,
 ) -> PurchaseRevisionLineFact {
@@ -223,7 +172,7 @@ pub(super) fn revision_line_fact(
 
 #[cfg(test)]
 mod tests {
-    /// 将供应商受控付款规则映射为采购测试使用的消费事实。
+    // 将供应商受控付款规则映射为采购测试使用的消费事实。
     fn resolve_procurement_payment_term(
         code: &str,
     ) -> erp_core::Result<erp_procurement::entity::facts::PaymentTermFact> {
@@ -244,7 +193,7 @@ mod tests {
 
     use super::ensure_po_fulfillable;
 
-    /// 采购履约资格独立于预付条款；未生效及终态仍拒绝履约。
+    // 采购履约资格独立于预付条款；未生效及终态仍拒绝履约。
     #[test]
     fn po_fulfillable_guards_status_with_prepayment_terms() {
         let mut po = PurchaseOrder::new(

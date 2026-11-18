@@ -32,14 +32,9 @@ pub struct ProductHandoverReceipt {
 impl ProductHandoverReceipt {
     /// 保存首次交接结果及独立命令身份。
     ///
-    /// # 参数
-    /// * `command` - 当前请求身份和摘要。
-    /// * `result` - 已持久化的交接结果。
-    /// * `audit_event_id` - 同事务展示事件编号。
-    /// # 返回
-    /// 返回已校验的独立回执。
-    /// # 错误
-    /// 身份、类型、结果或事件关联不合法时返回错误。
+    /// 返回已校验的独立回执。身份、类型、结果或事件关联不合法时返回错误。
+    ///
+    /// `command` 为当前请求身份和摘要。
     pub fn new(
         command: &CommandReceipt,
         result: HandoverProductView,
@@ -58,12 +53,7 @@ impl ProductHandoverReceipt {
 
     /// 校验身份及强类型结果，禁止损坏回执被当作未执行。
     ///
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 有效时返回空结果。
-    /// # 错误
-    /// schema、目标、版本或审计关联无效时返回内部错误。
+    /// 有效时返回空结果。schema、目标、版本或审计关联无效时返回内部错误。
     pub fn validate(&self) -> Result<()> {
         self.command.validate().map_err(|_| corrupted())?;
         if self.base.id != self.command.command_id
@@ -83,12 +73,7 @@ impl ProductHandoverReceipt {
 
     /// 使用结构化字段匹配同一请求，不解析展示消息。
     ///
-    /// # 参数
-    /// * `command` - 本次请求身份及载荷。
-    /// # 返回
-    /// 同键同载荷时成功；调用方继续读取当前责任视图。
-    /// # 错误
-    /// 异载荷保留稳定冲突，损坏身份返回内部错误。
+    /// 同键同载荷时成功；调用方继续读取当前责任视图。异载荷保留稳定冲突，损坏身份返回内部错误。
     pub fn ensure_matches(&self, command: &CommandReceipt) -> Result<()> {
         self.validate()?;
         match command.match_structured(&self.command) {
@@ -101,7 +86,7 @@ impl ProductHandoverReceipt {
     }
 }
 
-/// 损坏回执统一失败分类。
+// 损坏回执统一失败分类。
 fn corrupted() -> Error {
     Error::Internal("商品交接命令回执无效".into())
 }

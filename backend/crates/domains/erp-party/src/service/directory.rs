@@ -13,22 +13,22 @@ pub struct SettlementPartyDirectoryService {
 }
 impl SettlementPartyDirectoryService {
     /// 装配本域目录读取。
+    ///
     /// # 参数
     /// `db` 为本域数据库。
-    /// # 返回
+    ///
     /// 不执行 I/O 的服务。
-    /// # 错误
-    /// 无。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
     /// 查询目录或已选身份，不读取角色及人员范围。
+    ///
     /// # 参数
     /// `query` 为搜索、分页或已选身份条件。
-    /// # 返回
+    ///
     /// 我方公司目录页，只含编号、名称和状态。
-    /// # 错误
+    ///
     /// 非法请求、目录超限、内容版本变化或持久化失败时拒绝。
     pub async fn list(&self, query: DirectoryQuery) -> Result<SettlementPartyDirectoryPage> {
         let query = query.normalized()?;

@@ -193,13 +193,13 @@ impl SupplierMessageRefreshApplier for SupplierMessageRefresh {
     }
 }
 
-/// 按来源协议恢复原单提示；旧资金提示不能跳过原单应用或真实资金身份核验。
-/// # 参数
-/// 原账号消息能力、可靠接收证据、原提示以及原单和资金应用步骤。
-/// # 返回
-/// 原单已补查应用，且适用的资金步骤已经结束时返回成功。
-/// # 错误
-/// 原单未完成或必要资金步骤失败时停止，保留消息及原资金证据。
+// 按来源协议恢复原单提示；旧资金提示不能跳过原单应用或真实资金身份核验。
+//
+// 原账号消息能力、可靠接收证据、原提示以及原单和资金应用步骤。
+//
+// 原单已补查应用，且适用的资金步骤已经结束时返回成功。
+//
+// 原单未完成或必要资金步骤失败时停止，保留消息及原资金证据。
 pub(super) async fn apply_order_refresh(
     source: &dyn SupplierMessageSource,
     message: &SupplierPulledMessage,

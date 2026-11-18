@@ -166,13 +166,13 @@ impl BusinessTransfers {
     }
 }
 
-/// 使用提交或读取用例的原快照检查询价目标及其业务版本。
-/// # 参数
-/// service、kind、input 为固定询价任务和原始业务参数，actor、executor 为本次身份与原执行器。
-/// # 返回
-/// 当前目标或创建归属以及业务版本满足时成功。
-/// # 错误
-/// 非询价任务、无权限、对象缺失或业务版本变化时拒绝。
+// 使用提交或读取用例的原快照检查询价目标及其业务版本。
+//
+// service、kind、input 为固定询价任务和原始业务参数，actor、executor 为本次身份与原执行器。
+//
+// 当前目标或创建归属以及业务版本满足时成功。
+//
+// 非询价任务、无权限、对象缺失或业务版本变化时拒绝。
 pub(super) async fn authorize_inquiry(
     service: &SalesInquiryImportProcess,
     kind: TransferKind,

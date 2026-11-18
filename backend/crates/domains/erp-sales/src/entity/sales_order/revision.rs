@@ -52,16 +52,7 @@ pub enum RevisionSource {
 }
 
 impl RevisionSource {
-    /// 返回来源的中文展示名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 为界面或响应展示提供销售正式版本来源的中文名称；机器筛选和存储不使用该名称。
     pub fn label(&self) -> &'static str {
         match self {
             Self::ErpApproval => "ERP 审批",
@@ -69,16 +60,7 @@ impl RevisionSource {
         }
     }
 
-    /// 返回来源的稳定代码。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 将销售正式版本来源转成用于持久化和查询的稳定代码，与中文展示文案分开。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::ErpApproval => "ERP_APPROVAL",
@@ -180,22 +162,17 @@ pub struct SalesOrderRevision {
 }
 
 impl SalesOrderRevision {
-    /// 创建销售版本（不可变）。
+    /// 将调用方提供的业务事实冻结为销售版本（不可变），供后续按原内容追溯。
     ///
     /// 完成内容指纹与快照字段的校验与规范化，并强制两条不变式：
     /// - 卡券类目与履约期限必须同时提供或同时省略（§6.4 卡券单必填规则；
     ///   「是否卡券单」由关联销售单判定，属于跨文档校验，P3 在形成版本时复核）；
     /// - `gross = net + tax` 精确成立（§4.2 表头只汇总已舍入行金额）。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::SalesOrderRevisionId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
     /// 返回新建的销售版本实体。
-    ///
-    /// # 错误
     /// 版本号为零、必填为空、超长、卡券类目与履约期限只提供其一，或金额三元组不成立时返回错误。
+    ///
+    /// 输入约定：
+    /// - `id`：实体主键（`erp_core::ids::SalesOrderRevisionId`）
     pub fn new(id: SalesOrderRevisionId, data: SalesOrderRevisionData) -> Result<Self> {
         if data.revision_no == 0 {
             return Err(Error::from("版本号必须为正整数"));
@@ -247,47 +224,26 @@ impl SalesOrderRevision {
         })
     }
 
-    /// 更新销售版本。
-    ///
-    /// 正式版本业务字段不可更新（数据模型 §6.4：只允许修复非业务性元数据并留
-    /// 审计，属 P3 服务职责）；此方法恒拒绝，保留签名以表达不可变性契约。
-    ///
-    /// # 参数
-    /// * `_data` - 更新数据（被拒绝）
-    ///
-    /// # 返回
-    /// 恒返回 `Err`。
-    ///
-    /// # 错误
-    /// 恒返回「正式版本不可更新」错误。
+    /// 拒绝改写正式销售版本的业务字段；非业务元数据修复须由对应服务处理并留审计。
     pub fn update(&mut self, _data: SalesOrderRevisionData) -> Result<()> {
         Err(Error::from("正式销售版本业务字段不可更新"))
     }
 
     /// 判断聚合内版本号是否与调用方期望一致。
+    /// 结果：当前版本号与期望版本号一致时返回 `true`。
     ///
-    /// # 参数
-    /// * `expected_revision_no` - 调用方读取到的销售版本号
-    ///
-    /// # 返回
-    /// 当前版本号与期望版本号一致时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
+    /// 输入约定：
+    /// - `expected_revision_no`：调用方读取到的销售版本号
     pub fn matches_revision_no(&self, expected_revision_no: u32) -> bool {
         self.revision.revision_no == expected_revision_no
     }
 
     /// 由当前最大版本号计算下一销售版本号。
-    ///
-    /// # 参数
-    /// * `current_max` - 当前销售单全部正式版本中的最大版本号；尚无版本时为 `0`
-    ///
-    /// # 返回
     /// 返回严格递增的下一版本号。
-    ///
-    /// # 错误
     /// 当前版本号达到 `u32::MAX` 时返回错误。
+    ///
+    /// 输入约定：
+    /// - `current_max`：当前销售单全部正式版本中的最大版本号；尚无版本时为 `0`
     pub fn next_revision_no(current_max: u32) -> Result<u32> {
         current_max.checked_add(1).ok_or_else(|| Error::from("销售版本号溢出"))
     }
@@ -295,18 +251,9 @@ impl SalesOrderRevision {
     /// 返回卡券执行投影所需的表头履约期限。
     ///
     /// 卡券投影要求类目 SKU 与履约期限同时存在；任一缺失即不可投影。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
     /// 返回表头履约期限。
-    ///
-    /// # 错误
     /// 类目或履约期限缺失时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 唯一卡券行数量由仓储结果决定，不在本方法判定。本方法不触及持久化。
+    /// 业务边界：唯一卡券行数量由仓储结果决定，不在本方法判定。本方法不触及持久化。
     pub fn required_voucher_expiry(&self) -> Result<Instant> {
         match (&self.voucher_category_sku_id, self.voucher_expiry_at) {
             (Some(_), Some(expiry)) => Ok(expiry),
@@ -374,21 +321,16 @@ pub struct SalesOrderRevisionLine {
 }
 
 impl SalesOrderRevisionLine {
-    /// 创建公共行版本。
+    /// 将调用方提供的业务事实冻结为公共行版本，供后续按原内容追溯。
     ///
     /// 完成文本字段校验与规范化，并强制行级金额恒等式 `gross = net + tax`
     /// （§4.2 规则 1，逐行舍入）。「公共行 `gross_amount` 必须等于对应子类型行
     /// 金额」属于跨行断言（§6.4），P3 在形成版本时校验。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::SalesOrderRevisionLineId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
     /// 返回新建的公共行版本。
-    ///
-    /// # 错误
     /// 行号为零、必填为空、超长或金额三元组不成立时返回错误。
+    ///
+    /// 输入约定：
+    /// - `id`：实体主键（`erp_core::ids::SalesOrderRevisionLineId`）
     pub fn new(id: SalesOrderRevisionLineId, data: SalesOrderRevisionLineData) -> Result<Self> {
         if data.line_no == 0 {
             return Err(Error::from("行号必须为正整数"));
@@ -421,15 +363,11 @@ impl SalesOrderRevisionLine {
     }
 
     /// 将公共行与实物服务子行还原为销售变更工作副本行数据。
-    ///
-    /// # 参数
-    /// * `goods` - 与当前公共行一对一的实物服务子行
-    ///
-    /// # 返回
     /// 返回可用于创建变更工作副本行的冻结数据。
-    ///
-    /// # 错误
     /// 公共行不是实物服务类型，或子行未引用当前公共行时返回错误。
+    ///
+    /// 输入约定：
+    /// - `goods`：与当前公共行一对一的实物服务子行
     pub fn to_goods_working_copy_data(
         &self,
         goods: &SalesOrderGoodsServiceLineRevision,
@@ -539,19 +477,14 @@ pub struct SalesOrderGoodsServiceLineRevision {
 }
 
 impl SalesOrderGoodsServiceLineRevision {
-    /// 创建实物及服务行版本。
+    /// 将调用方提供的业务事实冻结为实物及服务行版本，供后续按原内容追溯。
     ///
     /// 完成基础单位代码的校验与规范化（trim、非空、长度上限）。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::SalesOrderGoodsServiceLineRevisionId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
     /// 返回新建的实物及服务行版本。
-    ///
-    /// # 错误
     /// 基础单位代码为空或超长时返回错误。
+    ///
+    /// 输入约定：
+    /// - `id`：实体主键（`erp_core::ids::SalesOrderGoodsServiceLineRevisionId`）
     pub fn new(
         id: SalesOrderGoodsServiceLineRevisionId,
         data: SalesOrderGoodsServiceLineRevisionData,
@@ -621,22 +554,17 @@ pub struct SalesOrderVoucherLineRevision {
 }
 
 impl SalesOrderVoucherLineRevision {
-    /// 创建卡券行版本。
+    /// 将调用方提供的业务事实冻结为卡券行版本，供后续按原内容追溯。
     ///
     /// 按数据模型 §6.4 推导并强制：`face_value_total = face_value × card_count`、
     /// `transaction_amount = round(unit_price_gross × card_count)`、
     /// `gift_amount = face_value_total − transaction_amount`、
     /// `gift_rate = gift_amount / transaction_amount`（成交金额为零时拒绝生效）。
-    ///
-    /// # 参数
-    /// * `id` - 实体主键（`erp_core::ids::SalesOrderVoucherLineRevisionId`）
-    /// * `data` - 创建数据
-    ///
-    /// # 返回
     /// 返回新建的卡券行版本。
-    ///
-    /// # 错误
     /// 卡张数为零、成交金额为零，或面额小计、成交金额、配赠金额、配赠率无法落入值对象时返回错误。
+    ///
+    /// 输入约定：
+    /// - `id`：实体主键（`erp_core::ids::SalesOrderVoucherLineRevisionId`）
     pub fn new(id: SalesOrderVoucherLineRevisionId, data: SalesOrderVoucherLineRevisionData) -> Result<Self> {
         if data.card_count == 0 {
             return Err(Error::from("卡券行卡张数必须为正整数"));

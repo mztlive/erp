@@ -55,22 +55,7 @@ impl_audit_context!(PreparedCatalogAudit);
 impl PreparedCatalogAudit {
     /// 捕获已校验目录事件的身份、持久化元数据及安全业务字段。
     ///
-    /// # 参数
-    /// * `base` - 事件持久化元数据。
-    /// * `actor_id` - 操作人 ID。
-    /// * `actor_account` - 操作人登录账号。
-    /// * `actor_type` - 操作人类型。
-    /// * `action` - 业务动作。
-    /// * `resource_type` - 资源类型。
-    /// * `resource_id` - 资源 ID。
-    /// * `success` - 成功标记。
-    /// * `message` - 业务说明。
-    ///
-    /// # 返回
-    /// 返回稍后持久化的预制审计事实。
-    ///
-    /// # 错误
-    /// 无；输入字段由调用方预先校验。
+    /// 返回稍后持久化的预制审计事实。输入字段由调用方预先校验。
     #[allow(clippy::too_many_arguments)]
     pub fn from_validated(
         base: &BaseModel,
@@ -105,18 +90,10 @@ impl PreparedCatalogAudit {
 
     /// 捕获已鉴权操作人及其安全名称，构造成功资源事件。
     ///
-    /// # 参数
-    /// * `actor` - 已鉴权身份及名称快照。
-    /// * `action` - 业务动作。
-    /// * `resource_type` - 资源类型。
-    /// * `resource_id` - 业务资源 ID。
-    /// * `message` - 业务说明；安全投影由组合层执行。
+    /// 返回保留发生时名称的预制审计事实。资源 ID 为空时返回校验错误。
     ///
-    /// # 返回
-    /// 返回保留发生时名称的预制审计事实。
-    ///
-    /// # 错误
-    /// 资源 ID 为空时返回校验错误。
+    /// - `actor`：已鉴权身份及名称快照。
+    /// - `message`：业务说明；安全投影由组合层执行。
     pub fn resource(
         actor: AuditActor,
         action: &str,
@@ -152,17 +129,7 @@ impl PreparedCatalogAudit {
 pub trait CatalogAuditPort: Send + Sync {
     /// 在事务前校验并准备一条成功的资源审计。
     ///
-    /// # 参数
-    /// * `actor` - 已鉴权操作人
-    /// * `action` - 业务动作
-    /// * `resource_type` - 资源类型
-    /// * `resource_id` - 资源 ID
-    ///
-    /// # 返回
-    /// 返回可在调用方执行器上持久化的审计事实。
-    ///
-    /// # 错误
-    /// 资源 ID 为空等校验失败时返回对应错误。
+    /// 返回可在调用方执行器上持久化的审计事实。资源 ID 为空等校验失败时返回对应错误。
     fn resource_log(
         &self,
         actor: AuditActor,
@@ -173,18 +140,9 @@ pub trait CatalogAuditPort: Send + Sync {
 
     /// 在事务前校验并准备一条带业务说明的成功资源审计。
     ///
-    /// # 参数
-    /// * `actor` - 已鉴权操作人
-    /// * `action` - 业务动作
-    /// * `resource_type` - 资源类型
-    /// * `resource_id` - 资源 ID
-    /// * `message` - 可选业务说明
+    /// 返回带业务说明的预制审计事实。资源 ID 为空等校验失败时返回对应错误。
     ///
-    /// # 返回
-    /// 返回带业务说明的预制审计事实。
-    ///
-    /// # 错误
-    /// 资源 ID 为空等校验失败时返回对应错误。
+    /// `message` 为可选业务说明。
     fn resource_log_with_message(
         &self,
         actor: AuditActor,
@@ -194,17 +152,7 @@ pub trait CatalogAuditPort: Send + Sync {
         message: Option<String>,
     ) -> Result<PreparedCatalogAudit>;
 
-    /// 在调用方选定的执行器上持久化已准备的审计。
-    ///
-    /// # 参数
-    /// * `audit` - 事先准备好的审计事实
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 写入完成时无返回值。
-    ///
-    /// # 错误
-    /// 端口未接线或写入失败时返回对应错误。
+    /// 在调用方选定的执行器上持久化已准备的审计。端口未接线或写入失败时返回对应错误。
     async fn persist(&self, audit: &PreparedCatalogAudit, executor: &mut dyn Executor) -> Result<()>;
 }
 

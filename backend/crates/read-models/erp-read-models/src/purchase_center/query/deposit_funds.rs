@@ -18,11 +18,14 @@ use crate::{Error, Result};
 /// 由组合层对真实资金账号执行主体、供应商组织与财务明细资格核验。
 #[async_trait]
 pub trait PurchaseDepositAccessPort: Send + Sync {
-    /// 在原读取事务内核验资金账号归属及当前操作人范围。
+    /// 检查采购预存款资格时，在原读取事务内核验资金账号归属及当前操作人范围。
+    ///
     /// # 参数
     /// `account_id` 来自原执行组占用，`actor` 为认证人员，`executor` 为原事务。
+    ///
     /// # 返回
     /// 已获账号、主体及组织许可的账户。
+    ///
     /// # 错误
     /// 缺财务明细资格、跨主体或供应商范围时拒绝，不返回金额。
     async fn authorize(
@@ -34,12 +37,15 @@ pub trait PurchaseDepositAccessPort: Send + Sync {
 }
 
 impl PurchaseOrderReadService {
-    /// 在采购及逐账号财务范围内读取当前执行组资金阶段。
+    /// 准备采购预存款时，在采购及逐账号财务范围内读取当前执行组资金阶段。
+    ///
     /// # 参数
     /// `id`、`expected_version` 来自已授权原采购视图；`actor` 为当前人员。
     /// `funds_access` 必须由组合根装配真实财务权限实现。
+    ///
     /// # 返回
     /// 占用、扣款、核销及返款分别计量的安全摘要，不返回外部账号或资金凭据。
+    ///
     /// # 错误
     /// 采购、财务权限、归属或金额不守恒时拒绝；无占用记录的执行不伪造金额摘要。
     pub async fn purchase_order_deposit_funds(

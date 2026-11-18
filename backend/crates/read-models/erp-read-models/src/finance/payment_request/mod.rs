@@ -39,13 +39,14 @@ pub struct PurchasePaymentRequestReadService {
 }
 
 impl PurchasePaymentRequestReadService {
-    /// 绑定数据库与当前权限服务。
+    /// 装配采购付款申请时，绑定数据库与当前权限服务。
     ///
     /// # 参数
     /// * `db` / `rbac` - 组合根注入的数据库与身份服务。
+    ///
     /// # 返回
     /// 返回不缓存资格的读取服务。
-    /// # 错误
+    ///
     /// 不执行 I/O，不返回错误。
     pub fn new(db: Database, rbac: Arc<AuthorizationService>) -> Self {
         Self { db, rbac }

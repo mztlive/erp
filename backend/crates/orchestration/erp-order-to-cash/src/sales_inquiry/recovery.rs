@@ -11,15 +11,9 @@ use super::execution::ReplaySource;
 use crate::{Error, Result};
 
 impl SalesInquiryProcess {
-    /// 按原动作与幂等键恢复本人成功命令的固定结果。
-    ///
-    /// # 参数
-    /// `actor` 为当前账号，`id` 为询价（创建响应丢失时允许为空），
-    /// `action` 与 `command_key` 必须沿用原命令。
-    /// # 返回
-    /// 成功回执存在且当前读取资格有效时返回原结果，尚未查到返回空。
-    /// # 错误
-    /// 身份不匹配、请求询价与结果不符、回执损坏或当前资格失效时拒绝。
+    /// 当询价办理响应丢失时，当前账号按原动作和幂等键查本人成功回执。只有创建命令恢复时可以不传询价 ID。
+    /// 同一恢复快照内核对回执身份和当前读取资格，命中后返回原冻结结果，未命中返回 `None`，不执行原写命令。
+    /// 回执损坏、操作人或询价不匹配、读取资格失效时拒绝。
     pub async fn recover(
         &self,
         actor: &AuditActor,
@@ -52,7 +46,7 @@ impl SalesInquiryProcess {
     }
 }
 
-/// 回执读取、当前入口授权及冻结结果交付均留在原恢复快照。
+// 回执读取、当前入口授权及冻结结果交付均留在原恢复快照。
 pub(super) async fn recover(
     source: &impl ReplaySource,
     actor: &AuditActor,
@@ -74,7 +68,7 @@ pub(super) async fn recover(
     Ok(Some(view))
 }
 
-/// 验证冻结回执与恢复请求一致，创建请求允许从回执取得真实对象身份。
+// 验证冻结回执与恢复请求一致，创建请求允许从回执取得真实对象身份。
 fn recovery_result(
     receipt: &InquiryCommandReceipt,
     actor: &AuditActor,
@@ -111,7 +105,7 @@ fn recovery_result(
     })
 }
 
-// 历史接手回执仍可只读核对，不再提供对应写命令。
+// 区分询价回执应走的采购恢复授权；历史接手动作仍可只读查证，但不再开放对应写入口。
 fn is_procurement_action(action: &str) -> bool {
     matches!(
         action,

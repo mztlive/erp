@@ -8,22 +8,8 @@ use crate::entity::purchase_order::PurchaseOrder;
 use crate::repository::PurchaseOrderExt;
 use crate::{Error, Result};
 
-/// 在审批取消运行事实写入后，以同一执行器 CAS 写回已执行撤回动作的采购单。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `order` - 已执行取消领域动作但尚未持久化的采购单
-/// * `executor` - 审批取消事务的执行器
-///
-/// # 返回
-/// 创建独立草稿提交与明细，切换当前提交指针并写回采购单。
-///
-/// # 错误
-/// 采购单版本冲突、冻结来源不一致或仓储写入失败时返回原错误。
-///
-/// # 关键业务约束
-/// 调用方持有根事务并先执行采购撤回状态动作；本方法不得另开事务。
-/// 原冻结提交与明细保持不变，新草稿和采购单指针随审批取消事实原子提交。
+/// 审批运行时已写入撤回事实且采购单已执行领域撤回后，从原冻结提交复制独立草稿与明细，再 CAS 更新当前指针。
+/// 全部步骤沿用调用方审批事务，原提交及明细不修改；来源不一致、版本冲突或仓储写入失败则返回原错误。
 pub async fn persist_cancelled_order(
     db: &mongodb::Database,
     order: &mut PurchaseOrder,

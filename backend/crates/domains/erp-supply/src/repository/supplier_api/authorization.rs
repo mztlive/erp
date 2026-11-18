@@ -23,11 +23,7 @@ struct ConnectionMapping {
 }
 
 /// 描述连接主键和真实供应商引用，不声明访问政策。
-/// # 参数
-/// supplier 为组合根复用的供应商事实映射。
-/// # 返回
 /// 无动态准备的完整连接对象映射。
-/// # 错误
 /// 固定模型校验失败时拒绝。
 pub fn connection_mapping(supplier: Arc<dyn AccessMapping>) -> IdentityResult<Arc<dyn AccessMapping>> {
     let model = QueryModel {
@@ -79,13 +75,9 @@ impl AccessMapping for ConnectionMapping {
     }
 }
 
-/// 检查连接仓储的固定模型、完整对象粒度和原读取阶段。
-/// # 参数
-/// access 为统一查询凭证，executor 为原执行器。
-/// # 返回
-/// 连接对象条件可在当前读取阶段执行时成功。
-/// # 错误
-/// 资源、集合、粒度或读取边界不匹配时拒绝。
+// 检查连接仓储的固定模型、完整对象粒度和原读取阶段。
+// 连接对象条件可在当前读取阶段执行时成功。
+// 资源、集合、粒度或读取边界不匹配时拒绝。
 pub(super) fn ensure_connection(access: &CompiledAccess, executor: &mut dyn Executor) -> Result<()> {
     let model = access.model();
     if model.resource != "supplier_api_connection"
@@ -101,12 +93,9 @@ pub(super) fn ensure_connection(access: &CompiledAccess, executor: &mut dyn Exec
 }
 
 /// 在完整授权过滤中读取指定连接，不能凭列表份额放行整对象。
-/// # 参数
-/// db、id 为本域连接身份；access、executor 为当前查询凭证和原执行器。
-/// # 返回
 /// 当前授权条件内的连接。
-/// # 错误
 /// 无权或不存在时统一返回不存在；模型、边界和数据库错误原样返回。
+/// db、id 为本域连接身份；access、executor 为当前查询凭证和原执行器。
 pub async fn authorized_connection(
     db: &Database,
     id: &str,

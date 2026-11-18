@@ -8,12 +8,10 @@ use erp_supplier::SupplierExt;
 use mongodb::Database;
 use persistence_core::{Executor, Result};
 
-/// 按供应商账号组装当前法定名称；缺失的主体或修订不进入结果。
+/// 依据供应商账号组装当前法定名称；缺失的主体或修订不进入结果。
 ///
 /// # 参数
-/// * `db` - 目标数据库。
 /// * `supplier_ids` - 供应商账号身份。
-/// * `executor` - 调用方执行器。
 ///
 /// # 返回
 /// 返回供应商账号身份到当前法定名称的映射；主体或修订缺失的账号省略。

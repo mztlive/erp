@@ -28,17 +28,10 @@ pub struct DemoFoundationReport {
 }
 
 impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
-    /// 补齐岗位账号、部门、尚未发布的审批流程，以及缺失的默认责任规则。
+    /// 为演示业务准备岗位角色、账号、部门、业务范围、审批链和默认责任规则，并返回准备统计。
+    /// 已有账号保留密码、同步姓名；已启用的默认采购或财务负责人不替换。
     ///
-    /// # 参数
-    /// * `actor` - 当前操作人，须能创建账号、调整组织、发布审批流程和维护责任规则
-    ///
-    /// # 返回
-    /// 返回新建和已存在的数量。已有账号不改密码，但姓名会同步为演示人名。已发布审批链不一致时保留原定义并返回阻断错误。
-    /// 已启用的默认采购调度人或财务责任规则保留现有负责人。
-    ///
-    /// # 错误
-    /// 环境未开放、必要权限缺失、已发布审批链不一致，或基础写入失败时返回错误。
+    /// 必须开启演示配置并具备各正式用例的权限。已发布审批链不匹配时保留原定义并停止；授权或写入失败不继续后续步骤。
     pub async fn ensure_foundation(&self, actor: &AuditActor) -> Result<DemoFoundationReport> {
         self.ensure_enabled()?;
         self.authorize_apply(actor).await?;

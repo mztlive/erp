@@ -18,11 +18,6 @@ pub struct RegionNodeView {
 }
 
 /// 返回内置行政区划全集。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
 /// 返回省、市、区县三级区划，按数据顺序排列。
 pub async fn list_regions() -> Result<Vec<RegionNodeView>> {
     let regions = all_regions()

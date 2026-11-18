@@ -24,14 +24,8 @@ use crate::{Error, Result};
 impl ProductImportProcess {
     /// 查询当前操作人发起的商品导入任务。
     ///
-    /// # 参数
-    /// * `params` - 分页参数
-    /// * `actor` - 审计操作人
-    ///
-    /// # 返回
     /// 返回任务分页。
     ///
-    /// # 错误
     /// 分页非法或查询失败时返回错误。
     pub async fn job_list(
         &self,
@@ -63,7 +57,7 @@ impl ProductImportProcess {
             .await
     }
 
-    /// 在同一读取事务内交付本人授权任务页及来源文件名称。
+    // 在同一读取事务内交付本人授权任务页及来源文件名称。
     async fn job_page(
         &self,
         filter: &BackgroundJobFilter,
@@ -85,14 +79,10 @@ impl ProductImportProcess {
 
     /// 查询单个导入任务详情。
     ///
-    /// # 参数
-    /// * `id` - 任务 ID
-    /// * `actor` - 审计操作人
+    /// `id`：任务 ID。
     ///
-    /// # 返回
     /// 返回任务视图。
     ///
-    /// # 错误
     /// 任务不存在或不属于当前操作人时返回错误。
     pub async fn job_detail(&self, id: &str, actor: &AuditActor) -> Result<ProductImportJobView> {
         let service = self.clone();
@@ -106,7 +96,7 @@ impl ProductImportProcess {
             .await
     }
 
-    /// 授权、任务和源文件名称在同一读取快照交付。
+    // 授权、任务和源文件名称在同一读取快照交付。
     async fn job_detail_stage(
         &self,
         id: &str,
@@ -123,15 +113,10 @@ impl ProductImportProcess {
 
     /// 查询导入任务逐项结果。
     ///
-    /// # 参数
-    /// * `id` - 任务 ID
-    /// * `params` - 分页参数
-    /// * `actor` - 审计操作人
+    /// `id`：任务 ID。
     ///
-    /// # 返回
     /// 返回逐项分页。
     ///
-    /// # 错误
     /// 任务不存在或不属于当前操作人时返回错误。
     pub async fn job_items(
         &self,
@@ -152,7 +137,7 @@ impl ProductImportProcess {
             .await
     }
 
-    /// 授权与任务逐项分页共享当前读取快照。
+    // 授权与任务逐项分页共享当前读取快照。
     async fn job_items_stage(
         &self,
         id: &str,
@@ -176,7 +161,7 @@ impl ProductImportProcess {
     }
 }
 
-/// 按任务事实收集去重源文件 ID，缺少源文件的任务不触发读取。
+// 按任务事实收集去重源文件 ID，缺少源文件的任务不触发读取。
 fn source_file_ids(jobs: &[BackgroundJob]) -> Vec<FileAssetId> {
     let mut seen = HashSet::new();
     jobs.iter()
@@ -186,7 +171,7 @@ fn source_file_ids(jobs: &[BackgroundJob]) -> Vec<FileAssetId> {
         .collect()
 }
 
-/// 按原分页顺序组装最新事实；任务消失保持报错，文件消失保持空名称。
+// 按原分页顺序组装最新事实；任务消失保持报错，文件消失保持空名称。
 fn page_job_views(
     ids: &[BackgroundJobId],
     jobs: &[BackgroundJob],
@@ -247,7 +232,7 @@ mod tests {
         FileAsset::new(FileAssetId::new(id), registration.into_data("admin").unwrap()).unwrap()
     }
 
-    /// 批量结果无序仍按页顺序展示最新进度，重复源文件只读取一次。
+    // 验证：批量结果无序仍按页顺序展示最新进度，重复源文件只读取一次。
     #[test]
     fn page_views_restore_order_latest_progress_and_shared_file() {
         let mut first = job("first", Some("shared"));
@@ -271,7 +256,7 @@ mod tests {
         assert!(views.iter().all(|view| view.file_name.as_deref() == Some("报价表.xlsx")));
     }
 
-    /// 文件消失与无源文件保持空名称，任务消失保持原 NotFound。
+    // 验证：文件消失与无源文件保持空名称，任务消失保持原 NotFound。
     #[test]
     fn page_views_preserve_missing_relationship_semantics_and_empty_pages() {
         let jobs = [job("missing-file", Some("removed")), job("no-file", None)];
